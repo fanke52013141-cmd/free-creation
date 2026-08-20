@@ -1,0 +1,34 @@
+# 依赖
+app/node_modules/
+**/node_modules/
+
+# 构建产物
+app/dist/
+**/dist/
+
+# 日志
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# 环境与敏感配置
+.env
+.env.local
+*.local
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# tldraw 本地缓存（如有）
+.tldraw/
+
+# 调研临时下载（保留 .research 目录结构，但可按需调整）
+.research/*.zip
+.research/*.tar.gz
