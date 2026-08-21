@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ProjectMeta } from '@shared/types'
 import { useAppStore } from '../stores/app'
+import { useGatewayStore } from '../stores/gateway'
 
 interface ProjectMenuProps {
   project: ProjectMeta
@@ -12,6 +13,7 @@ export function ProjectMenu({ project }: ProjectMenuProps): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   const setHome = useAppStore((s) => s.setHome)
   const openProjectInStore = useAppStore((s) => s.openProject)
+  const openSettings = useGatewayStore((s) => s.openSettings)
 
   useEffect(() => {
     if (!open) return
@@ -77,6 +79,17 @@ export function ProjectMenu({ project }: ProjectMenuProps): React.JSX.Element {
           <button className="node-menu-item" onClick={() => void createNew()}>
             <span className="item-icon">✚</span>
             <span>创建新项目</span>
+          </button>
+          <div className="node-menu-divider" />
+          <button
+            className="node-menu-item"
+            onClick={() => {
+              setOpen(false)
+              openSettings()
+            }}
+          >
+            <span className="item-icon">⚙</span>
+            <span>模型供应商设置</span>
           </button>
           <button className="node-menu-item danger" onClick={() => void removeCurrent()}>
             <span className="item-icon">🗑</span>

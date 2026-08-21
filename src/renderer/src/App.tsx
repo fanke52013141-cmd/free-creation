@@ -3,6 +3,7 @@ import { useAppStore } from './stores/app'
 import { ProjectListPage } from './pages/ProjectListPage'
 import { CanvasPage } from './pages/CanvasPage'
 import { Toast } from './components/Toast'
+import { ProviderSettingsPanel } from './gateway/ProviderSettingsPanel'
 
 function Content(): React.JSX.Element {
   const view = useAppStore((s) => s.view)
@@ -44,6 +45,7 @@ export default function App(): React.JSX.Element {
     <>
       <Content />
       <Toast />
+      <ProviderSettingsPanel />
     </>
   )
 }

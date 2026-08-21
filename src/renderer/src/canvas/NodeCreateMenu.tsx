@@ -8,6 +8,7 @@ interface NodeCreateMenuProps {
   y: number
   onPick: (type: NodeTypeId) => void
   onUpload: () => void
+  onGallery: () => void
   onClose: () => void
 }
 
@@ -16,6 +17,7 @@ export function NodeCreateMenu({
   y,
   onPick,
   onUpload,
+  onGallery,
   onClose
 }: NodeCreateMenuProps): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
@@ -36,7 +38,7 @@ export function NodeCreateMenu({
   }, [onClose])
 
   const menuW = 200
-  const menuH = 300
+  const menuH = 340
   const left = Math.min(x, window.innerWidth - menuW - 12)
   const top = Math.min(y, window.innerHeight - menuH - 12)
 
@@ -47,12 +49,18 @@ export function NodeCreateMenu({
         <button key={t.type} className="node-menu-item" onClick={() => onPick(t.type)}>
           <span className="item-icon">{t.icon}</span>
           <span>{t.label}</span>
+          {t.type === 'script' && <span className="beta-badge">Beta</span>}
         </button>
       ))}
       <div className="node-menu-divider" />
+      <div className="node-menu-title">添加资源</div>
       <button className="node-menu-item" onClick={onUpload}>
         <span className="item-icon">📂</span>
         <span>上传本地文件</span>
+      </button>
+      <button className="node-menu-item" onClick={onGallery}>
+        <span className="item-icon">🏞</span>
+        <span>从图库选择</span>
       </button>
     </div>
   )

@@ -1,7 +1,7 @@
 // 媒体仓库：文件落项目媒体目录 + SQLite 索引（见《技术框架与规范》§9）
 // 异步复制：大文件导入不阻塞主进程
 import { nanoid } from 'nanoid'
-import { copyFile, mkdir, readFile, stat } from 'fs/promises'
+import { copyFile, mkdir, readFile, stat, unlink, writeFile } from 'fs/promises'
 import { basename, dirname, extname, join } from 'path'
 import type { MediaAsset, MediaKind } from '../../shared/types'
 import { getDataDir, getDb } from './db'
@@ -113,6 +113,100 @@ export function getMediaAbsPath(relPath: string): string | null {
   const normalized = normalizePath(abs)
   if (!normalized.startsWith(normalizePath(dataDir) + '/')) return null
   return abs
+}
+
+// 生成产物落盘（AI 生图/生视频）：与 importMedia 同一套目录与索引规则
+export async function saveBufferAsset(
+  projectId: string,
+  buf: Buffer,
+  ext: string,
+  name: string
+): Promise<MediaAsset> {
+  const mime = MIME_BY_EXT[ext] ?? 'application/octet-stream'
+  const kind = detectKind(ext, mime)
+  const id = nanoid(10)
+  const relPath = `projects/${projectId}/media/${id}${ext}`
+  const destAbs = join(getDataDir(), relPath)
+  await mkdir(dirname(destAbs), { recursive: true })
+  await writeFile(destAbs, buf)
+
+  const now = Date.now()
+  getDb()
+    .prepare(
+      'INSERT INTO media (id, kind, mime, path, size_bytes, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+    )
+    .run(id, kind, mime, relPath, buf.length, now)
+
+  return {
+    id,
+    kind,
+    mime,
+    path: relPath,
+    sizeBytes: buf.length,
+    createdAt: now,
+    name: name.replace(/[\\/:*?"<>|\s]+/g, '-').slice(0, 40) || id
+  }
+}
+
+// 按 mediaId 读回文件内容（视频首帧图转 base64 上传用）
+export async function readMediaBuffer(
+  mediaId: string
+): Promise<{ buf: Buffer; mime: string } | null> {
+  const row = getDb()
+    .prepare('SELECT mime, path FROM media WHERE id = ?')
+    .get(mediaId) as { mime: string; path: string } | undefined
+  if (!row) return null
+  const abs = getMediaAbsPath(row.path)
+  if (!abs) return null
+  try {
+    return { buf: await readFile(abs), mime: row.mime }
+  } catch {
+    return null
+  }
+}
+
+// 列出指定项目的所有媒体资产（按创建时间倒序）
+export function listMedia(projectId: string): MediaAsset[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT id, kind, mime, path, size_bytes, created_at FROM media
+       WHERE path LIKE ? ORDER BY created_at DESC`
+    )
+    .all(`projects/${projectId}/media/%`) as {
+    id: string
+    kind: MediaKind
+    mime: string
+    path: string
+    size_bytes: number
+    created_at: number
+  }[]
+
+  return rows.map((r) => ({
+    id: r.id,
+    kind: r.kind,
+    mime: r.mime,
+    path: r.path,
+    sizeBytes: r.size_bytes,
+    createdAt: r.created_at
+  }))
+}
+
+// 删除媒体资产（SQLite + 磁盘文件）
+export async function deleteMedia(mediaId: string): Promise<boolean> {
+  const row = getDb()
+    .prepare('SELECT path FROM media WHERE id = ?')
+    .get(mediaId) as { path: string } | undefined
+  if (!row) return false
+  const abs = getMediaAbsPath(row.path)
+  getDb().prepare('DELETE FROM media WHERE id = ?').run(mediaId)
+  if (abs) {
+    try {
+      await unlink(abs)
+    } catch {
+      // 文件可能已不存在，忽略
+    }
+  }
+  return true
 }
 
 function normalizePath(p: string): string {

@@ -6,6 +6,38 @@ import { getNodeType, portCompatible, portOffsets } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
 import type { ConnectionFrom } from '../stores/connection'
 
+// 连线颜色按源端口类型分型。用 tldraw 内置标准色名（渲染层 getColorValue 解析为对应主题色），
+// 因为 arrow 的 color 属性受 DefaultColorStyle 枚举校验，内置名才是类型安全且最稳的做法。
+// 类型收窄为 tldraw 允许的色名联合，避免 string 过宽导致 typecheck 报错。
+type ArrowColor =
+  | 'black'
+  | 'blue'
+  | 'green'
+  | 'grey'
+  | 'orange'
+  | 'red'
+  | 'violet'
+  | 'white'
+  | 'yellow'
+  | 'light-blue'
+  | 'light-red'
+  | 'light-green'
+  | 'light-violet'
+
+export const EDGE_COLORS: Record<string, ArrowColor> = {
+  text: 'light-blue',
+  json: 'violet',
+  image: 'green',
+  video: 'light-red',
+  audio: 'yellow',
+  file: 'grey',
+  any: 'grey'
+}
+
+export function edgeColorFor(portType: string): ArrowColor {
+  return EDGE_COLORS[portType] ?? 'grey'
+}
+
 export interface EdgeEndpoint {
   shapeId: TLShapeId
   portId: string
@@ -103,6 +135,11 @@ export function createEdge(editor: Editor, from: EdgeEndpoint, to: EdgeEndpoint)
   const endPage = { x: toShape.x, y: toShape.y + toY }
   const arrowId = createShapeId()
 
+  // 弧线弯曲量：按连线长度自适应（tldraw 的 bend 为弧中点在垂直方向的偏移，越大越弯）。
+  // 固定写死会近处过弯/远处过直，这里取 0.16*长度并限制在 [20, 84]，形成一致的柔和弧线。
+  const connDist = Math.hypot(endPage.x - startPage.x, endPage.y - startPage.y)
+  const bend = Math.max(20, Math.min(84, connDist * 0.16))
+
   editor.run(() => {
     editor.createShape({
       id: arrowId,
@@ -111,16 +148,16 @@ export function createEdge(editor: Editor, from: EdgeEndpoint, to: EdgeEndpoint)
       y: startPage.y,
       props: {
         kind: 'arc',
-        color: 'grey',
+        color: edgeColorFor(fromPort.type),
         fill: 'none',
         dash: 'solid',
-        size: 'm',
+        size: 'l',
         font: 'sans',
         arrowheadStart: 'none',
         arrowheadEnd: 'arrow',
         start: { x: 0, y: 0 },
         end: { x: endPage.x - startPage.x, y: endPage.y - startPage.y },
-        bend: 0,
+        bend,
         labelPosition: 0.5,
         scale: 1
       },

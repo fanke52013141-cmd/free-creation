@@ -5,6 +5,8 @@ import type { ProjectMeta, MediaAsset, NodeTypeId } from '@shared/types'
 import { NodeCardUtil, type NodeCardProps } from './NodeCardShape'
 import { NodeCreateMenu } from './NodeCreateMenu'
 import { ConnectionLayer } from './ConnectionLayer'
+import { CanvasBottomDock } from './CanvasMinimap'
+import { CanvasSidePanel, type SidePanelTab } from './CanvasSidePanel'
 import {
   setConnectionFinishHandler,
   teardownConnectionDrag,
@@ -16,6 +18,10 @@ import { getNodeType } from '../nodes/registry'
 import { registerBaseNodeTypes, registerScriptNodeType } from '../nodes/specs'
 import { toast } from '../stores/toast'
 import type { ConnectionFrom } from '../stores/connection'
+import { useGatewayStore } from '../stores/gateway'
+import { useEngineStore } from '../engine/store'
+import { runWorkflow } from '../engine/executor'
+import { useMediaStore } from '../stores/media'
 
 registerBaseNodeTypes()
 registerScriptNodeType()
@@ -34,6 +40,8 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
   const editorRef = useRef<Editor | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
+  // 上传提示延迟隐藏定时器：HTML5 dragleave 会因进子元素误触发，用延迟避免闪烁
+  const dragHideTimer = useRef<number | null>(null)
   // 快照恢复失败后置位：跳过一切自动保存，避免把空画布写回覆盖原数据
   const restoreFailedRef = useRef(false)
   // 拉线到空白处松手：暂存连线来源，待菜单选定节点类型后自动连线（LibTV 交互）
@@ -42,6 +50,52 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
   const [dragOver, setDragOver] = useState(false)
   const [addDrag, setAddDrag] = useState<{ x: number; y: number } | null>(null)
   const [edgesVisible, setEdgesVisible] = useState(true)
+  // 在 React 状态中持有 editor，让右下角停靠簇能订阅画布变化（editorRef 变化不会触发重渲染）
+  const [editorInstance, setEditorInstance] = useState<Editor | null>(null)
+  // 右键侧栏面板：资产 / 工作流 / 历史记录
+  const [panelTab, setPanelTab] = useState<SidePanelTab | null>(null)
+  // 空白画布时展示底部 AI 模板卡（LibTV 26-7-7）
+  const [hasNodes, setHasNodes] = useState(false)
+
+  // 执行引擎：注册 run 闭包到全局 store，顶部栏通过 store 触发（捕获 editor + projectId + providers）
+  const providers = useGatewayStore((s) => s.providers)
+  useEffect(() => {
+    const run = (): void => {
+      const editor = editorRef.current
+      if (!editor) return
+      void runWorkflow(editor, project.id, providers)
+    }
+    useEngineStore.getState().register(run)
+    return () => {
+      // 卸载时清空，避免 stale 闭包残留
+      useEngineStore.getState().register(null)
+    }
+  }, [project.id, providers])
+
+  // 检测画布是否已有节点：空画布显示模板卡，有节点即隐藏
+  useEffect(() => {
+    if (!editorInstance) return
+    const check = (): void => {
+      let found = false
+      for (const s of editorInstance.getCurrentPageShapes()) {
+        if (s.type === 'node-card') {
+          found = true
+          break
+        }
+      }
+      setHasNodes(found)
+    }
+    check()
+    return editorInstance.store.listen(check, { scope: 'document' })
+  }, [editorInstance])
+
+  // 模板卡「一键生成」：在画布视角中心创建对应节点
+  const createTemplateNode = (type: NodeTypeId): void => {
+    const editor = editorRef.current
+    if (!editor) return
+    const screen = editor.pageToScreen(editor.getViewportPageBounds().center)
+    createNodeAt(type, screen.x, screen.y)
+  }
 
   // 左侧栏「＋」按住拖动：跟手显示浮标，松开时在落点弹创建菜单（拖动式添加）
   const startAddDrag = (e: React.PointerEvent): void => {
@@ -58,6 +112,18 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
     }
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
+  }
+
+  // 左侧栏「添加资源」：把素材放到画布当前视角中心（LibTV 区分「添加节点 / 添加资源」）
+  const addResource = (): void => {
+    const editor = editorRef.current
+    if (!editor) {
+      toast('画布未就绪')
+      return
+    }
+    const center = editor.getViewportPageBounds().center
+    const screen = editor.pageToScreen(center)
+    void handleUpload(screen.x, screen.y)
   }
 
   // 保存载荷：快照 + 从 shapes 派生的图数据（nodes/edges，M4 执行引擎的消费源）
@@ -243,6 +309,7 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
 
   const handleMount = (editor: Editor): void => {
     editorRef.current = editor
+    setEditorInstance(editor)
     // DEV 调试入口：浏览器 console 可用 window.__tldrawEditor 访问（生产构建自动剔除）
     if (import.meta.env.DEV) {
       ;(window as { __tldrawEditor?: Editor }).__tldrawEditor = editor
@@ -318,11 +385,23 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
     <div
       className={`canvas-host ${dragOver ? 'drag-over' : ''} ${edgesVisible ? '' : 'edges-hidden'}`}
       ref={wrapRef}
+      onDragEnter={(e) => {
+        // 只在拖入真实文件时提示上传；画布内拖动节点/框选等会冒泡 dragover，那些不提示
+        if (!e.dataTransfer.types.includes('Files')) return
+        e.preventDefault()
+        if (dragHideTimer.current) clearTimeout(dragHideTimer.current)
+        setDragOver(true)
+      }}
       onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes('Files')) return
         e.preventDefault()
         setDragOver(true)
       }}
-      onDragLeave={() => setDragOver(false)}
+      onDragLeave={() => {
+        // HTML5 dragleave 在指针移入子元素时也会触发，延迟隐藏避免提示闪烁
+        if (dragHideTimer.current) clearTimeout(dragHideTimer.current)
+        dragHideTimer.current = window.setTimeout(() => setDragOver(false), 120)
+      }}
       onDrop={(e) => void handleDrop(e)}
     >
       <Tldraw
@@ -338,48 +417,102 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
       />
       <div className="canvas-rail">
         <button
-          className="rail-btn"
+          className="rail-item"
           title="添加（点击或按住拖到画布）"
           onPointerDown={startAddDrag}
         >
-          ＋
+          <span className="rail-icon">＋</span>
+          <span className="rail-label">添加</span>
         </button>
+        <button className="rail-item" title="添加资源" onClick={addResource}>
+          <span className="rail-icon">📂</span>
+          <span className="rail-label">资源</span>
+        </button>
+        <div className="rail-divider" />
         <button
-          className="rail-btn"
-          title="工作流（即将上线）"
-          onClick={() => toast('工作流功能将在后续版本开放')}
+          className="rail-item"
+          title="工作流"
+          onClick={() => setPanelTab('workflow')}
         >
-          ⛓
+          <span className="rail-icon">⛓</span>
+          <span className="rail-label">工作流</span>
         </button>
         <button
-          className="rail-btn"
-          title="资产（即将上线）"
-          onClick={() => toast('资产功能将在后续版本开放')}
+          className="rail-item"
+          title="资产"
+          onClick={() => setPanelTab('assets')}
         >
-          📦
+          <span className="rail-icon">📦</span>
+          <span className="rail-label">资产</span>
         </button>
         <button
-          className="rail-btn"
-          title="历史记录（即将上线）"
-          onClick={() => toast('历史记录功能将在后续版本开放')}
+          className="rail-item"
+          title="历史记录"
+          onClick={() => setPanelTab('history')}
         >
-          🕘
+          <span className="rail-icon">🕘</span>
+          <span className="rail-label">历史</span>
         </button>
         <button
-          className="rail-btn"
+          className="rail-item"
           title="教程（即将上线）"
           onClick={() => toast('教程功能将在后续版本开放')}
         >
-          📖
+          <span className="rail-icon">📖</span>
+          <span className="rail-label">教程</span>
         </button>
       </div>
-      <button
-        className="edge-toggle"
-        title="显示 / 隐藏画布连线"
-        onClick={() => setEdgesVisible((v) => !v)}
-      >
-        🔗 {edgesVisible ? '隐藏连线' : '显示连线'}
-      </button>
+      <CanvasBottomDock
+        editor={editorInstance}
+        edgesVisible={edgesVisible}
+        onToggleEdges={() => setEdgesVisible((v) => !v)}
+      />
+      {!hasNodes && editorInstance && (
+        <div className="canvas-template">
+          <div className="tmpl-title">✨ AI 快速开始</div>
+          <div className="tmpl-grid">
+            <button className="tmpl-card" onClick={() => createTemplateNode('text')}>
+              <span className="tmpl-emoji">📝</span>
+              <strong>文本生成</strong>
+              <span className="tmpl-desc">写文案 / 改写 / 总结</span>
+            </button>
+            <button className="tmpl-card" onClick={() => createTemplateNode('image')}>
+              <span className="tmpl-emoji">🖼️</span>
+              <strong>图片生成</strong>
+              <span className="tmpl-desc">文生图 / 扩图 / 改绘</span>
+            </button>
+            <button className="tmpl-card" onClick={() => createTemplateNode('video')}>
+              <span className="tmpl-emoji">🎥</span>
+              <strong>视频生成</strong>
+              <span className="tmpl-desc">图生视频 / 文生视频</span>
+            </button>
+            <button className="tmpl-card" onClick={() => createTemplateNode('script')}>
+              <span className="tmpl-emoji">🎬</span>
+              <strong>分镜脚本</strong>
+              <span className="tmpl-desc">故事板 / 镜头分解</span>
+            </button>
+          </div>
+        </div>
+      )}
+      <CanvasSidePanel
+        tab={panelTab}
+        projectId={project.id}
+        onClose={() => setPanelTab(null)}
+        onImport={() => {
+          const editor = editorRef.current
+          if (!editor) return
+          const screen = editor.pageToScreen(editor.getViewportPageBounds().center)
+          void handleUpload(screen.x, screen.y).then(() => {
+            void useMediaStore.getState().refresh(project.id)
+          })
+        }}
+        onAddToCanvas={(asset) => {
+          const editor = editorRef.current
+          if (!editor) return
+          const screen = editor.pageToScreen(editor.getViewportPageBounds().center)
+          createMediaNodes([asset], screen.x, screen.y)
+        }}
+      />
       {addDrag && (
         <div className="add-drag-ghost" style={{ left: addDrag.x + 14, top: addDrag.y + 14 }}>
           松开在这里添加节点
@@ -398,6 +531,10 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
           onUpload={() => {
             void handleUpload(menu.x, menu.y)
             setMenu(null)
+          }}
+          onGallery={() => {
+            setMenu(null)
+            toast('图库功能将在后续版本开放')
           }}
           onClose={closeMenu}
         />

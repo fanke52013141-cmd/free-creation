@@ -1,8 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ProjectFile } from '@shared/types'
 import { useAppStore } from '../stores/app'
+import { useGatewayStore } from '../stores/gateway'
+import { useEngineStore } from '../engine/store'
 import { CanvasEditor } from '../canvas/CanvasEditor'
 import { ProjectMenu } from '../canvas/ProjectMenu'
+import { toast } from '../stores/toast'
 
 interface CanvasPageProps {
   projectId: string
@@ -13,9 +16,38 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
   const [loading, setLoading] = useState(true)
   const [renaming, setRenaming] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
+  const [userOpen, setUserOpen] = useState(false)
+  const userRef = useRef<HTMLDivElement>(null)
   const setHome = useAppStore((s) => s.setHome)
   const openProject = useAppStore((s) => s.openProject)
   const currentProject = useAppStore((s) => s.currentProject)
+  const openSettings = useGatewayStore((s) => s.openSettings)
+
+  // 执行引擎状态：phase 控制按钮形态，done/total 显示进度
+  const enginePhase = useEngineStore((s) => s.phase)
+  const engineDone = useEngineStore((s) => s.done)
+  const engineTotal = useEngineStore((s) => s.total)
+  const engineCurrent = useEngineStore((s) => s.currentLabel)
+  const engineRun = useEngineStore((s) => s.run)
+  const engineStop = useEngineStore((s) => s.stop)
+  const isRunning = enginePhase === 'running' || enginePhase === 'stopping'
+
+  // 右上角个人中心下拉：点击外部 / Esc 关闭
+  useEffect(() => {
+    if (!userOpen) return
+    const onDown = (e: MouseEvent): void => {
+      if (userRef.current && !userRef.current.contains(e.target as Node)) setUserOpen(false)
+    }
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setUserOpen(false)
+    }
+    window.addEventListener('mousedown', onDown)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', onDown)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [userOpen])
 
   useEffect(() => {
     let cancelled = false
@@ -86,6 +118,89 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
         )}
         <span className="topbar-spacer" />
         <span className="topbar-version">v{file.meta.graphVersion}</span>
+
+        {/* 运行/停止工作流 + 进度（执行引擎核心控件） */}
+        <div className="engine-controls">
+          {isRunning && (
+            <div className="engine-progress" title={engineCurrent || '执行中…'}>
+              <div className="engine-progress-bar">
+                <div
+                  className="engine-progress-fill"
+                  style={{ width: `${engineTotal > 0 ? (engineDone / engineTotal) * 100 : 0}%` }}
+                />
+              </div>
+              <span className="engine-progress-text">
+                {engineDone}/{engineTotal} · {enginePhase === 'stopping' ? '停止中…' : engineCurrent || '执行中…'}
+              </span>
+            </div>
+          )}
+          <button
+            className={`run-btn ${isRunning ? 'running' : ''}`}
+            title={isRunning ? '停止工作流' : '运行工作流'}
+            onClick={() => {
+              if (isRunning) {
+                engineStop?.()
+              } else {
+                engineRun?.()
+              }
+            }}
+          >
+            {isRunning ? '■ 停止' : '▶ 运行'}
+          </button>
+        </div>
+
+        <div className="topbar-actions">
+          <button className="topbar-icon" title="搜索节点" onClick={() => toast('搜索功能将在后续版本开放')}>
+            🔍
+          </button>
+          <button className="topbar-icon" title="分享项目" onClick={() => toast('分享链接将在后续版本开放')}>
+            ↗
+          </button>
+          <button className="topbar-icon" title="会员中心" onClick={() => toast('会员中心将在后续版本开放')}>
+            <span className="member-crown">♛</span>
+          </button>
+          <div className="topbar-user" ref={userRef}>
+            <button
+              className="avatar-btn"
+              title="个人中心"
+              onClick={() => setUserOpen((v) => !v)}
+            >
+              <span className="avatar-dot">我</span>
+            </button>
+            {userOpen && (
+              <div className="user-menu">
+                <div className="user-menu-header">
+                  <span className="user-avatar">我</span>
+                  <div className="user-meta">
+                    <strong>本地用户</strong>
+                    <span>免费版</span>
+                  </div>
+                </div>
+                <div className="node-menu-divider" />
+                <button
+                  className="node-menu-item"
+                  onClick={() => {
+                    setUserOpen(false)
+                    openSettings()
+                  }}
+                >
+                  <span className="item-icon">⚙</span>
+                  <span>模型供应商设置</span>
+                </button>
+                <button
+                  className="node-menu-item"
+                  onClick={() => {
+                    setUserOpen(false)
+                    void window.api.closeProject().then(() => setHome())
+                  }}
+                >
+                  <span className="item-icon">🏠</span>
+                  <span>回到主页</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
       <CanvasEditor project={currentProject ?? file.meta} initialSnapshot={file.tldrawSnapshot} />
     </div>

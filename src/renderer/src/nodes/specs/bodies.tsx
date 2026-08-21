@@ -1,9 +1,72 @@
 // 节点内容组件（LibTV 式卡片内容区）：五类基础节点 + 脚本节点
+// M4 起 Image/Chat/Video 节点接入模型网关（生成 / 流式对话 / 异步任务）
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
+import type { ChatMessage, VideoGenParams } from '@shared/types'
 import { mediaUrl, type NodeBodyProps } from '../registry'
 import { toast } from '../../stores/toast'
 import { markUndoPoint } from '../../canvas/history'
+import { useAppStore } from '../../stores/app'
+import { modelsByModality, useGatewayStore } from '../../stores/gateway'
+
+// shape.props.text 里的 JSON 解析：失败时返回 fallback（兼容旧纯文本数据，ScriptBody 同款约定）
+function parseJsonProp<T>(text: string, validate: (v: unknown) => T | null, fallback: T): T {
+  if (!text) return fallback
+  try {
+    const v = JSON.parse(text) as unknown
+    const r = validate(v)
+    if (r !== null) return r
+  } catch {
+    // 非结构化内容按 fallback 处理
+  }
+  return fallback
+}
+
+// 节点内模型选择下拉（按模态过滤全部供应商的模型）
+function ModelSelect({
+  value,
+  options,
+  onChange
+}: {
+  value: string
+  options: ReturnType<typeof modelsByModality>
+  onChange: (key: string) => void
+}): React.JSX.Element {
+  return (
+    <select
+      className="gen-select"
+      value={value}
+      onPointerDown={(e) => stopEventPropagation(e)}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      {!options.some((o) => o.key === value) && <option value="">选择模型…</option>}
+      {options.map((o) => (
+        <option key={o.key} value={o.key}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+// 未配置任何对应模态模型时的占位引导
+function NoModelHint({ onOpen }: { onOpen: () => void }): React.JSX.Element {
+  return (
+    <div className="gen-empty">
+      <span>尚未配置可用模型</span>
+      <button
+        className="btn-ghost small"
+        onPointerDown={(e) => stopEventPropagation(e)}
+        onClick={(e) => {
+          e.stopPropagation()
+          onOpen()
+        }}
+      >
+        打开模型设置
+      </button>
+    </div>
+  )
+}
 
 // 点击 vs 拖拽判定：拖动卡片时元素随指针移动，pointerup 仍会触发 click，
 // 位移超过阈值视为拖拽，不触发预览
@@ -91,51 +154,417 @@ export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
   )
 }
 
+// 图片节点：props.text 存 {prompt, modelKey, size}（旧纯文本数据视为提示词）
+interface ImageGenData {
+  prompt: string
+  modelKey: string
+  size: string
+}
+
+function parseImageGen(text: string): ImageGenData {
+  return parseJsonProp(
+    text,
+    (v) => {
+      const o = v as Record<string, unknown>
+      if (typeof o === 'object' && o !== null && typeof o.prompt === 'string') {
+        return {
+          prompt: o.prompt,
+          modelKey: typeof o.modelKey === 'string' ? o.modelKey : '',
+          size: typeof o.size === 'string' ? o.size : 'auto'
+        }
+      }
+      return null
+    },
+    { prompt: '', modelKey: '', size: 'auto' }
+  )
+}
+
+const IMAGE_SIZES = ['auto', '1024x1024', '1536x1024', '1024x1536']
+
 export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Element {
   const guard = useClickGuard()
-  if (!shape.props.mediaPath) {
-    return <div className="node-hint center">拖入图片或从菜单上传</div>
+  const editor = useEditor()
+  const project = useAppStore((s) => s.currentProject)
+  const providers = useGatewayStore((s) => s.providers)
+  const loaded = useGatewayStore((s) => s.loaded)
+  const loadProviders = useGatewayStore((s) => s.load)
+  const openSettings = useGatewayStore((s) => s.openSettings)
+  const options = modelsByModality(providers, 'image')
+  const data = parseImageGen(shape.props.text)
+  const [draft, setDraft] = useState(data.prompt)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (!loaded) void loadProviders()
+  }, [loaded, loadProviders])
+
+  const update = (next: ImageGenData): void => {
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: { text: JSON.stringify(next) }
+    })
   }
-  return (
-    <div
-      className="node-media"
-      onPointerDown={guard.onPointerDown}
-      onClick={(e) =>
-        guard.onClick(e, () =>
-          openPreview({
-            kind: 'image',
-            url: mediaUrl(shape.props.mediaPath),
-            title: shape.props.title
-          })
-        )
+
+  const generate = async (): Promise<void> => {
+    const opt = options.find((o) => o.key === data.modelKey)
+    if (!opt) return toast('请先选择图片模型')
+    if (!draft.trim()) return toast('请输入提示词')
+    if (!project) return toast('项目未就绪')
+    setBusy(true)
+    const res = await window.api.gateway.imageGenerate({
+      projectId: project.id,
+      providerId: opt.provider.id,
+      modelId: opt.model.id,
+      prompt: draft,
+      size: data.size
+    })
+    setBusy(false)
+    if (!res.ok) return toast(`生成失败：${res.error.message}`)
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: {
+        mediaId: res.data.id,
+        mediaPath: res.data.path,
+        mediaMime: res.data.mime,
+        title: res.data.name || res.data.id
       }
-    >
-      <img src={mediaUrl(shape.props.mediaPath)} alt={shape.props.title} draggable={false} />
+    })
+    markUndoPoint(editor, 'image-gen')
+  }
+
+  if (shape.props.mediaPath) {
+    return (
+      <div
+        className="node-media"
+        onPointerDown={guard.onPointerDown}
+        onClick={(e) =>
+          guard.onClick(e, () =>
+            openPreview({
+              kind: 'image',
+              url: mediaUrl(shape.props.mediaPath),
+              title: shape.props.title
+            })
+          )
+        }
+      >
+        <img src={mediaUrl(shape.props.mediaPath)} alt={shape.props.title} draggable={false} />
+      </div>
+    )
+  }
+
+  if (!options.length) return <NoModelHint onOpen={openSettings} />
+
+  return (
+    <div className="gen-panel">
+      <div className="gen-row">
+        <ModelSelect value={data.modelKey} options={options} onChange={(key) => update({ ...data, modelKey: key })} />
+        <select
+          className="gen-select w92"
+          value={data.size}
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onChange={(e) => update({ ...data, size: e.target.value })}
+        >
+          {IMAGE_SIZES.map((s) => (
+            <option key={s} value={s}>
+              {s === 'auto' ? '默认尺寸' : s}
+            </option>
+          ))}
+        </select>
+      </div>
+      <textarea
+        className="gen-prompt"
+        value={draft}
+        rows={3}
+        spellCheck={false}
+        placeholder="描述要生成的画面…"
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => update({ ...data, prompt: draft })}
+        onPointerDown={(e) => stopEventPropagation(e)}
+      />
+      <button
+        className="btn-primary small gen-go"
+        disabled={busy}
+        onPointerDown={(e) => stopEventPropagation(e)}
+        onClick={(e) => {
+          e.stopPropagation()
+          void generate()
+        }}
+      >
+        {busy ? '生成中…' : '✨ 生成图片'}
+      </button>
     </div>
   )
 }
 
+// 视频节点：props.text 存 {prompt, modelKey, params, taskId}；
+// 生成走异步任务（MiniMax H3 / Seedance），进度经网关事件推送
+interface VideoGenData {
+  prompt: string
+  modelKey: string
+  params: VideoGenParams
+  taskId: string
+}
+
+function parseVideoGen(text: string): VideoGenData {
+  return parseJsonProp<VideoGenData>(
+    text,
+    (v) => {
+      const o = v as Record<string, unknown>
+      if (typeof o === 'object' && o !== null && typeof o.prompt === 'string') {
+        const params = (typeof o.params === 'object' && o.params !== null ? o.params : {}) as {
+          ratio?: unknown
+          duration?: unknown
+          resolution?: unknown
+        }
+        return {
+          prompt: o.prompt,
+          modelKey: typeof o.modelKey === 'string' ? o.modelKey : '',
+          params: {
+            ratio: typeof params.ratio === 'string' ? params.ratio : undefined,
+            duration: typeof params.duration === 'number' ? params.duration : undefined,
+            resolution: typeof params.resolution === 'string' ? params.resolution : undefined
+          },
+          taskId: typeof o.taskId === 'string' ? o.taskId : ''
+        }
+      }
+      return null
+    },
+    { prompt: '', modelKey: '', params: {}, taskId: '' }
+  )
+}
+
+const VIDEO_RATIOS = ['16:9', '9:16', '1:1', '4:3', '3:4']
+const VIDEO_DURATIONS = [4, 5, 6, 8, 10, 12, 15]
+
 export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Element {
   const guard = useClickGuard()
-  if (!shape.props.mediaPath) {
-    return <div className="node-hint center">拖入视频或从菜单上传</div>
+  const editor = useEditor()
+  const project = useAppStore((s) => s.currentProject)
+  const providers = useGatewayStore((s) => s.providers)
+  const loaded = useGatewayStore((s) => s.loaded)
+  const loadProviders = useGatewayStore((s) => s.load)
+  const openSettings = useGatewayStore((s) => s.openSettings)
+  const options = modelsByModality(providers, 'video')
+  const data = parseVideoGen(shape.props.text)
+  const [draft, setDraft] = useState(data.prompt)
+  const [status, setStatus] = useState<string>(data.taskId ? 'running' : '')
+  const [submitting, setSubmitting] = useState(false)
+  const dataRef = useRef(data)
+  useLayoutEffect(() => {
+    dataRef.current = data
+  }, [data])
+
+  useEffect(() => {
+    if (!loaded) void loadProviders()
+  }, [loaded, loadProviders])
+
+  const update = (next: VideoGenData): void => {
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: { text: JSON.stringify(next) }
+    })
   }
-  return (
-    <div
-      className="node-media"
-      onPointerDown={guard.onPointerDown}
-      onClick={(e) =>
-        guard.onClick(e, () =>
-          openPreview({
-            kind: 'video',
-            url: mediaUrl(shape.props.mediaPath),
-            title: shape.props.title
-          })
-        )
+
+  // 挂载时核对持久化的任务：成功则补媒体，终态失败则允许重试，进行中则等事件
+  useEffect(() => {
+    if (!data.taskId) return
+    void (async () => {
+      const res = await window.api.gateway.videoTask(data.taskId)
+      if (!res.ok || !res.data) return
+      if (res.data.status === 'success' && res.data.mediaPath) {
+        editor.updateShape({
+          id: shape.id,
+          type: 'node-card',
+          props: {
+            mediaId: res.data.mediaId ?? '',
+            mediaPath: res.data.mediaPath,
+            mediaMime: 'video/mp4',
+            title: 'video'
+          }
+        })
+      } else if (res.data.status === 'failed' || res.data.status === 'cancelled') {
+        setStatus('')
+        update({ ...dataRef.current, taskId: '' })
       }
-    >
-      <video src={mediaUrl(shape.props.mediaPath)} preload="metadata" muted playsInline />
-      <span className="play-badge">▶</span>
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.taskId])
+
+  // 网关事件：本节点任务的视频进度
+  useEffect(() => {
+    const off = window.api.gateway.onEvent((e) => {
+      if (e.taskId !== dataRef.current.taskId) return
+      if (e.kind === 'video-status') {
+        setStatus(e.status)
+      } else if (e.kind === 'video-done') {
+        editor.updateShape({
+          id: shape.id,
+          type: 'node-card',
+          props: {
+            mediaId: e.mediaId,
+            mediaPath: e.mediaPath,
+            mediaMime: e.mime,
+            title: e.name
+          }
+        })
+        markUndoPoint(editor, 'video-gen')
+      } else if (e.kind === 'video-error') {
+        toast(`视频生成失败：${e.error}`)
+        setStatus('')
+        update({ ...dataRef.current, taskId: '' })
+      }
+    })
+    return off
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const submit = async (): Promise<void> => {
+    const opt = options.find((o) => o.key === data.modelKey)
+    if (!opt) return toast('请先选择视频模型')
+    if (!draft.trim()) return toast('请输入提示词')
+    if (!project) return toast('项目未就绪')
+    setSubmitting(true)
+    const res = await window.api.gateway.videoSubmit({
+      projectId: project.id,
+      nodeId: shape.id,
+      providerId: opt.provider.id,
+      modelId: opt.model.id,
+      prompt: draft,
+      params: data.params
+    })
+    setSubmitting(false)
+    if (!res.ok) return toast(`提交失败：${res.error.message}`)
+    update({ ...data, prompt: draft, taskId: res.data.taskId })
+    setStatus('running')
+  }
+
+  const cancel = async (): Promise<void> => {
+    if (!data.taskId) return
+    await window.api.gateway.videoCancel(data.taskId)
+    setStatus('')
+    update({ ...data, taskId: '' })
+  }
+
+  if (shape.props.mediaPath) {
+    return (
+      <div
+        className="node-media"
+        onPointerDown={guard.onPointerDown}
+        onClick={(e) =>
+          guard.onClick(e, () =>
+            openPreview({
+              kind: 'video',
+              url: mediaUrl(shape.props.mediaPath),
+              title: shape.props.title
+            })
+          )
+        }
+      >
+        <video src={mediaUrl(shape.props.mediaPath)} preload="metadata" muted playsInline />
+        <span className="play-badge">▶</span>
+      </div>
+    )
+  }
+
+  if (status === 'running' || status === 'submitted') {
+    return (
+      <div className="gen-panel">
+        <div className="gen-running">
+          <span className="gen-spin">◌</span>
+          <div>
+            <div>视频生成中…（约 1~5 分钟）</div>
+            <div className="dim">任务已持久化，可关闭窗口稍后回来</div>
+          </div>
+        </div>
+        <button
+          className="btn-ghost small"
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onClick={(e) => {
+            e.stopPropagation()
+            void cancel()
+          }}
+        >
+          取消任务
+        </button>
+      </div>
+    )
+  }
+
+  if (!options.length) return <NoModelHint onOpen={openSettings} />
+
+  // 分辨率选项跟随供应商（MiniMax: 768P/2K，Seedance: 480p/720p/1080p）
+  const opt = options.find((o) => o.key === data.modelKey)
+  const resolutions = opt?.provider.specId === 'minimax' ? ['768P', '2K'] : ['480p', '720p', '1080p']
+
+  return (
+    <div className="gen-panel">
+      <ModelSelect value={data.modelKey} options={options} onChange={(key) => update({ ...data, modelKey: key })} />
+      <textarea
+        className="gen-prompt"
+        value={draft}
+        rows={3}
+        spellCheck={false}
+        placeholder="描述视频内容、镜头与氛围…"
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => update({ ...data, prompt: draft })}
+        onPointerDown={(e) => stopEventPropagation(e)}
+      />
+      <div className="gen-row">
+        <select
+          className="gen-select"
+          value={data.params.ratio ?? '16:9'}
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onChange={(e) => update({ ...data, params: { ...data.params, ratio: e.target.value } })}
+        >
+          {VIDEO_RATIOS.map((r) => (
+            <option key={r} value={r}>
+              {r}
+            </option>
+          ))}
+        </select>
+        <select
+          className="gen-select w70"
+          value={String(data.params.duration ?? 5)}
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onChange={(e) =>
+            update({ ...data, params: { ...data.params, duration: Number(e.target.value) } })
+          }
+        >
+          {VIDEO_DURATIONS.map((d) => (
+            <option key={d} value={d}>
+              {d}s
+            </option>
+          ))}
+        </select>
+        <select
+          className="gen-select w86"
+          value={data.params.resolution ?? resolutions[1]}
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onChange={(e) =>
+            update({ ...data, params: { ...data.params, resolution: e.target.value } })
+          }
+        >
+          {resolutions.map((r) => (
+            <option key={r} value={r}>
+              {r}
+            </option>
+          ))}
+        </select>
+      </div>
+      <button
+        className="btn-primary small gen-go"
+        disabled={submitting}
+        onPointerDown={(e) => stopEventPropagation(e)}
+        onClick={(e) => {
+          e.stopPropagation()
+          void submit()
+        }}
+      >
+        {submitting ? '提交中…' : '🎬 生成视频'}
+      </button>
     </div>
   )
 }
@@ -165,19 +594,274 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   )
 }
 
-export function ChatBody(): React.JSX.Element {
+// 对话节点：props.text 存 {system, modelKey, messages}；
+// 发送经网关 streamText，主进程分片事件推送，逐字渲染
+interface ChatData {
+  system: string
+  modelKey: string
+  messages: ChatMessage[]
+}
+
+function parseChat(text: string): ChatData {
+  return parseJsonProp(
+    text,
+    (v) => {
+      const o = v as Record<string, unknown>
+      if (typeof o === 'object' && o !== null && Array.isArray(o.messages)) {
+        const messages = o.messages
+          .map((m) => m as { role?: unknown; content?: unknown })
+          .filter(
+            (m) =>
+              (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string'
+          )
+          .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content as string }))
+        return {
+          system: typeof o.system === 'string' ? o.system : '',
+          modelKey: typeof o.modelKey === 'string' ? o.modelKey : '',
+          messages
+        }
+      }
+      return null
+    },
+    { system: '', modelKey: '', messages: [] }
+  )
+}
+
+const CHAT_MAX_H = 520
+
+export function ChatBody({ shape }: NodeBodyProps): React.JSX.Element {
+  const editor = useEditor()
+  const project = useAppStore((s) => s.currentProject)
+  const providers = useGatewayStore((s) => s.providers)
+  const loaded = useGatewayStore((s) => s.loaded)
+  const loadProviders = useGatewayStore((s) => s.load)
+  const openSettings = useGatewayStore((s) => s.openSettings)
+  const options = modelsByModality(providers, 'text')
+  const data = parseChat(shape.props.text)
+  const [draft, setDraft] = useState('')
+  const [showSystem, setShowSystem] = useState(false)
+  const [systemDraft, setSystemDraft] = useState(data.system)
+  const [stream, setStream] = useState<{ taskId: string; text: string } | null>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const dataRef = useRef(data)
+  const streamRef = useRef(stream)
+  useLayoutEffect(() => {
+    dataRef.current = data
+  }, [data])
+  useLayoutEffect(() => {
+    streamRef.current = stream
+  }, [stream])
+  useWheelScroll(scrollRef)
+
+  useEffect(() => {
+    if (!loaded) void loadProviders()
+  }, [loaded, loadProviders])
+
+  // 流式期间自动滚到底部
+  useEffect(() => {
+    const el = scrollRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [data.messages.length, stream?.text])
+
+  const update = (next: ChatData): void => {
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: { text: JSON.stringify(next) }
+    })
+  }
+
+  const finishStream = (): void => {
+    const s = streamRef.current
+    if (!s) return
+    const cur = dataRef.current
+    if (s.text) {
+      update({
+        ...cur,
+        messages: [...cur.messages, { role: 'assistant', content: s.text }]
+      })
+      markUndoPoint(editor, 'chat-gen')
+    }
+    setStream(null)
+  }
+
+  // 网关事件：本节点聊天流
+  useEffect(() => {
+    const off = window.api.gateway.onEvent((e) => {
+      if (!streamRef.current || e.taskId !== streamRef.current.taskId) return
+      if (e.kind === 'chat-delta') {
+        setStream((s) => (s ? { ...s, text: s.text + e.text } : s))
+      } else if (e.kind === 'chat-done') {
+        finishStream()
+      } else if (e.kind === 'chat-error') {
+        toast(`对话失败：${e.error}`)
+        setStream(null)
+      }
+    })
+    return off
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const send = async (): Promise<void> => {
+    const opt = options.find((o) => o.key === data.modelKey)
+    if (!opt) return toast('请先选择对话模型')
+    if (!draft.trim()) return
+    if (stream) return
+    const messages: ChatMessage[] = [
+      ...data.messages,
+      { role: 'user', content: draft.trim() }
+    ]
+    update({ ...data, messages })
+    setDraft('')
+    setStream({ taskId: '', text: '' })
+    const res = await window.api.gateway.chatStart({
+      providerId: opt.provider.id,
+      modelId: opt.model.id,
+      system: data.system,
+      messages
+    })
+    if (!res.ok) {
+      toast(`发送失败：${res.error.message}`)
+      setStream(null)
+      return
+    }
+    setStream({ taskId: res.data.taskId, text: '' })
+  }
+
+  const stop = async (): Promise<void> => {
+    if (!stream?.taskId) return
+    await window.api.gateway.chatCancel(stream.taskId)
+    finishStream()
+  }
+
+  // 内容增高时自动撑高卡片（只增不减，上限后内部滚动）
+  useLayoutEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const need = el.scrollHeight + 120
+    if (need > shape.props.h && shape.props.h < CHAT_MAX_H) {
+      editor.updateShape({
+        id: shape.id,
+        type: 'node-card',
+        props: { h: Math.min(CHAT_MAX_H, need) }
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.messages.length, stream?.text, showSystem])
+
   return (
-    <div className="node-hint center">
-      💬 对话功能将在模型接入后开放
-      <br />
-      <span className="dim">（M4 模型网关）</span>
+    <div className="chat-body">
+      <div className="chat-toolbar">
+        {options.length ? (
+          <ModelSelect
+            value={data.modelKey}
+            options={options}
+            onChange={(key) => update({ ...data, modelKey: key })}
+          />
+        ) : (
+          <button
+            className="btn-ghost small"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              openSettings()
+            }}
+          >
+            配置对话模型
+          </button>
+        )}
+        <button
+          className="chat-sys-btn"
+          title="系统提示词"
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onClick={(e) => {
+            e.stopPropagation()
+            setShowSystem((v) => !v)
+          }}
+        >
+          {showSystem ? '▾' : '▸'} 系统
+        </button>
+      </div>
+      {showSystem && (
+        <textarea
+          className="chat-system"
+          value={systemDraft}
+          rows={2}
+          spellCheck={false}
+          placeholder="系统提示词（人设 / 输出要求）…"
+          onChange={(e) => setSystemDraft(e.target.value)}
+          onBlur={() => {
+            if (systemDraft !== data.system) update({ ...data, system: systemDraft })
+          }}
+          onPointerDown={(e) => stopEventPropagation(e)}
+        />
+      )}
+      <div className="chat-messages" ref={scrollRef}>
+        {data.messages.map((m, i) => (
+          <div key={i} className={`chat-msg ${m.role}`}>
+            <div className="chat-bubble">{m.content}</div>
+          </div>
+        ))}
+        {stream && (
+          <div className="chat-msg assistant">
+            <div className="chat-bubble streaming">
+              {stream.text || <span className="chat-cursor">▍</span>}
+            </div>
+          </div>
+        )}
+        {!data.messages.length && !stream && (
+          <div className="node-hint center">输入内容开始对话</div>
+        )}
+      </div>
+      <div className="chat-input-row">
+        <textarea
+          className="chat-input"
+          value={draft}
+          rows={1}
+          spellCheck={false}
+          placeholder={project ? '说点什么…（Enter 发送）' : '项目未就绪'}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              void send()
+            }
+            e.stopPropagation()
+          }}
+          onPointerDown={(e) => stopEventPropagation(e)}
+        />
+        {stream ? (
+          <button
+            className="btn-ghost small"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              void stop()
+            }}
+          >
+            停止
+          </button>
+        ) : (
+          <button
+            className="btn-primary small"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              void send()
+            }}
+          >
+            发送
+          </button>
+        )}
+      </div>
     </div>
   )
 }
 
-// ── 脚本节点（LibTV 1.2.6 基础版）──
+// ── 脚本节点（LibTV 式 AI 分镜）──
 // 数据存 shape.props.text（JSON 字符串），不改 tldraw 形状 schema，旧快照零迁移：
 // 解析失败时把原文当作剧本文本，兼容「文本节点内容直接粘贴」的旧数据
+// shape.props.text 里的 JSON 结构：{ source, shots, modelKey }
 interface ScriptShot {
   id: string
   scene: string
@@ -188,6 +872,8 @@ interface ScriptShot {
 interface ScriptData {
   source: string
   shots: ScriptShot[]
+  /** AI 拆解用的对话模型 key（`${providerId}::${modelId}`），空串表示未选 */
+  modelKey?: string
 }
 
 const emptyShot = (): ScriptShot => ({
@@ -210,11 +896,16 @@ function normalizeShot(v: unknown): ScriptShot {
 function parseScript(text: string): ScriptData {
   if (!text) return { source: '', shots: [] }
   try {
-    const v = JSON.parse(text) as { source?: unknown; shots?: unknown }
+    const v = JSON.parse(text) as {
+      source?: unknown
+      shots?: unknown
+      modelKey?: unknown
+    }
     if (v && typeof v === 'object' && Array.isArray(v.shots)) {
       return {
         source: typeof v.source === 'string' ? v.source : '',
-        shots: v.shots.map(normalizeShot)
+        shots: v.shots.map(normalizeShot),
+        modelKey: typeof v.modelKey === 'string' ? v.modelKey : undefined
       }
     }
   } catch {
@@ -225,6 +916,50 @@ function parseScript(text: string): ScriptData {
 
 const SCRIPT_MAX_H = 640
 
+// AI 拆解剧本的系统提示词：要求模型输出 JSON 数组分镜
+const STORYBOARD_SYSTEM_PROMPT = `你是一位专业的影视分镜导演。请将用户提供的剧本文本拆解为分镜列表。
+输出要求：
+1. 只输出一个 JSON 数组，不要添加任何其他文字或 markdown 标记
+2. 每个元素格式为 {"scene":"画面描述","dialogue":"台词或音效","duration":"预估时长（如 3s）"}
+3. 根据剧情节奏合理划分镜头，通常每 5-15 秒为一个镜头
+4. 画面描述要具体、可视化，适合后续 AI 绘图参考
+5. 台词包含角色对话、旁白或音效描述
+示例输出：
+[{"scene":"特写：清晨阳光透过窗帘洒在床头","dialogue":"（闹钟响起）","duration":"3s"},{"scene":"中景：女孩揉着眼睛从床上坐起","dialogue":"又是新的一天…","duration":"5s"}]`
+
+// 从 AI 响应中提取 JSON 数组
+function extractShotsJson(raw: string): ScriptShot[] | null {
+  const text = raw.trim()
+  // 尝试直接解析
+  try {
+    const v = JSON.parse(text)
+    if (Array.isArray(v)) return v.map(normalizeShot)
+  } catch {
+    // 继续
+  }
+  // 尝试提取 ```json ... ``` 或 [ ... ] 块
+  const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/)
+  if (jsonMatch) {
+    try {
+      const v = JSON.parse(jsonMatch[1].trim())
+      if (Array.isArray(v)) return v.map(normalizeShot)
+    } catch {
+      // 继续
+    }
+  }
+  const bracketStart = text.indexOf('[')
+  const bracketEnd = text.lastIndexOf(']')
+  if (bracketStart >= 0 && bracketEnd > bracketStart) {
+    try {
+      const v = JSON.parse(text.slice(bracketStart, bracketEnd + 1))
+      if (Array.isArray(v)) return v.map(normalizeShot)
+    } catch {
+      // 继续
+    }
+  }
+  return null
+}
+
 export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
   const data = parseScript(shape.props.text)
@@ -233,6 +968,14 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
   // 等下方布局副作用把自动撑高的 h 变更并入同一步后再打，避免污染撤销粒度
   const pendingMarkRef = useRef<string | null>(null)
   useWheelScroll(scrollRef)
+
+  // AI 拆解状态
+  const [breaking, setBreaking] = useState(false)
+  const breakTaskRef = useRef<string | null>(null)
+  const breakBufRef = useRef<string>('')
+  const providers = useGatewayStore((s) => s.providers)
+  const openSettings = useGatewayStore((s) => s.openSettings)
+  const chatModels = modelsByModality(providers, 'text')
 
   const update = (next: ScriptData): void => {
     editor.updateShape({
@@ -257,6 +1000,76 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
     ;[shots[index], shots[target]] = [shots[target], shots[index]]
     update({ ...data, shots })
     pendingMarkRef.current = 'shot-move'
+  }
+
+  // ── AI 拆解剧本：调用对话模型将剧本文本转为结构化分镜 ──
+  useEffect(() => {
+    const off = window.api.gateway.onEvent((e) => {
+      if (!breakTaskRef.current || e.taskId !== breakTaskRef.current) return
+      if (e.kind === 'chat-delta') {
+        breakBufRef.current += e.text
+      } else if (e.kind === 'chat-done') {
+        const shots = extractShotsJson(breakBufRef.current)
+        breakTaskRef.current = null
+        breakBufRef.current = ''
+        setBreaking(false)
+        if (shots && shots.length > 0) {
+          update({ ...data, shots })
+          pendingMarkRef.current = 'shot-breakdown'
+          toast(`AI 拆解完成，生成 ${shots.length} 个镜头`)
+        } else {
+          toast('AI 拆解结果解析失败，请检查模型输出或换一个模型重试')
+        }
+      } else if (e.kind === 'chat-error') {
+        breakTaskRef.current = null
+        breakBufRef.current = ''
+        setBreaking(false)
+        toast(`AI 拆解失败：${e.error}`)
+      }
+    })
+    return off
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data])
+
+  const breakdown = async (): Promise<void> => {
+    if (breaking) {
+      // 正在拆解中 → 取消
+      if (breakTaskRef.current) {
+        await window.api.gateway.chatCancel(breakTaskRef.current)
+      }
+      breakTaskRef.current = null
+      breakBufRef.current = ''
+      setBreaking(false)
+      return
+    }
+    if (!data.source.trim()) {
+      toast('请先输入剧本文本')
+      return
+    }
+    const modelKey = data.modelKey ?? ''
+    const opt = chatModels.find((m) => m.key === modelKey) ?? chatModels[0]
+    if (!opt) {
+      toast('请先在设置中配置对话模型')
+      return
+    }
+    // 持久化选中的 modelKey
+    if (data.modelKey !== opt.key) {
+      update({ ...data, modelKey: opt.key })
+    }
+    breakBufRef.current = ''
+    setBreaking(true)
+    const res = await window.api.gateway.chatStart({
+      providerId: opt.provider.id,
+      modelId: opt.model.id,
+      system: STORYBOARD_SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: data.source.trim() }]
+    })
+    if (!res.ok) {
+      setBreaking(false)
+      toast(`发送失败：${res.error.message}`)
+      return
+    }
+    breakTaskRef.current = res.data.taskId
   }
 
   // 内容增高时自动撑高卡片（只增不减，上限后内部滚动），手动缩放不被覆盖
@@ -289,7 +1102,7 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
         value={data.source}
         rows={3}
         spellCheck={false}
-        placeholder="输入或粘贴剧本文本…（接入模型后可一键拆解分镜）"
+        placeholder="输入或粘贴剧本文本…（点击「AI 拆解」可一键生成分镜）"
         onChange={(e) => update({ ...data, source: e.target.value })}
         onBlur={markSession}
         onPointerDown={(e) => stopEventPropagation(e)}
@@ -377,13 +1190,43 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
         >
           ＋ 添加镜头
         </button>
-        <button
-          className="btn-ghost small"
-          onClick={() => toast('剧本 AI 拆解将在模型接入（M4）后开放')}
-          onPointerDown={(e) => stopEventPropagation(e)}
-        >
-          ⚡ 拆解剧本
-        </button>
+        {chatModels.length > 0 ? (
+          <>
+            <button
+              className={`btn-breakdown ${breaking ? 'running' : ''}`}
+              onClick={() => void breakdown()}
+              disabled={!data.source.trim() && !breaking}
+              onPointerDown={(e) => stopEventPropagation(e)}
+            >
+              {breaking ? '■ 取消拆解…' : '⚡ AI 拆解'}
+            </button>
+            <select
+              className="script-model-select"
+              value={data.modelKey ?? chatModels[0]?.key ?? ''}
+              title="选择拆解用的对话模型"
+              onChange={(e) => update({ ...data, modelKey: e.target.value })}
+              onPointerDown={(e) => stopEventPropagation(e)}
+            >
+              {chatModels.map((m) => (
+                <option key={m.key} value={m.key}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </>
+        ) : (
+          <button
+            className="btn-ghost small"
+            title="点击配置对话模型"
+            onClick={(e) => {
+              e.stopPropagation()
+              openSettings()
+            }}
+            onPointerDown={(e) => stopEventPropagation(e)}
+          >
+            ⚡ AI 拆解（需配置模型）
+          </button>
+        )}
       </div>
     </div>
   )

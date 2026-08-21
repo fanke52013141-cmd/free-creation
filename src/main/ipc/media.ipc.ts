@@ -3,7 +3,7 @@ import { ipcMain, dialog } from 'electron'
 import { IPC } from '../../shared/contracts'
 import type { IpcEnvelope } from '../../shared/contracts'
 import type { MediaAsset, MediaImportError, MediaImportResult } from '../../shared/types'
-import { importMedia } from '../store/media.repo'
+import { deleteMedia, importMedia, listMedia } from '../store/media.repo'
 
 function ok<T>(data: T): IpcEnvelope<T> {
   return { ok: true, data }
@@ -76,6 +76,23 @@ export function registerMediaIpc(): void {
       })
       if (result.canceled || result.filePaths.length === 0) return ok({ assets: [], errors: [] })
       return ok(await importAll(projectId, result.filePaths))
+    }
+  )
+
+  ipcMain.handle(
+    IPC.media.list,
+    (_e, projectId: string): IpcEnvelope<MediaAsset[]> => {
+      if (!projectId) return err('INVALID_INPUT', '参数不完整')
+      return ok(listMedia(projectId))
+    }
+  )
+
+  ipcMain.handle(
+    IPC.media.delete,
+    async (_e, mediaId: string): Promise<IpcEnvelope<boolean>> => {
+      if (!mediaId) return err('INVALID_INPUT', '参数不完整')
+      const deleted = await deleteMedia(mediaId)
+      return ok(deleted)
     }
   )
 }

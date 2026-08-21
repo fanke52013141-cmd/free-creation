@@ -99,7 +99,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             <span
               key={p.id}
               className={`port-dot in ${draft ? (ok ? 'ok' : 'dim') : ''}`}
-              style={{ top: inY[i] - 5, borderColor: PORT_COLORS[p.type] }}
+              style={{ top: inY[i] - 5, borderColor: PORT_COLORS[p.type], ['--pc' as string]: PORT_COLORS[p.type] }}
               title={`${p.name}（${p.type}）输入`}
             />
           )
@@ -110,7 +110,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           <span
             key={p.id}
             className={`port-dot out ${isSource && draft?.from.portId === p.id ? 'ok' : ''}`}
-            style={{ top: outY[i] - 5, borderColor: PORT_COLORS[p.type] }}
+            style={{ top: outY[i] - 5, borderColor: PORT_COLORS[p.type], ['--pc' as string]: PORT_COLORS[p.type] }}
             title={`${p.name}（${p.type}）输出 · 按住拖出连线`}
             onPointerDown={(e) => {
               stopEventPropagation(e)

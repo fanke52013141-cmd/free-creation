@@ -11,7 +11,7 @@
 | 项 | 值 |
 |---|---|
 | 定位 | 单用户、本地优先（无云端、无账号），Windows 优先 |
-| 技术栈 | Electron 39 + electron-vite 5 + React 19 + TypeScript 5.9 + tldraw 4.5.12 + better-sqlite3 + zustand + pnpm |
+| 技术栈 | Electron 39 + electron-vite 5 + React 19 + TypeScript 5.9 + tldraw 4.5.12 + better-sqlite3 + zustand + AI SDK 7（ai + @ai-sdk/openai-compatible）+ pnpm |
 | 画布引擎 | tldraw v4（自定义形状承载节点卡片） |
 | 数据 | SQLite（索引/设置）+ 每项目一个 `project.json`（图数据 + tldraw 快照）+ 媒体文件目录 |
 | 参考竞品 | LibTV（功能/交互参照），参考文档：`libtv_guide.md`（工作区根目录） |
@@ -35,20 +35,29 @@ pnpm build:win        # 打 Windows 安装包
 ```
 src/
 ├─ main/                      # Electron 主进程
-│  ├─ index.ts                # 窗口创建、media:// 协议注册（stream: true）
+│  ├─ index.ts                # 窗口创建、media:// 协议注册（stream: true）、启动时 resumePendingVideoTasks
 │  ├─ ipc/project.ipc.ts      # 项目 CRUD/保存（含 beforeunload 用的同步保存）
 │  ├─ ipc/media.ipc.ts        # 拖拽导入 + 系统对话框导入（async，逐文件错误透传）
+│  ├─ ipc/gateway.ipc.ts      # 模型网关：供应商 CRUD/连通测试/chat 流式/生图/视频任务
+│  ├─ gateway/                # ★ 模型网关（M4）
+│  │  ├─ factory.ts           # 驱动映射：openai-compatible（AI SDK）vs video（自研适配器）
+│  │  ├─ providers.repo.ts    # providers 表 CRUD（含连通测试拉取模型列表）
+│  │  ├─ chat.ts              # 流式对话：streamText + 事件转发（chunk/done/error）
+│  │  ├─ image.ts             # 生图：generateImage → 落地项目 media → 返回 asset
+│  │  └─ video.ts             # 视频任务式适配器（MiniMax H3 + Seedance）：提交/轮询/下载/断点恢复
 │  └─ store/
-│     ├─ db.ts                # SQLite 初始化 + 迁移 + settings 表
+│     ├─ db.ts                # SQLite 初始化 + 迁移 + settings/providers/tasks 等表
 │     ├─ projects.repo.ts     # project.json 读写（原子写：tmp → rename，旧版留 .bak）
 │     └─ media.repo.ts        # 异步复制进项目目录 + 索引；2GB 上限；文本内容内联(≤1MB)
 ├─ preload/index.ts           # contextBridge 暴露 window.api（类型即契约）
 ├─ shared/
-│  ├─ contracts/index.ts      # IPC 通道名常量 + IpcEnvelope 信封类型
-│  └─ types/index.ts          # 领域模型（CanvasNode/ProjectFile/MediaAsset/...）
+│  ├─ contracts/index.ts      # IPC 通道名常量 + IpcEnvelope 信封类型 + SaveProviderInput
+│  └─ types/index.ts          # 领域模型（CanvasNode/ProviderConfig/VideoTaskInfo/PROVIDER_SPECS/...）
 └─ renderer/src/
-   ├─ App.tsx                 # 启动恢复上次项目 + 路由（home/canvas）+ 全局 Toast
+   ├─ App.tsx                 # 启动恢复上次项目 + 路由（home/canvas）+ 全局 Toast + 挂载 ProviderSettingsPanel
    ├─ pages/                  # ProjectListPage（主页）/ CanvasPage（画布页 + 顶栏重命名）
+   ├─ gateway/
+   │  └─ ProviderSettingsPanel.tsx  # 供应商管理面板（模板选择/BaseURL+Key/模型增删/连通测试）
    ├─ canvas/
    │  ├─ CanvasEditor.tsx     # tldraw 宿主：建节点/拖放导入/自动保存/连线收尾/连线显隐
    │  ├─ NodeCardShape.tsx    # node-card 形状定义 + TLGlobalShapePropsMap 声明合并
@@ -62,8 +71,8 @@ src/
    │  ├─ registry.tsx         # ★ NodeType 注册表 + 端口声明/兼容校验/端口纵坐标布局
    │  └─ specs/               # 六类节点：bodies.tsx（内容组件）+ index.tsx（注册，含端口声明）
    ├─ components/Toast.tsx    # 全局 toast（挂 App 根）
-   ├─ stores/                 # zustand：app（视图状态）/ toast / connection（连线拖拽草稿）
-   └─ dev/browserMock.ts      # 浏览器直连时的 window.api 模拟（DEV only）
+   ├─ stores/                 # zustand：app / toast / connection（连线拖拽草稿）/ gateway（供应商+任务状态）
+   └─ dev/browserMock.ts      # 浏览器直连时的 window.api 模拟（DEV only，gateway 走 MOCK 拒绝）
 ```
 
 数据落盘位置：`%APPDATA%/canvas-studio/data/`（app.db + `projects/<id>/project.json` + `projects/<id>/media/`）。
@@ -82,6 +91,21 @@ src/
 | `importMedia({ projectId, paths })` | 拖拽导入 → `{ assets, errors }` 逐文件结果 |
 | `pickMedia(projectId)` | 系统对话框多选导入 |
 | `getDroppedFilePath(file)` | Electron 32+ 拿拖拽文件真实路径（webUtils） |
+| `gateway.providers()` | 列出已配置供应商（含模型清单） |
+| `gateway.saveProvider(input)` | 新增/更新供应商（upsert，API Key 明文存 providers 表） |
+| `gateway.deleteProvider(id)` | 删除供应商 |
+| `gateway.testProvider(input)` | 连通测试：OpenAI 兼容驱动拉 GET /models 并返回模型列表；视频驱动仅校验必填 |
+| `gateway.chatStart({ providerId, modelId, system, messages })` | 发起流式对话 → `{ taskId }`，后续走事件推送 |
+| `gateway.chatCancel({ taskId })` | 中止对话（AbortController） |
+| `gateway.imageGenerate({ projectId, providerId, modelId, prompt, size })` | 生图 → 落地项目 media → `{ asset }`（暂无参考图入参） |
+| `gateway.videoSubmit({ projectId, nodeId, providerId, modelId, prompt, params, firstFrameMediaId? })` | 提交视频任务 → `{ taskId }`，轮询走事件推送（契约支持首帧 mediaId，主进程已实现转 data URL；**渲染端 UI 尚未接线**） |
+| `gateway.videoCancel({ taskId })` | 取消视频任务 |
+| `gateway.videoTask({ taskId })` | 查询单个任务状态（兜底，正常以事件为准） |
+
+**网关事件**：单一通道 `gateway:event`（`window.api.gateway.onEvent(listener)`），载荷为判别联合 `GatewayEvent`（`shared/contracts`）：
+`chat-delta`（流式分片 text）/ `chat-done` / `chat-error`；
+`video-status`（含进度 message）/ `video-done`（返回 mediaId+mediaPath+name+mime，视频落地项目 media 目录）/ `video-error`。
+渲染端 `stores/gateway.ts` 持 taskId → 节点映射，节点 body 按事件刷新。
 
 ## 5. 关键技术决策（务必理解再改）
 
@@ -106,6 +130,14 @@ src/
 
 8. **样式约定**：全部在 `app.css`，CSS 变量（--bg/--card/--line/--brand…）定义配色；LibTV 式深色。浮层必须 portal 到 `document.body`（画布容器带 transform，fixed 会错位）。
 
+9. **模型网关双层驱动**（M4，务必理解再扩）：
+   - **选型结论**：文本/图片统一走 Vercel AI SDK 的 `@ai-sdk/openai-compatible`——调研确认国内主流厂商（DeepSeek/通义/Kimi/GLM/豆包）官方端点全部 OpenAI 兼容，中转站天然对口，OpenAI 官方也直接可用，故**不需要** per-vendor 官方包。视频（MiniMax H3 / Seedance）是任务式异步 API（提交→轮询→下载），AI SDK 无对应抽象，自研轻量适配器（`video.ts`，每家约 100 行）。
+   - **驱动路由**：`factory.ts#driverForSpec` 按 `specId` 分流——`minimax`/`seedance` → video 适配器，其余 → openai-compatible。**新增文本/图片供应商零代码**：只需在 `shared/types` 的 `PROVIDER_SPECS` 加模板（预填 baseURL/建议模型）；新增视频供应商才要写适配器。
+   - **供应商持久化**：`providers` 表（SQLite），**API Key 明文存储**（单用户本地应用，无多租户风险，已知取舍）；模型清单 JSON 存 `models` 列，手动增删 + 连通测试时从 `GET /models` 一键拉取。**实测坑**（微信 chatapi 端点）：部分中转站不实现 `/models`（返回 400）、且**仅支持流式**（非流式请求挂起到超时）——`testProvider` 已做回退：`/models` 失败时用已配置的首个模型发最小 `stream:true` 对话探测；对话链路本身用 `streamText` 恒为流式，不受影响。
+   - **视频任务持久化**：复用 `tasks` 表（`kind='video'`），upstreamTaskId 存 input 列 JSON；**重启恢复**：主进程启动时 `resumePendingVideoTasks` 扫描 submitted/running 任务继续轮询，产物落地项目 media 目录（复用媒体管线，`media://` 协议直接可播）。
+   - **流式事件推送**：主进程只经单一 `gateway:event` 通道推判别联合 `GatewayEvent`；渲染端 `stores/gateway.ts` 以 taskId 为键分发。**不要**为每类事件开新通道（信封规范 §10）。
+   - **图片生成产物**：`image.ts` 生成后直接写入项目 media 目录并登记 asset，节点拿到即插即用，不经用户手动导入。
+
 ## 6. 已完成里程碑
 
 - **M0** 骨架：Electron + tldraw 集成、启动恢复上次项目。
@@ -126,6 +158,13 @@ src/
   - **双击边界**：双击弹菜单的监听限定 `target.closest('.tl-canvas')` 内且不在 shape/overlays/UI 上——双击侧栏按钮、连线开关不再误弹节点菜单。
   - **待连线残留**：拉线到空白后取消上传（对话框取消/失败/空 assets）会清 `pendingConnectRef`，避免残留到下一次建节点时误连。
   - 环检测/重复连线拦截/类型兼容经复测**本来就正常**（此前会话报失败是测试脚本时序问题）；拖拽中途引线浮层 + 端口高亮 + Esc 取消正常（此前误报是 React 渲染与同帧查询的时序假阴性，需分步 evaluate 验证）。
+- **M4 模型网关**（对话/图片/视频三类节点已全部实装）：
+  - **依赖**：Vercel AI SDK 7（`ai` + `@ai-sdk/openai-compatible`），文本/图片全走 OpenAI 兼容协议；视频自研任务式适配器（MiniMax H3 `POST /v2/video_generation` + 轮询 `/v2/query/video_generation`；Seedance 即梦开放平台提交 + 轮询），架构详见 §5.9。
+  - **供应商体系**：`PROVIDER_SPECS` 九个模板（openai/deepseek/qwen/kimi/glm/doubao/relay/minimax/seedance，预填官方 baseURL 与建议模型）；`ProviderSettingsPanel`（左上角项目菜单「模型供应商设置」入口，portal 挂 App 根）做模板选择 → BaseURL/APIKey → 模型清单（手动增删 + 连通测试一键拉取 `GET /models`）；providers 表 upsert。
+  - **对话节点**：模型下拉（按已配置供应商聚合）+ system 输入 + 多轮消息；`chatStart` 返回 taskId，`chat-delta/done/error` 事件流式渲染（markdown 纯文本呈现，气泡式布局），中止按钮走 `chatCancel`。props.text 存 `{system, modelKey, messages}` JSON（旧纯文本视为 system，零迁移）。
+  - **图片节点**：提示词 + 模型 + 尺寸（auto/1024x1024/1536x1024/1024x1536）；`imageGenerate` 生成后落地项目 media 并直接绑定节点 asset（media:// 协议渲染，无需手动导入）。props.text 存 `{prompt, modelKey, size}`（旧纯文本视为提示词）。
+  - **视频节点**：提示词 + 模型 + 参数（时长/分辨率按 spec 支持度）；`videoSubmit` 任务式提交，`video-status/done/error` 事件驱动进度与产物绑定；**任务持久化 + 重启恢复**（tasks 表 kind='video' + `resumePendingVideoTasks`，节点挂载时按 taskId 查询补媒体/清理终态）。props.text 存 `{prompt, modelKey, params, taskId}`。首帧图链路：契约与主进程已实现（`firstFrameMediaId` → 读本地文件转 base64 data URL 上传，MiniMax/Seedance 适配器均消费），**渲染端尚未接线**。
+  - **校验**：typecheck / lint（0 error，余为 CRLF 警告）/ `build:win` 全部通过。
 
 ## 7. 已知问题 / 待办（按优先级）
 
@@ -133,16 +172,24 @@ src/
 - [ ] `media://` 未处理 HTTP Range 请求，`<video>` 拖进度条可能失效 —— 实测，失效则在协议 handler 解析 Range 头
 - [x] 卡片内可滚动区域（长文本）滚轮是否会缩放画布 —— 已修复并验证：`useWheelScroll`（bodies.tsx）在内容可滚时原生截断 wheel 冒泡（React 合成事件到不了 tldraw 的容器监听），顶部/底部放行给画布
 - [ ] tldraw 字体/图标走 `cdn.tldraw.com`，**离线时缺失**（单机应用硬伤）→ 用 tldraw `assetUrls` 本地化打包
+- [x] 网关真实 API 冒烟（2026-08-22，文本链路）——微信 chatapi（chatapi.weixin.qq.com/openai/v1）+ GLM-5.2 全链路通过：`createOpenAICompatible` + `streamText` 流式输出正常，供应商「微信 AI（GLM-5.2）」已写入 providers 表（id: wechat-glm），应用内对话节点开箱可用
+- [x] 网关真实 API 冒烟（2026-08-22，图片链路）——codex2api（www.codex2api.com/v1）+ gpt-image-2 全链路通过：`/models` 正常返回（该中转仅此一个模型），`generateImage` 66~81s 出图，b64_json 解码为有效 PNG，`image.ts` 消费的 `uint8Array`/`mediaType` 字段均正常；供应商「Codex2API（生图）」已写入 providers 表（id: codex2api-image）。**注意**：gpt-image-2 不严格遵循 size 参数（请求 1024x1024 实际返回 1254x1254），属上游特性，应用内尺寸选项仅作建议值
+- [ ] 视频链路仍未接真实 API——MiniMax/Seedance 待各自密钥实测（含重启恢复）
 
 **P2（已记录，排期处理）**
+- [ ] API Key 明文存 SQLite（单用户本地应用，暂可接受；后续可接 Windows 凭据管理器 DPAPI）
+- [ ] 对话上下文仅手动输入，**连线输入尚未自动注入**（上游文本/图片节点的产物拼进 messages）——M5 连线编排的核心
 - [ ] 项目软删后 project.json + 媒体文件残留磁盘（M7 回收站规划内）
 - [ ] 保存全量重写（节点多后写放大），M5+ 做增量
 - [ ] `window.confirm` 与深色 UI 不符，换自绘确认弹窗
 - [ ] `detectKind` 认 `.avi` 但导入过滤器不含（不一致）；db 未显式 close；`exec` 状态字段当前恒为 idle（M4 执行引擎才用）
 - [ ] git 换行符警告（LF→CRLF），可加 `.gitattributes` 统一
 
-**M4 开发内容（下一步）**
-模型网关（OpenAI 兼容 API + 本地模型接入）、对话节点实装（基于连线图做上下文组装）、脚本节点 AI 拆解分镜、执行引擎（拓扑排序 + 节点 exec 状态流转）。参考《技术框架与规范》§6/§7 与 libtv_guide.md 对应章节。
+**M4 剩余 / 下一步**
+- 连线上下文注入（核心缺口）：三类生成节点的连线输入自动拼装进生成请求——上游文本节点内容进对话 messages；上游图片节点作图片参考（`ImageGenerateInput` 需加参考图字段）/ 视频首帧（契约与主进程已就绪，渲染端 UI 未接线，见 §6 M4 条目）。
+- 脚本节点 AI 拆解分镜（剧本 → 分镜表格一键生成，走网关 chat）。
+- 执行引擎：拓扑排序 + 节点 exec 状态流转（连线编排一键串行执行，`exec` 字段启用）。
+- 参考规划：《技术框架与规范》§6/§7 与 libtv_guide.md 对应章节。
 
 ## 8. 浏览器冒烟测试说明（M3 验证结论）
 
