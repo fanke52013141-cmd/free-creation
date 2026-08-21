@@ -1,14 +1,23 @@
-import { Tldraw, type Editor } from 'tldraw'
+import { Tldraw, createShapeId, type Editor, type TLShapeId } from 'tldraw'
 import 'tldraw/tldraw.css'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ProjectMeta, MediaAsset, NodeTypeId } from '@shared/types'
 import { NodeCardUtil, type NodeCardProps } from './NodeCardShape'
 import { NodeCreateMenu } from './NodeCreateMenu'
+import { ConnectionLayer } from './ConnectionLayer'
+import {
+  setConnectionFinishHandler,
+  teardownConnectionDrag,
+  type ConnectionFinish
+} from './connection-drag'
+import { deriveGraph, tryConnect } from './graph'
 import { getNodeType } from '../nodes/registry'
-import { registerBaseNodeTypes } from '../nodes/specs'
+import { registerBaseNodeTypes, registerScriptNodeType } from '../nodes/specs'
 import { toast } from '../stores/toast'
+import type { ConnectionFrom } from '../stores/connection'
 
 registerBaseNodeTypes()
+registerScriptNodeType()
 
 interface CanvasEditorProps {
   project: ProjectMeta
@@ -26,9 +35,12 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
   const wrapRef = useRef<HTMLDivElement>(null)
   // 快照恢复失败后置位：跳过一切自动保存，避免把空画布写回覆盖原数据
   const restoreFailedRef = useRef(false)
+  // 拉线到空白处松手：暂存连线来源，待菜单选定节点类型后自动连线（LibTV 交互）
+  const pendingConnectRef = useRef<ConnectionFrom | null>(null)
   const [menu, setMenu] = useState<MenuState | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [addDrag, setAddDrag] = useState<{ x: number; y: number } | null>(null)
+  const [edgesVisible, setEdgesVisible] = useState(true)
 
   // 左侧栏「＋」按住拖动：跟手显示浮标，松开时在落点弹创建菜单（拖动式添加）
   const startAddDrag = (e: React.PointerEvent): void => {
@@ -47,32 +59,39 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
     window.addEventListener('pointerup', onUp)
   }
 
+  // 保存载荷：快照 + 从 shapes 派生的图数据（nodes/edges，M4 执行引擎的消费源）
+  const collectSaveInput = (): {
+    id: string
+    tldrawSnapshot: unknown
+    graph: { nodes: unknown[]; edges: unknown[]; groups: unknown[] }
+  } | null => {
+    const editor = editorRef.current
+    if (!editor) return null
+    return {
+      id: project.id,
+      tldrawSnapshot: editor.store.getStoreSnapshot(),
+      graph: deriveGraph(editor)
+    }
+  }
+
   const flushSave = (): void => {
     if (restoreFailedRef.current) return
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current)
       saveTimerRef.current = null
     }
-    const editor = editorRef.current
-    if (!editor) return
-    void window.api.saveProject({
-      id: project.id,
-      tldrawSnapshot: editor.store.getStoreSnapshot()
-    })
+    const input = collectSaveInput()
+    if (input) void window.api.saveProject(input)
   }
 
   useEffect(() => {
     // 关窗时异步 invoke 可能赶不上页面销毁，用同步 IPC 确保落盘
     const onBeforeUnload = (): void => {
       if (restoreFailedRef.current) return
-      const editor = editorRef.current
-      if (!editor) return
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
       saveTimerRef.current = null
-      window.api.saveProjectSync({
-        id: project.id,
-        tldrawSnapshot: editor.store.getStoreSnapshot()
-      })
+      const input = collectSaveInput()
+      if (input) window.api.saveProjectSync(input)
     }
     window.addEventListener('beforeunload', onBeforeUnload)
     return () => {
@@ -104,13 +123,23 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
     }
   }, [])
 
+  const connectPendingTo = (editor: Editor, targetId: TLShapeId): void => {
+    const pending = pendingConnectRef.current
+    pendingConnectRef.current = null
+    if (!pending) return
+    const error = tryConnect(editor, pending, targetId)
+    if (error) toast(`未连线：${error}`)
+  }
+
   const createNodeAt = (type: NodeTypeId, screenX: number, screenY: number): void => {
     const editor = editorRef.current
     if (!editor) return
     const spec = getNodeType(type)
     if (!spec) return
     const point = editor.screenToPage({ x: screenX, y: screenY })
+    const id = createShapeId()
     editor.createShape({
+      id,
       type: 'node-card',
       x: point.x - spec.defaultSize.w / 2,
       y: point.y - spec.defaultSize.h / 2,
@@ -121,18 +150,23 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
         h: spec.defaultSize.h
       } satisfies Partial<NodeCardProps>
     })
+    connectPendingTo(editor, id)
   }
 
   const createMediaNodes = (assets: MediaAsset[], screenX: number, screenY: number): void => {
     const editor = editorRef.current
     if (!editor) return
+    let firstId: TLShapeId | null = null
     assets.forEach((asset, i) => {
       // 文本类文件（txt/md/json）：内容直接填进文本节点，可编辑
       const isTextFile = asset.kind === 'file'
       const spec = getNodeType(isTextFile ? 'text' : asset.kind)
       if (!spec) return
       const point = editor.screenToPage({ x: screenX + i * 24, y: screenY + i * 24 })
+      const id = createShapeId()
+      if (!firstId) firstId = id
       editor.createShape({
+        id,
         type: 'node-card',
         x: point.x,
         y: point.y,
@@ -148,6 +182,7 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
         } satisfies Partial<NodeCardProps>
       })
     })
+    if (firstId) connectPendingTo(editor, firstId)
   }
 
   const reportImport = (errors: { path: string; reason: string }[]): void => {
@@ -184,6 +219,8 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
 
   const handleMount = (editor: Editor): void => {
     editorRef.current = editor
+    // LibTV 式深色画布（tldraw 默认浅色，与整体 UI 不符）
+    editor.user.updateUserPreferences({ colorScheme: 'dark' })
     if (initialSnapshot) {
       try {
         editor.store.loadStoreSnapshot(editor.store.migrateSnapshot(initialSnapshot as never))
@@ -204,9 +241,41 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
     )
   }
 
+  // 连线松手：命中节点则校验连线；落在空白则暂存来源并弹创建菜单（新节点自动连线）
+  const handleConnectionFinish = useCallback((r: ConnectionFinish): void => {
+    const editor = editorRef.current
+    if (!editor) return
+    const pagePt = editor.screenToPage(r.screenPt)
+    const target = editor.getShapeAtPoint(pagePt, {
+      hitInside: true,
+      margin: 6,
+      filter: (s) => s.type === 'node-card' && s.id !== r.from.shapeId && !s.isLocked
+    })
+    if (target) {
+      const error = tryConnect(editor, r.from, target.id, pagePt)
+      if (error) toast(error)
+      return
+    }
+    pendingConnectRef.current = r.from
+    setMenu({ x: r.screenPt.x, y: r.screenPt.y })
+  }, [])
+
+  useEffect(() => {
+    setConnectionFinishHandler(handleConnectionFinish)
+    return () => {
+      setConnectionFinishHandler(null)
+      teardownConnectionDrag()
+    }
+  }, [handleConnectionFinish])
+
+  const closeMenu = (): void => {
+    pendingConnectRef.current = null
+    setMenu(null)
+  }
+
   return (
     <div
-      className={`canvas-host ${dragOver ? 'drag-over' : ''}`}
+      className={`canvas-host ${dragOver ? 'drag-over' : ''} ${edgesVisible ? '' : 'edges-hidden'}`}
       ref={wrapRef}
       onDragOver={(e) => {
         e.preventDefault()
@@ -263,12 +332,20 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
           📖
         </button>
       </div>
+      <button
+        className="edge-toggle"
+        title="显示 / 隐藏画布连线"
+        onClick={() => setEdgesVisible((v) => !v)}
+      >
+        🔗 {edgesVisible ? '隐藏连线' : '显示连线'}
+      </button>
       {addDrag && (
         <div className="add-drag-ghost" style={{ left: addDrag.x + 14, top: addDrag.y + 14 }}>
           松开在这里添加节点
         </div>
       )}
       {dragOver && <div className="drop-hint">松开鼠标，上传到画布</div>}
+      <ConnectionLayer />
       {menu && (
         <NodeCreateMenu
           x={menu.x}
@@ -281,7 +358,7 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
             void handleUpload(menu.x, menu.y)
             setMenu(null)
           }}
-          onClose={() => setMenu(null)}
+          onClose={closeMenu}
         />
       )}
     </div>

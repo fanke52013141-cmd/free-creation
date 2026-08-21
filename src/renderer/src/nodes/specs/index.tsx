@@ -1,6 +1,22 @@
-// 五类基础节点 Spec 注册（见《技术框架与规范》§5.1）
+// 节点 Spec 注册（见《技术框架与规范》§5.1）
+// 端口声明对齐路线图的节点类型表；any 万能口，其余类型需一致才可连
+import type { PortDecl } from '@shared/types'
 import { registerNodeType } from '../registry'
-import { AudioBody, ChatBody, ImageBody, TextBody, VideoBody } from './bodies'
+import { AudioBody, ChatBody, ImageBody, ScriptBody, TextBody, VideoBody } from './bodies'
+
+const port = (id: string, name: string, type: PortDecl['type']): PortDecl => ({
+  id,
+  name,
+  dir: 'in',
+  type
+})
+
+const out = (id: string, name: string, type: PortDecl['type']): PortDecl => ({
+  id,
+  name,
+  dir: 'out',
+  type
+})
 
 export function registerBaseNodeTypes(): void {
   registerNodeType({
@@ -9,6 +25,7 @@ export function registerBaseNodeTypes(): void {
     icon: '📝',
     color: '#8ab4f8',
     defaultSize: { w: 260, h: 150 },
+    ports: { in: [port('in-text', '文本', 'text')], out: [out('out-text', '文本', 'text')] },
     Body: TextBody
   })
   registerNodeType({
@@ -17,6 +34,10 @@ export function registerBaseNodeTypes(): void {
     icon: '🖼️',
     color: '#34d399',
     defaultSize: { w: 320, h: 240 },
+    ports: {
+      in: [port('in-image', '图片', 'image'), port('in-text', '提示词', 'text')],
+      out: [out('out-image', '图片', 'image')]
+    },
     Body: ImageBody
   })
   registerNodeType({
@@ -25,6 +46,14 @@ export function registerBaseNodeTypes(): void {
     icon: '🎥',
     color: '#f472b6',
     defaultSize: { w: 320, h: 240 },
+    ports: {
+      in: [
+        port('in-video', '视频', 'video'),
+        port('in-image', '首帧图', 'image'),
+        port('in-text', '提示词', 'text')
+      ],
+      out: [out('out-video', '视频', 'video')]
+    },
     Body: VideoBody
   })
   registerNodeType({
@@ -33,6 +62,10 @@ export function registerBaseNodeTypes(): void {
     icon: '🎵',
     color: '#fbbf24',
     defaultSize: { w: 280, h: 120 },
+    ports: {
+      in: [port('in-audio', '音频', 'audio'), port('in-text', '提示词', 'text')],
+      out: [out('out-audio', '音频', 'audio')]
+    },
     Body: AudioBody
   })
   registerNodeType({
@@ -41,6 +74,24 @@ export function registerBaseNodeTypes(): void {
     icon: '💬',
     color: '#a78bfa',
     defaultSize: { w: 280, h: 170 },
+    ports: { in: [port('in-text', '文本', 'text')], out: [out('out-text', '文本', 'text')] },
     Body: ChatBody
+  })
+}
+
+// 脚本节点（LibTV 1.2.6 基础版）：剧本文本 + 手工分镜表；
+// AI 拆解 / 批量生图在 M4 模型接入后开放
+export function registerScriptNodeType(): void {
+  registerNodeType({
+    type: 'script',
+    label: '脚本',
+    icon: '🎬',
+    color: '#fb923c',
+    defaultSize: { w: 360, h: 320 },
+    ports: {
+      in: [port('in-text', '剧本文本', 'text'), port('in-image', '参考图', 'image')],
+      out: [out('out-json', '分镜数据', 'json'), out('out-text', '分镜文本', 'text')]
+    },
+    Body: ScriptBody
   })
 }

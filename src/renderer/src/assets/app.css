@@ -348,6 +348,12 @@ input:focus {
 }
 
 /* ── 节点卡片 ── */
+.node-card-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
 .node-card {
   display: flex;
   flex-direction: column;
@@ -364,7 +370,9 @@ input:focus {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 10px;
+  height: 30px;
+  padding: 0 10px;
+  flex-shrink: 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   font-size: 13px;
   font-weight: 600;
@@ -583,6 +591,247 @@ input:focus {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ── 端口圆点 ── */
+.port-dot {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid;
+  background: #141821;
+  z-index: 5;
+  transition:
+    transform 0.12s,
+    box-shadow 0.12s,
+    opacity 0.12s;
+}
+
+.port-dot.in {
+  left: -6px;
+}
+
+.port-dot.out {
+  right: -6px;
+  cursor: crosshair;
+}
+
+.port-dot.out:hover {
+  transform: scale(1.4);
+  box-shadow: 0 0 10px rgba(108, 140, 255, 0.65);
+}
+
+.port-dot.ok {
+  transform: scale(1.3);
+  box-shadow:
+    0 0 0 3px rgba(52, 211, 153, 0.22),
+    0 0 12px rgba(52, 211, 153, 0.75);
+}
+
+.port-dot.dim {
+  opacity: 0.22;
+}
+
+/* ── 连线拖拽引线（portal 到 body，fixed 定位） ── */
+.conn-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 950;
+}
+
+.conn-overlay line {
+  stroke: var(--brand);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+}
+
+.conn-overlay circle {
+  fill: var(--brand);
+}
+
+/* ── 连线显隐（LibTV 26-7-7）：纯 CSS 切换，不写 store 不污染撤销历史 ── */
+.edge-toggle {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  z-index: 400;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.edge-toggle:hover {
+  color: var(--txt);
+  border-color: var(--brand);
+}
+
+.canvas-host.edges-hidden [data-shape-type='arrow'] {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* ── 脚本节点（LibTV 1.2.6 基础版：剧本文本 + 分镜表） ── */
+.script-body {
+  height: 100%;
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.script-source {
+  width: 100%;
+  background: #141821;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--txt);
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 8px;
+  resize: none;
+  font-family: inherit;
+  outline: none;
+}
+
+.script-source:focus {
+  border-color: var(--brand);
+}
+
+.script-shots {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.shot-row {
+  display: flex;
+  gap: 8px;
+  background: #141821;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.shot-no {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(251, 146, 60, 0.16);
+  color: #fb923c;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.shot-fields {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.shot-scene {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--txt);
+  font-size: 12px;
+  line-height: 1.5;
+  resize: none;
+  font-family: inherit;
+  padding: 0;
+}
+
+.shot-meta {
+  display: flex;
+  gap: 6px;
+}
+
+.shot-dialogue {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 3px 8px;
+  outline: none;
+}
+
+.shot-duration {
+  width: 54px;
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 3px 8px;
+  outline: none;
+}
+
+.shot-dialogue:focus,
+.shot-duration:focus {
+  border-color: var(--brand);
+}
+
+.shot-ops {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.shot-op {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.shot-op:hover:not(:disabled) {
+  background: var(--card-hover);
+  color: var(--txt);
+}
+
+.shot-op:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.shot-op.danger:hover {
+  color: var(--red);
+}
+
+.script-foot {
+  display: flex;
+  gap: 8px;
 }
 
 /* ── 媒体预览浮层 ── */
