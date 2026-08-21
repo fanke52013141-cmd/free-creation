@@ -120,12 +120,18 @@ src/
   - 脚本节点（LibTV 1.2.6 基础版）：剧本文本输入 + 分镜表格（增删/上下移/画面描述/台词/时长），内容撑高卡片（上限 640 后内滚），数据存 text prop（JSON）。
   - 保存时 `deriveGraph` 从 shapes 派生 nodes/edges 写入 project.json graph 字段（M4 执行引擎数据源）。
   - 深色画布（tldraw `colorScheme: 'dark'` 对齐整体 UI）。
+- **M3 交互审查修复轮（浏览器全量回归通过）**：
+  - **撤销粒度**：tldraw 变更默认累积进 `pendingDiff`，无分段点时一次 Ctrl+Z 回退多步。修复：每个逻辑操作结束同步调 `markHistoryStoppingPoint`（封装在 `canvas/history.ts#markUndoPoint`；**必须同步调用**，rAF 在页面不可见时不触发会丢分段点）。已覆盖：建节点、建连线、媒体导入、文本提交、标题编辑、脚本字段（blur 打点，连续敲键自然合并为一步）、镜头增删/移动。「拉线到空白建节点」流程不打节点单独点，节点+连线合并为一步（createEdge 统一收尾打点）。脚本节点自动撑高的 h 变更用 `pendingMarkRef` 延迟到布局副作用之后打点，与内容变更并入同一撤销步。
+  - **删节点级联清线**：tldraw 删 shape 只级联删 binding 不删 arrow，会留悬空线。修复：`CanvasEditor.handleMount` 里 `sideEffects.registerAfterDeleteHandler('shape')` 同步处理——binding 已在删 shape 时移除，此刻遍历 arrow 找绑定数 <2 的悬空线随同一次事务 `deleteShapes`（一次 Ctrl+Z 整体还原）。异步方案（rAF/microtask + store listener）在后台标签页会丢清理时机，已弃用。
+  - **双击边界**：双击弹菜单的监听限定 `target.closest('.tl-canvas')` 内且不在 shape/overlays/UI 上——双击侧栏按钮、连线开关不再误弹节点菜单。
+  - **待连线残留**：拉线到空白后取消上传（对话框取消/失败/空 assets）会清 `pendingConnectRef`，避免残留到下一次建节点时误连。
+  - 环检测/重复连线拦截/类型兼容经复测**本来就正常**（此前会话报失败是测试脚本时序问题）；拖拽中途引线浮层 + 端口高亮 + Esc 取消正常（此前误报是 React 渲染与同帧查询的时序假阴性，需分步 evaluate 验证）。
 
 ## 7. 已知问题 / 待办（按优先级）
 
 **P1（待实测/待修）**
 - [ ] `media://` 未处理 HTTP Range 请求，`<video>` 拖进度条可能失效 —— 实测，失效则在协议 handler 解析 Range 头
-- [ ] 卡片内可滚动区域（长文本）滚轮是否会缩放画布 —— tldraw 常见坑，需在 wheel 事件上判定
+- [x] 卡片内可滚动区域（长文本）滚轮是否会缩放画布 —— 已修复并验证：`useWheelScroll`（bodies.tsx）在内容可滚时原生截断 wheel 冒泡（React 合成事件到不了 tldraw 的容器监听），顶部/底部放行给画布
 - [ ] tldraw 字体/图标走 `cdn.tldraw.com`，**离线时缺失**（单机应用硬伤）→ 用 tldraw `assetUrls` 本地化打包
 
 **P2（已记录，排期处理）**
@@ -143,6 +149,9 @@ src/
 - 连线创建、空白拉线弹菜单、新节点自动连线、连线显隐、脚本节点增删改均已通过浏览器验证（`http://localhost:5173/` + browserMock）。
 - **重要**：自动化测试工具的 mouse 操作不产生 pointer 事件（应用监听 pointerdown/move/up），拖线类交互必须用 JS 合成 `PointerEvent` dispatchEvent 验证；真实用户操作不受影响。
 - 浏览器验证遇到 `Failed to reload ... does not provide an export named` 类 Vite HMR 错误时，删除 `node_modules/.vite` 并重启 dev server（HMR 模块图缓存损坏，源码本身无误）。
+- **缓存损坏的另一种表现**（审查轮实测）：HMR 无报错但浏览器拿到旧模块（改了代码行为不变）。验证模块新鲜度要 `fetch('/src/xxx.tsx')` 检查**标识符**（如函数名）——不能检查带引号的字符串字面量（Vite 转译会单引号变双引号，必然误报）。发现仍旧时同样删 `node_modules/.vite` 重启。
+- 拖拽中途状态（引线浮层/端口高亮）检查必须**分步 evaluate**：dispatch 事件与查询 DOM 不能在同一个脚本里（React 渲染是异步的，同帧查询必为 false，属测试假阴性）。
+- 撤销相关断言：undo 后若脚本要继续后续步骤，必须先 redo 恢复现场，否则端口元素已随节点消失导致后续拖拽脚本静默失败。
 
 ## 9. 工作流约定
 

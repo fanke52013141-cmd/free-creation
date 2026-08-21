@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import { mediaUrl, type NodeBodyProps } from '../registry'
 import { toast } from '../../stores/toast'
+import { markUndoPoint } from '../../canvas/history'
 
 // 点击 vs 拖拽判定：拖动卡片时元素随指针移动，pointerup 仍会触发 click，
 // 位移超过阈值视为拖拽，不触发预览
@@ -55,6 +56,7 @@ export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
     setEditing(false)
     if (draft !== shape.props.text) {
       editor.updateShape({ id: shape.id, type: 'node-card', props: { text: draft } })
+      markUndoPoint(editor, 'text-edit')
     }
   }
 
@@ -227,6 +229,9 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
   const data = parseScript(shape.props.text)
   const scrollRef = useRef<HTMLDivElement>(null)
+  // 离散操作（加/删/移镜头）的分段点名：不在 handler 里立即打点，
+  // 等下方布局副作用把自动撑高的 h 变更并入同一步后再打，避免污染撤销粒度
+  const pendingMarkRef = useRef<string | null>(null)
   useWheelScroll(scrollRef)
 
   const update = (next: ScriptData): void => {
@@ -236,6 +241,10 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
       props: { text: JSON.stringify(next) }
     })
   }
+
+  // 离开输入框时打撤销分段点：连续敲键在 pendingDiff 里自然合并为一步，
+  // 分段点保证「本次编辑会话」与后续操作（加镜头等）不粘连
+  const markSession = (): void => markUndoPoint(editor, 'script-edit')
 
   const patchShot = (id: string, patch: Partial<ScriptShot>): void => {
     update({ ...data, shots: data.shots.map((s) => (s.id === id ? { ...s, ...patch } : s)) })
@@ -247,6 +256,7 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
     const shots = [...data.shots]
     ;[shots[index], shots[target]] = [shots[target], shots[index]]
     update({ ...data, shots })
+    pendingMarkRef.current = 'shot-move'
   }
 
   // 内容增高时自动撑高卡片（只增不减，上限后内部滚动），手动缩放不被覆盖
@@ -264,6 +274,14 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.shots.length, data.source.length])
 
+  // 在高度副作用之后执行：此刻文本+高度变更都已落入同一段 pendingDiff，再打分段点
+  useLayoutEffect(() => {
+    const name = pendingMarkRef.current
+    if (!name) return
+    pendingMarkRef.current = null
+    markUndoPoint(editor, name)
+  })
+
   return (
     <div className="script-body" ref={scrollRef}>
       <textarea
@@ -273,6 +291,7 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
         spellCheck={false}
         placeholder="输入或粘贴剧本文本…（接入模型后可一键拆解分镜）"
         onChange={(e) => update({ ...data, source: e.target.value })}
+        onBlur={markSession}
         onPointerDown={(e) => stopEventPropagation(e)}
       />
       {data.shots.length > 0 && (
@@ -288,6 +307,7 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
                   spellCheck={false}
                   placeholder="画面描述…"
                   onChange={(e) => patchShot(shot.id, { scene: e.target.value })}
+                  onBlur={markSession}
                   onPointerDown={(e) => stopEventPropagation(e)}
                 />
                 <div className="shot-meta">
@@ -297,6 +317,7 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
                     spellCheck={false}
                     placeholder="台词 / 音效"
                     onChange={(e) => patchShot(shot.id, { dialogue: e.target.value })}
+                    onBlur={markSession}
                     onPointerDown={(e) => stopEventPropagation(e)}
                   />
                   <input
@@ -305,6 +326,7 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
                     spellCheck={false}
                     placeholder="时长"
                     onChange={(e) => patchShot(shot.id, { duration: e.target.value })}
+                    onBlur={markSession}
                     onPointerDown={(e) => stopEventPropagation(e)}
                   />
                 </div>
@@ -331,9 +353,10 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
                 <button
                   className="shot-op danger"
                   title="删除镜头"
-                  onClick={() =>
+                  onClick={() => {
                     update({ ...data, shots: data.shots.filter((s) => s.id !== shot.id) })
-                  }
+                    pendingMarkRef.current = 'shot-delete'
+                  }}
                   onPointerDown={(e) => stopEventPropagation(e)}
                 >
                   ✕
@@ -346,7 +369,10 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
       <div className="script-foot">
         <button
           className="btn-ghost small"
-          onClick={() => update({ ...data, shots: [...data.shots, emptyShot()] })}
+          onClick={() => {
+            update({ ...data, shots: [...data.shots, emptyShot()] })
+            pendingMarkRef.current = 'shot-add'
+          }}
           onPointerDown={(e) => stopEventPropagation(e)}
         >
           ＋ 添加镜头

@@ -151,6 +151,9 @@ export function createEdge(editor: Editor, from: EdgeEndpoint, to: EdgeEndpoint)
       }
     })
   })
+  // 连线单独成为一个撤销步；若上一操作是「拉线到空白新建节点」，
+  // 节点创建尚未打点，会与本连线合并为一步（符合直觉）
+  editor.markHistoryStoppingPoint('create-edge')
   return true
 }
 

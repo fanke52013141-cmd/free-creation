@@ -11,6 +11,7 @@ import {
   type ConnectionFinish
 } from './connection-drag'
 import { deriveGraph, tryConnect } from './graph'
+import { markUndoPoint } from './history'
 import { getNodeType } from '../nodes/registry'
 import { registerBaseNodeTypes, registerScriptNodeType } from '../nodes/specs'
 import { toast } from '../stores/toast'
@@ -107,10 +108,13 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
     if (!el) return
     const onDblClick = (e: MouseEvent): void => {
       const target = e.target as HTMLElement
+      // 只在 tldraw 画布空白处触发：侧栏/连线开关/菜单等自有 UI（均在 .tl-canvas 外）
+      // 双击时不得弹菜单；形状与选中浮层上的双击交给节点自身处理
       if (
+        !target.closest('.tl-canvas') ||
         target.closest('.tl-shape') ||
-        target.closest('.tlui-layout') ||
-        target.closest('.tl-overlays')
+        target.closest('.tl-overlays') ||
+        target.closest('.tlui-layout')
       )
         return
       e.preventDefault()
@@ -123,12 +127,17 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
     }
   }, [])
 
-  const connectPendingTo = (editor: Editor, targetId: TLShapeId): void => {
+  // 消费「拉线到空白」的待连线；返回是否成功建线（失败也要打撤销分段点）
+  const connectPendingTo = (editor: Editor, targetId: TLShapeId): boolean => {
     const pending = pendingConnectRef.current
     pendingConnectRef.current = null
-    if (!pending) return
+    if (!pending) return false
     const error = tryConnect(editor, pending, targetId)
-    if (error) toast(`未连线：${error}`)
+    if (error) {
+      toast(`未连线：${error}`)
+      return false
+    }
+    return true
   }
 
   const createNodeAt = (type: NodeTypeId, screenX: number, screenY: number): void => {
@@ -150,7 +159,10 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
         h: spec.defaultSize.h
       } satisfies Partial<NodeCardProps>
     })
-    connectPendingTo(editor, id)
+    // 有待连线且成功建线时由 createEdge 统一打点（节点+连线并为一步）；
+    // 建线失败（类型不兼容等）或无待连线时，节点创建独立成步
+    const connected = connectPendingTo(editor, id)
+    if (!connected) markUndoPoint(editor, 'create-node')
   }
 
   const createMediaNodes = (assets: MediaAsset[], screenX: number, screenY: number): void => {
@@ -182,7 +194,12 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
         } satisfies Partial<NodeCardProps>
       })
     })
-    if (firstId) connectPendingTo(editor, firstId)
+    // 建线成功时由 createEdge 打点（导入+连线并为一步）；失败/无待连线时导入独立成步
+    const connected = firstId ? connectPendingTo(editor, firstId) : false
+    if (!connected) {
+      pendingConnectRef.current = null
+      markUndoPoint(editor, 'import-media')
+    }
   }
 
   const reportImport = (errors: { path: string; reason: string }[]): void => {
@@ -195,10 +212,17 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
   const handleUpload = async (screenX: number, screenY: number): Promise<void> => {
     const res = await window.api.pickMedia(project.id)
     if (!res.ok) {
+      // 取消/失败都没有新节点，清掉待连线，避免残留到下一次建节点时误连
+      pendingConnectRef.current = null
       toast(`上传失败：${res.error.message}`)
       return
     }
-    if (res.data.assets.length > 0) createMediaNodes(res.data.assets, screenX, screenY)
+    if (res.data.assets.length > 0) {
+      createMediaNodes(res.data.assets, screenX, screenY)
+    } else {
+      // 用户在系统对话框点了取消（返回空 assets）
+      pendingConnectRef.current = null
+    }
     reportImport(res.data.errors)
   }
 
@@ -219,6 +243,10 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
 
   const handleMount = (editor: Editor): void => {
     editorRef.current = editor
+    // DEV 调试入口：浏览器 console 可用 window.__tldrawEditor 访问（生产构建自动剔除）
+    if (import.meta.env.DEV) {
+      ;(window as { __tldrawEditor?: Editor }).__tldrawEditor = editor
+    }
     // LibTV 式深色画布（tldraw 默认浅色，与整体 UI 不符）
     editor.user.updateUserPreferences({ colorScheme: 'dark' })
     if (initialSnapshot) {
@@ -239,6 +267,19 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
       },
       { scope: 'document' }
     )
+    // 删除节点时级联清理连线：tldraw 删 shape 时只删其 binding 不删 arrow，会留悬空线。
+    // 用 sideEffects 的 afterDelete 钩子同步处理——binding 在 shape 的 beforeDelete 阶段
+    // 已被 tldraw 删除，此时遍历箭头找绑定数 < 2 的即为悬空线，随同一次事务删除（可整体撤销）。
+    // 异步方案（rAF/microtask）在后台标签页会丢清理时机。
+    editor.sideEffects.registerAfterDeleteHandler('shape', (deleted) => {
+      if (deleted.type !== 'node-card') return
+      const orphaned: TLShapeId[] = []
+      for (const shape of editor.getCurrentPageShapes()) {
+        if (shape.type !== 'arrow') continue
+        if (editor.getBindingsFromShape(shape.id, 'arrow').length < 2) orphaned.push(shape.id)
+      }
+      if (orphaned.length > 0) editor.deleteShapes(orphaned)
+    })
   }
 
   // 连线松手：命中节点则校验连线；落在空白则暂存来源并弹创建菜单（新节点自动连线）

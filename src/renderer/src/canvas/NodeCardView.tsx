@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { getNodeType, portCompatible, portOffsets, PORT_COLORS } from '../nodes/registry'
 import { useConnectionStore } from '../stores/connection'
 import { beginConnectionDrag } from './connection-drag'
+import { markUndoPoint } from './history'
 import type { NodeCardShape } from './NodeCardShape'
 
 const EXEC_COLORS: Record<string, string> = {
@@ -38,6 +39,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     const next = e.currentTarget.textContent ?? ''
     if (next !== shape.props.title) {
       editor.updateShape({ id: shape.id, type: 'node-card', props: { title: next } })
+      markUndoPoint(editor, 'title-edit')
     }
   }
 
