@@ -647,26 +647,202 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   )
 }
 
+interface AudioData {
+  modelKey: string
+  text: string
+  voice: string
+  format: string
+}
+
+function parseAudioGen(text: string): AudioData {
+  return parseJsonProp(
+    text,
+    (v) => {
+      const o = v as Record<string, unknown>
+      if (typeof o === 'object' && o !== null) {
+        return {
+          modelKey: typeof o.modelKey === 'string' ? o.modelKey : '',
+          text: typeof o.text === 'string' ? o.text : '',
+          voice: typeof o.voice === 'string' ? o.voice : 'alloy',
+          format: typeof o.format === 'string' ? o.format : 'mp3'
+        }
+      }
+      return null
+    },
+    { modelKey: '', text: '', voice: 'alloy', format: 'mp3' }
+  )
+}
+
+const VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']
+const AUDIO_FORMATS = ['mp3', 'opus', 'aac', 'flac', 'wav', 'pcm']
+
 export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Element {
-  if (!shape.props.mediaPath) {
-    return <div className="node-hint center">拖入音频或从菜单上传</div>
+  const editor = useEditor()
+  const project = useAppStore((s) => s.currentProject)
+  const providers = useGatewayStore((s) => s.providers)
+  const loaded = useGatewayStore((s) => s.loaded)
+  const loadProviders = useGatewayStore((s) => s.load)
+  const openSettings = useGatewayStore((s) => s.openSettings)
+  const options = modelsByModality(providers, 'audio')
+  const data = parseAudioGen(shape.props.text)
+  const [draft, setDraft] = useState(data.text)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (!loaded) void loadProviders()
+  }, [loaded, loadProviders])
+
+  const update = (next: AudioData): void => {
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: { text: JSON.stringify(next) }
+    })
   }
+
+  const generate = async (): Promise<void> => {
+    const opt = options.find((o) => o.key === data.modelKey)
+    if (!opt) return toast('请先选择音频模型')
+    if (!draft.trim()) return toast('请输入要朗读的文本')
+    if (!project) return toast('项目未就绪')
+    setBusy(true)
+    const res = await window.api.gateway.audioGenerate({
+      projectId: project.id,
+      providerId: opt.provider.id,
+      modelId: opt.model.id,
+      text: draft,
+      voice: data.voice,
+      format: data.format
+    })
+    setBusy(false)
+    if (!res.ok) return toast(`生成失败：${res.error.message}`)
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: {
+        mediaId: res.data.id,
+        mediaPath: res.data.path,
+        mediaMime: res.data.mime,
+        title: res.data.name || res.data.id
+      }
+    })
+    markUndoPoint(editor, 'audio-gen')
+  }
+
+  // 已有音频：播放 + 重新生成
+  if (shape.props.mediaPath) {
+    return (
+      <div className="node-audio">
+        <div className="audio-wave">♪ ♫ ♪</div>
+        <div className="audio-actions">
+          <button
+            className="btn-ghost small"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              openPreview({
+                kind: 'audio',
+                url: mediaUrl(shape.props.mediaPath),
+                title: shape.props.title
+              })
+            }}
+          >
+            播放
+          </button>
+          <button
+            className="btn-ghost small"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              editor.updateShape({
+                id: shape.id,
+                type: 'node-card',
+                props: { mediaId: '', mediaPath: '', mediaMime: '' }
+              })
+            }}
+          >
+            重新生成
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // 生成模式
   return (
-    <div className="node-audio">
-      <div className="audio-wave">♪ ♫ ♪</div>
+    <div className="node-audio-gen">
+      <div className="gen-toolbar">
+        {options.length === 0 ? (
+          loaded ? (
+            <span className="hint">未配置音频模型</span>
+          ) : (
+            <span className="hint">加载中…</span>
+          )
+        ) : (
+          <ModelSelect
+            value={data.modelKey}
+            options={options}
+            onChange={(key) => update({ ...data, modelKey: key })}
+          />
+        )}
+        {loaded && options.length === 0 && (
+          <button
+            className="btn-ghost small"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              void openSettings()
+            }}
+          >
+            配置
+          </button>
+        )}
+      </div>
+      <textarea
+        className="gen-textarea audio"
+        value={draft}
+        placeholder="输入要朗读的文本…"
+        onPointerDown={(e) => stopEventPropagation(e)}
+        onChange={(e) => setDraft(e.target.value)}
+      />
+      <div className="audio-options">
+        <label className="opt-label">音色</label>
+        <select
+          className="gen-select small"
+          value={data.voice}
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onChange={(e) => update({ ...data, voice: e.target.value })}
+        >
+          {VOICES.map((v) => (
+            <option key={v} value={v}>
+              {v}
+            </option>
+          ))}
+        </select>
+        <label className="opt-label">格式</label>
+        <select
+          className="gen-select small"
+          value={data.format}
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onChange={(e) => update({ ...data, format: e.target.value })}
+        >
+          {AUDIO_FORMATS.map((f) => (
+            <option key={f} value={f}>
+              {f}
+            </option>
+          ))}
+        </select>
+      </div>
       <button
-        className="btn-ghost small"
+        className="btn-generate"
+        disabled={busy}
         onPointerDown={(e) => stopEventPropagation(e)}
         onClick={(e) => {
           e.stopPropagation()
-          openPreview({
-            kind: 'audio',
-            url: mediaUrl(shape.props.mediaPath),
-            title: shape.props.title
-          })
+          void generate()
         }}
       >
-        播放
+        {busy ? '生成中…' : '🔊 生成语音'}
       </button>
     </div>
   )
@@ -1349,18 +1525,144 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
   )
 }
 
-// Group 节点：分组容器标注
-export function GroupBody({ shape }: NodeBodyProps): React.JSX.Element {
-  return (
-    <div className="group-body">
-      <span className="group-icon">📦</span>
-      <span className="group-label">{shape.props.title || '分组'}</span>
-      <span className="group-hint">框选节点后打组，方便整组移动与管理</span>
-    </div>
+// Group 节点：分组容器（框选打组 + 整组移动 + 解组）
+interface GroupData {
+  memberIds: string[]
+}
+
+function parseGroupData(text: string): GroupData {
+  return parseJsonProp(
+    text,
+    (v) => {
+      const o = v as Record<string, unknown>
+      if (typeof o === 'object' && o !== null && Array.isArray(o.memberIds)) {
+        return { memberIds: o.memberIds.filter((x): x is string => typeof x === 'string') }
+      }
+      return null
+    },
+    { memberIds: [] }
   )
 }
 
-// Storyboard 节点：分镜板
+export function GroupBody({ shape }: NodeBodyProps): React.JSX.Element {
+  const editor = useEditor()
+  const data = parseGroupData(shape.props.text)
+  const prevPosRef = useRef({ x: shape.x, y: shape.y })
+
+  // 同步移动组内成员（计算位移增量，应用到所有成员）
+  useEffect(() => {
+    const prev = prevPosRef.current
+    const dx = shape.x - prev.x
+    const dy = shape.y - prev.y
+    if ((dx !== 0 || dy !== 0) && data.memberIds.length > 0) {
+      const updates = data.memberIds
+        .map((id) => {
+          const s = editor.getShape(id as TLShapeId)
+          return s ? { id: s.id, type: s.type, x: s.x + dx, y: s.y + dy } : null
+        })
+        .filter((u): u is NonNullable<typeof u> => u !== null)
+      if (updates.length > 0) editor.updateShapes(updates)
+    }
+    prevPosRef.current = { x: shape.x, y: shape.y }
+  })
+
+  const groupSelection = (): void => {
+    const selected = editor
+      .getSelectedShapes()
+      .filter((s) => s.id !== shape.id && s.type === 'node-card')
+    if (selected.length < 2) {
+      toast('请先在画布上选中至少 2 个节点')
+      return
+    }
+    const memberIds = selected.map((s) => String(s.id))
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: { text: JSON.stringify({ memberIds }) }
+    })
+    markUndoPoint(editor, 'group-create')
+    toast(`已将 ${memberIds.length} 个节点打组`)
+  }
+
+  const ungroup = (): void => {
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: { text: '' }
+    })
+    markUndoPoint(editor, 'group-dissolve')
+    toast('已解组')
+  }
+
+  const selectMembers = (): void => {
+    const ids = data.memberIds.map((id) => id as TLShapeId)
+    editor.setSelectedShapes(ids)
+  }
+
+  // 空组：显示打组引导
+  if (data.memberIds.length === 0) {
+    return (
+      <div className="group-body">
+        <span className="group-icon">📦</span>
+        <span className="group-empty-hint">选中多个节点后点击下方按钮打组</span>
+        <button
+          className="btn-ghost small"
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onClick={(e) => {
+            e.stopPropagation()
+            groupSelection()
+          }}
+        >
+          📦 将选中节点打组
+        </button>
+      </div>
+    )
+  }
+
+  // 已打组：显示成员列表 + 操作
+  return (
+    <div className="group-body">
+      <div className="group-header">
+        <span className="group-icon">📦</span>
+        <span className="group-count">{data.memberIds.length} 个节点</span>
+      </div>
+      <div className="group-members">
+        {data.memberIds.map((id) => {
+          const s = editor.getShape(id as TLShapeId) as NodeBodyProps['shape'] | undefined
+          return (
+            <div key={id} className="group-member-item">
+              <span className="group-member-dot">{s ? '●' : '○'}</span>
+              <span>{s?.props.title || s?.props.nodeType || '已删除'}</span>
+            </div>
+          )
+        })}
+      </div>
+      <div className="group-actions">
+        <button
+          className="btn-ghost small"
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onClick={(e) => {
+            e.stopPropagation()
+            selectMembers()
+          }}
+        >
+          全选成员
+        </button>
+        <button
+          className="btn-ghost small danger"
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onClick={(e) => {
+            e.stopPropagation()
+            ungroup()
+          }}
+        >
+          解组
+        </button>
+      </div>
+    </div>
+  )
+}
+// Storyboard 节点：分镜板（支持逐镜生图 + 全部生图）
 interface StoryboardShot {
   id: string
   scene: string
@@ -1372,12 +1674,13 @@ interface StoryboardShot {
 
 interface StoryboardData {
   shots: StoryboardShot[]
+  imageModelKey?: string
 }
 
 function parseStoryboard(text: string): StoryboardData {
   if (!text) return { shots: [] }
   try {
-    const v = JSON.parse(text) as { shots?: unknown }
+    const v = JSON.parse(text) as { shots?: unknown; imageModelKey?: unknown }
     if (v && typeof v === 'object' && Array.isArray(v.shots)) {
       return {
         shots: v.shots.map(
@@ -1408,7 +1711,8 @@ function parseStoryboard(text: string): StoryboardData {
                   ? (s as { imageMediaPath: string }).imageMediaPath
                   : undefined
             }) as StoryboardShot
-        )
+        ),
+        imageModelKey: typeof v.imageModelKey === 'string' ? v.imageModelKey : undefined
       }
     }
   } catch {
@@ -1423,7 +1727,18 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
   const editor = useEditor()
   const scrollRef = useRef<HTMLDivElement>(null)
   useWheelScroll(scrollRef)
+  const project = useAppStore((s) => s.currentProject)
+  const providers = useGatewayStore((s) => s.providers)
+  const loaded = useGatewayStore((s) => s.loaded)
+  const loadProviders = useGatewayStore((s) => s.load)
+  const openSettings = useGatewayStore((s) => s.openSettings)
+  const imgOptions = modelsByModality(providers, 'image')
   const data = parseStoryboard(shape.props.text)
+  const [generatingShots, setGeneratingShots] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    if (!loaded) void loadProviders()
+  }, [loaded, loadProviders])
 
   const update = (next: StoryboardData): void => {
     editor.updateShape({
@@ -1474,6 +1789,44 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.shots.length])
 
+  // 逐镜生图
+  const generateShotImage = async (shotId: string): Promise<void> => {
+    const shot = data.shots.find((s) => s.id === shotId)
+    if (!shot?.scene) return toast('该镜头没有画面描述')
+    if (!data.imageModelKey) return toast('请先选择图片模型')
+    const opt = imgOptions.find((o) => o.key === data.imageModelKey)
+    if (!opt) return toast('图片模型不可用')
+    if (!project) return toast('项目未就绪')
+    setGeneratingShots((prev) => new Set(prev).add(shotId))
+    const res = await window.api.gateway.imageGenerate({
+      projectId: project.id,
+      providerId: opt.provider.id,
+      modelId: opt.model.id,
+      prompt: shot.scene
+    })
+    setGeneratingShots((prev) => {
+      const next = new Set(prev)
+      next.delete(shotId)
+      return next
+    })
+    if (!res.ok) return toast(`生成失败：${res.error.message}`)
+    const nextShots = data.shots.map((s) =>
+      s.id === shotId ? { ...s, imageMediaId: res.data.id, imageMediaPath: res.data.path } : s
+    )
+    update({ ...data, shots: nextShots })
+    markUndoPoint(editor, 'storyboard-shotgen')
+  }
+
+  // 全部生图（顺序执行）
+  const generateAll = async (): Promise<void> => {
+    const pending = data.shots.filter((s) => !s.imageMediaPath && s.scene)
+    if (pending.length === 0) return toast('没有待生成的镜头')
+    for (const shot of pending) {
+      await generateShotImage(shot.id)
+    }
+    toast(`${pending.length} 个镜头已生成`)
+  }
+
   if (data.shots.length === 0) {
     return (
       <div className="node-hint center">
@@ -1484,8 +1837,47 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
     )
   }
 
+  const hasModel = imgOptions.length > 0
+  const pendingCount = data.shots.filter((s) => !s.imageMediaPath && s.scene).length
+
   return (
     <div className="storyboard-body" ref={scrollRef}>
+      {/* 图片模型选择栏 */}
+      <div className="storyboard-toolbar">
+        {hasModel ? (
+          <>
+            <ModelSelect
+              value={data.imageModelKey ?? ''}
+              options={imgOptions}
+              onChange={(key) => update({ ...data, imageModelKey: key })}
+            />
+            {pendingCount > 0 && data.imageModelKey && (
+              <button
+                className="btn-ghost small"
+                onPointerDown={(e) => stopEventPropagation(e)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void generateAll()
+                }}
+              >
+                全部生图 ({pendingCount})
+              </button>
+            )}
+          </>
+        ) : (
+          <button
+            className="btn-ghost small"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              openSettings()
+            }}
+          >
+            配置图片模型
+          </button>
+        )}
+      </div>
+      {/* 分镜卡片 */}
       {data.shots.map((shot, i) => (
         <div key={shot.id} className="storyboard-card">
           <div className="storyboard-num">#{i + 1}</div>
@@ -1503,8 +1895,20 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
             >
               <img src={mediaUrl(shot.imageMediaPath!)} alt={shot.scene} draggable={false} />
             </div>
+          ) : generatingShots.has(shot.id) ? (
+            <div className="storyboard-thumb-empty generating">⏳</div>
           ) : (
-            <div className="storyboard-thumb-empty">📷</div>
+            <button
+              className="storyboard-thumb-gen"
+              disabled={!shot.scene || !data.imageModelKey}
+              onPointerDown={(e) => stopEventPropagation(e)}
+              onClick={(e) => {
+                e.stopPropagation()
+                void generateShotImage(shot.id)
+              }}
+            >
+              {shot.scene ? '📷 生图' : '📷'}
+            </button>
           )}
           <div className="storyboard-info">
             <div className="storyboard-scene">{shot.scene || '（无画面描述）'}</div>
@@ -1516,13 +1920,16 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
     </div>
   )
 }
-
-// Compose 节点：视频合成
-export function ComposeBody({ shape }: NodeBodyProps): React.JSX.Element {
+// Compose 节点：视频合成（调用系统 ffmpeg 拼接连入的视频片段）
+export function ComposeBody({ shape, openPreview }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
   const scrollRef = useRef<HTMLDivElement>(null)
   useWheelScroll(scrollRef)
-  let clipCount = 0
+  const project = useAppStore((s) => s.currentProject)
+  const [busy, setBusy] = useState(false)
+
+  // 收集连入的视频片段
+  const clips: { mediaId: string; title: string }[] = []
   for (const arrow of editor.getCurrentPageShapes()) {
     if (arrow.type !== 'arrow') continue
     const bindings = editor.getBindingsFromShape(arrow.id, 'arrow')
@@ -1531,9 +1938,62 @@ export function ComposeBody({ shape }: NodeBodyProps): React.JSX.Element {
       const src = editor.getShape(endBinding.fromId as Parameters<typeof editor.getShape>[0])
       if (src?.type === 'node-card') {
         const card = src as NodeBodyProps['shape']
-        if (card.props.mediaPath) clipCount++
+        if (card.props.mediaPath && card.props.mediaId) {
+          clips.push({ mediaId: card.props.mediaId, title: card.props.title })
+        }
       }
     }
+  }
+
+  // 已合成：显示结果
+  if (shape.props.mediaPath) {
+    return (
+      <div className="compose-result">
+        <video
+          src={mediaUrl(shape.props.mediaPath)}
+          className="compose-preview"
+          draggable={false}
+        />
+        <button
+          className="btn-ghost small"
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onClick={(e) => {
+            e.stopPropagation()
+            openPreview({
+              kind: 'video',
+              url: mediaUrl(shape.props.mediaPath),
+              title: shape.props.title
+            })
+          }}
+        >
+          {'\u25B6'} 播放合成视频
+        </button>
+      </div>
+    )
+  }
+
+  const compose = async (): Promise<void> => {
+    if (!project) return toast('项目未就绪')
+    if (clips.length < 2) return toast('至少需要 2 个视频片段')
+    setBusy(true)
+    const res = await window.api.gateway.composeVideos({
+      projectId: project.id,
+      mediaIds: clips.map((c) => c.mediaId)
+    })
+    setBusy(false)
+    if (!res.ok) return toast(`合成失败：${res.error.message}`)
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: {
+        mediaId: res.data.id,
+        mediaPath: res.data.path,
+        mediaMime: res.data.mime,
+        title: '合成视频'
+      }
+    })
+    markUndoPoint(editor, 'compose-videos')
+    toast('视频合成完成！')
   }
 
   return (
@@ -1541,21 +2001,31 @@ export function ComposeBody({ shape }: NodeBodyProps): React.JSX.Element {
       <div className="compose-icon">🎬</div>
       <div className="compose-title">视频合成</div>
       <div className="compose-info">
-        {clipCount > 0
-          ? `${clipCount} 个视频片段已接入，点击合成`
+        {clips.length > 0
+          ? `${clips.length} 个视频片段已接入`
           : '将多个视频节点连入此节点进行拼接合成'}
       </div>
+      {clips.length > 0 && (
+        <div className="compose-clips">
+          {clips.map((c, i) => (
+            <div key={i} className="compose-clip-item">
+              📹 {c.title}
+            </div>
+          ))}
+        </div>
+      )}
       <button
         className="btn-primary small"
-        disabled={clipCount === 0}
+        disabled={clips.length < 2 || busy}
         onPointerDown={(e) => stopEventPropagation(e)}
         onClick={(e) => {
           e.stopPropagation()
-          toast('视频合成功能将在后续版本开放')
+          void compose()
         }}
       >
-        🎬 合成视频
+        {busy ? '合成中…' : '🎬 合成视频'}
       </button>
+      {clips.length === 1 && <div className="compose-hint">至少需要 2 个片段</div>}
     </div>
   )
 }

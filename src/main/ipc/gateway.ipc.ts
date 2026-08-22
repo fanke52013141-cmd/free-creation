@@ -1,4 +1,4 @@
-// 模型网关 IPC handlers（信封规范见《技术框架与规范》§10）
+﻿// 模型网关 IPC handlers（信封规范见《技术框架与规范》§10）
 import { ipcMain, type BrowserWindow } from 'electron'
 import { IPC } from '../../shared/contracts'
 import type {
@@ -19,6 +19,8 @@ import {
   resumePendingVideoTasks,
   submitVideoTask
 } from '../gateway/video'
+import { generateAudioToAsset } from '../gateway/audio'
+import { composeVideosToAsset } from '../gateway/compose'
 
 function ok<T>(data: T): IpcEnvelope<T> {
   return { ok: true, data }
@@ -93,6 +95,18 @@ export function registerGatewayIpc(win: BrowserWindow): void {
 
   ipcMain.handle(IPC.gateway.videoTask, (_e, { taskId }: { taskId: string }) =>
     wrap<VideoTaskInfo | null>(() => getVideoTask(taskId ?? ''))
+  )
+
+  ipcMain.handle(
+    IPC.gateway.audioGenerate,
+    (_e, input: Parameters<typeof generateAudioToAsset>[0]) =>
+      wrapAsync<MediaAsset>(() => generateAudioToAsset(input))
+  )
+
+  ipcMain.handle(
+    IPC.gateway.composeVideos,
+    (_e, input: Parameters<typeof composeVideosToAsset>[0]) =>
+      wrapAsync<MediaAsset>(() => composeVideosToAsset(input))
   )
 
   // 启动恢复：重启前仍在途的视频任务继续轮询

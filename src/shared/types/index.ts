@@ -1,4 +1,4 @@
-// 核心数据模型（双进程共享单一事实源，见《技术框架与规范》§4）
+﻿// 核心数据模型（双进程共享单一事实源，见《技术框架与规范》§4）
 
 export type NodeTypeId =
   | 'text'
@@ -139,7 +139,7 @@ export interface AsyncTask {
 
 // ── M4 模型网关（见《M4-模型网关-开源方案调研》）──
 
-export type ModelModality = 'text' | 'image' | 'video'
+export type ModelModality = 'text' | 'image' | 'video' | 'audio'
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'

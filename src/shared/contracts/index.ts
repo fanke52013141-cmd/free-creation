@@ -1,4 +1,4 @@
-// IPC 契约：通道名 + payload 类型 + 统一信封（见《技术框架与规范》§10）
+﻿// IPC 契约：通道名 + payload 类型 + 统一信封（见《技术框架与规范》§10）
 
 import type { ChatMessage, GatewayModelInfo, ProviderSpecId, VideoGenParams } from '../types'
 
@@ -33,6 +33,8 @@ export const IPC = {
     videoSubmit: 'gateway:video:submit',
     videoCancel: 'gateway:video:cancel',
     videoTask: 'gateway:video:task',
+    audioGenerate: 'gateway:audio:generate',
+    composeVideos: 'gateway:compose:videos',
     event: 'gateway:event'
   }
 } as const
@@ -105,6 +107,28 @@ export interface VideoSubmitInput {
 
 export interface VideoSubmitResult {
   taskId: string
+}
+
+// ── 音频生成（TTS）──
+
+export interface AudioGenerateInput {
+  projectId: string
+  providerId: string
+  modelId: string
+  /** 要朗读的文本 */
+  text: string
+  /** 音色（部分供应商支持） */
+  voice?: string
+  /** 输出格式 */
+  format?: string
+}
+
+// ── 视频合成 ──
+
+export interface ComposeVideosInput {
+  projectId: string
+  /** 源视频的 mediaId 列表（按顺序拼接） */
+  mediaIds: string[]
 }
 
 /** 主进程 → 渲染进程的网关事件（聊天流式分片 / 视频任务进度） */

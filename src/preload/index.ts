@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, webUtils } from 'electron'
+﻿import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import { IPC } from '../shared/contracts'
 import type {
@@ -13,7 +13,9 @@ import type {
   SaveProviderInput,
   TestProviderResult,
   VideoSubmitInput,
-  VideoSubmitResult
+  VideoSubmitResult,
+  AudioGenerateInput,
+  ComposeVideosInput
 } from '../shared/contracts'
 import type {
   MediaAsset,
@@ -74,6 +76,10 @@ const api = {
       ipcRenderer.invoke(IPC.gateway.videoCancel, { taskId }),
     videoTask: (taskId: string): Promise<IpcEnvelope<VideoTaskInfo | null>> =>
       ipcRenderer.invoke(IPC.gateway.videoTask, { taskId }),
+    audioGenerate: (input: AudioGenerateInput): Promise<IpcEnvelope<MediaAsset>> =>
+      ipcRenderer.invoke(IPC.gateway.audioGenerate, input),
+    composeVideos: (input: ComposeVideosInput): Promise<IpcEnvelope<MediaAsset>> =>
+      ipcRenderer.invoke(IPC.gateway.composeVideos, input),
     // 网关事件订阅（聊天流式分片 / 视频任务进度），返回取消订阅函数
     onEvent: (cb: (e: GatewayEvent) => void): (() => void) => {
       const listener = (_e: unknown, payload: GatewayEvent): void => cb(payload)
