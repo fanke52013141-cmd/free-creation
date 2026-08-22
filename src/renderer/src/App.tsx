@@ -3,6 +3,7 @@ import { useAppStore } from './stores/app'
 import { ProjectListPage } from './pages/ProjectListPage'
 import { CanvasPage } from './pages/CanvasPage'
 import { Toast } from './components/Toast'
+import { ConfirmDialog } from './components/ConfirmDialog'
 import { ProviderSettingsPanel } from './gateway/ProviderSettingsPanel'
 
 function Content(): React.JSX.Element {
@@ -45,6 +46,7 @@ export default function App(): React.JSX.Element {
     <>
       <Content />
       <Toast />
+      <ConfirmDialog />
       <ProviderSettingsPanel />
     </>
   )

@@ -28,6 +28,7 @@ const MEDIA_FILTERS = [
       'webm',
       'mov',
       'mkv',
+      'avi',
       'mp3',
       'wav',
       'ogg',

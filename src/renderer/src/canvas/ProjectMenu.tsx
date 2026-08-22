@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ProjectMeta } from '@shared/types'
 import { useAppStore } from '../stores/app'
+import { useConfirmStore } from '../stores/confirm'
 import { useGatewayStore } from '../stores/gateway'
 
 interface ProjectMenuProps {
@@ -45,7 +46,15 @@ export function ProjectMenu({ project }: ProjectMenuProps): React.JSX.Element {
 
   const removeCurrent = async (): Promise<void> => {
     setOpen(false)
-    if (!window.confirm(`确定删除项目「${project.name}」吗？删除后不可恢复`)) return
+    if (
+      !(await useConfirmStore.getState().confirm({
+        title: `删除项目「${project.name}」`,
+        message: '删除后项目数据将不可恢复。',
+        confirmText: '删除',
+        danger: true
+      }))
+    )
+      return
     const res = await window.api.deleteProject(project.id)
     if (res.ok) {
       await window.api.closeProject()

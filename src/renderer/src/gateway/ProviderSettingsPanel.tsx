@@ -11,6 +11,7 @@ import {
 } from '@shared/types'
 import type { SaveProviderInput } from '@shared/contracts'
 import { useGatewayStore } from '../stores/gateway'
+import { useConfirmStore } from '../stores/confirm'
 import { toast } from '../stores/toast'
 
 interface Draft extends SaveProviderInput {
@@ -149,7 +150,15 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
 
   const remove = async (): Promise<void> => {
     if (!draft?.id) return
-    if (!window.confirm(`确定删除供应商「${draft.name}」吗？`)) return
+    if (
+      !(await useConfirmStore.getState().confirm({
+        title: `删除供应商「${draft.name}」`,
+        message: '删除后需重新配置才能使用该供应商。',
+        confirmText: '删除',
+        danger: true
+      }))
+    )
+      return
     const res = await window.api.gateway.deleteProvider(draft.id)
     if (res.ok) {
       setDraft(null)

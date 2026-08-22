@@ -3008,3 +3008,97 @@ input:focus {
   background: rgba(255, 107, 107, 0.1);
   border-color: var(--danger);
 }
+
+/* ── P3-2 自绘确认弹窗 ── */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: confirm-fade-in 0.15s ease;
+}
+@keyframes confirm-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.confirm-dialog {
+  width: 380px;
+  max-width: 90vw;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  animation: confirm-slide-in 0.2s ease;
+}
+@keyframes confirm-slide-in {
+  from { transform: scale(0.95) translateY(-8px); opacity: 0; }
+  to { transform: scale(1) translateY(0); opacity: 1; }
+}
+.confirm-icon {
+  font-size: 28px;
+  text-align: center;
+}
+.confirm-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: center;
+}
+.confirm-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.confirm-message {
+  font-size: 13px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+.confirm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 4px;
+}
+.confirm-btn {
+  flex: 1;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.confirm-btn.cancel {
+  background: transparent;
+  color: var(--text-2);
+}
+.confirm-btn.cancel:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-1);
+}
+.confirm-btn.primary {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+.confirm-btn.primary:hover {
+  filter: brightness(1.15);
+}
+.confirm-btn.danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+.confirm-btn.danger:hover {
+  filter: brightness(1.15);
+}

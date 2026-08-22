@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ProjectMeta } from '@shared/types'
 import { useAppStore } from '../stores/app'
+import { useConfirmStore } from '../stores/confirm'
 
 function formatDate(ts: number): string {
   const d = new Date(ts)
@@ -42,7 +43,15 @@ export function ProjectListPage(): React.JSX.Element {
   }
 
   const handleDelete = async (id: string, projectName: string): Promise<void> => {
-    if (!window.confirm(`确定删除项目「${projectName}」吗？`)) return
+    if (
+      !(await useConfirmStore.getState().confirm({
+        title: `删除项目「${projectName}」`,
+        message: '删除后项目数据将不可恢复。',
+        confirmText: '删除',
+        danger: true
+      }))
+    )
+      return
     const res = await window.api.deleteProject(id)
     if (res.ok) void refresh()
   }

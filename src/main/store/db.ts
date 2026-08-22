@@ -26,6 +26,14 @@ export function getDb(): Database.Database {
   return db
 }
 
+/** 应用退出时关闭数据库连接，释放 WAL 文件锁 */
+export function closeDb(): void {
+  if (db) {
+    db.close()
+    db = null
+  }
+}
+
 function migrate(database: Database.Database): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS projects (
