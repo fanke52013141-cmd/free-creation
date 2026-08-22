@@ -122,18 +122,6 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
     window.addEventListener('pointerup', onUp)
   }
 
-  // 左侧栏「添加资源」：把素材放到画布当前视角中心（LibTV 区分「添加节点 / 添加资源」）
-  const addResource = (): void => {
-    const editor = editorRef.current
-    if (!editor) {
-      toast('画布未就绪')
-      return
-    }
-    const center = editor.getViewportPageBounds().center
-    const screen = editor.pageToScreen(center)
-    void handleUpload(screen.x, screen.y)
-  }
-
   // 保存载荷：快照 + 从 shapes 派生的图数据（nodes/edges，M4 执行引擎的消费源）
   const collectSaveInput = (): {
     id: string
@@ -431,10 +419,6 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
         >
           <span className="rail-icon">＋</span>
           <span className="rail-label">添加</span>
-        </button>
-        <button className="rail-item" title="添加资源" onClick={addResource}>
-          <span className="rail-icon">📂</span>
-          <span className="rail-label">资源</span>
         </button>
         <div className="rail-divider" />
         <button className="rail-item" title="工作流" onClick={() => setPanelTab('workflow')}>

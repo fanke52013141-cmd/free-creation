@@ -1,9 +1,10 @@
-// 左下角停靠簇：小地图 + 缩放（LibTV 布局）
-// 小地图为只读缩略图，单击任意处把画布视角中心移到对应位置；缩放簇提供 +/−/适配/百分比
+// 左下角停靠簇：小地图（弹出） + 画布整理 + 缩放（LibTV 布局）
+// 小地图为只读缩略图，点击地图图标弹出；缩放簇提供 +/−/适配/百分比
 import { useEffect, useRef, useState } from 'react'
 import type { Editor, TLShapeId } from 'tldraw'
 import type { NodeCardShape } from './NodeCardShape'
 import { getNodeType } from '../nodes/registry'
+import { markUndoPoint } from './history'
 
 const BOX_W = 168
 const BOX_H = 108
@@ -29,8 +30,59 @@ interface DockProps {
   editor: Editor | null
 }
 
+/** 画布整理：把所有节点按行列网格自动排列（LibTV Shift+Option+F） */
+function organizeCanvas(editor: Editor): void {
+  const shapes = editor
+    .getCurrentPageShapes()
+    .filter((s): s is NodeCardShape => s.type === 'node-card')
+  if (shapes.length === 0) return
+
+  // 按节点 y 排序后做简单的自适应网格排列
+  const sorted = [...shapes].sort((a, b) => {
+    const ay = a.y + a.props.h / 2
+    const by = b.y + b.props.h / 2
+    if (Math.abs(ay - by) < 80) return a.x - b.x // 同一行按 x 排
+    return ay - by
+  })
+
+  const GAP_X = 60
+  const GAP_Y = 80
+  const COLS = Math.ceil(Math.sqrt(sorted.length))
+  let col = 0
+  let row = 0
+  let rowMaxH = 0
+  const startX = sorted[0].x
+  const startY = sorted[0].y
+
+  const updates: Array<{ id: TLShapeId; x: number; y: number }> = []
+  for (const s of sorted) {
+    const x = startX + col * (260 + GAP_X)
+    const y = startY + row * (rowMaxH + GAP_Y)
+    updates.push({ id: s.id, x, y })
+    rowMaxH = Math.max(rowMaxH, s.props.h)
+    col++
+    if (col >= COLS) {
+      col = 0
+      row++
+      rowMaxH = 0
+    }
+  }
+
+  editor.updateShapes(
+    updates.map((u) => ({
+      id: u.id,
+      type: 'node-card' as const,
+      x: u.x,
+      y: u.y
+    }))
+  )
+  markUndoPoint(editor, 'organize-canvas')
+  editor.zoomToFit({ animation: { duration: 300 } })
+}
+
 export function CanvasBottomDock({ editor }: DockProps): React.JSX.Element {
   const [state, setState] = useState<MinimapState>({ nodes: [], zoom: 1, viewport: null })
+  const [showMap, setShowMap] = useState(false)
   const svgRef = useRef<SVGSVGElement>(null)
 
   // 订阅画布（含 camera 的 instance state）变化刷新缩略图
@@ -65,6 +117,18 @@ export function CanvasBottomDock({ editor }: DockProps): React.JSX.Element {
     return () => {
       unsub?.()
     }
+  }, [editor])
+
+  // 画布整理快捷键 Shift + Alt + F（LibTV）
+  useEffect(() => {
+    const handler = (e: KeyboardEvent): void => {
+      if (e.shiftKey && e.altKey && (e.key === 'f' || e.key === 'F')) {
+        e.preventDefault()
+        if (editor) organizeCanvas(editor)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
   }, [editor])
 
   // 节点包围盒（页坐标）
@@ -119,47 +183,64 @@ export function CanvasBottomDock({ editor }: DockProps): React.JSX.Element {
 
   return (
     <div className="canvas-dock">
-      <div className="dock-minimap">
-        {state.nodes.length === 0 ? (
-          <span className="dock-minimap-empty">空画布</span>
-        ) : (
-          <svg
-            ref={svgRef}
-            className="dock-minimap-svg"
-            viewBox={`0 0 ${BOX_W} ${BOX_H}`}
-            onClick={handleClick}
-          >
-            {state.nodes.map((n) => {
-              const p = toMini(n.x, n.y)
-              return (
+      {/* 小地图弹出层 */}
+      {showMap && (
+        <div className="dock-minimap dock-minimap-popup">
+          {state.nodes.length === 0 ? (
+            <span className="dock-minimap-empty">空画布</span>
+          ) : (
+            <svg
+              ref={svgRef}
+              className="dock-minimap-svg"
+              viewBox={`0 0 ${BOX_W} ${BOX_H}`}
+              onClick={handleClick}
+            >
+              {state.nodes.map((n) => {
+                const p = toMini(n.x, n.y)
+                return (
+                  <rect
+                    key={n.id}
+                    x={p.x}
+                    y={p.y}
+                    width={Math.max(3, n.w * scale)}
+                    height={Math.max(3, n.h * scale)}
+                    rx={2}
+                    fill={n.color}
+                    opacity={0.9}
+                  />
+                )
+              })}
+              {vpRect && (
                 <rect
-                  key={n.id}
-                  x={p.x}
-                  y={p.y}
-                  width={Math.max(3, n.w * scale)}
-                  height={Math.max(3, n.h * scale)}
+                  x={vpRect.x}
+                  y={vpRect.y}
+                  width={vpRect.w}
+                  height={vpRect.h}
+                  fill="rgba(9,202,245,0.10)"
+                  stroke="rgba(9,202,245,0.7)"
+                  strokeWidth={1}
                   rx={2}
-                  fill={n.color}
-                  opacity={0.9}
                 />
-              )
-            })}
-            {vpRect && (
-              <rect
-                x={vpRect.x}
-                y={vpRect.y}
-                width={vpRect.w}
-                height={vpRect.h}
-                fill="rgba(108,140,255,0.10)"
-                stroke="rgba(108,140,255,0.7)"
-                strokeWidth={1}
-                rx={2}
-              />
-            )}
-          </svg>
-        )}
-      </div>
+              )}
+            </svg>
+          )}
+        </div>
+      )}
       <div className="dock-controls">
+        {/* 工具组：小地图切换 + 画布整理 */}
+        <div className="dock-tool-group">
+          <button className="dock-btn" title="小地图导航" onClick={() => setShowMap((v) => !v)}>
+            {showMap ? '⊡' : '🗺'}
+          </button>
+          <button
+            className="dock-btn"
+            title="整理画布（Shift+Alt+F）"
+            onClick={() => editor && organizeCanvas(editor)}
+          >
+            ✨
+          </button>
+        </div>
+        {/* 缩放簇 */}
         <div className="dock-zoom">
           <button
             className="dock-btn"

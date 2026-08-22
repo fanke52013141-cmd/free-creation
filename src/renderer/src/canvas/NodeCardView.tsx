@@ -116,17 +116,17 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           )
         })}
 
-        {/* 输出端口（右侧）：按下即开始拖出连线 */}
+        {/* 输出端口（右侧「+」拉出连线，LibTV 风格） */}
         {outPorts.map((p, i) => (
           <span
             key={p.id}
-            className={`port-dot out ${isSource && draft?.from.portId === p.id ? 'ok' : ''}`}
+            className={`port-plus ${isSource && draft?.from.portId === p.id ? 'ok' : ''}`}
             style={{
-              top: outY[i] - 6,
+              top: outY[i] - 9,
               borderColor: PORT_COLORS[p.type],
               ['--pc' as string]: PORT_COLORS[p.type]
             }}
-            title={`${p.name}（${p.type}）输出 · 按住拖出连线`}
+            title={`${p.name}（${p.type}）输出 · 按住「+」拖出连线`}
             onPointerDown={(e) => {
               stopEventPropagation(e)
               beginConnectionDrag(
@@ -135,7 +135,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               )
             }}
           >
-            <span className="port-dot-inner" style={{ background: PORT_COLORS[p.type] }} />
+            +
           </span>
         ))}
       </div>
