@@ -97,7 +97,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           </div>
         </div>
 
-        {/* 输入端口（左侧，空心）：拖线时按类型兼容高亮 */}
+        {/* 输入端口（左侧）：拖线时按类型兼容高亮 */}
         {inPorts.map((p, i) => {
           const ok = draft && !isSource && portCompatible(p.type, draft.from.portType)
           return (
@@ -105,22 +105,24 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               key={p.id}
               className={`port-dot in ${draft ? (ok ? 'ok' : 'dim') : ''}`}
               style={{
-                top: inY[i] - 5,
+                top: inY[i] - 6,
                 borderColor: PORT_COLORS[p.type],
                 ['--pc' as string]: PORT_COLORS[p.type]
               }}
               title={`${p.name}（${p.type}）输入`}
-            />
+            >
+              <span className="port-dot-inner" style={{ background: PORT_COLORS[p.type] }} />
+            </span>
           )
         })}
 
-        {/* 输出端口（右侧，实心）：按下即开始拖出连线 */}
+        {/* 输出端口（右侧）：按下即开始拖出连线 */}
         {outPorts.map((p, i) => (
           <span
             key={p.id}
             className={`port-dot out ${isSource && draft?.from.portId === p.id ? 'ok' : ''}`}
             style={{
-              top: outY[i] - 5,
+              top: outY[i] - 6,
               borderColor: PORT_COLORS[p.type],
               ['--pc' as string]: PORT_COLORS[p.type]
             }}
@@ -132,7 +134,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                 { x: e.clientX, y: e.clientY }
               )
             }}
-          />
+          >
+            <span className="port-dot-inner" style={{ background: PORT_COLORS[p.type] }} />
+          </span>
         ))}
       </div>
       {/* tldraw 画布容器带 transform，fixed 元素会以它为包含块导致错位，必须 portal 到 body */}
