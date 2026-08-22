@@ -57,9 +57,9 @@ export function registerGatewayIpc(win: BrowserWindow): void {
 
   ipcMain.handle(IPC.gateway.saveProvider, (_e, input: SaveProviderInput) =>
     wrap(() => {
-      if (!input?.name?.trim()) return err('INVALID_NAME', '供应商名称不能为空')
-      if (!input?.baseURL?.trim()) return err('INVALID_INPUT', 'Base URL 不能为空')
-      return ok(saveProvider(input))
+      if (!input?.name?.trim()) throw new GatewayError('INVALID_NAME', '供应商名称不能为空')
+      if (!input?.baseURL?.trim()) throw new GatewayError('INVALID_INPUT', 'Base URL 不能为空')
+      return saveProvider(input)
     })
   )
 
