@@ -881,14 +881,27 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   )
 }
 
-// 对话节点：props.text 存 {system, modelKey, messages}；
+// 对话节点：props.text 存 {system, modelKey, messages, documents, summary}；
 // 发送经网关 streamText，主进程分片事件推送，逐字渲染
+// documents 支持上传文档（txt/md/json 正文注入上下文）
+// summary 实现 LangChain ConversationSummaryMemory 式自动压缩
+export interface ChatDocument {
+  name: string
+  content: string
+}
+
 interface ChatData {
   system: string
   modelKey: string
   messages: ChatMessage[]
   temperature: number
   maxTokens: number
+  /** 上传的文档列表，内容自动注入对话上下文 */
+  documents?: ChatDocument[]
+  /** 已压缩的历史摘要（LangChain ConversationSummaryMemory 模式） */
+  summary?: string
+  /** 是否启用自动压缩 */
+  autoCompress?: boolean
 }
 
 export type { ChatData }
@@ -906,17 +919,26 @@ function parseChat(text: string): ChatData {
             (m) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string'
           )
           .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content as string }))
+        // 解析上传文档列表
+        const rawDocs = Array.isArray(o.documents) ? o.documents : []
+        const documents = rawDocs
+          .map((d) => d as { name?: unknown; content?: unknown })
+          .filter((d) => typeof d.name === 'string' && typeof d.content === 'string')
+          .map((d) => ({ name: d.name as string, content: d.content as string }))
         return {
           system: typeof o.system === 'string' ? o.system : '',
           modelKey: typeof o.modelKey === 'string' ? o.modelKey : '',
           messages,
           temperature: typeof o.temperature === 'number' ? o.temperature : 0.7,
-          maxTokens: typeof o.maxTokens === 'number' ? o.maxTokens : 4096
+          maxTokens: typeof o.maxTokens === 'number' ? o.maxTokens : 4096,
+          documents,
+          summary: typeof o.summary === 'string' ? o.summary : '',
+          autoCompress: typeof o.autoCompress === 'boolean' ? o.autoCompress : true
         }
       }
       return null
     },
-    { system: '', modelKey: '', messages: [], temperature: 0.7, maxTokens: 4096 }
+    { system: '', modelKey: '', messages: [], temperature: 0.7, maxTokens: 4096, documents: [], summary: '', autoCompress: true }
   )
 }
 

@@ -2444,6 +2444,186 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   opacity: 0.5;
 }
 
+/* ── 文档上传 + 自动压缩样式 ── */
+.csp-doc-badge {
+  font-size: 11px;
+  color: var(--brand);
+  background: rgba(9, 202, 245, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.csp-summary-banner {
+  padding: 6px 14px;
+  background: rgba(9, 202, 245, 0.06);
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--brand);
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.csp-compressing {
+  padding: 6px 14px;
+  background: rgba(9, 202, 245, 0.1);
+  font-size: 11px;
+  color: var(--brand);
+  text-align: center;
+  flex-shrink: 0;
+  animation: csp-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes csp-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.csp-attach-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.csp-attach-btn:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
+/* 开关样式 */
+.csp-toggle-field {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.csp-toggle-field .csp-label {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.csp-toggle-hint {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--muted);
+  opacity: 0.6;
+}
+
+.csp-toggle {
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  background: var(--line);
+  border: none;
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+  transition: background 0.2s;
+  padding: 0;
+}
+
+.csp-toggle.on {
+  background: var(--brand);
+}
+
+.csp-toggle-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.csp-toggle.on .csp-toggle-knob {
+  transform: translateX(18px);
+}
+
+/* 文档列表 */
+.csp-doc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.csp-doc-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+.csp-doc-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.csp-doc-name {
+  flex: 1;
+  font-size: 11px;
+  color: var(--txt);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.csp-doc-remove {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.csp-doc-remove:hover {
+  color: #e74c3c;
+  background: rgba(231, 76, 60, 0.1);
+}
+
+.csp-doc-add {
+  width: 100%;
+  padding: 8px;
+  background: none;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.csp-doc-add:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
 /* 供应商设置面板 */
 .gw-mask {
   position: fixed;

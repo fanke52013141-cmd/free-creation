@@ -1,10 +1,11 @@
 // 对话节点右侧面板：选中对话节点时弹出，包含完整聊天界面 + 参数设置
 // 宽度 = 节点宽度（280）× 1.25 ≈ 380px；包含模型/系统提示词/温度/maxToken 设置
+// 支持：文档上传（正文注入上下文）+ LangChain ConversationSummaryMemory 式自动压缩
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Editor, TLShapeId } from 'tldraw'
 import type { ChatMessage } from '@shared/types'
 import type { NodeCardShape } from './NodeCardShape'
-import { parseChat, type ChatData } from '../nodes/specs/bodies'
+import { parseChat, type ChatData, type ChatDocument } from '../nodes/specs/bodies'
 import { modelsByModality, useGatewayStore } from '../stores/gateway'
 import { useAppStore } from '../stores/app'
 import { gatherUpstreamText } from './graph'
@@ -16,6 +17,23 @@ interface ChatSidePanelProps {
   shapeId: TLShapeId
   onClose: () => void
 }
+
+/** 自动压缩触发阈值：消息数超过此值时触发摘要压缩 */
+const COMPRESS_THRESHOLD = 10
+/** 压缩后保留最近消息数 */
+const KEEP_RECENT = 4
+
+/** LangChain ConversationSummaryMemory 式摘要 prompt */
+const SUMMARIZE_SYSTEM = `你是对话摘要助手。请逐步总结对话内容，将新消息整合进已有摘要，生成一个连贯的新摘要。
+要求：
+- 保留关键事实、决策和上下文
+- 去除冗余，保持简洁
+- 中文输出，不超过 300 字`
+
+const SUMMARIZE_PROMPT = (summary: string, lines: string): string =>
+  summary
+    ? `已有摘要：\n${summary}\n\n新增对话：\n${lines}\n\n请结合已有摘要和新对话，生成更新后的摘要：`
+    : `请总结以下对话：\n${lines}\n\n生成摘要：`
 
 export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps): React.JSX.Element {
   const project = useAppStore((s) => s.currentProject)
@@ -34,13 +52,16 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
   // 获取最新 shape 数据
   const shape = editor.getShape(shapeId) as NodeCardShape | undefined
   const data: ChatData = shape ? parseChat(shape.props.text) : {
-    system: '', modelKey: '', messages: [], temperature: 0.7, maxTokens: 4096
+    system: '', modelKey: '', messages: [], temperature: 0.7, maxTokens: 4096,
+    documents: [], summary: '', autoCompress: true
   }
 
   const [draft, setDraft] = useState('')
   const [showSettings, setShowSettings] = useState(false)
   const [stream, setStream] = useState<{ taskId: string; text: string } | null>(null)
+  const [compressing, setCompressing] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const dataRef = useRef(data)
   const streamRef = useRef(stream)
 
@@ -70,13 +91,83 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
     if (!s) return
     const cur = dataRef.current
     if (s.text) {
-      update({
+      const updated: ChatData = {
         ...cur,
         messages: [...cur.messages, { role: 'assistant', content: s.text }]
-      })
+      }
+      update(updated)
       markUndoPoint(editor, 'chat-gen')
+      // 流式回复完成后，检查是否需要自动压缩（LangChain ConversationSummaryMemory 模式）
+      void maybeCompress(updated)
     }
     setStream(null)
+  }
+
+  // LangChain ConversationSummaryMemory：当消息数超过阈值时压缩旧消息为摘要
+  const maybeCompress = async (cur: ChatData): Promise<void> => {
+    if (!cur.autoCompress) return
+    if (cur.messages.length < COMPRESS_THRESHOLD) return
+    const opt = options.find((o) => o.key === cur.modelKey)
+    if (!opt) return
+
+    setCompressing(true)
+    try {
+      // 保留最近 KEEP_RECENT 条消息，压缩其余
+      const toCompress = cur.messages.slice(0, cur.messages.length - KEEP_RECENT)
+      const lines = toCompress
+        .map((m) => `${m.role === 'user' ? '用户' : '助手'}：${m.content}`)
+        .join('\n')
+
+      const prompt = SUMMARIZE_PROMPT(cur.summary ?? '', lines)
+      const res = await window.api.gateway.chatStart({
+        providerId: opt.provider.id,
+        modelId: opt.model.id,
+        system: SUMMARIZE_SYSTEM,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.3,
+        maxTokens: 512
+      })
+      if (!res.ok) return
+
+      // 收集摘要结果：注册临时事件监听器收集流式分片
+      const summaryResult = await new Promise<string>((resolve) => {
+        let acc = ''
+        const targetTaskId = res.data.taskId
+        const unsub = window.api.gateway.onEvent((e) => {
+          if (e.taskId !== targetTaskId) return
+          if (e.kind === 'chat-delta') {
+            acc += e.text
+          } else if (e.kind === 'chat-done') {
+            unsub()
+            resolve(acc)
+          } else if (e.kind === 'chat-error') {
+            unsub()
+            resolve('')
+          }
+        })
+        // 30 秒超时兜底
+        setTimeout(() => {
+          unsub()
+          resolve(acc)
+        }, 30000)
+      })
+
+      if (summaryResult.trim()) {
+        // 更新数据：摘要 + 只保留最近消息
+        const latest = dataRef.current
+        update({
+          ...latest,
+          summary: summaryResult.trim(),
+          messages: latest.messages.slice(latest.messages.length - KEEP_RECENT)
+        })
+        markUndoPoint(editor, 'chat-compress')
+        toast('对话已自动压缩历史记录')
+      }
+    } catch {
+      // 压缩失败不影响正常对话
+    } finally {
+      setCompressing(false)
+    }
   }
 
   // 网关事件：本节点聊天流
@@ -96,6 +187,57 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // 文档上传：读取文本文件内容存入 ChatData.documents
+  const handleDocUpload = async (e: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
+    const files = Array.from(e.target.files ?? [])
+    e.target.value = '' // 重置以便重复上传同名文件
+    if (files.length === 0) return
+
+    const docs: ChatDocument[] = []
+    for (const file of files) {
+      // 限制文本类文件：txt/md/json/csv/log/xml/html/js/ts/py
+      const isText = /\.(txt|md|json|csv|log|xml|html?|js|ts|py|ya?ml)$/i.test(file.name)
+      if (!isText) {
+        toast(`${file.name}：仅支持文本类文件`)
+        continue
+      }
+      if (file.size > 512 * 1024) {
+        toast(`${file.name}：文件过大（限制 512KB）`)
+        continue
+      }
+      try {
+        const content = await file.text()
+        docs.push({ name: file.name, content })
+      } catch {
+        toast(`${file.name}：读取失败`)
+      }
+    }
+    if (docs.length > 0) {
+      update({ ...data, documents: [...(data.documents ?? []), ...docs] })
+      toast(`已添加 ${docs.length} 个文档到上下文`)
+    }
+  }
+
+  const removeDoc = (idx: number): void => {
+    const docs = data.documents ?? []
+    update({ ...data, documents: docs.filter((_, i) => i !== idx) })
+  }
+
+  /** 构建合并后的 system 上下文（系统提示词 + 文档 + 历史摘要） */
+  const buildEffectiveSystem = (cur: ChatData): string => {
+    let s = cur.system
+    if (cur.documents && cur.documents.length > 0) {
+      const docContext = cur.documents
+        .map((d) => `【文档：${d.name}】\n${d.content}`)
+        .join('\n\n---\n\n')
+      s = `${s}\n\n以下是用户提供的参考文档：\n\n${docContext}`
+    }
+    if (cur.summary) {
+      s = `${s}\n\n[对话历史摘要]\n${cur.summary}`
+    }
+    return s
+  }
+
   const send = async (): Promise<void> => {
     const opt = options.find((o) => o.key === data.modelKey)
     if (!opt) return toast('请先在设置中选择对话模型')
@@ -103,14 +245,16 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
     if (stream) return
     const upstream = gatherUpstreamText(editor, shapeId)
     const userContent = upstream ? `${upstream}\n\n---\n\n${draft.trim()}` : draft.trim()
+    const effectiveSystem = buildEffectiveSystem(data)
     const messages: ChatMessage[] = [...data.messages, { role: 'user', content: userContent }]
+
     update({ ...data, messages })
     setDraft('')
     setStream({ taskId: '', text: '' })
     const res = await window.api.gateway.chatStart({
       providerId: opt.provider.id,
       modelId: opt.model.id,
-      system: data.system,
+      system: effectiveSystem,
       messages,
       temperature: data.temperature,
       maxTokens: data.maxTokens
@@ -130,6 +274,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
   }
 
   const selectedModel = options.find((o) => o.key === data.modelKey)
+  const docCount = data.documents?.length ?? 0
 
   // ── 设置面板 ──
   if (showSettings) {
@@ -219,7 +364,54 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
               <span>32K</span>
             </div>
           </div>
+
+          {/* 自动压缩开关 */}
+          <div className="csp-field csp-toggle-field">
+            <label className="csp-label">
+              自动压缩对话
+              <span className="csp-toggle-hint">消息超过 {COMPRESS_THRESHOLD} 条时自动摘要压缩历史</span>
+            </label>
+            <button
+              className={`csp-toggle ${(data.autoCompress ?? true) ? 'on' : ''}`}
+              onClick={() => update({ ...data, autoCompress: !(data.autoCompress ?? true) })}
+            >
+              <span className="csp-toggle-knob" />
+            </button>
+          </div>
+
+          {/* 文档管理 */}
+          <div className="csp-field">
+            <label className="csp-label">
+              上下文文档（{docCount}）
+              <span className="csp-toggle-hint">文本内容自动注入对话上下文</span>
+            </label>
+            <div className="csp-doc-list">
+              {(data.documents ?? []).map((d, i) => (
+                <div key={i} className="csp-doc-item">
+                  <span className="csp-doc-icon">📄</span>
+                  <span className="csp-doc-name" title={d.content.slice(0, 100)}>{d.name}</span>
+                  <button className="csp-doc-remove" title="移除" onClick={() => removeDoc(i)}>
+                    ✕
+                  </button>
+                </div>
+              ))}
+              <button
+                className="csp-doc-add"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                + 添加文档
+              </button>
+            </div>
+          </div>
         </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".txt,.md,.json,.csv,.log,.xml,.html,.htm,.js,.ts,.py,.yaml,.yml"
+          multiple
+          style={{ display: 'none' }}
+          onChange={(e) => void handleDocUpload(e)}
+        />
       </div>
     )
   }
@@ -232,6 +424,8 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
           💬 {selectedModel?.model?.name ?? '未选择模型'}
         </span>
         <div className="csp-header-actions">
+          {docCount > 0 && <span className="csp-doc-badge" title={`${docCount} 个文档`}>📄{docCount}</span>}
+          {data.summary && <span className="csp-doc-badge" title="已有压缩摘要">🗜</span>}
           <button className="csp-icon-btn" title="参数设置" onClick={() => setShowSettings(true)}>
             ⚙
           </button>
@@ -240,6 +434,14 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
           </button>
         </div>
       </div>
+      {data.summary && (
+        <div className="csp-summary-banner" title={data.summary}>
+          🗜 已压缩历史 · {data.messages.length} 条近期消息
+        </div>
+      )}
+      {compressing && (
+        <div className="csp-compressing">正在自动压缩对话历史…</div>
+      )}
       <div className="csp-messages" ref={scrollRef}>
         {data.messages.map((m, i) => (
           <div key={i} className={`csp-msg ${m.role}`}>
@@ -258,6 +460,13 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
         )}
       </div>
       <div className="csp-input-row">
+        <button
+          className="csp-attach-btn"
+          title="上传文档到上下文"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          📎
+        </button>
         <textarea
           className="csp-input"
           value={draft}
@@ -286,6 +495,14 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
           </button>
         )}
       </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".txt,.md,.json,.csv,.log,.xml,.html,.htm,.js,.ts,.py,.yaml,.yml"
+        multiple
+        style={{ display: 'none' }}
+        onChange={(e) => void handleDocUpload(e)}
+      />
     </div>
   )
 }
