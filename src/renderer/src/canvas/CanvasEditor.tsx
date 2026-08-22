@@ -16,7 +16,7 @@ import {
 } from './connection-drag'
 import { deriveGraph, tryConnect } from './graph'
 import { markUndoPoint } from './history'
-import { getNodeType } from '../nodes/registry'
+import { getNodeType, allNodeTypes } from '../nodes/registry'
 import {
   registerBaseNodeTypes,
   registerScriptNodeType,
@@ -56,13 +56,16 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
   const pendingConnectRef = useRef<ConnectionFrom | null>(null)
   const [menu, setMenu] = useState<MenuState | null>(null)
   const [dragOver, setDragOver] = useState(false)
-  const [addDrag, setAddDrag] = useState<{ x: number; y: number } | null>(null)
   // 在 React 状态中持有 editor，让右下角停靠簇能订阅画布变化（editorRef 变化不会触发重渲染）
   const [editorInstance, setEditorInstance] = useState<Editor | null>(null)
   // 右键侧栏面板：资产 / 工作流 / 历史记录
   const [panelTab, setPanelTab] = useState<SidePanelTab | null>(null)
   // 选中对话节点时弹出右侧聊天面板
   const [chatShapeId, setChatShapeId] = useState<TLShapeId | null>(null)
+  // 画布配色：dark（深色）/ light（米黄色）
+  const [canvasTheme, setCanvasTheme] = useState<'dark' | 'light'>('dark')
+  // 左侧节点面板拖拽状态
+  const [nodeDrag, setNodeDrag] = useState<{ type: NodeTypeId; x: number; y: number } | null>(null)
 
   // 执行引擎：注册 run 闭包到全局 store，顶部栏通过 store 触发（捕获 editor + projectId + providers）
   const providers = useGatewayStore((s) => s.providers)
@@ -98,21 +101,51 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
     return editorInstance.store.listen(check, { scope: 'session' })
   }, [editorInstance])
 
-  // 左侧栏「＋」按住拖动：跟手显示浮标，松开时在落点弹创建菜单（拖动式添加）
-  const startAddDrag = (e: React.PointerEvent): void => {
+  // 左侧节点面板：点击在视口中心创建；拖拽到画布在落点创建
+  const SIDEBAR_W = 72
+  const nodeTypes = allNodeTypes()
+
+  const handleNodePick = (type: NodeTypeId): void => {
+    // 点击直接在视口中心创建
+    const editor = editorRef.current
+    if (!editor) return
+    const center = editor.getViewportPageBounds().center
+    const screen = editor.pageToScreen(center)
+    createNodeAt(type, screen.x, screen.y)
+  }
+
+  const startNodeDrag = (e: React.PointerEvent, type: NodeTypeId): void => {
     e.preventDefault()
-    setAddDrag({ x: e.clientX, y: e.clientY })
+    const startX = e.clientX
+    const startY = e.clientY
+    let dragged = false
+
     const onMove = (ev: PointerEvent): void => {
-      setAddDrag({ x: ev.clientX, y: ev.clientY })
+      if (Math.abs(ev.clientX - startX) > 6 || Math.abs(ev.clientY - startY) > 6) {
+        dragged = true
+      }
+      setNodeDrag({ type, x: ev.clientX, y: ev.clientY })
     }
     const onUp = (ev: PointerEvent): void => {
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
-      setAddDrag(null)
-      setMenu({ x: ev.clientX, y: ev.clientY })
+      setNodeDrag(null)
+      if (dragged && ev.clientX > SIDEBAR_W) {
+        // 拖到画布区域：在落点创建
+        createNodeAt(type, ev.clientX, ev.clientY)
+      }
     }
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
+  }
+
+  // 右键空白画布弹出节点创建菜单
+  const handleContextMenu = (e: React.MouseEvent): void => {
+    const target = e.target as HTMLElement
+    if (target.closest('.tl-shape') || target.closest('.tl-overlays') || target.closest('.node-palette') || target.closest('.canvas-dock') || target.closest('.side-panel') || target.closest('.chat-side-panel')) return
+    if (!target.closest('.tl-canvas')) return
+    e.preventDefault()
+    setMenu({ x: e.clientX, y: e.clientY })
   }
 
   // 保存载荷：快照 + 从 shapes 派生的图数据（nodes/edges，M4 执行引擎的消费源）
@@ -373,8 +406,9 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
 
   return (
     <div
-      className={`canvas-host ${dragOver ? 'drag-over' : ''}`}
+      className={`canvas-host canvas-theme-${canvasTheme} ${dragOver ? 'drag-over' : ''}`}
       ref={wrapRef}
+      onContextMenu={handleContextMenu}
       onDragEnter={(e) => {
         // 只在拖入真实文件时提示上传；画布内拖动节点/框选等会冒泡 dragover，那些不提示
         if (!e.dataTransfer.types.includes('Files')) return
@@ -410,35 +444,67 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
           SharePanel: null
         }}
       />
-      <div className="canvas-rail">
+      {/* 左侧节点面板：所有节点类型直接展示，点击创建或拖拽到画布 */}
+      <div className="node-palette">
+        <div className="palette-section">
+          <div className="palette-section-title">节点</div>
+          {nodeTypes.map((t) => (
+            <button
+              key={t.type}
+              className="palette-item"
+              title={`${t.label}（点击在中心创建 · 拖拽到画布）`}
+              onClick={() => handleNodePick(t.type)}
+              onPointerDown={(e) => startNodeDrag(e, t.type)}
+            >
+              <span className="palette-icon" style={{ color: t.color }}>{t.icon}</span>
+              <span className="palette-text">{t.label}</span>
+            </button>
+          ))}
+        </div>
+        <div className="palette-divider" />
+        <div className="palette-section">
+          <button
+            className="palette-item"
+            title="上传本地文件"
+            onClick={() => {
+              const editor = editorRef.current
+              if (!editor) return
+              const center = editor.getViewportPageBounds().center
+              const screen = editor.pageToScreen(center)
+              void handleUpload(screen.x, screen.y)
+            }}
+          >
+            <span className="palette-icon">📂</span>
+            <span className="palette-text">上传</span>
+          </button>
+          <button className="palette-item" title="资产管理" onClick={() => setPanelTab('assets')}>
+            <span className="palette-icon">📦</span>
+            <span className="palette-text">资产</span>
+          </button>
+          <button className="palette-item" title="工作流面板" onClick={() => setPanelTab('workflow')}>
+            <span className="palette-icon">⛓</span>
+            <span className="palette-text">工作流</span>
+          </button>
+          <button className="palette-item" title="历史记录" onClick={() => setPanelTab('history')}>
+            <span className="palette-icon">🕘</span>
+            <span className="palette-text">历史</span>
+          </button>
+        </div>
+        <div className="palette-divider" />
+        {/* 画布配色切换 */}
         <button
-          className="rail-item"
-          title="添加（点击或按住拖到画布）"
-          onPointerDown={startAddDrag}
+          className="palette-item"
+          title={canvasTheme === 'dark' ? '切换为米黄色' : '切换为深色'}
+          onClick={() => {
+            const next = canvasTheme === 'dark' ? 'light' : 'dark'
+            setCanvasTheme(next)
+            editorRef.current?.user.updateUserPreferences({
+              colorScheme: next === 'dark' ? 'dark' : 'light'
+            })
+          }}
         >
-          <span className="rail-icon">＋</span>
-          <span className="rail-label">添加</span>
-        </button>
-        <div className="rail-divider" />
-        <button className="rail-item" title="工作流" onClick={() => setPanelTab('workflow')}>
-          <span className="rail-icon">⛓</span>
-          <span className="rail-label">工作流</span>
-        </button>
-        <button className="rail-item" title="资产" onClick={() => setPanelTab('assets')}>
-          <span className="rail-icon">📦</span>
-          <span className="rail-label">资产</span>
-        </button>
-        <button className="rail-item" title="历史记录" onClick={() => setPanelTab('history')}>
-          <span className="rail-icon">🕘</span>
-          <span className="rail-label">历史</span>
-        </button>
-        <button
-          className="rail-item"
-          title="教程（即将上线）"
-          onClick={() => toast('教程功能将在后续版本开放')}
-        >
-          <span className="rail-icon">📖</span>
-          <span className="rail-label">教程</span>
+          <span className="palette-icon">{canvasTheme === 'dark' ? '☀' : '🌙'}</span>
+          <span className="palette-text">{canvasTheme === 'dark' ? '米色' : '深色'}</span>
         </button>
       </div>
       <CanvasBottomDock editor={editorInstance} />
@@ -475,9 +541,9 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
           }}
         />
       )}
-      {addDrag && (
-        <div className="add-drag-ghost" style={{ left: addDrag.x + 14, top: addDrag.y + 14 }}>
-          松开在这里添加节点
+      {nodeDrag && (
+        <div className="add-drag-ghost" style={{ left: nodeDrag.x + 14, top: nodeDrag.y + 14 }}>
+          {getNodeType(nodeDrag.type)?.icon} {getNodeType(nodeDrag.type)?.label}
         </div>
       )}
       {dragOver && <div className="drop-hint">松开鼠标，上传到画布</div>}

@@ -174,9 +174,8 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
           )}
         </div>
 
-        {/* 右侧：版本号 + 进度 + 搜索 + 运行 + 个人中心 */}
+        {/* 右侧：进度 + 版本 + 搜索 + 运行 + 个人中心 */}
         <span className="topbar-spacer" />
-        <span className="topbar-version">v{file.meta.graphVersion}</span>
 
         {/* 运行/停止工作流 + 进度（执行引擎核心控件） */}
         <div className="engine-controls">
@@ -194,7 +193,8 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
               </span>
             </div>
           )}
-          {/* 搜索按钮（运行按钮左侧） */}
+          {/* 版本号 + 搜索按钮 */}
+          <span className="engine-version">v1.0</span>
           <button
             className="run-btn search-trigger"
             title="搜索节点（Ctrl+K）"

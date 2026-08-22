@@ -279,10 +279,16 @@ input:focus {
   flex: 1;
 }
 
-.topbar-version {
-  font-size: 12px;
+.engine-version {
+  font-size: 11px;
   color: var(--muted);
   white-space: nowrap;
+  padding: 4px 8px;
+  background: var(--sunk);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  opacity: 0.7;
+  user-select: none;
 }
 
 /* 搜索按钮（运行左侧） */
@@ -479,6 +485,17 @@ input:focus {
   display: none !important;
 }
 
+/* ── 画布配色：米黄色主题 ── */
+.canvas-theme-light {
+  --canvas-bg: #f5f0e6;
+}
+.canvas-theme-light .tl-background {
+  background: #f5f0e6 !important;
+}
+.canvas-theme-light .tl-canvas {
+  background: transparent;
+}
+
 .canvas-host.drag-over::after {
   content: '';
   position: absolute;
@@ -503,66 +520,85 @@ input:focus {
   pointer-events: none;
 }
 
-/* ── 左侧工具栏（LibTV 画布左侧栏样式：图标 + 标签双层） ── */
-.canvas-rail {
+/* ── 左侧节点面板 ── */
+.node-palette {
   position: absolute;
-  left: 14px;
-  top: 50%;
-  transform: translateY(-50%);
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 72px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
+  padding: 8px 6px 8px 8px;
   background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 8px 6px;
+  border-right: 1px solid var(--line);
   z-index: 400;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.2);
 }
 
-.rail-item {
-  width: 48px;
-  height: 46px;
+.palette-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.palette-section-title {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 4px 4px 2px;
+  opacity: 0.6;
+}
+
+.palette-item {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  background: transparent;
+  gap: 2px;
+  padding: 6px 2px;
   border: none;
   border-radius: 8px;
+  background: transparent;
   color: var(--muted);
   cursor: pointer;
   transition:
     background 0.15s ease,
     color 0.15s ease;
+  touch-action: none;
 }
 
-.rail-icon {
-  font-size: 16px;
-  line-height: 1;
-  color: var(--txt);
-}
-
-.rail-label {
-  font-size: 10px;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.rail-item:hover {
+.palette-item:hover {
   background: var(--card-hover);
   color: var(--brand);
 }
 
-.rail-item:hover .rail-icon {
-  color: var(--brand);
+.palette-item:hover .palette-icon {
+  transform: scale(1.15);
 }
 
-.rail-divider {
+.palette-icon {
+  font-size: 18px;
+  line-height: 1;
+  color: var(--txt);
+  transition: transform 0.15s ease;
+}
+
+.palette-text {
+  font-size: 10px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.palette-divider {
   height: 1px;
   background: var(--line);
-  margin: 4px 2px;
+  margin: 6px 4px;
 }
 
 /* ── 节点创建菜单 ── */
@@ -656,11 +692,19 @@ input:focus {
     0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
+/* 节点顶部颜色条：按类型区分颜色（3px 高） */
+.node-color-bar {
+  height: 3px;
+  width: 100%;
+  flex-shrink: 0;
+  border-radius: 10px 10px 0 0;
+}
+
 .node-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  height: 32px;
+  gap: 5px;
+  height: 30px;
   padding: 0 10px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--line);
@@ -669,8 +713,24 @@ input:focus {
   background: rgba(255, 255, 255, 0.03);
 }
 
+/* 节点序号徽章 */
+.node-seq {
+  font-size: 10px;
+  font-weight: 800;
+  min-width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  padding: 0 3px;
+}
+
 .node-icon {
-  font-size: 14px;
+  font-size: 13px;
+  flex-shrink: 0;
 }
 
 .node-title {
@@ -683,7 +743,15 @@ input:focus {
 }
 
 .node-title.editable {
+  cursor: default;
+}
+
+.node-title.editing {
   cursor: text;
+  background: rgba(9, 202, 245, 0.08);
+  border-radius: 4px;
+  padding: 0 4px;
+  margin: 0 -4px;
 }
 
 .node-status {
@@ -1193,13 +1261,13 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   border: none;
-  border-radius: 6px;
+  border-radius: 50%;
   background: transparent;
   color: var(--muted);
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1;
   cursor: pointer;
   pointer-events: auto;
@@ -1211,12 +1279,12 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
 }
 
 .dock-btn:hover {
-  background: var(--sunk);
-  color: var(--txt);
+  background: color-mix(in srgb, var(--brand) 15%, transparent);
+  color: var(--brand);
 }
 
 .dock-btn:active {
-  transform: translateY(1px);
+  transform: scale(0.92);
 }
 
 /* ── 右侧面板：资产 / 工作流 / 历史记录（LibTV 侧栏落地） ── */

@@ -85,7 +85,7 @@ export function CanvasBottomDock({ editor }: DockProps): React.JSX.Element {
   const [showMap, setShowMap] = useState(false)
   const svgRef = useRef<SVGSVGElement>(null)
 
-  // 订阅画布（含 camera 的 instance state）变化刷新缩略图
+  // 订阅画布变化（document: 节点增删；session: 缩放/平移）
   useEffect(() => {
     if (!editor) return
     const update = (): void => {
@@ -113,9 +113,11 @@ export function CanvasBottomDock({ editor }: DockProps): React.JSX.Element {
       })
     }
     update()
-    const unsub = editor.store.listen(update, { scope: 'document' })
+    const unsub1 = editor.store.listen(update, { scope: 'document' })
+    const unsub2 = editor.store.listen(update, { scope: 'session' })
     return () => {
-      unsub?.()
+      unsub1?.()
+      unsub2?.()
     }
   }, [editor])
 
@@ -227,17 +229,10 @@ export function CanvasBottomDock({ editor }: DockProps): React.JSX.Element {
         </div>
       )}
       <div className="dock-controls">
-        {/* 工具组：小地图切换 + 画布整理 */}
+        {/* 工具组：小地图切换 */}
         <div className="dock-tool-group">
           <button className="dock-btn" title="小地图导航" onClick={() => setShowMap((v) => !v)}>
             {showMap ? '⊡' : '🗺'}
-          </button>
-          <button
-            className="dock-btn"
-            title="整理画布（Shift+Alt+F）"
-            onClick={() => editor && organizeCanvas(editor)}
-          >
-            ✨
           </button>
         </div>
         {/* 缩放簇 */}
@@ -267,10 +262,20 @@ export function CanvasBottomDock({ editor }: DockProps): React.JSX.Element {
           </button>
           <button
             className="dock-btn"
-            title="适配画布"
+            title="适配画布（缩放到所有节点）"
             onClick={() => editor && editor.zoomToFit({ animation: { duration: 220 } })}
           >
-            ⊡
+            ⤢
+          </button>
+          <button
+            className="dock-btn"
+            title="重置缩放到 100%"
+            onClick={() =>
+              editor &&
+              editor.setCamera({ ...editor.getCamera(), z: 1 }, { animation: { duration: 220 } })
+            }
+          >
+            ◎
           </button>
         </div>
       </div>

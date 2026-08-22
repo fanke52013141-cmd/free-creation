@@ -1,4 +1,4 @@
-// NodeCard 卡片视图：头部（图标/标题/状态灯）+ 类型化内容体 + 端口圆点 + 媒体预览浮层
+// NodeCard 卡片视图：头部（序号/图标/标题/状态灯）+ 类型化内容体 + 端口圆点 + 媒体预览浮层
 import { HTMLContainer, stopEventPropagation, useEditor } from 'tldraw'
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -28,11 +28,27 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     kind: 'image' | 'video' | 'audio'
     title: string
   } | null>(null)
+  const [editing, setEditing] = useState(false)
 
-  // 只在真正可交互的元素上拦事件（可编辑标题/端口）；卡片其余区域必须放行给 tldraw，
-  // 否则选中和拖拽会被吞掉（此前根节点拦了 pointerdown 导致节点完全拖不动）
+  // 计算节点序号：按创建顺序排序所有 node-card，返回当前节点的序号
+  const seq = (() => {
+    const shapes = editor
+      .getCurrentPageShapes()
+      .filter((s) => s.type === 'node-card')
+      .sort((a, b) => (a.id > b.id ? 1 : -1))
+    const idx = shapes.findIndex((s) => s.id === shape.id)
+    return idx >= 0 ? idx + 1 : 0
+  })()
+
+  // 双击标题进入编辑模式
+  const handleTitleDoubleClick = (e: React.MouseEvent): void => {
+    if (!titleEditable) return
+    stopEventPropagation(e)
+    setEditing(true)
+  }
+
   const handleTitlePointerDown = (e: React.PointerEvent): void => {
-    if (titleEditable) stopEventPropagation(e)
+    if (editing) stopEventPropagation(e)
   }
 
   const handleTitleBlur = (e: React.FocusEvent<HTMLDivElement>): void => {
@@ -41,14 +57,10 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       editor.updateShape({ id: shape.id, type: 'node-card', props: { title: next } })
       markUndoPoint(editor, 'title-edit')
     }
+    setEditing(false)
   }
 
-  const titleEditable =
-    spec?.type === 'text' ||
-    spec?.type === 'chat' ||
-    spec?.type === 'script' ||
-    spec?.type === 'json' ||
-    spec?.type === 'code'
+  const titleEditable = true
 
   const inPorts = spec?.ports.in ?? []
   const outPorts = spec?.ports.out ?? []
@@ -62,15 +74,18 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       <div className="node-card-wrap" style={{ width: shape.props.w, height: shape.props.h }}>
         <div
           className={`node-card type-${shape.props.nodeType}`}
-          style={{ borderColor: spec?.color }}
         >
-          <div className="node-header" style={{ color: spec?.color }}>
+          {/* 顶部颜色条（按类型区分） */}
+          <div className="node-color-bar" style={{ background: spec?.color }} />
+          <div className="node-header">
+            <span className="node-seq" style={{ color: spec?.color }}>{seq}</span>
             <span className="node-icon">{spec?.icon ?? '?'}</span>
             <div
-              className={`node-title ${titleEditable ? 'editable' : ''}`}
-              contentEditable={titleEditable}
+              className={`node-title ${titleEditable ? 'editable' : ''} ${editing ? 'editing' : ''}`}
+              contentEditable={editing}
               suppressContentEditableWarning
               spellCheck={false}
+              onDoubleClick={handleTitleDoubleClick}
               onBlur={handleTitleBlur}
               onPointerDown={handleTitlePointerDown}
               onKeyDown={(e) => {
