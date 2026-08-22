@@ -485,6 +485,16 @@ input:focus {
   display: none !important;
 }
 
+/* ── 节点缩放手柄：圆形 + 品牌色美化（替换 tldraw 默认方块） ── */
+.tl-corner-handle {
+  rx: 999px;
+  ry: 999px;
+  fill: var(--brand) !important;
+  stroke: rgba(255, 255, 255, 0.9) !important;
+  stroke-width: calc(2px * var(--tl-scale)) !important;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.3));
+}
+
 /* ── 画布配色：米黄色主题 ── */
 .canvas-theme-light {
   --canvas-bg: #f5f0e6;
@@ -1285,6 +1295,71 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
 
 .dock-btn:active {
   transform: scale(0.92);
+}
+
+/* ── 多选浮动工具栏：对齐 + 打组 ── */
+.multiselect-toolbar {
+  position: absolute;
+  top: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 700;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 5px 7px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  animation: ms-pop 0.15s ease-out;
+}
+
+@keyframes ms-pop {
+  from { opacity: 0; transform: translateX(-50%) translateY(-6px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.ms-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.ms-btn:hover {
+  background: color-mix(in srgb, var(--brand) 15%, transparent);
+  color: var(--brand);
+}
+
+.ms-btn:active {
+  transform: scale(0.9);
+}
+
+.ms-group {
+  color: var(--brand);
+}
+
+.ms-group:hover {
+  background: color-mix(in srgb, var(--brand) 22%, transparent);
+}
+
+.ms-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--line);
+  margin: 0 3px;
 }
 
 /* ── 右侧面板：资产 / 工作流 / 历史记录（LibTV 侧栏落地） ── */

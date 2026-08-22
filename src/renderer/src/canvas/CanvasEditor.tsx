@@ -6,6 +6,7 @@ import { NodeCardUtil, type NodeCardProps } from './NodeCardShape'
 import { NodeCreateMenu } from './NodeCreateMenu'
 import { ConnectionLayer } from './ConnectionLayer'
 import { CanvasBottomDock } from './CanvasMinimap'
+import { MultiSelectToolbar } from './MultiSelectToolbar'
 import { CanvasSidePanel, type SidePanelTab } from './CanvasSidePanel'
 import { ChatSidePanel } from './ChatSidePanel'
 import { SearchPalette } from './SearchPalette'
@@ -508,6 +509,8 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
         </button>
       </div>
       <CanvasBottomDock editor={editorInstance} />
+      {/* 多选浮动工具栏：选中 2+ 节点时显示对齐与打组 */}
+      {editorInstance && <MultiSelectToolbar editor={editorInstance} />}
       {/* 搜索覆盖层（顶栏按钮触发，在 Tldraw 同级渲染） */}
       {editorInstance && <SearchPalette editor={editorInstance} />}
       <CanvasSidePanel
