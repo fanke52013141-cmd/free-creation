@@ -1353,24 +1353,25 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
 }
 
 .dock-minimap {
-  width: 168px;
-  height: 108px;
-  background: var(--card);
+  width: 176px;
+  height: 116px;
+  background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 10px;
   overflow: hidden;
   position: relative;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
 }
 
 /* 弹出式小地图附加样式（点地图图标展开 / 收起） */
 .dock-minimap-popup {
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-  animation: dock-popup 0.18s ease-out;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  animation: dock-popup 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(8px);
 }
 
 @keyframes dock-popup {
-  from { opacity: 0; transform: translateY(8px) scale(0.96); }
+  from { opacity: 0; transform: translateY(10px) scale(0.94); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
@@ -1378,7 +1379,12 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   width: 100%;
   height: 100%;
   display: block;
-  cursor: crosshair;
+  cursor: grab;
+  touch-action: none;
+}
+
+.dock-minimap-svg:active {
+  cursor: grabbing;
 }
 
 .dock-minimap-empty {
