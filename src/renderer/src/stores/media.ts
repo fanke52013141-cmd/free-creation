@@ -51,8 +51,7 @@ export function filteredAssets(
   const kw = state.keyword.trim().toLowerCase()
   if (kw) {
     list = list.filter(
-      (a) =>
-        (a.name ?? '').toLowerCase().includes(kw) || a.id.toLowerCase().includes(kw)
+      (a) => (a.name ?? '').toLowerCase().includes(kw) || a.id.toLowerCase().includes(kw)
     )
   }
   return list

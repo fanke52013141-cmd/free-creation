@@ -290,3 +290,45 @@ export function deriveGraph(editor: Editor): {
 
   return { nodes, edges, groups: [] }
 }
+
+/**
+ * 实时收集连入某节点的上游文本内容（用于对话/图片等节点手动触发时自动注入上下文）。
+ * 遍历画布上的 arrow bindings，找到所有 → targetNodeId 的边，取源节点的文本输出。
+ */
+export function gatherUpstreamText(editor: Editor, targetNodeId: TLShapeId): string {
+  const parts: string[] = []
+  for (const shape of editor.getCurrentPageShapes()) {
+    if (shape.type !== 'arrow') continue
+    const { start, end } = getArrowBindings(editor, shape.id)
+    if (!start || !end) continue
+    if (end.toId !== targetNodeId) continue
+    const src = editor.getShape<NodeCardShape>(start.toId)
+    if (!src || src.type !== 'node-card') continue
+    // 取源节点的纯文本内容
+    const text = src.props.text
+    if (!text) continue
+    // 对文本节点：直接取 props.text
+    if (src.props.nodeType === 'text') {
+      if (text.trim()) parts.push(text.trim())
+      continue
+    }
+    // 对对话/脚本等 JSON 存储节点：尝试提取有效文本
+    try {
+      const parsed = JSON.parse(text) as Record<string, unknown>
+      // 对话节点：取最后一条 assistant 消息
+      if (src.props.nodeType === 'chat' && Array.isArray(parsed.messages)) {
+        const msgs = parsed.messages as { role: string; content: string }[]
+        const lastAssistant = [...msgs].reverse().find((m) => m.role === 'assistant')
+        if (lastAssistant?.content?.trim()) parts.push(lastAssistant.content.trim())
+      }
+      // 脚本节点：取剧本文本
+      else if (src.props.nodeType === 'script' && typeof parsed.source === 'string') {
+        if (parsed.source.trim()) parts.push(parsed.source.trim())
+      }
+    } catch {
+      // 非 JSON，可能是纯文本
+      if (text.trim()) parts.push(text.trim())
+    }
+  }
+  return parts.join('\n\n---\n\n')
+}

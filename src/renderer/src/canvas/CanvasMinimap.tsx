@@ -31,7 +31,11 @@ interface DockProps {
   onToggleEdges: () => void
 }
 
-export function CanvasBottomDock({ editor, edgesVisible, onToggleEdges }: DockProps): React.JSX.Element {
+export function CanvasBottomDock({
+  editor,
+  edgesVisible,
+  onToggleEdges
+}: DockProps): React.JSX.Element {
   const [state, setState] = useState<MinimapState>({ nodes: [], zoom: 1, viewport: null })
   const svgRef = useRef<SVGSVGElement>(null)
 
@@ -163,14 +167,34 @@ export function CanvasBottomDock({ editor, edgesVisible, onToggleEdges }: DockPr
       </div>
       <div className="dock-controls">
         <div className="dock-zoom">
-          <button className="dock-btn" title="放大" onClick={() => editor && editor.zoomIn(editor.getViewportPageBounds().center, { animation: { duration: 180 } })}>
+          <button
+            className="dock-btn"
+            title="放大"
+            onClick={() =>
+              editor &&
+              editor.zoomIn(editor.getViewportPageBounds().center, { animation: { duration: 180 } })
+            }
+          >
             ＋
           </button>
           <span className="dock-zoom-label">{Math.round(state.zoom * 100)}%</span>
-          <button className="dock-btn" title="缩小" onClick={() => editor && editor.zoomOut(editor.getViewportPageBounds().center, { animation: { duration: 180 } })}>
+          <button
+            className="dock-btn"
+            title="缩小"
+            onClick={() =>
+              editor &&
+              editor.zoomOut(editor.getViewportPageBounds().center, {
+                animation: { duration: 180 }
+              })
+            }
+          >
             －
           </button>
-          <button className="dock-btn" title="适配画布" onClick={() => editor && editor.zoomToFit({ animation: { duration: 220 } })}>
+          <button
+            className="dock-btn"
+            title="适配画布"
+            onClick={() => editor && editor.zoomToFit({ animation: { duration: 220 } })}
+          >
             ⊡
           </button>
         </div>

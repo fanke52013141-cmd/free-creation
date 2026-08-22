@@ -157,15 +157,7 @@ export interface GatewayModelInfo {
 }
 
 export type ProviderSpecId =
-  | 'openai'
-  | 'deepseek'
-  | 'qwen'
-  | 'kimi'
-  | 'glm'
-  | 'doubao'
-  | 'relay'
-  | 'minimax'
-  | 'seedance'
+  'openai' | 'deepseek' | 'qwen' | 'kimi' | 'glm' | 'doubao' | 'relay' | 'minimax' | 'seedance'
 
 export interface ProviderConfig {
   id: string

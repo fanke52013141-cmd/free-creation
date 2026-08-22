@@ -38,7 +38,8 @@ function parseJsonObj(text: string): Record<string, unknown> | null {
   if (!text) return null
   try {
     const v = JSON.parse(text)
-    if (typeof v === 'object' && v !== null && !Array.isArray(v)) return v as Record<string, unknown>
+    if (typeof v === 'object' && v !== null && !Array.isArray(v))
+      return v as Record<string, unknown>
   } catch {
     // 非结构化内容
   }
@@ -98,9 +99,7 @@ function parseChat(text: string): { system: string; modelKey: string; messages: 
   if (o && Array.isArray(o.messages)) {
     const messages = (o.messages as unknown[])
       .map((m) => m as { role?: unknown; content?: unknown })
-      .filter(
-        (m) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string'
-      )
+      .filter((m) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
       .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content as string }))
     return {
       system: typeof o.system === 'string' ? o.system : '',
@@ -289,7 +288,12 @@ function waitForVideo(
       const d = res.data
       if (d.status === 'success' && d.mediaPath) {
         stop()
-        resolve({ mediaId: d.mediaId ?? '', mediaPath: d.mediaPath, name: 'video', mime: 'video/mp4' })
+        resolve({
+          mediaId: d.mediaId ?? '',
+          mediaPath: d.mediaPath,
+          name: 'video',
+          mime: 'video/mp4'
+        })
       } else if (d.status === 'failed' || d.status === 'cancelled') {
         stop()
         reject(new Error(d.error ?? '视频生成失败'))

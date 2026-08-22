@@ -19,9 +19,7 @@ export async function generateImageToAsset(input: ImageGenerateInput): Promise<M
   const { images } = await generateImage({
     model: createImageModel(input.providerId, input.modelId),
     prompt: input.prompt.trim(),
-    ...(input.size && input.size !== 'auto'
-      ? { size: input.size as `${number}x${number}` }
-      : {})
+    ...(input.size && input.size !== 'auto' ? { size: input.size as `${number}x${number}` } : {})
   })
   if (!images?.length) throw new GatewayError('EMPTY_RESULT', '模型未返回图片')
 

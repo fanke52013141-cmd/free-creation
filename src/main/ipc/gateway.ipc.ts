@@ -51,9 +51,7 @@ export function registerGatewayIpc(win: BrowserWindow): void {
     if (!win.isDestroyed()) win.webContents.send(IPC.gateway.event, e)
   }
 
-  ipcMain.handle(IPC.gateway.providers, (): IpcEnvelope<ProviderConfig[]> =>
-    ok(listProviders())
-  )
+  ipcMain.handle(IPC.gateway.providers, (): IpcEnvelope<ProviderConfig[]> => ok(listProviders()))
 
   ipcMain.handle(IPC.gateway.saveProvider, (_e, input: SaveProviderInput) =>
     wrap(() => {
@@ -79,8 +77,10 @@ export function registerGatewayIpc(win: BrowserWindow): void {
     wrap(() => cancelChat(taskId ?? ''))
   )
 
-  ipcMain.handle(IPC.gateway.imageGenerate, (_e, input: Parameters<typeof generateImageToAsset>[0]) =>
-    wrapAsync<MediaAsset>(() => generateImageToAsset(input))
+  ipcMain.handle(
+    IPC.gateway.imageGenerate,
+    (_e, input: Parameters<typeof generateImageToAsset>[0]) =>
+      wrapAsync<MediaAsset>(() => generateImageToAsset(input))
   )
 
   ipcMain.handle(IPC.gateway.videoSubmit, (_e, input: Parameters<typeof submitVideoTask>[1]) =>

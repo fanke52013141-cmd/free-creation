@@ -1,4 +1,4 @@
-import { Tldraw, createShapeId, type Editor, type TLShapeId } from 'tldraw'
+﻿import { Tldraw, createShapeId, type Editor, type TLShapeId } from 'tldraw'
 import 'tldraw/tldraw.css'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ProjectMeta, MediaAsset, NodeTypeId } from '@shared/types'
@@ -7,6 +7,7 @@ import { NodeCreateMenu } from './NodeCreateMenu'
 import { ConnectionLayer } from './ConnectionLayer'
 import { CanvasBottomDock } from './CanvasMinimap'
 import { CanvasSidePanel, type SidePanelTab } from './CanvasSidePanel'
+import { StoryboardView } from './StoryboardView'
 import {
   setConnectionFinishHandler,
   teardownConnectionDrag,
@@ -15,7 +16,11 @@ import {
 import { deriveGraph, tryConnect } from './graph'
 import { markUndoPoint } from './history'
 import { getNodeType } from '../nodes/registry'
-import { registerBaseNodeTypes, registerScriptNodeType } from '../nodes/specs'
+import {
+  registerBaseNodeTypes,
+  registerScriptNodeType,
+  registerExtendedNodeTypes
+} from '../nodes/specs'
 import { toast } from '../stores/toast'
 import type { ConnectionFrom } from '../stores/connection'
 import { useGatewayStore } from '../stores/gateway'
@@ -25,6 +30,7 @@ import { useMediaStore } from '../stores/media'
 
 registerBaseNodeTypes()
 registerScriptNodeType()
+registerExtendedNodeTypes()
 
 interface CanvasEditorProps {
   project: ProjectMeta
@@ -56,6 +62,8 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
   const [panelTab, setPanelTab] = useState<SidePanelTab | null>(null)
   // 空白画布时展示底部 AI 模板卡（LibTV 26-7-7）
   const [hasNodes, setHasNodes] = useState(false)
+  // 双视图切换：节点工作流 ↔ 故事板（创作者视图 ↔ 工程师视图）
+  const [viewMode, setViewMode] = useState<'workflow' | 'storyboard'>('workflow')
 
   // 执行引擎：注册 run 闭包到全局 store，顶部栏通过 store 触发（捕获 editor + projectId + providers）
   const providers = useGatewayStore((s) => s.providers)
@@ -429,27 +437,15 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
           <span className="rail-label">资源</span>
         </button>
         <div className="rail-divider" />
-        <button
-          className="rail-item"
-          title="工作流"
-          onClick={() => setPanelTab('workflow')}
-        >
+        <button className="rail-item" title="工作流" onClick={() => setPanelTab('workflow')}>
           <span className="rail-icon">⛓</span>
           <span className="rail-label">工作流</span>
         </button>
-        <button
-          className="rail-item"
-          title="资产"
-          onClick={() => setPanelTab('assets')}
-        >
+        <button className="rail-item" title="资产" onClick={() => setPanelTab('assets')}>
           <span className="rail-icon">📦</span>
           <span className="rail-label">资产</span>
         </button>
-        <button
-          className="rail-item"
-          title="历史记录"
-          onClick={() => setPanelTab('history')}
-        >
+        <button className="rail-item" title="历史记录" onClick={() => setPanelTab('history')}>
           <span className="rail-icon">🕘</span>
           <span className="rail-label">历史</span>
         </button>
@@ -467,6 +463,25 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
         edgesVisible={edgesVisible}
         onToggleEdges={() => setEdgesVisible((v) => !v)}
       />
+      {/* 双视图切换浮动按钮 */}
+      {editorInstance && hasNodes && (
+        <div className="view-toggle">
+          <button
+            className={viewMode === 'workflow' ? 'vt-btn active' : 'vt-btn'}
+            onClick={() => setViewMode('workflow')}
+          >
+            ⛓ 工作流
+          </button>
+          <button
+            className={viewMode === 'storyboard' ? 'vt-btn active' : 'vt-btn'}
+            onClick={() => setViewMode('storyboard')}
+          >
+            📋 故事板
+          </button>
+        </div>
+      )}
+      {/* 故事板视图覆盖层 */}
+      {viewMode === 'storyboard' && editorInstance && <StoryboardView editor={editorInstance} />}
       {!hasNodes && editorInstance && (
         <div className="canvas-template">
           <div className="tmpl-title">✨ AI 快速开始</div>
@@ -497,6 +512,7 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
       <CanvasSidePanel
         tab={panelTab}
         projectId={project.id}
+        editor={editorInstance}
         onClose={() => setPanelTab(null)}
         onImport={() => {
           const editor = editorRef.current

@@ -1,11 +1,6 @@
 // IPC 契约：通道名 + payload 类型 + 统一信封（见《技术框架与规范》§10）
 
-import type {
-  ChatMessage,
-  GatewayModelInfo,
-  ProviderSpecId,
-  VideoGenParams
-} from '../types'
+import type { ChatMessage, GatewayModelInfo, ProviderSpecId, VideoGenParams } from '../types'
 
 export const IPC = {
   app: {

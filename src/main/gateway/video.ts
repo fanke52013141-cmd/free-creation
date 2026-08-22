@@ -81,9 +81,8 @@ function rowToInfo(row: TaskRow): VideoTaskInfo {
 
 function mediaPathById(mediaId: string): string | undefined {
   if (!mediaId) return undefined
-  const row = getDb()
-    .prepare('SELECT path FROM media WHERE id = ?')
-    .get(mediaId) as { path: string } | undefined
+  const row = getDb().prepare('SELECT path FROM media WHERE id = ?').get(mediaId) as
+    { path: string } | undefined
   return row?.path
 }
 
@@ -117,10 +116,7 @@ async function mediaToDataUrl(mediaId: string): Promise<string | undefined> {
 
 // ── MiniMax 适配 ──
 
-async function minimaxSubmit(
-  p: ProviderConfig,
-  input: VideoSubmitInput
-): Promise<string> {
+async function minimaxSubmit(p: ProviderConfig, input: VideoSubmitInput): Promise<string> {
   const content: Array<Record<string, unknown>> = [{ type: 'text', text: input.prompt }]
   if (input.firstFrameMediaId) {
     content.push({
@@ -143,7 +139,10 @@ async function minimaxSubmit(
   })
   const taskId = res.task_id ?? res.taskId ?? (res as { id?: string }).id
   if (typeof taskId !== 'string' || !taskId) {
-    throw new GatewayError('UPSTREAM_ERROR', `MiniMax 未返回 task_id：${JSON.stringify(res).slice(0, 200)}`)
+    throw new GatewayError(
+      'UPSTREAM_ERROR',
+      `MiniMax 未返回 task_id：${JSON.stringify(res).slice(0, 200)}`
+    )
   }
   return taskId
 }
@@ -173,10 +172,7 @@ async function minimaxPoll(p: ProviderConfig, upstreamId: string): Promise<Upstr
 
 // ── Seedance 适配 ──
 
-async function seedanceSubmit(
-  p: ProviderConfig,
-  input: VideoSubmitInput
-): Promise<string> {
+async function seedanceSubmit(p: ProviderConfig, input: VideoSubmitInput): Promise<string> {
   const content: Array<Record<string, unknown>> = [{ type: 'text', text: input.prompt }]
   if (input.firstFrameMediaId) {
     content.push({
@@ -198,7 +194,10 @@ async function seedanceSubmit(
   })
   const id = res.id
   if (typeof id !== 'string' || !id) {
-    throw new GatewayError('UPSTREAM_ERROR', `Seedance 未返回任务 id：${JSON.stringify(res).slice(0, 200)}`)
+    throw new GatewayError(
+      'UPSTREAM_ERROR',
+      `Seedance 未返回任务 id：${JSON.stringify(res).slice(0, 200)}`
+    )
   }
   return id
 }
@@ -234,10 +233,7 @@ function adaptersFor(p: ProviderConfig): {
     : { submit: seedanceSubmit, poll: seedancePoll }
 }
 
-export function submitVideoTask(
-  send: Send,
-  input: VideoSubmitInput
-): VideoSubmitResult {
+export function submitVideoTask(send: Send, input: VideoSubmitInput): VideoSubmitResult {
   if (!input.prompt?.trim()) throw new GatewayError('INVALID_INPUT', '提示词不能为空')
   const p = getProvider(input.providerId)
   if (!p) throw new GatewayError('PROVIDER_NOT_FOUND', '供应商不存在')
@@ -257,7 +253,16 @@ export function submitVideoTask(
       `INSERT INTO tasks (id, provider_id, model_id, node_id, project_id, kind, status, input, attempts, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, 'video', 'submitted', ?, 0, ?, ?)`
     )
-    .run(taskId, input.providerId, input.modelId, input.nodeId, input.projectId, JSON.stringify(state), now, now)
+    .run(
+      taskId,
+      input.providerId,
+      input.modelId,
+      input.nodeId,
+      input.projectId,
+      JSON.stringify(state),
+      now,
+      now
+    )
 
   void pollLoop(send, taskId, input)
   return { taskId }
@@ -271,7 +276,10 @@ async function pollLoop(send: Send, taskId: string, input: VideoSubmitInput): Pr
     const { submit, poll } = adaptersFor(p)
     const upstreamId = await submit(p, input)
     const state = parseInput(taskId)
-    updateTask(taskId, { input: JSON.stringify({ ...state, upstreamTaskId: upstreamId }), status: 'running' })
+    updateTask(taskId, {
+      input: JSON.stringify({ ...state, upstreamTaskId: upstreamId }),
+      status: 'running'
+    })
     send({ kind: 'video-status', taskId, status: 'running' })
 
     const deadline = Date.now() + VIDEO_TIMEOUT_MS
@@ -320,9 +328,8 @@ async function pollLoop(send: Send, taskId: string, input: VideoSubmitInput): Pr
 }
 
 function parseInput(taskId: string): VideoInputState {
-  const row = getDb()
-    .prepare('SELECT input FROM tasks WHERE id = ?')
-    .get(taskId) as { input: string | null } | undefined
+  const row = getDb().prepare('SELECT input FROM tasks WHERE id = ?').get(taskId) as
+    { input: string | null } | undefined
   if (!row?.input) return { prompt: '' }
   try {
     return JSON.parse(row.input) as VideoInputState
@@ -344,18 +351,15 @@ export function cancelVideoTask(taskId: string): boolean {
 }
 
 export function getVideoTask(taskId: string): VideoTaskInfo | null {
-  const row = getDb()
-    .prepare("SELECT * FROM tasks WHERE id = ? AND kind = 'video'")
-    .get(taskId) as TaskRow | undefined
+  const row = getDb().prepare("SELECT * FROM tasks WHERE id = ? AND kind = 'video'").get(taskId) as
+    TaskRow | undefined
   return row ? rowToInfo(row) : null
 }
 
 // 应用启动恢复：重启前仍在途的任务，有 upstreamTaskId 则继续轮询，否则标失败
 export function resumePendingVideoTasks(send: Send): void {
   const rows = getDb()
-    .prepare(
-      "SELECT * FROM tasks WHERE kind = 'video' AND status IN ('submitted', 'running')"
-    )
+    .prepare("SELECT * FROM tasks WHERE kind = 'video' AND status IN ('submitted', 'running')")
     .all() as TaskRow[]
   for (const row of rows) {
     const state = parseInput(row.id)

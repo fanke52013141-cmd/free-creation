@@ -20,8 +20,7 @@ function normalizeModel(v: unknown): GatewayModelInfo | null {
   if (typeof v === 'object' && v !== null) {
     const o = v as Record<string, unknown>
     if (typeof o.id !== 'string' || !o.id.trim()) return null
-    const modality =
-      o.modality === 'image' || o.modality === 'video' ? o.modality : 'text'
+    const modality = o.modality === 'image' || o.modality === 'video' ? o.modality : 'text'
     return {
       id: o.id.trim(),
       name: typeof o.name === 'string' && o.name.trim() ? o.name.trim() : undefined,
@@ -62,16 +61,13 @@ export function listProviders(): ProviderConfig[] {
 }
 
 export function getProvider(id: string): ProviderConfig | null {
-  const row = getDb()
-    .prepare('SELECT * FROM providers WHERE id = ?')
-    .get(id) as ProviderRow | undefined
+  const row = getDb().prepare('SELECT * FROM providers WHERE id = ?').get(id) as
+    ProviderRow | undefined
   return row ? rowToConfig(row) : null
 }
 
 export function saveProvider(input: SaveProviderInput): ProviderConfig {
-  const models = input.models
-    .map(normalizeModel)
-    .filter((m): m is GatewayModelInfo => m !== null)
+  const models = input.models.map(normalizeModel).filter((m): m is GatewayModelInfo => m !== null)
   const id = input.id ?? nanoid(10)
   const now = Date.now()
   const row: ProviderRow = {

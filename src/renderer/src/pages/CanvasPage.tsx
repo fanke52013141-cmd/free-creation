@@ -130,7 +130,8 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
                 />
               </div>
               <span className="engine-progress-text">
-                {engineDone}/{engineTotal} · {enginePhase === 'stopping' ? '停止中…' : engineCurrent || '执行中…'}
+                {engineDone}/{engineTotal} ·{' '}
+                {enginePhase === 'stopping' ? '停止中…' : engineCurrent || '执行中…'}
               </span>
             </div>
           )}
@@ -150,21 +151,29 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
         </div>
 
         <div className="topbar-actions">
-          <button className="topbar-icon" title="搜索节点" onClick={() => toast('搜索功能将在后续版本开放')}>
+          <button
+            className="topbar-icon"
+            title="搜索节点"
+            onClick={() => toast('搜索功能将在后续版本开放')}
+          >
             🔍
           </button>
-          <button className="topbar-icon" title="分享项目" onClick={() => toast('分享链接将在后续版本开放')}>
+          <button
+            className="topbar-icon"
+            title="分享项目"
+            onClick={() => toast('分享链接将在后续版本开放')}
+          >
             ↗
           </button>
-          <button className="topbar-icon" title="会员中心" onClick={() => toast('会员中心将在后续版本开放')}>
+          <button
+            className="topbar-icon"
+            title="会员中心"
+            onClick={() => toast('会员中心将在后续版本开放')}
+          >
             <span className="member-crown">♛</span>
           </button>
           <div className="topbar-user" ref={userRef}>
-            <button
-              className="avatar-btn"
-              title="个人中心"
-              onClick={() => setUserOpen((v) => !v)}
-            >
+            <button className="avatar-btn" title="个人中心" onClick={() => setUserOpen((v) => !v)}>
               <span className="avatar-dot">我</span>
             </button>
             {userOpen && (

@@ -1,8 +1,20 @@
-// 节点 Spec 注册（见《技术框架与规范》§5.1）
+﻿// 节点 Spec 注册（见《技术框架与规范》§5.1）
 // 端口声明对齐路线图的节点类型表；any 万能口，其余类型需一致才可连
 import type { PortDecl } from '@shared/types'
 import { registerNodeType } from '../registry'
-import { AudioBody, ChatBody, ImageBody, ScriptBody, TextBody, VideoBody } from './bodies'
+import {
+  AudioBody,
+  ChatBody,
+  CodeBody,
+  ComposeBody,
+  GroupBody,
+  ImageBody,
+  JsonBody,
+  ScriptBody,
+  StoryboardBody,
+  TextBody,
+  VideoBody
+} from './bodies'
 
 const port = (id: string, name: string, type: PortDecl['type']): PortDecl => ({
   id,
@@ -93,5 +105,66 @@ export function registerScriptNodeType(): void {
       out: [out('out-json', '分镜数据', 'json'), out('out-text', '分镜文本', 'text')]
     },
     Body: ScriptBody
+  })
+}
+
+// M5 新增节点注册
+export function registerExtendedNodeTypes(): void {
+  registerNodeType({
+    type: 'json',
+    label: 'JSON',
+    icon: '🔧',
+    color: '#c084fc',
+    defaultSize: { w: 280, h: 200 },
+    ports: {
+      in: [port('in-json', '数据', 'json'), port('in-text', '文本', 'text')],
+      out: [out('out-json', '数据', 'json')]
+    },
+    Body: JsonBody
+  })
+  registerNodeType({
+    type: 'code',
+    label: '代码',
+    icon: '⌨',
+    color: '#94a3b8',
+    defaultSize: { w: 320, h: 220 },
+    ports: {
+      in: [port('in-text', '代码', 'text')],
+      out: [out('out-text', '文本', 'text')]
+    },
+    Body: CodeBody
+  })
+  registerNodeType({
+    type: 'group',
+    label: '分组',
+    icon: '📦',
+    color: '#64748b',
+    defaultSize: { w: 200, h: 100 },
+    ports: { in: [], out: [] },
+    Body: GroupBody
+  })
+  registerNodeType({
+    type: 'storyboard',
+    label: '分镜板',
+    icon: '📋',
+    color: '#60a5fa',
+    defaultSize: { w: 380, h: 320 },
+    ports: {
+      in: [port('in-json', '分镜数据', 'json'), port('in-text', '分镜文本', 'text')],
+      out: [out('out-json', '分镜数据', 'json'), out('out-text', '合成文本', 'text')]
+    },
+    Body: StoryboardBody
+  })
+  registerNodeType({
+    type: 'compose',
+    label: '合成',
+    icon: '🎞',
+    color: '#f472b6',
+    defaultSize: { w: 260, h: 160 },
+    ports: {
+      in: [port('in-video', '视频片段', 'video')],
+      out: [out('out-video', '合成视频', 'video')]
+    },
+    Body: ComposeBody
   })
 }

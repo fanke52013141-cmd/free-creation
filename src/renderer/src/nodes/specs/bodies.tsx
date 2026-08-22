@@ -1,11 +1,13 @@
-// 节点内容组件（LibTV 式卡片内容区）：五类基础节点 + 脚本节点
+﻿// 节点内容组件（LibTV 式卡片内容区）：五类基础节点 + 脚本节点
 // M4 起 Image/Chat/Video 节点接入模型网关（生成 / 流式对话 / 异步任务）
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { stopEventPropagation, useEditor } from 'tldraw'
+import { createShapeId, stopEventPropagation, useEditor, type TLShapeId } from 'tldraw'
 import type { ChatMessage, VideoGenParams } from '@shared/types'
 import { mediaUrl, type NodeBodyProps } from '../registry'
 import { toast } from '../../stores/toast'
 import { markUndoPoint } from '../../canvas/history'
+import { gatherUpstreamText } from '../../canvas/graph'
+import { generateSlashPrompts, parseSlashCommand } from '../slash-commands'
 import { useAppStore } from '../../stores/app'
 import { modelsByModality, useGatewayStore } from '../../stores/gateway'
 
@@ -115,12 +117,55 @@ export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null)
   useWheelScroll(scrollRef)
 
+  // Slash 指令检测：/九宫格 /25宫格 /三视图
+  const slashCmd = parseSlashCommand(shape.props.text)
+
   const commit = (): void => {
     setEditing(false)
     if (draft !== shape.props.text) {
       editor.updateShape({ id: shape.id, type: 'node-card', props: { text: draft } })
       markUndoPoint(editor, 'text-edit')
     }
+  }
+
+  // 一键生成宫格图片节点
+  const generateSlashGrid = (): void => {
+    if (!slashCmd || !slashCmd.subject) {
+      toast('请在指令后输入主题，例如：/三视图 穿和服的女孩')
+      return
+    }
+    const prompts = generateSlashPrompts(slashCmd.command, slashCmd.subject)
+    const cols = slashCmd.command.cols
+    const startX = shape.x + shape.props.w + 60
+    const startY = shape.y - 40
+    const nodeW = 180
+    const nodeH = 140
+    const gap = 12
+    const ids: TLShapeId[] = []
+
+    editor.run(() => {
+      prompts.forEach((prompt, i) => {
+        const col = i % cols
+        const row = Math.floor(i / cols)
+        const id = createShapeId()
+        ids.push(id)
+        editor.createShape({
+          id,
+          type: 'node-card',
+          x: startX + col * (nodeW + gap),
+          y: startY + row * (nodeH + gap),
+          props: {
+            nodeType: 'image',
+            title: `${slashCmd.command.label} ${i + 1}`,
+            w: nodeW,
+            h: nodeH,
+            text: JSON.stringify({ prompt, modelKey: '', size: 'auto' })
+          }
+        })
+      })
+    })
+    markUndoPoint(editor, 'slash-generate')
+    toast(`已创建 ${prompts.length} 个图片节点，逐个点击生成`)
   }
 
   if (editing) {
@@ -150,6 +195,30 @@ export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
       }}
     >
       {shape.props.text || <span className="node-hint">双击输入文本内容</span>}
+      {slashCmd && (
+        <div className="slash-cmd-bar">
+          <div className="slash-cmd-info">
+            <span className="slash-cmd-icon">{slashCmd.command.icon}</span>
+            <span>{slashCmd.command.label}</span>
+            {slashCmd.subject ? (
+              <span className="slash-cmd-subject">：{slashCmd.subject.slice(0, 20)}</span>
+            ) : (
+              <span className="slash-cmd-warn">（请输入主题）</span>
+            )}
+          </div>
+          <button
+            className="slash-cmd-gen"
+            disabled={!slashCmd.subject}
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              generateSlashGrid()
+            }}
+          >
+            ⚡ 生成{slashCmd.command.count}图
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -259,7 +328,11 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   return (
     <div className="gen-panel">
       <div className="gen-row">
-        <ModelSelect value={data.modelKey} options={options} onChange={(key) => update({ ...data, modelKey: key })} />
+        <ModelSelect
+          value={data.modelKey}
+          options={options}
+          onChange={(key) => update({ ...data, modelKey: key })}
+        />
         <select
           className="gen-select w92"
           value={data.size}
@@ -497,11 +570,16 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
 
   // 分辨率选项跟随供应商（MiniMax: 768P/2K，Seedance: 480p/720p/1080p）
   const opt = options.find((o) => o.key === data.modelKey)
-  const resolutions = opt?.provider.specId === 'minimax' ? ['768P', '2K'] : ['480p', '720p', '1080p']
+  const resolutions =
+    opt?.provider.specId === 'minimax' ? ['768P', '2K'] : ['480p', '720p', '1080p']
 
   return (
     <div className="gen-panel">
-      <ModelSelect value={data.modelKey} options={options} onChange={(key) => update({ ...data, modelKey: key })} />
+      <ModelSelect
+        value={data.modelKey}
+        options={options}
+        onChange={(key) => update({ ...data, modelKey: key })}
+      />
       <textarea
         className="gen-prompt"
         value={draft}
@@ -611,8 +689,7 @@ function parseChat(text: string): ChatData {
         const messages = o.messages
           .map((m) => m as { role?: unknown; content?: unknown })
           .filter(
-            (m) =>
-              (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string'
+            (m) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string'
           )
           .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content as string }))
         return {
@@ -707,10 +784,10 @@ export function ChatBody({ shape }: NodeBodyProps): React.JSX.Element {
     if (!opt) return toast('请先选择对话模型')
     if (!draft.trim()) return
     if (stream) return
-    const messages: ChatMessage[] = [
-      ...data.messages,
-      { role: 'user', content: draft.trim() }
-    ]
+    // 连线上下文注入：自动收集上游文本节点的输出，拼到用户消息前
+    const upstream = gatherUpstreamText(editor, shape.id)
+    const userContent = upstream ? `${upstream}\n\n---\n\n${draft.trim()}` : draft.trim()
+    const messages: ChatMessage[] = [...data.messages, { role: 'user', content: userContent }]
     update({ ...data, messages })
     setDraft('')
     setStream({ taskId: '', text: '' })
@@ -1228,6 +1305,257 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
           </button>
         )}
       </div>
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────
+// M5 新增节点：JSON / Code / Group / Storyboard / Compose
+// ──────────────────────────────────────────────
+
+// JSON 节点：结构化数据查看器
+export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  useWheelScroll(scrollRef)
+  const text = shape.props.text || ''
+  let formatted = text
+  try {
+    formatted = JSON.stringify(JSON.parse(text), null, 2)
+  } catch {
+    // 非合法 JSON 原样展示
+  }
+  if (!text) {
+    return <div className="node-hint center">粘贴或拖入 JSON 数据</div>
+  }
+  return (
+    <div className="json-body" ref={scrollRef}>
+      <pre className="json-pre">{formatted}</pre>
+    </div>
+  )
+}
+
+// Code 节点：代码片段展示器
+export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  useWheelScroll(scrollRef)
+  const text = shape.props.text || ''
+  if (!text) {
+    return <div className="node-hint center">粘贴代码片段</div>
+  }
+  return (
+    <div className="code-body" ref={scrollRef}>
+      <pre className="code-pre">{text}</pre>
+    </div>
+  )
+}
+
+// Group 节点：分组容器标注
+export function GroupBody({ shape }: NodeBodyProps): React.JSX.Element {
+  return (
+    <div className="group-body">
+      <span className="group-icon">📦</span>
+      <span className="group-label">{shape.props.title || '分组'}</span>
+      <span className="group-hint">框选节点后打组，方便整组移动与管理</span>
+    </div>
+  )
+}
+
+// Storyboard 节点：分镜板
+interface StoryboardShot {
+  id: string
+  scene: string
+  dialogue: string
+  duration: string
+  imageMediaId?: string
+  imageMediaPath?: string
+}
+
+interface StoryboardData {
+  shots: StoryboardShot[]
+}
+
+function parseStoryboard(text: string): StoryboardData {
+  if (!text) return { shots: [] }
+  try {
+    const v = JSON.parse(text) as { shots?: unknown }
+    if (v && typeof v === 'object' && Array.isArray(v.shots)) {
+      return {
+        shots: v.shots.map(
+          (s) =>
+            ({
+              id:
+                typeof (s as Record<string, unknown>).id === 'string'
+                  ? (s as { id: string }).id
+                  : Math.random().toString(36).slice(2, 9),
+              scene:
+                typeof (s as Record<string, unknown>).scene === 'string'
+                  ? (s as { scene: string }).scene
+                  : '',
+              dialogue:
+                typeof (s as Record<string, unknown>).dialogue === 'string'
+                  ? (s as { dialogue: string }).dialogue
+                  : '',
+              duration:
+                typeof (s as Record<string, unknown>).duration === 'string'
+                  ? (s as { duration: string }).duration
+                  : '',
+              imageMediaId:
+                typeof (s as Record<string, unknown>).imageMediaId === 'string'
+                  ? (s as { imageMediaId: string }).imageMediaId
+                  : undefined,
+              imageMediaPath:
+                typeof (s as Record<string, unknown>).imageMediaPath === 'string'
+                  ? (s as { imageMediaPath: string }).imageMediaPath
+                  : undefined
+            }) as StoryboardShot
+        )
+      }
+    }
+  } catch {
+    // 非结构化内容
+  }
+  return { shots: [] }
+}
+
+const STORYBOARD_MAX_H = 640
+
+export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX.Element {
+  const editor = useEditor()
+  const scrollRef = useRef<HTMLDivElement>(null)
+  useWheelScroll(scrollRef)
+  const data = parseStoryboard(shape.props.text)
+
+  const update = (next: StoryboardData): void => {
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: { text: JSON.stringify(next) }
+    })
+  }
+
+  // 从上游接收分镜数据
+  useEffect(() => {
+    const upstream = gatherUpstreamText(editor, shape.id)
+    if (!upstream) return
+    try {
+      const parsed = JSON.parse(upstream)
+      if (Array.isArray(parsed) && parsed.length > 0 && data.shots.length === 0) {
+        update({
+          shots: parsed.map(
+            (s) =>
+              ({
+                id: Math.random().toString(36).slice(2, 9),
+                scene: (s as Record<string, string>).scene ?? '',
+                dialogue: (s as Record<string, string>).dialogue ?? '',
+                duration: (s as Record<string, string>).duration ?? ''
+              }) as StoryboardShot
+          )
+        })
+        markUndoPoint(editor, 'storyboard-import')
+      }
+    } catch {
+      // 非 JSON 上游，忽略
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // 自动撑高
+  useLayoutEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const need = el.scrollHeight + 80
+    if (need > shape.props.h && shape.props.h < STORYBOARD_MAX_H) {
+      editor.updateShape({
+        id: shape.id,
+        type: 'node-card',
+        props: { h: Math.min(STORYBOARD_MAX_H, need) }
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.shots.length])
+
+  if (data.shots.length === 0) {
+    return (
+      <div className="node-hint center">
+        将脚本节点连入此节点，
+        <br />
+        或粘贴分镜 JSON 到此处
+      </div>
+    )
+  }
+
+  return (
+    <div className="storyboard-body" ref={scrollRef}>
+      {data.shots.map((shot, i) => (
+        <div key={shot.id} className="storyboard-card">
+          <div className="storyboard-num">#{i + 1}</div>
+          {shot.imageMediaPath ? (
+            <div
+              className="storyboard-thumb"
+              onClick={(e) => {
+                e.stopPropagation()
+                openPreview({
+                  kind: 'image',
+                  url: mediaUrl(shot.imageMediaPath!),
+                  title: `镜头 ${i + 1}`
+                })
+              }}
+            >
+              <img src={mediaUrl(shot.imageMediaPath!)} alt={shot.scene} draggable={false} />
+            </div>
+          ) : (
+            <div className="storyboard-thumb-empty">📷</div>
+          )}
+          <div className="storyboard-info">
+            <div className="storyboard-scene">{shot.scene || '（无画面描述）'}</div>
+            {shot.dialogue && <div className="storyboard-dialogue">💬 {shot.dialogue}</div>}
+            {shot.duration && <div className="storyboard-duration">⏱ {shot.duration}</div>}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// Compose 节点：视频合成
+export function ComposeBody({ shape }: NodeBodyProps): React.JSX.Element {
+  const editor = useEditor()
+  const scrollRef = useRef<HTMLDivElement>(null)
+  useWheelScroll(scrollRef)
+  let clipCount = 0
+  for (const arrow of editor.getCurrentPageShapes()) {
+    if (arrow.type !== 'arrow') continue
+    const bindings = editor.getBindingsFromShape(arrow.id, 'arrow')
+    const endBinding = bindings.find((b) => b.props.terminal === 'end')
+    if (endBinding?.toId === shape.id) {
+      const src = editor.getShape(endBinding.fromId as Parameters<typeof editor.getShape>[0])
+      if (src?.type === 'node-card') {
+        const card = src as NodeBodyProps['shape']
+        if (card.props.mediaPath) clipCount++
+      }
+    }
+  }
+
+  return (
+    <div className="compose-body" ref={scrollRef}>
+      <div className="compose-icon">🎬</div>
+      <div className="compose-title">视频合成</div>
+      <div className="compose-info">
+        {clipCount > 0
+          ? `${clipCount} 个视频片段已接入，点击合成`
+          : '将多个视频节点连入此节点进行拼接合成'}
+      </div>
+      <button
+        className="btn-primary small"
+        disabled={clipCount === 0}
+        onPointerDown={(e) => stopEventPropagation(e)}
+        onClick={(e) => {
+          e.stopPropagation()
+          toast('视频合成功能将在后续版本开放')
+        }}
+      >
+        🎬 合成视频
+      </button>
     </div>
   )
 }

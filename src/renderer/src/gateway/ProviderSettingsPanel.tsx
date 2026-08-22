@@ -38,8 +38,7 @@ function guessModality(id: string, specId: ProviderSpecId): GatewayModelInfo['mo
   return 'text'
 }
 
-const specLabel = (id: string): string =>
-  PROVIDER_SPECS.find((s) => s.id === id)?.label ?? id
+const specLabel = (id: string): string => PROVIDER_SPECS.find((s) => s.id === id)?.label ?? id
 
 function draftFromConfig(p: ProviderConfig): Draft {
   return {
@@ -324,9 +323,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                       <button
                         className="shot-op danger"
                         title="删除模型"
-                        onClick={() =>
-                          patch({ models: draft.models.filter((_, j) => j !== i) })
-                        }
+                        onClick={() => patch({ models: draft.models.filter((_, j) => j !== i) })}
                       >
                         ✕
                       </button>
@@ -340,7 +337,11 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                 {testMsg && <div className="gw-test-msg">{testMsg}</div>}
 
                 <div className="gw-foot">
-                  <button className="btn-ghost" disabled={busy !== null} onClick={() => void test()}>
+                  <button
+                    className="btn-ghost"
+                    disabled={busy !== null}
+                    onClick={() => void test()}
+                  >
                     {busy === 'test' ? '测试中…' : '测试并拉取模型'}
                   </button>
                   <div className="gw-foot-right">
@@ -367,7 +368,8 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
               <div className="gw-empty big">
                 <p>从左侧选择或新增一个供应商</p>
                 <p className="dim">
-                  文本/图片走 OpenAI 兼容端点（中转站直接填 Base URL）；视频支持 MiniMax H3 与 Seedance
+                  文本/图片走 OpenAI 兼容端点（中转站直接填 Base URL）；视频支持 MiniMax H3 与
+                  Seedance
                 </p>
               </div>
             )}

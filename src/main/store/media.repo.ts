@@ -152,9 +152,8 @@ export async function saveBufferAsset(
 export async function readMediaBuffer(
   mediaId: string
 ): Promise<{ buf: Buffer; mime: string } | null> {
-  const row = getDb()
-    .prepare('SELECT mime, path FROM media WHERE id = ?')
-    .get(mediaId) as { mime: string; path: string } | undefined
+  const row = getDb().prepare('SELECT mime, path FROM media WHERE id = ?').get(mediaId) as
+    { mime: string; path: string } | undefined
   if (!row) return null
   const abs = getMediaAbsPath(row.path)
   if (!abs) return null
@@ -193,9 +192,8 @@ export function listMedia(projectId: string): MediaAsset[] {
 
 // 删除媒体资产（SQLite + 磁盘文件）
 export async function deleteMedia(mediaId: string): Promise<boolean> {
-  const row = getDb()
-    .prepare('SELECT path FROM media WHERE id = ?')
-    .get(mediaId) as { path: string } | undefined
+  const row = getDb().prepare('SELECT path FROM media WHERE id = ?').get(mediaId) as
+    { path: string } | undefined
   if (!row) return false
   const abs = getMediaAbsPath(row.path)
   getDb().prepare('DELETE FROM media WHERE id = ?').run(mediaId)

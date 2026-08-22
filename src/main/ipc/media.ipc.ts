@@ -79,20 +79,14 @@ export function registerMediaIpc(): void {
     }
   )
 
-  ipcMain.handle(
-    IPC.media.list,
-    (_e, projectId: string): IpcEnvelope<MediaAsset[]> => {
-      if (!projectId) return err('INVALID_INPUT', '参数不完整')
-      return ok(listMedia(projectId))
-    }
-  )
+  ipcMain.handle(IPC.media.list, (_e, projectId: string): IpcEnvelope<MediaAsset[]> => {
+    if (!projectId) return err('INVALID_INPUT', '参数不完整')
+    return ok(listMedia(projectId))
+  })
 
-  ipcMain.handle(
-    IPC.media.delete,
-    async (_e, mediaId: string): Promise<IpcEnvelope<boolean>> => {
-      if (!mediaId) return err('INVALID_INPUT', '参数不完整')
-      const deleted = await deleteMedia(mediaId)
-      return ok(deleted)
-    }
-  )
+  ipcMain.handle(IPC.media.delete, async (_e, mediaId: string): Promise<IpcEnvelope<boolean>> => {
+    if (!mediaId) return err('INVALID_INPUT', '参数不完整')
+    const deleted = await deleteMedia(mediaId)
+    return ok(deleted)
+  })
 }

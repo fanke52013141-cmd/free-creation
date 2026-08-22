@@ -92,11 +92,17 @@ export function installBrowserMock(): void {
         return Promise.resolve({ ok: true, data: i >= 0 })
       },
       testProvider: () =>
-        Promise.resolve({ ok: true, data: { models: ['gpt-image-2', 'gpt-5.2'], message: '演示环境' } }),
+        Promise.resolve({
+          ok: true,
+          data: { models: ['gpt-image-2', 'gpt-5.2'], message: '演示环境' }
+        }),
       chatStart: () => Promise.resolve({ ok: true, data: { taskId: 'mock-task' } }),
       chatCancel: () => Promise.resolve({ ok: true, data: true }),
       imageGenerate: () =>
-        Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持真实生成' } }),
+        Promise.resolve({
+          ok: false,
+          error: { code: 'MOCK', message: '浏览器演示不支持真实生成' }
+        }),
       videoSubmit: () => Promise.resolve({ ok: true, data: { taskId: 'mock-video' } }),
       videoCancel: () => Promise.resolve({ ok: true, data: true }),
       videoTask: () => Promise.resolve({ ok: true, data: null }),
