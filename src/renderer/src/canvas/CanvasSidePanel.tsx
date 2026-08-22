@@ -15,6 +15,7 @@ import { createEdge } from './graph'
 import { markUndoPoint } from './history'
 import { getNodeType } from '../nodes/registry'
 import { toast } from '../stores/toast'
+import { useHistorySnapshots, type HistorySnapshot } from '../stores/history-snapshots'
 
 export type SidePanelTab = 'assets' | 'workflow' | 'history'
 
@@ -432,6 +433,111 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
   )
 }
 
+// ── 历史版本面板 ──
+function HistoryPanel({
+  projectId,
+  editor
+}: {
+  projectId: string
+  editor: Editor | null
+}): React.JSX.Element {
+  const snapshots = useHistorySnapshots((s) => s.snapshots)
+  const load = useHistorySnapshots((s) => s.load)
+  const add = useHistorySnapshots((s) => s.add)
+  const remove = useHistorySnapshots((s) => s.remove)
+  const [label, setLabel] = useState('')
+
+  useEffect(() => {
+    load(projectId)
+  }, [projectId, load])
+
+  // 保存当前画布状态为版本快照
+  const handleSave = (): void => {
+    if (!editor) return
+    const snapshot = editor.store.getStoreSnapshot()
+    let nodeCount = 0
+    for (const s of editor.getCurrentPageShapes()) {
+      if (s.type === 'node-card') nodeCount++
+    }
+    add(projectId, snapshot, nodeCount, label)
+    setLabel('')
+    toast(`已保存版本（${nodeCount} 节点）`)
+  }
+
+  // 回溯到指定版本：加载快照到编辑器，打撤销分段点
+  const handleRestore = (snap: HistorySnapshot): void => {
+    if (!editor) return
+    try {
+      editor.store.loadStoreSnapshot(editor.store.migrateSnapshot(snap.snapshot as never))
+      markUndoPoint(editor, 'restore-snapshot')
+      toast(`已回溯到「${snap.label}」`)
+    } catch (e) {
+      console.error('版本恢复失败', e)
+      toast('版本恢复失败，数据可能已损坏')
+    }
+  }
+
+  const handleRemove = (id: string): void => {
+    remove(projectId, id)
+  }
+
+  return (
+    <div className="side-panel-body history-panel">
+      <div className="history-toolbar">
+        <input
+          className="wf-name-input"
+          placeholder="版本名称（可选）…"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          onPointerDown={(e) => e.stopPropagation()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleSave()
+          }}
+        />
+        <button className="side-panel-primary" onClick={handleSave} disabled={!editor}>
+          📸 保存版本
+        </button>
+      </div>
+      <p className="side-panel-hint">
+        手动保存当前画布为版本快照，随时可回溯。最多保留 {30} 个版本。
+      </p>
+      {snapshots.length === 0 ? (
+        <div className="side-panel-empty">暂无历史版本。点击「保存版本」记录当前画布状态。</div>
+      ) : (
+        <div className="history-list">
+          {snapshots.map((snap) => (
+            <div key={snap.id} className="history-card">
+              <span className="history-card-icon">🕘</span>
+              <div className="history-card-info">
+                <span className="history-card-label">{snap.label}</span>
+                <span className="history-card-meta">
+                  {formatTime(snap.timestamp)} · {snap.nodeCount} 节点
+                </span>
+              </div>
+              <div className="history-card-actions">
+                <button
+                  className="history-action-btn restore"
+                  title="回溯到此版本"
+                  onClick={() => handleRestore(snap)}
+                >
+                  ↩ 回溯
+                </button>
+                <button
+                  className="history-action-btn delete"
+                  title="删除此版本"
+                  onClick={() => handleRemove(snap.id)}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function CanvasSidePanel({
   tab,
   projectId,
@@ -469,12 +575,7 @@ export function CanvasSidePanel({
         <AssetsPanel projectId={projectId} onImport={onImport} onAddToCanvas={onAddToCanvas} />
       )}
       {tab === 'workflow' && <WorkflowPanel editor={editor} />}
-      {tab === 'history' && (
-        <div className="side-panel-body">
-          <p className="side-panel-desc">这里记录画布的自动保存版本，可随时回溯到任意历史版本。</p>
-          <div className="side-panel-empty">暂无历史版本，画布会自动保存每次变更。</div>
-        </div>
-      )}
+      {tab === 'history' && <HistoryPanel projectId={projectId} editor={editor} />}
     </div>
   )
 }

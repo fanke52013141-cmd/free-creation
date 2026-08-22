@@ -92,6 +92,8 @@ export interface ImageGenerateInput {
   prompt: string
   /** 传 'auto' 或留空表示用服务端默认 */
   size?: string
+  /** 参考图（本地图库 mediaId，主进程转 base64 data URL 作为图生图输入） */
+  referenceMediaId?: string
 }
 
 export interface VideoSubmitInput {

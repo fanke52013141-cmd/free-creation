@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createShapeId, stopEventPropagation, useEditor, type TLShapeId } from 'tldraw'
 import type { ChatMessage, VideoGenParams } from '@shared/types'
 import { mediaUrl, type NodeBodyProps } from '../registry'
+import type { NodeCardShape } from '../../canvas/NodeCardShape'
 import { toast } from '../../stores/toast'
 import { markUndoPoint } from '../../canvas/history'
 import { gatherUpstreamText } from '../../canvas/graph'
@@ -275,6 +276,26 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     })
   }
 
+  const findReferenceImage = (): { mediaId: string; mediaPath: string } | null => {
+    // 查找所有指向当前节点的 arrow 绑定
+    for (const arrow of editor.getCurrentPageShapes()) {
+      if (arrow.type !== 'arrow') continue
+      const bindings = editor.getBindingsFromShape(arrow.id, 'arrow')
+      const end = bindings.find((b) => b.props.terminal === 'end')
+      const start = bindings.find((b) => b.props.terminal === 'start')
+      if (!end || !start) continue
+      if (end.toId !== shape.id) continue
+      // 起点节点必须是 image 类型且有 mediaId
+      const source = editor.getShape<NodeCardShape>(start.toId)
+      if (!source || source.props.nodeType !== 'image') continue
+      if (!source.props.mediaId || !source.props.mediaPath) continue
+      return { mediaId: source.props.mediaId, mediaPath: source.props.mediaPath }
+    }
+    return null
+  }
+
+  const refImage = findReferenceImage()
+
   const generate = async (): Promise<void> => {
     const opt = options.find((o) => o.key === data.modelKey)
     if (!opt) return toast('请先选择图片模型')
@@ -286,7 +307,8 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
       providerId: opt.provider.id,
       modelId: opt.model.id,
       prompt: draft,
-      size: data.size
+      size: data.size,
+      ...(refImage ? { referenceMediaId: refImage.mediaId } : {})
     })
     setBusy(false)
     if (!res.ok) return toast(`生成失败：${res.error.message}`)
@@ -327,6 +349,17 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
 
   return (
     <div className="gen-panel">
+      {refImage && (
+        <div className="ref-image-bar">
+          <img
+            src={mediaUrl(refImage.mediaPath)}
+            className="ref-image-thumb"
+            draggable={false}
+            alt="参考图"
+          />
+          <span className="ref-image-label">🔗 参考图已连接</span>
+        </div>
+      )}
       <div className="gen-row">
         <ModelSelect
           value={data.modelKey}
@@ -1489,10 +1522,51 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
 // M5 新增节点：JSON / Code / Group / Storyboard / Compose
 // ──────────────────────────────────────────────
 
-// JSON 节点：结构化数据查看器
+// JSON 节点：结构化数据查看器 + 编辑器
 export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
+  const editor = useEditor()
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(shape.props.text)
   const scrollRef = useRef<HTMLDivElement>(null)
   useWheelScroll(scrollRef)
+
+  const commit = (): void => {
+    setEditing(false)
+    if (draft !== shape.props.text) {
+      editor.updateShape({ id: shape.id, type: 'node-card', props: { text: draft } })
+      markUndoPoint(editor, 'json-edit')
+    }
+  }
+
+  if (editing) {
+    return (
+      <textarea
+        className="node-textarea code-edit"
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') commit()
+          // Tab key 支持
+          if (e.key === 'Tab') {
+            e.preventDefault()
+            const target = e.currentTarget
+            const start = target.selectionStart
+            const end = target.selectionEnd
+            const newVal = draft.slice(0, start) + '  ' + draft.slice(end)
+            setDraft(newVal)
+            requestAnimationFrame(() => {
+              target.selectionStart = target.selectionEnd = start + 2
+            })
+          }
+        }}
+        onPointerDown={(e) => stopEventPropagation(e)}
+        spellCheck={false}
+      />
+    )
+  }
+
   const text = shape.props.text || ''
   let formatted = text
   try {
@@ -1500,27 +1574,139 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
   } catch {
     // 非合法 JSON 原样展示
   }
-  if (!text) {
-    return <div className="node-hint center">粘贴或拖入 JSON 数据</div>
+
+  const formatJson = (): void => {
+    try {
+      const parsed = JSON.parse(text)
+      const pretty = JSON.stringify(parsed, null, 2)
+      if (pretty !== text) {
+        editor.updateShape({ id: shape.id, type: 'node-card', props: { text: pretty } })
+        markUndoPoint(editor, 'json-format')
+      }
+    } catch {
+      toast('JSON 格式有误，无法格式化')
+    }
   }
+
   return (
     <div className="json-body" ref={scrollRef}>
-      <pre className="json-pre">{formatted}</pre>
+      {text ? (
+        <pre
+          className="json-pre"
+          onDoubleClick={(e) => {
+            e.stopPropagation()
+            setDraft(shape.props.text)
+            setEditing(true)
+          }}
+        >
+          {formatted}
+        </pre>
+      ) : (
+        <div className="node-hint center">双击输入 JSON 数据</div>
+      )}
+      <div className="code-toolbar">
+        <button
+          className="btn-ghost small"
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onClick={(e) => {
+            e.stopPropagation()
+            setDraft(shape.props.text)
+            setEditing(true)
+          }}
+        >
+          {text ? '✏️ 编辑' : '✏️ 输入'}
+        </button>
+        {text && (
+          <button
+            className="btn-ghost small"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              formatJson()
+            }}
+          >
+            🎨 格式化
+          </button>
+        )}
+      </div>
     </div>
   )
 }
 
-// Code 节点：代码片段展示器
+// Code 节点：代码片段展示器 + 编辑器
 export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
+  const editor = useEditor()
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(shape.props.text)
   const scrollRef = useRef<HTMLDivElement>(null)
   useWheelScroll(scrollRef)
-  const text = shape.props.text || ''
-  if (!text) {
-    return <div className="node-hint center">粘贴代码片段</div>
+
+  const commit = (): void => {
+    setEditing(false)
+    if (draft !== shape.props.text) {
+      editor.updateShape({ id: shape.id, type: 'node-card', props: { text: draft } })
+      markUndoPoint(editor, 'code-edit')
+    }
   }
+
+  if (editing) {
+    return (
+      <textarea
+        className="node-textarea code-edit"
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') commit()
+          if (e.key === 'Tab') {
+            e.preventDefault()
+            const target = e.currentTarget
+            const start = target.selectionStart
+            const end = target.selectionEnd
+            const newVal = draft.slice(0, start) + '  ' + draft.slice(end)
+            setDraft(newVal)
+            requestAnimationFrame(() => {
+              target.selectionStart = target.selectionEnd = start + 2
+            })
+          }
+        }}
+        onPointerDown={(e) => stopEventPropagation(e)}
+        spellCheck={false}
+      />
+    )
+  }
+
+  const text = shape.props.text || ''
   return (
     <div className="code-body" ref={scrollRef}>
-      <pre className="code-pre">{text}</pre>
+      {text ? (
+        <pre
+          className="code-pre"
+          onDoubleClick={(e) => {
+            e.stopPropagation()
+            setDraft(shape.props.text)
+            setEditing(true)
+          }}
+        >
+          {text}
+        </pre>
+      ) : (
+        <div className="node-hint center">双击输入代码片段</div>
+      )}
+      <div className="code-toolbar">
+        <button
+          className="btn-ghost small"
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onClick={(e) => {
+            e.stopPropagation()
+            setDraft(shape.props.text)
+            setEditing(true)
+          }}
+        >
+          {text ? '✏️ 编辑' : '✏️ 输入'}
+        </button>
+      </div>
     </div>
   )
 }

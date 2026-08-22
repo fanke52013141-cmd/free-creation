@@ -43,7 +43,12 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     }
   }
 
-  const titleEditable = spec?.type === 'text' || spec?.type === 'chat' || spec?.type === 'script'
+  const titleEditable =
+    spec?.type === 'text' ||
+    spec?.type === 'chat' ||
+    spec?.type === 'script' ||
+    spec?.type === 'json' ||
+    spec?.type === 'code'
 
   const inPorts = spec?.ports.in ?? []
   const outPorts = spec?.ports.out ?? []

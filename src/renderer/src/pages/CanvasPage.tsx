@@ -6,6 +6,7 @@ import { useEngineStore } from '../engine/store'
 import { CanvasEditor } from '../canvas/CanvasEditor'
 import { ProjectMenu } from '../canvas/ProjectMenu'
 import { toast } from '../stores/toast'
+import { useSearchStore } from '../stores/search'
 
 interface CanvasPageProps {
   projectId: string
@@ -48,6 +49,18 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
       window.removeEventListener('keydown', onKey)
     }
   }, [userOpen])
+
+  // Ctrl+K 唤起搜索面板
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault()
+        useSearchStore.getState().toggle()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -153,8 +166,8 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
         <div className="topbar-actions">
           <button
             className="topbar-icon"
-            title="搜索节点"
-            onClick={() => toast('搜索功能将在后续版本开放')}
+            title="搜索节点（Ctrl+K）"
+            onClick={() => useSearchStore.getState().toggle()}
           >
             🔍
           </button>

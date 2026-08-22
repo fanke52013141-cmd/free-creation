@@ -7,6 +7,7 @@ import { NodeCreateMenu } from './NodeCreateMenu'
 import { ConnectionLayer } from './ConnectionLayer'
 import { CanvasBottomDock } from './CanvasMinimap'
 import { CanvasSidePanel, type SidePanelTab } from './CanvasSidePanel'
+import { SearchPalette } from './SearchPalette'
 import { StoryboardView } from './StoryboardView'
 import {
   setConnectionFinishHandler,
@@ -480,6 +481,8 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
           </button>
         </div>
       )}
+      {/* 搜索覆盖层（顶栏按钮触发，在 Tldraw 同级渲染） */}
+      {editorInstance && <SearchPalette editor={editorInstance} />}
       {/* 故事板视图覆盖层 */}
       {viewMode === 'storyboard' && editorInstance && <StoryboardView editor={editorInstance} />}
       {!hasNodes && editorInstance && (

@@ -361,7 +361,8 @@ async function executeNode(
         providerId: opt.provider.id,
         modelId: opt.model.id,
         prompt,
-        size: data.size
+        size: data.size,
+        ...(ctx.imageMediaId ? { referenceMediaId: ctx.imageMediaId } : {})
       })
       if (token.cancelled) return { status: 'skipped' }
       if (!res.ok) return { status: 'failed', reason: res.error.message }
