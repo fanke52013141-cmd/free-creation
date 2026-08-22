@@ -1,4 +1,4 @@
-// 左下角停靠簇：连线显隐 + 小地图 + 缩放（LibTV 26-7-7 布局）
+// 左下角停靠簇：小地图 + 缩放（LibTV 布局）
 // 小地图为只读缩略图，单击任意处把画布视角中心移到对应位置；缩放簇提供 +/−/适配/百分比
 import { useEffect, useRef, useState } from 'react'
 import type { Editor, TLShapeId } from 'tldraw'
@@ -27,15 +27,9 @@ interface MinimapState {
 
 interface DockProps {
   editor: Editor | null
-  edgesVisible: boolean
-  onToggleEdges: () => void
 }
 
-export function CanvasBottomDock({
-  editor,
-  edgesVisible,
-  onToggleEdges
-}: DockProps): React.JSX.Element {
+export function CanvasBottomDock({ editor }: DockProps): React.JSX.Element {
   const [state, setState] = useState<MinimapState>({ nodes: [], zoom: 1, viewport: null })
   const svgRef = useRef<SVGSVGElement>(null)
 
@@ -198,9 +192,6 @@ export function CanvasBottomDock({
             ⊡
           </button>
         </div>
-        <button className="dock-btn dock-toggle" title="显示 / 隐藏连线" onClick={onToggleEdges}>
-          🔗 {edgesVisible ? '隐' : '显'}
-        </button>
       </div>
     </div>
   )

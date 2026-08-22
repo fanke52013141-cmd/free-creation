@@ -1094,21 +1094,6 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   transform: translateY(1px);
 }
 
-.dock-toggle {
-  align-self: flex-end;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 0 8px;
-  font-size: 12px;
-  gap: 4px;
-}
-
-.dock-toggle:hover {
-  color: var(--txt);
-  border-color: var(--brand);
-}
-
 /* ── 空白画布 AI 模板卡（LibTV 26-7-7） ── */
 .canvas-template {
   position: absolute;
@@ -1435,11 +1420,6 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   font-size: 11px;
   color: var(--muted);
   padding: 4px 0;
-}
-
-.canvas-host.edges-hidden [data-shape-type='arrow'] {
-  visibility: hidden;
-  pointer-events: none;
 }
 
 /* ── 脚本节点（LibTV 1.2.6 基础版：剧本文本 + 分镜表） ── */

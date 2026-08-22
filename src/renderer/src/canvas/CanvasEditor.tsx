@@ -56,7 +56,6 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
   const [menu, setMenu] = useState<MenuState | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [addDrag, setAddDrag] = useState<{ x: number; y: number } | null>(null)
-  const [edgesVisible, setEdgesVisible] = useState(true)
   // 在 React 状态中持有 editor，让右下角停靠簇能订阅画布变化（editorRef 变化不会触发重渲染）
   const [editorInstance, setEditorInstance] = useState<Editor | null>(null)
   // 右键侧栏面板：资产 / 工作流 / 历史记录
@@ -392,7 +391,7 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
 
   return (
     <div
-      className={`canvas-host ${dragOver ? 'drag-over' : ''} ${edgesVisible ? '' : 'edges-hidden'}`}
+      className={`canvas-host ${dragOver ? 'drag-over' : ''}`}
       ref={wrapRef}
       onDragEnter={(e) => {
         // 只在拖入真实文件时提示上传；画布内拖动节点/框选等会冒泡 dragover，那些不提示
@@ -459,11 +458,7 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
           <span className="rail-label">教程</span>
         </button>
       </div>
-      <CanvasBottomDock
-        editor={editorInstance}
-        edgesVisible={edgesVisible}
-        onToggleEdges={() => setEdgesVisible((v) => !v)}
-      />
+      <CanvasBottomDock editor={editorInstance} />
       {/* 双视图切换浮动按钮 */}
       {editorInstance && hasNodes && (
         <div className="view-toggle">
