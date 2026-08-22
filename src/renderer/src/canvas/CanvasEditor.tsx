@@ -97,14 +97,6 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
     return editorInstance.store.listen(check, { scope: 'document' })
   }, [editorInstance])
 
-  // 模板卡「一键生成」：在画布视角中心创建对应节点
-  const createTemplateNode = (type: NodeTypeId): void => {
-    const editor = editorRef.current
-    if (!editor) return
-    const screen = editor.pageToScreen(editor.getViewportPageBounds().center)
-    createNodeAt(type, screen.x, screen.y)
-  }
-
   // 左侧栏「＋」按住拖动：跟手显示浮标，松开时在落点弹创建菜单（拖动式添加）
   const startAddDrag = (e: React.PointerEvent): void => {
     e.preventDefault()
@@ -464,33 +456,6 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
       {editorInstance && <SearchPalette editor={editorInstance} />}
       {/* 故事板视图覆盖层 */}
       {viewMode === 'storyboard' && editorInstance && <StoryboardView editor={editorInstance} />}
-      {!hasNodes && editorInstance && (
-        <div className="canvas-template">
-          <div className="tmpl-title">✨ AI 快速开始</div>
-          <div className="tmpl-grid">
-            <button className="tmpl-card" onClick={() => createTemplateNode('text')}>
-              <span className="tmpl-emoji">📝</span>
-              <strong>文本生成</strong>
-              <span className="tmpl-desc">写文案 / 改写 / 总结</span>
-            </button>
-            <button className="tmpl-card" onClick={() => createTemplateNode('image')}>
-              <span className="tmpl-emoji">🖼️</span>
-              <strong>图片生成</strong>
-              <span className="tmpl-desc">文生图 / 扩图 / 改绘</span>
-            </button>
-            <button className="tmpl-card" onClick={() => createTemplateNode('video')}>
-              <span className="tmpl-emoji">🎥</span>
-              <strong>视频生成</strong>
-              <span className="tmpl-desc">图生视频 / 文生视频</span>
-            </button>
-            <button className="tmpl-card" onClick={() => createTemplateNode('script')}>
-              <span className="tmpl-emoji">🎬</span>
-              <strong>分镜脚本</strong>
-              <span className="tmpl-desc">故事板 / 镜头分解</span>
-            </button>
-          </div>
-        </div>
-      )}
       <CanvasSidePanel
         tab={panelTab}
         projectId={project.id}
