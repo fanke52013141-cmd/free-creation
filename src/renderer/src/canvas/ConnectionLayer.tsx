@@ -10,7 +10,7 @@ export function ConnectionLayer(): React.JSX.Element | null {
   if (!draft) return null
 
   const { startPt, pointer, from } = draft
-  const color = PORT_COLORS[from.portType] ?? '#7c5cff'
+  const color = PORT_COLORS[from.portType] ?? '#09caf5'
   // 从出端口（起点，右侧）到指针画一条平滑贝塞尔曲线：控制点沿水平方向外扩，形成自然弧度
   const dx = Math.max(48, Math.abs(pointer.x - startPt.x) * 0.5)
   const path = `M ${startPt.x} ${startPt.y} C ${startPt.x + dx} ${startPt.y}, ${pointer.x - dx} ${pointer.y}, ${pointer.x} ${pointer.y}`

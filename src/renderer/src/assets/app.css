@@ -1,12 +1,12 @@
-:root {
-  --bg: #0f1115;
-  --card: #1b1f29;
-  --card-hover: #222838;
-  --line: #2a2f3a;
-  --txt: #e6e9ef;
-  --muted: #9aa3b2;
-  --brand: #6c8cff;
-  --red: #ff6b6b;
+﻿:root {
+  --bg: #141414;
+  --card: #1f1f1f;
+  --card-hover: #2c2c2c;
+  --line: #ffffff14;
+  --txt: #f7f7f7;
+  --muted: #ffffff80;
+  --brand: #09caf5;
+  --red: #e74c3c;
 }
 
 * {
@@ -357,7 +357,7 @@ input:focus {
   padding: 0;
   border: 1px solid var(--line);
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--brand), #7c5cff);
+  background: linear-gradient(135deg, var(--brand), #04caf6);
   cursor: pointer;
   transition: border-color 0.15s ease;
 }
@@ -399,8 +399,8 @@ input:focus {
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--brand), #7c5cff);
-  color: #fff;
+  background: linear-gradient(135deg, var(--brand), #04caf6);
+  color: #141414;
   font-size: 16px;
   font-weight: 600;
   flex-shrink: 0;
@@ -426,6 +426,11 @@ input:focus {
   flex: 1;
   position: relative;
   min-height: 0;
+}
+
+/* tldraw 画布背景对齐 LibTV 中性灰 */
+.tl-background {
+  background: #171717 !important;
 }
 
 .canvas-host.drag-over::after {
@@ -841,7 +846,7 @@ input:focus {
   position: absolute;
   inset: -4px;
   border-radius: 50%;
-  border: 1.5px solid var(--pc, #6c8cff);
+  border: 1.5px solid var(--pc, #09caf5);
   opacity: 0;
   transition: opacity 0.2s ease;
 }
@@ -866,8 +871,8 @@ input:focus {
 .port-dot.out:hover {
   transform: scale(1.35);
   box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--pc, #6c8cff) 18%, transparent),
-    0 0 14px color-mix(in srgb, var(--pc, #6c8cff) 55%, transparent);
+    0 0 0 3px color-mix(in srgb, var(--pc, #09caf5) 18%, transparent),
+    0 0 14px color-mix(in srgb, var(--pc, #09caf5) 55%, transparent);
 }
 
 .port-dot.out:hover .port-dot-inner {
@@ -976,18 +981,18 @@ div[data-shape-type='arrow'] .tl-svg-container path {
 
 /* 柔和发光氛围（drop-shadow 让整条弧线带一层淡光晕） */
 div[data-shape-type='arrow'] .tl-svg-container > g {
-  filter: drop-shadow(0 0 2px rgba(108, 140, 255, 0.2));
+  filter: drop-shadow(0 0 2px rgba(9, 202, 245, 0.2));
   transition: filter 0.2s ease;
 }
 
 /* hover 时加亮发光 */
 div[data-shape-type='arrow']:hover .tl-svg-container > g {
-  filter: drop-shadow(0 0 6px rgba(108, 140, 255, 0.45)) brightness(1.12);
+  filter: drop-shadow(0 0 6px rgba(9, 202, 245, 0.45)) brightness(1.12);
 }
 
 /* 选中态：更强的发光（tldraw 选中时加 .tl-shape__inner--selected） */
 div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
-  filter: drop-shadow(0 0 8px rgba(108, 140, 255, 0.55)) brightness(1.18);
+  filter: drop-shadow(0 0 8px rgba(9, 202, 245, 0.55)) brightness(1.18);
 }
 
 /* ── 左下角停靠簇：连线显隐 + 小地图 + 缩放（LibTV 26-7-7） ── */
@@ -1694,7 +1699,7 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 6px;
-  color: #e6e9ef;
+  color: var(--txt);
   font-size: 12px;
   padding: 4px 6px;
   outline: none;
@@ -1713,7 +1718,7 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 6px;
-  color: #e6e9ef;
+  color: var(--txt);
   font-size: 12px;
   line-height: 1.5;
   padding: 6px 8px;
@@ -1746,7 +1751,7 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   gap: 10px;
   align-items: center;
   font-size: 12px;
-  color: #e6e9ef;
+  color: var(--txt);
   padding: 6px 2px;
 }
 
@@ -1835,15 +1840,15 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
 }
 
 .chat-msg.user .chat-bubble {
-  background: rgba(108, 140, 255, 0.16);
-  border: 1px solid rgba(108, 140, 255, 0.35);
+  background: rgba(9, 202, 245, 0.16);
+  border: 1px solid rgba(9, 202, 245, 0.35);
   color: #dfe6ff;
 }
 
 .chat-msg.assistant .chat-bubble {
   background: var(--card);
   border: 1px solid var(--line);
-  color: #e6e9ef;
+  color: var(--txt);
 }
 
 .chat-bubble.streaming::after {
@@ -1875,7 +1880,7 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 8px;
-  color: #e6e9ef;
+  color: var(--txt);
   font-size: 12px;
   line-height: 1.5;
   padding: 6px 8px;
@@ -1924,7 +1929,7 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
 .gw-title {
   font-size: 14px;
   font-weight: 600;
-  color: #e6e9ef;
+  color: var(--txt);
 }
 
 .gw-body {
@@ -1953,7 +1958,7 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   border-radius: 8px;
   padding: 8px 10px;
   cursor: pointer;
-  color: #e6e9ef;
+  color: var(--txt);
 }
 
 .gw-item:hover {
@@ -2000,7 +2005,7 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   background: none;
   border: 1px solid var(--line);
   border-radius: 8px;
-  color: #e6e9ef;
+  color: var(--txt);
   font-size: 12px;
   padding: 7px 10px;
   cursor: pointer;
@@ -2047,7 +2052,7 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 6px;
-  color: #e6e9ef;
+  color: var(--txt);
   font-size: 12px;
   padding: 6px 8px;
   outline: none;
@@ -2659,10 +2664,10 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
 /* ── 补充缺失的 CSS 变量别名（统一命名体系） ── */
 :root {
   --text-1: var(--txt);
-  --text-2: #b8c0cf;
+  --text-2: #ffffff99;
   --text-3: var(--muted);
-  --bg-0: #0c0e12;
-  --bg-2: #131620;
+  --bg-0: #161616;
+  --bg-2: #171717;
   --border: var(--line);
   --danger: var(--red);
 }
@@ -2831,15 +2836,15 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(108, 140, 255, 0.08);
-  border: 1px dashed rgba(108, 140, 255, 0.3);
+  background: rgba(9, 202, 245, 0.08);
+  border: 1px dashed rgba(9, 202, 245, 0.3);
   font-size: 16px;
   cursor: pointer;
   transition: background 0.15s;
   color: var(--brand);
 }
 .storyboard-thumb-gen:hover {
-  background: rgba(108, 140, 255, 0.18);
+  background: rgba(9, 202, 245, 0.18);
 }
 
 /* ── P0-2 Compose 视频合成扩展 ── */
@@ -2963,7 +2968,7 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   transition: background 0.1s;
 }
 .search-hit:hover {
-  background: rgba(108, 140, 255, 0.1);
+  background: rgba(9, 202, 245, 0.1);
 }
 .search-hit-icon {
   font-size: 18px;
@@ -3036,7 +3041,7 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   transition: border-color 0.15s;
 }
 .history-card:hover {
-  border-color: rgba(108, 140, 255, 0.3);
+  border-color: rgba(9, 202, 245, 0.3);
 }
 .history-card-icon {
   font-size: 18px;

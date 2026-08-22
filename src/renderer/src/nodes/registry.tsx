@@ -32,8 +32,8 @@ export const PORT_COLORS: Record<PortType, string> = {
   image: '#34d399',
   video: '#f472b6',
   audio: '#fbbf24',
-  file: '#9aa3b2',
-  any: '#e6e9ef'
+  file: '#ffffff60',
+  any: '#f7f7f7'
 }
 
 export function portCompatible(a: PortType, b: PortType): boolean {

@@ -48,7 +48,7 @@ export function CanvasBottomDock({ editor }: DockProps): React.JSX.Element {
             y: n.y,
             w: n.props.w,
             h: n.props.h,
-            color: spec?.color ?? '#6c8cff',
+            color: spec?.color ?? '#09caf5',
             label: n.props.title || ''
           })
         }
