@@ -9,7 +9,6 @@ import { CanvasBottomDock } from './CanvasMinimap'
 import { CanvasSidePanel, type SidePanelTab } from './CanvasSidePanel'
 import { ChatSidePanel } from './ChatSidePanel'
 import { SearchPalette } from './SearchPalette'
-import { StoryboardView } from './StoryboardView'
 import {
   setConnectionFinishHandler,
   teardownConnectionDrag,
@@ -62,10 +61,6 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
   const [editorInstance, setEditorInstance] = useState<Editor | null>(null)
   // 右键侧栏面板：资产 / 工作流 / 历史记录
   const [panelTab, setPanelTab] = useState<SidePanelTab | null>(null)
-  // 空白画布时展示底部 AI 模板卡（LibTV 26-7-7）
-  const [hasNodes, setHasNodes] = useState(false)
-  // 双视图切换：节点工作流 ↔ 故事板（创作者视图 ↔ 工程师视图）
-  const [viewMode, setViewMode] = useState<'workflow' | 'storyboard'>('workflow')
   // 选中对话节点时弹出右侧聊天面板
   const [chatShapeId, setChatShapeId] = useState<TLShapeId | null>(null)
 
@@ -83,23 +78,6 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
       useEngineStore.getState().register(null)
     }
   }, [project.id, providers])
-
-  // 检测画布是否已有节点：空画布显示模板卡，有节点即隐藏
-  useEffect(() => {
-    if (!editorInstance) return
-    const check = (): void => {
-      let found = false
-      for (const s of editorInstance.getCurrentPageShapes()) {
-        if (s.type === 'node-card') {
-          found = true
-          break
-        }
-      }
-      setHasNodes(found)
-    }
-    check()
-    return editorInstance.store.listen(check, { scope: 'document' })
-  }, [editorInstance])
 
   // 选中对话节点时弹出右侧聊天面板；取消选中或切换其他节点时关闭
   useEffect(() => {
@@ -464,27 +442,8 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
         </button>
       </div>
       <CanvasBottomDock editor={editorInstance} />
-      {/* 双视图切换浮动按钮 */}
-      {editorInstance && hasNodes && (
-        <div className="view-toggle">
-          <button
-            className={viewMode === 'workflow' ? 'vt-btn active' : 'vt-btn'}
-            onClick={() => setViewMode('workflow')}
-          >
-            ⛓ 工作流
-          </button>
-          <button
-            className={viewMode === 'storyboard' ? 'vt-btn active' : 'vt-btn'}
-            onClick={() => setViewMode('storyboard')}
-          >
-            📋 故事板
-          </button>
-        </div>
-      )}
       {/* 搜索覆盖层（顶栏按钮触发，在 Tldraw 同级渲染） */}
       {editorInstance && <SearchPalette editor={editorInstance} />}
-      {/* 故事板视图覆盖层 */}
-      {viewMode === 'storyboard' && editorInstance && <StoryboardView editor={editorInstance} />}
       <CanvasSidePanel
         tab={panelTab}
         projectId={project.id}
