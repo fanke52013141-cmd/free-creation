@@ -36,7 +36,7 @@ export function registerBaseNodeTypes(): void {
     label: '文本',
     icon: '📝',
     color: '#8ab4f8',
-    defaultSize: { w: 260, h: 150 },
+    defaultSize: { w: 780, h: 150 },
     ports: { in: [port('in-text', '文本', 'text')], out: [out('out-text', '文本', 'text')] },
     Body: TextBody
   })
@@ -45,7 +45,7 @@ export function registerBaseNodeTypes(): void {
     label: '图片',
     icon: '🖼️',
     color: '#34d399',
-    defaultSize: { w: 320, h: 240 },
+    defaultSize: { w: 960, h: 240 },
     ports: {
       in: [port('in-image', '图片', 'image'), port('in-text', '提示词', 'text')],
       out: [out('out-image', '图片', 'image')]
@@ -57,7 +57,7 @@ export function registerBaseNodeTypes(): void {
     label: '视频',
     icon: '🎥',
     color: '#f472b6',
-    defaultSize: { w: 320, h: 240 },
+    defaultSize: { w: 960, h: 240 },
     ports: {
       in: [
         port('in-video', '视频', 'video'),
@@ -73,7 +73,7 @@ export function registerBaseNodeTypes(): void {
     label: '音频',
     icon: '🎵',
     color: '#fbbf24',
-    defaultSize: { w: 280, h: 120 },
+    defaultSize: { w: 840, h: 120 },
     ports: {
       in: [port('in-audio', '音频', 'audio'), port('in-text', '提示词', 'text')],
       out: [out('out-audio', '音频', 'audio')]
@@ -85,7 +85,7 @@ export function registerBaseNodeTypes(): void {
     label: '对话',
     icon: '💬',
     color: '#a78bfa',
-    defaultSize: { w: 280, h: 170 },
+    defaultSize: { w: 840, h: 170 },
     ports: { in: [port('in-text', '文本', 'text')], out: [out('out-text', '文本', 'text')] },
     Body: ChatBody
   })
@@ -99,7 +99,7 @@ export function registerScriptNodeType(): void {
     label: '脚本',
     icon: '🎬',
     color: '#fb923c',
-    defaultSize: { w: 360, h: 320 },
+    defaultSize: { w: 1080, h: 320 },
     ports: {
       in: [port('in-text', '剧本文本', 'text'), port('in-image', '参考图', 'image')],
       out: [out('out-json', '分镜数据', 'json'), out('out-text', '分镜文本', 'text')]
@@ -115,7 +115,7 @@ export function registerExtendedNodeTypes(): void {
     label: 'JSON',
     icon: '🔧',
     color: '#c084fc',
-    defaultSize: { w: 280, h: 200 },
+    defaultSize: { w: 840, h: 200 },
     ports: {
       in: [port('in-json', '数据', 'json'), port('in-text', '文本', 'text')],
       out: [out('out-json', '数据', 'json')]
@@ -127,7 +127,7 @@ export function registerExtendedNodeTypes(): void {
     label: '代码',
     icon: '⌨',
     color: '#94a3b8',
-    defaultSize: { w: 320, h: 220 },
+    defaultSize: { w: 960, h: 220 },
     ports: {
       in: [port('in-text', '代码', 'text')],
       out: [out('out-text', '文本', 'text')]
@@ -139,7 +139,7 @@ export function registerExtendedNodeTypes(): void {
     label: '分组',
     icon: '📦',
     color: '#64748b',
-    defaultSize: { w: 200, h: 100 },
+    defaultSize: { w: 600, h: 100 },
     ports: { in: [], out: [] },
     Body: GroupBody
   })
@@ -148,7 +148,7 @@ export function registerExtendedNodeTypes(): void {
     label: '分镜板',
     icon: '📋',
     color: '#60a5fa',
-    defaultSize: { w: 380, h: 320 },
+    defaultSize: { w: 1140, h: 320 },
     ports: {
       in: [port('in-json', '分镜数据', 'json'), port('in-text', '分镜文本', 'text')],
       out: [out('out-json', '分镜数据', 'json'), out('out-text', '合成文本', 'text')]
@@ -160,7 +160,7 @@ export function registerExtendedNodeTypes(): void {
     label: '合成',
     icon: '🎞',
     color: '#f472b6',
-    defaultSize: { w: 260, h: 160 },
+    defaultSize: { w: 780, h: 160 },
     ports: {
       in: [port('in-video', '视频片段', 'video')],
       out: [out('out-video', '合成视频', 'video')]

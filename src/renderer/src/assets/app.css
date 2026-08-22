@@ -530,23 +530,26 @@ input:focus {
   pointer-events: none;
 }
 
-/* ── 左侧节点面板 ── */
+/* ── 左侧悬浮图标条 ── */
 .node-palette {
   position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 72px;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  max-height: 75vh;
+  width: 52px;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 8px 6px 8px 8px;
+  padding: 8px 4px;
   background: var(--card);
-  border-right: 1px solid var(--line);
+  border: 1px solid var(--line);
+  border-radius: 14px;
   z-index: 400;
   overflow-y: auto;
+  overflow-x: hidden;
   scrollbar-width: thin;
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
 .palette-section {
@@ -555,23 +558,13 @@ input:focus {
   gap: 2px;
 }
 
-.palette-section-title {
-  font-size: 9px;
-  font-weight: 700;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  padding: 4px 4px 2px;
-  opacity: 0.6;
-}
-
 .palette-item {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  padding: 6px 2px;
+  gap: 0;
+  padding: 8px 2px;
   border: none;
   border-radius: 8px;
   background: transparent;
@@ -589,26 +582,21 @@ input:focus {
 }
 
 .palette-item:hover .palette-icon {
-  transform: scale(1.15);
+  transform: scale(1.2);
 }
 
 .palette-icon {
-  font-size: 18px;
+  font-size: 20px;
   line-height: 1;
   color: var(--txt);
   transition: transform 0.15s ease;
 }
 
-.palette-text {
-  font-size: 10px;
-  line-height: 1.2;
-  white-space: nowrap;
-}
-
 .palette-divider {
   height: 1px;
   background: var(--line);
-  margin: 6px 4px;
+  margin: 4px 6px;
+  flex-shrink: 0;
 }
 
 /* ── 节点创建菜单 ── */
@@ -674,6 +662,33 @@ input:focus {
   position: relative;
   width: 100%;
   height: 100%;
+}
+
+/* 可连接高亮：选中某节点时，与之兼容的其他节点显示虚线发光框 */
+.node-card-wrap.connectable::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border: 2px dashed var(--brand);
+  border-radius: 14px;
+  pointer-events: none;
+  animation: connectable-pulse 1.5s ease-in-out infinite;
+  z-index: 10;
+}
+
+.node-card-wrap.connectable::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 14px;
+  pointer-events: none;
+  box-shadow: 0 0 16px 2px rgba(9, 202, 245, 0.3);
+  z-index: 9;
+}
+
+@keyframes connectable-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
 }
 
 .node-card {
@@ -1528,6 +1543,67 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   height: 20px;
   background: var(--line);
   margin: 0 3px;
+}
+
+/* ── 右侧操作栏：选中节点时常驻显示 ── */
+.node-actions-dock {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 400;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 6px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  animation: dock-slide-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes dock-slide-in {
+  from { opacity: 0; transform: translateY(-50%) translateX(20px); }
+  to { opacity: 1; transform: translateY(-50%) translateX(0); }
+}
+
+.action-dock-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 6px;
+  min-width: 52px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--txt);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.action-dock-btn:hover {
+  background: var(--card-hover);
+  color: var(--brand);
+}
+
+.action-dock-btn.danger:hover {
+  background: rgba(248, 81, 73, 0.12);
+  color: #f85149;
+}
+
+.action-dock-btn svg {
+  flex-shrink: 0;
+}
+
+.action-dock-divider {
+  height: 1px;
+  background: var(--line);
+  margin: 2px 8px;
 }
 
 /* ── 右侧面板：资产 / 工作流 / 历史记录（LibTV 侧栏落地） ── */

@@ -1,6 +1,6 @@
 // NodeCard 卡片视图：头部（序号/图标/标题/状态灯）+ 类型化内容体 + 端口圆点 + 媒体预览浮层
 import { HTMLContainer, stopEventPropagation, useEditor } from 'tldraw'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { getNodeType, portCompatible, portOffsets, PORT_COLORS } from '../nodes/registry'
 import { useConnectionStore } from '../stores/connection'
@@ -29,6 +29,35 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     title: string
   } | null>(null)
   const [editing, setEditing] = useState(false)
+  const [connectable, setConnectable] = useState(false)
+
+  // 选中节点时，判断当前节点是否能与选中节点建立连线（双向检测）
+  useEffect((): (() => void) => {
+    const check = (): void => {
+      const selected = editor.getSelectedShapes()
+      if (selected.length !== 1 || selected[0].type !== 'node-card' || selected[0].id === shape.id) {
+        setConnectable(false)
+        return
+      }
+      const target = selected[0] as NodeCardShape
+      const targetSpec = getNodeType(target.props.nodeType)
+      if (!spec || !targetSpec) {
+        setConnectable(false)
+        return
+      }
+      // 双向兼容：选中节点的输出 → 本节点输入，或 本节点输出 → 选中节点输入
+      const canReceive = targetSpec.ports.out.some((o) =>
+        spec.ports.in.some((i) => portCompatible(i.type, o.type))
+      )
+      const canSend = spec.ports.out.some((o) =>
+        targetSpec.ports.in.some((i) => portCompatible(i.type, o.type))
+      )
+      setConnectable(canReceive || canSend)
+    }
+    check()
+    const unsub = editor.store.listen(check, { scope: 'session' })
+    return unsub
+  }, [editor, shape.id, spec])
 
   // 计算节点序号：按创建顺序排序所有 node-card，返回当前节点的序号
   const seq = (() => {
@@ -71,7 +100,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   return (
     <HTMLContainer style={{ pointerEvents: 'all' }}>
       {/* 外层包一层无裁切的容器：端口圆点要压在卡片边缘外侧，不能被卡片 overflow:hidden 裁掉 */}
-      <div className="node-card-wrap" style={{ width: shape.props.w, height: shape.props.h }}>
+      <div className={`node-card-wrap ${connectable ? 'connectable' : ''}`} style={{ width: shape.props.w, height: shape.props.h }}>
         <div
           className={`node-card type-${shape.props.nodeType}`}
         >

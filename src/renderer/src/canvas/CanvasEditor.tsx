@@ -7,6 +7,7 @@ import { NodeCreateMenu } from './NodeCreateMenu'
 import { ConnectionLayer } from './ConnectionLayer'
 import { CanvasBottomDock } from './CanvasMinimap'
 import { MultiSelectToolbar } from './MultiSelectToolbar'
+import { NodeActionsDock } from './NodeActionsDock'
 import { CanvasSidePanel, type SidePanelTab } from './CanvasSidePanel'
 import { ChatSidePanel } from './ChatSidePanel'
 import { SearchPalette } from './SearchPalette'
@@ -445,10 +446,9 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
           SharePanel: null
         }}
       />
-      {/* 左侧节点面板：所有节点类型直接展示，点击创建或拖拽到画布 */}
+      {/* 左侧节点面板：悬浮图标条，点击创建或拖拽到画布 */}
       <div className="node-palette">
         <div className="palette-section">
-          <div className="palette-section-title">节点</div>
           {nodeTypes.map((t) => (
             <button
               key={t.type}
@@ -458,7 +458,6 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
               onPointerDown={(e) => startNodeDrag(e, t.type)}
             >
               <span className="palette-icon" style={{ color: t.color }}>{t.icon}</span>
-              <span className="palette-text">{t.label}</span>
             </button>
           ))}
         </div>
@@ -476,19 +475,15 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
             }}
           >
             <span className="palette-icon">📂</span>
-            <span className="palette-text">上传</span>
           </button>
           <button className="palette-item" title="资产管理" onClick={() => setPanelTab('assets')}>
             <span className="palette-icon">📦</span>
-            <span className="palette-text">资产</span>
           </button>
           <button className="palette-item" title="工作流面板" onClick={() => setPanelTab('workflow')}>
             <span className="palette-icon">⛓</span>
-            <span className="palette-text">工作流</span>
           </button>
           <button className="palette-item" title="历史记录" onClick={() => setPanelTab('history')}>
             <span className="palette-icon">🕘</span>
-            <span className="palette-text">历史</span>
           </button>
         </div>
         <div className="palette-divider" />
@@ -505,12 +500,13 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
           }}
         >
           <span className="palette-icon">{canvasTheme === 'dark' ? '☀' : '🌙'}</span>
-          <span className="palette-text">{canvasTheme === 'dark' ? '米色' : '深色'}</span>
         </button>
       </div>
       <CanvasBottomDock editor={editorInstance} />
       {/* 多选浮动工具栏：选中 2+ 节点时显示对齐与打组 */}
       {editorInstance && <MultiSelectToolbar editor={editorInstance} />}
+      {/* 右侧操作栏：选中节点时常驻显示删除/复制/置顶/置底 */}
+      {editorInstance && <NodeActionsDock editor={editorInstance} />}
       {/* 搜索覆盖层（顶栏按钮触发，在 Tldraw 同级渲染） */}
       {editorInstance && <SearchPalette editor={editorInstance} />}
       <CanvasSidePanel
