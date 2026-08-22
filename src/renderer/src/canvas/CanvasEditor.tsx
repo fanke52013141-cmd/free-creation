@@ -7,6 +7,7 @@ import { NodeCreateMenu } from './NodeCreateMenu'
 import { ConnectionLayer } from './ConnectionLayer'
 import { CanvasBottomDock } from './CanvasMinimap'
 import { CanvasSidePanel, type SidePanelTab } from './CanvasSidePanel'
+import { ChatSidePanel } from './ChatSidePanel'
 import { SearchPalette } from './SearchPalette'
 import { StoryboardView } from './StoryboardView'
 import {
@@ -28,6 +29,7 @@ import { useGatewayStore } from '../stores/gateway'
 import { useEngineStore } from '../engine/store'
 import { runWorkflow } from '../engine/executor'
 import { useMediaStore } from '../stores/media'
+import { useEditorStore } from '../stores/editor'
 
 registerBaseNodeTypes()
 registerScriptNodeType()
@@ -64,6 +66,8 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
   const [hasNodes, setHasNodes] = useState(false)
   // 双视图切换：节点工作流 ↔ 故事板（创作者视图 ↔ 工程师视图）
   const [viewMode, setViewMode] = useState<'workflow' | 'storyboard'>('workflow')
+  // 选中对话节点时弹出右侧聊天面板
+  const [chatShapeId, setChatShapeId] = useState<TLShapeId | null>(null)
 
   // 执行引擎：注册 run 闭包到全局 store，顶部栏通过 store 触发（捕获 editor + projectId + providers）
   const providers = useGatewayStore((s) => s.providers)
@@ -95,6 +99,25 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
     }
     check()
     return editorInstance.store.listen(check, { scope: 'document' })
+  }, [editorInstance])
+
+  // 选中对话节点时弹出右侧聊天面板；取消选中或切换其他节点时关闭
+  useEffect(() => {
+    if (!editorInstance) return
+    const check = (): void => {
+      const sel = editorInstance.getSelectedShapes()
+      if (
+        sel.length === 1 &&
+        sel[0].type === 'node-card' &&
+        (sel[0].props as { nodeType?: string }).nodeType === 'chat'
+      ) {
+        setChatShapeId(sel[0].id)
+      } else {
+        setChatShapeId(null)
+      }
+    }
+    check()
+    return editorInstance.store.listen(check, { scope: 'session' })
   }, [editorInstance])
 
   // 左侧栏「＋」按住拖动：跟手显示浮标，松开时在落点弹创建菜单（拖动式添加）
@@ -298,6 +321,7 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
   const handleMount = (editor: Editor): void => {
     editorRef.current = editor
     setEditorInstance(editor)
+    useEditorStore.getState().setEditor(editor)
     // DEV 调试入口：浏览器 console 可用 window.__tldrawEditor 访问（生产构建自动剔除）
     if (import.meta.env.DEV) {
       ;(window as { __tldrawEditor?: Editor }).__tldrawEditor = editor
@@ -400,7 +424,12 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
           StylePanel: null,
           HelpMenu: null,
           PageMenu: null,
-          DebugPanel: null
+          DebugPanel: null,
+          MainMenu: null,
+          ZoomMenu: null,
+          Minimap: null,
+          NavigationPanel: null,
+          SharePanel: null
         }}
       />
       <div className="canvas-rail">
@@ -476,6 +505,17 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
           createMediaNodes([asset], screen.x, screen.y)
         }}
       />
+      {/* 对话节点右侧聊天面板 */}
+      {chatShapeId && editorInstance && (
+        <ChatSidePanel
+          editor={editorInstance}
+          shapeId={chatShapeId}
+          onClose={() => {
+            editorInstance.selectNone()
+            setChatShapeId(null)
+          }}
+        />
+      )}
       {addDrag && (
         <div className="add-drag-ghost" style={{ left: addDrag.x + 14, top: addDrag.y + 14 }}>
           松开在这里添加节点

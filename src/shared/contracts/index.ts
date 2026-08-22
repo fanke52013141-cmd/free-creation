@@ -83,6 +83,8 @@ export interface ChatStartInput {
   modelId: string
   system?: string
   messages: ChatMessage[]
+  temperature?: number
+  maxTokens?: number
 }
 
 export interface ImageGenerateInput {

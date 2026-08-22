@@ -25,6 +25,8 @@ export function startChat(send: Send, input: ChatStartInput): string {
         messages: input.messages
           .filter((m) => m.content.trim())
           .map((m) => ({ role: m.role, content: m.content })),
+        temperature: input.temperature,
+        maxTokens: input.maxTokens,
         abortSignal: ctrl.signal
       })
       for await (const delta of result.textStream) {

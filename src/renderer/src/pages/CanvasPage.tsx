@@ -5,11 +5,49 @@ import { useGatewayStore } from '../stores/gateway'
 import { useEngineStore } from '../engine/store'
 import { CanvasEditor } from '../canvas/CanvasEditor'
 import { ProjectMenu } from '../canvas/ProjectMenu'
-import { toast } from '../stores/toast'
+import { useEditorStore } from '../stores/editor'
 import { useSearchStore } from '../stores/search'
 
 interface CanvasPageProps {
   projectId: string
+}
+
+/** 撤销/重做按钮：订阅 tldraw editor 状态变化，动态启用/禁用 */
+function UndoRedoButtons(): React.JSX.Element {
+  const editor = useEditorStore((s) => s.editor)
+  const [, force] = useState(0)
+
+  useEffect(() => {
+    if (!editor) return
+    const unsub = editor.store.listen(() => force((n) => n + 1), { scope: 'session' })
+    return () => {
+      unsub?.()
+    }
+  }, [editor])
+
+  const canUndo = editor ? editor.canUndo() : false
+  const canRedo = editor ? editor.canRedo() : false
+
+  return (
+    <div className="undo-redo-group">
+      <button
+        className="undo-redo-btn"
+        title="撤销（Ctrl+Z）"
+        disabled={!canUndo}
+        onClick={() => editor?.undo()}
+      >
+        ↶
+      </button>
+      <button
+        className="undo-redo-btn"
+        title="重做（Ctrl+Shift+Z）"
+        disabled={!canRedo}
+        onClick={() => editor?.redo()}
+      >
+        ↷
+      </button>
+    </div>
+  )
 }
 
 export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
@@ -102,33 +140,41 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
   return (
     <div className="canvas-page">
       <div className="canvas-topbar">
+        {/* 左侧：项目菜单 + 撤销/重做 */}
         <ProjectMenu project={currentProject ?? file.meta} />
-        {renaming ? (
-          <input
-            className="title-input"
-            autoFocus
-            value={nameDraft}
-            onChange={(e) => setNameDraft(e.target.value)}
-            onBlur={() => void commitRename()}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') void commitRename()
-              if (e.key === 'Escape') setRenaming(false)
-            }}
-          />
-        ) : (
-          <span
-            className="canvas-title editable"
-            title="双击重命名"
-            onDoubleClick={() => {
-              if (currentProject) {
-                setNameDraft(currentProject.name)
-                setRenaming(true)
-              }
-            }}
-          >
-            {currentProject?.name ?? file.meta.name}
-          </span>
-        )}
+        <UndoRedoButtons />
+
+        {/* 中间：项目名称（绝对居中） */}
+        <div className="topbar-center">
+          {renaming ? (
+            <input
+              className="title-input"
+              autoFocus
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onBlur={() => void commitRename()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void commitRename()
+                if (e.key === 'Escape') setRenaming(false)
+              }}
+            />
+          ) : (
+            <span
+              className="canvas-title editable"
+              title="双击重命名"
+              onDoubleClick={() => {
+                if (currentProject) {
+                  setNameDraft(currentProject.name)
+                  setRenaming(true)
+                }
+              }}
+            >
+              {currentProject?.name ?? file.meta.name}
+            </span>
+          )}
+        </div>
+
+        {/* 右侧：版本号 + 进度 + 搜索 + 运行 + 个人中心 */}
         <span className="topbar-spacer" />
         <span className="topbar-version">v{file.meta.graphVersion}</span>
 
@@ -148,6 +194,14 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
               </span>
             </div>
           )}
+          {/* 搜索按钮（运行按钮左侧） */}
+          <button
+            className="run-btn search-trigger"
+            title="搜索节点（Ctrl+K）"
+            onClick={() => useSearchStore.getState().toggle()}
+          >
+            🔍
+          </button>
           <button
             className={`run-btn ${isRunning ? 'running' : ''}`}
             title={isRunning ? '停止工作流' : '运行工作流'}
@@ -164,27 +218,6 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
         </div>
 
         <div className="topbar-actions">
-          <button
-            className="topbar-icon"
-            title="搜索节点（Ctrl+K）"
-            onClick={() => useSearchStore.getState().toggle()}
-          >
-            🔍
-          </button>
-          <button
-            className="topbar-icon"
-            title="分享项目"
-            onClick={() => toast('分享链接将在后续版本开放')}
-          >
-            ↗
-          </button>
-          <button
-            className="topbar-icon"
-            title="会员中心"
-            onClick={() => toast('会员中心将在后续版本开放')}
-          >
-            <span className="member-crown">♛</span>
-          </button>
           <div className="topbar-user" ref={userRef}>
             <button className="avatar-btn" title="个人中心" onClick={() => setUserOpen((v) => !v)}>
               <span className="avatar-dot">我</span>

@@ -887,7 +887,12 @@ interface ChatData {
   system: string
   modelKey: string
   messages: ChatMessage[]
+  temperature: number
+  maxTokens: number
 }
+
+export type { ChatData }
+export { parseChat }
 
 function parseChat(text: string): ChatData {
   return parseJsonProp(
@@ -904,242 +909,43 @@ function parseChat(text: string): ChatData {
         return {
           system: typeof o.system === 'string' ? o.system : '',
           modelKey: typeof o.modelKey === 'string' ? o.modelKey : '',
-          messages
+          messages,
+          temperature: typeof o.temperature === 'number' ? o.temperature : 0.7,
+          maxTokens: typeof o.maxTokens === 'number' ? o.maxTokens : 4096
         }
       }
       return null
     },
-    { system: '', modelKey: '', messages: [] }
+    { system: '', modelKey: '', messages: [], temperature: 0.7, maxTokens: 4096 }
   )
 }
 
-const CHAT_MAX_H = 520
-
+/** 对话节点卡片内的紧凑展示：选中后通过右侧 ChatSidePanel 进行完整对话 */
 export function ChatBody({ shape }: NodeBodyProps): React.JSX.Element {
-  const editor = useEditor()
-  const project = useAppStore((s) => s.currentProject)
   const providers = useGatewayStore((s) => s.providers)
   const loaded = useGatewayStore((s) => s.loaded)
   const loadProviders = useGatewayStore((s) => s.load)
-  const openSettings = useGatewayStore((s) => s.openSettings)
   const options = modelsByModality(providers, 'text')
   const data = parseChat(shape.props.text)
-  const [draft, setDraft] = useState('')
-  const [showSystem, setShowSystem] = useState(false)
-  const [systemDraft, setSystemDraft] = useState(data.system)
-  const [stream, setStream] = useState<{ taskId: string; text: string } | null>(null)
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const dataRef = useRef(data)
-  const streamRef = useRef(stream)
-  useLayoutEffect(() => {
-    dataRef.current = data
-  }, [data])
-  useLayoutEffect(() => {
-    streamRef.current = stream
-  }, [stream])
-  useWheelScroll(scrollRef)
 
   useEffect(() => {
     if (!loaded) void loadProviders()
   }, [loaded, loadProviders])
 
-  // 流式期间自动滚到底部
-  useEffect(() => {
-    const el = scrollRef.current
-    if (el) el.scrollTop = el.scrollHeight
-  }, [data.messages.length, stream?.text])
-
-  const update = (next: ChatData): void => {
-    editor.updateShape({
-      id: shape.id,
-      type: 'node-card',
-      props: { text: JSON.stringify(next) }
-    })
-  }
-
-  const finishStream = (): void => {
-    const s = streamRef.current
-    if (!s) return
-    const cur = dataRef.current
-    if (s.text) {
-      update({
-        ...cur,
-        messages: [...cur.messages, { role: 'assistant', content: s.text }]
-      })
-      markUndoPoint(editor, 'chat-gen')
-    }
-    setStream(null)
-  }
-
-  // 网关事件：本节点聊天流
-  useEffect(() => {
-    const off = window.api.gateway.onEvent((e) => {
-      if (!streamRef.current || e.taskId !== streamRef.current.taskId) return
-      if (e.kind === 'chat-delta') {
-        setStream((s) => (s ? { ...s, text: s.text + e.text } : s))
-      } else if (e.kind === 'chat-done') {
-        finishStream()
-      } else if (e.kind === 'chat-error') {
-        toast(`对话失败：${e.error}`)
-        setStream(null)
-      }
-    })
-    return off
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const send = async (): Promise<void> => {
-    const opt = options.find((o) => o.key === data.modelKey)
-    if (!opt) return toast('请先选择对话模型')
-    if (!draft.trim()) return
-    if (stream) return
-    // 连线上下文注入：自动收集上游文本节点的输出，拼到用户消息前
-    const upstream = gatherUpstreamText(editor, shape.id)
-    const userContent = upstream ? `${upstream}\n\n---\n\n${draft.trim()}` : draft.trim()
-    const messages: ChatMessage[] = [...data.messages, { role: 'user', content: userContent }]
-    update({ ...data, messages })
-    setDraft('')
-    setStream({ taskId: '', text: '' })
-    const res = await window.api.gateway.chatStart({
-      providerId: opt.provider.id,
-      modelId: opt.model.id,
-      system: data.system,
-      messages
-    })
-    if (!res.ok) {
-      toast(`发送失败：${res.error.message}`)
-      setStream(null)
-      return
-    }
-    setStream({ taskId: res.data.taskId, text: '' })
-  }
-
-  const stop = async (): Promise<void> => {
-    if (!stream?.taskId) return
-    await window.api.gateway.chatCancel(stream.taskId)
-    finishStream()
-  }
-
-  // 内容增高时自动撑高卡片（只增不减，上限后内部滚动）
-  useLayoutEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
-    const need = el.scrollHeight + 120
-    if (need > shape.props.h && shape.props.h < CHAT_MAX_H) {
-      editor.updateShape({
-        id: shape.id,
-        type: 'node-card',
-        props: { h: Math.min(CHAT_MAX_H, need) }
-      })
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.messages.length, stream?.text, showSystem])
+  const modelName =
+    options.find((o) => o.key === data.modelKey)?.model?.name ?? '未选择模型'
 
   return (
-    <div className="chat-body">
-      <div className="chat-toolbar">
-        {options.length ? (
-          <ModelSelect
-            value={data.modelKey}
-            options={options}
-            onChange={(key) => update({ ...data, modelKey: key })}
-          />
-        ) : (
-          <button
-            className="btn-ghost small"
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onClick={(e) => {
-              e.stopPropagation()
-              openSettings()
-            }}
-          >
-            配置对话模型
-          </button>
-        )}
-        <button
-          className="chat-sys-btn"
-          title="系统提示词"
-          onPointerDown={(e) => stopEventPropagation(e)}
-          onClick={(e) => {
-            e.stopPropagation()
-            setShowSystem((v) => !v)
-          }}
-        >
-          {showSystem ? '▾' : '▸'} 系统
-        </button>
+    <div className="chat-body-compact">
+      <div className="chat-compact-model">💬 {modelName}</div>
+      <div className="chat-compact-stats">
+        {data.messages.length > 0
+          ? `${data.messages.length} 条对话`
+          : '暂无对话'}
+        {' · '}
+        T{data.temperature.toFixed(1)} · {data.maxTokens} tok
       </div>
-      {showSystem && (
-        <textarea
-          className="chat-system"
-          value={systemDraft}
-          rows={2}
-          spellCheck={false}
-          placeholder="系统提示词（人设 / 输出要求）…"
-          onChange={(e) => setSystemDraft(e.target.value)}
-          onBlur={() => {
-            if (systemDraft !== data.system) update({ ...data, system: systemDraft })
-          }}
-          onPointerDown={(e) => stopEventPropagation(e)}
-        />
-      )}
-      <div className="chat-messages" ref={scrollRef}>
-        {data.messages.map((m, i) => (
-          <div key={i} className={`chat-msg ${m.role}`}>
-            <div className="chat-bubble">{m.content}</div>
-          </div>
-        ))}
-        {stream && (
-          <div className="chat-msg assistant">
-            <div className="chat-bubble streaming">
-              {stream.text || <span className="chat-cursor">▍</span>}
-            </div>
-          </div>
-        )}
-        {!data.messages.length && !stream && (
-          <div className="node-hint center">输入内容开始对话</div>
-        )}
-      </div>
-      <div className="chat-input-row">
-        <textarea
-          className="chat-input"
-          value={draft}
-          rows={1}
-          spellCheck={false}
-          placeholder={project ? '说点什么…（Enter 发送）' : '项目未就绪'}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault()
-              void send()
-            }
-            e.stopPropagation()
-          }}
-          onPointerDown={(e) => stopEventPropagation(e)}
-        />
-        {stream ? (
-          <button
-            className="btn-ghost small"
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onClick={(e) => {
-              e.stopPropagation()
-              void stop()
-            }}
-          >
-            停止
-          </button>
-        ) : (
-          <button
-            className="btn-primary small"
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onClick={(e) => {
-              e.stopPropagation()
-              void send()
-            }}
-          >
-            发送
-          </button>
-        )}
-      </div>
+      <div className="chat-compact-hint">选中此节点 → 右侧面板对话</div>
     </div>
   )
 }
