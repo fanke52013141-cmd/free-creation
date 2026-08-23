@@ -39,8 +39,8 @@ export class NodeCardUtil extends BaseBoxShapeUtil<NodeCardShape> {
 
   override getDefaultProps(): NodeCardProps {
     return {
-      w: 780,
-      h: 160,
+      w: 2340,
+      h: 300,
       nodeType: 'text',
       title: '文本',
       text: '',

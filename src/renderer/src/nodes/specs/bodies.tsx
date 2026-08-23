@@ -1626,6 +1626,16 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
   const text = shape.props.text || ''
   return (
     <div className="code-body" ref={scrollRef}>
+      {/* I/O 类型指示器 */}
+      <div className="code-io-hints">
+        <span className="code-io-hint in" title="可接收文本和 JSON 数据">
+          输入: text · json
+        </span>
+        <span className="code-io-arrow">→</span>
+        <span className="code-io-hint out" title="输出文本和 JSON 数据">
+          输出: text · json
+        </span>
+      </div>
       {text ? (
         <pre
           className="code-pre"
@@ -1638,7 +1648,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
           {text}
         </pre>
       ) : (
-        <div className="node-hint center">双击输入代码片段</div>
+        <div className="node-hint center">双击输入代码片段（可处理文本 / JSON 数据）</div>
       )}
       <div className="code-toolbar">
         <button

@@ -453,7 +453,7 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
             <button
               key={t.type}
               className="palette-item"
-              title={`${t.label}（点击在中心创建 · 拖拽到画布）`}
+              title={t.label}
               onClick={() => handleNodePick(t.type)}
               onPointerDown={(e) => startNodeDrag(e, t.type)}
             >
