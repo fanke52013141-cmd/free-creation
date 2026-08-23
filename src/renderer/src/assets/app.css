@@ -437,6 +437,18 @@ input:focus {
   display: none !important;
 }
 
+/* 隐藏 tldraw 左下角浮动工具栏 / 快速操作 / 助手按钮 ——
+   节点画布不需要绘图工具，这些图标小而无用，会让用户困惑 */
+.tlui-toolbar,
+.tlui-quick-actions,
+.tlui-helper-buttons,
+.tlui-help-menu,
+.tlui-debug-panel,
+.tlui-share-panel,
+.tlui-menu-button,
+.tlui-navigation-zone {
+  display: none !important;
+}
 /* ── 节点缩放手柄：圆形 + 品牌色美化（替换 tldraw 默认方块） ── */
 .tl-corner-handle {
   rx: 999px;
