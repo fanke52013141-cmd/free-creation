@@ -1616,6 +1616,51 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   margin: 0 3px;
 }
 
+/* ── 右侧历史操作簇：撤销 / 重做 常驻显示（画布右侧中部，NodeActionsDock 下方） ── */
+.history-dock {
+  position: absolute;
+  right: 16px;
+  bottom: 150px;
+  z-index: 400;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 5px 4px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.45);
+  animation: dock-slide-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.history-dock-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: none;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--txt);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.history-dock-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--brand) 15%, var(--card));
+  color: var(--brand);
+}
+
+.history-dock-btn:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.history-dock-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
 /* ── 右侧操作栏：选中节点时常驻显示 ── */
 .node-actions-dock {
   position: absolute;

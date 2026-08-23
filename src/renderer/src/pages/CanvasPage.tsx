@@ -5,49 +5,10 @@ import { useGatewayStore } from '../stores/gateway'
 import { useEngineStore } from '../engine/store'
 import { CanvasEditor } from '../canvas/CanvasEditor'
 import { ProjectMenu } from '../canvas/ProjectMenu'
-import { useEditorStore } from '../stores/editor'
 import { useSearchStore } from '../stores/search'
 
 interface CanvasPageProps {
   projectId: string
-}
-
-/** 撤销/重做按钮：订阅 tldraw editor 状态变化，动态启用/禁用 */
-function UndoRedoButtons(): React.JSX.Element {
-  const editor = useEditorStore((s) => s.editor)
-  const [, force] = useState(0)
-
-  useEffect(() => {
-    if (!editor) return
-    const unsub = editor.store.listen(() => force((n) => n + 1), { scope: 'session' })
-    return () => {
-      unsub?.()
-    }
-  }, [editor])
-
-  const canUndo = editor ? editor.canUndo() : false
-  const canRedo = editor ? editor.canRedo() : false
-
-  return (
-    <div className="undo-redo-group">
-      <button
-        className="undo-redo-btn"
-        title="撤销（Ctrl+Z）"
-        disabled={!canUndo}
-        onClick={() => editor?.undo()}
-      >
-        ↶
-      </button>
-      <button
-        className="undo-redo-btn"
-        title="重做（Ctrl+Shift+Z）"
-        disabled={!canRedo}
-        onClick={() => editor?.redo()}
-      >
-        ↷
-      </button>
-    </div>
-  )
 }
 
 export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
@@ -140,9 +101,8 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
   return (
     <div className="canvas-page">
       <div className="canvas-topbar">
-        {/* 左侧：项目菜单 + 撤销/重做 */}
+        {/* 左侧：项目菜单（撤销/重做已移到画布右侧历史簇） */}
         <ProjectMenu project={currentProject ?? file.meta} />
-        <UndoRedoButtons />
 
         {/* 中间：项目名称（绝对居中） */}
         <div className="topbar-center">

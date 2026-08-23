@@ -36,7 +36,7 @@ export function registerBaseNodeTypes(): void {
     label: '文本',
     icon: '📝',
     color: '#8ab4f8',
-    defaultSize: { w: 2340, h: 300 },
+    defaultSize: { w: 520, h: 300 },
     ports: { in: [port('in-text', '文本', 'text')], out: [out('out-text', '文本', 'text')] },
     Body: TextBody
   })

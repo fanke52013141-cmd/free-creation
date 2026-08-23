@@ -6,6 +6,7 @@ import { NodeCardUtil, type NodeCardProps } from './NodeCardShape'
 import { NodeCreateMenu } from './NodeCreateMenu'
 import { ConnectionLayer } from './ConnectionLayer'
 import { CanvasBottomDock } from './CanvasMinimap'
+import { CanvasHistoryDock } from './CanvasHistoryDock'
 import { MultiSelectToolbar } from './MultiSelectToolbar'
 import { NodeActionsDock } from './NodeActionsDock'
 import { CanvasSidePanel, type SidePanelTab } from './CanvasSidePanel'
@@ -542,6 +543,8 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
         </button>
       </div>
       <CanvasBottomDock editor={editorInstance} />
+      {/* 画布右侧历史操作簇：撤销 / 重做（常驻显示） */}
+      <CanvasHistoryDock editor={editorInstance} />
       {/* 多选浮动工具栏：选中 2+ 节点时显示对齐与打组 */}
       {editorInstance && <MultiSelectToolbar editor={editorInstance} />}
       {/* 右侧操作栏：选中节点时常驻显示删除/复制/置顶/置底 */}
