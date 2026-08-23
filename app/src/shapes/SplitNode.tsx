@@ -2,6 +2,7 @@ import { BaseBoxShapeUtil, T, useEditor, type RecordProps, type TLShape } from '
 import { describeSource, getCompatibleSources, getTextValue, markNodeAndDependentsDirty, replaceDataDependency } from './dependencies'
 import { SPLIT_TYPE, type SplitNodeShape } from './types'
 import { splitText } from './runtime'
+import { NodePortMarkers } from './NodePortMarkers'
 
 export class SplitNodeUtil extends BaseBoxShapeUtil<SplitNodeShape> {
   static override type = SPLIT_TYPE
@@ -29,7 +30,7 @@ function SplitNodeComponent({ shape }: { shape: SplitNodeShape }) {
   }
   let items: string[] = []
   try { const parsed: unknown = JSON.parse(props.itemsJson); if (Array.isArray(parsed)) items = parsed.filter((item): item is string => typeof item === 'string') } catch { /* invalid cache is displayed as empty */ }
-  return <div style={{ pointerEvents: 'all' }} className="w-full h-full flex flex-col node-card node-card-split">
+  return <div style={{ pointerEvents: 'all' }} className="w-full h-full flex flex-col node-card node-card-split"><NodePortMarkers type={shape.type} />
     <header className="node-header"><span className="node-kicker">⇶</span><span className="node-title">Split 拆分</span></header>
     <div onPointerDown={(event) => event.stopPropagation()} className="node-body space-y-2 text-xs">
       <label className="block text-neutral-500">输入（Text）

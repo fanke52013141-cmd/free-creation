@@ -7,6 +7,7 @@ import { IMAGE_GEN_TYPE, type ImageGenNodeShape } from './types'
 import { useCanvasProjectId } from '../components/projectContext'
 import { toNodeRunState, waitForGenerationTask } from './video'
 import { isActiveRunState, normalizeTextInput } from './runtime'
+import { NodePortMarkers } from './NodePortMarkers'
 
 export class ImageGenNodeUtil extends BaseBoxShapeUtil<ImageGenNodeShape> {
   static override type = IMAGE_GEN_TYPE
@@ -73,7 +74,7 @@ function ImageGenNodeComponent({ shape }: { shape: ImageGenNodeShape }) {
     }
   }
 
-  return <div style={{ pointerEvents: 'all' }} className="w-full h-full flex flex-col node-card node-card-imagegen">
+  return <div style={{ pointerEvents: 'all' }} className="w-full h-full flex flex-col node-card node-card-imagegen"><NodePortMarkers type={shape.type} />
     <header onPointerDown={(event) => event.stopPropagation()} className="node-header">
       <span className="node-kicker">✦</span><input value={props.title} onChange={(event) => update({ title: event.target.value })} className="node-title" />
       <button onClick={() => setConfigOpen(!configOpen)} className="node-icon-button">⚙</button>

@@ -31,6 +31,10 @@ export function Sidebar({ currentProjectId, onSelectProject, onOpenModels }: Sid
     setDragOver(null)
     setDragItem(null)
   }
+  const createAndOpenProject = (placement: { courseId: string | null; chapterId: string | null }) => {
+    const project = store.createProject(placement)
+    onSelectProject(project.id)
+  }
 
   return (
     <aside className="project-sidebar">
@@ -140,7 +144,7 @@ export function Sidebar({ currentProjectId, onSelectProject, onOpenModels }: Sid
                   </IconBtn>
                   <IconBtn
                     title="新建项目"
-                    onClick={() => store.createProject({ courseId: course.id, chapterId: null })}
+                    onClick={() => createAndOpenProject({ courseId: course.id, chapterId: null })}
                   >
                     📄＋
                   </IconBtn>
@@ -175,6 +179,7 @@ export function Sidebar({ currentProjectId, onSelectProject, onOpenModels }: Sid
                         projects={chProjects}
                         currentProjectId={currentProjectId}
                         onSelectProject={onSelectProject}
+                        onCreateProject={createAndOpenProject}
                         dragOver={dragOver}
                         setDragOver={setDragOver}
                       />
@@ -227,6 +232,7 @@ function ChapterBlock({
   projects,
   currentProjectId,
   onSelectProject,
+  onCreateProject,
   dragOver,
   setDragOver,
 }: {
@@ -234,6 +240,7 @@ function ChapterBlock({
   projects: Project[]
   currentProjectId: string | null
   onSelectProject: (id: string) => void
+  onCreateProject: (placement: { courseId: string | null; chapterId: string | null }) => void
   dragOver: string | null
   setDragOver: Dispatch<SetStateAction<string | null>>
 }) {
@@ -268,9 +275,7 @@ function ChapterBlock({
         <span className="hidden group-hover:flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
           <IconBtn
             title="新建项目"
-            onClick={() =>
-              store.createProject({ courseId: chapter.courseId, chapterId: chapter.id })
-            }
+            onClick={() => onCreateProject({ courseId: chapter.courseId, chapterId: chapter.id })}
           >
             📄＋
           </IconBtn>
@@ -301,9 +306,7 @@ function ChapterBlock({
         ))}
         {projects.length === 0 && (
           <button
-            onClick={() =>
-              store.createProject({ courseId: chapter.courseId, chapterId: chapter.id })
-            }
+            onClick={() => onCreateProject({ courseId: chapter.courseId, chapterId: chapter.id })}
             className="block text-xs text-neutral-400 hover:text-neutral-600 px-2 py-1 ml-3"
           >
             ＋ 新建项目

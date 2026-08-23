@@ -4,6 +4,7 @@ import { callChatCompletion } from './llm'
 import { describeSource, getCompatibleSources, getTextValue, markNodeAndDependentsDirty, replaceDataDependency } from './dependencies'
 import { ONE_SHOT_TYPE, type OneShotNodeShape } from './types'
 import { normalizeTextInput } from './runtime'
+import { NodePortMarkers } from './NodePortMarkers'
 
 export class OneShotNodeUtil extends BaseBoxShapeUtil<OneShotNodeShape> {
   static override type = ONE_SHOT_TYPE
@@ -94,6 +95,7 @@ function OneShotNodeComponent({ shape }: { shape: OneShotNodeShape }) {
 
   return (
     <div style={{ pointerEvents: 'all' }} className="w-full h-full flex flex-col node-card node-card-oneshot">
+      <NodePortMarkers type={shape.type} />
       <header onPointerDown={(event) => event.stopPropagation()} className="node-header">
         <span className="node-kicker">↗</span>
         <input value={props.title} onChange={(event) => update({ title: event.target.value })} onPointerDown={(event) => event.stopPropagation()} className="node-title" />

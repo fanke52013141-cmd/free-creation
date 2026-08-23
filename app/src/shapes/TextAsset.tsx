@@ -11,6 +11,7 @@ import { useState } from 'react'
 import type { TextAssetShape } from './types'
 import { TEXT_TYPE } from './types'
 import { getDependencyMeta, markNodeAndDependentsDirty } from './dependencies'
+import { NodePortMarkers } from './NodePortMarkers'
 
 export class TextAssetUtil extends BaseBoxShapeUtil<TextAssetShape> {
   static override type = TEXT_TYPE
@@ -65,6 +66,7 @@ function TextAssetComponent({ shape }: { shape: TextAssetShape }) {
         outline: isReferenced ? '2px solid rgba(59,130,246,0.25)' : 'none',
       }}
     >
+      <NodePortMarkers type={shape.type} />
       <div className="node-header">
         <span className="node-kicker">T</span>
         <span className="node-title">文本资产</span>

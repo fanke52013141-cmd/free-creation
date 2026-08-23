@@ -29,6 +29,16 @@ export function getInputPort(nodeType: string, portName: string): PortDefinition
   return getNodeDefinition(nodeType)?.inputs.find((port) => port.name === portName)
 }
 
+/**
+ * Physical anchors match the declared port ordering, so the line terminates at
+ * the actual consuming input instead of an arbitrary point in the node body.
+ */
+function inputAnchor(nodeType: string, portName: string) {
+  const inputs = getNodeDefinition(nodeType)?.inputs ?? []
+  const index = inputs.findIndex((port) => port.name === portName)
+  return { x: 0, y: index < 0 ? 0.5 : (index + 1) / (inputs.length + 1) }
+}
+
 export function getNodeInputRefs(shape: TLShape): Array<{ port: string; sourceId: string }> {
   const fields = INPUT_REF_FIELDS[shape.type]
   if (!fields) return []
@@ -242,9 +252,14 @@ export function replaceDataDependency(
     isLocked: true,
     meta: { dependency },
     props: {
-      color: 'blue',
-      size: 's',
-      arrowheadEnd: 'arrow',
+      // Locked data edges are deliberately distinct from incidental canvas arrows:
+      // dot = published source, filled triangle = consuming target.
+      color: 'light-violet',
+      size: 'm',
+      dash: 'solid',
+      fill: 'solid',
+      arrowheadStart: 'dot',
+      arrowheadEnd: 'triangle',
     },
   } as never)
   editor.createBindings([
@@ -252,13 +267,13 @@ export function replaceDataDependency(
       type: 'arrow',
       fromId: arrowId,
       toId: source.id,
-      props: { terminal: 'start', normalizedAnchor: { x: 0.5, y: 0.5 }, isExact: false, isPrecise: false },
+      props: { terminal: 'start', normalizedAnchor: { x: 1, y: 0.5 }, isExact: true, isPrecise: true },
     },
     {
       type: 'arrow',
       fromId: arrowId,
       toId: target.id,
-      props: { terminal: 'end', normalizedAnchor: { x: 0.5, y: 0.5 }, isExact: false, isPrecise: false },
+      props: { terminal: 'end', normalizedAnchor: inputAnchor(target.type, targetPort), isExact: true, isPrecise: true },
     },
   ] as never)
   updateTargetInput(source.id)

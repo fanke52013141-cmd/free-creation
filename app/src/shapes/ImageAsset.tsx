@@ -5,6 +5,7 @@ import { markNodeAndDependentsDirty } from './dependencies'
 import { useCanvasProjectId } from '../components/projectContext'
 import { importProjectImage, uploadProjectAsset } from '../services/gateway'
 import { useState } from 'react'
+import { NodePortMarkers } from './NodePortMarkers'
 
 export class ImageAssetUtil extends BaseBoxShapeUtil<ImageAssetShape> {
   static override type = IMAGE_ASSET_TYPE
@@ -46,7 +47,7 @@ function ImageAssetComponent({ shape }: { shape: ImageAssetShape }) {
       update({ lastError: error instanceof Error ? error.message : String(error) })
     }
   }
-  return <div style={{ pointerEvents: 'all' }} className="w-full h-full flex flex-col node-card node-card-image">
+  return <div style={{ pointerEvents: 'all' }} className="w-full h-full flex flex-col node-card node-card-image"><NodePortMarkers type={shape.type} />
     <header onPointerDown={(event) => event.stopPropagation()} className="node-header">
       <span className="node-kicker">◫</span><input value={shape.props.title} onChange={(event) => update({ title: event.target.value })} className="node-title" />
     </header>

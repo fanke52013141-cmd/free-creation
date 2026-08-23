@@ -7,6 +7,7 @@ import { CHAT_TYPE, parseMessages, stringifyMessages } from './types'
 import { callChatCompletion } from './llm'
 import { useAppData } from '../store'
 import { describeSource, getCompatibleSources, getTextValue, markNodeAndDependentsDirty, replaceDataDependency } from './dependencies'
+import { NodePortMarkers } from './NodePortMarkers'
 
 export class ChatNodeUtil extends BaseBoxShapeUtil<ChatNodeShape> {
   static override type = CHAT_TYPE
@@ -160,6 +161,7 @@ function ChatNodeComponent({ shape }: { shape: ChatNodeShape }) {
 
   return (
     <div style={{ pointerEvents: 'all' }} className="w-full h-full flex flex-col node-card node-card-chat">
+      <NodePortMarkers type={shape.type} />
       {/* 头部 */}
       <div
         onPointerDown={(e) => e.stopPropagation()}

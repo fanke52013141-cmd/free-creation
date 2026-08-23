@@ -1,6 +1,7 @@
 import { BaseBoxShapeUtil, T, useEditor, type RecordProps, type TLShape } from 'tldraw'
 import { describeSource, getCompatibleSources, getTextValue, markNodeAndDependentsDirty, replaceDataDependency } from './dependencies'
 import { MERGE_TYPE, type MergeNodeShape } from './types'
+import { NodePortMarkers } from './NodePortMarkers'
 
 export class MergeNodeUtil extends BaseBoxShapeUtil<MergeNodeShape> {
   static override type = MERGE_TYPE
@@ -22,7 +23,7 @@ function MergeNodeComponent({ shape }: { shape: MergeNodeShape }) {
     update({ outputText: items.join(props.separator.replaceAll('\\n', '\n')), runState: 'done', lastError: '' })
     markNodeAndDependentsDirty(editor, shape.id, false)
   }
-  return <div style={{ pointerEvents: 'all' }} className="w-full h-full flex flex-col node-card node-card-merge">
+  return <div style={{ pointerEvents: 'all' }} className="w-full h-full flex flex-col node-card node-card-merge"><NodePortMarkers type={shape.type} />
     <header className="node-header"><span className="node-kicker">⊕</span><span className="node-title">Merge 合并</span></header>
     <div onPointerDown={(event) => event.stopPropagation()} className="node-body space-y-2 text-xs">
       <label className="block text-neutral-500">输入（Text[]）

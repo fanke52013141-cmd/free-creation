@@ -7,6 +7,7 @@ import { runVideoGeneration, toNodeRunState, waitForGenerationTask } from './vid
 import { cancelVideoTask } from '../services/gateway'
 import { useCanvasProjectId } from '../components/projectContext'
 import { isActiveRunState, normalizeTextInput } from './runtime'
+import { NodePortMarkers } from './NodePortMarkers'
 
 export class VideoGenNodeUtil extends BaseBoxShapeUtil<VideoGenNodeShape> {
   static override type = VIDEO_GEN_TYPE
@@ -80,7 +81,7 @@ function VideoGenNodeComponent({ shape }: { shape: VideoGenNodeShape }) {
     }
   }
 
-  return <div style={{ pointerEvents: 'all' }} className="w-full h-full flex flex-col node-card node-card-video overflow-hidden">
+  return <div style={{ pointerEvents: 'all' }} className="w-full h-full flex flex-col node-card node-card-video overflow-hidden"><NodePortMarkers type={shape.type} />
     <header onPointerDown={(event) => event.stopPropagation()} className="node-header">
       <span className="node-kicker">▷</span><input value={props.title} onChange={(event) => update({ title: event.target.value })} className="node-title" />
       <button onClick={() => setConfigOpen(!configOpen)} className="node-icon-button" title="节点设置">⚙</button>

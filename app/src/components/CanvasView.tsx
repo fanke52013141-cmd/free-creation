@@ -111,6 +111,9 @@ export function CanvasView({ projectId, onBack }: Props) {
             shapeUtils={customShapeUtils}
             onMount={(mountedEditor) => {
               setEditor(mountedEditor)
+              // The product owns the workspace theme; canvas chrome should not
+              // inherit a browser/system light preference.
+              mountedEditor.user.updateUserPreferences({ colorScheme: 'dark' })
               void loadCanvasSnapshot(projectId).then((shapes) => {
                 if (!shapes?.length || mountedEditor.getCurrentPageShapes().length) return
                 mountedEditor.createShapes(shapes as never)
@@ -141,7 +144,7 @@ function CreatorDock({ editor }: { editor: Editor | null }) {
       {expanded && <div className="creator-dock-menu">
         {categories.map((category) => {
           const nodes = NODE_REGISTRY.filter((node) => node.category === category && node.implemented)
-          return <section key={category} className="creator-dock-section"><p>{CATEGORY_LABEL[category]}</p><div>{nodes.map((node) => <NodeIcon key={node.type} node={node} editor={editor} />)}</div></section>
+          return <section key={category} className="creator-dock-section"><p>{CATEGORY_LABEL[category]}</p><div>{nodes.map((node) => <NodeIcon key={node.type} node={node} editor={editor} onCreated={() => setExpanded(false)} />)}</div></section>
         })}
       </div>}
     </div>
@@ -149,7 +152,7 @@ function CreatorDock({ editor }: { editor: Editor | null }) {
 }
 
 // ===== 单个节点图标（含 tooltip + 拖拽）=====
-function NodeIcon({ node, editor }: { node: NodeMeta; editor: Editor | null }) {
+function NodeIcon({ node, editor, onCreated }: { node: NodeMeta; editor: Editor | null; onCreated?: () => void }) {
   const formatPorts = (ports: NodeMeta['inputs']) => ports.length
     ? ports.map((port) => `${port.name}: ${port.kinds.join(' | ')}${port.optional ? '?' : ''}`).join('; ')
     : '—'
@@ -157,13 +160,14 @@ function NodeIcon({ node, editor }: { node: NodeMeta; editor: Editor | null }) {
   // 点击：已实现的在视口中心创建
   const handleClick = () => {
     if (!node.implemented || !editor) return
-    const center = editor.getViewportPageBounds().center
+    const position = getNextNodePosition(editor, node)
     editor.createShape({
       type: node.type as any,
-      x: center.x - node.defaultSize.w / 2,
-      y: center.y - node.defaultSize.h / 2,
+      x: position.x,
+      y: position.y,
       props: node.defaultSize as any,
     })
+    onCreated?.()
   }
 
   return (
@@ -221,6 +225,22 @@ function NodeIcon({ node, editor }: { node: NodeMeta; editor: Editor | null }) {
       </div>
     </div>
   )
+}
+
+/** Place click-created nodes in a compact, non-overlapping working grid. */
+function getNextNodePosition(editor: Editor, node: NodeMeta) {
+  const center = editor.getViewportPageBounds().center
+  const placedCount = editor.getCurrentPageShapes().filter((shape) => NODE_REGISTRY.some((meta) => meta.type === shape.type)).length
+  const offsets = [
+    { x: -400, y: 0 }, { x: 0, y: 0 }, { x: 400, y: 0 },
+    { x: -400, y: 400 }, { x: 0, y: 400 }, { x: 400, y: 400 },
+  ]
+  const wave = Math.floor(placedCount / offsets.length)
+  const offset = offsets[placedCount % offsets.length]
+  return {
+    x: center.x - node.defaultSize.w / 2 + offset.x,
+    y: center.y - node.defaultSize.h / 2 + offset.y + wave * 800,
+  }
 }
 
 // ===== 画布拖放区：用 document 级监听接收从节点面板拖来的 drop =====
