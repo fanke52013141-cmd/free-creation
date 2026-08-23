@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ProjectFile } from '@shared/types'
 import { useAppStore } from '../stores/app'
 import { useGatewayStore } from '../stores/gateway'
@@ -16,8 +16,6 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
   const [loading, setLoading] = useState(true)
   const [renaming, setRenaming] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
-  const [userOpen, setUserOpen] = useState(false)
-  const userRef = useRef<HTMLDivElement>(null)
   const setHome = useAppStore((s) => s.setHome)
   const openProject = useAppStore((s) => s.openProject)
   const currentProject = useAppStore((s) => s.currentProject)
@@ -31,23 +29,6 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
   const engineRun = useEngineStore((s) => s.run)
   const engineStop = useEngineStore((s) => s.stop)
   const isRunning = enginePhase === 'running' || enginePhase === 'stopping'
-
-  // 右上角个人中心下拉：点击外部 / Esc 关闭
-  useEffect(() => {
-    if (!userOpen) return
-    const onDown = (e: MouseEvent): void => {
-      if (userRef.current && !userRef.current.contains(e.target as Node)) setUserOpen(false)
-    }
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') setUserOpen(false)
-    }
-    window.addEventListener('mousedown', onDown)
-    window.addEventListener('keydown', onKey)
-    return () => {
-      window.removeEventListener('mousedown', onDown)
-      window.removeEventListener('keydown', onKey)
-    }
-  }, [userOpen])
 
   // Ctrl+K 唤起搜索面板
   useEffect(() => {
@@ -178,43 +159,36 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
         </div>
 
         <div className="topbar-actions">
-          <div className="topbar-user" ref={userRef}>
-            <button className="avatar-btn" title="个人中心" onClick={() => setUserOpen((v) => !v)}>
-              <span className="avatar-dot">我</span>
-            </button>
-            {userOpen && (
-              <div className="user-menu">
-                <div className="user-menu-header">
-                  <span className="user-avatar">我</span>
-                  <div className="user-meta">
-                    <strong>本地用户</strong>
-                    <span>免费版</span>
-                  </div>
-                </div>
-                <div className="node-menu-divider" />
-                <button
-                  className="node-menu-item"
-                  onClick={() => {
-                    setUserOpen(false)
-                    openSettings()
-                  }}
-                >
-                  <span className="item-icon">⚙</span>
-                  <span>模型供应商设置</span>
-                </button>
-                <button
-                  className="node-menu-item"
-                  onClick={() => {
-                    setUserOpen(false)
-                    void window.api.closeProject().then(() => setHome())
-                  }}
-                >
-                  <span className="item-icon">🏠</span>
-                  <span>回到主页</span>
-                </button>
-              </div>
-            )}
-          </div>
+          {/* 模型供应商设置：常驻顶栏快捷按钮 */}
+          <button className="topbar-shortcut" title="模型供应商设置" onClick={openSettings}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" />
+              <path
+                d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+          {/* 回到主页：常驻顶栏快捷按钮 */}
+          <button
+            className="topbar-shortcut"
+            title="回到主页"
+            onClick={() => void window.api.closeProject().then(() => setHome())}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M3 11.5L12 4l9 7.5M5 10v9a1 1 0 001 1h12a1 1 0 001-1v-9"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path d="M9 20v-6h6v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
         </div>
       </div>
       <CanvasEditor project={currentProject ?? file.meta} initialSnapshot={file.tldrawSnapshot} />
