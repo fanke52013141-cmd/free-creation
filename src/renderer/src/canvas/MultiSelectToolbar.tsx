@@ -106,27 +106,43 @@ export function MultiSelectToolbar({ editor }: MultiSelectToolbarProps): React.J
   return (
     <div className="multiselect-toolbar">
       <button className="ms-btn" title="左对齐" onClick={() => applyAlign('left')}>
-        ⫦
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path d="M4 7h16M4 12h10M4 17h13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
       </button>
       <button className="ms-btn" title="右对齐" onClick={() => applyAlign('right')}>
-        ⫧
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path d="M20 7H4M20 12h-10M20 17H7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
       </button>
       <button className="ms-btn" title="水平居中" onClick={() => applyAlign('center-h')}>
-        ↧
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path d="M12 5v14M4 8h16M7 12h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
       </button>
       <button className="ms-btn" title="垂直居中" onClick={() => applyAlign('center-v')}>
-        ↦
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path d="M5 12h14M8 4v16M12 7v10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
       </button>
       <span className="ms-divider" />
       <button className="ms-btn" title="横向均分" onClick={() => applyAlign('distribute-h')}>
-        ⇿
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path d="M4 6v12M20 6v12M8 12h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
       </button>
       <button className="ms-btn" title="纵向均分" onClick={() => applyAlign('distribute-v')}>
-        ⇕
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path d="M6 4h12M6 20h12M12 8v8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
       </button>
       <span className="ms-divider" />
       <button className="ms-btn ms-group" title="打组" onClick={handleGroup}>
-        ⬓
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <rect x="3" y="3" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="2" />
+          <rect x="13" y="13" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="2" />
+          <path d="M7 11v2a2 2 0 002 2h2M17 13v-2a2 2 0 00-2-2h-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
       </button>
     </div>
   )

@@ -238,13 +238,6 @@ export function CanvasBottomDock({ editor }: DockProps): React.JSX.Element {
     const my = (clientY - rect.top) * sy
     const px = b.minX + (mx - offX) / scale
     const py = b.minY + (my - offY) / scale
-    // 拖拽中用即时 setCamera，松手时不额外操作
-    const cam = editor.getCamera()
-    editor.setCamera({
-      x: cam.x,
-      y: cam.y,
-      z: cam.z
-    })
     editor.centerOnPoint({ x: px, y: py })
   }
 

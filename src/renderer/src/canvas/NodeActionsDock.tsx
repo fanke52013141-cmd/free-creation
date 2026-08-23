@@ -25,6 +25,12 @@ export function NodeActionsDock({ editor }: ActionsDockProps): React.JSX.Element
 
   if (selectedIds.length === 0) return null
 
+  // 单个 chat 节点被选中时右侧会弹出聊天面板，操作栏与之重叠，此处隐藏
+  if (selectedIds.length === 1) {
+    const s = editor.getShape(selectedIds[0])
+    if (s?.type === 'node-card' && (s.props as { nodeType?: string }).nodeType === 'chat') return null
+  }
+
   const handleDelete = (): void => {
     markUndoPoint(editor, 'delete-nodes')
     editor.deleteShapes(selectedIds)

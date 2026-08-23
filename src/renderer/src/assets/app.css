@@ -530,6 +530,56 @@ input:focus {
   pointer-events: none;
 }
 
+/* ── 空画布引导提示 ── */
+.canvas-empty-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 300;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0.75;
+  animation: empty-hint-fade 0.4s ease-out;
+}
+
+@keyframes empty-hint-fade {
+  from { opacity: 0; transform: translate(-50%, -50%) translateY(10px); }
+  to { opacity: 0.75; transform: translate(-50%, -50%) translateY(0); }
+}
+
+.empty-hint-icon {
+  font-size: 42px;
+  margin-bottom: 14px;
+  color: var(--brand);
+  text-shadow: 0 0 24px rgba(9, 202, 245, 0.4);
+}
+
+.empty-hint-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--txt);
+  margin-bottom: 10px;
+}
+
+.empty-hint-desc {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.9;
+}
+
+.empty-hint-kbd,
+.empty-hint-side {
+  color: var(--brand);
+  font-weight: 600;
+  padding: 1px 6px;
+  background: rgba(9, 202, 245, 0.08);
+  border: 1px solid rgba(9, 202, 245, 0.25);
+  border-radius: 5px;
+  margin: 0 2px;
+  white-space: nowrap;
+}
+
 /* ── 左侧悬浮图标条 ── */
 .node-palette {
   position: absolute;
@@ -1389,8 +1439,8 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
 }
 
 .dock-minimap {
-  width: 176px;
-  height: 116px;
+  width: 220px;
+  height: 150px;
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 10px;

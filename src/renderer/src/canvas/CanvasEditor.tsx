@@ -68,6 +68,8 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
   const [canvasTheme, setCanvasTheme] = useState<'dark' | 'light'>('dark')
   // 左侧节点面板拖拽状态
   const [nodeDrag, setNodeDrag] = useState<{ type: NodeTypeId; x: number; y: number } | null>(null)
+  // 空画布引导：画布无节点时显示新手提示
+  const [isEmpty, setIsEmpty] = useState(true)
 
   // 执行引擎：注册 run 闭包到全局 store，顶部栏通过 store 触发（捕获 editor + projectId + providers）
   const providers = useGatewayStore((s) => s.providers)
@@ -101,6 +103,16 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
     }
     check()
     return editorInstance.store.listen(check, { scope: 'session' })
+  }, [editorInstance])
+
+  // 空画布检测：有任意 node-card 时隐藏引导提示
+  useEffect(() => {
+    if (!editorInstance) return
+    const check = (): void => {
+      setIsEmpty(!editorInstance.getCurrentPageShapes().some((s) => s.type === 'node-card'))
+    }
+    check()
+    return editorInstance.store.listen(check, { scope: 'document' })
   }, [editorInstance])
 
   // 左侧节点面板：点击在视口中心创建；拖拽到画布在落点创建
@@ -215,6 +227,33 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
     return () => {
       el.removeEventListener('dblclick', onDblClick, { capture: true })
     }
+  }, [])
+
+  // 全局快捷键：Ctrl+D 复制选中节点、Ctrl+Shift+F 适配画布
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      const editor = editorRef.current
+      if (!editor) return
+      const mod = e.ctrlKey || e.metaKey
+      if (mod && e.shiftKey && (e.key === 'f' || e.key === 'F')) {
+        if (e.altKey) return // Shift+Alt+F 整理画布交给小地图
+        e.preventDefault()
+        editor.zoomToFit({ animation: { duration: 200 } })
+        return
+      }
+      if (mod && (e.key === 'd' || e.key === 'D')) {
+        const sel = editor.getSelectedShapeIds().filter((id) => {
+          const s = editor.getShape(id)
+          return s?.type === 'node-card'
+        })
+        if (sel.length === 0) return
+        e.preventDefault()
+        markUndoPoint(editor, 'duplicate-nodes')
+        editor.duplicateShapes(sel)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
   }, [])
 
   // 消费「拉线到空白」的待连线；返回是否成功建线（失败也要打撤销分段点）
@@ -546,6 +585,17 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
         </div>
       )}
       {dragOver && <div className="drop-hint">松开鼠标，上传到画布</div>}
+      {isEmpty && !menu && !dragOver && (
+        <div className="canvas-empty-hint">
+          <div className="empty-hint-icon">✛</div>
+          <div className="empty-hint-title">开始你的创作</div>
+          <div className="empty-hint-desc">
+            <span className="empty-hint-kbd">双击</span> 画布空白处创建节点
+            <br />
+            或从<span className="empty-hint-side">左侧</span>拖拽节点到画布
+          </div>
+        </div>
+      )}
       <ConnectionLayer />
       {menu && (
         <NodeCreateMenu
