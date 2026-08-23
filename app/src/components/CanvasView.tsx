@@ -1,21 +1,32 @@
-import { Tldraw, useEditor } from 'tldraw'
+import { Tldraw, useEditor, type Editor } from 'tldraw'
 import 'tldraw/tldraw.css'
-import { useEffect } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import { useAppData, store } from '../store'
 import { ChatNodeUtil } from '../shapes/ChatNode'
 import { TextAssetUtil } from '../shapes/TextAsset'
+import { OneShotNodeUtil } from '../shapes/OneShotNode'
+import { SplitNodeUtil } from '../shapes/SplitNode'
+import { MergeNodeUtil } from '../shapes/MergeNode'
+import { ImageAssetUtil } from '../shapes/ImageAsset'
+import { ImageGenNodeUtil } from '../shapes/ImageGenNode'
+import { VideoGenNodeUtil } from '../shapes/VideoGenNode'
 import { NODE_REGISTRY, NODE_DRAG_MIME, CATEGORY_LABEL, type NodeMeta } from '../shapes/nodeRegistry'
+import { inspectDataGraph } from '../shapes/graph'
+import { loadCanvasSnapshot, saveCanvasSnapshot } from '../services/gateway'
+import { CanvasProjectProvider } from './CanvasProjectContext'
 
 interface Props {
   projectId: string
   onBack: () => void
 }
 
-const customShapeUtils = [ChatNodeUtil, TextAssetUtil]
+const customShapeUtils = [ChatNodeUtil, TextAssetUtil, OneShotNodeUtil, SplitNodeUtil, MergeNodeUtil, ImageAssetUtil, ImageGenNodeUtil, VideoGenNodeUtil]
 
 export function CanvasView({ projectId, onBack }: Props) {
   const data = useAppData()
   const project = data.projects.find((p) => p.id === projectId)
+  const [editor, setEditor] = useState<Editor | null>(null)
+  const [snapshotState, setSnapshotState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
 
   if (!project) {
     return (
@@ -29,23 +40,57 @@ export function CanvasView({ projectId, onBack }: Props) {
   }
 
   return (
-    <div className="flex-1 flex min-h-0">
-      {/* 左侧节点面板：竖排图标 + tooltip + 拖拽 */}
-      <NodePanel />
-
-      {/* 中间：顶栏 + 画布 */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* 顶栏 */}
-        <div className="h-12 border-b border-neutral-200 bg-white flex items-center px-4 gap-3 shrink-0 z-20">
+    <div className="canvas-workspace">
+      <div className="canvas-column">
+        <div className="canvas-topbar">
           <button
             onClick={onBack}
-            className="text-sm text-neutral-500 hover:text-neutral-800 transition-colors"
+            className="canvas-back"
           >
-            ← 返回
+            <span>←</span> 项目
           </button>
-          <span className="w-px h-4 bg-neutral-200" />
-          <span className="font-medium text-neutral-800">{project.name}</span>
-          <span className="ml-2 text-xs text-neutral-400">{project.description}</span>
+          <span className="canvas-divider" />
+          <div className="canvas-project-heading"><span>{project.name}</span>{project.description && <small>{project.description}</small>}</div>
+          <span className="canvas-mode-badge">创作画布</span>
+          <button
+            onClick={() => {
+              if (!editor) return
+              const report = inspectDataGraph(editor.getCurrentPageShapes())
+              const headline = `节点 ${report.nodeCount} 个，数据依赖 ${report.edgeCount} 条`
+              alert(report.issues.length ? `${headline}\n\n${report.issues.map((issue) => `【${issue.level === 'error' ? '错误' : '提示'}】${issue.message}`).join('\n')}` : `${headline}\n\n图依赖检查通过。`)
+            }}
+            disabled={!editor}
+            className="canvas-toolbar-button ml-auto"
+          >
+            图检查
+          </button>
+          <button
+            onClick={async () => {
+              if (!editor) return
+              setSnapshotState('saving')
+              try {
+                await saveCanvasSnapshot(project.id, editor.getCurrentPageShapes())
+                setSnapshotState('saved')
+              } catch {
+                setSnapshotState('error')
+              }
+            }}
+            disabled={!editor || snapshotState === 'saving'}
+            className="canvas-toolbar-button"
+          >
+            {snapshotState === 'saving' ? '保存中…' : snapshotState === 'saved' ? '已保存' : snapshotState === 'error' ? '保存失败' : '保存本地快照'}
+          </button>
+          <button
+            onClick={() => {
+              if (!editor) return
+              const shapes = editor.getCurrentPageShapes().filter((shape) => NODE_REGISTRY.some((meta) => meta.type === shape.type))
+              editor.updateShapes(shapes.map((shape) => ({ id: shape.id, type: shape.type, props: { w: 360, h: 360 } })) as never)
+            }}
+            disabled={!editor}
+            className="canvas-toolbar-button"
+          >
+            统一尺寸
+          </button>
           <button
             onClick={() => {
               if (confirm(`复制项目「${project.name}」？新项目为独立空画布。`)) {
@@ -53,110 +98,103 @@ export function CanvasView({ projectId, onBack }: Props) {
                 if (copy) alert(`已复制为「${copy.name}」`)
               }
             }}
-            className="ml-auto text-xs text-neutral-400 hover:text-neutral-600 px-2 py-1 rounded hover:bg-neutral-100"
+            className="canvas-toolbar-button canvas-toolbar-subtle"
           >
             复制项目
           </button>
         </div>
 
         {/* tldraw 无限画布；每个项目独立 persistenceKey → 独立持久化 */}
-        <div className="flex-1 relative min-h-0">
-          <Tldraw
+        <div className="canvas-stage">
+          <CanvasProjectProvider projectId={projectId}><Tldraw
             persistenceKey={`canvas_${projectId}`}
             shapeUtils={customShapeUtils}
+            onMount={(mountedEditor) => {
+              setEditor(mountedEditor)
+              void loadCanvasSnapshot(projectId).then((shapes) => {
+                if (!shapes?.length || mountedEditor.getCurrentPageShapes().length) return
+                mountedEditor.createShapes(shapes as never)
+              }).catch(() => undefined)
+            }}
             components={{
               // 隐藏 tldraw 默认上下文工具栏（避免与自定义节点交互冲突）
               Toolbar: null,
             }}
           >
             <CanvasDropZone />
-          </Tldraw>
+          </Tldraw></CanvasProjectProvider>
+          <CreatorDock editor={editor} />
         </div>
       </div>
     </div>
   )
 }
 
-// ===== 左侧节点面板：竖排图标 + 分类 + tooltip + 拖拽 =====
-function NodePanel() {
-  // 按分类分组
-  const categories = ['generate', 'asset', 'process', 'tool'] as const
-
+function CreatorDock({ editor }: { editor: Editor | null }) {
+  const [expanded, setExpanded] = useState(false)
+  const categories = ['generate', 'asset', 'tool'] as const
   return (
-    <aside className="w-16 h-full bg-white border-r border-neutral-200 flex flex-col shrink-0 z-30">
-      <div className="h-12 flex items-center justify-center border-b border-neutral-200 shrink-0">
-        <span className="text-base" title="节点">◉</span>
-      </div>
-      <div className="flex-1 overflow-y-auto py-2 no-scrollbar">
-        {categories.map((cat, idx) => {
-          const nodes = NODE_REGISTRY.filter((n) => n.category === cat)
-          return (
-            <div key={cat} className={idx > 0 ? 'mt-3 pt-3 border-t border-neutral-100' : ''}>
-              <div className="text-[9px] text-neutral-400 text-center mb-1 select-none">
-                {CATEGORY_LABEL[cat]}
-              </div>
-              <div className="flex flex-col items-center gap-1 px-1.5">
-                {nodes.map((node) => (
-                  <NodeIcon key={node.type} node={node} />
-                ))}
-              </div>
-            </div>
-          )
+    <div className={`creator-dock ${expanded ? 'is-expanded' : ''}`}>
+      <button className="creator-dock-trigger" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}>
+        <span className="creator-dock-plus">+</span><span>添加节点</span><span className="creator-dock-chevron">⌃</span>
+      </button>
+      {expanded && <div className="creator-dock-menu">
+        {categories.map((category) => {
+          const nodes = NODE_REGISTRY.filter((node) => node.category === category && node.implemented)
+          return <section key={category} className="creator-dock-section"><p>{CATEGORY_LABEL[category]}</p><div>{nodes.map((node) => <NodeIcon key={node.type} node={node} editor={editor} />)}</div></section>
         })}
-      </div>
-    </aside>
+      </div>}
+    </div>
   )
 }
 
 // ===== 单个节点图标（含 tooltip + 拖拽）=====
-function NodeIcon({ node }: { node: NodeMeta }) {
-  const editor = useEditor()
+function NodeIcon({ node, editor }: { node: NodeMeta; editor: Editor | null }) {
+  const formatPorts = (ports: NodeMeta['inputs']) => ports.length
+    ? ports.map((port) => `${port.name}: ${port.kinds.join(' | ')}${port.optional ? '?' : ''}`).join('; ')
+    : '—'
 
   // 点击：已实现的在视口中心创建
   const handleClick = () => {
-    if (!node.implemented) return
+    if (!node.implemented || !editor) return
     const center = editor.getViewportPageBounds().center
     editor.createShape({
       type: node.type as any,
-      x: center.x - node.w / 2,
-      y: center.y - node.h / 2,
-      props: { w: node.w, h: node.h } as any,
+      x: center.x - node.defaultSize.w / 2,
+      y: center.y - node.defaultSize.h / 2,
+      props: node.defaultSize as any,
     })
   }
 
   return (
-    <div className="relative group flex items-center justify-center">
+    <div className="relative group creator-node-item">
       <button
-        draggable={node.implemented}
+        draggable={node.implemented && Boolean(editor)}
         onDragStart={(e) => {
           // 拖拽时带上节点 type
           e.dataTransfer.setData(NODE_DRAG_MIME, node.type)
           e.dataTransfer.effectAllowed = 'copy'
         }}
         onClick={handleClick}
-        disabled={!node.implemented}
-        className={`w-11 h-11 flex items-center justify-center rounded-lg text-lg transition-all ${
+        disabled={!node.implemented || !editor}
+        className={`creator-node-button ${
           node.implemented
             ? 'hover:scale-110 cursor-grab active:cursor-grabbing'
             : 'opacity-35 cursor-not-allowed'
         }`}
-        style={
-          node.implemented
-            ? { backgroundColor: `${node.color}15`, color: node.color }
-            : undefined
-        }
+        style={node.implemented ? { '--node-color': node.color } as CSSProperties : undefined}
         title={node.implemented ? `${node.name}（点击或拖到画布）` : `${node.name}（开发中）`}
       >
-        {node.icon}
+        <span className="creator-node-symbol">{node.icon}</span><span>{node.name}</span>
       </button>
 
       {/* hover tooltip：详细节点信息（右侧弹出）*/}
       <div
-        className="pointer-events-none absolute left-full ml-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50"
+        className="creator-node-tooltip pointer-events-none absolute bottom-full mb-3 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50"
         style={{ minWidth: 220 }}
       >
         <div
-          className="bg-neutral-900 text-white rounded-lg shadow-xl px-3 py-2.5 text-xs"
+          className="creator-tooltip-card"
           style={{ borderLeft: `3px solid ${node.color}` }}
         >
           <div className="flex items-center gap-2 mb-1.5">
@@ -172,11 +210,11 @@ function NodeIcon({ node }: { node: NodeMeta }) {
           <div className="space-y-1 pt-1.5 border-t border-neutral-700 text-[11px]">
             <div className="flex gap-1.5">
               <span className="text-neutral-500 shrink-0">输入</span>
-              <span className="text-neutral-300 font-mono">{node.inputs}</span>
+              <span className="text-neutral-300 font-mono">{formatPorts(node.inputs)}</span>
             </div>
             <div className="flex gap-1.5">
               <span className="text-neutral-500 shrink-0">输出</span>
-              <span className="text-neutral-300 font-mono">{node.outputs}</span>
+              <span className="text-neutral-300 font-mono">{formatPorts(node.outputs)}</span>
             </div>
           </div>
         </div>
@@ -208,9 +246,9 @@ function CanvasDropZone() {
       const pagePoint = editor.screenToPage({ x: e.clientX, y: e.clientY })
       editor.createShape({
         type: meta.type as any,
-        x: pagePoint.x - meta.w / 2,
-        y: pagePoint.y - meta.h / 2,
-        props: { w: meta.w, h: meta.h } as any,
+        x: pagePoint.x - meta.defaultSize.w / 2,
+        y: pagePoint.y - meta.defaultSize.h / 2,
+        props: meta.defaultSize as any,
       })
     }
     document.addEventListener('dragover', onDragOver)

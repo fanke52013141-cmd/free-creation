@@ -17,12 +17,22 @@ function loadData(): AppData {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const p = JSON.parse(raw)
-      return {
+      const rawModels: unknown[] = Array.isArray(p.models) ? p.models : []
+      const sanitizedModels = rawModels
+          .filter((model: unknown): model is ModelConfig => Boolean(model) && typeof model === 'object')
+          .map((model) => {
+            const { apiKey: _legacyKey, ...publicModel } = model
+            return publicModel
+          })
+      const safeData = {
         courses: p.courses ?? [],
         chapters: p.chapters ?? [],
         projects: p.projects ?? [],
-        models: p.models ?? [],
+        models: sanitizedModels,
       }
+      // P3 migration: remove credentials that earlier MVP versions put in localStorage.
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(safeData))
+      return safeData
     }
   } catch (e) {
     console.error('载入数据失败', e)
@@ -250,7 +260,6 @@ export const store = {
       id: genId('model'),
       name: partial.name || '新建模型',
       provider: partial.provider || 'openai',
-      apiKey: partial.apiKey || '',
       baseUrl: partial.baseUrl || '',
       modelId: partial.modelId || '',
       type: partial.type || 'chat',
@@ -271,5 +280,13 @@ export const store = {
 
   deleteModel(id: string) {
     setState((s) => ({ ...s, models: s.models.filter((m) => m.id !== id) }))
+  },
+
+  /** 用 P3 网关公开的模型目录覆盖本地可选模型；凭据永不进入浏览器。 */
+  replaceModels(models: ModelConfig[]) {
+    setState((s) => ({
+      ...s,
+      models: models.map(({ apiKey: _ignored, ...model }) => model),
+    }))
   },
 }

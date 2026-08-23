@@ -43,7 +43,11 @@ export interface ModelConfig {
   id: string
   name: string
   provider: string
-  apiKey: string
+  /**
+   * 凭据只保存在 P3 服务端环境变量中；前端模型目录不再携带 API Key。
+   * 保留为可选字段仅用于读取旧版 localStorage 后的兼容迁移，绝不写回。
+   */
+  apiKey?: string
   baseUrl: string
   modelId: string
   type: ModelType

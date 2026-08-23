@@ -1,6 +1,7 @@
 import { useState, type Dispatch, type SetStateAction, type ReactNode } from 'react'
 import { useAppData, store, setDragItem, getDragItem } from '../store'
 import type { Chapter, Project } from '../types'
+import { BrandMark } from './BrandMark'
 
 interface SidebarProps {
   currentProjectId: string | null
@@ -21,7 +22,8 @@ export function Sidebar({ currentProjectId, onSelectProject, onOpenModels }: Sid
   const toggle = (id: string) =>
     setCollapsed((prev) => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       return next
     })
 
@@ -31,24 +33,24 @@ export function Sidebar({ currentProjectId, onSelectProject, onOpenModels }: Sid
   }
 
   return (
-    <aside className="w-64 h-full border-r border-neutral-200 bg-white flex flex-col shrink-0">
+    <aside className="project-sidebar">
       {/* 标题 */}
-      <div className="h-12 flex items-center px-4 border-b border-neutral-200 shrink-0">
-        <span className="font-semibold text-neutral-800">无限画布</span>
+      <div className="brand-bar">
+        <BrandMark />
       </div>
 
       {/* 新建课程 */}
-      <div className="px-3 py-2 border-b border-neutral-100 shrink-0">
+      <div className="sidebar-action-wrap">
         <button
           onClick={() => store.createCourse()}
-          className="w-full text-sm text-left px-2 py-1.5 rounded hover:bg-neutral-100 text-neutral-600"
+          className="sidebar-primary-action"
         >
-          ＋ 新建课程
+          <span>＋</span> 新建创作集
         </button>
       </div>
 
       {/* 树 */}
-      <div className="flex-1 overflow-y-auto py-2 text-sm">
+      <div className="sidebar-tree">
         {/* 独立项目区（drop zone：项目拖到此变独立）*/}
         <div
           onDragOver={(e) => {
@@ -67,7 +69,7 @@ export function Sidebar({ currentProjectId, onSelectProject, onOpenModels }: Sid
         >
           {standaloneProjects.length > 0 && (
             <div className="px-3">
-              <p className="text-xs text-neutral-400 px-2 py-1 select-none">独立项目</p>
+              <p className="sidebar-section-label">独立项目</p>
               {standaloneProjects.map((p) => (
                 <ProjectRow
                   key={p.id}
@@ -116,8 +118,8 @@ export function Sidebar({ currentProjectId, onSelectProject, onOpenModels }: Sid
                   }
                   clearDrop()
                 }}
-                className={`group flex items-center gap-1 px-2 mx-1 py-1 rounded cursor-pointer ${
-                  isOver ? 'bg-blue-50 ring-1 ring-blue-300' : 'hover:bg-neutral-100'
+                className={`group sidebar-course-row ${
+                  isOver ? 'is-drop-target' : ''
                 }`}
                 style={{ borderLeft: `3px solid ${course.coverColor}` }}
               >
@@ -201,18 +203,18 @@ export function Sidebar({ currentProjectId, onSelectProject, onOpenModels }: Sid
         })}
 
         {courses.length === 0 && standaloneProjects.length === 0 && (
-          <p className="text-center text-neutral-400 py-8 text-xs">点击「＋ 新建课程」开始</p>
+          <p className="text-center text-slate-500 py-8 text-xs">建立第一个创作集开始</p>
         )}
       </div>
 
       {/* 底部 Model 入口 */}
-      <div className="border-t border-neutral-200 p-3 shrink-0">
+      <div className="sidebar-footer">
         <button
           onClick={onOpenModels}
-          className="w-full text-sm px-2 py-1.5 rounded hover:bg-neutral-100 text-neutral-600 flex items-center gap-2"
+          className="sidebar-model-action"
         >
-          ⚙ Model 配置
-          <span className="text-xs text-neutral-400 ml-auto">{data.models.length} 个</span>
+          <span className="sidebar-model-icon">◌</span> 本地模型
+          <span className="text-xs text-slate-500 ml-auto">{data.models.length}</span>
         </button>
       </div>
     </aside>
@@ -253,8 +255,8 @@ function ChapterBlock({
           setDragItem(null)
           setDragOver(null)
         }}
-        className={`group flex items-center gap-1 px-2 mx-1 py-1 rounded ${
-          isOver ? 'bg-blue-50 ring-1 ring-blue-300' : 'hover:bg-neutral-100'
+        className={`group sidebar-chapter-row ${
+          isOver ? 'is-drop-target' : ''
         }`}
       >
         <span className="text-neutral-400 text-[10px] w-4 flex-none">▹</span>
@@ -328,8 +330,8 @@ function ProjectRow({
       onDragStart={() => setDragItem({ kind: 'project', id: project.id })}
       onDragEnd={() => setDragItem(null)}
       onClick={() => onSelect(project.id)}
-      className={`group flex items-center gap-1 px-2 mx-1 py-1 rounded cursor-pointer ${
-        active ? 'bg-blue-100 text-blue-700' : 'hover:bg-neutral-100 text-neutral-600'
+      className={`group sidebar-project-row ${
+        active ? 'is-active' : ''
       }`}
     >
       <span className="text-xs opacity-50 flex-none w-4">▣</span>

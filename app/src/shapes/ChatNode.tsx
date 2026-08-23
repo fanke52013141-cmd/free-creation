@@ -1,17 +1,12 @@
 // ===== 聊天节点（铁律§4.5：系统提示词/模型/温度/最大输出长度；对话沉淀）=====
 
-import {
-  BaseBoxShapeUtil,
-  T,
-  useEditor,
-  type RecordProps,
-  type TLShape,
-} from 'tldraw'
+import { BaseBoxShapeUtil, T, useEditor, type RecordProps, type TLShape } from 'tldraw'
 import { useState, useRef, useEffect } from 'react'
 import type { ChatNodeShape, ChatMessage } from './types'
 import { CHAT_TYPE, parseMessages, stringifyMessages } from './types'
 import { callChatCompletion } from './llm'
 import { useAppData } from '../store'
+import { describeSource, getCompatibleSources, getTextValue, markNodeAndDependentsDirty, replaceDataDependency } from './dependencies'
 
 export class ChatNodeUtil extends BaseBoxShapeUtil<ChatNodeShape> {
   static override type = CHAT_TYPE
@@ -32,8 +27,8 @@ export class ChatNodeUtil extends BaseBoxShapeUtil<ChatNodeShape> {
 
   override getDefaultProps(): ChatNodeShape['props'] {
     return {
-      w: 380,
-      h: 520,
+      w: 360,
+      h: 360,
       title: '聊天节点',
       systemPrompt: '',
       modelId: '',
@@ -61,8 +56,8 @@ function ChatNodeComponent({ shape }: { shape: ChatNodeShape }) {
   const editor = useEditor()
   const data = useAppData()
   const props = shape.props
+  const configOpen = shape.meta.configOpen === true
   const messages: ChatMessage[] = parseMessages(props.messagesJson)
-  const [showConfig, setShowConfig] = useState(false)
   const [input, setInput] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -75,10 +70,7 @@ function ChatNodeComponent({ shape }: { shape: ChatNodeShape }) {
   })
 
   const chatModels = data.models.filter((m) => m.type === 'chat')
-  const allShapes = editor.getCurrentPageShapes() as TLShape[]
-  const textAssets = allShapes
-    .filter((s) => s.type === 'text-asset')
-    .map((s) => ({ id: s.id, text: (s.props as { text: string }).text }))
+  const textAssets = getCompatibleSources(editor, shape.type, 'context', shape.id)
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
@@ -86,6 +78,8 @@ function ChatNodeComponent({ shape }: { shape: ChatNodeShape }) {
 
   const update = (patch: Partial<ChatNodeShape['props']>) =>
     editor.updateShape({ id: shape.id, type: 'chat-node', props: patch })
+  const setConfigOpen = (open: boolean) =>
+    editor.updateShape({ id: shape.id, type: 'chat-node', meta: { ...shape.meta, configOpen: open } })
 
   const send = async () => {
     const content = input.trim()
@@ -94,7 +88,7 @@ function ChatNodeComponent({ shape }: { shape: ChatNodeShape }) {
     const model = data.models.find((m) => m.id === props.modelId)
     if (!model) {
       update({ runState: 'error', lastError: '请先在配置中选择一个对话模型' })
-      setShowConfig(true)
+      setConfigOpen(true)
       return
     }
 
@@ -105,7 +99,8 @@ function ChatNodeComponent({ shape }: { shape: ChatNodeShape }) {
     // 铁律§3.2 数据依赖：引用上游文本资产作为上下文
     if (props.contextRef) {
       const refShape = editor.getShape(props.contextRef as TLShape['id'])
-      const refText = (refShape?.props as { text?: string })?.text
+      const reference = refShape ? getTextValue(refShape) : ''
+      const refText = Array.isArray(reference) ? reference.join('\n\n') : reference
       if (refText?.trim()) {
         msgs.push({
           role: 'system',
@@ -140,6 +135,7 @@ function ChatNodeComponent({ shape }: { shape: ChatNodeShape }) {
         ]),
         runState: 'done',
       })
+      markNodeAndDependentsDirty(editor, shape.id, false)
     } catch (e: unknown) {
       update({ runState: 'error', lastError: e instanceof Error ? e.message : String(e) })
     }
@@ -151,9 +147,9 @@ function ChatNodeComponent({ shape }: { shape: ChatNodeShape }) {
       modelId: cfg.modelId,
       temperature: cfg.temperature,
       maxTokens: cfg.maxTokens,
-      contextRef: cfg.contextRef,
     })
-    setShowConfig(false)
+    replaceDataDependency(editor, shape, 'context', cfg.contextRef, (contextRef) => update({ contextRef }))
+    setConfigOpen(false)
   }
 
   const clearChat = () => {
@@ -163,22 +159,22 @@ function ChatNodeComponent({ shape }: { shape: ChatNodeShape }) {
   }
 
   return (
-    <div className="w-full h-full flex flex-col bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden">
+    <div style={{ pointerEvents: 'all' }} className="w-full h-full flex flex-col node-card node-card-chat">
       {/* 头部 */}
       <div
         onPointerDown={(e) => e.stopPropagation()}
-        className="flex items-center gap-1.5 px-3 py-2 border-b border-neutral-100 bg-gradient-to-r from-blue-50 to-purple-50"
+        className="node-header"
       >
-        <span className="text-sm">💬</span>
+        <span className="node-kicker">◌</span>
         <input
           value={props.title}
           onChange={(e) => update({ title: e.target.value })}
           onPointerDown={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
-          className="flex-1 min-w-0 text-sm font-medium text-neutral-700 bg-transparent outline-none"
+          className="node-title"
         />
-        <button onClick={clearChat} title="清空对话" className="text-xs text-neutral-400 hover:text-red-500 px-1">
-          🗑
+        <button onClick={clearChat} title="清空对话" className="node-icon-button">
+          ×
         </button>
         <button
           onClick={() => {
@@ -189,9 +185,9 @@ function ChatNodeComponent({ shape }: { shape: ChatNodeShape }) {
               maxTokens: props.maxTokens,
               contextRef: props.contextRef,
             })
-            setShowConfig((v) => !v)
+            setConfigOpen(!configOpen)
           }}
-          className="text-xs text-neutral-400 hover:text-neutral-700 px-1"
+          className="node-icon-button"
           title="节点设置"
         >
           ⚙
@@ -199,8 +195,8 @@ function ChatNodeComponent({ shape }: { shape: ChatNodeShape }) {
       </div>
 
       {/* 配置面板 */}
-      {showConfig && (
-        <div className="p-3 border-b border-neutral-100 bg-neutral-50 space-y-2.5 text-xs overflow-y-auto max-h-72">
+      {configOpen && (
+        <div className="node-config max-h-72 overflow-y-auto">
           <div>
             <label className="block text-neutral-500 mb-1">系统提示词</label>
             <textarea
@@ -241,9 +237,9 @@ function ChatNodeComponent({ shape }: { shape: ChatNodeShape }) {
               className="w-full p-1.5 border border-neutral-300 rounded outline-none focus:border-blue-400"
             >
               <option value="">— 无引用 —</option>
-              {textAssets.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.text.slice(0, 20) || '(空文本)'}…
+              {textAssets.map((source) => (
+                <option key={source.id} value={source.id}>
+                  {describeSource(source)}
                 </option>
               ))}
             </select>
@@ -275,10 +271,10 @@ function ChatNodeComponent({ shape }: { shape: ChatNodeShape }) {
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-1">
-            <button onClick={() => setShowConfig(false)} className="px-2 py-1 text-neutral-500 hover:bg-neutral-200 rounded">
+            <button onClick={() => setConfigOpen(false)} className="node-secondary">
               取消
             </button>
-            <button onClick={saveConfig} className="px-2 py-1 text-white bg-blue-600 hover:bg-blue-700 rounded">
+            <button onClick={saveConfig} className="node-primary">
               保存
             </button>
           </div>
@@ -286,8 +282,8 @@ function ChatNodeComponent({ shape }: { shape: ChatNodeShape }) {
       )}
 
       {/* 消息区 */}
-      <div ref={scrollRef} onPointerDown={(e) => e.stopPropagation()} className="flex-1 overflow-y-auto p-3 space-y-2.5">
-        {messages.length === 0 && !showConfig && (
+      <div ref={scrollRef} onPointerDown={(e) => e.stopPropagation()} className="node-body space-y-2.5">
+        {messages.length === 0 && !configOpen && (
           <p className="text-center text-neutral-300 text-xs py-8">开始对话，内容会沉淀在此节点</p>
         )}
         {messages.map((m, i) => (
@@ -315,13 +311,13 @@ function ChatNodeComponent({ shape }: { shape: ChatNodeShape }) {
 
       {/* 错误提示 */}
       {props.runState === 'error' && props.lastError && (
-        <div onPointerDown={(e) => e.stopPropagation()} className="px-3 py-1.5 bg-red-50 text-red-600 text-[11px] border-t border-red-100">
+        <div onPointerDown={(e) => e.stopPropagation()} className="node-error">
           ⚠ {props.lastError}
         </div>
       )}
 
       {/* 输入区 */}
-      <div onPointerDown={(e) => e.stopPropagation()} className="border-t border-neutral-100 p-2 flex gap-1.5 bg-white">
+      <div onPointerDown={(e) => e.stopPropagation()} className="node-footer items-end">
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -335,12 +331,12 @@ function ChatNodeComponent({ shape }: { shape: ChatNodeShape }) {
           }}
           placeholder={props.modelId ? '发送消息…' : '请先在 ⚙ 中选择模型…'}
           rows={1}
-          className="flex-1 resize-none p-2 text-xs border border-neutral-200 rounded outline-none focus:border-blue-400 max-h-20"
+          className="flex-1 resize-none p-2 text-xs max-h-20"
         />
         <button
           onClick={send}
           disabled={props.runState === 'running' || !input.trim()}
-          className="px-3 self-end py-2 text-xs text-white bg-blue-600 hover:bg-blue-700 disabled:bg-neutral-300 rounded"
+          className="node-primary"
         >
           发送
         </button>

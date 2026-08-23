@@ -7,9 +7,10 @@ import {
   type RecordProps,
   type TLShape,
 } from 'tldraw'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import type { TextAssetShape } from './types'
 import { TEXT_TYPE } from './types'
+import { getDependencyMeta, markNodeAndDependentsDirty } from './dependencies'
 
 export class TextAssetUtil extends BaseBoxShapeUtil<TextAssetShape> {
   static override type = TEXT_TYPE
@@ -21,7 +22,7 @@ export class TextAssetUtil extends BaseBoxShapeUtil<TextAssetShape> {
   }
 
   override getDefaultProps(): TextAssetShape['props'] {
-    return { w: 340, h: 240, text: '在这里输入文本内容…' }
+    return { w: 360, h: 360, text: '在这里输入文本内容…' }
   }
 
   component(shape: TextAssetShape) {
@@ -38,37 +39,35 @@ export class TextAssetUtil extends BaseBoxShapeUtil<TextAssetShape> {
 function TextAssetComponent({ shape }: { shape: TextAssetShape }) {
   const editor = useEditor()
   const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(shape.props.text)
-
-  useEffect(() => {
-    if (!editing) setDraft(shape.props.text)
-  }, [shape.props.text, editing])
+  const [draft, setDraft] = useState('')
 
   const commit = () => {
     setEditing(false)
     if (draft !== shape.props.text) {
       editor.updateShape({ id: shape.id, type: 'text-asset', props: { text: draft } })
+      markNodeAndDependentsDirty(editor, shape.id, false)
     }
   }
 
-  // 被 chat-node 引用时高亮（铁律§3.2 数据依赖的可视化）
+  // 由任一节点作为真实数据输入时高亮（铁律§3.2 数据依赖的可视化）
   const allShapes = editor.getCurrentPageShapes() as TLShape[]
-  const isReferenced = allShapes.some((s) => {
-    if (s.type !== 'chat-node') return false
-    return (s.props as { contextRef?: string }).contextRef === shape.id
+  const isReferenced = allShapes.some((candidate) => {
+    const dependency = getDependencyMeta(candidate)
+    return dependency?.sourceId === shape.id
   })
 
   return (
     <div
-      className="w-full h-full flex flex-col bg-white rounded-lg border shadow-sm overflow-hidden"
+      className="w-full h-full flex flex-col node-card node-card-text"
       style={{
+        pointerEvents: 'all',
         borderColor: isReferenced ? '#3b82f6' : '#e5e7eb',
         outline: isReferenced ? '2px solid rgba(59,130,246,0.25)' : 'none',
       }}
     >
-      <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-neutral-100 bg-neutral-50">
-        <span className="text-xs">📝</span>
-        <span className="text-xs font-medium text-neutral-600">文本资产</span>
+      <div className="node-header">
+        <span className="node-kicker">T</span>
+        <span className="node-title">文本资产</span>
         {isReferenced && (
           <span className="text-[10px] text-blue-500 ml-auto">● 被引用</span>
         )}
@@ -87,8 +86,8 @@ function TextAssetComponent({ shape }: { shape: TextAssetShape }) {
       ) : (
         <div
           onPointerDown={(e) => e.stopPropagation()}
-          onDoubleClick={() => setEditing(true)}
-          className="flex-1 w-full p-3 text-sm text-neutral-700 leading-relaxed overflow-auto whitespace-pre-wrap break-words cursor-text"
+          onDoubleClick={() => { setDraft(shape.props.text); setEditing(true) }}
+          className="node-body w-full text-sm text-neutral-700 leading-relaxed whitespace-pre-wrap break-words cursor-text"
         >
           {shape.props.text || <span className="text-neutral-300">双击编辑</span>}
         </div>

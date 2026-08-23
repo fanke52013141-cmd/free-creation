@@ -1,20 +1,27 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { CanvasView } from './components/CanvasView'
 import { ModelPanel } from './components/ModelPanel'
+import { BrandMark } from './components/BrandMark'
+import { getGatewayModels } from './services/gateway'
+import { store } from './store'
 
 export default function App() {
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null)
   const [showModelPanel, setShowModelPanel] = useState(false)
 
+  useEffect(() => {
+    void getGatewayModels().then((models) => store.replaceModels(models)).catch(() => undefined)
+  }, [])
+
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-neutral-50">
+    <div className="app-shell">
       <Sidebar
         currentProjectId={currentProjectId}
         onSelectProject={setCurrentProjectId}
         onOpenModels={() => setShowModelPanel(true)}
       />
-      <main className="flex-1 flex flex-col min-w-0">
+      <main className="app-main">
         {currentProjectId ? (
           <CanvasView
             projectId={currentProjectId}
@@ -31,11 +38,13 @@ export default function App() {
 
 function EmptyState() {
   return (
-    <div className="flex-1 flex items-center justify-center text-neutral-400 select-none">
-      <div className="text-center">
-        <div className="text-5xl mb-4 opacity-40">◈</div>
-        <p className="text-lg font-medium text-neutral-500 mb-1">无限画布</p>
-        <p className="text-sm">从左侧选择项目，或新建项目开始创作</p>
+    <div className="empty-state select-none">
+      <div className="empty-state-card">
+        <BrandMark />
+        <div className="empty-orbit" />
+        <p className="empty-title">把想法接成可执行的创作流</p>
+        <p className="empty-copy">从左侧建立项目，再把文本、图片与生成节点放到画布。</p>
+        <img src="/brand/flow-line.svg" alt="数据流" className="empty-flow" />
       </div>
     </div>
   )
