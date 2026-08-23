@@ -36,6 +36,5 @@ backend/.env
 **/__pycache__/
 *.py[cod]
 
-# 调研临时下载（保留 .research 目录结构，但可按需调整）
-.research/*.zip
-.research/*.tar.gz
+# 调研临时下载不进入正式代码库
+.research/
