@@ -9,6 +9,7 @@ import { store } from './store'
 export default function App() {
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null)
   const [showModelPanel, setShowModelPanel] = useState(false)
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
 
   useEffect(() => {
     void getGatewayModels().then((models) => store.replaceModels(models)).catch(() => undefined)
@@ -18,9 +19,20 @@ export default function App() {
     <div className="app-shell">
       <Sidebar
         currentProjectId={currentProjectId}
-        onSelectProject={setCurrentProjectId}
+        onSelectProject={(projectId) => {
+          setCurrentProjectId(projectId)
+          setMobileSidebarOpen(false)
+        }}
         onOpenModels={() => setShowModelPanel(true)}
+        mobileOpen={mobileSidebarOpen}
+        onMobileClose={() => setMobileSidebarOpen(false)}
       />
+      <button
+        aria-label="打开项目栏"
+        className="mobile-sidebar-toggle"
+        onClick={() => setMobileSidebarOpen(true)}
+      ><i /><i /><i /></button>
+      {mobileSidebarOpen && <button aria-label="关闭项目栏" className="mobile-sidebar-scrim" onClick={() => setMobileSidebarOpen(false)} />}
       <main className="app-main">
         {currentProjectId ? (
           <CanvasView

@@ -114,9 +114,18 @@ export function CanvasView({ projectId, onBack }: Props) {
               // The product owns the workspace theme; canvas chrome should not
               // inherit a browser/system light preference.
               mountedEditor.user.updateUserPreferences({ colorScheme: 'dark' })
+              const focusCanvasContent = () => {
+                const nodeCount = mountedEditor.getCurrentPageShapes().filter((shape) => NODE_REGISTRY.some((meta) => meta.type === shape.type)).length
+                if (!nodeCount) return
+                requestAnimationFrame(() => mountedEditor.zoomToFit({ animation: { duration: 0 } }))
+              }
               void loadCanvasSnapshot(projectId).then((shapes) => {
-                if (!shapes?.length || mountedEditor.getCurrentPageShapes().length) return
+                if (!shapes?.length || mountedEditor.getCurrentPageShapes().length) {
+                  focusCanvasContent()
+                  return
+                }
                 mountedEditor.createShapes(shapes as never)
+                focusCanvasContent()
               }).catch(() => undefined)
             }}
             components={{

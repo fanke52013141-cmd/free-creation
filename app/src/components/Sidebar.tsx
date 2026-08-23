@@ -7,9 +7,11 @@ interface SidebarProps {
   currentProjectId: string | null
   onSelectProject: (id: string) => void
   onOpenModels: () => void
+  mobileOpen: boolean
+  onMobileClose: () => void
 }
 
-export function Sidebar({ currentProjectId, onSelectProject, onOpenModels }: SidebarProps) {
+export function Sidebar({ currentProjectId, onSelectProject, onOpenModels, mobileOpen, onMobileClose }: SidebarProps) {
   const data = useAppData()
   const [dragOver, setDragOver] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
@@ -37,10 +39,11 @@ export function Sidebar({ currentProjectId, onSelectProject, onOpenModels }: Sid
   }
 
   return (
-    <aside className="project-sidebar">
+    <aside className={`project-sidebar ${mobileOpen ? 'is-mobile-open' : ''}`}>
       {/* 标题 */}
       <div className="brand-bar">
         <BrandMark />
+        <button aria-label="关闭项目栏" className="mobile-sidebar-close" onClick={onMobileClose}>×</button>
       </div>
 
       {/* 新建课程 */}
@@ -140,13 +143,13 @@ export function Sidebar({ currentProjectId, onSelectProject, onOpenModels }: Sid
                 />
                 <span className="hidden group-hover:flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
                   <IconBtn title="新建章节" onClick={() => store.createChapter(course.id)}>
-                    📁＋
+                    ＋章节
                   </IconBtn>
                   <IconBtn
                     title="新建项目"
                     onClick={() => createAndOpenProject({ courseId: course.id, chapterId: null })}
                   >
-                    📄＋
+                    ＋项目
                   </IconBtn>
                   <IconBtn
                     title="删除课程"
@@ -277,7 +280,7 @@ function ChapterBlock({
             title="新建项目"
             onClick={() => onCreateProject({ courseId: chapter.courseId, chapterId: chapter.id })}
           >
-            📄＋
+            ＋项目
           </IconBtn>
           <IconBtn
             title="删除章节"
@@ -388,7 +391,7 @@ function EditableLabel({
           if (e.key === 'Escape') setEditing(false)
         }}
         onClick={(e) => e.stopPropagation()}
-        className="flex-1 min-w-0 text-sm bg-white border border-blue-400 outline-none rounded px-1"
+        className="sidebar-label-input"
       />
     )
   }

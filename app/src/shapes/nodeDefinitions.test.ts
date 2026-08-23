@@ -14,6 +14,11 @@ describe('node definition contract', () => {
     }
   })
 
+  it('uses compact typographic symbols instead of emoji for node catalog icons', () => {
+    const emoji = /[\u{1F000}-\u{1FAFF}]/u
+    for (const node of NODE_DEFINITIONS) expect(node.icon).not.toMatch(emoji)
+  })
+
   it('declares the current Merge implementation honestly', () => {
     const merge = getNodeDefinition('merge')!
     expect(merge.inputs[0].kinds).toEqual(['Text[]'])
