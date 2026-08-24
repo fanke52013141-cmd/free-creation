@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>无限画布创作平台</title>
+    <!-- blob: 供 tldraw 粘贴图片；media: 为本地媒体协议；http(s) 供 M4 用户自配模型 baseURL -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: media:; media-src 'self' blob: media:; connect-src 'self' https: http: ws: wss:"
+    />
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

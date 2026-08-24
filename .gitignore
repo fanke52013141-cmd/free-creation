@@ -1,40 +1,6 @@
-# 依赖
-app/node_modules/
-**/node_modules/
-
-# 构建产物
-app/dist/
-**/dist/
-
-# 日志
-*.log
-npm-debug.log*
-pnpm-debug.log*
-
-# 环境与敏感配置
-.env
-.env.local
-*.local
-
-# 编辑器
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# 系统
+node_modules
+dist
+out
 .DS_Store
-Thumbs.db
-
-# tldraw 本地缓存（如有）
-.tldraw/
-
-# P3 backend runtime data (SQLite, uploaded assets and local secrets)
-backend/data/
-backend/project_storage/
-backend/.env
-**/__pycache__/
-*.py[cod]
-
-# 调研临时下载不进入正式代码库
-.research/
+.eslintcache
+*.log*
