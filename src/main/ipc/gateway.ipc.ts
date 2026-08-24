@@ -20,7 +20,6 @@ import {
   submitVideoTask
 } from '../gateway/video'
 import { generateAudioToAsset } from '../gateway/audio'
-import { composeVideosToAsset } from '../gateway/compose'
 
 function ok<T>(data: T): IpcEnvelope<T> {
   return { ok: true, data }
@@ -101,12 +100,6 @@ export function registerGatewayIpc(win: BrowserWindow): void {
     IPC.gateway.audioGenerate,
     (_e, input: Parameters<typeof generateAudioToAsset>[0]) =>
       wrapAsync<MediaAsset>(() => generateAudioToAsset(input))
-  )
-
-  ipcMain.handle(
-    IPC.gateway.composeVideos,
-    (_e, input: Parameters<typeof composeVideosToAsset>[0]) =>
-      wrapAsync<MediaAsset>(() => composeVideosToAsset(input))
   )
 
   // 启动恢复：重启前仍在途的视频任务继续轮询

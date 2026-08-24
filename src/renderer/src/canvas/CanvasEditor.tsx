@@ -4,14 +4,15 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ProjectMeta, MediaAsset, NodeTypeId } from '@shared/types'
 import { NodeCardUtil, type NodeCardProps } from './NodeCardShape'
 import { NodeCreateMenu } from './NodeCreateMenu'
+import { NodeContextMenu } from './NodeContextMenu'
 import { ConnectionLayer } from './ConnectionLayer'
 import { CanvasBottomDock } from './CanvasMinimap'
-import { CanvasHistoryDock } from './CanvasHistoryDock'
 import { MultiSelectToolbar } from './MultiSelectToolbar'
-import { NodeActionsDock } from './NodeActionsDock'
 import { CanvasSidePanel, type SidePanelTab } from './CanvasSidePanel'
 import { ChatSidePanel } from './ChatSidePanel'
+import { NodeContractPanel } from './NodeContractPanel'
 import { SearchPalette } from './SearchPalette'
+import { GroupOutlineLayer } from './GroupOutlineLayer'
 import {
   setConnectionFinishHandler,
   teardownConnectionDrag,
@@ -19,7 +20,7 @@ import {
 } from './connection-drag'
 import { deriveGraph, tryConnect } from './graph'
 import { markUndoPoint } from './history'
-import { getNodeType, allNodeTypes } from '../nodes/registry'
+import { getNodeType, allNodeTypes, needsNodeSizeMigration } from '../nodes/registry'
 import {
   registerBaseNodeTypes,
   registerScriptNodeType,
@@ -32,6 +33,7 @@ import { useEngineStore } from '../engine/store'
 import { runWorkflow } from '../engine/executor'
 import { useMediaStore } from '../stores/media'
 import { useEditorStore } from '../stores/editor'
+import { Icon } from '../components/Icon'
 
 registerBaseNodeTypes()
 registerScriptNodeType()
@@ -42,10 +44,20 @@ interface CanvasEditorProps {
   initialSnapshot: unknown
 }
 
-interface MenuState {
+interface CreateMenuState {
+  kind: 'create'
   x: number
   y: number
 }
+
+interface NodeMenuState {
+  kind: 'node'
+  x: number
+  y: number
+  ids: TLShapeId[]
+}
+
+type MenuState = CreateMenuState | NodeMenuState
 
 export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): React.JSX.Element {
   const editorRef = useRef<Editor | null>(null)
@@ -69,8 +81,6 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
   const [canvasTheme, setCanvasTheme] = useState<'dark' | 'light'>('dark')
   // 左侧节点面板拖拽状态
   const [nodeDrag, setNodeDrag] = useState<{ type: NodeTypeId; x: number; y: number } | null>(null)
-  // 空画布引导：画布无节点时显示新手提示
-  const [isEmpty, setIsEmpty] = useState(true)
 
   // 执行引擎：注册 run 闭包到全局 store，顶部栏通过 store 触发（捕获 editor + projectId + providers）
   const providers = useGatewayStore((s) => s.providers)
@@ -106,19 +116,22 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
     return editorInstance.store.listen(check, { scope: 'session' })
   }, [editorInstance])
 
-  // 空画布检测：有任意 node-card 时隐藏引导提示
-  useEffect(() => {
-    if (!editorInstance) return
-    const check = (): void => {
-      setIsEmpty(!editorInstance.getCurrentPageShapes().some((s) => s.type === 'node-card'))
-    }
-    check()
-    return editorInstance.store.listen(check, { scope: 'document' })
-  }, [editorInstance])
-
   // 左侧节点面板：点击在视口中心创建；拖拽到画布在落点创建
   const SIDEBAR_W = 72
   const nodeTypes = allNodeTypes()
+  const paletteLabels: Partial<Record<NodeTypeId, string>> = {
+    text: '文本',
+    image: '图片',
+    'image-gen': '生图',
+    video: '视频',
+    audio: '音频',
+    chat: '对话',
+    script: '脚本',
+    processor: '处理',
+    json: '数据',
+    code: '代码',
+    storyboard: '分镜'
+  }
 
   const handleNodePick = (type: NodeTypeId): void => {
     // 点击直接在视口中心创建
@@ -130,7 +143,6 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
   }
 
   const startNodeDrag = (e: React.PointerEvent, type: NodeTypeId): void => {
-    e.preventDefault()
     const startX = e.clientX
     const startY = e.clientY
     let dragged = false
@@ -154,13 +166,34 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
     window.addEventListener('pointerup', onUp)
   }
 
-  // 右键空白画布弹出节点创建菜单
+  // 右键空白画布弹出创建菜单；右键节点则显示节点操作。
   const handleContextMenu = (e: React.MouseEvent): void => {
     const target = e.target as HTMLElement
-    if (target.closest('.tl-shape') || target.closest('.tl-overlays') || target.closest('.node-palette') || target.closest('.canvas-dock') || target.closest('.side-panel') || target.closest('.chat-side-panel')) return
+    if (
+      target.closest('.node-palette') ||
+      target.closest('.canvas-dock') ||
+      target.closest('.side-panel') ||
+      target.closest('.chat-side-panel')
+    )
+      return
     if (!target.closest('.tl-canvas')) return
     e.preventDefault()
-    setMenu({ x: e.clientX, y: e.clientY })
+    const editor = editorRef.current
+    const hit = editor?.getShapeAtPoint(editor.screenToPage({ x: e.clientX, y: e.clientY }), {
+      hitInside: true,
+      margin: 4,
+      filter: (shape) => shape.type === 'node-card'
+    })
+    if (hit?.type === 'node-card' && editor) {
+      const selected = editor
+        .getSelectedShapeIds()
+        .filter((id) => editor.getShape(id)?.type === 'node-card')
+      const ids = selected.includes(hit.id) ? selected : [hit.id]
+      if (!selected.includes(hit.id)) editor.select(hit.id)
+      setMenu({ kind: 'node', x: e.clientX, y: e.clientY, ids })
+      return
+    }
+    setMenu({ kind: 'create', x: e.clientX, y: e.clientY })
   }
 
   // 保存载荷：快照 + 从 shapes 派生的图数据（nodes/edges，M4 执行引擎的消费源）
@@ -222,7 +255,7 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
         return
       e.preventDefault()
       e.stopPropagation()
-      setMenu({ x: e.clientX, y: e.clientY })
+      setMenu({ kind: 'create', x: e.clientX, y: e.clientY })
     }
     el.addEventListener('dblclick', onDblClick, { capture: true })
     return () => {
@@ -317,7 +350,7 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
           title: asset.name ?? spec.label,
           text: asset.textContent ?? '',
           w: spec.defaultSize.w,
-          h: isTextFile ? 200 : spec.defaultSize.h,
+          h: spec.defaultSize.h,
           mediaId: asset.id,
           mediaPath: asset.path,
           mediaMime: asset.mime
@@ -371,14 +404,41 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
     reportImport(res.data.errors)
   }
 
+  const handlePaste = async (e: React.ClipboardEvent): Promise<void> => {
+    const imageFiles = Array.from(e.clipboardData.items)
+      .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => Boolean(file))
+    if (imageFiles.length === 0) return
+
+    // 阻止 tldraw 把剪贴板图片创建成无法参与工作流的原生 image shape。
+    e.preventDefault()
+    e.stopPropagation()
+    const editor = editorRef.current
+    if (!editor) return
+    const center = editor.pageToScreen(editor.getViewportPageBounds().center)
+    const assets: MediaAsset[] = []
+    for (const file of imageFiles) {
+      const data = new Uint8Array(await file.arrayBuffer())
+      const result = await window.api.importMediaBuffer({
+        projectId: project.id,
+        mime: file.type || 'image/png',
+        name: file.name || '粘贴图片',
+        data
+      })
+      if (result.ok) assets.push(result.data)
+      else toast(`粘贴失败：${result.error.message}`)
+    }
+    if (assets.length > 0) {
+      createMediaNodes(assets, center.x, center.y)
+      void useMediaStore.getState().refresh(project.id)
+    }
+  }
+
   const handleMount = (editor: Editor): void => {
     editorRef.current = editor
     setEditorInstance(editor)
     useEditorStore.getState().setEditor(editor)
-    // DEV 调试入口：浏览器 console 可用 window.__tldrawEditor 访问（生产构建自动剔除）
-    if (import.meta.env.DEV) {
-      ;(window as { __tldrawEditor?: Editor }).__tldrawEditor = editor
-    }
     // LibTV 式深色画布（tldraw 默认浅色，与整体 UI 不符）
     editor.user.updateUserPreferences({ colorScheme: 'dark' })
     if (initialSnapshot) {
@@ -391,6 +451,104 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
         return
       }
     }
+
+    // 旧版“图片”兼具资产和生成两种职责：有生成配置或尚无媒体的迁移为“生图”，
+    // 已导入的媒体保留为纯图片资产，避免再出现一个节点两种含义。
+    const imageGenUpdates = editor
+      .getCurrentPageShapes()
+      .filter((shape): shape is typeof shape & { type: 'node-card' } => shape.type === 'node-card')
+      .flatMap((shape) => {
+        if (shape.props.nodeType !== 'image') return []
+        let hasPromptConfig = false
+        try {
+          const value = JSON.parse(shape.props.text) as { prompt?: unknown }
+          hasPromptConfig = typeof value.prompt === 'string'
+        } catch {
+          // 空或普通资产文字不代表生图配置。
+        }
+        if (!hasPromptConfig && shape.props.mediaPath) return []
+        return [
+          {
+            id: shape.id,
+            type: 'node-card' as const,
+            props: {
+              nodeType: 'image-gen',
+              title: shape.props.title === '图片' ? '生图' : shape.props.title
+            }
+          }
+        ]
+      })
+    if (imageGenUpdates.length > 0) {
+      editor.updateShapes(imageGenUpdates)
+      toast(`已将 ${imageGenUpdates.length} 个旧图片生成节点迁移为“生图”`)
+    }
+
+    // 退役旧“分组节点”：成员关系迁移为 tldraw 原生 group；旧“合成节点”直接移出画布。
+    const retiredNodes: TLShapeId[] = []
+    let migratedGroups = 0
+    for (const current of editor.getCurrentPageShapes()) {
+      if (current.type !== 'node-card') continue
+      if (current.props.nodeType === 'compose') {
+        retiredNodes.push(current.id)
+        continue
+      }
+      if (current.props.nodeType !== 'group') continue
+      try {
+        const parsed = JSON.parse(current.props.text) as { memberIds?: unknown }
+        const memberIds = Array.isArray(parsed.memberIds)
+          ? parsed.memberIds.filter(
+              (id): id is TLShapeId =>
+                typeof id === 'string' && editor.getShape(id as TLShapeId)?.type === 'node-card'
+            )
+          : []
+        if (memberIds.length >= 2) {
+          editor.groupShapes(memberIds)
+          migratedGroups += 1
+        }
+      } catch {
+        // 损坏的旧分组不阻断项目打开；旧分组卡片仍会被移除。
+      }
+      retiredNodes.push(current.id)
+    }
+    if (retiredNodes.length > 0) editor.deleteShapes(retiredNodes)
+    if (migratedGroups > 0) toast(`已将 ${migratedGroups} 个旧分组迁移为画布分组状态`)
+
+    // 兼容旧版本由 tldraw 默认粘贴产生的原生 image shape：成功落盘后再替换为图片节点。
+    const rawImages = editor.getCurrentPageShapes().filter((shape) => shape.type === 'image')
+    if (rawImages.length > 0) {
+      void (async () => {
+        let migrated = 0
+        for (const raw of rawImages) {
+          const assetId = (raw.props as { assetId?: string }).assetId
+          if (!assetId) continue
+          const asset = editor.getAsset(assetId as Parameters<typeof editor.getAsset>[0])
+          const src = (asset?.props as { src?: unknown } | undefined)?.src
+          if (typeof src !== 'string' || !src) continue
+          try {
+            const response = await fetch(src)
+            const blob = await response.blob()
+            if (!blob.type.startsWith('image/')) continue
+            const result = await window.api.importMediaBuffer({
+              projectId: project.id,
+              mime: blob.type,
+              name: (asset?.props as { name?: string } | undefined)?.name || '粘贴图片',
+              data: new Uint8Array(await blob.arrayBuffer())
+            })
+            if (!result.ok) continue
+            const screen = editor.pageToScreen({ x: raw.x, y: raw.y })
+            createMediaNodes([result.data], screen.x, screen.y)
+            editor.deleteShapes([raw.id])
+            migrated += 1
+          } catch {
+            // 远程或已失效的旧资源保留原状，避免丢失画布内容。
+          }
+        }
+        if (migrated > 0) {
+          toast(`已将 ${migrated} 张旧粘贴图片转换为可连线图片节点`)
+          void useMediaStore.getState().refresh(project.id)
+        }
+      })()
+    }
     editor.store.listen(
       () => {
         if (restoreFailedRef.current) return
@@ -399,6 +557,27 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
       },
       { scope: 'document' }
     )
+    // 一次性兼容旧快照：只修正旧版本默认尺寸或明显异常的超大节点。
+    const resizeUpdates = editor
+      .getCurrentPageShapes()
+      .filter((shape): shape is typeof shape & { type: 'node-card' } => shape.type === 'node-card')
+      .flatMap((shape) => {
+        const spec = getNodeType(shape.props.nodeType)
+        if (!spec || !needsNodeSizeMigration(shape.props.nodeType, shape.props.w, shape.props.h)) {
+          return []
+        }
+        return [
+          {
+            id: shape.id,
+            type: 'node-card' as const,
+            props: { w: spec.defaultSize.w, h: spec.defaultSize.h }
+          }
+        ]
+      })
+    if (resizeUpdates.length > 0) {
+      editor.updateShapes(resizeUpdates)
+      toast(`已将 ${resizeUpdates.length} 个旧节点调整为标准尺寸`)
+    }
     // 删除节点时级联清理连线：tldraw 删 shape 时只删其 binding 不删 arrow，会留悬空线。
     // 用 sideEffects 的 afterDelete 钩子同步处理——binding 在 shape 的 beforeDelete 阶段
     // 已被 tldraw 删除，此时遍历箭头找绑定数 < 2 的即为悬空线，随同一次事务删除（可整体撤销）。
@@ -430,7 +609,7 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
       return
     }
     pendingConnectRef.current = r.from
-    setMenu({ x: r.screenPt.x, y: r.screenPt.y })
+    setMenu({ kind: 'create', x: r.screenPt.x, y: r.screenPt.y })
   }, [])
 
   useEffect(() => {
@@ -469,6 +648,7 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
         dragHideTimer.current = window.setTimeout(() => setDragOver(false), 120)
       }}
       onDrop={(e) => void handleDrop(e)}
+      onPasteCapture={(e) => void handlePaste(e)}
     >
       <Tldraw
         onMount={handleMount}
@@ -486,69 +666,91 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
           SharePanel: null
         }}
       />
+      {editorInstance && <GroupOutlineLayer editor={editorInstance} hostRef={wrapRef} />}
       {/* 左侧节点面板：悬浮图标条，点击创建或拖拽到画布 */}
       <div className="node-palette">
-        <div className="palette-section">
-          {nodeTypes.map((t) => (
-            <button
-              key={t.type}
-              className="palette-item"
-              title={t.label}
-              onClick={() => handleNodePick(t.type)}
-              onPointerDown={(e) => startNodeDrag(e, t.type)}
-            >
-              <span className="palette-icon" style={{ color: t.color }}>{t.icon}</span>
-            </button>
-          ))}
+        <div className="palette-node-scroll">
+          <div className="palette-section palette-node-section">
+            {nodeTypes.map((t) => (
+              <button
+                key={t.type}
+                className="palette-item palette-node-item"
+                title={t.label}
+                onClick={() => handleNodePick(t.type)}
+                onPointerDown={(e) => startNodeDrag(e, t.type)}
+              >
+                <span className="palette-icon" style={{ color: t.color }}>
+                  <Icon name={t.icon} size={20} />
+                </span>
+                <span className="palette-label">{paletteLabels[t.type] ?? t.label}</span>
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="palette-divider" />
-        <div className="palette-section">
+        <div className="palette-utility">
+          <div className="palette-divider" />
+          <div className="palette-section">
+            <button
+              className="palette-item"
+              title="上传本地文件"
+              onClick={() => {
+                const editor = editorRef.current
+                if (!editor) return
+                const center = editor.getViewportPageBounds().center
+                const screen = editor.pageToScreen(center)
+                void handleUpload(screen.x, screen.y)
+              }}
+            >
+              <span className="palette-icon">
+                <Icon name="upload" size={20} />
+              </span>
+            </button>
+            <button className="palette-item" title="资产管理" onClick={() => setPanelTab('assets')}>
+              <span className="palette-icon">
+                <Icon name="assets" size={20} />
+              </span>
+            </button>
+            <button
+              className="palette-item"
+              title="工作流面板"
+              onClick={() => setPanelTab('workflow')}
+            >
+              <span className="palette-icon">
+                <Icon name="workflow" size={20} />
+              </span>
+            </button>
+            <button
+              className="palette-item"
+              title="历史记录"
+              onClick={() => setPanelTab('history')}
+            >
+              <span className="palette-icon">
+                <Icon name="history" size={20} />
+              </span>
+            </button>
+          </div>
+          <div className="palette-divider" />
+          {/* 画布配色切换 */}
           <button
             className="palette-item"
-            title="上传本地文件"
+            title={canvasTheme === 'dark' ? '切换为米黄色' : '切换为深色'}
             onClick={() => {
-              const editor = editorRef.current
-              if (!editor) return
-              const center = editor.getViewportPageBounds().center
-              const screen = editor.pageToScreen(center)
-              void handleUpload(screen.x, screen.y)
+              const next = canvasTheme === 'dark' ? 'light' : 'dark'
+              setCanvasTheme(next)
+              editorRef.current?.user.updateUserPreferences({
+                colorScheme: next === 'dark' ? 'dark' : 'light'
+              })
             }}
           >
-            <span className="palette-icon">📂</span>
-          </button>
-          <button className="palette-item" title="资产管理" onClick={() => setPanelTab('assets')}>
-            <span className="palette-icon">📦</span>
-          </button>
-          <button className="palette-item" title="工作流面板" onClick={() => setPanelTab('workflow')}>
-            <span className="palette-icon">⛓</span>
-          </button>
-          <button className="palette-item" title="历史记录" onClick={() => setPanelTab('history')}>
-            <span className="palette-icon">🕘</span>
+            <span className="palette-icon">
+              <Icon name="theme" size={20} />
+            </span>
           </button>
         </div>
-        <div className="palette-divider" />
-        {/* 画布配色切换 */}
-        <button
-          className="palette-item"
-          title={canvasTheme === 'dark' ? '切换为米黄色' : '切换为深色'}
-          onClick={() => {
-            const next = canvasTheme === 'dark' ? 'light' : 'dark'
-            setCanvasTheme(next)
-            editorRef.current?.user.updateUserPreferences({
-              colorScheme: next === 'dark' ? 'dark' : 'light'
-            })
-          }}
-        >
-          <span className="palette-icon">{canvasTheme === 'dark' ? '☀' : '🌙'}</span>
-        </button>
       </div>
       <CanvasBottomDock editor={editorInstance} />
-      {/* 画布右侧历史操作簇：撤销 / 重做（常驻显示） */}
-      <CanvasHistoryDock editor={editorInstance} />
       {/* 多选浮动工具栏：选中 2+ 节点时显示对齐与打组 */}
       {editorInstance && <MultiSelectToolbar editor={editorInstance} />}
-      {/* 右侧操作栏：选中节点时常驻显示删除/复制/置顶/置底 */}
-      {editorInstance && <NodeActionsDock editor={editorInstance} />}
       {/* 搜索覆盖层（顶栏按钮触发，在 Tldraw 同级渲染） */}
       {editorInstance && <SearchPalette editor={editorInstance} />}
       <CanvasSidePanel
@@ -571,6 +773,9 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
           createMediaNodes([asset], screen.x, screen.y)
         }}
       />
+      {!panelTab && !chatShapeId && editorInstance && (
+        <NodeContractPanel editor={editorInstance} onClose={() => editorInstance.selectNone()} />
+      )}
       {/* 对话节点右侧聊天面板 */}
       {chatShapeId && editorInstance && (
         <ChatSidePanel
@@ -584,23 +789,13 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
       )}
       {nodeDrag && (
         <div className="add-drag-ghost" style={{ left: nodeDrag.x + 14, top: nodeDrag.y + 14 }}>
-          {getNodeType(nodeDrag.type)?.icon} {getNodeType(nodeDrag.type)?.label}
+          {getNodeType(nodeDrag.type) && <Icon name={getNodeType(nodeDrag.type)!.icon} size={16} />}{' '}
+          {getNodeType(nodeDrag.type)?.label}
         </div>
       )}
       {dragOver && <div className="drop-hint">松开鼠标，上传到画布</div>}
-      {isEmpty && !menu && !dragOver && (
-        <div className="canvas-empty-hint">
-          <div className="empty-hint-icon">✛</div>
-          <div className="empty-hint-title">开始你的创作</div>
-          <div className="empty-hint-desc">
-            <span className="empty-hint-kbd">双击</span> 画布空白处创建节点
-            <br />
-            或从<span className="empty-hint-side">左侧</span>拖拽节点到画布
-          </div>
-        </div>
-      )}
       <ConnectionLayer />
-      {menu && (
+      {menu?.kind === 'create' && (
         <NodeCreateMenu
           x={menu.x}
           y={menu.y}
@@ -616,6 +811,15 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
             setMenu(null)
             toast('图库功能将在后续版本开放')
           }}
+          onClose={closeMenu}
+        />
+      )}
+      {menu?.kind === 'node' && editorInstance && (
+        <NodeContextMenu
+          editor={editorInstance}
+          ids={menu.ids}
+          x={menu.x}
+          y={menu.y}
           onClose={closeMenu}
         />
       )}

@@ -6,6 +6,8 @@ import { useEngineStore } from '../engine/store'
 import { CanvasEditor } from '../canvas/CanvasEditor'
 import { ProjectMenu } from '../canvas/ProjectMenu'
 import { useSearchStore } from '../stores/search'
+import { Icon } from '../components/Icon'
+import { CanvasTopHistory } from '../canvas/CanvasHistoryDock'
 
 interface CanvasPageProps {
   projectId: string
@@ -134,14 +136,15 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
               </span>
             </div>
           )}
-          {/* 版本号 + 搜索按钮 */}
+          {/* 版本号 + 搜索按钮；撤销 / 重做紧挨搜索左侧 */}
           <span className="engine-version">v1.0</span>
+          <CanvasTopHistory />
           <button
             className="run-btn search-trigger"
             title="搜索节点（Ctrl+K）"
             onClick={() => useSearchStore.getState().toggle()}
           >
-            🔍
+            <Icon name="search" size={16} />
           </button>
           <button
             className={`run-btn ${isRunning ? 'running' : ''}`}
@@ -154,7 +157,9 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
               }
             }}
           >
-            {isRunning ? '■ 停止' : '▶ 运行'}
+            <>
+              <Icon name={isRunning ? 'close' : 'play'} size={14} /> {isRunning ? '停止' : '运行'}
+            </>
           </button>
         </div>
 
@@ -186,7 +191,13 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
-              <path d="M9 20v-6h6v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              <path
+                d="M9 20v-6h6v6"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </svg>
           </button>
         </div>

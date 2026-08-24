@@ -2,6 +2,7 @@
 import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useConfirmStore } from '../stores/confirm'
+import { Icon } from './Icon'
 
 export function ConfirmDialog(): React.JSX.Element | null {
   const options = useConfirmStore((s) => s.options)
@@ -28,7 +29,9 @@ export function ConfirmDialog(): React.JSX.Element | null {
       }}
     >
       <div className="confirm-dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="confirm-icon">{options.danger ? '⚠️' : '❓'}</div>
+        <div className="confirm-icon">
+          <Icon name={options.danger ? 'warning' : 'help'} size={24} />
+        </div>
         <div className="confirm-body">
           <div className="confirm-title">{options.title}</div>
           {options.message && <div className="confirm-message">{options.message}</div>}

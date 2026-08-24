@@ -3,7 +3,7 @@
 export interface SlashCommand {
   pattern: string
   label: string
-  icon: string
+  icon: 'target' | 'workflow' | 'grid'
   count: number
   cols: number
   desc: string
@@ -15,7 +15,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   {
     pattern: '/三视图',
     label: '三视图',
-    icon: '🎯',
+    icon: 'target',
     count: 3,
     cols: 3,
     desc: '正面 / 侧面 / 背面 三视角',
@@ -28,7 +28,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   {
     pattern: '/九宫格',
     label: '九宫格',
-    icon: '🔀',
+    icon: 'workflow',
     count: 9,
     cols: 3,
     desc: '9 种视角组合（正面/侧面/背面 × 平视/俯视/仰视）',
@@ -47,7 +47,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   {
     pattern: '/25宫格',
     label: '25宫格',
-    icon: '网格',
+    icon: 'grid',
     count: 25,
     cols: 5,
     desc: '25 种视角 × 光照 × 表情组合',

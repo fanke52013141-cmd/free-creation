@@ -172,22 +172,53 @@ async function minimaxPoll(p: ProviderConfig, upstreamId: string): Promise<Upstr
 
 // ── Seedance 适配 ──
 
+/**
+ * 官方方舟和常见的 Ark 兼容网关使用不同任务路径。
+ * 网关地址形如 /gateway/ark/v3 时沿用用户已验证的 /generations/tasks，
+ * 官方方舟仍使用 /contents/generations/tasks。
+ */
+function seedanceTasksUrl(p: ProviderConfig, taskId?: string): string {
+  const path = p.baseURL.includes('/gateway/ark/')
+    ? '/generations/tasks'
+    : '/contents/generations/tasks'
+  return `${p.baseURL}${path}${taskId ? `/${taskId}` : ''}`
+}
+
+function isSeedanceGatewayProxy(p: ProviderConfig): boolean {
+  return p.baseURL.includes('/gateway/ark/')
+}
+
 async function seedanceSubmit(p: ProviderConfig, input: VideoSubmitInput): Promise<string> {
-  const content: Array<Record<string, unknown>> = [{ type: 'text', text: input.prompt }]
+  const isProxy = isSeedanceGatewayProxy(p)
+  const suffix = isProxy
+    ? [
+        input.params?.ratio ? `--ratio ${input.params.ratio}` : '',
+        input.params?.resolution ? `--resolution ${input.params.resolution}` : '',
+        input.params?.duration ? `--duration ${input.params.duration}` : ''
+      ]
+        .filter(Boolean)
+        .join(' ')
+    : ''
+  const content: Array<Record<string, unknown>> = [
+    { type: 'text', text: suffix ? `${input.prompt} ${suffix}` : input.prompt }
+  ]
   if (input.firstFrameMediaId) {
     content.push({
       type: 'image_url',
       image_url: { url: await mediaToDataUrl(input.firstFrameMediaId) },
-      role: 'first_frame'
+      // 官方方舟要求 role；兼容网关采用用户已验证的无 role 格式。
+      ...(!isProxy ? { role: 'first_frame' } : {})
     })
   }
   const { params } = input
   const body: Record<string, unknown> = { model: input.modelId, content }
-  if (params?.ratio) body.ratio = params.ratio
-  if (params?.duration) body.duration = params.duration
-  if (params?.resolution) body.resolution = params.resolution
+  if (!isProxy) {
+    if (params?.ratio) body.ratio = params.ratio
+    if (params?.duration) body.duration = params.duration
+    if (params?.resolution) body.resolution = params.resolution
+  }
 
-  const res = await fetchJson(`${p.baseURL}/contents/generations/tasks`, {
+  const res = await fetchJson(seedanceTasksUrl(p), {
     method: 'POST',
     headers: authHeaders(p),
     body: JSON.stringify(body)
@@ -203,7 +234,7 @@ async function seedanceSubmit(p: ProviderConfig, input: VideoSubmitInput): Promi
 }
 
 async function seedancePoll(p: ProviderConfig, upstreamId: string): Promise<UpstreamState> {
-  const res = await fetchJson(`${p.baseURL}/contents/generations/tasks/${upstreamId}`, {
+  const res = await fetchJson(seedanceTasksUrl(p, upstreamId), {
     headers: authHeaders(p)
   })
   const status = res.status as string | undefined

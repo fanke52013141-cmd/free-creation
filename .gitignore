@@ -4,3 +4,9 @@ out
 .DS_Store
 .eslintcache
 *.log*
+.docx_review/
+*.docx
+M4-模型网关-开源方案调研.md
+backend/data/
+**/__pycache__/
+*.py[cod]

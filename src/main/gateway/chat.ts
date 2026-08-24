@@ -26,11 +26,16 @@ export function startChat(send: Send, input: ChatStartInput): string {
           .filter((m) => m.content.trim())
           .map((m) => ({ role: m.role, content: m.content })),
         temperature: input.temperature,
-        maxTokens: input.maxTokens,
+        // AI SDK v7 使用 maxOutputTokens；IPC 仍保留 maxTokens 以保持现有 UI 数据兼容。
+        maxOutputTokens: input.maxTokens,
         abortSignal: ctrl.signal
       })
-      for await (const delta of result.textStream) {
-        send({ kind: 'chat-delta', taskId, text: delta })
+      for await (const part of result.fullStream) {
+        if (part.type === 'text-delta') {
+          send({ kind: 'chat-delta', taskId, text: part.text })
+        } else if (part.type === 'reasoning-delta') {
+          send({ kind: 'chat-reasoning', taskId, text: part.text })
+        }
       }
       send({ kind: 'chat-done', taskId })
     } catch (e) {

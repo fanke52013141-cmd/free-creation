@@ -20,7 +20,10 @@ function normalizeModel(v: unknown): GatewayModelInfo | null {
   if (typeof v === 'object' && v !== null) {
     const o = v as Record<string, unknown>
     if (typeof o.id !== 'string' || !o.id.trim()) return null
-    const modality = o.modality === 'image' || o.modality === 'video' ? o.modality : 'text'
+    const modality =
+      o.modality === 'image' || o.modality === 'video' || o.modality === 'audio'
+        ? o.modality
+        : 'text'
     return {
       id: o.id.trim(),
       name: typeof o.name === 'string' && o.name.trim() ? o.name.trim() : undefined,

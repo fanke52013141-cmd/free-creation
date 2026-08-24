@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createShapeId, type Editor, type TLShapeId } from 'tldraw'
 import type { MediaAsset, MediaKind } from '@shared/types'
-import { mediaUrl } from '../nodes/registry'
+import { getNodeType, mediaUrl, portCompatible } from '../nodes/registry'
 import { filteredAssets, useMediaStore } from '../stores/media'
 import {
   extractTemplateFromSelection,
@@ -13,9 +13,9 @@ import {
 } from '../stores/workflow'
 import { createEdge } from './graph'
 import { markUndoPoint } from './history'
-import { getNodeType } from '../nodes/registry'
 import { toast } from '../stores/toast'
 import { useHistorySnapshots, type HistorySnapshot } from '../stores/history-snapshots'
+import { Icon, type IconName } from '../components/Icon'
 
 export type SidePanelTab = 'assets' | 'workflow' | 'history'
 
@@ -28,10 +28,10 @@ interface CanvasSidePanelProps {
   onAddToCanvas: (asset: MediaAsset) => void
 }
 
-const TAB_META: Record<SidePanelTab, { title: string; icon: string }> = {
-  assets: { title: '资产中心', icon: '📦' },
-  workflow: { title: '工作流', icon: '⛓' },
-  history: { title: '历史记录', icon: '🕘' }
+const TAB_META: Record<SidePanelTab, { title: string; icon: IconName }> = {
+  assets: { title: '资产中心', icon: 'assets' },
+  workflow: { title: '工作流', icon: 'workflow' },
+  history: { title: '历史记录', icon: 'history' }
 }
 
 const FILTER_TABS: { key: MediaKind | 'all'; label: string }[] = [
@@ -42,61 +42,59 @@ const FILTER_TABS: { key: MediaKind | 'all'; label: string }[] = [
   { key: 'file', label: '文件' }
 ]
 
-const KIND_ICON: Record<MediaKind, string> = {
-  image: '🖼️',
-  video: '🎥',
-  audio: '🎵',
-  file: '📄'
+const KIND_ICON: Record<MediaKind, IconName> = {
+  image: 'image',
+  video: 'video',
+  audio: 'audio',
+  file: 'document'
 }
 
 // 内置推荐模板（点击直接生成节点组合）
 const BUILTIN_TEMPLATES: {
   name: string
-  icon: string
+  icon: IconName
   desc: string
   nodes: { type: string; dx: number; dy: number }[]
-  edges: { from: number; to: number }[]
+  edges: { from: number; to: number; fromPort: string; toPort: string }[]
 }[] = [
   {
     name: '文本→图片生成',
-    icon: '📝',
+    icon: 'text',
     desc: '文本节点驱动图片生成',
     nodes: [
-      { type: 'text', dx: -160, dy: 0 },
-      { type: 'image', dx: 120, dy: 0 }
+      { type: 'text', dx: -190, dy: 0 },
+      { type: 'image-gen', dx: 190, dy: 0 }
     ],
-    edges: [{ from: 0, to: 1 }]
+    edges: [{ from: 0, to: 1, fromPort: 'out-text', toPort: 'in-text' }]
   },
   {
-    name: '脚本→分镜→图片',
-    icon: '🎬',
-    desc: '脚本拆解为分镜，逐镜生成图片',
+    name: '文本→AI→JSON→分镜',
+    icon: 'script',
+    desc: '用普通节点组合结构化分镜流程',
     nodes: [
-      { type: 'script', dx: -240, dy: 0 },
-      { type: 'storyboard', dx: 40, dy: 0 },
-      { type: 'image', dx: 320, dy: 0 }
+      { type: 'text', dx: -570, dy: 0 },
+      { type: 'chat', dx: -190, dy: 0 },
+      { type: 'json', dx: 190, dy: 0 },
+      { type: 'storyboard', dx: 570, dy: 0 }
     ],
     edges: [
-      { from: 0, to: 1 },
-      { from: 1, to: 2 }
+      { from: 0, to: 1, fromPort: 'out-text', toPort: 'in-text' },
+      { from: 1, to: 2, fromPort: 'out-markdown', toPort: 'in-text' },
+      { from: 2, to: 3, fromPort: 'out-json', toPort: 'in-json' }
     ]
   },
   {
-    name: '图片→视频→合成',
-    icon: '🎞',
-    desc: '多路图片生成视频后合成',
+    name: '文本→处理→代码',
+    icon: 'processor',
+    desc: '把上游变量显式映射后交给代码处理',
     nodes: [
-      { type: 'image', dx: -260, dy: -60 },
-      { type: 'image', dx: -260, dy: 80 },
-      { type: 'video', dx: 20, dy: -60 },
-      { type: 'video', dx: 20, dy: 80 },
-      { type: 'compose', dx: 300, dy: 10 }
+      { type: 'text', dx: -380, dy: 0 },
+      { type: 'processor', dx: 0, dy: 0 },
+      { type: 'code', dx: 380, dy: 0 }
     ],
     edges: [
-      { from: 0, to: 2 },
-      { from: 1, to: 3 },
-      { from: 2, to: 4 },
-      { from: 3, to: 4 }
+      { from: 0, to: 1, fromPort: 'out-text', toPort: 'in-value' },
+      { from: 1, to: 2, fromPort: 'out-value', toPort: 'in-text' }
     ]
   }
 ]
@@ -135,7 +133,9 @@ function AssetCard({
         {asset.kind === 'image' ? (
           <img src={mediaUrl(asset.path)} alt={asset.name ?? ''} loading="lazy" draggable={false} />
         ) : (
-          <span className="asset-thumb-icon">{KIND_ICON[asset.kind]}</span>
+          <span className="asset-thumb-icon">
+            <Icon name={KIND_ICON[asset.kind]} size={24} />
+          </span>
         )}
       </div>
       <div className="asset-info">
@@ -150,7 +150,7 @@ function AssetCard({
           onDelete()
         }}
       >
-        ✕
+        <Icon name="close" size={13} />
       </button>
     </div>
   )
@@ -185,7 +185,7 @@ function AssetsPanel({
     <div className="side-panel-body assets-panel" ref={scrollRef}>
       <div className="assets-toolbar">
         <button className="side-panel-primary" onClick={onImport}>
-          📂 导入素材
+          <Icon name="upload" size={15} /> 导入素材
         </button>
         <input
           className="assets-search"
@@ -283,6 +283,7 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
     if (!editor) return
     const center = editor.getViewportPageBounds().center
     const ids: TLShapeId[] = []
+    let skippedEdges = 0
     editor.run(() => {
       for (const node of tmpl.nodes) {
         const id = createShapeId()
@@ -308,15 +309,41 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
         const fromId = ids[edge.fromIdx]
         const toId = ids[edge.toIdx]
         if (!fromId || !toId) continue
-        createEdge(
-          editor,
-          { shapeId: fromId, portId: edge.fromPort ?? '' },
-          { shapeId: toId, portId: edge.toPort ?? '' }
+        const fromSpec = getNodeType(tmpl.nodes[edge.fromIdx]?.nodeType ?? '')
+        const toSpec = getNodeType(tmpl.nodes[edge.toIdx]?.nodeType ?? '')
+        const fromPort = edge.fromPort
+          ? fromSpec?.ports.out.find((port) => port.id === edge.fromPort)
+          : fromSpec?.ports.out.length === 1
+            ? fromSpec.ports.out[0]
+            : undefined
+        const compatibleTargets = fromPort
+          ? (toSpec?.ports.in.filter((port) => portCompatible(port.type, fromPort.type)) ?? [])
+          : []
+        const toPort = edge.toPort
+          ? compatibleTargets.find((port) => port.id === edge.toPort)
+          : compatibleTargets.length === 1
+            ? compatibleTargets[0]
+            : undefined
+        if (!fromPort || !toPort) {
+          skippedEdges += 1
+          continue
+        }
+        if (
+          !createEdge(
+            editor,
+            { shapeId: fromId, portId: fromPort.id },
+            { shapeId: toId, portId: toPort.id }
+          )
         )
+          skippedEdges += 1
       }
     })
     markUndoPoint(editor, 'apply-template')
-    toast(`已套用「${tmpl.name}」（${tmpl.nodes.length} 节点）`)
+    toast(
+      skippedEdges > 0
+        ? `已套用「${tmpl.name}」，${skippedEdges} 条旧连线因端口不明确未恢复`
+        : `已套用「${tmpl.name}」（${tmpl.nodes.length} 节点）`
+    )
   }
 
   // 套用内置推荐模板
@@ -324,6 +351,7 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
     if (!editor) return
     const center = editor.getViewportPageBounds().center
     const ids: TLShapeId[] = []
+    let skippedEdges = 0
     editor.run(() => {
       for (const node of builtin.nodes) {
         const id = createShapeId()
@@ -343,15 +371,22 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
         })
       }
       for (const edge of builtin.edges) {
-        createEdge(
-          editor,
-          { shapeId: ids[edge.from], portId: '' },
-          { shapeId: ids[edge.to], portId: '' }
+        if (
+          !createEdge(
+            editor,
+            { shapeId: ids[edge.from], portId: edge.fromPort },
+            { shapeId: ids[edge.to], portId: edge.toPort }
+          )
         )
+          skippedEdges += 1
       }
     })
     markUndoPoint(editor, 'apply-builtin')
-    toast(`已创建「${builtin.name}」`)
+    toast(
+      skippedEdges > 0
+        ? `已创建「${builtin.name}」，但有 ${skippedEdges} 条连线不符合当前契约`
+        : `已创建「${builtin.name}」`
+    )
   }
 
   return (
@@ -369,7 +404,7 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
           }}
         />
         <button className="side-panel-primary" onClick={handleSave}>
-          💾 保存选中
+          <Icon name="copy" size={14} /> 保存选中
         </button>
       </div>
       <p className="side-panel-hint">
@@ -377,7 +412,9 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
       </p>
 
       {/* 内置推荐模板 */}
-      <div className="wf-section-title">⚡ 推荐模板</div>
+      <div className="wf-section-title">
+        <Icon name="spark" size={13} /> 推荐模板
+      </div>
       <div className="wf-builtin-list">
         {BUILTIN_TEMPLATES.map((bt) => (
           <button
@@ -386,7 +423,9 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
             onClick={() => handleApplyBuiltin(bt)}
             title={bt.desc}
           >
-            <span className="wf-builtin-icon">{bt.icon}</span>
+            <span className="wf-builtin-icon">
+              <Icon name={bt.icon} size={20} />
+            </span>
             <div className="wf-builtin-info">
               <strong>{bt.name}</strong>
               <span>{bt.desc}</span>
@@ -396,7 +435,9 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
       </div>
 
       {/* 用户保存的模板 */}
-      <div className="wf-section-title">📦 我的模板</div>
+      <div className="wf-section-title">
+        <Icon name="assets" size={13} /> 我的模板
+      </div>
       {templates.length === 0 ? (
         <div className="side-panel-empty">暂无自定义模板。</div>
       ) : (
@@ -415,14 +456,14 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
                   title="套用模板"
                   onClick={() => handleApply(tmpl)}
                 >
-                  ➕ 套用
+                  <Icon name="add" size={13} /> 套用
                 </button>
                 <button
                   className="wf-action-btn delete"
                   title="删除模板"
                   onClick={() => wfRemove(tmpl.id)}
                 >
-                  ✕
+                  <Icon name="close" size={13} />
                 </button>
               </div>
             </div>
@@ -495,7 +536,7 @@ function HistoryPanel({
           }}
         />
         <button className="side-panel-primary" onClick={handleSave} disabled={!editor}>
-          📸 保存版本
+          <Icon name="history" size={14} /> 保存版本
         </button>
       </div>
       <p className="side-panel-hint">
@@ -507,7 +548,9 @@ function HistoryPanel({
         <div className="history-list">
           {snapshots.map((snap) => (
             <div key={snap.id} className="history-card">
-              <span className="history-card-icon">🕘</span>
+              <span className="history-card-icon">
+                <Icon name="history" size={16} />
+              </span>
               <div className="history-card-info">
                 <span className="history-card-label">{snap.label}</span>
                 <span className="history-card-meta">
@@ -527,7 +570,7 @@ function HistoryPanel({
                   title="删除此版本"
                   onClick={() => handleRemove(snap.id)}
                 >
-                  ✕
+                  <Icon name="close" size={13} />
                 </button>
               </div>
             </div>
@@ -565,10 +608,12 @@ export function CanvasSidePanel({
   return (
     <div className="side-panel" ref={ref}>
       <div className="side-panel-head">
-        <span className="side-panel-icon">{meta.icon}</span>
+        <span className="side-panel-icon">
+          <Icon name={meta.icon} size={17} />
+        </span>
         <strong className="side-panel-title">{meta.title}</strong>
         <button className="side-panel-close" title="关闭" onClick={onClose}>
-          ✕
+          <Icon name="close" size={15} />
         </button>
       </div>
       {tab === 'assets' && (

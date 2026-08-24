@@ -3,26 +3,52 @@
 export type NodeTypeId =
   | 'text'
   | 'image'
+  | 'image-gen'
   | 'video'
   | 'audio'
   | 'chat'
   | 'script'
+  | 'processor'
   | 'code'
   | 'json'
   | 'group'
   | 'storyboard'
   | 'compose'
 
-export type PortType = 'text' | 'json' | 'image' | 'video' | 'audio' | 'file' | 'any'
+/**
+ * 节点之间允许传递的数据类型。文本与 Markdown 都以字符串传输，但保留语义类型；
+ * JSON 是结构化值；媒体类型传递资产引用而不是把二进制塞进连线。
+ *
+ * 新增类型前必须同步更新：节点契约规范、兼容矩阵、执行器数据包和右侧契约面板。
+ * 规范入口：/NODE_CONTRACT_SPEC.md
+ */
+export type PortType = 'text' | 'markdown' | 'json' | 'image' | 'video' | 'audio' | 'file' | 'any'
+
+export type PortCardinality = 'one' | 'many'
+
+/** JSON 端口的稳定结构标识。结构变化必须提升 version，不能静默修改旧版本。 */
+export interface PortSchemaRef {
+  id: string
+  version: number
+}
 
 export type MediaKind = 'image' | 'video' | 'audio' | 'file'
 
 export interface PortDecl {
+  /** 稳定机器 ID；发布后不可改名或复用，必须以 in- / out- 开头。 */
   id: string
+  /** 用户可见名称，可以调整，不参与历史连线寻址。 */
   name: string
   dir: 'in' | 'out'
   type: PortType
-  required?: boolean
+  /** 输入：执行前必须存在；输出：成功执行后必须产生。 */
+  required: boolean
+  /** 数据本身是单值还是列表；不代表一个输出可以连接多少个下游。 */
+  cardinality: PortCardinality
+  /** 右侧契约面板展示的业务语义，禁止只写“输入/输出”。 */
+  description: string
+  /** JSON 端口必须提供结构引用；通用 JSON 使用 json.any。 */
+  schema?: PortSchemaRef
 }
 
 export type NodeContent =
@@ -44,6 +70,8 @@ export interface ExecState {
 export interface CanvasNode {
   id: string
   type: NodeTypeId
+  /** 保存快照时使用的节点契约版本，供后续端口迁移判断。 */
+  contractVersion: number
   title: string
   x: number
   y: number
@@ -144,6 +172,8 @@ export type ModelModality = 'text' | 'image' | 'video' | 'audio'
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
   content: string
+  /** 模型明确返回的推理文本；不生成、不推测，仅用于折叠展示。 */
+  reasoning?: string
 }
 
 export interface GatewayModelInfo {

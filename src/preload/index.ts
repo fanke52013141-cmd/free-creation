@@ -8,14 +8,14 @@ import type {
   GatewayEvent,
   IpcEnvelope,
   ImageGenerateInput,
+  ImportMediaBufferInput,
   RenameProjectInput,
   SaveProjectInput,
   SaveProviderInput,
   TestProviderResult,
   VideoSubmitInput,
   VideoSubmitResult,
-  AudioGenerateInput,
-  ComposeVideosInput
+  AudioGenerateInput
 } from '../shared/contracts'
 import type {
   MediaAsset,
@@ -47,6 +47,8 @@ const api = {
     projectId: string
     paths: string[]
   }): Promise<IpcEnvelope<MediaImportResult>> => ipcRenderer.invoke(IPC.media.import, input),
+  importMediaBuffer: (input: ImportMediaBufferInput): Promise<IpcEnvelope<MediaAsset>> =>
+    ipcRenderer.invoke(IPC.media.importBuffer, input),
   pickMedia: (projectId: string): Promise<IpcEnvelope<MediaImportResult>> =>
     ipcRenderer.invoke(IPC.media.pick, projectId),
   listMedia: (projectId: string): Promise<IpcEnvelope<MediaAsset[]>> =>
@@ -78,8 +80,6 @@ const api = {
       ipcRenderer.invoke(IPC.gateway.videoTask, { taskId }),
     audioGenerate: (input: AudioGenerateInput): Promise<IpcEnvelope<MediaAsset>> =>
       ipcRenderer.invoke(IPC.gateway.audioGenerate, input),
-    composeVideos: (input: ComposeVideosInput): Promise<IpcEnvelope<MediaAsset>> =>
-      ipcRenderer.invoke(IPC.gateway.composeVideos, input),
     // 网关事件订阅（聊天流式分片 / 视频任务进度），返回取消订阅函数
     onEvent: (cb: (e: GatewayEvent) => void): (() => void) => {
       const listener = (_e: unknown, payload: GatewayEvent): void => cb(payload)

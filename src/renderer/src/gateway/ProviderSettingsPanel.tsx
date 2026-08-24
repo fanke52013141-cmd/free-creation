@@ -13,6 +13,7 @@ import type { SaveProviderInput } from '@shared/contracts'
 import { useGatewayStore } from '../stores/gateway'
 import { useConfirmStore } from '../stores/confirm'
 import { toast } from '../stores/toast'
+import { Icon } from '../components/Icon'
 
 interface Draft extends SaveProviderInput {
   createdAt?: number
@@ -136,7 +137,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
     })
     setBusy(null)
     if (!res.ok) {
-      setTestMsg(`✕ ${res.error.message}`)
+      setTestMsg(`测试失败：${res.error.message}`)
       return
     }
     // 合并服务端新发现的模型（已有 id 跳过，模态按 ID 猜测，可手改）
@@ -145,7 +146,9 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
       .filter((id) => !known.has(id))
       .map((id) => ({ id, modality: guessModality(id, draft.specId) }))
     if (fresh.length) patch({ models: [...draft.models, ...fresh] })
-    setTestMsg(`✓ ${res.data.message}${fresh.length ? `，已并入 ${fresh.length} 个新模型` : ''}`)
+    setTestMsg(
+      `测试成功：${res.data.message}${fresh.length ? `，已并入 ${fresh.length} 个新模型` : ''}`
+    )
   }
 
   const remove = async (): Promise<void> => {
@@ -173,7 +176,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
         <div className="gw-head">
           <span className="gw-title">模型供应商</span>
           <button className="icon-btn" onClick={close} title="关闭 (Esc)">
-            ✕
+            <Icon name="close" size={16} />
           </button>
         </div>
         <div className="gw-body">
@@ -213,7 +216,8 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
               </div>
             ) : (
               <button className="gw-add" onClick={() => setPicking(true)}>
-                ＋ 新增供应商
+                <Icon name="add" size={14} />
+                新增供应商
               </button>
             )}
           </div>
@@ -280,7 +284,10 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                       })
                     }
                   >
-                    ＋ 添加
+                    <>
+                      <Icon name="add" size={14} />
+                      添加
+                    </>
                   </button>
                 </div>
                 <div className="gw-models">
@@ -328,18 +335,19 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                         <option value="text">文本</option>
                         <option value="image">图片</option>
                         <option value="video">视频</option>
+                        <option value="audio">音频</option>
                       </select>
                       <button
                         className="shot-op danger"
                         title="删除模型"
                         onClick={() => patch({ models: draft.models.filter((_, j) => j !== i) })}
                       >
-                        ✕
+                        <Icon name="close" size={14} />
                       </button>
                     </div>
                   ))}
                   {!draft.models.length && (
-                    <div className="gw-empty">还没有模型，点「＋ 添加」或用下方「测试并拉取」</div>
+                    <div className="gw-empty">还没有模型，点击“添加”或使用下方“测试并拉取”</div>
                   )}
                 </div>
 

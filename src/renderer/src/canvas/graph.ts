@@ -1,10 +1,12 @@
 // 连线系统核心：创建/校验 tldraw arrow + binding，保存时派生图数据
 // 端口信息存 arrow.meta（fromPort/toPort），绑定锚点按端口纵向位置计算
 import { createShapeId, type Editor, type TLShapeId } from 'tldraw'
-import type { CanvasEdge, CanvasNode, ExecStatus, PortDecl } from '@shared/types'
+import type { CanvasEdge, CanvasNode, ExecStatus, GroupDecl, PortDecl } from '@shared/types'
+import { nodeSchemasCompatible } from '@shared/node-schemas'
 import { getNodeType, portCompatible, portOffsets } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
 import type { ConnectionFrom } from '../stores/connection'
+import { projectNodeOutputs, type NodeValue } from '../nodes/nodeValues'
 
 // 连线颜色按源端口类型分型。用 tldraw 内置标准色名（渲染层 getColorValue 解析为对应主题色），
 // 因为 arrow 的 color 属性受 DefaultColorStyle 枚举校验，内置名才是类型安全且最稳的做法。
@@ -26,6 +28,7 @@ type ArrowColor =
 
 export const EDGE_COLORS: Record<string, ArrowColor> = {
   text: 'light-blue',
+  markdown: 'light-blue',
   json: 'violet',
   image: 'green',
   video: 'light-red',
@@ -106,6 +109,21 @@ function edgeExists(editor: Editor, from: EdgeEndpoint, to: EdgeEndpoint): boole
   return false
 }
 
+/** 单值输入端口是否已经有上游。连线数量规则属于端口契约，不能由节点执行器事后猜测。 */
+function inputPortOccupied(editor: Editor, target: EdgeEndpoint): boolean {
+  for (const shape of editor.getCurrentPageShapes()) {
+    if (shape.type !== 'arrow') continue
+    const { end } = getArrowBindings(editor, shape.id)
+    if (
+      end?.toId === target.shapeId &&
+      (shape.meta?.toPort as string | undefined) === target.portId
+    ) {
+      return true
+    }
+  }
+  return false
+}
+
 function clamp01(v: number): number {
   return Math.max(0.02, Math.min(0.98, v))
 }
@@ -121,9 +139,17 @@ export function createEdge(editor: Editor, from: EdgeEndpoint, to: EdgeEndpoint)
 
   const fromSpec = getNodeType(fromShape.props.nodeType)
   const toSpec = getNodeType(toShape.props.nodeType)
-  const fromPort = fromSpec?.ports.out.find((p) => p.id === from.portId) ?? fromSpec?.ports.out[0]
-  const toPort = toSpec?.ports.in.find((p) => p.id === to.portId) ?? toSpec?.ports.in[0]
+  const fromPort = fromSpec?.ports.out.find((p) => p.id === from.portId)
+  const toPort = toSpec?.ports.in.find((p) => p.id === to.portId)
   if (!fromSpec || !toSpec || !fromPort || !toPort) return false
+  if (!portCompatible(fromPort.type, toPort.type)) return false
+  if (
+    fromPort.type === 'json' &&
+    toPort.type === 'json' &&
+    !nodeSchemasCompatible(fromPort.schema, toPort.schema)
+  )
+    return false
+  if (toPort.cardinality === 'one' && inputPortOccupied(editor, to)) return false
 
   const fromIdx = Math.max(0, fromSpec.ports.out.indexOf(fromPort))
   const toIdx = Math.max(0, toSpec.ports.in.indexOf(toPort))
@@ -211,9 +237,30 @@ export function tryConnect(
   const targetSpec = getNodeType(target.props.nodeType)
   if (!targetSpec) return '目标节点类型未知'
 
-  const usable = targetSpec.ports.in.filter((p) => portCompatible(p.type, from.portType))
+  const source = editor.getShape<NodeCardShape>(from.shapeId)
+  const sourceSpec = source ? getNodeType(source.props.nodeType) : undefined
+  const sourcePort = sourceSpec?.ports.out.find((port) => port.id === from.portId)
+  if (!source || !sourceSpec || !sourcePort) return '源节点或输出端口不存在'
+
+  const compatible = targetSpec.ports.in.filter(
+    (port) =>
+      portCompatible(port.type, sourcePort.type) &&
+      !(
+        port.type === 'json' &&
+        sourcePort.type === 'json' &&
+        !nodeSchemasCompatible(sourcePort.schema, port.schema)
+      )
+  )
+  if (compatible.length === 0) {
+    return `类型或 Schema 不兼容：${sourcePort.type} 输出无法接入 ${targetSpec.label} 节点`
+  }
+  const usable = compatible.filter(
+    (port) =>
+      port.cardinality === 'many' ||
+      !inputPortOccupied(editor, { shapeId: targetShapeId, portId: port.id })
+  )
   if (usable.length === 0) {
-    return `类型不兼容：${from.portType} 输出无法接入 ${targetSpec.label} 节点`
+    return `${targetSpec.label} 的兼容输入均为单值端口且已有连线，请先断开原连线`
   }
 
   let port: PortDecl = usable[0]
@@ -247,10 +294,11 @@ export function tryConnect(
 export function deriveGraph(editor: Editor): {
   nodes: CanvasNode[]
   edges: CanvasEdge[]
-  groups: []
+  groups: GroupDecl[]
 } {
   const nodes: CanvasNode[] = []
   const edges: CanvasEdge[] = []
+  const groups: GroupDecl[] = []
 
   for (const shape of editor.getCurrentPageShapes()) {
     if (shape.type === 'node-card') {
@@ -260,6 +308,7 @@ export function deriveGraph(editor: Editor): {
       nodes.push({
         id: s.id,
         type: s.props.nodeType as CanvasNode['type'],
+        contractVersion: spec?.contractVersion ?? 1,
         title: s.props.title,
         x: s.x,
         y: s.y,
@@ -285,50 +334,101 @@ export function deriveGraph(editor: Editor): {
         from: { nodeId: start.toId, portId: (shape.meta?.fromPort as string) ?? '' },
         to: { nodeId: end.toId, portId: (shape.meta?.toPort as string) ?? '' }
       })
+    } else if (shape.type === 'group') {
+      const nodeIds = editor
+        .getSortedChildIdsForParent(shape.id)
+        .filter((id) => editor.getShape(id)?.type === 'node-card')
+      if (nodeIds.length >= 2) {
+        groups.push({ id: shape.id, name: '分组', nodeIds, kind: 'plain' })
+      }
     }
   }
 
-  return { nodes, edges, groups: [] }
+  return { nodes, edges, groups }
 }
 
 /**
  * 实时收集连入某节点的上游文本内容（用于对话/图片等节点手动触发时自动注入上下文）。
  * 遍历画布上的 arrow bindings，找到所有 → targetNodeId 的边，取源节点的文本输出。
  */
-export function gatherUpstreamText(editor: Editor, targetNodeId: TLShapeId): string {
+export function gatherUpstreamText(
+  editor: Editor,
+  targetNodeId: TLShapeId,
+  targetPortId = 'in-text'
+): string {
   const parts: string[] = []
   for (const shape of editor.getCurrentPageShapes()) {
     if (shape.type !== 'arrow') continue
     const { start, end } = getArrowBindings(editor, shape.id)
     if (!start || !end) continue
-    if (end.toId !== targetNodeId) continue
+    if (end.toId !== targetNodeId || shape.meta?.toPort !== targetPortId) continue
     const src = editor.getShape<NodeCardShape>(start.toId)
     if (!src || src.type !== 'node-card') continue
-    // 取源节点的纯文本内容
-    const text = src.props.text
-    if (!text) continue
-    // 对文本节点：直接取 props.text
-    if (src.props.nodeType === 'text') {
-      if (text.trim()) parts.push(text.trim())
-      continue
-    }
-    // 对对话/脚本等 JSON 存储节点：尝试提取有效文本
-    try {
-      const parsed = JSON.parse(text) as Record<string, unknown>
-      // 对话节点：取最后一条 assistant 消息
-      if (src.props.nodeType === 'chat' && Array.isArray(parsed.messages)) {
-        const msgs = parsed.messages as { role: string; content: string }[]
-        const lastAssistant = [...msgs].reverse().find((m) => m.role === 'assistant')
-        if (lastAssistant?.content?.trim()) parts.push(lastAssistant.content.trim())
-      }
-      // 脚本节点：取剧本文本
-      else if (src.props.nodeType === 'script' && typeof parsed.source === 'string') {
-        if (parsed.source.trim()) parts.push(parsed.source.trim())
-      }
-    } catch {
-      // 非 JSON，可能是纯文本
-      if (text.trim()) parts.push(text.trim())
-    }
+    const fromPort = shape.meta?.fromPort as string | undefined
+    if (!fromPort) continue
+    const output = projectNodeOutputs(src)[fromPort]
+    if (output?.kind === 'text' && output.text.trim()) parts.push(output.text.trim())
   }
   return parts.join('\n\n---\n\n')
+}
+
+/**
+ * 收集进入目标节点的第一个结构化 JSON 输出。
+ * 手动操作与工作流使用同一端口约定：脚本/分镜板输出 { shots }，JSON 输出自身内容，
+ * 代码节点输出其最近一次运行结果。解析失败返回 null，不把普通文本伪装成 JSON。
+ */
+export function gatherUpstreamJson(
+  editor: Editor,
+  targetNodeId: TLShapeId,
+  targetPortId = 'in-json'
+): unknown | null {
+  for (const shape of editor.getCurrentPageShapes()) {
+    if (shape.type !== 'arrow') continue
+    const { start, end } = getArrowBindings(editor, shape.id)
+    if (!start || !end || end.toId !== targetNodeId || shape.meta?.toPort !== targetPortId) continue
+    const fromPort = shape.meta?.fromPort as string | undefined
+    if (!fromPort) continue
+    const source = editor.getShape<NodeCardShape>(start.toId)
+    if (!source || source.type !== 'node-card') continue
+    const output = projectNodeOutputs(source)[fromPort]
+    if (output?.kind === 'json') return output.data
+  }
+  return null
+}
+
+/** 读取指定媒体输入端口的第一个真实资产输出；图片资产与生图节点使用相同协议。 */
+export function gatherUpstreamMedia<K extends 'image' | 'video' | 'audio'>(
+  editor: Editor,
+  targetNodeId: TLShapeId,
+  targetPortId: string,
+  kind: K
+): Extract<NodeValue, { kind: K }> | null {
+  for (const shape of editor.getCurrentPageShapes()) {
+    if (shape.type !== 'arrow') continue
+    const { start, end } = getArrowBindings(editor, shape.id)
+    if (
+      !start ||
+      !end ||
+      end.toId !== targetNodeId ||
+      shape.meta?.toPort !== targetPortId ||
+      typeof shape.meta?.fromPort !== 'string'
+    )
+      continue
+    const source = editor.getShape<NodeCardShape>(start.toId)
+    if (!source || source.type !== 'node-card') continue
+    const output = projectNodeOutputs(source)[shape.meta.fromPort]
+    if (output?.kind === kind) return output as Extract<NodeValue, { kind: K }>
+  }
+  return null
+}
+
+export function hasIncomingConnection(
+  editor: Editor,
+  targetNodeId: TLShapeId,
+  targetPortId: string
+): boolean {
+  return editor.getCurrentPageShapes().some((shape) => {
+    if (shape.type !== 'arrow' || shape.meta?.toPort !== targetPortId) return false
+    return getArrowBindings(editor, shape.id).end?.toId === targetNodeId
+  })
 }

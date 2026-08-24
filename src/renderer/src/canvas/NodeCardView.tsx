@@ -1,5 +1,5 @@
 // NodeCard 卡片视图：头部（序号/图标/标题/状态灯）+ 类型化内容体 + 端口圆点 + 媒体预览浮层
-import { HTMLContainer, stopEventPropagation, useEditor } from 'tldraw'
+import { HTMLContainer, stopEventPropagation, useEditor, useValue } from 'tldraw'
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { getNodeType, portCompatible, portOffsets, PORT_COLORS } from '../nodes/registry'
@@ -7,6 +7,7 @@ import { useConnectionStore } from '../stores/connection'
 import { beginConnectionDrag } from './connection-drag'
 import { markUndoPoint } from './history'
 import type { NodeCardShape } from './NodeCardShape'
+import { Icon } from '../components/Icon'
 
 const EXEC_COLORS: Record<string, string> = {
   idle: '#6b7280',
@@ -35,7 +36,11 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   useEffect((): (() => void) => {
     const check = (): void => {
       const selected = editor.getSelectedShapes()
-      if (selected.length !== 1 || selected[0].type !== 'node-card' || selected[0].id === shape.id) {
+      if (
+        selected.length !== 1 ||
+        selected[0].type !== 'node-card' ||
+        selected[0].id === shape.id
+      ) {
         setConnectable(false)
         return
       }
@@ -60,14 +65,36 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   }, [editor, shape.id, spec])
 
   // 计算节点序号：按创建顺序排序所有 node-card，返回当前节点的序号
-  const seq = (() => {
-    const shapes = editor
-      .getCurrentPageShapes()
-      .filter((s) => s.type === 'node-card')
-      .sort((a, b) => (a.id > b.id ? 1 : -1))
-    const idx = shapes.findIndex((s) => s.id === shape.id)
-    return idx >= 0 ? idx + 1 : 0
-  })()
+  const seq = useValue(
+    'node sequence',
+    () => {
+      const shapes = editor
+        .getCurrentPageShapes()
+        .filter((item) => item.type === 'node-card')
+        .sort((a, b) => a.index.localeCompare(b.index))
+      const idx = shapes.findIndex((item) => item.id === shape.id)
+      return idx >= 0 ? idx + 1 : 0
+    },
+    [editor, shape.id]
+  )
+
+  const selected = useValue(
+    'node selected',
+    () => editor.getSelectedShapeIds().includes(shape.id),
+    [editor, shape.id]
+  )
+
+  // 第一次单击只进入明确的选中状态；节点已选中后，下一次按住卡片空白处才交给
+  // tldraw 拖动。输入、按钮和端口仍各自处理，避免误拖。
+  const handleCardPointerDownCapture = (e: React.PointerEvent<HTMLDivElement>): void => {
+    if (e.button !== 0) return
+    const interactive = (e.target as HTMLElement).closest(
+      'input, textarea, select, button, [contenteditable="true"], .port-dot'
+    )
+    if (interactive || selected) return
+    stopEventPropagation(e)
+    editor.select(shape.id)
+  }
 
   // 双击标题进入编辑模式
   const handleTitleDoubleClick = (e: React.MouseEvent): void => {
@@ -100,15 +127,21 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   return (
     <HTMLContainer style={{ pointerEvents: 'all' }}>
       {/* 外层包一层无裁切的容器：端口圆点要压在卡片边缘外侧，不能被卡片 overflow:hidden 裁掉 */}
-      <div className={`node-card-wrap ${connectable ? 'connectable' : ''}`} style={{ width: shape.props.w, height: shape.props.h }}>
-        <div
-          className={`node-card type-${shape.props.nodeType}`}
-        >
+      <div
+        className={`node-card-wrap ${connectable ? 'connectable' : ''} ${selected ? 'is-selected' : ''}`}
+        style={{ width: shape.props.w, height: shape.props.h }}
+        onPointerDownCapture={handleCardPointerDownCapture}
+      >
+        <div className={`node-card type-${shape.props.nodeType}`}>
           {/* 顶部颜色条（按类型区分） */}
           <div className="node-color-bar" style={{ background: spec?.color }} />
           <div className="node-header">
-            <span className="node-seq" style={{ color: spec?.color }}>{seq}</span>
-            <span className="node-icon">{spec?.icon ?? '?'}</span>
+            <span className="node-seq" style={{ color: spec?.color }}>
+              {seq}
+            </span>
+            <span className="node-icon" style={{ color: spec?.color }}>
+              {spec ? <Icon name={spec.icon} size={15} /> : <Icon name="help" size={15} />}
+            </span>
             <div
               className={`node-title ${titleEditable ? 'editable' : ''} ${editing ? 'editing' : ''}`}
               contentEditable={editing}
@@ -153,24 +186,24 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                 borderColor: PORT_COLORS[p.type],
                 ['--pc' as string]: PORT_COLORS[p.type]
               }}
-              title={`${p.name}（${p.type}）输入`}
+              title={`${p.name}（${p.type}）输入：${p.description}`}
             >
               <span className="port-dot-inner" style={{ background: PORT_COLORS[p.type] }} />
             </span>
           )
         })}
 
-        {/* 输出端口（右侧「+」拉出连线，LibTV 风格） */}
+        {/* 输出端口：与输入端口同样是纯圆形，按住后拖出连线。 */}
         {outPorts.map((p, i) => (
           <span
             key={p.id}
-            className={`port-plus ${isSource && draft?.from.portId === p.id ? 'ok' : ''}`}
+            className={`port-dot out ${isSource && draft?.from.portId === p.id ? 'ok' : ''}`}
             style={{
-              top: outY[i] - 9,
+              top: outY[i] - 7,
               borderColor: PORT_COLORS[p.type],
               ['--pc' as string]: PORT_COLORS[p.type]
             }}
-            title={`${p.name}（${p.type}）输出 · 按住「+」拖出连线`}
+            title={`${p.name}（${p.type}）输出：${p.description} · 按住圆点拖出连线`}
             onPointerDown={(e) => {
               stopEventPropagation(e)
               beginConnectionDrag(
@@ -178,9 +211,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                 { x: e.clientX, y: e.clientY }
               )
             }}
-          >
-            +
-          </span>
+          />
         ))}
       </div>
       {/* tldraw 画布容器带 transform，fixed 元素会以它为包含块导致错位，必须 portal 到 body */}
@@ -191,7 +222,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               <div className="media-preview-title">
                 <span>{preview.title}</span>
                 <button className="icon-btn" onClick={() => setPreview(null)}>
-                  ✕
+                  <Icon name="close" size={16} />
                 </button>
               </div>
               <div className="media-preview-stage">

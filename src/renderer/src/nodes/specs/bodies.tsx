@@ -2,15 +2,21 @@
 // M4 起 Image/Chat/Video 节点接入模型网关（生成 / 流式对话 / 异步任务）
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createShapeId, stopEventPropagation, useEditor, type TLShapeId } from 'tldraw'
-import type { ChatMessage, VideoGenParams } from '@shared/types'
+import type { VideoGenParams } from '@shared/types'
 import { mediaUrl, type NodeBodyProps } from '../registry'
-import type { NodeCardShape } from '../../canvas/NodeCardShape'
 import { toast } from '../../stores/toast'
 import { markUndoPoint } from '../../canvas/history'
-import { gatherUpstreamText } from '../../canvas/graph'
+import {
+  gatherUpstreamJson,
+  gatherUpstreamMedia,
+  gatherUpstreamText,
+  hasIncomingConnection
+} from '../../canvas/graph'
+import { parseChat } from '../chatData'
 import { generateSlashPrompts, parseSlashCommand } from '../slash-commands'
 import { useAppStore } from '../../stores/app'
 import { modelsByModality, useGatewayStore } from '../../stores/gateway'
+import { Icon } from '../../components/Icon'
 
 // shape.props.text 里的 JSON 解析：失败时返回 fallback（兼容旧纯文本数据，ScriptBody 同款约定）
 function parseJsonProp<T>(text: string, validate: (v: unknown) => T | null, fallback: T): T {
@@ -139,8 +145,8 @@ export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
     const cols = slashCmd.command.cols
     const startX = shape.x + shape.props.w + 60
     const startY = shape.y - 40
-    const nodeW = 180
-    const nodeH = 140
+    const nodeW = 340
+    const nodeH = 260
     const gap = 12
     const ids: TLShapeId[] = []
 
@@ -156,17 +162,17 @@ export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
           x: startX + col * (nodeW + gap),
           y: startY + row * (nodeH + gap),
           props: {
-            nodeType: 'image',
+            nodeType: 'image-gen',
             title: `${slashCmd.command.label} ${i + 1}`,
-            w: nodeW,
-            h: nodeH,
+            w: 340,
+            h: 260,
             text: JSON.stringify({ prompt, modelKey: '', size: 'auto' })
           }
         })
       })
     })
     markUndoPoint(editor, 'slash-generate')
-    toast(`已创建 ${prompts.length} 个图片节点，逐个点击生成`)
+    toast(`已创建 ${prompts.length} 个生图节点，逐个点击生成`)
   }
 
   if (editing) {
@@ -189,6 +195,7 @@ export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
     <div
       className="node-text"
       ref={scrollRef}
+      onPointerDown={(e) => stopEventPropagation(e)}
       onDoubleClick={(e) => {
         e.stopPropagation()
         setDraft(shape.props.text)
@@ -199,7 +206,9 @@ export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
       {slashCmd && (
         <div className="slash-cmd-bar">
           <div className="slash-cmd-info">
-            <span className="slash-cmd-icon">{slashCmd.command.icon}</span>
+            <span className="slash-cmd-icon">
+              <Icon name={slashCmd.command.icon} size={14} />
+            </span>
             <span>{slashCmd.command.label}</span>
             {slashCmd.subject ? (
               <span className="slash-cmd-subject">：{slashCmd.subject.slice(0, 20)}</span>
@@ -216,7 +225,9 @@ export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
               generateSlashGrid()
             }}
           >
-            ⚡ 生成{slashCmd.command.count}图
+            <>
+              <Icon name="spark" size={13} /> 生成{slashCmd.command.count}图
+            </>
           </button>
         </div>
       )}
@@ -224,7 +235,7 @@ export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
   )
 }
 
-// 图片节点：props.text 存 {prompt, modelKey, size}（旧纯文本数据视为提示词）
+// 图片生成节点：props.text 存 {prompt, modelKey, size}（旧纯文本数据视为提示词）
 interface ImageGenData {
   prompt: string
   modelKey: string
@@ -251,7 +262,74 @@ function parseImageGen(text: string): ImageGenData {
 
 const IMAGE_SIZES = ['auto', '1024x1024', '1536x1024', '1024x1536']
 
+/**
+ * 图片资产与生图职责分离：资产节点只表示一份可复用图片数据，
+ * 不再混入模型、提示词或生成按钮。
+ */
 export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Element {
+  const guard = useClickGuard()
+  const editor = useEditor()
+  const project = useAppStore((s) => s.currentProject)
+
+  const chooseAsset = async (): Promise<void> => {
+    if (!project) return
+    const res = await window.api.pickMedia(project.id)
+    if (!res.ok) return toast(`导入失败：${res.error.message}`)
+    const asset = res.data.assets.find((item) => item.kind === 'image')
+    if (!asset) return toast('请选择一张图片文件')
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: {
+        title: asset.name || '图片',
+        mediaId: asset.id,
+        mediaPath: asset.path,
+        mediaMime: asset.mime
+      }
+    })
+    markUndoPoint(editor, 'image-asset-import')
+  }
+
+  if (!shape.props.mediaPath) {
+    return (
+      <div className="asset-empty">
+        <Icon name="image" size={24} />
+        <span>图片资产</span>
+        <small>上传或粘贴图片后，可连接给生图、视频等节点。</small>
+        <button
+          className="btn-ghost small"
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onClick={(e) => {
+            e.stopPropagation()
+            void chooseAsset()
+          }}
+        >
+          导入图片
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className="node-media"
+      onPointerDown={guard.onPointerDown}
+      onClick={(e) =>
+        guard.onClick(e, () =>
+          openPreview({
+            kind: 'image',
+            url: mediaUrl(shape.props.mediaPath),
+            title: shape.props.title
+          })
+        )
+      }
+    >
+      <img src={mediaUrl(shape.props.mediaPath)} alt={shape.props.title} draggable={false} />
+    </div>
+  )
+}
+
+export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.JSX.Element {
   const guard = useClickGuard()
   const editor = useEditor()
   const project = useAppStore((s) => s.currentProject)
@@ -276,37 +354,21 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     })
   }
 
-  const findReferenceImage = (): { mediaId: string; mediaPath: string } | null => {
-    // 查找所有指向当前节点的 arrow 绑定
-    for (const arrow of editor.getCurrentPageShapes()) {
-      if (arrow.type !== 'arrow') continue
-      const bindings = editor.getBindingsFromShape(arrow.id, 'arrow')
-      const end = bindings.find((b) => b.props.terminal === 'end')
-      const start = bindings.find((b) => b.props.terminal === 'start')
-      if (!end || !start) continue
-      if (end.toId !== shape.id) continue
-      // 起点节点必须是 image 类型且有 mediaId
-      const source = editor.getShape<NodeCardShape>(start.toId)
-      if (!source || source.props.nodeType !== 'image') continue
-      if (!source.props.mediaId || !source.props.mediaPath) continue
-      return { mediaId: source.props.mediaId, mediaPath: source.props.mediaPath }
-    }
-    return null
-  }
-
-  const refImage = findReferenceImage()
+  const refImage = gatherUpstreamMedia(editor, shape.id, 'in-image', 'image')
 
   const generate = async (): Promise<void> => {
     const opt = options.find((o) => o.key === data.modelKey)
     if (!opt) return toast('请先选择图片模型')
-    if (!draft.trim()) return toast('请输入提示词')
+    const upstream = gatherUpstreamText(editor, shape.id)
+    const prompt = upstream ? `${upstream}\n\n---\n\n${draft.trim()}` : draft.trim()
+    if (!prompt) return toast('请输入提示词或连接上游文本')
     if (!project) return toast('项目未就绪')
     setBusy(true)
     const res = await window.api.gateway.imageGenerate({
       projectId: project.id,
       providerId: opt.provider.id,
       modelId: opt.model.id,
-      prompt: draft,
+      prompt,
       size: data.size,
       ...(refImage ? { referenceMediaId: refImage.mediaId } : {})
     })
@@ -357,7 +419,10 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
             draggable={false}
             alt="参考图"
           />
-          <span className="ref-image-label">🔗 参考图已连接</span>
+          <span className="ref-image-label">
+            <Icon name="attach" size={13} />
+            参考图已连接
+          </span>
         </div>
       )}
       <div className="gen-row">
@@ -398,7 +463,14 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           void generate()
         }}
       >
-        {busy ? '生成中…' : '✨ 生成图片'}
+        {busy ? (
+          '生成中…'
+        ) : (
+          <>
+            <Icon name="spark" size={14} />
+            生成图片
+          </>
+        )}
       </button>
     </div>
   )
@@ -530,16 +602,20 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const submit = async (): Promise<void> => {
     const opt = options.find((o) => o.key === data.modelKey)
     if (!opt) return toast('请先选择视频模型')
-    if (!draft.trim()) return toast('请输入提示词')
+    const upstream = gatherUpstreamText(editor, shape.id)
+    const prompt = upstream ? `${upstream}\n\n---\n\n${draft.trim()}` : draft.trim()
+    if (!prompt) return toast('请输入提示词或连接上游文本')
     if (!project) return toast('项目未就绪')
+    const firstFrameMediaId = gatherUpstreamMedia(editor, shape.id, 'in-image', 'image')?.mediaId
     setSubmitting(true)
     const res = await window.api.gateway.videoSubmit({
       projectId: project.id,
       nodeId: shape.id,
       providerId: opt.provider.id,
       modelId: opt.model.id,
-      prompt: draft,
-      params: data.params
+      prompt,
+      params: data.params,
+      ...(firstFrameMediaId ? { firstFrameMediaId } : {})
     })
     setSubmitting(false)
     if (!res.ok) return toast(`提交失败：${res.error.message}`)
@@ -674,7 +750,14 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           void submit()
         }}
       >
-        {submitting ? '提交中…' : '🎬 生成视频'}
+        {submitting ? (
+          '提交中…'
+        ) : (
+          <>
+            <Icon name="video" size={14} />
+            生成视频
+          </>
+        )}
       </button>
     </div>
   )
@@ -789,14 +872,16 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const generate = async (): Promise<void> => {
     const opt = options.find((o) => o.key === data.modelKey)
     if (!opt) return toast('请先选择音频模型')
-    if (!draft.trim()) return toast('请输入要朗读的文本')
+    const upstream = gatherUpstreamText(editor, shape.id)
+    const text = upstream ? `${upstream}\n\n---\n\n${draft.trim()}` : draft.trim()
+    if (!text) return toast('请输入要朗读的文本或连接上游文本')
     if (!project) return toast('项目未就绪')
     setBusy(true)
     const res = await window.api.gateway.audioGenerate({
       projectId: project.id,
       providerId: opt.provider.id,
       modelId: opt.model.id,
-      text: draft,
+      text,
       voice: data.voice,
       format: data.format
     })
@@ -890,7 +975,10 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
             update({ ...data, mode: 'upload' })
           }}
         >
-          📎 上传文件
+          <>
+            <Icon name="upload" size={14} />
+            上传文件
+          </>
         </button>
         <button
           className={`audio-tab ${data.mode === 'generate' ? 'active' : ''}`}
@@ -900,7 +988,10 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
             update({ ...data, mode: 'generate' })
           }}
         >
-          🎙 语音合成
+          <>
+            <Icon name="audio" size={14} />
+            语音合成
+          </>
         </button>
       </div>
 
@@ -913,7 +1004,9 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
               void uploadAudio()
             }}
           >
-            <span className="audio-upload-icon">🎵</span>
+            <span className="audio-upload-icon">
+              <Icon name="audio" size={22} />
+            </span>
             <span className="audio-upload-text">点击上传音频文件</span>
             <span className="audio-upload-hint">支持 mp3 / wav / aac / flac 等</span>
           </button>
@@ -991,72 +1084,18 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
               void generate()
             }}
           >
-            {busy ? '生成中…' : '🔊 生成语音'}
+            {busy ? (
+              '生成中…'
+            ) : (
+              <>
+                <Icon name="audio" size={14} />
+                生成语音
+              </>
+            )}
           </button>
         </div>
       )}
     </div>
-  )
-}
-
-// 对话节点：props.text 存 {system, modelKey, messages, documents, summary}；
-// 发送经网关 streamText，主进程分片事件推送，逐字渲染
-// documents 支持上传文档（txt/md/json 正文注入上下文）
-// summary 实现 LangChain ConversationSummaryMemory 式自动压缩
-export interface ChatDocument {
-  name: string
-  content: string
-}
-
-interface ChatData {
-  system: string
-  modelKey: string
-  messages: ChatMessage[]
-  temperature: number
-  maxTokens: number
-  /** 上传的文档列表，内容自动注入对话上下文 */
-  documents?: ChatDocument[]
-  /** 已压缩的历史摘要（LangChain ConversationSummaryMemory 模式） */
-  summary?: string
-  /** 是否启用自动压缩 */
-  autoCompress?: boolean
-}
-
-export type { ChatData }
-export { parseChat }
-
-function parseChat(text: string): ChatData {
-  return parseJsonProp(
-    text,
-    (v) => {
-      const o = v as Record<string, unknown>
-      if (typeof o === 'object' && o !== null && Array.isArray(o.messages)) {
-        const messages = o.messages
-          .map((m) => m as { role?: unknown; content?: unknown })
-          .filter(
-            (m) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string'
-          )
-          .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content as string }))
-        // 解析上传文档列表
-        const rawDocs = Array.isArray(o.documents) ? o.documents : []
-        const documents = rawDocs
-          .map((d) => d as { name?: unknown; content?: unknown })
-          .filter((d) => typeof d.name === 'string' && typeof d.content === 'string')
-          .map((d) => ({ name: d.name as string, content: d.content as string }))
-        return {
-          system: typeof o.system === 'string' ? o.system : '',
-          modelKey: typeof o.modelKey === 'string' ? o.modelKey : '',
-          messages,
-          temperature: typeof o.temperature === 'number' ? o.temperature : 0.7,
-          maxTokens: typeof o.maxTokens === 'number' ? o.maxTokens : 4096,
-          documents,
-          summary: typeof o.summary === 'string' ? o.summary : '',
-          autoCompress: typeof o.autoCompress === 'boolean' ? o.autoCompress : true
-        }
-      }
-      return null
-    },
-    { system: '', modelKey: '', messages: [], temperature: 0.7, maxTokens: 4096, documents: [], summary: '', autoCompress: true }
   )
 }
 
@@ -1072,18 +1111,20 @@ export function ChatBody({ shape }: NodeBodyProps): React.JSX.Element {
     if (!loaded) void loadProviders()
   }, [loaded, loadProviders])
 
-  const modelName =
-    options.find((o) => o.key === data.modelKey)?.model?.name ?? '未选择模型'
+  const selectedModel = options.find((o) => o.key === data.modelKey)
+  const modelName = selectedModel
+    ? selectedModel.model.name || selectedModel.model.id
+    : '未选择模型'
 
   return (
     <div className="chat-body-compact">
-      <div className="chat-compact-model">💬 {modelName}</div>
+      <div className="chat-compact-model">
+        <Icon name="chat" size={14} />
+        {modelName}
+      </div>
       <div className="chat-compact-stats">
-        {data.messages.length > 0
-          ? `${data.messages.length} 条对话`
-          : '暂无对话'}
-        {' · '}
-        T{data.temperature.toFixed(1)} · {data.maxTokens} tok
+        {data.messages.length > 0 ? `${data.messages.length} 条对话` : '暂无对话'}
+        {' · '}T{data.temperature.toFixed(1)} · {data.maxTokens} tok
       </div>
       <div className="chat-compact-hint">选中此节点 → 右侧面板对话</div>
     </div>
@@ -1099,6 +1140,15 @@ interface ScriptShot {
   scene: string
   dialogue: string
   duration: string
+  [key: string]: unknown
+}
+
+interface ScriptOutputField {
+  id: string
+  path: string
+  label: string
+  type: 'string' | 'number' | 'boolean' | 'object' | 'array'
+  description: string
 }
 
 interface ScriptData {
@@ -1106,18 +1156,40 @@ interface ScriptData {
   shots: ScriptShot[]
   /** AI 拆解用的对话模型 key（`${providerId}::${modelId}`），空串表示未选 */
   modelKey?: string
+  outputFields: ScriptOutputField[]
 }
+
+const DEFAULT_SCRIPT_FIELDS: ScriptOutputField[] = [
+  { id: 'scene', path: 'scene', label: '画面描述', type: 'string', description: '镜头画面与构图' },
+  {
+    id: 'dialogue',
+    path: 'dialogue',
+    label: '台词',
+    type: 'string',
+    description: '角色台词或旁白'
+  },
+  {
+    id: 'sound',
+    path: 'sound',
+    label: '音效',
+    type: 'string',
+    description: '环境声、动作声或音乐'
+  },
+  { id: 'duration', path: 'duration', label: '时长', type: 'string', description: '例如 3s' }
+]
 
 const emptyShot = (): ScriptShot => ({
   id: Math.random().toString(36).slice(2, 9),
   scene: '',
   dialogue: '',
+  sound: '',
   duration: ''
 })
 
 function normalizeShot(v: unknown): ScriptShot {
   const o = (typeof v === 'object' && v !== null ? v : {}) as Record<string, unknown>
   return {
+    ...o,
     id: typeof o.id === 'string' ? o.id : Math.random().toString(36).slice(2, 9),
     scene: typeof o.scene === 'string' ? o.scene : '',
     dialogue: typeof o.dialogue === 'string' ? o.dialogue : '',
@@ -1126,38 +1198,94 @@ function normalizeShot(v: unknown): ScriptShot {
 }
 
 function parseScript(text: string): ScriptData {
-  if (!text) return { source: '', shots: [] }
+  if (!text) return { source: '', shots: [], outputFields: DEFAULT_SCRIPT_FIELDS }
   try {
     const v = JSON.parse(text) as {
       source?: unknown
       shots?: unknown
       modelKey?: unknown
+      outputFields?: unknown
     }
     if (v && typeof v === 'object' && Array.isArray(v.shots)) {
+      const outputFields = Array.isArray(v.outputFields)
+        ? v.outputFields
+            .map((field) => field as Partial<ScriptOutputField>)
+            .filter(
+              (field): field is ScriptOutputField =>
+                typeof field.id === 'string' &&
+                typeof field.path === 'string' &&
+                typeof field.label === 'string' &&
+                ['string', 'number', 'boolean', 'object', 'array'].includes(field.type ?? '')
+            )
+            .map((field) => ({ ...field, description: field.description ?? '' }))
+        : DEFAULT_SCRIPT_FIELDS
       return {
         source: typeof v.source === 'string' ? v.source : '',
         shots: v.shots.map(normalizeShot),
-        modelKey: typeof v.modelKey === 'string' ? v.modelKey : undefined
+        modelKey: typeof v.modelKey === 'string' ? v.modelKey : undefined,
+        outputFields: outputFields.length > 0 ? outputFields : DEFAULT_SCRIPT_FIELDS
       }
     }
   } catch {
     // 非结构化内容视为剧本文本
   }
-  return { source: text, shots: [] }
+  return { source: text, shots: [], outputFields: DEFAULT_SCRIPT_FIELDS }
 }
 
 const SCRIPT_MAX_H = 640
 
-// AI 拆解剧本的系统提示词：要求模型输出 JSON 数组分镜
-const STORYBOARD_SYSTEM_PROMPT = `你是一位专业的影视分镜导演。请将用户提供的剧本文本拆解为分镜列表。
+function setNestedValue(target: Record<string, unknown>, path: string, value: unknown): void {
+  const parts = path
+    .split('.')
+    .map((part) => part.trim())
+    .filter(Boolean)
+  if (parts.length === 0) return
+  let current = target
+  for (const part of parts.slice(0, -1)) {
+    const existing = current[part]
+    if (!existing || typeof existing !== 'object' || Array.isArray(existing)) current[part] = {}
+    current = current[part] as Record<string, unknown>
+  }
+  current[parts[parts.length - 1]] = value
+}
+
+function getNestedValue(target: Record<string, unknown>, path: string): unknown {
+  return path
+    .split('.')
+    .filter(Boolean)
+    .reduce<unknown>((current, part) => {
+      if (!current || typeof current !== 'object') return undefined
+      return (current as Record<string, unknown>)[part]
+    }, target)
+}
+
+function buildStoryboardSystemPrompt(fields: ScriptOutputField[]): string {
+  const example: Record<string, unknown> = {}
+  for (const field of fields) {
+    const sample =
+      field.type === 'number'
+        ? 0
+        : field.type === 'boolean'
+          ? false
+          : field.type === 'array'
+            ? []
+            : field.type === 'object'
+              ? {}
+              : field.description || field.label
+    setNestedValue(example, field.path, sample)
+  }
+  const definitions = fields
+    .map((field) => `- ${field.path} (${field.type})：${field.description || field.label}`)
+    .join('\n')
+  return `你是一位专业的影视分镜导演。请将用户提供的剧本文本拆解为分镜列表。
 输出要求：
-1. 只输出一个 JSON 数组，不要添加任何其他文字或 markdown 标记
-2. 每个元素格式为 {"scene":"画面描述","dialogue":"台词或音效","duration":"预估时长（如 3s）"}
-3. 根据剧情节奏合理划分镜头，通常每 5-15 秒为一个镜头
-4. 画面描述要具体、可视化，适合后续 AI 绘图参考
-5. 台词包含角色对话、旁白或音效描述
-示例输出：
-[{"scene":"特写：清晨阳光透过窗帘洒在床头","dialogue":"（闹钟响起）","duration":"3s"},{"scene":"中景：女孩揉着眼睛从床上坐起","dialogue":"又是新的一天…","duration":"5s"}]`
+1. 只输出一个 JSON 数组，不要添加其他文字或 Markdown 标记
+2. 每个数组元素必须严格遵守以下字段定义，不能改名：
+${definitions}
+3. 字段路径中的点表示 JSON 层级，例如 camera.angle 表示 {"camera":{"angle":"..."}}
+4. 根据剧情节奏合理划分镜头，画面描述应具体、可视化
+单个元素结构示例：${JSON.stringify(example)}`
+}
 
 // 从 AI 响应中提取 JSON 数组
 function extractShotsJson(raw: string): ScriptShot[] | null {
@@ -1203,6 +1331,7 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
 
   // AI 拆解状态
   const [breaking, setBreaking] = useState(false)
+  const [showOutputSettings, setShowOutputSettings] = useState(false)
   const breakTaskRef = useRef<string | null>(null)
   const breakBufRef = useRef<string>('')
   const providers = useGatewayStore((s) => s.providers)
@@ -1223,6 +1352,18 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
 
   const patchShot = (id: string, patch: Partial<ScriptShot>): void => {
     update({ ...data, shots: data.shots.map((s) => (s.id === id ? { ...s, ...patch } : s)) })
+  }
+
+  const patchShotPath = (id: string, path: string, value: unknown): void => {
+    update({
+      ...data,
+      shots: data.shots.map((shot) => {
+        if (shot.id !== id) return shot
+        const next = structuredClone(shot) as ScriptShot
+        setNestedValue(next, path, value)
+        return next
+      })
+    })
   }
 
   const moveShot = (index: number, delta: -1 | 1): void => {
@@ -1274,8 +1415,10 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
       setBreaking(false)
       return
     }
-    if (!data.source.trim()) {
-      toast('请先输入剧本文本')
+    const upstream = gatherUpstreamText(editor, shape.id)
+    const source = upstream ? `${upstream}\n\n---\n\n${data.source.trim()}` : data.source.trim()
+    if (!source) {
+      toast('请先输入剧本文本或连接上游文本')
       return
     }
     const modelKey = data.modelKey ?? ''
@@ -1293,8 +1436,8 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
     const res = await window.api.gateway.chatStart({
       providerId: opt.provider.id,
       modelId: opt.model.id,
-      system: STORYBOARD_SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: data.source.trim() }]
+      system: buildStoryboardSystemPrompt(data.outputFields),
+      messages: [{ role: 'user', content: source }]
     })
     if (!res.ok) {
       setBreaking(false)
@@ -1317,7 +1460,7 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.shots.length, data.source.length])
+  }, [data.shots.length, data.source.length, data.outputFields.length, showOutputSettings])
 
   // 在高度副作用之后执行：此刻文本+高度变更都已落入同一段 pendingDiff，再打分段点
   useLayoutEffect(() => {
@@ -1339,6 +1482,116 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
         onBlur={markSession}
         onPointerDown={(e) => stopEventPropagation(e)}
       />
+      {showOutputSettings && (
+        <div className="script-output-settings">
+          <div className="script-output-head">
+            <div>
+              <strong>输出结构</strong>
+              <span>支持用点号定义层级，如 camera.angle</span>
+            </div>
+            <button
+              className="btn-ghost small"
+              onPointerDown={(e) => stopEventPropagation(e)}
+              onClick={(e) => {
+                e.stopPropagation()
+                setShowOutputSettings(false)
+              }}
+            >
+              完成
+            </button>
+          </div>
+          <div className="script-field-list">
+            {data.outputFields.map((field, index) => (
+              <div className="script-field-row" key={field.id}>
+                <input
+                  value={field.label}
+                  aria-label={`字段 ${index + 1} 名称`}
+                  placeholder="名称"
+                  onPointerDown={(e) => stopEventPropagation(e)}
+                  onChange={(e) =>
+                    update({
+                      ...data,
+                      outputFields: data.outputFields.map((item) =>
+                        item.id === field.id ? { ...item, label: e.target.value } : item
+                      )
+                    })
+                  }
+                />
+                <input
+                  value={field.path}
+                  aria-label={`字段 ${index + 1} 路径`}
+                  placeholder="字段路径"
+                  spellCheck={false}
+                  onPointerDown={(e) => stopEventPropagation(e)}
+                  onChange={(e) =>
+                    update({
+                      ...data,
+                      outputFields: data.outputFields.map((item) =>
+                        item.id === field.id ? { ...item, path: e.target.value } : item
+                      )
+                    })
+                  }
+                />
+                <select
+                  value={field.type}
+                  onPointerDown={(e) => stopEventPropagation(e)}
+                  onChange={(e) =>
+                    update({
+                      ...data,
+                      outputFields: data.outputFields.map((item) =>
+                        item.id === field.id
+                          ? { ...item, type: e.target.value as ScriptOutputField['type'] }
+                          : item
+                      )
+                    })
+                  }
+                >
+                  {VARIABLE_TYPES.filter((item) => item.value !== 'any').map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="shot-op danger"
+                  title="删除字段"
+                  disabled={data.outputFields.length <= 1}
+                  onPointerDown={(e) => stopEventPropagation(e)}
+                  onClick={() =>
+                    update({
+                      ...data,
+                      outputFields: data.outputFields.filter((item) => item.id !== field.id)
+                    })
+                  }
+                >
+                  <Icon name="close" size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            className="btn-ghost small"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={() =>
+              update({
+                ...data,
+                outputFields: [
+                  ...data.outputFields,
+                  {
+                    id: Math.random().toString(36).slice(2, 9),
+                    path: `field_${data.outputFields.length + 1}`,
+                    label: `字段${data.outputFields.length + 1}`,
+                    type: 'string',
+                    description: ''
+                  }
+                ]
+              })
+            }
+          >
+            <Icon name="add" size={13} /> 添加字段
+          </button>
+        </div>
+      )}
       {data.shots.length > 0 && (
         <div className="script-shots">
           {data.shots.map((shot, i) => (
@@ -1375,6 +1628,26 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
                     onPointerDown={(e) => stopEventPropagation(e)}
                   />
                 </div>
+                {data.outputFields
+                  .filter((field) => !['scene', 'dialogue', 'duration'].includes(field.path))
+                  .map((field) => {
+                    const raw = getNestedValue(shot, field.path)
+                    const value =
+                      typeof raw === 'string' ? raw : raw === undefined ? '' : JSON.stringify(raw)
+                    return (
+                      <label className="shot-custom-field" key={field.id}>
+                        <span>{field.label || field.path}</span>
+                        <input
+                          value={value}
+                          spellCheck={false}
+                          placeholder={field.path}
+                          onPointerDown={(e) => stopEventPropagation(e)}
+                          onChange={(e) => patchShotPath(shot.id, field.path, e.target.value)}
+                          onBlur={markSession}
+                        />
+                      </label>
+                    )
+                  })}
               </div>
               <div className="shot-ops">
                 <button
@@ -1404,7 +1677,7 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
                   }}
                   onPointerDown={(e) => stopEventPropagation(e)}
                 >
-                  ✕
+                  <Icon name="close" size={14} />
                 </button>
               </div>
             </div>
@@ -1413,6 +1686,13 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
       )}
       <div className="script-foot">
         <button
+          className={`btn-ghost small ${showOutputSettings ? 'active' : ''}`}
+          onClick={() => setShowOutputSettings((value) => !value)}
+          onPointerDown={(e) => stopEventPropagation(e)}
+        >
+          <Icon name="settings" size={14} /> 输出结构
+        </button>
+        <button
           className="btn-ghost small"
           onClick={() => {
             update({ ...data, shots: [...data.shots, emptyShot()] })
@@ -1420,7 +1700,10 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
           }}
           onPointerDown={(e) => stopEventPropagation(e)}
         >
-          ＋ 添加镜头
+          <>
+            <Icon name="add" size={14} />
+            添加镜头
+          </>
         </button>
         {chatModels.length > 0 ? (
           <>
@@ -1430,7 +1713,14 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
               disabled={!data.source.trim() && !breaking}
               onPointerDown={(e) => stopEventPropagation(e)}
             >
-              {breaking ? '■ 取消拆解…' : '⚡ AI 拆解'}
+              {breaking ? (
+                '取消拆解…'
+              ) : (
+                <>
+                  <Icon name="spark" size={14} />
+                  AI 拆解
+                </>
+              )}
             </button>
             <select
               className="script-model-select"
@@ -1456,7 +1746,10 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
             }}
             onPointerDown={(e) => stopEventPropagation(e)}
           >
-            ⚡ AI 拆解（需配置模型）
+            <>
+              <Icon name="spark" size={14} />
+              AI 拆解（需配置模型）
+            </>
           </button>
         )}
       </div>
@@ -1465,8 +1758,170 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
 }
 
 // ──────────────────────────────────────────────
-// M5 新增节点：JSON / Code / Group / Storyboard / Compose
+// 数据处理节点：只负责显式变量映射与透传，不隐藏任何业务逻辑。
 // ──────────────────────────────────────────────
+
+type VariableValueType = 'string' | 'number' | 'boolean' | 'object' | 'array' | 'any'
+
+interface ProcessorData {
+  inputName: string
+  outputName: string
+  valueType: VariableValueType
+  fallback: string
+}
+
+function parseProcessor(text: string): ProcessorData {
+  return parseJsonProp(
+    text,
+    (value) => {
+      const data = value as Record<string, unknown>
+      if (!data || typeof data !== 'object') return null
+      const allowed: VariableValueType[] = ['string', 'number', 'boolean', 'object', 'array', 'any']
+      return {
+        inputName: typeof data.inputName === 'string' ? data.inputName : 'input',
+        outputName: typeof data.outputName === 'string' ? data.outputName : 'output',
+        valueType: allowed.includes(data.valueType as VariableValueType)
+          ? (data.valueType as VariableValueType)
+          : 'any',
+        fallback: typeof data.fallback === 'string' ? data.fallback : ''
+      }
+    },
+    { inputName: 'input', outputName: 'output', valueType: 'any', fallback: '' }
+  )
+}
+
+const VARIABLE_TYPES: { value: VariableValueType; label: string }[] = [
+  { value: 'any', label: '任意' },
+  { value: 'string', label: '文本' },
+  { value: 'number', label: '数字' },
+  { value: 'boolean', label: '布尔' },
+  { value: 'object', label: '对象' },
+  { value: 'array', label: '数组' }
+]
+
+export function ProcessorBody({ shape }: NodeBodyProps): React.JSX.Element {
+  const editor = useEditor()
+  const data = parseProcessor(shape.props.text)
+
+  const update = (next: ProcessorData): void => {
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: { text: JSON.stringify(next) }
+    })
+  }
+
+  const hasInput = hasIncomingConnection(editor, shape.id, 'in-value')
+
+  return (
+    <div className="processor-body">
+      <div className="variable-section-title">变量映射</div>
+      <div className="variable-row input">
+        <span className="variable-direction">输入</span>
+        <input
+          value={data.inputName}
+          aria-label="输入变量名"
+          spellCheck={false}
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onChange={(e) => update({ ...data, inputName: e.target.value || 'input' })}
+        />
+        <select
+          value={data.valueType}
+          aria-label="变量类型"
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onChange={(e) => update({ ...data, valueType: e.target.value as VariableValueType })}
+        >
+          {VARIABLE_TYPES.map((item) => (
+            <option key={item.value} value={item.value}>
+              {item.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="variable-map-arrow">↓ 原样传递</div>
+      <div className="variable-row output">
+        <span className="variable-direction">输出</span>
+        <input
+          value={data.outputName}
+          aria-label="输出变量名"
+          spellCheck={false}
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onChange={(e) => update({ ...data, outputName: e.target.value || 'output' })}
+        />
+        <span className="variable-type-badge">{data.valueType}</span>
+      </div>
+      {!hasInput && (
+        <input
+          className="processor-fallback"
+          value={data.fallback}
+          placeholder="未连线时使用的固定值（可选）"
+          spellCheck={false}
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onChange={(e) => update({ ...data, fallback: e.target.value })}
+        />
+      )}
+      <div className={`processor-status ${hasInput ? 'connected' : ''}`}>
+        {hasInput ? '输入变量已由连线填充' : '等待连线或填写固定值'}
+      </div>
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────
+// JSON / Code / Storyboard
+// ──────────────────────────────────────────────
+
+function JsonValueCards({ value }: { value: unknown }): React.JSX.Element {
+  const rows = Array.isArray(value)
+    ? value
+    : typeof value === 'object' &&
+        value !== null &&
+        Array.isArray((value as { shots?: unknown }).shots)
+      ? (value as { shots: unknown[] }).shots
+      : null
+
+  if (rows) {
+    return (
+      <div className="json-card-list">
+        {rows.slice(0, 40).map((row, index) => {
+          const fields =
+            typeof row === 'object' && row !== null
+              ? Object.entries(row as Record<string, unknown>)
+              : [['value', row]]
+          return (
+            <article className="json-data-card" key={index}>
+              <span className="json-card-index">{index + 1}</span>
+              <div className="json-card-fields">
+                {fields.slice(0, 10).map(([key, field]) => (
+                  <div className="json-card-field" key={key}>
+                    <span>{key}</span>
+                    <strong>{typeof field === 'string' ? field : JSON.stringify(field)}</strong>
+                  </div>
+                ))}
+              </div>
+            </article>
+          )
+        })}
+        {rows.length > 40 && <div className="json-card-more">还有 {rows.length - 40} 项未显示</div>}
+      </div>
+    )
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    return (
+      <div className="json-object-card">
+        {Object.entries(value as Record<string, unknown>).map(([key, field]) => (
+          <div className="json-card-field" key={key}>
+            <span>{key}</span>
+            <strong>{typeof field === 'string' ? field : JSON.stringify(field)}</strong>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  return <pre className="json-pre">{JSON.stringify(value, null, 2)}</pre>
+}
 
 // JSON 节点：结构化数据查看器 + 编辑器
 export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
@@ -1515,8 +1970,10 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
 
   const text = shape.props.text || ''
   let formatted = text
+  let parsedJson: unknown = null
   try {
-    formatted = JSON.stringify(JSON.parse(text), null, 2)
+    parsedJson = JSON.parse(text)
+    formatted = JSON.stringify(parsedJson, null, 2)
   } catch {
     // 非合法 JSON 原样展示
   }
@@ -1537,18 +1994,33 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
   return (
     <div className="json-body" ref={scrollRef}>
       {text ? (
-        <pre
-          className="json-pre"
+        <div
+          className="json-preview"
+          onPointerDown={(e) => stopEventPropagation(e)}
           onDoubleClick={(e) => {
             e.stopPropagation()
             setDraft(shape.props.text)
             setEditing(true)
           }}
         >
-          {formatted}
-        </pre>
+          {parsedJson === null ? (
+            <pre className="json-pre">{formatted}</pre>
+          ) : (
+            <JsonValueCards value={parsedJson} />
+          )}
+        </div>
       ) : (
-        <div className="node-hint center">双击输入 JSON 数据</div>
+        <div
+          className="node-hint center"
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onDoubleClick={(e) => {
+            e.stopPropagation()
+            setDraft(shape.props.text)
+            setEditing(true)
+          }}
+        >
+          双击输入 JSON 数据
+        </div>
       )}
       <div className="code-toolbar">
         <button
@@ -1560,7 +2032,10 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
             setEditing(true)
           }}
         >
-          {text ? '✏️ 编辑' : '✏️ 输入'}
+          <>
+            <Icon name="edit" size={14} />
+            {text ? '编辑' : '输入'}
+          </>
         </button>
         {text && (
           <button
@@ -1571,7 +2046,10 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
               formatJson()
             }}
           >
-            🎨 格式化
+            <>
+              <Icon name="spark" size={14} />
+              格式化
+            </>
           </button>
         )}
       </div>
@@ -1579,20 +2057,70 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
   )
 }
 
-// Code 节点：代码片段展示器 + 编辑器
+interface CodeConfig {
+  source: string
+  inputName: string
+  inputType: VariableValueType
+  outputName: string
+  outputType: VariableValueType
+}
+
+function parseCodeConfig(text: string): CodeConfig {
+  try {
+    const value = JSON.parse(text) as Record<string, unknown>
+    if (value && typeof value === 'object' && typeof value.source === 'string') {
+      const allowed: VariableValueType[] = ['string', 'number', 'boolean', 'object', 'array', 'any']
+      return {
+        source: value.source,
+        inputName: typeof value.inputName === 'string' ? value.inputName : 'input',
+        inputType: allowed.includes(value.inputType as VariableValueType)
+          ? (value.inputType as VariableValueType)
+          : 'any',
+        outputName: typeof value.outputName === 'string' ? value.outputName : 'output',
+        outputType: allowed.includes(value.outputType as VariableValueType)
+          ? (value.outputType as VariableValueType)
+          : 'any'
+      }
+    }
+  } catch {
+    // 旧版本纯代码文本直接迁移为 source。
+  }
+  return {
+    source: text,
+    inputName: 'input',
+    inputType: 'any',
+    outputName: 'output',
+    outputType: 'any'
+  }
+}
+
+// Code 节点：显式变量契约 + 代码片段编辑器
 export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
+  const data = parseCodeConfig(shape.props.text)
   const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(shape.props.text)
+  const [draft, setDraft] = useState(data.source)
   const scrollRef = useRef<HTMLDivElement>(null)
   useWheelScroll(scrollRef)
 
   const commit = (): void => {
     setEditing(false)
-    if (draft !== shape.props.text) {
-      editor.updateShape({ id: shape.id, type: 'node-card', props: { text: draft } })
+    if (draft !== data.source) {
+      editor.updateShape({
+        id: shape.id,
+        type: 'node-card',
+        props: { text: JSON.stringify({ ...data, source: draft }) }
+      })
       markUndoPoint(editor, 'code-edit')
     }
+  }
+
+  const updateConfig = (next: CodeConfig): void => {
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: { text: JSON.stringify(next) }
+    })
   }
 
   if (editing) {
@@ -1623,32 +2151,85 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
     )
   }
 
-  const text = shape.props.text || ''
+  const text = data.source
   return (
     <div className="code-body" ref={scrollRef}>
-      {/* I/O 类型指示器 */}
-      <div className="code-io-hints">
-        <span className="code-io-hint in" title="可接收文本和 JSON 数据">
-          输入: text · json
-        </span>
-        <span className="code-io-arrow">→</span>
-        <span className="code-io-hint out" title="输出文本和 JSON 数据">
-          输出: text · json
-        </span>
+      <div className="code-variable-contract">
+        <div className="variable-row input">
+          <span className="variable-direction">输入</span>
+          <input
+            value={data.inputName}
+            aria-label="代码输入变量名"
+            spellCheck={false}
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onChange={(e) => updateConfig({ ...data, inputName: e.target.value || 'input' })}
+          />
+          <select
+            value={data.inputType}
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onChange={(e) =>
+              updateConfig({ ...data, inputType: e.target.value as VariableValueType })
+            }
+          >
+            {VARIABLE_TYPES.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="variable-row output">
+          <span className="variable-direction">输出</span>
+          <input
+            value={data.outputName}
+            aria-label="代码输出变量名"
+            spellCheck={false}
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onChange={(e) => updateConfig({ ...data, outputName: e.target.value || 'output' })}
+          />
+          <select
+            value={data.outputType}
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onChange={(e) =>
+              updateConfig({ ...data, outputType: e.target.value as VariableValueType })
+            }
+          >
+            {VARIABLE_TYPES.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="code-variable-help">
+          代码中读取 <code>input.{data.inputName}</code>，return 值写入{' '}
+          <code>{data.outputName}</code>
+        </div>
       </div>
       {text ? (
         <pre
           className="code-pre"
+          onPointerDown={(e) => stopEventPropagation(e)}
           onDoubleClick={(e) => {
             e.stopPropagation()
-            setDraft(shape.props.text)
+            setDraft(data.source)
             setEditing(true)
           }}
         >
           {text}
         </pre>
       ) : (
-        <div className="node-hint center">双击输入代码片段（可处理文本 / JSON 数据）</div>
+        <div
+          className="node-hint center"
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onDoubleClick={(e) => {
+            e.stopPropagation()
+            setDraft(data.source)
+            setEditing(true)
+          }}
+        >
+          双击输入代码片段（可处理文本 / JSON 数据）
+        </div>
       )}
       <div className="code-toolbar">
         <button
@@ -1656,154 +2237,20 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
           onPointerDown={(e) => stopEventPropagation(e)}
           onClick={(e) => {
             e.stopPropagation()
-            setDraft(shape.props.text)
+            setDraft(data.source)
             setEditing(true)
           }}
         >
-          {text ? '✏️ 编辑' : '✏️ 输入'}
+          <>
+            <Icon name="edit" size={14} />
+            {text ? '编辑' : '输入'}
+          </>
         </button>
       </div>
     </div>
   )
 }
 
-// Group 节点：分组容器（框选打组 + 整组移动 + 解组）
-interface GroupData {
-  memberIds: string[]
-}
-
-function parseGroupData(text: string): GroupData {
-  return parseJsonProp(
-    text,
-    (v) => {
-      const o = v as Record<string, unknown>
-      if (typeof o === 'object' && o !== null && Array.isArray(o.memberIds)) {
-        return { memberIds: o.memberIds.filter((x): x is string => typeof x === 'string') }
-      }
-      return null
-    },
-    { memberIds: [] }
-  )
-}
-
-export function GroupBody({ shape }: NodeBodyProps): React.JSX.Element {
-  const editor = useEditor()
-  const data = parseGroupData(shape.props.text)
-  const prevPosRef = useRef({ x: shape.x, y: shape.y })
-
-  // 同步移动组内成员（计算位移增量，应用到所有成员）
-  useEffect(() => {
-    const prev = prevPosRef.current
-    const dx = shape.x - prev.x
-    const dy = shape.y - prev.y
-    if ((dx !== 0 || dy !== 0) && data.memberIds.length > 0) {
-      const updates = data.memberIds
-        .map((id) => {
-          const s = editor.getShape(id as TLShapeId)
-          return s ? { id: s.id, type: s.type, x: s.x + dx, y: s.y + dy } : null
-        })
-        .filter((u): u is NonNullable<typeof u> => u !== null)
-      if (updates.length > 0) editor.updateShapes(updates)
-    }
-    prevPosRef.current = { x: shape.x, y: shape.y }
-  })
-
-  const groupSelection = (): void => {
-    const selected = editor
-      .getSelectedShapes()
-      .filter((s) => s.id !== shape.id && s.type === 'node-card')
-    if (selected.length < 2) {
-      toast('请先在画布上选中至少 2 个节点')
-      return
-    }
-    const memberIds = selected.map((s) => String(s.id))
-    editor.updateShape({
-      id: shape.id,
-      type: 'node-card',
-      props: { text: JSON.stringify({ memberIds }) }
-    })
-    markUndoPoint(editor, 'group-create')
-    toast(`已将 ${memberIds.length} 个节点打组`)
-  }
-
-  const ungroup = (): void => {
-    editor.updateShape({
-      id: shape.id,
-      type: 'node-card',
-      props: { text: '' }
-    })
-    markUndoPoint(editor, 'group-dissolve')
-    toast('已解组')
-  }
-
-  const selectMembers = (): void => {
-    const ids = data.memberIds.map((id) => id as TLShapeId)
-    editor.setSelectedShapes(ids)
-  }
-
-  // 空组：显示打组引导
-  if (data.memberIds.length === 0) {
-    return (
-      <div className="group-body">
-        <span className="group-icon">📦</span>
-        <span className="group-empty-hint">选中多个节点后点击下方按钮打组</span>
-        <button
-          className="btn-ghost small"
-          onPointerDown={(e) => stopEventPropagation(e)}
-          onClick={(e) => {
-            e.stopPropagation()
-            groupSelection()
-          }}
-        >
-          📦 将选中节点打组
-        </button>
-      </div>
-    )
-  }
-
-  // 已打组：显示成员列表 + 操作
-  return (
-    <div className="group-body">
-      <div className="group-header">
-        <span className="group-icon">📦</span>
-        <span className="group-count">{data.memberIds.length} 个节点</span>
-      </div>
-      <div className="group-members">
-        {data.memberIds.map((id) => {
-          const s = editor.getShape(id as TLShapeId) as NodeBodyProps['shape'] | undefined
-          return (
-            <div key={id} className="group-member-item">
-              <span className="group-member-dot">{s ? '●' : '○'}</span>
-              <span>{s?.props.title || s?.props.nodeType || '已删除'}</span>
-            </div>
-          )
-        })}
-      </div>
-      <div className="group-actions">
-        <button
-          className="btn-ghost small"
-          onPointerDown={(e) => stopEventPropagation(e)}
-          onClick={(e) => {
-            e.stopPropagation()
-            selectMembers()
-          }}
-        >
-          全选成员
-        </button>
-        <button
-          className="btn-ghost small danger"
-          onPointerDown={(e) => stopEventPropagation(e)}
-          onClick={(e) => {
-            e.stopPropagation()
-            ungroup()
-          }}
-        >
-          解组
-        </button>
-      </div>
-    </div>
-  )
-}
 // Storyboard 节点：分镜板（支持逐镜生图 + 全部生图）
 interface StoryboardShot {
   id: string
@@ -1877,6 +2324,8 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
   const imgOptions = modelsByModality(providers, 'image')
   const data = parseStoryboard(shape.props.text)
   const [generatingShots, setGeneratingShots] = useState<Set<string>>(new Set())
+  const [editingInput, setEditingInput] = useState(false)
+  const [draftInput, setDraftInput] = useState(shape.props.text)
 
   useEffect(() => {
     if (!loaded) void loadProviders()
@@ -1890,15 +2339,17 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
     })
   }
 
-  // 从上游接收分镜数据
+  // 从上游接收分镜数据。监听画布变更，保证“先创建节点、后连接连线”也能同步。
   useEffect(() => {
-    const upstream = gatherUpstreamText(editor, shape.id)
-    if (!upstream) return
-    try {
-      const parsed = JSON.parse(upstream)
-      if (Array.isArray(parsed) && parsed.length > 0 && data.shots.length === 0) {
+    const importUpstream = (): void => {
+      if (data.shots.length > 0) return
+      const upstream = gatherUpstreamJson(editor, shape.id)
+      const parsed = Array.isArray(upstream)
+        ? { shots: upstream }
+        : (upstream as { shots?: unknown } | null)
+      if (parsed && Array.isArray(parsed.shots) && parsed.shots.length > 0) {
         update({
-          shots: parsed.map(
+          shots: parsed.shots.map(
             (s) =>
               ({
                 id: Math.random().toString(36).slice(2, 9),
@@ -1910,11 +2361,11 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
         })
         markUndoPoint(editor, 'storyboard-import')
       }
-    } catch {
-      // 非 JSON 上游，忽略
     }
+    importUpstream()
+    return editor.store.listen(importUpstream, { scope: 'document' })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [editor, shape.id, data.shots.length])
 
   // 自动撑高
   useLayoutEffect(() => {
@@ -1969,12 +2420,71 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
     toast(`${pending.length} 个镜头已生成`)
   }
 
+  const commitInput = (): void => {
+    let raw: unknown
+    try {
+      raw = JSON.parse(draftInput)
+    } catch {
+      toast('分镜 JSON 格式有误')
+      return
+    }
+    if (!raw || typeof raw !== 'object' || !Array.isArray((raw as { shots?: unknown }).shots)) {
+      toast('分镜 JSON 需要包含 shots 数组')
+      return
+    }
+    const next = parseStoryboard(draftInput)
+    setEditingInput(false)
+    update(next)
+    markUndoPoint(editor, 'storyboard-json-edit')
+  }
+
   if (data.shots.length === 0) {
+    if (editingInput) {
+      return (
+        <textarea
+          className="node-textarea code-edit"
+          autoFocus
+          value={draftInput}
+          placeholder='{"shots":[{"scene":"画面描述","dialogue":"","duration":"3s"}]}'
+          onChange={(e) => setDraftInput(e.target.value)}
+          onBlur={commitInput}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              setEditingInput(false)
+              setDraftInput(shape.props.text)
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') commitInput()
+          }}
+          onPointerDown={(e) => stopEventPropagation(e)}
+          spellCheck={false}
+        />
+      )
+    }
     return (
-      <div className="node-hint center">
+      <div
+        className="node-hint center"
+        onPointerDown={(e) => stopEventPropagation(e)}
+        onDoubleClick={(e) => {
+          e.stopPropagation()
+          setDraftInput(shape.props.text)
+          setEditingInput(true)
+        }}
+      >
         将脚本节点连入此节点，
         <br />
-        或粘贴分镜 JSON 到此处
+        或双击输入分镜 JSON
+        <button
+          className="btn-ghost small"
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onClick={(e) => {
+            e.stopPropagation()
+            setDraftInput(shape.props.text)
+            setEditingInput(true)
+          }}
+        >
+          <Icon name="edit" size={14} />
+          输入 JSON
+        </button>
       </div>
     )
   }
@@ -2049,125 +2559,28 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
                 void generateShotImage(shot.id)
               }}
             >
-              {shot.scene ? '📷 生图' : '📷'}
+              {shot.scene ? (
+                <>
+                  <Icon name="image" size={13} />
+                  生图
+                </>
+              ) : (
+                <Icon name="image" size={13} />
+              )}
             </button>
           )}
           <div className="storyboard-info">
             <div className="storyboard-scene">{shot.scene || '（无画面描述）'}</div>
-            {shot.dialogue && <div className="storyboard-dialogue">💬 {shot.dialogue}</div>}
+            {shot.dialogue && (
+              <div className="storyboard-dialogue">
+                <Icon name="chat" size={12} />
+                {shot.dialogue}
+              </div>
+            )}
             {shot.duration && <div className="storyboard-duration">⏱ {shot.duration}</div>}
           </div>
         </div>
       ))}
-    </div>
-  )
-}
-// Compose 节点：视频合成（调用系统 ffmpeg 拼接连入的视频片段）
-export function ComposeBody({ shape, openPreview }: NodeBodyProps): React.JSX.Element {
-  const editor = useEditor()
-  const scrollRef = useRef<HTMLDivElement>(null)
-  useWheelScroll(scrollRef)
-  const project = useAppStore((s) => s.currentProject)
-  const [busy, setBusy] = useState(false)
-
-  // 收集连入的视频片段
-  const clips: { mediaId: string; title: string }[] = []
-  for (const arrow of editor.getCurrentPageShapes()) {
-    if (arrow.type !== 'arrow') continue
-    const bindings = editor.getBindingsFromShape(arrow.id, 'arrow')
-    const endBinding = bindings.find((b) => b.props.terminal === 'end')
-    if (endBinding?.toId === shape.id) {
-      const src = editor.getShape(endBinding.fromId as Parameters<typeof editor.getShape>[0])
-      if (src?.type === 'node-card') {
-        const card = src as NodeBodyProps['shape']
-        if (card.props.mediaPath && card.props.mediaId) {
-          clips.push({ mediaId: card.props.mediaId, title: card.props.title })
-        }
-      }
-    }
-  }
-
-  // 已合成：显示结果
-  if (shape.props.mediaPath) {
-    return (
-      <div className="compose-result">
-        <video
-          src={mediaUrl(shape.props.mediaPath)}
-          className="compose-preview"
-          draggable={false}
-        />
-        <button
-          className="btn-ghost small"
-          onPointerDown={(e) => stopEventPropagation(e)}
-          onClick={(e) => {
-            e.stopPropagation()
-            openPreview({
-              kind: 'video',
-              url: mediaUrl(shape.props.mediaPath),
-              title: shape.props.title
-            })
-          }}
-        >
-          {'\u25B6'} 播放合成视频
-        </button>
-      </div>
-    )
-  }
-
-  const compose = async (): Promise<void> => {
-    if (!project) return toast('项目未就绪')
-    if (clips.length < 2) return toast('至少需要 2 个视频片段')
-    setBusy(true)
-    const res = await window.api.gateway.composeVideos({
-      projectId: project.id,
-      mediaIds: clips.map((c) => c.mediaId)
-    })
-    setBusy(false)
-    if (!res.ok) return toast(`合成失败：${res.error.message}`)
-    editor.updateShape({
-      id: shape.id,
-      type: 'node-card',
-      props: {
-        mediaId: res.data.id,
-        mediaPath: res.data.path,
-        mediaMime: res.data.mime,
-        title: '合成视频'
-      }
-    })
-    markUndoPoint(editor, 'compose-videos')
-    toast('视频合成完成！')
-  }
-
-  return (
-    <div className="compose-body" ref={scrollRef}>
-      <div className="compose-icon">🎬</div>
-      <div className="compose-title">视频合成</div>
-      <div className="compose-info">
-        {clips.length > 0
-          ? `${clips.length} 个视频片段已接入`
-          : '将多个视频节点连入此节点进行拼接合成'}
-      </div>
-      {clips.length > 0 && (
-        <div className="compose-clips">
-          {clips.map((c, i) => (
-            <div key={i} className="compose-clip-item">
-              📹 {c.title}
-            </div>
-          ))}
-        </div>
-      )}
-      <button
-        className="btn-primary small"
-        disabled={clips.length < 2 || busy}
-        onPointerDown={(e) => stopEventPropagation(e)}
-        onClick={(e) => {
-          e.stopPropagation()
-          void compose()
-        }}
-      >
-        {busy ? '合成中…' : '🎬 合成视频'}
-      </button>
-      {clips.length === 1 && <div className="compose-hint">至少需要 2 个片段</div>}
     </div>
   )
 }

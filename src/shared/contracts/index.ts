@@ -18,6 +18,7 @@ export const IPC = {
   },
   media: {
     import: 'media:import',
+    importBuffer: 'media:import-buffer',
     pick: 'media:pick',
     list: 'media:list',
     delete: 'media:delete'
@@ -34,7 +35,6 @@ export const IPC = {
     videoCancel: 'gateway:video:cancel',
     videoTask: 'gateway:video:task',
     audioGenerate: 'gateway:audio:generate',
-    composeVideos: 'gateway:compose:videos',
     event: 'gateway:event'
   }
 } as const
@@ -59,6 +59,13 @@ export interface SaveProjectInput {
   id: string
   tldrawSnapshot?: unknown
   graph?: { nodes: unknown[]; edges: unknown[]; groups: unknown[] }
+}
+
+export interface ImportMediaBufferInput {
+  projectId: string
+  mime: string
+  name?: string
+  data: Uint8Array
 }
 
 // ── 模型网关契约 ──
@@ -127,17 +134,10 @@ export interface AudioGenerateInput {
   format?: string
 }
 
-// ── 视频合成 ──
-
-export interface ComposeVideosInput {
-  projectId: string
-  /** 源视频的 mediaId 列表（按顺序拼接） */
-  mediaIds: string[]
-}
-
 /** 主进程 → 渲染进程的网关事件（聊天流式分片 / 视频任务进度） */
 export type GatewayEvent =
   | { kind: 'chat-delta'; taskId: string; text: string }
+  | { kind: 'chat-reasoning'; taskId: string; text: string }
   | { kind: 'chat-done'; taskId: string }
   | { kind: 'chat-error'; taskId: string; error: string }
   | { kind: 'video-status'; taskId: string; status: string; message?: string }

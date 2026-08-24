@@ -1,13 +1,10 @@
-// 画布右侧历史操作簇：撤销 / 重做 常驻显示（不随选中状态变化）
-// 订阅 editor store 动态启用/禁用，位置在画布右侧，远离左上角
+// 顶栏历史操作：位于搜索按钮左侧，避免遮挡画布与节点。
 import { useEffect, useState } from 'react'
-import type { Editor } from 'tldraw'
+import { useEditorStore } from '../stores/editor'
+import { Icon } from '../components/Icon'
 
-interface HistoryDockProps {
-  editor: Editor | null
-}
-
-export function CanvasHistoryDock({ editor }: HistoryDockProps): React.JSX.Element | null {
+export function CanvasTopHistory(): React.JSX.Element {
+  const editor = useEditorStore((state) => state.editor)
   const [, force] = useState(0)
 
   useEffect(() => {
@@ -23,43 +20,26 @@ export function CanvasHistoryDock({ editor }: HistoryDockProps): React.JSX.Eleme
     }
   }, [editor])
 
-  if (!editor) return null
-  const canUndo = editor.canUndo()
-  const canRedo = editor.canRedo()
+  const canUndo = editor?.canUndo() ?? false
+  const canRedo = editor?.canRedo() ?? false
 
   return (
-    <div className="history-dock">
+    <div className="undo-redo-group" aria-label="历史操作">
       <button
-        className="history-dock-btn"
+        className="undo-redo-btn"
         title="撤销（Ctrl+Z）"
         disabled={!canUndo}
-        onClick={() => editor.undo()}
+        onClick={() => editor?.undo()}
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-          <path
-            d="M9 7L4 12l5 5M4 12h11a5 5 0 015 5"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+        <Icon name="undo" size={16} />
       </button>
       <button
-        className="history-dock-btn"
+        className="undo-redo-btn"
         title="重做（Ctrl+Shift+Z）"
         disabled={!canRedo}
-        onClick={() => editor.redo()}
+        onClick={() => editor?.redo()}
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-          <path
-            d="M15 7l5 5-5 5M20 12H9a5 5 0 00-5 5"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+        <Icon name="redo" size={16} />
       </button>
     </div>
   )

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { ProjectMeta } from '@shared/types'
 import { useAppStore } from '../stores/app'
 import { useConfirmStore } from '../stores/confirm'
+import { Icon } from '../components/Icon'
 
 function formatDate(ts: number): string {
   const d = new Date(ts)
@@ -79,7 +80,7 @@ export function ProjectListPage(): React.JSX.Element {
             setCreating(true)
           }}
         >
-          + 新建项目
+          <Icon name="add" size={16} /> 新建项目
         </button>
       </header>
 
@@ -135,7 +136,7 @@ export function ProjectListPage(): React.JSX.Element {
                   setRenameValue(p.name)
                 }}
               >
-                ✎
+                <Icon name="edit" size={15} />
               </button>
               <button
                 className="icon-btn danger"
@@ -145,7 +146,7 @@ export function ProjectListPage(): React.JSX.Element {
                   void handleDelete(p.id, p.name)
                 }}
               >
-                ✕
+                <Icon name="trash" size={15} />
               </button>
             </div>
           </div>

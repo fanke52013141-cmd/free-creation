@@ -2,8 +2,9 @@
 import { ipcMain, dialog } from 'electron'
 import { IPC } from '../../shared/contracts'
 import type { IpcEnvelope } from '../../shared/contracts'
+import type { ImportMediaBufferInput } from '../../shared/contracts'
 import type { MediaAsset, MediaImportError, MediaImportResult } from '../../shared/types'
-import { deleteMedia, importMedia, listMedia } from '../store/media.repo'
+import { deleteMedia, importMedia, listMedia, saveBufferAsset } from '../store/media.repo'
 
 function ok<T>(data: T): IpcEnvelope<T> {
   return { ok: true, data }
@@ -63,6 +64,35 @@ export function registerMediaIpc(): void {
       if (!input?.projectId || !Array.isArray(input.paths))
         return err('INVALID_INPUT', '参数不完整')
       return ok(await importAll(input.projectId, input.paths))
+    }
+  )
+
+  ipcMain.handle(
+    IPC.media.importBuffer,
+    async (_e, input: ImportMediaBufferInput): Promise<IpcEnvelope<MediaAsset>> => {
+      if (!input?.projectId || !input.mime?.startsWith('image/') || !input.data) {
+        return err('INVALID_INPUT', '仅支持粘贴图片数据')
+      }
+      const buffer = Buffer.from(input.data)
+      if (buffer.length === 0 || buffer.length > 50 * 1024 * 1024) {
+        return err('INVALID_INPUT', '粘贴图片为空或超过 50MB')
+      }
+      const extByMime: Record<string, string> = {
+        'image/png': '.png',
+        'image/jpeg': '.jpg',
+        'image/webp': '.webp',
+        'image/gif': '.gif',
+        'image/bmp': '.bmp',
+        'image/svg+xml': '.svg'
+      }
+      const ext = extByMime[input.mime] ?? '.png'
+      const asset = await saveBufferAsset(
+        input.projectId,
+        buffer,
+        ext,
+        input.name?.replace(/\.[^.]+$/, '') || '粘贴图片'
+      )
+      return ok(asset)
     }
   )
 

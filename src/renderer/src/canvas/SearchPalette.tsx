@@ -6,6 +6,7 @@ import { stopEventPropagation, type TLShapeId, type Editor } from 'tldraw'
 import type { NodeCardShape } from './NodeCardShape'
 import { getNodeType } from '../nodes/registry'
 import { useSearchStore } from '../stores/search'
+import { Icon } from '../components/Icon'
 
 interface SearchHit {
   id: TLShapeId
@@ -79,7 +80,9 @@ function SearchPaletteInner({ editor }: { editor: Editor }): React.JSX.Element {
     >
       <div className="search-panel">
         <div className="search-header">
-          <span className="search-icon">🔍</span>
+          <span className="search-icon">
+            <Icon name="search" size={17} />
+          </span>
           <input
             ref={inputRef}
             className="search-input"
@@ -90,7 +93,7 @@ function SearchPaletteInner({ editor }: { editor: Editor }): React.JSX.Element {
             onKeyDown={(e) => e.stopPropagation()}
           />
           <button className="search-close" onClick={close}>
-            ✕
+            <Icon name="close" size={16} />
           </button>
         </div>
         {query.trim() && (
@@ -99,7 +102,7 @@ function SearchPaletteInner({ editor }: { editor: Editor }): React.JSX.Element {
               <div className="search-empty">未找到匹配的节点</div>
             ) : (
               hits.map((hit) => {
-                const icon = getNodeType(hit.nodeType)?.icon ?? '?'
+                const icon = getNodeType(hit.nodeType)?.icon ?? 'help'
                 return (
                   <button
                     key={hit.id}
@@ -107,7 +110,9 @@ function SearchPaletteInner({ editor }: { editor: Editor }): React.JSX.Element {
                     onClick={() => jumpTo(hit)}
                     onPointerDown={(e) => stopEventPropagation(e)}
                   >
-                    <span className="search-hit-icon">{icon}</span>
+                    <span className="search-hit-icon">
+                      <Icon name={icon} size={16} />
+                    </span>
                     <div className="search-hit-info">
                       <span className="search-hit-title">{hit.title}</span>
                       {hit.snippet && <span className="search-hit-snippet">{hit.snippet}</span>}

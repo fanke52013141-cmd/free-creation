@@ -4,6 +4,7 @@ import type { ProjectMeta } from '@shared/types'
 import { useAppStore } from '../stores/app'
 import { useConfirmStore } from '../stores/confirm'
 import { useGatewayStore } from '../stores/gateway'
+import { Icon } from '../components/Icon'
 
 interface ProjectMenuProps {
   project: ProjectMeta
@@ -71,22 +72,30 @@ export function ProjectMenu({ project }: ProjectMenuProps): React.JSX.Element {
           setOpen((v) => !v)
         }}
       >
-        <span className="logo-mark">▦</span>
+        <span className="logo-mark">
+          <Icon name="grid" size={15} />
+        </span>
         <span className="logo-text">无限画布</span>
       </button>
       {open && (
         <div className="project-menu-panel">
           <button className="node-menu-item" onClick={() => void goHome()}>
-            <span className="item-icon">🏠</span>
+            <span className="item-icon">
+              <Icon name="home" size={17} />
+            </span>
             <span>回到主页</span>
           </button>
           <button className="node-menu-item" onClick={() => void goHome()}>
-            <span className="item-icon">🗂</span>
+            <span className="item-icon">
+              <Icon name="assets" size={17} />
+            </span>
             <span>全部项目</span>
           </button>
           <div className="node-menu-divider" />
           <button className="node-menu-item" onClick={() => void createNew()}>
-            <span className="item-icon">✚</span>
+            <span className="item-icon">
+              <Icon name="add" size={17} />
+            </span>
             <span>创建新项目</span>
           </button>
           <div className="node-menu-divider" />
@@ -97,11 +106,15 @@ export function ProjectMenu({ project }: ProjectMenuProps): React.JSX.Element {
               openSettings()
             }}
           >
-            <span className="item-icon">⚙</span>
+            <span className="item-icon">
+              <Icon name="settings" size={17} />
+            </span>
             <span>模型供应商设置</span>
           </button>
           <button className="node-menu-item danger" onClick={() => void removeCurrent()}>
-            <span className="item-icon">🗑</span>
+            <span className="item-icon">
+              <Icon name="trash" size={17} />
+            </span>
             <span>删除项目</span>
           </button>
         </div>

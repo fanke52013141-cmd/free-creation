@@ -14,34 +14,28 @@ const EXT_BY_MIME: Record<string, string> = {
   'image/gif': '.gif'
 }
 
-/** 将图库 media 转为 data URL（供图生图场景使用） */
-async function mediaToDataUrl(mediaId: string): Promise<string> {
+/** 读取图库原始文件，交给 AI SDK 走 /images/edits 图生图请求。 */
+async function mediaToBuffer(mediaId: string): Promise<Buffer> {
   const m = await readMediaBuffer(mediaId)
   if (!m) throw new GatewayError('MEDIA_NOT_FOUND', `参考图不存在：${mediaId}`)
-  return `data:${m.mime};base64,${m.buf.toString('base64')}`
+  return m.buf
 }
 
 export async function generateImageToAsset(input: ImageGenerateInput): Promise<MediaAsset> {
   if (!input.prompt?.trim()) throw new GatewayError('INVALID_INPUT', '提示词不能为空')
 
-  // 参考图处理：读取图库 media → data URL → 通过 providerOptions 传递
-  let referenceImageUrl: string | undefined
+  // OpenAI-compatible provider 对含参考图的请求会自动改走 /images/edits。
+  let referenceImage: Buffer | undefined
   if (input.referenceMediaId) {
-    referenceImageUrl = await mediaToDataUrl(input.referenceMediaId)
+    referenceImage = await mediaToBuffer(input.referenceMediaId)
   }
 
   const { images } = await generateImage({
     model: createImageModel(input.providerId, input.modelId),
-    prompt: input.prompt.trim(),
-    ...(input.size && input.size !== 'auto' ? { size: input.size as `${number}x${number}` } : {}),
-    ...(referenceImageUrl
-      ? {
-          providerOptions: {
-            // OpenAI Images API 的 image 参数（图生图），兼容多数中转站
-            image: referenceImageUrl
-          }
-        }
-      : {})
+    prompt: referenceImage
+      ? { text: input.prompt.trim(), images: [referenceImage] }
+      : input.prompt.trim(),
+    ...(input.size && input.size !== 'auto' ? { size: input.size as `${number}x${number}` } : {})
   })
   if (!images?.length) throw new GatewayError('EMPTY_RESULT', '模型未返回图片')
 
