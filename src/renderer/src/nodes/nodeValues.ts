@@ -156,6 +156,25 @@ export function projectNodeOutputs(shape: NodeCardShape): RawNodeOutputs {
         ...(text ? { 'out-text': { kind: 'text' as const, text } } : {})
       }
     }
+    case 'ai-process': {
+      const data = parseRecord(props.text)
+      const result = data?.result as
+        { kind: 'text' | 'markdown' | 'json'; text?: string; data?: unknown } | undefined
+      if (!result) return {}
+      if (result.kind === 'text' && typeof result.text === 'string') {
+        return result.text.trim() ? { 'out-text': { kind: 'text', text: result.text } } : {}
+      }
+      if (result.kind === 'markdown' && typeof result.text === 'string') {
+        return result.text.trim() ? { 'out-markdown': { kind: 'text', text: result.text } } : {}
+      }
+      if (result.kind === 'json') return { 'out-json': { kind: 'json', data: result.data } }
+      return {}
+    }
+    case 'iterate': {
+      const data = parseRecord(props.text)
+      if (!data || !Array.isArray(data.items)) return {}
+      return { 'out-items': { kind: 'json', data: { items: data.items } } }
+    }
     default:
       return {}
   }

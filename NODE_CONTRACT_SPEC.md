@@ -133,7 +133,18 @@ schema: {
 - 完全开放的 JSON 使用 `json.any@1`，不能省略 Schema。
 - 相同 Schema ID 的新版本应尽量向后兼容。
 - 分镜、字幕、角色、镜头参数等业务结构必须使用独立 Schema ID。
+- 列表批处理使用 `list.items@1`：根值必须是数组，每个元素必须是对象（建议带稳定 id）。迭代/批处理节点的输入输出用它，使批量结果仍是可连接的结构化列表，而不是把几十个生成资产藏进一个不可连接的节点内部。
 - 后续应把 Schema 的字段定义集中到共享目录，并在运行前后执行实际校验。
+
+#### 动态输出的 Schema 声明原则
+
+当节点的输出 Schema 需要由用户运行时选择（如 AI 处理节点可在 `json.any` 与 `storyboard.shots` 之间切换）时：
+
+- 输出端口静态声明最宽泛的 Schema（通常 `json.any@1`），以保证连线阶段能与任意具体 Schema 连通。
+- 执行器内部按用户实际选择的 Schema 调用 `validateNodeSchema` 做运行时严格校验；不通过则执行失败并报错，绝不能把不符合所选 Schema 的值伪装成合法输出输出到下游。
+- 其意义：连线规则（§5）看静态声明，执行结果（§8）看运行时校验，两者职责分离，避免为动态输出预先枚举所有可能 Schema。
+
+示例见 `ai-process` 节点：`out-json` 静态声明 `json.any@1`，执行器按配置里的 `jsonSchema` 做运行时校验。
 
 ## 5. 连线规则
 
@@ -267,13 +278,15 @@ interface NodeValuePacket {
 
 完成标准：新增节点不需要修改全局输入收集分支。
 
-### P3：节点执行器解耦
+### P3：节点执行器解耦（已完成）
 
-- 每个节点注册自己的执行器或执行器 ID。
-- 全局运行器只负责拓扑、校验、取消、状态和错误。
-- 把 `executor.ts` 中的节点类型 switch 拆到各节点目录。
+- 每个节点在 Spec 中通过 `executor` 字段注册自己的执行器。
+- 执行器统一为函数类型别名 `NodeExecutor = (ctx) => result`，定义在 `engine/executor-types.ts`。
+- 执行器拿到 `NodeExecutionContext`（节点、shape、已校验输入、供应商、取消信号、`updateProps` / `updateResult` 写回入口），返回 `{ status, reason? }`。
+- 全局运行器 `engine/executor.ts` 只保留拓扑排序、输入收集、契约校验、取消、状态、输出投影与登记；不再含按 `nodeType` 分发的主 switch。
+- 各节点执行逻辑迁移到 `engine/executors/<node>.ts`，共享工具集中在 `engine/executors/shared.ts`。
 
-完成标准：新增普通节点只新增目录和注册项，不修改核心运行器。
+完成标准：新增普通节点只新增 Spec（注入执行器）、Body 和执行器文件，不修改核心运行器。`executor.ts` 中不再出现节点类型分支。
 
 ### P4：右侧契约与运行检查器
 

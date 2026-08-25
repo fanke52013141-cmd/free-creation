@@ -2,6 +2,7 @@
 // 新增节点类型 = 写一份 Spec 并 register，核心零改动
 import type { NodeTypeId, PortDecl, PortType } from '@shared/types'
 import { nodeSchemaRegistered } from '@shared/node-schemas'
+import type { NodeExecutor } from '../engine/executor-types'
 import type { NodeCardShape } from '../canvas/NodeCardShape'
 import type { IconName } from '../components/Icon'
 
@@ -30,6 +31,12 @@ export interface NodeTypeSpec {
   creatable?: boolean
   /** 输入/输出端口声明，连线类型校验与端口圆点渲染的依据 */
   ports: { in: PortDecl[]; out: PortDecl[] }
+  /**
+   * 节点自注册执行器（契约规范 P3）。运行器按 nodeType 取出并调用 execute；
+   * 新增普通节点只需在此注入自己的执行器，无需修改核心运行器。
+   * 未声明执行器的节点在全局运行时会被标记为「未实现」并跳过，但不影响注册。
+   */
+  executor?: NodeExecutor
   Body: React.ComponentType<NodeBodyProps>
 }
 

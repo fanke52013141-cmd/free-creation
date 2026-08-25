@@ -35,7 +35,14 @@ export async function generateImageToAsset(input: ImageGenerateInput): Promise<M
     prompt: referenceImage
       ? { text: input.prompt.trim(), images: [referenceImage] }
       : input.prompt.trim(),
-    ...(input.size && input.size !== 'auto' ? { size: input.size as `${number}x${number}` } : {})
+    ...(input.size && input.size !== 'auto' ? { size: input.size as `${number}x${number}` } : {}),
+    // 供应商扩展参数：固定种子可复现同一张图；宽高比为部分端点支持
+    providerOptions: {
+      [input.providerId]: {
+        ...(typeof input.seed === 'number' && input.seed > 0 ? { seed: input.seed } : {}),
+        ...(input.aspectRatio ? { aspectRatio: input.aspectRatio } : {})
+      }
+    }
   })
   if (!images?.length) throw new GatewayError('EMPTY_RESULT', '模型未返回图片')
 

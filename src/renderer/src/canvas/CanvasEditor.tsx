@@ -1,4 +1,4 @@
-﻿import { Tldraw, createShapeId, type Editor, type TLShapeId } from 'tldraw'
+import { Tldraw, createShapeId, type Editor, type TLShapeId } from 'tldraw'
 import 'tldraw/tldraw.css'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ProjectMeta, MediaAsset, NodeTypeId } from '@shared/types'
@@ -11,6 +11,7 @@ import { MultiSelectToolbar } from './MultiSelectToolbar'
 import { CanvasSidePanel, type SidePanelTab } from './CanvasSidePanel'
 import { ChatSidePanel } from './ChatSidePanel'
 import { NodeContractPanel } from './NodeContractPanel'
+import { useNodePanelStore } from '../stores/nodePanel'
 import { SearchPalette } from './SearchPalette'
 import { GroupOutlineLayer } from './GroupOutlineLayer'
 import {
@@ -18,7 +19,8 @@ import {
   teardownConnectionDrag,
   type ConnectionFinish
 } from './connection-drag'
-import { deriveGraph, tryConnect } from './graph'
+import { deriveGraph, tryConnect, createEdge } from './graph'
+import type { AiProcessConfig } from '../engine/executors/aiProcess'
 import { markUndoPoint } from './history'
 import { getNodeType, allNodeTypes, needsNodeSizeMigration } from '../nodes/registry'
 import {
@@ -75,8 +77,9 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
   const [editorInstance, setEditorInstance] = useState<Editor | null>(null)
   // 右键侧栏面板：资产 / 工作流 / 历史记录
   const [panelTab, setPanelTab] = useState<SidePanelTab | null>(null)
-  // 选中对话节点时弹出右侧聊天面板
-  const [chatShapeId, setChatShapeId] = useState<TLShapeId | null>(null)
+  // 节点右上角 info 图标显式打开的面板目标（选中不触发；对话节点→聊天，其余→契约窗）
+  const nodePanelKind = useNodePanelStore((s) => s.kind)
+  const nodePanelShapeId = useNodePanelStore((s) => s.shapeId)
   // 画布配色：dark（深色）/ light（米黄色）
   const [canvasTheme, setCanvasTheme] = useState<'dark' | 'light'>('dark')
   // 左侧节点面板拖拽状态
@@ -96,25 +99,6 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
       useEngineStore.getState().register(null)
     }
   }, [project.id, providers])
-
-  // 选中对话节点时弹出右侧聊天面板；取消选中或切换其他节点时关闭
-  useEffect(() => {
-    if (!editorInstance) return
-    const check = (): void => {
-      const sel = editorInstance.getSelectedShapes()
-      if (
-        sel.length === 1 &&
-        sel[0].type === 'node-card' &&
-        (sel[0].props as { nodeType?: string }).nodeType === 'chat'
-      ) {
-        setChatShapeId(sel[0].id)
-      } else {
-        setChatShapeId(null)
-      }
-    }
-    check()
-    return editorInstance.store.listen(check, { scope: 'session' })
-  }, [editorInstance])
 
   // 左侧节点面板：点击在视口中心创建；拖拽到画布在落点创建
   const SIDEBAR_W = 72
@@ -363,6 +347,87 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
       pendingConnectRef.current = null
       markUndoPoint(editor, 'import-media')
     }
+  }
+
+  // 剧本 → 分镜工作流模板（路线图 R3）
+  // 一键搭建「文本 → AI处理 → 分镜板」三条节点并预连线：
+  //   文本.out-text → AI处理.in-text（剧本文本喂给 AI）
+  //   AI处理.out-json → 分镜板.in-json（AI 产出 storyboard.shots，交给分镜板编辑）
+  // AI 处理节点预置 json/storyboard.shots@1 输出模式，用户填入剧本即可一键生成分镜。
+  const createStoryboardTemplate = (screenX: number, screenY: number): void => {
+    const editor = editorRef.current
+    if (!editor) return
+    const center = editor.screenToPage({ x: screenX, y: screenY })
+    const gap = 400
+    const cfg: AiProcessConfig = {
+      modelKey: '',
+      system:
+        '你是一位专业的影视分镜导演。请将剧本文本拆解为分镜 JSON 数组。每个元素必须严格包含 scene（画面描述）、dialogue（台词）、sound（音效）、duration（时长）字段。只输出 JSON 数组，不要添加 Markdown。',
+      mode: 'json',
+      jsonSchema: { id: 'storyboard.shots', version: 1 },
+      temperature: 0.7,
+      maxTokens: 4096
+    }
+    const pick = (type: NodeTypeId): { id: TLShapeId; w: number; h: number } => {
+      const spec = getNodeType(type)!
+      const id = createShapeId()
+      return { id, w: spec.defaultSize.w, h: spec.defaultSize.h }
+    }
+    const textNode = pick('text')
+    const aiNode = pick('ai-process')
+    const boardNode = pick('storyboard')
+
+    editor.run(() => {
+      editor.createShape({
+        id: textNode.id,
+        type: 'node-card',
+        x: center.x - textNode.w / 2 - gap,
+        y: center.y - textNode.h / 2,
+        props: {
+          nodeType: 'text',
+          title: '剧本',
+          w: textNode.w,
+          h: textNode.h
+        } satisfies Partial<NodeCardProps>
+      })
+      editor.createShape({
+        id: aiNode.id,
+        type: 'node-card',
+        x: center.x - aiNode.w / 2,
+        y: center.y - aiNode.h / 2,
+        props: {
+          nodeType: 'ai-process',
+          title: 'AI 拆解',
+          text: JSON.stringify(cfg),
+          w: aiNode.w,
+          h: aiNode.h
+        } satisfies Partial<NodeCardProps>
+      })
+      editor.createShape({
+        id: boardNode.id,
+        type: 'node-card',
+        x: center.x - boardNode.w / 2 + gap,
+        y: center.y - boardNode.h / 2,
+        props: {
+          nodeType: 'storyboard',
+          title: '分镜板',
+          w: boardNode.w,
+          h: boardNode.h
+        } satisfies Partial<NodeCardProps>
+      })
+    })
+    // 预连线；createEdge 内部成组并打撤销点，三条节点的创建与连线合并为一步。
+    createEdge(
+      editor,
+      { shapeId: textNode.id, portId: 'out-text' },
+      { shapeId: aiNode.id, portId: 'in-text' }
+    )
+    createEdge(
+      editor,
+      { shapeId: aiNode.id, portId: 'out-json' },
+      { shapeId: boardNode.id, portId: 'in-json' }
+    )
+    markUndoPoint(editor, 'template-storyboard')
   }
 
   const reportImport = (errors: { path: string; reason: string }[]): void => {
@@ -773,18 +838,18 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
           createMediaNodes([asset], screen.x, screen.y)
         }}
       />
-      {!panelTab && !chatShapeId && editorInstance && (
-        <NodeContractPanel editor={editorInstance} onClose={() => editorInstance.selectNone()} />
+      {!panelTab && editorInstance && nodePanelKind === 'contract' && nodePanelShapeId && (
+        <NodeContractPanel
+          editor={editorInstance}
+          onClose={() => useNodePanelStore.getState().close()}
+        />
       )}
-      {/* 对话节点右侧聊天面板 */}
-      {chatShapeId && editorInstance && (
+      {/* 对话节点右侧聊天面板（由节点右上角图标显式打开） */}
+      {!panelTab && editorInstance && nodePanelKind === 'chat' && nodePanelShapeId && (
         <ChatSidePanel
           editor={editorInstance}
-          shapeId={chatShapeId}
-          onClose={() => {
-            editorInstance.selectNone()
-            setChatShapeId(null)
-          }}
+          shapeId={nodePanelShapeId}
+          onClose={() => useNodePanelStore.getState().close()}
         />
       )}
       {nodeDrag && (
@@ -810,6 +875,10 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
           onGallery={() => {
             setMenu(null)
             toast('图库功能将在后续版本开放')
+          }}
+          onTemplate={() => {
+            createStoryboardTemplate(menu.x, menu.y)
+            setMenu(null)
           }}
           onClose={closeMenu}
         />

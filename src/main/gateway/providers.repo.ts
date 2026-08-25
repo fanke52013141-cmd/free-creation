@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid'
 import type { GatewayModelInfo, ProviderConfig } from '../../shared/types'
 import type { SaveProviderInput } from '../../shared/contracts'
 import { getDb } from '../store/db'
+import { decryptSecret, encryptSecret } from './keycrypto'
 
 interface ProviderRow {
   id: string
@@ -50,7 +51,7 @@ function rowToConfig(row: ProviderRow): ProviderConfig {
     name: row.name,
     specId: row.spec_id as ProviderConfig['specId'],
     baseURL: row.base_url,
-    apiKey: row.api_key_ref ?? '',
+    apiKey: decryptSecret(row.api_key_ref),
     models: list,
     createdAt: row.created_at
   }
@@ -78,7 +79,7 @@ export function saveProvider(input: SaveProviderInput): ProviderConfig {
     name: input.name.trim(),
     spec_id: input.specId,
     base_url: input.baseURL.trim().replace(/\/+$/, ''),
-    api_key_ref: input.apiKey.trim() || null,
+    api_key_ref: input.apiKey.trim() ? encryptSecret(input.apiKey.trim()) : null,
     models: JSON.stringify(models),
     created_at: now
   }

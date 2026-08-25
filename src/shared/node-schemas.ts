@@ -8,7 +8,8 @@ export interface SchemaValidationResult {
 export function nodeSchemaRegistered(schema: PortSchemaRef): boolean {
   return (
     `${schema.id}@${schema.version}` === 'json.any@1' ||
-    `${schema.id}@${schema.version}` === 'storyboard.shots@1'
+    `${schema.id}@${schema.version}` === 'storyboard.shots@1' ||
+    `${schema.id}@${schema.version}` === 'list.items@1'
   )
 }
 
@@ -46,6 +47,22 @@ function validateStoryboardShots(value: unknown): string[] {
 }
 
 /**
+ * 列表协议 list.items@1：根值必须是数组，每个元素必须是对象（允许任意业务字段，
+ * 建议带稳定 id）。供迭代/批处理节点输入输出，使批量结果仍是可连接的结构化列表，
+ * 而不是把几十个生成资产藏进一个不可连接的节点内部。
+ */
+function validateListItems(value: unknown): string[] {
+  if (!Array.isArray(value)) return ['根值必须是数组']
+  const errors: string[] = []
+  value.forEach((item, index) => {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+      errors.push(`items[${index}] 必须是对象`)
+    }
+  })
+  return errors
+}
+
+/**
  * JSON Schema 的轻量版本化仓库。这里返回可直接展示给用户的字段级错误；
  * 新增业务 Schema 时必须同时补充 NODE_CONTRACT_SPEC.md 中的结构说明。
  */
@@ -57,6 +74,9 @@ export function validateNodeSchema(schema: PortSchemaRef, value: unknown): Schem
       break
     case 'storyboard.shots@1':
       errors = [...jsonSerializable(value), ...validateStoryboardShots(value)]
+      break
+    case 'list.items@1':
+      errors = [...jsonSerializable(value), ...validateListItems(value)]
       break
     default:
       errors = [`未注册的 Schema：${schema.id}@${schema.version}`]

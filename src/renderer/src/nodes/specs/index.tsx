@@ -1,13 +1,15 @@
-﻿// 节点 Spec 注册（见《技术框架与规范》§5.1）
+// 节点 Spec 注册（见《技术框架与规范》§5.1）
 // 端口声明对齐路线图的节点类型表；any 万能口，其余类型需一致才可连
 import type { PortCardinality, PortDecl, PortSchemaRef } from '@shared/types'
 import { registerNodeType, unregisterNodeType } from '../registry'
 import {
   AudioBody,
+  AiProcessBody,
   ChatBody,
   CodeBody,
   ImageBody,
   ImageGenerateBody,
+  IterateBody,
   JsonBody,
   ProcessorBody,
   ScriptBody,
@@ -15,6 +17,19 @@ import {
   TextBody,
   VideoBody
 } from './bodies'
+import { aiProcessExecutor } from '../../engine/executors/aiProcess'
+import { audioExecutor } from '../../engine/executors/audio'
+import { chatExecutor } from '../../engine/executors/chat'
+import { codeExecutor } from '../../engine/executors/code'
+import { imageGenExecutor } from '../../engine/executors/imageGen'
+import { imageExecutor } from '../../engine/executors/image'
+import { iterateExecutor } from '../../engine/executors/iterate'
+import { jsonExecutor } from '../../engine/executors/json'
+import { processorExecutor } from '../../engine/executors/processor'
+import { scriptExecutor } from '../../engine/executors/script'
+import { storyboardExecutor } from '../../engine/executors/storyboard'
+import { textExecutor } from '../../engine/executors/text'
+import { videoExecutor } from '../../engine/executors/video'
 
 interface PortOptions {
   required?: boolean
@@ -58,6 +73,7 @@ const output = (
 
 const JSON_ANY: PortSchemaRef = { id: 'json.any', version: 1 }
 const STORYBOARD_SHOTS: PortSchemaRef = { id: 'storyboard.shots', version: 1 }
+const LIST_ITEMS: PortSchemaRef = { id: 'list.items', version: 1 }
 
 export function registerBaseNodeTypes(): void {
   registerNodeType({
@@ -76,6 +92,7 @@ export function registerBaseNodeTypes(): void {
       ],
       out: [output('out-text', '文本', 'text', '节点最终保存的纯文本内容。')]
     },
+    executor: textExecutor,
     Body: TextBody
   })
   registerNodeType({
@@ -90,6 +107,7 @@ export function registerBaseNodeTypes(): void {
       in: [],
       out: [output('out-image', '图片', 'image', '已导入并落盘的图片资产引用。')]
     },
+    executor: imageExecutor,
     Body: ImageBody
   })
   registerNodeType({
@@ -109,6 +127,7 @@ export function registerBaseNodeTypes(): void {
       ],
       out: [output('out-image', '图片', 'image', '模型生成并落盘后的图片资产引用。')]
     },
+    executor: imageGenExecutor,
     Body: ImageGenerateBody
   })
   registerNodeType({
@@ -128,6 +147,7 @@ export function registerBaseNodeTypes(): void {
       ],
       out: [output('out-video', '视频', 'video', '生成并落盘后的视频资产引用。')]
     },
+    executor: videoExecutor,
     Body: VideoBody
   })
   registerNodeType({
@@ -147,6 +167,7 @@ export function registerBaseNodeTypes(): void {
       ],
       out: [output('out-audio', '音频', 'audio', '导入或生成并落盘后的音频资产引用。')]
     },
+    executor: audioExecutor,
     Body: AudioBody
   })
   registerNodeType({
@@ -165,6 +186,7 @@ export function registerBaseNodeTypes(): void {
       ],
       out: [output('out-markdown', '回复', 'markdown', '模型最后一条回复，保留 Markdown 语义。')]
     },
+    executor: chatExecutor,
     Body: ChatBody
   })
 }
@@ -196,6 +218,7 @@ export function registerScriptNodeType(): void {
         })
       ]
     },
+    executor: scriptExecutor,
     Body: ScriptBody
   })
 }
@@ -218,6 +241,7 @@ export function registerExtendedNodeTypes(): void {
       in: [input('in-value', '输入变量', 'any', '需要原样传递或后续转换的单个变量。')],
       out: [output('out-value', '输出变量', 'any', '处理完成后的变量；实际类型由配置决定。')]
     },
+    executor: processorExecutor,
     Body: ProcessorBody
   })
   registerNodeType({
@@ -238,6 +262,7 @@ export function registerExtendedNodeTypes(): void {
       ],
       out: [output('out-json', '数据', 'json', '校验并格式化后的结构化值。', { schema: JSON_ANY })]
     },
+    executor: jsonExecutor,
     Body: JsonBody
   })
   registerNodeType({
@@ -268,6 +293,7 @@ export function registerExtendedNodeTypes(): void {
         })
       ]
     },
+    executor: codeExecutor,
     Body: CodeBody
   })
   registerNodeType({
@@ -294,6 +320,69 @@ export function registerExtendedNodeTypes(): void {
         })
       ]
     },
+    executor: storyboardExecutor,
     Body: StoryboardBody
+  })
+  registerNodeType({
+    type: 'ai-process',
+    contractVersion: 1,
+    label: 'AI 处理',
+    icon: 'spark',
+    color: '#c084fc',
+    defaultSize: { w: 340, h: 260 },
+    description:
+      '一次性、可复跑的工作流转换：把上游文本或 JSON 交给文本模型，输出文本、Markdown 或符合指定 Schema 的 JSON。不保留多轮历史，脚本/数据转换用它，对话节点用于多轮交互。',
+    ports: {
+      in: [
+        input('in-text', '文本', 'text', '一个或多个上游文本，作为本次转换的输入。', {
+          cardinality: 'many'
+        }),
+        input('in-json', 'JSON 上下文', 'json', '可选的结构化上下文，注入本次转换。', {
+          schema: JSON_ANY
+        })
+      ],
+      out: [
+        output('out-text', '文本', 'text', '模型返回的纯文本结果。', { required: false }),
+        output('out-markdown', 'Markdown', 'markdown', '模型返回的 Markdown 结果。', {
+          required: false
+        }),
+        output('out-json', 'JSON', 'json', '模型返回并校验后的结构化值（按所选 Schema）。', {
+          required: false,
+          schema: JSON_ANY
+        })
+      ]
+    },
+    executor: aiProcessExecutor,
+    Body: AiProcessBody
+  })
+  registerNodeType({
+    type: 'iterate',
+    contractVersion: 1,
+    label: '迭代',
+    icon: 'grid',
+    color: '#8b5cf6',
+    defaultSize: { w: 340, h: 260 },
+    description:
+      '列表批处理控制：把 in-list 的每个元素作为一次「迭代体」执行，逐项驱动下游子流程节点（如生图/视频/文本节点），并输出结构化结果列表。支持并发上限、失败策略、重试与取消，中止后可恢复未完成项。',
+    ports: {
+      in: [
+        input('in-list', '列表', 'json', '要逐项批量处理的列表（每个元素作为一次迭代体输入）。', {
+          schema: LIST_ITEMS
+        })
+      ],
+      out: [
+        output(
+          'out-items',
+          '结果列表',
+          'json',
+          '每项处理结果的结构化列表（含来源、状态、输出摘要）。',
+          {
+            schema: LIST_ITEMS
+          }
+        )
+      ]
+    },
+    executor: iterateExecutor,
+    Body: IterateBody
   })
 }

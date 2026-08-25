@@ -1,0 +1,347 @@
+// 音频节点 Body（路线图 R6：bodies.tsx 拆分）
+import { useEffect, useRef, useState } from 'react'
+import { stopEventPropagation, useEditor } from 'tldraw'
+import { mediaUrl, type NodeBodyProps } from '../../registry'
+import { toast } from '../../../stores/toast'
+import { markUndoPoint } from '../../../canvas/history'
+import { gatherUpstreamText } from '../../../canvas/graph'
+import { useAppStore } from '../../../stores/app'
+import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
+import { Icon } from '../../../components/Icon'
+import { ModelSelect, parseJsonProp } from './shared'
+
+type AudioMode = 'upload' | 'generate'
+
+interface AudioData {
+  mode: AudioMode
+  modelKey: string
+  text: string
+  voice: string
+  format: string
+}
+
+function parseAudioGen(text: string): AudioData {
+  return parseJsonProp(
+    text,
+    (v) => {
+      const o = v as Record<string, unknown>
+      if (typeof o === 'object' && o !== null) {
+        return {
+          mode: o.mode === 'generate' ? 'generate' : 'upload',
+          modelKey: typeof o.modelKey === 'string' ? o.modelKey : '',
+          text: typeof o.text === 'string' ? o.text : '',
+          voice: typeof o.voice === 'string' ? o.voice : 'alloy',
+          format: typeof o.format === 'string' ? o.format : 'mp3'
+        }
+      }
+      return null
+    },
+    { mode: 'upload', modelKey: '', text: '', voice: 'alloy', format: 'mp3' }
+  )
+}
+
+const VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']
+const AUDIO_FORMATS = ['mp3', 'opus', 'aac', 'flac', 'wav', 'pcm']
+
+export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Element {
+  const editor = useEditor()
+  const project = useAppStore((s) => s.currentProject)
+  const providers = useGatewayStore((s) => s.providers)
+  const loaded = useGatewayStore((s) => s.loaded)
+  const loadProviders = useGatewayStore((s) => s.load)
+  const openSettings = useGatewayStore((s) => s.openSettings)
+  const options = modelsByModality(providers, 'audio')
+  const data = parseAudioGen(shape.props.text)
+  const [draft, setDraft] = useState(data.text)
+  const [busy, setBusy] = useState(false)
+  const [playing, setPlaying] = useState(false)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  useEffect(() => {
+    if (!loaded) void loadProviders()
+  }, [loaded, loadProviders])
+
+  const update = (next: AudioData): void => {
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: { text: JSON.stringify(next) }
+    })
+  }
+
+  const uploadAudio = async (): Promise<void> => {
+    if (!project) return toast('项目未就绪')
+    const res = await window.api.pickMedia(project.id)
+    if (!res.ok) return toast(`上传失败：${res.error.message}`)
+    const audioAsset = res.data.assets.find((a) => a.kind === 'audio')
+    if (!audioAsset) return
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: {
+        mediaId: audioAsset.id,
+        mediaPath: audioAsset.path,
+        mediaMime: audioAsset.mime,
+        title: audioAsset.name ?? shape.props.title
+      }
+    })
+    markUndoPoint(editor, 'audio-upload')
+  }
+
+  const togglePlay = (): void => {
+    if (!shape.props.mediaPath) return
+    if (playing) {
+      audioRef.current?.pause()
+      setPlaying(false)
+    } else {
+      const el = audioRef.current ?? new Audio(mediaUrl(shape.props.mediaPath))
+      audioRef.current = el
+      el.loop = true
+      el.currentTime = 0
+      void el.play().then(() => setPlaying(true))
+      el.onended = () => setPlaying(false)
+      el.onpause = () => setPlaying(false)
+    }
+  }
+
+  const removeAudio = (): void => {
+    audioRef.current?.pause()
+    audioRef.current = null
+    setPlaying(false)
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: { mediaId: '', mediaPath: '', mediaMime: '' }
+    })
+    markUndoPoint(editor, 'audio-remove')
+  }
+
+  const generate = async (): Promise<void> => {
+    const opt = options.find((o) => o.key === data.modelKey)
+    if (!opt) return toast('请先选择音频模型')
+    const upstream = gatherUpstreamText(editor, shape.id)
+    const text = upstream ? `${upstream}\n\n---\n\n${draft.trim()}` : draft.trim()
+    if (!text) return toast('请输入要朗读的文本或连接上游文本')
+    if (!project) return toast('项目未就绪')
+    setBusy(true)
+    const res = await window.api.gateway.audioGenerate({
+      projectId: project.id,
+      providerId: opt.provider.id,
+      modelId: opt.model.id,
+      text,
+      voice: data.voice,
+      format: data.format
+    })
+    setBusy(false)
+    if (!res.ok) return toast(`生成失败：${res.error.message}`)
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: {
+        mediaId: res.data.id,
+        mediaPath: res.data.path,
+        mediaMime: res.data.mime,
+        title: res.data.name || res.data.id
+      }
+    })
+    markUndoPoint(editor, 'audio-gen')
+  }
+
+  // ── 已有音频文件：播放器视图（上传或生成共用） ──
+  if (shape.props.mediaPath) {
+    const isGenerated = data.mode === 'generate'
+    return (
+      <div className="node-audio-player">
+        <div className={`audio-player-wave ${playing ? 'playing' : ''}`}>
+          {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+            <span key={i} style={{ animationDelay: `${i * 0.12}s` }} />
+          ))}
+        </div>
+        <div className="audio-player-info">
+          <span className="audio-player-name">{shape.props.title}</span>
+        </div>
+        <div className="audio-player-actions">
+          <button
+            className="audio-play-btn"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              togglePlay()
+            }}
+          >
+            {playing ? '⏸' : '▶'}
+          </button>
+          <button
+            className="btn-ghost small"
+            title="打开播放器"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (playing) {
+                audioRef.current?.pause()
+                setPlaying(false)
+              }
+              openPreview({
+                kind: 'audio',
+                url: mediaUrl(shape.props.mediaPath),
+                title: shape.props.title
+              })
+            }}
+          >
+            展开
+          </button>
+          <button
+            className="btn-ghost small danger"
+            title={isGenerated ? '重新生成' : '替换文件'}
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (isGenerated) {
+                removeAudio()
+              } else {
+                void uploadAudio()
+              }
+            }}
+          >
+            {isGenerated ? '重新生成' : '替换'}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // ── 无音频文件：模式切换 ──
+  return (
+    <div className="node-audio-empty">
+      <div className="audio-mode-tabs">
+        <button
+          className={`audio-tab ${data.mode === 'upload' ? 'active' : ''}`}
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onClick={(e) => {
+            e.stopPropagation()
+            update({ ...data, mode: 'upload' })
+          }}
+        >
+          <>
+            <Icon name="upload" size={14} />
+            上传文件
+          </>
+        </button>
+        <button
+          className={`audio-tab ${data.mode === 'generate' ? 'active' : ''}`}
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onClick={(e) => {
+            e.stopPropagation()
+            update({ ...data, mode: 'generate' })
+          }}
+        >
+          <>
+            <Icon name="audio" size={14} />
+            语音合成
+          </>
+        </button>
+      </div>
+
+      {data.mode === 'upload' ? (
+        <div className="audio-upload-zone" onPointerDown={(e) => stopEventPropagation(e)}>
+          <button
+            className="audio-upload-btn"
+            onClick={(e) => {
+              e.stopPropagation()
+              void uploadAudio()
+            }}
+          >
+            <span className="audio-upload-icon">
+              <Icon name="audio" size={22} />
+            </span>
+            <span className="audio-upload-text">点击上传音频文件</span>
+            <span className="audio-upload-hint">支持 mp3 / wav / aac / flac 等</span>
+          </button>
+        </div>
+      ) : (
+        <div className="node-audio-gen">
+          <div className="gen-toolbar">
+            {options.length === 0 ? (
+              loaded ? (
+                <span className="hint">未配置音频模型</span>
+              ) : (
+                <span className="hint">加载中…</span>
+              )
+            ) : (
+              <ModelSelect
+                value={data.modelKey}
+                options={options}
+                onChange={(key) => update({ ...data, modelKey: key })}
+              />
+            )}
+            {loaded && options.length === 0 && (
+              <button
+                className="btn-ghost small"
+                onPointerDown={(e) => stopEventPropagation(e)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void openSettings()
+                }}
+              >
+                配置
+              </button>
+            )}
+          </div>
+          <textarea
+            className="gen-textarea audio"
+            value={draft}
+            placeholder="输入要朗读的文本…"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onChange={(e) => setDraft(e.target.value)}
+          />
+          <div className="audio-options">
+            <label className="opt-label">音色</label>
+            <select
+              className="gen-select small"
+              value={data.voice}
+              onPointerDown={(e) => stopEventPropagation(e)}
+              onChange={(e) => update({ ...data, voice: e.target.value })}
+            >
+              {VOICES.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+            <label className="opt-label">格式</label>
+            <select
+              className="gen-select small"
+              value={data.format}
+              onPointerDown={(e) => stopEventPropagation(e)}
+              onChange={(e) => update({ ...data, format: e.target.value })}
+            >
+              {AUDIO_FORMATS.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            className="btn-generate"
+            disabled={busy}
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              void generate()
+            }}
+          >
+            {busy ? (
+              '生成中…'
+            ) : (
+              <>
+                <Icon name="audio" size={14} />
+                生成语音
+              </>
+            )}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}

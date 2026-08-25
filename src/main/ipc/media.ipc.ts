@@ -1,10 +1,17 @@
 // 媒体 IPC：拖拽导入 + 系统对话框选择导入（见《技术框架与规范》§10）
-import { ipcMain, dialog } from 'electron'
+import { ipcMain, dialog, clipboard, shell } from 'electron'
 import { IPC } from '../../shared/contracts'
 import type { IpcEnvelope } from '../../shared/contracts'
 import type { ImportMediaBufferInput } from '../../shared/contracts'
 import type { MediaAsset, MediaImportError, MediaImportResult } from '../../shared/types'
-import { deleteMedia, importMedia, listMedia, saveBufferAsset } from '../store/media.repo'
+import {
+  deleteMedia,
+  getMediaAbsPath,
+  importMedia,
+  listMedia,
+  saveBufferAsset
+} from '../store/media.repo'
+import { getDb } from '../store/db'
 
 function ok<T>(data: T): IpcEnvelope<T> {
   return { ok: true, data }
@@ -119,5 +126,39 @@ export function registerMediaIpc(): void {
     if (!mediaId) return err('INVALID_INPUT', '参数不完整')
     const deleted = await deleteMedia(mediaId)
     return ok(deleted)
+  })
+
+  // 从 media.db 查绝对路径（mediaId 需有效），返回 null 表示媒体不存在或路径不合法。
+  function resolveAbsPath(mediaId: string): string | null {
+    if (!mediaId) return null
+    const row = getDb().prepare('SELECT path FROM media WHERE id = ?').get(mediaId) as
+      { path: string } | undefined
+    if (!row) return null
+    return getMediaAbsPath(row.path)
+  }
+
+  // 在资源管理器中定位文件（选中，不打开）
+  ipcMain.handle(IPC.media.reveal, (_e, mediaId: string): IpcEnvelope<boolean> => {
+    const abs = resolveAbsPath(mediaId)
+    if (!abs) return err('MEDIA_NOT_FOUND', '媒体文件不存在或路径不合法')
+    shell.showItemInFolder(abs)
+    return ok(true)
+  })
+
+  // 复制文件绝对路径到剪贴板
+  ipcMain.handle(IPC.media.copyPath, (_e, mediaId: string): IpcEnvelope<boolean> => {
+    const abs = resolveAbsPath(mediaId)
+    if (!abs) return err('MEDIA_NOT_FOUND', '媒体文件不存在或路径不合法')
+    clipboard.writeText(abs)
+    return ok(true)
+  })
+
+  // 用系统默认程序打开文件
+  ipcMain.handle(IPC.media.open, async (_e, mediaId: string): Promise<IpcEnvelope<boolean>> => {
+    const abs = resolveAbsPath(mediaId)
+    if (!abs) return err('MEDIA_NOT_FOUND', '媒体文件不存在或路径不合法')
+    const error = await shell.openPath(abs)
+    if (error) return err('OPEN_FAILED', error)
+    return ok(true)
   })
 }

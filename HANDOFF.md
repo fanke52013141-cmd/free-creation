@@ -41,6 +41,7 @@ pnpm dev
 ```bash
 pnpm typecheck
 pnpm lint
+pnpm test
 pnpm build
 ```
 
@@ -49,6 +50,16 @@ Windows 打包：
 ```bash
 pnpm build:win
 ```
+
+测试与门禁：
+
+```bash
+pnpm test            # 节点契约与执行器测试（289 用例，~4 秒）
+pnpm test:watch      # 监听模式
+pnpm test:coverage   # 覆盖率报告
+```
+
+CI（`.github/workflows/ci.yml`）在每次推送/PR 自动运行 install → typecheck → lint → test → build，任一失败阻断合并。
 
 `better-sqlite3`、Electron 和 esbuild 等原生构建许可定义在根目录 `pnpm-workspace.yaml`。不要重新把已失效的 `pnpm.onlyBuiltDependencies` 放回 `package.json`。
 
@@ -91,15 +102,52 @@ src/
 
 关键文件：
 
-- `src/renderer/src/nodes/specs/index.tsx`：全部节点 Spec 和端口契约。
-- `src/renderer/src/nodes/registry.tsx`：节点注册和注册时硬校验。
+- `src/renderer/src/nodes/specs/index.tsx`：全部节点 Spec 和端口契约，并为每个节点注入自注册执行器。
+- `src/renderer/src/nodes/registry.tsx`：节点注册和注册时硬校验；`NodeTypeSpec.executor` 暴露执行器注入点。
+- `src/renderer/src/engine/executor-types.ts`：`NodeExecutor` 函数类型、`NodeExecutionContext`、`NodeExecutionResult`、`CancelSignal`。
+- `src/renderer/src/engine/executors/<node>.ts`：各节点自注册执行器（text/image/imageGen/video/audio/chat/script/json/processor/code/storyboard）。
+- `src/renderer/src/engine/executors/shared.ts`：执行器共享工具（提示词合并、JSON/分镜解析、对话/视频取消式等待）。
 - `src/renderer/src/nodes/nodeValues.ts`：节点持久化状态到端口输出的唯一投影。
 - `src/renderer/src/engine/contracts.ts`：输入收集、数据包和运行前后契约校验。
-- `src/renderer/src/engine/executor.ts`：当前全局工作流执行编排。
+- `src/renderer/src/engine/executor.ts`：全局工作流运行器（拓扑、收集、校验、执行、投影、登记），不含节点特例。
 - `src/renderer/src/canvas/graph.ts`：创建连线、类型/Schema/数量/环校验和图数据派生。
 - `src/renderer/src/canvas/NodeCardView.tsx`：统一节点壳、标题、端口和交互。
 - `src/renderer/src/canvas/NodeContractPanel.tsx`：I/O 契约、连接来源/去向和值预览。
 - `src/renderer/src/canvas/ChatSidePanel.tsx`：对话节点完整侧栏、Markdown 和参数设置。
+
+#### 节点 Body 目录约定（R6 拆分后）
+
+节点卡片内容区（各节点 Body）已按节点拆分到 `nodes/specs/bodies/` 目录，不再使用单个巨型 `bodies.tsx`：
+
+```text
+nodes/specs/bodies/
+├─ index.tsx        # 聚合 re-export 全部节点 Body（specs/index.tsx 从这里 import，路径 `./bodies` 不变）
+├─ shared.tsx       # 被多个节点 Body 复用的共享工具/组件（见下）
+├─ text.tsx         # TextBody
+├─ image.tsx        # ImageBody
+├─ image-gen.tsx    # ImageGenerateBody
+├─ video.tsx        # VideoBody
+├─ audio.tsx        # AudioBody
+├─ chat.tsx         # ChatBody
+├─ script.tsx       # ScriptBody
+├─ processor.tsx    # ProcessorBody
+├─ json.tsx         # JsonBody
+├─ code.tsx         # CodeBody
+├─ storyboard.tsx   # StoryboardBody
+├─ aiProcess.tsx    # AiProcessBody
+└─ iterate.tsx      # IterateBody
+```
+
+**新增/维护节点 Body 的约定**：
+
+1. 每个节点一个 Body 文件，放在 `bodies/` 目录下；在 `bodies/index.tsx` 里 `export { XxxBody } from './xxx'`。
+2. 复用共享工具时从 `./shared` 导入（`ModelSelect`、`NoModelHint`、`useClickGuard`、`useWheelScroll`、`parseJsonProp`、`VariableValueType`、`VARIABLE_TYPES`）。
+3. 组件自身的私有接口/常量放在同文件内（如 `ImageGenData`、`VideoGenData` 等）。
+4. 相对路径比原来 `bodies.tsx` 多一级 `../`（当前文件在 `nodes/specs/bodies/` 子目录）。
+5. 拆分必须保持**行为完全等价**（纯移动 + 补 import），改动后跑 `pnpm typecheck`、`pnpm lint`、`pnpm test` 验证。
+6. `shared.tsx` 同时导出组件与非组件，顶部已有 `/* eslint-disable react-refresh/only-export-components */`（共享模块语义，勿删）。
+
+> 拆分是纯工程组织优化，不改变运行时行为、不影响 tldraw、不增加电脑配置要求。
 
 ## 5. 当前节点状态
 
@@ -107,7 +155,7 @@ src/
 | ------ | ------------------------ | --------------------- | ------------------- | ---------------- |
 | 文本   | 编辑原始文本             | 可选多文本            | `out-text`          | 可用             |
 | 图片   | 保存导入/粘贴的图片资产  | 无                    | `out-image`         | 可用             |
-| 生图   | 文本或参考图生成图片     | `in-text`、`in-image` | `out-image`         | 可用             |
+| 生图   | 文本或参考图生成图片     | `in-text`、`in-image` | `out-image`         | 可用；支持尺寸/参考图/种子，可重新生成 |
 | 视频   | 文本和可选首帧生成视频   | `in-text`、`in-image` | `out-video`         | 可用，依赖供应商 |
 | 音频   | 导入音频或文本转语音     | `in-audio`、`in-text` | `out-audio`         | 可用，依赖供应商 |
 | 对话   | 多轮交互对话             | `in-text`             | `out-markdown`      | 可用             |
@@ -115,6 +163,8 @@ src/
 | JSON   | 解析、展示和输出结构化值 | `in-json`、`in-text`  | `out-json`          | 可用             |
 | 代码   | 本地受限转换             | `in-text`、`in-json`  | 文本或 JSON         | 可用             |
 | 分镜板 | 展示和编辑分镜列表       | 分镜 JSON 或兼容文本  | 分镜 JSON、摘要文本 | 可用             |
+| AI 处理 | 一次性可复跑的工作流转换 | `in-text`、`in-json`  | text/markdown/json | 可用，依赖供应商 |
+| 迭代   | 列表批处理、逐项驱动下游  | `in-list`(list.items@1)| `out-items`(list.items@1) | 可用，驱动下游 |
 | 脚本   | 旧版复合拆解节点         | 文本                  | 分镜 JSON/文本      | 仅兼容，不可新建 |
 
 已经退役：
@@ -223,13 +273,13 @@ tldraw 交互特别注意：
 
 必须优先处理：
 
-1. `executor.ts` 仍通过节点类型 switch 执行，下一步应拆成节点自注册执行器。
-2. 没有契约和工作流的自动化测试，当前主要依赖 typecheck、lint、build 和人工回归。
-3. 节点固定配置与运行结果仍有历史混用，文本/旧脚本节点尤其需要在执行器解耦时分开。
-4. `bodies.tsx` 体积较大，应该按节点拆文件，但不要在行为改造期间同时做无关视觉重写。
+1. ~~`executor.ts` 仍通过节点类型 switch 执行，下一步应拆成节点自注册执行器。~~ **已完成（R1）：执行器已解耦到 `engine/executors/<node>.ts`，运行器零节点特例。**
+2. ~~没有契约和工作流的自动化测试，当前主要依赖 typecheck、lint、build 和人工回归。~~ **已完成（R2）：引入 vitest，9 个测试文件 289 个用例覆盖契约层；GitHub Actions 门禁已建立。**
+3. ~~节点固定配置与运行结果仍有历史混用，文本/旧脚本节点尤其需要在执行器解耦时分开。~~ **部分完成（R1）：执行器通过 `NodeExecutionContext.updateProps/updateResult` 受控写回，投影统一由运行器处理；配置与结果的彻底分离留待后续清理 `NodeCardProps.text` 复用字段时收尾。**
+4. ~~`bodies.tsx` 体积较大，应该按节点拆文件，但不要在行为改造期间同时做无关视觉重写。~~ **已完成（R6）：拆分为 `nodes/specs/bodies/` 目录下 13 个节点 Body 文件 + shared.tsx + index.tsx 聚合，行为等价。**
 5. JSON Schema 种类不足，角色、场景、字幕和列表协议尚未建立。
 6. 工作流模板的旧端口只能在唯一可推断时迁移；含糊的旧连线会跳过并提示。
-7. API Key 尚未使用 Electron `safeStorage` 加密。
+7. ~~API Key 尚未使用 Electron `safeStorage` 加密。~~ **已完成（R7）：`main/gateway/keycrypto.ts` 用 safeStorage 加密落盘，兼容旧明文。**
 8. 生产构建会提示 `db.ts` 同时被动态和静态导入；当前不影响构建，但可在整理主进程模块时统一。
 9. `pnpm audit --prod` 会报告 Electron 依赖链中的 `extract-zip@2.0.1` 路径穿越公告；上游目前没有可用修复版本。该包用于受信任的 Electron 安装/解包链路，不接收应用运行时用户输入。升级 Electron 时必须重新审计并移除此风险接受项。
 
@@ -245,23 +295,25 @@ tldraw 交互特别注意：
 
 优先执行 [ROADMAP.md](./ROADMAP.md) 的 R0 和 R1：
 
-1. 先补契约/连线/旧快照回归保护。
-2. 定义 `NodeExecutor` 接口。
-3. 把每个节点执行逻辑移到节点目录。
-4. 将节点配置、运行输入和运行输出彻底分离。
-5. 再增加结构化 AI 节点和批处理能力。
+1. ~~先补契约/连线/旧快照回归保护。~~ （R0 仍待补自动化回归表）
+2. ~~定义 `NodeExecutor` 接口。~~ **已完成（R1）**
+3. ~~把每个节点执行逻辑移到节点目录。~~ **已完成（R1）：`engine/executors/<node>.ts`**
+4. 将节点配置、运行输入和运行输出彻底分离（R1 已收敛写回入口，字段复用清理留待后续）。
+5. ~~再增加结构化 AI 节点和批处理能力。~~ （R3/R4，先做 R2 测试门禁）
 
-不要首先增加更多特殊业务节点。否则新的契约层会再次被全局 switch 和节点特例侵蚀。
+下一推荐：R2 自动化测试与 CI 门禁——为执行器、契约校验、连线矩阵和输出投影增加纯函数测试，让端口/Schema 变化在提交前自动暴露。在 R2 之前可顺手补 R0 回归表。
+
+不要首先增加更多特殊业务节点。否则新的契约层会再次被节点特例侵蚀。
 
 ## 12. 新节点接入步骤
 
 1. 在共享类型中增加稳定 `NodeTypeId`。
-2. 在节点 Spec 中声明职责、契约版本和全部端口。
+2. 在节点 Spec 中声明职责、契约版本和全部端口，并注入对应的 `executor`。
 3. JSON 端口先注册版本化 Schema。
 4. 实现节点 Body，但不要让 Body 自己猜测上游节点类型。
-5. 实现输出投影和节点执行器。
+5. 在 `engine/executors/<node>.ts` 实现执行器（函数 `(ctx) => result`），并通过 `updateProps/updateResult` 写回运行结果；输出投影复用 `nodeValues.ts`。
 6. 右侧契约面板必须能解释输入、输出和连接来源。
-7. 添加契约、连线、执行和旧项目迁移测试。
+7. 添加契约、连线、执行和旧项目迁移测试（R2 门禁建立后强制）。
 8. 更新 `NODE_CONTRACT_SPEC.md`、`ROADMAP.md` 或本文档中受影响的部分。
 
 注册表会拒绝不完整契约。不要绕过校验来临时让节点出现。
@@ -273,6 +325,7 @@ tldraw 交互特别注意：
 [ ] pnpm install 没有原生依赖许可警告
 [ ] pnpm typecheck 通过
 [ ] pnpm lint 通过
+[ ] pnpm test 通过（节点契约与执行器门禁）
 [ ] pnpm build 通过
 [ ] 文本节点双击可编辑
 [ ] 图片粘贴/拖入后成为节点
@@ -283,6 +336,8 @@ tldraw 交互特别注意：
 [ ] 旧项目打开、保存、重开正常
 [ ] 对话 Markdown 正常渲染
 [ ] 生图/视频真实供应商至少各冒烟一次
+[ ] API Key 保存后落盘为加密密文（非明文），重新读取可还原
+[ ] 项目可导出 .canvasbundle 并在另一台机器导入恢复
 [ ] 提交信息说明行为变化和兼容策略
 ```
 

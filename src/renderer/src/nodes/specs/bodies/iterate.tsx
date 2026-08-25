@@ -1,0 +1,131 @@
+// 迭代节点 Body（路线图 R6：bodies.tsx 拆分）
+import { stopEventPropagation, useEditor, useValue } from 'tldraw'
+import type { NodeBodyProps } from '../../registry'
+import {
+  parseIterate,
+  parseIterateResult,
+  type IterateConfig,
+  type IterateItemResult
+} from '../../../engine/executors/iterate'
+
+const ITERATE_FAILURE_OPTIONS: Array<{ value: IterateConfig['onFailure']; label: string }> = [
+  { value: 'skip', label: '跳过失败项' },
+  { value: 'fail', label: '全部中止' },
+  { value: 'retry', label: '重试' }
+]
+
+function enforceConfig(c: IterateConfig): IterateConfig {
+  return {
+    itemVar: c.itemVar || 'item',
+    onFailure: c.onFailure,
+    maxRetries: c.maxRetries < 0 ? 0 : c.maxRetries,
+    concurrency: c.concurrency < 1 ? 1 : c.concurrency,
+    limit: c.limit < 0 ? 0 : c.limit
+  }
+}
+
+function summaryFromResults(results: IterateItemResult[] | undefined): string {
+  if (!results) return ''
+  const done = results.filter((r) => r.status === 'done').length
+  const failed = results.filter((r) => r.status === 'failed').length
+  const skipped = results.filter((r) => r.status === 'skipped').length
+  return `共 ${results.length} 项 · 成功 ${done} · 失败 ${failed} · 跳过 ${skipped}`
+}
+
+export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
+  const editor = useEditor()
+  const data = parseIterate(shape.props.text)
+  const result = parseIterateResult(shape.props.text)
+  const updateConfig = (next: IterateConfig): void => {
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: { text: JSON.stringify(enforceConfig(next)) }
+    })
+  }
+  // 下游迭代体数量：通过当前节点的输出边推算（NodeContractPanel 之外简单估算）
+  const downstreamCount = useValue(
+    'iterate downstream',
+    () => {
+      let count = 0
+      for (const binding of editor.getBindingsFromShape(shape.id, 'arrow')) {
+        // 凡是本节点引出的箭头都视为下游迭代体的一部分
+        if (binding.props.terminal === 'start') count += 1
+      }
+      return count
+    },
+    [editor, shape.id]
+  )
+
+  return (
+    <div className="iterate-body">
+      <div className="iterate-config">
+        <label className="ai-row">
+          <span className="ai-row-label">变量名</span>
+          <input
+            value={data.itemVar}
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onChange={(e) => updateConfig({ ...data, itemVar: e.target.value || 'item' })}
+          />
+        </label>
+        <div className="ai-row ai-row-num">
+          <label>
+            <span className="ai-row-label">并发</span>
+            <input
+              type="number"
+              min="1"
+              value={data.concurrency}
+              onPointerDown={(e) => stopEventPropagation(e)}
+              onChange={(e) => updateConfig({ ...data, concurrency: Number(e.target.value) || 1 })}
+            />
+          </label>
+          <label>
+            <span className="ai-row-label">限数</span>
+            <input
+              type="number"
+              min="0"
+              value={data.limit}
+              onPointerDown={(e) => stopEventPropagation(e)}
+              onChange={(e) => updateConfig({ ...data, limit: Number(e.target.value) || 0 })}
+            />
+          </label>
+        </div>
+        <label className="ai-row">
+          <span className="ai-row-label">失败</span>
+          <select
+            className="gen-select"
+            value={data.onFailure}
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onChange={(e) =>
+              updateConfig({ ...data, onFailure: e.target.value as IterateConfig['onFailure'] })
+            }
+          >
+            {ITERATE_FAILURE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {data.onFailure === 'retry' && (
+          <label className="ai-row">
+            <span className="ai-row-label">重试</span>
+            <input
+              type="number"
+              min="0"
+              value={data.maxRetries}
+              onPointerDown={(e) => stopEventPropagation(e)}
+              onChange={(e) => updateConfig({ ...data, maxRetries: Number(e.target.value) || 0 })}
+            />
+          </label>
+        )}
+      </div>
+      <div className="iterate-meta">
+        <span>下游迭代体节点：{downstreamCount} 个</span>
+        <span className={result ? 'iterate-hint has-result' : 'iterate-hint'}>
+          {result ? summaryFromResults(result.items) : '（尚未运行）'}
+        </span>
+      </div>
+    </div>
+  )
+}

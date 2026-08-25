@@ -1,4 +1,4 @@
-﻿// 核心数据模型（双进程共享单一事实源，见《技术框架与规范》§4）
+// 核心数据模型（双进程共享单一事实源，见《技术框架与规范》§4）
 
 export type NodeTypeId =
   | 'text'
@@ -14,6 +14,8 @@ export type NodeTypeId =
   | 'group'
   | 'storyboard'
   | 'compose'
+  | 'ai-process'
+  | 'iterate'
 
 /**
  * 节点之间允许传递的数据类型。文本与 Markdown 都以字符串传输，但保留语义类型；

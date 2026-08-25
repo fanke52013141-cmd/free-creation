@@ -1,4 +1,4 @@
-﻿// IPC 契约：通道名 + payload 类型 + 统一信封（见《技术框架与规范》§10）
+// IPC 契约：通道名 + payload 类型 + 统一信封（见《技术框架与规范》§10）
 
 import type { ChatMessage, GatewayModelInfo, ProviderSpecId, VideoGenParams } from '../types'
 
@@ -14,14 +14,19 @@ export const IPC = {
     open: 'project:open',
     save: 'project:save',
     saveSync: 'project:save-sync',
-    close: 'project:close'
+    close: 'project:close',
+    export: 'project:export',
+    import: 'project:import'
   },
   media: {
     import: 'media:import',
     importBuffer: 'media:import-buffer',
     pick: 'media:pick',
     list: 'media:list',
-    delete: 'media:delete'
+    delete: 'media:delete',
+    reveal: 'media:reveal',
+    copyPath: 'media:copy-path',
+    open: 'media:open'
   },
   gateway: {
     providers: 'gateway:providers:list',
@@ -103,6 +108,10 @@ export interface ImageGenerateInput {
   size?: string
   /** 参考图（本地图库 mediaId，主进程转 base64 data URL 作为图生图输入） */
   referenceMediaId?: string
+  /** 种子：固定后可复现同一张图，0 或留空表示随机 */
+  seed?: number
+  /** 宽高比（部分供应商支持） */
+  aspectRatio?: string
 }
 
 export interface VideoSubmitInput {

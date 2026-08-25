@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { ProjectMeta } from '@shared/types'
 import { useAppStore } from '../stores/app'
 import { useConfirmStore } from '../stores/confirm'
+import { useToastStore } from '../stores/toast'
 import { Icon } from '../components/Icon'
 
 function formatDate(ts: number): string {
@@ -70,18 +71,39 @@ export function ProjectListPage(): React.JSX.Element {
     openProject(p)
   }
 
+  const handleExport = async (p: ProjectMeta): Promise<void> => {
+    const res = await window.api.exportProject({ id: p.id, name: p.name })
+    if (!res.ok) {
+      if (res.error.code !== 'CANCELLED')
+        useToastStore.getState().show(`导出失败：${res.error.message}`)
+      return
+    }
+    useToastStore.getState().show(`已导出到 ${res.data.path}`)
+  }
+
+  const handleImport = async (): Promise<void> => {
+    const res = await window.api.importProject()
+    if (!res.ok) {
+      if (res.error.code !== 'CANCELLED')
+        useToastStore.getState().show(`导入失败：${res.error.message}`)
+      return
+    }
+    useToastStore.getState().show(`已导入项目「${res.data.name}」`)
+    void refresh()
+  }
+
   return (
     <div className="home">
       <header className="home-header">
         <h1>无限画布创作平台</h1>
-        <button
-          className="btn-primary"
-          onClick={() => {
-            setCreating(true)
-          }}
-        >
-          <Icon name="add" size={16} /> 新建项目
-        </button>
+        <div className="home-actions">
+          <button className="btn-ghost" onClick={() => void handleImport()}>
+            <Icon name="upload" size={16} /> 导入项目
+          </button>
+          <button className="btn-primary" onClick={() => setCreating(true)}>
+            <Icon name="add" size={16} /> 新建项目
+          </button>
+        </div>
       </header>
 
       {creating && (
@@ -127,6 +149,16 @@ export function ProjectListPage(): React.JSX.Element {
             )}
             <div className="project-time">{formatDate(p.updatedAt)}</div>
             <div className="project-actions">
+              <button
+                className="icon-btn"
+                title="导出"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void handleExport(p)
+                }}
+              >
+                <Icon name="download" size={15} />
+              </button>
               <button
                 className="icon-btn"
                 title="重命名"

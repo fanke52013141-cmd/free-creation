@@ -1,19 +1,14 @@
-import { useEffect, useState } from 'react'
-import type { Editor, TLShapeId } from 'tldraw'
+import type { Editor } from 'tldraw'
 import type { PortDecl } from '@shared/types'
 import { getNodeType } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
 import { Icon } from '../components/Icon'
 import { projectNodeOutputs, type NodeValue } from '../nodes/nodeValues'
+import { useNodePanelStore } from '../stores/nodePanel'
 
 interface NodeContractPanelProps {
   editor: Editor
   onClose: () => void
-}
-
-function getSelectedNodeId(editor: Editor): TLShapeId | null {
-  const selected = editor.getSelectedShapes()
-  return selected.length === 1 && selected[0].type === 'node-card' ? selected[0].id : null
 }
 
 function PortRows({
@@ -84,11 +79,7 @@ export function NodeContractPanel({
   editor,
   onClose
 }: NodeContractPanelProps): React.JSX.Element | null {
-  const [shapeId, setShapeId] = useState<TLShapeId | null>(() => getSelectedNodeId(editor))
-
-  useEffect(() => {
-    return editor.store.listen(() => setShapeId(getSelectedNodeId(editor)), { scope: 'session' })
-  }, [editor])
+  const shapeId = useNodePanelStore((s) => s.shapeId)
 
   if (!shapeId) return null
   const shape = editor.getShape<NodeCardShape>(shapeId)

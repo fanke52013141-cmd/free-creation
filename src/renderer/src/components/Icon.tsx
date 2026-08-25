@@ -40,6 +40,7 @@ export type IconName =
   | 'document'
   | 'warning'
   | 'help'
+  | 'info'
   | 'add'
   | 'grid'
   | 'target'
@@ -47,6 +48,8 @@ export type IconName =
   | 'more'
   | 'trash'
   | 'edit'
+  | 'external'
+  | 'download'
 
 interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {
   name: IconName
@@ -271,6 +274,12 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M9.5 9a2.5 2.5 0 1 1 4.2 1.8c-.9.8-1.7 1.2-1.7 2.7M12 17h.01" />
     </>
   ),
+  info: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v6M12 7.5h.01" />
+    </>
+  ),
   add: (
     <>
       <path d="M12 5v14M5 12h14" />
@@ -312,6 +321,20 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <path d="m4 16.5-.7 3.7 3.7-.7L18.7 7.8a2.1 2.1 0 0 0-3-3L4 16.5Z" />
       <path d="m14.5 6.5 3 3" />
+    </>
+  ),
+  external: (
+    <>
+      <path d="M14 4h6v6" />
+      <path d="M20 4 10 14" />
+      <path d="M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5" />
+    </>
+  ),
+  download: (
+    <>
+      <path d="M12 3v12" />
+      <path d="m7 10 5 5 5-5" />
+      <path d="M5 19h14" />
     </>
   )
 }

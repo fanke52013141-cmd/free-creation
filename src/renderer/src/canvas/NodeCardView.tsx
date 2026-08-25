@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { getNodeType, portCompatible, portOffsets, PORT_COLORS } from '../nodes/registry'
 import { useConnectionStore } from '../stores/connection'
+import { useNodePanelStore } from '../stores/nodePanel'
 import { beginConnectionDrag } from './connection-drag'
 import { markUndoPoint } from './history'
 import type { NodeCardShape } from './NodeCardShape'
@@ -96,6 +97,13 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     editor.select(shape.id)
   }
 
+  // 右上角 info 图标：显式打开该节点的右侧面板。对话节点→聊天面板，其余→契约信息窗。
+  // 单击节点只负责选中，不再自动弹出；点击此图标才呈现，避免选中与点图标打架。
+  const handleInfoOpen = (e: React.PointerEvent<HTMLButtonElement>): void => {
+    // 阻止指针事件继续，避免落入卡片选中/拖动逻辑
+    stopEventPropagation(e)
+  }
+
   // 双击标题进入编辑模式
   const handleTitleDoubleClick = (e: React.MouseEvent): void => {
     if (!titleEditable) return
@@ -164,6 +172,19 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               style={{ background: EXEC_COLORS[shape.props.exec] ?? EXEC_COLORS.idle }}
               title={shape.props.exec}
             />
+            <button
+              className="node-info-btn"
+              title={shape.props.nodeType === 'chat' ? '打开对话面板' : '查看输入输出说明'}
+              aria-label="打开节点说明"
+              onPointerDown={handleInfoOpen}
+              onClick={(e) => {
+                stopEventPropagation(e)
+                const kind = shape.props.nodeType === 'chat' ? 'chat' : 'contract'
+                useNodePanelStore.getState().open(kind, shape.id)
+              }}
+            >
+              <Icon name="info" size={13} />
+            </button>
           </div>
           <div className="node-body">
             {spec ? (
@@ -221,6 +242,40 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             <div className="media-preview-box" onClick={(e) => e.stopPropagation()}>
               <div className="media-preview-title">
                 <span>{preview.title}</span>
+                {shape.props.mediaId && (
+                  <span className="media-preview-actions">
+                    <button
+                      className="icon-btn"
+                      title="在资源管理器中定位"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void window.api.revealMedia(shape.props.mediaId)
+                      }}
+                    >
+                      <Icon name="target" size={14} />
+                    </button>
+                    <button
+                      className="icon-btn"
+                      title="复制文件路径"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void window.api.copyMediaPath(shape.props.mediaId)
+                      }}
+                    >
+                      <Icon name="copy" size={14} />
+                    </button>
+                    <button
+                      className="icon-btn"
+                      title="用系统默认程序打开"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void window.api.openMedia(shape.props.mediaId)
+                      }}
+                    >
+                      <Icon name="external" size={14} />
+                    </button>
+                  </span>
+                )}
                 <button className="icon-btn" onClick={() => setPreview(null)}>
                   <Icon name="close" size={16} />
                 </button>

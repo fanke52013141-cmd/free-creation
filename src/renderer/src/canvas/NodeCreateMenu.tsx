@@ -8,6 +8,7 @@ interface NodeCreateMenuProps {
   x: number
   y: number
   onPick: (type: NodeTypeId) => void
+  onTemplate: () => void
   onUpload: () => void
   onGallery: () => void
   onClose: () => void
@@ -17,6 +18,7 @@ export function NodeCreateMenu({
   x,
   y,
   onPick,
+  onTemplate,
   onUpload,
   onGallery,
   onClose
@@ -65,6 +67,14 @@ export function NodeCreateMenu({
           <span>{t.label}</span>
         </button>
       ))}
+      <div className="node-menu-divider" />
+      <div className="node-menu-title">工作流模板</div>
+      <button className="node-menu-item" onClick={onTemplate}>
+        <span className="item-icon">
+          <Icon name="spark" size={18} />
+        </span>
+        <span>剧本 → 分镜</span>
+      </button>
       <div className="node-menu-divider" />
       <div className="node-menu-title">添加资源</div>
       <button className="node-menu-item" onClick={onUpload}>

@@ -1,4 +1,4 @@
-﻿import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import { IPC } from '../shared/contracts'
 import type {
@@ -43,6 +43,9 @@ const api = {
     ipcRenderer.sendSync(IPC.project.saveSync, input)
   },
   closeProject: (): Promise<IpcEnvelope<true>> => ipcRenderer.invoke(IPC.project.close),
+  exportProject: (input: { id: string; name?: string }): Promise<IpcEnvelope<{ path: string }>> =>
+    ipcRenderer.invoke(IPC.project.export, input),
+  importProject: (): Promise<IpcEnvelope<ProjectMeta>> => ipcRenderer.invoke(IPC.project.import),
   importMedia: (input: {
     projectId: string
     paths: string[]
@@ -55,6 +58,13 @@ const api = {
     ipcRenderer.invoke(IPC.media.list, projectId),
   deleteMedia: (mediaId: string): Promise<IpcEnvelope<boolean>> =>
     ipcRenderer.invoke(IPC.media.delete, mediaId),
+  // 媒体文件操作：资源管理器定位 / 复制绝对路径 / 系统默认程序打开
+  revealMedia: (mediaId: string): Promise<IpcEnvelope<boolean>> =>
+    ipcRenderer.invoke(IPC.media.reveal, mediaId),
+  copyMediaPath: (mediaId: string): Promise<IpcEnvelope<boolean>> =>
+    ipcRenderer.invoke(IPC.media.copyPath, mediaId),
+  openMedia: (mediaId: string): Promise<IpcEnvelope<boolean>> =>
+    ipcRenderer.invoke(IPC.media.open, mediaId),
   // 拖拽落盘的 File 对象拿真实路径（Electron 32+ 移除了 File.path）
   getDroppedFilePath: (file: File): string => webUtils.getPathForFile(file),
   gateway: {

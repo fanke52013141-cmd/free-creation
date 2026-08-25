@@ -1,0 +1,55 @@
+# 持续集成门禁（路线图 R2）
+#
+# 在每个推送和 PR 上运行：依赖安装 → 类型检查 → 代码规范 → 节点契约测试 → 生产构建。
+# 任意一步失败即阻断合并，确保节点端口、Schema 与契约规范的破坏性变化在合并前暴露。
+#
+# 测试覆盖契约层（端口 ID/类型/Schema/契约版本、连线矩阵、输入输出校验、执行器纯函数），
+# 不依赖 Electron 运行时或 tldraw Editor 渲染，可在任意 OS 的 Node 环境运行。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# 同一分支的新推送取消正在运行的旧工作流，节省 CI 资源。
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: typecheck · lint · test · build
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 类型检查
+        run: pnpm typecheck
+
+      - name: 代码规范
+        run: pnpm lint
+
+      - name: 节点契约与执行器测试
+        run: pnpm test
+
+      - name: 生产构建（Windows）
+        run: pnpm build
