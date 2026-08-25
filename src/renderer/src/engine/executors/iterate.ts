@@ -127,12 +127,24 @@ async function runItem(
   let retries = 0
   for (;;) {
     if (ctx.signal.cancelled) return { item, status: 'skipped', error: '已取消', ...base }
-    const output = (await ctx.runSubflow?.({
-      nodeIds: ctx.downstream ?? [],
-      item,
-      index,
-      itemId
-    })) as Record<string, unknown> | undefined
+    // 子流程执行可能抛错（如迭代体节点输出契约失败）。这里统一捕获并按失败策略
+    // 处理，避免错误冒泡成未处理 rejection，也与「迭代体未产生输出」走同一通路。
+    let output: Record<string, unknown> | undefined
+    try {
+      output = (await ctx.runSubflow?.({
+        nodeIds: ctx.downstream ?? [],
+        item,
+        index,
+        itemId
+      })) as Record<string, unknown> | undefined
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (config.onFailure === 'retry' && retries < config.maxRetries) {
+        retries += 1
+        continue
+      }
+      return { item, status: 'failed', error: msg, ...base }
+    }
     if (!output) {
       return { item, status: 'skipped', error: '未配置子流程', ...base }
     }
@@ -158,75 +170,49 @@ export const iterateExecutor = async (ctx: NodeExecutionContext): Promise<NodeEx
 
   const items = config.limit > 0 ? list.slice(0, config.limit) : list
   const results: Array<IterateItemResult | undefined> = new Array(items.length)
-  let next = 0
-  let inFlight = 0
   let failedAny = false
-  let finished = false
 
-  return await new Promise<NodeExecutionResult>((resolve) => {
-    const finish = (): void => {
-      if (finished) return
-      finished = true
-      // 未处理项（取消 / 中止）标记 skipped
-      for (let i = 0; i < results.length; i += 1) {
-        if (!results[i]) {
+  // 顺序执行：config.concurrency 当前被忽略（字段保留以兼容已保存的配置）。
+  // 迭代体的下游节点在画布上是单例，其持久状态（mediaPath 等）与运行输出登记
+  // （ctx.outputs）是共享可变的；并发跑多项会互相覆盖、产出错乱数据。
+  // 要安全恢复并发，需先实现 per-item 节点实例化（见 ROADMAP / 代码审查 P0）。
+  for (let idx = 0; idx < items.length; idx += 1) {
+    if (ctx.signal.cancelled) break
+    const item = items[idx] as Record<string, unknown>
+    const result = await runItem(ctx, config, item, idx)
+    results[idx] = result
+    if (result.status === 'failed') {
+      failedAny = true
+      if (config.onFailure === 'fail') {
+        // 立即中止：剩余未处理项标记 skipped
+        for (let i = idx + 1; i < items.length; i += 1) {
           results[i] = {
             item: items[i] as Record<string, unknown>,
             status: 'skipped',
-            error: ctx.signal.cancelled ? '已取消' : '未执行',
             source: { index: i }
           }
         }
+        break
       }
-      const data: IterateResult = { items: results as IterateItemResult[] }
-      ctx.updateProps({ text: JSON.stringify({ ...config, items: data.items }) })
-      ctx.updateResult(JSON.stringify(data))
-      if (ctx.signal.cancelled) resolve({ status: 'skipped', reason: '已取消' })
-      else if (failedAny && config.onFailure === 'fail')
-        resolve({ status: 'failed', reason: '循环中存在失败项' })
-      else resolve({ status: 'done' })
     }
+  }
 
-    const launch = (): void => {
-      if (ctx.signal.cancelled) return finish()
-      while (inFlight < config.concurrency && next < items.length) {
-        const idx = next
-        next += 1
-        inFlight += 1
-        const item = items[idx] as Record<string, unknown>
-        void runItem(ctx, config, item, idx).then((result) => {
-          inFlight -= 1
-          results[idx] = result
-          // 中间进度上报：每完成一项即写回 partial results，供 Body 渲染进度条
-          const completed = results.filter(Boolean).length
-          ctx.updateProps({
-            text: JSON.stringify({
-              ...config,
-              items: results.map((r) => r ?? null),
-              _progress: { done: completed, total: items.length }
-            })
-          })
-          if (result.status === 'failed') {
-            failedAny = true
-            if (config.onFailure === 'fail') {
-              // 立即中止：剩余未调度项标记 skipped
-              for (let i = next; i < items.length; i += 1) {
-                results[i] = {
-                  item: items[i] as Record<string, unknown>,
-                  status: 'skipped',
-                  source: { index: i }
-                }
-              }
-              next = items.length
-            }
-          }
-          if (inFlight === 0) finish()
-          else launch()
-        })
+  // 未处理项（取消 / 中止）标记 skipped
+  for (let i = 0; i < results.length; i += 1) {
+    if (!results[i]) {
+      results[i] = {
+        item: items[i] as Record<string, unknown>,
+        status: 'skipped',
+        error: ctx.signal.cancelled ? '已取消' : '未执行',
+        source: { index: i }
       }
-      if (inFlight === 0) finish()
     }
-
-    launch()
-  })
+  }
+  const data: IterateResult = { items: results as IterateItemResult[] }
+  ctx.updateProps({ text: JSON.stringify({ ...config, items: data.items }) })
+  ctx.updateResult(JSON.stringify(data))
+  if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
+  if (failedAny && config.onFailure === 'fail')
+    return { status: 'failed', reason: '迭代中存在失败项' }
+  return { status: 'done' }
 }

@@ -13,7 +13,7 @@ import type { Editor, TLShapeId } from 'tldraw'
 import type { CanvasEdge, CanvasNode, ExecStatus, ProviderConfig } from '@shared/types'
 import { deriveGraph } from '../canvas/graph'
 import { markUndoPoint } from '../canvas/history'
-import type { NodeCardShape } from '../canvas/NodeCardShape'
+import type { NodeCardShape, NodeCardProps } from '../canvas/NodeCardShape'
 import { buildOutputPackets, collectContractInputs, type ContractOutputs } from './contracts'
 import type { NodeExecutionContext, NodeExecutionResult, SubflowRequest } from './executor-types'
 import { getNodeType } from '../nodes/registry'
@@ -216,17 +216,56 @@ async function executeNodeOnce(
 }
 
 /**
- * 循环体子流程执行：对请求里的循环体节点链（nodeIds）执行一次，把 item 注入首节点。
- * 返回各节点的契约输出。非循环节点不会调到这里。
+ * 每个 item 执行迭代体前重置迭代体节点的「上次运行产物」。
+ *
+ * 迭代体的下游节点在画布上是单例：生成类节点（生图 / 视频 / 音频）以 mediaPath
+ * 作为「已生成则复用」的短路依据；若不清空，item B 会命中 item A 留下的产物
+ * 直接 done，不再为本项生成。这里清空媒体引用字段并删除输出登记，强制每项独立
+ * 产出。这是迭代语义的内在要求（每项独立处理），不构成节点类型特判：只重置与
+ * 「复用短路 / 输出登记」相关的通用运行态字段，对无媒体输出的节点无副作用。
+ */
+function resetSubflowRunState(ctx: WorkflowContext, nodeIds: string[]): void {
+  const updates: Array<{
+    id: TLShapeId
+    type: 'node-card'
+    props: Partial<NodeCardProps>
+  }> = []
+  for (const nodeId of nodeIds) {
+    const shape = ctx.editor.getShape<NodeCardShape>(nodeId as TLShapeId)
+    if (!shape) continue
+    // 仅当确实存在上次产物时才写回，避免无谓的 shape 变更触发保存
+    if (shape.props.mediaId || shape.props.mediaPath || shape.props.mediaMime) {
+      updates.push({
+        id: shape.id,
+        type: 'node-card',
+        props: { mediaId: '', mediaPath: '', mediaMime: '' }
+      })
+    }
+    ctx.outputs.delete(nodeId)
+  }
+  if (updates.length > 0) ctx.editor.updateShapes(updates)
+}
+
+/**
+ * 迭代体子流程执行：对请求里的迭代体节点链（nodeIds）执行一次，把 item 注入首节点。
+ * 返回各节点的契约输出。非迭代节点不会调到这里。
+ *
+ * 与主流程的区别：迭代体是线性链，后续节点依赖前节点；任一节点失败（执行或输出
+ * 契约）即中断并抛出错因，由迭代器的 runItem 捕获后按 onFailure 策略处理，避免
+ * 错误结构悄悄进入下游、也避免「部分节点成功」被误判为该项成功。
  */
 async function runSubflowForIterate(
   ctx: WorkflowContext,
   runSubflow: (request: SubflowRequest) => Promise<Record<string, ContractOutputs>>,
   request: SubflowRequest
 ): Promise<Record<string, ContractOutputs>> {
+  // 每个 item 执行迭代体前重置迭代体节点的上次运行产物，强制每项独立产出
+  resetSubflowRunState(ctx, request.nodeIds)
+
   const results: Record<string, ContractOutputs> = {}
   const byId = new Map(ctx.graph.nodes.map((n) => [n.id, n]))
   let index = 0
+  let failureReason: string | null = null
   for (const nodeId of request.nodeIds) {
     if (ctx.token.cancelled) break
     const node = byId.get(nodeId)
@@ -234,12 +273,24 @@ async function runSubflowForIterate(
     // 首节点注入当前 item；后续节点用正常图连边收集（此时 outputs 已包含首节点输出）
     const itemForNode = index === 0 ? (request.item ?? {}) : undefined
     const result = await executeNodeOnce(ctx, node, runSubflow, itemForNode)
+    if (ctx.token.cancelled) break
+    if (result.status === 'failed') {
+      failureReason = result.reason ?? '迭代体节点执行失败'
+      break
+    }
     const latest = ctx.editor.getShape<NodeCardShape>(node.id as TLShapeId)
     if (result.status === 'done' && latest) {
-      results[node.id] = buildOutputPackets(node, projectNodeOutputs(latest), ctx.runId).value ?? {}
+      // done 路径下 executeNodeOnce 已校验输出契约；这里防御性再检查，不吞错误
+      const projected = buildOutputPackets(node, projectNodeOutputs(latest), ctx.runId)
+      if (projected.errors.length > 0) {
+        failureReason = `迭代体节点 ${node.type} 输出契约失败：${projected.errors.join('；')}`
+        break
+      }
+      results[node.id] = projected.value
     }
     index += 1
   }
+  if (failureReason) throw new Error(failureReason)
   return results
 }
 

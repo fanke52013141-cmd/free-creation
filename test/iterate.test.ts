@@ -1,8 +1,8 @@
 // 循环节点执行器测试（原迭代控制节点）
 //
 // 覆盖 parseIterate / parseIterateResult 配置解析，以及 iterate 执行器的运行时分支：
-// 并发调度、失败策略（skip / fail / retry）、取消、来源追踪、无下游 / 无列表跳过。
-// runSubflow 用 mock 注入（返回非空输出视为成功、空输出视为失败）。
+// 顺序调度、失败策略（skip / fail / retry）、子流程抛错容错、取消、来源追踪、无下游 / 无列表跳过。
+// runSubflow 用 mock 注入（返回非空输出视为成功、空输出视为失败、抛错视为子流程崩溃）。
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
   parseIterate,
@@ -164,7 +164,7 @@ describe('parseIterateResult · 结果读取', () => {
 })
 
 describe('iterate 执行器 · 成功批量', () => {
-  it('并发调度列表每一项并输出结构化结果', async () => {
+  it('顺序处理列表每一项并输出结构化结果', async () => {
     const seen: number[] = []
     const { ctx, props, result } = makeCtx({
       text: JSON.stringify({ concurrency: 2, limit: 0 }),
@@ -185,7 +185,8 @@ describe('iterate 执行器 · 成功批量', () => {
     })
     const r = await iterateExecutor(ctx)
     expect(r.status).toBe('done')
-    expect(seen.sort((a, b) => a - b)).toEqual([0, 1, 2])
+    // 顺序执行：序号严格递增（即便配置了 concurrency:2，当前实现强制串行）
+    expect(seen).toEqual([0, 1, 2])
     const data = JSON.parse(props.text as string)
     expect(data.items).toHaveLength(3)
     expect(data.items.every((it: { status: string }) => it.status === 'done')).toBe(true)
@@ -335,5 +336,115 @@ describe('iterate 执行器 · 取消 / 跳过条件', () => {
     })
     const r = await iterateExecutor(ctx)
     expect(r.status).toBe('skipped')
+  })
+})
+
+describe('iterate 执行器 · 严格串行（无并发重叠）', () => {
+  it('即便配置 concurrency:4，item 仍严格按顺序执行', async () => {
+    const timeline: Array<{ index: number; phase: 'start' | 'end' }> = []
+    const { ctx } = makeCtx({
+      text: JSON.stringify({ concurrency: 4 }),
+      list: [{ id: 'a' }, { id: 'b' }, { id: 'c' }],
+      runSubflow: async (req) => {
+        timeline.push({ index: req.index, phase: 'start' })
+        await new Promise((r) => setTimeout(r, 5))
+        timeline.push({ index: req.index, phase: 'end' })
+        return {
+          'node-body': {
+            'out-x': {
+              value: 1,
+              type: 'json',
+              source: { nodeId: 'n', portId: 'p', runId: 'r' },
+              createdAt: 0
+            }
+          }
+        }
+      }
+    })
+    await iterateExecutor(ctx)
+    // 串行：每项的 end 紧随该项 start 之后，下一项 start 不与上一项重叠
+    expect(timeline.map((t) => `${t.index}:${t.phase}`).join(',')).toBe(
+      '0:start,0:end,1:start,1:end,2:start,2:end'
+    )
+  })
+})
+
+describe('iterate 执行器 · 子流程抛错的容错', () => {
+  it('runSubflow 抛错时该项标 failed 并带上错误信息（onFailure=skip，其余继续）', async () => {
+    const { ctx, props } = makeCtx({
+      text: JSON.stringify({ onFailure: 'skip' }),
+      list: [{ id: 'a' }, { id: 'b' }],
+      runSubflow: async (req) => {
+        if (req.index === 0) throw new Error('子流程内部崩溃')
+        return {
+          'node-body': {
+            'out-x': {
+              value: 1,
+              type: 'json',
+              source: { nodeId: 'n', portId: 'p', runId: 'r' },
+              createdAt: 0
+            }
+          }
+        }
+      }
+    })
+    const r = await iterateExecutor(ctx)
+    expect(r.status).toBe('done')
+    const items = JSON.parse(props.text as string).items
+    expect(items[0].status).toBe('failed')
+    expect(items[0].error).toContain('子流程内部崩溃')
+    expect(items[1].status).toBe('done')
+  })
+
+  it('runSubflow 抛错且 onFailure=fail 时立即中止，剩余项标 skipped', async () => {
+    const { ctx, props } = makeCtx({
+      text: JSON.stringify({ onFailure: 'fail' }),
+      list: [{ id: 'a' }, { id: 'b' }, { id: 'c' }],
+      runSubflow: async (req) => {
+        if (req.index === 0) throw new Error('崩溃')
+        return {
+          'node-body': {
+            'out-x': {
+              value: 1,
+              type: 'json',
+              source: { nodeId: 'n', portId: 'p', runId: 'r' },
+              createdAt: 0
+            }
+          }
+        }
+      }
+    })
+    const r = await iterateExecutor(ctx)
+    expect(r.status).toBe('failed')
+    const items = JSON.parse(props.text as string).items
+    expect(items[0].status).toBe('failed')
+    expect(items[1].status).toBe('skipped')
+    expect(items[2].status).toBe('skipped')
+  })
+
+  it('runSubflow 抛错且 onFailure=retry 时重试后成功', async () => {
+    let calls = 0
+    const { ctx, props } = makeCtx({
+      text: JSON.stringify({ onFailure: 'retry', maxRetries: 2 }),
+      list: [{ id: 'a' }],
+      runSubflow: async () => {
+        calls += 1
+        if (calls < 2) throw new Error('暂时失败')
+        return {
+          'node-body': {
+            'out-x': {
+              value: 1,
+              type: 'json',
+              source: { nodeId: 'n', portId: 'p', runId: 'r' },
+              createdAt: 0
+            }
+          }
+        }
+      }
+    })
+    const r = await iterateExecutor(ctx)
+    expect(r.status).toBe('done')
+    expect(calls).toBe(2)
+    expect(JSON.parse(props.text as string).items[0].status).toBe('done')
   })
 })
