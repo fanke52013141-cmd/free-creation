@@ -41,6 +41,95 @@ registerBaseNodeTypes()
 registerScriptNodeType()
 registerExtendedNodeTypes()
 
+// ── 一次性旧快照迁移（纯同步，返回迁移数量；由 handleMount 决定是否 toast）──
+// 这些函数从 handleMount 抽出以提高可读性，便于单独理解每段迁移的职责与边界。
+// 关键约束：迁移必须保持原有执行顺序，且不在迁移期间改变保存时机——
+// handleMount 仍按原顺序调用它们，store.listen 注册位置不变。
+
+/** 把兼具「资产 + 生成」旧职责的 image 节点拆分：有生成配置或无媒体的迁移为 image-gen。 */
+function migrateLegacyImageGenNodes(editor: Editor): number {
+  const updates = editor
+    .getCurrentPageShapes()
+    .filter((shape): shape is typeof shape & { type: 'node-card' } => shape.type === 'node-card')
+    .flatMap((shape) => {
+      if (shape.props.nodeType !== 'image') return []
+      let hasPromptConfig = false
+      try {
+        const value = JSON.parse(shape.props.text) as { prompt?: unknown }
+        hasPromptConfig = typeof value.prompt === 'string'
+      } catch {
+        // 空或普通资产文字不代表生图配置。
+      }
+      if (!hasPromptConfig && shape.props.mediaPath) return []
+      return [
+        {
+          id: shape.id,
+          type: 'node-card' as const,
+          props: {
+            nodeType: 'image-gen',
+            title: shape.props.title === '图片' ? '生图' : shape.props.title
+          }
+        }
+      ]
+    })
+  if (updates.length > 0) editor.updateShapes(updates)
+  return updates.length
+}
+
+/** 退役旧「分组节点」（成员迁移为 tldraw 原生 group）与「合成节点」（直接移除）。返回迁移的分组数。 */
+function migrateRetiredNodes(editor: Editor): number {
+  const retiredNodes: TLShapeId[] = []
+  let migratedGroups = 0
+  for (const current of editor.getCurrentPageShapes()) {
+    if (current.type !== 'node-card') continue
+    if (current.props.nodeType === 'compose') {
+      retiredNodes.push(current.id)
+      continue
+    }
+    if (current.props.nodeType !== 'group') continue
+    try {
+      const parsed = JSON.parse(current.props.text) as { memberIds?: unknown }
+      const memberIds = Array.isArray(parsed.memberIds)
+        ? parsed.memberIds.filter(
+            (id): id is TLShapeId =>
+              typeof id === 'string' && editor.getShape(id as TLShapeId)?.type === 'node-card'
+          )
+        : []
+      if (memberIds.length >= 2) {
+        editor.groupShapes(memberIds)
+        migratedGroups += 1
+      }
+    } catch {
+      // 损坏的旧分组不阻断项目打开；旧分组卡片仍会被移除。
+    }
+    retiredNodes.push(current.id)
+  }
+  if (retiredNodes.length > 0) editor.deleteShapes(retiredNodes)
+  return migratedGroups
+}
+
+/** 把旧版本默认尺寸或明显异常的超大节点修正为当前标准尺寸。返回修正数量。 */
+function migrateLegacyNodeSizes(editor: Editor): number {
+  const updates = editor
+    .getCurrentPageShapes()
+    .filter((shape): shape is typeof shape & { type: 'node-card' } => shape.type === 'node-card')
+    .flatMap((shape) => {
+      const spec = getNodeType(shape.props.nodeType)
+      if (!spec || !needsNodeSizeMigration(shape.props.nodeType, shape.props.w, shape.props.h)) {
+        return []
+      }
+      return [
+        {
+          id: shape.id,
+          type: 'node-card' as const,
+          props: { w: spec.defaultSize.w, h: spec.defaultSize.h }
+        }
+      ]
+    })
+  if (updates.length > 0) editor.updateShapes(updates)
+  return updates.length
+}
+
 interface CanvasEditorProps {
   project: ProjectMeta
   initialSnapshot: unknown
@@ -529,63 +618,11 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
 
     // 旧版“图片”兼具资产和生成两种职责：有生成配置或尚无媒体的迁移为“生图”，
     // 已导入的媒体保留为纯图片资产，避免再出现一个节点两种含义。
-    const imageGenUpdates = editor
-      .getCurrentPageShapes()
-      .filter((shape): shape is typeof shape & { type: 'node-card' } => shape.type === 'node-card')
-      .flatMap((shape) => {
-        if (shape.props.nodeType !== 'image') return []
-        let hasPromptConfig = false
-        try {
-          const value = JSON.parse(shape.props.text) as { prompt?: unknown }
-          hasPromptConfig = typeof value.prompt === 'string'
-        } catch {
-          // 空或普通资产文字不代表生图配置。
-        }
-        if (!hasPromptConfig && shape.props.mediaPath) return []
-        return [
-          {
-            id: shape.id,
-            type: 'node-card' as const,
-            props: {
-              nodeType: 'image-gen',
-              title: shape.props.title === '图片' ? '生图' : shape.props.title
-            }
-          }
-        ]
-      })
-    if (imageGenUpdates.length > 0) {
-      editor.updateShapes(imageGenUpdates)
-      toast(`已将 ${imageGenUpdates.length} 个旧图片生成节点迁移为“生图”`)
-    }
+    const migratedImageGen = migrateLegacyImageGenNodes(editor)
+    if (migratedImageGen > 0) toast(`已将 ${migratedImageGen} 个旧图片生成节点迁移为“生图”`)
 
     // 退役旧“分组节点”：成员关系迁移为 tldraw 原生 group；旧“合成节点”直接移出画布。
-    const retiredNodes: TLShapeId[] = []
-    let migratedGroups = 0
-    for (const current of editor.getCurrentPageShapes()) {
-      if (current.type !== 'node-card') continue
-      if (current.props.nodeType === 'compose') {
-        retiredNodes.push(current.id)
-        continue
-      }
-      if (current.props.nodeType !== 'group') continue
-      try {
-        const parsed = JSON.parse(current.props.text) as { memberIds?: unknown }
-        const memberIds = Array.isArray(parsed.memberIds)
-          ? parsed.memberIds.filter(
-              (id): id is TLShapeId =>
-                typeof id === 'string' && editor.getShape(id as TLShapeId)?.type === 'node-card'
-            )
-          : []
-        if (memberIds.length >= 2) {
-          editor.groupShapes(memberIds)
-          migratedGroups += 1
-        }
-      } catch {
-        // 损坏的旧分组不阻断项目打开；旧分组卡片仍会被移除。
-      }
-      retiredNodes.push(current.id)
-    }
-    if (retiredNodes.length > 0) editor.deleteShapes(retiredNodes)
+    const migratedGroups = migrateRetiredNodes(editor)
     if (migratedGroups > 0) toast(`已将 ${migratedGroups} 个旧分组迁移为画布分组状态`)
 
     // 兼容旧版本由 tldraw 默认粘贴产生的原生 image shape：成功落盘后再替换为图片节点。
@@ -633,26 +670,8 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
       { scope: 'document' }
     )
     // 一次性兼容旧快照：只修正旧版本默认尺寸或明显异常的超大节点。
-    const resizeUpdates = editor
-      .getCurrentPageShapes()
-      .filter((shape): shape is typeof shape & { type: 'node-card' } => shape.type === 'node-card')
-      .flatMap((shape) => {
-        const spec = getNodeType(shape.props.nodeType)
-        if (!spec || !needsNodeSizeMigration(shape.props.nodeType, shape.props.w, shape.props.h)) {
-          return []
-        }
-        return [
-          {
-            id: shape.id,
-            type: 'node-card' as const,
-            props: { w: spec.defaultSize.w, h: spec.defaultSize.h }
-          }
-        ]
-      })
-    if (resizeUpdates.length > 0) {
-      editor.updateShapes(resizeUpdates)
-      toast(`已将 ${resizeUpdates.length} 个旧节点调整为标准尺寸`)
-    }
+    const resizedNodes = migrateLegacyNodeSizes(editor)
+    if (resizedNodes > 0) toast(`已将 ${resizedNodes} 个旧节点调整为标准尺寸`)
     // 删除节点时级联清理连线：tldraw 删 shape 时只删其 binding 不删 arrow，会留悬空线。
     // 用 sideEffects 的 afterDelete 钩子同步处理——binding 在 shape 的 beforeDelete 阶段
     // 已被 tldraw 删除，此时遍历箭头找绑定数 < 2 的即为悬空线，随同一次事务删除（可整体撤销）。
