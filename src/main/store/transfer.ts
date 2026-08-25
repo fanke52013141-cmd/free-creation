@@ -16,6 +16,10 @@ import { getDb, getProjectsDir } from './db'
 const BUNDLE_EXT = '.canvasbundle'
 /** 当前支持的 ProjectFile version；导入时其它版本拒绝。 */
 const SUPPORTED_PROJECT_VERSION = 1
+/** 导入包条目数上限：防止 zip 炸弹 / 损坏包耗尽文件描述符与磁盘。 */
+const MAX_BUNDLE_ENTRIES = 50_000
+/** 导入包解压后总大小上限（2GB）：与单文件媒体上限一致。 */
+const MAX_BUNDLE_BYTES = 2 * 1024 * 1024 * 1024
 
 interface BundleMeta {
   projectName: string
@@ -135,6 +139,22 @@ export function exportProject(id: string, destPath: string): string {
 /** 导入项目 bundle，返回新项目元信息；版本不兼容或包损坏时抛错。 */
 export function importProject(srcPath: string): ProjectMetaInfo {
   const zip = new AdmZip(srcPath)
+
+  // 导入安全上限：拒绝条目过多或解压体过大的包，防止 zip 炸弹 / 损坏包耗尽
+  // 文件描述符与磁盘。AdmZip 仍是同步整包载入内存，这两个上限能卡住异常包，
+  // 但彻底流式化需换 yauzl 等库（更大重构，本次不做）。
+  const entries = zip.getEntries()
+  if (entries.length > MAX_BUNDLE_ENTRIES) {
+    throw new Error(`项目包条目数过多（${entries.length}），可能已损坏`)
+  }
+  let totalUncompressed = 0
+  for (const entry of entries) {
+    totalUncompressed += entry.header.size ?? 0
+  }
+  if (totalUncompressed > MAX_BUNDLE_BYTES) {
+    throw new Error(`项目包解压后大小超过 2GB 上限`)
+  }
+
   const fileEntry = zip.getEntry('project.json')
   if (!fileEntry) throw new Error('不是有效的项目导出包（缺少 project.json）')
 
