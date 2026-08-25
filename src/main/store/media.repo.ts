@@ -1,7 +1,7 @@
 // 媒体仓库：文件落项目媒体目录 + SQLite 索引（见《技术框架与规范》§9）
 // 异步复制：大文件导入不阻塞主进程
 import { nanoid } from 'nanoid'
-import { copyFile, mkdir, readFile, stat, unlink, writeFile } from 'fs/promises'
+import { copyFile, mkdir, readFile, rename, stat, unlink, writeFile } from 'fs/promises'
 import { basename, dirname, extname, join } from 'path'
 import type { MediaAsset, MediaKind } from '../../shared/types'
 import { getDataDir, getDb } from './db'
@@ -148,7 +148,53 @@ export async function saveBufferAsset(
   }
 }
 
-// 按 mediaId 读回文件内容（视频首帧图转 base64 上传用）
+/**
+ * 把已落地的本地文件登记为媒体资产（流式下载专用）。
+ *
+ * 与 saveBufferAsset 的区别：调用方已把内容写到 srcAbs（如视频成片流式下载到
+ * 临时文件），这里只做 rename 到目标位置 + SQLite 索引，不再读进内存——避免
+ * 几百 MB 成片让主进程内存尖峰。srcAbs 会被移走（rename），调用方不应再使用。
+ */
+export async function saveFileAsset(
+  projectId: string,
+  srcAbs: string,
+  ext: string,
+  name: string
+): Promise<MediaAsset> {
+  const mime = MIME_BY_EXT[ext] ?? 'application/octet-stream'
+  const kind = detectKind(ext, mime)
+  const id = nanoid(10)
+  const relPath = `projects/${projectId}/media/${id}${ext}`
+  const destAbs = join(getDataDir(), relPath)
+  await mkdir(dirname(destAbs), { recursive: true })
+  // 先 rename 到目标；跨卷时 rename 会失败，回退到 copy + unlink
+  try {
+    await rename(srcAbs, destAbs)
+  } catch {
+    await copyFile(srcAbs, destAbs)
+    await unlink(srcAbs).catch(() => {
+      /* 清理失败不阻断登记 */
+    })
+  }
+  const sizeBytes = (await stat(destAbs)).size
+
+  const now = Date.now()
+  getDb()
+    .prepare(
+      'INSERT INTO media (id, kind, mime, path, size_bytes, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+    )
+    .run(id, kind, mime, relPath, sizeBytes, now)
+
+  return {
+    id,
+    kind,
+    mime,
+    path: relPath,
+    sizeBytes,
+    createdAt: now,
+    name: name.replace(/[\\/:*?"<>|\s]+/g, '-').slice(0, 40) || id
+  }
+}
 export async function readMediaBuffer(
   mediaId: string
 ): Promise<{ buf: Buffer; mime: string } | null> {

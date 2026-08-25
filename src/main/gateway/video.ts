@@ -6,10 +6,14 @@
 //           GET  {base}/contents/generations/tasks/{id} → status / content.video_url
 // 任务落 tasks 表（upstreamTaskId 存 input JSON），应用重启后恢复轮询
 import { nanoid } from 'nanoid'
+import { Readable } from 'stream'
+import { pipeline } from 'stream/promises'
+import { open } from 'fs/promises'
+import { join } from 'path'
 import type { GatewayEvent, VideoSubmitInput, VideoSubmitResult } from '../../shared/contracts'
 import type { ProviderConfig, VideoTaskInfo } from '../../shared/types'
-import { getDb } from '../store/db'
-import { readMediaBuffer, saveBufferAsset } from '../store/media.repo'
+import { getDb, getDataDir } from '../store/db'
+import { readMediaBuffer, saveFileAsset } from '../store/media.repo'
 import { GatewayError } from './factory'
 import { getProvider } from './providers.repo'
 
@@ -112,6 +116,66 @@ async function mediaToDataUrl(mediaId: string): Promise<string | undefined> {
   const m = await readMediaBuffer(mediaId)
   if (!m) throw new GatewayError('MEDIA_NOT_FOUND', `首帧图不存在：${mediaId}`)
   return `data:${m.mime};base64,${m.buf.toString('base64')}`
+}
+
+/**
+ * 流式下载成片到临时文件，返回临时路径。
+ *
+ * 替代 Buffer.from(await fetch(url).arrayBuffer())：原方案把整段视频读进内存再
+ * 落盘，几百 MB 成片会让主进程内存尖峰。这里用 pipeline 把响应流直接写到磁盘，
+ * 内存占用恒定。调用方负责把返回的临时文件交给 saveFileAsset（登记后即被移走）。
+ */
+async function downloadToTempFile(url: string): Promise<string> {
+  const res = await fetch(url)
+  if (!res.ok || !res.body) {
+    throw new GatewayError('DOWNLOAD_FAILED', `下载成片失败：HTTP ${res.status}`)
+  }
+  const tmpAbs = join(getDataDir(), `tmp-video-${nanoid(10)}.mp4`)
+  const fh = await open(tmpAbs, 'w')
+  try {
+    const ws = fh.createWriteStream()
+    // fetch 的 body 是 DOM ReadableStream；Readable.fromWeb 需要 stream/web 类型。
+    // 运行时两者兼容，这里用双重断言绕过 TS 的不透明类型不匹配。
+    const nodeStream = Readable.fromWeb(res.body as unknown as import('stream/web').ReadableStream)
+    await pipeline(nodeStream, ws)
+    await fh.sync()
+  } finally {
+    await fh.close()
+  }
+  return tmpAbs
+}
+
+/**
+ * 任务终态时清理 cancelled 标记。
+ * cancelled 集合原本只在 cancel 时 add、永不 delete，长期运行会累积字符串，
+ * 且任务 id 用 nanoid(10)，理论碰撞虽概率极低也非零。终态清理保持集合干净。
+ */
+function clearCancelled(taskId: string): void {
+  cancelled.delete(taskId)
+}
+
+/** 成片下载 → 入库 → 发送 video-done 事件，并清理 cancelled 标记。返回入库的资产。 */
+async function finalizeVideo(
+  send: Send,
+  taskId: string,
+  projectId: string,
+  url: string
+): Promise<void> {
+  const tmp = await downloadToTempFile(url)
+  try {
+    const asset = await saveFileAsset(projectId, tmp, '.mp4', 'video')
+    updateTask(taskId, { status: 'success', output: JSON.stringify({ mediaId: asset.id }) })
+    send({
+      kind: 'video-done',
+      taskId,
+      mediaId: asset.id,
+      mediaPath: asset.path,
+      name: asset.name ?? asset.id,
+      mime: asset.mime
+    })
+  } finally {
+    clearCancelled(taskId)
+  }
 }
 
 // ── MiniMax 适配 ──
@@ -317,6 +381,7 @@ async function pollLoop(send: Send, taskId: string, input: VideoSubmitInput): Pr
     for (;;) {
       if (cancelled.has(taskId)) {
         updateTask(taskId, { status: 'cancelled' })
+        clearCancelled(taskId)
         send({ kind: 'video-error', taskId, error: '已取消' })
         return
       }
@@ -328,25 +393,13 @@ async function pollLoop(send: Send, taskId: string, input: VideoSubmitInput): Pr
 
       const st = await poll(p, upstreamId)
       if (st.status === 'succeeded' && st.url) {
-        const buf = Buffer.from(await (await fetch(st.url)).arrayBuffer())
-        const asset = await saveBufferAsset(input.projectId, buf, '.mp4', input.prompt.slice(0, 24))
-        updateTask(taskId, {
-          status: 'success',
-          output: JSON.stringify({ mediaId: asset.id })
-        })
-        send({
-          kind: 'video-done',
-          taskId,
-          mediaId: asset.id,
-          mediaPath: asset.path,
-          name: asset.name ?? asset.id,
-          mime: asset.mime
-        })
+        await finalizeVideo(send, taskId, input.projectId, st.url)
         return
       }
       if (st.status === 'failed') throw new GatewayError('GEN_FAILED', st.error ?? '生成失败')
       if (st.status === 'cancelled') {
         updateTask(taskId, { status: 'cancelled' })
+        clearCancelled(taskId)
         send({ kind: 'video-error', taskId, error: '上游任务被取消' })
         return
       }
@@ -354,6 +407,7 @@ async function pollLoop(send: Send, taskId: string, input: VideoSubmitInput): Pr
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     updateTask(taskId, { status: 'failed', error: msg })
+    clearCancelled(taskId)
     send({ kind: 'video-error', taskId, error: msg })
   }
 }
@@ -412,45 +466,40 @@ async function resumeLoop(
 ): Promise<void> {
   const { poll } = adaptersFor(p)
   try {
-    const deadline = row.updated_at + VIDEO_TIMEOUT_MS
     for (;;) {
       if (cancelled.has(row.id)) {
         updateTask(row.id, { status: 'cancelled' })
+        clearCancelled(row.id)
         send({ kind: 'video-error', taskId: row.id, error: '已取消' })
         return
       }
-      if (Date.now() > deadline) throw new GatewayError('TIMEOUT', '视频生成超时（30 分钟）')
-      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
-      if (cancelled.has(row.id)) continue
 
+      // 恢复时先 poll 一次：上游任务可能在我们离线期间已经成功（或失败），
+      // 此时即便已超过 deadline，也应取回已成片的 URL 而不是立即判超时失败。
       const st = await poll(p, upstreamId)
       if (st.status === 'succeeded' && st.url) {
-        const buf = Buffer.from(await (await fetch(st.url)).arrayBuffer())
-        const asset = await saveBufferAsset(row.project_id, buf, '.mp4', 'video')
-        updateTask(row.id, {
-          status: 'success',
-          output: JSON.stringify({ mediaId: asset.id })
-        })
-        send({
-          kind: 'video-done',
-          taskId: row.id,
-          mediaId: asset.id,
-          mediaPath: asset.path,
-          name: asset.name ?? asset.id,
-          mime: asset.mime
-        })
+        await finalizeVideo(send, row.id, row.project_id, st.url)
         return
       }
       if (st.status === 'failed') throw new GatewayError('GEN_FAILED', st.error ?? '生成失败')
       if (st.status === 'cancelled') {
         updateTask(row.id, { status: 'cancelled' })
+        clearCancelled(row.id)
         send({ kind: 'video-error', taskId: row.id, error: '上游任务被取消' })
         return
       }
+
+      // 只有在「上游仍在 running」时才判超时；否则进入下一轮 poll
+      if (Date.now() > row.updated_at + VIDEO_TIMEOUT_MS) {
+        throw new GatewayError('TIMEOUT', '视频生成超时（30 分钟）')
+      }
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
+      if (cancelled.has(row.id)) continue
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     updateTask(row.id, { status: 'failed', error: msg })
+    clearCancelled(row.id)
     send({ kind: 'video-error', taskId: row.id, error: msg })
   }
 }
