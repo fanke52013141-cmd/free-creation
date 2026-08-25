@@ -47,10 +47,15 @@ function topoSort(graph: { nodes: CanvasNode[]; edges: CanvasEdge[] }): CanvasNo
     next.push(edge.to.nodeId)
     adjacency.set(edge.from.nodeId, next)
   }
-  const queue = graph.nodes.filter((node) => indegree.get(node.id) === 0).map((node) => node.id)
+  // 用索引指针代替 queue.shift()：shift 是 O(n) 出队，会让整体复杂度退化到 O(n²)。
+  // 用 head 游标在数组上前进，出队变为 O(1)，整体降到 O(V+E)。
+  const queue: string[] = graph.nodes
+    .filter((node) => indegree.get(node.id) === 0)
+    .map((node) => node.id)
   const ordered: string[] = []
-  while (queue.length > 0) {
-    const id = queue.shift()!
+  let head = 0
+  while (head < queue.length) {
+    const id = queue[head++]
     ordered.push(id)
     for (const next of adjacency.get(id) ?? []) {
       indegree.set(next, (indegree.get(next) ?? 1) - 1)
