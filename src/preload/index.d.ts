@@ -3,7 +3,8 @@ import type { Api } from './index'
 
 declare global {
   interface Window {
-    electron: ElectronAPI
+    // electronAPI 仅在开发构建暴露（见 preload/index.ts），生产构建为 undefined。
+    electron?: ElectronAPI
     api: Api
   }
 }

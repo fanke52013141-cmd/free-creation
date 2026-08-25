@@ -108,16 +108,23 @@ const api = {
 
 export type Api = typeof api
 
+// 仅在开发构建暴露 electronAPI（方便调试）。生产构建不暴露，避免一旦渲染层被
+// 攻陷（如 Markdown/远程图片触发的漏洞），攻击者通过 electronAPI 拿到比最小
+// 必要集更宽的能力。已确认渲染层代码零处使用 window.electron。
+const isDev = process.env.NODE_ENV !== 'production'
+
 if (process.contextIsolated) {
   try {
-    contextBridge.exposeInMainWorld('electron', electronAPI)
     contextBridge.exposeInMainWorld('api', api)
+    if (isDev) contextBridge.exposeInMainWorld('electron', electronAPI)
   } catch (error) {
     console.error(error)
   }
 } else {
   // @ts-ignore (define in dts)
-  window.electron = electronAPI
-  // @ts-ignore (define in dts)
   window.api = api
+  if (isDev) {
+    // @ts-ignore (define in dts)
+    window.electron = electronAPI
+  }
 }
