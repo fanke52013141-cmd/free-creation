@@ -52,6 +52,35 @@ const MEDIA_FILTERS = [
   }
 ]
 
+// 允许 shell.openPath 直接打开的扩展名白名单。
+// 拖拽导入（importMedia）不对扩展名做白名单，用户可把 .exe/.bat 等拖入成为
+// file 媒体；为避免「系统默认程序打开」执行任意可执行文件，open 操作按媒体类型
+// 放行。reveal（资源管理器定位）与 copyPath 仅定位/复制路径、不执行文件，不受限。
+const OPENABLE_EXTS = new Set([
+  'png',
+  'jpg',
+  'jpeg',
+  'webp',
+  'gif',
+  'bmp',
+  'svg',
+  'mp4',
+  'webm',
+  'mov',
+  'mkv',
+  'avi',
+  'mp3',
+  'wav',
+  'ogg',
+  'm4a',
+  'flac',
+  'aac',
+  'txt',
+  'md',
+  'json',
+  'pdf'
+])
+
 async function importAll(projectId: string, paths: string[]): Promise<MediaImportResult> {
   const assets: MediaAsset[] = []
   const errors: MediaImportError[] = []
@@ -159,6 +188,14 @@ export function registerMediaIpc(): void {
   ipcMain.handle(IPC.media.open, async (_e, mediaId: string): Promise<IpcEnvelope<boolean>> => {
     const abs = resolveAbsPath(mediaId)
     if (!abs) return err('MEDIA_NOT_FOUND', '媒体文件不存在或路径不合法')
+    // 安全白名单：拒绝直接打开可执行 / 脚本类文件，避免用户拖入的 .exe/.bat 被执行。
+    const ext = extname(abs).slice(1).toLowerCase()
+    if (!OPENABLE_EXTS.has(ext)) {
+      return err(
+        'UNSUPPORTED_TYPE',
+        `出于安全考虑不直接打开 .${ext || '未知'} 文件，请改用「在资源管理器中定位」`
+      )
+    }
     const error = await shell.openPath(abs)
     if (error) return err('OPEN_FAILED', error)
     return ok(true)
