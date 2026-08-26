@@ -165,21 +165,42 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
 
   if (shape.props.mediaPath) {
     return (
-      <div
-        className="node-media"
-        onPointerDown={guard.onPointerDown}
-        onClick={(e) =>
-          guard.onClick(e, () =>
-            openPreview({
-              kind: 'video',
-              url: mediaUrl(shape.props.mediaPath),
-              title: shape.props.title
-            })
-          )
-        }
-      >
-        <video src={mediaUrl(shape.props.mediaPath)} preload="metadata" muted playsInline />
-        <span className="play-badge">▶</span>
+      <div className="node-media-wrap">
+        <div
+          className="node-media"
+          onPointerDown={guard.onPointerDown}
+          onClick={(e) =>
+            guard.onClick(e, () =>
+              openPreview({
+                kind: 'video',
+                url: mediaUrl(shape.props.mediaPath),
+                title: shape.props.title
+              })
+            )
+          }
+        >
+          <video src={mediaUrl(shape.props.mediaPath)} preload="metadata" muted playsInline />
+          <span className="play-badge">▶</span>
+        </div>
+        <div className="node-media-actions">
+          <button
+            className="btn-ghost small"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              // 重新生成：清空成片，回到配置面板重新跑一遍
+              editor.updateShape({
+                id: shape.id,
+                type: 'node-card',
+                props: { mediaId: '', mediaPath: '', mediaMime: '' }
+              })
+              markUndoPoint(editor, 'video-regenerate')
+            }}
+          >
+            <Icon name="reset" size={13} />
+            重新生成
+          </button>
+        </div>
       </div>
     )
   }

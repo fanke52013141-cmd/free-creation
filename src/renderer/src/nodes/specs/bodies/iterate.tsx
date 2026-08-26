@@ -24,12 +24,29 @@ function enforceConfig(c: IterateConfig): IterateConfig {
   }
 }
 
-function summaryFromResults(results: IterateItemResult[] | undefined): string {
+function summaryFromResults(results: (IterateItemResult | null)[] | undefined): string {
   if (!results) return ''
-  const done = results.filter((r) => r.status === 'done').length
-  const failed = results.filter((r) => r.status === 'failed').length
-  const skipped = results.filter((r) => r.status === 'skipped').length
+  const done = results.filter((r) => r?.status === 'done').length
+  const failed = results.filter((r) => r?.status === 'failed').length
+  const skipped = results.filter((r) => r?.status === 'skipped').length
   return `共 ${results.length} 项 · 成功 ${done} · 失败 ${failed} · 跳过 ${skipped}`
+}
+
+/** 从 shape.props.text 中解析执行器上报的中间进度（运行中 _progress 字段）。 */
+function parseIterateProgress(text: string): { done: number; total: number } | null {
+  if (!text) return null
+  try {
+    const v = JSON.parse(text) as { _progress?: unknown }
+    if (v && typeof v._progress === 'object' && v._progress !== null) {
+      const p = v._progress as { done?: unknown; total?: unknown }
+      if (typeof p.done === 'number' && typeof p.total === 'number' && p.total > 0) {
+        return { done: p.done, total: p.total }
+      }
+    }
+  } catch {
+    // 忽略
+  }
+  return null
 }
 
 export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
@@ -126,9 +143,30 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
       </div>
       <div className="iterate-meta">
         <span>下游迭代体节点：{downstreamCount} 个</span>
-        <span className={result ? 'iterate-hint has-result' : 'iterate-hint'}>
-          {result ? summaryFromResults(result.items) : '（尚未运行）'}
-        </span>
+        {(() => {
+          // 运行中：显示进度条 + 百分比
+          const progress = parseIterateProgress(shape.props.text)
+          const isRunning = shape.props.exec === 'running'
+          if (isRunning && progress) {
+            const pct = Math.round((progress.done / progress.total) * 100)
+            return (
+              <div className="iterate-progress-wrap">
+                <div className="iterate-progress-bar">
+                  <div className="iterate-progress-fill" style={{ width: `${pct}%` }} />
+                </div>
+                <span className="iterate-progress-text">
+                  运行中 {progress.done}/{progress.total} · {pct}%
+                </span>
+              </div>
+            )
+          }
+          // 已完成：显示汇总
+          return (
+            <span className={result ? 'iterate-hint has-result' : 'iterate-hint'}>
+              {result ? summaryFromResults(result.items) : '（尚未运行）'}
+            </span>
+          )
+        })()}
       </div>
     </div>
   )

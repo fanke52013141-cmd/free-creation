@@ -173,6 +173,15 @@ export const iterateExecutor = async (ctx: NodeExecutionContext): Promise<NodeEx
         void runItem(ctx, config, item, idx).then((result) => {
           inFlight -= 1
           results[idx] = result
+          // 中间进度上报：每完成一项即写回 partial results，供 Body 渲染进度条
+          const completed = results.filter(Boolean).length
+          ctx.updateProps({
+            text: JSON.stringify({
+              ...config,
+              items: results.map((r, i) => r ?? null),
+              _progress: { done: completed, total: items.length }
+            })
+          })
           if (result.status === 'failed') {
             failedAny = true
             if (config.onFailure === 'fail') {
