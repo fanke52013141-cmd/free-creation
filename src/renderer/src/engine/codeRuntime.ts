@@ -1,22 +1,41 @@
-// 代码节点运行时：在浏览器 Worker 中执行用户写入的同步/异步转换函数。
+// 代码节点运行时：在浏览器 Worker 中执行用户编写的同步/异步转换函数。
 // Worker 没有 Electron/Node API，输入仅通过结构化克隆传入；超时后会立即终止。
+// 注入 lodash(_) 和 dayjs，支持 Coze 风格 async function main(args) 写法。
 
 export type CodeOutput = { kind: 'text'; text: string } | { kind: 'json'; data: unknown }
 
-const DEFAULT_TIMEOUT_MS = 3_000
+const DEFAULT_TIMEOUT_MS = 10_000
 
 const WORKER_SOURCE = `
+// 尝试从 CDN 加载 lodash 和 dayjs（离线时静默失败，不影响基础执行）
+try { importScripts('https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js'); } catch(e) {}
+try { importScripts('https://cdn.jsdelivr.net/npm/dayjs@1.11.13/dayjs.min.js'); } catch(e) {}
+
 self.onmessage = async ({ data }) => {
   try {
-    const fn = new Function('input', '\\"use strict\\";\\n' + data.source)
-    const value = await fn(data.input)
-    if (value === undefined) throw new Error('代码必须 return 一个文本或 JSON 值')
-    self.postMessage({ ok: true, value })
+    let value;
+    const trimmedSource = data.source.trim();
+
+    if (/^(async\\s+)?function\\s+main\\b/.test(trimmedSource)) {
+      // Coze 风格：用户定义 async function main(args) { ... }
+      const runner = new Function(
+        'args',
+        '"use strict";\\n' + data.source + '\\n; return typeof main === "function" ? main(args) : undefined'
+      );
+      value = await runner(data.input);
+    } else {
+      // 向后兼容：纯代码片段，用 input 作为参数名执行
+      const fn = new Function('input', '"use strict";\\n' + data.source);
+      value = await fn(data.input);
+    }
+
+    if (value === undefined) throw new Error('代码必须 return 一个文本或 JSON 值');
+    self.postMessage({ ok: true, value });
   } catch (error) {
     self.postMessage({
       ok: false,
       error: error instanceof Error ? error.message : String(error)
-    })
+    });
   }
 }
 `

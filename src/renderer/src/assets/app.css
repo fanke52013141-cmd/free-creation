@@ -4012,6 +4012,52 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   font-family: 'Cascadia Code', monospace;
 }
 
+/* 代码节点执行结果显示（成功/失败摘要） */
+.code-result {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 4px 6px;
+  border-radius: 5px;
+  font-size: 10px;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+.code-result.success {
+  background: rgba(52, 211, 153, 0.08);
+  color: #34d399;
+}
+.code-result.error {
+  background: rgba(248, 113, 113, 0.1);
+  color: #f87171;
+}
+.code-result-badge {
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.code-result-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+/* 代码/JSON 节点底部操作按钮栏 */
+.code-toolbar {
+  display: flex;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+  flex-shrink: 0;
+}
+/* 代码编辑模式 textarea：等宽字体对齐 code-pre */
+.code-edit {
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .script-output-settings {
   display: flex;
   flex-direction: column;

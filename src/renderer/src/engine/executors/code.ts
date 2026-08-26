@@ -1,4 +1,5 @@
 // 代码节点执行器：把命名输入交给受限 Worker 执行，按返回值类型投影到命名输出。
+// 支持 Coze 风格 async function main(args) 写法和旧版纯代码片段（向后兼容）。
 import { inputJson, inputText } from '../contracts'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
 import { runCodeTransform } from '../codeRuntime'
@@ -46,18 +47,27 @@ export const codeExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecu
       : data.inputType === 'array'
         ? jsonInputs
         : (jsonInputs[0] ?? textInputs)
-  const output = await runCodeTransform(data.source, {
-    text: textInputs,
-    json: jsonInputs,
-    images: [],
-    videos: [],
-    audios: [],
-    [data.inputName]: primaryValue
-  })
-  ctx.updateResult(
-    output.kind === 'text'
-      ? JSON.stringify({ kind: 'text', text: output.text, variableName: data.outputName })
-      : JSON.stringify({ kind: 'json', data: output.data, variableName: data.outputName })
-  )
-  return { status: 'done' }
+
+  try {
+    const output = await runCodeTransform(data.source, {
+      text: textInputs,
+      json: jsonInputs,
+      images: [],
+      videos: [],
+      audios: [],
+      params: primaryValue,
+      [data.inputName]: primaryValue
+    })
+    ctx.updateResult(
+      output.kind === 'text'
+        ? JSON.stringify({ kind: 'text', text: output.text, variableName: data.outputName })
+        : JSON.stringify({ kind: 'json', data: output.data, variableName: data.outputName })
+    )
+    return { status: 'done' }
+  } catch (error) {
+    // 把错误信息写入 meta，让 Body 可以显示给用户
+    const message = error instanceof Error ? error.message : String(error)
+    ctx.updateResult(JSON.stringify({ kind: 'error', message }))
+    return { status: 'failed', reason: message }
+  }
 }

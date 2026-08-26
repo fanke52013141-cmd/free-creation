@@ -137,6 +137,7 @@ export function projectNodeOutputs(shape: NodeCardShape): RawNodeOutputs {
       const result = parseStoredNodeValue(
         typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
       )
+      // kind === 'error' 时不产生端口输出（执行失败的代码不应向下游传递数据）
       if (result?.kind === 'text') return { 'out-text': result }
       if (result?.kind === 'json') return { 'out-json': result }
       return {}

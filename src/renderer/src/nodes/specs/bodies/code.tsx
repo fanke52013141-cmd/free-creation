@@ -1,4 +1,5 @@
 // 代码节点 Body（路线图 R6：bodies.tsx 拆分）
+// 支持 Coze 风格 async function main(args) 写法，可用 lodash(_) 和 dayjs
 import { useRef, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import type { NodeBodyProps } from '../../registry'
@@ -12,6 +13,11 @@ interface CodeConfig {
   inputType: VariableValueType
   outputName: string
   outputType: VariableValueType
+}
+
+interface CodeResultDisplay {
+  kind: 'text' | 'json' | 'error'
+  summary: string
 }
 
 function parseCodeConfig(text: string): CodeConfig {
@@ -43,6 +49,44 @@ function parseCodeConfig(text: string): CodeConfig {
   }
 }
 
+/** 从 shape.meta.nodeResult 解析上次执行结果（成功摘要或错误信息）。 */
+function parseCodeResult(metaResult: string | undefined): CodeResultDisplay | null {
+  if (!metaResult) return null
+  try {
+    const value = JSON.parse(metaResult) as Record<string, unknown>
+    if (value.kind === 'error' && typeof value.message === 'string') {
+      return { kind: 'error', summary: value.message }
+    }
+    if (value.kind === 'text' && typeof value.text === 'string') {
+      return { kind: 'text', summary: value.text.slice(0, 80) }
+    }
+    if (value.kind === 'json') {
+      const keys = typeof value.data === 'object' && value.data !== null && !Array.isArray(value.data)
+        ? Object.keys(value.data as object).join(', ')
+        : Array.isArray(value.data)
+          ? `Array[${(value.data as unknown[]).length}]`
+          : ''
+      return { kind: 'json', summary: keys ? `JSON { ${keys} }` : 'JSON' }
+    }
+  } catch {
+    // 忽略
+  }
+  return null
+}
+
+const CODE_TEMPLATE = `async function main(args) {
+  // 可用变量：
+  //   args.text   — 上游文本输入
+  //   args.json   — 上游 JSON 数组
+  //   args.params — 主要输入值
+  // 可用库：_(lodash)、dayjs
+
+  const data = args.json || []
+  return {
+    result: data
+  }
+}`
+
 export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
   const data = parseCodeConfig(shape.props.text)
@@ -50,6 +94,8 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
   const [draft, setDraft] = useState(data.source)
   const scrollRef = useRef<HTMLDivElement>(null)
   useWheelScroll(scrollRef)
+
+  const resultDisplay = parseCodeResult(shape.meta?.nodeResult as string | undefined)
 
   const commit = (): void => {
     setEditing(false)
@@ -100,6 +146,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
   }
 
   const text = data.source
+  const isMainStyle = /^\s*(async\s+)?function\s+main\b/.test(text)
   return (
     <div className="code-body" ref={scrollRef}>
       <div className="code-variable-contract">
@@ -150,8 +197,17 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
           </select>
         </div>
         <div className="code-variable-help">
-          代码中读取 <code>input.{data.inputName}</code>，return 值写入{' '}
-          <code>{data.outputName}</code>
+          {isMainStyle ? (
+            <>
+              读取 <code>args.text</code> / <code>args.json</code> / <code>args.params</code>，
+              可用库 <code>_</code> <code>dayjs</code>
+            </>
+          ) : (
+            <>
+              读取 <code>input.{data.inputName}</code>，return 值写入{' '}
+              <code>{data.outputName}</code>
+            </>
+          )}
         </div>
       </div>
       {text ? (
@@ -172,11 +228,19 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
           onPointerDown={(e) => stopEventPropagation(e)}
           onDoubleClick={(e) => {
             e.stopPropagation()
-            setDraft(data.source)
+            setDraft(CODE_TEMPLATE)
             setEditing(true)
           }}
         >
-          双击输入代码片段（可处理文本 / JSON 数据）
+          双击编写代码（可用 _ lodash、dayjs、async/await）
+        </div>
+      )}
+      {resultDisplay && (
+        <div className={`code-result ${resultDisplay.kind === 'error' ? 'error' : 'success'}`}>
+          <span className="code-result-badge">
+            {resultDisplay.kind === 'error' ? '✗' : '✓'}
+          </span>
+          <span className="code-result-text">{resultDisplay.summary}</span>
         </div>
       )}
       <div className="code-toolbar">
@@ -185,7 +249,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
           onPointerDown={(e) => stopEventPropagation(e)}
           onClick={(e) => {
             e.stopPropagation()
-            setDraft(data.source)
+            setDraft(text || CODE_TEMPLATE)
             setEditing(true)
           }}
         >
