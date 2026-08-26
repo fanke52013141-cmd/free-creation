@@ -5033,7 +5033,7 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   filter: brightness(1.15);
 }
 
-/* ── B2: AI 处理 / 迭代节点样式（原完全缺失，复用 .gen-* 视觉语言） ── */
+/* ── B2: AI 处理 / 循环节点样式（原完全缺失，复用 .gen-* 视觉语言） ── */
 .ai-process-body,
 .iterate-body {
   display: flex;
@@ -5163,7 +5163,7 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   color: var(--muted);
   text-align: right;
 }
-/* 迭代节点底部摘要 */
+/* 循环节点底部摘要 */
 .iterate-meta {
   display: flex;
   flex-direction: column;
@@ -5180,7 +5180,7 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   color: var(--brand);
 }
 
-/* 迭代节点运行中进度条 */
+/* 循环节点运行中进度条 */
 .iterate-progress-wrap {
   display: flex;
   flex-direction: column;

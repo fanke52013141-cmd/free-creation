@@ -396,15 +396,15 @@ export function registerExtendedNodeTypes(): void {
   registerNodeType({
     type: 'iterate',
     contractVersion: 1,
-    label: '迭代',
+    label: '循环',
     icon: 'grid',
     color: '#8b5cf6',
     defaultSize: { w: 340, h: 260 },
     description:
-      '列表批处理控制：把 in-list 的每个元素作为一次「迭代体」执行，逐项驱动下游子流程节点（如生图/视频/文本节点），并输出结构化结果列表。支持并发上限、失败策略、重试与取消，中止后可恢复未完成项。',
+      '列表批处理控制：把 in-list 的每个元素作为一次「循环体」执行，逐项驱动下游子流程节点（如生图/视频/文本节点），并输出结构化结果列表。支持并发上限、失败策略、重试与取消，中止后可恢复未完成项。',
     ports: {
       in: [
-        input('in-list', '列表', 'json', '要逐项批量处理的列表（每个元素作为一次迭代体输入）。', {
+        input('in-list', '列表', 'json', '要逐项批量处理的列表（每个元素作为一次循环体输入）。', {
           schema: LIST_ITEMS
         })
       ],
@@ -413,7 +413,7 @@ export function registerExtendedNodeTypes(): void {
           'out-items',
           '结果列表',
           'json',
-          '每项处理结果的结构化列表（含来源、状态、输出摘要）。',
+          '每项处理结果的结构化列表（含来源、状态、各节点产物）。',
           {
             schema: LIST_ITEMS
           }

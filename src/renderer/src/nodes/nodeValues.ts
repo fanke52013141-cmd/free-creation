@@ -174,7 +174,8 @@ export function projectNodeOutputs(shape: NodeCardShape): RawNodeOutputs {
     case 'iterate': {
       const data = parseRecord(props.text)
       if (!data || !Array.isArray(data.items)) return {}
-      return { 'out-items': { kind: 'json', data: { items: data.items } } }
+      // list.items@1 Schema 要求根值为裸数组，直接输出 items 数组
+      return { 'out-items': { kind: 'json', data: data.items } }
     }
     default:
       return {}

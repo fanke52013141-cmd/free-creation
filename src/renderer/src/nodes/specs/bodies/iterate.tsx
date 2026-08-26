@@ -1,4 +1,4 @@
-// 迭代节点 Body（路线图 R6：bodies.tsx 拆分）
+// 循环节点 Body（原迭代节点 Body）
 import { stopEventPropagation, useEditor, useValue } from 'tldraw'
 import type { NodeBodyProps } from '../../registry'
 import {
@@ -29,7 +29,17 @@ function summaryFromResults(results: (IterateItemResult | null)[] | undefined): 
   const done = results.filter((r) => r?.status === 'done').length
   const failed = results.filter((r) => r?.status === 'failed').length
   const skipped = results.filter((r) => r?.status === 'skipped').length
-  return `共 ${results.length} 项 · 成功 ${done} · 失败 ${failed} · 跳过 ${skipped}`
+  // 统计产物数量：累加每项 outputs 中的节点端口数
+  let productCount = 0
+  for (const r of results) {
+    if (r?.outputs) {
+      for (const ports of Object.values(r.outputs)) {
+        productCount += Object.keys(ports).length
+      }
+    }
+  }
+  const productSuffix = productCount > 0 ? ` · 产物 ${productCount}` : ''
+  return `共 ${results.length} 项 · 成功 ${done} · 失败 ${failed} · 跳过 ${skipped}${productSuffix}`
 }
 
 /** 从 shape.props.text 中解析执行器上报的中间进度（运行中 _progress 字段）。 */
@@ -64,13 +74,13 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
       props: { text: JSON.stringify(payload) }
     })
   }
-  // 下游迭代体数量：通过当前节点的输出边推算（NodeContractPanel 之外简单估算）
+  // 下游循环体数量：通过当前节点的输出边推算（NodeContractPanel 之外简单估算）
   const downstreamCount = useValue(
     'iterate downstream',
     () => {
       let count = 0
       for (const binding of editor.getBindingsFromShape(shape.id, 'arrow')) {
-        // 凡是本节点引出的箭头都视为下游迭代体的一部分
+        // 凡是本节点引出的箭头都视为下游循环体的一部分
         if (binding.props.terminal === 'start') count += 1
       }
       return count
@@ -142,7 +152,7 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
         )}
       </div>
       <div className="iterate-meta">
-        <span>下游迭代体节点：{downstreamCount} 个</span>
+        <span>下游循环体节点：{downstreamCount} 个</span>
         {(() => {
           // 运行中：显示进度条 + 百分比
           const progress = parseIterateProgress(shape.props.text)

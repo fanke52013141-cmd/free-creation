@@ -1,4 +1,4 @@
-// 迭代控制节点执行器测试（路线图 R4 / 契约规范 P3）
+// 循环节点执行器测试（原迭代控制节点）
 //
 // 覆盖 parseIterate / parseIterateResult 配置解析，以及 iterate 执行器的运行时分支：
 // 并发调度、失败策略（skip / fail / retry）、取消、来源追踪、无下游 / 无列表跳过。
@@ -310,11 +310,11 @@ describe('iterate 执行器 · 取消 / 跳过条件', () => {
     expect(r.reason).toContain('列表')
   })
 
-  it('无下游迭代体 → 跳过', async () => {
+  it('无下游循环体 → 跳过', async () => {
     const { ctx } = makeCtx({ text: '{}', list: [{ id: 'a' }], downstream: [] })
     const r = await iterateExecutor(ctx)
     expect(r.status).toBe('skipped')
-    expect(r.reason).toContain('迭代体')
+    expect(r.reason).toContain('循环体')
   })
 
   it('已取消信号 → 跳过', async () => {

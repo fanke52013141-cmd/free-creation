@@ -1,8 +1,11 @@
-// 迭代控制节点执行器（路线图 R4 / 契约规范 P3）
+// 循环节点执行器（原迭代节点）
 //
-// 把 `in-list`（list.items@1）里的每个元素作为一次「迭代体」执行：
-// 对每一项，经 runSubflow 把当前项注入下游节点链（迭代体）执行一次，
+// 把 `in-list`（list.items@1）里的每个元素作为一次「循环体」执行：
+// 对每一项，经 runSubflow 把当前项注入下游节点链（循环体）执行一次，
 // 收集每项结果并输出结构化的 `{ items: [...] }` 列表（out-items）。
+//
+// 多产物收集：每项执行后收集循环体中所有节点的所有输出端口值，
+// 按 { nodeId: { portId: value } } 结构化聚合，不再只取首个非空值。
 //
 // 完成标准：20 个镜头可受控批量执行、单项失败不丢其它成功结果、中止后可恢复未完成项。
 // 每项结果带 source（index / itemId）与 status，失败的项保留原因；中止后续跑时，
@@ -17,7 +20,7 @@ export interface IterateConfig {
   onFailure: 'skip' | 'fail' | 'retry'
   /** retry 模式每项最多重试次数（不含首次）。 */
   maxRetries: number
-  /** 并发上限（同时执行的迭代体数量）。 */
+  /** 并发上限（同时执行的循环体数量）。 */
   concurrency: number
   /** 最大处理条数；0 表示不限。 */
   limit: number
@@ -28,8 +31,8 @@ export interface IterateItemResult {
   item: Record<string, unknown>
   /** 处理状态。 */
   status: 'done' | 'failed' | 'skipped'
-  /** 迭代体输出的首个可见值摘要。 */
-  output?: unknown
+  /** 循环体所有节点所有输出端口的结构化聚合：{ nodeId: { portId: value } }。 */
+  outputs?: Record<string, Record<string, unknown>>
   /** 失败 / 跳过原因。 */
   error?: string
   /** 来源追踪：序号 + 可选稳定 id（如镜头 id）。 */
@@ -70,17 +73,38 @@ export function parseIterateResult(text: string): IterateResult | null {
   return null
 }
 
-/** 从迭代体输出里抽取首个非空节点的首个值作为摘要。 */
-function pickFirstOutput(output: Record<string, unknown>): unknown {
-  for (const packets of Object.values(output)) {
-    const packetsRecord = packets as Record<string, { value?: unknown }>
-    const first = Object.values(packetsRecord)[0]
-    if (first && first.value !== undefined) return first.value
+/**
+ * 从循环体输出里收集所有节点所有输出端口的结构化值。
+ * 输入格式：{ nodeId: { portId: [{ value: ... }, ...] } }
+ * 输出格式：{ nodeId: { portId: value } }（每个端口取首个值，多值端口取数组）
+ */
+function collectAllOutputs(
+  output: Record<string, unknown>
+): Record<string, Record<string, unknown>> | undefined {
+  const result: Record<string, Record<string, unknown>> = {}
+  let hasAny = false
+  for (const [nodeId, portMap] of Object.entries(output)) {
+    if (!portMap || typeof portMap !== 'object') continue
+    const ports = portMap as Record<string, unknown>
+    const portValues: Record<string, unknown> = {}
+    for (const [portId, packets] of Object.entries(ports)) {
+      if (Array.isArray(packets) && packets.length > 0) {
+        const packetArr = packets as Array<{ value?: unknown }>
+        const values = packetArr.map((p) => p?.value).filter((v) => v !== undefined)
+        if (values.length > 0) {
+          portValues[portId] = values.length === 1 ? values[0] : values
+          hasAny = true
+        }
+      }
+    }
+    if (Object.keys(portValues).length > 0) {
+      result[nodeId] = portValues
+    }
   }
-  return undefined
+  return hasAny ? result : undefined
 }
 
-/** 迭代体是否产生了任何可见输出。 */
+/** 循环体是否产生了任何可见输出。 */
 function outputEmpty(output: Record<string, unknown>): boolean {
   for (const packets of Object.values(output)) {
     const packetsRecord = packets as Record<string, unknown>
@@ -89,7 +113,7 @@ function outputEmpty(output: Record<string, unknown>): boolean {
   return true
 }
 
-/** 对单个列表项执行一次迭代体（含失败 / 重试语义）。 */
+/** 对单个列表项执行一次循环体（含失败 / 重试语义）。 */
 async function runItem(
   ctx: NodeExecutionContext,
   config: IterateConfig,
@@ -113,23 +137,23 @@ async function runItem(
       return { item, status: 'skipped', error: '未配置子流程', ...base }
     }
     if (!outputEmpty(output)) {
-      return { item, status: 'done', output: pickFirstOutput(output), ...base }
+      return { item, status: 'done', outputs: collectAllOutputs(output), ...base }
     }
     // 下游未产生输出：按失败策略处理
     if (config.onFailure === 'retry' && retries < config.maxRetries) {
       retries += 1
       continue
     }
-    return { item, status: 'failed', error: '迭代体未产生输出', ...base }
+    return { item, status: 'failed', error: '循环体未产生输出', ...base }
   }
 }
 
 export const iterateExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
   const config = parseIterate(ctx.shape.props.text)
   const list = inputJson(ctx.inputs, 'in-list')[0]
-  if (!Array.isArray(list)) return { status: 'skipped', reason: '没有可迭代的列表输入' }
+  if (!Array.isArray(list)) return { status: 'skipped', reason: '没有可循环的列表输入' }
   if (!ctx.runSubflow || (ctx.downstream?.length ?? 0) === 0) {
-    return { status: 'skipped', reason: '未配置迭代体（迭代节点下游需连接要批量执行的节点）' }
+    return { status: 'skipped', reason: '未配置循环体（循环节点下游需连接要批量执行的节点）' }
   }
 
   const items = config.limit > 0 ? list.slice(0, config.limit) : list
@@ -159,7 +183,7 @@ export const iterateExecutor = async (ctx: NodeExecutionContext): Promise<NodeEx
       ctx.updateResult(JSON.stringify(data))
       if (ctx.signal.cancelled) resolve({ status: 'skipped', reason: '已取消' })
       else if (failedAny && config.onFailure === 'fail')
-        resolve({ status: 'failed', reason: '迭代中存在失败项' })
+        resolve({ status: 'failed', reason: '循环中存在失败项' })
       else resolve({ status: 'done' })
     }
 

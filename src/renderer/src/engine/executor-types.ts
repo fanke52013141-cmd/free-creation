@@ -18,13 +18,13 @@ export interface CancelSignal {
 }
 
 /**
- * 子流程执行请求（迭代控制节点用）。迭代节点为列表里每一项构造该请求，
- * 运行器据此执行「迭代体」节点链：对当前项执行一次，返回各节点输出。
+ * 子流程执行请求（循环控制节点用）。循环节点为列表里每一项构造该请求，
+ * 运行器据此执行「循环体」节点链：对当前项执行一次，返回各节点输出。
  */
 export interface SubflowRequest {
-  /** 迭代体节点 id 链（按拓扑顺序执行）；空数组表示无迭代体。 */
+  /** 循环体节点 id 链（按拓扑顺序执行）；空数组表示无循环体。 */
   nodeIds: string[]
-  /** 当前列表项的变量环境，注入为迭代体节点的输入。 */
+  /** 当前列表项的变量环境，注入为循环体节点的输入。 */
   item: Record<string, unknown>
   /** 当前项在列表里的序号（用于进度/来源追踪）。 */
   index: number
@@ -32,7 +32,7 @@ export interface SubflowRequest {
   itemId?: string
 }
 
-/** 子流程执行的输出：迭代体各节点产出的契约输出（key 为节点 id）。 */
+/** 子流程执行的输出：循环体各节点产出的契约输出（key 为节点 id）。 */
 export type SubflowOutput = Record<string, ContractOutputs>
 
 /**
@@ -58,13 +58,13 @@ export interface NodeExecutionContext {
   /** 把命名变量运行结果写入 shape meta（处理 / 代码节点使用）。传 null 清空。 */
   updateResult: (result: string | null) => void
   /**
-   * 当前节点的直接下游节点 id（通用图信息，运行器对每个节点填充）。迭代控制节点
-   * 用这批节点作为「迭代体」，对列表每一项驱动它们执行一次。
+   * 当前节点的直接下游节点 id（通用图信息，运行器对每个节点填充）。循环控制节点
+   * 用这批节点作为「循环体」，对列表每一项驱动它们执行一次。
    */
   downstream?: string[]
   /**
-   * 执行一条子流程（迭代控制节点用）：运行器对请求的迭代体节点链执行一次并返回输出。
-   * 非迭代节点不会注入。迭代节点用它把列表逐项填充进下游子流程变量。
+   * 执行一条子流程（循环控制节点用）：运行器对请求的循环体节点链执行一次并返回输出。
+   * 非循环节点不会注入。循环节点用它把列表逐项填充进下游子流程变量。
    */
   runSubflow?: (request: SubflowRequest) => Promise<SubflowOutput>
 }

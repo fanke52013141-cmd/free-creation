@@ -48,7 +48,7 @@ function validateStoryboardShots(value: unknown): string[] {
 
 /**
  * 列表协议 list.items@1：根值必须是数组，每个元素必须是对象（允许任意业务字段，
- * 建议带稳定 id）。供迭代/批处理节点输入输出，使批量结果仍是可连接的结构化列表，
+ * 建议带稳定 id）。供循环/批处理节点输入输出，使批量结果仍是可连接的结构化列表，
  * 而不是把几十个生成资产藏进一个不可连接的节点内部。
  */
 function validateListItems(value: unknown): string[] {

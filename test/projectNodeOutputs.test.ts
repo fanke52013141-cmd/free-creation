@@ -214,16 +214,16 @@ describe('projectNodeOutputs · AI 处理节点', () => {
   })
 })
 
-describe('projectNodeOutputs · 迭代节点', () => {
-  it('有 items 时输出 out-items 列表', () => {
+describe('projectNodeOutputs · 循环节点', () => {
+  it('有 items 时输出 out-items 裸数组（list.items@1 Schema）', () => {
     const text = JSON.stringify({
       items: [{ status: 'done', source: { index: 0 } }]
     })
     const out = projectNodeOutputs(shape('iterate', { text }))
     expect(out['out-items']?.kind).toBe('json')
-    expect((out['out-items'] as { data: unknown }).data).toEqual({
-      items: [{ status: 'done', source: { index: 0 } }]
-    })
+    expect((out['out-items'] as { data: unknown }).data).toEqual([
+      { status: 'done', source: { index: 0 } }
+    ])
   })
 
   it('无 items 时无输出', () => {

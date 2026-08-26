@@ -4,8 +4,8 @@
 // → 读取 shape 投影输出 → 输出契约校验 → 登记。节点专属执行逻辑已迁移到
 // engine/executors/* 下各节点自注册的执行器；新增普通节点无需改动本文件。
 //
-// 运行器对每个节点注入统一的 runSubflow 钩子（迭代控制节点用它驱动下游迭代体
-// 子流程逐项执行；非迭代节点不会调用它），保持「运行器零节点特判」。
+// 运行器对每个节点注入统一的 runSubflow 钩子（循环控制节点用它驱动下游循环体
+// 子流程逐项执行；非循环节点不会调用它），保持「运行器零节点特判」。
 //
 // 节点卡片内的手动生成与全局运行共用同一输出投影（nodes/nodeValues.ts），
 // 因此执行器只需把运行结果写回 shape props / meta，投影交给运行器统一处理。
@@ -80,7 +80,7 @@ async function invokeExecutor(
   if (!spec?.executor) return { status: 'failed', reason: `未实现节点类型：${node.type}` }
 
   const id = shape.id
-  // 直接下游节点 id（迭代体识别用）：从图边推导以本节点为起点的输出边目标。
+  // 直接下游节点 id（循环体识别用）：从图边推导以本节点为起点的输出边目标。
   const downstream = ctx.graph.edges
     .filter((e) => e.from.nodeId === node.id)
     .map((e) => e.to.nodeId)
@@ -112,7 +112,7 @@ async function invokeExecutor(
 }
 
 /**
- * 收集某个节点的输入。非迭代体节点用图上连边收集；迭代体首节点会把 runSubflow
+ * 收集某个节点的输入。非循环体节点用图上连边收集；循环体首节点会把 runSubflow
  * 请求里的 item 以 in-json 注入（供批处理模板读取当前项）。
  */
 function collectNodeInputs(
@@ -122,7 +122,7 @@ function collectNodeInputs(
 ): { value: ReturnType<typeof collectContractInputs>['value']; errors: string[] } {
   const spec = getNodeType(node.type)
   if (!spec) return { value: new Map(), errors: [`未知节点类型：${node.type}`] }
-  // 迭代体首节点：item 作为 in-json 输入（若有该端口）
+  // 循环体首节点：item 作为 in-json 输入（若有该端口）
   const hasJsonPort =
     node.ports.length > 0
       ? node.ports.some((p) => p.dir === 'in' && p.id === 'in-json')
@@ -149,7 +149,7 @@ function collectNodeInputs(
 
 /**
  * 对单个节点执行一次并登记输出。返回执行状态；失败时不抛错，错误写入 store.errors。
- * 供主工作流循环和迭代体子流程共用。
+ * 供主工作流循环和循环体子流程共用。
  */
 async function executeNodeOnce(
   ctx: WorkflowContext,
@@ -207,8 +207,8 @@ async function executeNodeOnce(
 }
 
 /**
- * 迭代体子流程执行：对请求里的迭代体节点链（nodeIds）执行一次，把 item 注入首节点。
- * 返回各节点的契约输出。非迭代节点不会调到这里。
+ * 循环体子流程执行：对请求里的循环体节点链（nodeIds）执行一次，把 item 注入首节点。
+ * 返回各节点的契约输出。非循环节点不会调到这里。
  */
 async function runSubflowForIterate(
   ctx: WorkflowContext,
