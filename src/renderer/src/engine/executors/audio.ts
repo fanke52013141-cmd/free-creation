@@ -43,20 +43,28 @@ export const audioExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
   if (!option) return { status: 'skipped', reason: '未选择可用音频模型' }
   const text = mergedPrompt(data.text, inputText(ctx.inputs, 'in-text'))
   if (!text.trim()) return { status: 'skipped', reason: '无朗读文本' }
-  const result = await window.api.gateway.audioGenerate({
-    projectId: ctx.projectId,
-    providerId: option.provider.id,
-    modelId: option.model.id,
-    text,
-    voice: data.voice,
-    format: data.format
-  })
-  if (!result.ok) return { status: 'failed', reason: result.error.message }
-  ctx.updateProps({
-    mediaId: result.data.id,
-    mediaPath: result.data.path,
-    mediaMime: result.data.mime,
-    title: result.data.name || result.data.id
-  })
-  return { status: 'done' }
+  if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
+  try {
+    const result = await window.api.gateway.audioGenerate({
+      projectId: ctx.projectId,
+      providerId: option.provider.id,
+      modelId: option.model.id,
+      text,
+      voice: data.voice,
+      format: data.format
+    })
+    if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
+    if (!result.ok) return { status: 'failed', reason: result.error.message }
+    ctx.updateProps({
+      mediaId: result.data.id,
+      mediaPath: result.data.path,
+      mediaMime: result.data.mime,
+      title: result.data.name || result.data.id
+    })
+    return { status: 'done' }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (message === '已取消') return { status: 'skipped', reason: '已取消' }
+    return { status: 'failed', reason: `语音合成异常：${message}` }
+  }
 }

@@ -728,6 +728,13 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
       <Tldraw
         onMount={handleMount}
         shapeUtils={[NodeCardUtil]}
+        cameraOptions={{
+          zoom: {
+            min: 0.1,
+            max: 4,
+            steps: [0.1, 0.25, 0.5, 1, 2, 4]
+          }
+        }}
         components={{
           Toolbar: null,
           StylePanel: null,

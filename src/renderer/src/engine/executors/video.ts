@@ -13,24 +13,30 @@ export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
   const prompt = mergedPrompt(data.prompt, inputText(ctx.inputs, 'in-text'))
   const firstFrame = inputMedia(ctx.inputs, 'in-image', 'image')[0]
   if (!prompt.trim()) return { status: 'skipped', reason: '无提示词' }
-  const submitted = await window.api.gateway.videoSubmit({
-    projectId: ctx.projectId,
-    nodeId: ctx.node.id,
-    providerId: option.provider.id,
-    modelId: option.model.id,
-    prompt,
-    params: data.params,
-    ...(firstFrame ? { firstFrameMediaId: firstFrame.mediaId } : {})
-  })
-  if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
-  if (!submitted.ok) return { status: 'failed', reason: submitted.error.message }
-  const result = await waitForVideo(submitted.data.taskId, ctx.signal)
-  if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
-  ctx.updateProps({
-    mediaId: result.mediaId,
-    mediaPath: result.mediaPath,
-    mediaMime: result.mime,
-    title: result.name
-  })
-  return { status: 'done' }
+  try {
+    const submitted = await window.api.gateway.videoSubmit({
+      projectId: ctx.projectId,
+      nodeId: ctx.node.id,
+      providerId: option.provider.id,
+      modelId: option.model.id,
+      prompt,
+      params: data.params,
+      ...(firstFrame ? { firstFrameMediaId: firstFrame.mediaId } : {})
+    })
+    if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
+    if (!submitted.ok) return { status: 'failed', reason: submitted.error.message }
+    const result = await waitForVideo(submitted.data.taskId, ctx.signal)
+    if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
+    ctx.updateProps({
+      mediaId: result.mediaId,
+      mediaPath: result.mediaPath,
+      mediaMime: result.mime,
+      title: result.name
+    })
+    return { status: 'done' }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (message === '已取消') return { status: 'skipped', reason: '已取消' }
+    return { status: 'failed', reason: `视频生成异常：${message}` }
+  }
 }

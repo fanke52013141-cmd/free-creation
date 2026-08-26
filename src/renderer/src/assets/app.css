@@ -4151,6 +4151,170 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   padding: 2px 0;
 }
 
+/* ── 代码节点：AI 生成区域 ── */
+.code-ai-section {
+  display: flex;
+  gap: 4px;
+  align-items: stretch;
+  padding: 6px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.06), rgba(168, 85, 247, 0.06));
+  border: 1px solid rgba(99, 102, 241, 0.18);
+}
+
+.code-ai-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 32px;
+  max-height: 60px;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--txt);
+  font-size: 10px;
+  line-height: 1.4;
+  resize: vertical;
+  outline: none;
+}
+
+.code-ai-input:focus {
+  border-color: #818cf8;
+}
+
+.code-ai-input::placeholder {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.btn-ai-generate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 0 10px;
+  min-height: 32px;
+  border: none;
+  border-radius: 5px;
+  background: linear-gradient(135deg, #6366f1, #a855f7);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s;
+}
+
+.btn-ai-generate:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
+.btn-ai-generate:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.code-ai-spinner {
+  width: 11px;
+  height: 11px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: ai-spin 0.6s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes ai-spin {
+  to { transform: rotate(360deg); }
+}
+
+.code-ai-error {
+  padding: 3px 6px;
+  border-radius: 5px;
+  background: rgba(248, 113, 113, 0.1);
+  color: #f87171;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+/* ── 代码节点：语法高亮 ── */
+.code-pre.highlighted {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.code-pre.highlighted:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.code-line {
+  display: block;
+  min-height: 1.5em;
+}
+
+.tok-comment {
+  color: #64748b;
+  font-style: italic;
+}
+
+.tok-string {
+  color: #f0abfc;
+}
+
+.tok-number {
+  color: #fbbf24;
+}
+
+.tok-keyword {
+  color: #818cf8;
+  font-weight: 600;
+}
+
+.tok-builtin {
+  color: #22d3ee;
+}
+
+/* ── 代码节点：编辑器行号 ── */
+.code-editor-wrap {
+  display: flex;
+  overflow: auto;
+  min-height: 0;
+  flex: 1;
+  background: rgba(0, 0, 0, 0.28);
+  border-radius: 6px;
+}
+
+.code-editor-gutter {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  padding: 5px 4px 5px 6px;
+  text-align: right;
+  user-select: none;
+  border-right: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.code-line-number {
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #475569;
+  min-height: calc(11px * 1.5);
+}
+
+.node-textarea.code-edit.with-gutter {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  border-radius: 0 6px 6px 0;
+  background: transparent;
+  padding: 5px 6px;
+  resize: none;
+  tab-size: 2;
+}
+
 .script-output-settings {
   display: flex;
   flex-direction: column;

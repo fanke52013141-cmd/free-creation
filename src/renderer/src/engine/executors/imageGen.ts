@@ -34,32 +34,39 @@ export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeE
   const prompt = mergedPrompt(data.prompt, inputText(ctx.inputs, 'in-text'))
   const referenceImage = inputMedia(ctx.inputs, 'in-image', 'image')[0]
   if (!prompt.trim()) return { status: 'skipped', reason: '无提示词' }
-  const result = await window.api.gateway.imageGenerate({
-    projectId: ctx.projectId,
-    providerId: option.provider.id,
-    modelId: option.model.id,
-    prompt,
-    size: data.size,
-    ...(typeof data.seed === 'number' && data.seed > 0 ? { seed: data.seed } : {}),
-    ...(referenceImage ? { referenceMediaId: referenceImage.mediaId } : {})
-  })
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
-  if (!result.ok) return { status: 'failed', reason: result.error.message }
-  ctx.updateProps({
-    mediaId: result.data.id,
-    mediaPath: result.data.path,
-    mediaMime: result.data.mime,
-    title: result.data.name || result.data.id
-  })
-  // 来源追溯：记录产生本节点的模型、输入摘要与时间，供「追踪到产生它的节点和输入」。
-  ctx.updateResult(
-    JSON.stringify({
-      kind: 'media-source',
-      nodeId: ctx.node.id,
-      modelKey: option.key,
-      prompt: prompt.slice(0, 80),
-      at: Date.now()
+  try {
+    const result = await window.api.gateway.imageGenerate({
+      projectId: ctx.projectId,
+      providerId: option.provider.id,
+      modelId: option.model.id,
+      prompt,
+      size: data.size,
+      ...(typeof data.seed === 'number' && data.seed > 0 ? { seed: data.seed } : {}),
+      ...(referenceImage ? { referenceMediaId: referenceImage.mediaId } : {})
     })
-  )
-  return { status: 'done' }
+    if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
+    if (!result.ok) return { status: 'failed', reason: result.error.message }
+    ctx.updateProps({
+      mediaId: result.data.id,
+      mediaPath: result.data.path,
+      mediaMime: result.data.mime,
+      title: result.data.name || result.data.id
+    })
+    // 来源追溯：记录产生本节点的模型、输入摘要与时间，供「追踪到产生它的节点和输入」。
+    ctx.updateResult(
+      JSON.stringify({
+        kind: 'media-source',
+        nodeId: ctx.node.id,
+        modelKey: option.key,
+        prompt: prompt.slice(0, 80),
+        at: Date.now()
+      })
+    )
+    return { status: 'done' }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (message === '已取消') return { status: 'skipped', reason: '已取消' }
+    return { status: 'failed', reason: `图片生成异常：${message}` }
+  }
 }
