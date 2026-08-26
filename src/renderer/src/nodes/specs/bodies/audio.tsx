@@ -61,6 +61,24 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     if (!loaded) void loadProviders()
   }, [loaded, loadProviders])
 
+  // 组件卸载时释放音频元素，避免后台持续播放与音频流泄漏（A8）
+  useEffect(() => {
+    return () => {
+      audioRef.current?.pause()
+      if (audioRef.current) audioRef.current.src = ''
+      audioRef.current = null
+    }
+  }, [])
+
+  // 音频源变化（重新生成 / 替换文件）时丢弃旧元素，下次播放用新 URL 重建，避免播放旧内容
+  useEffect(() => {
+    if (!audioRef.current) return
+    audioRef.current.pause()
+    audioRef.current.src = ''
+    audioRef.current = null
+    setPlaying(false)
+  }, [shape.props.mediaPath])
+
   const update = (next: AudioData): void => {
     editor.updateShape({
       id: shape.id,
@@ -243,9 +261,10 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
       </div>
 
       {data.mode === 'upload' ? (
-        <div className="audio-upload-zone" onPointerDown={(e) => stopEventPropagation(e)}>
+        <div className="audio-upload-zone">
           <button
             className="audio-upload-btn"
+            onPointerDown={(e) => stopEventPropagation(e)}
             onClick={(e) => {
               e.stopPropagation()
               void uploadAudio()

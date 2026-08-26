@@ -1,4 +1,4 @@
-﻿// 画布右侧抽屉面板：资产中心 / 工作流 / 历史记录（LibTV 侧栏入口落地）
+// 画布右侧抽屉面板：资产中心 / 工作流 / 历史记录（LibTV 侧栏入口落地）
 // 资产中心：项目级媒体库——导入/搜索/筛选/缩略图预览/点击拖到画布/删除
 // 工作流模板：保存选中节点组合为可复用模板，一键套用整段创作链路
 import { useEffect, useRef, useState } from 'react'
@@ -193,6 +193,7 @@ function AssetsPanel({
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
           onPointerDown={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
         />
       </div>
       <div className="assets-filters">
@@ -400,6 +401,7 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
           onChange={(e) => setName(e.target.value)}
           onPointerDown={(e) => e.stopPropagation()}
           onKeyDown={(e) => {
+            e.stopPropagation()
             if (e.key === 'Enter') handleSave()
           }}
         />
@@ -532,6 +534,7 @@ function HistoryPanel({
           onChange={(e) => setLabel(e.target.value)}
           onPointerDown={(e) => e.stopPropagation()}
           onKeyDown={(e) => {
+            e.stopPropagation()
             if (e.key === 'Enter') handleSave()
           }}
         />

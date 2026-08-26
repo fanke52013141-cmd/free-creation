@@ -85,18 +85,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     [editor, shape.id]
   )
 
-  // 第一次单击只进入明确的选中状态；节点已选中后，下一次按住卡片空白处才交给
-  // tldraw 拖动。输入、按钮和端口仍各自处理，避免误拖。
-  const handleCardPointerDownCapture = (e: React.PointerEvent<HTMLDivElement>): void => {
-    if (e.button !== 0) return
-    const interactive = (e.target as HTMLElement).closest(
-      'input, textarea, select, button, [contenteditable="true"], .port-dot'
-    )
-    if (interactive || selected) return
-    stopEventPropagation(e)
-    editor.select(shape.id)
-  }
-
   // 右上角 info 图标：显式打开该节点的右侧面板。对话节点→聊天面板，其余→契约信息窗。
   // 单击节点只负责选中，不再自动弹出；点击此图标才呈现，避免选中与点图标打架。
   const handleInfoOpen = (e: React.PointerEvent<HTMLButtonElement>): void => {
@@ -138,7 +126,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       <div
         className={`node-card-wrap ${connectable ? 'connectable' : ''} ${selected ? 'is-selected' : ''}`}
         style={{ width: shape.props.w, height: shape.props.h }}
-        onPointerDownCapture={handleCardPointerDownCapture}
       >
         <div className={`node-card type-${shape.props.nodeType}`}>
           {/* 顶部颜色条（按类型区分） */}

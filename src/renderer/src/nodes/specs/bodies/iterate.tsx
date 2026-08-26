@@ -37,10 +37,14 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
   const data = parseIterate(shape.props.text)
   const result = parseIterateResult(shape.props.text)
   const updateConfig = (next: IterateConfig): void => {
+    // 保留已有运行结果（items），避免调整并发/限数/失败策略等参数时清空历史批量结果（A4）
+    const prev = parseIterateResult(shape.props.text)
+    const payload: Record<string, unknown> = { ...enforceConfig(next) }
+    if (prev) (payload as { items?: IterateItemResult[] }).items = prev.items
     editor.updateShape({
       id: shape.id,
       type: 'node-card',
-      props: { text: JSON.stringify(enforceConfig(next)) }
+      props: { text: JSON.stringify(payload) }
     })
   }
   // 下游迭代体数量：通过当前节点的输出边推算（NodeContractPanel 之外简单估算）

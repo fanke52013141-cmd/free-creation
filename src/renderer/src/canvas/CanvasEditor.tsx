@@ -252,6 +252,16 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
     const onKey = (e: KeyboardEvent): void => {
       const editor = editorRef.current
       if (!editor) return
+      // 正在编辑文本（节点内文本/标题、顶栏项目名、各类输入框）时不拦截 Ctrl+D / Ctrl+Shift+F，
+      // 避免把"复制选中节点 / 适配画布"等画布操作误注入到用户的输入上下文
+      const active = document.activeElement
+      const typing =
+        !!editor.getEditingShape() ||
+        (active instanceof HTMLElement &&
+          (active.tagName === 'INPUT' ||
+            active.tagName === 'TEXTAREA' ||
+            active.isContentEditable))
+      if (typing) return
       const mod = e.ctrlKey || e.metaKey
       if (mod && e.shiftKey && (e.key === 'f' || e.key === 'F')) {
         if (e.altKey) return // Shift+Alt+F 整理画布交给小地图

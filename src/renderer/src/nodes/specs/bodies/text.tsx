@@ -86,7 +86,6 @@ export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
     <div
       className="node-text"
       ref={scrollRef}
-      onPointerDown={(e) => stopEventPropagation(e)}
       onDoubleClick={(e) => {
         e.stopPropagation()
         setDraft(shape.props.text)

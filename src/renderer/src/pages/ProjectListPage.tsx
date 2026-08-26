@@ -12,6 +12,7 @@ function formatDate(ts: number): string {
 
 export function ProjectListPage(): React.JSX.Element {
   const [projects, setProjects] = useState<ProjectMeta[]>([])
+  const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
   const [renamingId, setRenamingId] = useState<string | null>(null)
@@ -27,7 +28,10 @@ export function ProjectListPage(): React.JSX.Element {
     let cancelled = false
     void (async () => {
       const res = await window.api.listProjects()
-      if (!cancelled && res.ok) setProjects(res.data)
+      if (!cancelled) {
+        if (res.ok) setProjects(res.data)
+        setLoading(false)
+      }
     })()
     return () => {
       cancelled = true
@@ -128,7 +132,8 @@ export function ProjectListPage(): React.JSX.Element {
       )}
 
       <div className="project-grid">
-        {projects.length === 0 && !creating && (
+        {loading && <div className="empty">加载中…</div>}
+        {!loading && projects.length === 0 && !creating && (
           <div className="empty">还没有项目，点击右上角新建一个开始创作</div>
         )}
         {projects.map((p) => (

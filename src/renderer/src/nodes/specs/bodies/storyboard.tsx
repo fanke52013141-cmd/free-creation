@@ -82,6 +82,8 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
   const imgOptions = modelsByModality(providers, 'image')
   const data = parseStoryboard(shape.props.text)
   const [generatingShots, setGeneratingShots] = useState<Set<string>>(new Set())
+  // 上游自动导入只应发生一次；用户手动清空或编辑后不再被覆盖（A9）
+  const importedRef = useRef(false)
   const [editingInput, setEditingInput] = useState(false)
   const [draftInput, setDraftInput] = useState(shape.props.text)
 
@@ -100,7 +102,11 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
   // 从上游接收分镜数据。监听画布变更，保证“先创建节点、后连接连线”也能同步。
   useEffect(() => {
     const importUpstream = (): void => {
-      if (data.shots.length > 0) return
+      if (importedRef.current) return
+      if (data.shots.length > 0) {
+        importedRef.current = true
+        return
+      }
       const upstream = gatherUpstreamJson(editor, shape.id)
       const parsed = Array.isArray(upstream)
         ? { shots: upstream }
@@ -117,6 +123,7 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
               }) as StoryboardShot
           )
         })
+        importedRef.current = true
         markUndoPoint(editor, 'storyboard-import')
       }
     }
@@ -140,14 +147,31 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.shots.length])
 
+  // 从编辑器读取最新分镜状态（绕过渲染期闭包的过期 data，修复顺序生成互相覆盖）
+  const readCurrent = (): StoryboardData =>
+    parseStoryboard((editor.getShape(shape.id) as typeof shape | undefined)?.props.text ?? '')
+
   // 逐镜生图
-  const generateShotImage = async (shotId: string): Promise<void> => {
-    const shot = data.shots.find((s) => s.id === shotId)
-    if (!shot?.scene) return toast('该镜头没有画面描述')
-    if (!data.imageModelKey) return toast('请先选择图片模型')
-    const opt = imgOptions.find((o) => o.key === data.imageModelKey)
-    if (!opt) return toast('图片模型不可用')
-    if (!project) return toast('项目未就绪')
+  const generateShotImage = async (shotId: string): Promise<boolean> => {
+    const current = readCurrent()
+    const shot = current.shots.find((s) => s.id === shotId)
+    if (!shot?.scene) {
+      toast('该镜头没有画面描述')
+      return false
+    }
+    if (!current.imageModelKey) {
+      toast('请先选择图片模型')
+      return false
+    }
+    const opt = imgOptions.find((o) => o.key === current.imageModelKey)
+    if (!opt) {
+      toast('图片模型不可用')
+      return false
+    }
+    if (!project) {
+      toast('项目未就绪')
+      return false
+    }
     setGeneratingShots((prev) => new Set(prev).add(shotId))
     const res = await window.api.gateway.imageGenerate({
       projectId: project.id,
@@ -160,22 +184,30 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
       next.delete(shotId)
       return next
     })
-    if (!res.ok) return toast(`生成失败：${res.error.message}`)
-    const nextShots = data.shots.map((s) =>
+    if (!res.ok) {
+      toast(`生成失败：${res.error.message}`)
+      return false
+    }
+    // 关键：基于最新 shape 状态合并，顺序生成时不丢前序镜头的图
+    const latest = readCurrent()
+    const nextShots = latest.shots.map((s) =>
       s.id === shotId ? { ...s, imageMediaId: res.data.id, imageMediaPath: res.data.path } : s
     )
-    update({ ...data, shots: nextShots })
+    update({ ...latest, shots: nextShots })
     markUndoPoint(editor, 'storyboard-shotgen')
+    return true
   }
 
   // 全部生图（顺序执行）
   const generateAll = async (): Promise<void> => {
     const pending = data.shots.filter((s) => !s.imageMediaPath && s.scene)
     if (pending.length === 0) return toast('没有待生成的镜头')
+    let okCount = 0
     for (const shot of pending) {
-      await generateShotImage(shot.id)
+      if (await generateShotImage(shot.id)) okCount += 1
     }
-    toast(`${pending.length} 个镜头已生成`)
+    if (okCount === 0) return
+    toast(okCount === pending.length ? `${okCount} 个镜头已生成` : `已生成 ${okCount}/${pending.length} 个镜头`)
   }
 
   const commitInput = (): void => {

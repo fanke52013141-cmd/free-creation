@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import type { Editor } from 'tldraw'
 import type { PortDecl } from '@shared/types'
 import { getNodeType } from '../nodes/registry'
@@ -80,6 +81,15 @@ export function NodeContractPanel({
   onClose
 }: NodeContractPanelProps): React.JSX.Element | null {
   const shapeId = useNodePanelStore((s) => s.shapeId)
+
+  // Esc 关闭面板（与其它浮层面板行为统一）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
 
   if (!shapeId) return null
   const shape = editor.getShape<NodeCardShape>(shapeId)

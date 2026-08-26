@@ -36,6 +36,14 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        // 在输入框/文本编辑中不抢占 Ctrl+K，交给用户当前焦点
+        const active = document.activeElement
+        const typing =
+          active instanceof HTMLElement &&
+          (active.tagName === 'INPUT' ||
+            active.tagName === 'TEXTAREA' ||
+            active.isContentEditable)
+        if (typing) return
         e.preventDefault()
         useSearchStore.getState().toggle()
       }

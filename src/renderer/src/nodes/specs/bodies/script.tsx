@@ -208,6 +208,9 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
   const [showOutputSettings, setShowOutputSettings] = useState(false)
   const breakTaskRef = useRef<string | null>(null)
   const breakBufRef = useRef<string>('')
+  // 最新 data 的稳定引用，供注册一次的事件回调读取，避免闭包过期（A10）
+  const dataRef = useRef(data)
+  dataRef.current = data
   const providers = useGatewayStore((s) => s.providers)
   const openSettings = useGatewayStore((s) => s.openSettings)
   const chatModels = modelsByModality(providers, 'text')
@@ -261,7 +264,7 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
         breakBufRef.current = ''
         setBreaking(false)
         if (shots && shots.length > 0) {
-          update({ ...data, shots })
+          update({ ...dataRef.current, shots })
           pendingMarkRef.current = 'shot-breakdown'
           toast(`AI 拆解完成，生成 ${shots.length} 个镜头`)
         } else {
@@ -276,7 +279,7 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
     })
     return off
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data])
+  }, [])
 
   const breakdown = async (): Promise<void> => {
     if (breaking) {

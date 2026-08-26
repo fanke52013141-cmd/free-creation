@@ -299,6 +299,24 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // 卸载/切换节点时取消进行中的流式请求，避免关闭面板后主进程仍在跑、持续空耗 token
+  useEffect(() => {
+    return () => {
+      const taskId = streamRef.current?.taskId
+      if (taskId) void window.api.gateway.chatCancel(taskId)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Esc 关闭面板（与其它浮层面板行为统一）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   // 文档上传：读取文本文件内容存入 ChatData.documents
   const handleDocUpload = async (e: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
     const files = Array.from(e.target.files ?? [])
@@ -363,25 +381,37 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
     update({ ...data, messages })
     setDraft('')
     setStream({ taskId: '', text: '', reasoning: '' })
-    const res = await window.api.gateway.chatStart({
-      providerId: opt.provider.id,
-      modelId: opt.model.id,
-      system: effectiveSystem,
-      messages,
-      temperature: data.temperature,
-      maxTokens: data.maxTokens
-    })
-    if (!res.ok) {
-      toast(`发送失败：${res.error.message}`)
+    try {
+      const res = await window.api.gateway.chatStart({
+        providerId: opt.provider.id,
+        modelId: opt.model.id,
+        system: effectiveSystem,
+        messages,
+        temperature: data.temperature,
+        maxTokens: data.maxTokens
+      })
+      if (!res.ok) {
+        toast(`发送失败：${res.error.message}`)
+        setStream(null)
+        return
+      }
+      setStream({ taskId: res.data.taskId, text: '', reasoning: '' })
+    } catch (err) {
+      // 网关 IPC 抛异常（而非返回 {ok:false}）时也要退出"等待首个输出"态，
+      // 否则面板会永久卡住、停止按钮因 taskId 为空而失效
+      toast(`发送失败：${err instanceof Error ? err.message : '未知错误'}`)
       setStream(null)
-      return
     }
-    setStream({ taskId: res.data.taskId, text: '', reasoning: '' })
   }
 
   const stop = async (): Promise<void> => {
-    if (!stream?.taskId) return
-    await window.api.gateway.chatCancel(stream.taskId)
+    const taskId = stream?.taskId
+    if (!taskId) {
+      // taskId 为空（发送阶段卡住、请求异常）时也要能退出"等待"态，否则停止按钮变空操作
+      setStream(null)
+      return
+    }
+    await window.api.gateway.chatCancel(taskId)
     finishStream()
   }
 
@@ -629,6 +659,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
           placeholder={project ? '说点什么…（Enter 发送）' : '项目未就绪'}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
+            e.stopPropagation()
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault()
               void send()
