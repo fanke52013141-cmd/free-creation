@@ -229,6 +229,7 @@ input:focus {
 
 /* ── 画布页 ── */
 .canvas-page {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -434,6 +435,109 @@ input:focus {
   max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── 运行错误面板 ── */
+.engine-errors {
+  position: absolute;
+  top: 58px;
+  right: 16px;
+  width: 420px;
+  max-height: 360px;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid rgba(255, 77, 79, 0.3);
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
+  z-index: 500;
+}
+
+.engine-errors-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 600;
+  color: #ff4d4f;
+}
+
+.engine-errors-clear {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.engine-errors-clear:hover {
+  color: var(--txt);
+  background: var(--bg);
+}
+
+.engine-error-item {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  gap: 8px;
+  align-items: baseline;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+
+.engine-error-item:last-child {
+  border-bottom: none;
+}
+
+.error-phase-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.error-phase-badge.phase-input {
+  background: rgba(250, 173, 20, 0.12);
+  color: #faad14;
+}
+
+.error-phase-badge.phase-execution {
+  background: rgba(255, 77, 79, 0.12);
+  color: #ff4d4f;
+}
+
+.error-phase-badge.phase-output {
+  background: rgba(114, 46, 209, 0.12);
+  color: #722ed1;
+}
+
+.error-phase-badge.phase-unknown {
+  background: rgba(255, 77, 79, 0.12);
+  color: #ff4d4f;
+}
+
+.error-label {
+  font-weight: 600;
+  color: var(--txt);
+  white-space: nowrap;
+}
+
+.error-reason {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.error-time {
+  font-size: 10px;
+  color: var(--muted);
+  opacity: 0.7;
   white-space: nowrap;
 }
 
@@ -1867,6 +1971,32 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
 
 .side-panel-primary:hover {
   opacity: 0.9;
+}
+
+.side-panel-secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 12px;
+  background: var(--bg);
+  color: var(--txt);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+  white-space: nowrap;
+}
+
+.side-panel-secondary:hover:not(:disabled) {
+  border-color: var(--brand);
+}
+
+.side-panel-secondary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .side-panel-empty {

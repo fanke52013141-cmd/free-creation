@@ -181,11 +181,37 @@ function AssetsPanel({
 
   const visible = filteredAssets({ assets, filter, keyword })
 
+  const handleBatchExport = async (): Promise<void> => {
+    if (assets.length === 0) {
+      toast('暂无素材可导出')
+      return
+    }
+    const res = await window.api.batchExportMedia(projectId)
+    if (!res.ok) {
+      toast(`导出失败：${res.error.message}`)
+      return
+    }
+    if (res.data.exported === 0 && res.data.targetDir === '') return // 用户取消
+    toast(
+      res.data.failed > 0
+        ? `已导出 ${res.data.exported} 个素材（${res.data.failed} 个失败）`
+        : `已导出 ${res.data.exported} 个素材到目标目录`
+    )
+  }
+
   return (
     <div className="side-panel-body assets-panel" ref={scrollRef}>
       <div className="assets-toolbar">
         <button className="side-panel-primary" onClick={onImport}>
           <Icon name="upload" size={15} /> 导入素材
+        </button>
+        <button
+          className="side-panel-secondary"
+          title="将项目所有素材导出到指定目录"
+          disabled={assets.length === 0}
+          onClick={() => void handleBatchExport()}
+        >
+          <Icon name="download" size={15} /> 批量导出
         </button>
         <input
           className="assets-search"

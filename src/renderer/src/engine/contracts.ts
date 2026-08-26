@@ -1,6 +1,6 @@
 import type { CanvasEdge, CanvasNode, PortDecl, PortSchemaRef, PortType } from '@shared/types'
 import { nodeSchemasCompatible, validateNodeSchema } from '@shared/node-schemas'
-import { getNodePorts, getNodeType, portCompatible } from '../nodes/registry'
+import { getNodeType, portCompatible } from '../nodes/registry'
 import type { NodeValue, RawNodeOutputs } from '../nodes/nodeValues'
 
 export interface NodeValuePacket {

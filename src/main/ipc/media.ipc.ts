@@ -1,5 +1,7 @@
 // 媒体 IPC：拖拽导入 + 系统对话框选择导入（见《技术框架与规范》§10）
 import { ipcMain, dialog, clipboard, shell } from 'electron'
+import { copyFile } from 'fs/promises'
+import { basename, extname, join } from 'path'
 import { IPC } from '../../shared/contracts'
 import type { IpcEnvelope } from '../../shared/contracts'
 import type { ImportMediaBufferInput } from '../../shared/contracts'
@@ -161,4 +163,46 @@ export function registerMediaIpc(): void {
     if (error) return err('OPEN_FAILED', error)
     return ok(true)
   })
+
+  // 批量导出：弹出目录选择对话框，将项目所有媒体文件复制到目标目录
+  ipcMain.handle(
+    IPC.media.batchExport,
+    async (
+      _e,
+      input: { projectId: string }
+    ): Promise<IpcEnvelope<{ exported: number; failed: number; targetDir: string }>> => {
+      if (!input?.projectId) return err('INVALID_INPUT', '参数不完整')
+      const result = await dialog.showOpenDialog({
+        title: '选择导出目录',
+        properties: ['openDirectory', 'createDirectory']
+      })
+      if (result.canceled || result.filePaths.length === 0) {
+        return ok({ exported: 0, failed: 0, targetDir: '' })
+      }
+      const targetDir = result.filePaths[0]
+      const assets = listMedia(input.projectId)
+      let exported = 0
+      let failed = 0
+      const used = new Set<string>()
+      for (const asset of assets) {
+        const src = getMediaAbsPath(asset.path)
+        if (!src) {
+          failed++
+          continue
+        }
+        const ext = extname(asset.path)
+        const baseName = asset.name ? `${asset.name}${ext}` : basename(asset.path)
+        let destName = baseName
+        if (used.has(destName)) destName = `${asset.name ?? asset.id}_${asset.id}${ext}`
+        used.add(destName)
+        try {
+          await copyFile(src, join(targetDir, destName))
+          exported++
+        } catch {
+          failed++
+        }
+      }
+      return ok({ exported, failed, targetDir })
+    }
+  )
 }

@@ -28,9 +28,16 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
   const engineDone = useEngineStore((s) => s.done)
   const engineTotal = useEngineStore((s) => s.total)
   const engineCurrent = useEngineStore((s) => s.currentLabel)
+  const engineErrors = useEngineStore((s) => s.errors)
   const engineRun = useEngineStore((s) => s.run)
   const engineStop = useEngineStore((s) => s.stop)
   const isRunning = enginePhase === 'running' || enginePhase === 'stopping'
+  const [showErrors, setShowErrors] = useState(true)
+
+  // 新一轮执行时重置错误面板可见性
+  useEffect(() => {
+    if (enginePhase === 'running') setShowErrors(true)
+  }, [enginePhase])
 
   // Ctrl+K 唤起搜索面板
   useEffect(() => {
@@ -210,6 +217,36 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
           </button>
         </div>
       </div>
+      {engineErrors.length > 0 && showErrors && (
+        <div className="engine-errors">
+          <div className="engine-errors-head">
+            <span>运行错误（{engineErrors.length}）</span>
+            <button
+              className="engine-errors-clear"
+              onClick={() => {
+                useEngineStore.setState({ errors: [] })
+                setShowErrors(false)
+              }}
+            >
+              清空
+            </button>
+          </div>
+          {engineErrors.map((e, i) => (
+            <div key={i} className="engine-error-item">
+              <span className={`error-phase-badge phase-${e.phase ?? 'unknown'}`}>
+                {e.phase === 'input' ? '输入' : e.phase === 'execution' ? '执行' : e.phase === 'output' ? '输出' : '错误'}
+              </span>
+              <span className="error-label">{e.label}</span>
+              <span className="error-reason" title={e.reason}>
+                {e.reason}
+              </span>
+              <span className="error-time">
+                {new Date(e.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
       <CanvasEditor project={currentProject ?? file.meta} initialSnapshot={file.tldrawSnapshot} />
     </div>
   )

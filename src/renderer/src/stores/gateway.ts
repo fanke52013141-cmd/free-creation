@@ -57,3 +57,17 @@ export function findProvider(
 ): ProviderConfig | undefined {
   return providers.find((p) => p.id === providerId)
 }
+
+/** 按 modelKey 查找文本模型，支持回退到第一个可用文本模型 */
+export function findTextModel(
+  providers: ProviderConfig[],
+  modelKey: string,
+  fallback: boolean
+): ModelOption | undefined {
+  const textModels = modelsByModality(providers, 'text')
+  if (modelKey) {
+    const found = textModels.find((m) => m.key === modelKey)
+    if (found) return found
+  }
+  return fallback ? textModels[0] : undefined
+}

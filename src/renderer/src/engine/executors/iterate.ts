@@ -202,7 +202,7 @@ export const iterateExecutor = async (ctx: NodeExecutionContext): Promise<NodeEx
           ctx.updateProps({
             text: JSON.stringify({
               ...config,
-              items: results.map((r, i) => r ?? null),
+              items: results.map((r) => r ?? null),
               _progress: { done: completed, total: items.length }
             })
           })

@@ -5,9 +5,18 @@ import { create } from 'zustand'
 
 export type EnginePhase = 'idle' | 'running' | 'stopping'
 
+/** 错误发生的阶段 */
+export type ErrorPhase = 'input' | 'execution' | 'output'
+
 export interface RunError {
   label: string
   reason: string
+  /** 出错节点的 shape ID（用于诊断定位） */
+  nodeId?: string
+  /** 错误阶段：输入校验 / 执行过程 / 输出校验 */
+  phase?: ErrorPhase
+  /** 时间戳（ms） */
+  timestamp: number
 }
 
 interface EngineState {
@@ -25,7 +34,7 @@ interface EngineState {
   beginRun: (total: number) => void
   setCurrent: (label: string) => void
   nodeDone: () => void
-  addError: (label: string, reason: string) => void
+  addError: (label: string, reason: string, detail?: { nodeId?: string; phase?: ErrorPhase }) => void
   setStopping: () => void
   endRun: () => void
 }
@@ -43,7 +52,19 @@ export const useEngineStore = create<EngineState>((set) => ({
   beginRun: (total) => set({ phase: 'running', total, done: 0, currentLabel: '', errors: [] }),
   setCurrent: (label) => set({ currentLabel: label }),
   nodeDone: () => set((s) => ({ done: s.done + 1 })),
-  addError: (label, reason) => set((s) => ({ errors: [...s.errors, { label, reason }] })),
+  addError: (label, reason, detail) =>
+    set((s) => ({
+      errors: [
+        ...s.errors,
+        {
+          label,
+          reason,
+          nodeId: detail?.nodeId,
+          phase: detail?.phase,
+          timestamp: Date.now()
+        }
+      ]
+    })),
   setStopping: () => set({ phase: 'stopping' }),
   endRun: () => set({ phase: 'idle', currentLabel: '' })
 }))

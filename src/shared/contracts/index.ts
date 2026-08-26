@@ -26,7 +26,8 @@ export const IPC = {
     delete: 'media:delete',
     reveal: 'media:reveal',
     copyPath: 'media:copy-path',
-    open: 'media:open'
+    open: 'media:open',
+    batchExport: 'media:batch-export'
   },
   gateway: {
     providers: 'gateway:providers:list',

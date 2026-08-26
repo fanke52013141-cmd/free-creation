@@ -179,9 +179,11 @@ async function executeNodeOnce(
       const projected = buildOutputPackets(node, projectNodeOutputs(latest), ctx.runId)
       if (projected.errors.length > 0) {
         setExec(editor, shapeId, 'failed')
-        useEngineStore
-          .getState()
-          .addError(node.title || node.type, `输出契约校验失败：${projected.errors.join('；')}`)
+        useEngineStore.getState().addError(
+          node.title || node.type,
+          `输出契约校验失败：${projected.errors.join('；')}`,
+          { nodeId: node.id, phase: 'output' }
+        )
         return { status: 'failed', reason: '输出契约校验失败' }
       }
       ctx.outputs.set(node.id, projected.value)
@@ -190,7 +192,10 @@ async function executeNodeOnce(
     }
     if (result.status === 'failed') {
       setExec(editor, shapeId, 'failed')
-      useEngineStore.getState().addError(node.title || node.type, result.reason ?? '执行失败')
+      useEngineStore.getState().addError(node.title || node.type, result.reason ?? '执行失败', {
+        nodeId: node.id,
+        phase: 'execution'
+      })
     } else {
       setExec(editor, shapeId, 'idle')
     }
@@ -199,8 +204,12 @@ async function executeNodeOnce(
     if (ctx.token.cancelled) setExec(editor, shapeId, 'cancelled')
     else {
       const reason = error instanceof Error ? error.message : String(error)
+      const phase: 'input' | 'execution' = reason.includes('输入契约') ? 'input' : 'execution'
       setExec(editor, shapeId, 'failed')
-      useEngineStore.getState().addError(node.title || node.type, reason)
+      useEngineStore.getState().addError(node.title || node.type, reason, {
+        nodeId: node.id,
+        phase
+      })
     }
     return { status: 'failed', reason: error instanceof Error ? error.message : String(error) }
   }

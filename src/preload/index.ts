@@ -65,6 +65,11 @@ const api = {
     ipcRenderer.invoke(IPC.media.copyPath, mediaId),
   openMedia: (mediaId: string): Promise<IpcEnvelope<boolean>> =>
     ipcRenderer.invoke(IPC.media.open, mediaId),
+  // 批量导出：弹出目录选择，将项目所有媒体复制到目标目录
+  batchExportMedia: (
+    projectId: string
+  ): Promise<IpcEnvelope<{ exported: number; failed: number; targetDir: string }>> =>
+    ipcRenderer.invoke(IPC.media.batchExport, { projectId }),
   // 拖拽落盘的 File 对象拿真实路径（Electron 32+ 移除了 File.path）
   getDroppedFilePath: (file: File): string => webUtils.getPathForFile(file),
   gateway: {
