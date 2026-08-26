@@ -4058,6 +4058,99 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   line-height: 1.5;
 }
 
+/* 代码节点自定义参数端口声明表格 */
+.code-params-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.code-params-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.code-params-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--txt);
+}
+
+.code-params-table {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.code-param-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 56px 22px;
+  align-items: center;
+  gap: 4px;
+}
+
+.code-param-name {
+  min-width: 0;
+  height: 24px;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--txt);
+  font-size: 10px;
+  font-family: 'Cascadia Code', monospace;
+  outline: none;
+}
+
+.code-param-name:focus {
+  border-color: var(--brand);
+}
+
+.code-param-type {
+  min-width: 0;
+  height: 24px;
+  padding: 2px 4px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--txt);
+  font-size: 10px;
+  outline: none;
+}
+
+.code-param-type:focus {
+  border-color: var(--brand);
+}
+
+.code-param-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0;
+}
+
+.code-param-remove:hover {
+  background: rgba(248, 113, 113, 0.12);
+  color: #f87171;
+}
+
+.code-params-empty {
+  font-size: 9px;
+  color: var(--muted);
+  line-height: 1.4;
+  padding: 2px 0;
+}
+
 .script-output-settings {
   display: flex;
   flex-direction: column;

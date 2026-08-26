@@ -1,6 +1,6 @@
 import type { CanvasEdge, CanvasNode, PortDecl, PortSchemaRef, PortType } from '@shared/types'
 import { nodeSchemasCompatible, validateNodeSchema } from '@shared/node-schemas'
-import { getNodeType, portCompatible } from '../nodes/registry'
+import { getNodePorts, getNodeType, portCompatible } from '../nodes/registry'
 import type { NodeValue, RawNodeOutputs } from '../nodes/nodeValues'
 
 export interface NodeValuePacket {
@@ -31,6 +31,21 @@ function describePort(port: PortDecl): string {
   return `${port.name}（${port.id}）`
 }
 
+/**
+ * 从 CanvasNode 解析实际端口。优先使用 deriveGraph 已填充的 node.ports
+ * （包含动态解析的端口），为空时回退到 spec 静态端口（兼容测试与旧数据）。
+ */
+function portsOf(node: CanvasNode): { in: PortDecl[]; out: PortDecl[] } {
+  if (node.ports.length > 0) {
+    return {
+      in: node.ports.filter((p) => p.dir === 'in'),
+      out: node.ports.filter((p) => p.dir === 'out')
+    }
+  }
+  const spec = getNodeType(node.type)
+  return spec?.ports ?? { in: [], out: [] }
+}
+
 /** 成功执行后，把节点持久化结果封装成带来源的端口数据包，并验证输出契约。 */
 export function buildOutputPackets(
   node: CanvasNode,
@@ -42,7 +57,8 @@ export function buildOutputPackets(
 
   const errors: string[] = []
   const packets: ContractOutputs = {}
-  const outputPorts = new Map(spec.ports.out.map((port) => [port.id, port]))
+  const resolved = portsOf(node)
+  const outputPorts = new Map(resolved.out.map((port) => [port.id, port]))
 
   for (const [portId, raw] of Object.entries(rawOutputs)) {
     if (!raw) continue
@@ -73,7 +89,7 @@ export function buildOutputPackets(
     }
   }
 
-  for (const port of spec.ports.out) {
+  for (const port of resolved.out) {
     if (port.required && !packets[port.id]) {
       errors.push(`缺少必需输出：${describePort(port)}`)
     }
@@ -95,7 +111,8 @@ export function collectContractInputs(
 
   const errors: string[] = []
   const mutable = new Map<string, NodeValuePacket[]>()
-  const inputPorts = new Map(spec.ports.in.map((port) => [port.id, port]))
+  const resolved = portsOf(node)
+  const inputPorts = new Map(resolved.in.map((port) => [port.id, port]))
 
   for (const edge of edges) {
     if (edge.to.nodeId !== node.id) continue
@@ -137,7 +154,7 @@ export function collectContractInputs(
     mutable.set(target.id, values)
   }
 
-  for (const port of spec.ports.in) {
+  for (const port of resolved.in) {
     const count = mutable.get(port.id)?.length ?? 0
     if (port.required && count === 0) errors.push(`缺少必需输入：${describePort(port)}`)
     if (port.cardinality === 'one' && count > 1) {

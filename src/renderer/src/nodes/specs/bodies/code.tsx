@@ -1,5 +1,6 @@
 // 代码节点 Body（路线图 R6：bodies.tsx 拆分）
 // 支持 Coze 风格 async function main(args) 写法，可用 lodash(_) 和 dayjs
+// 支持自定义参数端口：用户在 UI 表格中声明额外输入参数
 import { useRef, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import type { NodeBodyProps } from '../../registry'
@@ -7,12 +8,18 @@ import { markUndoPoint } from '../../../canvas/history'
 import { Icon } from '../../../components/Icon'
 import { useWheelScroll, VARIABLE_TYPES, type VariableValueType } from './shared'
 
+interface CodeParam {
+  name: string
+  type: VariableValueType
+}
+
 interface CodeConfig {
   source: string
   inputName: string
   inputType: VariableValueType
   outputName: string
   outputType: VariableValueType
+  params: CodeParam[]
 }
 
 interface CodeResultDisplay {
@@ -25,6 +32,16 @@ function parseCodeConfig(text: string): CodeConfig {
     const value = JSON.parse(text) as Record<string, unknown>
     if (value && typeof value === 'object' && typeof value.source === 'string') {
       const allowed: VariableValueType[] = ['string', 'number', 'boolean', 'object', 'array', 'any']
+      const rawParams = Array.isArray(value.params) ? value.params : []
+      const params: CodeParam[] = rawParams
+        .filter((p): p is Record<string, unknown> => typeof p === 'object' && p !== null)
+        .map((p) => ({
+          name: typeof p.name === 'string' ? p.name : '',
+          type: allowed.includes(p.type as VariableValueType)
+            ? (p.type as VariableValueType)
+            : 'any'
+        }))
+        .filter((p) => p.name.trim())
       return {
         source: value.source,
         inputName: typeof value.inputName === 'string' ? value.inputName : 'input',
@@ -34,7 +51,8 @@ function parseCodeConfig(text: string): CodeConfig {
         outputName: typeof value.outputName === 'string' ? value.outputName : 'output',
         outputType: allowed.includes(value.outputType as VariableValueType)
           ? (value.outputType as VariableValueType)
-          : 'any'
+          : 'any',
+        params
       }
     }
   } catch {
@@ -45,7 +63,8 @@ function parseCodeConfig(text: string): CodeConfig {
     inputName: 'input',
     inputType: 'any',
     outputName: 'output',
-    outputType: 'any'
+    outputType: 'any',
+    params: []
   }
 }
 
@@ -78,7 +97,7 @@ const CODE_TEMPLATE = `async function main(args) {
   // 可用变量：
   //   args.text   — 上游文本输入
   //   args.json   — 上游 JSON 数组
-  //   args.params — 主要输入值
+  //   args.{自定义参数名} — 在上方"输入参数"表格中声明的端口
   // 可用库：_(lodash)、dayjs
 
   const data = args.json || []
@@ -115,6 +134,26 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
       type: 'node-card',
       props: { text: JSON.stringify(next) }
     })
+  }
+
+  const addParam = (): void => {
+    const used = new Set(data.params.map((p) => p.name))
+    let name = 'param1'
+    let i = 1
+    while (used.has(name)) name = `param${++i}`
+    updateConfig({ ...data, params: [...data.params, { name, type: 'any' }] })
+    markUndoPoint(editor, 'code-add-param')
+  }
+
+  const updateParam = (index: number, patch: Partial<CodeParam>): void => {
+    const params = data.params.map((p, i) => (i === index ? { ...p, ...patch } : p))
+    updateConfig({ ...data, params })
+  }
+
+  const removeParam = (index: number): void => {
+    const params = data.params.filter((_, i) => i !== index)
+    updateConfig({ ...data, params })
+    markUndoPoint(editor, 'code-remove-param')
   }
 
   if (editing) {
@@ -199,8 +238,20 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
         <div className="code-variable-help">
           {isMainStyle ? (
             <>
-              读取 <code>args.text</code> / <code>args.json</code> / <code>args.params</code>，
-              可用库 <code>_</code> <code>dayjs</code>
+              读取 <code>args.text</code> / <code>args.json</code>
+              {data.params.length > 0 && (
+                <>
+                  {' '}
+                  /{' '}
+                  {data.params.map((p, i) => (
+                    <span key={i}>
+                      {i > 0 && ' / '}
+                      <code>args.{p.name}</code>
+                    </span>
+                  ))}
+                </>
+              )}
+              ，可用库 <code>_</code> <code>dayjs</code>
             </>
           ) : (
             <>
@@ -209,6 +260,67 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
             </>
           )}
         </div>
+      </div>
+      <div className="code-params-section">
+        <div className="code-params-header">
+          <span className="code-params-title">输入参数</span>
+          <button
+            className="btn-ghost small"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              addParam()
+            }}
+          >
+            <Icon name="add" size={12} />
+            添加
+          </button>
+        </div>
+        {data.params.length > 0 && (
+          <div className="code-params-table">
+            {data.params.map((param, index) => (
+              <div key={index} className="code-param-row">
+                <input
+                  className="code-param-name"
+                  value={param.name}
+                  spellCheck={false}
+                  placeholder="参数名"
+                  onPointerDown={(e) => stopEventPropagation(e)}
+                  onChange={(e) =>
+                    updateParam(index, { name: e.target.value.replace(/[^\w]/g, '') })
+                  }
+                />
+                <select
+                  className="code-param-type"
+                  value={param.type}
+                  onPointerDown={(e) => stopEventPropagation(e)}
+                  onChange={(e) =>
+                    updateParam(index, { type: e.target.value as VariableValueType })
+                  }
+                >
+                  {VARIABLE_TYPES.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="code-param-remove"
+                  onPointerDown={(e) => stopEventPropagation(e)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    removeParam(index)
+                  }}
+                >
+                  <Icon name="close" size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {data.params.length === 0 && (
+          <div className="code-params-empty">添加自定义输入参数，每个参数生成一个独立输入端口</div>
+        )}
       </div>
       {text ? (
         <pre

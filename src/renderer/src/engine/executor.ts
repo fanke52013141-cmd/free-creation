@@ -123,7 +123,11 @@ function collectNodeInputs(
   const spec = getNodeType(node.type)
   if (!spec) return { value: new Map(), errors: [`未知节点类型：${node.type}`] }
   // 迭代体首节点：item 作为 in-json 输入（若有该端口）
-  if (item && spec.ports.in.some((p) => p.id === 'in-json')) {
+  const hasJsonPort =
+    node.ports.length > 0
+      ? node.ports.some((p) => p.dir === 'in' && p.id === 'in-json')
+      : spec.ports.in.some((p) => p.id === 'in-json')
+  if (item && hasJsonPort) {
     const inputs = new Map([
       [
         'in-json',

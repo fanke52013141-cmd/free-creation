@@ -3,7 +3,7 @@
 import { createShapeId, type Editor, type TLShapeId } from 'tldraw'
 import type { CanvasEdge, CanvasNode, ExecStatus, GroupDecl, PortDecl } from '@shared/types'
 import { nodeSchemasCompatible } from '@shared/node-schemas'
-import { getNodeType, portCompatible, portOffsets } from '../nodes/registry'
+import { getNodePorts, getNodeType, portCompatible, portOffsets } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
 import type { ConnectionFrom } from '../stores/connection'
 import { projectNodeOutputs, type NodeValue } from '../nodes/nodeValues'
@@ -139,9 +139,11 @@ export function createEdge(editor: Editor, from: EdgeEndpoint, to: EdgeEndpoint)
 
   const fromSpec = getNodeType(fromShape.props.nodeType)
   const toSpec = getNodeType(toShape.props.nodeType)
-  const fromPort = fromSpec?.ports.out.find((p) => p.id === from.portId)
-  const toPort = toSpec?.ports.in.find((p) => p.id === to.portId)
-  if (!fromSpec || !toSpec || !fromPort || !toPort) return false
+  const fromPorts = fromSpec ? getNodePorts(fromSpec, fromShape) : null
+  const toPorts = toSpec ? getNodePorts(toSpec, toShape) : null
+  const fromPort = fromPorts?.out.find((p) => p.id === from.portId)
+  const toPort = toPorts?.in.find((p) => p.id === to.portId)
+  if (!fromSpec || !toSpec || !fromPorts || !toPorts || !fromPort || !toPort) return false
   if (!portCompatible(fromPort.type, toPort.type)) return false
   if (
     fromPort.type === 'json' &&
@@ -151,11 +153,11 @@ export function createEdge(editor: Editor, from: EdgeEndpoint, to: EdgeEndpoint)
     return false
   if (toPort.cardinality === 'one' && inputPortOccupied(editor, to)) return false
 
-  const fromIdx = Math.max(0, fromSpec.ports.out.indexOf(fromPort))
-  const toIdx = Math.max(0, toSpec.ports.in.indexOf(toPort))
+  const fromIdx = Math.max(0, fromPorts.out.indexOf(fromPort))
+  const toIdx = Math.max(0, toPorts.in.indexOf(toPort))
   const fromY =
-    portOffsets(fromSpec.ports.out.length, fromShape.props.h)[fromIdx] ?? fromShape.props.h / 2
-  const toY = portOffsets(toSpec.ports.in.length, toShape.props.h)[toIdx] ?? toShape.props.h / 2
+    portOffsets(fromPorts.out.length, fromShape.props.h)[fromIdx] ?? fromShape.props.h / 2
+  const toY = portOffsets(toPorts.in.length, toShape.props.h)[toIdx] ?? toShape.props.h / 2
 
   const startPage = { x: fromShape.x + fromShape.props.w, y: fromShape.y + fromY }
   const endPage = { x: toShape.x, y: toShape.y + toY }
@@ -239,10 +241,12 @@ export function tryConnect(
 
   const source = editor.getShape<NodeCardShape>(from.shapeId)
   const sourceSpec = source ? getNodeType(source.props.nodeType) : undefined
-  const sourcePort = sourceSpec?.ports.out.find((port) => port.id === from.portId)
+  const sourcePorts = source && sourceSpec ? getNodePorts(sourceSpec, source) : null
+  const sourcePort = sourcePorts?.out.find((port) => port.id === from.portId)
   if (!source || !sourceSpec || !sourcePort) return '源节点或输出端口不存在'
 
-  const compatible = targetSpec.ports.in.filter(
+  const targetPorts = getNodePorts(targetSpec, target)
+  const compatible = targetPorts.in.filter(
     (port) =>
       portCompatible(port.type, sourcePort.type) &&
       !(
@@ -265,10 +269,10 @@ export function tryConnect(
 
   let port: PortDecl = usable[0]
   if (dropPagePt && usable.length > 1) {
-    const offsets = portOffsets(targetSpec.ports.in.length, target.props.h)
+    const offsets = portOffsets(targetPorts.in.length, target.props.h)
     let bestDist = Infinity
     for (const p of usable) {
-      const idx = targetSpec.ports.in.indexOf(p)
+      const idx = targetPorts.in.indexOf(p)
       const y = offsets[idx] ?? target.props.h / 2
       const d = Math.hypot(dropPagePt.x - target.x, dropPagePt.y - (target.y + y))
       if (d < bestDist) {
@@ -304,7 +308,8 @@ export function deriveGraph(editor: Editor): {
     if (shape.type === 'node-card') {
       const s = shape as NodeCardShape
       const spec = getNodeType(s.props.nodeType)
-      const ports: PortDecl[] = [...(spec?.ports.in ?? []), ...(spec?.ports.out ?? [])]
+      const resolved = spec ? getNodePorts(spec, s) : { in: [] as PortDecl[], out: [] as PortDecl[] }
+      const ports: PortDecl[] = [...resolved.in, ...resolved.out]
       nodes.push({
         id: s.id,
         type: s.props.nodeType as CanvasNode['type'],

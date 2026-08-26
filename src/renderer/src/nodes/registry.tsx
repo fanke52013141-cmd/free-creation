@@ -32,6 +32,12 @@ export interface NodeTypeSpec {
   /** 输入/输出端口声明，连线类型校验与端口圆点渲染的依据 */
   ports: { in: PortDecl[]; out: PortDecl[] }
   /**
+   * 可选：根据节点实例配置动态解析端口。如果提供，优先于静态 ports 使用。
+   * 用于代码节点等需要用户自定义输入端口的场景。
+   * 静态 ports 仍用于注册校验和契约快照测试。
+   */
+  resolvePorts?: (shape: NodeCardShape) => { in: PortDecl[]; out: PortDecl[] }
+  /**
    * 节点自注册执行器（契约规范 P3）。运行器按 nodeType 取出并调用 execute；
    * 新增普通节点只需在此注入自己的执行器，无需修改核心运行器。
    * 未声明执行器的节点在全局运行时会被标记为「未实现」并跳过，但不影响注册。
@@ -202,6 +208,14 @@ export function unregisterNodeType(type: NodeTypeId): void {
 
 export function getNodeType(type: string): NodeTypeSpec | undefined {
   return registry.get(type as NodeTypeId)
+}
+
+/** 解析节点的实际端口：如果有 resolvePorts 则动态解析，否则返回静态 ports。 */
+export function getNodePorts(
+  spec: NodeTypeSpec,
+  shape: NodeCardShape
+): { in: PortDecl[]; out: PortDecl[] } {
+  return spec.resolvePorts ? spec.resolvePorts(shape) : spec.ports
 }
 
 export function allNodeTypes(): NodeTypeSpec[] {

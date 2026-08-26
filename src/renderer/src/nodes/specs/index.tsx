@@ -20,7 +20,12 @@ import {
 import { aiProcessExecutor } from '../../engine/executors/aiProcess'
 import { audioExecutor } from '../../engine/executors/audio'
 import { chatExecutor } from '../../engine/executors/chat'
-import { codeExecutor } from '../../engine/executors/code'
+import {
+  codeExecutor,
+  mapVarTypeToPortType,
+  paramPortId,
+  parseCodeConfigs
+} from '../../engine/executors/code'
 import { imageGenExecutor } from '../../engine/executors/imageGen'
 import { imageExecutor } from '../../engine/executors/image'
 import { iterateExecutor } from '../../engine/executors/iterate'
@@ -292,6 +297,39 @@ export function registerExtendedNodeTypes(): void {
           schema: JSON_ANY
         })
       ]
+    },
+    resolvePorts: (shape) => {
+      const cfg = parseCodeConfigs(shape.props.text)
+      const paramPorts: PortDecl[] = cfg.params.map((p) => ({
+        id: paramPortId(p.name),
+        name: p.name,
+        dir: 'in',
+        type: mapVarTypeToPortType(p.type),
+        description: `自定义参数：${p.name}（${p.type}）`,
+        required: false,
+        cardinality: 'one'
+      }))
+      return {
+        in: [
+          input('in-text', '文本输入', 'text', '代码运行时 input.text 读取的合并文本。', {
+            cardinality: 'many'
+          }),
+          input('in-json', '数据输入', 'json', '代码运行时 input.json 读取的结构化值列表。', {
+            cardinality: 'many',
+            schema: JSON_ANY
+          }),
+          ...paramPorts
+        ],
+        out: [
+          output('out-text', '文本输出', 'text', '代码 return 字符串时产生的文本结果。', {
+            required: false
+          }),
+          output('out-json', '数据输出', 'json', '代码 return 对象或数组时产生的结构化结果。', {
+            required: false,
+            schema: JSON_ANY
+          })
+        ]
+      }
     },
     executor: codeExecutor,
     Body: CodeBody

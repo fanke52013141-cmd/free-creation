@@ -2,7 +2,8 @@
 import { HTMLContainer, stopEventPropagation, useEditor, useValue } from 'tldraw'
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { getNodeType, portCompatible, portOffsets, PORT_COLORS } from '../nodes/registry'
+import { getNodePorts, getNodeType, portCompatible, portOffsets, PORT_COLORS } from '../nodes/registry'
+import type { PortDecl } from '@shared/types'
 import { useConnectionStore } from '../stores/connection'
 import { useNodePanelStore } from '../stores/nodePanel'
 import { beginConnectionDrag } from './connection-drag'
@@ -52,11 +53,13 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         return
       }
       // 双向兼容：选中节点的输出 → 本节点输入，或 本节点输出 → 选中节点输入
-      const canReceive = targetSpec.ports.out.some((o) =>
-        spec.ports.in.some((i) => portCompatible(i.type, o.type))
+      const targetPorts = getNodePorts(targetSpec, target)
+      const myPorts = spec ? getNodePorts(spec, shape) : { in: [], out: [] }
+      const canReceive = targetPorts.out.some((o) =>
+        myPorts.in.some((i) => portCompatible(i.type, o.type))
       )
-      const canSend = spec.ports.out.some((o) =>
-        targetSpec.ports.in.some((i) => portCompatible(i.type, o.type))
+      const canSend = myPorts.out.some((o) =>
+        targetPorts.in.some((i) => portCompatible(i.type, o.type))
       )
       setConnectable(canReceive || canSend)
     }
@@ -114,8 +117,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
 
   const titleEditable = true
 
-  const inPorts = spec?.ports.in ?? []
-  const outPorts = spec?.ports.out ?? []
+  const resolvedPorts = spec ? getNodePorts(spec, shape) : { in: [] as PortDecl[], out: [] as PortDecl[] }
+  const inPorts = resolvedPorts.in
+  const outPorts = resolvedPorts.out
   const inY = portOffsets(inPorts.length, shape.props.h)
   const outY = portOffsets(outPorts.length, shape.props.h)
   const isSource = draft?.from.shapeId === shape.id
