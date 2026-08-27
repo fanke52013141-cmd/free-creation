@@ -10,10 +10,12 @@ import {
 } from '@shared/node-schemas'
 
 describe('nodeSchemaRegistered', () => {
-  it('识别已注册的 json.any@1 / storyboard.shots@1 / list.items@1', () => {
+  it('识别已注册的基础与导演台 Schema', () => {
     expect(nodeSchemaRegistered({ id: 'json.any', version: 1 })).toBe(true)
     expect(nodeSchemaRegistered({ id: 'storyboard.shots', version: 1 })).toBe(true)
     expect(nodeSchemaRegistered({ id: 'list.items', version: 1 })).toBe(true)
+    expect(nodeSchemaRegistered({ id: 'previs.camera', version: 1 })).toBe(true)
+    expect(nodeSchemaRegistered({ id: 'previs.project', version: 1 })).toBe(true)
   })
 
   it('拒绝未注册的 Schema ID 或错误版本', () => {
@@ -22,6 +24,42 @@ describe('nodeSchemaRegistered', () => {
     expect(nodeSchemaRegistered({ id: 'list.items', version: 2 })).toBe(false)
     expect(nodeSchemaRegistered({ id: 'unknown.schema', version: 1 })).toBe(false)
     expect(nodeSchemaRegistered({ id: 'character.profile', version: 1 })).toBe(false)
+  })
+})
+
+describe('validateNodeSchema · 导演台 Schema', () => {
+  const camera = {
+    x: 0,
+    y: 1.6,
+    z: 5,
+    heading: 0,
+    pitch: 0,
+    focalLengthMm: 35,
+    aspectRatio: '16:9',
+    durationSec: 5,
+    fps: 25
+  }
+
+  it('接受完整的预演摄像机参数', () => {
+    expect(validateNodeSchema({ id: 'previs.camera', version: 1 }, camera).ok).toBe(true)
+  })
+
+  it('拒绝缺少焦距或非法画幅的摄像机参数', () => {
+    expect(
+      validateNodeSchema({ id: 'previs.camera', version: 1 }, { ...camera, focalLengthMm: '35' }).ok
+    ).toBe(false)
+    expect(
+      validateNodeSchema({ id: 'previs.camera', version: 1 }, { ...camera, aspectRatio: '1:1' }).ok
+    ).toBe(false)
+  })
+
+  it('接受带镜头和摄像机的轻量导演工程摘要', () => {
+    expect(
+      validateNodeSchema(
+        { id: 'previs.project', version: 1 },
+        { version: 1, shots: [{ id: 'shot-1', name: '镜头 01', camera }] }
+      ).ok
+    ).toBe(true)
   })
 })
 

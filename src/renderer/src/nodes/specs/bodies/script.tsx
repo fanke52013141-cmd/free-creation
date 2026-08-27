@@ -210,7 +210,9 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
   const breakBufRef = useRef<string>('')
   // 最新 data 的稳定引用，供注册一次的事件回调读取，避免闭包过期（A10）
   const dataRef = useRef(data)
-  dataRef.current = data
+  useEffect(() => {
+    dataRef.current = data
+  }, [data])
   const providers = useGatewayStore((s) => s.providers)
   const openSettings = useGatewayStore((s) => s.openSettings)
   const chatModels = modelsByModality(providers, 'text')

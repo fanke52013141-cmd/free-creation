@@ -63,9 +63,22 @@ interface NodeTypeSpec {
     in: PortDecl[]
     out: PortDecl[]
   }
+  projectOutputs(shape): RawNodeOutputs
+  executionMode?: 'auto' | 'manual-publish' | 'display-only'
   // icon、size、Body 等 UI 字段略
 }
 ```
+
+`projectOutputs` 是“节点已持久化状态 → 正式输出端口”的唯一投影入口。只要节点
+声明了输出端口，就必须注册它；禁止在运行器或公共工具里新增按 `nodeType` 判断的
+输出 `switch`。新增节点必须自行提供 Spec、Body、Executor 与投影函数。
+
+`executionMode` 的含义：
+
+- `auto`：工作流可直接执行。
+- `manual-publish`：节点拥有交互式工作区，只有用户明确“发布”后才产生新的下游
+  数据；全局运行只能复用最近一次已发布结果，不能擅自打开工作区。
+- `display-only`：只呈现数据，不参与执行。
 
 ### 3.1 契约版本
 
@@ -103,6 +116,15 @@ interface PortDecl {
 - 使用小写 kebab-case，例如 `in-reference-image`。
 - ID 表达业务语义，禁止新增长期使用的 `input1`、`output2`。
 - 显示名称可以翻译或调整，ID 不可随文案变化。
+
+### 4.1.1 动态端口
+
+代码等节点允许根据节点配置生成端口，但动态端口同样是正式契约，不能只存在于 UI：
+
+- 必须由同一个 `resolvePorts(shape)` 同时驱动画布圆点、连线校验、右侧契约面板、保存图数据和运行时校验。
+- 动态 JSON 端口必须声明 Schema；通用结构使用 `json.any@1`。
+- 配置生成的端口 ID 必须在单个节点内去重；名称归一化后碰撞时，应拒绝或显式提示，不能悄悄生成两条同 ID 的端口。
+- 动态输出的投影必须使用同一个动态 `out-*` ID，不能声明命名输出却仍把结果写到固定端口。
 
 ### 4.2 `required`
 
@@ -227,6 +249,7 @@ interface NodeValuePacket {
 
 - 本次运行 ID、耗时、缓存状态。
 - 校验错误、执行错误和模型原始错误摘要。
+- 记录输入来源的 `nodeId + portId` 与本次实际输出端口，但不得复制 API Key、完整敏感正文或媒体二进制到运行记录。
 - 不显示伪造的思考过程；只展示供应商真实返回且允许展示的 reasoning 数据。
 
 ## 8. 复合能力规范
@@ -247,6 +270,25 @@ interface NodeValuePacket {
 - 无法由已有节点组合清晰表达。
 - 输入输出可以独立定义和测试。
 - 不是为了隐藏多个尚未梳理清楚的步骤。
+
+### 8.1 导演台（`director`）
+
+导演台是 `manual-publish` 节点：画布卡片只展示工程摘要和发布状态，完整预演在独立
+工作区打开。它不是没有连线的特殊工具，也不能把场景状态藏进下游节点。
+
+| 方向 | 端口 | 类型 | 数量 | 语义 |
+| --- | --- | --- | --- | --- |
+| 输入 | `in-storyboard` | `json / storyboard.shots@1` | one | 分镜同步为镜头列表 |
+| 输入 | `in-reference-images` | `image` | many | 人物、场景、构图参考图 |
+| 输入 | `in-camera-preset` | `json / previs.camera@1` | one | 初始机位参数 |
+| 输出 | `out-frame` | `image` | one | 明确发布的当前预演帧 |
+| 输出 | `out-preview-video` | `video` | one | 明确导出的 WebM 预演 |
+| 输出 | `out-camera` | `json / previs.camera@1` | one | 已发布镜头机位参数 |
+| 输出 | `out-project` | `json / previs.project@1` | one | 轻量工程摘要，不含媒体二进制 |
+
+导演工程改动后，在未重新发布帧/视频之前，节点必须标示“尚未发布”；下游仅可消费
+最近一次已发布数据。参考图和分镜的“同步输入”只读取其声明的 `portId`，不得按
+节点标题、节点类型或隐藏标签推断资源。
 
 ## 9. 分阶段改造方案
 

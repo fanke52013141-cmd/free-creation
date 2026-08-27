@@ -2,7 +2,13 @@
 import { HTMLContainer, stopEventPropagation, useEditor, useValue } from 'tldraw'
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { getNodePorts, getNodeType, portCompatible, portOffsets, PORT_COLORS } from '../nodes/registry'
+import {
+  getNodePorts,
+  getNodeType,
+  portCompatible,
+  portOffsets,
+  PORT_COLORS
+} from '../nodes/registry'
 import type { PortDecl } from '@shared/types'
 import { useConnectionStore } from '../stores/connection'
 import { useNodePanelStore } from '../stores/nodePanel'
@@ -66,7 +72,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     check()
     const unsub = editor.store.listen(check, { scope: 'session' })
     return unsub
-  }, [editor, shape.id, spec])
+  }, [editor, shape, spec])
 
   // 计算节点序号：按创建顺序排序所有 node-card，返回当前节点的序号
   const seq = useValue(
@@ -117,7 +123,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
 
   const titleEditable = true
 
-  const resolvedPorts = spec ? getNodePorts(spec, shape) : { in: [] as PortDecl[], out: [] as PortDecl[] }
+  const resolvedPorts = spec
+    ? getNodePorts(spec, shape)
+    : { in: [] as PortDecl[], out: [] as PortDecl[] }
   const inPorts = resolvedPorts.in
   const outPorts = resolvedPorts.out
   const inY = portOffsets(inPorts.length, shape.props.h)
@@ -165,12 +173,23 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             />
             <button
               className="node-info-btn"
-              title={shape.props.nodeType === 'chat' ? '打开对话面板' : '查看输入输出说明'}
+              title={
+                shape.props.nodeType === 'chat'
+                  ? '打开对话面板'
+                  : shape.props.nodeType === 'director'
+                    ? '打开导演台'
+                    : '查看输入输出说明'
+              }
               aria-label="打开节点说明"
               onPointerDown={handleInfoOpen}
               onClick={(e) => {
                 stopEventPropagation(e)
-                const kind = shape.props.nodeType === 'chat' ? 'chat' : 'contract'
+                const kind =
+                  shape.props.nodeType === 'chat'
+                    ? 'chat'
+                    : shape.props.nodeType === 'director'
+                      ? 'director'
+                      : 'contract'
                 useNodePanelStore.getState().open(kind, shape.id)
               }}
             >

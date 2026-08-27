@@ -152,6 +152,7 @@ describe('registerNodeType · 注册时硬校验门禁', () => {
           }
         ]
       },
+      projectOutputs: () => ({ 'out-text': { kind: 'text', text: 'test' } }),
       Body: () => null as never,
       ...over
     }
@@ -162,6 +163,12 @@ describe('registerNodeType · 注册时硬校验门禁', () => {
   it('合法 Spec 可注册并可查询', () => {
     registerNodeType(validSpec())
     expect(getNodeType('test-custom')?.type).toBe('test-custom')
+  })
+
+  it('拒绝有输出端口但没有输出投影的节点', () => {
+    const spec = validSpec()
+    delete spec.projectOutputs
+    expect(() => registerNodeType(spec)).toThrow(/projectOutputs/)
   })
 
   it('拒绝契约版本小于 1', () => {

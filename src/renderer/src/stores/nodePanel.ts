@@ -8,7 +8,7 @@
 import { create } from 'zustand'
 import type { TLShapeId } from 'tldraw'
 
-export type NodePanelKind = 'chat' | 'contract'
+export type NodePanelKind = 'chat' | 'contract' | 'director'
 
 interface NodePanelState {
   /** 当前打开的面板类型；null 表示关闭。 */

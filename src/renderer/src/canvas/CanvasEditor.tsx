@@ -11,6 +11,7 @@ import { MultiSelectToolbar } from './MultiSelectToolbar'
 import { CanvasSidePanel, type SidePanelTab } from './CanvasSidePanel'
 import { ChatSidePanel } from './ChatSidePanel'
 import { NodeContractPanel } from './NodeContractPanel'
+import { DirectorStudioPanel } from './DirectorStudioPanel'
 import { useNodePanelStore } from '../stores/nodePanel'
 import { SearchPalette } from './SearchPalette'
 import { GroupOutlineLayer } from './GroupOutlineLayer'
@@ -203,7 +204,8 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
     processor: '处理',
     json: '数据',
     code: '代码',
-    storyboard: '分镜'
+    storyboard: '分镜',
+    director: '导演'
   }
 
   const handleNodePick = (type: NodeTypeId): void => {
@@ -347,9 +349,7 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
       const typing =
         !!editor.getEditingShape() ||
         (active instanceof HTMLElement &&
-          (active.tagName === 'INPUT' ||
-            active.tagName === 'TEXTAREA' ||
-            active.isContentEditable))
+          (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable))
       if (typing) return
       const mod = e.ctrlKey || e.metaKey
       if (mod && e.shiftKey && (e.key === 'f' || e.key === 'F')) {
@@ -672,6 +672,7 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
     // 一次性兼容旧快照：只修正旧版本默认尺寸或明显异常的超大节点。
     const resizedNodes = migrateLegacyNodeSizes(editor)
     if (resizedNodes > 0) toast(`已将 ${resizedNodes} 个旧节点调整为标准尺寸`)
+
     // 删除节点时级联清理连线：tldraw 删 shape 时只删其 binding 不删 arrow，会留悬空线。
     // 用 sideEffects 的 afterDelete 钩子同步处理——binding 在 shape 的 beforeDelete 阶段
     // 已被 tldraw 删除，此时遍历箭头找绑定数 < 2 的即为悬空线，随同一次事务删除（可整体撤销）。
@@ -880,6 +881,14 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
       {!panelTab && editorInstance && nodePanelKind === 'chat' && nodePanelShapeId && (
         <ChatSidePanel
           editor={editorInstance}
+          shapeId={nodePanelShapeId}
+          onClose={() => useNodePanelStore.getState().close()}
+        />
+      )}
+      {!panelTab && editorInstance && nodePanelKind === 'director' && nodePanelShapeId && (
+        <DirectorStudioPanel
+          editor={editorInstance}
+          projectId={project.id}
           shapeId={nodePanelShapeId}
           onClose={() => useNodePanelStore.getState().close()}
         />

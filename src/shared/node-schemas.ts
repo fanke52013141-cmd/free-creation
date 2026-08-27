@@ -9,7 +9,9 @@ export function nodeSchemaRegistered(schema: PortSchemaRef): boolean {
   return (
     `${schema.id}@${schema.version}` === 'json.any@1' ||
     `${schema.id}@${schema.version}` === 'storyboard.shots@1' ||
-    `${schema.id}@${schema.version}` === 'list.items@1'
+    `${schema.id}@${schema.version}` === 'list.items@1' ||
+    `${schema.id}@${schema.version}` === 'previs.camera@1' ||
+    `${schema.id}@${schema.version}` === 'previs.project@1'
   )
 }
 
@@ -62,6 +64,52 @@ function validateListItems(value: unknown): string[] {
   return errors
 }
 
+/** 导演台摄像机参数：下游生图/视频可直接复用画幅、焦距和镜头节奏。 */
+function validatePrevisCamera(value: unknown): string[] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return ['根值必须是对象']
+  const data = value as Record<string, unknown>
+  const errors: string[] = []
+  for (const field of [
+    'x',
+    'y',
+    'z',
+    'heading',
+    'pitch',
+    'focalLengthMm',
+    'durationSec'
+  ] as const) {
+    if (typeof data[field] !== 'number' || !Number.isFinite(data[field])) {
+      errors.push(`${field} 必须是有限数字`)
+    }
+  }
+  if (!['16:9', '9:16', '4:3', '3:4'].includes(data.aspectRatio as string)) {
+    errors.push('aspectRatio 必须是 16:9、9:16、4:3 或 3:4')
+  }
+  if (![24, 25, 30].includes(data.fps as number)) errors.push('fps 必须是 24、25 或 30')
+  return errors
+}
+
+/** 导演工程的轻量可交换摘要；不把二进制模型或图片写入 JSON 数据流。 */
+function validatePrevisProject(value: unknown): string[] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return ['根值必须是对象']
+  const data = value as Record<string, unknown>
+  if (data.version !== 1) return ['version 必须为 1']
+  if (!Array.isArray(data.shots)) return ['shots 必须是数组']
+  const errors: string[] = []
+  data.shots.forEach((shot, index) => {
+    if (!shot || typeof shot !== 'object' || Array.isArray(shot)) {
+      errors.push(`shots[${index}] 必须是对象`)
+      return
+    }
+    const item = shot as Record<string, unknown>
+    if (typeof item.id !== 'string') errors.push(`shots[${index}].id 必须是字符串`)
+    if (typeof item.name !== 'string') errors.push(`shots[${index}].name 必须是字符串`)
+    const cameraErrors = validatePrevisCamera(item.camera)
+    errors.push(...cameraErrors.map((error) => `shots[${index}].camera.${error}`))
+  })
+  return errors
+}
+
 /**
  * JSON Schema 的轻量版本化仓库。这里返回可直接展示给用户的字段级错误；
  * 新增业务 Schema 时必须同时补充 NODE_CONTRACT_SPEC.md 中的结构说明。
@@ -77,6 +125,12 @@ export function validateNodeSchema(schema: PortSchemaRef, value: unknown): Schem
       break
     case 'list.items@1':
       errors = [...jsonSerializable(value), ...validateListItems(value)]
+      break
+    case 'previs.camera@1':
+      errors = [...jsonSerializable(value), ...validatePrevisCamera(value)]
+      break
+    case 'previs.project@1':
+      errors = [...jsonSerializable(value), ...validatePrevisProject(value)]
       break
     default:
       errors = [`未注册的 Schema：${schema.id}@${schema.version}`]

@@ -124,7 +124,8 @@ export const aiProcessExecutor = async (
     return { status: 'failed', reason: error instanceof Error ? error.message : String(error) }
   }
 
-  // 写回配置 + 上次运行结果；输出投影（nodeValues.ts）据此产出对应端口输出。
-  ctx.updateProps({ text: JSON.stringify({ ...config, result }) })
+  // 写回运行结果到 meta（配置/结果分离）；props.text 只存用户配置，不再混入 result。
+  // 输出投影（nodeValues.ts）据此产出对应端口输出。
+  ctx.updateResult(JSON.stringify(result))
   return { status: 'done' }
 }

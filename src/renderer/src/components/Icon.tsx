@@ -15,6 +15,7 @@ export type IconName =
   | 'json'
   | 'code'
   | 'storyboard'
+  | 'director'
   | 'upload'
   | 'assets'
   | 'workflow'
@@ -126,6 +127,13 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <rect x="3.5" y="4" width="17" height="16" rx="2" />
       <path d="M8 4v16M8 9h12M8 15h12" />
       <path d="M5.5 6.5h.01M5.5 12h.01M5.5 17.5h.01" />
+    </>
+  ),
+  director: (
+    <>
+      <rect x="3.5" y="6" width="13" height="12" rx="2" />
+      <path d="m16.5 10 4-2v8l-4-2" />
+      <circle cx="8" cy="12" r="2" />
     </>
   ),
   upload: (

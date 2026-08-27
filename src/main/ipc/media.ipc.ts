@@ -108,12 +108,16 @@ export function registerMediaIpc(): void {
   ipcMain.handle(
     IPC.media.importBuffer,
     async (_e, input: ImportMediaBufferInput): Promise<IpcEnvelope<MediaAsset>> => {
-      if (!input?.projectId || !input.mime?.startsWith('image/') || !input.data) {
-        return err('INVALID_INPUT', '仅支持粘贴图片数据')
+      if (
+        !input?.projectId ||
+        (!input.mime?.startsWith('image/') && !input.mime?.startsWith('video/')) ||
+        !input.data
+      ) {
+        return err('INVALID_INPUT', '仅支持图片或视频缓冲数据')
       }
       const buffer = Buffer.from(input.data)
-      if (buffer.length === 0 || buffer.length > 50 * 1024 * 1024) {
-        return err('INVALID_INPUT', '粘贴图片为空或超过 50MB')
+      if (buffer.length === 0 || buffer.length > 200 * 1024 * 1024) {
+        return err('INVALID_INPUT', '媒体缓冲为空或超过 200MB')
       }
       const extByMime: Record<string, string> = {
         'image/png': '.png',
@@ -121,7 +125,9 @@ export function registerMediaIpc(): void {
         'image/webp': '.webp',
         'image/gif': '.gif',
         'image/bmp': '.bmp',
-        'image/svg+xml': '.svg'
+        'image/svg+xml': '.svg',
+        'video/webm': '.webm',
+        'video/mp4': '.mp4'
       }
       const ext = extByMime[input.mime] ?? '.png'
       const asset = await saveBufferAsset(

@@ -53,8 +53,10 @@ function makeCtx(
 ): {
   ctx: NodeExecutionContext
   props: Partial<NodeCardShape['props']>
+  result: { value: string | null }
 } {
   const props: Partial<NodeCardShape['props']> = {}
+  const result = { value: null as string | null }
   const shape = {
     id: 'shape:1',
     type: 'node-card',
@@ -98,9 +100,11 @@ function makeCtx(
     providers: [provider],
     signal: { cancelled: false },
     updateProps: (patch) => Object.assign(props, patch),
-    updateResult: () => {}
+    updateResult: (r) => {
+      result.value = r
+    }
   }
-  return { ctx, props }
+  return { ctx, props, result }
 }
 
 function textInput(text: string): NodeExecutionContext['inputs'] {
@@ -173,20 +177,22 @@ describe('aiProcess 执行器 · 输出模式分支', () => {
       temperature: 0.7,
       maxTokens: 4096
     })
-    const { ctx, props } = makeCtx(config, textInput('原始文本'))
+    const { ctx, props, result } = makeCtx(config, textInput('原始文本'))
     const r = await aiProcessExecutor(ctx)
     expect(r.status).toBe('done')
-    const written = JSON.parse(props.text as string)
-    expect(written.result).toEqual({ kind: 'text', text: '转换后的文本' })
+    const written = JSON.parse(result.value as string)
+    expect(written).toEqual({ kind: 'text', text: '转换后的文本' })
+    // 配置/结果分离：执行器只写运行结果（meta），不改动 props.text 配置
+    expect(Object.keys(props)).toHaveLength(0)
   })
 
   it('markdown 模式：输出 markdown 结果', async () => {
     installFakeGateway('# 标题')
     const config = JSON.stringify({ modelKey: 'p1::m1', mode: 'markdown' })
-    const { ctx, props } = makeCtx(config, textInput('输入'))
+    const { ctx, result } = makeCtx(config, textInput('输入'))
     const r = await aiProcessExecutor(ctx)
     expect(r.status).toBe('done')
-    expect(JSON.parse(props.text as string).result).toEqual({ kind: 'markdown', text: '# 标题' })
+    expect(JSON.parse(result.value as string)).toEqual({ kind: 'markdown', text: '# 标题' })
   })
 
   it('json 模式：合法 JSON 且通过 Schema 校验 → 输出 json 结果', async () => {
@@ -196,11 +202,11 @@ describe('aiProcess 执行器 · 输出模式分支', () => {
       mode: 'json',
       jsonSchema: { id: 'storyboard.shots', version: 1 }
     })
-    const { ctx, props } = makeCtx(config, textInput('剧本'))
+    const { ctx, result } = makeCtx(config, textInput('剧本'))
     const r = await aiProcessExecutor(ctx)
     expect(r.status).toBe('done')
-    expect(JSON.parse(props.text as string).result.kind).toBe('json')
-    expect(JSON.parse(props.text as string).result.data.shots).toHaveLength(1)
+    expect(JSON.parse(result.value as string).kind).toBe('json')
+    expect(JSON.parse(result.value as string).data.shots).toHaveLength(1)
   })
 
   it('json 模式但未选 Schema → 失败（不伪装 JSON）', async () => {

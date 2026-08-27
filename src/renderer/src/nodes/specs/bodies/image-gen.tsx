@@ -5,7 +5,8 @@ import { PROVIDER_SPECS } from '@shared/types'
 import { mediaUrl, type NodeBodyProps } from '../../registry'
 import { toast } from '../../../stores/toast'
 import { markUndoPoint } from '../../../canvas/history'
-import { gatherUpstreamMedia, gatherUpstreamText } from '../../../canvas/graph'
+import { gatherUpstreamMedia } from '../../../canvas/graph'
+import { runNodeManually } from '../../../engine/executor'
 import { useAppStore } from '../../../stores/app'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { Icon } from '../../../components/Icon'
@@ -67,35 +68,15 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
   const refImage = gatherUpstreamMedia(editor, shape.id, 'in-image', 'image')
 
   const generate = async (): Promise<void> => {
-    const opt = options.find((o) => o.key === data.modelKey)
-    if (!opt) return toast('请先选择图片模型')
-    const upstream = gatherUpstreamText(editor, shape.id)
-    const prompt = upstream ? `${upstream}\n\n---\n\n${draft.trim()}` : draft.trim()
-    if (!prompt) return toast('请输入提示词或连接上游文本')
     if (!project) return toast('项目未就绪')
+    // 先提交本次编辑，再由统一运行器读取节点配置和真实上游端口输入。
+    update({ ...data, prompt: draft })
     setBusy(true)
-    const res = await window.api.gateway.imageGenerate({
-      projectId: project.id,
-      providerId: opt.provider.id,
-      modelId: opt.model.id,
-      prompt,
-      size: data.size,
-      ...(typeof data.seed === 'number' && data.seed > 0 ? { seed: data.seed } : {}),
-      ...(refImage ? { referenceMediaId: refImage.mediaId } : {})
-    })
-    setBusy(false)
-    if (!res.ok) return toast(`生成失败：${res.error.message}`)
-    editor.updateShape({
-      id: shape.id,
-      type: 'node-card',
-      props: {
-        mediaId: res.data.id,
-        mediaPath: res.data.path,
-        mediaMime: res.data.mime,
-        title: res.data.name || res.data.id
-      }
-    })
-    markUndoPoint(editor, 'image-gen')
+    try {
+      await runNodeManually(editor, project.id, providers, shape.id)
+    } finally {
+      setBusy(false)
+    }
   }
 
   if (shape.props.mediaPath) {

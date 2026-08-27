@@ -40,7 +40,8 @@ describe('全部标准节点都已注册', () => {
     'code',
     'storyboard',
     'ai-process',
-    'iterate'
+    'iterate',
+    'director'
   ]
 
   it.each(expected)('节点 %s 可通过 allNodeTypes 暴露（可创建）', (type) => {
@@ -76,7 +77,8 @@ describe('端口契约快照 · 每个端口 ID 稳定且符合命名规范', ()
     'storyboard',
     'script',
     'ai-process',
-    'iterate'
+    'iterate',
+    'director'
   ] as NodeTypeId[]
 
   it.each(types)('节点 %s 的端口 ID 命名合规', (type) => {
@@ -158,11 +160,12 @@ describe('关键端口契约快照（防回归）', () => {
     expect(spec.ports.out[0].id).toBe('out-markdown')
   })
 
-  it('代码节点两个输出均为非必填（互斥输出不能同时标记必填）', () => {
+  it('代码节点以默认 out-output 作为静态契约，实例可解析为命名输出端口', () => {
     const spec = getNodeType('code')!
-    for (const port of spec.ports.out) {
-      expect(port.required).toBe(false)
-    }
+    expect(spec.contractVersion).toBe(2)
+    expect(snapshotPorts(spec.ports.out)).toEqual([
+      { id: 'out-output', dir: 'out', type: 'any', required: true, cardinality: 'one' }
+    ])
   })
 
   it('处理节点使用 any 类型端口（仅通用处理类允许）', () => {
@@ -196,5 +199,28 @@ describe('关键端口契约快照（防回归）', () => {
     const outItems = spec.ports.out.find((p) => p.id === 'out-items')!
     expect(outItems.type).toBe('json')
     expect(outItems.schema).toEqual({ id: 'list.items', version: 1 })
+  })
+
+  it('导演台：分镜/参考图/机位输入，发布帧/视频/机位/工程摘要输出', () => {
+    const spec = getNodeType('director')!
+    expect(spec.executionMode).toBe('manual-publish')
+    expect(spec.ports.in.map((port) => port.id).sort()).toEqual([
+      'in-camera-preset',
+      'in-reference-images',
+      'in-storyboard'
+    ])
+    expect(spec.ports.out.map((port) => port.id).sort()).toEqual([
+      'out-camera',
+      'out-frame',
+      'out-preview-video',
+      'out-project'
+    ])
+    expect(spec.ports.in.find((port) => port.id === 'in-reference-images')?.cardinality).toBe(
+      'many'
+    )
+    expect(spec.ports.out.find((port) => port.id === 'out-camera')?.schema).toEqual({
+      id: 'previs.camera',
+      version: 1
+    })
   })
 })

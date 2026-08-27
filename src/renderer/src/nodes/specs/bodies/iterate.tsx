@@ -19,7 +19,6 @@ function enforceConfig(c: IterateConfig): IterateConfig {
     itemVar: c.itemVar || 'item',
     onFailure: c.onFailure,
     maxRetries: c.maxRetries < 0 ? 0 : c.maxRetries,
-    concurrency: c.concurrency < 1 ? 1 : c.concurrency,
     limit: c.limit < 0 ? 0 : c.limit
   }
 }
@@ -42,36 +41,19 @@ function summaryFromResults(results: (IterateItemResult | null)[] | undefined): 
   return `共 ${results.length} 项 · 成功 ${done} · 失败 ${failed} · 跳过 ${skipped}${productSuffix}`
 }
 
-/** 从 shape.props.text 中解析执行器上报的中间进度（运行中 _progress 字段）。 */
-function parseIterateProgress(text: string): { done: number; total: number } | null {
-  if (!text) return null
-  try {
-    const v = JSON.parse(text) as { _progress?: unknown }
-    if (v && typeof v._progress === 'object' && v._progress !== null) {
-      const p = v._progress as { done?: unknown; total?: unknown }
-      if (typeof p.done === 'number' && typeof p.total === 'number' && p.total > 0) {
-        return { done: p.done, total: p.total }
-      }
-    }
-  } catch {
-    // 忽略
-  }
-  return null
-}
-
 export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
   const data = parseIterate(shape.props.text)
-  const result = parseIterateResult(shape.props.text)
+  // 运行结果从 meta.nodeResult 读取（配置/结果分离）。
+  const result = parseIterateResult(
+    typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
+  )
   const updateConfig = (next: IterateConfig): void => {
-    // 保留已有运行结果（items），避免调整并发/限数/失败策略等参数时清空历史批量结果（A4）
-    const prev = parseIterateResult(shape.props.text)
-    const payload: Record<string, unknown> = { ...enforceConfig(next) }
-    if (prev) (payload as { items?: IterateItemResult[] }).items = prev.items
     editor.updateShape({
       id: shape.id,
       type: 'node-card',
-      props: { text: JSON.stringify(payload) }
+      // 配置写入只序列化配置字段，不再带上历史运行结果（结果在 meta）
+      props: { text: JSON.stringify(enforceConfig(next)) }
     })
   }
   // 下游循环体数量：通过当前节点的输出边推算（NodeContractPanel 之外简单估算）
@@ -100,16 +82,6 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
           />
         </label>
         <div className="ai-row ai-row-num">
-          <label>
-            <span className="ai-row-label">并发</span>
-            <input
-              type="number"
-              min="1"
-              value={data.concurrency}
-              onPointerDown={(e) => stopEventPropagation(e)}
-              onChange={(e) => updateConfig({ ...data, concurrency: Number(e.target.value) || 1 })}
-            />
-          </label>
           <label>
             <span className="ai-row-label">限数</span>
             <input
@@ -153,30 +125,13 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
       </div>
       <div className="iterate-meta">
         <span>下游循环体节点：{downstreamCount} 个</span>
-        {(() => {
-          // 运行中：显示进度条 + 百分比
-          const progress = parseIterateProgress(shape.props.text)
-          const isRunning = shape.props.exec === 'running'
-          if (isRunning && progress) {
-            const pct = Math.round((progress.done / progress.total) * 100)
-            return (
-              <div className="iterate-progress-wrap">
-                <div className="iterate-progress-bar">
-                  <div className="iterate-progress-fill" style={{ width: `${pct}%` }} />
-                </div>
-                <span className="iterate-progress-text">
-                  运行中 {progress.done}/{progress.total} · {pct}%
-                </span>
-              </div>
-            )
-          }
-          // 已完成：显示汇总
-          return (
-            <span className={result ? 'iterate-hint has-result' : 'iterate-hint'}>
-              {result ? summaryFromResults(result.items) : '（尚未运行）'}
-            </span>
-          )
-        })()}
+        <span className={result ? 'iterate-hint has-result' : 'iterate-hint'}>
+          {shape.props.exec === 'running'
+            ? '正在按顺序处理…'
+            : result
+              ? summaryFromResults(result.items)
+              : '（尚未运行）'}
+        </span>
       </div>
     </div>
   )

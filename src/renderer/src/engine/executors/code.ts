@@ -2,10 +2,11 @@
 // 支持 Coze 风格 async function main(args) 写法和旧版纯代码片段（向后兼容）。
 // 支持自定义参数端口：用户可在 UI 表格中声明额外输入参数，每个参数生成一个独立输入端口。
 import type { PortType } from '@shared/types'
-import { inputJson, inputText } from '../contracts'
+import { inputJson, inputText, inputValue } from '../contracts'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
 import { runCodeTransform } from '../codeRuntime'
 import { parseJsonObj, type VariableValueType } from './shared'
+import type { NodeValue } from '../../nodes/nodeValues'
 
 /** 自定义参数声明：用户在 UI 表格中添加的额外输入端口。 */
 export interface CodeParam {
@@ -62,10 +63,16 @@ export function paramPortId(name: string): string {
   return `in-param-${sanitizePortId(name)}`
 }
 
+/** 根据代码输出变量名生成稳定输出端口 ID。 */
+export function outputPortId(name: string): string {
+  return `out-${sanitizePortId(name)}`
+}
+
 export function parseCodeConfigs(text: string): CodeConfig {
   const value = parseJsonObj(text)
   if (value && typeof value.source === 'string') {
     const rawParams = Array.isArray(value.params) ? value.params : []
+    const seenPortIds = new Set<string>()
     const params: CodeParam[] = rawParams
       .filter((p): p is Record<string, unknown> => typeof p === 'object' && p !== null)
       .map((p) => ({
@@ -74,7 +81,13 @@ export function parseCodeConfigs(text: string): CodeConfig {
           ? (p.type as VariableValueType)
           : 'any'
       }))
-      .filter((p) => p.name.trim())
+      .filter((p) => {
+        if (!p.name.trim()) return false
+        const id = paramPortId(p.name)
+        if (seenPortIds.has(id)) return false
+        seenPortIds.add(id)
+        return true
+      })
     return {
       source: value.source,
       inputName: typeof value.inputName === 'string' ? value.inputName : 'input',
@@ -98,6 +111,20 @@ export function parseCodeConfigs(text: string): CodeConfig {
   }
 }
 
+/** 把契约层 NodeValue 还原为代码运行时可消费的普通值。 */
+function toCodeArgument(value: NodeValue | null): unknown {
+  if (!value) return undefined
+  if (value.kind === 'text' || value.kind === 'markdown') return value.text
+  if (value.kind === 'json') return value.data
+  // 媒体在代码中传递的是可序列化引用，不暴露二进制内容。
+  return {
+    kind: value.kind,
+    mediaId: value.mediaId,
+    mediaPath: value.mediaPath,
+    mime: value.mime
+  }
+}
+
 export const codeExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
   const data = parseCodeConfigs(ctx.shape.props.text)
   const textInputs = inputText(ctx.inputs, 'in-text')
@@ -109,6 +136,8 @@ export const codeExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecu
     const portId = paramPortId(param.name)
     if (param.type === 'string') {
       customArgs[param.name] = inputText(ctx.inputs, portId)
+    } else if (param.type === 'any') {
+      customArgs[param.name] = toCodeArgument(inputValue(ctx.inputs, portId))
     } else {
       const jsons = inputJson(ctx.inputs, portId)
       customArgs[param.name] =

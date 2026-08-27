@@ -97,8 +97,8 @@ describe('契约版本稳定性（防破坏性变化漏升版本）', () => {
     'iterate'
   ]
 
-  it.each(types)('节点 %s 契约版本为 1（破坏性端口变化时必须递增）', (type) => {
+  it.each(types)('节点 %s 的契约版本与已发布契约一致', (type) => {
     const spec = getNodeType(type)
-    expect(spec?.contractVersion).toBe(1)
+    expect(spec?.contractVersion).toBe(type === 'code' ? 2 : 1)
   })
 })

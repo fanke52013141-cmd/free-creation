@@ -308,7 +308,9 @@ export function deriveGraph(editor: Editor): {
     if (shape.type === 'node-card') {
       const s = shape as NodeCardShape
       const spec = getNodeType(s.props.nodeType)
-      const resolved = spec ? getNodePorts(spec, s) : { in: [] as PortDecl[], out: [] as PortDecl[] }
+      const resolved = spec
+        ? getNodePorts(spec, s)
+        : { in: [] as PortDecl[], out: [] as PortDecl[] }
       const ports: PortDecl[] = [...resolved.in, ...resolved.out]
       nodes.push({
         id: s.id,
@@ -372,7 +374,9 @@ export function gatherUpstreamText(
     const fromPort = shape.meta?.fromPort as string | undefined
     if (!fromPort) continue
     const output = projectNodeOutputs(src)[fromPort]
-    if (output?.kind === 'text' && output.text.trim()) parts.push(output.text.trim())
+    if ((output?.kind === 'text' || output?.kind === 'markdown') && output.text.trim()) {
+      parts.push(output.text.trim())
+    }
   }
   return parts.join('\n\n---\n\n')
 }
@@ -402,7 +406,7 @@ export function gatherUpstreamJson(
 }
 
 /** 读取指定媒体输入端口的第一个真实资产输出；图片资产与生图节点使用相同协议。 */
-export function gatherUpstreamMedia<K extends 'image' | 'video' | 'audio'>(
+export function gatherUpstreamMedia<K extends 'image' | 'video' | 'audio' | 'file'>(
   editor: Editor,
   targetNodeId: TLShapeId,
   targetPortId: string,
@@ -425,6 +429,36 @@ export function gatherUpstreamMedia<K extends 'image' | 'video' | 'audio'>(
     if (output?.kind === kind) return output as Extract<NodeValue, { kind: K }>
   }
   return null
+}
+
+/**
+ * 收集某个 many 媒体端口的所有真实资产输出，顺序遵循画布边的保存顺序。
+ * 交互式节点（如导演台）可把它显示为资源列表，但不得通过节点类型或标题猜测来源。
+ */
+export function gatherUpstreamMediaList<K extends 'image' | 'video' | 'audio' | 'file'>(
+  editor: Editor,
+  targetNodeId: TLShapeId,
+  targetPortId: string,
+  kind: K
+): Extract<NodeValue, { kind: K }>[] {
+  const assets: Extract<NodeValue, { kind: K }>[] = []
+  for (const shape of editor.getCurrentPageShapes()) {
+    if (shape.type !== 'arrow') continue
+    const { start, end } = getArrowBindings(editor, shape.id)
+    if (
+      !start ||
+      !end ||
+      end.toId !== targetNodeId ||
+      shape.meta?.toPort !== targetPortId ||
+      typeof shape.meta?.fromPort !== 'string'
+    )
+      continue
+    const source = editor.getShape<NodeCardShape>(start.toId)
+    if (!source || source.type !== 'node-card') continue
+    const output = projectNodeOutputs(source)[shape.meta.fromPort]
+    if (output?.kind === kind) assets.push(output as Extract<NodeValue, { kind: K }>)
+  }
+  return assets
 }
 
 export function hasIncomingConnection(

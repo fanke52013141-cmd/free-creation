@@ -7,6 +7,7 @@ import {
   AiProcessBody,
   ChatBody,
   CodeBody,
+  DirectorBody,
   ImageBody,
   ImageGenerateBody,
   IterateBody,
@@ -23,6 +24,7 @@ import { chatExecutor } from '../../engine/executors/chat'
 import {
   codeExecutor,
   mapVarTypeToPortType,
+  outputPortId,
   paramPortId,
   parseCodeConfigs
 } from '../../engine/executors/code'
@@ -35,6 +37,23 @@ import { scriptExecutor } from '../../engine/executors/script'
 import { storyboardExecutor } from '../../engine/executors/storyboard'
 import { textExecutor } from '../../engine/executors/text'
 import { videoExecutor } from '../../engine/executors/video'
+import { directorExecutor } from '../../engine/executors/director'
+import {
+  projectAiProcessOutputs,
+  projectAudioOutputs,
+  projectChatOutputs,
+  projectCodeOutputs,
+  projectDirectorOutputs,
+  projectImageGenOutputs,
+  projectImageOutputs,
+  projectIterateOutputs,
+  projectJsonOutputs,
+  projectProcessorOutputs,
+  projectScriptOutputs,
+  projectStoryboardOutputs,
+  projectTextOutputs,
+  projectVideoOutputs
+} from './outputProjections'
 
 interface PortOptions {
   required?: boolean
@@ -79,6 +98,8 @@ const output = (
 const JSON_ANY: PortSchemaRef = { id: 'json.any', version: 1 }
 const STORYBOARD_SHOTS: PortSchemaRef = { id: 'storyboard.shots', version: 1 }
 const LIST_ITEMS: PortSchemaRef = { id: 'list.items', version: 1 }
+const PREVIS_CAMERA: PortSchemaRef = { id: 'previs.camera', version: 1 }
+const PREVIS_PROJECT: PortSchemaRef = { id: 'previs.project', version: 1 }
 
 export function registerBaseNodeTypes(): void {
   registerNodeType({
@@ -97,6 +118,7 @@ export function registerBaseNodeTypes(): void {
       ],
       out: [output('out-text', '文本', 'text', '节点最终保存的纯文本内容。')]
     },
+    projectOutputs: projectTextOutputs,
     executor: textExecutor,
     Body: TextBody
   })
@@ -112,6 +134,7 @@ export function registerBaseNodeTypes(): void {
       in: [],
       out: [output('out-image', '图片', 'image', '已导入并落盘的图片资产引用。')]
     },
+    projectOutputs: projectImageOutputs,
     executor: imageExecutor,
     Body: ImageBody
   })
@@ -132,6 +155,7 @@ export function registerBaseNodeTypes(): void {
       ],
       out: [output('out-image', '图片', 'image', '模型生成并落盘后的图片资产引用。')]
     },
+    projectOutputs: projectImageGenOutputs,
     executor: imageGenExecutor,
     Body: ImageGenerateBody
   })
@@ -152,6 +176,7 @@ export function registerBaseNodeTypes(): void {
       ],
       out: [output('out-video', '视频', 'video', '生成并落盘后的视频资产引用。')]
     },
+    projectOutputs: projectVideoOutputs,
     executor: videoExecutor,
     Body: VideoBody
   })
@@ -172,6 +197,7 @@ export function registerBaseNodeTypes(): void {
       ],
       out: [output('out-audio', '音频', 'audio', '导入或生成并落盘后的音频资产引用。')]
     },
+    projectOutputs: projectAudioOutputs,
     executor: audioExecutor,
     Body: AudioBody
   })
@@ -191,6 +217,7 @@ export function registerBaseNodeTypes(): void {
       ],
       out: [output('out-markdown', '回复', 'markdown', '模型最后一条回复，保留 Markdown 语义。')]
     },
+    projectOutputs: projectChatOutputs,
     executor: chatExecutor,
     Body: ChatBody
   })
@@ -223,6 +250,7 @@ export function registerScriptNodeType(): void {
         })
       ]
     },
+    projectOutputs: projectScriptOutputs,
     executor: scriptExecutor,
     Body: ScriptBody
   })
@@ -246,6 +274,7 @@ export function registerExtendedNodeTypes(): void {
       in: [input('in-value', '输入变量', 'any', '需要原样传递或后续转换的单个变量。')],
       out: [output('out-value', '输出变量', 'any', '处理完成后的变量；实际类型由配置决定。')]
     },
+    projectOutputs: projectProcessorOutputs,
     executor: processorExecutor,
     Body: ProcessorBody
   })
@@ -267,12 +296,13 @@ export function registerExtendedNodeTypes(): void {
       ],
       out: [output('out-json', '数据', 'json', '校验并格式化后的结构化值。', { schema: JSON_ANY })]
     },
+    projectOutputs: projectJsonOutputs,
     executor: jsonExecutor,
     Body: JsonBody
   })
   registerNodeType({
     type: 'code',
-    contractVersion: 1,
+    contractVersion: 2,
     label: '代码',
     icon: 'code',
     color: '#94a3b8',
@@ -289,26 +319,29 @@ export function registerExtendedNodeTypes(): void {
         })
       ],
       out: [
-        output('out-text', '文本输出', 'text', '代码 return 字符串时产生的文本结果。', {
-          required: false
-        }),
-        output('out-json', '数据输出', 'json', '代码 return 对象或数组时产生的结构化结果。', {
-          required: false,
-          schema: JSON_ANY
-        })
+        output(
+          'out-output',
+          '输出变量',
+          'any',
+          '代码 return 的默认输出变量；实际端口由节点配置解析。'
+        )
       ]
     },
     resolvePorts: (shape) => {
       const cfg = parseCodeConfigs(shape.props.text)
-      const paramPorts: PortDecl[] = cfg.params.map((p) => ({
-        id: paramPortId(p.name),
-        name: p.name,
-        dir: 'in',
-        type: mapVarTypeToPortType(p.type),
-        description: `自定义参数：${p.name}（${p.type}）`,
-        required: false,
-        cardinality: 'one'
-      }))
+      const paramPorts: PortDecl[] = cfg.params.map((p) => {
+        const type = mapVarTypeToPortType(p.type)
+        return {
+          id: paramPortId(p.name),
+          name: p.name,
+          dir: 'in',
+          type,
+          description: `自定义参数：${p.name}（${p.type}）`,
+          required: false,
+          cardinality: 'one',
+          ...(type === 'json' ? { schema: JSON_ANY } : {})
+        }
+      })
       return {
         in: [
           input('in-text', '文本输入', 'text', '代码运行时 input.text 读取的合并文本。', {
@@ -321,16 +354,19 @@ export function registerExtendedNodeTypes(): void {
           ...paramPorts
         ],
         out: [
-          output('out-text', '文本输出', 'text', '代码 return 字符串时产生的文本结果。', {
-            required: false
-          }),
-          output('out-json', '数据输出', 'json', '代码 return 对象或数组时产生的结构化结果。', {
-            required: false,
-            schema: JSON_ANY
-          })
+          output(
+            outputPortId(cfg.outputName),
+            cfg.outputName,
+            mapVarTypeToPortType(cfg.outputType),
+            `代码 return 写入变量 ${cfg.outputName}（${cfg.outputType}）。`,
+            {
+              ...(mapVarTypeToPortType(cfg.outputType) === 'json' ? { schema: JSON_ANY } : {})
+            }
+          )
         ]
       }
     },
+    projectOutputs: projectCodeOutputs,
     executor: codeExecutor,
     Body: CodeBody
   })
@@ -358,6 +394,7 @@ export function registerExtendedNodeTypes(): void {
         })
       ]
     },
+    projectOutputs: projectStoryboardOutputs,
     executor: storyboardExecutor,
     Body: StoryboardBody
   })
@@ -390,6 +427,7 @@ export function registerExtendedNodeTypes(): void {
         })
       ]
     },
+    projectOutputs: projectAiProcessOutputs,
     executor: aiProcessExecutor,
     Body: AiProcessBody
   })
@@ -401,7 +439,7 @@ export function registerExtendedNodeTypes(): void {
     color: '#8b5cf6',
     defaultSize: { w: 340, h: 260 },
     description:
-      '列表批处理控制：把 in-list 的每个元素作为一次「循环体」执行，逐项驱动下游子流程节点（如生图/视频/文本节点），并输出结构化结果列表。支持并发上限、失败策略、重试与取消，中止后可恢复未完成项。',
+      '列表批处理控制：把 in-list 的每个元素按顺序作为一次「循环体」执行，逐项驱动下游子流程节点（如生图/视频/文本节点），并输出结构化结果列表。支持失败策略、重试、限数与取消。',
     ports: {
       in: [
         input('in-list', '列表', 'json', '要逐项批量处理的列表（每个元素作为一次循环体输入）。', {
@@ -420,7 +458,61 @@ export function registerExtendedNodeTypes(): void {
         )
       ]
     },
+    projectOutputs: projectIterateOutputs,
     executor: iterateExecutor,
     Body: IterateBody
+  })
+  registerNodeType({
+    type: 'director',
+    contractVersion: 1,
+    label: '导演台',
+    icon: 'director',
+    color: '#f59e0b',
+    defaultSize: { w: 340, h: 260 },
+    description:
+      '镜头预演工作区。接收分镜、参考图与摄像机参数；只有用户在导演台明确发布后，帧、预演视频和摄像机参数才会成为下游真实输入。',
+    executionMode: 'manual-publish',
+    ports: {
+      in: [
+        input('in-storyboard', '分镜', 'json', '可选的分镜列表；在导演台中同步为镜头。', {
+          schema: STORYBOARD_SHOTS
+        }),
+        input(
+          'in-reference-images',
+          '参考图',
+          'image',
+          '人物、场景或构图参考图，会进入导演台资源区。',
+          {
+            cardinality: 'many'
+          }
+        ),
+        input('in-camera-preset', '机位参数', 'json', '可选的初始摄像机参数。', {
+          schema: PREVIS_CAMERA
+        })
+      ],
+      out: [
+        output('out-frame', '预演帧', 'image', '用户发布的当前镜头静帧。', { required: false }),
+        output('out-preview-video', '预演视频', 'video', '用户导出的 WebM 预演视频。', {
+          required: false
+        }),
+        output('out-camera', '机位参数', 'json', '已发布镜头的焦距、画幅、时长和机位参数。', {
+          required: false,
+          schema: PREVIS_CAMERA
+        }),
+        output(
+          'out-project',
+          '工程摘要',
+          'json',
+          '导演工程中可交换的镜头和机位摘要，不包含媒体二进制。',
+          {
+            required: false,
+            schema: PREVIS_PROJECT
+          }
+        )
+      ]
+    },
+    projectOutputs: projectDirectorOutputs,
+    executor: directorExecutor,
+    Body: DirectorBody
   })
 }

@@ -34,11 +34,6 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
   const isRunning = enginePhase === 'running' || enginePhase === 'stopping'
   const [showErrors, setShowErrors] = useState(true)
 
-  // 新一轮执行时重置错误面板可见性
-  useEffect(() => {
-    if (enginePhase === 'running') setShowErrors(true)
-  }, [enginePhase])
-
   // Ctrl+K 唤起搜索面板
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -47,9 +42,7 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
         const active = document.activeElement
         const typing =
           active instanceof HTMLElement &&
-          (active.tagName === 'INPUT' ||
-            active.tagName === 'TEXTAREA' ||
-            active.isContentEditable)
+          (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)
         if (typing) return
         e.preventDefault()
         useSearchStore.getState().toggle()
@@ -168,6 +161,8 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
               if (isRunning) {
                 engineStop?.()
               } else {
+                // 由用户发起新一轮运行时立即恢复错误面板；不在 effect 内同步 setState。
+                setShowErrors(true)
                 engineRun?.()
               }
             }}
@@ -234,14 +229,24 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
           {engineErrors.map((e, i) => (
             <div key={i} className="engine-error-item">
               <span className={`error-phase-badge phase-${e.phase ?? 'unknown'}`}>
-                {e.phase === 'input' ? '输入' : e.phase === 'execution' ? '执行' : e.phase === 'output' ? '输出' : '错误'}
+                {e.phase === 'input'
+                  ? '输入'
+                  : e.phase === 'execution'
+                    ? '执行'
+                    : e.phase === 'output'
+                      ? '输出'
+                      : '错误'}
               </span>
               <span className="error-label">{e.label}</span>
               <span className="error-reason" title={e.reason}>
                 {e.reason}
               </span>
               <span className="error-time">
-                {new Date(e.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                {new Date(e.timestamp).toLocaleTimeString('zh-CN', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit'
+                })}
               </span>
             </div>
           ))}

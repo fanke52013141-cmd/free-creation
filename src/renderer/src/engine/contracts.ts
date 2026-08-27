@@ -20,7 +20,7 @@ export interface ContractResult<T> {
 }
 
 function valueType(value: NodeValue): PortType {
-  return value.kind === 'text' ? 'text' : value.kind
+  return value.kind
 }
 
 function valueMatchesPort(value: NodeValue, port: PortDecl): boolean {
@@ -171,7 +171,9 @@ export function inputPackets(inputs: ContractInputMap, portId: string): readonly
 
 export function inputText(inputs: ContractInputMap, portId: string): string {
   return inputPackets(inputs, portId)
-    .map((packet) => (packet.value.kind === 'text' ? packet.value.text : ''))
+    .map((packet) =>
+      packet.value.kind === 'text' || packet.value.kind === 'markdown' ? packet.value.text : ''
+    )
     .filter(Boolean)
     .join('\n\n---\n\n')
 }
@@ -182,7 +184,7 @@ export function inputJson(inputs: ContractInputMap, portId: string): unknown[] {
     .map((packet) => (packet.value.kind === 'json' ? packet.value.data : null))
 }
 
-export function inputMedia<K extends 'image' | 'video' | 'audio'>(
+export function inputMedia<K extends 'image' | 'video' | 'audio' | 'file'>(
   inputs: ContractInputMap,
   portId: string,
   kind: K

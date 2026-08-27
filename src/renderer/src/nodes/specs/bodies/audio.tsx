@@ -4,7 +4,7 @@ import { stopEventPropagation, useEditor } from 'tldraw'
 import { mediaUrl, type NodeBodyProps } from '../../registry'
 import { toast } from '../../../stores/toast'
 import { markUndoPoint } from '../../../canvas/history'
-import { gatherUpstreamText } from '../../../canvas/graph'
+import { runNodeManually } from '../../../engine/executor'
 import { useAppStore } from '../../../stores/app'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { Icon } from '../../../components/Icon'
@@ -112,13 +112,20 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
       audioRef.current?.pause()
       setPlaying(false)
     } else {
-      const el = audioRef.current ?? new Audio(mediaUrl(shape.props.mediaPath))
-      audioRef.current = el
-      el.loop = true
-      el.currentTime = 0
-      void el.play().then(() => setPlaying(true))
-      el.onended = () => setPlaying(false)
-      el.onpause = () => setPlaying(false)
+      // 先在局部变量上配置新元素，再写入 ref；避免把 ref 中的可变对象当作状态直接修改。
+      const el = audioRef.current
+      if (el) {
+        el.currentTime = 0
+        void el.play().then(() => setPlaying(true))
+        return
+      }
+      const created = new Audio(mediaUrl(shape.props.mediaPath))
+      created.loop = true
+      created.currentTime = 0
+      created.onended = () => setPlaying(false)
+      created.onpause = () => setPlaying(false)
+      audioRef.current = created
+      void created.play().then(() => setPlaying(true))
     }
   }
 
@@ -135,34 +142,15 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   }
 
   const generate = async (): Promise<void> => {
-    const opt = options.find((o) => o.key === data.modelKey)
-    if (!opt) return toast('请先选择音频模型')
-    const upstream = gatherUpstreamText(editor, shape.id)
-    const text = upstream ? `${upstream}\n\n---\n\n${draft.trim()}` : draft.trim()
-    if (!text) return toast('请输入要朗读的文本或连接上游文本')
     if (!project) return toast('项目未就绪')
+    // 文本与配置先落到节点，再由统一执行路径填充真实上游输入。
+    update({ ...data, mode: 'generate', text: draft })
     setBusy(true)
-    const res = await window.api.gateway.audioGenerate({
-      projectId: project.id,
-      providerId: opt.provider.id,
-      modelId: opt.model.id,
-      text,
-      voice: data.voice,
-      format: data.format
-    })
-    setBusy(false)
-    if (!res.ok) return toast(`生成失败：${res.error.message}`)
-    editor.updateShape({
-      id: shape.id,
-      type: 'node-card',
-      props: {
-        mediaId: res.data.id,
-        mediaPath: res.data.path,
-        mediaMime: res.data.mime,
-        title: res.data.name || res.data.id
-      }
-    })
-    markUndoPoint(editor, 'audio-gen')
+    try {
+      await runNodeManually(editor, project.id, providers, shape.id)
+    } finally {
+      setBusy(false)
+    }
   }
 
   // ── 已有音频文件：播放器视图（上传或生成共用） ──

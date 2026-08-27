@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest'
 import { jsonExecutor } from '@renderer/engine/executors/json'
 import { processorExecutor } from '@renderer/engine/executors/processor'
 import { storyboardExecutor } from '@renderer/engine/executors/storyboard'
+import { directorExecutor } from '@renderer/engine/executors/director'
 import type { NodeExecutionContext, NodeExecutionResult } from '@renderer/engine/executor-types'
 import type { NodeValue } from '@renderer/nodes/nodeValues'
 import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
@@ -263,12 +264,60 @@ describe('storyboardExecutor · 分镜解析分支', () => {
   })
 })
 
+describe('directorExecutor · 手动发布门禁', () => {
+  const camera = {
+    x: 0,
+    y: 1.6,
+    z: 5,
+    heading: 0,
+    pitch: 0,
+    focalLengthMm: 35,
+    aspectRatio: '16:9',
+    durationSec: 5,
+    fps: 25
+  }
+
+  it('没有已发布的媒体资产时跳过，不伪装成工作流成功', () => {
+    const { ctx } = makeCtx({
+      nodeType: 'director',
+      meta: {
+        nodeResult: JSON.stringify({
+          kind: 'director-publish',
+          version: 1,
+          publishedAt: 1,
+          shotId: 'shot-1',
+          camera
+        })
+      }
+    })
+    expect(directorExecutor(ctx)).toMatchObject({ status: 'skipped' })
+  })
+
+  it('有合法发布帧时允许工作流复用已发布输出', () => {
+    const { ctx } = makeCtx({
+      nodeType: 'director',
+      meta: {
+        nodeResult: JSON.stringify({
+          kind: 'director-publish',
+          version: 1,
+          publishedAt: 1,
+          shotId: 'shot-1',
+          camera,
+          frame: { mediaId: 'asset-1', mediaPath: 'projects/p/frame.png', mime: 'image/png' }
+        })
+      }
+    })
+    expect(directorExecutor(ctx)).toEqual({ status: 'done' })
+  })
+})
+
 describe('执行器返回类型完整性', () => {
   it('所有执行器返回的对象 status 限于 done/skipped/failed', () => {
     const results: NodeExecutionResult[] = []
     results.push(jsonExecutor(makeCtx({ nodeType: 'json', text: '{}' }).ctx))
     results.push(processorExecutor(makeCtx({ nodeType: 'processor', text: '' }).ctx))
     results.push(storyboardExecutor(makeCtx({ nodeType: 'storyboard', text: '' }).ctx))
+    results.push(directorExecutor(makeCtx({ nodeType: 'director', text: '' }).ctx))
     for (const r of results) {
       expect(['done', 'skipped', 'failed']).toContain(r.status)
     }

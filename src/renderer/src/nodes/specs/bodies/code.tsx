@@ -10,6 +10,7 @@ import { Icon } from '../../../components/Icon'
 import { useWheelScroll, VARIABLE_TYPES, type VariableValueType } from './shared'
 import { useGatewayStore, findTextModel } from '../../../stores/gateway'
 import { waitForChat, parseJsonObj } from '../../../engine/executors/shared'
+import { sanitizePortId } from '../../../engine/executors/code'
 
 interface CodeParam {
   name: string
@@ -73,6 +74,18 @@ function parseCodeConfig(text: string): CodeConfig {
     outputType: 'any',
     params: []
   }
+}
+
+/** 动态参数端口以归一化 ID 寻址；提前显式提示碰撞，不能让两个表项悄悄共用端口。 */
+function duplicateParamPortIds(params: CodeParam[]): string[] {
+  const seen = new Set<string>()
+  const duplicates = new Set<string>()
+  for (const param of params) {
+    const id = sanitizePortId(param.name)
+    if (seen.has(id)) duplicates.add(id)
+    seen.add(id)
+  }
+  return [...duplicates]
 }
 
 /** 从 shape.meta.nodeResult 解析上次执行结果（成功摘要或错误信息）。 */
@@ -279,6 +292,7 @@ const CODE_TEMPLATE = `async function main(args) {
 export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
   const data = parseCodeConfig(shape.props.text)
+  const duplicateParamIds = duplicateParamPortIds(data.params)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(data.source)
   const [generating, setGenerating] = useState(false)
@@ -573,6 +587,11 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
                 </button>
               </div>
             ))}
+          </div>
+        )}
+        {duplicateParamIds.length > 0 && (
+          <div className="code-ai-error">
+            输入参数名称归一化后重复：{duplicateParamIds.join('、')}。请修改其中一个名称。
           </div>
         )}
         {data.params.length === 0 && (

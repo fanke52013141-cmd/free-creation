@@ -20,8 +20,6 @@ export interface IterateConfig {
   onFailure: 'skip' | 'fail' | 'retry'
   /** retry 模式每项最多重试次数（不含首次）。 */
   maxRetries: number
-  /** 并发上限（同时执行的循环体数量）。 */
-  concurrency: number
   /** 最大处理条数；0 表示不限。 */
   limit: number
 }
@@ -45,7 +43,7 @@ export interface IterateResult {
 
 export function parseIterate(text: string): IterateConfig {
   if (!text) {
-    return { itemVar: 'item', onFailure: 'skip', maxRetries: 0, concurrency: 2, limit: 0 }
+    return { itemVar: 'item', onFailure: 'skip', maxRetries: 0, limit: 0 }
   }
   try {
     const value = JSON.parse(text) as Record<string, unknown>
@@ -54,11 +52,10 @@ export function parseIterate(text: string): IterateConfig {
       onFailure:
         value.onFailure === 'fail' || value.onFailure === 'retry' ? value.onFailure : 'skip',
       maxRetries: typeof value.maxRetries === 'number' ? Math.max(0, value.maxRetries) : 0,
-      concurrency: typeof value.concurrency === 'number' ? Math.max(1, value.concurrency) : 2,
       limit: typeof value.limit === 'number' ? Math.max(0, value.limit) : 0
     }
   } catch {
-    return { itemVar: 'item', onFailure: 'skip', maxRetries: 0, concurrency: 2, limit: 0 }
+    return { itemVar: 'item', onFailure: 'skip', maxRetries: 0, limit: 0 }
   }
 }
 
@@ -172,10 +169,9 @@ export const iterateExecutor = async (ctx: NodeExecutionContext): Promise<NodeEx
   const results: Array<IterateItemResult | undefined> = new Array(items.length)
   let failedAny = false
 
-  // 顺序执行：config.concurrency 当前被忽略（字段保留以兼容已保存的配置）。
-  // 迭代体的下游节点在画布上是单例，其持久状态（mediaPath 等）与运行输出登记
-  // （ctx.outputs）是共享可变的；并发跑多项会互相覆盖、产出错乱数据。
-  // 要安全恢复并发，需先实现 per-item 节点实例化（见 ROADMAP / 代码审查 P0）。
+  // 严格串行：迭代体的下游节点在画布上是单例，其持久状态（mediaPath 等）与
+  // 运行输出登记是共享可变的；并行跑多项会互相覆盖、产出错乱数据。要支持并行，
+  // 必须先引入每项独立的运行态，而不是暴露一个无法兑现的并发配置。
   for (let idx = 0; idx < items.length; idx += 1) {
     if (ctx.signal.cancelled) break
     const item = items[idx] as Record<string, unknown>
@@ -209,7 +205,9 @@ export const iterateExecutor = async (ctx: NodeExecutionContext): Promise<NodeEx
     }
   }
   const data: IterateResult = { items: results as IterateItemResult[] }
-  ctx.updateProps({ text: JSON.stringify({ ...config, items: data.items }) })
+  // 配置/结果分离：props.text 只存配置，运行结果 { items } 走 meta（updateResult）。
+  // 输出投影（nodeValues.ts）从 meta.nodeResult 读取 items。
+  ctx.updateProps({ text: JSON.stringify(config) })
   ctx.updateResult(JSON.stringify(data))
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
   if (failedAny && config.onFailure === 'fail')

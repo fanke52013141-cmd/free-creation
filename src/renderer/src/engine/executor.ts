@@ -20,6 +20,12 @@ import { getNodeType } from '../nodes/registry'
 import { projectNodeOutputs } from '../nodes/nodeValues'
 import { toast } from '../stores/toast'
 import { useEngineStore } from './store'
+import {
+  inputSources,
+  readNodeRunRecord,
+  type NodeRunRecord,
+  type NodeRunStatus
+} from './runRecord'
 
 interface CancelToken {
   cancelled: boolean
@@ -67,6 +73,33 @@ function topoSort(graph: { nodes: CanvasNode[]; edges: CanvasEdge[] }): CanvasNo
 
 function setExec(editor: Editor, id: TLShapeId, status: ExecStatus): void {
   editor.updateShape({ id, type: 'node-card', props: { exec: status } })
+}
+
+function writeRunRecord(editor: Editor, id: TLShapeId, record: NodeRunRecord): void {
+  const current = editor.getShape<NodeCardShape>(id)
+  editor.updateShape({
+    id,
+    type: 'node-card',
+    // tldraw meta 只接受 JSON 值；序列化同时确保审计记录不会带入不可持久化对象。
+    meta: { ...(current?.meta ?? {}), nodeRun: JSON.parse(JSON.stringify(record)) }
+  })
+}
+
+function finishRunRecord(
+  editor: Editor,
+  id: TLShapeId,
+  record: NodeRunRecord,
+  status: Exclude<NodeRunStatus, 'running'>,
+  detail: Pick<NodeRunRecord, 'outputPorts' | 'error'> = {}
+): void {
+  const finishedAt = Date.now()
+  writeRunRecord(editor, id, {
+    ...record,
+    status,
+    finishedAt,
+    durationMs: finishedAt - record.startedAt,
+    ...detail
+  })
 }
 
 /**
@@ -167,9 +200,18 @@ async function executeNodeOnce(
   const shape = editor.getShape<NodeCardShape>(shapeId)
   if (!shape) return { status: 'skipped', reason: '节点已不存在' }
 
+  const record: NodeRunRecord = {
+    runId: ctx.runId,
+    status: 'running',
+    startedAt: Date.now(),
+    inputs: {}
+  }
   setExec(editor, shapeId, 'running')
+  writeRunRecord(editor, shapeId, record)
   try {
     const collected = collectNodeInputs(ctx, node, item)
+    record.inputs = inputSources(collected.value)
+    writeRunRecord(editor, shapeId, record)
     if (collected.errors.length > 0) {
       throw new Error(`输入契约校验失败：${collected.errors.join('；')}`)
     }
@@ -177,6 +219,7 @@ async function executeNodeOnce(
     const latest = editor.getShape<NodeCardShape>(shapeId)
     if (ctx.token.cancelled) {
       setExec(editor, shapeId, 'cancelled')
+      finishRunRecord(editor, shapeId, record, 'cancelled')
       return { status: 'skipped', reason: '已取消' }
     }
     if (result.status === 'done') {
@@ -184,15 +227,22 @@ async function executeNodeOnce(
       const projected = buildOutputPackets(node, projectNodeOutputs(latest), ctx.runId)
       if (projected.errors.length > 0) {
         setExec(editor, shapeId, 'failed')
-        useEngineStore.getState().addError(
-          node.title || node.type,
-          `输出契约校验失败：${projected.errors.join('；')}`,
-          { nodeId: node.id, phase: 'output' }
-        )
+        useEngineStore
+          .getState()
+          .addError(node.title || node.type, `输出契约校验失败：${projected.errors.join('；')}`, {
+            nodeId: node.id,
+            phase: 'output'
+          })
+        finishRunRecord(editor, shapeId, record, 'failed', {
+          error: { phase: 'output', reason: `输出契约校验失败：${projected.errors.join('；')}` }
+        })
         return { status: 'failed', reason: '输出契约校验失败' }
       }
       ctx.outputs.set(node.id, projected.value)
       setExec(editor, shapeId, 'success')
+      finishRunRecord(editor, shapeId, record, 'success', {
+        outputPorts: Object.keys(projected.value)
+      })
       return { status: 'done' }
     }
     if (result.status === 'failed') {
@@ -201,13 +251,21 @@ async function executeNodeOnce(
         nodeId: node.id,
         phase: 'execution'
       })
+      finishRunRecord(editor, shapeId, record, 'failed', {
+        error: { phase: 'execution', reason: result.reason ?? '执行失败' }
+      })
     } else {
       setExec(editor, shapeId, 'idle')
+      finishRunRecord(editor, shapeId, record, 'skipped', {
+        error: result.reason ? { phase: 'execution', reason: result.reason } : undefined
+      })
     }
     return result
   } catch (error) {
-    if (ctx.token.cancelled) setExec(editor, shapeId, 'cancelled')
-    else {
+    if (ctx.token.cancelled) {
+      setExec(editor, shapeId, 'cancelled')
+      finishRunRecord(editor, shapeId, record, 'cancelled')
+    } else {
       const reason = error instanceof Error ? error.message : String(error)
       const phase: 'input' | 'execution' = reason.includes('输入契约') ? 'input' : 'execution'
       setExec(editor, shapeId, 'failed')
@@ -215,6 +273,7 @@ async function executeNodeOnce(
         nodeId: node.id,
         phase
       })
+      finishRunRecord(editor, shapeId, record, 'failed', { error: { phase, reason } })
     }
     return { status: 'failed', reason: error instanceof Error ? error.message : String(error) }
   }
@@ -297,6 +356,75 @@ async function runSubflowForIterate(
   }
   if (failureReason) throw new Error(failureReason)
   return results
+}
+
+/**
+ * 以当前卡片的已持久化内容预填输出缓存，供单节点执行读取其真实上游输入。
+ * 这不会运行上游节点，也不会猜测节点类型；只使用统一输出投影与端口契约校验。
+ */
+function seedPersistedOutputs(ctx: WorkflowContext): void {
+  for (const node of ctx.graph.nodes) {
+    const shape = ctx.editor.getShape<NodeCardShape>(node.id as TLShapeId)
+    if (!shape) continue
+    // 有运行记录时，仅成功结果可作为手动运行的上游输入，避免失败节点遗留旧值。
+    const lastRun = readNodeRunRecord(shape.meta?.nodeRun)
+    if (lastRun && lastRun.status !== 'success') continue
+    const projected = buildOutputPackets(node, projectNodeOutputs(shape), ctx.runId)
+    if (projected.errors.length === 0 && Object.keys(projected.value).length > 0) {
+      ctx.outputs.set(node.id, projected.value)
+    }
+  }
+}
+
+/**
+ * 执行单个节点的统一入口。
+ *
+ * 卡片内“生成”必须经由本函数，而非直接调用网关：它会以当前画布中的真实连线
+ * 收集上游端口值，执行同一个节点执行器，并通过同一个输出投影、状态和错误通道收尾。
+ */
+export async function runNodeManually(
+  editor: Editor,
+  projectId: string,
+  providers: ProviderConfig[],
+  nodeId: TLShapeId
+): Promise<NodeExecutionResult> {
+  const store = useEngineStore.getState()
+  if (store.phase === 'running') return { status: 'skipped', reason: '已有任务正在运行' }
+
+  const graph = deriveGraph(editor)
+  const node = graph.nodes.find((item) => item.id === nodeId)
+  if (!node) return { status: 'skipped', reason: '节点不存在或尚未保存到画布' }
+
+  const token: CancelToken = { cancelled: false }
+  useEngineStore.getState().setStop(() => {
+    token.cancelled = true
+    useEngineStore.getState().setStopping()
+  })
+  store.beginRun(1)
+  const ctx: WorkflowContext = {
+    editor,
+    projectId,
+    providers,
+    token,
+    graph,
+    outputs: new Map<string, ContractOutputs>(),
+    runId: crypto.randomUUID()
+  }
+  seedPersistedOutputs(ctx)
+  const runSubflow = (request: SubflowRequest): Promise<Record<string, ContractOutputs>> =>
+    runSubflowForIterate(ctx, runSubflow, request)
+
+  store.setCurrent(node.title || node.type)
+  const result = await executeNodeOnce(ctx, node, runSubflow)
+  store.nodeDone()
+  useEngineStore.getState().endRun()
+  useEngineStore.getState().setStop(null)
+  markUndoPoint(editor, 'node-manual-run')
+
+  if (result.status === 'done') toast(`${node.title || node.type} 已完成`)
+  else if (result.status === 'failed') toast(`${node.title || node.type} 执行失败`)
+  else if (result.reason) toast(result.reason)
+  return result
 }
 
 export async function runWorkflow(

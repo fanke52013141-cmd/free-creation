@@ -16,6 +16,7 @@ export type NodeTypeId =
   | 'compose'
   | 'ai-process'
   | 'iterate'
+  | 'director'
 
 /**
  * 节点之间允许传递的数据类型。文本与 Markdown 都以字符串传输，但保留语义类型；
@@ -27,6 +28,13 @@ export type NodeTypeId =
 export type PortType = 'text' | 'markdown' | 'json' | 'image' | 'video' | 'audio' | 'file' | 'any'
 
 export type PortCardinality = 'one' | 'many'
+
+/**
+ * 节点的运行方式。
+ * auto：工作流可以直接调用执行器；manual-publish：节点拥有交互式工作区，只有用户
+ * 明确“发布”后才产生新的下游数据；display-only：仅显示数据，不参与执行。
+ */
+export type NodeExecutionMode = 'auto' | 'manual-publish' | 'display-only'
 
 /** JSON 端口的稳定结构标识。结构变化必须提升 version，不能静默修改旧版本。 */
 export interface PortSchemaRef {

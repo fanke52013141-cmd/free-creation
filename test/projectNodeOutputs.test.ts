@@ -96,7 +96,7 @@ describe('projectNodeOutputs · 对话节点（取最后一条助手回复）', 
       ]
     }
     const out = projectNodeOutputs(shape('chat', { text: JSON.stringify(data) }))
-    expect(out['out-markdown']).toEqual({ kind: 'text', text: '最新回复' })
+    expect(out['out-markdown']).toEqual({ kind: 'markdown', text: '最新回复' })
   })
 
   it('无助手消息时不产出输出', () => {
@@ -143,16 +143,28 @@ describe('projectNodeOutputs · 分镜板节点', () => {
 })
 
 describe('projectNodeOutputs · 代码节点（读 meta.nodeResult）', () => {
-  it('文本运行结果输出 out-text', () => {
+  it('文本运行结果输出实例定义的命名端口', () => {
     const result = JSON.stringify({ kind: 'text', text: '转换结果', variableName: 'output' })
-    const out = projectNodeOutputs(shape('code', {}, { nodeResult: result }))
-    expect(out['out-text']).toEqual({ kind: 'text', text: '转换结果' })
+    const out = projectNodeOutputs(
+      shape(
+        'code',
+        { text: JSON.stringify({ source: '', outputName: 'caption', outputType: 'string' }) },
+        { nodeResult: result }
+      )
+    )
+    expect(out['out-caption']).toEqual({ kind: 'text', text: '转换结果' })
   })
 
-  it('JSON 运行结果输出 out-json', () => {
+  it('JSON 运行结果输出实例定义的命名端口', () => {
     const result = JSON.stringify({ kind: 'json', data: { x: 1 }, variableName: 'output' })
-    const out = projectNodeOutputs(shape('code', {}, { nodeResult: result }))
-    expect(out['out-json']).toEqual({ kind: 'json', data: { x: 1 } })
+    const out = projectNodeOutputs(
+      shape(
+        'code',
+        { text: JSON.stringify({ source: '', outputName: 'payload', outputType: 'object' }) },
+        { nodeResult: result }
+      )
+    )
+    expect(out['out-payload']).toEqual({ kind: 'json', data: { x: 1 } })
   })
 
   it('无运行结果返回空', () => {
@@ -185,21 +197,22 @@ describe('projectNodeOutputs · 脚本节点（旧版兼容）', () => {
 })
 
 describe('projectNodeOutputs · AI 处理节点', () => {
+  // 配置/结果分离后，运行结果从 meta.nodeResult 读取
   it('text 结果输出 out-text', () => {
-    const text = JSON.stringify({ result: { kind: 'text', text: '转换结果' } })
-    const out = projectNodeOutputs(shape('ai-process', { text }))
+    const nodeResult = JSON.stringify({ kind: 'text', text: '转换结果' })
+    const out = projectNodeOutputs(shape('ai-process', {}, { nodeResult }))
     expect(out['out-text']).toEqual({ kind: 'text', text: '转换结果' })
   })
 
-  it('markdown 结果输出 out-markdown（kind 为 text 但端口语义为 markdown）', () => {
-    const text = JSON.stringify({ result: { kind: 'markdown', text: '# 标题' } })
-    const out = projectNodeOutputs(shape('ai-process', { text }))
-    expect(out['out-markdown']).toEqual({ kind: 'text', text: '# 标题' })
+  it('markdown 结果输出 out-markdown，并保留 Markdown 语义类型', () => {
+    const nodeResult = JSON.stringify({ kind: 'markdown', text: '# 标题' })
+    const out = projectNodeOutputs(shape('ai-process', {}, { nodeResult }))
+    expect(out['out-markdown']).toEqual({ kind: 'markdown', text: '# 标题' })
   })
 
   it('json 结果输出 out-json', () => {
-    const text = JSON.stringify({ result: { kind: 'json', data: { a: 1 } } })
-    const out = projectNodeOutputs(shape('ai-process', { text }))
+    const nodeResult = JSON.stringify({ kind: 'json', data: { a: 1 } })
+    const out = projectNodeOutputs(shape('ai-process', {}, { nodeResult }))
     expect(out['out-json']).toEqual({ kind: 'json', data: { a: 1 } })
   })
 
@@ -209,17 +222,21 @@ describe('projectNodeOutputs · AI 处理节点', () => {
   })
 
   it('text 结果为空白时不输出', () => {
-    const text = JSON.stringify({ result: { kind: 'text', text: '   ' } })
-    expect(projectNodeOutputs(shape('ai-process', { text }))).toEqual({})
+    const nodeResult = JSON.stringify({ kind: 'text', text: '   ' })
+    expect(projectNodeOutputs(shape('ai-process', {}, { nodeResult }))).toEqual({})
+  })
+
+  it('损坏的 nodeResult 不产出输出', () => {
+    expect(projectNodeOutputs(shape('ai-process', {}, { nodeResult: '{bad' }))).toEqual({})
   })
 })
 
 describe('projectNodeOutputs · 循环节点', () => {
-  it('有 items 时输出 out-items 裸数组（list.items@1 Schema）', () => {
-    const text = JSON.stringify({
+  it('从 meta.nodeResult 读取 items 并输出 out-items 裸数组（list.items@1 Schema）', () => {
+    const nodeResult = JSON.stringify({
       items: [{ status: 'done', source: { index: 0 } }]
     })
-    const out = projectNodeOutputs(shape('iterate', { text }))
+    const out = projectNodeOutputs(shape('iterate', {}, { nodeResult }))
     expect(out['out-items']?.kind).toBe('json')
     expect((out['out-items'] as { data: unknown }).data).toEqual([
       { status: 'done', source: { index: 0 } }
@@ -227,7 +244,66 @@ describe('projectNodeOutputs · 循环节点', () => {
   })
 
   it('无 items 时无输出', () => {
-    expect(projectNodeOutputs(shape('iterate', { text: '{}' }))).toEqual({})
+    expect(projectNodeOutputs(shape('iterate', {}, { nodeResult: JSON.stringify({}) }))).toEqual({})
     expect(projectNodeOutputs(shape('iterate'))).toEqual({})
+  })
+
+  it('损坏的 nodeResult 不产出输出', () => {
+    expect(projectNodeOutputs(shape('iterate', {}, { nodeResult: 'not-json' }))).toEqual({})
+  })
+})
+
+describe('projectNodeOutputs · 导演台节点', () => {
+  const project = {
+    version: 1,
+    activeShotId: 'shot-1',
+    shots: [
+      {
+        id: 'shot-1',
+        name: '镜头 01',
+        scene: '雨夜街口',
+        dialogue: '',
+        referenceMediaIds: [],
+        referenceMediaPaths: [],
+        actors: [],
+        camera: {
+          x: 0,
+          y: 1.6,
+          z: 5,
+          heading: 0,
+          pitch: 0,
+          focalLengthMm: 35,
+          aspectRatio: '16:9',
+          durationSec: 5,
+          fps: 25
+        }
+      }
+    ]
+  }
+
+  it('未发布时只输出工程摘要，不伪造媒体输出', () => {
+    const out = projectNodeOutputs(shape('director', { text: JSON.stringify(project) }))
+    expect(out['out-project']?.kind).toBe('json')
+    expect(out['out-frame']).toBeUndefined()
+    expect(out['out-preview-video']).toBeUndefined()
+    expect(out['out-camera']).toBeUndefined()
+  })
+
+  it('发布记录同时投影为帧、视频和机位参数', () => {
+    const record = {
+      kind: 'director-publish',
+      version: 1,
+      publishedAt: 1,
+      shotId: 'shot-1',
+      frame: { mediaId: 'img-1', mediaPath: 'projects/a/frame.png', mime: 'image/png' },
+      video: { mediaId: 'vid-1', mediaPath: 'projects/a/preview.webm', mime: 'video/webm' },
+      camera: project.shots[0].camera
+    }
+    const out = projectNodeOutputs(
+      shape('director', { text: JSON.stringify(project) }, { nodeResult: JSON.stringify(record) })
+    )
+    expect(out['out-frame']).toEqual({ kind: 'image', ...record.frame })
+    expect(out['out-preview-video']).toEqual({ kind: 'video', ...record.video })
+    expect(out['out-camera']).toEqual({ kind: 'json', data: record.camera })
   })
 })

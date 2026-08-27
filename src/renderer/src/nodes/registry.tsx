@@ -1,10 +1,11 @@
 // NodeType 注册表（扩展点①，见《技术框架与规范》§5.1）
 // 新增节点类型 = 写一份 Spec 并 register，核心零改动
-import type { NodeTypeId, PortDecl, PortType } from '@shared/types'
+import type { NodeExecutionMode, NodeTypeId, PortDecl, PortType } from '@shared/types'
 import { nodeSchemaRegistered } from '@shared/node-schemas'
 import type { NodeExecutor } from '../engine/executor-types'
 import type { NodeCardShape } from '../canvas/NodeCardShape'
 import type { IconName } from '../components/Icon'
+import type { RawNodeOutputs } from './nodeValues'
 
 export interface PreviewPayload {
   kind: 'image' | 'video' | 'audio'
@@ -31,6 +32,13 @@ export interface NodeTypeSpec {
   creatable?: boolean
   /** 输入/输出端口声明，连线类型校验与端口圆点渲染的依据 */
   ports: { in: PortDecl[]; out: PortDecl[] }
+  /**
+   * 已持久化状态到端口数据的投影。每个有输出端口的节点都必须提供，避免由中央
+   * switch 猜测节点类型；执行器只负责产生状态，投影只负责暴露已声明的输出。
+   */
+  projectOutputs?: (shape: NodeCardShape) => RawNodeOutputs
+  /** 节点运行方式；默认 auto。 */
+  executionMode?: NodeExecutionMode
   /**
    * 可选：根据节点实例配置动态解析端口。如果提供，优先于静态 ports 使用。
    * 用于代码节点等需要用户自定义输入端口的场景。
@@ -141,6 +149,17 @@ function validateNodeTypeSpec(spec: NodeTypeSpec): void {
   }
   if (!spec.label.trim()) errors.push('label 不能为空')
   if (!spec.description.trim()) errors.push('description 不能为空')
+  if (
+    spec.executionMode !== undefined &&
+    spec.executionMode !== 'auto' &&
+    spec.executionMode !== 'manual-publish' &&
+    spec.executionMode !== 'display-only'
+  ) {
+    errors.push('executionMode 必须是 auto、manual-publish 或 display-only')
+  }
+  if (spec.ports.out.length > 0 && !spec.projectOutputs) {
+    errors.push('存在输出端口时必须声明 projectOutputs')
+  }
   if (
     !Number.isFinite(spec.defaultSize.w) ||
     !Number.isFinite(spec.defaultSize.h) ||

@@ -6,6 +6,24 @@ import { parseAiProcess, type AiProcessConfig } from '../../../engine/executors/
 import { ModelSelect, NoModelHint, useWheelScroll } from './shared'
 import type { NodeBodyProps } from '../../registry'
 
+/** 从 meta.nodeResult 解析 AI 处理节点的上次运行结果。 */
+function parseStoredAiResult(stored: string): AiProcessConfig['result'] | undefined {
+  if (!stored) return undefined
+  try {
+    const value = JSON.parse(stored) as Record<string, unknown>
+    if (value.kind === 'text' || value.kind === 'markdown' || value.kind === 'json') {
+      return {
+        kind: value.kind,
+        ...(typeof value.text === 'string' ? { text: value.text } : {}),
+        ...('data' in value ? { data: value.data } : {})
+      } as AiProcessConfig['result']
+    }
+  } catch {
+    // 未产生过有效运行结果。
+  }
+  return undefined
+}
+
 const AI_SCHEMA_OPTIONS = [
   { id: 'json.any', version: 1, label: '通用 JSON（json.any@1）' },
   { id: 'storyboard.shots', version: 1, label: '分镜（storyboard.shots@1）' }
@@ -40,6 +58,10 @@ export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
   const loadProviders = useGatewayStore((s) => s.load)
   const openSettings = useGatewayStore((s) => s.openSettings)
   const data = parseAiProcess(shape.props.text)
+  // 运行结果从 meta.nodeResult 读取（配置/结果分离）；配置写入不再混入 result。
+  const storedResult = parseStoredAiResult(
+    typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
+  )
   const [editingSystem, setEditingSystem] = useState(false)
   const [systemDraft, setSystemDraft] = useState(data.system)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -66,7 +88,7 @@ export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
     if (systemDraft !== data.system) updateConfig({ ...data, system: systemDraft })
   }
 
-  const summary = resultSummary(data.result)
+  const summary = resultSummary(storedResult)
 
   return (
     <div className="ai-process-body" ref={scrollRef}>
