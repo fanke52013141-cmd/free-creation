@@ -1,353 +1,244 @@
 # Canvas Studio 开发交接文档
 
-> 最后更新：2026-08-24
+> 最后更新：2026-08-28
 >
-> 当前主分支：`main`
+> 当前分支：`main`
 >
-> 远程仓库：`https://github.com/fanke52013141-cmd/free-creation`
+> 当前基线提交：`797d0c9`（已推送 `origin/main`）
 >
-> 产品形态：单用户、本地优先的 Windows Electron 无限画布创作工具。
+> 远程仓库：https://github.com/fanke52013141-cmd/free-creation
+>
+> 产品定位：单用户、本地优先的 Windows Electron 无限画布创作工具。
 
-## 1. 接手者先读
+## 1. 接手前必须知道的边界
+
+- 不做多租户、账号、权限、强制教程或运营后台。
+- 保持现有页面格局；视觉和交互优化必须渐进式进行，不能重做左侧工具栏、顶部栏或画布操作方式。
+- 连线只表示真实的数据依赖：`source.outputs[sourcePortId] -> target.inputs[targetPortId]`。
+- 分组是 tldraw 的画布状态，不是节点；视频剪辑和成片合成应交给剪映等专业工具。
+- 图片资产节点与图片生成节点是两个不同能力；所有导入、粘贴或生成的媒体都必须成为可连接的节点资产。
+- 节点不是复合功能容器。复杂工作流优先由节点连线或工作流模板组成。
 
 开始修改前，按顺序阅读：
 
-1. [README.md](./README.md)：项目入口和常用命令。
-2. [NODE_CONTRACT_SPEC.md](./NODE_CONTRACT_SPEC.md)：节点、端口、连线、Schema 和执行协议的强制规范。
-3. [ROADMAP.md](./ROADMAP.md)：推荐的后续开发顺序和验收标准。
-4. 本文档：当前架构、关键决策、遗留风险和发布步骤。
+1. [README.md](./README.md)：启动、打包和本地数据位置。
+2. [NODE_CONTRACT_SPEC.md](./NODE_CONTRACT_SPEC.md)：强制的节点/端口/Schema/执行规范。
+3. [ROADMAP.md](./ROADMAP.md)：历史阶段记录与产品边界。
+4. 本文：当前状态、交接流程、已知边界和下一步计划。
 
-产品边界已经确定：
+## 2. 当前完成状态（R0–R4）
 
-- 只有一个本地用户，不做多租户和权限系统。
-- 不做强制教程。
-- 保持当前整体 UI 格局，不重新设计导航结构。
-- 分组是画布状态，不是业务节点。
-- 图片资产和图片生成是两种不同节点。
-- 视频合成交给剪映等工具，不在画布内实现时间线和成片合成。
-- 连线必须表示真实的输入输出依赖。
+本轮已在 `797d0c9` 完成并推送。核心不是再增加一批特例，而是让所有节点按同一契约运行。
 
-## 2. 快速启动
+| 阶段 | 已交付内容 | 验证结果 |
+| --- | --- | --- |
+| R0 | 统一节点输出投影、执行模式与运行记录；输出不再由中心 `switch` 猜测 | 注册门禁、投影测试、手动执行测试通过 |
+| R1 | 节点执行器自注册；全局运行器只负责编排、校验、状态与登记 | `executor.ts` 无节点类型分发主逻辑 |
+| R2 | 契约、Schema、连线矩阵、执行器和迁移自动化测试 | 14 个测试文件、374 项测试全部通过 |
+| R3 | AI 处理节点、可验证 JSON、剧本到分镜模板、右侧契约/设置/运行记录面板 | 输出模式与 Schema 均受校验 |
+| R4 | `list.items@1` 和串行迭代节点；导演台节点与手动发布输出 | 真实 Electron 中 PNG 帧与 WebM 均成功发布 |
 
-要求：Node.js 20+、pnpm 10、Windows 开发环境。
+### 本轮新增：导演台（`director`）
 
-```bash
+导演台是 `manual-publish` 节点，不会在“运行工作流”时擅自打开工作区或生成媒体。
+
+- 输入：`in-storyboard`（分镜 JSON）、`in-reference-images`（多张图片）、`in-camera-preset`（`previs.camera@1`）。
+- 输出：`out-frame`（PNG 图片）、`out-preview-video`（WebM 视频）、`out-camera`（机位 JSON）、`out-project`（工程摘要 JSON）。
+- 已发布的帧/视频才会成为下游的真实输入；损坏的发布记录或只有机位而没有媒体的记录会被视为未发布。
+- 当前预演视口是可发布的 2D Canvas 白模，不应对外称为真实 3D 编辑器；后续可在相同的数据协议上替换为 Three.js 视口。
+- 媒体导入 IPC 已支持图片和视频缓冲，视频上限为 200 MB；只有 Electron preload 有本地媒体写入能力，浏览器预览页会给出明确提示。
+
+## 3. 架构地图
+
+```text
+节点 Spec（职责/端口/投影/执行模式）
+        │
+        ├─ Body：卡片上的最小编辑界面
+        ├─ Executor：把已验证输入变成持久化运行结果
+        └─ projectOutputs：持久化状态映射为正式输出端口
+                │
+          executor.ts：拓扑、收集、验证、运行、登记
+                │
+      NodeValuePacket（nodeId + portId + value + runId）
+                │
+          下游端口的真实输入
+```
+
+| 位置 | 职责 |
+| --- | --- |
+| `src/shared/types/index.ts` | `NodeTypeId`、端口类型、执行模式等跨层类型 |
+| `src/shared/node-schemas.ts` | 版本化 JSON Schema 的注册与校验 |
+| `src/renderer/src/nodes/registry.tsx` | `NodeTypeSpec` 和注册时硬门禁 |
+| `src/renderer/src/nodes/specs/index.tsx` | 所有节点 Spec、端口、执行器与投影的注册入口 |
+| `src/renderer/src/nodes/specs/outputProjections.ts` | 每一种节点的持久化状态 → 输出端口映射 |
+| `src/renderer/src/nodes/nodeValues.ts` | 统一投影入口与持久化结果解析器 |
+| `src/renderer/src/engine/executor.ts` | 拓扑排序、输入收集、契约检查、执行状态、下游数据包登记 |
+| `src/renderer/src/engine/executors/` | 节点独立执行器；不向全局运行器加特例 |
+| `src/renderer/src/canvas/graph.ts` | 连线创建、类型/Schema/数量/环校验、按端口读取上游值 |
+| `src/renderer/src/canvas/NodeContractPanel.tsx` | 右侧“概览 / I/O / 设置 / 运行”详情面板 |
+| `src/renderer/src/canvas/DirectorStudioPanel.tsx` | 导演台独立全屏预演工作区 |
+| `src/main/ipc/media.ipc.ts` | 本地媒体导入、落盘与安全限制 |
+
+## 4. 节点清单与可用范围
+
+| 节点 | 主要输入 | 主要输出 | 当前说明 |
+| --- | --- | --- | --- |
+| 文本 | 多文本（可选） | `out-text` | 可用 |
+| 图片资产 | 无 | `out-image` | 导入、粘贴、拖入均应走此节点 |
+| 生图 | 文本、参考图 | `out-image` | 可用；支持尺寸、种子和重新生成 |
+| 视频 | 文本、首帧图 | `out-video` | 可用；依赖已配置视频供应商 |
+| 音频 | 音频、文本 | `out-audio` | 可用；依赖供应商 |
+| 对话 | 文本 | `out-markdown` | 多轮交互；保留 Markdown 语义 |
+| AI 处理 | 文本、JSON | text / markdown / JSON 之一 | 一次性、可复跑的工作流转换 |
+| 处理 | 动态值 | `out-value` | 通用透传/兜底，不承载业务规则 |
+| JSON | 文本、JSON | `out-json` | 结构化编辑与校验 |
+| 代码 | 文本、JSON、命名参数 | 命名输出端口 | 本地受限转换；变量名决定端口 ID |
+| 分镜板 | 分镜 JSON、兼容文本 | 分镜 JSON、摘要 | 可用 |
+| 迭代 | `list.items@1` | `out-items` | 串行批处理；尚无并发/断点续跑 |
+| 导演台 | 分镜、参考图、机位 | 帧、预演视频、机位、工程摘要 | 手动发布；当前为 2D 白模预演 |
+| 脚本 | 历史文本 | 分镜 JSON、文本 | 仅旧项目兼容，禁止新建 |
+
+当前注册 Schema：
+
+- `json.any@1`
+- `storyboard.shots@1`
+- `list.items@1`
+- `previs.camera@1`
+- `previs.project@1`
+
+## 5. 新节点接入：强制交接协议
+
+任何新增节点都必须完整通过以下顺序，缺任一步不合并：
+
+1. 先写清职责、输入、输出、错误语义和是否需要手动发布；不要先画 UI。
+2. 在 `NodeTypeId` 中加入稳定类型；端口 ID 一经发布不可随意重命名。
+3. 在 `node-schemas.ts` 注册所有专用 JSON Schema；业务 JSON 不得只声明裸 `json`。
+4. 在 `specs/index.tsx` 注册 `NodeTypeSpec`：端口、`executionMode`、`projectOutputs`、`executor` 和 Body 缺一不可。
+5. 将执行逻辑放入 `engine/executors/<node>.ts`；不要修改 `executor.ts` 增加 `nodeType` 分支。
+6. 将“持久化配置/运行结果 → 端口输出”的逻辑放入 `outputProjections.ts`；运行器和 UI 不得各写一份投影。
+7. Body 只做编辑与展示，不得扫描上游节点类型；读取上游值只能按目标 `portId`。
+8. 确认右侧契约面板能解释端口、连接来源、值预览和运行结果。
+9. 增加注册、Schema、投影、执行器、连线/迁移测试，并更新规范与本文。
+
+若端口或 Schema 有破坏性变化：提高 `contractVersion`，提供迁移或明确拒绝旧项目；绝不能静默猜端口。
+
+## 6. 接手与发布流程
+
+### 开始工作
+
+```powershell
+git fetch origin
+git status -sb
+git log --oneline -5
 pnpm install
+pnpm typecheck
+pnpm test
+pnpm build
 pnpm dev
 ```
 
-发布前检查：
+先确认本地没有无关文件和远程未合并提交，再开始修改。测试素材、API Key、SQLite、媒体和打包输出均不得提交。
 
-```bash
+### 合并前门禁
+
+```powershell
 pnpm typecheck
 pnpm lint
 pnpm test
 pnpm build
+git diff --check
+git status -sb
 ```
 
-Windows 打包：
-
-```bash
-pnpm build:win
-```
-
-测试与门禁：
-
-```bash
-pnpm test            # 节点契约与执行器测试（289 用例，~4 秒）
-pnpm test:watch      # 监听模式
-pnpm test:coverage   # 覆盖率报告
-```
-
-CI（`.github/workflows/ci.yml`）在每次推送/PR 自动运行 install → typecheck → lint → test → build，任一失败阻断合并。
-
-`better-sqlite3`、Electron 和 esbuild 等原生构建许可定义在根目录 `pnpm-workspace.yaml`。不要重新把已失效的 `pnpm.onlyBuiltDependencies` 放回 `package.json`。
-
-## 3. 技术栈
-
-| 层       | 技术                                                   |
-| -------- | ------------------------------------------------------ |
-| 桌面外壳 | Electron 39、electron-vite 5                           |
-| UI       | React 19、TypeScript 5.9                               |
-| 画布     | tldraw 4.5.12                                          |
-| 状态     | Zustand                                                |
-| 本地数据 | better-sqlite3 + 项目 JSON + 媒体目录                  |
-| 模型调用 | Vercel AI SDK、OpenAI-compatible、自定义异步视频适配器 |
-| Markdown | react-markdown + remark-gfm                            |
-| 包管理   | pnpm 10                                                |
-
-注意：`tldraw` 与 `@tldraw/tlschema` 必须保持完全相同的版本。
-
-## 4. 目录和职责
-
-```text
-src/
-├─ main/
-│  ├─ gateway/              模型供应商、对话、生图、视频任务
-│  ├─ ipc/                  Electron IPC 处理
-│  └─ store/                SQLite、项目和媒体仓库
-├─ preload/index.ts         安全暴露 window.api
-├─ shared/
-│  ├─ contracts/            IPC 通道与信封
-│  ├─ types/                跨进程领域类型
-│  └─ node-schemas.ts       JSON Schema 版本化验证仓库
-└─ renderer/src/
-   ├─ canvas/               tldraw 宿主、连线、分组、菜单和侧栏
-   ├─ engine/               工作流编排、契约收集、代码运行
-   ├─ nodes/                节点注册、输出投影和节点 UI
-   ├─ gateway/              模型供应商设置 UI
-   ├─ pages/                项目列表和画布页面
-   └─ stores/               Zustand 状态
-```
-
-关键文件：
-
-- `src/renderer/src/nodes/specs/index.tsx`：全部节点 Spec 和端口契约，并为每个节点注入自注册执行器。
-- `src/renderer/src/nodes/registry.tsx`：节点注册和注册时硬校验；`NodeTypeSpec.executor` 暴露执行器注入点。
-- `src/renderer/src/engine/executor-types.ts`：`NodeExecutor` 函数类型、`NodeExecutionContext`、`NodeExecutionResult`、`CancelSignal`。
-- `src/renderer/src/engine/executors/<node>.ts`：各节点自注册执行器（text/image/imageGen/video/audio/chat/script/json/processor/code/storyboard）。
-- `src/renderer/src/engine/executors/shared.ts`：执行器共享工具（提示词合并、JSON/分镜解析、对话/视频取消式等待）。
-- `src/renderer/src/nodes/nodeValues.ts`：节点持久化状态到端口输出的唯一投影。
-- `src/renderer/src/engine/contracts.ts`：输入收集、数据包和运行前后契约校验。
-- `src/renderer/src/engine/executor.ts`：全局工作流运行器（拓扑、收集、校验、执行、投影、登记），不含节点特例。
-- `src/renderer/src/canvas/graph.ts`：创建连线、类型/Schema/数量/环校验和图数据派生。
-- `src/renderer/src/canvas/NodeCardView.tsx`：统一节点壳、标题、端口和交互。
-- `src/renderer/src/canvas/NodeContractPanel.tsx`：I/O 契约、连接来源/去向和值预览。
-- `src/renderer/src/canvas/ChatSidePanel.tsx`：对话节点完整侧栏、Markdown 和参数设置。
-
-#### 节点 Body 目录约定（R6 拆分后）
-
-节点卡片内容区（各节点 Body）已按节点拆分到 `nodes/specs/bodies/` 目录，不再使用单个巨型 `bodies.tsx`：
-
-```text
-nodes/specs/bodies/
-├─ index.tsx        # 聚合 re-export 全部节点 Body（specs/index.tsx 从这里 import，路径 `./bodies` 不变）
-├─ shared.tsx       # 被多个节点 Body 复用的共享工具/组件（见下）
-├─ text.tsx         # TextBody
-├─ image.tsx        # ImageBody
-├─ image-gen.tsx    # ImageGenerateBody
-├─ video.tsx        # VideoBody
-├─ audio.tsx        # AudioBody
-├─ chat.tsx         # ChatBody
-├─ script.tsx       # ScriptBody
-├─ processor.tsx    # ProcessorBody
-├─ json.tsx         # JsonBody
-├─ code.tsx         # CodeBody
-├─ storyboard.tsx   # StoryboardBody
-├─ aiProcess.tsx    # AiProcessBody
-└─ iterate.tsx      # IterateBody
-```
-
-**新增/维护节点 Body 的约定**：
-
-1. 每个节点一个 Body 文件，放在 `bodies/` 目录下；在 `bodies/index.tsx` 里 `export { XxxBody } from './xxx'`。
-2. 复用共享工具时从 `./shared` 导入（`ModelSelect`、`NoModelHint`、`useClickGuard`、`useWheelScroll`、`parseJsonProp`、`VariableValueType`、`VARIABLE_TYPES`）。
-3. 组件自身的私有接口/常量放在同文件内（如 `ImageGenData`、`VideoGenData` 等）。
-4. 相对路径比原来 `bodies.tsx` 多一级 `../`（当前文件在 `nodes/specs/bodies/` 子目录）。
-5. 拆分必须保持**行为完全等价**（纯移动 + 补 import），改动后跑 `pnpm typecheck`、`pnpm lint`、`pnpm test` 验证。
-6. `shared.tsx` 同时导出组件与非组件，顶部已有 `/* eslint-disable react-refresh/only-export-components */`（共享模块语义，勿删）。
-
-> 拆分是纯工程组织优化，不改变运行时行为、不影响 tldraw、不增加电脑配置要求。
-
-## 5. 当前节点状态
-
-| 节点   | 职责                     | 输入                  | 输出                | 状态             |
-| ------ | ------------------------ | --------------------- | ------------------- | ---------------- |
-| 文本   | 编辑原始文本             | 可选多文本            | `out-text`          | 可用             |
-| 图片   | 保存导入/粘贴的图片资产  | 无                    | `out-image`         | 可用             |
-| 生图   | 文本或参考图生成图片     | `in-text`、`in-image` | `out-image`         | 可用；支持尺寸/参考图/种子，可重新生成 |
-| 视频   | 文本和可选首帧生成视频   | `in-text`、`in-image` | `out-video`         | 可用，依赖供应商 |
-| 音频   | 导入音频或文本转语音     | `in-audio`、`in-text` | `out-audio`         | 可用，依赖供应商 |
-| 对话   | 多轮交互对话             | `in-text`             | `out-markdown`      | 可用             |
-| 处理   | 单个动态值原样传递/兜底  | `in-value`            | `out-value`         | 可用，能力较基础 |
-| JSON   | 解析、展示和输出结构化值 | `in-json`、`in-text`  | `out-json`          | 可用             |
-| 代码   | 本地受限转换             | `in-text`、`in-json`  | 文本或 JSON         | 可用             |
-| 分镜板 | 展示和编辑分镜列表       | 分镜 JSON 或兼容文本  | 分镜 JSON、摘要文本 | 可用             |
-| AI 处理 | 一次性可复跑的工作流转换 | `in-text`、`in-json`  | text/markdown/json | 可用，依赖供应商 |
-| 迭代   | 列表批处理、逐项驱动下游  | `in-list`(list.items@1)| `out-items`(list.items@1) | 可用，驱动下游 |
-| 脚本   | 旧版复合拆解节点         | 文本                  | 分镜 JSON/文本      | 仅兼容，不可新建 |
-
-已经退役：
+还必须进行一次与改动相符的真实桌面端冒烟测试。涉及媒体时至少验证：资产落盘、节点输出、连线可用、失败状态不产生旧输出。
 
-- `group` 节点：改用 tldraw 原生分组状态。
-- `compose` 节点和主进程视频合成：已删除。
-- 右侧悬浮删除/复制/置顶/置底工具条：改为右键菜单。
+### 当前已验证基线
 
-## 6. 节点契约运行方式
+- `pnpm typecheck`：通过。
+- `pnpm test`：14 文件、374 用例全部通过。
+- `pnpm build`：通过。
+- 定向 ESLint 与 `git diff --check`：通过。
+- Electron 手工测试：创建导演台 → 打开工作区 → 发布 PNG 帧 → 导出 WebM，两个输出均出现“可供下游使用”状态。
+- 构建仍会提示 `db.ts` 同时被动态与静态导入；它不阻断构建，列入后续技术债。
 
-连线含义固定为：
+## 7. 后续开发计划（建议按此顺序）
 
-```text
-source.outputs[sourcePortId] -> target.inputs[targetPortId]
-```
+### P1：发布回归与性能基准
 
-全局运行流程：
-
-```text
-拓扑排序
-→ 按 target portId 收集 NodeValuePacket
-→ 校验端口、类型、必填、数量和 Schema
-→ 执行节点
-→ 投影实际输出
-→ 校验必需输出和 Schema
-→ 登记为下游可读取的数据包
-```
+目标：把“能跑”变为可持续发布。
 
-重要规则：
+- 创建固定演示项目：文本→AI 处理→分镜→迭代→生图/视频，以及分镜→导演台→媒体下游。
+- 补 tldraw 端到端回归：节点创建、双击编辑、拖动、连线、分组、撤销、保存重开、右键菜单与右侧详情。
+- 建立 100/500/1000 节点基准，记录首屏、拖动、连线与保存耗时；先测量，再优化。
+- 整理 `db.ts` 动/静态导入告警，确保生产构建无非预期 chunk 问题。
 
-1. 端口 ID 发布后不能随意改名。
-2. 破坏性端口变化必须提升 `contractVersion` 并提供迁移。
-3. JSON 端口必须声明 Schema；通用 JSON 使用 `json.any@1`。
-4. `any` 只允许通用处理/代码类节点使用，运行时仍会恢复实际类型。
-5. 单值输入只能连接一个上游，多值文本按稳定连线顺序合并。
-6. 已连接但上游没有产生对应输出时，目标节点失败，不能静默使用旧值。
-7. 节点卡片内手动生成与全局运行必须使用相同的输出投影。
+验收：示例项目可在新目录打开、运行、保存、重开；500 节点拖动有可量化的可接受基线；关键 UI 回归可重复执行。
 
-当前 Schema：
+### P2：结构化创作数据与模板
 
-- `json.any@1`
-- `storyboard.shots@1`
+目标：让剧本、角色、场景、镜头和提示词成为可验证、可组合的数据，而不是散落字符串。
 
-## 7. 画布交互约定
+- 新建 `character.profile@1`、`scene.definition@1`、`shot.definition@1`、`prompt.bundle@1` 等 Schema。
+- 优先新增通用“结构编辑/字段映射”能力，不直接堆叠角色节点、场景节点等特殊 UI。
+- 以模板提供“角色设定→场景→分镜”“分镜→批量生图”“分镜→导演台”三条标准链路。
+- 每个 Schema 同时提供字段级校验、右侧详情预览和旧版本兼容策略。
 
-- 单击节点：选中并可拖动。
-- 双击标题：编辑标题。
-- 双击内容：编辑节点内容。
-- 右键节点：删除、复制、置顶、置底。
-- 分组：框选多个节点后建立 tldraw group；移动一个成员时整组移动。
-- 撤销/重做：位于顶部搜索按钮左侧。
-- 输出端口是纯圆点，没有加号；端口按整张卡片高度均分。
-- 所有标准节点默认尺寸为 `340 × 260`；只迁移已知历史默认尺寸，不覆盖用户手动缩放。
-- 画布空白引导已移除。
-- 左侧节点栏保持现有布局和两个字标签。
+验收：角色/场景/镜头能通过端口传递，错误结构会在连接或运行时给出字段级原因。
 
-tldraw 交互特别注意：
+### P3：迭代编排增强
 
-- 卡片根元素不能拦截 pointer 事件，否则节点无法拖动。
-- 输入框、按钮、端口等真正交互元素才调用 `stopEventPropagation`。
-- 删除节点后必须同步删除失去 binding 的 arrow。
-- 连接线必须是 arrow + start/end binding，不能画纯装饰线代替。
-- 浮层需要考虑画布 transform；现有预览和菜单实现可作为参考。
+目标：让批量制作在大项目中可靠且可恢复。
 
-## 8. 模型网关
-
-供应商配置保存在本地 SQLite。应用是单用户本地工具，目前 API Key 明文落盘，这是已知取舍；禁止把 Key 写进代码、日志、示例项目或 Git。
-
-文本/图片：
-
-- 使用 OpenAI-compatible 接口。
-- 支持自定义 Base URL、Key 和模型 ID。
-- 对话使用流式事件。
-- 生图结果落盘到项目媒体目录。
-
-视频：
-
-- 使用任务式提交、轮询、下载和恢复。
-- 支持文本生视频和首帧图生视频。
-- 重启后会恢复 submitted/running 任务。
-- 供应商差异封装在主进程 gateway 适配层。
-
-不要在渲染进程直接发带 API Key 的请求。
-
-## 9. 本地数据
-
-默认数据位置：
-
-```text
-%APPDATA%/canvas-studio/data/
-├─ app.db
-└─ projects/<projectId>/
-   ├─ project.json
-   └─ media/
-```
-
-`project.json` 同时保存：
-
-- tldraw snapshot：真实画布恢复源。
-- 派生 `nodes/edges/groups`：工作流和检查器使用。
-- `graphVersion`：项目图版本。
-
-项目写入使用临时文件和重命名，保留 `.bak` 回退。恢复快照失败时禁止自动保存空画布覆盖原项目。
-
-## 10. 当前已知问题
-
-必须优先处理：
-
-1. ~~`executor.ts` 仍通过节点类型 switch 执行，下一步应拆成节点自注册执行器。~~ **已完成（R1）：执行器已解耦到 `engine/executors/<node>.ts`，运行器零节点特例。**
-2. ~~没有契约和工作流的自动化测试，当前主要依赖 typecheck、lint、build 和人工回归。~~ **已完成（R2）：引入 vitest，9 个测试文件 289 个用例覆盖契约层；GitHub Actions 门禁已建立。**
-3. ~~节点固定配置与运行结果仍有历史混用，文本/旧脚本节点尤其需要在执行器解耦时分开。~~ **部分完成（R1）：执行器通过 `NodeExecutionContext.updateProps/updateResult` 受控写回，投影统一由运行器处理；配置与结果的彻底分离留待后续清理 `NodeCardProps.text` 复用字段时收尾。**
-4. ~~`bodies.tsx` 体积较大，应该按节点拆文件，但不要在行为改造期间同时做无关视觉重写。~~ **已完成（R6）：拆分为 `nodes/specs/bodies/` 目录下 13 个节点 Body 文件 + shared.tsx + index.tsx 聚合，行为等价。**
-5. JSON Schema 种类不足，角色、场景、字幕和列表协议尚未建立。
-6. 工作流模板的旧端口只能在唯一可推断时迁移；含糊的旧连线会跳过并提示。
-7. ~~API Key 尚未使用 Electron `safeStorage` 加密。~~ **已完成（R7）：`main/gateway/keycrypto.ts` 用 safeStorage 加密落盘，兼容旧明文。**
-8. 生产构建会提示 `db.ts` 同时被动态和静态导入；当前不影响构建，但可在整理主进程模块时统一。
-9. `pnpm audit --prod` 会报告 Electron 依赖链中的 `extract-zip@2.0.1` 路径穿越公告；上游目前没有可用修复版本。该包用于受信任的 Electron 安装/解包链路，不接收应用运行时用户输入。升级 Electron 时必须重新审计并移除此风险接受项。
-
-产品能力缺口：
-
-- 缺少独立的一次性“AI 处理”节点；当前工作流结构化转换借用对话节点。
-- 缺少列表迭代和受控批量生图/视频。
-- 缺少项目导出/导入和跨机器迁移。
-- tldraw 外部字体/资源尚未完全本地化。
-- 大节点数量下还没有系统性能基准。
-
-## 11. 推荐的下一项工作
-
-优先执行 [ROADMAP.md](./ROADMAP.md) 的 R0 和 R1：
-
-1. ~~先补契约/连线/旧快照回归保护。~~ （R0 仍待补自动化回归表）
-2. ~~定义 `NodeExecutor` 接口。~~ **已完成（R1）**
-3. ~~把每个节点执行逻辑移到节点目录。~~ **已完成（R1）：`engine/executors/<node>.ts`**
-4. 将节点配置、运行输入和运行输出彻底分离（R1 已收敛写回入口，字段复用清理留待后续）。
-5. ~~再增加结构化 AI 节点和批处理能力。~~ （R3/R4，先做 R2 测试门禁）
-
-下一推荐：R2 自动化测试与 CI 门禁——为执行器、契约校验、连线矩阵和输出投影增加纯函数测试，让端口/Schema 变化在提交前自动暴露。在 R2 之前可顺手补 R0 回归表。
-
-不要首先增加更多特殊业务节点。否则新的契约层会再次被节点特例侵蚀。
-
-## 12. 新节点接入步骤
-
-1. 在共享类型中增加稳定 `NodeTypeId`。
-2. 在节点 Spec 中声明职责、契约版本和全部端口，并注入对应的 `executor`。
-3. JSON 端口先注册版本化 Schema。
-4. 实现节点 Body，但不要让 Body 自己猜测上游节点类型。
-5. 在 `engine/executors/<node>.ts` 实现执行器（函数 `(ctx) => result`），并通过 `updateProps/updateResult` 写回运行结果；输出投影复用 `nodeValues.ts`。
-6. 右侧契约面板必须能解释输入、输出和连接来源。
-7. 添加契约、连线、执行和旧项目迁移测试（R2 门禁建立后强制）。
-8. 更新 `NODE_CONTRACT_SPEC.md`、`ROADMAP.md` 或本文档中受影响的部分。
-
-注册表会拒绝不完整契约。不要绕过校验来临时让节点出现。
-
-## 13. 发布检查清单
-
-```text
-[ ] git status 中没有 Word、解析缓存、数据库、媒体或 API Key
-[ ] pnpm install 没有原生依赖许可警告
-[ ] pnpm typecheck 通过
-[ ] pnpm lint 通过
-[ ] pnpm test 通过（节点契约与执行器门禁）
-[ ] pnpm build 通过
-[ ] 文本节点双击可编辑
-[ ] 图片粘贴/拖入后成为节点
-[ ] 单值端口不能连接第二个上游
-[ ] JSON Schema 不兼容连线被拒绝
-[ ] 节点删除时关联线同步删除
-[ ] 分组移动、撤销和重做正常
-[ ] 旧项目打开、保存、重开正常
-[ ] 对话 Markdown 正常渲染
-[ ] 生图/视频真实供应商至少各冒烟一次
-[ ] API Key 保存后落盘为加密密文（非明文），重新读取可还原
-[ ] 项目可导出 .canvasbundle 并在另一台机器导入恢复
-[ ] 提交信息说明行为变化和兼容策略
-```
-
-## 14. Git 与临时文件
-
-以下内容禁止提交：
-
-- Word 参考原文和 `.docx_review/` 解析缓存。
-- 本地 SQLite、媒体文件和 Python `__pycache__`。
-- API Key、Authorization header 和真实供应商配置。
-- `node_modules/`、`out/`、安装包和日志。
-
-本仓库当前直接使用 `main`。推送前必须先拉取/比较远程，再执行完整发布检查；远程领先时先停止并处理冲突，不能强推覆盖。
+- 为每个列表项建立独立运行态与产物引用，避免并发时共享节点结果互相覆盖。
+- 增加进度、暂停、取消、只重跑失败项、断点续跑和可控并发数。
+- 在不引入“巨型循环节点”的前提下定义子图/迭代体边界，支持多分支，但先保持端口寻址可追踪。
+- 为失败策略、重试、取消、恢复增加端到端测试。
+
+验收：20–100 项可暂停恢复；失败项可单独重试；并发不会串扰媒体或运行记录。
+
+### P4：导演台第二阶段
+
+目标：从 2D 可发布白模升级为更有指导价值的预演，而不破坏既有 I/O。
+
+- 引入可选 Three.js 白模视口：场景、角色占位、机位变换、焦距和画幅。
+- 保持 `previs.camera@1`、`previs.project@1` 和现有帧/视频端口稳定；视口实现可替换，数据协议不变。
+- 支持从分镜同步镜头，并明确“同步覆盖”与“本地编辑保护”的冲突策略。
+- 增加镜头顺序、参考图分区、相机预设和预演导出设置，但不进入剪辑/合成领域。
+
+验收：同一导演工程可重开、可编辑、可重新发布；旧的 PNG/WebM 下游连线完全兼容。
+
+### P5：媒体资产与供应商体验
+
+目标：让真实生成链路更稳定、可追溯、可重试。
+
+- 视频节点补“重新生成”和完整来源摘要；资产库补筛选、按来源跳转、批量导出。
+- 将供应商能力（文本/首帧/尺寸/时长/种子）结构化为驱动描述，UI 根据能力启用或禁用配置。
+- 为异步视频任务补更精确的恢复、取消和错误分类。
+- 严格保持 API Key 只在主进程本地使用，不写入日志、项目导出或模板。
+
+验收：任意媒体能回溯到输入与模型配置；失败任务有明确可操作的恢复路径。
+
+### P6：正式发布收尾
+
+目标：让单用户本地版本可安全升级和迁移。
+
+- 生成 Windows 安装包回归矩阵：新装、升级、旧项目、导入导出和离线使用。
+- 完善备份/修复 UI，而不是只保留 `.bak` 文件。
+- 发布前执行依赖审计并复查 Electron 依赖链风险；当前 `extract-zip@2.0.1` 公告需在 Electron 升级时重点复核。
+- 为每次发布写节点契约变更记录与迁移说明。
+
+## 8. 已知边界与风险
+
+1. 导演台当前是 2D 白模预演，不是完整三维导演工具；其价值在于稳定镜头数据与可发布媒体输出。
+2. 迭代节点目前为严格串行，不支持并发、暂停恢复或复杂多分支子图。
+3. `NodeCardProps.text` 仍承担部分节点配置；运行结果已统一写到 `meta.nodeResult`，但配置字段的彻底细分应在 P2 统一做，避免零散迁移。
+4. `pnpm build` 对 `db.ts` 的动态/静态导入会给出 Vite 告警，目前没有功能影响。
+5. API Key 使用 Electron `safeStorage` 加密并兼容旧配置；仍禁止将 Key、授权头、真实模型配置或媒体数据提交到 Git。
+
+## 9. 不可提交内容
+
+- `.docx` 原文、临时解析缓存、`node_modules/`、`out/`、安装包、日志。
+- 本地 SQLite、项目目录、生成媒体、截图和性能产物。
+- API Key、Authorization header、真实供应商 Base URL/配置。
+
+每次交接至少应包含：提交哈希、变更摘要、通过的命令、人工验证路径、已知限制和下一步的唯一推荐项。
