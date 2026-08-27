@@ -96,11 +96,23 @@ export function ProjectListPage(): React.JSX.Element {
     void refresh()
   }
 
+  const handleOpenDemo = async (): Promise<void> => {
+    const res = await window.api.importDemoProject()
+    if (!res.ok) {
+      useToastStore.getState().show(`打开示例项目失败：${res.error.message}`)
+      return
+    }
+    openProject(res.data)
+  }
+
   return (
     <div className="home">
       <header className="home-header">
         <h1>无限画布创作平台</h1>
         <div className="home-actions">
+          <button className="btn-ghost" onClick={() => void handleOpenDemo()}>
+            <Icon name="spark" size={16} /> 打开示例项目
+          </button>
           <button className="btn-ghost" onClick={() => void handleImport()}>
             <Icon name="upload" size={16} /> 导入项目
           </button>

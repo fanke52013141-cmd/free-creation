@@ -12,6 +12,11 @@ files:
 asarUnpack:
   - resources/**
   - node_modules/better-sqlite3/**
+# 内置示例项目随安装包分发（"打开示例项目"入口读取 resources/demo）
+extraResources:
+  - from: resources/demo
+    to: demo
+    filter: ['**/*']
 win:
   executableName: canvas-studio
 nsis:

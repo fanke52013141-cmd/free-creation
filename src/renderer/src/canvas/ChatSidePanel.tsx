@@ -305,7 +305,6 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
       const taskId = streamRef.current?.taskId
       if (taskId) void window.api.gateway.chatCancel(taskId)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Esc 关闭面板（与其它浮层面板行为统一）

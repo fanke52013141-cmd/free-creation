@@ -1,11 +1,13 @@
-// 视频节点 Body（路线图 R6：bodies.tsx 拆分）
+// 视频节点 Body（路线图 R6：bodies.tsx 拆分；R0/WP3：提交收敛到 runNodeManually）
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import type { VideoGenParams } from '@shared/types'
 import { mediaUrl, type NodeBodyProps } from '../../registry'
 import { toast } from '../../../stores/toast'
 import { markUndoPoint } from '../../../canvas/history'
-import { gatherUpstreamMedia, gatherUpstreamText } from '../../../canvas/graph'
+import { gatherUpstreamText } from '../../../canvas/graph'
+import { runNodeManually } from '../../../engine/executor'
+import { useEngineStore } from '../../../engine/store'
 import { useAppStore } from '../../../stores/app'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { Icon } from '../../../components/Icon'
@@ -132,31 +134,30 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // R0/WP3：提交统一走 runNodeManually（执行器负责提交/轮询/取消/落盘），Body 只保留
+  // 配置写回与 UI 状态；进度由执行器写入 props.taskId 后的网关事件驱动显示。
   const submit = async (): Promise<void> => {
     const opt = options.find((o) => o.key === data.modelKey)
     if (!opt) return toast('请先选择视频模型')
-    const upstream = gatherUpstreamText(editor, shape.id)
-    const prompt = upstream ? `${upstream}\n\n---\n\n${draft.trim()}` : draft.trim()
-    if (!prompt) return toast('请输入提示词或连接上游文本')
+    if (!draft.trim() && !gatherUpstreamText(editor, shape.id))
+      return toast('请输入提示词或连接上游文本')
     if (!project) return toast('项目未就绪')
-    const firstFrameMediaId = gatherUpstreamMedia(editor, shape.id, 'in-image', 'image')?.mediaId
+    if (draft !== data.prompt) update({ ...data, prompt: draft })
     setSubmitting(true)
-    const res = await window.api.gateway.videoSubmit({
-      projectId: project.id,
-      nodeId: shape.id,
-      providerId: opt.provider.id,
-      modelId: opt.model.id,
-      prompt,
-      params: data.params,
-      ...(firstFrameMediaId ? { firstFrameMediaId } : {})
-    })
-    setSubmitting(false)
-    if (!res.ok) return toast(`提交失败：${res.error.message}`)
-    update({ ...data, prompt: draft, taskId: res.data.taskId })
     setStatus('running')
+    const ok = await runNodeManually(editor, project.id, shape.id)
+    setSubmitting(false)
+    if (!ok) setStatus('')
   }
 
+  // 取消对接 CancelSignal：引擎运行中（手动/全局）走 stop → waitForVideo 撤销任务；
+  // 非运行态（应用重启后恢复的历史任务）直接撤销网关任务。
   const cancel = async (): Promise<void> => {
+    if (useEngineStore.getState().phase === 'running') {
+      useEngineStore.getState().stop?.()
+      setStatus('')
+      return
+    }
     if (!data.taskId) return
     await window.api.gateway.videoCancel(data.taskId)
     setStatus('')

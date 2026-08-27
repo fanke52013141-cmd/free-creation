@@ -304,11 +304,27 @@ export function deriveGraph(editor: Editor): {
   const edges: CanvasEdge[] = []
   const groups: GroupDecl[] = []
 
+  // 端口查找表：shapeId → { in: Set<portId>, out: Set<portId> }，供边检查使用。
+  // 预扫描先填满再处理 arrow：shapes 顺序不保证 node-card 先于 arrow，单遍会误标记。
+  const portMap = new Map<string, { in: Set<string>; out: Set<string> }>()
+  for (const shape of editor.getCurrentPageShapes()) {
+    if (shape.type !== 'node-card') continue
+    const s = shape as NodeCardShape
+    const spec = getNodeType(s.props.nodeType)
+    const resolved = spec ? getNodePorts(spec, s) : { in: [] as PortDecl[], out: [] as PortDecl[] }
+    portMap.set(s.id as string, {
+      in: new Set(resolved.in.map((p) => p.id)),
+      out: new Set(resolved.out.map((p) => p.id))
+    })
+  }
+
   for (const shape of editor.getCurrentPageShapes()) {
     if (shape.type === 'node-card') {
       const s = shape as NodeCardShape
       const spec = getNodeType(s.props.nodeType)
-      const resolved = spec ? getNodePorts(spec, s) : { in: [] as PortDecl[], out: [] as PortDecl[] }
+      const resolved = spec
+        ? getNodePorts(spec, s)
+        : { in: [] as PortDecl[], out: [] as PortDecl[] }
       const ports: PortDecl[] = [...resolved.in, ...resolved.out]
       nodes.push({
         id: s.id,
@@ -334,10 +350,19 @@ export function deriveGraph(editor: Editor): {
       if (!start || !end) continue
       if (editor.getShape(start.toId)?.type !== 'node-card') continue
       if (editor.getShape(end.toId)?.type !== 'node-card') continue
+      const fromPortId = (shape.meta?.fromPort as string) ?? ''
+      const toPortId = (shape.meta?.toPort as string) ?? ''
+      // 检查端口是否在当前注册表中存在（未知 nodeType 的节点端口集合为空，其边自然被标记）。
+      const fromPorts = portMap.get(start.toId as string)
+      const toPorts = portMap.get(end.toId as string)
+      const fromUnknown = !fromPorts || !fromPorts.out.has(fromPortId)
+      const toUnknown = !toPorts || !toPorts.in.has(toPortId)
+      const flagged = fromUnknown || toUnknown
       edges.push({
         id: shape.id,
-        from: { nodeId: start.toId, portId: (shape.meta?.fromPort as string) ?? '' },
-        to: { nodeId: end.toId, portId: (shape.meta?.toPort as string) ?? '' }
+        from: { nodeId: start.toId, portId: fromPortId },
+        to: { nodeId: end.toId, portId: toPortId },
+        ...(flagged ? { meta: { flagged: 'unknown-port' as const } } : {})
       })
     } else if (shape.type === 'group') {
       const nodeIds = editor

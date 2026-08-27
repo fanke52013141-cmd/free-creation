@@ -9,6 +9,7 @@
 import type { ChatMessage, ProviderConfig, VideoGenParams } from '@shared/types'
 import { modelsByModality, type ModelOption } from '../../stores/gateway'
 import type { CancelSignal } from '../executor-types'
+import { nodeData, nodeState, type NodeCardProps } from '../../nodes/nodeData'
 
 /** 把可能为 JSON 对象的文本解析为对象；非对象 / 解析失败返回 null。 */
 export function parseJsonObj(text: string): Record<string, unknown> | null {
@@ -213,4 +214,15 @@ export function parseVideoGen(text: string): VideoGenData {
     }
   }
   return { prompt: text, modelKey: '', params: {}, taskId: '' }
+}
+
+/** 字段三分读取：配置键来自 config（旧数据回退 text），taskId 来自 result。 */
+export function readVideoGen(props: NodeCardProps): VideoGenData {
+  const value = nodeData(props)
+  const state = nodeState(props)
+  const merged = JSON.stringify({ ...value, taskId: state.taskId ?? '' })
+  const parsed = parseVideoGen(merged)
+  if (typeof value.prompt === 'string') return parsed
+  if (props.config === '' && props.text.trim()) return parseVideoGen(props.text)
+  return { prompt: '', modelKey: '', params: {}, taskId: parsed.taskId }
 }

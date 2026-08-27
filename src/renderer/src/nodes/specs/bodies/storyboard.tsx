@@ -207,7 +207,11 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
       if (await generateShotImage(shot.id)) okCount += 1
     }
     if (okCount === 0) return
-    toast(okCount === pending.length ? `${okCount} 个镜头已生成` : `已生成 ${okCount}/${pending.length} 个镜头`)
+    toast(
+      okCount === pending.length
+        ? `${okCount} 个镜头已生成`
+        : `已生成 ${okCount}/${pending.length} 个镜头`
+    )
   }
 
   const commitInput = (): void => {

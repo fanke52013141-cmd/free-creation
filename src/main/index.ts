@@ -8,6 +8,8 @@ import icon from '../../resources/icon.png?asset'
 import { registerProjectIpc } from './ipc/project.ipc'
 import { registerMediaIpc } from './ipc/media.ipc'
 import { registerGatewayIpc } from './ipc/gateway.ipc'
+import { registerLogIpc } from './ipc/log.ipc'
+import { registerRunIpc } from './ipc/run.ipc'
 import { closeDb, getDb } from './store/db'
 import { getMediaAbsPath } from './store/media.repo'
 
@@ -133,6 +135,8 @@ app.whenReady().then(() => {
   registerMediaProtocol()
   registerProjectIpc()
   registerMediaIpc()
+  registerLogIpc()
+  registerRunIpc()
   const win = createWindow()
   registerGatewayIpc(win)
 

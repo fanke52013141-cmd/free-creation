@@ -87,11 +87,12 @@ function parseCodeResult(metaResult: string | undefined): CodeResultDisplay | nu
       return { kind: 'text', summary: value.text.slice(0, 80) }
     }
     if (value.kind === 'json') {
-      const keys = typeof value.data === 'object' && value.data !== null && !Array.isArray(value.data)
-        ? Object.keys(value.data as object).join(', ')
-        : Array.isArray(value.data)
-          ? `Array[${(value.data as unknown[]).length}]`
-          : ''
+      const keys =
+        typeof value.data === 'object' && value.data !== null && !Array.isArray(value.data)
+          ? Object.keys(value.data as object).join(', ')
+          : Array.isArray(value.data)
+            ? `Array[${(value.data as unknown[]).length}]`
+            : ''
       return { kind: 'json', summary: keys ? `JSON { ${keys} }` : 'JSON' }
     }
   } catch {
@@ -103,19 +104,70 @@ function parseCodeResult(metaResult: string | undefined): CodeResultDisplay | nu
 /* ── 轻量 JS 语法高亮（纯前端 tokenizer，无外部依赖） ── */
 
 const JS_KEYWORDS = new Set([
-  'async', 'await', 'function', 'return', 'const', 'let', 'var',
-  'if', 'else', 'for', 'while', 'do', 'try', 'catch', 'finally',
-  'new', 'typeof', 'instanceof', 'class', 'extends', 'import',
-  'export', 'from', 'default', 'of', 'in', 'this', 'null',
-  'undefined', 'true', 'false', 'void', 'delete', 'break', 'continue',
-  'switch', 'case', 'throw'
+  'async',
+  'await',
+  'function',
+  'return',
+  'const',
+  'let',
+  'var',
+  'if',
+  'else',
+  'for',
+  'while',
+  'do',
+  'try',
+  'catch',
+  'finally',
+  'new',
+  'typeof',
+  'instanceof',
+  'class',
+  'extends',
+  'import',
+  'export',
+  'from',
+  'default',
+  'of',
+  'in',
+  'this',
+  'null',
+  'undefined',
+  'true',
+  'false',
+  'void',
+  'delete',
+  'break',
+  'continue',
+  'switch',
+  'case',
+  'throw'
 ])
 
 const JS_BUILTINS = new Set([
-  'console', 'JSON', 'Math', 'Object', 'Array', 'String',
-  'Number', 'Boolean', 'Date', 'Promise', 'Map', 'Set',
-  'parseInt', 'parseFloat', 'isNaN', 'isFinite', 'RegExp',
-  'Error', 'Symbol', 'Proxy', 'Reflect', 'WeakMap', 'WeakSet'
+  'console',
+  'JSON',
+  'Math',
+  'Object',
+  'Array',
+  'String',
+  'Number',
+  'Boolean',
+  'Date',
+  'Promise',
+  'Map',
+  'Set',
+  'parseInt',
+  'parseFloat',
+  'isNaN',
+  'isFinite',
+  'RegExp',
+  'Error',
+  'Symbol',
+  'Proxy',
+  'Reflect',
+  'WeakMap',
+  'WeakSet'
 ])
 
 const TOKEN_RE =
@@ -128,19 +180,43 @@ function highlightLine(line: string): ReactNode[] {
   let key = 0
   while ((match = TOKEN_RE.exec(line)) !== null) {
     if (match[1]) {
-      nodes.push(<span key={key++} className="tok-comment">{match[1]}</span>)
+      nodes.push(
+        <span key={key++} className="tok-comment">
+          {match[1]}
+        </span>
+      )
     } else if (match[2]) {
-      nodes.push(<span key={key++} className="tok-string">{match[2]}</span>)
+      nodes.push(
+        <span key={key++} className="tok-string">
+          {match[2]}
+        </span>
+      )
     } else if (match[3]) {
-      nodes.push(<span key={key++} className="tok-number">{match[3]}</span>)
+      nodes.push(
+        <span key={key++} className="tok-number">
+          {match[3]}
+        </span>
+      )
     } else if (match[4]) {
       const word = match[4]
       if (JS_KEYWORDS.has(word)) {
-        nodes.push(<span key={key++} className="tok-keyword">{word}</span>)
+        nodes.push(
+          <span key={key++} className="tok-keyword">
+            {word}
+          </span>
+        )
       } else if (JS_BUILTINS.has(word) || word === '_' || word === 'dayjs') {
-        nodes.push(<span key={key++} className="tok-builtin">{word}</span>)
+        nodes.push(
+          <span key={key++} className="tok-builtin">
+            {word}
+          </span>
+        )
       } else if (/^[A-Z]/.test(word)) {
-        nodes.push(<span key={key++} className="tok-builtin">{word}</span>)
+        nodes.push(
+          <span key={key++} className="tok-builtin">
+            {word}
+          </span>
+        )
       } else {
         nodes.push(<span key={key++}>{word}</span>)
       }
@@ -167,9 +243,12 @@ function HighlightedCode({ code }: { code: string }): React.JSX.Element {
 /* ── AI 代码生成的系统提示词 ── */
 
 function buildCodeGenSystem(config: CodeConfig): string {
-  const paramList = config.params.length > 0
-    ? config.params.map((p) => `   - args.${p.name}：${p.type} 类型，用户声明的输入参数`).join('\n')
-    : '   （无自定义参数）'
+  const paramList =
+    config.params.length > 0
+      ? config.params
+          .map((p) => `   - args.${p.name}：${p.type} 类型，用户声明的输入参数`)
+          .join('\n')
+      : '   （无自定义参数）'
   return `你是一个 JavaScript 代码生成专家。根据用户的自然语言描述，生成一段可在 Worker 中执行的代码。
 
 严格要求：
@@ -254,7 +333,11 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
     const description = data.prompt.trim()
     if (!description) return
     const providers = useGatewayStore.getState().providers
-    const option = findTextModel(providers, parseJsonObj(shape.props.text)?.modelKey as string ?? '', true)
+    const option = findTextModel(
+      providers,
+      (parseJsonObj(shape.props.text)?.modelKey as string) ?? '',
+      true
+    )
     if (!option) {
       setAiError('未配置可用的对话模型，请先在设置中添加')
       return
@@ -292,7 +375,9 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
       <div className="code-editor-wrap" ref={scrollRef}>
         <div className="code-editor-gutter">
           {lines.map((_, i) => (
-            <div key={i} className="code-line-number">{i + 1}</div>
+            <div key={i} className="code-line-number">
+              {i + 1}
+            </div>
           ))}
         </div>
         <textarea
@@ -428,8 +513,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
             </>
           ) : (
             <>
-              读取 <code>input.{data.inputName}</code>，return 值写入{' '}
-              <code>{data.outputName}</code>
+              读取 <code>input.{data.inputName}</code>，return 值写入 <code>{data.outputName}</code>
             </>
           )}
         </div>
@@ -522,9 +606,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
       )}
       {resultDisplay && (
         <div className={`code-result ${resultDisplay.kind === 'error' ? 'error' : 'success'}`}>
-          <span className="code-result-badge">
-            {resultDisplay.kind === 'error' ? '✗' : '✓'}
-          </span>
+          <span className="code-result-badge">{resultDisplay.kind === 'error' ? '✗' : '✓'}</span>
           <span className="code-result-text">{resultDisplay.summary}</span>
         </div>
       )}

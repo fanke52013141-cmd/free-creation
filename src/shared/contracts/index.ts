@@ -6,6 +6,10 @@ export const IPC = {
   app: {
     bootstrap: 'app:bootstrap'
   },
+  log: {
+    /** 渲染进程 → 主进程：运行错误 / 全局异常落盘（fire-and-forget） */
+    write: 'log:write'
+  },
   project: {
     list: 'project:list',
     create: 'project:create',
@@ -16,7 +20,9 @@ export const IPC = {
     saveSync: 'project:save-sync',
     close: 'project:close',
     export: 'project:export',
-    import: 'project:import'
+    import: 'project:import',
+    /** 导入内置示例项目（resources/demo 的 canvasbundle，每次生成新 id 副本） */
+    importDemo: 'project:import-demo'
   },
   media: {
     import: 'media:import',
@@ -42,6 +48,12 @@ export const IPC = {
     videoTask: 'gateway:video:task',
     audioGenerate: 'gateway:audio:generate',
     event: 'gateway:event'
+  },
+  run: {
+    /** 渲染进程 → 主进程：运行记录追加（fire-and-forget） */
+    append: 'run:append',
+    /** 渲染进程 → 主进程：读取项目运行记录列表 */
+    list: 'run:list'
   }
 } as const
 
@@ -144,6 +156,22 @@ export interface AudioGenerateInput {
   format?: string
 }
 
+// ── 运行日志（渲染进程 → 主进程 fire-and-forget）──
+
+/** 渲染进程上报的运行错误条目，经 sanitizeRunError 脱敏后落盘。 */
+export interface RunLogEntry {
+  label: string
+  reason: string
+  nodeId?: string
+  portId?: string
+  phase?: string
+  nodeType?: string
+  contractVersion?: number
+  runId?: string
+  /** 未提供时由主进程落盘前盖章（组件内调用 Date.now 会被 React 编译器判为非纯） */
+  timestamp?: number
+}
+
 /** 主进程 → 渲染进程的网关事件（聊天流式分片 / 视频任务进度） */
 export type GatewayEvent =
   | { kind: 'chat-delta'; taskId: string; text: string }
@@ -160,3 +188,57 @@ export type GatewayEvent =
       mime: string
     }
   | { kind: 'video-error'; taskId: string; error: string }
+
+// ── 运行记录（R8 WP2：节点级 runMeta + 项目级 runs.json）──
+
+/** 节点级运行元数据，以 JSON 字符串存入 NodeCardShape.runMeta 字段。 */
+export interface RunMeta {
+  /** 结束时间戳（ms） */
+  at: number
+  /** 该节点本次执行耗时（ms） */
+  durationMs: number
+  /** 所属全局运行的 runId（与 executor WorkflowContext.runId 一致） */
+  runId: string
+  /** 失败时的摘要错误信息（已脱敏） */
+  error?: string
+}
+
+/** 单节点运行明细（run record 内一条节点记录） */
+export interface RunRecordNode {
+  /** 节点 ID（tldraw shape id） */
+  id: string
+  /** 节点标签 / 标题 */
+  label: string
+  /** 节点类型（nodeType） */
+  type: string
+  /** 执行状态 */
+  status: 'done' | 'skipped' | 'failed'
+  /** 该节点执行耗时（ms） */
+  durationMs: number
+  /** 失败时的错误原因（已脱敏） */
+  errorReason?: string
+}
+
+/** 项目级运行记录条目（runs.json 中一条） */
+export interface RunRecordEntry {
+  /** 运行唯一标识（executor 生成的 crypto.randomUUID()） */
+  runId: string
+  /** 运行开始时间戳（ms） */
+  startedAt: number
+  /** 整轮运行总耗时（ms） */
+  durationMs: number
+  /** 参与本轮运行的节点总数 */
+  total: number
+  /** 成功节点数（status = done） */
+  ok: number
+  /** 失败节点数（status = failed） */
+  failed: number
+  /** 节点级明细数组 */
+  nodes: RunRecordNode[]
+}
+
+/** 渲染进程 → 主进程：追加运行记录（fire-and-forget） */
+export interface AppendRunInput {
+  projectId: string
+  record: RunRecordEntry
+}

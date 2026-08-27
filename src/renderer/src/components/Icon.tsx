@@ -50,6 +50,9 @@ export type IconName =
   | 'edit'
   | 'external'
   | 'download'
+  | 'lock'
+  | 'crop'
+  | 'activity'
 
 interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {
   name: IconName
@@ -323,6 +326,12 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="m14.5 6.5 3 3" />
     </>
   ),
+  crop: (
+    <>
+      <path d="M6 2v14a2 2 0 0 0 2 2h14" />
+      <path d="M18 22V8a2 2 0 0 0-2-2H2" />
+    </>
+  ),
   external: (
     <>
       <path d="M14 4h6v6" />
@@ -335,6 +344,17 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M12 3v12" />
       <path d="m7 10 5 5 5-5" />
       <path d="M5 19h14" />
+    </>
+  ),
+  lock: (
+    <>
+      <rect x="5" y="11" width="14" height="9" rx="2" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+    </>
+  ),
+  activity: (
+    <>
+      <path d="M3 12h4l2 7 4-14 2 7h6" />
     </>
   )
 }
