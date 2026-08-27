@@ -8,7 +8,7 @@ import { sanitizeRunError } from '@shared/sanitize'
 export type EnginePhase = 'idle' | 'running' | 'stopping'
 
 /** 错误发生的阶段 */
-export type ErrorPhase = 'input' | 'execution' | 'output' | 'topology'
+export type ErrorPhase = 'input' | 'execution' | 'output' | 'topology' | 'timeout'
 
 export interface RunError {
   label: string

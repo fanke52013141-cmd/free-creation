@@ -19,6 +19,8 @@ import { buildOutputPackets, collectContractInputs, type ContractOutputs } from 
 import type { NodeExecutionContext, NodeExecutionResult, SubflowRequest } from './executor-types'
 import { getNodeType } from '../nodes/registry'
 import { projectNodeOutputs } from '../nodes/nodeValues'
+import { nodeData } from '../nodes/nodeData'
+import { resolveTimeoutMs, formatTimeoutLabel } from './timeouts'
 import { toast } from '../stores/toast'
 import { useGatewayStore } from '../stores/gateway'
 import { setRunId, useEngineStore } from './store'
@@ -136,6 +138,9 @@ function reportRunRecord(
  * 取出节点声明中自注册的执行器并调用。执行器拿到的 NodeExecutionContext 把
  * 写回持久化状态的入口收敛为 updateProps / updateResult，运行器据此读取最新
  * shape 并统一投影输出，避免执行器各自缓存或猜测端口输出。
+ *
+ * R8/WP3：用 Promise.race 对执行器统一施加超时。超时时触发 CancelSignal
+ * （执行器据此中止挂起请求），返回 phase='timeout' 的失败结果。
  */
 async function invokeExecutor(
   ctx: WorkflowContext,
@@ -170,7 +175,24 @@ async function invokeExecutor(
     },
     runSubflow
   }
-  return spec.executor(nodeCtx)
+
+  // R8/WP3：统一超时包裹
+  const timeoutMs = resolveTimeoutMs(node.type, nodeData(shape.props))
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutHandle = setTimeout(() => {
+      // 触发取消信号，让执行器内部中止挂起的网关请求
+      ctx.token.cancelled = true
+      reject(new Error(`超时（${formatTimeoutLabel(timeoutMs)}）`))
+    }, timeoutMs)
+  })
+
+  // 执行器抛错或超时 reject 时错误自然向上传播，finally 确保定时器被清理
+  try {
+    return await Promise.race([spec.executor(nodeCtx), timeoutPromise])
+  } finally {
+    if (timeoutHandle) clearTimeout(timeoutHandle)
+  }
 }
 
 /**
@@ -281,9 +303,21 @@ async function executeNodeOnce(
     }
     return result
   } catch (error) {
-    if (ctx.token.cancelled) setExec(editor, shapeId, 'cancelled')
-    else {
-      const reason = error instanceof Error ? error.message : String(error)
+    const reason = error instanceof Error ? error.message : String(error)
+    // R8/WP3：超时先于 cancelled 检查——超时会触发 CancelSignal，但应归类为
+    // phase='timeout' 的失败，而非用户主动取消的 'cancelled'。
+    const isTimeout = reason.startsWith('超时')
+    if (isTimeout) {
+      setExec(editor, shapeId, 'failed')
+      useEngineStore.getState().addError(node.title || node.type, reason, {
+        nodeId: node.id,
+        phase: 'timeout',
+        nodeType: node.type,
+        contractVersion: spec?.contractVersion
+      })
+    } else if (ctx.token.cancelled) {
+      setExec(editor, shapeId, 'cancelled')
+    } else {
       const phase: 'input' | 'execution' = reason.includes('输入契约') ? 'input' : 'execution'
       setExec(editor, shapeId, 'failed')
       useEngineStore.getState().addError(node.title || node.type, reason, {
@@ -293,7 +327,7 @@ async function executeNodeOnce(
         contractVersion: spec?.contractVersion
       })
     }
-    return { status: 'failed', reason: error instanceof Error ? error.message : String(error) }
+    return { status: 'failed', reason }
   }
 }
 

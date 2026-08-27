@@ -1,6 +1,6 @@
 # Canvas Studio 开发交接文档
 
-> 最后更新：2026-08-27（R8 WP1+WP2 完成）
+> 最后更新：2026-08-27（R8 WP1+WP2+WP3 完成）
 >
 > 当前主分支：`main`
 >
@@ -109,7 +109,8 @@ src/
 - `src/renderer/src/engine/executors/shared.ts`：执行器共享工具（提示词合并、JSON/分镜解析、对话/视频取消式等待）。
 - `src/renderer/src/nodes/nodeValues.ts`：节点持久化状态到端口输出的唯一投影。
 - `src/renderer/src/engine/contracts.ts`：输入收集、数据包和运行前后契约校验。
-- `src/renderer/src/engine/executor.ts`：全局工作流运行器（拓扑、收集、校验、执行、投影、登记），不含节点特例。R8 WP2 新增运行计时上报（runMeta + RunRecord）。
+- `src/renderer/src/engine/executor.ts`：全局工作流运行器（拓扑、收集、校验、执行、投影、登记），不含节点特例。R8 WP2 新增运行计时上报（runMeta + RunRecord）；R8 WP3 新增统一超时包裹（Promise.race + CancelSignal 联动）。
+- `src/renderer/src/engine/timeouts.ts`：统一超时配置单一事实源（R8 WP3），分级默认表 + `resolveTimeoutMs()` + `formatTimeoutLabel()`。
 - `src/renderer/src/nodes/nodeData.ts`：节点配置/内容/结果三分访问器（R8 WP1），旧 text 字段迁移拆分。
 - `src/main/ipc/run.ipc.ts`：运行记录仓库（R8 WP2），追加写入 runs.json（50 条 FIFO、损坏重建、原子写）。
 - `src/main/ipc/log.ipc.ts`：运行错误日志通道（R0 WP1），双层脱敏落盘。
@@ -314,15 +315,15 @@ R0-R7 主体均已完成。R8 数据模型与运行内核收敛进度：
 
 - **WP1 节点数据字段三分**（config/text/result）：✅ 已完成。`NodeCardProps` 升级到含 12 个字段（w/h/nodeType/title/text/config/result/mediaId/mediaPath/mediaMime/exec/runMeta），tldraw 迁移 v1→v2，旧项目自动迁移幂等。
 - **WP2 运行记录持久化**：✅ 已完成。节点级 `runMeta`（JSON：at/durationMs/runId/error）+ 项目级 `runs.json`（50 条 FIFO）+ `run.append`/`run.list` IPC + 状态灯 hover 提示 + 侧面板「运行历史」tab。
-- **WP3 长任务统一超时协议**：待开发。分级默认超时表 + `Promise.race` 包裹执行器 + 超时触发取消信号 + `phase='timeout'` 错误。
+- **WP3 长任务统一超时协议**：✅ 已完成。`engine/timeouts.ts` 分级默认表（chat/text/ai-process 120s，image-gen/audio 300s，video 1800s，兜底 120s）+ `invokeExecutor` 统一 `Promise.race` 包裹 + 超时触发 CancelSignal + `phase='timeout'` 错误（文案"超时（300s）"）+ config `timeoutMs` 覆盖（钳制 [1s, 1h]）。23 个测试用例（fake timers）覆盖。
 - **WP4 tldraw 连线端到端测试**：可选。jsdom 环境 headless Editor 连线创建/拒绝/环检测测试。
 
 R8 剩余事项与后续方向：
 
-1. R8 WP3：统一超时协议（当前仅 chat 有超时，生图/视频/音频无超时约束）。
+1. ~~R8 WP3：统一超时协议。~~ **已完成**：所有网关调用受分级超时约束，超时自动取消并记 phase='timeout' 错误；节点 config 可用 `timeoutMs` 覆盖默认值。
 2. R8 WP4：tldraw 连线 E2E 测试（可砍，当前靠纯函数测试 + 人工回归覆盖）。
 3. 发布前按 [docs/REGRESSION.md](./docs/REGRESSION.md) 全表人工回归并留档；`pnpm build:win` 后在全新 Windows 用户目录做安装冒烟。
-4. 为长任务统一超时协议（取消信号已通过 `CancelSignal` 下发，超时仍按各节点现有实现）。
+4. ~~为长任务统一超时协议。~~ **已完成（R8 WP3）**：见上文 WP3 条目。
 5. 大画布性能基准与优化（后续路线）。
 
 不要首先增加更多特殊业务节点。否则新的契约层会再次被节点特例侵蚀。

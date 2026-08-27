@@ -263,7 +263,7 @@ pnpm test:coverage   # 覆盖率报告
 | 7    | R6/R7         | 面向大项目和正式发布收尾             |
 | 8    | R8 内核收敛   | 数据模型三分 + 运行记录持久化 + 超时协议 |
 
-### R8：数据模型与运行内核收敛（进行中）
+### R8：数据模型与运行内核收敛（WP1-WP3 已完成，WP4 可选）
 
 > 详细计划见 [R8_PLAN.md](./R8_PLAN.md)。
 
@@ -288,16 +288,15 @@ pnpm test:coverage   # 覆盖率报告
 - UI 两入口：(1) 状态灯 hover 显示"上次运行：成功 · 2.3s · 14:32"；(2) CanvasSidePanel 新增「运行历史」tab（卡片列表 → 展开看每节点耗时与失败原因 → 点击失败节点定位画布）。
 - 测试 `test/runs-repo.test.ts`：10 个用例覆盖 FIFO 淘汰、损坏重建、原子写验证、计时往返、失败节点明细等。
 
-#### WP3 长任务统一超时协议 ⏳ 待开发
+#### WP3 长任务统一超时协议 ✅ 已完成
 
-当前仅 chat 等待有计时器（`shared.ts`），生图/视频/音频无超时约束。
+落地情况：
 
-计划：
-
-- `engine/timeouts.ts` 集中默认值：文本/对话 120s、生图/音频 300s、视频 1800s。
-- `invokeExecutor` 用 `Promise.race` 包裹执行器，超时触发 `CancelSignal` + `phase='timeout'` 错误。
-- 节点 config 增可选 `timeoutMs` 覆盖。
-- 测试 `test/timeout.test.ts`：fake timers 验证分级默认值、超时取消、配置覆盖、正常完成不受影响。
+- `engine/timeouts.ts` 单一事实源：分级默认表（chat/text/ai-process 120s，image-gen/audio 300s，video 1800s，兜底 120s）+ `resolveTimeoutMs()` 解析函数 + `formatTimeoutLabel()` 格式化辅助。
+- `invokeExecutor` 统一 `Promise.race([executor, timeoutPromise])` 包裹所有节点执行器；超时自动触发 `CancelSignal`（`token.cancelled = true`），让执行器内部中止挂起的网关请求。
+- `store.ts` 的 `ErrorPhase` 类型扩展 `'timeout'`；`executeNodeOnce` catch 块优先检测超时错误（消息以"超时"开头），路由到 `phase='timeout'` + `setExec('failed')`，不被 `cancelled` 分支吞没。
+- 节点 config 可选 `timeoutMs` 覆盖默认值（通过 `nodeData(shape.props)` 读取），钳制到 [1s, 1h] 范围；非正数/非数字忽略回退默认。
+- 测试 `test/timeout.test.ts`：23 个用例（fake timers）覆盖分级默认、兜底、用户覆盖与钳制、formatTimeoutLabel、正常完成不受影响、超时触发 CancelSignal、定时器清理、执行器内部错误传播、phase='timeout' 分类。
 
 #### WP4 tldraw 连线端到端测试（可选）⏳ 待开发
 
