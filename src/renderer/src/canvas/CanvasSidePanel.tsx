@@ -4,7 +4,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createShapeId, type Editor, type TLShapeId } from 'tldraw'
 import type { MediaAsset, MediaKind } from '@shared/types'
-import type { RunRecordEntry, RunRecordNode } from '@shared/contracts'
 import { getNodeType, mediaUrl, portCompatible } from '../nodes/registry'
 import { filteredAssets, useMediaStore } from '../stores/media'
 import {
@@ -18,7 +17,7 @@ import { toast } from '../stores/toast'
 import { useHistorySnapshots, type HistorySnapshot } from '../stores/history-snapshots'
 import { Icon, type IconName } from '../components/Icon'
 
-export type SidePanelTab = 'assets' | 'workflow' | 'history' | 'runs'
+export type SidePanelTab = 'assets' | 'workflow' | 'history'
 
 interface CanvasSidePanelProps {
   tab: SidePanelTab | null
@@ -32,8 +31,7 @@ interface CanvasSidePanelProps {
 const TAB_META: Record<SidePanelTab, { title: string; icon: IconName }> = {
   assets: { title: '资产中心', icon: 'assets' },
   workflow: { title: '工作流', icon: 'workflow' },
-  history: { title: '历史记录', icon: 'history' },
-  runs: { title: '运行历史', icon: 'activity' }
+  history: { title: '历史记录', icon: 'history' }
 }
 
 const FILTER_TABS: { key: MediaKind | 'all'; label: string }[] = [
@@ -544,15 +542,6 @@ function HistoryPanel({
       toast(`已回溯到「${snap.label}」`)
     } catch (e) {
       console.error('版本恢复失败', e)
-      try {
-        window.api?.log?.write({
-          label: '版本恢复失败',
-          reason: e instanceof Error ? e.message : String(e),
-          phase: 'version-restore'
-        })
-      } catch {
-        /* 静默 */
-      }
       toast('版本恢复失败，数据可能已损坏')
     }
   }
@@ -621,144 +610,6 @@ function HistoryPanel({
   )
 }
 
-// ── 运行历史面板 ──
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${Math.round(ms)}ms`
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
-  const m = Math.floor(ms / 60000)
-  const s = Math.round((ms % 60000) / 1000)
-  return `${m}m${s}s`
-}
-
-const NODE_STATUS_LABEL: Record<RunRecordNode['status'], string> = {
-  done: '成功',
-  skipped: '跳过',
-  failed: '失败'
-}
-
-const NODE_STATUS_COLOR: Record<RunRecordNode['status'], string> = {
-  done: '#34d399',
-  skipped: '#9ca3af',
-  failed: '#ff6b6b'
-}
-
-function RunsPanel({
-  projectId,
-  editor
-}: {
-  projectId: string
-  editor: Editor | null
-}): React.JSX.Element {
-  const [records, setRecords] = useState<RunRecordEntry[]>([])
-  const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  const refresh = async (): Promise<void> => {
-    const res = await window.api.run.list(projectId)
-    if (res.ok) setRecords(res.data)
-    setLoading(false)
-  }
-
-  useEffect(() => {
-    let cancelled = false
-    const doFetch = async (): Promise<void> => {
-      const res = await window.api.run.list(projectId)
-      if (!cancelled) {
-        if (res.ok) setRecords(res.data)
-        setLoading(false)
-      }
-    }
-    void doFetch()
-    return () => {
-      cancelled = true
-    }
-  }, [projectId])
-
-  // 点击节点定位到画布上
-  const handleLocateNode = (nodeId: string): void => {
-    if (!editor) return
-    const shapeId = nodeId as TLShapeId
-    const shape = editor.getShape(shapeId)
-    if (!shape) {
-      toast('该节点已不在画布上')
-      return
-    }
-    editor.select(shapeId)
-    editor.zoomToSelection({ animation: { duration: 300 } })
-  }
-
-  return (
-    <div className="side-panel-body runs-panel">
-      <div className="runs-toolbar">
-        <button className="side-panel-secondary" onClick={() => void refresh()} disabled={loading}>
-          <Icon name="reset" size={14} /> {loading ? '加载中…' : '刷新'}
-        </button>
-      </div>
-      <p className="side-panel-hint">每次全局运行或手动运行自动记录。最多保留 50 条。</p>
-      {records.length === 0 ? (
-        <div className="side-panel-empty">
-          {loading ? '正在加载…' : '暂无运行记录。执行一次工作流或手动运行节点后会在此显示。'}
-        </div>
-      ) : (
-        <div className="runs-list">
-          {records.map((rec) => {
-            const isOpen = expandedId === rec.runId
-            return (
-              <div key={rec.runId} className={`runs-card ${isOpen ? 'expanded' : ''}`}>
-                <div
-                  className="runs-card-header"
-                  onClick={() => setExpandedId(isOpen ? null : rec.runId)}
-                >
-                  <span
-                    className="runs-card-dot"
-                    style={{
-                      background:
-                        rec.failed > 0 ? '#ff6b6b' : rec.ok === rec.total ? '#34d399' : '#fbbf24'
-                    }}
-                  />
-                  <div className="runs-card-info">
-                    <span className="runs-card-time">{formatTime(rec.startedAt)}</span>
-                    <span className="runs-card-meta">
-                      {rec.ok}/{rec.total} 成功
-                      {rec.failed > 0 && ` · ${rec.failed} 失败`} · {formatDuration(rec.durationMs)}
-                    </span>
-                  </div>
-                  <span className="runs-card-chevron">{isOpen ? '▾' : '▸'}</span>
-                </div>
-                {isOpen && (
-                  <div className="runs-detail-list">
-                    {rec.nodes.map((node) => (
-                      <div
-                        key={node.id}
-                        className={`runs-detail-row ${node.status === 'failed' ? 'clickable' : ''}`}
-                        onClick={() => node.status === 'failed' && handleLocateNode(node.id)}
-                        title={node.status === 'failed' ? '点击在画布上定位此失败节点' : undefined}
-                      >
-                        <span
-                          className="runs-detail-dot"
-                          style={{ background: NODE_STATUS_COLOR[node.status] }}
-                        />
-                        <span className="runs-detail-label">{node.label}</span>
-                        <span className="runs-detail-status">{NODE_STATUS_LABEL[node.status]}</span>
-                        <span className="runs-detail-time">{formatDuration(node.durationMs)}</span>
-                        {node.errorReason && (
-                          <span className="runs-detail-error" title={node.errorReason}>
-                            {node.errorReason}
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}
-
 export function CanvasSidePanel({
   tab,
   projectId,
@@ -799,7 +650,6 @@ export function CanvasSidePanel({
       )}
       {tab === 'workflow' && <WorkflowPanel editor={editor} />}
       {tab === 'history' && <HistoryPanel projectId={projectId} editor={editor} />}
-      {tab === 'runs' && <RunsPanel projectId={projectId} editor={editor} />}
     </div>
   )
 }

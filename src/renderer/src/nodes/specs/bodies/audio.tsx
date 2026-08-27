@@ -5,7 +5,6 @@ import { mediaUrl, type NodeBodyProps } from '../../registry'
 import { toast } from '../../../stores/toast'
 import { markUndoPoint } from '../../../canvas/history'
 import { gatherUpstreamText } from '../../../canvas/graph'
-import { runNodeManually } from '../../../engine/executor'
 import { useAppStore } from '../../../stores/app'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { Icon } from '../../../components/Icon'
@@ -43,15 +42,6 @@ function parseAudioGen(text: string): AudioData {
 
 const VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']
 const AUDIO_FORMATS = ['mp3', 'opus', 'aac', 'flac', 'wav', 'pcm']
-
-// 模块级函数：对音频元素的属性赋值对 React 编译器不可见，
-// 避免事件处理器内直接改 DOM 属性被判为 immutability 违规
-function prepareAudio(el: HTMLAudioElement, onStopped: () => void): void {
-  el.loop = true
-  el.currentTime = 0
-  el.onended = onStopped
-  el.onpause = onStopped
-}
 
 export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
@@ -124,8 +114,11 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     } else {
       const el = audioRef.current ?? new Audio(mediaUrl(shape.props.mediaPath))
       audioRef.current = el
-      prepareAudio(el, () => setPlaying(false))
+      el.loop = true
+      el.currentTime = 0
       void el.play().then(() => setPlaying(true))
+      el.onended = () => setPlaying(false)
+      el.onpause = () => setPlaying(false)
     }
   }
 
@@ -141,17 +134,35 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     markUndoPoint(editor, 'audio-remove')
   }
 
-  // R0/WP3：语音合成统一走 runNodeManually（执行器负责上游合并/校验/落盘），Body 只写回配置。
   const generate = async (): Promise<void> => {
     const opt = options.find((o) => o.key === data.modelKey)
     if (!opt) return toast('请先选择音频模型')
-    if (!draft.trim() && !gatherUpstreamText(editor, shape.id))
-      return toast('请输入要朗读的文本或连接上游文本')
+    const upstream = gatherUpstreamText(editor, shape.id)
+    const text = upstream ? `${upstream}\n\n---\n\n${draft.trim()}` : draft.trim()
+    if (!text) return toast('请输入要朗读的文本或连接上游文本')
     if (!project) return toast('项目未就绪')
-    if (draft !== data.text) update({ ...data, text: draft })
     setBusy(true)
-    await runNodeManually(editor, project.id, shape.id)
+    const res = await window.api.gateway.audioGenerate({
+      projectId: project.id,
+      providerId: opt.provider.id,
+      modelId: opt.model.id,
+      text,
+      voice: data.voice,
+      format: data.format
+    })
     setBusy(false)
+    if (!res.ok) return toast(`生成失败：${res.error.message}`)
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: {
+        mediaId: res.data.id,
+        mediaPath: res.data.path,
+        mediaMime: res.data.mime,
+        title: res.data.name || res.data.id
+      }
+    })
+    markUndoPoint(editor, 'audio-gen')
   }
 
   // ── 已有音频文件：播放器视图（上传或生成共用） ──

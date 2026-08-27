@@ -1,7 +1,6 @@
 # R0 发布基线与回归保护：开发计划与测试计划
 
 > 制定日期：2026-08-27
-> **状态：✅ 已完成（2026-08-27）。WP1-WP5 全部落地；T1-T9 共 9 个测试文件、全套 421 用例通过。剩余事项：发布前按 [docs/REGRESSION.md](./docs/REGRESSION.md) 全表人工回归留档 + 全新 Windows 用户目录安装冒烟（REGRESSION.md §6）。**
 > 依据：[ROADMAP.md](./ROADMAP.md) R0 定义、[NODE_CONTRACT_SPEC.md](./NODE_CONTRACT_SPEC.md)、当前 main 分支（b3a33cc）代码实况。
 > 范围：R0 五项任务全部落地，含配套测试。不含 R3/R4 的角色/场景/镜头 Schema（另行规划）。
 

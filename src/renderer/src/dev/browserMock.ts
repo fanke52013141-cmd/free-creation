@@ -66,17 +66,6 @@ export function installBrowserMock(): void {
     },
     saveProjectSync: () => undefined,
     closeProject: () => Promise.resolve({ ok: true, data: true }),
-    importDemoProject: () => {
-      const p: ProjectMeta = {
-        id: 'demo-' + Date.now(),
-        name: 'Canvas Studio 示例项目',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        graphVersion: 0
-      }
-      projects.unshift(p)
-      return Promise.resolve({ ok: true, data: p })
-    },
     importMedia: () => Promise.resolve({ ok: true, data: { assets: [], errors: [] } }),
     pickMedia: () => Promise.resolve({ ok: true, data: { assets: [], errors: [] } }),
     getDroppedFilePath: () => '',

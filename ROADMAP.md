@@ -1,6 +1,6 @@
 # Canvas Studio 后续开发路线图
 
-> 更新日期：2026-08-27  
+> 更新日期：2026-08-24  
 > 产品边界：单用户、本地优先、不做多租户、不做权限系统、不做强制教程、不在画布内做视频剪辑合成。  
 > 节点规范以 [NODE_CONTRACT_SPEC.md](./NODE_CONTRACT_SPEC.md) 为唯一依据。
 
@@ -43,33 +43,24 @@
 
 ## 3. 分阶段计划
 
-### R0：发布基线与回归保护 ✅ 已完成
+### R0：发布基线与回归保护
 
 优先级：最高。应在继续开发新能力前完成。
 
-落地情况：
-
-- 运行错误日志落盘：`log.write` IPC 通道 + `RunLogEntry` 信封；双层脱敏 `sanitizeRunError()`（剔除 token/Authorization 头，URL 只留协议+域名）；`%APPDATA%/canvas-studio/logs/` 按天滚动；渲染进程 `window.onerror`/`unhandledrejection`/ErrorBoundary 兜底；错误面板可定位画布节点。
-- 旧项目迁移：四段迁移逻辑抽取为纯函数 `planLegacyMigrations()`；`inspectProjectFile()` 打开前预检；未知端口/节点类型冻结显示 + 显式警告，不再静默猜测或删数据。
-- 手动触发一致性：统一入口 `runNodeManually()` 复用 `executeNodeOnce`，生成类节点（生图/视频/音频）全部收敛，见 [docs/CONSISTENCY_MATRIX.md](./docs/CONSISTENCY_MATRIX.md)。
-- 节点回归表：[docs/REGRESSION.md](./docs/REGRESSION.md)，13 节点 × 9 操作 + 示例项目 5 链路验收 + 留档模板。
-- 示例项目：`scripts/build-demo-bundle.mjs` 生成含 5 条链路的 bundle，随安装包分发，首页「打开示例项目」一键导入。
-- 测试：新增 T1-T9 共 9 个测试文件，全套 421 用例通过，已纳入 CI。
-
 任务：
 
-1. ~~建立节点清单回归表，覆盖创建、编辑、拖动、复制、删除、连接、运行、保存和恢复。~~ ✅ docs/REGRESSION.md
-2. ~~为旧项目快照补充契约版本迁移入口；遇到未知端口时给出明确提示，不静默猜测。~~ ✅ migrations/legacy.ts + inspectProjectFile
-3. ~~检查所有手动触发按钮是否与全局运行使用相同端口和输出投影。~~ ✅ runNodeManually 统一入口
-4. ~~增加本地运行错误日志，记录节点 ID、端口 ID、契约版本和错误阶段，但不记录 API Key。~~ ✅ log.ipc.ts + sanitizeRunError
-5. ~~固定一份可回归的示例项目，至少包含文本→生图、文本→对话→JSON、JSON→分镜和处理→代码链路。~~ ✅ 内置示例项目（另含循环批处理链）
+1. 建立节点清单回归表，覆盖创建、编辑、拖动、复制、删除、连接、运行、保存和恢复。
+2. 为旧项目快照补充契约版本迁移入口；遇到未知端口时给出明确提示，不静默猜测。
+3. 检查所有手动触发按钮是否与全局运行使用相同端口和输出投影。
+4. 增加本地运行错误日志，记录节点 ID、端口 ID、契约版本和错误阶段，但不记录 API Key。
+5. 固定一份可回归的示例项目，至少包含文本→生图、文本→对话→JSON、JSON→分镜和处理→代码链路。
 
 完成标准：
 
-- ~~旧项目可以打开、保存并再次打开。~~ ✅（legacy-migrations / projects-repo 测试 + 迁移幂等验证）
-- ~~任意错误连线都能在创建时或运行时得到具体端口级错误。~~ ✅（连线矩阵测试 + 端口级错误信息）
-- ~~所有现有节点通过统一回归表。~~ ✅（表已建立；发布前人工全量执行留档，见 REGRESSION.md §5）
-- ~~发布包在全新 Windows 用户目录可启动。~~ 待发布时执行（REGRESSION.md §6 冒烟项）
+- 旧项目可以打开、保存并再次打开。
+- 任意错误连线都能在创建时或运行时得到具体端口级错误。
+- 所有现有节点通过统一回归表。
+- 发布包在全新 Windows 用户目录可启动。
 
 ### R1：节点执行器解耦（契约规范 P3）✅ 已完成
 
@@ -261,46 +252,6 @@ pnpm test:coverage   # 覆盖率报告
 | 5    | R4 批处理     | 为多镜头生产提供正确的控制模型       |
 | 6    | R5 媒体链路   | 在编排稳定后完善生成体验             |
 | 7    | R6/R7         | 面向大项目和正式发布收尾             |
-| 8    | R8 内核收敛   | 数据模型三分 + 运行记录持久化 + 超时协议 |
-
-### R8：数据模型与运行内核收敛（WP1-WP3 已完成，WP4 可选）
-
-> 详细计划见 [R8_PLAN.md](./R8_PLAN.md)。
-
-目标：在 v1.0 发布前把数据模型和运行协议收敛到位，避免发布后做 v2→v3 迁移。
-
-#### WP1 节点数据字段三分：config / text / result ✅ 已完成
-
-落地情况：
-
-- `NodeCardProps` 从 9 字段扩展到 12 字段（新增 `config`/`result`/`runMeta`），tldraw 迁移 v1→v2。
-- 访问器 `nodes/nodeData.ts`：`getNodeConfig()` 读 `props.config`（空回退旧 text 解析）、`getNodeResult()` 读 `props.result`、`setNodeResult()` 写 props.result、`splitLegacyTextField()` 按节点类型拆分旧 text 到 config/text/result。
-- 投影统一：`nodeValues.ts` 已运行节点从 `result` 投影，未运行从 `config` 派生，旧 `meta.nodeResult` 兼容读。
-- 全部 13 节点 Body 和 11 执行器切换到访问器读写，行为完全等价。
-
-#### WP2 运行记录持久化：RunRecord 与运行历史 ✅ 已完成
-
-落地情况：
-
-- 节点级 `runMeta`（JSON：`{ at, durationMs, runId, error? }`）：运行器用 `performance.now()` 统一采集每节点耗时，执行器零改动。
-- 项目级 `<projectId>/runs.json`：最多 50 条 FIFO 淘汰，含 runId、startedAt、durationMs、total、ok、failed、各节点明细。
-- `run.append`（fire-and-forget）+ `run.list`（请求/响应）IPC 通道，主进程 `main/ipc/run.ipc.ts` 原子写（.tmp+rename+.bak），损坏时降级重建为仅含当前记录。
-- UI 两入口：(1) 状态灯 hover 显示"上次运行：成功 · 2.3s · 14:32"；(2) CanvasSidePanel 新增「运行历史」tab（卡片列表 → 展开看每节点耗时与失败原因 → 点击失败节点定位画布）。
-- 测试 `test/runs-repo.test.ts`：10 个用例覆盖 FIFO 淘汰、损坏重建、原子写验证、计时往返、失败节点明细等。
-
-#### WP3 长任务统一超时协议 ✅ 已完成
-
-落地情况：
-
-- `engine/timeouts.ts` 单一事实源：分级默认表（chat/text/ai-process 120s，image-gen/audio 300s，video 1800s，兜底 120s）+ `resolveTimeoutMs()` 解析函数 + `formatTimeoutLabel()` 格式化辅助。
-- `invokeExecutor` 统一 `Promise.race([executor, timeoutPromise])` 包裹所有节点执行器；超时自动触发 `CancelSignal`（`token.cancelled = true`），让执行器内部中止挂起的网关请求。
-- `store.ts` 的 `ErrorPhase` 类型扩展 `'timeout'`；`executeNodeOnce` catch 块优先检测超时错误（消息以"超时"开头），路由到 `phase='timeout'` + `setExec('failed')`，不被 `cancelled` 分支吞没。
-- 节点 config 可选 `timeoutMs` 覆盖默认值（通过 `nodeData(shape.props)` 读取），钳制到 [1s, 1h] 范围；非正数/非数字忽略回退默认。
-- 测试 `test/timeout.test.ts`：23 个用例（fake timers）覆盖分级默认、兜底、用户覆盖与钳制、formatTimeoutLabel、正常完成不受影响、超时触发 CancelSignal、定时器清理、执行器内部错误传播、phase='timeout' 分类。
-
-#### WP4 tldraw 连线端到端测试（可选）⏳ 待开发
-
-计划：jsdom + headless Editor 覆盖连线创建/类型拒绝/Schema拒绝/环检测/重复边/删除连带。
 
 ## 5. 明确不做
 

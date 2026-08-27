@@ -1,12 +1,11 @@
-// 生图节点 Body（路线图 R6：bodies.tsx 拆分；R0/WP3：生成按钮收敛到 runNodeManually）
+// 生图节点 Body（路线图 R6：bodies.tsx 拆分）
 import { useEffect, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import { PROVIDER_SPECS } from '@shared/types'
 import { mediaUrl, type NodeBodyProps } from '../../registry'
 import { toast } from '../../../stores/toast'
 import { markUndoPoint } from '../../../canvas/history'
-import { gatherUpstreamMedia } from '../../../canvas/graph'
-import { runNodeManually } from '../../../engine/executor'
+import { gatherUpstreamMedia, gatherUpstreamText } from '../../../canvas/graph'
 import { useAppStore } from '../../../stores/app'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { Icon } from '../../../components/Icon'
@@ -67,15 +66,36 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
 
   const refImage = gatherUpstreamMedia(editor, shape.id, 'in-image', 'image')
 
-  // R0/WP3：生成按钮统一走 runNodeManually（复用执行器完整链路：契约校验/投影/错误登记），
-  // Body 不再直调网关。先把草稿写回 props，保证执行器读到最新配置。
   const generate = async (): Promise<void> => {
+    const opt = options.find((o) => o.key === data.modelKey)
+    if (!opt) return toast('请先选择图片模型')
+    const upstream = gatherUpstreamText(editor, shape.id)
+    const prompt = upstream ? `${upstream}\n\n---\n\n${draft.trim()}` : draft.trim()
+    if (!prompt) return toast('请输入提示词或连接上游文本')
     if (!project) return toast('项目未就绪')
-    if (!draft.trim() && !refImage) return toast('请输入提示词或连接上游文本')
-    if (draft !== data.prompt) update({ ...data, prompt: draft })
     setBusy(true)
-    await runNodeManually(editor, project.id, shape.id)
+    const res = await window.api.gateway.imageGenerate({
+      projectId: project.id,
+      providerId: opt.provider.id,
+      modelId: opt.model.id,
+      prompt,
+      size: data.size,
+      ...(typeof data.seed === 'number' && data.seed > 0 ? { seed: data.seed } : {}),
+      ...(refImage ? { referenceMediaId: refImage.mediaId } : {})
+    })
     setBusy(false)
+    if (!res.ok) return toast(`生成失败：${res.error.message}`)
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: {
+        mediaId: res.data.id,
+        mediaPath: res.data.path,
+        mediaMime: res.data.mime,
+        title: res.data.name || res.data.id
+      }
+    })
+    markUndoPoint(editor, 'image-gen')
   }
 
   if (shape.props.mediaPath) {

@@ -2,22 +2,14 @@
 import { HTMLContainer, stopEventPropagation, useEditor, useValue } from 'tldraw'
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import {
-  getNodePorts,
-  getNodeType,
-  portCompatible,
-  portOffsets,
-  PORT_COLORS
-} from '../nodes/registry'
+import { getNodePorts, getNodeType, portCompatible, portOffsets, PORT_COLORS } from '../nodes/registry'
 import type { PortDecl } from '@shared/types'
 import { useConnectionStore } from '../stores/connection'
 import { useNodePanelStore } from '../stores/nodePanel'
 import { beginConnectionDrag } from './connection-drag'
 import { markUndoPoint } from './history'
-import { NodeHoverToolbar } from './node-toolbar/NodeHoverToolbar'
 import type { NodeCardShape } from './NodeCardShape'
 import { Icon } from '../components/Icon'
-import type { RunMeta } from '@shared/contracts'
 
 const EXEC_COLORS: Record<string, string> = {
   idle: '#6b7280',
@@ -74,7 +66,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     check()
     const unsub = editor.store.listen(check, { scope: 'session' })
     return unsub
-  }, [editor, shape, spec])
+  }, [editor, shape.id, spec])
 
   // 计算节点序号：按创建顺序排序所有 node-card，返回当前节点的序号
   const seq = useValue(
@@ -125,28 +117,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
 
   const titleEditable = true
 
-  // 解析 runMeta JSON 构造状态灯 hover 提示文本
-  const statusTitle = (() => {
-    const execLabel = shape.props.exec
-    if (!shape.props.runMeta) return execLabel
-    try {
-      const meta = JSON.parse(shape.props.runMeta) as RunMeta
-      const d = new Date(meta.at)
-      const timeStr = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
-      const secs =
-        meta.durationMs >= 1000
-          ? `${(meta.durationMs / 1000).toFixed(1)}s`
-          : `${Math.round(meta.durationMs)}ms`
-      const outcome = meta.error ? `失败：${meta.error}` : '成功'
-      return `上次运行：${outcome} · ${secs} · ${timeStr}`
-    } catch {
-      return execLabel
-    }
-  })()
-
-  const resolvedPorts = spec
-    ? getNodePorts(spec, shape)
-    : { in: [] as PortDecl[], out: [] as PortDecl[] }
+  const resolvedPorts = spec ? getNodePorts(spec, shape) : { in: [] as PortDecl[], out: [] as PortDecl[] }
   const inPorts = resolvedPorts.in
   const outPorts = resolvedPorts.out
   const inY = portOffsets(inPorts.length, shape.props.h)
@@ -160,11 +131,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         className={`node-card-wrap ${connectable ? 'connectable' : ''} ${selected ? 'is-selected' : ''}`}
         style={{ width: shape.props.w, height: shape.props.h }}
       >
-        {/* 媒体节点悬浮工具栏：hover 出现的「第二功能」（查看/裁剪/拆分/放大等） */}
-        <NodeHoverToolbar shape={shape} onPreview={(p) => setPreview(p)} />
-        <div className={`node-card type-${shape.props.nodeType} ${!spec ? 'is-frozen' : ''}`}>
+        <div className={`node-card type-${shape.props.nodeType}`}>
           {/* 顶部颜色条（按类型区分） */}
-          <div className="node-color-bar" style={{ background: spec?.color ?? '#9ca3af' }} />
+          <div className="node-color-bar" style={{ background: spec?.color }} />
           <div className="node-header">
             <span className="node-seq" style={{ color: spec?.color }}>
               {seq}
@@ -192,7 +161,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             <span
               className="node-status"
               style={{ background: EXEC_COLORS[shape.props.exec] ?? EXEC_COLORS.idle }}
-              title={statusTitle}
+              title={shape.props.exec}
             />
             <button
               className="node-info-btn"
@@ -212,11 +181,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             {spec ? (
               <spec.Body shape={shape} openPreview={(p) => setPreview(p)} />
             ) : (
-              <div className="node-frozen-placeholder">
-                <Icon name="lock" size={20} />
-                <div className="node-frozen-type">{shape.props.nodeType}</div>
-                <div className="node-frozen-hint">来自更高版本或已移除的节点，不参与运行</div>
-              </div>
+              <div className="node-empty">未知节点类型：{shape.props.nodeType}</div>
             )}
           </div>
         </div>

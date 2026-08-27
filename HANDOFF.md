@@ -1,6 +1,6 @@
 # Canvas Studio 开发交接文档
 
-> 最后更新：2026-08-27（R8 WP1+WP2+WP3 完成）
+> 最后更新：2026-08-24
 >
 > 当前主分支：`main`
 >
@@ -54,7 +54,7 @@ pnpm build:win
 测试与门禁：
 
 ```bash
-pnpm test            # 节点契约与执行器测试（437 用例，~4 秒）
+pnpm test            # 节点契约与执行器测试（289 用例，~4 秒）
 pnpm test:watch      # 监听模式
 pnpm test:coverage   # 覆盖率报告
 ```
@@ -109,12 +109,7 @@ src/
 - `src/renderer/src/engine/executors/shared.ts`：执行器共享工具（提示词合并、JSON/分镜解析、对话/视频取消式等待）。
 - `src/renderer/src/nodes/nodeValues.ts`：节点持久化状态到端口输出的唯一投影。
 - `src/renderer/src/engine/contracts.ts`：输入收集、数据包和运行前后契约校验。
-- `src/renderer/src/engine/executor.ts`：全局工作流运行器（拓扑、收集、校验、执行、投影、登记），不含节点特例。R8 WP2 新增运行计时上报（runMeta + RunRecord）；R8 WP3 新增统一超时包裹（Promise.race + CancelSignal 联动）。
-- `src/renderer/src/engine/timeouts.ts`：统一超时配置单一事实源（R8 WP3），分级默认表 + `resolveTimeoutMs()` + `formatTimeoutLabel()`。
-- `src/renderer/src/nodes/nodeData.ts`：节点配置/内容/结果三分访问器（R8 WP1），旧 text 字段迁移拆分。
-- `src/main/ipc/run.ipc.ts`：运行记录仓库（R8 WP2），追加写入 runs.json（50 条 FIFO、损坏重建、原子写）。
-- `src/main/ipc/log.ipc.ts`：运行错误日志通道（R0 WP1），双层脱敏落盘。
-- `src/shared/sanitize.ts`：运行错误安全脱敏函数。
+- `src/renderer/src/engine/executor.ts`：全局工作流运行器（拓扑、收集、校验、执行、投影、登记），不含节点特例。
 - `src/renderer/src/canvas/graph.ts`：创建连线、类型/Schema/数量/环校验和图数据派生。
 - `src/renderer/src/canvas/NodeCardView.tsx`：统一节点壳、标题、端口和交互。
 - `src/renderer/src/canvas/NodeContractPanel.tsx`：I/O 契约、连接来源/去向和值预览。
@@ -261,10 +256,8 @@ tldraw 交互特别注意：
 ```text
 %APPDATA%/canvas-studio/data/
 ├─ app.db
-├─ logs/                    # 运行错误日志（R0 WP1），按天滚动
 └─ projects/<projectId>/
    ├─ project.json
-   ├─ runs.json             # 运行历史记录（R8 WP2），50 条 FIFO
    └─ media/
 ```
 
@@ -274,11 +267,6 @@ tldraw 交互特别注意：
 - 派生 `nodes/edges/groups`：工作流和检查器使用。
 - `graphVersion`：项目图版本。
 
-`runs.json`（R8 WP2）保存：
-
-- 最近 50 次运行的完整记录（runId、时间、耗时、各节点状态与耗时、失败原因）。
-- 追加写入，先进先出淘汰，损坏时降级重建为仅含当前记录。
-
 项目写入使用临时文件和重命名，保留 `.bak` 回退。恢复快照失败时禁止自动保存空画布覆盖原项目。
 
 ## 10. 当前已知问题
@@ -287,7 +275,7 @@ tldraw 交互特别注意：
 
 1. ~~`executor.ts` 仍通过节点类型 switch 执行，下一步应拆成节点自注册执行器。~~ **已完成（R1）：执行器已解耦到 `engine/executors/<node>.ts`，运行器零节点特例。**
 2. ~~没有契约和工作流的自动化测试，当前主要依赖 typecheck、lint、build 和人工回归。~~ **已完成（R2）：引入 vitest，9 个测试文件 289 个用例覆盖契约层；GitHub Actions 门禁已建立。**
-3. ~~节点固定配置与运行结果仍有历史混用，文本/旧脚本节点尤其需要在执行器解耦时分开。~~ **已完成（R8 WP1）：`NodeCardProps` 新增 `config`/`result`/`runMeta` 字段，访问器 `nodeData.ts` 统一读写，旧 text 字段经 `splitLegacyTextField` 迁移拆分。投影单一规则：result 优先 → config 派生 → 空。**
+3. ~~节点固定配置与运行结果仍有历史混用，文本/旧脚本节点尤其需要在执行器解耦时分开。~~ **部分完成（R1）：执行器通过 `NodeExecutionContext.updateProps/updateResult` 受控写回，投影统一由运行器处理；配置与结果的彻底分离留待后续清理 `NodeCardProps.text` 复用字段时收尾。**
 4. ~~`bodies.tsx` 体积较大，应该按节点拆文件，但不要在行为改造期间同时做无关视觉重写。~~ **已完成（R6）：拆分为 `nodes/specs/bodies/` 目录下 13 个节点 Body 文件 + shared.tsx + index.tsx 聚合，行为等价。**
 5. JSON Schema 种类不足，角色、场景、字幕和列表协议尚未建立。
 6. 工作流模板的旧端口只能在唯一可推断时迁移；含糊的旧连线会跳过并提示。
@@ -297,34 +285,23 @@ tldraw 交互特别注意：
 
 产品能力缺口：
 
-- ~~缺少独立的一次性“AI 处理”节点；当前工作流结构化转换借用对话节点。~~ **已完成（R3）：`ai-process` 节点。**
-- ~~缺少列表迭代和受控批量生图/视频。~~ **已完成（R4）：`iterate` 循环节点（list.items Schema、并发上限、失败策略、取消与恢复）。**
-- ~~缺少项目导出/导入和跨机器迁移。~~ **已完成：`.canvasbundle` 导出/导入，内置示例项目随安装包分发。**
+- 缺少独立的一次性“AI 处理”节点；当前工作流结构化转换借用对话节点。
+- 缺少列表迭代和受控批量生图/视频。
+- 缺少项目导出/导入和跨机器迁移。
 - tldraw 外部字体/资源尚未完全本地化。
 - 大节点数量下还没有系统性能基准。
 
-R0 已消解的问题（2026-08-27）：
-
-- ~~运行错误只存在内存，重启丢失。~~ **已完成（R0/WP1）：错误经 `log.write` IPC 落盘 `%APPDATA%/canvas-studio/logs/`，双层脱敏（`sanitizeRunError`），含 nodeId/portId/contractVersion/runId；渲染进程有全局错误监听与 ErrorBoundary 兜底。**
-- ~~旧项目未知端口/节点类型静默猜测写入。~~ **已完成（R0/WP2）：迁移逻辑纯函数化（`migrations/legacy.ts`）+ `inspectProjectFile` 预检；未知内容冻结显示 + 显式警告。**
-- ~~手动按钮与全局运行双轨。~~ **已完成（R0/WP3）：`runNodeManually` 统一入口，见 [docs/CONSISTENCY_MATRIX.md](./docs/CONSISTENCY_MATRIX.md)。**
-
 ## 11. 推荐的下一项工作
 
-R0-R7 主体均已完成。R8 数据模型与运行内核收敛进度：
+优先执行 [ROADMAP.md](./ROADMAP.md) 的 R0 和 R1：
 
-- **WP1 节点数据字段三分**（config/text/result）：✅ 已完成。`NodeCardProps` 升级到含 12 个字段（w/h/nodeType/title/text/config/result/mediaId/mediaPath/mediaMime/exec/runMeta），tldraw 迁移 v1→v2，旧项目自动迁移幂等。
-- **WP2 运行记录持久化**：✅ 已完成。节点级 `runMeta`（JSON：at/durationMs/runId/error）+ 项目级 `runs.json`（50 条 FIFO）+ `run.append`/`run.list` IPC + 状态灯 hover 提示 + 侧面板「运行历史」tab。
-- **WP3 长任务统一超时协议**：✅ 已完成。`engine/timeouts.ts` 分级默认表（chat/text/ai-process 120s，image-gen/audio 300s，video 1800s，兜底 120s）+ `invokeExecutor` 统一 `Promise.race` 包裹 + 超时触发 CancelSignal + `phase='timeout'` 错误（文案"超时（300s）"）+ config `timeoutMs` 覆盖（钳制 [1s, 1h]）。23 个测试用例（fake timers）覆盖。
-- **WP4 tldraw 连线端到端测试**：可选。jsdom 环境 headless Editor 连线创建/拒绝/环检测测试。
+1. ~~先补契约/连线/旧快照回归保护。~~ （R0 仍待补自动化回归表）
+2. ~~定义 `NodeExecutor` 接口。~~ **已完成（R1）**
+3. ~~把每个节点执行逻辑移到节点目录。~~ **已完成（R1）：`engine/executors/<node>.ts`**
+4. 将节点配置、运行输入和运行输出彻底分离（R1 已收敛写回入口，字段复用清理留待后续）。
+5. ~~再增加结构化 AI 节点和批处理能力。~~ （R3/R4，先做 R2 测试门禁）
 
-R8 剩余事项与后续方向：
-
-1. ~~R8 WP3：统一超时协议。~~ **已完成**：所有网关调用受分级超时约束，超时自动取消并记 phase='timeout' 错误；节点 config 可用 `timeoutMs` 覆盖默认值。
-2. R8 WP4：tldraw 连线 E2E 测试（可砍，当前靠纯函数测试 + 人工回归覆盖）。
-3. 发布前按 [docs/REGRESSION.md](./docs/REGRESSION.md) 全表人工回归并留档；`pnpm build:win` 后在全新 Windows 用户目录做安装冒烟。
-4. ~~为长任务统一超时协议。~~ **已完成（R8 WP3）**：见上文 WP3 条目。
-5. 大画布性能基准与优化（后续路线）。
+下一推荐：R2 自动化测试与 CI 门禁——为执行器、契约校验、连线矩阵和输出投影增加纯函数测试，让端口/Schema 变化在提交前自动暴露。在 R2 之前可顺手补 R0 回归表。
 
 不要首先增加更多特殊业务节点。否则新的契约层会再次被节点特例侵蚀。
 
@@ -342,8 +319,6 @@ R8 剩余事项与后续方向：
 注册表会拒绝不完整契约。不要绕过校验来临时让节点出现。
 
 ## 13. 发布检查清单
-
-发布流程 = 本清单 + [docs/REGRESSION.md](./docs/REGRESSION.md) 全表过一遍并留档。
 
 ```text
 [ ] git status 中没有 Word、解析缓存、数据库、媒体或 API Key
@@ -363,12 +338,6 @@ R8 剩余事项与后续方向：
 [ ] 生图/视频真实供应商至少各冒烟一次
 [ ] API Key 保存后落盘为加密密文（非明文），重新读取可还原
 [ ] 项目可导出 .canvasbundle 并在另一台机器导入恢复
-[ ] 错误日志落盘且不含 API Key/Authorization token（R0 新增）
-[ ] 首页「打开示例项目」可用，5 条链路全部运行成功（R0 新增）
-[ ] 全新 Windows 用户目录安装启动，%APPDATA%/canvas-studio/data/ 自动创建（R0 新增）
-[ ] 运行工作流后侧面板「运行历史」可见各节点耗时与状态（R8 WP2 新增）
-[ ] 状态灯 hover 显示"上次运行：成功/失败 · 耗时 · 时间"（R8 WP2 新增）
-[ ] 重开项目后运行历史保留（runs.json 持久化验证）（R8 WP2 新增）
 [ ] 提交信息说明行为变化和兼容策略
 ```
 

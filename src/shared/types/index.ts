@@ -95,10 +95,6 @@ export interface CanvasEdge {
   id: string
   from: { nodeId: string; portId: string }
   to: { nodeId: string; portId: string }
-  /** 运行时标记：'unknown-port' 表示该边引用的端口在当前注册表中不存在，不参与运行。 */
-  meta?: {
-    flagged?: 'unknown-port'
-  }
 }
 
 export interface GroupDecl {

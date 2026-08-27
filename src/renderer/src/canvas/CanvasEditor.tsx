@@ -22,13 +22,12 @@ import {
 import { deriveGraph, tryConnect, createEdge } from './graph'
 import type { AiProcessConfig } from '../engine/executors/aiProcess'
 import { markUndoPoint } from './history'
-import { getNodeType, allNodeTypes } from '../nodes/registry'
+import { getNodeType, allNodeTypes, needsNodeSizeMigration } from '../nodes/registry'
 import {
   registerBaseNodeTypes,
   registerScriptNodeType,
   registerExtendedNodeTypes
 } from '../nodes/specs'
-import { planLegacyMigrations } from '../nodes/migrations/legacy'
 import { toast } from '../stores/toast'
 import type { ConnectionFrom } from '../stores/connection'
 import { useGatewayStore } from '../stores/gateway'
@@ -259,7 +258,9 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
       const typing =
         !!editor.getEditingShape() ||
         (active instanceof HTMLElement &&
-          (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable))
+          (active.tagName === 'INPUT' ||
+            active.tagName === 'TEXTAREA' ||
+            active.isContentEditable))
       if (typing) return
       const mod = e.ctrlKey || e.metaKey
       if (mod && e.shiftKey && (e.key === 'f' || e.key === 'F')) {
@@ -520,28 +521,72 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
         editor.store.loadStoreSnapshot(editor.store.migrateSnapshot(initialSnapshot as never))
       } catch (e) {
         console.error('快照恢复失败', e)
-        try {
-          window.api?.log?.write({
-            label: '快照恢复失败',
-            reason: e instanceof Error ? e.message : String(e),
-            phase: 'snapshot-restore'
-          })
-        } catch {
-          /* 静默 */
-        }
         restoreFailedRef.current = true
         toast('画布数据恢复失败，已暂停自动保存，以防覆盖原有数据', 6000)
         return
       }
     }
 
-    // 旧项目契约迁移：纯函数产出迁移计划，编排统一应用（WP2 抽取自 handleMount 内联逻辑）。
-    // 覆盖 image→image-gen / compose 退役 / group→原生分组 / 尺寸规范化四段迁移。
-    const migration = planLegacyMigrations(editor.getCurrentPageShapes())
-    if (migration.shapeUpdates.length > 0) editor.updateShapes(migration.shapeUpdates)
-    for (const op of migration.groupOps) editor.groupShapes(op.memberIds)
-    if (migration.deletions.length > 0) editor.deleteShapes(migration.deletions)
-    for (const msg of migration.warnings) toast(msg)
+    // 旧版“图片”兼具资产和生成两种职责：有生成配置或尚无媒体的迁移为“生图”，
+    // 已导入的媒体保留为纯图片资产，避免再出现一个节点两种含义。
+    const imageGenUpdates = editor
+      .getCurrentPageShapes()
+      .filter((shape): shape is typeof shape & { type: 'node-card' } => shape.type === 'node-card')
+      .flatMap((shape) => {
+        if (shape.props.nodeType !== 'image') return []
+        let hasPromptConfig = false
+        try {
+          const value = JSON.parse(shape.props.text) as { prompt?: unknown }
+          hasPromptConfig = typeof value.prompt === 'string'
+        } catch {
+          // 空或普通资产文字不代表生图配置。
+        }
+        if (!hasPromptConfig && shape.props.mediaPath) return []
+        return [
+          {
+            id: shape.id,
+            type: 'node-card' as const,
+            props: {
+              nodeType: 'image-gen',
+              title: shape.props.title === '图片' ? '生图' : shape.props.title
+            }
+          }
+        ]
+      })
+    if (imageGenUpdates.length > 0) {
+      editor.updateShapes(imageGenUpdates)
+      toast(`已将 ${imageGenUpdates.length} 个旧图片生成节点迁移为“生图”`)
+    }
+
+    // 退役旧“分组节点”：成员关系迁移为 tldraw 原生 group；旧“合成节点”直接移出画布。
+    const retiredNodes: TLShapeId[] = []
+    let migratedGroups = 0
+    for (const current of editor.getCurrentPageShapes()) {
+      if (current.type !== 'node-card') continue
+      if (current.props.nodeType === 'compose') {
+        retiredNodes.push(current.id)
+        continue
+      }
+      if (current.props.nodeType !== 'group') continue
+      try {
+        const parsed = JSON.parse(current.props.text) as { memberIds?: unknown }
+        const memberIds = Array.isArray(parsed.memberIds)
+          ? parsed.memberIds.filter(
+              (id): id is TLShapeId =>
+                typeof id === 'string' && editor.getShape(id as TLShapeId)?.type === 'node-card'
+            )
+          : []
+        if (memberIds.length >= 2) {
+          editor.groupShapes(memberIds)
+          migratedGroups += 1
+        }
+      } catch {
+        // 损坏的旧分组不阻断项目打开；旧分组卡片仍会被移除。
+      }
+      retiredNodes.push(current.id)
+    }
+    if (retiredNodes.length > 0) editor.deleteShapes(retiredNodes)
+    if (migratedGroups > 0) toast(`已将 ${migratedGroups} 个旧分组迁移为画布分组状态`)
 
     // 兼容旧版本由 tldraw 默认粘贴产生的原生 image shape：成功落盘后再替换为图片节点。
     const rawImages = editor.getCurrentPageShapes().filter((shape) => shape.type === 'image')
@@ -587,6 +632,27 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
       },
       { scope: 'document' }
     )
+    // 一次性兼容旧快照：只修正旧版本默认尺寸或明显异常的超大节点。
+    const resizeUpdates = editor
+      .getCurrentPageShapes()
+      .filter((shape): shape is typeof shape & { type: 'node-card' } => shape.type === 'node-card')
+      .flatMap((shape) => {
+        const spec = getNodeType(shape.props.nodeType)
+        if (!spec || !needsNodeSizeMigration(shape.props.nodeType, shape.props.w, shape.props.h)) {
+          return []
+        }
+        return [
+          {
+            id: shape.id,
+            type: 'node-card' as const,
+            props: { w: spec.defaultSize.w, h: spec.defaultSize.h }
+          }
+        ]
+      })
+    if (resizeUpdates.length > 0) {
+      editor.updateShapes(resizeUpdates)
+      toast(`已将 ${resizeUpdates.length} 个旧节点调整为标准尺寸`)
+    }
     // 删除节点时级联清理连线：tldraw 删 shape 时只删其 binding 不删 arrow，会留悬空线。
     // 用 sideEffects 的 afterDelete 钩子同步处理——binding 在 shape 的 beforeDelete 阶段
     // 已被 tldraw 删除，此时遍历箭头找绑定数 < 2 的即为悬空线，随同一次事务删除（可整体撤销）。
@@ -738,11 +804,6 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
             >
               <span className="palette-icon">
                 <Icon name="history" size={20} />
-              </span>
-            </button>
-            <button className="palette-item" title="运行历史" onClick={() => setPanelTab('runs')}>
-              <span className="palette-icon">
-                <Icon name="activity" size={20} />
               </span>
             </button>
           </div>

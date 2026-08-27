@@ -2,7 +2,6 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import { IPC } from '../shared/contracts'
 import type {
-  AppendRunInput,
   BootstrapInfo,
   ChatStartInput,
   CreateProjectInput,
@@ -11,8 +10,6 @@ import type {
   ImageGenerateInput,
   ImportMediaBufferInput,
   RenameProjectInput,
-  RunLogEntry,
-  RunRecordEntry,
   SaveProjectInput,
   SaveProviderInput,
   TestProviderResult,
@@ -49,8 +46,6 @@ const api = {
   exportProject: (input: { id: string; name?: string }): Promise<IpcEnvelope<{ path: string }>> =>
     ipcRenderer.invoke(IPC.project.export, input),
   importProject: (): Promise<IpcEnvelope<ProjectMeta>> => ipcRenderer.invoke(IPC.project.import),
-  importDemoProject: (): Promise<IpcEnvelope<ProjectMeta>> =>
-    ipcRenderer.invoke(IPC.project.importDemo),
   importMedia: (input: {
     projectId: string
     paths: string[]
@@ -77,20 +72,6 @@ const api = {
     ipcRenderer.invoke(IPC.media.batchExport, { projectId }),
   // 拖拽落盘的 File 对象拿真实路径（Electron 32+ 移除了 File.path）
   getDroppedFilePath: (file: File): string => webUtils.getPathForFile(file),
-  // 运行日志上报（fire-and-forget，不等待返回）
-  log: {
-    write: (entry: RunLogEntry): void => {
-      ipcRenderer.send(IPC.log.write, entry)
-    }
-  },
-  // 运行记录追加（fire-and-forget，不等待返回）+ 列表读取
-  run: {
-    append: (input: AppendRunInput): void => {
-      ipcRenderer.send(IPC.run.append, input)
-    },
-    list: (projectId: string): Promise<IpcEnvelope<RunRecordEntry[]>> =>
-      ipcRenderer.invoke(IPC.run.list, projectId)
-  },
   gateway: {
     listProviders: (): Promise<IpcEnvelope<ProviderConfig[]>> =>
       ipcRenderer.invoke(IPC.gateway.providers),

@@ -116,10 +116,6 @@ export function collectContractInputs(
 
   for (const edge of edges) {
     if (edge.to.nodeId !== node.id) continue
-    if (edge.meta?.flagged === 'unknown-port') {
-      errors.push(`连线 ${edge.id} 引用的端口在当前版本中不存在（已冻结），不参与运行`)
-      continue
-    }
     const target = inputPorts.get(edge.to.portId)
     if (!target) {
       errors.push(`连线 ${edge.id} 指向不存在的输入端口：${edge.to.portId}`)

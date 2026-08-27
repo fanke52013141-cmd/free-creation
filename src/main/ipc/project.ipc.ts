@@ -1,5 +1,5 @@
 // 项目 IPC handlers（信封规范见《技术框架与规范》§10）
-import { ipcMain, dialog, app } from 'electron'
+import { ipcMain, dialog } from 'electron'
 import { IPC } from '../../shared/contracts'
 import type { IpcEnvelope } from '../../shared/contracts'
 import type { ProjectFile, ProjectMeta } from '../../shared/types'
@@ -99,24 +99,6 @@ export function registerProjectIpc(): void {
     if (result.canceled || result.filePaths.length === 0) return err('CANCELLED', '已取消导入')
     try {
       const meta = importProject(result.filePaths[0])
-      return ok(meta as ProjectMeta)
-    } catch (e) {
-      return err('IMPORT_FAILED', e instanceof Error ? e.message : String(e))
-    }
-  })
-
-  // 导入内置示例项目：每次生成带新 id 的副本，不污染 fixture。
-  // 打包后位于 resources/demo/；开发模式回退到仓库 resources/demo/。
-  ipcMain.handle(IPC.project.importDemo, async (): Promise<IpcEnvelope<ProjectMeta>> => {
-    const { join } = await import('path')
-    const { existsSync } = await import('fs')
-    const candidates = app.isPackaged
-      ? [join(process.resourcesPath, 'demo', 'canvas-studio-demo.canvasbundle')]
-      : [join(app.getAppPath(), 'resources', 'demo', 'canvas-studio-demo.canvasbundle')]
-    const bundlePath = candidates.find((p) => existsSync(p))
-    if (!bundlePath) return err('DEMO_MISSING', '内置示例项目缺失，请重新安装应用')
-    try {
-      const meta = importProject(bundlePath)
       return ok(meta as ProjectMeta)
     } catch (e) {
       return err('IMPORT_FAILED', e instanceof Error ? e.message : String(e))
