@@ -1,7 +1,7 @@
 import AdmZip from 'adm-zip'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 
 const state = vi.hoisted(() => ({
@@ -42,6 +42,28 @@ beforeEach(() => {
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
 describe('importProject · 本地导入集成', () => {
+  it('固定演示包可作为独立新项目导入，且其中媒体引用会完整重映射', () => {
+    const result = importProject(
+      resolve(process.cwd(), 'resources/demo/canvas-studio-demo.canvasbundle')
+    )
+    const projectPath = join(state.projectsDir, result.id, 'project.json')
+    const imported = JSON.parse(readFileSync(projectPath, 'utf-8'))
+    const reference = imported.tldrawSnapshot.store['shape:demo-reference']
+    const director = imported.tldrawSnapshot.store['shape:demo-director']
+
+    expect(imported.nodes).toHaveLength(8)
+    expect(imported.edges).toHaveLength(7)
+    expect(reference.props.mediaId).not.toBe('demo-reference-image')
+    expect(reference.props.mediaPath).toMatch(
+      new RegExp(`^projects/${result.id}/media/[A-Za-z0-9_-]+\\.png$`)
+    )
+    expect(JSON.parse(director.props.config).shots[0].referenceMediaIds).toEqual([
+      reference.props.mediaId
+    ])
+    expect(state.projects).toHaveLength(1)
+    expect(state.media).toHaveLength(1)
+  })
+
   it('重映射节点、tldraw 快照、运行结果与导演台媒体引用，并在提交后创建项目', () => {
     const sourceId = 'source-project'
     const oldId = 'old-image'

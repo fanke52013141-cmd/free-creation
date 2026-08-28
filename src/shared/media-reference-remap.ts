@@ -10,8 +10,27 @@ export interface MediaReferenceMap {
  */
 export function remapMediaReferences<T>(value: T, maps: MediaReferenceMap): T {
   const visit = (current: unknown): unknown => {
-    if (typeof current === 'string')
-      return maps.ids.get(current) ?? maps.paths.get(current) ?? current
+    if (typeof current === 'string') {
+      const direct = maps.ids.get(current) ?? maps.paths.get(current)
+      if (direct) return direct
+      // 节点 config/nodeResult 是持久化 JSON 字符串；导入时也必须进入其内部，
+      // 否则导演台等节点会保留指向源项目的媒体引用。跳过普通提示词，避免无意义的解析。
+      const trimmed = current.trim()
+      if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return current
+      try {
+        const parsed = JSON.parse(current) as unknown
+        if (parsed && typeof parsed === 'object') {
+          const remapped = visit(parsed)
+          // 没有引用变化时保留用户在配置中写下的原始格式。
+          return JSON.stringify(remapped) === JSON.stringify(parsed)
+            ? current
+            : JSON.stringify(remapped)
+        }
+      } catch {
+        // 非 JSON 的用户文本不属于结构化引用，保持原样。
+      }
+      return current
+    }
     if (Array.isArray(current)) return current.map(visit)
     if (!current || typeof current !== 'object') return current
     return Object.fromEntries(

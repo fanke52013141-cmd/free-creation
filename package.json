@@ -16,6 +16,7 @@
     "test:coverage": "vitest run --coverage",
     "test:contract": "vitest run test/node-compliance.test.ts test/node-contract-snapshot.test.ts test/connection-matrix.test.ts",
     "build:demo": "node scripts/build-demo-bundle.mjs",
+    "benchmark:canvas": "node scripts/benchmark-canvas.mjs",
     "verify": "npm run lint && npm run typecheck && npm run test && electron-vite build",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
