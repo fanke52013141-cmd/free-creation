@@ -189,6 +189,14 @@ function collectAllOutputs(
           portValues[portId] = values.length === 1 ? values[0] : values
           hasAny = true
         }
+      } else if (packets && typeof packets === 'object' && 'value' in packets) {
+        // runSubflow 的正式 ContractOutputs 是「端口 → 单个 NodeValuePacket」。
+        // 保留数组分支只是为了兼容早期测试/记录；不能因此遗漏真实运行产物。
+        const value = (packets as { value?: unknown }).value
+        if (value !== undefined) {
+          portValues[portId] = value
+          hasAny = true
+        }
       }
     }
     if (Object.keys(portValues).length > 0) {
@@ -376,6 +384,10 @@ export const iterateExecutor = async (ctx: NodeExecutionContext): Promise<NodeEx
     }
   }
   const data: IterateResult = { items: results as IterateItemResult[] }
+  ctx.restoreSubflowInputs?.({
+    nodeIds: bodyTargets.map((edge) => edge.nodeId),
+    iterationNodeId: ctx.node.id
+  })
   // 配置/结果分离：props.config 存配置，运行结果 { items } 走 meta（updateResult）。
   // 输出投影（nodeValues.ts）从 meta.nodeResult 读取 items。
   ctx.updateProps({ config: JSON.stringify(config) })

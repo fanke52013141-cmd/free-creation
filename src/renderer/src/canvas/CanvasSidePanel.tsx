@@ -212,6 +212,74 @@ export const BUILTIN_TEMPLATES: {
       { type: 'image-gen', title: '生图', dx: 200, dy: 0 }
     ],
     edges: [{ from: 0, to: 1, fromPort: 'out-json', toPort: 'in-prompt' }]
+  },
+  {
+    name: '分镜→批量生图',
+    icon: 'workflow',
+    desc: '分镜逐项生成提示词包并串行生图；支持暂停、续跑和只重跑失败项',
+    nodes: [
+      {
+        type: 'structured',
+        title: '分镜结构',
+        dx: -800,
+        dy: 0,
+        config: JSON.stringify({ schema: { id: 'storyboard.shots', version: 1 } }),
+        text: JSON.stringify({
+          shots: [
+            {
+              id: 'shot-1',
+              scene: '雨夜的霓虹街头，主角回头望向远处车灯',
+              dialogue: '',
+              sound: '细雨与车流',
+              camera: '中近景跟拍',
+              duration: '5s'
+            },
+            {
+              id: 'shot-2',
+              scene: '镜头拉远，主角走入潮湿的巷口',
+              dialogue: '',
+              sound: '脚步声与雨声',
+              camera: '广角远景',
+              duration: '5s'
+            }
+          ]
+        })
+      },
+      {
+        type: 'structured',
+        title: '镜头列表',
+        dx: -400,
+        dy: 0,
+        config: JSON.stringify({ schema: { id: 'list.items', version: 1 } }),
+        text: '{{input[0].shots}}'
+      },
+      {
+        type: 'iterate',
+        title: '逐镜生图',
+        dx: 0,
+        dy: 0,
+        config: JSON.stringify({ onFailure: 'skip', maxRetries: 0, limit: 0, runMode: 'resume' })
+      },
+      {
+        type: 'structured',
+        title: '镜头提示词',
+        dx: 400,
+        dy: 0,
+        config: JSON.stringify({ schema: { id: 'prompt.bundle', version: 1 } }),
+        text: JSON.stringify({
+          prompt: '{{input[0].scene}}。镜头：{{input[0].camera}}。时长：{{input[0].duration}}。',
+          style: '电影感分镜，35mm 胶片，浅景深，低饱和青橙色调',
+          aspectRatio: '16:9'
+        })
+      },
+      { type: 'image-gen', title: '批量生图', dx: 800, dy: 0 }
+    ],
+    edges: [
+      { from: 0, to: 1, fromPort: 'out-json', toPort: 'in-context' },
+      { from: 1, to: 2, fromPort: 'out-json', toPort: 'in-list' },
+      { from: 2, to: 3, fromPort: 'out-item', toPort: 'in-context' },
+      { from: 3, to: 4, fromPort: 'out-json', toPort: 'in-prompt' }
+    ]
   }
 ]
 

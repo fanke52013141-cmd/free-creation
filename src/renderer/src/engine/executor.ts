@@ -42,6 +42,11 @@ interface WorkflowContext {
   graph: { nodes: CanvasNode[]; edges: CanvasEdge[] }
   /** 运行期累积的输出登记：nodeId -> 端口输出数据包。 */
   outputs: Map<string, ContractOutputs>
+  /**
+   * 循环体首次进入时冻结的用户输入。执行器可以把解析后的值写回 props.text，
+   * 但每个 item 必须从同一份正文/固定配置重新计算，不能继承上一项的替换结果。
+   */
+  subflowBaseInputs: Map<string, Pick<NodeCardProps, 'text' | 'config'>>
   runId: string
 }
 
@@ -254,7 +259,8 @@ async function invokeExecutor(
         }
       })
     },
-    runSubflow
+    runSubflow,
+    restoreSubflowInputs: (request) => restoreSubflowStaticInputs(ctx, request)
   }
   return spec.executor(nodeCtx)
 }
@@ -406,8 +412,9 @@ async function executeNodeOnce(
  * 迭代体的下游节点在画布上是单例：生成类节点（生图 / 视频 / 音频）以 mediaPath
  * 作为「已生成则复用」的短路依据；若不清空，item B 会命中 item A 留下的产物
  * 直接 done，不再为本项生成。这里清空媒体引用字段并删除输出登记，强制每项独立
- * 产出。这是迭代语义的内在要求（每项独立处理），不构成节点类型特判：只重置与
- * 「复用短路 / 输出登记」相关的通用运行态字段，对无媒体输出的节点无副作用。
+ * 产出。这是迭代语义的内在要求（每项独立处理），不构成节点类型特判：重置与
+ * 「复用短路 / 输出登记」相关的通用运行态字段，并恢复循环体首次运行前的正文与
+ * 固定配置，对无媒体输出的节点无副作用。
  */
 function resetSubflowRunState(ctx: WorkflowContext, nodeIds: string[]): void {
   const updates: Array<{
@@ -419,19 +426,48 @@ function resetSubflowRunState(ctx: WorkflowContext, nodeIds: string[]): void {
   for (const nodeId of nodeIds) {
     const shape = ctx.editor.getShape<NodeCardShape>(nodeId as TLShapeId)
     if (!shape) continue
+    const baseInputs =
+      ctx.subflowBaseInputs.get(nodeId) ??
+      ({ text: shape.props.text, config: shape.props.config } satisfies Pick<
+        NodeCardProps,
+        'text' | 'config'
+      >)
+    ctx.subflowBaseInputs.set(nodeId, baseInputs)
     // 仅当确实存在上次运行态时才写回，避免无谓的 shape 变更触发保存。
     // meta.nodeResult 同样属于运行态：不清空会让本项失败时仍显示/复用上一项的文本或 JSON。
     const hasMedia = shape.props.mediaId || shape.props.mediaPath || shape.props.mediaMime
     const hasResult = typeof shape.meta?.nodeResult === 'string'
-    if (hasMedia || hasResult) {
+    const restoreInputs =
+      shape.props.text !== baseInputs.text || shape.props.config !== baseInputs.config
+    if (hasMedia || hasResult || restoreInputs) {
       updates.push({
         id: shape.id,
         type: 'node-card',
-        ...(hasMedia ? { props: { mediaId: '', mediaPath: '', mediaMime: '' } } : {}),
+        props: {
+          ...(restoreInputs ? baseInputs : {}),
+          ...(hasMedia ? { mediaId: '', mediaPath: '', mediaMime: '' } : {})
+        },
         ...(hasResult ? { meta: { ...(shape.meta ?? {}), nodeResult: undefined } } : {})
       })
     }
     ctx.outputs.delete(nodeId)
+  }
+  if (updates.length > 0) ctx.editor.updateShapes(updates)
+}
+
+/** 循环结束后只恢复用户可编辑的静态输入，不撤销本轮媒体或运行结果。 */
+function restoreSubflowStaticInputs(
+  ctx: WorkflowContext,
+  request: Pick<SubflowRequest, 'nodeIds' | 'iterationNodeId'>
+): void {
+  const updates: Array<{ id: TLShapeId; type: 'node-card'; props: Partial<NodeCardProps> }> = []
+  for (const nodeId of expandIterationBody(ctx.graph, request.nodeIds, request.iterationNodeId)) {
+    const base = ctx.subflowBaseInputs.get(nodeId)
+    const shape = ctx.editor.getShape<NodeCardShape>(nodeId as TLShapeId)
+    if (!base || !shape) continue
+    if (shape.props.text !== base.text || shape.props.config !== base.config) {
+      updates.push({ id: shape.id, type: 'node-card', props: base })
+    }
   }
   if (updates.length > 0) ctx.editor.updateShapes(updates)
 }
@@ -541,6 +577,7 @@ export async function runNodeManually(
     token,
     graph,
     outputs: new Map<string, ContractOutputs>(),
+    subflowBaseInputs: new Map(),
     runId: crypto.randomUUID()
   }
   seedPersistedOutputs(ctx)
@@ -584,6 +621,7 @@ export async function runWorkflow(
     token,
     graph,
     outputs: new Map<string, ContractOutputs>(),
+    subflowBaseInputs: new Map(),
     runId: crypto.randomUUID()
   }
 
@@ -654,6 +692,7 @@ export async function runWorkflowToNode(
     token,
     graph,
     outputs: new Map<string, ContractOutputs>(),
+    subflowBaseInputs: new Map(),
     runId: crypto.randomUUID()
   }
   const runSubflow = (request: SubflowRequest): Promise<Record<string, ContractOutputs>> =>

@@ -194,6 +194,7 @@ describe('iterate 执行器 · 成功批量', () => {
     const data = JSON.parse(result.value as string)
     expect(data.items).toHaveLength(3)
     expect(data.items.every((it: { status: string }) => it.status === 'done')).toBe(true)
+    expect(data.items[0].outputs['node-body']['out-x']).toEqual({ idx: 0 })
     // 来源追踪
     expect(data.items[0].source.itemId).toBe('s1')
     expect(data.items[2].source.index).toBe(2)
@@ -643,5 +644,40 @@ describe('iterate 执行器 · P3.2 恢复与检查点', () => {
     })
     await iterateExecutor(ctx)
     expect(seen).toEqual([0, 1])
+  })
+})
+
+describe('iterate 执行器 · P3.3 批量规模回归', () => {
+  it.each([20, 100])('%i 项仍严格串行，并保留完整检查点', async (count) => {
+    const active = { current: 0, max: 0 }
+    const seen: number[] = []
+    const { ctx, result } = makeCtx({
+      list: Array.from({ length: count }, (_, index) => ({
+        id: `shot-${index + 1}`,
+        scene: `场景 ${index + 1}`
+      })),
+      runSubflow: async (request) => {
+        active.current += 1
+        active.max = Math.max(active.max, active.current)
+        seen.push(request.index)
+        await Promise.resolve()
+        active.current -= 1
+        return {
+          body: {
+            out: {
+              value: { index: request.index },
+              type: 'json',
+              source: { nodeId: 'body', portId: 'out', runId: 'run' },
+              createdAt: 0
+            }
+          }
+        }
+      }
+    })
+    await iterateExecutor(ctx)
+    const data = JSON.parse(result.value as string)
+    expect(active.max).toBe(1)
+    expect(seen).toEqual(Array.from({ length: count }, (_, index) => index))
+    expect(data.progress).toMatchObject({ total: count, completed: count, done: count, failed: 0 })
   })
 })

@@ -83,6 +83,8 @@ export interface NodeExecutionContext {
    * 非循环节点不会注入。循环节点用它把列表逐项填充进下游子流程变量。
    */
   runSubflow?: (request: SubflowRequest) => Promise<SubflowOutput>
+  /** 循环完成后恢复循环体的静态正文/配置，避免最后一项的解析结果污染下一次运行。 */
+  restoreSubflowInputs?: (request: Pick<SubflowRequest, 'nodeIds' | 'iterationNodeId'>) => void
 }
 
 export interface NodeExecutionResult {

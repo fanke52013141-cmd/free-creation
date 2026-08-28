@@ -33,8 +33,8 @@ function shapeFor(node: (typeof BUILTIN_TEMPLATES)[number]['nodes'][number]): No
   }
 }
 
-describe('P2 内置创作模板', () => {
-  it.each(['角色→场景→分镜', '分镜→导演台', '提示词包→生图'])(
+describe('P2/P3 内置创作模板', () => {
+  it.each(['角色→场景→分镜', '分镜→导演台', '提示词包→生图', '分镜→批量生图'])(
     '%s 的每条连线均为真实契约连接',
     (name) => {
       const template = BUILTIN_TEMPLATES.find((item) => item.name === name)!
@@ -59,4 +59,14 @@ describe('P2 内置创作模板', () => {
       }
     }
   )
+
+  it('分镜→批量生图以 out-item 明确圈定循环体，结果列表不混入循环控制', () => {
+    const template = BUILTIN_TEMPLATES.find((item) => item.name === '分镜→批量生图')!
+    const iterateIndex = template.nodes.findIndex((node) => node.type === 'iterate')
+    const itemEdges = template.edges.filter((edge) => edge.from === iterateIndex)
+    expect(itemEdges).toEqual([
+      { from: iterateIndex, to: iterateIndex + 1, fromPort: 'out-item', toPort: 'in-context' }
+    ])
+    expect(template.nodes[iterateIndex]?.config).toContain('"runMode":"resume"')
+  })
 })
