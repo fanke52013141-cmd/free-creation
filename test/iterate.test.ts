@@ -17,14 +17,18 @@ function makeCtx(over: {
   list?: unknown
   outgoing?: NodeExecutionContext['outgoing']
   runSubflow?: (req: { item: Record<string, unknown>; index: number }) => Promise<SubflowOutput>
-  signal?: { cancelled: boolean }
+  signal?: { cancelled: boolean; paused?: boolean }
+  waitForResume?: () => Promise<void>
+  previousResult?: string
 }): {
   ctx: NodeExecutionContext
   props: Partial<NodeCardShape['props']>
   result: { value: string | null }
+  resultUpdates: string[]
 } {
   const props: Partial<NodeCardShape['props']> = {}
   const result = { value: null as string | null }
+  const resultUpdates: string[] = []
   const shape = {
     id: 'shape:1',
     type: 'node-card',
@@ -45,7 +49,7 @@ function makeCtx(over: {
       mediaMime: '',
       exec: 'idle'
     },
-    meta: {}
+    meta: over.previousResult ? { nodeResult: over.previousResult } : {}
   } as unknown as NodeCardShape
   const inputs = new Map<
     string,
@@ -81,13 +85,15 @@ function makeCtx(over: {
     inputs: inputs as NodeExecutionContext['inputs'],
     projectId: 'p1',
     providers: [],
-    signal: over.signal ?? { cancelled: false },
+    signal: over.signal ?? { cancelled: false, paused: false },
+    waitForResume: over.waitForResume,
     outgoing: over.outgoing ?? [
       { nodeId: 'node-body', fromPortId: 'out-item', toPortId: 'in-json' }
     ],
     updateProps: (patch) => Object.assign(props, patch),
     updateResult: (r) => {
       result.value = r
+      if (r) resultUpdates.push(r)
     },
     runSubflow: (req) =>
       over.runSubflow
@@ -103,7 +109,7 @@ function makeCtx(over: {
             }
           })
   }
-  return { ctx, props, result }
+  return { ctx, props, result, resultUpdates }
 }
 
 beforeEach(() => {
@@ -125,7 +131,8 @@ describe('parseIterate · 配置解析', () => {
     expect(cfg).toEqual({
       onFailure: 'retry',
       maxRetries: 3,
-      limit: 10
+      limit: 10,
+      runMode: 'all'
     })
   })
 
@@ -133,12 +140,14 @@ describe('parseIterate · 配置解析', () => {
     expect(parseIterate('')).toEqual({
       onFailure: 'skip',
       maxRetries: 0,
-      limit: 0
+      limit: 0,
+      runMode: 'all'
     })
     expect(parseIterate('{bad')).toEqual({
       onFailure: 'skip',
       maxRetries: 0,
-      limit: 0
+      limit: 0,
+      runMode: 'all'
     })
   })
 })
@@ -475,5 +484,164 @@ describe('iterate 执行器 · 子流程抛错的容错', () => {
     expect(r.status).toBe('done')
     expect(calls).toBe(2)
     expect(JSON.parse(result.value as string).items[0].status).toBe('done')
+  })
+})
+
+describe('iterate 执行器 · P3.2 恢复与检查点', () => {
+  const outputFor = (index: number): SubflowOutput => ({
+    body: {
+      out: {
+        value: { index },
+        type: 'json',
+        source: { nodeId: 'body', portId: 'out', runId: 'run' },
+        createdAt: 0
+      }
+    }
+  })
+
+  it('运行期间持续写入可观察进度，而不是完成后才出现结果', async () => {
+    const { ctx, resultUpdates } = makeCtx({
+      list: [{ id: 'a' }, { id: 'b' }],
+      runSubflow: async (req) => outputFor(req.index)
+    })
+    await iterateExecutor(ctx)
+    expect(resultUpdates.map((value) => JSON.parse(value).progress.completed)).toEqual([0, 1, 2, 2])
+  })
+
+  it('续跑只复用稳定 ID 和内容指纹都匹配的成功项', async () => {
+    const first = makeCtx({
+      list: [
+        { id: 'a', prompt: 'A' },
+        { id: 'b', prompt: 'B' }
+      ],
+      runSubflow: async (req) => (req.index === 0 ? outputFor(req.index) : ({} as SubflowOutput))
+    })
+    await iterateExecutor(first.ctx)
+
+    const seen: number[] = []
+    const resumed = makeCtx({
+      text: JSON.stringify({ runMode: 'resume' }),
+      list: [
+        { id: 'a', prompt: 'A' },
+        { id: 'b', prompt: 'B' }
+      ],
+      previousResult: first.result.value ?? undefined,
+      runSubflow: async (req) => {
+        seen.push(req.index)
+        return outputFor(req.index)
+      }
+    })
+    await iterateExecutor(resumed.ctx)
+    const items = JSON.parse(resumed.result.value as string).items
+    expect(seen).toEqual([1])
+    expect(items[0].status).toBe('reused')
+    expect(items[1].status).toBe('done')
+  })
+
+  it('同一 ID 的内容已改变时必须重新运行，不能误复用旧产物', async () => {
+    const first = makeCtx({
+      list: [{ id: 'a', prompt: '旧描述' }],
+      runSubflow: async (req) => outputFor(req.index)
+    })
+    await iterateExecutor(first.ctx)
+
+    const seen: number[] = []
+    const resumed = makeCtx({
+      text: JSON.stringify({ runMode: 'resume' }),
+      list: [{ id: 'a', prompt: '新描述' }],
+      previousResult: first.result.value ?? undefined,
+      runSubflow: async (req) => {
+        seen.push(req.index)
+        return outputFor(req.index)
+      }
+    })
+    await iterateExecutor(resumed.ctx)
+    expect(seen).toEqual([0])
+    expect(JSON.parse(resumed.result.value as string).items[0].status).toBe('done')
+  })
+
+  it('已复用的成功项可在下一次续跑继续复用', async () => {
+    const first = makeCtx({
+      list: [{ id: 'a', prompt: 'A' }],
+      runSubflow: async (req) => outputFor(req.index)
+    })
+    await iterateExecutor(first.ctx)
+    const second = makeCtx({
+      text: JSON.stringify({ runMode: 'resume' }),
+      list: [{ id: 'a', prompt: 'A' }],
+      previousResult: first.result.value ?? undefined,
+      runSubflow: async (req) => outputFor(req.index)
+    })
+    await iterateExecutor(second.ctx)
+
+    const thirdCalls: number[] = []
+    const third = makeCtx({
+      text: JSON.stringify({ runMode: 'resume' }),
+      list: [{ id: 'a', prompt: 'A' }],
+      previousResult: second.result.value ?? undefined,
+      runSubflow: async (req) => {
+        thirdCalls.push(req.index)
+        return outputFor(req.index)
+      }
+    })
+    await iterateExecutor(third.ctx)
+    expect(thirdCalls).toEqual([])
+    expect(JSON.parse(third.result.value as string).items[0].status).toBe('reused')
+  })
+
+  it('只重跑失败项，不触碰上轮成功或新加入的项', async () => {
+    const first = makeCtx({
+      list: [{ id: 'a' }, { id: 'b' }],
+      runSubflow: async (req) => (req.index === 0 ? outputFor(req.index) : ({} as SubflowOutput))
+    })
+    await iterateExecutor(first.ctx)
+
+    const seen: number[] = []
+    const retry = makeCtx({
+      text: JSON.stringify({ runMode: 'failed' }),
+      list: [{ id: 'a' }, { id: 'b' }, { id: 'new' }],
+      previousResult: first.result.value ?? undefined,
+      runSubflow: async (req) => {
+        seen.push(req.index)
+        return outputFor(req.index)
+      }
+    })
+    await iterateExecutor(retry.ctx)
+    const items = JSON.parse(retry.result.value as string).items
+    expect(seen).toEqual([1])
+    expect(items.map((item: { status: string }) => item.status)).toEqual([
+      'skipped',
+      'done',
+      'skipped'
+    ])
+  })
+
+  it('每项之间等待恢复信号，暂停不会打断正在执行的项', async () => {
+    const waitForResume = vi.fn(async () => undefined)
+    const { ctx } = makeCtx({
+      list: [{ id: 'a' }, { id: 'b' }],
+      waitForResume,
+      runSubflow: async (req) => outputFor(req.index)
+    })
+    await iterateExecutor(ctx)
+    expect(waitForResume).toHaveBeenCalledTimes(2)
+  })
+
+  it('损坏的历史结果或重复稳定身份都不会被恢复逻辑错误复用', async () => {
+    const seen: number[] = []
+    const { ctx } = makeCtx({
+      text: JSON.stringify({ runMode: 'resume' }),
+      list: [
+        { id: 'same', prompt: 'A' },
+        { id: 'same', prompt: 'A' }
+      ],
+      previousResult: JSON.stringify({ items: [{ status: 'done' }, null] }),
+      runSubflow: async (req) => {
+        seen.push(req.index)
+        return outputFor(req.index)
+      }
+    })
+    await iterateExecutor(ctx)
+    expect(seen).toEqual([0, 1])
   })
 })

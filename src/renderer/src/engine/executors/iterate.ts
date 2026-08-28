@@ -21,28 +21,51 @@ export interface IterateConfig {
   maxRetries: number
   /** 最大处理条数；0 表示不限。 */
   limit: number
+  /** 全部重跑 / 复用已成功项继续 / 只重跑上轮失败项。 */
+  runMode: 'all' | 'resume' | 'failed'
+}
+
+export type IterateItemStatus = 'pending' | 'done' | 'reused' | 'failed' | 'skipped'
+
+export interface IterateItemSource {
+  index: number
+  itemId?: string
+  /** 基于内容的稳定指纹；只和 itemId 一起用于恢复校验。 */
+  fingerprint?: string
 }
 
 export interface IterateItemResult {
   /** 原始列表元素（作为子流程输入）。 */
   item: Record<string, unknown>
   /** 处理状态。 */
-  status: 'done' | 'failed' | 'skipped'
+  status: IterateItemStatus
   /** 循环体所有节点所有输出端口的结构化聚合：{ nodeId: { portId: value } }。 */
   outputs?: Record<string, Record<string, unknown>>
   /** 失败 / 跳过原因。 */
   error?: string
   /** 来源追踪：序号 + 可选稳定 id（如镜头 id）。 */
-  source: { index: number; itemId?: string }
+  source: IterateItemSource
+}
+
+export interface IterateProgress {
+  total: number
+  completed: number
+  pending: number
+  done: number
+  reused: number
+  failed: number
+  skipped: number
+  mode: IterateConfig['runMode']
 }
 
 export interface IterateResult {
   items: IterateItemResult[]
+  progress?: IterateProgress
 }
 
 export function parseIterate(text: string): IterateConfig {
   if (!text) {
-    return { onFailure: 'skip', maxRetries: 0, limit: 0 }
+    return { onFailure: 'skip', maxRetries: 0, limit: 0, runMode: 'all' }
   }
   try {
     const value = JSON.parse(text) as Record<string, unknown>
@@ -50,11 +73,87 @@ export function parseIterate(text: string): IterateConfig {
       onFailure:
         value.onFailure === 'fail' || value.onFailure === 'retry' ? value.onFailure : 'skip',
       maxRetries: typeof value.maxRetries === 'number' ? Math.max(0, value.maxRetries) : 0,
-      limit: typeof value.limit === 'number' ? Math.max(0, value.limit) : 0
+      limit: typeof value.limit === 'number' ? Math.max(0, value.limit) : 0,
+      runMode: value.runMode === 'resume' || value.runMode === 'failed' ? value.runMode : 'all'
     }
   } catch {
-    return { onFailure: 'skip', maxRetries: 0, limit: 0 }
+    return { onFailure: 'skip', maxRetries: 0, limit: 0, runMode: 'all' }
   }
+}
+
+/** 把对象序列化为键顺序稳定的字符串，确保恢复判定不受 JSON 字段顺序影响。 */
+function stableSerialize(value: unknown): string {
+  if (value === undefined) return 'undefined'
+  if (value === null || typeof value !== 'object') return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map(stableSerialize).join(',')}]`
+  const record = value as Record<string, unknown>
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableSerialize(record[key])}`)
+    .join(',')}}`
+}
+
+/** FNV-1a：足够用于本地运行记录的变更检测，不承担安全或加密用途。 */
+function contentFingerprint(item: Record<string, unknown>): string {
+  let hash = 0x811c9dc5
+  for (const char of stableSerialize(item)) {
+    hash ^= char.charCodeAt(0)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0')
+}
+
+function sourceFor(item: Record<string, unknown>, index: number): IterateItemSource {
+  const itemId = typeof item.id === 'string' && item.id.trim() ? item.id : undefined
+  return {
+    index,
+    ...(itemId ? { itemId, fingerprint: contentFingerprint(item) } : {})
+  }
+}
+
+function progressFor(
+  entries: Array<IterateItemResult | undefined>,
+  config: IterateConfig
+): IterateProgress {
+  const counts: Record<IterateItemStatus, number> = {
+    pending: 0,
+    done: 0,
+    reused: 0,
+    failed: 0,
+    skipped: 0
+  }
+  for (const entry of entries) counts[entry?.status ?? 'pending'] += 1
+  return {
+    total: entries.length,
+    completed: entries.length - counts.pending,
+    ...counts,
+    mode: config.runMode
+  }
+}
+
+function isSameItem(
+  previous: IterateItemResult | undefined,
+  item: Record<string, unknown>,
+  source: IterateItemSource
+): previous is IterateItemResult {
+  const previousSource = previous?.source
+  if (!previous || !previousSource?.itemId || !previousSource.fingerprint) return false
+  return (
+    previousSource.itemId === source.itemId &&
+    previousSource.fingerprint === source.fingerprint &&
+    stableSerialize(previous.item) === stableSerialize(item)
+  )
+}
+
+/** 损坏或旧版运行记录不得参与恢复；返回 null 表示该项没有可安全复用的身份。 */
+function resultIdentity(entry: unknown): string | null {
+  if (!entry || typeof entry !== 'object') return null
+  const source = (entry as { source?: unknown }).source
+  if (!source || typeof source !== 'object') return null
+  const { itemId, fingerprint } = source as { itemId?: unknown; fingerprint?: unknown }
+  return typeof itemId === 'string' && typeof fingerprint === 'string'
+    ? `${itemId}:${fingerprint}`
+    : null
 }
 
 export function parseIterateResult(text: string): IterateResult | null {
@@ -115,8 +214,8 @@ async function runItem(
   item: Record<string, unknown>,
   index: number
 ): Promise<IterateItemResult> {
-  const itemId = typeof item.id === 'string' ? item.id : undefined
-  const base = { source: { index, itemId } as { index: number; itemId?: string } }
+  const source = sourceFor(item, index)
+  const base = { source }
   if (ctx.signal.cancelled) return { item, status: 'skipped', error: '已取消', ...base }
 
   let retries = 0
@@ -131,7 +230,7 @@ async function runItem(
         nodeIds: targets.map((edge) => edge.nodeId),
         item,
         index,
-        itemId,
+        itemId: source.itemId,
         iterationNodeId: ctx.node.id,
         itemTargets: targets.map((edge) => ({ nodeId: edge.nodeId, portId: edge.toPortId }))
       })) as Record<string, unknown> | undefined
@@ -172,16 +271,82 @@ export const iterateExecutor = async (ctx: NodeExecutionContext): Promise<NodeEx
 
   const items = config.limit > 0 ? list.slice(0, config.limit) : list
   const results: Array<IterateItemResult | undefined> = new Array(items.length)
+  const previous = parseIterateResult(
+    typeof ctx.shape.meta?.nodeResult === 'string' ? ctx.shape.meta.nodeResult : ''
+  )
+  const previousById = new Map<string, IterateItemResult | null>()
+  for (const entry of previous?.items ?? []) {
+    const identity = resultIdentity(entry)
+    if (!identity) continue
+    // 重复身份没有可靠的一一映射关系，后续一律不复用。
+    previousById.set(identity, previousById.has(identity) ? null : entry)
+  }
+  const currentIdentities = items.map((item) => {
+    const source = sourceFor(item as Record<string, unknown>, 0)
+    return source.itemId && source.fingerprint ? `${source.itemId}:${source.fingerprint}` : null
+  })
+  const duplicateCurrentIdentities = new Set(
+    currentIdentities.filter(
+      (identity, index, all): identity is string =>
+        Boolean(identity) && all.indexOf(identity) !== index
+    )
+  )
   let failedAny = false
+
+  const publishProgress = (): void => {
+    const data: IterateResult = {
+      items: results.map(
+        (entry, index) =>
+          entry ?? {
+            item: items[index] as Record<string, unknown>,
+            status: 'pending',
+            source: sourceFor(items[index] as Record<string, unknown>, index)
+          }
+      ),
+      progress: progressFor(results, config)
+    }
+    ctx.updateResult(JSON.stringify(data))
+  }
+  publishProgress()
 
   // 严格串行：迭代体的下游节点在画布上是单例，其持久状态（mediaPath 等）与
   // 运行输出登记是共享可变的；并行跑多项会互相覆盖、产出错乱数据。要支持并行，
   // 必须先引入每项独立的运行态，而不是暴露一个无法兑现的并发配置。
   for (let idx = 0; idx < items.length; idx += 1) {
+    await ctx.waitForResume?.()
     if (ctx.signal.cancelled) break
     const item = items[idx] as Record<string, unknown>
+    const source = sourceFor(item, idx)
+    const identity =
+      source.itemId && source.fingerprint ? `${source.itemId}:${source.fingerprint}` : ''
+    const prior =
+      (identity && !duplicateCurrentIdentities.has(identity)
+        ? previousById.get(identity)
+        : undefined) ?? undefined
+    if (
+      config.runMode === 'resume' &&
+      isSameItem(prior, item, source) &&
+      (prior.status === 'done' || prior.status === 'reused')
+    ) {
+      results[idx] = { ...prior, item, status: 'reused', source }
+      publishProgress()
+      continue
+    }
+    if (config.runMode === 'failed') {
+      if (!isSameItem(prior, item, source) || prior.status !== 'failed') {
+        results[idx] = {
+          item,
+          status: 'skipped',
+          error: prior ? '不属于上轮失败项' : '没有可重跑的失败项',
+          source
+        }
+        publishProgress()
+        continue
+      }
+    }
     const result = await runItem(ctx, config, item, idx)
     results[idx] = result
+    publishProgress()
     if (result.status === 'failed') {
       failedAny = true
       if (config.onFailure === 'fail') {
@@ -190,9 +355,10 @@ export const iterateExecutor = async (ctx: NodeExecutionContext): Promise<NodeEx
           results[i] = {
             item: items[i] as Record<string, unknown>,
             status: 'skipped',
-            source: { index: i }
+            source: sourceFor(items[i] as Record<string, unknown>, i)
           }
         }
+        publishProgress()
         break
       }
     }
@@ -205,7 +371,7 @@ export const iterateExecutor = async (ctx: NodeExecutionContext): Promise<NodeEx
         item: items[i] as Record<string, unknown>,
         status: 'skipped',
         error: ctx.signal.cancelled ? '已取消' : '未执行',
-        source: { index: i }
+        source: sourceFor(items[i] as Record<string, unknown>, i)
       }
     }
   }
@@ -213,6 +379,7 @@ export const iterateExecutor = async (ctx: NodeExecutionContext): Promise<NodeEx
   // 配置/结果分离：props.config 存配置，运行结果 { items } 走 meta（updateResult）。
   // 输出投影（nodeValues.ts）从 meta.nodeResult 读取 items。
   ctx.updateProps({ config: JSON.stringify(config) })
+  data.progress = progressFor(results, config)
   ctx.updateResult(JSON.stringify(data))
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
   if (failedAny && config.onFailure === 'fail')

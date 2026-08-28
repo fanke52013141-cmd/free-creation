@@ -28,19 +28,64 @@ import {
   type NodeRunStatus
 } from './runRecord'
 
-interface CancelToken {
+interface RunControl {
   cancelled: boolean
+  paused: boolean
+  resumeWaiters: Array<() => void>
 }
 
 interface WorkflowContext {
   editor: Editor
   projectId: string
   providers: ProviderConfig[]
-  token: CancelToken
+  token: RunControl
   graph: { nodes: CanvasNode[]; edges: CanvasEdge[] }
   /** 运行期累积的输出登记：nodeId -> 端口输出数据包。 */
   outputs: Map<string, ContractOutputs>
   runId: string
+}
+
+function createRunControl(): RunControl {
+  return { cancelled: false, paused: false, resumeWaiters: [] }
+}
+
+function releasePause(control: RunControl): void {
+  const waiters = control.resumeWaiters.splice(0)
+  for (const resolve of waiters) resolve()
+}
+
+function waitForResume(control: RunControl): Promise<void> {
+  if (!control.paused || control.cancelled) return Promise.resolve()
+  return new Promise((resolve) => control.resumeWaiters.push(resolve))
+}
+
+/** 把一次运行的协作式暂停/继续/停止入口注册到顶栏状态。 */
+function registerRunControls(control: RunControl): void {
+  const store = useEngineStore.getState()
+  store.setStop(() => {
+    control.cancelled = true
+    control.paused = false
+    releasePause(control)
+    useEngineStore.getState().setStopping()
+  })
+  store.setPause(() => {
+    if (control.cancelled || control.paused) return
+    control.paused = true
+    useEngineStore.getState().setPaused()
+  })
+  store.setResume(() => {
+    if (control.cancelled || !control.paused) return
+    control.paused = false
+    releasePause(control)
+    useEngineStore.getState().setRunning()
+  })
+}
+
+function clearRunControls(): void {
+  const store = useEngineStore.getState()
+  store.setStop(null)
+  store.setPause(null)
+  store.setResume(null)
 }
 
 function topoSort(graph: { nodes: CanvasNode[]; edges: CanvasEdge[] }): CanvasNode[] | null {
@@ -193,6 +238,7 @@ async function invokeExecutor(
     projectId: ctx.projectId,
     providers: ctx.providers,
     signal: ctx.token,
+    waitForResume: () => waitForResume(ctx.token),
     outgoing,
     updateProps: (patch) => {
       ctx.editor.updateShape({ id, type: 'node-card', props: patch })
@@ -479,17 +525,14 @@ export async function runNodeManually(
   nodeId: TLShapeId
 ): Promise<NodeExecutionResult> {
   const store = useEngineStore.getState()
-  if (store.phase === 'running') return { status: 'skipped', reason: '已有任务正在运行' }
+  if (store.phase !== 'idle') return { status: 'skipped', reason: '已有任务正在运行' }
 
   const graph = deriveGraph(editor)
   const node = graph.nodes.find((item) => item.id === nodeId)
   if (!node) return { status: 'skipped', reason: '节点不存在或尚未保存到画布' }
 
-  const token: CancelToken = { cancelled: false }
-  useEngineStore.getState().setStop(() => {
-    token.cancelled = true
-    useEngineStore.getState().setStopping()
-  })
+  const token = createRunControl()
+  registerRunControls(token)
   store.beginRun(1)
   const ctx: WorkflowContext = {
     editor,
@@ -508,7 +551,7 @@ export async function runNodeManually(
   const result = await executeNodeOnce(ctx, node, runSubflow)
   store.nodeDone()
   useEngineStore.getState().endRun()
-  useEngineStore.getState().setStop(null)
+  clearRunControls()
   markUndoPoint(editor, 'node-manual-run')
 
   if (result.status === 'done') toast(`${node.title || node.type} 已完成`)
@@ -523,17 +566,14 @@ export async function runWorkflow(
   providers: ProviderConfig[]
 ): Promise<void> {
   const store = useEngineStore.getState()
-  if (store.phase === 'running') return
+  if (store.phase !== 'idle') return
   const graph = deriveGraph(editor)
   if (graph.nodes.length === 0) return toast('画布上没有节点')
   const order = topoSort(graph)
   if (!order) return toast('工作流存在循环连线，无法执行')
 
-  const token: CancelToken = { cancelled: false }
-  useEngineStore.getState().setStop(() => {
-    token.cancelled = true
-    useEngineStore.getState().setStopping()
-  })
+  const token = createRunControl()
+  registerRunControls(token)
   const iterationBodies = iterationBodyNodeIds(graph)
   const executableOrder = order.filter((node) => !iterationBodies.has(node.id))
   store.beginRun(executableOrder.length)
@@ -551,6 +591,7 @@ export async function runWorkflow(
     runSubflowForIterate(ctx, runSubflow, request)
 
   for (const node of executableOrder) {
+    await waitForResume(token)
     if (token.cancelled) break
     store.setCurrent(node.title || node.type)
     await executeNodeOnce(ctx, node, runSubflow)
@@ -559,7 +600,7 @@ export async function runWorkflow(
 
   const after = useEngineStore.getState()
   after.endRun()
-  after.setStop(null)
+  clearRunControls()
   if (token.cancelled) toast('工作流已停止')
   else if (after.errors.length > 0) toast(`工作流完成，${after.errors.length} 个节点失败`)
   else toast('工作流执行完成')
@@ -577,7 +618,7 @@ export async function runWorkflowToNode(
   targetNodeId: TLShapeId
 ): Promise<void> {
   const store = useEngineStore.getState()
-  if (store.phase === 'running') return
+  if (store.phase !== 'idle') return
   const fullGraph = deriveGraph(editor)
   if (!fullGraph.nodes.some((node) => node.id === targetNodeId)) return toast('目标节点不存在')
 
@@ -601,11 +642,8 @@ export async function runWorkflowToNode(
   const order = topoSort(graph)
   if (!order) return toast('所选子图存在循环连线，无法执行')
 
-  const token: CancelToken = { cancelled: false }
-  useEngineStore.getState().setStop(() => {
-    token.cancelled = true
-    useEngineStore.getState().setStopping()
-  })
+  const token = createRunControl()
+  registerRunControls(token)
   const iterationBodies = iterationBodyNodeIds(graph)
   const executableOrder = order.filter((node) => !iterationBodies.has(node.id))
   store.beginRun(executableOrder.length)
@@ -622,6 +660,7 @@ export async function runWorkflowToNode(
     runSubflowForIterate(ctx, runSubflow, request)
 
   for (const node of executableOrder) {
+    await waitForResume(token)
     if (token.cancelled) break
     store.setCurrent(node.title || node.type)
     await executeNodeOnce(ctx, node, runSubflow)
@@ -630,7 +669,7 @@ export async function runWorkflowToNode(
 
   const after = useEngineStore.getState()
   after.endRun()
-  after.setStop(null)
+  clearRunControls()
   if (token.cancelled) toast('子图运行已停止')
   else if (after.errors.length > 0) toast(`子图完成，${after.errors.length} 个节点失败`)
   else toast(`已运行 ${executableOrder.length} 个节点至目标节点`)

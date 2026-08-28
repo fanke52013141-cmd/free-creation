@@ -12,9 +12,10 @@ import type { CanvasNode, ProviderConfig } from '@shared/types'
 import type { NodeCardShape } from '../canvas/NodeCardShape'
 import type { ContractInputMap, ContractOutputs } from './contracts'
 
-/** 取消信号。运行器在收到停止指令时把 cancelled 置 true，执行器据此中止长任务。 */
+/** 运行控制信号。暂停在当前原子任务结束后生效；停止会解除暂停等待。 */
 export interface CancelSignal {
   readonly cancelled: boolean
+  readonly paused?: boolean
 }
 
 /**
@@ -63,6 +64,11 @@ export interface NodeExecutionContext {
   providers: ProviderConfig[]
   /** 取消信号。 */
   signal: CancelSignal
+  /**
+   * 在下一个安全检查点等待继续。长任务本身不可被强行挂起，循环节点在每个 item
+   * 之间调用它，因此暂停不会让同一份节点运行态发生并发覆盖。
+   */
+  waitForResume?: () => Promise<void>
   /** 把执行产生的持久化状态写回 shape props（合并文本、媒体资产引用等）。 */
   updateProps: (patch: Partial<NodeCardShape['props']>) => void
   /** 把命名变量运行结果写入 shape meta（处理 / 代码节点使用）。传 null 清空。 */

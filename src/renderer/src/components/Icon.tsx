@@ -36,6 +36,7 @@ export type IconName =
   | 'bring-front'
   | 'send-back'
   | 'play'
+  | 'pause'
   | 'send'
   | 'attach'
   | 'document'
@@ -251,6 +252,11 @@ const PATHS: Record<IconName, React.ReactNode> = {
   play: (
     <>
       <path d="m9 6 9 6-9 6V6Z" />
+    </>
+  ),
+  pause: (
+    <>
+      <path d="M8 5v14M16 5v14" />
     </>
   ),
   send: (

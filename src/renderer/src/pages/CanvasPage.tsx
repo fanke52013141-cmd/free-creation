@@ -31,7 +31,10 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
   const engineErrors = useEngineStore((s) => s.errors)
   const engineRun = useEngineStore((s) => s.run)
   const engineStop = useEngineStore((s) => s.stop)
-  const isRunning = enginePhase === 'running' || enginePhase === 'stopping'
+  const enginePause = useEngineStore((s) => s.pause)
+  const engineResume = useEngineStore((s) => s.resume)
+  const isRunning = enginePhase !== 'idle'
+  const isPaused = enginePhase === 'paused'
   const [showErrors, setShowErrors] = useState(true)
 
   // Ctrl+K 唤起搜索面板
@@ -140,7 +143,11 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
               </div>
               <span className="engine-progress-text">
                 {engineDone}/{engineTotal} ·{' '}
-                {enginePhase === 'stopping' ? '停止中…' : engineCurrent || '执行中…'}
+                {enginePhase === 'stopping'
+                  ? '停止中…'
+                  : isPaused
+                    ? '已暂停（将在当前项结束后停下）'
+                    : engineCurrent || '执行中…'}
               </span>
             </div>
           )}
@@ -154,23 +161,33 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
           >
             <Icon name="search" size={16} />
           </button>
-          <button
-            className={`run-btn ${isRunning ? 'running' : ''}`}
-            title={isRunning ? '停止工作流' : '运行工作流'}
-            onClick={() => {
-              if (isRunning) {
-                engineStop?.()
-              } else {
+          {isRunning ? (
+            <>
+              <button
+                className={`run-btn ${enginePhase === 'stopping' ? 'running' : ''}`}
+                disabled={enginePhase === 'stopping'}
+                title={isPaused ? '继续工作流' : '在当前原子任务结束后暂停'}
+                onClick={() => (isPaused ? engineResume?.() : enginePause?.())}
+              >
+                <Icon name={isPaused ? 'play' : 'pause'} size={14} /> {isPaused ? '继续' : '暂停'}
+              </button>
+              <button className="run-btn running" title="停止工作流" onClick={() => engineStop?.()}>
+                <Icon name="close" size={14} /> 停止
+              </button>
+            </>
+          ) : (
+            <button
+              className="run-btn"
+              title="运行工作流"
+              onClick={() => {
                 // 由用户发起新一轮运行时立即恢复错误面板；不在 effect 内同步 setState。
                 setShowErrors(true)
                 engineRun?.()
-              }
-            }}
-          >
-            <>
-              <Icon name={isRunning ? 'close' : 'play'} size={14} /> {isRunning ? '停止' : '运行'}
-            </>
-          </button>
+              }}
+            >
+              <Icon name="play" size={14} /> 运行
+            </button>
+          )}
         </div>
 
         <div className="topbar-actions">
