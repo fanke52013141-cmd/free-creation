@@ -4,7 +4,7 @@
 >
 > 当前分支：`main`
 >
-> 当前基线提交：`797d0c9`（已推送 `origin/main`）
+> 当前基线提交：`39a32f2`（本地功能提交，推送后成为 `origin/main`）
 >
 > 远程仓库：https://github.com/fanke52013141-cmd/free-creation
 >
@@ -26,17 +26,22 @@
 3. [ROADMAP.md](./ROADMAP.md)：历史阶段记录与产品边界。
 4. 本文：当前状态、交接流程、已知边界和下一步计划。
 
-## 2. 当前完成状态（R0–R4）
+## 2. 当前完成状态（R0–R4、P0–P4）
 
-本轮已在 `797d0c9` 完成并推送。核心不是再增加一批特例，而是让所有节点按同一契约运行。
+R0–R4 已在 `363f2d1` 完成并推送；本次 `39a32f2` 在其上完成导演台增量、数据安全、节点治理和 P0–P4 体验修复。核心不是增加特例，而是让所有节点按同一契约运行，并让本地项目在异常状态下可恢复。
 
-| 阶段 | 已交付内容 | 验证结果 |
-| --- | --- | --- |
-| R0 | 统一节点输出投影、执行模式与运行记录；输出不再由中心 `switch` 猜测 | 注册门禁、投影测试、手动执行测试通过 |
-| R1 | 节点执行器自注册；全局运行器只负责编排、校验、状态与登记 | `executor.ts` 无节点类型分发主逻辑 |
-| R2 | 契约、Schema、连线矩阵、执行器和迁移自动化测试 | 14 个测试文件、374 项测试全部通过 |
-| R3 | AI 处理节点、可验证 JSON、剧本到分镜模板、右侧契约/设置/运行记录面板 | 输出模式与 Schema 均受校验 |
-| R4 | `list.items@1` 和串行迭代节点；导演台节点与手动发布输出 | 真实 Electron 中 PNG 帧与 WebM 均成功发布 |
+| 阶段 | 已交付内容                                                                                     | 验证结果                                  |
+| ---- | ---------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| R0   | 统一节点输出投影、执行模式与运行记录；输出不再由中心 `switch` 猜测                             | 注册门禁、投影测试、手动执行测试通过      |
+| R1   | 节点执行器自注册；全局运行器只负责编排、校验、状态与登记                                       | `executor.ts` 无节点类型分发主逻辑        |
+| R2   | 契约、Schema、连线矩阵、执行器和迁移自动化测试                                                 | 14 个测试文件、374 项测试全部通过         |
+| R3   | AI 处理节点、可验证 JSON、剧本到分镜模板、右侧契约/设置/运行记录面板                           | 输出模式与 Schema 均受校验                |
+| R4   | `list.items@1` 和串行迭代节点；导演台节点与手动发布输出                                        | 真实 Electron 中 PNG 帧与 WebM 均成功发布 |
+| P0   | 启动超时/渲染错误边界；修复 `node-card` 快照缺少 `config` 导致的白屏；增加 tldraw 形状迁移定义 | 快照修复测试与生产构建通过                |
+| P1   | 确认框焦点锁定、Esc 取消、焦点恢复；Toast 和契约分页增加可访问语义；项目卡片支持键盘打开       | lint、类型检查通过                        |
+| P2   | 顶部栏和侧面板响应式收敛；补齐 `--panel` 主题变量；窄屏下文字、按钮和弹层不溢出                | Web 类型检查、构建通过                    |
+| P3   | 导演台窄屏支持镜头/属性面板切换；时间轴、预演视口和操作栏保留在主工作区                        | 导演台数据测试通过                        |
+| P4   | 补充快照修复、节点状态、创建菜单、运行记录、媒体映射和导入事务测试                             | 全量 23 个测试文件、405 项用例通过        |
 
 ### 本轮新增：导演台（`director`）
 
@@ -64,39 +69,39 @@
           下游端口的真实输入
 ```
 
-| 位置 | 职责 |
-| --- | --- |
-| `src/shared/types/index.ts` | `NodeTypeId`、端口类型、执行模式等跨层类型 |
-| `src/shared/node-schemas.ts` | 版本化 JSON Schema 的注册与校验 |
-| `src/renderer/src/nodes/registry.tsx` | `NodeTypeSpec` 和注册时硬门禁 |
-| `src/renderer/src/nodes/specs/index.tsx` | 所有节点 Spec、端口、执行器与投影的注册入口 |
-| `src/renderer/src/nodes/specs/outputProjections.ts` | 每一种节点的持久化状态 → 输出端口映射 |
-| `src/renderer/src/nodes/nodeValues.ts` | 统一投影入口与持久化结果解析器 |
-| `src/renderer/src/engine/executor.ts` | 拓扑排序、输入收集、契约检查、执行状态、下游数据包登记 |
-| `src/renderer/src/engine/executors/` | 节点独立执行器；不向全局运行器加特例 |
-| `src/renderer/src/canvas/graph.ts` | 连线创建、类型/Schema/数量/环校验、按端口读取上游值 |
-| `src/renderer/src/canvas/NodeContractPanel.tsx` | 右侧“概览 / I/O / 设置 / 运行”详情面板 |
-| `src/renderer/src/canvas/DirectorStudioPanel.tsx` | 导演台独立全屏预演工作区 |
-| `src/main/ipc/media.ipc.ts` | 本地媒体导入、落盘与安全限制 |
+| 位置                                                | 职责                                                   |
+| --------------------------------------------------- | ------------------------------------------------------ |
+| `src/shared/types/index.ts`                         | `NodeTypeId`、端口类型、执行模式等跨层类型             |
+| `src/shared/node-schemas.ts`                        | 版本化 JSON Schema 的注册与校验                        |
+| `src/renderer/src/nodes/registry.tsx`               | `NodeTypeSpec` 和注册时硬门禁                          |
+| `src/renderer/src/nodes/specs/index.tsx`            | 所有节点 Spec、端口、执行器与投影的注册入口            |
+| `src/renderer/src/nodes/specs/outputProjections.ts` | 每一种节点的持久化状态 → 输出端口映射                  |
+| `src/renderer/src/nodes/nodeValues.ts`              | 统一投影入口与持久化结果解析器                         |
+| `src/renderer/src/engine/executor.ts`               | 拓扑排序、输入收集、契约检查、执行状态、下游数据包登记 |
+| `src/renderer/src/engine/executors/`                | 节点独立执行器；不向全局运行器加特例                   |
+| `src/renderer/src/canvas/graph.ts`                  | 连线创建、类型/Schema/数量/环校验、按端口读取上游值    |
+| `src/renderer/src/canvas/NodeContractPanel.tsx`     | 右侧“概览 / I/O / 设置 / 运行”详情面板                 |
+| `src/renderer/src/canvas/DirectorStudioPanel.tsx`   | 导演台独立全屏预演工作区                               |
+| `src/main/ipc/media.ipc.ts`                         | 本地媒体导入、落盘与安全限制                           |
 
 ## 4. 节点清单与可用范围
 
-| 节点 | 主要输入 | 主要输出 | 当前说明 |
-| --- | --- | --- | --- |
-| 文本 | 多文本（可选） | `out-text` | 可用 |
-| 图片资产 | 无 | `out-image` | 导入、粘贴、拖入均应走此节点 |
-| 生图 | 文本、参考图 | `out-image` | 可用；支持尺寸、种子和重新生成 |
-| 视频 | 文本、首帧图 | `out-video` | 可用；依赖已配置视频供应商 |
-| 音频 | 音频、文本 | `out-audio` | 可用；依赖供应商 |
-| 对话 | 文本 | `out-markdown` | 多轮交互；保留 Markdown 语义 |
-| AI 处理 | 文本、JSON | text / markdown / JSON 之一 | 一次性、可复跑的工作流转换 |
-| 处理 | 动态值 | `out-value` | 通用透传/兜底，不承载业务规则 |
-| JSON | 文本、JSON | `out-json` | 结构化编辑与校验 |
-| 代码 | 文本、JSON、命名参数 | 命名输出端口 | 本地受限转换；变量名决定端口 ID |
-| 分镜板 | 分镜 JSON、兼容文本 | 分镜 JSON、摘要 | 可用 |
-| 迭代 | `list.items@1` | `out-items` | 串行批处理；尚无并发/断点续跑 |
-| 导演台 | 分镜、参考图、机位 | 帧、预演视频、机位、工程摘要 | 手动发布；当前为 2D 白模预演 |
-| 脚本 | 历史文本 | 分镜 JSON、文本 | 仅旧项目兼容，禁止新建 |
+| 节点     | 主要输入             | 主要输出                     | 当前说明                        |
+| -------- | -------------------- | ---------------------------- | ------------------------------- |
+| 文本     | 多文本（可选）       | `out-text`                   | 可用                            |
+| 图片资产 | 无                   | `out-image`                  | 导入、粘贴、拖入均应走此节点    |
+| 生图     | 文本、参考图         | `out-image`                  | 可用；支持尺寸、种子和重新生成  |
+| 视频     | 文本、首帧图         | `out-video`                  | 可用；依赖已配置视频供应商      |
+| 音频     | 音频、文本           | `out-audio`                  | 可用；依赖供应商                |
+| 对话     | 文本                 | `out-markdown`               | 多轮交互；保留 Markdown 语义    |
+| AI 处理  | 文本、JSON           | text / markdown / JSON 之一  | 一次性、可复跑的工作流转换      |
+| 处理     | 动态值               | `out-value`                  | 通用透传/兜底，不承载业务规则   |
+| JSON     | 文本、JSON           | `out-json`                   | 结构化编辑与校验                |
+| 代码     | 文本、JSON、命名参数 | 命名输出端口                 | 本地受限转换；变量名决定端口 ID |
+| 分镜板   | 分镜 JSON、兼容文本  | 分镜 JSON、摘要              | 可用                            |
+| 迭代     | `list.items@1`       | `out-items`                  | 串行批处理；尚无并发/断点续跑   |
+| 导演台   | 分镜、参考图、机位   | 帧、预演视频、机位、工程摘要 | 手动发布；当前为 2D 白模预演    |
+| 脚本     | 历史文本             | 分镜 JSON、文本              | 仅旧项目兼容，禁止新建          |
 
 当前注册 Schema：
 
@@ -154,18 +159,25 @@ git status -sb
 
 ### 当前已验证基线
 
-- `pnpm typecheck`：通过。
-- `pnpm test`：14 文件、374 用例全部通过。
-- `pnpm build`：通过。
+- `npm run lint`：通过。
+- `npm run typecheck`：通过（Node + Web）。
+- `npm run test`：23 个测试文件、405 项用例全部通过。
+- `npx electron-vite build`：通过。
 - 定向 ESLint 与 `git diff --check`：通过。
-- Electron 手工测试：创建导演台 → 打开工作区 → 发布 PNG 帧 → 导出 WebM，两个输出均出现“可供下游使用”状态。
+- Electron 手工测试：创建导演台 → 打开工作区 → 发布 PNG 帧 → 导出 WebM，两个输出均出现“可供下游使用”状态；白屏问题已定位为旧 `node-card` 快照缺少 `config`，恢复前内存修复后再交给 tldraw 迁移。
 - 构建仍会提示 `db.ts` 同时被动态与静态导入；它不阻断构建，列入后续技术债。
+
+### 本次功能提交
+
+`39a32f2 feat: harden node workflows and director studio`
+
+该提交包含节点契约治理、导入媒体重映射与事务保护、导演台 2D/3D 预演和发布、节点状态/运行记录、P0–P4 UI 修复及对应测试。提交不包含 API Key、SQLite、本地项目目录、生成媒体或打包产物。
 
 ## 7. 后续开发计划（建议按此顺序）
 
-### P1：发布回归与性能基准
+### 下一步唯一推荐：P1 发布回归与性能基准
 
-目标：把“能跑”变为可持续发布。
+目标：把当前“可验证构建”变为可持续发布。P0–P4 已完成，先用固定演示项目做桌面端回归和性能基线。
 
 - 创建固定演示项目：文本→AI 处理→分镜→迭代→生图/视频，以及分镜→导演台→媒体下游。
 - 补 tldraw 端到端回归：节点创建、双击编辑、拖动、连线、分组、撤销、保存重开、右键菜单与右侧详情。
