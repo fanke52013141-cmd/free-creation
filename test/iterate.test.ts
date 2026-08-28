@@ -15,7 +15,7 @@ import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
 function makeCtx(over: {
   text?: string
   list?: unknown
-  downstream?: string[]
+  outgoing?: NodeExecutionContext['outgoing']
   runSubflow?: (req: { item: Record<string, unknown>; index: number }) => Promise<SubflowOutput>
   signal?: { cancelled: boolean }
 }): {
@@ -82,7 +82,9 @@ function makeCtx(over: {
     projectId: 'p1',
     providers: [],
     signal: over.signal ?? { cancelled: false },
-    downstream: over.downstream ?? ['node-body'],
+    outgoing: over.outgoing ?? [
+      { nodeId: 'node-body', fromPortId: 'out-item', toPortId: 'in-json' }
+    ],
     updateProps: (patch) => Object.assign(props, patch),
     updateResult: (r) => {
       result.value = r
@@ -115,14 +117,12 @@ describe('parseIterate · 配置解析', () => {
   it('解析完整配置', () => {
     const cfg = parseIterate(
       JSON.stringify({
-        itemVar: 'shot',
         onFailure: 'retry',
         maxRetries: 3,
         limit: 10
       })
     )
     expect(cfg).toEqual({
-      itemVar: 'shot',
       onFailure: 'retry',
       maxRetries: 3,
       limit: 10
@@ -131,13 +131,11 @@ describe('parseIterate · 配置解析', () => {
 
   it('空文本 / 非法 JSON 安全降级', () => {
     expect(parseIterate('')).toEqual({
-      itemVar: 'item',
       onFailure: 'skip',
       maxRetries: 0,
       limit: 0
     })
     expect(parseIterate('{bad')).toEqual({
-      itemVar: 'item',
       onFailure: 'skip',
       maxRetries: 0,
       limit: 0
@@ -310,8 +308,8 @@ describe('iterate 执行器 · 取消 / 跳过条件', () => {
     expect(r.reason).toContain('列表')
   })
 
-  it('无下游循环体 → 跳过', async () => {
-    const { ctx } = makeCtx({ text: '{}', list: [{ id: 'a' }], downstream: [] })
+  it('没有从当前项端口连接循环体 → 跳过', async () => {
+    const { ctx } = makeCtx({ text: '{}', list: [{ id: 'a' }], outgoing: [] })
     const r = await iterateExecutor(ctx)
     expect(r.status).toBe('skipped')
     expect(r.reason).toContain('循环体')
@@ -335,6 +333,38 @@ describe('iterate 执行器 · 取消 / 跳过条件', () => {
     })
     const r = await iterateExecutor(ctx)
     expect(r.status).toBe('skipped')
+  })
+
+  it('仅把 out-item 目标当作循环体，out-items 可安全连接汇总节点', async () => {
+    const seen: Array<{ nodeIds: string[]; targets: unknown }> = []
+    const { ctx } = makeCtx({
+      text: '{}',
+      list: [{ id: 'a' }],
+      outgoing: [
+        { nodeId: 'prompt-node', fromPortId: 'out-item', toPortId: 'in-context' },
+        { nodeId: 'summary-node', fromPortId: 'out-items', toPortId: 'in-list' }
+      ],
+      runSubflow: async (req) => {
+        seen.push({ nodeIds: req.nodeIds, targets: req.itemTargets })
+        return {
+          'prompt-node': {
+            out: {
+              value: { ok: true },
+              type: 'json',
+              source: { nodeId: 'n', portId: 'p', runId: 'r' },
+              createdAt: 0
+            }
+          }
+        }
+      }
+    })
+    await iterateExecutor(ctx)
+    expect(seen).toEqual([
+      {
+        nodeIds: ['prompt-node'],
+        targets: [{ nodeId: 'prompt-node', portId: 'in-context' }]
+      }
+    ])
   })
 })
 

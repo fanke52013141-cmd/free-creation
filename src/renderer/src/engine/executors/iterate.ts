@@ -1,7 +1,7 @@
 // 循环节点执行器（原迭代节点）
 //
 // 把 `in-list`（list.items@1）里的每个元素作为一次「循环体」执行：
-// 对每一项，经 runSubflow 把当前项注入下游节点链（循环体）执行一次，
+// 对每一项，经 runSubflow 把当前项注入由 out-item 明确标记的循环体执行一次，
 // 收集每项结果并输出结构化的 `{ items: [...] }` 列表（out-items）。
 //
 // 多产物收集：每项执行后收集循环体中所有节点的所有输出端口值，
@@ -15,8 +15,6 @@ import { readNodeConfig } from '../../canvas/node-persistence'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
 
 export interface IterateConfig {
-  /** 当前项注入下游子流程的变量名（首节点 in-json 收到含 item 的对象）。 */
-  itemVar: string
   /** 单项失败策略：skip 跳过继续 / fail 立即中止 / retry 重试后仍失败则跳过。 */
   onFailure: 'skip' | 'fail' | 'retry'
   /** retry 模式每项最多重试次数（不含首次）。 */
@@ -44,19 +42,18 @@ export interface IterateResult {
 
 export function parseIterate(text: string): IterateConfig {
   if (!text) {
-    return { itemVar: 'item', onFailure: 'skip', maxRetries: 0, limit: 0 }
+    return { onFailure: 'skip', maxRetries: 0, limit: 0 }
   }
   try {
     const value = JSON.parse(text) as Record<string, unknown>
     return {
-      itemVar: typeof value.itemVar === 'string' ? value.itemVar : 'item',
       onFailure:
         value.onFailure === 'fail' || value.onFailure === 'retry' ? value.onFailure : 'skip',
       maxRetries: typeof value.maxRetries === 'number' ? Math.max(0, value.maxRetries) : 0,
       limit: typeof value.limit === 'number' ? Math.max(0, value.limit) : 0
     }
   } catch {
-    return { itemVar: 'item', onFailure: 'skip', maxRetries: 0, limit: 0 }
+    return { onFailure: 'skip', maxRetries: 0, limit: 0 }
   }
 }
 
@@ -129,11 +126,14 @@ async function runItem(
     // 处理，避免错误冒泡成未处理 rejection，也与「迭代体未产生输出」走同一通路。
     let output: Record<string, unknown> | undefined
     try {
+      const targets = (ctx.outgoing ?? []).filter((edge) => edge.fromPortId === 'out-item')
       output = (await ctx.runSubflow?.({
-        nodeIds: ctx.downstream ?? [],
+        nodeIds: targets.map((edge) => edge.nodeId),
         item,
         index,
-        itemId
+        itemId,
+        iterationNodeId: ctx.node.id,
+        itemTargets: targets.map((edge) => ({ nodeId: edge.nodeId, portId: edge.toPortId }))
       })) as Record<string, unknown> | undefined
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -162,8 +162,12 @@ export const iterateExecutor = async (ctx: NodeExecutionContext): Promise<NodeEx
   const config = parseIterate(readNodeConfig(ctx.shape))
   const list = inputJson(ctx.inputs, 'in-list')[0]
   if (!Array.isArray(list)) return { status: 'skipped', reason: '没有可循环的列表输入' }
-  if (!ctx.runSubflow || (ctx.downstream?.length ?? 0) === 0) {
-    return { status: 'skipped', reason: '未配置循环体（循环节点下游需连接要批量执行的节点）' }
+  const bodyTargets = (ctx.outgoing ?? []).filter((edge) => edge.fromPortId === 'out-item')
+  if (!ctx.runSubflow || bodyTargets.length === 0) {
+    return {
+      status: 'skipped',
+      reason: '未配置循环体（请从“当前项”端口连接要批量执行的第一个节点）'
+    }
   }
 
   const items = config.limit > 0 ? list.slice(0, config.limit) : list

@@ -232,6 +232,28 @@ describe('collectContractInputs · 单值端口占用规则', () => {
 })
 
 describe('collectContractInputs · 成功路径', () => {
+  it('动态注入遵循目标端口和 Schema，且可忽略其控制连线', () => {
+    const target = makeNode('t', 'json')
+    const control = makeEdge('control', 'iterate', 'out-item', 't', 'in-json')
+    const result = collectContractInputs(target, [control], new Map(), {
+      ignoreEdgeIds: ['control'],
+      injections: [
+        {
+          portId: 'in-json',
+          packet: {
+            type: 'json',
+            value: { kind: 'json', data: { shot: 's1' } },
+            schema: { id: 'json.any', version: 1 },
+            source: { nodeId: 'iterate', portId: 'out-item', runId: 'run-1' },
+            createdAt: 0
+          }
+        }
+      ]
+    })
+    expect(result.errors).toHaveLength(0)
+    expect(inputJson(result.value, 'in-json')).toEqual([{ shot: 's1' }])
+  })
+
   it('兼容输入正确填充到目标 portId', () => {
     const target = makeNode('t', 'json')
     const edge = makeEdge('e1', 'u', 'out-json', 't', 'in-json')

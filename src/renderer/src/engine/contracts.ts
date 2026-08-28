@@ -19,6 +19,12 @@ export interface ContractResult<T> {
   errors: string[]
 }
 
+/** 运行器在动态作用域内注入的输入包（目前由 iterate.out-item 使用）。 */
+export interface ContractInputInjection {
+  portId: string
+  packet: NodeValuePacket
+}
+
 function valueType(value: NodeValue): PortType {
   return value.kind
 }
@@ -104,7 +110,11 @@ export function buildOutputPackets(
 export function collectContractInputs(
   node: CanvasNode,
   edges: CanvasEdge[],
-  outputs: ReadonlyMap<string, ContractOutputs>
+  outputs: ReadonlyMap<string, ContractOutputs>,
+  options: {
+    ignoreEdgeIds?: readonly string[]
+    injections?: readonly ContractInputInjection[]
+  } = {}
 ): ContractResult<ContractInputMap> {
   const spec = getNodeType(node.type)
   if (!spec) return { value: new Map(), errors: [`未知节点类型：${node.type}`] }
@@ -114,8 +124,39 @@ export function collectContractInputs(
   const resolved = portsOf(node)
   const inputPorts = new Map(resolved.in.map((port) => [port.id, port]))
 
+  const appendPacket = (target: PortDecl | undefined, packet: NodeValuePacket): void => {
+    if (!target) return
+    if (!portCompatible(packet.type, target.type)) {
+      errors.push(
+        `${describePort(target)} 需要 ${target.type}，上游 ${packet.source.portId} 实际为 ${packet.type}`
+      )
+      return
+    }
+    if (packet.type === 'json' && target.type === 'json' && target.schema) {
+      if (packet.schema && !nodeSchemasCompatible(packet.schema, target.schema)) {
+        errors.push(
+          `${describePort(target)} 的 Schema ${target.schema.id}@${target.schema.version} 与上游 ${packet.schema.id}@${packet.schema.version} 不兼容`
+        )
+        return
+      }
+      if (packet.value.kind !== 'json') {
+        errors.push(`${describePort(target)} 收到的 JSON 数据包内容类型无效`)
+        return
+      }
+      const result = validateNodeSchema(target.schema, packet.value.data)
+      if (!result.ok) {
+        errors.push(`${describePort(target)} 校验失败：${result.errors.join('；')}`)
+        return
+      }
+    }
+    const values = mutable.get(target.id) ?? []
+    values.push(packet)
+    mutable.set(target.id, values)
+  }
+
   for (const edge of edges) {
     if (edge.to.nodeId !== node.id) continue
+    if (options.ignoreEdgeIds?.includes(edge.id)) continue
     const target = inputPorts.get(edge.to.portId)
     if (!target) {
       errors.push(`连线 ${edge.id} 指向不存在的输入端口：${edge.to.portId}`)
@@ -126,32 +167,16 @@ export function collectContractInputs(
       errors.push(`连线 ${edge.id} 的上游未产生 ${edge.from.portId} 输出`)
       continue
     }
-    if (!portCompatible(packet.type, target.type)) {
-      errors.push(
-        `${describePort(target)} 需要 ${target.type}，上游 ${packet.source.portId} 实际为 ${packet.type}`
-      )
+    appendPacket(target, packet)
+  }
+
+  for (const injection of options.injections ?? []) {
+    const target = inputPorts.get(injection.portId)
+    if (!target) {
+      errors.push(`动态输入指向不存在的输入端口：${injection.portId}`)
       continue
     }
-    if (packet.type === 'json' && target.type === 'json' && target.schema) {
-      if (packet.schema && !nodeSchemasCompatible(packet.schema, target.schema)) {
-        errors.push(
-          `${describePort(target)} 的 Schema ${target.schema.id}@${target.schema.version} 与上游 ${packet.schema.id}@${packet.schema.version} 不兼容`
-        )
-        continue
-      }
-      if (packet.value.kind !== 'json') {
-        errors.push(`${describePort(target)} 收到的 JSON 数据包内容类型无效`)
-        continue
-      }
-      const result = validateNodeSchema(target.schema, packet.value.data)
-      if (!result.ok) {
-        errors.push(`${describePort(target)} 校验失败：${result.errors.join('；')}`)
-        continue
-      }
-    }
-    const values = mutable.get(target.id) ?? []
-    values.push(packet)
-    mutable.set(target.id, values)
+    appendPacket(target, injection.packet)
   }
 
   for (const port of resolved.in) {

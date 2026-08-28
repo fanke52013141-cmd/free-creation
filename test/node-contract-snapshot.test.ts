@@ -233,7 +233,7 @@ describe('关键端口契约快照（防回归）', () => {
     expect(ids).toEqual(['out-json', 'out-markdown', 'out-text'])
   })
 
-  it('迭代节点：in-list(list.items@1) → out-items(list.items@1)', () => {
+  it('迭代节点：in-list(list.items@1) → out-item(json.any 临时项) + out-items(list.items@1)', () => {
     const spec = getNodeType('iterate')!
     const inList = spec.ports.in.find((p) => p.id === 'in-list')!
     expect(inList.type).toBe('json')
@@ -241,6 +241,10 @@ describe('关键端口契约快照（防回归）', () => {
     const outItems = spec.ports.out.find((p) => p.id === 'out-items')!
     expect(outItems.type).toBe('json')
     expect(outItems.schema).toEqual({ id: 'list.items', version: 1 })
+    const outItem = spec.ports.out.find((p) => p.id === 'out-item')!
+    expect(outItem.type).toBe('json')
+    expect(outItem.schema).toEqual({ id: 'json.any', version: 1 })
+    expect(outItem.required).toBe(false)
   })
 
   it('导演台：分镜/参考图/机位输入，发布帧/视频/机位/工程摘要输出', () => {

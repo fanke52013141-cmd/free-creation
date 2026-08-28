@@ -534,6 +534,13 @@ export function registerExtendedNodeTypes(): void {
       ],
       out: [
         output(
+          'out-item',
+          '当前项',
+          'json',
+          '只在循环体内按项提供的临时数据。请连接循环体第一个节点；循环结束后不作为项目级输出。',
+          { required: false, schema: JSON_ANY }
+        ),
+        output(
           'out-items',
           '结果列表',
           'json',

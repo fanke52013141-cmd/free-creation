@@ -1,6 +1,6 @@
 # 节点输入输出契约规范
 
-> 状态：强制规范 1.1（P0-P2 已落地）  
+> 状态：强制规范 1.2（P0-P3.1 已落地）
 > 代码入口：`src/shared/types/index.ts`、`src/shared/node-schemas.ts`、`src/renderer/src/nodes/registry.tsx`  
 > 节点定义：`src/renderer/src/nodes/specs/index.tsx`
 > 运行时：`src/renderer/src/engine/contracts.ts`、`src/renderer/src/nodes/nodeValues.ts`
@@ -178,6 +178,17 @@ schema: {
 - 占位符只能读取上述已连线端口；禁止扫描任意上游节点、标题或节点类型。
 - 整个值恰为一个占位符时，可保留对象/数组（例如把单条 `shot.definition` 组装进 `storyboard.shots`）；嵌入文本时才转为字符串。
 - 执行后先做字段级 Schema 校验，失败不产生 `out-json`；未运行但本地正文已合法时可作为手工编辑的数据源输出。
+
+#### 迭代作用域端口
+
+`iterate` 不是把一条普通结果线同时拿来表示“循环控制”和“最终数据”。它有两个语义严格分离的输出：
+
+- `out-item`（`json.any@1`，可选）：当前列表项的**临时作用域**数据。只能连接循环体的入口输入端口；运行器会为每个 item 把该值注入这条端口，并沿循环体内的真实数据连线继续执行。
+- `out-items`（`list.items@1`）：循环完成后产生的**项目级结果列表**。它只能供汇总、展示或下一阶段的普通节点消费，不能作为循环体的隐式控制线。
+
+循环体由 `out-item` 的入口向下沿数据边展开；同一迭代节点 `out-items` 的目标是边界外的汇总消费者，不会在每项中重复运行。循环节点本身不会把 `out-item` 持久化为“最后一项”的普通输出，避免画布外部错误消费不确定的单项状态。
+
+运行器对动态注入仍执行目标端口的类型、Schema、基数和必填校验。禁止把当前项硬编码注入某个叫 `in-json` 的端口；循环体入口可以是 `in-context`、`in-prompt` 或任何已声明且兼容的 JSON 输入。
 
 ## 5. 连线规则
 

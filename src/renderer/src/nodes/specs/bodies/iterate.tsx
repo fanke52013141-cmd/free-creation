@@ -2,6 +2,7 @@
 import { stopEventPropagation, useEditor, useValue } from 'tldraw'
 import type { NodeBodyProps } from '../../registry'
 import { readNodeConfig } from '../../../canvas/node-persistence'
+import { deriveGraph } from '../../../canvas/graph'
 import {
   parseIterate,
   parseIterateResult,
@@ -17,7 +18,6 @@ const ITERATE_FAILURE_OPTIONS: Array<{ value: IterateConfig['onFailure']; label:
 
 function enforceConfig(c: IterateConfig): IterateConfig {
   return {
-    itemVar: c.itemVar || 'item',
     onFailure: c.onFailure,
     maxRetries: c.maxRetries < 0 ? 0 : c.maxRetries,
     limit: c.limit < 0 ? 0 : c.limit
@@ -57,16 +57,13 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
       props: { config: JSON.stringify(enforceConfig(next)) }
     })
   }
-  // 下游循环体数量：通过当前节点的输出边推算（NodeContractPanel 之外简单估算）
+  // 只有 out-item 的目标是循环体入口；out-items 的目标是循环结束后的汇总消费者。
   const downstreamCount = useValue(
-    'iterate downstream',
+    'iterate body entries',
     () => {
-      let count = 0
-      for (const binding of editor.getBindingsFromShape(shape.id, 'arrow')) {
-        // 凡是本节点引出的箭头都视为下游循环体的一部分
-        if (binding.props.terminal === 'start') count += 1
-      }
-      return count
+      return deriveGraph(editor).edges.filter(
+        (edge) => edge.from.nodeId === shape.id && edge.from.portId === 'out-item'
+      ).length
     },
     [editor, shape.id]
   )
@@ -74,14 +71,6 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
   return (
     <div className="iterate-body">
       <div className="iterate-config">
-        <label className="ai-row">
-          <span className="ai-row-label">变量名</span>
-          <input
-            value={data.itemVar}
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onChange={(e) => updateConfig({ ...data, itemVar: e.target.value || 'item' })}
-          />
-        </label>
         <div className="ai-row ai-row-num">
           <label>
             <span className="ai-row-label">限数</span>
@@ -125,7 +114,7 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
         )}
       </div>
       <div className="iterate-meta">
-        <span>下游循环体节点：{downstreamCount} 个</span>
+        <span>循环体入口：{downstreamCount} 个</span>
         <span className={result ? 'iterate-hint has-result' : 'iterate-hint'}>
           {shape.props.exec === 'running'
             ? '正在按顺序处理…'
