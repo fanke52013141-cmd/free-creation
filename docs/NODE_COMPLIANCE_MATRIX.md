@@ -12,6 +12,7 @@
 | 对话        | 是   | text → markdown                | 是       | 是       | text（对话内容） |
 | 处理        | 是   | any                            | 是       | 是       | config           |
 | JSON        | 是   | json.any                       | 是       | 是       | text             |
+| 结构数据    | 是   | 动态 Schema + json.any 上下文  | 是       | 是       | config + text    |
 | 代码        | 是   | 动态端口 + json.any            | 是       | 是       | config           |
 | 分镜板      | 是   | storyboard.shots               | 是       | 是       | text             |
 | AI 处理     | 是   | text/json → text/markdown/json | 是       | 是       | config           |

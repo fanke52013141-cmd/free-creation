@@ -5201,6 +5201,51 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   cursor: text;
 }
 
+/* 通用结构数据节点：沿用 JSON 卡片的密度，只增加 Schema 与字段状态。 */
+.structured-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.structured-header,
+.structured-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.structured-header .gen-select {
+  min-width: 0;
+  flex: 1;
+}
+
+.structured-preview {
+  min-height: 0;
+  flex: 1;
+  width: 100%;
+  overflow: auto;
+  margin: 0;
+  padding: 7px;
+  border: 1px solid color-mix(in srgb, #c084fc 26%, var(--line));
+  border-radius: 7px;
+  background: color-mix(in srgb, #c084fc 5%, var(--card));
+  color: var(--txt);
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 10px;
+  line-height: 1.45;
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+
+.structured-footer {
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 9px;
+}
+
 .json-card-list {
   display: flex;
   flex-direction: column;

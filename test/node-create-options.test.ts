@@ -19,7 +19,9 @@ describe('node creation options', () => {
     expect(choices).toContainEqual(
       expect.objectContaining({ type: 'ai-process', targetPortId: 'in-json' })
     )
-    expect(choices.some((choice) => choice.type === 'image-gen')).toBe(false)
+    expect(choices).toContainEqual(
+      expect.objectContaining({ type: 'image-gen', targetPortId: 'in-prompt' })
+    )
   })
 
   it('only exposes the matching schema port on a multi-input node', () => {

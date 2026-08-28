@@ -156,7 +156,8 @@ schema: {
 - 相同 Schema ID 的新版本应尽量向后兼容。
 - 分镜、字幕、角色、镜头参数等业务结构必须使用独立 Schema ID。
 - 列表批处理使用 `list.items@1`：根值必须是数组，每个元素必须是对象（建议带稳定 id）。迭代/批处理节点的输入输出用它，使批量结果仍是可连接的结构化列表，而不是把几十个生成资产藏进一个不可连接的节点内部。
-- 后续应把 Schema 的字段定义集中到共享目录，并在运行前后执行实际校验。
+- P2 已注册 `character.profile@1`、`scene.definition@1`、`shot.definition@1`、`prompt.bundle@1`；字段定义、校验错误和模板用法见 [docs/STRUCTURED_CREATIVE_DATA.md](./docs/STRUCTURED_CREATIVE_DATA.md)。
+- Schema 的字段定义必须集中到共享目录，并在运行前后执行实际校验。
 
 #### 动态输出的 Schema 声明原则
 
@@ -167,6 +168,16 @@ schema: {
 - 其意义：连线规则（§5）看静态声明，执行结果（§8）看运行时校验，两者职责分离，避免为动态输出预先枚举所有可能 Schema。
 
 示例见 `ai-process` 节点：`out-json` 静态声明 `json.any@1`，执行器按配置里的 `jsonSchema` 做运行时校验。
+
+#### 结构数据节点的字段映射
+
+`structured` 是 P2 的通用结构编辑节点，不为角色、场景或镜头分别创建特例 UI。它的正文保存 JSON，`props.config` 保存所选 Schema；输出端口由 `resolvePorts(shape)` 显示为该 Schema。
+
+- `in-context`：多个 `json.any@1` 上游，可在正文中使用 `{{input[0].field}}`、`{{input[1].nested.field}}` 明确引用。
+- `in-text`：多个文本上游，可用 `{{text}}` 引用合并文本。
+- 占位符只能读取上述已连线端口；禁止扫描任意上游节点、标题或节点类型。
+- 整个值恰为一个占位符时，可保留对象/数组（例如把单条 `shot.definition` 组装进 `storyboard.shots`）；嵌入文本时才转为字符串。
+- 执行后先做字段级 Schema 校验，失败不产生 `out-json`；未运行但本地正文已合法时可作为手工编辑的数据源输出。
 
 ## 5. 连线规则
 
@@ -276,15 +287,15 @@ interface NodeValuePacket {
 导演台是 `manual-publish` 节点：画布卡片只展示工程摘要和发布状态，完整预演在独立
 工作区打开。它不是没有连线的特殊工具，也不能把场景状态藏进下游节点。
 
-| 方向 | 端口 | 类型 | 数量 | 语义 |
-| --- | --- | --- | --- | --- |
-| 输入 | `in-storyboard` | `json / storyboard.shots@1` | one | 分镜同步为镜头列表 |
-| 输入 | `in-reference-images` | `image` | many | 人物、场景、构图参考图 |
-| 输入 | `in-camera-preset` | `json / previs.camera@1` | one | 初始机位参数 |
-| 输出 | `out-frame` | `image` | one | 明确发布的当前预演帧 |
-| 输出 | `out-preview-video` | `video` | one | 明确导出的 WebM 预演 |
-| 输出 | `out-camera` | `json / previs.camera@1` | one | 已发布镜头机位参数 |
-| 输出 | `out-project` | `json / previs.project@1` | one | 轻量工程摘要，不含媒体二进制 |
+| 方向 | 端口                  | 类型                        | 数量 | 语义                         |
+| ---- | --------------------- | --------------------------- | ---- | ---------------------------- |
+| 输入 | `in-storyboard`       | `json / storyboard.shots@1` | one  | 分镜同步为镜头列表           |
+| 输入 | `in-reference-images` | `image`                     | many | 人物、场景、构图参考图       |
+| 输入 | `in-camera-preset`    | `json / previs.camera@1`    | one  | 初始机位参数                 |
+| 输出 | `out-frame`           | `image`                     | one  | 明确发布的当前预演帧         |
+| 输出 | `out-preview-video`   | `video`                     | one  | 明确导出的 WebM 预演         |
+| 输出 | `out-camera`          | `json / previs.camera@1`    | one  | 已发布镜头机位参数           |
+| 输出 | `out-project`         | `json / previs.project@1`   | one  | 轻量工程摘要，不含媒体二进制 |
 
 导演工程改动后，在未重新发布帧/视频之前，节点必须标示“尚未发布”；下游仅可消费
 最近一次已发布数据。参考图和分镜的“同步输入”只读取其声明的 `portId`，不得按

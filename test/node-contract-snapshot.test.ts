@@ -6,7 +6,8 @@
 // 「破坏端口 ID 而不提升契约版本时测试失败」。
 import { describe, it, expect, beforeAll } from 'vitest'
 import { registerAllNodeTypes } from './helpers/registerNodes'
-import { allNodeTypes, getNodeType } from '@renderer/nodes/registry'
+import { allNodeTypes, getNodePorts, getNodeType } from '@renderer/nodes/registry'
+import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
 import type { NodeTypeId, PortDecl } from '@shared/types'
 
 beforeAll(() => {
@@ -37,6 +38,7 @@ describe('全部标准节点都已注册', () => {
     'chat',
     'processor',
     'json',
+    'structured',
     'code',
     'storyboard',
     'ai-process',
@@ -73,6 +75,7 @@ describe('端口契约快照 · 每个端口 ID 稳定且符合命名规范', ()
     'chat',
     'processor',
     'json',
+    'structured',
     'code',
     'storyboard',
     'script',
@@ -144,6 +147,45 @@ describe('关键端口契约快照（防回归）', () => {
     const spec = getNodeType('json')!
     const jsonOut = spec.ports.out.find((p) => p.id === 'out-json')!
     expect(jsonOut.schema).toEqual({ id: 'json.any', version: 1 })
+  })
+
+  it('结构数据节点：上下文/文本 → 实例所选 Schema 的 JSON 输出', () => {
+    const spec = getNodeType('structured')!
+    expect(spec.contractVersion).toBe(1)
+    expect(spec.ports.in.find((port) => port.id === 'in-context')?.schema).toEqual({
+      id: 'json.any',
+      version: 1
+    })
+    expect(spec.ports.out.find((port) => port.id === 'out-json')?.schema).toEqual({
+      id: 'json.any',
+      version: 1
+    })
+    const shape = {
+      id: 'shape:structured' as never,
+      type: 'node-card',
+      x: 0,
+      y: 0,
+      rotation: 0,
+      index: 'a1' as never,
+      isLocked: false,
+      props: {
+        w: 340,
+        h: 260,
+        nodeType: 'structured',
+        title: '角色设定',
+        config: JSON.stringify({ schema: { id: 'character.profile', version: 1 } }),
+        text: '',
+        mediaId: '',
+        mediaPath: '',
+        mediaMime: '',
+        exec: 'idle'
+      },
+      meta: {}
+    } as NodeCardShape
+    expect(getNodePorts(spec, shape).out[0]?.schema).toEqual({
+      id: 'character.profile',
+      version: 1
+    })
   })
 
   it('分镜板输入/输出都绑定 storyboard.shots@1 Schema', () => {

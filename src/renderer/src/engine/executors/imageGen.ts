@@ -1,8 +1,8 @@
 // 生图节点执行器：已有成片优先复用；否则按提示词与可选参考图调用图片模型。
-import { inputMedia, inputText } from '../contracts'
+import { inputJson, inputMedia, inputText } from '../contracts'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
 import { modelsByModality } from '../../stores/gateway'
-import { mergedPrompt, parseJsonObj } from './shared'
+import { mergedPrompt, parseJsonObj, promptBundleText } from './shared'
 import { readNodeConfig } from '../../canvas/node-persistence'
 
 export interface ImageGenData {
@@ -32,7 +32,11 @@ export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeE
   const data = parseImageGen(readNodeConfig(ctx.shape))
   const option = modelsByModality(ctx.providers, 'image').find((item) => item.key === data.modelKey)
   if (!option) return { status: 'skipped', reason: '未选择可用图片模型' }
-  const prompt = mergedPrompt(data.prompt, inputText(ctx.inputs, 'in-text'))
+  const bundlePrompt = promptBundleText(inputJson(ctx.inputs, 'in-prompt')[0])
+  const prompt = mergedPrompt(
+    data.prompt,
+    [bundlePrompt, inputText(ctx.inputs, 'in-text')].filter(Boolean).join('\n')
+  )
   const referenceImage = inputMedia(ctx.inputs, 'in-image', 'image')[0]
   if (!prompt.trim()) return { status: 'skipped', reason: '无提示词' }
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }

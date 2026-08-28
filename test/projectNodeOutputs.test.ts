@@ -123,6 +123,23 @@ describe('projectNodeOutputs · JSON 节点', () => {
   })
 })
 
+describe('projectNodeOutputs · 结构数据节点', () => {
+  it('只输出符合当前 Schema 的 JSON，避免将未校验配置交给下游', () => {
+    const config = JSON.stringify({ schema: { id: 'character.profile', version: 1 } })
+    const valid = projectNodeOutputs(
+      shape('structured', {
+        config,
+        text: JSON.stringify({ id: 'c1', name: '主角', description: '寻找真相的人' })
+      })
+    )
+    expect(valid['out-json']).toEqual({
+      kind: 'json',
+      data: { id: 'c1', name: '主角', description: '寻找真相的人' }
+    })
+    expect(projectNodeOutputs(shape('structured', { config, text: '{"id":"c1"}' }))).toEqual({})
+  })
+})
+
 describe('projectNodeOutputs · 分镜板节点', () => {
   it('输出分镜 JSON 与可读摘要文本', () => {
     const data = {

@@ -16,6 +16,7 @@ import {
   ProcessorBody,
   ScriptBody,
   StoryboardBody,
+  StructuredBody,
   TextBody,
   VideoBody
 } from './bodies'
@@ -34,6 +35,7 @@ import { imageGenExecutor } from '../../engine/executors/imageGen'
 import { imageExecutor } from '../../engine/executors/image'
 import { iterateExecutor } from '../../engine/executors/iterate'
 import { jsonExecutor } from '../../engine/executors/json'
+import { structuredExecutor } from '../../engine/executors/structured'
 import { processorExecutor } from '../../engine/executors/processor'
 import { scriptExecutor } from '../../engine/executors/script'
 import { storyboardExecutor } from '../../engine/executors/storyboard'
@@ -53,9 +55,11 @@ import {
   projectProcessorOutputs,
   projectScriptOutputs,
   projectStoryboardOutputs,
+  projectStructuredOutputs,
   projectTextOutputs,
   projectVideoOutputs
 } from './outputProjections'
+import { parseStructuredDataConfig } from '../structured-data'
 
 interface PortOptions {
   required?: boolean
@@ -100,6 +104,7 @@ const output = (
 const JSON_ANY: PortSchemaRef = { id: 'json.any', version: 1 }
 const STORYBOARD_SHOTS: PortSchemaRef = { id: 'storyboard.shots', version: 1 }
 const LIST_ITEMS: PortSchemaRef = { id: 'list.items', version: 1 }
+const PROMPT_BUNDLE: PortSchemaRef = { id: 'prompt.bundle', version: 1 }
 const PREVIS_CAMERA: PortSchemaRef = { id: 'previs.camera', version: 1 }
 const PREVIS_PROJECT: PortSchemaRef = { id: 'previs.project', version: 1 }
 
@@ -151,6 +156,15 @@ export function registerBaseNodeTypes(): void {
     ports: {
       in: [
         input('in-image', '参考图', 'image', '可选的一张参考图片，用于图生图或风格参考。'),
+        input(
+          'in-prompt',
+          '提示词包',
+          'json',
+          '可选的 prompt.bundle@1；读取其中的 prompt 与 style。',
+          {
+            schema: PROMPT_BUNDLE
+          }
+        ),
         input('in-text', '提示词', 'text', '生成图片使用的提示文本，可由多个文本上游合并。', {
           cardinality: 'many'
         })
@@ -172,6 +186,15 @@ export function registerBaseNodeTypes(): void {
     ports: {
       in: [
         input('in-image', '首帧图', 'image', '可选的单张首帧图片，用于图生视频。'),
+        input(
+          'in-prompt',
+          '提示词包',
+          'json',
+          '可选的 prompt.bundle@1；读取其中的 prompt 与 style。',
+          {
+            schema: PROMPT_BUNDLE
+          }
+        ),
         input('in-text', '提示词', 'text', '描述视频内容和运动方式的提示文本。', {
           cardinality: 'many'
         })
@@ -301,6 +324,64 @@ export function registerExtendedNodeTypes(): void {
     projectOutputs: projectJsonOutputs,
     executor: jsonExecutor,
     Body: JsonBody
+  })
+  registerNodeType({
+    type: 'structured',
+    contractVersion: 1,
+    label: '结构数据',
+    icon: 'json',
+    color: '#c084fc',
+    defaultSize: { w: 340, h: 260 },
+    description:
+      '通用结构编辑与字段映射节点。选择输出 Schema，在正文中维护 JSON，并只通过已连接的上下文端口引用数据。',
+    ports: {
+      in: [
+        input(
+          'in-context',
+          '结构上下文',
+          'json',
+          '一个或多个已连接的结构化输入，可在正文中用 {{input[0].field}} 显式引用。',
+          {
+            cardinality: 'many',
+            schema: JSON_ANY
+          }
+        ),
+        input('in-text', '文本上下文', 'text', '可在正文中用 {{text}} 显式引用的上游文本。', {
+          cardinality: 'many'
+        })
+      ],
+      out: [
+        output('out-json', '结构数据', 'json', '经所选 Schema 校验后的结构化数据。', {
+          schema: JSON_ANY
+        })
+      ]
+    },
+    resolvePorts: (shape) => {
+      const schema = parseStructuredDataConfig(readNodeConfig(shape)).schema
+      return {
+        in: [
+          input(
+            'in-context',
+            '结构上下文',
+            'json',
+            '一个或多个已连接的结构化输入，可在正文中用 {{input[0].field}} 显式引用。',
+            {
+              cardinality: 'many',
+              schema: JSON_ANY
+            }
+          ),
+          input('in-text', '文本上下文', 'text', '可在正文中用 {{text}} 显式引用的上游文本。', {
+            cardinality: 'many'
+          })
+        ],
+        out: [
+          output('out-json', '结构数据', 'json', '经所选 Schema 校验后的结构化数据。', { schema })
+        ]
+      }
+    },
+    projectOutputs: projectStructuredOutputs,
+    executor: structuredExecutor,
+    Body: StructuredBody
   })
   registerNodeType({
     type: 'code',

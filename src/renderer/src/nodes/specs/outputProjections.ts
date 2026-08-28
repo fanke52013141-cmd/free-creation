@@ -3,6 +3,7 @@
 // 这些函数由各自 NodeTypeSpec 直接注册。运行器和手动触发都只调用
 // projectNodeOutputs(shape)，不再维护按 nodeType 分支的中央投影器。
 import type { NodeCardShape } from '../../canvas/NodeCardShape'
+import { validateNodeSchema } from '@shared/node-schemas'
 import { readNodeConfig } from '../../canvas/node-persistence'
 import type { RawNodeOutputs } from '../nodeValues'
 import {
@@ -19,6 +20,7 @@ import {
   isDirectorPublishCurrent,
   type DirectorPublishRecord
 } from '../director-data'
+import { parseStructuredDataConfig } from '../structured-data'
 
 function mediaOutput(
   shape: NodeCardShape,
@@ -79,6 +81,16 @@ export const projectJsonOutputs = (shape: NodeCardShape): RawNodeOutputs => {
     return shape.props.text.trim()
       ? { 'out-json': { kind: 'json', data: JSON.parse(shape.props.text) } }
       : {}
+  } catch {
+    return {}
+  }
+}
+
+export const projectStructuredOutputs = (shape: NodeCardShape): RawNodeOutputs => {
+  try {
+    const data = JSON.parse(shape.props.text) as unknown
+    const schema = parseStructuredDataConfig(readNodeConfig(shape)).schema
+    return validateNodeSchema(schema, data).ok ? { 'out-json': { kind: 'json', data } } : {}
   } catch {
     return {}
   }
