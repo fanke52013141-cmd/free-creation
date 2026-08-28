@@ -11,7 +11,17 @@ import { runNodeManually } from '../../../engine/executor'
 import { useAppStore } from '../../../stores/app'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { Icon } from '../../../components/Icon'
-import { ModelSelect, NoModelHint, useClickGuard, parseJsonProp } from './shared'
+import {
+  MediaFileActions,
+  MediaResultGrid,
+  MediaSourceBadge,
+  clearSelectedMediaHistory,
+  ModelSelect,
+  NoModelHint,
+  selectMediaResult,
+  useClickGuard,
+  parseJsonProp
+} from './shared'
 
 interface VideoGenData {
   prompt: string
@@ -88,6 +98,16 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   }
 
   if (shape.props.mediaPath) {
+    const chooseResult = (item: Parameters<typeof selectMediaResult>[1]): void => {
+      const selected = selectMediaResult(shape, item)
+      editor.updateShape({
+        id: shape.id,
+        type: 'node-card',
+        props: selected.props,
+        meta: { ...(shape.meta ?? {}), nodeResult: selected.nodeResult }
+      })
+      markUndoPoint(editor, 'video-select-result')
+    }
     return (
       <div className="node-media-wrap">
         <div
@@ -124,19 +144,27 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
             <Icon name="reset" size={13} />
             重新生成
           </button>
-          {(() => {
-            const source = shape.meta?.nodeResult as
-              { kind?: string; modelKey?: string; at?: number } | undefined
-            if (source?.kind !== 'media-source') return null
-            return (
-              <span className="node-media-source">
-                <Icon name="info" size={11} />
-                {source.modelKey || 'AI 生成'}
-                {source.at ? ` · ${new Date(source.at).toLocaleTimeString()}` : ''}
-              </span>
-            )
-          })()}
+          <MediaSourceBadge shape={shape} fallback="AI 生成" />
+          <MediaFileActions shape={shape} />
         </div>
+        <MediaResultGrid
+          shape={shape}
+          kind="video"
+          onSelect={chooseResult}
+          onClear={() => {
+            const nodeResult = clearSelectedMediaHistory(shape)
+            if (!nodeResult) return
+            editor.updateShape({
+              id: shape.id,
+              type: 'node-card',
+              meta: { ...(shape.meta ?? {}), nodeResult }
+            })
+            markUndoPoint(editor, 'video-clear-result-history')
+          }}
+          openPreview={(item) =>
+            openPreview({ kind: 'video', url: mediaUrl(item.mediaPath), title: shape.props.title })
+          }
+        />
       </div>
     )
   }

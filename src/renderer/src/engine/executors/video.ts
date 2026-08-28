@@ -4,6 +4,7 @@ import type { NodeExecutionContext, NodeExecutionResult } from '../executor-type
 import { modelsByModality } from '../../stores/gateway'
 import { mergedPrompt, parseVideoGen, waitForVideo } from './shared'
 import { readNodeConfig } from '../../canvas/node-persistence'
+import { appendMediaResult, serializeMediaResultCollection } from '../../nodes/nodeValues'
 
 export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
   // 与图片节点一致，已有成片优先作为下游视频输出。
@@ -34,6 +35,19 @@ export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
       mediaMime: result.mime,
       title: result.name
     })
+    ctx.updateResult(
+      serializeMediaResultCollection(
+        appendMediaResult(
+          typeof ctx.shape.meta?.nodeResult === 'string' ? ctx.shape.meta.nodeResult : '',
+          {
+            mediaId: result.mediaId,
+            mediaPath: result.mediaPath,
+            mime: result.mime
+          },
+          { nodeId: ctx.node.id, modelKey: option.key, prompt: prompt.slice(0, 80) }
+        )
+      )
+    )
     return { status: 'done' }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

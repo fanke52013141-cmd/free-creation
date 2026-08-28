@@ -9,7 +9,15 @@ import { runNodeManually } from '../../../engine/executor'
 import { useAppStore } from '../../../stores/app'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { Icon } from '../../../components/Icon'
-import { ModelSelect, parseJsonProp } from './shared'
+import {
+  clearSelectedMediaHistory,
+  MediaFileActions,
+  MediaResultGrid,
+  MediaSourceBadge,
+  ModelSelect,
+  parseJsonProp,
+  selectMediaResult
+} from './shared'
 
 type AudioMode = 'upload' | 'generate'
 
@@ -157,66 +165,100 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   // ── 已有音频文件：播放器视图（上传或生成共用） ──
   if (shape.props.mediaPath) {
     const isGenerated = data.mode === 'generate'
+    const chooseResult = (item: Parameters<typeof selectMediaResult>[1]): void => {
+      const selected = selectMediaResult(shape, item)
+      editor.updateShape({
+        id: shape.id,
+        type: 'node-card',
+        props: selected.props,
+        meta: { ...(shape.meta ?? {}), nodeResult: selected.nodeResult }
+      })
+      markUndoPoint(editor, 'audio-select-result')
+    }
     return (
-      <div className="node-audio-player">
-        <div className={`audio-player-wave ${playing ? 'playing' : ''}`}>
-          {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
-            <span key={i} style={{ animationDelay: `${i * 0.12}s` }} />
-          ))}
+      <>
+        <div className="node-audio-player">
+          <div className={`audio-player-wave ${playing ? 'playing' : ''}`}>
+            {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+              <span key={i} style={{ animationDelay: `${i * 0.12}s` }} />
+            ))}
+          </div>
+          <div className="audio-player-info">
+            <span className="audio-player-name">{shape.props.title}</span>
+            <span className="audio-player-meta">
+              {isGenerated ? `${data.voice} · ${data.format}` : shape.props.mediaMime || '本地音频'}
+            </span>
+          </div>
+          <div className="audio-player-actions">
+            <button
+              className="audio-play-btn"
+              onPointerDown={(e) => stopEventPropagation(e)}
+              onClick={(e) => {
+                e.stopPropagation()
+                togglePlay()
+              }}
+            >
+              {playing ? '暂停' : '播放'}
+            </button>
+            <button
+              className="btn-ghost small"
+              title="打开播放器"
+              onPointerDown={(e) => stopEventPropagation(e)}
+              onClick={(e) => {
+                e.stopPropagation()
+                if (playing) {
+                  audioRef.current?.pause()
+                  setPlaying(false)
+                }
+                openPreview({
+                  kind: 'audio',
+                  url: mediaUrl(shape.props.mediaPath),
+                  title: shape.props.title
+                })
+              }}
+            >
+              展开
+            </button>
+            <button
+              className="btn-ghost small danger"
+              title={isGenerated ? '重新生成' : '替换文件'}
+              onPointerDown={(e) => stopEventPropagation(e)}
+              onClick={(e) => {
+                e.stopPropagation()
+                if (isGenerated) {
+                  removeAudio()
+                } else {
+                  void uploadAudio()
+                }
+              }}
+            >
+              {isGenerated ? '重新生成' : '替换'}
+            </button>
+            <MediaFileActions shape={shape} />
+          </div>
+          <div className="audio-player-source">
+            <MediaSourceBadge shape={shape} fallback={isGenerated ? 'AI 生成' : '本地音频'} />
+          </div>
         </div>
-        <div className="audio-player-info">
-          <span className="audio-player-name">{shape.props.title}</span>
-          <span className="audio-player-meta">
-            {isGenerated ? `${data.voice} · ${data.format}` : shape.props.mediaMime || '本地音频'}
-          </span>
-        </div>
-        <div className="audio-player-actions">
-          <button
-            className="audio-play-btn"
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onClick={(e) => {
-              e.stopPropagation()
-              togglePlay()
-            }}
-          >
-            {playing ? '⏸' : '▶'}
-          </button>
-          <button
-            className="btn-ghost small"
-            title="打开播放器"
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onClick={(e) => {
-              e.stopPropagation()
-              if (playing) {
-                audioRef.current?.pause()
-                setPlaying(false)
-              }
-              openPreview({
-                kind: 'audio',
-                url: mediaUrl(shape.props.mediaPath),
-                title: shape.props.title
-              })
-            }}
-          >
-            展开
-          </button>
-          <button
-            className="btn-ghost small danger"
-            title={isGenerated ? '重新生成' : '替换文件'}
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onClick={(e) => {
-              e.stopPropagation()
-              if (isGenerated) {
-                removeAudio()
-              } else {
-                void uploadAudio()
-              }
-            }}
-          >
-            {isGenerated ? '重新生成' : '替换'}
-          </button>
-        </div>
-      </div>
+        <MediaResultGrid
+          shape={shape}
+          kind="audio"
+          onSelect={chooseResult}
+          onClear={() => {
+            const nodeResult = clearSelectedMediaHistory(shape)
+            if (!nodeResult) return
+            editor.updateShape({
+              id: shape.id,
+              type: 'node-card',
+              meta: { ...(shape.meta ?? {}), nodeResult }
+            })
+            markUndoPoint(editor, 'audio-clear-result-history')
+          }}
+          openPreview={(item) =>
+            openPreview({ kind: 'audio', url: mediaUrl(item.mediaPath), title: shape.props.title })
+          }
+        />
+      </>
     )
   }
 

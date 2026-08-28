@@ -4,6 +4,7 @@ import type { NodeExecutionContext, NodeExecutionResult } from '../executor-type
 import { modelsByModality } from '../../stores/gateway'
 import { mergedPrompt, parseJsonObj } from './shared'
 import { readNodeConfig } from '../../canvas/node-persistence'
+import { appendMediaResult, serializeMediaResultCollection } from '../../nodes/nodeValues'
 
 export interface ImageGenData {
   prompt: string
@@ -56,13 +57,17 @@ export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeE
     })
     // 来源追溯：记录产生本节点的模型、输入摘要与时间，供「追踪到产生它的节点和输入」。
     ctx.updateResult(
-      JSON.stringify({
-        kind: 'media-source',
-        nodeId: ctx.node.id,
-        modelKey: option.key,
-        prompt: prompt.slice(0, 80),
-        at: Date.now()
-      })
+      serializeMediaResultCollection(
+        appendMediaResult(
+          typeof ctx.shape.meta?.nodeResult === 'string' ? ctx.shape.meta.nodeResult : '',
+          {
+            mediaId: result.data.id,
+            mediaPath: result.data.path,
+            mime: result.data.mime
+          },
+          { nodeId: ctx.node.id, modelKey: option.key, prompt: prompt.slice(0, 80) }
+        )
+      )
     )
     return { status: 'done' }
   } catch (error) {

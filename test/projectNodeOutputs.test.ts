@@ -6,7 +6,15 @@
 // 防止输出投影与端口契约脱节。
 import { describe, it, expect, beforeAll } from 'vitest'
 import { registerAllNodeTypes } from './helpers/registerNodes'
-import { projectNodeOutputs } from '@renderer/nodes/nodeValues'
+import {
+  appendMediaResult,
+  clearMediaResultHistory,
+  MEDIA_RESULT_LIMIT,
+  parseMediaResultCollection,
+  projectNodeOutputs,
+  removeMediaResult,
+  serializeMediaResultCollection
+} from '@renderer/nodes/nodeValues'
 import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
 import { createDirectorProject } from '@renderer/nodes/director-data'
 
@@ -84,6 +92,79 @@ describe('projectNodeOutputs · 媒体节点（图片/生图/视频/音频）', 
     expect(projectNodeOutputs(shape('image'))).toEqual({})
     expect(projectNodeOutputs(shape('video'))).toEqual({})
     expect(projectNodeOutputs(shape('audio'))).toEqual({})
+  })
+})
+
+describe('媒体结果集合', () => {
+  it('追加结果并保留当前选中项', () => {
+    const first = appendMediaResult('', {
+      mediaId: 'm1',
+      mediaPath: '/one.png',
+      mime: 'image/png'
+    })
+    const second = appendMediaResult(serializeMediaResultCollection(first), {
+      mediaId: 'm2',
+      mediaPath: '/two.png',
+      mime: 'image/png'
+    })
+    expect(second.results.map((item) => item.mediaId)).toEqual(['m1', 'm2'])
+    expect(second.selectedMediaId).toBe('m2')
+    expect(parseMediaResultCollection(serializeMediaResultCollection(second))).toEqual(second)
+  })
+
+  it('兼容旧的单结果 media-source 记录', () => {
+    const parsed = parseMediaResultCollection(
+      JSON.stringify({ kind: 'media-source', modelKey: 'demo', prompt: 'x', at: 1 })
+    )
+    expect(parsed?.results).toEqual([])
+    expect(parsed?.modelKey).toBe('demo')
+  })
+
+  it('限制历史数量并保留最新结果', () => {
+    let stored = ''
+    for (let i = 0; i < MEDIA_RESULT_LIMIT + 3; i += 1) {
+      stored = serializeMediaResultCollection(
+        appendMediaResult(
+          stored,
+          { mediaId: `m${i}`, mediaPath: `/m${i}.png`, mime: 'image/png' },
+          { nodeId: 'n1' }
+        )
+      )
+    }
+    const parsed = parseMediaResultCollection(stored)
+    expect(parsed?.results).toHaveLength(MEDIA_RESULT_LIMIT)
+    expect(parsed?.results[0].mediaId).toBe('m3')
+    expect(parsed?.selectedMediaId).toBe(`m${MEDIA_RESULT_LIMIT + 2}`)
+  })
+
+  it('删除结果并在当前结果被删除时回退到最后一项', () => {
+    const stored = serializeMediaResultCollection({
+      kind: 'media-source',
+      version: 1,
+      selectedMediaId: 'm2',
+      results: [
+        { mediaId: 'm1', mediaPath: '/1', mime: 'image/png', createdAt: 1 },
+        { mediaId: 'm2', mediaPath: '/2', mime: 'image/png', createdAt: 2 }
+      ]
+    })
+    const next = removeMediaResult(stored, 'm2')
+    expect(next?.results.map((item) => item.mediaId)).toEqual(['m1'])
+    expect(next?.selectedMediaId).toBe('m1')
+  })
+
+  it('清空历史时保留当前输出', () => {
+    const stored = serializeMediaResultCollection({
+      kind: 'media-source',
+      version: 1,
+      selectedMediaId: 'm1',
+      results: [
+        { mediaId: 'm1', mediaPath: '/1', mime: 'image/png', createdAt: 1 },
+        { mediaId: 'm2', mediaPath: '/2', mime: 'image/png', createdAt: 2 }
+      ]
+    })
+    const next = clearMediaResultHistory(stored)
+    expect(next?.results.map((item) => item.mediaId)).toEqual(['m1'])
+    expect(next?.selectedMediaId).toBe('m1')
   })
 })
 

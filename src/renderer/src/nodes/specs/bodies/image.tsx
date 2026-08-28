@@ -2,7 +2,12 @@
 import { useEditor } from 'tldraw'
 import { stopEventPropagation } from 'tldraw'
 import { mediaUrl, type NodeBodyProps } from '../../registry'
-import { useClickGuard } from './shared'
+import {
+  createImageContinuation,
+  MediaFileActions,
+  MediaSourceBadge,
+  useClickGuard
+} from './shared'
 import { useAppStore } from '../../../stores/app'
 import { toast } from '../../../stores/toast'
 import { markUndoPoint } from '../../../canvas/history'
@@ -81,10 +86,32 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           <Icon name="upload" size={13} />
           替换
         </button>
-        <span className="node-media-source" title={shape.props.mediaPath}>
-          <Icon name="image" size={11} />
-          {shape.props.mediaMime || '本地图片'}
-        </span>
+        <MediaSourceBadge shape={shape} fallback={shape.props.mediaMime || '本地图片'} />
+        <MediaFileActions shape={shape} />
+      </div>
+      <div className="node-media-next-actions" aria-label="图片后续操作">
+        <button
+          className="btn-ghost small"
+          title="创建生图节点并连接当前图片"
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onClick={(e) => {
+            e.stopPropagation()
+            createImageContinuation(editor, shape, 'image-gen')
+          }}
+        >
+          <Icon name="spark" size={12} /> 继续生图
+        </button>
+        <button
+          className="btn-ghost small"
+          title="创建视频节点并将当前图片作为首帧"
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onClick={(e) => {
+            e.stopPropagation()
+            createImageContinuation(editor, shape, 'video')
+          }}
+        >
+          <Icon name="video" size={12} /> 生成视频
+        </button>
       </div>
     </div>
   )

@@ -4,6 +4,7 @@ import type { NodeExecutionContext, NodeExecutionResult } from '../executor-type
 import { modelsByModality } from '../../stores/gateway'
 import { mergedPrompt, parseJsonObj } from './shared'
 import { readNodeConfig } from '../../canvas/node-persistence'
+import { appendMediaResult, serializeMediaResultCollection } from '../../nodes/nodeValues'
 
 interface AudioData {
   mode: 'upload' | 'generate'
@@ -62,6 +63,19 @@ export const audioExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
       mediaMime: result.data.mime,
       title: result.data.name || result.data.id
     })
+    ctx.updateResult(
+      serializeMediaResultCollection(
+        appendMediaResult(
+          typeof ctx.shape.meta?.nodeResult === 'string' ? ctx.shape.meta.nodeResult : '',
+          {
+            mediaId: result.data.id,
+            mediaPath: result.data.path,
+            mime: result.data.mime
+          },
+          { nodeId: ctx.node.id, modelKey: option.key, prompt: text.slice(0, 80) }
+        )
+      )
+    )
     return { status: 'done' }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

@@ -2,7 +2,7 @@
 /* eslint-disable react/no-unknown-property -- 下列属性属于 Three Fiber 的渲染器原语，不会传递给 DOM。 */
 import { Canvas, useThree } from '@react-three/fiber'
 import { Grid, OrbitControls } from '@react-three/drei'
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { Camera, Scene, WebGLRenderer, WebGLRenderTarget } from 'three'
 import {
   directorCameraFov,
@@ -153,6 +153,15 @@ function PrevisScene({ shot }: { shot: DirectorShot }): React.JSX.Element {
 export const Director3DViewport = forwardRef<Director3DViewportHandle, { shot: DirectorShot }>(
   function Director3DViewport({ shot }, ref): React.JSX.Element {
     const renderer = useRef<RenderContext | null>(null)
+    const [viewportError, setViewportError] = useState<string | null>(null)
+    const [ready, setReady] = useState(false)
+    const [canvasGeneration, setCanvasGeneration] = useState(0)
+
+    useEffect(() => {
+      return () => {
+        renderer.current = null
+      }
+    }, [])
     useImperativeHandle(
       ref,
       () => ({
@@ -216,19 +225,53 @@ export const Director3DViewport = forwardRef<Director3DViewportHandle, { shot: D
     )
     return (
       <div className="director-3d-viewport" aria-label="3D 白模预演视口">
+        <div className="director-3d-badge">白模预演 · 尚未加载 3D 模型</div>
+        {viewportError ? (
+          <div className="director-3d-error" role="alert">
+            <strong>3D 视口无法启动</strong>
+            <span>{viewportError}</span>
+            <button
+              type="button"
+              onClick={() => {
+                setViewportError(null)
+                setReady(false)
+                renderer.current = null
+                setCanvasGeneration((value) => value + 1)
+              }}
+            >
+              重试
+            </button>
+          </div>
+        ) : null}
         <Canvas
+          key={canvasGeneration}
           shadows
           dpr={[1, 1.5]}
           camera={{ position: [0, 1.6, 5], fov: 50 }}
+          fallback={
+            <div className="director-3d-error" role="alert">
+              <strong>当前环境不支持 WebGL</strong>
+              <span>请更新显卡驱动或在 Electron 硬件加速开启后重试。</span>
+            </div>
+          }
           onCreated={({ gl, camera, scene }) => {
-            renderer.current = { gl, camera, scene }
+            try {
+              if (!gl.getContext()) throw new Error('WebGL 上下文创建失败')
+              renderer.current = { gl, camera, scene }
+              setReady(true)
+            } catch (error) {
+              renderer.current = null
+              setReady(false)
+              setViewportError(error instanceof Error ? error.message : '未知 WebGL 错误')
+            }
           }}
         >
           <PrevisScene shot={shot} />
         </Canvas>
-        <span className="director-3d-hint">
-          拖拽自由查看 · 滚轮缩放 · 发布时自动回到右侧设定的导演机位
-        </span>
+        {!ready && !viewportError ? (
+          <span className="director-3d-loading">正在启动 3D 视口…</span>
+        ) : null}
+        <span className="director-3d-hint">拖拽查看 · 滚轮缩放 · 发布时回到右侧设定的导演机位</span>
       </div>
     )
   }

@@ -11,7 +11,18 @@ import { runNodeManually } from '../../../engine/executor'
 import { useAppStore } from '../../../stores/app'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { Icon } from '../../../components/Icon'
-import { ModelSelect, NoModelHint, useClickGuard, parseJsonProp } from './shared'
+import {
+  createImageContinuation,
+  clearSelectedMediaHistory,
+  MediaFileActions,
+  MediaResultGrid,
+  MediaSourceBadge,
+  selectMediaResult,
+  ModelSelect,
+  NoModelHint,
+  useClickGuard,
+  parseJsonProp
+} from './shared'
 
 interface ImageGenData {
   prompt: string
@@ -81,6 +92,16 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
   }
 
   if (shape.props.mediaPath) {
+    const chooseResult = (item: Parameters<typeof selectMediaResult>[1]): void => {
+      const selected = selectMediaResult(shape, item)
+      editor.updateShape({
+        id: shape.id,
+        type: 'node-card',
+        props: selected.props,
+        meta: { ...(shape.meta ?? {}), nodeResult: selected.nodeResult }
+      })
+      markUndoPoint(editor, 'image-select-result')
+    }
     return (
       <div className="node-media-wrap">
         <div
@@ -117,19 +138,51 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
             <Icon name="reset" size={13} />
             重新生成
           </button>
-          {(() => {
-            const src = shape.meta?.nodeResult as
-              { kind?: string; modelKey?: string; prompt?: string; at?: number } | undefined
-            if (src?.kind !== 'media-source') return null
-            return (
-              <span className="node-media-source" title={src.prompt}>
-                <Icon name="info" size={11} />
-                {src.modelKey ? `${src.modelKey}` : 'AI 生成'}
-                {src.at ? ` · ${new Date(src.at).toLocaleTimeString()}` : ''}
-              </span>
-            )
-          })()}
+          <MediaSourceBadge shape={shape} fallback="AI 生成" />
+          <MediaFileActions shape={shape} />
         </div>
+        <div className="node-media-next-actions" aria-label="图片后续操作">
+          <button
+            className="btn-ghost small"
+            title="基于当前结果继续生图"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              createImageContinuation(editor, shape, 'image-gen')
+            }}
+          >
+            <Icon name="spark" size={12} /> 继续生图
+          </button>
+          <button
+            className="btn-ghost small"
+            title="将当前结果作为首帧生成视频"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              createImageContinuation(editor, shape, 'video')
+            }}
+          >
+            <Icon name="video" size={12} /> 生成视频
+          </button>
+        </div>
+        <MediaResultGrid
+          shape={shape}
+          kind="image"
+          onSelect={chooseResult}
+          onClear={() => {
+            const nodeResult = clearSelectedMediaHistory(shape)
+            if (!nodeResult) return
+            editor.updateShape({
+              id: shape.id,
+              type: 'node-card',
+              meta: { ...(shape.meta ?? {}), nodeResult }
+            })
+            markUndoPoint(editor, 'image-clear-result-history')
+          }}
+          openPreview={(item) =>
+            openPreview({ kind: 'image', url: mediaUrl(item.mediaPath), title: shape.props.title })
+          }
+        />
       </div>
     )
   }
