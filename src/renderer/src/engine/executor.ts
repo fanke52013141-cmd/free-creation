@@ -20,6 +20,7 @@ import { getNodeType } from '../nodes/registry'
 import { projectNodeOutputs } from '../nodes/nodeValues'
 import { toast } from '../stores/toast'
 import { useEngineStore } from './store'
+import { topoSort } from './topology'
 import {
   appendNodeRunHistory,
   inputSources,
@@ -41,35 +42,6 @@ interface WorkflowContext {
   /** 运行期累积的输出登记：nodeId -> 端口输出数据包。 */
   outputs: Map<string, ContractOutputs>
   runId: string
-}
-
-function topoSort(graph: { nodes: CanvasNode[]; edges: CanvasEdge[] }): CanvasNode[] | null {
-  const byId = new Map(graph.nodes.map((node) => [node.id, node]))
-  const indegree = new Map(graph.nodes.map((node) => [node.id, 0]))
-  const adjacency = new Map<string, string[]>()
-  for (const edge of graph.edges) {
-    if (!byId.has(edge.from.nodeId) || !byId.has(edge.to.nodeId)) continue
-    indegree.set(edge.to.nodeId, (indegree.get(edge.to.nodeId) ?? 0) + 1)
-    const next = adjacency.get(edge.from.nodeId) ?? []
-    next.push(edge.to.nodeId)
-    adjacency.set(edge.from.nodeId, next)
-  }
-  // 用索引指针代替 queue.shift()：shift 是 O(n) 出队，会让整体复杂度退化到 O(n²)。
-  // 用 head 游标在数组上前进，出队变为 O(1)，整体降到 O(V+E)。
-  const queue: string[] = graph.nodes
-    .filter((node) => indegree.get(node.id) === 0)
-    .map((node) => node.id)
-  const ordered: string[] = []
-  let head = 0
-  while (head < queue.length) {
-    const id = queue[head++]
-    ordered.push(id)
-    for (const next of adjacency.get(id) ?? []) {
-      indegree.set(next, (indegree.get(next) ?? 1) - 1)
-      if (indegree.get(next) === 0) queue.push(next)
-    }
-  }
-  return ordered.length === graph.nodes.length ? ordered.map((id) => byId.get(id)!) : null
 }
 
 function setExec(editor: Editor, id: TLShapeId, status: ExecStatus): void {

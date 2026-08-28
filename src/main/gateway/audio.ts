@@ -4,6 +4,7 @@
 import type { AudioGenerateInput } from '../../shared/contracts'
 import type { MediaAsset } from '../../shared/types'
 import { saveBufferAsset } from '../store/media.repo'
+import { getDb } from '../store/db'
 import { getProvider } from './providers.repo'
 import { GatewayError } from './factory'
 
@@ -67,7 +68,7 @@ export async function generateAudioToAsset(input: AudioGenerateInput): Promise<M
   const mime = MIME_BY_FORMAT[format] ?? 'audio/mpeg'
   if (asset.mime !== mime) {
     // saveBufferAsset 可能根据 ext 推断了 mime，此处强制修正
-    const db = (await import('../store/db')).getDb()
+    const db = getDb()
     db.prepare('UPDATE media SET mime = ? WHERE id = ?').run(mime, asset.id)
     asset.mime = mime
   }
