@@ -6,6 +6,7 @@ import { mediaUrl, type NodeBodyProps } from '../../registry'
 import { toast } from '../../../stores/toast'
 import { markUndoPoint } from '../../../canvas/history'
 import { gatherUpstreamMedia } from '../../../canvas/graph'
+import { readNodeConfig } from '../../../canvas/node-persistence'
 import { runNodeManually } from '../../../engine/executor'
 import { useAppStore } from '../../../stores/app'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
@@ -49,7 +50,7 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
   const loadProviders = useGatewayStore((s) => s.load)
   const openSettings = useGatewayStore((s) => s.openSettings)
   const options = modelsByModality(providers, 'image')
-  const data = parseImageGen(shape.props.text)
+  const data = parseImageGen(readNodeConfig(shape))
   const [draft, setDraft] = useState(data.prompt)
   const [busy, setBusy] = useState(false)
 
@@ -61,7 +62,7 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
     editor.updateShape({
       id: shape.id,
       type: 'node-card',
-      props: { text: JSON.stringify(next) }
+      props: { config: JSON.stringify(next) }
     })
   }
 

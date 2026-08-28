@@ -137,12 +137,11 @@ export function ProjectListPage(): React.JSX.Element {
           <div className="empty">还没有项目，点击右上角新建一个开始创作</div>
         )}
         {projects.map((p) => (
-          <div key={p.id} className="project-card" onClick={() => handleOpen(p)}>
+          <article key={p.id} className="project-card">
             {renamingId === p.id ? (
               <input
                 autoFocus
                 value={renameValue}
-                onClick={(e) => e.stopPropagation()}
                 onChange={(e) => setRenameValue(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') void handleRename()
@@ -150,9 +149,15 @@ export function ProjectListPage(): React.JSX.Element {
                 }}
               />
             ) : (
-              <div className="project-name">{p.name}</div>
+              <button
+                className="project-card-open"
+                aria-label={`打开项目 ${p.name}`}
+                onClick={() => handleOpen(p)}
+              >
+                <span className="project-name">{p.name}</span>
+                <span className="project-time">{formatDate(p.updatedAt)}</span>
+              </button>
             )}
-            <div className="project-time">{formatDate(p.updatedAt)}</div>
             <div className="project-actions">
               <button
                 className="icon-btn"
@@ -186,7 +191,7 @@ export function ProjectListPage(): React.JSX.Element {
                 <Icon name="trash" size={15} />
               </button>
             </div>
-          </div>
+          </article>
         ))}
       </div>
     </div>

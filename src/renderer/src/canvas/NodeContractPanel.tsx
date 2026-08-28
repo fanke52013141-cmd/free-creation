@@ -1,16 +1,30 @@
 import { useEffect, useState } from 'react'
 import type { Editor } from 'tldraw'
-import type { PortDecl } from '@shared/types'
+import type { PortDecl, ProviderConfig } from '@shared/types'
 import { getNodePorts, getNodeType } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
 import { Icon } from '../components/Icon'
 import { projectNodeOutputs, type NodeValue } from '../nodes/nodeValues'
 import { useNodePanelStore } from '../stores/nodePanel'
-import { readNodeRunRecord } from '../engine/runRecord'
+import { readNodeRunHistory, readNodeRunRecord, type NodeRunRecord } from '../engine/runRecord'
+import { readNodeConfig } from './node-persistence'
+import { runNodeManually, runWorkflowToNode } from '../engine/executor'
 
 interface NodeContractPanelProps {
   editor: Editor
+  projectId: string
+  providers: ProviderConfig[]
   onClose: () => void
+}
+
+function runSummary(record: NodeRunRecord): string {
+  const time = new Date(record.startedAt).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  })
+  const duration = typeof record.durationMs === 'number' ? ` · ${record.durationMs} ms` : ''
+  return `${time} · ${record.status}${duration}`
 }
 
 function PortRows({
@@ -103,10 +117,13 @@ function safeConfigPreview(text: string): string {
 
 export function NodeContractPanel({
   editor,
+  projectId,
+  providers,
   onClose
 }: NodeContractPanelProps): React.JSX.Element | null {
   const shapeId = useNodePanelStore((s) => s.shapeId)
   const [tab, setTab] = useState<InspectorTab>('overview')
+  const [runningAction, setRunningAction] = useState<'node' | 'subgraph' | null>(null)
 
   // Esc 关闭面板（与其它浮层面板行为统一）
   useEffect(() => {
@@ -130,6 +147,7 @@ export function NodeContractPanel({
   const outputPreviews = new Map<string, string>()
   const ownOutputs = projectNodeOutputs(shape)
   const runRecord = readNodeRunRecord(shape.meta?.nodeRun)
+  const runHistory = readNodeRunHistory(shape.meta?.nodeRunHistory)
   const executionMode = spec.executionMode ?? 'auto'
   for (const [portId, value] of Object.entries(ownOutputs)) {
     const preview = valuePreview(value)
@@ -172,6 +190,16 @@ export function NodeContractPanel({
     }
   }
 
+  const run = async (kind: 'node' | 'subgraph'): Promise<void> => {
+    setRunningAction(kind)
+    try {
+      if (kind === 'node') await runNodeManually(editor, projectId, providers, shape.id)
+      else await runWorkflowToNode(editor, projectId, providers, shape.id)
+    } finally {
+      setRunningAction(null)
+    }
+  }
+
   return (
     <aside className="node-contract-panel" aria-label="节点输入输出说明">
       <header className="contract-head">
@@ -189,7 +217,7 @@ export function NodeContractPanel({
         </button>
       </header>
       <div className="contract-body">
-        <nav className="contract-tabs" aria-label="节点详情分页">
+        <nav className="contract-tabs" aria-label="节点详情分页" role="tablist">
           {(
             [
               ['overview', '概览'],
@@ -198,7 +226,13 @@ export function NodeContractPanel({
               ['run', '运行']
             ] as const
           ).map(([id, label]) => (
-            <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>
+            <button
+              key={id}
+              className={tab === id ? 'active' : ''}
+              role="tab"
+              aria-selected={tab === id}
+              onClick={() => setTab(id)}
+            >
               {label}
             </button>
           ))}
@@ -255,32 +289,66 @@ export function NodeContractPanel({
           <section className="contract-section">
             <h4>节点固定配置</h4>
             <p className="contract-settings-hint">连线值优先于固定值；敏感字段会自动隐藏。</p>
-            <pre className="contract-settings-code">{safeConfigPreview(shape.props.text)}</pre>
+            <pre className="contract-settings-code">{safeConfigPreview(readNodeConfig(shape))}</pre>
           </section>
         )}
-        {tab === 'run' &&
-          (runRecord ? (
+        {tab === 'run' && (
+          <>
             <section className="contract-section">
-              <h4>最近运行</h4>
-              <div className="contract-run-info">
-                <small>运行 ID：{runRecord.runId}</small>
-                <small>状态：{runRecord.status}</small>
-                {typeof runRecord.durationMs === 'number' && (
-                  <small>耗时：{runRecord.durationMs} ms</small>
-                )}
-                {runRecord.outputPorts && (
-                  <small>输出端口：{runRecord.outputPorts.join('、') || '无'}</small>
-                )}
-                {runRecord.error && (
-                  <small className="contract-run-error">
-                    {runRecord.error.phase}：{runRecord.error.reason}
-                  </small>
-                )}
+              <h4>运行操作</h4>
+              <div className="contract-run-actions">
+                <button disabled={runningAction !== null} onClick={() => void run('node')}>
+                  {runningAction === 'node'
+                    ? '运行中…'
+                    : runRecord?.status === 'failed'
+                      ? '重试此节点'
+                      : '运行此节点'}
+                </button>
+                <button disabled={runningAction !== null} onClick={() => void run('subgraph')}>
+                  {runningAction === 'subgraph' ? '运行中…' : '运行至此节点'}
+                </button>
               </div>
             </section>
-          ) : (
-            <p className="contract-empty">尚无运行记录</p>
-          ))}
+            {runRecord ? (
+              <section className="contract-section">
+                <h4>最近运行</h4>
+                <div className="contract-run-info">
+                  <small>运行 ID：{runRecord.runId}</small>
+                  <small>状态：{runRecord.status}</small>
+                  {typeof runRecord.durationMs === 'number' && (
+                    <small>耗时：{runRecord.durationMs} ms</small>
+                  )}
+                  {runRecord.outputPorts && (
+                    <small>输出端口：{runRecord.outputPorts.join('、') || '无'}</small>
+                  )}
+                  {runRecord.error && (
+                    <small className="contract-run-error">
+                      {runRecord.error.phase}：{runRecord.error.reason}
+                    </small>
+                  )}
+                </div>
+              </section>
+            ) : (
+              <p className="contract-empty">尚无运行记录</p>
+            )}
+            {runHistory.length > 0 && (
+              <section className="contract-section">
+                <h4>最近 {runHistory.length} 次运行</h4>
+                <div className="contract-run-history">
+                  {runHistory.map((record) => (
+                    <div
+                      key={record.runId}
+                      className={`contract-run-history-item ${record.status}`}
+                    >
+                      <strong>{runSummary(record)}</strong>
+                      {record.error && <small>{record.error.reason}</small>}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+          </>
+        )}
       </div>
     </aside>
   )

@@ -34,7 +34,11 @@ interface EngineState {
   beginRun: (total: number) => void
   setCurrent: (label: string) => void
   nodeDone: () => void
-  addError: (label: string, reason: string, detail?: { nodeId?: string; phase?: ErrorPhase }) => void
+  addError: (
+    label: string,
+    reason: string,
+    detail?: { nodeId?: string; phase?: ErrorPhase }
+  ) => void
   setStopping: () => void
   endRun: () => void
 }

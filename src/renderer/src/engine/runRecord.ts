@@ -25,6 +25,9 @@ export interface NodeRunRecord {
   error?: { phase: NodeRunPhase; reason: string }
 }
 
+/** 本地单用户项目保留最近运行，用于结果比较、失败回溯和重试；不复制输入正文或媒体。 */
+export const NODE_RUN_HISTORY_LIMIT = 12
+
 export function inputSources(inputs: ContractInputMap): Record<string, NodeRunSource[]> {
   return Object.fromEntries(
     Array.from(inputs.entries()).map(([portId, packets]) => [
@@ -49,4 +52,21 @@ export function readNodeRunRecord(value: unknown): NodeRunRecord | null {
   )
     return null
   return record as NodeRunRecord
+}
+
+export function readNodeRunHistory(value: unknown): NodeRunRecord[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map(readNodeRunRecord)
+    .filter((record): record is NodeRunRecord => Boolean(record && record.status !== 'running'))
+    .slice(0, NODE_RUN_HISTORY_LIMIT)
+}
+
+/** 按最新在前去重，防止一次运行的 running/finished 两个中间状态重复出现在历史中。 */
+export function appendNodeRunHistory(value: unknown, record: NodeRunRecord): NodeRunRecord[] {
+  if (record.status === 'running') return readNodeRunHistory(value)
+  return [record, ...readNodeRunHistory(value).filter((item) => item.runId !== record.runId)].slice(
+    0,
+    NODE_RUN_HISTORY_LIMIT
+  )
 }

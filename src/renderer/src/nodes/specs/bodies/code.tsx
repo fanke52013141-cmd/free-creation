@@ -6,11 +6,12 @@ import { useRef, useState, type ReactNode } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import type { NodeBodyProps } from '../../registry'
 import { markUndoPoint } from '../../../canvas/history'
+import { readNodeConfig } from '../../../canvas/node-persistence'
 import { Icon } from '../../../components/Icon'
 import { useWheelScroll, VARIABLE_TYPES, type VariableValueType } from './shared'
 import { useGatewayStore, findTextModel } from '../../../stores/gateway'
 import { waitForChat, parseJsonObj } from '../../../engine/executors/shared'
-import { sanitizePortId } from '../../../engine/executors/code'
+import { codePortConfigErrors } from '../../../engine/executors/code'
 
 interface CodeParam {
   name: string
@@ -74,18 +75,6 @@ function parseCodeConfig(text: string): CodeConfig {
     outputType: 'any',
     params: []
   }
-}
-
-/** 动态参数端口以归一化 ID 寻址；提前显式提示碰撞，不能让两个表项悄悄共用端口。 */
-function duplicateParamPortIds(params: CodeParam[]): string[] {
-  const seen = new Set<string>()
-  const duplicates = new Set<string>()
-  for (const param of params) {
-    const id = sanitizePortId(param.name)
-    if (seen.has(id)) duplicates.add(id)
-    seen.add(id)
-  }
-  return [...duplicates]
 }
 
 /** 从 shape.meta.nodeResult 解析上次执行结果（成功摘要或错误信息）。 */
@@ -291,8 +280,8 @@ const CODE_TEMPLATE = `async function main(args) {
 
 export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
-  const data = parseCodeConfig(shape.props.text)
-  const duplicateParamIds = duplicateParamPortIds(data.params)
+  const data = parseCodeConfig(readNodeConfig(shape))
+  const portConfigErrors = codePortConfigErrors(readNodeConfig(shape))
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(data.source)
   const [generating, setGenerating] = useState(false)
@@ -308,7 +297,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
       editor.updateShape({
         id: shape.id,
         type: 'node-card',
-        props: { text: JSON.stringify({ ...data, source: draft }) }
+        props: { config: JSON.stringify({ ...data, source: draft }) }
       })
       markUndoPoint(editor, 'code-edit')
     }
@@ -318,7 +307,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
     editor.updateShape({
       id: shape.id,
       type: 'node-card',
-      props: { text: JSON.stringify(next) }
+      props: { config: JSON.stringify(next) }
     })
   }
 
@@ -349,7 +338,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
     const providers = useGatewayStore.getState().providers
     const option = findTextModel(
       providers,
-      (parseJsonObj(shape.props.text)?.modelKey as string) ?? '',
+      (parseJsonObj(readNodeConfig(shape))?.modelKey as string) ?? '',
       true
     )
     if (!option) {
@@ -589,9 +578,9 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
             ))}
           </div>
         )}
-        {duplicateParamIds.length > 0 && (
+        {portConfigErrors.length > 0 && (
           <div className="code-ai-error">
-            输入参数名称归一化后重复：{duplicateParamIds.join('、')}。请修改其中一个名称。
+            动态端口配置无效：{portConfigErrors.join('；')}。请修改后再连线或运行。
           </div>
         )}
         {data.params.length === 0 && (

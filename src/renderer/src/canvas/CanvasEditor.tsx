@@ -3,6 +3,7 @@ import 'tldraw/tldraw.css'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ProjectMeta, MediaAsset, NodeTypeId } from '@shared/types'
 import { NodeCardUtil, type NodeCardProps } from './NodeCardShape'
+import { repairTldrawSnapshot } from './tldrawSnapshotRepair'
 import { NodeCreateMenu } from './NodeCreateMenu'
 import { NodeContextMenu } from './NodeContextMenu'
 import { ConnectionLayer } from './ConnectionLayer'
@@ -140,6 +141,7 @@ interface CreateMenuState {
   kind: 'create'
   x: number
   y: number
+  source?: ConnectionFrom
 }
 
 interface NodeMenuState {
@@ -374,11 +376,15 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
   }, [])
 
   // 消费「拉线到空白」的待连线；返回是否成功建线（失败也要打撤销分段点）
-  const connectPendingTo = (editor: Editor, targetId: TLShapeId): boolean => {
+  const connectPendingTo = (
+    editor: Editor,
+    targetId: TLShapeId,
+    preferredTargetPortId?: string
+  ): boolean => {
     const pending = pendingConnectRef.current
     pendingConnectRef.current = null
     if (!pending) return false
-    const error = tryConnect(editor, pending, targetId)
+    const error = tryConnect(editor, pending, targetId, undefined, preferredTargetPortId)
     if (error) {
       toast(`未连线：${error}`)
       return false
@@ -386,7 +392,12 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
     return true
   }
 
-  const createNodeAt = (type: NodeTypeId, screenX: number, screenY: number): void => {
+  const createNodeAt = (
+    type: NodeTypeId,
+    screenX: number,
+    screenY: number,
+    preferredTargetPortId?: string
+  ): void => {
     const editor = editorRef.current
     if (!editor) return
     const spec = getNodeType(type)
@@ -407,7 +418,7 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
     })
     // 有待连线且成功建线时由 createEdge 统一打点（节点+连线并为一步）；
     // 建线失败（类型不兼容等）或无待连线时，节点创建独立成步
-    const connected = connectPendingTo(editor, id)
+    const connected = connectPendingTo(editor, id, preferredTargetPortId)
     if (!connected) markUndoPoint(editor, 'create-node')
   }
 
@@ -497,7 +508,7 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
         props: {
           nodeType: 'ai-process',
           title: 'AI 拆解',
-          text: JSON.stringify(cfg),
+          config: JSON.stringify(cfg),
           w: aiNode.w,
           h: aiNode.h
         } satisfies Partial<NodeCardProps>
@@ -607,7 +618,8 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
     editor.user.updateUserPreferences({ colorScheme: 'dark' })
     if (initialSnapshot) {
       try {
-        editor.store.loadStoreSnapshot(editor.store.migrateSnapshot(initialSnapshot as never))
+        const repairedSnapshot = repairTldrawSnapshot(initialSnapshot)
+        editor.store.loadStoreSnapshot(editor.store.migrateSnapshot(repairedSnapshot as never))
       } catch (e) {
         console.error('快照恢复失败', e)
         restoreFailedRef.current = true
@@ -704,7 +716,7 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
       return
     }
     pendingConnectRef.current = r.from
-    setMenu({ kind: 'create', x: r.screenPt.x, y: r.screenPt.y })
+    setMenu({ kind: 'create', x: r.screenPt.x, y: r.screenPt.y, source: r.from })
   }, [])
 
   useEffect(() => {
@@ -874,6 +886,8 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
       {!panelTab && editorInstance && nodePanelKind === 'contract' && nodePanelShapeId && (
         <NodeContractPanel
           editor={editorInstance}
+          projectId={project.id}
+          providers={providers}
           onClose={() => useNodePanelStore.getState().close()}
         />
       )}
@@ -905,8 +919,8 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
         <NodeCreateMenu
           x={menu.x}
           y={menu.y}
-          onPick={(type) => {
-            createNodeAt(type, menu.x, menu.y)
+          onPick={(choice) => {
+            createNodeAt(choice.type, menu.x, menu.y, choice.targetPortId)
             setMenu(null)
           }}
           onUpload={() => {
@@ -922,6 +936,7 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
             setMenu(null)
           }}
           onClose={closeMenu}
+          source={menu.source ?? null}
         />
       )}
       {menu?.kind === 'node' && editorInstance && (

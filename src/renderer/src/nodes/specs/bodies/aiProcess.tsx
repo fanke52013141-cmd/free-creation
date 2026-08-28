@@ -5,6 +5,7 @@ import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { parseAiProcess, type AiProcessConfig } from '../../../engine/executors/aiProcess'
 import { ModelSelect, NoModelHint, useWheelScroll } from './shared'
 import type { NodeBodyProps } from '../../registry'
+import { readNodeConfig } from '../../../canvas/node-persistence'
 
 /** 从 meta.nodeResult 解析 AI 处理节点的上次运行结果。 */
 function parseStoredAiResult(stored: string): AiProcessConfig['result'] | undefined {
@@ -57,7 +58,7 @@ export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
   const loaded = useGatewayStore((s) => s.loaded)
   const loadProviders = useGatewayStore((s) => s.load)
   const openSettings = useGatewayStore((s) => s.openSettings)
-  const data = parseAiProcess(shape.props.text)
+  const data = parseAiProcess(readNodeConfig(shape))
   // 运行结果从 meta.nodeResult 读取（配置/结果分离）；配置写入不再混入 result。
   const storedResult = parseStoredAiResult(
     typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
@@ -79,7 +80,7 @@ export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
     editor.updateShape({
       id: shape.id,
       type: 'node-card',
-      props: { text: JSON.stringify(next) }
+      props: { config: JSON.stringify(next) }
     })
   }
 

@@ -3,6 +3,7 @@ import { inputValue } from '../contracts'
 import type { NodeValue } from '../../nodes/nodeValues'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
 import { parseJsonObj, type VariableValueType } from './shared'
+import { readNodeConfig } from '../../canvas/node-persistence'
 
 interface ProcessorData {
   inputName: string
@@ -24,7 +25,7 @@ export function parseProcessor(text: string): ProcessorData {
 }
 
 export const processorExecutor = (ctx: NodeExecutionContext): NodeExecutionResult => {
-  const data = parseProcessor(ctx.shape.props.text)
+  const data = parseProcessor(readNodeConfig(ctx.shape))
   let output: NodeValue | null = inputValue(ctx.inputs, 'in-value')
   if (!output && data.fallback.trim()) {
     if (data.valueType === 'string') {

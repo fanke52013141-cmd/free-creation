@@ -53,20 +53,39 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   }
 
   return (
-    <div
-      className="node-media"
-      onPointerDown={guard.onPointerDown}
-      onClick={(e) =>
-        guard.onClick(e, () =>
-          openPreview({
-            kind: 'image',
-            url: mediaUrl(shape.props.mediaPath),
-            title: shape.props.title
-          })
-        )
-      }
-    >
-      <img src={mediaUrl(shape.props.mediaPath)} alt={shape.props.title} draggable={false} />
+    <div className="node-media-wrap">
+      <div
+        className="node-media"
+        onPointerDown={guard.onPointerDown}
+        onClick={(e) =>
+          guard.onClick(e, () =>
+            openPreview({
+              kind: 'image',
+              url: mediaUrl(shape.props.mediaPath),
+              title: shape.props.title
+            })
+          )
+        }
+      >
+        <img src={mediaUrl(shape.props.mediaPath)} alt={shape.props.title} draggable={false} />
+      </div>
+      <div className="node-media-actions">
+        <button
+          className="btn-ghost small"
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onClick={(e) => {
+            e.stopPropagation()
+            void chooseAsset()
+          }}
+        >
+          <Icon name="upload" size={13} />
+          替换
+        </button>
+        <span className="node-media-source" title={shape.props.mediaPath}>
+          <Icon name="image" size={11} />
+          {shape.props.mediaMime || '本地图片'}
+        </span>
+      </div>
     </div>
   )
 }

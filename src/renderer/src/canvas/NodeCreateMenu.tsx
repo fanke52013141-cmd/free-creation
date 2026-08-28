@@ -1,17 +1,20 @@
 // LibTV 式节点创建菜单：双击空白画布弹出（指南 1.2.1）
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { allNodeTypes } from '../nodes/registry'
-import type { NodeTypeId } from '@shared/types'
+import { allNodeTypes, getNodeType } from '../nodes/registry'
+import type { ConnectionFrom } from '../stores/connection'
 import { Icon } from '../components/Icon'
+import { compatibleNodeCreateChoices, type NodeCreateChoice } from './node-create-options'
 
 interface NodeCreateMenuProps {
   x: number
   y: number
-  onPick: (type: NodeTypeId) => void
+  onPick: (choice: NodeCreateChoice) => void
   onTemplate: () => void
   onUpload: () => void
   onGallery: () => void
   onClose: () => void
+  /** 从输出端口拉线到空白时，只展示能接收该端口的节点。 */
+  source?: ConnectionFrom | null
 }
 
 export function NodeCreateMenu({
@@ -21,7 +24,8 @@ export function NodeCreateMenu({
   onTemplate,
   onUpload,
   onGallery,
-  onClose
+  onClose,
+  source = null
 }: NodeCreateMenuProps): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   const [menuHeight, setMenuHeight] = useState(0)
@@ -55,40 +59,65 @@ export function NodeCreateMenu({
   const menuH = menuHeight || 520
   const left = Math.max(12, Math.min(x, window.innerWidth - menuW - 12))
   const top = Math.max(12, Math.min(y, window.innerHeight - menuH - 12))
+  const choices: NodeCreateChoice[] = source
+    ? compatibleNodeCreateChoices(source)
+    : allNodeTypes().map((spec) => ({ type: spec.type }))
 
   return (
     <div className="node-menu" ref={ref} style={{ left, top }}>
-      <div className="node-menu-title">新建节点</div>
-      {allNodeTypes().map((t) => (
-        <button key={t.type} className="node-menu-item" onClick={() => onPick(t.type)}>
-          <span className="item-icon" style={{ color: t.color }}>
-            <Icon name={t.icon} size={18} />
-          </span>
-          <span>{t.label}</span>
-        </button>
-      ))}
-      <div className="node-menu-divider" />
-      <div className="node-menu-title">工作流模板</div>
-      <button className="node-menu-item" onClick={onTemplate}>
-        <span className="item-icon">
-          <Icon name="spark" size={18} />
-        </span>
-        <span>剧本 → 分镜</span>
-      </button>
-      <div className="node-menu-divider" />
-      <div className="node-menu-title">添加资源</div>
-      <button className="node-menu-item" onClick={onUpload}>
-        <span className="item-icon">
-          <Icon name="upload" size={18} />
-        </span>
-        <span>上传本地文件</span>
-      </button>
-      <button className="node-menu-item" onClick={onGallery}>
-        <span className="item-icon">
-          <Icon name="assets" size={18} />
-        </span>
-        <span>从图库选择</span>
-      </button>
+      <div className="node-menu-title">
+        {source ? `可连接 ${source.portType} 输出` : '新建节点'}
+      </div>
+      {choices.map((choice) => {
+        const spec = getNodeType(choice.type)
+        if (!spec) return null
+        return (
+          <button
+            key={`${spec.type}:${choice.targetPortId ?? 'default'}`}
+            className="node-menu-item"
+            onClick={() => onPick(choice)}
+          >
+            <span className="item-icon" style={{ color: spec.color }}>
+              <Icon name={spec.icon} size={18} />
+            </span>
+            <span className="node-menu-label">
+              {spec.label}
+              {choice.targetPort && (
+                <small>
+                  {choice.targetPort.name} · {choice.targetPort.type}
+                </small>
+              )}
+            </span>
+          </button>
+        )
+      })}
+      {choices.length === 0 && <div className="node-menu-empty">没有与当前输出兼容的节点</div>}
+      {!source && (
+        <>
+          <div className="node-menu-divider" />
+          <div className="node-menu-title">工作流模板</div>
+          <button className="node-menu-item" onClick={onTemplate}>
+            <span className="item-icon">
+              <Icon name="spark" size={18} />
+            </span>
+            <span>剧本 → 分镜</span>
+          </button>
+          <div className="node-menu-divider" />
+          <div className="node-menu-title">添加资源</div>
+          <button className="node-menu-item" onClick={onUpload}>
+            <span className="item-icon">
+              <Icon name="upload" size={18} />
+            </span>
+            <span>上传本地文件</span>
+          </button>
+          <button className="node-menu-item" onClick={onGallery}>
+            <span className="item-icon">
+              <Icon name="assets" size={18} />
+            </span>
+            <span>从图库选择</span>
+          </button>
+        </>
+      )}
     </div>
   )
 }

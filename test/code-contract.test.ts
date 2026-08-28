@@ -1,6 +1,6 @@
 // 代码节点动态参数契约：每个参数都必须是可连接、可展示、可执行的真实输入端口。
 import { describe, expect, it } from 'vitest'
-import { parseCodeConfigs } from '@renderer/engine/executors/code'
+import { codePortConfigErrors, parseCodeConfigs } from '@renderer/engine/executors/code'
 import { getNodePorts, getNodeType } from '@renderer/nodes/registry'
 import { registerAllNodeTypes } from './helpers/registerNodes'
 import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
@@ -21,7 +21,8 @@ function codeShape(text: string): NodeCardShape {
       h: 260,
       nodeType: 'code',
       title: '代码',
-      text,
+      config: text,
+      text: '',
       mediaId: '',
       mediaPath: '',
       mediaMime: '',
@@ -67,5 +68,30 @@ describe('代码节点动态输入参数', () => {
       })
     )
     expect(config.params).toEqual([{ name: 'shot id', type: 'string' }])
+    expect(
+      codePortConfigErrors(
+        JSON.stringify({
+          source: '',
+          params: [
+            { name: 'shot id', type: 'string' },
+            { name: 'shot-id', type: 'json' }
+          ]
+        })
+      )
+    ).toEqual(['输入参数端口重复：in-param-shot-id'])
+  })
+
+  it('动态端口冲突时不暴露可连接的半成品参数端口', () => {
+    const shape = codeShape(
+      JSON.stringify({
+        source: '',
+        params: [
+          { name: 'shot id', type: 'string' },
+          { name: 'shot-id', type: 'json' }
+        ]
+      })
+    )
+    const ports = getNodePorts(getNodeType('code')!, shape)
+    expect(ports.in.map((port) => port.id)).not.toContain('in-param-shot-id')
   })
 })

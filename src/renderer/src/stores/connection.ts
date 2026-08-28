@@ -1,12 +1,13 @@
 // 连线拖拽草稿（跨组件共享）：输出端口按下开始，拖拽层跟随指针，松手完成
 import { create } from 'zustand'
 import type { TLShapeId } from 'tldraw'
-import type { PortType } from '@shared/types'
+import type { PortSchemaRef, PortType } from '@shared/types'
 
 export interface ConnectionFrom {
   shapeId: TLShapeId
   portId: string
   portType: PortType
+  schema?: PortSchemaRef
 }
 
 export interface Pt {

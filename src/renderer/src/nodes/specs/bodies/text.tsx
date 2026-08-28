@@ -57,7 +57,7 @@ export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
             title: `${slashCmd.command.label} ${i + 1}`,
             w: 340,
             h: 260,
-            text: JSON.stringify({ prompt, modelKey: '', size: 'auto' })
+            config: JSON.stringify({ prompt, modelKey: '', size: 'auto' })
           }
         })
       })
@@ -93,6 +93,12 @@ export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
       }}
     >
       {shape.props.text || <span className="node-hint">双击输入文本内容</span>}
+      {shape.props.text && !slashCmd && (
+        <div className="text-node-meta">
+          <span>{shape.props.text.length} 字</span>
+          <span>双击编辑</span>
+        </div>
+      )}
       {slashCmd && (
         <div className="slash-cmd-bar">
           <div className="slash-cmd-info">

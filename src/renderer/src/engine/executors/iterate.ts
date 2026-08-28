@@ -11,6 +11,7 @@
 // 每项结果带 source（index / itemId）与 status，失败的项保留原因；中止后续跑时，
 // 已成功的项可作为已完成项跳过（由下游节点「已生成则复用」兜底）。
 import { inputJson } from '../contracts'
+import { readNodeConfig } from '../../canvas/node-persistence'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
 
 export interface IterateConfig {
@@ -158,7 +159,7 @@ async function runItem(
 }
 
 export const iterateExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
-  const config = parseIterate(ctx.shape.props.text)
+  const config = parseIterate(readNodeConfig(ctx.shape))
   const list = inputJson(ctx.inputs, 'in-list')[0]
   if (!Array.isArray(list)) return { status: 'skipped', reason: '没有可循环的列表输入' }
   if (!ctx.runSubflow || (ctx.downstream?.length ?? 0) === 0) {
@@ -205,9 +206,9 @@ export const iterateExecutor = async (ctx: NodeExecutionContext): Promise<NodeEx
     }
   }
   const data: IterateResult = { items: results as IterateItemResult[] }
-  // 配置/结果分离：props.text 只存配置，运行结果 { items } 走 meta（updateResult）。
+  // 配置/结果分离：props.config 存配置，运行结果 { items } 走 meta（updateResult）。
   // 输出投影（nodeValues.ts）从 meta.nodeResult 读取 items。
-  ctx.updateProps({ text: JSON.stringify(config) })
+  ctx.updateProps({ config: JSON.stringify(config) })
   ctx.updateResult(JSON.stringify(data))
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
   if (failedAny && config.onFailure === 'fail')

@@ -3,6 +3,7 @@
 // 这些函数由各自 NodeTypeSpec 直接注册。运行器和手动触发都只调用
 // projectNodeOutputs(shape)，不再维护按 nodeType 分支的中央投影器。
 import type { NodeCardShape } from '../../canvas/NodeCardShape'
+import { readNodeConfig } from '../../canvas/node-persistence'
 import type { RawNodeOutputs } from '../nodeValues'
 import {
   parseNodeRecord,
@@ -15,6 +16,7 @@ import { outputPortId, parseCodeConfigs } from '../../engine/executors/code'
 import {
   parseDirectorProject,
   parseDirectorPublishRecord,
+  isDirectorPublishCurrent,
   type DirectorPublishRecord
 } from '../director-data'
 
@@ -86,7 +88,7 @@ export const projectCodeOutputs = (shape: NodeCardShape): RawNodeOutputs => {
   const result = parseStoredNodeValue(
     typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
   )
-  const outputId = outputPortId(parseCodeConfigs(shape.props.text).outputName)
+  const outputId = outputPortId(parseCodeConfigs(readNodeConfig(shape)).outputName)
   return result ? { [outputId]: result } : {}
 }
 
@@ -136,29 +138,32 @@ export const projectDirectorOutputs = (shape: NodeCardShape): RawNodeOutputs => 
   } catch {
     // 损坏运行记录不得成为下游输入。
   }
-  const project = parseDirectorProject(shape.props.text)
+  const project = parseDirectorProject(readNodeConfig(shape))
+  const currentPublish = isDirectorPublishCurrent(project, published) ? published : null
   return {
     'out-project': { kind: 'json', data: project },
-    ...(published?.frame
+    ...(currentPublish?.frame
       ? {
           'out-frame': {
             kind: 'image' as const,
-            mediaId: published.frame.mediaId,
-            mediaPath: published.frame.mediaPath,
-            mime: published.frame.mime
+            mediaId: currentPublish.frame.mediaId,
+            mediaPath: currentPublish.frame.mediaPath,
+            mime: currentPublish.frame.mime
           }
         }
       : {}),
-    ...(published?.video
+    ...(currentPublish?.video
       ? {
           'out-preview-video': {
             kind: 'video' as const,
-            mediaId: published.video.mediaId,
-            mediaPath: published.video.mediaPath,
-            mime: published.video.mime
+            mediaId: currentPublish.video.mediaId,
+            mediaPath: currentPublish.video.mediaPath,
+            mime: currentPublish.video.mime
           }
         }
       : {}),
-    ...(published ? { 'out-camera': { kind: 'json' as const, data: published.camera } } : {})
+    ...(currentPublish
+      ? { 'out-camera': { kind: 'json' as const, data: currentPublish.camera } }
+      : {})
   }
 }

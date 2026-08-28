@@ -4,7 +4,7 @@
 // 产出 text / markdown / 指定 Schema 的 json。与对话节点不同，它不保留多轮历史，
 // 只做单次转换，输出可验证、可单独调试，不把普通文本伪装成 JSON。
 //
-// 配置存储在 shape.props.text（JSON 字符串）：
+// 配置存储在 shape.props.config（JSON 字符串）：
 //   { modelKey, system, mode: 'text'|'markdown'|'json', jsonSchema?, temperature, maxTokens,
 //     result?: { kind, text?/data? } }
 import { inputJson, inputText } from '../contracts'
@@ -12,6 +12,7 @@ import type { NodeExecutionContext, NodeExecutionResult } from '../executor-type
 import { validateNodeSchema } from '@shared/node-schemas'
 import type { PortSchemaRef } from '@shared/types'
 import { findTextModel, parseJsonObj, waitForChat } from './shared'
+import { readNodeConfig } from '../../canvas/node-persistence'
 
 export type AiOutputMode = 'text' | 'markdown' | 'json'
 
@@ -85,7 +86,7 @@ function normalizeResult(
 export const aiProcessExecutor = async (
   ctx: NodeExecutionContext
 ): Promise<NodeExecutionResult> => {
-  const config = parseAiProcess(ctx.shape.props.text)
+  const config = parseAiProcess(readNodeConfig(ctx.shape))
   const option = findTextModel(ctx.providers, config.modelKey)
   if (!option) return { status: 'skipped', reason: '未选择可用文本模型' }
 
@@ -124,7 +125,7 @@ export const aiProcessExecutor = async (
     return { status: 'failed', reason: error instanceof Error ? error.message : String(error) }
   }
 
-  // 写回运行结果到 meta（配置/结果分离）；props.text 只存用户配置，不再混入 result。
+  // 写回运行结果到 meta（配置/结果分离）；props.config 不再混入 result。
   // 输出投影（nodeValues.ts）据此产出对应端口输出。
   ctx.updateResult(JSON.stringify(result))
   return { status: 'done' }

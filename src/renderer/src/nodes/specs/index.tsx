@@ -2,6 +2,7 @@
 // 端口声明对齐路线图的节点类型表；any 万能口，其余类型需一致才可连
 import type { PortCardinality, PortDecl, PortSchemaRef } from '@shared/types'
 import { registerNodeType, unregisterNodeType } from '../registry'
+import { readNodeConfig } from '../../canvas/node-persistence'
 import {
   AudioBody,
   AiProcessBody,
@@ -23,6 +24,7 @@ import { audioExecutor } from '../../engine/executors/audio'
 import { chatExecutor } from '../../engine/executors/chat'
 import {
   codeExecutor,
+  codePortConfigErrors,
   mapVarTypeToPortType,
   outputPortId,
   paramPortId,
@@ -328,8 +330,11 @@ export function registerExtendedNodeTypes(): void {
       ]
     },
     resolvePorts: (shape) => {
-      const cfg = parseCodeConfigs(shape.props.text)
-      const paramPorts: PortDecl[] = cfg.params.map((p) => {
+      const cfg = parseCodeConfigs(readNodeConfig(shape))
+      // 配置有冲突时不暴露半真半假的动态端口；执行器会提供相同的硬错误。
+      const paramPorts: PortDecl[] = (
+        codePortConfigErrors(readNodeConfig(shape)).length ? [] : cfg.params
+      ).map((p) => {
         const type = mapVarTypeToPortType(p.type)
         return {
           id: paramPortId(p.name),

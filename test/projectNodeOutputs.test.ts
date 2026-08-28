@@ -8,6 +8,7 @@ import { describe, it, expect, beforeAll } from 'vitest'
 import { registerAllNodeTypes } from './helpers/registerNodes'
 import { projectNodeOutputs } from '@renderer/nodes/nodeValues'
 import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
+import { createDirectorProject } from '@renderer/nodes/director-data'
 
 beforeAll(() => {
   registerAllNodeTypes()
@@ -32,6 +33,7 @@ function shape(
       h: 260,
       nodeType,
       title: nodeType,
+      config: '',
       text: '',
       mediaId: '',
       mediaPath: '',
@@ -148,7 +150,7 @@ describe('projectNodeOutputs · 代码节点（读 meta.nodeResult）', () => {
     const out = projectNodeOutputs(
       shape(
         'code',
-        { text: JSON.stringify({ source: '', outputName: 'caption', outputType: 'string' }) },
+        { config: JSON.stringify({ source: '', outputName: 'caption', outputType: 'string' }) },
         { nodeResult: result }
       )
     )
@@ -160,7 +162,7 @@ describe('projectNodeOutputs · 代码节点（读 meta.nodeResult）', () => {
     const out = projectNodeOutputs(
       shape(
         'code',
-        { text: JSON.stringify({ source: '', outputName: 'payload', outputType: 'object' }) },
+        { config: JSON.stringify({ source: '', outputName: 'payload', outputType: 'object' }) },
         { nodeResult: result }
       )
     )
@@ -254,35 +256,16 @@ describe('projectNodeOutputs · 循环节点', () => {
 })
 
 describe('projectNodeOutputs · 导演台节点', () => {
+  const baseProject = createDirectorProject()
   const project = {
-    version: 1,
-    activeShotId: 'shot-1',
-    shots: [
-      {
-        id: 'shot-1',
-        name: '镜头 01',
-        scene: '雨夜街口',
-        dialogue: '',
-        referenceMediaIds: [],
-        referenceMediaPaths: [],
-        actors: [],
-        camera: {
-          x: 0,
-          y: 1.6,
-          z: 5,
-          heading: 0,
-          pitch: 0,
-          focalLengthMm: 35,
-          aspectRatio: '16:9',
-          durationSec: 5,
-          fps: 25
-        }
-      }
-    ]
+    ...baseProject,
+    revision: 2,
+    shots: baseProject.shots.map((shot) => ({ ...shot, id: 'shot-1', scene: '雨夜街口' })),
+    activeShotId: 'shot-1'
   }
 
   it('未发布时只输出工程摘要，不伪造媒体输出', () => {
-    const out = projectNodeOutputs(shape('director', { text: JSON.stringify(project) }))
+    const out = projectNodeOutputs(shape('director', { config: JSON.stringify(project) }))
     expect(out['out-project']?.kind).toBe('json')
     expect(out['out-frame']).toBeUndefined()
     expect(out['out-preview-video']).toBeUndefined()
@@ -294,16 +277,35 @@ describe('projectNodeOutputs · 导演台节点', () => {
       kind: 'director-publish',
       version: 1,
       publishedAt: 1,
+      projectRevision: 2,
       shotId: 'shot-1',
       frame: { mediaId: 'img-1', mediaPath: 'projects/a/frame.png', mime: 'image/png' },
       video: { mediaId: 'vid-1', mediaPath: 'projects/a/preview.webm', mime: 'video/webm' },
       camera: project.shots[0].camera
     }
     const out = projectNodeOutputs(
-      shape('director', { text: JSON.stringify(project) }, { nodeResult: JSON.stringify(record) })
+      shape('director', { config: JSON.stringify(project) }, { nodeResult: JSON.stringify(record) })
     )
     expect(out['out-frame']).toEqual({ kind: 'image', ...record.frame })
     expect(out['out-preview-video']).toEqual({ kind: 'video', ...record.video })
     expect(out['out-camera']).toEqual({ kind: 'json', data: record.camera })
+  })
+
+  it('工程编辑后不再把旧发布媒体投影为当前下游输出', () => {
+    const stale = {
+      kind: 'director-publish',
+      version: 1,
+      publishedAt: 1,
+      projectRevision: 1,
+      shotId: 'shot-1',
+      frame: { mediaId: 'img-1', mediaPath: 'projects/a/frame.png', mime: 'image/png' },
+      camera: project.shots[0].camera
+    }
+    const out = projectNodeOutputs(
+      shape('director', { config: JSON.stringify(project) }, { nodeResult: JSON.stringify(stale) })
+    )
+    expect(out['out-project']?.kind).toBe('json')
+    expect(out['out-frame']).toBeUndefined()
+    expect(out['out-camera']).toBeUndefined()
   })
 })

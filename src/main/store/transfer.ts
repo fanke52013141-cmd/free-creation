@@ -7,10 +7,11 @@
 // 安全：项目目录只含节点/连线/媒体，不含供应商 API Key（供应商配置存全局 app.db）；
 // 因此导出包不包含 API Key，满足「导出诊断包不包含 API Key」。
 import AdmZip from 'adm-zip'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { nanoid } from 'nanoid'
 import type { MediaAsset, ProjectFile } from '../../shared/types'
+import { remapMediaReferences } from '../../shared/media-reference-remap'
 import { getDb, getProjectsDir } from './db'
 
 const BUNDLE_EXT = '.canvasbundle'
@@ -34,10 +35,6 @@ export interface ProjectMetaInfo {
   createdAt: number
   updatedAt: number
   graphVersion: number
-}
-
-function projectMediaDir(id: string): string {
-  return join(getProjectsDir(), id, 'media')
 }
 
 /** 收集指定项目的媒体资产（从 SQLite 按路径前缀）。 */
@@ -103,6 +100,13 @@ function kindFor(mime: string): MediaAsset['kind'] {
   if (mime.startsWith('video/')) return 'video'
   if (mime.startsWith('audio/')) return 'audio'
   return 'file'
+}
+
+interface ImportedMediaRef {
+  oldId: string
+  newId: string
+  oldPath: string
+  newPath: string
 }
 
 /** 导出项目为 zip 到 destPath；返回目标路径。 */
@@ -178,58 +182,94 @@ export function importProject(srcPath: string): ProjectMetaInfo {
   const newId = nanoid(12)
   const now = Date.now()
   const name = bundleProjectName || '导入的项目'
-  const newMediaDir = projectMediaDir(newId)
-  mkdirSync(newMediaDir, { recursive: true })
+  const projectsDir = getProjectsDir()
+  const newProjectDir = join(projectsDir, newId)
+  const stagingDir = join(projectsDir, `${newId}.importing`)
+  const stagingMediaDir = join(stagingDir, 'media')
+  const sourceProjectId = file.meta.id
+  if (existsSync(newProjectDir) || existsSync(stagingDir))
+    throw new Error('导入项目 ID 冲突，请重试')
 
-  // 媒体解包到新 media 目录，重写 mediaId + 重新入库。media/<origId>.<ext>
-  const idMap = new Map<string, string>()
-  for (const entry of zip.getEntries()) {
-    if (!entry.entryName.startsWith('media/') || entry.isDirectory) continue
-    const origName = entry.entryName.replace('media/', '')
-    const newMediaId = nanoid(10)
-    idMap.set(origName, newMediaId)
-    const ext = extName(origName)
-    const mediaAbs = join(newMediaDir, `${newMediaId}${ext}`)
-    writeFileSync(mediaAbs, entry.getData())
-
-    const mime = MIME_BY_EXT[ext] ?? 'application/octet-stream'
-    const relPath = `projects/${newId}/media/${newMediaId}${ext}`
-    getDb()
-      .prepare(
-        'INSERT INTO media (id, kind, mime, path, size_bytes, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-      )
-      .run(newMediaId, kindFor(mime), mime, relPath, readFileSync(mediaAbs).byteLength, now)
-  }
-
-  // 替换节点里的 mediaId 引用：按 `<mediaId>.<ext>` 的 mediaId 前缀映射到新 id
-  const byMediaId = new Map<string, string>()
-  for (const [origName, nid] of idMap) {
-    byMediaId.set(origName.split('.')[0], nid)
-  }
-  for (const node of file.nodes) {
-    if (node.content?.kind === 'media' && node.content.mediaId) {
-      const newId = byMediaId.get(node.content.mediaId)
-      if (newId) node.content = { kind: 'media', mediaId: newId }
+  mkdirSync(stagingMediaDir, { recursive: true })
+  const mediaRefs: ImportedMediaRef[] = []
+  let databaseInserted = false
+  try {
+    // 先完整写入临时目录；遇到任何损坏条目时不会留下可见项目或数据库记录。
+    for (const entry of zip.getEntries()) {
+      if (!entry.entryName.startsWith('media/') || entry.isDirectory) continue
+      const origName = entry.entryName.slice('media/'.length)
+      if (
+        !origName ||
+        origName.includes('/') ||
+        origName.includes('\\') ||
+        origName.includes('..')
+      ) {
+        throw new Error(`项目包包含非法媒体路径：${entry.entryName}`)
+      }
+      const dot = origName.lastIndexOf('.')
+      const oldMediaId = dot > 0 ? origName.slice(0, dot) : origName
+      const ext = extName(origName)
+      const newMediaId = nanoid(10)
+      const stagedPath = join(stagingMediaDir, `${newMediaId}${ext}`)
+      writeFileSync(stagedPath, entry.getData())
+      mediaRefs.push({
+        oldId: oldMediaId,
+        newId: newMediaId,
+        oldPath: `projects/${sourceProjectId}/media/${origName}`,
+        newPath: `projects/${newId}/media/${newMediaId}${ext}`
+      })
     }
-  }
 
-  // 写新 project.json（重置 graphVersion=0）
-  const newFile: ProjectFile = {
-    ...file,
-    meta: { id: newId, name, createdAt: now, updatedAt: now, graphVersion: 0 },
-    nodes: file.nodes
-  }
-  writeFileSync(
-    join(getProjectsDir(), newId, 'project.json'),
-    JSON.stringify(newFile, null, 2),
-    'utf-8'
-  )
+    const remapped = remapMediaReferences(file, {
+      ids: new Map(mediaRefs.map((ref) => [ref.oldId, ref.newId])),
+      paths: new Map(mediaRefs.map((ref) => [ref.oldPath, ref.newPath]))
+    })
+    const newFile: ProjectFile = {
+      ...remapped,
+      meta: { id: newId, name, createdAt: now, updatedAt: now, graphVersion: 0 }
+    }
+    writeFileSync(join(stagingDir, 'project.json'), JSON.stringify(newFile, null, 2), 'utf-8')
 
-  getDb()
-    .prepare(
+    const database = getDb()
+    const insertProject = database.prepare(
       'INSERT INTO projects (id, name, created_at, updated_at, graph_version) VALUES (?, ?, ?, ?, 0)'
     )
-    .run(newId, name, now, now)
+    const insertMedia = database.prepare(
+      'INSERT INTO media (id, kind, mime, path, size_bytes, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+    )
+    database.transaction(() => {
+      insertProject.run(newId, name, now, now)
+      for (const ref of mediaRefs) {
+        const ext = extName(ref.newPath)
+        const stagedPath = join(stagingMediaDir, `${ref.newId}${ext}`)
+        const mime = MIME_BY_EXT[ext] ?? 'application/octet-stream'
+        insertMedia.run(
+          ref.newId,
+          kindFor(mime),
+          mime,
+          ref.newPath,
+          readFileSync(stagedPath).byteLength,
+          now
+        )
+      }
+    })()
+    databaseInserted = true
+
+    // 数据库提交成功后，目录的单次 rename 才让项目对列表可见。
+    renameSync(stagingDir, newProjectDir)
+  } catch (error) {
+    if (existsSync(stagingDir)) rmSync(stagingDir, { recursive: true, force: true })
+    // rename 前的 DB 写入失败路径需要补偿，避免项目列表出现指向不存在目录的幽灵记录。
+    if (databaseInserted && !existsSync(newProjectDir)) {
+      const database = getDb()
+      database.transaction(() => {
+        database.prepare('DELETE FROM media WHERE path LIKE ?').run(`projects/${newId}/media/%`)
+        database.prepare('DELETE FROM projects WHERE id = ?').run(newId)
+      })()
+    }
+    // rename 成功后的异常保留正式目录，避免删除可恢复的用户项目。
+    throw error
+  }
 
   return { id: newId, name, createdAt: now, updatedAt: now, graphVersion: 0 }
 }

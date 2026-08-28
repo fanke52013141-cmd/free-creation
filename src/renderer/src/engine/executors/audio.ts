@@ -3,6 +3,7 @@ import { inputMedia, inputText } from '../contracts'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
 import { modelsByModality } from '../../stores/gateway'
 import { mergedPrompt, parseJsonObj } from './shared'
+import { readNodeConfig } from '../../canvas/node-persistence'
 
 interface AudioData {
   mode: 'upload' | 'generate'
@@ -37,7 +38,7 @@ export const audioExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
     return { status: 'done' }
   }
   if (ctx.shape.props.mediaPath) return { status: 'done' }
-  const data = parseAudio(ctx.shape.props.text)
+  const data = parseAudio(readNodeConfig(ctx.shape))
   if (data.mode !== 'generate') return { status: 'skipped', reason: '请上传音频或切换到语音合成' }
   const option = modelsByModality(ctx.providers, 'audio').find((item) => item.key === data.modelKey)
   if (!option) return { status: 'skipped', reason: '未选择可用音频模型' }

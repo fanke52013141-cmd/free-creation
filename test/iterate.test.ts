@@ -38,7 +38,8 @@ function makeCtx(over: {
       h: 260,
       nodeType: 'iterate',
       title: 'n',
-      text: over.text ?? '',
+      config: over.text ?? '',
+      text: '',
       mediaId: '',
       mediaPath: '',
       mediaMime: '',
@@ -189,8 +190,8 @@ describe('iterate 执行器 · 成功批量', () => {
     // 来源追踪
     expect(data.items[0].source.itemId).toBe('s1')
     expect(data.items[2].source.index).toBe(2)
-    // 配置/结果分离：props.text 只存配置，不含 items
-    const configOnly = JSON.parse(props.text as string)
+    // 配置/结果分离：props.config 只存配置，不含 items
+    const configOnly = JSON.parse(props.config as string)
     expect(configOnly.items).toBeUndefined()
     expect(configOnly.limit).toBe(0)
   })

@@ -1,6 +1,12 @@
 // NodeType 注册表（扩展点①，见《技术框架与规范》§5.1）
 // 新增节点类型 = 写一份 Spec 并 register，核心零改动
-import type { NodeExecutionMode, NodeTypeId, PortDecl, PortType } from '@shared/types'
+import type {
+  ActiveNodeTypeId,
+  NodeExecutionMode,
+  NodeTypeId,
+  PortDecl,
+  PortType
+} from '@shared/types'
 import { nodeSchemaRegistered } from '@shared/node-schemas'
 import type { NodeExecutor } from '../engine/executor-types'
 import type { NodeCardShape } from '../canvas/NodeCardShape'
@@ -239,6 +245,15 @@ export function getNodePorts(
 
 export function allNodeTypes(): NodeTypeSpec[] {
   return Array.from(registry.values()).filter((spec) => spec.creatable !== false)
+}
+
+/** 可创建节点的单一真值；菜单、模板和合规检查均以此为准。 */
+export function activeNodeTypes(): NodeTypeSpec[] {
+  return allNodeTypes()
+}
+
+export function isActiveNodeType(type: string): type is ActiveNodeTypeId {
+  return activeNodeTypes().some((spec) => spec.type === type)
 }
 
 export function mediaUrl(relPath: string): string {

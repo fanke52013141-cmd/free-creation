@@ -5,6 +5,8 @@ import type { VideoGenParams } from '@shared/types'
 import { mediaUrl, type NodeBodyProps } from '../../registry'
 import { toast } from '../../../stores/toast'
 import { markUndoPoint } from '../../../canvas/history'
+import { gatherUpstreamMedia } from '../../../canvas/graph'
+import { readNodeConfig } from '../../../canvas/node-persistence'
 import { runNodeManually } from '../../../engine/executor'
 import { useAppStore } from '../../../stores/app'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
@@ -56,9 +58,10 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const loadProviders = useGatewayStore((s) => s.load)
   const openSettings = useGatewayStore((s) => s.openSettings)
   const options = modelsByModality(providers, 'video')
-  const data = parseVideoGen(shape.props.text)
+  const data = parseVideoGen(readNodeConfig(shape))
   const [draft, setDraft] = useState(data.prompt)
   const [submitting, setSubmitting] = useState(false)
+  const refImage = gatherUpstreamMedia(editor, shape.id, 'in-image', 'image')
 
   useEffect(() => {
     if (!loaded) void loadProviders()
@@ -68,7 +71,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     editor.updateShape({
       id: shape.id,
       type: 'node-card',
-      props: { text: JSON.stringify(next) }
+      props: { config: JSON.stringify(next) }
     })
   }
 
@@ -121,6 +124,18 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
             <Icon name="reset" size={13} />
             重新生成
           </button>
+          {(() => {
+            const source = shape.meta?.nodeResult as
+              { kind?: string; modelKey?: string; at?: number } | undefined
+            if (source?.kind !== 'media-source') return null
+            return (
+              <span className="node-media-source">
+                <Icon name="info" size={11} />
+                {source.modelKey || 'AI 生成'}
+                {source.at ? ` · ${new Date(source.at).toLocaleTimeString()}` : ''}
+              </span>
+            )
+          })()}
         </div>
       </div>
     )
@@ -135,6 +150,24 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
 
   return (
     <div className="gen-panel">
+      <div className="gen-capability-note">
+        <Icon name="info" size={13} />
+        <span>{refImage ? '首帧图已连接' : '可连接首帧图'} · 上游文本会并入提示词</span>
+      </div>
+      {refImage && (
+        <div className="ref-image-bar">
+          <img
+            src={mediaUrl(refImage.mediaPath)}
+            className="ref-image-thumb"
+            draggable={false}
+            alt="已连接首帧图"
+          />
+          <span className="ref-image-label">
+            <Icon name="attach" size={13} />
+            首帧图已连接
+          </span>
+        </div>
+      )}
       <ModelSelect
         value={data.modelKey}
         options={options}

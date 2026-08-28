@@ -3,6 +3,7 @@ import { inputMedia, inputText } from '../contracts'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
 import { modelsByModality } from '../../stores/gateway'
 import { mergedPrompt, parseJsonObj } from './shared'
+import { readNodeConfig } from '../../canvas/node-persistence'
 
 export interface ImageGenData {
   prompt: string
@@ -28,7 +29,7 @@ export function parseImageGen(text: string): ImageGenData {
 export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
   // 已生成的图片是稳定的数据源；不在每次整图运行时重复生成。
   if (ctx.shape.props.mediaPath) return { status: 'done' }
-  const data = parseImageGen(ctx.shape.props.text)
+  const data = parseImageGen(readNodeConfig(ctx.shape))
   const option = modelsByModality(ctx.providers, 'image').find((item) => item.key === data.modelKey)
   if (!option) return { status: 'skipped', reason: '未选择可用图片模型' }
   const prompt = mergedPrompt(data.prompt, inputText(ctx.inputs, 'in-text'))

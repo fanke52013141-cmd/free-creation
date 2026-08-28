@@ -2,6 +2,7 @@
 import { stopEventPropagation, useEditor } from 'tldraw'
 import type { NodeBodyProps } from '../../registry'
 import { hasIncomingConnection } from '../../../canvas/graph'
+import { readNodeConfig } from '../../../canvas/node-persistence'
 import { VARIABLE_TYPES, parseJsonProp, type VariableValueType } from './shared'
 
 interface ProcessorData {
@@ -33,13 +34,13 @@ function parseProcessor(text: string): ProcessorData {
 
 export function ProcessorBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
-  const data = parseProcessor(shape.props.text)
+  const data = parseProcessor(readNodeConfig(shape))
 
   const update = (next: ProcessorData): void => {
     editor.updateShape({
       id: shape.id,
       type: 'node-card',
-      props: { text: JSON.stringify(next) }
+      props: { config: JSON.stringify(next) }
     })
   }
 

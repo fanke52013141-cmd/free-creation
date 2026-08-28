@@ -3,5 +3,11 @@ import { useToastStore } from '../stores/toast'
 
 export function Toast(): React.JSX.Element {
   const msg = useToastStore((s) => s.msg)
-  return msg ? <div className="global-toast">{msg}</div> : <></>
+  return msg ? (
+    <div className="global-toast" role="status" aria-live="polite" aria-atomic="true">
+      {msg}
+    </div>
+  ) : (
+    <></>
+  )
 }

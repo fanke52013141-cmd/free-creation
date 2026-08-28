@@ -5,6 +5,7 @@ import type { PortType } from '@shared/types'
 import { inputJson, inputText, inputValue } from '../contracts'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
 import { runCodeTransform } from '../codeRuntime'
+import { readNodeConfig } from '../../canvas/node-persistence'
 import { parseJsonObj, type VariableValueType } from './shared'
 import type { NodeValue } from '../../nodes/nodeValues'
 
@@ -111,6 +112,30 @@ export function parseCodeConfigs(text: string): CodeConfig {
   }
 }
 
+/** 动态端口冲突不能被静默去重，否则画布、连线和执行器会看到不同的契约。 */
+export function codePortConfigErrors(text: string): string[] {
+  const value = parseJsonObj(text)
+  if (!value || !Array.isArray(value.params)) return []
+  const seen = new Set<string>()
+  const errors: string[] = []
+  value.params.forEach((raw, index) => {
+    if (!raw || typeof raw !== 'object') {
+      errors.push(`输入参数 ${index + 1} 必须是对象`)
+      return
+    }
+    const source = raw as Record<string, unknown>
+    const name = typeof source.name === 'string' ? source.name.trim() : ''
+    if (!name) {
+      errors.push(`输入参数 ${index + 1} 缺少名称`)
+      return
+    }
+    const portId = paramPortId(name)
+    if (seen.has(portId)) errors.push(`输入参数端口重复：${portId}`)
+    seen.add(portId)
+  })
+  return errors
+}
+
 /** 把契约层 NodeValue 还原为代码运行时可消费的普通值。 */
 function toCodeArgument(value: NodeValue | null): unknown {
   if (!value) return undefined
@@ -126,7 +151,14 @@ function toCodeArgument(value: NodeValue | null): unknown {
 }
 
 export const codeExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
-  const data = parseCodeConfigs(ctx.shape.props.text)
+  const configText = readNodeConfig(ctx.shape)
+  const portErrors = codePortConfigErrors(configText)
+  if (portErrors.length > 0) {
+    const reason = `代码节点端口配置无效：${portErrors.join('；')}`
+    ctx.updateResult(JSON.stringify({ kind: 'error', message: reason }))
+    return { status: 'failed', reason }
+  }
+  const data = parseCodeConfigs(configText)
   const textInputs = inputText(ctx.inputs, 'in-text')
   const jsonInputs = inputJson(ctx.inputs, 'in-json')
 

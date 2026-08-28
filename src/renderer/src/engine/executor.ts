@@ -21,6 +21,7 @@ import { projectNodeOutputs } from '../nodes/nodeValues'
 import { toast } from '../stores/toast'
 import { useEngineStore } from './store'
 import {
+  appendNodeRunHistory,
   inputSources,
   readNodeRunRecord,
   type NodeRunRecord,
@@ -93,12 +94,24 @@ function finishRunRecord(
   detail: Pick<NodeRunRecord, 'outputPorts' | 'error'> = {}
 ): void {
   const finishedAt = Date.now()
-  writeRunRecord(editor, id, {
+  const finalRecord: NodeRunRecord = {
     ...record,
     status,
     finishedAt,
     durationMs: finishedAt - record.startedAt,
     ...detail
+  }
+  const current = editor.getShape<NodeCardShape>(id)
+  editor.updateShape({
+    id,
+    type: 'node-card',
+    meta: {
+      ...(current?.meta ?? {}),
+      nodeRun: JSON.parse(JSON.stringify(finalRecord)),
+      nodeRunHistory: JSON.parse(
+        JSON.stringify(appendNodeRunHistory(current?.meta?.nodeRunHistory, finalRecord))
+      )
+    }
   })
 }
 
@@ -472,4 +485,73 @@ export async function runWorkflow(
   else if (after.errors.length > 0) toast(`工作流完成，${after.errors.length} 个节点失败`)
   else toast('工作流执行完成')
   markUndoPoint(editor, 'workflow-run')
+}
+
+/**
+ * 运行选中节点及其全部上游依赖。它通过图边求闭包，而不是按节点类型猜测步骤；
+ * 因而每一条执行路径仍可由 portId 和 nodeRun.inputs 回溯。
+ */
+export async function runWorkflowToNode(
+  editor: Editor,
+  projectId: string,
+  providers: ProviderConfig[],
+  targetNodeId: TLShapeId
+): Promise<void> {
+  const store = useEngineStore.getState()
+  if (store.phase === 'running') return
+  const fullGraph = deriveGraph(editor)
+  if (!fullGraph.nodes.some((node) => node.id === targetNodeId)) return toast('目标节点不存在')
+
+  const required = new Set<string>([targetNodeId])
+  const pending: string[] = [targetNodeId]
+  while (pending.length > 0) {
+    const nodeId = pending.pop()!
+    for (const edge of fullGraph.edges) {
+      if (edge.to.nodeId === nodeId && !required.has(edge.from.nodeId)) {
+        required.add(edge.from.nodeId)
+        pending.push(edge.from.nodeId)
+      }
+    }
+  }
+  const graph = {
+    nodes: fullGraph.nodes.filter((node) => required.has(node.id)),
+    edges: fullGraph.edges.filter(
+      (edge) => required.has(edge.from.nodeId) && required.has(edge.to.nodeId)
+    )
+  }
+  const order = topoSort(graph)
+  if (!order) return toast('所选子图存在循环连线，无法执行')
+
+  const token: CancelToken = { cancelled: false }
+  useEngineStore.getState().setStop(() => {
+    token.cancelled = true
+    useEngineStore.getState().setStopping()
+  })
+  store.beginRun(order.length)
+  const ctx: WorkflowContext = {
+    editor,
+    projectId,
+    providers,
+    token,
+    graph,
+    outputs: new Map<string, ContractOutputs>(),
+    runId: crypto.randomUUID()
+  }
+  const runSubflow = (request: SubflowRequest): Promise<Record<string, ContractOutputs>> =>
+    runSubflowForIterate(ctx, runSubflow, request)
+
+  for (const node of order) {
+    if (token.cancelled) break
+    store.setCurrent(node.title || node.type)
+    await executeNodeOnce(ctx, node, runSubflow)
+    store.nodeDone()
+  }
+
+  const after = useEngineStore.getState()
+  after.endRun()
+  after.setStop(null)
+  if (token.cancelled) toast('子图运行已停止')
+  else if (after.errors.length > 0) toast(`子图完成，${after.errors.length} 个节点失败`)
+  else toast(`已运行 ${order.length} 个节点至目标节点`)
+  markUndoPoint(editor, 'workflow-run-subgraph')
 }

@@ -1,6 +1,7 @@
 // 循环节点 Body（原迭代节点 Body）
 import { stopEventPropagation, useEditor, useValue } from 'tldraw'
 import type { NodeBodyProps } from '../../registry'
+import { readNodeConfig } from '../../../canvas/node-persistence'
 import {
   parseIterate,
   parseIterateResult,
@@ -43,7 +44,7 @@ function summaryFromResults(results: (IterateItemResult | null)[] | undefined): 
 
 export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
-  const data = parseIterate(shape.props.text)
+  const data = parseIterate(readNodeConfig(shape))
   // 运行结果从 meta.nodeResult 读取（配置/结果分离）。
   const result = parseIterateResult(
     typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
@@ -53,7 +54,7 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
       id: shape.id,
       type: 'node-card',
       // 配置写入只序列化配置字段，不再带上历史运行结果（结果在 meta）
-      props: { text: JSON.stringify(enforceConfig(next)) }
+      props: { config: JSON.stringify(enforceConfig(next)) }
     })
   }
   // 下游循环体数量：通过当前节点的输出边推算（NodeContractPanel 之外简单估算）

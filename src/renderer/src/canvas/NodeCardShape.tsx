@@ -1,4 +1,5 @@
 // NodeCard tldraw 自定义形状：所有节点类型的统一卡片容器
+import { createShapePropsMigrationIds, createShapePropsMigrationSequence } from '@tldraw/tlschema'
 import { BaseBoxShapeUtil, T, type RecordProps, type TLBaseShape } from 'tldraw'
 import { NodeCardView } from './NodeCardView'
 
@@ -14,6 +15,8 @@ export interface NodeCardProps {
   h: number
   nodeType: string
   title: string
+  /** 节点固定配置。与用户正文 text、运行记录和运行结果严格分离。 */
+  config: string
   text: string
   mediaId: string
   mediaPath: string
@@ -23,13 +26,34 @@ export interface NodeCardProps {
 
 export type NodeCardShape = TLBaseShape<'node-card', NodeCardProps>
 
+const nodeCardMigrationIds = createShapePropsMigrationIds('node-card', {
+  addStructuredConfig: 1
+})
+
 export class NodeCardUtil extends BaseBoxShapeUtil<NodeCardShape> {
   static override type = 'node-card' as const
+  /**
+   * tldraw 将自定义形状的持久化 schema 与 props 迁移序列绑定。显式声明首个
+   * 版本，既让旧快照可以补齐 config，也避免已保存 schema 中的 node-card 定义
+   * 在恢复时成为“无定义记录类型”。
+   */
+  static override migrations = createShapePropsMigrationSequence({
+    sequence: [
+      {
+        id: nodeCardMigrationIds.addStructuredConfig,
+        up: (props) => {
+          if (typeof props.config !== 'string') props.config = ''
+        },
+        down: 'retired'
+      }
+    ]
+  })
   static override props: RecordProps<NodeCardShape> = {
     w: T.number,
     h: T.number,
     nodeType: T.string,
     title: T.string,
+    config: T.string,
     text: T.string,
     mediaId: T.string,
     mediaPath: T.string,
@@ -43,6 +67,7 @@ export class NodeCardUtil extends BaseBoxShapeUtil<NodeCardShape> {
       h: 200,
       nodeType: 'text',
       title: '文本',
+      config: '',
       text: '',
       mediaId: '',
       mediaPath: '',

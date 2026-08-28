@@ -106,13 +106,23 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
 
   const text = shape.props.text || ''
   let formatted = text
-  let parsedJson: unknown = null
+  let parsedJson: unknown
+  let parseError = false
   try {
     parsedJson = JSON.parse(text)
     formatted = JSON.stringify(parsedJson, null, 2)
   } catch {
     // 非合法 JSON 原样展示
+    parseError = Boolean(text)
   }
+  const isValid = Boolean(text) && !parseError
+  const summary = Array.isArray(parsedJson)
+    ? `${parsedJson.length} 项`
+    : typeof parsedJson === 'object' && parsedJson !== null
+      ? `${Object.keys(parsedJson).length} 个字段`
+      : isValid
+        ? '基础值'
+        : '等待输入'
 
   const formatJson = (): void => {
     try {
@@ -139,7 +149,7 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
             setEditing(true)
           }}
         >
-          {parsedJson === null ? (
+          {parseError ? (
             <pre className="json-pre">{formatted}</pre>
           ) : (
             <JsonValueCards value={parsedJson} />
@@ -159,6 +169,9 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
         </div>
       )}
       <div className="code-toolbar">
+        <span className={`json-status ${isValid ? 'valid' : parseError ? 'invalid' : ''}`}>
+          {isValid ? 'JSON 有效' : parseError ? 'JSON 格式有误' : summary}
+        </span>
         <button
           className="btn-ghost small"
           onPointerDown={(e) => stopEventPropagation(e)}
@@ -186,6 +199,19 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
               <Icon name="spark" size={14} />
               格式化
             </>
+          </button>
+        )}
+        {text && (
+          <button
+            className="btn-ghost small"
+            title="复制当前 JSON"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              void navigator.clipboard.writeText(formatted).then(() => toast('已复制 JSON'))
+            }}
+          >
+            <Icon name="copy" size={14} />
           </button>
         )}
       </div>

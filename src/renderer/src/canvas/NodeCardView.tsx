@@ -10,12 +10,15 @@ import {
   PORT_COLORS
 } from '../nodes/registry'
 import type { PortDecl } from '@shared/types'
+import { nodeSchemasCompatible } from '@shared/node-schemas'
 import { useConnectionStore } from '../stores/connection'
 import { useNodePanelStore } from '../stores/nodePanel'
 import { beginConnectionDrag } from './connection-drag'
 import { markUndoPoint } from './history'
 import type { NodeCardShape } from './NodeCardShape'
 import { Icon } from '../components/Icon'
+import { nodeExecLabel } from './node-status'
+import { deriveNodeReadiness } from './node-readiness'
 
 const EXEC_COLORS: Record<string, string> = {
   idle: '#6b7280',
@@ -26,6 +29,20 @@ const EXEC_COLORS: Record<string, string> = {
   failed: '#ff6b6b',
   cancelled: '#6b7280',
   cached: '#60a5fa'
+}
+
+function canAttachPort(
+  source: { portType: PortDecl['type']; schema?: PortDecl['schema'] },
+  target: PortDecl
+): boolean {
+  return (
+    portCompatible(source.portType, target.type) &&
+    !(
+      source.portType === 'json' &&
+      target.type === 'json' &&
+      !nodeSchemasCompatible(source.schema, target.schema)
+    )
+  )
 }
 
 export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Element {
@@ -62,10 +79,10 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       const targetPorts = getNodePorts(targetSpec, target)
       const myPorts = spec ? getNodePorts(spec, shape) : { in: [], out: [] }
       const canReceive = targetPorts.out.some((o) =>
-        myPorts.in.some((i) => portCompatible(i.type, o.type))
+        myPorts.in.some((i) => canAttachPort({ portType: o.type, schema: o.schema }, i))
       )
       const canSend = myPorts.out.some((o) =>
-        targetPorts.in.some((i) => portCompatible(i.type, o.type))
+        targetPorts.in.some((i) => canAttachPort({ portType: o.type, schema: o.schema }, i))
       )
       setConnectable(canReceive || canSend)
     }
@@ -101,6 +118,16 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     stopEventPropagation(e)
   }
 
+  const openNodePanel = (): void => {
+    const kind =
+      shape.props.nodeType === 'chat'
+        ? 'chat'
+        : shape.props.nodeType === 'director'
+          ? 'director'
+          : 'contract'
+    useNodePanelStore.getState().open(kind, shape.id)
+  }
+
   // 双击标题进入编辑模式
   const handleTitleDoubleClick = (e: React.MouseEvent): void => {
     if (!titleEditable) return
@@ -131,6 +158,39 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   const inY = portOffsets(inPorts.length, shape.props.h)
   const outY = portOffsets(outPorts.length, shape.props.h)
   const isSource = draft?.from.shapeId === shape.id
+  const statusLabel = nodeExecLabel(shape.props.exec)
+  const readiness = useValue(
+    'node readiness',
+    () => {
+      const incomingCounts = new Map<string, number>()
+      for (const arrow of editor.getCurrentPageShapes()) {
+        if (arrow.type !== 'arrow' || arrow.meta?.toPort === undefined) continue
+        const bindings = editor.getBindingsFromShape(arrow.id, 'arrow')
+        const end = bindings.find((binding) => binding.props.terminal === 'end')
+        if (end?.toId !== shape.id || typeof arrow.meta.toPort !== 'string') continue
+        incomingCounts.set(arrow.meta.toPort, (incomingCounts.get(arrow.meta.toPort) ?? 0) + 1)
+      }
+      return deriveNodeReadiness({
+        executionMode: spec?.executionMode ?? 'auto',
+        exec: shape.props.exec,
+        inputs: inPorts,
+        incomingCounts,
+        outputs: spec?.projectOutputs?.(shape) ?? {}
+      })
+    },
+    [editor, shape, spec, inPorts]
+  )
+
+  const portSummary = (port: PortDecl, direction: '输入' | '输出'): string =>
+    [
+      `${port.name}（${port.type}）${direction}`,
+      port.required ? '必填' : '可选',
+      port.cardinality === 'many' ? '多值' : '单值',
+      port.schema ? `${port.schema.id}@${port.schema.version}` : null,
+      port.description
+    ]
+      .filter(Boolean)
+      .join(' · ')
 
   return (
     <HTMLContainer style={{ pointerEvents: 'all' }}>
@@ -169,7 +229,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             <span
               className="node-status"
               style={{ background: EXEC_COLORS[shape.props.exec] ?? EXEC_COLORS.idle }}
-              title={shape.props.exec}
+              title={`${statusLabel} · ${readiness.label}`}
+              aria-label={`${statusLabel} · ${readiness.label}`}
             />
             <button
               className="node-info-btn"
@@ -184,13 +245,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               onPointerDown={handleInfoOpen}
               onClick={(e) => {
                 stopEventPropagation(e)
-                const kind =
-                  shape.props.nodeType === 'chat'
-                    ? 'chat'
-                    : shape.props.nodeType === 'director'
-                      ? 'director'
-                      : 'contract'
-                useNodePanelStore.getState().open(kind, shape.id)
+                openNodePanel()
               }}
             >
               <Icon name="info" size={13} />
@@ -203,11 +258,41 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               <div className="node-empty">未知节点类型：{shape.props.nodeType}</div>
             )}
           </div>
+          <div className="node-hover-toolbar" aria-label="节点快捷操作">
+            <span
+              className={`node-status-label readiness-${readiness.kind}`}
+              title={readiness.detail}
+            >
+              {readiness.label}
+            </span>
+            <button
+              title="复制节点 ID"
+              aria-label="复制节点 ID"
+              onPointerDown={stopEventPropagation}
+              onClick={(event) => {
+                stopEventPropagation(event)
+                void navigator.clipboard?.writeText(String(shape.id))
+              }}
+            >
+              <Icon name="copy" size={12} />
+            </button>
+            <button
+              title="查看节点详情"
+              aria-label="查看节点详情"
+              onPointerDown={stopEventPropagation}
+              onClick={(event) => {
+                stopEventPropagation(event)
+                openNodePanel()
+              }}
+            >
+              <Icon name="info" size={12} />
+            </button>
+          </div>
         </div>
 
         {/* 输入端口（左侧）：拖线时按类型兼容高亮 */}
         {inPorts.map((p, i) => {
-          const ok = draft && !isSource && portCompatible(p.type, draft.from.portType)
+          const ok = draft && !isSource && canAttachPort(draft.from, p)
           return (
             <span
               key={p.id}
@@ -217,7 +302,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                 borderColor: PORT_COLORS[p.type],
                 ['--pc' as string]: PORT_COLORS[p.type]
               }}
-              title={`${p.name}（${p.type}）输入：${p.description}`}
+              title={portSummary(p, '输入')}
             >
               <span className="port-dot-inner" style={{ background: PORT_COLORS[p.type] }} />
             </span>
@@ -234,11 +319,11 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               borderColor: PORT_COLORS[p.type],
               ['--pc' as string]: PORT_COLORS[p.type]
             }}
-            title={`${p.name}（${p.type}）输出：${p.description} · 按住圆点拖出连线`}
+            title={`${portSummary(p, '输出')} · 按住圆点拖出连线`}
             onPointerDown={(e) => {
               stopEventPropagation(e)
               beginConnectionDrag(
-                { shapeId: shape.id, portId: p.id, portType: p.type },
+                { shapeId: shape.id, portId: p.id, portType: p.type, schema: p.schema },
                 { x: e.clientX, y: e.clientY }
               )
             }}

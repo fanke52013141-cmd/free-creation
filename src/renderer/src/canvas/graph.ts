@@ -230,7 +230,8 @@ export function tryConnect(
   editor: Editor,
   from: ConnectionFrom,
   targetShapeId: TLShapeId,
-  dropPagePt?: { x: number; y: number }
+  dropPagePt?: { x: number; y: number },
+  preferredTargetPortId?: string
 ): string | null {
   const target = editor.getShape<NodeCardShape>(targetShapeId)
   if (!target) return '目标节点不存在'
@@ -268,7 +269,11 @@ export function tryConnect(
   }
 
   let port: PortDecl = usable[0]
-  if (dropPagePt && usable.length > 1) {
+  if (preferredTargetPortId) {
+    const preferredPort = usable.find((candidate) => candidate.id === preferredTargetPortId)
+    if (!preferredPort) return `${targetSpec.label} 的目标输入不可用`
+    port = preferredPort
+  } else if (dropPagePt && usable.length > 1) {
     const offsets = portOffsets(targetPorts.in.length, target.props.h)
     let bestDist = Infinity
     for (const p of usable) {
@@ -322,7 +327,8 @@ export function deriveGraph(editor: Editor): {
         w: s.props.w,
         h: s.props.h,
         ports,
-        params: {},
+        // 图数据中保留固定配置，但不再把它混入用户正文 content。
+        params: s.props.config ? { config: s.props.config } : {},
         content: s.props.mediaId
           ? { kind: 'media', mediaId: s.props.mediaId }
           : s.props.text

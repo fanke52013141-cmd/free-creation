@@ -4,6 +4,7 @@ import { stopEventPropagation, useEditor } from 'tldraw'
 import { mediaUrl, type NodeBodyProps } from '../../registry'
 import { toast } from '../../../stores/toast'
 import { markUndoPoint } from '../../../canvas/history'
+import { readNodeConfig } from '../../../canvas/node-persistence'
 import { runNodeManually } from '../../../engine/executor'
 import { useAppStore } from '../../../stores/app'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
@@ -51,7 +52,7 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const loadProviders = useGatewayStore((s) => s.load)
   const openSettings = useGatewayStore((s) => s.openSettings)
   const options = modelsByModality(providers, 'audio')
-  const data = parseAudioGen(shape.props.text)
+  const data = parseAudioGen(readNodeConfig(shape))
   const [draft, setDraft] = useState(data.text)
   const [busy, setBusy] = useState(false)
   const [playing, setPlaying] = useState(false)
@@ -83,7 +84,7 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     editor.updateShape({
       id: shape.id,
       type: 'node-card',
-      props: { text: JSON.stringify(next) }
+      props: { config: JSON.stringify(next) }
     })
   }
 
@@ -165,6 +166,9 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
         </div>
         <div className="audio-player-info">
           <span className="audio-player-name">{shape.props.title}</span>
+          <span className="audio-player-meta">
+            {isGenerated ? `${data.voice} · ${data.format}` : shape.props.mediaMime || '本地音频'}
+          </span>
         </div>
         <div className="audio-player-actions">
           <button
@@ -267,6 +271,10 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
         </div>
       ) : (
         <div className="node-audio-gen">
+          <div className="gen-capability-note">
+            <Icon name="info" size={13} />
+            <span>上游文本会与此处文本合并后再合成</span>
+          </div>
           <div className="gen-toolbar">
             {options.length === 0 ? (
               loaded ? (
@@ -301,6 +309,7 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
             onPointerDown={(e) => stopEventPropagation(e)}
             onChange={(e) => setDraft(e.target.value)}
           />
+          <div className="audio-text-meta">{draft.length} 字 · 可由文本节点提供内容</div>
           <div className="audio-options">
             <label className="opt-label">音色</label>
             <select

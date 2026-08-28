@@ -8,6 +8,7 @@ import { jsonExecutor } from '@renderer/engine/executors/json'
 import { processorExecutor } from '@renderer/engine/executors/processor'
 import { storyboardExecutor } from '@renderer/engine/executors/storyboard'
 import { directorExecutor } from '@renderer/engine/executors/director'
+import { createDirectorProject } from '@renderer/nodes/director-data'
 import type { NodeExecutionContext, NodeExecutionResult } from '@renderer/engine/executor-types'
 import type { NodeValue } from '@renderer/nodes/nodeValues'
 import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
@@ -18,6 +19,7 @@ import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
 function makeCtx(over: {
   nodeType?: string
   text?: string
+  config?: string
   inputs?: NodeExecutionContext['inputs']
   meta?: Record<string, unknown>
 }): {
@@ -40,6 +42,7 @@ function makeCtx(over: {
       h: 260,
       nodeType: over.nodeType ?? 'json',
       title: 'n',
+      config: over.config ?? '',
       text: over.text ?? '',
       mediaId: '',
       mediaPath: '',
@@ -196,7 +199,7 @@ describe('processorExecutor · 固定值兜底与透传', () => {
 
   it('无上游但有 string 类型固定值兜底', () => {
     const config = JSON.stringify({ valueType: 'string', fallback: '默认值' })
-    const { ctx, result } = makeCtx({ nodeType: 'processor', text: config })
+    const { ctx, result } = makeCtx({ nodeType: 'processor', config })
     expect(processorExecutor(ctx).status).toBe('done')
     expect(JSON.parse(result.value as string).kind).toBe('text')
     expect(JSON.parse(result.value as string).text).toBe('默认值')
@@ -204,7 +207,7 @@ describe('processorExecutor · 固定值兜底与透传', () => {
 
   it('无上游但有 JSON 固定值兜底（按 valueType 推断）', () => {
     const config = JSON.stringify({ valueType: 'object', fallback: '{"a":1}' })
-    const { ctx, result } = makeCtx({ nodeType: 'processor', text: config })
+    const { ctx, result } = makeCtx({ nodeType: 'processor', config })
     expect(processorExecutor(ctx).status).toBe('done')
     expect(JSON.parse(result.value as string).kind).toBe('json')
   })
@@ -294,20 +297,45 @@ describe('directorExecutor · 手动发布门禁', () => {
   })
 
   it('有合法发布帧时允许工作流复用已发布输出', () => {
+    const project = createDirectorProject()
+    const shotId = project.activeShotId
     const { ctx } = makeCtx({
       nodeType: 'director',
+      config: JSON.stringify(project),
       meta: {
         nodeResult: JSON.stringify({
           kind: 'director-publish',
           version: 1,
           publishedAt: 1,
-          shotId: 'shot-1',
+          projectRevision: 1,
+          shotId,
           camera,
           frame: { mediaId: 'asset-1', mediaPath: 'projects/p/frame.png', mime: 'image/png' }
         })
       }
     })
     expect(directorExecutor(ctx)).toEqual({ status: 'done' })
+  })
+
+  it('发布记录与当前导演工程修订不一致时必须跳过', () => {
+    const project = createDirectorProject()
+    project.revision = 2
+    const { ctx } = makeCtx({
+      nodeType: 'director',
+      config: JSON.stringify(project),
+      meta: {
+        nodeResult: JSON.stringify({
+          kind: 'director-publish',
+          version: 1,
+          publishedAt: 1,
+          projectRevision: 1,
+          shotId: project.activeShotId,
+          camera,
+          frame: { mediaId: 'asset-1', mediaPath: 'projects/p/frame.png', mime: 'image/png' }
+        })
+      }
+    })
+    expect(directorExecutor(ctx)).toMatchObject({ status: 'skipped' })
   })
 })
 

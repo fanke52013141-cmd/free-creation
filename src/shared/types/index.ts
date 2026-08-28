@@ -1,22 +1,29 @@
 // 核心数据模型（双进程共享单一事实源，见《技术框架与规范》§4）
 
-export type NodeTypeId =
+/** 能在新画布中创建、维护并完整执行的节点类型。 */
+export type ActiveNodeTypeId =
   | 'text'
   | 'image'
   | 'image-gen'
   | 'video'
   | 'audio'
   | 'chat'
-  | 'script'
   | 'processor'
   | 'code'
   | 'json'
-  | 'group'
   | 'storyboard'
-  | 'compose'
   | 'ai-process'
   | 'iterate'
   | 'director'
+
+/**
+ * 已退役的内部类型。它们绝不能出现在新增节点入口；当前项目没有历史数据迁移需求，
+ * 该集合仅用于让注册表和类型边界保持明确。
+ */
+export type LegacyNodeTypeId = 'script' | 'group' | 'compose'
+
+/** 内部图数据可引用的完整类型集合。 */
+export type NodeTypeId = ActiveNodeTypeId | LegacyNodeTypeId
 
 /**
  * 节点之间允许传递的数据类型。文本与 Markdown 都以字符串传输，但保留语义类型；
