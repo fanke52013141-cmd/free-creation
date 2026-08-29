@@ -5,7 +5,7 @@
 // 本文件同时导出工具函数（非组件）与少量 UI 组件（ModelSelect/NoModelHint），
 // 是共享模块而非单一组件文件，故豁免 React Fast Refresh 的组件-only 规则。
 /* eslint-disable react-refresh/only-export-components */
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createShapeId, stopEventPropagation, type Editor } from 'tldraw'
 import { modelsByModality } from '../../../stores/gateway'
 import type { NodeCardShape, NodeCardProps } from '../../../canvas/NodeCardShape'
@@ -15,6 +15,7 @@ import { Icon } from '../../../components/Icon'
 import {
   clearMediaResultHistory,
   parseMediaResultCollection,
+  removeMediaResult,
   serializeMediaResultCollection,
   type MediaResultItem
 } from '../../nodeValues'
@@ -251,19 +252,31 @@ export function MediaResultGrid({
   kind,
   onSelect,
   openPreview,
-  onClear
+  onClear,
+  onDelete
 }: {
   shape: NodeCardShape
   kind: 'image' | 'video' | 'audio'
   onSelect: (item: MediaResultItem) => void
   openPreview: (item: MediaResultItem) => void
   onClear?: () => void
+  onDelete?: (item: MediaResultItem) => void
 }): React.JSX.Element | null {
+  const [compareIds, setCompareIds] = useState<string[]>([])
   const collection = parseMediaResultCollection(
     typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
   )
   if (!collection || collection.results.length < 2) return null
   const selected = collection.selectedMediaId || shape.props.mediaId
+  const compareItems = compareIds
+    .map((id) => collection.results.find((item) => item.mediaId === id))
+    .filter((item): item is MediaResultItem => Boolean(item))
+  const toggleCompare = (item: MediaResultItem): void => {
+    setCompareIds((current) => {
+      if (current.includes(item.mediaId)) return current.filter((id) => id !== item.mediaId)
+      return current.length >= 2 ? [current[1]!, item.mediaId] : [...current, item.mediaId]
+    })
+  }
   return (
     <div className="media-result-collection" aria-label="生成结果集合">
       <div className="media-result-collection-head">
@@ -271,7 +284,9 @@ export function MediaResultGrid({
           {collection.results.length} 个结果 · 已选 {selected ? '1' : '0'} 个
         </span>
         <span className="media-result-collection-tools">
-          <small>点击缩略图切换当前输出</small>
+          <small>
+            {compareItems.length === 2 ? '已选择 2 项进行对比' : '点击缩略图切换当前输出'}
+          </small>
           {onClear && collection.results.length > 1 ? (
             <button
               type="button"
@@ -289,18 +304,43 @@ export function MediaResultGrid({
           ) : null}
         </span>
       </div>
+      {compareItems.length === 2 && (
+        <div className="media-result-compare" aria-label="结果对比">
+          {compareItems.map((item) => (
+            <div className="media-result-compare-item" key={item.mediaId}>
+              {kind === 'image' ? (
+                <img src={mediaUrl(item.mediaPath)} alt="对比结果" draggable={false} />
+              ) : kind === 'video' ? (
+                <video src={mediaUrl(item.mediaPath)} preload="metadata" muted playsInline />
+              ) : (
+                <span className="media-result-audio-tile">
+                  <Icon name="audio" size={20} />
+                </span>
+              )}
+              <small>{item.mediaId === selected ? '当前输出' : '历史结果'}</small>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="media-result-grid">
         {collection.results.map((item) => {
           const active = item.mediaId === selected
           return (
-            <button
-              type="button"
+            <div
+              role="button"
+              tabIndex={0}
               key={item.mediaId}
-              className={`media-result-tile ${active ? 'selected' : ''}`}
+              className={`media-result-tile ${active ? 'selected' : ''} ${compareIds.includes(item.mediaId) ? 'compare' : ''}`}
               title={active ? '当前输出；点击预览' : '设为当前输出'}
               onPointerDown={(event) => stopEventPropagation(event)}
               onClick={(event) => {
                 event.stopPropagation()
+                if (active) openPreview(item)
+                else onSelect(item)
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return
+                event.preventDefault()
                 if (active) openPreview(item)
                 else onSelect(item)
               }}
@@ -316,7 +356,37 @@ export function MediaResultGrid({
                 </span>
               )}
               {active ? <span className="media-result-selected">当前</span> : null}
-            </button>
+              <span className="media-result-tile-actions">
+                <button
+                  type="button"
+                  className="icon-btn"
+                  title={compareIds.includes(item.mediaId) ? '取消对比' : '加入对比'}
+                  aria-label={compareIds.includes(item.mediaId) ? '取消对比' : '加入对比'}
+                  onPointerDown={(event) => stopEventPropagation(event)}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    toggleCompare(item)
+                  }}
+                >
+                  <Icon name="compare" size={11} />
+                </button>
+                {!active && onDelete ? (
+                  <button
+                    type="button"
+                    className="icon-btn danger"
+                    title="删除历史结果"
+                    aria-label="删除历史结果"
+                    onPointerDown={(event) => stopEventPropagation(event)}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onDelete(item)
+                    }}
+                  >
+                    <Icon name="trash" size={11} />
+                  </button>
+                ) : null}
+              </span>
+            </div>
           )
         })}
       </div>
@@ -327,6 +397,15 @@ export function MediaResultGrid({
 export function clearSelectedMediaHistory(shape: NodeCardShape): string | null {
   const raw = typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
   const next = clearMediaResultHistory(raw)
+  return next ? serializeMediaResultCollection(next) : null
+}
+
+export function removeMediaResultFromShape(
+  shape: NodeCardShape,
+  item: MediaResultItem
+): string | null {
+  const raw = typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
+  const next = removeMediaResult(raw, item.mediaId)
   return next ? serializeMediaResultCollection(next) : null
 }
 

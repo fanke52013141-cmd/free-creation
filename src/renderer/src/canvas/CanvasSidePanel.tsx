@@ -367,6 +367,7 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
             w: node.w,
             h: node.h,
             text: node.text ?? '',
+            config: node.config ?? '',
             mediaId: node.mediaId,
             mediaPath: node.mediaPath,
             mediaMime: node.mediaMime

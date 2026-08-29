@@ -244,6 +244,47 @@ describe('processorExecutor · 固定值兜底与透传', () => {
     expect(parsed.variableName).toBe('output')
   })
 
+  it('处理节点支持提取字段和字符串模板', () => {
+    const picked = makeCtx({
+      nodeType: 'processor',
+      config: JSON.stringify({ operation: 'pick', path: 'scene.name', outputName: 'name' }),
+      inputs: new Map([
+        [
+          'in-value',
+          [
+            {
+              value: { kind: 'json', data: { scene: { name: '雨巷' } } },
+              source: { nodeId: 'source', portId: 'out-json', runId: 'r1' }
+            }
+          ]
+        ]
+      ])
+    })
+    processorExecutor(picked.ctx)
+    expect(JSON.parse(picked.result.value as string)).toMatchObject({ kind: 'text', text: '雨巷' })
+
+    const templated = makeCtx({
+      nodeType: 'processor',
+      config: JSON.stringify({ operation: 'template', template: '镜头：{{value}}' }),
+      inputs: new Map([
+        [
+          'in-value',
+          [
+            {
+              value: { kind: 'text', text: '主角回头' },
+              source: { nodeId: 'source', portId: 'out-text', runId: 'r1' }
+            }
+          ]
+        ]
+      ])
+    })
+    processorExecutor(templated.ctx)
+    expect(JSON.parse(templated.result.value as string)).toMatchObject({
+      kind: 'text',
+      text: '镜头：主角回头'
+    })
+  })
+
   it('无上游但有 string 类型固定值兜底', () => {
     const config = JSON.stringify({ valueType: 'string', fallback: '默认值' })
     const { ctx, result } = makeCtx({ nodeType: 'processor', config })

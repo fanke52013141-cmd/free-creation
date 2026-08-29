@@ -48,6 +48,7 @@ export type IconName =
   | 'info'
   | 'add'
   | 'grid'
+  | 'compare'
   | 'target'
   | 'spark'
   | 'more'
@@ -328,6 +329,13 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <rect x="14" y="4" width="6" height="6" rx="1" />
       <rect x="4" y="14" width="6" height="6" rx="1" />
       <rect x="14" y="14" width="6" height="6" rx="1" />
+    </>
+  ),
+  compare: (
+    <>
+      <rect x="3" y="5" width="8" height="14" rx="1.5" />
+      <rect x="13" y="5" width="8" height="14" rx="1.5" />
+      <path d="M11 9h2M11 15h2" />
     </>
   ),
   target: (

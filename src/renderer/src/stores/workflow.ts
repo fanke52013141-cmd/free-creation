@@ -11,6 +11,7 @@ export interface TemplateNode {
   w: number
   h: number
   text?: string
+  config?: string
   mediaId?: string
   mediaPath?: string
   mediaMime?: string
@@ -93,9 +94,7 @@ export function extractTemplateFromSelection(
     w: n.props.w,
     h: n.props.h,
     text: n.props.text,
-    mediaId: n.props.mediaId,
-    mediaPath: n.props.mediaPath,
-    mediaMime: n.props.mediaMime
+    config: n.props.config
   }))
   return { nodes, edges: arrowMeta }
 }

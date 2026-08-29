@@ -5,6 +5,7 @@ import { BUILTIN_TEMPLATES } from '@renderer/canvas/CanvasSidePanel'
 import { getNodePorts, getNodeType, portCompatible } from '@renderer/nodes/registry'
 import { nodeSchemasCompatible } from '@shared/node-schemas'
 import { registerAllNodeTypes } from './helpers/registerNodes'
+import { extractTemplateFromSelection } from '@renderer/stores/workflow'
 
 beforeAll(registerAllNodeTypes)
 
@@ -68,5 +69,25 @@ describe('P2/P3 内置创作模板', () => {
       { from: iterateIndex, to: iterateIndex + 1, fromPort: 'out-item', toPort: 'in-context' }
     ])
     expect(template.nodes[iterateIndex]?.config).toContain('"runMode":"resume"')
+  })
+})
+
+describe('工作流模板配置保存', () => {
+  it('保存选中节点时保留 config，套用后可恢复动态端口和 Schema', () => {
+    const node = shapeFor({
+      type: 'code',
+      title: '代码',
+      config: JSON.stringify({
+        source: 'return input',
+        outputName: 'result',
+        outputType: 'json',
+        params: [{ name: 'scene', type: 'string' }]
+      }),
+      dx: 0,
+      dy: 0
+    })
+    const payload = extractTemplateFromSelection([node], [])
+    expect(payload.nodes[0]?.config).toContain('result')
+    expect(payload.nodes[0]?.config).toContain('scene')
   })
 })

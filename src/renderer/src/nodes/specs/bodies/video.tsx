@@ -14,6 +14,7 @@ import { Icon } from '../../../components/Icon'
 import {
   MediaFileActions,
   MediaResultGrid,
+  removeMediaResultFromShape,
   MediaSourceBadge,
   createVideoContinuation,
   clearSelectedMediaHistory,
@@ -184,6 +185,16 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           shape={shape}
           kind="video"
           onSelect={chooseResult}
+          onDelete={(item) => {
+            const nodeResult = removeMediaResultFromShape(shape, item)
+            if (!nodeResult) return
+            editor.updateShape({
+              id: shape.id,
+              type: 'node-card',
+              meta: { ...(shape.meta ?? {}), nodeResult }
+            })
+            markUndoPoint(editor, 'video-delete-result')
+          }}
           onClear={() => {
             const nodeResult = clearSelectedMediaHistory(shape)
             if (!nodeResult) return

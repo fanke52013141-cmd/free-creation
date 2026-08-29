@@ -16,6 +16,7 @@ import {
   clearSelectedMediaHistory,
   MediaFileActions,
   MediaResultGrid,
+  removeMediaResultFromShape,
   MediaSourceBadge,
   selectMediaResult,
   ModelSelect,
@@ -191,6 +192,16 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
           shape={shape}
           kind="image"
           onSelect={chooseResult}
+          onDelete={(item) => {
+            const nodeResult = removeMediaResultFromShape(shape, item)
+            if (!nodeResult) return
+            editor.updateShape({
+              id: shape.id,
+              type: 'node-card',
+              meta: { ...(shape.meta ?? {}), nodeResult }
+            })
+            markUndoPoint(editor, 'image-delete-result')
+          }}
           onClear={() => {
             const nodeResult = clearSelectedMediaHistory(shape)
             if (!nodeResult) return

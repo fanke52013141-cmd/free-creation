@@ -11,6 +11,15 @@ import {
 } from '../../structured-data'
 import type { NodeBodyProps } from '../../registry'
 
+function fieldEntries(value: unknown, prefix = '', depth = 0): { path: string; value: unknown }[] {
+  if (depth > 3 || !value || typeof value !== 'object' || Array.isArray(value)) return []
+  return Object.entries(value as Record<string, unknown>).flatMap(([key, child]) => {
+    const path = prefix ? `${prefix}.${key}` : key
+    const nested = fieldEntries(child, path, depth + 1)
+    return [{ path, value: child }, ...nested]
+  })
+}
+
 export function StructuredBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
   const config = parseStructuredDataConfig(readNodeConfig(shape))
@@ -40,6 +49,8 @@ export function StructuredBody({ shape }: NodeBodyProps): React.JSX.Element {
     })
     markUndoPoint(editor, 'structured-schema')
   }
+
+  const fields = validation.ok ? fieldEntries(parsed) : []
   const commit = (): void => {
     setEditing(false)
     if (draft === shape.props.text) return
@@ -108,6 +119,28 @@ export function StructuredBody({ shape }: NodeBodyProps): React.JSX.Element {
             ? JSON.stringify(parsed, null, 2)
             : '双击输入 JSON；可使用 {{text}} 或 {{input[0].field}} 引用已连接输入。'}
         </button>
+      )}
+      {fields.length > 0 && (
+        <div className="structured-field-tree" aria-label="结构字段">
+          <div className="structured-field-tree-title">字段路径</div>
+          {fields.slice(0, 24).map((field) => (
+            <button
+              type="button"
+              className="structured-field-row"
+              key={field.path}
+              title="复制字段路径"
+              onPointerDown={(event) => stopEventPropagation(event)}
+              onClick={(event) => {
+                event.stopPropagation()
+                void navigator.clipboard.writeText(field.path)
+              }}
+            >
+              <code>{field.path}</code>
+              <span>{Array.isArray(field.value) ? '数组' : typeof field.value}</span>
+            </button>
+          ))}
+          {fields.length > 24 && <small>还有 {fields.length - 24} 个字段</small>}
+        </div>
       )}
       <div className="structured-footer">
         <span>{option.hint}</span>

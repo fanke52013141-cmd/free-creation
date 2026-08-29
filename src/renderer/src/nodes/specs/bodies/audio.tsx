@@ -13,6 +13,7 @@ import {
   clearSelectedMediaHistory,
   MediaFileActions,
   MediaResultGrid,
+  removeMediaResultFromShape,
   MediaSourceBadge,
   ModelSelect,
   parseJsonProp,
@@ -244,6 +245,16 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           shape={shape}
           kind="audio"
           onSelect={chooseResult}
+          onDelete={(item) => {
+            const nodeResult = removeMediaResultFromShape(shape, item)
+            if (!nodeResult) return
+            editor.updateShape({
+              id: shape.id,
+              type: 'node-card',
+              meta: { ...(shape.meta ?? {}), nodeResult }
+            })
+            markUndoPoint(editor, 'audio-delete-result')
+          }}
           onClear={() => {
             const nodeResult = clearSelectedMediaHistory(shape)
             if (!nodeResult) return

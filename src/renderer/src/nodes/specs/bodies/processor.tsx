@@ -10,6 +10,9 @@ interface ProcessorData {
   outputName: string
   valueType: VariableValueType
   fallback: string
+  operation: 'pass' | 'pick' | 'template'
+  path: string
+  template: string
 }
 
 function parseProcessor(text: string): ProcessorData {
@@ -25,10 +28,22 @@ function parseProcessor(text: string): ProcessorData {
         valueType: allowed.includes(data.valueType as VariableValueType)
           ? (data.valueType as VariableValueType)
           : 'any',
-        fallback: typeof data.fallback === 'string' ? data.fallback : ''
+        fallback: typeof data.fallback === 'string' ? data.fallback : '',
+        operation:
+          data.operation === 'pick' || data.operation === 'template' ? data.operation : 'pass',
+        path: typeof data.path === 'string' ? data.path : '',
+        template: typeof data.template === 'string' ? data.template : ''
       }
     },
-    { inputName: 'input', outputName: 'output', valueType: 'any', fallback: '' }
+    {
+      inputName: 'input',
+      outputName: 'output',
+      valueType: 'any',
+      fallback: '',
+      operation: 'pass',
+      path: '',
+      template: ''
+    }
   )
 }
 
@@ -49,6 +64,39 @@ export function ProcessorBody({ shape }: NodeBodyProps): React.JSX.Element {
   return (
     <div className="processor-body">
       <div className="variable-section-title">变量映射</div>
+      <select
+        className="gen-select"
+        aria-label="处理方式"
+        value={data.operation}
+        onPointerDown={(e) => stopEventPropagation(e)}
+        onChange={(e) =>
+          update({ ...data, operation: e.target.value as ProcessorData['operation'] })
+        }
+      >
+        <option value="pass">原样传递</option>
+        <option value="pick">提取字段</option>
+        <option value="template">字符串模板</option>
+      </select>
+      {data.operation === 'pick' && (
+        <input
+          value={data.path}
+          aria-label="字段路径"
+          placeholder="字段路径，例如 scene.description"
+          spellCheck={false}
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onChange={(e) => update({ ...data, path: e.target.value })}
+        />
+      )}
+      {data.operation === 'template' && (
+        <input
+          value={data.template}
+          aria-label="字符串模板"
+          placeholder="模板，例如：镜头：{{value}}"
+          spellCheck={false}
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onChange={(e) => update({ ...data, template: e.target.value })}
+        />
+      )}
       <div className="variable-row input">
         <span className="variable-direction">输入</span>
         <input
