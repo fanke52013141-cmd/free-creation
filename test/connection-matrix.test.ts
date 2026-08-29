@@ -73,6 +73,11 @@ describe('标准连线 · 允许的组合', () => {
     expect(canConnect('json', 'out-json', 'code', 'in-json')).toBe(true)
   })
 
+  it('结构数据的提示词包 → 图片/视频的明确提示词包端口', () => {
+    expect(canConnect('structured', 'out-json', 'image-gen', 'in-prompt')).toBe(true)
+    expect(canConnect('structured', 'out-json', 'video', 'in-prompt')).toBe(true)
+  })
+
   it('分镜板 storyboard.shots → 分镜板（同 Schema 完全匹配）', () => {
     expect(canConnect('storyboard', 'out-json', 'storyboard', 'in-json')).toBe(true)
   })

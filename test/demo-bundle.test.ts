@@ -1,52 +1,57 @@
 import AdmZip from 'adm-zip'
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
-describe('demo bundle', () => {
-  it('contains a contract-shaped workflow graph and tldraw bindings', () => {
-    const zip = new AdmZip('resources/demo/canvas-studio-demo.canvasbundle')
-    const project = JSON.parse(zip.readAsText('project.json')) as {
-      nodes: Array<{ id: string; type: string }>
+const demoPath = resolve(process.cwd(), 'resources/demo/canvas-studio-demo.canvasbundle')
+
+describe('固定演示项目', () => {
+  it('保留完整的端口化创作链路与真实媒体样本', () => {
+    const zip = new AdmZip(demoPath)
+    const projectEntry = zip.getEntry('project.json')
+    expect(projectEntry).toBeTruthy()
+    const project = JSON.parse(projectEntry!.getData().toString('utf-8')) as {
+      meta: { name: string }
+      nodes: Array<{ type: string }>
       edges: Array<{ from: { portId: string }; to: { portId: string } }>
       tldrawSnapshot: {
-        store: Record<string, { typeName?: string; type?: string; props?: Record<string, unknown> }>
-        schema: { sequences: Record<string, number> }
+        store: Record<string, { type?: string; props?: { config?: unknown } }>
       }
     }
 
-    expect(project.nodes.map((node) => node.type)).toEqual([
-      'text',
-      'ai-process',
-      'storyboard',
-      'json',
-      'iterate',
-      'image'
-    ])
-    expect(project.edges).toEqual([
-      expect.objectContaining({
-        from: { nodeId: 'shape:text', portId: 'out-text' },
-        to: { nodeId: 'shape:ai', portId: 'in-text' }
-      }),
-      expect.objectContaining({
-        from: { nodeId: 'shape:ai', portId: 'out-json' },
-        to: { nodeId: 'shape:storyboard', portId: 'in-json' }
-      }),
-      expect.objectContaining({
-        from: { nodeId: 'shape:list', portId: 'out-json' },
-        to: { nodeId: 'shape:iterate', portId: 'in-list' }
-      })
-    ])
-
-    const records = Object.values(project.tldrawSnapshot.store)
-    expect(records.filter((record) => record.type === 'node-card')).toHaveLength(6)
-    expect(
-      records.filter((record) => record.typeName === 'shape' && record.type === 'arrow')
-    ).toHaveLength(3)
-    expect(records.filter((record) => record.typeName === 'binding')).toHaveLength(6)
-    expect(project.tldrawSnapshot.schema.sequences['com.tldraw.shape.node-card']).toBe(1)
-    expect(zip.getEntry('media/demo-image.png')).toBeTruthy()
-
-    const rawBundle = readFileSync('resources/demo/canvas-studio-demo.canvasbundle')
-    expect(rawBundle.length).toBeGreaterThan(0)
+    expect(project.meta.name).toBe('Canvas Studio 创作链路演示')
+    expect(project.nodes.map((node) => node.type).sort()).toEqual(
+      [
+        'ai-process',
+        'director',
+        'image',
+        'image-gen',
+        'iterate',
+        'storyboard',
+        'text',
+        'video'
+      ].sort()
+    )
+    expect(project.edges).toHaveLength(7)
+    expect(project.edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          from: expect.objectContaining({ portId: 'out-text' }),
+          to: expect.objectContaining({ portId: 'in-text' })
+        }),
+        expect.objectContaining({
+          from: expect.objectContaining({ portId: 'out-json' }),
+          to: expect.objectContaining({ portId: 'in-storyboard' })
+        }),
+        expect.objectContaining({
+          from: expect.objectContaining({ portId: 'out-image' }),
+          to: expect.objectContaining({ portId: 'in-reference-images' })
+        })
+      ])
+    )
+    for (const record of Object.values(project.tldrawSnapshot.store)) {
+      if (record.type !== 'node-card') continue
+      expect(typeof record.props.config).toBe('string')
+    }
+    expect(zip.getEntry('media/demo-reference-image.png')?.getData().byteLength).toBeGreaterThan(0)
   })
 })

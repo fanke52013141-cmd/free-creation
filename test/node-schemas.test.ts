@@ -14,6 +14,10 @@ describe('nodeSchemaRegistered', () => {
     expect(nodeSchemaRegistered({ id: 'json.any', version: 1 })).toBe(true)
     expect(nodeSchemaRegistered({ id: 'storyboard.shots', version: 1 })).toBe(true)
     expect(nodeSchemaRegistered({ id: 'list.items', version: 1 })).toBe(true)
+    expect(nodeSchemaRegistered({ id: 'character.profile', version: 1 })).toBe(true)
+    expect(nodeSchemaRegistered({ id: 'scene.definition', version: 1 })).toBe(true)
+    expect(nodeSchemaRegistered({ id: 'shot.definition', version: 1 })).toBe(true)
+    expect(nodeSchemaRegistered({ id: 'prompt.bundle', version: 1 })).toBe(true)
     expect(nodeSchemaRegistered({ id: 'previs.camera', version: 1 })).toBe(true)
     expect(nodeSchemaRegistered({ id: 'previs.project', version: 1 })).toBe(true)
   })
@@ -23,7 +27,49 @@ describe('nodeSchemaRegistered', () => {
     expect(nodeSchemaRegistered({ id: 'storyboard.shots', version: 2 })).toBe(false)
     expect(nodeSchemaRegistered({ id: 'list.items', version: 2 })).toBe(false)
     expect(nodeSchemaRegistered({ id: 'unknown.schema', version: 1 })).toBe(false)
-    expect(nodeSchemaRegistered({ id: 'character.profile', version: 1 })).toBe(false)
+    expect(nodeSchemaRegistered({ id: 'character.profile', version: 2 })).toBe(false)
+  })
+})
+
+describe('validateNodeSchema · P2 创作结构', () => {
+  it('接受角色、场景、镜头与提示词包的最小合法结构', () => {
+    expect(
+      validateNodeSchema(
+        { id: 'character.profile', version: 1 },
+        { id: 'c1', name: '主角', description: '寻找真相的人' }
+      ).ok
+    ).toBe(true)
+    expect(
+      validateNodeSchema(
+        { id: 'scene.definition', version: 1 },
+        { id: 's1', name: '雨巷', description: '雨夜的霓虹街道' }
+      ).ok
+    ).toBe(true)
+    expect(
+      validateNodeSchema({ id: 'shot.definition', version: 1 }, { id: 'shot-1', scene: '人物回头' })
+        .ok
+    ).toBe(true)
+    expect(
+      validateNodeSchema({ id: 'prompt.bundle', version: 1 }, { prompt: '电影感雨夜' }).ok
+    ).toBe(true)
+  })
+
+  it('给出字段级错误，不让不完整的结构流入下游', () => {
+    const character = validateNodeSchema(
+      { id: 'character.profile', version: 1 },
+      { id: 'c1', name: '', tags: ['合法', 2] }
+    )
+    expect(character.ok).toBe(false)
+    expect(character.errors).toContain('name 必须是非空字符串')
+    expect(character.errors).toContain('description 必须是非空字符串')
+    expect(character.errors).toContain('tags 必须是字符串数组')
+
+    const prompt = validateNodeSchema(
+      { id: 'prompt.bundle', version: 1 },
+      { prompt: 'x', seed: '42' }
+    )
+    expect(prompt.ok).toBe(false)
+    expect(prompt.errors).toContain('seed 必须是有限数字')
   })
 })
 

@@ -71,6 +71,15 @@ export function mergedPrompt(nodeValue: string, upstreamValue: string): string {
   return nodeValue.startsWith(prefix) ? nodeValue : `${prefix}${nodeValue}`
 }
 
+/** 从已通过 prompt.bundle@1 输入校验的 JSON 提取模型可用的正向提示词。 */
+export function promptBundleText(value: unknown): string {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return ''
+  const data = value as Record<string, unknown>
+  return [data.prompt, data.style]
+    .filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
+    .join('\n')
+}
+
 /** 在全部供应商里按 key 查文本模型；allowDefault 为真时可回落到第一个可用选项。 */
 export function findTextModel(
   providers: ProviderConfig[],

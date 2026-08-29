@@ -46,4 +46,27 @@ describe('remapMediaReferences · 导入媒体引用完整性', () => {
       id: newId
     })
   })
+
+  it('进入 config 形式的 JSON 字符串，但不改写普通提示词', () => {
+    const input = {
+      props: {
+        config: JSON.stringify({
+          referenceMediaIds: [oldId],
+          referenceMediaPaths: [oldPath]
+        }),
+        text: `请参考 ${oldId}`
+      }
+    }
+    const remapped = remapMediaReferences(input, maps)
+    expect(JSON.parse(remapped.props.config)).toEqual({
+      referenceMediaIds: [newId],
+      referenceMediaPaths: [newPath]
+    })
+    expect(remapped.props.text).toBe(`请参考 ${oldId}`)
+  })
+
+  it('未含媒体引用的 JSON 配置保留用户原始格式', () => {
+    const config = '{\n  "model": "local",\n  "temperature": 0.7\n}'
+    expect(remapMediaReferences({ config }, maps).config).toBe(config)
+  })
 })

@@ -3,7 +3,7 @@
 // 顶部工具栏通过此 store 触发执行，无需直接访问 editor（editor 生命周期由 CanvasEditor 管）。
 import { create } from 'zustand'
 
-export type EnginePhase = 'idle' | 'running' | 'stopping'
+export type EnginePhase = 'idle' | 'running' | 'paused' | 'stopping'
 
 /** 错误发生的阶段 */
 export type ErrorPhase = 'input' | 'execution' | 'output'
@@ -29,8 +29,13 @@ interface EngineState {
   run: (() => void) | null
   /** runWorkflow 启动时注册 cancel 令牌、结束时清空 */
   stop: (() => void) | null
+  /** 运行器注册的协作式暂停/继续入口；仅在可安全暂停的检查点生效。 */
+  pause: (() => void) | null
+  resume: (() => void) | null
   register: (run: (() => void) | null) => void
   setStop: (stop: (() => void) | null) => void
+  setPause: (pause: (() => void) | null) => void
+  setResume: (resume: (() => void) | null) => void
   beginRun: (total: number) => void
   setCurrent: (label: string) => void
   nodeDone: () => void
@@ -40,6 +45,8 @@ interface EngineState {
     detail?: { nodeId?: string; phase?: ErrorPhase }
   ) => void
   setStopping: () => void
+  setPaused: () => void
+  setRunning: () => void
   endRun: () => void
 }
 
@@ -51,8 +58,12 @@ export const useEngineStore = create<EngineState>((set) => ({
   errors: [],
   run: null,
   stop: null,
+  pause: null,
+  resume: null,
   register: (run) => set({ run }),
   setStop: (stop) => set({ stop }),
+  setPause: (pause) => set({ pause }),
+  setResume: (resume) => set({ resume }),
   beginRun: (total) => set({ phase: 'running', total, done: 0, currentLabel: '', errors: [] }),
   setCurrent: (label) => set({ currentLabel: label }),
   nodeDone: () => set((s) => ({ done: s.done + 1 })),
@@ -70,5 +81,7 @@ export const useEngineStore = create<EngineState>((set) => ({
       ]
     })),
   setStopping: () => set({ phase: 'stopping' }),
+  setPaused: () => set({ phase: 'paused' }),
+  setRunning: () => set({ phase: 'running' }),
   endRun: () => set({ phase: 'idle', currentLabel: '' })
 }))

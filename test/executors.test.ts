@@ -5,6 +5,7 @@
 // 缺失输入、错误类型、错误结构、固定值兜底、any 实际类型恢复等。
 import { describe, it, expect } from 'vitest'
 import { jsonExecutor } from '@renderer/engine/executors/json'
+import { structuredExecutor } from '@renderer/engine/executors/structured'
 import { processorExecutor } from '@renderer/engine/executors/processor'
 import { storyboardExecutor } from '@renderer/engine/executors/storyboard'
 import { directorExecutor } from '@renderer/engine/executors/director'
@@ -170,6 +171,46 @@ describe('jsonExecutor · 运行时分支', () => {
     const r = jsonExecutor(ctx)
     expect(r.status).toBe('failed')
     expect(r.reason).toContain('JSON')
+  })
+})
+
+describe('structuredExecutor · 字段映射与 Schema 校验', () => {
+  it('只使用 in-context 显式输入替换占位符，并写回已验证 JSON', () => {
+    const inputs: NodeExecutionContext['inputs'] = new Map([
+      [
+        'in-context',
+        [
+          {
+            type: 'json',
+            value: { kind: 'json', data: { name: '主角' } },
+            source: { nodeId: 'character', portId: 'out-json', runId: 'r1' },
+            createdAt: 0
+          }
+        ]
+      ]
+    ])
+    const { ctx, props } = makeCtx({
+      nodeType: 'structured',
+      config: JSON.stringify({ schema: { id: 'scene.definition', version: 1 } }),
+      text: JSON.stringify({
+        id: 'scene-1',
+        name: '雨巷',
+        description: '{{input[0].name}} 穿过雨夜街头'
+      }),
+      inputs
+    })
+    expect(structuredExecutor(ctx)).toEqual({ status: 'done' })
+    expect(JSON.parse(props.text ?? '{}')).toMatchObject({ description: '主角 穿过雨夜街头' })
+  })
+
+  it('字段校验失败时不写出下游可用结果', () => {
+    const { ctx, props } = makeCtx({
+      nodeType: 'structured',
+      config: JSON.stringify({ schema: { id: 'prompt.bundle', version: 1 } }),
+      text: JSON.stringify({ prompt: '', seed: 'bad' })
+    })
+    expect(structuredExecutor(ctx)).toMatchObject({ status: 'failed' })
+    expect(props.text).toBeUndefined()
   })
 })
 

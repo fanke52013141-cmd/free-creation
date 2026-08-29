@@ -2,7 +2,7 @@
 // 卡片内手动执行必须与工作流共用同一套「连线 → 输入收集 → 执行 → 输出投影」路径。
 import { beforeAll, describe, expect, it } from 'vitest'
 import type { Editor } from 'tldraw'
-import { runNodeManually, runWorkflowToNode } from '@renderer/engine/executor'
+import { runNodeManually, runWorkflow, runWorkflowToNode } from '@renderer/engine/executor'
 import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
 import { registerAllNodeTypes } from './helpers/registerNodes'
 
@@ -22,6 +22,7 @@ function node(id: string, nodeType: string, text: string): NodeCardShape {
       h: 260,
       nodeType,
       title: nodeType,
+      config: '',
       text,
       mediaId: '',
       mediaPath: '',
@@ -191,5 +192,90 @@ describe('runNodeManually · 卡片内统一执行入口', () => {
       status: 'failed',
       error: { phase: 'input' }
     })
+  })
+})
+
+describe('runWorkflow · 迭代体输入隔离', () => {
+  it('每个 item 都从循环体原始正文重新解析，不继承上一项的占位符结果', async () => {
+    const source = node(
+      'shape:list-source',
+      'structured',
+      JSON.stringify([
+        { id: 'shot-1', scene: '第一镜：霓虹雨巷' },
+        { id: 'shot-2', scene: '第二镜：潮湿巷口' }
+      ])
+    )
+    source.props.config = JSON.stringify({ schema: { id: 'list.items', version: 1 } })
+    const iterate = node('shape:iterate', 'iterate', '')
+    const prompt = node(
+      'shape:prompt',
+      'structured',
+      JSON.stringify({ prompt: '{{input[0].scene}}', style: '电影感' })
+    )
+    prompt.props.config = JSON.stringify({ schema: { id: 'prompt.bundle', version: 1 } })
+    const sourceToIterate = {
+      id: 'shape:list-to-iterate',
+      type: 'arrow',
+      meta: { fromPort: 'out-json', toPort: 'in-list' }
+    }
+    const iterateToPrompt = {
+      id: 'shape:iterate-to-prompt',
+      type: 'arrow',
+      meta: { fromPort: 'out-item', toPort: 'in-context' }
+    }
+    const shapes = new Map<string, NodeCardShape | typeof sourceToIterate>([
+      [source.id, source],
+      [iterate.id, iterate],
+      [prompt.id, prompt],
+      [sourceToIterate.id, sourceToIterate],
+      [iterateToPrompt.id, iterateToPrompt]
+    ])
+    const bindings = new Map<string, Array<{ props: { terminal: string }; toId: string }>>([
+      [
+        sourceToIterate.id,
+        [
+          { props: { terminal: 'start' }, toId: source.id },
+          { props: { terminal: 'end' }, toId: iterate.id }
+        ]
+      ],
+      [
+        iterateToPrompt.id,
+        [
+          { props: { terminal: 'start' }, toId: iterate.id },
+          { props: { terminal: 'end' }, toId: prompt.id }
+        ]
+      ]
+    ])
+    const updateShape = (patch: {
+      id: string
+      props?: Record<string, unknown>
+      meta?: Record<string, unknown>
+    }): void => {
+      const current = shapes.get(patch.id)
+      if (!current || current.type !== 'node-card') return
+      if (patch.props) Object.assign(current.props, patch.props)
+      if (patch.meta) Object.assign(current.meta, patch.meta)
+    }
+    const editor = {
+      getCurrentPageShapes: () => Array.from(shapes.values()),
+      getShape: (id: string) => shapes.get(id),
+      getBindingsFromShape: (id: string) => bindings.get(id) ?? [],
+      updateShape,
+      updateShapes: (patches: Parameters<typeof updateShape>[0][]) => patches.forEach(updateShape),
+      markHistoryStoppingPoint: () => undefined
+    } as unknown as Editor
+
+    await runWorkflow(editor, 'project-1', [])
+
+    const result = JSON.parse(String(iterate.meta.nodeResult))
+    expect(
+      result.items.map((item: { outputs: Record<string, Record<string, unknown>> }) => {
+        const output = item.outputs[prompt.id]!['out-json'] as { data: { prompt: string } }
+        return output.data.prompt
+      })
+    ).toEqual(['第一镜：霓虹雨巷', '第二镜：潮湿巷口'])
+    expect(prompt.props.text).toBe(
+      JSON.stringify({ prompt: '{{input[0].scene}}', style: '电影感' })
+    )
   })
 })

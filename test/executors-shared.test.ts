@@ -8,6 +8,7 @@ import {
   normalizeShot,
   extractShots,
   mergedPrompt,
+  promptBundleText,
   parseVideoGen
 } from '@renderer/engine/executors/shared'
 import { parseImageGen } from '@renderer/engine/executors/imageGen'
@@ -98,6 +99,20 @@ describe('mergedPrompt · 提示词合并（防累积）', () => {
     const once = mergedPrompt('节点', '上游')
     const twice = mergedPrompt(once, '上游')
     expect(twice).toBe(once)
+  })
+})
+
+describe('promptBundleText · 结构化提示词包', () => {
+  it('只提取可被当前图片/视频驱动使用的正向提示词与风格', () => {
+    expect(
+      promptBundleText({ prompt: '雨夜街头', style: '35mm 胶片', negativePrompt: '模糊' })
+    ).toBe('雨夜街头\n35mm 胶片')
+  })
+
+  it('非对象或无有效字符串时安全返回空', () => {
+    expect(promptBundleText(null)).toBe('')
+    expect(promptBundleText(['提示词'])).toBe('')
+    expect(promptBundleText({ prompt: 1, style: '' })).toBe('')
   })
 })
 

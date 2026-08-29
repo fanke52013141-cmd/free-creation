@@ -1,6 +1,7 @@
 // 画布右侧抽屉面板：资产中心 / 工作流 / 历史记录（LibTV 侧栏入口落地）
 // 资产中心：项目级媒体库——导入/搜索/筛选/缩略图预览/点击拖到画布/删除
 // 工作流模板：保存选中节点组合为可复用模板，一键套用整段创作链路
+/* eslint-disable react-refresh/only-export-components -- 导出内置模板数据供契约回归测试复用，避免重复维护同一组端口连线。 */
 import { useEffect, useRef, useState } from 'react'
 import { createShapeId, type Editor, type TLShapeId } from 'tldraw'
 import type { MediaAsset, MediaKind } from '@shared/types'
@@ -50,11 +51,11 @@ const KIND_ICON: Record<MediaKind, IconName> = {
 }
 
 // 内置推荐模板（点击直接生成节点组合）
-const BUILTIN_TEMPLATES: {
+export const BUILTIN_TEMPLATES: {
   name: string
   icon: IconName
   desc: string
-  nodes: { type: string; dx: number; dy: number }[]
+  nodes: { type: string; title?: string; text?: string; config?: string; dx: number; dy: number }[]
   edges: { from: number; to: number; fromPort: string; toPort: string }[]
 }[] = [
   {
@@ -95,6 +96,189 @@ const BUILTIN_TEMPLATES: {
     edges: [
       { from: 0, to: 1, fromPort: 'out-text', toPort: 'in-value' },
       { from: 1, to: 2, fromPort: 'out-value', toPort: 'in-text' }
+    ]
+  },
+  {
+    name: '角色→场景→分镜',
+    icon: 'json',
+    desc: '用可校验结构数据组装一条镜头，并交给分镜板继续编辑',
+    nodes: [
+      {
+        type: 'structured',
+        title: '角色设定',
+        dx: -800,
+        dy: 0,
+        config: JSON.stringify({ schema: { id: 'character.profile', version: 1 } }),
+        text: JSON.stringify({
+          id: 'character-1',
+          name: '主角',
+          description: '雨夜里坚持追寻真相的人',
+          appearance: '深色风衣，短发'
+        })
+      },
+      {
+        type: 'structured',
+        title: '场景设定',
+        dx: -400,
+        dy: 0,
+        config: JSON.stringify({ schema: { id: 'scene.definition', version: 1 } }),
+        text: JSON.stringify({
+          id: 'scene-1',
+          name: '霓虹雨巷',
+          description: '{{input[0].name}} 穿行在雨夜的霓虹街头',
+          timeOfDay: '夜晚'
+        })
+      },
+      {
+        type: 'structured',
+        title: '镜头定义',
+        dx: 0,
+        dy: 0,
+        config: JSON.stringify({ schema: { id: 'shot.definition', version: 1 } }),
+        text: JSON.stringify({
+          id: 'shot-1',
+          scene: '{{input[0].description}}',
+          dialogue: '',
+          sound: '雨声与远处车流',
+          camera: '中近景跟拍',
+          duration: '5s'
+        })
+      },
+      {
+        type: 'structured',
+        title: '分镜结构',
+        dx: 400,
+        dy: 0,
+        config: JSON.stringify({ schema: { id: 'storyboard.shots', version: 1 } }),
+        text: JSON.stringify({ shots: ['{{input[0]}}'] })
+      },
+      { type: 'storyboard', title: '分镜板', dx: 800, dy: 0 }
+    ],
+    edges: [
+      { from: 0, to: 1, fromPort: 'out-json', toPort: 'in-context' },
+      { from: 1, to: 2, fromPort: 'out-json', toPort: 'in-context' },
+      { from: 2, to: 3, fromPort: 'out-json', toPort: 'in-context' },
+      { from: 3, to: 4, fromPort: 'out-json', toPort: 'in-json' }
+    ]
+  },
+  {
+    name: '分镜→导演台',
+    icon: 'director',
+    desc: '分镜数据直接交给导演台进行镜头预演与手动发布',
+    nodes: [
+      {
+        type: 'structured',
+        title: '分镜结构',
+        dx: -400,
+        dy: 0,
+        config: JSON.stringify({ schema: { id: 'storyboard.shots', version: 1 } }),
+        text: JSON.stringify({
+          shots: [
+            {
+              id: 'shot-1',
+              scene: '雨夜街头，人物在霓虹灯下回头',
+              dialogue: '',
+              sound: '细雨与车流',
+              duration: '5s'
+            }
+          ]
+        })
+      },
+      { type: 'storyboard', title: '分镜板', dx: 0, dy: 0 },
+      { type: 'director', title: '导演台', dx: 400, dy: 0 }
+    ],
+    edges: [
+      { from: 0, to: 1, fromPort: 'out-json', toPort: 'in-json' },
+      { from: 1, to: 2, fromPort: 'out-json', toPort: 'in-storyboard' }
+    ]
+  },
+  {
+    name: '提示词包→生图',
+    icon: 'image-gen',
+    desc: '以 prompt.bundle@1 明确传递提示词和风格约束',
+    nodes: [
+      {
+        type: 'structured',
+        title: '提示词包',
+        dx: -200,
+        dy: 0,
+        config: JSON.stringify({ schema: { id: 'prompt.bundle', version: 1 } }),
+        text: JSON.stringify({
+          prompt: '电影感雨夜街头，人物在霓虹灯下回头',
+          style: '35mm 胶片，浅景深，低饱和青橙色调',
+          aspectRatio: '16:9'
+        })
+      },
+      { type: 'image-gen', title: '生图', dx: 200, dy: 0 }
+    ],
+    edges: [{ from: 0, to: 1, fromPort: 'out-json', toPort: 'in-prompt' }]
+  },
+  {
+    name: '分镜→批量生图',
+    icon: 'workflow',
+    desc: '分镜逐项生成提示词包并串行生图；支持暂停、续跑和只重跑失败项',
+    nodes: [
+      {
+        type: 'structured',
+        title: '分镜结构',
+        dx: -800,
+        dy: 0,
+        config: JSON.stringify({ schema: { id: 'storyboard.shots', version: 1 } }),
+        text: JSON.stringify({
+          shots: [
+            {
+              id: 'shot-1',
+              scene: '雨夜的霓虹街头，主角回头望向远处车灯',
+              dialogue: '',
+              sound: '细雨与车流',
+              camera: '中近景跟拍',
+              duration: '5s'
+            },
+            {
+              id: 'shot-2',
+              scene: '镜头拉远，主角走入潮湿的巷口',
+              dialogue: '',
+              sound: '脚步声与雨声',
+              camera: '广角远景',
+              duration: '5s'
+            }
+          ]
+        })
+      },
+      {
+        type: 'structured',
+        title: '镜头列表',
+        dx: -400,
+        dy: 0,
+        config: JSON.stringify({ schema: { id: 'list.items', version: 1 } }),
+        text: '{{input[0].shots}}'
+      },
+      {
+        type: 'iterate',
+        title: '逐镜生图',
+        dx: 0,
+        dy: 0,
+        config: JSON.stringify({ onFailure: 'skip', maxRetries: 0, limit: 0, runMode: 'resume' })
+      },
+      {
+        type: 'structured',
+        title: '镜头提示词',
+        dx: 400,
+        dy: 0,
+        config: JSON.stringify({ schema: { id: 'prompt.bundle', version: 1 } }),
+        text: JSON.stringify({
+          prompt: '{{input[0].scene}}。镜头：{{input[0].camera}}。时长：{{input[0].duration}}。',
+          style: '电影感分镜，35mm 胶片，浅景深，低饱和青橙色调',
+          aspectRatio: '16:9'
+        })
+      },
+      { type: 'image-gen', title: '批量生图', dx: 800, dy: 0 }
+    ],
+    edges: [
+      { from: 0, to: 1, fromPort: 'out-json', toPort: 'in-context' },
+      { from: 1, to: 2, fromPort: 'out-json', toPort: 'in-list' },
+      { from: 2, to: 3, fromPort: 'out-item', toPort: 'in-context' },
+      { from: 3, to: 4, fromPort: 'out-json', toPort: 'in-prompt' }
     ]
   }
 ]
@@ -391,9 +575,11 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
           y: center.y + node.dy,
           props: {
             nodeType: node.type,
-            title: spec?.label ?? node.type,
+            title: node.title ?? spec?.label ?? node.type,
             w: spec?.defaultSize.w ?? 260,
-            h: spec?.defaultSize.h ?? 160
+            h: spec?.defaultSize.h ?? 160,
+            text: node.text ?? '',
+            config: node.config ?? ''
           }
         })
       }

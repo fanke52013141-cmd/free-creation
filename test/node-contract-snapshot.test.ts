@@ -6,7 +6,8 @@
 // 「破坏端口 ID 而不提升契约版本时测试失败」。
 import { describe, it, expect, beforeAll } from 'vitest'
 import { registerAllNodeTypes } from './helpers/registerNodes'
-import { allNodeTypes, getNodeType } from '@renderer/nodes/registry'
+import { allNodeTypes, getNodePorts, getNodeType } from '@renderer/nodes/registry'
+import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
 import type { NodeTypeId, PortDecl } from '@shared/types'
 
 beforeAll(() => {
@@ -37,6 +38,7 @@ describe('全部标准节点都已注册', () => {
     'chat',
     'processor',
     'json',
+    'structured',
     'code',
     'storyboard',
     'ai-process',
@@ -73,6 +75,7 @@ describe('端口契约快照 · 每个端口 ID 稳定且符合命名规范', ()
     'chat',
     'processor',
     'json',
+    'structured',
     'code',
     'storyboard',
     'script',
@@ -146,6 +149,45 @@ describe('关键端口契约快照（防回归）', () => {
     expect(jsonOut.schema).toEqual({ id: 'json.any', version: 1 })
   })
 
+  it('结构数据节点：上下文/文本 → 实例所选 Schema 的 JSON 输出', () => {
+    const spec = getNodeType('structured')!
+    expect(spec.contractVersion).toBe(1)
+    expect(spec.ports.in.find((port) => port.id === 'in-context')?.schema).toEqual({
+      id: 'json.any',
+      version: 1
+    })
+    expect(spec.ports.out.find((port) => port.id === 'out-json')?.schema).toEqual({
+      id: 'json.any',
+      version: 1
+    })
+    const shape = {
+      id: 'shape:structured' as never,
+      type: 'node-card',
+      x: 0,
+      y: 0,
+      rotation: 0,
+      index: 'a1' as never,
+      isLocked: false,
+      props: {
+        w: 340,
+        h: 260,
+        nodeType: 'structured',
+        title: '角色设定',
+        config: JSON.stringify({ schema: { id: 'character.profile', version: 1 } }),
+        text: '',
+        mediaId: '',
+        mediaPath: '',
+        mediaMime: '',
+        exec: 'idle'
+      },
+      meta: {}
+    } as NodeCardShape
+    expect(getNodePorts(spec, shape).out[0]?.schema).toEqual({
+      id: 'character.profile',
+      version: 1
+    })
+  })
+
   it('分镜板输入/输出都绑定 storyboard.shots@1 Schema', () => {
     const spec = getNodeType('storyboard')!
     const inJson = spec.ports.in.find((p) => p.id === 'in-json')!
@@ -191,7 +233,7 @@ describe('关键端口契约快照（防回归）', () => {
     expect(ids).toEqual(['out-json', 'out-markdown', 'out-text'])
   })
 
-  it('迭代节点：in-list(list.items@1) → out-items(list.items@1)', () => {
+  it('迭代节点：in-list(list.items@1) → out-item(json.any 临时项) + out-items(list.items@1)', () => {
     const spec = getNodeType('iterate')!
     const inList = spec.ports.in.find((p) => p.id === 'in-list')!
     expect(inList.type).toBe('json')
@@ -199,6 +241,10 @@ describe('关键端口契约快照（防回归）', () => {
     const outItems = spec.ports.out.find((p) => p.id === 'out-items')!
     expect(outItems.type).toBe('json')
     expect(outItems.schema).toEqual({ id: 'list.items', version: 1 })
+    const outItem = spec.ports.out.find((p) => p.id === 'out-item')!
+    expect(outItem.type).toBe('json')
+    expect(outItem.schema).toEqual({ id: 'json.any', version: 1 })
+    expect(outItem.required).toBe(false)
   })
 
   it('导演台：分镜/参考图/机位输入，发布帧/视频/机位/工程摘要输出', () => {

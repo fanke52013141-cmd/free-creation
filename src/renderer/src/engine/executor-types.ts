@@ -12,9 +12,10 @@ import type { CanvasNode, ProviderConfig } from '@shared/types'
 import type { NodeCardShape } from '../canvas/NodeCardShape'
 import type { ContractInputMap, ContractOutputs } from './contracts'
 
-/** 取消信号。运行器在收到停止指令时把 cancelled 置 true，执行器据此中止长任务。 */
+/** 运行控制信号。暂停在当前原子任务结束后生效；停止会解除暂停等待。 */
 export interface CancelSignal {
   readonly cancelled: boolean
+  readonly paused?: boolean
 }
 
 /**
@@ -22,7 +23,10 @@ export interface CancelSignal {
  * 运行器据此执行「循环体」节点链：对当前项执行一次，返回各节点输出。
  */
 export interface SubflowRequest {
-  /** 循环体节点 id 链（按拓扑顺序执行）；空数组表示无循环体。 */
+  /**
+   * 循环体入口节点 id。运行器从这些入口展开循环体内的真实数据依赖，
+   * 再按拓扑顺序执行；空数组表示无循环体。
+   */
   nodeIds: string[]
   /** 当前列表项的变量环境，注入为循环体节点的输入。 */
   item: Record<string, unknown>
@@ -30,6 +34,13 @@ export interface SubflowRequest {
   index: number
   /** 当前项的可选稳定 id（如镜头 id），用于来源追踪。 */
   itemId?: string
+  /** 发起这次迭代的节点 id，用于识别 out-items 的循环后汇总消费者。 */
+  iterationNodeId?: string
+  /**
+   * 当前项的注入目标。只有从 iterate.out-item 连出的边会出现在这里；
+   * 这使「循环体」与 iterate.out-items 的最终汇总消费者明确分界。
+   */
+  itemTargets?: Array<{ nodeId: string; portId: string }>
 }
 
 /** 子流程执行的输出：循环体各节点产出的契约输出（key 为节点 id）。 */
@@ -53,20 +64,27 @@ export interface NodeExecutionContext {
   providers: ProviderConfig[]
   /** 取消信号。 */
   signal: CancelSignal
+  /**
+   * 在下一个安全检查点等待继续。长任务本身不可被强行挂起，循环节点在每个 item
+   * 之间调用它，因此暂停不会让同一份节点运行态发生并发覆盖。
+   */
+  waitForResume?: () => Promise<void>
   /** 把执行产生的持久化状态写回 shape props（合并文本、媒体资产引用等）。 */
   updateProps: (patch: Partial<NodeCardShape['props']>) => void
   /** 把命名变量运行结果写入 shape meta（处理 / 代码节点使用）。传 null 清空。 */
   updateResult: (result: string | null) => void
   /**
-   * 当前节点的直接下游节点 id（通用图信息，运行器对每个节点填充）。循环控制节点
-   * 用这批节点作为「循环体」，对列表每一项驱动它们执行一次。
+   * 当前节点的直接输出边。它把端口语义显式交给节点执行器：例如循环节点只把
+   * out-item 的目标当作循环体入口，out-items 则是循环完成后的结果列表。
    */
-  downstream?: string[]
+  outgoing?: Array<{ nodeId: string; fromPortId: string; toPortId: string }>
   /**
    * 执行一条子流程（循环控制节点用）：运行器对请求的循环体节点链执行一次并返回输出。
    * 非循环节点不会注入。循环节点用它把列表逐项填充进下游子流程变量。
    */
   runSubflow?: (request: SubflowRequest) => Promise<SubflowOutput>
+  /** 循环完成后恢复循环体的静态正文/配置，避免最后一项的解析结果污染下一次运行。 */
+  restoreSubflowInputs?: (request: Pick<SubflowRequest, 'nodeIds' | 'iterationNodeId'>) => void
 }
 
 export interface NodeExecutionResult {

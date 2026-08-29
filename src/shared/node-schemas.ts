@@ -10,6 +10,10 @@ export function nodeSchemaRegistered(schema: PortSchemaRef): boolean {
     `${schema.id}@${schema.version}` === 'json.any@1' ||
     `${schema.id}@${schema.version}` === 'storyboard.shots@1' ||
     `${schema.id}@${schema.version}` === 'list.items@1' ||
+    `${schema.id}@${schema.version}` === 'character.profile@1' ||
+    `${schema.id}@${schema.version}` === 'scene.definition@1' ||
+    `${schema.id}@${schema.version}` === 'shot.definition@1' ||
+    `${schema.id}@${schema.version}` === 'prompt.bundle@1' ||
     `${schema.id}@${schema.version}` === 'previs.camera@1' ||
     `${schema.id}@${schema.version}` === 'previs.project@1'
   )
@@ -61,6 +65,90 @@ function validateListItems(value: unknown): string[] {
       errors.push(`items[${index}] 必须是对象`)
     }
   })
+  return errors
+}
+
+function objectValue(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  return value as Record<string, unknown>
+}
+
+function requiredString(data: Record<string, unknown>, field: string, errors: string[]): void {
+  if (typeof data[field] !== 'string' || !data[field].trim()) {
+    errors.push(`${field} 必须是非空字符串`)
+  }
+}
+
+function optionalString(data: Record<string, unknown>, field: string, errors: string[]): void {
+  if (data[field] !== undefined && typeof data[field] !== 'string') {
+    errors.push(`${field} 必须是字符串`)
+  }
+}
+
+function optionalStringList(data: Record<string, unknown>, field: string, errors: string[]): void {
+  if (data[field] === undefined) return
+  if (
+    !Array.isArray(data[field]) ||
+    !(data[field] as unknown[]).every((item) => typeof item === 'string')
+  ) {
+    errors.push(`${field} 必须是字符串数组`)
+  }
+}
+
+/** 角色设定：稳定 ID、名称与人物描述是所有下游提示词/分镜引用的最小公共字段。 */
+function validateCharacterProfile(value: unknown): string[] {
+  const data = objectValue(value)
+  if (!data) return ['根值必须是对象']
+  const errors: string[] = []
+  requiredString(data, 'id', errors)
+  requiredString(data, 'name', errors)
+  requiredString(data, 'description', errors)
+  for (const field of ['appearance', 'persona', 'voice'] as const)
+    optionalString(data, field, errors)
+  for (const field of ['tags', 'referenceImageIds'] as const)
+    optionalStringList(data, field, errors)
+  return errors
+}
+
+/** 场景设定：不把媒体二进制塞进数据流，只保存可追溯的媒体 ID 列表。 */
+function validateSceneDefinition(value: unknown): string[] {
+  const data = objectValue(value)
+  if (!data) return ['根值必须是对象']
+  const errors: string[] = []
+  requiredString(data, 'id', errors)
+  requiredString(data, 'name', errors)
+  requiredString(data, 'description', errors)
+  for (const field of ['location', 'timeOfDay', 'mood'] as const)
+    optionalString(data, field, errors)
+  for (const field of ['tags', 'referenceImageIds'] as const)
+    optionalStringList(data, field, errors)
+  return errors
+}
+
+/** 单镜头定义：与 storyboard.shots 的单条 shot 对齐，便于后续组装为镜头列表。 */
+function validateShotDefinition(value: unknown): string[] {
+  const data = objectValue(value)
+  if (!data) return ['根值必须是对象']
+  const errors: string[] = []
+  requiredString(data, 'id', errors)
+  requiredString(data, 'scene', errors)
+  for (const field of ['dialogue', 'sound', 'camera', 'duration'] as const)
+    optionalString(data, field, errors)
+  return errors
+}
+
+/** 提示词包：文本提示词是唯一必填字段，其余字段是可选、可组合的生成约束。 */
+function validatePromptBundle(value: unknown): string[] {
+  const data = objectValue(value)
+  if (!data) return ['根值必须是对象']
+  const errors: string[] = []
+  requiredString(data, 'prompt', errors)
+  for (const field of ['negativePrompt', 'style', 'aspectRatio'] as const)
+    optionalString(data, field, errors)
+  if (data.seed !== undefined && (typeof data.seed !== 'number' || !Number.isFinite(data.seed))) {
+    errors.push('seed 必须是有限数字')
+  }
+  optionalStringList(data, 'referenceImageIds', errors)
   return errors
 }
 
@@ -125,6 +213,18 @@ export function validateNodeSchema(schema: PortSchemaRef, value: unknown): Schem
       break
     case 'list.items@1':
       errors = [...jsonSerializable(value), ...validateListItems(value)]
+      break
+    case 'character.profile@1':
+      errors = [...jsonSerializable(value), ...validateCharacterProfile(value)]
+      break
+    case 'scene.definition@1':
+      errors = [...jsonSerializable(value), ...validateSceneDefinition(value)]
+      break
+    case 'shot.definition@1':
+      errors = [...jsonSerializable(value), ...validateShotDefinition(value)]
+      break
+    case 'prompt.bundle@1':
+      errors = [...jsonSerializable(value), ...validatePromptBundle(value)]
       break
     case 'previs.camera@1':
       errors = [...jsonSerializable(value), ...validatePrevisCamera(value)]

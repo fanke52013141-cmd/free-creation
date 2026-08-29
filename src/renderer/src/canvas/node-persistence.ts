@@ -9,6 +9,7 @@ export const CONFIG_NODE_TYPES = new Set([
   'video',
   'audio',
   'processor',
+  'structured',
   'code',
   'ai-process',
   'iterate',

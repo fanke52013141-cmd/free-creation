@@ -90,6 +90,7 @@ describe('契约版本稳定性（防破坏性变化漏升版本）', () => {
     'chat',
     'processor',
     'json',
+    'structured',
     'code',
     'storyboard',
     'script',

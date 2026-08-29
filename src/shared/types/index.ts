@@ -11,6 +11,7 @@ export type ActiveNodeTypeId =
   | 'processor'
   | 'code'
   | 'json'
+  | 'structured'
   | 'storyboard'
   | 'ai-process'
   | 'iterate'
