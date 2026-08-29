@@ -4,7 +4,7 @@
 >
 > 当前分支：`main`
 >
-> 当前功能与测试基线：`a12af87`（本地已提交，基于远端 `origin/main` 的 `7db203d`；尚未推送）
+> 当前功能与测试基线：`763bcf0`（本地已提交，基于远端 `origin/main` 的 `7db203d`；尚未推送）
 >
 > 远程仓库：https://github.com/fanke52013141-cmd/free-creation
 >
@@ -167,7 +167,7 @@ git status -sb
 ### 当前已验证基线
 
 - `npm run verify`：通过（ESLint、Node/Web 类型检查、Vitest 和 `electron-vite build`）。
-- `npm run test`：29 个测试文件、455 项用例全部通过。
+- `npm run test`：30 个测试文件、456 项用例全部通过。
 - `git diff --check`：通过。
 - Electron 手工测试：创建导演台 → 打开工作区 → 发布 PNG 帧 → 导出 WebM，两个输出均出现“可供下游使用”状态；白屏问题已定位为旧 `node-card` 快照缺少 `config`，恢复前内存修复后再交给 tldraw 迁移。
 - IA-2.3 的 Electron 人工路径尚未执行，列入 IA-2.4，不能以自动化验证替代。
@@ -283,9 +283,9 @@ git status -sb
 4. **✅ IA-2.3 运行中心**：跨节点读取持久化的 `meta.nodeRun` / `meta.nodeRunHistory`，支持运行状态、节点/运行 ID/端口的安全搜索、定位来源节点和错误摘要；失败记录的重试仍通过统一 `runNodeManually → executor` 路径。资产卡可直接打开准确对应的运行记录。
    - 每个新媒体结果会写入产生它的 `runId`；索引优先从当前记录或历史记录精确匹配该运行，即使后续一次执行失败，也不会把既有资产误标为失败运行。旧结果没有 `runId` 时安全回退到节点最近记录。
    - 未新增端口、节点类型或隐式数据流；运行中心只读取既有持久化状态，不保存提示词全文、路径全文或密钥。
-5. **IA-2.4 验收（下一开发切片）**：已补图片执行器的精确 `runId`、重复追加、取消和失败不写入回归；仍需补保存重开后的运行/资产索引集成测试，并在 Electron 中完成“生成图片 → 重复生成 → 切换结果 → 定位节点 → 查看运行记录 → 失败重试”人工路径；再决定是否在音频结果网格中提供同样的运行入口。
+5. **✅ IA-2.4 自动化验收**：图片执行器已覆盖精确 `runId`、重复追加、取消和失败不写入；项目仓库已覆盖保存重开后媒体结果 `runId`、当前运行记录和历史记录不变。下一项只剩 Electron 人工路径：“生成图片 → 重复生成 → 切换结果 → 定位节点 → 查看运行记录 → 失败重试”；完成后再决定是否在音频结果网格中提供同样的运行入口。
 
-本切片新增 `test/media-index.test.ts`、`test/run-index.test.ts`，并补强 `test/media-result-executor.test.ts`；覆盖生成结果集合来源、当前/历史结果、稳定 `nodeId` 筛选、无运行记录资产、安全关键词、跨节点运行记录的去重排序和过滤，以及连续执行时每个媒体结果保留自身 `runId`。完整门禁通过，当前为 29 个测试文件、455 个用例。IA-2 仍保持本地单用户架构，不引入登录、团队、云端项目或权限系统；导演台真实 3D、图片转模型和供应商级批量候选不作为 IA-2 前置工作。P3.4 的真实桌面端批量媒体回归属于并行验收债务，不阻塞 IA-2 的索引与资产中心开发，但必须在发布前完成。详细借鉴差异与验收表见 [INFINITE_ATELIER_ADOPTION_PLAN.md](./docs/INFINITE_ATELIER_ADOPTION_PLAN.md)。
+本切片新增 `test/media-index.test.ts`、`test/run-index.test.ts`、`test/project-persistence.test.ts`，并补强 `test/media-result-executor.test.ts`；覆盖生成结果集合来源、当前/历史结果、稳定 `nodeId` 筛选、无运行记录资产、安全关键词、跨节点运行记录的去重排序和过滤、连续执行时每个媒体结果保留自身 `runId`，以及保存重开后该溯源记录不丢失。完整门禁通过，当前为 30 个测试文件、456 个用例。IA-2 仍保持本地单用户架构，不引入登录、团队、云端项目或权限系统；导演台真实 3D、图片转模型和供应商级批量候选不作为 IA-2 前置工作。P3.4 的真实桌面端批量媒体回归属于并行验收债务，不阻塞 IA-2 的索引与资产中心开发，但必须在发布前完成。详细借鉴差异与验收表见 [INFINITE_ATELIER_ADOPTION_PLAN.md](./docs/INFINITE_ATELIER_ADOPTION_PLAN.md)。
 
 ## 10. 不可提交内容
 
