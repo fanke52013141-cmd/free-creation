@@ -8,6 +8,7 @@ import type {
   GatewayEvent,
   IpcEnvelope,
   ImageGenerateInput,
+  ImageEditInput,
   ImageCropTransformInput,
   VideoFrameTransformInput,
   VideoRangeTransformInput,
@@ -118,6 +119,8 @@ const api = {
       ipcRenderer.invoke(IPC.gateway.chatCancel, { taskId }),
     imageGenerate: (input: ImageGenerateInput): Promise<IpcEnvelope<MediaAsset>> =>
       ipcRenderer.invoke(IPC.gateway.imageGenerate, input),
+    imageEdit: (input: ImageEditInput): Promise<IpcEnvelope<MediaAsset>> =>
+      ipcRenderer.invoke(IPC.gateway.imageEdit, input),
     videoSubmit: (input: VideoSubmitInput): Promise<IpcEnvelope<VideoSubmitResult>> =>
       ipcRenderer.invoke(IPC.gateway.videoSubmit, input),
     videoCancel: (taskId: string): Promise<IpcEnvelope<boolean>> =>

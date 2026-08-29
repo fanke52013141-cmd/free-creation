@@ -7,6 +7,7 @@ export { TextBody } from './text'
 export { ImageBody } from './image'
 export { ImageCropBody, ImageCropSettings } from './image-crop'
 export { ImageGenerateBody } from './image-gen'
+export { ImageEditBody, ImageEditSettings } from './image-edit'
 export { VideoBody } from './video'
 export {
   VideoAudioBody,

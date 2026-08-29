@@ -114,6 +114,17 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
         </button>
         <button
           className="btn-ghost small"
+          title="对当前结果添加标注并修改"
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onClick={(e) => {
+            e.stopPropagation()
+            createImageContinuation(editor, shape, 'image-edit')
+          }}
+        >
+          <Icon name="edit" size={12} /> 修改图片
+        </button>
+        <button
+          className="btn-ghost small"
           title="创建视频节点并将当前图片作为首帧"
           onPointerDown={(e) => stopEventPropagation(e)}
           onClick={(e) => {

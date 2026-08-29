@@ -7,6 +7,7 @@ import type { NodeCardShape } from './NodeCardShape'
 export const CONFIG_NODE_TYPES = new Set([
   'image-gen',
   'image-crop',
+  'image-edit',
   'video',
   'video-frame',
   'video-clip',

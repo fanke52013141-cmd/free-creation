@@ -2,6 +2,7 @@
 
 import type { ChatMessage, GatewayModelInfo, ProviderSpecId, VideoGenParams } from '../types'
 import type { ImageCropConfig } from '../image-crop'
+import type { ImageEditConfig } from '../image-edit'
 import type { VideoFrameConfig, VideoRangeConfig } from '../video-transform'
 
 export const IPC = {
@@ -51,6 +52,7 @@ export const IPC = {
     chatStart: 'gateway:chat:start',
     chatCancel: 'gateway:chat:cancel',
     imageGenerate: 'gateway:image:generate',
+    imageEdit: 'gateway:image:edit',
     videoSubmit: 'gateway:video:submit',
     videoCancel: 'gateway:video:cancel',
     videoTask: 'gateway:video:task',
@@ -180,6 +182,16 @@ export interface ImageGenerateInput {
   seed?: number
   /** 宽高比（部分供应商支持） */
   aspectRatio?: string
+}
+
+export interface ImageEditInput {
+  projectId: string
+  sourceMediaId: string
+  providerId: string
+  modelId: string
+  prompt: string
+  size?: string
+  config: ImageEditConfig
 }
 
 export interface VideoSubmitInput {

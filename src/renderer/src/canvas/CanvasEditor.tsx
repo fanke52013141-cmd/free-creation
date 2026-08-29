@@ -200,6 +200,7 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
     image: '图片',
     'image-gen': '生图',
     'image-crop': '裁剪',
+    'image-edit': '修改',
     video: '视频',
     'video-frame': '取帧',
     'video-clip': '截取',

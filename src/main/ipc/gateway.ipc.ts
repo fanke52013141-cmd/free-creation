@@ -12,6 +12,7 @@ import type { MediaAsset, ProviderSummary, VideoTaskInfo } from '../../shared/ty
 import { startChat, cancelChat } from '../gateway/chat'
 import { GatewayError, testProvider } from '../gateway/factory'
 import { generateImageToAsset } from '../gateway/image'
+import { transformImageEdit } from '../media/image-edit'
 import { deleteProvider, listProviders, saveProvider } from '../gateway/providers.repo'
 import {
   cancelVideoTask,
@@ -85,6 +86,10 @@ export function registerGatewayIpc(win: BrowserWindow): void {
     IPC.gateway.imageGenerate,
     (_e, input: Parameters<typeof generateImageToAsset>[0]) =>
       wrapAsync<MediaAsset>(() => generateImageToAsset(input))
+  )
+
+  ipcMain.handle(IPC.gateway.imageEdit, (_e, input: Parameters<typeof transformImageEdit>[0]) =>
+    wrapAsync<MediaAsset>(() => transformImageEdit(input))
   )
 
   ipcMain.handle(IPC.gateway.videoSubmit, (_e, input: Parameters<typeof submitVideoTask>[1]) =>

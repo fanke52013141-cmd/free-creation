@@ -50,6 +50,7 @@ export const projectImageGenOutputs = projectImageOutputs
 
 /** 裁剪节点与图片节点共享 image 输出值，但产物只能来自本节点的成功运行。 */
 export const projectImageCropOutputs = projectImageOutputs
+export const projectImageEditOutputs = projectImageOutputs
 
 export const projectVideoOutputs = (shape: NodeCardShape): RawNodeOutputs =>
   mediaOutput(shape, 'video', 'out-video')

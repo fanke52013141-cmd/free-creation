@@ -166,6 +166,17 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
           </button>
           <button
             className="btn-ghost small"
+            title="对当前结果添加标注并修改"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              createImageContinuation(editor, shape, 'image-edit')
+            }}
+          >
+            <Icon name="edit" size={12} /> 修改图片
+          </button>
+          <button
+            className="btn-ghost small"
             title="将当前结果作为首帧生成视频"
             onPointerDown={(e) => stopEventPropagation(e)}
             onClick={(e) => {

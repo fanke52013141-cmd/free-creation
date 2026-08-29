@@ -2568,8 +2568,8 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   line-height: 1.45;
 }
 
-.crop-no-source,
-.crop-invalid {
+  .crop-no-source,
+  .crop-invalid {
   margin: 0;
   padding: 9px;
   border: 1px dashed var(--line);
@@ -2816,6 +2816,89 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
       0 0 0 4px rgba(251, 191, 36, 0.16),
       0 0 12px rgba(251, 191, 36, 0.45);
   }
+
+  .image-edit-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+
+  .image-edit-settings h4,
+  .image-edit-settings .contract-settings-hint {
+    margin: 0;
+  }
+
+  .image-edit-preview {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #111;
+    touch-action: none;
+    user-select: none;
+  }
+
+  .image-edit-preview > img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: fill;
+    pointer-events: none;
+  }
+
+  .image-edit-overlay {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+
+  .image-edit-mark {
+    fill: none;
+    stroke-width: 1.5;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .image-edit-mark.red,
+  .image-edit-text.red { stroke: #ef4444; fill: #ef4444; }
+  .image-edit-mark.yellow,
+  .image-edit-text.yellow { stroke: #facc15; fill: #facc15; }
+  .image-edit-mark.orange,
+  .image-edit-text.orange { stroke: #f97316; fill: #f97316; }
+  .image-edit-text { font-size: 4px; paint-order: stroke; stroke-width: .35px; }
+
+  .image-edit-tools,
+  .image-edit-colors {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+  }
+
+  .image-edit-tools button,
+  .image-edit-colors button {
+    min-height: 27px;
+    padding: 3px 7px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.035);
+    color: var(--muted);
+    font: inherit;
+    font-size: 10px;
+    cursor: pointer;
+  }
+
+  .image-edit-tools button.active,
+  .image-edit-colors button.active {
+    border-color: rgba(249, 115, 22, 0.72);
+    background: rgba(249, 115, 22, 0.14);
+    color: #fed7aa;
+  }
+
+  .image-edit-color.red { color: #fca5a5; }
+  .image-edit-color.yellow { color: #fde68a; }
+  .image-edit-color.orange { color: #fdba74; }
 }
 
 .node-text,

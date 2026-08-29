@@ -85,7 +85,7 @@ export function NoModelHint({ onOpen }: { onOpen: () => void }): React.JSX.Eleme
 export function createImageContinuation(
   editor: Editor,
   source: NodeCardShape,
-  targetType: 'image-gen' | 'image-crop' | 'video'
+  targetType: 'image-gen' | 'image-crop' | 'image-edit' | 'video'
 ): void {
   const spec = getNodeType(targetType)
   if (!spec) return
@@ -95,7 +95,9 @@ export function createImageContinuation(
       ? '继续生图'
       : targetType === 'image-crop'
         ? '图片裁剪'
-        : '图片生成视频'
+        : targetType === 'image-edit'
+          ? '图片修改'
+          : '图片生成视频'
   editor.createShape({
     id,
     type: 'node-card',

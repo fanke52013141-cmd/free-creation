@@ -155,6 +155,11 @@ export function installBrowserMock(): void {
           ok: false,
           error: { code: 'MOCK', message: '浏览器演示不支持真实生成' }
         }),
+      imageEdit: () =>
+        Promise.resolve({
+          ok: false,
+          error: { code: 'MOCK', message: '浏览器演示不支持图片修改' }
+        }),
       videoSubmit: () => Promise.resolve({ ok: true, data: { taskId: 'mock-video' } }),
       videoCancel: () => Promise.resolve({ ok: true, data: true }),
       videoTask: () => Promise.resolve({ ok: true, data: null }),

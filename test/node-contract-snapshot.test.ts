@@ -34,6 +34,7 @@ describe('全部标准节点都已注册', () => {
     'image',
     'image-crop',
     'image-gen',
+    'image-edit',
     'video',
     'video-frame',
     'video-clip',
@@ -75,6 +76,7 @@ describe('端口契约快照 · 每个端口 ID 稳定且符合命名规范', ()
     'image',
     'image-crop',
     'image-gen',
+    'image-edit',
     'video',
     'video-frame',
     'video-clip',
@@ -155,6 +157,18 @@ describe('关键端口契约快照（防回归）', () => {
     const spec = getNodeType('image-crop')!
     expect(snapshotPorts(spec.ports.in)).toEqual([
       { id: 'in-image', dir: 'in', type: 'image', required: true, cardinality: 'one' }
+    ])
+    expect(snapshotPorts(spec.ports.out)).toEqual([
+      { id: 'out-image', dir: 'out', type: 'image', required: true, cardinality: 'one' }
+    ])
+    expect(spec.SettingsPanel).toBeTypeOf('function')
+  })
+
+  it('图片修改节点：原图 + 修改说明 → 新图片', () => {
+    const spec = getNodeType('image-edit')!
+    expect(snapshotPorts(spec.ports.in)).toEqual([
+      { id: 'in-image', dir: 'in', type: 'image', required: true, cardinality: 'one' },
+      { id: 'in-text', dir: 'in', type: 'text', required: false, cardinality: 'many' }
     ])
     expect(snapshotPorts(spec.ports.out)).toEqual([
       { id: 'out-image', dir: 'out', type: 'image', required: true, cardinality: 'one' }

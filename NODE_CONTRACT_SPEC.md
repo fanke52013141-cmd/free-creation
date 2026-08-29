@@ -1,6 +1,6 @@
 # 节点输入输出契约规范
 
-> 状态：强制规范 1.5（P0-P3.1、M0-M4 本地图片/视频媒体处理已落地）
+> 状态：强制规范 1.6（P0-P4 图片修改、P0-P3.1、M0-M4 本地图片/视频媒体处理已落地）
 > 代码入口：`src/shared/types/index.ts`、`src/shared/node-schemas.ts`、`src/renderer/src/nodes/registry.tsx`  
 > 节点定义：`src/renderer/src/nodes/specs/index.tsx`
 > 运行时：`src/renderer/src/engine/contracts.ts`、`src/renderer/src/nodes/nodeValues.ts`
@@ -44,6 +44,8 @@ sourceNode.outputs[sourcePortId]
 - 相比已有节点改变了输出类型、输出数量或核心业务语义。
 
 独立节点必须遵守本规范的全部要求：稳定类型、单一职责、输入输出契约、执行器、输出投影、持久化结果、右侧详情和回归测试。原始媒体视为不可变输入；裁剪、切分、取帧、截取和提取等操作必须创建新的 `MediaAsset`，不得覆盖原文件。
+
+图片标注修改同样是独立的 `image-edit` 节点：`in-image` 接收一张原图，`in-text` 接收可选修改说明，`out-image` 输出新的图片资产。箭头、矩形、画笔和文字标注保存在节点 `config` 中，属于可复跑的配置而不是隐藏端口；执行时主进程将标注绘制到临时参考图后调用图片模型，原图始终保持不变。
 
 #### 扩展既有节点
 

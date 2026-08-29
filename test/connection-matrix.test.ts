@@ -61,6 +61,9 @@ describe('标准连线 · 允许的组合', () => {
     expect(canConnect('image', 'out-image', 'video', 'in-image')).toBe(true)
     expect(canConnect('image-gen', 'out-image', 'image-gen', 'in-image')).toBe(true)
     expect(canConnect('image-gen', 'out-image', 'video', 'in-image')).toBe(true)
+    expect(canConnect('image', 'out-image', 'image-edit', 'in-image')).toBe(true)
+    expect(canConnect('image-gen', 'out-image', 'image-edit', 'in-image')).toBe(true)
+    expect(canConnect('image-crop', 'out-image', 'image-edit', 'in-image')).toBe(true)
     expect(canConnect('image', 'out-image', 'image-crop', 'in-image')).toBe(true)
     expect(canConnect('image-gen', 'out-image', 'image-crop', 'in-image')).toBe(true)
     expect(canConnect('image-crop', 'out-image', 'video', 'in-image')).toBe(true)
@@ -76,6 +79,7 @@ describe('标准连线 · 允许的组合', () => {
   it('对话 markdown 输出 → 文本输入（text 与 markdown 互连）', () => {
     expect(canConnect('chat', 'out-markdown', 'text', 'in-text')).toBe(true)
     expect(canConnect('chat', 'out-markdown', 'image-gen', 'in-text')).toBe(true)
+    expect(canConnect('chat', 'out-markdown', 'image-edit', 'in-text')).toBe(true)
   })
 
   it('JSON → JSON（json.any 通用互通）', () => {
@@ -137,6 +141,7 @@ describe('标准连线 · 拒绝的组合', () => {
   it('音频 → 图片/视频输入（媒体类型严格匹配）', () => {
     expect(canConnect('audio', 'out-audio', 'image-gen', 'in-image')).toBe(false)
     expect(canConnect('audio', 'out-audio', 'video', 'in-image')).toBe(false)
+    expect(canConnect('video', 'out-video', 'image-edit', 'in-image')).toBe(false)
   })
 })
 

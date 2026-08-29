@@ -6,6 +6,7 @@ export type ActiveNodeTypeId =
   | 'image'
   | 'image-crop'
   | 'image-gen'
+  | 'image-edit'
   | 'video'
   | 'video-frame'
   | 'video-clip'

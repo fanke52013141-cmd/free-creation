@@ -12,6 +12,8 @@ import {
   ImageBody,
   ImageCropBody,
   ImageCropSettings,
+  ImageEditBody,
+  ImageEditSettings,
   ImageGenerateBody,
   IterateBody,
   JsonBody,
@@ -42,6 +44,7 @@ import {
 import { imageGenExecutor } from '../../engine/executors/imageGen'
 import { imageExecutor } from '../../engine/executors/image'
 import { imageCropExecutor } from '../../engine/executors/imageCrop'
+import { imageEditExecutor } from '../../engine/executors/imageEdit'
 import { iterateExecutor } from '../../engine/executors/iterate'
 import { jsonExecutor } from '../../engine/executors/json'
 import { structuredExecutor } from '../../engine/executors/structured'
@@ -64,6 +67,7 @@ import {
   projectDirectorOutputs,
   projectImageGenOutputs,
   projectImageCropOutputs,
+  projectImageEditOutputs,
   projectImageOutputs,
   projectIterateOutputs,
   projectJsonOutputs,
@@ -214,6 +218,28 @@ export function registerBaseNodeTypes(): void {
     projectOutputs: projectImageGenOutputs,
     executor: imageGenExecutor,
     Body: ImageGenerateBody
+  })
+  registerNodeType({
+    type: 'image-edit',
+    contractVersion: 1,
+    label: '修改',
+    icon: 'edit',
+    color: '#f97316',
+    defaultSize: { w: 340, h: 260 },
+    description: '以一张上游图片为原图，结合标注与文字说明生成新的图片；原图保持不变。',
+    ports: {
+      in: [
+        input('in-image', '原图', 'image', '必须连接的一张待修改图片。', { required: true }),
+        input('in-text', '修改说明', 'text', '可选的文本修改说明，可由多个文本上游合并。', {
+          cardinality: 'many'
+        })
+      ],
+      out: [output('out-image', '修改图', 'image', '模型修改并落盘后的新图片资产。')]
+    },
+    projectOutputs: projectImageEditOutputs,
+    executor: imageEditExecutor,
+    SettingsPanel: ImageEditSettings,
+    Body: ImageEditBody
   })
   registerNodeType({
     type: 'video',
