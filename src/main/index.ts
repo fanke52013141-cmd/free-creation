@@ -10,7 +10,8 @@ import { registerProjectIpc } from './ipc/project.ipc'
 import { registerMediaIpc } from './ipc/media.ipc'
 import { registerGatewayIpc } from './ipc/gateway.ipc'
 import { registerWorkspaceStateIpc } from './ipc/workspace-state.ipc'
-import { closeDb, getDb } from './store/db'
+import { closeDb, getDb, getProjectsDir } from './store/db'
+import { reconcileWorkspace } from './store/workspace-health'
 import { getMediaAbsPath } from './store/media.repo'
 import { mimeForExtension } from '../shared/mime'
 
@@ -128,7 +129,20 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  getDb()
+  const database = getDb()
+  const health = reconcileWorkspace({
+    projectsDir: getProjectsDir(),
+    projectIds: (
+      database.prepare('SELECT id FROM projects WHERE deleted = 0').all() as Array<{ id: string }>
+    ).map((row) => row.id)
+  })
+  if (
+    health.recoveredImports.length ||
+    health.orphanedProjectIds.length ||
+    health.temporaryFiles.length
+  ) {
+    log.warn('workspace health check found recoverable items', health)
+  }
   registerMediaProtocol()
   registerProjectIpc()
   registerMediaIpc()

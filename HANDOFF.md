@@ -4,7 +4,7 @@
 >
 > 当前分支：`main`
 >
-> 当前功能与测试基线：`d413db6`（本地已提交，基于远端 `origin/main` 的 `7db203d`；尚未推送）+ CR-0/CR-1/CR-2 未提交改动
+> 当前功能与测试基线：以 `main` 最新提交为准；交接时先执行 `git fetch origin` 与 `git status -sb`，不得依据旧哈希判断推送状态。
 >
 > 远程仓库：https://github.com/fanke52013141-cmd/free-creation
 >
@@ -194,11 +194,11 @@ git status -sb
 
 验证：`npm run verify`、`git diff --check` 均通过；全量为 33 个测试文件、460 项用例。提交前仍应做一次桌面端手工冒烟：保存/编辑供应商（留空 Key）、保存/重启后读取模板、保存/回溯/删除历史版本、对话节点发送并检查 nodeRun 和 out-markdown。
 
-**CR 后续顺序（未开始）：**
+**CR-3 / CR-4 / CR-5 完成状态：**
 
-1. **CR-3 数据层卫生**：收敛三份 MIME 表为共享单一来源；为 SQLite 引入可测试的 `user_version` 迁移；启动时对账残留 `.importing`、幽灵项目和可清理临时文件。不得删除用户媒体或项目，任何清理先做可恢复/可报告的处理。
-2. **CR-4 契约与执行测试**：补 chat/video/audio executor 的 mocked gateway 测试、`waitForChat`/视频轮询、暂停/继续/停止的 runner 测试、stringified `meta.nodeResult` 导入重映射、code 输出端口演进策略。端口变更必须提升契约版本，当前没有历史项目，可明确拒绝而非猜测旧端口。
-3. **CR-5 体验与维护性**：把 `CanvasSidePanel` 拆成资产、模板、历史、运行中心子面板；修复资产来源索引在节点运行后不即时刷新的依赖；补桌面端人工验收清单。导演台继续保持冻结，除非以上通用节点、数据和体验切片全部验收通过。
+1. **✅ CR-3 数据层卫生**：MIME 已收敛到共享单一来源；SQLite 改为按版本逐项、可模拟测试的 `user_version` 迁移；启动时将残留 `.importing` 移入 `.recovery`，幽灵项目与 `.tmp` 仅报告而不删除。
+2. **✅ CR-4 契约与执行测试**：新增 chat/video/audio mocked gateway、聊天完成、视频轮询/取消回归；迭代暂停恢复、导入重映射和代码动态端口契约已有覆盖。代码节点维持 `contractVersion: 2`，端口由同一 `resolvePorts` 解析；破坏性端口变更不得猜测旧连线。
+3. **✅ CR-5 体验与维护性**：资产面板已拆为独立模块，并继续通过画布文档监听即时刷新来源索引；其余子面板保持独立职责组件；新增 `docs/DESKTOP_ACCEPTANCE_CHECKLIST.md` 作为发布前桌面验收门禁。导演台继续冻结，直至清单通过。
 
 ## 7. 后续开发计划（建议按此顺序）
 

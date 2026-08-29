@@ -3,10 +3,9 @@ import Database from 'better-sqlite3'
 import { app } from 'electron'
 import { join } from 'path'
 import { mkdirSync } from 'fs'
+import { migrateDatabase } from './db-migrations'
 
 let db: Database.Database | null = null
-/** 每次结构变更递增；旧库启动时在幂等 DDL 后升级该标记。 */
-const DB_SCHEMA_VERSION = 2
 
 export function getDataDir(): string {
   const dir = join(app.getPath('userData'), 'data')
@@ -24,7 +23,7 @@ export function getDb(): Database.Database {
   if (db) return db
   db = new Database(join(getDataDir(), 'app.db'))
   db.pragma('journal_mode = WAL')
-  migrate(db)
+  migrateDatabase(db)
   return db
 }
 
@@ -34,93 +33,6 @@ export function closeDb(): void {
     db.close()
     db = null
   }
-}
-
-function migrate(database: Database.Database): void {
-  const currentVersion = Number(database.pragma('user_version', { simple: true }) ?? 0)
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS projects (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL,
-      cover_media_id TEXT,
-      graph_version INTEGER NOT NULL DEFAULT 0,
-      deleted INTEGER NOT NULL DEFAULT 0
-    );
-
-    CREATE TABLE IF NOT EXISTS media (
-      id TEXT PRIMARY KEY,
-      kind TEXT NOT NULL,
-      mime TEXT NOT NULL,
-      path TEXT NOT NULL,
-      size_bytes INTEGER NOT NULL,
-      width INTEGER,
-      height INTEGER,
-      duration_sec REAL,
-      thumb_path TEXT,
-      created_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS tasks (
-      id TEXT PRIMARY KEY,
-      provider_id TEXT NOT NULL,
-      model_id TEXT NOT NULL,
-      node_id TEXT NOT NULL,
-      project_id TEXT NOT NULL,
-      kind TEXT NOT NULL,
-      status TEXT NOT NULL,
-      input TEXT,
-      output TEXT,
-      error TEXT,
-      attempts INTEGER NOT NULL DEFAULT 0,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS history (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      task_id TEXT NOT NULL,
-      node_id TEXT NOT NULL,
-      project_id TEXT NOT NULL,
-      created_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS providers (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      spec_id TEXT NOT NULL,
-      base_url TEXT NOT NULL,
-      api_key_ref TEXT,
-      models TEXT NOT NULL DEFAULT '[]',
-      created_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS settings (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS workflow_templates (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      payload TEXT NOT NULL,
-      created_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS history_snapshots (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL,
-      label TEXT NOT NULL,
-      snapshot TEXT NOT NULL,
-      node_count INTEGER NOT NULL,
-      created_at INTEGER NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_history_snapshots_project_created
-      ON history_snapshots(project_id, created_at DESC);
-  `)
-  if (currentVersion < DB_SCHEMA_VERSION) database.pragma(`user_version = ${DB_SCHEMA_VERSION}`)
 }
 
 export function getSetting(key: string): string | null {
