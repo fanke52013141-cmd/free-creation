@@ -219,6 +219,24 @@ export const BUILTIN_TEMPLATES: {
     edges: [{ from: 0, to: 1, fromPort: 'out-json', toPort: 'in-prompt' }]
   },
   {
+    name: '图片修改→后续创作',
+    icon: 'edit',
+    desc: '导入原图后，经图片修改分别连接裁剪、生图参考图和首帧视频',
+    nodes: [
+      { type: 'image', title: '原图资产', dx: -760, dy: 0 },
+      { type: 'image-edit', title: '图片修改', dx: -380, dy: 0 },
+      { type: 'image-crop', title: '图片裁剪', dx: 0, dy: -240 },
+      { type: 'image-gen', title: '继续生图', dx: 0, dy: 0 },
+      { type: 'video', title: '图片生成视频', dx: 0, dy: 240 }
+    ],
+    edges: [
+      { from: 0, to: 1, fromPort: 'out-image', toPort: 'in-image' },
+      { from: 1, to: 2, fromPort: 'out-image', toPort: 'in-image' },
+      { from: 1, to: 3, fromPort: 'out-image', toPort: 'in-image' },
+      { from: 1, to: 4, fromPort: 'out-image', toPort: 'in-image' }
+    ]
+  },
+  {
     name: '分镜→批量生图',
     icon: 'workflow',
     desc: '分镜逐项生成提示词包并串行生图；支持暂停、续跑和只重跑失败项',

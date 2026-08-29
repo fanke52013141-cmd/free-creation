@@ -3,6 +3,8 @@ productName: canvas-studio
 directories:
   buildResources: build
 files:
+  # 构建产物可能位于项目根目录的 dist；绝不能把旧安装包再次收进新的 asar。
+  - '!dist/**'
   - '!**/.vscode/*'
   - '!src/*'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
