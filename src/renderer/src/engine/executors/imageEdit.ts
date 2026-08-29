@@ -20,7 +20,8 @@ export const imageEditExecutor = async (
   const prompt = [
     config.instruction.trim(),
     inputText(ctx.inputs, 'in-text').trim(),
-    config.annotations.length ? '请根据图片中的标注进行修改，最终图像不要保留标注本身。' : ''
+    config.annotations.length ? '请根据图片中的标注进行修改，最终图像不要保留标注本身。' : '',
+    config.mask?.enabled ? '请仅修改遮罩指定区域，未遮罩区域尽量保持不变。' : ''
   ]
     .filter(Boolean)
     .join('\n\n')

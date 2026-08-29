@@ -2974,6 +2974,7 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   .image-edit-text.yellow { stroke: #facc15; fill: #facc15; }
   .image-edit-mark.orange,
   .image-edit-text.orange { stroke: #f97316; fill: #f97316; }
+  .image-edit-mask-mark { stroke: #38bdf8; stroke-width: 6; fill: none; opacity: .7; vector-effect: non-scaling-stroke; }
   .image-edit-text { font-size: 4px; paint-order: stroke; stroke-width: .35px; }
 
   .image-edit-tools,
@@ -3006,6 +3007,8 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   .image-edit-color.red { color: #fca5a5; }
   .image-edit-color.yellow { color: #fde68a; }
   .image-edit-color.orange { color: #fdba74; }
+  .image-edit-mask-options { display: flex; gap: 10px; margin-top: 5px; color: #b7c2d0; font-size: 11px; }
+  .image-edit-mask-options label { display: inline-flex; align-items: center; gap: 4px; }
 }
 
 .node-text,

@@ -43,6 +43,16 @@ describe('图片修改配置', () => {
       })
     ).toContain('不完整')
   })
+
+  it('启用遮罩时必须提供轨迹', () => {
+    expect(
+      validateImageEditConfig({
+        ...DEFAULT_IMAGE_EDIT_CONFIG,
+        instruction: '局部重绘',
+        mask: { enabled: true, strokes: [], brushSize: 0.08, invert: false }
+      })
+    ).toContain('至少绘制一个遮罩区域')
+  })
 })
 
 describe('imageEditExecutor', () => {

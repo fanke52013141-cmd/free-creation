@@ -4,7 +4,8 @@ import type { ImageEditInput } from '../../shared/contracts'
 import {
   parseImageEditConfig,
   validateImageEditConfig,
-  type ImageEditAnnotation
+  type ImageEditAnnotation,
+  type ImageEditMask
 } from '../../shared/image-edit'
 import type { MediaAsset } from '../../shared/types'
 import { getDb } from '../store/db'
@@ -38,9 +39,13 @@ export async function transformImageEdit(input: ImageEditInput): Promise<MediaAs
   if (!image.width || !image.height) throw new Error('无法读取图片尺寸')
   if (image.width * image.height > MAX_IMAGE_PIXELS) throw new Error('图片解码后超过 6400 万像素')
   const reference = renderAnnotatedReference(image, config.annotations)
+  const mask = config.mask?.enabled
+    ? renderImageEditMask(image.width, image.height, config.mask)
+    : undefined
   return generateImageEditToAsset(
     { ...input, config, size: config.size, prompt: input.prompt.trim() },
-    reference
+    reference,
+    mask
   )
 }
 
@@ -109,6 +114,40 @@ export function renderAnnotatedReference(
         ctx.fill()
       }
     }
+  }
+  return canvas.toBuffer('image/png')
+}
+
+/** 将遮罩笔画绘制为透明区域；透明部分是 image2 需要重绘的区域。 */
+export function renderImageEditMask(width: number, height: number, mask: ImageEditMask): Buffer {
+  const scale = Math.min(
+    1,
+    MAX_EXPORT_DIMENSION / width,
+    MAX_EXPORT_DIMENSION / height,
+    Math.sqrt(MAX_EXPORT_PIXELS / (width * height))
+  )
+  const outputWidth = Math.max(1, Math.round(width * scale))
+  const outputHeight = Math.max(1, Math.round(height * scale))
+  const canvas = createCanvas(outputWidth, outputHeight)
+  const ctx = canvas.getContext('2d')
+  if (!mask.invert) {
+    ctx.fillStyle = '#000'
+    ctx.fillRect(0, 0, outputWidth, outputHeight)
+    ctx.globalCompositeOperation = 'destination-out'
+  } else {
+    ctx.clearRect(0, 0, outputWidth, outputHeight)
+    ctx.globalCompositeOperation = 'source-over'
+  }
+  ctx.strokeStyle = '#fff'
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  ctx.lineWidth = Math.max(1, mask.brushSize * Math.min(outputWidth, outputHeight))
+  for (const stroke of mask.strokes) {
+    if (stroke.length < 2) continue
+    ctx.beginPath()
+    ctx.moveTo(stroke[0].x * outputWidth, stroke[0].y * outputHeight)
+    for (const point of stroke.slice(1)) ctx.lineTo(point.x * outputWidth, point.y * outputHeight)
+    ctx.stroke()
   }
   return canvas.toBuffer('image/png')
 }

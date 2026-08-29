@@ -32,13 +32,14 @@ const COLORS: Array<{ id: ImageEditColor; label: string }> = [
   { id: 'yellow', label: '黄' },
   { id: 'orange', label: '橙' }
 ]
-const TOOLS: Array<{ id: ImageEditAnnotationType; label: string; icon: 'crop' | 'edit' | 'text' }> =
-  [
-    { id: 'arrow', label: '箭头', icon: 'edit' },
-    { id: 'rect', label: '矩形', icon: 'crop' },
-    { id: 'brush', label: '画笔', icon: 'edit' },
-    { id: 'text', label: '文字', icon: 'text' }
-  ]
+type ImageEditTool = ImageEditAnnotationType | 'mask'
+const TOOLS: Array<{ id: ImageEditTool; label: string; icon: 'crop' | 'edit' | 'text' }> = [
+  { id: 'arrow', label: '箭头', icon: 'edit' },
+  { id: 'rect', label: '矩形', icon: 'crop' },
+  { id: 'brush', label: '画笔', icon: 'edit' },
+  { id: 'text', label: '文字', icon: 'text' },
+  { id: 'mask', label: '遮罩', icon: 'crop' }
+]
 
 export function ImageEditBody({ shape, openPreview }: NodeBodyProps): React.JSX.Element {
   const guard = useClickGuard()
@@ -142,8 +143,10 @@ export function ImageEditSettings({
 }: NodeSettingsProps): React.JSX.Element {
   const previewRef = useRef<HTMLDivElement>(null)
   const draft = useRef<ImageEditAnnotation | null>(null)
+  const maskDraft = useRef<ImageEditPoint[] | null>(null)
+  const maskBase = useRef<ImageEditPoint[][]>([])
   const [config, setConfig] = useState(() => parseImageEditConfig(readNodeConfig(shape)))
-  const [tool, setTool] = useState<ImageEditAnnotationType>('arrow')
+  const [tool, setTool] = useState<ImageEditTool>('arrow')
   const [color, setColor] = useState<ImageEditColor>('red')
   const [aspect, setAspect] = useState(16 / 10)
   const [busy, setBusy] = useState(false)
@@ -171,6 +174,12 @@ export function ImageEditSettings({
     const el = previewRef.current
     if (!el) return
     const startPoint = pointFromEvent(event, el)
+    if (tool === 'mask') {
+      maskBase.current = config.mask?.strokes ?? []
+      maskDraft.current = [startPoint]
+      el.setPointerCapture(event.pointerId)
+      return
+    }
     if (tool === 'text') {
       const text = window.prompt('输入标注文字')?.trim()
       if (text)
@@ -194,7 +203,22 @@ export function ImageEditSettings({
     el.setPointerCapture(event.pointerId)
   }
   const move = (event: React.PointerEvent<HTMLDivElement>): void => {
-    if (!draft.current || !previewRef.current) return
+    if (!previewRef.current) return
+    if (maskDraft.current) {
+      const next = [...maskDraft.current, pointFromEvent(event, previewRef.current)]
+      maskDraft.current = next
+      setConfig((current) => ({
+        ...current,
+        mask: {
+          enabled: true,
+          strokes: [...maskBase.current, next],
+          brushSize: current.mask?.brushSize ?? 0.08,
+          invert: current.mask?.invert ?? false
+        }
+      }))
+      return
+    }
+    if (!draft.current) return
     const next = {
       ...draft.current,
       points: [...draft.current.points, pointFromEvent(event, previewRef.current)]
@@ -206,6 +230,21 @@ export function ImageEditSettings({
     }))
   }
   const finish = (): void => {
+    if (maskDraft.current) {
+      const stroke = maskDraft.current
+      maskDraft.current = null
+      if (stroke.length >= 2)
+        save({
+          ...config,
+          mask: {
+            enabled: true,
+            strokes: [...maskBase.current, stroke],
+            brushSize: config.mask?.brushSize ?? 0.08,
+            invert: config.mask?.invert ?? false
+          }
+        })
+      return
+    }
     if (!draft.current) return
     const next = draft.current
     draft.current = null
@@ -257,6 +296,14 @@ export function ImageEditSettings({
               }}
             />
             <svg className="image-edit-overlay" viewBox="0 0 100 100" preserveAspectRatio="none">
+              {config.mask?.enabled &&
+                config.mask.strokes.map((stroke, index) => (
+                  <polyline
+                    key={`mask-${index}`}
+                    points={stroke.map((p) => `${p.x * 100},${p.y * 100}`).join(' ')}
+                    className="image-edit-mask-mark"
+                  />
+                ))}
               {config.annotations.map((a) => {
                 const pts = a.points.map((p) => `${p.x * 100},${p.y * 100}`).join(' ')
                 if (a.type === 'rect') {
@@ -318,6 +365,14 @@ export function ImageEditSettings({
             >
               清空
             </button>
+            {config.mask?.strokes.length ? (
+              <button
+                onPointerDown={stopEventPropagation}
+                onClick={() => save({ ...config, mask: { ...config.mask!, strokes: [] } })}
+              >
+                清空遮罩
+              </button>
+            ) : null}
           </div>
           <div className="image-edit-colors">
             {COLORS.map((item) => (
@@ -330,6 +385,45 @@ export function ImageEditSettings({
                 {item.label}
               </button>
             ))}
+          </div>
+          <div className="image-edit-mask-options">
+            <label>
+              <input
+                type="checkbox"
+                checked={config.mask?.enabled ?? false}
+                onPointerDown={stopEventPropagation}
+                onChange={(event) =>
+                  save({
+                    ...config,
+                    mask: {
+                      enabled: event.target.checked,
+                      strokes: config.mask?.strokes ?? [],
+                      brushSize: config.mask?.brushSize ?? 0.08,
+                      invert: config.mask?.invert ?? false
+                    }
+                  })
+                }
+              />
+              启用遮罩
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={config.mask?.invert ?? false}
+                disabled={!config.mask?.enabled}
+                onPointerDown={stopEventPropagation}
+                onChange={(event) =>
+                  save({
+                    ...config,
+                    mask: {
+                      ...(config.mask ?? { enabled: true, strokes: [], brushSize: 0.08 }),
+                      invert: event.target.checked
+                    }
+                  })
+                }
+              />
+              反选区域
+            </label>
           </div>
         </>
       )}

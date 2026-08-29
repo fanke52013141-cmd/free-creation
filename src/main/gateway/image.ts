@@ -40,12 +40,15 @@ export async function generateImageToAsset(input: ImageGenerateInput): Promise<M
 async function generateImageWithReference(
   input: Pick<ImageGenerateInput, 'projectId' | 'providerId' | 'modelId' | 'prompt' | 'size'>,
   referenceImage?: Buffer,
-  providerOptions?: Record<string, string | number | boolean>
+  providerOptions?: Record<string, string | number | boolean>,
+  maskImage?: Buffer
 ): Promise<MediaAsset> {
   const prompt = input.prompt.trim()
   const { images } = await generateImage({
     model: createImageModel(input.providerId, input.modelId),
-    prompt: referenceImage ? { text: prompt, images: [referenceImage] } : prompt,
+    prompt: referenceImage
+      ? { text: prompt, images: [referenceImage], ...(maskImage ? { mask: maskImage } : {}) }
+      : prompt,
     ...(input.size && input.size !== 'auto' ? { size: input.size as `${number}x${number}` } : {}),
     ...(providerOptions && Object.keys(providerOptions).length > 0
       ? { providerOptions: { [input.providerId]: providerOptions } }
@@ -64,12 +67,13 @@ async function generateImageWithReference(
 /** 图片修改使用已渲染的标注参考图，原始图片不会被覆写。 */
 export async function generateImageEditToAsset(
   input: ImageEditInput,
-  referenceImage: Buffer
+  referenceImage: Buffer,
+  maskImage?: Buffer
 ): Promise<MediaAsset> {
   if (!input.prompt?.trim()) throw new GatewayError('INVALID_INPUT', '修改说明不能为空')
   if (input.prompt.length > 8000) throw new GatewayError('INVALID_INPUT', '修改说明超过 8000 字')
   if (input.size && !IMAGE_EDIT_SIZES.includes(input.size as (typeof IMAGE_EDIT_SIZES)[number])) {
     throw new GatewayError('INVALID_INPUT', '图片修改尺寸不受支持')
   }
-  return generateImageWithReference(input, referenceImage)
+  return generateImageWithReference(input, referenceImage, undefined, maskImage)
 }

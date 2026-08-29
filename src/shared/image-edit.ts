@@ -7,6 +7,14 @@ export interface ImageEditPoint {
   y: number
 }
 
+export interface ImageEditMask {
+  enabled: boolean
+  /** 归一化画笔轨迹；遮罩区域在发送给模型时会被转为透明区域。 */
+  strokes: ImageEditPoint[][]
+  brushSize: number
+  invert: boolean
+}
+
 export interface ImageEditAnnotation {
   id: string
   type: ImageEditAnnotationType
@@ -22,11 +30,14 @@ export interface ImageEditConfig {
   size: string
   instruction: string
   annotations: ImageEditAnnotation[]
+  mask?: ImageEditMask
 }
 
 export const MAX_IMAGE_EDIT_ANNOTATIONS = 64
 export const MAX_IMAGE_EDIT_INSTRUCTION = 4000
 export const MAX_IMAGE_EDIT_ANNOTATION_TEXT = 500
+export const MAX_IMAGE_EDIT_MASK_STROKES = 64
+export const MAX_IMAGE_EDIT_MASK_POINTS = 512
 export const IMAGE_EDIT_SIZES = ['auto', '1024x1024', '1536x1024', '1024x1536'] as const
 export type ImageEditSize = (typeof IMAGE_EDIT_SIZES)[number]
 
@@ -35,7 +46,8 @@ export const DEFAULT_IMAGE_EDIT_CONFIG: ImageEditConfig = {
   modelKey: '',
   size: 'auto',
   instruction: '',
-  annotations: []
+  annotations: [],
+  mask: { enabled: false, strokes: [], brushSize: 0.08, invert: false }
 }
 
 const TYPES = new Set<ImageEditAnnotationType>(['arrow', 'rect', 'brush', 'text'])
@@ -47,6 +59,26 @@ function point(value: unknown): ImageEditPoint {
   return {
     x: clamp(typeof p?.x === 'number' && Number.isFinite(p.x) ? p.x : 0),
     y: clamp(typeof p?.y === 'number' && Number.isFinite(p.y) ? p.y : 0)
+  }
+}
+
+function mask(value: unknown): ImageEditMask | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const raw = value as Record<string, unknown>
+  const strokes = Array.isArray(raw.strokes)
+    ? raw.strokes
+        .filter((stroke): stroke is unknown[] => Array.isArray(stroke))
+        .slice(0, MAX_IMAGE_EDIT_MASK_STROKES)
+        .map((stroke) => stroke.slice(0, MAX_IMAGE_EDIT_MASK_POINTS).map(point).filter(Boolean))
+        .filter((stroke) => stroke.length >= 2)
+    : []
+  const rawSize =
+    typeof raw.brushSize === 'number' && Number.isFinite(raw.brushSize) ? raw.brushSize : 0.08
+  return {
+    enabled: raw.enabled === true,
+    strokes,
+    brushSize: Math.min(0.5, Math.max(0.01, rawSize)),
+    invert: raw.invert === true
   }
 }
 
@@ -93,6 +125,13 @@ export function parseImageEditConfig(text: string): ImageEditConfig {
     if (ids.has(annotation.id)) annotation.id = `${annotation.id}-${ids.size + 1}`
     ids.add(annotation.id)
   }
+  const parsedMask = mask(raw.mask) ??
+    DEFAULT_IMAGE_EDIT_CONFIG.mask ?? {
+      enabled: false,
+      strokes: [],
+      brushSize: 0.08,
+      invert: false
+    }
   return {
     version: 1,
     modelKey: typeof raw.modelKey === 'string' ? raw.modelKey.trim().slice(0, 200) : '',
@@ -104,7 +143,8 @@ export function parseImageEditConfig(text: string): ImageEditConfig {
       typeof raw.instruction === 'string'
         ? raw.instruction.slice(0, MAX_IMAGE_EDIT_INSTRUCTION)
         : '',
-    annotations
+    annotations,
+    ...(parsedMask ? { mask: parsedMask } : {})
   }
 }
 
@@ -130,7 +170,17 @@ export function validateImageEditConfig(config: ImageEditConfig): string | null 
       return `第 ${index + 1} 个绘制标注不完整`
     }
   }
-  if (!config.instruction.trim() && config.annotations.length === 0)
+  if (
+    !config.instruction.trim() &&
+    config.annotations.length === 0 &&
+    !(config.mask?.enabled && config.mask.strokes.length > 0)
+  )
     return '请填写修改说明或添加至少一个标注'
+  if (config.mask?.enabled && config.mask.strokes.length === 0)
+    return '已启用遮罩，请至少绘制一个遮罩区域'
+  if ((config.mask?.strokes.length ?? 0) > MAX_IMAGE_EDIT_MASK_STROKES)
+    return '遮罩笔画数量超过上限'
+  if (config.mask?.strokes.some((stroke) => stroke.length > MAX_IMAGE_EDIT_MASK_POINTS))
+    return '遮罩笔画点数超过上限'
   return null
 }

@@ -1,6 +1,6 @@
 import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { describe, expect, it } from 'vitest'
-import { renderAnnotatedReference } from '../src/main/media/image-edit'
+import { renderAnnotatedReference, renderImageEditMask } from '../src/main/media/image-edit'
 
 describe('图片修改标注参考图', () => {
   it('保留源图尺寸并绘制箭头、矩形和文字标注', async () => {
@@ -45,5 +45,46 @@ describe('图片修改标注参考图', () => {
     outputContext.drawImage(rendered, 0, 0)
     const pixel = outputContext.getImageData(16, 8, 1, 1).data
     expect(pixel[0]).toBeGreaterThan(pixel[2])
+  })
+})
+
+describe('图片修改遮罩', () => {
+  it('默认遮罩将笔画区域变为透明，反选时保留笔画区域', async () => {
+    const mask = await loadImage(
+      renderImageEditMask(40, 40, {
+        enabled: true,
+        brushSize: 0.25,
+        invert: false,
+        strokes: [
+          [
+            { x: 0.25, y: 0.5 },
+            { x: 0.75, y: 0.5 }
+          ]
+        ]
+      })
+    )
+    const canvas = createCanvas(40, 40)
+    const context = canvas.getContext('2d')
+    context.drawImage(mask, 0, 0)
+    expect(context.getImageData(20, 20, 1, 1).data[3]).toBe(0)
+    expect(context.getImageData(2, 2, 1, 1).data[3]).toBe(255)
+
+    const inverted = await loadImage(
+      renderImageEditMask(40, 40, {
+        enabled: true,
+        brushSize: 0.25,
+        invert: true,
+        strokes: [
+          [
+            { x: 0.25, y: 0.5 },
+            { x: 0.75, y: 0.5 }
+          ]
+        ]
+      })
+    )
+    context.clearRect(0, 0, 40, 40)
+    context.drawImage(inverted, 0, 0)
+    expect(context.getImageData(20, 20, 1, 1).data[3]).toBe(255)
+    expect(context.getImageData(2, 2, 1, 1).data[3]).toBe(0)
   })
 })
