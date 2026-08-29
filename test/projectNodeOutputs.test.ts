@@ -127,6 +127,18 @@ describe('projectNodeOutputs · 媒体节点（图片/生图/视频/音频）', 
     expect(projectNodeOutputs(shape('video-audio'))).toEqual({})
     expect(projectNodeOutputs(shape('audio'))).toEqual({})
   })
+
+  it('失败运行不会继续暴露上一次的媒体输出', () => {
+    expect(
+      projectNodeOutputs(
+        shape(
+          'image-edit',
+          { mediaId: 'old', mediaPath: '/old.png', mediaMime: 'image/png' },
+          { nodeRun: { runId: 'run-failed', status: 'failed', startedAt: 1, inputs: {} } }
+        )
+      )
+    ).toEqual({})
+  })
 })
 
 describe('媒体结果集合', () => {

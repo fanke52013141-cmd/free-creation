@@ -38,12 +38,18 @@ export async function transformImageEdit(input: ImageEditInput): Promise<MediaAs
   if (!image.width || !image.height) throw new Error('无法读取图片尺寸')
   if (image.width * image.height > MAX_IMAGE_PIXELS) throw new Error('图片解码后超过 6400 万像素')
   const reference = renderAnnotatedReference(image, config.annotations)
-  return generateImageEditToAsset({ ...input, config, prompt: input.prompt.trim() }, reference)
+  return generateImageEditToAsset(
+    { ...input, config, size: config.size, prompt: input.prompt.trim() },
+    reference
+  )
 }
 
 type CanvasImage = Awaited<ReturnType<typeof loadImage>>
 
-function renderAnnotatedReference(image: CanvasImage, annotations: ImageEditAnnotation[]): Buffer {
+export function renderAnnotatedReference(
+  image: CanvasImage,
+  annotations: ImageEditAnnotation[]
+): Buffer {
   const scale = Math.min(
     1,
     MAX_EXPORT_DIMENSION / image.width,
@@ -65,7 +71,11 @@ function renderAnnotatedReference(image: CanvasImage, annotations: ImageEditAnno
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
     if (annotation.type === 'rect' && points.length >= 2) {
-      ctx.strokeRect(points[0].x, points[0].y, points[1].x - points[0].x, points[1].y - points[0].y)
+      const x = Math.min(points[0].x, points[1].x)
+      const y = Math.min(points[0].y, points[1].y)
+      const width = Math.abs(points[1].x - points[0].x)
+      const height = Math.abs(points[1].y - points[0].y)
+      ctx.strokeRect(x, y, width, height)
     } else if (annotation.type === 'text' && points[0]) {
       const fontSize = Math.max(14, Math.round(24 * scale))
       ctx.font = `${fontSize}px sans-serif`

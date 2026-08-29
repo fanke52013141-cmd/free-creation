@@ -8,13 +8,15 @@ import {
   type ImageEditAnnotationType,
   type ImageEditColor,
   type ImageEditConfig,
-  type ImageEditPoint
+  type ImageEditPoint,
+  IMAGE_EDIT_SIZES
 } from '@shared/image-edit'
 import { gatherUpstreamMedia } from '../../../canvas/graph'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { runNodeManually } from '../../../engine/executor'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { useNodePanelStore } from '../../../stores/nodePanel'
+import { toast } from '../../../stores/toast'
 import { Icon } from '../../../components/Icon'
 import { mediaUrl, type NodeBodyProps, type NodeSettingsProps } from '../../registry'
 import {
@@ -102,6 +104,37 @@ function pointFromEvent(event: React.PointerEvent, element: HTMLDivElement): Ima
   }
 }
 
+function arrowHead(points: ImageEditPoint[]): string {
+  const end = points[points.length - 1]
+  const previous = points[points.length - 2]
+  if (!end || !previous) return ''
+  const angle = Math.atan2(end.y - previous.y, end.x - previous.x)
+  const size = 0.035
+  const left = {
+    x: end.x - size * Math.cos(angle - Math.PI / 6),
+    y: end.y - size * Math.sin(angle - Math.PI / 6)
+  }
+  const right = {
+    x: end.x - size * Math.cos(angle + Math.PI / 6),
+    y: end.y - size * Math.sin(angle + Math.PI / 6)
+  }
+  return [end, left, right].map((p) => `${p.x * 100},${p.y * 100}`).join(' ')
+}
+
+function normalizedRect(
+  points: ImageEditPoint[]
+): { x: number; y: number; width: number; height: number } | null {
+  const start = points[0]
+  const end = points[1]
+  if (!start || !end) return null
+  return {
+    x: Math.min(start.x, end.x) * 100,
+    y: Math.min(start.y, end.y) * 100,
+    width: Math.abs(end.x - start.x) * 100,
+    height: Math.abs(end.y - start.y) * 100
+  }
+}
+
 export function ImageEditSettings({
   shape,
   editor,
@@ -176,17 +209,17 @@ export function ImageEditSettings({
     if (!draft.current) return
     const next = draft.current
     draft.current = null
-    const valid =
-      next.type === 'rect' || next.type === 'arrow'
-        ? next.points.length >= 2
-        : next.points.length >= 2
+    const valid = next.points.length >= 2
     if (!valid) return
     save({ ...config, annotations: [...config.annotations.filter((a) => a.id !== next.id), next] })
   }
   const removeLast = (): void => save({ ...config, annotations: config.annotations.slice(0, -1) })
+  const validationError = validateImageEditConfig(config)
   const run = async (): Promise<void> => {
-    const invalid = validateImageEditConfig(config)
-    if (invalid) return
+    if (validationError) {
+      toast(validationError)
+      return
+    }
     setBusy(true)
     try {
       await runNodeManually(editor, projectId, providers, shape.id)
@@ -194,10 +227,7 @@ export function ImageEditSettings({
       setBusy(false)
     }
   }
-  const invalid =
-    config.annotations.length === 0 && !config.instruction.trim()
-      ? '请填写修改说明或添加标注'
-      : null
+  const invalid = validationError
   return (
     <section className="contract-section image-edit-settings">
       <h4>图片修改</h4>
@@ -229,18 +259,18 @@ export function ImageEditSettings({
             <svg className="image-edit-overlay" viewBox="0 0 100 100" preserveAspectRatio="none">
               {config.annotations.map((a) => {
                 const pts = a.points.map((p) => `${p.x * 100},${p.y * 100}`).join(' ')
-                if (a.type === 'rect' && a.points[1])
-                  return (
-                    <rect
-                      key={a.id}
-                      x={a.points[0].x * 100}
-                      y={a.points[0].y * 100}
-                      width={(a.points[1].x - a.points[0].x) * 100}
-                      height={(a.points[1].y - a.points[0].y) * 100}
-                      className={`image-edit-mark ${a.color}`}
-                      style={{ fill: 'none' }}
-                    />
-                  )
+                if (a.type === 'rect') {
+                  const rect = normalizedRect(a.points)
+                  if (rect)
+                    return (
+                      <rect
+                        key={a.id}
+                        {...rect}
+                        className={`image-edit-mark ${a.color}`}
+                        style={{ fill: 'none' }}
+                      />
+                    )
+                }
                 if (a.type === 'text')
                   return (
                     <text
@@ -251,6 +281,16 @@ export function ImageEditSettings({
                     >
                       {a.text}
                     </text>
+                  )
+                if (a.type === 'arrow')
+                  return (
+                    <g key={a.id}>
+                      <polyline points={pts} className={`image-edit-mark ${a.color}`} />
+                      <polygon
+                        points={arrowHead(a.points)}
+                        className={`image-edit-mark ${a.color}`}
+                      />
+                    </g>
                   )
                 return <polyline key={a.id} points={pts} className={`image-edit-mark ${a.color}`} />
               })}
@@ -305,10 +345,11 @@ export function ImageEditSettings({
           onPointerDown={stopEventPropagation}
           onChange={(e) => save({ ...config, size: e.target.value })}
         >
-          <option value="auto">默认尺寸</option>
-          <option value="1024x1024">1024x1024</option>
-          <option value="1536x1024">1536x1024</option>
-          <option value="1024x1536">1024x1536</option>
+          {IMAGE_EDIT_SIZES.map((size) => (
+            <option key={size} value={size}>
+              {size === 'auto' ? '默认尺寸' : size}
+            </option>
+          ))}
         </select>
       </div>
       <textarea
@@ -323,7 +364,7 @@ export function ImageEditSettings({
       {!options.length && <NoModelHint onOpen={openProviderSettings} />}
       <button
         className="btn-primary small gen-go"
-        disabled={busy || !source || !options.length}
+        disabled={busy || !source || !options.length || Boolean(invalid)}
         onPointerDown={stopEventPropagation}
         onClick={(e) => {
           e.stopPropagation()

@@ -3,6 +3,7 @@
 // P1: 支持 referenceMediaId 参考图（图生图），通过 providerOptions 传递 data URL
 import { generateImage } from 'ai'
 import type { ImageEditInput, ImageGenerateInput } from '../../shared/contracts'
+import { IMAGE_EDIT_SIZES } from '../../shared/image-edit'
 import type { MediaAsset } from '../../shared/types'
 import { readMediaBuffer, saveBufferAsset } from '../store/media.repo'
 import { createImageModel, GatewayError } from './factory'
@@ -67,5 +68,8 @@ export async function generateImageEditToAsset(
 ): Promise<MediaAsset> {
   if (!input.prompt?.trim()) throw new GatewayError('INVALID_INPUT', '修改说明不能为空')
   if (input.prompt.length > 8000) throw new GatewayError('INVALID_INPUT', '修改说明超过 8000 字')
+  if (input.size && !IMAGE_EDIT_SIZES.includes(input.size as (typeof IMAGE_EDIT_SIZES)[number])) {
+    throw new GatewayError('INVALID_INPUT', '图片修改尺寸不受支持')
+  }
   return generateImageWithReference(input, referenceImage)
 }

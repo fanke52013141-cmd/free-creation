@@ -343,6 +343,8 @@ async function executeNodeOnce(
     if (collected.errors.length > 0) {
       throw new Error(`输入契约校验失败：${collected.errors.join('；')}`)
     }
+    // 本次执行接管该节点的输出；失败或跳过时不能让本轮继续消费上一次结果。
+    ctx.outputs.delete(node.id)
     const result = await invokeExecutor(ctx, node, shape, collected.value, runSubflow)
     const latest = editor.getShape<NodeCardShape>(shapeId)
     if (ctx.token.cancelled) {

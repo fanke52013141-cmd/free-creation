@@ -27,6 +27,8 @@ export interface ImageEditConfig {
 export const MAX_IMAGE_EDIT_ANNOTATIONS = 64
 export const MAX_IMAGE_EDIT_INSTRUCTION = 4000
 export const MAX_IMAGE_EDIT_ANNOTATION_TEXT = 500
+export const IMAGE_EDIT_SIZES = ['auto', '1024x1024', '1536x1024', '1024x1536'] as const
+export type ImageEditSize = (typeof IMAGE_EDIT_SIZES)[number]
 
 export const DEFAULT_IMAGE_EDIT_CONFIG: ImageEditConfig = {
   version: 1,
@@ -94,7 +96,10 @@ export function parseImageEditConfig(text: string): ImageEditConfig {
   return {
     version: 1,
     modelKey: typeof raw.modelKey === 'string' ? raw.modelKey.trim().slice(0, 200) : '',
-    size: typeof raw.size === 'string' && raw.size.trim() ? raw.size.trim().slice(0, 32) : 'auto',
+    size:
+      typeof raw.size === 'string' && IMAGE_EDIT_SIZES.includes(raw.size as ImageEditSize)
+        ? raw.size
+        : 'auto',
     instruction:
       typeof raw.instruction === 'string'
         ? raw.instruction.slice(0, MAX_IMAGE_EDIT_INSTRUCTION)

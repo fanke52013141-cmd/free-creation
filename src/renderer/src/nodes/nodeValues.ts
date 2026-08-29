@@ -1,5 +1,6 @@
 import type { NodeCardShape } from '../canvas/NodeCardShape'
 import { getNodeType } from './registry'
+import { readNodeRunRecord } from '../engine/runRecord'
 
 export type NodeValue =
   | { kind: 'text'; text: string }
@@ -219,5 +220,7 @@ export function storyboardSummary(shots: unknown[]): string {
  * 统一输出入口。节点具体投影由各自 Spec 注册，运行器永远不根据 nodeType 猜测。
  */
 export function projectNodeOutputs(shape: NodeCardShape): RawNodeOutputs {
+  const lastRun = readNodeRunRecord(shape.meta?.nodeRun)
+  if (lastRun && lastRun.status !== 'success') return {}
   return getNodeType(shape.props.nodeType)?.projectOutputs?.(shape) ?? {}
 }

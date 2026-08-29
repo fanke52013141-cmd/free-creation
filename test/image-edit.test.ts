@@ -31,6 +31,7 @@ describe('图片修改配置', () => {
       { x: 0, y: 1 },
       { x: 1, y: 0 }
     ])
+    expect(parseImageEditConfig(JSON.stringify({ size: 'not-a-size' })).size).toBe('auto')
   })
 
   it('没有说明或标注时拒绝执行', () => {
