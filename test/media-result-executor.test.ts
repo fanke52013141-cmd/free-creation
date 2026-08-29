@@ -15,7 +15,10 @@ const provider: ProviderConfig = {
   models: [{ id: 'img-1', name: '图片模型', modality: 'image', providerId: 'p1' }]
 }
 
-function makeContext(nodeResult = ''): {
+function makeContext(
+  nodeResult = '',
+  runId = 'run-default'
+): {
   ctx: NodeExecutionContext
   result: { value: string | null }
 } {
@@ -61,6 +64,7 @@ function makeContext(nodeResult = ''): {
     shape,
     inputs: new Map(),
     projectId: 'p1',
+    runId,
     providers: [provider],
     signal: { cancelled: false },
     updateProps: () => undefined,
@@ -98,15 +102,18 @@ describe('imageGenExecutor · 媒体结果集合', () => {
       }
     } as unknown as Window & typeof globalThis
 
-    const first = makeContext()
+    const first = makeContext('', 'run-first')
     expect((await imageGenExecutor(first.ctx)).status).toBe('done')
-    expect(parseMediaResultCollection(first.result.value ?? '')?.results).toHaveLength(1)
+    expect(parseMediaResultCollection(first.result.value ?? '')?.results).toEqual([
+      expect.objectContaining({ mediaId: 'img-1', runId: 'run-first' })
+    ])
 
-    const second = makeContext(first.result.value ?? '')
+    const second = makeContext(first.result.value ?? '', 'run-second')
     expect((await imageGenExecutor(second.ctx)).status).toBe('done')
-    expect(
-      parseMediaResultCollection(second.result.value ?? '')?.results.map((item) => item.mediaId)
-    ).toEqual(['img-1', 'img-2'])
+    expect(parseMediaResultCollection(second.result.value ?? '')?.results).toEqual([
+      expect.objectContaining({ mediaId: 'img-1', runId: 'run-first' }),
+      expect.objectContaining({ mediaId: 'img-2', runId: 'run-second' })
+    ])
 
     const cancelled = makeContext(second.result.value ?? '')
     cancelled.ctx.signal = { cancelled: true }
