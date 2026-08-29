@@ -125,6 +125,45 @@ export function createImageContinuation(
   editor.select(id)
 }
 
+/** 图片结果的统一下游入口。它只创建节点和声明端口边，不复制任何媒体。 */
+export function ImageContinuationActions({
+  editor,
+  shape
+}: {
+  editor: Editor
+  shape: NodeCardShape
+}): React.JSX.Element {
+  const actions: Array<{
+    type: 'image-crop' | 'image-gen' | 'image-edit' | 'video'
+    icon: 'crop' | 'spark' | 'edit' | 'video'
+    label: string
+    title: string
+  }> = [
+    { type: 'image-crop', icon: 'crop', label: '裁剪图片', title: '创建裁剪节点并连接当前图片' },
+    { type: 'image-gen', icon: 'spark', label: '继续生图', title: '创建生图节点并连接当前图片' },
+    { type: 'image-edit', icon: 'edit', label: '修改图片', title: '对当前图片添加标注并修改' },
+    { type: 'video', icon: 'video', label: '生成视频', title: '创建视频节点并将当前图片作为首帧' }
+  ]
+  return (
+    <div className="node-media-next-actions" aria-label="图片后续操作">
+      {actions.map((action) => (
+        <button
+          className="btn-ghost small"
+          key={action.type}
+          title={action.title}
+          onPointerDown={stopEventPropagation}
+          onClick={(event) => {
+            stopEventPropagation(event)
+            createImageContinuation(editor, shape, action.type)
+          }}
+        >
+          <Icon name={action.icon} size={12} /> {action.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 /** 从视频输出创建独立处理节点；快捷入口只建真实边，不在视频节点内隐藏产物。 */
 export function createVideoContinuation(
   editor: Editor,

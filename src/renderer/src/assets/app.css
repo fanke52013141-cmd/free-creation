@@ -952,40 +952,8 @@ select:focus-visible,
   position: relative;
   width: 100%;
   height: 100%;
-}
-
-/* 可连接高亮：选中某节点时，与之兼容的其他节点显示虚线发光框 */
-.node-card-wrap.connectable::before {
-  content: '';
-  position: absolute;
-  inset: -6px;
-  border: 1px dashed var(--brand);
-  border-radius: 14px;
-  pointer-events: none;
-  animation: connectable-pulse 1.2s ease-in-out infinite;
-  z-index: 10;
-}
-
-.node-card-wrap.connectable::after {
-  content: '';
-  position: absolute;
-  inset: -6px;
-  border-radius: 14px;
-  pointer-events: none;
-  box-shadow: 0 0 14px 2px rgba(9, 202, 245, 0.18);
-  background: rgba(9, 202, 245, 0.02);
-  z-index: 9;
-  animation: connectable-pulse 1.2s ease-in-out infinite;
-}
-
-@keyframes connectable-pulse {
-  0%,
-  100% {
-    opacity: 0.45;
-  }
-  50% {
-    opacity: 1;
-  }
+  /* 让触屏和触控板指针交给画布选择工具，按住节点即可直接拖动。 */
+  touch-action: none;
 }
 
 .node-card {
@@ -1017,9 +985,9 @@ select:focus-visible,
   background: color-mix(in srgb, var(--brand) 10%, var(--card));
 }
 
-/* 节点顶部颜色条：按类型区分颜色（3px 高） */
+/* 节点顶部颜色条：全宽，4px 高，提升类型辨识而不改变卡片格局。 */
 .node-color-bar {
-  height: 2px;
+  height: 4px;
   width: 100%;
   flex-shrink: 0;
   border-radius: 10px 10px 0 0;
@@ -2675,8 +2643,8 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   line-height: 1.45;
 }
 
-  .crop-no-source,
-  .crop-invalid {
+.crop-no-source,
+.crop-invalid {
   margin: 0;
   padding: 9px;
   border: 1px dashed var(--line);
@@ -2923,92 +2891,161 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
       0 0 0 4px rgba(251, 191, 36, 0.16),
       0 0 12px rgba(251, 191, 36, 0.45);
   }
+}
 
-  .image-edit-settings {
-    display: flex;
-    flex-direction: column;
-    gap: 9px;
-  }
+.image-edit-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
 
-  .image-edit-settings h4,
-  .image-edit-settings .contract-settings-hint {
-    margin: 0;
-  }
+.image-edit-settings h4,
+.image-edit-settings .contract-settings-hint {
+  margin: 0;
+}
 
-  .image-edit-preview {
-    position: relative;
-    width: 100%;
-    overflow: hidden;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    background: #111;
-    touch-action: none;
-    user-select: none;
-  }
+.image-edit-preview {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #111;
+  touch-action: none;
+  user-select: none;
+}
 
-  .image-edit-preview > img {
-    display: block;
-    width: 100%;
-    height: 100%;
-    object-fit: fill;
-    pointer-events: none;
-  }
+.image-edit-preview > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+}
 
-  .image-edit-overlay {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-  }
+.image-edit-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
 
-  .image-edit-mark {
-    fill: none;
-    stroke-width: 1.5;
-    vector-effect: non-scaling-stroke;
-  }
+.image-edit-mark {
+  fill: none;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
 
-  .image-edit-mark.red,
-  .image-edit-text.red { stroke: #ef4444; fill: #ef4444; }
-  .image-edit-mark.yellow,
-  .image-edit-text.yellow { stroke: #facc15; fill: #facc15; }
-  .image-edit-mark.orange,
-  .image-edit-text.orange { stroke: #f97316; fill: #f97316; }
-  .image-edit-mask-mark { stroke: #38bdf8; stroke-width: 6; fill: none; opacity: .7; vector-effect: non-scaling-stroke; }
-  .image-edit-text { font-size: 4px; paint-order: stroke; stroke-width: .35px; }
+.image-edit-mark.red,
+.image-edit-text.red {
+  stroke: #ef4444;
+  fill: #ef4444;
+}
+.image-edit-mark.yellow,
+.image-edit-text.yellow {
+  stroke: #facc15;
+  fill: #facc15;
+}
+.image-edit-mark.orange,
+.image-edit-text.orange {
+  stroke: #f97316;
+  fill: #f97316;
+}
+.image-edit-mask-mark {
+  stroke: #38bdf8;
+  stroke-width: 6;
+  fill: none;
+  opacity: 0.7;
+  vector-effect: non-scaling-stroke;
+}
+.image-edit-text {
+  font-size: 4px;
+  paint-order: stroke;
+  stroke-width: 0.35px;
+}
 
-  .image-edit-tools,
-  .image-edit-colors {
-    display: flex;
-    gap: 5px;
-    flex-wrap: wrap;
-  }
+.image-edit-tools,
+.image-edit-colors,
+.image-edit-presets {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
 
-  .image-edit-tools button,
-  .image-edit-colors button {
-    min-height: 27px;
-    padding: 3px 7px;
-    border: 1px solid var(--line);
-    border-radius: 6px;
-    background: rgba(255, 255, 255, 0.035);
-    color: var(--muted);
-    font: inherit;
-    font-size: 10px;
-    cursor: pointer;
-  }
+.image-edit-tools button,
+.image-edit-colors button,
+.image-edit-presets button {
+  min-height: 27px;
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--muted);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
 
-  .image-edit-tools button.active,
-  .image-edit-colors button.active {
-    border-color: rgba(249, 115, 22, 0.72);
-    background: rgba(249, 115, 22, 0.14);
-    color: #fed7aa;
-  }
+.image-edit-tools button.active,
+.image-edit-colors button.active {
+  border-color: rgba(249, 115, 22, 0.72);
+  background: rgba(249, 115, 22, 0.14);
+  color: #fed7aa;
+}
 
-  .image-edit-color.red { color: #fca5a5; }
-  .image-edit-color.yellow { color: #fde68a; }
-  .image-edit-color.orange { color: #fdba74; }
-  .image-edit-mask-options { display: flex; gap: 10px; margin-top: 5px; color: #b7c2d0; font-size: 11px; }
-  .image-edit-mask-options label { display: inline-flex; align-items: center; gap: 4px; }
+.image-edit-presets > span {
+  align-self: center;
+  color: var(--muted);
+  font-size: 10px;
+}
+.image-edit-color.red {
+  color: #fca5a5;
+}
+.image-edit-color.yellow {
+  color: #fde68a;
+}
+.image-edit-color.orange {
+  color: #fdba74;
+}
+.image-edit-mask-options {
+  display: flex;
+  gap: 10px;
+  margin-top: 5px;
+  color: #b7c2d0;
+  font-size: 11px;
+}
+.image-edit-mask-options label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.image-edit-source-compare {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 6px 8px;
+  border-top: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.018);
+}
+.image-edit-source-compare figure {
+  min-width: 0;
+  margin: 0;
+}
+.image-edit-source-compare img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+.image-edit-source-compare figcaption {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+  text-align: center;
 }
 
 .node-text,
@@ -6860,6 +6897,10 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.wf-builtin-info small {
+  color: color-mix(in srgb, var(--brand) 72%, var(--muted));
+  font-size: 10px;
 }
 .wf-template-list {
   display: flex;

@@ -3,7 +3,7 @@ import { useEditor } from 'tldraw'
 import { stopEventPropagation } from 'tldraw'
 import { mediaUrl, type NodeBodyProps } from '../../registry'
 import {
-  createImageContinuation,
+  ImageContinuationActions,
   MediaFileActions,
   MediaSourceBadge,
   useClickGuard
@@ -89,52 +89,7 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
         <MediaSourceBadge shape={shape} fallback={shape.props.mediaMime || '本地图片'} />
         <MediaFileActions shape={shape} />
       </div>
-      <div className="node-media-next-actions" aria-label="图片后续操作">
-        <button
-          className="btn-ghost small"
-          title="创建裁剪节点并连接当前图片"
-          onPointerDown={(e) => stopEventPropagation(e)}
-          onClick={(e) => {
-            e.stopPropagation()
-            createImageContinuation(editor, shape, 'image-crop')
-          }}
-        >
-          <Icon name="crop" size={12} /> 裁剪图片
-        </button>
-        <button
-          className="btn-ghost small"
-          title="创建生图节点并连接当前图片"
-          onPointerDown={(e) => stopEventPropagation(e)}
-          onClick={(e) => {
-            e.stopPropagation()
-            createImageContinuation(editor, shape, 'image-gen')
-          }}
-        >
-          <Icon name="spark" size={12} /> 继续生图
-        </button>
-        <button
-          className="btn-ghost small"
-          title="对当前结果添加标注并修改"
-          onPointerDown={(e) => stopEventPropagation(e)}
-          onClick={(e) => {
-            e.stopPropagation()
-            createImageContinuation(editor, shape, 'image-edit')
-          }}
-        >
-          <Icon name="edit" size={12} /> 修改图片
-        </button>
-        <button
-          className="btn-ghost small"
-          title="创建视频节点并将当前图片作为首帧"
-          onPointerDown={(e) => stopEventPropagation(e)}
-          onClick={(e) => {
-            e.stopPropagation()
-            createImageContinuation(editor, shape, 'video')
-          }}
-        >
-          <Icon name="video" size={12} /> 生成视频
-        </button>
-      </div>
+      <ImageContinuationActions editor={editor} shape={shape} />
     </div>
   )
 }

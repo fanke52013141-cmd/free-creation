@@ -17,6 +17,7 @@ import { runNodeManually } from '../engine/executor'
 import { useGatewayStore } from '../stores/gateway'
 import {
   extractTemplateFromSelection,
+  templateNodeProps,
   useWorkflowStore,
   type WorkflowTemplate
 } from '../stores/workflow'
@@ -380,15 +381,9 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
           x: center.x + node.dx,
           y: center.y + node.dy,
           props: {
-            nodeType: node.nodeType,
-            title: node.title,
-            w: node.w,
-            h: node.h,
-            text: node.text ?? '',
-            config: node.config ?? '',
-            mediaId: node.mediaId,
-            mediaPath: node.mediaPath,
-            mediaMime: node.mediaMime
+            // 模板只保存节点结构、正文、配置和真实连线。即使历史模板中残留媒体字段，
+            // 套用时也必须创建空入口，不能跨项目复制或引用旧媒体资产。
+            ...templateNodeProps(node)
           }
         })
       }
@@ -498,7 +493,7 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
         </button>
       </div>
       <p className="side-panel-hint">
-        在画布上框选节点，然后点击「保存选中」将其保存为可复用模板。
+        在画布上框选节点，然后点击「保存选中」将其保存为可复用模板。模板只保存结构和连线，不复制媒体资产。
       </p>
 
       {/* 内置推荐模板 */}
@@ -519,6 +514,9 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
             <div className="wf-builtin-info">
               <strong>{bt.name}</strong>
               <span>{bt.desc}</span>
+              <small>
+                {bt.nodes.length} 节点 · {bt.edges.length} 条真实连线
+              </small>
             </div>
           </button>
         ))}

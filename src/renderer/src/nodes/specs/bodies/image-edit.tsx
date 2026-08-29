@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { stopEventPropagation } from 'tldraw'
+import { stopEventPropagation, useEditor } from 'tldraw'
 import {
   parseImageEditConfig,
   serializeImageEditConfig,
@@ -20,12 +20,18 @@ import { toast } from '../../../stores/toast'
 import { Icon } from '../../../components/Icon'
 import { mediaUrl, type NodeBodyProps, type NodeSettingsProps } from '../../registry'
 import {
+  clearSelectedMediaHistory,
+  ImageContinuationActions,
   MediaFileActions,
+  MediaResultGrid,
   MediaSourceBadge,
   ModelSelect,
   NoModelHint,
+  removeMediaResultFromShape,
+  selectMediaResult,
   useClickGuard
 } from './shared'
+import { markUndoPoint } from '../../../canvas/history'
 
 const COLORS: Array<{ id: ImageEditColor; label: string }> = [
   { id: 'red', label: '红' },
@@ -40,9 +46,47 @@ const TOOLS: Array<{ id: ImageEditTool; label: string; icon: 'crop' | 'edit' | '
   { id: 'text', label: '文字', icon: 'text' },
   { id: 'mask', label: '遮罩', icon: 'crop' }
 ]
+const ANNOTATION_PRESETS: Array<{
+  id: string
+  label: string
+  instruction: string
+  annotation: Omit<ImageEditAnnotation, 'id'>
+}> = [
+  {
+    id: 'subject',
+    label: '主体框选',
+    instruction: '保留框选主体，优先修改主体以外的区域。',
+    annotation: {
+      type: 'rect',
+      color: 'yellow',
+      points: [
+        { x: 0.2, y: 0.15 },
+        { x: 0.8, y: 0.85 }
+      ],
+      strokeWidth: 3
+    }
+  },
+  {
+    id: 'focus',
+    label: '焦点箭头',
+    instruction: '请重点修改箭头指向的位置。',
+    annotation: {
+      type: 'arrow',
+      color: 'red',
+      points: [
+        { x: 0.16, y: 0.2 },
+        { x: 0.5, y: 0.5 }
+      ],
+      strokeWidth: 3
+    }
+  }
+]
 
 export function ImageEditBody({ shape, openPreview }: NodeBodyProps): React.JSX.Element {
   const guard = useClickGuard()
+  const editor = useEditor()
+  const source = gatherUpstreamMedia(editor, shape.id, 'in-image', 'image')
+  const [compareSource, setCompareSource] = useState(false)
   const openSettings = (): void => useNodePanelStore.getState().open('contract', shape.id)
   if (!shape.props.mediaPath)
     return (
@@ -62,6 +106,16 @@ export function ImageEditBody({ shape, openPreview }: NodeBodyProps): React.JSX.
         </button>
       </div>
     )
+  const chooseResult = (item: Parameters<typeof selectMediaResult>[1]): void => {
+    const selected = selectMediaResult(shape, item)
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: selected.props,
+      meta: { ...(shape.meta ?? {}), nodeResult: selected.nodeResult }
+    })
+    markUndoPoint(editor, 'image-edit-select-result')
+  }
   return (
     <div className="node-media-wrap">
       <div
@@ -90,9 +144,62 @@ export function ImageEditBody({ shape, openPreview }: NodeBodyProps): React.JSX.
         >
           <Icon name="edit" size={13} /> 调整修改
         </button>
+        {source ? (
+          <button
+            className={`btn-ghost small ${compareSource ? 'active' : ''}`}
+            onPointerDown={stopEventPropagation}
+            onClick={(event) => {
+              stopEventPropagation(event)
+              setCompareSource((current) => !current)
+            }}
+          >
+            <Icon name="compare" size={13} /> {compareSource ? '收起对比' : '对比原图'}
+          </button>
+        ) : null}
         <MediaSourceBadge shape={shape} fallback="图片修改" />
         <MediaFileActions shape={shape} />
       </div>
+      {compareSource && source ? (
+        <div className="image-edit-source-compare" aria-label="原图与修改结果对比">
+          <figure>
+            <img src={mediaUrl(source.mediaPath)} alt="原图" draggable={false} />
+            <figcaption>原图</figcaption>
+          </figure>
+          <figure>
+            <img src={mediaUrl(shape.props.mediaPath)} alt="修改结果" draggable={false} />
+            <figcaption>修改结果</figcaption>
+          </figure>
+        </div>
+      ) : null}
+      <ImageContinuationActions editor={editor} shape={shape} />
+      <MediaResultGrid
+        shape={shape}
+        kind="image"
+        onSelect={chooseResult}
+        onDelete={(item) => {
+          const nodeResult = removeMediaResultFromShape(shape, item)
+          if (!nodeResult) return
+          editor.updateShape({
+            id: shape.id,
+            type: 'node-card',
+            meta: { ...(shape.meta ?? {}), nodeResult }
+          })
+          markUndoPoint(editor, 'image-edit-delete-result')
+        }}
+        onClear={() => {
+          const nodeResult = clearSelectedMediaHistory(shape)
+          if (!nodeResult) return
+          editor.updateShape({
+            id: shape.id,
+            type: 'node-card',
+            meta: { ...(shape.meta ?? {}), nodeResult }
+          })
+          markUndoPoint(editor, 'image-edit-clear-result-history')
+        }}
+        openPreview={(item) =>
+          openPreview({ kind: 'image', url: mediaUrl(item.mediaPath), title: shape.props.title })
+        }
+      />
     </div>
   )
 }
@@ -169,6 +276,16 @@ export function ImageEditSettings({
   }
   const add = (annotation: ImageEditAnnotation): void =>
     save({ ...config, annotations: [...config.annotations, annotation].slice(-64) })
+  const applyAnnotationPreset = (
+    preset: (typeof ANNOTATION_PRESETS)[number],
+    annotationId: string
+  ): void => {
+    save({
+      ...config,
+      instruction: config.instruction.trim() || preset.instruction,
+      annotations: [...config.annotations, { ...preset.annotation, id: annotationId }].slice(-64)
+    })
+  }
   const start = (event: React.PointerEvent<HTMLDivElement>): void => {
     stopEventPropagation(event)
     const el = previewRef.current
@@ -373,6 +490,20 @@ export function ImageEditSettings({
                 清空遮罩
               </button>
             ) : null}
+          </div>
+          <div className="image-edit-presets" aria-label="标注预设">
+            <span>标注预设</span>
+            {ANNOTATION_PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                onPointerDown={stopEventPropagation}
+                onClick={() =>
+                  applyAnnotationPreset(preset, `annotation-${preset.id}-${Date.now()}`)
+                }
+              >
+                {preset.label}
+              </button>
+            ))}
           </div>
           <div className="image-edit-colors">
             {COLORS.map((item) => (

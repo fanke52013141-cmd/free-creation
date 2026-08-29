@@ -145,4 +145,68 @@ describe('imageEditExecutor', () => {
     )
     expect(update).toMatchObject({ mediaId: 'edited-1', mediaMime: 'image/png' })
   })
+
+  it('供应商失败时不改写已有输出或结果集合', async () => {
+    const updateProps = vi.fn()
+    const updateResult = vi.fn()
+    const imageEdit = vi.fn(async () => ({
+      ok: false as const,
+      error: { message: '供应商不支持当前图片修改请求' }
+    }))
+    globalThis.window = { api: { gateway: { imageEdit } } } as unknown as Window & typeof globalThis
+    const ctx = {
+      shape: {
+        id: 'shape:edit',
+        type: 'node-card',
+        props: {
+          config: JSON.stringify({ modelKey: 'p1::img-1', instruction: '修改背景' }),
+          mediaId: 'previous-result',
+          mediaPath: '/previous.png',
+          mediaMime: 'image/png'
+        },
+        meta: { nodeResult: '{"kind":"media-source","results":[]}' }
+      } as unknown as NodeCardShape,
+      node: { id: 'shape:edit', type: 'image-edit', contractVersion: 1 },
+      projectId: 'project-a',
+      providers: [
+        {
+          id: 'p1',
+          name: 'p',
+          specId: 'openai',
+          baseURL: '',
+          models: [{ id: 'img-1', modality: 'image' }],
+          createdAt: 0,
+          hasApiKey: true
+        }
+      ],
+      inputs: new Map([
+        [
+          'in-image',
+          [
+            {
+              type: 'image',
+              value: {
+                kind: 'image',
+                mediaId: 'source',
+                mediaPath: '/source.png',
+                mime: 'image/png'
+              },
+              source: { nodeId: 'source', portId: 'out-image', runId: 'r' },
+              createdAt: 0
+            }
+          ]
+        ]
+      ]),
+      signal: { cancelled: false },
+      updateProps,
+      updateResult
+    } as unknown as NodeExecutionContext
+
+    await expect(imageEditExecutor(ctx)).resolves.toEqual({
+      status: 'failed',
+      reason: '供应商不支持当前图片修改请求'
+    })
+    expect(updateProps).not.toHaveBeenCalled()
+    expect(updateResult).not.toHaveBeenCalled()
+  })
 })

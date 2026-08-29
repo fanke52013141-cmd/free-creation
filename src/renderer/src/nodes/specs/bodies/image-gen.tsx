@@ -12,7 +12,7 @@ import { useAppStore } from '../../../stores/app'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { Icon } from '../../../components/Icon'
 import {
-  createImageContinuation,
+  ImageContinuationActions,
   clearSelectedMediaHistory,
   MediaFileActions,
   MediaResultGrid,
@@ -142,52 +142,7 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
           <MediaSourceBadge shape={shape} fallback="AI 生成" />
           <MediaFileActions shape={shape} />
         </div>
-        <div className="node-media-next-actions" aria-label="图片后续操作">
-          <button
-            className="btn-ghost small"
-            title="创建裁剪节点并连接当前结果"
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onClick={(e) => {
-              e.stopPropagation()
-              createImageContinuation(editor, shape, 'image-crop')
-            }}
-          >
-            <Icon name="crop" size={12} /> 裁剪图片
-          </button>
-          <button
-            className="btn-ghost small"
-            title="基于当前结果继续生图"
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onClick={(e) => {
-              e.stopPropagation()
-              createImageContinuation(editor, shape, 'image-gen')
-            }}
-          >
-            <Icon name="spark" size={12} /> 继续生图
-          </button>
-          <button
-            className="btn-ghost small"
-            title="对当前结果添加标注并修改"
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onClick={(e) => {
-              e.stopPropagation()
-              createImageContinuation(editor, shape, 'image-edit')
-            }}
-          >
-            <Icon name="edit" size={12} /> 修改图片
-          </button>
-          <button
-            className="btn-ghost small"
-            title="将当前结果作为首帧生成视频"
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onClick={(e) => {
-              e.stopPropagation()
-              createImageContinuation(editor, shape, 'video')
-            }}
-          >
-            <Icon name="video" size={12} /> 生成视频
-          </button>
-        </div>
+        <ImageContinuationActions editor={editor} shape={shape} />
         <MediaResultGrid
           shape={shape}
           kind="image"

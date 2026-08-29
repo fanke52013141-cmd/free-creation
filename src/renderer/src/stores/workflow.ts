@@ -12,9 +12,6 @@ export interface TemplateNode {
   h: number
   text?: string
   config?: string
-  mediaId?: string
-  mediaPath?: string
-  mediaMime?: string
 }
 
 export interface TemplateEdge {
@@ -32,6 +29,21 @@ export interface WorkflowTemplate extends Omit<WorkflowTemplateRecord, 'nodes' |
 export interface SavePayload {
   nodes: TemplateNode[]
   edges: TemplateEdge[]
+}
+
+/** 统一将模板节点还原为画布节点。模板是流程蓝图，不能携带项目媒体。 */
+export function templateNodeProps(node: TemplateNode): Partial<NodeCardShape['props']> {
+  return {
+    nodeType: node.nodeType,
+    title: node.title,
+    w: node.w,
+    h: node.h,
+    text: node.text ?? '',
+    config: node.config ?? '',
+    mediaId: '',
+    mediaPath: '',
+    mediaMime: ''
+  }
 }
 
 interface WorkflowState {

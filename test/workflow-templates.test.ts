@@ -5,7 +5,7 @@ import { BUILTIN_TEMPLATES } from '@renderer/canvas/CanvasSidePanel'
 import { getNodePorts, getNodeType, portCompatible } from '@renderer/nodes/registry'
 import { nodeSchemasCompatible } from '@shared/node-schemas'
 import { registerAllNodeTypes } from './helpers/registerNodes'
-import { extractTemplateFromSelection } from '@renderer/stores/workflow'
+import { extractTemplateFromSelection, templateNodeProps } from '@renderer/stores/workflow'
 
 beforeAll(registerAllNodeTypes)
 
@@ -106,5 +106,25 @@ describe('工作流模板配置保存', () => {
     const payload = extractTemplateFromSelection([node], [])
     expect(payload.nodes[0]?.config).toContain('result')
     expect(payload.nodes[0]?.config).toContain('scene')
+  })
+
+  it('模板不会保存或重放项目媒体，即使旧记录含有媒体字段', () => {
+    const legacyTemplateNode = {
+      nodeType: 'image',
+      title: '旧图片入口',
+      dx: 0,
+      dy: 0,
+      w: 340,
+      h: 220,
+      mediaId: 'old-project-media',
+      mediaPath: 'projects/old/media/reference.png',
+      mediaMime: 'image/png'
+    }
+    expect(templateNodeProps(legacyTemplateNode)).toMatchObject({
+      nodeType: 'image',
+      mediaId: '',
+      mediaPath: '',
+      mediaMime: ''
+    })
   })
 })
