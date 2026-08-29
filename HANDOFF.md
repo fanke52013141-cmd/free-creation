@@ -4,7 +4,7 @@
 >
 > 当前分支：`main`
 >
-> 当前基线提交：以 `git log --oneline -1` 为准（已合并线上 P2/P3 更新与 IA-1 第三批）
+> 当前基线提交：`33e8655`（已推送至 `origin/main`，合并线上 P2/P3 更新与 IA-1 第三批）
 >
 > 远程仓库：https://github.com/fanke52013141-cmd/free-creation
 >
@@ -270,7 +270,7 @@ git status -sb
 - 支持清空历史候选并保留当前输出；音频结果采用播放器加轻量结果网格。
 - 未新增节点类型、未新增隐藏端口、未改变既有节点契约；媒体仍以独立 `MediaAsset` 保存。
 
-验收：`npm run lint`、`npm run typecheck`、`npm test`、`electron-vite build`、`git diff --check` 全部通过；当前为 26 个测试文件、415 个用例，并已补充生图执行器的首次写入、重复追加、取消和失败回归。
+验收：`npm run lint`、`npm run typecheck`、`npm test`、`electron-vite build`、`git diff --check` 全部通过；合并线上更新后当前为 27 个测试文件、450 个用例，并已补充生图执行器的首次写入、重复追加、取消和失败回归。
 
 ### IA-2：资产与运行中心（下一阶段唯一推荐）
 
