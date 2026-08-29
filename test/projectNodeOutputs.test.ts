@@ -92,6 +92,21 @@ describe('projectNodeOutputs · 媒体节点（图片/生图/视频/音频）', 
     )
     expect(vid['out-video']?.kind).toBe('video')
 
+    const frame = projectNodeOutputs(
+      shape('video-frame', { mediaId: 'm-frame', mediaPath: '/frame.png', mediaMime: 'image/png' })
+    )
+    expect(frame['out-image']?.kind).toBe('image')
+
+    const clip = projectNodeOutputs(
+      shape('video-clip', { mediaId: 'm-clip', mediaPath: '/clip.mp4', mediaMime: 'video/mp4' })
+    )
+    expect(clip['out-video']?.kind).toBe('video')
+
+    const extractedAudio = projectNodeOutputs(
+      shape('video-audio', { mediaId: 'm-audio', mediaPath: '/audio.m4a', mediaMime: 'audio/mp4' })
+    )
+    expect(extractedAudio['out-audio']?.kind).toBe('audio')
+
     const aud = projectNodeOutputs(
       shape('audio', { mediaId: 'm4', mediaPath: '/a.mp3', mediaMime: 'audio/mpeg' })
     )
@@ -102,6 +117,9 @@ describe('projectNodeOutputs · 媒体节点（图片/生图/视频/音频）', 
     expect(projectNodeOutputs(shape('image'))).toEqual({})
     expect(projectNodeOutputs(shape('image-crop'))).toEqual({})
     expect(projectNodeOutputs(shape('video'))).toEqual({})
+    expect(projectNodeOutputs(shape('video-frame'))).toEqual({})
+    expect(projectNodeOutputs(shape('video-clip'))).toEqual({})
+    expect(projectNodeOutputs(shape('video-audio'))).toEqual({})
     expect(projectNodeOutputs(shape('audio'))).toEqual({})
   })
 })

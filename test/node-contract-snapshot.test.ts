@@ -35,6 +35,9 @@ describe('全部标准节点都已注册', () => {
     'image-crop',
     'image-gen',
     'video',
+    'video-frame',
+    'video-clip',
+    'video-audio',
     'audio',
     'chat',
     'processor',
@@ -73,6 +76,9 @@ describe('端口契约快照 · 每个端口 ID 稳定且符合命名规范', ()
     'image-crop',
     'image-gen',
     'video',
+    'video-frame',
+    'video-clip',
+    'video-audio',
     'audio',
     'chat',
     'processor',
@@ -154,6 +160,24 @@ describe('关键端口契约快照（防回归）', () => {
       { id: 'out-image', dir: 'out', type: 'image', required: true, cardinality: 'one' }
     ])
     expect(spec.SettingsPanel).toBeTypeOf('function')
+  })
+
+  it('视频媒体处理：取帧/截取/提音只接受真实视频，并分别输出图片/视频/音频', () => {
+    const expected = [
+      ['video-frame', 'out-image', 'image'],
+      ['video-clip', 'out-video', 'video'],
+      ['video-audio', 'out-audio', 'audio']
+    ] as const
+    for (const [type, outputId, outputType] of expected) {
+      const spec = getNodeType(type)!
+      expect(snapshotPorts(spec.ports.in)).toEqual([
+        { id: 'in-video', dir: 'in', type: 'video', required: true, cardinality: 'one' }
+      ])
+      expect(snapshotPorts(spec.ports.out)).toEqual([
+        { id: outputId, dir: 'out', type: outputType, required: true, cardinality: 'one' }
+      ])
+      expect(spec.SettingsPanel).toBeTypeOf('function')
+    }
   })
 
   it('JSON 节点端口带 storyboard-independent 的 json.any Schema', () => {

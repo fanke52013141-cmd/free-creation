@@ -1,6 +1,6 @@
 # 节点输入输出契约规范
 
-> 状态：强制规范 1.4（P0-P3.1、M0-M1 图片裁剪已落地）
+> 状态：强制规范 1.5（P0-P3.1、M0-M4 本地图片/视频媒体处理已落地）
 > 代码入口：`src/shared/types/index.ts`、`src/shared/node-schemas.ts`、`src/renderer/src/nodes/registry.tsx`  
 > 节点定义：`src/renderer/src/nodes/specs/index.tsx`
 > 运行时：`src/renderer/src/engine/contracts.ts`、`src/renderer/src/nodes/nodeValues.ts`
@@ -146,7 +146,12 @@ interface NodeTypeSpec {
 复杂配置的 UI 应由节点自己通过 `SettingsPanel` 扩展右侧详情面板；公共面板不得因
 某个节点的业务逻辑新增 `nodeType` 分支。图片裁剪是参考实现：`image-crop` 的
 `in-image(required, one) -> out-image(required, one)` 不随矩形/四角模式改变，模式与
-归一化坐标仅写入 `props.config`，执行器通过 M0 本地媒体服务产生新的 PNG 资产。
+归一化坐标仅写入 `props.config`，执行器通过 M0 本地媒体服务产生新的 PNG 资产。视频
+节点同样遵循这一边界：`video-frame`、`video-clip`、`video-audio` 分别固定为
+`in-video -> out-image/out-video/out-audio`；时间轴是右侧面板的附加预览 UI，确认的
+`timeMs` 或 `startMs/endMs` 才写入配置。当前本地视频适配器调用用户机器已安装的
+FFmpeg（优先读取 `CANVAS_STUDIO_FFMPEG_PATH`，否则使用 PATH 中的 `ffmpeg`），不随
+应用打包 GPL 二进制；找不到时必须给出可操作的安装/配置错误。
 
 `executionMode` 的含义：
 

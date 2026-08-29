@@ -15,6 +15,7 @@ import {
   MediaFileActions,
   MediaResultGrid,
   MediaSourceBadge,
+  createVideoContinuation,
   clearSelectedMediaHistory,
   ModelSelect,
   NoModelHint,
@@ -146,6 +147,38 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           </button>
           <MediaSourceBadge shape={shape} fallback="AI 生成" />
           <MediaFileActions shape={shape} />
+        </div>
+        <div className="node-media-next-actions" aria-label="视频后续操作">
+          <button
+            className="btn-ghost small"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              createVideoContinuation(editor, shape, 'video-frame')
+            }}
+          >
+            <Icon name="frame" size={12} /> 取帧
+          </button>
+          <button
+            className="btn-ghost small"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              createVideoContinuation(editor, shape, 'video-clip')
+            }}
+          >
+            <Icon name="clip" size={12} /> 截取
+          </button>
+          <button
+            className="btn-ghost small"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              createVideoContinuation(editor, shape, 'video-audio')
+            }}
+          >
+            <Icon name="audio" size={12} /> 提音
+          </button>
         </div>
         <MediaResultGrid
           shape={shape}

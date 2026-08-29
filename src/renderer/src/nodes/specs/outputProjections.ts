@@ -54,6 +54,15 @@ export const projectImageCropOutputs = projectImageOutputs
 export const projectVideoOutputs = (shape: NodeCardShape): RawNodeOutputs =>
   mediaOutput(shape, 'video', 'out-video')
 
+export const projectVideoFrameOutputs = (shape: NodeCardShape): RawNodeOutputs =>
+  mediaOutput(shape, 'image', 'out-image')
+
+export const projectVideoClipOutputs = (shape: NodeCardShape): RawNodeOutputs =>
+  mediaOutput(shape, 'video', 'out-video')
+
+export const projectVideoAudioOutputs = (shape: NodeCardShape): RawNodeOutputs =>
+  mediaOutput(shape, 'audio', 'out-audio')
+
 export const projectAudioOutputs = (shape: NodeCardShape): RawNodeOutputs =>
   mediaOutput(shape, 'audio', 'out-audio')
 

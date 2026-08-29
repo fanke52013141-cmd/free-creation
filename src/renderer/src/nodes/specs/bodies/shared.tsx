@@ -122,6 +122,45 @@ export function createImageContinuation(
   editor.select(id)
 }
 
+/** 从视频输出创建独立处理节点；快捷入口只建真实边，不在视频节点内隐藏产物。 */
+export function createVideoContinuation(
+  editor: Editor,
+  source: NodeCardShape,
+  targetType: 'video-frame' | 'video-clip' | 'video-audio'
+): void {
+  const spec = getNodeType(targetType)
+  if (!spec) return
+  const titles: Record<typeof targetType, string> = {
+    'video-frame': '视频取帧',
+    'video-clip': '视频截取',
+    'video-audio': '提取音频'
+  }
+  const id = createShapeId()
+  editor.createShape({
+    id,
+    type: 'node-card',
+    x: source.x + source.props.w + 80,
+    y: source.y,
+    props: {
+      nodeType: targetType,
+      title: titles[targetType],
+      w: spec.defaultSize.w,
+      h: spec.defaultSize.h
+    } satisfies Partial<NodeCardProps>
+  })
+  if (
+    !createEdge(
+      editor,
+      { shapeId: source.id, portId: 'out-video' },
+      { shapeId: id, portId: 'in-video' }
+    )
+  ) {
+    editor.deleteShape(id)
+    return
+  }
+  editor.select(id)
+}
+
 type MediaSourceMeta = {
   kind?: string
   modelKey?: string

@@ -9,6 +9,8 @@ export type IconName =
   | 'crop'
   | 'image-gen'
   | 'video'
+  | 'frame'
+  | 'clip'
   | 'audio'
   | 'chat'
   | 'script'
@@ -91,6 +93,19 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <rect x="3.5" y="4" width="17" height="16" rx="2" />
       <path d="m10 8 5 4-5 4V8Z" />
+    </>
+  ),
+  frame: (
+    <>
+      <rect x="3.5" y="4" width="17" height="16" rx="2" />
+      <path d="M8 4v16M16 4v16M3.5 9h17M3.5 15h17" />
+    </>
+  ),
+  clip: (
+    <>
+      <path d="M6 4v16M18 4v16" />
+      <path d="M9 8h6M9 16h6" />
+      <path d="m12 7-2 2 2 2M12 13l2 2-2 2" />
     </>
   ),
   audio: (

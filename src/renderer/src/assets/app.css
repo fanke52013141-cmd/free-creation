@@ -2584,6 +2584,49 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   color: #fca5a5;
 }
 
+/* M2-M4 视频处理：时间轴和预览仅属于节点详情，避免让画布卡片膨胀。 */
+.video-transform-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.video-transform-settings h4,
+.video-transform-settings .contract-settings-hint {
+  margin: 0;
+}
+
+.video-transform-preview {
+  display: block;
+  width: 100%;
+  max-height: 190px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #111;
+}
+
+.video-time-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 5px 8px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.video-time-control input[type='range'] {
+  grid-column: 1 / -1;
+  width: 100%;
+  accent-color: #f472b6;
+}
+
+.video-range-summary {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
 .contract-port {
   display: flex;
   align-items: center;

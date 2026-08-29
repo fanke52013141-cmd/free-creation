@@ -20,7 +20,13 @@ import {
   StoryboardBody,
   StructuredBody,
   TextBody,
-  VideoBody
+  VideoBody,
+  VideoAudioBody,
+  VideoAudioSettings,
+  VideoClipBody,
+  VideoClipSettings,
+  VideoFrameBody,
+  VideoFrameSettings
 } from './bodies'
 import { aiProcessExecutor } from '../../engine/executors/aiProcess'
 import { audioExecutor } from '../../engine/executors/audio'
@@ -44,6 +50,11 @@ import { scriptExecutor } from '../../engine/executors/script'
 import { storyboardExecutor } from '../../engine/executors/storyboard'
 import { textExecutor } from '../../engine/executors/text'
 import { videoExecutor } from '../../engine/executors/video'
+import {
+  videoAudioExecutor,
+  videoClipExecutor,
+  videoFrameExecutor
+} from '../../engine/executors/videoTransforms'
 import { directorExecutor } from '../../engine/executors/director'
 import {
   projectAiProcessOutputs,
@@ -61,7 +72,10 @@ import {
   projectStoryboardOutputs,
   projectStructuredOutputs,
   projectTextOutputs,
-  projectVideoOutputs
+  projectVideoOutputs,
+  projectVideoAudioOutputs,
+  projectVideoClipOutputs,
+  projectVideoFrameOutputs
 } from './outputProjections'
 import { parseStructuredDataConfig } from '../structured-data'
 
@@ -230,6 +244,57 @@ export function registerBaseNodeTypes(): void {
     projectOutputs: projectVideoOutputs,
     executor: videoExecutor,
     Body: VideoBody
+  })
+  registerNodeType({
+    type: 'video-frame',
+    contractVersion: 1,
+    label: '取帧',
+    icon: 'frame',
+    color: '#fb7185',
+    defaultSize: { w: 340, h: 260 },
+    description: '在指定毫秒位置从一段上游视频取出一帧，输出新的 PNG 图片资产。',
+    ports: {
+      in: [input('in-video', '源视频', 'video', '必须连接的一段源视频。', { required: true })],
+      out: [output('out-image', '视频帧', 'image', '指定时间点解码得到的新 PNG 图片资产。')]
+    },
+    projectOutputs: projectVideoFrameOutputs,
+    executor: videoFrameExecutor,
+    SettingsPanel: VideoFrameSettings,
+    Body: VideoFrameBody
+  })
+  registerNodeType({
+    type: 'video-clip',
+    contractVersion: 1,
+    label: '截取',
+    icon: 'clip',
+    color: '#ec4899',
+    defaultSize: { w: 340, h: 260 },
+    description: '从上游视频按起止毫秒精确截取片段，输出新的 MP4 视频资产。',
+    ports: {
+      in: [input('in-video', '源视频', 'video', '必须连接的一段源视频。', { required: true })],
+      out: [output('out-video', '视频片段', 'video', '精确重编码后的 MP4 视频片段。')]
+    },
+    projectOutputs: projectVideoClipOutputs,
+    executor: videoClipExecutor,
+    SettingsPanel: VideoClipSettings,
+    Body: VideoClipBody
+  })
+  registerNodeType({
+    type: 'video-audio',
+    contractVersion: 1,
+    label: '提音',
+    icon: 'audio',
+    color: '#f59e0b',
+    defaultSize: { w: 340, h: 260 },
+    description: '从上游视频的指定时间范围提取音轨，输出新的 M4A 音频资产。',
+    ports: {
+      in: [input('in-video', '源视频', 'video', '必须连接的一段源视频。', { required: true })],
+      out: [output('out-audio', '音频片段', 'audio', '从指定范围提取并转码的新 M4A 音频资产。')]
+    },
+    projectOutputs: projectVideoAudioOutputs,
+    executor: videoAudioExecutor,
+    SettingsPanel: VideoAudioSettings,
+    Body: VideoAudioBody
   })
   registerNodeType({
     type: 'audio',

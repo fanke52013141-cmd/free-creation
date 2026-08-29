@@ -2,6 +2,7 @@
 
 import type { ChatMessage, GatewayModelInfo, ProviderSpecId, VideoGenParams } from '../types'
 import type { ImageCropConfig } from '../image-crop'
+import type { VideoFrameConfig, VideoRangeConfig } from '../video-transform'
 
 export const IPC = {
   app: {
@@ -23,6 +24,9 @@ export const IPC = {
     import: 'media:import',
     importBuffer: 'media:import-buffer',
     imageCrop: 'media:image-crop',
+    videoFrame: 'media:video-frame',
+    videoClip: 'media:video-clip',
+    videoAudio: 'media:video-audio',
     pick: 'media:pick',
     list: 'media:list',
     delete: 'media:delete',
@@ -88,6 +92,19 @@ export interface ImageCropTransformInput {
   projectId: string
   sourceMediaId: string
   config: ImageCropConfig
+}
+
+export interface VideoTransformSourceInput {
+  projectId: string
+  sourceMediaId: string
+}
+
+export interface VideoFrameTransformInput extends VideoTransformSourceInput {
+  config: VideoFrameConfig
+}
+
+export interface VideoRangeTransformInput extends VideoTransformSourceInput {
+  config: VideoRangeConfig
 }
 
 // ── 本地工作区状态（模板与手动历史版本）──

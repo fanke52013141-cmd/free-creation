@@ -8,6 +8,14 @@ export { ImageBody } from './image'
 export { ImageCropBody, ImageCropSettings } from './image-crop'
 export { ImageGenerateBody } from './image-gen'
 export { VideoBody } from './video'
+export {
+  VideoAudioBody,
+  VideoAudioSettings,
+  VideoClipBody,
+  VideoClipSettings,
+  VideoFrameBody,
+  VideoFrameSettings
+} from './video-transforms'
 export { AudioBody } from './audio'
 export { ChatBody } from './chat'
 export { ScriptBody } from './script'

@@ -9,6 +9,8 @@ import type {
   IpcEnvelope,
   ImageGenerateInput,
   ImageCropTransformInput,
+  VideoFrameTransformInput,
+  VideoRangeTransformInput,
   ImportMediaBufferInput,
   RenameProjectInput,
   SaveHistorySnapshotInput,
@@ -59,6 +61,12 @@ const api = {
     ipcRenderer.invoke(IPC.media.importBuffer, input),
   cropImage: (input: ImageCropTransformInput): Promise<IpcEnvelope<MediaAsset>> =>
     ipcRenderer.invoke(IPC.media.imageCrop, input),
+  extractVideoFrame: (input: VideoFrameTransformInput): Promise<IpcEnvelope<MediaAsset>> =>
+    ipcRenderer.invoke(IPC.media.videoFrame, input),
+  clipVideo: (input: VideoRangeTransformInput): Promise<IpcEnvelope<MediaAsset>> =>
+    ipcRenderer.invoke(IPC.media.videoClip, input),
+  extractVideoAudio: (input: VideoRangeTransformInput): Promise<IpcEnvelope<MediaAsset>> =>
+    ipcRenderer.invoke(IPC.media.videoAudio, input),
   pickMedia: (projectId: string): Promise<IpcEnvelope<MediaImportResult>> =>
     ipcRenderer.invoke(IPC.media.pick, projectId),
   listMedia: (projectId: string): Promise<IpcEnvelope<MediaAsset[]>> =>

@@ -4,7 +4,12 @@ import { copyFile } from 'fs/promises'
 import { basename, extname, join } from 'path'
 import { IPC } from '../../shared/contracts'
 import type { IpcEnvelope } from '../../shared/contracts'
-import type { ImageCropTransformInput, ImportMediaBufferInput } from '../../shared/contracts'
+import type {
+  ImageCropTransformInput,
+  ImportMediaBufferInput,
+  VideoFrameTransformInput,
+  VideoRangeTransformInput
+} from '../../shared/contracts'
 import type { MediaAsset, MediaImportError, MediaImportResult } from '../../shared/types'
 import {
   deleteMedia,
@@ -15,6 +20,11 @@ import {
 } from '../store/media.repo'
 import { getDb } from '../store/db'
 import { transformImageCrop } from '../media/image-transform'
+import {
+  transformVideoAudio,
+  transformVideoClip,
+  transformVideoFrame
+} from '../media/video-transform'
 
 function ok<T>(data: T): IpcEnvelope<T> {
   return { ok: true, data }
@@ -103,6 +113,44 @@ export function registerMediaIpc(): void {
       if (!input?.projectId || !Array.isArray(input.paths))
         return err('INVALID_INPUT', '参数不完整')
       return ok(await importAll(input.projectId, input.paths))
+    }
+  )
+
+  /** 视频处理端点分开声明，与三个独立节点的一一对应关系保持可追溯。 */
+  ipcMain.handle(
+    IPC.media.videoFrame,
+    async (_e, input: VideoFrameTransformInput): Promise<IpcEnvelope<MediaAsset>> => {
+      if (!input?.projectId || !input.sourceMediaId || !input.config)
+        return err('INVALID_INPUT', '缺少视频取帧参数')
+      try {
+        return ok(await transformVideoFrame(input))
+      } catch (error) {
+        return err('VIDEO_FRAME_FAILED', error instanceof Error ? error.message : String(error))
+      }
+    }
+  )
+  ipcMain.handle(
+    IPC.media.videoClip,
+    async (_e, input: VideoRangeTransformInput): Promise<IpcEnvelope<MediaAsset>> => {
+      if (!input?.projectId || !input.sourceMediaId || !input.config)
+        return err('INVALID_INPUT', '缺少视频截取参数')
+      try {
+        return ok(await transformVideoClip(input))
+      } catch (error) {
+        return err('VIDEO_CLIP_FAILED', error instanceof Error ? error.message : String(error))
+      }
+    }
+  )
+  ipcMain.handle(
+    IPC.media.videoAudio,
+    async (_e, input: VideoRangeTransformInput): Promise<IpcEnvelope<MediaAsset>> => {
+      if (!input?.projectId || !input.sourceMediaId || !input.config)
+        return err('INVALID_INPUT', '缺少音频提取参数')
+      try {
+        return ok(await transformVideoAudio(input))
+      } catch (error) {
+        return err('VIDEO_AUDIO_FAILED', error instanceof Error ? error.message : String(error))
+      }
     }
   )
 
