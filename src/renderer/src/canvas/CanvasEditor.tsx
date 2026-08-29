@@ -838,6 +838,11 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
                 <Icon name="history" size={20} />
               </span>
             </button>
+            <button className="palette-item" title="运行中心" onClick={() => setPanelTab('runs')}>
+              <span className="palette-icon">
+                <Icon name="play" size={20} />
+              </span>
+            </button>
           </div>
           <div className="palette-divider" />
           {/* 画布配色切换 */}
@@ -882,6 +887,7 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
           const screen = editor.pageToScreen(editor.getViewportPageBounds().center)
           createMediaNodes([asset], screen.x, screen.y)
         }}
+        onOpenRuns={() => setPanelTab('runs')}
       />
       {!panelTab && editorInstance && nodePanelKind === 'contract' && nodePanelShapeId && (
         <NodeContractPanel

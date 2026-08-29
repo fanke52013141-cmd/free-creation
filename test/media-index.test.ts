@@ -73,23 +73,34 @@ describe('项目媒体索引', () => {
               mediaId: 'img-old',
               mediaPath: '/media/img-old.png',
               mime: 'image/png',
-              createdAt: now - 8_000
+              createdAt: now - 8_000,
+              runId: 'run-image'
             },
             {
               mediaId: 'img-current',
               mediaPath: '/media/img-current.png',
               mime: 'image/png',
-              createdAt: now
+              createdAt: now,
+              runId: 'run-image'
             }
           ]
         }),
         nodeRun: {
-          runId: 'run-image',
-          status: 'success',
-          startedAt: now - 500,
-          finishedAt: now,
-          inputs: { 'in-text': [{ nodeId: 'shape:text', portId: 'out-text' }] }
-        }
+          runId: 'run-later-failed',
+          status: 'failed',
+          startedAt: now + 100,
+          inputs: {},
+          error: { phase: 'execution', reason: '后续失败' }
+        },
+        nodeRunHistory: [
+          {
+            runId: 'run-image',
+            status: 'success',
+            startedAt: now - 500,
+            finishedAt: now,
+            inputs: { 'in-text': [{ nodeId: 'shape:text', portId: 'out-text' }] }
+          }
+        ]
       }
     ),
     shape('shape:upload', { nodeType: 'image', title: '参考图', mediaId: 'upload' })
@@ -106,6 +117,7 @@ describe('项目媒体索引', () => {
       modelKey: 'local::image-model',
       resultCount: 2,
       isCurrentOutput: true,
+      runId: 'run-image',
       runStatus: 'success'
     })
     expect(old?.source?.isCurrentOutput).toBe(false)

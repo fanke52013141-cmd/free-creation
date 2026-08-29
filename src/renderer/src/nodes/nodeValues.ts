@@ -19,6 +19,8 @@ export interface MediaResultItem {
   createdAt: number
   modelKey?: string
   prompt?: string
+  /** 生成该媒体的工作流运行 ID；旧结果可能没有此字段。 */
+  runId?: string
 }
 
 export interface MediaResultCollection {
@@ -74,11 +76,15 @@ export function serializeMediaResultCollection(value: MediaResultCollection): st
 export function appendMediaResult(
   previous: string,
   item: Omit<MediaResultItem, 'createdAt'> & { createdAt?: number },
-  meta: Pick<MediaResultCollection, 'nodeId' | 'modelKey' | 'prompt'> = {}
+  meta: Pick<MediaResultCollection, 'nodeId' | 'modelKey' | 'prompt'> & { runId?: string } = {}
 ): MediaResultCollection {
   const current = parseMediaResultCollection(previous)
   const results = current?.results.filter((result) => result.mediaId !== item.mediaId) ?? []
-  const nextItem: MediaResultItem = { ...item, createdAt: item.createdAt ?? Date.now() }
+  const nextItem: MediaResultItem = {
+    ...item,
+    createdAt: item.createdAt ?? Date.now(),
+    ...(meta.runId ? { runId: meta.runId } : {})
+  }
   return {
     kind: 'media-source',
     version: 1,

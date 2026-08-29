@@ -69,7 +69,12 @@ export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeE
             mediaPath: result.data.path,
             mime: result.data.mime
           },
-          { nodeId: ctx.node.id, modelKey: option.key, prompt: prompt.slice(0, 80) }
+          {
+            nodeId: ctx.node.id,
+            modelKey: option.key,
+            prompt: prompt.slice(0, 80),
+            runId: ctx.runId
+          }
         )
       )
     )

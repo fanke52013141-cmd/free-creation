@@ -2,7 +2,7 @@
 // 不写入项目、不扫描节点标题猜测数据流，也不读取 API Key 或完整提示词。
 import type { MediaAsset } from '@shared/types'
 import type { NodeCardShape } from '../canvas/NodeCardShape'
-import { readNodeRunRecord, type NodeRunStatus } from '../engine/runRecord'
+import { readNodeRunHistory, readNodeRunRecord, type NodeRunStatus } from '../engine/runRecord'
 import { parseMediaResultCollection } from '../nodes/nodeValues'
 
 export type MediaRunFilter = NodeRunStatus | 'unavailable' | 'all'
@@ -15,6 +15,7 @@ export interface MediaSourceSummary {
   modelKey?: string
   resultCount: number
   isCurrentOutput: boolean
+  /** 产物对应的真实运行 ID；旧产物没有时回退到节点最近一次运行。 */
   runId?: string
   runStatus?: NodeRunStatus
   runStartedAt?: number
@@ -38,9 +39,17 @@ function sourceForShape(
   shape: NodeCardShape,
   resultCount: number,
   isCurrentOutput: boolean,
-  modelKey?: string
+  modelKey?: string,
+  resultRunId?: string
 ): MediaSourceSummary {
-  const run = readNodeRunRecord(shape.meta?.nodeRun)
+  const currentRun = readNodeRunRecord(shape.meta?.nodeRun)
+  const run =
+    (resultRunId && currentRun?.runId === resultRunId ? currentRun : undefined) ??
+    (resultRunId
+      ? readNodeRunHistory(shape.meta?.nodeRunHistory).find(
+          (record) => record.runId === resultRunId
+        )
+      : currentRun)
   return {
     nodeId: shape.id,
     nodeTitle: shape.props.title,
@@ -54,7 +63,9 @@ function sourceForShape(
           runStatus: run.status,
           runStartedAt: run.startedAt
         }
-      : {})
+      : resultRunId
+        ? { runId: resultRunId }
+        : {})
   }
 }
 
@@ -91,7 +102,8 @@ export function buildMediaAssetIndex(
             shape,
             collection.results.length,
             result.mediaId === selectedMediaId,
-            result.modelKey || collection.modelKey
+            result.modelKey || collection.modelKey,
+            result.runId
           ),
           priority: 2,
           createdAt: result.createdAt

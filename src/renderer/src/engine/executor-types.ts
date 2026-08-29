@@ -61,6 +61,8 @@ export interface NodeExecutionContext {
   /** 已收集并校验的上游输入，键为输入 portId。 */
   inputs: ContractInputMap
   projectId: string
+  /** 本次工作流执行的稳定 ID；媒体执行器写入产物来源，供资产中心精确回溯。 */
+  runId?: string
   providers: ProviderConfig[]
   /** 取消信号。 */
   signal: CancelSignal

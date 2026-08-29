@@ -16,6 +16,14 @@ import {
 } from '../assets/media-index'
 import type { NodeCardShape } from './NodeCardShape'
 import {
+  buildRunIndex,
+  filterRunIndex,
+  type IndexedNodeRun,
+  type RunStatusFilter
+} from '../engine/run-index'
+import { runNodeManually } from '../engine/executor'
+import { useGatewayStore } from '../stores/gateway'
+import {
   extractTemplateFromSelection,
   useWorkflowStore,
   type WorkflowTemplate
@@ -26,7 +34,7 @@ import { toast } from '../stores/toast'
 import { useHistorySnapshots, type HistorySnapshot } from '../stores/history-snapshots'
 import { Icon, type IconName } from '../components/Icon'
 
-export type SidePanelTab = 'assets' | 'workflow' | 'history'
+export type SidePanelTab = 'assets' | 'workflow' | 'history' | 'runs'
 
 interface CanvasSidePanelProps {
   tab: SidePanelTab | null
@@ -35,12 +43,14 @@ interface CanvasSidePanelProps {
   onClose: () => void
   onImport: () => void
   onAddToCanvas: (asset: MediaAsset) => void
+  onOpenRuns: () => void
 }
 
 const TAB_META: Record<SidePanelTab, { title: string; icon: IconName }> = {
   assets: { title: '资产中心', icon: 'assets' },
   workflow: { title: '工作流', icon: 'workflow' },
-  history: { title: '历史记录', icon: 'history' }
+  history: { title: '历史记录', icon: 'history' },
+  runs: { title: '运行中心', icon: 'play' }
 }
 
 const FILTER_TABS: { key: MediaKind | 'all'; label: string }[] = [
@@ -73,6 +83,15 @@ const TIME_FILTERS: { key: MediaTimeFilter; label: string }[] = [
   { key: 'today', label: '今天' },
   { key: '7d', label: '最近 7 天' },
   { key: '30d', label: '最近 30 天' }
+]
+
+const RUN_CENTER_FILTERS: { key: RunStatusFilter; label: string }[] = [
+  { key: 'all', label: '全部状态' },
+  { key: 'running', label: '运行中' },
+  { key: 'success', label: '成功' },
+  { key: 'failed', label: '失败' },
+  { key: 'skipped', label: '跳过' },
+  { key: 'cancelled', label: '已取消' }
 ]
 
 // 内置推荐模板（点击直接生成节点组合）
@@ -324,12 +343,14 @@ function AssetCard({
   asset,
   onAdd,
   onDelete,
-  onLocate
+  onLocate,
+  onOpenRun
 }: {
   asset: IndexedMediaAsset
   onAdd: () => void
   onDelete: () => void
   onLocate: () => void
+  onOpenRun: () => void
 }): React.JSX.Element {
   const hoverRef = useRef<HTMLDivElement>(null)
 
@@ -378,6 +399,19 @@ function AssetCard({
           <Icon name="target" size={12} />
         </button>
       )}
+      {asset.source?.runId && (
+        <button
+          className="asset-run"
+          title="查看对应运行记录"
+          aria-label="查看对应运行记录"
+          onClick={(e) => {
+            e.stopPropagation()
+            onOpenRun()
+          }}
+        >
+          <Icon name="history" size={12} />
+        </button>
+      )}
       <button
         className="asset-delete"
         title="删除"
@@ -397,12 +431,14 @@ function AssetsPanel({
   projectId,
   editor,
   onImport,
-  onAddToCanvas
+  onAddToCanvas,
+  onOpenRun
 }: {
   projectId: string
   editor: Editor | null
   onImport: () => void
   onAddToCanvas: (asset: MediaAsset) => void
+  onOpenRun: (nodeId: string, runId: string) => void
 }): React.JSX.Element {
   const assets = useMediaStore((s) => s.assets)
   const filter = useMediaStore((s) => s.filter)
@@ -557,6 +593,9 @@ function AssetsPanel({
               onAdd={() => onAddToCanvas(asset)}
               onDelete={() => void remove(projectId, asset.id)}
               onLocate={() => locateSource(asset)}
+              onOpenRun={() => {
+                if (asset.source?.runId) onOpenRun(asset.source.nodeId, asset.source.runId)
+              }}
             />
           ))}
         </div>
@@ -818,6 +857,146 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
   )
 }
 
+type RunFocus = { nodeId: string; runId: string } | null
+
+function runInputSummary(run: IndexedNodeRun): string {
+  const items = Object.entries(run.inputs).flatMap(([targetPort, sources]) =>
+    sources.map((source) => `${source.portId} → ${targetPort}`)
+  )
+  return items.length > 0 ? items.join('、') : '无上游输入'
+}
+
+// ── 跨节点运行中心 ──
+function RunsPanel({
+  editor,
+  projectId,
+  focus,
+  onClearFocus
+}: {
+  editor: Editor | null
+  projectId: string
+  focus: RunFocus
+  onClearFocus: () => void
+}): React.JSX.Element {
+  const providers = useGatewayStore((s) => s.providers)
+  const [status, setStatus] = useState<RunStatusFilter>('all')
+  const [keyword, setKeyword] = useState('')
+  const [retrying, setRetrying] = useState<string | null>(null)
+
+  // 运行结束会更新 retrying 并触发重渲染，从持久化记录重建列表。
+  // 画布节点数量有限，避免为这份状态快照增加额外的同步副作用。
+  const entries = editor
+    ? buildRunIndex(
+        editor
+          .getCurrentPageShapes()
+          .filter((shape): shape is NodeCardShape => shape.type === 'node-card')
+      )
+    : []
+  const visible = filterRunIndex(entries, {
+    status,
+    keyword,
+    ...(focus ? { nodeId: focus.nodeId, runId: focus.runId } : {})
+  })
+
+  const locate = (run: IndexedNodeRun): void => {
+    if (!editor) return toast('画布尚未就绪')
+    const shape = editor.getShape(run.nodeId as TLShapeId)
+    if (!shape || shape.type !== 'node-card') return toast('来源节点已删除或不可用')
+    editor.setSelectedShapes([shape.id])
+    editor.zoomToSelection({ animation: { duration: 220 } })
+    toast(`已定位到「${run.nodeTitle}」`)
+  }
+
+  const retry = async (run: IndexedNodeRun): Promise<void> => {
+    if (!editor) return
+    const shape = editor.getShape(run.nodeId as TLShapeId)
+    if (!shape || shape.type !== 'node-card') return toast('来源节点已删除或不可用')
+    setRetrying(run.runId)
+    try {
+      await runNodeManually(editor, projectId, providers, shape.id)
+    } finally {
+      setRetrying(null)
+    }
+  }
+
+  return (
+    <div className="side-panel-body runs-panel">
+      <div className="runs-toolbar">
+        <input
+          className="assets-search"
+          placeholder="搜索节点、运行 ID 或端口…"
+          value={keyword}
+          onChange={(event) => setKeyword(event.target.value)}
+          onPointerDown={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+        />
+        <select
+          value={status}
+          onChange={(event) => setStatus(event.target.value as RunStatusFilter)}
+          onPointerDown={(event) => event.stopPropagation()}
+          title="按运行状态筛选"
+        >
+          {RUN_CENTER_FILTERS.map((item) => (
+            <option key={item.key} value={item.key}>
+              {item.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      {focus && (
+        <div className="runs-focus-note">
+          正在查看来自资产的对应运行记录
+          <button onClick={onClearFocus}>查看全部</button>
+        </div>
+      )}
+      {visible.length === 0 ? (
+        <div className="side-panel-empty">
+          {entries.length === 0 ? '当前项目还没有节点运行记录。' : '没有匹配的运行记录。'}
+        </div>
+      ) : (
+        <div className="runs-list">
+          {visible.map((run) => (
+            <article className={`run-card ${run.status}`} key={`${run.nodeId}:${run.runId}`}>
+              <div className="run-card-head">
+                <div>
+                  <strong>{run.nodeTitle}</strong>
+                  <small>
+                    {run.nodeType} · {formatTime(run.startedAt)}
+                    {run.isLatest ? ' · 最近' : ''}
+                  </small>
+                </div>
+                <span className={`run-status ${run.status}`}>{run.status}</span>
+              </div>
+              <small className="run-id">{run.runId}</small>
+              <p className="run-inputs">输入：{runInputSummary(run)}</p>
+              {run.outputPorts && (
+                <p className="run-outputs">输出：{run.outputPorts.join('、') || '无'}</p>
+              )}
+              {run.error && (
+                <p className="run-error">
+                  {run.error.phase}：{run.error.reason}
+                </p>
+              )}
+              <div className="run-card-actions">
+                <button onClick={() => locate(run)}>
+                  <Icon name="target" size={12} /> 回到节点
+                </button>
+                {run.status === 'failed' && (
+                  <button disabled={retrying !== null} onClick={() => void retry(run)}>
+                    <Icon name="reset" size={12} />
+                    {retrying === run.runId ? '重试中…' : '重试节点'}
+                  </button>
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+      {entries.length > 0 && <div className="assets-footer">共 {visible.length} 条运行记录</div>}
+    </div>
+  )
+}
+
 // ── 历史版本面板 ──
 function HistoryPanel({
   projectId,
@@ -932,9 +1111,11 @@ export function CanvasSidePanel({
   editor,
   onClose,
   onImport,
-  onAddToCanvas
+  onAddToCanvas,
+  onOpenRuns
 }: CanvasSidePanelProps): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
+  const [runFocus, setRunFocus] = useState<RunFocus>(null)
 
   useEffect(() => {
     if (!tab) return
@@ -967,10 +1148,22 @@ export function CanvasSidePanel({
           editor={editor}
           onImport={onImport}
           onAddToCanvas={onAddToCanvas}
+          onOpenRun={(nodeId, runId) => {
+            setRunFocus({ nodeId, runId })
+            onOpenRuns()
+          }}
         />
       )}
       {tab === 'workflow' && <WorkflowPanel editor={editor} />}
       {tab === 'history' && <HistoryPanel projectId={projectId} editor={editor} />}
+      {tab === 'runs' && (
+        <RunsPanel
+          editor={editor}
+          projectId={projectId}
+          focus={runFocus}
+          onClearFocus={() => setRunFocus(null)}
+        />
+      )}
     </div>
   )
 }

@@ -241,6 +241,7 @@ async function invokeExecutor(
     shape,
     inputs,
     projectId: ctx.projectId,
+    runId: ctx.runId,
     providers: ctx.providers,
     signal: ctx.token,
     waitForResume: () => waitForResume(ctx.token),

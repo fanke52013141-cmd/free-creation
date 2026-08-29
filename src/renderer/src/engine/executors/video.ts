@@ -48,7 +48,12 @@ export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
             mediaPath: result.mediaPath,
             mime: result.mime
           },
-          { nodeId: ctx.node.id, modelKey: option.key, prompt: prompt.slice(0, 80) }
+          {
+            nodeId: ctx.node.id,
+            modelKey: option.key,
+            prompt: prompt.slice(0, 80),
+            runId: ctx.runId
+          }
         )
       )
     )

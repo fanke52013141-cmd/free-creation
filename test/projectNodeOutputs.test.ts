@@ -97,17 +97,18 @@ describe('projectNodeOutputs · 媒体节点（图片/生图/视频/音频）', 
 
 describe('媒体结果集合', () => {
   it('追加结果并保留当前选中项', () => {
-    const first = appendMediaResult('', {
-      mediaId: 'm1',
-      mediaPath: '/one.png',
-      mime: 'image/png'
-    })
+    const first = appendMediaResult(
+      '',
+      { mediaId: 'm1', mediaPath: '/one.png', mime: 'image/png' },
+      { runId: 'run-1' }
+    )
     const second = appendMediaResult(serializeMediaResultCollection(first), {
       mediaId: 'm2',
       mediaPath: '/two.png',
       mime: 'image/png'
     })
     expect(second.results.map((item) => item.mediaId)).toEqual(['m1', 'm2'])
+    expect(second.results[0].runId).toBe('run-1')
     expect(second.selectedMediaId).toBe('m2')
     expect(parseMediaResultCollection(serializeMediaResultCollection(second))).toEqual(second)
   })

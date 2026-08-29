@@ -72,7 +72,12 @@ export const audioExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
             mediaPath: result.data.path,
             mime: result.data.mime
           },
-          { nodeId: ctx.node.id, modelKey: option.key, prompt: text.slice(0, 80) }
+          {
+            nodeId: ctx.node.id,
+            modelKey: option.key,
+            prompt: text.slice(0, 80),
+            runId: ctx.runId
+          }
         )
       )
     )
