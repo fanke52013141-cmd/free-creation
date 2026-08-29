@@ -13,13 +13,19 @@ interface StoredProjectRow {
   deleted: number
 }
 
+interface MockStatement {
+  all: () => StoredProjectRow[]
+  get: (id: string) => StoredProjectRow | undefined
+  run: (...values: unknown[]) => { changes: number }
+}
+
 const state = vi.hoisted(() => ({
   projectsDir: '',
   rows: new Map<string, StoredProjectRow>()
 }))
 
 vi.mock('../src/main/store/db', (): { getProjectsDir: () => string; getDb: () => unknown } => {
-  const statement = (sql: string) => ({
+  const statement = (sql: string): MockStatement => ({
     all: () => [...state.rows.values()].filter((row) => row.deleted === 0),
     get: (id: string) => {
       const row = state.rows.get(id)
