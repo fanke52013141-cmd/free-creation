@@ -2,11 +2,19 @@
 // 资产中心：项目级媒体库——导入/搜索/筛选/缩略图预览/点击拖到画布/删除
 // 工作流模板：保存选中节点组合为可复用模板，一键套用整段创作链路
 /* eslint-disable react-refresh/only-export-components -- 导出内置模板数据供契约回归测试复用，避免重复维护同一组端口连线。 */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createShapeId, type Editor, type TLShapeId } from 'tldraw'
 import type { MediaAsset, MediaKind } from '@shared/types'
 import { getNodeType, mediaUrl, portCompatible } from '../nodes/registry'
 import { filteredAssets, useMediaStore } from '../stores/media'
+import {
+  buildMediaAssetIndex,
+  mediaSourceOptions,
+  type IndexedMediaAsset,
+  type MediaRunFilter,
+  type MediaTimeFilter
+} from '../assets/media-index'
+import type { NodeCardShape } from './NodeCardShape'
 import {
   extractTemplateFromSelection,
   useWorkflowStore,
@@ -49,6 +57,23 @@ const KIND_ICON: Record<MediaKind, IconName> = {
   audio: 'audio',
   file: 'document'
 }
+
+const RUN_FILTERS: { key: MediaRunFilter; label: string }[] = [
+  { key: 'all', label: '全部状态' },
+  { key: 'success', label: '成功' },
+  { key: 'running', label: '运行中' },
+  { key: 'failed', label: '失败' },
+  { key: 'skipped', label: '跳过' },
+  { key: 'cancelled', label: '已取消' },
+  { key: 'unavailable', label: '无运行记录' }
+]
+
+const TIME_FILTERS: { key: MediaTimeFilter; label: string }[] = [
+  { key: 'all', label: '全部时间' },
+  { key: 'today', label: '今天' },
+  { key: '7d', label: '最近 7 天' },
+  { key: '30d', label: '最近 30 天' }
+]
 
 // 内置推荐模板（点击直接生成节点组合）
 export const BUILTIN_TEMPLATES: {
@@ -298,11 +323,13 @@ function formatTime(ts: number): string {
 function AssetCard({
   asset,
   onAdd,
-  onDelete
+  onDelete,
+  onLocate
 }: {
-  asset: MediaAsset
+  asset: IndexedMediaAsset
   onAdd: () => void
   onDelete: () => void
+  onLocate: () => void
 }): React.JSX.Element {
   const hoverRef = useRef<HTMLDivElement>(null)
 
@@ -324,8 +351,33 @@ function AssetCard({
       </div>
       <div className="asset-info">
         <span className="asset-name">{asset.name ?? asset.id.slice(0, 8)}</span>
-        <span className="asset-meta">{formatSize(asset.sizeBytes)}</span>
+        <span className="asset-meta">
+          {formatSize(asset.sizeBytes)} · {formatTime(asset.createdAt)}
+        </span>
+        {asset.source && (
+          <span
+            className={`asset-source ${asset.source.runStatus ?? 'unavailable'}`}
+            title={`${asset.source.nodeTitle} · ${asset.source.nodeType}${asset.source.modelKey ? ` · ${asset.source.modelKey}` : ''}`}
+          >
+            <Icon name="target" size={10} />
+            {asset.source.nodeTitle}
+            {asset.source.isCurrentOutput ? ' · 当前' : ' · 历史'}
+          </span>
+        )}
       </div>
+      {asset.source && (
+        <button
+          className="asset-locate"
+          title="定位到来源节点"
+          aria-label="定位到来源节点"
+          onClick={(e) => {
+            e.stopPropagation()
+            onLocate()
+          }}
+        >
+          <Icon name="target" size={12} />
+        </button>
+      )}
       <button
         className="asset-delete"
         title="删除"
@@ -343,27 +395,61 @@ function AssetCard({
 // ── 资产中心面板 ──
 function AssetsPanel({
   projectId,
+  editor,
   onImport,
   onAddToCanvas
 }: {
   projectId: string
+  editor: Editor | null
   onImport: () => void
   onAddToCanvas: (asset: MediaAsset) => void
 }): React.JSX.Element {
   const assets = useMediaStore((s) => s.assets)
   const filter = useMediaStore((s) => s.filter)
   const keyword = useMediaStore((s) => s.keyword)
+  const sourceNodeId = useMediaStore((s) => s.sourceNodeId)
+  const runStatus = useMediaStore((s) => s.runStatus)
+  const timeRange = useMediaStore((s) => s.timeRange)
   const load = useMediaStore((s) => s.load)
   const remove = useMediaStore((s) => s.remove)
   const setFilter = useMediaStore((s) => s.setFilter)
   const setKeyword = useMediaStore((s) => s.setKeyword)
+  const setSourceNodeId = useMediaStore((s) => s.setSourceNodeId)
+  const setRunStatus = useMediaStore((s) => s.setRunStatus)
+  const setTimeRange = useMediaStore((s) => s.setTimeRange)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     void load(projectId)
   }, [projectId, load])
 
-  const visible = filteredAssets({ assets, filter, keyword })
+  const indexedAssets = useMemo(() => {
+    const shapes = editor
+      ? editor
+          .getCurrentPageShapes()
+          .filter((shape): shape is NodeCardShape => shape.type === 'node-card')
+      : []
+    return buildMediaAssetIndex(assets, shapes)
+  }, [assets, editor])
+  const sourceOptions = useMemo(() => mediaSourceOptions(indexedAssets), [indexedAssets])
+  const visible = filteredAssets({
+    assets: indexedAssets,
+    filter,
+    keyword,
+    sourceNodeId,
+    runStatus,
+    timeRange
+  })
+
+  const locateSource = (asset: IndexedMediaAsset): void => {
+    const source = asset.source
+    if (!editor || !source) return toast('此素材没有可定位的来源节点')
+    const shape = editor.getShape(source.nodeId as TLShapeId)
+    if (!shape || shape.type !== 'node-card') return toast('来源节点已删除或不可用')
+    editor.setSelectedShapes([shape.id])
+    editor.zoomToSelection({ animation: { duration: 220 } })
+    toast(`已定位到「${source.nodeTitle}」`)
+  }
 
   const handleBatchExport = async (): Promise<void> => {
     if (assets.length === 0) {
@@ -399,7 +485,7 @@ function AssetsPanel({
         </button>
         <input
           className="assets-search"
-          placeholder="搜索素材…"
+          placeholder="搜索素材、来源或模型…"
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
           onPointerDown={(e) => e.stopPropagation()}
@@ -417,6 +503,45 @@ function AssetsPanel({
           </button>
         ))}
       </div>
+      <div className="assets-advanced-filters" aria-label="资产高级筛选">
+        <select
+          value={sourceNodeId}
+          title="按来源节点筛选"
+          onChange={(e) => setSourceNodeId(e.target.value)}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <option value="all">全部来源</option>
+          {sourceOptions.map((source) => (
+            <option key={source.nodeId} value={source.nodeId}>
+              {source.nodeTitle} · {source.nodeType}
+            </option>
+          ))}
+        </select>
+        <select
+          value={runStatus}
+          title="按最近运行状态筛选"
+          onChange={(e) => setRunStatus(e.target.value as MediaRunFilter)}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          {RUN_FILTERS.map((status) => (
+            <option key={status.key} value={status.key}>
+              {status.label}
+            </option>
+          ))}
+        </select>
+        <select
+          value={timeRange}
+          title="按生成时间筛选"
+          onChange={(e) => setTimeRange(e.target.value as MediaTimeFilter)}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          {TIME_FILTERS.map((range) => (
+            <option key={range.key} value={range.key}>
+              {range.label}
+            </option>
+          ))}
+        </select>
+      </div>
       {visible.length === 0 ? (
         <div className="side-panel-empty">
           {assets.length === 0
@@ -431,11 +556,16 @@ function AssetsPanel({
               asset={asset}
               onAdd={() => onAddToCanvas(asset)}
               onDelete={() => void remove(projectId, asset.id)}
+              onLocate={() => locateSource(asset)}
             />
           ))}
         </div>
       )}
-      {assets.length > 0 && <div className="assets-footer">共 {assets.length} 个素材</div>}
+      {assets.length > 0 && (
+        <div className="assets-footer">
+          显示 {visible.length} / {assets.length} 个素材
+        </div>
+      )}
     </div>
   )
 }
@@ -832,7 +962,12 @@ export function CanvasSidePanel({
         </button>
       </div>
       {tab === 'assets' && (
-        <AssetsPanel projectId={projectId} onImport={onImport} onAddToCanvas={onAddToCanvas} />
+        <AssetsPanel
+          projectId={projectId}
+          editor={editor}
+          onImport={onImport}
+          onAddToCanvas={onAddToCanvas}
+        />
       )}
       {tab === 'workflow' && <WorkflowPanel editor={editor} />}
       {tab === 'history' && <HistoryPanel projectId={projectId} editor={editor} />}

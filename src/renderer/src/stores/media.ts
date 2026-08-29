@@ -2,6 +2,12 @@
 // 导入和生成操作完成后可调用 refresh() 增量刷新列表
 import { create } from 'zustand'
 import type { MediaAsset } from '@shared/types'
+import {
+  filterMediaAssets,
+  type IndexedMediaAsset,
+  type MediaRunFilter,
+  type MediaTimeFilter
+} from '../assets/media-index'
 
 interface MediaState {
   assets: MediaAsset[]
@@ -10,11 +16,20 @@ interface MediaState {
   filter: MediaAsset['kind'] | 'all'
   /** 搜索关键词（匹配文件名） */
   keyword: string
+  /** 来源节点筛选；值始终为稳定 nodeId。 */
+  sourceNodeId: string | 'all'
+  /** 节点最近一次运行状态筛选。 */
+  runStatus: MediaRunFilter
+  /** 资产创建时间范围筛选。 */
+  timeRange: MediaTimeFilter
   load: (projectId: string) => Promise<void>
   refresh: (projectId: string) => Promise<void>
   remove: (projectId: string, mediaId: string) => Promise<void>
   setFilter: (filter: MediaAsset['kind'] | 'all') => void
   setKeyword: (kw: string) => void
+  setSourceNodeId: (nodeId: string | 'all') => void
+  setRunStatus: (status: MediaRunFilter) => void
+  setTimeRange: (range: MediaTimeFilter) => void
 }
 
 export const useMediaStore = create<MediaState>((set, get) => ({
@@ -22,6 +37,9 @@ export const useMediaStore = create<MediaState>((set, get) => ({
   loaded: false,
   filter: 'all',
   keyword: '',
+  sourceNodeId: 'all',
+  runStatus: 'all',
+  timeRange: 'all',
   load: async (projectId) => {
     const res = await window.api.listMedia(projectId)
     if (res.ok) set({ assets: res.data, loaded: true })
@@ -37,22 +55,17 @@ export const useMediaStore = create<MediaState>((set, get) => ({
     }
   },
   setFilter: (filter) => set({ filter }),
-  setKeyword: (keyword) => set({ keyword })
+  setKeyword: (keyword) => set({ keyword }),
+  setSourceNodeId: (sourceNodeId) => set({ sourceNodeId }),
+  setRunStatus: (runStatus) => set({ runStatus }),
+  setTimeRange: (timeRange) => set({ timeRange })
 }))
 
-/** 过滤后的资产列表（按 filter + keyword） */
+/** 过滤后的资产列表（类型、来源、运行状态、时间与安全关键词）。 */
 export function filteredAssets(
-  state: Pick<MediaState, 'assets' | 'filter' | 'keyword'>
-): MediaAsset[] {
-  let list = state.assets
-  if (state.filter !== 'all') {
-    list = list.filter((a) => a.kind === state.filter)
+  state: Pick<MediaState, 'filter' | 'keyword' | 'sourceNodeId' | 'runStatus' | 'timeRange'> & {
+    assets: IndexedMediaAsset[]
   }
-  const kw = state.keyword.trim().toLowerCase()
-  if (kw) {
-    list = list.filter(
-      (a) => (a.name ?? '').toLowerCase().includes(kw) || a.id.toLowerCase().includes(kw)
-    )
-  }
-  return list
+): IndexedMediaAsset[] {
+  return filterMediaAssets(state.assets, state)
 }

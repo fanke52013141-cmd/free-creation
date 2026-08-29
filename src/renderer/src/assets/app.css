@@ -3669,6 +3669,29 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   flex-wrap: wrap;
 }
 
+.assets-advanced-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px;
+}
+
+.assets-advanced-filters select {
+  min-width: 0;
+  padding: 5px 7px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--txt-dim);
+  font-size: 10px;
+  text-overflow: ellipsis;
+}
+
+.assets-advanced-filters select:focus {
+  border-color: var(--brand);
+  outline: none;
+}
+
 .asset-filter-tab {
   padding: 3px 10px;
   font-size: 11px;
@@ -3762,6 +3785,57 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   color: var(--muted);
 }
 
+.asset-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  color: var(--txt-dim);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-source.success {
+  color: var(--success, #5fc89a);
+}
+
+.asset-source.failed {
+  color: var(--danger, #e87979);
+}
+
+.asset-source.running {
+  color: var(--brand);
+}
+
+.asset-locate {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.asset-card:hover .asset-locate,
+.asset-locate:focus-visible {
+  opacity: 1;
+}
+
+.asset-locate:hover {
+  background: var(--brand);
+}
+
 .asset-delete {
   position: absolute;
   top: 4px;
@@ -3794,6 +3868,16 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   font-size: 11px;
   color: var(--muted);
   padding: 4px 0;
+}
+
+@media (max-width: 460px) {
+  .assets-advanced-filters {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .assets-advanced-filters select:first-child {
+    grid-column: 1 / -1;
+  }
 }
 
 /* ── 脚本节点（LibTV 1.2.6 基础版：剧本文本 + 分镜表） ── */
