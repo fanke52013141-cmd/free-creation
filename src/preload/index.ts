@@ -10,9 +10,13 @@ import type {
   ImageGenerateInput,
   ImportMediaBufferInput,
   RenameProjectInput,
+  SaveHistorySnapshotInput,
   SaveProjectInput,
   SaveProviderInput,
+  SaveWorkflowTemplateInput,
   TestProviderResult,
+  HistorySnapshotRecord,
+  WorkflowTemplateRecord,
   VideoSubmitInput,
   VideoSubmitResult,
   AudioGenerateInput
@@ -22,7 +26,7 @@ import type {
   MediaImportResult,
   ProjectFile,
   ProjectMeta,
-  ProviderConfig,
+  ProviderSummary,
   VideoTaskInfo
 } from '../shared/types'
 
@@ -70,12 +74,28 @@ const api = {
     projectId: string
   ): Promise<IpcEnvelope<{ exported: number; failed: number; targetDir: string }>> =>
     ipcRenderer.invoke(IPC.media.batchExport, { projectId }),
+  workspace: {
+    listTemplates: (): Promise<IpcEnvelope<WorkflowTemplateRecord[]>> =>
+      ipcRenderer.invoke(IPC.workspace.listTemplates),
+    saveTemplate: (
+      input: SaveWorkflowTemplateInput
+    ): Promise<IpcEnvelope<WorkflowTemplateRecord>> =>
+      ipcRenderer.invoke(IPC.workspace.saveTemplate, input),
+    deleteTemplate: (id: string): Promise<IpcEnvelope<boolean>> =>
+      ipcRenderer.invoke(IPC.workspace.deleteTemplate, id),
+    listSnapshots: (projectId: string): Promise<IpcEnvelope<HistorySnapshotRecord[]>> =>
+      ipcRenderer.invoke(IPC.workspace.listSnapshots, projectId),
+    saveSnapshot: (input: SaveHistorySnapshotInput): Promise<IpcEnvelope<HistorySnapshotRecord>> =>
+      ipcRenderer.invoke(IPC.workspace.saveSnapshot, input),
+    deleteSnapshot: (input: { projectId: string; id: string }): Promise<IpcEnvelope<boolean>> =>
+      ipcRenderer.invoke(IPC.workspace.deleteSnapshot, input)
+  },
   // 拖拽落盘的 File 对象拿真实路径（Electron 32+ 移除了 File.path）
   getDroppedFilePath: (file: File): string => webUtils.getPathForFile(file),
   gateway: {
-    listProviders: (): Promise<IpcEnvelope<ProviderConfig[]>> =>
+    listProviders: (): Promise<IpcEnvelope<ProviderSummary[]>> =>
       ipcRenderer.invoke(IPC.gateway.providers),
-    saveProvider: (input: SaveProviderInput): Promise<IpcEnvelope<ProviderConfig>> =>
+    saveProvider: (input: SaveProviderInput): Promise<IpcEnvelope<ProviderSummary>> =>
       ipcRenderer.invoke(IPC.gateway.saveProvider, input),
     deleteProvider: (id: string): Promise<IpcEnvelope<boolean>> =>
       ipcRenderer.invoke(IPC.gateway.deleteProvider, id),

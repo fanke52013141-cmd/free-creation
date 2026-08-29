@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Editor } from 'tldraw'
-import type { PortDecl, ProviderConfig } from '@shared/types'
+import type { PortDecl, ProviderSummary } from '@shared/types'
 import { getNodePorts, getNodeType } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
 import { Icon } from '../components/Icon'
@@ -13,7 +13,7 @@ import { runNodeManually, runWorkflowToNode } from '../engine/executor'
 interface NodeContractPanelProps {
   editor: Editor
   projectId: string
-  providers: ProviderConfig[]
+  providers: ProviderSummary[]
   onClose: () => void
 }
 

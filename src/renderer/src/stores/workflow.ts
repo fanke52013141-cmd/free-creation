@@ -1,6 +1,6 @@
-﻿// 工作流模板存储（LibTV 工作流 Tab）：保存/列出/套用节点组合模板
-// 使用 localStorage 持久化，零数据库迁移成本
+// 工作流模板存储（LibTV 工作流 Tab）：经主进程 SQLite 保存为本机全局模板。
 import { create } from 'zustand'
+import type { WorkflowTemplateRecord } from '@shared/contracts'
 import type { NodeCardShape } from '../canvas/NodeCardShape'
 
 export interface TemplateNode {
@@ -23,13 +23,9 @@ export interface TemplateEdge {
   toPort?: string
 }
 
-export interface WorkflowTemplate {
-  id: string
-  name: string
-  createdAt: number
+export interface WorkflowTemplate extends Omit<WorkflowTemplateRecord, 'nodes' | 'edges'> {
   nodes: TemplateNode[]
   edges: TemplateEdge[]
-  nodeCount: number
 }
 
 export interface SavePayload {
@@ -40,61 +36,44 @@ export interface SavePayload {
 interface WorkflowState {
   templates: WorkflowTemplate[]
   loaded: boolean
-  load: () => void
-  save: (name: string, data: SavePayload) => void
-  remove: (id: string) => void
+  load: () => Promise<void>
+  save: (name: string, data: SavePayload) => Promise<WorkflowTemplate>
+  remove: (id: string) => Promise<void>
 }
 
-const STORAGE_KEY = 'canvas-studio:wf-templates'
-
-function readStore(): WorkflowTemplate[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return []
-    const arr = JSON.parse(raw) as WorkflowTemplate[]
-    if (!Array.isArray(arr)) return []
-    return arr
-  } catch {
-    return []
-  }
-}
-
-function writeStore(templates: WorkflowTemplate[]): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(templates))
-  } catch {
-    // localStorage 满或被禁用时静默失败
-  }
+function asTemplate(value: WorkflowTemplateRecord): WorkflowTemplate {
+  return value as WorkflowTemplate
 }
 
 export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   templates: [],
   loaded: false,
 
-  load: () => {
+  load: async () => {
     if (get().loaded) return
-    set({ templates: readStore(), loaded: true })
+    const result = await window.api.workspace.listTemplates()
+    if (!result.ok) throw new Error(result.error.message)
+    set({ templates: result.data.map(asTemplate), loaded: true })
   },
 
-  save: (name, data) => {
-    if (data.nodes.length === 0) return
-    const tmpl: WorkflowTemplate = {
-      id: `wf-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+  save: async (name, data) => {
+    if (data.nodes.length === 0) throw new Error('模板至少需要一个节点')
+    const result = await window.api.workspace.saveTemplate({
       name: name.trim() || `模板 ${get().templates.length + 1}`,
-      createdAt: Date.now(),
       nodes: data.nodes,
       edges: data.edges,
       nodeCount: data.nodes.length
-    }
-    const next = [tmpl, ...get().templates]
-    writeStore(next)
-    set({ templates: next })
+    })
+    if (!result.ok) throw new Error(result.error.message)
+    const template = asTemplate(result.data)
+    set({ templates: [template, ...get().templates] })
+    return template
   },
 
-  remove: (id) => {
-    const next = get().templates.filter((t) => t.id !== id)
-    writeStore(next)
-    set({ templates: next })
+  remove: async (id) => {
+    const result = await window.api.workspace.deleteTemplate(id)
+    if (!result.ok) throw new Error(result.error.message)
+    set({ templates: get().templates.filter((template) => template.id !== id) })
   }
 }))
 

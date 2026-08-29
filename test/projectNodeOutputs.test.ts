@@ -220,6 +220,35 @@ describe('projectNodeOutputs · 结构数据节点', () => {
     })
     expect(projectNodeOutputs(shape('structured', { config, text: '{"id":"c1"}' }))).toEqual({})
   })
+
+  it('成功运行后投影运行态结果，失败时不复用旧结果', () => {
+    const config = JSON.stringify({ schema: { id: 'scene.definition', version: 1 } })
+    const nodeResult = JSON.stringify({
+      kind: 'structured-result',
+      schema: { id: 'scene.definition', version: 1 },
+      data: { id: 'scene-1', name: '雨巷', description: '主角穿过雨夜街头' }
+    })
+    const successful = shape(
+      'structured',
+      { config, text: JSON.stringify({ id: 'scene-1', name: '雨巷', description: '{{text}}' }) },
+      {
+        nodeResult,
+        nodeRun: { runId: 'run-1', status: 'success', startedAt: 1, inputs: {} }
+      }
+    )
+    expect(projectNodeOutputs(successful)['out-json']).toEqual({
+      kind: 'json',
+      data: { id: 'scene-1', name: '雨巷', description: '主角穿过雨夜街头' }
+    })
+    const failed = {
+      ...successful,
+      meta: {
+        ...successful.meta,
+        nodeRun: { runId: 'run-2', status: 'failed', startedAt: 2, inputs: {} }
+      }
+    }
+    expect(projectNodeOutputs(failed)).toEqual({})
+  })
 })
 
 describe('projectNodeOutputs · 分镜板节点', () => {

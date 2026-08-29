@@ -1,11 +1,8 @@
 // 脚本节点 Body（路线图 R6：bodies.tsx 拆分）
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import type { NodeBodyProps } from '../../registry'
-import { toast } from '../../../stores/toast'
 import { markUndoPoint } from '../../../canvas/history'
-import { gatherUpstreamText } from '../../../canvas/graph'
-import { useGatewayStore, modelsByModality } from '../../../stores/gateway'
 import { Icon } from '../../../components/Icon'
 import { useWheelScroll, VARIABLE_TYPES } from './shared'
 
@@ -133,67 +130,6 @@ function getNestedValue(target: Record<string, unknown>, path: string): unknown 
     }, target)
 }
 
-function buildStoryboardSystemPrompt(fields: ScriptOutputField[]): string {
-  const example: Record<string, unknown> = {}
-  for (const field of fields) {
-    const sample =
-      field.type === 'number'
-        ? 0
-        : field.type === 'boolean'
-          ? false
-          : field.type === 'array'
-            ? []
-            : field.type === 'object'
-              ? {}
-              : field.description || field.label
-    setNestedValue(example, field.path, sample)
-  }
-  const definitions = fields
-    .map((field) => `- ${field.path} (${field.type})：${field.description || field.label}`)
-    .join('\n')
-  return `你是一位专业的影视分镜导演。请将用户提供的剧本文本拆解为分镜列表。
-输出要求：
-1. 只输出一个 JSON 数组，不要添加其他文字或 Markdown 标记
-2. 每个数组元素必须严格遵守以下字段定义，不能改名：
-${definitions}
-3. 字段路径中的点表示 JSON 层级，例如 camera.angle 表示 {"camera":{"angle":"..."}}
-4. 根据剧情节奏合理划分镜头，画面描述应具体、可视化
-单个元素结构示例：${JSON.stringify(example)}`
-}
-
-// 从 AI 响应中提取 JSON 数组
-function extractShotsJson(raw: string): ScriptShot[] | null {
-  const text = raw.trim()
-  // 尝试直接解析
-  try {
-    const v = JSON.parse(text)
-    if (Array.isArray(v)) return v.map(normalizeShot)
-  } catch {
-    // 继续
-  }
-  // 尝试提取 ```json ... ``` 或 [ ... ] 块
-  const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/)
-  if (jsonMatch) {
-    try {
-      const v = JSON.parse(jsonMatch[1].trim())
-      if (Array.isArray(v)) return v.map(normalizeShot)
-    } catch {
-      // 继续
-    }
-  }
-  const bracketStart = text.indexOf('[')
-  const bracketEnd = text.lastIndexOf(']')
-  if (bracketStart >= 0 && bracketEnd > bracketStart) {
-    try {
-      const v = JSON.parse(text.slice(bracketStart, bracketEnd + 1))
-      if (Array.isArray(v)) return v.map(normalizeShot)
-    } catch {
-      // 继续
-    }
-  }
-  return null
-}
-
 export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
   const data = parseScript(shape.props.text)
@@ -203,19 +139,7 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
   const pendingMarkRef = useRef<string | null>(null)
   useWheelScroll(scrollRef)
 
-  // AI 拆解状态
-  const [breaking, setBreaking] = useState(false)
   const [showOutputSettings, setShowOutputSettings] = useState(false)
-  const breakTaskRef = useRef<string | null>(null)
-  const breakBufRef = useRef<string>('')
-  // 最新 data 的稳定引用，供注册一次的事件回调读取，避免闭包过期（A10）
-  const dataRef = useRef(data)
-  useEffect(() => {
-    dataRef.current = data
-  }, [data])
-  const providers = useGatewayStore((s) => s.providers)
-  const openSettings = useGatewayStore((s) => s.openSettings)
-  const chatModels = modelsByModality(providers, 'text')
 
   const update = (next: ScriptData): void => {
     editor.updateShape({
@@ -254,78 +178,6 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
     pendingMarkRef.current = 'shot-move'
   }
 
-  // ── AI 拆解剧本：调用对话模型将剧本文本转为结构化分镜 ──
-  useEffect(() => {
-    const off = window.api.gateway.onEvent((e) => {
-      if (!breakTaskRef.current || e.taskId !== breakTaskRef.current) return
-      if (e.kind === 'chat-delta') {
-        breakBufRef.current += e.text
-      } else if (e.kind === 'chat-done') {
-        const shots = extractShotsJson(breakBufRef.current)
-        breakTaskRef.current = null
-        breakBufRef.current = ''
-        setBreaking(false)
-        if (shots && shots.length > 0) {
-          update({ ...dataRef.current, shots })
-          pendingMarkRef.current = 'shot-breakdown'
-          toast(`AI 拆解完成，生成 ${shots.length} 个镜头`)
-        } else {
-          toast('AI 拆解结果解析失败，请检查模型输出或换一个模型重试')
-        }
-      } else if (e.kind === 'chat-error') {
-        breakTaskRef.current = null
-        breakBufRef.current = ''
-        setBreaking(false)
-        toast(`AI 拆解失败：${e.error}`)
-      }
-    })
-    return off
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const breakdown = async (): Promise<void> => {
-    if (breaking) {
-      // 正在拆解中 → 取消
-      if (breakTaskRef.current) {
-        await window.api.gateway.chatCancel(breakTaskRef.current)
-      }
-      breakTaskRef.current = null
-      breakBufRef.current = ''
-      setBreaking(false)
-      return
-    }
-    const upstream = gatherUpstreamText(editor, shape.id)
-    const source = upstream ? `${upstream}\n\n---\n\n${data.source.trim()}` : data.source.trim()
-    if (!source) {
-      toast('请先输入剧本文本或连接上游文本')
-      return
-    }
-    const modelKey = data.modelKey ?? ''
-    const opt = chatModels.find((m) => m.key === modelKey) ?? chatModels[0]
-    if (!opt) {
-      toast('请先在设置中配置对话模型')
-      return
-    }
-    // 持久化选中的 modelKey
-    if (data.modelKey !== opt.key) {
-      update({ ...data, modelKey: opt.key })
-    }
-    breakBufRef.current = ''
-    setBreaking(true)
-    const res = await window.api.gateway.chatStart({
-      providerId: opt.provider.id,
-      modelId: opt.model.id,
-      system: buildStoryboardSystemPrompt(data.outputFields),
-      messages: [{ role: 'user', content: source }]
-    })
-    if (!res.ok) {
-      setBreaking(false)
-      toast(`发送失败：${res.error.message}`)
-      return
-    }
-    breakTaskRef.current = res.data.taskId
-  }
-
   // 内容增高时自动撑高卡片（只增不减，上限后内部滚动），手动缩放不被覆盖
   useLayoutEffect(() => {
     const el = scrollRef.current
@@ -356,7 +208,7 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
         value={data.source}
         rows={3}
         spellCheck={false}
-        placeholder="输入或粘贴剧本文本…（点击「AI 拆解」可一键生成分镜）"
+        placeholder="输入或粘贴剧本文本；AI 拆解请使用“文本 → AI 处理 → 结构数据 → 分镜板”工作流。"
         onChange={(e) => update({ ...data, source: e.target.value })}
         onBlur={markSession}
         onPointerDown={(e) => stopEventPropagation(e)}
@@ -584,53 +436,9 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
             添加镜头
           </>
         </button>
-        {chatModels.length > 0 ? (
-          <>
-            <button
-              className={`btn-breakdown ${breaking ? 'running' : ''}`}
-              onClick={() => void breakdown()}
-              disabled={!data.source.trim() && !breaking}
-              onPointerDown={(e) => stopEventPropagation(e)}
-            >
-              {breaking ? (
-                '取消拆解…'
-              ) : (
-                <>
-                  <Icon name="spark" size={14} />
-                  AI 拆解
-                </>
-              )}
-            </button>
-            <select
-              className="script-model-select"
-              value={data.modelKey ?? chatModels[0]?.key ?? ''}
-              title="选择拆解用的对话模型"
-              onChange={(e) => update({ ...data, modelKey: e.target.value })}
-              onPointerDown={(e) => stopEventPropagation(e)}
-            >
-              {chatModels.map((m) => (
-                <option key={m.key} value={m.key}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-          </>
-        ) : (
-          <button
-            className="btn-ghost small"
-            title="点击配置对话模型"
-            onClick={(e) => {
-              e.stopPropagation()
-              openSettings()
-            }}
-            onPointerDown={(e) => stopEventPropagation(e)}
-          >
-            <>
-              <Icon name="spark" size={14} />
-              AI 拆解（需配置模型）
-            </>
-          </button>
-        )}
+        <span className="script-template-hint">
+          AI 拆解请使用“文本 → AI 处理 → 结构数据 → 分镜板”工作流模板。
+        </span>
       </div>
     </div>
   )

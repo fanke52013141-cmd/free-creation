@@ -11,6 +11,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { join } from 'path'
 import { nanoid } from 'nanoid'
 import type { MediaAsset, ProjectFile } from '../../shared/types'
+import { mimeForExtension } from '../../shared/mime'
 import { remapMediaReferences } from '../../shared/media-reference-remap'
 import { getDb, getProjectsDir } from './db'
 
@@ -71,23 +72,6 @@ function readProjectJson(id: string): ProjectFile | null {
     }
   }
   return null
-}
-
-const MIME_BY_EXT: Record<string, string> = {
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp',
-  '.gif': 'image/gif',
-  '.bmp': 'image/bmp',
-  '.svg': 'image/svg+xml',
-  '.mp4': 'video/mp4',
-  '.webm': 'video/webm',
-  '.mov': 'video/quicktime',
-  '.mp3': 'audio/mpeg',
-  '.wav': 'audio/wav',
-  '.ogg': 'audio/ogg',
-  '.m4a': 'audio/mp4'
 }
 
 function extName(name: string): string {
@@ -242,7 +226,7 @@ export function importProject(srcPath: string): ProjectMetaInfo {
       for (const ref of mediaRefs) {
         const ext = extName(ref.newPath)
         const stagedPath = join(stagingMediaDir, `${ref.newId}${ext}`)
-        const mime = MIME_BY_EXT[ext] ?? 'application/octet-stream'
+        const mime = mimeForExtension(ext)
         insertMedia.run(
           ref.newId,
           kindFor(mime),

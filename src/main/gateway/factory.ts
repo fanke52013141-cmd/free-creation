@@ -52,14 +52,16 @@ export async function testProvider(
 ): Promise<{ models: string[]; message: string }> {
   const baseURL = input.baseURL.trim().replace(/\/+$/, '')
   if (!baseURL) throw new GatewayError('PROVIDER_NO_URL', 'Base URL 不能为空')
-  if (!input.apiKey.trim()) throw new GatewayError('PROVIDER_NO_KEY', 'API Key 不能为空')
+  // 已保存供应商的编辑面板不回显密钥；测试未保存的 URL/模型变更时可安全复用主进程密钥。
+  const apiKey = input.apiKey?.trim() || (input.id ? (getProvider(input.id)?.apiKey ?? '') : '')
+  if (!apiKey) throw new GatewayError('PROVIDER_NO_KEY', 'API Key 不能为空')
 
   if (driverForSpec(input.specId) === 'video') {
     return { models: [], message: '配置已保存（视频供应商在首次生成时验证）' }
   }
 
   const res = await fetch(`${baseURL}/models`, {
-    headers: { Authorization: `Bearer ${input.apiKey.trim()}` }
+    headers: { Authorization: `Bearer ${apiKey}` }
   })
   if (res.ok) {
     const json = (await res.json()) as { data?: Array<{ id?: string }> }
@@ -81,7 +83,7 @@ export async function testProvider(
   const chatRes = await fetch(`${baseURL}/chat/completions`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${input.apiKey.trim()}`,
+      Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({

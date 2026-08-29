@@ -5,6 +5,8 @@ import { join } from 'path'
 import { mkdirSync } from 'fs'
 
 let db: Database.Database | null = null
+/** 每次结构变更递增；旧库启动时在幂等 DDL 后升级该标记。 */
+const DB_SCHEMA_VERSION = 2
 
 export function getDataDir(): string {
   const dir = join(app.getPath('userData'), 'data')
@@ -35,6 +37,7 @@ export function closeDb(): void {
 }
 
 function migrate(database: Database.Database): void {
+  const currentVersion = Number(database.pragma('user_version', { simple: true }) ?? 0)
   database.exec(`
     CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY,
@@ -97,7 +100,27 @@ function migrate(database: Database.Database): void {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS workflow_templates (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS history_snapshots (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      label TEXT NOT NULL,
+      snapshot TEXT NOT NULL,
+      node_count INTEGER NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_history_snapshots_project_created
+      ON history_snapshots(project_id, created_at DESC);
   `)
+  if (currentVersion < DB_SCHEMA_VERSION) database.pragma(`user_version = ${DB_SCHEMA_VERSION}`)
 }
 
 export function getSetting(key: string): string | null {

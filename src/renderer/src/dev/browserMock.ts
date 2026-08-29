@@ -1,6 +1,6 @@
 // 浏览器直连 vite dev 时的 window.api 模拟：Electron 内 preload 已提供真实 api，
 // 此 mock 仅在开发期用浏览器验证画布交互（建节点/拖拽/缩放），媒体导入返回空
-import type { ProjectMeta, ProjectFile, ProviderConfig } from '@shared/types'
+import type { ProjectMeta, ProjectFile, ProviderSummary } from '@shared/types'
 
 export function installBrowserMock(): void {
   if (window.api) return
@@ -10,13 +10,13 @@ export function installBrowserMock(): void {
     { id: 'demo', name: '浏览器演示项目', createdAt: now, updatedAt: now, graphVersion: 0 }
   ]
   let snapshot: unknown
-  const providers: ProviderConfig[] = [
+  const providers: ProviderSummary[] = [
     {
       id: 'mock-relay',
       name: '演示中转站',
       specId: 'relay',
       baseURL: 'https://example.com/v1',
-      apiKey: 'sk-mock',
+      hasApiKey: true,
       createdAt: now,
       models: [
         { id: 'gpt-image-2', modality: 'image' },
@@ -25,6 +25,8 @@ export function installBrowserMock(): void {
       ]
     }
   ]
+  const templates: Array<Record<string, unknown>> = []
+  const snapshots: Array<Record<string, unknown> & { projectId: string }> = []
 
   window.api = {
     bootstrap: () => Promise.resolve({ ok: true, data: { lastProjectId: 'demo' } }),
@@ -68,16 +70,56 @@ export function installBrowserMock(): void {
     closeProject: () => Promise.resolve({ ok: true, data: true }),
     importMedia: () => Promise.resolve({ ok: true, data: { assets: [], errors: [] } }),
     pickMedia: () => Promise.resolve({ ok: true, data: { assets: [], errors: [] } }),
+    workspace: {
+      listTemplates: () => Promise.resolve({ ok: true, data: templates }),
+      saveTemplate: (input: Record<string, unknown>) => {
+        const template = { ...input, id: `wf-${Date.now()}`, createdAt: Date.now() }
+        templates.unshift(template)
+        return Promise.resolve({ ok: true, data: template })
+      },
+      deleteTemplate: (id: string) => {
+        const index = templates.findIndex((template) => template.id === id)
+        if (index >= 0) templates.splice(index, 1)
+        return Promise.resolve({ ok: true, data: index >= 0 })
+      },
+      listSnapshots: (projectId: string) =>
+        Promise.resolve({
+          ok: true,
+          data: snapshots
+            .filter((snapshot) => snapshot.projectId === projectId)
+            .map((snapshot) => {
+              const publicSnapshot: Record<string, unknown> = { ...snapshot }
+              delete publicSnapshot.projectId
+              return publicSnapshot
+            })
+        }),
+      saveSnapshot: (input: Record<string, unknown> & { projectId: string }) => {
+        const snapshot = {
+          ...input,
+          id: `snap-${Date.now()}`,
+          timestamp: Date.now()
+        }
+        snapshots.unshift(snapshot)
+        return Promise.resolve({ ok: true, data: snapshot })
+      },
+      deleteSnapshot: ({ projectId, id }: { projectId: string; id: string }) => {
+        const index = snapshots.findIndex(
+          (snapshot) => snapshot.projectId === projectId && snapshot.id === id
+        )
+        if (index >= 0) snapshots.splice(index, 1)
+        return Promise.resolve({ ok: true, data: index >= 0 })
+      }
+    },
     getDroppedFilePath: () => '',
     gateway: {
       listProviders: () => Promise.resolve({ ok: true, data: providers }),
       saveProvider: (input: { id?: string; name: string }) => {
-        const p: ProviderConfig = {
+        const p: ProviderSummary = {
           id: input.id ?? 'p' + Date.now(),
           name: input.name,
           specId: 'relay',
           baseURL: '',
-          apiKey: '',
+          hasApiKey: false,
           models: [],
           createdAt: Date.now()
         }

@@ -29,6 +29,14 @@ export const IPC = {
     open: 'media:open',
     batchExport: 'media:batch-export'
   },
+  workspace: {
+    listTemplates: 'workspace:templates:list',
+    saveTemplate: 'workspace:templates:save',
+    deleteTemplate: 'workspace:templates:delete',
+    listSnapshots: 'workspace:snapshots:list',
+    saveSnapshot: 'workspace:snapshots:save',
+    deleteSnapshot: 'workspace:snapshots:delete'
+  },
   gateway: {
     providers: 'gateway:providers:list',
     saveProvider: 'gateway:providers:save',
@@ -74,6 +82,39 @@ export interface ImportMediaBufferInput {
   data: Uint8Array
 }
 
+// ── 本地工作区状态（模板与手动历史版本）──
+
+export interface WorkflowTemplateRecord {
+  id: string
+  name: string
+  createdAt: number
+  nodes: unknown[]
+  edges: unknown[]
+  nodeCount: number
+}
+
+export interface SaveWorkflowTemplateInput {
+  name: string
+  nodes: unknown[]
+  edges: unknown[]
+  nodeCount: number
+}
+
+export interface HistorySnapshotRecord {
+  id: string
+  label: string
+  timestamp: number
+  nodeCount: number
+  snapshot: unknown
+}
+
+export interface SaveHistorySnapshotInput {
+  projectId: string
+  label: string
+  nodeCount: number
+  snapshot: unknown
+}
+
 // ── 模型网关契约 ──
 
 export interface SaveProviderInput {
@@ -82,7 +123,8 @@ export interface SaveProviderInput {
   name: string
   specId: ProviderSpecId
   baseURL: string
-  apiKey: string
+  /** 新建时必填；更新时留空代表保留主进程已保存的密钥。 */
+  apiKey?: string
   models: GatewayModelInfo[]
 }
 

@@ -8,7 +8,7 @@
 //        ↑                                      ↓
 //   contracts.ts ──────────────────────────────┘（执行器复用输入工具）
 // 本文件只定义类型；registry 用 `import type` 引用，运行时不新增依赖。
-import type { CanvasNode, ProviderConfig } from '@shared/types'
+import type { CanvasNode, ProviderSummary } from '@shared/types'
 import type { NodeCardShape } from '../canvas/NodeCardShape'
 import type { ContractInputMap, ContractOutputs } from './contracts'
 
@@ -63,7 +63,7 @@ export interface NodeExecutionContext {
   projectId: string
   /** 本次工作流执行的稳定 ID；媒体执行器写入产物来源，供资产中心精确回溯。 */
   runId?: string
-  providers: ProviderConfig[]
+  providers: ProviderSummary[]
   /** 取消信号。 */
   signal: CancelSignal
   /**

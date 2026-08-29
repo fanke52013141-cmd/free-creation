@@ -1,12 +1,8 @@
-// 画布历史版本快照存储：手动快照 + localStorage 持久化，按项目隔离
-// 遵循 workflow.ts 同款模式（手动 localStorage 读写，避免 zustand persist 序列化大对象的开销）
+// 画布历史版本快照：通过主进程 SQLite 按项目隔离保存。
 import { create } from 'zustand'
+import type { HistorySnapshotRecord } from '@shared/contracts'
 
-export interface HistorySnapshot {
-  id: string
-  label: string
-  timestamp: number
-  nodeCount: number
+export interface HistorySnapshot extends HistorySnapshotRecord {
   /** tldraw store 快照（序列化后的完整画布状态） */
   snapshot: unknown
 }
@@ -15,35 +11,14 @@ interface HistorySnapshotsState {
   projectId: string | null
   snapshots: HistorySnapshot[]
   loaded: boolean
-  load: (projectId: string) => void
-  add: (projectId: string, snapshot: unknown, nodeCount: number, label: string) => void
-  remove: (projectId: string, id: string) => void
-}
-
-const MAX_SNAPSHOTS = 30
-
-function storageKey(projectId: string): string {
-  return `canvas-studio:history:${projectId}`
-}
-
-function readStore(projectId: string): HistorySnapshot[] {
-  try {
-    const raw = localStorage.getItem(storageKey(projectId))
-    if (!raw) return []
-    const arr = JSON.parse(raw) as HistorySnapshot[]
-    if (!Array.isArray(arr)) return []
-    return arr
-  } catch {
-    return []
-  }
-}
-
-function writeStore(projectId: string, snapshots: HistorySnapshot[]): void {
-  try {
-    localStorage.setItem(storageKey(projectId), JSON.stringify(snapshots))
-  } catch {
-    // localStorage 满或被禁用时静默失败
-  }
+  load: (projectId: string) => Promise<void>
+  add: (
+    projectId: string,
+    snapshot: unknown,
+    nodeCount: number,
+    label: string
+  ) => Promise<HistorySnapshot>
+  remove: (projectId: string, id: string) => Promise<void>
 }
 
 export const useHistorySnapshots = create<HistorySnapshotsState>((set, get) => ({
@@ -51,29 +26,29 @@ export const useHistorySnapshots = create<HistorySnapshotsState>((set, get) => (
   snapshots: [],
   loaded: false,
 
-  load: (projectId) => {
+  load: async (projectId) => {
     if (get().loaded && get().projectId === projectId) return
-    set({ projectId, snapshots: readStore(projectId), loaded: true })
+    const result = await window.api.workspace.listSnapshots(projectId)
+    if (!result.ok) throw new Error(result.error.message)
+    set({ projectId, snapshots: result.data, loaded: true })
   },
 
-  add: (projectId, snapshot, nodeCount, label) => {
-    const entry: HistorySnapshot = {
-      id: `snap-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      label:
-        label.trim() ||
-        `版本 ${new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`,
-      timestamp: Date.now(),
+  add: async (projectId, snapshot, nodeCount, label) => {
+    const result = await window.api.workspace.saveSnapshot({
+      projectId,
+      snapshot,
       nodeCount,
-      snapshot
-    }
-    const next = [entry, ...get().snapshots].slice(0, MAX_SNAPSHOTS)
-    writeStore(projectId, next)
-    set({ projectId, snapshots: next, loaded: true })
+      label
+    })
+    if (!result.ok) throw new Error(result.error.message)
+    const entry = result.data
+    set({ projectId, snapshots: [entry, ...get().snapshots].slice(0, 30), loaded: true })
+    return entry
   },
 
-  remove: (projectId, id) => {
-    const next = get().snapshots.filter((s) => s.id !== id)
-    writeStore(projectId, next)
-    set({ snapshots: next })
+  remove: async (projectId, id) => {
+    const result = await window.api.workspace.deleteSnapshot({ projectId, id })
+    if (!result.ok) throw new Error(result.error.message)
+    set({ snapshots: get().snapshots.filter((snapshot) => snapshot.id !== id) })
   }
 }))

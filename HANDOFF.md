@@ -4,7 +4,7 @@
 >
 > 当前分支：`main`
 >
-> 当前功能与测试基线：`763bcf0`（本地已提交，基于远端 `origin/main` 的 `7db203d`；尚未推送）
+> 当前功能与测试基线：`d413db6`（本地已提交，基于远端 `origin/main` 的 `7db203d`；尚未推送）+ CR-0/CR-1/CR-2 未提交改动
 >
 > 远程仓库：https://github.com/fanke52013141-cmd/free-creation
 >
@@ -167,7 +167,7 @@ git status -sb
 ### 当前已验证基线
 
 - `npm run verify`：通过（ESLint、Node/Web 类型检查、Vitest 和 `electron-vite build`）。
-- `npm run test`：30 个测试文件、456 项用例全部通过。
+- `npm run test`：33 个测试文件、460 项用例全部通过。
 - `git diff --check`：通过。
 - Electron 手工测试：创建导演台 → 打开工作区 → 发布 PNG 帧 → 导出 WebM，两个输出均出现“可供下游使用”状态；白屏问题已定位为旧 `node-card` 快照缺少 `config`，恢复前内存修复后再交给 tldraw 迁移。
 - IA-2.3 的 Electron 人工路径尚未执行，列入 IA-2.4，不能以自动化验证替代。
@@ -182,6 +182,23 @@ git status -sb
 `76e943c feat: add run center and precise media provenance`（本地提交，尚未推送）
 
 该提交新增跨节点运行中心和只读运行索引；失败运行可从统一 executor 路径重试，资产可定位到精确产生它的 `runId`。每个生成结果只增加可选的持久化 `runId`，既有端口、节点类型、连线语义和旧结果的安全回退保持不变。
+
+### 当前未提交：CR-0 / CR-1 / CR-2（2026-08-29）
+
+以 [CODE_REVIEW_2026_08_29.md](./docs/CODE_REVIEW_2026_08_29.md) 为依据，已完成以下切片；导演台不在本轮改动范围内。
+
+1. **CR-0 节点规范收口**：分镜、代码和聊天 React UI 不再直接调用模型网关。分镜与代码的快捷生成改为明确工作流指引；聊天面板只写入待发送消息，再通过 `runNodeManually → chatExecutor` 执行。文档/摘要/温度等上下文合并也已移入 `chatExecutor`。结构数据节点把插值运行产物写入 `meta.nodeResult`，不再覆写用户模板 `props.text`；输出投影只接受成功运行的结果。运行器投影本轮产物时使用内存中的 success 记录，避免结构化节点在循环子流程中遗漏输出。
+2. **CR-1 API Key 边界**：新增 `ProviderSummary`。渲染进程、preload、设置面板和所有 renderer executor 只接收公开摘要（模型、URL、`hasApiKey`），API Key 仅由主进程仓库解密并供网关使用。编辑现有供应商时 API Key 输入框留空会保留已存密钥；新建供应商仍强制填写。
+3. **CR-2 本地持久化**：工作流模板与历史版本移出 `localStorage`，通过 `workspace:*` IPC 保存至本机 SQLite。模板为本机全局数据；历史快照按项目隔离、最多 30 条、单条限制 8 MB；渲染端会对保存/读取/删除失败给出提示。因当前没有历史项目，不做旧 localStorage 迁移。
+4. **新增防回归测试**：`react-model-boundary` 禁止 UI 绕过 executor；`providers-security` 验证供应商公开列表不包含密钥；`workspace-persistence-boundary` 禁止模板/历史 store 回退到 localStorage。既有循环工作流测试同时覆盖 CR-0 结构化结果在迭代体内的输出回归。
+
+验证：`npm run verify`、`git diff --check` 均通过；全量为 33 个测试文件、460 项用例。提交前仍应做一次桌面端手工冒烟：保存/编辑供应商（留空 Key）、保存/重启后读取模板、保存/回溯/删除历史版本、对话节点发送并检查 nodeRun 和 out-markdown。
+
+**CR 后续顺序（未开始）：**
+
+1. **CR-3 数据层卫生**：收敛三份 MIME 表为共享单一来源；为 SQLite 引入可测试的 `user_version` 迁移；启动时对账残留 `.importing`、幽灵项目和可清理临时文件。不得删除用户媒体或项目，任何清理先做可恢复/可报告的处理。
+2. **CR-4 契约与执行测试**：补 chat/video/audio executor 的 mocked gateway 测试、`waitForChat`/视频轮询、暂停/继续/停止的 runner 测试、stringified `meta.nodeResult` 导入重映射、code 输出端口演进策略。端口变更必须提升契约版本，当前没有历史项目，可明确拒绝而非猜测旧端口。
+3. **CR-5 体验与维护性**：把 `CanvasSidePanel` 拆成资产、模板、历史、运行中心子面板；修复资产来源索引在节点运行后不即时刷新的依赖；补桌面端人工验收清单。导演台继续保持冻结，除非以上通用节点、数据和体验切片全部验收通过。
 
 ## 7. 后续开发计划（建议按此顺序）
 

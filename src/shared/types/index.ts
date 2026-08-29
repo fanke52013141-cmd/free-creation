@@ -217,6 +217,20 @@ export interface ProviderConfig {
   createdAt: number
 }
 
+/**
+ * 可安全发送给渲染进程的供应商信息。API Key 只能停留在主进程的 ProviderConfig 中；
+ * UI 仅需知道密钥是否已配置，而不应读取、缓存或回填真实值。
+ */
+export interface ProviderSummary {
+  id: string
+  name: string
+  specId: ProviderSpecId
+  baseURL: string
+  models: GatewayModelInfo[]
+  createdAt: number
+  hasApiKey: boolean
+}
+
 /** 供应商模板：新增供应商时的预设（渲染端设置面板与主进程驱动映射共用） */
 export interface ProviderSpec {
   id: ProviderSpecId

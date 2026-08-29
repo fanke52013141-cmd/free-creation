@@ -32,6 +32,10 @@ export const structuredExecutor = (ctx: NodeExecutionContext): NodeExecutionResu
       reason: `不符合${schemaOption(config.schema).label}：${validation.errors.join('；')}`
     }
   }
-  ctx.updateProps({ text: JSON.stringify(value, null, 2), config: JSON.stringify(config) })
+  // props.text 是用户维护的模板，不能用本次插值结果覆盖；否则下一次运行会丢失
+  // {{text}} / {{input[n]}} 占位符。运行产物与其它执行器一致写入 meta.nodeResult。
+  ctx.updateResult(
+    JSON.stringify({ kind: 'structured-result', schema: config.schema, data: value })
+  )
   return { status: 'done' }
 }

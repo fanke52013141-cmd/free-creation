@@ -5,10 +5,8 @@ import { mediaUrl, type NodeBodyProps } from '../../registry'
 import { toast } from '../../../stores/toast'
 import { markUndoPoint } from '../../../canvas/history'
 import { gatherUpstreamJson } from '../../../canvas/graph'
-import { useAppStore } from '../../../stores/app'
-import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { Icon } from '../../../components/Icon'
-import { ModelSelect, useWheelScroll } from './shared'
+import { useWheelScroll } from './shared'
 
 interface StoryboardShot {
   id: string
@@ -74,22 +72,11 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
   const editor = useEditor()
   const scrollRef = useRef<HTMLDivElement>(null)
   useWheelScroll(scrollRef)
-  const project = useAppStore((s) => s.currentProject)
-  const providers = useGatewayStore((s) => s.providers)
-  const loaded = useGatewayStore((s) => s.loaded)
-  const loadProviders = useGatewayStore((s) => s.load)
-  const openSettings = useGatewayStore((s) => s.openSettings)
-  const imgOptions = modelsByModality(providers, 'image')
   const data = parseStoryboard(shape.props.text)
-  const [generatingShots, setGeneratingShots] = useState<Set<string>>(new Set())
   // 上游自动导入只应发生一次；用户手动清空或编辑后不再被覆盖（A9）
   const importedRef = useRef(false)
   const [editingInput, setEditingInput] = useState(false)
   const [draftInput, setDraftInput] = useState(shape.props.text)
-
-  useEffect(() => {
-    if (!loaded) void loadProviders()
-  }, [loaded, loadProviders])
 
   const update = (next: StoryboardData): void => {
     editor.updateShape({
@@ -146,73 +133,6 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.shots.length])
-
-  // 从编辑器读取最新分镜状态（绕过渲染期闭包的过期 data，修复顺序生成互相覆盖）
-  const readCurrent = (): StoryboardData =>
-    parseStoryboard((editor.getShape(shape.id) as typeof shape | undefined)?.props.text ?? '')
-
-  // 逐镜生图
-  const generateShotImage = async (shotId: string): Promise<boolean> => {
-    const current = readCurrent()
-    const shot = current.shots.find((s) => s.id === shotId)
-    if (!shot?.scene) {
-      toast('该镜头没有画面描述')
-      return false
-    }
-    if (!current.imageModelKey) {
-      toast('请先选择图片模型')
-      return false
-    }
-    const opt = imgOptions.find((o) => o.key === current.imageModelKey)
-    if (!opt) {
-      toast('图片模型不可用')
-      return false
-    }
-    if (!project) {
-      toast('项目未就绪')
-      return false
-    }
-    setGeneratingShots((prev) => new Set(prev).add(shotId))
-    const res = await window.api.gateway.imageGenerate({
-      projectId: project.id,
-      providerId: opt.provider.id,
-      modelId: opt.model.id,
-      prompt: shot.scene
-    })
-    setGeneratingShots((prev) => {
-      const next = new Set(prev)
-      next.delete(shotId)
-      return next
-    })
-    if (!res.ok) {
-      toast(`生成失败：${res.error.message}`)
-      return false
-    }
-    // 关键：基于最新 shape 状态合并，顺序生成时不丢前序镜头的图
-    const latest = readCurrent()
-    const nextShots = latest.shots.map((s) =>
-      s.id === shotId ? { ...s, imageMediaId: res.data.id, imageMediaPath: res.data.path } : s
-    )
-    update({ ...latest, shots: nextShots })
-    markUndoPoint(editor, 'storyboard-shotgen')
-    return true
-  }
-
-  // 全部生图（顺序执行）
-  const generateAll = async (): Promise<void> => {
-    const pending = data.shots.filter((s) => !s.imageMediaPath && s.scene)
-    if (pending.length === 0) return toast('没有待生成的镜头')
-    let okCount = 0
-    for (const shot of pending) {
-      if (await generateShotImage(shot.id)) okCount += 1
-    }
-    if (okCount === 0) return
-    toast(
-      okCount === pending.length
-        ? `${okCount} 个镜头已生成`
-        : `已生成 ${okCount}/${pending.length} 个镜头`
-    )
-  }
 
   const commitInput = (): void => {
     let raw: unknown
@@ -283,45 +203,10 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
     )
   }
 
-  const hasModel = imgOptions.length > 0
-  const pendingCount = data.shots.filter((s) => !s.imageMediaPath && s.scene).length
-
   return (
     <div className="storyboard-body" ref={scrollRef}>
-      {/* 图片模型选择栏 */}
       <div className="storyboard-toolbar">
-        {hasModel ? (
-          <>
-            <ModelSelect
-              value={data.imageModelKey ?? ''}
-              options={imgOptions}
-              onChange={(key) => update({ ...data, imageModelKey: key })}
-            />
-            {pendingCount > 0 && data.imageModelKey && (
-              <button
-                className="btn-ghost small"
-                onPointerDown={(e) => stopEventPropagation(e)}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  void generateAll()
-                }}
-              >
-                全部生图 ({pendingCount})
-              </button>
-            )}
-          </>
-        ) : (
-          <button
-            className="btn-ghost small"
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onClick={(e) => {
-              e.stopPropagation()
-              openSettings()
-            }}
-          >
-            配置图片模型
-          </button>
-        )}
+        <span>批量生图请在工作流面板套用「分镜→批量生图」模板。</span>
       </div>
       {/* 分镜卡片 */}
       {data.shots.map((shot, i) => (
@@ -341,27 +226,10 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
             >
               <img src={mediaUrl(shot.imageMediaPath!)} alt={shot.scene} draggable={false} />
             </div>
-          ) : generatingShots.has(shot.id) ? (
-            <div className="storyboard-thumb-empty generating">⏳</div>
           ) : (
-            <button
-              className="storyboard-thumb-gen"
-              disabled={!shot.scene || !data.imageModelKey}
-              onPointerDown={(e) => stopEventPropagation(e)}
-              onClick={(e) => {
-                e.stopPropagation()
-                void generateShotImage(shot.id)
-              }}
-            >
-              {shot.scene ? (
-                <>
-                  <Icon name="image" size={13} />
-                  生图
-                </>
-              ) : (
-                <Icon name="image" size={13} />
-              )}
-            </button>
+            <div className="storyboard-thumb-empty" title="请通过分镜批量生图工作流生成媒体">
+              <Icon name="image" size={13} />
+            </div>
           )}
           <div className="storyboard-info">
             <div className="storyboard-scene">{shot.scene || '（无画面描述）'}</div>

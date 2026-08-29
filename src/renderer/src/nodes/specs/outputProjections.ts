@@ -21,6 +21,7 @@ import {
   type DirectorPublishRecord
 } from '../director-data'
 import { parseStructuredDataConfig } from '../structured-data'
+import { readNodeRunRecord } from '../../engine/runRecord'
 
 function mediaOutput(
   shape: NodeCardShape,
@@ -87,9 +88,28 @@ export const projectJsonOutputs = (shape: NodeCardShape): RawNodeOutputs => {
 }
 
 export const projectStructuredOutputs = (shape: NodeCardShape): RawNodeOutputs => {
+  const schema = parseStructuredDataConfig(readNodeConfig(shape)).schema
+  const latestRun = readNodeRunRecord(shape.meta?.nodeRun)
+  // 有过一次运行时，只接受这一次成功运行写入的结果；失败不能继续投影旧产物。
+  if (latestRun) {
+    if (latestRun.status !== 'success') return {}
+    try {
+      const stored =
+        typeof shape.meta?.nodeResult === 'string'
+          ? (JSON.parse(shape.meta.nodeResult) as { kind?: unknown; data?: unknown })
+          : null
+      if (stored?.kind === 'structured-result' && validateNodeSchema(schema, stored.data).ok) {
+        return { 'out-json': { kind: 'json', data: stored.data } }
+      }
+      return {}
+    } catch {
+      return {}
+    }
+  }
+  // 从未运行过的手工结构数据仍可作为可连接的数据源；模板包含占位符通常不会
+  // 通过 Schema 校验，因此不会在未执行前泄露为下游结果。
   try {
     const data = JSON.parse(shape.props.text) as unknown
-    const schema = parseStructuredDataConfig(readNodeConfig(shape)).schema
     return validateNodeSchema(schema, data).ok ? { 'out-json': { kind: 'json', data } } : {}
   } catch {
     return {}

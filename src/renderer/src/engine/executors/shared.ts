@@ -6,7 +6,7 @@
 // - 文本对话与视频任务的取消式等待
 //
 // 这些函数从原 executor.ts 原样搬出，行为保持等价，便于行为回归对照。
-import type { ChatMessage, ProviderConfig, VideoGenParams } from '@shared/types'
+import type { ChatMessage, ProviderSummary, VideoGenParams } from '@shared/types'
 import { modelsByModality, type ModelOption } from '../../stores/gateway'
 import type { CancelSignal } from '../executor-types'
 
@@ -82,7 +82,7 @@ export function promptBundleText(value: unknown): string {
 
 /** 在全部供应商里按 key 查文本模型；allowDefault 为真时可回落到第一个可用选项。 */
 export function findTextModel(
-  providers: ProviderConfig[],
+  providers: ProviderSummary[],
   modelKey: string,
   allowDefault = false
 ): ModelOption | undefined {

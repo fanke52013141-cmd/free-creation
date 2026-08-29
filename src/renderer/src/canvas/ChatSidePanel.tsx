@@ -1,25 +1,16 @@
 // 对话节点右侧面板：选中对话节点时弹出，包含完整聊天界面 + 参数设置
 // 宽度 = 节点宽度（280）× 1.25 ≈ 380px；包含模型/系统提示词/温度/maxToken 设置
-// 支持：文档上传（正文注入上下文）+ LangChain ConversationSummaryMemory 式自动压缩
-import {
-  isValidElement,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode
-} from 'react'
+// 支持：文档上传（正文由 chat executor 注入上下文）
+import { isValidElement, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Editor, TLShapeId } from 'tldraw'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { ChatMessage } from '@shared/types'
 import type { NodeCardShape } from './NodeCardShape'
 import { parseChat, type ChatData, type ChatDocument } from '../nodes/chatData'
 import { modelsByModality, useGatewayStore } from '../stores/gateway'
 import { useAppStore } from '../stores/app'
 import { gatherUpstreamText } from './graph'
-import { markUndoPoint } from './history'
+import { runNodeManually } from '../engine/executor'
 import { toast } from '../stores/toast'
 import { Icon } from '../components/Icon'
 import { getNodeType } from '../nodes/registry'
@@ -29,23 +20,6 @@ interface ChatSidePanelProps {
   shapeId: TLShapeId
   onClose: () => void
 }
-
-/** 自动压缩触发阈值：消息数超过此值时触发摘要压缩 */
-const COMPRESS_THRESHOLD = 10
-/** 压缩后保留最近消息数 */
-const KEEP_RECENT = 4
-
-/** LangChain ConversationSummaryMemory 式摘要 prompt */
-const SUMMARIZE_SYSTEM = `你是对话摘要助手。请逐步总结对话内容，将新消息整合进已有摘要，生成一个连贯的新摘要。
-要求：
-- 保留关键事实、决策和上下文
-- 去除冗余，保持简洁
-- 中文输出，不超过 300 字`
-
-const SUMMARIZE_PROMPT = (summary: string, lines: string): string =>
-  summary
-    ? `已有摘要：\n${summary}\n\n新增对话：\n${lines}\n\n请结合已有摘要和新对话，生成更新后的摘要：`
-    : `请总结以下对话：\n${lines}\n\n生成摘要：`
 
 function markdownText(node: ReactNode): string {
   if (typeof node === 'string' || typeof node === 'number') return String(node)
@@ -155,31 +129,18 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
 
   const [draft, setDraft] = useState('')
   const [showSettings, setShowSettings] = useState(false)
-  const [stream, setStream] = useState<{ taskId: string; text: string; reasoning: string } | null>(
-    null
-  )
-  const [compressing, setCompressing] = useState(false)
+  const [running, setRunning] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const dataRef = useRef(data)
-  const streamRef = useRef(stream)
-
-  useLayoutEffect(() => {
-    dataRef.current = data
-  }, [data])
-  useLayoutEffect(() => {
-    streamRef.current = stream
-  }, [stream])
 
   useEffect(() => {
     if (!loaded) void loadProviders()
   }, [loaded, loadProviders])
 
-  // 流式期间自动滚到底部
   useEffect(() => {
     const el = scrollRef.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [data.messages.length, stream?.text, stream?.reasoning])
+  }, [data.messages.length, running])
 
   const update = (next: ChatData): void => {
     editor.updateShape({
@@ -188,124 +149,6 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
       props: { text: JSON.stringify(next) }
     })
   }
-
-  const finishStream = (): void => {
-    const s = streamRef.current
-    if (!s) return
-    const cur = dataRef.current
-    if (s.text || s.reasoning) {
-      const updated: ChatData = {
-        ...cur,
-        messages: [
-          ...cur.messages,
-          {
-            role: 'assistant',
-            content: s.text || '（模型未返回最终回答）',
-            ...(s.reasoning.trim() ? { reasoning: s.reasoning.trim() } : {})
-          }
-        ]
-      }
-      update(updated)
-      markUndoPoint(editor, 'chat-gen')
-      // 流式回复完成后，检查是否需要自动压缩（LangChain ConversationSummaryMemory 模式）
-      void maybeCompress(updated)
-    }
-    setStream(null)
-  }
-
-  // LangChain ConversationSummaryMemory：当消息数超过阈值时压缩旧消息为摘要
-  const maybeCompress = async (cur: ChatData): Promise<void> => {
-    if (!cur.autoCompress) return
-    if (cur.messages.length < COMPRESS_THRESHOLD) return
-    const opt = options.find((o) => o.key === cur.modelKey)
-    if (!opt) return
-
-    setCompressing(true)
-    try {
-      // 保留最近 KEEP_RECENT 条消息，压缩其余
-      const toCompress = cur.messages.slice(0, cur.messages.length - KEEP_RECENT)
-      const lines = toCompress
-        .map((m) => `${m.role === 'user' ? '用户' : '助手'}：${m.content}`)
-        .join('\n')
-
-      const prompt = SUMMARIZE_PROMPT(cur.summary ?? '', lines)
-      const res = await window.api.gateway.chatStart({
-        providerId: opt.provider.id,
-        modelId: opt.model.id,
-        system: SUMMARIZE_SYSTEM,
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.3,
-        maxTokens: 512
-      })
-      if (!res.ok) return
-
-      // 收集摘要结果：注册临时事件监听器收集流式分片
-      const summaryResult = await new Promise<string>((resolve) => {
-        let acc = ''
-        const targetTaskId = res.data.taskId
-        const unsub = window.api.gateway.onEvent((e) => {
-          if (e.taskId !== targetTaskId) return
-          if (e.kind === 'chat-delta') {
-            acc += e.text
-          } else if (e.kind === 'chat-done') {
-            unsub()
-            resolve(acc)
-          } else if (e.kind === 'chat-error') {
-            unsub()
-            resolve('')
-          }
-        })
-        // 30 秒超时兜底
-        setTimeout(() => {
-          unsub()
-          resolve(acc)
-        }, 30000)
-      })
-
-      if (summaryResult.trim()) {
-        // 更新数据：摘要 + 只保留最近消息
-        const latest = dataRef.current
-        update({
-          ...latest,
-          summary: summaryResult.trim(),
-          messages: latest.messages.slice(latest.messages.length - KEEP_RECENT)
-        })
-        markUndoPoint(editor, 'chat-compress')
-        toast('对话已自动压缩历史记录')
-      }
-    } catch {
-      // 压缩失败不影响正常对话
-    } finally {
-      setCompressing(false)
-    }
-  }
-
-  // 网关事件：本节点聊天流
-  useEffect(() => {
-    const off = window.api.gateway.onEvent((e) => {
-      if (!streamRef.current || e.taskId !== streamRef.current.taskId) return
-      if (e.kind === 'chat-delta') {
-        setStream((s) => (s ? { ...s, text: s.text + e.text } : s))
-      } else if (e.kind === 'chat-reasoning') {
-        setStream((s) => (s ? { ...s, reasoning: s.reasoning + e.text } : s))
-      } else if (e.kind === 'chat-done') {
-        finishStream()
-      } else if (e.kind === 'chat-error') {
-        toast(`对话失败：${e.error}`)
-        setStream(null)
-      }
-    })
-    return off
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // 卸载/切换节点时取消进行中的流式请求，避免关闭面板后主进程仍在跑、持续空耗 token
-  useEffect(() => {
-    return () => {
-      const taskId = streamRef.current?.taskId
-      if (taskId) void window.api.gateway.chatCancel(taskId)
-    }
-  }, [])
 
   // Esc 关闭面板（与其它浮层面板行为统一）
   useEffect(() => {
@@ -352,66 +195,25 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
     update({ ...data, documents: docs.filter((_, i) => i !== idx) })
   }
 
-  /** 构建合并后的 system 上下文（系统提示词 + 文档 + 历史摘要） */
-  const buildEffectiveSystem = (cur: ChatData): string => {
-    let s = cur.system
-    if (cur.documents && cur.documents.length > 0) {
-      const docContext = cur.documents
-        .map((d) => `【文档：${d.name}】\n${d.content}`)
-        .join('\n\n---\n\n')
-      s = `${s}\n\n以下是用户提供的参考文档：\n\n${docContext}`
-    }
-    if (cur.summary) {
-      s = `${s}\n\n[对话历史摘要]\n${cur.summary}`
-    }
-    return s
-  }
-
   const send = async (): Promise<void> => {
+    if (!project) return toast('项目未就绪')
     const opt = options.find((o) => o.key === data.modelKey)
     if (!opt) return toast('请先在设置中选择对话模型')
     if (!draft.trim()) return
-    if (stream) return
+    if (running) return
     const upstream = gatherUpstreamText(editor, shapeId)
     const userContent = upstream ? `${upstream}\n\n---\n\n${draft.trim()}` : draft.trim()
-    const effectiveSystem = buildEffectiveSystem(data)
-    const messages: ChatMessage[] = [...data.messages, { role: 'user', content: userContent }]
 
-    update({ ...data, messages })
+    // 面板只记录待发送消息并调用统一运行器；模型调用、上下文合并、运行状态与失败
+    // 路径全部由 chat executor 负责，避免形成未声明的第二条数据流。
+    update({ ...data, messages: [...data.messages, { role: 'user', content: userContent }] })
     setDraft('')
-    setStream({ taskId: '', text: '', reasoning: '' })
+    setRunning(true)
     try {
-      const res = await window.api.gateway.chatStart({
-        providerId: opt.provider.id,
-        modelId: opt.model.id,
-        system: effectiveSystem,
-        messages,
-        temperature: data.temperature,
-        maxTokens: data.maxTokens
-      })
-      if (!res.ok) {
-        toast(`发送失败：${res.error.message}`)
-        setStream(null)
-        return
-      }
-      setStream({ taskId: res.data.taskId, text: '', reasoning: '' })
-    } catch (err) {
-      // 网关 IPC 抛异常（而非返回 {ok:false}）时也要退出"等待首个输出"态，
-      // 否则面板会永久卡住、停止按钮因 taskId 为空而失效
-      toast(`发送失败：${err instanceof Error ? err.message : '未知错误'}`)
-      setStream(null)
+      await runNodeManually(editor, project.id, providers, shapeId)
+    } finally {
+      setRunning(false)
     }
-  }
-
-  const stop = async (): Promise<void> => {
-    const taskId = stream?.taskId
-    if (!taskId) {
-      // taskId 为空（发送阶段卡住、请求异常）时也要能退出"等待"态，否则停止按钮变空操作
-      setStream(null)
-      return
-    }
-    await window.api.gateway.chatCancel(taskId)
-    finishStream()
   }
 
   const selectedModel = options.find((o) => o.key === data.modelKey)
@@ -528,22 +330,6 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
             </div>
           </div>
 
-          {/* 自动压缩开关 */}
-          <div className="csp-field csp-toggle-field">
-            <label className="csp-label">
-              自动压缩对话
-              <span className="csp-toggle-hint">
-                消息超过 {COMPRESS_THRESHOLD} 条时自动摘要压缩历史
-              </span>
-            </label>
-            <button
-              className={`csp-toggle ${(data.autoCompress ?? true) ? 'on' : ''}`}
-              onClick={() => update({ ...data, autoCompress: !(data.autoCompress ?? true) })}
-            >
-              <span className="csp-toggle-knob" />
-            </button>
-          </div>
-
           {/* 文档管理 */}
           <div className="csp-field">
             <label className="csp-label">
@@ -615,7 +401,6 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
           <Icon name="history" size={13} /> 已压缩历史 · {data.messages.length} 条近期消息
         </div>
       )}
-      {compressing && <div className="csp-compressing">正在自动压缩对话历史…</div>}
       <div className="csp-messages" ref={scrollRef}>
         {data.messages.map((m, i) => (
           <div key={i} className={`csp-msg ${m.role}`}>
@@ -625,22 +410,17 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
             </div>
           </div>
         ))}
-        {stream && (
+        {running && (
           <div className="csp-msg assistant">
             <div className="csp-bubble streaming">
-              {stream.reasoning && <ReasoningBlock content={stream.reasoning} live />}
-              {stream.text ? (
-                <MarkdownMessage content={stream.text} />
-              ) : !stream.reasoning ? (
-                <div className="csp-waiting">
-                  <span className="csp-waiting-dot" />
-                  模型已收到请求，正在等待首个输出…
-                </div>
-              ) : null}
+              <div className="csp-waiting">
+                <span className="csp-waiting-dot" />
+                正在通过节点运行器执行…
+              </div>
             </div>
           </div>
         )}
-        {!data.messages.length && !stream && <div className="csp-empty">输入消息开始对话…</div>}
+        {!data.messages.length && !running && <div className="csp-empty">输入消息开始对话…</div>}
       </div>
       <div className="csp-input-row">
         <button
@@ -665,15 +445,13 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
             }
           }}
         />
-        {stream ? (
-          <button className="csp-send-btn stop" onClick={() => void stop()}>
-            <Icon name="close" size={15} />
-          </button>
-        ) : (
-          <button className="csp-send-btn" disabled={!draft.trim()} onClick={() => void send()}>
-            <Icon name="send" size={15} />
-          </button>
-        )}
+        <button
+          className="csp-send-btn"
+          disabled={!draft.trim() || running}
+          onClick={() => void send()}
+        >
+          <Icon name="send" size={15} />
+        </button>
       </div>
       <input
         ref={fileInputRef}

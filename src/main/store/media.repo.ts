@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid'
 import { copyFile, mkdir, readFile, rename, stat, unlink, writeFile } from 'fs/promises'
 import { basename, dirname, extname, join } from 'path'
 import type { MediaAsset, MediaKind } from '../../shared/types'
+import { mimeForExtension } from '../../shared/mime'
 import { getDataDir, getDb } from './db'
 
 // 单文件上限 2GB；文本内容内联上限 1MB（超限的文本文件不读内容，仅存文件）
@@ -42,26 +43,6 @@ function detectKind(ext: string, mime: string): MediaKind {
   }
 }
 
-const MIME_BY_EXT: Record<string, string> = {
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp',
-  '.gif': 'image/gif',
-  '.bmp': 'image/bmp',
-  '.svg': 'image/svg+xml',
-  '.mp4': 'video/mp4',
-  '.webm': 'video/webm',
-  '.mov': 'video/quicktime',
-  '.mkv': 'video/x-matroska',
-  '.mp3': 'audio/mpeg',
-  '.wav': 'audio/wav',
-  '.ogg': 'audio/ogg',
-  '.m4a': 'audio/mp4',
-  '.flac': 'audio/flac',
-  '.aac': 'audio/aac'
-}
-
 export type ImportOutcome = { ok: true; asset: MediaAsset } | { ok: false; reason: string }
 
 export async function importMedia(projectId: string, srcAbsPath: string): Promise<ImportOutcome> {
@@ -77,7 +58,7 @@ export async function importMedia(projectId: string, srcAbsPath: string): Promis
     await mkdir(dirname(destAbs), { recursive: true })
     await copyFile(srcAbsPath, destAbs)
 
-    const mime = MIME_BY_EXT[ext] ?? 'application/octet-stream'
+    const mime = mimeForExtension(ext)
     const kind = detectKind(ext, mime)
     const now = Date.now()
 
@@ -122,7 +103,7 @@ export async function saveBufferAsset(
   ext: string,
   name: string
 ): Promise<MediaAsset> {
-  const mime = MIME_BY_EXT[ext] ?? 'application/octet-stream'
+  const mime = mimeForExtension(ext)
   const kind = detectKind(ext, mime)
   const id = nanoid(10)
   const relPath = `projects/${projectId}/media/${id}${ext}`
@@ -161,7 +142,7 @@ export async function saveFileAsset(
   ext: string,
   name: string
 ): Promise<MediaAsset> {
-  const mime = MIME_BY_EXT[ext] ?? 'application/octet-stream'
+  const mime = mimeForExtension(ext)
   const kind = detectKind(ext, mime)
   const id = nanoid(10)
   const relPath = `projects/${projectId}/media/${id}${ext}`

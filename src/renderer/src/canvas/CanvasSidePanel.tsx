@@ -453,20 +453,31 @@ function AssetsPanel({
   const setSourceNodeId = useMediaStore((s) => s.setSourceNodeId)
   const setRunStatus = useMediaStore((s) => s.setRunStatus)
   const setTimeRange = useMediaStore((s) => s.setTimeRange)
+  const [shapeRevision, setShapeRevision] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     void load(projectId)
   }, [projectId, load])
 
+  // 资产来源来自节点 meta，不会触发 media store 更新；运行结束后立即重建索引。
+  useEffect(() => {
+    if (!editor) return
+    return editor.store.listen(() => setShapeRevision((revision) => revision + 1), {
+      scope: 'document'
+    })
+  }, [editor])
+
   const indexedAssets = useMemo(() => {
+    // 读取 revision 以把 tldraw 文档变更纳入这个派生视图的失效条件。
+    void shapeRevision
     const shapes = editor
       ? editor
           .getCurrentPageShapes()
           .filter((shape): shape is NodeCardShape => shape.type === 'node-card')
       : []
     return buildMediaAssetIndex(assets, shapes)
-  }, [assets, editor])
+  }, [assets, editor, shapeRevision])
   const sourceOptions = useMemo(() => mediaSourceOptions(indexedAssets), [indexedAssets])
   const visible = filteredAssets({
     assets: indexedAssets,
@@ -619,11 +630,11 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    wfLoad()
+    void wfLoad().catch((error) => toast(`加载模板失败：${String(error)}`))
   }, [wfLoad])
 
   // 保存当前选中节点为模板
-  const handleSave = (): void => {
+  const handleSave = async (): Promise<void> => {
     if (!editor) return
     const selected = editor.getSelectedShapes()
     const nodeShapes = selected.filter((s) => s.type === 'node-card')
@@ -653,9 +664,13 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
       })
     }
     const data = extractTemplateFromSelection(nodeShapes as never[], edges)
-    wfSave(name || `模板 ${templates.length + 1}`, data)
-    setName('')
-    toast(`已保存模板（${data.nodes.length} 节点 / ${data.edges.length} 连线）`)
+    try {
+      await wfSave(name || `模板 ${templates.length + 1}`, data)
+      setName('')
+      toast(`已保存模板（${data.nodes.length} 节点 / ${data.edges.length} 连线）`)
+    } catch (error) {
+      toast(`保存模板失败：${String(error)}`)
+    }
   }
 
   // 套用模板到画布视角中心
@@ -783,10 +798,10 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
           onPointerDown={(e) => e.stopPropagation()}
           onKeyDown={(e) => {
             e.stopPropagation()
-            if (e.key === 'Enter') handleSave()
+            if (e.key === 'Enter') void handleSave()
           }}
         />
-        <button className="side-panel-primary" onClick={handleSave}>
+        <button className="side-panel-primary" onClick={() => void handleSave()}>
           <Icon name="copy" size={14} /> 保存选中
         </button>
       </div>
@@ -844,7 +859,9 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
                 <button
                   className="wf-action-btn delete"
                   title="删除模板"
-                  onClick={() => wfRemove(tmpl.id)}
+                  onClick={() =>
+                    void wfRemove(tmpl.id).catch((error) => toast(`删除模板失败：${String(error)}`))
+                  }
                 >
                   <Icon name="close" size={13} />
                 </button>
@@ -1012,20 +1029,24 @@ function HistoryPanel({
   const [label, setLabel] = useState('')
 
   useEffect(() => {
-    load(projectId)
+    void load(projectId).catch((error) => toast(`加载历史版本失败：${String(error)}`))
   }, [projectId, load])
 
   // 保存当前画布状态为版本快照
-  const handleSave = (): void => {
+  const handleSave = async (): Promise<void> => {
     if (!editor) return
     const snapshot = editor.store.getStoreSnapshot()
     let nodeCount = 0
     for (const s of editor.getCurrentPageShapes()) {
       if (s.type === 'node-card') nodeCount++
     }
-    add(projectId, snapshot, nodeCount, label)
-    setLabel('')
-    toast(`已保存版本（${nodeCount} 节点）`)
+    try {
+      await add(projectId, snapshot, nodeCount, label)
+      setLabel('')
+      toast(`已保存版本（${nodeCount} 节点）`)
+    } catch (error) {
+      toast(`保存版本失败：${String(error)}`)
+    }
   }
 
   // 回溯到指定版本：加载快照到编辑器，打撤销分段点
@@ -1041,8 +1062,12 @@ function HistoryPanel({
     }
   }
 
-  const handleRemove = (id: string): void => {
-    remove(projectId, id)
+  const handleRemove = async (id: string): Promise<void> => {
+    try {
+      await remove(projectId, id)
+    } catch (error) {
+      toast(`删除历史版本失败：${String(error)}`)
+    }
   }
 
   return (
@@ -1056,10 +1081,10 @@ function HistoryPanel({
           onPointerDown={(e) => e.stopPropagation()}
           onKeyDown={(e) => {
             e.stopPropagation()
-            if (e.key === 'Enter') handleSave()
+            if (e.key === 'Enter') void handleSave()
           }}
         />
-        <button className="side-panel-primary" onClick={handleSave} disabled={!editor}>
+        <button className="side-panel-primary" onClick={() => void handleSave()} disabled={!editor}>
           <Icon name="history" size={14} /> 保存版本
         </button>
       </div>
@@ -1092,7 +1117,7 @@ function HistoryPanel({
                 <button
                   className="history-action-btn delete"
                   title="删除此版本"
-                  onClick={() => handleRemove(snap.id)}
+                  onClick={() => void handleRemove(snap.id)}
                 >
                   <Icon name="close" size={13} />
                 </button>

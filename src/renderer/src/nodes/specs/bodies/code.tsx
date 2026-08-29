@@ -1,7 +1,6 @@
 // 代码节点 Body（路线图 R6：bodies.tsx 拆分）
 // 支持 Coze 风格 async function main(args) 写法，可用 lodash(_) 和 dayjs
 // 支持自定义参数端口：用户在 UI 表格中声明额外输入参数
-// 支持 AI 生成代码：用户写自然语言描述，AI 自动生成代码
 import { useRef, useState, type ReactNode } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import type { NodeBodyProps } from '../../registry'
@@ -9,8 +8,6 @@ import { markUndoPoint } from '../../../canvas/history'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { Icon } from '../../../components/Icon'
 import { useWheelScroll, VARIABLE_TYPES, type VariableValueType } from './shared'
-import { useGatewayStore, findTextModel } from '../../../stores/gateway'
-import { waitForChat, parseJsonObj } from '../../../engine/executors/shared'
 import { codePortConfigErrors } from '../../../engine/executors/code'
 
 interface CodeParam {
@@ -242,29 +239,6 @@ function HighlightedCode({ code }: { code: string }): React.JSX.Element {
   )
 }
 
-/* ── AI 代码生成的系统提示词 ── */
-
-function buildCodeGenSystem(config: CodeConfig): string {
-  const paramList =
-    config.params.length > 0
-      ? config.params
-          .map((p) => `   - args.${p.name}：${p.type} 类型，用户声明的输入参数`)
-          .join('\n')
-      : '   （无自定义参数）'
-  return `你是一个 JavaScript 代码生成专家。根据用户的自然语言描述，生成一段可在 Worker 中执行的代码。
-
-严格要求：
-1. 必须使用 async function main(args) { ... } 格式
-2. 可用变量：
-   - args.text：字符串，上游文本输入
-   - args.json：数组，上游 JSON 输入
-${paramList}
-3. 可用库：_(lodash) 和 dayjs
-4. 必须 return 一个值（字符串、数字、布尔值、对象或数组）
-5. 代码要简洁、高效、有适当注释
-6. 只输出代码本身，不要任何解释文字、不要 markdown 代码块标记`
-}
-
 const CODE_TEMPLATE = `async function main(args) {
   // 可用变量：
   //   args.text   — 上游文本输入
@@ -284,8 +258,6 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
   const portConfigErrors = codePortConfigErrors(readNodeConfig(shape))
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(data.source)
-  const [generating, setGenerating] = useState(false)
-  const [aiError, setAiError] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
   useWheelScroll(scrollRef)
 
@@ -331,47 +303,6 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
     markUndoPoint(editor, 'code-remove-param')
   }
 
-  /** AI 生成代码：用自然语言描述调用对话模型生成代码。 */
-  const generateCode = async (): Promise<void> => {
-    const description = data.prompt.trim()
-    if (!description) return
-    const providers = useGatewayStore.getState().providers
-    const option = findTextModel(
-      providers,
-      (parseJsonObj(readNodeConfig(shape))?.modelKey as string) ?? '',
-      true
-    )
-    if (!option) {
-      setAiError('未配置可用的对话模型，请先在设置中添加')
-      return
-    }
-    setGenerating(true)
-    setAiError('')
-    try {
-      const reply = await waitForChat(
-        {
-          providerId: option.provider.id,
-          modelId: option.model.id,
-          system: buildCodeGenSystem(data),
-          messages: [{ role: 'user', content: description }]
-        },
-        { cancelled: false }
-      )
-      // 提取代码：去掉可能的 markdown 代码块标记
-      const cleaned = reply
-        .replace(/^```(?:javascript|js)?\n?/m, '')
-        .replace(/\n?```$/m, '')
-        .trim()
-      const newConfig = { ...data, source: cleaned }
-      updateConfig(newConfig)
-      markUndoPoint(editor, 'code-ai-generate')
-    } catch (error) {
-      setAiError(error instanceof Error ? error.message : String(error))
-    } finally {
-      setGenerating(false)
-    }
-  }
-
   if (editing) {
     const lines = draft.split('\n')
     return (
@@ -414,40 +345,11 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
   const isMainStyle = /^\s*(async\s+)?function\s+main\b/.test(text)
   return (
     <div className="code-body" ref={scrollRef}>
-      {/* AI 代码生成区域 */}
       <div className="code-ai-section">
-        <textarea
-          className="code-ai-input"
-          value={data.prompt}
-          placeholder="描述你想要的代码功能，例如：把 JSON 数组按日期排序并提取标题字段"
-          rows={2}
-          spellCheck={false}
-          onPointerDown={(e) => stopEventPropagation(e)}
-          onChange={(e) => updateConfig({ ...data, prompt: e.target.value })}
-        />
-        <button
-          className="btn-ai-generate"
-          disabled={generating || !data.prompt.trim()}
-          onPointerDown={(e) => stopEventPropagation(e)}
-          onClick={(e) => {
-            e.stopPropagation()
-            void generateCode()
-          }}
-        >
-          {generating ? (
-            <>
-              <span className="code-ai-spinner" />
-              生成中...
-            </>
-          ) : (
-            <>
-              <Icon name="edit" size={12} />
-              AI 生成代码
-            </>
-          )}
-        </button>
+        <span className="code-ai-guidance">
+          AI 代码生成不在此节点内隐式执行；请使用 AI 处理节点生成文本后，审阅并粘贴代码。
+        </span>
       </div>
-      {aiError && <div className="code-ai-error">{aiError}</div>}
 
       <div className="code-variable-contract">
         <div className="variable-row input">
@@ -609,7 +511,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
             setEditing(true)
           }}
         >
-          双击编写代码，或在上方描述功能让 AI 生成
+          双击编写代码
         </div>
       )}
       {resultDisplay && (

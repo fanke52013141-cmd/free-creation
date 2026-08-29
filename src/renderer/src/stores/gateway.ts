@@ -1,9 +1,9 @@
 // 模型网关渲染端状态：供应商配置缓存 + 设置面板开关
 import { create } from 'zustand'
-import type { GatewayModelInfo, ModelModality, ProviderConfig } from '@shared/types'
+import type { GatewayModelInfo, ModelModality, ProviderSummary } from '@shared/types'
 
 export interface ModelOption {
-  provider: ProviderConfig
+  provider: ProviderSummary
   model: GatewayModelInfo
   /** `${provider.id}::${model.id}`，节点参数里持久化的选择键 */
   key: string
@@ -11,7 +11,7 @@ export interface ModelOption {
 }
 
 interface GatewayState {
-  providers: ProviderConfig[]
+  providers: ProviderSummary[]
   loaded: boolean
   settingsOpen: boolean
   load: () => Promise<void>
@@ -33,7 +33,7 @@ export const useGatewayStore = create<GatewayState>((set) => ({
 
 /** 全部供应商里指定模态的模型，展平成下拉选项 */
 export function modelsByModality(
-  providers: ProviderConfig[],
+  providers: ProviderSummary[],
   modality: ModelModality
 ): ModelOption[] {
   const out: ModelOption[] = []
@@ -52,15 +52,15 @@ export function modelsByModality(
 }
 
 export function findProvider(
-  providers: ProviderConfig[],
+  providers: ProviderSummary[],
   providerId: string
-): ProviderConfig | undefined {
+): ProviderSummary | undefined {
   return providers.find((p) => p.id === providerId)
 }
 
 /** 按 modelKey 查找文本模型，支持回退到第一个可用文本模型 */
 export function findTextModel(
-  providers: ProviderConfig[],
+  providers: ProviderSummary[],
   modelKey: string,
   fallback: boolean
 ): ModelOption | undefined {

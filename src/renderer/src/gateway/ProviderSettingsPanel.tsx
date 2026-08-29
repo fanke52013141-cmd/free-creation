@@ -6,7 +6,7 @@ import { stopEventPropagation } from 'tldraw'
 import {
   PROVIDER_SPECS,
   type GatewayModelInfo,
-  type ProviderConfig,
+  type ProviderSummary,
   type ProviderSpecId
 } from '@shared/types'
 import type { SaveProviderInput } from '@shared/contracts'
@@ -15,8 +15,10 @@ import { useConfirmStore } from '../stores/confirm'
 import { toast } from '../stores/toast'
 import { Icon } from '../components/Icon'
 
-interface Draft extends SaveProviderInput {
+interface Draft extends Omit<SaveProviderInput, 'apiKey'> {
+  apiKey: string
   createdAt?: number
+  hasApiKey?: boolean
 }
 
 const newDraft = (specId: ProviderSpecId): Draft => {
@@ -42,15 +44,16 @@ function guessModality(id: string, specId: ProviderSpecId): GatewayModelInfo['mo
 
 const specLabel = (id: string): string => PROVIDER_SPECS.find((s) => s.id === id)?.label ?? id
 
-function draftFromConfig(p: ProviderConfig): Draft {
+function draftFromConfig(p: ProviderSummary): Draft {
   return {
     id: p.id,
     name: p.name,
     specId: p.specId,
     baseURL: p.baseURL,
-    apiKey: p.apiKey,
+    apiKey: '',
     models: p.models.map((m) => ({ ...m })),
-    createdAt: p.createdAt
+    createdAt: p.createdAt,
+    hasApiKey: p.hasApiKey
   }
 }
 
@@ -102,7 +105,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
     if (!draft) return
     if (!draft.name.trim()) return toast('供应商名称不能为空')
     if (!draft.baseURL.trim()) return toast('Base URL 不能为空')
-    if (!draft.apiKey.trim()) return toast('API Key 不能为空')
+    if (!draft.apiKey.trim() && !draft.hasApiKey) return toast('API Key 不能为空')
     if (!draft.models.length) return toast('至少添加一个模型')
     setBusy('save')
     const res = await window.api.gateway.saveProvider({
@@ -110,7 +113,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
       name: draft.name.trim(),
       specId: draft.specId,
       baseURL: draft.baseURL.trim(),
-      apiKey: draft.apiKey.trim(),
+      apiKey: draft.apiKey.trim() || undefined,
       models: draft.models
     })
     setBusy(null)
@@ -122,7 +125,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
 
   const test = async (): Promise<void> => {
     if (!draft) return
-    if (!draft.baseURL.trim() || !draft.apiKey.trim()) {
+    if (!draft.baseURL.trim() || (!draft.apiKey.trim() && !draft.hasApiKey)) {
       return toast('请先填写 Base URL 与 API Key')
     }
     setBusy('test')
@@ -132,7 +135,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
       name: draft.name,
       specId: draft.specId,
       baseURL: draft.baseURL.trim(),
-      apiKey: draft.apiKey.trim(),
+      apiKey: draft.apiKey.trim() || undefined,
       models: draft.models
     })
     setBusy(null)
@@ -265,7 +268,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                       type="password"
                       value={draft.apiKey}
                       spellCheck={false}
-                      placeholder="sk-…"
+                      placeholder={draft.hasApiKey ? '已保存；留空则保持不变' : 'sk-…'}
                       onChange={(e) => patch({ apiKey: e.target.value })}
                     />
                   </label>

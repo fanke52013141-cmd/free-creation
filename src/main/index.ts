@@ -9,36 +9,16 @@ import icon from '../../resources/icon.png?asset'
 import { registerProjectIpc } from './ipc/project.ipc'
 import { registerMediaIpc } from './ipc/media.ipc'
 import { registerGatewayIpc } from './ipc/gateway.ipc'
+import { registerWorkspaceStateIpc } from './ipc/workspace-state.ipc'
 import { closeDb, getDb } from './store/db'
 import { getMediaAbsPath } from './store/media.repo'
+import { mimeForExtension } from '../shared/mime'
 
 log.initialize()
 log.info('main process starting')
 
 // media:// 协议：渲染进程加载本地媒体（stream 支持 <video> 播放）
 protocol.registerSchemesAsPrivileged([{ scheme: 'media', privileges: { stream: true } }])
-
-// 媒体 MIME 类型查找（与 media.repo.ts MIME_BY_EXT 保持一致）
-const MEDIA_MIME: Record<string, string> = {
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp',
-  '.gif': 'image/gif',
-  '.bmp': 'image/bmp',
-  '.svg': 'image/svg+xml',
-  '.mp4': 'video/mp4',
-  '.webm': 'video/webm',
-  '.mov': 'video/quicktime',
-  '.mkv': 'video/x-matroska',
-  '.avi': 'video/x-msvideo',
-  '.mp3': 'audio/mpeg',
-  '.wav': 'audio/wav',
-  '.ogg': 'audio/ogg',
-  '.m4a': 'audio/mp4',
-  '.flac': 'audio/flac',
-  '.aac': 'audio/aac'
-}
 
 function registerMediaProtocol(): void {
   protocol.handle('media', async (request) => {
@@ -50,7 +30,7 @@ function registerMediaProtocol(): void {
     }
 
     const ext = extname(abs).toLowerCase()
-    const contentType = MEDIA_MIME[ext] ?? 'application/octet-stream'
+    const contentType = mimeForExtension(ext)
 
     // 异步 stat：避免在主进程事件循环同步阻塞（慢盘 / 网络盘会卡住整个主进程）。
     let fileSize: number
@@ -152,6 +132,7 @@ app.whenReady().then(() => {
   registerMediaProtocol()
   registerProjectIpc()
   registerMediaIpc()
+  registerWorkspaceStateIpc()
   const win = createWindow()
   registerGatewayIpc(win)
 

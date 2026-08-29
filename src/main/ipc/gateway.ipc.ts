@@ -8,7 +8,7 @@ import type {
   TestProviderResult,
   VideoSubmitResult
 } from '../../shared/contracts'
-import type { MediaAsset, ProviderConfig, VideoTaskInfo } from '../../shared/types'
+import type { MediaAsset, ProviderSummary, VideoTaskInfo } from '../../shared/types'
 import { startChat, cancelChat } from '../gateway/chat'
 import { GatewayError, testProvider } from '../gateway/factory'
 import { generateImageToAsset } from '../gateway/image'
@@ -52,12 +52,15 @@ export function registerGatewayIpc(win: BrowserWindow): void {
     if (!win.isDestroyed()) win.webContents.send(IPC.gateway.event, e)
   }
 
-  ipcMain.handle(IPC.gateway.providers, (): IpcEnvelope<ProviderConfig[]> => ok(listProviders()))
+  ipcMain.handle(IPC.gateway.providers, (): IpcEnvelope<ProviderSummary[]> => ok(listProviders()))
 
   ipcMain.handle(IPC.gateway.saveProvider, (_e, input: SaveProviderInput) =>
     wrap(() => {
       if (!input?.name?.trim()) throw new GatewayError('INVALID_NAME', '供应商名称不能为空')
       if (!input?.baseURL?.trim()) throw new GatewayError('INVALID_INPUT', 'Base URL 不能为空')
+      if (!input.id && !input.apiKey?.trim()) {
+        throw new GatewayError('PROVIDER_NO_KEY', '新建供应商必须填写 API Key')
+      }
       return saveProvider(input)
     })
   )

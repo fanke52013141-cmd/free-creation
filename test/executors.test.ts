@@ -175,7 +175,7 @@ describe('jsonExecutor · 运行时分支', () => {
 })
 
 describe('structuredExecutor · 字段映射与 Schema 校验', () => {
-  it('只使用 in-context 显式输入替换占位符，并写回已验证 JSON', () => {
+  it('只使用 in-context 显式输入替换占位符，并把已验证结果写入运行态', () => {
     const inputs: NodeExecutionContext['inputs'] = new Map([
       [
         'in-context',
@@ -189,18 +189,24 @@ describe('structuredExecutor · 字段映射与 Schema 校验', () => {
         ]
       ]
     ])
-    const { ctx, props } = makeCtx({
+    const template = JSON.stringify({
+      id: 'scene-1',
+      name: '雨巷',
+      description: '{{input[0].name}} 穿过雨夜街头'
+    })
+    const { ctx, props, result } = makeCtx({
       nodeType: 'structured',
       config: JSON.stringify({ schema: { id: 'scene.definition', version: 1 } }),
-      text: JSON.stringify({
-        id: 'scene-1',
-        name: '雨巷',
-        description: '{{input[0].name}} 穿过雨夜街头'
-      }),
+      text: template,
       inputs
     })
     expect(structuredExecutor(ctx)).toEqual({ status: 'done' })
-    expect(JSON.parse(props.text ?? '{}')).toMatchObject({ description: '主角 穿过雨夜街头' })
+    expect(props.text).toBeUndefined()
+    expect(ctx.shape.props.text).toBe(template)
+    expect(JSON.parse(result.value ?? '{}')).toMatchObject({
+      kind: 'structured-result',
+      data: { description: '主角 穿过雨夜街头' }
+    })
   })
 
   it('字段校验失败时不写出下游可用结果', () => {

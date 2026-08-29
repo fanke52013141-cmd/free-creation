@@ -10,7 +10,7 @@
 // 节点卡片内的手动生成与全局运行共用同一输出投影（nodes/nodeValues.ts），
 // 因此执行器只需把运行结果写回 shape props / meta，投影交给运行器统一处理。
 import type { Editor, TLShapeId } from 'tldraw'
-import type { CanvasEdge, CanvasNode, ExecStatus, ProviderConfig } from '@shared/types'
+import type { CanvasEdge, CanvasNode, ExecStatus, ProviderSummary } from '@shared/types'
 import { deriveGraph } from '../canvas/graph'
 import { markUndoPoint } from '../canvas/history'
 import type { NodeCardShape, NodeCardProps } from '../canvas/NodeCardShape'
@@ -37,7 +37,7 @@ interface RunControl {
 interface WorkflowContext {
   editor: Editor
   projectId: string
-  providers: ProviderConfig[]
+  providers: ProviderSummary[]
   token: RunControl
   graph: { nodes: CanvasNode[]; edges: CanvasEdge[] }
   /** 运行期累积的输出登记：nodeId -> 端口输出数据包。 */
@@ -352,7 +352,15 @@ async function executeNodeOnce(
     }
     if (result.status === 'done') {
       if (!latest) throw new Error('节点执行后已不存在')
-      const projected = buildOutputPackets(node, projectNodeOutputs(latest), ctx.runId)
+      // 执行器刚刚把本次产物写入 shape，但 nodeRun 仍处于 running，直到输出契约也
+      // 验证完成才会落为 success。输出投影必须读取这次刚完成的产物（特别是结构化
+      // 节点的 meta.nodeResult），因此在内存中投影等价的 success 记录；真实记录仍
+      // 只会在输出验证成功后写入，失败路径不会泄露任何输出。
+      const outputShape = {
+        ...latest,
+        meta: { ...(latest.meta ?? {}), nodeRun: { ...record, status: 'success' as const } }
+      } as unknown as NodeCardShape
+      const projected = buildOutputPackets(node, projectNodeOutputs(outputShape), ctx.runId)
       if (projected.errors.length > 0) {
         setExec(editor, shapeId, 'failed')
         useEngineStore
@@ -558,7 +566,7 @@ function seedPersistedOutputs(ctx: WorkflowContext): void {
 export async function runNodeManually(
   editor: Editor,
   projectId: string,
-  providers: ProviderConfig[],
+  providers: ProviderSummary[],
   nodeId: TLShapeId
 ): Promise<NodeExecutionResult> {
   const store = useEngineStore.getState()
@@ -601,7 +609,7 @@ export async function runNodeManually(
 export async function runWorkflow(
   editor: Editor,
   projectId: string,
-  providers: ProviderConfig[]
+  providers: ProviderSummary[]
 ): Promise<void> {
   const store = useEngineStore.getState()
   if (store.phase !== 'idle') return
@@ -653,7 +661,7 @@ export async function runWorkflow(
 export async function runWorkflowToNode(
   editor: Editor,
   projectId: string,
-  providers: ProviderConfig[],
+  providers: ProviderSummary[],
   targetNodeId: TLShapeId
 ): Promise<void> {
   const store = useEngineStore.getState()
