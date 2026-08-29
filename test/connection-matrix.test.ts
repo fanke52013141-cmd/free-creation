@@ -61,6 +61,9 @@ describe('标准连线 · 允许的组合', () => {
     expect(canConnect('image', 'out-image', 'video', 'in-image')).toBe(true)
     expect(canConnect('image-gen', 'out-image', 'image-gen', 'in-image')).toBe(true)
     expect(canConnect('image-gen', 'out-image', 'video', 'in-image')).toBe(true)
+    expect(canConnect('image', 'out-image', 'image-crop', 'in-image')).toBe(true)
+    expect(canConnect('image-gen', 'out-image', 'image-crop', 'in-image')).toBe(true)
+    expect(canConnect('image-crop', 'out-image', 'video', 'in-image')).toBe(true)
   })
 
   it('对话 markdown 输出 → 文本输入（text 与 markdown 互连）', () => {

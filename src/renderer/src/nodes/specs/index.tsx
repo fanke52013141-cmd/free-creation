@@ -10,6 +10,8 @@ import {
   CodeBody,
   DirectorBody,
   ImageBody,
+  ImageCropBody,
+  ImageCropSettings,
   ImageGenerateBody,
   IterateBody,
   JsonBody,
@@ -33,6 +35,7 @@ import {
 } from '../../engine/executors/code'
 import { imageGenExecutor } from '../../engine/executors/imageGen'
 import { imageExecutor } from '../../engine/executors/image'
+import { imageCropExecutor } from '../../engine/executors/imageCrop'
 import { iterateExecutor } from '../../engine/executors/iterate'
 import { jsonExecutor } from '../../engine/executors/json'
 import { structuredExecutor } from '../../engine/executors/structured'
@@ -49,6 +52,7 @@ import {
   projectCodeOutputs,
   projectDirectorOutputs,
   projectImageGenOutputs,
+  projectImageCropOutputs,
   projectImageOutputs,
   projectIterateOutputs,
   projectJsonOutputs,
@@ -144,6 +148,28 @@ export function registerBaseNodeTypes(): void {
     projectOutputs: projectImageOutputs,
     executor: imageExecutor,
     Body: ImageBody
+  })
+  registerNodeType({
+    type: 'image-crop',
+    contractVersion: 1,
+    label: '裁剪',
+    icon: 'crop',
+    color: '#22c55e',
+    defaultSize: { w: 340, h: 260 },
+    description:
+      '对一张上游图片执行本地矩形或四角透视裁剪。每次运行产生新的图片资产，原图保持不变。',
+    ports: {
+      in: [
+        input('in-image', '原图', 'image', '必须连接的一张源图片；裁剪参数按其原始比例解释。', {
+          required: true
+        })
+      ],
+      out: [output('out-image', '裁剪图', 'image', '本地裁剪完成并落盘的新图片资产。')]
+    },
+    projectOutputs: projectImageCropOutputs,
+    executor: imageCropExecutor,
+    SettingsPanel: ImageCropSettings,
+    Body: ImageCropBody
   })
   registerNodeType({
     type: 'image-gen',

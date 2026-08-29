@@ -32,6 +32,7 @@ describe('全部标准节点都已注册', () => {
   const expected: NodeTypeId[] = [
     'text',
     'image',
+    'image-crop',
     'image-gen',
     'video',
     'audio',
@@ -69,6 +70,7 @@ describe('端口契约快照 · 每个端口 ID 稳定且符合命名规范', ()
   const types = [
     'text',
     'image',
+    'image-crop',
     'image-gen',
     'video',
     'audio',
@@ -141,6 +143,17 @@ describe('关键端口契约快照（防回归）', () => {
     })
     expect(ins.find((p) => p.id === 'in-text')?.cardinality).toBe('many')
     expect(snapshotPorts(spec.ports.out)[0].type).toBe('image')
+  })
+
+  it('图片裁剪节点：必填原图 → 新的裁剪图', () => {
+    const spec = getNodeType('image-crop')!
+    expect(snapshotPorts(spec.ports.in)).toEqual([
+      { id: 'in-image', dir: 'in', type: 'image', required: true, cardinality: 'one' }
+    ])
+    expect(snapshotPorts(spec.ports.out)).toEqual([
+      { id: 'out-image', dir: 'out', type: 'image', required: true, cardinality: 'one' }
+    ])
+    expect(spec.SettingsPanel).toBeTypeOf('function')
   })
 
   it('JSON 节点端口带 storyboard-independent 的 json.any Schema', () => {

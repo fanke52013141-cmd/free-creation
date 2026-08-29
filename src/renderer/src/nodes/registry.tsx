@@ -24,6 +24,13 @@ export interface NodeBodyProps {
   openPreview: (p: PreviewPayload) => void
 }
 
+/** 节点自有设置面板。用于复杂配置，不让 NodeContractPanel 按节点类型写分支。 */
+export interface NodeSettingsProps {
+  shape: NodeCardShape
+  editor: import('tldraw').Editor
+  projectId: string
+}
+
 export interface NodeTypeSpec {
   type: NodeTypeId
   /** 输入输出契约版本。端口 ID、类型、必填性或 Schema 破坏性变化时必须递增。 */
@@ -57,6 +64,8 @@ export interface NodeTypeSpec {
    * 未声明执行器的节点在全局运行时会被标记为「未实现」并跳过，但不影响注册。
    */
   executor?: NodeExecutor
+  /** 可选的节点专属设置界面；缺省时右侧面板仅展示安全的配置预览。 */
+  SettingsPanel?: React.ComponentType<NodeSettingsProps>
   Body: React.ComponentType<NodeBodyProps>
 }
 

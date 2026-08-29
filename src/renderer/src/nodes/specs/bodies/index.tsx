@@ -5,6 +5,7 @@
 // 行为与原超大 bodies.tsx 完全等价。
 export { TextBody } from './text'
 export { ImageBody } from './image'
+export { ImageCropBody, ImageCropSettings } from './image-crop'
 export { ImageGenerateBody } from './image-gen'
 export { VideoBody } from './video'
 export { AudioBody } from './audio'

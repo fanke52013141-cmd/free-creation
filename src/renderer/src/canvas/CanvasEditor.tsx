@@ -199,6 +199,7 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
     text: '文本',
     image: '图片',
     'image-gen': '生图',
+    'image-crop': '裁剪',
     video: '视频',
     audio: '音频',
     chat: '对话',

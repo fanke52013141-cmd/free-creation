@@ -6,6 +6,7 @@ import type { SVGProps } from 'react'
 export type IconName =
   | 'text'
   | 'image'
+  | 'crop'
   | 'image-gen'
   | 'video'
   | 'audio'
@@ -69,6 +70,13 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <rect x="3.5" y="4" width="17" height="16" rx="2" />
       <circle cx="8.5" cy="9" r="1.5" />
       <path d="m4.5 17 4.5-4 3 2.5 2.5-2 5.5 4.5" />
+    </>
+  ),
+  crop: (
+    <>
+      <path d="M7 3v14a4 4 0 0 0 4 4h10" />
+      <path d="M3 7h14a4 4 0 0 1 4 4v10" />
+      <path d="M17 3v4M3 17h4" />
     </>
   ),
   'image-gen': (

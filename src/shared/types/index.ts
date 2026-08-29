@@ -4,6 +4,7 @@
 export type ActiveNodeTypeId =
   | 'text'
   | 'image'
+  | 'image-crop'
   | 'image-gen'
   | 'video'
   | 'audio'

@@ -92,6 +92,17 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
       <div className="node-media-next-actions" aria-label="图片后续操作">
         <button
           className="btn-ghost small"
+          title="创建裁剪节点并连接当前图片"
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onClick={(e) => {
+            e.stopPropagation()
+            createImageContinuation(editor, shape, 'image-crop')
+          }}
+        >
+          <Icon name="crop" size={12} /> 裁剪图片
+        </button>
+        <button
+          className="btn-ghost small"
           title="创建生图节点并连接当前图片"
           onPointerDown={(e) => stopEventPropagation(e)}
           onClick={(e) => {

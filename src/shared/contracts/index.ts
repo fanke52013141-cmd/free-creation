@@ -1,6 +1,7 @@
 // IPC 契约：通道名 + payload 类型 + 统一信封（见《技术框架与规范》§10）
 
 import type { ChatMessage, GatewayModelInfo, ProviderSpecId, VideoGenParams } from '../types'
+import type { ImageCropConfig } from '../image-crop'
 
 export const IPC = {
   app: {
@@ -21,6 +22,7 @@ export const IPC = {
   media: {
     import: 'media:import',
     importBuffer: 'media:import-buffer',
+    imageCrop: 'media:image-crop',
     pick: 'media:pick',
     list: 'media:list',
     delete: 'media:delete',
@@ -80,6 +82,12 @@ export interface ImportMediaBufferInput {
   mime: string
   name?: string
   data: Uint8Array
+}
+
+export interface ImageCropTransformInput {
+  projectId: string
+  sourceMediaId: string
+  config: ImageCropConfig
 }
 
 // ── 本地工作区状态（模板与手动历史版本）──

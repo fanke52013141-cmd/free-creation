@@ -69,6 +69,10 @@ export function installBrowserMock(): void {
     saveProjectSync: () => undefined,
     closeProject: () => Promise.resolve({ ok: true, data: true }),
     importMedia: () => Promise.resolve({ ok: true, data: { assets: [], errors: [] } }),
+    importMediaBuffer: () =>
+      Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持媒体写入' } }),
+    cropImage: () =>
+      Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持本地裁剪' } }),
     pickMedia: () => Promise.resolve({ ok: true, data: { assets: [], errors: [] } }),
     workspace: {
       listTemplates: () => Promise.resolve({ ok: true, data: templates }),

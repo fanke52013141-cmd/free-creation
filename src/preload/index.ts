@@ -8,6 +8,7 @@ import type {
   GatewayEvent,
   IpcEnvelope,
   ImageGenerateInput,
+  ImageCropTransformInput,
   ImportMediaBufferInput,
   RenameProjectInput,
   SaveHistorySnapshotInput,
@@ -56,6 +57,8 @@ const api = {
   }): Promise<IpcEnvelope<MediaImportResult>> => ipcRenderer.invoke(IPC.media.import, input),
   importMediaBuffer: (input: ImportMediaBufferInput): Promise<IpcEnvelope<MediaAsset>> =>
     ipcRenderer.invoke(IPC.media.importBuffer, input),
+  cropImage: (input: ImageCropTransformInput): Promise<IpcEnvelope<MediaAsset>> =>
+    ipcRenderer.invoke(IPC.media.imageCrop, input),
   pickMedia: (projectId: string): Promise<IpcEnvelope<MediaImportResult>> =>
     ipcRenderer.invoke(IPC.media.pick, projectId),
   listMedia: (projectId: string): Promise<IpcEnvelope<MediaAsset[]>> =>

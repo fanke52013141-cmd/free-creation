@@ -1,6 +1,6 @@
 # 节点输入输出契约规范
 
-> 状态：强制规范 1.3（P0-P3.1 已落地）
+> 状态：强制规范 1.4（P0-P3.1、M0-M1 图片裁剪已落地）
 > 代码入口：`src/shared/types/index.ts`、`src/shared/node-schemas.ts`、`src/renderer/src/nodes/registry.tsx`  
 > 节点定义：`src/renderer/src/nodes/specs/index.tsx`
 > 运行时：`src/renderer/src/engine/contracts.ts`、`src/renderer/src/nodes/nodeValues.ts`
@@ -142,6 +142,11 @@ interface NodeTypeSpec {
 `projectOutputs` 是“节点已持久化状态 → 正式输出端口”的唯一投影入口。只要节点
 声明了输出端口，就必须注册它；禁止在运行器或公共工具里新增按 `nodeType` 判断的
 输出 `switch`。新增节点必须自行提供 Spec、Body、Executor 与投影函数。
+
+复杂配置的 UI 应由节点自己通过 `SettingsPanel` 扩展右侧详情面板；公共面板不得因
+某个节点的业务逻辑新增 `nodeType` 分支。图片裁剪是参考实现：`image-crop` 的
+`in-image(required, one) -> out-image(required, one)` 不随矩形/四角模式改变，模式与
+归一化坐标仅写入 `props.config`，执行器通过 M0 本地媒体服务产生新的 PNG 资产。
 
 `executionMode` 的含义：
 

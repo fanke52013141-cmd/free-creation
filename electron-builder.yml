@@ -12,6 +12,8 @@ files:
 asarUnpack:
   - resources/**
   - node_modules/better-sqlite3/**
+  # M0 本地媒体变换引擎：NAPI 二进制不能置于 asar 内。
+  - node_modules/@napi-rs/**
 win:
   executableName: canvas-studio
 nsis:

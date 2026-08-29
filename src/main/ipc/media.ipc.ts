@@ -4,7 +4,7 @@ import { copyFile } from 'fs/promises'
 import { basename, extname, join } from 'path'
 import { IPC } from '../../shared/contracts'
 import type { IpcEnvelope } from '../../shared/contracts'
-import type { ImportMediaBufferInput } from '../../shared/contracts'
+import type { ImageCropTransformInput, ImportMediaBufferInput } from '../../shared/contracts'
 import type { MediaAsset, MediaImportError, MediaImportResult } from '../../shared/types'
 import {
   deleteMedia,
@@ -14,6 +14,7 @@ import {
   saveBufferAsset
 } from '../store/media.repo'
 import { getDb } from '../store/db'
+import { transformImageCrop } from '../media/image-transform'
 
 function ok<T>(data: T): IpcEnvelope<T> {
   return { ok: true, data }
@@ -137,6 +138,21 @@ export function registerMediaIpc(): void {
         input.name?.replace(/\.[^.]+$/, '') || '粘贴图片'
       )
       return ok(asset)
+    }
+  )
+
+  /** M0：裁剪只接受“当前项目内已登记的图片资产”，不开放任意磁盘路径给渲染进程。 */
+  ipcMain.handle(
+    IPC.media.imageCrop,
+    async (_e, input: ImageCropTransformInput): Promise<IpcEnvelope<MediaAsset>> => {
+      if (!input?.projectId || !input.sourceMediaId || !input.config) {
+        return err('INVALID_INPUT', '缺少图片裁剪参数')
+      }
+      try {
+        return ok(await transformImageCrop(input))
+      } catch (error) {
+        return err('IMAGE_CROP_FAILED', error instanceof Error ? error.message : String(error))
+      }
     }
   )
 

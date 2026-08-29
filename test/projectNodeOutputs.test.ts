@@ -77,6 +77,16 @@ describe('projectNodeOutputs · 媒体节点（图片/生图/视频/音频）', 
     )
     expect(gen['out-image']?.kind).toBe('image')
 
+    const crop = projectNodeOutputs(
+      shape('image-crop', { mediaId: 'm-crop', mediaPath: '/crop.png', mediaMime: 'image/png' })
+    )
+    expect(crop['out-image']).toEqual({
+      kind: 'image',
+      mediaId: 'm-crop',
+      mediaPath: '/crop.png',
+      mime: 'image/png'
+    })
+
     const vid = projectNodeOutputs(
       shape('video', { mediaId: 'm3', mediaPath: '/v.mp4', mediaMime: 'video/mp4' })
     )
@@ -90,6 +100,7 @@ describe('projectNodeOutputs · 媒体节点（图片/生图/视频/音频）', 
 
   it('无媒体路径时不产出输出', () => {
     expect(projectNodeOutputs(shape('image'))).toEqual({})
+    expect(projectNodeOutputs(shape('image-crop'))).toEqual({})
     expect(projectNodeOutputs(shape('video'))).toEqual({})
     expect(projectNodeOutputs(shape('audio'))).toEqual({})
   })

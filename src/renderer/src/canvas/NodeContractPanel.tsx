@@ -140,6 +140,7 @@ export function NodeContractPanel({
   const spec = getNodeType(shape.props.nodeType)
   if (!spec) return null
   const ports = getNodePorts(spec, shape)
+  const SettingsPanel = spec.SettingsPanel
 
   const incoming = new Map<string, string[]>()
   const outgoing = new Map<string, string[]>()
@@ -285,13 +286,18 @@ export function NodeContractPanel({
             />
           </>
         )}
-        {tab === 'settings' && (
-          <section className="contract-section">
-            <h4>节点固定配置</h4>
-            <p className="contract-settings-hint">连线值优先于固定值；敏感字段会自动隐藏。</p>
-            <pre className="contract-settings-code">{safeConfigPreview(readNodeConfig(shape))}</pre>
-          </section>
-        )}
+        {tab === 'settings' &&
+          (SettingsPanel ? (
+            <SettingsPanel key={shape.id} shape={shape} editor={editor} projectId={projectId} />
+          ) : (
+            <section className="contract-section">
+              <h4>节点固定配置</h4>
+              <p className="contract-settings-hint">连线值优先于固定值；敏感字段会自动隐藏。</p>
+              <pre className="contract-settings-code">
+                {safeConfigPreview(readNodeConfig(shape))}
+              </pre>
+            </section>
+          ))}
         {tab === 'run' && (
           <>
             <section className="contract-section">

@@ -84,6 +84,7 @@ describe('契约版本稳定性（防破坏性变化漏升版本）', () => {
   const types: NodeTypeId[] = [
     'text',
     'image',
+    'image-crop',
     'image-gen',
     'video',
     'audio',
