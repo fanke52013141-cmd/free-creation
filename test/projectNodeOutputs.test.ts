@@ -86,6 +86,41 @@ describe('projectNodeOutputs · 媒体节点（图片/生图/视频/音频）', 
       mediaPath: '/crop.png',
       mime: 'image/png'
     })
+    const split = projectNodeOutputs(
+      shape(
+        'image-split',
+        { mediaId: 'm-split-1', mediaPath: '/split-1.png', mediaMime: 'image/png' },
+        {
+          nodeResult: JSON.stringify({
+            kind: 'media-source',
+            version: 1,
+            selectedMediaId: 'm-split-1',
+            results: [
+              {
+                mediaId: 'm-split-1',
+                mediaPath: '/split-1.png',
+                mime: 'image/png',
+                createdAt: 1
+              },
+              {
+                mediaId: 'm-split-2',
+                mediaPath: '/split-2.png',
+                mime: 'image/png',
+                createdAt: 1
+              }
+            ]
+          })
+        }
+      )
+    )
+    expect(split['out-image']?.kind).toBe('image')
+    expect(split['out-images']).toMatchObject({
+      kind: 'json',
+      data: [
+        { index: 1, mediaId: 'm-split-1' },
+        { index: 2, mediaId: 'm-split-2' }
+      ]
+    })
     const edit = projectNodeOutputs(
       shape('image-edit', { mediaId: 'm-edit', mediaPath: '/edit.png', mediaMime: 'image/png' })
     )
@@ -120,6 +155,7 @@ describe('projectNodeOutputs · 媒体节点（图片/生图/视频/音频）', 
   it('无媒体路径时不产出输出', () => {
     expect(projectNodeOutputs(shape('image'))).toEqual({})
     expect(projectNodeOutputs(shape('image-crop'))).toEqual({})
+    expect(projectNodeOutputs(shape('image-split'))).toEqual({})
     expect(projectNodeOutputs(shape('image-edit'))).toEqual({})
     expect(projectNodeOutputs(shape('video'))).toEqual({})
     expect(projectNodeOutputs(shape('video-frame'))).toEqual({})

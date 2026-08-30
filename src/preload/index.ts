@@ -12,9 +12,19 @@ import type {
   ImageGenerateInput,
   ImageEditInput,
   ImageCropTransformInput,
+  ImageSplitTransformInput,
   TtsGenerateInput,
   VideoFrameTransformInput,
-  VideoRangeTransformInput,
+  VideoProbeInput,
+  VideoProbeResult,
+  VideoClipTransformInput,
+  VideoAudioTransformInput,
+  VideoThumbnailsInput,
+  VideoThumbnailsResult,
+  AudioWaveformInput,
+  AudioWaveformResult,
+  VocalSeparateInput,
+  VocalSeparationResult,
   ImportMediaBufferInput,
   RenameProjectInput,
   SaveHistorySnapshotInput,
@@ -65,12 +75,22 @@ const api = {
     ipcRenderer.invoke(IPC.media.importBuffer, input),
   cropImage: (input: ImageCropTransformInput): Promise<IpcEnvelope<MediaAsset>> =>
     ipcRenderer.invoke(IPC.media.imageCrop, input),
+  splitImageGrid: (input: ImageSplitTransformInput): Promise<IpcEnvelope<MediaAsset[]>> =>
+    ipcRenderer.invoke(IPC.media.imageSplit, input),
   extractVideoFrame: (input: VideoFrameTransformInput): Promise<IpcEnvelope<MediaAsset>> =>
     ipcRenderer.invoke(IPC.media.videoFrame, input),
-  clipVideo: (input: VideoRangeTransformInput): Promise<IpcEnvelope<MediaAsset>> =>
+  clipVideo: (input: VideoClipTransformInput): Promise<IpcEnvelope<MediaAsset>> =>
     ipcRenderer.invoke(IPC.media.videoClip, input),
-  extractVideoAudio: (input: VideoRangeTransformInput): Promise<IpcEnvelope<MediaAsset>> =>
+  extractVideoAudio: (input: VideoAudioTransformInput): Promise<IpcEnvelope<MediaAsset>> =>
     ipcRenderer.invoke(IPC.media.videoAudio, input),
+  probeVideo: (input: VideoProbeInput): Promise<IpcEnvelope<VideoProbeResult>> =>
+    ipcRenderer.invoke(IPC.media.videoProbe, input),
+  generateVideoThumbnails: (input: VideoThumbnailsInput): Promise<IpcEnvelope<VideoThumbnailsResult>> =>
+    ipcRenderer.invoke(IPC.media.videoThumbnails, input),
+  generateAudioWaveform: (input: AudioWaveformInput): Promise<IpcEnvelope<AudioWaveformResult>> =>
+    ipcRenderer.invoke(IPC.media.audioWaveform, input),
+  separateVocals: (input: VocalSeparateInput): Promise<IpcEnvelope<VocalSeparationResult>> =>
+    ipcRenderer.invoke(IPC.media.vocalSeparate, input),
   ttsGenerate: (input: TtsGenerateInput): Promise<IpcEnvelope<MediaAsset>> =>
     ipcRenderer.invoke(IPC.media.ttsGenerate, input),
   comfyui: {

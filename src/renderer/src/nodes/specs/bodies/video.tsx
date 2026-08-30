@@ -17,6 +17,7 @@ import {
   removeMediaResultFromShape,
   MediaSourceBadge,
   createVideoContinuation,
+  createVocalExtractionTemplate,
   clearSelectedMediaHistory,
   ModelSelect,
   NoModelHint,
@@ -180,6 +181,17 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
             }}
           >
             <Icon name="audio" size={12} /> 提音
+          </button>
+          <button
+            className="btn-ghost small"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              createVocalExtractionTemplate(editor, shape)
+            }}
+            title="一键创建 视频提音 → 人声分离 并预连线"
+          >
+            <Icon name="audio" size={12} /> 一键提取人声
           </button>
         </div>
         <MediaResultGrid

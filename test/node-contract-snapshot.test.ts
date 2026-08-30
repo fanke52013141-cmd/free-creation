@@ -33,6 +33,7 @@ describe('全部标准节点都已注册', () => {
     'text',
     'image',
     'image-crop',
+    'image-split',
     'image-gen',
     'image-edit',
     'video',
@@ -76,6 +77,7 @@ describe('端口契约快照 · 每个端口 ID 稳定且符合命名规范', ()
     'text',
     'image',
     'image-crop',
+    'image-split',
     'image-gen',
     'image-edit',
     'video',
@@ -162,6 +164,25 @@ describe('关键端口契约快照（防回归）', () => {
     ])
     expect(snapshotPorts(spec.ports.out)).toEqual([
       { id: 'out-image', dir: 'out', type: 'image', required: true, cardinality: 'one' }
+    ])
+    expect(spec.SettingsPanel).toBeTypeOf('function')
+  })
+
+  it('图片拆分节点：原图 → 当前图片 + 可批处理图片集合', () => {
+    const spec = getNodeType('image-split')!
+    expect(snapshotPorts(spec.ports.in)).toEqual([
+      { id: 'in-image', dir: 'in', type: 'image', required: true, cardinality: 'one' }
+    ])
+    expect(snapshotPorts(spec.ports.out)).toEqual([
+      { id: 'out-image', dir: 'out', type: 'image', required: true, cardinality: 'one' },
+      {
+        id: 'out-images',
+        dir: 'out',
+        type: 'json',
+        required: true,
+        cardinality: 'one',
+        schema: 'list.items@1'
+      }
     ])
     expect(spec.SettingsPanel).toBeTypeOf('function')
   })

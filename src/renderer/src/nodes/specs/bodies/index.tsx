@@ -6,6 +6,7 @@
 export { TextBody } from './text'
 export { ImageBody } from './image'
 export { ImageCropBody, ImageCropSettings } from './image-crop'
+export { ImageSplitBody, ImageSplitSettings } from './image-split'
 export { ImageGenerateBody } from './image-gen'
 export { ImageEditBody, ImageEditSettings } from './image-edit'
 export { VideoBody } from './video'
@@ -17,6 +18,7 @@ export {
   VideoFrameBody,
   VideoFrameSettings
 } from './video-transforms'
+export { VocalSeparateBody, VocalSeparateSettings } from './vocal-separate'
 export { AudioBody } from './audio'
 export { TtsBody } from './tts'
 export { ChatBody } from './chat'

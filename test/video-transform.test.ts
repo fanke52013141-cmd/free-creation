@@ -2,8 +2,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   parseVideoFrameConfig,
-  parseVideoRangeConfig,
-  serializeVideoConfig
+  parseVideoClipConfig,
+  parseVideoAudioConfig,
+  parseVocalSeparationConfig,
+  serializeVideoFrameConfig,
+  serializeVideoClipConfig,
+  serializeVideoAudioConfig,
+  serializeVocalSeparationConfig
 } from '@shared/video-transform'
 import {
   videoAudioExecutor,
@@ -16,49 +21,84 @@ import type { NodeExecutionContext } from '@renderer/engine/executor-types'
 
 afterEach(() => vi.restoreAllMocks())
 
-describe('视频处理配置', () => {
-  it('损坏配置回退到安全默认值，范围始终至少 1ms', () => {
-    expect(parseVideoFrameConfig('not-json')).toEqual({ version: 1, timeMs: 0 })
-    expect(parseVideoRangeConfig('{bad')).toEqual({ version: 1, startMs: 0, endMs: 1000 })
-    expect(parseVideoRangeConfig(JSON.stringify({ startMs: 900, endMs: 100 }))).toEqual({
-      version: 1,
-      startMs: 900,
-      endMs: 901
+describe('视频处理配置 · v2', () => {
+  it('取帧：损坏配置回退到安全默认值', () => {
+    expect(parseVideoFrameConfig('not-json')).toEqual({
+      version: 2,
+      mode: 'first',
+      timeMs: 0,
+      format: 'png'
     })
   })
 
-  it('序列化后的毫秒配置可稳定解析', () => {
-    expect(parseVideoFrameConfig(serializeVideoConfig({ version: 1, timeMs: 1234 }))).toEqual({
-      version: 1,
-      timeMs: 1234
-    })
-    expect(
-      parseVideoRangeConfig(serializeVideoConfig({ version: 1, startMs: 400, endMs: 2400 }))
-    ).toEqual({ version: 1, startMs: 400, endMs: 2400 })
+  it('取帧：序列化后可稳定解析', () => {
+    const cfg = { version: 2, mode: 'custom' as const, timeMs: 1234, format: 'jpg' as const }
+    expect(parseVideoFrameConfig(serializeVideoFrameConfig(cfg))).toEqual(cfg)
   })
 
-  it('解析人声隔离配置（removeBackground + isolationMode）', () => {
+  it('截取：损坏配置回退到安全默认值，区间至少 1ms', () => {
+    expect(parseVideoClipConfig('{bad')).toEqual({
+      version: 2,
+      startMs: 0,
+      endMs: 1000,
+      includeAudio: true,
+      quality: 'balanced'
+    })
+    // startMs > endMs 时自动纠正
     expect(
-      parseVideoRangeConfig(
-        JSON.stringify({ startMs: 100, endMs: 5000, removeBackground: true, isolationMode: 'center' })
-      )
+      parseVideoClipConfig(JSON.stringify({ startMs: 900, endMs: 100 }))
     ).toEqual({
-      version: 1,
+      version: 2,
+      startMs: 900,
+      endMs: 901,
+      includeAudio: true,
+      quality: 'balanced'
+    })
+  })
+
+  it('截取：序列化后可稳定解析', () => {
+    const cfg = {
+      version: 2,
+      startMs: 400,
+      endMs: 2400,
+      includeAudio: false,
+      quality: 'fast' as const
+    }
+    expect(parseVideoClipConfig(serializeVideoClipConfig(cfg))).toEqual(cfg)
+  })
+
+  it('提音：损坏配置回退到安全默认值', () => {
+    expect(parseVideoAudioConfig('not-json')).toEqual({
+      version: 2,
+      startMs: 0,
+      endMs: 1000,
+      format: 'm4a',
+      sampleRate: 44100
+    })
+  })
+
+  it('提音：序列化后可稳定解析', () => {
+    const cfg = {
+      version: 2,
       startMs: 100,
       endMs: 5000,
-      removeBackground: true,
-      isolationMode: 'center'
+      format: 'm4a' as const,
+      sampleRate: 48000 as const
+    }
+    expect(parseVideoAudioConfig(serializeVideoAudioConfig(cfg))).toEqual(cfg)
+  })
+
+  it('人声分离：损坏配置回退到安全默认值', () => {
+    expect(parseVocalSeparationConfig('not-json')).toEqual({
+      version: 1,
+      mode: 'fast',
+      outputAccompaniment: true
     })
-    // removeBackground=false 时不带 isolationMode
-    expect(
-      parseVideoRangeConfig(JSON.stringify({ startMs: 0, endMs: 1000, removeBackground: false }))
-    ).toEqual({ version: 1, startMs: 0, endMs: 1000 })
-    // 无效的 isolationMode 回退到 auto
-    expect(
-      parseVideoRangeConfig(
-        JSON.stringify({ startMs: 0, endMs: 1000, removeBackground: true, isolationMode: 'bogus' })
-      )
-    ).toEqual({ version: 1, startMs: 0, endMs: 1000, removeBackground: true, isolationMode: 'auto' })
+  })
+
+  it('人声分离：序列化后可稳定解析', () => {
+    const cfg = { version: 1, mode: 'quality' as const, outputAccompaniment: true }
+    expect(parseVocalSeparationConfig(serializeVocalSeparationConfig(cfg))).toEqual(cfg)
   })
 })
 
@@ -69,6 +109,12 @@ function context(type: 'video-frame' | 'video-clip' | 'video-audio'): {
 } {
   const props: Record<string, unknown> = {}
   const result = { value: null as string | null }
+  const config =
+    type === 'video-frame'
+      ? JSON.stringify({ version: 2, mode: 'custom', timeMs: 1200, format: 'png' })
+      : type === 'video-clip'
+        ? JSON.stringify({ version: 2, startMs: 500, endMs: 1700, includeAudio: true, quality: 'balanced' })
+        : JSON.stringify({ version: 2, startMs: 500, endMs: 1700, format: 'wav', sampleRate: 44100 })
   const shape = {
     id: `shape:${type}`,
     type: 'node-card',
@@ -82,10 +128,7 @@ function context(type: 'video-frame' | 'video-clip' | 'video-audio'): {
       h: 260,
       nodeType: type,
       title: type,
-      config:
-        type === 'video-frame'
-          ? JSON.stringify({ version: 1, timeMs: 1200 })
-          : JSON.stringify({ version: 1, startMs: 500, endMs: 1700 }),
+      config,
       text: '',
       mediaId: '',
       mediaPath: '',
@@ -101,7 +144,7 @@ function context(type: 'video-frame' | 'video-clip' | 'video-audio'): {
       node: {
         id: shape.id,
         type,
-        contractVersion: 1,
+        contractVersion: 2,
         title: type,
         x: 0,
         y: 0,
@@ -149,7 +192,7 @@ describe('视频处理执行器', () => {
   it.each([
     ['video-frame', videoFrameExecutor, 'extractVideoFrame', 'frame-1', 'image/png'],
     ['video-clip', videoClipExecutor, 'clipVideo', 'clip-1', 'video/mp4'],
-    ['video-audio', videoAudioExecutor, 'extractVideoAudio', 'audio-1', 'audio/mp4']
+    ['video-audio', videoAudioExecutor, 'extractVideoAudio', 'audio-1', 'audio/wav']
   ] as const)(
     '%s 只使用 in-video 的真实资产并记录新结果',
     async (type, executor, apiName, id, mime) => {
@@ -182,28 +225,30 @@ describe('视频处理执行器', () => {
     item.ctx.inputs = new Map()
     await expect(videoFrameExecutor(item.ctx)).resolves.toEqual({
       status: 'skipped',
-      reason: '请连接一段视频到\u201c源视频\u201d输入'
+      reason: '请连接一段视频到"源视频"输入'
     })
   })
 
-  it('音频执行器将人声隔离配置透传给 IPC', async () => {
+  it('提音执行器透传 v2 配置（format + sampleRate）给 IPC', async () => {
     const api = { extractVideoAudio: vi.fn() }
     api.extractVideoAudio.mockResolvedValue({
       ok: true,
-      data: { id: 'vocal-1', path: 'projects/project-a/media/vocal-1', mime: 'audio/mp4', name: 'vocal-1' }
+      data: { id: 'audio-1', path: 'projects/project-a/media/audio-1', mime: 'audio/wav', name: 'audio-1' }
     })
     globalThis.window = { api } as unknown as Window & typeof globalThis
     const item = context('video-audio')
     item.ctx.shape.props.config = JSON.stringify({
-      version: 1,
+      version: 2,
       startMs: 500,
       endMs: 1700,
-      removeBackground: true,
-      isolationMode: 'center'
+      format: 'm4a',
+      sampleRate: 48000
     })
     await videoAudioExecutor(item.ctx)
-    const callArg = api.extractVideoAudio.mock.calls[0][0] as { config: { removeBackground?: boolean; isolationMode?: string } }
-    expect(callArg.config.removeBackground).toBe(true)
-    expect(callArg.config.isolationMode).toBe('center')
+    const callArg = api.extractVideoAudio.mock.calls[0][0] as {
+      config: { format?: string; sampleRate?: number }
+    }
+    expect(callArg.config.format).toBe('m4a')
+    expect(callArg.config.sampleRate).toBe(48000)
   })
 })

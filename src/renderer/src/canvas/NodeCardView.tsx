@@ -176,7 +176,10 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           data-node-type={shape.props.nodeType}
         >
           {/* 顶部颜色条（按类型区分） */}
-          <div className="node-color-bar" style={{ background: spec?.color }} />
+          <div
+            className="node-color-bar"
+            style={{ ['--node-accent' as string]: spec?.color ?? '#42b9f5' }}
+          />
           <div className="node-header">
             <span className="node-seq" style={{ color: spec?.color }}>
               {seq}
@@ -202,7 +205,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               {shape.props.title}
             </div>
             <span
-              className="node-status"
+              className={`node-status node-status-${shape.props.exec}`}
               style={{ background: EXEC_COLORS[shape.props.exec] ?? EXEC_COLORS.idle }}
               title={`${statusLabel} · ${readiness.label}`}
               aria-label={`${statusLabel} · ${readiness.label}`}
@@ -232,36 +235,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             ) : (
               <div className="node-empty">未知节点类型：{shape.props.nodeType}</div>
             )}
-          </div>
-          <div className="node-hover-toolbar" aria-label="节点快捷操作">
-            <span
-              className={`node-status-label readiness-${readiness.kind}`}
-              title={readiness.detail}
-            >
-              {readiness.label}
-            </span>
-            <button
-              title="复制节点 ID"
-              aria-label="复制节点 ID"
-              onPointerDown={stopEventPropagation}
-              onClick={(event) => {
-                stopEventPropagation(event)
-                void navigator.clipboard?.writeText(String(shape.id))
-              }}
-            >
-              <Icon name="copy" size={12} />
-            </button>
-            <button
-              title="查看节点详情"
-              aria-label="查看节点详情"
-              onPointerDown={stopEventPropagation}
-              onClick={(event) => {
-                stopEventPropagation(event)
-                openNodePanel()
-              }}
-            >
-              <Icon name="info" size={12} />
-            </button>
           </div>
         </div>
 

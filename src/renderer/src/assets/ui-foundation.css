@@ -265,13 +265,15 @@ body {
 
 .node-color-bar {
   position: absolute;
-  z-index: 3;
-  top: 0;
-  left: 18px;
-  width: calc(100% - 36px) !important;
-  height: 3px;
-  border-radius: 0 0 99px 99px;
-  opacity: 0.82;
+  z-index: 4;
+  top: -8px;
+  left: -8px;
+  width: calc(100% + 16px) !important;
+  height: 8px;
+  border-radius: calc(var(--node-radius) + 8px) calc(var(--node-radius) + 8px) 3px 3px;
+  background: var(--node-accent, var(--brand)) !important;
+  opacity: 0.94;
+  pointer-events: none;
 }
 
 .node-header {
@@ -300,12 +302,13 @@ body {
   min-width: 15px;
   height: 15px;
   padding: 0 3px;
-  border: 1px solid rgba(231, 238, 247, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.24);
   border-radius: 5px;
-  background: rgba(18, 22, 27, 0.72);
-  color: var(--txt-dim) !important;
-  font-size: 9px;
-  font-weight: 700;
+  background: #33404d;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.15);
+  color: #fff !important;
+  font-size: 10px;
+  font-weight: 800;
 }
 
 .node-icon {
@@ -338,13 +341,13 @@ body {
   height: 20px;
   border-radius: 6px;
   color: var(--txt-dim);
-  opacity: 0.38;
+  opacity: 0.68;
 }
 
 .node-card-wrap:hover .node-info-btn,
 .node-card-wrap.is-selected .node-info-btn {
   color: #cbd5df;
-  opacity: 0.9;
+  opacity: 1;
 }
 
 .node-body {
@@ -604,14 +607,17 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
 
 /* 左栏以同一尺寸、同一节奏呈现；滚动条只在需要浏览时出现。 */
 .node-palette {
-  left: 14px;
-  width: 58px;
+  left: 12px;
+  width: 76px;
   /* 为左下角小地图/缩放停靠簇预留完整高度，避免主题按钮被遮住。 */
   bottom: 80px;
+  overflow-x: hidden;
 }
 
 .palette-node-scroll {
+  width: 100%;
   padding: 2px 0 7px;
+  overflow-x: hidden;
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
 }
@@ -643,7 +649,7 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
 }
 
 .palette-node-item {
-  width: 54px;
+  width: 68px;
   height: 46px;
   min-height: 46px;
   gap: 2px;

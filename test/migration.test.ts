@@ -85,13 +85,16 @@ describe('契约版本稳定性（防破坏性变化漏升版本）', () => {
     'text',
     'image',
     'image-crop',
+    'image-split',
     'image-gen',
     'image-edit',
     'video',
     'video-frame',
     'video-clip',
     'video-audio',
+    'vocal-separate',
     'audio',
+    'tts',
     'chat',
     'processor',
     'json',
@@ -105,6 +108,7 @@ describe('契约版本稳定性（防破坏性变化漏升版本）', () => {
 
   it.each(types)('节点 %s 的契约版本与已发布契约一致', (type) => {
     const spec = getNodeType(type)
-    expect(spec?.contractVersion).toBe(type === 'code' || type === 'video' ? 2 : 1)
+    const v2Types: NodeTypeId[] = ['code', 'video', 'video-frame', 'video-clip', 'video-audio', 'vocal-separate']
+    expect(spec?.contractVersion).toBe(v2Types.includes(type) ? 2 : 1)
   })
 })

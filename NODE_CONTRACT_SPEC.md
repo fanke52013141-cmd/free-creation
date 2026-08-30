@@ -155,6 +155,15 @@ interface NodeTypeSpec {
 FFmpeg（优先读取 `CANVAS_STUDIO_FFMPEG_PATH`，否则使用 PATH 中的 `ffmpeg`），不随
 应用打包 GPL 二进制；找不到时必须给出可操作的安装/配置错误。
 
+**输出数量改变时必须创建独立节点。**例如 `image-split` 不属于 `image-crop` 的模式：
+裁剪固定为 `1 张图片 -> 1 张图片`，而拆分固定为 `1 张图片 -> 1 张当前图片 + 1 个图片
+集合`。拆分节点的 `out-images` 为 `list.items@1`，列表每项只保存真实落盘资产的
+`mediaId/mediaPath/mime`，可连接给循环节点；`out-image` 始终是用户从该集合中选中的
+一张，供生图、裁剪、视频等单图节点直接使用。行、列和 `scalePercent` 仅存于配置，
+其中 `scalePercent` 是**面积比例**，每个格子以自身中心缩放，线性缩放系数为
+`sqrt(scalePercent / 100)`。单次拆分最多 64 格；任一格生成失败时必须清理本次已写入
+资产，且不得覆盖节点上一次成功输出。
+
 `executionMode` 的含义：
 
 - `auto`：工作流可直接执行。

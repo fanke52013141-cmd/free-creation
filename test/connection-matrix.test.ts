@@ -67,6 +67,8 @@ describe('标准连线 · 允许的组合', () => {
     expect(canConnect('image', 'out-image', 'image-crop', 'in-image')).toBe(true)
     expect(canConnect('image-gen', 'out-image', 'image-crop', 'in-image')).toBe(true)
     expect(canConnect('image-crop', 'out-image', 'video', 'in-image')).toBe(true)
+    expect(canConnect('image-split', 'out-image', 'video', 'in-image')).toBe(true)
+    expect(canConnect('image-split', 'out-images', 'iterate', 'in-list')).toBe(true)
   })
 
   it('视频 → 取帧 / 截取 / 提音（同一源视频生成新的类型明确资产）', () => {

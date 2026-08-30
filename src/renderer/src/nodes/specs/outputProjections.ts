@@ -8,6 +8,7 @@ import { readNodeConfig } from '../../canvas/node-persistence'
 import type { RawNodeOutputs } from '../nodeValues'
 import {
   parseNodeRecord,
+  parseMediaResultCollection,
   parseStoredAiResult,
   parseStoredIterateResult,
   parseStoredNodeValue,
@@ -22,6 +23,7 @@ import {
 } from '../director-data'
 import { parseStructuredDataConfig } from '../structured-data'
 import { readNodeRunRecord } from '../../engine/runRecord'
+import { parseVocalSeparationResult } from '../../engine/executors/vocalSeparate'
 
 function mediaOutput(
   shape: NodeCardShape,
@@ -52,6 +54,34 @@ export const projectImageGenOutputs = projectImageOutputs
 export const projectImageCropOutputs = projectImageOutputs
 export const projectImageEditOutputs = projectImageOutputs
 
+/**
+ * 宫格拆分同时暴露当前选中的单张图片与全部真实产物列表：
+ * 前者兼容图片类下游；后者可交给循环节点逐项批处理，绝不把多张图片伪装成一张。
+ */
+export const projectImageSplitOutputs = (shape: NodeCardShape): RawNodeOutputs => {
+  const collection = parseMediaResultCollection(
+    typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
+  )
+  const results = collection?.results ?? []
+  return {
+    ...mediaOutput(shape, 'image', 'out-image'),
+    ...(results.length > 0
+      ? {
+          'out-images': {
+            kind: 'json' as const,
+            data: results.map((item, index) => ({
+              id: `grid-${index + 1}-${item.mediaId}`,
+              index: index + 1,
+              mediaId: item.mediaId,
+              mediaPath: item.mediaPath,
+              mime: item.mime
+            }))
+          }
+        }
+      : {})
+  }
+}
+
 export const projectVideoOutputs = (shape: NodeCardShape): RawNodeOutputs =>
   mediaOutput(shape, 'video', 'out-video')
 
@@ -63,6 +93,20 @@ export const projectVideoClipOutputs = (shape: NodeCardShape): RawNodeOutputs =>
 
 export const projectVideoAudioOutputs = (shape: NodeCardShape): RawNodeOutputs =>
   mediaOutput(shape, 'audio', 'out-audio')
+
+export const projectVocalSeparateOutputs = (shape: NodeCardShape): RawNodeOutputs => {
+  const result = parseVocalSeparationResult(
+    typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
+  )
+  if (!result) return {}
+  const outputs: RawNodeOutputs = {
+    'out-vocals': { kind: 'audio', ...result.vocals }
+  }
+  if (result.accompaniment) {
+    outputs['out-accompaniment'] = { kind: 'audio', ...result.accompaniment }
+  }
+  return outputs
+}
 
 export const projectAudioOutputs = (shape: NodeCardShape): RawNodeOutputs =>
   mediaOutput(shape, 'audio', 'out-audio')

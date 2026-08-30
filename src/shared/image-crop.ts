@@ -6,6 +6,39 @@
  */
 export type ImageCropMode = 'rect' | 'quad'
 
+/**
+ * 矩形裁剪的显示比例。比例是编辑约束而不是输出格式：执行时仍只依赖归一化 rect，
+ * 因而不同分辨率的同一张素材也能稳定复现相同构图。
+ */
+export type ImageCropAspectRatio =
+  | 'free'
+  | '1:1'
+  | '16:9'
+  | '9:16'
+  | '4:3'
+  | '3:4'
+  | '3:2'
+  | '2:3'
+  | '21:9'
+  | '9:21'
+  | '5:4'
+  | '4:5'
+
+export const IMAGE_CROP_ASPECT_RATIOS: Readonly<Record<ImageCropAspectRatio, number | null>> = {
+  free: null,
+  '1:1': 1,
+  '16:9': 16 / 9,
+  '9:16': 9 / 16,
+  '4:3': 4 / 3,
+  '3:4': 3 / 4,
+  '3:2': 3 / 2,
+  '2:3': 2 / 3,
+  '21:9': 21 / 9,
+  '9:21': 9 / 21,
+  '5:4': 5 / 4,
+  '4:5': 4 / 5
+}
+
 export interface NormalizedPoint {
   x: number
   y: number
@@ -21,6 +54,8 @@ export interface NormalizedRect {
 export interface ImageCropConfig {
   version: 1
   mode: ImageCropMode
+  /** `free` 为自由拖动；其他值锁定矩形选区的视觉宽高比例。 */
+  aspectRatio: ImageCropAspectRatio
   rect: NormalizedRect
   /** 顺序固定为左上、右上、左下、右下；quad 模式用 FFmpeg 透视滤镜变换。 */
   points: [NormalizedPoint, NormalizedPoint, NormalizedPoint, NormalizedPoint]
@@ -29,6 +64,7 @@ export interface ImageCropConfig {
 export const DEFAULT_IMAGE_CROP_CONFIG: ImageCropConfig = {
   version: 1,
   mode: 'rect',
+  aspectRatio: 'free',
   rect: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 },
   points: [
     { x: 0.1, y: 0.1 },
@@ -58,6 +94,12 @@ function pointAt(value: unknown, fallback: NormalizedPoint): NormalizedPoint {
   }
 }
 
+function aspectRatioAt(value: unknown): ImageCropAspectRatio {
+  return typeof value === 'string' && value in IMAGE_CROP_ASPECT_RATIOS
+    ? (value as ImageCropAspectRatio)
+    : 'free'
+}
+
 /** 把任意文本安全收敛为当前契约版本的可执行配置。 */
 export function parseImageCropConfig(text: string): ImageCropConfig {
   try {
@@ -78,6 +120,7 @@ export function parseImageCropConfig(text: string): ImageCropConfig {
     return {
       version: 1,
       mode: raw.mode === 'quad' ? 'quad' : 'rect',
+      aspectRatio: aspectRatioAt(raw.aspectRatio),
       rect,
       points: base.points.map((fallback, index) =>
         pointAt(rawPoints[index], fallback)

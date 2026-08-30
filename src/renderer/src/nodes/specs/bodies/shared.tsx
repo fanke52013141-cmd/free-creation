@@ -86,7 +86,7 @@ export function NoModelHint({ onOpen }: { onOpen: () => void }): React.JSX.Eleme
 export function createImageContinuation(
   editor: Editor,
   source: NodeCardShape,
-  targetType: 'image-gen' | 'image-crop' | 'image-edit' | 'video'
+  targetType: 'image-gen' | 'image-crop' | 'image-split' | 'image-edit' | 'video'
 ): void {
   const spec = getNodeType(targetType)
   if (!spec) return
@@ -96,6 +96,8 @@ export function createImageContinuation(
       ? '继续生图'
       : targetType === 'image-crop'
         ? '图片裁剪'
+        : targetType === 'image-split'
+          ? '图片拆分'
         : targetType === 'image-edit'
           ? '图片修改'
           : '图片生成视频'
@@ -125,6 +127,102 @@ export function createImageContinuation(
   editor.select(id)
 }
 
+/**
+ * 从音频输出创建独立处理节点（当前仅支持人声分离）。
+ * 快捷入口只建真实边，不在源节点内隐藏产物。
+ */
+export function createAudioContinuation(
+  editor: Editor,
+  source: NodeCardShape,
+  targetType: 'vocal-separate'
+): void {
+  const spec = getNodeType(targetType)
+  if (!spec) return
+  const id = createShapeId()
+  const titles: Record<typeof targetType, string> = {
+    'vocal-separate': '人声分离'
+  }
+  editor.createShape({
+    id,
+    type: 'node-card',
+    x: source.x + source.props.w + 80,
+    y: source.y,
+    props: {
+      nodeType: targetType,
+      title: titles[targetType],
+      w: spec.defaultSize.w,
+      h: spec.defaultSize.h
+    } satisfies Partial<NodeCardProps>
+  })
+  if (
+    !createEdge(
+      editor,
+      { shapeId: source.id, portId: 'out-audio' },
+      { shapeId: id, portId: 'in-audio' }
+    )
+  ) {
+    editor.deleteShape(id)
+    return
+  }
+  editor.select(id)
+}
+
+/**
+ * 一键提取人声模板：从视频节点创建 视频提音 → 人声分离 两个节点并预连线。
+ * 底层是两个真实节点 + 两条真实边，不生成隐藏逻辑或超级节点。
+ */
+export function createVocalExtractionTemplate(
+  editor: Editor,
+  source: NodeCardShape
+): void {
+  const audioSpec = getNodeType('video-audio')
+  const vocalSpec = getNodeType('vocal-separate')
+  if (!audioSpec || !vocalSpec) return
+
+  const audioId = createShapeId()
+  const vocalId = createShapeId()
+  const gap = 80
+
+  editor.run(() => {
+    editor.createShape({
+      id: audioId,
+      type: 'node-card',
+      x: source.x + source.props.w + gap,
+      y: source.y - vocalSpec.defaultSize.h / 4,
+      props: {
+        nodeType: 'video-audio',
+        title: '提取音频',
+        w: audioSpec.defaultSize.w,
+        h: audioSpec.defaultSize.h
+      } satisfies Partial<NodeCardProps>
+    })
+    editor.createShape({
+      id: vocalId,
+      type: 'node-card',
+      x: source.x + source.props.w + gap + audioSpec.defaultSize.w + gap,
+      y: source.y + vocalSpec.defaultSize.h / 4,
+      props: {
+        nodeType: 'vocal-separate',
+        title: '人声分离',
+        w: vocalSpec.defaultSize.w,
+        h: vocalSpec.defaultSize.h
+      } satisfies Partial<NodeCardProps>
+    })
+  })
+  // 预连线：视频.out-video → 提音.in-video，提音.out-audio → 人声分离.in-audio
+  createEdge(
+    editor,
+    { shapeId: source.id, portId: 'out-video' },
+    { shapeId: audioId, portId: 'in-video' }
+  )
+  createEdge(
+    editor,
+    { shapeId: audioId, portId: 'out-audio' },
+    { shapeId: vocalId, portId: 'in-audio' }
+  )
+  editor.select(vocalId)
+}
+
 /** 图片结果的统一下游入口。它只创建节点和声明端口边，不复制任何媒体。 */
 export function ImageContinuationActions({
   editor,
@@ -134,12 +232,13 @@ export function ImageContinuationActions({
   shape: NodeCardShape
 }): React.JSX.Element {
   const actions: Array<{
-    type: 'image-crop' | 'image-gen' | 'image-edit' | 'video'
-    icon: 'crop' | 'spark' | 'edit' | 'video'
+    type: 'image-crop' | 'image-split' | 'image-gen' | 'image-edit' | 'video'
+    icon: 'crop' | 'grid' | 'spark' | 'edit' | 'video'
     label: string
     title: string
   }> = [
     { type: 'image-crop', icon: 'crop', label: '裁剪图片', title: '创建裁剪节点并连接当前图片' },
+    { type: 'image-split', icon: 'grid', label: '宫格拆分', title: '创建图片拆分节点并连接当前图片' },
     { type: 'image-gen', icon: 'spark', label: '继续生图', title: '创建生图节点并连接当前图片' },
     { type: 'image-edit', icon: 'edit', label: '修改图片', title: '对当前图片添加标注并修改' },
     { type: 'video', icon: 'video', label: '生成视频', title: '创建视频节点并将当前图片作为首帧' }
@@ -352,13 +451,12 @@ export function MediaResultGrid({
   return (
     <div className="media-result-collection" aria-label="生成结果集合">
       <div className="media-result-collection-head">
-        <span>
-          {collection.results.length} 个结果 · 已选 {selected ? '1' : '0'} 个
+        <span className="media-result-summary">
+          <strong>{collection.results.length}</strong> 个候选
+          <em>{selected ? '当前输出已确定' : '尚未选择输出'}</em>
         </span>
         <span className="media-result-collection-tools">
-          <small>
-            {compareItems.length === 2 ? '已选择 2 项进行对比' : '点击缩略图切换当前输出'}
-          </small>
+          <small>{compareItems.length === 2 ? '正在对比 2 项结果' : '点击候选设为当前输出'}</small>
           {onClear && collection.results.length > 1 ? (
             <button
               type="button"

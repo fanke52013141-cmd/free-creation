@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react'
 import { stopEventPropagation } from 'tldraw'
-import type { ImageCropConfig, NormalizedPoint } from '@shared/image-crop'
+import type { ImageCropAspectRatio, ImageCropConfig, NormalizedPoint } from '@shared/image-crop'
 import {
   DEFAULT_IMAGE_CROP_CONFIG,
+  IMAGE_CROP_ASPECT_RATIOS,
   parseImageCropConfig,
   serializeImageCropConfig,
   validateImageCropConfig
@@ -18,6 +19,24 @@ import { MediaFileActions, MediaSourceBadge, useClickGuard } from './shared'
 type DragTarget = { kind: 'rect'; corner: 0 | 1 | 2 | 3 } | { kind: 'quad'; point: 0 | 1 | 2 | 3 }
 
 const clamp = (value: number): number => Math.min(1, Math.max(0, value))
+
+const COMMON_ASPECT_RATIOS: readonly ImageCropAspectRatio[] = [
+  'free',
+  '1:1',
+  '16:9',
+  '9:16',
+  '4:3',
+  '3:4'
+]
+
+const EXTRA_ASPECT_RATIOS: readonly ImageCropAspectRatio[] = [
+  '3:2',
+  '2:3',
+  '21:9',
+  '9:21',
+  '5:4',
+  '4:5'
+]
 
 function updateRect(
   config: ImageCropConfig,
@@ -47,6 +66,76 @@ function updateRect(
     next.height = Math.max(min, point.y - y)
   }
   return parseImageCropConfig(JSON.stringify({ ...config, rect: next }))
+}
+
+/**
+ * 固定比例拖拽：始终以对角为锚点，用户拖动任意一个圆点即可等比例放大或缩小。
+ * ratio 是图片像素比例；归一化坐标需要除以 sourceAspect 才能保持视觉比例正确。
+ */
+function updateRectWithAspect(
+  config: ImageCropConfig,
+  corner: 0 | 1 | 2 | 3,
+  point: NormalizedPoint,
+  ratio: number,
+  sourceAspect: number
+): ImageCropConfig {
+  const { x, y, width, height } = config.rect
+  const right = x + width
+  const bottom = y + height
+  const anchor =
+    corner === 0
+      ? { x: right, y: bottom }
+      : corner === 1
+        ? { x, y: bottom }
+        : corner === 2
+          ? { x: right, y }
+          : { x, y }
+  const xDirection = corner === 0 || corner === 2 ? -1 : 1
+  const yDirection = corner === 0 || corner === 1 ? -1 : 1
+  const normalizedRatio = ratio / Math.max(0.0001, sourceAspect)
+  const desiredWidth = Math.abs(point.x - anchor.x)
+  const desiredHeight = Math.abs(point.y - anchor.y)
+  let nextWidth = desiredWidth
+  let nextHeight = desiredHeight
+  if (desiredHeight === 0 || desiredWidth / desiredHeight >= normalizedRatio) {
+    nextHeight = desiredWidth / normalizedRatio
+  } else {
+    nextWidth = desiredHeight * normalizedRatio
+  }
+
+  const availableWidth = xDirection > 0 ? 1 - anchor.x : anchor.x
+  const availableHeight = yDirection > 0 ? 1 - anchor.y : anchor.y
+  const maxWidth = Math.min(availableWidth, availableHeight * normalizedRatio)
+  if (maxWidth <= 0) return config
+  nextWidth = Math.min(nextWidth, maxWidth)
+  nextHeight = nextWidth / normalizedRatio
+  if (nextWidth < 0.02 || nextHeight < 0.02) return config
+
+  return parseImageCropConfig(
+    JSON.stringify({
+      ...config,
+      rect: {
+        x: xDirection > 0 ? anchor.x : anchor.x - nextWidth,
+        y: yDirection > 0 ? anchor.y : anchor.y - nextHeight,
+        width: nextWidth,
+        height: nextHeight
+      }
+    })
+  )
+}
+
+/** 切换比例时以原选区中心为基准，内接到新比例，绝不越过原图。 */
+function fitRectToAspect(config: ImageCropConfig, ratio: number, sourceAspect: number): ImageCropConfig {
+  const normalizedRatio = ratio / Math.max(0.0001, sourceAspect)
+  let width = config.rect.width
+  let height = config.rect.height
+  if (width / height > normalizedRatio) width = height * normalizedRatio
+  else height = width / normalizedRatio
+  const centerX = config.rect.x + config.rect.width / 2
+  const centerY = config.rect.y + config.rect.height / 2
+  const x = clamp(Math.min(centerX - width / 2, 1 - width))
+  const y = clamp(Math.min(centerY - height / 2, 1 - height))
+  return parseImageCropConfig(JSON.stringify({ ...config, rect: { x, y, width, height } }))
 }
 
 function rectCorners(config: ImageCropConfig): NormalizedPoint[] {
@@ -154,7 +243,14 @@ export function ImageCropSettings({ shape, editor }: NodeSettingsProps): React.J
     const target = drag.current
     const point = target ? pointForEvent(event) : null
     if (!target || !point) return
-    if (target.kind === 'rect') save(updateRect(config, target.corner, point))
+    if (target.kind === 'rect') {
+      const ratio = IMAGE_CROP_ASPECT_RATIOS[config.aspectRatio]
+      save(
+        ratio
+          ? updateRectWithAspect(config, target.corner, point, ratio, previewAspect ?? 1)
+          : updateRect(config, target.corner, point)
+      )
+    }
     else {
       const points = config.points.map((item, index) =>
         index === target.point ? point : item
@@ -174,6 +270,13 @@ export function ImageCropSettings({ shape, editor }: NodeSettingsProps): React.J
   }
   const handles = config.mode === 'rect' ? rectCorners(config) : config.points
   const invalid = validateImageCropConfig(config)
+  const setAspectRatio = (aspectRatio: ImageCropAspectRatio): void => {
+    const ratio = IMAGE_CROP_ASPECT_RATIOS[aspectRatio]
+    const base: ImageCropConfig = { ...config, mode: 'rect', aspectRatio }
+    const next = ratio ? fitRectToAspect(base, ratio, previewAspect ?? 1) : base
+    save(next)
+    markUndoPoint(editor, 'image-crop-aspect-ratio')
+  }
 
   return (
     <section className="contract-section crop-settings">
@@ -196,6 +299,45 @@ export function ImageCropSettings({ shape, editor }: NodeSettingsProps): React.J
         </button>
         <button onClick={() => save(structuredClone(DEFAULT_IMAGE_CROP_CONFIG))}>重置</button>
       </div>
+      {config.mode === 'rect' && (
+        <div className="crop-aspect-settings">
+          <span className="crop-aspect-label">裁剪比例</span>
+          <div className="crop-aspect-shortcuts" role="group" aria-label="常用裁剪比例">
+            {COMMON_ASPECT_RATIOS.map((aspectRatio) => (
+              <button
+                key={aspectRatio}
+                type="button"
+                className={config.aspectRatio === aspectRatio ? 'active' : ''}
+                onClick={() => setAspectRatio(aspectRatio)}
+              >
+                {aspectRatio === 'free' ? '自由' : aspectRatio}
+              </button>
+            ))}
+          </div>
+          <label className="crop-aspect-more">
+            更多比例
+            <select
+              value={EXTRA_ASPECT_RATIOS.includes(config.aspectRatio) ? config.aspectRatio : ''}
+              onChange={(event) => {
+                const value = event.currentTarget.value as ImageCropAspectRatio
+                if (value) setAspectRatio(value)
+              }}
+            >
+              <option value="">选择比例</option>
+              {EXTRA_ASPECT_RATIOS.map((aspectRatio) => (
+                <option key={aspectRatio} value={aspectRatio}>
+                  {aspectRatio}
+                </option>
+              ))}
+            </select>
+          </label>
+          <small>
+            {config.aspectRatio === 'free'
+              ? '自由拖动：四个角点可分别调整宽高。'
+              : `固定 ${config.aspectRatio}：拖动任意角点，选区会等比例缩放。`}
+          </small>
+        </div>
+      )}
       {source ? (
         <>
           <div
@@ -264,7 +406,7 @@ export function ImageCropSettings({ shape, editor }: NodeSettingsProps): React.J
       )}
       {invalid && <p className="crop-invalid">{invalid}</p>}
       <p className="crop-coordinate-hint">
-        坐标以原图比例保存；拖动四个圆点即可调整。运行后输出 PNG 图片。
+        坐标以原图比例保存；矩形模式支持自由或固定比例，四角透视用于校正倾斜画面。运行后输出 PNG 图片。
       </p>
     </section>
   )

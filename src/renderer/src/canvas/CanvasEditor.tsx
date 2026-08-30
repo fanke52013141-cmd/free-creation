@@ -135,6 +135,7 @@ function migrateLegacyNodeSizes(editor: Editor): number {
 interface CanvasEditorProps {
   project: ProjectMeta
   initialSnapshot: unknown
+  onThemeChange?: (theme: 'dark' | 'light') => void
 }
 
 interface CreateMenuState {
@@ -153,7 +154,11 @@ interface NodeMenuState {
 
 type MenuState = CreateMenuState | NodeMenuState
 
-export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): React.JSX.Element {
+export function CanvasEditor({
+  project,
+  initialSnapshot,
+  onThemeChange
+}: CanvasEditorProps): React.JSX.Element {
   const editorRef = useRef<Editor | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -200,11 +205,13 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
     image: '图片',
     'image-gen': '生图',
     'image-crop': '裁剪',
+    'image-split': '拆分',
     'image-edit': '修改',
     video: '视频',
     'video-frame': '取帧',
     'video-clip': '截取',
     'video-audio': '提音',
+    'vocal-separate': '人声分离',
     audio: '音频',
     tts: '配音',
     chat: '对话',
@@ -767,6 +774,10 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
         onMount={handleMount}
         shapeUtils={[NodeCardUtil]}
         cameraOptions={{
+          // 创作画布的主操作是观察全局与细节：滚轮直接缩放，按住 Ctrl / Cmd 时反向平移。
+          // 这也与底部的 +/- 缩放控制保持同一语义。
+          wheelBehavior: 'zoom',
+          zoomSpeed: 0.85,
           zoomSteps: [0.1, 0.25, 0.5, 1, 2, 4]
         }}
         components={{
@@ -858,6 +869,7 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
             onClick={() => {
               const next = canvasTheme === 'dark' ? 'light' : 'dark'
               setCanvasTheme(next)
+              onThemeChange?.(next)
               editorRef.current?.user.updateUserPreferences({
                 colorScheme: next === 'dark' ? 'dark' : 'light'
               })

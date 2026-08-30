@@ -10,7 +10,7 @@
 >
 > 产品定位：单用户、本地优先的 Windows Electron 无限画布创作工具。
 
-> **当前交接入口（2026-08-30 第二批）**：本轮一次性交付四个功能方向：语音克隆节点（TTS）、视频变换增强（取帧预设 + 人声分离）、3D 预演台升级（contractVersion 1→2）、UI 图标与视觉系统。请先阅读 [docs/HANDOFF_2026_08_30_FEATURE_BATCH.md](./docs/HANDOFF_2026_08_30_FEATURE_BATCH.md)，再阅读 [docs/HANDOFF_2026_08_30_MEDIA_WORKFLOW.md](./docs/HANDOFF_2026_08_30_MEDIA_WORKFLOW.md) 和 [docs/HANDOFF_2026_08_29_IMAGE_EDIT.md](./docs/HANDOFF_2026_08_29_IMAGE_EDIT.md)。本文件其余部分是长期历史记录，提交哈希与测试数量以当前交接单为准。
+> **当前交接入口（2026-08-30 第三批）**：本轮将视频处理链路重构为四个职责清晰的独立节点（`video-frame` / `video-clip` / `video-audio` / `vocal-separate`），新增统一媒体时间轴组件 MediaTimeline 和图片宫格拆分节点 `image-split`。请先阅读 [docs/HANDOFF_2026_08_30_VIDEO_RESTRUCTURE.md](./docs/HANDOFF_2026_08_30_VIDEO_RESTRUCTURE.md)，再阅读 [docs/HANDOFF_2026_08_30_FEATURE_BATCH.md](./docs/HANDOFF_2026_08_30_FEATURE_BATCH.md) 和 [docs/HANDOFF_2026_08_30_MEDIA_WORKFLOW.md](./docs/HANDOFF_2026_08_30_MEDIA_WORKFLOW.md)。本文件其余部分是长期历史记录，提交哈希与测试数量以当前交接单为准。
 
 ## 1. 接手前必须知道的边界
 
@@ -47,18 +47,23 @@ R0–R4 已在 `363f2d1` 完成并推送；本次 `39a32f2` 在其上完成导�
 | P3      | 导演台窄屏支持镜头/属性面板切换；时间轴、预演视口和操作栏保留在主工作区                        | 导演台数据测试通过                        |
 | P4      | 补充快照修复、节点状态、创建菜单、运行记录、媒体映射和导入事务测试                             | 全量 23 个测试文件、405 项用例通过        |
 
-### 本轮新增：功能批量交付（2026-08-30 第二批）
+### 本轮新增：视频节点 v2 重构（2026-08-30 第三批）
 
-本轮一次性交付四个功能方向，详见 [docs/HANDOFF_2026_08_30_FEATURE_BATCH.md](./docs/HANDOFF_2026_08_30_FEATURE_BATCH.md)：
+本轮将视频处理链路重构为四个独立节点，新增统一媒体时间轴和图片拆分节点，详见 [docs/HANDOFF_2026_08_30_VIDEO_RESTRUCTURE.md](./docs/HANDOFF_2026_08_30_VIDEO_RESTRUCTURE.md)：
 
 | 功能 | 状态 | 说明 |
 | --- | --- | --- |
-| 语音克隆节点（`tts`） | 已开发，待桌面验收 | 新增节点类型，通过本地 ComfyUI + IndexTTS-2.5 合成音频 |
-| 视频变换增强 | 已开发，待桌面验收 | `video-frame` 新增首帧/尾帧预设；`video-audio` 新增人声分离（FFmpeg 滤镜方案） |
-| 3D 预演台升级 | 已开发，待桌面验收 | `director` contractVersion 1→2，2D 白模升级为 3D 白模；新增 `previs-space-generator.ts` |
-| UI 图标与视觉系统 | 已开发，待桌面验收 | 新增图标系统、UI 基础/表面层 CSS；多选工具栏重设计 |
+| 视频节点 v2 重构 | 已开发，待桌面验收 | `video-frame`/`video-clip`/`video-audio` 升级为 contractVersion 2，独立配置类型；删除旧的共享 `VideoRangeConfig` |
+| 独立人声分离节点 | 已开发，待桌面验收 | 新增 `vocal-separate` 节点，从 `video-audio` 解耦；支持快速 FFmpeg 和高质量 AI 双模式；双输出（人声 + 伴奏） |
+| 统一媒体时间轴 | 已开发，待桌面验收 | `MediaTimeline` 组件：10 帧缩略图、300 点波形、播放/暂停、逐帧导航、循环预览、手动时间码 |
+| 图片宫格拆分 | 已开发，待桌面验收 | 新增 `image-split` 节点：宫格预览、面积缩放、最大 8x8 |
+| 快捷入口与模板 | 已开发，待桌面验收 | 视频节点下游按钮 + 一键提取人声链路（自动创建并预连线 video-audio → vocal-separate） |
 
-验证基线：44 个测试文件、557 项用例全部通过；Node + Web 双端类型检查通过。
+验证基线：**45 个测试文件、576 项用例全部通过**；`npx tsc --noEmit` 零错误。
+
+### 前批：功能批量交付（2026-08-30 第二批）
+
+前批一次性交付四个功能方向，已提交于 `33d82e3`，详见 [docs/HANDOFF_2026_08_30_FEATURE_BATCH.md](./docs/HANDOFF_2026_08_30_FEATURE_BATCH.md)：语音克隆节点（`tts`）、视频变换增强（取帧预设 + 人声分离）、3D 预演台升级（contractVersion 1→2）、UI 图标与视觉系统。
 
 ### 本轮新增：3D 预演台（`director`）
 
@@ -114,7 +119,12 @@ R0–R4 已在 `363f2d1` 完成并推送；本次 `39a32f2` 在其上完成导�
 | 文本     | 多文本（可选）          | `out-text`                   | 可用                                      |
 | 图片资产 | 无                      | `out-image`                  | 导入、粘贴、拖入均应走此节点              |
 | 生图     | 文本、参考图            | `out-image`                  | 可用；支持尺寸、种子和重新生成            |
-| 视频     | 文本、首帧图            | `out-video`                  | 可用；依赖已配置视频供应商                |
+| 视频资产 | 无                      | `out-video`                  | 可用；依赖已配置视频供应商；支持一键提取人声链路 |
+| 视频取帧 | `in-video`              | `out-image`                  | 可用；首帧/尾帧/手动三种模式；统一时间轴 |
+| 视频截取 | `in-video`              | `out-video`                  | 可用；双游标区间；循环预览；质量模式 |
+| 视频提音 | `in-video`              | `out-audio`                  | 可用；WAV/M4A + 采样率；波形预览 |
+| 人声分离 | `in-audio`              | `out-vocals` / `out-accompaniment` | 可用；快速 FFmpeg / 高质量 AI 双模式；双输出 |
+| 图片拆分 | `in-image`              | `out-images`                 | 可用；宫格拆分（最大 8x8）；面积缩放 |
 | 音频     | 音频、文本              | `out-audio`                  | 可用；依赖供应商                          |
 | 语音克隆 | 参考语音、文本          | `out-audio`                  | 可用；依赖本地 ComfyUI + IndexTTS-2.5    |
 | 对话     | 文本                    | `out-markdown`               | 多轮交互；保留 Markdown 语义              |
@@ -189,10 +199,10 @@ git status -sb
 ### 当前已验证基线
 
 - `npm run typecheck`：通过（Node + Web 双端类型检查）。
-- `npx vitest run`：44 个测试文件、557 项用例全部通过。
+- `npx vitest run`：**45 个测试文件、576 项用例全部通过**。
 - `git diff --check`：通过。
 - Electron 手工测试：创建导演台 → 打开工作区 → 发布 PNG 帧 → 导出 WebM，两个输出均出现"可供下游使用"状态；白屏问题已定位为旧 `node-card` 快照缺少 `config`，恢复前内存修复后再交给 tldraw 迁移。
-- 本轮新增功能（TTS / 视频变换 / 3D 预演 / UI 图标）尚未执行桌面端手工冒烟，验收路径详见 [docs/HANDOFF_2026_08_30_FEATURE_BATCH.md](./docs/HANDOFF_2026_08_30_FEATURE_BATCH.md)。
+- 本轮新增功能（视频节点 v2 重构 / 独立人声分离 / 统一时间轴 / 图片拆分 / 快捷入口）尚未执行桌面端手工冒烟，验收路径详见 [docs/HANDOFF_2026_08_30_VIDEO_RESTRUCTURE.md](./docs/HANDOFF_2026_08_30_VIDEO_RESTRUCTURE.md)。
 - 构建仍会提示 `db.ts` 同时被动态与静态导入；它不阻断构建，列入后续技术债。
 
 ### 本次功能提交
@@ -205,16 +215,17 @@ git status -sb
 
 该提交新增跨节点运行中心和只读运行索引；失败运行可从统一 executor 路径重试，资产可定位到精确产生它的 `runId`。每个生成结果只增加可选的持久化 `runId`，既有端口、节点类型、连线语义和旧结果的安全回退保持不变。
 
-### 当前未提交：功能批量交付（2026-08-30 第二批）
+### 当前未提交：视频节点 v2 重构（2026-08-30 第三批）
 
-详见 [docs/HANDOFF_2026_08_30_FEATURE_BATCH.md](./docs/HANDOFF_2026_08_30_FEATURE_BATCH.md)。本轮包含：
+详见 [docs/HANDOFF_2026_08_30_VIDEO_RESTRUCTURE.md](./docs/HANDOFF_2026_08_30_VIDEO_RESTRUCTURE.md)。本轮包含：
 
-1. **语音克隆节点（`tts`）**：新增节点类型，通过本地 ComfyUI + IndexTTS-2.5 合成音频。新增文件包括 `src/shared/tts.ts`、`src/main/comfyui/`、`src/main/ipc/comfyui.ipc.ts`、`src/main/media/tts-transform.ts`、`src/renderer/src/engine/executors/tts.ts`、`src/renderer/src/nodes/specs/bodies/tts.tsx`，并在 specs/outputProjections/index/types/CanvasEditor 中完成注册。
-2. **视频变换增强**：`video-frame` 新增首帧/尾帧预设按钮；`video-audio` 新增人声分离开关（auto/center/eq 三种模式，基于 FFmpeg 滤镜链 + ffprobe 声道检测）。修改 `src/shared/video-transform.ts`、`src/main/media/video-transform.ts`、`video-transforms.tsx`、`videoTransforms.ts` 及测试。
-3. **3D 预演台升级**：`director` contractVersion 1→2，`previs.project` Schema 1→2；2D 白模升级为 3D 白模；新增 `previs-space-generator.ts`（local-whitebox + image-depth 策略）；视频节点新增 `in-reference-video` 端口（contractVersion 1→2）。
-4. **UI 图标与视觉系统**：新增 `docs/UI_ICON_SYSTEM.md`、图标精灵图、`ui-foundation.css`、`ui-surfaces.css`；扩展 `Icon.tsx` 和 `MultiSelectToolbar.tsx`。
+1. **视频节点 v2 重构**：三个视频变换节点（`video-frame`/`video-clip`/`video-audio`）升级为 contractVersion 2，各自拥有独立配置类型（删除旧的共享 `VideoRangeConfig`）。修改 `src/shared/video-transform.ts`、`video-transforms.tsx`、`videoTransforms.ts` 等。
+2. **独立人声分离节点（`vocal-separate`）**：从 `video-audio` 解耦为独立节点；双输出端口（`out-vocals` + `out-accompaniment`）；快速 FFmpeg 和高质量 AI 双模式。新增 `vocalSeparate.ts` 执行器和 `vocal-separate.tsx` Body/Settings。
+3. **统一媒体时间轴（`MediaTimeline`）**：10 帧缩略图、300 点波形预览、播放/暂停/逐帧导航、循环预览、手动时间码输入。新增 `generateVideoThumbnails` 和 `generateAudioWaveform` IPC。
+4. **图片宫格拆分节点（`image-split`）**：新增节点，宫格预览、面积缩放、最大 8x8。新增 `src/shared/image-split.ts`、执行器和 Body。
+5. **快捷入口与一键模板**：视频资产节点新增"一键提取人声"按钮（自动创建 `video-audio` → `vocal-separate` 并预连线）；三个变换节点结果卡新增下游快捷按钮。
 
-验证：`npx vitest run` 44 文件 557 项通过；`npm run typecheck` 通过。本轮尚未执行 Electron 桌面端手工冒烟，验收路径见交接单。
+验证：`npx vitest run` **45 文件 576 项全部通过**；`npx tsc --noEmit` 零错误。本轮尚未执行 Electron 桌面端手工冒烟，验收路径见交接单。
 
 ### CR-0 / CR-1 / CR-2（2026-08-29）
 

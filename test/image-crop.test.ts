@@ -19,6 +19,12 @@ describe('图片裁剪配置', () => {
       JSON.stringify({ mode: 'rect', rect: { x: -1, y: 0.9, width: 2, height: 2 } })
     )
     expect(config.rect).toEqual({ x: 0, y: 0.9, width: 1, height: 0.1 })
+    expect(config.aspectRatio).toBe('free')
+  })
+
+  it('只接受声明过的固定裁剪比例', () => {
+    expect(parseImageCropConfig(JSON.stringify({ aspectRatio: '16:9' })).aspectRatio).toBe('16:9')
+    expect(parseImageCropConfig(JSON.stringify({ aspectRatio: '999:1' })).aspectRatio).toBe('free')
   })
 
   it('拒绝交叉或退化的四角区域', () => {

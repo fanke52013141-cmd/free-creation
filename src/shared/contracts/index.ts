@@ -2,9 +2,15 @@
 
 import type { ChatMessage, GatewayModelInfo, ProviderSpecId, VideoGenParams } from '../types'
 import type { ImageCropConfig } from '../image-crop'
+import type { ImageSplitConfig } from '../image-split'
 import type { ImageEditConfig } from '../image-edit'
 import type { TtsConfig } from '../tts'
-import type { VideoFrameConfig, VideoRangeConfig } from '../video-transform'
+import type {
+  VideoFrameConfig,
+  VideoClipConfig,
+  VideoAudioConfig,
+  VocalSeparationConfig
+} from '../video-transform'
 
 export const IPC = {
   app: {
@@ -26,9 +32,14 @@ export const IPC = {
     import: 'media:import',
     importBuffer: 'media:import-buffer',
     imageCrop: 'media:image-crop',
+    imageSplit: 'media:image-split',
     videoFrame: 'media:video-frame',
     videoClip: 'media:video-clip',
     videoAudio: 'media:video-audio',
+    videoProbe: 'media:video-probe',
+    videoThumbnails: 'media:video-thumbnails',
+    audioWaveform: 'media:audio-waveform',
+    vocalSeparate: 'media:vocal-separate',
     pick: 'media:pick',
     list: 'media:list',
     delete: 'media:delete',
@@ -102,6 +113,12 @@ export interface ImageCropTransformInput {
   config: ImageCropConfig
 }
 
+export interface ImageSplitTransformInput {
+  projectId: string
+  sourceMediaId: string
+  config: ImageSplitConfig
+}
+
 export interface VideoTransformSourceInput {
   projectId: string
   sourceMediaId: string
@@ -111,8 +128,58 @@ export interface VideoFrameTransformInput extends VideoTransformSourceInput {
   config: VideoFrameConfig
 }
 
-export interface VideoRangeTransformInput extends VideoTransformSourceInput {
-  config: VideoRangeConfig
+export interface VideoClipTransformInput extends VideoTransformSourceInput {
+  config: VideoClipConfig
+}
+
+export interface VideoAudioTransformInput extends VideoTransformSourceInput {
+  config: VideoAudioConfig
+}
+
+/** 只读取当前项目内视频的元信息，供时间轴精确显示；不产生媒体资产。 */
+export interface VideoProbeInput extends VideoTransformSourceInput {}
+
+export interface VideoProbeResult {
+  durationMs: number
+  /** 源视频的平均帧率；不可用时为 null，时间轴仍以毫秒为准。 */
+  fps: number | null
+  hasAudio: boolean
+}
+
+/** 时间轴缩略图请求：均匀采样指定数量的帧返回 data URL 数组。 */
+export interface VideoThumbnailsInput extends VideoTransformSourceInput {
+  count: number
+}
+
+export interface VideoThumbnailsResult {
+  /** 与 count 等长的 data URL 数组（JPEG）。 */
+  thumbnails: string[]
+}
+
+/** 音频波形采样请求：返回归一化振幅数组供前端绘制。 */
+export interface AudioWaveformInput {
+  projectId: string
+  sourceMediaId: string
+  /** 采样点数；建议 200-400。 */
+  samples: number
+}
+
+export interface AudioWaveformResult {
+  /** 归一化到 [0,1] 的峰值数组。 */
+  peaks: number[]
+  sampleRate: number
+}
+
+export interface VocalSeparateInput {
+  projectId: string
+  sourceMediaId: string
+  config: VocalSeparationConfig
+}
+
+export interface VocalSeparationResult {
+  vocals: import('../types').MediaAsset
+  /** 仅当 config.outputAccompaniment=true 时存在。 */
+  accompaniment?: import('../types').MediaAsset
 }
 
 // ── 本地 ComfyUI 语音复刻（IndexTTS-2.5）──

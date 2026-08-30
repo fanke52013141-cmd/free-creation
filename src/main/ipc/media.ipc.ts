@@ -6,11 +6,19 @@ import { basename, extname, join } from 'path'
 import { IPC } from '../../shared/contracts'
 import type { IpcEnvelope } from '../../shared/contracts'
 import type {
+  AudioWaveformInput,
+  AudioWaveformResult,
   ImageCropTransformInput,
+  ImageSplitTransformInput,
   ImportMediaBufferInput,
   TtsGenerateInput,
+  VideoAudioTransformInput,
+  VideoClipTransformInput,
   VideoFrameTransformInput,
-  VideoRangeTransformInput
+  VideoProbeInput,
+  VideoThumbnailsInput,
+  VideoThumbnailsResult,
+  VocalSeparateInput
 } from '../../shared/contracts'
 import type { MediaAsset, MediaImportError, MediaImportResult } from '../../shared/types'
 import {
@@ -21,12 +29,16 @@ import {
   saveBufferAsset
 } from '../store/media.repo'
 import { getDb } from '../store/db'
-import { transformImageCrop } from '../media/image-transform'
+import { transformImageCrop, transformImageSplit } from '../media/image-transform'
 import { transformTts } from '../media/tts-transform'
 import {
   transformVideoAudio,
   transformVideoClip,
-  transformVideoFrame
+  transformVideoFrame,
+  probeVideo,
+  separateVocals,
+  generateVideoThumbnails,
+  generateAudioWaveform
 } from '../media/video-transform'
 
 function ok<T>(data: T): IpcEnvelope<T> {
@@ -108,6 +120,17 @@ async function importAll(projectId: string, paths: string[]): Promise<MediaImpor
 
 export function registerMediaIpc(): void {
   ipcMain.handle(
+    IPC.media.videoProbe,
+    async (_e, input: VideoProbeInput) => {
+      if (!input?.projectId || !input.sourceMediaId) return err('INVALID_INPUT', '缺少视频元数据参数')
+      try {
+        return ok(await probeVideo(input))
+      } catch (error) {
+        return err('VIDEO_PROBE_FAILED', error instanceof Error ? error.message : String(error))
+      }
+    }
+  )
+  ipcMain.handle(
     IPC.media.import,
     async (
       _e,
@@ -116,6 +139,19 @@ export function registerMediaIpc(): void {
       if (!input?.projectId || !Array.isArray(input.paths))
         return err('INVALID_INPUT', '参数不完整')
       return ok(await importAll(input.projectId, input.paths))
+    }
+  )
+
+  ipcMain.handle(
+    IPC.media.imageSplit,
+    async (_e, input: ImageSplitTransformInput): Promise<IpcEnvelope<MediaAsset[]>> => {
+      if (!input?.projectId || !input.sourceMediaId || !input.config)
+        return err('INVALID_INPUT', '缺少图片宫格拆分参数')
+      try {
+        return ok(await transformImageSplit(input))
+      } catch (error) {
+        return err('IMAGE_SPLIT_FAILED', error instanceof Error ? error.message : String(error))
+      }
     }
   )
 
@@ -134,7 +170,7 @@ export function registerMediaIpc(): void {
   )
   ipcMain.handle(
     IPC.media.videoClip,
-    async (_e, input: VideoRangeTransformInput): Promise<IpcEnvelope<MediaAsset>> => {
+    async (_e, input: VideoClipTransformInput): Promise<IpcEnvelope<MediaAsset>> => {
       if (!input?.projectId || !input.sourceMediaId || !input.config)
         return err('INVALID_INPUT', '缺少视频截取参数')
       try {
@@ -146,13 +182,51 @@ export function registerMediaIpc(): void {
   )
   ipcMain.handle(
     IPC.media.videoAudio,
-    async (_e, input: VideoRangeTransformInput): Promise<IpcEnvelope<MediaAsset>> => {
+    async (_e, input: VideoAudioTransformInput): Promise<IpcEnvelope<MediaAsset>> => {
       if (!input?.projectId || !input.sourceMediaId || !input.config)
         return err('INVALID_INPUT', '缺少音频提取参数')
       try {
         return ok(await transformVideoAudio(input))
       } catch (error) {
         return err('VIDEO_AUDIO_FAILED', error instanceof Error ? error.message : String(error))
+      }
+    }
+  )
+  /** 时间轴缩略图：均匀采样指定数量的帧，返回 base64 JPEG data URL 数组。 */
+  ipcMain.handle(
+    IPC.media.videoThumbnails,
+    async (_e, input: VideoThumbnailsInput): Promise<IpcEnvelope<VideoThumbnailsResult>> => {
+      if (!input?.projectId || !input.sourceMediaId || !input.count)
+        return err('INVALID_INPUT', '缺少缩略图参数')
+      try {
+        return ok(await generateVideoThumbnails(input))
+      } catch (error) {
+        return err('VIDEO_THUMBNAILS_FAILED', error instanceof Error ? error.message : String(error))
+      }
+    }
+  )
+  /** 音频波形：解码为 PCM 并采样峰值，返回归一化振幅数组。 */
+  ipcMain.handle(
+    IPC.media.audioWaveform,
+    async (_e, input: AudioWaveformInput): Promise<IpcEnvelope<AudioWaveformResult>> => {
+      if (!input?.projectId || !input.sourceMediaId || !input.samples)
+        return err('INVALID_INPUT', '缺少波形参数')
+      try {
+        return ok(await generateAudioWaveform(input))
+      } catch (error) {
+        return err('AUDIO_WAVEFORM_FAILED', error instanceof Error ? error.message : String(error))
+      }
+    }
+  )
+  ipcMain.handle(
+    IPC.media.vocalSeparate,
+    async (_e, input: VocalSeparateInput) => {
+      if (!input?.projectId || !input.sourceMediaId || !input.config)
+        return err('INVALID_INPUT', '缺少人声分离参数')
+      try {
+        return ok(await separateVocals(input))
+      } catch (error) {
+        return err('VOCAL_SEPARATE_FAILED', error instanceof Error ? error.message : String(error))
       }
     }
   )

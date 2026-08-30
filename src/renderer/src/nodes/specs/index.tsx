@@ -12,6 +12,8 @@ import {
   ImageBody,
   ImageCropBody,
   ImageCropSettings,
+  ImageSplitBody,
+  ImageSplitSettings,
   ImageEditBody,
   ImageEditSettings,
   ImageGenerateBody,
@@ -30,6 +32,8 @@ import {
   VideoClipSettings,
   VideoFrameBody,
   VideoFrameSettings
+  ,VocalSeparateBody
+  ,VocalSeparateSettings
 } from './bodies'
 import { aiProcessExecutor } from '../../engine/executors/aiProcess'
 import { audioExecutor } from '../../engine/executors/audio'
@@ -46,6 +50,7 @@ import {
 import { imageGenExecutor } from '../../engine/executors/imageGen'
 import { imageExecutor } from '../../engine/executors/image'
 import { imageCropExecutor } from '../../engine/executors/imageCrop'
+import { imageSplitExecutor } from '../../engine/executors/imageSplit'
 import { imageEditExecutor } from '../../engine/executors/imageEdit'
 import { iterateExecutor } from '../../engine/executors/iterate'
 import { jsonExecutor } from '../../engine/executors/json'
@@ -60,6 +65,7 @@ import {
   videoClipExecutor,
   videoFrameExecutor
 } from '../../engine/executors/videoTransforms'
+import { vocalSeparateExecutor } from '../../engine/executors/vocalSeparate'
 import { directorExecutor } from '../../engine/executors/director'
 import {
   projectAiProcessOutputs,
@@ -69,6 +75,7 @@ import {
   projectDirectorOutputs,
   projectImageGenOutputs,
   projectImageCropOutputs,
+  projectImageSplitOutputs,
   projectImageEditOutputs,
   projectImageOutputs,
   projectIterateOutputs,
@@ -83,6 +90,7 @@ import {
   projectVideoAudioOutputs,
   projectVideoClipOutputs,
   projectVideoFrameOutputs
+  ,projectVocalSeparateOutputs
 } from './outputProjections'
 import { parseStructuredDataConfig } from '../structured-data'
 
@@ -193,6 +201,33 @@ export function registerBaseNodeTypes(): void {
     Body: ImageCropBody
   })
   registerNodeType({
+    type: 'image-split',
+    contractVersion: 1,
+    label: '拆分',
+    icon: 'grid',
+    color: '#14b8a6',
+    defaultSize: { w: 340, h: 260 },
+    description:
+      '把一张上游图片按行列派生为多张独立图片。面积缩放以每个格子的中心为锚点；输出同时提供当前图片和可批处理的图片集合。',
+    ports: {
+      in: [
+        input('in-image', '原图', 'image', '必须连接的一张源图片；按行列从左到右、从上到下拆分。', {
+          required: true
+        })
+      ],
+      out: [
+        output('out-image', '当前图片', 'image', '从图片集合中选中的一格，可直接连接图片类下游。'),
+        output('out-images', '图片集合', 'json', '所有格子对应的真实图片资产引用列表，可连接循环节点批处理。', {
+          schema: LIST_ITEMS
+        })
+      ]
+    },
+    projectOutputs: projectImageSplitOutputs,
+    executor: imageSplitExecutor,
+    SettingsPanel: ImageSplitSettings,
+    Body: ImageSplitBody
+  })
+  registerNodeType({
     type: 'image-gen',
     contractVersion: 1,
     label: '生图',
@@ -282,15 +317,15 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'video-frame',
-    contractVersion: 1,
+    contractVersion: 2,
     label: '取帧',
     icon: 'frame',
     color: '#fb7185',
     defaultSize: { w: 340, h: 260 },
-    description: '在指定毫秒位置从一段上游视频取出一帧，输出新的 PNG 图片资产。',
+    description: '从上游视频提取首帧、尾帧或任意指定时刻的画面，输出新的 PNG/JPG 图片资产。',
     ports: {
       in: [input('in-video', '源视频', 'video', '必须连接的一段源视频。', { required: true })],
-      out: [output('out-image', '视频帧', 'image', '指定时间点解码得到的新 PNG 图片资产。')]
+      out: [output('out-image', '视频帧', 'image', '指定时间点解码得到的新图片资产。')]
     },
     projectOutputs: projectVideoFrameOutputs,
     executor: videoFrameExecutor,
@@ -299,12 +334,12 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'video-clip',
-    contractVersion: 1,
+    contractVersion: 2,
     label: '截取',
     icon: 'clip',
     color: '#ec4899',
     defaultSize: { w: 340, h: 260 },
-    description: '从上游视频按起止毫秒精确截取片段，输出新的 MP4 视频资产。',
+    description: '从上游视频按起止毫秒精确截取片段，默认重编码输出 MP4 视频资产。',
     ports: {
       in: [input('in-video', '源视频', 'video', '必须连接的一段源视频。', { required: true })],
       out: [output('out-video', '视频片段', 'video', '精确重编码后的 MP4 视频片段。')]
@@ -316,20 +351,41 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'video-audio',
-    contractVersion: 1,
+    contractVersion: 2,
     label: '提音',
     icon: 'audio',
     color: '#f59e0b',
     defaultSize: { w: 340, h: 260 },
-    description: '从上游视频的指定时间范围提取音轨，输出新的 M4A 音频资产。',
+    description: '从上游视频的指定时间范围忠实提取原始音轨，输出 WAV 或 M4A 音频资产。',
     ports: {
       in: [input('in-video', '源视频', 'video', '必须连接的一段源视频。', { required: true })],
-      out: [output('out-audio', '音频片段', 'audio', '从指定范围提取并转码的新 M4A 音频资产。')]
+      out: [output('out-audio', '音频片段', 'audio', '从指定范围提取并转码的新音频资产。')]
     },
     projectOutputs: projectVideoAudioOutputs,
     executor: videoAudioExecutor,
     SettingsPanel: VideoAudioSettings,
     Body: VideoAudioBody
+  })
+  registerNodeType({
+    type: 'vocal-separate',
+    contractVersion: 2,
+    label: '人声分离',
+    icon: 'audio',
+    color: '#a78bfa',
+    defaultSize: { w: 340, h: 260 },
+    description:
+      '将一段音频分离为人声与伴奏。快速模式使用 FFmpeg 滤镜增强，高质量模式使用本地 AI 模型。',
+    ports: {
+      in: [input('in-audio', '源音频', 'audio', '必须连接的一段完整音频资产。', { required: true })],
+      out: [
+        output('out-vocals', '人声', 'audio', '分离产出的人声音轨。'),
+        output('out-accompaniment', '伴奏', 'audio', '可选：分离产出的伴奏音轨。')
+      ]
+    },
+    projectOutputs: projectVocalSeparateOutputs,
+    executor: vocalSeparateExecutor,
+    SettingsPanel: VocalSeparateSettings,
+    Body: VocalSeparateBody
   })
   registerNodeType({
     type: 'audio',
