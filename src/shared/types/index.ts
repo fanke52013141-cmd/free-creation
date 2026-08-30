@@ -12,6 +12,7 @@ export type ActiveNodeTypeId =
   | 'video-clip'
   | 'video-audio'
   | 'audio'
+  | 'tts'
   | 'chat'
   | 'processor'
   | 'code'

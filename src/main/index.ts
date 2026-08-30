@@ -9,6 +9,7 @@ import icon from '../../resources/icon.png?asset'
 import { registerProjectIpc } from './ipc/project.ipc'
 import { registerMediaIpc } from './ipc/media.ipc'
 import { registerGatewayIpc } from './ipc/gateway.ipc'
+import { registerComfyuiIpc } from './ipc/comfyui.ipc'
 import { registerWorkspaceStateIpc } from './ipc/workspace-state.ipc'
 import { closeDb, getDb, getProjectsDir } from './store/db'
 import { reconcileWorkspace } from './store/workspace-health'
@@ -146,6 +147,7 @@ app.whenReady().then(() => {
   registerMediaProtocol()
   registerProjectIpc()
   registerMediaIpc()
+  registerComfyuiIpc()
   registerWorkspaceStateIpc()
   const win = createWindow()
   registerGatewayIpc(win)

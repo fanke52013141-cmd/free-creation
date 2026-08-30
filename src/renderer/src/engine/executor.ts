@@ -497,20 +497,23 @@ async function runSubflowForIterate(
   runSubflow: (request: SubflowRequest) => Promise<Record<string, ContractOutputs>>,
   request: SubflowRequest
 ): Promise<Record<string, ContractOutputs>> {
+  // 每一项切换到独立 runId。循环体卡片虽然复用，但运行记录和媒体结果不能复用
+  // 工作流级 runId，否则 nodeRunHistory 会按相同 runId 去重，资产也无法精确定位。
+  const itemCtx: WorkflowContext = request.itemRunId ? { ...ctx, runId: request.itemRunId } : ctx
   const nodeIds = expandIterationBody(ctx.graph, request.nodeIds, request.iterationNodeId)
   // 每个 item 执行迭代体前重置迭代体节点的上次运行产物，强制每项独立产出
-  resetSubflowRunState(ctx, nodeIds)
+  resetSubflowRunState(itemCtx, nodeIds)
 
   const results: Record<string, ContractOutputs> = {}
-  const byId = new Map(ctx.graph.nodes.map((n) => [n.id, n]))
+  const byId = new Map(itemCtx.graph.nodes.map((n) => [n.id, n]))
   let failureReason: string | null = null
   for (const nodeId of nodeIds) {
-    if (ctx.token.cancelled) break
+    if (itemCtx.token.cancelled) break
     const node = byId.get(nodeId)
     if (!node) continue
     const target = request.itemTargets?.find((candidate) => candidate.nodeId === nodeId)
     const result = await executeNodeOnce(
-      ctx,
+      itemCtx,
       node,
       runSubflow,
       target
@@ -521,15 +524,15 @@ async function runSubflowForIterate(
           }
         : undefined
     )
-    if (ctx.token.cancelled) break
+    if (itemCtx.token.cancelled) break
     if (result.status === 'failed') {
       failureReason = result.reason ?? '迭代体节点执行失败'
       break
     }
-    const latest = ctx.editor.getShape<NodeCardShape>(node.id as TLShapeId)
+    const latest = itemCtx.editor.getShape<NodeCardShape>(node.id as TLShapeId)
     if (result.status === 'done' && latest) {
       // done 路径下 executeNodeOnce 已校验输出契约；这里防御性再检查，不吞错误
-      const projected = buildOutputPackets(node, projectNodeOutputs(latest), ctx.runId)
+      const projected = buildOutputPackets(node, projectNodeOutputs(latest), itemCtx.runId)
       if (projected.errors.length > 0) {
         failureReason = `迭代体节点 ${node.type} 输出契约失败：${projected.errors.join('；')}`
         break

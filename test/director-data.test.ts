@@ -3,6 +3,10 @@ import {
   createDirectorProject,
   createDirectorPublishRecord,
   createDirectorShot,
+  createImageDepthSpace,
+  createLocalWhiteboxSpace,
+  directorShotWarnings,
+  directorSequenceDuration,
   directorCameraFov,
   directorCameraTarget,
   evaluateDirectorShot,
@@ -12,6 +16,7 @@ import {
   recordDirectorActorKeyframe,
   recordDirectorCameraKeyframe,
   removeDirectorShot,
+  syncDirectorSequence,
   type DirectorPublishRecord
 } from '@renderer/nodes/director-data'
 
@@ -61,6 +66,56 @@ describe('导演台发布记录', () => {
 })
 
 describe('导演台 2D 预演数据', () => {
+  it('v1 工程会规范化为携带空间和镜头序列的 v2 工程', () => {
+    const v1 = {
+      version: 1,
+      revision: 3,
+      activeShotId: 'shot-1',
+      shots: [{ ...createDirectorShot(), id: 'shot-1' }]
+    }
+    const parsed = parseDirectorProject(JSON.stringify(v1))
+    expect(parsed.version).toBe(2)
+    expect(parsed.space.status).toBe('empty')
+    expect(parsed.sequence.cuts[0]?.shotId).toBe('shot-1')
+  })
+
+  it('本地白模只保存轻量 primitive 与来源 ID，不嵌入媒体二进制', () => {
+    const space = createLocalWhiteboxSpace(['image-a'], ['projects/a.png'])
+    expect(space.status).toBe('ready')
+    expect(space.mode).toBe('local-whitebox')
+    expect(space.primitives.length).toBeGreaterThan(0)
+    expect(JSON.stringify(space)).not.toContain('base64')
+  })
+
+  it('图片视差空间只保存真实来源引用并限制视差强度', () => {
+    const space = createImageDepthSpace('image-a', 'projects/a.png', 3)
+    expect(space.mode).toBe('image-depth')
+    expect(space.backgroundMediaId).toBe('image-a')
+    expect(space.backgroundMediaPath).toBe('projects/a.png')
+    expect(space.depthSource).toBe('heuristic-luminance')
+    expect(space.parallaxStrength).toBe(1)
+    expect(JSON.stringify(space)).not.toContain('data:image')
+  })
+
+  it('镜头顺序变化会同步硬切序列并计算总时长', () => {
+    const project = createDirectorProject()
+    const second = createDirectorShot('镜头 02')
+    const full = { ...project, shots: [project.shots[0], second] }
+    const sequence = syncDirectorSequence(full)
+    expect(sequence.cuts.map((cut) => cut.shotId)).toEqual([project.shots[0].id, second.id])
+    expect(directorSequenceDuration({ ...full, sequence })).toBeGreaterThan(0)
+  })
+
+  it('白模碰撞和过长镜头只给出非阻断预警', () => {
+    const project = createDirectorProject()
+    const shot = { ...project.shots[0], camera: { ...project.shots[0].camera, durationSec: 13 } }
+    const warnings = directorShotWarnings(
+      { ...project, space: createLocalWhiteboxSpace(['image-a'], ['projects/a.png']) },
+      shot
+    )
+    expect(warnings.some((warning) => warning.includes('12 秒'))).toBe(true)
+  })
+
   it('3D 预演与发布使用同一套焦段和机位朝向语义', () => {
     const camera = { ...createDirectorShot().camera, heading: 90, pitch: 0, focalLengthMm: 50 }
     expect(directorCameraFov(50)).toBe(43.25)

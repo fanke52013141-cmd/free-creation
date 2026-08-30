@@ -1,0 +1,484 @@
+/*
+ * UI Surfaces — P0/P1/P2 component layer.
+ *
+ * Foundation owns tokens, canvas, cards and icon states. This file owns reusable application
+ * surfaces: panels, menus, forms, result cards and the light canvas theme. Keeping this layer
+ * separate prevents component-specific rules from leaking back into the canvas foundation.
+ */
+
+/* ── P0: theme boundary ────────────────────────────────────────────────── */
+.canvas-theme-light {
+  --bg: #f4f0e9;
+  --card: #fffdfa;
+  --card-hover: #f5f1ea;
+  --sunk: #eee9e0;
+  --panel: #faf7f1;
+  --surface-1: #f7f3ec;
+  --surface-2: #ece6dc;
+  --line: rgba(42, 55, 67, 0.14);
+  --border-soft: rgba(42, 55, 67, 0.18);
+  --txt: #17232d;
+  --muted: #657382;
+  --txt-dim: #7d8a97;
+  --elevation-1: 0 14px 32px rgba(50, 43, 34, 0.12);
+  --elevation-float: 0 18px 46px rgba(50, 43, 34, 0.17);
+}
+
+.canvas-theme-light .node-card {
+  border-color: rgba(34, 48, 61, 0.16);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(250, 247, 240, 0.8)), #fffdfa;
+  box-shadow: 0 12px 28px rgba(58, 49, 38, 0.12);
+}
+
+.canvas-theme-light .node-title,
+.canvas-theme-light .asset-empty > span,
+.canvas-theme-light .crop-empty > span {
+  color: #1d2a34;
+}
+
+.canvas-theme-light .node-card textarea,
+.canvas-theme-light .node-card input,
+.canvas-theme-light .node-card select,
+.canvas-theme-light .node-media,
+.canvas-theme-light .port-dot {
+  background: #f7f3ec;
+}
+
+.canvas-theme-light .node-hover-toolbar,
+.canvas-theme-light .node-media-actions,
+.canvas-theme-light .node-media-next-actions,
+.canvas-theme-light .media-result-collection {
+  background: rgba(247, 243, 236, 0.9);
+}
+
+.canvas-theme-light .node-status {
+  box-shadow: 0 0 0 2px #fffdfa;
+}
+
+.canvas-theme-light .node-card .btn-ghost.small {
+  border-color: rgba(42, 55, 67, 0.18);
+  background: rgba(42, 55, 67, 0.045);
+  color: #3b5161;
+}
+
+.canvas-theme-light .node-card .btn-ghost.small:hover {
+  border-color: rgba(24, 143, 202, 0.45);
+  background: rgba(66, 185, 245, 0.12);
+  color: #11658e;
+}
+
+.canvas-theme-light .node-hover-toolbar {
+  border-color: rgba(42, 55, 67, 0.14);
+  background: rgba(255, 253, 250, 0.94);
+  box-shadow: 0 8px 22px rgba(58, 49, 38, 0.13);
+}
+
+.canvas-theme-light .node-media-file-actions .icon-btn,
+.canvas-theme-light .media-result-tile-actions .icon-btn {
+  border-color: rgba(42, 55, 67, 0.16);
+  background: rgba(255, 253, 250, 0.88);
+  color: #3d5262;
+}
+
+/* ── P1: one panel material ────────────────────────────────────────────── */
+.side-panel,
+.node-contract-panel,
+.chat-side-panel {
+  border-left-color: rgba(231, 238, 247, 0.12);
+  background: linear-gradient(145deg, rgba(43, 49, 58, 0.95), rgba(23, 27, 33, 0.98));
+  box-shadow: -18px 0 44px rgba(0, 0, 0, 0.26);
+}
+
+.side-panel-head,
+.contract-head,
+.csp-header {
+  min-height: 54px;
+  padding: 11px 14px;
+  border-bottom-color: rgba(231, 238, 247, 0.1);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.028), transparent);
+}
+
+.side-panel-icon {
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(231, 238, 247, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.045);
+  color: #aee4ff;
+}
+
+.side-panel-title,
+.contract-head strong,
+.csp-title {
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.side-panel-close,
+.csp-icon-btn,
+.csp-close {
+  width: 30px;
+  height: 30px;
+  border-color: transparent;
+  border-radius: 8px;
+}
+
+.side-panel-close:hover,
+.csp-icon-btn:hover,
+.csp-close:hover {
+  border-color: rgba(231, 238, 247, 0.12);
+  background: rgba(255, 255, 255, 0.065);
+  color: #edf5fb;
+}
+
+.side-panel-body,
+.contract-body,
+.csp-messages {
+  gap: 12px;
+  padding: 14px;
+  scrollbar-color: rgba(173, 192, 210, 0.3) transparent;
+}
+
+.side-panel-body::-webkit-scrollbar,
+.contract-body::-webkit-scrollbar,
+.csp-messages::-webkit-scrollbar,
+.search-results::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+.side-panel-body::-webkit-scrollbar-thumb,
+.contract-body::-webkit-scrollbar-thumb,
+.csp-messages::-webkit-scrollbar-thumb,
+.search-results::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 99px;
+  background: rgba(173, 192, 210, 0.3);
+  background-clip: padding-box;
+}
+
+.side-panel-primary,
+.side-panel-secondary,
+.contract-run-actions button {
+  min-height: 34px;
+  border-radius: 8px;
+  font-weight: 600;
+  transition:
+    color 140ms ease,
+    border-color 140ms ease,
+    background-color 140ms ease,
+    transform 140ms ease;
+}
+
+.side-panel-primary {
+  border: 1px solid rgba(131, 216, 255, 0.38);
+  background: linear-gradient(180deg, #53c5fa, #2caeea);
+  box-shadow: 0 7px 16px rgba(31, 173, 234, 0.14);
+}
+
+.side-panel-primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #67ceff, #37b8ef);
+  transform: translateY(-1px);
+}
+
+.side-panel-secondary {
+  border-color: rgba(231, 238, 247, 0.12);
+  background: rgba(255, 255, 255, 0.035);
+  color: #d4dee8;
+}
+
+.side-panel-secondary:hover:not(:disabled) {
+  border-color: rgba(105, 208, 255, 0.38);
+  background: rgba(66, 185, 245, 0.09);
+  color: #e9f8ff;
+}
+
+.side-panel-empty,
+.contract-empty,
+.crop-no-source,
+.crop-invalid {
+  border-color: rgba(231, 238, 247, 0.13);
+  border-style: dashed;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.contract-tabs {
+  gap: 4px;
+  padding: 4px;
+  border-color: rgba(231, 238, 247, 0.1);
+  border-radius: 10px;
+  background: rgba(8, 12, 16, 0.3);
+}
+
+.contract-tabs button {
+  min-height: 28px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.contract-tabs button:hover {
+  border-color: rgba(231, 238, 247, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.contract-tabs button.active {
+  border-color: rgba(98, 199, 246, 0.2);
+  background: rgba(66, 185, 245, 0.14);
+  color: #c1edff;
+}
+
+.contract-overview-grid > span,
+.contract-run-info,
+.contract-run-history-item {
+  border-color: rgba(231, 238, 247, 0.1);
+  border-radius: 9px;
+  background: rgba(8, 12, 16, 0.22);
+}
+
+.contract-section + .contract-section {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(231, 238, 247, 0.09);
+}
+
+.contract-section h4 {
+  margin-bottom: 8px;
+  font-size: 11px;
+  letter-spacing: 0.015em;
+}
+
+.audio-isolation-control {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--surface-border, rgba(255, 255, 255, 0.1));
+  border-radius: 10px;
+  background: var(--surface-raised, rgba(255, 255, 255, 0.035));
+}
+
+.audio-isolation-toggle,
+.audio-isolation-mode {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-primary, #f5f7fa);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.audio-isolation-toggle input {
+  accent-color: var(--accent-primary, #57c7ff);
+}
+
+.audio-isolation-mode {
+  justify-content: space-between;
+  color: var(--text-secondary, #9fa8b7);
+  font-weight: 500;
+}
+
+.audio-isolation-mode select {
+  min-width: 116px;
+  padding: 5px 8px;
+  border: 1px solid var(--surface-border, rgba(255, 255, 255, 0.12));
+  border-radius: 7px;
+  background: var(--surface-input, rgba(0, 0, 0, 0.2));
+  color: var(--text-primary, #f5f7fa);
+  font: inherit;
+}
+
+.contract-port {
+  margin-bottom: 6px;
+  padding: 9px;
+  border: 1px solid rgba(231, 238, 247, 0.08);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.contract-port + .contract-port {
+  border-top: 1px solid rgba(231, 238, 247, 0.08);
+}
+
+.contract-dot.connected {
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.12);
+}
+
+.gw-panel,
+.search-panel,
+.engine-errors,
+.media-preview-box {
+  border-color: rgba(231, 238, 247, 0.13);
+  background: linear-gradient(145deg, rgba(43, 49, 58, 0.98), rgba(22, 26, 32, 0.98));
+  box-shadow: var(--elevation-float);
+  backdrop-filter: blur(18px);
+}
+
+.search-panel,
+.gw-panel,
+.media-preview-box {
+  border-radius: 14px;
+}
+
+.media-preview-mask {
+  background: rgba(6, 9, 13, 0.76);
+  backdrop-filter: blur(7px);
+}
+
+.media-preview-title {
+  min-height: 48px;
+  border-bottom-color: rgba(231, 238, 247, 0.1);
+  background: rgba(255, 255, 255, 0.02);
+  color: #e6edf4;
+  font-weight: 600;
+}
+
+.engine-errors {
+  overflow: hidden auto;
+  border-color: rgba(251, 113, 133, 0.34);
+}
+
+.engine-errors-head {
+  background: rgba(251, 113, 133, 0.06);
+}
+
+.director-studio {
+  border: 1px solid rgba(231, 238, 247, 0.12);
+  box-shadow: 0 28px 72px rgba(0, 0, 0, 0.48);
+}
+
+.director-topbar,
+.director-panel-head {
+  border-color: rgba(231, 238, 247, 0.1);
+}
+
+/* ── P2: shared controls and result surfaces ───────────────────────────── */
+.side-panel :is(input:not([type='range']):not([type='checkbox']), select, textarea),
+.node-contract-panel :is(input:not([type='range']):not([type='checkbox']), select, textarea),
+.chat-side-panel :is(input:not([type='range']):not([type='checkbox']), select, textarea),
+.gw-panel :is(input:not([type='range']):not([type='checkbox']), select, textarea) {
+  min-height: 32px;
+  border-color: rgba(231, 238, 247, 0.13);
+  border-radius: 8px;
+  background: rgba(8, 12, 16, 0.32);
+  color: var(--txt);
+  font: inherit;
+  font-size: 12px;
+}
+
+.side-panel textarea,
+.node-contract-panel textarea,
+.chat-side-panel textarea,
+.gw-panel textarea {
+  min-height: 76px;
+  padding: 8px 10px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.side-panel :is(input, select, textarea):focus,
+.node-contract-panel :is(input, select, textarea):focus,
+.chat-side-panel :is(input, select, textarea):focus,
+.gw-panel :is(input, select, textarea):focus {
+  outline: none;
+  border-color: rgba(99, 202, 249, 0.62);
+  box-shadow: 0 0 0 3px rgba(66, 185, 245, 0.1);
+}
+
+.contract-settings-code,
+.contract-port code {
+  border-color: rgba(196, 181, 253, 0.18);
+  background: rgba(13, 16, 23, 0.72);
+}
+
+.media-result-collection {
+  padding: 7px 9px 9px;
+}
+
+.media-result-collection-head {
+  margin-bottom: 7px;
+  color: #aebbc8;
+  font-weight: 600;
+}
+
+.media-result-grid {
+  gap: 6px;
+}
+
+.media-result-tile,
+.media-result-compare-item {
+  border-color: rgba(231, 238, 247, 0.12);
+  border-radius: 7px;
+  background: #11161d;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.035);
+  transition:
+    border-color 140ms ease,
+    transform 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.media-result-tile:hover,
+.media-result-tile.selected,
+.media-result-tile.compare {
+  border-color: rgba(101, 205, 250, 0.78);
+  box-shadow: 0 0 0 2px rgba(66, 185, 245, 0.11);
+}
+
+.media-result-tile:hover {
+  transform: translateY(-1px);
+}
+
+.media-result-tile-actions {
+  top: 4px;
+  right: 4px;
+  gap: 3px;
+}
+
+.media-result-compare-item > small {
+  left: 5px;
+  bottom: 4px;
+  padding: 2px 4px;
+  border: 1px solid rgba(231, 238, 247, 0.1);
+  border-radius: 4px;
+  background: rgba(8, 11, 15, 0.72);
+}
+
+.asset-card,
+.run-card,
+.history-card {
+  border-color: rgba(231, 238, 247, 0.11);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+  box-shadow: none;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    transform 140ms ease;
+}
+
+.asset-card:hover,
+.run-card:hover,
+.history-card:hover {
+  border-color: rgba(119, 207, 250, 0.32);
+  background: rgba(66, 185, 245, 0.055);
+  transform: translateY(-1px);
+}
+
+.run-card.success,
+.run-card.failed,
+.run-card.running {
+  border-left-width: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .side-panel-primary,
+  .side-panel-secondary,
+  .media-result-tile,
+  .asset-card,
+  .run-card,
+  .history-card {
+    transition: none;
+  }
+}

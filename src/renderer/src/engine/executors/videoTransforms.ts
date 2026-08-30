@@ -31,7 +31,7 @@ async function executeVideoTransform(
         kind === 'clip'
           ? await window.api.clipVideo(input)
           : await window.api.extractVideoAudio(input)
-      prompt = `源视频 ${source.mediaId} · ${config.startMs}-${config.endMs}ms`
+      prompt = `源视频 ${source.mediaId} · ${config.startMs}-${config.endMs}ms${config.removeBackground ? ' · 人声分离' : ''}`
     }
     if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
     if (!result.ok) return { status: 'failed', reason: result.error.message }

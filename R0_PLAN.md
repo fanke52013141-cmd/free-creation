@@ -8,12 +8,12 @@
 
 R1-R7 主体已完成后，当前代码有四类会在发布时暴露的问题，R0 逐一对症：
 
-| 问题 | 代码证据 | 后果 |
-| --- | --- | --- |
-| 运行错误只存在内存 | `engine/store.ts:11-20` 的 `RunError` 仅进渲染进程 store；主进程虽有 `electron-log`（`main/index.ts:14`），但渲染进程没有任何错误上报通道 | 重启后错误全部丢失，用户报障时无据可查 |
-| 旧项目静默降级 | `canvas/graph.ts:307-331` `deriveGraph` 遇到未知 `nodeType` 产出空端口节点并照常持久化；未知 `portId` 的边在 `createEdge`（graph.ts:135-146）静默返回 false | 升级或回滚版本后，坏数据被无提示写入 project.json，越存越坏 |
-| 手动按钮与全局运行双轨 | 10 处卡片内按钮绕过执行器直调 `window.api.gateway.*`（详见 §3 WP3 排查表） | 手动路径不做契约校验、不登记输出、不写运行错误、无取消信号 |
-| 回归全靠手感和记忆 | 迁移逻辑内嵌在 `CanvasEditor.tsx:530-626` 的 `handleMount` 中，无测试；无示例项目、无统一回归表 | 每次改动后无法系统性验证未破坏既有节点 |
+| 问题                   | 代码证据                                                                                                                                                    | 后果                                                        |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| 运行错误只存在内存     | `engine/store.ts:11-20` 的 `RunError` 仅进渲染进程 store；主进程虽有 `electron-log`（`main/index.ts:14`），但渲染进程没有任何错误上报通道                   | 重启后错误全部丢失，用户报障时无据可查                      |
+| 旧项目静默降级         | `canvas/graph.ts:307-331` `deriveGraph` 遇到未知 `nodeType` 产出空端口节点并照常持久化；未知 `portId` 的边在 `createEdge`（graph.ts:135-146）静默返回 false | 升级或回滚版本后，坏数据被无提示写入 project.json，越存越坏 |
+| 手动按钮与全局运行双轨 | 10 处卡片内按钮绕过执行器直调 `window.api.gateway.*`（详见 §3 WP3 排查表）                                                                                  | 手动路径不做契约校验、不登记输出、不写运行错误、无取消信号  |
+| 回归全靠手感和记忆     | 迁移逻辑内嵌在 `CanvasEditor.tsx:530-626` 的 `handleMount` 中，无测试；无示例项目、无统一回归表                                                             | 每次改动后无法系统性验证未破坏既有节点                      |
 
 R0 完成标准（沿用 ROADMAP 原文，验收映射见 §6）：
 
@@ -92,14 +92,14 @@ WP2 旧快照迁移   ──┘            WP4 示例项目（随时可插入，
 
 **现状排查结果**（10 处绕过执行器的按钮）：
 
-| 类别 | 按钮 | 位置 | 问题 |
-| --- | --- | --- | --- |
-| 生成类 | 生图-生成图片 | bodies/image-gen.tsx:69-99 | 直调 `imageGenerate` 写 props，无契约校验、无输出登记、无取消 |
-| 生成类 | 视频-生成/取消/重新生成 | bodies/video.tsx:135-164、186-202 | 任务生命周期自管，绕过 `videoExecutor` |
-| 生成类 | 音频-生成语音 | bodies/audio.tsx:137-166 | 绕过 `audioExecutor` |
-| 生成类 | 分镜-单镜头/全部生图 | bodies/storyboard.tsx:155-211 | 直调 `imageGenerate` 写镜头字段 |
-| 导入类 | 图片-导入、音频-上传 | bodies/image.tsx:16-33、audio.tsx:90-107 | 资产编辑，直写 props |
-| 辅助类 | 脚本-AI 拆解、代码-AI 生成、文本-生成N图 | bodies/script.tsx:284-325、code.tsx:253-287、text.tsx:30-67 | 配置编辑辅助，非运行路径 |
+| 类别   | 按钮                                     | 位置                                                        | 问题                                                          |
+| ------ | ---------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------- |
+| 生成类 | 生图-生成图片                            | bodies/image-gen.tsx:69-99                                  | 直调 `imageGenerate` 写 props，无契约校验、无输出登记、无取消 |
+| 生成类 | 视频-生成/取消/重新生成                  | bodies/video.tsx:135-164、186-202                           | 任务生命周期自管，绕过 `videoExecutor`                        |
+| 生成类 | 音频-生成语音                            | bodies/audio.tsx:137-166                                    | 绕过 `audioExecutor`                                          |
+| 生成类 | 分镜-单镜头/全部生图                     | bodies/storyboard.tsx:155-211                               | 直调 `imageGenerate` 写镜头字段                               |
+| 导入类 | 图片-导入、音频-上传                     | bodies/image.tsx:16-33、audio.tsx:90-107                    | 资产编辑，直写 props                                          |
+| 辅助类 | 脚本-AI 拆解、代码-AI 生成、文本-生成N图 | bodies/script.tsx:284-325、code.tsx:253-287、text.tsx:30-67 | 配置编辑辅助，非运行路径                                      |
 
 **分类处置**（需确认的决策点见 §5）：
 
@@ -153,12 +153,12 @@ WP2 旧快照迁移   ──┘            WP4 示例项目（随时可插入，
 
 按周排（单人节奏，可压缩）：
 
-| 阶段 | 内容 | 产出 |
-| --- | --- | --- |
-| 第 1 段 | WP1 全部 + WP2 任务 1-2（迁移纯函数化 + inspect） | 日志链路可用；旧逻辑获得测试保护 |
-| 第 2 段 | WP2 任务 3-6 + WP3 任务 1（runNodeManually 设计与实现） | 未知内容显式化；手动运行入口就绪 |
-| 第 3 段 | WP3 任务 2-6（逐节点改造 + 一致性矩阵）+ 同步补 T5 测试 | 双轨消除 |
-| 第 4 段 | WP4 + WP5，最后统一跑 §5 测试计划全量 | 回归表、示例项目、发布冒烟、文档回写 |
+| 阶段    | 内容                                                    | 产出                                 |
+| ------- | ------------------------------------------------------- | ------------------------------------ |
+| 第 1 段 | WP1 全部 + WP2 任务 1-2（迁移纯函数化 + inspect）       | 日志链路可用；旧逻辑获得测试保护     |
+| 第 2 段 | WP2 任务 3-6 + WP3 任务 1（runNodeManually 设计与实现） | 未知内容显式化；手动运行入口就绪     |
+| 第 3 段 | WP3 任务 2-6（逐节点改造 + 一致性矩阵）+ 同步补 T5 测试 | 双轨消除                             |
+| 第 4 段 | WP4 + WP5，最后统一跑 §5 测试计划全量                   | 回归表、示例项目、发布冒烟、文档回写 |
 
 每段收尾跑一次 `pnpm typecheck && pnpm lint && pnpm test && pnpm build`，保持 CI 绿色，不攒到最后。
 
@@ -168,22 +168,22 @@ WP2 旧快照迁移   ──┘            WP4 示例项目（随时可插入，
 
 ### 5.1 单元测试（vitest，node 环境，新增文件）
 
-| 编号 | 文件 | 覆盖内容 | 对应 WP |
-| --- | --- | --- | --- |
-| T1 | `test/sanitize.test.ts` | `sanitizeRunError` 真值表：Bearer/sk-/api_key token 剔除、URL 只留协议+域名、超长截断、中文与多行错误保留 | WP1 |
-| T2 | `test/run-error.test.ts` | 错误构造纯函数：各阶段（input/execution/output/topo）产出字段齐全（nodeId/portId/contractVersion/runId）；拓扑环错误进 store 不再只 toast | WP1 |
-| T3 | `test/legacy-migrations.test.ts` | 四段迁移输入输出真值表：image→image-gen（有无 prompt 两分支）、compose 删除、group 输出分组指令、原生 tldraw 图片转节点；迁移幂等（二次运行不再变更） | WP2 |
-| T4 | `test/project-inspect.test.ts` | `inspectProjectFile`：未知 nodeType / 未知 portId / 高 contractVersion / 非 v1 文件 / 正常文件 五类输入的警告断言；不修改原数据 | WP2 |
-| T5 | `test/manual-run.test.ts` | 同图同节点：`runNodeManually` 与 `runWorkflow` 的输出投影、持久化 props 逐字段一致（沿用 executors.test.ts 的 fake editor 模式）；手动失败走同一错误路径 | WP3 |
-| T6 | `test/graph-unknown-ports.test.ts` | `deriveGraph` 对未知端口边产出 flagged 标记与警告；flagged 边不参与运行、运行时报端口级错误 | WP2 |
+| 编号 | 文件                               | 覆盖内容                                                                                                                                                 | 对应 WP |
+| ---- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| T1   | `test/sanitize.test.ts`            | `sanitizeRunError` 真值表：Bearer/sk-/api_key token 剔除、URL 只留协议+域名、超长截断、中文与多行错误保留                                                | WP1     |
+| T2   | `test/run-error.test.ts`           | 错误构造纯函数：各阶段（input/execution/output/topo）产出字段齐全（nodeId/portId/contractVersion/runId）；拓扑环错误进 store 不再只 toast                | WP1     |
+| T3   | `test/legacy-migrations.test.ts`   | 四段迁移输入输出真值表：image→image-gen（有无 prompt 两分支）、compose 删除、group 输出分组指令、原生 tldraw 图片转节点；迁移幂等（二次运行不再变更）    | WP2     |
+| T4   | `test/project-inspect.test.ts`     | `inspectProjectFile`：未知 nodeType / 未知 portId / 高 contractVersion / 非 v1 文件 / 正常文件 五类输入的警告断言；不修改原数据                          | WP2     |
+| T5   | `test/manual-run.test.ts`          | 同图同节点：`runNodeManually` 与 `runWorkflow` 的输出投影、持久化 props 逐字段一致（沿用 executors.test.ts 的 fake editor 模式）；手动失败走同一错误路径 | WP3     |
+| T6   | `test/graph-unknown-ports.test.ts` | `deriveGraph` 对未知端口边产出 flagged 标记与警告；flagged 边不参与运行、运行时报端口级错误                                                              | WP2     |
 
 ### 5.2 跨进程与主进程测试（vitest，node 环境，新增文件）
 
-| 编号 | 文件 | 覆盖内容 | 对应 WP |
-| --- | --- | --- | --- |
-| T7 | `test/projects-repo.test.ts` | 临时目录中 `saveProject` 原子写（.tmp→.bak→rename）、`graphVersion` 递增、损坏时 .bak 回退、open→save→open roundtrip。此项同时补上 ROADMAP R2 遗留的"主进程项目读写与 graphVersion 测试" | 基线保护 |
-| T8 | `test/log-ipc.test.ts` | log handler 收到含假 Key 的错误 → electron-log mock 捕获的写入内容不含 Key；信封字段完整 | WP1 |
-| T9 | `test/demo-bundle.test.ts` | 示例 bundle 可解析；含四条链路的节点与边；媒体文件存在且引用一致 | WP4 |
+| 编号 | 文件                         | 覆盖内容                                                                                                                                                                                 | 对应 WP  |
+| ---- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| T7   | `test/projects-repo.test.ts` | 临时目录中 `saveProject` 原子写（.tmp→.bak→rename）、`graphVersion` 递增、损坏时 .bak 回退、open→save→open roundtrip。此项同时补上 ROADMAP R2 遗留的"主进程项目读写与 graphVersion 测试" | 基线保护 |
+| T8   | `test/log-ipc.test.ts`       | log handler 收到含假 Key 的错误 → electron-log mock 捕获的写入内容不含 Key；信封字段完整                                                                                                 | WP1      |
+| T9   | `test/demo-bundle.test.ts`   | 示例 bundle 可解析；含四条链路的节点与边；媒体文件存在且引用一致                                                                                                                         | WP4      |
 
 ### 5.3 人工回归（发布前，按 docs/REGRESSION.md 执行）
 
@@ -197,13 +197,13 @@ WP2 旧快照迁移   ──┘            WP4 示例项目（随时可插入，
 
 ### 5.4 错误注入场景（发布前，人工）
 
-| 场景 | 操作 | 预期 |
-| --- | --- | --- |
-| 断网生成 | 断网后手动与全局各跑一次生图 | 面板与日志文件均有记录，reason 含 HTTP 状态，不含 Key |
-| 坏 Schema | AI 处理选 storyboard.shots 输出，喂非法 JSON | 执行器报 Schema 不符，错误带 portId 与 Schema 名 |
-| 循环连线 | 构建 A→B→A | 运行前报循环错误，进面板与日志（不再只 toast） |
-| 旧版本数据 | 打开含高版本 contractVersion 节点的 fixture | 冻结占位 + 警告，不崩、不静默改写 |
-| 渲染崩溃 | 开发模式注入渲染异常 | ErrorBoundary 拦截，日志有记录，应用不白屏 |
+| 场景       | 操作                                         | 预期                                                  |
+| ---------- | -------------------------------------------- | ----------------------------------------------------- |
+| 断网生成   | 断网后手动与全局各跑一次生图                 | 面板与日志文件均有记录，reason 含 HTTP 状态，不含 Key |
+| 坏 Schema  | AI 处理选 storyboard.shots 输出，喂非法 JSON | 执行器报 Schema 不符，错误带 portId 与 Schema 名      |
+| 循环连线   | 构建 A→B→A                                   | 运行前报循环错误，进面板与日志（不再只 toast）        |
+| 旧版本数据 | 打开含高版本 contractVersion 节点的 fixture  | 冻结占位 + 警告，不崩、不静默改写                     |
+| 渲染崩溃   | 开发模式注入渲染异常                         | ErrorBoundary 拦截，日志有记录，应用不白屏            |
 
 ### 5.5 CI
 
@@ -211,12 +211,12 @@ WP2 旧快照迁移   ──┘            WP4 示例项目（随时可插入，
 
 ## 6. 验收标准映射
 
-| ROADMAP R0 完成标准 | 由谁达成 | 证据 |
-| --- | --- | --- |
-| 旧项目可以打开、保存并再次打开 | WP2 | T3/T4/T7 通过 + §5.3 旧项目人工回归记录 |
-| 任意错误连线都能得到具体端口级错误 | WP1 + WP2 | T2/T6 通过 + §5.4 坏 Schema/循环连线场景 |
-| 所有现有节点通过统一回归表 | WP5 | REGRESSION.md 全表留档（版本+日期+执行人） |
-| 发布包在全新 Windows 用户目录可启动 | WP5 | 干净环境冒烟记录 |
+| ROADMAP R0 完成标准                 | 由谁达成  | 证据                                       |
+| ----------------------------------- | --------- | ------------------------------------------ |
+| 旧项目可以打开、保存并再次打开      | WP2       | T3/T4/T7 通过 + §5.3 旧项目人工回归记录    |
+| 任意错误连线都能得到具体端口级错误  | WP1 + WP2 | T2/T6 通过 + §5.4 坏 Schema/循环连线场景   |
+| 所有现有节点通过统一回归表          | WP5       | REGRESSION.md 全表留档（版本+日期+执行人） |
+| 发布包在全新 Windows 用户目录可启动 | WP5       | 干净环境冒烟记录                           |
 
 ## 7. 风险与决策点
 

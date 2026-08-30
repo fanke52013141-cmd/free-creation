@@ -22,6 +22,7 @@ import {
   StoryboardBody,
   StructuredBody,
   TextBody,
+  TtsBody,
   VideoBody,
   VideoAudioBody,
   VideoAudioSettings,
@@ -32,6 +33,7 @@ import {
 } from './bodies'
 import { aiProcessExecutor } from '../../engine/executors/aiProcess'
 import { audioExecutor } from '../../engine/executors/audio'
+import { ttsExecutor } from '../../engine/executors/tts'
 import { chatExecutor } from '../../engine/executors/chat'
 import {
   codeExecutor,
@@ -76,6 +78,7 @@ import {
   projectStoryboardOutputs,
   projectStructuredOutputs,
   projectTextOutputs,
+  projectTtsOutputs,
   projectVideoOutputs,
   projectVideoAudioOutputs,
   projectVideoClipOutputs,
@@ -128,7 +131,7 @@ const STORYBOARD_SHOTS: PortSchemaRef = { id: 'storyboard.shots', version: 1 }
 const LIST_ITEMS: PortSchemaRef = { id: 'list.items', version: 1 }
 const PROMPT_BUNDLE: PortSchemaRef = { id: 'prompt.bundle', version: 1 }
 const PREVIS_CAMERA: PortSchemaRef = { id: 'previs.camera', version: 1 }
-const PREVIS_PROJECT: PortSchemaRef = { id: 'previs.project', version: 1 }
+const PREVIS_PROJECT: PortSchemaRef = { id: 'previs.project', version: 2 }
 
 export function registerBaseNodeTypes(): void {
   registerNodeType({
@@ -243,7 +246,7 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'video',
-    contractVersion: 1,
+    contractVersion: 2,
     label: '视频',
     icon: 'video',
     color: '#f472b6',
@@ -252,6 +255,12 @@ export function registerBaseNodeTypes(): void {
     ports: {
       in: [
         input('in-image', '首帧图', 'image', '可选的单张首帧图片，用于图生视频。'),
+        input(
+          'in-reference-video',
+          '运动参考',
+          'video',
+          '可选的真实参考视频。预演台白模视频可在此传入，模型是否接受由供应商实际响应决定。'
+        ),
         input(
           'in-prompt',
           '提示词包',
@@ -342,6 +351,27 @@ export function registerBaseNodeTypes(): void {
     projectOutputs: projectAudioOutputs,
     executor: audioExecutor,
     Body: AudioBody
+  })
+  registerNodeType({
+    type: 'tts',
+    contractVersion: 1,
+    label: '语音克隆',
+    icon: 'audio',
+    color: '#fbbf24',
+    defaultSize: { w: 340, h: 260 },
+    description: '用本地 ComfyUI IndexTTS-2.5 复刻音色并朗读文本，输出新的音频资产。',
+    ports: {
+      in: [
+        input('in-audio', '参考语音', 'audio', '可选的上游参考音频；也可在节点内上传。'),
+        input('in-text', '文本', 'text', '需要朗读的文本（与节点内文本合并）。', {
+          cardinality: 'many'
+        })
+      ],
+      out: [output('out-audio', '音频', 'audio', '语音复刻合成并落盘后的音频资产引用。')]
+    },
+    projectOutputs: projectTtsOutputs,
+    executor: ttsExecutor,
+    Body: TtsBody
   })
   registerNodeType({
     type: 'chat',
@@ -674,13 +704,13 @@ export function registerExtendedNodeTypes(): void {
   })
   registerNodeType({
     type: 'director',
-    contractVersion: 1,
-    label: '导演台',
+    contractVersion: 2,
+    label: '3D 预演台',
     icon: 'director',
     color: '#f59e0b',
     defaultSize: { w: 340, h: 260 },
     description:
-      '镜头预演工作区。接收分镜、参考图与摄像机参数；只有用户在导演台明确发布后，帧、预演视频和摄像机参数才会成为下游真实输入。',
+      '3D 白模预演工作区。接收分镜、场景参考图与机位参数；只有用户明确发布后，帧、预演视频和机位参数才会成为下游真实输入。',
     executionMode: 'manual-publish',
     ports: {
       in: [
@@ -689,9 +719,9 @@ export function registerExtendedNodeTypes(): void {
         }),
         input(
           'in-reference-images',
-          '参考图',
+          '场景参考图',
           'image',
-          '人物、场景或构图参考图，会进入导演台资源区。',
+          '1～3 张参考图建议用于建立白模空间；真实连线输入，不读取其他节点内部状态。',
           {
             cardinality: 'many'
           }

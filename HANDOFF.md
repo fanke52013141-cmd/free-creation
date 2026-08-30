@@ -10,7 +10,7 @@
 >
 > 产品定位：单用户、本地优先的 Windows Electron 无限画布创作工具。
 
-> **当前交接入口（2026-08-30）**：图片修改节点与“图片修改→后续创作”模板均已实现。请先阅读 [docs/HANDOFF_2026_08_30_MEDIA_WORKFLOW.md](./docs/HANDOFF_2026_08_30_MEDIA_WORKFLOW.md)，再阅读 [docs/HANDOFF_2026_08_29_IMAGE_EDIT.md](./docs/HANDOFF_2026_08_29_IMAGE_EDIT.md)。前者记录本轮变更、桌面验收和打包修复，后者包含图片修改的完整节点边界。本文件其余部分是长期历史记录，提交哈希与测试数量以当前交接单为准。
+> **当前交接入口（2026-08-30 第二批）**：本轮一次性交付四个功能方向：语音克隆节点（TTS）、视频变换增强（取帧预设 + 人声分离）、3D 预演台升级（contractVersion 1→2）、UI 图标与视觉系统。请先阅读 [docs/HANDOFF_2026_08_30_FEATURE_BATCH.md](./docs/HANDOFF_2026_08_30_FEATURE_BATCH.md)，再阅读 [docs/HANDOFF_2026_08_30_MEDIA_WORKFLOW.md](./docs/HANDOFF_2026_08_30_MEDIA_WORKFLOW.md) 和 [docs/HANDOFF_2026_08_29_IMAGE_EDIT.md](./docs/HANDOFF_2026_08_29_IMAGE_EDIT.md)。本文件其余部分是长期历史记录，提交哈希与测试数量以当前交接单为准。
 
 ## 1. 接手前必须知道的边界
 
@@ -47,15 +47,34 @@ R0–R4 已在 `363f2d1` 完成并推送；本次 `39a32f2` 在其上完成导�
 | P3      | 导演台窄屏支持镜头/属性面板切换；时间轴、预演视口和操作栏保留在主工作区                        | 导演台数据测试通过                        |
 | P4      | 补充快照修复、节点状态、创建菜单、运行记录、媒体映射和导入事务测试                             | 全量 23 个测试文件、405 项用例通过        |
 
-### 本轮新增：导演台（`director`）
+### 本轮新增：功能批量交付（2026-08-30 第二批）
+
+本轮一次性交付四个功能方向，详见 [docs/HANDOFF_2026_08_30_FEATURE_BATCH.md](./docs/HANDOFF_2026_08_30_FEATURE_BATCH.md)：
+
+| 功能 | 状态 | 说明 |
+| --- | --- | --- |
+| 语音克隆节点（`tts`） | 已开发，待桌面验收 | 新增节点类型，通过本地 ComfyUI + IndexTTS-2.5 合成音频 |
+| 视频变换增强 | 已开发，待桌面验收 | `video-frame` 新增首帧/尾帧预设；`video-audio` 新增人声分离（FFmpeg 滤镜方案） |
+| 3D 预演台升级 | 已开发，待桌面验收 | `director` contractVersion 1→2，2D 白模升级为 3D 白模；新增 `previs-space-generator.ts` |
+| UI 图标与视觉系统 | 已开发，待桌面验收 | 新增图标系统、UI 基础/表面层 CSS；多选工具栏重设计 |
+
+验证基线：44 个测试文件、557 项用例全部通过；Node + Web 双端类型检查通过。
+
+### 本轮新增：3D 预演台（`director`）
 
 导演台是 `manual-publish` 节点，不会在“运行工作流”时擅自打开工作区或生成媒体。
 
-- 输入：`in-storyboard`（分镜 JSON）、`in-reference-images`（多张图片）、`in-camera-preset`（`previs.camera@1`）。
-- 输出：`out-frame`（PNG 图片）、`out-preview-video`（WebM 视频）、`out-camera`（机位 JSON）、`out-project`（工程摘要 JSON）。
+- 输入：`in-storyboard`（分镜 JSON）、`in-reference-images`（多张图片；空间建立建议前 1～3 张）、`in-camera-preset`（`previs.camera@1`）。
+- 输出：`out-frame`（PNG 图片）、`out-preview-video`（白模 WebM 运动参考）、`out-camera`（机位 JSON）、`out-project`（`previs.project@2` 工程摘要 JSON）。
 - 已发布的帧/视频才会成为下游的真实输入；损坏的发布记录或只有机位而没有媒体的记录会被视为未发布。
-- 当前预演支持 2D Canvas 与可选 Three.js 白模视口；它用于镜头预演，不是成片剪辑或完整三维制作工具。
+- 当前预演支持 2D Canvas 与 Three.js 白模视口。编辑视角与拍摄机位已经分离；人物可在 3D 视口中选择并直接移动/旋转，支持 G/R/空格快捷键、起终点关键帧、运镜预设、镜头序列和非阻断的穿模/时长/关键帧预警。
+- “生成空间”当前落地为稳定的本地轻量白模 fallback；外部图片→白模服务必须经可插拔 Provider 适配后才能替换为自动重建，失败不得覆盖已有空间。
+- 视频节点新增可选 `in-reference-video`。预演视频可一键创建真实连线进入该端口；供应商是否接受参考视频以实际响应为准。
 - 媒体导入 IPC 已支持图片和视频缓冲，视频上限为 200 MB；只有 Electron preload 有本地媒体写入能力，浏览器预览页会给出明确提示。
+- 空间生成现采用两层本地策略：`local-whitebox` 为默认的轻量墙体/方块白模；`image-depth` 取首张
+  `in-reference-images` 图片，在 Three.js 视口中以亮度近似深度做 2.5D 视差。后者只保存真实媒体
+  引用，不复制资产、不创建新节点、无额外 API 成本；未来如引入本地 Depth Anything，只替换
+  `src/renderer/src/nodes/previs-space-generator.ts` 的适配器并填充可选 depth 媒体字段。
 
 ## 3. 架构地图
 
@@ -97,6 +116,7 @@ R0–R4 已在 `363f2d1` 完成并推送；本次 `39a32f2` 在其上完成导�
 | 生图     | 文本、参考图            | `out-image`                  | 可用；支持尺寸、种子和重新生成            |
 | 视频     | 文本、首帧图            | `out-video`                  | 可用；依赖已配置视频供应商                |
 | 音频     | 音频、文本              | `out-audio`                  | 可用；依赖供应商                          |
+| 语音克隆 | 参考语音、文本          | `out-audio`                  | 可用；依赖本地 ComfyUI + IndexTTS-2.5    |
 | 对话     | 文本                    | `out-markdown`               | 多轮交互；保留 Markdown 语义              |
 | AI 处理  | 文本、JSON              | text / markdown / JSON 之一  | 一次性、可复跑的工作流转换                |
 | 处理     | 动态值                  | `out-value`                  | 通用透传/兜底，不承载业务规则             |
@@ -105,7 +125,7 @@ R0–R4 已在 `363f2d1` 完成并推送；本次 `39a32f2` 在其上完成导�
 | 代码     | 文本、JSON、命名参数    | 命名输出端口                 | 本地受限转换；变量名决定端口 ID           |
 | 分镜板   | 分镜 JSON、兼容文本     | 分镜 JSON、摘要              | 可用                                      |
 | 迭代     | `list.items@1`          | `out-item`、`out-items`      | P3.1 明确循环体边界；仍为串行、无暂停恢复 |
-| 导演台   | 分镜、参考图、机位      | 帧、预演视频、机位、工程摘要 | 手动发布；当前为 2D 白模预演              |
+| 导演台   | 分镜、参考图、机位      | 帧、预演视频、机位、工程摘要 | 手动发布；已升级为 3D 白模预演（contractVersion 2） |
 | 脚本     | 历史文本                | 分镜 JSON、文本              | 仅旧项目兼容，禁止新建                    |
 
 当前注册 Schema：
@@ -114,7 +134,7 @@ R0–R4 已在 `363f2d1` 完成并推送；本次 `39a32f2` 在其上完成导�
 - `storyboard.shots@1`
 - `list.items@1`
 - `previs.camera@1`
-- `previs.project@1`
+- `previs.project@2`
 - `character.profile@1`
 - `scene.definition@1`
 - `shot.definition@1`
@@ -168,11 +188,11 @@ git status -sb
 
 ### 当前已验证基线
 
-- `npm run verify`：通过（ESLint、Node/Web 类型检查、Vitest 和 `electron-vite build`）。
-- `npm run test`：33 个测试文件、460 项用例全部通过。
+- `npm run typecheck`：通过（Node + Web 双端类型检查）。
+- `npx vitest run`：44 个测试文件、557 项用例全部通过。
 - `git diff --check`：通过。
-- Electron 手工测试：创建导演台 → 打开工作区 → 发布 PNG 帧 → 导出 WebM，两个输出均出现“可供下游使用”状态；白屏问题已定位为旧 `node-card` 快照缺少 `config`，恢复前内存修复后再交给 tldraw 迁移。
-- IA-2.3 的 Electron 人工路径尚未执行，列入 IA-2.4，不能以自动化验证替代。
+- Electron 手工测试：创建导演台 → 打开工作区 → 发布 PNG 帧 → 导出 WebM，两个输出均出现"可供下游使用"状态；白屏问题已定位为旧 `node-card` 快照缺少 `config`，恢复前内存修复后再交给 tldraw 迁移。
+- 本轮新增功能（TTS / 视频变换 / 3D 预演 / UI 图标）尚未执行桌面端手工冒烟，验收路径详见 [docs/HANDOFF_2026_08_30_FEATURE_BATCH.md](./docs/HANDOFF_2026_08_30_FEATURE_BATCH.md)。
 - 构建仍会提示 `db.ts` 同时被动态与静态导入；它不阻断构建，列入后续技术债。
 
 ### 本次功能提交
@@ -185,7 +205,18 @@ git status -sb
 
 该提交新增跨节点运行中心和只读运行索引；失败运行可从统一 executor 路径重试，资产可定位到精确产生它的 `runId`。每个生成结果只增加可选的持久化 `runId`，既有端口、节点类型、连线语义和旧结果的安全回退保持不变。
 
-### 当前未提交：CR-0 / CR-1 / CR-2（2026-08-29）
+### 当前未提交：功能批量交付（2026-08-30 第二批）
+
+详见 [docs/HANDOFF_2026_08_30_FEATURE_BATCH.md](./docs/HANDOFF_2026_08_30_FEATURE_BATCH.md)。本轮包含：
+
+1. **语音克隆节点（`tts`）**：新增节点类型，通过本地 ComfyUI + IndexTTS-2.5 合成音频。新增文件包括 `src/shared/tts.ts`、`src/main/comfyui/`、`src/main/ipc/comfyui.ipc.ts`、`src/main/media/tts-transform.ts`、`src/renderer/src/engine/executors/tts.ts`、`src/renderer/src/nodes/specs/bodies/tts.tsx`，并在 specs/outputProjections/index/types/CanvasEditor 中完成注册。
+2. **视频变换增强**：`video-frame` 新增首帧/尾帧预设按钮；`video-audio` 新增人声分离开关（auto/center/eq 三种模式，基于 FFmpeg 滤镜链 + ffprobe 声道检测）。修改 `src/shared/video-transform.ts`、`src/main/media/video-transform.ts`、`video-transforms.tsx`、`videoTransforms.ts` 及测试。
+3. **3D 预演台升级**：`director` contractVersion 1→2，`previs.project` Schema 1→2；2D 白模升级为 3D 白模；新增 `previs-space-generator.ts`（local-whitebox + image-depth 策略）；视频节点新增 `in-reference-video` 端口（contractVersion 1→2）。
+4. **UI 图标与视觉系统**：新增 `docs/UI_ICON_SYSTEM.md`、图标精灵图、`ui-foundation.css`、`ui-surfaces.css`；扩展 `Icon.tsx` 和 `MultiSelectToolbar.tsx`。
+
+验证：`npx vitest run` 44 文件 557 项通过；`npm run typecheck` 通过。本轮尚未执行 Electron 桌面端手工冒烟，验收路径见交接单。
+
+### CR-0 / CR-1 / CR-2（2026-08-29）
 
 以 [CODE_REVIEW_2026_08_29.md](./docs/CODE_REVIEW_2026_08_29.md) 为依据，已完成以下切片；导演台不在本轮改动范围内。
 

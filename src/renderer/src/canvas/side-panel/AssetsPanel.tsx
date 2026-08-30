@@ -209,8 +209,11 @@ export function AssetsPanel({
     toast(`已定位到「${source.nodeTitle}」`)
   }
   const handleBatchExport = async (): Promise<void> => {
-    if (assets.length === 0) return toast('暂无素材可导出')
-    const res = await window.api.batchExportMedia(projectId)
+    if (visible.length === 0) return toast('当前筛选没有可导出的素材')
+    const res = await window.api.batchExportMedia(
+      projectId,
+      visible.map((asset) => asset.id)
+    )
     if (!res.ok) return toast(`导出失败：${res.error.message}`)
     if (res.data.exported === 0 && res.data.targetDir === '') return
     toast(
@@ -228,11 +231,11 @@ export function AssetsPanel({
         </button>
         <button
           className="side-panel-secondary"
-          title="将项目所有素材导出到指定目录"
-          disabled={assets.length === 0}
+          title="将当前筛选结果导出到指定目录；同名文件不会被覆盖"
+          disabled={visible.length === 0}
           onClick={() => void handleBatchExport()}
         >
-          <Icon name="download" size={15} /> 批量导出
+          <Icon name="download" size={15} /> 导出筛选
         </button>
         <input
           className="assets-search"

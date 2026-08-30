@@ -105,6 +105,6 @@ describe('契约版本稳定性（防破坏性变化漏升版本）', () => {
 
   it.each(types)('节点 %s 的契约版本与已发布契约一致', (type) => {
     const spec = getNodeType(type)
-    expect(spec?.contractVersion).toBe(type === 'code' ? 2 : 1)
+    expect(spec?.contractVersion).toBe(type === 'code' || type === 'video' ? 2 : 1)
   })
 })

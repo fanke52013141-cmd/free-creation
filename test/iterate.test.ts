@@ -17,6 +17,7 @@ function makeCtx(over: {
   list?: unknown
   outgoing?: NodeExecutionContext['outgoing']
   runSubflow?: (req: { item: Record<string, unknown>; index: number }) => Promise<SubflowOutput>
+  runId?: string
   signal?: { cancelled: boolean; paused?: boolean }
   waitForResume?: () => Promise<void>
   previousResult?: string
@@ -84,6 +85,7 @@ function makeCtx(over: {
     shape,
     inputs: inputs as NodeExecutionContext['inputs'],
     projectId: 'p1',
+    runId: over.runId,
     providers: [],
     signal: over.signal ?? { cancelled: false, paused: false },
     waitForResume: over.waitForResume,
@@ -679,5 +681,36 @@ describe('iterate 执行器 · P3.3 批量规模回归', () => {
     expect(active.max).toBe(1)
     expect(seen).toEqual(Array.from({ length: count }, (_, index) => index))
     expect(data.progress).toMatchObject({ total: count, completed: count, done: count, failed: 0 })
+  })
+})
+
+describe('iterate 执行器 · P3.4 逐项运行追溯', () => {
+  it('为每一个列表项传入独立运行 ID，并把实际 ID 保留在结果中', async () => {
+    const itemRunIds: string[] = []
+    const { ctx, result } = makeCtx({
+      runId: 'workflow-run',
+      list: [{ id: 'shot-a' }, { id: 'shot-b' }],
+      runSubflow: async (request) => {
+        itemRunIds.push((request as { itemRunId?: string }).itemRunId ?? '')
+        return {
+          body: {
+            out: {
+              value: { index: request.index },
+              type: 'json',
+              source: { nodeId: 'body', portId: 'out', runId: 'placeholder' },
+              createdAt: 0
+            }
+          }
+        }
+      }
+    })
+    await iterateExecutor(ctx)
+    expect(itemRunIds).toHaveLength(2)
+    expect(itemRunIds[0]).toContain('workflow-run:item:0:')
+    expect(itemRunIds[1]).toContain('workflow-run:item:1:')
+    expect(new Set(itemRunIds).size).toBe(2)
+    expect(
+      JSON.parse(result.value as string).items.map((item: { runId?: string }) => item.runId)
+    ).toEqual(itemRunIds)
   })
 })

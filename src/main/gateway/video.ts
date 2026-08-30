@@ -41,6 +41,7 @@ interface VideoInputState {
   prompt: string
   params?: VideoSubmitInput['params']
   firstFrameMediaId?: string
+  referenceVideoMediaId?: string
   upstreamTaskId?: string
 }
 
@@ -114,7 +115,7 @@ function authHeaders(p: ProviderConfig): Record<string, string> {
 
 async function mediaToDataUrl(mediaId: string): Promise<string | undefined> {
   const m = await readMediaBuffer(mediaId)
-  if (!m) throw new GatewayError('MEDIA_NOT_FOUND', `首帧图不存在：${mediaId}`)
+  if (!m) throw new GatewayError('MEDIA_NOT_FOUND', `参考媒体不存在：${mediaId}`)
   return `data:${m.mime};base64,${m.buf.toString('base64')}`
 }
 
@@ -187,6 +188,13 @@ async function minimaxSubmit(p: ProviderConfig, input: VideoSubmitInput): Promis
       type: 'image_url',
       image_url: { url: await mediaToDataUrl(input.firstFrameMediaId) },
       role: 'first_frame'
+    })
+  }
+  if (input.referenceVideoMediaId) {
+    content.push({
+      type: 'video_url',
+      video_url: { url: await mediaToDataUrl(input.referenceVideoMediaId) },
+      role: 'reference_video'
     })
   }
   const body: Record<string, unknown> = { model: input.modelId, content }
@@ -274,6 +282,14 @@ async function seedanceSubmit(p: ProviderConfig, input: VideoSubmitInput): Promi
       ...(!isProxy ? { role: 'first_frame' } : {})
     })
   }
+  if (input.referenceVideoMediaId) {
+    content.push({
+      type: 'video_url',
+      video_url: { url: await mediaToDataUrl(input.referenceVideoMediaId) },
+      // 兼容网关延续无 role 的多模态格式；官方端点可识别参考视频语义。
+      ...(!isProxy ? { role: 'reference_video' } : {})
+    })
+  }
   const { params } = input
   const body: Record<string, unknown> = { model: input.modelId, content }
   if (!isProxy) {
@@ -341,7 +357,8 @@ export function submitVideoTask(send: Send, input: VideoSubmitInput): VideoSubmi
   const state: VideoInputState = {
     prompt: input.prompt.trim(),
     params: input.params,
-    firstFrameMediaId: input.firstFrameMediaId
+    firstFrameMediaId: input.firstFrameMediaId,
+    referenceVideoMediaId: input.referenceVideoMediaId
   }
   getDb()
     .prepare(

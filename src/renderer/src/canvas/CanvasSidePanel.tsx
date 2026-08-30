@@ -168,9 +168,9 @@ export const BUILTIN_TEMPLATES: {
     ]
   },
   {
-    name: '分镜→导演台',
+    name: '分镜→3D预演',
     icon: 'director',
-    desc: '分镜数据直接交给导演台进行镜头预演与手动发布',
+    desc: '分镜数据直接交给 3D 预演台进行镜头预演与手动发布',
     nodes: [
       {
         type: 'structured',
@@ -191,7 +191,7 @@ export const BUILTIN_TEMPLATES: {
         })
       },
       { type: 'storyboard', title: '分镜板', dx: 0, dy: 0 },
-      { type: 'director', title: '导演台', dx: 400, dy: 0 }
+      { type: 'director', title: '3D 预演台', dx: 400, dy: 0 }
     ],
     edges: [
       { from: 0, to: 1, fromPort: 'out-json', toPort: 'in-json' },

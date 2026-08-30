@@ -18,6 +18,7 @@ export {
   VideoFrameSettings
 } from './video-transforms'
 export { AudioBody } from './audio'
+export { TtsBody } from './tts'
 export { ChatBody } from './chat'
 export { ScriptBody } from './script'
 export { ProcessorBody } from './processor'

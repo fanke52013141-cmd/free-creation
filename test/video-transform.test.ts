@@ -36,6 +36,30 @@ describe('视频处理配置', () => {
       parseVideoRangeConfig(serializeVideoConfig({ version: 1, startMs: 400, endMs: 2400 }))
     ).toEqual({ version: 1, startMs: 400, endMs: 2400 })
   })
+
+  it('解析人声隔离配置（removeBackground + isolationMode）', () => {
+    expect(
+      parseVideoRangeConfig(
+        JSON.stringify({ startMs: 100, endMs: 5000, removeBackground: true, isolationMode: 'center' })
+      )
+    ).toEqual({
+      version: 1,
+      startMs: 100,
+      endMs: 5000,
+      removeBackground: true,
+      isolationMode: 'center'
+    })
+    // removeBackground=false 时不带 isolationMode
+    expect(
+      parseVideoRangeConfig(JSON.stringify({ startMs: 0, endMs: 1000, removeBackground: false }))
+    ).toEqual({ version: 1, startMs: 0, endMs: 1000 })
+    // 无效的 isolationMode 回退到 auto
+    expect(
+      parseVideoRangeConfig(
+        JSON.stringify({ startMs: 0, endMs: 1000, removeBackground: true, isolationMode: 'bogus' })
+      )
+    ).toEqual({ version: 1, startMs: 0, endMs: 1000, removeBackground: true, isolationMode: 'auto' })
+  })
 })
 
 function context(type: 'video-frame' | 'video-clip' | 'video-audio'): {
@@ -158,7 +182,28 @@ describe('视频处理执行器', () => {
     item.ctx.inputs = new Map()
     await expect(videoFrameExecutor(item.ctx)).resolves.toEqual({
       status: 'skipped',
-      reason: '请连接一段视频到“源视频”输入'
+      reason: '请连接一段视频到\u201c源视频\u201d输入'
     })
+  })
+
+  it('音频执行器将人声隔离配置透传给 IPC', async () => {
+    const api = { extractVideoAudio: vi.fn() }
+    api.extractVideoAudio.mockResolvedValue({
+      ok: true,
+      data: { id: 'vocal-1', path: 'projects/project-a/media/vocal-1', mime: 'audio/mp4', name: 'vocal-1' }
+    })
+    globalThis.window = { api } as unknown as Window & typeof globalThis
+    const item = context('video-audio')
+    item.ctx.shape.props.config = JSON.stringify({
+      version: 1,
+      startMs: 500,
+      endMs: 1700,
+      removeBackground: true,
+      isolationMode: 'center'
+    })
+    await videoAudioExecutor(item.ctx)
+    const callArg = api.extractVideoAudio.mock.calls[0][0] as { config: { removeBackground?: boolean; isolationMode?: string } }
+    expect(callArg.config.removeBackground).toBe(true)
+    expect(callArg.config.isolationMode).toBe('center')
   })
 })

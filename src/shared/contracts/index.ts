@@ -3,6 +3,7 @@
 import type { ChatMessage, GatewayModelInfo, ProviderSpecId, VideoGenParams } from '../types'
 import type { ImageCropConfig } from '../image-crop'
 import type { ImageEditConfig } from '../image-edit'
+import type { TtsConfig } from '../tts'
 import type { VideoFrameConfig, VideoRangeConfig } from '../video-transform'
 
 export const IPC = {
@@ -34,7 +35,12 @@ export const IPC = {
     reveal: 'media:reveal',
     copyPath: 'media:copy-path',
     open: 'media:open',
-    batchExport: 'media:batch-export'
+    batchExport: 'media:batch-export',
+    ttsGenerate: 'media:tts-generate'
+  },
+  comfyui: {
+    status: 'comfyui:status',
+    saveSettings: 'comfyui:save-settings'
   },
   workspace: {
     listTemplates: 'workspace:templates:list',
@@ -107,6 +113,34 @@ export interface VideoFrameTransformInput extends VideoTransformSourceInput {
 
 export interface VideoRangeTransformInput extends VideoTransformSourceInput {
   config: VideoRangeConfig
+}
+
+// ── 本地 ComfyUI 语音复刻（IndexTTS-2.5）──
+
+export interface TtsGenerateInput {
+  projectId: string
+  /** 参考音频（音色来源）在本地图库中的 mediaId。 */
+  referenceAudioId: string
+  /** 要朗读的文本。 */
+  text: string
+  /** 合成参数（语言 / 语速 / 情绪 / 输出格式）。 */
+  config: TtsConfig
+}
+
+export interface ComfyuiSettingsInput {
+  /** ComfyUI 服务地址，如 http://127.0.0.1:8188。 */
+  baseUrl: string
+}
+
+export interface ComfyuiStatus {
+  online: boolean
+  baseUrl: string
+  /** ComfyUI 版本号（仅在线时返回）。 */
+  version?: string
+  /** IndexTTS-2.5 自定义节点是否已安装。 */
+  ttsNodeReady: boolean
+  /** 人类可读的状态说明（连接失败原因 / 缺节点提示）。 */
+  message: string
 }
 
 // ── 本地工作区状态（模板与手动历史版本）──
@@ -203,6 +237,11 @@ export interface VideoSubmitInput {
   params?: VideoGenParams
   /** 首帧图（本地图库 mediaId，主进程转 base64 data URL 上传） */
   firstFrameMediaId?: string
+  /**
+   * 可选的运动参考视频。是否支持由实际模型决定；适配器只如实转发，不伪造“已跟随”。
+   * 该字段来自 video.in-reference-video 的真实连线。
+   */
+  referenceVideoMediaId?: string
 }
 
 export interface VideoSubmitResult {

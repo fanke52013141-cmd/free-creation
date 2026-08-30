@@ -1,5 +1,8 @@
 // 导演台的纯数据协议。UI、节点投影、执行器共用，避免把导演工程结构散落在组件里。
 export interface DirectorCamera {
+  /** Stable camera identity. A shot owns one active camera in v2; the sequence owns the cut order. */
+  id: string
+  name: string
   x: number
   y: number
   z: number
@@ -9,6 +12,9 @@ export interface DirectorCamera {
   aspectRatio: '16:9' | '9:16' | '4:3' | '3:4'
   durationSec: number
   fps: 24 | 25 | 30
+  /** Optional target used by the simple follow / look-at presets. */
+  targetActorId?: string
+  followActorId?: string
 }
 
 export interface DirectorActor {
@@ -21,6 +27,8 @@ export interface DirectorActor {
   z: number
   scale: number
   color: string
+  /** Ground-plane facing direction; optional for v1 project compatibility. */
+  heading?: number
 }
 
 /** 2D 预演构图辅助；仅影响工作区观察，不会伪装为场景或媒体资产。 */
@@ -33,19 +41,73 @@ export interface DirectorGuides {
 export interface DirectorKeyframe<T> {
   timeSec: number
   value: T
+  easing?: 'linear' | 'smooth'
 }
 
 export type DirectorCameraMotion = Pick<
   DirectorCamera,
   'x' | 'y' | 'z' | 'heading' | 'pitch' | 'focalLengthMm'
 >
-export type DirectorActorMotion = Pick<DirectorActor, 'x' | 'y' | 'z' | 'scale' | 'pose'>
+export type DirectorActorMotion = Pick<
+  DirectorActor,
+  'x' | 'y' | 'z' | 'scale' | 'pose' | 'heading'
+>
 
 /** 镜头动画仅描述可随时间变化的空间参数；画幅、帧率和时长仍属于镜头固定配置。 */
 export interface DirectorShotTimeline {
   version: 1
   camera: DirectorKeyframe<DirectorCameraMotion>[]
   actors: Record<string, DirectorKeyframe<DirectorActorMotion>[]>
+}
+
+export type DirectorSpaceStatus = 'empty' | 'generating' | 'ready' | 'failed'
+/**
+ * local-whitebox is the default low-cost blockout. image-depth is a local 2.5D backdrop
+ * that derives an approximate depth field from the source image luminance. provider-whitebox
+ * remains reserved for an optional external adapter and is never required by the editor.
+ */
+export type DirectorSpaceMode = 'manual' | 'local-whitebox' | 'image-depth' | 'provider-whitebox'
+export type DirectorDepthSource = 'none' | 'heuristic-luminance' | 'estimated'
+
+/**
+ * A deliberately small, portable whitebox description. We retain primitives instead of serialising
+ * a binary 3D file so the project stays inspectable, versionable and safe to pass through a node port.
+ */
+export interface DirectorWhiteboxPrimitive {
+  id: string
+  kind: 'wall' | 'box' | 'platform'
+  x: number
+  y: number
+  z: number
+  width: number
+  height: number
+  depth: number
+}
+
+export interface DirectorSpace {
+  id: string
+  status: DirectorSpaceStatus
+  mode: DirectorSpaceMode
+  sourceMediaIds: string[]
+  sourceMediaPaths: string[]
+  /** Primary image used by the local 2.5D backdrop. Kept optional for v1/v2 whitebox projects. */
+  backgroundMediaId?: string
+  backgroundMediaPath?: string
+  /** A future persisted depth-map asset can be attached without changing the node contract. */
+  depthMediaId?: string
+  depthMediaPath?: string
+  depthSource?: DirectorDepthSource
+  /** 0..1 visual displacement amount for image-depth mode. */
+  parallaxStrength?: number
+  message?: string
+  primitives: DirectorWhiteboxPrimitive[]
+}
+
+/** A sequence is intentionally only a list of hard cuts. It is not a video editor or compositor. */
+export interface DirectorSequenceCut {
+  id: string
+  shotId: string
+  durationSec: number
 }
 
 export interface DirectorShot {
@@ -64,11 +126,16 @@ export interface DirectorShot {
 }
 
 export interface DirectorProjectData {
-  version: 1
+  version: 2
   /** 会影响已发布画面/机位的工程修订号。 */
   revision: number
   activeShotId: string
   shots: DirectorShot[]
+  space: DirectorSpace
+  sequence: {
+    version: 1
+    cuts: DirectorSequenceCut[]
+  }
 }
 
 export interface DirectorAssetRef {
@@ -95,6 +162,8 @@ export function createDirectorId(prefix: string): string {
 
 export function defaultDirectorCamera(): DirectorCamera {
   return {
+    id: createDirectorId('camera'),
+    name: '机位 A',
     x: 0,
     y: 1.6,
     z: 5,
@@ -104,6 +173,115 @@ export function defaultDirectorCamera(): DirectorCamera {
     aspectRatio: '16:9',
     durationSec: 5,
     fps: 25
+  }
+}
+
+export function createEmptyDirectorSpace(): DirectorSpace {
+  return {
+    id: createDirectorId('space'),
+    status: 'empty',
+    mode: 'manual',
+    sourceMediaIds: [],
+    sourceMediaPaths: [],
+    primitives: []
+  }
+}
+
+/**
+ * A local, deterministic fallback used when an external image-to-space provider is unavailable.
+ * It intentionally produces a light-weight spatial blockout, never claims to be an AI reconstruction.
+ */
+export function createLocalWhiteboxSpace(
+  sourceMediaIds: string[],
+  sourceMediaPaths: string[]
+): DirectorSpace {
+  const room = sourceMediaIds.length > 0
+  const primitives: DirectorWhiteboxPrimitive[] = room
+    ? [
+        {
+          id: createDirectorId('wall'),
+          kind: 'wall',
+          x: 0,
+          y: 1.5,
+          z: -7,
+          width: 14,
+          height: 3,
+          depth: 0.25
+        },
+        {
+          id: createDirectorId('wall'),
+          kind: 'wall',
+          x: -7,
+          y: 1.5,
+          z: 0,
+          width: 0.25,
+          height: 3,
+          depth: 14
+        },
+        {
+          id: createDirectorId('wall'),
+          kind: 'wall',
+          x: 7,
+          y: 1.5,
+          z: 0,
+          width: 0.25,
+          height: 3,
+          depth: 14
+        },
+        {
+          id: createDirectorId('box'),
+          kind: 'box',
+          x: -2.4,
+          y: 0.55,
+          z: -1.6,
+          width: 1.8,
+          height: 1.1,
+          depth: 1.2
+        }
+      ]
+    : []
+  return {
+    id: createDirectorId('space'),
+    status: 'ready',
+    mode: 'local-whitebox',
+    sourceMediaIds,
+    sourceMediaPaths,
+    message: room
+      ? '已依据连接的参考图建立本地白模。接入空间生成服务后可替换为自动重建结果。'
+      : '当前为空白预演空间；可直接布置人物和机位。',
+    primitives
+  }
+}
+
+/**
+ * Build a local 2.5D stage from one real image. No network call or model is required: the
+ * viewport samples luminance as an approximate depth field and applies a restrained parallax.
+ * The shape stores the source media reference so projects remain portable and inspectable.
+ */
+export function createImageDepthSpace(
+  sourceMediaId: string,
+  sourceMediaPath: string,
+  parallaxStrength = 0.28
+): DirectorSpace {
+  const hasSource = Boolean(sourceMediaId || sourceMediaPath)
+  const clampedStrength = Math.max(
+    0,
+    Math.min(1, Number.isFinite(parallaxStrength) ? parallaxStrength : 0.28)
+  )
+  return {
+    id: createDirectorId('space'),
+    status: hasSource ? 'ready' : 'failed',
+    mode: 'image-depth',
+    sourceMediaIds: sourceMediaId ? [sourceMediaId] : [],
+    sourceMediaPaths: sourceMediaPath ? [sourceMediaPath] : [],
+    ...(sourceMediaId ? { backgroundMediaId: sourceMediaId } : {}),
+    ...(sourceMediaPath ? { backgroundMediaPath: sourceMediaPath } : {}),
+    depthSource: 'heuristic-luminance',
+    parallaxStrength: clampedStrength,
+    message: hasSource
+      ? '已建立本地图片视差空间；深度由图像亮度近似，不产生额外费用。'
+      : '图片视差空间缺少参考图，请先连接一个图片节点。',
+    primitives: []
   }
 }
 
@@ -151,7 +329,8 @@ export function createDirectorShot(name = '镜头 01'): DirectorShot {
         y: 62,
         z: 0,
         scale: 1,
-        color: '#76d7ea'
+        color: '#76d7ea',
+        heading: 0
       }
     ]
   }
@@ -182,6 +361,13 @@ function isDirectorActor(value: unknown): value is DirectorActor {
     ) &&
     typeof actor.color === 'string'
   )
+}
+
+function normalizeDirectorActor(actor: DirectorActor): DirectorActor {
+  return {
+    ...actor,
+    heading: typeof actor.heading === 'number' && Number.isFinite(actor.heading) ? actor.heading : 0
+  }
 }
 
 function isKeyframe<T>(
@@ -249,6 +435,8 @@ function normalizeDirectorShot(value: unknown): DirectorShot | null {
   ) {
     return null
   }
+  const camera = normalizeDirectorCamera(shot.camera)
+  if (!camera) return null
   return {
     id: shot.id,
     name: shot.name,
@@ -262,14 +450,24 @@ function normalizeDirectorShot(value: unknown): DirectorShot | null {
         : 0.42,
     guides: normalizeGuides(shot.guides),
     timeline: shot.timeline,
-    camera: shot.camera,
-    actors: shot.actors
+    camera,
+    actors: shot.actors.map(normalizeDirectorActor)
   }
 }
 
 export function createDirectorProject(): DirectorProjectData {
   const shot = createDirectorShot()
-  return { version: 1, revision: 1, activeShotId: shot.id, shots: [shot] }
+  return {
+    version: 2,
+    revision: 1,
+    activeShotId: shot.id,
+    shots: [shot],
+    space: createEmptyDirectorSpace(),
+    sequence: {
+      version: 1,
+      cuts: [{ id: createDirectorId('cut'), shotId: shot.id, durationSec: shot.camera.durationSec }]
+    }
+  }
 }
 
 /** 仅镜头选择等不改变画面内容的 UI 状态不应使已发布媒体失效。 */
@@ -293,6 +491,22 @@ function isCamera(value: unknown): value is DirectorCamera {
       v.aspectRatio === '3:4') &&
     (v.fps === 24 || v.fps === 25 || v.fps === 30)
   )
+}
+
+function normalizeDirectorCamera(
+  value: unknown,
+  fallback = defaultDirectorCamera()
+): DirectorCamera | null {
+  if (!isCamera(value)) return null
+  const camera = value as Partial<DirectorCamera>
+  return {
+    ...fallback,
+    ...camera,
+    id: typeof camera.id === 'string' && camera.id ? camera.id : fallback.id,
+    name: typeof camera.name === 'string' && camera.name ? camera.name : fallback.name,
+    ...(typeof camera.targetActorId === 'string' ? { targetActorId: camera.targetActorId } : {}),
+    ...(typeof camera.followActorId === 'string' ? { followActorId: camera.followActorId } : {})
+  }
 }
 
 function normalizedTimelineTime(timeSec: number, durationSec: number): number {
@@ -333,7 +547,7 @@ export function recordDirectorActorKeyframe(
   const actor = shot.actors.find((item) => item.id === actorId)
   if (!actor) return shot
   const time = normalizedTimelineTime(timeSec, shot.camera.durationSec)
-  const { x, y, z, scale, pose } = actor
+  const { x, y, z, scale, pose, heading = 0 } = actor
   return {
     ...shot,
     timeline: {
@@ -342,7 +556,7 @@ export function recordDirectorActorKeyframe(
         ...shot.timeline.actors,
         [actorId]: upsertKeyframe(shot.timeline.actors[actorId] ?? [], {
           timeSec: time,
-          value: { x, y, z, scale, pose }
+          value: { x, y, z, scale, pose, heading }
         })
       }
     }
@@ -365,7 +579,12 @@ function evaluateMotion<T extends Record<string, unknown>>(
   if (!previous && !next) return base
   if (!previous) return { ...base, ...next!.value }
   if (!next || next.timeSec === previous.timeSec) return { ...base, ...previous.value }
-  const progress = (timeSec - previous.timeSec) / (next.timeSec - previous.timeSec)
+  const rawProgress = (timeSec - previous.timeSec) / (next.timeSec - previous.timeSec)
+  // Keyframes default to smooth movement. Explicit linear is useful for mechanical blocking.
+  const progress =
+    (next.easing ?? 'smooth') === 'smooth'
+      ? rawProgress * rawProgress * (3 - 2 * rawProgress)
+      : rawProgress
   const value = { ...base, ...previous.value }
   for (const key of numericKeys) {
     const left = previous.value[key]
@@ -397,17 +616,131 @@ export function evaluateDirectorShot(shot: DirectorShot, timeSec: number): Direc
         'x',
         'y',
         'z',
-        'scale'
+        'scale',
+        'heading'
       ])
     }))
   }
 }
 
+function normalizeDirectorSpace(value: unknown): DirectorSpace {
+  const empty = createEmptyDirectorSpace()
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return empty
+  const raw = value as Partial<DirectorSpace>
+  const primitives = Array.isArray(raw.primitives)
+    ? raw.primitives.filter((item): item is DirectorWhiteboxPrimitive => {
+        if (!item || typeof item !== 'object') return false
+        const candidate = item as Partial<DirectorWhiteboxPrimitive>
+        return (
+          typeof candidate.id === 'string' &&
+          (candidate.kind === 'wall' ||
+            candidate.kind === 'box' ||
+            candidate.kind === 'platform') &&
+          ['x', 'y', 'z', 'width', 'height', 'depth'].every(
+            (key) => typeof candidate[key as keyof DirectorWhiteboxPrimitive] === 'number'
+          )
+        )
+      })
+    : []
+  const status: DirectorSpaceStatus =
+    raw.status === 'generating' || raw.status === 'ready' || raw.status === 'failed'
+      ? raw.status
+      : 'empty'
+  return {
+    id: typeof raw.id === 'string' && raw.id ? raw.id : empty.id,
+    status,
+    mode:
+      raw.mode === 'local-whitebox' ||
+      raw.mode === 'image-depth' ||
+      raw.mode === 'provider-whitebox'
+        ? raw.mode
+        : 'manual',
+    sourceMediaIds: Array.isArray(raw.sourceMediaIds)
+      ? raw.sourceMediaIds.filter((item): item is string => typeof item === 'string')
+      : [],
+    sourceMediaPaths: Array.isArray(raw.sourceMediaPaths)
+      ? raw.sourceMediaPaths.filter((item): item is string => typeof item === 'string')
+      : [],
+    ...(typeof raw.backgroundMediaId === 'string' && raw.backgroundMediaId
+      ? { backgroundMediaId: raw.backgroundMediaId }
+      : {}),
+    ...(typeof raw.backgroundMediaPath === 'string' && raw.backgroundMediaPath
+      ? { backgroundMediaPath: raw.backgroundMediaPath }
+      : {}),
+    ...(typeof raw.depthMediaId === 'string' && raw.depthMediaId
+      ? { depthMediaId: raw.depthMediaId }
+      : {}),
+    ...(typeof raw.depthMediaPath === 'string' && raw.depthMediaPath
+      ? { depthMediaPath: raw.depthMediaPath }
+      : {}),
+    ...(raw.depthSource === 'heuristic-luminance' || raw.depthSource === 'estimated'
+      ? { depthSource: raw.depthSource }
+      : {}),
+    ...(typeof raw.parallaxStrength === 'number' && Number.isFinite(raw.parallaxStrength)
+      ? { parallaxStrength: Math.max(0, Math.min(1, raw.parallaxStrength)) }
+      : {}),
+    ...(typeof raw.message === 'string' ? { message: raw.message } : {}),
+    primitives
+  }
+}
+
+function normalizeDirectorSequence(
+  value: unknown,
+  shots: DirectorShot[]
+): DirectorProjectData['sequence'] {
+  const fallback = {
+    version: 1 as const,
+    cuts: shots.map((shot) => ({
+      id: createDirectorId('cut'),
+      shotId: shot.id,
+      durationSec: shot.camera.durationSec
+    }))
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return fallback
+  const raw = value as Partial<DirectorProjectData['sequence']>
+  if (raw.version !== 1 || !Array.isArray(raw.cuts)) return fallback
+  const seen = new Set<string>()
+  const cuts = raw.cuts.filter((cut): cut is DirectorSequenceCut => {
+    if (!cut || typeof cut !== 'object' || seen.has(cut.shotId)) return false
+    if (!shots.some((shot) => shot.id === cut.shotId)) return false
+    if (
+      typeof cut.id !== 'string' ||
+      typeof cut.durationSec !== 'number' ||
+      !Number.isFinite(cut.durationSec)
+    ) {
+      return false
+    }
+    seen.add(cut.shotId)
+    return true
+  })
+  for (const shot of shots) {
+    if (!seen.has(shot.id)) {
+      cuts.push({
+        id: createDirectorId('cut'),
+        shotId: shot.id,
+        durationSec: shot.camera.durationSec
+      })
+    }
+  }
+  return { version: 1, cuts }
+}
+
 export function parseDirectorProject(text: string): DirectorProjectData {
   if (!text) return createDirectorProject()
   try {
-    const raw = JSON.parse(text) as Partial<DirectorProjectData>
-    if (raw.version !== 1 || !Array.isArray(raw.shots) || raw.shots.length === 0) {
+    const raw = JSON.parse(text) as {
+      version?: number
+      revision?: unknown
+      activeShotId?: unknown
+      shots?: unknown[]
+      space?: unknown
+      sequence?: unknown
+    }
+    if (
+      (raw.version !== 1 && raw.version !== 2) ||
+      !Array.isArray(raw.shots) ||
+      raw.shots.length === 0
+    ) {
       return createDirectorProject()
     }
     const shots = raw.shots
@@ -418,13 +751,15 @@ export function parseDirectorProject(text: string): DirectorProjectData {
       ? (raw.activeShotId as string)
       : shots[0].id
     return {
-      version: 1,
+      version: 2,
       revision:
         typeof raw.revision === 'number' && Number.isInteger(raw.revision) && raw.revision > 0
           ? raw.revision
           : 1,
       activeShotId,
-      shots
+      shots,
+      space: normalizeDirectorSpace(raw.space),
+      sequence: normalizeDirectorSequence(raw.sequence, shots)
     }
   } catch {
     return createDirectorProject()
@@ -458,7 +793,68 @@ export function removeDirectorShot(
     project.activeShotId === shotId
       ? (shots[Math.min(index, shots.length - 1)]?.id ?? shots[0].id)
       : project.activeShotId
-  return { version: 1, activeShotId, shots }
+  return {
+    version: 2,
+    activeShotId,
+    shots,
+    space: project.space,
+    sequence: normalizeDirectorSequence(
+      { version: 1, cuts: project.sequence.cuts.filter((cut) => cut.shotId !== shotId) },
+      shots
+    )
+  }
+}
+
+/** Keep the simple hard-cut sequence in the same order as its visual shot list. */
+export function syncDirectorSequence(
+  project: DirectorProjectData
+): DirectorProjectData['sequence'] {
+  const previous = new Map(project.sequence.cuts.map((cut) => [cut.shotId, cut]))
+  return {
+    version: 1,
+    cuts: project.shots.map((shot) => {
+      const cut = previous.get(shot.id)
+      return {
+        id: cut?.id ?? createDirectorId('cut'),
+        shotId: shot.id,
+        durationSec: Math.max(1, Math.min(30, cut?.durationSec ?? shot.camera.durationSec))
+      }
+    })
+  }
+}
+
+export function directorSequenceDuration(project: DirectorProjectData): number {
+  return project.sequence.cuts.reduce((total, cut) => total + cut.durationSec, 0)
+}
+
+/**
+ * Helpful, non-blocking previs warnings. This is deliberately simple AABB checking, not a physics
+ * simulation: users get actionable feedback without turning the stage into a complex 3D package.
+ */
+export function directorShotWarnings(project: DirectorProjectData, shot: DirectorShot): string[] {
+  const warnings: string[] = []
+  if (shot.camera.durationSec > 12)
+    warnings.push('当前镜头超过 12 秒，建议拆分以提高视频模型跟随度。')
+  const tracks = [shot.timeline.camera, ...Object.values(shot.timeline.actors)]
+  if (
+    tracks.some((frames) =>
+      frames.some((frame, index) => index >= 6 && frame.timeSec - frames[index - 6]!.timeSec < 1)
+    )
+  ) {
+    warnings.push('1 秒内关键帧过密，运动可能出现抖动。')
+  }
+  for (const actor of shot.actors) {
+    const x = (actor.x - 50) / 10
+    const z = (actor.z + actor.y - 62) / 10
+    const blocked = project.space.primitives.some(
+      (primitive) =>
+        primitive.kind !== 'platform' &&
+        Math.abs(x - primitive.x) < primitive.width / 2 + 0.28 &&
+        Math.abs(z - primitive.z) < primitive.depth / 2 + 0.28
+    )
+    if (blocked) warnings.push(`${actor.name} 位于白模障碍物内，请调整人物或路线。`)
+  }
+  return warnings
 }
 
 export function parseDirectorPublishRecord(value: unknown): DirectorPublishRecord | null {

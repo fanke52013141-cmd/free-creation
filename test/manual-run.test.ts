@@ -277,5 +277,11 @@ describe('runWorkflow · 迭代体输入隔离', () => {
     expect(prompt.props.text).toBe(
       JSON.stringify({ prompt: '{{input[0].scene}}', style: '电影感' })
     )
+    // 循环体节点在画布上虽是同一张卡，但每一镜必须留下独立运行记录；否则
+    // nodeRunHistory 会按相同 runId 去重，资产中心无法精确回溯到对应镜头。
+    const promptRuns = (prompt.meta.nodeRunHistory as Array<{ runId: string }> | undefined) ?? []
+    expect(promptRuns).toHaveLength(2)
+    expect(new Set(promptRuns.map((run) => run.runId)).size).toBe(2)
+    expect(promptRuns.every((run) => run.runId.includes(':item:'))).toBe(true)
   })
 })

@@ -9,6 +9,7 @@ import {
 import { useNodePanelStore } from '../../../stores/nodePanel'
 import { Icon } from '../../../components/Icon'
 import { readNodeConfig } from '../../../canvas/node-persistence'
+import { createPrevisVideoReference } from './shared'
 
 /** 画布卡片只显示导演工程摘要；完整编辑器始终在独立工作区中打开。 */
 export function DirectorBody({ shape }: NodeBodyProps): React.JSX.Element {
@@ -56,8 +57,20 @@ export function DirectorBody({ shape }: NodeBodyProps): React.JSX.Element {
           useNodePanelStore.getState().open('director', shape.id)
         }}
       >
-        <Icon name="director" size={15} /> 打开导演台
+        <Icon name="director" size={15} /> 打开 3D 预演台
       </button>
+      {publishCurrent && publish?.video && (
+        <button
+          className="director-open-btn"
+          onClick={(event) => {
+            event.stopPropagation()
+            createPrevisVideoReference(editor, shape)
+          }}
+          title="创建视频节点，并以当前预演视频作为真实运动参考输入"
+        >
+          <Icon name="video" size={15} /> 用作运动参考
+        </button>
+      )}
     </div>
   )
 }

@@ -43,6 +43,8 @@ export interface IterateItemResult {
   outputs?: Record<string, Record<string, unknown>>
   /** 失败 / 跳过原因。 */
   error?: string
+  /** 本项实际执行时使用的独立运行 ID；复用旧产物时保留原 ID 以便追溯。 */
+  runId?: string
   /** 来源追踪：序号 + 可选稳定 id（如镜头 id）。 */
   source: IterateItemSource
 }
@@ -220,7 +222,8 @@ async function runItem(
   ctx: NodeExecutionContext,
   config: IterateConfig,
   item: Record<string, unknown>,
-  index: number
+  index: number,
+  itemRunId: string
 ): Promise<IterateItemResult> {
   const source = sourceFor(item, index)
   const base = { source }
@@ -239,6 +242,7 @@ async function runItem(
         item,
         index,
         itemId: source.itemId,
+        itemRunId,
         iterationNodeId: ctx.node.id,
         itemTargets: targets.map((edge) => ({ nodeId: edge.nodeId, portId: edge.toPortId }))
       })) as Record<string, unknown> | undefined
@@ -248,21 +252,33 @@ async function runItem(
         retries += 1
         continue
       }
-      return { item, status: 'failed', error: msg, ...base }
+      return { item, status: 'failed', error: msg, runId: itemRunId, ...base }
     }
     if (!output) {
       return { item, status: 'skipped', error: '未配置子流程', ...base }
     }
     if (!outputEmpty(output)) {
-      return { item, status: 'done', outputs: collectAllOutputs(output), ...base }
+      return { item, status: 'done', outputs: collectAllOutputs(output), runId: itemRunId, ...base }
     }
     // 下游未产生输出：按失败策略处理
     if (config.onFailure === 'retry' && retries < config.maxRetries) {
       retries += 1
       continue
     }
-    return { item, status: 'failed', error: '循环体未产生输出', ...base }
+    return { item, status: 'failed', error: '循环体未产生输出', runId: itemRunId, ...base }
   }
+}
+
+/**
+ * 循环体节点是画布上的单例，但每个列表项必须有独立运行记录。runId 不参与恢复
+ * 匹配（恢复由稳定 item id + 内容指纹决定）；它只用于准确追溯这一次实际产物。
+ */
+function itemRunIdFor(ctx: NodeExecutionContext, source: IterateItemSource): string {
+  const workflowRunId = ctx.runId || 'workflow'
+  const identity = source.itemId
+    ? `${source.itemId}:${source.fingerprint ?? 'unknown'}`
+    : `index:${source.index}`
+  return `${workflowRunId}:item:${source.index}:${contentFingerprint({ identity })}`
 }
 
 export const iterateExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
@@ -325,6 +341,7 @@ export const iterateExecutor = async (ctx: NodeExecutionContext): Promise<NodeEx
     if (ctx.signal.cancelled) break
     const item = items[idx] as Record<string, unknown>
     const source = sourceFor(item, idx)
+    const itemRunId = itemRunIdFor(ctx, source)
     const identity =
       source.itemId && source.fingerprint ? `${source.itemId}:${source.fingerprint}` : ''
     const prior =
@@ -352,7 +369,7 @@ export const iterateExecutor = async (ctx: NodeExecutionContext): Promise<NodeEx
         continue
       }
     }
-    const result = await runItem(ctx, config, item, idx)
+    const result = await runItem(ctx, config, item, idx, itemRunId)
     results[idx] = result
     publishProgress()
     if (result.status === 'failed') {

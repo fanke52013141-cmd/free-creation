@@ -32,6 +32,13 @@ export type IconName =
   | 'zoom-in'
   | 'zoom-out'
   | 'reset'
+  | 'align-left'
+  | 'align-right'
+  | 'align-horizontal'
+  | 'align-vertical'
+  | 'distribute-horizontal'
+  | 'distribute-vertical'
+  | 'group'
   | 'undo'
   | 'redo'
   | 'close'
@@ -87,7 +94,7 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <rect x="3.5" y="4" width="17" height="16" rx="2" />
       <circle cx="8.5" cy="9" r="1.5" />
       <path d="m4.5 17 4.5-4 3 2.5 2.5-2 5.5 4.5" />
-      <path d="m18 3 .7 2.3L21 6l-2.3.7L18 9l-.7-2.3L15 6l2.3-.7L18 3Z" />
+      <path d="m18 2.5.65 2.85L21.5 6l-2.85.65L18 9.5l-.65-2.85L14.5 6l2.85-.65L18 2.5Z" />
     </>
   ),
   video: (
@@ -98,15 +105,16 @@ const PATHS: Record<IconName, React.ReactNode> = {
   ),
   frame: (
     <>
-      <rect x="3.5" y="4" width="17" height="16" rx="2" />
-      <path d="M8 4v16M16 4v16M3.5 9h17M3.5 15h17" />
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+      <path d="M7.5 4.5v15M16.5 4.5v15M3.5 8.5h4M16.5 8.5h4M3.5 15.5h4M16.5 15.5h4" />
+      <rect x="9.5" y="8" width="5" height="8" rx=".8" />
     </>
   ),
   clip: (
     <>
-      <path d="M6 4v16M18 4v16" />
-      <path d="M9 8h6M9 16h6" />
-      <path d="m12 7-2 2 2 2M12 13l2 2-2 2" />
+      <rect x="3.5" y="5" width="17" height="14" rx="2" />
+      <path d="M9 7.5v9M15 7.5v9M6 12h3M15 12h3" />
+      <path d="m8 10-2 2 2 2M16 10l2 2-2 2" />
     </>
   ),
   audio: (
@@ -130,10 +138,10 @@ const PATHS: Record<IconName, React.ReactNode> = {
   ),
   processor: (
     <>
-      <path d="M4 7h10M10 4l4 3-4 3" />
-      <path d="M20 17H10M14 14l-4 3 4 3" />
-      <circle cx="6" cy="17" r="2" />
-      <circle cx="18" cy="7" r="2" />
+      <circle cx="6" cy="7" r="2" />
+      <circle cx="18" cy="17" r="2" />
+      <path d="M8 7h4l4 4M16 17h-4l-4-4" />
+      <path d="m14 9 2 2-2 2M10 13l-2-2 2-2" />
     </>
   ),
   json: (
@@ -150,15 +158,15 @@ const PATHS: Record<IconName, React.ReactNode> = {
   storyboard: (
     <>
       <rect x="3.5" y="4" width="17" height="16" rx="2" />
-      <path d="M8 4v16M8 9h12M8 15h12" />
-      <path d="M5.5 6.5h.01M5.5 12h.01M5.5 17.5h.01" />
+      <path d="M8.5 4v16M8.5 9.3h12M8.5 14.7h12" />
+      <path d="M5.8 6.7h.01M5.8 12h.01M5.8 17.3h.01" />
     </>
   ),
   director: (
     <>
-      <rect x="3.5" y="6" width="13" height="12" rx="2" />
-      <path d="m16.5 10 4-2v8l-4-2" />
-      <circle cx="8" cy="12" r="2" />
+      <path d="m4 15 8 4 8-4-8-4-8 4Z" />
+      <path d="M12 11V4M8.5 7.5 12 4l3.5 3.5" />
+      <path d="M8 15.2 12 17l4-1.8" />
     </>
   ),
   upload: (
@@ -175,10 +183,10 @@ const PATHS: Record<IconName, React.ReactNode> = {
   ),
   workflow: (
     <>
-      <rect x="9" y="3.5" width="6" height="5" rx="1.2" />
-      <rect x="3.5" y="15.5" width="6" height="5" rx="1.2" />
-      <rect x="14.5" y="15.5" width="6" height="5" rx="1.2" />
-      <path d="M12 8.5v3M12 11.5H6.5v4M12 11.5h5.5v4" />
+      <circle cx="12" cy="5.5" r="2.5" />
+      <circle cx="5.5" cy="18" r="2.5" />
+      <circle cx="18.5" cy="18" r="2.5" />
+      <path d="M12 8v3.5M12 11.5H5.5V15M12 11.5h6.5V15" />
     </>
   ),
   history: (
@@ -238,6 +246,45 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <circle cx="12" cy="12" r="8" />
       <path d="M12 8v4l3 2" />
+    </>
+  ),
+  'align-left': (
+    <>
+      <path d="M4 6v12M8 7h10M8 12h7M8 17h9" />
+    </>
+  ),
+  'align-right': (
+    <>
+      <path d="M20 6v12M16 7H6M16 12H9M16 17H7" />
+    </>
+  ),
+  'align-horizontal': (
+    <>
+      <path d="M12 4v16M5 7h14M8 12h8M6 17h12" />
+    </>
+  ),
+  'align-vertical': (
+    <>
+      <path d="M4 12h16M7 5v14M12 8v8M17 6v12" />
+    </>
+  ),
+  'distribute-horizontal': (
+    <>
+      <path d="M4 5v14M20 5v14M8 12h8" />
+      <path d="m10 9-3 3 3 3M14 9l3 3-3 3" />
+    </>
+  ),
+  'distribute-vertical': (
+    <>
+      <path d="M5 4h14M5 20h14M12 8v8" />
+      <path d="m9 10 3-3 3 3M9 14l3 3 3-3" />
+    </>
+  ),
+  group: (
+    <>
+      <rect x="3.5" y="3.5" width="7.5" height="7.5" rx="1.5" />
+      <rect x="13" y="13" width="7.5" height="7.5" rx="1.5" />
+      <path d="M7.25 11v1.2A2.8 2.8 0 0 0 10 15h1M16.75 13v-1.2A2.8 2.8 0 0 0 14 9h-1" />
     </>
   ),
   undo: (
@@ -383,6 +430,12 @@ const PATHS: Record<IconName, React.ReactNode> = {
     </>
   )
 }
+
+/**
+ * 供测试和节点规范校验使用的运行时图标清单。
+ * `PATHS` 保持唯一真源，`Record<IconName, ...>` 会在编译期阻止遗漏条目。
+ */
+export const ICON_NAMES = Object.freeze(Object.keys(PATHS) as IconName[])
 
 export function Icon({
   name,

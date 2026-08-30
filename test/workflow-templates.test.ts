@@ -35,7 +35,7 @@ function shapeFor(node: (typeof BUILTIN_TEMPLATES)[number]['nodes'][number]): No
 }
 
 describe('P2/P3 内置创作模板', () => {
-  it.each(['角色→场景→分镜', '分镜→导演台', '提示词包→生图', '图片修改→后续创作', '分镜→批量生图'])(
+  it.each(['角色→场景→分镜', '分镜→3D预演', '提示词包→生图', '图片修改→后续创作', '分镜→批量生图'])(
     '%s 的每条连线均为真实契约连接',
     (name) => {
       const template = BUILTIN_TEMPLATES.find((item) => item.name === name)!

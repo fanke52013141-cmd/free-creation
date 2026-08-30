@@ -206,13 +206,14 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
     'video-clip': '截取',
     'video-audio': '提音',
     audio: '音频',
+    tts: '配音',
     chat: '对话',
     script: '脚本',
     processor: '处理',
     json: '数据',
     code: '代码',
     storyboard: '分镜',
-    director: '导演'
+    director: '预演'
   }
 
   const handleNodePick = (type: NodeTypeId): void => {

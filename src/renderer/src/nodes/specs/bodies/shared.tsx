@@ -203,6 +203,39 @@ export function createVideoContinuation(
   editor.select(id)
 }
 
+/**
+ * 导演台的预演视频不是“下载提示”，而是可以直接注入视频节点的真实运动参考。
+ * 此快捷入口只创建 video.in-reference-video 边，不复制视频、不读取隐藏状态。
+ */
+export function createPrevisVideoReference(editor: Editor, source: NodeCardShape): void {
+  const spec = getNodeType('video')
+  if (!spec) return
+  const id = createShapeId()
+  editor.createShape({
+    id,
+    type: 'node-card',
+    x: source.x + source.props.w + 80,
+    y: source.y,
+    props: {
+      nodeType: 'video',
+      title: '参考视频生成',
+      w: spec.defaultSize.w,
+      h: spec.defaultSize.h
+    } satisfies Partial<NodeCardProps>
+  })
+  if (
+    !createEdge(
+      editor,
+      { shapeId: source.id, portId: 'out-preview-video' },
+      { shapeId: id, portId: 'in-reference-video' }
+    )
+  ) {
+    editor.deleteShape(id)
+    return
+  }
+  editor.select(id)
+}
+
 type MediaSourceMeta = {
   kind?: string
   modelKey?: string

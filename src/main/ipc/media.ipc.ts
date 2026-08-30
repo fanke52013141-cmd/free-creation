@@ -1,5 +1,6 @@
 // 媒体 IPC：拖拽导入 + 系统对话框选择导入（见《技术框架与规范》§10）
 import { ipcMain, dialog, clipboard, shell } from 'electron'
+import { constants as fsConstants } from 'fs'
 import { copyFile } from 'fs/promises'
 import { basename, extname, join } from 'path'
 import { IPC } from '../../shared/contracts'
@@ -7,6 +8,7 @@ import type { IpcEnvelope } from '../../shared/contracts'
 import type {
   ImageCropTransformInput,
   ImportMediaBufferInput,
+  TtsGenerateInput,
   VideoFrameTransformInput,
   VideoRangeTransformInput
 } from '../../shared/contracts'
@@ -20,6 +22,7 @@ import {
 } from '../store/media.repo'
 import { getDb } from '../store/db'
 import { transformImageCrop } from '../media/image-transform'
+import { transformTts } from '../media/tts-transform'
 import {
   transformVideoAudio,
   transformVideoClip,
@@ -204,6 +207,24 @@ export function registerMediaIpc(): void {
     }
   )
 
+  /** 本地 ComfyUI 语音复刻：同步等待合成完成（轮询在主进程内完成）。 */
+  ipcMain.handle(
+    IPC.media.ttsGenerate,
+    async (_e, input: TtsGenerateInput): Promise<IpcEnvelope<MediaAsset>> => {
+      if (!input?.projectId || !input.referenceAudioId || !input.text?.trim()) {
+        return err('INVALID_INPUT', '缺少参考音频或合成文本')
+      }
+      if (!input.config || typeof input.config !== 'object') {
+        return err('INVALID_INPUT', '合成配置不完整')
+      }
+      try {
+        return ok(await transformTts(input))
+      } catch (error) {
+        return err('TTS_FAILED', error instanceof Error ? error.message : String(error))
+      }
+    }
+  )
+
   ipcMain.handle(
     IPC.media.pick,
     async (_e, projectId: string): Promise<IpcEnvelope<MediaImportResult>> => {
@@ -271,12 +292,13 @@ export function registerMediaIpc(): void {
     return ok(true)
   })
 
-  // 批量导出：弹出目录选择对话框，将项目所有媒体文件复制到目标目录
+  // 批量导出：只允许导出当前项目的资产；以 COPYFILE_EXCL 写入，绝不覆盖目标目录
+  // 中已有文件。重名时自动加序号，避免重复导出或同名素材丢失。
   ipcMain.handle(
     IPC.media.batchExport,
     async (
       _e,
-      input: { projectId: string }
+      input: { projectId: string; mediaIds?: string[] }
     ): Promise<IpcEnvelope<{ exported: number; failed: number; targetDir: string }>> => {
       if (!input?.projectId) return err('INVALID_INPUT', '参数不完整')
       const result = await dialog.showOpenDialog({
@@ -287,10 +309,17 @@ export function registerMediaIpc(): void {
         return ok({ exported: 0, failed: 0, targetDir: '' })
       }
       const targetDir = result.filePaths[0]
-      const assets = listMedia(input.projectId)
+      const projectAssets = listMedia(input.projectId)
+      const requestedIds = Array.isArray(input.mediaIds)
+        ? new Set(
+            input.mediaIds.filter((id): id is string => typeof id === 'string' && id.length > 0)
+          )
+        : null
+      const assets = requestedIds
+        ? projectAssets.filter((asset) => requestedIds.has(asset.id))
+        : projectAssets
       let exported = 0
       let failed = 0
-      const used = new Set<string>()
       for (const asset of assets) {
         const src = getMediaAbsPath(asset.path)
         if (!src) {
@@ -298,16 +327,25 @@ export function registerMediaIpc(): void {
           continue
         }
         const ext = extname(asset.path)
-        const baseName = asset.name ? `${asset.name}${ext}` : basename(asset.path)
-        let destName = baseName
-        if (used.has(destName)) destName = `${asset.name ?? asset.id}_${asset.id}${ext}`
-        used.add(destName)
-        try {
-          await copyFile(src, join(targetDir, destName))
-          exported++
-        } catch {
-          failed++
+        const rawName = asset.name ? `${asset.name}${ext}` : basename(asset.path)
+        const baseName = rawName.replace(/[\\/:*?"<>|]+/g, '-').trim() || `${asset.id}${ext}`
+        const extIndex = baseName.lastIndexOf('.')
+        const stem = extIndex > 0 ? baseName.slice(0, extIndex) : baseName
+        const suffix = extIndex > 0 ? baseName.slice(extIndex) : ''
+        let copied = false
+        for (let attempt = 0; attempt < 1000; attempt += 1) {
+          const destName = attempt === 0 ? `${stem}${suffix}` : `${stem} (${attempt})${suffix}`
+          try {
+            await copyFile(src, join(targetDir, destName), fsConstants.COPYFILE_EXCL)
+            exported++
+            copied = true
+            break
+          } catch (error) {
+            const code = (error as NodeJS.ErrnoException).code
+            if (code !== 'EEXIST') break
+          }
         }
+        if (!copied) failed++
       }
       return ok({ exported, failed, targetDir })
     }

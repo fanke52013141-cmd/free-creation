@@ -34,6 +34,12 @@ export interface SubflowRequest {
   index: number
   /** 当前项的可选稳定 id（如镜头 id），用于来源追踪。 */
   itemId?: string
+  /**
+   * 本次批量项的独立运行 ID。循环体节点共享画布卡片，但每一个列表项的运行记录、
+   * 媒体产物和端口数据包必须使用不同 runId，才能在资产中心准确回溯，且不会互相
+   * 覆盖历史记录。
+   */
+  itemRunId?: string
   /** 发起这次迭代的节点 id，用于识别 out-items 的循环后汇总消费者。 */
   iterationNodeId?: string
   /**

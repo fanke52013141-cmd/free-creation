@@ -20,6 +20,7 @@ describe('nodeSchemaRegistered', () => {
     expect(nodeSchemaRegistered({ id: 'prompt.bundle', version: 1 })).toBe(true)
     expect(nodeSchemaRegistered({ id: 'previs.camera', version: 1 })).toBe(true)
     expect(nodeSchemaRegistered({ id: 'previs.project', version: 1 })).toBe(true)
+    expect(nodeSchemaRegistered({ id: 'previs.project', version: 2 })).toBe(true)
   })
 
   it('拒绝未注册的 Schema ID 或错误版本', () => {
@@ -106,6 +107,21 @@ describe('validateNodeSchema · 导演台 Schema', () => {
         { version: 1, shots: [{ id: 'shot-1', name: '镜头 01', camera }] }
       ).ok
     ).toBe(true)
+  })
+
+  it('v2 工程必须携带空间和序列骨架', () => {
+    expect(
+      validateNodeSchema(
+        { id: 'previs.project', version: 2 },
+        { version: 2, shots: [{ id: 'shot-1', name: '镜头 01', camera }], space: {}, sequence: {} }
+      ).ok
+    ).toBe(true)
+    expect(
+      validateNodeSchema(
+        { id: 'previs.project', version: 2 },
+        { version: 2, shots: [{ id: 'shot-1', name: '镜头 01', camera }] }
+      ).ok
+    ).toBe(false)
   })
 })
 

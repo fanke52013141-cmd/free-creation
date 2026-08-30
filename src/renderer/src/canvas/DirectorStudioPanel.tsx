@@ -10,6 +10,8 @@ import {
   createDirectorId,
   createDirectorPublishRecord,
   createDirectorShot,
+  directorSequenceDuration,
+  directorShotWarnings,
   evaluateDirectorShot,
   isDirectorPublishCurrent,
   moveDirectorShot,
@@ -19,11 +21,13 @@ import {
   removeDirectorShot,
   recordDirectorActorKeyframe,
   recordDirectorCameraKeyframe,
+  syncDirectorSequence,
   type DirectorCamera,
   type DirectorProjectData,
   type DirectorPublishRecord,
   type DirectorShot
 } from '../nodes/director-data'
+import { generatePrevisSpace } from '../nodes/previs-space-generator'
 import { validateNodeSchema } from '@shared/node-schemas'
 import { getNodePorts, getNodeType, mediaUrl } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
@@ -219,8 +223,12 @@ export function DirectorStudioPanel({
   const [timeline, setTimeline] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [mobilePanel, setMobilePanel] = useState<'shots' | 'inspector' | null>(null)
-  const [viewportMode, setViewportMode] = useState<'2d' | '3d'>('2d')
-  const [publishing, setPublishing] = useState<'frame' | 'video' | null>(null)
+  const [viewportMode, setViewportMode] = useState<'2d' | '3d'>('3d')
+  const [selectedActorId, setSelectedActorId] = useState<string | null>(null)
+  const [transformMode, setTransformMode] = useState<'translate' | 'rotate'>('translate')
+  const [generatingSpace, setGeneratingSpace] = useState(false)
+  const [advancedMode, setAdvancedMode] = useState(false)
+  const [publishing, setPublishing] = useState<'frame' | 'video' | 'sequence' | null>(null)
   const [videoProgress, setVideoProgress] = useState<number | null>(null)
   const previewRef = useRef<HTMLCanvasElement>(null)
   const director3dRef = useRef<Director3DViewportHandle>(null)
@@ -230,6 +238,10 @@ export function DirectorStudioPanel({
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') onClose()
+      const target = event.target as HTMLElement | null
+      if (target?.matches('input, textarea, select, [contenteditable=true]')) return
+      if (event.key.toLowerCase() === 'g') setTransformMode('translate')
+      if (event.key.toLowerCase() === 'r') setTransformMode('rotate')
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -240,6 +252,32 @@ export function DirectorStudioPanel({
     () => (shot ? evaluateDirectorShot(shot, timeline) : null),
     [shot, timeline]
   )
+  const shotWarnings = useMemo(
+    () => (project && shot ? directorShotWarnings(project, shot) : []),
+    [project, shot]
+  )
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      const target = event.target as HTMLElement | null
+      if (
+        event.code !== 'Space' ||
+        target?.matches('input, textarea, select, [contenteditable=true]')
+      ) {
+        return
+      }
+      event.preventDefault()
+      setIsPlaying((playing) => {
+        if (!playing) playbackStartedAtRef.current = performance.now() - timeline * 1000
+        return !playing
+      })
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [timeline])
+  const effectiveSelectedActorId =
+    selectedActorId && shot?.actors.some((actor) => actor.id === selectedActorId)
+      ? selectedActorId
+      : null
   useEffect(() => {
     if (previewShot && previewRef.current) {
       drawShotFrame(previewRef.current, previewShot, timeline / previewShot.camera.durationSec)
@@ -273,7 +311,12 @@ export function DirectorStudioPanel({
     isDirectorPublishCurrent(project, published) && published.shotId === shot.id
 
   const save = (next: Omit<DirectorProjectData, 'revision'>, affectsPublish = true): void => {
-    const revised = nextDirectorProjectRevision(project, next, affectsPublish)
+    const normalized = {
+      ...next,
+      version: 2 as const,
+      sequence: syncDirectorSequence({ ...next, version: 2, revision: project.revision })
+    }
+    const revised = nextDirectorProjectRevision(project, normalized, affectsPublish)
     setProject(revised)
     editor.updateShape({
       id: shapeId,
@@ -297,6 +340,61 @@ export function DirectorStudioPanel({
   const removeActor = (actorId: string): void => {
     if (shot.actors.length <= 1) return toast('每个镜头至少保留一个角色')
     patchShot({ actors: shot.actors.filter((actor) => actor.id !== actorId) })
+  }
+
+  const alignCameraToEditorView = (): void => {
+    if (viewportMode !== '3d') {
+      setViewportMode('3d')
+      return toast('已切换到 3D 视口；调整视角后再次点击“对准当前视角”')
+    }
+    try {
+      patchCamera(director3dRef.current?.captureEditorView() ?? {})
+      toast('导演机位已对准当前编辑视角')
+    } catch (error) {
+      toast(error instanceof Error ? error.message : '无法读取当前编辑视角')
+    }
+  }
+
+  const buildLocalWhitebox = async (): Promise<void> => {
+    const linked = gatherUpstreamMediaList(editor, shapeId, 'in-reference-images', 'image')
+    const references = linked.slice(0, 3)
+    if (linked.length > 3) toast('空间白模只使用前 3 张参考图；其余图片仍保留在镜头参考区')
+    setGeneratingSpace(true)
+    try {
+      const space = await generatePrevisSpace({
+        referenceMediaIds: references.map((item) => item.mediaId),
+        referenceMediaPaths: references.map((item) => item.mediaPath)
+      })
+      save({ ...project, space })
+      toast(references.length ? '已建立本地白模空间，可继续布置人物和机位' : '已建立空白白模空间')
+    } catch (error) {
+      toast(`空间建立失败：${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      setGeneratingSpace(false)
+    }
+  }
+
+  const buildImageDepth = async (): Promise<void> => {
+    const linked = gatherUpstreamMediaList(editor, shapeId, 'in-reference-images', 'image')
+    const reference = linked[0]
+    if (!reference) {
+      toast('图片视差需要先连接一个图片节点')
+      return
+    }
+    setGeneratingSpace(true)
+    try {
+      const space = await generatePrevisSpace({
+        mode: 'image-depth',
+        referenceMediaIds: [reference.mediaId],
+        referenceMediaPaths: [reference.mediaPath]
+      })
+      save({ ...project, space })
+      toast('已建立图片视差空间；拖动 3D 视口可观察近似景深变化')
+    } catch (error) {
+      toast(`图片视差建立失败：${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      setGeneratingSpace(false)
+    }
   }
 
   const syncInputs = (): void => {
@@ -360,7 +458,17 @@ export function DirectorStudioPanel({
     const activeShotId = shots.some((item) => item.id === project.activeShotId)
       ? project.activeShotId
       : shots[0].id
-    save({ version: 1, activeShotId, shots })
+    save({
+      version: 2,
+      activeShotId,
+      shots,
+      space: {
+        ...project.space,
+        sourceMediaIds: references.slice(0, 3).map((item) => item.mediaId),
+        sourceMediaPaths: references.slice(0, 3).map((item) => item.mediaPath)
+      },
+      sequence: project.sequence
+    })
     markUndoPoint(editor, 'director-sync-inputs')
     toast(
       `已同步 ${Array.isArray(story?.shots) ? story.shots.length : 0} 个分镜与 ${references.length} 张参考图`
@@ -455,6 +563,49 @@ export function DirectorStudioPanel({
     }
   }
 
+  const publishSequence = async (): Promise<void> => {
+    if (viewportMode !== '3d') {
+      setViewportMode('3d')
+      return toast('整段预演使用 3D 白模导出；已切换到 3D 视口，请再次点击导出整段')
+    }
+    const segments = project.sequence.cuts
+      .map((cut) => {
+        const sourceShot = project.shots.find((item) => item.id === cut.shotId)
+        return sourceShot ? { shot: sourceShot, durationSec: cut.durationSec } : null
+      })
+      .filter((item): item is { shot: DirectorShot; durationSec: number } => Boolean(item))
+    if (!segments.length) return toast('镜头序列为空，无法导出')
+    setPublishing('sequence')
+    setVideoProgress(0)
+    const controller = new AbortController()
+    videoAbortRef.current = controller
+    try {
+      const blob = await director3dRef.current?.recordDirectorSequence(
+        segments,
+        (progress) => setVideoProgress(progress),
+        controller.signal
+      )
+      if (!blob) throw new Error('3D 预演尚未就绪，请稍后重试')
+      const result = await getMediaBridge().importMediaBuffer({
+        projectId,
+        mime: 'video/webm',
+        name: `${shape.props.title}-3D预演序列`,
+        data: new Uint8Array(await blob.arrayBuffer())
+      })
+      if (!result.ok) throw new Error(result.error.message)
+      writePublish({
+        video: { mediaId: result.data.id, mediaPath: result.data.path, mime: result.data.mime }
+      })
+      toast('3D 预演序列已发布，可作为视频节点的运动参考')
+    } catch (error) {
+      toast(`序列导出失败：${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      setPublishing(null)
+      setVideoProgress(null)
+      videoAbortRef.current = null
+    }
+  }
+
   const addShot = (): void => {
     const nextShot = createDirectorShot(`镜头 ${String(project.shots.length + 1).padStart(2, '0')}`)
     save({ ...project, activeShotId: nextShot.id, shots: [...project.shots, nextShot] })
@@ -473,7 +624,7 @@ export function DirectorStudioPanel({
   const moveShot = (offset: -1 | 1): void => {
     const shots = moveDirectorShot(project.shots, shot.id, offset)
     if (shots === project.shots) return
-    save({ version: 1, activeShotId: project.activeShotId, shots })
+    save({ ...project, activeShotId: project.activeShotId, shots })
     markUndoPoint(editor, 'director-move-shot')
   }
 
@@ -485,11 +636,11 @@ export function DirectorStudioPanel({
   }
 
   return (
-    <div className="director-studio-mask" role="dialog" aria-modal="true" aria-label="导演台">
+    <div className="director-studio-mask" role="dialog" aria-modal="true" aria-label="3D 预演台">
       <section className="director-studio">
         <header className="director-topbar">
           <div className="director-brand">
-            <Icon name="director" size={18} /> 导演台 <small>PREVIS</small>
+            <Icon name="director" size={18} /> 3D 预演台 <small>PREVIS</small>
           </div>
           <div className="director-project-title">
             {shape.props.title} · {shot.name}
@@ -502,8 +653,34 @@ export function DirectorStudioPanel({
             </small>
           </div>
           <div className="director-top-actions">
+            <button
+              onClick={() => void buildLocalWhitebox()}
+              disabled={generatingSpace}
+              title="依据最多三张真实连线参考图建立本地白模"
+            >
+              <Icon name="grid" size={14} />{' '}
+              {generatingSpace
+                ? '建立中…'
+                : project.space.status === 'ready'
+                  ? '重建空间'
+                  : '生成空间'}
+            </button>
+            <button
+              onClick={() => void buildImageDepth()}
+              disabled={generatingSpace}
+              title="用首张真实连线图片建立本地 2.5D 视差空间"
+            >
+              <Icon name="image" size={14} /> 图片视差
+            </button>
             <button onClick={syncInputs} title="同步连线输入">
               <Icon name="reset" size={14} /> 同步连线输入
+            </button>
+            <button
+              aria-pressed={advancedMode}
+              onClick={() => setAdvancedMode((value) => !value)}
+              title="显示或隐藏数值、关键帧等高级参数"
+            >
+              <Icon name="settings" size={14} /> {advancedMode ? '简洁模式' : '高级设置'}
             </button>
             <button
               onClick={() => void publishFrame()}
@@ -529,7 +706,19 @@ export function DirectorStudioPanel({
                   ? '导出 3D WebM'
                   : '导出 WebM'}
             </button>
-            {publishing === 'video' && viewportMode === '3d' && (
+            {project.sequence.cuts.length > 1 && (
+              <button
+                onClick={() => void publishSequence()}
+                disabled={publishing !== null}
+                title="按时间轴硬切导出所有镜头的 3D 白模预演"
+              >
+                <Icon name="workflow" size={14} />{' '}
+                {publishing === 'sequence'
+                  ? `整段 ${Math.round((videoProgress ?? 0) * 100)}%`
+                  : '导出整段'}
+              </button>
+            )}
+            {(publishing === 'video' || publishing === 'sequence') && viewportMode === '3d' && (
               <button onClick={() => videoAbortRef.current?.abort()} title="取消 3D 视频导出">
                 取消
               </button>
@@ -618,6 +807,45 @@ export function DirectorStudioPanel({
           <main className="director-viewport">
             <div className="director-viewport-tools">
               <span>{viewportMode === '3d' ? '3D 白模预演' : '2D 构图预演'}</span>
+              <span className="director-quick-tools">
+                <button
+                  className={transformMode === 'translate' ? 'active' : ''}
+                  onClick={() => setTransformMode('translate')}
+                  title="移动选中人物（G）"
+                >
+                  G 移动
+                </button>
+                <button
+                  className={transformMode === 'rotate' ? 'active' : ''}
+                  onClick={() => setTransformMode('rotate')}
+                  title="旋转选中人物（R）"
+                >
+                  R 旋转
+                </button>
+                <button
+                  onClick={() => {
+                    const actor = {
+                      id: createDirectorId('actor'),
+                      name: `角色 ${String(shot.actors.length + 1).padStart(2, '0')}`,
+                      pose: '站立' as const,
+                      x: 30 + shot.actors.length * 12,
+                      y: 62,
+                      z: 0,
+                      scale: 1,
+                      color: '#c4a7ff',
+                      heading: 0
+                    }
+                    patchShot({ actors: [...shot.actors, actor] })
+                    setSelectedActorId(actor.id)
+                  }}
+                  title="添加白模人物"
+                >
+                  <Icon name="add" size={13} /> 人物
+                </button>
+                <button onClick={alignCameraToEditorView} title="将拍摄机位匹配为当前观察角度">
+                  <Icon name="target" size={13} /> 对准视角
+                </button>
+              </span>
               <span className="director-viewport-mode">
                 <button
                   className={viewportMode === '2d' ? 'active' : ''}
@@ -634,7 +862,18 @@ export function DirectorStudioPanel({
               </span>
             </div>
             {viewportMode === '3d' ? (
-              <Director3DViewport ref={director3dRef} shot={previewShot} />
+              <Director3DViewport
+                ref={director3dRef}
+                shot={previewShot}
+                space={project.space}
+                selectedActorId={effectiveSelectedActorId}
+                transformMode={transformMode}
+                onSelectActor={setSelectedActorId}
+                onCommitActorTransform={(actorId, patch) => {
+                  patchActor(actorId, patch)
+                  setSelectedActorId(actorId)
+                }}
+              />
             ) : (
               <div
                 className={`director-camera-monitor aspect-${shot.camera.aspectRatio.replace(':', '-')}`}
@@ -656,6 +895,16 @@ export function DirectorStudioPanel({
             <div className="director-scene-summary">
               {shot.scene || '填写画面描述，建立本镜头的预演意图。'}
             </div>
+            <div className="director-space-status">
+              <Icon name="grid" size={13} />
+              {project.space.message ??
+                '尚未建立空间；可直接布置人物，或点击“生成空间 / 图片视差”。'}
+            </div>
+            {shotWarnings[0] && (
+              <div className="director-warning" role="status">
+                <Icon name="warning" size={13} /> {shotWarnings[0]}
+              </div>
+            )}
           </main>
           <aside className="director-inspector">
             <div className="director-panel-head">
@@ -689,6 +938,36 @@ export function DirectorStudioPanel({
             </label>
             <div className="director-inspector-group">
               <strong>摄像机</strong>
+              <div className="director-guide-toggles" aria-label="常用运镜">
+                {(['固定', '推近', '拉远', '横移'] as const).map((preset) => (
+                  <button
+                    key={preset}
+                    onClick={() => {
+                      const start = recordDirectorCameraKeyframe(shot, 0)
+                      const distance = preset === '横移' ? 4 : preset === '固定' ? 0 : 3
+                      const direction = preset === '推近' ? -1 : 1
+                      const targetCamera = {
+                        ...shot.camera,
+                        ...(preset === '横移'
+                          ? { x: shot.camera.x + distance }
+                          : { z: shot.camera.z + direction * distance })
+                      }
+                      const withEnd: DirectorShot = { ...start, camera: targetCamera }
+                      const timelineWithEnd = recordDirectorCameraKeyframe(
+                        withEnd,
+                        shot.camera.durationSec
+                      ).timeline
+                      patchShot({ camera: shot.camera, timeline: timelineWithEnd })
+                      toast(`已应用${preset}运镜；可在时间轴继续微调`)
+                    }}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+              <button className="director-record-keyframe" onClick={alignCameraToEditorView}>
+                <Icon name="target" size={13} /> 对准当前视角
+              </button>
               <button
                 className="director-record-keyframe"
                 onClick={() =>
@@ -697,45 +976,49 @@ export function DirectorStudioPanel({
               >
                 在 {timeline.toFixed(2)} 秒记录机位
               </button>
-              <div className="director-camera-transform">
-                {(
-                  [
-                    ['X', 'x', -50, 50, 0.1],
-                    ['Y', 'y', -10, 30, 0.1],
-                    ['Z', 'z', -50, 50, 0.1],
-                    ['方位', 'heading', -360, 360, 1],
-                    ['俯仰', 'pitch', -89, 89, 1]
-                  ] as const
-                ).map(([label, key, min, max, step]) => (
-                  <label key={key}>
-                    {label}
-                    <input
-                      type="number"
-                      min={min}
-                      max={max}
-                      step={step}
-                      value={shot.camera[key]}
-                      onChange={(event) =>
-                        patchCamera({
-                          [key]: Math.max(min, Math.min(max, Number(event.target.value) || 0))
-                        })
-                      }
-                    />
-                  </label>
-                ))}
-              </div>
-              <label>
-                焦距
-                <input
-                  type="number"
-                  min="12"
-                  max="200"
-                  value={shot.camera.focalLengthMm}
-                  onChange={(event) =>
-                    patchCamera({ focalLengthMm: Number(event.target.value) || 35 })
-                  }
-                />
-              </label>
+              {advancedMode && (
+                <div className="director-camera-transform">
+                  {(
+                    [
+                      ['X', 'x', -50, 50, 0.1],
+                      ['Y', 'y', -10, 30, 0.1],
+                      ['Z', 'z', -50, 50, 0.1],
+                      ['方位', 'heading', -360, 360, 1],
+                      ['俯仰', 'pitch', -89, 89, 1]
+                    ] as const
+                  ).map(([label, key, min, max, step]) => (
+                    <label key={key}>
+                      {label}
+                      <input
+                        type="number"
+                        min={min}
+                        max={max}
+                        step={step}
+                        value={shot.camera[key]}
+                        onChange={(event) =>
+                          patchCamera({
+                            [key]: Math.max(min, Math.min(max, Number(event.target.value) || 0))
+                          })
+                        }
+                      />
+                    </label>
+                  ))}
+                </div>
+              )}
+              {advancedMode && (
+                <label>
+                  焦距
+                  <input
+                    type="number"
+                    min="12"
+                    max="200"
+                    value={shot.camera.focalLengthMm}
+                    onChange={(event) =>
+                      patchCamera({ focalLengthMm: Number(event.target.value) || 35 })
+                    }
+                  />
+                </label>
+              )}
               <label>
                 画幅
                 <select
@@ -766,19 +1049,21 @@ export function DirectorStudioPanel({
                   }
                 />
               </label>
-              <label>
-                帧率
-                <select
-                  value={shot.camera.fps}
-                  onChange={(event) =>
-                    patchCamera({ fps: Number(event.target.value) as DirectorCamera['fps'] })
-                  }
-                >
-                  <option value="24">24 fps</option>
-                  <option value="25">25 fps</option>
-                  <option value="30">30 fps</option>
-                </select>
-              </label>
+              {advancedMode && (
+                <label>
+                  帧率
+                  <select
+                    value={shot.camera.fps}
+                    onChange={(event) =>
+                      patchCamera({ fps: Number(event.target.value) as DirectorCamera['fps'] })
+                    }
+                  >
+                    <option value="24">24 fps</option>
+                    <option value="25">25 fps</option>
+                    <option value="30">30 fps</option>
+                  </select>
+                </label>
+              )}
             </div>
             <div className="director-inspector-group">
               <strong>构图与参考</strong>
@@ -819,8 +1104,15 @@ export function DirectorStudioPanel({
             </div>
             <div className="director-inspector-group">
               <strong>角色 ({shot.actors.length})</strong>
+              <small className="director-reference-hint">
+                单击角色选中，3D 视口直接拖动坐标轴；“起点/终点”会自动写入关键帧。
+              </small>
               {shot.actors.map((actor) => (
-                <div className="director-actor" key={actor.id}>
+                <div
+                  className={`director-actor ${effectiveSelectedActorId === actor.id ? 'selected' : ''}`}
+                  key={actor.id}
+                  onClick={() => setSelectedActorId(actor.id)}
+                >
                   <div className="director-actor-row">
                     <input
                       value={actor.name}
@@ -928,27 +1220,49 @@ export function DirectorStudioPanel({
                   >
                     在 {timeline.toFixed(2)} 秒记录角色
                   </button>
+                  <div className="director-guide-toggles">
+                    <button
+                      onClick={() =>
+                        patchShot({
+                          timeline: recordDirectorActorKeyframe(shot, actor.id, 0).timeline
+                        })
+                      }
+                    >
+                      设为起点
+                    </button>
+                    <button
+                      onClick={() =>
+                        patchShot({
+                          timeline: recordDirectorActorKeyframe(
+                            shot,
+                            actor.id,
+                            shot.camera.durationSec
+                          ).timeline
+                        })
+                      }
+                    >
+                      设为终点
+                    </button>
+                  </div>
                 </div>
               ))}
               <button
                 className="director-add-actor"
-                onClick={() =>
-                  patchShot({
-                    actors: [
-                      ...shot.actors,
-                      {
-                        id: createDirectorId('actor'),
-                        name: `角色 ${String(shot.actors.length + 1).padStart(2, '0')}`,
-                        pose: '站立',
-                        x: 30 + shot.actors.length * 18,
-                        y: 62,
-                        z: 0,
-                        scale: 1,
-                        color: '#c4a7ff'
-                      }
-                    ]
-                  })
-                }
+                onClick={() => {
+                  const actor = {
+                    id: createDirectorId('actor'),
+                    name: `角色 ${String(shot.actors.length + 1).padStart(2, '0')}`,
+                    pose: '站立' as const,
+                    x: 30 + shot.actors.length * 18,
+                    y: 62,
+                    z: 0,
+                    scale: 1,
+                    color: '#c4a7ff',
+                    heading: 0
+                  }
+                  patchShot({ actors: [...shot.actors, actor] })
+                  setSelectedActorId(actor.id)
+                }}
               >
                 <Icon name="add" size={13} /> 添加角色
               </button>
@@ -995,6 +1309,10 @@ export function DirectorStudioPanel({
                 0
               )}{' '}
               个角色关键帧
+            </span>
+            <span>
+              序列 · {project.sequence.cuts.length} 个镜头 ·{' '}
+              {directorSequenceDuration(project).toFixed(1)} 秒
             </span>
           </div>
         </footer>

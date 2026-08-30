@@ -74,6 +74,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const [draft, setDraft] = useState(data.prompt)
   const [submitting, setSubmitting] = useState(false)
   const refImage = gatherUpstreamMedia(editor, shape.id, 'in-image', 'image')
+  const motionReference = gatherUpstreamMedia(editor, shape.id, 'in-reference-video', 'video')
 
   useEffect(() => {
     if (!loaded) void loadProviders()
@@ -224,7 +225,10 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     <div className="gen-panel">
       <div className="gen-capability-note">
         <Icon name="info" size={13} />
-        <span>{refImage ? '首帧图已连接' : '可连接首帧图'} · 上游文本会并入提示词</span>
+        <span>
+          {refImage ? '首帧图已连接' : '可连接首帧图'} ·{' '}
+          {motionReference ? '运动参考已连接' : '可连接预演视频'}
+        </span>
       </div>
       {refImage && (
         <div className="ref-image-bar">
@@ -237,6 +241,14 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           <span className="ref-image-label">
             <Icon name="attach" size={13} />
             首帧图已连接
+          </span>
+        </div>
+      )}
+      {motionReference && (
+        <div className="ref-image-bar">
+          <Icon name="director" size={15} />
+          <span className="ref-image-label">
+            已连接预演运动参考；模型是否接受以实际运行结果为准。
           </span>
         </div>
       )}

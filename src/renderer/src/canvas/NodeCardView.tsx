@@ -171,7 +171,10 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         style={{ width: shape.props.w, height: shape.props.h }}
         onPointerDown={handleCardPointerDown}
       >
-        <div className={`node-card type-${shape.props.nodeType}`}>
+        <div
+          className={`node-card type-${shape.props.nodeType}`}
+          data-node-type={shape.props.nodeType}
+        >
           {/* 顶部颜色条（按类型区分） */}
           <div className="node-color-bar" style={{ background: spec?.color }} />
           <div className="node-header">
@@ -210,7 +213,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                 shape.props.nodeType === 'chat'
                   ? '打开对话面板'
                   : shape.props.nodeType === 'director'
-                    ? '打开导演台'
+                    ? '打开 3D 预演台'
                     : '查看输入输出说明'
               }
               aria-label="打开节点说明"
@@ -287,7 +290,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             key={p.id}
             className={`port-dot out ${isSource && draft?.from.portId === p.id ? 'ok' : ''}`}
             style={{
-              top: outY[i] - 7,
+              top: outY[i] - 6,
               borderColor: PORT_COLORS[p.type],
               ['--pc' as string]: PORT_COLORS[p.type]
             }}

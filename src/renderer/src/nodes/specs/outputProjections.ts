@@ -67,6 +67,9 @@ export const projectVideoAudioOutputs = (shape: NodeCardShape): RawNodeOutputs =
 export const projectAudioOutputs = (shape: NodeCardShape): RawNodeOutputs =>
   mediaOutput(shape, 'audio', 'out-audio')
 
+export const projectTtsOutputs = (shape: NodeCardShape): RawNodeOutputs =>
+  mediaOutput(shape, 'audio', 'out-audio')
+
 export const projectChatOutputs = (shape: NodeCardShape): RawNodeOutputs => {
   const data = parseNodeRecord(shape.props.text)
   const messages = Array.isArray(data?.messages)

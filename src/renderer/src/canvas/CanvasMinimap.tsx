@@ -312,13 +312,6 @@ export function CanvasBottomDock({ editor }: DockProps): React.JSX.Element {
                     strokeWidth="0.5"
                   />
                 </pattern>
-                <filter id="mm-glow">
-                  <feGaussianBlur stdDeviation="1.5" result="blur" />
-                  <feMerge>
-                    <feMergeNode in="blur" />
-                    <feMergeNode in="SourceGraphic" />
-                  </feMerge>
-                </filter>
               </defs>
               <rect width={BOX_W} height={BOX_H} fill="url(#mm-grid)" />
               {/* 连线 */}
@@ -356,7 +349,6 @@ export function CanvasBottomDock({ editor }: DockProps): React.JSX.Element {
                     opacity={n.selected ? 1 : 0.75}
                     stroke={n.selected ? '#fff' : 'none'}
                     strokeWidth={n.selected ? 1.5 : 0}
-                    filter={n.selected ? 'url(#mm-glow)' : undefined}
                     style={{ cursor: 'pointer', transition: 'opacity 0.15s' }}
                     onPointerDown={(e) => {
                       e.stopPropagation()

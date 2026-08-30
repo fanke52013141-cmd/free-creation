@@ -76,10 +76,24 @@ describe('标准连线 · 允许的组合', () => {
     expect(canConnect('video-clip', 'out-video', 'video-frame', 'in-video')).toBe(true)
   })
 
+  it('预演视频 → 视频运动参考（真实 video 端口连接）', () => {
+    expect(canConnect('director', 'out-preview-video', 'video', 'in-reference-video')).toBe(true)
+  })
+
   it('对话 markdown 输出 → 文本输入（text 与 markdown 互连）', () => {
     expect(canConnect('chat', 'out-markdown', 'text', 'in-text')).toBe(true)
     expect(canConnect('chat', 'out-markdown', 'image-gen', 'in-text')).toBe(true)
     expect(canConnect('chat', 'out-markdown', 'image-edit', 'in-text')).toBe(true)
+  })
+
+  it('音频 / TTS → TTS 参考语音（audio 端口互连）', () => {
+    expect(canConnect('audio', 'out-audio', 'tts', 'in-audio')).toBe(true)
+    expect(canConnect('video-audio', 'out-audio', 'tts', 'in-audio')).toBe(true)
+    expect(canConnect('tts', 'out-audio', 'tts', 'in-audio')).toBe(true)
+  })
+
+  it('文本 → TTS 合成文字（text 端口连接）', () => {
+    expect(canConnect('text', 'out-text', 'tts', 'in-text')).toBe(true)
   })
 
   it('JSON → JSON（json.any 通用互通）', () => {

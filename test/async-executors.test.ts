@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ProviderSummary } from '@shared/types'
 import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
 import type { NodeExecutionContext } from '@renderer/engine/executor-types'
+import type { NodeValuePacket } from '@renderer/engine/contracts'
 import { audioExecutor } from '@renderer/engine/executors/audio'
 import { chatExecutor } from '@renderer/engine/executors/chat'
 import { waitForChat, waitForVideo } from '@renderer/engine/executors/shared'
@@ -228,5 +229,46 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     await expect(pending).resolves.toEqual({ status: 'done' })
     expect(props.mediaId).toBe('video-1')
     expect(JSON.parse(result.value ?? '{}').results[0].runId).toBe('run-1')
+  })
+
+  it('video executor forwards a connected motion reference to the gateway', async () => {
+    const videoSubmit = vi
+      .fn()
+      .mockResolvedValue({ ok: true, data: { taskId: 'video-reference-task' } })
+    installGateway({
+      videoSubmit,
+      videoTask: vi.fn().mockResolvedValue({
+        ok: true,
+        data: { status: 'success', mediaId: 'video-2', mediaPath: 'projects/p/video-2.mp4' }
+      }),
+      videoCancel: vi.fn()
+    })
+    const { ctx } = makeContext(
+      'video',
+      JSON.stringify({ prompt: '跟随人物移动', modelKey: 'provider-1::video-model', params: {} }),
+      [provider('video')]
+    )
+    ;(ctx.inputs as Map<string, NodeValuePacket[]>).set('in-reference-video', [
+      {
+        type: 'video',
+        value: {
+          kind: 'video',
+          mediaId: 'previs-1',
+          mediaPath: 'projects/p/previs.webm',
+          mime: 'video/webm'
+        },
+        source: { nodeId: 'director-1', portId: 'out-preview-video', runId: 'run-1' },
+        createdAt: Date.now()
+      }
+    ])
+
+    const pending = videoExecutor(ctx)
+    await vi.runAllTicks()
+    await vi.advanceTimersByTimeAsync(3_000)
+    await pending
+
+    expect(videoSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ referenceVideoMediaId: 'previs-1' })
+    )
   })
 })

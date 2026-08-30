@@ -12,7 +12,9 @@ import {
   parseVideoFrameConfig,
   parseVideoRangeConfig,
   serializeVideoConfig,
-  type VideoTransformKind
+  type VideoRangeConfig,
+  type VideoTransformKind,
+  type VocalIsolationMode
 } from '@shared/video-transform'
 
 type BodyMode = VideoTransformKind
@@ -124,7 +126,11 @@ function VideoTransformSettings({
   const saveRange = (startMs: number, endMs: number): void => {
     const start = Math.round(clamp(startMs, Math.max(0, max - 1)))
     const end = Math.round(Math.max(start + 1, clamp(endMs, max)))
-    const next = { version: 1 as const, startMs: start, endMs: end }
+    const next: VideoRangeConfig = { version: 1, startMs: start, endMs: end }
+    if (rangeConfigRef.current.removeBackground) {
+      next.removeBackground = true
+      next.isolationMode = rangeConfigRef.current.isolationMode
+    }
     rangeConfigRef.current = next
     setRangeConfig(next)
   }
@@ -135,6 +141,44 @@ function VideoTransformSettings({
       props: { config: serializeVideoConfig(rangeConfigRef.current) }
     })
     markUndoPoint(editor, `video-${mode}-config`)
+  }
+  const toggleVocalIsolation = (removeBackground: boolean): void => {
+    const cur = rangeConfigRef.current
+    const next: VideoRangeConfig = {
+      version: 1,
+      startMs: cur.startMs,
+      endMs: cur.endMs
+    }
+    if (removeBackground) {
+      next.removeBackground = true
+      next.isolationMode = cur.isolationMode ?? 'auto'
+    }
+    rangeConfigRef.current = next
+    setRangeConfig(next)
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: { config: serializeVideoConfig(next) }
+    })
+    markUndoPoint(editor, 'video-audio-vocal')
+  }
+  const changeIsolationMode = (isolationMode: VocalIsolationMode): void => {
+    const cur = rangeConfigRef.current
+    const next: VideoRangeConfig = {
+      version: 1,
+      startMs: cur.startMs,
+      endMs: cur.endMs,
+      removeBackground: true,
+      isolationMode
+    }
+    rangeConfigRef.current = next
+    setRangeConfig(next)
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: { config: serializeVideoConfig(next) }
+    })
+    markUndoPoint(editor, 'video-audio-isolation-mode')
   }
   const seek = (timeMs: number): void => {
     const video = videoRef.current
@@ -165,25 +209,57 @@ function VideoTransformSettings({
             }
           />
           {isFrame ? (
-            <label className="video-time-control">
-              取帧位置 <strong>{timeLabel(frameConfig.timeMs)}</strong>
-              <input
-                type="range"
-                min="0"
-                max={max}
-                step="1"
-                value={clamp(frameConfig.timeMs, max)}
-                onInput={(event) => {
-                  const value = Number(event.currentTarget.value)
-                  seek(value)
-                  saveFrame(value)
-                }}
-                onPointerUp={finish}
-                onKeyUp={(event) => {
-                  if (event.key.startsWith('Arrow')) finish()
-                }}
-              />
-            </label>
+            <>
+              <div className="frame-preset-row">
+                <button
+                  type="button"
+                  className="btn-ghost small frame-preset-btn"
+                  onPointerDown={stopEventPropagation}
+                  onClick={(event) => {
+                    stopEventPropagation(event)
+                    seek(0)
+                    saveFrame(0)
+                    persistFrame()
+                  }}
+                >
+                  首帧
+                </button>
+                <button
+                  type="button"
+                  className="btn-ghost small frame-preset-btn"
+                  disabled={durationMs <= 0}
+                  onPointerDown={stopEventPropagation}
+                  onClick={(event) => {
+                    stopEventPropagation(event)
+                    const last = Math.max(0, max - 1)
+                    seek(last)
+                    saveFrame(last)
+                    persistFrame()
+                  }}
+                >
+                  尾帧
+                </button>
+              </div>
+              <label className="video-time-control">
+                取帧位置 <strong>{timeLabel(frameConfig.timeMs)}</strong>
+                <input
+                  type="range"
+                  min="0"
+                  max={max}
+                  step="1"
+                  value={clamp(frameConfig.timeMs, max)}
+                  onInput={(event) => {
+                    const value = Number(event.currentTarget.value)
+                    seek(value)
+                    saveFrame(value)
+                  }}
+                  onPointerUp={finish}
+                  onKeyUp={(event) => {
+                    if (event.key.startsWith('Arrow')) finish()
+                  }}
+                />
+              </label>
+            </>
           ) : (
             <>
               <label className="video-time-control">
@@ -227,6 +303,33 @@ function VideoTransformSettings({
               <small className="video-range-summary">
                 时长：{timeLabel(Math.max(1, rangeConfig.endMs - rangeConfig.startMs))}
               </small>
+              {mode === 'audio' && (
+                <div className="audio-isolation-control">
+                  <label className="audio-isolation-toggle">
+                    <input
+                      type="checkbox"
+                      checked={rangeConfig.removeBackground === true}
+                      onChange={(event) => toggleVocalIsolation(event.currentTarget.checked)}
+                    />
+                    <span>人声分离</span>
+                  </label>
+                  {rangeConfig.removeBackground && (
+                    <label className="audio-isolation-mode">
+                      分离方式
+                      <select
+                        value={rangeConfig.isolationMode ?? 'auto'}
+                        onChange={(event) =>
+                          changeIsolationMode(event.currentTarget.value as VocalIsolationMode)
+                        }
+                      >
+                        <option value="auto">自动</option>
+                        <option value="center">中置人声</option>
+                        <option value="eq">均衡器分离</option>
+                      </select>
+                    </label>
+                  )}
+                </div>
+              )}
             </>
           )}
         </>
@@ -238,7 +341,9 @@ function VideoTransformSettings({
           ? '运行后输出 PNG 图片。'
           : mode === 'clip'
             ? '运行后精确重编码为 MP4 片段。'
-            : '运行后输出 M4A 音频。'}
+            : rangeConfig.removeBackground
+              ? '运行后输出 M4A 音频（已启用人声分离，去除背景音乐）。'
+              : '运行后输出 M4A 音频。'}
       </p>
     </section>
   )

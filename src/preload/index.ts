@@ -4,12 +4,15 @@ import { IPC } from '../shared/contracts'
 import type {
   BootstrapInfo,
   ChatStartInput,
+  ComfyuiSettingsInput,
+  ComfyuiStatus,
   CreateProjectInput,
   GatewayEvent,
   IpcEnvelope,
   ImageGenerateInput,
   ImageEditInput,
   ImageCropTransformInput,
+  TtsGenerateInput,
   VideoFrameTransformInput,
   VideoRangeTransformInput,
   ImportMediaBufferInput,
@@ -68,6 +71,13 @@ const api = {
     ipcRenderer.invoke(IPC.media.videoClip, input),
   extractVideoAudio: (input: VideoRangeTransformInput): Promise<IpcEnvelope<MediaAsset>> =>
     ipcRenderer.invoke(IPC.media.videoAudio, input),
+  ttsGenerate: (input: TtsGenerateInput): Promise<IpcEnvelope<MediaAsset>> =>
+    ipcRenderer.invoke(IPC.media.ttsGenerate, input),
+  comfyui: {
+    status: (): Promise<IpcEnvelope<ComfyuiStatus>> => ipcRenderer.invoke(IPC.comfyui.status),
+    saveSettings: (input: ComfyuiSettingsInput): Promise<IpcEnvelope<{ baseUrl: string }>> =>
+      ipcRenderer.invoke(IPC.comfyui.saveSettings, input)
+  },
   pickMedia: (projectId: string): Promise<IpcEnvelope<MediaImportResult>> =>
     ipcRenderer.invoke(IPC.media.pick, projectId),
   listMedia: (projectId: string): Promise<IpcEnvelope<MediaAsset[]>> =>
@@ -81,11 +91,12 @@ const api = {
     ipcRenderer.invoke(IPC.media.copyPath, mediaId),
   openMedia: (mediaId: string): Promise<IpcEnvelope<boolean>> =>
     ipcRenderer.invoke(IPC.media.open, mediaId),
-  // 批量导出：弹出目录选择，将项目所有媒体复制到目标目录
+  // 批量导出：弹出目录选择，将项目所有或当前筛选出的媒体复制到目标目录。
   batchExportMedia: (
-    projectId: string
+    projectId: string,
+    mediaIds?: string[]
   ): Promise<IpcEnvelope<{ exported: number; failed: number; targetDir: string }>> =>
-    ipcRenderer.invoke(IPC.media.batchExport, { projectId }),
+    ipcRenderer.invoke(IPC.media.batchExport, { projectId, mediaIds }),
   workspace: {
     listTemplates: (): Promise<IpcEnvelope<WorkflowTemplateRecord[]>> =>
       ipcRenderer.invoke(IPC.workspace.listTemplates),

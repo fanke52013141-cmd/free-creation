@@ -15,7 +15,8 @@ export function nodeSchemaRegistered(schema: PortSchemaRef): boolean {
     `${schema.id}@${schema.version}` === 'shot.definition@1' ||
     `${schema.id}@${schema.version}` === 'prompt.bundle@1' ||
     `${schema.id}@${schema.version}` === 'previs.camera@1' ||
-    `${schema.id}@${schema.version}` === 'previs.project@1'
+    `${schema.id}@${schema.version}` === 'previs.project@1' ||
+    `${schema.id}@${schema.version}` === 'previs.project@2'
   )
 }
 
@@ -178,10 +179,10 @@ function validatePrevisCamera(value: unknown): string[] {
 }
 
 /** 导演工程的轻量可交换摘要；不把二进制模型或图片写入 JSON 数据流。 */
-function validatePrevisProject(value: unknown): string[] {
+function validatePrevisProject(value: unknown, version: 1 | 2): string[] {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return ['根值必须是对象']
   const data = value as Record<string, unknown>
-  if (data.version !== 1) return ['version 必须为 1']
+  if (data.version !== version) return [`version 必须为 ${version}`]
   if (!Array.isArray(data.shots)) return ['shots 必须是数组']
   const errors: string[] = []
   data.shots.forEach((shot, index) => {
@@ -195,6 +196,14 @@ function validatePrevisProject(value: unknown): string[] {
     const cameraErrors = validatePrevisCamera(item.camera)
     errors.push(...cameraErrors.map((error) => `shots[${index}].camera.${error}`))
   })
+  if (version === 2) {
+    if (!data.space || typeof data.space !== 'object' || Array.isArray(data.space)) {
+      errors.push('space 必须是对象')
+    }
+    if (!data.sequence || typeof data.sequence !== 'object' || Array.isArray(data.sequence)) {
+      errors.push('sequence 必须是对象')
+    }
+  }
   return errors
 }
 
@@ -230,7 +239,10 @@ export function validateNodeSchema(schema: PortSchemaRef, value: unknown): Schem
       errors = [...jsonSerializable(value), ...validatePrevisCamera(value)]
       break
     case 'previs.project@1':
-      errors = [...jsonSerializable(value), ...validatePrevisProject(value)]
+      errors = [...jsonSerializable(value), ...validatePrevisProject(value, 1)]
+      break
+    case 'previs.project@2':
+      errors = [...jsonSerializable(value), ...validatePrevisProject(value, 2)]
       break
     default:
       errors = [`未注册的 Schema：${schema.id}@${schema.version}`]

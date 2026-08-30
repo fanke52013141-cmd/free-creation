@@ -272,7 +272,7 @@ schema: {
 
 运行器对动态注入仍执行目标端口的类型、Schema、基数和必填校验。禁止把当前项硬编码注入某个叫 `in-json` 的端口；循环体入口可以是 `in-context`、`in-prompt` 或任何已声明且兼容的 JSON 输入。
 
-迭代的可恢复运行记录保存在 `meta.nodeResult`，其中每项都有 `source.index`，并在存在非空字符串 `id` 时附带 `source.itemId + source.fingerprint`。恢复规则只能复用 **ID 和内容指纹均匹配** 的 `done/reused` 项；没有稳定 ID、内容已变或上轮失败/中断的项必须重新执行。`runMode: 'failed'` 只允许重跑这次记录中仍匹配的失败项。运行器会在每项完成后写入进度检查点；暂停是协作式的，只在当前原子项结束后停下，停止会解除暂停等待。循环体执行时若把输入解析后写回 `props.text/config`，运行器必须在每项前恢复冻结的静态输入，并在循环结束后再恢复一次，不能把最后一项的解析结果当作下一轮模板。
+迭代的可恢复运行记录保存在 `meta.nodeResult`，其中每项都有 `source.index`，并在存在非空字符串 `id` 时附带 `source.itemId + source.fingerprint`。恢复规则只能复用 **ID 和内容指纹均匹配** 的 `done/reused` 项；没有稳定 ID、内容已变或上轮失败/中断的项必须重新执行。`runMode: 'failed'` 只允许重跑这次记录中仍匹配的失败项。每个实际执行的列表项还必须拥有独立 `runId`：循环体虽然复用同一批画布节点，但该 ID 必须贯穿节点运行记录、`NodeValuePacket.source.runId`、媒体结果与资产来源；不得让多项共享工作流级 `runId`，否则历史记录会被去重、媒体无法精确反查。运行器会在每项完成后写入进度检查点；暂停是协作式的，只在当前原子项结束后停下，停止会解除暂停等待。循环体执行时若把输入解析后写回 `props.text/config`，运行器必须在每项前恢复冻结的静态输入，并在循环结束后再恢复一次，不能把最后一项的解析结果当作下一轮模板。
 
 ## 5. 连线规则
 
@@ -379,24 +379,59 @@ interface NodeValuePacket {
 
 节点与附加功能的归属必须先通过 §1.1 的判断流程。位于既有节点卡片上的快捷按钮不构成例外：只要操作产生新数据，就必须创建真实节点和真实连线。
 
-### 8.1 导演台（`director`）
+### 8.1 3D 预演台（`director`）
 
 导演台是 `manual-publish` 节点：画布卡片只展示工程摘要和发布状态，完整预演在独立
 工作区打开。它不是没有连线的特殊工具，也不能把场景状态藏进下游节点。
 
-| 方向 | 端口                  | 类型                        | 数量 | 语义                         |
-| ---- | --------------------- | --------------------------- | ---- | ---------------------------- |
-| 输入 | `in-storyboard`       | `json / storyboard.shots@1` | one  | 分镜同步为镜头列表           |
-| 输入 | `in-reference-images` | `image`                     | many | 人物、场景、构图参考图       |
-| 输入 | `in-camera-preset`    | `json / previs.camera@1`    | one  | 初始机位参数                 |
-| 输出 | `out-frame`           | `image`                     | one  | 明确发布的当前预演帧         |
-| 输出 | `out-preview-video`   | `video`                     | one  | 明确导出的 WebM 预演         |
-| 输出 | `out-camera`          | `json / previs.camera@1`    | one  | 已发布镜头机位参数           |
-| 输出 | `out-project`         | `json / previs.project@1`   | one  | 轻量工程摘要，不含媒体二进制 |
+| 方向 | 端口                  | 类型                        | 数量 | 语义                                      |
+| ---- | --------------------- | --------------------------- | ---- | ----------------------------------------- |
+| 输入 | `in-storyboard`       | `json / storyboard.shots@1` | one  | 分镜同步为镜头列表                        |
+| 输入 | `in-reference-images` | `image`                     | many | 场景/人物参考图；建立空间时建议取 1～3 张 |
+| 输入 | `in-camera-preset`    | `json / previs.camera@1`    | one  | 初始机位参数                              |
+| 输出 | `out-frame`           | `image`                     | one  | 明确发布的当前预演帧                      |
+| 输出 | `out-preview-video`   | `video`                     | one  | 明确导出的白模运动参考 WebM               |
+| 输出 | `out-camera`          | `json / previs.camera@1`    | one  | 已发布镜头机位参数                        |
+| 输出 | `out-project`         | `json / previs.project@2`   | one  | 空间、镜头序列与机位摘要；不含媒体二进制  |
 
 导演工程改动后，在未重新发布帧/视频之前，节点必须标示“尚未发布”；下游仅可消费
 最近一次已发布数据。参考图和分镜的“同步输入”只读取其声明的 `portId`，不得按
 节点标题、节点类型或隐藏标签推断资源。
+
+预演台内部的空间、人物、机位、关键帧和硬切镜头序列属于同一个预演工程，不拆成
+隐藏节点，也不得隐式写入下游节点。只有 `out-preview-video`、`out-frame`、
+`out-camera`、`out-project` 是正式输出。白模视频可以通过真实边连接至视频节点的
+`in-reference-video`；是否被某一模型接受由供应商实际响应决定，应用不得伪造“运动
+已跟随”。
+
+`previs.project@2` 的最小语义为：`space`（状态、参考媒体 ID、轻量白模 primitive）、
+`shots`（人物、拍摄机位、关键帧）和 `sequence.cuts`（仅硬切顺序）。工程 JSON 禁止
+保存图片、视频或 3D 二进制。旧 `previs.project@1` 仅在读取时规范化为 v2，不新增旧
+端口或隐式迁移节点。
+
+空间实现分为两层，均不改变上述端口：
+
+1. **第一层：本地白模（`local-whitebox`）**。生成器依据 1～3 张真实参考图建立可编辑
+   的墙体、平台和方块 primitive；它是默认、零费用、可离线工作的空间方案。
+2. **第二层：图片视差（`image-depth`）**。取 `in-reference-images` 的首张图片作为
+   `backgroundMediaId/backgroundMediaPath`，视口在本地以亮度近似深度并施加受控视差。
+   当前 `depthSource` 为 `heuristic-luminance`，不声称得到真实尺度深度，也不产生新的
+   媒体资产；将来接入 Depth Anything 等本地模型时，只替换生成器适配器并写入可选的
+   `depthMediaId/depthMediaPath`，不得改变节点端口或复制图片节点。
+
+两层空间都必须引用真实媒体 ID/路径；缺少参考图时返回 `failed` 状态并保留旧空间，
+不能制造空白“成功”结果。空间模式属于导演工程状态，不是新的画布节点；只有发布的
+帧、预演视频、机位和工程摘要才通过正式输出端口离开导演台。
+
+当序列含多个镜头时，预演台可以按 `sequence.cuts` 导出整段白模 WebM；它是预演输出，
+不是画布内剪辑或合成能力。`out-camera` 在此情况下仍表达当前活动镜头的机位，完整镜头
+序列应从 `out-project` 读取。
+
+### 8.2 视频运动参考输入
+
+视频节点的 `in-reference-video` 是可选 `video` 输入。它表达“将此资产作为运动/镜头
+参考转交给当前视频供应商”，不保证任何模型都支持该能力。执行器必须把真实 `mediaId`
+传给网关；网关必须如实把参考视频提交给供应商或返回供应商错误，不能退化为静默忽略。
 
 ## 9. 分阶段改造方案
 

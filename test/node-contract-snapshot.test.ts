@@ -40,6 +40,7 @@ describe('全部标准节点都已注册', () => {
     'video-clip',
     'video-audio',
     'audio',
+    'tts',
     'chat',
     'processor',
     'json',
@@ -82,6 +83,7 @@ describe('端口契约快照 · 每个端口 ID 稳定且符合命名规范', ()
     'video-clip',
     'video-audio',
     'audio',
+    'tts',
     'chat',
     'processor',
     'json',
@@ -245,6 +247,17 @@ describe('关键端口契约快照（防回归）', () => {
     const outJson = spec.ports.out.find((p) => p.id === 'out-json')!
     expect(inJson.schema).toEqual({ id: 'storyboard.shots', version: 1 })
     expect(outJson.schema).toEqual({ id: 'storyboard.shots', version: 1 })
+  })
+
+  it('语音克隆节点：参考语音(one) + 文本(many) → 音频', () => {
+    const spec = getNodeType('tts')!
+    expect(snapshotPorts(spec.ports.in)).toEqual([
+      { id: 'in-audio', dir: 'in', type: 'audio', required: false, cardinality: 'one' },
+      { id: 'in-text', dir: 'in', type: 'text', required: false, cardinality: 'many' }
+    ])
+    expect(snapshotPorts(spec.ports.out)).toEqual([
+      { id: 'out-audio', dir: 'out', type: 'audio', required: true, cardinality: 'one' }
+    ])
   })
 
   it('对话节点输出为 markdown 类型', () => {
