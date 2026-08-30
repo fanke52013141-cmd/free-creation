@@ -811,7 +811,6 @@ select:focus-visible,
     transform-origin: left bottom;
   }
 }
-
 /* Dock 式邻近放大：只改变视觉变换，不改变按钮布局和命中区域。 */
 .palette-item {
   position: relative;
