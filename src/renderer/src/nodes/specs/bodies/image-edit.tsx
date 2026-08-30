@@ -18,6 +18,7 @@ import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { useNodePanelStore } from '../../../stores/nodePanel'
 import { toast } from '../../../stores/toast'
 import { Icon } from '../../../components/Icon'
+import { AppSelect } from '../../../components/AppSelect'
 import { mediaUrl, type NodeBodyProps, type NodeSettingsProps } from '../../registry'
 import {
   clearSelectedMediaHistory,
@@ -564,7 +565,7 @@ export function ImageEditSettings({
           options={options}
           onChange={(modelKey) => save({ ...config, modelKey })}
         />
-        <select
+        <AppSelect
           className="gen-select w92"
           value={config.size}
           onPointerDown={stopEventPropagation}
@@ -575,7 +576,7 @@ export function ImageEditSettings({
               {size === 'auto' ? '默认尺寸' : size}
             </option>
           ))}
-        </select>
+        </AppSelect>
       </div>
       <textarea
         className="gen-prompt"

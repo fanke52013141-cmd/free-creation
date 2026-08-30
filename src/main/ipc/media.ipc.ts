@@ -38,7 +38,8 @@ import {
   probeVideo,
   separateVocals,
   generateVideoThumbnails,
-  generateAudioWaveform
+  generateAudioWaveform,
+  getLocalMediaCapabilities
 } from '../media/video-transform'
 
 function ok<T>(data: T): IpcEnvelope<T> {
@@ -120,16 +121,26 @@ async function importAll(projectId: string, paths: string[]): Promise<MediaImpor
 
 export function registerMediaIpc(): void {
   ipcMain.handle(
-    IPC.media.videoProbe,
-    async (_e, input: VideoProbeInput) => {
-      if (!input?.projectId || !input.sourceMediaId) return err('INVALID_INPUT', '缺少视频元数据参数')
+    IPC.media.localCapabilities,
+    async (): Promise<IpcEnvelope<import('../../shared/contracts').LocalMediaCapabilities>> => {
       try {
-        return ok(await probeVideo(input))
+        return ok(await getLocalMediaCapabilities())
       } catch (error) {
-        return err('VIDEO_PROBE_FAILED', error instanceof Error ? error.message : String(error))
+        return err(
+          'LOCAL_CAPABILITIES_FAILED',
+          error instanceof Error ? error.message : String(error)
+        )
       }
     }
   )
+  ipcMain.handle(IPC.media.videoProbe, async (_e, input: VideoProbeInput) => {
+    if (!input?.projectId || !input.sourceMediaId) return err('INVALID_INPUT', '缺少视频元数据参数')
+    try {
+      return ok(await probeVideo(input))
+    } catch (error) {
+      return err('VIDEO_PROBE_FAILED', error instanceof Error ? error.message : String(error))
+    }
+  })
   ipcMain.handle(
     IPC.media.import,
     async (
@@ -201,7 +212,10 @@ export function registerMediaIpc(): void {
       try {
         return ok(await generateVideoThumbnails(input))
       } catch (error) {
-        return err('VIDEO_THUMBNAILS_FAILED', error instanceof Error ? error.message : String(error))
+        return err(
+          'VIDEO_THUMBNAILS_FAILED',
+          error instanceof Error ? error.message : String(error)
+        )
       }
     }
   )
@@ -218,18 +232,15 @@ export function registerMediaIpc(): void {
       }
     }
   )
-  ipcMain.handle(
-    IPC.media.vocalSeparate,
-    async (_e, input: VocalSeparateInput) => {
-      if (!input?.projectId || !input.sourceMediaId || !input.config)
-        return err('INVALID_INPUT', '缺少人声分离参数')
-      try {
-        return ok(await separateVocals(input))
-      } catch (error) {
-        return err('VOCAL_SEPARATE_FAILED', error instanceof Error ? error.message : String(error))
-      }
+  ipcMain.handle(IPC.media.vocalSeparate, async (_e, input: VocalSeparateInput) => {
+    if (!input?.projectId || !input.sourceMediaId || !input.config)
+      return err('INVALID_INPUT', '缺少人声分离参数')
+    try {
+      return ok(await separateVocals(input))
+    } catch (error) {
+      return err('VOCAL_SEPARATE_FAILED', error instanceof Error ? error.message : String(error))
     }
-  )
+  })
 
   ipcMain.handle(
     IPC.media.importBuffer,

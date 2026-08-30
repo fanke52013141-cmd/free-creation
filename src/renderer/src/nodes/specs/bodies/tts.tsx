@@ -8,6 +8,7 @@ import { readNodeConfig } from '../../../canvas/node-persistence'
 import { runNodeManually } from '../../../engine/executor'
 import { useAppStore } from '../../../stores/app'
 import { Icon } from '../../../components/Icon'
+import { AppSelect } from '../../../components/AppSelect'
 import { parseTtsConfig } from '@shared/tts'
 import { TTS_LANGS, type TtsConfig, type TtsLang } from '@shared/tts'
 import {
@@ -220,7 +221,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
       {/* ── 合成参数 ── */}
       <div className="tts-options">
         <label className="opt-label">语言</label>
-        <select
+        <AppSelect
           className="gen-select small"
           value={config.lang}
           onPointerDown={(e) => stopEventPropagation(e)}
@@ -231,9 +232,9 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
               {item.label}
             </option>
           ))}
-        </select>
+        </AppSelect>
         <label className="opt-label">格式</label>
-        <select
+        <AppSelect
           className="gen-select small"
           value={config.format}
           onPointerDown={(e) => stopEventPropagation(e)}
@@ -244,7 +245,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
               {f.toUpperCase()}
             </option>
           ))}
-        </select>
+        </AppSelect>
       </div>
       <div className="tts-sliders">
         <div className="tts-slider-row">
@@ -374,7 +375,11 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
               markUndoPoint(editor, 'tts-clear-history')
             }}
             openPreview={(item) =>
-              openPreview({ kind: 'audio', url: mediaUrl(item.mediaPath), title: shape.props.title })
+              openPreview({
+                kind: 'audio',
+                url: mediaUrl(item.mediaPath),
+                title: shape.props.title
+              })
             }
           />
         </>

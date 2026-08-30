@@ -34,12 +34,12 @@ function canConnect(
 }
 
 describe('标准连线 · 允许的组合', () => {
-  it('文本 → 文本类节点（生图/视频/对话/音频/脚本/代码）', () => {
+  it('文本 → 文本类节点（生图/视频/对话/配音/脚本/代码）', () => {
     const textOut = [
       'image-gen',
       'video',
       'chat',
-      'audio',
+      'speech',
       'script',
       'code',
       'text',
@@ -68,6 +68,9 @@ describe('标准连线 · 允许的组合', () => {
     expect(canConnect('image-gen', 'out-image', 'image-crop', 'in-image')).toBe(true)
     expect(canConnect('image-crop', 'out-image', 'video', 'in-image')).toBe(true)
     expect(canConnect('image-split', 'out-image', 'video', 'in-image')).toBe(true)
+    expect(canConnect('image', 'out-image', 'video', 'in-last-image')).toBe(true)
+    expect(canConnect('image-gen', 'out-image', 'video', 'in-reference-images')).toBe(true)
+    expect(canConnect('audio', 'out-audio', 'video', 'in-reference-audio')).toBe(true)
     expect(canConnect('image-split', 'out-images', 'iterate', 'in-list')).toBe(true)
   })
 
@@ -96,6 +99,7 @@ describe('标准连线 · 允许的组合', () => {
 
   it('文本 → TTS 合成文字（text 端口连接）', () => {
     expect(canConnect('text', 'out-text', 'tts', 'in-text')).toBe(true)
+    expect(canConnect('text', 'out-text', 'speech', 'in-text')).toBe(true)
   })
 
   it('JSON → JSON（json.any 通用互通）', () => {

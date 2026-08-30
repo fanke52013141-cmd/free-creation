@@ -6,6 +6,7 @@ import type { NodeCardShape } from './NodeCardShape'
 import { getNodeType } from '../nodes/registry'
 import { markUndoPoint } from './history'
 import { Icon } from '../components/Icon'
+import { Tooltip } from '../components/Tooltip'
 
 const BOX_W = 220
 const BOX_H = 150
@@ -380,51 +381,67 @@ export function CanvasBottomDock({ editor }: DockProps): React.JSX.Element {
       )}
       <div className="dock-controls">
         <div className="dock-tool-group">
-          <button className="dock-btn" title="小地图导航" onClick={() => setShowMap((v) => !v)}>
-            <Icon name="minimap" size={16} />
-          </button>
+          <Tooltip label="小地图导航">
+            <button
+              className="dock-btn"
+              aria-label="小地图导航"
+              onClick={() => setShowMap((v) => !v)}
+            >
+              <Icon name="minimap" size={16} />
+            </button>
+          </Tooltip>
         </div>
         <div className="dock-zoom">
-          <button
-            className="dock-btn"
-            title="放大"
-            onClick={() =>
-              editor &&
-              editor.zoomIn(editor.getViewportPageBounds().center, { animation: { duration: 180 } })
-            }
-          >
-            <Icon name="zoom-in" size={16} />
-          </button>
+          <Tooltip label="放大">
+            <button
+              className="dock-btn"
+              aria-label="放大"
+              onClick={() =>
+                editor &&
+                editor.zoomIn(editor.getViewportPageBounds().center, {
+                  animation: { duration: 180 }
+                })
+              }
+            >
+              <Icon name="zoom-in" size={16} />
+            </button>
+          </Tooltip>
           <span className="dock-zoom-label">{Math.round(data.zoom * 100)}%</span>
-          <button
-            className="dock-btn"
-            title="缩小"
-            onClick={() =>
-              editor &&
-              editor.zoomOut(editor.getViewportPageBounds().center, {
-                animation: { duration: 180 }
-              })
-            }
-          >
-            <Icon name="zoom-out" size={16} />
-          </button>
-          <button
-            className="dock-btn"
-            title="适配画布（缩放到所有节点）"
-            onClick={() => editor && editor.zoomToFit({ animation: { duration: 220 } })}
-          >
-            <Icon name="fit" size={16} />
-          </button>
-          <button
-            className="dock-btn"
-            title="重置缩放到 100%"
-            onClick={() =>
-              editor &&
-              editor.setCamera({ ...editor.getCamera(), z: 1 }, { animation: { duration: 220 } })
-            }
-          >
-            <Icon name="reset" size={16} />
-          </button>
+          <Tooltip label="缩小">
+            <button
+              className="dock-btn"
+              aria-label="缩小"
+              onClick={() =>
+                editor &&
+                editor.zoomOut(editor.getViewportPageBounds().center, {
+                  animation: { duration: 180 }
+                })
+              }
+            >
+              <Icon name="zoom-out" size={16} />
+            </button>
+          </Tooltip>
+          <Tooltip label="适配画布（缩放到所有节点）">
+            <button
+              className="dock-btn"
+              aria-label="适配画布（缩放到所有节点）"
+              onClick={() => editor && editor.zoomToFit({ animation: { duration: 220 } })}
+            >
+              <Icon name="fit" size={16} />
+            </button>
+          </Tooltip>
+          <Tooltip label="重置缩放到 100%">
+            <button
+              className="dock-btn"
+              aria-label="重置缩放到 100%"
+              onClick={() =>
+                editor &&
+                editor.setCamera({ ...editor.getCamera(), z: 1 }, { animation: { duration: 220 } })
+              }
+            >
+              <Icon name="reset" size={16} />
+            </button>
+          </Tooltip>
         </div>
       </div>
     </div>

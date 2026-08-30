@@ -40,6 +40,7 @@ export const IPC = {
     videoThumbnails: 'media:video-thumbnails',
     audioWaveform: 'media:audio-waveform',
     vocalSeparate: 'media:vocal-separate',
+    localCapabilities: 'media:local-capabilities',
     pick: 'media:pick',
     list: 'media:list',
     delete: 'media:delete',
@@ -182,6 +183,18 @@ export interface VocalSeparationResult {
   accompaniment?: import('../types').MediaAsset
 }
 
+/** 本机媒体工具只读探测结果；用于在配置阶段提示，不能替代执行时的真实错误处理。 */
+export interface LocalToolCapability {
+  available: boolean
+  message: string
+}
+
+export interface LocalMediaCapabilities {
+  ffmpeg: LocalToolCapability
+  ffprobe: LocalToolCapability
+  audioSeparator: LocalToolCapability
+}
+
 // ── 本地 ComfyUI 语音复刻（IndexTTS-2.5）──
 
 export interface TtsGenerateInput {
@@ -279,6 +292,8 @@ export interface ImageGenerateInput {
   size?: string
   /** 参考图（本地图库 mediaId，主进程转 base64 data URL 作为图生图输入） */
   referenceMediaId?: string
+  /** 多参考图（真实 many 端口的稳定顺序）；与旧 referenceMediaId 合并去重后提交。 */
+  referenceMediaIds?: string[]
   /** 种子：固定后可复现同一张图，0 或留空表示随机 */
   seed?: number
   /** 宽高比（部分供应商支持） */
@@ -304,11 +319,22 @@ export interface VideoSubmitInput {
   params?: VideoGenParams
   /** 首帧图（本地图库 mediaId，主进程转 base64 data URL 上传） */
   firstFrameMediaId?: string
+  /** H3 等首尾帧协议的尾帧图；与首帧一样是明确的正式输入。 */
+  lastFrameMediaId?: string
   /**
-   * 可选的运动参考视频。是否支持由实际模型决定；适配器只如实转发，不伪造“已跟随”。
-   * 该字段来自 video.in-reference-video 的真实连线。
+   * 多模态参考图片。顺序就是提示词中“图片 1 / 图片 2”的稳定顺序；
+   * 首尾帧不混入此数组，避免角色和语义被悄悄混淆。
+   */
+  referenceImageMediaIds?: string[]
+  /** 可选的多段运动参考视频；顺序来自 video.in-reference-video 的真实连线。 */
+  referenceVideoMediaIds?: string[]
+  /**
+   * @deprecated 仅保留给已在运行中的旧调用；新代码一律使用 referenceVideoMediaIds。
+   * 不作为节点契约的一部分。
    */
   referenceVideoMediaId?: string
+  /** 多模态参考音频；不能把它伪装成输出配乐。 */
+  referenceAudioMediaIds?: string[]
 }
 
 export interface VideoSubmitResult {

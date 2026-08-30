@@ -5,10 +5,11 @@ import type { NodeExecutionContext } from '@renderer/engine/executor-types'
 import type { NodeValuePacket } from '@renderer/engine/contracts'
 import { audioExecutor } from '@renderer/engine/executors/audio'
 import { chatExecutor } from '@renderer/engine/executors/chat'
+import { imageGenExecutor } from '@renderer/engine/executors/imageGen'
 import { waitForChat, waitForVideo } from '@renderer/engine/executors/shared'
 import { videoExecutor } from '@renderer/engine/executors/video'
 
-const provider = (modality: 'text' | 'audio' | 'video'): ProviderSummary =>
+const provider = (modality: 'text' | 'audio' | 'video' | 'image'): ProviderSummary =>
   ({
     id: 'provider-1',
     name: '测试供应商',
@@ -160,6 +161,42 @@ describe('异步网关等待器', () => {
 })
 
 describe('chat / audio / video executors with a mocked gateway', () => {
+  it('image generator submits ordered real multi-reference inputs instead of prompt-only mentions', async () => {
+    const imageGenerate = vi.fn().mockResolvedValue({
+      ok: true,
+      data: { id: 'image-1', path: 'projects/p/image.png', mime: 'image/png', name: '结果' }
+    })
+    installGateway({ imageGenerate })
+    const { ctx } = makeContext(
+      'image-gen',
+      JSON.stringify({ modelKey: 'provider-1::image-model', prompt: '角色正面图' }),
+      [provider('image')]
+    )
+    ctx.inputs = new Map([
+      [
+        'in-reference-images',
+        [
+          {
+            type: 'image',
+            value: { kind: 'image', mediaId: 'a', mediaPath: 'a.png', mime: 'image/png' },
+            source: { nodeId: 'a', portId: 'out-image', runId: 'run-a' },
+            createdAt: 0
+          },
+          {
+            type: 'image',
+            value: { kind: 'image', mediaId: 'b', mediaPath: 'b.png', mime: 'image/png' },
+            source: { nodeId: 'b', portId: 'out-image', runId: 'run-b' },
+            createdAt: 0
+          }
+        ]
+      ]
+    ])
+    await expect(imageGenExecutor(ctx)).resolves.toEqual({ status: 'done' })
+    expect(imageGenerate).toHaveBeenCalledWith(
+      expect.objectContaining({ referenceMediaIds: ['a', 'b'] })
+    )
+  })
+
   it('chat executor persists the completed assistant message through its controlled write API', async () => {
     let eventListener: ((event: Record<string, string>) => void) | undefined
     installGateway({
@@ -194,7 +231,7 @@ describe('chat / audio / video executors with a mocked gateway', () => {
       })
     })
     const { ctx, props, result } = makeContext(
-      'audio',
+      'speech',
       JSON.stringify({
         mode: 'generate',
         modelKey: 'provider-1::audio-model',
@@ -207,6 +244,21 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     await expect(audioExecutor(ctx)).resolves.toEqual({ status: 'done' })
     expect(props.mediaId).toBe('audio-1')
     expect(JSON.parse(result.value ?? '{}').results[0].runId).toBe('run-1')
+  })
+
+  it('audio asset executor never falls through to a remote speech request', async () => {
+    const audioGenerate = vi.fn()
+    installGateway({ audioGenerate })
+    const { ctx } = makeContext(
+      'audio',
+      JSON.stringify({ mode: 'generate', modelKey: 'provider-1::audio-model', text: '不应执行' }),
+      [provider('audio')]
+    )
+    await expect(audioExecutor(ctx)).resolves.toEqual({
+      status: 'skipped',
+      reason: '请上传音频或连接一段上游音频资产'
+    })
+    expect(audioGenerate).not.toHaveBeenCalled()
   })
 
   it('video executor submits, polls, and records the completed media result', async () => {
@@ -248,18 +300,67 @@ describe('chat / audio / video executors with a mocked gateway', () => {
       JSON.stringify({ prompt: '跟随人物移动', modelKey: 'provider-1::video-model', params: {} }),
       [provider('video')]
     )
-    ;(ctx.inputs as Map<string, NodeValuePacket[]>).set('in-reference-video', [
-      {
-        type: 'video',
+    ;(ctx.inputs as Map<string, NodeValuePacket[]>).set(
+      'in-reference-video',
+      ['previs-1', 'previs-2'].map((mediaId) => ({
+        type: 'video' as const,
         value: {
-          kind: 'video',
-          mediaId: 'previs-1',
-          mediaPath: 'projects/p/previs.webm',
+          kind: 'video' as const,
+          mediaId,
+          mediaPath: `projects/p/${mediaId}.webm`,
           mime: 'video/webm'
         },
         source: { nodeId: 'director-1', portId: 'out-preview-video', runId: 'run-1' },
         createdAt: Date.now()
-      }
+      }))
+    )
+
+    const pending = videoExecutor(ctx)
+    await vi.runAllTicks()
+    await vi.advanceTimersByTimeAsync(3_000)
+    await pending
+
+    expect(videoSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ referenceVideoMediaIds: ['previs-1', 'previs-2'] })
+    )
+  })
+
+  it('video executor forwards explicit last-frame, image and audio reference ports', async () => {
+    const videoSubmit = vi
+      .fn()
+      .mockResolvedValue({ ok: true, data: { taskId: 'video-multimodal-task' } })
+    installGateway({
+      videoSubmit,
+      videoTask: vi.fn().mockResolvedValue({
+        ok: true,
+        data: { status: 'success', mediaId: 'video-3', mediaPath: 'projects/p/video-3.mp4' }
+      }),
+      videoCancel: vi.fn()
+    })
+    const { ctx } = makeContext(
+      'video',
+      JSON.stringify({
+        prompt: '图片 1 中的人物说话',
+        modelKey: 'provider-1::video-model',
+        params: {}
+      }),
+      [provider('video')]
+    )
+    const mediaPacket = (kind: 'image' | 'audio', mediaId: string): NodeValuePacket => ({
+      type: kind,
+      value: { kind, mediaId, mediaPath: `projects/p/${mediaId}`, mime: `${kind}/test` },
+      source: { nodeId: `${kind}-node`, portId: `out-${kind}`, runId: 'run-1' },
+      createdAt: Date.now()
+    })
+    ;(ctx.inputs as Map<string, NodeValuePacket[]>).set('in-last-image', [
+      mediaPacket('image', 'last')
+    ])
+    ;(ctx.inputs as Map<string, NodeValuePacket[]>).set('in-reference-images', [
+      mediaPacket('image', 'ref-1'),
+      mediaPacket('image', 'ref-2')
+    ])
+    ;(ctx.inputs as Map<string, NodeValuePacket[]>).set('in-reference-audio', [
+      mediaPacket('audio', 'audio-1')
     ])
 
     const pending = videoExecutor(ctx)
@@ -268,7 +369,11 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     await pending
 
     expect(videoSubmit).toHaveBeenCalledWith(
-      expect.objectContaining({ referenceVideoMediaId: 'previs-1' })
+      expect.objectContaining({
+        lastFrameMediaId: 'last',
+        referenceImageMediaIds: ['ref-1', 'ref-2'],
+        referenceAudioMediaIds: ['audio-1']
+      })
     )
   })
 })

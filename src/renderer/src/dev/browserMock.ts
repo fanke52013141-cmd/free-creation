@@ -79,6 +79,15 @@ export function installBrowserMock(): void {
       Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持视频截取' } }),
     extractVideoAudio: () =>
       Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持音频提取' } }),
+    getLocalMediaCapabilities: () =>
+      Promise.resolve({
+        ok: true,
+        data: {
+          ffmpeg: { available: false, message: '浏览器演示不检测本机工具' },
+          ffprobe: { available: false, message: '浏览器演示不检测本机工具' },
+          audioSeparator: { available: false, message: '浏览器演示不检测本机工具' }
+        }
+      }),
     pickMedia: () => Promise.resolve({ ok: true, data: { assets: [], errors: [] } }),
     workspace: {
       listTemplates: () => Promise.resolve({ ok: true, data: templates }),

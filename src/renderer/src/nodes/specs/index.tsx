@@ -31,9 +31,9 @@ import {
   VideoClipBody,
   VideoClipSettings,
   VideoFrameBody,
-  VideoFrameSettings
-  ,VocalSeparateBody
-  ,VocalSeparateSettings
+  VideoFrameSettings,
+  VocalSeparateBody,
+  VocalSeparateSettings
 } from './bodies'
 import { aiProcessExecutor } from '../../engine/executors/aiProcess'
 import { audioExecutor } from '../../engine/executors/audio'
@@ -89,8 +89,8 @@ import {
   projectVideoOutputs,
   projectVideoAudioOutputs,
   projectVideoClipOutputs,
-  projectVideoFrameOutputs
-  ,projectVocalSeparateOutputs
+  projectVideoFrameOutputs,
+  projectVocalSeparateOutputs
 } from './outputProjections'
 import { parseStructuredDataConfig } from '../structured-data'
 
@@ -144,7 +144,7 @@ const PREVIS_PROJECT: PortSchemaRef = { id: 'previs.project', version: 2 }
 export function registerBaseNodeTypes(): void {
   registerNodeType({
     type: 'text',
-    contractVersion: 1,
+    contractVersion: 2,
     label: '文本',
     icon: 'text',
     color: '#8ab4f8',
@@ -217,9 +217,15 @@ export function registerBaseNodeTypes(): void {
       ],
       out: [
         output('out-image', '当前图片', 'image', '从图片集合中选中的一格，可直接连接图片类下游。'),
-        output('out-images', '图片集合', 'json', '所有格子对应的真实图片资产引用列表，可连接循环节点批处理。', {
-          schema: LIST_ITEMS
-        })
+        output(
+          'out-images',
+          '图片集合',
+          'json',
+          '所有格子对应的真实图片资产引用列表，可连接循环节点批处理。',
+          {
+            schema: LIST_ITEMS
+          }
+        )
       ]
     },
     projectOutputs: projectImageSplitOutputs,
@@ -229,15 +235,23 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'image-gen',
-    contractVersion: 1,
+    contractVersion: 2,
     label: '生图',
     icon: 'image-gen',
     color: '#10b981',
     defaultSize: { w: 340, h: 260 },
-    description: '根据提示词生成图片；可连接一张图片资产作为参考图，生成结果从图片端口输出。',
+    description:
+      '根据提示词生成图片；可连接一张旧版参考图及最多四张有序参考图，生成结果从图片端口输出。',
     ports: {
       in: [
-        input('in-image', '参考图', 'image', '可选的一张参考图片，用于图生图或风格参考。'),
+        input('in-image', '参考图', 'image', '可选的一张旧版参考图片，用于兼容图生图或风格参考。'),
+        input(
+          'in-reference-images',
+          '多参考图',
+          'image',
+          '可选的多张参考图片，按真实连线顺序作为图片 1–4 提交给模型。',
+          { cardinality: 'many' }
+        ),
         input(
           'in-prompt',
           '提示词包',
@@ -281,20 +295,42 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'video',
-    contractVersion: 2,
+    contractVersion: 3,
     label: '视频',
     icon: 'video',
     color: '#f472b6',
     defaultSize: { w: 340, h: 260 },
-    description: '根据文本和可选首帧图片生成一段视频，输出可供预览或下载的视频资产。',
+    description:
+      '根据文本、首尾帧或多模态参考生成视频。所有参考素材都必须通过明确端口连入，输出可供预览或下载的视频资产。',
     ports: {
       in: [
         input('in-image', '首帧图', 'image', '可选的单张首帧图片，用于图生视频。'),
         input(
+          'in-last-image',
+          '尾帧图',
+          'image',
+          '可选的单张尾帧图片；仅支持首尾帧模式的模型可用。'
+        ),
+        input(
+          'in-reference-images',
+          '参考图',
+          'image',
+          '可选的多张参考图；顺序是提示词中“图片 1、图片 2”的稳定顺序。',
+          { cardinality: 'many' }
+        ),
+        input(
           'in-reference-video',
           '运动参考',
           'video',
-          '可选的真实参考视频。预演台白模视频可在此传入，模型是否接受由供应商实际响应决定。'
+          '可选的真实参考视频。预演台白模视频可在此传入，模型是否接受由供应商实际响应决定。',
+          { cardinality: 'many' }
+        ),
+        input(
+          'in-reference-audio',
+          '参考音频',
+          'audio',
+          '可选的参考音频；仅在当前模型支持时按真实输入提交，不能替代生成音频设置。',
+          { cardinality: 'many' }
         ),
         input(
           'in-prompt',
@@ -376,10 +412,14 @@ export function registerBaseNodeTypes(): void {
     description:
       '将一段音频分离为人声与伴奏。快速模式使用 FFmpeg 滤镜增强，高质量模式使用本地 AI 模型。',
     ports: {
-      in: [input('in-audio', '源音频', 'audio', '必须连接的一段完整音频资产。', { required: true })],
+      in: [
+        input('in-audio', '源音频', 'audio', '必须连接的一段完整音频资产。', { required: true })
+      ],
       out: [
         output('out-vocals', '人声', 'audio', '分离产出的人声音轨。'),
-        output('out-accompaniment', '伴奏', 'audio', '可选：分离产出的伴奏音轨。')
+        output('out-accompaniment', '伴奏', 'audio', '高质量模型真实分离出的可选伴奏音轨。', {
+          required: false
+        })
       ]
     },
     projectOutputs: projectVocalSeparateOutputs,
@@ -389,20 +429,35 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'audio',
-    contractVersion: 1,
+    contractVersion: 2,
     label: '音频',
     icon: 'audio',
     color: '#fbbf24',
     defaultSize: { w: 340, h: 260 },
-    description: '导入或生成音频；上游文本可作为语音生成的朗读内容。',
+    description: '音频资产节点：导入本地音频或承接一段上游音频，只负责保存、预览和输出资产。',
+    ports: {
+      in: [input('in-audio', '音频', 'audio', '可选的上游音频资产；接入后作为本节点音频来源。')],
+      out: [output('out-audio', '音频', 'audio', '已导入或承接的音频资产引用。')]
+    },
+    projectOutputs: projectAudioOutputs,
+    executor: audioExecutor,
+    Body: AudioBody
+  })
+  registerNodeType({
+    type: 'speech',
+    contractVersion: 1,
+    label: '配音',
+    icon: 'audio',
+    color: '#fbbf24',
+    defaultSize: { w: 340, h: 260 },
+    description: '通用文本配音节点：将节点内或上游文本交给已配置的语音模型，生成新的音频资产。',
     ports: {
       in: [
-        input('in-audio', '音频', 'audio', '可选的上游音频资产；接入后作为本节点音频来源。'),
-        input('in-text', '文本', 'text', '语音合成模式下需要朗读的文本。', {
+        input('in-text', '朗读文本', 'text', '节点内文本与一个或多个上游文本合并后进行朗读。', {
           cardinality: 'many'
         })
       ],
-      out: [output('out-audio', '音频', 'audio', '导入或生成并落盘后的音频资产引用。')]
+      out: [output('out-audio', '配音', 'audio', '模型生成并落盘的配音资产。')]
     },
     projectOutputs: projectAudioOutputs,
     executor: audioExecutor,
@@ -415,7 +470,8 @@ export function registerBaseNodeTypes(): void {
     icon: 'audio',
     color: '#fbbf24',
     defaultSize: { w: 340, h: 260 },
-    description: '用本地 ComfyUI IndexTTS-2.5 复刻音色并朗读文本，输出新的音频资产。',
+    description:
+      '语音克隆节点：用本地 ComfyUI IndexTTS-2.5 参考一段音色并朗读文本，输出新的音频资产。',
     ports: {
       in: [
         input('in-audio', '参考语音', 'audio', '可选的上游参考音频；也可在节点内上传。'),

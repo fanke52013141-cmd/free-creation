@@ -41,6 +41,7 @@ describe('全部标准节点都已注册', () => {
     'video-clip',
     'video-audio',
     'audio',
+    'speech',
     'tts',
     'chat',
     'processor',
@@ -85,6 +86,7 @@ describe('端口契约快照 · 每个端口 ID 稳定且符合命名规范', ()
     'video-clip',
     'video-audio',
     'audio',
+    'speech',
     'tts',
     'chat',
     'processor',
@@ -270,6 +272,19 @@ describe('关键端口契约快照（防回归）', () => {
     expect(outJson.schema).toEqual({ id: 'storyboard.shots', version: 1 })
   })
 
+  it('生图节点保留旧单图参考，并以 many 端口接收有序多参考图', () => {
+    const spec = getNodeType('image-gen')!
+    expect(spec.contractVersion).toBe(2)
+    expect(spec.ports.in.find((port) => port.id === 'in-image')).toMatchObject({
+      type: 'image',
+      cardinality: 'one'
+    })
+    expect(spec.ports.in.find((port) => port.id === 'in-reference-images')).toMatchObject({
+      type: 'image',
+      cardinality: 'many'
+    })
+  })
+
   it('语音克隆节点：参考语音(one) + 文本(many) → 音频', () => {
     const spec = getNodeType('tts')!
     expect(snapshotPorts(spec.ports.in)).toEqual([
@@ -277,6 +292,18 @@ describe('关键端口契约快照（防回归）', () => {
       { id: 'in-text', dir: 'in', type: 'text', required: false, cardinality: 'many' }
     ])
     expect(snapshotPorts(spec.ports.out)).toEqual([
+      { id: 'out-audio', dir: 'out', type: 'audio', required: true, cardinality: 'one' }
+    ])
+  })
+
+  it('音频资产与通用配音职责分开：前者只承接音频，后者只接朗读文本', () => {
+    expect(snapshotPorts(getNodeType('audio')!.ports.in)).toEqual([
+      { id: 'in-audio', dir: 'in', type: 'audio', required: false, cardinality: 'one' }
+    ])
+    expect(snapshotPorts(getNodeType('speech')!.ports.in)).toEqual([
+      { id: 'in-text', dir: 'in', type: 'text', required: false, cardinality: 'many' }
+    ])
+    expect(snapshotPorts(getNodeType('speech')!.ports.out)).toEqual([
       { id: 'out-audio', dir: 'out', type: 'audio', required: true, cardinality: 'one' }
     ])
   })

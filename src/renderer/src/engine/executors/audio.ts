@@ -1,4 +1,4 @@
-// 音频节点执行器：优先用上游音频资产；否则按语音合成配置生成。
+// 音频资产节点只承接/保存媒体；通用配音节点（speech）才调用语音模型。
 import { inputMedia, inputText } from '../contracts'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
 import { modelsByModality } from '../../stores/gateway'
@@ -39,8 +39,10 @@ export const audioExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
     return { status: 'done' }
   }
   if (ctx.shape.props.mediaPath) return { status: 'done' }
+  if (ctx.node.type !== 'speech') {
+    return { status: 'skipped', reason: '请上传音频或连接一段上游音频资产' }
+  }
   const data = parseAudio(readNodeConfig(ctx.shape))
-  if (data.mode !== 'generate') return { status: 'skipped', reason: '请上传音频或切换到语音合成' }
   const option = modelsByModality(ctx.providers, 'audio').find((item) => item.key === data.modelKey)
   if (!option) return { status: 'skipped', reason: '未选择可用音频模型' }
   const text = mergedPrompt(data.text, inputText(ctx.inputs, 'in-text'))

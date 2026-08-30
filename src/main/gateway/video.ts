@@ -16,6 +16,7 @@ import { getDb, getDataDir } from '../store/db'
 import { readMediaBuffer, saveFileAsset } from '../store/media.repo'
 import { GatewayError } from './factory'
 import { getProvider } from './providers.repo'
+import { videoCapabilitiesFor, videoCapabilityIssues } from '../../shared/video-capabilities'
 
 type Send = (e: GatewayEvent) => void
 
@@ -41,7 +42,11 @@ interface VideoInputState {
   prompt: string
   params?: VideoSubmitInput['params']
   firstFrameMediaId?: string
+  lastFrameMediaId?: string
+  referenceImageMediaIds?: string[]
+  referenceVideoMediaIds?: string[]
   referenceVideoMediaId?: string
+  referenceAudioMediaIds?: string[]
   upstreamTaskId?: string
 }
 
@@ -52,6 +57,75 @@ interface UpstreamState {
 }
 
 const cancelled = new Set<string>()
+
+function uniqueMediaIds(ids: string[] | undefined): string[] {
+  return [
+    ...new Set((ids ?? []).filter((id): id is string => typeof id === 'string' && Boolean(id)))
+  ]
+}
+
+/**
+ * 参考素材的数量限制属于供应商协议，必须在提交前给用户可操作的错误；
+ * 不能让超限请求变成一个含糊的上游 400。
+ */
+function validateReferenceLimits(p: ProviderConfig, input: VideoSubmitInput): void {
+  const images = uniqueMediaIds(input.referenceImageMediaIds)
+  const videos = uniqueMediaIds([
+    ...(input.referenceVideoMediaIds ?? []),
+    ...(input.referenceVideoMediaId ? [input.referenceVideoMediaId] : [])
+  ])
+  const audios = uniqueMediaIds(input.referenceAudioMediaIds)
+  if (p.specId === 'minimax') {
+    if (images.length > 9) throw new GatewayError('INVALID_INPUT', 'MiniMax H3 最多支持 9 张参考图')
+    if (videos.length > 3)
+      throw new GatewayError('INVALID_INPUT', 'MiniMax H3 最多支持 3 段参考视频')
+    if (audios.length > 3)
+      throw new GatewayError('INVALID_INPUT', 'MiniMax H3 最多支持 3 段参考音频')
+    if (
+      images.length +
+        videos.length +
+        audios.length +
+        Number(Boolean(input.firstFrameMediaId)) +
+        Number(Boolean(input.lastFrameMediaId)) >
+      12
+    ) {
+      throw new GatewayError('INVALID_INPUT', 'MiniMax H3 的全部参考素材最多 12 个')
+    }
+  }
+  if (p.specId === 'seedance') {
+    if (images.length + (input.firstFrameMediaId ? 1 : 0) > 9) {
+      throw new GatewayError('INVALID_INPUT', 'Seedance 2.0 最多支持 9 张参考图')
+    }
+    if (videos.length > 3)
+      throw new GatewayError('INVALID_INPUT', 'Seedance 2.0 最多支持 3 段参考视频')
+    if (audios.length > 3)
+      throw new GatewayError('INVALID_INPUT', 'Seedance 2.0 最多支持 3 段参考音频')
+    if (input.lastFrameMediaId) {
+      throw new GatewayError(
+        'INVALID_INPUT',
+        '当前 Seedance 适配器只支持参考图，不支持首尾帧硬约束'
+      )
+    }
+  }
+}
+
+function validateVideoCapabilities(p: ProviderConfig, input: VideoSubmitInput): void {
+  const capabilities = videoCapabilitiesFor(p.specId, input.modelId)
+  const issues = videoCapabilityIssues(capabilities, {
+    params: input.params,
+    hasFirstFrame: Boolean(input.firstFrameMediaId),
+    hasLastFrame: Boolean(input.lastFrameMediaId),
+    referenceImageCount:
+      uniqueMediaIds(input.referenceImageMediaIds).length +
+      Number(Boolean(input.firstFrameMediaId)),
+    referenceVideoCount: uniqueMediaIds([
+      ...(input.referenceVideoMediaIds ?? []),
+      ...(input.referenceVideoMediaId ? [input.referenceVideoMediaId] : [])
+    ]).length,
+    referenceAudioCount: uniqueMediaIds(input.referenceAudioMediaIds).length
+  })
+  if (issues.length > 0) throw new GatewayError('INVALID_INPUT', issues.join('；'))
+}
 
 function updateTask(id: string, patch: Partial<TaskRow>): void {
   const sets = Object.keys(patch)
@@ -190,19 +264,45 @@ async function minimaxSubmit(p: ProviderConfig, input: VideoSubmitInput): Promis
       role: 'first_frame'
     })
   }
-  if (input.referenceVideoMediaId) {
+  if (input.lastFrameMediaId) {
+    content.push({
+      type: 'image_url',
+      image_url: { url: await mediaToDataUrl(input.lastFrameMediaId) },
+      role: 'last_frame'
+    })
+  }
+  for (const mediaId of input.referenceImageMediaIds ?? []) {
+    content.push({
+      type: 'image_url',
+      image_url: { url: await mediaToDataUrl(mediaId) },
+      role: 'reference_image'
+    })
+  }
+  const referenceVideoIds = uniqueMediaIds([
+    ...(input.referenceVideoMediaIds ?? []),
+    ...(input.referenceVideoMediaId ? [input.referenceVideoMediaId] : [])
+  ])
+  for (const mediaId of referenceVideoIds) {
     content.push({
       type: 'video_url',
-      video_url: { url: await mediaToDataUrl(input.referenceVideoMediaId) },
+      video_url: { url: await mediaToDataUrl(mediaId) },
       role: 'reference_video'
+    })
+  }
+  for (const mediaId of input.referenceAudioMediaIds ?? []) {
+    content.push({
+      type: 'audio_url',
+      audio_url: { url: await mediaToDataUrl(mediaId) },
+      role: 'reference_audio'
     })
   }
   const body: Record<string, unknown> = { model: input.modelId, content }
   const { params } = input
   if (params?.duration) body.duration = params.duration
   if (params?.resolution) body.resolution = params.resolution
-  // 图生视频场景 ratio 由输入图片决定（恒 adaptive），不传
-  if (params?.ratio && !input.firstFrameMediaId) body.ratio = params.ratio
+  // H3 的首尾帧模式由输入图决定画幅；纯文本或纯参考模式使用明确 ratio。
+  if (params?.ratio && !input.firstFrameMediaId && !input.lastFrameMediaId)
+    body.ratio = params.ratio
 
   const res = await fetchJson(`${p.baseURL}/v2/video_generation`, {
     method: 'POST',
@@ -274,20 +374,37 @@ async function seedanceSubmit(p: ProviderConfig, input: VideoSubmitInput): Promi
   const content: Array<Record<string, unknown>> = [
     { type: 'text', text: suffix ? `${input.prompt} ${suffix}` : input.prompt }
   ]
-  if (input.firstFrameMediaId) {
+  // Seedance 2.0 将所有图片、视频、音频作为有顺序的参考素材传递。它没有首尾帧
+  // 端口语义，因此不能把 H3 的 last_frame 角色偷换过去；调用方会在 UI 中禁用该模式。
+  const referenceImageIds = [
+    ...(input.firstFrameMediaId ? [input.firstFrameMediaId] : []),
+    ...(input.referenceImageMediaIds ?? [])
+  ]
+  for (const mediaId of referenceImageIds) {
     content.push({
       type: 'image_url',
-      image_url: { url: await mediaToDataUrl(input.firstFrameMediaId) },
-      // 官方方舟要求 role；兼容网关采用用户已验证的无 role 格式。
-      ...(!isProxy ? { role: 'first_frame' } : {})
+      image_url: { url: await mediaToDataUrl(mediaId) },
+      // 官方方舟按参考素材语义接收；兼容网关延续已验证的无 role 格式。
+      ...(!isProxy ? { role: 'reference_image' } : {})
     })
   }
-  if (input.referenceVideoMediaId) {
+  const referenceVideoIds = uniqueMediaIds([
+    ...(input.referenceVideoMediaIds ?? []),
+    ...(input.referenceVideoMediaId ? [input.referenceVideoMediaId] : [])
+  ])
+  for (const mediaId of referenceVideoIds) {
     content.push({
       type: 'video_url',
-      video_url: { url: await mediaToDataUrl(input.referenceVideoMediaId) },
+      video_url: { url: await mediaToDataUrl(mediaId) },
       // 兼容网关延续无 role 的多模态格式；官方端点可识别参考视频语义。
       ...(!isProxy ? { role: 'reference_video' } : {})
+    })
+  }
+  for (const mediaId of input.referenceAudioMediaIds ?? []) {
+    content.push({
+      type: 'audio_url',
+      audio_url: { url: await mediaToDataUrl(mediaId) },
+      ...(!isProxy ? { role: 'reference_audio' } : {})
     })
   }
   const { params } = input
@@ -296,6 +413,9 @@ async function seedanceSubmit(p: ProviderConfig, input: VideoSubmitInput): Promi
     if (params?.ratio) body.ratio = params.ratio
     if (params?.duration) body.duration = params.duration
     if (params?.resolution) body.resolution = params.resolution
+    if (typeof params?.generateAudio === 'boolean') body.generate_audio = params.generateAudio
+    if (typeof params?.seed === 'number') body.seed = params.seed
+    if (typeof params?.watermark === 'boolean') body.watermark = params.watermark
   }
 
   const res = await fetchJson(seedanceTasksUrl(p), {
@@ -351,6 +471,8 @@ export function submitVideoTask(send: Send, input: VideoSubmitInput): VideoSubmi
   if (p.specId !== 'minimax' && p.specId !== 'seedance') {
     throw new GatewayError('WRONG_SPEC', '该供应商不支持视频生成')
   }
+  validateReferenceLimits(p, input)
+  validateVideoCapabilities(p, input)
 
   const taskId = nanoid(10)
   const now = Date.now()
@@ -358,7 +480,14 @@ export function submitVideoTask(send: Send, input: VideoSubmitInput): VideoSubmi
     prompt: input.prompt.trim(),
     params: input.params,
     firstFrameMediaId: input.firstFrameMediaId,
-    referenceVideoMediaId: input.referenceVideoMediaId
+    lastFrameMediaId: input.lastFrameMediaId,
+    referenceImageMediaIds: uniqueMediaIds(input.referenceImageMediaIds),
+    referenceVideoMediaIds: uniqueMediaIds([
+      ...(input.referenceVideoMediaIds ?? []),
+      ...(input.referenceVideoMediaId ? [input.referenceVideoMediaId] : [])
+    ]),
+    referenceVideoMediaId: input.referenceVideoMediaId,
+    referenceAudioMediaIds: uniqueMediaIds(input.referenceAudioMediaIds)
   }
   getDb()
     .prepare(

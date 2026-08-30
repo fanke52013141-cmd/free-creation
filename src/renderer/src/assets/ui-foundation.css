@@ -257,20 +257,21 @@ body {
 
 .tl-shape__inner--selected .node-card,
 .node-card-wrap.is-selected .node-card {
-  border-color: rgba(100, 198, 246, 0.78);
+  /* 类型色只属于顶部色带；选中态保持中性，避免四条边抢走节点语义。 */
+  border-color: rgba(231, 238, 247, 0.3);
   box-shadow:
-    0 0 0 1px rgba(66, 185, 245, 0.18),
+    0 0 0 1px rgba(255, 255, 255, 0.08),
     0 18px 40px rgba(0, 0, 0, 0.31);
 }
 
 .node-color-bar {
   position: absolute;
   z-index: 4;
-  top: -8px;
-  left: -8px;
-  width: calc(100% + 16px) !important;
+  top: 0;
+  left: 0;
+  width: 100% !important;
   height: 8px;
-  border-radius: calc(var(--node-radius) + 8px) calc(var(--node-radius) + 8px) 3px 3px;
+  border-radius: var(--node-radius) var(--node-radius) 0 0;
   background: var(--node-accent, var(--brand)) !important;
   opacity: 0.94;
   pointer-events: none;
@@ -396,10 +397,60 @@ body {
   box-shadow: 0 0 0 2px rgba(66, 185, 245, 0.11);
 }
 
+/* 原生 select 保持可靠的键盘/读屏体验；统一由 AppSelect 承担可视外观。 */
+.app-select {
+  min-height: 32px;
+  padding: 5px 30px 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: color-mix(in srgb, var(--sunk) 78%, transparent);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 13px) calc(50% - 2px),
+    calc(100% - 8px) calc(50% - 2px);
+  background-repeat: no-repeat;
+  background-size:
+    5px 5px,
+    5px 5px;
+  color: var(--txt);
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.app-select:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--brand) 38%, var(--line));
+  background-color: color-mix(in srgb, var(--sunk) 64%, var(--brand) 4%);
+}
+
+.app-select:focus-visible {
+  border-color: color-mix(in srgb, var(--brand) 72%, var(--line));
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 16%, transparent);
+}
+
+.app-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
 /* ── Ports: meaningful but quiet until an interaction needs them ───────── */
 .port-dot {
+  position: absolute;
   width: 11px;
   height: 11px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid;
+  border-radius: 50%;
   border-width: 1.5px;
   background: #15191f;
   opacity: 0.72;
@@ -431,6 +482,7 @@ body {
 
 .port-dot.out {
   right: -6px;
+  cursor: crosshair;
 }
 
 .node-card-wrap:hover .port-dot {
@@ -454,15 +506,29 @@ body {
 }
 
 /* ── Connections: a restrained directional line, not a neon decoration ── */
+.conn-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-conn);
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+}
+
 .conn-glow-path {
+  fill: none;
   stroke-width: 4px;
   opacity: 0.11;
+  stroke-linecap: round;
   filter: blur(2px);
 }
 
 .conn-main-path {
+  fill: none;
   stroke-width: 2px;
   stroke-dasharray: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
   opacity: 0.92;
   animation: none;
 }
@@ -861,9 +927,42 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
 }
 
 .dock-btn {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   border-radius: 7px;
+}
+
+/* 选中节点时，运行是该节点的就地动作，贴在标题右上角而不是另起一个浮动工具栏。 */
+.node-run-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 1px solid rgba(105, 208, 255, 0.28);
+  border-radius: 6px;
+  background: rgba(66, 185, 245, 0.12);
+  color: #8bdcff;
+  cursor: pointer;
+  transition:
+    color 140ms ease,
+    background-color 140ms ease,
+    border-color 140ms ease,
+    transform 140ms ease;
+}
+
+.node-run-btn:hover:not(:disabled) {
+  border-color: rgba(139, 220, 255, 0.6);
+  background: rgba(66, 185, 245, 0.24);
+  color: #e2f7ff;
+  transform: translateY(-1px);
+}
+
+.node-run-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .dock-btn:hover,

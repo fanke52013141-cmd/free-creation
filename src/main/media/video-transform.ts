@@ -3,10 +3,12 @@ import { mkdtemp, readFile, readdir, rm, stat } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { getDb } from '../store/db'
-import { getMediaAbsPath, saveFileAsset } from '../store/media.repo'
+import { deleteMedia, getMediaAbsPath, saveFileAsset } from '../store/media.repo'
 import type {
   AudioWaveformInput,
   AudioWaveformResult,
+  LocalMediaCapabilities,
+  LocalToolCapability,
   VideoClipTransformInput,
   VideoFrameTransformInput,
   VideoProbeInput,
@@ -31,6 +33,41 @@ interface VideoSource {
 
 interface AudioSource {
   path: string
+}
+
+/**
+ * 只读检查本机媒体工具。这里不缓存结果，方便用户安装或调整 PATH 后在设置面板重新打开即生效。
+ * 执行器仍须处理工具在检查后被移除等竞态，不能把此状态当作授权或安全边界。
+ */
+export async function getLocalMediaCapabilities(): Promise<LocalMediaCapabilities> {
+  const check = async (
+    binary: string,
+    args: string[],
+    missingHint: string
+  ): Promise<LocalToolCapability> => {
+    try {
+      await runProcess(binary, args, missingHint)
+      return { available: true, message: '已就绪' }
+    } catch (error) {
+      return {
+        available: false,
+        message: error instanceof Error ? error.message : missingHint
+      }
+    }
+  }
+  const ffmpegBinary = process.env.CANVAS_STUDIO_FFMPEG_PATH?.trim() || 'ffmpeg'
+  const audioSeparatorBinary =
+    process.env.CANVAS_STUDIO_AUDIO_SEPARATOR_PATH?.trim() || 'audio-separator'
+  const ffmpegHint = '未找到本机 FFmpeg。请安装并加入 PATH，或设置 CANVAS_STUDIO_FFMPEG_PATH。'
+  return {
+    ffmpeg: await check(ffmpegBinary, ['-version'], ffmpegHint),
+    ffprobe: await check(getFfprobePath(), ['-version'], ffmpegHint),
+    audioSeparator: await check(
+      audioSeparatorBinary,
+      ['--version'],
+      '未找到本机 audio-separator。请安装并加入 PATH，或设置 CANVAS_STUDIO_AUDIO_SEPARATOR_PATH。'
+    )
+  }
 }
 
 /**
@@ -62,12 +99,18 @@ export async function transformVideoFrame(input: VideoFrameTransformInput): Prom
   }
 
   return runToAsset(input.projectId, name, ext, '视频帧', [
-    '-ss', seconds(seekMs),
-    '-i', source.path,
-    '-frames:v', '1',
-    '-f', 'image2',
-    '-c:v', codec,
-    '-q:v', '2',
+    '-ss',
+    seconds(seekMs),
+    '-i',
+    source.path,
+    '-frames:v',
+    '1',
+    '-f',
+    'image2',
+    '-c:v',
+    codec,
+    '-q:v',
+    '2',
     '-an'
   ])
 }
@@ -81,39 +124,50 @@ export async function transformVideoClip(input: VideoClipTransformInput): Promis
 
   if (config.quality === 'fast') {
     // 快速模式：关键帧对齐复制，边界可能不精确
-    const audioArgs = config.includeAudio
-      ? ['-map', '0:a?']
-      : ['-an']
+    const audioArgs = config.includeAudio ? ['-map', '0:a?'] : ['-an']
     return runToAsset(input.projectId, 'clip.mp4', '.mp4', '视频片段', [
-      '-i', source.path,
-      '-ss', seconds(config.startMs),
-      '-t', durationSec,
-      '-map', '0:v:0?',
+      '-i',
+      source.path,
+      '-ss',
+      seconds(config.startMs),
+      '-t',
+      durationSec,
+      '-map',
+      '0:v:0?',
       ...audioArgs,
-      '-c', 'copy',
-      '-avoid_negative_ts', 'make_zero'
+      '-c',
+      'copy',
+      '-avoid_negative_ts',
+      'make_zero'
     ])
   }
 
   // balanced/high 模式：精确重编码
   const crf = config.quality === 'high' ? '14' : '18'
   const preset = config.quality === 'high' ? 'slow' : 'medium'
-  const audioArgs = config.includeAudio
-    ? ['-c:a', 'aac', '-b:a', '192k']
-    : ['-an']
+  const audioArgs = config.includeAudio ? ['-c:a', 'aac', '-b:a', '192k'] : ['-an']
 
   return runToAsset(input.projectId, 'clip.mp4', '.mp4', '视频片段', [
-    '-i', source.path,
-    '-ss', seconds(config.startMs),
-    '-t', durationSec,
-    '-map', '0:v:0?',
+    '-i',
+    source.path,
+    '-ss',
+    seconds(config.startMs),
+    '-t',
+    durationSec,
+    '-map',
+    '0:v:0?',
     ...(config.includeAudio ? ['-map', '0:a?'] : []),
-    '-c:v', 'libx264',
-    '-crf', crf,
-    '-preset', preset,
+    '-c:v',
+    'libx264',
+    '-crf',
+    crf,
+    '-preset',
+    preset,
     ...audioArgs,
-    '-pix_fmt', 'yuv420p',
-    '-movflags', '+faststart'
+    '-pix_fmt',
+    'yuv420p',
+    '-movflags',
+    '+faststart'
   ])
 }
 
@@ -128,12 +182,17 @@ export async function transformVideoAudio(input: VideoAudioTransformInput): Prom
   const sr = String(config.sampleRate)
 
   return runToAsset(input.projectId, name, ext, '提取音频', [
-    '-i', source.path,
-    '-ss', seconds(config.startMs),
-    '-t', seconds(config.endMs - config.startMs),
+    '-i',
+    source.path,
+    '-ss',
+    seconds(config.startMs),
+    '-t',
+    seconds(config.endMs - config.startMs),
     '-vn',
-    '-map', '0:a:0?',
-    '-ar', sr,
+    '-map',
+    '0:a:0?',
+    '-ar',
+    sr,
     ...(wav ? ['-c:a', 'pcm_s16le'] : ['-c:a', 'aac', '-b:a', '192k'])
   ])
 }
@@ -147,42 +206,39 @@ export async function separateVocals(input: VocalSeparateInput): Promise<VocalSe
     return separateWithModel(input)
   }
   // 快速模式：FFmpeg 滤镜增强（中置提取 + EQ），不保证完全分离
-  return enhanceWithFfmpeg(input, config.outputAccompaniment)
+  return enhanceWithFfmpeg(input)
 }
 
 /** 快速增强：FFmpeg 滤镜链。诚实标注为"增强"而非"分离"。 */
-async function enhanceWithFfmpeg(
-  input: VocalSeparateInput,
-  outputAccompaniment: boolean
-): Promise<VocalSeparationResult> {
+async function enhanceWithFfmpeg(input: VocalSeparateInput): Promise<VocalSeparationResult> {
   const source = await resolveAudioSource(input.projectId, input.sourceMediaId)
   const dir = await mkdtemp(join(tmpdir(), 'canvas-studio-vocal-'))
   try {
     const vocalPath = join(dir, 'vocals_enhanced.wav')
     // 中置提取 + 带通 + 降噪 + 增益
     await runFfmpeg([
-      '-i', source.path,
+      '-i',
+      source.path,
       '-vn',
-      '-af', [
+      '-af',
+      [
         'pan=mono|c0=0.5*c0+-0.5*c1',
         'highpass=f=85',
         'lowpass=f=8000',
         'afftdn=nr=15',
         'volume=1.6'
       ].join(','),
-      '-c:a', 'pcm_s16le',
-      '-ar', '44100',
-      '-y', vocalPath
+      '-c:a',
+      'pcm_s16le',
+      '-ar',
+      '44100',
+      '-y',
+      vocalPath
     ])
     const vocals = await saveFileAsset(input.projectId, vocalPath, '.wav', '人声增强')
 
-    if (!outputAccompaniment) {
-      return { vocals }
-    }
-
-    // 伴奏轨：原始文件直接登记（快速模式下不真正分离伴奏）
-    const accompaniment = await saveFileAsset(input.projectId, source.path, '', '原始音频')
-    return { vocals, accompaniment }
+    // 快速模式只承诺“人声增强”。不能把原始音频副本伪装为伴奏。
+    return { vocals }
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => undefined)
   }
@@ -196,19 +252,46 @@ async function separateWithModel(input: VocalSeparateInput): Promise<VocalSepara
   const outputDir = join(dir, 'separated')
   try {
     await runFfmpeg(['-i', source.path, '-vn', '-c:a', 'pcm_s16le', '-ar', '44100', '-y', inputWav])
-    await runAudioSeparator([inputWav, '--model_filename', 'UVR-MDX-NET-Inst_HQ_3.onnx', '--output_dir', outputDir])
+    await runAudioSeparator([
+      inputWav,
+      '--model_filename',
+      'UVR-MDX-NET-Inst_HQ_3.onnx',
+      '--output_dir',
+      outputDir
+    ])
     const files = await readdir(outputDir).catch(() => [])
     const vocal = files.find((name) => /\(vocals\)|vocal/i.test(name))
     if (!vocal) throw new Error('本地分离模型没有返回人声轨，请检查 audio-separator 与模型文件。')
-    const vocals = await saveFileAsset(input.projectId, join(outputDir, vocal), '.wav', '分离人声')
-
     const config = parseVocalSeparationConfig(JSON.stringify(input.config))
-    if (!config.outputAccompaniment) return { vocals }
+    const accompaniment = files.find((name) =>
+      /\(instrumental\)|instrumental|accompaniment/i.test(name)
+    )
+    if (config.outputAccompaniment && !accompaniment) {
+      throw new Error('本地分离模型没有返回伴奏轨；请取消“同时输出伴奏”或更换模型。')
+    }
 
-    const accompaniment = files.find((name) => /\(instrumental\)|instrumental|accompaniment/i.test(name))
-    if (!accompaniment) return { vocals }
-    const backing = await saveFileAsset(input.projectId, join(outputDir, accompaniment), '.wav', '分离伴奏')
-    return { vocals, accompaniment: backing }
+    const created: MediaAsset[] = []
+    try {
+      const vocals = await saveFileAsset(
+        input.projectId,
+        join(outputDir, vocal),
+        '.wav',
+        '分离人声'
+      )
+      created.push(vocals)
+      if (!config.outputAccompaniment) return { vocals }
+      const backing = await saveFileAsset(
+        input.projectId,
+        join(outputDir, accompaniment as string),
+        '.wav',
+        '分离伴奏'
+      )
+      created.push(backing)
+      return { vocals, accompaniment: backing }
+    } catch (error) {
+      await Promise.all(created.map((asset) => deleteMedia(asset.id).catch(() => false)))
+      throw error
+    }
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => undefined)
   }
@@ -219,10 +302,14 @@ async function separateWithModel(input: VocalSeparateInput): Promise<VocalSepara
 export async function probeVideo(input: VideoProbeInput): Promise<VideoProbeResult> {
   const source = await resolveVideoSource(input.projectId, input.sourceMediaId)
   const raw = await runFfprobe([
-    '-v', 'error',
-    '-show_entries', 'format=duration',
-    '-show_entries', 'stream=codec_type,avg_frame_rate',
-    '-of', 'json',
+    '-v',
+    'error',
+    '-show_entries',
+    'format=duration',
+    '-show_entries',
+    'stream=codec_type,avg_frame_rate',
+    '-of',
+    'json',
     source.path
   ])
   try {
@@ -232,7 +319,9 @@ export async function probeVideo(input: VideoProbeInput): Promise<VideoProbeResu
     }
     const durationMs = Math.max(0, Math.round(Number(parsed.format?.duration ?? 0) * 1000))
     const video = parsed.streams?.find((stream) => stream.codec_type === 'video')
-    const [n, d] = String(video?.avg_frame_rate ?? '').split('/').map(Number)
+    const [n, d] = String(video?.avg_frame_rate ?? '')
+      .split('/')
+      .map(Number)
     const fps = Number.isFinite(n) && Number.isFinite(d) && d > 0 ? n / d : null
     return {
       durationMs,
@@ -246,7 +335,9 @@ export async function probeVideo(input: VideoProbeInput): Promise<VideoProbeResu
 
 // ── 缩略图采样 ──
 
-export async function generateVideoThumbnails(input: VideoThumbnailsInput): Promise<VideoThumbnailsResult> {
+export async function generateVideoThumbnails(
+  input: VideoThumbnailsInput
+): Promise<VideoThumbnailsResult> {
   const source = await resolveVideoSource(input.projectId, input.sourceMediaId)
   const count = Math.max(1, Math.min(12, Math.floor(input.count)))
   const meta = await probeVideo(input)
@@ -259,14 +350,22 @@ export async function generateVideoThumbnails(input: VideoThumbnailsInput): Prom
       const t = Math.round((durationMs * i) / count)
       const outFile = join(dir, `thumb_${String(i).padStart(2, '0')}.jpg`)
       await runFfmpeg([
-        '-ss', seconds(t),
-        '-i', source.path,
-        '-frames:v', '1',
-        '-f', 'image2',
-        '-c:v', 'mjpeg',
-        '-q:v', '5',
-        '-vf', 'scale=120:-1',
-        '-y', outFile
+        '-ss',
+        seconds(t),
+        '-i',
+        source.path,
+        '-frames:v',
+        '1',
+        '-f',
+        'image2',
+        '-c:v',
+        'mjpeg',
+        '-q:v',
+        '5',
+        '-vf',
+        'scale=120:-1',
+        '-y',
+        outFile
       ]).catch(() => undefined)
       const buf = await readFile(outFile).catch(() => null)
       thumbnails.push(buf ? `data:image/jpeg;base64,${buf.toString('base64')}` : '')
@@ -279,7 +378,9 @@ export async function generateVideoThumbnails(input: VideoThumbnailsInput): Prom
 
 // ── 音频波形采样 ──
 
-export async function generateAudioWaveform(input: AudioWaveformInput): Promise<AudioWaveformResult> {
+export async function generateAudioWaveform(
+  input: AudioWaveformInput
+): Promise<AudioWaveformResult> {
   const source = await resolveAudioSource(input.projectId, input.sourceMediaId)
   const samples = Math.max(50, Math.min(500, Math.floor(input.samples)))
   const dir = await mkdtemp(join(tmpdir(), 'canvas-studio-waveform-'))
@@ -287,13 +388,19 @@ export async function generateAudioWaveform(input: AudioWaveformInput): Promise<
     const rawFile = join(dir, 'raw.pcm')
     // 解码为 8-bit 单声道 raw PCM，便于快速采样峰值
     await runFfmpeg([
-      '-i', source.path,
+      '-i',
+      source.path,
       '-vn',
-      '-ac', '1',
-      '-c:a', 'pcm_u8',
-      '-ar', String(Math.min(8000, samples * 4)),
-      '-f', 'u8',
-      '-y', rawFile
+      '-ac',
+      '1',
+      '-c:a',
+      'pcm_u8',
+      '-ar',
+      String(Math.min(8000, samples * 4)),
+      '-f',
+      'u8',
+      '-y',
+      rawFile
     ]).catch(() => undefined)
     const buf = await readFile(rawFile).catch(() => null)
     if (!buf || buf.length === 0) return { peaks: new Array(samples).fill(0), sampleRate: 8000 }
@@ -327,8 +434,7 @@ async function resolveVideoSource(projectId: string, mediaId: string): Promise<V
       'SELECT path, mime, kind, size_bytes FROM media WHERE id = ? AND substr(path, 1, length(?)) = ? LIMIT 1'
     )
     .get(mediaId, prefix, prefix) as
-    | { path: string; mime: string; kind: string; size_bytes: number }
-    | undefined
+    { path: string; mime: string; kind: string; size_bytes: number } | undefined
   if (!row || row.kind !== 'video' || !row.mime.startsWith('video/')) {
     throw new Error('输入视频不存在，或不属于当前项目')
   }
@@ -343,13 +449,16 @@ async function resolveAudioSource(projectId: string, mediaId: string): Promise<A
   if (!projectId || !mediaId) throw new Error('缺少项目或源音频')
   const prefix = `projects/${projectId}/media/`
   const row = getDb()
-    .prepare('SELECT path, mime, kind FROM media WHERE id = ? AND substr(path, 1, length(?)) = ? LIMIT 1')
+    .prepare(
+      'SELECT path, mime, kind FROM media WHERE id = ? AND substr(path, 1, length(?)) = ? LIMIT 1'
+    )
     .get(mediaId, prefix, prefix) as { path: string; mime: string; kind: string } | undefined
   if (!row || row.kind !== 'audio' || !row.mime.startsWith('audio/')) {
     throw new Error('输入音频不存在，或不属于当前项目')
   }
   const path = getMediaAbsPath(row.path)
-  if (!path || !(await stat(path).catch(() => null))?.isFile()) throw new Error('输入音频文件不存在')
+  if (!path || !(await stat(path).catch(() => null))?.isFile())
+    throw new Error('输入音频文件不存在')
   return { path }
 }
 
@@ -385,7 +494,11 @@ function getFfprobePath(): string {
 }
 
 function runFfprobe(args: string[]): Promise<string> {
-  return runProcess(getFfprobePath(), args, '未找到本机 FFprobe。请安装 FFmpeg 并加入 PATH，或设置 CANVAS_STUDIO_FFMPEG_PATH。')
+  return runProcess(
+    getFfprobePath(),
+    args,
+    '未找到本机 FFprobe。请安装 FFmpeg 并加入 PATH，或设置 CANVAS_STUDIO_FFMPEG_PATH。'
+  )
 }
 
 function runAudioSeparator(args: string[]): Promise<string> {
@@ -403,12 +516,19 @@ function runProcess(binary: string, args: string[], missingHint: string): Promis
     let stdout = ''
     let stderr = ''
     child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()))
-    child.stderr.on('data', (chunk: Buffer) => (stderr = `${stderr}${chunk.toString()}`.slice(-4000)))
+    child.stderr.on(
+      'data',
+      (chunk: Buffer) => (stderr = `${stderr}${chunk.toString()}`.slice(-4000))
+    )
     child.once('error', (error) =>
-      reject(new Error((error as NodeJS.ErrnoException).code === 'ENOENT' ? missingHint : error.message))
+      reject(
+        new Error((error as NodeJS.ErrnoException).code === 'ENOENT' ? missingHint : error.message)
+      )
     )
     child.once('close', (code) =>
-      code === 0 ? resolve(stdout) : reject(new Error(stderr.trim() || `${binary} 退出码 ${code ?? '未知'}`))
+      code === 0
+        ? resolve(stdout)
+        : reject(new Error(stderr.trim() || `${binary} 退出码 ${code ?? '未知'}`))
     )
   })
 }

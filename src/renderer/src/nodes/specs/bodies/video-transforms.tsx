@@ -8,6 +8,7 @@ import { readNodeConfig } from '../../../canvas/node-persistence'
 import { useNodePanelStore } from '../../../stores/nodePanel'
 import { useAppStore } from '../../../stores/app'
 import { Icon } from '../../../components/Icon'
+import { AppSelect } from '../../../components/AppSelect'
 import {
   MediaFileActions,
   MediaSourceBadge,
@@ -61,11 +62,6 @@ function TimeInput({
   onCommit: (ms: number) => void
 }): React.JSX.Element {
   const [text, setText] = useState(timecode(valueMs))
-  const [editing, setEditing] = useState(false)
-
-  useEffect((): void => {
-    if (!editing) setText(timecode(valueMs))
-  }, [valueMs, editing])
 
   const parseTimecode = (s: string): number | null => {
     const parts = s.trim().split(':')
@@ -82,7 +78,6 @@ function TimeInput({
   }
 
   const handleBlur = (): void => {
-    setEditing(false)
     const ms = parseTimecode(text)
     if (ms !== null) {
       onCommit(clamp(ms, max))
@@ -98,14 +93,12 @@ function TimeInput({
         type="text"
         value={text}
         onPointerDown={stopEventPropagation}
-        onFocus={(): void => setEditing(true)}
         onChange={(event): void => setText(event.currentTarget.value)}
         onBlur={handleBlur}
         onKeyDown={(event): void => {
           if (event.key === 'Enter') event.currentTarget.blur()
           if (event.key === 'Escape') {
             setText(timecode(valueMs))
-            setEditing(false)
             event.currentTarget.blur()
           }
         }}
@@ -219,10 +212,12 @@ function MediaTimeline({
   const stepFrame = (current: number, dir: 1 | -1): number =>
     frameInterval ? clamp(current + dir * frameInterval, max) : current
 
-  const handleBtn = (fn: () => void) => (event: React.MouseEvent): void => {
-    stopEventPropagation(event)
-    fn()
-  }
+  const handleBtn =
+    (fn: () => void) =>
+    (event: React.MouseEvent): void => {
+      stopEventPropagation(event)
+      fn()
+    }
 
   // 取帧逐帧
   const prevPoint = (): void => {
@@ -299,7 +294,10 @@ function MediaTimeline({
         style={
           isPoint
             ? ({ '--point': percent(currentPoint) } as React.CSSProperties)
-            : ({ '--start': percent(currentStart), '--end': percent(currentEnd) } as React.CSSProperties)
+            : ({
+                '--start': percent(currentStart),
+                '--end': percent(currentEnd)
+              } as React.CSSProperties)
         }
       >
         {isPoint ? (
@@ -400,6 +398,7 @@ function MediaTimeline({
               {'\u23ED'}
             </button>
             <TimeInput
+              key={`point-${currentPoint}`}
               valueMs={currentPoint}
               max={max}
               onCommit={(ms): void => {
@@ -434,6 +433,7 @@ function MediaTimeline({
               </>
             )}
             <TimeInput
+              key={`start-${currentStart}`}
               label="起"
               valueMs={currentStart}
               max={max}
@@ -467,6 +467,7 @@ function MediaTimeline({
               </>
             )}
             <TimeInput
+              key={`end-${currentEnd}`}
               label="终"
               valueMs={currentEnd}
               max={max}
@@ -669,10 +670,25 @@ function VideoTransformSettings({
   const [waveform, setWaveform] = useState<number[]>([])
   const [isPlaying, setIsPlaying] = useState(false)
   const [loopEnabled, setLoopEnabled] = useState(false)
+  const [localCapabilities, setLocalCapabilities] = useState<Awaited<
+    ReturnType<typeof window.api.getLocalMediaCapabilities>
+  > | null>(null)
 
   const isFrame = mode === 'frame'
   const isClip = mode === 'clip'
   const label = isFrame ? '视频取帧' : isClip ? '视频截取' : '提取音频'
+
+  useEffect(() => {
+    let active = true
+    void window.api.getLocalMediaCapabilities().then((result) => {
+      if (active) setLocalCapabilities(result)
+    })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const mediaEngineReady = localCapabilities?.ok ? localCapabilities.data.ffmpeg.available : null
 
   // 当前模式的有效时间上限
   const max = Math.max(
@@ -893,8 +909,21 @@ function VideoTransformSettings({
     <section className="contract-section video-transform-settings">
       <h4>{label}</h4>
       <p className="contract-settings-hint">
-        源视频来自 in-video 连线；时间以毫秒保存。拖动滑块会立即定位预览，松开后才写入配置，原视频不会被改写。
+        源视频来自 in-video
+        连线；时间以毫秒保存。拖动滑块会立即定位预览，松开后才写入配置，原视频不会被改写。
       </p>
+      {mediaEngineReady === false && (
+        <div className="local-capability-alert" role="alert">
+          <strong>本机媒体引擎未就绪</strong>
+          <span>
+            {localCapabilities?.ok
+              ? localCapabilities.data.ffmpeg.message
+              : '无法读取本机工具状态。'}
+          </span>
+          <small>本节点不会修改原视频；安装或配置 FFmpeg 后重新打开此面板即可再次检测。</small>
+        </div>
+      )}
+      {mediaEngineReady === true && <div className="local-capability-ok">本机 FFmpeg 已就绪</div>}
       {source ? (
         <>
           {/* 第一层：视频预览 */}
@@ -977,13 +1006,13 @@ function VideoTransformSettings({
               {/* 格式选择 */}
               <label className="audio-isolation-mode">
                 输出格式
-                <select
+                <AppSelect
                   value={frameCfg.format}
                   onChange={(event) => setFrameFormat(event.currentTarget.value as 'png' | 'jpg')}
                 >
                   <option value="png">PNG（无损）</option>
                   <option value="jpg">JPG（体积小）</option>
-                </select>
+                </AppSelect>
               </label>
             </>
           ) : isClip ? (
@@ -1004,14 +1033,14 @@ function VideoTransformSettings({
               />
               <label className="audio-isolation-mode">
                 编码质量
-                <select
+                <AppSelect
                   value={clipCfg.quality}
                   onChange={(event) => setClipQuality(event.currentTarget.value as ClipQuality)}
                 >
                   <option value="fast">快速（关键帧复制，边界可能不精确）</option>
                   <option value="balanced">平衡（重编码 CRF 18）</option>
                   <option value="high">高质量（重编码 CRF 14）</option>
-                </select>
+                </AppSelect>
               </label>
               <label className="audio-checkbox-row">
                 <input
@@ -1041,17 +1070,17 @@ function VideoTransformSettings({
               />
               <label className="audio-isolation-mode">
                 输出格式
-                <select
+                <AppSelect
                   value={audioCfg.format}
                   onChange={(event) => setAudioFormat(event.currentTarget.value as AudioFormat)}
                 >
                   <option value="m4a">M4A（体积小）</option>
                   <option value="wav">WAV（无损，适合后续人声分离）</option>
-                </select>
+                </AppSelect>
               </label>
               <label className="audio-isolation-mode">
                 采样率
-                <select
+                <AppSelect
                   value={audioCfg.sampleRate}
                   onChange={(event) =>
                     setAudioSampleRate(Number(event.currentTarget.value) as 44100 | 48000)
@@ -1059,16 +1088,16 @@ function VideoTransformSettings({
                 >
                   <option value={44100}>44100 Hz</option>
                   <option value={48000}>48000 Hz</option>
-                </select>
+                </AppSelect>
               </label>
               <small className="crop-coordinate-hint">
-                提音只忠实提取原始音频，不做降噪或人声分离。如需分离，请将输出连到独立的"人声分离"节点。
+                提音只忠实提取原始音频，不做降噪或人声分离。如需分离，请将输出连到独立的“人声分离”节点。
               </small>
             </>
           )}
         </>
       ) : (
-        <div className="crop-no-source">请从视频节点连线到左侧"源视频"端口。</div>
+        <div className="crop-no-source">请从视频节点连线到左侧“源视频”端口。</div>
       )}
       <p className="crop-coordinate-hint">
         {isFrame

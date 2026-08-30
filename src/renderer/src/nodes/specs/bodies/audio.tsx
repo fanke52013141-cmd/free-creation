@@ -9,6 +9,7 @@ import { runNodeManually } from '../../../engine/executor'
 import { useAppStore } from '../../../stores/app'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { Icon } from '../../../components/Icon'
+import { AppSelect } from '../../../components/AppSelect'
 import {
   clearSelectedMediaHistory,
   MediaFileActions,
@@ -61,6 +62,7 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const loadProviders = useGatewayStore((s) => s.load)
   const openSettings = useGatewayStore((s) => s.openSettings)
   const options = modelsByModality(providers, 'audio')
+  const isSpeechNode = shape.props.nodeType === 'speech'
   const data = parseAudioGen(readNodeConfig(shape))
   const [draft, setDraft] = useState(data.text)
   const [busy, setBusy] = useState(false)
@@ -165,7 +167,7 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
 
   // ── 已有音频文件：播放器视图（上传或生成共用） ──
   if (shape.props.mediaPath) {
-    const isGenerated = data.mode === 'generate'
+    const isGenerated = isSpeechNode
     const chooseResult = (item: Parameters<typeof selectMediaResult>[1]): void => {
       const selected = selectMediaResult(shape, item)
       editor.updateShape({
@@ -273,40 +275,16 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     )
   }
 
-  // ── 无音频文件：模式切换 ──
+  // 音频资产、通用配音、语音克隆是三种清晰职责：这里不再让“音频”节点在
+  // 上传与生成之间切换，避免用户无法判断它到底是素材还是模型调用。
   return (
     <div className="node-audio-empty">
-      <div className="audio-mode-tabs">
-        <button
-          className={`audio-tab ${data.mode === 'upload' ? 'active' : ''}`}
-          onPointerDown={(e) => stopEventPropagation(e)}
-          onClick={(e) => {
-            e.stopPropagation()
-            update({ ...data, mode: 'upload' })
-          }}
-        >
-          <>
-            <Icon name="upload" size={14} />
-            上传文件
-          </>
-        </button>
-        <button
-          className={`audio-tab ${data.mode === 'generate' ? 'active' : ''}`}
-          onPointerDown={(e) => stopEventPropagation(e)}
-          onClick={(e) => {
-            e.stopPropagation()
-            update({ ...data, mode: 'generate' })
-          }}
-        >
-          <>
-            <Icon name="audio" size={14} />
-            语音合成
-          </>
-        </button>
-      </div>
-
-      {data.mode === 'upload' ? (
+      {!isSpeechNode ? (
         <div className="audio-upload-zone">
+          <div className="gen-capability-note">
+            <Icon name="info" size={13} />
+            <span>这是音频资产节点。需要模型配音请使用「配音」，需要复刻音色请使用「克隆」。</span>
+          </div>
           <button
             className="audio-upload-btn"
             onPointerDown={(e) => stopEventPropagation(e)}
@@ -326,7 +304,7 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
         <div className="node-audio-gen">
           <div className="gen-capability-note">
             <Icon name="info" size={13} />
-            <span>上游文本会与此处文本合并后再合成</span>
+            <span>这是通用配音节点；上游文本会与此处文本合并后再合成。</span>
           </div>
           <div className="gen-toolbar">
             {options.length === 0 ? (
@@ -365,7 +343,7 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           <div className="audio-text-meta">{draft.length} 字 · 可由文本节点提供内容</div>
           <div className="audio-options">
             <label className="opt-label">音色</label>
-            <select
+            <AppSelect
               className="gen-select small"
               value={data.voice}
               onPointerDown={(e) => stopEventPropagation(e)}
@@ -376,9 +354,9 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
                   {v}
                 </option>
               ))}
-            </select>
+            </AppSelect>
             <label className="opt-label">格式</label>
-            <select
+            <AppSelect
               className="gen-select small"
               value={data.format}
               onPointerDown={(e) => stopEventPropagation(e)}
@@ -389,7 +367,7 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
                   {f}
                 </option>
               ))}
-            </select>
+            </AppSelect>
           </div>
           <button
             className="btn-generate"

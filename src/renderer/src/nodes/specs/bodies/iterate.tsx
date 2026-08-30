@@ -2,6 +2,7 @@
 import { stopEventPropagation, useEditor, useValue } from 'tldraw'
 import type { NodeBodyProps } from '../../registry'
 import { readNodeConfig } from '../../../canvas/node-persistence'
+import { AppSelect } from '../../../components/AppSelect'
 import { deriveGraph } from '../../../canvas/graph'
 import {
   parseIterate,
@@ -101,7 +102,7 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
         </div>
         <label className="ai-row">
           <span className="ai-row-label">范围</span>
-          <select
+          <AppSelect
             className="gen-select"
             value={data.runMode}
             onPointerDown={(e) => stopEventPropagation(e)}
@@ -114,11 +115,11 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
                 {o.label}
               </option>
             ))}
-          </select>
+          </AppSelect>
         </label>
         <label className="ai-row">
           <span className="ai-row-label">失败</span>
-          <select
+          <AppSelect
             className="gen-select"
             value={data.onFailure}
             onPointerDown={(e) => stopEventPropagation(e)}
@@ -131,7 +132,7 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
                 {o.label}
               </option>
             ))}
-          </select>
+          </AppSelect>
         </label>
         {data.onFailure === 'retry' && (
           <label className="ai-row">

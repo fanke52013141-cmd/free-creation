@@ -23,6 +23,7 @@ import type {
   VideoThumbnailsResult,
   AudioWaveformInput,
   AudioWaveformResult,
+  LocalMediaCapabilities,
   VocalSeparateInput,
   VocalSeparationResult,
   ImportMediaBufferInput,
@@ -85,12 +86,16 @@ const api = {
     ipcRenderer.invoke(IPC.media.videoAudio, input),
   probeVideo: (input: VideoProbeInput): Promise<IpcEnvelope<VideoProbeResult>> =>
     ipcRenderer.invoke(IPC.media.videoProbe, input),
-  generateVideoThumbnails: (input: VideoThumbnailsInput): Promise<IpcEnvelope<VideoThumbnailsResult>> =>
+  generateVideoThumbnails: (
+    input: VideoThumbnailsInput
+  ): Promise<IpcEnvelope<VideoThumbnailsResult>> =>
     ipcRenderer.invoke(IPC.media.videoThumbnails, input),
   generateAudioWaveform: (input: AudioWaveformInput): Promise<IpcEnvelope<AudioWaveformResult>> =>
     ipcRenderer.invoke(IPC.media.audioWaveform, input),
   separateVocals: (input: VocalSeparateInput): Promise<IpcEnvelope<VocalSeparationResult>> =>
     ipcRenderer.invoke(IPC.media.vocalSeparate, input),
+  getLocalMediaCapabilities: (): Promise<IpcEnvelope<LocalMediaCapabilities>> =>
+    ipcRenderer.invoke(IPC.media.localCapabilities),
   ttsGenerate: (input: TtsGenerateInput): Promise<IpcEnvelope<MediaAsset>> =>
     ipcRenderer.invoke(IPC.media.ttsGenerate, input),
   comfyui: {

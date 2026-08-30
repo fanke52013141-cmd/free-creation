@@ -2,6 +2,7 @@ import { Tldraw, createShapeId, type Editor, type TLShapeId } from 'tldraw'
 import 'tldraw/tldraw.css'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ProjectMeta, MediaAsset, NodeTypeId } from '@shared/types'
+import { Tooltip } from '../components/Tooltip'
 import { NodeCardUtil, type NodeCardProps } from './NodeCardShape'
 import { repairTldrawSnapshot } from './tldrawSnapshotRepair'
 import { NodeCreateMenu } from './NodeCreateMenu'
@@ -34,7 +35,7 @@ import { toast } from '../stores/toast'
 import type { ConnectionFrom } from '../stores/connection'
 import { useGatewayStore } from '../stores/gateway'
 import { useEngineStore } from '../engine/store'
-import { runWorkflow } from '../engine/executor'
+import { runNodeManually, runWorkflow, runWorkflowForNodes } from '../engine/executor'
 import { useMediaStore } from '../stores/media'
 import { useEditorStore } from '../stores/editor'
 import { Icon } from '../components/Icon'
@@ -213,7 +214,8 @@ export function CanvasEditor({
     'video-audio': '提音',
     'vocal-separate': '人声分离',
     audio: '音频',
-    tts: '配音',
+    speech: '配音',
+    tts: '克隆',
     chat: '对话',
     script: '脚本',
     processor: '处理',
@@ -353,7 +355,7 @@ export function CanvasEditor({
     }
   }, [])
 
-  // 全局快捷键：Ctrl+D 复制选中节点、Ctrl+Shift+F 适配画布
+  // 全局快捷键：Ctrl+D 复制选中节点、Delete 删除选中连线、Ctrl+Shift+F 适配画布
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       const editor = editorRef.current
@@ -367,6 +369,21 @@ export function CanvasEditor({
           (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable))
       if (typing) return
       const mod = e.ctrlKey || e.metaKey
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        // 节点删除由 tldraw 默认行为处理；这里仅接管连线，确保点选一条箭头后 Delete
+        // 一定会删除那条真实数据依赖，而不会误删相连节点。
+        const arrows = editor
+          .getSelectedShapes()
+          .filter((shape) => shape.type === 'arrow')
+          .map((shape) => shape.id)
+        if (arrows.length > 0) {
+          e.preventDefault()
+          markUndoPoint(editor, 'delete-connections')
+          editor.deleteShapes(arrows)
+          toast(`已断开 ${arrows.length} 条连线`)
+          return
+        }
+      }
       if (mod && e.shiftKey && (e.key === 'f' || e.key === 'F')) {
         if (e.altKey) return // Shift+Alt+F 整理画布交给小地图
         e.preventDefault()
@@ -774,9 +791,8 @@ export function CanvasEditor({
         onMount={handleMount}
         shapeUtils={[NodeCardUtil]}
         cameraOptions={{
-          // 创作画布的主操作是观察全局与细节：滚轮直接缩放，按住 Ctrl / Cmd 时反向平移。
-          // 这也与底部的 +/- 缩放控制保持同一语义。
-          wheelBehavior: 'zoom',
+          // 默认滚轮平移画布，按住 Ctrl / Cmd 才缩放，符合画布编辑器的常用语义。
+          wheelBehavior: 'pan',
           zoomSpeed: 0.85,
           zoomSteps: [0.1, 0.25, 0.5, 1, 2, 4]
         }}
@@ -799,27 +815,30 @@ export function CanvasEditor({
         <div className="palette-node-scroll">
           <div className="palette-section palette-node-section">
             {nodeTypes.map((t) => (
-              <button
-                key={t.type}
-                className="palette-item palette-node-item"
-                title={t.label}
-                onClick={() => handleNodePick(t.type)}
-                onPointerDown={(e) => startNodeDrag(e, t.type)}
-              >
-                <span className="palette-icon" style={{ color: t.color }}>
-                  <Icon name={t.icon} size={20} />
-                </span>
-                <span className="palette-label">{paletteLabels[t.type] ?? t.label}</span>
-              </button>
+              <Tooltip key={t.type} label={`添加${t.label}节点`}>
+                <button
+                  className="palette-item palette-node-item"
+                  aria-label={`添加${t.label}节点`}
+                  onClick={() => handleNodePick(t.type)}
+                  onPointerDown={(e) => startNodeDrag(e, t.type)}
+                >
+                  <span className="palette-icon" style={{ color: t.color }}>
+                    <Icon name={t.icon} size={20} />
+                  </span>
+                  <span className="palette-label">{paletteLabels[t.type] ?? t.label}</span>
+                </button>
+              </Tooltip>
             ))}
           </div>
         </div>
-        <div className="palette-utility">
-          <div className="palette-divider" />
-          <div className="palette-section">
+      </div>
+      <div className="palette-utility">
+        <div className="palette-divider" />
+        <div className="palette-section">
+          <Tooltip label="上传本地文件">
             <button
               className="palette-item"
-              title="上传本地文件"
+              aria-label="上传本地文件"
               onClick={() => {
                 const editor = editorRef.current
                 if (!editor) return
@@ -831,41 +850,64 @@ export function CanvasEditor({
               <span className="palette-icon">
                 <Icon name="upload" size={20} />
               </span>
+              <span className="palette-label">上传</span>
             </button>
-            <button className="palette-item" title="资产管理" onClick={() => setPanelTab('assets')}>
+          </Tooltip>
+          <Tooltip label="打开资产管理">
+            <button
+              className="palette-item"
+              aria-label="打开资产管理"
+              onClick={() => setPanelTab('assets')}
+            >
               <span className="palette-icon">
                 <Icon name="assets" size={20} />
               </span>
+              <span className="palette-label">资产</span>
             </button>
+          </Tooltip>
+          <Tooltip label="打开工作流面板">
             <button
               className="palette-item"
-              title="工作流面板"
+              aria-label="打开工作流面板"
               onClick={() => setPanelTab('workflow')}
             >
               <span className="palette-icon">
                 <Icon name="workflow" size={20} />
               </span>
+              <span className="palette-label">流程</span>
             </button>
+          </Tooltip>
+          <Tooltip label="打开历史记录">
             <button
               className="palette-item"
-              title="历史记录"
+              aria-label="打开历史记录"
               onClick={() => setPanelTab('history')}
             >
               <span className="palette-icon">
                 <Icon name="history" size={20} />
               </span>
+              <span className="palette-label">历史</span>
             </button>
-            <button className="palette-item" title="运行中心" onClick={() => setPanelTab('runs')}>
+          </Tooltip>
+          <Tooltip label="打开运行中心">
+            <button
+              className="palette-item"
+              aria-label="打开运行中心"
+              onClick={() => setPanelTab('runs')}
+            >
               <span className="palette-icon">
                 <Icon name="play" size={20} />
               </span>
+              <span className="palette-label">运行</span>
             </button>
-          </div>
-          <div className="palette-divider" />
-          {/* 画布配色切换 */}
+          </Tooltip>
+        </div>
+        <div className="palette-divider" />
+        {/* 画布配色切换 */}
+        <Tooltip label={canvasTheme === 'dark' ? '切换为浅色画布' : '切换为深色画布'}>
           <button
             className="palette-item"
-            title={canvasTheme === 'dark' ? '切换为米黄色' : '切换为深色'}
+            aria-label={canvasTheme === 'dark' ? '切换为浅色画布' : '切换为深色画布'}
             onClick={() => {
               const next = canvasTheme === 'dark' ? 'light' : 'dark'
               setCanvasTheme(next)
@@ -878,12 +920,20 @@ export function CanvasEditor({
             <span className="palette-icon">
               <Icon name="theme" size={20} />
             </span>
+            <span className="palette-label">主题</span>
           </button>
-        </div>
+        </Tooltip>
       </div>
       <CanvasBottomDock editor={editorInstance} />
       {/* 多选浮动工具栏：选中 2+ 节点时显示对齐与打组 */}
-      {editorInstance && <MultiSelectToolbar editor={editorInstance} />}
+      {editorInstance && (
+        <MultiSelectToolbar
+          editor={editorInstance}
+          onRunNode={(id) => void runNodeManually(editorInstance, project.id, providers, id)}
+          onRunFlow={(ids) => void runWorkflowForNodes(editorInstance, project.id, providers, ids)}
+          onSaveWorkflow={() => setPanelTab('workflow')}
+        />
+      )}
       {/* 搜索覆盖层（顶栏按钮触发，在 Tldraw 同级渲染） */}
       {editorInstance && <SearchPalette editor={editorInstance} />}
       <CanvasSidePanel

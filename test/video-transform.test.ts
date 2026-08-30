@@ -15,6 +15,10 @@ import {
   videoClipExecutor,
   videoFrameExecutor
 } from '@renderer/engine/executors/videoTransforms'
+import {
+  vocalSeparateExecutor,
+  parseVocalSeparationResult
+} from '@renderer/engine/executors/vocalSeparate'
 import { parseMediaResultCollection } from '@renderer/nodes/nodeValues'
 import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
 import type { NodeExecutionContext } from '@renderer/engine/executor-types'
@@ -45,9 +49,7 @@ describe('视频处理配置 · v2', () => {
       quality: 'balanced'
     })
     // startMs > endMs 时自动纠正
-    expect(
-      parseVideoClipConfig(JSON.stringify({ startMs: 900, endMs: 100 }))
-    ).toEqual({
+    expect(parseVideoClipConfig(JSON.stringify({ startMs: 900, endMs: 100 }))).toEqual({
       version: 2,
       startMs: 900,
       endMs: 901,
@@ -113,8 +115,20 @@ function context(type: 'video-frame' | 'video-clip' | 'video-audio'): {
     type === 'video-frame'
       ? JSON.stringify({ version: 2, mode: 'custom', timeMs: 1200, format: 'png' })
       : type === 'video-clip'
-        ? JSON.stringify({ version: 2, startMs: 500, endMs: 1700, includeAudio: true, quality: 'balanced' })
-        : JSON.stringify({ version: 2, startMs: 500, endMs: 1700, format: 'wav', sampleRate: 44100 })
+        ? JSON.stringify({
+            version: 2,
+            startMs: 500,
+            endMs: 1700,
+            includeAudio: true,
+            quality: 'balanced'
+          })
+        : JSON.stringify({
+            version: 2,
+            startMs: 500,
+            endMs: 1700,
+            format: 'wav',
+            sampleRate: 44100
+          })
   const shape = {
     id: `shape:${type}`,
     type: 'node-card',
@@ -233,7 +247,12 @@ describe('视频处理执行器', () => {
     const api = { extractVideoAudio: vi.fn() }
     api.extractVideoAudio.mockResolvedValue({
       ok: true,
-      data: { id: 'audio-1', path: 'projects/project-a/media/audio-1', mime: 'audio/wav', name: 'audio-1' }
+      data: {
+        id: 'audio-1',
+        path: 'projects/project-a/media/audio-1',
+        mime: 'audio/wav',
+        name: 'audio-1'
+      }
     })
     globalThis.window = { api } as unknown as Window & typeof globalThis
     const item = context('video-audio')
@@ -250,5 +269,49 @@ describe('视频处理执行器', () => {
     }
     expect(callArg.config.format).toBe('m4a')
     expect(callArg.config.sampleRate).toBe(48000)
+  })
+})
+
+describe('人声分离执行器', () => {
+  it('没有工作流 runId 的手动执行不伪造来源 ID，仍能保存真实人声结果', async () => {
+    const api = {
+      separateVocals: vi.fn().mockResolvedValue({
+        ok: true,
+        data: {
+          vocals: { id: 'vocal-1', path: 'projects/project-a/media/vocal-1.wav', mime: 'audio/wav' }
+        }
+      })
+    }
+    globalThis.window = { api } as unknown as Window & typeof globalThis
+    const item = context('video-audio')
+    item.ctx.node.type = 'vocal-separate'
+    item.ctx.shape.props.nodeType = 'vocal-separate'
+    item.ctx.shape.props.config = JSON.stringify({
+      version: 1,
+      mode: 'fast',
+      outputAccompaniment: false
+    })
+    item.ctx.inputs = new Map([
+      [
+        'in-audio',
+        [
+          {
+            type: 'audio',
+            value: {
+              kind: 'audio',
+              mediaId: 'source-audio',
+              mediaPath: 'projects/project-a/media/source.wav',
+              mime: 'audio/wav'
+            },
+            source: { nodeId: 'source', portId: 'out-audio' },
+            createdAt: 0
+          }
+        ]
+      ]
+    ])
+    item.ctx.runId = undefined
+
+    await expect(vocalSeparateExecutor(item.ctx)).resolves.toEqual({ status: 'done' })
+    expect(parseVocalSeparationResult(item.result.value ?? '')?.runId).toBeUndefined()
   })
 })

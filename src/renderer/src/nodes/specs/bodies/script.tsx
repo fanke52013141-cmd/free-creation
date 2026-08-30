@@ -4,6 +4,7 @@ import { stopEventPropagation, useEditor } from 'tldraw'
 import type { NodeBodyProps } from '../../registry'
 import { markUndoPoint } from '../../../canvas/history'
 import { Icon } from '../../../components/Icon'
+import { AppSelect } from '../../../components/AppSelect'
 import { useWheelScroll, VARIABLE_TYPES } from './shared'
 
 interface ScriptShot {
@@ -263,7 +264,7 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
                     })
                   }
                 />
-                <select
+                <AppSelect
                   value={field.type}
                   onPointerDown={(e) => stopEventPropagation(e)}
                   onChange={(e) =>
@@ -282,7 +283,7 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
                       {item.label}
                     </option>
                   ))}
-                </select>
+                </AppSelect>
                 <button
                   className="shot-op danger"
                   title="删除字段"

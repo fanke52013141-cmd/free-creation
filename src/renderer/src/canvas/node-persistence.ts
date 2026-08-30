@@ -14,7 +14,7 @@ export const CONFIG_NODE_TYPES = new Set([
   'video-clip',
   'video-audio',
   'vocal-separate',
-  'audio',
+  'speech',
   'processor',
   'structured',
   'code',

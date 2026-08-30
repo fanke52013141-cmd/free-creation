@@ -38,7 +38,13 @@ export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeE
     data.prompt,
     [bundlePrompt, inputText(ctx.inputs, 'in-text')].filter(Boolean).join('\n')
   )
-  const referenceImage = inputMedia(ctx.inputs, 'in-image', 'image')[0]
+  // in-image 是旧项目的单参考图入口；in-reference-images 是新 many 入口。
+  // 合并去重后按端口顺序提交，保证“图片 1/2/3”的提示词指代可复跑。
+  const referenceImages = [
+    ...inputMedia(ctx.inputs, 'in-image', 'image'),
+    ...inputMedia(ctx.inputs, 'in-reference-images', 'image')
+  ]
+  const referenceMediaIds = [...new Set(referenceImages.map((image) => image.mediaId))].slice(0, 4)
   if (!prompt.trim()) return { status: 'skipped', reason: '无提示词' }
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
   try {
@@ -49,7 +55,7 @@ export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeE
       prompt,
       size: data.size,
       ...(typeof data.seed === 'number' && data.seed > 0 ? { seed: data.seed } : {}),
-      ...(referenceImage ? { referenceMediaId: referenceImage.mediaId } : {})
+      ...(referenceMediaIds.length > 0 ? { referenceMediaIds } : {})
     })
     if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
     if (!result.ok) return { status: 'failed', reason: result.error.message }
