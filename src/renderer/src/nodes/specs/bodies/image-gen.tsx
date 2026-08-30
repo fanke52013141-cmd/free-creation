@@ -5,12 +5,13 @@ import { PROVIDER_SPECS } from '@shared/types'
 import { mediaUrl, type NodeBodyProps } from '../../registry'
 import { toast } from '../../../stores/toast'
 import { markUndoPoint } from '../../../canvas/history'
-import { gatherUpstreamMedia } from '../../../canvas/graph'
+import { gatherUpstreamMedia, gatherUpstreamMediaList } from '../../../canvas/graph'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { runNodeManually } from '../../../engine/executor'
 import { useAppStore } from '../../../stores/app'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { Icon } from '../../../components/Icon'
+import { AppSelect } from '../../../components/AppSelect'
 import {
   ImageContinuationActions,
   clearSelectedMediaHistory,
@@ -79,6 +80,15 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
   }
 
   const refImage = gatherUpstreamMedia(editor, shape.id, 'in-image', 'image')
+  const multiReferenceImages = gatherUpstreamMediaList(
+    editor,
+    shape.id,
+    'in-reference-images',
+    'image'
+  )
+  const referenceImages = [...(refImage ? [refImage] : []), ...multiReferenceImages].filter(
+    (image, index, items) => items.findIndex((item) => item.mediaId === image.mediaId) === index
+  )
 
   const generate = async (): Promise<void> => {
     if (!project) return toast('项目未就绪')
@@ -184,7 +194,9 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
         const spec = sel ? PROVIDER_SPECS.find((s) => s.id === sel.provider.specId) : undefined
         const notes = [
           spec ? spec.desc : '',
-          refImage ? '参考图：已连接' : '参考图：可连上游图片',
+          referenceImages.length > 0
+            ? `参考图：${referenceImages.length} 张已连接`
+            : '参考图：可连上游图片',
           typeof data.seed === 'number' ? '种子：固定' : '种子：随机'
         ].filter(Boolean)
         return notes.length > 0 ? (
@@ -194,17 +206,22 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
           </div>
         ) : null
       })()}
-      {refImage && (
+      {referenceImages.length > 0 && (
         <div className="ref-image-bar">
-          <img
-            src={mediaUrl(refImage.mediaPath)}
-            className="ref-image-thumb"
-            draggable={false}
-            alt="参考图"
-          />
+          <div className="ref-image-stack" aria-label={`${referenceImages.length} 张参考图`}>
+            {referenceImages.slice(0, 4).map((image, index) => (
+              <img
+                key={image.mediaId}
+                src={mediaUrl(image.mediaPath)}
+                className="ref-image-thumb"
+                draggable={false}
+                alt={`参考图 ${index + 1}`}
+              />
+            ))}
+          </div>
           <span className="ref-image-label">
             <Icon name="attach" size={13} />
-            参考图已连接
+            {referenceImages.length} 张参考图已连接（最多提交 4 张）
           </span>
         </div>
       )}
@@ -214,7 +231,7 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
           options={options}
           onChange={(key) => update({ ...data, modelKey: key })}
         />
-        <select
+        <AppSelect
           className="gen-select w92"
           value={data.size}
           onPointerDown={(e) => stopEventPropagation(e)}
@@ -225,7 +242,7 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
               {s === 'auto' ? '默认尺寸' : s}
             </option>
           ))}
-        </select>
+        </AppSelect>
         <input
           className="gen-seed"
           type="number"

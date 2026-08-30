@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- 这是纯节点注册表，不导出 React 组件。 */
 // NodeType 注册表（扩展点①，见《技术框架与规范》§5.1）
 // 新增节点类型 = 写一份 Spec 并 register，核心零改动
 import type {
@@ -68,6 +69,12 @@ export interface NodeTypeSpec {
   SettingsPanel?: React.ComponentType<NodeSettingsProps>
   Body: React.ComponentType<NodeBodyProps>
 }
+
+/**
+ * 所有可创建节点的初始画布尺寸。节点内部可以呈现不同内容，但初始占位必须一致；
+ * 复杂配置放入右侧详情面板，不能以更大的默认卡片破坏画布节奏。
+ */
+export const STANDARD_NODE_SIZE = { w: 340, h: 260 } as const
 
 // 端口类型配色（圆点描边）
 export const PORT_COLORS: Record<PortType, string> = {
@@ -182,6 +189,12 @@ function validateNodeTypeSpec(spec: NodeTypeSpec): void {
     spec.defaultSize.h <= 0
   ) {
     errors.push('defaultSize 必须是大于 0 的有效数字')
+  }
+  if (
+    spec.creatable !== false &&
+    (spec.defaultSize.w !== STANDARD_NODE_SIZE.w || spec.defaultSize.h !== STANDARD_NODE_SIZE.h)
+  ) {
+    errors.push(`可创建节点的 defaultSize 必须为 ${STANDARD_NODE_SIZE.w} × ${STANDARD_NODE_SIZE.h}`)
   }
 
   const ids = new Set<string>()

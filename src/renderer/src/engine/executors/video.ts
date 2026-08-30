@@ -18,7 +18,10 @@ export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
     [bundlePrompt, inputText(ctx.inputs, 'in-text')].filter(Boolean).join('\n')
   )
   const firstFrame = inputMedia(ctx.inputs, 'in-image', 'image')[0]
-  const motionReference = inputMedia(ctx.inputs, 'in-reference-video', 'video')[0]
+  const lastFrame = inputMedia(ctx.inputs, 'in-last-image', 'image')[0]
+  const referenceImages = inputMedia(ctx.inputs, 'in-reference-images', 'image')
+  const motionReferences = inputMedia(ctx.inputs, 'in-reference-video', 'video')
+  const audioReferences = inputMedia(ctx.inputs, 'in-reference-audio', 'audio')
   if (!prompt.trim()) return { status: 'skipped', reason: '无提示词' }
   try {
     const submitted = await window.api.gateway.videoSubmit({
@@ -29,7 +32,16 @@ export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
       prompt,
       params: data.params,
       ...(firstFrame ? { firstFrameMediaId: firstFrame.mediaId } : {}),
-      ...(motionReference ? { referenceVideoMediaId: motionReference.mediaId } : {})
+      ...(lastFrame ? { lastFrameMediaId: lastFrame.mediaId } : {}),
+      ...(referenceImages.length
+        ? { referenceImageMediaIds: referenceImages.map((media) => media.mediaId) }
+        : {}),
+      ...(motionReferences.length
+        ? { referenceVideoMediaIds: motionReferences.map((media) => media.mediaId) }
+        : {}),
+      ...(audioReferences.length
+        ? { referenceAudioMediaIds: audioReferences.map((media) => media.mediaId) }
+        : {})
     })
     if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
     if (!submitted.ok) return { status: 'failed', reason: submitted.error.message }

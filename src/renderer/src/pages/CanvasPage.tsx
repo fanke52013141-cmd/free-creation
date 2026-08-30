@@ -7,6 +7,7 @@ import { CanvasEditor } from '../canvas/CanvasEditor'
 import { ProjectMenu } from '../canvas/ProjectMenu'
 import { useSearchStore } from '../stores/search'
 import { Icon } from '../components/Icon'
+import { Tooltip } from '../components/Tooltip'
 import { CanvasTopHistory } from '../canvas/CanvasHistoryDock'
 
 interface CanvasPageProps {
@@ -114,18 +115,19 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
               }}
             />
           ) : (
-            <span
-              className="canvas-title editable"
-              title="双击重命名"
-              onDoubleClick={() => {
-                if (currentProject) {
-                  setNameDraft(currentProject.name)
-                  setRenaming(true)
-                }
-              }}
-            >
-              {currentProject?.name ?? file.meta.name}
-            </span>
+            <Tooltip label="双击重命名">
+              <span
+                className="canvas-title editable"
+                onDoubleClick={() => {
+                  if (currentProject) {
+                    setNameDraft(currentProject.name)
+                    setRenaming(true)
+                  }
+                }}
+              >
+                {currentProject?.name ?? file.meta.name}
+              </span>
+            </Tooltip>
           )}
         </div>
 
@@ -155,61 +157,64 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
           {/* 版本号 + 搜索按钮；撤销 / 重做紧挨搜索左侧 */}
           <span className="engine-version">v1.0</span>
           <CanvasTopHistory />
-          <button
-            className="run-btn search-trigger"
-            title="搜索节点（Ctrl+K）"
-            onClick={() => useSearchStore.getState().toggle()}
-          >
-            <Icon name="search" size={16} />
-          </button>
+          <Tooltip label="搜索节点（Ctrl+K）">
+            <button
+              className="run-btn search-trigger"
+              onClick={() => useSearchStore.getState().toggle()}
+            >
+              <Icon name="search" size={16} />
+            </button>
+          </Tooltip>
           {isRunning ? (
             <>
-              <button
-                className={`run-btn ${enginePhase === 'stopping' ? 'running' : ''}`}
-                disabled={enginePhase === 'stopping'}
-                title={isPaused ? '继续工作流' : '在当前原子任务结束后暂停'}
-                onClick={() => (isPaused ? engineResume?.() : enginePause?.())}
-              >
-                <Icon name={isPaused ? 'play' : 'pause'} size={14} /> {isPaused ? '继续' : '暂停'}
-              </button>
-              <button className="run-btn running" title="停止工作流" onClick={() => engineStop?.()}>
-                <Icon name="close" size={14} /> 停止
-              </button>
+              <Tooltip label={isPaused ? '继续工作流' : '在当前原子任务结束后暂停'}>
+                <button
+                  className={`run-btn ${enginePhase === 'stopping' ? 'running' : ''}`}
+                  disabled={enginePhase === 'stopping'}
+                  onClick={() => (isPaused ? engineResume?.() : enginePause?.())}
+                >
+                  <Icon name={isPaused ? 'play' : 'pause'} size={14} /> {isPaused ? '继续' : '暂停'}
+                </button>
+              </Tooltip>
+              <Tooltip label="停止工作流">
+                <button className="run-btn running" onClick={() => engineStop?.()}>
+                  <Icon name="close" size={14} /> 停止
+                </button>
+              </Tooltip>
             </>
           ) : (
-            <button
-              className="run-btn"
-              title="运行工作流"
-              onClick={() => {
-                // 由用户发起新一轮运行时立即恢复错误面板；不在 effect 内同步 setState。
-                setShowErrors(true)
-                engineRun?.()
-              }}
-            >
-              <Icon name="play" size={14} /> 运行
-            </button>
+            <Tooltip label="运行工作流">
+              <button
+                className="run-btn"
+                onClick={() => {
+                  // 由用户发起新一轮运行时立即恢复错误面板；不在 effect 内同步 setState。
+                  setShowErrors(true)
+                  engineRun?.()
+                }}
+              >
+                <Icon name="play" size={14} /> 运行
+              </button>
+            </Tooltip>
           )}
         </div>
 
         <div className="topbar-actions">
           {/* 模型供应商设置：常驻顶栏快捷按钮 */}
-          <button
-            className="topbar-shortcut"
-            title="模型供应商设置"
-            aria-label="模型供应商设置"
-            onClick={openSettings}
-          >
-            <Icon name="settings" size={16} />
-          </button>
+          <Tooltip label="模型供应商设置">
+            <button className="topbar-shortcut" aria-label="模型供应商设置" onClick={openSettings}>
+              <Icon name="settings" size={16} />
+            </button>
+          </Tooltip>
           {/* 回到主页：常驻顶栏快捷按钮 */}
-          <button
-            className="topbar-shortcut"
-            title="回到主页"
-            aria-label="回到主页"
-            onClick={() => void window.api.closeProject().then(() => setHome())}
-          >
-            <Icon name="home" size={16} />
-          </button>
+          <Tooltip label="回到主页">
+            <button
+              className="topbar-shortcut"
+              aria-label="回到主页"
+              onClick={() => void window.api.closeProject().then(() => setHome())}
+            >
+              <Icon name="home" size={16} />
+            </button>
+          </Tooltip>
         </div>
       </div>
       {engineErrors.length > 0 && showErrors && (

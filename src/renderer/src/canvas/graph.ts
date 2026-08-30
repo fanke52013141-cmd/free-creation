@@ -8,9 +8,9 @@ import type { NodeCardShape } from './NodeCardShape'
 import type { ConnectionFrom } from '../stores/connection'
 import { projectNodeOutputs, type NodeValue } from '../nodes/nodeValues'
 
-// 连线颜色按源端口类型分型。用 tldraw 内置标准色名（渲染层 getColorValue 解析为对应主题色），
-// 因为 arrow 的 color 属性受 DefaultColorStyle 枚举校验，内置名才是类型安全且最稳的做法。
-// 类型收窄为 tldraw 允许的色名联合，避免 string 过宽导致 typecheck 报错。
+// 默认连线保持中性灰，避免同一画布被端口类型色切成多种视觉噪声；
+// 类型辨识交给端口色与详情面板，悬浮/选中/拖线则由统一蓝色交互态强调。
+// 仍使用 tldraw 内置色名，确保 DefaultColorStyle 校验安全。
 type ArrowColor =
   | 'black'
   | 'blue'
@@ -27,12 +27,12 @@ type ArrowColor =
   | 'light-violet'
 
 export const EDGE_COLORS: Record<string, ArrowColor> = {
-  text: 'light-blue',
-  markdown: 'light-blue',
-  json: 'violet',
-  image: 'green',
-  video: 'light-red',
-  audio: 'yellow',
+  text: 'grey',
+  markdown: 'grey',
+  json: 'grey',
+  image: 'grey',
+  video: 'grey',
+  audio: 'grey',
   file: 'grey',
   any: 'grey'
 }

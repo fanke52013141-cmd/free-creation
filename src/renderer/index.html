@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <title>无限画布创作平台</title>
-    <!-- blob: 供 tldraw 粘贴图片；media: 为本地媒体协议；http(s) 供 M4 用户自配模型 baseURL -->
+    <!-- 渲染进程不直接请求模型：所有供应商流量都经主进程 IPC。blob: 仅用于本地媒体/代码 Worker。 -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: media:; media-src 'self' blob: media:; connect-src 'self' https: http: ws: wss:"
+      content="default-src 'self'; base-uri 'none'; object-src 'none'; script-src 'self' blob: 'unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: media:; media-src 'self' blob: media:; connect-src 'self' ws://localhost:* ws://127.0.0.1:* ws://[::1]:*"
     />
   </head>
 

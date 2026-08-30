@@ -136,7 +136,8 @@ export function NodeContractPanel({
 
   if (!shapeId) return null
   const shape = editor.getShape<NodeCardShape>(shapeId)
-  if (!shape || shape.props.nodeType === 'chat') return null
+  // 对话也有真实的 text → markdown 契约；不能因为它另有聊天工作区就隐藏 I/O 说明。
+  if (!shape) return null
   const spec = getNodeType(shape.props.nodeType)
   if (!spec) return null
   const ports = getNodePorts(spec, shape)

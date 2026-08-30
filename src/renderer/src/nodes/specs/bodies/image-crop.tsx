@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { stopEventPropagation } from 'tldraw'
 import type { ImageCropAspectRatio, ImageCropConfig, NormalizedPoint } from '@shared/image-crop'
 import {
@@ -14,9 +14,13 @@ import { mediaUrl, type NodeBodyProps, type NodeSettingsProps } from '../../regi
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { useNodePanelStore } from '../../../stores/nodePanel'
 import { Icon } from '../../../components/Icon'
+import { AppSelect } from '../../../components/AppSelect'
 import { MediaFileActions, MediaSourceBadge, useClickGuard } from './shared'
 
-type DragTarget = { kind: 'rect'; corner: 0 | 1 | 2 | 3 } | { kind: 'quad'; point: 0 | 1 | 2 | 3 }
+type DragTarget =
+  | { kind: 'rect'; corner: 0 | 1 | 2 | 3 }
+  | { kind: 'quad'; point: 0 | 1 | 2 | 3 }
+  | { kind: 'move'; start: NormalizedPoint; rect: ImageCropConfig['rect'] }
 
 const clamp = (value: number): number => Math.min(1, Math.max(0, value))
 
@@ -66,6 +70,18 @@ function updateRect(
     next.height = Math.max(min, point.y - y)
   }
   return parseImageCropConfig(JSON.stringify({ ...config, rect: next }))
+}
+
+/** 拖动选区内部时整体平移；保持原尺寸且绝不越过原图边界。 */
+function moveRect(
+  config: ImageCropConfig,
+  start: NormalizedPoint,
+  initial: ImageCropConfig['rect'],
+  point: NormalizedPoint
+): ImageCropConfig {
+  const x = Math.max(0, Math.min(1 - initial.width, initial.x + point.x - start.x))
+  const y = Math.max(0, Math.min(1 - initial.height, initial.y + point.y - start.y))
+  return parseImageCropConfig(JSON.stringify({ ...config, rect: { ...initial, x, y } }))
 }
 
 /**
@@ -125,7 +141,11 @@ function updateRectWithAspect(
 }
 
 /** 切换比例时以原选区中心为基准，内接到新比例，绝不越过原图。 */
-function fitRectToAspect(config: ImageCropConfig, ratio: number, sourceAspect: number): ImageCropConfig {
+function fitRectToAspect(
+  config: ImageCropConfig,
+  ratio: number,
+  sourceAspect: number
+): ImageCropConfig {
   const normalizedRatio = ratio / Math.max(0.0001, sourceAspect)
   let width = config.rect.width
   let height = config.rect.height
@@ -220,17 +240,42 @@ export function ImageCropSettings({ shape, editor }: NodeSettingsProps): React.J
   const previewRef = useRef<HTMLDivElement>(null)
   const drag = useRef<DragTarget | null>(null)
   const [config, setConfig] = useState(() => parseImageCropConfig(readNodeConfig(shape)))
+  const configRef = useRef(config)
+  const pendingPersist = useRef<ImageCropConfig | null>(null)
+  const persistFrame = useRef<number | null>(null)
   const [previewAspect, setPreviewAspect] = useState<number | null>(null)
   const source = gatherUpstreamMedia(editor, shape.id, 'in-image', 'image')
 
-  const save = (next: ImageCropConfig): void => {
-    setConfig(next)
+  const persist = (next: ImageCropConfig): void => {
+    pendingPersist.current = null
+    persistFrame.current = null
     editor.updateShape({
       id: shape.id,
       type: 'node-card',
       props: { config: serializeImageCropConfig(next) }
     })
   }
+  const flushPersist = (): void => {
+    if (persistFrame.current !== null) {
+      cancelAnimationFrame(persistFrame.current)
+      persistFrame.current = null
+    }
+    if (pendingPersist.current) persist(pendingPersist.current)
+  }
+  const save = (next: ImageCropConfig): void => {
+    configRef.current = next
+    setConfig(next)
+    // 拖动每个 pointermove 都写入 tldraw 文档会让画布重排、产生明显掉帧。
+    // 预览仍每帧更新，持久化则合并为最多一帧一次并在松手时立即落盘。
+    if (!drag.current) return persist(next)
+    pendingPersist.current = next
+    if (persistFrame.current === null) {
+      persistFrame.current = requestAnimationFrame(() => {
+        if (pendingPersist.current) persist(pendingPersist.current)
+      })
+    }
+  }
+  useEffect(() => () => flushPersist(), [])
   const pointForEvent = (event: React.PointerEvent): NormalizedPoint | null => {
     const bounds = previewRef.current?.getBoundingClientRect()
     if (!bounds || bounds.width <= 0 || bounds.height <= 0) return null
@@ -243,27 +288,31 @@ export function ImageCropSettings({ shape, editor }: NodeSettingsProps): React.J
     const target = drag.current
     const point = target ? pointForEvent(event) : null
     if (!target || !point) return
-    if (target.kind === 'rect') {
-      const ratio = IMAGE_CROP_ASPECT_RATIOS[config.aspectRatio]
+    if (target.kind === 'move') {
+      save(moveRect(configRef.current, target.start, target.rect, point))
+    } else if (target.kind === 'rect') {
+      const current = configRef.current
+      const ratio = IMAGE_CROP_ASPECT_RATIOS[current.aspectRatio]
       save(
         ratio
-          ? updateRectWithAspect(config, target.corner, point, ratio, previewAspect ?? 1)
-          : updateRect(config, target.corner, point)
+          ? updateRectWithAspect(current, target.corner, point, ratio, previewAspect ?? 1)
+          : updateRect(current, target.corner, point)
       )
-    }
-    else {
-      const points = config.points.map((item, index) =>
+    } else {
+      const current = configRef.current
+      const points = current.points.map((item, index) =>
         index === target.point ? point : item
       ) as ImageCropConfig['points']
-      save(parseImageCropConfig(JSON.stringify({ ...config, points })))
+      save(parseImageCropConfig(JSON.stringify({ ...current, points })))
     }
   }
   const finishDrag = (): void => {
     if (!drag.current) return
     drag.current = null
+    flushPersist()
     markUndoPoint(editor, 'image-crop-config')
   }
-  const begin = (target: DragTarget, event: React.PointerEvent<HTMLButtonElement>): void => {
+  const begin = (target: DragTarget, event: React.PointerEvent<HTMLElement>): void => {
     stopEventPropagation(event)
     drag.current = target
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -316,7 +365,7 @@ export function ImageCropSettings({ shape, editor }: NodeSettingsProps): React.J
           </div>
           <label className="crop-aspect-more">
             更多比例
-            <select
+            <AppSelect
               value={EXTRA_ASPECT_RATIOS.includes(config.aspectRatio) ? config.aspectRatio : ''}
               onChange={(event) => {
                 const value = event.currentTarget.value as ImageCropAspectRatio
@@ -329,7 +378,7 @@ export function ImageCropSettings({ shape, editor }: NodeSettingsProps): React.J
                   {aspectRatio}
                 </option>
               ))}
-            </select>
+            </AppSelect>
           </label>
           <small>
             {config.aspectRatio === 'free'
@@ -369,6 +418,10 @@ export function ImageCropSettings({ shape, editor }: NodeSettingsProps): React.J
                   width: `${config.rect.width * 100}%`,
                   height: `${config.rect.height * 100}%`
                 }}
+                onPointerDown={(event) => {
+                  const point = pointForEvent(event)
+                  if (point) begin({ kind: 'move', start: point, rect: { ...config.rect } }, event)
+                }}
               />
             ) : (
               <svg className="crop-quad-overlay" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -400,13 +453,34 @@ export function ImageCropSettings({ shape, editor }: NodeSettingsProps): React.J
           <small className="crop-source-label">
             输入：{source.mime} · {source.mediaId}
           </small>
+          {config.mode === 'rect' && (
+            <div
+              className="crop-result-preview"
+              style={{
+                aspectRatio: `${(previewAspect ?? 1) * (config.rect.width / config.rect.height)}`
+              }}
+            >
+              <img
+                src={mediaUrl(source.mediaPath)}
+                alt="裁剪结果预览"
+                draggable={false}
+                style={{
+                  width: `${100 / config.rect.width}%`,
+                  height: `${100 / config.rect.height}%`,
+                  transform: `translate(${-config.rect.x * 100}%, ${-config.rect.y * 100}%)`
+                }}
+              />
+              <span>裁剪结果预览</span>
+            </div>
+          )}
         </>
       ) : (
         <div className="crop-no-source">请从图片或生图节点连线到左侧“原图”端口。</div>
       )}
       {invalid && <p className="crop-invalid">{invalid}</p>}
       <p className="crop-coordinate-hint">
-        坐标以原图比例保存；矩形模式支持自由或固定比例，四角透视用于校正倾斜画面。运行后输出 PNG 图片。
+        坐标以原图比例保存；矩形模式支持自由或固定比例，四角透视用于校正倾斜画面。运行后输出 PNG
+        图片。
       </p>
     </section>
   )

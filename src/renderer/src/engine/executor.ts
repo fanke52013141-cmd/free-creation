@@ -660,22 +660,25 @@ export async function runWorkflow(
 }
 
 /**
- * 运行选中节点及其全部上游依赖。它通过图边求闭包，而不是按节点类型猜测步骤；
- * 因而每一条执行路径仍可由 portId 和 nodeRun.inputs 回溯。
+ * 运行指定目标节点及其全部上游依赖。它通过真实图边求闭包，不会猜测步骤、
+ * 不会碰画布中未选中的并行分支；用于框选一段流程后的局部运行。
  */
-export async function runWorkflowToNode(
+export async function runWorkflowForNodes(
   editor: Editor,
   projectId: string,
   providers: ProviderSummary[],
-  targetNodeId: TLShapeId
+  targetNodeIds: TLShapeId[]
 ): Promise<void> {
   const store = useEngineStore.getState()
   if (store.phase !== 'idle') return
   const fullGraph = deriveGraph(editor)
-  if (!fullGraph.nodes.some((node) => node.id === targetNodeId)) return toast('目标节点不存在')
+  const targets = [...new Set(targetNodeIds)].filter((id) =>
+    fullGraph.nodes.some((node) => node.id === id)
+  )
+  if (targets.length === 0) return toast('所选节点不存在或尚未保存到画布')
 
-  const required = new Set<string>([targetNodeId])
-  const pending: string[] = [targetNodeId]
+  const required = new Set<string>(targets)
+  const pending: string[] = [...targets]
   while (pending.length > 0) {
     const nodeId = pending.pop()!
     for (const edge of fullGraph.edges) {
@@ -725,6 +728,16 @@ export async function runWorkflowToNode(
   clearRunControls()
   if (token.cancelled) toast('子图运行已停止')
   else if (after.errors.length > 0) toast(`子图完成，${after.errors.length} 个节点失败`)
-  else toast(`已运行 ${executableOrder.length} 个节点至目标节点`)
+  else toast(`已运行所选流程（${executableOrder.length} 个节点）`)
   markUndoPoint(editor, 'workflow-run-subgraph')
+}
+
+/** 向后兼容右侧详情面板的“运行至此节点”动作。 */
+export async function runWorkflowToNode(
+  editor: Editor,
+  projectId: string,
+  providers: ProviderSummary[],
+  targetNodeId: TLShapeId
+): Promise<void> {
+  await runWorkflowForNodes(editor, projectId, providers, [targetNodeId])
 }

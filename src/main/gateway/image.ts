@@ -1,6 +1,6 @@
 // 图片生成链路：generateImage（OpenAI Images 兼容端点，中转站直接可用）
 // → 产物 Buffer 走 media 管线入库，节点侧拿到 MediaAsset 即可展示
-// P1: 支持 referenceMediaId 参考图（图生图），通过 providerOptions 传递 data URL
+// P1: 支持真实多参考图（图生图），通过 AI SDK images 数组提交。
 import { generateImage } from 'ai'
 import type { ImageEditInput, ImageGenerateInput } from '../../shared/contracts'
 import { IMAGE_EDIT_SIZES } from '../../shared/image-edit'
@@ -25,13 +25,14 @@ async function mediaToBuffer(mediaId: string): Promise<Buffer> {
 export async function generateImageToAsset(input: ImageGenerateInput): Promise<MediaAsset> {
   if (!input.prompt?.trim()) throw new GatewayError('INVALID_INPUT', '提示词不能为空')
 
-  // OpenAI-compatible provider 对含参考图的请求会自动改走 /images/edits。
-  let referenceImage: Buffer | undefined
-  if (input.referenceMediaId) {
-    referenceImage = await mediaToBuffer(input.referenceMediaId)
-  }
+  // 旧的单参考图字段与新 many 端口合并，保持旧项目可运行。
+  // 限制为 4 张，避免某些 OpenAI-compatible 端点在大 payload 下静默失败。
+  const referenceIds = [...new Set([input.referenceMediaId, ...(input.referenceMediaIds ?? [])])]
+    .filter((id): id is string => typeof id === 'string' && Boolean(id))
+    .slice(0, 4)
+  const referenceImages = await Promise.all(referenceIds.map(mediaToBuffer))
 
-  return generateImageWithReference(input, referenceImage, {
+  return generateImageWithReference(input, referenceImages, {
     ...(typeof input.seed === 'number' && input.seed > 0 ? { seed: input.seed } : {}),
     ...(input.aspectRatio ? { aspectRatio: input.aspectRatio } : {})
   })
@@ -39,16 +40,17 @@ export async function generateImageToAsset(input: ImageGenerateInput): Promise<M
 
 async function generateImageWithReference(
   input: Pick<ImageGenerateInput, 'projectId' | 'providerId' | 'modelId' | 'prompt' | 'size'>,
-  referenceImage?: Buffer,
+  referenceImages: readonly Buffer[] = [],
   providerOptions?: Record<string, string | number | boolean>,
   maskImage?: Buffer
 ): Promise<MediaAsset> {
   const prompt = input.prompt.trim()
   const { images } = await generateImage({
     model: createImageModel(input.providerId, input.modelId),
-    prompt: referenceImage
-      ? { text: prompt, images: [referenceImage], ...(maskImage ? { mask: maskImage } : {}) }
-      : prompt,
+    prompt:
+      referenceImages.length > 0
+        ? { text: prompt, images: [...referenceImages], ...(maskImage ? { mask: maskImage } : {}) }
+        : prompt,
     ...(input.size && input.size !== 'auto' ? { size: input.size as `${number}x${number}` } : {}),
     ...(providerOptions && Object.keys(providerOptions).length > 0
       ? { providerOptions: { [input.providerId]: providerOptions } }
@@ -75,5 +77,5 @@ export async function generateImageEditToAsset(
   if (input.size && !IMAGE_EDIT_SIZES.includes(input.size as (typeof IMAGE_EDIT_SIZES)[number])) {
     throw new GatewayError('INVALID_INPUT', '图片修改尺寸不受支持')
   }
-  return generateImageWithReference(input, referenceImage, undefined, maskImage)
+  return generateImageWithReference(input, [referenceImage], undefined, maskImage)
 }

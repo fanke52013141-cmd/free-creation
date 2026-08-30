@@ -12,6 +12,7 @@ import type { NodeCardShape, NodeCardProps } from '../../../canvas/NodeCardShape
 import { createEdge } from '../../../canvas/graph'
 import { getNodeType, mediaUrl } from '../../registry'
 import { Icon } from '../../../components/Icon'
+import { AppSelect } from '../../../components/AppSelect'
 import {
   clearMediaResultHistory,
   parseMediaResultCollection,
@@ -44,7 +45,7 @@ export function ModelSelect({
   onChange: (key: string) => void
 }): React.JSX.Element {
   return (
-    <select
+    <AppSelect
       className="gen-select"
       value={value}
       onPointerDown={(e) => stopEventPropagation(e)}
@@ -56,7 +57,7 @@ export function ModelSelect({
           {o.label}
         </option>
       ))}
-    </select>
+    </AppSelect>
   )
 }
 
@@ -98,9 +99,9 @@ export function createImageContinuation(
         ? '图片裁剪'
         : targetType === 'image-split'
           ? '图片拆分'
-        : targetType === 'image-edit'
-          ? '图片修改'
-          : '图片生成视频'
+          : targetType === 'image-edit'
+            ? '图片修改'
+            : '图片生成视频'
   editor.createShape({
     id,
     type: 'node-card',
@@ -171,10 +172,7 @@ export function createAudioContinuation(
  * 一键提取人声模板：从视频节点创建 视频提音 → 人声分离 两个节点并预连线。
  * 底层是两个真实节点 + 两条真实边，不生成隐藏逻辑或超级节点。
  */
-export function createVocalExtractionTemplate(
-  editor: Editor,
-  source: NodeCardShape
-): void {
+export function createVocalExtractionTemplate(editor: Editor, source: NodeCardShape): void {
   const audioSpec = getNodeType('video-audio')
   const vocalSpec = getNodeType('vocal-separate')
   if (!audioSpec || !vocalSpec) return
@@ -238,7 +236,12 @@ export function ImageContinuationActions({
     title: string
   }> = [
     { type: 'image-crop', icon: 'crop', label: '裁剪图片', title: '创建裁剪节点并连接当前图片' },
-    { type: 'image-split', icon: 'grid', label: '宫格拆分', title: '创建图片拆分节点并连接当前图片' },
+    {
+      type: 'image-split',
+      icon: 'grid',
+      label: '宫格拆分',
+      title: '创建图片拆分节点并连接当前图片'
+    },
     { type: 'image-gen', icon: 'spark', label: '继续生图', title: '创建生图节点并连接当前图片' },
     { type: 'image-edit', icon: 'edit', label: '修改图片', title: '对当前图片添加标注并修改' },
     { type: 'video', icon: 'video', label: '生成视频', title: '创建视频节点并将当前图片作为首帧' }

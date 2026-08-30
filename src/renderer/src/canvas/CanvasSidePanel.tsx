@@ -26,6 +26,7 @@ import { markUndoPoint } from './history'
 import { toast } from '../stores/toast'
 import { useHistorySnapshots, type HistorySnapshot } from '../stores/history-snapshots'
 import { Icon, type IconName } from '../components/Icon'
+import { AppSelect } from '../components/AppSelect'
 import { AssetsPanel } from './side-panel/AssetsPanel'
 
 export type SidePanelTab = 'assets' | 'workflow' | 'history' | 'runs'
@@ -637,7 +638,8 @@ function RunsPanel({
           onPointerDown={(event) => event.stopPropagation()}
           onKeyDown={(event) => event.stopPropagation()}
         />
-        <select
+        <AppSelect
+          className="runs-filter-select"
           value={status}
           onChange={(event) => setStatus(event.target.value as RunStatusFilter)}
           onPointerDown={(event) => event.stopPropagation()}
@@ -648,7 +650,7 @@ function RunsPanel({
               {item.label}
             </option>
           ))}
-        </select>
+        </AppSelect>
       </div>
       {focus && (
         <div className="runs-focus-note">

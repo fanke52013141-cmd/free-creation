@@ -4,6 +4,7 @@ import type { NodeBodyProps } from '../../registry'
 import { hasIncomingConnection } from '../../../canvas/graph'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { VARIABLE_TYPES, parseJsonProp, type VariableValueType } from './shared'
+import { AppSelect } from '../../../components/AppSelect'
 
 interface ProcessorData {
   inputName: string
@@ -64,7 +65,7 @@ export function ProcessorBody({ shape }: NodeBodyProps): React.JSX.Element {
   return (
     <div className="processor-body">
       <div className="variable-section-title">变量映射</div>
-      <select
+      <AppSelect
         className="gen-select"
         aria-label="处理方式"
         value={data.operation}
@@ -76,7 +77,7 @@ export function ProcessorBody({ shape }: NodeBodyProps): React.JSX.Element {
         <option value="pass">原样传递</option>
         <option value="pick">提取字段</option>
         <option value="template">字符串模板</option>
-      </select>
+      </AppSelect>
       {data.operation === 'pick' && (
         <input
           value={data.path}
@@ -106,7 +107,7 @@ export function ProcessorBody({ shape }: NodeBodyProps): React.JSX.Element {
           onPointerDown={(e) => stopEventPropagation(e)}
           onChange={(e) => update({ ...data, inputName: e.target.value || 'input' })}
         />
-        <select
+        <AppSelect
           value={data.valueType}
           aria-label="变量类型"
           onPointerDown={(e) => stopEventPropagation(e)}
@@ -117,7 +118,7 @@ export function ProcessorBody({ shape }: NodeBodyProps): React.JSX.Element {
               {item.label}
             </option>
           ))}
-        </select>
+        </AppSelect>
       </div>
       <div className="variable-map-arrow">↓ 原样传递</div>
       <div className="variable-row output">

@@ -1,5 +1,5 @@
 // 代码节点 Body（路线图 R6：bodies.tsx 拆分）
-// 支持 Coze 风格 async function main(args) 写法，可用 lodash(_) 和 dayjs
+// 支持 Coze 风格 async function main(args) 写法，可用本地工具 `_` 和 `dayjs`
 // 支持自定义参数端口：用户在 UI 表格中声明额外输入参数
 import { useRef, useState, type ReactNode } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
@@ -7,6 +7,7 @@ import type { NodeBodyProps } from '../../registry'
 import { markUndoPoint } from '../../../canvas/history'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { Icon } from '../../../components/Icon'
+import { AppSelect } from '../../../components/AppSelect'
 import { useWheelScroll, VARIABLE_TYPES, type VariableValueType } from './shared'
 import { codePortConfigErrors } from '../../../engine/executors/code'
 
@@ -244,7 +245,7 @@ const CODE_TEMPLATE = `async function main(args) {
   //   args.text   — 上游文本输入
   //   args.json   — 上游 JSON 数组
   //   args.{自定义参数名} — 在上方"输入参数"表格中声明的端口
-  // 可用库：_(lodash)、dayjs
+  // 本地帮助：_.get / pick / omit / map / filter / groupBy / uniq / chunk / cloneDeep，dayjs
 
   const data = args.json || []
   return {
@@ -361,7 +362,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
             onPointerDown={(e) => stopEventPropagation(e)}
             onChange={(e) => updateConfig({ ...data, inputName: e.target.value || 'input' })}
           />
-          <select
+          <AppSelect
             value={data.inputType}
             onPointerDown={(e) => stopEventPropagation(e)}
             onChange={(e) =>
@@ -373,7 +374,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
                 {item.label}
               </option>
             ))}
-          </select>
+          </AppSelect>
         </div>
         <div className="variable-row output">
           <span className="variable-direction">输出</span>
@@ -384,7 +385,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
             onPointerDown={(e) => stopEventPropagation(e)}
             onChange={(e) => updateConfig({ ...data, outputName: e.target.value || 'output' })}
           />
-          <select
+          <AppSelect
             value={data.outputType}
             onPointerDown={(e) => stopEventPropagation(e)}
             onChange={(e) =>
@@ -396,7 +397,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
                 {item.label}
               </option>
             ))}
-          </select>
+          </AppSelect>
         </div>
         <div className="code-variable-help">
           {isMainStyle ? (
@@ -414,7 +415,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
                   ))}
                 </>
               )}
-              ，可用库 <code>_</code> <code>dayjs</code>
+              ，本地帮助 <code>_</code> <code>dayjs</code>（不联网；时间固定、随机数可复跑）
             </>
           ) : (
             <>
@@ -452,7 +453,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
                     updateParam(index, { name: e.target.value.replace(/[^\w]/g, '') })
                   }
                 />
-                <select
+                <AppSelect
                   className="code-param-type"
                   value={param.type}
                   onPointerDown={(e) => stopEventPropagation(e)}
@@ -465,7 +466,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
                       {item.label}
                     </option>
                   ))}
-                </select>
+                </AppSelect>
                 <button
                   className="code-param-remove"
                   onPointerDown={(e) => stopEventPropagation(e)}

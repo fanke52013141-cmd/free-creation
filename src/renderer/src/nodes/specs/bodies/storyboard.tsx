@@ -1,5 +1,5 @@
 // 分镜板节点 Body（路线图 R6：bodies.tsx 拆分）
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import { mediaUrl, type NodeBodyProps } from '../../registry'
 import { toast } from '../../../stores/toast'
@@ -7,20 +7,14 @@ import { markUndoPoint } from '../../../canvas/history'
 import { gatherUpstreamJson } from '../../../canvas/graph'
 import { Icon } from '../../../components/Icon'
 import { useWheelScroll } from './shared'
-
-interface StoryboardShot {
-  id: string
-  scene: string
-  dialogue: string
-  duration: string
-  imageMediaId?: string
-  imageMediaPath?: string
-}
-
-interface StoryboardData {
-  shots: StoryboardShot[]
-  imageModelKey?: string
-}
+import {
+  createStoryboardShot,
+  moveStoryboardShot,
+  removeStoryboardShot,
+  updateStoryboardShot,
+  type StoryboardData,
+  type StoryboardShot
+} from '../../storyboard-editor'
 
 function parseStoryboard(text: string): StoryboardData {
   if (!text) return { shots: [] }
@@ -66,7 +60,9 @@ function parseStoryboard(text: string): StoryboardData {
   return { shots: [] }
 }
 
-const STORYBOARD_MAX_H = 640
+function newShotId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 11)
+}
 
 export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
@@ -77,6 +73,14 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
   const importedRef = useRef(false)
   const [editingInput, setEditingInput] = useState(false)
   const [draftInput, setDraftInput] = useState(shape.props.text)
+  const [editingShotId, setEditingShotId] = useState<string | null>(null)
+  const [shotDraft, setShotDraft] = useState<
+    Pick<StoryboardShot, 'scene' | 'dialogue' | 'duration'>
+  >({
+    scene: '',
+    dialogue: '',
+    duration: ''
+  })
 
   const update = (next: StoryboardData): void => {
     editor.updateShape({
@@ -103,7 +107,7 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
           shots: parsed.shots.map(
             (s) =>
               ({
-                id: Math.random().toString(36).slice(2, 9),
+                id: newShotId(),
                 scene: (s as Record<string, string>).scene ?? '',
                 dialogue: (s as Record<string, string>).dialogue ?? '',
                 duration: (s as Record<string, string>).duration ?? ''
@@ -118,21 +122,6 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
     return editor.store.listen(importUpstream, { scope: 'document' })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, shape.id, data.shots.length])
-
-  // 自动撑高
-  useLayoutEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
-    const need = el.scrollHeight + 80
-    if (need > shape.props.h && shape.props.h < STORYBOARD_MAX_H) {
-      editor.updateShape({
-        id: shape.id,
-        type: 'node-card',
-        props: { h: Math.min(STORYBOARD_MAX_H, need) }
-      })
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.shots.length])
 
   const commitInput = (): void => {
     let raw: unknown
@@ -152,28 +141,61 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
     markUndoPoint(editor, 'storyboard-json-edit')
   }
 
+  const startShotEdit = (shot: StoryboardShot): void => {
+    setEditingShotId(shot.id)
+    setShotDraft({ scene: shot.scene, dialogue: shot.dialogue, duration: shot.duration })
+  }
+
+  const saveShotEdit = (): void => {
+    if (!editingShotId) return
+    update(updateStoryboardShot(data, editingShotId, shotDraft))
+    setEditingShotId(null)
+    markUndoPoint(editor, 'storyboard-shot-edit')
+  }
+
+  const addShot = (): void => {
+    const shot = createStoryboardShot(newShotId())
+    update({ ...data, shots: [...data.shots, shot] })
+    startShotEdit(shot)
+    markUndoPoint(editor, 'storyboard-shot-add')
+  }
+
+  const moveShot = (index: number, direction: -1 | 1): void => {
+    const next = moveStoryboardShot(data, index, direction)
+    if (next === data) return
+    update(next)
+    markUndoPoint(editor, 'storyboard-shot-move')
+  }
+
+  const removeShot = (shotId: string): void => {
+    update(removeStoryboardShot(data, shotId))
+    if (editingShotId === shotId) setEditingShotId(null)
+    markUndoPoint(editor, 'storyboard-shot-remove')
+  }
+
+  if (editingInput) {
+    return (
+      <textarea
+        className="node-textarea code-edit"
+        autoFocus
+        value={draftInput}
+        placeholder='{"shots":[{"scene":"画面描述","dialogue":"","duration":"3s"}]}'
+        onChange={(e) => setDraftInput(e.target.value)}
+        onBlur={commitInput}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            setEditingInput(false)
+            setDraftInput(shape.props.text)
+          }
+          if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') commitInput()
+        }}
+        onPointerDown={(e) => stopEventPropagation(e)}
+        spellCheck={false}
+      />
+    )
+  }
+
   if (data.shots.length === 0) {
-    if (editingInput) {
-      return (
-        <textarea
-          className="node-textarea code-edit"
-          autoFocus
-          value={draftInput}
-          placeholder='{"shots":[{"scene":"画面描述","dialogue":"","duration":"3s"}]}'
-          onChange={(e) => setDraftInput(e.target.value)}
-          onBlur={commitInput}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') {
-              setEditingInput(false)
-              setDraftInput(shape.props.text)
-            }
-            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') commitInput()
-          }}
-          onPointerDown={(e) => stopEventPropagation(e)}
-          spellCheck={false}
-        />
-      )
-    }
     return (
       <div
         className="node-hint center"
@@ -206,11 +228,35 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
   return (
     <div className="storyboard-body" ref={scrollRef}>
       <div className="storyboard-toolbar">
-        <span>批量生图请在工作流面板套用「分镜→批量生图」模板。</span>
+        <span>逐镜编辑后可用「分镜→批量生图」模板继续创作。</span>
+        <div className="storyboard-toolbar-actions">
+          <button type="button" onPointerDown={stopEventPropagation} onClick={addShot}>
+            <Icon name="add" size={12} /> 新增镜头
+          </button>
+          <button
+            type="button"
+            title="编辑原始分镜 JSON"
+            onPointerDown={stopEventPropagation}
+            onClick={(event) => {
+              stopEventPropagation(event)
+              setDraftInput(JSON.stringify(data, null, 2))
+              setEditingInput(true)
+            }}
+          >
+            JSON
+          </button>
+        </div>
       </div>
       {/* 分镜卡片 */}
       {data.shots.map((shot, i) => (
-        <div key={shot.id} className="storyboard-card">
+        <div
+          key={shot.id}
+          className={`storyboard-card ${editingShotId === shot.id ? 'editing' : ''}`}
+          onDoubleClick={(event) => {
+            stopEventPropagation(event)
+            startShotEdit(shot)
+          }}
+        >
           <div className="storyboard-num">#{i + 1}</div>
           {shot.imageMediaPath ? (
             <div
@@ -231,16 +277,76 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
               <Icon name="image" size={13} />
             </div>
           )}
-          <div className="storyboard-info">
-            <div className="storyboard-scene">{shot.scene || '（无画面描述）'}</div>
-            {shot.dialogue && (
-              <div className="storyboard-dialogue">
-                <Icon name="chat" size={12} />
-                {shot.dialogue}
+          {editingShotId === shot.id ? (
+            <div className="storyboard-edit" onPointerDown={stopEventPropagation}>
+              <label>
+                画面
+                <textarea
+                  autoFocus
+                  value={shotDraft.scene}
+                  placeholder="描述镜头画面、构图与动作"
+                  onChange={(event) => setShotDraft({ ...shotDraft, scene: event.target.value })}
+                />
+              </label>
+              <label>
+                台词
+                <input
+                  value={shotDraft.dialogue}
+                  placeholder="可选"
+                  onChange={(event) => setShotDraft({ ...shotDraft, dialogue: event.target.value })}
+                />
+              </label>
+              <label>
+                时长
+                <input
+                  value={shotDraft.duration}
+                  placeholder="例如 3s"
+                  onChange={(event) => setShotDraft({ ...shotDraft, duration: event.target.value })}
+                  onKeyDown={(event) => {
+                    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') saveShotEdit()
+                    if (event.key === 'Escape') setEditingShotId(null)
+                  }}
+                />
+              </label>
+              <div className="storyboard-edit-actions">
+                <button type="button" onClick={saveShotEdit}>
+                  保存
+                </button>
+                <button type="button" onClick={() => setEditingShotId(null)}>
+                  取消
+                </button>
               </div>
-            )}
-            {shot.duration && <div className="storyboard-duration">⏱ {shot.duration}</div>}
-          </div>
+            </div>
+          ) : (
+            <div className="storyboard-info">
+              <div className="storyboard-scene">{shot.scene || '（无画面描述）'}</div>
+              {shot.dialogue && (
+                <div className="storyboard-dialogue">
+                  <Icon name="chat" size={12} />
+                  {shot.dialogue}
+                </div>
+              )}
+              {shot.duration && <div className="storyboard-duration">⏱ {shot.duration}</div>}
+              <div className="storyboard-card-actions" onPointerDown={stopEventPropagation}>
+                <button type="button" onClick={() => startShotEdit(shot)}>
+                  编辑
+                </button>
+                <button type="button" disabled={i === 0} onClick={() => moveShot(i, -1)}>
+                  上移
+                </button>
+                <button
+                  type="button"
+                  disabled={i === data.shots.length - 1}
+                  onClick={() => moveShot(i, 1)}
+                >
+                  下移
+                </button>
+                <button type="button" className="danger" onClick={() => removeShot(shot.id)}>
+                  删除
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       ))}
     </div>

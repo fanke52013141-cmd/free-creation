@@ -13,6 +13,7 @@ import {
 import type { NodeCardShape } from '../NodeCardShape'
 import { toast } from '../../stores/toast'
 import { Icon, type IconName } from '../../components/Icon'
+import { AppSelect } from '../../components/AppSelect'
 
 const FILTER_TABS: { key: MediaKind | 'all'; label: string }[] = [
   { key: 'all', label: '全部' },
@@ -258,7 +259,8 @@ export function AssetsPanel({
         ))}
       </div>
       <div className="assets-advanced-filters" aria-label="资产高级筛选">
-        <select
+        <AppSelect
+          className="asset-filter-select"
           value={sourceNodeId}
           title="按来源节点筛选"
           onChange={(event) => setSourceNodeId(event.target.value)}
@@ -270,8 +272,9 @@ export function AssetsPanel({
               {source.nodeTitle} · {source.nodeType}
             </option>
           ))}
-        </select>
-        <select
+        </AppSelect>
+        <AppSelect
+          className="asset-filter-select"
           value={runStatus}
           title="按最近运行状态筛选"
           onChange={(event) => setRunStatus(event.target.value as MediaRunFilter)}
@@ -282,8 +285,9 @@ export function AssetsPanel({
               {status.label}
             </option>
           ))}
-        </select>
-        <select
+        </AppSelect>
+        <AppSelect
+          className="asset-filter-select"
           value={timeRange}
           title="按生成时间筛选"
           onChange={(event) => setTimeRange(event.target.value as MediaTimeFilter)}
@@ -294,7 +298,7 @@ export function AssetsPanel({
               {range.label}
             </option>
           ))}
-        </select>
+        </AppSelect>
       </div>
       {visible.length === 0 ? (
         <div className="side-panel-empty">

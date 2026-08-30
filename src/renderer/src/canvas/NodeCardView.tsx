@@ -19,6 +19,9 @@ import type { NodeCardShape } from './NodeCardShape'
 import { Icon } from '../components/Icon'
 import { nodeExecLabel } from './node-status'
 import { deriveNodeReadiness } from './node-readiness'
+import { runNodeManually } from '../engine/executor'
+import { useAppStore } from '../stores/app'
+import { useGatewayStore } from '../stores/gateway'
 
 const EXEC_COLORS: Record<string, string> = {
   idle: '#6b7280',
@@ -47,6 +50,8 @@ function canAttachPort(
 
 export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Element {
   const editor = useEditor()
+  const project = useAppStore((s) => s.currentProject)
+  const providers = useGatewayStore((s) => s.providers)
   const spec = getNodeType(shape.props.nodeType)
   const draft = useConnectionStore((s) => s.draft)
   const [preview, setPreview] = useState<{
@@ -210,6 +215,21 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               title={`${statusLabel} · ${readiness.label}`}
               aria-label={`${statusLabel} · ${readiness.label}`}
             />
+            {selected && spec?.executor && (
+              <button
+                className="node-run-btn"
+                title="运行此节点（使用已连接的上游结果）"
+                aria-label="运行此节点"
+                disabled={shape.props.exec === 'running' || !project}
+                onPointerDown={(event) => stopEventPropagation(event)}
+                onClick={(event) => {
+                  stopEventPropagation(event)
+                  if (project) void runNodeManually(editor, project.id, providers, shape.id)
+                }}
+              >
+                <Icon name="play" size={12} />
+              </button>
+            )}
             <button
               className="node-info-btn"
               title={

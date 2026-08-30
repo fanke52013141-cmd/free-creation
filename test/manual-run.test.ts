@@ -2,7 +2,12 @@
 // 卡片内手动执行必须与工作流共用同一套「连线 → 输入收集 → 执行 → 输出投影」路径。
 import { beforeAll, describe, expect, it } from 'vitest'
 import type { Editor } from 'tldraw'
-import { runNodeManually, runWorkflow, runWorkflowToNode } from '@renderer/engine/executor'
+import {
+  runNodeManually,
+  runWorkflow,
+  runWorkflowForNodes,
+  runWorkflowToNode
+} from '@renderer/engine/executor'
 import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
 import { registerAllNodeTypes } from './helpers/registerNodes'
 
@@ -137,6 +142,57 @@ describe('runNodeManually · 卡片内统一执行入口', () => {
     expect(target.props.exec).toBe('success')
     expect(unrelated.props.exec).toBe('idle')
     expect(JSON.parse(String(target.meta.nodeResult))).toMatchObject({ text: '子图输入' })
+  })
+
+  it('框选多个目标时，只运行这些目标及其上游闭包', async () => {
+    const source = node('shape:multi-source', 'text', '流程输入')
+    const target = node('shape:multi-target', 'processor', '')
+    const independent = node('shape:multi-independent', 'text', '独立分支')
+    const unrelated = node('shape:multi-unrelated', 'text', '不应执行')
+    const arrow = {
+      id: 'shape:multi-arrow',
+      type: 'arrow',
+      meta: { fromPort: 'out-text', toPort: 'in-value' }
+    }
+    const shapes = new Map<
+      string,
+      typeof source | typeof target | typeof independent | typeof unrelated | typeof arrow
+    >([
+      [source.id, source],
+      [target.id, target],
+      [independent.id, independent],
+      [unrelated.id, unrelated],
+      [arrow.id, arrow]
+    ])
+    const editor = {
+      getCurrentPageShapes: () => Array.from(shapes.values()),
+      getShape: (id: string) => shapes.get(id),
+      getBindingsFromShape: (id: string) =>
+        id === arrow.id
+          ? [
+              { props: { terminal: 'start' }, toId: source.id },
+              { props: { terminal: 'end' }, toId: target.id }
+            ]
+          : [],
+      updateShape: (patch: {
+        id: string
+        props?: Record<string, unknown>
+        meta?: Record<string, unknown>
+      }) => {
+        const current = shapes.get(patch.id)
+        if (!current || current.type !== 'node-card') return
+        if (patch.props) Object.assign(current.props, patch.props)
+        if (patch.meta) Object.assign(current.meta, patch.meta)
+      },
+      markHistoryStoppingPoint: () => undefined
+    } as unknown as Editor
+
+    await runWorkflowForNodes(editor, 'project-1', [], [target.id, independent.id])
+
+    expect(source.props.exec).toBe('success')
+    expect(target.props.exec).toBe('success')
+    expect(independent.props.exec).toBe('success')
+    expect(unrelated.props.exec).toBe('idle')
   })
 
   it('不会把最近失败节点遗留的输出当作有效上游输入', async () => {

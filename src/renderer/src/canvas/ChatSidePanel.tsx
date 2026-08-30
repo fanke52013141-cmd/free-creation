@@ -13,6 +13,7 @@ import { gatherUpstreamText } from './graph'
 import { runNodeManually } from '../engine/executor'
 import { toast } from '../stores/toast'
 import { Icon } from '../components/Icon'
+import { AppSelect } from '../components/AppSelect'
 import { getNodeType } from '../nodes/registry'
 
 interface ChatSidePanelProps {
@@ -237,7 +238,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
           <div className="csp-field">
             <label className="csp-label">模型</label>
             {options.length ? (
-              <select
+              <AppSelect
                 className="csp-select"
                 value={data.modelKey}
                 onChange={(e) => update({ ...data, modelKey: e.target.value })}
@@ -248,7 +249,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
                     {o.provider.name} / {o.model.name || o.model.id}
                   </option>
                 ))}
-              </select>
+              </AppSelect>
             ) : (
               <button className="btn-ghost small" onClick={() => openSettings()}>
                 配置对话模型

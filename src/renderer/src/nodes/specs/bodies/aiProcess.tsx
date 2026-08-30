@@ -6,6 +6,7 @@ import { parseAiProcess, type AiProcessConfig } from '../../../engine/executors/
 import { ModelSelect, NoModelHint, useWheelScroll } from './shared'
 import type { NodeBodyProps } from '../../registry'
 import { readNodeConfig } from '../../../canvas/node-persistence'
+import { AppSelect } from '../../../components/AppSelect'
 
 /** 从 meta.nodeResult 解析 AI 处理节点的上次运行结果。 */
 function parseStoredAiResult(stored: string): AiProcessConfig['result'] | undefined {
@@ -109,7 +110,7 @@ export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
 
         <label className="ai-row">
           <span className="ai-row-label">输出</span>
-          <select
+          <AppSelect
             className="gen-select"
             value={data.mode}
             onPointerDown={(e) => stopEventPropagation(e)}
@@ -129,13 +130,13 @@ export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
                 {m.label}
               </option>
             ))}
-          </select>
+          </AppSelect>
         </label>
 
         {data.mode === 'json' && (
           <label className="ai-row">
             <span className="ai-row-label">Schema</span>
-            <select
+            <AppSelect
               className="gen-select"
               value={schemaKey(data.jsonSchema)}
               onPointerDown={(e) => stopEventPropagation(e)}
@@ -146,7 +147,7 @@ export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
                   {s.label}
                 </option>
               ))}
-            </select>
+            </AppSelect>
           </label>
         )}
 

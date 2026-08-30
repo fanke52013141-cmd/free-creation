@@ -10,6 +10,7 @@ import {
   schemaKey
 } from '../../structured-data'
 import type { NodeBodyProps } from '../../registry'
+import { AppSelect } from '../../../components/AppSelect'
 
 function fieldEntries(value: unknown, prefix = '', depth = 0): { path: string; value: unknown }[] {
   if (depth > 3 || !value || typeof value !== 'object' || Array.isArray(value)) return []
@@ -61,7 +62,7 @@ export function StructuredBody({ shape }: NodeBodyProps): React.JSX.Element {
   return (
     <div className="json-body structured-body">
       <div className="structured-header" onPointerDown={(event) => stopEventPropagation(event)}>
-        <select
+        <AppSelect
           className="gen-select"
           aria-label="结构 Schema"
           value={schemaKey(config.schema)}
@@ -72,7 +73,7 @@ export function StructuredBody({ shape }: NodeBodyProps): React.JSX.Element {
               {item.label}
             </option>
           ))}
-        </select>
+        </AppSelect>
         <span
           className={
             validation.ok

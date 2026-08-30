@@ -175,6 +175,12 @@ describe('registerNodeType · 注册时硬校验门禁', () => {
     expect(() => registerNodeType(validSpec({ contractVersion: 0 }))).toThrow(/contractVersion/)
   })
 
+  it('拒绝可创建节点使用非标准初始尺寸', () => {
+    expect(() => registerNodeType(validSpec({ defaultSize: { w: 360, h: 260 } }))).toThrow(
+      /defaultSize 必须为 340 × 260/
+    )
+  })
+
   it('拒绝错误的端口 ID 前缀（输入必须 in- 开头）', () => {
     expect(() =>
       registerNodeType(

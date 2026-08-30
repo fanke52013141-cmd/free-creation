@@ -756,7 +756,88 @@ select:focus-visible,
 }
 
 .palette-utility {
-  flex: 0 0 auto;
+  position: fixed;
+  left: 14px;
+  bottom: 14px;
+  z-index: var(--z-dock);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(27, 32, 39, 0.9);
+  box-shadow: var(--elevation-float);
+  backdrop-filter: blur(14px);
+  overflow: visible;
+}
+
+.palette-utility .palette-section {
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+}
+
+.palette-utility .palette-divider {
+  width: 1px;
+  height: 28px;
+  margin: 0 2px;
+}
+
+.palette-utility .palette-item {
+  width: 44px;
+  height: 42px;
+  border-radius: 9px;
+}
+
+.palette-utility .palette-label {
+  font-size: 10px;
+}
+
+/* 与底部入口栏错开，避免小地图和资产/历史按钮互相遮挡。 */
+.canvas-dock {
+  left: 300px;
+}
+
+@media (max-width: 760px) {
+  .canvas-dock {
+    left: 14px;
+    bottom: 76px;
+  }
+
+  .palette-utility {
+    transform: scale(0.9);
+    transform-origin: left bottom;
+  }
+}
+
+/* Dock 式邻近放大：只改变视觉变换，不改变按钮布局和命中区域。 */
+.palette-item {
+  position: relative;
+  transform-origin: center;
+  z-index: 1;
+}
+
+.palette-item:hover {
+  z-index: 3;
+  transform: translateY(-3px) scale(1.14);
+}
+
+.palette-node-section .palette-item:has(+ .palette-item:hover) {
+  transform: translateY(-1px) scale(1.06);
+}
+
+.palette-node-section .palette-item:hover + .palette-item {
+  transform: translateY(1px) scale(1.06);
+}
+
+.palette-utility .palette-item:has(+ .palette-item:hover) {
+  transform: translateX(-3px) translateY(-1px) scale(1.08);
+}
+
+.palette-utility .palette-item:hover + .palette-item {
+  transform: translateX(3px) translateY(-1px) scale(1.08);
 }
 
 .palette-item {
@@ -1695,7 +1776,9 @@ select:focus-visible,
   border: 1.5px dashed var(--border);
   background: var(--card);
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
   color: var(--txt);
 }
 
@@ -1959,179 +2042,6 @@ select:focus-visible,
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-/* ── 端口圆点（升级版：内外双层 + 发光 + 脉冲） ── */
-.port-dot {
-  position: absolute;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  border: 2.5px solid;
-  background: var(--bg);
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition:
-    transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1),
-    box-shadow 0.15s ease,
-    opacity 0.15s ease;
-}
-
-.port-dot::before {
-  content: '';
-  position: absolute;
-  inset: -4px;
-  border-radius: 50%;
-  border: 1.5px solid var(--pc, #09caf5);
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-.port-dot-inner {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  opacity: 0.35;
-  transition:
-    opacity 0.15s ease,
-    transform 0.15s ease;
-}
-
-.port-dot.in {
-  left: -7px;
-}
-
-.port-dot.out {
-  right: -7px;
-  cursor: crosshair;
-}
-
-.port-dot.out:hover {
-  transform: scale(1.35);
-  box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--pc, #09caf5) 18%, transparent),
-    0 0 14px color-mix(in srgb, var(--pc, #09caf5) 55%, transparent);
-}
-
-.port-dot.out:hover .port-dot-inner {
-  opacity: 1;
-  transform: scale(1.3);
-}
-
-.port-dot.out:hover::before,
-.port-dot.in.ok::before {
-  opacity: 0.5;
-  animation: port-pulse 1.6s ease-out infinite;
-}
-
-@keyframes port-pulse {
-  0% {
-    transform: scale(1);
-    opacity: 0.5;
-  }
-  100% {
-    transform: scale(2.2);
-    opacity: 0;
-  }
-}
-
-.port-dot.ok {
-  transform: scale(1.3);
-  box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--pc, #34d399) 20%, transparent),
-    0 0 16px color-mix(in srgb, var(--pc, #34d399) 70%, transparent);
-}
-
-.port-dot.ok .port-dot-inner {
-  opacity: 1;
-}
-
-.port-dot.dim {
-  opacity: 0.2;
-  filter: grayscale(0.6);
-}
-
-/* ── 连线拖拽引线（全面升级：发光底色 + 流动虚线 + 脉冲光环） ── */
-.conn-overlay {
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  pointer-events: none;
-  z-index: var(--z-conn);
-}
-
-.conn-glow-path {
-  stroke-width: 5;
-  fill: none;
-  opacity: 0.08;
-  stroke-linecap: round;
-  filter: blur(4px);
-}
-
-.conn-main-path {
-  stroke-width: 2;
-  fill: none;
-  stroke-dasharray: 8 5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  animation: conn-flow 1.1s linear infinite;
-}
-
-@keyframes conn-flow {
-  to {
-    stroke-dashoffset: -13;
-  }
-}
-
-.conn-start-ring {
-  fill: none;
-  stroke-width: 1.5;
-  opacity: 0.4;
-}
-
-.conn-overlay .conn-start {
-  stroke: var(--bg);
-  stroke-width: 2;
-}
-
-.conn-cursor-pulse {
-  fill: none;
-  stroke-width: 1.5;
-  opacity: 0.5;
-  animation: conn-cursor-pulse 1.2s ease-out infinite;
-}
-
-@keyframes conn-cursor-pulse {
-  0% {
-    transform-origin: center;
-    r: 8;
-    opacity: 0.6;
-  }
-  100% {
-    r: 22;
-    opacity: 0;
-  }
-}
-
-.conn-overlay .conn-cursor {
-  fill-opacity: 0.25;
-  stroke-width: 2;
-  stroke: currentColor;
-}
-
-/* ── tldraw 箭头 CSS 覆盖：让画布上的连线更精致 ──
-   tldraw v4 箭头 DOM 结构：
-   div.tl-shape[data-shape-type="arrow"] > svg.tl-svg-container > g[stroke][stroke-width] > g[clip-path] > path
-   SVG presentation attributes 可被 CSS 直接覆盖（无需 !important） */
-
-/* 弧线圆角化 + 调细至 3px，视觉更精致（tldraw size=l 默认 5px） */
-div[data-shape-type='arrow'] .tl-svg-container path {
-  stroke-width: 3;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
 /* ── 左下角停靠簇：弹出小地图 + 画布整理 + 缩放（LibTV 26-7-7） ── */
@@ -2756,6 +2666,34 @@ div[data-shape-type='arrow'] .tl-svg-container path {
   inset: auto;
   border: 2px solid #5eead4;
   box-shadow: 0 0 0 200vmax rgba(0, 0, 0, 0.43);
+  pointer-events: auto;
+  cursor: move;
+}
+
+.crop-rect-overlay::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+  background-image:
+    linear-gradient(
+      to right,
+      transparent 33.2%,
+      rgba(234, 255, 248, 0.32) 33.4%,
+      transparent 33.6%,
+      transparent 66.4%,
+      rgba(234, 255, 248, 0.32) 66.6%,
+      transparent 66.8%
+    ),
+    linear-gradient(
+      to bottom,
+      transparent 33.2%,
+      rgba(234, 255, 248, 0.32) 33.4%,
+      transparent 33.6%,
+      transparent 66.4%,
+      rgba(234, 255, 248, 0.32) 66.6%,
+      transparent 66.8%
+    );
+  pointer-events: none;
 }
 
 .crop-quad-overlay polygon {
@@ -2788,6 +2726,32 @@ div[data-shape-type='arrow'] .tl-svg-container path {
   color: var(--muted);
   font-size: 10px;
   line-height: 1.45;
+}
+
+.crop-result-preview {
+  position: relative;
+  width: min(100%, 240px);
+  overflow: hidden;
+  border: 1px solid rgba(94, 234, 212, 0.42);
+  border-radius: 7px;
+  background: #111;
+}
+
+.crop-result-preview img {
+  display: block;
+  max-width: none;
+  transform-origin: top left;
+}
+
+.crop-result-preview span {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  color: #eafff8;
+  background: rgba(0, 0, 0, 0.64);
+  font-size: 10px;
 }
 
 .crop-no-source,
@@ -3074,7 +3038,9 @@ div[data-shape-type='arrow'] .tl-svg-container path {
   font-size: 12px;
   line-height: 1;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
 }
 
 .video-timeline-btn:hover:not(:disabled) {
@@ -5381,12 +5347,28 @@ div[data-shape-type='arrow'] .tl-svg-container path {
   flex: 0 0 auto;
 }
 
+.gen-capability-note.capability-error {
+  border-color: rgba(248, 113, 113, 0.34);
+  background: rgba(127, 29, 29, 0.2);
+  color: #fecaca;
+}
+
 .ref-image-thumb {
   width: 26px;
   height: 22px;
   flex: 0 0 auto;
   border-radius: 4px;
   object-fit: cover;
+}
+
+.ref-image-stack {
+  display: flex;
+  align-items: center;
+  min-width: 30px;
+}
+
+.ref-image-stack .ref-image-thumb + .ref-image-thumb {
+  margin-left: -8px;
 }
 
 .ref-image-label {
@@ -7714,6 +7696,98 @@ div[data-shape-type='arrow'] .tl-svg-container path {
   padding: 2px 0 4px;
   border-bottom: 1px solid var(--line);
   margin-bottom: 4px;
+}
+.storyboard-toolbar > span {
+  min-width: 0;
+  flex: 1;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+.storyboard-toolbar-actions,
+.storyboard-card-actions,
+.storyboard-edit-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+}
+.storyboard-toolbar-actions button,
+.storyboard-card-actions button,
+.storyboard-edit-actions button {
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 3px 5px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--txt-dim);
+  font-size: 10px;
+  cursor: pointer;
+}
+.storyboard-toolbar-actions button:hover,
+.storyboard-card-actions button:hover,
+.storyboard-edit-actions button:hover {
+  border-color: color-mix(in srgb, var(--brand) 55%, var(--line));
+  background: color-mix(in srgb, var(--brand) 12%, transparent);
+  color: var(--txt);
+}
+.storyboard-card.editing {
+  border-color: color-mix(in srgb, var(--brand) 58%, var(--line));
+  background: color-mix(in srgb, var(--brand) 7%, transparent);
+}
+.storyboard-edit {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  grid-template-columns: 1fr 84px;
+  gap: 5px;
+  padding-right: 18px;
+}
+.storyboard-edit label {
+  display: grid;
+  gap: 2px;
+  color: var(--muted);
+  font-size: 9px;
+}
+.storyboard-edit label:first-child {
+  grid-column: 1 / -1;
+}
+.storyboard-edit textarea,
+.storyboard-edit input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 4px 5px;
+  background: var(--bg);
+  color: var(--txt);
+  font: inherit;
+  font-size: 10px;
+  outline: none;
+}
+.storyboard-edit textarea {
+  min-height: 42px;
+  resize: vertical;
+}
+.storyboard-edit textarea:focus,
+.storyboard-edit input:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 16%, transparent);
+}
+.storyboard-edit-actions {
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+}
+.storyboard-card-actions {
+  margin-top: 5px;
+  opacity: 0;
+  transition: opacity 0.14s ease;
+}
+.storyboard-card:hover .storyboard-card-actions,
+.storyboard-card:focus-within .storyboard-card-actions {
+  opacity: 1;
+}
+.storyboard-card-actions .danger {
+  color: var(--red);
 }
 .storyboard-thumb-empty.generating {
   animation: sb-pulse 1s ease-in-out infinite;

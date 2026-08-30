@@ -12,7 +12,8 @@ export interface VocalSeparationNodeResult {
   accompaniment?: { mediaId: string; mediaPath: string; mime: string }
   mode: VocalMode
   sourceMediaId: string
-  runId: string
+  /** 手动局部执行可能没有工作流 runId；不能伪造一个来源 ID。 */
+  runId?: string
   at: number
 }
 
@@ -41,7 +42,9 @@ export function parseVocalSeparationResult(text: string): VocalSeparationNodeRes
   }
 }
 
-export async function vocalSeparateExecutor(ctx: NodeExecutionContext): Promise<NodeExecutionResult> {
+export async function vocalSeparateExecutor(
+  ctx: NodeExecutionContext
+): Promise<NodeExecutionResult> {
   const source = inputMedia(ctx.inputs, 'in-audio', 'audio')[0]
   if (!source) return { status: 'skipped', reason: '请连接一段音频到"源音频"输入' }
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
@@ -65,7 +68,7 @@ export async function vocalSeparateExecutor(ctx: NodeExecutionContext): Promise<
       },
       mode: config.mode,
       sourceMediaId: source.mediaId,
-      runId: ctx.runId,
+      ...(ctx.runId ? { runId: ctx.runId } : {}),
       at: Date.now()
     }
 

@@ -503,6 +503,12 @@
   border-color: rgba(255, 218, 218, 0.76);
 }
 
+.canvas-theme-light .node-run-btn {
+  border-color: rgba(24, 143, 202, 0.25);
+  background: rgba(66, 185, 245, 0.1);
+  color: #11658e;
+}
+
 @keyframes node-status-pulse {
   50% {
     box-shadow:
@@ -812,4 +818,448 @@
   .history-card {
     transition: none;
   }
+}
+
+/* ── UI-R3: readable controls, aligned utility rail and theme-complete inspectors ── */
+/* 左栏保持可滚动，但永远不露出浏览器滚动条；标签和底部工具使用同一中心轴。 */
+.node-palette {
+  left: 12px;
+  width: 76px;
+  overflow: hidden;
+}
+
+.palette-node-scroll {
+  overflow-x: hidden;
+  scrollbar-width: none;
+}
+
+.palette-node-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.palette-utility .palette-section {
+  align-items: center;
+}
+
+.palette-utility .palette-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 68px;
+  height: 46px;
+  min-height: 46px;
+  border-radius: 12px;
+}
+
+.palette-item {
+  will-change: transform;
+}
+
+.palette-item:hover {
+  transform: translateX(2px) scale(1.075);
+}
+
+.palette-item:hover .palette-icon {
+  transform: scale(1.13);
+}
+
+/* 统一的 portal 提示层：不受左栏滚动容器裁切，也可被其他高频图标复用。 */
+.app-tooltip {
+  position: fixed;
+  z-index: 2000;
+  max-width: 220px;
+  padding: 7px 9px;
+  border: 1px solid rgba(185, 209, 228, 0.16);
+  border-radius: 8px;
+  background: rgba(20, 26, 33, 0.96);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+  color: #f2f7fb;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+/* 本机依赖状态：在配置前说明工具是否可用，不把失败留到一次媒体运行之后。 */
+.local-capability-alert,
+.local-capability-ok {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.local-capability-alert {
+  color: var(--text-primary, #f8fafc);
+  border: 1px solid color-mix(in srgb, #f59e0b 46%, transparent);
+  background: color-mix(in srgb, #f59e0b 10%, var(--surface-2, #1e2530));
+}
+
+.local-capability-alert strong {
+  color: #fbbf24;
+}
+.local-capability-alert span,
+.local-capability-alert small {
+  color: var(--text-secondary, #b6c2d1);
+}
+
+.local-capability-ok {
+  display: block;
+  padding: 7px 10px;
+  color: #86efac;
+  border: 1px solid color-mix(in srgb, #22c55e 34%, transparent);
+  background: color-mix(in srgb, #22c55e 8%, var(--surface-2, #1e2530));
+}
+
+.canvas-theme-light .local-capability-alert {
+  color: #3f2a00;
+  background: #fff7e4;
+}
+.canvas-theme-light .local-capability-alert span,
+.canvas-theme-light .local-capability-alert small {
+  color: #6b521e;
+}
+.canvas-theme-light .local-capability-ok {
+  color: #166534;
+  background: #effcf3;
+}
+
+/* 让底部小地图入口与左栏图标的中心线一致，其余缩放控件仍向右延展。 */
+.canvas-dock {
+  left: 12px;
+}
+
+.dock-tool-group {
+  display: flex;
+  width: 76px;
+  justify-content: center;
+}
+
+/* 统一可交互下拉框，保留原生 option 的可访问性，不再使用浏览器默认外观。 */
+:is(.node-card, .side-panel, .node-contract-panel, .chat-side-panel, .gw-panel, .director-studio)
+  select {
+  min-height: 36px;
+  padding: 0 34px 0 10px;
+  border: 1px solid rgba(171, 193, 212, 0.18);
+  border-radius: 9px;
+  appearance: none;
+  background-color: rgba(12, 17, 23, 0.42);
+  background-image:
+    linear-gradient(45deg, transparent 50%, #a9c0d2 50%),
+    linear-gradient(135deg, #a9c0d2 50%, transparent 50%);
+  background-position:
+    calc(100% - 15px) 50%,
+    calc(100% - 10px) 50%;
+  background-repeat: no-repeat;
+  background-size:
+    5px 5px,
+    5px 5px;
+  color: var(--txt);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+:is(.node-card, .side-panel, .node-contract-panel, .chat-side-panel, .gw-panel, .director-studio)
+  select:hover {
+  border-color: rgba(111, 207, 249, 0.42);
+  background-color: rgba(66, 185, 245, 0.08);
+}
+
+:is(.node-card, .side-panel, .node-contract-panel, .chat-side-panel, .gw-panel, .director-studio)
+  select:focus {
+  border-color: rgba(99, 202, 249, 0.8);
+  box-shadow: 0 0 0 3px rgba(66, 185, 245, 0.14);
+  outline: none;
+}
+
+/* 契约抽屉本身就是节点的说明书，不能为了紧凑牺牲文字可读性。 */
+.node-contract-panel {
+  width: clamp(350px, 25vw, 390px);
+}
+
+.contract-head {
+  min-height: 62px;
+  padding: 13px 17px;
+}
+
+.contract-head strong {
+  color: #f5f8fb;
+  font-size: 16px;
+  font-weight: 720;
+}
+
+.contract-head small {
+  color: #adbbc8;
+  font-size: 12px;
+}
+
+.contract-body {
+  padding: 16px;
+}
+
+.contract-tabs {
+  gap: 5px;
+  padding: 5px;
+  border-radius: 11px;
+}
+
+.contract-tabs button {
+  min-height: 32px;
+  padding: 6px 4px;
+  color: #bdcad6;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.contract-description {
+  color: #e2eaf1;
+  font-size: 14px;
+  font-weight: 520;
+  line-height: 1.65;
+}
+
+.contract-rule {
+  padding: 10px 11px;
+  color: #d8f1fc;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.contract-overview-grid {
+  gap: 9px;
+}
+
+.contract-overview-grid > span {
+  padding: 10px;
+}
+
+.contract-overview-grid small,
+.contract-settings-hint,
+.contract-empty {
+  color: #afbdc9;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.contract-overview-grid strong,
+.contract-section h4 {
+  color: #f4f8fb;
+  font-size: 14px;
+}
+
+.contract-section h4 {
+  margin-bottom: 10px;
+  font-weight: 720;
+}
+
+.contract-port {
+  align-items: flex-start;
+  gap: 9px;
+  padding: 11px;
+}
+
+.contract-port strong {
+  color: #f4f8fb;
+  font-size: 14px;
+}
+
+.contract-port small,
+.contract-port p,
+.contract-port em {
+  color: #b7c4d0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.contract-port code {
+  padding: 3px 6px;
+  font-size: 11px;
+}
+
+/* 浅色模式必须完整切换右侧三个抽屉，不能残留深色底 + 深色字。 */
+.canvas-theme-light :is(.side-panel, .node-contract-panel, .chat-side-panel) {
+  border-left-color: rgba(54, 69, 82, 0.15);
+  background: linear-gradient(145deg, rgba(255, 254, 251, 0.98), rgba(244, 239, 231, 0.98));
+  box-shadow: -18px 0 44px rgba(73, 61, 45, 0.14);
+}
+
+.canvas-theme-light :is(.side-panel-head, .contract-head, .csp-header) {
+  border-bottom-color: rgba(54, 69, 82, 0.13);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.64), transparent);
+}
+
+.canvas-theme-light :is(.side-panel-head::after, .contract-head::after, .csp-header::after) {
+  background: linear-gradient(90deg, transparent, rgba(76, 96, 113, 0.22), transparent);
+}
+
+.canvas-theme-light .contract-head strong,
+.canvas-theme-light .contract-overview-grid strong,
+.canvas-theme-light .contract-section h4,
+.canvas-theme-light .contract-port strong {
+  color: #17232d;
+}
+
+.canvas-theme-light
+  :is(
+    .contract-head small,
+    .contract-description,
+    .contract-rule,
+    .contract-overview-grid small,
+    .contract-settings-hint,
+    .contract-empty,
+    .contract-port small,
+    .contract-port p,
+    .contract-port em
+  ) {
+  color: #405466;
+}
+
+.canvas-theme-light .contract-tabs {
+  border-color: rgba(54, 69, 82, 0.14);
+  background: rgba(225, 235, 241, 0.48);
+  box-shadow: 0 8px 15px rgba(73, 61, 45, 0.08);
+}
+
+.canvas-theme-light .contract-tabs button {
+  color: #405466;
+}
+
+.canvas-theme-light .contract-tabs button.active {
+  border-color: rgba(24, 136, 191, 0.26);
+  background: rgba(45, 171, 222, 0.14);
+  color: #0e5478;
+}
+
+.canvas-theme-light .contract-port,
+.canvas-theme-light .contract-overview-grid > span,
+.canvas-theme-light .contract-run-info,
+.canvas-theme-light .contract-run-history-item {
+  border-color: rgba(54, 69, 82, 0.13);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.canvas-theme-light
+  :is(.node-card, .side-panel, .node-contract-panel, .chat-side-panel, .gw-panel, .director-studio)
+  select {
+  border-color: rgba(54, 69, 82, 0.2);
+  background-color: rgba(255, 255, 255, 0.8);
+  background-image:
+    linear-gradient(45deg, transparent 50%, #405466 50%),
+    linear-gradient(135deg, #405466 50%, transparent 50%);
+  color: #17232d;
+}
+
+/* 选中节点后的运行与工作流复用是明确的主动作，和排版按钮区分开。 */
+.ms-run {
+  border-color: rgba(103, 234, 166, 0.34);
+  background: linear-gradient(180deg, rgba(58, 192, 120, 0.25), rgba(27, 129, 77, 0.2));
+  color: #9af3c2;
+}
+
+.ms-run:hover {
+  border-color: rgba(125, 245, 181, 0.58);
+  background: linear-gradient(180deg, rgba(67, 213, 137, 0.3), rgba(28, 151, 86, 0.26));
+  color: #d9ffea;
+}
+
+.ms-template {
+  border-color: rgba(139, 180, 255, 0.3);
+  color: #afc8ff;
+}
+
+.ms-template:hover {
+  border-color: rgba(150, 190, 255, 0.54);
+  background: rgba(104, 155, 255, 0.15);
+  color: #e0eaff;
+}
+
+.canvas-theme-light .ms-run {
+  border-color: rgba(22, 142, 79, 0.3);
+  background: rgba(49, 184, 106, 0.13);
+  color: #167a45;
+}
+
+.canvas-theme-light .ms-template {
+  border-color: rgba(55, 104, 192, 0.26);
+  color: #305fbd;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .palette-item,
+  .palette-item::before,
+  .palette-icon {
+    transition: none;
+  }
+}
+
+/* 视频提示词的 @ 图片引用：只是“创建真实参考图连线”的快捷界面，不保存隐藏媒体。 */
+.video-reference-mention {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: -2px;
+  color: var(--ui-text-muted, #93a0b3);
+  font-size: 12px;
+}
+
+.video-mention-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 7px);
+  left: 0;
+  display: grid;
+  width: min(300px, 100%);
+  max-height: 220px;
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid color-mix(in srgb, var(--ui-border, #3b4656) 82%, transparent);
+  border-radius: 10px;
+  background: var(--ui-surface-raised, #202733);
+  box-shadow: 0 14px 30px rgb(0 0 0 / 28%);
+}
+
+.video-mention-menu button {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 4px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--ui-text, #f5f8fc);
+  background: transparent;
+  text-align: left;
+}
+
+.video-mention-menu button:hover,
+.video-mention-menu button:focus-visible {
+  background: color-mix(in srgb, var(--ui-accent, #52b7f5) 15%, transparent);
+}
+
+.video-mention-menu img {
+  width: 30px;
+  height: 30px;
+  border-radius: 5px;
+  object-fit: cover;
+}
+
+.video-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ui-text, #f5f8fc);
+  font-size: 12px;
+  white-space: nowrap;
 }

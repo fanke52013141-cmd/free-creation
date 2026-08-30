@@ -14,6 +14,7 @@ export type ActiveNodeTypeId =
   | 'video-audio'
   | 'vocal-separate'
   | 'audio'
+  | 'speech'
   | 'tts'
   | 'chat'
   | 'processor'
@@ -329,6 +330,12 @@ export interface VideoGenParams {
   ratio?: string
   duration?: number
   resolution?: string
+  /** Seedance 2.0 生成与画面同步的音频；其他模型由适配器忽略或明确拒绝。 */
+  generateAudio?: boolean
+  /** 支持时传给供应商的随机种子，-1 表示由供应商随机。 */
+  seed?: number
+  /** 支持时要求供应商保留水印。 */
+  watermark?: boolean
 }
 
 /** 视频任务对渲染端的投影（tasks 表 kind='video' 行） */
