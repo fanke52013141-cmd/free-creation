@@ -1263,3 +1263,21 @@
   font-size: 12px;
   white-space: nowrap;
 }
+
+/* Canvas dock final overrides: this file loads after app.css, so keep the
+   bottom utility placement and Dock magnification at the final cascade layer. */
+.canvas-dock {
+  left: 300px;
+}
+
+.palette-node-section .palette-item:hover,
+.palette-utility .palette-item:hover {
+  transform: translateY(-3px) scale(1.14);
+}
+
+@media (max-width: 760px) {
+  .canvas-dock {
+    left: 14px;
+    bottom: 76px;
+  }
+}
