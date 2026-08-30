@@ -35,7 +35,7 @@ import { toast } from '../stores/toast'
 import type { ConnectionFrom } from '../stores/connection'
 import { useGatewayStore } from '../stores/gateway'
 import { useEngineStore } from '../engine/store'
-import { runNodeManually, runWorkflow, runWorkflowForNodes } from '../engine/executor'
+import { runWorkflow, runWorkflowForNodes } from '../engine/executor'
 import { useMediaStore } from '../stores/media'
 import { useEditorStore } from '../stores/editor'
 import { Icon } from '../components/Icon'
@@ -929,7 +929,6 @@ export function CanvasEditor({
       {editorInstance && (
         <MultiSelectToolbar
           editor={editorInstance}
-          onRunNode={(id) => void runNodeManually(editorInstance, project.id, providers, id)}
           onRunFlow={(ids) => void runWorkflowForNodes(editorInstance, project.id, providers, ids)}
           onSaveWorkflow={() => setPanelTab('workflow')}
         />

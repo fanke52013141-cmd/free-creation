@@ -22,6 +22,7 @@ import { deriveNodeReadiness } from './node-readiness'
 import { runNodeManually } from '../engine/executor'
 import { useAppStore } from '../stores/app'
 import { useGatewayStore } from '../stores/gateway'
+import { Tooltip } from '../components/Tooltip'
 
 const EXEC_COLORS: Record<string, string> = {
   idle: '#6b7280',
@@ -216,19 +217,20 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               aria-label={`${statusLabel} · ${readiness.label}`}
             />
             {selected && spec?.executor && (
-              <button
-                className="node-run-btn"
-                title="运行此节点（使用已连接的上游结果）"
-                aria-label="运行此节点"
-                disabled={shape.props.exec === 'running' || !project}
-                onPointerDown={(event) => stopEventPropagation(event)}
-                onClick={(event) => {
-                  stopEventPropagation(event)
-                  if (project) void runNodeManually(editor, project.id, providers, shape.id)
-                }}
-              >
-                <Icon name="play" size={12} />
-              </button>
+              <Tooltip label="运行此节点（使用已连接的上游结果）">
+                <button
+                  className="node-run-btn"
+                  aria-label="运行此节点"
+                  disabled={shape.props.exec === 'running' || !project}
+                  onPointerDown={(event) => stopEventPropagation(event)}
+                  onClick={(event) => {
+                    stopEventPropagation(event)
+                    if (project) void runNodeManually(editor, project.id, providers, shape.id)
+                  }}
+                >
+                  <Icon name="play" size={12} />
+                </button>
+              </Tooltip>
             )}
             <button
               className="node-info-btn"
