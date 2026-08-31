@@ -843,6 +843,129 @@
   will-change: transform;
 }
 
+/* 一级分类只显示图标；二级节点在悬浮时从右侧快速展开。 */
+.palette-category-section {
+  align-items: center;
+  gap: 5px;
+  padding-top: 4px;
+}
+
+.palette-category-item {
+  position: relative;
+  width: 68px;
+  height: 46px;
+  min-height: 46px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--muted, #9dabb9);
+}
+
+.palette-category-item:hover,
+.palette-category-item.is-active {
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--brand, #7edbff);
+}
+
+.palette-category-item .palette-label {
+  display: none;
+}
+
+.palette-expand-arrow {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 4px solid currentColor;
+  opacity: 0.68;
+  transform: translateY(-50%);
+}
+
+.palette-node-flyout {
+  position: fixed;
+  z-index: var(--z-palette, 1200);
+  width: 196px;
+  max-height: min(520px, calc(100vh - 24px));
+  overflow: hidden;
+  border: 1px solid rgba(185, 209, 228, 0.14);
+  border-radius: 12px;
+  background: rgba(23, 29, 36, 0.97);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(16px);
+}
+
+.palette-node-flyout-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 37px;
+  padding: 7px 10px;
+  border-bottom: 1px solid rgba(185, 209, 228, 0.1);
+  color: #dceaf3;
+}
+
+.palette-node-flyout-head strong {
+  flex: 1;
+  font-size: 12px;
+}
+
+.palette-node-flyout-head small {
+  color: #8e9eac;
+  font-size: 10px;
+}
+
+.palette-node-flyout-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  max-height: 470px;
+  padding: 6px;
+  overflow-y: auto;
+}
+
+.palette-node-flyout .palette-node-item {
+  width: auto;
+  min-width: 0;
+  height: 54px;
+  min-height: 54px;
+  border-radius: 9px;
+}
+
+.palette-node-flyout .palette-node-item .palette-label {
+  max-width: 82px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-theme-light .palette-node-flyout {
+  border-color: rgba(42, 55, 67, 0.15);
+  background: rgba(255, 253, 250, 0.97);
+  box-shadow: 0 14px 34px rgba(58, 49, 38, 0.16);
+}
+
+.canvas-theme-light .palette-node-flyout-head {
+  border-bottom-color: rgba(42, 55, 67, 0.12);
+  color: #263743;
+}
+
+.canvas-theme-light .palette-node-flyout-head small {
+  color: #70808c;
+}
+
+@media (max-width: 1040px) {
+  .palette-category-item {
+    width: 48px;
+  }
+
+  .palette-node-flyout {
+    width: 180px;
+  }
+}
+
 /* 统一的 portal 提示层：不受左栏滚动容器裁切，也可被其他高频图标复用。 */
 .app-tooltip {
   position: fixed;

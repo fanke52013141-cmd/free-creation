@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { deriveNodeReadiness } from '@renderer/canvas/node-readiness'
+import { deriveInputPortReadiness, deriveNodeReadiness } from '@renderer/canvas/node-readiness'
 import type { PortDecl } from '@shared/types'
 
 const requiredText: PortDecl = {
@@ -13,6 +13,17 @@ const requiredText: PortDecl = {
 }
 
 describe('节点就绪状态', () => {
+  it('端口级状态区分缺失必填、可选未连和多输入连接数量', () => {
+    const many = {
+      ...requiredText,
+      id: 'in-context',
+      required: false,
+      cardinality: 'many' as const
+    }
+    const states = deriveInputPortReadiness([requiredText, many], new Map([['in-context', 2]]))
+    expect(states.get('in-text')).toMatchObject({ kind: 'missing', label: '缺少必填输入' })
+    expect(states.get('in-context')).toMatchObject({ kind: 'connected', label: '2 条连接' })
+  })
   it('必填端口未连接时明确说明缺失输入', () => {
     expect(
       deriveNodeReadiness({

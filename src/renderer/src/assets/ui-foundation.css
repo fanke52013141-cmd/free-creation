@@ -330,6 +330,41 @@ body {
   box-shadow: 0 0 0 2px #15191f;
 }
 
+.node-readiness {
+  position: absolute;
+  top: 29px;
+  right: 9px;
+  z-index: 3;
+  max-width: calc(100% - 18px);
+  overflow: hidden;
+  padding: 2px 6px;
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 82%, transparent);
+  color: var(--txt-dim);
+  font-size: 10px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: auto;
+}
+
+.node-readiness-ready {
+  border-color: color-mix(in srgb, #34d399 38%, var(--line));
+  color: #86efac;
+}
+
+.node-readiness-blocked,
+.node-readiness-failed {
+  border-color: color-mix(in srgb, #ff6b6b 42%, var(--line));
+  color: #fca5a5;
+}
+
+.node-readiness-running {
+  border-color: color-mix(in srgb, #fbbf24 42%, var(--line));
+  color: #fde68a;
+}
+
 .node-info-btn {
   width: 20px;
   height: 20px;
@@ -496,6 +531,21 @@ body {
 
 .port-dot.dim {
   opacity: 0.16;
+}
+
+.port-dot.input-missing {
+  border-style: dashed;
+  opacity: 1;
+}
+
+.port-dot.has-output .port-dot-inner {
+  width: 5px;
+  height: 5px;
+  opacity: 0.92;
+}
+
+.port-dot.no-output .port-dot-inner {
+  opacity: 0.22;
 }
 
 /* ── Connections: a restrained directional line, not a neon decoration ── */
@@ -912,7 +962,9 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), color 0.15s ease;
+  transition:
+    transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+    color 0.15s ease;
 }
 
 .dock-btn:hover {

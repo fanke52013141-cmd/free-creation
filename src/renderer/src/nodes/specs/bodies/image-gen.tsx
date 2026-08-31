@@ -2,6 +2,13 @@
 import { useEffect, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import { PROVIDER_SPECS } from '@shared/types'
+import {
+  imageCapabilitiesFor,
+  normalizeImageGenerationConfig,
+  sizesForImageAspectRatio,
+  type ImageAspectRatio,
+  type ImageGenerationConfig
+} from '@shared/image-capabilities'
 import { mediaUrl, type NodeBodyProps } from '../../registry'
 import { toast } from '../../../stores/toast'
 import { markUndoPoint } from '../../../canvas/history'
@@ -26,12 +33,7 @@ import {
   parseJsonProp
 } from './shared'
 
-interface ImageGenData {
-  prompt: string
-  modelKey: string
-  size: string
-  seed?: number
-}
+type ImageGenData = ImageGenerationConfig
 
 function parseImageGen(text: string): ImageGenData {
   return parseJsonProp(
@@ -39,20 +41,13 @@ function parseImageGen(text: string): ImageGenData {
     (v) => {
       const o = v as Record<string, unknown>
       if (typeof o === 'object' && o !== null && typeof o.prompt === 'string') {
-        return {
-          prompt: o.prompt,
-          modelKey: typeof o.modelKey === 'string' ? o.modelKey : '',
-          size: typeof o.size === 'string' ? o.size : 'auto',
-          seed: typeof o.seed === 'number' ? o.seed : undefined
-        }
+        return normalizeImageGenerationConfig(o, imageCapabilitiesFor('relay'))
       }
       return null
     },
-    { prompt: '', modelKey: '', size: 'auto', seed: undefined }
+    normalizeImageGenerationConfig({}, imageCapabilitiesFor('relay'))
   )
 }
-
-const IMAGE_SIZES = ['auto', '1024x1024', '1536x1024', '1024x1536']
 
 export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.JSX.Element {
   const guard = useClickGuard()
@@ -64,6 +59,12 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
   const openSettings = useGatewayStore((s) => s.openSettings)
   const options = modelsByModality(providers, 'image')
   const data = parseImageGen(readNodeConfig(shape))
+  const selected = options.find((option) => option.key === data.modelKey)
+  const capabilities = selected
+    ? imageCapabilitiesFor(selected.provider.specId, selected.model.id)
+    : imageCapabilitiesFor('relay')
+  const config = normalizeImageGenerationConfig(data, capabilities)
+  const sizeOptions = sizesForImageAspectRatio(capabilities, config.aspectRatio)
   const [draft, setDraft] = useState(data.prompt)
   const [busy, setBusy] = useState(false)
 
@@ -75,7 +76,7 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
     editor.updateShape({
       id: shape.id,
       type: 'node-card',
-      props: { config: JSON.stringify(next) }
+      props: { config: JSON.stringify(normalizeImageGenerationConfig(next, capabilities)) }
     })
   }
 
@@ -93,7 +94,7 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
   const generate = async (): Promise<void> => {
     if (!project) return toast('项目未就绪')
     // 先提交本次编辑，再由统一运行器读取节点配置和真实上游端口输入。
-    update({ ...data, prompt: draft })
+    update({ ...config, prompt: draft })
     setBusy(true)
     try {
       await runNodeManually(editor, project.id, providers, shape.id)
@@ -190,14 +191,15 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
   return (
     <div className="gen-panel">
       {(() => {
-        const sel = options.find((o) => o.key === data.modelKey)
+        const sel = selected
         const spec = sel ? PROVIDER_SPECS.find((s) => s.id === sel.provider.specId) : undefined
         const notes = [
           spec ? spec.desc : '',
           referenceImages.length > 0
             ? `参考图：${referenceImages.length} 张已连接`
             : '参考图：可连上游图片',
-          typeof data.seed === 'number' ? '种子：固定' : '种子：随机'
+          `${config.aspectRatio === 'auto' ? '画幅：默认' : `画幅：${config.aspectRatio}`}`,
+          typeof config.seed === 'number' ? '种子：固定' : '种子：随机'
         ].filter(Boolean)
         return notes.length > 0 ? (
           <div className="gen-capability-note">
@@ -229,17 +231,50 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
         <ModelSelect
           value={data.modelKey}
           options={options}
-          onChange={(key) => update({ ...data, modelKey: key })}
+          onChange={(key) => {
+            const next = options.find((option) => option.key === key)
+            const nextCapabilities = next
+              ? imageCapabilitiesFor(next.provider.specId, next.model.id)
+              : imageCapabilitiesFor('relay')
+            editor.updateShape({
+              id: shape.id,
+              type: 'node-card',
+              props: {
+                config: JSON.stringify(
+                  normalizeImageGenerationConfig({ ...config, modelKey: key }, nextCapabilities)
+                )
+              }
+            })
+          }}
         />
         <AppSelect
           className="gen-select w92"
-          value={data.size}
+          value={config.aspectRatio}
           onPointerDown={(e) => stopEventPropagation(e)}
-          onChange={(e) => update({ ...data, size: e.target.value })}
+          onChange={(e) => {
+            const ratio = e.target.value as ImageAspectRatio
+            update({
+              ...config,
+              aspectRatio: ratio,
+              size: sizesForImageAspectRatio(capabilities, ratio)[0]?.value ?? 'auto'
+            })
+          }}
         >
-          {IMAGE_SIZES.map((s) => (
-            <option key={s} value={s}>
-              {s === 'auto' ? '默认尺寸' : s}
+          {capabilities.ratios.map((ratio) => (
+            <option key={ratio} value={ratio}>
+              {ratio === 'auto' ? '默认画幅' : ratio}
+            </option>
+          ))}
+        </AppSelect>
+        <AppSelect
+          className="gen-select w92"
+          value={config.size}
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onChange={(e) => update({ ...config, size: e.target.value })}
+        >
+          {sizeOptions.map((size) => (
+            <option key={size.value} value={size.value}>
+              {size.label}
             </option>
           ))}
         </AppSelect>
@@ -247,11 +282,11 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
           className="gen-seed"
           type="number"
           placeholder="种子"
-          value={data.seed ?? ''}
+          value={config.seed ?? ''}
           min="1"
           onPointerDown={(e) => stopEventPropagation(e)}
           onChange={(e) =>
-            update({ ...data, seed: e.target.value ? Number(e.target.value) : undefined })
+            update({ ...config, seed: e.target.value ? Number(e.target.value) : undefined })
           }
         />
       </div>
@@ -262,7 +297,7 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
         spellCheck={false}
         placeholder="描述要生成的画面…"
         onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => update({ ...data, prompt: draft })}
+        onBlur={() => update({ ...config, prompt: draft })}
         onPointerDown={(e) => stopEventPropagation(e)}
       />
       <button

@@ -166,6 +166,8 @@ export function CanvasEditor({
   const wrapRef = useRef<HTMLDivElement>(null)
   // 上传提示延迟隐藏定时器：HTML5 dragleave 会因进子元素误触发，用延迟避免闪烁
   const dragHideTimer = useRef<number | null>(null)
+  // 节点已拖入画布时，浏览器随后仍会派发 click；拦住它以避免再在视口中心创建一份。
+  const suppressNodePickRef = useRef(false)
   // 快照恢复失败后置位：跳过一切自动保存，避免把空画布写回覆盖原数据
   const restoreFailedRef = useRef(false)
   // 拉线到空白处松手：暂存连线来源，待菜单选定节点类型后自动连线（LibTV 交互）
@@ -186,8 +188,16 @@ export function CanvasEditor({
   // macOS Dock 风格鱼眼放大：左侧节点面板（纵向）+ 底部工具栏（横向）
   const nodeScrollRef = useRef<HTMLDivElement>(null)
   const paletteUtilityRef = useRef<HTMLDivElement>(null)
-  const nodeMagnify = useDockMagnify(nodeScrollRef, { direction: 'vertical', maxScale: 1.42, range: 90 })
-  const utilityMagnify = useDockMagnify(paletteUtilityRef, { direction: 'horizontal', maxScale: 1.32, range: 75 })
+  const nodeMagnify = useDockMagnify(nodeScrollRef, {
+    direction: 'vertical',
+    maxScale: 1.42,
+    range: 90
+  })
+  const utilityMagnify = useDockMagnify(paletteUtilityRef, {
+    direction: 'horizontal',
+    maxScale: 1.32,
+    range: 75
+  })
 
   // 执行引擎：注册 run 闭包到全局 store，顶部栏通过 store 触发（捕获 editor + projectId + providers）
   const providers = useGatewayStore((s) => s.providers)
@@ -230,8 +240,11 @@ export function CanvasEditor({
     storyboard: '分镜',
     director: '预演'
   }
-
   const handleNodePick = (type: NodeTypeId): void => {
+    if (suppressNodePickRef.current) {
+      suppressNodePickRef.current = false
+      return
+    }
     // 点击直接在视口中心创建
     const editor = editorRef.current
     if (!editor) return
@@ -257,6 +270,10 @@ export function CanvasEditor({
       setNodeDrag(null)
       if (dragged && ev.clientX > SIDEBAR_W) {
         // 拖到画布区域：在落点创建
+        suppressNodePickRef.current = true
+        window.setTimeout(() => {
+          suppressNodePickRef.current = false
+        }, 0)
         createNodeAt(type, ev.clientX, ev.clientY)
       }
     }
@@ -826,10 +843,10 @@ export function CanvasEditor({
         >
           <div className="palette-section palette-node-section">
             {nodeTypes.map((t) => (
-              <Tooltip key={t.type} label={`添加${t.label}节点`}>
+              <Tooltip key={t.type} label={'添加' + t.label + '节点'}>
                 <button
                   className="palette-item palette-node-item"
-                  aria-label={`添加${t.label}节点`}
+                  aria-label={'添加' + t.label + '节点'}
                   onClick={() => handleNodePick(t.type)}
                   onPointerDown={(e) => startNodeDrag(e, t.type)}
                 >

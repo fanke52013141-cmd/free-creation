@@ -5,26 +5,20 @@ import { modelsByModality } from '../../stores/gateway'
 import { mergedPrompt, parseJsonObj, promptBundleText } from './shared'
 import { readNodeConfig } from '../../canvas/node-persistence'
 import { appendMediaResult, serializeMediaResultCollection } from '../../nodes/nodeValues'
+import {
+  imageCapabilitiesFor,
+  normalizeImageGenerationConfig,
+  type ImageGenerationConfig
+} from '@shared/image-capabilities'
 
-export interface ImageGenData {
-  prompt: string
-  modelKey: string
-  size: string
-  /** 固定种子（>0 时启用） */
-  seed?: number
-}
+export type ImageGenData = ImageGenerationConfig
 
 export function parseImageGen(text: string): ImageGenData {
   const value = parseJsonObj(text)
   if (value && typeof value.prompt === 'string') {
-    return {
-      prompt: value.prompt,
-      modelKey: typeof value.modelKey === 'string' ? value.modelKey : '',
-      size: typeof value.size === 'string' ? value.size : 'auto',
-      seed: typeof value.seed === 'number' ? value.seed : undefined
-    }
+    return normalizeImageGenerationConfig(value, imageCapabilitiesFor('relay'))
   }
-  return { prompt: text, modelKey: '', size: 'auto' }
+  return normalizeImageGenerationConfig({ prompt: text }, imageCapabilitiesFor('relay'))
 }
 
 export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
@@ -33,9 +27,11 @@ export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeE
   const data = parseImageGen(readNodeConfig(ctx.shape))
   const option = modelsByModality(ctx.providers, 'image').find((item) => item.key === data.modelKey)
   if (!option) return { status: 'skipped', reason: '未选择可用图片模型' }
+  const capabilities = imageCapabilitiesFor(option.provider.specId, option.model.id)
+  const config = normalizeImageGenerationConfig(data, capabilities)
   const bundlePrompt = promptBundleText(inputJson(ctx.inputs, 'in-prompt')[0])
   const prompt = mergedPrompt(
-    data.prompt,
+    config.prompt,
     [bundlePrompt, inputText(ctx.inputs, 'in-text')].filter(Boolean).join('\n')
   )
   // in-image 是旧项目的单参考图入口；in-reference-images 是新 many 入口。
@@ -53,8 +49,11 @@ export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeE
       providerId: option.provider.id,
       modelId: option.model.id,
       prompt,
-      size: data.size,
-      ...(typeof data.seed === 'number' && data.seed > 0 ? { seed: data.seed } : {}),
+      size: config.size,
+      ...(typeof config.seed === 'number' && config.seed > 0 ? { seed: config.seed } : {}),
+      ...(capabilities.forwardsAspectRatio && config.aspectRatio !== 'auto'
+        ? { aspectRatio: config.aspectRatio }
+        : {}),
       ...(referenceMediaIds.length > 0 ? { referenceMediaIds } : {})
     })
     if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }

@@ -9,6 +9,7 @@ import {
   needsNodeSizeMigration,
   registerNodeType,
   getNodeType,
+  getNodePorts,
   unregisterNodeType,
   PORT_COLORS,
   type NodeTypeSpec
@@ -129,6 +130,7 @@ describe('registerNodeType · 注册时硬校验门禁', () => {
       defaultSize: { w: 340, h: 260 },
       description: '测试用最小合法节点。',
       category: 'input',
+      creatable: false,
       ports: {
         in: [
           {
@@ -172,14 +174,18 @@ describe('registerNodeType · 注册时硬校验门禁', () => {
     expect(() => registerNodeType(spec)).toThrow(/projectOutputs/)
   })
 
+  it('拒绝不在 ActiveNodeTypeId 中的可创建节点', () => {
+    expect(() => registerNodeType(validSpec({ creatable: true }))).toThrow(/ActiveNodeTypeId/)
+  })
+
   it('拒绝契约版本小于 1', () => {
     expect(() => registerNodeType(validSpec({ contractVersion: 0 }))).toThrow(/contractVersion/)
   })
 
   it('拒绝可创建节点使用非标准初始尺寸', () => {
-    expect(() => registerNodeType(validSpec({ defaultSize: { w: 360, h: 260 } }))).toThrow(
-      /defaultSize 必须为 340 × 260/
-    )
+    expect(() =>
+      registerNodeType(validSpec({ creatable: true, defaultSize: { w: 360, h: 260 } }))
+    ).toThrow(/defaultSize 必须为 340 × 260/)
   })
 
   it('拒绝错误的端口 ID 前缀（输入必须 in- 开头）', () => {
@@ -306,5 +312,26 @@ describe('registerNodeType · 注册时硬校验门禁', () => {
         })
       )
     ).toThrow(/重复/)
+  })
+
+  it('动态端口与静态端口使用同一套契约校验', () => {
+    const spec = validSpec({
+      resolvePorts: () => ({
+        in: [
+          {
+            id: 'input',
+            name: '错误输入',
+            dir: 'in',
+            type: 'text',
+            required: false,
+            cardinality: 'one',
+            description: '故意使用不稳定端口 ID'
+          }
+        ],
+        out: []
+      })
+    })
+    registerNodeType(spec)
+    expect(() => getNodePorts(spec, {} as never)).toThrow(/动态端口不合法.*in-/s)
   })
 })

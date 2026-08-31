@@ -1,36 +1,44 @@
 // 核心数据模型（双进程共享单一事实源，见《技术框架与规范》§4）
 
-/** 能在新画布中创建、维护并完整执行的节点类型。 */
-export type ActiveNodeTypeId =
-  | 'text'
-  | 'image'
-  | 'image-crop'
-  | 'image-split'
-  | 'image-gen'
-  | 'image-edit'
-  | 'video'
-  | 'video-frame'
-  | 'video-clip'
-  | 'video-audio'
-  | 'vocal-separate'
-  | 'audio'
-  | 'speech'
-  | 'tts'
-  | 'chat'
-  | 'processor'
-  | 'code'
-  | 'json'
-  | 'structured'
-  | 'storyboard'
-  | 'ai-process'
-  | 'iterate'
-  | 'director'
+/**
+ * 能在新画布中创建、维护并完整执行的节点类型。
+ * 类型、注册表和契约测试必须引用这一份运行时清单，避免新节点已上线却漏出快照门禁。
+ */
+export const ACTIVE_NODE_TYPE_IDS = [
+  'text',
+  'image',
+  'image-crop',
+  'image-split',
+  'image-gen',
+  'image-edit',
+  'video',
+  'video-frame',
+  'video-clip',
+  'video-audio',
+  'vocal-separate',
+  'audio',
+  'speech',
+  'tts',
+  'chat',
+  'processor',
+  'code',
+  'json',
+  'structured',
+  'storyboard',
+  'ai-process',
+  'iterate',
+  'director'
+] as const
+
+export type ActiveNodeTypeId = (typeof ACTIVE_NODE_TYPE_IDS)[number]
 
 /**
  * 已退役的内部类型。它们绝不能出现在新增节点入口；当前项目没有历史数据迁移需求，
  * 该集合仅用于让注册表和类型边界保持明确。
  */
-export type LegacyNodeTypeId = 'script' | 'group' | 'compose'
+export const LEGACY_NODE_TYPE_IDS = ['script', 'group', 'compose'] as const
+
+export type LegacyNodeTypeId = (typeof LEGACY_NODE_TYPE_IDS)[number]
 
 /** 内部图数据可引用的完整类型集合。 */
 export type NodeTypeId = ActiveNodeTypeId | LegacyNodeTypeId

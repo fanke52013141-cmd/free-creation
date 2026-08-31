@@ -4,6 +4,7 @@ import { IPC } from '../../shared/contracts'
 import type {
   HistorySnapshotRecord,
   IpcEnvelope,
+  PalettePreferences,
   SaveHistorySnapshotInput,
   SaveWorkflowTemplateInput,
   WorkflowTemplateRecord
@@ -11,8 +12,10 @@ import type {
 import {
   deleteHistorySnapshot,
   deleteWorkflowTemplate,
+  getPalettePreferences,
   listHistorySnapshots,
   listWorkflowTemplates,
+  savePalettePreferences,
   saveHistorySnapshot,
   saveWorkflowTemplate
 } from '../store/workspace-state.repo'
@@ -61,5 +64,13 @@ export function registerWorkspaceStateIpc(): void {
     IPC.workspace.deleteSnapshot,
     (_event, input: { projectId: string; id: string }): IpcEnvelope<boolean> =>
       wrap(() => deleteHistorySnapshot(input?.projectId ?? '', input?.id ?? ''))
+  )
+  ipcMain.handle(IPC.workspace.getPalettePreferences, (): IpcEnvelope<PalettePreferences> =>
+    wrap(getPalettePreferences)
+  )
+  ipcMain.handle(
+    IPC.workspace.savePalettePreferences,
+    (_event, input: PalettePreferences): IpcEnvelope<PalettePreferences> =>
+      wrap(() => savePalettePreferences(input))
   )
 }

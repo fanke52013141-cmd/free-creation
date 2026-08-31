@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { stopEventPropagation, useEditor, type TLShapeId } from 'tldraw'
 import type { VideoGenParams } from '@shared/types'
 import {
+  normalizeVideoGenParams,
   videoCapabilitiesFor,
   videoCapabilityIssues,
   videoRatioIsDerivedByFrames
@@ -132,8 +133,9 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     opt &&
     videoRatioIsDerivedByFrames(opt.provider.specId, opt.model.id, Boolean(refImage || lastFrame))
   )
+  const params = normalizeVideoGenParams(capabilities, data.params, { framesDetermineRatio })
   const capabilityIssues = videoCapabilityIssues(capabilities, {
-    params: framesDetermineRatio ? { ...data.params, ratio: undefined } : data.params,
+    params,
     hasFirstFrame: Boolean(refImage),
     hasLastFrame: Boolean(lastFrame),
     referenceImageCount: referenceImages.length + Number(Boolean(refImage)),
@@ -153,11 +155,27 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     })
   }
 
+  const updateModel = (modelKey: string): void => {
+    const next = options.find((option) => option.key === modelKey)
+    const nextCapabilities = next
+      ? videoCapabilitiesFor(next.provider.specId, next.model.id)
+      : videoCapabilitiesFor('seedance')
+    update({
+      ...data,
+      modelKey,
+      params: normalizeVideoGenParams(nextCapabilities, data.params)
+    })
+  }
+
   const submit = async (): Promise<void> => {
     if (!project) return toast('项目未就绪')
     if (capabilityIssues.length > 0) return toast(capabilityIssues[0])
     // 配置先落盘，再由统一运行器读取真实端口输入、校验契约并调用视频执行器。
-    update({ ...data, prompt: draft })
+    update({
+      ...data,
+      prompt: draft,
+      params: normalizeVideoGenParams(capabilities, data.params, { framesDetermineRatio })
+    })
     setSubmitting(true)
     try {
       await runNodeManually(editor, project.id, providers, shape.id)
@@ -374,11 +392,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           </span>
         </div>
       )}
-      <ModelSelect
-        value={data.modelKey}
-        options={options}
-        onChange={(key) => update({ ...data, modelKey: key })}
-      />
+      <ModelSelect value={data.modelKey} options={options} onChange={updateModel} />
       <textarea
         className="gen-prompt"
         value={draft}
@@ -386,7 +400,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
         spellCheck={false}
         placeholder="描述视频内容、镜头与氛围…"
         onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => update({ ...data, prompt: draft })}
+        onBlur={() => update({ ...data, prompt: draft, params })}
         onKeyDown={(e) => {
           if (e.key === '@' && availableMentions.length > 0) setMentionOpen(true)
           if (e.key === 'Escape') setMentionOpen(false)
@@ -440,9 +454,9 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
         ) : (
           <AppSelect
             className="gen-select"
-            value={data.params.ratio ?? capabilities.ratios[0]}
+            value={params.ratio ?? capabilities.ratios[0]}
             onPointerDown={(e) => stopEventPropagation(e)}
-            onChange={(e) => update({ ...data, params: { ...data.params, ratio: e.target.value } })}
+            onChange={(e) => update({ ...data, params: { ...params, ratio: e.target.value } })}
           >
             {capabilities.ratios.map((ratio) => (
               <option key={ratio} value={ratio}>
@@ -453,10 +467,10 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
         )}
         <AppSelect
           className="gen-select w70"
-          value={String(data.params.duration ?? 5)}
+          value={String(params.duration ?? 5)}
           onPointerDown={(e) => stopEventPropagation(e)}
           onChange={(e) =>
-            update({ ...data, params: { ...data.params, duration: Number(e.target.value) } })
+            update({ ...data, params: { ...params, duration: Number(e.target.value) } })
           }
         >
           {capabilities.durations.map((d) => (
@@ -467,11 +481,9 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
         </AppSelect>
         <AppSelect
           className="gen-select w86"
-          value={data.params.resolution ?? capabilities.resolutions.at(-1)}
+          value={params.resolution ?? capabilities.resolutions.at(-1)}
           onPointerDown={(e) => stopEventPropagation(e)}
-          onChange={(e) =>
-            update({ ...data, params: { ...data.params, resolution: e.target.value } })
-          }
+          onChange={(e) => update({ ...data, params: { ...params, resolution: e.target.value } })}
         >
           {capabilities.resolutions.map((r) => (
             <option key={r} value={r}>
@@ -485,10 +497,10 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           <label className="video-checkbox">
             <input
               type="checkbox"
-              checked={data.params.generateAudio ?? true}
+              checked={params.generateAudio ?? true}
               onPointerDown={(e) => stopEventPropagation(e)}
               onChange={(e) =>
-                update({ ...data, params: { ...data.params, generateAudio: e.target.checked } })
+                update({ ...data, params: { ...params, generateAudio: e.target.checked } })
               }
             />
             生成同步音频
@@ -498,13 +510,13 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
             type="number"
             min="-1"
             placeholder="种子（可选）"
-            value={data.params.seed ?? ''}
+            value={params.seed ?? ''}
             onPointerDown={(e) => stopEventPropagation(e)}
             onChange={(e) =>
               update({
                 ...data,
                 params: {
-                  ...data.params,
+                  ...params,
                   seed: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value)
                 }
               })

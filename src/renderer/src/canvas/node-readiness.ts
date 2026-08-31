@@ -9,6 +9,36 @@ export interface NodeReadiness {
   detail: string
 }
 
+export interface InputPortReadiness {
+  count: number
+  kind: 'missing' | 'connected' | 'optional'
+  label: string
+}
+
+/** 将端口级连接数量投影为卡片和详情面板可共用的可读状态。 */
+export function deriveInputPortReadiness(
+  inputs: PortDecl[],
+  incomingCounts: ReadonlyMap<string, number>
+): ReadonlyMap<string, InputPortReadiness> {
+  return new Map(
+    inputs.map((port) => {
+      const count = incomingCounts.get(port.id) ?? 0
+      const kind: InputPortReadiness['kind'] =
+        count > 0 ? 'connected' : port.required ? 'missing' : 'optional'
+      const quantity =
+        port.cardinality === 'many' ? `${count} 条连接` : count > 0 ? '已连接' : '未连接'
+      return [
+        port.id,
+        {
+          count,
+          kind,
+          label: kind === 'missing' ? `缺少必填输入` : quantity
+        }
+      ]
+    })
+  )
+}
+
 /**
  * 将节点规范、现有连线和正式输出转换为用户可理解的“下一步”。这不是另一套执行规则：
  * required/cardinality 与 output projection 都直接复用节点契约的单一真值。

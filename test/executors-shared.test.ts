@@ -122,7 +122,14 @@ describe('parseVideoGen · 视频生成配置解析', () => {
       JSON.stringify({
         prompt: '奔跑的猫',
         modelKey: 'p1::m1',
-        params: { ratio: '16:9', duration: 5, resolution: '1080p' },
+        params: {
+          ratio: '16:9',
+          duration: 5,
+          resolution: '1080p',
+          generateAudio: true,
+          seed: 42,
+          watermark: false
+        },
         taskId: 't1'
       })
     )
@@ -131,6 +138,9 @@ describe('parseVideoGen · 视频生成配置解析', () => {
     expect(d.params.ratio).toBe('16:9')
     expect(d.params.duration).toBe(5)
     expect(d.params.resolution).toBe('1080p')
+    expect(d.params.generateAudio).toBe(true)
+    expect(d.params.seed).toBe(42)
+    expect(d.params.watermark).toBe(false)
     expect(d.taskId).toBe('t1')
   })
 
@@ -159,6 +169,7 @@ describe('parseImageGen · 生图配置解析（R5 种子）', () => {
     expect(d.prompt).toBe('猫')
     expect(d.modelKey).toBe('p1::m1')
     expect(d.size).toBe('1024x1024')
+    expect(d.aspectRatio).toBe('1:1')
     expect(d.seed).toBe(42)
   })
 

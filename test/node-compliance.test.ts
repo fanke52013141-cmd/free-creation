@@ -4,16 +4,22 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { registerAllNodeTypes } from './helpers/registerNodes'
 import { activeNodeTypes, getNodeType } from '@renderer/nodes/registry'
-import type { ActiveNodeTypeId, LegacyNodeTypeId } from '@shared/types'
+import {
+  ACTIVE_NODE_TYPE_IDS,
+  LEGACY_NODE_TYPE_IDS,
+  type ActiveNodeTypeId,
+  type LegacyNodeTypeId
+} from '@shared/types'
 
 beforeAll(registerAllNodeTypes)
 
-const legacy: LegacyNodeTypeId[] = ['script', 'group', 'compose']
+const legacy: readonly LegacyNodeTypeId[] = LEGACY_NODE_TYPE_IDS
 
 describe('节点合规门禁', () => {
   it('所有可创建节点都是 ActiveNodeTypeId，历史节点不进入创建入口', () => {
     const active = activeNodeTypes()
     expect(active.length).toBeGreaterThan(0)
+    expect(new Set(active.map((spec) => spec.type))).toEqual(new Set(ACTIVE_NODE_TYPE_IDS))
     for (const spec of active) expect(legacy).not.toContain(spec.type as LegacyNodeTypeId)
     for (const type of legacy) expect(active.some((spec) => spec.type === type)).toBe(false)
   })
@@ -27,6 +33,7 @@ describe('节点合规门禁', () => {
       }
       expect(spec.contractVersion).toBeGreaterThanOrEqual(1)
       expect(spec.description.trim()).not.toBe('')
+      expect(spec.category, `${spec.type} 缺少创建菜单分类`).toBeTruthy()
     }
   })
 

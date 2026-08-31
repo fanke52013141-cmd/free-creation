@@ -1,5 +1,9 @@
 appId: com.electron.app
 productName: canvas-studio
+# 当前 Electron Builder / Windows 环境下，包含大量本机依赖的 asar 会生成错位索引，
+# 导致桌面程序在加载主入口前退出。asar 不是安全边界；本地单机版改为目录打包，
+# 以保证原生模块和入口文件可稳定加载。
+asar: false
 directories:
   buildResources: build
 files:
@@ -11,6 +15,10 @@ files:
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  # pnpm 将 @napi-rs/canvas 的 Windows optional binding 放在虚拟仓库中，
+  # electron-builder 依赖收集器可能不会自动复制；显式映射到运行时解析路径。
+  - from: node_modules/.pnpm/@napi-rs+canvas-win32-x64-msvc@1.0.8/node_modules/@napi-rs/canvas-win32-x64-msvc
+    to: node_modules/@napi-rs/canvas-win32-x64-msvc
 asarUnpack:
   - resources/**
   - node_modules/better-sqlite3/**

@@ -18,7 +18,7 @@ import { markUndoPoint } from './history'
 import type { NodeCardShape } from './NodeCardShape'
 import { Icon } from '../components/Icon'
 import { nodeExecLabel } from './node-status'
-import { deriveNodeReadiness } from './node-readiness'
+import { deriveInputPortReadiness, deriveNodeReadiness } from './node-readiness'
 import { runNodeManually } from '../engine/executor'
 import { useAppStore } from '../stores/app'
 import { useGatewayStore } from '../stores/gateway'
@@ -136,7 +136,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   const outY = portOffsets(outPorts.length, shape.props.h)
   const isSource = draft?.from.shapeId === shape.id
   const statusLabel = nodeExecLabel(shape.props.exec)
-  const readiness = useValue(
+  const readinessState = useValue(
     'node readiness',
     () => {
       const incomingCounts = new Map<string, number>()
@@ -147,16 +147,21 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         if (end?.toId !== shape.id || typeof arrow.meta.toPort !== 'string') continue
         incomingCounts.set(arrow.meta.toPort, (incomingCounts.get(arrow.meta.toPort) ?? 0) + 1)
       }
-      return deriveNodeReadiness({
-        executionMode: spec?.executionMode ?? 'auto',
-        exec: shape.props.exec,
-        inputs: inPorts,
-        incomingCounts,
-        outputs: spec?.projectOutputs?.(shape) ?? {}
-      })
+      return {
+        readiness: deriveNodeReadiness({
+          executionMode: spec?.executionMode ?? 'auto',
+          exec: shape.props.exec,
+          inputs: inPorts,
+          incomingCounts,
+          outputs: spec?.projectOutputs?.(shape) ?? {}
+        }),
+        inputs: deriveInputPortReadiness(inPorts, incomingCounts)
+      }
     },
     [editor, shape, spec, inPorts]
   )
+  const readiness = readinessState.readiness
+  const inputReadiness = readinessState.inputs
 
   const portSummary = (port: PortDecl, direction: '输入' | '输出'): string =>
     [
@@ -251,6 +256,13 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               <Icon name="info" size={13} />
             </button>
           </div>
+          <div
+            className={`node-readiness node-readiness-${readiness.kind}`}
+            title={readiness.detail}
+            aria-label={`${readiness.label}：${readiness.detail}`}
+          >
+            {readiness.label}
+          </div>
           <div className="node-body">
             {spec ? (
               <spec.Body shape={shape} openPreview={(p) => setPreview(p)} />
@@ -263,16 +275,17 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         {/* 输入端口（左侧）：拖线时按类型兼容高亮 */}
         {inPorts.map((p, i) => {
           const ok = draft && !isSource && canAttachPort(draft.from, p)
+          const state = inputReadiness.get(p.id)
           return (
             <span
               key={p.id}
-              className={`port-dot in ${draft ? (ok ? 'ok' : 'dim') : ''}`}
+              className={`port-dot in input-${state?.kind ?? 'optional'} ${draft ? (ok ? 'ok' : 'dim') : ''}`}
               style={{
                 top: inY[i] - 6,
                 borderColor: PORT_COLORS[p.type],
                 ['--pc' as string]: PORT_COLORS[p.type]
               }}
-              title={portSummary(p, '输入')}
+              title={`${portSummary(p, '输入')} · ${state?.label ?? '未连接'}`}
             >
               <span className="port-dot-inner" style={{ background: PORT_COLORS[p.type] }} />
             </span>
@@ -280,25 +293,28 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         })}
 
         {/* 输出端口：与输入端口同样是纯圆形，按住后拖出连线。 */}
-        {outPorts.map((p, i) => (
-          <span
-            key={p.id}
-            className={`port-dot out ${isSource && draft?.from.portId === p.id ? 'ok' : ''}`}
-            style={{
-              top: outY[i] - 6,
-              borderColor: PORT_COLORS[p.type],
-              ['--pc' as string]: PORT_COLORS[p.type]
-            }}
-            title={`${portSummary(p, '输出')} · 按住圆点拖出连线`}
-            onPointerDown={(e) => {
-              stopEventPropagation(e)
-              beginConnectionDrag(
-                { shapeId: shape.id, portId: p.id, portType: p.type, schema: p.schema },
-                { x: e.clientX, y: e.clientY }
-              )
-            }}
-          />
-        ))}
+        {outPorts.map((p, i) => {
+          const hasOutput = Boolean(spec?.projectOutputs?.(shape)[p.id])
+          return (
+            <span
+              key={p.id}
+              className={`port-dot out ${hasOutput ? 'has-output' : 'no-output'} ${isSource && draft?.from.portId === p.id ? 'ok' : ''}`}
+              style={{
+                top: outY[i] - 6,
+                borderColor: PORT_COLORS[p.type],
+                ['--pc' as string]: PORT_COLORS[p.type]
+              }}
+              title={`${portSummary(p, '输出')} · ${hasOutput ? '当前输出可用' : '当前尚无可用输出'} · 按住圆点拖出连线`}
+              onPointerDown={(e) => {
+                stopEventPropagation(e)
+                beginConnectionDrag(
+                  { shapeId: shape.id, portId: p.id, portType: p.type, schema: p.schema },
+                  { x: e.clientX, y: e.clientY }
+                )
+              }}
+            />
+          )
+        })}
       </div>
       {/* tldraw 画布容器带 transform，fixed 元素会以它为包含块导致错位，必须 portal 到 body */}
       {preview &&

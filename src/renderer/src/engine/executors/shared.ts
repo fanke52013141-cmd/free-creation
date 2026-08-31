@@ -216,7 +216,11 @@ export function parseVideoGen(text: string): VideoGenData {
       params: {
         ratio: typeof rawParams.ratio === 'string' ? rawParams.ratio : undefined,
         duration: typeof rawParams.duration === 'number' ? rawParams.duration : undefined,
-        resolution: typeof rawParams.resolution === 'string' ? rawParams.resolution : undefined
+        resolution: typeof rawParams.resolution === 'string' ? rawParams.resolution : undefined,
+        generateAudio:
+          typeof rawParams.generateAudio === 'boolean' ? rawParams.generateAudio : undefined,
+        seed: typeof rawParams.seed === 'number' ? rawParams.seed : undefined,
+        watermark: typeof rawParams.watermark === 'boolean' ? rawParams.watermark : undefined
       },
       taskId: typeof value.taskId === 'string' ? value.taskId : ''
     }

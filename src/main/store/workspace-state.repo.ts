@@ -7,10 +7,16 @@ import type {
   SaveWorkflowTemplateInput,
   WorkflowTemplateRecord
 } from '../../shared/contracts'
-import { getDb } from './db'
+import {
+  defaultPalettePreferences,
+  normalizePalettePreferences,
+  type PalettePreferences
+} from '../../shared/palette-preferences'
+import { getDb, getSetting, setSetting } from './db'
 
 const MAX_HISTORY_SNAPSHOTS = 30
 const MAX_SNAPSHOT_BYTES = 8 * 1024 * 1024
+const PALETTE_PREFERENCES_KEY = 'ui.palette-preferences.v1'
 
 interface TemplateRow {
   id: string
@@ -141,4 +147,17 @@ export function deleteHistorySnapshot(projectId: string, id: string): boolean {
       .prepare('DELETE FROM history_snapshots WHERE id = ? AND project_id = ?')
       .run(id, projectId).changes > 0
   )
+}
+
+/** 左侧 Dock 是应用级本机偏好，不能污染项目快照或工作流导出。 */
+export function getPalettePreferences(): PalettePreferences {
+  const raw = getSetting(PALETTE_PREFERENCES_KEY)
+  if (!raw) return defaultPalettePreferences()
+  return normalizePalettePreferences(parseJson(raw))
+}
+
+export function savePalettePreferences(input: PalettePreferences): PalettePreferences {
+  const normalized = normalizePalettePreferences(input)
+  setSetting(PALETTE_PREFERENCES_KEY, JSON.stringify(normalized))
+  return normalized
 }

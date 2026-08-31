@@ -11,6 +11,7 @@ import type {
   VideoAudioConfig,
   VocalSeparationConfig
 } from '../video-transform'
+import type { PalettePreferences } from '../palette-preferences'
 
 export const IPC = {
   app: {
@@ -60,7 +61,9 @@ export const IPC = {
     deleteTemplate: 'workspace:templates:delete',
     listSnapshots: 'workspace:snapshots:list',
     saveSnapshot: 'workspace:snapshots:save',
-    deleteSnapshot: 'workspace:snapshots:delete'
+    deleteSnapshot: 'workspace:snapshots:delete',
+    getPalettePreferences: 'workspace:palette-preferences:get',
+    savePalettePreferences: 'workspace:palette-preferences:save'
   },
   gateway: {
     providers: 'gateway:providers:list',
@@ -255,6 +258,9 @@ export interface SaveHistorySnapshotInput {
   nodeCount: number
   snapshot: unknown
 }
+
+/** 本机 UI 偏好；不属于项目文件，导入导出不会携带。 */
+export type { PalettePreferences }
 
 // ── 模型网关契约 ──
 

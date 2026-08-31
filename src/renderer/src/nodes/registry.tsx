@@ -8,7 +8,9 @@ import type {
   PortDecl,
   PortType
 } from '@shared/types'
+import { ACTIVE_NODE_TYPE_IDS } from '@shared/types'
 import { nodeSchemaRegistered } from '@shared/node-schemas'
+import { NODE_CATEGORY_IDS, type NodeCategoryId } from '@shared/palette-preferences'
 import type { NodeExecutor } from '../engine/executor-types'
 import type { NodeCardShape } from '../canvas/NodeCardShape'
 import type { IconName } from '../components/Icon'
@@ -21,9 +23,9 @@ export const NODE_CATEGORIES = [
   { id: 'video', label: '视频处理' },
   { id: 'audio', label: '音频语音' },
   { id: 'logic', label: '逻辑流程' }
-] as const
+] as const satisfies ReadonlyArray<{ id: NodeCategoryId; label: string }>
 
-export type NodeCategoryId = (typeof NODE_CATEGORIES)[number]['id']
+export { NODE_CATEGORY_IDS, type NodeCategoryId }
 
 export interface PreviewPayload {
   kind: 'image' | 'video' | 'audio'
@@ -177,48 +179,14 @@ const registry = new Map<NodeTypeId, NodeTypeSpec>()
  * 新节点的硬性质量门。规则的完整解释、兼容策略和迁移流程见 /NODE_CONTRACT_SPEC.md。
  * 这里故意在注册阶段直接抛错：不完整的节点不能进入创建菜单，更不能留到运行时猜测。
  */
-function validateNodeTypeSpec(spec: NodeTypeSpec): void {
+function portValidationErrors(ports: NodeTypeSpec['ports']): string[] {
   const errors: string[] = []
-  if (!Number.isInteger(spec.contractVersion) || spec.contractVersion < 1) {
-    errors.push('contractVersion 必须是大于等于 1 的整数')
-  }
-  if (!spec.label.trim()) errors.push('label 不能为空')
-  if (!spec.description.trim()) errors.push('description 不能为空')
-  if (!NODE_CATEGORIES.some((c) => c.id === spec.category)) {
-    errors.push('category 必须是已注册的分类之一')
-  }
-  if (
-    spec.executionMode !== undefined &&
-    spec.executionMode !== 'auto' &&
-    spec.executionMode !== 'manual-publish' &&
-    spec.executionMode !== 'display-only'
-  ) {
-    errors.push('executionMode 必须是 auto、manual-publish 或 display-only')
-  }
-  if (spec.ports.out.length > 0 && !spec.projectOutputs) {
-    errors.push('存在输出端口时必须声明 projectOutputs')
-  }
-  if (
-    !Number.isFinite(spec.defaultSize.w) ||
-    !Number.isFinite(spec.defaultSize.h) ||
-    spec.defaultSize.w <= 0 ||
-    spec.defaultSize.h <= 0
-  ) {
-    errors.push('defaultSize 必须是大于 0 的有效数字')
-  }
-  if (
-    spec.creatable !== false &&
-    (spec.defaultSize.w !== STANDARD_NODE_SIZE.w || spec.defaultSize.h !== STANDARD_NODE_SIZE.h)
-  ) {
-    errors.push(`可创建节点的 defaultSize 必须为 ${STANDARD_NODE_SIZE.w} × ${STANDARD_NODE_SIZE.h}`)
-  }
-
   const ids = new Set<string>()
-  for (const [direction, ports] of [
-    ['in', spec.ports.in],
-    ['out', spec.ports.out]
+  for (const [direction, items] of [
+    ['in', ports.in],
+    ['out', ports.out]
   ] as const) {
-    for (const current of ports) {
+    for (const current of items) {
       if (current.dir !== direction) errors.push(`${current.id} 的 dir 与所在分组不一致`)
       if (!new RegExp(`^${direction}-[a-z0-9]+(?:-[a-z0-9]+)*$`).test(current.id)) {
         errors.push(`${current.id} 必须使用 ${direction}- 开头的 kebab-case 稳定 ID`)
@@ -253,6 +221,52 @@ function validateNodeTypeSpec(spec: NodeTypeSpec): void {
       }
     }
   }
+  return errors
+}
+
+function validateNodeTypeSpec(spec: NodeTypeSpec): void {
+  const errors: string[] = []
+  if (!Number.isInteger(spec.contractVersion) || spec.contractVersion < 1) {
+    errors.push('contractVersion 必须是大于等于 1 的整数')
+  }
+  if (!spec.label.trim()) errors.push('label 不能为空')
+  if (!spec.description.trim()) errors.push('description 不能为空')
+  if (!NODE_CATEGORIES.some((c) => c.id === spec.category)) {
+    errors.push('category 必须是已注册的分类之一')
+  }
+  if (
+    spec.executionMode !== undefined &&
+    spec.executionMode !== 'auto' &&
+    spec.executionMode !== 'manual-publish' &&
+    spec.executionMode !== 'display-only'
+  ) {
+    errors.push('executionMode 必须是 auto、manual-publish 或 display-only')
+  }
+  if (spec.ports.out.length > 0 && !spec.projectOutputs) {
+    errors.push('存在输出端口时必须声明 projectOutputs')
+  }
+  if (spec.creatable !== false && !ACTIVE_NODE_TYPE_IDS.includes(spec.type as ActiveNodeTypeId)) {
+    errors.push('可创建节点必须声明为 ActiveNodeTypeId')
+  }
+  if (spec.creatable !== false && !spec.executor) {
+    errors.push('可创建节点必须声明 executor')
+  }
+  if (
+    !Number.isFinite(spec.defaultSize.w) ||
+    !Number.isFinite(spec.defaultSize.h) ||
+    spec.defaultSize.w <= 0 ||
+    spec.defaultSize.h <= 0
+  ) {
+    errors.push('defaultSize 必须是大于 0 的有效数字')
+  }
+  if (
+    spec.creatable !== false &&
+    (spec.defaultSize.w !== STANDARD_NODE_SIZE.w || spec.defaultSize.h !== STANDARD_NODE_SIZE.h)
+  ) {
+    errors.push(`可创建节点的 defaultSize 必须为 ${STANDARD_NODE_SIZE.w} × ${STANDARD_NODE_SIZE.h}`)
+  }
+
+  errors.push(...portValidationErrors(spec.ports))
 
   if (errors.length > 0) {
     throw new Error(`节点契约不合法：${spec.type}\n- ${errors.join('\n- ')}`)
@@ -278,7 +292,12 @@ export function getNodePorts(
   spec: NodeTypeSpec,
   shape: NodeCardShape
 ): { in: PortDecl[]; out: PortDecl[] } {
-  return spec.resolvePorts ? spec.resolvePorts(shape) : spec.ports
+  const ports = spec.resolvePorts ? spec.resolvePorts(shape) : spec.ports
+  const errors = portValidationErrors(ports)
+  if (errors.length > 0) {
+    throw new Error(`节点动态端口不合法：${spec.type}\n- ${errors.join('\n- ')}`)
+  }
+  return ports
 }
 
 export function allNodeTypes(): NodeTypeSpec[] {

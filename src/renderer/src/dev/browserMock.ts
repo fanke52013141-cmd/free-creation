@@ -1,6 +1,11 @@
 // 浏览器直连 vite dev 时的 window.api 模拟：Electron 内 preload 已提供真实 api，
 // 此 mock 仅在开发期用浏览器验证画布交互（建节点/拖拽/缩放），媒体导入返回空
 import type { ProjectMeta, ProjectFile, ProviderSummary } from '@shared/types'
+import {
+  defaultPalettePreferences,
+  normalizePalettePreferences,
+  type PalettePreferences
+} from '@shared/palette-preferences'
 
 export function installBrowserMock(): void {
   if (window.api) return
@@ -27,6 +32,7 @@ export function installBrowserMock(): void {
   ]
   const templates: Array<Record<string, unknown>> = []
   const snapshots: Array<Record<string, unknown> & { projectId: string }> = []
+  let palettePreferences: PalettePreferences = defaultPalettePreferences()
 
   window.api = {
     bootstrap: () => Promise.resolve({ ok: true, data: { lastProjectId: 'demo' } }),
@@ -127,6 +133,11 @@ export function installBrowserMock(): void {
         )
         if (index >= 0) snapshots.splice(index, 1)
         return Promise.resolve({ ok: true, data: index >= 0 })
+      },
+      getPalettePreferences: () => Promise.resolve({ ok: true, data: palettePreferences }),
+      savePalettePreferences: (input: PalettePreferences) => {
+        palettePreferences = normalizePalettePreferences(input)
+        return Promise.resolve({ ok: true, data: palettePreferences })
       }
     },
     getDroppedFilePath: () => '',

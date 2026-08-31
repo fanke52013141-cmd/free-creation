@@ -5,6 +5,11 @@ import { modelsByModality } from '../../stores/gateway'
 import { mergedPrompt, parseVideoGen, promptBundleText, waitForVideo } from './shared'
 import { readNodeConfig } from '../../canvas/node-persistence'
 import { appendMediaResult, serializeMediaResultCollection } from '../../nodes/nodeValues'
+import {
+  normalizeVideoGenParams,
+  videoCapabilitiesFor,
+  videoRatioIsDerivedByFrames
+} from '@shared/video-capabilities'
 
 export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
   // 与图片节点一致，已有成片优先作为下游视频输出。
@@ -22,6 +27,17 @@ export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
   const referenceImages = inputMedia(ctx.inputs, 'in-reference-images', 'image')
   const motionReferences = inputMedia(ctx.inputs, 'in-reference-video', 'video')
   const audioReferences = inputMedia(ctx.inputs, 'in-reference-audio', 'audio')
+  const params = normalizeVideoGenParams(
+    videoCapabilitiesFor(option.provider.specId, option.model.id),
+    data.params,
+    {
+      framesDetermineRatio: videoRatioIsDerivedByFrames(
+        option.provider.specId,
+        option.model.id,
+        Boolean(firstFrame || lastFrame)
+      )
+    }
+  )
   if (!prompt.trim()) return { status: 'skipped', reason: '无提示词' }
   try {
     const submitted = await window.api.gateway.videoSubmit({
@@ -30,7 +46,7 @@ export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
       providerId: option.provider.id,
       modelId: option.model.id,
       prompt,
-      params: data.params,
+      params,
       ...(firstFrame ? { firstFrameMediaId: firstFrame.mediaId } : {}),
       ...(lastFrame ? { lastFrameMediaId: lastFrame.mediaId } : {}),
       ...(referenceImages.length

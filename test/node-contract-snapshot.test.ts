@@ -8,7 +8,7 @@ import { describe, it, expect, beforeAll } from 'vitest'
 import { registerAllNodeTypes } from './helpers/registerNodes'
 import { allNodeTypes, getNodePorts, getNodeType } from '@renderer/nodes/registry'
 import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
-import type { NodeTypeId, PortDecl } from '@shared/types'
+import { ACTIVE_NODE_TYPE_IDS, type NodeTypeId, type PortDecl } from '@shared/types'
 
 beforeAll(() => {
   registerAllNodeTypes()
@@ -29,30 +29,7 @@ function snapshotPorts(ports: PortDecl[]): Array<Record<string, unknown>> {
 }
 
 describe('全部标准节点都已注册', () => {
-  const expected: NodeTypeId[] = [
-    'text',
-    'image',
-    'image-crop',
-    'image-split',
-    'image-gen',
-    'image-edit',
-    'video',
-    'video-frame',
-    'video-clip',
-    'video-audio',
-    'audio',
-    'speech',
-    'tts',
-    'chat',
-    'processor',
-    'json',
-    'structured',
-    'code',
-    'storyboard',
-    'ai-process',
-    'iterate',
-    'director'
-  ]
+  const expected: readonly NodeTypeId[] = ACTIVE_NODE_TYPE_IDS
 
   it.each(expected)('节点 %s 可通过 allNodeTypes 暴露（可创建）', (type) => {
     expect(allNodeTypes().some((s) => s.type === type)).toBe(true)
@@ -74,31 +51,7 @@ describe('全部标准节点都已注册', () => {
 describe('端口契约快照 · 每个端口 ID 稳定且符合命名规范', () => {
   beforeAll(() => registerAllNodeTypes())
 
-  const types = [
-    'text',
-    'image',
-    'image-crop',
-    'image-split',
-    'image-gen',
-    'image-edit',
-    'video',
-    'video-frame',
-    'video-clip',
-    'video-audio',
-    'audio',
-    'speech',
-    'tts',
-    'chat',
-    'processor',
-    'json',
-    'structured',
-    'code',
-    'storyboard',
-    'script',
-    'ai-process',
-    'iterate',
-    'director'
-  ] as NodeTypeId[]
+  const types = [...ACTIVE_NODE_TYPE_IDS, 'script'] as NodeTypeId[]
 
   it.each(types)('节点 %s 的端口 ID 命名合规', (type) => {
     const spec = getNodeType(type)

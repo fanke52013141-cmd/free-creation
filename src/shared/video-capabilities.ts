@@ -29,6 +29,19 @@ export interface VideoCapabilityRequest {
   referenceAudioCount?: number
 }
 
+export interface NormalizeVideoParamsOptions {
+  /** H3 首尾帧模式由图片决定画幅，不能再提交独立 ratio。 */
+  framesDetermineRatio?: boolean
+}
+
+/** 只接受明确登记的模型标识；大小写和分隔符差异不会导致能力误判。 */
+export function canonicalVideoModelId(modelId: string): string {
+  return modelId
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, '-')
+}
+
 const H3_CAPABILITIES: VideoCapabilities = {
   ratios: ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'],
   durations: Array.from({ length: 12 }, (_, index) => index + 4),
@@ -74,7 +87,7 @@ const FALLBACK_CAPABILITIES: VideoCapabilities = {
 }
 
 export function videoCapabilitiesFor(specId: ProviderSpecId, modelId = ''): VideoCapabilities {
-  if (specId === 'minimax' && modelId.trim().toLowerCase() === 'minimax-h3') {
+  if (specId === 'minimax' && canonicalVideoModelId(modelId) === 'minimax-h3') {
     return H3_CAPABILITIES
   }
   if (specId === 'seedance') return SEEDANCE_2_CAPABILITIES
@@ -88,8 +101,45 @@ export function videoRatioIsDerivedByFrames(
   hasFirstOrLastFrame: boolean
 ): boolean {
   return (
-    specId === 'minimax' && modelId.trim().toLowerCase() === 'minimax-h3' && hasFirstOrLastFrame
+    specId === 'minimax' && canonicalVideoModelId(modelId) === 'minimax-h3' && hasFirstOrLastFrame
   )
+}
+
+/**
+ * 模型切换与旧配置恢复时使用的保守回退：只保留当前能力表可提交的参数。
+ * 主进程仍会再次执行 videoCapabilityIssues，避免 renderer 绕过校验。
+ */
+export function normalizeVideoGenParams(
+  capabilities: VideoCapabilities,
+  params: VideoGenParams = {},
+  options: NormalizeVideoParamsOptions = {}
+): VideoGenParams {
+  const defaultDuration = capabilities.durations.includes(5)
+    ? 5
+    : (capabilities.durations[0] ?? undefined)
+  const ratio = options.framesDetermineRatio
+    ? undefined
+    : capabilities.ratios.includes(params.ratio ?? '')
+      ? params.ratio
+      : capabilities.ratios[0]
+  return {
+    ...(ratio ? { ratio } : {}),
+    ...(capabilities.durations.includes(params.duration ?? Number.NaN)
+      ? { duration: params.duration }
+      : defaultDuration !== undefined
+        ? { duration: defaultDuration }
+        : {}),
+    ...(capabilities.resolutions.includes(params.resolution ?? '')
+      ? { resolution: params.resolution }
+      : capabilities.resolutions[0]
+        ? { resolution: capabilities.resolutions.at(-1) }
+        : {}),
+    ...(capabilities.supportsGeneratedAudio ? { generateAudio: params.generateAudio ?? true } : {}),
+    ...(typeof params.seed === 'number' && Number.isFinite(params.seed)
+      ? { seed: params.seed }
+      : {}),
+    ...(typeof params.watermark === 'boolean' ? { watermark: params.watermark } : {})
+  }
 }
 
 /** 返回可在提交前解释给用户的能力冲突；主进程仍会在提交时再次校验。 */

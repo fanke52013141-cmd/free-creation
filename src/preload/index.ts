@@ -34,6 +34,7 @@ import type {
   SaveWorkflowTemplateInput,
   TestProviderResult,
   HistorySnapshotRecord,
+  PalettePreferences,
   WorkflowTemplateRecord,
   VideoSubmitInput,
   VideoSubmitResult,
@@ -136,7 +137,11 @@ const api = {
     saveSnapshot: (input: SaveHistorySnapshotInput): Promise<IpcEnvelope<HistorySnapshotRecord>> =>
       ipcRenderer.invoke(IPC.workspace.saveSnapshot, input),
     deleteSnapshot: (input: { projectId: string; id: string }): Promise<IpcEnvelope<boolean>> =>
-      ipcRenderer.invoke(IPC.workspace.deleteSnapshot, input)
+      ipcRenderer.invoke(IPC.workspace.deleteSnapshot, input),
+    getPalettePreferences: (): Promise<IpcEnvelope<PalettePreferences>> =>
+      ipcRenderer.invoke(IPC.workspace.getPalettePreferences),
+    savePalettePreferences: (input: PalettePreferences): Promise<IpcEnvelope<PalettePreferences>> =>
+      ipcRenderer.invoke(IPC.workspace.savePalettePreferences, input)
   },
   // 拖拽落盘的 File 对象拿真实路径（Electron 32+ 移除了 File.path）
   getDroppedFilePath: (file: File): string => webUtils.getPathForFile(file),

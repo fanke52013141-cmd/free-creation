@@ -1,11 +1,24 @@
 import { describe, expect, it } from 'vitest'
 import {
+  canonicalVideoModelId,
+  normalizeVideoGenParams,
   videoCapabilitiesFor,
   videoCapabilityIssues,
   videoRatioIsDerivedByFrames
 } from '@shared/video-capabilities'
 
 describe('视频供应商能力描述', () => {
+  it('统一模型标识并在模型切换后回退到已声明的安全配置', () => {
+    expect(canonicalVideoModelId(' MiniMax_H3 ')).toBe('minimax-h3')
+    const params = normalizeVideoGenParams(videoCapabilitiesFor('minimax', 'MiniMax_H3'), {
+      ratio: '9:21',
+      duration: 3,
+      resolution: '1080p',
+      generateAudio: true
+    })
+    expect(params).toEqual({ ratio: '21:9', duration: 5, resolution: '2K' })
+  })
+
   it('MiniMax H3 按协议暴露 4–15 秒、2K 和完整多模态参考能力', () => {
     const caps = videoCapabilitiesFor('minimax', 'minimax-h3')
     expect(caps.durations).toEqual(Array.from({ length: 12 }, (_, index) => index + 4))
