@@ -890,31 +890,41 @@ select:focus-visible,
 
 .canvas-group-outline {
   position: absolute;
-  border: 1px dashed rgba(9, 202, 245, 0.62);
-  border-radius: 14px;
-  background: rgba(9, 202, 245, 0.025);
-  box-shadow: inset 0 0 0 1px rgba(9, 202, 245, 0.04);
+  border: 1px solid rgba(231, 238, 247, 0.18);
+  border-radius: 18px;
+  background: rgba(231, 238, 247, 0.055);
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.025),
+    0 12px 30px rgba(0, 0, 0, 0.08);
 }
 
 .canvas-group-outline > span {
   position: absolute;
-  left: 10px;
-  top: -22px;
-  padding: 2px 7px;
-  border: 1px solid rgba(9, 202, 245, 0.28);
-  border-radius: 5px;
-  background: rgba(20, 24, 28, 0.94);
-  color: #9cecff;
-  font-size: 10px;
-  line-height: 15px;
+  left: 0;
+  top: -31px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: rgba(218, 227, 237, 0.62);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.canvas-selection-outline {
+  position: absolute;
+  border: 1px dashed rgba(224, 231, 239, 0.68);
+  border-radius: 4px;
+  background: transparent;
 }
 
 /* ── 节点创建菜单 ── */
 .node-menu {
   position: fixed;
-  width: max-content;
-  min-width: 180px;
-  max-width: min(208px, calc(100vw - 24px));
+  width: fit-content;
+  min-width: 0;
+  max-width: calc(100vw - 24px);
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -929,26 +939,14 @@ select:focus-visible,
 /* The primary menu owns the viewport-limited scroll region. Keeping this wrapper
    separate lets the hover submenu escape the root without pushing actions out. */
 .node-menu-main {
-  width: 196px;
   max-width: calc(100vw - 24px);
-  max-height: 390px;
-  overflow-y: auto;
-  scrollbar-width: thin;
-}
-
-.node-menu-main::-webkit-scrollbar {
-  width: 4px;
-}
-
-.node-menu-main::-webkit-scrollbar-thumb {
-  background: var(--line);
-  border-radius: 2px;
+  overflow: visible;
 }
 
 .node-menu-category-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   padding: 2px 0;
 }
 
@@ -957,8 +955,8 @@ select:focus-visible,
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  min-height: 36px;
-  padding: 8px 10px;
+  min-height: 42px;
+  padding: 9px 10px;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -988,7 +986,7 @@ select:focus-visible,
   z-index: 2;
   top: 6px;
   left: calc(100% + 7px);
-  width: 276px;
+  max-width: min(276px, calc(100vw - 24px));
   max-height: 388px;
   padding: 6px;
   overflow: hidden;
@@ -1052,6 +1050,15 @@ select:focus-visible,
   scrollbar-width: thin;
 }
 
+/* “全部”是快速浏览入口：仍可鼠标滚动，但不显示浏览器滚动条。 */
+.node-menu-list.scrollbar-hidden {
+  scrollbar-width: none;
+}
+
+.node-menu-list.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
+
 .node-menu-list::-webkit-scrollbar {
   width: 4px;
 }
@@ -1077,12 +1084,32 @@ select:focus-visible,
   border-radius: 8px;
   color: var(--txt);
   font-size: 14px;
-  padding: 8px 10px;
+  min-height: 42px;
+  padding: 9px 10px;
   cursor: pointer;
   text-align: left;
 }
 
 .node-menu-item:hover {
+  background: var(--card-hover);
+}
+
+/* 一级中的工作流和资源都是直接操作，不需要再重复装饰图标。 */
+.node-menu-action {
+  display: block;
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--txt);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.node-menu-action:hover {
   background: var(--card-hover);
 }
 

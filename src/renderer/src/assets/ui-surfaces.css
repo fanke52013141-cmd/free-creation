@@ -811,7 +811,8 @@
 /* ── UI-R3: readable controls, aligned utility rail and theme-complete inspectors ── */
 /* 左栏保持可滚动，但永远不露出浏览器滚动条；标签和底部工具使用同一中心轴。 */
 .node-palette {
-  left: 12px;
+  /* 与顶栏「无限画布」标志的中心轴对齐。 */
+  left: 0;
   width: 76px;
   overflow: hidden;
 }
@@ -981,7 +982,7 @@
   font-weight: 600;
   line-height: 1.25;
   pointer-events: none;
-  transform: translateY(-50%);
+  white-space: nowrap;
 }
 
 /* 本机依赖状态：在配置前说明工具是否可用，不把失败留到一次媒体运行之后。 */
@@ -1062,6 +1063,8 @@
     5px 5px,
     5px 5px;
   color: var(--txt);
+  color-scheme: dark;
+  font-family: inherit;
   font-size: 13px;
   font-weight: 600;
   line-height: 1.2;
@@ -1083,6 +1086,27 @@
   border-color: rgba(99, 202, 249, 0.8);
   box-shadow: 0 0 0 3px rgba(66, 185, 245, 0.14);
   outline: none;
+}
+
+.canvas-theme-light
+  :is(.node-card, .side-panel, .node-contract-panel, .chat-side-panel, .gw-panel, .director-studio)
+  select {
+  color-scheme: light;
+}
+
+:is(.node-card, .side-panel, .node-contract-panel, .chat-side-panel, .gw-panel, .director-studio)
+  select
+  option {
+  background: #20242a;
+  color: #f1f4f7;
+}
+
+.canvas-theme-light
+  :is(.node-card, .side-panel, .node-contract-panel, .chat-side-panel, .gw-panel, .director-studio)
+  select
+  option {
+  background: #fffdfa;
+  color: #263743;
 }
 
 /* 契约抽屉本身就是节点的说明书，不能为了紧凑牺牲文字可读性。 */

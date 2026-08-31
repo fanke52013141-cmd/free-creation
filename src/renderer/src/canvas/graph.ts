@@ -178,7 +178,7 @@ export function createEdge(editor: Editor, from: EdgeEndpoint, to: EdgeEndpoint)
         kind: 'arc',
         color: edgeColorFor(fromPort.type),
         fill: 'none',
-        dash: 'solid',
+        dash: 'dashed',
         size: 'm',
         font: 'sans',
         arrowheadStart: 'none',

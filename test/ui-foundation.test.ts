@@ -10,7 +10,7 @@ describe('统一画布视觉基础', () => {
   it('连线和端口只保留低噪声的基础样式来源', () => {
     expect(foundation).toContain('.conn-main-path')
     expect(foundation).toContain('.port-dot')
-    expect(foundation).not.toMatch(/stroke-dasharray\s*:\s*8\s+5/)
+    expect(foundation).toMatch(/stroke-dasharray\s*:\s*7\s+7/)
     expect(legacy).not.toContain('.conn-main-path')
     expect(legacy).not.toContain('.conn-glow-path')
   })

@@ -18,6 +18,21 @@ interface NodeCreateMenuProps {
   source?: ConnectionFrom | null
 }
 
+function estimatedTextWidth(label: string): number {
+  return Array.from(label).reduce((width, char) => {
+    const code = char.codePointAt(0) ?? 0
+    if ((code >= 0x2e80 && code <= 0x9fff) || (code >= 0xf900 && code <= 0xfaff)) {
+      return width + 14
+    }
+    return width + (char === ' ' ? 4 : 8)
+  }, 0)
+}
+
+function menuWidth(labels: string[], minWidth: number, chromeWidth: number): number {
+  const widest = Math.max(0, ...labels.map(estimatedTextWidth))
+  return Math.max(minWidth, Math.min(240, Math.ceil(widest + chromeWidth)))
+}
+
 export function NodeCreateMenu({
   x,
   y,
@@ -60,9 +75,7 @@ export function NodeCreateMenu({
 
   // Position against the compact primary menu; the submenu is absolutely positioned
   // and intentionally does not affect the primary menu's viewport clamping.
-  const menuW = 196
   const menuH = menuHeight || 420
-  const left = Math.max(12, Math.min(x, window.innerWidth - menuW - 12))
   const top = Math.max(12, Math.min(y, window.innerHeight - menuH - 12))
   const allChoices: NodeCreateChoice[] = source
     ? compatibleNodeCreateChoices(source)
@@ -80,6 +93,27 @@ export function NodeCreateMenu({
     hoverCategory === null || hoverCategory === 'all'
       ? allChoices
       : allChoices.filter((c) => getNodeType(c.type)?.category === hoverCategory)
+  const primaryLabels = showTabs
+    ? [
+        ...categoryOptions.map((category) => category.label),
+        ...(source ? [] : ['剧本 → 分镜', '上传本地文件', '从图库选择'])
+      ]
+    : allChoices.flatMap((choice) => {
+        const spec = getNodeType(choice.type)
+        return spec ? [spec.label] : []
+      })
+  const primaryWidth = menuWidth(primaryLabels, 128, showTabs ? 42 : 52)
+  const submenuWidth = source
+    ? 276
+    : menuWidth(
+        submenuChoices.flatMap((choice) => {
+          const spec = getNodeType(choice.type)
+          return spec ? [spec.label] : []
+        }),
+        128,
+        52
+      )
+  const left = Math.max(12, Math.min(x, window.innerWidth - primaryWidth - 24))
   const showCategoryMenu = (category: NodeCategoryId | 'all'): void => {
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current)
     setHoverCategory(category)
@@ -92,7 +126,7 @@ export function NodeCreateMenu({
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current)
   }
   const renderChoices = (): React.JSX.Element => (
-    <div className="node-menu-list">
+    <div className={`node-menu-list${hoverCategory === 'all' ? ' scrollbar-hidden' : ''}`}>
       {submenuChoices.map((choice) => {
         const spec = getNodeType(choice.type)
         if (!spec) return null
@@ -128,7 +162,7 @@ export function NodeCreateMenu({
 
   return (
     <div className="node-menu" ref={ref} style={{ left, top }}>
-      <div className="node-menu-main">
+      <div className="node-menu-main" style={{ width: primaryWidth }}>
         <div className="node-menu-title">
           {source ? `可连接 ${source.portType} 输出` : '新建节点'}
         </div>
@@ -156,25 +190,16 @@ export function NodeCreateMenu({
           <>
             <div className="node-menu-divider" />
             <div className="node-menu-title">工作流模板</div>
-            <button className="node-menu-item" onClick={onTemplate}>
-              <span className="item-icon">
-                <Icon name="spark" size={18} />
-              </span>
-              <span>剧本 → 分镜</span>
+            <button className="node-menu-action" onClick={onTemplate}>
+              剧本 → 分镜
             </button>
             <div className="node-menu-divider" />
             <div className="node-menu-title">添加资源</div>
-            <button className="node-menu-item" onClick={onUpload}>
-              <span className="item-icon">
-                <Icon name="upload" size={18} />
-              </span>
-              <span>上传本地文件</span>
+            <button className="node-menu-action" onClick={onUpload}>
+              上传本地文件
             </button>
-            <button className="node-menu-item" onClick={onGallery}>
-              <span className="item-icon">
-                <Icon name="assets" size={18} />
-              </span>
-              <span>从图库选择</span>
+            <button className="node-menu-action" onClick={onGallery}>
+              从图库选择
             </button>
           </>
         )}
@@ -182,6 +207,7 @@ export function NodeCreateMenu({
       {showTabs && hoverCategory !== null && (
         <div
           className="node-menu-submenu"
+          style={{ width: submenuWidth }}
           onMouseEnter={keepCategoryMenu}
           onMouseLeave={hideCategoryMenu}
           onFocus={keepCategoryMenu}

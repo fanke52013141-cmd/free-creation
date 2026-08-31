@@ -256,13 +256,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               <Icon name="info" size={13} />
             </button>
           </div>
-          <div
-            className={`node-readiness node-readiness-${readiness.kind}`}
-            title={readiness.detail}
-            aria-label={`${readiness.label}：${readiness.detail}`}
-          >
-            {readiness.label}
-          </div>
           <div className="node-body">
             {spec ? (
               <spec.Body shape={shape} openPreview={(p) => setPreview(p)} />

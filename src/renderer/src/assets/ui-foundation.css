@@ -330,41 +330,6 @@ body {
   box-shadow: 0 0 0 2px #15191f;
 }
 
-.node-readiness {
-  position: absolute;
-  top: 29px;
-  right: 9px;
-  z-index: 3;
-  max-width: calc(100% - 18px);
-  overflow: hidden;
-  padding: 2px 6px;
-  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--panel) 82%, transparent);
-  color: var(--txt-dim);
-  font-size: 10px;
-  line-height: 1.25;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  pointer-events: auto;
-}
-
-.node-readiness-ready {
-  border-color: color-mix(in srgb, #34d399 38%, var(--line));
-  color: #86efac;
-}
-
-.node-readiness-blocked,
-.node-readiness-failed {
-  border-color: color-mix(in srgb, #ff6b6b 42%, var(--line));
-  color: #fca5a5;
-}
-
-.node-readiness-running {
-  border-color: color-mix(in srgb, #fbbf24 42%, var(--line));
-  color: #fde68a;
-}
-
 .node-info-btn {
   width: 20px;
   height: 20px;
@@ -445,6 +410,10 @@ body {
     5px 5px,
     5px 5px;
   color: var(--txt);
+  color-scheme: dark;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
   transition:
     border-color 140ms ease,
@@ -466,6 +435,24 @@ body {
 .app-select:disabled {
   cursor: not-allowed;
   opacity: 0.52;
+}
+
+/* Chromium 在 Electron 中会把 option 菜单交给系统绘制；color-scheme 和 option
+   颜色一起声明，可让深浅主题下的原生菜单与触发框保持同一套材质。 */
+.app-select option {
+  background: #20242a;
+  color: #f1f4f7;
+  font-family: inherit;
+  font-weight: 600;
+}
+
+.canvas-theme-light .app-select {
+  color-scheme: light;
+}
+
+.canvas-theme-light .app-select option {
+  background: #fffdfa;
+  color: #263743;
 }
 
 /* ── Ports: meaningful but quiet until an interaction needs them ───────── */
@@ -568,8 +555,8 @@ body {
 
 .conn-main-path {
   fill: none;
-  stroke-width: 2px;
-  stroke-dasharray: none;
+  stroke-width: 1.7px;
+  stroke-dasharray: 7 7;
   stroke-linecap: round;
   stroke-linejoin: round;
   opacity: 0.92;
@@ -591,11 +578,12 @@ body {
   stroke-width: 1.5px;
 }
 
-div[data-shape-type='arrow'] .tl-svg-container path {
-  stroke-width: 2px;
+div[data-shape-type='arrow'] .tl-svg-container path[fill='none'] {
+  stroke-width: 1.7px;
+  stroke-dasharray: 7 7;
   stroke-linecap: round;
   stroke-linejoin: round;
-  opacity: 0.78;
+  opacity: 0.84;
 }
 
 div[data-shape-type='arrow'] .tl-svg-container > g {
@@ -611,7 +599,7 @@ div[data-shape-type='arrow']:hover .tl-svg-container > g {
 
 div[data-shape-type='arrow']:hover .tl-svg-container path,
 div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container path {
-  stroke-width: 2.5px;
+  stroke-width: 2.1px;
   opacity: 1;
 }
 
@@ -754,7 +742,7 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
 }
 
 .palette-node-section {
-  gap: 5px;
+  gap: 8px;
 }
 
 .palette-node-item {

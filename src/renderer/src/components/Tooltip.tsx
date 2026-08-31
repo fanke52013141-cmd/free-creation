@@ -32,14 +32,17 @@ export function Tooltip({
   const [position, setPosition] = useState<{
     top: number
     left: number
-    side: 'left' | 'right'
+    side: 'top' | 'bottom'
   } | null>(null)
   const show = (element: HTMLElement): void => {
     const rect = element.getBoundingClientRect()
-    const top = Math.max(12, Math.min(window.innerHeight - 12, rect.top + rect.height / 2))
-    // 不先渲染再测量，避免 tooltip 在边缘先闪到屏幕外；宽度按设计令牌的上限预留。
-    const side = window.innerWidth - rect.right < 228 ? 'left' : 'right'
-    setPosition({ top, left: side === 'right' ? rect.right + 10 : rect.left - 10, side })
+    // 图标密集的 Dock 中，横向提示会遮住相邻操作。默认垂直向上，
+    // 只有贴近窗口顶边时才向下展开。
+    const side = rect.top >= 48 ? 'top' : 'bottom'
+    const top = side === 'top' ? rect.top - 8 : rect.bottom + 8
+    // 预留提示最大宽度，避免在窗口左右边缘先闪出屏幕。
+    const left = Math.max(12, Math.min(window.innerWidth - 12, rect.left + rect.width / 2))
+    setPosition({ top, left, side })
   }
   const hide = (): void => setPosition(null)
   const child = cloneElement(children, {
@@ -77,7 +80,7 @@ export function Tooltip({
               style: {
                 top: position.top,
                 left: position.left,
-                transform: `translate(${position.side === 'left' ? '-100%' : '0'}, -50%)`
+                transform: `translate(-50%, ${position.side === 'top' ? '-100%' : '0'})`
               }
             },
             label

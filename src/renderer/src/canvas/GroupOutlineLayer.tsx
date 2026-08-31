@@ -15,6 +15,13 @@ interface GroupOutline {
   count: number
 }
 
+interface SelectionOutline {
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
 function outlinesEqual(left: GroupOutline[], right: GroupOutline[]): boolean {
   return (
     left.length === right.length &&
@@ -38,6 +45,7 @@ function outlinesEqual(left: GroupOutline[], right: GroupOutline[]): boolean {
  */
 export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): React.JSX.Element {
   const [outlines, setOutlines] = useState<GroupOutline[]>([])
+  const [selection, setSelection] = useState<SelectionOutline | null>(null)
 
   useEffect(() => {
     let frame = 0
@@ -67,6 +75,39 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
         })
       }
       setOutlines((current) => (outlinesEqual(current, next) ? current : next))
+
+      // 多选不是分组：只在 2 个以上节点被同时选中时绘制细虚线范围框，
+      // 让它和常驻的分组容器维持完全不同的视觉语义。
+      const selectedNodes = editor.getSelectedShapes().filter((shape) => shape.type === 'node-card')
+      if (selectedNodes.length < 2) {
+        setSelection((current) => (current === null ? current : null))
+        return
+      }
+      const bounds = selectedNodes
+        .map((shape) => editor.getShapePageBounds(shape.id))
+        .filter((bound): bound is NonNullable<typeof bound> => Boolean(bound))
+      if (bounds.length < 2) return
+      const minX = Math.min(...bounds.map((bound) => bound.x))
+      const minY = Math.min(...bounds.map((bound) => bound.y))
+      const maxX = Math.max(...bounds.map((bound) => bound.maxX))
+      const maxY = Math.max(...bounds.map((bound) => bound.maxY))
+      const topLeft = editor.pageToScreen({ x: minX, y: minY })
+      const bottomRight = editor.pageToScreen({ x: maxX, y: maxY })
+      const nextSelection = {
+        left: topLeft.x - hostBounds.left - 12,
+        top: topLeft.y - hostBounds.top - 12,
+        width: bottomRight.x - topLeft.x + 24,
+        height: bottomRight.y - topLeft.y + 24
+      }
+      setSelection((current) =>
+        current &&
+        current.left === nextSelection.left &&
+        current.top === nextSelection.top &&
+        current.width === nextSelection.width &&
+        current.height === nextSelection.height
+          ? current
+          : nextSelection
+      )
     }
 
     // 拖动时 document/session 会在同一帧内连续变化；每帧最多计算一次分组框，
@@ -107,6 +148,17 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
           <span>分组 · {outline.count} 个节点</span>
         </div>
       ))}
+      {selection && (
+        <div
+          className="canvas-selection-outline"
+          style={{
+            left: selection.left,
+            top: selection.top,
+            width: selection.width,
+            height: selection.height
+          }}
+        />
+      )}
     </div>
   )
 }
