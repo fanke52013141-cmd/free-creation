@@ -186,7 +186,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           className={`node-card type-${shape.props.nodeType}`}
           data-node-type={shape.props.nodeType}
         >
-          {/* 顶部颜色条（按类型区分） */}
+          {/* 底部颜色条（按类型区分，避免干扰标题区域） */}
           <div
             className="node-color-bar"
             style={{ ['--node-accent' as string]: spec?.color ?? '#42b9f5' }}

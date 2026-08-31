@@ -21,27 +21,47 @@ type TooltipChildProps = {
   onBlur?: (event: FocusEvent<HTMLElement>) => void
 }
 
+export type TooltipPlacement = 'auto' | 'top' | 'bottom' | 'left' | 'right'
+
 export function Tooltip({
   label,
-  children
+  children,
+  placement = 'auto',
+  anchorSelector
 }: {
   label: string
   children: ReactElement<TooltipChildProps>
+  /** auto 适合普通操作；图标栏可明确指定展示方向。 */
+  placement?: TooltipPlacement
+  /** 用子元素里的局部锚点定位，例如左栏只对齐图标而不是图标加标签。 */
+  anchorSelector?: string
 }): React.JSX.Element {
   const tooltipId = useId()
   const [position, setPosition] = useState<{
     top: number
     left: number
-    side: 'top' | 'bottom'
+    side: Exclude<TooltipPlacement, 'auto'>
   } | null>(null)
   const show = (element: HTMLElement): void => {
-    const rect = element.getBoundingClientRect()
-    // 图标密集的 Dock 中，横向提示会遮住相邻操作。默认垂直向上，
-    // 只有贴近窗口顶边时才向下展开。
-    const side = rect.top >= 48 ? 'top' : 'bottom'
-    const top = side === 'top' ? rect.top - 8 : rect.bottom + 8
-    // 预留提示最大宽度，避免在窗口左右边缘先闪出屏幕。
-    const left = Math.max(12, Math.min(window.innerWidth - 12, rect.left + rect.width / 2))
+    const anchor = anchorSelector
+      ? (element.querySelector<HTMLElement>(anchorSelector) ?? element)
+      : element
+    const rect = anchor.getBoundingClientRect()
+    // 普通工具栏默认垂直提示；左栏节点使用 right，避免遮住其它节点图标。
+    const side: Exclude<TooltipPlacement, 'auto'> =
+      placement === 'auto' ? (rect.top >= 48 ? 'top' : 'bottom') : placement
+    const top =
+      side === 'top'
+        ? rect.top - 8
+        : side === 'bottom'
+          ? rect.bottom + 8
+          : rect.top + rect.height / 2
+    const left =
+      side === 'left'
+        ? rect.left - 10
+        : side === 'right'
+          ? rect.right + 10
+          : Math.max(12, Math.min(window.innerWidth - 12, rect.left + rect.width / 2))
     setPosition({ top, left, side })
   }
   const hide = (): void => setPosition(null)
@@ -80,7 +100,14 @@ export function Tooltip({
               style: {
                 top: position.top,
                 left: position.left,
-                transform: `translate(-50%, ${position.side === 'top' ? '-100%' : '0'})`
+                transform:
+                  position.side === 'top'
+                    ? 'translate(-50%, -100%)'
+                    : position.side === 'bottom'
+                      ? 'translate(-50%, 0)'
+                      : position.side === 'left'
+                        ? 'translate(-100%, -50%)'
+                        : 'translate(0, -50%)'
               }
             },
             label

@@ -17,6 +17,7 @@ import { DirectorStudioPanel } from './DirectorStudioPanel'
 import { useNodePanelStore } from '../stores/nodePanel'
 import { SearchPalette } from './SearchPalette'
 import { GroupOutlineLayer } from './GroupOutlineLayer'
+import { DataEdgeLayer } from './DataEdgeLayer'
 import { useDockMagnify } from './useDockMagnify'
 import {
   setConnectionFinishHandler,
@@ -40,6 +41,7 @@ import { runWorkflow, runWorkflowForNodes } from '../engine/executor'
 import { useMediaStore } from '../stores/media'
 import { useEditorStore } from '../stores/editor'
 import { Icon } from '../components/Icon'
+import { useEdgeSelectionStore } from '../stores/edgeSelection'
 
 registerBaseNodeTypes()
 registerScriptNodeType()
@@ -155,6 +157,29 @@ interface NodeMenuState {
 }
 
 type MenuState = CreateMenuState | NodeMenuState
+
+/**
+ * 画布只承载工作流实体，不是通用白板。tldraw 内置的 draw / text / geo 等形状既无法
+ * 参与端口契约，又会干扰节点布局；原生 group 仍保留为“分组状态”。
+ */
+function isWorkflowCanvasShape(shape: { type: string; meta?: Record<string, unknown> }): boolean {
+  if (shape.type === 'node-card' || shape.type === 'group') return true
+  return (
+    shape.type === 'arrow' &&
+    typeof shape.meta?.fromPort === 'string' &&
+    typeof shape.meta?.toPort === 'string'
+  )
+}
+
+/** 清理历史快照中遗留的自由笔迹、白板文本等非工作流形状。 */
+function removeUnsupportedCanvasShapes(editor: Editor): number {
+  const ids = editor
+    .getCurrentPageShapes()
+    .filter((shape) => shape.type !== 'image' && !isWorkflowCanvasShape(shape))
+    .map((shape) => shape.id)
+  if (ids.length > 0) editor.deleteShapes(ids)
+  return ids.length
+}
 
 export function CanvasEditor({
   project,
@@ -353,29 +378,48 @@ export function CanvasEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id])
 
-  // 双击空白画布弹节点菜单（LibTV 1.2.1 交互）；捕获阶段拦截，阻止 tldraw 默认建文本
+  // 画布禁用 tldraw 的默认“双击插入白板文本”行为：节点正文使用自己的编辑器。
+  // 文本正文在捕获阶段被拦下后，转发一个专用事件给 TextBody，避免同时出现一张
+  // 独立 text shape（截图中的小文本框）和节点内 textarea。
   useEffect(() => {
     const el = wrapRef.current
     if (!el) return
-    const onDblClick = (e: MouseEvent): void => {
-      const target = e.target as HTMLElement
-      // 只在 tldraw 画布空白处触发：侧栏/连线开关/菜单等自有 UI（均在 .tl-canvas 外）
-      // 双击时不得弹菜单；形状与选中浮层上的双击交给节点自身处理
-      if (
-        !target.closest('.tl-canvas') ||
-        target.closest('.tl-shape') ||
-        target.closest('.tl-overlays') ||
-        target.closest('.tlui-layout')
-      )
+    const onDblClickCapture = (event: MouseEvent): void => {
+      const target = event.target as HTMLElement
+      const textBody = target.closest<HTMLElement>('[data-node-interactive="text-content"]')
+      if (textBody) {
+        event.preventDefault()
+        event.stopPropagation()
+        textBody.dispatchEvent(new CustomEvent('canvas:edit-text-node'))
         return
-      e.preventDefault()
-      e.stopPropagation()
-      setMenu({ kind: 'create', x: e.clientX, y: e.clientY })
+      }
+      // 空白画布不再有双击创建入口，也不能被 tldraw 自动插入独立文本框。
+      if (!target.closest('.node-card-wrap')) {
+        event.preventDefault()
+        event.stopPropagation()
+      }
     }
-    el.addEventListener('dblclick', onDblClick, { capture: true })
-    return () => {
-      el.removeEventListener('dblclick', onDblClick, { capture: true })
+    el.addEventListener('dblclick', onDblClickCapture, { capture: true })
+    return () => el.removeEventListener('dblclick', onDblClickCapture, { capture: true })
+  }, [])
+
+  // 禁用 tldraw 的绘制类快捷键；输入控件和常用组合键不受影响。
+  useEffect(() => {
+    const el = wrapRef.current
+    if (!el) return
+    const blockedTools = new Set(['a', 'd', 'e', 'g', 'h', 'i', 'k', 'l', 'n', 'r', 't'])
+    const onKeyDownCapture = (event: KeyboardEvent): void => {
+      const target = event.target as HTMLElement
+      const typing =
+        target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable
+      if (typing || event.ctrlKey || event.metaKey || event.altKey) return
+      if (!blockedTools.has(event.key.toLowerCase())) return
+      event.preventDefault()
+      event.stopPropagation()
+      editorRef.current?.setCurrentTool('select')
     }
+    el.addEventListener('keydown', onKeyDownCapture, { capture: true })
+    return () => el.removeEventListener('keydown', onKeyDownCapture, { capture: true })
   }, [])
 
   // 全局快捷键：Ctrl+D 复制选中节点、Delete 删除选中连线、Ctrl+Shift+F 适配画布
@@ -393,8 +437,17 @@ export function CanvasEditor({
       if (typing) return
       const mod = e.ctrlKey || e.metaKey
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        // 节点删除由 tldraw 默认行为处理；这里仅接管连线，确保点选一条箭头后 Delete
-        // 一定会删除那条真实数据依赖，而不会误删相连节点。
+        // 数据连线由专用连接层选中，不能平移但可明确断开。
+        const selectedDataEdge = useEdgeSelectionStore.getState().selectedEdgeId
+        if (selectedDataEdge && editor.getShape(selectedDataEdge as TLShapeId)?.type === 'arrow') {
+          e.preventDefault()
+          markUndoPoint(editor, 'delete-connections')
+          editor.deleteShapes([selectedDataEdge as TLShapeId])
+          useEdgeSelectionStore.getState().clear()
+          toast('已断开 1 条连线')
+          return
+        }
+        // 兼容历史上曾被 tldraw 默认工具选中的箭头。
         const arrows = editor
           .getSelectedShapes()
           .filter((shape) => shape.type === 'arrow')
@@ -667,6 +720,8 @@ export function CanvasEditor({
     editorRef.current = editor
     setEditorInstance(editor)
     useEditorStore.getState().setEditor(editor)
+    // 不能恢复上一次 tldraw 会话遗留的画笔/文本工具；工作流画布始终从选择工具开始。
+    editor.setCurrentTool('select')
     // LibTV 式深色画布（tldraw 默认浅色，与整体 UI 不符）
     editor.user.updateUserPreferences({ colorScheme: 'dark' })
     if (initialSnapshot) {
@@ -726,6 +781,8 @@ export function CanvasEditor({
         }
       })()
     }
+    const removedUnsupported = removeUnsupportedCanvasShapes(editor)
+    if (removedUnsupported > 0) toast(`已移除 ${removedUnsupported} 个不属于工作流的白板元素`)
     editor.store.listen(
       () => {
         if (restoreFailedRef.current) return
@@ -750,6 +807,11 @@ export function CanvasEditor({
         if (editor.getBindingsFromShape(shape.id, 'arrow').length < 2) orphaned.push(shape.id)
       }
       if (orphaned.length > 0) editor.deleteShapes(orphaned)
+    })
+    // 即使 tldraw 的隐藏快捷键或外部拖放尝试创建默认图形，也在创建后立刻移除，
+    // 形成第二道约束，确保画布只保留可参与真实数据依赖的节点/连线/分组。
+    editor.sideEffects.registerAfterCreateHandler('shape', (created) => {
+      if (!isWorkflowCanvasShape(created)) editor.deleteShapes([created.id])
     })
   }
 
@@ -789,6 +851,17 @@ export function CanvasEditor({
     <div
       className={`canvas-host canvas-theme-${canvasTheme} ${dragOver ? 'drag-over' : ''}`}
       ref={wrapRef}
+      onPointerDownCapture={(event) => {
+        const target = event.target as HTMLElement
+        // 防御性重置：默认工具不应参与本应用的节点画布交互。
+        if (
+          !target.closest('.node-card-wrap') &&
+          editorRef.current?.getCurrentToolId() !== 'select'
+        ) {
+          editorRef.current?.setCurrentTool('select')
+        }
+        if (!target.closest('.data-edge-hit')) useEdgeSelectionStore.getState().clear()
+      }}
       onContextMenu={handleContextMenu}
       onDragEnter={(e) => {
         // 只在拖入真实文件时提示上传；画布内拖动节点/框选等会冒泡 dragover，那些不提示
@@ -833,6 +906,7 @@ export function CanvasEditor({
         }}
       />
       {editorInstance && <GroupOutlineLayer editor={editorInstance} hostRef={wrapRef} />}
+      {editorInstance && <DataEdgeLayer editor={editorInstance} hostRef={wrapRef} />}
       {/* 左侧节点面板：悬浮图标条，点击创建或拖拽到画布 */}
       <div className="node-palette">
         <div
@@ -843,7 +917,12 @@ export function CanvasEditor({
         >
           <div className="palette-section palette-node-section">
             {nodeTypes.map((t) => (
-              <Tooltip key={t.type} label={'添加' + t.label + '节点'}>
+              <Tooltip
+                key={t.type}
+                label={'添加' + t.label + '节点'}
+                placement="right"
+                anchorSelector=".palette-icon"
+              >
                 <button
                   className="palette-item palette-node-item"
                   aria-label={'添加' + t.label + '节点'}

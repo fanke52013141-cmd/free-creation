@@ -523,7 +523,7 @@ export function ImageEditSettings({
               <input
                 type="checkbox"
                 checked={config.mask?.enabled ?? false}
-                onPointerDown={stopEventPropagation}
+                onPointerDown={(e) => e.stopPropagation()}
                 onChange={(event) =>
                   save({
                     ...config,
@@ -543,7 +543,7 @@ export function ImageEditSettings({
                 type="checkbox"
                 checked={config.mask?.invert ?? false}
                 disabled={!config.mask?.enabled}
-                onPointerDown={stopEventPropagation}
+                onPointerDown={(e) => e.stopPropagation()}
                 onChange={(event) =>
                   save({
                     ...config,
@@ -568,7 +568,7 @@ export function ImageEditSettings({
         <AppSelect
           className="gen-select w92"
           value={config.size}
-          onPointerDown={stopEventPropagation}
+          onPointerDown={(e) => e.stopPropagation()}
           onChange={(e) => save({ ...config, size: e.target.value })}
         >
           {IMAGE_EDIT_SIZES.map((size) => (
@@ -583,7 +583,7 @@ export function ImageEditSettings({
         rows={3}
         value={config.instruction}
         placeholder="描述需要修改的内容…"
-        onPointerDown={stopEventPropagation}
+        onPointerDown={(e) => e.stopPropagation()}
         onChange={(e) => save({ ...config, instruction: e.target.value.slice(0, 4000) })}
       />
       {invalid && <p className="crop-invalid">{invalid}</p>}

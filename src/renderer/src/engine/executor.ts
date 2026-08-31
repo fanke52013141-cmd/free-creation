@@ -14,10 +14,15 @@ import type { CanvasEdge, CanvasNode, ExecStatus, ProviderSummary } from '@share
 import { deriveGraph } from '../canvas/graph'
 import { markUndoPoint } from '../canvas/history'
 import type { NodeCardShape, NodeCardProps } from '../canvas/NodeCardShape'
-import { buildOutputPackets, collectContractInputs, type ContractOutputs } from './contracts'
+import {
+  buildOutputPackets,
+  collectContractInputs,
+  type ContractInputInjection,
+  type ContractOutputs
+} from './contracts'
 import type { NodeExecutionContext, NodeExecutionResult, SubflowRequest } from './executor-types'
 import { getNodeType } from '../nodes/registry'
-import { projectNodeOutputs } from '../nodes/nodeValues'
+import { projectNodeOutputs, type NodeValue } from '../nodes/nodeValues'
 import { toast } from '../stores/toast'
 import { useEngineStore } from './store'
 import {
@@ -91,6 +96,127 @@ function clearRunControls(): void {
   store.setStop(null)
   store.setPause(null)
   store.setResume(null)
+}
+
+/**
+ * 右侧「节点测试」使用的临时输入。它们不会写入画布，也不会伪造一条连线；
+ * 仍然会经过与工作流完全相同的输入/输出契约校验和节点执行器。
+ */
+export type NodeTestInputs = Record<string, readonly NodeValue[]>
+
+export interface NodeTestResult {
+  status: NodeExecutionResult['status']
+  reason?: string
+  outputs: ContractOutputs
+}
+
+/**
+ * 在隔离的 shape 副本上执行一个节点。
+ *
+ * 用途是让用户在尚未连线时验证一个节点的输入与输出。生成类执行器仍可能创建真实
+ * 媒体资产（测试结果可预览），但测试绝不改写原节点 props、运行记录或画布连线。
+ * 迭代节点依赖真实下游子流程，因此明确要求在画布中以工作流方式运行。
+ */
+export async function runNodeTest(
+  editor: Editor,
+  projectId: string,
+  providers: ProviderSummary[],
+  nodeId: TLShapeId,
+  testInputs: NodeTestInputs
+): Promise<NodeTestResult> {
+  const graph = deriveGraph(editor)
+  const node = graph.nodes.find((item) => item.id === nodeId)
+  const shape = editor.getShape<NodeCardShape>(nodeId)
+  const spec = node ? getNodeType(node.type) : null
+  if (!node || !shape || !spec?.executor) {
+    return { status: 'skipped', reason: '节点不存在或未实现执行器', outputs: {} }
+  }
+  if (node.type === 'iterate') {
+    return { status: 'skipped', reason: '循环节点需要真实下游流程，请在画布中运行', outputs: {} }
+  }
+
+  const runId = `test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const injections: ContractInputInjection[] = Object.entries(testInputs).flatMap(
+    ([portId, values]) =>
+      values.map((value, index) => ({
+        portId,
+        packet: {
+          type: value.kind,
+          value,
+          source: { nodeId: '__node_test__', portId: `${portId}.${index + 1}`, runId },
+          createdAt: Date.now()
+        }
+      }))
+  )
+  const collected = collectContractInputs(node, [], new Map(), { injections })
+  if (collected.errors.length > 0) {
+    return {
+      status: 'failed',
+      reason: `输入契约校验失败：${collected.errors.join('；')}`,
+      outputs: {}
+    }
+  }
+
+  let testShape: NodeCardShape = {
+    ...shape,
+    props: { ...shape.props },
+    meta: { ...(shape.meta ?? {}) }
+  }
+  const token: RunControl = createRunControl()
+  const context: NodeExecutionContext = {
+    node,
+    shape: testShape,
+    inputs: collected.value,
+    projectId,
+    runId,
+    providers,
+    signal: token,
+    outgoing: graph.edges
+      .filter((edge) => edge.from.nodeId === node.id)
+      .map((edge) => ({
+        nodeId: edge.to.nodeId,
+        fromPortId: edge.from.portId,
+        toPortId: edge.to.portId
+      })),
+    updateProps: (patch) => {
+      testShape = { ...testShape, props: { ...testShape.props, ...patch } }
+    },
+    updateResult: (result) => {
+      testShape = {
+        ...testShape,
+        meta: { ...(testShape.meta ?? {}), nodeResult: result ?? undefined }
+      }
+    },
+    runSubflow: async () => {
+      throw new Error('节点测试不执行下游子流程')
+    }
+  }
+  try {
+    const result = await spec.executor(context)
+    if (result.status !== 'done') return { ...result, outputs: {} }
+    const outputShape: NodeCardShape = {
+      ...testShape,
+      meta: {
+        ...(testShape.meta ?? {}),
+        nodeRun: { runId, status: 'success', startedAt: Date.now() }
+      }
+    }
+    const output = buildOutputPackets(node, projectNodeOutputs(outputShape), runId)
+    if (output.errors.length > 0) {
+      return {
+        status: 'failed',
+        reason: `输出契约校验失败：${output.errors.join('；')}`,
+        outputs: {}
+      }
+    }
+    return { status: 'done', outputs: output.value }
+  } catch (error) {
+    return {
+      status: 'failed',
+      reason: error instanceof Error ? error.message : String(error),
+      outputs: {}
+    }
+  }
 }
 
 function topoSort(graph: { nodes: CanvasNode[]; edges: CanvasEdge[] }): CanvasNode[] | null {

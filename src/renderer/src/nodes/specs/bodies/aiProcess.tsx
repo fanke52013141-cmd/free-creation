@@ -117,7 +117,7 @@ export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
           <AppSelect
             className="gen-select"
             value={data.mode}
-            onPointerDown={(e) => stopEventPropagation(e)}
+            onPointerDown={(e) => e.stopPropagation()}
             onChange={(e) =>
               updateConfig({
                 ...data,
@@ -143,7 +143,7 @@ export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
             <AppSelect
               className="gen-select"
               value={schemaKey(data.jsonSchema)}
-              onPointerDown={(e) => stopEventPropagation(e)}
+              onPointerDown={(e) => e.stopPropagation()}
               onChange={(e) => updateConfig({ ...data, jsonSchema: schemaFromKey(e.target.value) })}
             >
               {AI_SCHEMA_OPTIONS.map((s) => (
@@ -167,7 +167,7 @@ export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
               onKeyDown={(e) => {
                 if (e.key === 'Escape') commitSystem()
               }}
-              onPointerDown={(e) => stopEventPropagation(e)}
+              onPointerDown={(e) => e.stopPropagation()}
               spellCheck={false}
             />
           ) : (
@@ -194,7 +194,7 @@ export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
               min="0"
               max="2"
               value={data.temperature}
-              onPointerDown={(e) => stopEventPropagation(e)}
+              onPointerDown={(e) => e.stopPropagation()}
               onChange={(e) => updateConfig({ ...data, temperature: Number(e.target.value) || 0 })}
             />
           </label>
@@ -205,7 +205,7 @@ export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
               step="256"
               min="256"
               value={data.maxTokens}
-              onPointerDown={(e) => stopEventPropagation(e)}
+              onPointerDown={(e) => e.stopPropagation()}
               onChange={(e) => updateConfig({ ...data, maxTokens: Number(e.target.value) || 4096 })}
             />
           </label>

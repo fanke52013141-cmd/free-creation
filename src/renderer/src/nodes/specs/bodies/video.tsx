@@ -405,7 +405,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           if (e.key === '@' && availableMentions.length > 0) setMentionOpen(true)
           if (e.key === 'Escape') setMentionOpen(false)
         }}
-        onPointerDown={(e) => stopEventPropagation(e)}
+        onPointerDown={(e) => e.stopPropagation()}
       />
       <div className="video-reference-mention">
         <button
@@ -455,7 +455,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           <AppSelect
             className="gen-select"
             value={params.ratio ?? capabilities.ratios[0]}
-            onPointerDown={(e) => stopEventPropagation(e)}
+            onPointerDown={(e) => e.stopPropagation()}
             onChange={(e) => update({ ...data, params: { ...params, ratio: e.target.value } })}
           >
             {capabilities.ratios.map((ratio) => (
@@ -468,7 +468,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
         <AppSelect
           className="gen-select w70"
           value={String(params.duration ?? 5)}
-          onPointerDown={(e) => stopEventPropagation(e)}
+          onPointerDown={(e) => e.stopPropagation()}
           onChange={(e) =>
             update({ ...data, params: { ...params, duration: Number(e.target.value) } })
           }
@@ -482,7 +482,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
         <AppSelect
           className="gen-select w86"
           value={params.resolution ?? capabilities.resolutions.at(-1)}
-          onPointerDown={(e) => stopEventPropagation(e)}
+          onPointerDown={(e) => e.stopPropagation()}
           onChange={(e) => update({ ...data, params: { ...params, resolution: e.target.value } })}
         >
           {capabilities.resolutions.map((r) => (
@@ -498,7 +498,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
             <input
               type="checkbox"
               checked={params.generateAudio ?? true}
-              onPointerDown={(e) => stopEventPropagation(e)}
+              onPointerDown={(e) => e.stopPropagation()}
               onChange={(e) =>
                 update({ ...data, params: { ...params, generateAudio: e.target.checked } })
               }
@@ -511,7 +511,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
             min="-1"
             placeholder="种子（可选）"
             value={params.seed ?? ''}
-            onPointerDown={(e) => stopEventPropagation(e)}
+            onPointerDown={(e) => e.stopPropagation()}
             onChange={(e) =>
               update({
                 ...data,

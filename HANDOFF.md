@@ -1,14 +1,16 @@
 # Canvas Studio 开发交接文档
 
-> 最后更新：2026-08-31
+> 最后更新：2026-09-01
 >
-> 当前分支：`main`（基线提交 `f519ac3`，已与 `origin/main` 同步；P0–P3 协议/能力优化、可定制节点分类 Dock 及交接文档待提交）
+> 当前分支：`main`（线上基线提交 `a5962ad`；工作区仍有上一阶段未提交的 UI 修改，Agent 对接方案应独立提交，不能混入暂停中的 UI 改动）
 >
 > 当前功能与测试基线：以 `main` 最新提交为准；交接时先执行 `git fetch origin` 与 `git status -sb`，不得依据旧哈希判断推送状态。
 >
 > 远程仓库：https://github.com/fanke52013141-cmd/free-creation
 >
 > 产品定位：单用户、本地优先的 Windows Electron 无限画布创作工具。
+
+> **最新交付（2026-09-01 Agent 对接 P0–P3 实现完成）**：已将 Canvas Studio 从"只能由桌面页面操作"升级为可被 Agent 无界面调用的稳定创作引擎。本轮完成四层核心架构：① **能力注册表**（`src/capabilities/`）—— 23 个节点能力的唯一定义来源，自动派生 MCP Schema、CLI 规格和能力矩阵；② **应用服务层**（`src/application/`）—— 无 React 依赖的无界面核心，包含 NodeService、WorkflowService、ProjectService 和 CapabilityService，统一返回 `Result<T>`，支持幂等键和审计日志；③ **CLI 适配器**（`src/cli/`）—— 支持 project/capability/node/workflow/artifact 五组命令和 `--json` 结构化输出；④ **MCP 适配器**（`src/mcp/`）—— stdio JSON-RPC 2.0 服务，15 个通用工具和资源发现。验证基线：**60 个测试文件、779 项用例全部通过**，Node + Web 双端 TypeScript 类型检查零错误。完整架构、API、测试覆盖和接手注意事项见 [docs/HANDOFF_2026_09_01_AGENT_INTEGRATION.md](./docs/HANDOFF_2026_09_01_AGENT_INTEGRATION.md)；方案原文见 [docs/AGENT_INTEGRATION_PLAN.md](./docs/AGENT_INTEGRATION_PLAN.md)。后续 P4（Agent 友好增强）和 P5（桌面端双向同步）尚未实现。
 
 > **当前交接入口（2026-08-31 P0–P3 优化）**：Sprint 0、Sprint 2、Sprint 3 和导演台安排已完成；P0–P3 协议、交互、生图比例和视频能力优化也已完成，详见 [docs/P0_P3_NODE_CAPABILITY_OPTIMIZATION_2026_08_31.md](./docs/P0_P3_NODE_CAPABILITY_OPTIMIZATION_2026_08_31.md)、[docs/NODE_PROTOCOL_AUDIT_2026_08_31.md](./docs/NODE_PROTOCOL_AUDIT_2026_08_31.md) 与 [docs/NODE_COMPLIANCE_MATRIX.md](./docs/NODE_COMPLIANCE_MATRIX.md)。左侧节点菜单保持未分类版本：单一无框鱼眼图标栏，节点列表沿用原有交互。右键画布的新建节点菜单采用一级分类悬浮二级筛选，分类项带右向箭头，二级节点可直接创建或用于真实连线。UI 整体优化六阶段已由 `f519ac3` 提交并推送。
 

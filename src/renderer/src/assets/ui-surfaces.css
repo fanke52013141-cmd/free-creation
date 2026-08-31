@@ -1112,6 +1112,14 @@
 /* 契约抽屉本身就是节点的说明书，不能为了紧凑牺牲文字可读性。 */
 .node-contract-panel {
   width: clamp(350px, 25vw, 390px);
+  /* 给固定在画布底部的资产 / 流程 / 历史 / 运行 / 主题工具条留出完整空间。 */
+  bottom: var(--canvas-bottom-utility-h, 82px);
+}
+
+.contract-body {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
 }
 
 .contract-head {
@@ -1319,6 +1327,313 @@
 .canvas-theme-light .ms-template {
   border-color: rgba(55, 104, 192, 0.26);
   color: #305fbd;
+}
+
+/* ── Canvas interaction polish: final layer after legacy CSS ──────────── */
+/* 节点创建菜单永远允许滚动浏览，但不暴露浏览器原生滚动条。 */
+.node-menu-list,
+.node-menu-list.scrollbar-hidden {
+  scrollbar-width: none;
+}
+
+.node-menu-list::-webkit-scrollbar,
+.node-menu-list.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
+
+/* 左侧节点轨与底部导航共享一条几何中心线。 */
+.canvas-dock {
+  left: 12px;
+  bottom: 14px;
+}
+
+.dock-controls {
+  gap: 0;
+}
+
+.dock-tool-group {
+  width: 76px;
+  padding: 0;
+  justify-content: center;
+}
+
+.dock-zoom {
+  margin-left: -7px;
+  padding: 0;
+}
+
+/* 标题区按“序号 → 类型 → 名称 → 状态 → 操作”建立清晰层级。 */
+.node-seq,
+.canvas-theme-light .node-seq {
+  min-width: 18px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #fff !important;
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 22px;
+}
+
+.node-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.node-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.node-title {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.node-info-btn {
+  width: 22px;
+  height: 22px;
+}
+
+.node-info-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* 单节点运行是轻量就地动作：只保留方向三角，不制造第二个按钮框。 */
+.node-run-btn,
+.canvas-theme-light .node-run-btn {
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #8bdcff;
+}
+
+.node-run-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.node-run-btn:hover:not(:disabled) {
+  border: 0;
+  background: transparent;
+  color: #e8f9ff;
+  filter: drop-shadow(0 0 5px rgba(105, 220, 255, 0.38));
+  transform: translateY(-1px) scale(1.08);
+}
+
+/* 不让运行 / 保存工作流抢走多选工具栏的统一节奏。 */
+.ms-run,
+.ms-template,
+.canvas-theme-light .ms-run,
+.canvas-theme-light .ms-template {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+.ms-run:hover,
+.ms-template:hover,
+.canvas-theme-light .ms-run:hover,
+.canvas-theme-light .ms-template:hover {
+  border-color: rgba(231, 238, 247, 0.12);
+  background: rgba(66, 185, 245, 0.1);
+  color: #72cdf8;
+}
+
+/* 选中态：卡片边框变为品牌色发光（tldraw 选中容器是卡片的祖先元素）。 */
+.tl-shape__inner--selected .node-card,
+.node-card-wrap.is-selected .node-card {
+  border-color: color-mix(in srgb, var(--brand) 50%, var(--line));
+  box-shadow:
+    0 0 0 1.5px color-mix(in srgb, var(--brand) 40%, transparent),
+    0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+/* 选中框：实线紧贴节点轮廓，不做大范围偏移。 */
+.tl-selection__fg__outline {
+  fill: none !important;
+  stroke: color-mix(in srgb, var(--brand) 70%, transparent) !important;
+  stroke-width: 1.5px !important;
+  stroke-linecap: round;
+}
+
+/* 四个缩放点悬浮在虚线外，视觉不与边框粘连，命中区仍由 tldraw 保留。 */
+.tl-corner-handle {
+  width: 9px !important;
+  height: 9px !important;
+  rx: 999px;
+  ry: 999px;
+  fill: var(--canvas-bg, #171b22) !important;
+  stroke: #8ec7ff !important;
+  stroke-width: 2px !important;
+  filter: drop-shadow(0 0 0 3px var(--canvas-bg, #171b22))
+    drop-shadow(0 1px 3px rgba(0, 0, 0, 0.28));
+}
+
+[data-testid='selection.resize.top-left'] {
+  transform: translate(-5px, -5px);
+}
+
+[data-testid='selection.resize.top-right'] {
+  transform: translate(5px, -5px);
+}
+
+[data-testid='selection.resize.bottom-right'] {
+  transform: translate(5px, 5px);
+}
+
+[data-testid='selection.resize.bottom-left'] {
+  transform: translate(-5px, 5px);
+}
+
+/* 文本占位语再靠近左上角，编辑态和展示态保持同一排版基线。 */
+.node-text,
+.node-textarea {
+  padding: 7px 9px;
+  font-size: 14px;
+}
+
+.node-hint {
+  padding: 7px 9px;
+}
+
+/* 类型色只作为卡片的底部识别条：标题区保持纯净，不抢占节点名称的视觉注意力。 */
+.node-color-bar {
+  top: auto;
+  bottom: 0;
+  height: 8px;
+  border-radius: 0 0 var(--node-radius) var(--node-radius);
+}
+
+/* tldraw Arrow 仅保留为端口 binding / 持久化载体；业务线由 DataEdgeLayer 统一绘制。 */
+.tl-shape[data-shape-type='arrow'] {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.data-edge-layer {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.data-edge-visible {
+  fill: none;
+  stroke-width: 1.5;
+  stroke-dasharray: 7 7;
+  stroke-linecap: round;
+  opacity: 0.74;
+  pointer-events: none;
+  transition:
+    stroke-width 140ms ease,
+    opacity 140ms ease,
+    filter 140ms ease;
+}
+
+.data-edge-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.data-edge.is-hovered .data-edge-visible {
+  opacity: 0.98;
+  stroke-width: 1.8;
+}
+
+.data-edge.is-selected .data-edge-visible {
+  stroke-width: 2.2;
+  opacity: 1;
+  filter: drop-shadow(0 0 5px rgb(138 111 255 / 45%));
+}
+
+.contract-test-harness {
+  display: grid;
+  gap: 10px;
+}
+
+.contract-test-input {
+  display: grid;
+  gap: 6px;
+  padding: 9px;
+  border: 1px solid rgba(231, 238, 247, 0.11);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.024);
+}
+
+.contract-test-input > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.contract-test-input strong {
+  color: var(--txt, #f5f8fc);
+  font-size: 12px;
+}
+
+.contract-test-input small,
+.contract-test-result small {
+  color: var(--muted, #9aa6b6);
+  font-size: 11px;
+}
+
+.contract-test-run {
+  min-height: 36px;
+  border: 1px solid rgba(97, 205, 250, 0.46);
+  border-radius: 9px;
+  background: linear-gradient(180deg, #4bc2f4, #29aae4);
+  color: #06131a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.contract-test-run:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.contract-test-result {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid rgba(96, 211, 157, 0.28);
+  border-radius: 9px;
+  background: rgba(52, 211, 153, 0.06);
+}
+
+.contract-test-result.failed {
+  border-color: rgba(251, 113, 133, 0.36);
+  background: rgba(251, 113, 133, 0.06);
+}
+
+.contract-test-result pre {
+  max-height: 150px;
+  overflow: auto;
+  margin: 0;
+  padding: 8px;
+  border-radius: 7px;
+  background: rgba(3, 6, 10, 0.36);
+  color: var(--txt, #eaf3fa);
+  font:
+    11px/1.45 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Consolas,
+    monospace;
+  white-space: pre-wrap;
 }
 
 @media (prefers-reduced-motion: reduce) {

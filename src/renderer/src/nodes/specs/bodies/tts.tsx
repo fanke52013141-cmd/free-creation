@@ -212,7 +212,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
           className="gen-textarea tts"
           value={draft}
           placeholder="输入要朗读的文本，上游文本节点内容会自动合并…"
-          onPointerDown={(e) => stopEventPropagation(e)}
+          onPointerDown={(e) => e.stopPropagation()}
           onChange={(e) => setDraft(e.target.value)}
         />
         <div className="audio-text-meta">{draft.length} 字 · 可由文本节点提供</div>
@@ -224,7 +224,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
         <AppSelect
           className="gen-select small"
           value={config.lang}
-          onPointerDown={(e) => stopEventPropagation(e)}
+          onPointerDown={(e) => e.stopPropagation()}
           onChange={(e) => updateConfig({ lang: e.target.value as TtsLang })}
         >
           {TTS_LANGS.map((item) => (
@@ -237,7 +237,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
         <AppSelect
           className="gen-select small"
           value={config.format}
-          onPointerDown={(e) => stopEventPropagation(e)}
+          onPointerDown={(e) => e.stopPropagation()}
           onChange={(e) => updateConfig({ format: e.target.value as TtsConfig['format'] })}
         >
           {TTS_FORMATS.map((f) => (
@@ -256,7 +256,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
             max="2"
             step="0.1"
             value={config.speed}
-            onPointerDown={(e) => stopEventPropagation(e)}
+            onPointerDown={(e) => e.stopPropagation()}
             onChange={(e) => updateConfig({ speed: Number(e.target.value) })}
           />
         </div>
@@ -268,7 +268,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
             max="1"
             step="0.1"
             value={config.emotion}
-            onPointerDown={(e) => stopEventPropagation(e)}
+            onPointerDown={(e) => e.stopPropagation()}
             onChange={(e) => updateConfig({ emotion: Number(e.target.value) })}
           />
         </div>

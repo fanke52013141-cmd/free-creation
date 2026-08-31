@@ -80,7 +80,27 @@ export class NodeCardUtil extends BaseBoxShapeUtil<NodeCardShape> {
     return <NodeCardView shape={shape} />
   }
 
+  /** 禁止旋转：调整节点只需缩放，旋转没有实际意义。 */
+  override hideRotateHandle(): boolean {
+    return true
+  }
+
+  /** 文本节点允许进入 tldraw 编辑态——编辑期间 tldraw 不再拦截键盘事件。 */
+  override canEdit(shape: NodeCardShape): boolean {
+    return shape.props.nodeType === 'text'
+  }
+
+  /** 选中实线框紧贴节点轮廓，视觉上干净利落。 */
   override indicator(shape: NodeCardShape): React.JSX.Element {
-    return <rect width={shape.props.w} height={shape.props.h} rx={12} />
+    const pad = 3
+    return (
+      <rect
+        x={-pad}
+        y={-pad}
+        width={shape.props.w + pad * 2}
+        height={shape.props.h + pad * 2}
+        rx={16}
+      />
+    )
   }
 }

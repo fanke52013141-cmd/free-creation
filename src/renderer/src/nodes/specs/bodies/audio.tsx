@@ -337,7 +337,7 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
             className="gen-textarea audio"
             value={draft}
             placeholder="输入要朗读的文本…"
-            onPointerDown={(e) => stopEventPropagation(e)}
+            onPointerDown={(e) => e.stopPropagation()}
             onChange={(e) => setDraft(e.target.value)}
           />
           <div className="audio-text-meta">{draft.length} 字 · 可由文本节点提供内容</div>
@@ -346,7 +346,7 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
             <AppSelect
               className="gen-select small"
               value={data.voice}
-              onPointerDown={(e) => stopEventPropagation(e)}
+              onPointerDown={(e) => e.stopPropagation()}
               onChange={(e) => update({ ...data, voice: e.target.value })}
             >
               {VOICES.map((v) => (
@@ -359,7 +359,7 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
             <AppSelect
               className="gen-select small"
               value={data.format}
-              onPointerDown={(e) => stopEventPropagation(e)}
+              onPointerDown={(e) => e.stopPropagation()}
               onChange={(e) => update({ ...data, format: e.target.value })}
             >
               {AUDIO_FORMATS.map((f) => (

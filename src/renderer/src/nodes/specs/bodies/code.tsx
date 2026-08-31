@@ -335,7 +335,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
               })
             }
           }}
-          onPointerDown={(e) => stopEventPropagation(e)}
+          onPointerDown={(e) => e.stopPropagation()}
           spellCheck={false}
         />
       </div>
@@ -359,12 +359,12 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
             value={data.inputName}
             aria-label="代码输入变量名"
             spellCheck={false}
-            onPointerDown={(e) => stopEventPropagation(e)}
+            onPointerDown={(e) => e.stopPropagation()}
             onChange={(e) => updateConfig({ ...data, inputName: e.target.value || 'input' })}
           />
           <AppSelect
             value={data.inputType}
-            onPointerDown={(e) => stopEventPropagation(e)}
+            onPointerDown={(e) => e.stopPropagation()}
             onChange={(e) =>
               updateConfig({ ...data, inputType: e.target.value as VariableValueType })
             }
@@ -382,12 +382,12 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
             value={data.outputName}
             aria-label="代码输出变量名"
             spellCheck={false}
-            onPointerDown={(e) => stopEventPropagation(e)}
+            onPointerDown={(e) => e.stopPropagation()}
             onChange={(e) => updateConfig({ ...data, outputName: e.target.value || 'output' })}
           />
           <AppSelect
             value={data.outputType}
-            onPointerDown={(e) => stopEventPropagation(e)}
+            onPointerDown={(e) => e.stopPropagation()}
             onChange={(e) =>
               updateConfig({ ...data, outputType: e.target.value as VariableValueType })
             }
@@ -448,7 +448,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
                   value={param.name}
                   spellCheck={false}
                   placeholder="参数名"
-                  onPointerDown={(e) => stopEventPropagation(e)}
+                  onPointerDown={(e) => e.stopPropagation()}
                   onChange={(e) =>
                     updateParam(index, { name: e.target.value.replace(/[^\w]/g, '') })
                   }
@@ -456,7 +456,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
                 <AppSelect
                   className="code-param-type"
                   value={param.type}
-                  onPointerDown={(e) => stopEventPropagation(e)}
+                  onPointerDown={(e) => e.stopPropagation()}
                   onChange={(e) =>
                     updateParam(index, { type: e.target.value as VariableValueType })
                   }

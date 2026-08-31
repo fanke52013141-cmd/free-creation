@@ -250,7 +250,7 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
         <AppSelect
           className="gen-select w92"
           value={config.aspectRatio}
-          onPointerDown={(e) => stopEventPropagation(e)}
+          onPointerDown={(e) => e.stopPropagation()}
           onChange={(e) => {
             const ratio = e.target.value as ImageAspectRatio
             update({
@@ -269,7 +269,7 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
         <AppSelect
           className="gen-select w92"
           value={config.size}
-          onPointerDown={(e) => stopEventPropagation(e)}
+          onPointerDown={(e) => e.stopPropagation()}
           onChange={(e) => update({ ...config, size: e.target.value })}
         >
           {sizeOptions.map((size) => (
@@ -284,7 +284,7 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
           placeholder="种子"
           value={config.seed ?? ''}
           min="1"
-          onPointerDown={(e) => stopEventPropagation(e)}
+          onPointerDown={(e) => e.stopPropagation()}
           onChange={(e) =>
             update({ ...config, seed: e.target.value ? Number(e.target.value) : undefined })
           }
@@ -298,7 +298,7 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
         placeholder="描述要生成的画面…"
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => update({ ...config, prompt: draft })}
-        onPointerDown={(e) => stopEventPropagation(e)}
+        onPointerDown={(e) => e.stopPropagation()}
       />
       <button
         className="btn-primary small gen-go"

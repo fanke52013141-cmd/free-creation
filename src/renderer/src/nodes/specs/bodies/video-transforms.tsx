@@ -92,7 +92,7 @@ function TimeInput({
       <input
         type="text"
         value={text}
-        onPointerDown={stopEventPropagation}
+        onPointerDown={(e) => e.stopPropagation()}
         onChange={(event): void => setText(event.currentTarget.value)}
         onBlur={handleBlur}
         onKeyDown={(event): void => {

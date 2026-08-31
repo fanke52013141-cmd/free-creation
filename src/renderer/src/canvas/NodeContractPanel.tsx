@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Editor } from 'tldraw'
-import type { PortDecl, ProviderSummary } from '@shared/types'
+import type { MediaAsset, PortDecl, PortType, ProviderSummary } from '@shared/types'
 import { getNodePorts, getNodeType } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
 import { Icon } from '../components/Icon'
@@ -8,7 +8,14 @@ import { projectNodeOutputs, type NodeValue } from '../nodes/nodeValues'
 import { useNodePanelStore } from '../stores/nodePanel'
 import { readNodeRunHistory, readNodeRunRecord, type NodeRunRecord } from '../engine/runRecord'
 import { readNodeConfig } from './node-persistence'
-import { runNodeManually, runWorkflowToNode } from '../engine/executor'
+import { markUndoPoint } from './history'
+import {
+  runNodeManually,
+  runNodeTest,
+  runWorkflowToNode,
+  type NodeTestInputs
+} from '../engine/executor'
+import { useMediaStore } from '../stores/media'
 
 interface NodeContractPanelProps {
   editor: Editor
@@ -101,6 +108,12 @@ function safeConfigPreview(text: string): string {
   } catch {
     return text.length > 1200 ? `${text.slice(0, 1200)}\n…（内容已截断）` : text
   }
+  // 隐藏内部测试输入字段，不干扰用户查看节点配置
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const filtered = { ...(value as Record<string, unknown>) }
+    delete filtered['_testInputs']
+    value = filtered
+  }
   const redact = (input: unknown): unknown => {
     if (Array.isArray(input)) return input.map(redact)
     if (!input || typeof input !== 'object') return input
@@ -113,6 +126,197 @@ function safeConfigPreview(text: string): string {
   }
   const formatted = JSON.stringify(redact(value), null, 2)
   return formatted.length > 2400 ? `${formatted.slice(0, 2400)}\n…（配置已截断）` : formatted
+}
+
+/** 保存在节点 config 中的测试输入键名（执行器不会读取此键）。 */
+const TEST_INPUTS_KEY = '_testInputs'
+
+/** 从节点 config 中恢复之前保存的测试输入值。文本节点额外读取 props.text。 */
+function loadTestInputsFromConfig(shape: NodeCardShape): Partial<Record<string, string>> {
+  const result: Partial<Record<string, string>> = {}
+  if (shape.props.nodeType === 'text') {
+    result['in-text'] = shape.props.text
+  }
+  try {
+    const config = shape.props.config ? JSON.parse(shape.props.config) : {}
+    const saved = config[TEST_INPUTS_KEY] as Record<string, { type: string; value: string }> | undefined
+    if (saved) {
+      for (const [portId, input] of Object.entries(saved)) {
+        if (!result[portId]) result[portId] = input.value
+      }
+    }
+  } catch {
+    // ignore parse errors
+  }
+  return result
+}
+
+type TestDraft = { type: PortType; value: string }
+
+function defaultDraft(port: PortDecl): TestDraft {
+  return { type: port.type === 'any' ? 'text' : port.type, value: '' }
+}
+
+function previewTestValue(value: NodeValue): string {
+  if (value.kind === 'text' || value.kind === 'markdown') return value.text || '（空文本）'
+  if (value.kind === 'json') return JSON.stringify(value.data, null, 2)
+  return `${value.kind} · ${value.mime} · ${value.mediaId}`
+}
+
+function TestHarness({
+  projectId,
+  ports,
+  onRun,
+  onTextInputCommit,
+  initialTextInputs = {}
+}: {
+  projectId: string
+  ports: PortDecl[]
+  onRun: (
+    inputs: NodeTestInputs
+  ) => Promise<{ status: string; reason?: string; outputs: Record<string, unknown> }>
+  onTextInputCommit?: (port: PortDecl, type: PortType, value: string) => void
+  initialTextInputs?: Partial<Record<string, string>>
+}): React.JSX.Element {
+  const assets = useMediaStore((state) => state.assets)
+  const loadAssets = useMediaStore((state) => state.load)
+  const [drafts, setDrafts] = useState<Record<string, TestDraft>>({})
+  const [running, setRunning] = useState(false)
+  const [result, setResult] = useState<{
+    status: string
+    reason?: string
+    outputs: Record<string, unknown>
+  } | null>(null)
+
+  useEffect(() => {
+    void loadAssets(projectId)
+  }, [loadAssets, projectId])
+
+  const readDraft = (port: PortDecl): TestDraft =>
+    drafts[port.id] ?? { ...defaultDraft(port), value: initialTextInputs[port.id] ?? '' }
+  const updateDraft = (port: PortDecl, patch: Partial<TestDraft>): void => {
+    setDrafts((current) => ({ ...current, [port.id]: { ...readDraft(port), ...patch } }))
+  }
+  const usableAssets = (type: PortType): MediaAsset[] =>
+    assets.filter((asset) => type === 'any' || type === 'file' || asset.kind === type)
+
+  const runTest = async (): Promise<void> => {
+    const inputs: NodeTestInputs = {}
+    try {
+      for (const port of ports) {
+        const draft = readDraft(port)
+        const type = port.type === 'any' ? draft.type : port.type
+        if (!draft.value) continue
+        let value: NodeValue
+        if (type === 'text' || type === 'markdown') value = { kind: type, text: draft.value }
+        else if (type === 'json') value = { kind: 'json', data: JSON.parse(draft.value) }
+        else {
+          const asset = assets.find((item) => item.id === draft.value)
+          if (!asset) throw new Error(`${port.name} 请选择一个已导入的资产`)
+          const mediaKind = type === 'file' ? 'file' : asset.kind
+          if (mediaKind === 'file' && asset.kind !== 'file' && type !== 'file') {
+            throw new Error(`${port.name} 的资产类型不匹配`)
+          }
+          value = { kind: mediaKind, mediaId: asset.id, mediaPath: asset.path, mime: asset.mime }
+        }
+        inputs[port.id] = [value]
+      }
+      setRunning(true)
+      setResult(await onRun(inputs))
+    } catch (error) {
+      setResult({
+        status: 'failed',
+        reason: error instanceof Error ? error.message : String(error),
+        outputs: {}
+      })
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  return (
+    <section className="contract-section contract-test-harness">
+      <h4>未连线测试</h4>
+      <p className="contract-settings-hint">
+        输入内容在失焦时自动保存到节点，下次打开面板会自动回填；也可直接点击下方测试运行。
+      </p>
+      {ports.length === 0 ? (
+        <p className="contract-empty">此节点没有可注入的输入，可直接点击下方测试运行。</p>
+      ) : (
+        ports.map((port) => {
+          const draft = readDraft(port)
+          const type = port.type === 'any' ? draft.type : port.type
+          const isText = type === 'text' || type === 'markdown' || type === 'json'
+          return (
+            <label className="contract-test-input" key={port.id}>
+              <span>
+                <strong>{port.name}</strong>
+                <small>
+                  {port.required ? '必填' : '可选'} ·{' '}
+                  {port.cardinality === 'many' ? '多值（本次注入一项）' : '单值'}
+                </small>
+              </span>
+              {port.type === 'any' && (
+                <select
+                  value={draft.type}
+                  onChange={(event) =>
+                    updateDraft(port, { type: event.target.value as PortType, value: '' })
+                  }
+                >
+                  {(
+                    ['text', 'markdown', 'json', 'image', 'video', 'audio', 'file'] as PortType[]
+                  ).map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {isText ? (
+                <textarea
+                  value={draft.value}
+                  placeholder={
+                    type === 'json' ? '输入合法 JSON，例如 {"title":"示例"}' : `输入${port.name}`
+                  }
+                  onChange={(event) => updateDraft(port, { value: event.target.value })}
+                  onBlur={(event) => onTextInputCommit?.(port, type, event.target.value)}
+                />
+              ) : (
+                <select
+                  value={draft.value}
+                  onChange={(event) => updateDraft(port, { value: event.target.value })}
+                >
+                  <option value="">选择已导入的 {type} 资产</option>
+                  {usableAssets(type).map((asset) => (
+                    <option key={asset.id} value={asset.id}>
+                      {asset.name || asset.id} · {asset.mime}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </label>
+          )
+        })
+      )}
+      <button className="contract-test-run" disabled={running} onClick={() => void runTest()}>
+        {running ? '测试运行中…' : '测试此节点'}
+      </button>
+      {result && (
+        <div className={`contract-test-result ${result.status}`}>
+          <strong>{result.status === 'done' ? '测试成功' : '测试未通过'}</strong>
+          {result.reason && <small>{result.reason}</small>}
+          {Object.entries(result.outputs).map(([portId, packet]) => {
+            const item = packet as { value?: NodeValue }
+            return item.value ? (
+              <pre key={portId}>
+                {portId}\n{previewTestValue(item.value)}
+              </pre>
+            ) : null
+          })}
+        </div>
+      )}
+    </section>
+  )
 }
 
 export function NodeContractPanel({
@@ -202,6 +406,48 @@ export function NodeContractPanel({
     }
   }
 
+  const testNode = async (inputs: NodeTestInputs): ReturnType<typeof runNodeTest> => {
+    return runNodeTest(editor, projectId, providers, shape.id, inputs)
+  }
+
+  const syncTextInputOnBlur = (port: PortDecl, type: PortType, value: string): void => {
+    if (type !== 'text' && type !== 'markdown' && type !== 'json') return
+
+    // 文本节点的 in-text 直接写入 props.text（节点正文）
+    if (shape.props.nodeType === 'text' && port.id === 'in-text') {
+      const current = editor.getShape<NodeCardShape>(shape.id)
+      if (!current || current.props.text === value) return
+      editor.updateShape({ id: shape.id, type: 'node-card', props: { text: value } })
+      markUndoPoint(editor, 'contract-text-input')
+      return
+    }
+
+    // 其他节点的文本测试输入：持久化到 config._testInputs，下次打开面板自动回填
+    try {
+      const config = shape.props.config ? JSON.parse(shape.props.config) : {}
+      const testInputs = (config[TEST_INPUTS_KEY] ?? {}) as Record<
+        string,
+        { type: PortType; value: string }
+      >
+      if (testInputs[port.id]?.value === value) return
+      if (value) {
+        testInputs[port.id] = { type, value }
+      } else {
+        delete testInputs[port.id]
+      }
+      const hasInputs = Object.keys(testInputs).length > 0
+      if (hasInputs) config[TEST_INPUTS_KEY] = testInputs
+      else delete config[TEST_INPUTS_KEY]
+      const configStr = JSON.stringify(config)
+      const current = editor.getShape<NodeCardShape>(shape.id)
+      if (!current || current.props.config === configStr) return
+      editor.updateShape({ id: shape.id, type: 'node-card', props: { config: configStr } })
+      markUndoPoint(editor, 'contract-test-input')
+    } catch {
+      // 配置解析失败时静默跳过，不影响测试本身
+    }
+  }
+
   return (
     <aside className="node-contract-panel" aria-label="节点输入输出说明">
       <header className="contract-head">
@@ -278,6 +524,14 @@ export function NodeContractPanel({
               ports={ports.in}
               connections={incoming}
               previews={inputPreviews}
+            />
+            <TestHarness
+              key={shape.id}
+              projectId={projectId}
+              ports={ports.in}
+              onRun={testNode}
+              onTextInputCommit={syncTextInputOnBlur}
+              initialTextInputs={loadTestInputsFromConfig(shape)}
             />
             <PortRows
               title="输出"

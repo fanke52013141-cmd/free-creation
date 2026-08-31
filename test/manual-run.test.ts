@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import type { Editor } from 'tldraw'
 import {
   runNodeManually,
+  runNodeTest,
   runWorkflow,
   runWorkflowForNodes,
   runWorkflowToNode
@@ -39,6 +40,31 @@ function node(id: string, nodeType: string, text: string): NodeCardShape {
 }
 
 describe('runNodeManually · 卡片内统一执行入口', () => {
+  it('节点测试使用临时契约输入，且不污染原节点内容或运行记录', async () => {
+    const target = node('shape:test-processor', 'processor', '原始内容')
+    const shapes = new Map([[target.id, target]])
+    const editor = {
+      getCurrentPageShapes: () => Array.from(shapes.values()),
+      getShape: (id: string) => shapes.get(id),
+      getBindingsFromShape: () => [],
+      updateShape: () => undefined,
+      markHistoryStoppingPoint: () => undefined
+    } as unknown as Editor
+
+    const result = await runNodeTest(editor, 'project-1', [], target.id, {
+      'in-value': [{ kind: 'text', text: '仅用于本次测试的内容' }]
+    })
+
+    expect(result.status).toBe('done')
+    expect(result.outputs['out-value']?.value).toMatchObject({
+      kind: 'text',
+      text: '仅用于本次测试的内容'
+    })
+    expect(target.props.text).toBe('原始内容')
+    expect(target.meta.nodeRun).toBeUndefined()
+    expect(target.meta.nodeResult).toBeUndefined()
+  })
+
   it('预填真实上游投影后，按连线把值送入目标节点', async () => {
     const source = node('shape:text', 'text', '来自上游的真实文本')
     const target = node('shape:processor', 'processor', '')

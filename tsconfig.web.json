@@ -17,6 +17,18 @@
       ],
       "@shared/*": [
         "src/shared/*"
+      ],
+      "@capabilities": [
+        "src/capabilities/index.ts"
+      ],
+      "@capabilities/*": [
+        "src/capabilities/*"
+      ],
+      "@application": [
+        "src/application/index.ts"
+      ],
+      "@application/*": [
+        "src/application/*"
       ]
     }
   }

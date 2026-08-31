@@ -1,5 +1,5 @@
 // 文本节点 Body（路线图 R6：bodies.tsx 拆分）
-import { useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createShapeId, stopEventPropagation, useEditor, type TLShapeId } from 'tldraw'
 import { generateSlashPrompts, parseSlashCommand } from '../../slash-commands'
 import { markUndoPoint } from '../../../canvas/history'
@@ -13,14 +13,60 @@ export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(shape.props.text)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  // 保持最新的 text 引用，让事件监听器始终读到当前值（避免闭包过期）
+  const textRef = useRef(shape.props.text)
+  textRef.current = shape.props.text
   useWheelScroll(scrollRef)
+
+  useLayoutEffect(() => {
+    if (!editing || !textareaRef.current) return
+    const target = textareaRef.current
+    target.focus()
+    target.setSelectionRange(target.value.length, target.value.length)
+  }, [editing])
+
+  // 进入 tldraw 编辑态：告知 tldraw 此 shape 正在被编辑，
+  // 编辑期间 tldraw 不再拦截键盘事件（快捷键等），textarea 才能正常接收输入。
+  const enterEditing = (): void => {
+    setDraft(textRef.current)
+    setEditing(true)
+    editor.setEditingShape(shape.id)
+  }
+
+  const exitEditing = (): void => {
+    setEditing(false)
+    editor.setEditingShape(null)
+  }
+
+  // 组件卸载时清理 tldraw 编辑态，防止卸载后键盘仍被 tldraw 扣留。
+  useEffect(() => {
+    return () => {
+      if (editor.getEditingShapeId() === shape.id) editor.setEditingShape(null)
+    }
+  }, [editor, shape.id])
+
+  // 监听器依赖 [editing]：每次从编辑态切回展示态时，展示 div 会重建，
+  // 必须在新 div 上重新注册监听器，否则双击会失效。
+  useEffect(() => {
+    if (editing) return // 编辑态没有展示 div，无需注册
+    const element = scrollRef.current
+    if (!element) return
+    element.addEventListener('canvas:edit-text-node', enterEditing)
+    return () => element.removeEventListener('canvas:edit-text-node', enterEditing)
+  }, [editing])
+
+  // 外部修改 text（如 I/O 面板写入）时同步 draft，避免编辑器打开时显示旧值
+  useEffect(() => {
+    if (!editing) setDraft(shape.props.text)
+  }, [shape.props.text, editing])
 
   // Slash 指令检测：/九宫格 /25宫格 /三视图
   const slashCmd = parseSlashCommand(shape.props.text)
 
   const commit = (): void => {
-    setEditing(false)
-    if (draft !== shape.props.text) {
+    exitEditing()
+    if (draft !== textRef.current) {
       editor.updateShape({ id: shape.id, type: 'node-card', props: { text: draft } })
       markUndoPoint(editor, 'text-edit')
     }
@@ -69,15 +115,25 @@ export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
   if (editing) {
     return (
       <textarea
+        ref={textareaRef}
         className="node-textarea"
-        autoFocus
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => {
-          if (e.key === 'Escape') commit()
+          if (e.key === 'Escape') {
+            setDraft(textRef.current)
+            exitEditing()
+          }
+          if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') commit()
         }}
-        onPointerDown={(e) => stopEventPropagation(e)}
+        /* 仅阻止冒泡到 tldraw 画布层，不调用 preventDefault ——
+           否则浏览器无法执行 pointerdown 默认行为（聚焦文本框），导致无法输入。 */
+        onPointerDown={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
+        onContextMenu={(e) => e.stopPropagation()}
+        data-node-interactive="text-editor"
       />
     )
   }
@@ -86,10 +142,10 @@ export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
     <div
       className="node-text"
       ref={scrollRef}
+      data-node-interactive="text-content"
       onDoubleClick={(e) => {
         e.stopPropagation()
-        setDraft(shape.props.text)
-        setEditing(true)
+        enterEditing()
       }}
     >
       {shape.props.text || <span className="node-hint">双击输入文本内容</span>}

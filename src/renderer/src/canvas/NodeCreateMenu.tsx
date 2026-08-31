@@ -126,7 +126,7 @@ export function NodeCreateMenu({
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current)
   }
   const renderChoices = (): React.JSX.Element => (
-    <div className={`node-menu-list${hoverCategory === 'all' ? ' scrollbar-hidden' : ''}`}>
+    <div className="node-menu-list scrollbar-hidden">
       {submenuChoices.map((choice) => {
         const spec = getNodeType(choice.type)
         if (!spec) return null
