@@ -1,6 +1,7 @@
 // LibTV 式节点创建菜单：双击空白画布弹出（指南 1.2.1）
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { allNodeTypes, getNodeType } from '../nodes/registry'
+import { allNodeTypes, getNodeType, NODE_CATEGORIES } from '../nodes/registry'
+import type { NodeCategoryId } from '../nodes/registry'
 import type { ConnectionFrom } from '../stores/connection'
 import { Icon } from '../components/Icon'
 import { compatibleNodeCreateChoices, type NodeCreateChoice } from './node-create-options'
@@ -29,6 +30,7 @@ export function NodeCreateMenu({
 }: NodeCreateMenuProps): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   const [menuHeight, setMenuHeight] = useState(0)
+  const [activeCategory, setActiveCategory] = useState<NodeCategoryId | 'all'>('all')
 
   useEffect(() => {
     const onDown = (e: MouseEvent): void => {
@@ -59,39 +61,69 @@ export function NodeCreateMenu({
   const menuH = menuHeight || 520
   const left = Math.max(12, Math.min(x, window.innerWidth - menuW - 12))
   const top = Math.max(12, Math.min(y, window.innerHeight - menuH - 12))
-  const choices: NodeCreateChoice[] = source
+  const allChoices: NodeCreateChoice[] = source
     ? compatibleNodeCreateChoices(source)
     : allNodeTypes().map((spec) => ({ type: spec.type }))
+
+  const availableCategories = NODE_CATEGORIES.filter((cat) =>
+    allChoices.some((c) => getNodeType(c.type)?.category === cat.id)
+  )
+  const showTabs = availableCategories.length > 1
+  const choices =
+    activeCategory === 'all'
+      ? allChoices
+      : allChoices.filter((c) => getNodeType(c.type)?.category === activeCategory)
 
   return (
     <div className="node-menu" ref={ref} style={{ left, top }}>
       <div className="node-menu-title">
         {source ? `可连接 ${source.portType} 输出` : '新建节点'}
       </div>
-      {choices.map((choice) => {
-        const spec = getNodeType(choice.type)
-        if (!spec) return null
-        return (
+      {showTabs && (
+        <div className="node-menu-tabs">
           <button
-            key={`${spec.type}:${choice.targetPortId ?? 'default'}`}
-            className="node-menu-item"
-            onClick={() => onPick(choice)}
+            className={`node-menu-tab${activeCategory === 'all' ? ' active' : ''}`}
+            onClick={() => setActiveCategory('all')}
           >
-            <span className="item-icon" style={{ color: spec.color }}>
-              <Icon name={spec.icon} size={18} />
-            </span>
-            <span className="node-menu-label">
-              {spec.label}
-              {choice.targetPort && (
-                <small>
-                  {choice.targetPort.name} · {choice.targetPort.type}
-                </small>
-              )}
-            </span>
+            全部
           </button>
-        )
-      })}
-      {choices.length === 0 && <div className="node-menu-empty">没有与当前输出兼容的节点</div>}
+          {availableCategories.map((cat) => (
+            <button
+              key={cat.id}
+              className={`node-menu-tab${activeCategory === cat.id ? ' active' : ''}`}
+              onClick={() => setActiveCategory(cat.id)}
+            >
+              {cat.label}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="node-menu-list">
+        {choices.map((choice) => {
+          const spec = getNodeType(choice.type)
+          if (!spec) return null
+          return (
+            <button
+              key={`${spec.type}:${choice.targetPortId ?? 'default'}`}
+              className="node-menu-item"
+              onClick={() => onPick(choice)}
+            >
+              <span className="item-icon" style={{ color: spec.color }}>
+                <Icon name={spec.icon} size={18} />
+              </span>
+              <span className="node-menu-label">
+                {spec.label}
+                {choice.targetPort && (
+                  <small>
+                    {choice.targetPort.name} · {choice.targetPort.type}
+                  </small>
+                )}
+              </span>
+            </button>
+          )
+        })}
+        {choices.length === 0 && <div className="node-menu-empty">没有与当前筛选匹配的节点</div>}
+      </div>
       {!source && (
         <>
           <div className="node-menu-divider" />

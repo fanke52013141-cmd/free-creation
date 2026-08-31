@@ -17,6 +17,7 @@ import { DirectorStudioPanel } from './DirectorStudioPanel'
 import { useNodePanelStore } from '../stores/nodePanel'
 import { SearchPalette } from './SearchPalette'
 import { GroupOutlineLayer } from './GroupOutlineLayer'
+import { useDockMagnify } from './useDockMagnify'
 import {
   setConnectionFinishHandler,
   teardownConnectionDrag,
@@ -182,6 +183,11 @@ export function CanvasEditor({
   const [canvasTheme, setCanvasTheme] = useState<'dark' | 'light'>('dark')
   // 左侧节点面板拖拽状态
   const [nodeDrag, setNodeDrag] = useState<{ type: NodeTypeId; x: number; y: number } | null>(null)
+  // macOS Dock 风格鱼眼放大：左侧节点面板（纵向）+ 底部工具栏（横向）
+  const nodeScrollRef = useRef<HTMLDivElement>(null)
+  const paletteUtilityRef = useRef<HTMLDivElement>(null)
+  const nodeMagnify = useDockMagnify(nodeScrollRef, { direction: 'vertical', maxScale: 1.42, range: 90 })
+  const utilityMagnify = useDockMagnify(paletteUtilityRef, { direction: 'horizontal', maxScale: 1.32, range: 75 })
 
   // 执行引擎：注册 run 闭包到全局 store，顶部栏通过 store 触发（捕获 editor + projectId + providers）
   const providers = useGatewayStore((s) => s.providers)
@@ -812,7 +818,12 @@ export function CanvasEditor({
       {editorInstance && <GroupOutlineLayer editor={editorInstance} hostRef={wrapRef} />}
       {/* 左侧节点面板：悬浮图标条，点击创建或拖拽到画布 */}
       <div className="node-palette">
-        <div className="palette-node-scroll">
+        <div
+          className="palette-node-scroll"
+          ref={nodeScrollRef}
+          onPointerMove={nodeMagnify.onPointerMove}
+          onPointerLeave={nodeMagnify.onPointerLeave}
+        >
           <div className="palette-section palette-node-section">
             {nodeTypes.map((t) => (
               <Tooltip key={t.type} label={`添加${t.label}节点`}>
@@ -832,7 +843,12 @@ export function CanvasEditor({
           </div>
         </div>
       </div>
-      <div className="palette-utility">
+      <div
+        className="palette-utility"
+        ref={paletteUtilityRef}
+        onPointerMove={utilityMagnify.onPointerMove}
+        onPointerLeave={utilityMagnify.onPointerLeave}
+      >
         <div className="palette-divider" />
         <div className="palette-section">
           <Tooltip label="上传本地文件">

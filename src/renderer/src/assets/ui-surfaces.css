@@ -661,18 +661,6 @@
   overflow-x: hidden;
 }
 
-.canvas-theme-light .palette-item {
-  border-color: rgba(54, 69, 82, 0.12);
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(245, 241, 234, 0.88));
-  box-shadow: 0 5px 13px rgba(65, 54, 41, 0.08);
-}
-
-.canvas-theme-light .palette-item:hover {
-  border-color: rgba(31, 139, 193, 0.34);
-  background: #fffdfa;
-  box-shadow: 0 8px 17px rgba(65, 54, 41, 0.13);
-}
-
 .canvas-theme-light .palette-label {
   color: #354553;
 }
@@ -853,14 +841,6 @@
 
 .palette-item {
   will-change: transform;
-}
-
-.palette-item:hover {
-  transform: translateX(2px) scale(1.075);
-}
-
-.palette-item:hover .palette-icon {
-  transform: scale(1.13);
 }
 
 /* 统一的 portal 提示层：不受左栏滚动容器裁切，也可被其他高频图标复用。 */
@@ -1264,15 +1244,18 @@
   white-space: nowrap;
 }
 
-/* Canvas dock final overrides: this file loads after app.css, so keep the
-   bottom utility placement and Dock magnification at the final cascade layer. */
+/* Canvas dock final overrides: navigation stays in bottom-left corner. */
 .canvas-dock {
-  left: 300px;
+  position: fixed;
+  left: 14px;
+  bottom: 14px;
 }
 
-.palette-node-section .palette-item:hover,
-.palette-utility .palette-item:hover {
-  transform: translateY(-3px) scale(1.14);
+.dock-controls {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
 }
 
 @media (max-width: 760px) {

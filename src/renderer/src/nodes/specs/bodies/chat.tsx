@@ -3,12 +3,14 @@ import { useEffect } from 'react'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { parseChat } from '../../chatData'
 import { Icon } from '../../../components/Icon'
+import { NoModelHint } from './shared'
 import type { NodeBodyProps } from '../../registry'
 
 export function ChatBody({ shape }: NodeBodyProps): React.JSX.Element {
   const providers = useGatewayStore((s) => s.providers)
   const loaded = useGatewayStore((s) => s.loaded)
   const loadProviders = useGatewayStore((s) => s.load)
+  const openSettings = useGatewayStore((s) => s.openSettings)
   const options = modelsByModality(providers, 'text')
   const data = parseChat(shape.props.text)
 
@@ -17,6 +19,11 @@ export function ChatBody({ shape }: NodeBodyProps): React.JSX.Element {
   }, [loaded, loadProviders])
 
   const selectedModel = options.find((o) => o.key === data.modelKey)
+
+  if (options.length === 0) {
+    return <NoModelHint onOpen={() => openSettings()} />
+  }
+
   const modelName = selectedModel
     ? selectedModel.model.name || selectedModel.model.id
     : '未选择模型'

@@ -14,6 +14,17 @@ import type { NodeCardShape } from '../canvas/NodeCardShape'
 import type { IconName } from '../components/Icon'
 import type { RawNodeOutputs } from './nodeValues'
 
+/** 节点分类，用于创建菜单的二级筛选。顺序即 Tab 顺序。 */
+export const NODE_CATEGORIES = [
+  { id: 'input', label: '素材输入' },
+  { id: 'image', label: '图像处理' },
+  { id: 'video', label: '视频处理' },
+  { id: 'audio', label: '音频语音' },
+  { id: 'logic', label: '逻辑流程' }
+] as const
+
+export type NodeCategoryId = (typeof NODE_CATEGORIES)[number]['id']
+
 export interface PreviewPayload {
   kind: 'image' | 'video' | 'audio'
   url: string
@@ -42,6 +53,8 @@ export interface NodeTypeSpec {
   defaultSize: { w: number; h: number }
   /** 节点的业务职责；在选中节点的右侧 I/O 面板中常驻呈现。 */
   description: string
+  /** 创建菜单二级筛选分类。 */
+  category: NodeCategoryId
   /** 是否出现在新增节点入口；退役节点保留执行与数据兼容，但不允许再新建。 */
   creatable?: boolean
   /** 输入/输出端口声明，连线类型校验与端口圆点渲染的依据 */
@@ -171,6 +184,9 @@ function validateNodeTypeSpec(spec: NodeTypeSpec): void {
   }
   if (!spec.label.trim()) errors.push('label 不能为空')
   if (!spec.description.trim()) errors.push('description 不能为空')
+  if (!NODE_CATEGORIES.some((c) => c.id === spec.category)) {
+    errors.push('category 必须是已注册的分类之一')
+  }
   if (
     spec.executionMode !== undefined &&
     spec.executionMode !== 'auto' &&

@@ -51,6 +51,18 @@ export function NodeContextMenu({
         className="node-menu-item"
         onClick={() =>
           run(() => {
+            editor.setEditingShape(ids[0])
+          })
+        }
+      >
+        <Icon name="edit" size={16} />
+        编辑
+      </button>
+      <div className="node-menu-divider" />
+      <button
+        className="node-menu-item"
+        onClick={() =>
+          run(() => {
             markUndoPoint(editor, 'duplicate-nodes')
             editor.duplicateShapes(ids)
           })

@@ -195,20 +195,15 @@ body {
 /* ── Left palette and bottom dock ───────────────────────────────────────── */
 .node-palette {
   top: 12px;
-  bottom: 18px;
+  bottom: 68px;
 }
 
 .palette-item {
-  border-color: rgba(231, 238, 247, 0.07);
-  background: rgba(28, 33, 40, 0.88);
   color: var(--muted);
 }
 
 .palette-item:hover {
-  border-color: rgba(231, 238, 247, 0.16);
-  background: rgba(40, 46, 55, 0.96);
   color: var(--txt);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
 }
 
 .palette-node-item {
@@ -223,9 +218,7 @@ body {
   font-weight: 550;
 }
 
-.dock-minimap,
-.dock-controls,
-.multi-select-toolbar {
+.dock-minimap {
   border-color: rgba(231, 238, 247, 0.11);
   background: rgba(27, 32, 39, 0.9);
   box-shadow: var(--elevation-float);
@@ -724,30 +717,6 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
 
 .palette-item {
   position: relative;
-  border-color: rgba(231, 238, 247, 0.055);
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.035), transparent 55%), rgba(27, 32, 39, 0.9);
-}
-
-.palette-item::after {
-  position: absolute;
-  right: 8px;
-  bottom: 3px;
-  left: 8px;
-  height: 1px;
-  border-radius: 99px;
-  content: '';
-  background: currentColor;
-  opacity: 0;
-  transform: scaleX(0.45);
-  transition:
-    opacity 140ms ease,
-    transform 140ms ease;
-}
-
-.palette-item:hover::after {
-  opacity: 0.72;
-  transform: scaleX(1);
 }
 
 .palette-label {
@@ -918,7 +887,13 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
 }
 
 .dock-tool-group,
-.dock-zoom,
+.dock-zoom {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
 .multiselect-toolbar {
   border-color: rgba(231, 238, 247, 0.11);
   background: rgba(27, 32, 39, 0.91);
@@ -927,9 +902,25 @@ div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
 }
 
 .dock-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 42px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), color 0.15s ease;
+}
+
+.dock-btn:hover {
+  color: var(--brand);
+}
+
+.dock-btn:active {
+  transform: scale(0.97);
 }
 
 /* 选中节点时，运行是该节点的就地动作，贴在标题右上角而不是另起一个浮动工具栏。 */

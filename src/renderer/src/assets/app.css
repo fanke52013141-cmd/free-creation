@@ -732,7 +732,7 @@ select:focus-visible,
 }
 
 .palette-node-scroll {
-  flex: 0 1 640px;
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   overflow-x: visible;
@@ -757,18 +757,13 @@ select:focus-visible,
 
 .palette-utility {
   position: fixed;
-  left: 14px;
+  right: 14px;
   bottom: 14px;
   z-index: var(--z-dock);
   display: flex;
   align-items: center;
   gap: 5px;
   padding: 5px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: rgba(27, 32, 39, 0.9);
-  box-shadow: var(--elevation-float);
-  backdrop-filter: blur(14px);
   overflow: visible;
 }
 
@@ -795,20 +790,12 @@ select:focus-visible,
   font-size: 10px;
 }
 
-/* 与底部入口栏错开，避免小地图和资产/历史按钮互相遮挡。 */
-.canvas-dock {
-  left: 300px;
-}
+/* Navigation and utility dock positions are finalized in ui-surfaces.css. */
 
 @media (max-width: 760px) {
-  .canvas-dock {
-    left: 14px;
-    bottom: 76px;
-  }
-
   .palette-utility {
     transform: scale(0.9);
-    transform-origin: left bottom;
+    transform-origin: right bottom;
   }
 }
 /* Dock 式邻近放大：只改变视觉变换，不改变按钮布局和命中区域。 */
@@ -820,23 +807,6 @@ select:focus-visible,
 
 .palette-item:hover {
   z-index: 3;
-  transform: translateY(-3px) scale(1.14);
-}
-
-.palette-node-section .palette-item:has(+ .palette-item:hover) {
-  transform: translateY(-1px) scale(1.06);
-}
-
-.palette-node-section .palette-item:hover + .palette-item {
-  transform: translateY(1px) scale(1.06);
-}
-
-.palette-utility .palette-item:has(+ .palette-item:hover) {
-  transform: translateX(-3px) translateY(-1px) scale(1.08);
-}
-
-.palette-utility .palette-item:hover + .palette-item {
-  transform: translateX(3px) translateY(-1px) scale(1.08);
 }
 
 .palette-item {
@@ -847,30 +817,20 @@ select:focus-visible,
   height: 38px;
   margin: 0 auto;
   padding: 0;
-  border: 1px solid transparent;
+  border: none;
   border-radius: 10px;
-  background: rgba(31, 31, 31, 0.92);
+  background: transparent;
   color: var(--muted);
   cursor: pointer;
   transition:
     transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 0.18s ease,
-    background 0.15s ease;
+    color 0.15s ease;
   touch-action: none;
-  box-shadow: none;
   flex-shrink: 0;
 }
 
 .palette-item:hover {
-  background: var(--surface-2);
   color: var(--brand);
-  border-color: var(--border-soft);
-  transform: translateY(-1px);
-  box-shadow: var(--elevation-1);
-}
-
-.palette-item:hover .palette-icon {
-  transform: scale(1.04);
 }
 
 .palette-item:active {
@@ -953,19 +913,62 @@ select:focus-visible,
 .node-menu {
   position: fixed;
   width: 224px;
-  max-height: calc(100vh - 24px);
+  max-height: 400px;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 6px;
   z-index: var(--z-panel);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
-  overflow-y: auto;
-  scrollbar-width: none;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
-.node-menu::-webkit-scrollbar {
-  display: none;
+.node-menu-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px 4px 6px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 4px;
+}
+
+.node-menu-tab {
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 4px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.node-menu-tab:hover {
+  color: var(--txt);
+  background: var(--card-hover);
+}
+
+.node-menu-tab.active {
+  color: var(--brand);
+  background: rgba(103, 202, 250, 0.12);
+}
+
+.node-menu-list {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.node-menu-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.node-menu-list::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 2px;
 }
 
 .node-menu-title {
@@ -2120,9 +2123,6 @@ select:focus-visible,
   display: flex;
   align-items: center;
   gap: 2px;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 8px;
   padding: 3px;
 }
 
@@ -2130,9 +2130,6 @@ select:focus-visible,
   display: flex;
   align-items: center;
   gap: 2px;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 8px;
   padding: 3px;
 }
 

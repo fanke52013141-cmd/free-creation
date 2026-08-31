@@ -150,6 +150,7 @@ export function registerBaseNodeTypes(): void {
     color: '#8ab4f8',
     defaultSize: { w: 340, h: 260 },
     description: '可编辑的原始文本。连线输出会作为下游节点的文本输入。',
+    category: 'input',
     ports: {
       in: [
         input('in-text', '文本', 'text', '一个或多个上游文本，执行时与节点内文本合并。', {
@@ -170,6 +171,7 @@ export function registerBaseNodeTypes(): void {
     color: '#34d399',
     defaultSize: { w: 340, h: 260 },
     description: '图片资产节点，只负责保存和输出一张已导入的图片，不承担生成逻辑。',
+    category: 'input',
     ports: {
       in: [],
       out: [output('out-image', '图片', 'image', '已导入并落盘的图片资产引用。')]
@@ -187,6 +189,7 @@ export function registerBaseNodeTypes(): void {
     defaultSize: { w: 340, h: 260 },
     description:
       '对一张上游图片执行本地矩形或四角透视裁剪。每次运行产生新的图片资产，原图保持不变。',
+    category: 'image',
     ports: {
       in: [
         input('in-image', '原图', 'image', '必须连接的一张源图片；裁剪参数按其原始比例解释。', {
@@ -209,6 +212,7 @@ export function registerBaseNodeTypes(): void {
     defaultSize: { w: 340, h: 260 },
     description:
       '把一张上游图片按行列派生为多张独立图片。面积缩放以每个格子的中心为锚点；输出同时提供当前图片和可批处理的图片集合。',
+    category: 'image',
     ports: {
       in: [
         input('in-image', '原图', 'image', '必须连接的一张源图片；按行列从左到右、从上到下拆分。', {
@@ -242,6 +246,7 @@ export function registerBaseNodeTypes(): void {
     defaultSize: { w: 340, h: 260 },
     description:
       '根据提示词生成图片；可连接一张旧版参考图及最多四张有序参考图，生成结果从图片端口输出。',
+    category: 'input',
     ports: {
       in: [
         input('in-image', '参考图', 'image', '可选的一张旧版参考图片，用于兼容图生图或风格参考。'),
@@ -279,6 +284,7 @@ export function registerBaseNodeTypes(): void {
     color: '#f97316',
     defaultSize: { w: 340, h: 260 },
     description: '以一张上游图片为原图，结合标注与文字说明生成新的图片；原图保持不变。',
+    category: 'image',
     ports: {
       in: [
         input('in-image', '原图', 'image', '必须连接的一张待修改图片。', { required: true }),
@@ -302,6 +308,7 @@ export function registerBaseNodeTypes(): void {
     defaultSize: { w: 340, h: 260 },
     description:
       '根据文本、首尾帧或多模态参考生成视频。所有参考素材都必须通过明确端口连入，输出可供预览或下载的视频资产。',
+    category: 'input',
     ports: {
       in: [
         input('in-image', '首帧图', 'image', '可选的单张首帧图片，用于图生视频。'),
@@ -359,6 +366,7 @@ export function registerBaseNodeTypes(): void {
     color: '#fb7185',
     defaultSize: { w: 340, h: 260 },
     description: '从上游视频提取首帧、尾帧或任意指定时刻的画面，输出新的 PNG/JPG 图片资产。',
+    category: 'video',
     ports: {
       in: [input('in-video', '源视频', 'video', '必须连接的一段源视频。', { required: true })],
       out: [output('out-image', '视频帧', 'image', '指定时间点解码得到的新图片资产。')]
@@ -376,6 +384,7 @@ export function registerBaseNodeTypes(): void {
     color: '#ec4899',
     defaultSize: { w: 340, h: 260 },
     description: '从上游视频按起止毫秒精确截取片段，默认重编码输出 MP4 视频资产。',
+    category: 'video',
     ports: {
       in: [input('in-video', '源视频', 'video', '必须连接的一段源视频。', { required: true })],
       out: [output('out-video', '视频片段', 'video', '精确重编码后的 MP4 视频片段。')]
@@ -393,6 +402,7 @@ export function registerBaseNodeTypes(): void {
     color: '#f59e0b',
     defaultSize: { w: 340, h: 260 },
     description: '从上游视频的指定时间范围忠实提取原始音轨，输出 WAV 或 M4A 音频资产。',
+    category: 'video',
     ports: {
       in: [input('in-video', '源视频', 'video', '必须连接的一段源视频。', { required: true })],
       out: [output('out-audio', '音频片段', 'audio', '从指定范围提取并转码的新音频资产。')]
@@ -411,6 +421,7 @@ export function registerBaseNodeTypes(): void {
     defaultSize: { w: 340, h: 260 },
     description:
       '将一段音频分离为人声与伴奏。快速模式使用 FFmpeg 滤镜增强，高质量模式使用本地 AI 模型。',
+    category: 'audio',
     ports: {
       in: [
         input('in-audio', '源音频', 'audio', '必须连接的一段完整音频资产。', { required: true })
@@ -435,6 +446,7 @@ export function registerBaseNodeTypes(): void {
     color: '#fbbf24',
     defaultSize: { w: 340, h: 260 },
     description: '音频资产节点：导入本地音频或承接一段上游音频，只负责保存、预览和输出资产。',
+    category: 'input',
     ports: {
       in: [input('in-audio', '音频', 'audio', '可选的上游音频资产；接入后作为本节点音频来源。')],
       out: [output('out-audio', '音频', 'audio', '已导入或承接的音频资产引用。')]
@@ -451,6 +463,7 @@ export function registerBaseNodeTypes(): void {
     color: '#fbbf24',
     defaultSize: { w: 340, h: 260 },
     description: '通用文本配音节点：将节点内或上游文本交给已配置的语音模型，生成新的音频资产。',
+    category: 'audio',
     ports: {
       in: [
         input('in-text', '朗读文本', 'text', '节点内文本与一个或多个上游文本合并后进行朗读。', {
@@ -472,6 +485,7 @@ export function registerBaseNodeTypes(): void {
     defaultSize: { w: 340, h: 260 },
     description:
       '语音克隆节点：用本地 ComfyUI IndexTTS-2.5 参考一段音色并朗读文本，输出新的音频资产。',
+    category: 'audio',
     ports: {
       in: [
         input('in-audio', '参考语音', 'audio', '可选的上游参考音频；也可在节点内上传。'),
@@ -493,6 +507,7 @@ export function registerBaseNodeTypes(): void {
     color: '#a78bfa',
     defaultSize: { w: 340, h: 260 },
     description: '与文本模型对话。上游文本会成为本轮输入，最后一条助手回复作为文本输出。',
+    category: 'audio',
     ports: {
       in: [
         input('in-text', '文本', 'text', '作为本轮用户消息或上下文注入的上游文本。', {
@@ -517,7 +532,8 @@ export function registerScriptNodeType(): void {
     icon: 'script',
     color: '#fb923c',
     defaultSize: { w: 340, h: 260 },
-    description: '旧版复合脚本节点，仅为已有项目兼容保留；新流程请使用“文本 → 处理 → JSON”。',
+    description: '旧版复合脚本节点，仅为已有项目兼容保留；新流程请使用"文本 → 处理 → JSON"。',
+    category: 'logic',
     creatable: false,
     ports: {
       in: [
@@ -554,6 +570,7 @@ export function registerExtendedNodeTypes(): void {
     color: '#22d3ee',
     defaultSize: { w: 340, h: 260 },
     description: '通用变量处理节点。收到上游值后原样传递；未连线时可使用固定值。',
+    category: 'logic',
     ports: {
       in: [input('in-value', '输入变量', 'any', '需要原样传递或后续转换的单个变量。')],
       out: [output('out-value', '输出变量', 'any', '处理完成后的变量；实际类型由配置决定。')]
@@ -570,6 +587,7 @@ export function registerExtendedNodeTypes(): void {
     color: '#c084fc',
     defaultSize: { w: 340, h: 260 },
     description: '结构化 JSON 数据节点。可接收 JSON 或可解析的文本，并以字段卡片形式呈现。',
+    category: 'logic',
     ports: {
       in: [
         input('in-json', '数据', 'json', '一个或多个需要汇总或展示的结构化值。', {
@@ -593,6 +611,7 @@ export function registerExtendedNodeTypes(): void {
     defaultSize: { w: 340, h: 260 },
     description:
       '通用结构编辑与字段映射节点。选择输出 Schema，在正文中维护 JSON，并只通过已连接的上下文端口引用数据。',
+    category: 'logic',
     ports: {
       in: [
         input(
@@ -650,6 +669,7 @@ export function registerExtendedNodeTypes(): void {
     color: '#94a3b8',
     defaultSize: { w: 340, h: 260 },
     description: '代码转换节点。读取命名输入变量，执行后将 return 值写入命名输出变量。',
+    category: 'logic',
     ports: {
       in: [
         input('in-text', '文本输入', 'text', '代码运行时 input.text 读取的合并文本。', {
@@ -723,6 +743,7 @@ export function registerExtendedNodeTypes(): void {
     color: '#60a5fa',
     defaultSize: { w: 340, h: 260 },
     description: '将分镜 JSON 呈现为可编辑的镜头卡片，并输出结构化分镜数据与文字摘要。',
+    category: 'logic',
     ports: {
       in: [
         input('in-json', '分镜数据', 'json', '符合分镜 Schema 的镜头列表。', {
@@ -752,6 +773,7 @@ export function registerExtendedNodeTypes(): void {
     defaultSize: { w: 340, h: 260 },
     description:
       '一次性、可复跑的工作流转换：把上游文本或 JSON 交给文本模型，输出文本、Markdown 或符合指定 Schema 的 JSON。不保留多轮历史，脚本/数据转换用它，对话节点用于多轮交互。',
+    category: 'logic',
     ports: {
       in: [
         input('in-text', '文本', 'text', '一个或多个上游文本，作为本次转换的输入。', {
@@ -785,6 +807,7 @@ export function registerExtendedNodeTypes(): void {
     defaultSize: { w: 340, h: 260 },
     description:
       '列表批处理控制：把 in-list 的每个元素按顺序作为一次「循环体」执行，逐项驱动下游子流程节点（如生图/视频/文本节点），并输出结构化结果列表。支持失败策略、重试、限数与取消。',
+    category: 'logic',
     ports: {
       in: [
         input('in-list', '列表', 'json', '要逐项批量处理的列表（每个元素作为一次循环体输入）。', {
@@ -823,6 +846,7 @@ export function registerExtendedNodeTypes(): void {
     defaultSize: { w: 340, h: 260 },
     description:
       '3D 白模预演工作区。接收分镜、场景参考图与机位参数；只有用户明确发布后，帧、预演视频和机位参数才会成为下游真实输入。',
+    category: 'logic',
     executionMode: 'manual-publish',
     ports: {
       in: [

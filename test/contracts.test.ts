@@ -105,6 +105,7 @@ describe('collectContractInputs · 缺失与无效输入', () => {
       color: '#fff',
       defaultSize: { w: 340, h: 260 },
       description: '测试必填输入校验。',
+      category: 'input',
       ports: {
         in: [
           {

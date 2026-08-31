@@ -128,6 +128,7 @@ describe('registerNodeType · 注册时硬校验门禁', () => {
       color: '#fff',
       defaultSize: { w: 340, h: 260 },
       description: '测试用最小合法节点。',
+      category: 'input',
       ports: {
         in: [
           {

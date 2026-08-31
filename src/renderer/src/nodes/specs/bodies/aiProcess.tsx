@@ -92,6 +92,10 @@ export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
 
   const summary = resultSummary(storedResult)
 
+  if (options.length === 0) {
+    return <NoModelHint onOpen={() => openSettings()} />
+  }
+
   return (
     <div className="ai-process-body" ref={scrollRef}>
       <div className="ai-process-config">
