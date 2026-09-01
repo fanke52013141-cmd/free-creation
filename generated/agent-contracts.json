@@ -2,7 +2,7 @@
   "mcpTools": [
     {
       "name": "node.chat",
-      "description": "AI 对话 — 使用大语言模型进行文本对话。",
+      "description": "对话 — 与文本模型对话。上游文本会成为本轮输入，最后一条助手回复作为文本输出。",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -34,44 +34,16 @@
     },
     {
       "name": "node.director",
-      "description": "导演台 — 编排多步骤创作流程的总控节点。",
+      "description": "3D 预演台 — 3D 白模预演工作区。接收分镜、场景参考图与机位参数；只有用户明确发布后，帧、预演视频和机位参数才会成为下游真实输入。",
       "inputSchema": {
         "type": "object",
-        "properties": {
-          "providerId": {
-            "type": "string",
-            "description": "供应商 ID"
-          },
-          "modelId": {
-            "type": "string",
-            "description": "模型 ID"
-          }
-        },
-        "required": [
-          "providerId",
-          "modelId"
-        ]
+        "properties": {},
+        "required": []
       }
     },
     {
       "name": "node.ai-process",
-      "description": "AI 流程 — 自定义多步 AI 处理流程。",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "steps": {
-            "type": "array",
-            "description": "处理步骤"
-          }
-        },
-        "required": [
-          "steps"
-        ]
-      }
-    },
-    {
-      "name": "node.speech",
-      "description": "语音对话 — 语音输入与 AI 对话。",
+      "description": "AI 处理 — 一次性、可复跑的工作流转换：把上游文本或 JSON 交给文本模型，输出文本、Markdown 或符合指定 Schema 的 JSON。不保留多轮历史，脚本/数据转换用它，对话节点用于多轮交互。",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -92,59 +64,30 @@
     },
     {
       "name": "node.storyboard",
-      "description": "分镜生成 — 根据文本生成分镜脚本（镜头列表 JSON）。",
+      "description": "分镜板 — 将分镜 JSON 呈现为可编辑的镜头卡片，并输出结构化分镜数据与文字摘要。",
       "inputSchema": {
         "type": "object",
-        "properties": {
-          "providerId": {
-            "type": "string",
-            "description": "供应商 ID"
-          },
-          "modelId": {
-            "type": "string",
-            "description": "模型 ID"
-          },
-          "shotCount": {
-            "type": "number",
-            "description": "期望镜头数",
-            "minimum": 1,
-            "maximum": 50
-          }
-        },
-        "required": [
-          "providerId",
-          "modelId"
-        ]
+        "properties": {},
+        "required": []
       }
     },
     {
       "name": "node.structured",
-      "description": "结构化提取 — 使用 AI 从文本中提取结构化 JSON 数据。",
+      "description": "结构数据 — 通用结构编辑与字段映射节点。选择输出 Schema，在正文中维护 JSON，并只通过已连接的上下文端口引用数据。",
       "inputSchema": {
         "type": "object",
         "properties": {
-          "providerId": {
+          "schemaId": {
             "type": "string",
-            "description": "供应商 ID"
-          },
-          "modelId": {
-            "type": "string",
-            "description": "模型 ID"
-          },
-          "schema": {
-            "type": "object",
-            "description": "期望的 JSON Schema"
+            "description": "所选输出 Schema 的 ID"
           }
         },
-        "required": [
-          "providerId",
-          "modelId"
-        ]
+        "required": []
       }
     },
     {
       "name": "node.audio",
-      "description": "音频 — 导入本地音频文件，作为下游节点的音频输入。",
+      "description": "音频 — 音频资产节点：导入本地音频或承接一段上游音频，只负责保存、预览和输出资产。",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -157,8 +100,17 @@
       }
     },
     {
+      "name": "node.speech",
+      "description": "配音 — 通用文本配音节点：将节点内或上游文本交给已配置的语音模型，生成新的音频资产。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
       "name": "node.tts",
-      "description": "语音合成 — 将文本转换为语音。",
+      "description": "语音克隆 — 语音克隆节点：用本地 ComfyUI IndexTTS-2.5 参考一段音色并朗读文本，输出新的音频资产。",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -179,7 +131,7 @@
     },
     {
       "name": "node.vocal-separate",
-      "description": "人声分离 — 将音频分离为人声和伴奏。",
+      "description": "人声分离 — 将一段音频分离为人声与伴奏。快速模式使用 FFmpeg 滤镜增强，高质量模式使用本地 AI 模型。",
       "inputSchema": {
         "type": "object",
         "properties": {},
@@ -188,7 +140,7 @@
     },
     {
       "name": "node.code",
-      "description": "代码执行 — 执行 JavaScript/TypeScript 代码片段。",
+      "description": "代码 — 代码转换节点。读取命名输入变量，执行后将 return 值写入命名输出变量。",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -204,7 +156,7 @@
     },
     {
       "name": "node.iterate",
-      "description": "循环迭代 — 对列表中的每一项执行循环体子流程。",
+      "description": "循环 — 列表批处理控制：把 in-list 的每个元素按顺序作为一次「循环体」执行，逐项驱动下游子流程节点（如生图/视频/文本节点），并输出结构化结果列表。支持失败策略、重试、限数与取消。",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -219,7 +171,7 @@
     },
     {
       "name": "node.image-crop",
-      "description": "图片裁剪 — 按照固定比例或自由区域裁剪图片。",
+      "description": "裁剪 — 对一张上游图片执行本地矩形或四角透视裁剪。每次运行产生新的图片资产，原图保持不变。",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -255,7 +207,7 @@
     },
     {
       "name": "node.image-edit",
-      "description": "图片修改 — 使用 AI 模型对已有图片进行修改和重绘。",
+      "description": "修改 — 以一张上游图片为原图，结合标注与文字说明生成新的图片；原图保持不变。",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -280,7 +232,7 @@
     },
     {
       "name": "node.image-gen",
-      "description": "图片生成 — 使用 AI 模型根据提示词生成图片。",
+      "description": "生图 — 根据提示词生成图片；可连接一张旧版参考图及最多四张有序参考图，生成结果从图片端口输出。",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -317,7 +269,7 @@
     },
     {
       "name": "node.image",
-      "description": "图片 — 导入本地图片文件，作为下游节点的图片输入。",
+      "description": "图片 — 图片资产节点，只负责保存和输出一张已导入的图片，不承担生成逻辑。",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -331,7 +283,7 @@
     },
     {
       "name": "node.image-split",
-      "description": "宫格拆分 — 将一张图片按 N×M 宫格拆分为多张子图。",
+      "description": "拆分 — 把一张上游图片按行列派生为多张独立图片。面积缩放以每个格子的中心为锚点；输出同时提供当前图片和可批处理的图片集合。",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -358,7 +310,7 @@
     },
     {
       "name": "node.json",
-      "description": "JSON — 结构化 JSON 数据，作为下游节点的 JSON 输入。",
+      "description": "JSON — 结构化 JSON 数据节点。可接收 JSON 或可解析的文本，并以字段卡片形式呈现。",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -372,18 +324,11 @@
     },
     {
       "name": "node.processor",
-      "description": "文本处理器 — 对文本执行格式化、提取或变换。",
+      "description": "处理 — 通用变量处理节点。收到上游值后原样传递；未连线时可使用固定值。",
       "inputSchema": {
         "type": "object",
-        "properties": {
-          "template": {
-            "type": "string",
-            "description": "处理模板（支持变量替换）"
-          }
-        },
-        "required": [
-          "template"
-        ]
+        "properties": {},
+        "required": []
       }
     },
     {
@@ -402,7 +347,7 @@
     },
     {
       "name": "node.video-audio",
-      "description": "视频提取音频 — 从视频中提取音轨。",
+      "description": "提音 — 从上游视频的指定时间范围忠实提取原始音轨，输出 WAV 或 M4A 音频资产。",
       "inputSchema": {
         "type": "object",
         "properties": {},
@@ -411,7 +356,7 @@
     },
     {
       "name": "node.video-clip",
-      "description": "视频截取 — 截取视频的指定时间段。",
+      "description": "截取 — 从上游视频按起止毫秒精确截取片段，默认重编码输出 MP4 视频资产。",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -434,7 +379,7 @@
     },
     {
       "name": "node.video-frame",
-      "description": "视频取帧 — 从视频中按时间点提取帧画面。",
+      "description": "取帧 — 从上游视频提取首帧、尾帧或任意指定时刻的画面，输出新的 PNG/JPG 图片资产。",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -454,23 +399,30 @@
     },
     {
       "name": "node.video",
-      "description": "视频 — 导入本地视频文件，作为下游节点的视频输入。",
+      "description": "视频 — 根据文本、首尾帧或多模态参考生成视频。所有参考素材都必须通过明确端口连入，输出可供预览或下载的视频资产。",
       "inputSchema": {
         "type": "object",
         "properties": {
-          "mediaId": {
+          "providerId": {
             "type": "string",
-            "description": "已导入的媒体资产 ID"
+            "description": "供应商 ID"
+          },
+          "modelId": {
+            "type": "string",
+            "description": "模型 ID"
           }
         },
-        "required": []
+        "required": [
+          "providerId",
+          "modelId"
+        ]
       }
     }
   ],
   "cliCommands": [
     {
       "command": "chat",
-      "description": "AI 对话: 使用大语言模型进行文本对话。",
+      "description": "对话: 与文本模型对话。上游文本会成为本轮输入，最后一条助手回复作为文本输出。",
       "options": [
         {
           "name": "--providerId",
@@ -501,37 +453,12 @@
     },
     {
       "command": "director",
-      "description": "导演台: 编排多步骤创作流程的总控节点。",
-      "options": [
-        {
-          "name": "--providerId",
-          "type": "string",
-          "description": "供应商 ID",
-          "required": true
-        },
-        {
-          "name": "--modelId",
-          "type": "string",
-          "description": "模型 ID",
-          "required": true
-        }
-      ]
+      "description": "3D 预演台: 3D 白模预演工作区。接收分镜、场景参考图与机位参数；只有用户明确发布后，帧、预演视频和机位参数才会成为下游真实输入。",
+      "options": []
     },
     {
       "command": "ai-process",
-      "description": "AI 流程: 自定义多步 AI 处理流程。",
-      "options": [
-        {
-          "name": "--steps",
-          "type": "array",
-          "description": "处理步骤",
-          "required": true
-        }
-      ]
-    },
-    {
-      "command": "speech",
-      "description": "语音对话: 语音输入与 AI 对话。",
+      "description": "AI 处理: 一次性、可复跑的工作流转换：把上游文本或 JSON 交给文本模型，输出文本、Markdown 或符合指定 Schema 的 JSON。不保留多轮历史，脚本/数据转换用它，对话节点用于多轮交互。",
       "options": [
         {
           "name": "--providerId",
@@ -549,55 +476,24 @@
     },
     {
       "command": "storyboard",
-      "description": "分镜生成: 根据文本生成分镜脚本（镜头列表 JSON）。",
-      "options": [
-        {
-          "name": "--providerId",
-          "type": "string",
-          "description": "供应商 ID",
-          "required": true
-        },
-        {
-          "name": "--modelId",
-          "type": "string",
-          "description": "模型 ID",
-          "required": true
-        },
-        {
-          "name": "--shotCount",
-          "type": "number",
-          "description": "期望镜头数",
-          "required": false
-        }
-      ]
+      "description": "分镜板: 将分镜 JSON 呈现为可编辑的镜头卡片，并输出结构化分镜数据与文字摘要。",
+      "options": []
     },
     {
       "command": "structured",
-      "description": "结构化提取: 使用 AI 从文本中提取结构化 JSON 数据。",
+      "description": "结构数据: 通用结构编辑与字段映射节点。选择输出 Schema，在正文中维护 JSON，并只通过已连接的上下文端口引用数据。",
       "options": [
         {
-          "name": "--providerId",
+          "name": "--schemaId",
           "type": "string",
-          "description": "供应商 ID",
-          "required": true
-        },
-        {
-          "name": "--modelId",
-          "type": "string",
-          "description": "模型 ID",
-          "required": true
-        },
-        {
-          "name": "--schema",
-          "type": "object",
-          "description": "期望的 JSON Schema",
+          "description": "所选输出 Schema 的 ID",
           "required": false
         }
       ]
     },
     {
       "command": "audio",
-      "description": "音频: 导入本地音频文件，作为下游节点的音频输入。",
+      "description": "音频: 音频资产节点：导入本地音频或承接一段上游音频，只负责保存、预览和输出资产。",
       "options": [
         {
           "name": "--mediaId",
@@ -608,8 +504,13 @@
       ]
     },
     {
+      "command": "speech",
+      "description": "配音: 通用文本配音节点：将节点内或上游文本交给已配置的语音模型，生成新的音频资产。",
+      "options": []
+    },
+    {
       "command": "tts",
-      "description": "语音合成: 将文本转换为语音。",
+      "description": "语音克隆: 语音克隆节点：用本地 ComfyUI IndexTTS-2.5 参考一段音色并朗读文本，输出新的音频资产。",
       "options": [
         {
           "name": "--voice",
@@ -628,12 +529,12 @@
     },
     {
       "command": "vocal-separate",
-      "description": "人声分离: 将音频分离为人声和伴奏。",
+      "description": "人声分离: 将一段音频分离为人声与伴奏。快速模式使用 FFmpeg 滤镜增强，高质量模式使用本地 AI 模型。",
       "options": []
     },
     {
       "command": "code",
-      "description": "代码执行: 执行 JavaScript/TypeScript 代码片段。",
+      "description": "代码: 代码转换节点。读取命名输入变量，执行后将 return 值写入命名输出变量。",
       "options": [
         {
           "name": "--code",
@@ -645,7 +546,7 @@
     },
     {
       "command": "iterate",
-      "description": "循环迭代: 对列表中的每一项执行循环体子流程。",
+      "description": "循环: 列表批处理控制：把 in-list 的每个元素按顺序作为一次「循环体」执行，逐项驱动下游子流程节点（如生图/视频/文本节点），并输出结构化结果列表。支持失败策略、重试、限数与取消。",
       "options": [
         {
           "name": "--variableName",
@@ -658,7 +559,7 @@
     },
     {
       "command": "image-crop",
-      "description": "图片裁剪: 按照固定比例或自由区域裁剪图片。",
+      "description": "裁剪: 对一张上游图片执行本地矩形或四角透视裁剪。每次运行产生新的图片资产，原图保持不变。",
       "options": [
         {
           "name": "--mode",
@@ -683,7 +584,7 @@
     },
     {
       "command": "image-edit",
-      "description": "图片修改: 使用 AI 模型对已有图片进行修改和重绘。",
+      "description": "修改: 以一张上游图片为原图，结合标注与文字说明生成新的图片；原图保持不变。",
       "options": [
         {
           "name": "--providerId",
@@ -707,7 +608,7 @@
     },
     {
       "command": "image-gen",
-      "description": "图片生成: 使用 AI 模型根据提示词生成图片。",
+      "description": "生图: 根据提示词生成图片；可连接一张旧版参考图及最多四张有序参考图，生成结果从图片端口输出。",
       "options": [
         {
           "name": "--providerId",
@@ -738,7 +639,7 @@
     },
     {
       "command": "image",
-      "description": "图片: 导入本地图片文件，作为下游节点的图片输入。",
+      "description": "图片: 图片资产节点，只负责保存和输出一张已导入的图片，不承担生成逻辑。",
       "options": [
         {
           "name": "--mediaId",
@@ -750,7 +651,7 @@
     },
     {
       "command": "image-split",
-      "description": "宫格拆分: 将一张图片按 N×M 宫格拆分为多张子图。",
+      "description": "拆分: 把一张上游图片按行列派生为多张独立图片。面积缩放以每个格子的中心为锚点；输出同时提供当前图片和可批处理的图片集合。",
       "options": [
         {
           "name": "--rows",
@@ -770,7 +671,7 @@
     },
     {
       "command": "json",
-      "description": "JSON: 结构化 JSON 数据，作为下游节点的 JSON 输入。",
+      "description": "JSON: 结构化 JSON 数据节点。可接收 JSON 或可解析的文本，并以字段卡片形式呈现。",
       "options": [
         {
           "name": "--data",
@@ -782,15 +683,8 @@
     },
     {
       "command": "processor",
-      "description": "文本处理器: 对文本执行格式化、提取或变换。",
-      "options": [
-        {
-          "name": "--template",
-          "type": "string",
-          "description": "处理模板（支持变量替换）",
-          "required": true
-        }
-      ]
+      "description": "处理: 通用变量处理节点。收到上游值后原样传递；未连线时可使用固定值。",
+      "options": []
     },
     {
       "command": "text",
@@ -806,12 +700,12 @@
     },
     {
       "command": "video-audio",
-      "description": "视频提取音频: 从视频中提取音轨。",
+      "description": "提音: 从上游视频的指定时间范围忠实提取原始音轨，输出 WAV 或 M4A 音频资产。",
       "options": []
     },
     {
       "command": "video-clip",
-      "description": "视频截取: 截取视频的指定时间段。",
+      "description": "截取: 从上游视频按起止毫秒精确截取片段，默认重编码输出 MP4 视频资产。",
       "options": [
         {
           "name": "--startTime",
@@ -829,7 +723,7 @@
     },
     {
       "command": "video-frame",
-      "description": "视频取帧: 从视频中按时间点提取帧画面。",
+      "description": "取帧: 从上游视频提取首帧、尾帧或任意指定时刻的画面，输出新的 PNG/JPG 图片资产。",
       "options": [
         {
           "name": "--timestamps",
@@ -847,13 +741,19 @@
     },
     {
       "command": "video",
-      "description": "视频: 导入本地视频文件，作为下游节点的视频输入。",
+      "description": "视频: 根据文本、首尾帧或多模态参考生成视频。所有参考素材都必须通过明确端口连入，输出可供预览或下载的视频资产。",
       "options": [
         {
-          "name": "--mediaId",
+          "name": "--providerId",
           "type": "string",
-          "description": "已导入的媒体资产 ID",
-          "required": false
+          "description": "供应商 ID",
+          "required": true
+        },
+        {
+          "name": "--modelId",
+          "type": "string",
+          "description": "模型 ID",
+          "required": true
         }
       ]
     }
@@ -861,7 +761,7 @@
   "capabilityMatrix": [
     {
       "capability": "ai.chat",
-      "node": "AI 对话",
+      "node": "对话",
       "nodeType": "chat",
       "version": "1.0.0",
       "contractVersion": 1,
@@ -873,20 +773,32 @@
     },
     {
       "capability": "ai.director",
-      "node": "导演台",
+      "node": "3D 预演台",
       "nodeType": "director",
-      "version": "1.0.0",
-      "contractVersion": 1,
+      "version": "2.0.0",
+      "contractVersion": 2,
       "cli": true,
       "mcp": true,
-      "inputs": 1,
-      "outputs": 1,
+      "inputs": 3,
+      "outputs": 4,
       "headless": true
     },
     {
       "capability": "ai.process",
-      "node": "AI 流程",
+      "node": "AI 处理",
       "nodeType": "ai-process",
+      "version": "1.0.0",
+      "contractVersion": 1,
+      "cli": true,
+      "mcp": true,
+      "inputs": 2,
+      "outputs": 3,
+      "headless": true
+    },
+    {
+      "capability": "ai.storyboard",
+      "node": "分镜板",
+      "nodeType": "storyboard",
       "version": "1.0.0",
       "contractVersion": 1,
       "cli": true,
@@ -896,38 +808,14 @@
       "headless": true
     },
     {
-      "capability": "ai.speech",
-      "node": "语音对话",
-      "nodeType": "speech",
-      "version": "1.0.0",
-      "contractVersion": 1,
-      "cli": true,
-      "mcp": true,
-      "inputs": 2,
-      "outputs": 1,
-      "headless": false
-    },
-    {
-      "capability": "ai.storyboard",
-      "node": "分镜生成",
-      "nodeType": "storyboard",
-      "version": "1.0.0",
-      "contractVersion": 1,
-      "cli": true,
-      "mcp": true,
-      "inputs": 1,
-      "outputs": 1,
-      "headless": true
-    },
-    {
       "capability": "ai.structured",
-      "node": "结构化提取",
+      "node": "结构数据",
       "nodeType": "structured",
       "version": "1.0.0",
       "contractVersion": 1,
       "cli": true,
       "mcp": true,
-      "inputs": 1,
+      "inputs": 2,
       "outputs": 1,
       "headless": true
     },
@@ -935,18 +823,18 @@
       "capability": "audio.source",
       "node": "音频",
       "nodeType": "audio",
-      "version": "1.0.0",
-      "contractVersion": 1,
+      "version": "2.0.0",
+      "contractVersion": 2,
       "cli": true,
       "mcp": true,
-      "inputs": 0,
+      "inputs": 1,
       "outputs": 1,
       "headless": true
     },
     {
-      "capability": "audio.tts",
-      "node": "语音合成",
-      "nodeType": "tts",
+      "capability": "audio.speech",
+      "node": "配音",
+      "nodeType": "speech",
       "version": "1.0.0",
       "contractVersion": 1,
       "cli": true,
@@ -956,11 +844,23 @@
       "headless": true
     },
     {
+      "capability": "audio.tts",
+      "node": "语音克隆",
+      "nodeType": "tts",
+      "version": "1.0.0",
+      "contractVersion": 1,
+      "cli": true,
+      "mcp": true,
+      "inputs": 2,
+      "outputs": 1,
+      "headless": true
+    },
+    {
       "capability": "audio.vocal",
       "node": "人声分离",
       "nodeType": "vocal-separate",
-      "version": "1.0.0",
-      "contractVersion": 1,
+      "version": "2.0.0",
+      "contractVersion": 2,
       "cli": true,
       "mcp": true,
       "inputs": 1,
@@ -969,19 +869,19 @@
     },
     {
       "capability": "code.execute",
-      "node": "代码执行",
+      "node": "代码",
       "nodeType": "code",
-      "version": "1.0.0",
-      "contractVersion": 1,
+      "version": "2.0.0",
+      "contractVersion": 2,
       "cli": true,
       "mcp": true,
-      "inputs": 1,
-      "outputs": 2,
+      "inputs": 2,
+      "outputs": 1,
       "headless": true
     },
     {
       "capability": "flow.iterate",
-      "node": "循环迭代",
+      "node": "循环",
       "nodeType": "iterate",
       "version": "1.0.0",
       "contractVersion": 1,
@@ -993,10 +893,10 @@
     },
     {
       "capability": "image.crop",
-      "node": "图片裁剪",
+      "node": "裁剪",
       "nodeType": "image-crop",
-      "version": "2.0.0",
-      "contractVersion": 2,
+      "version": "1.0.0",
+      "contractVersion": 1,
       "cli": true,
       "mcp": true,
       "inputs": 1,
@@ -1005,7 +905,7 @@
     },
     {
       "capability": "image.edit",
-      "node": "图片修改",
+      "node": "修改",
       "nodeType": "image-edit",
       "version": "1.0.0",
       "contractVersion": 1,
@@ -1017,13 +917,13 @@
     },
     {
       "capability": "image.generate",
-      "node": "图片生成",
+      "node": "生图",
       "nodeType": "image-gen",
-      "version": "1.0.0",
-      "contractVersion": 1,
+      "version": "2.0.0",
+      "contractVersion": 2,
       "cli": true,
       "mcp": true,
-      "inputs": 2,
+      "inputs": 4,
       "outputs": 1,
       "headless": true
     },
@@ -1041,14 +941,14 @@
     },
     {
       "capability": "image.split",
-      "node": "宫格拆分",
+      "node": "拆分",
       "nodeType": "image-split",
       "version": "1.0.0",
       "contractVersion": 1,
       "cli": true,
       "mcp": true,
       "inputs": 1,
-      "outputs": 1,
+      "outputs": 2,
       "headless": true
     },
     {
@@ -1059,13 +959,13 @@
       "contractVersion": 1,
       "cli": true,
       "mcp": true,
-      "inputs": 1,
+      "inputs": 2,
       "outputs": 1,
       "headless": true
     },
     {
       "capability": "text.processor",
-      "node": "文本处理器",
+      "node": "处理",
       "nodeType": "processor",
       "version": "1.0.0",
       "contractVersion": 1,
@@ -1089,10 +989,10 @@
     },
     {
       "capability": "video.audio",
-      "node": "视频提取音频",
+      "node": "提音",
       "nodeType": "video-audio",
-      "version": "1.0.0",
-      "contractVersion": 1,
+      "version": "2.0.0",
+      "contractVersion": 2,
       "cli": true,
       "mcp": true,
       "inputs": 1,
@@ -1101,10 +1001,10 @@
     },
     {
       "capability": "video.clip",
-      "node": "视频截取",
+      "node": "截取",
       "nodeType": "video-clip",
-      "version": "1.0.0",
-      "contractVersion": 1,
+      "version": "2.0.0",
+      "contractVersion": 2,
       "cli": true,
       "mcp": true,
       "inputs": 1,
@@ -1113,10 +1013,10 @@
     },
     {
       "capability": "video.frame",
-      "node": "视频取帧",
+      "node": "取帧",
       "nodeType": "video-frame",
-      "version": "1.0.0",
-      "contractVersion": 1,
+      "version": "2.0.0",
+      "contractVersion": 2,
       "cli": true,
       "mcp": true,
       "inputs": 1,
@@ -1124,14 +1024,14 @@
       "headless": true
     },
     {
-      "capability": "video.source",
+      "capability": "video.generate",
       "node": "视频",
       "nodeType": "video",
-      "version": "1.0.0",
-      "contractVersion": 1,
+      "version": "3.0.0",
+      "contractVersion": 3,
       "cli": true,
       "mcp": true,
-      "inputs": 0,
+      "inputs": 7,
       "outputs": 1,
       "headless": true
     }
@@ -1143,21 +1043,21 @@
       "inputs": [
         {
           "id": "in-text",
-          "name": "输入",
+          "name": "文本",
           "type": "text",
-          "required": true,
+          "required": false,
           "cardinality": "many",
-          "description": "对话输入文本"
+          "description": "作为本轮用户消息或上下文注入的上游文本。"
         }
       ],
       "outputs": [
         {
-          "id": "out-text",
+          "id": "out-markdown",
           "name": "回复",
-          "type": "text",
+          "type": "markdown",
           "required": true,
           "cardinality": "one",
-          "description": "AI 回复文本"
+          "description": "模型最后一条回复，保留 Markdown 语义。"
         }
       ],
       "configSchema": {
@@ -1188,39 +1088,68 @@
     },
     {
       "capabilityId": "ai.director",
-      "version": "1.0.0",
+      "version": "2.0.0",
       "inputs": [
         {
-          "id": "in-text",
-          "name": "需求",
-          "type": "text",
-          "required": true,
+          "id": "in-storyboard",
+          "name": "分镜",
+          "type": "json",
+          "required": false,
+          "cardinality": "one",
+          "description": "可选的分镜列表；在导演台中同步为镜头。"
+        },
+        {
+          "id": "in-reference-images",
+          "name": "场景参考图",
+          "type": "image",
+          "required": false,
           "cardinality": "many",
-          "description": "创作需求描述"
+          "description": "1-3 张参考图建议用于建立白模空间；真实连线输入，不读取其他节点内部状态。"
+        },
+        {
+          "id": "in-camera-preset",
+          "name": "机位参数",
+          "type": "json",
+          "required": false,
+          "cardinality": "one",
+          "description": "可选的初始摄像机参数。"
         }
       ],
       "outputs": [
         {
-          "id": "out-plan",
-          "name": "执行计划",
-          "type": "json",
-          "required": true,
+          "id": "out-frame",
+          "name": "预演帧",
+          "type": "image",
+          "required": false,
           "cardinality": "one",
-          "description": "生成的执行计划"
+          "description": "用户发布的当前镜头静帧。"
+        },
+        {
+          "id": "out-preview-video",
+          "name": "预演视频",
+          "type": "video",
+          "required": false,
+          "cardinality": "one",
+          "description": "用户导出的 WebM 预演视频。"
+        },
+        {
+          "id": "out-camera",
+          "name": "机位参数",
+          "type": "json",
+          "required": false,
+          "cardinality": "one",
+          "description": "已发布镜头的焦距、画幅、时长和机位参数。"
+        },
+        {
+          "id": "out-project",
+          "name": "工程摘要",
+          "type": "json",
+          "required": false,
+          "cardinality": "one",
+          "description": "导演工程中可交换的镜头和机位摘要，不包含媒体二进制。"
         }
       ],
-      "configSchema": {
-        "providerId": {
-          "type": "string",
-          "required": true,
-          "description": "供应商 ID"
-        },
-        "modelId": {
-          "type": "string",
-          "required": true,
-          "description": "模型 ID"
-        }
-      }
+      "configSchema": {}
     },
     {
       "capabilityId": "ai.process",
@@ -1228,79 +1157,45 @@
       "inputs": [
         {
           "id": "in-text",
-          "name": "输入",
-          "type": "text",
-          "required": false,
-          "cardinality": "many",
-          "description": "流程输入"
-        },
-        {
-          "id": "in-image",
-          "name": "图片",
-          "type": "image",
-          "required": false,
-          "cardinality": "one",
-          "description": "图片输入"
-        }
-      ],
-      "outputs": [
-        {
-          "id": "out-text",
-          "name": "输出",
-          "type": "text",
-          "required": false,
-          "cardinality": "one",
-          "description": "流程输出文本"
-        },
-        {
-          "id": "out-image",
-          "name": "图片",
-          "type": "image",
-          "required": false,
-          "cardinality": "one",
-          "description": "流程输出图片"
-        }
-      ],
-      "configSchema": {
-        "steps": {
-          "type": "array",
-          "required": true,
-          "description": "处理步骤",
-          "items": {
-            "type": "object"
-          }
-        }
-      }
-    },
-    {
-      "capabilityId": "ai.speech",
-      "version": "1.0.0",
-      "inputs": [
-        {
-          "id": "in-audio",
-          "name": "语音",
-          "type": "audio",
-          "required": false,
-          "cardinality": "one",
-          "description": "语音输入"
-        },
-        {
-          "id": "in-text",
           "name": "文本",
           "type": "text",
           "required": false,
           "cardinality": "many",
-          "description": "文本输入"
+          "description": "一个或多个上游文本，作为本次转换的输入。"
+        },
+        {
+          "id": "in-json",
+          "name": "JSON 上下文",
+          "type": "json",
+          "required": false,
+          "cardinality": "one",
+          "description": "可选的结构化上下文，注入本次转换。"
         }
       ],
       "outputs": [
         {
           "id": "out-text",
-          "name": "回复",
+          "name": "文本",
           "type": "text",
-          "required": true,
+          "required": false,
           "cardinality": "one",
-          "description": "AI 回复文本"
+          "description": "模型返回的纯文本结果。"
+        },
+        {
+          "id": "out-markdown",
+          "name": "Markdown",
+          "type": "markdown",
+          "required": false,
+          "cardinality": "one",
+          "description": "模型返回的 Markdown 结果。"
+        },
+        {
+          "id": "out-json",
+          "name": "JSON",
+          "type": "json",
+          "required": false,
+          "cardinality": "one",
+          "description": "模型返回并校验后的结构化值（按所选 Schema）。"
         }
       ],
       "configSchema": {
@@ -1321,89 +1216,94 @@
       "version": "1.0.0",
       "inputs": [
         {
+          "id": "in-json",
+          "name": "分镜数据",
+          "type": "json",
+          "required": false,
+          "cardinality": "one",
+          "description": "符合分镜 Schema 的镜头列表。"
+        },
+        {
           "id": "in-text",
-          "name": "剧本",
+          "name": "分镜文本",
           "type": "text",
-          "required": true,
-          "cardinality": "many",
-          "description": "剧本文本"
+          "required": false,
+          "cardinality": "one",
+          "description": "可解析为分镜 JSON 的兼容文本输入。"
         }
       ],
       "outputs": [
         {
           "id": "out-json",
-          "name": "分镜",
+          "name": "分镜数据",
           "type": "json",
           "required": true,
           "cardinality": "one",
-          "description": "分镜 JSON 数据"
+          "description": "编辑后的完整分镜结构。"
+        },
+        {
+          "id": "out-text",
+          "name": "合成文本",
+          "type": "text",
+          "required": false,
+          "cardinality": "one",
+          "description": "由画面、台词和时长生成的可读摘要。"
         }
       ],
-      "configSchema": {
-        "providerId": {
-          "type": "string",
-          "required": true,
-          "description": "供应商 ID"
-        },
-        "modelId": {
-          "type": "string",
-          "required": true,
-          "description": "模型 ID"
-        },
-        "shotCount": {
-          "type": "number",
-          "required": false,
-          "minimum": 1,
-          "maximum": 50,
-          "description": "期望镜头数"
-        }
-      }
+      "configSchema": {}
     },
     {
       "capabilityId": "ai.structured",
       "version": "1.0.0",
       "inputs": [
         {
-          "id": "in-text",
-          "name": "文本",
-          "type": "text",
-          "required": true,
+          "id": "in-context",
+          "name": "结构上下文",
+          "type": "json",
+          "required": false,
           "cardinality": "many",
-          "description": "待提取的文本"
+          "description": "一个或多个已连接的结构化输入，可在正文中用 {{input[0].field}} 显式引用。"
+        },
+        {
+          "id": "in-text",
+          "name": "文本上下文",
+          "type": "text",
+          "required": false,
+          "cardinality": "many",
+          "description": "可在正文中用 {{text}} 显式引用的上游文本。"
         }
       ],
       "outputs": [
         {
           "id": "out-json",
-          "name": "结构化数据",
+          "name": "结构数据",
           "type": "json",
           "required": true,
           "cardinality": "one",
-          "description": "提取的 JSON 数据"
+          "description": "经所选 Schema 校验后的结构化数据。"
         }
       ],
       "configSchema": {
-        "providerId": {
+        "schemaId": {
           "type": "string",
-          "required": true,
-          "description": "供应商 ID"
-        },
-        "modelId": {
-          "type": "string",
-          "required": true,
-          "description": "模型 ID"
-        },
-        "schema": {
-          "type": "object",
           "required": false,
-          "description": "期望的 JSON Schema"
+          "description": "所选输出 Schema 的 ID"
         }
       }
     },
     {
       "capabilityId": "audio.source",
-      "version": "1.0.0",
-      "inputs": [],
+      "version": "2.0.0",
+      "inputs": [
+        {
+          "id": "in-audio",
+          "name": "音频",
+          "type": "audio",
+          "required": false,
+          "cardinality": "one",
+          "description": "可选的上游音频资产；接入后作为本节点音频来源。"
+        }
+      ],
       "outputs": [
         {
           "id": "out-audio",
@@ -1411,7 +1311,7 @@
           "type": "audio",
           "required": true,
           "cardinality": "one",
-          "description": "导入的音频资产"
+          "description": "已导入或承接的音频资产引用。"
         }
       ],
       "configSchema": {
@@ -1423,26 +1323,59 @@
       }
     },
     {
-      "capabilityId": "audio.tts",
+      "capabilityId": "audio.speech",
       "version": "1.0.0",
       "inputs": [
         {
           "id": "in-text",
-          "name": "文本",
+          "name": "朗读文本",
           "type": "text",
-          "required": true,
+          "required": false,
           "cardinality": "many",
-          "description": "待合成的文本"
+          "description": "节点内文本与一个或多个上游文本合并后进行朗读。"
         }
       ],
       "outputs": [
         {
           "id": "out-audio",
-          "name": "语音",
+          "name": "配音",
           "type": "audio",
           "required": true,
           "cardinality": "one",
-          "description": "合成的语音"
+          "description": "模型生成并落盘的配音资产。"
+        }
+      ],
+      "configSchema": {}
+    },
+    {
+      "capabilityId": "audio.tts",
+      "version": "1.0.0",
+      "inputs": [
+        {
+          "id": "in-audio",
+          "name": "参考语音",
+          "type": "audio",
+          "required": false,
+          "cardinality": "one",
+          "description": "可选的上游参考音频；也可在节点内上传。"
+        },
+        {
+          "id": "in-text",
+          "name": "文本",
+          "type": "text",
+          "required": false,
+          "cardinality": "many",
+          "description": "需要朗读的文本（与节点内文本合并）。"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "out-audio",
+          "name": "音频",
+          "type": "audio",
+          "required": true,
+          "cardinality": "one",
+          "description": "语音复刻合成并落盘后的音频资产引用。"
         }
       ],
       "configSchema": {
@@ -1463,66 +1396,66 @@
     },
     {
       "capabilityId": "audio.vocal",
-      "version": "1.0.0",
+      "version": "2.0.0",
       "inputs": [
         {
           "id": "in-audio",
-          "name": "音频",
+          "name": "源音频",
           "type": "audio",
           "required": true,
           "cardinality": "one",
-          "description": "待分离的音频"
+          "description": "必须连接的一段完整音频资产。"
         }
       ],
       "outputs": [
         {
-          "id": "out-vocal",
+          "id": "out-vocals",
           "name": "人声",
           "type": "audio",
           "required": true,
           "cardinality": "one",
-          "description": "分离出的人声"
+          "description": "分离产出的人声音轨。"
         },
         {
           "id": "out-accompaniment",
           "name": "伴奏",
           "type": "audio",
-          "required": true,
+          "required": false,
           "cardinality": "one",
-          "description": "分离出的伴奏"
+          "description": "高质量模型真实分离出的可选伴奏音轨。"
         }
       ],
       "configSchema": {}
     },
     {
       "capabilityId": "code.execute",
-      "version": "1.0.0",
+      "version": "2.0.0",
       "inputs": [
         {
-          "id": "in-data",
-          "name": "输入数据",
+          "id": "in-text",
+          "name": "文本输入",
+          "type": "text",
+          "required": false,
+          "cardinality": "many",
+          "description": "代码运行时 input.text 读取的合并文本。"
+        },
+        {
+          "id": "in-json",
+          "name": "数据输入",
           "type": "json",
           "required": false,
           "cardinality": "many",
-          "description": "代码输入数据"
+          "description": "代码运行时 input.json 读取的结构化值列表。"
         }
       ],
       "outputs": [
         {
-          "id": "out-text",
-          "name": "输出",
-          "type": "text",
+          "id": "out-output",
+          "name": "输出变量",
+          "type": "any",
           "required": true,
           "cardinality": "one",
-          "description": "代码执行结果"
-        },
-        {
-          "id": "out-json",
-          "name": "JSON 输出",
-          "type": "json",
-          "required": false,
-          "cardinality": "one",
-          "description": "结构化输出"
+          "description": "代码 return 的默认输出变量；实际端口由节点配置解析。"
         }
       ],
       "configSchema": {
@@ -1543,25 +1476,25 @@
           "type": "json",
           "required": true,
           "cardinality": "one",
-          "description": "待迭代的列表"
+          "description": "要逐项批量处理的列表（每个元素作为一次循环体输入）。"
         }
       ],
       "outputs": [
         {
-          "id": "out-items",
-          "name": "逐项输出",
-          "type": "any",
-          "required": false,
-          "cardinality": "many",
-          "description": "循环体内的逐项输出（连接循环体节点）"
-        },
-        {
-          "id": "out-results",
-          "name": "汇总结果",
+          "id": "out-item",
+          "name": "当前项",
           "type": "json",
           "required": false,
           "cardinality": "one",
-          "description": "所有迭代结果的汇总列表"
+          "description": "只在循环体内按项提供的临时数据。请连接循环体第一个节点；循环结束后不作为项目级输出。"
+        },
+        {
+          "id": "out-items",
+          "name": "结果列表",
+          "type": "json",
+          "required": true,
+          "cardinality": "one",
+          "description": "每项处理结果的结构化列表（含来源、状态、各节点产物）。"
         }
       ],
       "configSchema": {
@@ -1575,25 +1508,25 @@
     },
     {
       "capabilityId": "image.crop",
-      "version": "2.0.0",
+      "version": "1.0.0",
       "inputs": [
         {
           "id": "in-image",
-          "name": "图片",
+          "name": "原图",
           "type": "image",
           "required": true,
           "cardinality": "one",
-          "description": "待裁剪的图片"
+          "description": "必须连接的一张源图片；裁剪参数按其原始比例解释。"
         }
       ],
       "outputs": [
         {
           "id": "out-image",
-          "name": "裁剪结果",
+          "name": "裁剪图",
           "type": "image",
           "required": true,
           "cardinality": "one",
-          "description": "裁剪后的图片"
+          "description": "本地裁剪完成并落盘的新图片资产。"
         }
       ],
       "configSchema": {
@@ -1636,25 +1569,25 @@
           "type": "image",
           "required": true,
           "cardinality": "one",
-          "description": "待修改的图片"
+          "description": "必须连接的一张待修改图片。"
         },
         {
-          "id": "in-prompt",
-          "name": "修改指令",
+          "id": "in-text",
+          "name": "修改说明",
           "type": "text",
-          "required": true,
+          "required": false,
           "cardinality": "many",
-          "description": "修改描述"
+          "description": "可选的文本修改说明，可由多个文本上游合并。"
         }
       ],
       "outputs": [
         {
           "id": "out-image",
-          "name": "修改结果",
+          "name": "修改图",
           "type": "image",
           "required": true,
           "cardinality": "one",
-          "description": "修改后的图片"
+          "description": "模型修改并落盘后的新图片资产。"
         }
       ],
       "configSchema": {
@@ -1677,33 +1610,49 @@
     },
     {
       "capabilityId": "image.generate",
-      "version": "1.0.0",
+      "version": "2.0.0",
       "inputs": [
         {
-          "id": "in-prompt",
-          "name": "提示词",
-          "type": "text",
-          "required": true,
-          "cardinality": "many",
-          "description": "图片生成提示词"
-        },
-        {
-          "id": "in-reference",
+          "id": "in-image",
           "name": "参考图",
           "type": "image",
           "required": false,
           "cardinality": "one",
-          "description": "可选的参考图片"
+          "description": "可选的一张旧版参考图片，用于兼容图生图或风格参考。"
+        },
+        {
+          "id": "in-reference-images",
+          "name": "多参考图",
+          "type": "image",
+          "required": false,
+          "cardinality": "many",
+          "description": "可选的多张参考图片，按真实连线顺序作为图片 1-4 提交给模型。"
+        },
+        {
+          "id": "in-prompt",
+          "name": "提示词包",
+          "type": "json",
+          "required": false,
+          "cardinality": "one",
+          "description": "可选的 prompt.bundle；读取其中的 prompt 与 style。"
+        },
+        {
+          "id": "in-text",
+          "name": "提示词",
+          "type": "text",
+          "required": false,
+          "cardinality": "many",
+          "description": "生成图片使用的提示文本，可由多个文本上游合并。"
         }
       ],
       "outputs": [
         {
           "id": "out-image",
-          "name": "生成图片",
+          "name": "图片",
           "type": "image",
           "required": true,
           "cardinality": "one",
-          "description": "AI 生成的图片"
+          "description": "模型生成并落盘后的图片资产引用。"
         }
       ],
       "configSchema": {
@@ -1748,7 +1697,7 @@
           "type": "image",
           "required": true,
           "cardinality": "one",
-          "description": "导入的图片资产"
+          "description": "已导入并落盘的图片资产引用。"
         }
       ],
       "configSchema": {
@@ -1765,21 +1714,29 @@
       "inputs": [
         {
           "id": "in-image",
-          "name": "图片",
+          "name": "原图",
           "type": "image",
           "required": true,
           "cardinality": "one",
-          "description": "待拆分的图片"
+          "description": "必须连接的一张源图片；按行列从左到右、从上到下拆分。"
         }
       ],
       "outputs": [
         {
-          "id": "out-images",
-          "name": "子图列表",
+          "id": "out-image",
+          "name": "当前图片",
           "type": "image",
           "required": true,
-          "cardinality": "many",
-          "description": "拆分后的子图列表"
+          "cardinality": "one",
+          "description": "从图片集合中选中的一格，可直接连接图片类下游。"
+        },
+        {
+          "id": "out-images",
+          "name": "图片集合",
+          "type": "json",
+          "required": true,
+          "cardinality": "one",
+          "description": "所有格子对应的真实图片资产引用列表，可连接循环节点批处理。"
         }
       ],
       "configSchema": {
@@ -1807,21 +1764,29 @@
       "inputs": [
         {
           "id": "in-json",
-          "name": "JSON",
+          "name": "数据",
           "type": "json",
           "required": false,
           "cardinality": "many",
-          "description": "上游 JSON 会合并后输出"
+          "description": "一个或多个需要汇总或展示的结构化值。"
+        },
+        {
+          "id": "in-text",
+          "name": "文本",
+          "type": "text",
+          "required": false,
+          "cardinality": "one",
+          "description": "可被 JSON.parse 解析的单段文本。"
         }
       ],
       "outputs": [
         {
           "id": "out-json",
-          "name": "JSON",
+          "name": "数据",
           "type": "json",
           "required": true,
           "cardinality": "one",
-          "description": "节点保存的 JSON 数据"
+          "description": "校验并格式化后的结构化值。"
         }
       ],
       "configSchema": {
@@ -1837,31 +1802,25 @@
       "version": "1.0.0",
       "inputs": [
         {
-          "id": "in-text",
-          "name": "文本",
-          "type": "text",
-          "required": true,
-          "cardinality": "many",
-          "description": "待处理的文本"
+          "id": "in-value",
+          "name": "输入变量",
+          "type": "any",
+          "required": false,
+          "cardinality": "one",
+          "description": "需要原样传递或后续转换的单个变量。"
         }
       ],
       "outputs": [
         {
-          "id": "out-text",
-          "name": "结果",
-          "type": "text",
+          "id": "out-value",
+          "name": "输出变量",
+          "type": "any",
           "required": true,
           "cardinality": "one",
-          "description": "处理后的文本"
+          "description": "处理完成后的变量；实际类型由配置决定。"
         }
       ],
-      "configSchema": {
-        "template": {
-          "type": "string",
-          "required": true,
-          "description": "处理模板（支持变量替换）"
-        }
-      }
+      "configSchema": {}
     },
     {
       "capabilityId": "text.source",
@@ -1873,7 +1832,7 @@
           "type": "text",
           "required": false,
           "cardinality": "many",
-          "description": "上游文本会拼接后作为基础内容"
+          "description": "一个或多个上游文本，执行时与节点内文本合并。"
         }
       ],
       "outputs": [
@@ -1883,7 +1842,7 @@
           "type": "text",
           "required": true,
           "cardinality": "one",
-          "description": "节点最终保存的纯文本内容"
+          "description": "节点最终保存的纯文本内容。"
         }
       ],
       "configSchema": {
@@ -1896,50 +1855,50 @@
     },
     {
       "capabilityId": "video.audio",
-      "version": "1.0.0",
+      "version": "2.0.0",
       "inputs": [
         {
           "id": "in-video",
-          "name": "视频",
+          "name": "源视频",
           "type": "video",
           "required": true,
           "cardinality": "one",
-          "description": "源视频"
+          "description": "必须连接的一段源视频。"
         }
       ],
       "outputs": [
         {
           "id": "out-audio",
-          "name": "音频",
+          "name": "音频片段",
           "type": "audio",
           "required": true,
           "cardinality": "one",
-          "description": "提取的音轨"
+          "description": "从指定范围提取并转码的新音频资产。"
         }
       ],
       "configSchema": {}
     },
     {
       "capabilityId": "video.clip",
-      "version": "1.0.0",
+      "version": "2.0.0",
       "inputs": [
         {
           "id": "in-video",
-          "name": "视频",
+          "name": "源视频",
           "type": "video",
           "required": true,
           "cardinality": "one",
-          "description": "源视频"
+          "description": "必须连接的一段源视频。"
         }
       ],
       "outputs": [
         {
           "id": "out-video",
-          "name": "片段",
+          "name": "视频片段",
           "type": "video",
           "required": true,
           "cardinality": "one",
-          "description": "截取的视频片段"
+          "description": "精确重编码后的 MP4 视频片段。"
         }
       ],
       "configSchema": {
@@ -1959,25 +1918,25 @@
     },
     {
       "capabilityId": "video.frame",
-      "version": "1.0.0",
+      "version": "2.0.0",
       "inputs": [
         {
           "id": "in-video",
-          "name": "视频",
+          "name": "源视频",
           "type": "video",
           "required": true,
           "cardinality": "one",
-          "description": "源视频"
+          "description": "必须连接的一段源视频。"
         }
       ],
       "outputs": [
         {
-          "id": "out-frames",
-          "name": "帧列表",
+          "id": "out-image",
+          "name": "视频帧",
           "type": "image",
           "required": true,
-          "cardinality": "many",
-          "description": "提取的帧画面列表"
+          "cardinality": "one",
+          "description": "指定时间点解码得到的新图片资产。"
         }
       ],
       "configSchema": {
@@ -1999,9 +1958,66 @@
       }
     },
     {
-      "capabilityId": "video.source",
-      "version": "1.0.0",
-      "inputs": [],
+      "capabilityId": "video.generate",
+      "version": "3.0.0",
+      "inputs": [
+        {
+          "id": "in-image",
+          "name": "首帧图",
+          "type": "image",
+          "required": false,
+          "cardinality": "one",
+          "description": "可选的单张首帧图片，用于图生视频。"
+        },
+        {
+          "id": "in-last-image",
+          "name": "尾帧图",
+          "type": "image",
+          "required": false,
+          "cardinality": "one",
+          "description": "可选的单张尾帧图片；仅支持首尾帧模式的模型可用。"
+        },
+        {
+          "id": "in-reference-images",
+          "name": "参考图",
+          "type": "image",
+          "required": false,
+          "cardinality": "many",
+          "description": "可选的多张参考图；顺序是提示词中\"图片 1、图片 2\"的稳定顺序。"
+        },
+        {
+          "id": "in-reference-video",
+          "name": "运动参考",
+          "type": "video",
+          "required": false,
+          "cardinality": "many",
+          "description": "可选的真实参考视频。预演台白模视频可在此传入。"
+        },
+        {
+          "id": "in-reference-audio",
+          "name": "参考音频",
+          "type": "audio",
+          "required": false,
+          "cardinality": "many",
+          "description": "可选的参考音频；仅在当前模型支持时按真实输入提交。"
+        },
+        {
+          "id": "in-prompt",
+          "name": "提示词包",
+          "type": "json",
+          "required": false,
+          "cardinality": "one",
+          "description": "可选的 prompt.bundle；读取其中的 prompt 与 style。"
+        },
+        {
+          "id": "in-text",
+          "name": "提示词",
+          "type": "text",
+          "required": false,
+          "cardinality": "many",
+          "description": "描述视频内容和运动方式的提示文本。"
+        }
+      ],
       "outputs": [
         {
           "id": "out-video",
@@ -2009,14 +2025,19 @@
           "type": "video",
           "required": true,
           "cardinality": "one",
-          "description": "导入的视频资产"
+          "description": "生成并落盘后的视频资产引用。"
         }
       ],
       "configSchema": {
-        "mediaId": {
+        "providerId": {
           "type": "string",
-          "required": false,
-          "description": "已导入的媒体资产 ID"
+          "required": true,
+          "description": "供应商 ID"
+        },
+        "modelId": {
+          "type": "string",
+          "required": true,
+          "description": "模型 ID"
         }
       }
     }
