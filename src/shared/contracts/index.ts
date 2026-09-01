@@ -102,6 +102,11 @@ export interface SaveProjectInput {
   id: string
   tldrawSnapshot?: unknown
   graph?: { nodes: unknown[]; edges: unknown[]; groups: unknown[] }
+  /**
+   * 乐观锁：renderer 记住上次成功保存返回的 graphVersion，保存前以此校验；
+   * 不匹配（画布外有 Agent/其他写入）返回 REVISION_CONFLICT 而不是静默覆盖。
+   */
+  expectedGraphVersion?: number
 }
 
 export interface ImportMediaBufferInput {

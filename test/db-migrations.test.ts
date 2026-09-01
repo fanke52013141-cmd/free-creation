@@ -27,15 +27,16 @@ describe('SQLite user_version migrations', () => {
     const state = fakeDatabase(0)
     expect(migrateDatabase(state.db)).toBe(0)
     expect(state.execs).toHaveLength(DB_SCHEMA_VERSION)
-    expect(state.pragmas).toEqual(['user_version = 1', 'user_version = 2'])
+    expect(state.pragmas).toEqual(['user_version = 1', 'user_version = 2', 'user_version = 3'])
   })
 
   it('runs only the missing migration for an existing v1 database', () => {
     const state = fakeDatabase(1)
     migrateDatabase(state.db)
-    expect(state.execs).toHaveLength(1)
+    expect(state.execs).toHaveLength(2)
     expect(state.execs[0]).toContain('history_snapshots')
-    expect(state.pragmas).toEqual(['user_version = 2'])
+    expect(state.execs[1]).toContain('runs')
+    expect(state.pragmas).toEqual(['user_version = 2', 'user_version = 3'])
   })
 
   it('refuses a database newer than this application instead of guessing a downgrade', () => {

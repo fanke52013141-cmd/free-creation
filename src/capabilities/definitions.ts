@@ -85,7 +85,7 @@ const imageCapability = defineCapability({
     mediaId: { type: 'string', required: false, description: '已导入的媒体资产 ID' }
   },
   commands: { execute: 'image.source.execute' },
-  runtime: { headless: true, preview: true, batch: false, executionMode: 'manual-publish' },
+  runtime: { headless: true, preview: true, batch: false, executionMode: 'manual-publish', agentRunnable: false },
   expose: ALL_EXPOSED
 })
 
@@ -277,7 +277,7 @@ const audioCapability = defineCapability({
     mediaId: { type: 'string', required: false, description: '已导入的媒体资产 ID' }
   },
   commands: { execute: 'audio.source.execute' },
-  runtime: { headless: true, preview: true, batch: false, executionMode: 'manual-publish' },
+  runtime: { headless: true, preview: true, batch: false, executionMode: 'manual-publish', agentRunnable: false },
   expose: ALL_EXPOSED
 })
 
@@ -1144,7 +1144,7 @@ const directorCapability = defineCapability({
   ],
   configSchema: {},
   commands: { execute: 'ai.director.orchestrate' },
-  runtime: { headless: true, preview: false, batch: false, executionMode: 'manual-publish' },
+  runtime: { headless: true, preview: false, batch: false, executionMode: 'manual-publish', agentRunnable: false },
   expose: ALL_EXPOSED
 })
 

@@ -23,18 +23,19 @@
  *   CANVAS_DATA_DIR  数据目录路径（默认使用 Electron userData 目录）
  */
 
-import { createServices, DesktopProjectStore } from '@application'
+import { agentWriteEnabledFromEnv, createServices, DesktopProjectStore } from '@application'
 import type { Result, ServiceContainer } from '@application'
 import type { NodeTypeId } from '@shared/types'
 
 // ── 服务初始化 ─────────────────────────────────────────────
 
 function getServices(): ServiceContainer {
-  // 外部 CLI 默认只读：它读取的是桌面端同一个 SQLite/project.json，不会写出
-  // 一份脱离 tldraw 快照的平行项目。后续 headless 事务完成后再显式开放。
+  // 外部 CLI 默认只读；仅在 CANVAS_AGENT_WRITE=draft 时开放草稿写入——写入走
+  // 图写入事务（快照同步 + 乐观锁），Agent 建的节点/连线在画布上可见。
+  const writeEnabled = agentWriteEnabledFromEnv()
   return createServices(new DesktopProjectStore(), {
-    permission: { level: 'read' },
-    writeEnabled: false,
+    permission: { level: writeEnabled ? 'edit' : 'read' },
+    writeEnabled,
     executionEnabled: false,
     actor: 'agent'
   })
@@ -330,13 +331,20 @@ async function handleNode(
         process.exit(1)
       }
 
-      const [fromNodeId, fromPortId] = from.split(':')
-      const [toNodeId, toPortId] = to.split(':')
+      // 节点 id 为 tldraw shape id（形如 shape:xxx），端口引用按最后一个冒号切分
+      const parseRef = (ref: string): { nodeId: string; portId: string } => {
+        const idx = ref.lastIndexOf(':')
+        if (idx <= 0 || idx === ref.length - 1) {
+          console.error(`非法端口引用: ${ref}（应为 <nodeId>:<portId>）`)
+          process.exit(1)
+        }
+        return { nodeId: ref.slice(0, idx), portId: ref.slice(idx + 1) }
+      }
 
       const result = await services.nodeService.connectNodes({
         projectId,
-        from: { nodeId: fromNodeId, portId: fromPortId },
-        to: { nodeId: toNodeId, portId: toPortId }
+        from: parseRef(from),
+        to: parseRef(to)
       })
       output(result, args.flags)
       break
@@ -444,7 +452,8 @@ Canvas Studio CLI — 无限画布命令行工具
   --dry-run    预演模式（不实际执行）
 
 环境变量：
-  CANVAS_DATA_DIR  数据目录路径
+  CANVAS_DATA_DIR      数据目录路径
+  CANVAS_AGENT_WRITE   设为 draft 时开放草稿写入（默认只读）
 `)
 }
 

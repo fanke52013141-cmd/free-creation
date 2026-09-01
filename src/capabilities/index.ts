@@ -25,6 +25,7 @@ export type {
   SemVer,
   ChangeType
 } from './types'
+export { isAgentRunnable } from './types'
 
 // 注册表 API
 export {

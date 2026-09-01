@@ -337,17 +337,42 @@ export function CanvasEditor({
   }
 
   // 保存载荷：快照 + 从 shapes 派生的图数据（nodes/edges，M4 执行引擎的消费源）
+  // expectedGraphVersion 是画布侧乐观锁：外部（Agent/CLI/MCP）写入会推进版本，
+  // 本地保存冲突时返回 REVISION_CONFLICT 而不是静默覆盖外部修改。
+  const graphVersionRef = useRef<number>(project.graphVersion)
+
   const collectSaveInput = (): {
     id: string
     tldrawSnapshot: unknown
     graph: { nodes: unknown[]; edges: unknown[]; groups: unknown[] }
+    expectedGraphVersion: number
   } | null => {
     const editor = editorRef.current
     if (!editor) return null
     return {
       id: project.id,
       tldrawSnapshot: editor.store.getStoreSnapshot(),
-      graph: deriveGraph(editor)
+      graph: deriveGraph(editor),
+      expectedGraphVersion: graphVersionRef.current
+    }
+  }
+
+  // 保存冲突时从磁盘重载最新数据：外部写入的 node-card/arrow 已同步进快照，
+  // 这里恢复快照即可让 Agent 的新增内容出现在画布上。
+  const reloadFromDisk = async (): Promise<void> => {
+    const editor = editorRef.current
+    if (!editor) return
+    const res = await window.api.openProject(project.id)
+    if (!res.ok || !res.data) return
+    try {
+      const repaired = repairTldrawSnapshot(res.data.tldrawSnapshot)
+      editor.store.loadStoreSnapshot(editor.store.migrateSnapshot(repaired as never))
+      graphVersionRef.current = res.data.meta.graphVersion
+      toast('画布外有新的修改，已重新加载最新内容', 4000)
+    } catch (e) {
+      console.error('冲突重载失败', e)
+      restoreFailedRef.current = true
+      toast('外部修改加载失败，已暂停自动保存，以防覆盖原有数据', 6000)
     }
   }
 
@@ -358,17 +383,25 @@ export function CanvasEditor({
       saveTimerRef.current = null
     }
     const input = collectSaveInput()
-    if (input) void window.api.saveProject(input)
+    if (!input) return
+    void window.api.saveProject(input).then((res) => {
+      if (res.ok && res.data) {
+        graphVersionRef.current = res.data.graphVersion
+      } else if (!res.ok && res.error.code === 'REVISION_CONFLICT') {
+        void reloadFromDisk()
+      }
+    })
   }
 
   useEffect(() => {
-    // 关窗时异步 invoke 可能赶不上页面销毁，用同步 IPC 确保落盘
+    // 关窗时异步 invoke 可能赶不上页面销毁，用同步 IPC 确保落盘。
+    // 关窗时已无法重载冲突数据，这里不带乐观锁：用户当前视图最后写入胜出。
     const onBeforeUnload = (): void => {
       if (restoreFailedRef.current) return
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
       saveTimerRef.current = null
       const input = collectSaveInput()
-      if (input) window.api.saveProjectSync(input)
+      if (input) window.api.saveProjectSync({ ...input, expectedGraphVersion: undefined })
     }
     window.addEventListener('beforeunload', onBeforeUnload)
     return () => {

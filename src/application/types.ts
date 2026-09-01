@@ -79,6 +79,16 @@ export interface ProjectStore {
   // 媒体资产
   listArtifacts(projectId: string): Promise<MediaAsset[]>
   getArtifact(assetId: string): Promise<MediaAsset | null>
+
+  // Run / Artifact 持久化（P3）
+  createRun(record: Omit<RunRecord, 'createdAt'>): Promise<RunRecord>
+  updateRun(runId: string, patch: RunUpdatePatch): Promise<RunRecord | null>
+  getRun(runId: string): Promise<RunRecord | null>
+  listRuns(projectId: string, filter?: { status?: RunStatus }): Promise<RunRecord[]>
+  createRunArtifact(
+    record: Omit<RunArtifactRecord, 'artifactId' | 'createdAt'>
+  ): Promise<RunArtifactRecord>
+  listRunArtifacts(runId: string): Promise<RunArtifactRecord[]>
 }
 
 // ── 权限级别 ───────────────────────────────────────────────
@@ -192,12 +202,55 @@ export interface RunEstimate {
 
 export interface RunHandle {
   runId: string
-  status: 'queued' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled'
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
   scope: {
     type: 'node' | 'selection' | 'workflow'
     nodeIds?: string[]
   }
   startedAt: number
+  finishedAt?: number
+  durationMs?: number
+  error?: { code: string; message: string }
+}
+
+// ── Run / Artifact 持久化 ─────────────────────────────────
+
+export type RunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+export type RunScopeType = 'node' | 'selection' | 'workflow'
+
+/** 持久化的运行记录——一次工作流或节点执行的完整生命周期。 */
+export interface RunRecord {
+  runId: string
+  projectId: string
+  scope: { type: RunScopeType; nodeIds?: string[] }
+  status: RunStatus
+  actor: AuditActor
+  startedAt?: number
+  finishedAt?: number
+  durationMs?: number
+  error?: { code: string; message: string }
+  createdAt: number
+}
+
+/** 更新运行记录时可修改的字段。 */
+export type RunUpdatePatch = Partial<
+  Pick<RunRecord, 'status' | 'startedAt' | 'finishedAt' | 'durationMs' | 'error'>
+>
+
+/** 运行产出的单条记录——关联 Run 与 MediaAsset（或纯文本/JSON 产物）。 */
+export interface RunArtifactRecord {
+  artifactId: string
+  runId: string
+  projectId: string
+  nodeId: string
+  portId?: string
+  mediaId?: string
+  artifactType: 'image' | 'video' | 'audio' | 'text' | 'json' | 'file'
+  mimeType?: string
+  label?: string
+  inputSummary?: Record<string, unknown>
+  modelKey?: string
+  createdAt: number
 }
 
 export interface ArtifactInfo {

@@ -7,6 +7,7 @@
 
 import { nanoid } from 'nanoid'
 import type { CanvasNode, CanvasEdge, PortDecl, NodeTypeId } from '@shared/types'
+import { GraphVersionConflictError } from '@shared/graph-snapshot-sync'
 import { getCapabilityByNodeType } from '@capabilities'
 import type {
   Result,
@@ -29,6 +30,37 @@ function scopedIdempotencyKey(
   key: string
 ): string {
   return `${operation}:${projectId}:${key}`
+}
+
+// ── ID 与错误映射 ──────────────────────────────────────────
+
+/**
+ * 节点/连线 id 直接采用 tldraw shape id 形态，与画布侧 deriveGraph 产出的
+ * id 同源：Agent 写入、快照同步、画布回读全程稳定，避免同一实体出现两套 id。
+ */
+function newShapeId(): string {
+  return `shape:${nanoid(10)}`
+}
+
+/** 把 store 层抛出的保存错误映射为结构化 Result，调用方无需 try/catch。 */
+function saveError(
+  error: unknown,
+  expectedGraphVersion?: number
+): { code: string; message: string; details?: Record<string, unknown> } {
+  if (error instanceof GraphVersionConflictError) {
+    return {
+      code: 'REVISION_CONFLICT',
+      message: '项目已被其他操作更新，请重新读取后再试',
+      details: {
+        expectedGraphVersion: expectedGraphVersion ?? error.expectedVersion,
+        actualGraphVersion: error.actualVersion
+      }
+    }
+  }
+  return {
+    code: 'SAVE_FAILED',
+    message: `项目保存失败: ${error instanceof Error ? error.message : String(error)}`
+  }
 }
 
 export class NodeService {
@@ -79,7 +111,7 @@ export class NodeService {
 
     // 创建节点
     const node: CanvasNode = {
-      id: nanoid(10),
+      id: newShapeId(),
       type: req.type as NodeTypeId,
       contractVersion: cap.contractVersion,
       title: req.title ?? cap.title,
@@ -113,13 +145,18 @@ export class NodeService {
     const edges = await this.ctx.store.getEdges(req.projectId)
     const groups = await this.ctx.store.getGroups(req.projectId)
     nodes.push(node)
-    await this.ctx.store.saveGraph(
-      req.projectId,
-      { nodes, edges, groups },
-      {
-        expectedGraphVersion: req.expectedGraphVersion
-      }
-    )
+    try {
+      await this.ctx.store.saveGraph(
+        req.projectId,
+        { nodes, edges, groups },
+        {
+          expectedGraphVersion: req.expectedGraphVersion
+        }
+      )
+    } catch (error) {
+      const mapped = saveError(error, req.expectedGraphVersion)
+      return fail(mapped.code, mapped.message, mapped.details)
+    }
 
     this.ctx.audit.log({
       actor: this.ctx.actor,
@@ -178,13 +215,18 @@ export class NodeService {
 
     const edges = await this.ctx.store.getEdges(req.projectId)
     const groups = await this.ctx.store.getGroups(req.projectId)
-    await this.ctx.store.saveGraph(
-      req.projectId,
-      { nodes, edges, groups },
-      {
-        expectedGraphVersion: req.expectedGraphVersion
-      }
-    )
+    try {
+      await this.ctx.store.saveGraph(
+        req.projectId,
+        { nodes, edges, groups },
+        {
+          expectedGraphVersion: req.expectedGraphVersion
+        }
+      )
+    } catch (error) {
+      const mapped = saveError(error, req.expectedGraphVersion)
+      return fail(mapped.code, mapped.message, mapped.details)
+    }
 
     this.ctx.audit.log({
       actor: this.ctx.actor,
@@ -222,7 +264,12 @@ export class NodeService {
     const filteredEdges = edges.filter((e) => e.from.nodeId !== nodeId && e.to.nodeId !== nodeId)
 
     const groups = await this.ctx.store.getGroups(projectId)
-    await this.ctx.store.saveGraph(projectId, { nodes, edges: filteredEdges, groups })
+    try {
+      await this.ctx.store.saveGraph(projectId, { nodes, edges: filteredEdges, groups })
+    } catch (error) {
+      const mapped = saveError(error)
+      return fail(mapped.code, mapped.message, mapped.details)
+    }
 
     this.ctx.audit.log({
       actor: this.ctx.actor,
@@ -269,7 +316,7 @@ export class NodeService {
     }
 
     const edge: CanvasEdge = {
-      id: nanoid(10),
+      id: newShapeId(),
       from: req.from,
       to: req.to
     }
@@ -278,13 +325,18 @@ export class NodeService {
     const edges = await this.ctx.store.getEdges(req.projectId)
     const groups = await this.ctx.store.getGroups(req.projectId)
     edges.push(edge)
-    await this.ctx.store.saveGraph(
-      req.projectId,
-      { nodes, edges, groups },
-      {
-        expectedGraphVersion: req.expectedGraphVersion
-      }
-    )
+    try {
+      await this.ctx.store.saveGraph(
+        req.projectId,
+        { nodes, edges, groups },
+        {
+          expectedGraphVersion: req.expectedGraphVersion
+        }
+      )
+    } catch (error) {
+      const mapped = saveError(error, req.expectedGraphVersion)
+      return fail(mapped.code, mapped.message, mapped.details)
+    }
 
     this.ctx.audit.log({
       actor: this.ctx.actor,
@@ -319,7 +371,12 @@ export class NodeService {
 
     const nodes = await this.ctx.store.getNodes(projectId)
     const groups = await this.ctx.store.getGroups(projectId)
-    await this.ctx.store.saveGraph(projectId, { nodes, edges, groups })
+    try {
+      await this.ctx.store.saveGraph(projectId, { nodes, edges, groups })
+    } catch (error) {
+      const mapped = saveError(error)
+      return fail(mapped.code, mapped.message, mapped.details)
+    }
 
     this.ctx.audit.log({
       actor: this.ctx.actor,

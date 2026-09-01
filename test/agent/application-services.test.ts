@@ -8,6 +8,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { createServices } from '@application'
 import type { ProjectStore, ServiceContainer } from '@application'
+import type { RunRecord, RunUpdatePatch, RunArtifactRecord } from '@application'
 import { isPortTypeCompatible } from '@application'
 import type {
   CanvasNode,
@@ -77,6 +78,52 @@ class MockStore implements ProjectStore {
 
   async getArtifact(_assetId: string): Promise<MediaAsset | null> {
     return null
+  }
+
+  // ── Run / Artifact 持久化 ──
+  private runs = new Map<string, RunRecord>()
+  private artifacts = new Map<string, RunArtifactRecord>()
+
+  async createRun(record: Omit<RunRecord, 'createdAt'>): Promise<RunRecord> {
+    const full: RunRecord = { ...record, createdAt: Date.now() }
+    this.runs.set(full.runId, full)
+    return full
+  }
+
+  async updateRun(runId: string, patch: RunUpdatePatch): Promise<RunRecord | null> {
+    const existing = this.runs.get(runId)
+    if (!existing) return null
+    const next = { ...existing, ...patch }
+    this.runs.set(runId, next)
+    return next
+  }
+
+  async getRun(runId: string): Promise<RunRecord | null> {
+    return this.runs.get(runId) ?? null
+  }
+
+  async listRuns(
+    projectId: string,
+    filter?: { status?: string }
+  ): Promise<RunRecord[]> {
+    return Array.from(this.runs.values()).filter(
+      (r) =>
+        r.projectId === projectId &&
+        (!filter?.status || r.status === filter.status)
+    )
+  }
+
+  async createRunArtifact(
+    record: Omit<RunArtifactRecord, 'artifactId' | 'createdAt'>
+  ): Promise<RunArtifactRecord> {
+    const artifactId = `art_${++this.counter}`
+    const full: RunArtifactRecord = { ...record, artifactId, createdAt: Date.now() }
+    this.artifacts.set(artifactId, full)
+    return full
+  }
+
+  async listRunArtifacts(runId: string): Promise<RunArtifactRecord[]> {
+    return Array.from(this.artifacts.values()).filter((a) => a.runId === runId)
   }
 }
 
@@ -732,7 +779,7 @@ describe('WorkflowService', () => {
   })
 
   describe('runNode()', () => {
-    it('dry-run 模式应返回 completed 状态', async () => {
+    it('dry-run 模式应返回 succeeded 状态', async () => {
       const created = await env.services.nodeService.createNode({
         projectId: env.projectId,
         type: 'text' as any
@@ -747,12 +794,12 @@ describe('WorkflowService', () => {
 
       expect(result.ok).toBe(true)
       if (result.ok) {
-        expect(result.data.status).toBe('completed')
+        expect(result.data.status).toBe('succeeded')
         expect(result.data.runId).toBe('dry-run')
       }
     })
 
-    it('正常模式应返回 queued 状态', async () => {
+    it('正常模式应创建持久化 Run 记录并返回 queued', async () => {
       const created = await env.services.nodeService.createNode({
         projectId: env.projectId,
         type: 'text' as any
@@ -770,11 +817,20 @@ describe('WorkflowService', () => {
         expect(result.data.runId).not.toBe('dry-run')
         expect(result.data.scope.type).toBe('node')
       }
+      // 已持久化到 store
+      const handle = result.ok ? result.data : null
+      if (handle && result.ok) {
+        const { store, projectId } = env
+        const record = await store.getRun(handle.runId)
+        expect(record).not.toBeNull()
+        expect(record?.projectId).toBe(projectId)
+        expect(record?.status).toBe('queued')
+      }
     })
   })
 
   describe('runWorkflow()', () => {
-    it('dry-run 应跳过校验直接返回', async () => {
+    it('dry-run 应跳过校验直接返回 succeeded', async () => {
       const result = await env.services.workflowService.runWorkflow({
         projectId: env.projectId,
         dryRun: true
@@ -782,7 +838,7 @@ describe('WorkflowService', () => {
 
       expect(result.ok).toBe(true)
       if (result.ok) {
-        expect(result.data.status).toBe('completed')
+        expect(result.data.status).toBe('succeeded')
       }
     })
 

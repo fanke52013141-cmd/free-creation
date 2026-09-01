@@ -12,7 +12,12 @@
  * 协议：MCP over stdio（JSON-RPC 2.0）
  */
 
-import { createServices, DesktopProjectStore, FileProjectStore } from '@application'
+import {
+  agentWriteEnabledFromEnv,
+  createServices,
+  DesktopProjectStore,
+  FileProjectStore
+} from '@application'
 import type { ServiceContainer, ProjectStore } from '@application'
 import { listCapabilities } from '@capabilities'
 import type { Readable, Writable } from 'stream'
@@ -480,18 +485,26 @@ const PROTOCOL_VERSION = '2024-11-05' as const
 /**
  * 启动 MCP Server（stdio 传输）。
  * 读取 stdin 的 JSON-RPC 请求，写入 stdout 的 JSON-RPC 响应。
+ *
+ * 默认只读。CANVAS_AGENT_WRITE=draft（或显式传入 options.writeEnabled）时开放
+ * 草稿写入——写入走图写入事务（快照同步 + 乐观锁），画布可见且可回滚。
  */
+export interface McpServerOptions {
+  /** 测试可显式注入写入开关；生产默认从 CANVAS_AGENT_WRITE 读取。 */
+  writeEnabled?: boolean
+}
+
 export function startMcpServer(
   stdin: Readable = process.stdin,
   stdout: Writable = process.stdout,
-  injectedStore?: ProjectStore
+  injectedStore?: ProjectStore,
+  options?: McpServerOptions
 ): void {
-  // MCP 先采用只读安全模式。它访问的就是桌面端项目数据，而不是独立文件目录；
-  // 在 tldraw 快照事务和真实 headless executor 完成前，写入/运行工具会明确拒绝。
   const store = injectedStore ?? new DesktopProjectStore()
+  const writeEnabled = options?.writeEnabled ?? agentWriteEnabledFromEnv()
   const services = createServices(store, {
-    permission: { level: 'read' },
-    writeEnabled: false,
+    permission: { level: writeEnabled ? 'edit' : 'read' },
+    writeEnabled,
     executionEnabled: false,
     actor: 'agent'
   })

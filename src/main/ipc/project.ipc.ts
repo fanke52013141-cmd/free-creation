@@ -1,8 +1,9 @@
 // 项目 IPC handlers（信封规范见《技术框架与规范》§10）
 import { ipcMain, dialog } from 'electron'
 import { IPC } from '../../shared/contracts'
-import type { IpcEnvelope } from '../../shared/contracts'
+import type { IpcEnvelope, SaveProjectInput } from '../../shared/contracts'
 import type { ProjectFile, ProjectMeta } from '../../shared/types'
+import { GraphVersionConflictError } from '../../shared/graph-snapshot-sync'
 import { getSetting, setSetting } from '../store/db'
 import * as repo from '../store/projects.repo'
 import { exportProject, importProject } from '../store/transfer'
@@ -13,6 +14,19 @@ function ok<T>(data: T): IpcEnvelope<T> {
 
 function err(code: string, message: string): IpcEnvelope<never> {
   return { ok: false, error: { code, message } }
+}
+
+function saveEnvelope(
+  input: Parameters<typeof repo.saveProject>[0]
+): IpcEnvelope<{ graphVersion: number } | null> {
+  try {
+    return ok(repo.saveProject(input))
+  } catch (e) {
+    if (e instanceof GraphVersionConflictError) {
+      return err('REVISION_CONFLICT', e.message)
+    }
+    return err('SAVE_FAILED', e instanceof Error ? e.message : String(e))
+  }
 }
 
 export function registerProjectIpc(): void {
@@ -49,20 +63,10 @@ export function registerProjectIpc(): void {
     return ok(file)
   })
 
-  ipcMain.handle(
-    IPC.project.save,
-    (
-      _e,
-      input: {
-        id: string
-        tldrawSnapshot?: unknown
-        graph?: { nodes: unknown[]; edges: unknown[]; groups: unknown[] }
-      }
-    ): IpcEnvelope<{ graphVersion: number } | null> => {
-      if (!input?.id) return err('INVALID_INPUT', '参数不完整')
-      return ok(repo.saveProject(input))
-    }
-  )
+  ipcMain.handle(IPC.project.save, (_e, input: SaveProjectInput): IpcEnvelope<{ graphVersion: number } | null> => {
+    if (!input?.id) return err('INVALID_INPUT', '参数不完整')
+    return saveEnvelope(input)
+  })
 
   ipcMain.handle(IPC.project.close, (): IpcEnvelope<true> => {
     setSetting('lastProjectId', '')
@@ -105,23 +109,14 @@ export function registerProjectIpc(): void {
     }
   })
 
-  // 同步保存：渲染进程 beforeunload 时用 sendSync 保证落盘后才销毁页面
-  ipcMain.on(
-    IPC.project.saveSync,
-    (
-      e,
-      input: {
-        id: string
-        tldrawSnapshot?: unknown
-        graph?: { nodes: unknown[]; edges: unknown[]; groups: unknown[] }
-      }
-    ) => {
-      try {
-        repo.saveProject(input)
-        e.returnValue = { ok: true, data: null }
-      } catch (err) {
-        e.returnValue = { ok: false, error: { code: 'FLUSH_FAILED', message: String(err) } }
-      }
+  // 同步保存：渲染进程 beforeunload 时用 sendSync 保证落盘后才销毁页面。
+  // 不带乐观锁：关窗时无法重载，用户当前视图最后写入胜出。
+  ipcMain.on(IPC.project.saveSync, (e, input: SaveProjectInput) => {
+    try {
+      repo.saveProject(input)
+      e.returnValue = { ok: true, data: null }
+    } catch (err) {
+      e.returnValue = { ok: false, error: { code: 'FLUSH_FAILED', message: String(err) } }
     }
-  )
+  })
 }

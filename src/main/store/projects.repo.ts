@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid'
 import { mkdirSync, readFileSync, rmSync, writeFileSync, renameSync, existsSync } from 'fs'
 import { join } from 'path'
 import type { ProjectFile, ProjectMeta } from '../../shared/types'
+import { GraphVersionConflictError } from '../../shared/graph-snapshot-sync'
 import { getDb, getProjectsDir } from './db'
 
 interface ProjectRow {
@@ -109,10 +110,20 @@ export function openProject(id: string): ProjectFile | null {
   return file
 }
 
+/**
+ * 保存项目（图写入事务）。
+ *
+ * - expectedGraphVersion 提供原子乐观锁：以 project.json 内的 meta.graphVersion
+ *   为准在同一同步代码块内完成"读取-校验-写入"，关闭服务层先读后写的竞态窗口。
+ *   不匹配时抛 GraphVersionConflictError，文件保持原样。
+ * - 写入顺序：tmp → 旧文件转 .bak → tmp 转正 → SQLite 更新。任何一步失败都会
+ *   尽力把 .bak 恢复为主文件，保证图数据与快照不会停留在半提交状态。
+ */
 export function saveProject(input: {
   id: string
   tldrawSnapshot?: unknown
   graph?: { nodes: unknown[]; edges: unknown[]; groups: unknown[] }
+  expectedGraphVersion?: number
 }): { graphVersion: number } | null {
   const meta = getProject(input.id)
   if (!meta) return null
@@ -126,6 +137,13 @@ export function saveProject(input: {
     groups: []
   }
 
+  if (
+    input.expectedGraphVersion !== undefined &&
+    file.meta.graphVersion !== input.expectedGraphVersion
+  ) {
+    throw new GraphVersionConflictError(input.expectedGraphVersion, file.meta.graphVersion)
+  }
+
   if (input.tldrawSnapshot !== undefined) file.tldrawSnapshot = input.tldrawSnapshot
   if (input.graph) {
     file.nodes = input.graph.nodes as ProjectFile['nodes']
@@ -137,17 +155,27 @@ export function saveProject(input: {
   const now = Date.now()
   file.meta = { ...file.meta, graphVersion: nextVersion, updatedAt: now }
 
-  // 原子写：先临时文件再替换；旧版留 .bak
   const tmp = path + '.tmp'
-  writeFileSync(tmp, JSON.stringify(file, null, 2), 'utf-8')
-  if (existsSync(path)) {
-    renameSync(path, path + '.bak')
+  const bak = path + '.bak'
+  try {
+    writeFileSync(tmp, JSON.stringify(file, null, 2), 'utf-8')
+    if (existsSync(path)) renameSync(path, bak)
+    renameSync(tmp, path)
+    getDb()
+      .prepare('UPDATE projects SET updated_at = ?, graph_version = ? WHERE id = ?')
+      .run(now, nextVersion, input.id)
+  } catch (error) {
+    // 回滚：把最后一份完整数据恢复为主文件，清理事务残留
+    try {
+      if (existsSync(tmp)) rmSync(tmp, { force: true })
+      if (existsSync(path)) renameSync(path, tmp)
+      if (existsSync(bak)) renameSync(bak, path)
+      if (existsSync(tmp)) rmSync(tmp, { force: true })
+    } catch {
+      // 回滚本身失败：保留 .bak/tmp 现场，交给下次读取的 .bak 回退逻辑兜底
+    }
+    throw error
   }
-  renameSync(tmp, path)
-
-  getDb()
-    .prepare('UPDATE projects SET updated_at = ?, graph_version = ? WHERE id = ?')
-    .run(now, nextVersion, input.id)
 
   return { graphVersion: nextVersion }
 }

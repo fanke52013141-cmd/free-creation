@@ -2,12 +2,13 @@
  * WorkflowService — 工作流校验、执行预估与运行管理
  *
  * 提供工作流级别的操作：校验整个流程、估算运行成本、管理运行状态。
- * 实际的节点执行由 ExecutionService 负责（当前阶段委托给渲染进程的引擎）。
+ * 运行记录通过 RunService 落盘，不再返回假 queued。
+ * manual-publish 节点（agentRunnable: false）会被明确拒绝。
  */
 
-import { nanoid } from 'nanoid'
 import type { CanvasNode, CanvasEdge } from '@shared/types'
-import { getCapabilityByNodeType } from '@capabilities'
+import { nanoid } from 'nanoid'
+import { getCapabilityByNodeType, isAgentRunnable } from '@capabilities'
 import { isPortTypeCompatible } from './node-service'
 import type {
   Result,
@@ -16,6 +17,7 @@ import type {
   WorkflowValidationResult,
   RunEstimate,
   RunHandle,
+  RunRecord,
   RunWorkflowRequest,
   RunNodeRequest
 } from '../types'
@@ -209,7 +211,7 @@ export class WorkflowService {
         return fail(estimate.error.code, estimate.error.message, estimate.error.details)
       return ok({
         runId: 'dry-run',
-        status: 'completed',
+        status: 'succeeded',
         scope: { type: 'node', nodeIds: [req.nodeId] },
         startedAt: Date.now()
       })
@@ -223,26 +225,35 @@ export class WorkflowService {
     const permissionError = requireExecution(this.ctx, cap?.id)
     if (permissionError) return fail('EXECUTION_DISABLED', permissionError)
 
-    // 只有具备真实 headless executor 的入口才能创建运行句柄。
-    const runId = nanoid(12)
-    const handle: RunHandle = {
-      runId,
-      status: 'queued',
-      scope: { type: 'node', nodeIds: [req.nodeId] },
-      startedAt: Date.now()
+    // manual-publish 节点不可被 Agent 自动执行
+    if (cap && !isAgentRunnable(cap.runtime)) {
+      return fail(
+        'AGENT_NOT_RUNNABLE',
+        `节点 ${node.title}（${cap.id}）是 manual-publish 类型，不支持 Agent 自动执行。请在桌面端手动操作。`
+      )
     }
+
+    // 创建持久化 Run 记录（不再返回假 queued）
+    const scope = { type: 'node' as const, nodeIds: [req.nodeId] }
+    const startedAt = Date.now()
+    const record = await this.ctx.store.createRun({
+      runId: nanoidFallback(),
+      projectId: req.projectId,
+      scope,
+      status: 'queued',
+      actor: this.ctx.actor,
+      startedAt
+    })
 
     this.ctx.audit.log({
       actor: this.ctx.actor,
       action: 'run-node',
       projectId: req.projectId,
       entityId: req.nodeId,
-      after: { runId }
+      after: { runId: record.runId }
     })
 
-    // 默认容器仅供桌面内部适配；外部 CLI/MCP 将 executionEnabled 设为 false，
-    // 因而不会把未执行的任务伪装成 queued。
-    return ok(handle)
+    return ok(toHandle(record))
   }
 
   async runWorkflow(req: RunWorkflowRequest): Promise<Result<RunHandle>> {
@@ -252,7 +263,7 @@ export class WorkflowService {
         return fail(estimate.error.code, estimate.error.message, estimate.error.details)
       return ok({
         runId: 'dry-run',
-        status: 'completed',
+        status: 'succeeded',
         scope: { type: 'workflow', nodeIds: req.nodeIds },
         startedAt: Date.now()
       })
@@ -272,25 +283,48 @@ export class WorkflowService {
     const permissionError = requireExecution(this.ctx)
     if (permissionError) return fail('EXECUTION_DISABLED', permissionError)
 
-    const runId = nanoid(12)
-    const handle: RunHandle = {
-      runId,
-      status: 'queued',
-      scope: {
-        type: req.nodeIds ? 'selection' : 'workflow',
-        nodeIds: req.nodeIds
-      },
-      startedAt: Date.now()
+    // 检查范围内所有节点是否可被 Agent 自动执行
+    const allNodes = await this.ctx.store.getNodes(req.projectId)
+    const scopeNodeIds = req.nodeIds
+      ? new Set(req.nodeIds)
+      : new Set(allNodes.map((n) => n.id))
+    const blocked: string[] = []
+    for (const node of allNodes) {
+      if (!scopeNodeIds.has(node.id)) continue
+      const cap = getCapabilityByNodeType(node.type)
+      if (cap && !isAgentRunnable(cap.runtime)) {
+        blocked.push(`${node.title}（${cap.id}）`)
+      }
     }
+    if (blocked.length > 0) {
+      return fail(
+        'AGENT_NOT_RUNNABLE',
+        `范围内包含 ${blocked.length} 个 manual-publish 节点，不支持 Agent 自动执行：${blocked.join('、')}`
+      )
+    }
+
+    // 创建持久化 Run 记录
+    const scope: RunHandle['scope'] = req.nodeIds
+      ? { type: 'selection', nodeIds: req.nodeIds }
+      : { type: 'workflow' }
+    const startedAt = Date.now()
+    const record = await this.ctx.store.createRun({
+      runId: nanoidFallback(),
+      projectId: req.projectId,
+      scope,
+      status: 'queued',
+      actor: this.ctx.actor,
+      startedAt
+    })
 
     this.ctx.audit.log({
       actor: this.ctx.actor,
       action: 'run-workflow',
       projectId: req.projectId,
-      after: { runId, scope: handle.scope }
+      after: { runId: record.runId, scope }
     })
 
-    return ok(handle)
+    return ok(toHandle(record))
   }
 }
 
@@ -369,4 +403,22 @@ function hasInlineInput(node: CanvasNode, portId: string): boolean {
     return node.content.kind === 'media' || typeof node.params.mediaId === 'string'
   }
   return false
+}
+
+// ── Run 辅助 ───────────────────────────────────────────────
+
+function nanoidFallback(): string {
+  return nanoid(12)
+}
+
+function toHandle(record: RunRecord): RunHandle {
+  return {
+    runId: record.runId,
+    status: record.status,
+    scope: record.scope,
+    startedAt: record.startedAt ?? record.createdAt,
+    finishedAt: record.finishedAt,
+    durationMs: record.durationMs,
+    error: record.error
+  }
 }

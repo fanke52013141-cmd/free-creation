@@ -16,7 +16,8 @@ import type {
   ProjectFile,
   MediaAsset
 } from '@shared/types'
-import type { ProjectStore } from '../types'
+import { syncGraphSnapshot, GraphVersionConflictError } from '@shared/graph-snapshot-sync'
+import type { ProjectStore, RunRecord, RunUpdatePatch, RunStatus, RunArtifactRecord } from '../types'
 
 interface FileStoreOptions {
   /** 数据根目录（包含 projects/ 子目录） */
@@ -27,6 +28,10 @@ export class FileProjectStore implements ProjectStore {
   private projectsDir: string
   /** 内存缓存：projectId → ProjectFile */
   private cache = new Map<string, ProjectFile>()
+  /** 内存 Run 存储（测试用） */
+  private runs = new Map<string, RunRecord>()
+  /** 内存 Artifact 存储（测试用） */
+  private runArtifacts: RunArtifactRecord[] = []
 
   constructor(options: FileStoreOptions) {
     this.projectsDir = join(options.dataDir, 'projects')
@@ -113,14 +118,14 @@ export class FileProjectStore implements ProjectStore {
       options?.expectedGraphVersion !== undefined &&
       file.meta.graphVersion !== options.expectedGraphVersion
     ) {
-      throw new Error(
-        `项目版本冲突：期望 ${options.expectedGraphVersion}，当前 ${file.meta.graphVersion}`
-      )
+      throw new GraphVersionConflictError(options.expectedGraphVersion, file.meta.graphVersion)
     }
 
+    const { snapshot } = syncGraphSnapshot(file.tldrawSnapshot, graph)
     file.nodes = graph.nodes
     file.edges = graph.edges
     file.groups = graph.groups
+    file.tldrawSnapshot = snapshot
 
     const nextVersion = file.meta.graphVersion + 1
     file.meta.graphVersion = nextVersion
@@ -143,6 +148,49 @@ export class FileProjectStore implements ProjectStore {
   async getArtifact(): Promise<MediaAsset | null> {
     // FileProjectStore 暂不支持单个资产查询
     return null
+  }
+
+  // ── Run / Artifact 持久化（内存实现，供测试使用） ────────
+
+  async createRun(record: Omit<RunRecord, 'createdAt'>): Promise<RunRecord> {
+    const full: RunRecord = { ...record, createdAt: Date.now() }
+    this.runs.set(full.runId, full)
+    return full
+  }
+
+  async updateRun(runId: string, patch: RunUpdatePatch): Promise<RunRecord | null> {
+    const existing = this.runs.get(runId)
+    if (!existing) return null
+    const updated: RunRecord = { ...existing, ...patch }
+    this.runs.set(runId, updated)
+    return updated
+  }
+
+  async getRun(runId: string): Promise<RunRecord | null> {
+    return this.runs.get(runId) ?? null
+  }
+
+  async listRuns(projectId: string, filter?: { status?: RunStatus }): Promise<RunRecord[]> {
+    return Array.from(this.runs.values())
+      .filter((r) => r.projectId === projectId)
+      .filter((r) => !filter?.status || r.status === filter.status)
+      .sort((a, b) => b.createdAt - a.createdAt)
+  }
+
+  async createRunArtifact(
+    record: Omit<RunArtifactRecord, 'artifactId' | 'createdAt'>
+  ): Promise<RunArtifactRecord> {
+    const full: RunArtifactRecord = {
+      ...record,
+      artifactId: nanoid(12),
+      createdAt: Date.now()
+    }
+    this.runArtifacts.push(full)
+    return full
+  }
+
+  async listRunArtifacts(runId: string): Promise<RunArtifactRecord[]> {
+    return this.runArtifacts.filter((a) => a.runId === runId)
   }
 
   // ── 内部方法 ─────────────────────────────────────────────

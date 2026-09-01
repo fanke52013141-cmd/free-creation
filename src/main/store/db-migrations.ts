@@ -8,7 +8,7 @@ export interface MigrationDatabase {
   pragma(statement: string, options?: { simple?: boolean }): unknown
 }
 
-export const DB_SCHEMA_VERSION = 2
+export const DB_SCHEMA_VERSION = 3
 
 const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
@@ -51,6 +51,47 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
       );
       CREATE INDEX IF NOT EXISTS idx_history_snapshots_project_created
         ON history_snapshots(project_id, created_at DESC);
+    `)
+  },
+  (database) => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS runs (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        scope_type TEXT NOT NULL,
+        scope_node_ids TEXT NOT NULL DEFAULT '[]',
+        status TEXT NOT NULL DEFAULT 'queued',
+        actor TEXT NOT NULL DEFAULT 'agent',
+        started_at INTEGER,
+        finished_at INTEGER,
+        duration_ms INTEGER,
+        error_code TEXT,
+        error_message TEXT,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_runs_project_status
+        ON runs(project_id, status);
+      CREATE INDEX IF NOT EXISTS idx_runs_status
+        ON runs(status);
+
+      CREATE TABLE IF NOT EXISTS run_artifacts (
+        id TEXT PRIMARY KEY,
+        run_id TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        node_id TEXT NOT NULL,
+        port_id TEXT,
+        media_id TEXT,
+        artifact_type TEXT NOT NULL,
+        mime_type TEXT,
+        label TEXT,
+        input_summary TEXT,
+        model_key TEXT,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_run_artifacts_run
+        ON run_artifacts(run_id);
+      CREATE INDEX IF NOT EXISTS idx_run_artifacts_project
+        ON run_artifacts(project_id);
     `)
   }
 ]

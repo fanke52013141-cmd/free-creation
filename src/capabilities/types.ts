@@ -83,6 +83,17 @@ export interface CapabilityRuntime {
   batch: boolean
   /** 执行模式 */
   executionMode: NodeExecutionMode
+  /**
+   * 是否可被 Agent 无界面自动执行。manual-publish 节点（导演台、手动导入图片/音频）
+   * 设为 false：它们只复用用户明确「发布」的结果，不可由 Agent 自动触发。
+   * 省略时默认 true。
+   */
+  agentRunnable?: boolean
+}
+
+/** 判断一项能力是否可被 Agent 自动执行（省略 agentRunnable 时默认 true）。 */
+export function isAgentRunnable(runtime: CapabilityRuntime): boolean {
+  return runtime.agentRunnable ?? true
 }
 
 // ── 版本规则 ───────────────────────────────────────────────
