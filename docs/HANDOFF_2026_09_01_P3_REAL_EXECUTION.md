@@ -86,7 +86,7 @@ git diff --check    # 无空白错误
 
 ---
 
-## 六、已知边界与下一步（唯一推荐项）
+## 6. 已知边界与下一步
 
 > 关键：renderer 执行器尚未切换为 shared 层 re-export shim，`executor.ts` 尚未注入 `gateway` / `runCode`。当前 renderer 仍走旧执行器，构建与测试均为绿。
 
