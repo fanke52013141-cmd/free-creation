@@ -1,14 +1,16 @@
 import { inputMedia } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
 import { readNodeConfig } from '../node-config'
-import { parseVideoFrameConfig, parseVideoClipConfig, parseVideoAudioConfig } from '@shared/video-transform'
+import {
+  parseVideoFrameConfig,
+  parseVideoClipConfig,
+  parseVideoAudioConfig
+} from '@shared/video-transform'
 import { appendMediaResult, serializeMediaResultCollection } from '../values'
 
 // ── 视频取帧 ──
 
-export async function videoFrameExecutor(
-  ctx: NodeExecutionContext
-): Promise<NodeExecutionResult> {
+export async function videoFrameExecutor(ctx: NodeExecutionContext): Promise<NodeExecutionResult> {
   const source = inputMedia(ctx.inputs, 'in-video', 'video')[0]
   if (!source) return { status: 'skipped', reason: '请连接一段视频到"源视频"输入' }
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
@@ -51,9 +53,7 @@ export async function videoFrameExecutor(
 
 // ── 视频截取 ──
 
-export async function videoClipExecutor(
-  ctx: NodeExecutionContext
-): Promise<NodeExecutionResult> {
+export async function videoClipExecutor(ctx: NodeExecutionContext): Promise<NodeExecutionResult> {
   const source = inputMedia(ctx.inputs, 'in-video', 'video')[0]
   if (!source) return { status: 'skipped', reason: '请连接一段视频到"源视频"输入' }
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
@@ -96,9 +96,7 @@ export async function videoClipExecutor(
 
 // ── 视频提音 ──
 
-export async function videoAudioExecutor(
-  ctx: NodeExecutionContext
-): Promise<NodeExecutionResult> {
+export async function videoAudioExecutor(ctx: NodeExecutionContext): Promise<NodeExecutionResult> {
   const source = inputMedia(ctx.inputs, 'in-video', 'video')[0]
   if (!source) return { status: 'skipped', reason: '请连接一段视频到"源视频"输入' }
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }

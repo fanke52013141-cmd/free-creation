@@ -28,6 +28,11 @@ export type {
   RunRecord,
   RunUpdatePatch,
   RunArtifactRecord,
+  AgentMutationOperation,
+  IdempotencyClaimInput,
+  IdempotencyClaim,
+  IdempotencyCompleteInput,
+  IdempotencyReleaseInput,
   ArtifactInfo,
   AuditActor,
   AuditEntry,
@@ -55,11 +60,15 @@ export { FileProjectStore } from './stores/file-store'
 export { DesktopProjectStore } from './stores/desktop-store'
 
 // 图写入事务共享协议
-export { GraphVersionConflictError, syncGraphSnapshot } from '@shared/graph-snapshot-sync'
+export {
+  GraphVersionConflictError,
+  GraphWriteInProgressError,
+  syncGraphSnapshot
+} from '@shared/graph-snapshot-sync'
 
 // ── 服务容器工厂 ──────────────────────────────────────────
 
-import type { ServiceContext, ProjectStore, Permission } from './types'
+import type { ServiceContext, ProjectStore, Permission, RunRecord } from './types'
 import { NodeService } from './services/node-service'
 import { WorkflowService } from './services/workflow-service'
 import { RunService } from './services/run-service'
@@ -81,6 +90,9 @@ export interface ServiceOptions {
   writeEnabled?: boolean
   executionEnabled?: boolean
   actor?: 'user' | 'agent' | 'system'
+  requireExpectedGraphVersion?: boolean
+  requireIdempotencyKey?: boolean
+  executeRun?: (run: RunRecord) => Promise<void>
 }
 
 /**
@@ -107,7 +119,10 @@ export function createServices(
     // 保持内存测试和桌面内部调用的现有行为；外部入口必须显式传 false/true。
     writeEnabled: options.writeEnabled ?? true,
     executionEnabled: options.executionEnabled ?? true,
-    actor: options.actor ?? 'agent'
+    actor: options.actor ?? 'agent',
+    requireExpectedGraphVersion: options.requireExpectedGraphVersion ?? false,
+    requireIdempotencyKey: options.requireIdempotencyKey ?? false,
+    executeRun: options.executeRun
   }
 
   return {
@@ -129,4 +144,11 @@ export function agentWriteEnabledFromEnv(
   value: string | undefined = process.env.CANVAS_AGENT_WRITE
 ): boolean {
   return value === 'draft'
+}
+
+/** 执行会产生供应商调用与项目结果，必须独立于草稿写入显式开启。 */
+export function agentExecutionEnabledFromEnv(
+  value: string | undefined = process.env.CANVAS_AGENT_EXECUTE
+): boolean {
+  return value === 'enabled'
 }

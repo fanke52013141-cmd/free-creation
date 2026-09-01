@@ -224,6 +224,7 @@ export class WorkflowService {
     const cap = getCapabilityByNodeType(node.type)
     const permissionError = requireExecution(this.ctx, cap?.id)
     if (permissionError) return fail('EXECUTION_DISABLED', permissionError)
+    if (!this.ctx.executeRun) return fail('EXECUTION_UNAVAILABLE', '当前入口没有已接入的运行消费者')
 
     // manual-publish 节点不可被 Agent 自动执行
     if (cap && !isAgentRunnable(cap.runtime)) {
@@ -253,7 +254,9 @@ export class WorkflowService {
       after: { runId: record.runId }
     })
 
-    return ok(toHandle(record))
+    await this.ctx.executeRun(record)
+    const completed = await this.ctx.store.getRun(record.runId)
+    return ok(toHandle(completed ?? record))
   }
 
   async runWorkflow(req: RunWorkflowRequest): Promise<Result<RunHandle>> {
@@ -282,12 +285,11 @@ export class WorkflowService {
 
     const permissionError = requireExecution(this.ctx)
     if (permissionError) return fail('EXECUTION_DISABLED', permissionError)
+    if (!this.ctx.executeRun) return fail('EXECUTION_UNAVAILABLE', '当前入口没有已接入的运行消费者')
 
     // 检查范围内所有节点是否可被 Agent 自动执行
     const allNodes = await this.ctx.store.getNodes(req.projectId)
-    const scopeNodeIds = req.nodeIds
-      ? new Set(req.nodeIds)
-      : new Set(allNodes.map((n) => n.id))
+    const scopeNodeIds = req.nodeIds ? new Set(req.nodeIds) : new Set(allNodes.map((n) => n.id))
     const blocked: string[] = []
     for (const node of allNodes) {
       if (!scopeNodeIds.has(node.id)) continue
@@ -324,7 +326,9 @@ export class WorkflowService {
       after: { runId: record.runId, scope }
     })
 
-    return ok(toHandle(record))
+    await this.ctx.executeRun(record)
+    const completed = await this.ctx.store.getRun(record.runId)
+    return ok(toHandle(completed ?? record))
   }
 }
 

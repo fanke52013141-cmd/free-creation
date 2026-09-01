@@ -27,6 +27,19 @@ export class GraphVersionConflictError extends Error {
   }
 }
 
+/**
+ * 另一个进程正持有同一项目的图写入锁。
+ *
+ * 这不是一个可重试的“成功”：调用者应重新读取项目，并使用新的 revision 重试。
+ * 通过明确的错误类型避免把跨进程竞争误报成普通 I/O 故障。
+ */
+export class GraphWriteInProgressError extends Error {
+  constructor() {
+    super('项目正在被另一项写入操作更新，请重新读取后再试')
+    this.name = 'GraphWriteInProgressError'
+  }
+}
+
 // ── tldraw 快照基础结构 ──────────────────────────────────────
 
 /**
@@ -132,8 +145,7 @@ function stringOr(value: unknown, fallback: string): string {
 
 /** node-card 默认 props：与 renderer NodeCardShape 的默认值对齐。 */
 function nodeCardProps(node: CanvasNode): UnknownRecord {
-  const config =
-    typeof node.params?.config === 'string' ? node.params.config : ''
+  const config = typeof node.params?.config === 'string' ? node.params.config : ''
   const content = node.content ?? { kind: 'empty' }
   return {
     w: node.w,
@@ -149,10 +161,7 @@ function nodeCardProps(node: CanvasNode): UnknownRecord {
   }
 }
 
-function makeNodeCardRecord(
-  node: CanvasNode,
-  index: string
-): UnknownRecord {
+function makeNodeCardRecord(node: CanvasNode, index: string): UnknownRecord {
   return {
     id: toShapeId(node.id),
     typeName: 'shape',
@@ -264,8 +273,7 @@ export function syncGraphSnapshot(
   snapshot: unknown,
   graph: { nodes: CanvasNode[]; edges: CanvasEdge[]; groups: GroupDecl[] }
 ): GraphSnapshotSyncResult {
-  const baseStore =
-    isRecord(snapshot) && isRecord(snapshot.store) ? snapshot.store : null
+  const baseStore = isRecord(snapshot) && isRecord(snapshot.store) ? snapshot.store : null
   const base = isRecord(snapshot) && baseStore !== null ? snapshot : null
   const originalStore = baseStore ? { ...baseStore } : null
 
@@ -335,20 +343,11 @@ export function syncGraphSnapshot(
       store[arrowId] = arrowRecord(edge, start, end, bend, nextSiblingIndex(store))
     }
 
-    upsertArrowBinding(
-      store,
-      arrowId,
-      fromShapeId,
-      'start',
-      { x: 0.98, y: clamp01(fromY / fromNode.h) }
-    )
-    upsertArrowBinding(
-      store,
-      arrowId,
-      toShapeId2,
-      'end',
-      { x: 0.02, y: clamp01(toY / toNode.h) }
-    )
+    upsertArrowBinding(store, arrowId, fromShapeId, 'start', {
+      x: 0.98,
+      y: clamp01(fromY / fromNode.h)
+    })
+    upsertArrowBinding(store, arrowId, toShapeId2, 'end', { x: 0.02, y: clamp01(toY / toNode.h) })
   }
 
   // 3) 清理：图数据不再引用的 node-card / arrow，以及随之悬空的 binding
@@ -366,21 +365,14 @@ export function syncGraphSnapshot(
     const fromId = record.fromId
     const toId = record.toId
     const fromAlive =
-      typeof fromId === 'string' &&
-      isRecord(store[fromId]) &&
-      store[fromId].typeName === 'shape'
+      typeof fromId === 'string' && isRecord(store[fromId]) && store[fromId].typeName === 'shape'
     const toAlive =
-      typeof toId === 'string' &&
-      isRecord(store[toId]) &&
-      store[toId].typeName === 'shape'
+      typeof toId === 'string' && isRecord(store[toId]) && store[toId].typeName === 'shape'
     if (!fromAlive || !toAlive) delete store[key]
   }
 
-  const changed =
-    originalStore === null || JSON.stringify(store) !== JSON.stringify(originalStore)
-  const resultSnapshot = base
-    ? { ...base, store }
-    : { store, schema: TL_SNAPSHOT_SCHEMA }
+  const changed = originalStore === null || JSON.stringify(store) !== JSON.stringify(originalStore)
+  const resultSnapshot = base ? { ...base, store } : { store, schema: TL_SNAPSHOT_SCHEMA }
 
   return { snapshot: resultSnapshot, changed }
 }

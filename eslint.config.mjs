@@ -28,5 +28,15 @@ export default defineConfig(
       ...eslintPluginReactRefresh.configs.vite.rules
     }
   },
+  // 测试夹具需要构造不完整的外部输入与 mock；对其强制生产代码的显式返回类型、
+  // 禁止 any 和未使用变量只会制造噪声。生产源码仍保持严格规则。
+  {
+    files: ['test/**/*.{ts,tsx}'],
+    rules: {
+      '@typescript-eslint/explicit-function-return-type': 'off',
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unused-vars': 'off'
+    }
+  },
   eslintConfigPrettier
 )

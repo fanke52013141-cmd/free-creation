@@ -92,4 +92,3 @@ export function buildImageSplitTiles(config: ImageSplitConfig): ImageSplitTile[]
     }
   })
 }
-

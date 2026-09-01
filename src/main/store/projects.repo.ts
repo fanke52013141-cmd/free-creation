@@ -1,9 +1,23 @@
 // 项目仓库：SQLite 索引 + project.json 图数据（见《技术框架与规范》§9）
 import { nanoid } from 'nanoid'
-import { mkdirSync, readFileSync, rmSync, writeFileSync, renameSync, existsSync } from 'fs'
+import {
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+  renameSync,
+  existsSync,
+  openSync,
+  closeSync,
+  unlinkSync,
+  statSync
+} from 'fs'
 import { join } from 'path'
 import type { ProjectFile, ProjectMeta } from '../../shared/types'
-import { GraphVersionConflictError } from '../../shared/graph-snapshot-sync'
+import {
+  GraphVersionConflictError,
+  GraphWriteInProgressError
+} from '../../shared/graph-snapshot-sync'
 import { getDb, getProjectsDir } from './db'
 
 interface ProjectRow {
@@ -32,6 +46,32 @@ function projectDir(id: string): string {
 
 function projectJsonPath(id: string): string {
   return join(projectDir(id), 'project.json')
+}
+
+const PROJECT_WRITE_LOCK_STALE_MS = 30_000
+
+function acquireProjectWriteLock(lockPath: string): number {
+  // 图快照事务只做本地同步 I/O；超过 30 秒仍存在的锁说明持锁进程已经异常终止。
+  // 接管前仅按 mtime 判定，避免把不可探测的旧 Electron PID 当作活进程。
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return openSync(lockPath, 'wx')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+      try {
+        const ageMs = Date.now() - statSync(lockPath).mtimeMs
+        if (ageMs >= PROJECT_WRITE_LOCK_STALE_MS && attempt === 0) {
+          unlinkSync(lockPath)
+          continue
+        }
+      } catch (lockError) {
+        // 若锁刚被持有者删除，下一次循环重新尝试获取；其余错误仍按“写入中”返回。
+        if ((lockError as NodeJS.ErrnoException).code === 'ENOENT' && attempt === 0) continue
+      }
+      throw new GraphWriteInProgressError()
+    }
+  }
+  throw new GraphWriteInProgressError()
 }
 
 // 主文件损坏时回退 .bak（保存时每次轮转一份）
@@ -120,6 +160,30 @@ export function openProject(id: string): ProjectFile | null {
  *   尽力把 .bak 恢复为主文件，保证图数据与快照不会停留在半提交状态。
  */
 export function saveProject(input: {
+  id: string
+  tldrawSnapshot?: unknown
+  graph?: { nodes: unknown[]; edges: unknown[]; groups: unknown[] }
+  expectedGraphVersion?: number
+}): { graphVersion: number } | null {
+  // project.json 的 rename 是原子的，但“读取版本 → 校验 → 写入”不是跨进程原子。
+  // CLI/MCP 可能各自运行在独立 Electron 进程，所以用同目录的排他锁把整个临界区
+  // 包起来。锁文件只在写入期间存在；异常路径也必须释放，避免永久阻塞。
+  const lockPath = projectJsonPath(input.id) + '.write-lock'
+  const lockFd = acquireProjectWriteLock(lockPath)
+
+  try {
+    return saveProjectUnlocked(input)
+  } finally {
+    closeSync(lockFd)
+    try {
+      if (existsSync(lockPath)) unlinkSync(lockPath)
+    } catch {
+      // 锁文件清理失败时保留现场，下一次调用会明确报告占用而不会悄悄覆盖数据。
+    }
+  }
+}
+
+function saveProjectUnlocked(input: {
   id: string
   tldrawSnapshot?: unknown
   graph?: { nodes: unknown[]; edges: unknown[]; groups: unknown[] }

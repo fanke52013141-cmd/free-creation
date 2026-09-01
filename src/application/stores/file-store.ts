@@ -17,7 +17,17 @@ import type {
   MediaAsset
 } from '@shared/types'
 import { syncGraphSnapshot, GraphVersionConflictError } from '@shared/graph-snapshot-sync'
-import type { ProjectStore, RunRecord, RunUpdatePatch, RunStatus, RunArtifactRecord } from '../types'
+import type {
+  ProjectStore,
+  RunRecord,
+  RunUpdatePatch,
+  RunStatus,
+  RunArtifactRecord,
+  IdempotencyClaimInput,
+  IdempotencyClaim,
+  IdempotencyCompleteInput,
+  IdempotencyReleaseInput
+} from '../types'
 
 interface FileStoreOptions {
   /** 数据根目录（包含 projects/ 子目录） */
@@ -32,6 +42,10 @@ export class FileProjectStore implements ProjectStore {
   private runs = new Map<string, RunRecord>()
   /** 内存 Artifact 存储（测试用） */
   private runArtifacts: RunArtifactRecord[] = []
+  private idempotency = new Map<
+    string,
+    { payloadHash: string; state: 'pending' | 'completed'; result?: unknown; updatedAt: number }
+  >()
 
   constructor(options: FileStoreOptions) {
     this.projectsDir = join(options.dataDir, 'projects')
@@ -193,6 +207,48 @@ export class FileProjectStore implements ProjectStore {
     return this.runArtifacts.filter((a) => a.runId === runId)
   }
 
+  async claimIdempotency(input: IdempotencyClaimInput): Promise<IdempotencyClaim> {
+    const key = idempotencyStorageKey(input)
+    const existing = this.idempotency.get(key)
+    if (!existing) {
+      this.idempotency.set(key, {
+        payloadHash: input.payloadHash,
+        state: 'pending',
+        updatedAt: Date.now()
+      })
+      return { state: 'claimed' }
+    }
+    if (existing.payloadHash !== input.payloadHash) return { state: 'payload-conflict' }
+    if (existing.state === 'completed') return { state: 'completed', result: existing.result }
+    if (Date.now() - existing.updatedAt >= 30_000) {
+      this.idempotency.set(key, { ...existing, updatedAt: Date.now() })
+      return { state: 'claimed' }
+    }
+    return { state: 'pending' }
+  }
+
+  async completeIdempotency(input: IdempotencyCompleteInput): Promise<void> {
+    const key = idempotencyStorageKey(input)
+    const existing = this.idempotency.get(key)
+    if (!existing || existing.payloadHash !== input.payloadHash) {
+      throw new Error('幂等记录不存在或与当前请求不匹配')
+    }
+    this.idempotency.set(key, {
+      payloadHash: input.payloadHash,
+      state: 'completed',
+      result: input.result,
+      updatedAt: Date.now()
+    })
+  }
+
+  async releaseIdempotency(input: IdempotencyReleaseInput): Promise<void> {
+    const key = idempotencyStorageKey(input)
+    const existing = this.idempotency.get(key)
+    if (existing?.state === 'pending' && existing.payloadHash === input.payloadHash) {
+      this.idempotency.delete(key)
+    }
+  }
+
   // ── 内部方法 ─────────────────────────────────────────────
 
   private ensureProjectsDir(): void {
@@ -245,6 +301,10 @@ export class FileProjectStore implements ProjectStore {
       this.cache.clear()
     }
   }
+}
+
+function idempotencyStorageKey(input: IdempotencyClaimInput): string {
+  return `${input.actor}:${input.projectId}:${input.operation}:${input.key}`
 }
 
 /** projectId 永远来自 nanoid 或受控数据库，禁止进入路径分隔符或父目录。 */

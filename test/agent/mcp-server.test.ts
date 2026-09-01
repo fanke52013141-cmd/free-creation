@@ -199,11 +199,88 @@ describe('MCP Server', () => {
         expect(tool.inputSchema.type).toBe('object')
       }
     })
+
+    it('草稿写入工具应公开 revision 与 idempotency 字段', async () => {
+      sendRequest(stdin, {
+        jsonrpc: '2.0',
+        id: 5,
+        method: 'tools/list'
+      })
+
+      const res = await readResponse(stdout)
+      const createNode = res!.result.tools.find(
+        (tool: { name: string }) => tool.name === 'create_node'
+      ) as { inputSchema: { properties: Record<string, unknown> } }
+      expect(createNode.inputSchema.properties.expectedGraphVersion).toBeDefined()
+      expect(createNode.inputSchema.properties.idempotencyKey).toBeDefined()
+    })
   })
 
   // ── tools/call ────────────────────────────────────────────
 
   describe('tools/call', () => {
+    it('草稿写入要求 revision/key，重试会返回第一次结果而不会重复创建', async () => {
+      const draftIn = new PassThrough()
+      const draftOut = new PassThrough()
+      const draftStore = createIsolatedMcpStore(tempDir)
+      const project = await draftStore.createProject('draft safety')
+      startMcpServer(draftIn, draftOut, draftStore, { writeEnabled: true })
+
+      const request = async (
+        id: number,
+        arguments_: Record<string, unknown>,
+        name = 'create_node'
+      ): Promise<Record<string, unknown>> => {
+        sendRequest(draftIn, {
+          jsonrpc: '2.0',
+          id,
+          method: 'tools/call',
+          params: { name, arguments: arguments_ }
+        })
+        return (await readResponse(draftOut))!
+      }
+
+      const missingSafety = await request(40, {
+        projectId: project.id,
+        type: 'text'
+      })
+      expect(missingSafety.result.isError).toBe(true)
+      expect(missingSafety.result.content[0].text).toContain('expectedGraphVersion')
+
+      const arguments_ = {
+        projectId: project.id,
+        type: 'text',
+        title: '安全文本',
+        expectedGraphVersion: 0,
+        idempotencyKey: 'mcp-create-text-0001'
+      }
+      const first = await request(41, arguments_)
+      const firstNode = JSON.parse(first.result.content[0].text) as { id: string }
+      const replay = await request(42, arguments_)
+      const replayNode = JSON.parse(replay.result.content[0].text) as { id: string }
+      expect(replayNode.id).toBe(firstNode.id)
+      expect(await draftStore.getNodes(project.id)).toHaveLength(1)
+
+      const conflict = await request(43, { ...arguments_, title: '不同内容' })
+      expect(conflict.result.isError).toBe(true)
+      expect(conflict.result.content[0].text).toContain('idempotencyKey')
+
+      const deleteArguments = {
+        projectId: project.id,
+        nodeId: firstNode.id,
+        expectedGraphVersion: 1,
+        idempotencyKey: 'mcp-delete-text-0001'
+      }
+      const deleted = await request(44, deleteArguments, 'delete_node')
+      const deletedReplay = await request(45, deleteArguments, 'delete_node')
+      expect(JSON.parse(deleted.result.content[0].text)).toEqual({ deleted: true })
+      expect(JSON.parse(deletedReplay.result.content[0].text)).toEqual({ deleted: true })
+      expect(await draftStore.getNodes(project.id)).toHaveLength(0)
+
+      draftIn.destroy()
+      draftOut.destroy()
+    })
+
     it('list_projects 应返回数组', async () => {
       sendRequest(stdin, {
         jsonrpc: '2.0',

@@ -16,6 +16,7 @@ import type {
   ContractSnapshot
 } from './types'
 import { listCapabilities } from './registry'
+import { defineTools } from '../mcp/server'
 
 // ── 单项生成 ───────────────────────────────────────────────
 
@@ -100,8 +101,12 @@ export function generateSnapshot(cap: Capability): ContractSnapshot {
 // ── 批量生成 ───────────────────────────────────────────────
 
 export interface GeneratedArtifacts {
+  /** MCP 实际注册的通用工具。 */
   mcpTools: McpToolSchema[]
+  /** CLI 实际顶层命令。 */
   cliCommands: CliCommandSpec[]
+  /** 每种节点的 params 配置 schema，供通用 create/configure 工具使用。 */
+  nodeConfigSchemas: McpToolSchema[]
   capabilityMatrix: CapabilityMatrixEntry[]
   snapshots: ContractSnapshot[]
   /** 仅供运行时审计；提交到 generated/ 的稳定产物会移除该字段。 */
@@ -115,8 +120,16 @@ export interface GeneratedArtifacts {
 export function generateAll(): GeneratedArtifacts {
   const caps = [...listCapabilities()].sort((a, b) => a.id.localeCompare(b.id))
   return {
-    mcpTools: caps.map(generateMcpToolSchema),
-    cliCommands: caps.map(generateCliSpec),
+    mcpTools: defineTools().map((tool) => ({
+      ...tool,
+      inputSchema: { ...tool.inputSchema, required: tool.inputSchema.required ?? [] }
+    })),
+    cliCommands: ['project', 'capability', 'node', 'workflow', 'artifact'].map((command) => ({
+      command,
+      description: `Canvas CLI ${command} 命令`,
+      options: []
+    })),
+    nodeConfigSchemas: caps.map(generateMcpToolSchema),
     capabilityMatrix: caps.map(generateMatrixEntry),
     snapshots: caps.map(generateSnapshot),
     generatedAt: Date.now()

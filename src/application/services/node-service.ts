@@ -6,8 +6,9 @@
  */
 
 import { nanoid } from 'nanoid'
+import { createHash } from 'node:crypto'
 import type { CanvasNode, CanvasEdge, PortDecl, NodeTypeId } from '@shared/types'
-import { GraphVersionConflictError } from '@shared/graph-snapshot-sync'
+import { GraphVersionConflictError, GraphWriteInProgressError } from '@shared/graph-snapshot-sync'
 import { getCapabilityByNodeType } from '@capabilities'
 import type {
   Result,
@@ -19,18 +20,6 @@ import type {
 } from '../types'
 import { ok, fail } from '../types'
 import { requireWrite } from './authorization'
-
-// ── 幂等性缓存 ─────────────────────────────────────────────
-
-const idempotencyCache = new Map<string, Result<CanvasNode | CanvasEdge>>()
-
-function scopedIdempotencyKey(
-  operation: 'create-node' | 'update-node' | 'connect',
-  projectId: string,
-  key: string
-): string {
-  return `${operation}:${projectId}:${key}`
-}
 
 // ── ID 与错误映射 ──────────────────────────────────────────
 
@@ -57,10 +46,90 @@ function saveError(
       }
     }
   }
+  if (error instanceof GraphWriteInProgressError) {
+    return {
+      code: 'REVISION_CONFLICT',
+      message: '项目正在被另一项写入操作更新，请重新读取后再试'
+    }
+  }
   return {
     code: 'SAVE_FAILED',
     message: `项目保存失败: ${error instanceof Error ? error.message : String(error)}`
   }
+}
+
+type MutationGuard<T> =
+  | { kind: 'proceed'; claim?: import('../types').IdempotencyClaimInput }
+  | { kind: 'return'; result: Result<T> }
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
+  if (value && typeof value === 'object') {
+    const object = value as Record<string, unknown>
+    return `{${Object.keys(object)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableJson(object[key])}`)
+      .join(',')}}`
+  }
+  return JSON.stringify(value)
+}
+
+async function claimMutation<T>(
+  ctx: ServiceContext,
+  operation: import('../types').AgentMutationOperation,
+  projectId: string,
+  expectedGraphVersion: number | undefined,
+  idempotencyKey: string | undefined,
+  payload: unknown
+): Promise<MutationGuard<T>> {
+  if (ctx.requireExpectedGraphVersion && expectedGraphVersion === undefined) {
+    return {
+      kind: 'return',
+      result: fail('REVISION_REQUIRED', '草稿写入必须提供 expectedGraphVersion')
+    }
+  }
+  if (ctx.requireIdempotencyKey && !idempotencyKey) {
+    return {
+      kind: 'return',
+      result: fail('IDEMPOTENCY_KEY_REQUIRED', '草稿写入必须提供 idempotencyKey')
+    }
+  }
+  if (!idempotencyKey) return { kind: 'proceed' }
+
+  const claim = {
+    actor: ctx.actor,
+    projectId,
+    operation,
+    key: idempotencyKey,
+    payloadHash: createHash('sha256').update(stableJson(payload)).digest('hex')
+  }
+  const state = await ctx.store.claimIdempotency(claim)
+  if (state.state === 'claimed') return { kind: 'proceed', claim }
+  if (state.state === 'completed') return { kind: 'return', result: ok(state.result as T) }
+  if (state.state === 'payload-conflict') {
+    return {
+      kind: 'return',
+      result: fail('IDEMPOTENCY_PAYLOAD_CONFLICT', '同一 idempotencyKey 被用于不同请求，已拒绝执行')
+    }
+  }
+  return {
+    kind: 'return',
+    result: fail('IDEMPOTENCY_IN_PROGRESS', '相同请求仍在处理中，请稍后重试')
+  }
+}
+
+async function completeMutation<T>(
+  ctx: ServiceContext,
+  guard: MutationGuard<T>,
+  result: T
+): Promise<Result<T>> {
+  if (guard.kind === 'proceed' && guard.claim)
+    await ctx.store.completeIdempotency({ ...guard.claim, result })
+  return ok(result)
+}
+
+async function releaseMutation<T>(ctx: ServiceContext, guard: MutationGuard<T>): Promise<void> {
+  if (guard.kind === 'proceed' && guard.claim) await ctx.store.releaseIdempotency(guard.claim)
 }
 
 export class NodeService {
@@ -75,14 +144,6 @@ export class NodeService {
     }
     const denied = requireWrite(this.ctx, capability.id)
     if (denied) return fail('WRITE_DISABLED', denied)
-
-    // 幂等性检查
-    if (req.idempotencyKey) {
-      const cached = idempotencyCache.get(
-        scopedIdempotencyKey('create-node', req.projectId, req.idempotencyKey)
-      )
-      if (cached) return cached as Result<CanvasNode>
-    }
 
     // 从能力注册表获取端口定义
     const cap = capability
@@ -132,10 +193,20 @@ export class NodeService {
     // 保存到项目
     const project = await this.ctx.store.getProject(req.projectId)
     if (!project) return fail('PROJECT_NOT_FOUND', `项目不存在: ${req.projectId}`)
+    const guard = await claimMutation<CanvasNode>(
+      this.ctx,
+      'create-node',
+      req.projectId,
+      req.expectedGraphVersion,
+      req.idempotencyKey,
+      req
+    )
+    if (guard.kind === 'return') return guard.result
     if (
       req.expectedGraphVersion !== undefined &&
       project.meta.graphVersion !== req.expectedGraphVersion
     ) {
+      await releaseMutation(this.ctx, guard)
       return fail('REVISION_CONFLICT', '项目已被其他操作更新，请重新读取后再试', {
         expectedGraphVersion: req.expectedGraphVersion,
         actualGraphVersion: project.meta.graphVersion
@@ -154,6 +225,7 @@ export class NodeService {
         }
       )
     } catch (error) {
+      await releaseMutation(this.ctx, guard)
       const mapped = saveError(error, req.expectedGraphVersion)
       return fail(mapped.code, mapped.message, mapped.details)
     }
@@ -166,39 +238,34 @@ export class NodeService {
       after: { type: node.type, title: node.title }
     })
 
-    const result = ok(node)
-
-    // 缓存幂等结果
-    if (req.idempotencyKey) {
-      idempotencyCache.set(
-        scopedIdempotencyKey('create-node', req.projectId, req.idempotencyKey),
-        result
-      )
-    }
-
-    return result
+    return completeMutation(this.ctx, guard, node)
   }
 
   async updateNode(req: UpdateNodeRequest): Promise<Result<CanvasNode>> {
     const permissionError = requireWrite(this.ctx)
     if (permissionError) return fail('WRITE_DISABLED', permissionError)
-    if (req.idempotencyKey) {
-      const cached = idempotencyCache.get(
-        scopedIdempotencyKey('update-node', req.projectId, req.idempotencyKey)
-      )
-      if (cached) return cached as Result<CanvasNode>
-    }
     const project = await this.ctx.store.getProject(req.projectId)
     if (!project) return fail('PROJECT_NOT_FOUND', `项目不存在: ${req.projectId}`)
+    const guard = await claimMutation<CanvasNode>(
+      this.ctx,
+      'update-node',
+      req.projectId,
+      req.expectedGraphVersion,
+      req.idempotencyKey,
+      req
+    )
+    if (guard.kind === 'return') return guard.result
     if (
       req.expectedGraphVersion !== undefined &&
       project.meta.graphVersion !== req.expectedGraphVersion
     ) {
+      await releaseMutation(this.ctx, guard)
       return fail('REVISION_CONFLICT', '项目已被其他操作更新，请重新读取后再试')
     }
     const nodes = await this.ctx.store.getNodes(req.projectId)
     const node = nodes.find((n) => n.id === req.nodeId)
     if (!node) {
+      await releaseMutation(this.ctx, guard)
       return fail('NODE_NOT_FOUND', `节点不存在: ${req.nodeId}`, { entityId: req.nodeId })
     }
 
@@ -224,6 +291,7 @@ export class NodeService {
         }
       )
     } catch (error) {
+      await releaseMutation(this.ctx, guard)
       const mapped = saveError(error, req.expectedGraphVersion)
       return fail(mapped.code, mapped.message, mapped.details)
     }
@@ -237,22 +305,38 @@ export class NodeService {
       after: { title: node.title, params: node.params }
     })
 
-    const result = ok(node)
-    if (req.idempotencyKey) {
-      idempotencyCache.set(
-        scopedIdempotencyKey('update-node', req.projectId, req.idempotencyKey),
-        result
-      )
-    }
-    return result
+    return completeMutation(this.ctx, guard, node)
   }
 
-  async deleteNode(projectId: string, nodeId: string): Promise<Result<boolean>> {
+  async deleteNode(
+    projectId: string,
+    nodeId: string,
+    options?: { expectedGraphVersion?: number; idempotencyKey?: string }
+  ): Promise<Result<boolean>> {
     const permissionError = requireWrite(this.ctx)
     if (permissionError) return fail('WRITE_DISABLED', permissionError)
+    const project = await this.ctx.store.getProject(projectId)
+    if (!project) return fail('PROJECT_NOT_FOUND', `项目不存在: ${projectId}`)
+    const guard = await claimMutation<boolean>(
+      this.ctx,
+      'delete-node',
+      projectId,
+      options?.expectedGraphVersion,
+      options?.idempotencyKey,
+      { projectId, nodeId }
+    )
+    if (guard.kind === 'return') return guard.result
+    if (
+      options?.expectedGraphVersion !== undefined &&
+      project.meta.graphVersion !== options.expectedGraphVersion
+    ) {
+      await releaseMutation(this.ctx, guard)
+      return fail('REVISION_CONFLICT', '项目已被其他操作更新，请重新读取后再试')
+    }
     const nodes = await this.ctx.store.getNodes(projectId)
     const idx = nodes.findIndex((n) => n.id === nodeId)
     if (idx === -1) {
+      await releaseMutation(this.ctx, guard)
       return fail('NODE_NOT_FOUND', `节点不存在: ${nodeId}`, { entityId: nodeId })
     }
 
@@ -265,8 +349,9 @@ export class NodeService {
 
     const groups = await this.ctx.store.getGroups(projectId)
     try {
-      await this.ctx.store.saveGraph(projectId, { nodes, edges: filteredEdges, groups })
+      await this.ctx.store.saveGraph(projectId, { nodes, edges: filteredEdges, groups }, options)
     } catch (error) {
+      await releaseMutation(this.ctx, guard)
       const mapped = saveError(error)
       return fail(mapped.code, mapped.message, mapped.details)
     }
@@ -279,7 +364,7 @@ export class NodeService {
       before: removed
     })
 
-    return ok(true)
+    return completeMutation(this.ctx, guard, true)
   }
 
   async getNode(projectId: string, nodeId: string): Promise<Result<CanvasNode>> {
@@ -301,17 +386,29 @@ export class NodeService {
   async connectNodes(req: ConnectNodesRequest): Promise<Result<CanvasEdge>> {
     const permissionError = requireWrite(this.ctx)
     if (permissionError) return fail('WRITE_DISABLED', permissionError)
-    // 幂等性检查
-    if (req.idempotencyKey) {
-      const cached = idempotencyCache.get(
-        scopedIdempotencyKey('connect', req.projectId, req.idempotencyKey)
-      )
-      if (cached) return cached as Result<CanvasEdge>
-    }
 
-    // 校验连接
+    const project = await this.ctx.store.getProject(req.projectId)
+    if (!project) return fail('PROJECT_NOT_FOUND', `项目不存在: ${req.projectId}`)
+    const guard = await claimMutation<CanvasEdge>(
+      this.ctx,
+      'connect',
+      req.projectId,
+      req.expectedGraphVersion,
+      req.idempotencyKey,
+      req
+    )
+    if (guard.kind === 'return') return guard.result
+    if (
+      req.expectedGraphVersion !== undefined &&
+      project.meta.graphVersion !== req.expectedGraphVersion
+    ) {
+      await releaseMutation(this.ctx, guard)
+      return fail('REVISION_CONFLICT', '项目已被其他操作更新，请重新读取后再试')
+    }
+    // 对首次请求才做连线校验；幂等重放在 claim 阶段已经直接返回原结果。
     const validation = await this.validateConnection(req)
     if (!validation.valid) {
+      await releaseMutation(this.ctx, guard)
       return fail('INVALID_CONNECTION', validation.errors.join('; '))
     }
 
@@ -334,6 +431,7 @@ export class NodeService {
         }
       )
     } catch (error) {
+      await releaseMutation(this.ctx, guard)
       const mapped = saveError(error, req.expectedGraphVersion)
       return fail(mapped.code, mapped.message, mapped.details)
     }
@@ -346,23 +444,38 @@ export class NodeService {
       after: edge
     })
 
-    const result = ok(edge)
-    if (req.idempotencyKey) {
-      idempotencyCache.set(
-        scopedIdempotencyKey('connect', req.projectId, req.idempotencyKey),
-        result
-      )
-    }
-
-    return result
+    return completeMutation(this.ctx, guard, edge)
   }
 
-  async disconnectNodes(projectId: string, edgeId: string): Promise<Result<boolean>> {
+  async disconnectNodes(
+    projectId: string,
+    edgeId: string,
+    options?: { expectedGraphVersion?: number; idempotencyKey?: string }
+  ): Promise<Result<boolean>> {
     const permissionError = requireWrite(this.ctx)
     if (permissionError) return fail('WRITE_DISABLED', permissionError)
+    const project = await this.ctx.store.getProject(projectId)
+    if (!project) return fail('PROJECT_NOT_FOUND', `项目不存在: ${projectId}`)
+    const guard = await claimMutation<boolean>(
+      this.ctx,
+      'disconnect',
+      projectId,
+      options?.expectedGraphVersion,
+      options?.idempotencyKey,
+      { projectId, edgeId }
+    )
+    if (guard.kind === 'return') return guard.result
+    if (
+      options?.expectedGraphVersion !== undefined &&
+      project.meta.graphVersion !== options.expectedGraphVersion
+    ) {
+      await releaseMutation(this.ctx, guard)
+      return fail('REVISION_CONFLICT', '项目已被其他操作更新，请重新读取后再试')
+    }
     const edges = await this.ctx.store.getEdges(projectId)
     const idx = edges.findIndex((e) => e.id === edgeId)
     if (idx === -1) {
+      await releaseMutation(this.ctx, guard)
       return fail('EDGE_NOT_FOUND', `连线不存在: ${edgeId}`, { entityId: edgeId })
     }
 
@@ -372,8 +485,9 @@ export class NodeService {
     const nodes = await this.ctx.store.getNodes(projectId)
     const groups = await this.ctx.store.getGroups(projectId)
     try {
-      await this.ctx.store.saveGraph(projectId, { nodes, edges, groups })
+      await this.ctx.store.saveGraph(projectId, { nodes, edges, groups }, options)
     } catch (error) {
+      await releaseMutation(this.ctx, guard)
       const mapped = saveError(error)
       return fail(mapped.code, mapped.message, mapped.details)
     }
@@ -386,7 +500,7 @@ export class NodeService {
       before: removed
     })
 
-    return ok(true)
+    return completeMutation(this.ctx, guard, true)
   }
 
   async listEdges(projectId: string): Promise<Result<CanvasEdge[]>> {

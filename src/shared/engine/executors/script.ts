@@ -2,13 +2,7 @@
 import { inputText } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
 import { findTextModel } from '../models'
-import {
-  extractShots,
-  mergedPrompt,
-  normalizeShot,
-  parseJsonObj,
-  waitForChat
-} from '../helpers'
+import { extractShots, mergedPrompt, normalizeShot, parseJsonObj, waitForChat } from '../helpers'
 
 export interface ScriptShot {
   id: string

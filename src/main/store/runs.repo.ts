@@ -11,7 +11,11 @@ import type {
   RunStatus,
   RunUpdatePatch,
   RunArtifactRecord,
-  AuditActor
+  AuditActor,
+  IdempotencyClaimInput,
+  IdempotencyClaim,
+  IdempotencyCompleteInput,
+  IdempotencyReleaseInput
 } from '../../application/types'
 
 // ── Run CRUD ──────────────────────────────────────────────
@@ -158,7 +162,9 @@ function artifactRowToRecord(row: ArtifactRow): RunArtifactRecord {
     artifactType: row.artifact_type as RunArtifactRecord['artifactType'],
     mimeType: row.mime_type ?? undefined,
     label: row.label ?? undefined,
-    inputSummary: row.input_summary ? (JSON.parse(row.input_summary) as Record<string, unknown>) : undefined,
+    inputSummary: row.input_summary
+      ? (JSON.parse(row.input_summary) as Record<string, unknown>)
+      : undefined,
     modelKey: row.model_key ?? undefined,
     createdAt: row.created_at
   }
@@ -196,4 +202,89 @@ export function listRunArtifacts(runId: string): RunArtifactRecord[] {
     .prepare('SELECT * FROM run_artifacts WHERE run_id = ? ORDER BY created_at ASC')
     .all(runId) as ArtifactRow[]
   return rows.map(artifactRowToRecord)
+}
+
+// ── Agent 幂等记录 ──────────────────────────────────────────
+
+interface IdempotencyRow {
+  payload_hash: string
+  status: 'pending' | 'completed'
+  result_json: string | null
+  updated_at: number
+}
+
+// 节点/连线写入仅包裹本地快照事务，正常情况下是毫秒级。进程在 saveGraph 成功、
+// completeIdempotency 前崩溃时允许在窗口后接管 pending 记录，避免 key 永久卡死。
+const STALE_IDEMPOTENCY_MS = 30_000
+
+export function claimIdempotency(input: IdempotencyClaimInput): IdempotencyClaim {
+  const now = Date.now()
+  const db = getDb()
+  const insert = db
+    .prepare(
+      `INSERT OR IGNORE INTO agent_idempotency
+       (actor, project_id, operation, idempotency_key, payload_hash, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)`
+    )
+    .run(input.actor, input.projectId, input.operation, input.key, input.payloadHash, now, now)
+  if (insert.changes === 1) return { state: 'claimed' }
+
+  const row = db
+    .prepare(
+      `SELECT payload_hash, status, result_json, updated_at FROM agent_idempotency
+       WHERE actor = ? AND project_id = ? AND operation = ? AND idempotency_key = ?`
+    )
+    .get(input.actor, input.projectId, input.operation, input.key) as IdempotencyRow | undefined
+  if (!row || row.payload_hash !== input.payloadHash) return { state: 'payload-conflict' }
+  if (row.status === 'completed' && row.result_json) {
+    return { state: 'completed', result: JSON.parse(row.result_json) }
+  }
+  if (now - row.updated_at >= STALE_IDEMPOTENCY_MS) {
+    const takeover = db
+      .prepare(
+        `UPDATE agent_idempotency SET updated_at = ?
+         WHERE actor = ? AND project_id = ? AND operation = ? AND idempotency_key = ?
+           AND payload_hash = ? AND status = 'pending' AND updated_at = ?`
+      )
+      .run(
+        now,
+        input.actor,
+        input.projectId,
+        input.operation,
+        input.key,
+        input.payloadHash,
+        row.updated_at
+      )
+    if (takeover.changes === 1) return { state: 'claimed' }
+  }
+  return { state: 'pending' }
+}
+
+export function completeIdempotency(input: IdempotencyCompleteInput): void {
+  const result = getDb()
+    .prepare(
+      `UPDATE agent_idempotency
+       SET status = 'completed', result_json = ?, updated_at = ?
+       WHERE actor = ? AND project_id = ? AND operation = ? AND idempotency_key = ? AND payload_hash = ?`
+    )
+    .run(
+      JSON.stringify(input.result),
+      Date.now(),
+      input.actor,
+      input.projectId,
+      input.operation,
+      input.key,
+      input.payloadHash
+    )
+  if (result.changes !== 1) throw new Error('幂等记录不存在或与当前请求不匹配')
+}
+
+export function releaseIdempotency(input: IdempotencyReleaseInput): void {
+  getDb()
+    .prepare(
+      `DELETE FROM agent_idempotency
+       WHERE actor = ? AND project_id = ? AND operation = ? AND idempotency_key = ?
+         AND payload_hash = ? AND status = 'pending'`
+    )
+    .run(input.actor, input.projectId, input.operation, input.key, input.payloadHash)
 }

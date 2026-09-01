@@ -75,7 +75,10 @@ export interface NodeExecutionContext {
    * 代码执行入口（P3）：renderer 注入 Web Worker 实现，headless 可注入 Node.js vm 实现。
    * 代码节点执行器通过此函数执行用户代码，不直接导入 renderer 的 codeRuntime 模块。
    */
-  runCode?: (source: string, args: Record<string, unknown>) => Promise<{ kind: 'text'; text: string } | { kind: 'json'; data: unknown }>
+  runCode?: (
+    source: string,
+    args: Record<string, unknown>
+  ) => Promise<{ kind: 'text'; text: string } | { kind: 'json'; data: unknown }>
   waitForResume?: () => Promise<void>
   updateProps: (patch: Partial<NodeShape['props']>) => void
   updateResult: (result: string | null) => void

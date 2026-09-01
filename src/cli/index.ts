@@ -23,9 +23,16 @@
  *   CANVAS_DATA_DIR  数据目录路径（默认使用 Electron userData 目录）
  */
 
-import { agentWriteEnabledFromEnv, createServices, DesktopProjectStore } from '@application'
+import {
+  agentExecutionEnabledFromEnv,
+  agentWriteEnabledFromEnv,
+  createServices,
+  DesktopProjectStore
+} from '@application'
 import type { Result, ServiceContainer } from '@application'
 import type { NodeTypeId } from '@shared/types'
+import { createHeadlessGateway } from '../main/headless/gateway-client'
+import { HeadlessRunExecutor } from '../main/headless/run-executor'
 
 // ── 服务初始化 ─────────────────────────────────────────────
 
@@ -33,11 +40,19 @@ function getServices(): ServiceContainer {
   // 外部 CLI 默认只读；仅在 CANVAS_AGENT_WRITE=draft 时开放草稿写入——写入走
   // 图写入事务（快照同步 + 乐观锁），Agent 建的节点/连线在画布上可见。
   const writeEnabled = agentWriteEnabledFromEnv()
-  return createServices(new DesktopProjectStore(), {
-    permission: { level: writeEnabled ? 'edit' : 'read' },
+  const executionEnabled = agentExecutionEnabledFromEnv()
+  const store = new DesktopProjectStore()
+  const runner = executionEnabled
+    ? new HeadlessRunExecutor({ store, gateway: createHeadlessGateway() })
+    : undefined
+  return createServices(store, {
+    permission: { level: executionEnabled ? 'execute' : writeEnabled ? 'edit' : 'read' },
     writeEnabled,
-    executionEnabled: false,
-    actor: 'agent'
+    executionEnabled,
+    actor: 'agent',
+    requireExpectedGraphVersion: writeEnabled,
+    requireIdempotencyKey: writeEnabled,
+    executeRun: runner ? (run) => runner.execute(run) : undefined
   })
 }
 
@@ -49,6 +64,26 @@ interface ParsedArgs {
   options: Record<string, string>
   flags: Set<string>
   positional: string[]
+}
+
+function writeSafety(args: ParsedArgs): { expectedGraphVersion?: number; idempotencyKey?: string } {
+  const revision = args.options.revision
+  if (
+    revision !== undefined &&
+    (!/^\d+$/.test(revision) || Number(revision) > Number.MAX_SAFE_INTEGER)
+  ) {
+    console.error('--revision 必须是非负整数')
+    process.exit(1)
+  }
+  const idempotencyKey = args.options['idempotency-key']
+  if (idempotencyKey !== undefined && (idempotencyKey.length < 8 || idempotencyKey.length > 128)) {
+    console.error('--idempotency-key 长度必须为 8–128')
+    process.exit(1)
+  }
+  return {
+    expectedGraphVersion: revision === undefined ? undefined : Number(revision),
+    idempotencyKey
+  }
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -315,7 +350,8 @@ async function handleNode(
         projectId,
         type: type as NodeTypeId,
         title: args.options.title,
-        params
+        params,
+        ...writeSafety(args)
       })
       output(result, args.flags)
       break
@@ -344,7 +380,8 @@ async function handleNode(
       const result = await services.nodeService.connectNodes({
         projectId,
         from: parseRef(from),
-        to: parseRef(to)
+        to: parseRef(to),
+        ...writeSafety(args)
       })
       output(result, args.flags)
       break
@@ -356,7 +393,7 @@ async function handleNode(
         console.error('用法: canvas node delete --project <id> <nodeId>')
         process.exit(1)
       }
-      const result = await services.nodeService.deleteNode(projectId, nodeId)
+      const result = await services.nodeService.deleteNode(projectId, nodeId, writeSafety(args))
       output(result, args.flags)
       break
     }

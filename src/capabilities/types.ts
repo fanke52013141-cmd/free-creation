@@ -194,3 +194,10 @@ export interface ContractSnapshot {
   /** 仅供运行时审计；提交到 generated/ 的稳定产物会移除该字段。 */
   snapshotAt: number
 }
+
+/** 真实适配器与节点配置 schema 的交叉索引，避免把配置 schema 误说成可调用工具。 */
+export interface AdapterContractManifest {
+  mcpTools: McpToolSchema[]
+  cliCommands: CliCommandSpec[]
+  nodeConfigSchemas: McpToolSchema[]
+}

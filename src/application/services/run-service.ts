@@ -78,7 +78,10 @@ export class RunService {
 
     const allowed = VALID_TRANSITIONS[current.status]
     if (!allowed.includes(target)) {
-      return fail('INVALID_TRANSITION', `运行 ${runId} 当前状态 ${current.status} 不可迁移到 ${target}`)
+      return fail(
+        'INVALID_TRANSITION',
+        `运行 ${runId} 当前状态 ${current.status} 不可迁移到 ${target}`
+      )
     }
 
     const patch: RunUpdatePatch = { status: target, ...extra }
@@ -116,7 +119,10 @@ export class RunService {
     return this.transition(runId, 'succeeded')
   }
 
-  async failRun(runId: string, error: { code: string; message: string }): Promise<Result<RunRecord>> {
+  async failRun(
+    runId: string,
+    error: { code: string; message: string }
+  ): Promise<Result<RunRecord>> {
     return this.transition(runId, 'failed', { error })
   }
 

@@ -51,12 +51,7 @@ export async function transformImageSplit(input: ImageSplitTransformInput): Prom
         rect: tile.rect
       })
       created.push(
-        await saveBufferAsset(
-          input.projectId,
-          output,
-          '.png',
-          `拆分图-R${tile.row}C${tile.column}`
-        )
+        await saveBufferAsset(input.projectId, output, '.png', `拆分图-R${tile.row}C${tile.column}`)
       )
     }
     return created

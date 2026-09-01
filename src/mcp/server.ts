@@ -14,6 +14,7 @@
 
 import {
   agentWriteEnabledFromEnv,
+  agentExecutionEnabledFromEnv,
   createServices,
   DesktopProjectStore,
   FileProjectStore
@@ -23,6 +24,8 @@ import { listCapabilities } from '@capabilities'
 import type { Readable, Writable } from 'stream'
 import { z } from 'zod'
 import type { NodeTypeId } from '@shared/types'
+import { createHeadlessGateway } from '../main/headless/gateway-client'
+import { HeadlessRunExecutor } from '../main/headless/run-executor'
 
 const projectIdSchema = z.string().regex(/^[A-Za-z0-9_-]{6,64}$/, '非法项目 ID')
 const nodeIdSchema = z.string().min(1).max(128)
@@ -30,6 +33,25 @@ const portRefSchema = z.object({
   nodeId: nodeIdSchema,
   portId: z.string().regex(/^(in|out)-[a-z0-9]+(?:-[a-z0-9]+)*$/)
 })
+const writeSafetySchema = {
+  expectedGraphVersion: z.number().int().min(0).optional(),
+  idempotencyKey: z.string().min(8).max(128).optional()
+}
+
+/**
+ * 草稿写入的并发控制字段。它们保持 optional，是为了让 MCP 在默认只读模式
+ * 下仍能给出清晰的权限错误；当 CANVAS_AGENT_WRITE=draft 时由服务层强制要求。
+ */
+const writeSafetyProperties = {
+  expectedGraphVersion: {
+    type: 'number',
+    description: '读取项目时获得的 graphVersion；草稿写入模式必填，用于避免覆盖并发修改'
+  },
+  idempotencyKey: {
+    type: 'string',
+    description: '本次写入请求的稳定唯一键（8–128 字符）；草稿写入模式必填，重试必须复用'
+  }
+} as const
 
 const toolArgumentSchemas: Record<string, z.ZodType<Record<string, unknown>>> = {
   list_projects: z.object({}).passthrough(),
@@ -45,17 +67,28 @@ const toolArgumentSchemas: Record<string, z.ZodType<Record<string, unknown>>> = 
     projectId: projectIdSchema,
     type: z.string().min(1).max(64),
     title: z.string().max(160).optional(),
-    params: z.record(z.string(), z.unknown()).optional()
+    params: z.record(z.string(), z.unknown()).optional(),
+    ...writeSafetySchema
   }),
   configure_node: z.object({
     projectId: projectIdSchema,
     nodeId: nodeIdSchema,
     params: z.record(z.string(), z.unknown()).optional(),
-    title: z.string().max(160).optional()
+    title: z.string().max(160).optional(),
+    ...writeSafetySchema
   }),
-  delete_node: z.object({ projectId: projectIdSchema, nodeId: nodeIdSchema }),
-  connect_nodes: z.object({ projectId: projectIdSchema, from: portRefSchema, to: portRefSchema }),
-  disconnect_nodes: z.object({ projectId: projectIdSchema, edgeId: nodeIdSchema }),
+  delete_node: z.object({ projectId: projectIdSchema, nodeId: nodeIdSchema, ...writeSafetySchema }),
+  connect_nodes: z.object({
+    projectId: projectIdSchema,
+    from: portRefSchema,
+    to: portRefSchema,
+    ...writeSafetySchema
+  }),
+  disconnect_nodes: z.object({
+    projectId: projectIdSchema,
+    edgeId: nodeIdSchema,
+    ...writeSafetySchema
+  }),
   validate_workflow: z.object({
     projectId: projectIdSchema,
     nodeIds: z.array(nodeIdSchema).max(200).optional()
@@ -173,7 +206,8 @@ export function defineTools(): McpTool[] {
           projectId: { type: 'string', description: '项目 ID' },
           type: { type: 'string', description: '节点类型（如 text, image-gen, video-frame）' },
           title: { type: 'string', description: '节点标题' },
-          params: { type: 'object', description: '节点配置参数' }
+          params: { type: 'object', description: '节点配置参数' },
+          ...writeSafetyProperties
         },
         required: ['projectId', 'type']
       }
@@ -187,7 +221,8 @@ export function defineTools(): McpTool[] {
           projectId: { type: 'string', description: '项目 ID' },
           nodeId: { type: 'string', description: '节点 ID' },
           params: { type: 'object', description: '要更新的配置参数' },
-          title: { type: 'string', description: '新标题' }
+          title: { type: 'string', description: '新标题' },
+          ...writeSafetyProperties
         },
         required: ['projectId', 'nodeId']
       }
@@ -199,7 +234,8 @@ export function defineTools(): McpTool[] {
         type: 'object',
         properties: {
           projectId: { type: 'string' },
-          nodeId: { type: 'string' }
+          nodeId: { type: 'string' },
+          ...writeSafetyProperties
         },
         required: ['projectId', 'nodeId']
       }
@@ -226,7 +262,8 @@ export function defineTools(): McpTool[] {
               portId: { type: 'string' }
             },
             description: '目标节点和输入端口'
-          }
+          },
+          ...writeSafetyProperties
         },
         required: ['projectId', 'from', 'to']
       }
@@ -238,7 +275,8 @@ export function defineTools(): McpTool[] {
         type: 'object',
         properties: {
           projectId: { type: 'string' },
-          edgeId: { type: 'string', description: '连线 ID' }
+          edgeId: { type: 'string', description: '连线 ID' },
+          ...writeSafetyProperties
         },
         required: ['projectId', 'edgeId']
       }
@@ -379,7 +417,9 @@ async function executeTool(
           projectId: String(args.projectId),
           type: String(args.type) as NodeTypeId,
           title: args.title as string | undefined,
-          params: args.params as Record<string, unknown> | undefined
+          params: args.params as Record<string, unknown> | undefined,
+          expectedGraphVersion: args.expectedGraphVersion as number | undefined,
+          idempotencyKey: args.idempotencyKey as string | undefined
         })
         return result.ok ? json(result.data) : error(result.error.message)
       }
@@ -388,31 +428,43 @@ async function executeTool(
           projectId: String(args.projectId),
           nodeId: String(args.nodeId),
           params: args.params as Record<string, unknown> | undefined,
-          title: args.title as string | undefined
+          title: args.title as string | undefined,
+          expectedGraphVersion: args.expectedGraphVersion as number | undefined,
+          idempotencyKey: args.idempotencyKey as string | undefined
         })
         return result.ok ? json(result.data) : error(result.error.message)
       }
       case 'delete_node': {
         const result = await services.nodeService.deleteNode(
           String(args.projectId),
-          String(args.nodeId)
+          String(args.nodeId),
+          {
+            expectedGraphVersion: args.expectedGraphVersion as number | undefined,
+            idempotencyKey: args.idempotencyKey as string | undefined
+          }
         )
-        return result.ok ? json({ deleted: true }) : error(result.error.message)
+        return result.ok ? json({ deleted: result.data }) : error(result.error.message)
       }
       case 'connect_nodes': {
         const result = await services.nodeService.connectNodes({
           projectId: String(args.projectId),
           from: args.from as { nodeId: string; portId: string },
-          to: args.to as { nodeId: string; portId: string }
+          to: args.to as { nodeId: string; portId: string },
+          expectedGraphVersion: args.expectedGraphVersion as number | undefined,
+          idempotencyKey: args.idempotencyKey as string | undefined
         })
         return result.ok ? json(result.data) : error(result.error.message)
       }
       case 'disconnect_nodes': {
         const result = await services.nodeService.disconnectNodes(
           String(args.projectId),
-          String(args.edgeId)
+          String(args.edgeId),
+          {
+            expectedGraphVersion: args.expectedGraphVersion as number | undefined,
+            idempotencyKey: args.idempotencyKey as string | undefined
+          }
         )
-        return result.ok ? json({ disconnected: true }) : error(result.error.message)
+        return result.ok ? json({ disconnected: result.data }) : error(result.error.message)
       }
       // 验证类
       case 'validate_workflow': {
@@ -502,11 +554,19 @@ export function startMcpServer(
 ): void {
   const store = injectedStore ?? new DesktopProjectStore()
   const writeEnabled = options?.writeEnabled ?? agentWriteEnabledFromEnv()
+  const executionEnabled = agentExecutionEnabledFromEnv()
+  const runner =
+    executionEnabled && !injectedStore
+      ? new HeadlessRunExecutor({ store, gateway: createHeadlessGateway() })
+      : undefined
   const services = createServices(store, {
-    permission: { level: writeEnabled ? 'edit' : 'read' },
+    permission: { level: executionEnabled ? 'execute' : writeEnabled ? 'edit' : 'read' },
     writeEnabled,
-    executionEnabled: false,
-    actor: 'agent'
+    executionEnabled,
+    actor: 'agent',
+    requireExpectedGraphVersion: writeEnabled,
+    requireIdempotencyKey: writeEnabled,
+    executeRun: runner ? (run) => runner.execute(run) : undefined
   })
   const tools = defineTools()
 

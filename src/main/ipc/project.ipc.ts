@@ -63,10 +63,13 @@ export function registerProjectIpc(): void {
     return ok(file)
   })
 
-  ipcMain.handle(IPC.project.save, (_e, input: SaveProjectInput): IpcEnvelope<{ graphVersion: number } | null> => {
-    if (!input?.id) return err('INVALID_INPUT', '参数不完整')
-    return saveEnvelope(input)
-  })
+  ipcMain.handle(
+    IPC.project.save,
+    (_e, input: SaveProjectInput): IpcEnvelope<{ graphVersion: number } | null> => {
+      if (!input?.id) return err('INVALID_INPUT', '参数不完整')
+      return saveEnvelope(input)
+    }
+  )
 
   ipcMain.handle(IPC.project.close, (): IpcEnvelope<true> => {
     setSetting('lastProjectId', '')

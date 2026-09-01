@@ -44,32 +44,32 @@ export function buildTtsWorkflow(
   return {
     load_audio: {
       class_type: NODE_LOAD_AUDIO,
-      inputs: { 'audio_音频': uploadedAudioName }
+      inputs: { audio_音频: uploadedAudioName }
     },
     load_model: {
       class_type: NODE_LOADER,
       inputs: {
-        'use_bf16_使用BF16': true,
-        'device_设备': 'auto'
+        use_bf16_使用BF16: true,
+        device_设备: 'auto'
       }
     },
     synthesis: {
       class_type: NODE_SYNTHESIS,
       inputs: {
-        'tts_model_TTS模型': ['load_model', 0],
-        'text_文本': text,
-        'reference_audio_参考音频': ['load_audio', 0],
-        'lang_语言': config.lang,
-        'duration_factor_语速因子': config.speed,
-        'emo_alpha_情绪强度': config.emotion
+        tts_model_TTS模型: ['load_model', 0],
+        text_文本: text,
+        reference_audio_参考音频: ['load_audio', 0],
+        lang_语言: config.lang,
+        duration_factor_语速因子: config.speed,
+        emo_alpha_情绪强度: config.emotion
       }
     },
     save_audio: {
       class_type: NODE_SAVE_AUDIO,
       inputs: {
-        'audio_音频': ['synthesis', 0],
-        'filename_prefix_文件名前缀': 'canvas_tts',
-        'format_格式': config.format
+        audio_音频: ['synthesis', 0],
+        filename_prefix_文件名前缀: 'canvas_tts',
+        format_格式: config.format
       }
     }
   }
@@ -177,9 +177,8 @@ interface ReferenceAudioPayload {
 /** 读取本地图库中的参考音频；mediaId 无效或文件丢失时抛出明确错误。 */
 async function readReferenceAudio(mediaId: string): Promise<ReferenceAudioPayload> {
   if (!mediaId) throw new ComfyuiError('INVALID_INPUT', '缺少参考音频')
-  const row = getDb()
-    .prepare('SELECT mime, path FROM media WHERE id = ?')
-    .get(mediaId) as { mime: string; path: string } | undefined
+  const row = getDb().prepare('SELECT mime, path FROM media WHERE id = ?').get(mediaId) as
+    { mime: string; path: string } | undefined
   if (!row) throw new ComfyuiError('MEDIA_NOT_FOUND', '参考音频不存在或已删除')
   const abs = getMediaAbsPath(row.path)
   if (!abs) throw new ComfyuiError('MEDIA_NOT_FOUND', '参考音频路径不合法')

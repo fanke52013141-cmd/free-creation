@@ -139,7 +139,8 @@ function loadTestInputsFromConfig(shape: NodeCardShape): Partial<Record<string, 
   }
   try {
     const config = shape.props.config ? JSON.parse(shape.props.config) : {}
-    const saved = config[TEST_INPUTS_KEY] as Record<string, { type: string; value: string }> | undefined
+    const saved = config[TEST_INPUTS_KEY] as
+      Record<string, { type: string; value: string }> | undefined
     if (saved) {
       for (const [portId, input] of Object.entries(saved)) {
         if (!result[portId]) result[portId] = input.value

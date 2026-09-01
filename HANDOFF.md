@@ -10,6 +10,8 @@
 >
 > 产品定位：单用户、本地优先的 Windows Electron 无限画布创作工具。
 
+> **最新交付（2026-09-01 Agent 生产链路）**：MCP 的真实 Electron stdio 启动烟测、持久化 revision/idempotency 写入保护、Headless Run 消费器、真实工具/节点配置契约产物以及零警告 lint 已完成。使用方式、开关和后续硬门槛见 [docs/HANDOFF_2026_09_01_AGENT_PRODUCTION.md](./docs/HANDOFF_2026_09_01_AGENT_PRODUCTION.md)。
+
 > **最新交付（2026-09-01 Agent 对接安全基线）**：CLI/MCP 已改为读取桌面端同一份项目/媒体数据，默认只读；写入与无界面执行在画布快照事务和真实执行器完成前被主动关闭。新增 Electron ABI 构建、Zod 边界校验、稳定契约生成文件、权限/乐观版本/幂等基础设施。此前“P0–P3 已完整实现、能力表为唯一事实来源”的表述不准确，现已撤回。完整状态、验证和后续硬门槛见 [docs/HANDOFF_2026_09_01_AGENT_SAFETY_BASELINE.md](./docs/HANDOFF_2026_09_01_AGENT_SAFETY_BASELINE.md)。
 
 > **当前交接入口（2026-08-31 P0–P3 优化）**：Sprint 0、Sprint 2、Sprint 3 和导演台安排已完成；P0–P3 协议、交互、生图比例和视频能力优化也已完成，详见 [docs/P0_P3_NODE_CAPABILITY_OPTIMIZATION_2026_08_31.md](./docs/P0_P3_NODE_CAPABILITY_OPTIMIZATION_2026_08_31.md)、[docs/NODE_PROTOCOL_AUDIT_2026_08_31.md](./docs/NODE_PROTOCOL_AUDIT_2026_08_31.md) 与 [docs/NODE_COMPLIANCE_MATRIX.md](./docs/NODE_COMPLIANCE_MATRIX.md)。左侧节点菜单保持未分类版本：单一无框鱼眼图标栏，节点列表沿用原有交互。右键画布的新建节点菜单采用一级分类悬浮二级筛选，分类项带右向箭头，二级节点可直接创建或用于真实连线。UI 整体优化六阶段已由 `f519ac3` 提交并推送。

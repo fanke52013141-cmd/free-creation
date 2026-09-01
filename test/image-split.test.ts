@@ -34,7 +34,9 @@ describe('图片宫格拆分配置', () => {
   })
 
   it('把异常行列与面积参数收敛到安全上限', () => {
-    const config = parseImageSplitConfig(JSON.stringify({ rows: 99, columns: 99, scalePercent: 300 }))
+    const config = parseImageSplitConfig(
+      JSON.stringify({ rows: 99, columns: 99, scalePercent: 300 })
+    )
     expect(config.rows * config.columns).toBeLessThanOrEqual(64)
     expect(config.scalePercent).toBe(100)
   })

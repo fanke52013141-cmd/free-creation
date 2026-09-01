@@ -8,7 +8,7 @@ export interface MigrationDatabase {
   pragma(statement: string, options?: { simple?: boolean }): unknown
 }
 
-export const DB_SCHEMA_VERSION = 3
+export const DB_SCHEMA_VERSION = 4
 
 const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
@@ -92,6 +92,24 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
         ON run_artifacts(run_id);
       CREATE INDEX IF NOT EXISTS idx_run_artifacts_project
         ON run_artifacts(project_id);
+    `)
+  },
+  (database) => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS agent_idempotency (
+        actor TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        operation TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL,
+        payload_hash TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        result_json TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (actor, project_id, operation, idempotency_key)
+      );
+      CREATE INDEX IF NOT EXISTS idx_agent_idempotency_pending
+        ON agent_idempotency(status, updated_at);
     `)
   }
 ]

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { stopEventPropagation } from 'tldraw'
 import type { ImageCropAspectRatio, ImageCropConfig, NormalizedPoint } from '@shared/image-crop'
 import {
@@ -246,22 +246,25 @@ export function ImageCropSettings({ shape, editor }: NodeSettingsProps): React.J
   const [previewAspect, setPreviewAspect] = useState<number | null>(null)
   const source = gatherUpstreamMedia(editor, shape.id, 'in-image', 'image')
 
-  const persist = (next: ImageCropConfig): void => {
-    pendingPersist.current = null
-    persistFrame.current = null
-    editor.updateShape({
-      id: shape.id,
-      type: 'node-card',
-      props: { config: serializeImageCropConfig(next) }
-    })
-  }
-  const flushPersist = (): void => {
+  const persist = useCallback(
+    (next: ImageCropConfig): void => {
+      pendingPersist.current = null
+      persistFrame.current = null
+      editor.updateShape({
+        id: shape.id,
+        type: 'node-card',
+        props: { config: serializeImageCropConfig(next) }
+      })
+    },
+    [editor, shape.id]
+  )
+  const flushPersist = useCallback((): void => {
     if (persistFrame.current !== null) {
       cancelAnimationFrame(persistFrame.current)
       persistFrame.current = null
     }
     if (pendingPersist.current) persist(pendingPersist.current)
-  }
+  }, [persist])
   const save = (next: ImageCropConfig): void => {
     configRef.current = next
     setConfig(next)
@@ -275,7 +278,7 @@ export function ImageCropSettings({ shape, editor }: NodeSettingsProps): React.J
       })
     }
   }
-  useEffect(() => () => flushPersist(), [])
+  useEffect(() => () => flushPersist(), [flushPersist])
   const pointForEvent = (event: React.PointerEvent): NormalizedPoint | null => {
     const bounds = previewRef.current?.getBoundingClientRect()
     if (!bounds || bounds.width <= 0 || bounds.height <= 0) return null

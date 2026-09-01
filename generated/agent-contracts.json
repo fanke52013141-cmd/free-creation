@@ -1,6 +1,415 @@
 {
   "mcpTools": [
     {
+      "name": "list_projects",
+      "description": "列出所有项目",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "get_project",
+      "description": "获取项目详情（含完整图数据）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "项目 ID"
+          }
+        },
+        "required": [
+          "projectId"
+        ]
+      }
+    },
+    {
+      "name": "list_node_types",
+      "description": "列出所有可用的节点类型（能力定义）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "exposure": {
+            "type": "string",
+            "enum": [
+              "desktop",
+              "cli",
+              "mcp"
+            ],
+            "description": "按暴露入口过滤"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "get_capability",
+      "description": "获取指定能力的完整定义（输入/输出端口、配置 Schema、运行时特性）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "capabilityId": {
+            "type": "string",
+            "description": "能力 ID（如 image.crop）"
+          }
+        },
+        "required": [
+          "capabilityId"
+        ]
+      }
+    },
+    {
+      "name": "get_capability_by_node_type",
+      "description": "按节点类型获取能力定义",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "nodeType": {
+            "type": "string",
+            "description": "节点类型（如 image-crop）"
+          }
+        },
+        "required": [
+          "nodeType"
+        ]
+      }
+    },
+    {
+      "name": "validate_node_config",
+      "description": "校验节点配置是否符合能力定义",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "nodeType": {
+            "type": "string",
+            "description": "节点类型"
+          },
+          "config": {
+            "type": "object",
+            "description": "配置对象"
+          }
+        },
+        "required": [
+          "nodeType",
+          "config"
+        ]
+      }
+    },
+    {
+      "name": "create_node",
+      "description": "在项目中创建新节点",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "项目 ID"
+          },
+          "type": {
+            "type": "string",
+            "description": "节点类型（如 text, image-gen, video-frame）"
+          },
+          "title": {
+            "type": "string",
+            "description": "节点标题"
+          },
+          "params": {
+            "type": "object",
+            "description": "节点配置参数"
+          },
+          "expectedGraphVersion": {
+            "type": "number",
+            "description": "读取项目时获得的 graphVersion；草稿写入模式必填，用于避免覆盖并发修改"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "description": "本次写入请求的稳定唯一键（8–128 字符）；草稿写入模式必填，重试必须复用"
+          }
+        },
+        "required": [
+          "projectId",
+          "type"
+        ]
+      }
+    },
+    {
+      "name": "configure_node",
+      "description": "更新节点配置（参数、标题等）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "项目 ID"
+          },
+          "nodeId": {
+            "type": "string",
+            "description": "节点 ID"
+          },
+          "params": {
+            "type": "object",
+            "description": "要更新的配置参数"
+          },
+          "title": {
+            "type": "string",
+            "description": "新标题"
+          },
+          "expectedGraphVersion": {
+            "type": "number",
+            "description": "读取项目时获得的 graphVersion；草稿写入模式必填，用于避免覆盖并发修改"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "description": "本次写入请求的稳定唯一键（8–128 字符）；草稿写入模式必填，重试必须复用"
+          }
+        },
+        "required": [
+          "projectId",
+          "nodeId"
+        ]
+      }
+    },
+    {
+      "name": "delete_node",
+      "description": "删除节点（同时删除关联连线）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "expectedGraphVersion": {
+            "type": "number",
+            "description": "读取项目时获得的 graphVersion；草稿写入模式必填，用于避免覆盖并发修改"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "description": "本次写入请求的稳定唯一键（8–128 字符）；草稿写入模式必填，重试必须复用"
+          }
+        },
+        "required": [
+          "projectId",
+          "nodeId"
+        ]
+      }
+    },
+    {
+      "name": "connect_nodes",
+      "description": "连接两个节点（从源端口到目标端口）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "from": {
+            "type": "object",
+            "properties": {
+              "nodeId": {
+                "type": "string"
+              },
+              "portId": {
+                "type": "string"
+              }
+            },
+            "description": "源节点和输出端口"
+          },
+          "to": {
+            "type": "object",
+            "properties": {
+              "nodeId": {
+                "type": "string"
+              },
+              "portId": {
+                "type": "string"
+              }
+            },
+            "description": "目标节点和输入端口"
+          },
+          "expectedGraphVersion": {
+            "type": "number",
+            "description": "读取项目时获得的 graphVersion；草稿写入模式必填，用于避免覆盖并发修改"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "description": "本次写入请求的稳定唯一键（8–128 字符）；草稿写入模式必填，重试必须复用"
+          }
+        },
+        "required": [
+          "projectId",
+          "from",
+          "to"
+        ]
+      }
+    },
+    {
+      "name": "disconnect_nodes",
+      "description": "断开连线",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "edgeId": {
+            "type": "string",
+            "description": "连线 ID"
+          },
+          "expectedGraphVersion": {
+            "type": "number",
+            "description": "读取项目时获得的 graphVersion；草稿写入模式必填，用于避免覆盖并发修改"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "description": "本次写入请求的稳定唯一键（8–128 字符）；草稿写入模式必填，重试必须复用"
+          }
+        },
+        "required": [
+          "projectId",
+          "edgeId"
+        ]
+      }
+    },
+    {
+      "name": "validate_workflow",
+      "description": "校验整个工作流（检查输入完整性、连线类型兼容性、环路检测）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "nodeIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "限定校验范围（空数组或省略表示全部节点）"
+          }
+        },
+        "required": [
+          "projectId"
+        ]
+      }
+    },
+    {
+      "name": "estimate_run",
+      "description": "预估运行（返回将调用的模型、预计消耗、缺失配置和风险提示）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "nodeIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "projectId"
+        ]
+      }
+    },
+    {
+      "name": "run_node",
+      "description": "运行单个节点。返回 runId 和状态，不阻塞等待完成。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "dryRun": {
+            "type": "boolean",
+            "description": "预演模式"
+          }
+        },
+        "required": [
+          "projectId",
+          "nodeId"
+        ]
+      }
+    },
+    {
+      "name": "run_workflow",
+      "description": "运行整个工作流或指定范围的节点。返回 runId 和状态。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "nodeIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "dryRun": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "projectId"
+        ]
+      }
+    },
+    {
+      "name": "list_artifacts",
+      "description": "列出项目中的媒体产物",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId"
+        ]
+      }
+    }
+  ],
+  "cliCommands": [
+    {
+      "command": "project",
+      "description": "Canvas CLI project 命令",
+      "options": []
+    },
+    {
+      "command": "capability",
+      "description": "Canvas CLI capability 命令",
+      "options": []
+    },
+    {
+      "command": "node",
+      "description": "Canvas CLI node 命令",
+      "options": []
+    },
+    {
+      "command": "workflow",
+      "description": "Canvas CLI workflow 命令",
+      "options": []
+    },
+    {
+      "command": "artifact",
+      "description": "Canvas CLI artifact 命令",
+      "options": []
+    }
+  ],
+  "nodeConfigSchemas": [
+    {
       "name": "node.chat",
       "description": "对话 — 与文本模型对话。上游文本会成为本轮输入，最后一条助手回复作为文本输出。",
       "inputSchema": {
@@ -417,345 +826,6 @@
           "modelId"
         ]
       }
-    }
-  ],
-  "cliCommands": [
-    {
-      "command": "chat",
-      "description": "对话: 与文本模型对话。上游文本会成为本轮输入，最后一条助手回复作为文本输出。",
-      "options": [
-        {
-          "name": "--providerId",
-          "type": "string",
-          "description": "供应商 ID",
-          "required": true
-        },
-        {
-          "name": "--modelId",
-          "type": "string",
-          "description": "模型 ID",
-          "required": true
-        },
-        {
-          "name": "--systemPrompt",
-          "type": "string",
-          "description": "系统提示词",
-          "required": false
-        },
-        {
-          "name": "--temperature",
-          "type": "number",
-          "description": "温度参数",
-          "required": false,
-          "defaultValue": 0.7
-        }
-      ]
-    },
-    {
-      "command": "director",
-      "description": "3D 预演台: 3D 白模预演工作区。接收分镜、场景参考图与机位参数；只有用户明确发布后，帧、预演视频和机位参数才会成为下游真实输入。",
-      "options": []
-    },
-    {
-      "command": "ai-process",
-      "description": "AI 处理: 一次性、可复跑的工作流转换：把上游文本或 JSON 交给文本模型，输出文本、Markdown 或符合指定 Schema 的 JSON。不保留多轮历史，脚本/数据转换用它，对话节点用于多轮交互。",
-      "options": [
-        {
-          "name": "--providerId",
-          "type": "string",
-          "description": "供应商 ID",
-          "required": true
-        },
-        {
-          "name": "--modelId",
-          "type": "string",
-          "description": "模型 ID",
-          "required": true
-        }
-      ]
-    },
-    {
-      "command": "storyboard",
-      "description": "分镜板: 将分镜 JSON 呈现为可编辑的镜头卡片，并输出结构化分镜数据与文字摘要。",
-      "options": []
-    },
-    {
-      "command": "structured",
-      "description": "结构数据: 通用结构编辑与字段映射节点。选择输出 Schema，在正文中维护 JSON，并只通过已连接的上下文端口引用数据。",
-      "options": [
-        {
-          "name": "--schemaId",
-          "type": "string",
-          "description": "所选输出 Schema 的 ID",
-          "required": false
-        }
-      ]
-    },
-    {
-      "command": "audio",
-      "description": "音频: 音频资产节点：导入本地音频或承接一段上游音频，只负责保存、预览和输出资产。",
-      "options": [
-        {
-          "name": "--mediaId",
-          "type": "string",
-          "description": "已导入的媒体资产 ID",
-          "required": false
-        }
-      ]
-    },
-    {
-      "command": "speech",
-      "description": "配音: 通用文本配音节点：将节点内或上游文本交给已配置的语音模型，生成新的音频资产。",
-      "options": []
-    },
-    {
-      "command": "tts",
-      "description": "语音克隆: 语音克隆节点：用本地 ComfyUI IndexTTS-2.5 参考一段音色并朗读文本，输出新的音频资产。",
-      "options": [
-        {
-          "name": "--voice",
-          "type": "string",
-          "description": "音色 ID",
-          "required": false
-        },
-        {
-          "name": "--speed",
-          "type": "number",
-          "description": "语速",
-          "required": false,
-          "defaultValue": 1
-        }
-      ]
-    },
-    {
-      "command": "vocal-separate",
-      "description": "人声分离: 将一段音频分离为人声与伴奏。快速模式使用 FFmpeg 滤镜增强，高质量模式使用本地 AI 模型。",
-      "options": []
-    },
-    {
-      "command": "code",
-      "description": "代码: 代码转换节点。读取命名输入变量，执行后将 return 值写入命名输出变量。",
-      "options": [
-        {
-          "name": "--code",
-          "type": "string",
-          "description": "代码内容",
-          "required": true
-        }
-      ]
-    },
-    {
-      "command": "iterate",
-      "description": "循环: 列表批处理控制：把 in-list 的每个元素按顺序作为一次「循环体」执行，逐项驱动下游子流程节点（如生图/视频/文本节点），并输出结构化结果列表。支持失败策略、重试、限数与取消。",
-      "options": [
-        {
-          "name": "--variableName",
-          "type": "string",
-          "description": "循环变量名",
-          "required": false,
-          "defaultValue": "item"
-        }
-      ]
-    },
-    {
-      "command": "image-crop",
-      "description": "裁剪: 对一张上游图片执行本地矩形或四角透视裁剪。每次运行产生新的图片资产，原图保持不变。",
-      "options": [
-        {
-          "name": "--mode",
-          "type": "enum",
-          "description": "裁剪模式：固定比例或自由裁剪",
-          "required": true,
-          "defaultValue": "fixed-ratio"
-        },
-        {
-          "name": "--ratio",
-          "type": "enum",
-          "description": "裁剪比例（仅 fixed-ratio 模式有效）",
-          "required": false
-        },
-        {
-          "name": "--cropRect",
-          "type": "rect",
-          "description": "自定义裁剪区域 {x, y, w, h}",
-          "required": false
-        }
-      ]
-    },
-    {
-      "command": "image-edit",
-      "description": "修改: 以一张上游图片为原图，结合标注与文字说明生成新的图片；原图保持不变。",
-      "options": [
-        {
-          "name": "--providerId",
-          "type": "string",
-          "description": "供应商 ID",
-          "required": true
-        },
-        {
-          "name": "--modelId",
-          "type": "string",
-          "description": "模型 ID",
-          "required": true
-        },
-        {
-          "name": "--mask",
-          "type": "string",
-          "description": "蒙版区域（base64 或区域描述）",
-          "required": false
-        }
-      ]
-    },
-    {
-      "command": "image-gen",
-      "description": "生图: 根据提示词生成图片；可连接一张旧版参考图及最多四张有序参考图，生成结果从图片端口输出。",
-      "options": [
-        {
-          "name": "--providerId",
-          "type": "string",
-          "description": "供应商 ID",
-          "required": true
-        },
-        {
-          "name": "--modelId",
-          "type": "string",
-          "description": "模型 ID",
-          "required": true
-        },
-        {
-          "name": "--ratio",
-          "type": "enum",
-          "description": "图片比例",
-          "required": false,
-          "defaultValue": "1:1"
-        },
-        {
-          "name": "--seed",
-          "type": "number",
-          "description": "随机种子（-1 为随机）",
-          "required": false
-        }
-      ]
-    },
-    {
-      "command": "image",
-      "description": "图片: 图片资产节点，只负责保存和输出一张已导入的图片，不承担生成逻辑。",
-      "options": [
-        {
-          "name": "--mediaId",
-          "type": "string",
-          "description": "已导入的媒体资产 ID",
-          "required": false
-        }
-      ]
-    },
-    {
-      "command": "image-split",
-      "description": "拆分: 把一张上游图片按行列派生为多张独立图片。面积缩放以每个格子的中心为锚点；输出同时提供当前图片和可批处理的图片集合。",
-      "options": [
-        {
-          "name": "--rows",
-          "type": "number",
-          "description": "行数",
-          "required": true,
-          "defaultValue": 2
-        },
-        {
-          "name": "--cols",
-          "type": "number",
-          "description": "列数",
-          "required": true,
-          "defaultValue": 2
-        }
-      ]
-    },
-    {
-      "command": "json",
-      "description": "JSON: 结构化 JSON 数据节点。可接收 JSON 或可解析的文本，并以字段卡片形式呈现。",
-      "options": [
-        {
-          "name": "--data",
-          "type": "object",
-          "description": "JSON 数据内容",
-          "required": false
-        }
-      ]
-    },
-    {
-      "command": "processor",
-      "description": "处理: 通用变量处理节点。收到上游值后原样传递；未连线时可使用固定值。",
-      "options": []
-    },
-    {
-      "command": "text",
-      "description": "文本: 可编辑的原始文本。连线输出会作为下游节点的文本输入。",
-      "options": [
-        {
-          "name": "--text",
-          "type": "string",
-          "description": "节点文本内容",
-          "required": false
-        }
-      ]
-    },
-    {
-      "command": "video-audio",
-      "description": "提音: 从上游视频的指定时间范围忠实提取原始音轨，输出 WAV 或 M4A 音频资产。",
-      "options": []
-    },
-    {
-      "command": "video-clip",
-      "description": "截取: 从上游视频按起止毫秒精确截取片段，默认重编码输出 MP4 视频资产。",
-      "options": [
-        {
-          "name": "--startTime",
-          "type": "number",
-          "description": "开始时间（秒）",
-          "required": true
-        },
-        {
-          "name": "--endTime",
-          "type": "number",
-          "description": "结束时间（秒）",
-          "required": true
-        }
-      ]
-    },
-    {
-      "command": "video-frame",
-      "description": "取帧: 从上游视频提取首帧、尾帧或任意指定时刻的画面，输出新的 PNG/JPG 图片资产。",
-      "options": [
-        {
-          "name": "--timestamps",
-          "type": "array",
-          "description": "取帧时间点列表（秒）",
-          "required": false
-        },
-        {
-          "name": "--count",
-          "type": "number",
-          "description": "均匀取帧数量",
-          "required": false
-        }
-      ]
-    },
-    {
-      "command": "video",
-      "description": "视频: 根据文本、首尾帧或多模态参考生成视频。所有参考素材都必须通过明确端口连入，输出可供预览或下载的视频资产。",
-      "options": [
-        {
-          "name": "--providerId",
-          "type": "string",
-          "description": "供应商 ID",
-          "required": true
-        },
-        {
-          "name": "--modelId",
-          "type": "string",
-          "description": "模型 ID",
-          "required": true
-        }
-      ]
     }
   ],
   "capabilityMatrix": [

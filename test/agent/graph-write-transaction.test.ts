@@ -14,10 +14,7 @@ import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import type { CanvasNode, CanvasEdge, ProjectFile } from '@shared/types'
-import {
-  GraphVersionConflictError,
-  syncGraphSnapshot
-} from '@shared/graph-snapshot-sync'
+import { GraphVersionConflictError, syncGraphSnapshot } from '@shared/graph-snapshot-sync'
 
 // ── 测试数据 ───────────────────────────────────────────────
 

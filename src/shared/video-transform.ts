@@ -74,20 +74,16 @@ const parseClipQuality = (value: unknown): ClipQuality => {
   return 'balanced'
 }
 
-const parseAudioFormat = (value: unknown): AudioFormat =>
-  value === 'wav' ? 'wav' : 'm4a'
+const parseAudioFormat = (value: unknown): AudioFormat => (value === 'wav' ? 'wav' : 'm4a')
 
-const parseVocalMode = (value: unknown): VocalMode =>
-  value === 'quality' ? 'quality' : 'fast'
+const parseVocalMode = (value: unknown): VocalMode => (value === 'quality' ? 'quality' : 'fast')
 
-const parseSampleRate = (value: unknown): 44100 | 48000 =>
-  value === 48000 ? 48000 : 44100
+const parseSampleRate = (value: unknown): 44100 | 48000 => (value === 48000 ? 48000 : 44100)
 
 const parseBoolean = (value: unknown, fallback: boolean): boolean =>
   typeof value === 'boolean' ? value : fallback
 
-const parseImageFormat = (value: unknown): 'png' | 'jpg' =>
-  value === 'jpg' ? 'jpg' : 'png'
+const parseImageFormat = (value: unknown): 'png' | 'jpg' => (value === 'jpg' ? 'jpg' : 'png')
 
 // ── v1 → v2 迁移 ──
 

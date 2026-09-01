@@ -31,10 +31,24 @@ function makeCapability(overrides: Partial<Capability> = {}): Capability {
     description: '测试用能力',
     category: 'test',
     inputs: [
-      { id: 'in1', name: '输入', type: 'text', required: true, cardinality: 'one', description: '输入端口' }
+      {
+        id: 'in1',
+        name: '输入',
+        type: 'text',
+        required: true,
+        cardinality: 'one',
+        description: '输入端口'
+      }
     ],
     outputs: [
-      { id: 'out1', name: '输出', type: 'text', required: true, cardinality: 'one', description: '输出端口' }
+      {
+        id: 'out1',
+        name: '输出',
+        type: 'text',
+        required: true,
+        cardinality: 'one',
+        description: '输出端口'
+      }
     ],
     configSchema: {
       mode: { type: 'enum', required: false, enumValues: ['a', 'b'], description: '模式选择' }
@@ -62,24 +76,16 @@ describe('Capability Registry', () => {
     })
 
     it('应该拒绝 id 不含点号格式', () => {
-      expect(() => defineCapability(makeCapability({ id: 'invalid' }))).toThrow(
-        /category\.name/
-      )
+      expect(() => defineCapability(makeCapability({ id: 'invalid' }))).toThrow(/category\.name/)
     })
 
     it('应该拒绝非语义化版本', () => {
-      expect(() => defineCapability(makeCapability({ version: '1.0' }))).toThrow(
-        /语义化版本/
-      )
-      expect(() => defineCapability(makeCapability({ version: 'v1.0.0' }))).toThrow(
-        /语义化版本/
-      )
+      expect(() => defineCapability(makeCapability({ version: '1.0' }))).toThrow(/语义化版本/)
+      expect(() => defineCapability(makeCapability({ version: 'v1.0.0' }))).toThrow(/语义化版本/)
     })
 
     it('应该拒绝缺少 nodeType', () => {
-      expect(() =>
-        defineCapability(makeCapability({ nodeType: '' as any }))
-      ).toThrow(/nodeType/)
+      expect(() => defineCapability(makeCapability({ nodeType: '' as any }))).toThrow(/nodeType/)
     })
 
     it('应该拒绝缺少 title', () => {
@@ -91,8 +97,22 @@ describe('Capability Registry', () => {
         defineCapability(
           makeCapability({
             inputs: [
-              { id: 'dup', name: '输入A', type: 'text', required: false, cardinality: 'one', description: '' },
-              { id: 'dup', name: '输入B', type: 'text', required: false, cardinality: 'one', description: '' }
+              {
+                id: 'dup',
+                name: '输入A',
+                type: 'text',
+                required: false,
+                cardinality: 'one',
+                description: ''
+              },
+              {
+                id: 'dup',
+                name: '输入B',
+                type: 'text',
+                required: false,
+                cardinality: 'one',
+                description: ''
+              }
             ]
           })
         )
@@ -104,10 +124,24 @@ describe('Capability Registry', () => {
         defineCapability(
           makeCapability({
             inputs: [
-              { id: 'shared', name: '输入', type: 'text', required: false, cardinality: 'one', description: '' }
+              {
+                id: 'shared',
+                name: '输入',
+                type: 'text',
+                required: false,
+                cardinality: 'one',
+                description: ''
+              }
             ],
             outputs: [
-              { id: 'shared', name: '输出', type: 'text', required: true, cardinality: 'one', description: '' }
+              {
+                id: 'shared',
+                name: '输出',
+                type: 'text',
+                required: true,
+                cardinality: 'one',
+                description: ''
+              }
             ]
           })
         )
@@ -152,8 +186,16 @@ describe('Capability Registry', () => {
     })
 
     it('应该支持按暴露标志过滤', () => {
-      defineCapability(makeCapability({ id: 'a.one', expose: { desktop: true, cli: false, mcp: true } }))
-      defineCapability(makeCapability({ id: 'b.two', nodeType: 'b-two' as any, expose: { desktop: false, cli: true, mcp: false } }))
+      defineCapability(
+        makeCapability({ id: 'a.one', expose: { desktop: true, cli: false, mcp: true } })
+      )
+      defineCapability(
+        makeCapability({
+          id: 'b.two',
+          nodeType: 'b-two' as any,
+          expose: { desktop: false, cli: true, mcp: false }
+        })
+      )
 
       const cliOnly = listCapabilities({ cli: true })
       expect(cliOnly).toHaveLength(1)

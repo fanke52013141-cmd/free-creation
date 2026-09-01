@@ -30,9 +30,22 @@ import {
   getRun,
   listRuns,
   createRunArtifact,
-  listRunArtifacts
+  listRunArtifacts,
+  claimIdempotency,
+  completeIdempotency,
+  releaseIdempotency
 } from '../../main/store/runs.repo'
-import type { ProjectStore, RunRecord, RunUpdatePatch, RunStatus, RunArtifactRecord } from '../types'
+import type {
+  ProjectStore,
+  RunRecord,
+  RunUpdatePatch,
+  RunStatus,
+  RunArtifactRecord,
+  IdempotencyClaimInput,
+  IdempotencyClaim,
+  IdempotencyCompleteInput,
+  IdempotencyReleaseInput
+} from '../types'
 
 export class DesktopProjectStore implements ProjectStore {
   async listProjects(): Promise<ProjectMeta[]> {
@@ -120,5 +133,17 @@ export class DesktopProjectStore implements ProjectStore {
 
   async listRunArtifacts(runId: string): Promise<RunArtifactRecord[]> {
     return listRunArtifacts(runId)
+  }
+
+  async claimIdempotency(input: IdempotencyClaimInput): Promise<IdempotencyClaim> {
+    return claimIdempotency(input)
+  }
+
+  async completeIdempotency(input: IdempotencyCompleteInput): Promise<void> {
+    completeIdempotency(input)
+  }
+
+  async releaseIdempotency(input: IdempotencyReleaseInput): Promise<void> {
+    releaseIdempotency(input)
   }
 }

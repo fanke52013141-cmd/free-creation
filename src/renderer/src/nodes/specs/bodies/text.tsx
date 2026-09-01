@@ -1,5 +1,5 @@
 // 文本节点 Body（路线图 R6：bodies.tsx 拆分）
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createShapeId, stopEventPropagation, useEditor, type TLShapeId } from 'tldraw'
 import { generateSlashPrompts, parseSlashCommand } from '../../slash-commands'
 import { markUndoPoint } from '../../../canvas/history'
@@ -16,8 +16,11 @@ export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   // 保持最新的 text 引用，让事件监听器始终读到当前值（避免闭包过期）
   const textRef = useRef(shape.props.text)
-  textRef.current = shape.props.text
   useWheelScroll(scrollRef)
+
+  useEffect(() => {
+    textRef.current = shape.props.text
+  }, [shape.props.text])
 
   useLayoutEffect(() => {
     if (!editing || !textareaRef.current) return
@@ -28,11 +31,11 @@ export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
 
   // 进入 tldraw 编辑态：告知 tldraw 此 shape 正在被编辑，
   // 编辑期间 tldraw 不再拦截键盘事件（快捷键等），textarea 才能正常接收输入。
-  const enterEditing = (): void => {
+  const enterEditing = useCallback((): void => {
     setDraft(textRef.current)
     setEditing(true)
     editor.setEditingShape(shape.id)
-  }
+  }, [editor, shape.id])
 
   const exitEditing = (): void => {
     setEditing(false)
@@ -54,12 +57,7 @@ export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
     if (!element) return
     element.addEventListener('canvas:edit-text-node', enterEditing)
     return () => element.removeEventListener('canvas:edit-text-node', enterEditing)
-  }, [editing])
-
-  // 外部修改 text（如 I/O 面板写入）时同步 draft，避免编辑器打开时显示旧值
-  useEffect(() => {
-    if (!editing) setDraft(shape.props.text)
-  }, [shape.props.text, editing])
+  }, [editing, enterEditing])
 
   // Slash 指令检测：/九宫格 /25宫格 /三视图
   const slashCmd = parseSlashCommand(shape.props.text)

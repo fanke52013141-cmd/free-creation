@@ -154,11 +154,10 @@ export function waitForVideo(
 ): Promise<VideoMedia> {
   return new Promise((resolve, reject) => {
     let stopped = false
-    let timeout: ReturnType<typeof setTimeout> | undefined
     const stop = (): void => {
       stopped = true
       clearInterval(timer)
-      if (timeout !== undefined) clearTimeout(timeout)
+      clearTimeout(timeout)
     }
     const timer = setInterval(async () => {
       if (signal.cancelled) {
@@ -182,7 +181,7 @@ export function waitForVideo(
         reject(new Error(result.data.error ?? '视频生成失败'))
       }
     }, 3_000)
-    timeout = setTimeout(() => {
+    const timeout = setTimeout(() => {
       if (!stopped) {
         stop()
         reject(new Error('视频生成超时（10 分钟）'))

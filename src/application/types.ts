@@ -89,7 +89,36 @@ export interface ProjectStore {
     record: Omit<RunArtifactRecord, 'artifactId' | 'createdAt'>
   ): Promise<RunArtifactRecord>
   listRunArtifacts(runId: string): Promise<RunArtifactRecord[]>
+
+  // 外部 Agent 写入的持久化幂等保护。claim 必须在同一数据源内原子执行，
+  // 防止 CLI/MCP 重试或多个进程同时提交同一请求。
+  claimIdempotency(input: IdempotencyClaimInput): Promise<IdempotencyClaim>
+  completeIdempotency(input: IdempotencyCompleteInput): Promise<void>
+  releaseIdempotency(input: IdempotencyReleaseInput): Promise<void>
 }
+
+export type AgentMutationOperation =
+  'create-node' | 'update-node' | 'delete-node' | 'connect' | 'disconnect'
+
+export interface IdempotencyClaimInput {
+  actor: AuditActor
+  projectId: string
+  operation: AgentMutationOperation
+  key: string
+  payloadHash: string
+}
+
+export type IdempotencyClaim =
+  | { state: 'claimed' }
+  | { state: 'completed'; result: unknown }
+  | { state: 'pending' }
+  | { state: 'payload-conflict' }
+
+export interface IdempotencyCompleteInput extends IdempotencyClaimInput {
+  result: unknown
+}
+
+export type IdempotencyReleaseInput = IdempotencyClaimInput
 
 // ── 权限级别 ───────────────────────────────────────────────
 
@@ -316,4 +345,10 @@ export interface ServiceContext {
   executionEnabled: boolean
   /** 审计主体；CLI/MCP 都必须留下来源。 */
   actor: AuditActor
+  /** 外部草稿写入必须显式带上当前图版本，避免静默覆盖。 */
+  requireExpectedGraphVersion?: boolean
+  /** 外部草稿写入必须带稳定幂等键，允许网络重试而不重复创建。 */
+  requireIdempotencyKey?: boolean
+  /** 由 main/headless 注入的真实运行消费者；未注入时不得创建 queued 假运行。 */
+  executeRun?: (run: RunRecord) => Promise<void>
 }

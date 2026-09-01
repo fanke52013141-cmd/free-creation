@@ -20,6 +20,7 @@
     "test:contract": "vitest run test/node-compliance.test.ts test/node-contract-snapshot.test.ts test/connection-matrix.test.ts",
     "agent:build": "node scripts/build-agent.mjs",
     "agent:mcp": "node scripts/canvas-mcp.cjs",
+    "agent:test-mcp-production": "npm run agent:build && node scripts/test-mcp-production.mjs",
     "agent:generate": "node scripts/generate-agent-contracts.mjs",
     "agent:check-contracts": "npm run agent:generate && git ls-files --error-unmatch generated/agent-contracts.json && git diff --exit-code -- generated/agent-contracts.json",
     "agent:test-e2e": "npm run agent:build && vitest run test/agent",

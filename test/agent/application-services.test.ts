@@ -8,7 +8,15 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { createServices } from '@application'
 import type { ProjectStore, ServiceContainer } from '@application'
-import type { RunRecord, RunUpdatePatch, RunArtifactRecord } from '@application'
+import type {
+  RunRecord,
+  RunUpdatePatch,
+  RunArtifactRecord,
+  IdempotencyClaimInput,
+  IdempotencyClaim,
+  IdempotencyCompleteInput,
+  IdempotencyReleaseInput
+} from '@application'
 import { isPortTypeCompatible } from '@application'
 import type {
   CanvasNode,
@@ -83,6 +91,10 @@ class MockStore implements ProjectStore {
   // ── Run / Artifact 持久化 ──
   private runs = new Map<string, RunRecord>()
   private artifacts = new Map<string, RunArtifactRecord>()
+  private idempotency = new Map<
+    string,
+    { payloadHash: string; state: 'pending' | 'completed'; result?: unknown }
+  >()
 
   async createRun(record: Omit<RunRecord, 'createdAt'>): Promise<RunRecord> {
     const full: RunRecord = { ...record, createdAt: Date.now() }
@@ -102,14 +114,9 @@ class MockStore implements ProjectStore {
     return this.runs.get(runId) ?? null
   }
 
-  async listRuns(
-    projectId: string,
-    filter?: { status?: string }
-  ): Promise<RunRecord[]> {
+  async listRuns(projectId: string, filter?: { status?: string }): Promise<RunRecord[]> {
     return Array.from(this.runs.values()).filter(
-      (r) =>
-        r.projectId === projectId &&
-        (!filter?.status || r.status === filter.status)
+      (r) => r.projectId === projectId && (!filter?.status || r.status === filter.status)
     )
   }
 
@@ -125,6 +132,33 @@ class MockStore implements ProjectStore {
   async listRunArtifacts(runId: string): Promise<RunArtifactRecord[]> {
     return Array.from(this.artifacts.values()).filter((a) => a.runId === runId)
   }
+
+  async claimIdempotency(input: IdempotencyClaimInput): Promise<IdempotencyClaim> {
+    const key = `${input.actor}:${input.projectId}:${input.operation}:${input.key}`
+    const existing = this.idempotency.get(key)
+    if (!existing) {
+      this.idempotency.set(key, { payloadHash: input.payloadHash, state: 'pending' })
+      return { state: 'claimed' }
+    }
+    if (existing.payloadHash !== input.payloadHash) return { state: 'payload-conflict' }
+    return existing.state === 'completed'
+      ? { state: 'completed', result: existing.result }
+      : { state: 'pending' }
+  }
+
+  async completeIdempotency(input: IdempotencyCompleteInput): Promise<void> {
+    const key = `${input.actor}:${input.projectId}:${input.operation}:${input.key}`
+    this.idempotency.set(key, {
+      payloadHash: input.payloadHash,
+      state: 'completed',
+      result: input.result
+    })
+  }
+
+  async releaseIdempotency(input: IdempotencyReleaseInput): Promise<void> {
+    const key = `${input.actor}:${input.projectId}:${input.operation}:${input.key}`
+    this.idempotency.delete(key)
+  }
 }
 
 // ── 测试辅助 ───────────────────────────────────────────────
@@ -136,13 +170,23 @@ function setup(): { services: ServiceContainer; store: MockStore; projectId: str
   const projectId = `proj_test_${Date.now()}`
   // 直接操作 store 创建项目
   const now = Date.now()
-  const meta: ProjectMeta = { id: projectId, name: '测试项目', createdAt: now, updatedAt: now, graphVersion: 0 }
+  const meta: ProjectMeta = {
+    id: projectId,
+    name: '测试项目',
+    createdAt: now,
+    updatedAt: now,
+    graphVersion: 0
+  }
   const file: ProjectFile = { version: 1, meta, nodes: [], edges: [], groups: [] }
   // MockStore 的 map 是私有的，通过 createProject 间接创建
   return { services, store, projectId: '' }
 }
 
-async function setupAsync(): Promise<{ services: ServiceContainer; store: MockStore; projectId: string }> {
+async function setupAsync(): Promise<{
+  services: ServiceContainer
+  store: MockStore
+  projectId: string
+}> {
   const store = new MockStore()
   const services = createServices(store)
   const meta = await store.createProject('测试项目')
@@ -353,11 +397,13 @@ describe('NodeService', () => {
       })
       if (!n1.ok || !n2.ok) return
 
-      await env.services.nodeService.connectNotes?.({
-        projectId: env.projectId,
-        from: { nodeId: n1.data.id, portId: 'out-text' },
-        to: { nodeId: n2.data.id, portId: 'in-text' }
-      }).catch(() => {})
+      await env.services.nodeService
+        .connectNotes?.({
+          projectId: env.projectId,
+          from: { nodeId: n1.data.id, portId: 'out-text' },
+          to: { nodeId: n2.data.id, portId: 'in-text' }
+        })
+        .catch(() => {})
 
       // connectNotes 不存在，用 connectNodes
       await env.services.nodeService.connectNodes({
@@ -799,7 +845,7 @@ describe('WorkflowService', () => {
       }
     })
 
-    it('正常模式应创建持久化 Run 记录并返回 queued', async () => {
+    it('没有运行消费者时正常模式应明确拒绝，而非留下 queued', async () => {
       const created = await env.services.nodeService.createNode({
         projectId: env.projectId,
         type: 'text' as any
@@ -811,20 +857,9 @@ describe('WorkflowService', () => {
         nodeId: created.data.id
       })
 
-      expect(result.ok).toBe(true)
-      if (result.ok) {
-        expect(result.data.status).toBe('queued')
-        expect(result.data.runId).not.toBe('dry-run')
-        expect(result.data.scope.type).toBe('node')
-      }
-      // 已持久化到 store
-      const handle = result.ok ? result.data : null
-      if (handle && result.ok) {
-        const { store, projectId } = env
-        const record = await store.getRun(handle.runId)
-        expect(record).not.toBeNull()
-        expect(record?.projectId).toBe(projectId)
-        expect(record?.status).toBe('queued')
+      expect(result.ok).toBe(false)
+      if (!result.ok) {
+        expect(result.error.code).toBe('EXECUTION_UNAVAILABLE')
       }
     })
   })
@@ -859,15 +894,14 @@ describe('WorkflowService', () => {
       }
     })
 
-    it('有效工作流应返回 queued', async () => {
+    it('有效工作流没有运行消费者时应拒绝执行', async () => {
       const result = await env.services.workflowService.runWorkflow({
         projectId: env.projectId
       })
 
-      expect(result.ok).toBe(true)
-      if (result.ok) {
-        expect(result.data.status).toBe('queued')
-        expect(result.data.scope.type).toBe('workflow')
+      expect(result.ok).toBe(false)
+      if (!result.ok) {
+        expect(result.error.code).toBe('EXECUTION_UNAVAILABLE')
       }
     })
   })

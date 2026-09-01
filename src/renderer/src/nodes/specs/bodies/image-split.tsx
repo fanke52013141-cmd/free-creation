@@ -137,7 +137,12 @@ export function ImageSplitSettings({ shape, editor }: NodeSettingsProps): React.
             min="1"
             max="64"
             value={config.rows}
-            onChange={(event) => save({ rows: positiveInteger(event.currentTarget.value, config.rows) }, 'image-split-rows')}
+            onChange={(event) =>
+              save(
+                { rows: positiveInteger(event.currentTarget.value, config.rows) },
+                'image-split-rows'
+              )
+            }
           />
         </label>
         <label>
@@ -147,7 +152,12 @@ export function ImageSplitSettings({ shape, editor }: NodeSettingsProps): React.
             min="1"
             max="64"
             value={config.columns}
-            onChange={(event) => save({ columns: positiveInteger(event.currentTarget.value, config.columns) }, 'image-split-columns')}
+            onChange={(event) =>
+              save(
+                { columns: positiveInteger(event.currentTarget.value, config.columns) },
+                'image-split-columns'
+              )
+            }
           />
         </label>
         <label>
@@ -160,7 +170,12 @@ export function ImageSplitSettings({ shape, editor }: NodeSettingsProps): React.
               value={config.scalePercent}
               onChange={(event) =>
                 save(
-                  { scalePercent: Math.min(100, positiveInteger(event.currentTarget.value, config.scalePercent)) },
+                  {
+                    scalePercent: Math.min(
+                      100,
+                      positiveInteger(event.currentTarget.value, config.scalePercent)
+                    )
+                  },
                   'image-split-scale'
                 )
               }
@@ -174,7 +189,8 @@ export function ImageSplitSettings({ shape, editor }: NodeSettingsProps): React.
           {config.rows} × {config.columns} = {imageSplitCount(config)} 份
         </strong>
         <span>
-          每格以自身中心缩放；面积为原格的 {config.scalePercent}%（边长约 {linearPercent.toFixed(1)}%）。
+          每格以自身中心缩放；面积为原格的 {config.scalePercent}%（边长约 {linearPercent.toFixed(1)}
+          %）。
         </span>
       </p>
       {source ? (

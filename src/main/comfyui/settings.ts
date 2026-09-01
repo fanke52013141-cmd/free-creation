@@ -5,9 +5,8 @@ const SETTINGS_KEY = 'comfyui.baseUrl'
 export const DEFAULT_COMFYUI_BASE_URL = 'http://127.0.0.1:8188'
 
 export function getComfyuiBaseUrl(): string {
-  const row = getDb()
-    .prepare('SELECT value FROM settings WHERE key = ?')
-    .get(SETTINGS_KEY) as { value: string } | undefined
+  const row = getDb().prepare('SELECT value FROM settings WHERE key = ?').get(SETTINGS_KEY) as
+    { value: string } | undefined
   const stored = row?.value?.trim()
   return stored ? normalizeBaseUrl(stored) : DEFAULT_COMFYUI_BASE_URL
 }

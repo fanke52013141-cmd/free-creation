@@ -11,18 +11,7 @@ export type ImageCropMode = 'rect' | 'quad'
  * 因而不同分辨率的同一张素材也能稳定复现相同构图。
  */
 export type ImageCropAspectRatio =
-  | 'free'
-  | '1:1'
-  | '16:9'
-  | '9:16'
-  | '4:3'
-  | '3:4'
-  | '3:2'
-  | '2:3'
-  | '21:9'
-  | '9:21'
-  | '5:4'
-  | '4:5'
+  'free' | '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | '3:2' | '2:3' | '21:9' | '9:21' | '5:4' | '4:5'
 
 export const IMAGE_CROP_ASPECT_RATIOS: Readonly<Record<ImageCropAspectRatio, number | null>> = {
   free: null,

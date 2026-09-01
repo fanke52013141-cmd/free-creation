@@ -46,7 +46,10 @@ export interface ComfyuiSystemStats {
 }
 
 export async function comfyuiSystemStats(baseUrl: string): Promise<ComfyuiSystemStats> {
-  const data = await requestJson<{ system?: { comfyui_version?: string } }>(baseUrl, '/system_stats')
+  const data = await requestJson<{ system?: { comfyui_version?: string } }>(
+    baseUrl,
+    '/system_stats'
+  )
   return {
     online: true,
     version: data.system?.comfyui_version
@@ -110,15 +113,15 @@ export async function comfyuiFetchHistory(
   baseUrl: string,
   promptId: string
 ): Promise<ComfyuiHistoryEntry | null> {
-  const data = await requestJson<Record<string, ComfyuiHistoryEntry>>(baseUrl, `/history/${promptId}`)
+  const data = await requestJson<Record<string, ComfyuiHistoryEntry>>(
+    baseUrl,
+    `/history/${promptId}`
+  )
   return data[promptId] ?? null
 }
 
 /** 从 output / temp 目录下载产物文件。 */
-export async function comfyuiFetchView(
-  baseUrl: string,
-  file: ComfyuiOutputFile
-): Promise<Buffer> {
+export async function comfyuiFetchView(baseUrl: string, file: ComfyuiOutputFile): Promise<Buffer> {
   const query = new URLSearchParams({
     filename: file.filename,
     subfolder: file.subfolder ?? '',

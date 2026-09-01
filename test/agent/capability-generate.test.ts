@@ -32,10 +32,24 @@ function makeCap(overrides: Partial<Capability> = {}): Capability {
     description: '按照固定比例或自由区域裁剪图片',
     category: 'image',
     inputs: [
-      { id: 'image', name: '图片', type: 'image', required: true, cardinality: 'one', description: '待裁剪图片' }
+      {
+        id: 'image',
+        name: '图片',
+        type: 'image',
+        required: true,
+        cardinality: 'one',
+        description: '待裁剪图片'
+      }
     ],
     outputs: [
-      { id: 'result', name: '结果', type: 'image', required: true, cardinality: 'one', description: '裁剪后图片' }
+      {
+        id: 'result',
+        name: '结果',
+        type: 'image',
+        required: true,
+        cardinality: 'one',
+        description: '裁剪后图片'
+      }
     ],
     configSchema: {
       mode: {
@@ -205,17 +219,19 @@ describe('自动生成层', () => {
       defineCapability(makeCap({ id: 'b.two', nodeType: 'b-two' as any }))
 
       const artifacts = generateAll()
-      expect(artifacts.mcpTools).toHaveLength(2)
-      expect(artifacts.cliCommands).toHaveLength(2)
+      expect(artifacts.mcpTools.some((tool) => tool.name === 'create_node')).toBe(true)
+      expect(artifacts.cliCommands.some((command) => command.command === 'node')).toBe(true)
+      expect(artifacts.nodeConfigSchemas).toHaveLength(2)
       expect(artifacts.capabilityMatrix).toHaveLength(2)
       expect(artifacts.snapshots).toHaveLength(2)
       expect(artifacts.generatedAt).toBeGreaterThan(0)
     })
 
-    it('空注册表应生成空产物', () => {
+    it('空注册表仍保留真实入口，但不生成节点配置 schema', () => {
       const artifacts = generateAll()
-      expect(artifacts.mcpTools).toEqual([])
-      expect(artifacts.cliCommands).toEqual([])
+      expect(artifacts.mcpTools.length).toBeGreaterThan(0)
+      expect(artifacts.cliCommands.length).toBeGreaterThan(0)
+      expect(artifacts.nodeConfigSchemas).toEqual([])
     })
   })
 
@@ -227,10 +243,24 @@ describe('自动生成层', () => {
         capabilityId: 'image.crop',
         version: '1.0.0',
         inputs: [
-          { id: 'image', name: '图片', type: 'image', required: true, cardinality: 'one', description: '' }
+          {
+            id: 'image',
+            name: '图片',
+            type: 'image',
+            required: true,
+            cardinality: 'one',
+            description: ''
+          }
         ],
         outputs: [
-          { id: 'result', name: '结果', type: 'image', required: true, cardinality: 'one', description: '' }
+          {
+            id: 'result',
+            name: '结果',
+            type: 'image',
+            required: true,
+            cardinality: 'one',
+            description: ''
+          }
         ],
         configSchema: {
           mode: { type: 'enum', required: true, enumValues: ['a', 'b'] }
@@ -252,7 +282,14 @@ describe('自动生成层', () => {
         version: '1.1.0',
         inputs: [
           ...old.inputs,
-          { id: 'mask', name: '遮罩', type: 'image', required: false, cardinality: 'one', description: '' }
+          {
+            id: 'mask',
+            name: '遮罩',
+            type: 'image',
+            required: false,
+            cardinality: 'one',
+            description: ''
+          }
         ]
       })
       const diff = diffSnapshots(old, newSnap)
@@ -263,13 +300,29 @@ describe('自动生成层', () => {
     it('删除输出端口应检测为 removed', () => {
       const old = makeSnap({
         outputs: [
-          { id: 'result', name: '结果', type: 'image', required: true, cardinality: 'one', description: '' },
-          { id: 'thumbnail', name: '缩略图', type: 'image', required: false, cardinality: 'one', description: '' }
+          {
+            id: 'result',
+            name: '结果',
+            type: 'image',
+            required: true,
+            cardinality: 'one',
+            description: ''
+          },
+          {
+            id: 'thumbnail',
+            name: '缩略图',
+            type: 'image',
+            required: false,
+            cardinality: 'one',
+            description: ''
+          }
         ]
       })
       const newSnap = makeSnap()
       const diff = diffSnapshots(old, newSnap)
-      const removed = diff.changes.find((c) => c.type === 'removed' && c.path === 'outputs.thumbnail')
+      const removed = diff.changes.find(
+        (c) => c.type === 'removed' && c.path === 'outputs.thumbnail'
+      )
       expect(removed).toBeDefined()
     })
 
@@ -277,7 +330,14 @@ describe('自动生成层', () => {
       const old = makeSnap()
       const newSnap = makeSnap({
         inputs: [
-          { id: 'image', name: '图片', type: 'text', required: true, cardinality: 'one', description: '' }
+          {
+            id: 'image',
+            name: '图片',
+            type: 'text',
+            required: true,
+            cardinality: 'one',
+            description: ''
+          }
         ]
       })
       const diff = diffSnapshots(old, newSnap)
@@ -320,7 +380,9 @@ describe('自动生成层', () => {
   // ── 破坏性变更判定 ───────────────────────────────────────
 
   describe('isBreakingChange()', () => {
-    function makeDiff(changes: Array<{ type: 'added' | 'removed' | 'modified'; path: string; after?: unknown }>) {
+    function makeDiff(
+      changes: Array<{ type: 'added' | 'removed' | 'modified'; path: string; after?: unknown }>
+    ) {
       return {
         capabilityId: 'test',
         changes: changes.map((c) => ({ ...c, before: undefined }))
@@ -376,15 +438,16 @@ describe('生成一致性', () => {
     clearRegistry()
   })
 
-  it('生成的 MCP 工具数应与注册能力数一致', () => {
+  it('真实工具表固定，节点配置 schema 与注册能力数一致', () => {
     defineCapability(makeCap({ id: 'a.one', nodeType: 'a-one' as any }))
     defineCapability(makeCap({ id: 'b.two', nodeType: 'b-two' as any }))
     defineCapability(makeCap({ id: 'c.three', nodeType: 'c-three' as any }))
 
     const artifacts = generateAll()
     const capCount = listCapabilities().length
-    expect(artifacts.mcpTools.length).toBe(capCount)
-    expect(artifacts.cliCommands.length).toBe(capCount)
+    expect(artifacts.mcpTools.some((tool) => tool.name === 'create_node')).toBe(true)
+    expect(artifacts.cliCommands.some((command) => command.command === 'node')).toBe(true)
+    expect(artifacts.nodeConfigSchemas.length).toBe(capCount)
     expect(artifacts.capabilityMatrix.length).toBe(capCount)
     expect(artifacts.snapshots.length).toBe(capCount)
   })

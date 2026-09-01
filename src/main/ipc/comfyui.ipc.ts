@@ -34,9 +34,7 @@ export async function queryComfyuiStatus(): Promise<ComfyuiStatus> {
     }
   } catch (error) {
     status.message =
-      error instanceof ComfyuiError || error instanceof Error
-        ? error.message
-        : '无法连接 ComfyUI'
+      error instanceof ComfyuiError || error instanceof Error ? error.message : '无法连接 ComfyUI'
     return status
   }
   try {
@@ -64,10 +62,7 @@ export function registerComfyuiIpc(): void {
       try {
         return ok({ baseUrl: saveComfyuiBaseUrl(input.baseUrl) })
       } catch (error) {
-        return err(
-          'INVALID_URL',
-          error instanceof Error ? error.message : 'ComfyUI 地址无法解析'
-        )
+        return err('INVALID_URL', error instanceof Error ? error.message : 'ComfyUI 地址无法解析')
       }
     }
   )
