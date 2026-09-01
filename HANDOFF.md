@@ -10,6 +10,8 @@
 >
 > 产品定位：单用户、本地优先的 Windows Electron 无限画布创作工具。
 
+> **最新修复（2026-09-02 文本节点输入）**：修复文本节点双击进入编辑态后 textarea 无法输入的问题——`textRef` 改为在 `useEffect` 中同步、`enterEditing` 用 `useCallback` 稳定监听器引用、移除会覆盖 draft 的旧副作用；textarea 事件处理仅 `stopPropagation` 不做 `preventDefault`，保证输入可正常聚焦。涉及文件与验证路径见 [docs/HANDOFF_2026_09_02_TEXT_EDIT_INPUT.md](./docs/HANDOFF_2026_09_02_TEXT_EDIT_INPUT.md)。
+
 > **最新交付（2026-09-01 Agent 生产链路）**：MCP 的真实 Electron stdio 启动烟测、持久化 revision/idempotency 写入保护、Headless Run 消费器、真实工具/节点配置契约产物以及零警告 lint 已完成。使用方式、开关和后续硬门槛见 [docs/HANDOFF_2026_09_01_AGENT_PRODUCTION.md](./docs/HANDOFF_2026_09_01_AGENT_PRODUCTION.md)。
 
 > **最新交付（2026-09-01 Agent 对接安全基线）**：CLI/MCP 已改为读取桌面端同一份项目/媒体数据，默认只读；写入与无界面执行在画布快照事务和真实执行器完成前被主动关闭。新增 Electron ABI 构建、Zod 边界校验、稳定契约生成文件、权限/乐观版本/幂等基础设施。此前“P0–P3 已完整实现、能力表为唯一事实来源”的表述不准确，现已撤回。完整状态、验证和后续硬门槛见 [docs/HANDOFF_2026_09_01_AGENT_SAFETY_BASELINE.md](./docs/HANDOFF_2026_09_01_AGENT_SAFETY_BASELINE.md)。
