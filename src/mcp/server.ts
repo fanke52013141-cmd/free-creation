@@ -12,27 +12,64 @@
  * 协议：MCP over stdio（JSON-RPC 2.0）
  */
 
-import { createServices, FileProjectStore } from '@application'
+import { createServices, DesktopProjectStore, FileProjectStore } from '@application'
 import type { ServiceContainer, ProjectStore } from '@application'
 import { listCapabilities } from '@capabilities'
-import { join } from 'path'
-import { homedir } from 'os'
 import type { Readable, Writable } from 'stream'
+import { z } from 'zod'
+import type { NodeTypeId } from '@shared/types'
 
-// ── 数据目录 ───────────────────────────────────────────────
+const projectIdSchema = z.string().regex(/^[A-Za-z0-9_-]{6,64}$/, '非法项目 ID')
+const nodeIdSchema = z.string().min(1).max(128)
+const portRefSchema = z.object({
+  nodeId: nodeIdSchema,
+  portId: z.string().regex(/^(in|out)-[a-z0-9]+(?:-[a-z0-9]+)*$/)
+})
 
-function getDataDir(): string {
-  const env = process.env.CANVAS_DATA_DIR
-  if (env) return env
-
-  const platform = process.platform
-  if (platform === 'win32') {
-    return join(process.env.APPDATA || join(homedir(), 'AppData', 'Roaming'), 'canvas-studio', 'data')
-  }
-  if (platform === 'darwin') {
-    return join(homedir(), 'Library', 'Application Support', 'canvas-studio', 'data')
-  }
-  return join(homedir(), '.config', 'canvas-studio', 'data')
+const toolArgumentSchemas: Record<string, z.ZodType<Record<string, unknown>>> = {
+  list_projects: z.object({}).passthrough(),
+  get_project: z.object({ projectId: projectIdSchema }),
+  list_node_types: z.object({ exposure: z.enum(['desktop', 'cli', 'mcp']).optional() }),
+  get_capability: z.object({ capabilityId: z.string().min(3).max(128) }),
+  get_capability_by_node_type: z.object({ nodeType: z.string().min(1).max(64) }),
+  validate_node_config: z.object({
+    nodeType: z.string().min(1).max(64),
+    config: z.record(z.string(), z.unknown())
+  }),
+  create_node: z.object({
+    projectId: projectIdSchema,
+    type: z.string().min(1).max(64),
+    title: z.string().max(160).optional(),
+    params: z.record(z.string(), z.unknown()).optional()
+  }),
+  configure_node: z.object({
+    projectId: projectIdSchema,
+    nodeId: nodeIdSchema,
+    params: z.record(z.string(), z.unknown()).optional(),
+    title: z.string().max(160).optional()
+  }),
+  delete_node: z.object({ projectId: projectIdSchema, nodeId: nodeIdSchema }),
+  connect_nodes: z.object({ projectId: projectIdSchema, from: portRefSchema, to: portRefSchema }),
+  disconnect_nodes: z.object({ projectId: projectIdSchema, edgeId: nodeIdSchema }),
+  validate_workflow: z.object({
+    projectId: projectIdSchema,
+    nodeIds: z.array(nodeIdSchema).max(200).optional()
+  }),
+  estimate_run: z.object({
+    projectId: projectIdSchema,
+    nodeIds: z.array(nodeIdSchema).max(200).optional()
+  }),
+  run_node: z.object({
+    projectId: projectIdSchema,
+    nodeId: nodeIdSchema,
+    dryRun: z.boolean().optional()
+  }),
+  run_workflow: z.object({
+    projectId: projectIdSchema,
+    nodeIds: z.array(nodeIdSchema).max(200).optional(),
+    dryRun: z.boolean().optional()
+  }),
+  list_artifacts: z.object({ projectId: projectIdSchema })
 }
 
 // ── MCP 工具定义 ──────────────────────────────────────────
@@ -48,16 +85,13 @@ export interface McpTool {
 }
 
 export interface McpToolResult {
-  content: Array<
-    | { type: 'text'; text: string }
-    | { type: 'image'; data: string; mimeType: string }
-  >
+  content: Array<{ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }>
   isError?: boolean
 }
 
 // ── 工具注册 ───────────────────────────────────────────────
 
-function defineTools(): McpTool[] {
+export function defineTools(): McpTool[] {
   return [
     // ── 查询类 ──────────────────────────────────
     {
@@ -82,7 +116,11 @@ function defineTools(): McpTool[] {
       inputSchema: {
         type: 'object',
         properties: {
-          exposure: { type: 'string', enum: ['desktop', 'cli', 'mcp'], description: '按暴露入口过滤' }
+          exposure: {
+            type: 'string',
+            enum: ['desktop', 'cli', 'mcp'],
+            description: '按暴露入口过滤'
+          }
         }
       }
     },
@@ -287,6 +325,15 @@ async function executeTool(
     isError: true
   })
 
+  const schema = toolArgumentSchemas[name]
+  if (schema) {
+    const parsed = schema.safeParse(args)
+    if (!parsed.success) {
+      return error(`输入无效: ${parsed.error.issues.map((issue) => issue.message).join('；')}`)
+    }
+    args = parsed.data
+  }
+
   try {
     switch (name) {
       // 查询类
@@ -309,7 +356,9 @@ async function executeTool(
         return result.ok ? json(result.data) : error(result.error.message)
       }
       case 'get_capability_by_node_type': {
-        const result = await services.capabilityService.getCapabilityByNodeType(String(args.nodeType))
+        const result = await services.capabilityService.getCapabilityByNodeType(
+          String(args.nodeType)
+        )
         return result.ok ? json(result.data) : error(result.error.message)
       }
       case 'validate_node_config': {
@@ -323,7 +372,7 @@ async function executeTool(
       case 'create_node': {
         const result = await services.nodeService.createNode({
           projectId: String(args.projectId),
-          type: String(args.type) as any,
+          type: String(args.type) as NodeTypeId,
           title: args.title as string | undefined,
           params: args.params as Record<string, unknown> | undefined
         })
@@ -434,13 +483,27 @@ const PROTOCOL_VERSION = '2024-11-05' as const
  */
 export function startMcpServer(
   stdin: Readable = process.stdin,
-  stdout: Writable = process.stdout
+  stdout: Writable = process.stdout,
+  injectedStore?: ProjectStore
 ): void {
-  const store = new FileProjectStore({ dataDir: getDataDir() })
-  const services = createServices(store)
+  // MCP 先采用只读安全模式。它访问的就是桌面端项目数据，而不是独立文件目录；
+  // 在 tldraw 快照事务和真实 headless executor 完成前，写入/运行工具会明确拒绝。
+  const store = injectedStore ?? new DesktopProjectStore()
+  const services = createServices(store, {
+    permission: { level: 'read' },
+    writeEnabled: false,
+    executionEnabled: false,
+    actor: 'agent'
+  })
   const tools = defineTools()
 
   let buffer = ''
+  let pendingRequests = 0
+  let stdinEnded = false
+
+  const exitWhenDrained = (): void => {
+    if (stdinEnded && pendingRequests === 0) process.exit(0)
+  }
 
   stdin.setEncoding('utf-8')
 
@@ -457,11 +520,17 @@ export function startMcpServer(
 
       try {
         const request = JSON.parse(line) as JsonRpcRequest
-        handleRequest(request, tools, services, store).then((response) => {
-          if (response && request.id !== undefined) {
-            stdout.write(JSON.stringify(response) + '\n')
-          }
-        })
+        pendingRequests++
+        handleRequest(request, tools, services, store)
+          .then((response) => {
+            if (response && request.id !== undefined) {
+              stdout.write(JSON.stringify(response) + '\n')
+            }
+          })
+          .finally(() => {
+            pendingRequests--
+            exitWhenDrained()
+          })
       } catch {
         // 解析失败，忽略
         if (process.env.MCP_DEBUG) {
@@ -472,8 +541,14 @@ export function startMcpServer(
   })
 
   stdin.on('end', () => {
-    process.exit(0)
+    stdinEnded = true
+    exitWhenDrained()
   })
+}
+
+/** 测试专用：独立临时目录，不会触及真实桌面项目。 */
+export function createIsolatedMcpStore(dataDir: string): ProjectStore {
+  return new FileProjectStore({ dataDir })
 }
 
 async function handleRequest(

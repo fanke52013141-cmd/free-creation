@@ -37,9 +37,16 @@ export { WorkflowService } from './services/workflow-service'
 export { ProjectService } from './services/project-service'
 export { CapabilityService } from './services/capability-service'
 export { InMemoryAuditLog } from './services/audit-log'
+export {
+  authorize,
+  requireWrite,
+  requireExecution,
+  permissionForReadOnlyAgent
+} from './services/authorization'
 
 // 存储实现
 export { FileProjectStore } from './stores/file-store'
+export { DesktopProjectStore } from './stores/desktop-store'
 
 // ── 服务容器工厂 ──────────────────────────────────────────
 
@@ -58,6 +65,13 @@ export interface ServiceContainer {
   auditLog: InMemoryAuditLog
 }
 
+export interface ServiceOptions {
+  permission?: Partial<Permission>
+  writeEnabled?: boolean
+  executionEnabled?: boolean
+  actor?: 'user' | 'agent' | 'system'
+}
+
 /**
  * 创建服务容器。
  *
@@ -67,25 +81,29 @@ export interface ServiceContainer {
  */
 export function createServices(
   store: ProjectStore,
-  permission?: Partial<Permission>
+  options: ServiceOptions = {}
 ): ServiceContainer {
   const auditLog = new InMemoryAuditLog()
   const defaultPermission: Permission = {
     level: 'execute',
-    ...permission
+    ...options.permission
   }
 
   const ctx: ServiceContext = {
     store,
     permission: defaultPermission,
-    audit: auditLog
+    audit: auditLog,
+    // 保持内存测试和桌面内部调用的现有行为；外部入口必须显式传 false/true。
+    writeEnabled: options.writeEnabled ?? true,
+    executionEnabled: options.executionEnabled ?? true,
+    actor: options.actor ?? 'agent'
   }
 
   return {
     nodeService: new NodeService(ctx),
     workflowService: new WorkflowService(ctx),
     projectService: new ProjectService(ctx),
-    capabilityService: new CapabilityService(ctx),
+    capabilityService: new CapabilityService(),
     auditLog
   }
 }

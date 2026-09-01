@@ -5,24 +5,16 @@
  * Agent 可以先查询可用能力和节点规范，再决定如何组装工作流。
  */
 
-import {
-  getCapability,
-  getCapabilityByNodeType,
-  listCapabilities
-} from '@capabilities'
+import { getCapability, getCapabilityByNodeType, listCapabilities } from '@capabilities'
 import type { Capability, ConfigFieldSchema } from '@capabilities/types'
-import type { Result, ServiceContext } from '../types'
+import type { Result } from '../types'
 import { ok, fail } from '../types'
 
 export class CapabilityService {
-  constructor(_ctx: ServiceContext) {}
-
   /** 列出所有暴露给当前入口的能力 */
   async listCapabilities(exposure?: 'desktop' | 'cli' | 'mcp'): Promise<Result<Capability[]>> {
     const all = listCapabilities()
-    const filtered = exposure
-      ? all.filter((cap) => cap.expose[exposure])
-      : all
+    const filtered = exposure ? all.filter((cap) => cap.expose[exposure]) : all
     return ok(filtered)
   }
 
@@ -68,7 +60,9 @@ export class CapabilityService {
 
     const errors: string[] = []
 
-    for (const [key, field] of Object.entries(cap.configSchema) as Array<[string, ConfigFieldSchema]>) {
+    for (const [key, field] of Object.entries(cap.configSchema) as Array<
+      [string, ConfigFieldSchema]
+    >) {
       const value = config[key]
 
       if (field.required && (value === undefined || value === null || value === '')) {

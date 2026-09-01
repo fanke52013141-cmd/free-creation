@@ -20,6 +20,7 @@ import type {
   RunNodeRequest
 } from '../types'
 import { ok, fail } from '../types'
+import { requireExecution } from './authorization'
 import type { ConfigFieldSchema } from '@capabilities/types'
 
 export class WorkflowService {
@@ -32,14 +33,10 @@ export class WorkflowService {
     const allEdges = await this.ctx.store.getEdges(req.projectId)
 
     // 筛选范围
-    const nodes = req.nodeIds
-      ? allNodes.filter((n) => req.nodeIds!.includes(n.id))
-      : allNodes
+    const nodes = req.nodeIds ? allNodes.filter((n) => req.nodeIds!.includes(n.id)) : allNodes
 
     const nodeIds = new Set(nodes.map((n) => n.id))
-    const edges = allEdges.filter(
-      (e) => nodeIds.has(e.from.nodeId) && nodeIds.has(e.to.nodeId)
-    )
+    const edges = allEdges.filter((e) => nodeIds.has(e.from.nodeId) && nodeIds.has(e.to.nodeId))
 
     const errors: WorkflowValidationResult['errors'] = []
     let inputIssues = 0
@@ -60,12 +57,10 @@ export class WorkflowService {
       for (const inputPort of cap.inputs) {
         if (!inputPort.required) continue
 
-        const hasInput = edges.some(
-          (e) => e.to.nodeId === node.id && e.to.portId === inputPort.id
-        )
+        const hasInput = edges.some((e) => e.to.nodeId === node.id && e.to.portId === inputPort.id)
 
-        // 检查节点自身是否有内容（如文本节点的 text 参数）
-        const hasInlineContent = node.params && Object.keys(node.params).length > 0
+        // 只允许明确映射到当前端口的本地值满足必填输入，不能把任意配置误当输入。
+        const hasInlineContent = hasInlineInput(node, inputPort.id)
 
         if (!hasInput && !hasInlineContent) {
           inputIssues++
@@ -145,7 +140,11 @@ export class WorkflowService {
       scopeNodes = nodes.filter((n) => req.nodeIds!.includes(n.id))
     } else if (req.toNodeId) {
       // 包含目标节点及其所有上游
-      const allUpstream = collectUpstream(req.toNodeId, nodes, await this.ctx.store.getEdges(req.projectId))
+      const allUpstream = collectUpstream(
+        req.toNodeId,
+        nodes,
+        await this.ctx.store.getEdges(req.projectId)
+      )
       scopeNodes = nodes.filter((n) => allUpstream.has(n.id))
     } else {
       scopeNodes = nodes
@@ -168,7 +167,9 @@ export class WorkflowService {
 
       // 检查必填配置
       const missing: string[] = []
-      for (const [key, field] of Object.entries(cap.configSchema) as Array<[string, ConfigFieldSchema]>) {
+      for (const [key, field] of Object.entries(cap.configSchema) as Array<
+        [string, ConfigFieldSchema]
+      >) {
         if (field.required && !node.params?.[key]) {
           missing.push(key)
         }
@@ -204,7 +205,8 @@ export class WorkflowService {
         nodeIds: [req.nodeId],
         dryRun: true
       })
-      if (!estimate.ok) return estimate as any
+      if (!estimate.ok)
+        return fail(estimate.error.code, estimate.error.message, estimate.error.details)
       return ok({
         runId: 'dry-run',
         status: 'completed',
@@ -213,7 +215,15 @@ export class WorkflowService {
       })
     }
 
-    // 创建运行句柄（实际执行委托给执行引擎）
+    const node = (await this.ctx.store.getNodes(req.projectId)).find(
+      (item) => item.id === req.nodeId
+    )
+    if (!node) return fail('NODE_NOT_FOUND', `节点不存在: ${req.nodeId}`)
+    const cap = getCapabilityByNodeType(node.type)
+    const permissionError = requireExecution(this.ctx, cap?.id)
+    if (permissionError) return fail('EXECUTION_DISABLED', permissionError)
+
+    // 只有具备真实 headless executor 的入口才能创建运行句柄。
     const runId = nanoid(12)
     const handle: RunHandle = {
       runId,
@@ -223,22 +233,23 @@ export class WorkflowService {
     }
 
     this.ctx.audit.log({
-      actor: 'agent',
+      actor: this.ctx.actor,
       action: 'run-node',
       projectId: req.projectId,
       entityId: req.nodeId,
       after: { runId }
     })
 
-    // 当前阶段：返回排队状态
-    // 实际执行需要通过桌面端引擎或未来的 headless 执行器完成
+    // 默认容器仅供桌面内部适配；外部 CLI/MCP 将 executionEnabled 设为 false，
+    // 因而不会把未执行的任务伪装成 queued。
     return ok(handle)
   }
 
   async runWorkflow(req: RunWorkflowRequest): Promise<Result<RunHandle>> {
     if (req.dryRun) {
       const estimate = await this.estimateRun(req)
-      if (!estimate.ok) return estimate as any
+      if (!estimate.ok)
+        return fail(estimate.error.code, estimate.error.message, estimate.error.details)
       return ok({
         runId: 'dry-run',
         status: 'completed',
@@ -252,14 +263,14 @@ export class WorkflowService {
       projectId: req.projectId,
       nodeIds: req.nodeIds
     })
-    if (!validation.ok) return validation as any
+    if (!validation.ok)
+      return fail(validation.error.code, validation.error.message, validation.error.details)
     if (!validation.data.valid) {
-      return fail(
-        'WORKFLOW_INVALID',
-        '工作流校验未通过',
-        { errors: validation.data.errors }
-      )
+      return fail('WORKFLOW_INVALID', '工作流校验未通过', { errors: validation.data.errors })
     }
+
+    const permissionError = requireExecution(this.ctx)
+    if (permissionError) return fail('EXECUTION_DISABLED', permissionError)
 
     const runId = nanoid(12)
     const handle: RunHandle = {
@@ -273,7 +284,7 @@ export class WorkflowService {
     }
 
     this.ctx.audit.log({
-      actor: 'agent',
+      actor: this.ctx.actor,
       action: 'run-workflow',
       projectId: req.projectId,
       after: { runId, scope: handle.scope }
@@ -323,11 +334,7 @@ function detectCycle(nodes: CanvasNode[], edges: CanvasEdge[]): boolean {
   return false
 }
 
-function collectUpstream(
-  nodeId: string,
-  _nodes: CanvasNode[],
-  edges: CanvasEdge[]
-): Set<string> {
+function collectUpstream(nodeId: string, _nodes: CanvasNode[], edges: CanvasEdge[]): Set<string> {
   const result = new Set<string>([nodeId])
   const queue = [nodeId]
 
@@ -342,4 +349,24 @@ function collectUpstream(
   }
 
   return result
+}
+
+function hasInlineInput(node: CanvasNode, portId: string): boolean {
+  if (portId === 'in-text') {
+    return (
+      (node.content.kind === 'text' && node.content.text.trim().length > 0) ||
+      (typeof node.params.text === 'string' && node.params.text.trim().length > 0)
+    )
+  }
+  if (portId === 'in-json' || portId === 'in-value') {
+    return (
+      node.content.kind === 'json' ||
+      node.params.value !== undefined ||
+      node.params.data !== undefined
+    )
+  }
+  if (portId === 'in-image' || portId === 'in-video' || portId === 'in-audio') {
+    return node.content.kind === 'media' || typeof node.params.mediaId === 'string'
+  }
+  return false
 }

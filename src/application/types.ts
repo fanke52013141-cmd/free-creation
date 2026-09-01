@@ -22,9 +22,7 @@ import type {
 
 // ── 统一结果类型 ──────────────────────────────────────────
 
-export type Result<T> =
-  | { ok: true; data: T }
-  | { ok: false; error: ServiceError }
+export type Result<T> = { ok: true; data: T } | { ok: false; error: ServiceError }
 
 export interface ServiceError {
   code: string
@@ -39,7 +37,11 @@ export function ok<T>(data: T): Result<T> {
   return { ok: true, data }
 }
 
-export function fail<T>(code: string, message: string, details?: Record<string, unknown>): Result<T> {
+export function fail<T>(
+  code: string,
+  message: string,
+  details?: Record<string, unknown>
+): Result<T> {
   return { ok: false, error: { code, message, details } }
 }
 
@@ -70,7 +72,8 @@ export interface ProjectStore {
   getGroups(projectId: string): Promise<GroupDecl[]>
   saveGraph(
     projectId: string,
-    graph: { nodes: CanvasNode[]; edges: CanvasEdge[]; groups: GroupDecl[] }
+    graph: { nodes: CanvasNode[]; edges: CanvasEdge[]; groups: GroupDecl[] },
+    options?: { expectedGraphVersion?: number }
   ): Promise<{ graphVersion: number }>
 
   // 媒体资产
@@ -101,6 +104,8 @@ export interface CreateNodeRequest {
   params?: Record<string, unknown>
   /** 幂等键——相同 key 重复调用不会创建多个节点 */
   idempotencyKey?: string
+  /** 乐观并发控制：必须等于读取项目时得到的 graphVersion。 */
+  expectedGraphVersion?: number
 }
 
 export interface UpdateNodeRequest {
@@ -110,6 +115,8 @@ export interface UpdateNodeRequest {
   params?: Record<string, unknown>
   /** 位置更新（仅桌面端有实际意义，headless 模式忽略） */
   position?: { x: number; y: number }
+  expectedGraphVersion?: number
+  idempotencyKey?: string
 }
 
 export interface ConnectNodesRequest {
@@ -117,6 +124,7 @@ export interface ConnectNodesRequest {
   from: { nodeId: string; portId: string }
   to: { nodeId: string; portId: string }
   idempotencyKey?: string
+  expectedGraphVersion?: number
 }
 
 export interface ValidateWorkflowRequest {
@@ -249,4 +257,10 @@ export interface ServiceContext {
   store: ProjectStore
   permission: Permission
   audit: AuditLog
+  /** 仅在真正接入桌面项目事务层并获得显式授权时允许修改项目。 */
+  writeEnabled: boolean
+  /** 当前入口是否拥有可执行的无界面执行器。没有时必须拒绝，而非伪造 queued。 */
+  executionEnabled: boolean
+  /** 审计主体；CLI/MCP 都必须留下来源。 */
+  actor: AuditActor
 }

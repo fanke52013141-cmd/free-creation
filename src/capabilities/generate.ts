@@ -31,7 +31,7 @@ export function generateMcpToolSchema(cap: Capability): McpToolSchema {
 
   for (const [key, field] of Object.entries(cap.configSchema)) {
     const prop: Record<string, unknown> = {
-      type: field.type,
+      type: jsonSchemaType(field.type),
       description: field.description ?? ''
     }
     if (field.enumValues) prop.enum = field.enumValues
@@ -104,6 +104,7 @@ export interface GeneratedArtifacts {
   cliCommands: CliCommandSpec[]
   capabilityMatrix: CapabilityMatrixEntry[]
   snapshots: ContractSnapshot[]
+  /** 仅供运行时审计；提交到 generated/ 的稳定产物会移除该字段。 */
   generatedAt: number
 }
 
@@ -112,13 +113,25 @@ export interface GeneratedArtifacts {
  * CI 脚本调用此函数，将结果写入 generated/ 目录，并检查是否有未提交差异。
  */
 export function generateAll(): GeneratedArtifacts {
-  const caps = listCapabilities()
+  const caps = [...listCapabilities()].sort((a, b) => a.id.localeCompare(b.id))
   return {
     mcpTools: caps.map(generateMcpToolSchema),
     cliCommands: caps.map(generateCliSpec),
     capabilityMatrix: caps.map(generateMatrixEntry),
     snapshots: caps.map(generateSnapshot),
     generatedAt: Date.now()
+  }
+}
+
+function jsonSchemaType(type: string): string {
+  switch (type) {
+    case 'enum':
+    case 'color':
+      return 'string'
+    case 'rect':
+      return 'object'
+    default:
+      return type
   }
 }
 
@@ -138,10 +151,7 @@ export interface ContractDiff {
  * 比较两个契约快照的差异。
  * 用于检测能力定义变更是否引入了破坏性变化。
  */
-export function diffSnapshots(
-  oldSnap: ContractSnapshot,
-  newSnap: ContractSnapshot
-): ContractDiff {
+export function diffSnapshots(oldSnap: ContractSnapshot, newSnap: ContractSnapshot): ContractDiff {
   const changes: ContractDiff['changes'] = []
 
   // 比较输入端口

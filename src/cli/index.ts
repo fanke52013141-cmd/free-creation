@@ -23,33 +23,21 @@
  *   CANVAS_DATA_DIR  数据目录路径（默认使用 Electron userData 目录）
  */
 
-import { createServices, FileProjectStore } from '@application'
-import type { Result } from '@application'
-import { join } from 'path'
-import { homedir } from 'os'
-
-// ── 数据目录 ───────────────────────────────────────────────
-
-function getDataDir(): string {
-  const env = process.env.CANVAS_DATA_DIR
-  if (env) return env
-
-  // 默认：与 Electron app.getPath('userData') 对齐
-  const platform = process.platform
-  if (platform === 'win32') {
-    return join(process.env.APPDATA || join(homedir(), 'AppData', 'Roaming'), 'canvas-studio', 'data')
-  }
-  if (platform === 'darwin') {
-    return join(homedir(), 'Library', 'Application Support', 'canvas-studio', 'data')
-  }
-  return join(homedir(), '.config', 'canvas-studio', 'data')
-}
+import { createServices, DesktopProjectStore } from '@application'
+import type { Result, ServiceContainer } from '@application'
+import type { NodeTypeId } from '@shared/types'
 
 // ── 服务初始化 ─────────────────────────────────────────────
 
-function getServices() {
-  const store = new FileProjectStore({ dataDir: getDataDir() })
-  return createServices(store)
+function getServices(): ServiceContainer {
+  // 外部 CLI 默认只读：它读取的是桌面端同一个 SQLite/project.json，不会写出
+  // 一份脱离 tldraw 快照的平行项目。后续 headless 事务完成后再显式开放。
+  return createServices(new DesktopProjectStore(), {
+    permission: { level: 'read' },
+    writeEnabled: false,
+    executionEnabled: false,
+    actor: 'agent'
+  })
 }
 
 // ── 参数解析 ───────────────────────────────────────────────
@@ -122,11 +110,21 @@ function printHumanReadable(data: unknown): void {
       // 表格格式
       const items = data as Record<string, unknown>[]
       const keys = Object.keys(items[0]).slice(0, 5)
-      const widths = keys.map((k) => Math.max(k.length, ...items.map((i) => String(i[k] ?? '').slice(0, 40).length)))
+      const widths = keys.map((k) =>
+        Math.max(k.length, ...items.map((i) => String(i[k] ?? '').slice(0, 40).length))
+      )
       console.log(keys.map((k, i) => k.padEnd(widths[i])).join('  '))
       console.log(widths.map((w) => '-'.repeat(w)).join('  '))
       for (const item of items) {
-        console.log(keys.map((k, i) => String(item[k] ?? '').slice(0, 40).padEnd(widths[i])).join('  '))
+        console.log(
+          keys
+            .map((k, i) =>
+              String(item[k] ?? '')
+                .slice(0, 40)
+                .padEnd(widths[i])
+            )
+            .join('  ')
+        )
       }
       console.log(`\n共 ${items.length} 条`)
     } else {
@@ -158,8 +156,8 @@ function printObject(obj: Record<string, unknown>, indent: number): void {
 
 // ── 命令处理 ───────────────────────────────────────────────
 
-async function main(): Promise<void> {
-  const args = parseArgs(process.argv)
+export async function runCli(argv: string[] = process.argv): Promise<void> {
+  const args = parseArgs(argv)
 
   if (!args.command) {
     printHelp()
@@ -174,7 +172,10 @@ async function main(): Promise<void> {
       break
     case 'capability':
     case 'node':
-      if (args.command === 'capability' || (args.command === 'node' && args.subcommand === 'types')) {
+      if (
+        args.command === 'capability' ||
+        (args.command === 'node' && args.subcommand === 'types')
+      ) {
         await handleCapability(args, services)
       } else {
         await handleNode(args, services)
@@ -184,7 +185,7 @@ async function main(): Promise<void> {
       await handleWorkflow(args, services)
       break
     case 'artifact':
-      await handleArtifact(args, services)
+      await handleArtifact(args)
       break
     case 'help':
     case '--help':
@@ -200,7 +201,10 @@ async function main(): Promise<void> {
 
 // ── project 命令 ──────────────────────────────────────────
 
-async function handleProject(args: ParsedArgs, services: ReturnType<typeof getServices>): Promise<void> {
+async function handleProject(
+  args: ParsedArgs,
+  services: ReturnType<typeof getServices>
+): Promise<void> {
   switch (args.subcommand) {
     case 'list': {
       const result = await services.projectService.listProjects()
@@ -245,7 +249,10 @@ async function handleProject(args: ParsedArgs, services: ReturnType<typeof getSe
 
 // ── capability 命令 ───────────────────────────────────────
 
-async function handleCapability(args: ParsedArgs, services: ReturnType<typeof getServices>): Promise<void> {
+async function handleCapability(
+  args: ParsedArgs,
+  services: ReturnType<typeof getServices>
+): Promise<void> {
   switch (args.subcommand) {
     case 'list':
     case 'types': {
@@ -271,7 +278,10 @@ async function handleCapability(args: ParsedArgs, services: ReturnType<typeof ge
 
 // ── node 命令 ─────────────────────────────────────────────
 
-async function handleNode(args: ParsedArgs, services: ReturnType<typeof getServices>): Promise<void> {
+async function handleNode(
+  args: ParsedArgs,
+  services: ReturnType<typeof getServices>
+): Promise<void> {
   switch (args.subcommand) {
     case 'list': {
       const projectId = args.options.project
@@ -302,7 +312,7 @@ async function handleNode(args: ParsedArgs, services: ReturnType<typeof getServi
 
       const result = await services.nodeService.createNode({
         projectId,
-        type: type as any,
+        type: type as NodeTypeId,
         title: args.options.title,
         params
       })
@@ -314,7 +324,9 @@ async function handleNode(args: ParsedArgs, services: ReturnType<typeof getServi
       const from = args.options.from
       const to = args.options.to
       if (!projectId || !from || !to) {
-        console.error('用法: canvas node connect --project <id> --from <nodeId:portId> --to <nodeId:portId>')
+        console.error(
+          '用法: canvas node connect --project <id> --from <nodeId:portId> --to <nodeId:portId>'
+        )
         process.exit(1)
       }
 
@@ -348,7 +360,10 @@ async function handleNode(args: ParsedArgs, services: ReturnType<typeof getServi
 
 // ── workflow 命令 ─────────────────────────────────────────
 
-async function handleWorkflow(args: ParsedArgs, services: ReturnType<typeof getServices>): Promise<void> {
+async function handleWorkflow(
+  args: ParsedArgs,
+  services: ReturnType<typeof getServices>
+): Promise<void> {
   const projectId = args.options.project
   if (!projectId) {
     console.error('用法: canvas workflow <subcommand> --project <id>')
@@ -380,7 +395,7 @@ async function handleWorkflow(args: ParsedArgs, services: ReturnType<typeof getS
 
 // ── artifact 命令 ─────────────────────────────────────────
 
-async function handleArtifact(args: ParsedArgs, _services: ReturnType<typeof getServices>): Promise<void> {
+async function handleArtifact(args: ParsedArgs): Promise<void> {
   switch (args.subcommand) {
     case 'list': {
       const projectId = args.options.project
@@ -388,9 +403,7 @@ async function handleArtifact(args: ParsedArgs, _services: ReturnType<typeof get
         console.error('用法: canvas artifact list --project <id>')
         process.exit(1)
       }
-      // FileProjectStore 的 listArtifacts 当前返回空
-      const store = new FileProjectStore({ dataDir: getDataDir() })
-      const artifacts = await store.listArtifacts(projectId)
+      const artifacts = await new DesktopProjectStore().listArtifacts(projectId)
       output({ ok: true, data: artifacts }, args.flags)
       break
     }
@@ -436,8 +449,3 @@ Canvas Studio CLI — 无限画布命令行工具
 }
 
 // ── 启动 ──────────────────────────────────────────────────
-
-main().catch((err) => {
-  console.error('致命错误:', err.message)
-  process.exit(1)
-})

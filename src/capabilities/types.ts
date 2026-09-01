@@ -8,12 +8,7 @@
  * 规则：禁止在页面组件、CLI 适配器或 MCP 适配器中单独定义业务规则。
  */
 
-import type {
-  PortType,
-  PortCardinality,
-  NodeTypeId,
-  NodeExecutionMode
-} from '@shared/types'
+import type { PortType, PortCardinality, NodeTypeId, NodeExecutionMode } from '@shared/types'
 
 // ── 暴露控制 ──────────────────────────────────────────────
 
@@ -30,14 +25,7 @@ export interface CapabilityExpose {
 // ── 配置 Schema ───────────────────────────────────────────
 
 export type ConfigFieldType =
-  | 'string'
-  | 'number'
-  | 'boolean'
-  | 'enum'
-  | 'object'
-  | 'array'
-  | 'color'
-  | 'rect'
+  'string' | 'number' | 'boolean' | 'enum' | 'object' | 'array' | 'color' | 'rect'
 
 /** 单个配置字段的 Schema 描述 */
 export interface ConfigFieldSchema {
@@ -192,5 +180,6 @@ export interface ContractSnapshot {
   inputs: CapabilityPort[]
   outputs: CapabilityPort[]
   configSchema: ConfigSchema
+  /** 仅供运行时审计；提交到 generated/ 的稳定产物会移除该字段。 */
   snapshotAt: number
 }

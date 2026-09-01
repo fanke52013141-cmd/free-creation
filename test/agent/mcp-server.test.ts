@@ -10,7 +10,7 @@ import { PassThrough } from 'stream'
 import { mkdtempSync, rmSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { startMcpServer } from '../../src/mcp/server'
+import { createIsolatedMcpStore, startMcpServer } from '../../src/mcp/server'
 
 // ── 测试环境 ───────────────────────────────────────────────
 
@@ -25,7 +25,7 @@ function setupServer(): { stdin: PassThrough; stdout: PassThrough } {
   stdin = new PassThrough()
   stdout = new PassThrough()
 
-  startMcpServer(stdin as any, stdout as any)
+  startMcpServer(stdin as any, stdout as any, createIsolatedMcpStore(tempDir))
 
   return { stdin, stdout }
 }
@@ -34,7 +34,10 @@ function sendRequest(stdin: PassThrough, req: Record<string, unknown>): void {
   stdin.write(JSON.stringify(req) + '\n')
 }
 
-function readResponse(stdout: PassThrough, timeout = 3000): Promise<Record<string, unknown> | null> {
+function readResponse(
+  stdout: PassThrough,
+  timeout = 3000
+): Promise<Record<string, unknown> | null> {
   return new Promise((resolve) => {
     let buffer = ''
     const timer = setTimeout(() => {
@@ -354,6 +357,38 @@ describe('MCP Server', () => {
 
       const res = await readResponse(stdout)
       expect(res!.result.isError).toBe(true)
+    })
+
+    it('默认只读模式必须拒绝节点写入', async () => {
+      sendRequest(stdin, {
+        jsonrpc: '2.0',
+        id: 171,
+        method: 'tools/call',
+        params: {
+          name: 'create_node',
+          arguments: { projectId: 'project_123', type: 'text' }
+        }
+      })
+
+      const res = await readResponse(stdout)
+      expect(res!.result.isError).toBe(true)
+      expect(res!.result.content[0].text).toContain('写入已安全关闭')
+    })
+
+    it('应在调用服务前拒绝非法项目 ID', async () => {
+      sendRequest(stdin, {
+        jsonrpc: '2.0',
+        id: 172,
+        method: 'tools/call',
+        params: {
+          name: 'get_project',
+          arguments: { projectId: '../../outside' }
+        }
+      })
+
+      const res = await readResponse(stdout)
+      expect(res!.result.isError).toBe(true)
+      expect(res!.result.content[0].text).toContain('输入无效')
     })
 
     it('缺少工具名应返回 JSON-RPC 错误', async () => {

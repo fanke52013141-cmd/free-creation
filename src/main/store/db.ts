@@ -8,7 +8,15 @@ import { migrateDatabase } from './db-migrations'
 let db: Database.Database | null = null
 
 export function getDataDir(): string {
-  const dir = join(app.getPath('userData'), 'data')
+  // CLI/MCP 进程没有 Electron app；显式环境变量优先，保证它们与桌面端可以访问
+  // 同一数据根目录，同时避免在 Node 下调用 app.getPath() 崩溃。
+  const configured = process.env.CANVAS_DATA_DIR
+  const userData = configured
+    ? configured
+    : app && typeof app.getPath === 'function'
+      ? app.getPath('userData')
+      : join(process.env.APPDATA || process.cwd(), 'canvas-studio')
+  const dir = configured ? userData : join(userData, 'data')
   mkdirSync(dir, { recursive: true })
   return dir
 }

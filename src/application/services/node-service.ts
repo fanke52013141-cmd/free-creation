@@ -8,12 +8,28 @@
 import { nanoid } from 'nanoid'
 import type { CanvasNode, CanvasEdge, PortDecl, NodeTypeId } from '@shared/types'
 import { getCapabilityByNodeType } from '@capabilities'
-import type { Result, ServiceContext, CreateNodeRequest, UpdateNodeRequest, ConnectNodesRequest, ConnectionValidation } from '../types'
+import type {
+  Result,
+  ServiceContext,
+  CreateNodeRequest,
+  UpdateNodeRequest,
+  ConnectNodesRequest,
+  ConnectionValidation
+} from '../types'
 import { ok, fail } from '../types'
+import { requireWrite } from './authorization'
 
 // ── 幂等性缓存 ─────────────────────────────────────────────
 
 const idempotencyCache = new Map<string, Result<CanvasNode | CanvasEdge>>()
+
+function scopedIdempotencyKey(
+  operation: 'create-node' | 'update-node' | 'connect',
+  projectId: string,
+  key: string
+): string {
+  return `${operation}:${projectId}:${key}`
+}
 
 export class NodeService {
   constructor(private ctx: ServiceContext) {}
@@ -21,17 +37,23 @@ export class NodeService {
   // ── 节点 CRUD ────────────────────────────────────────────
 
   async createNode(req: CreateNodeRequest): Promise<Result<CanvasNode>> {
+    const capability = getCapabilityByNodeType(req.type)
+    if (!capability) {
+      return fail('UNKNOWN_NODE_TYPE', `未注册的节点类型: ${req.type}`)
+    }
+    const denied = requireWrite(this.ctx, capability.id)
+    if (denied) return fail('WRITE_DISABLED', denied)
+
     // 幂等性检查
     if (req.idempotencyKey) {
-      const cached = idempotencyCache.get(req.idempotencyKey)
+      const cached = idempotencyCache.get(
+        scopedIdempotencyKey('create-node', req.projectId, req.idempotencyKey)
+      )
       if (cached) return cached as Result<CanvasNode>
     }
 
     // 从能力注册表获取端口定义
-    const cap = getCapabilityByNodeType(req.type)
-    if (!cap) {
-      return fail('UNKNOWN_NODE_TYPE', `未注册的节点类型: ${req.type}`)
-    }
+    const cap = capability
 
     // 构建端口声明
     const ports: PortDecl[] = [
@@ -67,7 +89,7 @@ export class NodeService {
       h: 200,
       ports,
       params: req.params ?? {},
-      content: 'empty' as any,
+      content: { kind: 'empty' },
       exec: { status: 'idle' },
       meta: {
         source: 'input',
@@ -76,14 +98,31 @@ export class NodeService {
     }
 
     // 保存到项目
+    const project = await this.ctx.store.getProject(req.projectId)
+    if (!project) return fail('PROJECT_NOT_FOUND', `项目不存在: ${req.projectId}`)
+    if (
+      req.expectedGraphVersion !== undefined &&
+      project.meta.graphVersion !== req.expectedGraphVersion
+    ) {
+      return fail('REVISION_CONFLICT', '项目已被其他操作更新，请重新读取后再试', {
+        expectedGraphVersion: req.expectedGraphVersion,
+        actualGraphVersion: project.meta.graphVersion
+      })
+    }
     const nodes = await this.ctx.store.getNodes(req.projectId)
     const edges = await this.ctx.store.getEdges(req.projectId)
     const groups = await this.ctx.store.getGroups(req.projectId)
     nodes.push(node)
-    await this.ctx.store.saveGraph(req.projectId, { nodes, edges, groups })
+    await this.ctx.store.saveGraph(
+      req.projectId,
+      { nodes, edges, groups },
+      {
+        expectedGraphVersion: req.expectedGraphVersion
+      }
+    )
 
     this.ctx.audit.log({
-      actor: 'agent',
+      actor: this.ctx.actor,
       action: 'create-node',
       projectId: req.projectId,
       entityId: node.id,
@@ -94,13 +133,32 @@ export class NodeService {
 
     // 缓存幂等结果
     if (req.idempotencyKey) {
-      idempotencyCache.set(req.idempotencyKey, result)
+      idempotencyCache.set(
+        scopedIdempotencyKey('create-node', req.projectId, req.idempotencyKey),
+        result
+      )
     }
 
     return result
   }
 
   async updateNode(req: UpdateNodeRequest): Promise<Result<CanvasNode>> {
+    const permissionError = requireWrite(this.ctx)
+    if (permissionError) return fail('WRITE_DISABLED', permissionError)
+    if (req.idempotencyKey) {
+      const cached = idempotencyCache.get(
+        scopedIdempotencyKey('update-node', req.projectId, req.idempotencyKey)
+      )
+      if (cached) return cached as Result<CanvasNode>
+    }
+    const project = await this.ctx.store.getProject(req.projectId)
+    if (!project) return fail('PROJECT_NOT_FOUND', `项目不存在: ${req.projectId}`)
+    if (
+      req.expectedGraphVersion !== undefined &&
+      project.meta.graphVersion !== req.expectedGraphVersion
+    ) {
+      return fail('REVISION_CONFLICT', '项目已被其他操作更新，请重新读取后再试')
+    }
     const nodes = await this.ctx.store.getNodes(req.projectId)
     const node = nodes.find((n) => n.id === req.nodeId)
     if (!node) {
@@ -120,10 +178,16 @@ export class NodeService {
 
     const edges = await this.ctx.store.getEdges(req.projectId)
     const groups = await this.ctx.store.getGroups(req.projectId)
-    await this.ctx.store.saveGraph(req.projectId, { nodes, edges, groups })
+    await this.ctx.store.saveGraph(
+      req.projectId,
+      { nodes, edges, groups },
+      {
+        expectedGraphVersion: req.expectedGraphVersion
+      }
+    )
 
     this.ctx.audit.log({
-      actor: 'agent',
+      actor: this.ctx.actor,
       action: 'update-node',
       projectId: req.projectId,
       entityId: node.id,
@@ -131,10 +195,19 @@ export class NodeService {
       after: { title: node.title, params: node.params }
     })
 
-    return ok(node)
+    const result = ok(node)
+    if (req.idempotencyKey) {
+      idempotencyCache.set(
+        scopedIdempotencyKey('update-node', req.projectId, req.idempotencyKey),
+        result
+      )
+    }
+    return result
   }
 
   async deleteNode(projectId: string, nodeId: string): Promise<Result<boolean>> {
+    const permissionError = requireWrite(this.ctx)
+    if (permissionError) return fail('WRITE_DISABLED', permissionError)
     const nodes = await this.ctx.store.getNodes(projectId)
     const idx = nodes.findIndex((n) => n.id === nodeId)
     if (idx === -1) {
@@ -146,15 +219,13 @@ export class NodeService {
 
     // 同时删除关联的连线
     const edges = await this.ctx.store.getEdges(projectId)
-    const filteredEdges = edges.filter(
-      (e) => e.from.nodeId !== nodeId && e.to.nodeId !== nodeId
-    )
+    const filteredEdges = edges.filter((e) => e.from.nodeId !== nodeId && e.to.nodeId !== nodeId)
 
     const groups = await this.ctx.store.getGroups(projectId)
     await this.ctx.store.saveGraph(projectId, { nodes, edges: filteredEdges, groups })
 
     this.ctx.audit.log({
-      actor: 'agent',
+      actor: this.ctx.actor,
       action: 'delete-node',
       projectId,
       entityId: nodeId,
@@ -181,9 +252,13 @@ export class NodeService {
   // ── 连线管理 ─────────────────────────────────────────────
 
   async connectNodes(req: ConnectNodesRequest): Promise<Result<CanvasEdge>> {
+    const permissionError = requireWrite(this.ctx)
+    if (permissionError) return fail('WRITE_DISABLED', permissionError)
     // 幂等性检查
     if (req.idempotencyKey) {
-      const cached = idempotencyCache.get(req.idempotencyKey)
+      const cached = idempotencyCache.get(
+        scopedIdempotencyKey('connect', req.projectId, req.idempotencyKey)
+      )
       if (cached) return cached as Result<CanvasEdge>
     }
 
@@ -203,10 +278,16 @@ export class NodeService {
     const edges = await this.ctx.store.getEdges(req.projectId)
     const groups = await this.ctx.store.getGroups(req.projectId)
     edges.push(edge)
-    await this.ctx.store.saveGraph(req.projectId, { nodes, edges, groups })
+    await this.ctx.store.saveGraph(
+      req.projectId,
+      { nodes, edges, groups },
+      {
+        expectedGraphVersion: req.expectedGraphVersion
+      }
+    )
 
     this.ctx.audit.log({
-      actor: 'agent',
+      actor: this.ctx.actor,
       action: 'connect',
       projectId: req.projectId,
       entityId: edge.id,
@@ -215,13 +296,18 @@ export class NodeService {
 
     const result = ok(edge)
     if (req.idempotencyKey) {
-      idempotencyCache.set(req.idempotencyKey, result)
+      idempotencyCache.set(
+        scopedIdempotencyKey('connect', req.projectId, req.idempotencyKey),
+        result
+      )
     }
 
     return result
   }
 
   async disconnectNodes(projectId: string, edgeId: string): Promise<Result<boolean>> {
+    const permissionError = requireWrite(this.ctx)
+    if (permissionError) return fail('WRITE_DISABLED', permissionError)
     const edges = await this.ctx.store.getEdges(projectId)
     const idx = edges.findIndex((e) => e.id === edgeId)
     if (idx === -1) {
@@ -236,7 +322,7 @@ export class NodeService {
     await this.ctx.store.saveGraph(projectId, { nodes, edges, groups })
 
     this.ctx.audit.log({
-      actor: 'agent',
+      actor: this.ctx.actor,
       action: 'disconnect',
       projectId,
       entityId: edgeId,

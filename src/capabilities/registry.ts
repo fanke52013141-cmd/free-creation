@@ -6,12 +6,7 @@
  * 禁止绕过注册表直接硬编码能力信息。
  */
 
-import type {
-  Capability,
-  CapabilityDefinition,
-  CapabilityExpose,
-  ContractSnapshot
-} from './types'
+import type { Capability, CapabilityDefinition, CapabilityExpose, ContractSnapshot } from './types'
 
 // ── 注册表内部状态 ─────────────────────────────────────────
 
@@ -125,9 +120,7 @@ function recordSnapshot(cap: Capability): void {
 
 function validateDefinition(def: CapabilityDefinition): void {
   if (!def.id || !def.id.includes('.')) {
-    throw new Error(
-      `[CapabilityRegistry] id 必须是 "category.name" 格式，收到: "${def.id}"`
-    )
+    throw new Error(`[CapabilityRegistry] id 必须是 "category.name" 格式，收到: "${def.id}"`)
   }
 
   if (!def.version || !/^\d+\.\d+\.\d+$/.test(def.version)) {
@@ -148,9 +141,7 @@ function validateDefinition(def: CapabilityDefinition): void {
   const portIds = new Set<string>()
   for (const port of [...def.inputs, ...def.outputs]) {
     if (portIds.has(port.id)) {
-      throw new Error(
-        `[CapabilityRegistry] "${def.id}" 端口 ID 重复: "${port.id}"`
-      )
+      throw new Error(`[CapabilityRegistry] "${def.id}" 端口 ID 重复: "${port.id}"`)
     }
     portIds.add(port.id)
   }

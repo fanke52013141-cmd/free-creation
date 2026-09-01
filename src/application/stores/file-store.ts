@@ -50,6 +50,7 @@ export class FileProjectStore implements ProjectStore {
   }
 
   async getProject(id: string): Promise<ProjectFile | null> {
+    if (!isSafeProjectId(id)) return null
     return this.readProjectFile(id)
   }
 
@@ -74,12 +75,13 @@ export class FileProjectStore implements ProjectStore {
   }
 
   async deleteProject(id: string): Promise<boolean> {
-    // 软删除：标记为已删除（与 SQLite 方案对齐）
+    if (!isSafeProjectId(id)) return false
     const file = this.readProjectFile(id)
     if (!file) return false
-    // FileProjectStore 无 SQLite 索引，直接保留文件但从缓存移除
+    // 独立文件存储没有项目索引，不能谎称已删除；它仅在测试/迁移场景使用。
+    // 外部 CLI/MCP 已改为 DesktopProjectStore，由 SQLite 完成软删除。
     this.cache.delete(id)
-    return true
+    return false
   }
 
   // ── 图数据操作 ───────────────────────────────────────────
@@ -101,10 +103,20 @@ export class FileProjectStore implements ProjectStore {
 
   async saveGraph(
     projectId: string,
-    graph: { nodes: CanvasNode[]; edges: CanvasEdge[]; groups: GroupDecl[] }
+    graph: { nodes: CanvasNode[]; edges: CanvasEdge[]; groups: GroupDecl[] },
+    options?: { expectedGraphVersion?: number }
   ): Promise<{ graphVersion: number }> {
+    if (!isSafeProjectId(projectId)) throw new Error('非法项目 ID')
     const file = await this.getProject(projectId)
     if (!file) throw new Error(`项目不存在: ${projectId}`)
+    if (
+      options?.expectedGraphVersion !== undefined &&
+      file.meta.graphVersion !== options.expectedGraphVersion
+    ) {
+      throw new Error(
+        `项目版本冲突：期望 ${options.expectedGraphVersion}，当前 ${file.meta.graphVersion}`
+      )
+    }
 
     file.nodes = graph.nodes
     file.edges = graph.edges
@@ -122,13 +134,13 @@ export class FileProjectStore implements ProjectStore {
 
   // ── 媒体资产 ─────────────────────────────────────────────
 
-  async listArtifacts(_projectId: string): Promise<MediaAsset[]> {
+  async listArtifacts(): Promise<MediaAsset[]> {
     // FileProjectStore 暂不支持完整的媒体索引
     // 生产环境应通过 IPC 或数据库查询
     return []
   }
 
-  async getArtifact(_assetId: string): Promise<MediaAsset | null> {
+  async getArtifact(): Promise<MediaAsset | null> {
     // FileProjectStore 暂不支持单个资产查询
     return null
   }
@@ -142,6 +154,7 @@ export class FileProjectStore implements ProjectStore {
   }
 
   private projectJsonPath(id: string): string {
+    if (!isSafeProjectId(id)) throw new Error('非法项目 ID')
     return join(this.projectsDir, id, 'project.json')
   }
 
@@ -184,4 +197,9 @@ export class FileProjectStore implements ProjectStore {
       this.cache.clear()
     }
   }
+}
+
+/** projectId 永远来自 nanoid 或受控数据库，禁止进入路径分隔符或父目录。 */
+function isSafeProjectId(id: string): boolean {
+  return /^[A-Za-z0-9_-]{6,64}$/.test(id)
 }

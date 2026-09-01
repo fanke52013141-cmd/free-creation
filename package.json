@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "无限画布创作平台 - 通用 AI 创作画布",
   "main": "./out/main/index.js",
+  "bin": {
+    "canvas": "./scripts/canvas-cli.cjs"
+  },
   "author": "canvas-studio",
   "private": true,
   "scripts": {
@@ -15,6 +18,11 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:contract": "vitest run test/node-compliance.test.ts test/node-contract-snapshot.test.ts test/connection-matrix.test.ts",
+    "agent:build": "node scripts/build-agent.mjs",
+    "agent:mcp": "node scripts/canvas-mcp.cjs",
+    "agent:generate": "node scripts/generate-agent-contracts.mjs",
+    "agent:check-contracts": "npm run agent:generate && git ls-files --error-unmatch generated/agent-contracts.json && git diff --exit-code -- generated/agent-contracts.json",
+    "agent:test-e2e": "npm run agent:build && vitest run test/agent",
     "benchmark:graph": "node scripts/benchmark-graph.mjs",
     "build:demo": "node scripts/build-demo-bundle.mjs",
     "benchmark:canvas": "node scripts/benchmark-canvas.mjs",
