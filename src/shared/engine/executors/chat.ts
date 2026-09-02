@@ -29,7 +29,7 @@ export const chatExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecu
     : textInput
       ? [...data.messages, { role: 'user' as const, content: textInput }]
       : []
-  if (!messages.length) return { status: 'skipped', reason: '请输入消息或连接"文本输入"端口' }
+  if (!messages.length) return { status: 'skipped', reason: '请输入消息或连接“文本输入”端口' }
   const reply = await waitForChat(
     ctx.gateway,
     {

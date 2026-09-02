@@ -6,36 +6,30 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { parseAiProcess, aiProcessExecutor } from '@renderer/engine/executors/aiProcess'
 import type { NodeExecutionContext } from '@renderer/engine/executor-types'
+import type { GatewayClient } from '@shared/engine/gateway-client'
 import type { ProviderConfig } from '@shared/types'
 import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
 
 // 构造一个能回放 chatStart 的假网关，返回预置的完整回复。
 
 let chatReply = ''
+let currentGateway: Record<string, unknown> = {}
 
 function installFakeGateway(reply: string): void {
   chatReply = reply
-  globalThis.window = {
-    setInterval,
-    clearInterval,
-    setTimeout,
-    clearTimeout,
-    api: {
-      gateway: {
-        chatStart: vi.fn().mockResolvedValue({ ok: true, data: { taskId: 'task-1' } }),
-        chatCancel: vi.fn().mockResolvedValue({ ok: true, data: true }),
-        onEvent: vi.fn((cb) => {
-          // 用 setTimeout(0) 在 chatStart.then 设置 taskId 之后再派发事件，
-          // 否则 waitForChat 的 `if (!taskId) return` 会丢弃这些事件导致永远不 resolve。
-          setTimeout(() => {
-            cb({ kind: 'chat-delta', taskId: 'task-1', text: chatReply })
-            cb({ kind: 'chat-done', taskId: 'task-1' })
-          }, 0)
-          return () => {}
-        })
-      }
-    }
-  } as unknown as Window & typeof globalThis
+  currentGateway = {
+    chatStart: vi.fn().mockResolvedValue({ ok: true, data: { taskId: 'task-1' } }),
+    chatCancel: vi.fn().mockResolvedValue({ ok: true, data: true }),
+    onEvent: vi.fn((cb) => {
+      // 用 setTimeout(0) 在 chatStart.then 设置 taskId 之后再派发事件，
+      // 否则 waitForChat 的 `if (!taskId) return` 会丢弃这些事件导致永远不 resolve。
+      setTimeout(() => {
+        cb({ kind: 'chat-delta', taskId: 'task-1', text: chatReply })
+        cb({ kind: 'chat-done', taskId: 'task-1' })
+      }, 0)
+      return () => {}
+    })
+  }
 }
 
 const provider: ProviderConfig = {
@@ -100,6 +94,7 @@ function makeCtx(
     projectId: 'p1',
     providers: [provider],
     signal: { cancelled: false },
+    gateway: currentGateway as unknown as GatewayClient,
     updateProps: (patch) => Object.assign(props, patch),
     updateResult: (r) => {
       result.value = r
@@ -126,6 +121,7 @@ function textInput(text: string): NodeExecutionContext['inputs'] {
 
 beforeEach(() => {
   vi.restoreAllMocks()
+  currentGateway = {}
 })
 afterEach(() => {
   vi.restoreAllMocks()

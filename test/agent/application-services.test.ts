@@ -264,6 +264,23 @@ describe('NodeService', () => {
       }
     })
 
+    it('应保留 Capability 的 JSON Schema 并使用统一初始尺寸', async () => {
+      const result = await env.services.nodeService.createNode({
+        projectId: env.projectId,
+        type: 'iterate' as any
+      })
+
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        expect(result.data.w).toBe(340)
+        expect(result.data.h).toBe(260)
+        expect(result.data.ports.find((port) => port.id === 'in-list')?.schema).toEqual({
+          id: 'list.items',
+          version: 1
+        })
+      }
+    })
+
     it('应该拒绝未注册的节点类型', async () => {
       const result = await env.services.nodeService.createNode({
         projectId: env.projectId,
@@ -470,6 +487,27 @@ describe('NodeService', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('INVALID_CONNECTION')
       }
+    })
+
+    it('应拒绝业务 JSON Schema 不兼容的连接', async () => {
+      const storyboard = await env.services.nodeService.createNode({
+        projectId: env.projectId,
+        type: 'storyboard' as any
+      })
+      const director = await env.services.nodeService.createNode({
+        projectId: env.projectId,
+        type: 'director' as any
+      })
+      if (!storyboard.ok || !director.ok) return
+
+      const result = await env.services.nodeService.connectNodes({
+        projectId: env.projectId,
+        from: { nodeId: storyboard.data.id, portId: 'out-json' },
+        to: { nodeId: director.data.id, portId: 'in-camera-preset' }
+      })
+
+      expect(result.ok).toBe(false)
+      if (!result.ok) expect(result.error.code).toBe('INVALID_CONNECTION')
     })
 
     it('应该拒绝不存在的源节点', async () => {
@@ -903,6 +941,78 @@ describe('WorkflowService', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('EXECUTION_UNAVAILABLE')
       }
+    })
+  })
+
+  describe('P2 运行查询、取消与重试', () => {
+    it('取消只在 headless consumer 接受后返回，且不伪造终态', async () => {
+      const store = new MockStore()
+      const project = await store.createProject('取消测试')
+      const run = await store.createRun({
+        runId: 'run-cancel-accepted',
+        projectId: project.id,
+        scope: { type: 'workflow' },
+        status: 'running',
+        actor: 'agent'
+      })
+      let cancelledId = ''
+      const services = createServices(store, {
+        executionEnabled: true,
+        cancelRun: async (runId) => {
+          cancelledId = runId
+          return true
+        }
+      })
+
+      const result = await services.workflowService.cancelRun(run.runId)
+      expect(result.ok).toBe(true)
+      expect(cancelledId).toBe(run.runId)
+      if (result.ok) expect(result.data.status).toBe('running')
+    })
+
+    it('重试会创建新运行并交给同一个真实 consumer 执行', async () => {
+      const store = new MockStore()
+      const project = await store.createProject('重试测试')
+      const original = await store.createRun({
+        runId: 'run-retry-original',
+        projectId: project.id,
+        scope: { type: 'node', nodeIds: ['shape:text'] },
+        status: 'failed',
+        actor: 'agent'
+      })
+      const consumed: string[] = []
+      const services = createServices(store, {
+        executionEnabled: true,
+        executeRun: async (run) => {
+          consumed.push(run.runId)
+          await store.updateRun(run.runId, { status: 'succeeded', finishedAt: Date.now() })
+        }
+      })
+
+      const result = await services.workflowService.retryRun(original.runId)
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        expect(result.data.runId).not.toBe(original.runId)
+        expect(result.data.status).toBe('succeeded')
+        expect(consumed).toEqual([result.data.runId])
+      }
+    })
+
+    it('不能重试仍在运行中的记录', async () => {
+      const store = new MockStore()
+      const project = await store.createProject('活动运行')
+      const original = await store.createRun({
+        runId: 'run-active',
+        projectId: project.id,
+        scope: { type: 'workflow' },
+        status: 'running',
+        actor: 'agent'
+      })
+      const services = createServices(store, { executionEnabled: true, executeRun: async () => {} })
+
+      const result = await services.workflowService.retryRun(original.runId)
+      expect(result.ok).toBe(false)
+      if (!result.ok) expect(result.error.code).toBe('RUN_STILL_ACTIVE')
     })
   })
 })

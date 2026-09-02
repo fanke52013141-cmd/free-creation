@@ -133,6 +133,7 @@ describe('imageEditExecutor', () => {
         ]
       ]),
       signal: { cancelled: false },
+      gateway: { imageEdit },
       updateProps: (patch: Record<string, unknown>) => Object.assign(update, patch),
       updateResult: () => undefined
     } as unknown as NodeExecutionContext
@@ -198,6 +199,7 @@ describe('imageEditExecutor', () => {
         ]
       ]),
       signal: { cancelled: false },
+      gateway: { imageEdit },
       updateProps,
       updateResult
     } as unknown as NodeExecutionContext

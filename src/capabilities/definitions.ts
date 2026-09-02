@@ -127,7 +127,8 @@ const imageGenCapability = defineCapability({
       type: 'json',
       required: false,
       cardinality: 'one',
-      description: '可选的 prompt.bundle；读取其中的 prompt 与 style。'
+      description: '可选的 prompt.bundle；读取其中的 prompt 与 style。',
+      schema: { id: 'prompt.bundle', version: 1 }
     },
     {
       id: 'in-text',
@@ -221,7 +222,8 @@ const videoCapability = defineCapability({
       type: 'json',
       required: false,
       cardinality: 'one',
-      description: '可选的 prompt.bundle；读取其中的 prompt 与 style。'
+      description: '可选的 prompt.bundle；读取其中的 prompt 与 style。',
+      schema: { id: 'prompt.bundle', version: 1 }
     },
     {
       id: 'in-text',
@@ -382,7 +384,8 @@ const imageSplitCapability = defineCapability({
       type: 'json',
       required: true,
       cardinality: 'one',
-      description: '所有格子对应的真实图片资产引用列表，可连接循环节点批处理。'
+      description: '所有格子对应的真实图片资产引用列表，可连接循环节点批处理。',
+      schema: { id: 'list.items', version: 1 }
     }
   ],
   configSchema: {
@@ -804,7 +807,8 @@ const jsonCapability = defineCapability({
       type: 'json',
       required: false,
       cardinality: 'many',
-      description: '一个或多个需要汇总或展示的结构化值。'
+      description: '一个或多个需要汇总或展示的结构化值。',
+      schema: { id: 'json.any', version: 1 }
     },
     {
       id: 'in-text',
@@ -822,7 +826,8 @@ const jsonCapability = defineCapability({
       type: 'json',
       required: true,
       cardinality: 'one',
-      description: '校验并格式化后的结构化值。'
+      description: '校验并格式化后的结构化值。',
+      schema: { id: 'json.any', version: 1 }
     }
   ],
   configSchema: {
@@ -849,7 +854,8 @@ const structuredCapability = defineCapability({
       type: 'json',
       required: false,
       cardinality: 'many',
-      description: '一个或多个已连接的结构化输入，可在正文中用 {{input[0].field}} 显式引用。'
+      description: '一个或多个已连接的结构化输入，可在正文中用 {{input[0].field}} 显式引用。',
+      schema: { id: 'json.any', version: 1 }
     },
     {
       id: 'in-text',
@@ -867,7 +873,8 @@ const structuredCapability = defineCapability({
       type: 'json',
       required: true,
       cardinality: 'one',
-      description: '经所选 Schema 校验后的结构化数据。'
+      description: '经所选 Schema 校验后的结构化数据。',
+      schema: { id: 'json.any', version: 1 }
     }
   ],
   configSchema: {
@@ -901,7 +908,8 @@ const codeCapability = defineCapability({
       type: 'json',
       required: false,
       cardinality: 'many',
-      description: '代码运行时 input.json 读取的结构化值列表。'
+      description: '代码运行时 input.json 读取的结构化值列表。',
+      schema: { id: 'json.any', version: 1 }
     }
   ],
   outputs: [
@@ -937,7 +945,8 @@ const storyboardCapability = defineCapability({
       type: 'json',
       required: false,
       cardinality: 'one',
-      description: '符合分镜 Schema 的镜头列表。'
+      description: '符合分镜 Schema 的镜头列表。',
+      schema: { id: 'storyboard.shots', version: 1 }
     },
     {
       id: 'in-text',
@@ -955,7 +964,8 @@ const storyboardCapability = defineCapability({
       type: 'json',
       required: true,
       cardinality: 'one',
-      description: '编辑后的完整分镜结构。'
+      description: '编辑后的完整分镜结构。',
+      schema: { id: 'storyboard.shots', version: 1 }
     },
     {
       id: 'out-text',
@@ -996,7 +1006,8 @@ const aiProcessCapability = defineCapability({
       type: 'json',
       required: false,
       cardinality: 'one',
-      description: '可选的结构化上下文，注入本次转换。'
+      description: '可选的结构化上下文，注入本次转换。',
+      schema: { id: 'json.any', version: 1 }
     }
   ],
   outputs: [
@@ -1022,7 +1033,8 @@ const aiProcessCapability = defineCapability({
       type: 'json',
       required: false,
       cardinality: 'one',
-      description: '模型返回并校验后的结构化值（按所选 Schema）。'
+      description: '模型返回并校验后的结构化值（按所选 Schema）。',
+      schema: { id: 'json.any', version: 1 }
     }
   ],
   configSchema: {
@@ -1050,7 +1062,8 @@ const iterateCapability = defineCapability({
       type: 'json',
       required: true,
       cardinality: 'one',
-      description: '要逐项批量处理的列表（每个元素作为一次循环体输入）。'
+      description: '要逐项批量处理的列表（每个元素作为一次循环体输入）。',
+      schema: { id: 'list.items', version: 1 }
     }
   ],
   outputs: [
@@ -1061,7 +1074,8 @@ const iterateCapability = defineCapability({
       required: false,
       cardinality: 'one',
       description:
-        '只在循环体内按项提供的临时数据。请连接循环体第一个节点；循环结束后不作为项目级输出。'
+        '只在循环体内按项提供的临时数据。请连接循环体第一个节点；循环结束后不作为项目级输出。',
+      schema: { id: 'json.any', version: 1 }
     },
     {
       id: 'out-items',
@@ -1069,7 +1083,8 @@ const iterateCapability = defineCapability({
       type: 'json',
       required: true,
       cardinality: 'one',
-      description: '每项处理结果的结构化列表（含来源、状态、各节点产物）。'
+      description: '每项处理结果的结构化列表（含来源、状态、各节点产物）。',
+      schema: { id: 'list.items', version: 1 }
     }
   ],
   configSchema: {
@@ -1101,7 +1116,8 @@ const directorCapability = defineCapability({
       type: 'json',
       required: false,
       cardinality: 'one',
-      description: '可选的分镜列表；在导演台中同步为镜头。'
+      description: '可选的分镜列表；在导演台中同步为镜头。',
+      schema: { id: 'storyboard.shots', version: 1 }
     },
     {
       id: 'in-reference-images',
@@ -1117,7 +1133,8 @@ const directorCapability = defineCapability({
       type: 'json',
       required: false,
       cardinality: 'one',
-      description: '可选的初始摄像机参数。'
+      description: '可选的初始摄像机参数。',
+      schema: { id: 'previs.camera', version: 1 }
     }
   ],
   outputs: [
@@ -1143,7 +1160,8 @@ const directorCapability = defineCapability({
       type: 'json',
       required: false,
       cardinality: 'one',
-      description: '已发布镜头的焦距、画幅、时长和机位参数。'
+      description: '已发布镜头的焦距、画幅、时长和机位参数。',
+      schema: { id: 'previs.camera', version: 1 }
     },
     {
       id: 'out-project',
@@ -1151,7 +1169,8 @@ const directorCapability = defineCapability({
       type: 'json',
       required: false,
       cardinality: 'one',
-      description: '导演工程中可交换的镜头和机位摘要，不包含媒体二进制。'
+      description: '导演工程中可交换的镜头和机位摘要，不包含媒体二进制。',
+      schema: { id: 'previs.project', version: 2 }
     }
   ],
   configSchema: {},

@@ -2,6 +2,7 @@ import { describe, expect, it, vi, afterEach } from 'vitest'
 import { imageGenExecutor } from '@renderer/engine/executors/imageGen'
 import { parseMediaResultCollection } from '@renderer/nodes/nodeValues'
 import type { NodeExecutionContext } from '@renderer/engine/executor-types'
+import type { GatewayClient } from '@shared/engine/gateway-client'
 import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
 import type { ProviderConfig } from '@shared/types'
 
@@ -14,6 +15,8 @@ const provider: ProviderConfig = {
   createdAt: 0,
   models: [{ id: 'img-1', name: '图片模型', modality: 'image', providerId: 'p1' }]
 }
+
+let currentGateway: Record<string, unknown> = {}
 
 function makeContext(
   nodeResult = '',
@@ -67,6 +70,7 @@ function makeContext(
     runId,
     providers: [provider],
     signal: { cancelled: false },
+    gateway: currentGateway as unknown as GatewayClient,
     updateProps: () => undefined,
     updateResult: (value) => {
       result.value = value
@@ -77,30 +81,27 @@ function makeContext(
 
 afterEach(() => {
   vi.restoreAllMocks()
+  currentGateway = {}
 })
 
 describe('imageGenExecutor · 媒体结果集合', () => {
   it('第一次写入、第二次追加；取消和失败不追加', async () => {
     let count = 0
-    globalThis.window = {
-      api: {
-        gateway: {
-          imageGenerate: vi.fn(async () => {
-            count += 1
-            if (count === 3) return { ok: false, error: { message: '供应商失败' } }
-            return {
-              ok: true,
-              data: {
-                id: `img-${count}`,
-                path: `/tmp/img-${count}.png`,
-                mime: 'image/png',
-                name: `图片 ${count}`
-              }
-            }
-          })
+    currentGateway = {
+      imageGenerate: vi.fn(async () => {
+        count += 1
+        if (count === 3) return { ok: false, error: { message: '供应商失败' } }
+        return {
+          ok: true,
+          data: {
+            id: `img-${count}`,
+            path: `/tmp/img-${count}.png`,
+            mime: 'image/png',
+            name: `图片 ${count}`
+          }
         }
-      }
-    } as unknown as Window & typeof globalThis
+      })
+    }
 
     const first = makeContext('', 'run-first')
     expect((await imageGenExecutor(first.ctx)).status).toBe('done')

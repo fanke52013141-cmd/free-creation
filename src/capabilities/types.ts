@@ -8,7 +8,13 @@
  * 规则：禁止在页面组件、CLI 适配器或 MCP 适配器中单独定义业务规则。
  */
 
-import type { PortType, PortCardinality, NodeTypeId, NodeExecutionMode } from '@shared/types'
+import type {
+  PortType,
+  PortCardinality,
+  PortSchemaRef,
+  NodeTypeId,
+  NodeExecutionMode
+} from '@shared/types'
 
 // ── 暴露控制 ──────────────────────────────────────────────
 
@@ -57,6 +63,8 @@ export interface CapabilityPort {
   required: boolean
   cardinality: PortCardinality
   description: string
+  /** JSON 端口的稳定结构标识；与画布 PortDecl 完全一致。 */
+  schema?: PortSchemaRef
 }
 
 // ── 命令映射 ───────────────────────────────────────────────

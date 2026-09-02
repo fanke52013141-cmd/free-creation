@@ -119,6 +119,7 @@ describe('imageSplitExecutor', () => {
       runId: 'split-run',
       providers: [],
       signal: { cancelled: false },
+      gateway: { splitImageGrid },
       updateProps: (next: Record<string, unknown>) => Object.assign(props, next),
       updateResult: (value: string) => {
         result.value = value

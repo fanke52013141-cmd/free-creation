@@ -6,6 +6,7 @@ import type { NodeValue, RawNodeOutputs } from '@shared/engine/values'
 import { parseStoredNodeValue } from '@shared/engine/values'
 import type { GatewayClient } from '@shared/engine/gateway-client'
 import type { ProjectStore, RunRecord } from '@application/types'
+import { runCodeHeadless } from './run-code'
 
 interface HeadlessRunOptions {
   store: ProjectStore
@@ -17,11 +18,36 @@ interface HeadlessRunOptions {
  * graph 节点状态、Run 状态和媒体 Artifact；没有窗口或 renderer 参与。
  */
 export class HeadlessRunExecutor {
+  /** 活跃运行的协作式取消令牌。执行器在每个原子节点前后检查它。 */
+  private readonly tokens = new Map<string, { cancelled: boolean }>()
+
   constructor(private readonly options: HeadlessRunOptions) {}
+
+  /**
+   * 请求取消一个真实运行。正在等待可取消网关任务的执行器会通过同一 token
+   * 终止轮询；不可中断的原子调用完成后，其结果会被丢弃而不会写回项目。
+   */
+  async cancel(runId: string): Promise<boolean> {
+    const token = this.tokens.get(runId)
+    if (token) {
+      token.cancelled = true
+      return true
+    }
+    const run = await this.options.store.getRun(runId)
+    if (!run || run.status !== 'queued') return false
+    await this.options.store.updateRun(runId, {
+      status: 'cancelled',
+      finishedAt: Date.now(),
+      durationMs: 0
+    })
+    return true
+  }
 
   async execute(run: RunRecord): Promise<void> {
     const project = await this.options.store.getProject(run.projectId)
     if (!project) throw new Error(`项目不存在: ${run.projectId}`)
+    const token = { cancelled: false }
+    this.tokens.set(run.runId, token)
     await this.options.store.updateRun(run.runId, { status: 'running', startedAt: Date.now() })
 
     try {
@@ -41,6 +67,7 @@ export class HeadlessRunExecutor {
       const providers = providersEnvelope.data
 
       for (const nodeId of topoSort(scope, internalEdges)) {
+        throwIfCancelled(token)
         const node = nodeById.get(nodeId)
         if (!node) throw new Error(`运行范围包含不存在的节点: ${nodeId}`)
         node.exec = { status: 'running', updatedAt: Date.now() }
@@ -57,8 +84,9 @@ export class HeadlessRunExecutor {
           projectId: run.projectId,
           runId: run.runId,
           providers,
-          signal: { cancelled: false },
+          signal: token,
           gateway: this.options.gateway,
+          runCode: (source, args) => runCodeHeadless(source, args),
           updateProps: (patch) => Object.assign(shape.props, patch),
           updateResult: (value) => {
             shape.meta = { ...shape.meta, nodeResult: value ?? undefined }
@@ -66,6 +94,7 @@ export class HeadlessRunExecutor {
         })
         if (result.status === 'failed')
           throw new Error(result.reason ?? `节点 ${node.title} 执行失败`)
+        throwIfCancelled(token)
         if (result.status === 'skipped') {
           node.exec = { status: 'idle', updatedAt: Date.now() }
           continue
@@ -76,6 +105,8 @@ export class HeadlessRunExecutor {
         packets.set(node.id, toPackets(node, outputs, run.runId))
         await this.registerMediaArtifacts(run, node, outputs)
       }
+
+      throwIfCancelled(token)
 
       await this.options.store.saveGraph(
         run.projectId,
@@ -90,6 +121,14 @@ export class HeadlessRunExecutor {
       })
     } catch (error) {
       const finishedAt = Date.now()
+      if (isRunCancelled(error) || token.cancelled) {
+        await this.options.store.updateRun(run.runId, {
+          status: 'cancelled',
+          finishedAt,
+          durationMs: finishedAt - (run.startedAt ?? run.createdAt)
+        })
+        return
+      }
       await this.options.store.updateRun(run.runId, {
         status: 'failed',
         finishedAt,
@@ -99,6 +138,8 @@ export class HeadlessRunExecutor {
           message: error instanceof Error ? error.message : String(error)
         }
       })
+    } finally {
+      this.tokens.delete(run.runId)
     }
   }
 
@@ -121,6 +162,20 @@ export class HeadlessRunExecutor {
       })
     }
   }
+}
+
+class RunCancelledError extends Error {
+  constructor() {
+    super('运行已取消')
+  }
+}
+
+function throwIfCancelled(token: { cancelled: boolean }): void {
+  if (token.cancelled) throw new RunCancelledError()
+}
+
+function isRunCancelled(error: unknown): error is RunCancelledError {
+  return error instanceof RunCancelledError
 }
 
 function toShape(node: CanvasNode): NodeShape {

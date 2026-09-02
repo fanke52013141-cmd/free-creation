@@ -9,7 +9,7 @@ export const imageCropExecutor = async (
   ctx: NodeExecutionContext
 ): Promise<NodeExecutionResult> => {
   const source = inputMedia(ctx.inputs, 'in-image', 'image')[0]
-  if (!source) return { status: 'skipped', reason: '请连接一张图片到"原图"输入' }
+  if (!source) return { status: 'skipped', reason: '请连接一张图片到“原图”输入' }
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
   try {
     const result = await ctx.gateway.cropImage({

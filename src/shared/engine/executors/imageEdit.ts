@@ -9,7 +9,7 @@ export const imageEditExecutor = async (
   ctx: NodeExecutionContext
 ): Promise<NodeExecutionResult> => {
   const source = inputMedia(ctx.inputs, 'in-image', 'image')[0]
-  if (!source) return { status: 'skipped', reason: '请连接一张图片到"原图"输入' }
+  if (!source) return { status: 'skipped', reason: '请连接一张图片到“原图”输入' }
   const config = parseImageEditConfig(readNodeConfig(ctx.shape))
   const invalid = validateImageEditConfig(config)
   if (invalid) return { status: 'skipped', reason: invalid }

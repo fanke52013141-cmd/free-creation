@@ -9,6 +9,7 @@ import { imageCropExecutor } from '@renderer/engine/executors/imageCrop'
 import { parseMediaResultCollection } from '@renderer/nodes/nodeValues'
 import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
 import type { NodeExecutionContext } from '@renderer/engine/executor-types'
+import type { GatewayClient } from '@shared/engine/gateway-client'
 
 afterEach(() => vi.restoreAllMocks())
 
@@ -45,6 +46,8 @@ describe('图片裁剪配置', () => {
 })
 
 describe('imageCropExecutor', () => {
+  let currentGateway: Record<string, unknown> = {}
+
   function context(): {
     ctx: NodeExecutionContext
     props: Record<string, unknown>
@@ -117,6 +120,7 @@ describe('imageCropExecutor', () => {
         runId: 'run-crop',
         providers: [],
         signal: { cancelled: false },
+        gateway: currentGateway as unknown as GatewayClient,
         updateProps: (next) => Object.assign(props, next),
         updateResult: (value) => {
           result.value = value
@@ -135,7 +139,7 @@ describe('imageCropExecutor', () => {
         name: '裁剪图片'
       }
     }))
-    globalThis.window = { api: { cropImage } } as unknown as Window & typeof globalThis
+    currentGateway = { cropImage }
     const item = context()
     await expect(imageCropExecutor(item.ctx)).resolves.toEqual({ status: 'done' })
     expect(cropImage).toHaveBeenCalledWith(

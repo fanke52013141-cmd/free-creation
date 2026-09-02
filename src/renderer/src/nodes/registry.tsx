@@ -11,6 +11,8 @@ import type {
 import { ACTIVE_NODE_TYPE_IDS } from '@shared/types'
 import { nodeSchemaRegistered } from '@shared/node-schemas'
 import { NODE_CATEGORY_IDS, type NodeCategoryId } from '@shared/palette-preferences'
+import { getCapabilityByNodeType } from '@capabilities/renderer'
+import type { CapabilityPort } from '@capabilities/renderer'
 import type { NodeExecutor } from '../engine/executor-types'
 import type { NodeCardShape } from '../canvas/NodeCardShape'
 import type { IconName } from '../components/Icon'
@@ -274,8 +276,53 @@ function validateNodeTypeSpec(spec: NodeTypeSpec): void {
 }
 
 export function registerNodeType(spec: NodeTypeSpec): void {
+  // 先验证传入 Spec，保留对新增节点实现的本地质量门；随后才由 Capability
+  // 覆盖运行时契约字段，防止 UI 入口绕开基础校验。
   validateNodeTypeSpec(spec)
-  registry.set(spec.type, spec)
+  const normalized = normalizeCapabilityContract(spec)
+  validateNodeTypeSpec(normalized)
+  registry.set(normalized.type, normalized)
+}
+
+/**
+ * 运行时节点契约只从 Capability Registry 读取。Node spec 只保留视觉、执行器、
+ * 输出投影与动态端口解析；这避免 Agent、CLI、MCP 与画布各自维护一份端口表。
+ * 退役节点没有 Capability 时仍可注册为不可创建兼容项。
+ */
+function normalizeCapabilityContract(spec: NodeTypeSpec): NodeTypeSpec {
+  const capability = getCapabilityByNodeType(spec.type)
+  if (!capability) {
+    if (spec.creatable !== false) {
+      throw new Error(`可创建节点 ${spec.type} 缺少 Capability Registry 契约`)
+    }
+    return spec
+  }
+
+  return {
+    ...spec,
+    contractVersion: capability.contractVersion,
+    label: capability.title,
+    description: capability.description,
+    category: capability.category as NodeCategoryId,
+    executionMode: capability.runtime.executionMode,
+    ports: {
+      in: capability.inputs.map((port) => capabilityPortToDecl(port, 'in')),
+      out: capability.outputs.map((port) => capabilityPortToDecl(port, 'out'))
+    }
+  }
+}
+
+function capabilityPortToDecl(port: CapabilityPort, dir: PortDecl['dir']): PortDecl {
+  return {
+    id: port.id,
+    name: port.name,
+    dir,
+    type: port.type,
+    required: port.required,
+    cardinality: port.cardinality,
+    description: port.description,
+    schema: port.schema
+  }
 }
 
 /** 旧节点类型退役时显式移出注册表，开发热更新也不会继续残留在创建菜单。 */

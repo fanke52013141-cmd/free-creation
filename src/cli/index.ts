@@ -52,7 +52,8 @@ function getServices(): ServiceContainer {
     actor: 'agent',
     requireExpectedGraphVersion: writeEnabled,
     requireIdempotencyKey: writeEnabled,
-    executeRun: runner ? (run) => runner.execute(run) : undefined
+    executeRun: runner ? (run) => runner.execute(run) : undefined,
+    cancelRun: runner ? (runId) => runner.cancel(runId) : undefined
   })
 }
 
@@ -220,6 +221,9 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
     case 'workflow':
       await handleWorkflow(args, services)
       break
+    case 'run':
+      await handleRun(args, services)
+      break
     case 'artifact':
       await handleArtifact(args)
       break
@@ -351,6 +355,7 @@ async function handleNode(
         type: type as NodeTypeId,
         title: args.options.title,
         params,
+        text: args.options.text,
         ...writeSafety(args)
       })
       output(result, args.flags)
@@ -452,8 +457,82 @@ async function handleArtifact(args: ParsedArgs): Promise<void> {
       output({ ok: true, data: artifacts }, args.flags)
       break
     }
+    case 'get': {
+      const artifactId = args.positional[0] || args.options.id
+      if (!artifactId) {
+        console.error('用法: canvas artifact get <artifactId>')
+        process.exit(1)
+      }
+      const artifact = await new DesktopProjectStore().getArtifact(artifactId)
+      if (!artifact) {
+        console.error(`媒体资产不存在: ${artifactId}`)
+        process.exit(1)
+      }
+      output({ ok: true, data: artifact }, args.flags)
+      break
+    }
     default:
       console.error(`未知子命令: artifact ${args.subcommand}`)
+      process.exit(1)
+  }
+}
+
+// ── run 命令 ──────────────────────────────────────────────
+
+async function handleRun(
+  args: ParsedArgs,
+  services: ReturnType<typeof getServices>
+): Promise<void> {
+  switch (args.subcommand) {
+    case 'get': {
+      const runId = args.positional[0] || args.options.id
+      if (!runId) {
+        console.error('用法: canvas run get <runId>')
+        process.exit(1)
+      }
+      output(await services.workflowService.getRun(runId), args.flags)
+      break
+    }
+    case 'list': {
+      const projectId = args.options.project
+      if (!projectId) {
+        console.error('用法: canvas run list --project <projectId> [--status <status>]')
+        process.exit(1)
+      }
+      const status = args.options.status
+      const allowed = new Set(['queued', 'running', 'succeeded', 'failed', 'cancelled'])
+      if (status && !allowed.has(status)) {
+        console.error('--status 必须是 queued、running、succeeded、failed 或 cancelled')
+        process.exit(1)
+      }
+      output(
+        await services.workflowService.listRuns(projectId, {
+          status: status as import('@application').RunStatus | undefined
+        }),
+        args.flags
+      )
+      break
+    }
+    case 'cancel': {
+      const runId = args.positional[0] || args.options.id
+      if (!runId) {
+        console.error('用法: canvas run cancel <runId>')
+        process.exit(1)
+      }
+      output(await services.workflowService.cancelRun(runId), args.flags)
+      break
+    }
+    case 'retry': {
+      const runId = args.positional[0] || args.options.id
+      if (!runId) {
+        console.error('用法: canvas run retry <runId>')
+        process.exit(1)
+      }
+      output(await services.workflowService.retryRun(runId), args.flags)
+      break
+    }
+    default:
+      console.error(`未知子命令: run ${args.subcommand}`)
       process.exit(1)
   }
 }
@@ -469,6 +548,7 @@ Canvas Studio CLI — 无限画布命令行工具
   capability 能力查询
   node       节点管理
   workflow   工作流操作
+  run        运行查询、取消与重试
   artifact   产物查询
 
 用法示例：
@@ -482,6 +562,8 @@ Canvas Studio CLI — 无限画布命令行工具
   canvas workflow validate --project <projectId>
   canvas workflow estimate --project <projectId>
   canvas workflow run --project <projectId> --dry-run
+  canvas run list --project <projectId> --status failed
+  canvas run retry <runId>
 
 选项：
   --json       输出 JSON 格式

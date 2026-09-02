@@ -9,6 +9,7 @@ import { nanoid } from 'nanoid'
 import { createHash } from 'node:crypto'
 import type { CanvasNode, CanvasEdge, PortDecl, NodeTypeId } from '@shared/types'
 import { GraphVersionConflictError, GraphWriteInProgressError } from '@shared/graph-snapshot-sync'
+import { nodeSchemasCompatible } from '@shared/node-schemas'
 import { getCapabilityByNodeType } from '@capabilities'
 import type {
   Result,
@@ -157,7 +158,8 @@ export class NodeService {
         type: p.type,
         required: p.required,
         cardinality: p.cardinality,
-        description: p.description
+        description: p.description,
+        schema: p.schema
       })),
       ...cap.outputs.map((p) => ({
         id: p.id,
@@ -166,7 +168,8 @@ export class NodeService {
         type: p.type,
         required: p.required,
         cardinality: p.cardinality,
-        description: p.description
+        description: p.description,
+        schema: p.schema
       }))
     ]
 
@@ -178,11 +181,13 @@ export class NodeService {
       title: req.title ?? cap.title,
       x: req.x ?? 0,
       y: req.y ?? 0,
-      w: 320,
-      h: 200,
+      // 与桌面创建入口使用同一个强制节点初始尺寸。Agent 草稿不能生成
+      // 与画布节奏不一致的卡片。
+      w: 340,
+      h: 260,
       ports,
       params: req.params ?? {},
-      content: { kind: 'empty' },
+      content: req.text === undefined ? { kind: 'empty' } : { kind: 'text', text: req.text },
       exec: { status: 'idle' },
       meta: {
         source: 'input',
@@ -275,6 +280,7 @@ export class NodeService {
     if (req.params !== undefined) {
       node.params = { ...node.params, ...req.params }
     }
+    if (req.text !== undefined) node.content = { kind: 'text', text: req.text }
     if (req.position) {
       node.x = req.position.x
       node.y = req.position.y
@@ -302,7 +308,7 @@ export class NodeService {
       projectId: req.projectId,
       entityId: node.id,
       before,
-      after: { title: node.title, params: node.params }
+      after: { title: node.title, params: node.params, text: req.text }
     })
 
     return completeMutation(this.ctx, guard, node)
@@ -543,6 +549,23 @@ export class NodeService {
       }
     }
 
+    // JSON 不只是“同一种类型”：业务 Schema 不同不能直连。json.any 作为明确
+    // 的通用协议可与具体 Schema 连通，执行阶段仍会按目标 Schema 校验实际值。
+    if (
+      fromPort.type === 'json' &&
+      toPort.type === 'json' &&
+      !nodeSchemasCompatible(fromPort.schema, toPort.schema)
+    ) {
+      return {
+        valid: false,
+        errors: [
+          `JSON Schema 不兼容: ${describeSchema(fromPort.schema)} → ${describeSchema(toPort.schema)}`
+        ],
+        fromType: fromPort.type,
+        toType: toPort.type
+      }
+    }
+
     // 不能自连
     if (req.from.nodeId === req.to.nodeId) {
       return { valid: false, errors: ['不能连接到自身'] }
@@ -594,4 +617,8 @@ export function isPortTypeCompatible(from: string, to: string): boolean {
   // text 和 markdown 互通
   if ((from === 'text' && to === 'markdown') || (from === 'markdown' && to === 'text')) return true
   return false
+}
+
+function describeSchema(schema: PortDecl['schema']): string {
+  return schema ? `${schema.id}@${schema.version}` : '未声明 Schema'
 }

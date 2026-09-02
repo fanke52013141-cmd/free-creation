@@ -130,4 +130,47 @@ describe('HeadlessRunExecutor', () => {
       rmSync(root, { recursive: true, force: true })
     }
   })
+
+  it('取消等待中的运行时会写入 cancelled，且不保存节点输出', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'canvas-headless-cancel-'))
+    try {
+      const store = new FileProjectStore({ dataDir: root })
+      const project = await store.createProject('headless cancel')
+      const node = textNode('shape:cancel', '不应写回')
+      await store.saveGraph(project.id, { nodes: [node], edges: [], groups: [] })
+      const run = await store.createRun({
+        runId: 'run-cancel',
+        projectId: project.id,
+        scope: { type: 'node', nodeIds: [node.id] },
+        status: 'queued',
+        actor: 'agent'
+      })
+      let providersStarted!: () => void
+      let releaseProviders!: () => void
+      const started = new Promise<void>((resolve) => {
+        providersStarted = resolve
+      })
+      const release = new Promise<void>((resolve) => {
+        releaseProviders = resolve
+      })
+      const gateway = {
+        listProviders: async () => {
+          providersStarted()
+          await release
+          return { ok: true, data: [] }
+        }
+      } as unknown as GatewayClient
+      const runner = new HeadlessRunExecutor({ store, gateway })
+      const pending = runner.execute(run)
+      await started
+      expect(await runner.cancel(run.runId)).toBe(true)
+      releaseProviders()
+      await pending
+
+      expect((await store.getRun(run.runId))?.status).toBe('cancelled')
+      expect((await store.getNodes(project.id))[0]?.exec.status).toBe('idle')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
 })

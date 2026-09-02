@@ -11,6 +11,7 @@ import { storyboardExecutor } from '@renderer/engine/executors/storyboard'
 import { directorExecutor } from '@renderer/engine/executors/director'
 import { createDirectorProject } from '@renderer/nodes/director-data'
 import type { NodeExecutionContext, NodeExecutionResult } from '@renderer/engine/executor-types'
+import type { GatewayClient } from '@shared/engine/gateway-client'
 import type { NodeValue } from '@renderer/nodes/nodeValues'
 import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
 
@@ -74,6 +75,7 @@ function makeCtx(over: {
     projectId: 'p1',
     providers: [],
     signal: { cancelled: false },
+    gateway: {} as GatewayClient,
     updateProps: (patch) => Object.assign(props, patch),
     updateResult: (r) => {
       result.value = r

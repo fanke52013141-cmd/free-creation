@@ -22,6 +22,7 @@ import {
 import { parseMediaResultCollection } from '@renderer/nodes/nodeValues'
 import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
 import type { NodeExecutionContext } from '@renderer/engine/executor-types'
+import type { GatewayClient } from '@shared/engine/gateway-client'
 
 afterEach(() => vi.restoreAllMocks())
 
@@ -103,6 +104,8 @@ describe('视频处理配置 · v2', () => {
     expect(parseVocalSeparationConfig(serializeVocalSeparationConfig(cfg))).toEqual(cfg)
   })
 })
+
+let currentGateway: Record<string, unknown> = {}
 
 function context(type: 'video-frame' | 'video-clip' | 'video-audio'): {
   ctx: NodeExecutionContext
@@ -194,6 +197,7 @@ function context(type: 'video-frame' | 'video-clip' | 'video-audio'): {
       runId: 'run-video-transform',
       providers: [],
       signal: { cancelled: false },
+      gateway: currentGateway as unknown as GatewayClient,
       updateProps: (next) => Object.assign(props, next),
       updateResult: (value) => {
         result.value = value
@@ -219,7 +223,7 @@ describe('视频处理执行器', () => {
         ok: true,
         data: { id, path: `projects/project-a/media/${id}`, mime, name: id }
       })
-      globalThis.window = { api } as unknown as Window & typeof globalThis
+      currentGateway = api
       const item = context(type)
 
       await expect(executor(item.ctx)).resolves.toEqual({ status: 'done' })
@@ -254,7 +258,7 @@ describe('视频处理执行器', () => {
         name: 'audio-1'
       }
     })
-    globalThis.window = { api } as unknown as Window & typeof globalThis
+    currentGateway = api
     const item = context('video-audio')
     item.ctx.shape.props.config = JSON.stringify({
       version: 2,
@@ -282,7 +286,7 @@ describe('人声分离执行器', () => {
         }
       })
     }
-    globalThis.window = { api } as unknown as Window & typeof globalThis
+    currentGateway = api
     const item = context('video-audio')
     item.ctx.node.type = 'vocal-separate'
     item.ctx.shape.props.nodeType = 'vocal-separate'

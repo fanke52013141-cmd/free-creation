@@ -21,6 +21,8 @@ import {
   type ContractOutputs
 } from './contracts'
 import type { NodeExecutionContext, NodeExecutionResult, SubflowRequest } from './executor-types'
+import { rendererGateway } from './rendererGateway'
+import { runCodeTransform } from './codeRuntime'
 import { getNodeType } from '../nodes/registry'
 import { projectNodeOutputs, type NodeValue } from '../nodes/nodeValues'
 import { toast } from '../stores/toast'
@@ -171,6 +173,8 @@ export async function runNodeTest(
     runId,
     providers,
     signal: token,
+    gateway: rendererGateway,
+    runCode: (source, args) => runCodeTransform(source, args),
     outgoing: graph.edges
       .filter((edge) => edge.from.nodeId === node.id)
       .map((edge) => ({
@@ -370,6 +374,8 @@ async function invokeExecutor(
     runId: ctx.runId,
     providers: ctx.providers,
     signal: ctx.token,
+    gateway: rendererGateway,
+    runCode: (source, args) => runCodeTransform(source, args),
     waitForResume: () => waitForResume(ctx.token),
     outgoing,
     updateProps: (patch) => {

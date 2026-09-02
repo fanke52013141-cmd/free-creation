@@ -141,6 +141,8 @@ export interface CreateNodeRequest {
   x?: number
   y?: number
   params?: Record<string, unknown>
+  /** 节点用户正文，独立于固定配置 params；对应画布 props.text。 */
+  text?: string
   /** 幂等键——相同 key 重复调用不会创建多个节点 */
   idempotencyKey?: string
   /** 乐观并发控制：必须等于读取项目时得到的 graphVersion。 */
@@ -152,6 +154,8 @@ export interface UpdateNodeRequest {
   nodeId: string
   title?: string
   params?: Record<string, unknown>
+  /** 覆盖节点用户正文；不与固定配置混存。 */
+  text?: string
   /** 位置更新（仅桌面端有实际意义，headless 模式忽略） */
   position?: { x: number; y: number }
   expectedGraphVersion?: number
@@ -351,4 +355,9 @@ export interface ServiceContext {
   requireIdempotencyKey?: boolean
   /** 由 main/headless 注入的真实运行消费者；未注入时不得创建 queued 假运行。 */
   executeRun?: (run: RunRecord) => Promise<void>
+  /**
+   * 由 main/headless 注入的真实取消入口。只有执行器确认接受取消请求后，
+   * 服务层才会把运行记录切换为 cancelled，避免对仍在运行的供应商任务伪造取消成功。
+   */
+  cancelRun?: (runId: string) => Promise<boolean>
 }

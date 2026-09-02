@@ -1,11 +1,6 @@
-// 文本节点执行器：把上游文本与节点内文本合并写回 props.text。
-import { inputText } from '../contracts'
-import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
-import { mergedPrompt } from './shared'
-
-export const textExecutor = (ctx: NodeExecutionContext): NodeExecutionResult => {
-  const text = mergedPrompt(ctx.shape.props.text, inputText(ctx.inputs, 'in-text'))
-  if (!text.trim()) return { status: 'skipped', reason: '无文本输入' }
-  if (text !== ctx.shape.props.text) ctx.updateProps({ text })
-  return { status: 'done' }
-}
+// P3 Renderer Adapter：re-export shim → 共享层执行器
+//
+// 执行器实现已迁移至 @shared/engine/executors/text；renderer 通过此 shim
+// 保持旧导入路径 `../../engine/executors/text` 向后兼容。
+// 共享层执行器通过 ctx.gateway 调用模型网关，由 renderer 运行器注入 rendererGateway。
+export * from '@shared/engine/executors/text'

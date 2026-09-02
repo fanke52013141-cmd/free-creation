@@ -7,6 +7,7 @@
  */
 
 import type { Capability, CapabilityDefinition, CapabilityExpose, ContractSnapshot } from './types'
+import { nodeSchemaRegistered } from '@shared/node-schemas'
 
 // ── 注册表内部状态 ─────────────────────────────────────────
 
@@ -144,5 +145,16 @@ function validateDefinition(def: CapabilityDefinition): void {
       throw new Error(`[CapabilityRegistry] "${def.id}" 端口 ID 重复: "${port.id}"`)
     }
     portIds.add(port.id)
+    if (port.type === 'json' && !port.schema) {
+      throw new Error(`[CapabilityRegistry] "${def.id}" JSON 端口 ${port.id} 必须声明 schema`)
+    }
+    if (port.type !== 'json' && port.schema) {
+      throw new Error(`[CapabilityRegistry] "${def.id}" 非 JSON 端口 ${port.id} 不应声明 schema`)
+    }
+    if (port.schema && !nodeSchemaRegistered(port.schema)) {
+      throw new Error(
+        `[CapabilityRegistry] "${def.id}" 端口 ${port.id} 引用了未注册 Schema: ${port.schema.id}@${port.schema.version}`
+      )
+    }
   }
 }

@@ -93,6 +93,7 @@ export interface ServiceOptions {
   requireExpectedGraphVersion?: boolean
   requireIdempotencyKey?: boolean
   executeRun?: (run: RunRecord) => Promise<void>
+  cancelRun?: (runId: string) => Promise<boolean>
 }
 
 /**
@@ -122,7 +123,8 @@ export function createServices(
     actor: options.actor ?? 'agent',
     requireExpectedGraphVersion: options.requireExpectedGraphVersion ?? false,
     requireIdempotencyKey: options.requireIdempotencyKey ?? false,
-    executeRun: options.executeRun
+    executeRun: options.executeRun,
+    cancelRun: options.cancelRun
   }
 
   return {

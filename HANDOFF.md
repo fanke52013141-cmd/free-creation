@@ -1,6 +1,6 @@
 # Canvas Studio 开发交接文档
 
-> 最后更新：2026-09-01
+> 最后更新：2026-09-02
 >
 > 当前分支：`main`。接手前必须执行 `git fetch origin` 与 `git status -sb`，不得依据本文旧哈希判断推送状态。
 >
@@ -9,6 +9,8 @@
 > 远程仓库：https://github.com/fanke52013141-cmd/free-creation
 >
 > 产品定位：单用户、本地优先的 Windows Electron 无限画布创作工具。
+
+> **最新交付（2026-09-02 Agent P1–P3）**：Agent 的真实端到端 Headless 验收、运行查询/取消/重试及安全产物读取工具已完成；节点运行时契约已收口到 Capability Registry，JSON Schema 与 Agent 创建节点尺寸也已纳入硬校验。交接、验证命令和继续验收步骤见 [docs/HANDOFF_2026_09_02_AGENT_P1_P3.md](./docs/HANDOFF_2026_09_02_AGENT_P1_P3.md)。
 
 > **最新修复（2026-09-02 文本节点输入）**：修复文本节点双击进入编辑态后 textarea 无法输入的问题——`textRef` 改为在 `useEffect` 中同步、`enterEditing` 用 `useCallback` 稳定监听器引用、移除会覆盖 draft 的旧副作用；textarea 事件处理仅 `stopPropagation` 不做 `preventDefault`，保证输入可正常聚焦。涉及文件与验证路径见 [docs/HANDOFF_2026_09_02_TEXT_EDIT_INPUT.md](./docs/HANDOFF_2026_09_02_TEXT_EDIT_INPUT.md)。
 

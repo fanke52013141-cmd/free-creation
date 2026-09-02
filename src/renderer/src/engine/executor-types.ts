@@ -11,6 +11,7 @@
 import type { CanvasNode, ProviderSummary } from '@shared/types'
 import type { NodeCardShape } from '../canvas/NodeCardShape'
 import type { ContractInputMap, ContractOutputs } from './contracts'
+import type { GatewayClient } from '@shared/engine/gateway-client'
 
 /** 运行控制信号。暂停在当前原子任务结束后生效；停止会解除暂停等待。 */
 export interface CancelSignal {
@@ -72,6 +73,19 @@ export interface NodeExecutionContext {
   providers: ProviderSummary[]
   /** 取消信号。 */
   signal: CancelSignal
+  /**
+   * 模型网关客户端（P3）：替代执行器中对 window.api.gateway / window.api.* 的直接调用。
+   * 共享层执行器通过此字段获得模型调用能力；renderer 运行器注入 rendererGateway。
+   */
+  gateway: GatewayClient
+  /**
+   * 代码执行入口（P3）：renderer 注入 Web Worker 实现。
+   * 代码节点执行器通过此函数执行用户代码，不直接导入 renderer 的 codeRuntime 模块。
+   */
+  runCode?: (
+    source: string,
+    args: Record<string, unknown>
+  ) => Promise<{ kind: 'text'; text: string } | { kind: 'json'; data: unknown }>
   /**
    * 在下一个安全检查点等待继续。长任务本身不可被强行挂起，循环节点在每个 item
    * 之间调用它，因此暂停不会让同一份节点运行态发生并发覆盖。

@@ -23,7 +23,7 @@ import type { ServiceContainer, ProjectStore } from '@application'
 import { listCapabilities } from '@capabilities'
 import type { Readable, Writable } from 'stream'
 import { z } from 'zod'
-import type { NodeTypeId } from '@shared/types'
+import type { MediaAsset, NodeTypeId } from '@shared/types'
 import { createHeadlessGateway } from '../main/headless/gateway-client'
 import { HeadlessRunExecutor } from '../main/headless/run-executor'
 
@@ -68,6 +68,7 @@ const toolArgumentSchemas: Record<string, z.ZodType<Record<string, unknown>>> = 
     type: z.string().min(1).max(64),
     title: z.string().max(160).optional(),
     params: z.record(z.string(), z.unknown()).optional(),
+    text: z.string().max(100_000).optional(),
     ...writeSafetySchema
   }),
   configure_node: z.object({
@@ -75,6 +76,7 @@ const toolArgumentSchemas: Record<string, z.ZodType<Record<string, unknown>>> = 
     nodeId: nodeIdSchema,
     params: z.record(z.string(), z.unknown()).optional(),
     title: z.string().max(160).optional(),
+    text: z.string().max(100_000).optional(),
     ...writeSafetySchema
   }),
   delete_node: z.object({ projectId: projectIdSchema, nodeId: nodeIdSchema, ...writeSafetySchema }),
@@ -107,7 +109,16 @@ const toolArgumentSchemas: Record<string, z.ZodType<Record<string, unknown>>> = 
     nodeIds: z.array(nodeIdSchema).max(200).optional(),
     dryRun: z.boolean().optional()
   }),
-  list_artifacts: z.object({ projectId: projectIdSchema })
+  get_run: z.object({ runId: nodeIdSchema }),
+  list_runs: z.object({
+    projectId: projectIdSchema,
+    status: z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']).optional()
+  }),
+  cancel_run: z.object({ runId: nodeIdSchema }),
+  retry_run: z.object({ runId: nodeIdSchema }),
+  list_artifacts: z.object({ projectId: projectIdSchema }),
+  get_artifact: z.object({ artifactId: nodeIdSchema }),
+  list_run_artifacts: z.object({ runId: nodeIdSchema })
 }
 
 // ── MCP 工具定义 ──────────────────────────────────────────
@@ -207,6 +218,7 @@ export function defineTools(): McpTool[] {
           type: { type: 'string', description: '节点类型（如 text, image-gen, video-frame）' },
           title: { type: 'string', description: '节点标题' },
           params: { type: 'object', description: '节点配置参数' },
+          text: { type: 'string', description: '节点用户正文；与固定配置 params 分离' },
           ...writeSafetyProperties
         },
         required: ['projectId', 'type']
@@ -222,6 +234,7 @@ export function defineTools(): McpTool[] {
           nodeId: { type: 'string', description: '节点 ID' },
           params: { type: 'object', description: '要更新的配置参数' },
           title: { type: 'string', description: '新标题' },
+          text: { type: 'string', description: '要覆盖的节点用户正文；与固定配置 params 分离' },
           ...writeSafetyProperties
         },
         required: ['projectId', 'nodeId']
@@ -337,6 +350,48 @@ export function defineTools(): McpTool[] {
         required: ['projectId']
       }
     },
+    {
+      name: 'get_run',
+      description: '读取单次运行的真实状态、范围、错误和耗时。',
+      inputSchema: {
+        type: 'object',
+        properties: { runId: { type: 'string', description: '运行 ID' } },
+        required: ['runId']
+      }
+    },
+    {
+      name: 'list_runs',
+      description: '按项目列出持久化运行记录，可按状态筛选。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          projectId: { type: 'string' },
+          status: {
+            type: 'string',
+            enum: ['queued', 'running', 'succeeded', 'failed', 'cancelled']
+          }
+        },
+        required: ['projectId']
+      }
+    },
+    {
+      name: 'cancel_run',
+      description: '请求取消真实无界面运行；只有执行器接受请求后才会终止或丢弃未落盘结果。',
+      inputSchema: {
+        type: 'object',
+        properties: { runId: { type: 'string', description: '运行 ID' } },
+        required: ['runId']
+      }
+    },
+    {
+      name: 'retry_run',
+      description: '重试一条已结束的运行，并返回这次真实重试的 runId 和最终状态。',
+      inputSchema: {
+        type: 'object',
+        properties: { runId: { type: 'string', description: '已结束的运行 ID' } },
+        required: ['runId']
+      }
+    },
     // ── 结果类 ──────────────────────────────────
     {
       name: 'list_artifacts',
@@ -347,6 +402,24 @@ export function defineTools(): McpTool[] {
           projectId: { type: 'string' }
         },
         required: ['projectId']
+      }
+    },
+    {
+      name: 'get_artifact',
+      description: '读取单个媒体资产的安全元数据；不返回任意本地绝对路径。',
+      inputSchema: {
+        type: 'object',
+        properties: { artifactId: { type: 'string', description: '媒体资产 ID' } },
+        required: ['artifactId']
+      }
+    },
+    {
+      name: 'list_run_artifacts',
+      description: '列出某次运行产生的精确产物及其来源节点、端口和媒体 ID。',
+      inputSchema: {
+        type: 'object',
+        properties: { runId: { type: 'string', description: '运行 ID' } },
+        required: ['runId']
       }
     }
   ]
@@ -418,6 +491,7 @@ async function executeTool(
           type: String(args.type) as NodeTypeId,
           title: args.title as string | undefined,
           params: args.params as Record<string, unknown> | undefined,
+          text: args.text as string | undefined,
           expectedGraphVersion: args.expectedGraphVersion as number | undefined,
           idempotencyKey: args.idempotencyKey as string | undefined
         })
@@ -429,6 +503,7 @@ async function executeTool(
           nodeId: String(args.nodeId),
           params: args.params as Record<string, unknown> | undefined,
           title: args.title as string | undefined,
+          text: args.text as string | undefined,
           expectedGraphVersion: args.expectedGraphVersion as number | undefined,
           idempotencyKey: args.idempotencyKey as string | undefined
         })
@@ -498,10 +573,38 @@ async function executeTool(
         })
         return result.ok ? json(result.data) : error(result.error.message)
       }
+      case 'get_run': {
+        const result = await services.workflowService.getRun(String(args.runId))
+        return result.ok ? json(result.data) : error(result.error.message)
+      }
+      case 'list_runs': {
+        const result = await services.workflowService.listRuns(String(args.projectId), {
+          status: args.status as import('@application').RunStatus | undefined
+        })
+        return result.ok ? json(result.data) : error(result.error.message)
+      }
+      case 'cancel_run': {
+        const result = await services.workflowService.cancelRun(String(args.runId))
+        return result.ok ? json(result.data) : error(result.error.message)
+      }
+      case 'retry_run': {
+        const result = await services.workflowService.retryRun(String(args.runId))
+        return result.ok ? json(result.data) : error(result.error.message)
+      }
       // 结果类
       case 'list_artifacts': {
         const artifacts = await store.listArtifacts(String(args.projectId))
-        return json(artifacts)
+        return json(artifacts.map(toPublicArtifact))
+      }
+      case 'get_artifact': {
+        const artifact = await store.getArtifact(String(args.artifactId))
+        return artifact
+          ? json(toPublicArtifact(artifact))
+          : error(`媒体资产不存在: ${String(args.artifactId)}`)
+      }
+      case 'list_run_artifacts': {
+        const result = await services.runService.listArtifacts(String(args.runId))
+        return result.ok ? json(result.data) : error(result.error.message)
       }
       default:
         return error(`未知工具: ${name}`)
@@ -544,6 +647,10 @@ const PROTOCOL_VERSION = '2024-11-05' as const
 export interface McpServerOptions {
   /** 测试可显式注入写入开关；生产默认从 CANVAS_AGENT_WRITE 读取。 */
   writeEnabled?: boolean
+  /** 测试或嵌入式入口可显式开启真实 headless consumer；生产默认读取环境变量。 */
+  executionEnabled?: boolean
+  /** 可注入网关以做无外部模型费用的端到端验收。 */
+  gateway?: import('@shared/engine/gateway-client').GatewayClient
 }
 
 export function startMcpServer(
@@ -554,11 +661,10 @@ export function startMcpServer(
 ): void {
   const store = injectedStore ?? new DesktopProjectStore()
   const writeEnabled = options?.writeEnabled ?? agentWriteEnabledFromEnv()
-  const executionEnabled = agentExecutionEnabledFromEnv()
-  const runner =
-    executionEnabled && !injectedStore
-      ? new HeadlessRunExecutor({ store, gateway: createHeadlessGateway() })
-      : undefined
+  const executionEnabled = options?.executionEnabled ?? agentExecutionEnabledFromEnv()
+  const runner = executionEnabled
+    ? new HeadlessRunExecutor({ store, gateway: options?.gateway ?? createHeadlessGateway() })
+    : undefined
   const services = createServices(store, {
     permission: { level: executionEnabled ? 'execute' : writeEnabled ? 'edit' : 'read' },
     writeEnabled,
@@ -566,7 +672,8 @@ export function startMcpServer(
     actor: 'agent',
     requireExpectedGraphVersion: writeEnabled,
     requireIdempotencyKey: writeEnabled,
-    executeRun: runner ? (run) => runner.execute(run) : undefined
+    executeRun: runner ? (run) => runner.execute(run) : undefined,
+    cancelRun: runner ? (runId) => runner.cancel(runId) : undefined
   })
   const tools = defineTools()
 
@@ -692,6 +799,28 @@ async function handleRequest(
           }
         }
 
+      case 'resources/templates/list':
+        return {
+          jsonrpc: '2.0',
+          id,
+          result: {
+            resourceTemplates: [
+              {
+                uriTemplate: 'canvas://runs/{runId}',
+                name: '运行记录',
+                description: '读取一条持久化运行的状态、范围、耗时与错误信息',
+                mimeType: 'application/json'
+              },
+              {
+                uriTemplate: 'canvas://artifacts/{artifactId}',
+                name: '媒体产物',
+                description: '读取媒体产物的安全元数据；不返回本地绝对路径',
+                mimeType: 'application/json'
+              }
+            ]
+          }
+        }
+
       case 'resources/read': {
         const p = params as { uri: string }
         if (p?.uri === 'canvas://capabilities') {
@@ -708,6 +837,18 @@ async function handleRequest(
               ]
             }
           }
+        }
+        const runMatch = p?.uri?.match(/^canvas:\/\/runs\/([A-Za-z0-9_-]{1,128})$/)
+        if (runMatch) {
+          const run = await store.getRun(runMatch[1])
+          if (!run) return resourceNotFound(id, p.uri)
+          return resourceJson(id, p.uri, run)
+        }
+        const artifactMatch = p?.uri?.match(/^canvas:\/\/artifacts\/([A-Za-z0-9_-]{1,128})$/)
+        if (artifactMatch) {
+          const artifact = await store.getArtifact(artifactMatch[1])
+          if (!artifact) return resourceNotFound(id, p.uri)
+          return resourceJson(id, p.uri, toPublicArtifact(artifact))
         }
         return {
           jsonrpc: '2.0',
@@ -733,4 +874,43 @@ async function handleRequest(
       }
     }
   }
+}
+
+/** MCP 给 Agent 的媒体模型：只提供可引用 ID 与可展示元数据，绝不泄露机器路径。 */
+function toPublicArtifact(asset: MediaAsset): Omit<
+  MediaAsset,
+  'path' | 'thumbPath' | 'textContent'
+> & {
+  resourceUri: string
+} {
+  return {
+    id: asset.id,
+    kind: asset.kind,
+    mime: asset.mime,
+    sizeBytes: asset.sizeBytes,
+    width: asset.width,
+    height: asset.height,
+    durationSec: asset.durationSec,
+    createdAt: asset.createdAt,
+    name: asset.name,
+    resourceUri: `canvas://artifacts/${asset.id}`
+  }
+}
+
+function resourceJson(
+  id: string | number | undefined,
+  uri: string,
+  data: unknown
+): JsonRpcResponse {
+  return {
+    jsonrpc: '2.0',
+    id,
+    result: {
+      contents: [{ uri, mimeType: 'application/json', text: JSON.stringify(data, null, 2) }]
+    }
+  }
+}
+
+function resourceNotFound(id: string | number | undefined, uri: string): JsonRpcResponse {
+  return { jsonrpc: '2.0', id, error: { code: -32602, message: `未知或不存在的资源: ${uri}` } }
 }

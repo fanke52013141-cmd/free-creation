@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ProviderSummary } from '@shared/types'
 import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
 import type { NodeExecutionContext } from '@renderer/engine/executor-types'
+import type { GatewayClient } from '@shared/engine/gateway-client'
 import type { NodeValuePacket } from '@renderer/engine/contracts'
 import { audioExecutor } from '@renderer/engine/executors/audio'
 import { chatExecutor } from '@renderer/engine/executors/chat'
@@ -20,7 +21,10 @@ const provider = (modality: 'text' | 'audio' | 'video' | 'image'): ProviderSumma
     models: [{ id: `${modality}-model`, name: '测试模型', modality, providerId: 'provider-1' }]
   }) as ProviderSummary
 
+let currentGateway: Record<string, unknown> = {}
+
 function installGateway(gateway: Record<string, unknown>): void {
+  currentGateway = gateway
   globalThis.window = {
     setInterval,
     clearInterval,
@@ -88,6 +92,7 @@ function makeContext(
       runId: 'run-1',
       providers,
       signal: { cancelled: false },
+      gateway: currentGateway as unknown as GatewayClient,
       updateProps: (patch) => Object.assign(props, patch),
       updateResult: (value) => {
         result.value = value
@@ -96,7 +101,10 @@ function makeContext(
   }
 }
 
-beforeEach(() => vi.useFakeTimers())
+beforeEach(() => {
+  vi.useFakeTimers()
+  currentGateway = {}
+})
 afterEach(() => {
   vi.useRealTimers()
   vi.restoreAllMocks()

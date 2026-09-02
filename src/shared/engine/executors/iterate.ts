@@ -280,7 +280,7 @@ export const iterateExecutor = async (ctx: NodeExecutionContext): Promise<NodeEx
   if (!ctx.runSubflow || bodyTargets.length === 0) {
     return {
       status: 'skipped',
-      reason: '未配置循环体（请从"当前项"端口连接要批量执行的第一个节点）'
+      reason: '未配置循环体（请从“当前项”端口连接要批量执行的第一个节点）'
     }
   }
 

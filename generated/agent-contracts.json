@@ -119,6 +119,10 @@
             "type": "object",
             "description": "节点配置参数"
           },
+          "text": {
+            "type": "string",
+            "description": "节点用户正文；与固定配置 params 分离"
+          },
           "expectedGraphVersion": {
             "type": "number",
             "description": "读取项目时获得的 graphVersion；草稿写入模式必填，用于避免覆盖并发修改"
@@ -155,6 +159,10 @@
           "title": {
             "type": "string",
             "description": "新标题"
+          },
+          "text": {
+            "type": "string",
+            "description": "要覆盖的节点用户正文；与固定配置 params 分离"
           },
           "expectedGraphVersion": {
             "type": "number",
@@ -366,6 +374,79 @@
       }
     },
     {
+      "name": "get_run",
+      "description": "读取单次运行的真实状态、范围、错误和耗时。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "description": "运行 ID"
+          }
+        },
+        "required": [
+          "runId"
+        ]
+      }
+    },
+    {
+      "name": "list_runs",
+      "description": "按项目列出持久化运行记录，可按状态筛选。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed",
+              "cancelled"
+            ]
+          }
+        },
+        "required": [
+          "projectId"
+        ]
+      }
+    },
+    {
+      "name": "cancel_run",
+      "description": "请求取消真实无界面运行；只有执行器接受请求后才会终止或丢弃未落盘结果。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "description": "运行 ID"
+          }
+        },
+        "required": [
+          "runId"
+        ]
+      }
+    },
+    {
+      "name": "retry_run",
+      "description": "重试一条已结束的运行，并返回这次真实重试的 runId 和最终状态。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "description": "已结束的运行 ID"
+          }
+        },
+        "required": [
+          "runId"
+        ]
+      }
+    },
+    {
       "name": "list_artifacts",
       "description": "列出项目中的媒体产物",
       "inputSchema": {
@@ -377,6 +458,38 @@
         },
         "required": [
           "projectId"
+        ]
+      }
+    },
+    {
+      "name": "get_artifact",
+      "description": "读取单个媒体资产的安全元数据；不返回任意本地绝对路径。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "artifactId": {
+            "type": "string",
+            "description": "媒体资产 ID"
+          }
+        },
+        "required": [
+          "artifactId"
+        ]
+      }
+    },
+    {
+      "name": "list_run_artifacts",
+      "description": "列出某次运行产生的精确产物及其来源节点、端口和媒体 ID。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "description": "运行 ID"
+          }
+        },
+        "required": [
+          "runId"
         ]
       }
     }
@@ -1166,7 +1279,11 @@
           "type": "json",
           "required": false,
           "cardinality": "one",
-          "description": "可选的分镜列表；在导演台中同步为镜头。"
+          "description": "可选的分镜列表；在导演台中同步为镜头。",
+          "schema": {
+            "id": "storyboard.shots",
+            "version": 1
+          }
         },
         {
           "id": "in-reference-images",
@@ -1182,7 +1299,11 @@
           "type": "json",
           "required": false,
           "cardinality": "one",
-          "description": "可选的初始摄像机参数。"
+          "description": "可选的初始摄像机参数。",
+          "schema": {
+            "id": "previs.camera",
+            "version": 1
+          }
         }
       ],
       "outputs": [
@@ -1208,7 +1329,11 @@
           "type": "json",
           "required": false,
           "cardinality": "one",
-          "description": "已发布镜头的焦距、画幅、时长和机位参数。"
+          "description": "已发布镜头的焦距、画幅、时长和机位参数。",
+          "schema": {
+            "id": "previs.camera",
+            "version": 1
+          }
         },
         {
           "id": "out-project",
@@ -1216,7 +1341,11 @@
           "type": "json",
           "required": false,
           "cardinality": "one",
-          "description": "导演工程中可交换的镜头和机位摘要，不包含媒体二进制。"
+          "description": "导演工程中可交换的镜头和机位摘要，不包含媒体二进制。",
+          "schema": {
+            "id": "previs.project",
+            "version": 2
+          }
         }
       ],
       "configSchema": {}
@@ -1239,7 +1368,11 @@
           "type": "json",
           "required": false,
           "cardinality": "one",
-          "description": "可选的结构化上下文，注入本次转换。"
+          "description": "可选的结构化上下文，注入本次转换。",
+          "schema": {
+            "id": "json.any",
+            "version": 1
+          }
         }
       ],
       "outputs": [
@@ -1265,7 +1398,11 @@
           "type": "json",
           "required": false,
           "cardinality": "one",
-          "description": "模型返回并校验后的结构化值（按所选 Schema）。"
+          "description": "模型返回并校验后的结构化值（按所选 Schema）。",
+          "schema": {
+            "id": "json.any",
+            "version": 1
+          }
         }
       ],
       "configSchema": {
@@ -1291,7 +1428,11 @@
           "type": "json",
           "required": false,
           "cardinality": "one",
-          "description": "符合分镜 Schema 的镜头列表。"
+          "description": "符合分镜 Schema 的镜头列表。",
+          "schema": {
+            "id": "storyboard.shots",
+            "version": 1
+          }
         },
         {
           "id": "in-text",
@@ -1309,7 +1450,11 @@
           "type": "json",
           "required": true,
           "cardinality": "one",
-          "description": "编辑后的完整分镜结构。"
+          "description": "编辑后的完整分镜结构。",
+          "schema": {
+            "id": "storyboard.shots",
+            "version": 1
+          }
         },
         {
           "id": "out-text",
@@ -1332,7 +1477,11 @@
           "type": "json",
           "required": false,
           "cardinality": "many",
-          "description": "一个或多个已连接的结构化输入，可在正文中用 {{input[0].field}} 显式引用。"
+          "description": "一个或多个已连接的结构化输入，可在正文中用 {{input[0].field}} 显式引用。",
+          "schema": {
+            "id": "json.any",
+            "version": 1
+          }
         },
         {
           "id": "in-text",
@@ -1350,7 +1499,11 @@
           "type": "json",
           "required": true,
           "cardinality": "one",
-          "description": "经所选 Schema 校验后的结构化数据。"
+          "description": "经所选 Schema 校验后的结构化数据。",
+          "schema": {
+            "id": "json.any",
+            "version": 1
+          }
         }
       ],
       "configSchema": {
@@ -1515,7 +1668,11 @@
           "type": "json",
           "required": false,
           "cardinality": "many",
-          "description": "代码运行时 input.json 读取的结构化值列表。"
+          "description": "代码运行时 input.json 读取的结构化值列表。",
+          "schema": {
+            "id": "json.any",
+            "version": 1
+          }
         }
       ],
       "outputs": [
@@ -1546,7 +1703,11 @@
           "type": "json",
           "required": true,
           "cardinality": "one",
-          "description": "要逐项批量处理的列表（每个元素作为一次循环体输入）。"
+          "description": "要逐项批量处理的列表（每个元素作为一次循环体输入）。",
+          "schema": {
+            "id": "list.items",
+            "version": 1
+          }
         }
       ],
       "outputs": [
@@ -1556,7 +1717,11 @@
           "type": "json",
           "required": false,
           "cardinality": "one",
-          "description": "只在循环体内按项提供的临时数据。请连接循环体第一个节点；循环结束后不作为项目级输出。"
+          "description": "只在循环体内按项提供的临时数据。请连接循环体第一个节点；循环结束后不作为项目级输出。",
+          "schema": {
+            "id": "json.any",
+            "version": 1
+          }
         },
         {
           "id": "out-items",
@@ -1564,7 +1729,11 @@
           "type": "json",
           "required": true,
           "cardinality": "one",
-          "description": "每项处理结果的结构化列表（含来源、状态、各节点产物）。"
+          "description": "每项处理结果的结构化列表（含来源、状态、各节点产物）。",
+          "schema": {
+            "id": "list.items",
+            "version": 1
+          }
         }
       ],
       "configSchema": {
@@ -1704,7 +1873,11 @@
           "type": "json",
           "required": false,
           "cardinality": "one",
-          "description": "可选的 prompt.bundle；读取其中的 prompt 与 style。"
+          "description": "可选的 prompt.bundle；读取其中的 prompt 与 style。",
+          "schema": {
+            "id": "prompt.bundle",
+            "version": 1
+          }
         },
         {
           "id": "in-text",
@@ -1806,7 +1979,11 @@
           "type": "json",
           "required": true,
           "cardinality": "one",
-          "description": "所有格子对应的真实图片资产引用列表，可连接循环节点批处理。"
+          "description": "所有格子对应的真实图片资产引用列表，可连接循环节点批处理。",
+          "schema": {
+            "id": "list.items",
+            "version": 1
+          }
         }
       ],
       "configSchema": {
@@ -1838,7 +2015,11 @@
           "type": "json",
           "required": false,
           "cardinality": "many",
-          "description": "一个或多个需要汇总或展示的结构化值。"
+          "description": "一个或多个需要汇总或展示的结构化值。",
+          "schema": {
+            "id": "json.any",
+            "version": 1
+          }
         },
         {
           "id": "in-text",
@@ -1856,7 +2037,11 @@
           "type": "json",
           "required": true,
           "cardinality": "one",
-          "description": "校验并格式化后的结构化值。"
+          "description": "校验并格式化后的结构化值。",
+          "schema": {
+            "id": "json.any",
+            "version": 1
+          }
         }
       ],
       "configSchema": {
@@ -2077,7 +2262,11 @@
           "type": "json",
           "required": false,
           "cardinality": "one",
-          "description": "可选的 prompt.bundle；读取其中的 prompt 与 style。"
+          "description": "可选的 prompt.bundle；读取其中的 prompt 与 style。",
+          "schema": {
+            "id": "prompt.bundle",
+            "version": 1
+          }
         },
         {
           "id": "in-text",

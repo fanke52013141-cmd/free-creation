@@ -182,6 +182,15 @@ describe('MCP Server', () => {
       // 执行类
       expect(toolNames).toContain('run_node')
       expect(toolNames).toContain('run_workflow')
+      expect(toolNames).toContain('get_run')
+      expect(toolNames).toContain('list_runs')
+      expect(toolNames).toContain('cancel_run')
+      expect(toolNames).toContain('retry_run')
+
+      // 结果类
+      expect(toolNames).toContain('list_artifacts')
+      expect(toolNames).toContain('get_artifact')
+      expect(toolNames).toContain('list_run_artifacts')
     })
 
     it('每个工具应有 name、description 和 inputSchema', async () => {
@@ -279,6 +288,147 @@ describe('MCP Server', () => {
 
       draftIn.destroy()
       draftOut.destroy()
+    })
+
+    it('P1：MCP 可完成文本→生图的发现、编排、校验与 dry-run，且画布图数据同步可读', async () => {
+      const draftIn = new PassThrough()
+      const draftOut = new PassThrough()
+      const draftStore = createIsolatedMcpStore(tempDir)
+      const project = await draftStore.createProject('P1 text to image')
+      startMcpServer(draftIn, draftOut, draftStore, { writeEnabled: true })
+
+      const call = async (
+        id: number,
+        name: string,
+        arguments_: Record<string, unknown>
+      ): Promise<Record<string, unknown>> => {
+        sendRequest(draftIn, {
+          jsonrpc: '2.0',
+          id,
+          method: 'tools/call',
+          params: { name, arguments: arguments_ }
+        })
+        return (await readResponse(draftOut))!
+      }
+
+      const capability = await call(460, 'get_capability_by_node_type', { nodeType: 'image-gen' })
+      expect(capability.result.isError).toBeFalsy()
+      expect(JSON.parse(capability.result.content[0].text).outputs[0].id).toBe('out-image')
+
+      const text = await call(461, 'create_node', {
+        projectId: project.id,
+        type: 'text',
+        text: '一只戴红围巾的猫',
+        expectedGraphVersion: 0,
+        idempotencyKey: 'p1-text-create-0001'
+      })
+      const textNode = JSON.parse(text.result.content[0].text) as { id: string }
+
+      const image = await call(462, 'create_node', {
+        projectId: project.id,
+        type: 'image-gen',
+        expectedGraphVersion: 1,
+        idempotencyKey: 'p1-image-create-0001'
+      })
+      const imageNode = JSON.parse(image.result.content[0].text) as { id: string }
+
+      const connection = await call(463, 'connect_nodes', {
+        projectId: project.id,
+        from: { nodeId: textNode.id, portId: 'out-text' },
+        to: { nodeId: imageNode.id, portId: 'in-text' },
+        expectedGraphVersion: 2,
+        idempotencyKey: 'p1-text-image-connect-0001'
+      })
+      expect(connection.result.isError).toBeFalsy()
+
+      const validation = await call(464, 'validate_workflow', { projectId: project.id })
+      expect(JSON.parse(validation.result.content[0].text).valid).toBe(true)
+      const estimate = await call(465, 'estimate_run', { projectId: project.id })
+      expect(JSON.parse(estimate.result.content[0].text).missingConfigs[0].nodeId).toBe(
+        imageNode.id
+      )
+      const dryRun = await call(466, 'run_workflow', { projectId: project.id, dryRun: true })
+      expect(JSON.parse(dryRun.result.content[0].text).runId).toBe('dry-run')
+
+      const saved = await call(467, 'get_project', { projectId: project.id })
+      const graph = JSON.parse(saved.result.content[0].text)
+      expect(graph.nodes).toHaveLength(2)
+      expect(graph.edges).toHaveLength(1)
+      expect(graph.meta.graphVersion).toBe(3)
+
+      draftIn.destroy()
+      draftOut.destroy()
+    })
+
+    it('P1：MCP 真实执行文本→文本并查询终态，正文不会混入 params', async () => {
+      const executionIn = new PassThrough()
+      const executionOut = new PassThrough()
+      const store = createIsolatedMcpStore(tempDir)
+      const project = await store.createProject('P1 real execution')
+      startMcpServer(executionIn, executionOut, store, {
+        writeEnabled: true,
+        executionEnabled: true,
+        gateway: { listProviders: async () => ({ ok: true, data: [] }) } as any
+      })
+      const call = async (
+        id: number,
+        name: string,
+        arguments_: Record<string, unknown>
+      ): Promise<Record<string, unknown>> => {
+        sendRequest(executionIn, {
+          jsonrpc: '2.0',
+          id,
+          method: 'tools/call',
+          params: { name, arguments: arguments_ }
+        })
+        return (await readResponse(executionOut))!
+      }
+
+      const source = await call(470, 'create_node', {
+        projectId: project.id,
+        type: 'text',
+        text: '来自 Agent 的正文',
+        params: { marker: 'config-only' },
+        expectedGraphVersion: 0,
+        idempotencyKey: 'p1-real-source-create-0001'
+      })
+      const sourceNode = JSON.parse(source.result.content[0].text) as {
+        id: string
+        content: unknown
+      }
+      expect(sourceNode.content).toEqual({ kind: 'text', text: '来自 Agent 的正文' })
+
+      const target = await call(471, 'create_node', {
+        projectId: project.id,
+        type: 'text',
+        text: '目标正文',
+        expectedGraphVersion: 1,
+        idempotencyKey: 'p1-real-target-create-0001'
+      })
+      const targetNode = JSON.parse(target.result.content[0].text) as { id: string }
+      const connected = await call(472, 'connect_nodes', {
+        projectId: project.id,
+        from: { nodeId: sourceNode.id, portId: 'out-text' },
+        to: { nodeId: targetNode.id, portId: 'in-text' },
+        expectedGraphVersion: 2,
+        idempotencyKey: 'p1-real-connect-0001'
+      })
+      expect(connected.result.isError).toBeFalsy()
+
+      const run = await call(473, 'run_workflow', { projectId: project.id })
+      const runHandle = JSON.parse(run.result.content[0].text) as { runId: string; status: string }
+      expect(runHandle.status).toBe('succeeded')
+      const queried = await call(474, 'get_run', { runId: runHandle.runId })
+      expect(JSON.parse(queried.result.content[0].text).status).toBe('succeeded')
+
+      const saved = await store.getNodes(project.id)
+      expect(saved.find((node) => node.id === targetNode.id)?.content).toEqual({
+        kind: 'text',
+        text: '来自 Agent 的正文\n\n---\n\n目标正文'
+      })
+
+      executionIn.destroy()
+      executionOut.destroy()
     })
 
     it('list_projects 应返回数组', async () => {

@@ -10,6 +10,7 @@ import {
   iterateExecutor
 } from '@renderer/engine/executors/iterate'
 import type { NodeExecutionContext, SubflowOutput } from '@renderer/engine/executor-types'
+import type { GatewayClient } from '@shared/engine/gateway-client'
 import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
 
 function makeCtx(over: {
@@ -88,6 +89,7 @@ function makeCtx(over: {
     runId: over.runId,
     providers: [],
     signal: over.signal ?? { cancelled: false, paused: false },
+    gateway: {} as GatewayClient,
     waitForResume: over.waitForResume,
     outgoing: over.outgoing ?? [
       { nodeId: 'node-body', fromPortId: 'out-item', toPortId: 'in-json' }
