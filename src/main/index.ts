@@ -7,6 +7,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import log from 'electron-log/main'
 import icon from '../../resources/icon.png?asset'
 import { registerProjectIpc } from './ipc/project.ipc'
+import { ProjectFileWatcher } from './ipc/project-watcher'
 import { registerMediaIpc } from './ipc/media.ipc'
 import { registerGatewayIpc } from './ipc/gateway.ipc'
 import { registerComfyuiIpc } from './ipc/comfyui.ipc'
@@ -145,12 +146,18 @@ app.whenReady().then(() => {
     log.warn('workspace health check found recoverable items', health)
   }
   registerMediaProtocol()
-  registerProjectIpc()
+
+  // 文件监听器：CLI/MCP 写入 project.json 时通知渲染进程实时刷新。
+  // 窗口创建后赋值给引用，监听器通过 getter 延迟获取。
+  let mainWindow: BrowserWindow | null = null
+  const projectWatcher = new ProjectFileWatcher(() => mainWindow)
+
+  registerProjectIpc(projectWatcher)
   registerMediaIpc()
   registerComfyuiIpc()
   registerWorkspaceStateIpc()
-  const win = createWindow()
-  registerGatewayIpc(win)
+  mainWindow = createWindow()
+  registerGatewayIpc(mainWindow)
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

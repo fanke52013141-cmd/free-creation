@@ -7,6 +7,7 @@ import { GraphVersionConflictError } from '../../shared/graph-snapshot-sync'
 import { getSetting, setSetting } from '../store/db'
 import * as repo from '../store/projects.repo'
 import { exportProject, importProject } from '../store/transfer'
+import { ProjectFileWatcher } from './project-watcher'
 
 function ok<T>(data: T): IpcEnvelope<T> {
   return { ok: true, data }
@@ -16,20 +17,7 @@ function err(code: string, message: string): IpcEnvelope<never> {
   return { ok: false, error: { code, message } }
 }
 
-function saveEnvelope(
-  input: Parameters<typeof repo.saveProject>[0]
-): IpcEnvelope<{ graphVersion: number } | null> {
-  try {
-    return ok(repo.saveProject(input))
-  } catch (e) {
-    if (e instanceof GraphVersionConflictError) {
-      return err('REVISION_CONFLICT', e.message)
-    }
-    return err('SAVE_FAILED', e instanceof Error ? e.message : String(e))
-  }
-}
-
-export function registerProjectIpc(): void {
+export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
   ipcMain.handle(IPC.app.bootstrap, (): IpcEnvelope<{ lastProjectId: string | null }> => {
     return ok({ lastProjectId: getSetting('lastProjectId') })
   })
@@ -58,8 +46,13 @@ export function registerProjectIpc(): void {
 
   ipcMain.handle(IPC.project.open, (_e, id: string): IpcEnvelope<ProjectFile | null> => {
     const file = repo.openProject(id)
-    if (file) setSetting('lastProjectId', id)
-    else setSetting('lastProjectId', '')
+    if (file) {
+      setSetting('lastProjectId', id)
+      watcher?.startWatching(id)
+    } else {
+      setSetting('lastProjectId', '')
+      watcher?.stopWatching()
+    }
     return ok(file)
   })
 
@@ -67,12 +60,22 @@ export function registerProjectIpc(): void {
     IPC.project.save,
     (_e, input: SaveProjectInput): IpcEnvelope<{ graphVersion: number } | null> => {
       if (!input?.id) return err('INVALID_INPUT', '参数不完整')
-      return saveEnvelope(input)
+      try {
+        const result = repo.saveProject(input)
+        if (result) watcher?.notifySelfSave(result.graphVersion)
+        return ok(result)
+      } catch (e) {
+        if (e instanceof GraphVersionConflictError) {
+          return err('REVISION_CONFLICT', e.message)
+        }
+        return err('SAVE_FAILED', e instanceof Error ? e.message : String(e))
+      }
     }
   )
 
   ipcMain.handle(IPC.project.close, (): IpcEnvelope<true> => {
     setSetting('lastProjectId', '')
+    watcher?.stopWatching()
     return ok(true)
   })
 
@@ -116,10 +119,11 @@ export function registerProjectIpc(): void {
   // 不带乐观锁：关窗时无法重载，用户当前视图最后写入胜出。
   ipcMain.on(IPC.project.saveSync, (e, input: SaveProjectInput) => {
     try {
-      repo.saveProject(input)
+      const result = repo.saveProject(input)
+      if (result) watcher?.notifySelfSave(result.graphVersion)
       e.returnValue = { ok: true, data: null }
-    } catch (err) {
-      e.returnValue = { ok: false, error: { code: 'FLUSH_FAILED', message: String(err) } }
+    } catch (saveErr) {
+      e.returnValue = { ok: false, error: { code: 'FLUSH_FAILED', message: String(saveErr) } }
     }
   })
 }

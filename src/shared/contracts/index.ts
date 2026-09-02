@@ -27,7 +27,8 @@ export const IPC = {
     saveSync: 'project:save-sync',
     close: 'project:close',
     export: 'project:export',
-    import: 'project:import'
+    import: 'project:import',
+    externalChange: 'project:external-change'
   },
   media: {
     import: 'media:import',

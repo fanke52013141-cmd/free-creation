@@ -411,7 +411,23 @@ export function CanvasEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id])
 
-  // 画布禁用 tldraw 的默认“双击插入白板文本”行为：节点正文使用自己的编辑器。
+  // 外部写入主动通知：Agent/CLI/MCP 修改 project.json 后，主进程 fs.watch 推送
+  // externalChange 事件。有未保存的本地修改时先 flushSave（冲突走 REVISION_CONFLICT
+  // 重载），否则直接重载最新数据。
+  useEffect(() => {
+    const unsubscribe = window.api.onExternalProjectChange((payload) => {
+      if (payload.projectId !== project.id) return
+      if (saveTimerRef.current) {
+        flushSave()
+      } else {
+        void reloadFromDisk()
+      }
+    })
+    return unsubscribe
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project.id])
+
+  // 画布禁用 tldraw 的默认"双击插入白板文本"行为：节点正文使用自己的编辑器。
   // 文本正文在捕获阶段被拦下后，转发一个专用事件给 TextBody，避免同时出现一张
   // 独立 text shape（截图中的小文本框）和节点内 textarea。
   useEffect(() => {

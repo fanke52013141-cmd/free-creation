@@ -66,6 +66,18 @@ const api = {
     ipcRenderer.sendSync(IPC.project.saveSync, input)
   },
   closeProject: (): Promise<IpcEnvelope<true>> => ipcRenderer.invoke(IPC.project.close),
+  onExternalProjectChange: (
+    cb: (payload: { projectId: string; graphVersion: number }) => void
+  ): (() => void) => {
+    const listener = (
+      _e: unknown,
+      payload: { projectId: string; graphVersion: number }
+    ): void => cb(payload)
+    ipcRenderer.on(IPC.project.externalChange, listener)
+    return () => {
+      ipcRenderer.off(IPC.project.externalChange, listener)
+    }
+  },
   exportProject: (input: { id: string; name?: string }): Promise<IpcEnvelope<{ path: string }>> =>
     ipcRenderer.invoke(IPC.project.export, input),
   importProject: (): Promise<IpcEnvelope<ProjectMeta>> => ipcRenderer.invoke(IPC.project.import),
