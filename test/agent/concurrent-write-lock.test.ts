@@ -243,4 +243,64 @@ describe('AG-6 并发写入安全', () => {
     const final = repo.getProject(meta.id)
     expect(final?.graphVersion).toBe(2)
   })
+
+  // ── 7. 故障恢复：损坏的 project.json 回退到 .bak ─────────────
+
+  it('project.json 损坏时自动回退到 .bak 文件', async () => {
+    const repo = await importRepo()
+    const meta = repo.createProject('故障恢复')
+    // 写入有效数据，产生 .bak
+    repo.saveProject({
+      id: meta.id,
+      tldrawSnapshot: { store: {} },
+      graph: { nodes: [], edges: [], groups: [] }
+    })
+    // 再保存一次，让 .bak 保存第一版数据
+    repo.saveProject({
+      id: meta.id,
+      tldrawSnapshot: { store: { 'page:page': { typeName: 'page' } } },
+      graph: { nodes: [], edges: [], groups: [] }
+    })
+
+    // 损坏主文件
+    const mainPath = join(repoState.projectsDir, meta.id, 'project.json')
+    writeFileSync(mainPath, '{ "corrupted": true, "missing": ', 'utf-8')
+
+    // openProject 应回退到 .bak
+    const recovered = repo.openProject(meta.id)
+    expect(recovered).not.toBeNull()
+    if (recovered) {
+      // .bak 保存的是倒数第二次写入的数据（graphVersion=1）
+      expect(recovered.meta.graphVersion).toBeGreaterThanOrEqual(1)
+    }
+  })
+
+  it('锁文件残留（进程崩溃后）不会永久阻塞后续写入', async () => {
+    const repo = await importRepo()
+    const meta = repo.createProject('崩溃恢复')
+    const lp = lockPath(meta.id)
+
+    // 模拟进程崩溃：残留锁文件 + 极新的 mtime（30s 内）
+    writeFileSync(lp, 'crashed-pid', 'utf-8')
+
+    // 此时新写入应被阻塞（锁未过期）
+    expect(() =>
+      repo.saveProject({
+        id: meta.id,
+        graph: { nodes: [], edges: [], groups: [] }
+      })
+    ).toThrow(GraphWriteInProgressError)
+
+    // 将锁文件 mtime 设为 35s 前（超过 30s 过期阈值）
+    const oldTime = new Date(Date.now() - 35_000)
+    utimesSync(lp, oldTime, oldTime)
+
+    // 过期锁可被接管，写入成功
+    const result = repo.saveProject({
+      id: meta.id,
+      graph: { nodes: [], edges: [], groups: [] }
+    })
+    expect(result).toEqual({ graphVersion: 1 })
+    expect(existsSync(lp)).toBe(false)
+  })
 })
