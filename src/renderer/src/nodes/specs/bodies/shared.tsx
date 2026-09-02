@@ -343,6 +343,20 @@ type MediaSourceMeta = {
   modelKey?: string
   prompt?: string
   at?: number
+  genParams?: {
+    ratio?: string
+    duration?: number
+    resolution?: string
+    generateAudio?: boolean
+    seed?: number
+  }
+  sourceSummary?: {
+    firstFrame?: boolean
+    lastFrame?: boolean
+    referenceImages?: number
+    referenceVideo?: number
+    referenceAudio?: number
+  }
 }
 
 function mediaSourceMeta(shape: NodeCardShape): MediaSourceMeta | null {
@@ -373,6 +387,67 @@ export function MediaSourceBadge({
       {label}
       {time}
     </span>
+  )
+}
+
+/**
+ * Sprint 2 来源摘要：比 MediaSourceBadge 更丰富，展示生成参数和输入来源。
+ * 仅当 nodeResult 中存在 genParams 或 sourceSummary 时渲染完整摘要，否则回退到普通 badge。
+ */
+export function MediaSourceSummary({
+  shape,
+  fallback = '本地资产'
+}: {
+  shape: NodeCardShape
+  fallback?: string
+}): React.JSX.Element {
+  const source = mediaSourceMeta(shape)
+  const hasRichData = Boolean(source?.genParams || source?.sourceSummary)
+
+  // 无增强数据时回退到普通 badge
+  if (!hasRichData) {
+    return <MediaSourceBadge shape={shape} fallback={fallback} />
+  }
+
+  const paramBadges: string[] = []
+  if (source?.genParams) {
+    const gp = source.genParams
+    if (gp.ratio) paramBadges.push(gp.ratio === 'adaptive' ? '自适应' : gp.ratio)
+    if (gp.duration) paramBadges.push(`${gp.duration}s`)
+    if (gp.resolution) paramBadges.push(gp.resolution)
+  }
+
+  const sourceParts: string[] = []
+  if (source?.sourceSummary) {
+    const ss = source.sourceSummary
+    if (ss.firstFrame) sourceParts.push('首帧图')
+    if (ss.lastFrame) sourceParts.push('尾帧图')
+    if (ss.referenceImages) sourceParts.push(`参考图 ${ss.referenceImages} 张`)
+    if (ss.referenceVideo) sourceParts.push(`参考视频 ${ss.referenceVideo} 段`)
+    if (ss.referenceAudio) sourceParts.push(`参考音频 ${ss.referenceAudio} 段`)
+  }
+
+  const time = source?.at ? new Date(source.at).toLocaleTimeString() : ''
+  const promptLine = source?.prompt ? (source.prompt.length > 50 ? source.prompt.slice(0, 50) + '…' : source.prompt) : ''
+
+  return (
+    <div className="media-source-summary" title={source?.prompt || shape.props.mediaPath}>
+      <div className="media-source-summary-head">
+        <Icon name="info" size={11} />
+        <span className="media-source-summary-model">{source?.modelKey || fallback}</span>
+        {paramBadges.length > 0 && (
+          <span className="media-source-summary-params">{paramBadges.join(' · ')}</span>
+        )}
+        {time && <span className="media-source-summary-time">{time}</span>}
+      </div>
+      {sourceParts.length > 0 && (
+        <div className="media-source-summary-sources">
+          <Icon name="attach" size={10} />
+          {sourceParts.join(' · ')}
+        </div>
+      )}
+      {promptLine && <div className="media-source-summary-prompt">{promptLine}</div>}
+    </div>
   )
 }
 

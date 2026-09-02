@@ -82,7 +82,21 @@ export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
             nodeId: ctx.node.id,
             modelKey: option.key,
             prompt: prompt.slice(0, 80),
-            runId: ctx.runId
+            runId: ctx.runId,
+            genParams: {
+              ratio: params.ratio,
+              duration: params.duration,
+              resolution: params.resolution,
+              generateAudio: params.generateAudio,
+              seed: params.seed
+            },
+            sourceSummary: {
+              firstFrame: Boolean(firstFrame),
+              lastFrame: Boolean(lastFrame),
+              referenceImages: referenceImages.length,
+              referenceVideo: motionReferences.length,
+              referenceAudio: audioReferences.length
+            }
           }
         )
       )

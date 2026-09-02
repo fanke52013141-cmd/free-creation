@@ -24,6 +24,24 @@ export interface MediaResultItem {
   runId?: string
 }
 
+/** 生成参数摘要：记录本次生成使用的关键参数，用于来源摘要展示。 */
+export interface GenParamSummary {
+  ratio?: string
+  duration?: number
+  resolution?: string
+  generateAudio?: boolean
+  seed?: number
+}
+
+/** 输入来源摘要：记录本次生成引用了哪些上游输入。 */
+export interface SourceSummary {
+  firstFrame?: boolean
+  lastFrame?: boolean
+  referenceImages?: number
+  referenceVideo?: number
+  referenceAudio?: number
+}
+
 export interface MediaResultCollection {
   kind: 'media-source'
   version: 1
@@ -32,6 +50,10 @@ export interface MediaResultCollection {
   prompt?: string
   at?: number
   selectedMediaId?: string
+  /** 生成参数摘要（Sprint 2 来源摘要） */
+  genParams?: GenParamSummary
+  /** 输入来源摘要（Sprint 2 来源摘要） */
+  sourceSummary?: SourceSummary
   results: MediaResultItem[]
 }
 
@@ -63,6 +85,12 @@ export function parseMediaResultCollection(text: string): MediaResultCollection 
       ...(typeof value.selectedMediaId === 'string'
         ? { selectedMediaId: value.selectedMediaId }
         : {}),
+      ...(value.genParams && typeof value.genParams === 'object'
+        ? { genParams: value.genParams as GenParamSummary }
+        : {}),
+      ...(value.sourceSummary && typeof value.sourceSummary === 'object'
+        ? { sourceSummary: value.sourceSummary as SourceSummary }
+        : {}),
       results
     }
   } catch {
@@ -77,7 +105,11 @@ export function serializeMediaResultCollection(value: MediaResultCollection): st
 export function appendMediaResult(
   previous: string,
   item: Omit<MediaResultItem, 'createdAt'> & { createdAt?: number },
-  meta: Pick<MediaResultCollection, 'nodeId' | 'modelKey' | 'prompt'> & { runId?: string } = {}
+  meta: Pick<MediaResultCollection, 'nodeId' | 'modelKey' | 'prompt'> & {
+    runId?: string
+    genParams?: GenParamSummary
+    sourceSummary?: SourceSummary
+  } = {}
 ): MediaResultCollection {
   const current = parseMediaResultCollection(previous)
   const results = current?.results.filter((result) => result.mediaId !== item.mediaId) ?? []
@@ -94,6 +126,12 @@ export function appendMediaResult(
     ...(meta.prompt || current?.prompt ? { prompt: meta.prompt || current?.prompt } : {}),
     at: nextItem.createdAt,
     selectedMediaId: nextItem.mediaId,
+    ...(meta.genParams || current?.genParams
+      ? { genParams: meta.genParams ?? current?.genParams }
+      : {}),
+    ...(meta.sourceSummary || current?.sourceSummary
+      ? { sourceSummary: meta.sourceSummary ?? current?.sourceSummary }
+      : {}),
     results: [...results, nextItem].slice(-MEDIA_RESULT_LIMIT)
   }
 }

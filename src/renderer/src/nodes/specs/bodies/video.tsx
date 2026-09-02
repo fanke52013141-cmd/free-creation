@@ -24,7 +24,7 @@ import {
   MediaFileActions,
   MediaResultGrid,
   removeMediaResultFromShape,
-  MediaSourceBadge,
+  MediaSourceSummary,
   createVideoContinuation,
   createVocalExtractionTemplate,
   clearSelectedMediaHistory,
@@ -184,6 +184,17 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     }
   }
 
+  /** 重新生成：清空成片后立即用相同参数重新提交，无需手动返回配置面板。 */
+  const regenerate = async (): Promise<void> => {
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: { mediaId: '', mediaPath: '', mediaMime: '' }
+    })
+    markUndoPoint(editor, 'video-regenerate')
+    await submit()
+  }
+
   const addImageMention = (item: MentionableImage): void => {
     if (referenceImages.some((image) => image.mediaPath === item.mediaPath)) {
       setMentionOpen(false)
@@ -238,24 +249,36 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
         <div className="node-media-actions">
           <button
             className="btn-ghost small"
+            disabled={submitting}
             onPointerDown={(e) => stopEventPropagation(e)}
             onClick={(e) => {
               e.stopPropagation()
-              // 重新生成：清空成片，回到配置面板重新跑一遍
+              void regenerate()
+            }}
+          >
+            <Icon name="reset" size={13} />
+            {submitting ? '重新生成中…' : '重新生成'}
+          </button>
+          <button
+            className="btn-ghost small"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              // 编辑配置：清空成片，回到配置面板
               editor.updateShape({
                 id: shape.id,
                 type: 'node-card',
                 props: { mediaId: '', mediaPath: '', mediaMime: '' }
               })
-              markUndoPoint(editor, 'video-regenerate')
+              markUndoPoint(editor, 'video-edit-config')
             }}
           >
-            <Icon name="reset" size={13} />
-            重新生成
+            <Icon name="edit" size={13} />
+            编辑
           </button>
-          <MediaSourceBadge shape={shape} fallback="AI 生成" />
           <MediaFileActions shape={shape} />
         </div>
+        <MediaSourceSummary shape={shape} fallback="AI 生成" />
         <div className="node-media-next-actions" aria-label="视频后续操作">
           <button
             className="btn-ghost small"
