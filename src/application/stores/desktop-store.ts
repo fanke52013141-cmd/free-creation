@@ -15,7 +15,7 @@ import type {
   ProjectFile,
   ProjectMeta
 } from '@shared/types'
-import { syncGraphSnapshot } from '@shared/graph-snapshot-sync'
+import { syncGraphSnapshot, GraphWriteInProgressError } from '@shared/graph-snapshot-sync'
 import {
   createProject,
   deleteProject,
@@ -84,15 +84,27 @@ export class DesktopProjectStore implements ProjectStore {
     const file = openProject(projectId)
     if (!file) throw new Error(`项目不存在: ${projectId}`)
     const { snapshot } = syncGraphSnapshot(file.tldrawSnapshot, graph)
-    // 版本冲突以 GraphVersionConflictError 形式抛出，由服务层映射为 REVISION_CONFLICT
-    const saved = saveProject({
-      id: projectId,
-      graph,
-      tldrawSnapshot: snapshot,
-      expectedGraphVersion: options?.expectedGraphVersion
-    })
-    if (!saved) throw new Error(`项目保存失败: ${projectId}`)
-    return saved
+    // 文件锁冲突是瞬时的（同步 I/O 毫秒级）。短退避重试减少并发写入时的假冲突。
+    const MAX_RETRIES = 3
+    const BACKOFF_MS = [50, 100, 200]
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        const saved = saveProject({
+          id: projectId,
+          graph,
+          tldrawSnapshot: snapshot,
+          expectedGraphVersion: options?.expectedGraphVersion
+        })
+        if (!saved) throw new Error(`项目保存失败: ${projectId}`)
+        return saved
+      } catch (error) {
+        if (error instanceof GraphWriteInProgressError && attempt < MAX_RETRIES) {
+          await new Promise((resolve) => setTimeout(resolve, BACKOFF_MS[attempt]))
+          continue
+        }
+        throw error
+      }
+    }
   }
 
   async listArtifacts(projectId: string): Promise<MediaAsset[]> {

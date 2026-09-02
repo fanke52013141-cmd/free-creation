@@ -3,7 +3,10 @@ import { ipcMain, dialog } from 'electron'
 import { IPC } from '../../shared/contracts'
 import type { IpcEnvelope, SaveProjectInput } from '../../shared/contracts'
 import type { ProjectFile, ProjectMeta } from '../../shared/types'
-import { GraphVersionConflictError } from '../../shared/graph-snapshot-sync'
+import {
+  GraphVersionConflictError,
+  GraphWriteInProgressError
+} from '../../shared/graph-snapshot-sync'
 import { getSetting, setSetting } from '../store/db'
 import * as repo from '../store/projects.repo'
 import { exportProject, importProject } from '../store/transfer'
@@ -67,6 +70,9 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
       } catch (e) {
         if (e instanceof GraphVersionConflictError) {
           return err('REVISION_CONFLICT', e.message)
+        }
+        if (e instanceof GraphWriteInProgressError) {
+          return err('REVISION_CONFLICT', '项目正在被另一项写入操作更新，请稍后重试')
         }
         return err('SAVE_FAILED', e instanceof Error ? e.message : String(e))
       }
