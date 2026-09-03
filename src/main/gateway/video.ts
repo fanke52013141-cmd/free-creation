@@ -16,7 +16,11 @@ import { getDb, getDataDir } from '../store/db'
 import { readMediaBuffer, saveFileAsset } from '../store/media.repo'
 import { GatewayError } from './factory'
 import { getProvider } from './providers.repo'
-import { videoCapabilitiesFor, videoCapabilityIssues } from '../../shared/video-capabilities'
+import {
+  videoCapabilitiesFor,
+  videoCapabilityIssues,
+  isSeedanceGatewayProxy
+} from '../../shared/video-capabilities'
 
 type Send = (e: GatewayEvent) => void
 
@@ -356,12 +360,12 @@ function seedanceTasksUrl(p: ProviderConfig, taskId?: string): string {
   return `${p.baseURL}${path}${taskId ? `/${taskId}` : ''}`
 }
 
-function isSeedanceGatewayProxy(p: ProviderConfig): boolean {
-  return p.baseURL.includes('/gateway/ark/')
+function isSeedanceProxy(p: ProviderConfig): boolean {
+  return isSeedanceGatewayProxy(p.specId, p.baseURL)
 }
 
 async function seedanceSubmit(p: ProviderConfig, input: VideoSubmitInput): Promise<string> {
-  const isProxy = isSeedanceGatewayProxy(p)
+  const isProxy = isSeedanceProxy(p)
   const suffix = isProxy
     ? [
         input.params?.ratio ? `--ratio ${input.params.ratio}` : '',

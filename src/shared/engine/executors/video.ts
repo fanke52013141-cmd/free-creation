@@ -6,6 +6,7 @@ import { mergedPrompt, parseVideoGen, promptBundleText, waitForVideo } from '../
 import { readNodeConfig } from '../node-config'
 import { appendMediaResult, serializeMediaResultCollection } from '../values'
 import {
+  isSeedanceGatewayProxy,
   normalizeVideoGenParams,
   videoCapabilitiesFor,
   videoRatioIsDerivedByFrames
@@ -28,7 +29,9 @@ export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
   const motionReferences = inputMedia(ctx.inputs, 'in-reference-video', 'video')
   const audioReferences = inputMedia(ctx.inputs, 'in-reference-audio', 'audio')
   const params = normalizeVideoGenParams(
-    videoCapabilitiesFor(option.provider.specId, option.model.id),
+    videoCapabilitiesFor(option.provider.specId, option.model.id, {
+      gatewayProxy: isSeedanceGatewayProxy(option.provider.specId, option.provider.baseURL)
+    }),
     data.params,
     {
       framesDetermineRatio: videoRatioIsDerivedByFrames(

@@ -15,9 +15,15 @@ export interface VideoCapabilities {
   supportsReferenceVideo: boolean
   supportsReferenceAudio: boolean
   supportsGeneratedAudio: boolean
+  supportsSeed: boolean
   maxReferenceImages: number
   maxReferenceVideos: number
   maxReferenceAudios: number
+}
+
+/** 能力查询上下文：兼容网关代理只提交已验证参数，UI 与执行器据此收窄可选开关。 */
+export interface VideoCapabilityContext {
+  gatewayProxy?: boolean
 }
 
 export interface VideoCapabilityRequest {
@@ -52,6 +58,7 @@ const H3_CAPABILITIES: VideoCapabilities = {
   supportsReferenceAudio: true,
   // 参考音频不等于模型会生成原生音轨；当前 H3 适配不展示这个开关。
   supportsGeneratedAudio: false,
+  supportsSeed: false,
   maxReferenceImages: 9,
   maxReferenceVideos: 3,
   maxReferenceAudios: 3
@@ -67,6 +74,7 @@ const SEEDANCE_2_CAPABILITIES: VideoCapabilities = {
   supportsReferenceVideo: true,
   supportsReferenceAudio: true,
   supportsGeneratedAudio: true,
+  supportsSeed: true,
   maxReferenceImages: 9,
   maxReferenceVideos: 3,
   maxReferenceAudios: 3
@@ -81,16 +89,31 @@ const FALLBACK_CAPABILITIES: VideoCapabilities = {
   supportsReferenceVideo: true,
   supportsReferenceAudio: false,
   supportsGeneratedAudio: false,
+  supportsSeed: false,
   maxReferenceImages: 0,
   maxReferenceVideos: 1,
   maxReferenceAudios: 0
 }
 
-export function videoCapabilitiesFor(specId: ProviderSpecId, modelId = ''): VideoCapabilities {
+/** 官方方舟之外的 Ark 兼容网关：沿用已验证的任务路径，仅提交基础参数。 */
+export function isSeedanceGatewayProxy(specId: ProviderSpecId, baseURL: string): boolean {
+  return specId === 'seedance' && baseURL.includes('/gateway/ark/')
+}
+
+export function videoCapabilitiesFor(
+  specId: ProviderSpecId,
+  modelId = '',
+  context: VideoCapabilityContext = {}
+): VideoCapabilities {
   if (specId === 'minimax' && canonicalVideoModelId(modelId) === 'minimax-h3') {
     return H3_CAPABILITIES
   }
-  if (specId === 'seedance') return SEEDANCE_2_CAPABILITIES
+  if (specId === 'seedance') {
+    // 兼容网关未验证音频/种子参数的转发，结构化地收窄能力而不是在 UI 里硬编码供应商判断。
+    return context.gatewayProxy
+      ? { ...SEEDANCE_2_CAPABILITIES, supportsGeneratedAudio: false, supportsSeed: false }
+      : SEEDANCE_2_CAPABILITIES
+  }
   return FALLBACK_CAPABILITIES
 }
 
@@ -135,7 +158,7 @@ export function normalizeVideoGenParams(
         ? { resolution: capabilities.resolutions.at(-1) }
         : {}),
     ...(capabilities.supportsGeneratedAudio ? { generateAudio: params.generateAudio ?? true } : {}),
-    ...(typeof params.seed === 'number' && Number.isFinite(params.seed)
+    ...(capabilities.supportsSeed && typeof params.seed === 'number' && Number.isFinite(params.seed)
       ? { seed: params.seed }
       : {}),
     ...(typeof params.watermark === 'boolean' ? { watermark: params.watermark } : {})
@@ -173,5 +196,35 @@ export function videoCapabilityIssues(
   if (params.generateAudio && !capabilities.supportsGeneratedAudio) {
     issues.push('当前模型不支持生成同步音频')
   }
+  if (typeof params.seed === 'number' && !capabilities.supportsSeed) {
+    issues.push('当前模型不支持种子参数')
+  }
   return issues
+}
+
+export interface VideoInputState {
+  hasFirstFrame?: boolean
+  hasLastFrame?: boolean
+  referenceImageCount?: number
+}
+
+/**
+ * 配置面板顶部的能力提示行：只列出当前模型真实支持的图片输入方式。
+ * 首尾帧硬约束仅 H3 支持；Seedance 连到 in-image 的图片会作为参考素材传递。
+ * 参考视频/音频的连接状态由面板中的素材条展示，这里不重复。
+ */
+export function videoInputHints(capabilities: VideoCapabilities, state: VideoInputState): string[] {
+  const hints: string[] = []
+  if (capabilities.supportsFirstLastFrames) {
+    hints.push(state.hasFirstFrame ? '首帧已连接' : '可连接首帧')
+    hints.push(state.hasLastFrame ? '尾帧已连接' : '可连接尾帧')
+  } else if (capabilities.supportsReferenceImages) {
+    hints.push('图片作参考素材')
+  }
+  if (capabilities.supportsReferenceImages) {
+    hints.push(
+      state.referenceImageCount ? `参考图 ${state.referenceImageCount} 张` : '可 @ 引用参考图'
+    )
+  }
+  return hints
 }

@@ -3,9 +3,11 @@ import { useEffect, useState } from 'react'
 import { stopEventPropagation, useEditor, type TLShapeId } from 'tldraw'
 import type { VideoGenParams } from '@shared/types'
 import {
+  isSeedanceGatewayProxy,
   normalizeVideoGenParams,
   videoCapabilitiesFor,
   videoCapabilityIssues,
+  videoInputHints,
   videoRatioIsDerivedByFrames
 } from '@shared/video-capabilities'
 import { getNodeType, mediaUrl, type NodeBodyProps } from '../../registry'
@@ -123,12 +125,13 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const audioReferences = gatherUpstreamMediaList(editor, shape.id, 'in-reference-audio', 'audio')
   const availableMentions = imageMentions(editor, shape.id)
   const opt = options.find((o) => o.key === data.modelKey)
-  const capabilities = opt
-    ? videoCapabilitiesFor(opt.provider.specId, opt.model.id)
-    : videoCapabilitiesFor('seedance')
-  const seedanceGatewayProxy = Boolean(
-    opt?.provider.specId === 'seedance' && opt.provider.baseURL.includes('/gateway/ark/')
+  // 兼容网关代理属于供应商接入事实，统一收在能力层；UI 只读取结构化能力。
+  const gatewayProxy = Boolean(
+    opt && isSeedanceGatewayProxy(opt.provider.specId, opt.provider.baseURL)
   )
+  const capabilities = opt
+    ? videoCapabilitiesFor(opt.provider.specId, opt.model.id, { gatewayProxy })
+    : videoCapabilitiesFor('seedance')
   const framesDetermineRatio = Boolean(
     opt &&
     videoRatioIsDerivedByFrames(opt.provider.specId, opt.model.id, Boolean(refImage || lastFrame))
@@ -141,6 +144,11 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     referenceImageCount: referenceImages.length + Number(Boolean(refImage)),
     referenceVideoCount: motionReferences.length,
     referenceAudioCount: audioReferences.length
+  })
+  const inputHints = videoInputHints(capabilities, {
+    hasFirstFrame: Boolean(refImage),
+    hasLastFrame: Boolean(lastFrame),
+    referenceImageCount: referenceImages.length
   })
 
   useEffect(() => {
@@ -158,7 +166,9 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const updateModel = (modelKey: string): void => {
     const next = options.find((option) => option.key === modelKey)
     const nextCapabilities = next
-      ? videoCapabilitiesFor(next.provider.specId, next.model.id)
+      ? videoCapabilitiesFor(next.provider.specId, next.model.id, {
+          gatewayProxy: isSeedanceGatewayProxy(next.provider.specId, next.provider.baseURL)
+        })
       : videoCapabilitiesFor('seedance')
     update({
       ...data,
@@ -358,13 +368,12 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
 
   return (
     <div className="gen-panel">
-      <div className="gen-capability-note">
-        <Icon name="info" size={13} />
-        <span>
-          {refImage ? '首帧已连接' : '可连接首帧'} · {lastFrame ? '尾帧已连接' : '可连接尾帧'} ·{' '}
-          {referenceImages.length ? `参考图 ${referenceImages.length} 张` : '可 @ 引用参考图'}
-        </span>
-      </div>
+      {inputHints.length > 0 && (
+        <div className="gen-capability-note">
+          <Icon name="info" size={13} />
+          <span>{inputHints.join(' · ')}</span>
+        </div>
+      )}
       {capabilityIssues.length > 0 && (
         <div className="gen-capability-note capability-error" role="alert">
           <Icon name="info" size={13} />
@@ -515,39 +524,43 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           ))}
         </AppSelect>
       </div>
-      {opt?.provider.specId === 'seedance' && !seedanceGatewayProxy && (
+      {(capabilities.supportsGeneratedAudio || capabilities.supportsSeed) && (
         <div className="gen-row video-advanced-row">
-          <label className="video-checkbox">
+          {capabilities.supportsGeneratedAudio && (
+            <label className="video-checkbox">
+              <input
+                type="checkbox"
+                checked={params.generateAudio ?? true}
+                onPointerDown={(e) => e.stopPropagation()}
+                onChange={(e) =>
+                  update({ ...data, params: { ...params, generateAudio: e.target.checked } })
+                }
+              />
+              生成同步音频
+            </label>
+          )}
+          {capabilities.supportsSeed && (
             <input
-              type="checkbox"
-              checked={params.generateAudio ?? true}
+              className="gen-seed"
+              type="number"
+              min="-1"
+              placeholder="种子（可选）"
+              value={params.seed ?? ''}
               onPointerDown={(e) => e.stopPropagation()}
               onChange={(e) =>
-                update({ ...data, params: { ...params, generateAudio: e.target.checked } })
+                update({
+                  ...data,
+                  params: {
+                    ...params,
+                    seed: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value)
+                  }
+                })
               }
             />
-            生成同步音频
-          </label>
-          <input
-            className="gen-seed"
-            type="number"
-            min="-1"
-            placeholder="种子（可选）"
-            value={params.seed ?? ''}
-            onPointerDown={(e) => e.stopPropagation()}
-            onChange={(e) =>
-              update({
-                ...data,
-                params: {
-                  ...params,
-                  seed: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value)
-                }
-              })
-            }
-          />
+          )}
         </div>
       )}
-      {seedanceGatewayProxy && (
+      {gatewayProxy && (
         <small className="gen-capability-note">
           当前兼容网关仅提交已验证的画幅、时长与清晰度参数；不展示未经验证的音频/种子开关。
         </small>
