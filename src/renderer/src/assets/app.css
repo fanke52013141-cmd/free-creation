@@ -1392,15 +1392,22 @@ select:focus-visible,
   cursor: default;
 }
 
-.text-node-meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 10px;
-  padding-top: 6px;
-  border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
-  color: var(--muted);
+.node-text-count {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-left: 4px;
   font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 3px 7px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--card) 92%, black 8%);
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  border-radius: 999px;
+  user-select: none;
+  pointer-events: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
 }
 
 .node-textarea {
@@ -2586,6 +2593,16 @@ select:focus-visible,
 }
 
 .contract-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  /* tab 栏是固定标题；内容区由 .contract-scroll 单独滚动，避免内容滚上来遮挡 tab。 */
+}
+
+.contract-scroll {
+  flex: 1;
+  min-height: 0;
   overflow: auto;
   padding: 14px;
 }
@@ -2594,10 +2611,14 @@ select:focus-visible,
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 3px;
-  margin: -2px 0 14px;
-  padding: 3px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  flex-shrink: 0;
+  margin: 0;
+  padding: 8px 14px 4px;
+  border-right: none;
+  border-left: none;
+  border-top: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
   background: rgba(255, 255, 255, 0.025);
 }
 
@@ -3709,7 +3730,7 @@ select:focus-visible,
 }
 
 .node-text,
-.contract-body,
+.contract-scroll,
 .side-panel-body,
 .assets-grid,
 .script-body,
@@ -3719,7 +3740,7 @@ select:focus-visible,
 }
 
 .node-text:hover,
-.contract-body:hover,
+.contract-scroll:hover,
 .side-panel-body:hover,
 .assets-grid:hover,
 .script-body:hover,
@@ -3728,7 +3749,7 @@ select:focus-visible,
 }
 
 .node-text::-webkit-scrollbar,
-.contract-body::-webkit-scrollbar,
+.contract-scroll::-webkit-scrollbar,
 .side-panel-body::-webkit-scrollbar,
 .assets-grid::-webkit-scrollbar,
 .script-body::-webkit-scrollbar,
@@ -3738,7 +3759,7 @@ select:focus-visible,
 }
 
 .node-text::-webkit-scrollbar-thumb,
-.contract-body::-webkit-scrollbar-thumb,
+.contract-scroll::-webkit-scrollbar-thumb,
 .side-panel-body::-webkit-scrollbar-thumb,
 .assets-grid::-webkit-scrollbar-thumb,
 .script-body::-webkit-scrollbar-thumb,
@@ -8077,7 +8098,7 @@ select:focus-visible,
 .side-panel-body,
 .assets-grid,
 .search-results,
-.contract-body,
+.contract-scroll,
 .json-body,
 .code-body,
 .node-text {
@@ -8087,7 +8108,7 @@ select:focus-visible,
 .side-panel-body::-webkit-scrollbar,
 .assets-grid::-webkit-scrollbar,
 .search-results::-webkit-scrollbar,
-.contract-body::-webkit-scrollbar,
+.contract-scroll::-webkit-scrollbar,
 .json-body::-webkit-scrollbar,
 .code-body::-webkit-scrollbar,
 .node-text::-webkit-scrollbar {
@@ -8097,7 +8118,7 @@ select:focus-visible,
 .side-panel-body::-webkit-scrollbar-thumb,
 .assets-grid::-webkit-scrollbar-thumb,
 .search-results::-webkit-scrollbar-thumb,
-.contract-body::-webkit-scrollbar-thumb,
+.contract-scroll::-webkit-scrollbar-thumb,
 .json-body::-webkit-scrollbar-thumb,
 .code-body::-webkit-scrollbar-thumb,
 .node-text::-webkit-scrollbar-thumb {
@@ -8107,7 +8128,7 @@ select:focus-visible,
 .side-panel-body::-webkit-scrollbar-track,
 .assets-grid::-webkit-scrollbar-track,
 .search-results::-webkit-scrollbar-track,
-.contract-body::-webkit-scrollbar-track,
+.contract-scroll::-webkit-scrollbar-track,
 .json-body::-webkit-scrollbar-track,
 .code-body::-webkit-scrollbar-track,
 .node-text::-webkit-scrollbar-track {
@@ -8545,4 +8566,48 @@ select:focus-visible,
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ============================================================
+   文本节点滚动条：仅视觉隐藏，保留滚动能力（overflow:auto 不受影响）。
+   ============================================================ */
+.node-text {
+  scrollbar-width: none;
+}
+.node-text::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* ============================================================
+   连线只保留虚线：彻底移除以图 selected 箭头上的实线指示 path。
+   - 节点选中框由 NodeCardUtil.indicator() 处理为无描边（stroke none
+     的 rect，移除后无任何影响）。
+   - 箭头为 tldraw 内置 shape，其选中指示是通用 ShapeIndicator
+     沿箭头路径描实的 <path class="tl-shape-indicator">。用 display:none
+     直接移除此 path 元素，比 stroke:none 更彻底（属性级移除，
+     无被内联 presentation attribute 覆盖的可能），确保框选/多选
+     时连线始终只有虚线、绝不出现实线。
+   ============================================================ */
+svg .tl-shape-indicator {
+  display: none !important;
+}
+
+/* 兜底：即便存在其它实线描边来源也一并关闭。 */
+svg[data-shape-type='arrow'] .tl-shape-indicator {
+  stroke: none !important;
+}
+
+/* ============================================================
+   选中/缩放框：全局去除框线，只保留 tldraw 圆形缩放手柄。
+   ------------------------------------------------------------
+   - 单节点选中框由 NodeCardUtil.indicator() 绘制（已改为无描边）。
+   - 多选/拖动时的整体外框：SelectionForeground 的实线 rect
+     (.tl-selection__fg__outline) 与 SelectionBackground 的填充
+     (.tl-selection__bg)。这里一并隐藏，保留 .tl-handle 圆圈。
+   ============================================================ */
+.tl-selection__fg__outline,
+.tl-selection__bg {
+  display: none !important;
 }

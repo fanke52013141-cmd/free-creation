@@ -45,7 +45,7 @@ export function NodeCreateMenu({
 }: NodeCreateMenuProps): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   const [menuHeight, setMenuHeight] = useState(0)
-  const [hoverCategory, setHoverCategory] = useState<NodeCategoryId | 'all' | null>(null)
+  const [hoverCategory, setHoverCategory] = useState<NodeCategoryId | null>(null)
   const hoverTimer = useRef<number | null>(null)
 
   useEffect(() => {
@@ -85,12 +85,11 @@ export function NodeCreateMenu({
     allChoices.some((c) => getNodeType(c.type)?.category === cat.id)
   )
   const showTabs = availableCategories.length > 1
-  const categoryOptions: Array<{ id: NodeCategoryId | 'all'; label: string }> = [
-    { id: 'all', label: '全部' },
-    ...availableCategories.map((cat) => ({ id: cat.id, label: cat.label }))
-  ]
+  const categoryOptions: Array<{ id: NodeCategoryId; label: string }> = availableCategories.map(
+    (cat) => ({ id: cat.id, label: cat.label })
+  )
   const submenuChoices =
-    hoverCategory === null || hoverCategory === 'all'
+    hoverCategory === null
       ? allChoices
       : allChoices.filter((c) => getNodeType(c.type)?.category === hoverCategory)
   const primaryLabels = showTabs
@@ -114,7 +113,7 @@ export function NodeCreateMenu({
         52
       )
   const left = Math.max(12, Math.min(x, window.innerWidth - primaryWidth - 24))
-  const showCategoryMenu = (category: NodeCategoryId | 'all'): void => {
+  const showCategoryMenu = (category: NodeCategoryId): void => {
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current)
     setHoverCategory(category)
   }
@@ -214,7 +213,7 @@ export function NodeCreateMenu({
           onBlur={hideCategoryMenu}
         >
           <div className="node-menu-submenu-title">
-            {categoryOptions.find((category) => category.id === hoverCategory)?.label ?? '全部'}
+            {categoryOptions.find((category) => category.id === hoverCategory)?.label ?? ''}
           </div>
           {renderChoices()}
         </div>

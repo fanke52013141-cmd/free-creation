@@ -709,20 +709,25 @@ export function useClickGuard(): {
   }
 }
 
-// 卡片内可滚动区域：内容可滚时截断 wheel 冒泡，避免滚动手势被画布抢走（缩放/平移）。
-// 必须用原生监听：tldraw 的 wheel 监听在容器上，React 合成事件的 stopPropagation 到不了它
+// 卡片内可滚动区域：内容可滚时消费滚轮，避免滚动手势被画布抢走（缩放/平移）。
+// 必须用原生监听（tldraw 的 wheel 在容器上，React 合成事件的 stopPropagation 到不了它）。
+// 在 document 捕获阶段拦截：始终读取 ref.current，故编辑态导致 div 重建后仍能生效。
+// 仅当事件落点在滚动容器内部、容器确有滚动量、且未按住修饰键时才 stopPropagation：
+//   修饰键（Ctrl/Meta/Alt）下的滚轮是画布缩放手势，应放行给 tldraw，不在此拦截。
 export function useWheelScroll(ref: React.RefObject<HTMLElement | null>): void {
   useEffect(() => {
-    const el = ref.current
-    if (!el) return
     const onWheel = (e: WheelEvent): void => {
-      const canScroll =
-        e.deltaY > 0 ? el.scrollTop + el.clientHeight < el.scrollHeight - 1 : el.scrollTop > 0
-      if (canScroll) e.stopPropagation()
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      const el = ref.current
+      if (!el) return
+      if (!(e.target instanceof Node)) return
+      if (el === e.target || el.contains(e.target)) {
+        if (el.scrollHeight > el.clientHeight) e.stopPropagation()
+      }
     }
-    el.addEventListener('wheel', onWheel, { passive: true })
+    document.addEventListener('wheel', onWheel, { capture: true, passive: true })
     return () => {
-      el.removeEventListener('wheel', onWheel)
+      document.removeEventListener('wheel', onWheel, { capture: true } as EventListenerOptions)
     }
   }, [ref])
 }

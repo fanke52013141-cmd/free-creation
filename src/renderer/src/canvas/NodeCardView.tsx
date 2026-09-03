@@ -17,6 +17,7 @@ import { beginConnectionDrag } from './connection-drag'
 import { markUndoPoint } from './history'
 import type { NodeCardShape } from './NodeCardShape'
 import { Icon } from '../components/Icon'
+import { parseSlashCommand } from '../nodes/slash-commands'
 import { nodeExecLabel } from './node-status'
 import { deriveInputPortReadiness, deriveNodeReadiness } from './node-readiness'
 import { runNodeManually } from '../engine/executor'
@@ -54,6 +55,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   const project = useAppStore((s) => s.currentProject)
   const providers = useGatewayStore((s) => s.providers)
   const spec = getNodeType(shape.props.nodeType)
+  // 文本开头是 slash 指令时，字数角标让位给"生成宫格"操作栏（与 TextBody 内部判断保持一致）。
+  const slashCmdForText =
+    shape.props.nodeType === 'text' ? Boolean(parseSlashCommand(shape.props.text ?? '')) : false
   const draft = useConnectionStore((s) => s.draft)
   const [preview, setPreview] = useState<{
     url: string
@@ -249,12 +253,16 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               aria-label="打开节点说明"
               onPointerDown={handleInfoOpen}
               onClick={(e) => {
-                stopEventPropagation(e)
+                e.stopPropagation()
                 openNodePanel()
               }}
             >
               <Icon name="info" size={13} />
             </button>
+            {/* 文本节点字数徽标：作为 header 行元素，与 序号/执行状态/info 图标 同一行对齐 */}
+            {shape.props.nodeType === 'text' && shape.props.text && !slashCmdForText && (
+              <span className="node-text-count">{shape.props.text.length} 字</span>
+            )}
           </div>
           <div className="node-body">
             {spec ? (

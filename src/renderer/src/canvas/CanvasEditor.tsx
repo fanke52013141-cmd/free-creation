@@ -239,6 +239,40 @@ export function CanvasEditor({
     }
   }, [project.id, providers])
 
+  // Ctrl/Cmd+滚轮缩放：tldraw 的 wheel 手势管线存在多重门控（容器 isFocused、
+  // 动量末事件过滤等），Ctrl+滚轮在这些门控下会被整体吞掉。这里在宿主捕获阶段
+  // 直接驱动相机：preventDefault 阻止浏览器页面缩放，stopPropagation 阻止 tldraw
+  // 把 Ctrl+滚轮当作平移处理，再以光标为锚点连续缩放。
+  useEffect(() => {
+    const el = wrapRef.current
+    if (!el || !editorInstance) return
+    const onWheel = (e: WheelEvent): void => {
+      if (!e.ctrlKey && !e.metaKey) return
+      const editor = editorRef.current
+      if (!editor) return
+      e.preventDefault()
+      e.stopPropagation()
+      // 滚轮一格按 20% 步进；触控板捏合等小增量按比例缩放
+      const dy = Math.abs(e.deltaY) > 10 ? 10 * Math.sign(e.deltaY) : e.deltaY
+      const rect = editor.getContainer().getBoundingClientRect()
+      const px = e.clientX - rect.left
+      const py = e.clientY - rect.top
+      const { x: cx, y: cy, z: cz } = editor.getCamera()
+      const baseZoom = editor.getBaseZoom()
+      const steps = editor.getCameraOptions().zoomSteps ?? [0.1, 1]
+      const zoom = Math.min(
+        steps[steps.length - 1] * baseZoom,
+        Math.max(steps[0] * baseZoom, cz * (1 - (dy / 100) * 2))
+      )
+      editor.setCamera(
+        { x: cx + px / zoom - px / cz, y: cy + py / zoom - py / cz, z: zoom },
+        { immediate: true }
+      )
+    }
+    el.addEventListener('wheel', onWheel, { capture: true, passive: false })
+    return () => el.removeEventListener('wheel', onWheel, { capture: true })
+  }, [editorInstance])
+
   // 左侧节点面板：点击在视口中心创建；拖拽到画布在落点创建
   const SIDEBAR_W = 72
   const nodeTypes = allNodeTypes()
@@ -459,9 +493,10 @@ export function CanvasEditor({
       const textBody =
         target.closest<HTMLElement>('[data-node-interactive="text-content"]') ??
         // pointer capture 重定向后 target 是 .tl-canvas，用双击坐标兜底重新命中。
-        (document
+        document
           .elementFromPoint(event.clientX, event.clientY)
-          ?.closest<HTMLElement>('[data-node-interactive="text-content"]') ?? null)
+          ?.closest<HTMLElement>('[data-node-interactive="text-content"]') ??
+        null
       if (textBody) {
         // mousedown 捕获层已转发过一次；这里再转发是幂等的（enterEditing 对已编辑态无副作用），
         // 并继续拦下 tldraw 的默认双击行为。

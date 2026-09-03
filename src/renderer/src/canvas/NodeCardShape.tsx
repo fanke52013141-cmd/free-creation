@@ -90,7 +90,7 @@ export class NodeCardUtil extends BaseBoxShapeUtil<NodeCardShape> {
     return shape.props.nodeType === 'text'
   }
 
-  /** 选中实线框紧贴节点轮廓，视觉上干净利落。 */
+  /** 选中时不再绘制节点外框实线，只保留 tldraw 自带的圆形缩放手柄。 */
   override indicator(shape: NodeCardShape): React.JSX.Element {
     const pad = 3
     return (
@@ -100,6 +100,8 @@ export class NodeCardUtil extends BaseBoxShapeUtil<NodeCardShape> {
         width={shape.props.w + pad * 2}
         height={shape.props.h + pad * 2}
         rx={16}
+        fill="none"
+        stroke="none"
       />
     )
   }

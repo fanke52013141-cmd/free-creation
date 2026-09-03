@@ -486,7 +486,8 @@ export function NodeContractPanel({
             </button>
           ))}
         </nav>
-        {tab === 'overview' && (
+        <div className="contract-scroll">
+          {tab === 'overview' && (
           <>
             <p className="contract-description">{spec.description}</p>
             <div className="contract-rule">
@@ -611,6 +612,7 @@ export function NodeContractPanel({
             )}
           </>
         )}
+        </div>
       </div>
     </aside>
   )
