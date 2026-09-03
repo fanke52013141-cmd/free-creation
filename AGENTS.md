@@ -17,6 +17,14 @@
 不得在 React 组件中绕过 executor 调用模型，不得按上游节点标题或类型猜测输入，不得用
 快捷按钮隐式产生未声明的业务输出。任何新处理能力必须是独立节点或明确的工作流模板。
 
+## Agent 契约同步
+
+任何触及节点能力面（端口 / Schema / configSchema / contractVersion / MCP 工具）的改动，
+必须在同一提交内运行 `npm run agent:generate` 并提交 `generated/agent-contracts.json`。
+破坏性变更（删除端口 / 修改端口类型 / required 收紧为必填）必须 bump `contractVersion`
+并同步 renderer spec。`npm run test` 中的两个门禁测试会拦截契约漂移与漏 bump。
+完整流程见 `docs/AGENT_SYNC_MECHANISM.md`。
+
 ## 本地数据安全
 
 项目导入导出不得包含 API Key。导入时必须重映射所有媒体 ID 和相对路径，包括

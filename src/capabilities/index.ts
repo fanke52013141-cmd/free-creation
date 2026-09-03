@@ -47,10 +47,11 @@ export {
   generateMatrixEntry,
   generateSnapshot,
   generateAll,
+  normalizeArtifacts,
   diffSnapshots,
   isBreakingChange
 } from './generate'
-export type { GeneratedArtifacts, ContractDiff } from './generate'
+export type { GeneratedArtifacts, ContractDiff, StableContractArtifacts } from './generate'
 
 // 能力定义（导入即注册）
 export { capabilityDefinitions } from './definitions'

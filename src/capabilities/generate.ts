@@ -136,6 +136,33 @@ export function generateAll(): GeneratedArtifacts {
   }
 }
 
+// ── 稳定产物归一化 ────────────────────────────────────────
+
+/** 提交到 generated/ 的稳定产物：剔除运行时审计时间戳，保证确定性。 */
+export type StableContractArtifacts = Omit<GeneratedArtifacts, 'generatedAt' | 'snapshots'> & {
+  snapshots: Array<Omit<ContractSnapshot, 'snapshotAt'>>
+}
+
+/**
+ * 把 generateAll() 的结果归一化为可提交的稳定产物：
+ * 剔除 generatedAt 与每个快照的 snapshotAt（仅供运行时审计的非确定性字段）。
+ *
+ * generate-entry.ts（写盘）与 test/agent/contract-snapshot-fresh.test.ts（对比）
+ * 必须共用此实现，避免两处归一化逻辑各自漂移——这是「契约的契约」。
+ */
+export function normalizeArtifacts(artifacts: GeneratedArtifacts): StableContractArtifacts {
+  const { generatedAt, snapshots, ...rest } = artifacts
+  void generatedAt
+  return {
+    ...rest,
+    snapshots: snapshots.map((current) => {
+      const { snapshotAt, ...snapshot } = current
+      void snapshotAt
+      return snapshot
+    })
+  }
+}
+
 function jsonSchemaType(type: string): string {
   switch (type) {
     case 'enum':

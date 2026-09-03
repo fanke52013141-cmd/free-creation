@@ -51,5 +51,11 @@ jobs:
       - name: 节点契约与执行器测试
         run: pnpm test
 
+      # Agent 契约同步机制（docs/AGENT_SYNC_MECHANISM.md）：
+      # 测试套件内已有快照新鲜度/版本 bump 门禁拦截漂移；
+      # 此显式步骤提供 PR 页面上独立、直观的红色标记，便于一眼识别契约漂移类失败。
+      - name: Agent 契约快照一致性
+        run: pnpm agent:check-contracts
+
       - name: 生产构建（Windows）
         run: pnpm build

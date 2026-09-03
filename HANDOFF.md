@@ -1,6 +1,6 @@
 # Canvas Studio 开发交接文档
 
-> 最后更新：2026-09-02
+> 最后更新：2026-09-03
 >
 > 当前分支：`main`。接手前必须执行 `git fetch origin` 与 `git status -sb`，不得依据本文旧哈希判断推送状态。
 >
@@ -9,6 +9,8 @@
 > 远程仓库：https://github.com/fanke52013141-cmd/free-creation
 >
 > 产品定位：单用户、本地优先的 Windows Electron 无限画布创作工具。
+
+> **最新交付（2026-09-03 Agent 契约同步机制）**：新增两道自动化门禁——契约快照新鲜度（`test/agent/contract-snapshot-fresh.test.ts`）与破坏性变更版本 bump（`test/agent/contract-version-bump.test.ts`），任何触及节点能力面的改动若未同步 `generated/agent-contracts.json` 或未提升 `contractVersion`，`npm run test` 直接拦截；CI 增加 `Agent 契约快照一致性` 显式步骤。归一化逻辑收敛到 `normalizeArtifacts()` 供写盘与测试共用。完整触发矩阵、门禁对照表和开发者工作流见 [docs/AGENT_SYNC_MECHANISM.md](./docs/AGENT_SYNC_MECHANISM.md)；工程约束已同步至 `AGENTS.md`。
 
 > **最新交付（2026-09-02 Agent P1–P3）**：Agent 的真实端到端 Headless 验收、运行查询/取消/重试及安全产物读取工具已完成；节点运行时契约已收口到 Capability Registry，JSON Schema 与 Agent 创建节点尺寸也已纳入硬校验。交接、验证命令和继续验收步骤见 [docs/HANDOFF_2026_09_02_AGENT_P1_P3.md](./docs/HANDOFF_2026_09_02_AGENT_P1_P3.md)。
 
