@@ -1,4 +1,8 @@
-# 文本节点输入修复交接（2026-09-02）
+# 文本节点输入修复交接（2026-09-02，根因已于 2026-09-03 更正）
+
+> **2026-09-03 根因更正**：桌面验收发现双击仍无法输入。Playwright 驱动打包版
+> 实测事件序列表明，本文件最初诊断的「焦点/闭包」不是根因（那些改动保留但非关键）。
+> 真正根因与修复见下方「根因更正」节。
 
 ## 背景
 
@@ -6,7 +10,7 @@
 修复落地在 `main` 的最新提交 `c214d45` 中，并已推送至
 `origin/main`（本地与远程哈希一致，无需再次推送）。
 
-## 根因
+## 根因（2026-09-02 初判，已被 2026-09-03 实测推翻）
 
 编辑态下创建的 `<textarea>` 本质是 tldraw 画布内的一个 HTML 节点，而 tldraw 会拦截
 键盘事件来响应快捷键。存在两个隐患：
@@ -51,3 +55,49 @@ pointerdown 默认聚焦行为，导致无法输入）。
 - 该提交 `c214d45` 同时包含 Agent 生产执行硬化等其他改动，文本输入修复是其子集；
   完整上下文见 [docs/HANDOFF_2026_09_01_AGENT_PRODUCTION.md](./HANDOFF_2026_09_01_AGENT_PRODUCTION.md)。
 - 根 `HANDOFF.md` 顶部已新增本条交付入口。
+
+## 根因更正（2026-09-03，Playwright 实测定位）
+
+### 真正的根因：tldraw pointer capture 重定向 dblclick target
+
+用 Playwright `_electron` 驱动打包版，捕获双击的完整事件序列：
+
+```
+pointerdown  target=DIV.node-text    ← 按下时命中正文（正常）
+mousedown    target=DIV.node-text    ← 正常（detail=2 的第二击也在正文上）
+pointerup    target=DIV.tl-canvas    ← 被重定向！
+click/dblclick target=DIV.tl-canvas  ← click target = mousedown/mouseup 最近公共祖先
+```
+
+tldraw 的 `useCanvasEvents` 在 `.tl-canvas` 的 pointerdown 处理里调用
+`setPointerCapture(e.currentTarget, e)`（`@tldraw/editor` `useCanvasEvents.mjs`）。
+此后 pointerup 的 target 被强制重定向到 `.tl-canvas`，浏览器合成的
+mouseup/click/dblclick 跟随。后果：
+
+1. `TextBody` 展示 div 上的 React `onDoubleClick` 永不触发（事件根本不经过正文）；
+2. `CanvasEditor` dblclick 捕获层的 `target.closest('[data-node-interactive="text-content"]')`
+   匹配失败（target 是 tl-canvas，不在任何 node-card-wrap 内），专用
+   `canvas:edit-text-node` 事件从不分发，textarea 从不挂载——「双击没办法输入」。
+
+手动 dispatch CustomEvent 时一切正常（textarea 出现且获焦），证明 TextBody/React
+层本身无恙，断点只在 dblclick 转发一环。
+
+### 修复（`src/renderer/src/canvas/CanvasEditor.tsx`）
+
+双击转发改在 `mousedown(detail===2)` 捕获阶段完成：mousedown 的 target 是浏览器
+hit-test 的原生结果，不受 pointer capture 影响，始终命中正文 div。dblclick 捕获层
+保留（继续阻止 tldraw 空白画布双击插入独立 text shape），并对 text-content 匹配
+增加 `elementFromPoint` 坐标兜底；两处转发的二次触发幂等无害（enterEditing 对
+已编辑态无副作用，此时用户尚未输入）。
+
+### 验证（Playwright 驱动 electron 真实事件序列）
+
+- 双击 → textarea 出现且获焦 ✅
+- 键盘输入（tldraw 不再扣留）✅
+- blur 提交 → 展示态更新、编辑器关闭 ✅
+- 再次双击可重复进入，textRef 同步显示最新落盘值 ✅
+
+### 已知遗留
+
+右键菜单「编辑」按钮（`NodeContextMenu.tsx`）只调用 `editor.setEditingShape(ids[0])`，
+不分发 `canvas:edit-text-node`，对文本节点同样无法打开编辑器——独立缺陷，待后续修复。

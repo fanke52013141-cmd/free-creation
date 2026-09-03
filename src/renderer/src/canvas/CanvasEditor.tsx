@@ -430,16 +430,42 @@ export function CanvasEditor({
   // 画布禁用 tldraw 的默认"双击插入白板文本"行为：节点正文使用自己的编辑器。
   // 文本正文在捕获阶段被拦下后，转发一个专用事件给 TextBody，避免同时出现一张
   // 独立 text shape（截图中的小文本框）和节点内 textarea。
+  //
+  // 关键：tldraw 的 useCanvasEvents 会在 pointerdown 时 setPointerCapture(tl-canvas)，
+  // 导致 pointerup 及合成 click/dblclick 的 target 被重定向到 .tl-canvas——
+  // dblclick 捕获层的 target.closest 永远匹配不到节点正文（tldraw 4.5.12 实测事件序列：
+  // mousedown target=node-text，mouseup/click/dblclick target=tl-canvas）。
+  // 因此双击转发必须在 mousedown(detail===2) 捕获阶段完成：mousedown 的 target
+  // 是浏览器 hit-test 的原生结果，不受 pointer capture 影响，始终命中正文 div。
+  // dblclick 捕获层保留（阻止 tldraw 在空白画布双击插入独立文本框），并对
+  // text-content 匹配增加坐标兜底（elementFromPoint）。
   useEffect(() => {
     const el = wrapRef.current
     if (!el) return
-    const onDblClickCapture = (event: MouseEvent): void => {
+    const dispatchEditText = (textBody: HTMLElement, event: MouseEvent): void => {
+      event.preventDefault()
+      event.stopPropagation()
+      textBody.dispatchEvent(new CustomEvent('canvas:edit-text-node'))
+    }
+    // 双击第二击的 mousedown：此时 target 仍是正文 div（未被 pointer capture 重定向）。
+    const onDoubleMouseDown = (event: MouseEvent): void => {
+      if (event.detail !== 2) return // 只处理双击的第二击
       const target = event.target as HTMLElement
       const textBody = target.closest<HTMLElement>('[data-node-interactive="text-content"]')
+      if (textBody) dispatchEditText(textBody, event)
+    }
+    const onDblClickCapture = (event: MouseEvent): void => {
+      const target = event.target as HTMLElement
+      const textBody =
+        target.closest<HTMLElement>('[data-node-interactive="text-content"]') ??
+        // pointer capture 重定向后 target 是 .tl-canvas，用双击坐标兜底重新命中。
+        (document
+          .elementFromPoint(event.clientX, event.clientY)
+          ?.closest<HTMLElement>('[data-node-interactive="text-content"]') ?? null)
       if (textBody) {
-        event.preventDefault()
-        event.stopPropagation()
-        textBody.dispatchEvent(new CustomEvent('canvas:edit-text-node'))
+        // mousedown 捕获层已转发过一次；这里再转发是幂等的（enterEditing 对已编辑态无副作用），
+        // 并继续拦下 tldraw 的默认双击行为。
+        dispatchEditText(textBody, event)
         return
       }
       // 空白画布不再有双击创建入口，也不能被 tldraw 自动插入独立文本框。
@@ -448,8 +474,12 @@ export function CanvasEditor({
         event.stopPropagation()
       }
     }
+    el.addEventListener('mousedown', onDoubleMouseDown, { capture: true })
     el.addEventListener('dblclick', onDblClickCapture, { capture: true })
-    return () => el.removeEventListener('dblclick', onDblClickCapture, { capture: true })
+    return () => {
+      el.removeEventListener('mousedown', onDoubleMouseDown, { capture: true })
+      el.removeEventListener('dblclick', onDblClickCapture, { capture: true })
+    }
   }, [])
 
   // 禁用 tldraw 的绘制类快捷键；输入控件和常用组合键不受影响。
