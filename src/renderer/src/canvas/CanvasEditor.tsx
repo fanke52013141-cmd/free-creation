@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ProjectMeta, MediaAsset, NodeTypeId } from '@shared/types'
 import { Tooltip } from '../components/Tooltip'
 import { NodeCardUtil, type NodeCardProps } from './NodeCardShape'
+import { CarrierArrowUtil } from './CarrierArrowUtil'
 import { repairTldrawSnapshot } from './tldrawSnapshotRepair'
 import { NodeCreateMenu } from './NodeCreateMenu'
 import { NodeContextMenu } from './NodeContextMenu'
@@ -999,7 +1000,7 @@ export function CanvasEditor({
     >
       <Tldraw
         onMount={handleMount}
-        shapeUtils={[NodeCardUtil]}
+        shapeUtils={[NodeCardUtil, CarrierArrowUtil]}
         cameraOptions={{
           // 默认滚轮平移画布，按住 Ctrl / Cmd 才缩放，符合画布编辑器的常用语义。
           wheelBehavior: 'pan',

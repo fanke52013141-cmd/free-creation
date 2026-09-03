@@ -85,7 +85,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     [editor, shape.id]
   )
 
-  // 右上角 info 图标：显式打开该节点的右侧面板。对话节点→聊天面板，其余→契约信息窗。
+  // 行首 info 图标：显式打开该节点的右侧面板。对话节点→聊天面板，其余→契约信息窗。
   // 单击节点只负责选中，不再自动弹出；点击此图标才呈现，避免选中与点图标打架。
   const handleInfoOpen = (e: React.PointerEvent<HTMLButtonElement>): void => {
     // 阻止指针事件继续，避免落入卡片选中/拖动逻辑
@@ -202,6 +202,26 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             <span className="node-icon" style={{ color: spec?.color }}>
               {spec ? <Icon name={spec.icon} size={15} /> : <Icon name="help" size={15} />}
             </span>
+            {/* 行首 info 按钮（查看输入输出说明）：与 序号/图标 同在标题行左端，
+                和右端的 运行/字数 分居两侧，不再挤在同一个角。 */}
+            <button
+              className="node-info-btn"
+              title={
+                shape.props.nodeType === 'chat'
+                  ? '打开对话面板'
+                  : shape.props.nodeType === 'director'
+                    ? '打开 3D 预演台'
+                    : '查看输入输出说明'
+              }
+              aria-label="打开节点说明"
+              onPointerDown={handleInfoOpen}
+              onClick={(e) => {
+                e.stopPropagation()
+                openNodePanel()
+              }}
+            >
+              <Icon name="info" size={13} />
+            </button>
             <div
               className={`node-title ${titleEditable ? 'editable' : ''} ${editing ? 'editing' : ''}`}
               contentEditable={editing}
@@ -241,25 +261,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                 </button>
               </Tooltip>
             )}
-            <button
-              className="node-info-btn"
-              title={
-                shape.props.nodeType === 'chat'
-                  ? '打开对话面板'
-                  : shape.props.nodeType === 'director'
-                    ? '打开 3D 预演台'
-                    : '查看输入输出说明'
-              }
-              aria-label="打开节点说明"
-              onPointerDown={handleInfoOpen}
-              onClick={(e) => {
-                e.stopPropagation()
-                openNodePanel()
-              }}
-            >
-              <Icon name="info" size={13} />
-            </button>
-            {/* 文本节点字数徽标：作为 header 行元素，与 序号/执行状态/info 图标 同一行对齐 */}
+            {/* 文本节点字数徽标：header 行最后一个元素，永远位于整行最右端 */}
             {shape.props.nodeType === 'text' && shape.props.text && !slashCmdForText && (
               <span className="node-text-count">{shape.props.text.length} 字</span>
             )}

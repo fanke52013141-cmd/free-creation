@@ -1258,7 +1258,7 @@ select:focus-visible,
   flex-shrink: 0;
 }
 
-/* 节点右上角 info 按钮：点击显式打开右侧面板（选中不触发） */
+/* 节点标题行左端 info 按钮（序号/图标旁）：点击显式打开右侧面板（选中不触发） */
 .node-info-btn {
   display: inline-flex;
   align-items: center;
@@ -8597,6 +8597,17 @@ svg .tl-shape-indicator {
 /* 兜底：即便存在其它实线描边来源也一并关闭。 */
 svg[data-shape-type='arrow'] .tl-shape-indicator {
   stroke: none !important;
+}
+
+/* ============================================================
+   tldraw 4.5 起箭头选中指示改走 canvas 绘制（CanvasShapeIndicators
+   经 ArrowShapeUtil.getIndicatorPath 描在专用 canvas 上），
+   上面对 svg 的规则管不到它。canvas 指示层在本应用里只可能描箭头
+   （节点卡片走 legacy SVG 指示），CarrierArrowUtil 已从源头禁用，
+   这里再整体隐藏兜底，确保框选/多选时连线永远只剩虚线。
+   ============================================================ */
+canvas.tl-canvas-indicators {
+  display: none !important;
 }
 
 /* ============================================================
