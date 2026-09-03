@@ -10,7 +10,11 @@
 >
 > 产品定位：单用户、本地优先的 Windows Electron 无限画布创作工具。
 
-> **最新交付（2026-09-03 Agent 契约同步机制）**：新增两道自动化门禁——契约快照新鲜度（`test/agent/contract-snapshot-fresh.test.ts`）与破坏性变更版本 bump（`test/agent/contract-version-bump.test.ts`），任何触及节点能力面的改动若未同步 `generated/agent-contracts.json` 或未提升 `contractVersion`，`npm run test` 直接拦截；CI 增加 `Agent 契约快照一致性` 显式步骤。归一化逻辑收敛到 `normalizeArtifacts()` 供写盘与测试共用。完整触发矩阵、门禁对照表和开发者工作流见 [docs/AGENT_SYNC_MECHANISM.md](./docs/AGENT_SYNC_MECHANISM.md)；工程约束已同步至 `AGENTS.md`。
+> **最新交付（2026-09-03 Sprint 2 + Agent 契约同步机制，均已推送至 `origin/main`）**：开发任务清零，仅剩桌面人工验收。今日两批交付：
+> ① **Sprint 2 媒体体验**——视频节点"重新生成"与来源摘要、供应商能力驱动的配置 UI（`3f8d986`、`8d4039b`）；
+> ② **Agent 契约同步机制**——双门禁测试拦截契约漂移与漏 bump（`3e2995a`），完整触发矩阵、门禁对照表和开发者工作流见 [docs/AGENT_SYNC_MECHANISM.md](./docs/AGENT_SYNC_MECHANISM.md)；工程约束已同步至 `AGENTS.md`。
+> 全量 `npm run verify` 通过（**847 项用例**），性能基线健康（100/500/1000 节点线性扩展），`dist/win-unpacked` 打包完成。
+> **当前仅剩桌面人工验收**：视频节点功能链路、文本节点双击输入修复冒烟（修复在 `c214d45`）、[docs/DESKTOP_ACCEPTANCE_CHECKLIST.md](./docs/DESKTOP_ACCEPTANCE_CHECKLIST.md) 全量门禁。
 
 > **最新交付（2026-09-02 Agent P1–P3）**：Agent 的真实端到端 Headless 验收、运行查询/取消/重试及安全产物读取工具已完成；节点运行时契约已收口到 Capability Registry，JSON Schema 与 Agent 创建节点尺寸也已纳入硬校验。交接、验证命令和继续验收步骤见 [docs/HANDOFF_2026_09_02_AGENT_P1_P3.md](./docs/HANDOFF_2026_09_02_AGENT_P1_P3.md)。
 
@@ -245,35 +249,28 @@ git status -sb
 
 ### 当前已验证基线
 
-- `pnpm typecheck`：通过（Node + Web 双端类型检查）。
-- `npx vitest run`：**53 个测试文件、617 项用例全部通过**（含 P0–P3 的 Active 清单、动态端口、就绪状态、图片/视频能力回归）。
+- `npm run verify`：全绿——lint、Node/Web 类型检查、**847 项用例**（含契约快照新鲜度、破坏性变更版本 bump 两道 Agent 契约门禁）、三端生产构建。
+- `pnpm benchmark:canvas`：100/500/1000 节点基线线性扩展健康（构造 2.8→7.4ms）。
 - `git diff --check`：通过。
 - Electron 手工测试：导演台发布链路已验证（PNG 帧与 WebM）；白屏问题已定位为旧 `node-card` 快照缺少 `config`，已修复。
-- 本轮 UI 优化六阶段尚未执行桌面端手工冒烟，验收路径详见 [docs/HANDOFF_2026_08_31_UI_OVERHAUL.md](./docs/HANDOFF_2026_08_31_UI_OVERHAUL.md)。
+- 待执行桌面冒烟：视频节点功能链路（重新生成/来源摘要/能力驱动 UI）、文本节点双击输入修复（`c214d45`，5 场景）；全量验收路径见 [docs/DESKTOP_ACCEPTANCE_CHECKLIST.md](./docs/DESKTOP_ACCEPTANCE_CHECKLIST.md)。
 - 构建仍会提示 `db.ts` 同时被动态与静态导入；它不阻断构建，列入后续技术债。
 - 桌面快捷方式 `Canvas Studio.lnk` 指向 `dist/win-unpacked/canvas-studio.exe`；本轮已验证该目标能保持运行。重新打包后必须确认 `resources/app/out/main/index.js` 存在，再通知用户点击快捷方式。
 
-### 本次功能提交
+### 最近提交链（截至 2026-09-03，均已推送至 `origin/main`）
 
-`39a32f2 feat: harden node workflows and director studio`
+| 提交     | 内容                                                                                       |
+| -------- | ------------------------------------------------------------------------------------------ |
+| `3e2995a` | Agent 契约同步机制：双门禁测试 + CI 显式步骤 + 机制文档（10 文件 +396/-14）                |
+| `8d4039b` | Sprint 2：视频节点 capability 驱动配置 UI                                                   |
+| `3f8d986` | Sprint 2：视频节点重新生成 + 来源摘要                                                       |
+| `cb54af9` | 全局 testTimeout 提升至 15s（I/O 密集并行套件）                                             |
+| `7c85d47`–`0a698c0` | AG-6：故障恢复测试、并发写安全锁、ProjectFileWatcher 双向同步                    |
+| `a219212` | Renderer Adapter P3：执行器共享层 + headless vm 沙箱 + 契约唯一来源                        |
+| `c214d45` | Agent 生产执行加固（含文本节点双击输入修复）；交接见 [docs/HANDOFF_2026_09_02_TEXT_EDIT_INPUT.md](./docs/HANDOFF_2026_09_02_TEXT_EDIT_INPUT.md) |
+| `39a32f2` | 节点契约治理、导入媒体重映射与事务保护、导演台 2D/3D 预演、P0–P4 UI 修复及对应测试           |
 
-该提交包含节点契约治理、导入媒体重映射与事务保护、导演台 2D/3D 预演和发布、节点状态/运行记录、P0–P4 UI 修复及对应测试。提交不包含 API Key、SQLite、本地项目目录、生成媒体或打包产物。
-
-`76e943c feat: add run center and precise media provenance`（本地提交，尚未推送）
-
-该提交新增跨节点运行中心和只读运行索引；失败运行可从统一 executor 路径重试，资产可定位到精确产生它的 `runId`。每个生成结果只增加可选的持久化 `runId`，既有端口、节点类型、连线语义和旧结果的安全回退保持不变。
-
-### 当前未提交：视频节点 v2 重构（2026-08-30 第三批）
-
-详见 [docs/HANDOFF_2026_08_30_VIDEO_RESTRUCTURE.md](./docs/HANDOFF_2026_08_30_VIDEO_RESTRUCTURE.md)。本轮包含：
-
-1. **视频节点 v2 重构**：三个视频变换节点（`video-frame`/`video-clip`/`video-audio`）升级为 contractVersion 2，各自拥有独立配置类型（删除旧的共享 `VideoRangeConfig`）。修改 `src/shared/video-transform.ts`、`video-transforms.tsx`、`videoTransforms.ts` 等。
-2. **独立人声分离节点（`vocal-separate`）**：从 `video-audio` 解耦为独立节点；双输出端口（`out-vocals` + `out-accompaniment`）；快速 FFmpeg 和高质量 AI 双模式。新增 `vocalSeparate.ts` 执行器和 `vocal-separate.tsx` Body/Settings。
-3. **统一媒体时间轴（`MediaTimeline`）**：10 帧缩略图、300 点波形预览、播放/暂停/逐帧导航、循环预览、手动时间码输入。新增 `generateVideoThumbnails` 和 `generateAudioWaveform` IPC。
-4. **图片宫格拆分节点（`image-split`）**：新增节点，宫格预览、面积缩放、最大 8x8。新增 `src/shared/image-split.ts`、执行器和 Body。
-5. **快捷入口与一键模板**：视频资产节点新增"一键提取人声"按钮（自动创建 `video-audio` → `vocal-separate` 并预连线）；三个变换节点结果卡新增下游快捷按钮。
-
-验证：`npx vitest run` **45 文件 576 项全部通过**；`npx tsc --noEmit` 零错误。本轮尚未执行 Electron 桌面端手工冒烟，验收路径见交接单。
+历史批次（视频节点 v2 重构、功能批量交付、IA-2 资产与运行中心等）均已在更早提交中合入 `main`，详情见各自交接文档；提交不包含 API Key、SQLite、本地项目目录、生成媒体或打包产物。
 
 ### CR-0 / CR-1 / CR-2（2026-08-29）
 
@@ -298,13 +295,13 @@ git status -sb
 
 ### 当前验证计划（唯一后续范围）
 
-Sprint 0（交接与发布基线校准）、Sprint 2（全节点协议与能力审计）、Sprint 3（参考项目能力对齐审计）、导演台安排及 P0–P3 协议/能力优化已完成。本轮不新增节点类型、不调整导演台能力；后续只允许执行下列验证或由验证结果引出的缺陷修复。
+Sprint 0–4 开发部分全部完成并推送；Sprint 2 媒体体验（视频重新生成/来源摘要/能力驱动 UI）与 Agent 契约同步机制已于 2026-09-03 合入 `main`。**当前只剩桌面人工验收**，各项状态：
 
-1. 自动门禁：`npm run verify`、`git diff --check`，并记录准确测试数量。
-2. 桌面人工回归：按 [docs/DESKTOP_ACCEPTANCE_CHECKLIST.md](./docs/DESKTOP_ACCEPTANCE_CHECKLIST.md) 验收画布、持久化、供应商、媒体、导入导出与 UI。
-3. 性能与本地稳定性：运行 `benchmark:canvas` 的 100/500/1000 节点基线，并进行保存重开、异常恢复和离线运行检查。
-4. 真实供应商回归：以用户本地已配置模型验证图片与视频；视频至少覆盖 Seedance/MiniMax H3 的 16:9、9:16、秒数、失败提示和取消。API Key 不进入日志、项目或仓库。
-5. 导演台验收：只验证既有 v2 的重开、手动发布、下游视频参考连线、未发布无输出与导入导出重映射；图片直接建模不在本轮范围。
+1. 自动门禁：✅ 已完成——`npm run verify` 全绿（847 项用例）、`git diff --check` 通过、`benchmark:canvas` 100/500/1000 节点线性健康、`dist/win-unpacked` 打包完成。
+2. 桌面人工回归：⏳ 进行中——按 [docs/DESKTOP_ACCEPTANCE_CHECKLIST.md](./docs/DESKTOP_ACCEPTANCE_CHECKLIST.md) 验收画布、持久化、供应商、媒体、导入导出与 UI；文本节点双击输入修复（`c214d45`）需完成 5 场景冒烟。
+3. 性能与本地稳定性：⏳ 量化基线已留档（构造 2.8→7.4ms）；保存重开、异常恢复和离线运行检查待桌面执行。
+4. 真实供应商回归：⏳ 以用户本地已配置模型验证图片与视频；视频至少覆盖 Seedance/MiniMax H3 的 16:9、9:16、秒数、失败提示和取消；本轮新增重点为视频节点"重新生成"、来源摘要与能力驱动配置 UI。API Key 不进入日志、项目或仓库。
+5. 导演台验收：⏳ 只验证既有 v2 的重开、手动发布、下游视频参考连线、未发布无输出与导入导出重映射；图片直接建模不在本轮范围。
 
 候选能力（图片模型精确 16:9/9:16 支持、反推提示词、放大、角度控制）已记录在 [docs/NODE_PROTOCOL_AUDIT_2026_08_31.md](./docs/NODE_PROTOCOL_AUDIT_2026_08_31.md)，不自动进入开发队列。
 
