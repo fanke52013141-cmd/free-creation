@@ -1,6 +1,6 @@
 # Canvas Studio 开发交接文档
 
-> 最后更新：2026-09-03
+> 最后更新：2026-09-04
 >
 > 当前分支：`main`。接手前必须执行 `git fetch origin` 与 `git status -sb`，不得依据本文旧哈希判断推送状态。
 >
@@ -9,6 +9,14 @@
 > 远程仓库：https://github.com/fanke52013141-cmd/free-creation
 >
 > 产品定位：单用户、本地优先的 Windows Electron 无限画布创作工具。
+
+> **最新交付（2026-09-04 图片节点优化 + Ctrl+滚轮接管排查，已推送至 `origin/main`）**：提交 `454f21b`
+> 完成图片节点四件事——图片资产节点新增可选 `in-image` 输入端口（拆分展开的连线归属）、图片拆分自动
+> 展开为独立图片节点并自动连线（幂等防重复）、拆分按钮移到底部、内容多节点滚动修复；`agent-contracts.json`
+> 已同步。全量 `npm test` 67 文件 847 用例通过。另排查用户反馈「未选中时 Ctrl+滚轮缩放失效」：代码本身正常，
+> 根因是用户运行的是不含接管逻辑的旧 exe（2026-09-03 14:20，早于 `ed38a1f`）；已重新打包
+> `dist/win-unpacked/canvas-studio.exe`（09-04 17:39），Playwright 实测重打包 exe Ctrl+滚轮 100%→173% 生效。
+> 完整覆盖/缺口清单见 [docs/HANDOFF_2026_09_04_IMAGE_NODE_OPTIMIZATION.md](./docs/HANDOFF_2026_09_04_IMAGE_NODE_OPTIMIZATION.md)。
 
 > **最新交付（2026-09-03 文本节点双击输入根因修复，Playwright 实测定位）**：桌面验收发现 `c214d45` 的修复无效。真实根因是 tldraw `useCanvasEvents` 在 pointerdown 时 `setPointerCapture(tl-canvas)`，把 dblclick 的 target 重定向到 `.tl-canvas`，导致双击转发永不命中正文。修复：转发改在 `mousedown(detail===2)` 捕获阶段（target 是 hit-test 原生结果，不受 capture 影响）。Playwright 驱动打包版验证双击/输入/提交/重复进入全链路 ✅，`dist/win-unpacked` 已重新打包。根因链、事件序列证据与遗留缺陷见 [docs/HANDOFF_2026_09_02_TEXT_EDIT_INPUT.md](./docs/HANDOFF_2026_09_02_TEXT_EDIT_INPUT.md)（根因更正节）。
 
@@ -259,10 +267,13 @@ git status -sb
 - 构建仍会提示 `db.ts` 同时被动态与静态导入；它不阻断构建，列入后续技术债。
 - 桌面快捷方式 `Canvas Studio.lnk` 指向 `dist/win-unpacked/canvas-studio.exe`；本轮已验证该目标能保持运行。重新打包后必须确认 `resources/app/out/main/index.js` 存在，再通知用户点击快捷方式。
 
-### 最近提交链（截至 2026-09-03，均已推送至 `origin/main`）
+### 最近提交链（截至 2026-09-04，均已推送至 `origin/main`）
 
 | 提交     | 内容                                                                                       |
 | -------- | ------------------------------------------------------------------------------------------ |
+| `454f21b` | 图片节点优化与拆分自动展开：图片资产新增 `in-image` 端口、拆分自动展开为节点+连线、拆分按钮到底部、内容多节点滚动修复 + 契约同步（28 文件 +1007/-229） |
+| `5c69d4a` | 节点标题行按钮重排与框选实线根修                                                           |
+| `ed38a1f` | Ctrl+滚轮缩放接管与节点交互细节修复                                                        |
 | `3e2995a` | Agent 契约同步机制：双门禁测试 + CI 显式步骤 + 机制文档（10 文件 +396/-14）                |
 | `8d4039b` | Sprint 2：视频节点 capability 驱动配置 UI                                                   |
 | `3f8d986` | Sprint 2：视频节点重新生成 + 来源摘要                                                       |
