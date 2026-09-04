@@ -50,7 +50,6 @@ export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeE
       modelId: option.model.id,
       prompt,
       size: config.size,
-      ...(typeof config.seed === 'number' && config.seed > 0 ? { seed: config.seed } : {}),
       ...(capabilities.forwardsAspectRatio && config.aspectRatio !== 'auto'
         ? { aspectRatio: config.aspectRatio }
         : {}),

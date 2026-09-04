@@ -33,7 +33,6 @@ export async function generateImageToAsset(input: ImageGenerateInput): Promise<M
   const referenceImages = await Promise.all(referenceIds.map(mediaToBuffer))
 
   return generateImageWithReference(input, referenceImages, {
-    ...(typeof input.seed === 'number' && input.seed > 0 ? { seed: input.seed } : {}),
     ...(input.aspectRatio ? { aspectRatio: input.aspectRatio } : {})
   })
 }

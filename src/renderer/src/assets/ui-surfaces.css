@@ -1430,6 +1430,46 @@
   transform: translateY(-1px) scale(1.08);
 }
 
+/* 运行按钮与说明按钮分离：它贴在节点框右上角，不占用标题行宽度。 */
+.node-action-float {
+  position: absolute;
+  z-index: 12;
+  top: -34px;
+  right: -4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  pointer-events: auto;
+}
+
+.node-readiness-badge {
+  display: inline-flex;
+  align-items: center;
+  max-width: 116px;
+  height: 18px;
+  padding: 0 7px;
+  border: 1px solid rgba(52, 211, 153, 0.28);
+  border-radius: 999px;
+  background: rgba(16, 45, 42, 0.82);
+  color: #7be8bd;
+  font-size: 10px;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 选中态保持圆角虚线，色带仍只承担节点类型识别。 */
+.node-card-wrap.is-selected .node-card,
+.tl-shape__inner--selected .node-card {
+  border-style: dashed;
+}
+
+.tl-selection__fg__outline {
+  stroke-dasharray: 7 5 !important;
+}
+
 /* 不让运行 / 保存工作流抢走多选工具栏的统一节奏。 */
 .ms-run,
 .ms-template,

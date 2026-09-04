@@ -6,13 +6,13 @@ import {
 } from '@shared/image-capabilities'
 
 describe('图片模型能力描述', () => {
-  it('公开稳定的比例与尺寸映射，不把未知服务端参数伪装为可用', () => {
+  it('公开稳定的常用画幅意图，并保留自动尺寸回退', () => {
     const capabilities = imageCapabilitiesFor('relay', 'custom-image-model')
-    expect(capabilities.ratios).toEqual(['auto', '1:1', '3:2', '2:3'])
-    expect(sizesForImageAspectRatio(capabilities, '3:2')).toEqual([
-      { value: '1536x1024', label: '1536 × 1024', ratio: '3:2' }
+    expect(capabilities.ratios).toEqual(['auto', '1:1', '16:9', '9:16', '4:3', '3:4', '21:9'])
+    expect(sizesForImageAspectRatio(capabilities, '16:9')).toEqual([
+      { value: 'auto', label: '自动尺寸（16:9）', ratio: '16:9' }
     ])
-    expect(capabilities.forwardsAspectRatio).toBe(false)
+    expect(capabilities.forwardsAspectRatio).toBe(true)
   })
 
   it('旧 size-only 配置和模型切换后的无效值都归一为合法比例/尺寸组合', () => {
@@ -20,8 +20,8 @@ describe('图片模型能力描述', () => {
     expect(
       normalizeImageGenerationConfig({ prompt: '海边', size: '1024x1536' }, capabilities)
     ).toMatchObject({
-      aspectRatio: '2:3',
-      size: '1024x1536'
+      aspectRatio: '9:16',
+      size: 'auto'
     })
     expect(
       normalizeImageGenerationConfig({ aspectRatio: '1:1', size: '1536x1024' }, capabilities)

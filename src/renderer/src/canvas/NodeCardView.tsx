@@ -208,9 +208,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             style={{ ['--node-accent' as string]: spec?.color ?? '#42b9f5' }}
           />
           <div className="node-header">
-            {/* 标题行布局（用户重排）：左侧依次为 序号 → 图标 → 名称 → 查看输入输出说明，
-                文本节点的字数徽标紧跟说明按钮；右侧依次为 状态灯 → 运行按钮（最右），
-                中间以弹性 spacer 推开，左右两组分居两端。 */}
+            {/* 标题行布局：左侧依次为 序号 → 图标 → 名称 → 查看输入输出说明；
+                状态灯保留在标题行，运行动作独立浮在卡片右上角，避免挤压标题。 */}
             <span className="node-seq" title={`节点序号 ${seq}`}>
               {seq}
             </span>
@@ -219,6 +218,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             </span>
             <div
               className={`node-title ${titleEditable ? 'editable' : ''} ${editing ? 'editing' : ''}`}
+              title={spec?.description ?? shape.props.title}
               contentEditable={editing}
               suppressContentEditableWarning
               spellCheck={false}
@@ -259,7 +259,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             {shape.props.nodeType === 'text' && shape.props.text && !slashCmdForText && (
               <span className="node-text-count">{formatCharCount(shape.props.text.length)}</span>
             )}
-            {/* 弹性占位：把右侧 状态灯/运行按钮 推到标题行右端 */}
+            {/* 弹性占位：把状态灯推到标题行右端 */}
             <span className="node-header-spacer" />
             <span
               className={`node-status node-status-${shape.props.exec}`}
@@ -267,22 +267,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               title={`${statusLabel} · ${readiness.label}`}
               aria-label={`${statusLabel} · ${readiness.label}`}
             />
-            {selected && spec?.executor && (
-              <Tooltip label="运行此节点（使用已连接的上游结果）">
-                <button
-                  className="node-run-btn"
-                  aria-label="运行此节点"
-                  disabled={shape.props.exec === 'running' || !project}
-                  onPointerDown={(event) => stopEventPropagation(event)}
-                  onClick={(event) => {
-                    stopEventPropagation(event)
-                    if (project) void runNodeManually(editor, project.id, providers, shape.id)
-                  }}
-                >
-                  <Icon name="play" size={12} />
-                </button>
-              </Tooltip>
-            )}
           </div>
           <div className="node-body">
             {spec ? (
@@ -292,6 +276,31 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             )}
           </div>
         </div>
+
+        {/* 运行是节点级动作：独立放在卡片右上角，和说明按钮分开，避免标题被挤压。 */}
+        {selected && spec?.executor && (
+          <div className="node-action-float" aria-label="节点动作">
+            {readiness.kind === 'ready' && (
+              <span className="node-readiness-badge" title={readiness.detail}>
+                执行成功可运行
+              </span>
+            )}
+            <Tooltip label="运行此节点（使用已连接的上游结果）">
+              <button
+                className="node-run-btn"
+                aria-label="运行此节点"
+                disabled={shape.props.exec === 'running' || !project}
+                onPointerDown={(event) => stopEventPropagation(event)}
+                onClick={(event) => {
+                  stopEventPropagation(event)
+                  if (project) void runNodeManually(editor, project.id, providers, shape.id)
+                }}
+              >
+                <Icon name="play" size={12} />
+              </button>
+            </Tooltip>
+          </div>
+        )}
 
         {/* 输入端口（左侧）：拖线时按类型兼容高亮 */}
         {inPorts.map((p, i) => {
@@ -366,7 +375,16 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                     <Icon name="copy" size={14} />
                   </button>
                 </span>
-                <button className="icon-btn" onClick={() => setPreview(null)}>
+                <button
+                  className="icon-btn"
+                  title="关闭预览"
+                  aria-label="关闭预览"
+                  onPointerDown={(e) => stopEventPropagation(e)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setPreview(null)
+                  }}
+                >
                   <Icon name="close" size={16} />
                 </button>
               </div>

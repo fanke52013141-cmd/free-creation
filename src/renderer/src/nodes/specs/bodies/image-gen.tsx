@@ -1,7 +1,6 @@
 // 生图节点 Body（路线图 R6：bodies.tsx 拆分）
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
-import { PROVIDER_SPECS } from '@shared/types'
 import {
   imageCapabilitiesFor,
   normalizeImageGenerationConfig,
@@ -67,6 +66,7 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
   const sizeOptions = sizesForImageAspectRatio(capabilities, config.aspectRatio)
   const [draft, setDraft] = useState(data.prompt)
   const [busy, setBusy] = useState(false)
+  const promptRef = useRef<HTMLTextAreaElement | null>(null)
 
   useEffect(() => {
     if (!loaded) void loadProviders()
@@ -90,6 +90,27 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
   const referenceImages = [...(refImage ? [refImage] : []), ...multiReferenceImages].filter(
     (image, index, items) => items.findIndex((item) => item.mediaId === image.mediaId) === index
   )
+  const mentionMatch = draft.match(/@([^\s]*)$/)
+  const showMentionMenu = referenceImages.length > 0 && mentionMatch !== null
+
+  const insertReferenceMention = (index: number): void => {
+    const textarea = promptRef.current
+    const caret = textarea?.selectionStart ?? draft.length
+    const before = draft.slice(0, caret)
+    const after = draft.slice(textarea?.selectionEnd ?? caret)
+    const match = before.match(/@([^\s]*)$/)
+    const replacement = `@图片 ${index + 1} `
+    const next = match
+      ? `${before.slice(0, before.length - match[0].length)}${match[0].startsWith(' ') ? ' ' : ''}${replacement}${after}`
+      : `${before}${replacement}${after}`
+    setDraft(next)
+    requestAnimationFrame(() => {
+      if (!textarea) return
+      const position = before.length - (match?.[0].length ?? 0) + replacement.length
+      textarea.focus()
+      textarea.setSelectionRange(position, position)
+    })
+  }
 
   const generate = async (): Promise<void> => {
     if (!project) return toast('项目未就绪')
@@ -190,40 +211,35 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
 
   return (
     <div className="gen-panel">
-      {(() => {
-        const sel = selected
-        const spec = sel ? PROVIDER_SPECS.find((s) => s.id === sel.provider.specId) : undefined
-        const notes = [
-          spec ? spec.desc : '',
-          referenceImages.length > 0
-            ? `参考图：${referenceImages.length} 张已连接`
-            : '参考图：可连上游图片',
-          `${config.aspectRatio === 'auto' ? '画幅：默认' : `画幅：${config.aspectRatio}`}`,
-          typeof config.seed === 'number' ? '种子：固定' : '种子：随机'
-        ].filter(Boolean)
-        return notes.length > 0 ? (
-          <div className="gen-capability-note">
-            <Icon name="info" size={13} />
-            <span>{notes.join(' · ')}</span>
-          </div>
-        ) : null
-      })()}
       {referenceImages.length > 0 && (
         <div className="ref-image-bar">
           <div className="ref-image-stack" aria-label={`${referenceImages.length} 张参考图`}>
             {referenceImages.slice(0, 4).map((image, index) => (
-              <img
+              <button
                 key={image.mediaId}
-                src={mediaUrl(image.mediaPath)}
-                className="ref-image-thumb"
-                draggable={false}
-                alt={`参考图 ${index + 1}`}
-              />
+                type="button"
+                className="ref-image-chip"
+                title={`插入 @图片 ${index + 1}`}
+                aria-label={`插入 @图片 ${index + 1}`}
+                onPointerDown={(e) => stopEventPropagation(e)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  insertReferenceMention(index)
+                }}
+              >
+                <img
+                  className="ref-image-thumb"
+                  src={mediaUrl(image.mediaPath)}
+                  alt={`图片 ${index + 1}`}
+                  draggable={false}
+                />
+                <span>图片 {index + 1}</span>
+              </button>
             ))}
           </div>
           <span className="ref-image-label">
             <Icon name="attach" size={13} />
-            {referenceImages.length} 张参考图已连接（最多提交 4 张）
+            已连接 {referenceImages.length} 张参考图，可用 @图片 1… 调用
           </span>
         </div>
       )}
@@ -278,19 +294,9 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
             </option>
           ))}
         </AppSelect>
-        <input
-          className="gen-seed"
-          type="number"
-          placeholder="种子"
-          value={config.seed ?? ''}
-          min="1"
-          onPointerDown={(e) => e.stopPropagation()}
-          onChange={(e) =>
-            update({ ...config, seed: e.target.value ? Number(e.target.value) : undefined })
-          }
-        />
       </div>
       <textarea
+        ref={promptRef}
         className="gen-prompt"
         value={draft}
         rows={3}
@@ -300,6 +306,24 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
         onBlur={() => update({ ...config, prompt: draft })}
         onPointerDown={(e) => e.stopPropagation()}
       />
+      {showMentionMenu && (
+        <div className="ref-mention-menu" role="listbox" aria-label="选择参考图片">
+          {referenceImages.slice(0, 4).map((image, index) => (
+            <button
+              type="button"
+              key={image.mediaId}
+              onPointerDown={(e) => stopEventPropagation(e)}
+              onClick={(e) => {
+                e.stopPropagation()
+                insertReferenceMention(index)
+              }}
+            >
+              <img src={mediaUrl(image.mediaPath)} alt="" />
+              @图片 {index + 1}
+            </button>
+          ))}
+        </div>
+      )}
       <button
         className="btn-primary small gen-go"
         disabled={busy}

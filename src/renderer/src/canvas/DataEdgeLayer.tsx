@@ -52,9 +52,13 @@ function collectEdges(editor: Editor, host: HTMLDivElement): ScreenEdge[] {
     const targetBounds = editor.getShapePageBounds(target.id)
     if (!sourceBounds || !targetBounds) continue
     const sourceAnchorY =
-      source.props.h > 0 ? sourceBounds.y + (sourceBounds.height * fromY) / source.props.h : sourceBounds.y
+      source.props.h > 0
+        ? sourceBounds.y + (sourceBounds.height * fromY) / source.props.h
+        : sourceBounds.y
     const targetAnchorY =
-      target.props.h > 0 ? targetBounds.y + (targetBounds.height * toY) / target.props.h : targetBounds.y
+      target.props.h > 0
+        ? targetBounds.y + (targetBounds.height * toY) / target.props.h
+        : targetBounds.y
     const startScreen = editor.pageToScreen({ x: sourceBounds.maxX, y: sourceAnchorY })
     const endScreen = editor.pageToScreen({ x: targetBounds.x, y: targetAnchorY })
     const fromPort = sourcePorts.out[fromIndex]
@@ -114,10 +118,18 @@ export function DataEdgeLayer({
     }
     const offDocument = editor.store.listen(update, { scope: 'document' })
     const offSession = editor.store.listen(update, { scope: 'session' })
+    // tldraw 的相机缩放/平移不会产生 document 变更；它只在每帧更新 camera。
+    // 连线坐标是 pageToScreen 的结果，因此必须在 camera tick 中重算，否则缩放时
+    // 节点已经移动而 SVG 仍保留上一帧的端点，视觉上就会出现“线变形/脱离节点”。
+    const onTick = (): void => update()
+    editor.on('tick', onTick)
+    editor.on('resize', onTick)
     window.addEventListener('resize', update)
     return () => {
       offDocument()
       offSession()
+      editor.off('tick', onTick)
+      editor.off('resize', onTick)
       if (frame) cancelAnimationFrame(frame)
       window.removeEventListener('resize', update)
     }
@@ -147,6 +159,9 @@ export function DataEdgeLayer({
   // “这次按下属于连线选中”还是“完全放行给画布框选”。
   useEffect(() => {
     const onPointerDown = (event: PointerEvent): void => {
+      // 预览弹层通过 portal 挂到 body；弹层上方即使覆盖着一条画布连线，也不能
+      // 被连线的 window 捕获监听抢走 pointerdown，否则关闭按钮会收不到 click。
+      if (event.target instanceof Element && event.target.closest('.media-preview-mask')) return
       const hit = hitTest(event.clientX, event.clientY)
       if (!hit) return
       // 命中连线：选中并终止传播，画布不会开始框选/平移，已选连线也不会被清除。
@@ -155,6 +170,7 @@ export function DataEdgeLayer({
       select(hit)
     }
     const onContextMenu = (event: MouseEvent): void => {
+      if (event.target instanceof Element && event.target.closest('.media-preview-mask')) return
       const hit = hitTest(event.clientX, event.clientY)
       if (!hit) return
       // 右键落在连线上：选中该连线，且不让空白处的创建菜单弹出。
