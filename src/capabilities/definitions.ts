@@ -70,7 +70,17 @@ const imageCapability = defineCapability({
   title: '图片',
   description: '图片资产节点，只负责保存和输出一张已导入的图片，不承担生成逻辑。',
   category: 'input',
-  inputs: [],
+  inputs: [
+    {
+      id: 'in-image',
+      name: '图源',
+      type: 'image',
+      required: false,
+      cardinality: 'one',
+      description:
+        '可选的上游图片来源；主要用于拆分结果展开后的连线归属，资产仍以本节点已导入的媒体为准。'
+    }
+  ],
   outputs: [
     {
       id: 'out-image',

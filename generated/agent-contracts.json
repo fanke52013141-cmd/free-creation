@@ -1118,7 +1118,7 @@
       "contractVersion": 1,
       "cli": true,
       "mcp": true,
-      "inputs": 0,
+      "inputs": 1,
       "outputs": 1,
       "headless": true
     },
@@ -1932,7 +1932,16 @@
     {
       "capabilityId": "image.source",
       "version": "1.0.0",
-      "inputs": [],
+      "inputs": [
+        {
+          "id": "in-image",
+          "name": "图源",
+          "type": "image",
+          "required": false,
+          "cardinality": "one",
+          "description": "可选的上游图片来源；主要用于拆分结果展开后的连线归属，资产仍以本节点已导入的媒体为准。"
+        }
+      ],
       "outputs": [
         {
           "id": "out-image",

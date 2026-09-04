@@ -170,7 +170,8 @@ function rectCorners(config: ImageCropConfig): NormalizedPoint[] {
 
 export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.Element {
   const guard = useClickGuard()
-  const openSettings = (): void => useNodePanelStore.getState().open('contract', shape.id)
+  const openSettings = (): void =>
+    useNodePanelStore.getState().open('contract', shape.id, 'settings')
   if (!shape.props.mediaPath) {
     return (
       <div className="asset-empty crop-empty">

@@ -7,6 +7,8 @@ out
 *.log*
 .docx_review/
 *.docx
+benchmark-baseline/
+pnpm-lock.yaml.packaging-backup
 M4-模型网关-开源方案调研.md
 backend/data/
 **/__pycache__/

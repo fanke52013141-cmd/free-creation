@@ -54,6 +54,7 @@ export type IconName =
   | 'help'
   | 'info'
   | 'add'
+  | 'check'
   | 'grid'
   | 'compare'
   | 'target'
@@ -368,6 +369,11 @@ const PATHS: Record<IconName, React.ReactNode> = {
   add: (
     <>
       <path d="M12 5v14M5 12h14" />
+    </>
+  ),
+  check: (
+    <>
+      <path d="m5 12.5 4.5 4.5L19 7.5" />
     </>
   ),
   grid: (

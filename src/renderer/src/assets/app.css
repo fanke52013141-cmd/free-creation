@@ -898,10 +898,12 @@ select:focus-visible,
     0 12px 30px rgba(0, 0, 0, 0.08);
 }
 
+/* 分组名标签：位于框上边缘外 26px 处（与 GroupOutlineLayer 的双击命中带
+   LABEL_BAND_TOP=26 对齐），双击进入重命名。 */
 .canvas-group-outline > span {
   position: absolute;
   left: 0;
-  top: -31px;
+  top: -26px;
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -910,6 +912,26 @@ select:focus-visible,
   font-size: 13px;
   font-weight: 600;
   line-height: 20px;
+  cursor: default;
+}
+
+/* 分组重命名输入框：编辑态接管标签位置。图层容器是 pointer-events: none，
+   这里必须显式恢复 auto 才能让 input 接收点击与输入。 */
+.canvas-group-name-input {
+  position: absolute;
+  left: 0;
+  top: -26px;
+  width: 180px;
+  padding: 0 6px;
+  border: 1px solid rgba(93, 156, 236, 0.6);
+  border-radius: 6px;
+  background: rgba(16, 21, 29, 0.96);
+  color: #e8eef7;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  outline: none;
+  pointer-events: auto;
 }
 
 .canvas-selection-outline {
@@ -1230,8 +1252,10 @@ select:focus-visible,
   flex-shrink: 0;
 }
 
+/* 标题不占满剩余空间（改由 .node-header-spacer 接管），仅可收缩并出省略号 */
 .node-title {
-  flex: 1;
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1457,6 +1481,45 @@ select:focus-visible,
   flex-shrink: 0;
 }
 
+.image-edit-inline {
+  display: flex;
+  align-items: stretch;
+  padding: 6px 8px;
+  border-top: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.02);
+  flex-shrink: 0;
+}
+.image-edit-inline-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--txt-dim);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  text-align: left;
+}
+.image-edit-inline-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--txt);
+}
+.image-edit-inline-btn .image-edit-inline-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.image-edit-inline-input {
+  min-height: 52px;
+}
+
 .node-media-next-actions {
   display: flex;
   align-items: center;
@@ -1483,7 +1546,11 @@ select:focus-visible,
 }
 
 .media-result-collection {
-  flex: 0 0 auto;
+  /* 可伸缩：网格在卡片内获得剩余高度，超出部分由网格自身滚动，避免“只见 8 格”。 */
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   padding: 5px 8px 7px;
   border-top: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.02);
@@ -1491,6 +1558,7 @@ select:focus-visible,
 
 .media-result-collection-head {
   display: flex;
+  flex-shrink: 0;
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
@@ -1508,6 +1576,10 @@ select:focus-visible,
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 4px;
+  /* 9 格等网格限高，超出滚动，避免被卡片高度裁剪导致“只见 8 格”。 */
+  max-height: 196px;
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 .media-result-tile {
@@ -1519,7 +1591,8 @@ select:focus-visible,
   border: 1px solid var(--line);
   border-radius: 4px;
   background: #0e141b;
-  cursor: pointer;
+  /* 点击即预览：与主图区放大镜交互一致 */
+  cursor: zoom-in;
 }
 
 .media-result-tile:hover,
@@ -1651,6 +1724,67 @@ select:focus-visible,
   background: rgba(0, 0, 0, 0.7);
   color: var(--brand);
   font-size: 8px;
+}
+
+/* 拆分节点紧凑头部：缩略图 + 标题 + 调整按钮，把高度让给结果网格。 */
+.image-split-head {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 4px;
+  min-height: 0;
+}
+
+.image-split-thumb {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #0e141b;
+  cursor: zoom-in;
+}
+
+.image-split-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.image-split-head-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.image-split-head-title {
+  overflow: hidden;
+  color: var(--txt, #e3e8ee);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.image-split-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+/* 拆分节点网格优先：填满卡片剩余高度，9 格（3 行）默认完整可见。 */
+.media-result-collection-split {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.media-result-collection-split .media-result-grid {
+  max-height: 280px;
 }
 
 .node-media-source {
@@ -3903,6 +4037,46 @@ select:focus-visible,
   display: flex;
   background: rgba(5, 8, 12, 0.82);
   backdrop-filter: blur(12px);
+}
+.image-edit-workbench-mask {
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+}
+.image-edit-workbench {
+  display: flex;
+  flex-direction: column;
+  width: min(760px, 92vw);
+  max-height: min(820px, 90vh);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+}
+.image-edit-workbench-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: 0 0 auto;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+}
+.image-edit-workbench-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--txt);
+  font-size: 13px;
+  font-weight: 650;
+}
+.image-edit-workbench-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px;
 }
 .director-studio {
   display: flex;

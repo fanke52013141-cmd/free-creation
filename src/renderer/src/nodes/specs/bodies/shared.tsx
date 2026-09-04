@@ -5,11 +5,12 @@
 // 本文件同时导出工具函数（非组件）与少量 UI 组件（ModelSelect/NoModelHint），
 // 是共享模块而非单一组件文件，故豁免 React Fast Refresh 的组件-only 规则。
 /* eslint-disable react-refresh/only-export-components */
-import { useEffect, useRef, useState } from 'react'
-import { createShapeId, stopEventPropagation, type Editor } from 'tldraw'
+import { useEffect, useRef } from 'react'
+import { createShapeId, stopEventPropagation, type Editor, type TLShapeId } from 'tldraw'
 import { modelsByModality } from '../../../stores/gateway'
 import type { NodeCardShape, NodeCardProps } from '../../../canvas/NodeCardShape'
 import { createEdge } from '../../../canvas/graph'
+import { markUndoPoint } from '../../../canvas/history'
 import { getNodeType, mediaUrl } from '../../registry'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
@@ -428,7 +429,11 @@ export function MediaSourceSummary({
   }
 
   const time = source?.at ? new Date(source.at).toLocaleTimeString() : ''
-  const promptLine = source?.prompt ? (source.prompt.length > 50 ? source.prompt.slice(0, 50) + '…' : source.prompt) : ''
+  const promptLine = source?.prompt
+    ? source.prompt.length > 50
+      ? source.prompt.slice(0, 50) + '…'
+      : source.prompt
+    : ''
 
   return (
     <div className="media-source-summary" title={source?.prompt || shape.props.mediaPath}>
@@ -480,18 +485,6 @@ export function MediaFileActions({ shape }: { shape: NodeCardShape }): React.JSX
       >
         <Icon name="copy" size={11} />
       </button>
-      <button
-        className="icon-btn"
-        title="用系统默认程序打开"
-        aria-label="用系统默认程序打开"
-        onPointerDown={(e) => stopEventPropagation(e)}
-        onClick={(e) => {
-          e.stopPropagation()
-          void window.api.openMedia(shape.props.mediaId)
-        }}
-      >
-        <Icon name="external" size={11} />
-      </button>
     </span>
   )
 }
@@ -502,7 +495,8 @@ export function MediaResultGrid({
   onSelect,
   openPreview,
   onClear,
-  onDelete
+  onDelete,
+  className
 }: {
   shape: NodeCardShape
   kind: 'image' | 'video' | 'audio'
@@ -510,31 +504,29 @@ export function MediaResultGrid({
   openPreview: (item: MediaResultItem) => void
   onClear?: () => void
   onDelete?: (item: MediaResultItem) => void
+  className?: string
 }): React.JSX.Element | null {
-  const [compareIds, setCompareIds] = useState<string[]>([])
+  // 结果网格在卡片内可滚动：鼠标滚轮落在网格上时消费滚动而交给画布缩放/平移。
+  // 必须放在任何早退 return 之前，保证 Hook 调用顺序稳定。
+  const gridRef = useRef<HTMLDivElement | null>(null)
+  useWheelScroll(gridRef)
   const collection = parseMediaResultCollection(
     typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
   )
   if (!collection || collection.results.length < 2) return null
   const selected = collection.selectedMediaId || shape.props.mediaId
-  const compareItems = compareIds
-    .map((id) => collection.results.find((item) => item.mediaId === id))
-    .filter((item): item is MediaResultItem => Boolean(item))
-  const toggleCompare = (item: MediaResultItem): void => {
-    setCompareIds((current) => {
-      if (current.includes(item.mediaId)) return current.filter((id) => id !== item.mediaId)
-      return current.length >= 2 ? [current[1]!, item.mediaId] : [...current, item.mediaId]
-    })
-  }
   return (
-    <div className="media-result-collection" aria-label="生成结果集合">
+    <div
+      className={`media-result-collection${className ? ` ${className}` : ''}`}
+      aria-label="生成结果集合"
+    >
       <div className="media-result-collection-head">
         <span className="media-result-summary">
-          <strong>{collection.results.length}</strong> 个候选
+          <strong>{collection.results.length}</strong> 格
           <em>{selected ? '当前输出已确定' : '尚未选择输出'}</em>
         </span>
         <span className="media-result-collection-tools">
-          <small>{compareItems.length === 2 ? '正在对比 2 项结果' : '点击候选设为当前输出'}</small>
+          <small>点击候选查看预览</small>
           {onClear && collection.results.length > 1 ? (
             <button
               type="button"
@@ -552,25 +544,7 @@ export function MediaResultGrid({
           ) : null}
         </span>
       </div>
-      {compareItems.length === 2 && (
-        <div className="media-result-compare" aria-label="结果对比">
-          {compareItems.map((item) => (
-            <div className="media-result-compare-item" key={item.mediaId}>
-              {kind === 'image' ? (
-                <img src={mediaUrl(item.mediaPath)} alt="对比结果" draggable={false} />
-              ) : kind === 'video' ? (
-                <video src={mediaUrl(item.mediaPath)} preload="metadata" muted playsInline />
-              ) : (
-                <span className="media-result-audio-tile">
-                  <Icon name="audio" size={20} />
-                </span>
-              )}
-              <small>{item.mediaId === selected ? '当前输出' : '历史结果'}</small>
-            </div>
-          ))}
-        </div>
-      )}
-      <div className="media-result-grid">
+      <div className="media-result-grid" ref={gridRef}>
         {collection.results.map((item) => {
           const active = item.mediaId === selected
           return (
@@ -578,19 +552,17 @@ export function MediaResultGrid({
               role="button"
               tabIndex={0}
               key={item.mediaId}
-              className={`media-result-tile ${active ? 'selected' : ''} ${compareIds.includes(item.mediaId) ? 'compare' : ''}`}
-              title={active ? '当前输出；点击预览' : '设为当前输出'}
+              className={`media-result-tile ${active ? 'selected' : ''}`}
+              title={active ? '当前输出；点击预览' : '点击预览'}
               onPointerDown={(event) => stopEventPropagation(event)}
               onClick={(event) => {
                 event.stopPropagation()
-                if (active) openPreview(item)
-                else onSelect(item)
+                openPreview(item)
               }}
               onKeyDown={(event) => {
                 if (event.key !== 'Enter' && event.key !== ' ') return
                 event.preventDefault()
-                if (active) openPreview(item)
-                else onSelect(item)
+                openPreview(item)
               }}
             >
               {kind === 'image' ? (
@@ -608,15 +580,16 @@ export function MediaResultGrid({
                 <button
                   type="button"
                   className="icon-btn"
-                  title={compareIds.includes(item.mediaId) ? '取消对比' : '加入对比'}
-                  aria-label={compareIds.includes(item.mediaId) ? '取消对比' : '加入对比'}
+                  title={active ? '打开预览' : '设为当前输出'}
+                  aria-label={active ? '打开预览' : '设为当前输出'}
                   onPointerDown={(event) => stopEventPropagation(event)}
                   onClick={(event) => {
                     event.stopPropagation()
-                    toggleCompare(item)
+                    if (active) openPreview(item)
+                    else onSelect(item)
                   }}
                 >
-                  <Icon name="compare" size={11} />
+                  <Icon name="check" size={11} />
                 </button>
                 {!active && onDelete ? (
                   <button
@@ -744,3 +717,76 @@ export const VARIABLE_TYPES: { value: VariableValueType; label: string }[] = [
   { value: 'object', label: '对象' },
   { value: 'array', label: '数组' }
 ]
+
+/**
+ * 把拆分节点每格真实结果展开为独立的 image 资产节点，从上到下排布，并把每格节点
+ * 连线回拆分节点的 out-image（仅拓扑归属，数据仍由 image executor 按媒体 ID 加载）。
+ * 幂等：若本次媒体集合已被展开过（splitAutoExpandedFor 签名一致），直接返回已展开节点
+ * 的 ID 而不重复创建；否则创建后把签名写回拆分节点 meta。
+ */
+export function expandSplitResults(
+  editor: Editor,
+  source: NodeCardShape
+): { ids: TLShapeId[]; created: boolean } {
+  const raw = typeof source.meta?.nodeResult === 'string' ? source.meta.nodeResult : ''
+  const collection = parseMediaResultCollection(raw)
+  if (!collection || collection.results.length < 2) return { ids: [], created: false }
+  const spec = getNodeType('image')
+  if (!spec) return { ids: [], created: false }
+
+  // 幂等签名：以本套媒体集合的稳定标识为准（含媒体顺序与时间戳，重算/换图后签名变化才重建）。
+  const signature = collection.results.map((item) => `${item.mediaId}@${item.createdAt}`).join('|')
+  const previous = (source.meta?.splitAutoExpandedFor as string | undefined) ?? ''
+  if (previous === signature) {
+    // 已经展开过同一套结果，且对应节点仍在画布上，则不再重复创建。
+    const existing = collection.results
+      .map((_item, index) => `${source.id}:split:${index}`)
+      .map((key) => editor.getShape(key as TLShapeId))
+      .filter((shape): shape is NodeCardShape => Boolean(shape))
+    if (existing.length === collection.results.length)
+      return { ids: existing.map((s) => s.id), created: false }
+  }
+
+  const gap = 16
+  const startX = source.x + source.props.w + 80
+  const ids: TLShapeId[] = []
+  editor.run(() => {
+    collection.results.forEach((item, index) => {
+      const id = `${source.id}:split:${index}` as TLShapeId
+      if (editor.getShape(id)) {
+        ids.push(id)
+        return
+      }
+      editor.createShape({
+        id,
+        type: 'node-card',
+        x: startX,
+        y: source.y + index * (spec.defaultSize.h + gap),
+        props: {
+          nodeType: 'image',
+          title: `${source.props.title || '图片拆分'} · 第 ${index + 1} 格`,
+          mediaId: item.mediaId,
+          mediaPath: item.mediaPath,
+          mediaMime: item.mime,
+          w: spec.defaultSize.w,
+          h: spec.defaultSize.h
+        } satisfies Partial<NodeCardProps>
+      })
+      // 每个展开节点一条指向拆分节点 out-image 的连线（拆几个连几个）
+      createEdge(
+        editor,
+        { shapeId: source.id, portId: 'out-image' },
+        { shapeId: id, portId: 'in-image' }
+      )
+      ids.push(id)
+    })
+  })
+  // 记录已展开的签名，保证后续自动/手动展开幂等
+  editor.updateShape({
+    id: source.id,
+    type: 'node-card',
+    meta: { ...(source.meta ?? {}), splitAutoExpandedFor: signature }
+  })
+  markUndoPoint(editor, 'image-split-expand-nodes')
+  return { ids, created: true }
+}

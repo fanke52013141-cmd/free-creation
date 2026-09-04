@@ -36,6 +36,18 @@ const EXEC_COLORS: Record<string, string> = {
   cached: '#60a5fa'
 }
 
+/**
+ * 文本节点字数徽标格式：
+ * - 不足一百字：精确显示（如「42 字」）；
+ * - 一百到不足一千：按整百取整加“多”（567 →「500 多字」）；
+ * - 达到一千：换算为 K，保留两位有效数字（1234 →「1.2K」，15600 →「16K」）。
+ */
+function formatCharCount(n: number): string {
+  if (n >= 1000) return `${Number((n / 1000).toPrecision(2))}K`
+  if (n >= 100) return `${Math.floor(n / 100) * 100} 多字`
+  return `${n} 字`
+}
+
 function canAttachPort(
   source: { portType: PortDecl['type']; schema?: PortDecl['schema'] },
   target: PortDecl
@@ -196,14 +208,34 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             style={{ ['--node-accent' as string]: spec?.color ?? '#42b9f5' }}
           />
           <div className="node-header">
-            <span className="node-seq" style={{ color: spec?.color }}>
+            {/* 标题行布局（用户重排）：左侧依次为 序号 → 图标 → 名称 → 查看输入输出说明，
+                文本节点的字数徽标紧跟说明按钮；右侧依次为 状态灯 → 运行按钮（最右），
+                中间以弹性 spacer 推开，左右两组分居两端。 */}
+            <span className="node-seq" title={`节点序号 ${seq}`}>
               {seq}
             </span>
             <span className="node-icon" style={{ color: spec?.color }}>
               {spec ? <Icon name={spec.icon} size={15} /> : <Icon name="help" size={15} />}
             </span>
-            {/* 行首 info 按钮（查看输入输出说明）：与 序号/图标 同在标题行左端，
-                和右端的 运行/字数 分居两侧，不再挤在同一个角。 */}
+            <div
+              className={`node-title ${titleEditable ? 'editable' : ''} ${editing ? 'editing' : ''}`}
+              contentEditable={editing}
+              suppressContentEditableWarning
+              spellCheck={false}
+              onDoubleClick={handleTitleDoubleClick}
+              onBlur={handleTitleBlur}
+              onPointerDown={handleTitlePointerDown}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  ;(e.currentTarget as HTMLDivElement).blur()
+                }
+              }}
+            >
+              {shape.props.title}
+            </div>
+            {/* info 按钮（查看输入输出说明）：紧跟节点名称，点击显式打开右侧面板
+                （对话节点→聊天面板，其余→契约信息窗）。 */}
             <button
               className="node-info-btn"
               title={
@@ -222,23 +254,13 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             >
               <Icon name="info" size={13} />
             </button>
-            <div
-              className={`node-title ${titleEditable ? 'editable' : ''} ${editing ? 'editing' : ''}`}
-              contentEditable={editing}
-              suppressContentEditableWarning
-              spellCheck={false}
-              onDoubleClick={handleTitleDoubleClick}
-              onBlur={handleTitleBlur}
-              onPointerDown={handleTitlePointerDown}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault()
-                  ;(e.currentTarget as HTMLDivElement).blur()
-                }
-              }}
-            >
-              {shape.props.title}
-            </div>
+            {/* 文本节点字数徽标：位于“查看输入输出说明”右侧。
+                格式见 formatCharCount（N 字 / N 多字 / X.XK）。 */}
+            {shape.props.nodeType === 'text' && shape.props.text && !slashCmdForText && (
+              <span className="node-text-count">{formatCharCount(shape.props.text.length)}</span>
+            )}
+            {/* 弹性占位：把右侧 状态灯/运行按钮 推到标题行右端 */}
+            <span className="node-header-spacer" />
             <span
               className={`node-status node-status-${shape.props.exec}`}
               style={{ background: EXEC_COLORS[shape.props.exec] ?? EXEC_COLORS.idle }}
@@ -260,10 +282,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                   <Icon name="play" size={12} />
                 </button>
               </Tooltip>
-            )}
-            {/* 文本节点字数徽标：header 行最后一个元素，永远位于整行最右端 */}
-            {shape.props.nodeType === 'text' && shape.props.text && !slashCmdForText && (
-              <span className="node-text-count">{shape.props.text.length} 字</span>
             )}
           </div>
           <div className="node-body">
@@ -326,40 +344,28 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             <div className="media-preview-box" onClick={(e) => e.stopPropagation()}>
               <div className="media-preview-title">
                 <span>{preview.title}</span>
-                {shape.props.mediaId && (
-                  <span className="media-preview-actions">
-                    <button
-                      className="icon-btn"
-                      title="在资源管理器中定位"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        void window.api.revealMedia(shape.props.mediaId)
-                      }}
-                    >
-                      <Icon name="target" size={14} />
-                    </button>
-                    <button
-                      className="icon-btn"
-                      title="复制文件路径"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        void window.api.copyMediaPath(shape.props.mediaId)
-                      }}
-                    >
-                      <Icon name="copy" size={14} />
-                    </button>
-                    <button
-                      className="icon-btn"
-                      title="用系统默认程序打开"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        void window.api.openMedia(shape.props.mediaId)
-                      }}
-                    >
-                      <Icon name="external" size={14} />
-                    </button>
-                  </span>
-                )}
+                <span className="media-preview-actions">
+                  <button
+                    className="icon-btn"
+                    title="在资源管理器中定位"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void window.api.revealMedia(shape.props.mediaId)
+                    }}
+                  >
+                    <Icon name="target" size={14} />
+                  </button>
+                  <button
+                    className="icon-btn"
+                    title="复制文件路径"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void window.api.copyMediaPath(shape.props.mediaId)
+                    }}
+                  >
+                    <Icon name="copy" size={14} />
+                  </button>
+                </span>
                 <button className="icon-btn" onClick={() => setPreview(null)}>
                   <Icon name="close" size={16} />
                 </button>

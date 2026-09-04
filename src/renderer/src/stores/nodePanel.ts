@@ -10,13 +10,18 @@ import type { TLShapeId } from 'tldraw'
 
 export type NodePanelKind = 'chat' | 'contract' | 'director'
 
+/** 契约面板的初始 tab：配置类入口直达「设置」，说明入口停留在「概览」。 */
+export type NodePanelInitialTab = 'overview' | 'settings'
+
 interface NodePanelState {
   /** 当前打开的面板类型；null 表示关闭。 */
   kind: NodePanelKind | null
   /** 打开面板的目标节点 id。 */
   shapeId: TLShapeId | null
+  /** 本次打开面板时契约面板应定位的初始 tab（仅对 contract 生效）。 */
+  initialTab: NodePanelInitialTab
   /** 打开（或切换）到某个节点的指定面板。 */
-  open: (kind: NodePanelKind, shapeId: TLShapeId) => void
+  open: (kind: NodePanelKind, shapeId: TLShapeId, initialTab?: NodePanelInitialTab) => void
   /** 关闭面板。 */
   close: () => void
 }
@@ -24,6 +29,7 @@ interface NodePanelState {
 export const useNodePanelStore = create<NodePanelState>((set) => ({
   kind: null,
   shapeId: null,
-  open: (kind, shapeId) => set({ kind, shapeId }),
-  close: () => set({ kind: null, shapeId: null })
+  initialTab: 'overview',
+  open: (kind, shapeId, initialTab = 'overview') => set({ kind, shapeId, initialTab }),
+  close: () => set({ kind: null, shapeId: null, initialTab: 'overview' })
 }))

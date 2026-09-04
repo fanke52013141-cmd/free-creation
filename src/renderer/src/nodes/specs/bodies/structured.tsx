@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import { validateNodeSchema } from '@shared/node-schemas'
 import { markUndoPoint } from '../../../canvas/history'
 import { readNodeConfig } from '../../../canvas/node-persistence'
+import { useWheelScroll } from './shared'
 import {
   parseStructuredDataConfig,
   schemaOption,
@@ -23,6 +24,8 @@ function fieldEntries(value: unknown, prefix = '', depth = 0): { path: string; v
 
 export function StructuredBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  useWheelScroll(scrollRef)
   const config = parseStructuredDataConfig(readNodeConfig(shape))
   const option = schemaOption(config.schema)
   const [editing, setEditing] = useState(false)
@@ -60,7 +63,7 @@ export function StructuredBody({ shape }: NodeBodyProps): React.JSX.Element {
   }
 
   return (
-    <div className="json-body structured-body">
+    <div className="json-body structured-body" ref={scrollRef}>
       <div className="structured-header" onPointerDown={(event) => stopEventPropagation(event)}>
         <AppSelect
           className="gen-select"

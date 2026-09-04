@@ -11,14 +11,15 @@ import { gatherUpstreamMedia } from '../../../canvas/graph'
 import { markUndoPoint } from '../../../canvas/history'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { mediaUrl, type NodeBodyProps, type NodeSettingsProps } from '../../registry'
+import { parseMediaResultCollection } from '../../nodeValues'
 import { useNodePanelStore } from '../../../stores/nodePanel'
 import { Icon } from '../../../components/Icon'
 import {
+  expandSplitResults,
   MediaFileActions,
   MediaResultGrid,
   MediaSourceBadge,
-  selectMediaResult,
-  useClickGuard
+  selectMediaResult
 } from './shared'
 
 function positiveInteger(value: string, fallback: number): number {
@@ -27,9 +28,9 @@ function positiveInteger(value: string, fallback: number): number {
 }
 
 export function ImageSplitBody({ shape, openPreview }: NodeBodyProps): React.JSX.Element {
-  const guard = useClickGuard()
   const editor = useEditor()
-  const openSettings = (): void => useNodePanelStore.getState().open('contract', shape.id)
+  const openSettings = (): void =>
+    useNodePanelStore.getState().open('contract', shape.id, 'settings')
   if (!shape.props.mediaPath) {
     return (
       <div className="asset-empty crop-empty">
@@ -61,23 +62,57 @@ export function ImageSplitBody({ shape, openPreview }: NodeBodyProps): React.JSX
     markUndoPoint(editor, 'image-split-select-result')
   }
 
+  const raw = typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
+  const collection = parseMediaResultCollection(raw)
+  const expandable = Boolean(collection && collection.results.length >= 2)
+
   return (
-    <div className="node-media-wrap">
-      <div
-        className="node-media"
-        onPointerDown={guard.onPointerDown}
-        onClick={(event) =>
-          guard.onClick(event, () =>
+    <div className="node-media-wrap image-split-body">
+      <div className="image-split-head">
+        <div
+          className="image-split-thumb"
+          role="button"
+          title="点击预览当前输出"
+          onClick={() =>
             openPreview({
               kind: 'image',
               url: mediaUrl(shape.props.mediaPath),
               title: shape.props.title
             })
-          )
-        }
-      >
-        <img src={mediaUrl(shape.props.mediaPath)} alt={shape.props.title} draggable={false} />
+          }
+        >
+          <img src={mediaUrl(shape.props.mediaPath)} alt={shape.props.title} draggable={false} />
+        </div>
+        <div className="image-split-head-info">
+          <span className="image-split-head-title">{shape.props.title || '图片拆分'}</span>
+          <MediaSourceBadge shape={shape} fallback="本地宫格拆分" />
+        </div>
+        <span className="image-split-head-actions">
+          {expandable ? (
+            <button
+              className="btn-ghost small"
+              title="把每格结果展开为独立的图片节点并连线"
+              onPointerDown={stopEventPropagation}
+              onClick={(event) => {
+                stopEventPropagation(event)
+                const { ids } = expandSplitResults(editor, shape)
+                if (ids.length > 0) editor.select(...ids)
+              }}
+            >
+              <Icon name="copy" size={13} /> 展开为节点
+            </button>
+          ) : null}
+        </span>
       </div>
+      <MediaResultGrid
+        shape={shape}
+        kind="image"
+        className="media-result-collection-split"
+        onSelect={chooseResult}
+        openPreview={(item) =>
+          openPreview({ kind: 'image', url: mediaUrl(item.mediaPath), title: shape.props.title })
+        }
+      />
       <div className="node-media-actions">
         <button
           className="btn-ghost small"
@@ -89,17 +124,8 @@ export function ImageSplitBody({ shape, openPreview }: NodeBodyProps): React.JSX
         >
           <Icon name="grid" size={13} /> 调整拆分
         </button>
-        <MediaSourceBadge shape={shape} fallback="本地宫格拆分" />
         <MediaFileActions shape={shape} />
       </div>
-      <MediaResultGrid
-        shape={shape}
-        kind="image"
-        onSelect={chooseResult}
-        openPreview={(item) =>
-          openPreview({ kind: 'image', url: mediaUrl(item.mediaPath), title: shape.props.title })
-        }
-      />
     </div>
   )
 }

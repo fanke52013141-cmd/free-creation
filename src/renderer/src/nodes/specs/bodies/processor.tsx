@@ -1,9 +1,10 @@
 // 处理节点 Body（路线图 R6：bodies.tsx 拆分）
+import { useRef } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import type { NodeBodyProps } from '../../registry'
 import { hasIncomingConnection } from '../../../canvas/graph'
 import { readNodeConfig } from '../../../canvas/node-persistence'
-import { VARIABLE_TYPES, parseJsonProp, type VariableValueType } from './shared'
+import { VARIABLE_TYPES, parseJsonProp, useWheelScroll, type VariableValueType } from './shared'
 import { AppSelect } from '../../../components/AppSelect'
 
 interface ProcessorData {
@@ -50,6 +51,8 @@ function parseProcessor(text: string): ProcessorData {
 
 export function ProcessorBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  useWheelScroll(scrollRef)
   const data = parseProcessor(readNodeConfig(shape))
 
   const update = (next: ProcessorData): void => {
@@ -63,7 +66,7 @@ export function ProcessorBody({ shape }: NodeBodyProps): React.JSX.Element {
   const hasInput = hasIncomingConnection(editor, shape.id, 'in-value')
 
   return (
-    <div className="processor-body">
+    <div className="processor-body" ref={scrollRef}>
       <div className="variable-section-title">变量映射</div>
       <AppSelect
         className="gen-select"

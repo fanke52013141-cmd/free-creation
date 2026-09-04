@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import type { Editor, TLShapeId } from 'tldraw'
 import { getNodePorts, getNodeType, portOffsets, PORT_COLORS } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
@@ -45,8 +45,18 @@ function collectEdges(editor: Editor, host: HTMLDivElement): ScreenEdge[] {
     const fromY = portOffsets(sourcePorts.out.length, source.props.h)[fromIndex]
     const toY = portOffsets(targetPorts.in.length, target.props.h)[toIndex]
     if (fromY === undefined || toY === undefined) continue
-    const startScreen = editor.pageToScreen({ x: source.x + source.props.w, y: source.y + fromY })
-    const endScreen = editor.pageToScreen({ x: target.x, y: target.y + toY })
+    // 分组后 shape.x/y 是相对父 group 的局部坐标，直接相加会让连线“飘走”。
+    // getShapePageBounds 返回页面绝对边界（含父级 group 的平移），端口纵向偏移
+    // 再按高度比例映射到页面 bounds，保证任何嵌套层级下锚点都贴住节点边缘。
+    const sourceBounds = editor.getShapePageBounds(source.id)
+    const targetBounds = editor.getShapePageBounds(target.id)
+    if (!sourceBounds || !targetBounds) continue
+    const sourceAnchorY =
+      source.props.h > 0 ? sourceBounds.y + (sourceBounds.height * fromY) / source.props.h : sourceBounds.y
+    const targetAnchorY =
+      target.props.h > 0 ? targetBounds.y + (targetBounds.height * toY) / target.props.h : targetBounds.y
+    const startScreen = editor.pageToScreen({ x: sourceBounds.maxX, y: sourceAnchorY })
+    const endScreen = editor.pageToScreen({ x: targetBounds.x, y: targetAnchorY })
     const fromPort = sourcePorts.out[fromIndex]
     result.push({
       id: arrow.id,
@@ -68,6 +78,15 @@ function getNodePortsForShape(shape: NodeCardShape): {
   return spec ? getNodePorts(spec, shape) : { in: [], out: [] }
 }
 
+/**
+ * 节点数据连线覆盖层。
+ *
+ * 事件策略：本层此前用 14px 宽的透明描边路径直接拦截 pointerdown（DOM 层级在
+ * tldraw 画布之外，事件无法传入 .tl-canvas），导致在连线附近按下鼠标时 tldraw
+ * 的框选/平移永远无法启动。现在命中路径关闭 DOM 指针事件，选中、悬停与右键
+ * 改为在 window 捕获阶段用 SVGGeometryElement.isPointInStroke 手动判定：
+ * 命中连线才拦截事件，其余区域完全放行给 tldraw。
+ */
 export function DataEdgeLayer({
   editor,
   hostRef
@@ -79,7 +98,10 @@ export function DataEdgeLayer({
   const [host, setHost] = useState<HTMLDivElement | null>(null)
   const selectedEdgeId = useEdgeSelectionStore((state) => state.selectedEdgeId)
   const select = useEdgeSelectionStore((state) => state.select)
-  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null)
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<TLShapeId | null>(null)
+  const svgRef = useRef<SVGSVGElement | null>(null)
+  // 每条边的命中几何引用；Map 内容由渲染时的 ref 回调维护，始终与当前 edges 一致。
+  const hitPathsRef = useRef(new Map<TLShapeId, SVGPathElement>())
 
   useEffect(() => {
     let frame = 0
@@ -108,9 +130,62 @@ export function DataEdgeLayer({
   // store/视口监听会触发本组件重绘，确保拖动、缩放和连线后重新换算屏幕坐标。
   const edges = host ? collectEdges(editor, host) : []
 
-  if (!host || edges.length === 0) return null
+  /** 判断屏幕坐标是否落在任一连线的可点击描边区域内。 */
+  const hitTest = (clientX: number, clientY: number): TLShapeId | null => {
+    const svg = svgRef.current
+    if (!svg || hitPathsRef.current.size === 0) return null
+    const rect = svg.getBoundingClientRect()
+    if (rect.width === 0 && rect.height === 0) return null
+    const point = new DOMPoint(clientX - rect.left, clientY - rect.top)
+    for (const [id, path] of hitPathsRef.current) {
+      if (path.isPointInStroke(point)) return id
+    }
+    return null
+  }
+
+  // window 捕获阶段处理连线交互：先于 tldraw 与 React 合成事件，能精确决定
+  // “这次按下属于连线选中”还是“完全放行给画布框选”。
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent): void => {
+      const hit = hitTest(event.clientX, event.clientY)
+      if (!hit) return
+      // 命中连线：选中并终止传播，画布不会开始框选/平移，已选连线也不会被清除。
+      event.preventDefault()
+      event.stopPropagation()
+      select(hit)
+    }
+    const onContextMenu = (event: MouseEvent): void => {
+      const hit = hitTest(event.clientX, event.clientY)
+      if (!hit) return
+      // 右键落在连线上：选中该连线，且不让空白处的创建菜单弹出。
+      event.preventDefault()
+      event.stopPropagation()
+      select(hit)
+    }
+    let moveFrame = 0
+    const onPointerMove = (event: PointerEvent): void => {
+      if (moveFrame) return
+      const { clientX, clientY } = event
+      moveFrame = requestAnimationFrame(() => {
+        moveFrame = 0
+        const hit = hitTest(clientX, clientY)
+        setHoveredEdgeId((current) => (current === hit ? current : hit))
+      })
+    }
+    window.addEventListener('pointerdown', onPointerDown, { capture: true })
+    window.addEventListener('pointermove', onPointerMove, { capture: true })
+    window.addEventListener('contextmenu', onContextMenu, { capture: true })
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown, { capture: true })
+      window.removeEventListener('pointermove', onPointerMove, { capture: true })
+      window.removeEventListener('contextmenu', onContextMenu, { capture: true })
+      if (moveFrame) cancelAnimationFrame(moveFrame)
+    }
+  }, [select])
+
+  if (!host) return null
   return (
-    <svg className="data-edge-layer" aria-label="节点数据连线">
+    <svg className="data-edge-layer" ref={svgRef} aria-label="节点数据连线">
       {edges.map((edge) => {
         const active = edge.id === selectedEdgeId
         const hovered = edge.id === hoveredEdgeId
@@ -123,17 +198,9 @@ export function DataEdgeLayer({
             <path
               className="data-edge-hit"
               d={edge.path}
-              onPointerDown={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-                select(edge.id)
-              }}
-              onPointerEnter={() => setHoveredEdgeId(edge.id)}
-              onPointerLeave={() => setHoveredEdgeId(null)}
-              onContextMenu={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-                select(edge.id)
+              ref={(el) => {
+                if (el) hitPathsRef.current.set(edge.id, el)
+                else hitPathsRef.current.delete(edge.id)
               }}
             />
           </g>

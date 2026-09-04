@@ -173,7 +173,14 @@ export function registerBaseNodeTypes(): void {
     description: '图片资产节点，只负责保存和输出一张已导入的图片，不承担生成逻辑。',
     category: 'input',
     ports: {
-      in: [],
+      in: [
+        input(
+          'in-image',
+          '图源',
+          'image',
+          '可选的上游图片来源；主要用于拆分结果展开后的连线归属，资产仍以本节点已导入的媒体为准。'
+        )
+      ],
       out: [output('out-image', '图片', 'image', '已导入并落盘的图片资产引用。')]
     },
     projectOutputs: projectImageOutputs,
@@ -209,6 +216,7 @@ export function registerBaseNodeTypes(): void {
     label: '拆分',
     icon: 'grid',
     color: '#14b8a6',
+    // 结果网格在卡片内限高滚动（见 .media-result-grid），不通过放大默认卡片容纳内容。
     defaultSize: { w: 340, h: 260 },
     description:
       '把一张上游图片按行列派生为多张独立图片。面积缩放以每个格子的中心为锚点；输出同时提供当前图片和可批处理的图片集合。',

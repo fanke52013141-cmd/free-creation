@@ -513,6 +513,16 @@ async function executeNodeOnce(
       finishRunRecord(editor, shapeId, record, 'success', {
         outputPorts: Object.keys(projected.value)
       })
+      // 拆分节点运行成功后，自动把每格结果展开为独立图片节点并连线（幂等）。
+      // 惰性加载避免把 UI 模块静态拉进工作流引擎；explode 失败不影响运行结果。
+      if (latest?.props.nodeType === 'image-split') {
+        try {
+          const { expandSplitResults } = await import('../nodes/specs/bodies/shared')
+          expandSplitResults(editor, latest)
+        } catch {
+          // 自动展开为附加体验，失败不阻断工作流本身
+        }
+      }
       return { status: 'done' }
     }
     if (result.status === 'failed') {

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { stopEventPropagation, useEditor } from 'tldraw'
+import { createPortal } from 'react-dom'
+import { stopEventPropagation, useEditor, type Editor } from 'tldraw'
 import {
   parseImageEditConfig,
   serializeImageEditConfig,
@@ -13,9 +14,10 @@ import {
 } from '@shared/image-edit'
 import { gatherUpstreamMedia } from '../../../canvas/graph'
 import { readNodeConfig } from '../../../canvas/node-persistence'
+import type { NodeCardShape } from '../../../canvas/NodeCardShape'
 import { runNodeManually } from '../../../engine/executor'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
-import { useNodePanelStore } from '../../../stores/nodePanel'
+import { useAppStore } from '../../../stores/app'
 import { toast } from '../../../stores/toast'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
@@ -88,23 +90,64 @@ export function ImageEditBody({ shape, openPreview }: NodeBodyProps): React.JSX.
   const editor = useEditor()
   const source = gatherUpstreamMedia(editor, shape.id, 'in-image', 'image')
   const [compareSource, setCompareSource] = useState(false)
-  const openSettings = (): void => useNodePanelStore.getState().open('contract', shape.id)
+  const [workbenchOpen, setWorkbenchOpen] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const instruction = parseImageEditConfig(readNodeConfig(shape)).instruction
+
+  // 卸载时清理 tldraw 编辑态，防止键盘事件被画布扣留。
+  useEffect(() => {
+    return () => {
+      if (editor.getEditingShapeId() === shape.id) editor.setEditingShape(null)
+    }
+  }, [editor, shape.id])
+
+  const enterInlineEdit = (): void => {
+    setDraft(instruction)
+    setEditing(true)
+    editor.setEditingShape(shape.id)
+  }
+  const exitInlineEdit = (): void => {
+    setEditing(false)
+    editor.setEditingShape(null)
+  }
+  const commitInline = (): void => {
+    exitInlineEdit()
+    if (draft === instruction) return
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: {
+        config: serializeImageEditConfig({
+          ...parseImageEditConfig(readNodeConfig(shape)),
+          instruction: draft.slice(0, 4000)
+        })
+      }
+    })
+    markUndoPoint(editor, 'image-edit-inline-instruction')
+  }
+
+  const workbench = workbenchOpen ? (
+    <ImageEditWorkbench shape={shape} editor={editor} onClose={() => setWorkbenchOpen(false)} />
+  ) : null
+
   if (!shape.props.mediaPath)
     return (
       <div className="asset-empty image-edit-empty">
         <Icon name="edit" size={24} />
         <span>图片修改</span>
-        <small>连接图片后，在右侧添加标注和修改说明。</small>
+        <small>连接图片后，点击打开工作台添加标注和修改说明。</small>
         <button
           className="btn-ghost small"
           onPointerDown={stopEventPropagation}
           onClick={(e) => {
             stopEventPropagation(e)
-            openSettings()
+            setWorkbenchOpen(true)
           }}
         >
-          配置修改
+          打开工作台
         </button>
+        {workbench}
       </div>
     )
   const chooseResult = (item: Parameters<typeof selectMediaResult>[1]): void => {
@@ -140,7 +183,7 @@ export function ImageEditBody({ shape, openPreview }: NodeBodyProps): React.JSX.
           onPointerDown={stopEventPropagation}
           onClick={(e) => {
             stopEventPropagation(e)
-            openSettings()
+            setWorkbenchOpen(true)
           }}
         >
           <Icon name="edit" size={13} /> 调整修改
@@ -159,6 +202,44 @@ export function ImageEditBody({ shape, openPreview }: NodeBodyProps): React.JSX.
         ) : null}
         <MediaSourceBadge shape={shape} fallback="图片修改" />
         <MediaFileActions shape={shape} />
+      </div>
+      <div className="image-edit-inline">
+        {editing ? (
+          <textarea
+            className="gen-prompt image-edit-inline-input"
+            rows={2}
+            value={draft}
+            placeholder="描述需要修改的内容…"
+            autoFocus
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commitInline}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                setDraft(instruction)
+                exitInlineEdit()
+              }
+              if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') commitInline()
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => e.stopPropagation()}
+            onContextMenu={(e) => e.stopPropagation()}
+          />
+        ) : (
+          <button
+            className="image-edit-inline-btn"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation()
+              enterInlineEdit()
+            }}
+          >
+            <Icon name="edit" size={12} />
+            <span className="image-edit-inline-text">
+              {instruction || '点击输入修改说明…'}
+            </span>
+          </button>
+        )}
       </div>
       {compareSource && source ? (
         <div className="image-edit-source-compare" aria-label="原图与修改结果对比">
@@ -201,6 +282,7 @@ export function ImageEditBody({ shape, openPreview }: NodeBodyProps): React.JSX.
           openPreview({ kind: 'image', url: mediaUrl(item.mediaPath), title: shape.props.title })
         }
       />
+      {workbench}
     </div>
   )
 }
@@ -245,6 +327,23 @@ function normalizedRect(
 }
 
 export function ImageEditSettings({
+  shape,
+  editor,
+  projectId
+}: NodeSettingsProps): React.JSX.Element {
+  return (
+    <section className="contract-section">
+      <h4>图片修改</h4>
+      <p className="contract-settings-hint">
+        原图来自 in-image；标注仅作为修改参考，运行后输出新的图片资产。
+      </p>
+      <ImageEditEditorCore shape={shape} editor={editor} projectId={projectId} />
+    </section>
+  )
+}
+
+/** 标注编辑器核心：画布、工具、预设、颜色、遮罩、模型与运行。设置面板与弹窗工作台共用。 */
+function ImageEditEditorCore({
   shape,
   editor,
   projectId
@@ -386,11 +485,7 @@ export function ImageEditSettings({
   }
   const invalid = validationError
   return (
-    <section className="contract-section image-edit-settings">
-      <h4>图片修改</h4>
-      <p className="contract-settings-hint">
-        原图来自 in-image；标注仅作为修改参考，运行后输出新的图片资产。
-      </p>
+    <div className="image-edit-settings">
       {!source ? (
         <div className="crop-no-source">请从图片或生图节点连线到“原图”端口。</div>
       ) : (
@@ -606,6 +701,60 @@ export function ImageEditSettings({
           </>
         )}
       </button>
-    </section>
+    </div>
+  )
+}
+
+/** 图片修改工作台：全屏弹窗，复用标注编辑器核心。 */
+function ImageEditWorkbench({
+  shape,
+  editor,
+  onClose
+}: {
+  shape: NodeCardShape
+  editor: Editor
+  onClose: () => void
+}): React.JSX.Element {
+  const projectId = useAppStore((s) => s.currentProject)?.id ?? ''
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onClose])
+  return createPortal(
+    <div
+      className="director-studio-mask image-edit-workbench-mask"
+      role="dialog"
+      aria-modal="true"
+      aria-label="图片修改工作台"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
+    >
+      <div className="image-edit-workbench">
+        <header className="image-edit-workbench-head">
+          <div className="image-edit-workbench-title">
+            <Icon name="edit" size={15} />
+            <span>图片修改工作台</span>
+          </div>
+          <button
+            className="btn-ghost small"
+            onPointerDown={stopEventPropagation}
+            onClick={(event) => {
+              stopEventPropagation(event)
+              onClose()
+            }}
+          >
+            <Icon name="close" size={14} />
+          </button>
+        </header>
+        <div className="image-edit-workbench-body">
+          <ImageEditEditorCore shape={shape} editor={editor} projectId={projectId} />
+        </div>
+      </div>
+    </div>,
+    document.body
   )
 }

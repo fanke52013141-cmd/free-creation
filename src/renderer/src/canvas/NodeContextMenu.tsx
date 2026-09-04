@@ -9,6 +9,8 @@ interface NodeContextMenuProps {
   x: number
   y: number
   onClose: () => void
+  /** 复制按钮写入节点剪贴板（由 CanvasEditor 提供），之后可在空白处 Ctrl+V 或右键粘贴；不可用时回退为原地复制。 */
+  onCopy?: () => number
 }
 
 export function NodeContextMenu({
@@ -16,6 +18,7 @@ export function NodeContextMenu({
   ids,
   x,
   y,
+  onCopy,
   onClose
 }: NodeContextMenuProps): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
@@ -63,8 +66,12 @@ export function NodeContextMenu({
         className="node-menu-item"
         onClick={() =>
           run(() => {
-            markUndoPoint(editor, 'duplicate-nodes')
-            editor.duplicateShapes(ids)
+            const copied = onCopy?.() ?? 0
+            if (copied === 0) {
+              // 画布外未提供剪贴板回调时保持旧行为：原地复制一份
+              markUndoPoint(editor, 'duplicate-nodes')
+              editor.duplicateShapes(ids)
+            }
           })
         }
       >

@@ -13,6 +13,9 @@ interface NodeCreateMenuProps {
   onTemplate: () => void
   onUpload: () => void
   onGallery: () => void
+  /** 节点剪贴板中的数量；> 0 且非拉线场景时在菜单顶部显示「粘贴」入口。 */
+  pasteCount?: number
+  onPaste?: () => void
   onClose: () => void
   /** 从输出端口拉线到空白时，只展示能接收该端口的节点。 */
   source?: ConnectionFrom | null
@@ -40,6 +43,8 @@ export function NodeCreateMenu({
   onTemplate,
   onUpload,
   onGallery,
+  pasteCount = 0,
+  onPaste,
   onClose,
   source = null
 }: NodeCreateMenuProps): React.JSX.Element {
@@ -92,8 +97,10 @@ export function NodeCreateMenu({
     hoverCategory === null
       ? allChoices
       : allChoices.filter((c) => getNodeType(c.type)?.category === hoverCategory)
+  const showPaste = !source && pasteCount > 0 && !!onPaste
   const primaryLabels = showTabs
     ? [
+        ...(showPaste ? [`粘贴 ${pasteCount} 个节点`] : []),
         ...categoryOptions.map((category) => category.label),
         ...(source ? [] : ['剧本 → 分镜', '上传本地文件', '从图库选择'])
       ]
@@ -165,6 +172,14 @@ export function NodeCreateMenu({
         <div className="node-menu-title">
           {source ? `可连接 ${source.portType} 输出` : '新建节点'}
         </div>
+        {showPaste && (
+          <>
+            <button className="node-menu-action" onClick={onPaste}>
+              粘贴 {pasteCount} 个节点
+            </button>
+            <div className="node-menu-divider" />
+          </>
+        )}
         {showTabs && (
           <div className="node-menu-category-list" onMouseLeave={hideCategoryMenu}>
             {categoryOptions.map((category) => (

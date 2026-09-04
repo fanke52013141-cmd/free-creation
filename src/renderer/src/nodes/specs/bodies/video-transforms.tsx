@@ -512,7 +512,8 @@ export function VideoTransformBody({
   const guard = useClickGuard()
   const editor = useEditor()
   const label = mode === 'frame' ? '视频取帧' : mode === 'clip' ? '视频截取' : '提取音频'
-  const openSettings = (): void => useNodePanelStore.getState().open('contract', shape.id)
+  const openSettings = (): void =>
+    useNodePanelStore.getState().open('contract', shape.id, 'settings')
   if (!shape.props.mediaPath) {
     return (
       <div className="asset-empty crop-empty">

@@ -5,7 +5,7 @@ import { getNodePorts, getNodeType } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
 import { Icon } from '../components/Icon'
 import { projectNodeOutputs, type NodeValue } from '../nodes/nodeValues'
-import { useNodePanelStore } from '../stores/nodePanel'
+import { useNodePanelStore, type NodePanelInitialTab } from '../stores/nodePanel'
 import { readNodeRunHistory, readNodeRunRecord, type NodeRunRecord } from '../engine/runRecord'
 import { readNodeConfig } from './node-persistence'
 import { markUndoPoint } from './history'
@@ -327,8 +327,19 @@ export function NodeContractPanel({
   onClose
 }: NodeContractPanelProps): React.JSX.Element | null {
   const shapeId = useNodePanelStore((s) => s.shapeId)
-  const [tab, setTab] = useState<InspectorTab>('overview')
+  const initialTab = useNodePanelStore((s) => s.initialTab)
+  const [tab, setTab] = useState<InspectorTab>(initialTab === 'settings' ? 'settings' : 'overview')
   const [runningAction, setRunningAction] = useState<'node' | 'subgraph' | null>(null)
+  // 打开/切换节点（或配置类入口改变 initialTab）时，渲染期同步重置 tab，
+  // 不用 effect 里 setState（避免级联渲染告警）。
+  const [tabAnchor, setTabAnchor] = useState<{ shapeId: string | null; initialTab: NodePanelInitialTab }>({
+    shapeId,
+    initialTab
+  })
+  if (tabAnchor.shapeId !== shapeId || tabAnchor.initialTab !== initialTab) {
+    setTabAnchor({ shapeId, initialTab })
+    setTab(initialTab)
+  }
 
   // Esc 关闭面板（与其它浮层面板行为统一）
   useEffect(() => {

@@ -1362,20 +1362,23 @@
   padding: 0;
 }
 
-/* 标题区按“序号 → 类型 → 名称 → 状态 → 操作”建立清晰层级。 */
+/* 标题行布局（用户重排）：左侧 序号→图标→名称→说明（文本节点再跟字数徽标），
+   中间弹性占位，右侧 状态灯→运行按钮。
+   序号改为纯文字（用户要求去掉外围边框/底色/内阴影），保持 10px/800 字号：
+   画布缩放（tldraw 用 transform scale 渲染 HTML）时大字号会被缩放出
+   亚像素采样，产生用户反馈的“序号模糊”，因此字号不再放大。 */
 .node-seq,
 .canvas-theme-light .node-seq {
-  min-width: 18px;
-  height: 22px;
+  min-width: 0;
+  height: auto;
   padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
-  color: #fff !important;
-  font-size: 17px;
+  font-size: 10px;
   font-weight: 800;
-  line-height: 22px;
+  line-height: inherit;
 }
 
 .node-icon {
@@ -1540,12 +1543,14 @@
     filter 140ms ease;
 }
 
+/* 命中路径不再拦截 DOM 指针事件：14px 描边宽度仅作为 isPointInStroke 的几何
+   判定宽度（DataEdgeLayer 在 window 捕获阶段手动计算命中），避免连线附近
+   按下鼠标时挡住 tldraw 的框选/平移。 */
 .data-edge-hit {
   fill: none;
   stroke: transparent;
   stroke-width: 14;
-  pointer-events: stroke;
-  cursor: pointer;
+  pointer-events: none;
 }
 
 .data-edge.is-hovered .data-edge-visible {

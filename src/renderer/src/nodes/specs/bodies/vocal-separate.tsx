@@ -18,7 +18,8 @@ export function VocalSeparateBody({ shape, openPreview }: NodeBodyProps): React.
   const record = parseVocalSeparationResult(
     typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
   )
-  const openSettings = (): void => useNodePanelStore.getState().open('contract', shape.id)
+  const openSettings = (): void =>
+    useNodePanelStore.getState().open('contract', shape.id, 'settings')
   if (!record) {
     return (
       <div className="asset-empty crop-empty">

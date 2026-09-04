@@ -1,6 +1,13 @@
 // NodeCard tldraw 自定义形状：所有节点类型的统一卡片容器
 import { createShapePropsMigrationIds, createShapePropsMigrationSequence } from '@tldraw/tlschema'
-import { BaseBoxShapeUtil, T, type RecordProps, type TLBaseShape } from 'tldraw'
+import {
+  BaseBoxShapeUtil,
+  T,
+  type RecordProps,
+  type TLBaseShape,
+  type TLResizeInfo,
+  type TLShapePartial
+} from 'tldraw'
 import { NodeCardView } from './NodeCardView'
 
 // 声明合并：把 node-card 并入 tldraw 的 TLShape 联合类型（官方扩展点）
@@ -88,6 +95,21 @@ export class NodeCardUtil extends BaseBoxShapeUtil<NodeCardShape> {
   /** 文本节点允许进入 tldraw 编辑态——编辑期间 tldraw 不再拦截键盘事件。 */
   override canEdit(shape: NodeCardShape): boolean {
     return shape.props.nodeType === 'text'
+  }
+
+  /**
+   * 分组缩放时（tldraw 会以 mode='scale_shape' 通知组内子节点）返回 undefined，
+   * 让编辑器走“仅平移”分支：卡片 w/h 保持不变，只随缩放比例重新定位。
+   * 卡片头部与正文是固定像素 CSS（header 悬浮在 top:-29px、字号不随 w/h 变化），
+   * w/h 被缩放后与它们错位——这正是“打组后缩放、节点相对位置和文字大小漂移”的根因。
+   * 直接拖单个节点自己的缩放手柄时（mode='resize_bounds'）仍正常缩放 w/h。
+   */
+  override onResize(
+    shape: NodeCardShape,
+    info: TLResizeInfo<NodeCardShape>
+  ): Omit<TLShapePartial<NodeCardShape>, 'id' | 'type'> | undefined {
+    if (info.mode === 'scale_shape') return undefined
+    return super.onResize(shape, info)
   }
 
   /** 选中时不再绘制节点外框实线，只保留 tldraw 自带的圆形缩放手柄。 */

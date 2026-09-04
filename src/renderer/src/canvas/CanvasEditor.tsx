@@ -3,7 +3,7 @@ import 'tldraw/tldraw.css'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ProjectMeta, MediaAsset, NodeTypeId } from '@shared/types'
 import { Tooltip } from '../components/Tooltip'
-import { NodeCardUtil, type NodeCardProps } from './NodeCardShape'
+import { NodeCardUtil, type NodeCardProps, type NodeCardShape } from './NodeCardShape'
 import { CarrierArrowUtil } from './CarrierArrowUtil'
 import { repairTldrawSnapshot } from './tldrawSnapshotRepair'
 import { NodeCreateMenu } from './NodeCreateMenu'
@@ -198,6 +198,10 @@ export function CanvasEditor({
   const restoreFailedRef = useRef(false)
   // 拉线到空白处松手：暂存连线来源，待菜单选定节点类型后自动连线（LibTV 交互）
   const pendingConnectRef = useRef<ConnectionFrom | null>(null)
+  // 节点剪贴板：Ctrl+C / 右键「复制」暂存节点 props 与相对整体左上角的偏移，粘贴时按原布局重建
+  const clipboardRef = useRef<Array<{ props: NodeCardProps; dx: number; dy: number }> | null>(null)
+  // 剪贴板节点数进入 React 状态，让「新建节点」菜单能响应式显示「粘贴」入口
+  const [clipboardCount, setClipboardCount] = useState(0)
   const [menu, setMenu] = useState<MenuState | null>(null)
   const [dragOver, setDragOver] = useState(false)
   // 在 React 状态中持有 editor，让右下角停靠簇能订阅画布变化（editorRef 变化不会触发重渲染）
@@ -537,25 +541,82 @@ export function CanvasEditor({
     return () => el.removeEventListener('keydown', onKeyDownCapture, { capture: true })
   }, [])
 
-  // 全局快捷键：Ctrl+D 复制选中节点、Delete 删除选中连线、Ctrl+Shift+F 适配画布
+  // 把选中的 node-card 写入节点剪贴板（保留相对整体左上角的偏移，粘贴时恢复布局）
+  const copySelectionToClipboard = useCallback((editor: Editor): number => {
+    const cards = editor
+      .getSelectedShapes()
+      .filter((s): s is NodeCardShape => s.type === 'node-card')
+    const items: Array<{ props: NodeCardProps; dx: number; dy: number }> = []
+    let minX = Infinity
+    let minY = Infinity
+    for (const card of cards) {
+      const bounds = editor.getShapePageBounds(card.id)
+      if (!bounds) continue
+      minX = Math.min(minX, bounds.x)
+      minY = Math.min(minY, bounds.y)
+      items.push({ props: { ...card.props }, dx: bounds.x, dy: bounds.y })
+    }
+    if (items.length === 0) return 0
+    for (const item of items) {
+      item.dx -= minX
+      item.dy -= minY
+    }
+    clipboardRef.current = items
+    setClipboardCount(items.length)
+    return items.length
+  }, [])
+
+  // 把剪贴板节点粘贴到屏幕坐标 (screenX, screenY)：整体左上角对齐该点，保持复制时的相对布局
+  const pasteClipboardAt = useCallback((screenX: number, screenY: number): number => {
+    const editor = editorRef.current
+    const items = clipboardRef.current
+    if (!editor || !items || items.length === 0) return 0
+    const anchor = editor.screenToPage({ x: screenX, y: screenY })
+    const ids: TLShapeId[] = []
+    for (const item of items) {
+      const id = createShapeId()
+      ids.push(id)
+      editor.createShape({
+        id,
+        type: 'node-card',
+        x: anchor.x + item.dx,
+        y: anchor.y + item.dy,
+        // 粘贴得到的是干净节点：不携带原节点的运行状态
+        props: { ...item.props, exec: 'idle' }
+      })
+    }
+    markUndoPoint(editor, 'paste-nodes')
+    editor.select(...ids)
+    return ids.length
+  }, [])
+
+  // 全局快捷键（window 捕获阶段，先于 tldraw 容器自身的快捷键管线）：
+  // Delete 删除选中节点/分组/连线，Ctrl+C/V 复制粘贴节点，Ctrl+D 原地复制，Ctrl+Shift+F 适配画布
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       const editor = editorRef.current
       if (!editor) return
-      // 正在编辑文本（节点内文本/标题、顶栏项目名、各类输入框）时不拦截 Ctrl+D / Ctrl+Shift+F，
-      // 避免把"复制选中节点 / 适配画布"等画布操作误注入到用户的输入上下文
+      // 正在编辑文本（节点内文本/标题、顶栏项目名、各类输入框）时不拦截，
+      // 避免把画布快捷键误注入到用户的输入上下文
       const active = document.activeElement
       const typing =
         !!editor.getEditingShape() ||
         (active instanceof HTMLElement &&
           (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable))
       if (typing) return
+      // 焦点不在画布且画布上无选中时不接管，避免误伤侧栏/顶栏的快捷键语义
+      const container = editor.getContainer()
+      const inCanvas =
+        container === active || (container !== null && container.contains(active)) ||
+        editor.getSelectedShapeIds().length > 0
+      if (!inCanvas) return
       const mod = e.ctrlKey || e.metaKey
       if (e.key === 'Delete' || e.key === 'Backspace') {
         // 数据连线由专用连接层选中，不能平移但可明确断开。
         const selectedDataEdge = useEdgeSelectionStore.getState().selectedEdgeId
         if (selectedDataEdge && editor.getShape(selectedDataEdge as TLShapeId)?.type === 'arrow') {
           e.preventDefault()
+          e.stopPropagation()
           markUndoPoint(editor, 'delete-connections')
           editor.deleteShapes([selectedDataEdge as TLShapeId])
           useEdgeSelectionStore.getState().clear()
@@ -569,16 +630,55 @@ export function CanvasEditor({
           .map((shape) => shape.id)
         if (arrows.length > 0) {
           e.preventDefault()
+          e.stopPropagation()
           markUndoPoint(editor, 'delete-connections')
           editor.deleteShapes(arrows)
           toast(`已断开 ${arrows.length} 条连线`)
+          return
+        }
+        // 选中节点（含分组）后按 Delete / Backspace 直接删除。
+        const selected = editor
+          .getSelectedShapes()
+          .filter((shape) => shape.type === 'node-card' || shape.type === 'group')
+          .map((shape) => shape.id)
+        if (selected.length > 0) {
+          e.preventDefault()
+          e.stopPropagation()
+          markUndoPoint(editor, 'delete-nodes')
+          editor.deleteShapes(selected)
+          toast(`已删除 ${selected.length} 项`)
           return
         }
       }
       if (mod && e.shiftKey && (e.key === 'f' || e.key === 'F')) {
         if (e.altKey) return // Shift+Alt+F 整理画布交给小地图
         e.preventDefault()
+        e.stopPropagation()
         editor.zoomToFit({ animation: { duration: 200 } })
+        return
+      }
+      if (mod && !e.shiftKey && (e.key === 'c' || e.key === 'C')) {
+        const n = copySelectionToClipboard(editor)
+        if (n > 0) {
+          e.preventDefault()
+          e.stopPropagation()
+          toast(`已复制 ${n} 个节点，可在空白处粘贴`)
+        }
+        return
+      }
+      if (mod && !e.shiftKey && (e.key === 'v' || e.key === 'V')) {
+        const items = clipboardRef.current
+        if (items && items.length > 0) {
+          e.preventDefault()
+          e.stopPropagation()
+          // 粘贴到视口中心：先把锚点从整体左上角回退半个整体尺寸，实现整体居中
+          const center = editor.getViewportPageBounds().center
+          const screen = editor.pageToScreen(center)
+          const w = Math.max(...items.map((item) => item.dx + item.props.w))
+          const h = Math.max(...items.map((item) => item.dy + item.props.h))
+          const n = pasteClipboardAt(screen.x - w / 2, screen.y - h / 2)
+          if (n > 0) toast(`已粘贴 ${n} 个节点`)
+        }
         return
       }
       if (mod && (e.key === 'd' || e.key === 'D')) {
@@ -588,13 +688,15 @@ export function CanvasEditor({
         })
         if (sel.length === 0) return
         e.preventDefault()
+        e.stopPropagation()
         markUndoPoint(editor, 'duplicate-nodes')
         editor.duplicateShapes(sel)
       }
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
+    // 捕获阶段监听：在 tldraw 容器处理之前接管 Delete / Ctrl+C / Ctrl+V 等键位语义
+    window.addEventListener('keydown', onKey, { capture: true })
+    return () => window.removeEventListener('keydown', onKey, { capture: true })
+  }, [copySelectionToClipboard, pasteClipboardAt])
 
   // 消费「拉线到空白」的待连线；返回是否成功建线（失败也要打撤销分段点）
   const connectPendingTo = (
@@ -1017,7 +1119,9 @@ export function CanvasEditor({
           ZoomMenu: null,
           Minimap: null,
           NavigationPanel: null,
-          SharePanel: null
+          SharePanel: null,
+          // 禁用 tldraw 内置英文右键菜单，画布右键统一走自定义中文菜单
+          ContextMenu: null
         }}
       />
       {editorInstance && <GroupOutlineLayer editor={editorInstance} hostRef={wrapRef} />}
@@ -1235,6 +1339,12 @@ export function CanvasEditor({
             createStoryboardTemplate(menu.x, menu.y)
             setMenu(null)
           }}
+          pasteCount={clipboardCount}
+          onPaste={() => {
+            const n = pasteClipboardAt(menu.x, menu.y)
+            if (n > 0) toast(`已粘贴 ${n} 个节点`)
+            setMenu(null)
+          }}
           onClose={closeMenu}
           source={menu.source ?? null}
         />
@@ -1245,6 +1355,7 @@ export function CanvasEditor({
           ids={menu.ids}
           x={menu.x}
           y={menu.y}
+          onCopy={() => copySelectionToClipboard(editorInstance)}
           onClose={closeMenu}
         />
       )}
