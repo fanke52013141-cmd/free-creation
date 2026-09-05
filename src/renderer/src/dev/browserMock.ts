@@ -1,6 +1,7 @@
 // 浏览器直连 vite dev 时的 window.api 模拟：Electron 内 preload 已提供真实 api，
-// 此 mock 仅在开发期用浏览器验证画布交互（建节点/拖拽/缩放），媒体导入返回空
+// 此 mock 仅在开发期用浏览器验证画布交互；媒体仅保存在当前浏览器会话。
 import type { ProjectMeta, ProjectFile, ProviderSummary } from '@shared/types'
+import { createBrowserMedia } from './browserMedia'
 import {
   defaultPalettePreferences,
   normalizePalettePreferences,
@@ -9,6 +10,7 @@ import {
 
 export function installBrowserMock(): void {
   if (window.api) return
+  const media = createBrowserMedia()
 
   const now = Date.now()
   const projects: ProjectMeta[] = [
@@ -75,15 +77,42 @@ export function installBrowserMock(): void {
     saveProjectSync: () => undefined,
     closeProject: () => Promise.resolve({ ok: true, data: true }),
     onExternalProjectChange: () => () => undefined,
-    exportProject: () => Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持项目导出' } }),
-    importProject: () => Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持项目导入' } }),
-    importMedia: () => Promise.resolve({ ok: true, data: { assets: [], errors: [] } }),
-    importMediaBuffer: () =>
-      Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持媒体写入' } }),
+    exportProject: () =>
+      Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持项目导出' } }),
+    importProject: () =>
+      Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持项目导入' } }),
+    importMedia: () =>
+      Promise.resolve({
+        ok: false,
+        error: { code: 'MOCK', message: '浏览器不能读取本地路径，请使用上传按钮选择文件' }
+      }),
+    importMediaBuffer: (input: {
+      projectId: string
+      name: string
+      mime: string
+      data: Uint8Array
+    }) =>
+      media
+        .addBuffer(input.projectId, input)
+        .then((data) => ({ ok: true as const, data }))
+        .catch((error) => ({
+          ok: false as const,
+          error: { code: 'MOCK_IMPORT', message: String(error) }
+        })),
     cropImage: () =>
       Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持本地裁剪' } }),
-    splitImageGrid: () =>
-      Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持图片拆分' } }),
+    splitImageGrid: (input: {
+      projectId: string
+      sourceMediaId: string
+      config: import('@shared/image-split').ImageSplitConfig
+    }) =>
+      media
+        .splitImage(input.projectId, input.sourceMediaId, input.config)
+        .then((data) => ({ ok: true as const, data }))
+        .catch((error) => ({
+          ok: false as const,
+          error: { code: 'MOCK_IMAGE_SPLIT', message: String(error) }
+        })),
     extractVideoFrame: () =>
       Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持视频取帧' } }),
     clipVideo: () =>
@@ -93,7 +122,10 @@ export function installBrowserMock(): void {
     probeVideo: () =>
       Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持视频探测' } }),
     generateVideoThumbnails: () =>
-      Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持视频缩略图' } }),
+      Promise.resolve({
+        ok: false,
+        error: { code: 'MOCK', message: '浏览器演示不支持视频缩略图' }
+      }),
     generateAudioWaveform: () =>
       Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持音频波形' } }),
     separateVocals: () =>
@@ -109,9 +141,9 @@ export function installBrowserMock(): void {
           audioSeparator: { available: false, message: '浏览器演示不检测本机工具' }
         }
       }),
-    pickMedia: () => Promise.resolve({ ok: true, data: { assets: [], errors: [] } }),
-    listMedia: () => Promise.resolve({ ok: true, data: [] }),
-    deleteMedia: () => Promise.resolve({ ok: true, data: true }),
+    pickMedia: async (projectId: string) => ({ ok: true, data: await media.pick(projectId) }),
+    listMedia: (projectId: string) => Promise.resolve({ ok: true, data: media.list(projectId) }),
+    deleteMedia: (id: string) => Promise.resolve({ ok: true, data: media.remove(id) }),
     revealMedia: () => Promise.resolve({ ok: true, data: true }),
     copyMediaPath: () => Promise.resolve({ ok: true, data: true }),
     openMedia: () => Promise.resolve({ ok: true, data: true }),
@@ -202,7 +234,10 @@ export function installBrowserMock(): void {
       chatStart: () => Promise.resolve({ ok: true, data: { taskId: 'mock-task' } }),
       chatCancel: () => Promise.resolve({ ok: true, data: true }),
       audioGenerate: () =>
-        Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持音频生成' } }),
+        Promise.resolve({
+          ok: false,
+          error: { code: 'MOCK', message: '浏览器演示不支持音频生成' }
+        }),
       imageGenerate: () =>
         Promise.resolve({
           ok: false,

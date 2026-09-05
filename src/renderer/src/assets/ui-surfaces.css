@@ -584,13 +584,6 @@
   --node-status-ring: #fffdfa;
 }
 
-.canvas-theme-light .node-seq {
-  border-color: rgba(20, 38, 52, 0.28);
-  background: #344451;
-  color: #fff !important;
-  box-shadow: inset 0 1px rgba(255, 255, 255, 0.15);
-}
-
 .canvas-theme-light .media-result-summary strong {
   color: #0a78ab;
 }
@@ -1112,8 +1105,8 @@
 /* 契约抽屉本身就是节点的说明书，不能为了紧凑牺牲文字可读性。 */
 .node-contract-panel {
   width: clamp(350px, 25vw, 390px);
-  /* 给固定在画布底部的资产 / 流程 / 历史 / 运行 / 主题工具条留出完整空间。 */
-  bottom: var(--canvas-bottom-utility-h, 82px);
+  /* 抽屉延伸至画布底部；底部工具条改为全局居中显示，不再挤压内容。 */
+  bottom: 0;
 }
 
 .contract-body {
@@ -1362,11 +1355,28 @@
   padding: 0;
 }
 
-/* 标题行布局（用户重排）：左侧 序号→图标→名称→说明（文本节点再跟字数徽标），
-   中间弹性占位，右侧 状态灯→运行按钮。
-   序号改为纯文字（用户要求去掉外围边框/底色/内阴影），保持 10px/800 字号：
-   画布缩放（tldraw 用 transform scale 渲染 HTML）时大字号会被缩放出
-   亚像素采样，产生用户反馈的“序号模糊”，因此字号不再放大。 */
+/* 标题完全悬浮在节点上方。基础层曾保留 auto 宽度，导致右侧运行按钮只能紧跟标题，
+   无法真正贴齐节点右上角；最终层在这里收口为全宽的单行布局。 */
+.node-header {
+  top: -34px;
+  left: 0;
+  width: 100%;
+  max-width: none;
+  height: 28px;
+  box-sizing: border-box;
+  gap: 6px;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  font-size: 15px;
+}
+
+.node-header-spacer {
+  flex: 1 1 auto;
+  min-width: 8px;
+}
+
+/* 序号比名称更醒目，无底框。 */
 .node-seq,
 .canvas-theme-light .node-seq {
   min-width: 0;
@@ -1376,9 +1386,38 @@
   border-radius: 0;
   background: transparent;
   box-shadow: none;
-  font-size: 10px;
+  font-size: 19px;
   font-weight: 800;
   line-height: inherit;
+}
+
+.canvas-theme-light .node-seq {
+  color: #e53935;
+}
+
+.image-asset-empty > svg {
+  width: 48px;
+  height: 48px;
+}
+
+.image-asset-empty > span {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.image-asset-empty small {
+  font-size: 13px;
+  line-height: 1.6;
+  max-width: 270px;
+}
+
+.image-asset-empty .image-import-button {
+  min-width: 120px;
+  min-height: 40px;
+  padding: 8px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 10px;
 }
 
 .node-icon {
@@ -1430,34 +1469,71 @@
   transform: translateY(-1px) scale(1.08);
 }
 
-/* 运行按钮与说明按钮分离：它贴在节点框右上角，不占用标题行宽度。 */
+/* 运行按钮与标题行垂直居中，并固定在节点右上角。 */
 .node-action-float {
-  position: absolute;
-  z-index: 12;
-  top: -34px;
-  right: -4px;
   display: inline-flex;
   align-items: center;
   gap: 5px;
   height: 24px;
+  flex: 0 0 auto;
+  margin-left: 2px;
   pointer-events: auto;
 }
 
-.node-readiness-badge {
-  display: inline-flex;
+/* 运行页是一个紧凑的执行卡，不让空记录区域占满抽屉。 */
+.contract-run-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.contract-run-actions button {
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid rgba(74, 190, 248, 0.32);
+  background: rgba(36, 122, 167, 0.14);
+  color: #dff5ff;
+  font-size: 12px;
+}
+
+.contract-run-empty {
+  display: grid;
+  grid-template-columns: auto 1fr;
   align-items: center;
-  max-width: 116px;
-  height: 18px;
-  padding: 0 7px;
-  border: 1px solid rgba(52, 211, 153, 0.28);
-  border-radius: 999px;
-  background: rgba(16, 45, 42, 0.82);
-  color: #7be8bd;
-  font-size: 10px;
-  line-height: 18px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  gap: 3px 8px;
+  margin: 2px 0 0;
+  padding: 13px 12px;
+  border: 1px solid rgba(162, 181, 196, 0.18);
+  border-radius: 10px;
+  background: rgba(9, 14, 20, 0.2);
+  color: #d6e2ea;
+}
+
+.contract-run-empty svg {
+  grid-row: span 2;
+  color: #78c8ef;
+}
+
+.contract-run-empty small {
+  color: #90a2b0;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.canvas-theme-light .contract-run-actions button {
+  border-color: #d9e3ef;
+  background: #f7fbff;
+  color: #1f609c;
+}
+
+.canvas-theme-light .contract-run-empty {
+  border-color: #e1e7ee;
+  background: #fafbfd;
+  color: #263544;
+}
+
+.canvas-theme-light .contract-run-empty small {
+  color: #718091;
 }
 
 /* 选中态保持圆角虚线，色带仍只承担节点类型识别。 */
@@ -1681,6 +1757,106 @@
   white-space: pre-wrap;
 }
 
+/* 浅色详情：白色阅读底、灰色层级，仅主操作和当前页使用蓝色。 */
+.canvas-theme-light .node-contract-panel {
+  --txt: #18212d;
+  --muted: #5f6b7a;
+  width: min(420px, calc(100vw - 96px));
+  background: #fff;
+  color: var(--txt);
+  border-left: 1px solid #e2e6eb;
+  box-shadow: -8px 0 28px rgb(24 33 45 / 7%);
+}
+
+.canvas-theme-light .node-contract-panel .contract-head {
+  background: #fff;
+  border-bottom: 1px solid #e8ebef;
+}
+
+.canvas-theme-light .node-contract-panel .contract-tabs {
+  background: #f5f6f8;
+  border: 0;
+  box-shadow: none;
+  padding: 4px;
+  border-radius: 10px;
+}
+
+.canvas-theme-light .node-contract-panel .contract-tabs button.active {
+  background: #fff;
+  border-color: #e2e6eb;
+  color: #1768c4;
+  box-shadow: 0 1px 3px rgb(24 33 45 / 6%);
+}
+
+.canvas-theme-light
+  .node-contract-panel
+  :is(
+    .contract-port,
+    .contract-test-input,
+    .contract-overview-grid > span,
+    .contract-run-info,
+    .contract-run-history-item
+  ) {
+  background: #fafbfc;
+  border: 1px solid #e5e8ed;
+  border-radius: 12px;
+  padding: 14px;
+  box-shadow: none;
+}
+
+.canvas-theme-light
+  .node-contract-panel
+  :is(input:not([type='checkbox']):not([type='range']), textarea, select) {
+  background-color: #fff;
+  color: #18212d;
+  border: 1px solid #cbd2dc;
+  border-radius: 8px;
+  box-shadow: none;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.canvas-theme-light .node-contract-panel :is(input, textarea, select):focus {
+  border-color: #2878d4;
+  outline: 3px solid rgb(40 120 212 / 12%);
+}
+
+.canvas-theme-light
+  .node-contract-panel
+  :is(.contract-port code, .contract-settings-code, .contract-test-result pre) {
+  background: #f0f2f5;
+  color: #485466;
+  border: 0;
+  font-size: 12px;
+}
+
+.canvas-theme-light .node-contract-panel .contract-test-input strong {
+  font-size: 14px;
+}
+
+.canvas-theme-light .node-contract-panel .contract-test-run {
+  min-height: 42px;
+  background: #246fc9;
+  color: #fff;
+  border: 0;
+  font-size: 14px;
+}
+
+.canvas-theme-light .node-contract-panel .contract-test-run:hover:not(:disabled) {
+  background: #1c5fad;
+}
+
+.canvas-theme-light .node-contract-panel .contract-test-result {
+  background: #fafbfc;
+  border: 1px solid #e5e8ed;
+  border-left: 3px solid #298458;
+  color: #18212d;
+}
+
+.canvas-theme-light .node-contract-panel .contract-test-result.failed {
+  border-left-color: #c23c3c;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .palette-item,
   .palette-item::before,
@@ -1749,6 +1925,60 @@
   color: var(--ui-text, #f5f8fc);
   font-size: 12px;
   white-space: nowrap;
+}
+
+.video-reference-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+}
+
+.video-reference-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 3px 7px 3px 3px;
+  border: 1px solid rgba(82, 183, 245, 0.3);
+  border-radius: 999px;
+  background: rgba(82, 183, 245, 0.09);
+  color: var(--ui-text, #e8f6ff);
+  font-size: 11px;
+}
+
+.video-reference-chip img {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.video-param-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.video-param-grid > label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.video-param-grid > label > span {
+  color: var(--ui-text-muted, #9ba9bb);
+  font-size: 11px;
+}
+
+.video-param-grid .gen-select {
+  width: 100%;
+}
+
+@media (max-width: 520px) {
+  .video-param-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Canvas dock final overrides: navigation stays in bottom-left corner. */

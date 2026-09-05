@@ -1,6 +1,7 @@
 /** 图片修改节点的稳定配置：标注是配置，不是隐藏的数据端口。 */
 export type ImageEditAnnotationType = 'arrow' | 'rect' | 'brush' | 'text'
-export type ImageEditColor = 'red' | 'yellow' | 'orange'
+/** orange 仅用于兼容旧项目；读取时会迁移为蓝色标注。 */
+export type ImageEditColor = 'red' | 'yellow' | 'blue' | 'orange'
 
 export interface ImageEditPoint {
   x: number
@@ -51,7 +52,7 @@ export const DEFAULT_IMAGE_EDIT_CONFIG: ImageEditConfig = {
 }
 
 const TYPES = new Set<ImageEditAnnotationType>(['arrow', 'rect', 'brush', 'text'])
-const COLORS = new Set<ImageEditColor>(['red', 'yellow', 'orange'])
+const COLORS = new Set<ImageEditColor>(['red', 'yellow', 'blue', 'orange'])
 const clamp = (value: number): number => Math.min(1, Math.max(0, value))
 
 function point(value: unknown): ImageEditPoint {
@@ -111,9 +112,12 @@ export function parseImageEditConfig(text: string): ImageEditConfig {
               ? value.id.trim().slice(0, 80)
               : `annotation-${index + 1}`,
           type,
-          color: COLORS.has(value.color as ImageEditColor)
-            ? (value.color as ImageEditColor)
-            : 'red',
+          color:
+            value.color === 'orange'
+              ? 'blue'
+              : COLORS.has(value.color as ImageEditColor)
+                ? (value.color as ImageEditColor)
+                : 'red',
           points,
           ...(text ? { text } : {}),
           strokeWidth

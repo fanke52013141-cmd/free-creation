@@ -3,6 +3,7 @@
 import { createPortal } from 'react-dom'
 import { useConnectionStore } from '../stores/connection'
 import { PORT_COLORS } from '../nodes/registry'
+import { buildDataEdgePath } from './edge-geometry'
 
 export function ConnectionLayer(): React.JSX.Element | null {
   const draft = useConnectionStore((s) => s.draft)
@@ -11,9 +12,8 @@ export function ConnectionLayer(): React.JSX.Element | null {
 
   const { startPt, pointer, from } = draft
   const color = PORT_COLORS[from.portType] ?? '#09caf5'
-  // 从出端口（起点，右侧）到指针画一条平滑贝塞尔曲线：控制点沿水平方向外扩，形成自然弧度
-  const dx = Math.max(48, Math.abs(pointer.x - startPt.x) * 0.5)
-  const path = `M ${startPt.x} ${startPt.y} C ${startPt.x + dx} ${startPt.y}, ${pointer.x - dx} ${pointer.y}, ${pointer.x} ${pointer.y}`
+  // 与正式连线使用同一套比例几何，拖拽预览在反向拖动时也不会翻折成 S 型。
+  const path = buildDataEdgePath(startPt, pointer)
   return createPortal(
     <svg className="conn-overlay">
       {/* 极弱底光仅用于把正在拖拽的连线从画布中分离出来。 */}

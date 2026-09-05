@@ -20,4 +20,15 @@ describe('画布创建节点交互', () => {
     expect(canvasEditorSource).toContain("editor.setCurrentTool('select')")
     expect(canvasEditorSource).toContain("registerAfterCreateHandler('shape'")
   })
+
+  it('节点拖近时只通过统一契约校验自动连接，不绕过端口规则', () => {
+    expect(canvasEditorSource).toContain('tryAutoConnectNearby')
+    expect(canvasEditorSource).toContain('已按兼容端口自动连接两个节点')
+  })
+
+  it('双节点框选后，连线可在目标附近吸附，缩放不会改变屏幕吸附范围', () => {
+    expect(canvasEditorSource).toContain('selected.length === 2')
+    expect(canvasEditorSource).toContain('56 / zoom')
+    expect(canvasEditorSource).toContain('已吸附连接到已选节点')
+  })
 })

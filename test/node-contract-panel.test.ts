@@ -26,10 +26,10 @@ describe('节点详情面板', () => {
     expect(panelSource.slice(runStart)).not.toContain('<TestHarness')
   })
 
-  it('文本测试输入失焦后会回写文本节点，面板本身固定在底部工具条上方滚动', () => {
+  it('文本测试输入失焦后会回写文本节点，面板本身可延伸至画布底部滚动', () => {
     expect(panelSource).toContain('onTextInputCommit?.(port, type, event.target.value)')
     expect(panelSource).toContain("markUndoPoint(editor, 'contract-text-input')")
-    expect(surfaceSource).toContain('bottom: var(--canvas-bottom-utility-h, 82px)')
+    expect(surfaceSource).toContain('bottom: 0')
     expect(surfaceSource).toContain('flex: 1 1 auto')
   })
 })

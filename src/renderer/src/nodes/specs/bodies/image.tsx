@@ -22,6 +22,7 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     if (!project) return
     const res = await window.api.pickMedia(project.id)
     if (!res.ok) return toast(`导入失败：${res.error.message}`)
+    if (res.data.assets.length === 0 && res.data.errors.length === 0) return
     const asset = res.data.assets.find((item) => item.kind === 'image')
     if (!asset) return toast('请选择一张图片文件')
     editor.updateShape({
@@ -39,12 +40,12 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
 
   if (!shape.props.mediaPath) {
     return (
-      <div className="asset-empty">
-        <Icon name="image" size={24} />
+      <div className="asset-empty image-asset-empty">
+        <Icon name="image" size={40} />
         <span>图片资产</span>
         <small>上传或粘贴图片后，可连接给生图、视频等节点。</small>
         <button
-          className="btn-ghost small"
+          className="btn-ghost image-import-button"
           onPointerDown={(e) => stopEventPropagation(e)}
           onClick={(e) => {
             e.stopPropagation()

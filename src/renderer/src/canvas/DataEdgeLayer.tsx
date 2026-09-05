@@ -3,19 +3,12 @@ import type { Editor, TLShapeId } from 'tldraw'
 import { getNodePorts, getNodeType, portOffsets, PORT_COLORS } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
 import { useEdgeSelectionStore } from '../stores/edgeSelection'
+import { buildDataEdgePath } from './edge-geometry'
 
 interface ScreenEdge {
   id: TLShapeId
   path: string
   color: string
-}
-
-function edgePath(start: { x: number; y: number }, end: { x: number; y: number }): string {
-  // 业务线只从源端口水平离开、向目标端口水平收束；不用 tldraw Arrow 的 bend，
-  // 避免出现用户截图中“向下坠”的大弧线。
-  const distance = Math.abs(end.x - start.x)
-  const handle = Math.max(42, Math.min(156, distance * 0.46))
-  return `M ${start.x} ${start.y} C ${start.x + handle} ${start.y}, ${end.x - handle} ${end.y}, ${end.x} ${end.y}`
 }
 
 function collectEdges(editor: Editor, host: HTMLDivElement): ScreenEdge[] {
@@ -65,7 +58,7 @@ function collectEdges(editor: Editor, host: HTMLDivElement): ScreenEdge[] {
     result.push({
       id: arrow.id,
       color: PORT_COLORS[fromPort.type] ?? '#8f73ff',
-      path: edgePath(
+      path: buildDataEdgePath(
         { x: startScreen.x - hostRect.left, y: startScreen.y - hostRect.top },
         { x: endScreen.x - hostRect.left, y: endScreen.y - hostRect.top }
       )

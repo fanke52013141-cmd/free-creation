@@ -48,4 +48,11 @@ export type { ShotShape, VariableValueType, ChatInput, VideoMedia, VideoGenData 
 export { readNodeConfig, usesNodeConfig, CONFIG_NODE_TYPES } from './node-config'
 export type { ChatData, ChatDocument } from './chat-data'
 export { parseChat } from './chat-data'
+export {
+  CHAT_UNCOMPRESSED_MESSAGES,
+  CHAT_UNCOMPRESSED_ROUNDS,
+  buildChatCompressionPrompt,
+  langChainTranscript,
+  splitChatForCompression
+} from './chat-memory'
 export { EXECUTOR_REGISTRY, getExecutor } from './executors'

@@ -216,10 +216,9 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
       { shapeId: item.shapeId, portId: 'out-image' },
       { shapeId: shape.id, portId: 'in-reference-images' }
     )
-    // 已连接同一素材时无需重复建边，仍允许用户在提示词中补充“图片 N”。
-    const ordinal =
-      referenceImages.length + Number(Boolean(refImage)) + Number(Boolean(lastFrame)) + 1
-    const nextPrompt = `${draft}${draft && !/\s$/.test(draft) ? ' ' : ''}图片 ${ordinal}`
+    // @ 提示词只引用此端口的真实参考图序号，不把首帧、尾帧混入序号。
+    const ordinal = referenceImages.length + 1
+    const nextPrompt = `${draft}${draft && !/\s$/.test(draft) ? ' ' : ''}@图片 ${ordinal}`
     setDraft(nextPrompt)
     update({ ...data, prompt: nextPrompt })
     setMentionOpen(false)
@@ -404,16 +403,18 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
       )}
       {referenceImages.length > 0 && (
         <div className="ref-image-bar">
-          <img
-            src={mediaUrl(referenceImages[0].mediaPath)}
-            className="ref-image-thumb"
-            draggable={false}
-            alt="已连接参考图"
-          />
           <span className="ref-image-label">
             <Icon name="attach" size={13} />
-            已连接 {referenceImages.length} 张参考图（提示词可写“图片 1”等）。
+            已连接 {referenceImages.length} 张参考图（可在提示词中写 @图片 N）。
           </span>
+          <div className="video-reference-chips" aria-label="已连接参考图">
+            {referenceImages.map((image, index) => (
+              <span className="video-reference-chip" key={`${image.mediaPath}-${index}`}>
+                <img src={mediaUrl(image.mediaPath)} alt={`图片 ${index + 1}`} draggable={false} />
+                图片 {index + 1}
+              </span>
+            ))}
+          </div>
         </div>
       )}
       {audioReferences.length > 0 && (
@@ -480,51 +481,60 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           </div>
         )}
       </div>
-      <div className="gen-row">
+      <div className="video-param-grid" aria-label="视频生成参数">
         {framesDetermineRatio ? (
           <span className="gen-capability-note">画幅由首/尾帧决定</span>
         ) : (
+          <label>
+            <span>画幅</span>
+            <AppSelect
+              className="gen-select"
+              value={params.ratio ?? capabilities.ratios[0]}
+              onPointerDown={(e) => e.stopPropagation()}
+              onChange={(e) => update({ ...data, params: { ...params, ratio: e.target.value } })}
+            >
+              {capabilities.ratios.map((ratio) => (
+                <option key={ratio} value={ratio}>
+                  {ratio === 'adaptive' ? '自适应' : ratio}
+                </option>
+              ))}
+            </AppSelect>
+          </label>
+        )}
+        <label>
+          <span>时长（秒）</span>
           <AppSelect
             className="gen-select"
-            value={params.ratio ?? capabilities.ratios[0]}
+            value={String(params.duration ?? 5)}
             onPointerDown={(e) => e.stopPropagation()}
-            onChange={(e) => update({ ...data, params: { ...params, ratio: e.target.value } })}
+            onChange={(e) =>
+              update({ ...data, params: { ...params, duration: Number(e.target.value) } })
+            }
           >
-            {capabilities.ratios.map((ratio) => (
-              <option key={ratio} value={ratio}>
-                {ratio === 'adaptive' ? '自适应' : ratio}
+            {capabilities.durations.map((d) => (
+              <option key={d} value={d}>
+                {d}s
               </option>
             ))}
           </AppSelect>
-        )}
-        <AppSelect
-          className="gen-select w70"
-          value={String(params.duration ?? 5)}
-          onPointerDown={(e) => e.stopPropagation()}
-          onChange={(e) =>
-            update({ ...data, params: { ...params, duration: Number(e.target.value) } })
-          }
-        >
-          {capabilities.durations.map((d) => (
-            <option key={d} value={d}>
-              {d}s
-            </option>
-          ))}
-        </AppSelect>
-        <AppSelect
-          className="gen-select w86"
-          value={params.resolution ?? capabilities.resolutions.at(-1)}
-          onPointerDown={(e) => e.stopPropagation()}
-          onChange={(e) => update({ ...data, params: { ...params, resolution: e.target.value } })}
-        >
-          {capabilities.resolutions.map((r) => (
-            <option key={r} value={r}>
-              {r}
-            </option>
-          ))}
-        </AppSelect>
+        </label>
+        <label>
+          <span>分辨率</span>
+          <AppSelect
+            className="gen-select"
+            value={params.resolution ?? capabilities.resolutions.at(-1)}
+            onPointerDown={(e) => e.stopPropagation()}
+            onChange={(e) => update({ ...data, params: { ...params, resolution: e.target.value } })}
+          >
+            {capabilities.resolutions.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </AppSelect>
+        </label>
       </div>
-      {(capabilities.supportsGeneratedAudio || capabilities.supportsSeed) && (
+      {capabilities.supportsGeneratedAudio && (
         <div className="gen-row video-advanced-row">
           {capabilities.supportsGeneratedAudio && (
             <label className="video-checkbox">
@@ -538,25 +548,6 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
               />
               生成同步音频
             </label>
-          )}
-          {capabilities.supportsSeed && (
-            <input
-              className="gen-seed"
-              type="number"
-              min="-1"
-              placeholder="种子（可选）"
-              value={params.seed ?? ''}
-              onPointerDown={(e) => e.stopPropagation()}
-              onChange={(e) =>
-                update({
-                  ...data,
-                  params: {
-                    ...params,
-                    seed: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value)
-                  }
-                })
-              }
-            />
           )}
         </div>
       )}

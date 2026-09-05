@@ -29,6 +29,7 @@ import { toast } from '../stores/toast'
 import { useEngineStore } from './store'
 import {
   appendNodeRunHistory,
+  appendNodeRunTrace,
   inputSources,
   readNodeRunRecord,
   type NodeRunRecord,
@@ -464,24 +465,38 @@ async function executeNodeOnce(
     runId: ctx.runId,
     status: 'running',
     startedAt: Date.now(),
-    inputs: {}
+    inputs: {},
+    trace: [{ at: Date.now(), phase: 'input', level: 'info', message: '开始收集并校验输入端口' }]
   }
   setExec(editor, shapeId, 'running')
   writeRunRecord(editor, shapeId, record)
   try {
     const collected = collectNodeInputs(ctx, node, injection)
     record.inputs = inputSources(collected.value)
+    record.trace = appendNodeRunTrace(
+      record,
+      'input',
+      'info',
+      `已收集 ${Object.keys(record.inputs).length} 个输入端口`
+    ).trace
     writeRunRecord(editor, shapeId, record)
     if (collected.errors.length > 0) {
       throw new Error(`输入契约校验失败：${collected.errors.join('；')}`)
     }
     // 本次执行接管该节点的输出；失败或跳过时不能让本轮继续消费上一次结果。
     ctx.outputs.delete(node.id)
+    record.trace = appendNodeRunTrace(record, 'execution', 'info', '开始调用节点执行器').trace
+    writeRunRecord(editor, shapeId, record)
     const result = await invokeExecutor(ctx, node, shape, collected.value, runSubflow)
     const latest = editor.getShape<NodeCardShape>(shapeId)
     if (ctx.token.cancelled) {
       setExec(editor, shapeId, 'cancelled')
-      finishRunRecord(editor, shapeId, record, 'cancelled')
+      finishRunRecord(
+        editor,
+        shapeId,
+        appendNodeRunTrace(record, 'execution', 'info', '运行已取消'),
+        'cancelled'
+      )
       return { status: 'skipped', reason: '已取消' }
     }
     if (result.status === 'done') {
@@ -503,16 +518,28 @@ async function executeNodeOnce(
             nodeId: node.id,
             phase: 'output'
           })
-        finishRunRecord(editor, shapeId, record, 'failed', {
-          error: { phase: 'output', reason: `输出契约校验失败：${projected.errors.join('；')}` }
-        })
+        finishRunRecord(
+          editor,
+          shapeId,
+          appendNodeRunTrace(record, 'output', 'error', '输出契约校验失败'),
+          'failed',
+          {
+            error: { phase: 'output', reason: `输出契约校验失败：${projected.errors.join('；')}` }
+          }
+        )
         return { status: 'failed', reason: '输出契约校验失败' }
       }
       ctx.outputs.set(node.id, projected.value)
       setExec(editor, shapeId, 'success')
-      finishRunRecord(editor, shapeId, record, 'success', {
-        outputPorts: Object.keys(projected.value)
-      })
+      finishRunRecord(
+        editor,
+        shapeId,
+        appendNodeRunTrace(record, 'output', 'info', '输出契约校验通过'),
+        'success',
+        {
+          outputPorts: Object.keys(projected.value)
+        }
+      )
       // 拆分节点运行成功后，自动把每格结果展开为独立图片节点并连线（幂等）。
       // 惰性加载避免把 UI 模块静态拉进工作流引擎；explode 失败不影响运行结果。
       if (latest?.props.nodeType === 'image-split') {
@@ -531,20 +558,37 @@ async function executeNodeOnce(
         nodeId: node.id,
         phase: 'execution'
       })
-      finishRunRecord(editor, shapeId, record, 'failed', {
-        error: { phase: 'execution', reason: result.reason ?? '执行失败' }
-      })
+      finishRunRecord(
+        editor,
+        shapeId,
+        appendNodeRunTrace(record, 'execution', 'error', result.reason ?? '执行失败'),
+        'failed',
+        {
+          error: { phase: 'execution', reason: result.reason ?? '执行失败' }
+        }
+      )
     } else {
       setExec(editor, shapeId, 'idle')
-      finishRunRecord(editor, shapeId, record, 'skipped', {
-        error: result.reason ? { phase: 'execution', reason: result.reason } : undefined
-      })
+      finishRunRecord(
+        editor,
+        shapeId,
+        appendNodeRunTrace(record, 'execution', 'info', result.reason ?? '节点跳过执行'),
+        'skipped',
+        {
+          error: result.reason ? { phase: 'execution', reason: result.reason } : undefined
+        }
+      )
     }
     return result
   } catch (error) {
     if (ctx.token.cancelled) {
       setExec(editor, shapeId, 'cancelled')
-      finishRunRecord(editor, shapeId, record, 'cancelled')
+      finishRunRecord(
+        editor,
+        shapeId,
+        appendNodeRunTrace(record, 'execution', 'info', '运行已取消'),
+        'cancelled'
+      )
     } else {
       const reason = error instanceof Error ? error.message : String(error)
       const phase: 'input' | 'execution' = reason.includes('输入契约') ? 'input' : 'execution'
@@ -553,7 +597,13 @@ async function executeNodeOnce(
         nodeId: node.id,
         phase
       })
-      finishRunRecord(editor, shapeId, record, 'failed', { error: { phase, reason } })
+      finishRunRecord(
+        editor,
+        shapeId,
+        appendNodeRunTrace(record, phase, 'error', reason),
+        'failed',
+        { error: { phase, reason } }
+      )
     }
     return { status: 'failed', reason: error instanceof Error ? error.message : String(error) }
   }

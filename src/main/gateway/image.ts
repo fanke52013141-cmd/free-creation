@@ -65,10 +65,10 @@ async function generateImageWithReference(
   )
 }
 
-/** 图片修改使用已渲染的标注参考图，原始图片不会被覆写。 */
+/** 图片修改会同时携带原图和标注参考图，原始图片不会被覆写。 */
 export async function generateImageEditToAsset(
   input: ImageEditInput,
-  referenceImage: Buffer,
+  referenceImages: readonly Buffer[],
   maskImage?: Buffer
 ): Promise<MediaAsset> {
   if (!input.prompt?.trim()) throw new GatewayError('INVALID_INPUT', '修改说明不能为空')
@@ -76,5 +76,5 @@ export async function generateImageEditToAsset(
   if (input.size && !IMAGE_EDIT_SIZES.includes(input.size as (typeof IMAGE_EDIT_SIZES)[number])) {
     throw new GatewayError('INVALID_INPUT', '图片修改尺寸不受支持')
   }
-  return generateImageWithReference(input, [referenceImage], undefined, maskImage)
+  return generateImageWithReference(input, referenceImages, undefined, maskImage)
 }

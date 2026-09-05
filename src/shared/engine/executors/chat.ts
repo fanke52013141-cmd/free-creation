@@ -4,6 +4,7 @@ import type { NodeExecutionContext, NodeExecutionResult } from '../executor-type
 import { parseChat } from '../chat-data'
 import { findTextModel } from '../models'
 import { waitForChat } from '../helpers'
+import { buildChatCompressionPrompt, splitChatForCompression } from '../chat-memory'
 
 function effectiveSystem(data: ReturnType<typeof parseChat>): string {
   const sections = [data.system.trim()]
@@ -43,11 +44,37 @@ export const chatExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecu
     ctx.signal
   )
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
+  const completedMessages = [...messages, { role: 'assistant' as const, content: reply }]
+  let summary = data.summary ?? ''
+  let persistedMessages = completedMessages
+  // 第 21 轮完成后才开始压缩：此前最多 40 条原始 user / assistant 消息完全保留。
+  const compression = data.autoCompress ? splitChatForCompression(completedMessages) : null
+  if (compression && !ctx.signal.cancelled) {
+    try {
+      summary = await waitForChat(
+        ctx.gateway,
+        {
+          providerId: option.provider.id,
+          modelId: option.model.id,
+          messages: [
+            { role: 'user', content: buildChatCompressionPrompt(summary, compression.earlier) }
+          ],
+          temperature: 0,
+          maxTokens: Math.min(data.maxTokens, 2048)
+        },
+        ctx.signal
+      )
+      persistedMessages = compression.recent
+    } catch {
+      // 主回复已经成功；摘要失败时绝不丢历史，下一轮可重试压缩。
+    }
+  }
   ctx.updateProps({
     text: JSON.stringify({
       ...data,
       modelKey: option.key,
-      messages: [...messages, { role: 'assistant', content: reply }]
+      summary,
+      messages: persistedMessages
     })
   })
   return { status: 'done' }

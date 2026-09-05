@@ -37,9 +37,9 @@ import {
 import { markUndoPoint } from '../../../canvas/history'
 
 const COLORS: Array<{ id: ImageEditColor; label: string }> = [
-  { id: 'red', label: '红' },
-  { id: 'yellow', label: '黄' },
-  { id: 'orange', label: '橙' }
+  { id: 'red', label: '红 · 修改' },
+  { id: 'blue', label: '蓝 · 替换' },
+  { id: 'yellow', label: '黄 · 保留' }
 ]
 type ImageEditTool = ImageEditAnnotationType | 'mask'
 const TOOLS: Array<{ id: ImageEditTool; label: string; icon: 'crop' | 'edit' | 'text' }> = [
@@ -49,42 +49,6 @@ const TOOLS: Array<{ id: ImageEditTool; label: string; icon: 'crop' | 'edit' | '
   { id: 'text', label: '文字', icon: 'text' },
   { id: 'mask', label: '遮罩', icon: 'crop' }
 ]
-const ANNOTATION_PRESETS: Array<{
-  id: string
-  label: string
-  instruction: string
-  annotation: Omit<ImageEditAnnotation, 'id'>
-}> = [
-  {
-    id: 'subject',
-    label: '主体框选',
-    instruction: '保留框选主体，优先修改主体以外的区域。',
-    annotation: {
-      type: 'rect',
-      color: 'yellow',
-      points: [
-        { x: 0.2, y: 0.15 },
-        { x: 0.8, y: 0.85 }
-      ],
-      strokeWidth: 3
-    }
-  },
-  {
-    id: 'focus',
-    label: '焦点箭头',
-    instruction: '请重点修改箭头指向的位置。',
-    annotation: {
-      type: 'arrow',
-      color: 'red',
-      points: [
-        { x: 0.16, y: 0.2 },
-        { x: 0.5, y: 0.5 }
-      ],
-      strokeWidth: 3
-    }
-  }
-]
-
 export function ImageEditBody({ shape, openPreview }: NodeBodyProps): React.JSX.Element {
   const guard = useClickGuard()
   const editor = useEditor()
@@ -235,9 +199,7 @@ export function ImageEditBody({ shape, openPreview }: NodeBodyProps): React.JSX.
             }}
           >
             <Icon name="edit" size={12} />
-            <span className="image-edit-inline-text">
-              {instruction || '点击输入修改说明…'}
-            </span>
+            <span className="image-edit-inline-text">{instruction || '点击输入修改说明…'}</span>
           </button>
         )}
       </div>
@@ -346,9 +308,11 @@ export function ImageEditSettings({
 function ImageEditEditorCore({
   shape,
   editor,
-  projectId
-}: NodeSettingsProps): React.JSX.Element {
+  projectId,
+  workbench = false
+}: NodeSettingsProps & { workbench?: boolean }): React.JSX.Element {
   const previewRef = useRef<HTMLDivElement>(null)
+  const textEntryRef = useRef<HTMLInputElement>(null)
   const draft = useRef<ImageEditAnnotation | null>(null)
   const maskDraft = useRef<ImageEditPoint[] | null>(null)
   const maskBase = useRef<ImageEditPoint[][]>([])
@@ -357,6 +321,9 @@ function ImageEditEditorCore({
   const [color, setColor] = useState<ImageEditColor>('red')
   const [aspect, setAspect] = useState(16 / 10)
   const [busy, setBusy] = useState(false)
+  const [redoAnnotations, setRedoAnnotations] = useState<ImageEditAnnotation[]>([])
+  const [textEntry, setTextEntry] = useState<{ point: ImageEditPoint; value: string } | null>(null)
+  const [brushSize, setBrushSize] = useState(4)
   const source = gatherUpstreamMedia(editor, shape.id, 'in-image', 'image')
   const providers = useGatewayStore((s) => s.providers)
   const options = modelsByModality(providers, 'image')
@@ -366,8 +333,14 @@ function ImageEditEditorCore({
   useEffect(() => {
     if (!loaded) void load()
   }, [loaded, load])
-  const save = (next: ImageEditConfig): void => {
+  useEffect(() => {
+    if (!textEntry) return
+    const frame = requestAnimationFrame(() => textEntryRef.current?.focus())
+    return () => cancelAnimationFrame(frame)
+  }, [textEntry])
+  const save = (next: ImageEditConfig, preserveRedo = false): void => {
     setConfig(next)
+    if (!preserveRedo) setRedoAnnotations([])
     editor.updateShape({
       id: shape.id,
       type: 'node-card',
@@ -376,14 +349,19 @@ function ImageEditEditorCore({
   }
   const add = (annotation: ImageEditAnnotation): void =>
     save({ ...config, annotations: [...config.annotations, annotation].slice(-64) })
-  const applyAnnotationPreset = (
-    preset: (typeof ANNOTATION_PRESETS)[number],
-    annotationId: string
-  ): void => {
-    save({
-      ...config,
-      instruction: config.instruction.trim() || preset.instruction,
-      annotations: [...config.annotations, { ...preset.annotation, id: annotationId }].slice(-64)
+  const commitTextEntry = (): void => {
+    if (!textEntry) return
+    const text = textEntry.value.trim()
+    const point = textEntry.point
+    setTextEntry(null)
+    if (!text) return
+    add({
+      id: `annotation-${Date.now()}`,
+      type: 'text',
+      color,
+      points: [point],
+      text,
+      strokeWidth: brushSize
     })
   }
   const start = (event: React.PointerEvent<HTMLDivElement>): void => {
@@ -398,16 +376,7 @@ function ImageEditEditorCore({
       return
     }
     if (tool === 'text') {
-      const text = window.prompt('输入标注文字')?.trim()
-      if (text)
-        add({
-          id: `annotation-${Date.now()}`,
-          type: 'text',
-          color,
-          points: [startPoint],
-          text,
-          strokeWidth: 3
-        })
+      setTextEntry({ point: startPoint, value: '' })
       return
     }
     draft.current = {
@@ -415,7 +384,7 @@ function ImageEditEditorCore({
       type: tool,
       color,
       points: [startPoint],
-      strokeWidth: 3
+      strokeWidth: brushSize
     }
     el.setPointerCapture(event.pointerId)
   }
@@ -436,9 +405,14 @@ function ImageEditEditorCore({
       return
     }
     if (!draft.current) return
+    const endPoint = pointFromEvent(event, previewRef.current)
     const next = {
       ...draft.current,
-      points: [...draft.current.points, pointFromEvent(event, previewRef.current)]
+      // 箭头和矩形只需要起止点；保留 brush 的完整轨迹，避免画成闭合填充面。
+      points:
+        draft.current.type === 'arrow' || draft.current.type === 'rect'
+          ? [draft.current.points[0], endPoint]
+          : [...draft.current.points, endPoint]
     }
     draft.current = next
     setConfig((current) => ({
@@ -469,7 +443,18 @@ function ImageEditEditorCore({
     if (!valid) return
     save({ ...config, annotations: [...config.annotations.filter((a) => a.id !== next.id), next] })
   }
-  const removeLast = (): void => save({ ...config, annotations: config.annotations.slice(0, -1) })
+  const removeLast = (): void => {
+    const last = config.annotations.at(-1)
+    if (!last) return
+    setRedoAnnotations((items) => [last, ...items].slice(0, 64))
+    save({ ...config, annotations: config.annotations.slice(0, -1) }, true)
+  }
+  const restoreLast = (): void => {
+    const [next, ...rest] = redoAnnotations
+    if (!next) return
+    setRedoAnnotations(rest)
+    save({ ...config, annotations: [...config.annotations, next].slice(-64) }, true)
+  }
   const validationError = validateImageEditConfig(config)
   const run = async (): Promise<void> => {
     if (validationError) {
@@ -485,7 +470,7 @@ function ImageEditEditorCore({
   }
   const invalid = validationError
   return (
-    <div className="image-edit-settings">
+    <div className={`image-edit-settings ${workbench ? 'image-edit-settings-workbench' : ''}`}>
       {!source ? (
         <div className="crop-no-source">请从图片或生图节点连线到“原图”端口。</div>
       ) : (
@@ -515,6 +500,7 @@ function ImageEditEditorCore({
                     key={`mask-${index}`}
                     points={stroke.map((p) => `${p.x * 100},${p.y * 100}`).join(' ')}
                     className="image-edit-mask-mark"
+                    style={{ strokeWidth: Math.max(1, (config.mask?.brushSize ?? 0.08) * 100) }}
                   />
                 ))}
               {config.annotations.map((a) => {
@@ -527,7 +513,7 @@ function ImageEditEditorCore({
                         key={a.id}
                         {...rect}
                         className={`image-edit-mark ${a.color}`}
-                        style={{ fill: 'none' }}
+                        style={{ fill: 'none', strokeWidth: a.strokeWidth ?? 3 }}
                       />
                     )
                 }
@@ -545,16 +531,55 @@ function ImageEditEditorCore({
                 if (a.type === 'arrow')
                   return (
                     <g key={a.id}>
-                      <polyline points={pts} className={`image-edit-mark ${a.color}`} />
+                      <line
+                        x1={a.points[0].x * 100}
+                        y1={a.points[0].y * 100}
+                        x2={a.points[a.points.length - 1].x * 100}
+                        y2={a.points[a.points.length - 1].y * 100}
+                        className={`image-edit-mark ${a.color}`}
+                        style={{ strokeWidth: a.strokeWidth ?? 3 }}
+                      />
                       <polygon
                         points={arrowHead(a.points)}
-                        className={`image-edit-mark ${a.color}`}
+                        className={`image-edit-arrow-head ${a.color}`}
                       />
                     </g>
                   )
-                return <polyline key={a.id} points={pts} className={`image-edit-mark ${a.color}`} />
+                return (
+                  <polyline
+                    key={a.id}
+                    points={pts}
+                    className={`image-edit-mark ${a.color}`}
+                    style={{ strokeWidth: a.strokeWidth ?? 3 }}
+                  />
+                )
               })}
             </svg>
+            {textEntry && (
+              <input
+                ref={textEntryRef}
+                className="image-edit-text-entry"
+                style={{ left: `${textEntry.point.x * 100}%`, top: `${textEntry.point.y * 100}%` }}
+                value={textEntry.value}
+                aria-label="输入图片标注文字"
+                placeholder="输入文字后回车"
+                onPointerDown={(event) => event.stopPropagation()}
+                onChange={(event) =>
+                  setTextEntry((current) =>
+                    current ? { ...current, value: event.target.value.slice(0, 120) } : current
+                  )
+                }
+                onBlur={commitTextEntry}
+                onKeyDown={(event) => {
+                  event.stopPropagation()
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    commitTextEntry()
+                  }
+                  if (event.key === 'Escape') setTextEntry(null)
+                }}
+              />
+            )}
           </div>
           <div className="image-edit-tools">
             {TOOLS.map((item) => (
@@ -569,8 +594,23 @@ function ImageEditEditorCore({
                 {item.label}
               </button>
             ))}
-            <button onPointerDown={stopEventPropagation} onClick={removeLast}>
-              撤销
+            <button
+              title="撤销上一步标注"
+              aria-label="撤销上一步标注"
+              disabled={!config.annotations.length}
+              onPointerDown={stopEventPropagation}
+              onClick={removeLast}
+            >
+              <Icon name="undo" size={14} />
+            </button>
+            <button
+              title="重做上一步标注"
+              aria-label="重做上一步标注"
+              disabled={!redoAnnotations.length}
+              onPointerDown={stopEventPropagation}
+              onClick={restoreLast}
+            >
+              <Icon name="redo" size={14} />
             </button>
             <button
               onPointerDown={stopEventPropagation}
@@ -587,20 +627,6 @@ function ImageEditEditorCore({
               </button>
             ) : null}
           </div>
-          <div className="image-edit-presets" aria-label="标注预设">
-            <span>标注预设</span>
-            {ANNOTATION_PRESETS.map((preset) => (
-              <button
-                key={preset.id}
-                onPointerDown={stopEventPropagation}
-                onClick={() =>
-                  applyAnnotationPreset(preset, `annotation-${preset.id}-${Date.now()}`)
-                }
-              >
-                {preset.label}
-              </button>
-            ))}
-          </div>
           <div className="image-edit-colors">
             {COLORS.map((item) => (
               <button
@@ -613,6 +639,20 @@ function ImageEditEditorCore({
               </button>
             ))}
           </div>
+          {tool === 'brush' && (
+            <label className="image-edit-size-control">
+              <span>画笔粗细</span>
+              <input
+                type="range"
+                min="1"
+                max="12"
+                value={brushSize}
+                onPointerDown={(event) => event.stopPropagation()}
+                onChange={(event) => setBrushSize(Number(event.target.value))}
+              />
+              <output>{brushSize}</output>
+            </label>
+          )}
           <div className="image-edit-mask-options">
             <label>
               <input
@@ -633,6 +673,34 @@ function ImageEditEditorCore({
               />
               启用遮罩
             </label>
+            {tool === 'mask' && (
+              <label className="image-edit-size-control">
+                <span>遮罩大小</span>
+                <input
+                  type="range"
+                  min="0.02"
+                  max="0.3"
+                  step="0.01"
+                  value={config.mask?.brushSize ?? 0.08}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onChange={(event) =>
+                    save({
+                      ...config,
+                      mask: {
+                        ...(config.mask ?? {
+                          enabled: true,
+                          strokes: [],
+                          brushSize: 0.08,
+                          invert: false
+                        }),
+                        brushSize: Number(event.target.value)
+                      }
+                    })
+                  }
+                />
+                <output>{Math.round((config.mask?.brushSize ?? 0.08) * 100)}%</output>
+              </label>
+            )}
             <label>
               <input
                 type="checkbox"
@@ -751,7 +819,7 @@ function ImageEditWorkbench({
           </button>
         </header>
         <div className="image-edit-workbench-body">
-          <ImageEditEditorCore shape={shape} editor={editor} projectId={projectId} />
+          <ImageEditEditorCore shape={shape} editor={editor} projectId={projectId} workbench />
         </div>
       </div>
     </div>,

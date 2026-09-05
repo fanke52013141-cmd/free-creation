@@ -5,6 +5,13 @@ export type NodeRunStatus = 'running' | 'success' | 'failed' | 'skipped' | 'canc
 
 export type NodeRunPhase = 'input' | 'execution' | 'output'
 
+export interface NodeRunTraceEntry {
+  at: number
+  phase: NodeRunPhase
+  level: 'info' | 'error'
+  message: string
+}
+
 export interface NodeRunSource {
   nodeId: string
   portId: string
@@ -23,10 +30,28 @@ export interface NodeRunRecord {
   inputs: Record<string, NodeRunSource[]>
   outputPorts?: string[]
   error?: { phase: NodeRunPhase; reason: string }
+  /** 分阶段、脱敏的运行轨迹；不记录完整提示词、文件内容、媒体二进制或密钥。 */
+  trace?: NodeRunTraceEntry[]
 }
 
 /** 本地单用户项目保留最近运行，用于结果比较、失败回溯和重试；不复制输入正文或媒体。 */
 export const NODE_RUN_HISTORY_LIMIT = 12
+export const NODE_RUN_TRACE_LIMIT = 24
+
+export function appendNodeRunTrace(
+  record: NodeRunRecord,
+  phase: NodeRunPhase,
+  level: NodeRunTraceEntry['level'],
+  message: string
+): NodeRunRecord {
+  return {
+    ...record,
+    trace: [
+      ...(record.trace ?? []),
+      { at: Date.now(), phase, level, message: message.slice(0, 500) }
+    ].slice(-NODE_RUN_TRACE_LIMIT)
+  }
+}
 
 export function inputSources(inputs: ContractInputMap): Record<string, NodeRunSource[]> {
   return Object.fromEntries(

@@ -669,6 +669,9 @@ export function useClickGuard(): {
   const downRef = useRef<{ x: number; y: number } | null>(null)
   return {
     onPointerDown: (e) => {
+      // 媒体是节点内部的主交互区：先阻止画布把点击转换成选中/拖拽，
+      // 否则 pointerdown 触发的重渲染会吞掉随后用于预览的 click。
+      e.stopPropagation()
       downRef.current = { x: e.clientX, y: e.clientY }
     },
     onClick: (e, open) => {

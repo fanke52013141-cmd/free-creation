@@ -16,7 +16,7 @@ const MAX_IMAGE_PIXELS = 64 * 1024 * 1024
 const MAX_EXPORT_PIXELS = 16 * 1024 * 1024
 const MAX_EXPORT_DIMENSION = 4096
 
-/** 图片修改：将标注绘制成临时参考图，再交给图片模型生成新资产。 */
+/** 图片修改：原图与标注参考图作为两份输入发送，输出始终保存为新资产。 */
 export async function transformImageEdit(input: ImageEditInput): Promise<MediaAsset> {
   if (!input.projectId || !input.sourceMediaId) throw new Error('缺少项目或源图片')
   const config = parseImageEditConfig(JSON.stringify(input.config))
@@ -35,7 +35,8 @@ export async function transformImageEdit(input: ImageEditInput): Promise<MediaAs
   if (source.size_bytes > 100 * 1024 * 1024) throw new Error('图片超过 100MB，暂不支持图片修改')
   const sourcePath = getMediaAbsPath(source.path)
   if (!sourcePath) throw new Error('输入图片路径无效')
-  const image = await loadImage(await readFile(sourcePath))
+  const sourceBuffer = await readFile(sourcePath)
+  const image = await loadImage(sourceBuffer)
   if (!image.width || !image.height) throw new Error('无法读取图片尺寸')
   if (image.width * image.height > MAX_IMAGE_PIXELS) throw new Error('图片解码后超过 6400 万像素')
   const reference = renderAnnotatedReference(image, config.annotations)
@@ -44,7 +45,7 @@ export async function transformImageEdit(input: ImageEditInput): Promise<MediaAs
     : undefined
   return generateImageEditToAsset(
     { ...input, config, size: config.size, prompt: input.prompt.trim() },
-    reference,
+    [sourceBuffer, reference],
     mask
   )
 }
@@ -66,7 +67,13 @@ export function renderAnnotatedReference(
   const canvas = createCanvas(width, height)
   const ctx = canvas.getContext('2d')
   ctx.drawImage(image, 0, 0, width, height)
-  const colors: Record<string, string> = { red: '#ef4444', yellow: '#facc15', orange: '#f97316' }
+  // 红 / 蓝 / 黄在图片中拥有明显的色相间隔；比红、橙、黄连续色相更容易被视觉模型区分。
+  const colors: Record<string, string> = {
+    red: '#ff315b',
+    blue: '#00b8ff',
+    yellow: '#ffd60a',
+    orange: '#00b8ff'
+  }
   for (const annotation of annotations) {
     const color = colors[annotation.color] ?? colors.red
     const points = annotation.points.map((p) => ({ x: p.x * width, y: p.y * height }))

@@ -361,5 +361,6 @@ export function isActiveNodeType(type: string): type is ActiveNodeTypeId {
 }
 
 export function mediaUrl(relPath: string): string {
+  if (relPath.startsWith('blob:')) return relPath
   return `media:///${relPath.split('/').map(encodeURIComponent).join('/')}`
 }

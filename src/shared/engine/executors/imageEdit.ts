@@ -20,7 +20,9 @@ export const imageEditExecutor = async (
   const prompt = [
     config.instruction.trim(),
     inputText(ctx.inputs, 'in-text').trim(),
-    config.annotations.length ? '请根据图片中的标注进行修改，最终图像不要保留标注本身。' : '',
+    config.annotations.length
+      ? '输入包含两张参考：第 1 张是原图，第 2 张是带标注的原图。请以原图为准，根据第 2 张的标注修改，最终图像不要保留标注本身。红色表示需要修改，蓝色表示替换或调整，黄色表示需要保留或重点注意。'
+      : '',
     config.mask?.enabled ? '请仅修改遮罩指定区域，未遮罩区域尽量保持不变。' : ''
   ]
     .filter(Boolean)

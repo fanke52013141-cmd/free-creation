@@ -25,7 +25,7 @@ import {
   teardownConnectionDrag,
   type ConnectionFinish
 } from './connection-drag'
-import { deriveGraph, tryConnect, createEdge } from './graph'
+import { deriveGraph, tryAutoConnectNearby, tryConnect, createEdge } from './graph'
 import type { AiProcessConfig } from '../engine/executors/aiProcess'
 import { markUndoPoint } from './history'
 import { getNodeType, allNodeTypes, needsNodeSizeMigration } from '../nodes/registry'
@@ -607,7 +607,8 @@ export function CanvasEditor({
       // 焦点不在画布且画布上无选中时不接管，避免误伤侧栏/顶栏的快捷键语义
       const container = editor.getContainer()
       const inCanvas =
-        container === active || (container !== null && container.contains(active)) ||
+        container === active ||
+        (container !== null && container.contains(active)) ||
         editor.getSelectedShapeIds().length > 0
       if (!inCanvas) return
       const mod = e.ctrlKey || e.metaKey
@@ -1063,6 +1064,53 @@ export function CanvasEditor({
       },
       { scope: 'document' }
     )
+    // 双节点自动连接只关注“两个节点相对位置发生变化”。两个节点作为一个整体拖动时
+    // 相对关系不变，不会产生意外连线；这里使用页面坐标，分组或嵌套分组也能正确判断。
+    let selectedPairKey = ''
+    let previousPairDelta: { x: number; y: number } | null = null
+    let autoConnectFrame: number | null = null
+    editor.store.listen(
+      () => {
+        const selected = editor
+          .getSelectedShapeIds()
+          .map((id) => editor.getShape<NodeCardShape>(id))
+          .filter((shape): shape is NodeCardShape => shape?.type === 'node-card')
+        if (selected.length !== 2) {
+          selectedPairKey = ''
+          previousPairDelta = null
+          return
+        }
+        const [first, second] = selected
+        const firstBounds = editor.getShapePageBounds(first.id)
+        const secondBounds = editor.getShapePageBounds(second.id)
+        if (!firstBounds || !secondBounds) return
+        const pairKey = [first.id, second.id].sort().join(':')
+        const delta = {
+          x: secondBounds.center.x - firstBounds.center.x,
+          y: secondBounds.center.y - firstBounds.center.y
+        }
+        const relativeMove =
+          pairKey === selectedPairKey &&
+          previousPairDelta !== null &&
+          Math.hypot(delta.x - previousPairDelta.x, delta.y - previousPairDelta.y) > 0.5
+        selectedPairKey = pairKey
+        previousPairDelta = delta
+        if (!relativeMove) return
+        if (autoConnectFrame !== null) cancelAnimationFrame(autoConnectFrame)
+        autoConnectFrame = requestAnimationFrame(() => {
+          autoConnectFrame = null
+          const latestSelected = editor
+            .getSelectedShapeIds()
+            .map((id) => editor.getShape<NodeCardShape>(id))
+            .filter((shape): shape is NodeCardShape => shape?.type === 'node-card')
+          if (latestSelected.length !== 2) return
+          if (tryAutoConnectNearby(editor, latestSelected[0].id, latestSelected[1].id)) {
+            toast('已按兼容端口自动连接两个节点')
+          }
+        })
+      },
+      { scope: 'document' }
+    )
     // 一次性兼容旧快照：只修正旧版本默认尺寸或明显异常的超大节点。
     const resizedNodes = migrateLegacyNodeSizes(editor)
     if (resizedNodes > 0) toast(`已将 ${resizedNodes} 个旧节点调整为标准尺寸`)
@@ -1102,6 +1150,28 @@ export function CanvasEditor({
       if (error) toast(error)
       return
     }
+    // 框选两个节点后，允许把线拖到另一个已选节点的“附近”而非精确压中端口。
+    // 半径保持为屏幕像素，缩放画布不会让吸附范围忽大忽小。
+    const selected = editor
+      .getSelectedShapeIds()
+      .map((id) => editor.getShape<NodeCardShape>(id))
+      .filter((shape): shape is NodeCardShape => shape?.type === 'node-card')
+    const candidate =
+      selected.length === 2 && selected.some((shape) => shape.id === r.from.shapeId)
+        ? selected.find((shape) => shape.id !== r.from.shapeId)
+        : undefined
+    if (candidate) {
+      const bounds = editor.getShapePageBounds(candidate.id)
+      const zoom = editor.getCamera().z || 1
+      const dx = Math.max(bounds ? bounds.x - pagePt.x : 0, 0, bounds ? pagePt.x - bounds.maxX : 0)
+      const dy = Math.max(bounds ? bounds.y - pagePt.y : 0, 0, bounds ? pagePt.y - bounds.maxY : 0)
+      if (bounds && Math.hypot(dx, dy) <= 56 / zoom) {
+        const error = tryConnect(editor, r.from, candidate.id, pagePt)
+        if (error) toast(error)
+        else toast('已吸附连接到已选节点')
+        return
+      }
+    }
     pendingConnectRef.current = r.from
     setMenu({ kind: 'create', x: r.screenPt.x, y: r.screenPt.y, source: r.from })
   }, [])
@@ -1125,6 +1195,37 @@ export function CanvasEditor({
       ref={wrapRef}
       onPointerDownCapture={(event) => {
         const target = event.target as HTMLElement
+        // Selection overlays sit above HTML nodes. Reserve the port's screen-space
+        // hit area before tldraw can interpret the same press as an edge resize.
+        if (event.button === 0 && target.closest('.tl-container') && !target.closest('.port-dot')) {
+          const port = Array.from(wrapRef.current?.querySelectorAll<HTMLElement>('.port-dot') ?? [])
+            .reverse()
+            .find((item) => {
+              const rect = item.getBoundingClientRect()
+              const radius = Math.max(14, rect.width / 2)
+              return (
+                Math.hypot(
+                  event.clientX - rect.x - rect.width / 2,
+                  event.clientY - rect.y - rect.height / 2
+                ) <= radius
+              )
+            })
+          if (port) {
+            event.preventDefault()
+            event.stopPropagation()
+            port.dispatchEvent(
+              new PointerEvent('pointerdown', {
+                bubbles: true,
+                clientX: event.clientX,
+                clientY: event.clientY,
+                button: event.button,
+                pointerId: event.pointerId,
+                pointerType: event.pointerType
+              })
+            )
+            return
+          }
+        }
         // 防御性重置：默认工具不应参与本应用的节点画布交互。
         if (
           !target.closest('.node-card-wrap') &&

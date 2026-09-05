@@ -213,7 +213,7 @@ export function registerBaseNodeTypes(): void {
   registerNodeType({
     type: 'image-split',
     contractVersion: 1,
-    label: '拆分',
+    label: '拆图',
     icon: 'grid',
     color: '#14b8a6',
     // 结果网格在卡片内限高滚动（见 .media-result-grid），不通过放大默认卡片容纳内容。
@@ -287,7 +287,7 @@ export function registerBaseNodeTypes(): void {
   registerNodeType({
     type: 'image-edit',
     contractVersion: 1,
-    label: '修改',
+    label: 'P图',
     icon: 'edit',
     color: '#f97316',
     defaultSize: { w: 340, h: 260 },

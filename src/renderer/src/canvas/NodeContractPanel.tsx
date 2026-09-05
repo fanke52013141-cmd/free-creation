@@ -310,7 +310,9 @@ function TestHarness({
             const item = packet as { value?: NodeValue }
             return item.value ? (
               <pre key={portId}>
-                {portId}\n{previewTestValue(item.value)}
+                {portId}
+                {'\n'}
+                {previewTestValue(item.value)}
               </pre>
             ) : null
           })}
@@ -332,7 +334,10 @@ export function NodeContractPanel({
   const [runningAction, setRunningAction] = useState<'node' | 'subgraph' | null>(null)
   // 打开/切换节点（或配置类入口改变 initialTab）时，渲染期同步重置 tab，
   // 不用 effect 里 setState（避免级联渲染告警）。
-  const [tabAnchor, setTabAnchor] = useState<{ shapeId: string | null; initialTab: NodePanelInitialTab }>({
+  const [tabAnchor, setTabAnchor] = useState<{
+    shapeId: string | null
+    initialTab: NodePanelInitialTab
+  }>({
     shapeId,
     initialTab
   })
@@ -499,130 +504,153 @@ export function NodeContractPanel({
         </nav>
         <div className="contract-scroll">
           {tab === 'overview' && (
-          <>
-            <p className="contract-description">{spec.description}</p>
-            <div className="contract-rule">
-              连线会把上游端口的真实输出填入对应输入；没有连线时才使用节点内的固定内容。
-            </div>
-            <div className="contract-overview-grid">
-              <span>
-                <small>执行方式</small>
-                <strong>
-                  {executionMode === 'manual-publish'
-                    ? '手动发布'
-                    : executionMode === 'display-only'
-                      ? '仅展示'
-                      : '自动执行'}
-                </strong>
-              </span>
-              <span>
-                <small>输入端口</small>
-                <strong>{ports.in.length} 个</strong>
-              </span>
-              <span>
-                <small>输出端口</small>
-                <strong>{ports.out.length} 个</strong>
-              </span>
-              <span>
-                <small>当前状态</small>
-                <strong>{shape.props.exec}</strong>
-              </span>
-            </div>
-          </>
-        )}
-        {tab === 'io' && (
-          <>
-            <PortRows
-              title="输入"
-              ports={ports.in}
-              connections={incoming}
-              previews={inputPreviews}
-            />
-            <TestHarness
-              key={shape.id}
-              projectId={projectId}
-              ports={ports.in}
-              onRun={testNode}
-              onTextInputCommit={syncTextInputOnBlur}
-              initialTextInputs={loadTestInputsFromConfig(shape)}
-            />
-            <PortRows
-              title="输出"
-              ports={ports.out}
-              connections={outgoing}
-              previews={outputPreviews}
-            />
-          </>
-        )}
-        {tab === 'settings' &&
-          (SettingsPanel ? (
-            <SettingsPanel key={shape.id} shape={shape} editor={editor} projectId={projectId} />
-          ) : (
-            <section className="contract-section">
-              <h4>节点固定配置</h4>
-              <p className="contract-settings-hint">连线值优先于固定值；敏感字段会自动隐藏。</p>
-              <pre className="contract-settings-code">
-                {safeConfigPreview(readNodeConfig(shape))}
-              </pre>
-            </section>
-          ))}
-        {tab === 'run' && (
-          <>
-            <section className="contract-section">
-              <h4>运行操作</h4>
-              <div className="contract-run-actions">
-                <button disabled={runningAction !== null} onClick={() => void run('node')}>
-                  {runningAction === 'node'
-                    ? '运行中…'
-                    : runRecord?.status === 'failed'
-                      ? '重试此节点'
-                      : '运行此节点'}
-                </button>
-                <button disabled={runningAction !== null} onClick={() => void run('subgraph')}>
-                  {runningAction === 'subgraph' ? '运行中…' : '运行至此节点'}
-                </button>
+            <>
+              <p className="contract-description">{spec.description}</p>
+              <div className="contract-rule">
+                连线会把上游端口的真实输出填入对应输入；没有连线时才使用节点内的固定内容。
               </div>
-            </section>
-            {runRecord ? (
-              <section className="contract-section">
-                <h4>最近运行</h4>
-                <div className="contract-run-info">
-                  <small>运行 ID：{runRecord.runId}</small>
-                  <small>状态：{runRecord.status}</small>
-                  {typeof runRecord.durationMs === 'number' && (
-                    <small>耗时：{runRecord.durationMs} ms</small>
-                  )}
-                  {runRecord.outputPorts && (
-                    <small>输出端口：{runRecord.outputPorts.join('、') || '无'}</small>
-                  )}
-                  {runRecord.error && (
-                    <small className="contract-run-error">
-                      {runRecord.error.phase}：{runRecord.error.reason}
-                    </small>
-                  )}
-                </div>
-              </section>
+              <div className="contract-overview-grid">
+                <span>
+                  <small>执行方式</small>
+                  <strong>
+                    {executionMode === 'manual-publish'
+                      ? '手动发布'
+                      : executionMode === 'display-only'
+                        ? '仅展示'
+                        : '自动执行'}
+                  </strong>
+                </span>
+                <span>
+                  <small>输入端口</small>
+                  <strong>{ports.in.length} 个</strong>
+                </span>
+                <span>
+                  <small>输出端口</small>
+                  <strong>{ports.out.length} 个</strong>
+                </span>
+                <span>
+                  <small>当前状态</small>
+                  <strong>{shape.props.exec}</strong>
+                </span>
+              </div>
+            </>
+          )}
+          {tab === 'io' && (
+            <>
+              <PortRows
+                title="输入"
+                ports={ports.in}
+                connections={incoming}
+                previews={inputPreviews}
+              />
+              <TestHarness
+                key={shape.id}
+                projectId={projectId}
+                ports={ports.in}
+                onRun={testNode}
+                onTextInputCommit={syncTextInputOnBlur}
+                initialTextInputs={loadTestInputsFromConfig(shape)}
+              />
+              <PortRows
+                title="输出"
+                ports={ports.out}
+                connections={outgoing}
+                previews={outputPreviews}
+              />
+            </>
+          )}
+          {tab === 'settings' &&
+            (SettingsPanel ? (
+              <SettingsPanel key={shape.id} shape={shape} editor={editor} projectId={projectId} />
             ) : (
-              <p className="contract-empty">尚无运行记录</p>
-            )}
-            {runHistory.length > 0 && (
               <section className="contract-section">
-                <h4>最近 {runHistory.length} 次运行</h4>
-                <div className="contract-run-history">
-                  {runHistory.map((record) => (
-                    <div
-                      key={record.runId}
-                      className={`contract-run-history-item ${record.status}`}
-                    >
-                      <strong>{runSummary(record)}</strong>
-                      {record.error && <small>{record.error.reason}</small>}
-                    </div>
-                  ))}
+                <h4>节点固定配置</h4>
+                <p className="contract-settings-hint">连线值优先于固定值；敏感字段会自动隐藏。</p>
+                <pre className="contract-settings-code">
+                  {safeConfigPreview(readNodeConfig(shape))}
+                </pre>
+              </section>
+            ))}
+          {tab === 'run' && (
+            <>
+              <section className="contract-section">
+                <h4>运行操作</h4>
+                <div className="contract-run-actions">
+                  <button disabled={runningAction !== null} onClick={() => void run('node')}>
+                    {runningAction === 'node'
+                      ? '运行中…'
+                      : runRecord?.status === 'failed'
+                        ? '重试此节点'
+                        : '运行此节点'}
+                  </button>
+                  <button disabled={runningAction !== null} onClick={() => void run('subgraph')}>
+                    {runningAction === 'subgraph' ? '运行中…' : '运行至此节点'}
+                  </button>
                 </div>
               </section>
-            )}
-          </>
-        )}
+              {runRecord ? (
+                <section className="contract-section">
+                  <h4>最近运行</h4>
+                  <div className="contract-run-info">
+                    <small>运行 ID：{runRecord.runId}</small>
+                    <small>状态：{runRecord.status}</small>
+                    {typeof runRecord.durationMs === 'number' && (
+                      <small>耗时：{runRecord.durationMs} ms</small>
+                    )}
+                    {runRecord.outputPorts && (
+                      <small>输出端口：{runRecord.outputPorts.join('、') || '无'}</small>
+                    )}
+                    {runRecord.error && (
+                      <small className="contract-run-error">
+                        {runRecord.error.phase}：{runRecord.error.reason}
+                      </small>
+                    )}
+                    {runRecord.trace && runRecord.trace.length > 0 && (
+                      <details className="contract-run-trace">
+                        <summary>查看运行日志（{runRecord.trace.length} 条）</summary>
+                        {runRecord.trace.map((entry, index) => (
+                          <small
+                            key={`${entry.at}-${index}`}
+                            className={entry.level === 'error' ? 'error' : ''}
+                          >
+                            {new Date(entry.at).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit'
+                            })}
+                            {' · '}
+                            {entry.phase} · {entry.message}
+                          </small>
+                        ))}
+                      </details>
+                    )}
+                  </div>
+                </section>
+              ) : (
+                <div className="contract-run-empty">
+                  <Icon name="history" size={16} />
+                  <span>尚无运行记录</span>
+                  <small>运行后会在这里保留本节点的结果与耗时。</small>
+                </div>
+              )}
+              {runHistory.length > 0 && (
+                <section className="contract-section">
+                  <h4>最近 {runHistory.length} 次运行</h4>
+                  <div className="contract-run-history">
+                    {runHistory.map((record) => (
+                      <div
+                        key={record.runId}
+                        className={`contract-run-history-item ${record.status}`}
+                      >
+                        <strong>{runSummary(record)}</strong>
+                        {record.error && <small>{record.error.reason}</small>}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+            </>
+          )}
         </div>
       </div>
     </aside>

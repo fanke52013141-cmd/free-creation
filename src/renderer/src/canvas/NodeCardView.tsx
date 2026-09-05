@@ -1,6 +1,6 @@
 // NodeCard 卡片视图：头部（序号/图标/标题/状态灯）+ 类型化内容体 + 端口圆点 + 媒体预览浮层
 import { HTMLContainer, stopEventPropagation, useEditor, useValue } from 'tldraw'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   getNodePorts,
@@ -77,6 +77,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     title: string
   } | null>(null)
   const [editing, setEditing] = useState(false)
+  const bodyRef = useRef<HTMLDivElement>(null)
   // 计算节点序号：按创建顺序排序所有 node-card，返回当前节点的序号
   const seq = useValue(
     'node sequence',
@@ -111,7 +112,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         : shape.props.nodeType === 'director'
           ? 'director'
           : 'contract'
-    useNodePanelStore.getState().open(kind, shape.id)
+    useNodePanelStore.getState().open(kind, shape.id, 'settings')
   }
 
   // 双击标题进入编辑模式
@@ -179,6 +180,32 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   const readiness = readinessState.readiness
   const inputReadiness = readinessState.inputs
 
+  // 节点有一个规范的初始尺寸，但内容（尤其是视频参数、图片工具）不应被固定高度截断。
+  // 只在内容溢出时向下扩展，不会反过来压缩用户手动拉大的节点。
+  useEffect(() => {
+    const body = bodyRef.current
+    if (!body) return
+    let frame = 0
+    const fitHeight = (): void => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        const overflow = Math.ceil(body.scrollHeight - body.clientHeight)
+        if (overflow <= 2) return
+        const nextHeight = Math.min(760, Math.ceil(shape.props.h + overflow + 16))
+        if (nextHeight > shape.props.h + 2) {
+          editor.updateShape({ id: shape.id, type: 'node-card', props: { h: nextHeight } })
+        }
+      })
+    }
+    fitHeight()
+    const observer = new ResizeObserver(fitHeight)
+    observer.observe(body)
+    return () => {
+      cancelAnimationFrame(frame)
+      observer.disconnect()
+    }
+  }, [editor, shape.id, shape.props.h])
+
   const portSummary = (port: PortDecl, direction: '输入' | '输出'): string =>
     [
       `${port.name}（${port.type}）${direction}`,
@@ -195,6 +222,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       {/* 外层包一层无裁切的容器：端口圆点要压在卡片边缘外侧，不能被卡片 overflow:hidden 裁掉 */}
       <div
         className={`node-card-wrap ${selected ? 'is-selected' : ''}`}
+        data-node-id={shape.id}
         style={{ width: shape.props.w, height: shape.props.h }}
         onPointerDown={handleCardPointerDown}
       >
@@ -252,14 +280,14 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                 openNodePanel()
               }}
             >
-              <Icon name="info" size={13} />
+              <Icon name="document" size={16} />
             </button>
             {/* 文本节点字数徽标：位于“查看输入输出说明”右侧。
                 格式见 formatCharCount（N 字 / N 多字 / X.XK）。 */}
             {shape.props.nodeType === 'text' && shape.props.text && !slashCmdForText && (
               <span className="node-text-count">{formatCharCount(shape.props.text.length)}</span>
             )}
-            {/* 弹性占位：把状态灯推到标题行右端 */}
+            {/* 弹性占位：运行与状态都固定在标题行的右侧。 */}
             <span className="node-header-spacer" />
             <span
               className={`node-status node-status-${shape.props.exec}`}
@@ -267,8 +295,26 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               title={`${statusLabel} · ${readiness.label}`}
               aria-label={`${statusLabel} · ${readiness.label}`}
             />
+            {selected && spec?.executor && (
+              <span className="node-action-float" aria-label="节点动作">
+                <Tooltip label="运行此节点（使用已连接的上游结果）">
+                  <button
+                    className="node-run-btn"
+                    aria-label="运行此节点"
+                    disabled={shape.props.exec === 'running' || !project}
+                    onPointerDown={(event) => stopEventPropagation(event)}
+                    onClick={(event) => {
+                      stopEventPropagation(event)
+                      if (project) void runNodeManually(editor, project.id, providers, shape.id)
+                    }}
+                  >
+                    <Icon name="play" size={14} />
+                  </button>
+                </Tooltip>
+              </span>
+            )}
           </div>
-          <div className="node-body">
+          <div ref={bodyRef} className="node-body">
             {spec ? (
               <spec.Body shape={shape} openPreview={(p) => setPreview(p)} />
             ) : (
@@ -276,32 +322,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             )}
           </div>
         </div>
-
-        {/* 运行是节点级动作：独立放在卡片右上角，和说明按钮分开，避免标题被挤压。 */}
-        {selected && spec?.executor && (
-          <div className="node-action-float" aria-label="节点动作">
-            {readiness.kind === 'ready' && (
-              <span className="node-readiness-badge" title={readiness.detail}>
-                执行成功可运行
-              </span>
-            )}
-            <Tooltip label="运行此节点（使用已连接的上游结果）">
-              <button
-                className="node-run-btn"
-                aria-label="运行此节点"
-                disabled={shape.props.exec === 'running' || !project}
-                onPointerDown={(event) => stopEventPropagation(event)}
-                onClick={(event) => {
-                  stopEventPropagation(event)
-                  if (project) void runNodeManually(editor, project.id, providers, shape.id)
-                }}
-              >
-                <Icon name="play" size={12} />
-              </button>
-            </Tooltip>
-          </div>
-        )}
-
         {/* 输入端口（左侧）：拖线时按类型兼容高亮 */}
         {inPorts.map((p, i) => {
           const ok = draft && !isSource && canAttachPort(draft.from, p)

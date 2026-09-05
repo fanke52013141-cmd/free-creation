@@ -129,6 +129,26 @@ function clamp01(v: number): number {
 }
 
 /**
+ * Node-card x/y become local coordinates after tldraw groups the node.  All
+ * arrow geometry and hit-testing, however, live in page coordinates.  Keep the
+ * conversion in one place so grouped and root-level nodes follow the exact
+ * same connection path.
+ */
+function pagePortPoint(
+  editor: Editor,
+  shape: NodeCardShape,
+  side: 'in' | 'out',
+  localY: number
+): { x: number; y: number } | null {
+  const bounds = editor.getShapePageBounds(shape.id)
+  if (!bounds) return null
+  return {
+    x: side === 'out' ? bounds.maxX : bounds.x,
+    y: shape.props.h > 0 ? bounds.y + (bounds.height * localY) / shape.props.h : bounds.y
+  }
+}
+
+/**
  * 创建连线：arrow 形状 + 两条 arrow binding（start/end 分别锚到源/目标端口位置）。
  * 绑定后连线自动跟随节点移动、可选中删除、支持撤销重做。
  */
@@ -159,8 +179,9 @@ export function createEdge(editor: Editor, from: EdgeEndpoint, to: EdgeEndpoint)
     portOffsets(fromPorts.out.length, fromShape.props.h)[fromIdx] ?? fromShape.props.h / 2
   const toY = portOffsets(toPorts.in.length, toShape.props.h)[toIdx] ?? toShape.props.h / 2
 
-  const startPage = { x: fromShape.x + fromShape.props.w, y: fromShape.y + fromY }
-  const endPage = { x: toShape.x, y: toShape.y + toY }
+  const startPage = pagePortPoint(editor, fromShape, 'out', fromY)
+  const endPage = pagePortPoint(editor, toShape, 'in', toY)
+  if (!startPage || !endPage) return false
   const arrowId = createShapeId()
 
   // 弧线弯曲量：按连线长度自适应（tldraw 的 bend 为弧中点在垂直方向的偏移，越大越弯）。
@@ -274,12 +295,18 @@ export function tryConnect(
     if (!preferredPort) return `${targetSpec.label} 的目标输入不可用`
     port = preferredPort
   } else if (dropPagePt && usable.length > 1) {
+    const targetBounds = editor.getShapePageBounds(target.id)
+    if (!targetBounds) return '目标节点位置不可用'
     const offsets = portOffsets(targetPorts.in.length, target.props.h)
     let bestDist = Infinity
     for (const p of usable) {
       const idx = targetPorts.in.indexOf(p)
       const y = offsets[idx] ?? target.props.h / 2
-      const d = Math.hypot(dropPagePt.x - target.x, dropPagePt.y - (target.y + y))
+      const pageY =
+        target.props.h > 0
+          ? targetBounds.y + (targetBounds.height * y) / target.props.h
+          : targetBounds.y
+      const d = Math.hypot(dropPagePt.x - targetBounds.x, dropPagePt.y - pageY)
       if (d < bestDist) {
         bestDist = d
         port = p
@@ -295,8 +322,58 @@ export function tryConnect(
     return '不能创建循环连线'
   }
 
-  createEdge(editor, { shapeId: from.shapeId, portId: from.portId }, endpoint)
+  if (!createEdge(editor, { shapeId: from.shapeId, portId: from.portId }, endpoint)) {
+    return '创建连线失败'
+  }
   return null
+}
+
+/**
+ * 两个节点被同时选中后拖近时的便捷连接。
+ *
+ * 只在左右相邻、垂直距离合理的情况下尝试，并始终复用 tryConnect 的端口、Schema、
+ * 单值占用和环路校验；因此它不会把“靠近”误变成绕过契约的连线。
+ */
+export function tryAutoConnectNearby(
+  editor: Editor,
+  firstId: TLShapeId,
+  secondId: TLShapeId
+): boolean {
+  const first = editor.getShape<NodeCardShape>(firstId)
+  const second = editor.getShape<NodeCardShape>(secondId)
+  if (!first || !second || first.id === second.id) return false
+
+  const firstBounds = editor.getShapePageBounds(first.id)
+  const secondBounds = editor.getShapePageBounds(second.id)
+  if (!firstBounds || !secondBounds) return false
+
+  const firstCenter = firstBounds.center
+  const secondCenter = secondBounds.center
+  const left = firstCenter.x <= secondCenter.x ? first : second
+  const right = left.id === first.id ? second : first
+  const leftBounds = left.id === first.id ? firstBounds : secondBounds
+  const rightBounds = right.id === first.id ? firstBounds : secondBounds
+  const gap = Math.max(0, rightBounds.x - leftBounds.maxX)
+  const verticalDistance = Math.abs(firstCenter.y - secondCenter.y)
+  // 只有确实在“拖近对方输入侧”时才触发，避免普通框选时产生意外连线。
+  if (gap > 140 || verticalDistance > 180) return false
+
+  const sourceSpec = getNodeType(left.props.nodeType)
+  if (!sourceSpec) return false
+  const outputs = getNodePorts(sourceSpec, left).out
+  for (const output of outputs) {
+    if (
+      tryConnect(
+        editor,
+        { shapeId: left.id, portId: output.id, portType: output.type, schema: output.schema },
+        right.id,
+        { x: rightBounds.x, y: rightBounds.y + rightBounds.height / 2 }
+      ) === null
+    ) {
+      return true
+    }
+  }
+  return false
 }
 
 /** 保存时从画布 shapes 派生图数据（node-card → CanvasNode，arrow+binding → CanvasEdge） */

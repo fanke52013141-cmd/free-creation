@@ -13,7 +13,7 @@
   --panel: #1b222b;
   --border-soft: rgba(255, 255, 255, 0.1);
   --node-radius: 12px;
-  --node-header-h: 36px;
+  --node-header-h: 42px;
   --elevation-1: 0 5px 18px rgba(0, 0, 0, 0.24);
   /* C1: --txt-dim 原被多处引用却从未定义，始终退回 #9aa4b5，此处显式补齐 */
   --txt-dim: #9aa4b5;
@@ -757,9 +757,11 @@ select:focus-visible,
 
 .palette-utility {
   position: fixed;
-  right: 14px;
+  left: 50%;
+  right: auto;
   bottom: 14px;
   z-index: var(--z-dock);
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 5px;
@@ -794,8 +796,8 @@ select:focus-visible,
 
 @media (max-width: 760px) {
   .palette-utility {
-    transform: scale(0.9);
-    transform-origin: right bottom;
+    transform: translateX(-50%) scale(0.9);
+    transform-origin: center bottom;
   }
 }
 /* Dock 式邻近放大：只改变视觉变换，不改变按钮布局和命中区域。 */
@@ -1218,22 +1220,22 @@ select:focus-visible,
 .node-header {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 7px;
   height: var(--node-header-h);
   padding: 0 10px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--line);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   background: rgba(255, 255, 255, 0.03);
 }
 
 /* 节点序号徽章 */
 .node-seq {
-  font-size: 10px;
+  font-size: 18px;
   font-weight: 800;
-  min-width: 16px;
-  height: 16px;
+  min-width: 22px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1247,8 +1249,8 @@ select:focus-visible,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   flex-shrink: 0;
 }
 
@@ -1287,8 +1289,8 @@ select:focus-visible,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
   padding: 0;
   border: none;
@@ -1319,6 +1321,14 @@ select:focus-visible,
   flex: 1;
   min-height: 0;
   position: relative;
+}
+
+/* 画布内可点击动作统一采用可读尺寸；内容多时由节点自动向下扩展。 */
+.node-card .btn-ghost.small,
+.node-card .btn-primary.small {
+  min-height: 32px;
+  padding: 5px 10px;
+  font-size: 11px;
 }
 
 /* 参考节点悬浮操作，但只提供不会绕过节点协议的查看/复制能力。 */
@@ -1504,6 +1514,15 @@ select:focus-visible,
   font-size: 12px;
   font-family: inherit;
   text-align: left;
+}
+
+/* 图片工具节点的关键动作要能一眼看到，避免和说明文字混在一起。 */
+.image-edit-empty .btn-ghost.small,
+.crop-empty .btn-ghost.small,
+.image-split-body .btn-ghost.small {
+  min-height: 34px;
+  padding: 6px 12px;
+  font-size: 12px;
 }
 .image-edit-inline-btn:hover {
   background: rgba(255, 255, 255, 0.05);
@@ -1737,8 +1756,8 @@ select:focus-visible,
 }
 
 .image-split-thumb {
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   flex-shrink: 0;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -1764,7 +1783,7 @@ select:focus-visible,
 .image-split-head-title {
   overflow: hidden;
   color: var(--txt, #e3e8ee);
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3678,6 +3697,24 @@ select:focus-visible,
   color: #fca5a5;
 }
 
+.contract-run-trace {
+  display: grid;
+  gap: 5px;
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+  padding-top: 7px;
+}
+.contract-run-trace summary {
+  cursor: pointer;
+  color: var(--txt);
+  font-size: 11px;
+}
+.contract-run-trace small {
+  white-space: normal;
+  line-height: 1.45;
+}
+.contract-run-trace small.error { color: #fca5a5; }
+
 /* ── R1：低噪声节点视觉与滚动体验 ── */
 .node-card-wrap:not(.is-selected):hover .node-card {
   border-color: color-mix(in srgb, #fff 16%, var(--line));
@@ -3734,7 +3771,7 @@ select:focus-visible,
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: fill;
+  object-fit: contain;
   pointer-events: none;
 }
 
@@ -3748,25 +3785,28 @@ select:focus-visible,
 
 .image-edit-mark {
   fill: none;
-  stroke-width: 1.5;
+  stroke-width: 3;
   vector-effect: non-scaling-stroke;
 }
 
-.image-edit-mark.red,
-.image-edit-text.red {
-  stroke: #ef4444;
-  fill: #ef4444;
+.image-edit-text.red,
+.image-edit-arrow-head.red {
+  fill: #ff315b;
 }
-.image-edit-mark.yellow,
-.image-edit-text.yellow {
-  stroke: #facc15;
-  fill: #facc15;
+.image-edit-mark.red { stroke: #ff315b; }
+.image-edit-text.yellow,
+.image-edit-arrow-head.yellow {
+  fill: #ffd60a;
 }
-.image-edit-mark.orange,
-.image-edit-text.orange {
-  stroke: #f97316;
-  fill: #f97316;
+.image-edit-mark.yellow { stroke: #ffd60a; }
+.image-edit-text.blue,
+.image-edit-arrow-head.blue,
+.image-edit-text.orange,
+.image-edit-arrow-head.orange {
+  fill: #00b8ff;
 }
+.image-edit-mark.blue,
+.image-edit-mark.orange { stroke: #00b8ff; }
 .image-edit-mask-mark {
   stroke: #38bdf8;
   stroke-width: 6;
@@ -3804,9 +3844,23 @@ select:focus-visible,
 
 .image-edit-tools button.active,
 .image-edit-colors button.active {
-  border-color: rgba(249, 115, 22, 0.72);
-  background: rgba(249, 115, 22, 0.14);
-  color: #fed7aa;
+  border-color: rgba(0, 184, 255, 0.72);
+  background: rgba(0, 184, 255, 0.14);
+  color: #b9ecff;
+}
+
+.image-edit-text-entry {
+  position: absolute;
+  z-index: 3;
+  min-width: 132px;
+  min-height: 30px;
+  padding: 4px 7px;
+  border: 1px solid #60a5fa;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.94);
+  color: #fff;
+  font-size: 13px;
+  transform: translate(4px, -50%);
 }
 
 .image-edit-presets > span {
@@ -3820,9 +3874,19 @@ select:focus-visible,
 .image-edit-color.yellow {
   color: #fde68a;
 }
-.image-edit-color.orange {
-  color: #fdba74;
+.image-edit-color.blue {
+  color: #7dd3fc;
 }
+.image-edit-size-control {
+  display: grid;
+  grid-template-columns: auto minmax(90px, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.image-edit-size-control input { min-width: 0; }
+.image-edit-size-control output { min-width: 28px; color: var(--txt); text-align: right; }
 .image-edit-mask-options {
   display: flex;
   gap: 10px;
@@ -3834,6 +3898,10 @@ select:focus-visible,
   display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+.image-edit-mask-options .image-edit-size-control {
+  display: grid;
+  flex: 1 1 220px;
 }
 
 .image-edit-source-compare {
@@ -4046,7 +4114,7 @@ select:focus-visible,
 .image-edit-workbench {
   display: flex;
   flex-direction: column;
-  width: min(760px, 92vw);
+  width: min(980px, 92vw);
   max-height: min(820px, 90vh);
   overflow: hidden;
   border: 1px solid var(--line);
@@ -4077,6 +4145,34 @@ select:focus-visible,
   min-height: 0;
   overflow-y: auto;
   padding: 14px;
+}
+
+.image-edit-workbench-body .image-edit-settings-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.9fr);
+  align-items: start;
+  gap: 14px 18px;
+}
+
+.image-edit-workbench-body .image-edit-settings-workbench .image-edit-preview {
+  grid-column: 1;
+  grid-row: 1 / span 7;
+  max-height: min(52vh, 500px);
+  justify-self: stretch;
+}
+
+.image-edit-workbench-body .image-edit-settings-workbench > :not(.image-edit-preview) {
+  grid-column: 2;
+}
+
+@media (max-width: 760px) {
+  .image-edit-workbench-body .image-edit-settings-workbench {
+    display: flex;
+  }
+
+  .image-edit-workbench-body .image-edit-preview {
+    max-height: 44vh;
+  }
 }
 .director-studio {
   display: flex;
