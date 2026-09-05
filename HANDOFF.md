@@ -10,7 +10,7 @@
 >
 > 产品定位：单用户、本地优先的 Windows Electron 无限画布创作工具。
 
-> **最新交付（2026-09-05 节点关系与媒体前置校验优化，待提交）**：补充真实的一对多扇出工作流回归（一个文本输出同时驱动两个处理节点），补充 JSON 卡片正文直接手动运行回归，并将 JSON 编辑器接入与文本节点一致的 tldraw 编辑生命周期，避免详情页测试与卡片运行出现两套编辑态。视频取帧/截取/提音与人声分离执行器现在在调用主进程媒体转换前先读取本机 FFmpeg/FFprobe/audio-separator 能力；能力不可用时返回稳定的前置错误，不再启动必然失败的转换任务。`GatewayClient`、renderer gateway 和 headless gateway 已统一暴露能力探测。验证基线为 `npm run verify`：67 个测试文件、852 个用例通过，Node/Web 类型检查和 Electron/Vite 构建通过；浏览器 mock 仍不代表真实媒体生成，桌面端需用真实媒体做最终验收。详见 [docs/QA-NODE-AUDIT-2026-09-05.md](./docs/QA-NODE-AUDIT-2026-09-05.md)。
+> **最新交付（2026-09-05 节点关系与媒体前置校验优化，提交 `b9395d3`）**：补充真实的一对多扇出工作流回归（一个文本输出同时驱动两个处理节点），补充 JSON 卡片正文直接手动运行回归，并将 JSON 编辑器接入与文本节点一致的 tldraw 编辑生命周期，避免详情页测试与卡片运行出现两套编辑态。视频取帧/截取/提音与人声分离执行器现在在调用主进程媒体转换前先读取本机 FFmpeg/FFprobe/audio-separator 能力；能力不可用时返回稳定的前置错误，不再启动必然失败的转换任务。`GatewayClient`、renderer gateway 和 headless gateway 已统一暴露能力探测。验证基线为 `npm run verify`：67 个测试文件、852 个用例通过，Node/Web 类型检查和 Electron/Vite 构建通过；浏览器 mock 仍不代表真实媒体生成，桌面端需用真实媒体做最终验收。详见 [docs/QA-NODE-AUDIT-2026-09-05.md](./docs/QA-NODE-AUDIT-2026-09-05.md)。
 
 > **最新交付（2026-09-04 图片节点优化 + Ctrl+滚轮接管排查，已推送至 `origin/main`）**：提交 `454f21b`
 > 完成图片节点四件事——图片资产节点新增可选 `in-image` 输入端口（拆分展开的连线归属）、图片拆分自动
