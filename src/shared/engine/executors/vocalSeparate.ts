@@ -3,6 +3,7 @@ import type { NodeExecutionContext, NodeExecutionResult } from '../executor-type
 import { readNodeConfig } from '../node-config'
 import { parseVocalSeparationConfig } from '@shared/video-transform'
 import type { VocalMode } from '@shared/video-transform'
+import { capabilityFailure, unavailableLocalCapability } from '../preflight'
 
 export interface VocalSeparationNodeResult {
   kind: 'vocal-separation'
@@ -49,6 +50,13 @@ export async function vocalSeparateExecutor(
   if (!source) return { status: 'skipped', reason: '请连接一段音频到"源音频"输入' }
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
   const config = parseVocalSeparationConfig(readNodeConfig(ctx.shape))
+  const capabilityKeys =
+    config.mode === 'quality' ? (['ffmpeg', 'audioSeparator'] as const) : (['ffmpeg'] as const)
+  for (const key of capabilityKeys) {
+    const capabilityReason = await unavailableLocalCapability(ctx.gateway, key)
+    if (capabilityReason)
+      return { status: 'failed', reason: capabilityFailure(key, capabilityReason) }
+  }
   try {
     const result = await ctx.gateway.separateVocals({
       projectId: ctx.projectId,

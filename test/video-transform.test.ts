@@ -274,9 +274,106 @@ describe('视频处理执行器', () => {
     expect(callArg.config.format).toBe('m4a')
     expect(callArg.config.sampleRate).toBe(48000)
   })
+
+  it('FFmpeg 不可用时在执行前失败，并且不调用媒体转换 IPC', async () => {
+    const api = {
+      extractVideoFrame: vi.fn(),
+      getLocalMediaCapabilities: vi.fn().mockResolvedValue({
+        ok: true,
+        data: {
+          ffmpeg: { available: false, message: '请安装 FFmpeg' },
+          ffprobe: { available: false, message: '请安装 FFprobe' },
+          audioSeparator: { available: false, message: '未安装分离器' }
+        }
+      })
+    }
+    currentGateway = api
+    const item = context('video-frame')
+
+    await expect(videoFrameExecutor(item.ctx)).resolves.toEqual({
+      status: 'failed',
+      reason: 'FFmpeg能力不可用：请安装 FFmpeg'
+    })
+    expect(api.extractVideoFrame).not.toHaveBeenCalled()
+  })
+
+  it('取尾帧还会检查 FFprobe 能力', async () => {
+    const api = {
+      extractVideoFrame: vi.fn(),
+      getLocalMediaCapabilities: vi.fn().mockResolvedValue({
+        ok: true,
+        data: {
+          ffmpeg: { available: true, message: '已就绪' },
+          ffprobe: { available: false, message: '请安装 FFprobe' },
+          audioSeparator: { available: true, message: '已就绪' }
+        }
+      })
+    }
+    currentGateway = api
+    const item = context('video-frame')
+    item.ctx.shape.props.config = JSON.stringify({
+      version: 2,
+      mode: 'last',
+      timeMs: 0,
+      format: 'png'
+    })
+
+    await expect(videoFrameExecutor(item.ctx)).resolves.toEqual({
+      status: 'failed',
+      reason: 'FFprobe能力不可用：请安装 FFprobe'
+    })
+    expect(api.extractVideoFrame).not.toHaveBeenCalled()
+  })
 })
 
 describe('人声分离执行器', () => {
+  it('高质量人声分离未安装分离器时在执行前失败', async () => {
+    const api = {
+      separateVocals: vi.fn(),
+      getLocalMediaCapabilities: vi.fn().mockResolvedValue({
+        ok: true,
+        data: {
+          ffmpeg: { available: true, message: '已就绪' },
+          ffprobe: { available: true, message: '已就绪' },
+          audioSeparator: { available: false, message: '未安装 BS-RoFormer 分离器' }
+        }
+      })
+    }
+    currentGateway = api
+    const item = context('video-audio')
+    item.ctx.node.type = 'vocal-separate'
+    item.ctx.shape.props.nodeType = 'vocal-separate'
+    item.ctx.shape.props.config = JSON.stringify({
+      version: 1,
+      mode: 'quality',
+      outputAccompaniment: true
+    })
+    item.ctx.inputs = new Map([
+      [
+        'in-audio',
+        [
+          {
+            type: 'audio',
+            value: {
+              kind: 'audio',
+              mediaId: 'source-audio',
+              mediaPath: 'projects/project-a/media/source.wav',
+              mime: 'audio/wav'
+            },
+            source: { nodeId: 'source', portId: 'out-audio' },
+            createdAt: 0
+          }
+        ]
+      ]
+    ])
+
+    await expect(vocalSeparateExecutor(item.ctx)).resolves.toEqual({
+      status: 'failed',
+      reason: '人声分离工具能力不可用：未安装 BS-RoFormer 分离器'
+    })
+    expect(api.separateVocals).not.toHaveBeenCalled()
+  })
+
   it('没有工作流 runId 的手动执行不伪造来源 ID，仍能保存真实人声结果', async () => {
     const api = {
       separateVocals: vi.fn().mockResolvedValue({

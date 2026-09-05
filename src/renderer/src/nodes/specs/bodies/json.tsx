@@ -1,5 +1,5 @@
 // JSON 节点 Body（路线图 R6：bodies.tsx 拆分）
-import { useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import { markUndoPoint } from '../../../canvas/history'
 import { toast } from '../../../stores/toast'
@@ -65,11 +65,41 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(shape.props.text)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const textRef = useRef(shape.props.text)
   useWheelScroll(scrollRef)
 
-  const commit = (): void => {
+  useEffect(() => {
+    textRef.current = shape.props.text
+  }, [shape.props.text])
+
+  useLayoutEffect(() => {
+    if (!editing || !textareaRef.current) return
+    const target = textareaRef.current
+    target.focus()
+    target.setSelectionRange(target.value.length, target.value.length)
+  }, [editing])
+
+  const exitEditing = useCallback((): void => {
     setEditing(false)
-    if (draft !== shape.props.text) {
+    editor.setEditingShape(null)
+  }, [editor])
+
+  const enterEditing = useCallback((): void => {
+    setDraft(textRef.current)
+    setEditing(true)
+    editor.setEditingShape(shape.id)
+  }, [editor, shape.id])
+
+  useEffect(() => {
+    return () => {
+      if (editor.getEditingShapeId() === shape.id) editor.setEditingShape(null)
+    }
+  }, [editor, shape.id])
+
+  const commit = (): void => {
+    exitEditing()
+    if (draft !== textRef.current) {
       editor.updateShape({ id: shape.id, type: 'node-card', props: { text: draft } })
       markUndoPoint(editor, 'json-edit')
     }
@@ -78,6 +108,7 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
   if (editing) {
     return (
       <textarea
+        ref={textareaRef}
         className="node-textarea code-edit"
         autoFocus
         value={draft}
@@ -145,8 +176,7 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
           onPointerDown={(e) => stopEventPropagation(e)}
           onDoubleClick={(e) => {
             e.stopPropagation()
-            setDraft(shape.props.text)
-            setEditing(true)
+            enterEditing()
           }}
         >
           {parseError ? (
@@ -161,8 +191,7 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
           onPointerDown={(e) => stopEventPropagation(e)}
           onDoubleClick={(e) => {
             e.stopPropagation()
-            setDraft(shape.props.text)
-            setEditing(true)
+            enterEditing()
           }}
         >
           双击输入 JSON 数据
@@ -177,8 +206,7 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
           onPointerDown={(e) => stopEventPropagation(e)}
           onClick={(e) => {
             e.stopPropagation()
-            setDraft(shape.props.text)
-            setEditing(true)
+            enterEditing()
           }}
         >
           <>

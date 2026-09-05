@@ -7,6 +7,7 @@ import {
   parseVideoAudioConfig
 } from '@shared/video-transform'
 import { appendMediaResult, serializeMediaResultCollection } from '../values'
+import { capabilityFailure, unavailableLocalCapability } from '../preflight'
 
 // ── 视频取帧 ──
 
@@ -14,8 +15,15 @@ export async function videoFrameExecutor(ctx: NodeExecutionContext): Promise<Nod
   const source = inputMedia(ctx.inputs, 'in-video', 'video')[0]
   if (!source) return { status: 'skipped', reason: '请连接一段视频到"源视频"输入' }
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
+  const config = parseVideoFrameConfig(readNodeConfig(ctx.shape))
+  for (const key of config.mode === 'last'
+    ? (['ffmpeg', 'ffprobe'] as const)
+    : (['ffmpeg'] as const)) {
+    const capabilityReason = await unavailableLocalCapability(ctx.gateway, key)
+    if (capabilityReason)
+      return { status: 'failed', reason: capabilityFailure(key, capabilityReason) }
+  }
   try {
-    const config = parseVideoFrameConfig(readNodeConfig(ctx.shape))
     if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
     const result = await ctx.gateway.extractVideoFrame({
       projectId: ctx.projectId,
@@ -57,6 +65,9 @@ export async function videoClipExecutor(ctx: NodeExecutionContext): Promise<Node
   const source = inputMedia(ctx.inputs, 'in-video', 'video')[0]
   if (!source) return { status: 'skipped', reason: '请连接一段视频到"源视频"输入' }
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
+  const capabilityReason = await unavailableLocalCapability(ctx.gateway, 'ffmpeg')
+  if (capabilityReason)
+    return { status: 'failed', reason: capabilityFailure('ffmpeg', capabilityReason) }
   try {
     const config = parseVideoClipConfig(readNodeConfig(ctx.shape))
     if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
@@ -100,6 +111,9 @@ export async function videoAudioExecutor(ctx: NodeExecutionContext): Promise<Nod
   const source = inputMedia(ctx.inputs, 'in-video', 'video')[0]
   if (!source) return { status: 'skipped', reason: '请连接一段视频到"源视频"输入' }
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
+  const capabilityReason = await unavailableLocalCapability(ctx.gateway, 'ffmpeg')
+  if (capabilityReason)
+    return { status: 'failed', reason: capabilityFailure('ffmpeg', capabilityReason) }
   try {
     const config = parseVideoAudioConfig(readNodeConfig(ctx.shape))
     if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }

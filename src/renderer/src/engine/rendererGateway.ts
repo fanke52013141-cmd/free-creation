@@ -26,6 +26,7 @@ export const rendererGateway: GatewayClient = {
   onEvent: (cb) => window.api.gateway.onEvent(cb),
 
   // ── 本地媒体处理 ──
+  getLocalMediaCapabilities: () => window.api.getLocalMediaCapabilities(),
   cropImage: (input) => window.api.cropImage(input),
   splitImageGrid: (input) => window.api.splitImageGrid(input),
   extractVideoFrame: (input) => window.api.extractVideoFrame(input),

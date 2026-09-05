@@ -5,7 +5,7 @@
 //
 // renderer 实现：包装 window.api.gateway（IPC 调用）。
 // main 实现：直接调用 gateway 模块（chat/image/video/audio）。
-import type { IpcEnvelope, GatewayEvent } from '../contracts'
+import type { IpcEnvelope, GatewayEvent, LocalMediaCapabilities } from '../contracts'
 import type {
   ChatStartInput,
   ImageGenerateInput,
@@ -47,6 +47,12 @@ export interface GatewayClient {
   audioGenerate(input: AudioGenerateInput): Promise<IpcEnvelope<MediaAsset>>
   /** 订阅网关事件（流式分片 / 视频进度），返回取消订阅函数。 */
   onEvent(cb: (event: GatewayEvent) => void): () => void
+
+  /**
+   * 本机媒体能力探测。执行器将它作为运行前提示/门禁使用；保留为可选方法，
+   * 兼容旧版 headless 调用方与纯执行器单测注入的最小 Gateway mock。
+   */
+  getLocalMediaCapabilities?: () => Promise<IpcEnvelope<LocalMediaCapabilities>>
 
   // ── 本地媒体处理 ──
   cropImage(input: ImageCropTransformInput): Promise<IpcEnvelope<MediaAsset>>

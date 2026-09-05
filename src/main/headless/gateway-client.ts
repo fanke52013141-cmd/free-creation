@@ -11,7 +11,8 @@ import {
   transformVideoFrame,
   transformVideoClip,
   transformVideoAudio,
-  separateVocals
+  separateVocals,
+  getLocalMediaCapabilities
 } from '../media/video-transform'
 import { transformTts } from '../media/tts-transform'
 
@@ -63,6 +64,7 @@ export function createHeadlessGateway(): GatewayClient {
       listeners.add(callback)
       return () => listeners.delete(callback)
     },
+    getLocalMediaCapabilities: async () => ok(await getLocalMediaCapabilities()),
     cropImage: async (input) => wrap(() => transformImageCrop(input)),
     splitImageGrid: async (input) => wrap(() => transformImageSplit(input)),
     extractVideoFrame: async (input) => wrap(() => transformVideoFrame(input)),

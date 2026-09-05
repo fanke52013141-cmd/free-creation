@@ -221,6 +221,103 @@ describe('runNodeManually · 卡片内统一执行入口', () => {
     expect(unrelated.props.exec).toBe('idle')
   })
 
+  it('JSON 节点卡片正文与手动运行共用同一持久化字段', async () => {
+    const json = node('shape:json-direct', 'json', '{"message":"卡片正文"}')
+    const shapes = new Map([[json.id, json]])
+    const editor = {
+      getCurrentPageShapes: () => Array.from(shapes.values()),
+      getShape: (id: string) => shapes.get(id),
+      getBindingsFromShape: () => [],
+      updateShape: (patch: {
+        id: string
+        props?: Record<string, unknown>
+        meta?: Record<string, unknown>
+      }) => {
+        if (patch.props) Object.assign(json.props, patch.props)
+        if (patch.meta) Object.assign(json.meta, patch.meta)
+      },
+      markHistoryStoppingPoint: () => undefined
+    } as unknown as Editor
+
+    const result = await runNodeManually(editor, 'project-1', [], json.id)
+
+    expect(result.status).toBe('done')
+    expect(json.props.text).toBe(JSON.stringify({ message: '卡片正文' }, null, 2))
+    expect(json.props.exec).toBe('success')
+    expect(json.meta.nodeRun).toMatchObject({ status: 'success', outputPorts: ['out-json'] })
+  })
+
+  it('一个文本输出可以并行扇出到两个处理节点，且两个分支都消费同一份数据', async () => {
+    const source = node('shape:fanout-source', 'text', '同一份并行输入')
+    const first = node('shape:fanout-first', 'processor', '')
+    const second = node('shape:fanout-second', 'processor', '')
+    const firstArrow = {
+      id: 'shape:fanout-first-arrow',
+      type: 'arrow',
+      meta: { fromPort: 'out-text', toPort: 'in-value' }
+    }
+    const secondArrow = {
+      id: 'shape:fanout-second-arrow',
+      type: 'arrow',
+      meta: { fromPort: 'out-text', toPort: 'in-value' }
+    }
+    const shapes = new Map<string, NodeCardShape | typeof firstArrow>([
+      [source.id, source],
+      [first.id, first],
+      [second.id, second],
+      [firstArrow.id, firstArrow],
+      [secondArrow.id, secondArrow]
+    ])
+    const bindings = new Map<string, Array<{ props: { terminal: string }; toId: string }>>([
+      [
+        firstArrow.id,
+        [
+          { props: { terminal: 'start' }, toId: source.id },
+          { props: { terminal: 'end' }, toId: first.id }
+        ]
+      ],
+      [
+        secondArrow.id,
+        [
+          { props: { terminal: 'start' }, toId: source.id },
+          { props: { terminal: 'end' }, toId: second.id }
+        ]
+      ]
+    ])
+    const editor = {
+      getCurrentPageShapes: () => Array.from(shapes.values()),
+      getShape: (id: string) => shapes.get(id),
+      getBindingsFromShape: (id: string) => bindings.get(id) ?? [],
+      updateShape: (patch: {
+        id: string
+        props?: Record<string, unknown>
+        meta?: Record<string, unknown>
+      }) => {
+        const current = shapes.get(patch.id)
+        if (!current || current.type !== 'node-card') return
+        if (patch.props) Object.assign(current.props, patch.props)
+        if (patch.meta) Object.assign(current.meta, patch.meta)
+      },
+      markHistoryStoppingPoint: () => undefined
+    } as unknown as Editor
+
+    await runWorkflow(editor, 'project-1', [])
+
+    expect(source.props.exec).toBe('success')
+    expect(first.props.exec).toBe('success')
+    expect(second.props.exec).toBe('success')
+    expect(JSON.parse(String(first.meta.nodeResult))).toMatchObject({
+      kind: 'text',
+      text: '同一份并行输入'
+    })
+    expect(JSON.parse(String(second.meta.nodeResult))).toMatchObject({
+      kind: 'text',
+      text: '同一份并行输入'
+    })
+    expect(first.meta.nodeRun).toMatchObject({ inputs: { 'in-value': [{ nodeId: source.id }] } })
+    expect(second.meta.nodeRun).toMatchObject({ inputs: { 'in-value': [{ nodeId: source.id }] } })
+  })
+
   it('不会把最近失败节点遗留的输出当作有效上游输入', async () => {
     const source = node('shape:failed-source', 'text', '旧的遗留文本')
     source.meta.nodeRun = {
