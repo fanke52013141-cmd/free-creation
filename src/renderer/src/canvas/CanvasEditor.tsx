@@ -715,6 +715,58 @@ export function CanvasEditor({
     return true
   }
 
+  /**
+   * 左侧节点工具栏连续点击时，所有节点的默认落点相同会导致卡片、端口和
+   * 顶部操作区完全重叠。保留用户指定的落点；只有检测到重叠时，才按最近
+   * 的网格候选点寻找空位。正在从端口拉线创建目标节点时不做避让，确保目标
+   * 节点仍然落在用户松开鼠标的位置。
+   */
+  const findNodePlacement = (
+    editor: Editor,
+    point: { x: number; y: number },
+    size: { w: number; h: number }
+  ): { x: number; y: number } => {
+    const existing = editor
+      .getCurrentPageShapes()
+      .filter((shape): shape is NodeCardShape => shape.type === 'node-card')
+      .map((shape) => editor.getShapePageBounds(shape.id))
+      .filter((bounds): bounds is NonNullable<typeof bounds> => Boolean(bounds))
+    const origin = { x: point.x - size.w / 2, y: point.y - size.h / 2 }
+    const overlaps = (x: number, y: number): boolean =>
+      existing.some(
+        (bounds) =>
+          x < bounds.maxX + 24 &&
+          x + size.w > bounds.x - 24 &&
+          y < bounds.maxY + 24 &&
+          y + size.h > bounds.y - 24
+      )
+    if (!overlaps(origin.x, origin.y)) return origin
+
+    const stepX = size.w + 48
+    const stepY = size.h + 48
+    // 逐圈枚举网格，避免固定候选数量在连续添加 20+ 个节点时再次回退到重叠位置。
+    const offsets: Array<[number, number]> = []
+    for (let radius = 1; radius <= 8; radius += 1) {
+      for (let dx = -radius; dx <= radius; dx += 1) {
+        for (let dy = -radius; dy <= radius; dy += 1) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) === radius) offsets.push([dx, dy])
+        }
+      }
+    }
+    for (const [dx, dy] of offsets) {
+      const candidate = { x: origin.x + dx * stepX, y: origin.y + dy * stepY }
+      if (!overlaps(candidate.x, candidate.y)) return candidate
+    }
+    // 极端情况下所有候选都被占用，也要保持可读的网格间距，不能退化成 24px 级联。
+    const fallbackColumns = 8
+    const fallbackCol = existing.length % fallbackColumns
+    const fallbackRow = Math.floor(existing.length / fallbackColumns)
+    return {
+      x: origin.x + (fallbackCol - Math.floor(fallbackColumns / 2)) * stepX,
+      y: origin.y + (fallbackRow + 1) * stepY
+    }
+  }
+
   const createNodeAt = (
     type: NodeTypeId,
     screenX: number,
@@ -726,12 +778,15 @@ export function CanvasEditor({
     const spec = getNodeType(type)
     if (!spec) return
     const point = editor.screenToPage({ x: screenX, y: screenY })
+    const placement = pendingConnectRef.current
+      ? { x: point.x - spec.defaultSize.w / 2, y: point.y - spec.defaultSize.h / 2 }
+      : findNodePlacement(editor, point, spec.defaultSize)
     const id = createShapeId()
     editor.createShape({
       id,
       type: 'node-card',
-      x: point.x - spec.defaultSize.w / 2,
-      y: point.y - spec.defaultSize.h / 2,
+      x: placement.x,
+      y: placement.y,
       props: {
         nodeType: type,
         title: spec.label,
