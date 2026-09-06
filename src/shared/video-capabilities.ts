@@ -105,7 +105,8 @@ export function videoCapabilitiesFor(
   modelId = '',
   context: VideoCapabilityContext = {}
 ): VideoCapabilities {
-  if (specId === 'minimax' && canonicalVideoModelId(modelId) === 'minimax-h3') {
+  // H3 家族（minimax-h3、minimax-h3-max 等）共享同一套已验证能力。
+  if (specId === 'minimax' && canonicalVideoModelId(modelId).startsWith('minimax-h3')) {
     return H3_CAPABILITIES
   }
   if (specId === 'seedance') {
@@ -124,7 +125,9 @@ export function videoRatioIsDerivedByFrames(
   hasFirstOrLastFrame: boolean
 ): boolean {
   return (
-    specId === 'minimax' && canonicalVideoModelId(modelId) === 'minimax-h3' && hasFirstOrLastFrame
+    specId === 'minimax' &&
+    canonicalVideoModelId(modelId).startsWith('minimax-h3') &&
+    hasFirstOrLastFrame
   )
 }
 
