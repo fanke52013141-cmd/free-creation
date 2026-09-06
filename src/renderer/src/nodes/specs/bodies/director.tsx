@@ -27,7 +27,10 @@ export function DirectorBody({ shape }: NodeBodyProps): React.JSX.Element {
   const publishCurrent = isDirectorPublishCurrent(project, publish)
 
   return (
-    <div className="director-node-body" onPointerDown={(event) => stopEventPropagation(event)}>
+    // 注意：不要在容器上整块 stopEventPropagation——那会同时吞掉卡片空白区的
+    // 选中与拖动（点卡片无法选中，QA-NODE-AUDIT-2026-09-06 P3-2）。
+    // 拦截只放在真正可交互的按钮上，与其它节点 Body 的约定一致。
+    <div className="director-node-body">
       <div className="director-node-preview">
         <div className="director-node-frame">
           <span className="director-node-grid" />
@@ -51,6 +54,7 @@ export function DirectorBody({ shape }: NodeBodyProps): React.JSX.Element {
       </div>
       <button
         className="director-open-btn"
+        onPointerDown={(event) => stopEventPropagation(event)}
         onClick={(event) => {
           event.stopPropagation()
           editor.select(shape.id)
@@ -62,6 +66,7 @@ export function DirectorBody({ shape }: NodeBodyProps): React.JSX.Element {
       {publishCurrent && publish?.video && (
         <button
           className="director-open-btn"
+          onPointerDown={(event) => stopEventPropagation(event)}
           onClick={(event) => {
             event.stopPropagation()
             createPrevisVideoReference(editor, shape)

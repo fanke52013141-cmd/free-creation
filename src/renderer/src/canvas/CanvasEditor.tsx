@@ -182,6 +182,18 @@ function removeUnsupportedCanvasShapes(editor: Editor): number {
   return ids.length
 }
 
+/**
+ * 新建节点必须落在顶栏之下：顶栏悬浮于画布之上，卡片标题行的运行/说明按钮
+ * 若被顶栏覆盖，命中测试会被顶栏截获而不可点。返回顶栏底边在屏幕空间的
+ * y 坐标（外加安全边距）；顶栏不存在（例如纯浏览器无头布局）时返回 0，表示
+ * 不施加约束。
+ */
+function topbarSafeScreenY(editor: Editor): number {
+  const topbar = editor.getContainer().ownerDocument.querySelector('.canvas-topbar')
+  if (!topbar) return 0
+  return topbar.getBoundingClientRect().bottom + 12
+}
+
 export function CanvasEditor({
   project,
   initialSnapshot,
@@ -211,6 +223,20 @@ export function CanvasEditor({
   // 节点右上角 info 图标显式打开的面板目标（选中不触发；对话节点→聊天，其余→契约窗）
   const nodePanelKind = useNodePanelStore((s) => s.kind)
   const nodePanelShapeId = useNodePanelStore((s) => s.shapeId)
+  // 右侧区域是单例：节点详情请求（info 图标、卡片配置按钮、预演台入口、选中对话节点）
+  // 到达时，若资产/工作流/历史/运行中心等侧栏面板正开着，必须先关闭它再渲染详情，
+  // 否则打开动作会被静默吞掉（QA-NODE-AUDIT-2026-09-06 P1-2）。
+  // 订阅 openVersion 变化而非 kind/shapeId：重复打开同一节点也要触发收口；
+  // 收口发生在 store 回调（事件路径）而非 effect 同步体，避免级联渲染。
+  useEffect(
+    () =>
+      useNodePanelStore.subscribe((state, prev) => {
+        if (state.openVersion === prev.openVersion) return
+        if (!state.kind || !state.shapeId) return
+        setPanelTab((current) => (current === null ? current : null))
+      }),
+    []
+  )
   // 画布配色：dark（深色）/ light（米黄色）
   const [canvasTheme, setCanvasTheme] = useState<'dark' | 'light'>('dark')
   // 左侧节点面板拖拽状态
@@ -721,18 +747,29 @@ export function CanvasEditor({
    * 顶部操作区完全重叠。保留用户指定的落点；只有检测到重叠时，才按最近
    * 的网格候选点寻找空位。正在从端口拉线创建目标节点时不做避让，确保目标
    * 节点仍然落在用户松开鼠标的位置。
+   *
+   * 避让网格只在卡片之间避让；顶栏悬浮在画布上方，若候选点落在顶栏之下，
+   * 卡片标题行（运行/说明按钮）会被顶栏截获命中而不可点。因此每个候选点都
+   * 先在屏幕空间做顶栏净空归一，再做卡片重叠判断。
    */
   const findNodePlacement = (
     editor: Editor,
     point: { x: number; y: number },
     size: { w: number; h: number }
   ): { x: number; y: number } => {
+    const minScreenY = topbarSafeScreenY(editor)
     const existing = editor
       .getCurrentPageShapes()
       .filter((shape): shape is NodeCardShape => shape.type === 'node-card')
       .map((shape) => editor.getShapePageBounds(shape.id))
       .filter((bounds): bounds is NonNullable<typeof bounds> => Boolean(bounds))
-    const origin = { x: point.x - size.w / 2, y: point.y - size.h / 2 }
+    const normalize = (candidate: { x: number; y: number }): { x: number; y: number } => {
+      if (minScreenY <= 0) return candidate
+      const zoom = editor.getCamera().z || 1
+      const screenY = editor.pageToScreen(candidate).y
+      if (screenY >= minScreenY) return candidate
+      return { ...candidate, y: candidate.y + (minScreenY - screenY) / zoom }
+    }
     const overlaps = (x: number, y: number): boolean =>
       existing.some(
         (bounds) =>
@@ -741,6 +778,7 @@ export function CanvasEditor({
           y < bounds.maxY + 24 &&
           y + size.h > bounds.y - 24
       )
+    const origin = normalize({ x: point.x - size.w / 2, y: point.y - size.h / 2 })
     if (!overlaps(origin.x, origin.y)) return origin
 
     const stepX = size.w + 48
@@ -755,17 +793,17 @@ export function CanvasEditor({
       }
     }
     for (const [dx, dy] of offsets) {
-      const candidate = { x: origin.x + dx * stepX, y: origin.y + dy * stepY }
+      const candidate = normalize({ x: origin.x + dx * stepX, y: origin.y + dy * stepY })
       if (!overlaps(candidate.x, candidate.y)) return candidate
     }
     // 极端情况下所有候选都被占用，也要保持可读的网格间距，不能退化成 24px 级联。
     const fallbackColumns = 8
     const fallbackCol = existing.length % fallbackColumns
     const fallbackRow = Math.floor(existing.length / fallbackColumns)
-    return {
+    return normalize({
       x: origin.x + (fallbackCol - Math.floor(fallbackColumns / 2)) * stepX,
       y: origin.y + (fallbackRow + 1) * stepY
-    }
+    })
   }
 
   const createNodeAt = (
@@ -1110,6 +1148,21 @@ export function CanvasEditor({
         })
       },
       { scope: 'document' }
+    )
+    // 对话节点的交互主体在右侧聊天面板：卡片空态文案承诺「选中此节点 → 右侧面板对话」。
+    // 这里监听选中变化，单选对话节点时自动打开其聊天面板（QA-NODE-AUDIT-2026-09-06 P2-2）。
+    // 只在选中变化时触发：用户主动关闭面板后，不重新选中不会再次弹出。
+    editor.store.listen(
+      () => {
+        const selected = editor.getSelectedShapeIds()
+        if (selected.length !== 1) return
+        const shape = editor.getShape<NodeCardShape>(selected[0])
+        if (!shape || shape.type !== 'node-card' || shape.props.nodeType !== 'chat') return
+        const panel = useNodePanelStore.getState()
+        if (panel.kind === 'chat' && panel.shapeId === shape.id) return
+        panel.open('chat', shape.id, 'settings')
+      },
+      { scope: 'session' }
     )
     // 一次性兼容旧快照：只修正旧版本默认尺寸或明显异常的超大节点。
     const resizedNodes = migrateLegacyNodeSizes(editor)

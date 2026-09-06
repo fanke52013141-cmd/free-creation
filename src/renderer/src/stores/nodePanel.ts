@@ -20,6 +20,12 @@ interface NodePanelState {
   shapeId: TLShapeId | null
   /** 本次打开面板时契约面板应定位的初始 tab（仅对 contract 生效）。 */
   initialTab: NodePanelInitialTab
+  /**
+   * 每次 open 递增的请求版本。open 的参数可能与上次完全相同（重复点击同一节点
+   * 的说明按钮），订阅方需要据此感知「又发生了一次打开请求」，用于与运行中心等
+   * 互斥面板收口（QA-NODE-AUDIT-2026-09-06 P1-2）。
+   */
+  openVersion: number
   /** 打开（或切换）到某个节点的指定面板。 */
   open: (kind: NodePanelKind, shapeId: TLShapeId, initialTab?: NodePanelInitialTab) => void
   /** 关闭面板。 */
@@ -30,6 +36,8 @@ export const useNodePanelStore = create<NodePanelState>((set) => ({
   kind: null,
   shapeId: null,
   initialTab: 'settings',
-  open: (kind, shapeId, initialTab = 'settings') => set({ kind, shapeId, initialTab }),
+  openVersion: 0,
+  open: (kind, shapeId, initialTab = 'settings') =>
+    set((s) => ({ kind, shapeId, initialTab, openVersion: s.openVersion + 1 })),
   close: () => set({ kind: null, shapeId: null, initialTab: 'settings' })
 }))

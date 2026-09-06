@@ -3,8 +3,23 @@
 const { chromium } = require('playwright')
 const assert = require('node:assert/strict')
 
+// 优先真实 Chrome（历史基线），缺失时回退 Edge / Playwright 内置 Chromium，
+// 保证审查通道在不同机器上都能启动。
+async function launchBrowser() {
+  const attempts = [{ channel: 'chrome' }, { channel: 'msedge' }, {}]
+  let lastError
+  for (const options of attempts) {
+    try {
+      return await chromium.launch({ ...options, headless: true })
+    } catch (error) {
+      lastError = error
+    }
+  }
+  throw lastError
+}
+
 async function main() {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true })
+  const browser = await launchBrowser()
   try {
     const page = await browser.newPage({ viewport: { width: 1707, height: 900 } })
     await page.goto('http://127.0.0.1:5173/')
@@ -31,6 +46,24 @@ async function main() {
     await page.locator('.media-preview-mask').waitFor({ state: 'detached' })
     // 浏览器演示同样要能完成真实的画布内图片拆分，而不是把能力 mock 成失败。
     await page.getByRole('button', { name: '添加拆分节点', exact: true }).click()
+    // P1-1 回归（QA-NODE-AUDIT-2026-09-06）：新建节点必须整体落在顶栏之下，
+    // 否则卡片标题行的运行/说明按钮会被顶栏截获命中而不可点。
+    const assertCardsClearOfTopbar = async () => {
+      const topbarBottom = await page.evaluate(() => {
+        const bar = document.querySelector('.canvas-topbar')
+        return bar ? bar.getBoundingClientRect().bottom : 0
+      })
+      await page.waitForFunction(
+        (minY) =>
+          Math.min(
+            ...Array.from(document.querySelectorAll('.node-card-wrap')).map(
+              (c) => c.getBoundingClientRect().top
+            )
+          ) >= minY,
+        topbarBottom
+      )
+    }
+    await assertCardsClearOfTopbar()
     await page.getByRole('button', { name: '适配画布（缩放到所有节点）', exact: true }).click()
     const splitNode = page.locator('.node-card-wrap:has(.type-image-split)').first()
     await splitNode.waitFor()
@@ -46,6 +79,7 @@ async function main() {
     })
     await page.getByText('你好，导入测试', { exact: true }).waitFor()
     await page.getByRole('button', { name: '添加文本节点', exact: true }).click()
+    await assertCardsClearOfTopbar()
     await page.getByRole('button', { name: '适配画布（缩放到所有节点）', exact: true }).click()
     const nodes = page.locator('.node-card-wrap:has(.type-text)')
     assert.equal(await nodes.count(), 2)
@@ -110,9 +144,23 @@ async function main() {
         .evaluate((el) => getComputedStyle(el).color),
       'rgb(229, 57, 53)'
     )
+    // P1-2 回归（QA-NODE-AUDIT-2026-09-06）：运行中心打开时，节点详情请求必须
+    // 收口侧栏并打开详情面板，而不是被静默忽略。
+    await page.getByRole('button', { name: '打开运行中心', exact: true }).click()
+    await page.locator('.side-panel').waitFor()
+    await page.locator('.node-card-wrap:has(.type-text)').first().locator('.node-info-btn').click()
+    await page.locator('.node-contract-panel').waitFor()
+    assert.equal(await page.locator('.side-panel').count(), 0, '运行中心必须被节点详情请求收口')
+    // P2-2 回归：选中对话节点即打开右侧对话面板（与卡片空态文案一致）。
+    await page.keyboard.press('Escape')
+    await page.getByRole('button', { name: '添加对话节点', exact: true }).click()
+    const chatCard = page.locator('.node-card-wrap:has(.type-chat)').first()
+    await chatCard.waitFor()
+    await chatCard.locator('.node-card').click({ position: { x: 120, y: 60 } })
+    await page.locator('.chat-side-panel').waitFor()
     if (process.env.UI_SCREENSHOT) await page.screenshot({ path: process.env.UI_SCREENSHOT })
     console.log(
-      'PASS: image import/preview, image-split availability, footer text import, port connection, grouping, light inspector, sequence color, readiness removal'
+      'PASS: image import/preview, image-split availability, footer text import, port connection, grouping, light inspector, sequence color, readiness removal, topbar clearance, run-center/contract handoff, chat select-to-open'
     )
   } finally {
     await browser.close()
