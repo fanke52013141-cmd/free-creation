@@ -10,7 +10,21 @@
 >
 > 产品定位：单用户、本地优先的 Windows Electron 无限画布创作工具。
 
-> **最新交付（2026-09-06 真实模型接入 + 桌面端逐节点真跑审查）**：接入 TokenDance 网关与 codex2api 图片中转（配置存于本机应用 SQLite，Key 经 safeStorage 加密，不入仓库）。**新增代码**：`main/gateway/audio.ts` 按供应商协议分派 TTS——`specId=minimax` 走 MiniMax T2A v2（`/v1/t2a_v2`，hex 音频解码，OpenAI 默认音色映射 `male-qn-qingse`），其余保持 OpenAI `/audio/speech`；`video-capabilities.ts` 以 `minimax-h3` 前缀识别 H3 家族（含 minimax-h3-max）。**已配置供应商**：TokenDance 文本（`https://tokendance.space/gateway/v1`，glm-5.3-flash/text）、TokenDance MiniMax（`https://tokendance.space/gateway/minimax`，minimax-h3-max/video + minimax-speech-2.8-turbo/audio）、codex2api 图片（`https://www.codex2api.com/v1`，gpt-image-2/image）。**桌面端真跑结论**（Playwright 驱动打包产物 + 真实 Key）：文本/处理/JSON/代码/结构数据/分镜板 ✅ 本地链路；对话/AI 处理 ✅ glm-5.3-flash 真实补全；生图 ✅ gpt-image-2 真实出图；配音 ✅ minimax-speech-2.8-turbo 真实合成（T2A v2 适配器）；提音/人声分离 ✅ 真实 FFmpeg；裁剪/拆分/取帧/截取 ✅ 真实媒体变换；导演台 ✅ 发布链路；图片资产/视频资产 ✅ 真实导入。**受阻项**：视频生成——TokenDance 网关对 `minimax:video_generation_v2` 协议整体未配置价格（`当前模型未配置该请求规格的价格`，h3 与 h3-max 同样），需用户联系 TokenDance 开通；语音克隆——按契约依赖本地 ComfyUI + IndexTTS-2.5（TokenDance 有 `minimax:voice_clone` 协议，可作后续接入项）；修改(图生图) 的 `/images/edits` 后端已 curl 真实验证，UI 工作台流需桌面人工过一遍。审查中发现的应用侧问题：外部修改重载（`画布外有新的修改`）存在吞掉 800ms 内未保存新节点的竞态窗口；拆分自动展开会在同一坐标堆叠图片节点；建议后续批次处理。验证：`npm run verify` 69 文件 860 用例全绿；审查脚本与结果存于 `C:/Users/Administrator/canvas-tools/`（不入仓库）。本机 FFmpeg 便携版位于 `C:/Users/Administrator/canvas-tools/ffmpeg/`，应用经 `CANVAS_STUDIO_FFMPEG_PATH` 使用。
+> **最新交付（2026-09-06 第二批：外部重载竞态修复 + FFmpeg 正式安装）**：修复模型接入审查发现的三个应用侧缺陷——
+> ① **外部修改重载吞节点竞态**：`reloadFromDisk` 现在会在重载前抓取本地 document 快照，把磁盘上没有的
+> shape/binding/asset 记录并入磁盘快照后再加载（合并策略在 `canvas/external-reload.ts`，纯函数含 13 项单测），
+> 相机与选中态也一并恢复；重载 toast 会明确提示保留了多少条未保存内容。**已知取舍**：本地未保存的删除会被
+> 复活——相比丢掉新画内容危害更小。
+> ② **资产「添加到画布」接入避让网格**：`createMediaNodes` 与调色板/右键建节点一致走 `findNodePlacement`，
+> 反复导入不再堆叠在同一坐标。
+> ③ **画布挂载前的建节点请求排队补建**：tldraw 初始化完成前点击调色板不再静默丢弃，挂载后自动补建并 toast 提示。
+> **FFmpeg 正式安装**：官方 7.1.1 full 构建已安装至 `C:\Users\Administrator\AppData\Local\Programs\FFmpeg`（bin 含
+> ffmpeg/ffprobe/ffplay），并写入**用户 PATH**——应用按默认逻辑直接探测 PATH 即可，不再需要 `CANVAS_STUDIO_FFMPEG_PATH`
+> 或便携版（后者已删除）。注意：已运行的进程看不到新 PATH，重启应用/新开终端生效；若未来需要全机安装，把该 bin
+> 提权写入系统 PATH 即可。验证：`npm run verify` 70 文件 869 用例全绿（contract-consistency hook 单独跑 3.9s，
+> 满载偶发超时为既有抖动）；`dist/win-unpacked` 已重新打包。
+
+> **交付（2026-09-06 真实模型接入 + 桌面端逐节点真跑审查）**：接入 TokenDance 网关与 codex2api 图片中转（配置存于本机应用 SQLite，Key 经 safeStorage 加密，不入仓库）。**新增代码**：`main/gateway/audio.ts` 按供应商协议分派 TTS——`specId=minimax` 走 MiniMax T2A v2（`/v1/t2a_v2`，hex 音频解码，OpenAI 默认音色映射 `male-qn-qingse`），其余保持 OpenAI `/audio/speech`；`video-capabilities.ts` 以 `minimax-h3` 前缀识别 H3 家族（含 minimax-h3-max）。**已配置供应商**：TokenDance 文本（`https://tokendance.space/gateway/v1`，glm-5.3-flash/text）、TokenDance MiniMax（`https://tokendance.space/gateway/minimax`，minimax-h3-max/video + minimax-speech-2.8-turbo/audio）、codex2api 图片（`https://www.codex2api.com/v1`，gpt-image-2/image）。**桌面端真跑结论**（Playwright 驱动打包产物 + 真实 Key）：文本/处理/JSON/代码/结构数据/分镜板 ✅ 本地链路；对话/AI 处理 ✅ glm-5.3-flash 真实补全；生图 ✅ gpt-image-2 真实出图；配音 ✅ minimax-speech-2.8-turbo 真实合成（T2A v2 适配器）；提音/人声分离 ✅ 真实 FFmpeg；裁剪/拆分/取帧/截取 ✅ 真实媒体变换；导演台 ✅ 发布链路；图片资产/视频资产 ✅ 真实导入。**受阻项**：视频生成——TokenDance 网关对 `minimax:video_generation_v2` 协议整体未配置价格（`当前模型未配置该请求规格的价格`，h3 与 h3-max 同样），由用户联系 TokenDance 开通后自测；语音克隆——按契约依赖本地 ComfyUI + IndexTTS-2.5（用户将在另一台装有该环境的电脑自测；TokenDance 有 `minimax:voice_clone` 协议，可作后续接入项）；修改(图生图) 的 `/images/edits` 后端已 curl 真实验证，UI 工作台流需桌面人工过一遍。验证：`npm run verify` 全绿；审查脚本与结果存于 `C:/Users/Administrator/canvas-tools/`（不入仓库）。
 
 > **最新交付（2026-09-06 八项审查问题修复批次）**：对 [docs/QA-NODE-AUDIT-2026-09-06.md](./docs/QA-NODE-AUDIT-2026-09-06.md) 的 8 项问题完成 Playwright 实证复核与修复。**修复 4 项真实缺陷**——P1-1 新节点避让网格加入屏幕空间顶栏净空约束（`topbarSafeScreenY`，修复前 5 连建 2 个被 67px 顶栏遮挡致标题按钮不可点）；P1-2 右侧单例收口：`nodePanelStore.openVersion` + `CanvasEditor` 订阅，节点详情请求自动关闭运行中心等侧栏（重复打开同一节点也生效）；P2-2 选中对话节点即自动打开右侧对话面板（与卡片空态文案一致）；P3-2 `DirectorBody` 去掉容器整块 `stopEventPropagation`，预演卡空白区可选中/拖动。**改进 2 项**——P2-1 图片导入加异常兜底 toast（信封消费本就存在）；P2-4 节点级运行缺必填输入时 toast 透出缺失端口明细（记录保持 `failed` 与整图一致）。**证伪 2 项**——P2-3「打开 3D 预演台」与 P3-1 数据节点运行记录在 `e0486d7` 上实测正常，均为 P1-1/P3-2 拦截点击造成的连带误报。回归断言（顶栏避让/运行中心收口/对话选中即开）已并入 `npm run test:browser-ui`，并给该脚本加了 Chrome→Edge→内置 Chromium 的浏览器回退。验证：全部诊断检查 PASS、`npm run test:browser-ui` PASS、`npm run verify` 通过。
 

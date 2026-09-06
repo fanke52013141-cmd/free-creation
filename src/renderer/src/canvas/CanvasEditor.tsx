@@ -26,6 +26,7 @@ import {
   type ConnectionFinish
 } from './connection-drag'
 import { deriveGraph, tryAutoConnectNearby, tryConnect, createEdge } from './graph'
+import { mergeUnsavedLocalRecords, countRestorableRecords } from './external-reload'
 import type { AiProcessConfig } from '../engine/executors/aiProcess'
 import { markUndoPoint } from './history'
 import { getNodeType, allNodeTypes, needsNodeSizeMigration } from '../nodes/registry'
@@ -210,6 +211,11 @@ export function CanvasEditor({
   const restoreFailedRef = useRef(false)
   // 拉线到空白处松手：暂存连线来源，待菜单选定节点类型后自动连线（LibTV 交互）
   const pendingConnectRef = useRef<ConnectionFrom | null>(null)
+  // 画布挂载前（tldraw 初始化完成前）的建节点请求：先排队，编辑器就绪后补建。
+  // 旧行为是直接静默 return，启动初期点击左侧调色板会像「按钮坏了」一样无反馈。
+  const pendingCreationRef = useRef<
+    Array<{ type: NodeTypeId; screenX: number; screenY: number; preferredTargetPortId?: string }>
+  >([])
   // 节点剪贴板：Ctrl+C / 右键「复制」暂存节点 props 与相对整体左上角的偏移，粘贴时按原布局重建
   const clipboardRef = useRef<Array<{ props: NodeCardProps; dx: number; dy: number }> | null>(null)
   // 剪贴板节点数进入 React 状态，让「新建节点」菜单能响应式显示「粘贴」入口
@@ -424,16 +430,43 @@ export function CanvasEditor({
 
   // 保存冲突时从磁盘重载最新数据：外部写入的 node-card/arrow 已同步进快照，
   // 这里恢复快照即可让 Agent 的新增内容出现在画布上。
+  // 竞态保护：自动保存有 800ms 防抖，重载会把「本地已创建但未落盘」的节点吞掉
+  // （2026-09-06 模型接入审查实锤）。重载前先取本地 document 快照，把磁盘上没有的
+  // shape/binding/asset 记录并入磁盘快照后再加载；相机与选中态一并保留。
   const reloadFromDisk = async (): Promise<void> => {
     const editor = editorRef.current
     if (!editor) return
+    const localDocument = editor.store.getStoreSnapshot('document')
+    const camera = editor.getCamera()
+    const selectedIds = editor.getSelectedShapeIds()
     const res = await window.api.openProject(project.id)
     if (!res.ok || !res.data) return
     try {
-      const repaired = repairTldrawSnapshot(res.data.tldrawSnapshot)
-      editor.store.loadStoreSnapshot(editor.store.migrateSnapshot(repaired as never))
+      const repaired = repairTldrawSnapshot(res.data.tldrawSnapshot) as never as {
+        store: Record<string, unknown>
+      }
+      const merged = mergeUnsavedLocalRecords(
+        repaired,
+        localDocument as {
+          store: Record<string, unknown>
+        }
+      )
+      const restorable = countRestorableRecords(
+        repaired,
+        localDocument as { store: Record<string, unknown> }
+      )
+      editor.store.loadStoreSnapshot(editor.store.migrateSnapshot(merged as never))
       graphVersionRef.current = res.data.meta.graphVersion
-      toast('画布外有新的修改，已重新加载最新内容', 4000)
+      // 相机与选中在 loadStoreSnapshot 中被重置，这里恢复重载前的视角
+      editor.setCamera(camera)
+      if (selectedIds.length > 0 && selectedIds.every((id) => editor.getShape(id))) {
+        editor.select(...selectedIds)
+      }
+      if (restorable > 0) {
+        toast(`已从磁盘重载，并保留了 ${restorable} 条未保存的新增内容`, 5000)
+      } else {
+        toast('画布外有新的修改，已重新加载最新内容', 4000)
+      }
     } catch (e) {
       console.error('冲突重载失败', e)
       restoreFailedRef.current = true
@@ -813,7 +846,11 @@ export function CanvasEditor({
     preferredTargetPortId?: string
   ): void => {
     const editor = editorRef.current
-    if (!editor) return
+    if (!editor) {
+      // tldraw 尚未挂载：排队等 handleMount 补建，而不是静默丢弃
+      pendingCreationRef.current.push({ type, screenX, screenY, preferredTargetPortId })
+      return
+    }
     const spec = getNodeType(type)
     if (!spec) return
     const point = editor.screenToPage({ x: screenX, y: screenY })
@@ -849,13 +886,15 @@ export function CanvasEditor({
       const spec = getNodeType(isTextFile ? 'text' : asset.kind)
       if (!spec) return
       const point = editor.screenToPage({ x: screenX + i * 24, y: screenY + i * 24 })
+      // 与调色板/右键菜单建节点一致地走避让网格：反复导入时不再堆叠在同一坐标
+      const placement = findNodePlacement(editor, point, spec.defaultSize)
       const id = createShapeId()
       if (!firstId) firstId = id
       editor.createShape({
         id,
         type: 'node-card',
-        x: point.x,
-        y: point.y,
+        x: placement.x,
+        y: placement.y,
         props: {
           nodeType: isTextFile ? 'text' : asset.kind,
           title: asset.name ?? spec.label,
@@ -1031,6 +1070,14 @@ export function CanvasEditor({
     editorRef.current = editor
     setEditorInstance(editor)
     useEditorStore.getState().setEditor(editor)
+    // 补建挂载前排队的节点：用户在画布初始化完成前的点击不丢失
+    const queued = pendingCreationRef.current.splice(0)
+    if (queued.length > 0) {
+      for (const item of queued) {
+        createNodeAt(item.type, item.screenX, item.screenY, item.preferredTargetPortId)
+      }
+      toast(`画布就绪，已补建 ${queued.length} 个初始化期间请求的节点`)
+    }
     // 不能恢复上一次 tldraw 会话遗留的画笔/文本工具；工作流画布始终从选择工具开始。
     editor.setCurrentTool('select')
     // LibTV 式深色画布（tldraw 默认浅色，与整体 UI 不符）
