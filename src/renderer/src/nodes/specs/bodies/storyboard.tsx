@@ -261,7 +261,9 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
           {shot.imageMediaPath ? (
             <div
               className="storyboard-thumb"
-              onClick={(e) => {
+              data-node-interactive="media-preview"
+              title="双击预览镜头图片"
+              onDoubleClick={(e) => {
                 e.stopPropagation()
                 openPreview({
                   kind: 'image',

@@ -361,6 +361,8 @@ export function isActiveNodeType(type: string): type is ActiveNodeTypeId {
 }
 
 export function mediaUrl(relPath: string): string {
-  if (relPath.startsWith('blob:')) return relPath
+  // 浏览器验收页把小型会话媒体序列化为 data URL，以便刷新后继续裁剪/拆分；
+  // Electron 项目仍使用受限的 media:/// 协议，绝不把本地绝对路径暴露到页面。
+  if (relPath.startsWith('blob:') || relPath.startsWith('data:')) return relPath
   return `media:///${relPath.split('/').map(encodeURIComponent).join('/')}`
 }

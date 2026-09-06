@@ -62,6 +62,12 @@ export type IconName =
   | 'more'
   | 'trash'
   | 'edit'
+  | 'move'
+  | 'arrow'
+  | 'rectangle'
+  | 'brush'
+  | 'mask'
+  | 'loader'
   | 'external'
   | 'download'
 
@@ -419,6 +425,43 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <path d="m4 16.5-.7 3.7 3.7-.7L18.7 7.8a2.1 2.1 0 0 0-3-3L4 16.5Z" />
       <path d="m14.5 6.5 3 3" />
+    </>
+  ),
+  move: (
+    <>
+      <path d="M12 3v18M3 12h18" />
+      <path d="m8.5 6.5 3.5-3.5 3.5 3.5M8.5 17.5 12 21l3.5-3.5M6.5 8.5 3 12l3.5 3.5M17.5 8.5 21 12l-3.5 3.5" />
+    </>
+  ),
+  arrow: (
+    <>
+      <path d="M4 18 18 6" />
+      <path d="M10 6h8v8" />
+    </>
+  ),
+  rectangle: (
+    <>
+      <rect x="4" y="5" width="16" height="14" rx="1.5" />
+      <path d="M7 8h.01M17 16h.01" />
+    </>
+  ),
+  brush: (
+    <>
+      <path d="m14.5 4.5 5 5-8.8 8.8-5.9 1.4 1.4-5.9 8.3-8.3Z" />
+      <path d="m5.2 19.8 2.6-2.6M12.4 6.6l5 5" />
+    </>
+  ),
+  mask: (
+    <>
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <path d="M8 4v16M16 4v16M4 8h16M4 16h16" strokeDasharray="2 2" />
+      <path d="m9 12 2 2 4-4" />
+    </>
+  ),
+  loader: (
+    <>
+      <path d="M20 12a8 8 0 1 1-2.34-5.66" />
+      <path d="M20 5v5h-5" />
     </>
   ),
   external: (

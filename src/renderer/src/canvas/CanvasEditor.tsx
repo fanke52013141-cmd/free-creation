@@ -27,6 +27,7 @@ import {
 } from './connection-drag'
 import { deriveGraph, tryAutoConnectNearby, tryConnect, createEdge } from './graph'
 import { mergeUnsavedLocalRecords, countRestorableRecords } from './external-reload'
+import { NODE_PORT_OUTSET } from './edge-geometry'
 import type { AiProcessConfig } from '../engine/executors/aiProcess'
 import { markUndoPoint } from './history'
 import { getNodeType, allNodeTypes, needsNodeSizeMigration } from '../nodes/registry'
@@ -545,10 +546,37 @@ export function CanvasEditor({
       event.stopPropagation()
       textBody.dispatchEvent(new CustomEvent('canvas:edit-text-node'))
     }
+    const dispatchMediaPreview = (mediaBody: HTMLElement, event: MouseEvent): void => {
+      event.preventDefault()
+      event.stopPropagation()
+      // tldraw 会在第一击时捕获指针，第二击随后的 dblclick target 会变成 .tl-canvas。
+      // 在尚未被重定向的第二次 mousedown 上向实际媒体元素补发 dblclick，交给每个
+      // 节点的预览处理器。这样单击仍只选中节点，所有图片预览都稳定为双击。
+      mediaBody.dispatchEvent(
+        new MouseEvent('dblclick', {
+          bubbles: true,
+          cancelable: true,
+          detail: 2,
+          clientX: event.clientX,
+          clientY: event.clientY
+        })
+      )
+    }
     // 双击第二击的 mousedown：此时 target 仍是正文 div（未被 pointer capture 重定向）。
     const onDoubleMouseDown = (event: MouseEvent): void => {
       if (event.detail !== 2) return // 只处理双击的第二击
       const target = event.target as HTMLElement
+      const mediaBody = target.closest<HTMLElement>('[data-node-interactive="media-preview"]')
+      if (mediaBody) {
+        // 卡片内的“设为当前 / 删除 / 文件操作”等按钮维持自己的双击语义，不把它们
+        // 当成媒体预览热区；只有图片本体或结果卡空白区走下面的预览桥接。
+        const nestedControl = target.closest<HTMLElement>(
+          'button, input, textarea, select, a, [contenteditable="true"]'
+        )
+        if (nestedControl && mediaBody.contains(nestedControl)) return
+        dispatchMediaPreview(mediaBody, event)
+        return
+      }
       const textBody = target.closest<HTMLElement>('[data-node-interactive="text-content"]')
       if (textBody) dispatchEditText(textBody, event)
     }
@@ -1242,7 +1270,8 @@ export function CanvasEditor({
     const pagePt = editor.screenToPage(r.screenPt)
     const target = editor.getShapeAtPoint(pagePt, {
       hitInside: true,
-      margin: 6,
+      // 端口位于卡片外侧；保留足够的命中余量，释放在线框外的输入端口上仍能连接。
+      margin: NODE_PORT_OUTSET + 8,
       filter: (s) => s.type === 'node-card' && s.id !== r.from.shapeId && !s.isLocked
     })
     if (target) {

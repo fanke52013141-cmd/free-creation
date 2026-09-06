@@ -15,6 +15,7 @@ interface GroupOutline {
   height: number
   count: number
   label: string
+  zoom: number
 }
 
 interface SelectionOutline {
@@ -36,7 +37,8 @@ function outlinesEqual(left: GroupOutline[], right: GroupOutline[]): boolean {
         item.width === other.width &&
         item.height === other.height &&
         item.count === other.count &&
-        item.label === other.label
+        item.label === other.label &&
+        item.zoom === other.zoom
       )
     })
   )
@@ -66,6 +68,12 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
       const host = hostRef.current
       if (!host) return
       const hostBounds = host.getBoundingClientRect()
+      const zoom = editor.getCamera().z || 1
+      // 分组线框属于 page 几何的一部分：边距、圆角与标题都必须随画布缩放。
+      // 原先在屏幕像素上固定 44px 顶部留白，缩小画布后它会远大于组内节点，造成
+      // “分组变成细长胶囊”的错觉。
+      const sidePad = OUTLINE_SIDE_PAD * zoom
+      const topPad = OUTLINE_TOP_PAD * zoom
       const next: GroupOutline[] = []
 
       for (const shape of editor.getCurrentPageShapes()) {
@@ -82,12 +90,13 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
         const label = typeof meta?.label === 'string' ? meta.label : ''
         next.push({
           id: shape.id,
-          left: topLeft.x - hostBounds.left - OUTLINE_SIDE_PAD,
-          top: topLeft.y - hostBounds.top - OUTLINE_TOP_PAD,
-          width: bottomRight.x - topLeft.x + OUTLINE_SIDE_PAD * 2,
-          height: bottomRight.y - topLeft.y + OUTLINE_TOP_PAD + OUTLINE_SIDE_PAD,
+          left: topLeft.x - hostBounds.left - sidePad,
+          top: topLeft.y - hostBounds.top - topPad,
+          width: bottomRight.x - topLeft.x + sidePad * 2,
+          height: bottomRight.y - topLeft.y + topPad + sidePad,
           count,
-          label
+          label,
+          zoom
         })
       }
       setOutlines((current) => (outlinesEqual(current, next) ? current : next))
@@ -110,10 +119,10 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
       const topLeft = editor.pageToScreen({ x: minX, y: minY })
       const bottomRight = editor.pageToScreen({ x: maxX, y: maxY })
       const nextSelection = {
-        left: topLeft.x - hostBounds.left - OUTLINE_SIDE_PAD,
-        top: topLeft.y - hostBounds.top - OUTLINE_SIDE_PAD,
-        width: bottomRight.x - topLeft.x + OUTLINE_SIDE_PAD * 2,
-        height: bottomRight.y - topLeft.y + OUTLINE_SIDE_PAD * 2
+        left: topLeft.x - hostBounds.left - sidePad,
+        top: topLeft.y - hostBounds.top - sidePad,
+        width: bottomRight.x - topLeft.x + sidePad * 2,
+        height: bottomRight.y - topLeft.y + sidePad * 2
       }
       setSelection((current) =>
         current &&
@@ -162,8 +171,8 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
         const hit =
           x >= outline.left &&
           x <= outline.left + outline.width &&
-          y >= outline.top - LABEL_BAND_TOP - 4 &&
-          y <= outline.top - LABEL_BAND_TOP + LABEL_BAND_HEIGHT + 4
+          y >= outline.top - LABEL_BAND_TOP * outline.zoom - 4 &&
+          y <= outline.top - LABEL_BAND_TOP * outline.zoom + LABEL_BAND_HEIGHT * outline.zoom + 4
         if (hit) {
           e.preventDefault()
           e.stopPropagation()
@@ -196,7 +205,8 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
             left: outline.left,
             top: outline.top,
             width: outline.width,
-            height: outline.height
+            height: outline.height,
+            ['--group-zoom' as string]: outline.zoom
           }}
         >
           {editingId === outline.id ? (

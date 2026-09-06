@@ -3,7 +3,7 @@ import type { Editor, TLShapeId } from 'tldraw'
 import { getNodePorts, getNodeType, portOffsets, PORT_COLORS } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
 import { useEdgeSelectionStore } from '../stores/edgeSelection'
-import { buildDataEdgePath } from './edge-geometry'
+import { buildDataEdgePath, NODE_PORT_OUTSET } from './edge-geometry'
 
 interface ScreenEdge {
   id: TLShapeId
@@ -52,8 +52,15 @@ function collectEdges(editor: Editor, host: HTMLDivElement): ScreenEdge[] {
       target.props.h > 0
         ? targetBounds.y + (targetBounds.height * toY) / target.props.h
         : targetBounds.y
-    const startScreen = editor.pageToScreen({ x: sourceBounds.maxX, y: sourceAnchorY })
-    const endScreen = editor.pageToScreen({ x: targetBounds.x, y: targetAnchorY })
+    // 端口圆心位于卡片外侧，正式数据线也以圆心为锚点，不能留一段“线没接上”的空隙。
+    const startScreen = editor.pageToScreen({
+      x: sourceBounds.maxX + NODE_PORT_OUTSET,
+      y: sourceAnchorY
+    })
+    const endScreen = editor.pageToScreen({
+      x: targetBounds.x - NODE_PORT_OUTSET,
+      y: targetAnchorY
+    })
     const fromPort = sourcePorts.out[fromIndex]
     result.push({
       id: arrow.id,

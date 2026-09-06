@@ -19,7 +19,8 @@ import {
   MediaFileActions,
   MediaResultGrid,
   MediaSourceBadge,
-  selectMediaResult
+  selectMediaResult,
+  useClickGuard
 } from './shared'
 
 function positiveInteger(value: string, fallback: number): number {
@@ -29,6 +30,7 @@ function positiveInteger(value: string, fallback: number): number {
 
 export function ImageSplitBody({ shape, openPreview }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
+  const guard = useClickGuard()
   const openSettings = (): void =>
     useNodePanelStore.getState().open('contract', shape.id, 'settings')
   if (!shape.props.mediaPath) {
@@ -65,20 +67,26 @@ export function ImageSplitBody({ shape, openPreview }: NodeBodyProps): React.JSX
   const raw = typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
   const collection = parseMediaResultCollection(raw)
   const expandable = Boolean(collection && collection.results.length >= 2)
+  const splitConfig = parseImageSplitConfig(readNodeConfig(shape))
 
   return (
     <div className="node-media-wrap image-split-body">
       <div className="image-split-head">
         <div
           className="image-split-thumb"
+          data-node-interactive="media-preview"
           role="button"
-          title="点击预览当前输出"
-          onClick={() =>
-            openPreview({
-              kind: 'image',
-              url: mediaUrl(shape.props.mediaPath),
-              title: shape.props.title
-            })
+          tabIndex={0}
+          title="双击预览当前输出"
+          onPointerDown={guard.onPointerDown}
+          onDoubleClick={(event) =>
+            guard.onDoubleClick(event, () =>
+              openPreview({
+                kind: 'image',
+                url: mediaUrl(shape.props.mediaPath),
+                title: shape.props.title
+              })
+            )
           }
         >
           <img src={mediaUrl(shape.props.mediaPath)} alt={shape.props.title} draggable={false} />
@@ -108,6 +116,12 @@ export function ImageSplitBody({ shape, openPreview }: NodeBodyProps): React.JSX
         shape={shape}
         kind="image"
         className="media-result-collection-split"
+        gridColumns={splitConfig.columns}
+        itemLabel={(index) => {
+          const row = Math.floor(index / splitConfig.columns) + 1
+          const column = (index % splitConfig.columns) + 1
+          return `R${row} · C${column}`
+        }}
         onSelect={chooseResult}
         openPreview={(item) =>
           openPreview({ kind: 'image', url: mediaUrl(item.mediaPath), title: shape.props.title })

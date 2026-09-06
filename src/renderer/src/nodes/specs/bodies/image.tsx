@@ -68,9 +68,10 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     <div className="node-media-wrap">
       <div
         className="node-media"
+        data-node-interactive="media-preview"
         onPointerDown={guard.onPointerDown}
-        onClick={(e) =>
-          guard.onClick(e, () =>
+        onDoubleClick={(e) =>
+          guard.onDoubleClick(e, () =>
             openPreview({
               kind: 'image',
               url: mediaUrl(shape.props.mediaPath),

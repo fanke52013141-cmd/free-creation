@@ -33,6 +33,38 @@ describe('图片宫格拆分配置', () => {
     expect(first!.rect.width * first!.rect.height).toBeCloseTo(0.25 * 0.9)
   })
 
+  it('100% 宫格的导出区域首尾相接但绝不重叠', () => {
+    const tiles = buildImageSplitTiles({
+      ...DEFAULT_IMAGE_SPLIT_CONFIG,
+      rows: 3,
+      columns: 3,
+      scalePercent: 100
+    })
+
+    expect(tiles).toHaveLength(9)
+    for (const tile of tiles) {
+      expect(tile.rect.x).toBeGreaterThanOrEqual(0)
+      expect(tile.rect.y).toBeGreaterThanOrEqual(0)
+      expect(tile.rect.x + tile.rect.width).toBeLessThanOrEqual(1)
+      expect(tile.rect.y + tile.rect.height).toBeLessThanOrEqual(1)
+    }
+    for (let index = 0; index < tiles.length; index += 1) {
+      for (let compare = index + 1; compare < tiles.length; compare += 1) {
+        const first = tiles[index]!.rect
+        const second = tiles[compare]!.rect
+        const overlapWidth = Math.max(
+          0,
+          Math.min(first.x + first.width, second.x + second.width) - Math.max(first.x, second.x)
+        )
+        const overlapHeight = Math.max(
+          0,
+          Math.min(first.y + first.height, second.y + second.height) - Math.max(first.y, second.y)
+        )
+        expect(overlapWidth * overlapHeight).toBeCloseTo(0)
+      }
+    }
+  })
+
   it('把异常行列与面积参数收敛到安全上限', () => {
     const config = parseImageSplitConfig(
       JSON.stringify({ rows: 99, columns: 99, scalePercent: 300 })

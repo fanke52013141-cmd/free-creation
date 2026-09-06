@@ -1,6 +1,7 @@
 // 浏览器直连 vite dev 时的 window.api 模拟：Electron 内 preload 已提供真实 api，
 // 此 mock 仅在开发期用浏览器验证画布交互；媒体仅保存在当前浏览器会话。
 import type { ProjectMeta, ProjectFile, ProviderSummary } from '@shared/types'
+import type { ImageGenerateInput, SaveProviderInput } from '@shared/contracts'
 import { createBrowserMedia } from './browserMedia'
 import {
   defaultPalettePreferences,
@@ -12,12 +13,34 @@ export function installBrowserMock(): void {
   if (window.api) return
   const media = createBrowserMedia()
 
+  // 浏览器验收页不是 Electron 的项目数据库，但刷新页面也不应让正在验收的节点消失。
+  // 仅把画布快照和不含密钥的供应商摘要放到当前 tab 的 sessionStorage；关闭 tab 后即清空，
+  // 真实桌面项目仍只走主进程 SQLite/文件存储。
+  const readSession = <T>(key: string, fallback: T): T => {
+    try {
+      const raw = window.sessionStorage.getItem(key)
+      return raw ? (JSON.parse(raw) as T) : fallback
+    } catch {
+      return fallback
+    }
+  }
+  const writeSession = (key: string, value: unknown): void => {
+    try {
+      window.sessionStorage.setItem(key, JSON.stringify(value))
+    } catch {
+      // 容量或隐私模式受限时仍保留本页内存态，不让验收页崩溃。
+    }
+  }
+  const snapshotKey = 'canvas-studio.browser-demo.snapshot.v1'
+  const providersKey = 'canvas-studio.browser-demo.providers.v1'
+
   const now = Date.now()
   const projects: ProjectMeta[] = [
     { id: 'demo', name: '浏览器演示项目', createdAt: now, updatedAt: now, graphVersion: 0 }
   ]
-  let snapshot: unknown
-  const providers: ProviderSummary[] = [
+  let snapshot: unknown = readSession(snapshotKey, null)
+  let graphVersion = 0
+  const defaultProviders: ProviderSummary[] = [
     {
       id: 'mock-relay',
       name: '演示中转站',
@@ -32,6 +55,7 @@ export function installBrowserMock(): void {
       ]
     }
   ]
+  const providers = readSession(providersKey, defaultProviders)
   const templates: Array<Record<string, unknown>> = []
   const snapshots: Array<Record<string, unknown> & { projectId: string }> = []
   let palettePreferences: PalettePreferences = defaultPalettePreferences()
@@ -45,7 +69,7 @@ export function installBrowserMock(): void {
         name,
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        graphVersion: 0
+        graphVersion
       }
       projects.unshift(p)
       return Promise.resolve({ ok: true, data: p })
@@ -72,9 +96,14 @@ export function installBrowserMock(): void {
     },
     saveProject: (input: { tldrawSnapshot?: unknown }) => {
       snapshot = input.tldrawSnapshot
-      return Promise.resolve({ ok: true, data: { graphVersion: 1 } })
+      graphVersion += 1
+      writeSession(snapshotKey, snapshot)
+      return Promise.resolve({ ok: true, data: { graphVersion } })
     },
-    saveProjectSync: () => undefined,
+    saveProjectSync: (input: { tldrawSnapshot?: unknown }) => {
+      snapshot = input.tldrawSnapshot
+      writeSession(snapshotKey, snapshot)
+    },
     closeProject: () => Promise.resolve({ ok: true, data: true }),
     onExternalProjectChange: () => () => undefined,
     exportProject: () =>
@@ -99,8 +128,18 @@ export function installBrowserMock(): void {
           ok: false as const,
           error: { code: 'MOCK_IMPORT', message: String(error) }
         })),
-    cropImage: () =>
-      Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持本地裁剪' } }),
+    cropImage: (input: {
+      projectId: string
+      sourceMediaId: string
+      config: import('@shared/image-crop').ImageCropConfig
+    }) =>
+      media
+        .cropImage(input.projectId, input.sourceMediaId, input.config)
+        .then((data) => ({ ok: true as const, data }))
+        .catch((error) => ({
+          ok: false as const,
+          error: { code: 'MOCK_IMAGE_CROP', message: String(error) }
+        })),
     splitImageGrid: (input: {
       projectId: string
       sourceMediaId: string
@@ -206,30 +245,39 @@ export function installBrowserMock(): void {
     getDroppedFilePath: () => '',
     gateway: {
       listProviders: () => Promise.resolve({ ok: true, data: providers }),
-      saveProvider: (input: { id?: string; name: string }) => {
+      saveProvider: (input: SaveProviderInput) => {
+        const existing = input.id
+          ? providers.find((provider) => provider.id === input.id)
+          : undefined
         const p: ProviderSummary = {
           id: input.id ?? 'p' + Date.now(),
           name: input.name,
-          specId: 'relay',
-          baseURL: '',
-          hasApiKey: false,
-          models: [],
-          createdAt: Date.now()
+          specId: input.specId,
+          baseURL: input.baseURL,
+          // 演示页从不把 API Key 写入浏览器存储；仅保留“已配置”状态以供 UI 验收。
+          hasApiKey: Boolean(input.apiKey?.trim() || existing?.hasApiKey),
+          models: input.models.map((model) => ({ ...model })),
+          createdAt: existing?.createdAt ?? Date.now()
         }
         const i = providers.findIndex((x) => x.id === p.id)
         if (i >= 0) providers[i] = p
         else providers.push(p)
+        writeSession(providersKey, providers)
         return Promise.resolve({ ok: true, data: p })
       },
       deleteProvider: (id: string) => {
         const i = providers.findIndex((x) => x.id === id)
         if (i >= 0) providers.splice(i, 1)
+        writeSession(providersKey, providers)
         return Promise.resolve({ ok: true, data: i >= 0 })
       },
-      testProvider: () =>
+      testProvider: (input: SaveProviderInput) =>
         Promise.resolve({
           ok: true,
-          data: { models: ['gpt-image-2', 'gpt-5.2'], message: '演示环境' }
+          data: {
+            models: input.models.map((model) => model.id),
+            message: '浏览器演示环境：已校验模型配置结构，不会发送 API Key 或真实网络请求'
+          }
         }),
       chatStart: () => Promise.resolve({ ok: true, data: { taskId: 'mock-task' } }),
       chatCancel: () => Promise.resolve({ ok: true, data: true }),
@@ -238,11 +286,14 @@ export function installBrowserMock(): void {
           ok: false,
           error: { code: 'MOCK', message: '浏览器演示不支持音频生成' }
         }),
-      imageGenerate: () =>
-        Promise.resolve({
-          ok: false,
-          error: { code: 'MOCK', message: '浏览器演示不支持真实生成' }
-        }),
+      imageGenerate: (input: ImageGenerateInput) =>
+        media
+          .createGeneratedImage(input.projectId, input.prompt, input.size)
+          .then((data) => ({ ok: true as const, data }))
+          .catch((error) => ({
+            ok: false as const,
+            error: { code: 'MOCK_IMAGE_GENERATE', message: String(error) }
+          })),
       imageEdit: () =>
         Promise.resolve({
           ok: false,

@@ -34,7 +34,13 @@ describe('UI 图标系统', () => {
       'align-vertical',
       'distribute-horizontal',
       'distribute-vertical',
-      'group'
+      'group',
+      'move',
+      'arrow',
+      'rectangle',
+      'brush',
+      'mask',
+      'loader'
     ]) {
       expect(icons.has(name as (typeof ICON_NAMES)[number])).toBe(true)
     }

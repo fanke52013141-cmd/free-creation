@@ -4,6 +4,13 @@ export interface EdgePoint {
 }
 
 /**
+ * 连线端口不再压在卡片边框上。端口圆心位于卡片边缘外 16px，既让拖拽更容易命中，
+ * 也给卡片正文留出完整的点击/选中区域。视觉连线和端口渲染必须共享该距离。
+ */
+export const NODE_PORT_OUTSET = 16
+export const NODE_PORT_SIZE = 18
+
+/**
  * Build the visible data-edge curve in screen coordinates.
  *
  * The handle is intentionally derived only from the horizontal distance between

@@ -41,9 +41,78 @@ async function main() {
       return img && img.complete && img.naturalWidth === 1
     })
     await page.locator('.type-image .node-media img').click()
+    assert.equal(
+      await page.locator('.media-preview-mask').count(),
+      0,
+      '单击媒体只应选中节点，不应打开预览'
+    )
+    await page.locator('.type-image .node-media img').dblclick()
     await page.locator('.media-preview-mask').waitFor()
     await page.getByRole('button', { name: '关闭预览', exact: true }).click()
     await page.locator('.media-preview-mask').waitFor({ state: 'detached' })
+    const browserMediaResults = await page.evaluate(async () => {
+      const media = await window.api.listMedia('demo')
+      const source = media.data.find((item) => item.kind === 'image')
+      if (!media.ok || !source)
+        return { crop: false, split: false, generated: false, savedModel: false }
+      const crop = await window.api.cropImage({
+        projectId: 'demo',
+        sourceMediaId: source.id,
+        config: {
+          version: 1,
+          mode: 'rect',
+          aspectRatio: 'free',
+          rect: { x: 0, y: 0, width: 0.5, height: 1 },
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 0 },
+            { x: 0, y: 1 },
+            { x: 1, y: 1 }
+          ]
+        }
+      })
+      const split = await window.api.splitImageGrid({
+        projectId: 'demo',
+        sourceMediaId: source.id,
+        config: { version: 1, rows: 1, columns: 2, scalePercent: 100 }
+      })
+      const saved = await window.api.gateway.saveProvider({
+        name: '浏览器验收模型',
+        specId: 'relay',
+        baseURL: 'https://example.com/v1',
+        apiKey: 'browser-demo-key',
+        models: [{ id: 'browser-image', modality: 'image' }]
+      })
+      const generated = await window.api.gateway.imageGenerate({
+        projectId: 'demo',
+        providerId: saved.ok ? saved.data.id : 'mock-relay',
+        modelId: 'browser-image',
+        prompt: '浏览器验收生图',
+        size: '512x512'
+      })
+      const providers = await window.api.gateway.listProviders()
+      return {
+        crop: crop.ok,
+        cropMessage: crop.ok ? '' : crop.error.message,
+        split: split.ok && split.data.length === 2,
+        splitMessage: split.ok ? String(split.data.length) : split.error.message,
+        generated: generated.ok && generated.data.kind === 'image',
+        savedModel:
+          saved.ok &&
+          providers.ok &&
+          providers.data.some((provider) =>
+            provider.models.some((model) => model.id === 'browser-image')
+          )
+      }
+    })
+    assert.deepEqual(browserMediaResults, {
+      crop: true,
+      cropMessage: '',
+      split: true,
+      splitMessage: '2',
+      generated: true,
+      savedModel: true
+    })
     // 浏览器演示同样要能完成真实的画布内图片拆分，而不是把能力 mock 成失败。
     await page.getByRole('button', { name: '添加拆分节点', exact: true }).click()
     // P1-1 回归（QA-NODE-AUDIT-2026-09-06）：新建节点必须整体落在顶栏之下，
@@ -90,6 +159,19 @@ async function main() {
     const before = await source.boundingBox()
     const a = await source.locator('.port-dot.out').boundingBox()
     const b = await destination.locator('.port-dot.in').boundingBox()
+    const sourceRect = await source.boundingBox()
+    const destinationRect = await destination.boundingBox()
+    assert.equal(
+      await source.locator('.port-dot.out').evaluate((port) => getComputedStyle(port).width),
+      '18px',
+      '端口需要是更大的可命中圆环'
+    )
+    assert.ok(a.x >= sourceRect.x + sourceRect.width, '输出端口必须完整位于节点外侧')
+    assert.ok(b.x + b.width <= destinationRect.x, '输入端口必须完整位于节点外侧')
+    assert.equal(
+      await source.locator('.port-dot.out').evaluate((port) => getComputedStyle(port).borderStyle),
+      'dashed'
+    )
     const edgeCountBeforeTextConnect = await page.locator('.data-edge').count()
     await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2)
     await page.mouse.down()
@@ -125,6 +207,29 @@ async function main() {
     await page.getByRole('button', { name: '打组', exact: true }).click()
     await page.locator('.canvas-group-outline').waitFor()
     assert.ok(await page.locator('.data-edge').count(), '分组后应保留真实数据边')
+    const readGroupGeometry = () =>
+      page.evaluate(() => {
+        const group = document.querySelector('.canvas-group-outline')
+        const cards = Array.from(document.querySelectorAll('.node-card-wrap:has(.type-text)'))
+        if (!group || cards.length < 2) return null
+        const groupRect = group.getBoundingClientRect()
+        const cardRects = cards.map((card) => card.getBoundingClientRect())
+        const minLeft = Math.min(...cardRects.map((rect) => rect.left))
+        return {
+          zoom: Number(getComputedStyle(group).getPropertyValue('--group-zoom')),
+          horizontalPadding: minLeft - groupRect.left
+        }
+      })
+    const groupBeforeZoom = await readGroupGeometry()
+    await page.getByRole('button', { name: '缩小', exact: true }).click()
+    await page.waitForTimeout(280)
+    const groupAfterZoom = await readGroupGeometry()
+    assert.ok(groupBeforeZoom && groupAfterZoom, '分组线框应保留可读的几何信息')
+    assert.ok(groupAfterZoom.zoom < groupBeforeZoom.zoom, '分组线框必须感知画布缩小')
+    assert.ok(
+      groupAfterZoom.horizontalPadding < groupBeforeZoom.horizontalPadding,
+      '分组边距必须随缩放同比缩小，不能在缩小时拉成细长框'
+    )
     await page.getByRole('button', { name: '切换为浅色画布', exact: true }).click()
     await destination.getByRole('button', { name: '打开节点说明' }).click()
     await page.getByRole('tab', { name: '输入输出', exact: true }).click()
@@ -158,9 +263,35 @@ async function main() {
     await chatCard.waitFor()
     await chatCard.locator('.node-card').click({ position: { x: 120, y: 60 } })
     await page.locator('.chat-side-panel').waitFor()
+    await page.reload()
+    await page.locator('.node-card-wrap').first().waitFor()
+    assert.ok(await page.locator('.node-card-wrap').count(), '刷新浏览器演示页不能丢失画布节点')
+    const persistedMedia = await page.evaluate(async () => {
+      const media = await window.api.listMedia('demo')
+      const source = media.ok ? media.data.find((item) => item.kind === 'image') : undefined
+      if (!source) return { ok: false, message: '刷新后找不到已导入图片' }
+      const crop = await window.api.cropImage({
+        projectId: 'demo',
+        sourceMediaId: source.id,
+        config: {
+          version: 1,
+          mode: 'rect',
+          aspectRatio: 'free',
+          rect: { x: 0, y: 0, width: 1, height: 1 },
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 0 },
+            { x: 0, y: 1 },
+            { x: 1, y: 1 }
+          ]
+        }
+      })
+      return crop.ok ? { ok: true, message: '' } : { ok: false, message: crop.error.message }
+    })
+    assert.deepEqual(persistedMedia, { ok: true, message: '' }, '刷新后媒体资产仍应能继续裁剪')
     if (process.env.UI_SCREENSHOT) await page.screenshot({ path: process.env.UI_SCREENSHOT })
     console.log(
-      'PASS: image import/preview, image-split availability, footer text import, port connection, grouping, light inspector, sequence color, readiness removal, topbar clearance, run-center/contract handoff, chat select-to-open'
+      'PASS: image double-click preview, browser crop/split/model generation, external dashed ports, refresh persistence and crop, zoom-stable grouping, light inspector, sequence color, readiness removal, topbar clearance, run-center/contract handoff, chat select-to-open'
     )
   } finally {
     await browser.close()

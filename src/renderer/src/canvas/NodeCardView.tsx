@@ -24,6 +24,7 @@ import { runNodeManually } from '../engine/executor'
 import { useAppStore } from '../stores/app'
 import { useGatewayStore } from '../stores/gateway'
 import { Tooltip } from '../components/Tooltip'
+import { NODE_PORT_SIZE } from './edge-geometry'
 
 const EXEC_COLORS: Record<string, string> = {
   idle: '#6b7280',
@@ -153,6 +154,24 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   const outY = portOffsets(outPorts.length, shape.props.h)
   const isSource = draft?.from.shapeId === shape.id
   const statusLabel = nodeExecLabel(shape.props.exec)
+  const activeExecution = ['pending', 'queued', 'running'].includes(shape.props.exec)
+  const executionLabel: Record<string, string> = {
+    'image-gen': '图片生成中',
+    'image-edit': '图片修改中',
+    'image-split': '正在拆分图片',
+    'image-crop': '正在裁剪图片',
+    video: '视频生成中'
+  }
+  const executionDetail: Record<string, string> = {
+    'image-gen': '正在调用已选模型，完成后会自动替换为生成结果。',
+    'image-edit': '正在发送原图、标注参考与修改说明。',
+    'image-split': '正在按当前行列导出独立图片，不会覆盖原图。',
+    'image-crop': '正在导出裁剪后的新图片，原图保持不变。',
+    video: '正在提交视频任务，完成后会自动显示成片。'
+  }
+  const executionTitle = executionLabel[shape.props.nodeType] ?? '节点执行中'
+  const executionDescription =
+    executionDetail[shape.props.nodeType] ?? '正在处理输入和生成输出，请稍候。'
   const readinessState = useValue(
     'node readiness',
     () => {
@@ -321,6 +340,17 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               <div className="node-empty">未知节点类型：{shape.props.nodeType}</div>
             )}
           </div>
+          {activeExecution && spec?.executor && (
+            <div className="node-execution-overlay" role="status" aria-live="polite">
+              <span className="node-execution-spinner" aria-hidden="true">
+                <Icon name="loader" size={22} />
+              </span>
+              <span className="node-execution-copy">
+                <strong>{executionTitle}</strong>
+                <small>{executionDescription}</small>
+              </span>
+            </div>
+          )}
         </div>
         {/* 输入端口（左侧）：拖线时按类型兼容高亮 */}
         {inPorts.map((p, i) => {
@@ -331,7 +361,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               key={p.id}
               className={`port-dot in input-${state?.kind ?? 'optional'} ${draft ? (ok ? 'ok' : 'dim') : ''}`}
               style={{
-                top: inY[i] - 6,
+                top: inY[i] - NODE_PORT_SIZE / 2,
                 borderColor: PORT_COLORS[p.type],
                 ['--pc' as string]: PORT_COLORS[p.type]
               }}
@@ -350,7 +380,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               key={p.id}
               className={`port-dot out ${hasOutput ? 'has-output' : 'no-output'} ${isSource && draft?.from.portId === p.id ? 'ok' : ''}`}
               style={{
-                top: outY[i] - 6,
+                top: outY[i] - NODE_PORT_SIZE / 2,
                 borderColor: PORT_COLORS[p.type],
                 ['--pc' as string]: PORT_COLORS[p.type]
               }}

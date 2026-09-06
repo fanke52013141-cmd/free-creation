@@ -893,7 +893,7 @@ select:focus-visible,
 .canvas-group-outline {
   position: absolute;
   border: 1px solid rgba(231, 238, 247, 0.18);
-  border-radius: 18px;
+  border-radius: calc(18px * var(--group-zoom, 1));
   background: rgba(231, 238, 247, 0.055);
   box-shadow:
     inset 0 1px rgba(255, 255, 255, 0.025),
@@ -905,15 +905,15 @@ select:focus-visible,
 .canvas-group-outline > span {
   position: absolute;
   left: 0;
-  top: -26px;
+  top: calc(-26px * var(--group-zoom, 1));
   padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
   color: rgba(218, 227, 237, 0.62);
-  font-size: 13px;
+  font-size: calc(13px * var(--group-zoom, 1));
   font-weight: 600;
-  line-height: 20px;
+  line-height: calc(20px * var(--group-zoom, 1));
   cursor: default;
 }
 
@@ -922,7 +922,7 @@ select:focus-visible,
 .canvas-group-name-input {
   position: absolute;
   left: 0;
-  top: -26px;
+  top: calc(-26px * var(--group-zoom, 1));
   width: 180px;
   padding: 0 6px;
   border: 1px solid rgba(93, 156, 236, 0.6);
@@ -1055,7 +1055,9 @@ select:focus-visible,
   padding: 4px 8px;
   cursor: pointer;
   white-space: nowrap;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
 }
 
 .node-menu-tab:hover {
@@ -1181,6 +1183,7 @@ select:focus-visible,
 }
 
 .node-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -1321,6 +1324,66 @@ select:focus-visible,
   flex: 1;
   min-height: 0;
   position: relative;
+}
+
+/* 模型 / 本地媒体任务运行时的明确状态层。状态来自统一运行器的 exec 字段，而不是
+   用“绿色结果图”猜测；用户能区分生成中、完成和失败。 */
+.node-execution-overlay {
+  position: absolute;
+  z-index: 6;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 11px;
+  padding: 18px;
+  background:
+    radial-gradient(circle at 50% 38%, rgba(35, 190, 159, 0.15), transparent 52%),
+    rgba(10, 15, 22, 0.74);
+  backdrop-filter: blur(3px);
+  color: #eaf7f4;
+  pointer-events: none;
+}
+
+.node-execution-spinner {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgba(80, 239, 191, 0.38);
+  border-radius: 50%;
+  background: rgba(24, 154, 124, 0.13);
+  color: #5cf0bf;
+  box-shadow: 0 0 26px rgba(34, 211, 160, 0.18);
+}
+
+.node-execution-spinner svg {
+  animation: node-execution-rotate 900ms linear infinite;
+}
+
+.node-execution-copy {
+  display: grid;
+  gap: 3px;
+  max-width: min(230px, 74%);
+}
+
+.node-execution-copy strong {
+  color: #eafff7;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.node-execution-copy small {
+  color: rgba(219, 247, 239, 0.75);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+@keyframes node-execution-rotate {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* 画布内可点击动作统一采用可读尺寸；内容多时由节点自动向下扩展。 */
@@ -1593,7 +1656,7 @@ select:focus-visible,
 
 .media-result-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--media-grid-columns, 4), minmax(0, 1fr));
   gap: 4px;
   /* 9 格等网格限高，超出滚动，避免被卡片高度裁剪导致“只见 8 格”。 */
   max-height: 196px;
@@ -1610,8 +1673,8 @@ select:focus-visible,
   border: 1px solid var(--line);
   border-radius: 4px;
   background: #0e141b;
-  /* 点击即预览：与主图区放大镜交互一致 */
-  cursor: zoom-in;
+  /* 单击仍用于选中节点，双击才打开预览。 */
+  cursor: default;
 }
 
 .media-result-tile:hover,
@@ -1734,6 +1797,34 @@ select:focus-visible,
   object-fit: cover;
 }
 
+/* 拆图结果必须完整展示每一个派生区域。通用候选图可以 cover，但拆图使用 cover
+   会把窄条图片再裁掉，视觉上像相邻格子相互叠在一起。 */
+.media-result-collection-split .media-result-tile {
+  background:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.025) 25%, transparent 25%) 0 0 / 10px 10px,
+    linear-gradient(-45deg, rgba(255, 255, 255, 0.025) 25%, transparent 25%) 0 0 / 10px 10px,
+    #0e141b;
+}
+
+.media-result-collection-split .media-result-tile img {
+  object-fit: contain;
+}
+
+.media-result-tile-label {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  padding: 2px 4px;
+  border: 1px solid rgba(231, 238, 247, 0.12);
+  border-radius: 4px;
+  background: rgba(7, 11, 16, 0.78);
+  color: #d4e5f0;
+  font-size: 9px;
+  font-weight: 650;
+  line-height: 1;
+  letter-spacing: 0.03em;
+}
+
 .media-result-selected {
   position: absolute;
   right: 3px;
@@ -1763,14 +1854,14 @@ select:focus-visible,
   border: 1px solid var(--line);
   border-radius: 6px;
   background: #0e141b;
-  cursor: zoom-in;
+  cursor: default;
 }
 
 .image-split-thumb img {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .image-split-head-info {
@@ -3713,7 +3804,9 @@ select:focus-visible,
   white-space: normal;
   line-height: 1.45;
 }
-.contract-run-trace small.error { color: #fca5a5; }
+.contract-run-trace small.error {
+  color: #fca5a5;
+}
 
 /* ── R1：低噪声节点视觉与滚动体验 ── */
 .node-card-wrap:not(.is-selected):hover .node-card {
@@ -3789,16 +3882,30 @@ select:focus-visible,
   vector-effect: non-scaling-stroke;
 }
 
+.image-edit-mark.selected,
+.image-edit-mask-mark.selected {
+  filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.84));
+  stroke-dasharray: 4 2;
+}
+
+.image-edit-arrow-head.selected {
+  filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.84));
+}
+
 .image-edit-text.red,
 .image-edit-arrow-head.red {
   fill: #ff315b;
 }
-.image-edit-mark.red { stroke: #ff315b; }
+.image-edit-mark.red {
+  stroke: #ff315b;
+}
 .image-edit-text.yellow,
 .image-edit-arrow-head.yellow {
   fill: #ffd60a;
 }
-.image-edit-mark.yellow { stroke: #ffd60a; }
+.image-edit-mark.yellow {
+  stroke: #ffd60a;
+}
 .image-edit-text.blue,
 .image-edit-arrow-head.blue,
 .image-edit-text.orange,
@@ -3806,13 +3913,23 @@ select:focus-visible,
   fill: #00b8ff;
 }
 .image-edit-mark.blue,
-.image-edit-mark.orange { stroke: #00b8ff; }
+.image-edit-mark.orange {
+  stroke: #00b8ff;
+}
 .image-edit-mask-mark {
   stroke: #38bdf8;
   stroke-width: 6;
   fill: none;
   opacity: 0.7;
   vector-effect: non-scaling-stroke;
+}
+
+.image-edit-preview.tool-move {
+  cursor: move;
+}
+
+.image-edit-preview.tool-text {
+  cursor: text;
 }
 .image-edit-text {
   font-size: 4px;
@@ -3828,6 +3945,10 @@ select:focus-visible,
   flex-wrap: wrap;
 }
 
+.image-edit-tools {
+  align-items: center;
+}
+
 .image-edit-tools button,
 .image-edit-colors button,
 .image-edit-presets button {
@@ -3840,6 +3961,13 @@ select:focus-visible,
   font: inherit;
   font-size: 10px;
   cursor: pointer;
+}
+
+.image-edit-tools button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
 }
 
 .image-edit-tools button.active,
@@ -3885,8 +4013,23 @@ select:focus-visible,
   color: var(--muted);
   font-size: 11px;
 }
-.image-edit-size-control input { min-width: 0; }
-.image-edit-size-control output { min-width: 28px; color: var(--txt); text-align: right; }
+.image-edit-size-control input {
+  min-width: 0;
+}
+.image-edit-size-control output {
+  min-width: 28px;
+  color: var(--txt);
+  text-align: right;
+}
+.image-edit-tool-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: -2px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
 .image-edit-mask-options {
   display: flex;
   gap: 10px;
@@ -5851,7 +5994,10 @@ select:focus-visible,
   color: #bdeaff;
   font-size: 10px;
   cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    transform 120ms ease;
 }
 
 .ref-image-chip + .ref-image-chip {

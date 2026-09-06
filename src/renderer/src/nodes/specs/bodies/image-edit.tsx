@@ -41,13 +41,20 @@ const COLORS: Array<{ id: ImageEditColor; label: string }> = [
   { id: 'blue', label: '蓝 · 替换' },
   { id: 'yellow', label: '黄 · 保留' }
 ]
-type ImageEditTool = ImageEditAnnotationType | 'mask'
-const TOOLS: Array<{ id: ImageEditTool; label: string; icon: 'crop' | 'edit' | 'text' }> = [
-  { id: 'arrow', label: '箭头', icon: 'edit' },
-  { id: 'rect', label: '矩形', icon: 'crop' },
-  { id: 'brush', label: '画笔', icon: 'edit' },
+type ImageEditTool = ImageEditAnnotationType | 'mask' | 'move'
+type MoveTarget = { kind: 'annotation'; id: string } | { kind: 'mask'; index: number }
+
+const TOOLS: Array<{
+  id: ImageEditTool
+  label: string
+  icon: 'move' | 'arrow' | 'rectangle' | 'brush' | 'text' | 'mask'
+}> = [
+  { id: 'move', label: '移动', icon: 'move' },
+  { id: 'arrow', label: '箭头', icon: 'arrow' },
+  { id: 'rect', label: '矩形', icon: 'rectangle' },
+  { id: 'brush', label: '画笔', icon: 'brush' },
   { id: 'text', label: '文字', icon: 'text' },
-  { id: 'mask', label: '遮罩', icon: 'crop' }
+  { id: 'mask', label: '遮罩', icon: 'mask' }
 ]
 export function ImageEditBody({ shape, openPreview }: NodeBodyProps): React.JSX.Element {
   const guard = useClickGuard()
@@ -128,9 +135,10 @@ export function ImageEditBody({ shape, openPreview }: NodeBodyProps): React.JSX.
     <div className="node-media-wrap">
       <div
         className="node-media"
+        data-node-interactive="media-preview"
         onPointerDown={guard.onPointerDown}
-        onClick={(e) =>
-          guard.onClick(e, () =>
+        onDoubleClick={(e) =>
+          guard.onDoubleClick(e, () =>
             openPreview({
               kind: 'image',
               url: mediaUrl(shape.props.mediaPath),
@@ -262,14 +270,16 @@ function arrowHead(points: ImageEditPoint[]): string {
   const previous = points[points.length - 2]
   if (!end || !previous) return ''
   const angle = Math.atan2(end.y - previous.y, end.x - previous.x)
-  const size = 0.035
+  // 加长而尖锐的三角箭头：在图片预览、导出的标注参考图和不同缩放级别下都保留
+  // 明确的指向，不会因线帽覆盖而看成一条“平头质量线”。
+  const size = 0.06
   const left = {
-    x: end.x - size * Math.cos(angle - Math.PI / 6),
-    y: end.y - size * Math.sin(angle - Math.PI / 6)
+    x: end.x - size * Math.cos(angle - Math.PI / 7),
+    y: end.y - size * Math.sin(angle - Math.PI / 7)
   }
   const right = {
-    x: end.x - size * Math.cos(angle + Math.PI / 6),
-    y: end.y - size * Math.sin(angle + Math.PI / 6)
+    x: end.x - size * Math.cos(angle + Math.PI / 7),
+    y: end.y - size * Math.sin(angle + Math.PI / 7)
   }
   return [end, left, right].map((p) => `${p.x * 100},${p.y * 100}`).join(' ')
 }
@@ -286,6 +296,60 @@ function normalizedRect(
     width: Math.abs(end.x - start.x) * 100,
     height: Math.abs(end.y - start.y) * 100
   }
+}
+
+const clampUnit = (value: number): number => Math.min(1, Math.max(0, value))
+
+function distanceToSegment(
+  point: ImageEditPoint,
+  start: ImageEditPoint,
+  end: ImageEditPoint
+): number {
+  const dx = end.x - start.x
+  const dy = end.y - start.y
+  const lengthSquared = dx * dx + dy * dy
+  if (!lengthSquared) return Math.hypot(point.x - start.x, point.y - start.y)
+  const t = clampUnit(((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared)
+  return Math.hypot(point.x - (start.x + dx * t), point.y - (start.y + dy * t))
+}
+
+function annotationHit(annotation: ImageEditAnnotation, point: ImageEditPoint): boolean {
+  const tolerance = Math.max(0.018, (annotation.strokeWidth ?? 3) / 260)
+  if (annotation.type === 'text') {
+    const anchor = annotation.points[0]
+    return Boolean(anchor && Math.hypot(point.x - anchor.x, point.y - anchor.y) <= tolerance * 2.5)
+  }
+  if (annotation.type === 'rect') {
+    const rect = normalizedRect(annotation.points)
+    if (!rect) return false
+    const x = point.x * 100
+    const y = point.y * 100
+    const pad = tolerance * 100
+    return (
+      x >= rect.x - pad &&
+      x <= rect.x + rect.width + pad &&
+      y >= rect.y - pad &&
+      y <= rect.y + rect.height + pad
+    )
+  }
+  return annotation.points.some((current, index, points) => {
+    const previous = points[index - 1]
+    return previous ? distanceToSegment(point, previous, current) <= tolerance : false
+  })
+}
+
+function translatePoints(points: ImageEditPoint[], dx: number, dy: number): ImageEditPoint[] {
+  return points.map((point) => ({ x: clampUnit(point.x + dx), y: clampUnit(point.y + dy) }))
+}
+
+function sameMoveTarget(left: MoveTarget | null, right: MoveTarget | null): boolean {
+  if (!left || !right) return left === right
+  return (
+    left.kind === right.kind &&
+    (left.kind === 'annotation' && right.kind === 'annotation'
+      ? left.id === right.id
+      : left.kind === 'mask' && right.kind === 'mask' && left.index === right.index)
+  )
 }
 
 export function ImageEditSettings({
@@ -316,6 +380,12 @@ function ImageEditEditorCore({
   const draft = useRef<ImageEditAnnotation | null>(null)
   const maskDraft = useRef<ImageEditPoint[] | null>(null)
   const maskBase = useRef<ImageEditPoint[][]>([])
+  const moveDraft = useRef<{
+    target: MoveTarget
+    start: ImageEditPoint
+    base: ImageEditConfig
+    latest: ImageEditConfig
+  } | null>(null)
   const [config, setConfig] = useState(() => parseImageEditConfig(readNodeConfig(shape)))
   const [tool, setTool] = useState<ImageEditTool>('arrow')
   const [color, setColor] = useState<ImageEditColor>('red')
@@ -324,6 +394,7 @@ function ImageEditEditorCore({
   const [redoAnnotations, setRedoAnnotations] = useState<ImageEditAnnotation[]>([])
   const [textEntry, setTextEntry] = useState<{ point: ImageEditPoint; value: string } | null>(null)
   const [brushSize, setBrushSize] = useState(4)
+  const [selectedMoveTarget, setSelectedMoveTarget] = useState<MoveTarget | null>(null)
   const source = gatherUpstreamMedia(editor, shape.id, 'in-image', 'image')
   const providers = useGatewayStore((s) => s.providers)
   const options = modelsByModality(providers, 'image')
@@ -349,6 +420,25 @@ function ImageEditEditorCore({
   }
   const add = (annotation: ImageEditAnnotation): void =>
     save({ ...config, annotations: [...config.annotations, annotation].slice(-64) })
+  const findMoveTarget = (point: ImageEditPoint): MoveTarget | null => {
+    const annotation = [...config.annotations].reverse().find((item) => annotationHit(item, point))
+    if (annotation) return { kind: 'annotation', id: annotation.id }
+    const mask = config.mask
+    if (!mask?.enabled) return null
+    const tolerance = Math.max(0.025, mask.brushSize / 2)
+    for (let index = mask.strokes.length - 1; index >= 0; index -= 1) {
+      const stroke = mask.strokes[index]
+      if (
+        stroke?.some((current, pointIndex, points) => {
+          const previous = points[pointIndex - 1]
+          return previous ? distanceToSegment(point, previous, current) <= tolerance : false
+        })
+      ) {
+        return { kind: 'mask', index }
+      }
+    }
+    return null
+  }
   const commitTextEntry = (): void => {
     if (!textEntry) return
     const text = textEntry.value.trim()
@@ -369,6 +459,18 @@ function ImageEditEditorCore({
     const el = previewRef.current
     if (!el) return
     const startPoint = pointFromEvent(event, el)
+    if (tool === 'move') {
+      const target = findMoveTarget(startPoint)
+      if (!target) {
+        setSelectedMoveTarget(null)
+        toast('请点击已有的箭头、矩形、画笔、文字或遮罩后拖动')
+        return
+      }
+      moveDraft.current = { target, start: startPoint, base: config, latest: config }
+      setSelectedMoveTarget(target)
+      el.setPointerCapture(event.pointerId)
+      return
+    }
     if (tool === 'mask') {
       maskBase.current = config.mask?.strokes ?? []
       maskDraft.current = [startPoint]
@@ -404,6 +506,40 @@ function ImageEditEditorCore({
       }))
       return
     }
+    if (moveDraft.current) {
+      const active = moveDraft.current
+      const point = pointFromEvent(event, previewRef.current)
+      const dx = point.x - active.start.x
+      const dy = point.y - active.start.y
+      let next: ImageEditConfig
+      if (active.target.kind === 'annotation') {
+        const annotationId = active.target.id
+        next = {
+          ...active.base,
+          annotations: active.base.annotations.map((annotation) =>
+            annotation.id === annotationId
+              ? { ...annotation, points: translatePoints(annotation.points, dx, dy) }
+              : annotation
+          )
+        }
+      } else {
+        const maskIndex = active.target.index
+        next = {
+          ...active.base,
+          mask: active.base.mask
+            ? {
+                ...active.base.mask,
+                strokes: active.base.mask.strokes.map((stroke, index) =>
+                  index === maskIndex ? translatePoints(stroke, dx, dy) : stroke
+                )
+              }
+            : active.base.mask
+        }
+      }
+      active.latest = next
+      setConfig(next)
+      return
+    }
     if (!draft.current) return
     const endPoint = pointFromEvent(event, previewRef.current)
     const next = {
@@ -434,6 +570,12 @@ function ImageEditEditorCore({
             invert: config.mask?.invert ?? false
           }
         })
+      return
+    }
+    if (moveDraft.current) {
+      const next = moveDraft.current.latest
+      moveDraft.current = null
+      save(next)
       return
     }
     if (!draft.current) return
@@ -477,7 +619,7 @@ function ImageEditEditorCore({
         <>
           <div
             ref={previewRef}
-            className="image-edit-preview"
+            className={`image-edit-preview tool-${tool}`}
             style={{ aspectRatio: aspect }}
             onPointerDown={start}
             onPointerMove={move}
@@ -499,12 +641,16 @@ function ImageEditEditorCore({
                   <polyline
                     key={`mask-${index}`}
                     points={stroke.map((p) => `${p.x * 100},${p.y * 100}`).join(' ')}
-                    className="image-edit-mask-mark"
+                    className={`image-edit-mask-mark ${sameMoveTarget(selectedMoveTarget, { kind: 'mask', index }) ? 'selected' : ''}`}
                     style={{ strokeWidth: Math.max(1, (config.mask?.brushSize ?? 0.08) * 100) }}
                   />
                 ))}
               {config.annotations.map((a) => {
                 const pts = a.points.map((p) => `${p.x * 100},${p.y * 100}`).join(' ')
+                const selected = sameMoveTarget(selectedMoveTarget, {
+                  kind: 'annotation',
+                  id: a.id
+                })
                 if (a.type === 'rect') {
                   const rect = normalizedRect(a.points)
                   if (rect)
@@ -512,7 +658,7 @@ function ImageEditEditorCore({
                       <rect
                         key={a.id}
                         {...rect}
-                        className={`image-edit-mark ${a.color}`}
+                        className={`image-edit-mark ${a.color} ${selected ? 'selected' : ''}`}
                         style={{ fill: 'none', strokeWidth: a.strokeWidth ?? 3 }}
                       />
                     )
@@ -523,25 +669,25 @@ function ImageEditEditorCore({
                       key={a.id}
                       x={a.points[0].x * 100}
                       y={a.points[0].y * 100}
-                      className={`image-edit-text ${a.color}`}
+                      className={`image-edit-text ${a.color} ${selected ? 'selected' : ''}`}
                     >
                       {a.text}
                     </text>
                   )
                 if (a.type === 'arrow')
                   return (
-                    <g key={a.id}>
+                    <g key={a.id} className={selected ? 'selected' : ''}>
                       <line
                         x1={a.points[0].x * 100}
                         y1={a.points[0].y * 100}
                         x2={a.points[a.points.length - 1].x * 100}
                         y2={a.points[a.points.length - 1].y * 100}
-                        className={`image-edit-mark ${a.color}`}
+                        className={`image-edit-mark ${a.color} ${selected ? 'selected' : ''}`}
                         style={{ strokeWidth: a.strokeWidth ?? 3 }}
                       />
                       <polygon
                         points={arrowHead(a.points)}
-                        className={`image-edit-arrow-head ${a.color}`}
+                        className={`image-edit-arrow-head ${a.color} ${selected ? 'selected' : ''}`}
                       />
                     </g>
                   )
@@ -549,7 +695,7 @@ function ImageEditEditorCore({
                   <polyline
                     key={a.id}
                     points={pts}
-                    className={`image-edit-mark ${a.color}`}
+                    className={`image-edit-mark ${a.color} ${selected ? 'selected' : ''}`}
                     style={{ strokeWidth: a.strokeWidth ?? 3 }}
                   />
                 )
@@ -587,8 +733,12 @@ function ImageEditEditorCore({
                 key={item.id}
                 className={tool === item.id ? 'active' : ''}
                 title={item.label}
+                aria-pressed={tool === item.id}
                 onPointerDown={stopEventPropagation}
-                onClick={() => setTool(item.id)}
+                onClick={() => {
+                  setTool(item.id)
+                  if (item.id !== 'move') setSelectedMoveTarget(null)
+                }}
               >
                 <Icon name={item.icon} size={13} />
                 {item.label}
@@ -627,6 +777,11 @@ function ImageEditEditorCore({
               </button>
             ) : null}
           </div>
+          {tool === 'move' && (
+            <p className="image-edit-tool-hint">
+              <Icon name="move" size={13} /> 点击已有标注或遮罩后直接拖动；不会新建标注。
+            </p>
+          )}
           <div className="image-edit-colors">
             {COLORS.map((item) => (
               <button
@@ -639,18 +794,41 @@ function ImageEditEditorCore({
               </button>
             ))}
           </div>
-          {tool === 'brush' && (
+          {(tool === 'brush' || tool === 'mask') && (
             <label className="image-edit-size-control">
-              <span>画笔粗细</span>
+              <span>{tool === 'mask' ? '遮罩大小' : '画笔粗细'}</span>
               <input
                 type="range"
-                min="1"
-                max="12"
-                value={brushSize}
+                min={tool === 'mask' ? '0.02' : '1'}
+                max={tool === 'mask' ? '0.3' : '12'}
+                step={tool === 'mask' ? '0.01' : '1'}
+                value={tool === 'mask' ? (config.mask?.brushSize ?? 0.08) : brushSize}
                 onPointerDown={(event) => event.stopPropagation()}
-                onChange={(event) => setBrushSize(Number(event.target.value))}
+                onChange={(event) => {
+                  const value = Number(event.target.value)
+                  if (tool === 'mask') {
+                    save({
+                      ...config,
+                      mask: {
+                        ...(config.mask ?? {
+                          enabled: true,
+                          strokes: [],
+                          brushSize: 0.08,
+                          invert: false
+                        }),
+                        brushSize: value
+                      }
+                    })
+                  } else {
+                    setBrushSize(value)
+                  }
+                }}
               />
-              <output>{brushSize}</output>
+              <output>
+                {tool === 'mask'
+                  ? `${Math.round((config.mask?.brushSize ?? 0.08) * 100)}%`
+                  : brushSize}
+              </output>
             </label>
           )}
           <div className="image-edit-mask-options">
@@ -673,34 +851,6 @@ function ImageEditEditorCore({
               />
               启用遮罩
             </label>
-            {tool === 'mask' && (
-              <label className="image-edit-size-control">
-                <span>遮罩大小</span>
-                <input
-                  type="range"
-                  min="0.02"
-                  max="0.3"
-                  step="0.01"
-                  value={config.mask?.brushSize ?? 0.08}
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onChange={(event) =>
-                    save({
-                      ...config,
-                      mask: {
-                        ...(config.mask ?? {
-                          enabled: true,
-                          strokes: [],
-                          brushSize: 0.08,
-                          invert: false
-                        }),
-                        brushSize: Number(event.target.value)
-                      }
-                    })
-                  }
-                />
-                <output>{Math.round((config.mask?.brushSize ?? 0.08) * 100)}%</output>
-              </label>
-            )}
             <label>
               <input
                 type="checkbox"

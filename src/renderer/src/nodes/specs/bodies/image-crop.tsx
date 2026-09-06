@@ -195,9 +195,10 @@ export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.
     <div className="node-media-wrap">
       <div
         className="node-media"
+        data-node-interactive="media-preview"
         onPointerDown={guard.onPointerDown}
-        onClick={(event) =>
-          guard.onClick(event, () =>
+        onDoubleClick={(event) =>
+          guard.onDoubleClick(event, () =>
             openPreview({
               kind: 'image',
               url: mediaUrl(shape.props.mediaPath),

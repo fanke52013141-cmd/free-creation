@@ -139,9 +139,10 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
       <div className="node-media-wrap">
         <div
           className="node-media"
+          data-node-interactive="media-preview"
           onPointerDown={guard.onPointerDown}
-          onClick={(e) =>
-            guard.onClick(e, () =>
+          onDoubleClick={(e) =>
+            guard.onDoubleClick(e, () =>
               openPreview({
                 kind: 'image',
                 url: mediaUrl(shape.props.mediaPath),

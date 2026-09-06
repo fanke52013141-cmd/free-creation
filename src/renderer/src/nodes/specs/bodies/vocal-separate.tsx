@@ -53,8 +53,8 @@ export function VocalSeparateBody({ shape, openPreview }: NodeBodyProps): React.
           key={label}
           className="vocal-result-row"
           onPointerDown={guard.onPointerDown}
-          onClick={(event) =>
-            guard.onClick(event, () =>
+          onDoubleClick={(event) =>
+            guard.onDoubleClick(event, () =>
               openPreview({ kind: 'audio', url: mediaUrl(media.mediaPath), title: label })
             )
           }

@@ -11,9 +11,11 @@ import { modelsByModality } from '../../../stores/gateway'
 import type { NodeCardShape, NodeCardProps } from '../../../canvas/NodeCardShape'
 import { createEdge } from '../../../canvas/graph'
 import { markUndoPoint } from '../../../canvas/history'
+import { readNodeConfig } from '../../../canvas/node-persistence'
 import { getNodeType, mediaUrl } from '../../registry'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
+import { parseImageSplitConfig } from '@shared/image-split'
 import {
   clearMediaResultHistory,
   parseMediaResultCollection,
@@ -380,7 +382,10 @@ export function MediaSourceBadge({
   fallback?: string
 }): React.JSX.Element {
   const source = mediaSourceMeta(shape)
-  const label = source?.modelKey || fallback
+  // 浏览器验收环境生成的是确定性的本地演示图，而不是远端模型返回结果。
+  // 明确标识它，避免把“mock-relay”误认为一个异常的生成状态或真实模型名。
+  const isBrowserDemo = source?.modelKey === 'mock-relay::gpt-image-2'
+  const label = isBrowserDemo ? '浏览器演示生成 · 已完成' : source?.modelKey || fallback
   const time = source?.at ? ` · ${new Date(source.at).toLocaleTimeString()}` : ''
   return (
     <span className="node-media-source" title={source?.prompt || shape.props.mediaPath}>
@@ -496,7 +501,9 @@ export function MediaResultGrid({
   openPreview,
   onClear,
   onDelete,
-  className
+  className,
+  gridColumns,
+  itemLabel
 }: {
   shape: NodeCardShape
   kind: 'image' | 'video' | 'audio'
@@ -505,6 +512,10 @@ export function MediaResultGrid({
   onClear?: () => void
   onDelete?: (item: MediaResultItem) => void
   className?: string
+  /** 仅拆图使用：用真实列数呈现结果，不把 3×3 拆分误画成 4 列候选集合。 */
+  gridColumns?: number
+  /** 结果的业务位置标签，例如拆图的「R2 · C3」。 */
+  itemLabel?: (index: number) => string | undefined
 }): React.JSX.Element | null {
   // 结果网格在卡片内可滚动：鼠标滚轮落在网格上时消费滚动而交给画布缩放/平移。
   // 必须放在任何早退 return 之前，保证 Hook 调用顺序稳定。
@@ -526,7 +537,7 @@ export function MediaResultGrid({
           <em>{selected ? '当前输出已确定' : '尚未选择输出'}</em>
         </span>
         <span className="media-result-collection-tools">
-          <small>点击候选查看预览</small>
+          <small>双击候选查看预览</small>
           {onClear && collection.results.length > 1 ? (
             <button
               type="button"
@@ -544,18 +555,31 @@ export function MediaResultGrid({
           ) : null}
         </span>
       </div>
-      <div className="media-result-grid" ref={gridRef}>
-        {collection.results.map((item) => {
+      <div
+        className="media-result-grid"
+        ref={gridRef}
+        style={
+          gridColumns
+            ? { ['--media-grid-columns' as string]: String(Math.max(1, gridColumns)) }
+            : undefined
+        }
+      >
+        {collection.results.map((item, index) => {
           const active = item.mediaId === selected
+          const label = itemLabel?.(index)
           return (
             <div
               role="button"
               tabIndex={0}
               key={item.mediaId}
               className={`media-result-tile ${active ? 'selected' : ''}`}
-              title={active ? '当前输出；点击预览' : '点击预览'}
-              onPointerDown={(event) => stopEventPropagation(event)}
+              data-node-interactive="media-preview"
+              title={`${label ? `${label}；` : ''}${active ? '当前输出；' : ''}双击预览`}
               onClick={(event) => {
+                // 单击由卡片承接为“选中节点”；双击才打开预览，避免媒体区吞掉选中操作。
+                if (event.detail >= 2) event.stopPropagation()
+              }}
+              onDoubleClick={(event) => {
                 event.stopPropagation()
                 openPreview(item)
               }}
@@ -576,6 +600,7 @@ export function MediaResultGrid({
                 </span>
               )}
               {active ? <span className="media-result-selected">当前</span> : null}
+              {label ? <span className="media-result-tile-label">{label}</span> : null}
               <span className="media-result-tile-actions">
                 <button
                   type="button"
@@ -660,25 +685,16 @@ export function selectMediaResult(
   }
 }
 
-// 点击 vs 拖拽判定：拖动卡片时元素随指针移动，pointerup 仍会触发 click，
-// 位移超过阈值视为拖拽，不触发预览
+// 媒体单击必须仍能选中节点，原生 dblclick 才打开预览。不要在单击的 detail 上
+// 推断双击：tldraw 在首次选中时会重建 HTML 节点，使 detail / ref 不稳定。
+// 浏览器只会在无拖拽时派发 dblclick，因此无需单独吞掉 pointerdown。
 export function useClickGuard(): {
   onPointerDown: (e: React.PointerEvent) => void
-  onClick: (e: React.MouseEvent, open: () => void) => void
+  onDoubleClick: (e: React.MouseEvent, open: () => void) => void
 } {
-  const downRef = useRef<{ x: number; y: number } | null>(null)
   return {
-    onPointerDown: (e) => {
-      // 媒体是节点内部的主交互区：先阻止画布把点击转换成选中/拖拽，
-      // 否则 pointerdown 触发的重渲染会吞掉随后用于预览的 click。
-      e.stopPropagation()
-      downRef.current = { x: e.clientX, y: e.clientY }
-    },
-    onClick: (e, open) => {
-      const d = downRef.current
-      downRef.current = null
-      if (!d) return
-      if (Math.abs(e.clientX - d.x) > 4 || Math.abs(e.clientY - d.y) > 4) return
+    onPointerDown: () => undefined,
+    onDoubleClick: (e, open) => {
       e.stopPropagation()
       open()
     }
@@ -722,7 +738,7 @@ export const VARIABLE_TYPES: { value: VariableValueType; label: string }[] = [
 ]
 
 /**
- * 把拆分节点每格真实结果展开为独立的 image 资产节点，从上到下排布，并把每格节点
+ * 把拆分节点每格真实结果展开为独立的 image 资产节点，按原始行列排布，并把每格节点
  * 连线回拆分节点的 out-image（仅拓扑归属，数据仍由 image executor 按媒体 ID 加载）。
  * 幂等：若本次媒体集合已被展开过（splitAutoExpandedFor 签名一致），直接返回已展开节点
  * 的 ID 而不重复创建；否则创建后把签名写回拆分节点 meta。
@@ -736,6 +752,14 @@ export function expandSplitResults(
   if (!collection || collection.results.length < 2) return { ids: [], created: false }
   const spec = getNodeType('image')
   if (!spec) return { ids: [], created: false }
+  const splitConfig = parseImageSplitConfig(readNodeConfig(source))
+  const columns = splitConfig.columns
+  const gap = 28
+  const startX = source.x + source.props.w + 96
+  const positionFor = (index: number): { x: number; y: number } => ({
+    x: startX + (index % columns) * (spec.defaultSize.w + gap),
+    y: source.y + Math.floor(index / columns) * (spec.defaultSize.h + gap)
+  })
 
   // 幂等签名：以本套媒体集合的稳定标识为准（含媒体顺序与时间戳，重算/换图后签名变化才重建）。
   const signature = collection.results.map((item) => `${item.mediaId}@${item.createdAt}`).join('|')
@@ -746,12 +770,29 @@ export function expandSplitResults(
       .map((_item, index) => `${source.id}:split:${index}`)
       .map((key) => editor.getShape(key as TLShapeId))
       .filter((shape): shape is NodeCardShape => Boolean(shape))
-    if (existing.length === collection.results.length)
+    if (existing.length === collection.results.length) {
+      // 旧版本把所有格子竖直堆叠，选中后再打组会形成一根很长的“条”，缩放时视觉上像
+      // 变形。仅迁移系统生成的旧布局一次；新版布局不再覆盖用户自行调整过的位置。
+      if (source.meta?.splitAutoLayoutVersion !== 2) {
+        editor.run(() => {
+          existing.forEach((shape, index) => {
+            editor.updateShape({ id: shape.id, type: 'node-card', ...positionFor(index) })
+          })
+        })
+        editor.updateShape({
+          id: source.id,
+          type: 'node-card',
+          meta: {
+            ...(source.meta ?? {}),
+            splitAutoExpandedFor: signature,
+            splitAutoLayoutVersion: 2
+          }
+        })
+      }
       return { ids: existing.map((s) => s.id), created: false }
+    }
   }
 
-  const gap = 16
-  const startX = source.x + source.props.w + 80
   const ids: TLShapeId[] = []
   editor.run(() => {
     collection.results.forEach((item, index) => {
@@ -760,11 +801,12 @@ export function expandSplitResults(
         ids.push(id)
         return
       }
+      const position = positionFor(index)
       editor.createShape({
         id,
         type: 'node-card',
-        x: startX,
-        y: source.y + index * (spec.defaultSize.h + gap),
+        x: position.x,
+        y: position.y,
         props: {
           nodeType: 'image',
           title: `${source.props.title || '图片拆分'} · 第 ${index + 1} 格`,
@@ -788,7 +830,7 @@ export function expandSplitResults(
   editor.updateShape({
     id: source.id,
     type: 'node-card',
-    meta: { ...(source.meta ?? {}), splitAutoExpandedFor: signature }
+    meta: { ...(source.meta ?? {}), splitAutoExpandedFor: signature, splitAutoLayoutVersion: 2 }
   })
   markUndoPoint(editor, 'image-split-expand-nodes')
   return { ids, created: true }

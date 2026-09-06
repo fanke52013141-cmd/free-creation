@@ -106,16 +106,17 @@ export function renderAnnotatedReference(
         const end = points[points.length - 1]
         const prev = points[Math.max(0, points.length - 2)]
         const angle = Math.atan2(end.y - prev.y, end.x - prev.x)
-        const size = Math.max(8, 12 * scale)
+        // 长而尖的标准三角箭头；避免导出的参考图把箭头看成“平头线段”。
+        const size = Math.max(10, 18 * scale)
         ctx.beginPath()
         ctx.moveTo(end.x, end.y)
         ctx.lineTo(
-          end.x - size * Math.cos(angle - Math.PI / 6),
-          end.y - size * Math.sin(angle - Math.PI / 6)
+          end.x - size * Math.cos(angle - Math.PI / 7),
+          end.y - size * Math.sin(angle - Math.PI / 7)
         )
         ctx.lineTo(
-          end.x - size * Math.cos(angle + Math.PI / 6),
-          end.y - size * Math.sin(angle + Math.PI / 6)
+          end.x - size * Math.cos(angle + Math.PI / 7),
+          end.y - size * Math.sin(angle + Math.PI / 7)
         )
         ctx.closePath()
         ctx.fill()
