@@ -10,6 +10,8 @@
 >
 > 产品定位：单用户、本地优先的 Windows Electron 无限画布创作工具。
 
+> **最新交付（2026-09-06 真实模型接入 + 桌面端逐节点真跑审查）**：接入 TokenDance 网关与 codex2api 图片中转（配置存于本机应用 SQLite，Key 经 safeStorage 加密，不入仓库）。**新增代码**：`main/gateway/audio.ts` 按供应商协议分派 TTS——`specId=minimax` 走 MiniMax T2A v2（`/v1/t2a_v2`，hex 音频解码，OpenAI 默认音色映射 `male-qn-qingse`），其余保持 OpenAI `/audio/speech`；`video-capabilities.ts` 以 `minimax-h3` 前缀识别 H3 家族（含 minimax-h3-max）。**已配置供应商**：TokenDance 文本（`https://tokendance.space/gateway/v1`，glm-5.3-flash/text）、TokenDance MiniMax（`https://tokendance.space/gateway/minimax`，minimax-h3-max/video + minimax-speech-2.8-turbo/audio）、codex2api 图片（`https://www.codex2api.com/v1`，gpt-image-2/image）。**桌面端真跑结论**（Playwright 驱动打包产物 + 真实 Key）：文本/处理/JSON/代码/结构数据/分镜板 ✅ 本地链路；对话/AI 处理 ✅ glm-5.3-flash 真实补全；生图 ✅ gpt-image-2 真实出图；配音 ✅ minimax-speech-2.8-turbo 真实合成（T2A v2 适配器）；提音/人声分离 ✅ 真实 FFmpeg；裁剪/拆分/取帧/截取 ✅ 真实媒体变换；导演台 ✅ 发布链路；图片资产/视频资产 ✅ 真实导入。**受阻项**：视频生成——TokenDance 网关对 `minimax:video_generation_v2` 协议整体未配置价格（`当前模型未配置该请求规格的价格`，h3 与 h3-max 同样），需用户联系 TokenDance 开通；语音克隆——按契约依赖本地 ComfyUI + IndexTTS-2.5（TokenDance 有 `minimax:voice_clone` 协议，可作后续接入项）；修改(图生图) 的 `/images/edits` 后端已 curl 真实验证，UI 工作台流需桌面人工过一遍。审查中发现的应用侧问题：外部修改重载（`画布外有新的修改`）存在吞掉 800ms 内未保存新节点的竞态窗口；拆分自动展开会在同一坐标堆叠图片节点；建议后续批次处理。验证：`npm run verify` 69 文件 860 用例全绿；审查脚本与结果存于 `C:/Users/Administrator/canvas-tools/`（不入仓库）。本机 FFmpeg 便携版位于 `C:/Users/Administrator/canvas-tools/ffmpeg/`，应用经 `CANVAS_STUDIO_FFMPEG_PATH` 使用。
+
 > **最新交付（2026-09-06 八项审查问题修复批次）**：对 [docs/QA-NODE-AUDIT-2026-09-06.md](./docs/QA-NODE-AUDIT-2026-09-06.md) 的 8 项问题完成 Playwright 实证复核与修复。**修复 4 项真实缺陷**——P1-1 新节点避让网格加入屏幕空间顶栏净空约束（`topbarSafeScreenY`，修复前 5 连建 2 个被 67px 顶栏遮挡致标题按钮不可点）；P1-2 右侧单例收口：`nodePanelStore.openVersion` + `CanvasEditor` 订阅，节点详情请求自动关闭运行中心等侧栏（重复打开同一节点也生效）；P2-2 选中对话节点即自动打开右侧对话面板（与卡片空态文案一致）；P3-2 `DirectorBody` 去掉容器整块 `stopEventPropagation`，预演卡空白区可选中/拖动。**改进 2 项**——P2-1 图片导入加异常兜底 toast（信封消费本就存在）；P2-4 节点级运行缺必填输入时 toast 透出缺失端口明细（记录保持 `failed` 与整图一致）。**证伪 2 项**——P2-3「打开 3D 预演台」与 P3-1 数据节点运行记录在 `e0486d7` 上实测正常，均为 P1-1/P3-2 拦截点击造成的连带误报。回归断言（顶栏避让/运行中心收口/对话选中即开）已并入 `npm run test:browser-ui`，并给该脚本加了 Chrome→Edge→内置 Chromium 的浏览器回退。验证：全部诊断检查 PASS、`npm run test:browser-ui` PASS、`npm run verify` 通过。
 
 > **交付（2026-09-06 全节点浏览器审查 + 优化方案）**：在 ZCode In-app Browser 对 `npm run dev:browser`（工作区 `e0486d7`）完成 23 类节点全量 GUI 审查（截图排版/端口输入输出/连线校验/整图运行 + 运行中心核对）。整体结论：节点创建、空态、端口类型声明、类型/Schema 校验（text→image 被拒并有 toast）、连线渲染、依赖顺序执行、运行中心状态记录全部正常；处理与代码节点在浏览器内真实跑通（success + 输出可用），生图/对话/配音/AI 处理按预期给出稳定的前置错误。**新发现 8 项问题**：P1×2——①新节点级联生成位置 (162,45) 被顶栏遮挡，标题行「运行此节点/节点说明」不可点（13 类节点复现，避让网格未覆盖"卡片 vs 顶栏"场景）；②运行中心打开时节点卡配置按钮/卡片选中被静默忽略（面板不切换无提示）。P2×4——③图片节点「导入图片」零反馈；④对话节点"选中→右侧面板对话"未发生；⑤「打开 3D 预演台」按钮无响应；⑥缺必填输入时节点级运行静默无动作无记录。P3×2——⑦数据(JSON) 节点整图运行无执行记录；⑧预演卡命中热区异常点选不中。逐项复现步骤、修复方案与 2026-09-06 修复批次实证结论见 [docs/QA-NODE-AUDIT-2026-09-06.md](./docs/QA-NODE-AUDIT-2026-09-06.md)。
@@ -275,19 +277,19 @@ git status -sb
 
 ### 最近提交链（截至 2026-09-04，均已推送至 `origin/main`）
 
-| 提交     | 内容                                                                                       |
-| -------- | ------------------------------------------------------------------------------------------ |
-| `454f21b` | 图片节点优化与拆分自动展开：图片资产新增 `in-image` 端口、拆分自动展开为节点+连线、拆分按钮到底部、内容多节点滚动修复 + 契约同步（28 文件 +1007/-229） |
-| `5c69d4a` | 节点标题行按钮重排与框选实线根修                                                           |
-| `ed38a1f` | Ctrl+滚轮缩放接管与节点交互细节修复                                                        |
-| `3e2995a` | Agent 契约同步机制：双门禁测试 + CI 显式步骤 + 机制文档（10 文件 +396/-14）                |
-| `8d4039b` | Sprint 2：视频节点 capability 驱动配置 UI                                                   |
-| `3f8d986` | Sprint 2：视频节点重新生成 + 来源摘要                                                       |
-| `cb54af9` | 全局 testTimeout 提升至 15s（I/O 密集并行套件）                                             |
-| `7c85d47`–`0a698c0` | AG-6：故障恢复测试、并发写安全锁、ProjectFileWatcher 双向同步                    |
-| `a219212` | Renderer Adapter P3：执行器共享层 + headless vm 沙箱 + 契约唯一来源                        |
-| `c214d45` | Agent 生产执行加固（含文本节点双击输入修复）；交接见 [docs/HANDOFF_2026_09_02_TEXT_EDIT_INPUT.md](./docs/HANDOFF_2026_09_02_TEXT_EDIT_INPUT.md) |
-| `39a32f2` | 节点契约治理、导入媒体重映射与事务保护、导演台 2D/3D 预演、P0–P4 UI 修复及对应测试           |
+| 提交                | 内容                                                                                                                                                   |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `454f21b`           | 图片节点优化与拆分自动展开：图片资产新增 `in-image` 端口、拆分自动展开为节点+连线、拆分按钮到底部、内容多节点滚动修复 + 契约同步（28 文件 +1007/-229） |
+| `5c69d4a`           | 节点标题行按钮重排与框选实线根修                                                                                                                       |
+| `ed38a1f`           | Ctrl+滚轮缩放接管与节点交互细节修复                                                                                                                    |
+| `3e2995a`           | Agent 契约同步机制：双门禁测试 + CI 显式步骤 + 机制文档（10 文件 +396/-14）                                                                            |
+| `8d4039b`           | Sprint 2：视频节点 capability 驱动配置 UI                                                                                                              |
+| `3f8d986`           | Sprint 2：视频节点重新生成 + 来源摘要                                                                                                                  |
+| `cb54af9`           | 全局 testTimeout 提升至 15s（I/O 密集并行套件）                                                                                                        |
+| `7c85d47`–`0a698c0` | AG-6：故障恢复测试、并发写安全锁、ProjectFileWatcher 双向同步                                                                                          |
+| `a219212`           | Renderer Adapter P3：执行器共享层 + headless vm 沙箱 + 契约唯一来源                                                                                    |
+| `c214d45`           | Agent 生产执行加固（含文本节点双击输入修复）；交接见 [docs/HANDOFF_2026_09_02_TEXT_EDIT_INPUT.md](./docs/HANDOFF_2026_09_02_TEXT_EDIT_INPUT.md)        |
+| `39a32f2`           | 节点契约治理、导入媒体重映射与事务保护、导演台 2D/3D 预演、P0–P4 UI 修复及对应测试                                                                     |
 
 历史批次（视频节点 v2 重构、功能批量交付、IA-2 资产与运行中心等）均已在更早提交中合入 `main`，详情见各自交接文档；提交不包含 API Key、SQLite、本地项目目录、生成媒体或打包产物。
 
