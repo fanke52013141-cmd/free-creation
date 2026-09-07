@@ -10,18 +10,14 @@ import {
 } from '@shared/image-capabilities'
 import { mediaUrl, type NodeBodyProps } from '../../registry'
 import { toast } from '../../../stores/toast'
-import { gatherUpstreamMedia, gatherUpstreamMediaList } from '../../../canvas/graph'
+import { gatherUpstreamMediaList } from '../../../canvas/graph'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { runNodeManually } from '../../../engine/executor'
 import { useAppStore } from '../../../stores/app'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
-import {
-  ModelSelect,
-  NoModelHint,
-  parseJsonProp
-} from './shared'
+import { ModelSelect, NoModelHint, parseJsonProp } from './shared'
 
 type ImageGenData = ImageGenerationConfig
 
@@ -69,16 +65,8 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
     })
   }
 
-  const refImage = gatherUpstreamMedia(editor, shape.id, 'in-image', 'image')
-  const multiReferenceImages = gatherUpstreamMediaList(
-    editor,
-    shape.id,
-    'in-reference-images',
-    'image'
-  )
-  const referenceImages = [...(refImage ? [refImage] : []), ...multiReferenceImages].filter(
-    (image, index, items) => items.findIndex((item) => item.mediaId === image.mediaId) === index
-  )
+  // 所有图片都使用同一个多值端口，连接顺序就是 @图片 1～4 的顺序。
+  const referenceImages = gatherUpstreamMediaList(editor, shape.id, 'in-images', 'image')
   const mentionMatch = draft.match(/@([^\s]*)$/)
   const showMentionMenu = referenceImages.length > 0 && mentionMatch !== null
 

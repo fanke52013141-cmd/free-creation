@@ -132,8 +132,8 @@ export function VocalSeparateSettings({ shape, editor }: NodeSettingsProps): Rea
     <section className="contract-section video-transform-settings">
       <h4>人声分离</h4>
       <p className="contract-settings-hint">
-        输入 in-audio；运行后输出 out-vocals；仅高质量模式可额外输出
-        out-accompaniment。绝不修改原音频。
+        输入 in-audio；运行后操作节点只输出 out-audio（人声）。高质量模式产生的伴奏会作为
+        关联的独立音频节点出现在画布中；原音频绝不修改。
       </p>
       {config.mode === 'fast' && ffmpegReady === false && (
         <div className="local-capability-alert" role="alert">

@@ -653,7 +653,7 @@
     },
     {
       "name": "node.vocal-separate",
-      "description": "人声分离 — 将一段音频分离为人声与伴奏。快速模式使用 FFmpeg 滤镜增强，高质量模式使用本地 AI 模型。",
+      "description": "人声分离 — 将一段音频分离为人声与伴奏。操作节点只输出人声；伴奏作为关联的独立音频资产节点创建。",
       "inputSchema": {
         "type": "object",
         "properties": {},
@@ -754,7 +754,7 @@
     },
     {
       "name": "node.image-gen",
-      "description": "生图 — 根据提示词生成图片；可连接一张旧版参考图及最多四张有序参考图，生成结果从图片端口输出。",
+      "description": "生图 — 根据提示词和有序参考图片生成图片；所有参考图统一连入一个多值图片端口。",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -958,8 +958,8 @@
       "capability": "ai.director",
       "node": "3D 预演台",
       "nodeType": "director",
-      "version": "2.0.0",
-      "contractVersion": 2,
+      "version": "3.0.0",
+      "contractVersion": 3,
       "cli": true,
       "mcp": true,
       "inputs": 3,
@@ -1042,12 +1042,12 @@
       "capability": "audio.vocal",
       "node": "人声分离",
       "nodeType": "vocal-separate",
-      "version": "2.0.0",
-      "contractVersion": 2,
+      "version": "3.0.0",
+      "contractVersion": 3,
       "cli": true,
       "mcp": true,
       "inputs": 1,
-      "outputs": 2,
+      "outputs": 1,
       "headless": true
     },
     {
@@ -1066,8 +1066,8 @@
       "capability": "flow.iterate",
       "node": "循环",
       "nodeType": "iterate",
-      "version": "1.0.0",
-      "contractVersion": 1,
+      "version": "2.0.0",
+      "contractVersion": 2,
       "cli": true,
       "mcp": true,
       "inputs": 1,
@@ -1102,11 +1102,11 @@
       "capability": "image.generate",
       "node": "生图",
       "nodeType": "image-gen",
-      "version": "2.0.0",
-      "contractVersion": 2,
+      "version": "3.0.0",
+      "contractVersion": 3,
       "cli": true,
       "mcp": true,
-      "inputs": 4,
+      "inputs": 3,
       "outputs": 1,
       "headless": true
     },
@@ -1271,7 +1271,7 @@
     },
     {
       "capabilityId": "ai.director",
-      "version": "2.0.0",
+      "version": "3.0.0",
       "inputs": [
         {
           "id": "in-storyboard",
@@ -1296,10 +1296,10 @@
         {
           "id": "in-camera-preset",
           "name": "机位参数",
-          "type": "json",
+          "type": "camera",
           "required": false,
           "cardinality": "one",
-          "description": "可选的初始摄像机参数。",
+          "description": "可选的初始机位参数，仅接受 3D 预演台发布的机位通道。",
           "schema": {
             "id": "previs.camera",
             "version": 1
@@ -1326,10 +1326,10 @@
         {
           "id": "out-camera",
           "name": "机位参数",
-          "type": "json",
+          "type": "camera",
           "required": false,
           "cardinality": "one",
-          "description": "已发布镜头的焦距、画幅、时长和机位参数。",
+          "description": "已发布镜头的焦距、画幅、时长和机位参数；使用专用机位通道，不与工程摘要混为同类输出。",
           "schema": {
             "id": "previs.camera",
             "version": 1
@@ -1619,7 +1619,7 @@
     },
     {
       "capabilityId": "audio.vocal",
-      "version": "2.0.0",
+      "version": "3.0.0",
       "inputs": [
         {
           "id": "in-audio",
@@ -1632,20 +1632,12 @@
       ],
       "outputs": [
         {
-          "id": "out-vocals",
+          "id": "out-audio",
           "name": "人声",
           "type": "audio",
           "required": true,
           "cardinality": "one",
-          "description": "分离产出的人声音轨。"
-        },
-        {
-          "id": "out-accompaniment",
-          "name": "伴奏",
-          "type": "audio",
-          "required": false,
-          "cardinality": "one",
-          "description": "高质量模型真实分离出的可选伴奏音轨。"
+          "description": "分离产出的人声音轨；高质量模式的伴奏会作为关联独立音频节点显示在画布中。"
         }
       ],
       "configSchema": {}
@@ -1695,7 +1687,7 @@
     },
     {
       "capabilityId": "flow.iterate",
-      "version": "1.0.0",
+      "version": "2.0.0",
       "inputs": [
         {
           "id": "in-list",
@@ -1714,14 +1706,10 @@
         {
           "id": "out-item",
           "name": "当前项",
-          "type": "json",
+          "type": "iteration",
           "required": false,
           "cardinality": "one",
-          "description": "只在循环体内按项提供的临时数据。请连接循环体第一个节点；循环结束后不作为项目级输出。",
-          "schema": {
-            "id": "json.any",
-            "version": 1
-          }
+          "description": "循环体专用的临时作用域。可连接下游 JSON 输入；循环结束后不作为项目级输出。"
         },
         {
           "id": "out-items",
@@ -1849,23 +1837,15 @@
     },
     {
       "capabilityId": "image.generate",
-      "version": "2.0.0",
+      "version": "3.0.0",
       "inputs": [
         {
-          "id": "in-image",
+          "id": "in-images",
           "name": "参考图",
           "type": "image",
           "required": false,
-          "cardinality": "one",
-          "description": "可选的一张旧版参考图片，用于兼容图生图或风格参考。"
-        },
-        {
-          "id": "in-reference-images",
-          "name": "多参考图",
-          "type": "image",
-          "required": false,
           "cardinality": "many",
-          "description": "可选的多张参考图片，按真实连线顺序作为图片 1-4 提交给模型。"
+          "description": "唯一的图片输入；可连接 1～4 张图片，按真实连线顺序作为图片 1～4 提交给模型。"
         },
         {
           "id": "in-prompt",

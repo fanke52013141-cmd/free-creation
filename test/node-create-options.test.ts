@@ -28,7 +28,7 @@ describe('node creation options', () => {
     const choices = compatibleNodeCreateChoices({
       shapeId: 'shape:source',
       portId: 'out-camera',
-      portType: 'json',
+      portType: 'camera',
       schema: { id: 'previs.camera', version: 1 }
     })
 

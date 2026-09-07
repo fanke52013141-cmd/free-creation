@@ -98,6 +98,8 @@ export const PORT_COLORS: Record<PortType, string> = {
   text: '#8ab4f8',
   markdown: '#38bdf8',
   json: '#a78bfa',
+  iteration: '#2dd4bf',
+  camera: '#f59e0b',
   image: '#34d399',
   video: '#f472b6',
   audio: '#fbbf24',
@@ -107,7 +109,9 @@ export const PORT_COLORS: Record<PortType, string> = {
 
 export function portCompatible(a: PortType, b: PortType): boolean {
   const bothTextual = (a === 'text' || a === 'markdown') && (b === 'text' || b === 'markdown')
-  return a === b || bothTextual || a === 'any' || b === 'any'
+  // 当前循环项是控制作用域，不是第二个普通 JSON 输出；只允许注入 JSON 输入。
+  const iterationToJson = a === 'iteration' && b === 'json'
+  return a === b || bothTextual || iterationToJson || a === 'any' || b === 'any'
 }
 
 /** 旧版本曾把画布坐标误当成缩略图单位，历史快照中会出现几千像素宽的节点。 */
@@ -186,9 +190,14 @@ const registry = new Map<NodeTypeId, NodeTypeSpec>()
  * 新节点的硬性质量门。规则的完整解释、兼容策略和迁移流程见 /NODE_CONTRACT_SPEC.md。
  * 这里故意在注册阶段直接抛错：不完整的节点不能进入创建菜单，更不能留到运行时猜测。
  */
-function portValidationErrors(ports: NodeTypeSpec['ports']): string[] {
+function portValidationErrors(
+  ports: NodeTypeSpec['ports'],
+  options: { allowRepeatedNamedInputs?: boolean } = {}
+): string[] {
   const errors: string[] = []
   const ids = new Set<string>()
+  const inputTypes = new Set<PortType>()
+  const outputTypes = new Set<PortType>()
   for (const [direction, items] of [
     ['in', ports.in],
     ['out', ports.out]
@@ -200,6 +209,22 @@ function portValidationErrors(ports: NodeTypeSpec['ports']): string[] {
       }
       if (ids.has(current.id)) errors.push(`端口 ID 重复：${current.id}`)
       ids.add(current.id)
+      if (direction === 'in') {
+        if (inputTypes.has(current.type) && !options.allowRepeatedNamedInputs) {
+          errors.push(
+            `输入端口类型重复：${current.type}。同类素材应使用一个 many 端口或一个集合输入。`
+          )
+        }
+        inputTypes.add(current.type)
+      }
+      if (direction === 'out') {
+        if (outputTypes.has(current.type)) {
+          errors.push(
+            `输出端口类型重复：${current.type}。同类结果应使用一个 many 端口、集合 JSON，或独立资产节点承载。`
+          )
+        }
+        outputTypes.add(current.type)
+      }
       if (!current.name.trim()) errors.push(`${current.id} 缺少用户可见名称`)
       if (!current.description.trim()) errors.push(`${current.id} 缺少业务说明`)
       if (typeof current.required !== 'boolean')
@@ -207,11 +232,11 @@ function portValidationErrors(ports: NodeTypeSpec['ports']): string[] {
       if (current.cardinality !== 'one' && current.cardinality !== 'many') {
         errors.push(`${current.id} 的 cardinality 必须是 one 或 many`)
       }
-      if (current.type === 'json' && !current.schema) {
-        errors.push(`${current.id} 是 JSON 端口，必须声明 schema`)
+      if ((current.type === 'json' || current.type === 'camera') && !current.schema) {
+        errors.push(`${current.id} 是 ${current.type} 端口，必须声明 schema`)
       }
-      if (current.type !== 'json' && current.schema) {
-        errors.push(`${current.id} 不是 JSON 端口，不应声明 schema`)
+      if (current.type !== 'json' && current.type !== 'camera' && current.schema) {
+        errors.push(`${current.id} 不是 JSON/camera 端口，不应声明 schema`)
       }
       if (
         current.schema &&
@@ -345,7 +370,11 @@ export function getNodePorts(
   shape: NodeCardShape
 ): { in: PortDecl[]; out: PortDecl[] } {
   const ports = spec.resolvePorts ? spec.resolvePorts(shape) : spec.ports
-  const errors = portValidationErrors(ports)
+  // 代码节点的动态端口是用户声明的具名函数参数，不是并列的通用素材入口。
+  // 固定契约始终保持同类型唯一；动态参数依然由端口 ID 和参数名去重。
+  const errors = portValidationErrors(ports, {
+    allowRepeatedNamedInputs: Boolean(spec.resolvePorts && spec.type === 'code')
+  })
   if (errors.length > 0) {
     throw new Error(`节点动态端口不合法：${spec.type}\n- ${errors.join('\n- ')}`)
   }

@@ -157,7 +157,7 @@ describe('collectContractInputs · 类型不匹配', () => {
 
   it('text 输出接入 image 输入 → 报错', () => {
     const target = makeNode('t', 'image-gen')
-    const edge = makeEdge('e1', 'u', 'out-text', 't', 'in-image')
+    const edge = makeEdge('e1', 'u', 'out-text', 't', 'in-images')
     const outs = outputsMap('u', { 'out-text': makePacket('text', { kind: 'text', text: 'x' }) })
     const result = collectContractInputs(target, [edge], outs)
     expect(result.errors.length).toBeGreaterThan(0)
@@ -207,7 +207,7 @@ describe('collectContractInputs · Schema 不兼容', () => {
 
 describe('collectContractInputs · 单值端口占用规则', () => {
   it('单值输入连接两条上游 → 报错', () => {
-    const target = makeNode('t', 'image-gen')
+    const target = makeNode('t', 'image-crop')
     const edge1 = makeEdge('e1', 'u1', 'out-image', 't', 'in-image')
     const edge2 = makeEdge('e2', 'u2', 'out-image', 't', 'in-image')
     const imgVal = { kind: 'image', mediaId: 'm', mediaPath: 'p', mime: 'image/png' } as NodeValue
@@ -295,7 +295,7 @@ describe('collectContractInputs · 成功路径', () => {
 
   it('media 输入按 kind 过滤（inputMedia 只返回匹配媒体类型）', () => {
     const target = makeNode('t', 'image-gen')
-    const edge = makeEdge('e1', 'u', 'out-image', 't', 'in-image')
+    const edge = makeEdge('e1', 'u', 'out-image', 't', 'in-images')
     const outs = outputsMap('u', {
       'out-image': makePacket('image', {
         kind: 'image',
@@ -305,7 +305,7 @@ describe('collectContractInputs · 成功路径', () => {
       })
     })
     const result = collectContractInputs(target, [edge], outs)
-    const media = inputMedia(result.value, 'in-image', 'image')
+    const media = inputMedia(result.value, 'in-images', 'image')
     expect(media).toHaveLength(1)
     expect(media[0].mediaId).toBe('m1')
   })

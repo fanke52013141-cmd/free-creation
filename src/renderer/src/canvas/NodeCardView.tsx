@@ -82,6 +82,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
   const bodyRef = useRef<HTMLDivElement>(null)
+  const titleRef = useRef<HTMLDivElement>(null)
+  const titleEditable = true
 
   // 预览切换时不能沿用上一份媒体的错误状态；尤其是同一节点重新生成视频后，
   // 新输出应立即获得一个干净的播放器，而不是继续显示旧文件的加载错误。
@@ -130,11 +132,24 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     useNodePanelStore.getState().open(kind, shape.id, 'settings')
   }
 
-  // 双击标题进入编辑模式
-  const handleTitleDoubleClick = (e: React.MouseEvent): void => {
+  const beginTitleEditing = (): void => {
     if (!titleEditable) return
-    stopEventPropagation(e)
     setEditing(true)
+    requestAnimationFrame(() => titleRef.current?.focus())
+  }
+
+  // 双击标题进入编辑模式。原生 CustomEvent 是画布捕获指针后的可靠桥接，
+  // 否则 tldraw 会把第二击的 dblclick 重定向到画布而不是标题元素。
+  useEffect(() => {
+    const title = titleRef.current
+    if (!title) return
+    title.addEventListener('canvas:edit-node-title', beginTitleEditing)
+    return () => title.removeEventListener('canvas:edit-node-title', beginTitleEditing)
+  })
+
+  const handleTitleDoubleClick = (e: React.MouseEvent): void => {
+    stopEventPropagation(e)
+    beginTitleEditing()
   }
 
   const handleTitlePointerDown = (e: React.PointerEvent): void => {
@@ -156,8 +171,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     }
     setEditing(false)
   }
-
-  const titleEditable = true
 
   const resolvedPorts = spec
     ? getNodePorts(spec, shape)
@@ -290,7 +303,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               {spec ? <Icon name={spec.icon} size={15} /> : <Icon name="help" size={15} />}
             </span>
             <div
+              ref={titleRef}
               className={`node-title ${titleEditable ? 'editable' : ''} ${editing ? 'editing' : ''}`}
+              data-node-interactive="node-title"
               title={shape.props.title}
               contentEditable={editing}
               suppressContentEditableWarning

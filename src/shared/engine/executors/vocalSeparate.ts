@@ -93,14 +93,15 @@ export async function vocalSeparateExecutor(
     ctx.emitArtifact?.({
       kind: 'audio',
       ...value.vocals,
-      portId: 'out-vocals',
+      portId: 'out-audio',
       title: config.mode === 'quality' ? '分离人声（高质量）' : '增强人声（快速）'
     })
     if (value.accompaniment) {
       ctx.emitArtifact?.({
         kind: 'audio',
         ...value.accompaniment,
-        portId: 'out-accompaniment',
+        // 伴奏不是第二个同类型输出口；它是本次操作派生的独立资产节点。
+        portId: 'artifact-accompaniment',
         title: '分离伴奏'
       })
     }

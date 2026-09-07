@@ -38,12 +38,23 @@ describe('P3 · Capability Registry 是节点运行时契约唯一来源', () =>
   it('所有 Capability JSON 端口都有可注册的结构 Schema', () => {
     for (const capability of listCapabilities()) {
       for (const port of [...capability.inputs, ...capability.outputs]) {
-        if (port.type === 'json') {
+        if (port.type === 'json' || port.type === 'camera') {
           expect(port.schema, `${capability.id}:${port.id}`).toBeDefined()
         } else {
           expect(port.schema, `${capability.id}:${port.id}`).toBeUndefined()
         }
       }
+    }
+  })
+
+  it('每个固定节点的同类输入与输出端口都只保留一个', () => {
+    for (const capability of listCapabilities()) {
+      const inputTypes = capability.inputs.map((port) => port.type)
+      const outputTypes = capability.outputs.map((port) => port.type)
+      expect(new Set(inputTypes).size, `${capability.id} 存在重复输入类型`).toBe(inputTypes.length)
+      expect(new Set(outputTypes).size, `${capability.id} 存在重复输出类型`).toBe(
+        outputTypes.length
+      )
     }
   })
 })

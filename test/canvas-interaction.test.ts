@@ -157,4 +157,12 @@ describe('画布创建节点交互', () => {
     expect(edgeSurfaceSource).toContain('width: min(94vw, 1280px);')
     expect(edgeSurfaceSource).toContain('.media-preview-video .media-preview-stage video')
   })
+
+  it('节点标题稳定支持双击重命名，且不与画布指针捕获冲突', () => {
+    expect(nodeCardViewSource).toContain('data-node-interactive="node-title"')
+    expect(nodeCardViewSource).toContain('canvas:edit-node-title')
+    expect(nodeCardViewSource).toContain('beginTitleEditing')
+    expect(canvasEditorSource).toContain('dispatchEditNodeTitle')
+    expect(canvasEditorSource).toContain('[data-node-interactive="node-title"]')
+  })
 })

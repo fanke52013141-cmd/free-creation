@@ -57,9 +57,9 @@ describe('标准连线 · 允许的组合', () => {
   })
 
   it('生图/图片 → 生图参考图 / 视频统一图片输入', () => {
-    expect(canConnect('image', 'out-image', 'image-gen', 'in-image')).toBe(true)
+    expect(canConnect('image', 'out-image', 'image-gen', 'in-images')).toBe(true)
     expect(canConnect('image', 'out-image', 'video', 'in-images')).toBe(true)
-    expect(canConnect('image-gen', 'out-image', 'image-gen', 'in-image')).toBe(true)
+    expect(canConnect('image-gen', 'out-image', 'image-gen', 'in-images')).toBe(true)
     expect(canConnect('image-gen', 'out-image', 'video', 'in-images')).toBe(true)
     expect(canConnect('image', 'out-image', 'image-edit', 'in-image')).toBe(true)
     expect(canConnect('image-gen', 'out-image', 'image-edit', 'in-image')).toBe(true)
@@ -124,7 +124,7 @@ describe('标准连线 · 允许的组合', () => {
 
   it('处理节点 any 输出 → 任意类型输入', () => {
     expect(canConnect('processor', 'out-value', 'text', 'in-text')).toBe(true)
-    expect(canConnect('processor', 'out-value', 'image-gen', 'in-image')).toBe(true)
+    expect(canConnect('processor', 'out-value', 'image-gen', 'in-images')).toBe(true)
     expect(canConnect('processor', 'out-value', 'json', 'in-json')).toBe(true)
   })
 })
@@ -136,12 +136,12 @@ describe('标准连线 · 拒绝的组合', () => {
   })
 
   it('文本 → 图片输入（text 不能进 image）', () => {
-    expect(canConnect('text', 'out-text', 'image-gen', 'in-image')).toBe(false)
+    expect(canConnect('text', 'out-text', 'image-gen', 'in-images')).toBe(false)
     expect(canConnect('text', 'out-text', 'video', 'in-images')).toBe(false)
   })
 
   it('视频 → 图片输入（video 不能进 image，严格匹配）', () => {
-    expect(canConnect('video', 'out-video', 'image-gen', 'in-image')).toBe(false)
+    expect(canConnect('video', 'out-video', 'image-gen', 'in-images')).toBe(false)
   })
 
   it('图片 → 视频输入（image 不能进 video）', () => {
@@ -157,7 +157,7 @@ describe('标准连线 · 拒绝的组合', () => {
   })
 
   it('音频 → 图片/视频输入（媒体类型严格匹配）', () => {
-    expect(canConnect('audio', 'out-audio', 'image-gen', 'in-image')).toBe(false)
+    expect(canConnect('audio', 'out-audio', 'image-gen', 'in-images')).toBe(false)
     expect(canConnect('audio', 'out-audio', 'video', 'in-images')).toBe(false)
     expect(canConnect('video', 'out-video', 'image-edit', 'in-image')).toBe(false)
   })
@@ -165,12 +165,24 @@ describe('标准连线 · 拒绝的组合', () => {
 
 describe('端口类型兼容矩阵完整性', () => {
   // 枚举所有 PortType 两两组合，固化兼容规则（防 portCompatible 被误改）
-  const types: PortType[] = ['text', 'markdown', 'json', 'image', 'video', 'audio', 'file', 'any']
+  const types: PortType[] = [
+    'text',
+    'markdown',
+    'json',
+    'iteration',
+    'camera',
+    'image',
+    'video',
+    'audio',
+    'file',
+    'any'
+  ]
 
   // 期望兼容的真值表：同行=兼容；text<->markdown；any 与全部
   function expected(a: PortType, b: PortType): boolean {
     if (a === b) return true
     if (a === 'any' || b === 'any') return true
+    if (a === 'iteration' && b === 'json') return true
     const textual = (t: PortType): boolean => t === 'text' || t === 'markdown'
     return textual(a) && textual(b)
   }

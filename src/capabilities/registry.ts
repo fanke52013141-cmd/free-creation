@@ -145,16 +145,38 @@ function validateDefinition(def: CapabilityDefinition): void {
       throw new Error(`[CapabilityRegistry] "${def.id}" 端口 ID 重复: "${port.id}"`)
     }
     portIds.add(port.id)
-    if (port.type === 'json' && !port.schema) {
-      throw new Error(`[CapabilityRegistry] "${def.id}" JSON 端口 ${port.id} 必须声明 schema`)
+    if ((port.type === 'json' || port.type === 'camera') && !port.schema) {
+      throw new Error(
+        `[CapabilityRegistry] "${def.id}" ${port.type} 端口 ${port.id} 必须声明 schema`
+      )
     }
-    if (port.type !== 'json' && port.schema) {
-      throw new Error(`[CapabilityRegistry] "${def.id}" 非 JSON 端口 ${port.id} 不应声明 schema`)
+    if (port.type !== 'json' && port.type !== 'camera' && port.schema) {
+      throw new Error(
+        `[CapabilityRegistry] "${def.id}" 非 JSON/camera 端口 ${port.id} 不应声明 schema`
+      )
     }
     if (port.schema && !nodeSchemaRegistered(port.schema)) {
       throw new Error(
         `[CapabilityRegistry] "${def.id}" 端口 ${port.id} 引用了未注册 Schema: ${port.schema.id}@${port.schema.version}`
       )
     }
+  }
+  const outputTypes = new Set<string>()
+  const inputTypes = new Set<string>()
+  for (const port of def.inputs) {
+    if (inputTypes.has(port.type)) {
+      throw new Error(
+        `[CapabilityRegistry] "${def.id}" 输入端口类型重复: "${port.type}"；同类素材必须合并为一个多值端口或集合输入`
+      )
+    }
+    inputTypes.add(port.type)
+  }
+  for (const port of def.outputs) {
+    if (outputTypes.has(port.type)) {
+      throw new Error(
+        `[CapabilityRegistry] "${def.id}" 输出端口类型重复: "${port.type}"；同类结果必须合并为一个端口或独立资产节点`
+      )
+    }
+    outputTypes.add(port.type)
   }
 }

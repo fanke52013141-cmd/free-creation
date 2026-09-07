@@ -83,7 +83,7 @@ describe('P2/P3 内置创作模板', () => {
     expect(template.edges).toEqual([
       { from: 0, to: 1, fromPort: 'out-image', toPort: 'in-image' },
       { from: 1, to: 2, fromPort: 'out-image', toPort: 'in-image' },
-      { from: 1, to: 3, fromPort: 'out-image', toPort: 'in-image' },
+      { from: 1, to: 3, fromPort: 'out-image', toPort: 'in-images' },
       { from: 1, to: 4, fromPort: 'out-image', toPort: 'in-images' }
     ])
   })

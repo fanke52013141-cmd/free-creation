@@ -1321,7 +1321,8 @@ select:focus-visible,
 }
 
 .node-title.editable {
-  cursor: default;
+  /* 标题可双击重命名；单击仍保留为选中节点，不和拖动画布冲突。 */
+  cursor: text;
 }
 
 .node-title.editing {

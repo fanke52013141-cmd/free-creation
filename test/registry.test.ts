@@ -30,7 +30,17 @@ describe('portCompatible · 类型兼容矩阵', () => {
   })
 
   it('any 与所有类型可连（目标节点仍需运行时验证）', () => {
-    for (const t of ['text', 'markdown', 'json', 'image', 'video', 'audio', 'file'] as const) {
+    for (const t of [
+      'text',
+      'markdown',
+      'json',
+      'iteration',
+      'camera',
+      'image',
+      'video',
+      'audio',
+      'file'
+    ] as const) {
       expect(portCompatible('any', t)).toBe(true)
       expect(portCompatible(t, 'any')).toBe(true)
     }
@@ -42,6 +52,9 @@ describe('portCompatible · 类型兼容矩阵', () => {
     expect(portCompatible('image', 'video')).toBe(false)
     expect(portCompatible('image', 'text')).toBe(false)
     expect(portCompatible('audio', 'image')).toBe(false)
+    expect(portCompatible('iteration', 'json')).toBe(true)
+    expect(portCompatible('json', 'iteration')).toBe(false)
+    expect(portCompatible('camera', 'json')).toBe(false)
     expect(portCompatible('file', 'image')).toBe(false)
   })
 })
@@ -107,6 +120,8 @@ describe('PORT_COLORS · 每个端口类型都有配色', () => {
       'text',
       'markdown',
       'json',
+      'iteration',
+      'camera',
       'image',
       'video',
       'audio',
@@ -312,6 +327,57 @@ describe('registerNodeType · 注册时硬校验门禁', () => {
         })
       )
     ).toThrow(/重复/)
+  })
+
+  it('拒绝同一节点并列同类型输入或输出端口', () => {
+    expect(() =>
+      registerNodeType(
+        validSpec({
+          ports: {
+            in: [
+              {
+                id: 'in-primary-image',
+                name: '主图',
+                dir: 'in',
+                type: 'image',
+                required: false,
+                cardinality: 'one',
+                description: '主图输入'
+              },
+              {
+                id: 'in-reference-image',
+                name: '参考图',
+                dir: 'in',
+                type: 'image',
+                required: false,
+                cardinality: 'many',
+                description: '参考图输入'
+              }
+            ],
+            out: [
+              {
+                id: 'out-primary-image',
+                name: '主图结果',
+                dir: 'out',
+                type: 'image',
+                required: true,
+                cardinality: 'one',
+                description: '主图输出'
+              },
+              {
+                id: 'out-variant-image',
+                name: '变体结果',
+                dir: 'out',
+                type: 'image',
+                required: true,
+                cardinality: 'many',
+                description: '变体输出'
+              }
+            ]
+          }
+        })
+      )
+    ).toThrow(/输入端口类型重复.*输出端口类型重复/s)
   })
 
   it('动态端口与静态端口使用同一套契约校验', () => {

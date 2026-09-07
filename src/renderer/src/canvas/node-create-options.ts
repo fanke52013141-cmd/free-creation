@@ -23,8 +23,8 @@ export function compatibleNodeCreateChoices(source: ConnectionFrom): NodeCreateC
           // “看起来连上、实际只消费第一张”的隐式降级。
           (!source.memberIds?.length || port.cardinality === 'many') &&
           !(
-            source.portType === 'json' &&
-            port.type === 'json' &&
+            (source.portType === 'json' || source.portType === 'camera') &&
+            port.type === source.portType &&
             !nodeSchemasCompatible(source.schema, port.schema)
           )
       )

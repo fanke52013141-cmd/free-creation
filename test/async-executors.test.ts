@@ -186,7 +186,7 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     )
     ctx.inputs = new Map([
       [
-        'in-reference-images',
+        'in-images',
         [
           {
             type: 'image',

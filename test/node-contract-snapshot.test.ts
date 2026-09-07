@@ -76,10 +76,10 @@ describe('端口契约快照 · 每个端口 ID 稳定且符合命名规范', ()
   it.each(types)('节点 %s 每个 JSON 端口都声明了已注册 Schema', (type) => {
     const spec = getNodeType(type)
     for (const port of [...spec!.ports.in, ...spec!.ports.out]) {
-      if (port.type === 'json') {
+      if (port.type === 'json' || port.type === 'camera') {
         expect(port.schema, `${port.id} 缺少 schema`).toBeDefined()
       } else {
-        expect(port.schema, `${port.id} 非 JSON 端口不应有 schema`).toBeUndefined()
+        expect(port.schema, `${port.id} 非 JSON/camera 端口不应有 schema`).toBeUndefined()
       }
     }
   })
@@ -98,15 +98,15 @@ describe('关键端口契约快照（防回归）', () => {
     ])
   })
 
-  it('生图节点：in-image(one) + in-text(many) → out-image', () => {
+  it('生图节点：in-images(many) + in-text(many) → out-image', () => {
     const spec = getNodeType('image-gen')!
     const ins = snapshotPorts(spec.ports.in)
-    expect(ins.find((p) => p.id === 'in-image')).toEqual({
-      id: 'in-image',
+    expect(ins.find((p) => p.id === 'in-images')).toEqual({
+      id: 'in-images',
       dir: 'in',
       type: 'image',
       required: false,
-      cardinality: 'one'
+      cardinality: 'many'
     })
     expect(ins.find((p) => p.id === 'in-text')?.cardinality).toBe('many')
     expect(snapshotPorts(spec.ports.out)[0].type).toBe('image')
@@ -225,14 +225,13 @@ describe('关键端口契约快照（防回归）', () => {
     expect(outJson.schema).toEqual({ id: 'storyboard.shots', version: 1 })
   })
 
-  it('生图节点保留旧单图参考，并以 many 端口接收有序多参考图', () => {
+  it('生图节点只保留一个 many 图片输入，按连线顺序接收有序参考图', () => {
     const spec = getNodeType('image-gen')!
-    expect(spec.contractVersion).toBe(2)
-    expect(spec.ports.in.find((port) => port.id === 'in-image')).toMatchObject({
-      type: 'image',
-      cardinality: 'one'
-    })
-    expect(spec.ports.in.find((port) => port.id === 'in-reference-images')).toMatchObject({
+    expect(spec.contractVersion).toBe(3)
+    const imageInputs = spec.ports.in.filter((port) => port.type === 'image')
+    expect(imageInputs).toHaveLength(1)
+    expect(imageInputs[0]).toMatchObject({
+      id: 'in-images',
       type: 'image',
       cardinality: 'many'
     })
@@ -298,7 +297,7 @@ describe('关键端口契约快照（防回归）', () => {
     expect(ids).toEqual(['out-json', 'out-markdown', 'out-text'])
   })
 
-  it('迭代节点：in-list(list.items@1) → out-item(json.any 临时项) + out-items(list.items@1)', () => {
+  it('迭代节点：in-list(list.items@1) → out-item(iteration 临时项) + out-items(list.items@1)', () => {
     const spec = getNodeType('iterate')!
     const inList = spec.ports.in.find((p) => p.id === 'in-list')!
     expect(inList.type).toBe('json')
@@ -307,8 +306,8 @@ describe('关键端口契约快照（防回归）', () => {
     expect(outItems.type).toBe('json')
     expect(outItems.schema).toEqual({ id: 'list.items', version: 1 })
     const outItem = spec.ports.out.find((p) => p.id === 'out-item')!
-    expect(outItem.type).toBe('json')
-    expect(outItem.schema).toEqual({ id: 'json.any', version: 1 })
+    expect(outItem.type).toBe('iteration')
+    expect(outItem.schema).toBeUndefined()
     expect(outItem.required).toBe(false)
   })
 
@@ -329,10 +328,8 @@ describe('关键端口契约快照（防回归）', () => {
     expect(spec.ports.in.find((port) => port.id === 'in-reference-images')?.cardinality).toBe(
       'many'
     )
-    expect(spec.ports.out.find((port) => port.id === 'out-camera')?.schema).toEqual({
-      id: 'previs.camera',
-      version: 1
-    })
+    expect(spec.ports.in.find((port) => port.id === 'in-camera-preset')?.type).toBe('camera')
+    expect(spec.ports.out.find((port) => port.id === 'out-camera')?.type).toBe('camera')
   })
 
   it('视频节点只保留一个 image many 输入，避免并列的同色图片端口', () => {
@@ -341,5 +338,14 @@ describe('关键端口契约快照（防回归）', () => {
     expect(spec.contractVersion).toBe(4)
     expect(imageInputs).toHaveLength(1)
     expect(imageInputs[0]).toMatchObject({ id: 'in-images', cardinality: 'many' })
+  })
+
+  it('所有活跃节点的同一种输入或输出类型都只声明一次', () => {
+    for (const spec of allNodeTypes()) {
+      const inputTypes = spec.ports.in.map((port) => port.type)
+      const outputTypes = spec.ports.out.map((port) => port.type)
+      expect(new Set(inputTypes).size, `${spec.type} 存在重复输入类型`).toBe(inputTypes.length)
+      expect(new Set(outputTypes).size, `${spec.type} 存在重复输出类型`).toBe(outputTypes.length)
+    }
   })
 })

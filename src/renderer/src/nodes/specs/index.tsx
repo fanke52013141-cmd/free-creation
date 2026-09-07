@@ -241,22 +241,20 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'image-gen',
-    contractVersion: 2,
+    contractVersion: 3,
     label: '生图',
     icon: 'image-gen',
     color: '#10b981',
     defaultSize: { w: 340, h: 260 },
-    description:
-      '根据提示词生成图片；可连接一张旧版参考图及最多四张有序参考图，生成结果从图片端口输出。',
+    description: '根据提示词和有序参考图片生成图片；所有参考图统一连入一个多值图片端口。',
     category: 'input',
     ports: {
       in: [
-        input('in-image', '参考图', 'image', '可选的一张旧版参考图片，用于兼容图生图或风格参考。'),
         input(
-          'in-reference-images',
-          '多参考图',
+          'in-images',
+          '参考图',
           'image',
-          '可选的多张参考图片，按真实连线顺序作为图片 1–4 提交给模型。',
+          '唯一的图片输入；可连接 1～4 张图片，按真实连线顺序作为图片 1～4 提交给模型。',
           { cardinality: 'many' }
         ),
         input(
@@ -427,23 +425,25 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'vocal-separate',
-    contractVersion: 2,
+    contractVersion: 3,
     label: '人声分离',
     icon: 'audio',
     color: '#a78bfa',
     defaultSize: { w: 340, h: 260 },
     description:
-      '将一段音频分离为人声与伴奏。快速模式使用 FFmpeg 滤镜增强，高质量模式使用本地 AI 模型。',
+      '将一段音频分离为人声与伴奏。操作节点只输出人声；伴奏作为关联的独立音频资产节点创建。',
     category: 'audio',
     ports: {
       in: [
         input('in-audio', '源音频', 'audio', '必须连接的一段完整音频资产。', { required: true })
       ],
       out: [
-        output('out-vocals', '人声', 'audio', '分离产出的人声音轨。'),
-        output('out-accompaniment', '伴奏', 'audio', '高质量模型真实分离出的可选伴奏音轨。', {
-          required: false
-        })
+        output(
+          'out-audio',
+          '人声',
+          'audio',
+          '分离产出的人声音轨；高质量模式的伴奏会作为关联独立音频节点显示在画布中。'
+        )
       ]
     },
     projectOutputs: projectVocalSeparateOutputs,
@@ -816,7 +816,7 @@ export function registerExtendedNodeTypes(): void {
   })
   registerNodeType({
     type: 'iterate',
-    contractVersion: 1,
+    contractVersion: 2,
     label: '循环',
     icon: 'grid',
     color: '#8b5cf6',
@@ -834,9 +834,9 @@ export function registerExtendedNodeTypes(): void {
         output(
           'out-item',
           '当前项',
-          'json',
-          '只在循环体内按项提供的临时数据。请连接循环体第一个节点；循环结束后不作为项目级输出。',
-          { required: false, schema: JSON_ANY }
+          'iteration',
+          '循环体专用的临时作用域。可连接下游 JSON 输入；循环结束后不作为项目级输出。',
+          { required: false }
         ),
         output(
           'out-items',
@@ -855,7 +855,7 @@ export function registerExtendedNodeTypes(): void {
   })
   registerNodeType({
     type: 'director',
-    contractVersion: 2,
+    contractVersion: 3,
     label: '3D 预演台',
     icon: 'director',
     color: '#f59e0b',
@@ -878,19 +878,28 @@ export function registerExtendedNodeTypes(): void {
             cardinality: 'many'
           }
         ),
-        input('in-camera-preset', '机位参数', 'json', '可选的初始摄像机参数。', {
-          schema: PREVIS_CAMERA
-        })
+        input(
+          'in-camera-preset',
+          '机位参数',
+          'camera',
+          '可选的初始机位参数，仅接受 3D 预演台发布的机位通道。',
+          {
+            schema: PREVIS_CAMERA
+          }
+        )
       ],
       out: [
         output('out-frame', '预演帧', 'image', '用户发布的当前镜头静帧。', { required: false }),
         output('out-preview-video', '预演视频', 'video', '用户导出的 WebM 预演视频。', {
           required: false
         }),
-        output('out-camera', '机位参数', 'json', '已发布镜头的焦距、画幅、时长和机位参数。', {
-          required: false,
-          schema: PREVIS_CAMERA
-        }),
+        output(
+          'out-camera',
+          '机位参数',
+          'camera',
+          '已发布镜头的焦距、画幅、时长和机位参数；使用专用机位通道，不与工程摘要混为同类输出。',
+          { required: false, schema: PREVIS_CAMERA }
+        ),
         output(
           'out-project',
           '工程摘要',

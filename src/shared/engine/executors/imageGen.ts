@@ -32,12 +32,8 @@ export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeE
     config.prompt,
     [bundlePrompt, inputText(ctx.inputs, 'in-text')].filter(Boolean).join('\n')
   )
-  // in-image 是旧项目的单参考图入口；in-reference-images 是新 many 入口。
-  // 合并去重后按端口顺序提交，保证"图片 1/2/3"的提示词指代可复跑。
-  const referenceImages = [
-    ...inputMedia(ctx.inputs, 'in-image', 'image'),
-    ...inputMedia(ctx.inputs, 'in-reference-images', 'image')
-  ]
+  // 所有参考图只有一个多值入口；按真实连线顺序提交，保证“图片 1/2/3”的提示词指代可复跑。
+  const referenceImages = inputMedia(ctx.inputs, 'in-images', 'image')
   const referenceMediaIds = [...new Set(referenceImages.map((image) => image.mediaId))].slice(0, 4)
   if (!prompt.trim()) return { status: 'skipped', reason: '无提示词' }
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }

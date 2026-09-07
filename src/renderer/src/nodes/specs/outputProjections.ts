@@ -124,13 +124,7 @@ export const projectVocalSeparateOutputs = (shape: NodeCardShape): RawNodeOutput
     typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
   )
   if (!result) return {}
-  const outputs: RawNodeOutputs = {
-    'out-vocals': { kind: 'audio', ...result.vocals }
-  }
-  if (result.accompaniment) {
-    outputs['out-accompaniment'] = { kind: 'audio', ...result.accompaniment }
-  }
-  return outputs
+  return { 'out-audio': { kind: 'audio', ...result.vocals } }
 }
 
 export const projectAudioOutputs = (shape: NodeCardShape): RawNodeOutputs =>

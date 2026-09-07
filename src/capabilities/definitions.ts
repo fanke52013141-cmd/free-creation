@@ -107,29 +107,20 @@ const imageCapability = defineCapability({
 
 const imageGenCapability = defineCapability({
   id: 'image.generate',
-  version: '2.0.0',
-  contractVersion: 2,
+  version: '3.0.0',
+  contractVersion: 3,
   nodeType: 'image-gen',
   title: '生图',
-  description:
-    '根据提示词生成图片；可连接一张旧版参考图及最多四张有序参考图，生成结果从图片端口输出。',
+  description: '根据提示词和有序参考图片生成图片；所有参考图统一连入一个多值图片端口。',
   category: 'input',
   inputs: [
     {
-      id: 'in-image',
+      id: 'in-images',
       name: '参考图',
       type: 'image',
       required: false,
-      cardinality: 'one',
-      description: '可选的一张旧版参考图片，用于兼容图生图或风格参考。'
-    },
-    {
-      id: 'in-reference-images',
-      name: '多参考图',
-      type: 'image',
-      required: false,
       cardinality: 'many',
-      description: '可选的多张参考图片，按真实连线顺序作为图片 1-4 提交给模型。'
+      description: '唯一的图片输入；可连接 1～4 张图片，按真实连线顺序作为图片 1～4 提交给模型。'
     },
     {
       id: 'in-prompt',
@@ -576,12 +567,12 @@ const videoAudioCapability = defineCapability({
 
 const vocalSeparateCapability = defineCapability({
   id: 'audio.vocal',
-  version: '2.0.0',
-  contractVersion: 2,
+  version: '3.0.0',
+  contractVersion: 3,
   nodeType: 'vocal-separate',
   title: '人声分离',
   description:
-    '将一段音频分离为人声与伴奏。快速模式使用 FFmpeg 滤镜增强，高质量模式使用本地 AI 模型。',
+    '将一段音频分离为人声与伴奏。操作节点只输出人声；伴奏作为关联的独立音频资产节点创建。',
   category: 'audio',
   inputs: [
     {
@@ -595,20 +586,12 @@ const vocalSeparateCapability = defineCapability({
   ],
   outputs: [
     {
-      id: 'out-vocals',
+      id: 'out-audio',
       name: '人声',
       type: 'audio',
       required: true,
       cardinality: 'one',
-      description: '分离产出的人声音轨。'
-    },
-    {
-      id: 'out-accompaniment',
-      name: '伴奏',
-      type: 'audio',
-      required: false,
-      cardinality: 'one',
-      description: '高质量模型真实分离出的可选伴奏音轨。'
+      description: '分离产出的人声音轨；高质量模式的伴奏会作为关联独立音频节点显示在画布中。'
     }
   ],
   configSchema: {},
@@ -1042,8 +1025,8 @@ const aiProcessCapability = defineCapability({
 
 const iterateCapability = defineCapability({
   id: 'flow.iterate',
-  version: '1.0.0',
-  contractVersion: 1,
+  version: '2.0.0',
+  contractVersion: 2,
   nodeType: 'iterate',
   title: '循环',
   description:
@@ -1064,12 +1047,10 @@ const iterateCapability = defineCapability({
     {
       id: 'out-item',
       name: '当前项',
-      type: 'json',
+      type: 'iteration',
       required: false,
       cardinality: 'one',
-      description:
-        '只在循环体内按项提供的临时数据。请连接循环体第一个节点；循环结束后不作为项目级输出。',
-      schema: { id: 'json.any', version: 1 }
+      description: '循环体专用的临时作用域。可连接下游 JSON 输入；循环结束后不作为项目级输出。'
     },
     {
       id: 'out-items',
@@ -1096,8 +1077,8 @@ const iterateCapability = defineCapability({
 
 const directorCapability = defineCapability({
   id: 'ai.director',
-  version: '2.0.0',
-  contractVersion: 2,
+  version: '3.0.0',
+  contractVersion: 3,
   nodeType: 'director',
   title: '3D 预演台',
   description:
@@ -1124,10 +1105,10 @@ const directorCapability = defineCapability({
     {
       id: 'in-camera-preset',
       name: '机位参数',
-      type: 'json',
+      type: 'camera',
       required: false,
       cardinality: 'one',
-      description: '可选的初始摄像机参数。',
+      description: '可选的初始机位参数，仅接受 3D 预演台发布的机位通道。',
       schema: { id: 'previs.camera', version: 1 }
     }
   ],
@@ -1151,10 +1132,11 @@ const directorCapability = defineCapability({
     {
       id: 'out-camera',
       name: '机位参数',
-      type: 'json',
+      type: 'camera',
       required: false,
       cardinality: 'one',
-      description: '已发布镜头的焦距、画幅、时长和机位参数。',
+      description:
+        '已发布镜头的焦距、画幅、时长和机位参数；使用专用机位通道，不与工程摘要混为同类输出。',
       schema: { id: 'previs.camera', version: 1 }
     },
     {

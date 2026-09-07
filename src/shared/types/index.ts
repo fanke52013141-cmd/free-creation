@@ -54,7 +54,18 @@ export type NodeTypeId = ActiveNodeTypeId | InternalNodeTypeId | LegacyNodeTypeI
  * 新增类型前必须同步更新：节点契约规范、兼容矩阵、执行器数据包和右侧契约面板。
  * 规范入口：/NODE_CONTRACT_SPEC.md
  */
-export type PortType = 'text' | 'markdown' | 'json' | 'image' | 'video' | 'audio' | 'file' | 'any'
+/** 循环的临时作用域通道：只可注入下游 JSON 输入，不是普通项目级 JSON 输出。 */
+export type PortType =
+  | 'text'
+  | 'markdown'
+  | 'json'
+  | 'iteration'
+  | 'camera'
+  | 'image'
+  | 'video'
+  | 'audio'
+  | 'file'
+  | 'any'
 
 export type PortCardinality = 'one' | 'many'
 

@@ -568,6 +568,11 @@ export function CanvasEditor({
       event.stopPropagation()
       textBody.dispatchEvent(new CustomEvent('canvas:edit-text-node'))
     }
+    const dispatchEditNodeTitle = (title: HTMLElement, event: MouseEvent): void => {
+      event.preventDefault()
+      event.stopPropagation()
+      title.dispatchEvent(new CustomEvent('canvas:edit-node-title'))
+    }
     const dispatchMediaPreview = (mediaBody: HTMLElement, event: MouseEvent): void => {
       event.preventDefault()
       event.stopPropagation()
@@ -597,6 +602,11 @@ export function CanvasEditor({
         )
         if (nestedControl && mediaBody.contains(nestedControl)) return
         dispatchMediaPreview(mediaBody, event)
+        return
+      }
+      const nodeTitle = target.closest<HTMLElement>('[data-node-interactive="node-title"]')
+      if (nodeTitle && nodeTitle.getAttribute('contenteditable') !== 'true') {
+        dispatchEditNodeTitle(nodeTitle, event)
         return
       }
       const textBody = target.closest<HTMLElement>('[data-node-interactive="text-content"]')
