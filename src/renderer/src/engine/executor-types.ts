@@ -12,6 +12,7 @@ import type { CanvasNode, ProviderSummary } from '@shared/types'
 import type { NodeCardShape } from '../canvas/NodeCardShape'
 import type { ContractInputMap, ContractOutputs } from './contracts'
 import type { GatewayClient } from '@shared/engine/gateway-client'
+import type { ProducedArtifact } from '@shared/engine/executor-types'
 
 /** 运行控制信号。暂停在当前原子任务结束后生效；停止会解除暂停等待。 */
 export interface CancelSignal {
@@ -95,6 +96,8 @@ export interface NodeExecutionContext {
   updateProps: (patch: Partial<NodeCardShape['props']>) => void
   /** 把命名变量运行结果写入 shape meta（处理 / 代码节点使用）。传 null 清空。 */
   updateResult: (result: string | null) => void
+  /** 媒体操作节点的产物由运行器落为独立资产节点，禁止写回操作节点 props。 */
+  emitArtifact?: (artifact: ProducedArtifact) => void
   /**
    * 当前节点的直接输出边。它把端口语义显式交给节点执行器：例如循环节点只把
    * out-item 的目标当作循环体入口，out-items 则是循环完成后的结果列表。

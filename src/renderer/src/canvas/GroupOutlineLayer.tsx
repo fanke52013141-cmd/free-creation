@@ -1,6 +1,10 @@
 import { useEffect, useState, type RefObject } from 'react'
 import type { Editor, TLShapeId } from 'tldraw'
 import { markUndoPoint } from './history'
+import { beginConnectionDrag } from './connection-drag'
+import { batchConnectionFromSelection } from './batch-connection'
+import type { ConnectionFrom } from '../stores/connection'
+import { Icon } from '../components/Icon'
 
 interface GroupOutlineLayerProps {
   editor: Editor
@@ -23,6 +27,24 @@ interface SelectionOutline {
   top: number
   width: number
   height: number
+  batchSource: ConnectionFrom | null
+}
+
+function batchKey(source: ConnectionFrom | null): string {
+  return source ? `${source.portId}:${source.memberIds?.join(':') ?? source.shapeId}` : ''
+}
+
+function selectedNodeIds(editor: Editor): TLShapeId[] {
+  const ids = new Set<TLShapeId>()
+  for (const shape of editor.getSelectedShapes()) {
+    if (shape.type === 'node-card') ids.add(shape.id)
+    if (shape.type === 'group') {
+      for (const childId of editor.getSortedChildIdsForParent(shape.id)) {
+        if (editor.getShape(childId)?.type === 'node-card') ids.add(childId)
+      }
+    }
+  }
+  return [...ids]
 }
 
 function outlinesEqual(left: GroupOutline[], right: GroupOutline[]): boolean {
@@ -103,13 +125,13 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
 
       // 多选不是分组：只在 2 个以上节点被同时选中时绘制细虚线范围框，
       // 让它和常驻的分组容器维持完全不同的视觉语义。
-      const selectedNodes = editor.getSelectedShapes().filter((shape) => shape.type === 'node-card')
-      if (selectedNodes.length < 2) {
+      const selectedIds = selectedNodeIds(editor)
+      if (selectedIds.length < 2) {
         setSelection((current) => (current === null ? current : null))
         return
       }
-      const bounds = selectedNodes
-        .map((shape) => editor.getShapePageBounds(shape.id))
+      const bounds = selectedIds
+        .map((id) => editor.getShapePageBounds(id))
         .filter((bound): bound is NonNullable<typeof bound> => Boolean(bound))
       if (bounds.length < 2) return
       const minX = Math.min(...bounds.map((bound) => bound.x))
@@ -122,14 +144,16 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
         left: topLeft.x - hostBounds.left - sidePad,
         top: topLeft.y - hostBounds.top - sidePad,
         width: bottomRight.x - topLeft.x + sidePad * 2,
-        height: bottomRight.y - topLeft.y + sidePad * 2
+        height: bottomRight.y - topLeft.y + sidePad * 2,
+        batchSource: batchConnectionFromSelection(editor, selectedIds)
       }
       setSelection((current) =>
         current &&
         current.left === nextSelection.left &&
         current.top === nextSelection.top &&
         current.width === nextSelection.width &&
-        current.height === nextSelection.height
+        current.height === nextSelection.height &&
+        batchKey(current.batchSource) === batchKey(nextSelection.batchSource)
           ? current
           : nextSelection
       )
@@ -196,7 +220,7 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
   }
 
   return (
-    <div className="canvas-group-outline-layer" aria-hidden="true">
+    <div className="canvas-group-outline-layer">
       {outlines.map((outline) => (
         <div
           key={outline.id}
@@ -232,15 +256,38 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
         </div>
       ))}
       {selection && (
-        <div
-          className="canvas-selection-outline"
-          style={{
-            left: selection.left,
-            top: selection.top,
-            width: selection.width,
-            height: selection.height
-          }}
-        />
+        <>
+          <div
+            className="canvas-selection-outline"
+            aria-hidden="true"
+            style={{
+              left: selection.left,
+              top: selection.top,
+              width: selection.width,
+              height: selection.height
+            }}
+          />
+          {selection.batchSource && (
+            <button
+              type="button"
+              className="canvas-selection-batch-port"
+              aria-label={`批量连接 ${selection.batchSource.memberIds?.length ?? 0} 个节点`}
+              title="拖动此端口，将所有已选同类节点连接到目标的多值输入"
+              style={{
+                left: selection.left + selection.width,
+                top: selection.top + selection.height / 2
+              }}
+              onPointerDown={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                beginConnectionDrag(selection.batchSource!, { x: event.clientX, y: event.clientY })
+              }}
+            >
+              <Icon name="attach" size={14} />
+              <span>{selection.batchSource.memberIds?.length} 项</span>
+            </button>
+          )}
+        </>
       )}
     </div>
   )

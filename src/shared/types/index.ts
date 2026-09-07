@@ -32,6 +32,10 @@ export const ACTIVE_NODE_TYPE_IDS = [
 
 export type ActiveNodeTypeId = (typeof ACTIVE_NODE_TYPE_IDS)[number]
 
+/** 仅由运行器物化、不能从节点面板新建的资产承载类型。 */
+export const INTERNAL_NODE_TYPE_IDS = ['video-asset'] as const
+export type InternalNodeTypeId = (typeof INTERNAL_NODE_TYPE_IDS)[number]
+
 /**
  * 已退役的内部类型。它们绝不能出现在新增节点入口；当前项目没有历史数据迁移需求，
  * 该集合仅用于让注册表和类型边界保持明确。
@@ -41,7 +45,7 @@ export const LEGACY_NODE_TYPE_IDS = ['script', 'group', 'compose'] as const
 export type LegacyNodeTypeId = (typeof LEGACY_NODE_TYPE_IDS)[number]
 
 /** 内部图数据可引用的完整类型集合。 */
-export type NodeTypeId = ActiveNodeTypeId | LegacyNodeTypeId
+export type NodeTypeId = ActiveNodeTypeId | InternalNodeTypeId | LegacyNodeTypeId
 
 /**
  * 节点之间允许传递的数据类型。文本与 Markdown 都以字符串传输，但保留语义类型；

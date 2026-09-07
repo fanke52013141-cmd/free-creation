@@ -136,7 +136,17 @@ async function main() {
     await page.getByRole('button', { name: '适配画布（缩放到所有节点）', exact: true }).click()
     const splitNode = page.locator('.node-card-wrap:has(.type-image-split)').first()
     await splitNode.waitFor()
-    assert.match(await splitNode.innerText(), /图片拆分/)
+    assert.match(await splitNode.innerText(), /连接原图/)
+    assert.equal(
+      await splitNode.locator('.image-split-quick-controls').count(),
+      1,
+      '图片拆分的行列与面积必须直接显示在节点内'
+    )
+    assert.equal(
+      await splitNode.getByRole('button', { name: '快速拆分', exact: true }).count(),
+      1,
+      '图片拆分必须提供节点内快速执行入口'
+    )
     const upload = page.waitForEvent('filechooser')
     await page.getByRole('button', { name: '上传本地文件', exact: true }).click()
     await (
@@ -180,6 +190,15 @@ async function main() {
     await page.waitForFunction(
       (count) => document.querySelectorAll('.data-edge').length > count,
       edgeCountBeforeTextConnect
+    )
+    assert.equal(
+      await page.locator('.data-edge-visible').first().evaluate((line) => getComputedStyle(line).strokeDasharray),
+      'none',
+      '普通数据线必须为实线；重叠效果仅应通过透明度实现'
+    )
+    assert.ok(
+      await page.locator('.data-edge-visible[data-edge-obscured], .data-edge-obscured').count(),
+      '数据线必须存在节点遮挡片段的淡化层'
     )
     const after = await source.boundingBox()
     assert.equal(after.width, before.width, 'port drag must not resize width')
@@ -289,9 +308,47 @@ async function main() {
       return crop.ok ? { ok: true, message: '' } : { ok: false, message: crop.error.message }
     })
     assert.deepEqual(persistedMedia, { ok: true, message: '' }, '刷新后媒体资产仍应能继续裁剪')
+    // 批量删除回归：框选/多选节点时，隐藏的 carrier arrow 不能抢走第一次 Delete。
+    const textCards = page.locator('.node-card-wrap:has(.type-text)')
+    const initialTextCount = await textCards.count()
+    await page.getByRole('button', { name: '添加文本节点', exact: true }).click()
+    await page.getByRole('button', { name: '添加文本节点', exact: true }).click()
+    await page.waitForFunction(
+      (count) => document.querySelectorAll('.node-card-wrap:has(.type-text)').length === count + 2,
+      initialTextCount
+    )
+    const deleteSource = textCards.nth(initialTextCount)
+    const deleteTarget = textCards.nth(initialTextCount + 1)
+    const deleteOut = await deleteSource.locator('.port-dot.out').boundingBox()
+    const deleteIn = await deleteTarget.locator('.port-dot.in').boundingBox()
+    const edgeCountBeforeConnectForDelete = await page.locator('.data-edge').count()
+    await page.mouse.move(deleteOut.x + deleteOut.width / 2, deleteOut.y + deleteOut.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(deleteIn.x + deleteIn.width / 2, deleteIn.y + deleteIn.height / 2, {
+      steps: 12
+    })
+    await page.mouse.up()
+    await page.waitForFunction(
+      (count) => document.querySelectorAll('.data-edge').length > count,
+      edgeCountBeforeConnectForDelete
+    )
+    const edgeCountBeforeDelete = await page.locator('.data-edge').count()
+    await deleteSource.locator('.node-card').click({ position: { x: 120, y: 80 } })
+    await deleteTarget
+      .locator('.node-card')
+      .click({ position: { x: 120, y: 80 }, modifiers: ['Shift'] })
+    await page.keyboard.press('Delete')
+    await page.waitForFunction(
+      (count) => document.querySelectorAll('.node-card-wrap:has(.type-text)').length === count,
+      initialTextCount
+    )
+    assert.ok(
+      (await page.locator('.data-edge').count()) < edgeCountBeforeDelete,
+      '删除节点时必须在同一次操作中清理关联连线'
+    )
     if (process.env.UI_SCREENSHOT) await page.screenshot({ path: process.env.UI_SCREENSHOT })
     console.log(
-      'PASS: image double-click preview, browser crop/split/model generation, external dashed ports, refresh persistence and crop, zoom-stable grouping, light inspector, sequence color, readiness removal, topbar clearance, run-center/contract handoff, chat select-to-open'
+      'PASS: image double-click preview, browser crop/split/model generation, external dashed ports, refresh persistence and crop, zoom-stable grouping, light inspector, sequence color, topbar clearance, run-center/contract handoff, chat select-to-open, one-key batch node delete'
     )
   } finally {
     await browser.close()

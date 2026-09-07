@@ -22,8 +22,6 @@ export function parseImageGen(text: string): ImageGenData {
 }
 
 export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
-  // 已生成的图片是稳定的数据源；不在每次整图运行时重复生成。
-  if (ctx.shape.props.mediaPath) return { status: 'done' }
   const data = parseImageGen(readNodeConfig(ctx.shape))
   const option = modelsByModality(ctx.providers, 'image').find((item) => item.key === data.modelKey)
   if (!option) return { status: 'skipped', reason: '未选择可用图片模型' }
@@ -57,12 +55,6 @@ export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeE
     })
     if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
     if (!result.ok) return { status: 'failed', reason: result.error.message }
-    ctx.updateProps({
-      mediaId: result.data.id,
-      mediaPath: result.data.path,
-      mediaMime: result.data.mime,
-      title: result.data.name || result.data.id
-    })
     // 来源追溯：记录产生本节点的模型、输入摘要与时间，供「追踪到产生它的节点和输入」。
     ctx.updateResult(
       serializeMediaResultCollection(
@@ -82,6 +74,14 @@ export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeE
         )
       )
     )
+    ctx.emitArtifact?.({
+      kind: 'image',
+      mediaId: result.data.id,
+      mediaPath: result.data.path,
+      mime: result.data.mime,
+      portId: 'out-image',
+      title: result.data.name || '生成图片'
+    })
     return { status: 'done' }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

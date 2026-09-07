@@ -10,7 +10,6 @@ import {
 } from '@shared/image-capabilities'
 import { mediaUrl, type NodeBodyProps } from '../../registry'
 import { toast } from '../../../stores/toast'
-import { markUndoPoint } from '../../../canvas/history'
 import { gatherUpstreamMedia, gatherUpstreamMediaList } from '../../../canvas/graph'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { runNodeManually } from '../../../engine/executor'
@@ -19,16 +18,8 @@ import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
 import {
-  ImageContinuationActions,
-  clearSelectedMediaHistory,
-  MediaFileActions,
-  MediaResultGrid,
-  removeMediaResultFromShape,
-  MediaSourceBadge,
-  selectMediaResult,
   ModelSelect,
   NoModelHint,
-  useClickGuard,
   parseJsonProp
 } from './shared'
 
@@ -48,8 +39,7 @@ function parseImageGen(text: string): ImageGenData {
   )
 }
 
-export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.JSX.Element {
-  const guard = useClickGuard()
+export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
   const project = useAppStore((s) => s.currentProject)
   const providers = useGatewayStore((s) => s.providers)
@@ -63,7 +53,6 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
     ? imageCapabilitiesFor(selected.provider.specId, selected.model.id)
     : imageCapabilitiesFor('relay')
   const config = normalizeImageGenerationConfig(data, capabilities)
-  const sizeOptions = sizesForImageAspectRatio(capabilities, config.aspectRatio)
   const [draft, setDraft] = useState(data.prompt)
   const [busy, setBusy] = useState(false)
   const promptRef = useRef<HTMLTextAreaElement | null>(null)
@@ -122,90 +111,6 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
     } finally {
       setBusy(false)
     }
-  }
-
-  if (shape.props.mediaPath) {
-    const chooseResult = (item: Parameters<typeof selectMediaResult>[1]): void => {
-      const selected = selectMediaResult(shape, item)
-      editor.updateShape({
-        id: shape.id,
-        type: 'node-card',
-        props: selected.props,
-        meta: { ...(shape.meta ?? {}), nodeResult: selected.nodeResult }
-      })
-      markUndoPoint(editor, 'image-select-result')
-    }
-    return (
-      <div className="node-media-wrap">
-        <div
-          className="node-media"
-          data-node-interactive="media-preview"
-          onPointerDown={guard.onPointerDown}
-          onDoubleClick={(e) =>
-            guard.onDoubleClick(e, () =>
-              openPreview({
-                kind: 'image',
-                url: mediaUrl(shape.props.mediaPath),
-                title: shape.props.title
-              })
-            )
-          }
-        >
-          <img src={mediaUrl(shape.props.mediaPath)} alt={shape.props.title} draggable={false} />
-        </div>
-        <div className="node-media-actions">
-          <button
-            className="btn-ghost small"
-            disabled={busy}
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onClick={(e) => {
-              e.stopPropagation()
-              // 重新生成：清空成片，回到配置面板重新跑一遍
-              editor.updateShape({
-                id: shape.id,
-                type: 'node-card',
-                props: { mediaId: '', mediaPath: '', mediaMime: '' }
-              })
-              markUndoPoint(editor, 'image-regenerate')
-            }}
-          >
-            <Icon name="reset" size={13} />
-            重新生成
-          </button>
-          <MediaSourceBadge shape={shape} fallback="AI 生成" />
-          <MediaFileActions shape={shape} />
-        </div>
-        <ImageContinuationActions editor={editor} shape={shape} />
-        <MediaResultGrid
-          shape={shape}
-          kind="image"
-          onSelect={chooseResult}
-          onDelete={(item) => {
-            const nodeResult = removeMediaResultFromShape(shape, item)
-            if (!nodeResult) return
-            editor.updateShape({
-              id: shape.id,
-              type: 'node-card',
-              meta: { ...(shape.meta ?? {}), nodeResult }
-            })
-            markUndoPoint(editor, 'image-delete-result')
-          }}
-          onClear={() => {
-            const nodeResult = clearSelectedMediaHistory(shape)
-            if (!nodeResult) return
-            editor.updateShape({
-              id: shape.id,
-              type: 'node-card',
-              meta: { ...(shape.meta ?? {}), nodeResult }
-            })
-            markUndoPoint(editor, 'image-clear-result-history')
-          }}
-          openPreview={(item) =>
-            openPreview({ kind: 'image', url: mediaUrl(item.mediaPath), title: shape.props.title })
-          }
-        />
-      </div>
-    )
   }
 
   if (!options.length) return <NoModelHint onOpen={openSettings} />
@@ -280,18 +185,6 @@ export function ImageGenerateBody({ shape, openPreview }: NodeBodyProps): React.
           {capabilities.ratios.map((ratio) => (
             <option key={ratio} value={ratio}>
               {ratio === 'auto' ? '默认画幅' : ratio}
-            </option>
-          ))}
-        </AppSelect>
-        <AppSelect
-          className="gen-select w92"
-          value={config.size}
-          onPointerDown={(e) => e.stopPropagation()}
-          onChange={(e) => update({ ...config, size: e.target.value })}
-        >
-          {sizeOptions.map((size) => (
-            <option key={size.value} value={size.value}>
-              {size.label}
             </option>
           ))}
         </AppSelect>

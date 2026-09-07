@@ -42,9 +42,11 @@ function makeContext(
   ctx: NodeExecutionContext
   props: Partial<NodeCardShape['props']>
   result: { value: string | null }
+  artifacts: unknown[]
 } {
   const props: Partial<NodeCardShape['props']> = {}
   const result = { value: null as string | null }
+  const artifacts: unknown[] = []
   const shape = {
     id: `shape:${nodeType}`,
     type: 'node-card',
@@ -96,8 +98,10 @@ function makeContext(
       updateProps: (patch) => Object.assign(props, patch),
       updateResult: (value) => {
         result.value = value
-      }
-    }
+      },
+      emitArtifact: (artifact) => artifacts.push(artifact)
+    },
+    artifacts
   }
 }
 
@@ -238,7 +242,7 @@ describe('chat / audio / video executors with a mocked gateway', () => {
         data: { id: 'audio-1', path: 'projects/p/audio.mp3', mime: 'audio/mpeg', name: '旁白' }
       })
     })
-    const { ctx, props, result } = makeContext(
+    const { ctx, props, result, artifacts } = makeContext(
       'speech',
       JSON.stringify({
         mode: 'generate',
@@ -250,7 +254,8 @@ describe('chat / audio / video executors with a mocked gateway', () => {
       [provider('audio')]
     )
     await expect(audioExecutor(ctx)).resolves.toEqual({ status: 'done' })
-    expect(props.mediaId).toBe('audio-1')
+    expect(props.mediaId).toBeUndefined()
+    expect(artifacts).toContainEqual(expect.objectContaining({ kind: 'audio', mediaId: 'audio-1' }))
     expect(JSON.parse(result.value ?? '{}').results[0].runId).toBe('run-1')
   })
 
@@ -278,7 +283,7 @@ describe('chat / audio / video executors with a mocked gateway', () => {
       }),
       videoCancel: vi.fn()
     })
-    const { ctx, props, result } = makeContext(
+    const { ctx, props, result, artifacts } = makeContext(
       'video',
       JSON.stringify({ prompt: '猫咪挥爪', modelKey: 'provider-1::video-model', params: {} }),
       [provider('video')]
@@ -287,7 +292,8 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     await vi.runAllTicks()
     await vi.advanceTimersByTimeAsync(3_000)
     await expect(pending).resolves.toEqual({ status: 'done' })
-    expect(props.mediaId).toBe('video-1')
+    expect(props.mediaId).toBeUndefined()
+    expect(artifacts).toContainEqual(expect.objectContaining({ kind: 'video', mediaId: 'video-1' }))
     expect(JSON.parse(result.value ?? '{}').results[0].runId).toBe('run-1')
   })
 
@@ -333,7 +339,7 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     )
   })
 
-  it('video executor forwards explicit last-frame, image and audio reference ports', async () => {
+  it('video executor reads the unified image port in connection order plus audio references', async () => {
     const videoSubmit = vi
       .fn()
       .mockResolvedValue({ ok: true, data: { taskId: 'video-multimodal-task' } })
@@ -360,10 +366,8 @@ describe('chat / audio / video executors with a mocked gateway', () => {
       source: { nodeId: `${kind}-node`, portId: `out-${kind}`, runId: 'run-1' },
       createdAt: Date.now()
     })
-    ;(ctx.inputs as Map<string, NodeValuePacket[]>).set('in-last-image', [
-      mediaPacket('image', 'last')
-    ])
-    ;(ctx.inputs as Map<string, NodeValuePacket[]>).set('in-reference-images', [
+    ;(ctx.inputs as Map<string, NodeValuePacket[]>).set('in-images', [
+      mediaPacket('image', 'first'),
       mediaPacket('image', 'ref-1'),
       mediaPacket('image', 'ref-2')
     ])
@@ -378,7 +382,7 @@ describe('chat / audio / video executors with a mocked gateway', () => {
 
     expect(videoSubmit).toHaveBeenCalledWith(
       expect.objectContaining({
-        lastFrameMediaId: 'last',
+        firstFrameMediaId: 'first',
         referenceImageMediaIds: ['ref-1', 'ref-2'],
         referenceAudioMediaIds: ['audio-1']
       })

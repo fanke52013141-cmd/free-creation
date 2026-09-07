@@ -111,9 +111,11 @@ function context(type: 'video-frame' | 'video-clip' | 'video-audio'): {
   ctx: NodeExecutionContext
   props: Record<string, unknown>
   result: { value: string | null }
+  artifacts: unknown[]
 } {
   const props: Record<string, unknown> = {}
   const result = { value: null as string | null }
+  const artifacts: unknown[] = []
   const config =
     type === 'video-frame'
       ? JSON.stringify({ version: 2, mode: 'custom', timeMs: 1200, format: 'png' })
@@ -201,8 +203,10 @@ function context(type: 'video-frame' | 'video-clip' | 'video-audio'): {
       updateProps: (next) => Object.assign(props, next),
       updateResult: (value) => {
         result.value = value
-      }
-    }
+      },
+      emitArtifact: (artifact) => artifacts.push(artifact)
+    },
+    artifacts
   }
 }
 
@@ -230,7 +234,8 @@ describe('视频处理执行器', () => {
       expect(api[apiName]).toHaveBeenCalledWith(
         expect.objectContaining({ projectId: 'project-a', sourceMediaId: 'source-video' })
       )
-      expect(item.props).toMatchObject({ mediaId: id, mediaMime: mime })
+      expect(item.props).toEqual({})
+      expect(item.artifacts).toContainEqual(expect.objectContaining({ mediaId: id, mime }))
       expect(parseMediaResultCollection(item.result.value ?? '')?.results[0]).toMatchObject({
         mediaId: id,
         runId: 'run-video-transform'

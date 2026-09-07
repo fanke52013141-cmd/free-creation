@@ -53,6 +53,21 @@ function shape(
   }
 }
 
+function operationResult(
+  mediaId: string,
+  mediaPath: string,
+  mime: string
+): Record<string, unknown> {
+  return {
+    nodeResult: JSON.stringify({
+      kind: 'media-source',
+      version: 1,
+      selectedMediaId: mediaId,
+      results: [{ mediaId, mediaPath, mime, createdAt: 1 }]
+    })
+  }
+}
+
 describe('projectNodeOutputs · 文本节点', () => {
   it('有文本时输出 out-text', () => {
     const out = projectNodeOutputs(shape('text', { text: '  hello  ' }))
@@ -65,20 +80,20 @@ describe('projectNodeOutputs · 文本节点', () => {
   })
 })
 
-describe('projectNodeOutputs · 媒体节点（图片/生图/视频/音频）', () => {
-  it('有媒体路径时产出对应类型输出', () => {
+describe('projectNodeOutputs · 媒体节点（资产 / 操作节点）', () => {
+  it('资产从自身媒体投影；操作节点从运行结果投影对应类型输出', () => {
     const img = projectNodeOutputs(
       shape('image', { mediaId: 'm1', mediaPath: '/p.png', mediaMime: 'image/png' })
     )
     expect(img['out-image']?.kind).toBe('image')
 
     const gen = projectNodeOutputs(
-      shape('image-gen', { mediaId: 'm2', mediaPath: '/g.png', mediaMime: 'image/png' })
+      shape('image-gen', {}, operationResult('m2', '/g.png', 'image/png'))
     )
     expect(gen['out-image']?.kind).toBe('image')
 
     const crop = projectNodeOutputs(
-      shape('image-crop', { mediaId: 'm-crop', mediaPath: '/crop.png', mediaMime: 'image/png' })
+      shape('image-crop', {}, operationResult('m-crop', '/crop.png', 'image/png'))
     )
     expect(crop['out-image']).toEqual({
       kind: 'image',
@@ -122,27 +137,25 @@ describe('projectNodeOutputs · 媒体节点（图片/生图/视频/音频）', 
       ]
     })
     const edit = projectNodeOutputs(
-      shape('image-edit', { mediaId: 'm-edit', mediaPath: '/edit.png', mediaMime: 'image/png' })
+      shape('image-edit', {}, operationResult('m-edit', '/edit.png', 'image/png'))
     )
     expect(edit['out-image']?.kind).toBe('image')
 
-    const vid = projectNodeOutputs(
-      shape('video', { mediaId: 'm3', mediaPath: '/v.mp4', mediaMime: 'video/mp4' })
-    )
+    const vid = projectNodeOutputs(shape('video', {}, operationResult('m3', '/v.mp4', 'video/mp4')))
     expect(vid['out-video']?.kind).toBe('video')
 
     const frame = projectNodeOutputs(
-      shape('video-frame', { mediaId: 'm-frame', mediaPath: '/frame.png', mediaMime: 'image/png' })
+      shape('video-frame', {}, operationResult('m-frame', '/frame.png', 'image/png'))
     )
     expect(frame['out-image']?.kind).toBe('image')
 
     const clip = projectNodeOutputs(
-      shape('video-clip', { mediaId: 'm-clip', mediaPath: '/clip.mp4', mediaMime: 'video/mp4' })
+      shape('video-clip', {}, operationResult('m-clip', '/clip.mp4', 'video/mp4'))
     )
     expect(clip['out-video']?.kind).toBe('video')
 
     const extractedAudio = projectNodeOutputs(
-      shape('video-audio', { mediaId: 'm-audio', mediaPath: '/audio.m4a', mediaMime: 'audio/mp4' })
+      shape('video-audio', {}, operationResult('m-audio', '/audio.m4a', 'audio/mp4'))
     )
     expect(extractedAudio['out-audio']?.kind).toBe('audio')
 

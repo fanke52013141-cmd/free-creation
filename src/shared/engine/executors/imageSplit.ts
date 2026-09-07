@@ -20,16 +20,9 @@ export const imageSplitExecutor = async (
     })
     if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
     if (!response.ok) return { status: 'failed', reason: response.error.message }
-    const [selected] = response.data
-    if (!selected) return { status: 'failed', reason: '图片拆分未生成任何结果' }
+    if (response.data.length === 0) return { status: 'failed', reason: '图片拆分未生成任何结果' }
     const now = Date.now()
     // 每次运行是完整的一次派生，不与上次的格子混合；失败时主进程会回滚本次已落盘资产。
-    ctx.updateProps({
-      mediaId: selected.id,
-      mediaPath: selected.path,
-      mediaMime: selected.mime,
-      title: '图片拆分'
-    })
     ctx.updateResult(
       serializeMediaResultCollection({
         kind: 'media-source',
@@ -38,7 +31,7 @@ export const imageSplitExecutor = async (
         modelKey: 'local:image-grid-split',
         prompt: `源图片 ${source.mediaId} · ${config.rows}×${config.columns} · 面积 ${config.scalePercent}%`,
         at: now,
-        selectedMediaId: selected.id,
+        selectedMediaId: response.data[0].id,
         results: response.data.map((asset) => ({
           mediaId: asset.id,
           mediaPath: asset.path,
@@ -48,6 +41,16 @@ export const imageSplitExecutor = async (
         }))
       })
     )
+    response.data.forEach((asset, index) => {
+      ctx.emitArtifact?.({
+        kind: 'image',
+        mediaId: asset.id,
+        mediaPath: asset.path,
+        mime: asset.mime,
+        portId: 'out-images',
+        title: `拆图 · 第 ${index + 1} 格`
+      })
+    })
     return { status: 'done' }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

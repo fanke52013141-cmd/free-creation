@@ -52,9 +52,11 @@ describe('imageCropExecutor', () => {
     ctx: NodeExecutionContext
     props: Record<string, unknown>
     result: { value: string | null }
+    artifacts: unknown[]
   } {
     const props: Record<string, unknown> = {}
     const result = { value: null as string | null }
+    const artifacts: unknown[] = []
     const shape = {
       id: 'shape:crop',
       type: 'node-card',
@@ -124,8 +126,10 @@ describe('imageCropExecutor', () => {
         updateProps: (next) => Object.assign(props, next),
         updateResult: (value) => {
           result.value = value
-        }
-      }
+        },
+        emitArtifact: (artifact) => artifacts.push(artifact)
+      },
+      artifacts
     }
   }
 
@@ -145,7 +149,10 @@ describe('imageCropExecutor', () => {
     expect(cropImage).toHaveBeenCalledWith(
       expect.objectContaining({ projectId: 'project-a', sourceMediaId: 'source' })
     )
-    expect(item.props).toMatchObject({ mediaId: 'crop-1', mediaMime: 'image/png' })
+    expect(item.props).toEqual({})
+    expect(item.artifacts).toContainEqual(
+      expect.objectContaining({ kind: 'image', mediaId: 'crop-1', mime: 'image/png' })
+    )
     expect(parseMediaResultCollection(item.result.value ?? '')?.results[0]).toMatchObject({
       mediaId: 'crop-1',
       runId: 'run-crop'

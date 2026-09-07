@@ -87,6 +87,7 @@ import {
   projectTextOutputs,
   projectTtsOutputs,
   projectVideoOutputs,
+  projectVideoAssetOutputs,
   projectVideoAudioOutputs,
   projectVideoClipOutputs,
   projectVideoFrameOutputs,
@@ -165,7 +166,7 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'image',
-    contractVersion: 1,
+    contractVersion: 2,
     label: '图片',
     icon: 'image',
     color: '#34d399',
@@ -173,14 +174,7 @@ export function registerBaseNodeTypes(): void {
     description: '图片资产节点，只负责保存和输出一张已导入的图片，不承担生成逻辑。',
     category: 'input',
     ports: {
-      in: [
-        input(
-          'in-image',
-          '图源',
-          'image',
-          '可选的上游图片来源；主要用于拆分结果展开后的连线归属，资产仍以本节点已导入的媒体为准。'
-        )
-      ],
+      in: [],
       out: [output('out-image', '图片', 'image', '已导入并落盘的图片资产引用。')]
     },
     projectOutputs: projectImageOutputs,
@@ -309,28 +303,21 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'video',
-    contractVersion: 3,
-    label: '视频',
+    contractVersion: 4,
+    label: '图片生成视频',
     icon: 'video',
     color: '#f472b6',
     defaultSize: { w: 340, h: 260 },
     description:
-      '根据文本、首尾帧或多模态参考生成视频。所有参考素材都必须通过明确端口连入，输出可供预览或下载的视频资产。',
+      '根据文本和多模态参考生成视频。图片统一连入一个多值端口，按连接顺序使用；其他参考素材也必须通过明确端口连入。',
     category: 'input',
     ports: {
       in: [
-        input('in-image', '首帧图', 'image', '可选的单张首帧图片，用于图生视频。'),
         input(
-          'in-last-image',
-          '尾帧图',
+          'in-images',
+          '图片',
           'image',
-          '可选的单张尾帧图片；仅支持首尾帧模式的模型可用。'
-        ),
-        input(
-          'in-reference-images',
-          '参考图',
-          'image',
-          '可选的多张参考图；顺序是提示词中“图片 1、图片 2”的稳定顺序。',
+          '可选的多张图片。按连线顺序读取：第 1 张作为主图/首帧，其余作为有序参考图；全部都连接到同一个绿色端口。',
           { cardinality: 'many' }
         ),
         input(
@@ -364,6 +351,24 @@ export function registerBaseNodeTypes(): void {
     },
     projectOutputs: projectVideoOutputs,
     executor: videoExecutor,
+    Body: VideoBody
+  })
+  registerNodeType({
+    type: 'video-asset',
+    contractVersion: 1,
+    label: '视频资产',
+    icon: 'video',
+    color: '#f472b6',
+    defaultSize: { w: 340, h: 260 },
+    description: '运行产出的独立视频资产。它只负责预览、选择和向下游输出，不承担生成逻辑。',
+    category: 'input',
+    creatable: false,
+    ports: { in: [], out: [output('out-video', '视频', 'video', '不可变的视频资产引用。')] },
+    projectOutputs: projectVideoAssetOutputs,
+    executor: (ctx) =>
+      ctx.shape.props.mediaPath
+        ? { status: 'done' }
+        : { status: 'skipped', reason: '未导入视频资产' },
     Body: VideoBody
   })
   registerNodeType({
@@ -448,19 +453,22 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'audio',
-    contractVersion: 2,
+    contractVersion: 3,
     label: '音频',
     icon: 'audio',
     color: '#fbbf24',
     defaultSize: { w: 340, h: 260 },
-    description: '音频资产节点：导入本地音频或承接一段上游音频，只负责保存、预览和输出资产。',
+    description: '音频资产节点：导入本地音频，只负责保存、预览和输出资产。',
     category: 'input',
     ports: {
-      in: [input('in-audio', '音频', 'audio', '可选的上游音频资产；接入后作为本节点音频来源。')],
+      in: [],
       out: [output('out-audio', '音频', 'audio', '已导入或承接的音频资产引用。')]
     },
     projectOutputs: projectAudioOutputs,
-    executor: audioExecutor,
+    executor: (ctx) =>
+      ctx.shape.props.mediaPath
+        ? { status: 'done' }
+        : { status: 'skipped', reason: '未导入音频资产' },
     Body: AudioBody
   })
   registerNodeType({

@@ -58,6 +58,7 @@ describe('图片修改配置', () => {
 describe('imageEditExecutor', () => {
   it('只消费 in-image 与 in-text 并记录图片结果', async () => {
     const update: Record<string, unknown> = {}
+    const artifacts: unknown[] = []
     const imageEdit = vi.fn(async () => ({
       ok: true as const,
       data: { id: 'edited-1', path: '/edited.png', mime: 'image/png', name: '修改图片' }
@@ -135,7 +136,8 @@ describe('imageEditExecutor', () => {
       signal: { cancelled: false },
       gateway: { imageEdit },
       updateProps: (patch: Record<string, unknown>) => Object.assign(update, patch),
-      updateResult: () => undefined
+      updateResult: () => undefined,
+      emitArtifact: (artifact: unknown) => artifacts.push(artifact)
     } as unknown as NodeExecutionContext
     await expect(imageEditExecutor(ctx)).resolves.toEqual({ status: 'done' })
     expect(imageEdit).toHaveBeenCalledWith(
@@ -144,7 +146,10 @@ describe('imageEditExecutor', () => {
         prompt: expect.stringContaining('保留主体')
       })
     )
-    expect(update).toMatchObject({ mediaId: 'edited-1', mediaMime: 'image/png' })
+    expect(update).toEqual({})
+    expect(artifacts).toContainEqual(
+      expect.objectContaining({ kind: 'image', mediaId: 'edited-1', mime: 'image/png' })
+    )
   })
 
   it('供应商失败时不改写已有输出或结果集合', async () => {

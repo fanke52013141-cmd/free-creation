@@ -56,20 +56,18 @@ describe('标准连线 · 允许的组合', () => {
     }
   })
 
-  it('生图/图片 → 生图参考图 / 视频首帧', () => {
+  it('生图/图片 → 生图参考图 / 视频统一图片输入', () => {
     expect(canConnect('image', 'out-image', 'image-gen', 'in-image')).toBe(true)
-    expect(canConnect('image', 'out-image', 'video', 'in-image')).toBe(true)
+    expect(canConnect('image', 'out-image', 'video', 'in-images')).toBe(true)
     expect(canConnect('image-gen', 'out-image', 'image-gen', 'in-image')).toBe(true)
-    expect(canConnect('image-gen', 'out-image', 'video', 'in-image')).toBe(true)
+    expect(canConnect('image-gen', 'out-image', 'video', 'in-images')).toBe(true)
     expect(canConnect('image', 'out-image', 'image-edit', 'in-image')).toBe(true)
     expect(canConnect('image-gen', 'out-image', 'image-edit', 'in-image')).toBe(true)
     expect(canConnect('image-crop', 'out-image', 'image-edit', 'in-image')).toBe(true)
     expect(canConnect('image', 'out-image', 'image-crop', 'in-image')).toBe(true)
     expect(canConnect('image-gen', 'out-image', 'image-crop', 'in-image')).toBe(true)
-    expect(canConnect('image-crop', 'out-image', 'video', 'in-image')).toBe(true)
-    expect(canConnect('image-split', 'out-image', 'video', 'in-image')).toBe(true)
-    expect(canConnect('image', 'out-image', 'video', 'in-last-image')).toBe(true)
-    expect(canConnect('image-gen', 'out-image', 'video', 'in-reference-images')).toBe(true)
+    expect(canConnect('image-crop', 'out-image', 'video', 'in-images')).toBe(true)
+    expect(canConnect('image-split', 'out-image', 'video', 'in-images')).toBe(true)
     expect(canConnect('audio', 'out-audio', 'video', 'in-reference-audio')).toBe(true)
     expect(canConnect('image-split', 'out-images', 'iterate', 'in-list')).toBe(true)
   })
@@ -139,7 +137,7 @@ describe('标准连线 · 拒绝的组合', () => {
 
   it('文本 → 图片输入（text 不能进 image）', () => {
     expect(canConnect('text', 'out-text', 'image-gen', 'in-image')).toBe(false)
-    expect(canConnect('text', 'out-text', 'video', 'in-image')).toBe(false)
+    expect(canConnect('text', 'out-text', 'video', 'in-images')).toBe(false)
   })
 
   it('视频 → 图片输入（video 不能进 image，严格匹配）', () => {
@@ -160,7 +158,7 @@ describe('标准连线 · 拒绝的组合', () => {
 
   it('音频 → 图片/视频输入（媒体类型严格匹配）', () => {
     expect(canConnect('audio', 'out-audio', 'image-gen', 'in-image')).toBe(false)
-    expect(canConnect('audio', 'out-audio', 'video', 'in-image')).toBe(false)
+    expect(canConnect('audio', 'out-audio', 'video', 'in-images')).toBe(false)
     expect(canConnect('video', 'out-video', 'image-edit', 'in-image')).toBe(false)
   })
 })

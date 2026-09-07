@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import { useEffect, useId, useRef, useState, type RefObject } from 'react'
 import type { Editor, TLShapeId } from 'tldraw'
 import { getNodePorts, getNodeType, portOffsets, PORT_COLORS } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
@@ -9,6 +9,41 @@ interface ScreenEdge {
   id: TLShapeId
   path: string
   color: string
+  provenance?: boolean
+}
+
+interface ScreenNodeRect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/**
+ * 返回节点卡片在当前 SVG 坐标系中的边界。
+ *
+ * 数据线的底图会被这些矩形挖空，随后仅在挖空区再绘制一条低透明度的同色线。
+ * 这样“穿过节点”的部分是变淡而不是变成另一种线型，线的其余部分保持完整实线。
+ */
+function collectNodeRects(editor: Editor, host: HTMLDivElement): ScreenNodeRect[] {
+  const hostRect = host.getBoundingClientRect()
+  return editor
+    .getCurrentPageShapes()
+    .filter((shape): shape is NodeCardShape => shape.type === 'node-card')
+    .flatMap((shape) => {
+      const bounds = editor.getShapePageBounds(shape.id)
+      if (!bounds) return []
+      const topLeft = editor.pageToScreen({ x: bounds.x, y: bounds.y })
+      const bottomRight = editor.pageToScreen({ x: bounds.maxX, y: bounds.maxY })
+      return [
+        {
+          x: topLeft.x - hostRect.left,
+          y: topLeft.y - hostRect.top,
+          width: Math.max(0, bottomRight.x - topLeft.x),
+          height: Math.max(0, bottomRight.y - topLeft.y)
+        }
+      ]
+    })
 }
 
 function collectEdges(editor: Editor, host: HTMLDivElement): ScreenEdge[] {
@@ -71,6 +106,31 @@ function collectEdges(editor: Editor, host: HTMLDivElement): ScreenEdge[] {
       )
     })
   }
+  // 运行产物与操作节点的关系只作可视化追溯，绝不能被当成可执行数据边。
+  for (const asset of editor.getCurrentPageShapes()) {
+    if (asset.type !== 'node-card') continue
+    const producerId = (asset.meta as Record<string, unknown> | undefined)?.artifactProducerId
+    if (typeof producerId !== 'string') continue
+    const producer = editor.getShape<NodeCardShape>(producerId as TLShapeId)
+    if (!producer || producer.type !== 'node-card') continue
+    const producerBounds = editor.getShapePageBounds(producer.id)
+    const assetBounds = editor.getShapePageBounds(asset.id)
+    if (!producerBounds || !assetBounds) continue
+    const start = editor.pageToScreen({
+      x: producerBounds.maxX,
+      y: producerBounds.y + producerBounds.height / 2
+    })
+    const end = editor.pageToScreen({ x: assetBounds.x, y: assetBounds.y + assetBounds.height / 2 })
+    result.push({
+      id: `artifact:${asset.id}` as TLShapeId,
+      color: '#94a3b8',
+      provenance: true,
+      path: buildDataEdgePath(
+        { x: start.x - hostRect.left, y: start.y - hostRect.top },
+        { x: end.x - hostRect.left, y: end.y - hostRect.top }
+      )
+    })
+  }
   return result
 }
 
@@ -104,8 +164,9 @@ export function DataEdgeLayer({
   const select = useEdgeSelectionStore((state) => state.select)
   const [hoveredEdgeId, setHoveredEdgeId] = useState<TLShapeId | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
-  // 每条边的命中几何引用；Map 内容由渲染时的 ref 回调维护，始终与当前 edges 一致。
-  const hitPathsRef = useRef(new Map<TLShapeId, SVGPathElement>())
+  const reactId = useId().replace(/:/g, '')
+  const overlapMaskId = `data-edge-node-mask-${reactId}`
+  const overlapClipId = `${overlapMaskId}-clip`
 
   useEffect(() => {
     let frame = 0
@@ -141,16 +202,17 @@ export function DataEdgeLayer({
 
   // store/视口监听会触发本组件重绘，确保拖动、缩放和连线后重新换算屏幕坐标。
   const edges = host ? collectEdges(editor, host) : []
+  const nodeRects = host ? collectNodeRects(editor, host) : []
 
   /** 判断屏幕坐标是否落在任一连线的可点击描边区域内。 */
   const hitTest = (clientX: number, clientY: number): TLShapeId | null => {
     const svg = svgRef.current
-    if (!svg || hitPathsRef.current.size === 0) return null
+    if (!svg) return null
     const rect = svg.getBoundingClientRect()
     if (rect.width === 0 && rect.height === 0) return null
     const point = new DOMPoint(clientX - rect.left, clientY - rect.top)
-    for (const [id, path] of hitPathsRef.current) {
-      if (path.isPointInStroke(point)) return id
+    for (const path of svg.querySelectorAll<SVGPathElement>('.data-edge-hit')) {
+      if (path.isPointInStroke(point)) return path.dataset.edgeId as TLShapeId
     }
     return null
   }
@@ -200,9 +262,40 @@ export function DataEdgeLayer({
   }, [select])
 
   if (!host) return null
+  const hostBounds = host.getBoundingClientRect()
   return (
     <svg className="data-edge-layer" ref={svgRef} aria-label="节点数据连线">
+      <defs>
+        <mask
+          id={overlapMaskId}
+          maskUnits="userSpaceOnUse"
+          x={0}
+          y={0}
+          width={hostBounds.width}
+          height={hostBounds.height}
+        >
+          <rect width={hostBounds.width} height={hostBounds.height} fill="white" />
+          {nodeRects.map((rect, index) => (
+            <rect key={index} {...rect} fill="black" />
+          ))}
+        </mask>
+        <clipPath id={overlapClipId} clipPathUnits="userSpaceOnUse">
+          {nodeRects.map((rect, index) => (
+            <rect key={index} {...rect} />
+          ))}
+        </clipPath>
+      </defs>
       {edges.map((edge) => {
+        if (edge.provenance) {
+          return (
+            <path
+              className="data-edge-visible artifact-provenance-edge"
+              key={edge.id}
+              d={edge.path}
+              style={{ stroke: edge.color, pointerEvents: 'none' }}
+            />
+          )
+        }
         const active = edge.id === selectedEdgeId
         const hovered = edge.id === hoveredEdgeId
         return (
@@ -210,15 +303,19 @@ export function DataEdgeLayer({
             className={`data-edge${active ? ' is-selected' : ''}${hovered ? ' is-hovered' : ''}`}
             key={edge.id}
           >
-            <path className="data-edge-visible" d={edge.path} style={{ stroke: edge.color }} />
             <path
-              className="data-edge-hit"
+              className="data-edge-visible"
               d={edge.path}
-              ref={(el) => {
-                if (el) hitPathsRef.current.set(edge.id, el)
-                else hitPathsRef.current.delete(edge.id)
-              }}
+              mask={`url(#${overlapMaskId})`}
+              style={{ stroke: edge.color }}
             />
+            <path
+              className="data-edge-visible data-edge-obscured"
+              d={edge.path}
+              clipPath={`url(#${overlapClipId})`}
+              style={{ stroke: edge.color }}
+            />
+            <path className="data-edge-hit" d={edge.path} data-edge-id={edge.id} />
           </g>
         )
       })}

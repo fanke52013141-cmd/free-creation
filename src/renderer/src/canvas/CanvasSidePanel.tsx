@@ -235,7 +235,7 @@ export const BUILTIN_TEMPLATES: {
       { from: 0, to: 1, fromPort: 'out-image', toPort: 'in-image' },
       { from: 1, to: 2, fromPort: 'out-image', toPort: 'in-image' },
       { from: 1, to: 3, fromPort: 'out-image', toPort: 'in-image' },
-      { from: 1, to: 4, fromPort: 'out-image', toPort: 'in-image' }
+      { from: 1, to: 4, fromPort: 'out-image', toPort: 'in-images' }
     ]
   },
   {

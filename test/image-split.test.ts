@@ -102,6 +102,7 @@ describe('imageSplitExecutor', () => {
       exec: 'idle'
     }
     const result = { value: '' }
+    const artifacts: unknown[] = []
     const ctx = {
       node: {
         id: 'shape:split',
@@ -155,7 +156,8 @@ describe('imageSplitExecutor', () => {
       updateProps: (next: Record<string, unknown>) => Object.assign(props, next),
       updateResult: (value: string) => {
         result.value = value
-      }
+      },
+      emitArtifact: (artifact: unknown) => artifacts.push(artifact)
     } as unknown as NodeExecutionContext
 
     await expect(imageSplitExecutor(ctx)).resolves.toEqual({ status: 'done' })
@@ -166,7 +168,8 @@ describe('imageSplitExecutor', () => {
         config: { version: 1, rows: 2, columns: 2, scalePercent: 90 }
       })
     )
-    expect(props).toMatchObject({ mediaId: 'grid-1', mediaMime: 'image/png' })
+    expect(props).toMatchObject({ mediaId: '', mediaMime: '' })
+    expect(artifacts).toHaveLength(4)
     expect(parseMediaResultCollection(result.value)?.results).toHaveLength(4)
   })
 })

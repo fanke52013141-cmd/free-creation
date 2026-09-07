@@ -8,6 +8,8 @@ export interface ConnectionFrom {
   portId: string
   portType: PortType
   schema?: PortSchemaRef
+  /** 多选资产以一个临时“共有输出”拖出时，包含全部实际源节点。 */
+  memberIds?: TLShapeId[]
 }
 
 export interface Pt {

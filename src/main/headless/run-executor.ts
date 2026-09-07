@@ -1,5 +1,6 @@
 import type { CanvasEdge, CanvasNode, PortDecl } from '@shared/types'
 import { getExecutor } from '@shared/engine/executors'
+import { operationPatchViolation } from '@shared/engine/node-invariants'
 import type { NodeShape } from '@shared/engine/executor-types'
 import type { ContractInputMap, ContractOutputs, NodeValuePacket } from '@shared/engine/inputs'
 import type { NodeValue, RawNodeOutputs } from '@shared/engine/values'
@@ -87,7 +88,11 @@ export class HeadlessRunExecutor {
           signal: token,
           gateway: this.options.gateway,
           runCode: (source, args) => runCodeHeadless(source, args),
-          updateProps: (patch) => Object.assign(shape.props, patch),
+          updateProps: (patch) => {
+            const violation = operationPatchViolation(node.type, patch)
+            if (violation) throw new Error(violation)
+            Object.assign(shape.props, patch)
+          },
           updateResult: (value) => {
             shape.meta = { ...shape.meta, nodeResult: value ?? undefined }
           }

@@ -335,6 +335,49 @@
   font-weight: 600;
 }
 
+/* 视频预览是完整播放器而不是一块按媒体原始尺寸收缩的缩略图。
+   使用视口上限，既能在大屏清晰审片，也不会在小屏越界。 */
+.media-preview-box.media-preview-video {
+  width: min(94vw, 1280px);
+  height: min(88vh, 820px);
+  max-width: 94vw;
+  max-height: 90vh;
+}
+
+.media-preview-video .media-preview-stage {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 20px;
+  position: relative;
+  background: #090d12;
+}
+
+.media-preview-video .media-preview-stage video {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 8px;
+  background: #05070a;
+  object-fit: contain;
+}
+
+.media-preview-error {
+  position: absolute;
+  right: 32px;
+  bottom: 28px;
+  max-width: min(620px, calc(100% - 64px));
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(251, 113, 133, 0.4);
+  border-radius: 8px;
+  background: rgba(58, 20, 29, 0.92);
+  color: #fecdd3;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 .engine-errors {
   overflow: hidden auto;
   border-color: rgba(251, 113, 133, 0.34);
@@ -1372,8 +1415,7 @@
 }
 
 .node-header-spacer {
-  flex: 1 1 auto;
-  min-width: 8px;
+  display: none;
 }
 
 /* 序号比名称更醒目，无底框。 */
@@ -1649,7 +1691,6 @@
 .data-edge-visible {
   fill: none;
   stroke-width: 1.5;
-  stroke-dasharray: 7 7;
   stroke-linecap: round;
   opacity: 0.74;
   pointer-events: none;
@@ -1657,6 +1698,18 @@
     stroke-width 140ms ease,
     opacity 140ms ease,
     filter 140ms ease;
+}
+
+/* 节点遮住的数据线仍是同一条实线，只降低该重叠片段的不透明度。 */
+.data-edge-obscured {
+  opacity: 0.18;
+}
+
+/* 浅色细虚线只表达“由该操作产生”，不具备可运行的数据流含义。 */
+.artifact-provenance-edge {
+  stroke-width: 1.2;
+  stroke-dasharray: 3 7;
+  opacity: 0.52;
 }
 
 /* 命中路径不再拦截 DOM 指针事件：14px 描边宽度仅作为 isPointInStroke 的几何
@@ -1678,6 +1731,11 @@
   stroke-width: 2.2;
   opacity: 1;
   filter: drop-shadow(0 0 5px rgb(138 111 255 / 45%));
+}
+
+.data-edge.is-selected .data-edge-obscured,
+.data-edge.is-hovered .data-edge-obscured {
+  opacity: 0.4;
 }
 
 .contract-test-harness {

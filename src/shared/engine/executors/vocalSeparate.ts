@@ -89,14 +89,21 @@ export async function vocalSeparateExecutor(
       }
     }
 
-    // 卡片默认展示人声；正式的两条端口只从 nodeResult 精确投影。
-    ctx.updateProps({
-      mediaId: value.vocals.mediaId,
-      mediaPath: value.vocals.mediaPath,
-      mediaMime: value.vocals.mime,
+    ctx.updateResult(JSON.stringify(value))
+    ctx.emitArtifact?.({
+      kind: 'audio',
+      ...value.vocals,
+      portId: 'out-vocals',
       title: config.mode === 'quality' ? '分离人声（高质量）' : '增强人声（快速）'
     })
-    ctx.updateResult(JSON.stringify(value))
+    if (value.accompaniment) {
+      ctx.emitArtifact?.({
+        kind: 'audio',
+        ...value.accompaniment,
+        portId: 'out-accompaniment',
+        title: '分离伴奏'
+      })
+    }
     return { status: 'done' }
   } catch (error) {
     return { status: 'failed', reason: error instanceof Error ? error.message : String(error) }

@@ -152,7 +152,12 @@ function pagePortPoint(
  * 创建连线：arrow 形状 + 两条 arrow binding（start/end 分别锚到源/目标端口位置）。
  * 绑定后连线自动跟随节点移动、可选中删除、支持撤销重做。
  */
-export function createEdge(editor: Editor, from: EdgeEndpoint, to: EdgeEndpoint): boolean {
+export function createEdge(
+  editor: Editor,
+  from: EdgeEndpoint,
+  to: EdgeEndpoint,
+  markHistory = true
+): boolean {
   const fromShape = editor.getShape<NodeCardShape>(from.shapeId)
   const toShape = editor.getShape<NodeCardShape>(to.shapeId)
   if (!fromShape || !toShape) return false
@@ -239,8 +244,125 @@ export function createEdge(editor: Editor, from: EdgeEndpoint, to: EdgeEndpoint)
   })
   // 连线单独成为一个撤销步；若上一操作是「拉线到空白新建节点」，
   // 节点创建尚未打点，会与本连线合并为一步（符合直觉）
-  editor.markHistoryStoppingPoint('create-edge')
+  if (markHistory) editor.markHistoryStoppingPoint('create-edge')
   return true
+}
+
+export interface BatchConnectionResult {
+  created: number
+  skipped: number
+  error?: string
+}
+
+/**
+ * 将多选节点作为一个临时的“共有输出”接入目标的多值输入。
+ *
+ * 先完整预检目标端口、每个源节点与环路，再一次性建边；不会出现只连上一半图片的状态。
+ * 单值输入刻意不支持该快捷方式，避免批量动作悄悄覆盖用户已有连接。
+ */
+export function tryConnectBatch(
+  editor: Editor,
+  from: ConnectionFrom,
+  targetShapeId: TLShapeId,
+  dropPagePt?: { x: number; y: number },
+  preferredTargetPortId?: string
+): BatchConnectionResult {
+  const memberIds = [...new Set(from.memberIds ?? [])]
+  if (memberIds.length < 2) return { created: 0, skipped: 0, error: '批量连接至少需要两个节点' }
+  const target = editor.getShape<NodeCardShape>(targetShapeId)
+  if (!target) return { created: 0, skipped: 0, error: '目标节点不存在' }
+  if (memberIds.includes(target.id)) {
+    return { created: 0, skipped: 0, error: '批量连接不能连接到自身' }
+  }
+  const sources = memberIds.map((id) => {
+    const shape = editor.getShape<NodeCardShape>(id)
+    const spec = shape ? getNodeType(shape.props.nodeType) : undefined
+    const port =
+      shape && spec
+        ? getNodePorts(spec, shape).out.find((item) => item.id === from.portId)
+        : undefined
+    return { shape, spec, port }
+  })
+  if (
+    sources.some(
+      ({ shape, spec, port }) =>
+        !shape ||
+        !spec ||
+        !port ||
+        port.type !== from.portType ||
+        (port.type === 'json' && !nodeSchemasCompatible(port.schema, from.schema))
+    )
+  ) {
+    return { created: 0, skipped: 0, error: '所选节点没有相同且兼容的输出端口' }
+  }
+  const targetSpec = getNodeType(target.props.nodeType)
+  if (!targetSpec) return { created: 0, skipped: 0, error: '目标节点类型未知' }
+  const targetPorts = getNodePorts(targetSpec, target)
+  const compatible = targetPorts.in.filter(
+    (port) =>
+      port.cardinality === 'many' &&
+      sources.every(
+        ({ port: sourcePort }) =>
+          sourcePort &&
+          portCompatible(port.type, sourcePort.type) &&
+          !(
+            port.type === 'json' &&
+            sourcePort.type === 'json' &&
+            !nodeSchemasCompatible(sourcePort.schema, port.schema)
+          )
+      )
+  )
+  if (compatible.length === 0) {
+    return {
+      created: 0,
+      skipped: 0,
+      error: `${targetSpec.label} 没有可接收多项 ${from.portType} 的多值输入端口`
+    }
+  }
+  let targetPort = compatible[0]
+  if (preferredTargetPortId) {
+    const preferred = compatible.find((port) => port.id === preferredTargetPortId)
+    if (!preferred) return { created: 0, skipped: 0, error: `${targetSpec.label} 的目标输入不可用` }
+    targetPort = preferred
+  } else if (dropPagePt && compatible.length > 1) {
+    const targetBounds = editor.getShapePageBounds(target.id)
+    if (!targetBounds) return { created: 0, skipped: 0, error: '目标节点位置不可用' }
+    const offsets = portOffsets(targetPorts.in.length, target.props.h)
+    targetPort = compatible.reduce((best, port) => {
+      const bestIndex = targetPorts.in.indexOf(best)
+      const index = targetPorts.in.indexOf(port)
+      const bestY =
+        targetBounds.y +
+        (targetBounds.height * (offsets[bestIndex] ?? target.props.h / 2)) / target.props.h
+      const y =
+        targetBounds.y +
+        (targetBounds.height * (offsets[index] ?? target.props.h / 2)) / target.props.h
+      return Math.abs(dropPagePt.y - y) < Math.abs(dropPagePt.y - bestY) ? port : best
+    })
+  }
+  const endpoint: EdgeEndpoint = { shapeId: target.id, portId: targetPort.id }
+  // 环路不是可忽略的“个别失败”：批量手势必须保持原子性，否则用户会误以为
+  // 整组选中项都已接入。已存在的同一条边可安全跳过，其他项仍照常创建。
+  if (sources.some(({ shape }) => shape && reaches(editor, target.id, shape.id))) {
+    return { created: 0, skipped: 0, error: '批量连接会形成循环，未创建任何连线' }
+  }
+  const plan = sources.flatMap(({ shape }) => {
+    if (!shape || edgeExists(editor, { shapeId: shape.id, portId: from.portId }, endpoint))
+      return []
+    return [shape.id]
+  })
+  if (plan.length === 0) {
+    return { created: 0, skipped: memberIds.length, error: '所选节点均已存在相同连接' }
+  }
+  let created = 0
+  editor.run(() => {
+    for (const sourceId of plan) {
+      if (createEdge(editor, { shapeId: sourceId, portId: from.portId }, endpoint, false))
+        created += 1
+    }
+  })
+  if (created > 0) editor.markHistoryStoppingPoint('create-batch-edges')
+  return { created, skipped: memberIds.length - created }
 }
 
 /**
@@ -254,6 +376,13 @@ export function tryConnect(
   dropPagePt?: { x: number; y: number },
   preferredTargetPortId?: string
 ): string | null {
+  if ((from.memberIds?.length ?? 0) > 1) {
+    const result = tryConnectBatch(editor, from, targetShapeId, dropPagePt, preferredTargetPortId)
+    if (result.error) return result.error
+    return result.skipped > 0
+      ? `已批量连接 ${result.created} 个节点；${result.skipped} 个已存在相同连接`
+      : null
+  }
   const target = editor.getShape<NodeCardShape>(targetShapeId)
   if (!target) return '目标节点不存在'
   if (target.id === from.shapeId) return '不能连接到自身'

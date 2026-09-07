@@ -33,12 +33,6 @@ export async function videoFrameExecutor(ctx: NodeExecutionContext): Promise<Nod
     if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
     if (!result.ok) return { status: 'failed', reason: result.error.message }
     const prompt = `源视频 ${source.mediaId} · mode=${config.mode} · ${config.timeMs}ms · ${config.format}`
-    ctx.updateProps({
-      mediaId: result.data.id,
-      mediaPath: result.data.path,
-      mediaMime: result.data.mime,
-      title: result.data.name || '视频帧'
-    })
     ctx.updateResult(
       serializeMediaResultCollection(
         appendMediaResult(
@@ -53,6 +47,14 @@ export async function videoFrameExecutor(ctx: NodeExecutionContext): Promise<Nod
         )
       )
     )
+    ctx.emitArtifact?.({
+      kind: 'image',
+      mediaId: result.data.id,
+      mediaPath: result.data.path,
+      mime: result.data.mime,
+      portId: 'out-image',
+      title: result.data.name || '视频帧'
+    })
     return { status: 'done' }
   } catch (error) {
     return { status: 'failed', reason: error instanceof Error ? error.message : String(error) }
@@ -79,12 +81,6 @@ export async function videoClipExecutor(ctx: NodeExecutionContext): Promise<Node
     if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
     if (!result.ok) return { status: 'failed', reason: result.error.message }
     const prompt = `源视频 ${source.mediaId} · ${config.startMs}-${config.endMs}ms · audio=${config.includeAudio} · ${config.quality}`
-    ctx.updateProps({
-      mediaId: result.data.id,
-      mediaPath: result.data.path,
-      mediaMime: result.data.mime,
-      title: result.data.name || '视频片段'
-    })
     ctx.updateResult(
       serializeMediaResultCollection(
         appendMediaResult(
@@ -99,6 +95,14 @@ export async function videoClipExecutor(ctx: NodeExecutionContext): Promise<Node
         )
       )
     )
+    ctx.emitArtifact?.({
+      kind: 'video',
+      mediaId: result.data.id,
+      mediaPath: result.data.path,
+      mime: result.data.mime,
+      portId: 'out-video',
+      title: result.data.name || '视频片段'
+    })
     return { status: 'done' }
   } catch (error) {
     return { status: 'failed', reason: error instanceof Error ? error.message : String(error) }
@@ -125,12 +129,6 @@ export async function videoAudioExecutor(ctx: NodeExecutionContext): Promise<Nod
     if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
     if (!result.ok) return { status: 'failed', reason: result.error.message }
     const prompt = `源视频 ${source.mediaId} · ${config.startMs}-${config.endMs}ms · ${config.format} · ${config.sampleRate}Hz`
-    ctx.updateProps({
-      mediaId: result.data.id,
-      mediaPath: result.data.path,
-      mediaMime: result.data.mime,
-      title: result.data.name || '提取音频'
-    })
     ctx.updateResult(
       serializeMediaResultCollection(
         appendMediaResult(
@@ -145,6 +143,14 @@ export async function videoAudioExecutor(ctx: NodeExecutionContext): Promise<Nod
         )
       )
     )
+    ctx.emitArtifact?.({
+      kind: 'audio',
+      mediaId: result.data.id,
+      mediaPath: result.data.path,
+      mime: result.data.mime,
+      portId: 'out-audio',
+      title: result.data.name || '提取音频'
+    })
     return { status: 'done' }
   } catch (error) {
     return { status: 'failed', reason: error instanceof Error ? error.message : String(error) }

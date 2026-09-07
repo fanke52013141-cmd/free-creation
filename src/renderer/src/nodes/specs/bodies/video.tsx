@@ -13,7 +13,7 @@ import {
 import { getNodeType, mediaUrl, type NodeBodyProps } from '../../registry'
 import { toast } from '../../../stores/toast'
 import { markUndoPoint } from '../../../canvas/history'
-import { createEdge, gatherUpstreamMedia, gatherUpstreamMediaList } from '../../../canvas/graph'
+import { createEdge, gatherUpstreamMediaList } from '../../../canvas/graph'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import type { NodeCardShape } from '../../../canvas/NodeCardShape'
 import { projectNodeOutputs } from '../../nodeValues'
@@ -118,9 +118,9 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const [draft, setDraft] = useState(data.prompt)
   const [submitting, setSubmitting] = useState(false)
   const [mentionOpen, setMentionOpen] = useState(false)
-  const refImage = gatherUpstreamMedia(editor, shape.id, 'in-image', 'image')
-  const lastFrame = gatherUpstreamMedia(editor, shape.id, 'in-last-image', 'image')
-  const referenceImages = gatherUpstreamMediaList(editor, shape.id, 'in-reference-images', 'image')
+  // 视频的所有图片只占一个绿色端口；第一张是主图/首帧，后续为有序参考图。
+  const images = gatherUpstreamMediaList(editor, shape.id, 'in-images', 'image')
+  const refImage = images[0]
   const motionReferences = gatherUpstreamMediaList(editor, shape.id, 'in-reference-video', 'video')
   const audioReferences = gatherUpstreamMediaList(editor, shape.id, 'in-reference-audio', 'audio')
   const availableMentions = imageMentions(editor, shape.id)
@@ -133,22 +133,21 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     ? videoCapabilitiesFor(opt.provider.specId, opt.model.id, { gatewayProxy })
     : videoCapabilitiesFor('seedance')
   const framesDetermineRatio = Boolean(
-    opt &&
-    videoRatioIsDerivedByFrames(opt.provider.specId, opt.model.id, Boolean(refImage || lastFrame))
+    opt && videoRatioIsDerivedByFrames(opt.provider.specId, opt.model.id, Boolean(refImage))
   )
   const params = normalizeVideoGenParams(capabilities, data.params, { framesDetermineRatio })
   const capabilityIssues = videoCapabilityIssues(capabilities, {
     params,
     hasFirstFrame: Boolean(refImage),
-    hasLastFrame: Boolean(lastFrame),
-    referenceImageCount: referenceImages.length + Number(Boolean(refImage)),
+    hasLastFrame: false,
+    referenceImageCount: images.length,
     referenceVideoCount: motionReferences.length,
     referenceAudioCount: audioReferences.length
   })
   const inputHints = videoInputHints(capabilities, {
     hasFirstFrame: Boolean(refImage),
-    hasLastFrame: Boolean(lastFrame),
-    referenceImageCount: referenceImages.length
+    hasLastFrame: false,
+    referenceImageCount: images.length
   })
 
   useEffect(() => {
@@ -206,7 +205,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   }
 
   const addImageMention = (item: MentionableImage): void => {
-    if (referenceImages.some((image) => image.mediaPath === item.mediaPath)) {
+    if (images.some((image) => image.mediaPath === item.mediaPath)) {
       setMentionOpen(false)
       toast('该图片已作为参考图连接，无需重复引用')
       return
@@ -214,15 +213,15 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     const linked = createEdge(
       editor,
       { shapeId: item.shapeId, portId: 'out-image' },
-      { shapeId: shape.id, portId: 'in-reference-images' }
+      { shapeId: shape.id, portId: 'in-images' }
     )
-    // @ 提示词只引用此端口的真实参考图序号，不把首帧、尾帧混入序号。
-    const ordinal = referenceImages.length + 1
+    // @ 标记严格对应这个唯一图片端口的连接顺序；第一张主图也计入序号。
+    const ordinal = images.length + 1
     const nextPrompt = `${draft}${draft && !/\s$/.test(draft) ? ' ' : ''}@图片 ${ordinal}`
     setDraft(nextPrompt)
     update({ ...data, prompt: nextPrompt })
     setMentionOpen(false)
-    if (linked) toast(`已将“${item.title}”作为图片 ${ordinal} 连入参考图端口`)
+    if (linked) toast(`已将“${item.title}”作为图片 ${ordinal} 连入图片端口`)
     else toast('该图片可能已经引用；已保留提示词标记')
   }
 
@@ -380,20 +379,6 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           <span>{capabilityIssues.join('；')}；请更换模型、调整参数或断开该输入后再运行。</span>
         </div>
       )}
-      {refImage && (
-        <div className="ref-image-bar">
-          <img
-            src={mediaUrl(refImage.mediaPath)}
-            className="ref-image-thumb"
-            draggable={false}
-            alt="已连接首帧图"
-          />
-          <span className="ref-image-label">
-            <Icon name="attach" size={13} />
-            首帧图已连接
-          </span>
-        </div>
-      )}
       {motionReferences.length > 0 && (
         <div className="ref-image-bar">
           <Icon name="director" size={15} />
@@ -402,17 +387,18 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           </span>
         </div>
       )}
-      {referenceImages.length > 0 && (
+      {images.length > 0 && (
         <div className="ref-image-bar">
           <span className="ref-image-label">
             <Icon name="attach" size={13} />
-            已连接 {referenceImages.length} 张参考图（可在提示词中写 @图片 N）。
+            已连接 {images.length} 张图片；第 1 张作为主图，其余作为参考图（可在提示词中写 @图片
+            N）。
           </span>
-          <div className="video-reference-chips" aria-label="已连接参考图">
-            {referenceImages.map((image, index) => (
+          <div className="video-reference-chips" aria-label="已连接图片">
+            {images.map((image, index) => (
               <span className="video-reference-chip" key={`${image.mediaPath}-${index}`}>
                 <img src={mediaUrl(image.mediaPath)} alt={`图片 ${index + 1}`} draggable={false} />
-                图片 {index + 1}
+                {index === 0 ? '主图' : `图片 ${index + 1}`}
               </span>
             ))}
           </div>

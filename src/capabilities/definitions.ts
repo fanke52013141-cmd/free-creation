@@ -178,37 +178,21 @@ const imageGenCapability = defineCapability({
 
 const videoCapability = defineCapability({
   id: 'video.generate',
-  version: '3.0.0',
-  contractVersion: 3,
+  version: '4.0.0',
+  contractVersion: 4,
   nodeType: 'video',
   title: '视频',
   description:
-    '根据文本、首尾帧或多模态参考生成视频。所有参考素材都必须通过明确端口连入，输出可供预览或下载的视频资产。',
+    '根据文本和多模态参考生成视频。图片统一连入一个多值端口，按连接顺序使用；其他参考素材都必须通过明确端口连入。',
   category: 'input',
   inputs: [
     {
-      id: 'in-image',
-      name: '首帧图',
-      type: 'image',
-      required: false,
-      cardinality: 'one',
-      description: '可选的单张首帧图片，用于图生视频。'
-    },
-    {
-      id: 'in-last-image',
-      name: '尾帧图',
-      type: 'image',
-      required: false,
-      cardinality: 'one',
-      description: '可选的单张尾帧图片；仅支持首尾帧模式的模型可用。'
-    },
-    {
-      id: 'in-reference-images',
-      name: '参考图',
+      id: 'in-images',
+      name: '图片',
       type: 'image',
       required: false,
       cardinality: 'many',
-      description: '可选的多张参考图；顺序是提示词中"图片 1、图片 2"的稳定顺序。'
+      description: '唯一的图片输入；多张图片均连这里。连线第 1 张为主图，其余为有序参考图。'
     },
     {
       id: 'in-reference-video',

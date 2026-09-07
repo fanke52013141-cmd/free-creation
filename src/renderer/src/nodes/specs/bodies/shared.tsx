@@ -739,7 +739,8 @@ export const VARIABLE_TYPES: { value: VariableValueType; label: string }[] = [
 
 /**
  * 把拆分节点每格真实结果展开为独立的 image 资产节点，按原始行列排布，并把每格节点
- * 连线回拆分节点的 out-image（仅拓扑归属，数据仍由 image executor 按媒体 ID 加载）。
+ * 关联回拆分节点的生产关系。该关系不是数据边，避免把所有格子误当作拆分节点的
+ * “当前输出”并干扰工作流执行。
  * 幂等：若本次媒体集合已被展开过（splitAutoExpandedFor 签名一致），直接返回已展开节点
  * 的 ID 而不重复创建；否则创建后把签名写回拆分节点 meta。
  */
@@ -817,12 +818,16 @@ export function expandSplitResults(
           h: spec.defaultSize.h
         } satisfies Partial<NodeCardProps>
       })
-      // 每个展开节点一条指向拆分节点 out-image 的连线（拆几个连几个）
-      createEdge(
-        editor,
-        { shapeId: source.id, portId: 'out-image' },
-        { shapeId: id, portId: 'in-image' }
-      )
+      editor.updateShape({
+        id,
+        type: 'node-card',
+        meta: {
+          artifactProducerId: source.id,
+          artifactProducerPortId: 'out-images',
+          artifactRunId: item.runId,
+          artifactCreatedAt: item.createdAt
+        }
+      })
       ids.push(id)
     })
   })

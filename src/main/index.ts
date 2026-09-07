@@ -21,7 +21,20 @@ log.initialize()
 log.info('main process starting')
 
 // media:// 协议：渲染进程加载本地媒体（stream 支持 <video> 播放）
-protocol.registerSchemesAsPrivileged([{ scheme: 'media', privileges: { stream: true } }])
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'media',
+    // <video> 需要的不只是 stream：标准/安全来源和 Fetch 支持让 Chromium 能建立
+    // Range 请求、读取元数据并在预览浮层里播放本地 MP4/WebM。
+    privileges: {
+      standard: true,
+      secure: true,
+      stream: true,
+      supportFetchAPI: true,
+      corsEnabled: true
+    }
+  }
+])
 
 function registerMediaProtocol(): void {
   protocol.handle('media', async (request) => {

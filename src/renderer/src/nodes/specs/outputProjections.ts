@@ -42,17 +42,42 @@ function mediaOutput(
     : {}
 }
 
+/** 操作节点的“最新输出”只来自运行结果；资产节点才从自身 props 投影。 */
+function latestResultMediaOutput(
+  shape: NodeCardShape,
+  kind: 'image' | 'video' | 'audio',
+  portId: string
+): RawNodeOutputs {
+  const collection = parseMediaResultCollection(
+    typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
+  )
+  const result = collection?.results.at(-1)
+  return result
+    ? {
+        [portId]: {
+          kind,
+          mediaId: result.mediaId,
+          mediaPath: result.mediaPath,
+          mime: result.mime
+        }
+      }
+    : {}
+}
+
 export const projectTextOutputs = (shape: NodeCardShape): RawNodeOutputs =>
   shape.props.text.trim() ? { 'out-text': { kind: 'text', text: shape.props.text.trim() } } : {}
 
 export const projectImageOutputs = (shape: NodeCardShape): RawNodeOutputs =>
   mediaOutput(shape, 'image', 'out-image')
 
-export const projectImageGenOutputs = projectImageOutputs
+export const projectImageGenOutputs = (shape: NodeCardShape): RawNodeOutputs =>
+  latestResultMediaOutput(shape, 'image', 'out-image')
 
 /** 裁剪节点与图片节点共享 image 输出值，但产物只能来自本节点的成功运行。 */
-export const projectImageCropOutputs = projectImageOutputs
-export const projectImageEditOutputs = projectImageOutputs
+export const projectImageCropOutputs = (shape: NodeCardShape): RawNodeOutputs =>
+  latestResultMediaOutput(shape, 'image', 'out-image')
+export const projectImageEditOutputs = (shape: NodeCardShape): RawNodeOutputs =>
+  latestResultMediaOutput(shape, 'image', 'out-image')
 
 /**
  * 宫格拆分同时暴露当前选中的单张图片与全部真实产物列表：
@@ -64,7 +89,7 @@ export const projectImageSplitOutputs = (shape: NodeCardShape): RawNodeOutputs =
   )
   const results = collection?.results ?? []
   return {
-    ...mediaOutput(shape, 'image', 'out-image'),
+    ...latestResultMediaOutput(shape, 'image', 'out-image'),
     ...(results.length > 0
       ? {
           'out-images': {
@@ -83,16 +108,16 @@ export const projectImageSplitOutputs = (shape: NodeCardShape): RawNodeOutputs =
 }
 
 export const projectVideoOutputs = (shape: NodeCardShape): RawNodeOutputs =>
-  mediaOutput(shape, 'video', 'out-video')
+  latestResultMediaOutput(shape, 'video', 'out-video')
 
 export const projectVideoFrameOutputs = (shape: NodeCardShape): RawNodeOutputs =>
-  mediaOutput(shape, 'image', 'out-image')
+  latestResultMediaOutput(shape, 'image', 'out-image')
 
 export const projectVideoClipOutputs = (shape: NodeCardShape): RawNodeOutputs =>
-  mediaOutput(shape, 'video', 'out-video')
+  latestResultMediaOutput(shape, 'video', 'out-video')
 
 export const projectVideoAudioOutputs = (shape: NodeCardShape): RawNodeOutputs =>
-  mediaOutput(shape, 'audio', 'out-audio')
+  latestResultMediaOutput(shape, 'audio', 'out-audio')
 
 export const projectVocalSeparateOutputs = (shape: NodeCardShape): RawNodeOutputs => {
   const result = parseVocalSeparationResult(
@@ -109,10 +134,15 @@ export const projectVocalSeparateOutputs = (shape: NodeCardShape): RawNodeOutput
 }
 
 export const projectAudioOutputs = (shape: NodeCardShape): RawNodeOutputs =>
-  mediaOutput(shape, 'audio', 'out-audio')
+  shape.props.nodeType === 'audio'
+    ? mediaOutput(shape, 'audio', 'out-audio')
+    : latestResultMediaOutput(shape, 'audio', 'out-audio')
+
+export const projectVideoAssetOutputs = (shape: NodeCardShape): RawNodeOutputs =>
+  mediaOutput(shape, 'video', 'out-video')
 
 export const projectTtsOutputs = (shape: NodeCardShape): RawNodeOutputs =>
-  mediaOutput(shape, 'audio', 'out-audio')
+  latestResultMediaOutput(shape, 'audio', 'out-audio')
 
 export const projectChatOutputs = (shape: NodeCardShape): RawNodeOutputs => {
   const data = parseNodeRecord(shape.props.text)

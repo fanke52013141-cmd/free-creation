@@ -31,14 +31,9 @@ export function parseAudio(text: string): AudioData {
 export const audioExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
   const audioInput = inputMedia(ctx.inputs, 'in-audio', 'audio')[0]
   if (audioInput) {
-    ctx.updateProps({
-      mediaId: audioInput.mediaId,
-      mediaPath: audioInput.mediaPath,
-      mediaMime: audioInput.mime
-    })
-    return { status: 'done' }
+    // 资产节点不再把上游引用复制进自身；请使用来源资产本身建立下游连接。
+    return { status: 'skipped', reason: '音频资产无需执行；请直接连接该音频资产' }
   }
-  if (ctx.shape.props.mediaPath) return { status: 'done' }
   if (ctx.node.type !== 'speech') {
     return { status: 'skipped', reason: '请上传音频或连接一段上游音频资产' }
   }
@@ -59,12 +54,6 @@ export const audioExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
     })
     if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
     if (!result.ok) return { status: 'failed', reason: result.error.message }
-    ctx.updateProps({
-      mediaId: result.data.id,
-      mediaPath: result.data.path,
-      mediaMime: result.data.mime,
-      title: result.data.name || result.data.id
-    })
     ctx.updateResult(
       serializeMediaResultCollection(
         appendMediaResult(
@@ -83,6 +72,14 @@ export const audioExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
         )
       )
     )
+    ctx.emitArtifact?.({
+      kind: 'audio',
+      mediaId: result.data.id,
+      mediaPath: result.data.path,
+      mime: result.data.mime,
+      portId: 'out-audio',
+      title: result.data.name || '生成语音'
+    })
     return { status: 'done' }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

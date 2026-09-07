@@ -213,7 +213,8 @@ export interface VideoInputState {
 
 /**
  * 配置面板顶部的能力提示行：只列出当前模型真实支持的图片输入方式。
- * 首尾帧硬约束仅 H3 支持；Seedance 连到 in-image 的图片会作为参考素材传递。
+ * 首尾帧硬约束仅 H3 支持；画布的 `in-images` 统一图片端口将第 1 张作为主图，
+ * 其他图片作为有序参考素材传递。
  * 参考视频/音频的连接状态由面板中的素材条展示，这里不重复。
  */
 export function videoInputHints(capabilities: VideoCapabilities, state: VideoInputState): string[] {

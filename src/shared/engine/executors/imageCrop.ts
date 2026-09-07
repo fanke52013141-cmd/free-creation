@@ -19,12 +19,6 @@ export const imageCropExecutor = async (
     })
     if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
     if (!result.ok) return { status: 'failed', reason: result.error.message }
-    ctx.updateProps({
-      mediaId: result.data.id,
-      mediaPath: result.data.path,
-      mediaMime: result.data.mime,
-      title: result.data.name || '裁剪图片'
-    })
     ctx.updateResult(
       serializeMediaResultCollection(
         appendMediaResult(
@@ -39,6 +33,14 @@ export const imageCropExecutor = async (
         )
       )
     )
+    ctx.emitArtifact?.({
+      kind: 'image',
+      mediaId: result.data.id,
+      mediaPath: result.data.path,
+      mime: result.data.mime,
+      portId: 'out-image',
+      title: result.data.name || '裁剪图片'
+    })
     return { status: 'done' }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

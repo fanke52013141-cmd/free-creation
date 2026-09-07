@@ -206,6 +206,9 @@ export function CanvasEditor({
   const wrapRef = useRef<HTMLDivElement>(null)
   // 上传提示延迟隐藏定时器：HTML5 dragleave 会因进子元素误触发，用延迟避免闪烁
   const dragHideTimer = useRef<number | null>(null)
+  // 真实文件下落只允许触发一次导入。外部 drop 会同时经过 React 捕获层和画布内层，
+  // 没有这道门闩时同一份图片/视频/音频会被创建出两份资产节点。
+  const dropImportInFlightRef = useRef(false)
   // 节点已拖入画布时，浏览器随后仍会派发 click；拦住它以避免再在视口中心创建一份。
   const suppressNodePickRef = useRef(false)
   // 快照恢复失败后置位：跳过一切自动保存，避免把空画布写回覆盖原数据
@@ -223,6 +226,25 @@ export function CanvasEditor({
   const [clipboardCount, setClipboardCount] = useState(0)
   const [menu, setMenu] = useState<MenuState | null>(null)
   const [dragOver, setDragOver] = useState(false)
+  // 外部文件拖入时只在指针落点提供反馈，不能用整张画布的高亮边框抢走视觉焦点。
+  const [dropPoint, setDropPoint] = useState<{ x: number; y: number } | null>(null)
+
+  // 外部文件的 drop/dragend 可能先被 tldraw 内层元素消费。无论导入是否成功，
+  // 只要松手或拖拽源结束，投放浮标都必须立即撤掉，绝不能滞留在画布上。
+  useEffect(() => {
+    const clearDropFeedback = (): void => {
+      if (dragHideTimer.current) clearTimeout(dragHideTimer.current)
+      dragHideTimer.current = null
+      setDragOver(false)
+      setDropPoint(null)
+    }
+    window.addEventListener('drop', clearDropFeedback, { capture: true })
+    window.addEventListener('dragend', clearDropFeedback, { capture: true })
+    return () => {
+      window.removeEventListener('drop', clearDropFeedback, { capture: true })
+      window.removeEventListener('dragend', clearDropFeedback, { capture: true })
+    }
+  }, [])
   // 在 React 状态中持有 editor，让右下角停靠簇能订阅画布变化（editorRef 变化不会触发重渲染）
   const [editorInstance, setEditorInstance] = useState<Editor | null>(null)
   // 右键侧栏面板：资产 / 工作流 / 历史记录
@@ -700,6 +722,35 @@ export function CanvasEditor({
       if (!inCanvas) return
       const mod = e.ctrlKey || e.metaKey
       if (e.key === 'Delete' || e.key === 'Backspace') {
+        // 节点/分组的批量删除永远优先于连线选择。框选节点时 tldraw 也可能把其
+        // 载体 arrow 纳入选区，若先删线就会出现“第一次 Delete 只删线”的两步操作。
+        // 删除节点后的 afterDelete handler 会一次性清理所有悬空连线。
+        const selected = editor
+          .getSelectedShapes()
+          .filter((shape) => shape.type === 'node-card' || shape.type === 'group')
+          .map((shape) => shape.id)
+        if (selected.length > 0) {
+          e.preventDefault()
+          e.stopPropagation()
+          const selectedIds = new Set(selected)
+          // tldraw 删除节点时 binding 的回收时机晚于 afterDelete；在同一事务中
+          // 显式删除所有两端绑定到所选节点的 carrier arrow，保证一次 Delete 不会
+          // 留下可见但不可用的业务线。
+          const linkedArrows = editor
+            .getCurrentPageShapes()
+            .filter((shape) => {
+              if (shape.type !== 'arrow') return false
+              return editor
+                .getBindingsFromShape(shape.id, 'arrow')
+                .some((binding) => selectedIds.has(binding.toId))
+            })
+            .map((shape) => shape.id)
+          markUndoPoint(editor, 'delete-nodes')
+          editor.run(() => editor.deleteShapes([...selected, ...linkedArrows]))
+          useEdgeSelectionStore.getState().clear()
+          toast(`已删除 ${selected.length} 项及 ${linkedArrows.length} 条关联连线`)
+          return
+        }
         // 数据连线由专用连接层选中，不能平移但可明确断开。
         const selectedDataEdge = useEdgeSelectionStore.getState().selectedEdgeId
         if (selectedDataEdge && editor.getShape(selectedDataEdge as TLShapeId)?.type === 'arrow') {
@@ -722,19 +773,6 @@ export function CanvasEditor({
           markUndoPoint(editor, 'delete-connections')
           editor.deleteShapes(arrows)
           toast(`已断开 ${arrows.length} 条连线`)
-          return
-        }
-        // 选中节点（含分组）后按 Delete / Backspace 直接删除。
-        const selected = editor
-          .getSelectedShapes()
-          .filter((shape) => shape.type === 'node-card' || shape.type === 'group')
-          .map((shape) => shape.id)
-        if (selected.length > 0) {
-          e.preventDefault()
-          e.stopPropagation()
-          markUndoPoint(editor, 'delete-nodes')
-          editor.deleteShapes(selected)
-          toast(`已删除 ${selected.length} 项`)
           return
         }
       }
@@ -799,6 +837,10 @@ export function CanvasEditor({
     if (error) {
       toast(`未连线：${error}`)
       return false
+    }
+    const pendingBatchCount = pending.memberIds?.length ?? 0
+    if (pendingBatchCount > 1) {
+      toast(`已批量连接 ${pendingBatchCount} 个节点`)
     }
     return true
   }
@@ -1050,17 +1092,43 @@ export function CanvasEditor({
 
   const handleDrop = async (e: React.DragEvent): Promise<void> => {
     e.preventDefault()
+    e.stopPropagation()
     setDragOver(false)
+    setDropPoint(null)
     const files = Array.from(e.dataTransfer.files)
     if (files.length === 0) return
+    if (dropImportInFlightRef.current) return
+    dropImportInFlightRef.current = true
     const paths = files.map((f) => window.api.getDroppedFilePath(f))
-    const res = await window.api.importMedia({ projectId: project.id, paths })
-    if (!res.ok) {
-      toast(`导入失败：${res.error.message}`)
-      return
+    try {
+      // Electron 会提供受控的本地路径；浏览器验收页没有路径权限，必须直接把 File
+      // 内容送到同一导入 API。这样拖入的视频/音频不会落到“导入失败”或空播放器状态。
+      if (paths.every(Boolean)) {
+        const res = await window.api.importMedia({ projectId: project.id, paths })
+        if (!res.ok) {
+          toast(`导入失败：${res.error.message}`)
+          return
+        }
+        if (res.data.assets.length > 0) createMediaNodes(res.data.assets, e.clientX, e.clientY)
+        reportImport(res.data.errors)
+      } else {
+        const assets: MediaAsset[] = []
+        for (const file of files) {
+          const res = await window.api.importMediaBuffer({
+            projectId: project.id,
+            mime: file.type || 'application/octet-stream',
+            name: file.name || '拖入文件',
+            data: new Uint8Array(await file.arrayBuffer())
+          })
+          if (res.ok) assets.push(res.data)
+          else toast(`导入失败：${file.name || '文件'}（${res.error.message}）`)
+        }
+        if (assets.length > 0) createMediaNodes(assets, e.clientX, e.clientY)
+        void useMediaStore.getState().refresh(project.id)
+      }
+    } finally {
+      dropImportInFlightRef.current = false
     }
-    if (res.data.assets.length > 0) createMediaNodes(res.data.assets, e.clientX, e.clientY)
-    reportImport(res.data.errors)
   }
 
   const handlePaste = async (e: React.ClipboardEvent): Promise<void> => {
@@ -1277,6 +1345,10 @@ export function CanvasEditor({
     if (target) {
       const error = tryConnect(editor, r.from, target.id, pagePt)
       if (error) toast(error)
+      else {
+        const batchCount = r.from.memberIds?.length ?? 0
+        if (batchCount > 1) toast(`已批量连接 ${batchCount} 个节点`)
+      }
       return
     }
     // 框选两个节点后，允许把线拖到另一个已选节点的“附近”而非精确压中端口。
@@ -1297,7 +1369,11 @@ export function CanvasEditor({
       if (bounds && Math.hypot(dx, dy) <= 56 / zoom) {
         const error = tryConnect(editor, r.from, candidate.id, pagePt)
         if (error) toast(error)
-        else toast('已吸附连接到已选节点')
+        else {
+          const batchCount = r.from.memberIds?.length ?? 0
+          if (batchCount > 1) toast(`已批量连接 ${batchCount} 个节点`)
+          else toast('已吸附连接到已选节点')
+        }
         return
       }
     }
@@ -1371,18 +1447,38 @@ export function CanvasEditor({
         e.preventDefault()
         if (dragHideTimer.current) clearTimeout(dragHideTimer.current)
         setDragOver(true)
+        const bounds = wrapRef.current?.getBoundingClientRect()
+        if (bounds) {
+          setDropPoint({
+            x: Math.min(Math.max(e.clientX - bounds.left, 122), bounds.width - 122),
+            y: Math.min(Math.max(e.clientY - bounds.top, 94), bounds.height - 36)
+          })
+        }
       }}
       onDragOver={(e) => {
         if (!e.dataTransfer.types.includes('Files')) return
         e.preventDefault()
+        if (dragHideTimer.current) clearTimeout(dragHideTimer.current)
         setDragOver(true)
+        const bounds = wrapRef.current?.getBoundingClientRect()
+        if (bounds) {
+          setDropPoint({
+            x: Math.min(Math.max(e.clientX - bounds.left, 122), bounds.width - 122),
+            y: Math.min(Math.max(e.clientY - bounds.top, 94), bounds.height - 36)
+          })
+        }
       }}
       onDragLeave={() => {
         // HTML5 dragleave 在指针移入子元素时也会触发，延迟隐藏避免提示闪烁
         if (dragHideTimer.current) clearTimeout(dragHideTimer.current)
-        dragHideTimer.current = window.setTimeout(() => setDragOver(false), 120)
+        dragHideTimer.current = window.setTimeout(() => {
+          setDragOver(false)
+          setDropPoint(null)
+        }, 120)
       }}
-      onDrop={(e) => void handleDrop(e)}
+      // 捕获阶段先接住外部文件，避免画布内部组件 stopPropagation 后没有导入、
+      // 但投放浮标仍停留的假状态。
+      onDropCapture={(e) => void handleDrop(e)}
       onPasteCapture={(e) => void handlePaste(e)}
     >
       <Tldraw
@@ -1602,7 +1698,22 @@ export function CanvasEditor({
           {getNodeType(nodeDrag.type)?.label}
         </div>
       )}
-      {dragOver && <div className="drop-hint">松开鼠标，上传到画布</div>}
+      {dragOver && dropPoint && (
+        <div
+          className="drop-hint"
+          role="status"
+          aria-live="polite"
+          style={{ left: dropPoint.x, top: dropPoint.y }}
+        >
+          <span className="drop-hint-icon">
+            <Icon name="upload" size={18} />
+          </span>
+          <span>
+            <strong>松开以添加资产</strong>
+            <small>将在此处创建节点</small>
+          </span>
+        </div>
+      )}
       <ConnectionLayer />
       {menu?.kind === 'create' && (
         <NodeCreateMenu

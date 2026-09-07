@@ -15,6 +15,7 @@ import { nodeSchemasCompatible } from '@shared/node-schemas'
 import { useConnectionStore } from '../stores/connection'
 import { useNodePanelStore } from '../stores/nodePanel'
 import { beginConnectionDrag } from './connection-drag'
+import { batchConnectionFromSelection } from './batch-connection'
 import { markUndoPoint } from './history'
 import type { NodeCardShape } from './NodeCardShape'
 import { Icon } from '../components/Icon'
@@ -78,8 +79,20 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     kind: 'image' | 'video' | 'audio'
     title: string
   } | null>(null)
+  const [previewError, setPreviewError] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
   const bodyRef = useRef<HTMLDivElement>(null)
+
+  // 预览切换时不能沿用上一份媒体的错误状态；尤其是同一节点重新生成视频后，
+  // 新输出应立即获得一个干净的播放器，而不是继续显示旧文件的加载错误。
+  const openMediaPreview = (next: {
+    url: string
+    kind: 'image' | 'video' | 'audio'
+    title: string
+  }): void => {
+    setPreviewError(null)
+    setPreview(next)
+  }
   // 计算节点序号：按创建顺序排序所有 node-card，返回当前节点的序号
   const seq = useValue(
     'node sequence',
@@ -278,7 +291,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             </span>
             <div
               className={`node-title ${titleEditable ? 'editable' : ''} ${editing ? 'editing' : ''}`}
-              title={spec?.description ?? shape.props.title}
+              title={shape.props.title}
               contentEditable={editing}
               suppressContentEditableWarning
               spellCheck={false}
@@ -348,7 +361,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           </div>
           <div ref={bodyRef} className="node-body">
             {spec ? (
-              <spec.Body shape={shape} openPreview={(p) => setPreview(p)} />
+              <spec.Body shape={shape} openPreview={openMediaPreview} />
             ) : (
               <div className="node-empty">未知节点类型：{shape.props.nodeType}</div>
             )}
@@ -397,11 +410,18 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                 borderColor: PORT_COLORS[p.type],
                 ['--pc' as string]: PORT_COLORS[p.type]
               }}
-              title={`${portSummary(p, '输出')} · ${hasOutput ? '当前输出可用' : '当前尚无可用输出'} · 按住圆点拖出连线`}
+              title={`${portSummary(p, '输出')} · ${hasOutput ? '当前输出可用' : '当前尚无可用输出'} · 按住圆点拖出连线；多选同类节点时会批量连接`}
               onPointerDown={(e) => {
                 stopEventPropagation(e)
+                const selectedNodeIds = editor
+                  .getSelectedShapes()
+                  .filter((candidate) => candidate.type === 'node-card')
+                  .map((candidate) => candidate.id)
+                const batch = selectedNodeIds.includes(shape.id)
+                  ? batchConnectionFromSelection(editor, selectedNodeIds, p.id)
+                  : null
                 beginConnectionDrag(
-                  { shapeId: shape.id, portId: p.id, portType: p.type, schema: p.schema },
+                  batch ?? { shapeId: shape.id, portId: p.id, portType: p.type, schema: p.schema },
                   { x: e.clientX, y: e.clientY }
                 )
               }}
@@ -413,7 +433,10 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       {preview &&
         createPortal(
           <div className="media-preview-mask" onClick={() => setPreview(null)}>
-            <div className="media-preview-box" onClick={(e) => e.stopPropagation()}>
+            <div
+              className={`media-preview-box media-preview-${preview.kind}`}
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="media-preview-title">
                 <span>{preview.title}</span>
                 <span className="media-preview-actions">
@@ -453,7 +476,27 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               </div>
               <div className="media-preview-stage">
                 {preview.kind === 'image' && <img src={preview.url} alt={preview.title} />}
-                {preview.kind === 'video' && <video src={preview.url} controls autoPlay />}
+                {preview.kind === 'video' && (
+                  <>
+                    <video
+                      key={preview.url}
+                      src={preview.url}
+                      controls
+                      autoPlay
+                      playsInline
+                      preload="auto"
+                      onLoadedMetadata={() => setPreviewError(null)}
+                      onError={() =>
+                        setPreviewError(
+                          preview.url.startsWith('blob:')
+                            ? '该临时视频已失效，请重新上传后预览。'
+                            : '视频无法解码或读取。请确认文件完整，并优先使用 H.264 MP4 或 WebM。'
+                        )
+                      }
+                    />
+                    {previewError ? <p className="media-preview-error">{previewError}</p> : null}
+                  </>
+                )}
                 {preview.kind === 'audio' && <audio src={preview.url} controls autoPlay />}
               </div>
             </div>

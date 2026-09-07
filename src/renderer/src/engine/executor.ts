@@ -13,6 +13,7 @@ import type { Editor, TLShapeId } from 'tldraw'
 import type { CanvasEdge, CanvasNode, ExecStatus, ProviderSummary } from '@shared/types'
 import { deriveGraph } from '../canvas/graph'
 import { markUndoPoint } from '../canvas/history'
+import { materializeArtifact } from '../canvas/artifact-materializer'
 import type { NodeCardShape, NodeCardProps } from '../canvas/NodeCardShape'
 import {
   buildOutputPackets,
@@ -22,6 +23,7 @@ import {
 } from './contracts'
 import type { NodeExecutionContext, NodeExecutionResult, SubflowRequest } from './executor-types'
 import { rendererGateway } from './rendererGateway'
+import { operationPatchViolation } from '@shared/engine/node-invariants'
 import { runCodeTransform } from './codeRuntime'
 import { getNodeType } from '../nodes/registry'
 import { projectNodeOutputs, type NodeValue } from '../nodes/nodeValues'
@@ -380,6 +382,8 @@ async function invokeExecutor(
     waitForResume: () => waitForResume(ctx.token),
     outgoing,
     updateProps: (patch) => {
+      const violation = operationPatchViolation(node.type, patch)
+      if (violation) throw new Error(violation)
       ctx.editor.updateShape({ id, type: 'node-card', props: patch })
     },
     updateResult: (result) => {
@@ -392,6 +396,11 @@ async function invokeExecutor(
           nodeResult: result ?? undefined
         }
       })
+    },
+    emitArtifact: (artifact) => {
+      const current = ctx.editor.getShape<NodeCardShape>(id) ?? shape
+      // 同一次执行中的多个产物需要作为同一个撤销单元落到画布，保持操作可逆。
+      ctx.editor.run(() => materializeArtifact(ctx.editor, current, artifact, ctx.runId))
     },
     runSubflow,
     restoreSubflowInputs: (request) => restoreSubflowStaticInputs(ctx, request)
@@ -540,16 +549,6 @@ async function executeNodeOnce(
           outputPorts: Object.keys(projected.value)
         }
       )
-      // 拆分节点运行成功后，自动把每格结果展开为独立图片节点并连线（幂等）。
-      // 惰性加载避免把 UI 模块静态拉进工作流引擎；explode 失败不影响运行结果。
-      if (latest?.props.nodeType === 'image-split') {
-        try {
-          const { expandSplitResults } = await import('../nodes/specs/bodies/shared')
-          expandSplitResults(editor, latest)
-        } catch {
-          // 自动展开为附加体验，失败不阻断工作流本身
-        }
-      }
       return { status: 'done' }
     }
     if (result.status === 'failed') {

@@ -24,8 +24,10 @@ function makeContext(
 ): {
   ctx: NodeExecutionContext
   result: { value: string | null }
+  artifacts: unknown[]
 } {
   const result = { value: null as string | null }
+  const artifacts: unknown[] = []
   const shape = {
     id: 'shape:media-result',
     type: 'node-card',
@@ -74,9 +76,10 @@ function makeContext(
     updateProps: () => undefined,
     updateResult: (value) => {
       result.value = value
-    }
+    },
+    emitArtifact: (artifact) => artifacts.push(artifact)
   }
-  return { ctx, result }
+  return { ctx, result, artifacts }
 }
 
 afterEach(() => {
@@ -115,6 +118,12 @@ describe('imageGenExecutor · 媒体结果集合', () => {
       expect.objectContaining({ mediaId: 'img-1', runId: 'run-first' }),
       expect.objectContaining({ mediaId: 'img-2', runId: 'run-second' })
     ])
+    expect(first.artifacts).toContainEqual(
+      expect.objectContaining({ kind: 'image', mediaId: 'img-1', portId: 'out-image' })
+    )
+    expect(second.artifacts).toContainEqual(
+      expect.objectContaining({ kind: 'image', mediaId: 'img-2', portId: 'out-image' })
+    )
 
     const cancelled = makeContext(second.result.value ?? '')
     cancelled.ctx.signal = { cancelled: true }

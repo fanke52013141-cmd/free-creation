@@ -690,28 +690,52 @@ select:focus-visible,
   background: transparent;
 }
 
-.canvas-host.drag-over::after {
-  content: '';
-  position: absolute;
-  inset: 12px;
-  border: 2px dashed var(--brand);
-  border-radius: 14px;
-  pointer-events: none;
-  z-index: var(--z-overlay-hint);
-}
-
 .drop-hint {
   position: absolute;
-  top: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--brand);
-  color: #fff;
-  padding: 8px 18px;
-  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 196px;
+  padding: 10px 13px;
+  border: 1px solid rgba(107, 216, 255, 0.88);
+  border-radius: 12px;
+  background: rgba(17, 34, 47, 0.96);
+  color: #e9f7ff;
   font-size: 13px;
   z-index: var(--z-overlay-hint);
   pointer-events: none;
+  transform: translate(-50%, -50%);
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.28),
+    0 0 0 4px rgba(67, 190, 244, 0.1);
+}
+
+.drop-hint-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border-radius: 9px;
+  background: rgba(58, 184, 240, 0.2);
+  color: #69d9ff;
+}
+
+.drop-hint > span:last-child {
+  display: grid;
+  gap: 2px;
+}
+
+.drop-hint strong {
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.drop-hint small {
+  color: rgba(218, 238, 250, 0.65);
+  font-size: 11px;
+  line-height: 14px;
 }
 
 /* ── 左侧悬浮图标条 ── */
@@ -941,6 +965,34 @@ select:focus-visible,
   border: 1px dashed rgba(224, 231, 239, 0.68);
   border-radius: 4px;
   background: transparent;
+}
+
+/* 多选范围的公共输出口。它只是一个临时操作柄，不创建任何“集合节点”；
+   真正保存到画布的是每个来源节点各自的一条普通数据边。 */
+.canvas-selection-batch-port {
+  position: absolute;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px dashed rgba(73, 221, 172, 0.95);
+  border-radius: 999px;
+  background: rgba(12, 31, 30, 0.96);
+  color: #8ef0cf;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: auto;
+  cursor: crosshair;
+  transform: translate(10px, -50%);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
+}
+
+.canvas-selection-batch-port:hover {
+  background: rgba(20, 75, 61, 0.98);
+  border-style: solid;
 }
 
 /* ── 节点创建菜单 ── */
@@ -1257,9 +1309,9 @@ select:focus-visible,
   flex-shrink: 0;
 }
 
-/* 标题不占满剩余空间（改由 .node-header-spacer 接管），仅可收缩并出省略号 */
+/* 右侧图标与运行按钮占用固定空间；标题只使用其余可用宽度并稳定省略。 */
 .node-title {
-  flex: 0 1 auto;
+  flex: 1 1 0;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1528,7 +1580,8 @@ select:focus-visible,
   align-items: center;
   justify-content: center;
   background: #171717;
-  cursor: zoom-in;
+  /* 单击只选中节点、双击才预览；不能把媒体区伪装成“点击放大”的热区。 */
+  cursor: default;
   position: relative;
 }
 
@@ -1838,6 +1891,119 @@ select:focus-visible,
 }
 
 /* 拆分节点紧凑头部：缩略图 + 标题 + 调整按钮，把高度让给结果网格。 */
+.image-split-quick {
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+  padding: 10px;
+}
+
+.image-split-quick-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.image-split-quick-preview {
+  display: grid;
+  width: 56px;
+  height: 56px;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(76, 214, 181, 0.38);
+  border-radius: 9px;
+  background: #101820;
+  color: var(--txt-dim, #9aa4b5);
+  cursor: default;
+}
+
+.image-split-quick-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.image-split-quick-preview.is-empty {
+  border-style: dashed;
+}
+
+.image-split-quick-preview span {
+  display: grid;
+  place-items: center;
+  gap: 3px;
+  padding: 5px;
+  color: var(--txt-dim, #9aa4b5);
+  font-size: 9px;
+  text-align: center;
+}
+
+.image-split-quick-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.image-split-quick-controls label {
+  display: grid;
+  gap: 4px;
+  color: var(--muted, #8e9bab);
+  font-size: 10px;
+}
+
+.image-split-quick-controls input {
+  min-width: 0;
+  height: 28px;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(7, 12, 18, 0.48);
+  color: var(--txt, #e3e8ee);
+  font: inherit;
+}
+
+.image-split-quick-controls .image-split-percent-input {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.image-split-quick-controls .image-split-percent-input b {
+  color: var(--muted, #8e9bab);
+  font-size: 11px;
+}
+
+.image-split-quick-grid {
+  position: relative;
+  width: 100%;
+  min-height: 92px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #10151c;
+}
+
+.image-split-quick-grid > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.image-split-quick-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted, #8e9bab);
+  font-size: 11px;
+}
+
+.image-split-quick-footer .btn-primary {
+  min-height: 30px;
+  padding: 5px 10px;
+}
+
 .image-split-head {
   display: flex;
   flex-shrink: 0;

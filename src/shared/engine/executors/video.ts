@@ -13,8 +13,6 @@ import {
 } from '@shared/video-capabilities'
 
 export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
-  // 与图片节点一致，已有成片优先作为下游视频输出。
-  if (ctx.shape.props.mediaPath) return { status: 'done' }
   const data = parseVideoGen(readNodeConfig(ctx.shape))
   const option = modelsByModality(ctx.providers, 'video').find((item) => item.key === data.modelKey)
   if (!option) return { status: 'skipped', reason: '未选择可用视频模型' }
@@ -23,9 +21,11 @@ export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
     data.prompt,
     [bundlePrompt, inputText(ctx.inputs, 'in-text')].filter(Boolean).join('\n')
   )
-  const firstFrame = inputMedia(ctx.inputs, 'in-image', 'image')[0]
-  const lastFrame = inputMedia(ctx.inputs, 'in-last-image', 'image')[0]
-  const referenceImages = inputMedia(ctx.inputs, 'in-reference-images', 'image')
+  // 视频节点只有一个图片多值端口：连接顺序即语义。第一张是主图/首帧，
+  // 后续图片是有序参考图，避免在画布边缘摆出多个同色、同类型端口。
+  const images = inputMedia(ctx.inputs, 'in-images', 'image')
+  const firstFrame = images[0]
+  const referenceImages = images.slice(1)
   const motionReferences = inputMedia(ctx.inputs, 'in-reference-video', 'video')
   const audioReferences = inputMedia(ctx.inputs, 'in-reference-audio', 'audio')
   const params = normalizeVideoGenParams(
@@ -37,7 +37,7 @@ export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
       framesDetermineRatio: videoRatioIsDerivedByFrames(
         option.provider.specId,
         option.model.id,
-        Boolean(firstFrame || lastFrame)
+        Boolean(firstFrame)
       )
     }
   )
@@ -51,7 +51,6 @@ export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
       prompt,
       params,
       ...(firstFrame ? { firstFrameMediaId: firstFrame.mediaId } : {}),
-      ...(lastFrame ? { lastFrameMediaId: lastFrame.mediaId } : {}),
       ...(referenceImages.length
         ? { referenceImageMediaIds: referenceImages.map((media) => media.mediaId) }
         : {}),
@@ -66,12 +65,6 @@ export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
     if (!submitted.ok) return { status: 'failed', reason: submitted.error.message }
     const result = await waitForVideo(ctx.gateway, submitted.data.taskId, ctx.signal)
     if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
-    ctx.updateProps({
-      mediaId: result.mediaId,
-      mediaPath: result.mediaPath,
-      mediaMime: result.mime,
-      title: result.name
-    })
     ctx.updateResult(
       serializeMediaResultCollection(
         appendMediaResult(
@@ -95,7 +88,7 @@ export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
             },
             sourceSummary: {
               firstFrame: Boolean(firstFrame),
-              lastFrame: Boolean(lastFrame),
+              lastFrame: false,
               referenceImages: referenceImages.length,
               referenceVideo: motionReferences.length,
               referenceAudio: audioReferences.length
@@ -104,6 +97,14 @@ export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
         )
       )
     )
+    ctx.emitArtifact?.({
+      kind: 'video',
+      mediaId: result.mediaId,
+      mediaPath: result.mediaPath,
+      mime: result.mime,
+      portId: 'out-video',
+      title: result.name || '生成视频'
+    })
     return { status: 'done' }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

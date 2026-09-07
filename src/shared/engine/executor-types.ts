@@ -82,9 +82,26 @@ export interface NodeExecutionContext {
   waitForResume?: () => Promise<void>
   updateProps: (patch: Partial<NodeShape['props']>) => void
   updateResult: (result: string | null) => void
+  /**
+   * 将一次运行产生的不可变媒体落为独立资产节点。操作节点不得把运行产物
+   * 回写到自身 props；这样“再次生成”仍然使用同一个操作节点，而每个结果
+   * 都有可追溯、可选择、可继续处理的独立承载节点。
+   * headless 路径可以不注入该回调，它仍会保留 nodeResult 供输出契约使用。
+   */
+  emitArtifact?: (artifact: ProducedArtifact) => void
   outgoing?: Array<{ nodeId: string; fromPortId: string; toPortId: string }>
   runSubflow?: (request: SubflowRequest) => Promise<SubflowOutput>
   restoreSubflowInputs?: (request: Pick<SubflowRequest, 'nodeIds' | 'iterationNodeId'>) => void
+}
+
+export interface ProducedArtifact {
+  kind: 'image' | 'video' | 'audio'
+  mediaId: string
+  mediaPath: string
+  mime: string
+  /** 产物在同一次运行中的端口归属；用于溯源展示，不参与数据拓扑。 */
+  portId: string
+  title?: string
 }
 
 export interface NodeExecutionResult {
