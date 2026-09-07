@@ -18,7 +18,8 @@ import {
   MediaSourceBadge,
   ModelSelect,
   parseJsonProp,
-  selectMediaResult
+  selectMediaResult,
+  useClickGuard
 } from './shared'
 
 type AudioMode = 'upload' | 'generate'
@@ -55,6 +56,7 @@ const VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']
 const AUDIO_FORMATS = ['mp3', 'opus', 'aac', 'flac', 'wav', 'pcm']
 
 export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Element {
+  const guard = useClickGuard()
   const editor = useEditor()
   const project = useAppStore((s) => s.currentProject)
   const providers = useGatewayStore((s) => s.providers)
@@ -180,7 +182,26 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     }
     return (
       <>
-        <div className="node-audio-player">
+        {/* 媒体区统一交互：单击选中节点，双击打开大窗播放器（与图片/视频节点一致） */}
+        <div
+          className="node-audio-player"
+          data-node-interactive="media-preview"
+          title="双击打开大窗播放器"
+          onPointerDown={guard.onPointerDown}
+          onDoubleClick={(e) =>
+            guard.onDoubleClick(e, () => {
+              if (playing) {
+                audioRef.current?.pause()
+                setPlaying(false)
+              }
+              openPreview({
+                kind: 'audio',
+                url: mediaUrl(shape.props.mediaPath),
+                title: shape.props.title
+              })
+            })
+          }
+        >
           <div className={`audio-player-wave ${playing ? 'playing' : ''}`}>
             {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
               <span key={i} style={{ animationDelay: `${i * 0.12}s` }} />
@@ -202,25 +223,6 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
               }}
             >
               {playing ? '暂停' : '播放'}
-            </button>
-            <button
-              className="btn-ghost small"
-              title="打开播放器"
-              onPointerDown={(e) => stopEventPropagation(e)}
-              onClick={(e) => {
-                e.stopPropagation()
-                if (playing) {
-                  audioRef.current?.pause()
-                  setPlaying(false)
-                }
-                openPreview({
-                  kind: 'audio',
-                  url: mediaUrl(shape.props.mediaPath),
-                  title: shape.props.title
-                })
-              }}
-            >
-              展开
             </button>
             <button
               className="btn-ghost small danger"

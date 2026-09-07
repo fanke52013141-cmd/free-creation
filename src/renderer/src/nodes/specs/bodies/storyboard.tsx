@@ -6,7 +6,7 @@ import { toast } from '../../../stores/toast'
 import { markUndoPoint } from '../../../canvas/history'
 import { gatherUpstreamJson } from '../../../canvas/graph'
 import { Icon } from '../../../components/Icon'
-import { useWheelScroll } from './shared'
+import { useClickGuard, useWheelScroll } from './shared'
 import {
   createStoryboardShot,
   moveStoryboardShot,
@@ -65,6 +65,7 @@ function newShotId(): string {
 }
 
 export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX.Element {
+  const guard = useClickGuard()
   const editor = useEditor()
   const scrollRef = useRef<HTMLDivElement>(null)
   useWheelScroll(scrollRef)
@@ -263,14 +264,16 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
               className="storyboard-thumb"
               data-node-interactive="media-preview"
               title="双击预览镜头图片"
-              onDoubleClick={(e) => {
-                e.stopPropagation()
-                openPreview({
-                  kind: 'image',
-                  url: mediaUrl(shot.imageMediaPath!),
-                  title: `镜头 ${i + 1}`
-                })
-              }}
+              onPointerDown={guard.onPointerDown}
+              onDoubleClick={(e) =>
+                guard.onDoubleClick(e, () =>
+                  openPreview({
+                    kind: 'image',
+                    url: mediaUrl(shot.imageMediaPath!),
+                    title: `镜头 ${i + 1}`
+                  })
+                )
+              }
             >
               <img src={mediaUrl(shot.imageMediaPath!)} alt={shot.scene} draggable={false} />
             </div>
