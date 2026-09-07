@@ -154,6 +154,9 @@ const PRIOR_UNIFIED_SIZES: Partial<Record<NodeTypeId, { w: number; h: number }>>
   storyboard: { w: 340, h: 300 }
 }
 
+/** fitHeight 内容自适应的节点高度上限；高度迁移阈值必须高于它，见 needsNodeSizeMigration。 */
+export const MAX_AUTO_NODE_HEIGHT = 1200
+
 export function needsNodeSizeMigration(type: string, w: number, h: number): boolean {
   const legacy = LEGACY_DEFAULT_SIZES[type as NodeTypeId]
   if (legacy && w === legacy.w && h === legacy.h) return true
@@ -162,7 +165,9 @@ export function needsNodeSizeMigration(type: string, w: number, h: number): bool
   const priorUnified = PRIOR_UNIFIED_SIZES[type as NodeTypeId]
   if (priorUnified && w === priorUnified.w && h === priorUnified.h) return true
   // 保守处理：只自动修正明显异常的尺寸，避免覆盖用户合理的手动调整。
-  return w > 900 || h > 700
+  // h 阈值必须高于 fitHeight 的自动扩展上限（MAX_AUTO_NODE_HEIGHT），否则
+  // 内容自适应拉高过的节点（如拆分 9/16 格的图片节点）会在重开项目时被误重置。
+  return w > 900 || h > MAX_AUTO_NODE_HEIGHT + 100
 }
 
 /** 同侧端口在卡片上的纵向落点（px，相对卡片顶部） */

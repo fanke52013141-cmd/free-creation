@@ -1658,8 +1658,9 @@ select:focus-visible,
   display: grid;
   grid-template-columns: repeat(var(--media-grid-columns, 4), minmax(0, 1fr));
   gap: 4px;
-  /* 9 格等网格限高，超出滚动，避免被卡片高度裁剪导致“只见 8 格”。 */
-  max-height: 196px;
+  /* 自然高度：结果网格随内容撑开，由 NodeCardView 的 fitHeight 同步拉高节点，
+     9 格 / 16 格拆分结果全部完整可见。仅保留一个大兜底，超长历史才在网格内滚动。 */
+  max-height: 860px;
   overflow-y: auto;
   scrollbar-width: thin;
 }
@@ -1887,14 +1888,11 @@ select:focus-visible,
   margin-left: auto;
 }
 
-/* 拆分节点网格优先：填满卡片剩余高度，9 格（3 行）默认完整可见。 */
+/* 拆分节点的结果网格不再单独限高：与通用 .media-result-grid 一致地自然撑开，
+   由 fitHeight 拉高节点，让拆分出的全部格子完整可见。 */
 .media-result-collection-split {
   flex: 1 1 auto;
   min-height: 0;
-}
-
-.media-result-collection-split .media-result-grid {
-  max-height: 280px;
 }
 
 .node-media-source {

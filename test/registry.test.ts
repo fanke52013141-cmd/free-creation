@@ -95,9 +95,9 @@ describe('needsNodeSizeMigration · 旧快照尺寸迁移', () => {
     expect(needsNodeSizeMigration('image', 300, 220)).toBe(false)
   })
 
-  it('对未知节点类型的超大尺寸仍兜底迁移', () => {
+  it('对未知节点类型的超大尺寸仍兜底迁移（宽>900 或 高>1300）', () => {
     expect(needsNodeSizeMigration('unknown', 1000, 500)).toBe(true)
-    expect(needsNodeSizeMigration('unknown', 500, 800)).toBe(true)
+    expect(needsNodeSizeMigration('unknown', 500, 1400)).toBe(true)
   })
 })
 

@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import {
   getNodePorts,
   getNodeType,
+  MAX_AUTO_NODE_HEIGHT,
   portCompatible,
   portOffsets,
   PORT_COLORS
@@ -208,9 +209,21 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     const fitHeight = (): void => {
       cancelAnimationFrame(frame)
       frame = requestAnimationFrame(() => {
-        const overflow = Math.ceil(body.scrollHeight - body.clientHeight)
+        let overflow = Math.ceil(body.scrollHeight - body.clientHeight)
+        // 媒体结果网格等嵌套滚动容器（flex min-height:0 链 + overflow-y:auto）会把溢出
+        // 吸收在自己的滚动条里，body.scrollHeight 因此恒等于 clientHeight。此时扫描
+        // body 内所有纵向滚动容器，把它们的隐藏溢出计入，拆分 9/16 格等大结果才能
+        // 撑高卡片，而不是挤在小窗口里滚动、视觉上“叠在一起”。
+        if (overflow <= 2) {
+          for (const el of body.querySelectorAll<HTMLElement>('*')) {
+            const oy = getComputedStyle(el).overflowY
+            if (oy !== 'auto' && oy !== 'scroll') continue
+            overflow = Math.max(overflow, Math.ceil(el.scrollHeight - el.clientHeight))
+          }
+        }
         if (overflow <= 2) return
-        const nextHeight = Math.min(760, Math.ceil(shape.props.h + overflow + 16))
+        // 上限需覆盖拆分 16 格等大内容场景；迁移阈值（needsNodeSizeMigration）与之联动。
+        const nextHeight = Math.min(MAX_AUTO_NODE_HEIGHT, Math.ceil(shape.props.h + overflow + 16))
         if (nextHeight > shape.props.h + 2) {
           editor.updateShape({ id: shape.id, type: 'node-card', props: { h: nextHeight } })
         }

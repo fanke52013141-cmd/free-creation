@@ -61,9 +61,16 @@ describe('needsNodeSizeMigration · 历史尺寸真值表', () => {
     expect(needsNodeSizeMigration('json', 400, 300)).toBe(false)
   })
 
-  it('明显异常的尺寸兜底迁移（宽>900 或 高>700）', () => {
+  it('明显异常的尺寸兜底迁移（宽>900 或 高>1300）', () => {
     expect(needsNodeSizeMigration('text', 1200, 260)).toBe(true)
-    expect(needsNodeSizeMigration('text', 340, 800)).toBe(true)
+    expect(needsNodeSizeMigration('text', 340, 1400)).toBe(true)
+  })
+
+  it('fitHeight 内容自适应拉高过的尺寸是合法状态，不触发迁移', () => {
+    // 节点高度自适应上限为 MAX_AUTO_NODE_HEIGHT(1200)：拆分 9/16 格等大内容
+    // 会把节点拉高到此范围内。重开项目时不得把这些高度误重置回 260。
+    expect(needsNodeSizeMigration('text', 340, 800)).toBe(false)
+    expect(needsNodeSizeMigration('image-split', 340, 1200)).toBe(false)
   })
 })
 
