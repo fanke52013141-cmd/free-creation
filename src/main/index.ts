@@ -39,7 +39,12 @@ protocol.registerSchemesAsPrivileged([
 function registerMediaProtocol(): void {
   protocol.handle('media', async (request) => {
     const url = new URL(request.url)
-    const relPath = decodeURIComponent(url.pathname).replace(/^\/+/, '')
+    // privileges.standard=true 时 Chromium 按标准 URL 解析 media:///a/b/c：
+    // 首段路径会被当作主机名（host='a'，pathname='/b/c'）。因此 relPath 必须
+    // 由 host + pathname 拼接还原，否则 `projects/` 前缀丢失，所有媒体 404 破图。
+    // 约定：所有媒体相对路径都以字面量 `projects/` 开头（全小写，见 media.repo），
+    // 它成为 host 时不会被 Chromium 的小写化破坏；plain 模式下 host 为空，拼接同样成立。
+    const relPath = decodeURIComponent(`${url.host}${url.pathname}`).replace(/^\/+/, '')
     const abs = getMediaAbsPath(relPath)
     if (!abs) {
       return new Response(null, { status: 403 })
