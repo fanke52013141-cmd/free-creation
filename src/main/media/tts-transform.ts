@@ -8,6 +8,9 @@ import type { TtsGenerateInput } from '../../shared/contracts'
 import type { MediaAsset } from '../../shared/types'
 import { getDb } from '../store/db'
 import { getMediaAbsPath, saveBufferAsset } from '../store/media.repo'
+import { getProvider } from '../gateway/providers.repo'
+import { generateAudioToAsset } from '../gateway/audio'
+import { GatewayError } from '../gateway/factory'
 import {
   ComfyuiError,
   comfyuiFetchHistory,
@@ -135,6 +138,7 @@ async function pollUntilDone(
 export async function transformTts(input: TtsGenerateInput): Promise<MediaAsset> {
   if (!input.text?.trim()) throw new ComfyuiError('INVALID_INPUT', '朗读文本不能为空')
   const config = input.config
+  if (config.backend === 'minimax') return transformMiniMaxTts(input)
 
   const baseUrl = getComfyuiBaseUrl()
   const stats = await comfyuiSystemStats(baseUrl)
@@ -166,6 +170,116 @@ export async function transformTts(input: TtsGenerateInput): Promise<MediaAsset>
     `.${config.format}`,
     input.text.trim().slice(0, 24)
   )
+}
+
+const MINIMAX_CLONE_MIMES = new Set([
+  'audio/mpeg',
+  'audio/wav',
+  'audio/x-wav',
+  'audio/mp4',
+  'audio/m4a'
+])
+const MINIMAX_CLONE_MAX_BYTES = 20 * 1024 * 1024
+
+/**
+ * MiniMax 快速复刻的正式链路：上传本地参考音频 → 创建 voice_id → 用该音色调用
+ * T2A。clone 接口只负责登记音色（和可选试听），真正的运行产物必须由 T2A 落入
+ * 本地资产库，才能和其他音频节点保持同一种输出语义。
+ */
+async function transformMiniMaxTts(input: TtsGenerateInput): Promise<MediaAsset> {
+  const config = input.config
+  if (!config.providerId) throw new GatewayError('INVALID_INPUT', '请选择 MiniMax 供应商')
+  const provider = getProvider(config.providerId)
+  if (!provider) throw new GatewayError('PROVIDER_NOT_FOUND', 'MiniMax 供应商不存在')
+  if (provider.specId !== 'minimax') {
+    throw new GatewayError('INVALID_INPUT', '语音克隆只能选择 MiniMax 供应商')
+  }
+
+  const reference = await readReferenceAudio(input.referenceAudioId)
+  if (!MINIMAX_CLONE_MIMES.has(reference.mime.toLowerCase())) {
+    throw new GatewayError('INVALID_INPUT', 'MiniMax 复刻参考音频仅支持 mp3、m4a 或 wav')
+  }
+  if (reference.buf.length > MINIMAX_CLONE_MAX_BYTES) {
+    throw new GatewayError('INVALID_INPUT', 'MiniMax 复刻参考音频不能超过 20MB')
+  }
+
+  const baseUrl = provider.baseURL.replace(/\/+$/, '')
+  const fileName = `canvas_clone_${randomUUID().slice(0, 12)}${extname(reference.path) || '.wav'}`
+  const form = new FormData()
+  form.set('purpose', 'voice_clone')
+  form.set('file', new Blob([new Uint8Array(reference.buf)], { type: reference.mime }), fileName)
+  const upload = await fetch(`${baseUrl}/v1/files/upload`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${provider.apiKey}` },
+    body: form
+  })
+  if (!upload.ok) {
+    const detail = await upload.text().catch(() => '')
+    throw new GatewayError(
+      'UPSTREAM_ERROR',
+      `MiniMax 上传参考音频失败：HTTP ${upload.status}${detail ? `：${detail.slice(0, 180)}` : ''}`
+    )
+  }
+  const uploadPayload = (await upload.json().catch(() => null)) as {
+    file?: { file_id?: number | string }
+    base_resp?: { status_code?: number; status_msg?: string }
+  } | null
+  const fileId = uploadPayload?.file?.file_id
+  if (
+    !fileId ||
+    (uploadPayload?.base_resp?.status_code && uploadPayload.base_resp.status_code !== 0)
+  ) {
+    throw new GatewayError(
+      'UPSTREAM_ERROR',
+      `MiniMax 未返回有效复刻文件：${uploadPayload?.base_resp?.status_msg || '未知错误'}`
+    )
+  }
+
+  const voiceId = normalizeMiniMaxVoiceId(config.voiceId)
+  const clone = await fetch(`${baseUrl}/v1/voice_clone`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${provider.apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      file_id: typeof fileId === 'string' ? Number(fileId) : fileId,
+      voice_id: voiceId,
+      model: config.modelId || 'speech-2.8-turbo',
+      need_noise_reduction: config.needNoiseReduction,
+      need_volume_normalization: config.needVolumeNormalization,
+      aigc_watermark: config.aigcWatermark
+    })
+  })
+  if (!clone.ok) {
+    const detail = await clone.text().catch(() => '')
+    throw new GatewayError(
+      'UPSTREAM_ERROR',
+      `MiniMax 创建克隆音色失败：HTTP ${clone.status}${detail ? `：${detail.slice(0, 180)}` : ''}`
+    )
+  }
+  const clonePayload = (await clone.json().catch(() => null)) as {
+    base_resp?: { status_code?: number; status_msg?: string }
+  } | null
+  if (clonePayload?.base_resp?.status_code !== 0) {
+    throw new GatewayError(
+      'UPSTREAM_ERROR',
+      `MiniMax 创建克隆音色失败：${clonePayload?.base_resp?.status_msg || '未知错误'}`
+    )
+  }
+
+  return generateAudioToAsset({
+    projectId: input.projectId,
+    providerId: provider.id,
+    modelId: config.modelId || 'speech-2.8-turbo',
+    text: input.text.trim(),
+    voice: voiceId,
+    format: config.format,
+    aigcWatermark: config.aigcWatermark
+  })
+}
+
+function normalizeMiniMaxVoiceId(raw: string): string {
+  const compact = raw.trim().replace(/[^A-Za-z0-9_-]/g, '-')
+  if (/^[A-Za-z][A-Za-z0-9_-]{6,254}[A-Za-z0-9]$/.test(compact)) return compact
+  return `canvas-voice-${randomUUID().replace(/-/g, '').slice(0, 20)}`
 }
 
 interface ReferenceAudioPayload {

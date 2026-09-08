@@ -2,7 +2,7 @@
 //
 // 关键变化：waitForChat / waitForVideo 通过参数注入 GatewayClient 和定时器，
 // 不再直接访问 window.api 和 window.setInterval。
-import type { ChatMessage, ProviderSummary, VideoGenParams } from '../types'
+import type { ChatMessage, ProviderSummary, VideoGenerationMode, VideoGenParams } from '../types'
 import type { GatewayClient } from './gateway-client'
 import { modelsByModality, type ModelOption } from './models'
 import type { CancelSignal } from './executor-types'
@@ -194,6 +194,7 @@ export function waitForVideo(
 export interface VideoGenData {
   prompt: string
   modelKey: string
+  mode?: VideoGenerationMode
   params: VideoGenParams
   taskId: string
 }
@@ -205,6 +206,13 @@ export function parseVideoGen(text: string): VideoGenData {
     return {
       prompt: value.prompt,
       modelKey: typeof value.modelKey === 'string' ? value.modelKey : '',
+      mode:
+        value.mode === 'text' ||
+        value.mode === 'first-frame' ||
+        value.mode === 'first-last-frame' ||
+        value.mode === 'reference'
+          ? value.mode
+          : undefined,
       params: {
         ratio: typeof rawParams.ratio === 'string' ? rawParams.ratio : undefined,
         duration: typeof rawParams.duration === 'number' ? rawParams.duration : undefined,

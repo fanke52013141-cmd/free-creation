@@ -500,7 +500,7 @@ export function registerBaseNodeTypes(): void {
     color: '#fbbf24',
     defaultSize: { w: 340, h: 260 },
     description:
-      '语音克隆节点：用本地 ComfyUI IndexTTS-2.5 参考一段音色并朗读文本，输出新的音频资产。',
+      '语音克隆节点：可选本地 ComfyUI IndexTTS-2.5 或 MiniMax 快速复刻；运行产物始终作为独立音频资产输出。',
     category: 'audio',
     ports: {
       in: [

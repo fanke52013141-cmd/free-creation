@@ -1,6 +1,12 @@
 // IPC 契约：通道名 + payload 类型 + 统一信封（见《技术框架与规范》§10）
 
-import type { ChatMessage, GatewayModelInfo, ProviderSpecId, VideoGenParams } from '../types'
+import type {
+  ChatMessage,
+  GatewayModelInfo,
+  ProviderSpecId,
+  VideoGenerationMode,
+  VideoGenParams
+} from '../types'
 import type { ImageCropConfig } from '../image-crop'
 import type { ImageSplitConfig } from '../image-split'
 import type { ImageEditConfig } from '../image-edit'
@@ -328,6 +334,8 @@ export interface VideoSubmitInput {
   providerId: string
   modelId: string
   prompt: string
+  /** 协议模式由节点配置明确选择，不能再根据“第几根线”猜测。 */
+  mode?: VideoGenerationMode
   params?: VideoGenParams
   /** 首帧图（本地图库 mediaId，主进程转 base64 data URL 上传） */
   firstFrameMediaId?: string
@@ -365,6 +373,8 @@ export interface AudioGenerateInput {
   voice?: string
   /** 输出格式 */
   format?: string
+  /** MiniMax 非流式合成可选的 AIGC 音频水印。 */
+  aigcWatermark?: boolean
 }
 
 /** 主进程 → 渲染进程的网关事件（聊天流式分片 / 视频任务进度） */

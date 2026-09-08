@@ -11,6 +11,7 @@ import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
 import { parseTtsConfig } from '@shared/tts'
 import { TTS_LANGS, type TtsConfig, type TtsLang } from '@shared/tts'
+import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import {
   clearSelectedMediaHistory,
   MediaFileActions,
@@ -26,6 +27,9 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
   const guard = useClickGuard()
   const editor = useEditor()
   const project = useAppStore((s) => s.currentProject)
+  const providers = useGatewayStore((s) => s.providers)
+  const providersLoaded = useGatewayStore((s) => s.loaded)
+  const loadProviders = useGatewayStore((s) => s.load)
   const config = parseTtsConfig(readNodeConfig(shape))
   const [draft, setDraft] = useState(config.text)
   const [busy, setBusy] = useState(false)
@@ -33,6 +37,13 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
   const [refPlaying, setRefPlaying] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const refAudioRef = useRef<HTMLAudioElement | null>(null)
+  const minimaxModels = modelsByModality(providers, 'audio').filter(
+    (option) => option.provider.specId === 'minimax'
+  )
+
+  useEffect(() => {
+    if (!providersLoaded) void loadProviders()
+  }, [providersLoaded, loadProviders])
 
   // 组件卸载时释放音频元素
   useEffect(() => {
@@ -221,6 +232,88 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
       </div>
 
       {/* ── 合成参数 ── */}
+      <div className="tts-section">
+        <div className="tts-section-label">
+          <Icon name="settings" size={13} />
+          <span>复刻引擎</span>
+        </div>
+        <div className="tts-options">
+          <label className="opt-label">后端</label>
+          <AppSelect
+            className="gen-select small"
+            value={config.backend}
+            onPointerDown={(e) => e.stopPropagation()}
+            onChange={(e) => {
+              const backend = e.target.value === 'minimax' ? 'minimax' : 'comfyui'
+              updateConfig({
+                backend,
+                ...(backend === 'minimax' && config.format === 'wav' ? { format: 'mp3' } : {})
+              })
+            }}
+          >
+            <option value="comfyui">本地 ComfyUI · IndexTTS</option>
+            <option value="minimax">MiniMax · 快速复刻</option>
+          </AppSelect>
+        </div>
+        {config.backend === 'minimax' && (
+          <div className="tts-minimax-options">
+            <AppSelect
+              className="gen-select"
+              value={config.providerId ? `${config.providerId}::${config.modelId}` : ''}
+              onPointerDown={(e) => e.stopPropagation()}
+              onChange={(e) => {
+                const selected = minimaxModels.find((item) => item.key === e.target.value)
+                if (selected)
+                  updateConfig({ providerId: selected.provider.id, modelId: selected.model.id })
+              }}
+            >
+              <option value="">{providersLoaded ? '选择 MiniMax 语音模型…' : '加载模型中…'}</option>
+              {minimaxModels.map((item) => (
+                <option key={item.key} value={item.key}>
+                  {item.label}
+                </option>
+              ))}
+            </AppSelect>
+            <input
+              className="gen-input"
+              value={config.voiceId}
+              placeholder="可选：自定义 Voice ID"
+              onPointerDown={(e) => e.stopPropagation()}
+              onChange={(e) => updateConfig({ voiceId: e.target.value })}
+            />
+            <div className="tts-toggle-row">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={config.needNoiseReduction}
+                  onChange={(e) => updateConfig({ needNoiseReduction: e.target.checked })}
+                />{' '}
+                降噪
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={config.needVolumeNormalization}
+                  onChange={(e) => updateConfig({ needVolumeNormalization: e.target.checked })}
+                />{' '}
+                音量归一
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={config.aigcWatermark}
+                  onChange={(e) => updateConfig({ aigcWatermark: e.target.checked })}
+                />{' '}
+                添加水印
+              </label>
+            </div>
+            <div className="gen-capability-note">
+              参考音频需为 mp3 / m4a / wav，10 秒至 5 分钟且不超过 20MB；复刻音色会通过 MiniMax T2A
+              生成新的独立音频资产。
+            </div>
+          </div>
+        )}
+      </div>
       <div className="tts-options">
         <label className="opt-label">语言</label>
         <AppSelect
@@ -242,7 +335,10 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
           onPointerDown={(e) => e.stopPropagation()}
           onChange={(e) => updateConfig({ format: e.target.value as TtsConfig['format'] })}
         >
-          {TTS_FORMATS.map((f) => (
+          {(config.backend === 'minimax'
+            ? TTS_FORMATS.filter((f) => f !== 'wav')
+            : TTS_FORMATS
+          ).map((f) => (
             <option key={f} value={f}>
               {f.toUpperCase()}
             </option>
@@ -278,7 +374,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
 
       <button
         className="btn-generate"
-        disabled={busy || !hasRefAudio || !draft.trim()}
+        disabled={busy || !draft.trim() || (config.backend === 'minimax' && !config.providerId)}
         onPointerDown={(e) => stopEventPropagation(e)}
         onClick={(e) => {
           e.stopPropagation()

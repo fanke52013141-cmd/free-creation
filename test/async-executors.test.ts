@@ -339,7 +339,7 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     )
   })
 
-  it('video executor reads the unified image port in connection order plus audio references', async () => {
+  it('video executor 将多张统一图片端口按参考模式完整、稳定地提交，并保留音频参考', async () => {
     const videoSubmit = vi
       .fn()
       .mockResolvedValue({ ok: true, data: { taskId: 'video-multimodal-task' } })
@@ -382,8 +382,8 @@ describe('chat / audio / video executors with a mocked gateway', () => {
 
     expect(videoSubmit).toHaveBeenCalledWith(
       expect.objectContaining({
-        firstFrameMediaId: 'first',
-        referenceImageMediaIds: ['ref-1', 'ref-2'],
+        mode: 'reference',
+        referenceImageMediaIds: ['first', 'ref-1', 'ref-2'],
         referenceAudioMediaIds: ['audio-1']
       })
     )

@@ -2387,6 +2387,31 @@ select:focus-visible,
   flex-wrap: wrap;
 }
 
+.tts-minimax-options {
+  display: grid;
+  gap: 6px;
+}
+
+.tts-minimax-options .gen-select,
+.tts-minimax-options .gen-input {
+  width: 100%;
+}
+
+.tts-toggle-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.tts-toggle-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
 .tts-sliders {
   display: flex;
   flex-direction: column;

@@ -1,7 +1,7 @@
 // 视频节点 Body（路线图 R6：bodies.tsx 拆分）
 import { useEffect, useState } from 'react'
 import { stopEventPropagation, useEditor, type TLShapeId } from 'tldraw'
-import type { VideoGenParams } from '@shared/types'
+import type { VideoGenerationMode, VideoGenParams } from '@shared/types'
 import {
   isSeedanceGatewayProxy,
   normalizeVideoGenParams,
@@ -40,7 +40,27 @@ import {
 interface VideoGenData {
   prompt: string
   modelKey: string
+  mode?: VideoGenerationMode
   params: VideoGenParams
+}
+
+function resolvedMode(mode: unknown, imageCount: number): VideoGenerationMode {
+  if (
+    mode === 'text' ||
+    mode === 'first-frame' ||
+    mode === 'first-last-frame' ||
+    mode === 'reference'
+  ) {
+    return mode
+  }
+  return imageCount === 0 ? 'text' : imageCount === 1 ? 'first-frame' : 'reference'
+}
+
+const MODE_LABELS: Record<VideoGenerationMode, string> = {
+  text: '文生视频',
+  'first-frame': '首帧生视频',
+  'first-last-frame': '首尾帧生视频',
+  reference: '多模态参考'
 }
 
 function parseVideoGen(text: string): VideoGenData {
@@ -60,6 +80,13 @@ function parseVideoGen(text: string): VideoGenData {
         return {
           prompt: o.prompt,
           modelKey: typeof o.modelKey === 'string' ? o.modelKey : '',
+          mode:
+            o.mode === 'text' ||
+            o.mode === 'first-frame' ||
+            o.mode === 'first-last-frame' ||
+            o.mode === 'reference'
+              ? o.mode
+              : undefined,
           params: {
             ratio: typeof params.ratio === 'string' ? params.ratio : undefined,
             duration: typeof params.duration === 'number' ? params.duration : undefined,
@@ -118,9 +145,8 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const [draft, setDraft] = useState(data.prompt)
   const [submitting, setSubmitting] = useState(false)
   const [mentionOpen, setMentionOpen] = useState(false)
-  // 视频的所有图片只占一个绿色端口；第一张是主图/首帧，后续为有序参考图。
+  // 视频的所有图片只占一个绿色端口；模式决定连接顺序的协议角色。
   const images = gatherUpstreamMediaList(editor, shape.id, 'in-images', 'image')
-  const refImage = images[0]
   const motionReferences = gatherUpstreamMediaList(editor, shape.id, 'in-reference-video', 'video')
   const audioReferences = gatherUpstreamMediaList(editor, shape.id, 'in-reference-audio', 'audio')
   const availableMentions = imageMentions(editor, shape.id)
@@ -132,22 +158,27 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const capabilities = opt
     ? videoCapabilitiesFor(opt.provider.specId, opt.model.id, { gatewayProxy })
     : videoCapabilitiesFor('seedance')
+  const mode = resolvedMode(data.mode, images.length)
+  const firstFrame = mode === 'first-frame' || mode === 'first-last-frame' ? images[0] : undefined
+  const lastFrame = mode === 'first-last-frame' ? images[1] : undefined
   const framesDetermineRatio = Boolean(
-    opt && videoRatioIsDerivedByFrames(opt.provider.specId, opt.model.id, Boolean(refImage))
+    opt &&
+    videoRatioIsDerivedByFrames(opt.provider.specId, opt.model.id, Boolean(firstFrame || lastFrame))
   )
   const params = normalizeVideoGenParams(capabilities, data.params, { framesDetermineRatio })
   const capabilityIssues = videoCapabilityIssues(capabilities, {
     params,
-    hasFirstFrame: Boolean(refImage),
-    hasLastFrame: false,
-    referenceImageCount: images.length,
+    mode,
+    hasFirstFrame: Boolean(firstFrame),
+    hasLastFrame: Boolean(lastFrame),
+    imageCount: images.length,
+    referenceImageCount: mode === 'reference' ? images.length : 0,
     referenceVideoCount: motionReferences.length,
     referenceAudioCount: audioReferences.length
   })
   const inputHints = videoInputHints(capabilities, {
-    hasFirstFrame: Boolean(refImage),
-    hasLastFrame: false,
-    referenceImageCount: images.length
+    mode,
+    imageCount: images.length
   })
 
   useEffect(() => {
@@ -172,6 +203,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     update({
       ...data,
       modelKey,
+      mode: nextCapabilities.modes.includes(mode) ? mode : 'text',
       params: normalizeVideoGenParams(nextCapabilities, data.params)
     })
   }
@@ -182,6 +214,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     // 配置先落盘，再由统一运行器读取真实端口输入、校验契约并调用视频执行器。
     update({
       ...data,
+      mode,
       prompt: draft,
       params: normalizeVideoGenParams(capabilities, data.params, { framesDetermineRatio })
     })
@@ -391,14 +424,25 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
         <div className="ref-image-bar">
           <span className="ref-image-label">
             <Icon name="attach" size={13} />
-            已连接 {images.length} 张图片；第 1 张作为主图，其余作为参考图（可在提示词中写 @图片
-            N）。
+            {mode === 'first-last-frame'
+              ? '第 1 张为首帧，第 2 张为尾帧。'
+              : mode === 'first-frame'
+                ? '第 1 张图片作为首帧。'
+                : mode === 'reference'
+                  ? `已连接 ${images.length} 张参考图（可在提示词中写 @图片 N）。`
+                  : `当前为文生视频模式；已连接的 ${images.length} 张图片不会提交。`}
           </span>
           <div className="video-reference-chips" aria-label="已连接图片">
             {images.map((image, index) => (
               <span className="video-reference-chip" key={`${image.mediaPath}-${index}`}>
                 <img src={mediaUrl(image.mediaPath)} alt={`图片 ${index + 1}`} draggable={false} />
-                {index === 0 ? '主图' : `图片 ${index + 1}`}
+                {mode === 'first-last-frame' && index === 0
+                  ? '首帧'
+                  : mode === 'first-last-frame' && index === 1
+                    ? '尾帧'
+                    : mode === 'first-frame' && index === 0
+                      ? '首帧'
+                      : `图片 ${index + 1}`}
               </span>
             ))}
           </div>
@@ -413,6 +457,36 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
         </div>
       )}
       <ModelSelect value={data.modelKey} options={options} onChange={updateModel} />
+      <label className="video-mode-select">
+        <span>生成模式</span>
+        <AppSelect
+          className="gen-select"
+          value={mode}
+          onPointerDown={(event) => event.stopPropagation()}
+          onChange={(event) => {
+            const nextMode = event.target.value as VideoGenerationMode
+            const nextFrames = nextMode === 'first-frame' || nextMode === 'first-last-frame'
+            update({
+              ...data,
+              mode: nextMode,
+              params: normalizeVideoGenParams(capabilities, data.params, {
+                framesDetermineRatio: Boolean(
+                  nextFrames &&
+                  images.length > 0 &&
+                  opt &&
+                  videoRatioIsDerivedByFrames(opt.provider.specId, opt.model.id, true)
+                )
+              })
+            })
+          }}
+        >
+          {capabilities.modes.map((candidate) => (
+            <option key={candidate} value={candidate}>
+              {MODE_LABELS[candidate]}
+            </option>
+          ))}
+        </AppSelect>
+      </label>
       <textarea
         className="gen-prompt"
         value={draft}

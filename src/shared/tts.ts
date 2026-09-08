@@ -1,10 +1,23 @@
-/** TTS 语音复刻节点（本地 ComfyUI IndexTTS-2.5）的固定配置。 */
+/** TTS 语音复刻节点配置：本地 ComfyUI 与 MiniMax 使用明确、互不混淆的后端。 */
 
 /** IndexTTS-2.5 支持的合成语言；zhen 为中英混说自动判别。 */
 export type TtsLang = 'zhen' | 'ZH' | 'EN' | 'JA' | 'ES' | 'AR'
+export type TtsBackend = 'comfyui' | 'minimax'
 
 export interface TtsConfig {
   version: 1
+  /** 本地 IndexTTS 或 MiniMax 快速复刻；默认保留本地路径。 */
+  backend: TtsBackend
+  /** MiniMax 供应商 ID（backend=minimax 时必填）。 */
+  providerId: string
+  /** MiniMax 合成模型，例如 speech-2.8-turbo。 */
+  modelId: string
+  /** 可选自定义 Voice ID；留空时系统为本次复刻生成合法唯一 ID。 */
+  voiceId: string
+  /** MiniMax 复刻预处理与试听水印参数。 */
+  needNoiseReduction: boolean
+  needVolumeNormalization: boolean
+  aigcWatermark: boolean
   /** 节点内编辑的合成文本；执行时与上游 in-text 输入合并。 */
   text: string
   /** 合成语言。 */
@@ -36,6 +49,13 @@ export const TTS_LANGS: ReadonlyArray<{ value: TtsLang; label: string }> = [
 
 export const DEFAULT_TTS_CONFIG: TtsConfig = {
   version: 1,
+  backend: 'comfyui',
+  providerId: '',
+  modelId: 'speech-2.8-turbo',
+  voiceId: '',
+  needNoiseReduction: false,
+  needVolumeNormalization: false,
+  aigcWatermark: false,
   text: '',
   lang: 'zhen',
   speed: 1,
@@ -60,6 +80,13 @@ export function parseTtsConfig(text: string): TtsConfig {
       raw.format === 'mp3' || raw.format === 'flac' ? (raw.format as TtsConfig['format']) : 'wav'
     return {
       version: 1,
+      backend: raw.backend === 'minimax' ? 'minimax' : 'comfyui',
+      providerId: typeof raw.providerId === 'string' ? raw.providerId : '',
+      modelId: typeof raw.modelId === 'string' && raw.modelId ? raw.modelId : 'speech-2.8-turbo',
+      voiceId: typeof raw.voiceId === 'string' ? raw.voiceId : '',
+      needNoiseReduction: raw.needNoiseReduction === true,
+      needVolumeNormalization: raw.needVolumeNormalization === true,
+      aigcWatermark: raw.aigcWatermark === true,
       text: typeof raw.text === 'string' ? raw.text : '',
       lang,
       speed: clampNumber(raw.speed, 0.5, 2, 1),
