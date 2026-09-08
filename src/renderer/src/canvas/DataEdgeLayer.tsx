@@ -287,13 +287,23 @@ export function DataEdgeLayer({
       </defs>
       {edges.map((edge) => {
         if (edge.provenance) {
+          // 追溯线与数据线共用统一的线条规则：节点之上的片段实线、被节点覆盖的
+          // 片段虚线。它不可交互（没有 hit 路径），只是“由该操作产生”的视觉标注。
           return (
-            <path
-              className="data-edge-visible artifact-provenance-edge"
-              key={edge.id}
-              d={edge.path}
-              style={{ stroke: edge.color, pointerEvents: 'none' }}
-            />
+            <g key={edge.id}>
+              <path
+                className="data-edge-visible artifact-provenance-edge"
+                d={edge.path}
+                mask={`url(#${overlapMaskId})`}
+                style={{ stroke: edge.color, pointerEvents: 'none' }}
+              />
+              <path
+                className="data-edge-visible data-edge-obscured artifact-provenance-edge"
+                d={edge.path}
+                clipPath={`url(#${overlapClipId})`}
+                style={{ stroke: edge.color, pointerEvents: 'none' }}
+              />
+            </g>
           )
         }
         const active = edge.id === selectedEdgeId

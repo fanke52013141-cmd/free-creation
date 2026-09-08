@@ -22,6 +22,10 @@ const imageGenBodySource = readFileSync(
   resolve(process.cwd(), 'src/renderer/src/nodes/specs/bodies/image-gen.tsx'),
   'utf8'
 )
+const nodeBodiesSharedSource = readFileSync(
+  resolve(process.cwd(), 'src/renderer/src/nodes/specs/bodies/shared.tsx'),
+  'utf8'
+)
 const nodeCardViewSource = readFileSync(
   resolve(process.cwd(), 'src/renderer/src/canvas/NodeCardView.tsx'),
   'utf8'
@@ -114,6 +118,15 @@ describe('画布创建节点交互', () => {
     expect(imageGenBodySource).toContain('<ModelSelect')
     expect(imageGenBodySource).toContain('value={config.aspectRatio}')
     expect(imageGenBodySource).not.toContain('value={config.size}')
+  })
+
+  it('图片快捷续接的下游端口必须按 spec 声明解析，不得写死 in-image', () => {
+    // image-gen 与 video 的图片输入是多值端口 in-images；写死 'in-image' 会让
+    // createEdge 失败并静默删除新节点，表现为“继续生图/生成视频”按钮点了没反应。
+    expect(nodeBodiesSharedSource).toContain(
+      "spec.ports.in.find((port) => port.type === 'image')?.id"
+    )
+    expect(nodeBodiesSharedSource).not.toContain("const targetPort = 'in-image'")
   })
 
   it('多选节点可以从任一输出口或选框外公共端口进行真实批量连接', () => {

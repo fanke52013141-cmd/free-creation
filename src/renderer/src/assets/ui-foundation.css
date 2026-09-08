@@ -579,34 +579,8 @@ body {
   stroke-width: 1.5px;
 }
 
-div[data-shape-type='arrow'] .tl-svg-container path[fill='none'] {
-  stroke-width: 1.7px;
-  stroke-dasharray: 7 7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  opacity: 0.84;
-}
-
-div[data-shape-type='arrow'] .tl-svg-container > g {
-  filter: none;
-  transition:
-    opacity 140ms ease,
-    filter 140ms ease;
-}
-
-div[data-shape-type='arrow']:hover .tl-svg-container > g {
-  filter: drop-shadow(0 0 3px rgba(116, 205, 248, 0.28));
-}
-
-div[data-shape-type='arrow']:hover .tl-svg-container path,
-div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container path {
-  stroke-width: 2.1px;
-  opacity: 1;
-}
-
-div[data-shape-type='arrow'].tl-shape__inner--selected .tl-svg-container > g {
-  filter: drop-shadow(0 0 5px rgba(116, 205, 248, 0.42));
-}
+/* tldraw Arrow 形状仅是端口 binding / 持久化载体，已被 ui-surfaces.css 整体隐藏
+   （opacity: 0），不再为它保留任何可见样式；业务连线由 DataEdgeLayer 统一绘制。 */
 
 @media (prefers-reduced-motion: reduce) {
   .node-card,

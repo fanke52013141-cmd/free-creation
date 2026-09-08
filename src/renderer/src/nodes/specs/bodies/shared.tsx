@@ -94,6 +94,12 @@ export function createImageContinuation(
 ): void {
   const spec = getNodeType(targetType)
   if (!spec) return
+  // 目标图片输入端口必须从 spec 声明解析，不能写死端口 ID：image-crop /
+  // image-split / image-edit 用单值 in-image，而 image-gen 与 video 的图片
+  // 输入已迁移为多值端口 in-images。写死 'in-image' 会让 createEdge 因端口
+  // 不存在而失败并静默删除刚创建的节点，表现为快捷按钮“点了没反应”。
+  const targetPortId = spec.ports.in.find((port) => port.type === 'image')?.id
+  if (!targetPortId) return
   const id = createShapeId()
   const title =
     targetType === 'image-gen'
@@ -117,12 +123,11 @@ export function createImageContinuation(
       h: spec.defaultSize.h
     } satisfies Partial<NodeCardProps>
   })
-  const targetPort = 'in-image'
   if (
     !createEdge(
       editor,
       { shapeId: source.id, portId: 'out-image' },
-      { shapeId: id, portId: targetPort }
+      { shapeId: id, portId: targetPortId }
     )
   ) {
     editor.deleteShape(id)

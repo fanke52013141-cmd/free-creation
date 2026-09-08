@@ -4,7 +4,6 @@ import { markUndoPoint } from './history'
 import { beginConnectionDrag } from './connection-drag'
 import { batchConnectionFromSelection } from './batch-connection'
 import type { ConnectionFrom } from '../stores/connection'
-import { Icon } from '../components/Icon'
 
 interface GroupOutlineLayerProps {
   editor: Editor
@@ -274,6 +273,7 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
               aria-label={`批量连接 ${selection.batchSource.memberIds?.length ?? 0} 个节点`}
               title="拖动此端口，将所有已选同类节点连接到目标的多值输入"
               style={{
+                // 挂在选区右侧外沿、垂直居中：位置沿用原批量端口，仅形态改为圆形。
                 left: selection.left + selection.width,
                 top: selection.top + selection.height / 2
               }}
@@ -283,8 +283,8 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
                 beginConnectionDrag(selection.batchSource!, { x: event.clientX, y: event.clientY })
               }}
             >
-              <Icon name="attach" size={14} />
-              <span>{selection.batchSource.memberIds?.length} 项</span>
+              {/* 只显示成员数量数字：不带图标、不带“项”字。 */}
+              <span>{selection.batchSource.memberIds?.length}</span>
             </button>
           )}
         </>

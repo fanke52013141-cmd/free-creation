@@ -258,9 +258,21 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     fitHeight()
     const observer = new ResizeObserver(fitHeight)
     observer.observe(body)
+    // 图片等异步媒体在 onLoad 后才会改写子树的真实内容高度（如拆分九宫格按原图
+    // 宽高比重设 aspect-ratio）。这只改变 body 内部的布局，body 自身盒子尺寸
+    // 不变，ResizeObserver 不会触发；必须监听子树结构 / style / src 变化后重新
+    // 量高，否则新的网格高度只会被卡片 overflow:hidden 静默裁掉（底部格子缺半格）。
+    const mutations = new MutationObserver(fitHeight)
+    mutations.observe(body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['style', 'src', 'class']
+    })
     return () => {
       cancelAnimationFrame(frame)
       observer.disconnect()
+      mutations.disconnect()
     }
   }, [editor, shape.id, shape.props.h])
 

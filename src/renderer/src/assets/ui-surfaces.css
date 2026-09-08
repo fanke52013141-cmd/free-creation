@@ -344,7 +344,17 @@
   max-height: 90vh;
 }
 
-.media-preview-video .media-preview-stage {
+/* 图片预览与视频同理：固定约半屏面积的舞台，不再按内容收缩。
+   否则图片未加载/加载中时只剩 320×200 的占位小框，无法审图。 */
+.media-preview-box.media-preview-image {
+  width: min(72vw, 1240px);
+  height: min(76vh, 720px);
+  max-width: 94vw;
+  max-height: 90vh;
+}
+
+.media-preview-video .media-preview-stage,
+.media-preview-image .media-preview-stage {
   flex: 1;
   min-width: 0;
   min-height: 0;
@@ -354,6 +364,16 @@
 }
 
 .media-preview-video .media-preview-stage video {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 8px;
+  background: #05070a;
+  object-fit: contain;
+}
+
+.media-preview-image .media-preview-stage img {
   width: 100%;
   height: 100%;
   max-width: 100%;
@@ -1700,15 +1720,17 @@
     filter 140ms ease;
 }
 
-/* 节点遮住的数据线仍是同一条实线，只降低该重叠片段的不透明度。 */
+/* 统一线条规则：节点之上的片段是实线；被节点覆盖的片段显示为虚线，
+   与低不透明度一起表达“这条线从节点下方穿过”。 */
 .data-edge-obscured {
+  stroke-dasharray: 4 6;
   opacity: 0.18;
 }
 
-/* 浅色细虚线只表达“由该操作产生”，不具备可运行的数据流含义。 */
+/* 追溯线只表达“由该操作产生”，不具备可运行的数据流含义；它比数据线更细更淡，
+   虚实同样遵循统一线条规则（追溯线自身不再自带虚线）。 */
 .artifact-provenance-edge {
   stroke-width: 1.2;
-  stroke-dasharray: 3 7;
   opacity: 0.52;
 }
 
