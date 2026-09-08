@@ -967,6 +967,46 @@ select:focus-visible,
   background: transparent;
 }
 
+/* 多选虚线框四角的旋转点：中心压在框角上，拖动对所选节点整体旋转。
+   原生 tldraw 角点画在未外扩的选择边界上（与虚线框相差 12px 内陷），
+   多选时由 data-multi-node-select 隐藏，改用这里的角点。 */
+.canvas-selection-corner {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  padding: 0;
+  border: 2px solid #8ec7ff;
+  border-radius: 50%;
+  background: var(--canvas-bg, #171b22);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+  pointer-events: auto;
+  touch-action: none;
+}
+.canvas-selection-corner.nw {
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  cursor: nwse-rotate;
+}
+.canvas-selection-corner.ne {
+  left: 100%;
+  top: 0;
+  transform: translate(-50%, -50%);
+  cursor: nesw-rotate;
+}
+.canvas-selection-corner.sw {
+  left: 0;
+  top: 100%;
+  transform: translate(-50%, -50%);
+  cursor: nesw-rotate;
+}
+.canvas-selection-corner.se {
+  left: 100%;
+  top: 100%;
+  transform: translate(-50%, -50%);
+  cursor: nwse-rotate;
+}
+
 /* 多选范围的公共输出口。它只是一个临时操作柄，不创建任何“集合节点”；
    真正保存到画布的是每个来源节点各自的一条普通数据边。 */
 .canvas-selection-batch-port {
@@ -6121,22 +6161,13 @@ select:focus-visible,
   color: #fecaca;
 }
 
-.ref-image-thumb {
-  width: 26px;
-  height: 22px;
-  flex: 0 0 auto;
-  border-radius: 4px;
-  object-fit: cover;
-}
-
+/* 参考图正方形卡片：图片本体 + 下方“图片 N”标注；悬浮展示 3 倍放大预览 */
 .ref-image-stack {
   display: flex;
-  align-items: center;
-  min-width: 30px;
-}
-
-.ref-image-stack .ref-image-thumb + .ref-image-thumb {
-  margin-left: -8px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
 }
 
 .ref-image-label {
@@ -6150,37 +6181,69 @@ select:focus-visible,
 }
 
 .ref-image-chip {
-  display: inline-flex;
+  position: relative;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 4px;
-  min-width: 0;
-  padding: 2px 5px 2px 2px;
+  gap: 3px;
+  padding: 3px;
   border: 1px solid rgba(66, 185, 245, 0.22);
-  border-radius: 6px;
+  border-radius: 7px;
   background: rgba(10, 30, 42, 0.62);
   color: #bdeaff;
-  font-size: 10px;
   cursor: pointer;
   transition:
     background 120ms ease,
-    border-color 120ms ease,
-    transform 120ms ease;
-}
-
-.ref-image-chip + .ref-image-chip {
-  margin-left: 3px;
+    border-color 120ms ease;
 }
 
 .ref-image-chip:hover {
   border-color: rgba(105, 208, 255, 0.62);
   background: rgba(25, 74, 96, 0.8);
-  transform: translateY(-1px);
 }
 
 .ref-image-chip .ref-image-thumb {
-  width: 24px;
-  height: 20px;
+  width: 66px;
+  height: 66px;
   margin: 0;
+  border-radius: 5px;
+  object-fit: cover;
+}
+
+.ref-image-name {
+  max-width: 66px;
+  overflow: hidden;
+  font-size: 10px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 3 倍放大预览（66px → 198px）：跟随 chip 左下角向下展开，不遮挡标注 */
+.ref-image-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 30;
+  display: none;
+  padding: 4px;
+  border: 1px solid rgba(105, 208, 255, 0.5);
+  border-radius: 8px;
+  background: rgba(16, 22, 30, 0.97);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.4);
+}
+
+.ref-image-chip:hover .ref-image-pop,
+.ref-image-chip:focus-visible .ref-image-pop {
+  display: block;
+}
+
+.ref-image-pop img {
+  display: block;
+  width: 198px;
+  height: 198px;
+  border-radius: 5px;
+  object-fit: cover;
 }
 
 .ref-mention-menu {
@@ -6291,6 +6354,9 @@ select:focus-visible,
 
 .gen-go {
   align-self: stretch;
+  /* 卡片有富余高度时把“生成”按钮压到底部（贴住卡片下沿），
+     消除按钮与卡片底部之间的大段空白。 */
+  margin-top: auto;
 }
 
 .gen-empty {

@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import type { Editor, TLShapeId } from 'tldraw'
 import { markUndoPoint } from './history'
 import { beginConnectionDrag } from './connection-drag'
@@ -82,11 +82,20 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
   const [outlines, setOutlines] = useState<GroupOutline[]>([])
   const [selection, setSelection] = useState<SelectionOutline | null>(null)
   const [editingId, setEditingId] = useState<TLShapeId | null>(null)
+  // 多选旋转拖拽的进行时状态：角点按下后接管 pointermove，增量驱动 tldraw 旋转。
+  const rotationDragRef = useRef<{
+    pointerId: number
+    center: { x: number; y: number }
+    pageCenter: { x: number; y: number }
+    lastPointerAngle: number
+  } | null>(null)
 
   useEffect(() => {
     let frame = 0
+    // React 规范：cleanup 需要用到 host，按 exhaustive-deps 建议在 effect 内
+    // 复制为局部变量（画布挂载期间 hostRef 始终指向同一容器，无需重复取值）。
+    const host = hostRef.current
     const updateNow = (): void => {
-      const host = hostRef.current
       if (!host) return
       const hostBounds = host.getBoundingClientRect()
       const zoom = editor.getCamera().z || 1
@@ -125,6 +134,9 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
       // 多选不是分组：只在 2 个以上节点被同时选中时绘制细虚线范围框，
       // 让它和常驻的分组容器维持完全不同的视觉语义。
       const selectedIds = selectedNodeIds(editor)
+      // 同步告知 CSS：多选时隐藏 tldraw 原生角点（它们画在未外扩的选择边界上，
+      // 与这里的虚线框相差 12px，正是用户反馈的“蓝点漂移进虚线框”）。
+      host.dataset.multiNodeSelect = selectedIds.length >= 2 ? 'true' : 'false'
       if (selectedIds.length < 2) {
         setSelection((current) => (current === null ? current : null))
         return
@@ -177,6 +189,8 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
       offSession()
       if (frame) cancelAnimationFrame(frame)
       window.removeEventListener('resize', update)
+      // 卸载或多选解散时清掉 CSS 开关。
+      delete host?.dataset.multiNodeSelect
     }
   }, [editor, hostRef])
 
@@ -216,6 +230,70 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
       markUndoPoint(editor, 'rename-group')
     }
     setEditingId(null)
+  }
+
+  // ── 多选整体旋转 ─────────────────────────────────────────────
+  // 角点按下后用 pointer capture 接管后续事件，按指针绕选区中心的
+  // 角度增量驱动 editor.rotateShapesBy（与 tldraw 原生旋转同一 API，
+  // 位置、子形状相对姿态全部由 tldraw 自己维护）。接近 15° 整数倍时
+  // 磁吸，方便把选区转正。
+  const SNAP_STEP = Math.PI / 12
+  const SNAP_TOLERANCE = (4 * Math.PI) / 180
+
+  const beginSelectionRotate = (event: React.PointerEvent<HTMLButtonElement>): void => {
+    const host = hostRef.current
+    if (!host || !selection || event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    const selectedIds = selectedNodeIds(editor)
+    if (selectedIds.length < 2) return
+    const hostBounds = host.getBoundingClientRect()
+    const center = {
+      x: hostBounds.left + selection.left + selection.width / 2,
+      y: hostBounds.top + selection.top + selection.height / 2
+    }
+    rotationDragRef.current = {
+      pointerId: event.pointerId,
+      center,
+      pageCenter: editor.screenToPage(center),
+      lastPointerAngle: Math.atan2(event.clientY - center.y, event.clientX - center.x)
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  const moveSelectionRotate = (event: React.PointerEvent<HTMLButtonElement>): void => {
+    const drag = rotationDragRef.current
+    if (!drag || event.pointerId !== drag.pointerId) return
+    event.preventDefault()
+    event.stopPropagation()
+    const angle = Math.atan2(event.clientY - drag.center.y, event.clientX - drag.center.x)
+    let delta = angle - drag.lastPointerAngle
+    while (delta > Math.PI) delta -= Math.PI * 2
+    while (delta < -Math.PI) delta += Math.PI * 2
+    drag.lastPointerAngle = angle
+    if (Math.abs(delta) > 1e-5) {
+      editor.rotateShapesBy(selectedNodeIds(editor), delta, { center: drag.pageCenter })
+    }
+    const rotation = editor.getSelectionRotation()
+    const snapped = Math.round(rotation / SNAP_STEP) * SNAP_STEP
+    if (snapped !== rotation && Math.abs(snapped - rotation) < SNAP_TOLERANCE) {
+      editor.rotateShapesBy(selectedNodeIds(editor), snapped - rotation, {
+        center: drag.pageCenter
+      })
+    }
+  }
+
+  const endSelectionRotate = (event: React.PointerEvent<HTMLButtonElement>): void => {
+    const drag = rotationDragRef.current
+    if (!drag || event.pointerId !== drag.pointerId) return
+    event.stopPropagation()
+    rotationDragRef.current = null
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    } catch {
+      // 指针已隐式释放（例如窗口失焦），无需处理。
+    }
+    markUndoPoint(editor, 'rotate-selection')
   }
 
   return (
@@ -258,14 +336,34 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
         <>
           <div
             className="canvas-selection-outline"
-            aria-hidden="true"
             style={{
               left: selection.left,
               top: selection.top,
               width: selection.width,
               height: selection.height
             }}
-          />
+          >
+            {/* 四角旋转点：压在虚线框角上，拖动整体旋转（隐藏 tldraw 原生角点）。 */}
+            {(
+              [
+                ['nw', '左上角'],
+                ['ne', '右上角'],
+                ['sw', '左下角'],
+                ['se', '右下角']
+              ] as const
+            ).map(([corner, label]) => (
+              <button
+                key={corner}
+                type="button"
+                className={`canvas-selection-corner ${corner}`}
+                aria-label={`拖动旋转所选节点（${label}）`}
+                onPointerDown={beginSelectionRotate}
+                onPointerMove={moveSelectionRotate}
+                onPointerUp={endSelectionRotate}
+                onPointerCancel={endSelectionRotate}
+              />
+            ))}
+          </div>
           {selection.batchSource && (
             <button
               type="button"
