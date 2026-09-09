@@ -1644,33 +1644,28 @@
   stroke-linecap: round;
 }
 
-/* 四个缩放点悬浮在虚线外，视觉不与边框粘连，命中区仍由 tldraw 保留。 */
+/*
+ * 原生手柄只保留其较大的命中区域。视觉点由 GroupOutlineLayer 用同一套
+ * page -> screen 几何绘制，避免给 tldraw SVG 手柄再叠加 CSS transform 后漂移。
+ */
 .tl-corner-handle {
-  width: 9px !important;
-  height: 9px !important;
-  rx: 999px;
-  ry: 999px;
-  fill: var(--canvas-bg, #171b22) !important;
-  stroke: #8ec7ff !important;
-  stroke-width: 2px !important;
-  filter: drop-shadow(0 0 0 3px var(--canvas-bg, #171b22))
-    drop-shadow(0 1px 3px rgba(0, 0, 0, 0.28));
+  opacity: 0 !important;
 }
 
-[data-testid='selection.resize.top-left'] {
-  transform: translate(-5px, -5px);
-}
-
-[data-testid='selection.resize.top-right'] {
-  transform: translate(5px, -5px);
-}
-
-[data-testid='selection.resize.bottom-right'] {
-  transform: translate(5px, 5px);
-}
-
-[data-testid='selection.resize.bottom-left'] {
-  transform: translate(-5px, 5px);
+.canvas-selection-corner {
+  position: absolute;
+  z-index: 3;
+  box-sizing: border-box;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #8ec7ff;
+  border-radius: 50%;
+  background: var(--canvas-bg, #171b22);
+  box-shadow:
+    0 0 0 3px var(--canvas-bg, #171b22),
+    0 1px 3px rgba(0, 0, 0, 0.28);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
 }
 
 /* 文本占位语再靠近左上角，编辑态和展示态保持同一排版基线。 */

@@ -27,6 +27,7 @@ import { useAppStore } from '../stores/app'
 import { useGatewayStore } from '../stores/gateway'
 import { Tooltip } from '../components/Tooltip'
 import { NODE_PORT_SIZE } from './edge-geometry'
+import { ConnectedInputPreview } from './ConnectedInputPreview'
 
 const EXEC_COLORS: Record<string, string> = {
   idle: '#6b7280',
@@ -300,11 +301,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           className={`node-card type-${shape.props.nodeType}`}
           data-node-type={shape.props.nodeType}
         >
-          {/* 底部颜色条（按类型区分，避免干扰标题区域） */}
-          <div
-            className="node-color-bar"
-            style={{ ['--node-accent' as string]: spec?.color ?? '#42b9f5' }}
-          />
           <div className="node-header">
             {/* 标题行布局：左侧依次为 序号 → 图标 → 名称 → 查看输入输出说明；
                 状态灯保留在标题行，运行动作独立浮在卡片右上角，避免挤压标题。 */}
@@ -387,12 +383,20 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             )}
           </div>
           <div ref={bodyRef} className="node-body">
-            {spec ? (
-              <spec.Body shape={shape} openPreview={openMediaPreview} />
-            ) : (
-              <div className="node-empty">未知节点类型：{shape.props.nodeType}</div>
-            )}
+            <ConnectedInputPreview editor={editor} shape={shape} />
+            <div className="node-body-content">
+              {spec ? (
+                <spec.Body shape={shape} openPreview={openMediaPreview} />
+              ) : (
+                <div className="node-empty">未知节点类型：{shape.props.nodeType}</div>
+              )}
+            </div>
           </div>
+          {/* 底部颜色条：固定像素、只表达节点类型，不占用标题和正文的可读空间。 */}
+          <div
+            className="node-color-bar"
+            style={{ ['--node-accent' as string]: spec?.color ?? '#42b9f5' }}
+          />
           {activeExecution && spec?.executor && (
             <div className="node-execution-overlay" role="status" aria-live="polite">
               <span className="node-execution-spinner" aria-hidden="true">

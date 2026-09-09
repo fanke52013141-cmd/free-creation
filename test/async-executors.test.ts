@@ -259,7 +259,7 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     expect(JSON.parse(result.value ?? '{}').results[0].runId).toBe('run-1')
   })
 
-  it('audio asset executor never falls through to a remote speech request', async () => {
+  it('audio asset executor only publishes its own imported media and never makes a remote speech request', async () => {
     const audioGenerate = vi.fn()
     installGateway({ audioGenerate })
     const { ctx } = makeContext(
@@ -269,8 +269,12 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     )
     await expect(audioExecutor(ctx)).resolves.toEqual({
       status: 'skipped',
-      reason: '请上传音频或连接一段上游音频资产'
+      reason: '未导入音频资产'
     })
+    expect(audioGenerate).not.toHaveBeenCalled()
+
+    ctx.shape.props.mediaPath = 'projects/p/imported.wav'
+    await expect(audioExecutor(ctx)).resolves.toEqual({ status: 'done' })
     expect(audioGenerate).not.toHaveBeenCalled()
   })
 

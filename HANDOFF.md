@@ -10,6 +10,14 @@
 >
 > 产品定位：单用户、本地优先的 Windows Electron 无限画布创作工具。
 
+> **最新交付（2026-09-09 节点 UI/关系审计与规范收口）**：本轮完成 23 个 Active 节点的隔离浏览器截图审查、端口关系矩阵审查与节点值追踪审查。详细报告见 [docs/NODE_UI_RELATION_AUDIT_2026_09_09.md](./docs/NODE_UI_RELATION_AUDIT_2026_09_09.md)，强制呈现规范见 [docs/NODE_CANVAS_PRESENTATION_SPEC.md](./docs/NODE_CANVAS_PRESENTATION_SPEC.md)，截图脚本见 `scripts/audit-node-ui.cjs`（截图产物仅保留在本地 `artifacts/`，不提交）。
+>
+> 本轮变更：①选区虚线框、四个外置视觉角点和批量连接柄统一使用同一 page→screen 几何，修复缩放/分组后的角点漂移；②新增严格的异构 `ConnectionPlan`，文本+图片框选后可一次创建 `out-text → in-text`、`out-image → in-images` 等真实端口边，类型、Schema、基数、占用和环路均在创建前预检；③所有节点统一显示真实 Arrow binding、端口和 `projectOutputs` 派生的已连接输入摘要；④生图节点改为模型/画幅→弹性提示词→底部生成按钮；⑤图片资产与音频资产删除不被执行器消费的假输入，分别升级至 contract v2/v3，并同步 `generated/agent-contracts.json`；⑥节点类型色条固定在底部 4px。
+>
+> 验证：`npm run verify` 通过（75 个测试文件、939 项测试，Node/Web 类型检查与 Electron 构建通过）；目标关系回归 8 文件/300 项通过；`npm run test:browser-ui` 通过。ESLint 无 error，仅保留项目原有 12 条 Prettier warning；`git diff --check` 通过。
+>
+> 当前后续：P2 统一动态高度收缩/窄屏溢出与分镜文案，P3 增加导入边完整校验、保存重开端到端关系回归、各节点连接态/运行态截图门禁；导演台仍不作为本轮前置。本轮提交：`e9afc9b`。
+
 > **最新交付（2026-09-07 画布媒体交互与图片工作台优化）**：端口改为卡片外侧大号虚线圆环，连线可稳定落到外侧输入端口；运行按钮固定在右上角。分组框及标签随画布缩放同步计算，修复缩放后细长变形。所有节点内媒体统一为**双击预览、单击选中**，并解决 tldraw pointer capture 导致的双击丢失。拆图结果按实际行列完整显示/展开且经计算测试确保无重叠；浏览器演示的裁剪、拆图、生成、资产刷新恢复均可用。节点执行时有明确的生成中状态层；图片修改工作台补齐正确图标、尖头箭头、移动标注/遮罩工具及画笔/遮罩尺寸控制。详细改动、验证和人工验收路径见 [docs/HANDOFF_2026_09_07_CANVAS_MEDIA_INTERACTION.md](./docs/HANDOFF_2026_09_07_CANVAS_MEDIA_INTERACTION.md)。
 
 > **最新交付（2026-09-06 第二批：外部重载竞态修复 + FFmpeg 正式安装）**：修复模型接入审查发现的三个应用侧缺陷——

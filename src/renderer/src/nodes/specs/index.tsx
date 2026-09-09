@@ -462,7 +462,7 @@ export function registerBaseNodeTypes(): void {
     category: 'input',
     ports: {
       in: [],
-      out: [output('out-audio', '音频', 'audio', '已导入或承接的音频资产引用。')]
+      out: [output('out-audio', '音频', 'audio', '已导入并落盘的音频资产引用。')]
     },
     projectOutputs: projectAudioOutputs,
     executor: (ctx) =>

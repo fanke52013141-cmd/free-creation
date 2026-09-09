@@ -1266,12 +1266,13 @@ select:focus-visible,
   background: color-mix(in srgb, var(--brand) 10%, var(--card));
 }
 
-/* 节点顶部颜色条：全宽，4px 高，提升类型辨识而不改变卡片格局。 */
+/* 节点底部颜色条：全宽固定 4px，仅表达类型，不挤压标题。 */
 .node-color-bar {
   height: 4px;
   width: 100%;
   flex-shrink: 0;
-  border-radius: 10px 10px 0 0;
+  border-radius: 0 0 10px 10px;
+  background: var(--node-accent);
 }
 
 .node-header {
@@ -1376,9 +1377,115 @@ select:focus-visible,
 }
 
 .node-body {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
   position: relative;
+}
+
+.node-body-content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+/* 统一的已连接输入：由真实 arrow + port + projectOutputs 驱动，所有节点共用。
+   仅存在实际边时渲染，避免未连接节点出现无意义空态。 */
+.connected-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px 10px 0;
+}
+
+.connected-inputs-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--txt-dim, #9aa4b5);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.connected-input-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.connected-input-item {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  height: 28px;
+  gap: 5px;
+  padding: 3px 6px 3px 5px;
+  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg) 62%, transparent);
+  color: var(--txt-dim, #aeb8c8);
+  font-size: 10px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.connected-input-target {
+  flex: 0 0 auto;
+  color: var(--brand);
+}
+
+.connected-input-order {
+  display: grid;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--brand) 24%, transparent);
+  color: var(--txt);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.connected-input-value,
+.connected-input-source {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connected-input-value {
+  max-width: 84px;
+  color: var(--txt);
+}
+
+.connected-input-source {
+  max-width: 105px;
+  color: var(--muted);
+}
+
+.connected-input-empty {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.connected-input-media {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  color: var(--txt);
+}
+
+.connected-input-media img {
+  width: 20px;
+  height: 18px;
+  border-radius: 3px;
+  object-fit: cover;
 }
 
 /* 模型 / 本地媒体任务运行时的明确状态层。状态来自统一运行器的 exec 字段，而不是
@@ -6100,7 +6207,8 @@ select:focus-visible,
   flex-direction: column;
   gap: 8px;
   padding: 10px;
-  min-height: 100%;
+  min-height: 0;
+  height: 100%;
 }
 
 .gen-row {
@@ -6298,6 +6406,8 @@ select:focus-visible,
 
 .gen-prompt {
   width: 100%;
+  flex: 1 1 72px;
+  min-height: 72px;
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -6316,6 +6426,8 @@ select:focus-visible,
 
 .gen-go {
   align-self: stretch;
+  margin-top: auto;
+  margin-bottom: 0;
 }
 
 .gen-empty {

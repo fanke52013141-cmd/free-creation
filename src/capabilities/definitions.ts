@@ -64,23 +64,14 @@ const textCapability = defineCapability({
 
 const imageCapability = defineCapability({
   id: 'image.source',
-  version: '1.0.0',
-  contractVersion: 1,
+  version: '2.0.0',
+  contractVersion: 2,
   nodeType: 'image',
   title: '图片',
   description: '图片资产节点，只负责保存和输出一张已导入的图片，不承担生成逻辑。',
   category: 'input',
-  inputs: [
-    {
-      id: 'in-image',
-      name: '图源',
-      type: 'image',
-      required: false,
-      cardinality: 'one',
-      description:
-        '可选的上游图片来源；主要用于拆分结果展开后的连线归属，资产仍以本节点已导入的媒体为准。'
-    }
-  ],
+  // 资产节点只输出用户导入的不可变媒体，不能作为上游资产的无意义中转站。
+  inputs: [],
   outputs: [
     {
       id: 'out-image',
@@ -240,22 +231,14 @@ const videoCapability = defineCapability({
 
 const audioCapability = defineCapability({
   id: 'audio.source',
-  version: '2.0.0',
-  contractVersion: 2,
+  version: '3.0.0',
+  contractVersion: 3,
   nodeType: 'audio',
   title: '音频',
-  description: '音频资产节点：导入本地音频或承接一段上游音频，只负责保存、预览和输出资产。',
+  description: '音频资产节点：导入本地音频，只负责保存、预览和输出资产。',
   category: 'input',
-  inputs: [
-    {
-      id: 'in-audio',
-      name: '音频',
-      type: 'audio',
-      required: false,
-      cardinality: 'one',
-      description: '可选的上游音频资产；接入后作为本节点音频来源。'
-    }
-  ],
+  // 音频资产与图片资产一样是源节点；处理或引用音频必须使用声明输入的下游节点。
+  inputs: [],
   outputs: [
     {
       id: 'out-audio',
@@ -263,7 +246,7 @@ const audioCapability = defineCapability({
       type: 'audio',
       required: true,
       cardinality: 'one',
-      description: '已导入或承接的音频资产引用。'
+      description: '已导入并落盘的音频资产引用。'
     }
   ],
   configSchema: {

@@ -105,38 +105,6 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
 
   return (
     <div className="gen-panel">
-      {referenceImages.length > 0 && (
-        <div className="ref-image-bar">
-          <div className="ref-image-stack" aria-label={`${referenceImages.length} 张参考图`}>
-            {referenceImages.slice(0, 4).map((image, index) => (
-              <button
-                key={image.mediaId}
-                type="button"
-                className="ref-image-chip"
-                title={`插入 @图片 ${index + 1}`}
-                aria-label={`插入 @图片 ${index + 1}`}
-                onPointerDown={(e) => stopEventPropagation(e)}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  insertReferenceMention(index)
-                }}
-              >
-                <img
-                  className="ref-image-thumb"
-                  src={mediaUrl(image.mediaPath)}
-                  alt={`图片 ${index + 1}`}
-                  draggable={false}
-                />
-                <span>图片 {index + 1}</span>
-              </button>
-            ))}
-          </div>
-          <span className="ref-image-label">
-            <Icon name="attach" size={13} />
-            已连接 {referenceImages.length} 张参考图，可用 @图片 1… 调用
-          </span>
-        </div>
-      )}
       <div className="gen-row">
         <ModelSelect
           value={data.modelKey}
@@ -181,7 +149,6 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
         ref={promptRef}
         className="gen-prompt"
         value={draft}
-        rows={3}
         spellCheck={false}
         placeholder="描述要生成的画面…"
         onChange={(e) => setDraft(e.target.value)}

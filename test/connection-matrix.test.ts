@@ -130,6 +130,12 @@ describe('标准连线 · 允许的组合', () => {
 })
 
 describe('标准连线 · 拒绝的组合', () => {
+  it('图片/音频资产是纯源节点，不能将资产再连接到同类资产节点', () => {
+    // 两个资产节点均没有输入端口；不存在“看起来连上、实际不消费”的中转关系。
+    expect(canConnect('image', 'out-image', 'image', 'in-image')).toBe(false)
+    expect(canConnect('audio', 'out-audio', 'audio', 'in-audio')).toBe(false)
+  })
+
   it('图片 → 文本输入（image 不能进 text）', () => {
     expect(canConnect('image', 'out-image', 'text', 'in-text')).toBe(false)
     expect(canConnect('image', 'out-image', 'chat', 'in-text')).toBe(false)

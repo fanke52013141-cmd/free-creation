@@ -1,5 +1,5 @@
 // 音频资产节点只承接/保存媒体；通用配音节点（speech）才调用语音模型。
-import { inputMedia, inputText } from '../inputs'
+import { inputText } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
 import { modelsByModality } from '../models'
 import { mergedPrompt, parseJsonObj } from '../helpers'
@@ -29,13 +29,14 @@ export function parseAudio(text: string): AudioData {
 }
 
 export const audioExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
-  const audioInput = inputMedia(ctx.inputs, 'in-audio', 'audio')[0]
-  if (audioInput) {
-    // 资产节点不再把上游引用复制进自身；请使用来源资产本身建立下游连接。
-    return { status: 'skipped', reason: '音频资产无需执行；请直接连接该音频资产' }
+  // audio 是纯资产源节点，不读取或转发上游值；只有其已导入媒体才可发布为 out-audio。
+  if (ctx.node.type === 'audio') {
+    return ctx.shape.props.mediaPath
+      ? { status: 'done' }
+      : { status: 'skipped', reason: '未导入音频资产' }
   }
   if (ctx.node.type !== 'speech') {
-    return { status: 'skipped', reason: '请上传音频或连接一段上游音频资产' }
+    return { status: 'skipped', reason: '音频执行器不支持该节点类型' }
   }
   const data = parseAudio(readNodeConfig(ctx.shape))
   const option = modelsByModality(ctx.providers, 'audio').find((item) => item.key === data.modelKey)

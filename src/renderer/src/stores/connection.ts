@@ -10,6 +10,21 @@ export interface ConnectionFrom {
   schema?: PortSchemaRef
   /** 多选资产以一个临时“共有输出”拖出时，包含全部实际源节点。 */
   memberIds?: TLShapeId[]
+  /**
+   * 异构多选的显式来源端口。
+   *
+   * 这不是一个“联合 any 输出”：每一项都保留其实际节点、端口、类型和 JSON
+   * Schema，落到目标时必须逐项映射至真实兼容输入端口。仅同构批量可省略本字段，
+   * 继续沿用 `portId` + `memberIds` 的既有语义。
+   */
+  memberPorts?: BatchConnectionMember[]
+}
+
+export interface BatchConnectionMember {
+  shapeId: TLShapeId
+  portId: string
+  portType: PortType
+  schema?: PortSchemaRef
 }
 
 export interface Pt {

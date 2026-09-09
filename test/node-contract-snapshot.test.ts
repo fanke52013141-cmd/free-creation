@@ -248,10 +248,11 @@ describe('关键端口契约快照（防回归）', () => {
     ])
   })
 
-  it('音频资产与通用配音职责分开：前者只承接音频，后者只接朗读文本', () => {
-    expect(snapshotPorts(getNodeType('audio')!.ports.in)).toEqual([
-      { id: 'in-audio', dir: 'in', type: 'audio', required: false, cardinality: 'one' }
-    ])
+  it('图片/音频资产都是纯源节点，通用配音只接朗读文本', () => {
+    expect(getNodeType('image')!.contractVersion).toBe(2)
+    expect(snapshotPorts(getNodeType('image')!.ports.in)).toEqual([])
+    expect(getNodeType('audio')!.contractVersion).toBe(3)
+    expect(snapshotPorts(getNodeType('audio')!.ports.in)).toEqual([])
     expect(snapshotPorts(getNodeType('speech')!.ports.in)).toEqual([
       { id: 'in-text', dir: 'in', type: 'text', required: false, cardinality: 'many' }
     ])

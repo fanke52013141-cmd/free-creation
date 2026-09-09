@@ -5,7 +5,7 @@ import type { CanvasEdge, CanvasNode, ExecStatus, GroupDecl, PortDecl } from '@s
 import { nodeSchemasCompatible } from '@shared/node-schemas'
 import { getNodePorts, getNodeType, portCompatible, portOffsets } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
-import type { ConnectionFrom } from '../stores/connection'
+import type { BatchConnectionMember, ConnectionFrom } from '../stores/connection'
 import { projectNodeOutputs, type NodeValue } from '../nodes/nodeValues'
 
 // 默认连线保持中性灰，避免同一画布被端口类型色切成多种视觉噪声；
@@ -56,6 +56,14 @@ function getArrowBindings(editor: Editor, arrowId: TLShapeId): ArrowBindings {
   const start = bindings.find((b) => b.props.terminal === 'start')
   const end = bindings.find((b) => b.props.terminal === 'end')
   return { start, end }
+}
+
+/** 统一的保存顺序，供 many 输入的运行时读取与画布摘要共同使用。 */
+function orderedPageArrows(editor: Editor): ReturnType<Editor['getCurrentPageShapes']> {
+  return editor
+    .getCurrentPageShapes()
+    .filter((shape) => shape.type === 'arrow')
+    .sort((a, b) => a.index.localeCompare(b.index))
 }
 
 /** 现有全部连线（仅两端都是 node-card 的 arrow） */
@@ -254,6 +262,160 @@ export interface BatchConnectionResult {
   error?: string
 }
 
+export interface HeterogeneousBatchConnectionPlan {
+  sourcePortId: string
+  targetPortId: string
+}
+
+/**
+ * 为异构多选建立明确的端口映射，不把多种输出折叠成 `any`。
+ *
+ * 单值输入最多分配给一个成员且不能覆盖已有边；多值输入可接收多个成员。递归
+ * 回溯保证“文本既可接 any 又可接 text、图片只能接 image”这类组合不会因为
+ * 贪心顺序而错误失败。返回 null 表示不存在一个覆盖全部成员的合法映射。
+ */
+export function planHeterogeneousBatchConnections(
+  sources: readonly BatchConnectionMember[],
+  targetPorts: readonly PortDecl[],
+  occupiedOnePortIds: ReadonlySet<string>,
+  preferredTargetPortId?: string
+): HeterogeneousBatchConnectionPlan[] | null {
+  const candidatesBySource = sources.map((source, sourceIndex) => {
+    const candidates = targetPorts.filter((target) => {
+      if (sourceIndex === 0 && preferredTargetPortId && target.id !== preferredTargetPortId) {
+        return false
+      }
+      if (target.cardinality === 'one' && occupiedOnePortIds.has(target.id)) return false
+      if (!portCompatible(source.portType, target.type)) return false
+      return !(
+        source.portType === 'json' &&
+        target.type === 'json' &&
+        !nodeSchemasCompatible(source.schema, target.schema)
+      )
+    })
+    return { source, candidates }
+  })
+  if (candidatesBySource.some(({ candidates }) => candidates.length === 0)) return null
+
+  // 先处理候选最少的成员，同时保持结果按原始 sources 顺序返回，提升分配成功率。
+  const order = candidatesBySource
+    .map((item, index) => ({ ...item, index }))
+    .sort((a, b) => a.candidates.length - b.candidates.length || a.index - b.index)
+  const assignments = new Map<number, string>()
+  const usedOnePorts = new Set<string>(occupiedOnePortIds)
+
+  const assign = (cursor: number): boolean => {
+    if (cursor === order.length) return true
+    const current = order[cursor]
+    for (const target of current.candidates) {
+      if (target.cardinality === 'one' && usedOnePorts.has(target.id)) continue
+      assignments.set(current.index, target.id)
+      if (target.cardinality === 'one') usedOnePorts.add(target.id)
+      if (assign(cursor + 1)) return true
+      if (target.cardinality === 'one') usedOnePorts.delete(target.id)
+      assignments.delete(current.index)
+    }
+    return false
+  }
+
+  if (!assign(0)) return null
+  return sources.map((source, index) => ({
+    sourcePortId: source.portId,
+    targetPortId: assignments.get(index)!
+  }))
+}
+
+function sameSchemaRef(left: BatchConnectionMember['schema'], right: PortDecl['schema']): boolean {
+  if (!left || !right) return left === right
+  return left.id === right.id && left.version === right.version
+}
+
+function tryConnectHeterogeneousBatch(
+  editor: Editor,
+  from: ConnectionFrom,
+  targetShapeId: TLShapeId,
+  preferredTargetPortId?: string
+): BatchConnectionResult {
+  const members = from.memberPorts ?? []
+  if (members.length < 2) return { created: 0, skipped: 0, error: '批量连接至少需要两个节点' }
+  if (new Set(members.map((member) => member.shapeId)).size !== members.length) {
+    return { created: 0, skipped: 0, error: '批量连接包含重复源节点' }
+  }
+  const target = editor.getShape<NodeCardShape>(targetShapeId)
+  if (!target) return { created: 0, skipped: 0, error: '目标节点不存在' }
+  if (members.some((member) => member.shapeId === target.id)) {
+    return { created: 0, skipped: 0, error: '批量连接不能连接到自身' }
+  }
+
+  const sources = members.map((member) => {
+    const shape = editor.getShape<NodeCardShape>(member.shapeId)
+    const spec = shape ? getNodeType(shape.props.nodeType) : undefined
+    const port =
+      shape && spec
+        ? getNodePorts(spec, shape).out.find((item) => item.id === member.portId)
+        : undefined
+    return { member, shape, port }
+  })
+  if (
+    sources.some(
+      ({ member, shape, port }) =>
+        !shape ||
+        !port ||
+        port.type !== member.portType ||
+        !sameSchemaRef(member.schema, port.schema)
+    )
+  ) {
+    return { created: 0, skipped: 0, error: '所选节点的输出端口已变化或不可用' }
+  }
+
+  const targetSpec = getNodeType(target.props.nodeType)
+  if (!targetSpec) return { created: 0, skipped: 0, error: '目标节点类型未知' }
+  if (sources.some(({ shape }) => shape && reaches(editor, target.id, shape.id))) {
+    return { created: 0, skipped: 0, error: '批量连接会形成循环，未创建任何连线' }
+  }
+
+  const targetPorts = getNodePorts(targetSpec, target).in
+  const occupiedOnePortIds = new Set(
+    targetPorts
+      .filter((port) => port.cardinality === 'one')
+      .filter((port) => inputPortOccupied(editor, { shapeId: target.id, portId: port.id }))
+      .map((port) => port.id)
+  )
+  const plan = planHeterogeneousBatchConnections(
+    members,
+    targetPorts,
+    occupiedOnePortIds,
+    preferredTargetPortId
+  )
+  if (!plan) {
+    return {
+      created: 0,
+      skipped: 0,
+      error: `${targetSpec.label} 没有可同时接收所选节点的兼容输入端口`
+    }
+  }
+
+  const edges = plan.flatMap((item, index) => {
+    const source = members[index]
+    const fromEndpoint: EdgeEndpoint = { shapeId: source.shapeId, portId: item.sourcePortId }
+    const toEndpoint: EdgeEndpoint = { shapeId: target.id, portId: item.targetPortId }
+    return edgeExists(editor, fromEndpoint, toEndpoint)
+      ? []
+      : [{ from: fromEndpoint, to: toEndpoint }]
+  })
+  if (edges.length === 0) {
+    return { created: 0, skipped: members.length, error: '所选节点均已存在相同连接' }
+  }
+  let created = 0
+  editor.run(() => {
+    for (const edge of edges) {
+      if (createEdge(editor, edge.from, edge.to, false)) created += 1
+    }
+  })
+  if (created > 0) editor.markHistoryStoppingPoint('create-batch-edges')
+  return { created, skipped: members.length - created }
+}
+
 /**
  * 将多选节点作为一个临时的“共有输出”接入目标的多值输入。
  *
@@ -267,6 +429,9 @@ export function tryConnectBatch(
   dropPagePt?: { x: number; y: number },
   preferredTargetPortId?: string
 ): BatchConnectionResult {
+  if (from.memberPorts?.length) {
+    return tryConnectHeterogeneousBatch(editor, from, targetShapeId, preferredTargetPortId)
+  }
   const memberIds = [...new Set(from.memberIds ?? [])]
   if (memberIds.length < 2) return { created: 0, skipped: 0, error: '批量连接至少需要两个节点' }
   const target = editor.getShape<NodeCardShape>(targetShapeId)
@@ -567,6 +732,73 @@ export function deriveGraph(editor: Editor): {
 }
 
 /**
+ * 画布卡片使用的已连接输入快照。
+ *
+ * 此处刻意从 Arrow binding + `fromPort` / `toPort` 读取关系，再经来源节点的
+ * `projectOutputs` 取得当前已持久化输出。它既不扫描上游节点标题，也不按节点类型
+ * 猜测数据；失效输出仍保留为 `null`，让 UI 可以如实提示“已连接，等待上游输出”。
+ */
+export interface ConnectedNodeInput {
+  targetPortId: string
+  targetPortName: string
+  targetPortCardinality: PortDecl['cardinality']
+  sourceNodeId: TLShapeId
+  sourceNodeName: string
+  sourcePortId: string
+  sourcePortName: string
+  sourcePortType: PortDecl['type']
+  /** 同一目标输入端口内的真实边顺序，从 1 开始。 */
+  order: number
+  value: NodeValue | null
+}
+
+export function readConnectedNodeInputs(
+  editor: Editor,
+  targetNodeId: TLShapeId
+): ConnectedNodeInput[] {
+  const target = editor.getShape<NodeCardShape>(targetNodeId)
+  const targetSpec = target ? getNodeType(target.props.nodeType) : undefined
+  if (!target || !targetSpec) return []
+
+  const targetPorts = getNodePorts(targetSpec, target).in
+  const perPortOrder = new Map<string, number>()
+  const connected: ConnectedNodeInput[] = []
+  // tldraw 的 shape index 是保存到快照的稳定顺序。显式排序让 many 输入在刷新后
+  // 仍以同一顺序呈现，并与执行器读取连线时采用的边顺序保持一致。
+  const arrows = orderedPageArrows(editor)
+
+  for (const arrow of arrows) {
+    const { start, end } = getArrowBindings(editor, arrow.id)
+    const sourcePortId = typeof arrow.meta?.fromPort === 'string' ? arrow.meta.fromPort : null
+    const targetPortId = typeof arrow.meta?.toPort === 'string' ? arrow.meta.toPort : null
+    if (!start || !end || !sourcePortId || !targetPortId || end.toId !== targetNodeId) continue
+
+    const targetPort = targetPorts.find((port) => port.id === targetPortId)
+    const source = editor.getShape<NodeCardShape>(start.toId)
+    const sourceSpec = source ? getNodeType(source.props.nodeType) : undefined
+    if (!targetPort || !source || !sourceSpec) continue
+    const sourcePort = getNodePorts(sourceSpec, source).out.find((port) => port.id === sourcePortId)
+    if (!sourcePort) continue
+
+    const order = (perPortOrder.get(targetPort.id) ?? 0) + 1
+    perPortOrder.set(targetPort.id, order)
+    connected.push({
+      targetPortId: targetPort.id,
+      targetPortName: targetPort.name,
+      targetPortCardinality: targetPort.cardinality,
+      sourceNodeId: source.id,
+      sourceNodeName: source.props.title,
+      sourcePortId: sourcePort.id,
+      sourcePortName: sourcePort.name,
+      sourcePortType: sourcePort.type,
+      order,
+      value: projectNodeOutputs(source)[sourcePort.id] ?? null
+    })
+  }
+  return connected
+}
+
+/**
  * 实时收集连入某节点的上游文本内容（用于对话/图片等节点手动触发时自动注入上下文）。
  * 遍历画布上的 arrow bindings，找到所有 → targetNodeId 的边，取源节点的文本输出。
  */
@@ -576,8 +808,7 @@ export function gatherUpstreamText(
   targetPortId = 'in-text'
 ): string {
   const parts: string[] = []
-  for (const shape of editor.getCurrentPageShapes()) {
-    if (shape.type !== 'arrow') continue
+  for (const shape of orderedPageArrows(editor)) {
     const { start, end } = getArrowBindings(editor, shape.id)
     if (!start || !end) continue
     if (end.toId !== targetNodeId || shape.meta?.toPort !== targetPortId) continue
@@ -603,8 +834,7 @@ export function gatherUpstreamJson(
   targetNodeId: TLShapeId,
   targetPortId = 'in-json'
 ): unknown | null {
-  for (const shape of editor.getCurrentPageShapes()) {
-    if (shape.type !== 'arrow') continue
+  for (const shape of orderedPageArrows(editor)) {
     const { start, end } = getArrowBindings(editor, shape.id)
     if (!start || !end || end.toId !== targetNodeId || shape.meta?.toPort !== targetPortId) continue
     const fromPort = shape.meta?.fromPort as string | undefined
@@ -624,8 +854,7 @@ export function gatherUpstreamMedia<K extends 'image' | 'video' | 'audio' | 'fil
   targetPortId: string,
   kind: K
 ): Extract<NodeValue, { kind: K }> | null {
-  for (const shape of editor.getCurrentPageShapes()) {
-    if (shape.type !== 'arrow') continue
+  for (const shape of orderedPageArrows(editor)) {
     const { start, end } = getArrowBindings(editor, shape.id)
     if (
       !start ||
@@ -654,8 +883,7 @@ export function gatherUpstreamMediaList<K extends 'image' | 'video' | 'audio' | 
   kind: K
 ): Extract<NodeValue, { kind: K }>[] {
   const assets: Extract<NodeValue, { kind: K }>[] = []
-  for (const shape of editor.getCurrentPageShapes()) {
-    if (shape.type !== 'arrow') continue
+  for (const shape of orderedPageArrows(editor)) {
     const { start, end } = getArrowBindings(editor, shape.id)
     if (
       !start ||

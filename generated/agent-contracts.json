@@ -609,7 +609,7 @@
     },
     {
       "name": "node.audio",
-      "description": "音频 — 音频资产节点：导入本地音频或承接一段上游音频，只负责保存、预览和输出资产。",
+      "description": "音频 — 音频资产节点：导入本地音频，只负责保存、预览和输出资产。",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1006,11 +1006,11 @@
       "capability": "audio.source",
       "node": "音频",
       "nodeType": "audio",
-      "version": "2.0.0",
-      "contractVersion": 2,
+      "version": "3.0.0",
+      "contractVersion": 3,
       "cli": true,
       "mcp": true,
-      "inputs": 1,
+      "inputs": 0,
       "outputs": 1,
       "headless": true
     },
@@ -1114,11 +1114,11 @@
       "capability": "image.source",
       "node": "图片",
       "nodeType": "image",
-      "version": "1.0.0",
-      "contractVersion": 1,
+      "version": "2.0.0",
+      "contractVersion": 2,
       "cli": true,
       "mcp": true,
-      "inputs": 1,
+      "inputs": 0,
       "outputs": 1,
       "headless": true
     },
@@ -1516,17 +1516,8 @@
     },
     {
       "capabilityId": "audio.source",
-      "version": "2.0.0",
-      "inputs": [
-        {
-          "id": "in-audio",
-          "name": "音频",
-          "type": "audio",
-          "required": false,
-          "cardinality": "one",
-          "description": "可选的上游音频资产；接入后作为本节点音频来源。"
-        }
-      ],
+      "version": "3.0.0",
+      "inputs": [],
       "outputs": [
         {
           "id": "out-audio",
@@ -1534,7 +1525,7 @@
           "type": "audio",
           "required": true,
           "cardinality": "one",
-          "description": "已导入或承接的音频资产引用。"
+          "description": "已导入并落盘的音频资产引用。"
         }
       ],
       "configSchema": {
@@ -1911,17 +1902,8 @@
     },
     {
       "capabilityId": "image.source",
-      "version": "1.0.0",
-      "inputs": [
-        {
-          "id": "in-image",
-          "name": "图源",
-          "type": "image",
-          "required": false,
-          "cardinality": "one",
-          "description": "可选的上游图片来源；主要用于拆分结果展开后的连线归属，资产仍以本节点已导入的媒体为准。"
-        }
-      ],
+      "version": "2.0.0",
+      "inputs": [],
       "outputs": [
         {
           "id": "out-image",

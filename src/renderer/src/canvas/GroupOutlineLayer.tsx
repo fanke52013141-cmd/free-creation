@@ -26,7 +26,80 @@ interface SelectionOutline {
   top: number
   width: number
   height: number
+  corners: SelectionCornerPositions
   batchSource: ConnectionFrom | null
+}
+
+interface PageBoundsLike {
+  x: number
+  y: number
+  maxX: number
+  maxY: number
+}
+
+interface ScreenPoint {
+  x: number
+  y: number
+}
+
+interface SelectionCornerPositions {
+  topLeft: ScreenPoint
+  topRight: ScreenPoint
+  bottomRight: ScreenPoint
+  bottomLeft: ScreenPoint
+}
+
+interface SelectionGeometry {
+  left: number
+  top: number
+  width: number
+  height: number
+  corners: SelectionCornerPositions
+}
+
+// The visual point is deliberately a fixed screen-space affordance. It is outside the
+// dashed rectangle, while tldraw's larger, invisible target stays centered on the actual
+// rectangle corner. This makes the visual easy to read without changing resize hit testing.
+const SELECTION_CORNER_OUTSET_PX = 7
+
+/**
+ * Derive every selection decoration from one page -> screen conversion. Do not add padding
+ * here: tldraw's resize targets are based on the unpadded selection bounds, and a padded
+ * outline was the source of the previous handle drift at different zoom levels.
+ */
+function selectionGeometryFromPageBounds(
+  bounds: PageBoundsLike,
+  hostBounds: Pick<DOMRect, 'left' | 'top'>,
+  pageToScreen: (point: ScreenPoint) => ScreenPoint
+): SelectionGeometry {
+  const topLeft = pageToScreen({ x: bounds.x, y: bounds.y })
+  const bottomRight = pageToScreen({ x: bounds.maxX, y: bounds.maxY })
+  const left = topLeft.x - hostBounds.left
+  const top = topLeft.y - hostBounds.top
+  const width = bottomRight.x - topLeft.x
+  const height = bottomRight.y - topLeft.y
+
+  return {
+    left,
+    top,
+    width,
+    height,
+    corners: {
+      topLeft: { x: left - SELECTION_CORNER_OUTSET_PX, y: top - SELECTION_CORNER_OUTSET_PX },
+      topRight: {
+        x: left + width + SELECTION_CORNER_OUTSET_PX,
+        y: top - SELECTION_CORNER_OUTSET_PX
+      },
+      bottomRight: {
+        x: left + width + SELECTION_CORNER_OUTSET_PX,
+        y: top + height + SELECTION_CORNER_OUTSET_PX
+      },
+      bottomLeft: {
+        x: left - SELECTION_CORNER_OUTSET_PX,
+        y: top + height + SELECTION_CORNER_OUTSET_PX
+      }
+    }
+  }
 }
 
 function batchKey(source: ConnectionFrom | null): string {
@@ -137,13 +210,13 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
       const minY = Math.min(...bounds.map((bound) => bound.y))
       const maxX = Math.max(...bounds.map((bound) => bound.maxX))
       const maxY = Math.max(...bounds.map((bound) => bound.maxY))
-      const topLeft = editor.pageToScreen({ x: minX, y: minY })
-      const bottomRight = editor.pageToScreen({ x: maxX, y: maxY })
+      const geometry = selectionGeometryFromPageBounds(
+        { x: minX, y: minY, maxX, maxY },
+        hostBounds,
+        (point) => editor.pageToScreen(point)
+      )
       const nextSelection = {
-        left: topLeft.x - hostBounds.left - sidePad,
-        top: topLeft.y - hostBounds.top - sidePad,
-        width: bottomRight.x - topLeft.x + sidePad * 2,
-        height: bottomRight.y - topLeft.y + sidePad * 2,
+        ...geometry,
         batchSource: batchConnectionFromSelection(editor, selectedIds)
       }
       setSelection((current) =>
@@ -152,6 +225,10 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
         current.top === nextSelection.top &&
         current.width === nextSelection.width &&
         current.height === nextSelection.height &&
+        current.corners.topLeft.x === nextSelection.corners.topLeft.x &&
+        current.corners.topLeft.y === nextSelection.corners.topLeft.y &&
+        current.corners.bottomRight.x === nextSelection.corners.bottomRight.x &&
+        current.corners.bottomRight.y === nextSelection.corners.bottomRight.y &&
         batchKey(current.batchSource) === batchKey(nextSelection.batchSource)
           ? current
           : nextSelection
@@ -266,6 +343,14 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
               height: selection.height
             }}
           />
+          {Object.entries(selection.corners).map(([corner, position]) => (
+            <span
+              key={corner}
+              className="canvas-selection-corner"
+              aria-hidden="true"
+              style={{ left: position.x, top: position.y }}
+            />
+          ))}
           {selection.batchSource && (
             <button
               type="button"
