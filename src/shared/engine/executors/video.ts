@@ -11,6 +11,21 @@ import {
   videoCapabilitiesFor,
   videoRatioIsDerivedByFrames
 } from '@shared/video-capabilities'
+import type { VideoGenerationMode } from '@shared/types'
+
+function resolvedMode(mode: unknown, imageCount: number): VideoGenerationMode {
+  if (
+    mode === 'text' ||
+    mode === 'first-frame' ||
+    mode === 'first-last-frame' ||
+    mode === 'reference'
+  ) {
+    return mode
+  }
+  // 旧节点没有保存模式：单图保持原先的图生视频语义，多图改为真实参考模式，
+  // 避免向上游发送互斥的 first_frame + reference_image。
+  return imageCount === 0 ? 'text' : imageCount === 1 ? 'first-frame' : 'reference'
+}
 
 export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
   const data = parseVideoGen(readNodeConfig(ctx.shape))
@@ -24,8 +39,10 @@ export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
   // 视频节点只有一个图片多值端口：连接顺序即语义。第一张是主图/首帧，
   // 后续图片是有序参考图，避免在画布边缘摆出多个同色、同类型端口。
   const images = inputMedia(ctx.inputs, 'in-images', 'image')
-  const firstFrame = images[0]
-  const referenceImages = images.slice(1)
+  const mode = resolvedMode(data.mode, images.length)
+  const firstFrame = mode === 'first-frame' || mode === 'first-last-frame' ? images[0] : undefined
+  const lastFrame = mode === 'first-last-frame' ? images[1] : undefined
+  const referenceImages = mode === 'reference' ? images : []
   const motionReferences = inputMedia(ctx.inputs, 'in-reference-video', 'video')
   const audioReferences = inputMedia(ctx.inputs, 'in-reference-audio', 'audio')
   const params = normalizeVideoGenParams(
@@ -37,7 +54,7 @@ export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
       framesDetermineRatio: videoRatioIsDerivedByFrames(
         option.provider.specId,
         option.model.id,
-        Boolean(firstFrame)
+        Boolean(firstFrame || lastFrame)
       )
     }
   )
@@ -49,8 +66,10 @@ export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
       providerId: option.provider.id,
       modelId: option.model.id,
       prompt,
+      mode,
       params,
       ...(firstFrame ? { firstFrameMediaId: firstFrame.mediaId } : {}),
+      ...(lastFrame ? { lastFrameMediaId: lastFrame.mediaId } : {}),
       ...(referenceImages.length
         ? { referenceImageMediaIds: referenceImages.map((media) => media.mediaId) }
         : {}),
@@ -88,7 +107,7 @@ export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
             },
             sourceSummary: {
               firstFrame: Boolean(firstFrame),
-              lastFrame: false,
+              lastFrame: Boolean(lastFrame),
               referenceImages: referenceImages.length,
               referenceVideo: motionReferences.length,
               referenceAudio: audioReferences.length

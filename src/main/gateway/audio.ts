@@ -66,7 +66,8 @@ async function generateViaMiniMax(
       text: input.text.trim(),
       stream: false,
       voice_setting: { voice_id: voiceId, speed: 1, vol: 1, pitch: 0 },
-      audio_setting: { sample_rate: 32000, bitrate: 128000, format, channel: 1 }
+      audio_setting: { sample_rate: 32000, bitrate: 128000, format, channel: 1 },
+      ...(typeof input.aigcWatermark === 'boolean' ? { aigc_watermark: input.aigcWatermark } : {})
     })
   })
 

@@ -22,6 +22,7 @@ async function main() {
   const browser = await launchBrowser()
   try {
     const page = await browser.newPage({ viewport: { width: 1707, height: 900 } })
+    page.setDefaultTimeout(8_000)
     await page.goto('http://127.0.0.1:5173/')
     await page.getByRole('button', { name: '添加图片节点', exact: true }).click()
     const chooser = page.waitForEvent('filechooser')
@@ -192,7 +193,10 @@ async function main() {
       edgeCountBeforeTextConnect
     )
     assert.equal(
-      await page.locator('.data-edge-visible').first().evaluate((line) => getComputedStyle(line).strokeDasharray),
+      await page
+        .locator('.data-edge-visible')
+        .first()
+        .evaluate((line) => getComputedStyle(line).strokeDasharray),
       'none',
       '普通数据线必须为实线；重叠效果仅应通过透明度实现'
     )
@@ -317,10 +321,17 @@ async function main() {
       (count) => document.querySelectorAll('.node-card-wrap:has(.type-text)').length === count + 2,
       initialTextCount
     )
+    // 重载后的相机可能仍停在上一处工作区；先适配全部节点，确保回归测试实际拖到
+    // 可见的外置端口，而不是把空的视口坐标误判成端口命中失败。
+    await page.getByRole('button', { name: '适配画布（缩放到所有节点）', exact: true }).click()
+    await page.waitForTimeout(260)
     const deleteSource = textCards.nth(initialTextCount)
     const deleteTarget = textCards.nth(initialTextCount + 1)
+    await deleteSource.locator('.port-dot.out').waitFor({ state: 'visible' })
+    await deleteTarget.locator('.port-dot.in').waitFor({ state: 'visible' })
     const deleteOut = await deleteSource.locator('.port-dot.out').boundingBox()
     const deleteIn = await deleteTarget.locator('.port-dot.in').boundingBox()
+    assert.ok(deleteOut && deleteIn, '批量删除回归必须从两个可见的外置端口建立连线')
     const edgeCountBeforeConnectForDelete = await page.locator('.data-edge').count()
     await page.mouse.move(deleteOut.x + deleteOut.width / 2, deleteOut.y + deleteOut.height / 2)
     await page.mouse.down()
@@ -341,6 +352,11 @@ async function main() {
     await page.waitForFunction(
       (count) => document.querySelectorAll('.node-card-wrap:has(.type-text)').length === count,
       initialTextCount
+    )
+    await page.waitForFunction(
+      (count) => document.querySelectorAll('.data-edge').length < count,
+      edgeCountBeforeDelete,
+      { timeout: 5_000 }
     )
     assert.ok(
       (await page.locator('.data-edge').count()) < edgeCountBeforeDelete,

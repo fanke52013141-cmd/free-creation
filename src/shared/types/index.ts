@@ -334,10 +334,10 @@ export const PROVIDER_SPECS: ProviderSpec[] = [
   {
     id: 'minimax',
     label: 'MiniMax（海螺）',
-    desc: 'MiniMax H3 视频生成，异步任务式',
+    desc: 'MiniMax H3 / H3-Max 视频及 Speech 语音服务',
     baseURL: 'https://api.minimaxi.com',
     modality: 'video',
-    suggestions: ['MiniMax-H3']
+    suggestions: ['MiniMax-H3', 'MiniMax-H3-Max', 'speech-2.8-turbo']
   },
   {
     id: 'seedance',
@@ -345,7 +345,12 @@ export const PROVIDER_SPECS: ProviderSpec[] = [
     desc: '字节 Seedance 视频生成（方舟账户需余额>200元），模型 ID 带日期版本号',
     baseURL: 'https://ark.cn-beijing.volces.com/api/v3',
     modality: 'video',
-    suggestions: ['doubao-seedance-2-0-260128']
+    suggestions: [
+      'doubao-seedance-2-5-260901',
+      'doubao-seedance-2-0-260128',
+      'doubao-seedance-2-0-fast-260128',
+      'doubao-seedance-2-0-mini-260128'
+    ]
   }
 ]
 
@@ -360,6 +365,12 @@ export interface VideoGenParams {
   /** 支持时要求供应商保留水印。 */
   watermark?: boolean
 }
+
+/**
+ * 图片素材始终通过一个 many 图片端口连接；此字段定义连接后的协议语义，
+ * 防止把首尾帧和多模态参考混成同一请求。
+ */
+export type VideoGenerationMode = 'text' | 'first-frame' | 'first-last-frame' | 'reference'
 
 /** 视频任务对渲染端的投影（tasks 表 kind='video' 行） */
 export interface VideoTaskInfo {

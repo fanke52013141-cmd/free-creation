@@ -196,6 +196,16 @@ function topbarSafeScreenY(editor: Editor): number {
   return topbar.getBoundingClientRect().bottom + 12
 }
 
+/**
+ * 左侧调色板也是覆盖在画布上的浮层。若自动创建的节点落在它下面，首个点击会被
+ * 调色板拦截，表现为「节点选不中、Delete 要按两次」。新节点必须避开该命中区域。
+ */
+function paletteSafeScreenX(editor: Editor): number {
+  const palette = editor.getContainer().ownerDocument.querySelector('.node-palette')
+  if (!palette) return 0
+  return palette.getBoundingClientRect().right + 16
+}
+
 export function CanvasEditor({
   project,
   initialSnapshot,
@@ -871,17 +881,19 @@ export function CanvasEditor({
     size: { w: number; h: number }
   ): { x: number; y: number } => {
     const minScreenY = topbarSafeScreenY(editor)
+    const minScreenX = paletteSafeScreenX(editor)
     const existing = editor
       .getCurrentPageShapes()
       .filter((shape): shape is NodeCardShape => shape.type === 'node-card')
       .map((shape) => editor.getShapePageBounds(shape.id))
       .filter((bounds): bounds is NonNullable<typeof bounds> => Boolean(bounds))
     const normalize = (candidate: { x: number; y: number }): { x: number; y: number } => {
-      if (minScreenY <= 0) return candidate
       const zoom = editor.getCamera().z || 1
-      const screenY = editor.pageToScreen(candidate).y
-      if (screenY >= minScreenY) return candidate
-      return { ...candidate, y: candidate.y + (minScreenY - screenY) / zoom }
+      const screen = editor.pageToScreen(candidate)
+      return {
+        x: screen.x >= minScreenX ? candidate.x : candidate.x + (minScreenX - screen.x) / zoom,
+        y: screen.y >= minScreenY ? candidate.y : candidate.y + (minScreenY - screen.y) / zoom
+      }
     }
     const overlaps = (x: number, y: number): boolean =>
       existing.some(
@@ -1321,19 +1333,61 @@ export function CanvasEditor({
     const resizedNodes = migrateLegacyNodeSizes(editor)
     if (resizedNodes > 0) toast(`已将 ${resizedNodes} 个旧节点调整为标准尺寸`)
 
-    // 删除节点时级联清理连线：tldraw 删 shape 时只删其 binding 不删 arrow，会留悬空线。
-    // 用 sideEffects 的 afterDelete 钩子同步处理——binding 在 shape 的 beforeDelete 阶段
-    // 已被 tldraw 删除，此时遍历箭头找绑定数 < 2 的即为悬空线，随同一次事务删除（可整体撤销）。
-    // 异步方案（rAF/microtask）在后台标签页会丢清理时机。
+    // 删除节点时级联清理连线：tldraw 在不同删除入口下对 binding 的回收时机不一致；
+    // 有时 arrow 仍保留两条 binding，但其中一条已经指向不存在的 node-card。不能只按
+    // binding 数量判断，否则默认 Delete 会删掉节点却留下可见的孤儿数据线。
+    // 用 afterDelete 同步清理，使快捷键、菜单和 tldraw 原生删除都具有相同的一次性语义。
     editor.sideEffects.registerAfterDeleteHandler('shape', (deleted) => {
       if (deleted.type !== 'node-card') return
       const orphaned: TLShapeId[] = []
       for (const shape of editor.getCurrentPageShapes()) {
         if (shape.type !== 'arrow') continue
-        if (editor.getBindingsFromShape(shape.id, 'arrow').length < 2) orphaned.push(shape.id)
+        const bindings = editor.getBindingsFromShape(shape.id, 'arrow')
+        const hasDeletedEndpoint = bindings.some((binding) => binding.toId === deleted.id)
+        const hasMissingEndpoint = bindings.some((binding) => !editor.getShape(binding.toId))
+        if (bindings.length < 2 || hasDeletedEndpoint || hasMissingEndpoint) orphaned.push(shape.id)
       }
       if (orphaned.length > 0) editor.deleteShapes(orphaned)
     })
+    // 某些 tldraw 原生快捷键路径会在 binding 清理之前提交 shape 删除，导致上面的
+    // side effect 看见的还是旧 binding。再以 document store 的节点集合为真源兜底：
+    // 一旦节点从当前页消失，所有绑定到它的 carrier arrow 都立即移除。这里不依赖
+    // 当前选区，因而鼠标菜单、系统 Delete 与后续批量 API 的语义完全一致。
+    let knownNodeIds = new Set(
+      editor
+        .getCurrentPageShapes()
+        .filter((shape) => shape.type === 'node-card')
+        .map((shape) => shape.id)
+    )
+    let cleaningOrphanArrows = false
+    editor.store.listen(
+      () => {
+        if (cleaningOrphanArrows) return
+        const currentNodeIds = new Set(
+          editor
+            .getCurrentPageShapes()
+            .filter((shape) => shape.type === 'node-card')
+            .map((shape) => shape.id)
+        )
+        const deletedNodeIds = new Set([...knownNodeIds].filter((id) => !currentNodeIds.has(id)))
+        knownNodeIds = currentNodeIds
+        if (deletedNodeIds.size === 0) return
+        const arrows = editor
+          .getCurrentPageShapes()
+          .filter((shape) => {
+            if (shape.type !== 'arrow') return false
+            return editor
+              .getBindingsFromShape(shape.id, 'arrow')
+              .some((binding) => deletedNodeIds.has(binding.toId))
+          })
+          .map((shape) => shape.id)
+        if (arrows.length === 0) return
+        cleaningOrphanArrows = true
+        editor.run(() => editor.deleteShapes(arrows))
+        cleaningOrphanArrows = false
+      },
+      { scope: 'document' }
+    )
     // 即使 tldraw 的隐藏快捷键或外部拖放尝试创建默认图形，也在创建后立刻移除，
     // 形成第二道约束，确保画布只保留可参与真实数据依赖的节点/连线/分组。
     editor.sideEffects.registerAfterCreateHandler('shape', (created) => {
