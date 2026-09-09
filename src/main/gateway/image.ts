@@ -37,26 +37,13 @@ export async function generateImageToAsset(input: ImageGenerateInput): Promise<M
   })
 }
 
-/**
- * 画幅兜底：OpenAI Images 兼容端点没有标准的 aspectRatio 字段（AI SDK 顶层参数也会被
- * openai-compatible 驱动标记为 unsupported），主流中转站对请求体里的非标字段一律忽略，
- * 表现为“选了 21:9 出图仍是原比例”。因此除继续透传字段（少数端点认识）外，
- * 把画幅作为构图要求写进提示词——这是所有兼容端点都遵循的通道。
- */
-function withAspectRatioHint(prompt: string, aspectRatio?: string): string {
-  if (!aspectRatio) return prompt
-  return `${prompt}\n（构图要求：画幅 ${aspectRatio}，请严格按 ${aspectRatio} 宽高比出图）`
-}
-
 async function generateImageWithReference(
-  input: Pick<ImageGenerateInput, 'projectId' | 'providerId' | 'modelId' | 'prompt' | 'size'> & {
-    aspectRatio?: string
-  },
+  input: Pick<ImageGenerateInput, 'projectId' | 'providerId' | 'modelId' | 'prompt' | 'size'>,
   referenceImages: readonly Buffer[] = [],
   providerOptions?: Record<string, string | number | boolean>,
   maskImage?: Buffer
 ): Promise<MediaAsset> {
-  const prompt = withAspectRatioHint(input.prompt.trim(), input.aspectRatio)
+  const prompt = input.prompt.trim()
   const { images } = await generateImage({
     model: createImageModel(input.providerId, input.modelId),
     prompt:

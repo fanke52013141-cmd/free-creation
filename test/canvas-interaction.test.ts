@@ -141,24 +141,6 @@ describe('画布创建节点交互', () => {
     expect(nodeCreateOptionsSource).toContain("port.cardinality === 'many'")
   })
 
-  it('多选范围框四角旋转点必须贴住虚线外沿，整体旋转走 tldraw 官方 API', () => {
-    // 多选时自定义虚线框带 12px 外扩，而 tldraw 原生角点画在未外扩的选择边界上，
-    // 会内陷进虚线框（用户反馈“蓝点漂移”）。必须用 data 开关隐藏原生角点，
-    // 改由 GroupOutlineLayer 渲染四角旋转点并整体旋转。
-    expect(groupOutlineSource).toContain(
-      "host.dataset.multiNodeSelect = selectedIds.length >= 2 ? 'true' : 'false'"
-    )
-    expect(edgeSurfaceSource).toContain(
-      ".canvas-host[data-multi-node-select='true'] .tl-corner-handle"
-    )
-    expect(groupOutlineSource).toContain('canvas-selection-corner')
-    expect(groupOutlineSource).toContain('editor.rotateShapesBy(selectedNodeIds(editor), delta')
-    expect(groupOutlineSource).toContain('beginSelectionRotate')
-    expect(groupOutlineSource).toContain('endSelectionRotate')
-    expect(canvasSurfaceSource).toContain('.canvas-selection-corner.nw')
-    expect(canvasSurfaceSource).toContain('.canvas-selection-corner.se')
-  })
-
   it('导入图片保留资产名称作为图片节点名称，并将过长标题限制在固定操作区前', () => {
     expect(canvasEditorSource).toContain('title: asset.name ?? spec.label')
     expect(canvasSurfaceSource).toContain('flex: 1 1 0;')

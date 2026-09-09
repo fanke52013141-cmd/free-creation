@@ -1657,13 +1657,6 @@
     drop-shadow(0 1px 3px rgba(0, 0, 0, 0.28));
 }
 
-/* 多选节点（≥2 个 node-card）时，自定义虚线范围框带 12px 外扩 padding，
-   原生角点仍画在未外扩的边界上会内陷进虚线框——隐藏之，改用
-   GroupOutlineLayer 的 .canvas-selection-corner（支持整体旋转）。 */
-.canvas-host[data-multi-node-select='true'] .tl-corner-handle {
-  display: none;
-}
-
 [data-testid='selection.resize.top-left'] {
   transform: translate(-5px, -5px);
 }
