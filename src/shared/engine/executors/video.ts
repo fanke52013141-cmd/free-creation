@@ -13,7 +13,7 @@ import {
 } from '@shared/video-capabilities'
 import type { VideoGenerationMode } from '@shared/types'
 
-function resolvedMode(mode: unknown, imageCount: number): VideoGenerationMode {
+function resolvedMode(mode: unknown, _imageCount: number): VideoGenerationMode {
   if (
     mode === 'text' ||
     mode === 'first-frame' ||
@@ -22,9 +22,8 @@ function resolvedMode(mode: unknown, imageCount: number): VideoGenerationMode {
   ) {
     return mode
   }
-  // 旧节点没有保存模式：单图保持原先的图生视频语义，多图改为真实参考模式，
-  // 避免向上游发送互斥的 first_frame + reference_image。
-  return imageCount === 0 ? 'text' : imageCount === 1 ? 'first-frame' : 'reference'
+  // 缺少保存模式的节点统一按多参协议处理；无参考素材时上游会自然作为文生视频提交。
+  return 'reference'
 }
 
 export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {

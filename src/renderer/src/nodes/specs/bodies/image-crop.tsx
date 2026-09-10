@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { stopEventPropagation } from 'tldraw'
+import { stopEventPropagation, useEditor } from 'tldraw'
 import type { ImageCropAspectRatio, ImageCropConfig, NormalizedPoint } from '@shared/image-crop'
 import {
   DEFAULT_IMAGE_CROP_CONFIG,
@@ -13,6 +13,10 @@ import { markUndoPoint } from '../../../canvas/history'
 import { mediaUrl, type NodeBodyProps, type NodeSettingsProps } from '../../registry'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { useNodePanelStore } from '../../../stores/nodePanel'
+import { runNodeManually } from '../../../engine/executor'
+import { useAppStore } from '../../../stores/app'
+import { useGatewayStore } from '../../../stores/gateway'
+import { toast } from '../../../stores/toast'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
 import { MediaFileActions, MediaSourceBadge, useClickGuard } from './shared'
@@ -21,6 +25,10 @@ type DragTarget =
   | { kind: 'rect'; corner: 0 | 1 | 2 | 3 }
   | { kind: 'quad'; point: 0 | 1 | 2 | 3 }
   | { kind: 'move'; start: NormalizedPoint; rect: ImageCropConfig['rect'] }
+
+type InlineCropDrag =
+  | { kind: 'move'; start: NormalizedPoint; rect: ImageCropConfig['rect'] }
+  | { kind: 'corner'; corner: 0 | 1 | 2 | 3; base: ImageCropConfig }
 
 const clamp = (value: number): number => Math.min(1, Math.max(0, value))
 
@@ -170,14 +178,40 @@ function rectCorners(config: ImageCropConfig): NormalizedPoint[] {
 
 export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.Element {
   const guard = useClickGuard()
+  const editor = useEditor()
+  const project = useAppStore((state) => state.currentProject)
+  const providers = useGatewayStore((state) => state.providers)
+  const source = gatherUpstreamMedia(editor, shape.id, 'in-image', 'image')
+  const config = parseImageCropConfig(readNodeConfig(shape))
+  const [previewAspect, setPreviewAspect] = useState(1)
+  const inlineDrag = useRef<InlineCropDrag | null>(null)
   const openSettings = (): void =>
     useNodePanelStore.getState().open('contract', shape.id, 'settings')
-  if (!shape.props.mediaPath) {
+  const setAspectRatio = (aspectRatio: ImageCropAspectRatio): void => {
+    const ratio = IMAGE_CROP_ASPECT_RATIOS[aspectRatio]
+    const base: ImageCropConfig = { ...config, mode: 'rect', aspectRatio }
+    const next = ratio
+      ? fitRectToAspect(base, ratio, previewAspect)
+      : base
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: { config: serializeImageCropConfig(next) }
+    })
+    markUndoPoint(editor, 'image-crop-inline-aspect-ratio')
+  }
+  const runCrop = async (): Promise<void> => {
+    if (!source) return toast('请先连接一张图片')
+    if (!project) return toast('项目未就绪')
+    await runNodeManually(editor, project.id, providers, shape.id)
+  }
+
+  if (!shape.props.mediaPath && !source) {
     return (
       <div className="asset-empty crop-empty">
         <Icon name="crop" size={24} />
         <span>图片裁剪</span>
-        <small>连接一张图片后，在右侧详情中框选区域，再运行生成新的图片资产。</small>
+        <small>连接一张图片后，即可在节点中选择比例并裁剪；精细框选也可随时打开。</small>
         <button
           className="btn-ghost small"
           onPointerDown={stopEventPropagation}
@@ -188,6 +222,142 @@ export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.
         >
           配置裁剪
         </button>
+      </div>
+    )
+  }
+  if (!shape.props.mediaPath && source) {
+    const pointForInlineEvent = (event: React.PointerEvent<HTMLDivElement>): NormalizedPoint => {
+      const bounds = event.currentTarget.getBoundingClientRect()
+      return {
+        x: clamp((event.clientX - bounds.left) / bounds.width),
+        y: clamp((event.clientY - bounds.top) / bounds.height)
+      }
+    }
+    const beginInlineDrag = (event: React.PointerEvent<HTMLDivElement>): void => {
+      stopEventPropagation(event)
+      const point = pointForInlineEvent(event)
+      const corners = rectCorners(config)
+      const cornerIndex = corners.findIndex(
+        (item) => Math.abs(item.x - point.x) < 0.045 && Math.abs(item.y - point.y) < 0.045
+      )
+      if (cornerIndex >= 0) {
+        inlineDrag.current = { kind: 'corner', corner: cornerIndex as 0 | 1 | 2 | 3, base: config }
+      } else {
+        const { x, y, width, height } = config.rect
+        if (point.x < x || point.x > x + width || point.y < y || point.y > y + height) return
+        inlineDrag.current = { kind: 'move', start: point, rect: { ...config.rect } }
+      }
+      event.currentTarget.setPointerCapture(event.pointerId)
+    }
+    const moveInlineDrag = (event: React.PointerEvent<HTMLDivElement>): void => {
+      const active = inlineDrag.current
+      if (!active) return
+      const point = pointForInlineEvent(event)
+      const next =
+        active.kind === 'move'
+          ? moveRect(config, active.start, active.rect, point)
+          : IMAGE_CROP_ASPECT_RATIOS[active.base.aspectRatio]
+            ? updateRectWithAspect(
+                active.base,
+                active.corner,
+                point,
+                IMAGE_CROP_ASPECT_RATIOS[active.base.aspectRatio]!,
+                previewAspect
+              )
+            : updateRect(active.base, active.corner, point)
+      editor.updateShape({
+        id: shape.id,
+        type: 'node-card',
+        props: { config: serializeImageCropConfig(next) }
+      })
+    }
+    const finishInlineDrag = (): void => {
+      if (!inlineDrag.current) return
+      inlineDrag.current = null
+      markUndoPoint(editor, 'image-crop-inline-drag')
+    }
+    return (
+      <div className="crop-inline-workbench">
+        <div className="crop-inline-toolbar" role="group" aria-label="裁剪比例">
+          {COMMON_ASPECT_RATIOS.map((aspectRatio) => (
+            <button
+              key={aspectRatio}
+              type="button"
+              className={config.aspectRatio === aspectRatio ? 'active' : ''}
+              onPointerDown={stopEventPropagation}
+              onClick={(event) => {
+                stopEventPropagation(event)
+                setAspectRatio(aspectRatio)
+              }}
+            >
+              {aspectRatio === 'free' ? '自由' : aspectRatio}
+            </button>
+          ))}
+        </div>
+        <div
+          className="crop-inline-preview"
+          data-node-interactive="media-preview"
+          onPointerDown={guard.onPointerDown}
+          onDoubleClick={(event) =>
+            guard.onDoubleClick(event, () =>
+              openPreview({ kind: 'image', url: mediaUrl(source.mediaPath), title: shape.props.title })
+            )
+          }
+        >
+          <div
+            className="crop-inline-canvas"
+            style={{ aspectRatio: previewAspect }}
+            onPointerDown={beginInlineDrag}
+            onPointerMove={moveInlineDrag}
+            onPointerUp={finishInlineDrag}
+            onPointerCancel={finishInlineDrag}
+          >
+            <img
+              src={mediaUrl(source.mediaPath)}
+              alt="待裁剪图片"
+              draggable={false}
+              onLoad={(event) => {
+                const image = event.currentTarget
+                if (image.naturalWidth && image.naturalHeight) {
+                  setPreviewAspect(image.naturalWidth / image.naturalHeight)
+                }
+              }}
+            />
+            <span
+              className="crop-inline-selection"
+              style={{
+                left: `${config.rect.x * 100}%`,
+                top: `${config.rect.y * 100}%`,
+                width: `${config.rect.width * 100}%`,
+                height: `${config.rect.height * 100}%`
+              }}
+            >
+              {[0, 1, 2, 3].map((corner) => <i key={corner} className={`crop-inline-handle corner-${corner}`} />)}
+            </span>
+          </div>
+        </div>
+        <div className="crop-inline-actions">
+          <button
+            className="btn-ghost small"
+            onPointerDown={stopEventPropagation}
+            onClick={(event) => {
+              stopEventPropagation(event)
+              openSettings()
+            }}
+          >
+            <Icon name="edit" size={13} /> 精细框选
+          </button>
+          <button
+            className="btn-primary small"
+            onPointerDown={stopEventPropagation}
+            onClick={(event) => {
+              stopEventPropagation(event)
+              void runCrop()
+            }}
+          >
+            <Icon name="crop" size={13} /> 裁剪图片
+          </button>
+        </div>
       </div>
     )
   }

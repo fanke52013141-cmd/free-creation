@@ -317,7 +317,17 @@ function annotationHit(annotation: ImageEditAnnotation, point: ImageEditPoint): 
   const tolerance = Math.max(0.018, (annotation.strokeWidth ?? 3) / 260)
   if (annotation.type === 'text') {
     const anchor = annotation.points[0]
-    return Boolean(anchor && Math.hypot(point.x - anchor.x, point.y - anchor.y) <= tolerance * 2.5)
+    if (!anchor) return false
+    // SVG text 的锚点在左下角，不能只命中一个极小的点；按真实文本宽度和基线
+    // 命中，文字中间任意位置都可被移动工具拖住。
+    const width = Math.max(0.075, (annotation.text?.length ?? 1) * 0.036)
+    const height = Math.max(0.055, tolerance * 3)
+    return (
+      point.x >= anchor.x - tolerance &&
+      point.x <= anchor.x + width + tolerance &&
+      point.y >= anchor.y - height - tolerance &&
+      point.y <= anchor.y + tolerance
+    )
   }
   if (annotation.type === 'rect') {
     const rect = normalizedRect(annotation.points)
@@ -463,7 +473,6 @@ function ImageEditEditorCore({
       const target = findMoveTarget(startPoint)
       if (!target) {
         setSelectedMoveTarget(null)
-        toast('请点击已有的箭头、矩形、画笔、文字或遮罩后拖动')
         return
       }
       moveDraft.current = { target, start: startPoint, base: config, latest: config }
@@ -777,11 +786,6 @@ function ImageEditEditorCore({
               </button>
             ) : null}
           </div>
-          {tool === 'move' && (
-            <p className="image-edit-tool-hint">
-              <Icon name="move" size={13} /> 点击已有标注或遮罩后直接拖动；不会新建标注。
-            </p>
-          )}
           <div className="image-edit-colors">
             {COLORS.map((item) => (
               <button

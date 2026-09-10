@@ -959,7 +959,10 @@ export function CanvasEditor({
         nodeType: type,
         title: spec.label,
         w: spec.defaultSize.w,
-        h: spec.defaultSize.h
+        h: spec.defaultSize.h,
+        ...(type === 'video'
+          ? { config: JSON.stringify({ prompt: '', modelKey: '', mode: 'reference', params: {} }) }
+          : {})
       } satisfies Partial<NodeCardProps>
     })
     // 有待连线且成功建线时由 createEdge 统一打点（节点+连线并为一步）；

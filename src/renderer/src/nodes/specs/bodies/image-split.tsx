@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import {
   buildImageSplitTiles,
@@ -11,10 +11,6 @@ import { gatherUpstreamMedia } from '../../../canvas/graph'
 import { markUndoPoint } from '../../../canvas/history'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { mediaUrl, type NodeBodyProps, type NodeSettingsProps } from '../../registry'
-import { runNodeManually } from '../../../engine/executor'
-import { useAppStore } from '../../../stores/app'
-import { useGatewayStore } from '../../../stores/gateway'
-import { toast } from '../../../stores/toast'
 import { Icon } from '../../../components/Icon'
 import { useClickGuard } from './shared'
 
@@ -26,13 +22,22 @@ function positiveInteger(value: string, fallback: number): number {
 export function ImageSplitBody({ shape, openPreview }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
   const guard = useClickGuard()
-  const project = useAppStore((state) => state.currentProject)
-  const providers = useGatewayStore((state) => state.providers)
   const source = gatherUpstreamMedia(editor, shape.id, 'in-image', 'image')
   const config = parseImageSplitConfig(readNodeConfig(shape))
   const tiles = buildImageSplitTiles(config)
   const [previewAspect, setPreviewAspect] = useState<number | null>(null)
-  const [busy, setBusy] = useState(false)
+
+  // 移除卡片底部的按钮后，将旧卡片也只压缩一次为原高的 5/6；元数据标记避免
+  // 后续刷新或用户手动改变尺寸时再次缩小。'快速拆分' 仍由卡片右上角统一运行按钮执行。
+  useEffect(() => {
+    if (shape.meta?.splitCompactApplied || shape.props.h <= 220) return
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: { h: Math.max(220, Math.round(shape.props.h * (5 / 6))) },
+      meta: { ...(shape.meta ?? {}), splitCompactApplied: true }
+    })
+  }, [editor, shape.id, shape.meta, shape.props.h])
 
   const save = (partial: Partial<ImageSplitConfig>, reason: string): void => {
     const next = parseImageSplitConfig(JSON.stringify({ ...config, ...partial }))
@@ -44,51 +49,8 @@ export function ImageSplitBody({ shape, openPreview }: NodeBodyProps): React.JSX
     markUndoPoint(editor, reason)
   }
 
-  const split = async (): Promise<void> => {
-    if (!source) return toast('请先连接一张原图')
-    if (!project) return toast('项目未就绪')
-    setBusy(true)
-    try {
-      await runNodeManually(editor, project.id, providers, shape.id)
-    } finally {
-      setBusy(false)
-    }
-  }
-
   return (
     <div className="image-split-quick">
-      <div className="image-split-quick-head">
-        <div
-          className={`image-split-quick-preview${source ? '' : ' is-empty'}`}
-          data-node-interactive="media-preview"
-          role="button"
-          tabIndex={0}
-          title={source ? '双击预览原图' : '请先连接原图'}
-          onPointerDown={guard.onPointerDown}
-          onDoubleClick={(event) => {
-            if (!source) return
-            guard.onDoubleClick(event, () =>
-              openPreview({ kind: 'image', url: mediaUrl(source.mediaPath), title: '待拆分原图' })
-            )
-          }}
-        >
-          {source ? (
-            <img
-              src={mediaUrl(source.mediaPath)}
-              alt="待拆分原图"
-              draggable={false}
-              onLoad={(event) => {
-                const image = event.currentTarget
-                if (image.naturalWidth && image.naturalHeight) {
-                  setPreviewAspect(image.naturalWidth / image.naturalHeight)
-                }
-              }}
-            />
-          ) : (
-            <span><Icon name="image" size={20} /> 连接原图</span>
-          )}
-        </div>
-      </div>
       <div className="image-split-quick-controls" aria-label="快速拆分设置">
         <label>
           行数
@@ -143,8 +105,31 @@ export function ImageSplitBody({ shape, openPreview }: NodeBodyProps): React.JSX
         className="image-split-quick-grid"
         style={{ aspectRatio: previewAspect ?? 16 / 10 }}
         aria-label={`${config.rows} 行 ${config.columns} 列拆分预览`}
+        data-node-interactive="media-preview"
+        role="button"
+        tabIndex={source ? 0 : -1}
+        title={source ? '双击预览原图' : '请先连接原图'}
+        onPointerDown={guard.onPointerDown}
+        onDoubleClick={(event) => {
+          if (!source) return
+          guard.onDoubleClick(event, () =>
+            openPreview({ kind: 'image', url: mediaUrl(source.mediaPath), title: '待拆分原图' })
+          )
+        }}
       >
-        {source && <img src={mediaUrl(source.mediaPath)} alt="拆分范围预览" draggable={false} />}
+        {source ? (
+          <img
+            src={mediaUrl(source.mediaPath)}
+            alt="拆分范围预览"
+            draggable={false}
+            onLoad={(event) => {
+              const image = event.currentTarget
+              if (image.naturalWidth && image.naturalHeight) setPreviewAspect(image.naturalWidth / image.naturalHeight)
+            }}
+          />
+        ) : (
+          <span className="image-split-quick-empty"><Icon name="image" size={19} /> 连接原图</span>
+        )}
         {tiles.map((tile) => (
           <span
             className="image-split-preview-tile"
@@ -160,20 +145,9 @@ export function ImageSplitBody({ shape, openPreview }: NodeBodyProps): React.JSX
           </span>
         ))}
       </div>
-      <div className="image-split-quick-footer">
-        <span>{config.rows} × {config.columns}，共 {imageSplitCount(config)} 张</span>
-        <button
-          className="btn-primary small"
-          disabled={!source || busy}
-          onPointerDown={stopEventPropagation}
-          onClick={(event) => {
-            stopEventPropagation(event)
-            void split()
-          }}
-        >
-          <Icon name="grid" size={14} /> {busy ? '拆分中…' : '快速拆分'}
-        </button>
-      </div>
+      <span className="image-split-quick-summary">
+        {source ? `${config.rows} × ${config.columns}，共 ${imageSplitCount(config)} 张；右上角运行即可拆分` : '连接原图后可从右上角运行'}
+      </span>
     </div>
   )
 }

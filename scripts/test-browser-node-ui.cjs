@@ -145,8 +145,8 @@ async function main() {
     )
     assert.equal(
       await splitNode.getByRole('button', { name: '快速拆分', exact: true }).count(),
-      1,
-      '图片拆分必须提供节点内快速执行入口'
+      0,
+      '图片拆分不再保留底部快速拆分按钮，应由节点右上角统一运行入口执行'
     )
     const upload = page.waitForEvent('filechooser')
     await page.getByRole('button', { name: '上传本地文件', exact: true }).click()
@@ -335,8 +335,11 @@ async function main() {
     const edgeCountBeforeConnectForDelete = await page.locator('.data-edge').count()
     await page.mouse.move(deleteOut.x + deleteOut.width / 2, deleteOut.y + deleteOut.height / 2)
     await page.mouse.down()
+    // tldraw 需先处理 pointerdown 才会进入端口连线态；没有这小段等待时，CI 或高负载
+    // 机器偶尔会把紧随的第一帧移动当成普通画布拖动，造成假阴性的删除回归。
+    await page.waitForTimeout(80)
     await page.mouse.move(deleteIn.x + deleteIn.width / 2, deleteIn.y + deleteIn.height / 2, {
-      steps: 12
+      steps: 20
     })
     await page.mouse.up()
     await page.waitForFunction(

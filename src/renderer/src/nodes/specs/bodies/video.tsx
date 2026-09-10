@@ -1,5 +1,5 @@
 // 视频节点 Body（路线图 R6：bodies.tsx 拆分）
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { stopEventPropagation, useEditor, type TLShapeId } from 'tldraw'
 import type { VideoGenerationMode, VideoGenParams } from '@shared/types'
 import {
@@ -7,13 +7,12 @@ import {
   normalizeVideoGenParams,
   videoCapabilitiesFor,
   videoCapabilityIssues,
-  videoInputHints,
   videoRatioIsDerivedByFrames
 } from '@shared/video-capabilities'
 import { getNodeType, mediaUrl, type NodeBodyProps } from '../../registry'
 import { toast } from '../../../stores/toast'
 import { markUndoPoint } from '../../../canvas/history'
-import { createEdge, gatherUpstreamMediaList } from '../../../canvas/graph'
+import { createEdge, gatherUpstreamMediaList, readConnectedNodeInputs } from '../../../canvas/graph'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import type { NodeCardShape } from '../../../canvas/NodeCardShape'
 import { projectNodeOutputs } from '../../nodeValues'
@@ -44,7 +43,7 @@ interface VideoGenData {
   params: VideoGenParams
 }
 
-function resolvedMode(mode: unknown, imageCount: number): VideoGenerationMode {
+function resolvedMode(mode: unknown, _imageCount: number): VideoGenerationMode {
   if (
     mode === 'text' ||
     mode === 'first-frame' ||
@@ -53,14 +52,26 @@ function resolvedMode(mode: unknown, imageCount: number): VideoGenerationMode {
   ) {
     return mode
   }
-  return imageCount === 0 ? 'text' : imageCount === 1 ? 'first-frame' : 'reference'
+  // 新节点的默认语义是「多参模式」：空输入时它等价于文生视频，连接图片后
+  // 直接把这些图片作为有序参考素材提交。旧节点仍保留其显式保存的模式。
+  return 'reference'
 }
 
 const MODE_LABELS: Record<VideoGenerationMode, string> = {
   text: '文生视频',
   'first-frame': '首帧生视频',
   'first-last-frame': '首尾帧生视频',
-  reference: '多模态参考'
+  reference: '多参模式'
+}
+
+/** 输入变化时优先使用不需要用户重复选择的多参模式；模型不支持时才回退到首帧。 */
+function automaticMode(
+  capabilities: ReturnType<typeof videoCapabilitiesFor>,
+  imageCount: number
+): VideoGenerationMode {
+  if (capabilities.modes.includes('reference')) return 'reference'
+  if (imageCount > 0 && capabilities.modes.includes('first-frame')) return 'first-frame'
+  return capabilities.modes.includes('text') ? 'text' : capabilities.modes[0] ?? 'text'
 }
 
 function parseVideoGen(text: string): VideoGenData {
@@ -145,10 +156,19 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const [draft, setDraft] = useState(data.prompt)
   const [submitting, setSubmitting] = useState(false)
   const [mentionOpen, setMentionOpen] = useState(false)
+  const priorImageCount = useRef<number | null>(null)
   // 视频的所有图片只占一个绿色端口；模式决定连接顺序的协议角色。
   const images = gatherUpstreamMediaList(editor, shape.id, 'in-images', 'image')
   const motionReferences = gatherUpstreamMediaList(editor, shape.id, 'in-reference-video', 'video')
   const audioReferences = gatherUpstreamMediaList(editor, shape.id, 'in-reference-audio', 'audio')
+  const connectedImageNames = new Map(
+    readConnectedNodeInputs(editor, shape.id)
+      .flatMap((input) =>
+        input.targetPortId === 'in-images' && input.value?.kind === 'image'
+          ? [[input.value.mediaPath, input.sourceNodeName] as const]
+          : []
+      )
+  )
   const availableMentions = imageMentions(editor, shape.id)
   const opt = options.find((o) => o.key === data.modelKey)
   // 兼容网关代理属于供应商接入事实，统一收在能力层；UI 只读取结构化能力。
@@ -176,14 +196,35 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     referenceVideoCount: motionReferences.length,
     referenceAudioCount: audioReferences.length
   })
-  const inputHints = videoInputHints(capabilities, {
-    mode,
-    imageCount: images.length
-  })
 
   useEffect(() => {
     if (!loaded) void loadProviders()
   }, [loaded, loadProviders])
+
+  // 连上一张图片时，自动把旧的文生视频切为多参模式。只在输入数量变化时运行，
+  // 因此用户随后手动选择首帧 / 首尾帧不会被渲染过程反复改回去。
+  useEffect(() => {
+    const previous = priorImageCount.current
+    priorImageCount.current = images.length
+    const hasExplicitNonTextMode =
+      data.mode === 'first-frame' || data.mode === 'first-last-frame' || data.mode === 'reference'
+    if (
+      images.length === 0 ||
+      // 打开已有节点时尊重已保存的首帧/首尾帧选择；只迁移旧的文生视频或未设置模式。
+      (previous === null && hasExplicitNonTextMode) ||
+      (previous !== null && previous === images.length && data.mode !== 'text')
+    ) {
+      return
+    }
+    const nextMode = automaticMode(capabilities, images.length)
+    if (data.mode !== nextMode) {
+      editor.updateShape({
+        id: shape.id,
+        type: 'node-card',
+        props: { config: JSON.stringify({ ...data, mode: nextMode, params }) }
+      })
+    }
+  }, [capabilities, data, editor, images.length, params, shape.id])
 
   const update = (next: VideoGenData): void => {
     editor.updateShape({
@@ -203,7 +244,9 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     update({
       ...data,
       modelKey,
-      mode: nextCapabilities.modes.includes(mode) ? mode : 'text',
+      mode: nextCapabilities.modes.includes(mode)
+        ? mode
+        : automaticMode(nextCapabilities, images.length),
       params: normalizeVideoGenParams(nextCapabilities, data.params)
     })
   }
@@ -248,13 +291,12 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
       { shapeId: item.shapeId, portId: 'out-image' },
       { shapeId: shape.id, portId: 'in-images' }
     )
-    // @ 标记严格对应这个唯一图片端口的连接顺序；第一张主图也计入序号。
-    const ordinal = images.length + 1
-    const nextPrompt = `${draft}${draft && !/\s$/.test(draft) ? ' ' : ''}@图片 ${ordinal}`
+    // 提示词引用使用资产名，不暴露“图片 1 / 图片 2”这类内部序号。
+    const nextPrompt = `${draft}${draft && !/\s$/.test(draft) ? ' ' : ''}@${item.title}`
     setDraft(nextPrompt)
     update({ ...data, prompt: nextPrompt })
     setMentionOpen(false)
-    if (linked) toast(`已将“${item.title}”作为图片 ${ordinal} 连入图片端口`)
+    if (linked) toast(`已将“${item.title}”加入多参素材`)
     else toast('该图片可能已经引用；已保留提示词标记')
   }
 
@@ -400,12 +442,6 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
 
   return (
     <div className="gen-panel">
-      {inputHints.length > 0 && (
-        <div className="gen-capability-note">
-          <Icon name="info" size={13} />
-          <span>{inputHints.join(' · ')}</span>
-        </div>
-      )}
       {capabilityIssues.length > 0 && (
         <div className="gen-capability-note capability-error" role="alert">
           <Icon name="info" size={13} />
@@ -421,28 +457,14 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
         </div>
       )}
       {images.length > 0 && (
-        <div className="ref-image-bar">
-          <span className="ref-image-label">
-            <Icon name="attach" size={13} />
-            {mode === 'first-last-frame'
-              ? '第 1 张为首帧，第 2 张为尾帧。'
-              : mode === 'first-frame'
-                ? '第 1 张图片作为首帧。'
-                : mode === 'reference'
-                  ? `已连接 ${images.length} 张参考图（可在提示词中写 @图片 N）。`
-                  : `当前为文生视频模式；已连接的 ${images.length} 张图片不会提交。`}
-          </span>
-          <div className="video-reference-chips" aria-label="已连接图片">
+        <div className="video-reference-strip" aria-label="已连接图片">
+          <div className="video-reference-chips reference-flow">
             {images.map((image, index) => (
-              <span className="video-reference-chip" key={`${image.mediaPath}-${index}`}>
-                <img src={mediaUrl(image.mediaPath)} alt={`图片 ${index + 1}`} draggable={false} />
-                {mode === 'first-last-frame' && index === 0
-                  ? '首帧'
-                  : mode === 'first-last-frame' && index === 1
-                    ? '尾帧'
-                    : mode === 'first-frame' && index === 0
-                      ? '首帧'
-                      : `图片 ${index + 1}`}
+              <span className="video-reference-chip" key={`${image.mediaPath}-${index}`} title={connectedImageNames.get(image.mediaPath) ?? '图片'}>
+                <img src={mediaUrl(image.mediaPath)} alt="" draggable={false} />
+                <span className="video-reference-name">
+                  {connectedImageNames.get(image.mediaPath) ?? '未命名图片'}
+                </span>
               </span>
             ))}
           </div>
@@ -456,10 +478,14 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           </span>
         </div>
       )}
-      <ModelSelect value={data.modelKey} options={options} onChange={updateModel} />
-      <label className="video-mode-select">
-        <span>生成模式</span>
-        <AppSelect
+      <div className="video-model-mode-row">
+        <label>
+          <span>模型</span>
+          <ModelSelect value={data.modelKey} options={options} onChange={updateModel} />
+        </label>
+        <label>
+          <span>生成模式</span>
+          <AppSelect
           className="gen-select"
           value={mode}
           onPointerDown={(event) => event.stopPropagation()}
@@ -479,14 +505,15 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
               })
             })
           }}
-        >
-          {capabilities.modes.map((candidate) => (
-            <option key={candidate} value={candidate}>
-              {MODE_LABELS[candidate]}
-            </option>
-          ))}
-        </AppSelect>
-      </label>
+          >
+            {capabilities.modes.map((candidate) => (
+              <option key={candidate} value={candidate}>
+                {MODE_LABELS[candidate]}
+              </option>
+            ))}
+          </AppSelect>
+        </label>
+      </div>
       <textarea
         className="gen-prompt"
         value={draft}
@@ -519,9 +546,6 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
         >
           <Icon name="attach" size={13} /> @ 引用图片
         </button>
-        <span>
-          {availableMentions.length ? '引用会建立真实参考图连线' : '先生成或上传一张图片'}
-        </span>
         {mentionOpen && (
           <div className="video-mention-menu" role="listbox" aria-label="选择参考图">
             {availableMentions.map((item) => (

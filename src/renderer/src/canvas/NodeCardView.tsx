@@ -288,6 +288,12 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       .filter(Boolean)
       .join(' · ')
 
+  // 裁剪、拆图和视频各自已经在正文内呈现可操作的素材区；继续显示通用输入条会
+  // 重复“原图 / 图片名称”，并挤占预览高度。其他节点仍保留统一的关系可见性。
+  const hasDedicatedInputSurface = ['image-crop', 'image-split', 'video'].includes(
+    shape.props.nodeType
+  )
+
   return (
     <HTMLContainer style={{ pointerEvents: 'all' }}>
       {/* 外层包一层无裁切的容器：端口圆点要压在卡片边缘外侧，不能被卡片 overflow:hidden 裁掉 */}
@@ -383,7 +389,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             )}
           </div>
           <div ref={bodyRef} className="node-body">
-            <ConnectedInputPreview editor={editor} shape={shape} />
+            {!hasDedicatedInputSurface && <ConnectedInputPreview editor={editor} shape={shape} />}
             <div className="node-body-content">
               {spec ? (
                 <spec.Body shape={shape} openPreview={openMediaPreview} />

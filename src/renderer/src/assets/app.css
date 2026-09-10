@@ -1556,6 +1556,95 @@ select:focus-visible,
   font-size: 11px;
 }
 
+/* 裁剪节点的高频路径：比例选择、预览与执行均在卡片内，精细框选才进入详情面板。 */
+.crop-inline-workbench {
+  display: grid;
+  grid-template-rows: auto minmax(104px, 1fr) auto;
+  height: 100%;
+  min-height: 0;
+  gap: 7px;
+  padding: 9px;
+}
+
+.crop-inline-toolbar {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+}
+
+.crop-inline-toolbar button {
+  height: 25px;
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted);
+  cursor: pointer;
+  font: 10px/1 inherit;
+}
+
+.crop-inline-toolbar button.active {
+  border-color: rgba(79, 216, 155, 0.72);
+  background: rgba(16, 185, 129, 0.16);
+  color: #b9f6d3;
+}
+
+.crop-inline-preview {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #10151c;
+}
+
+.crop-inline-canvas {
+  position: relative;
+  width: auto;
+  height: 100%;
+  max-width: 100%;
+  touch-action: none;
+}
+
+.crop-inline-canvas img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+
+.crop-inline-selection {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1.5px solid #67e8f9;
+  box-shadow: 0 0 0 999px rgba(5, 10, 15, 0.38);
+  cursor: move;
+}
+
+.crop-inline-handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #cffafe;
+  border-radius: 50%;
+  background: #0891b2;
+  box-shadow: 0 0 0 1px rgba(4, 35, 48, 0.8);
+}
+
+.crop-inline-handle.corner-0 { top: -6px; left: -6px; cursor: nwse-resize; }
+.crop-inline-handle.corner-1 { top: -6px; right: -6px; cursor: nesw-resize; }
+.crop-inline-handle.corner-2 { bottom: -6px; left: -6px; cursor: nesw-resize; }
+.crop-inline-handle.corner-3 { right: -6px; bottom: -6px; cursor: nwse-resize; }
+
+.crop-inline-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
 /* 参考节点悬浮操作，但只提供不会绕过节点协议的查看/复制能力。 */
 .node-hover-toolbar {
   position: absolute;
@@ -2003,7 +2092,9 @@ select:focus-visible,
 /* 拆分节点紧凑头部：缩略图 + 标题 + 调整按钮，把高度让给结果网格。 */
 .image-split-quick {
   display: grid;
+  grid-template-rows: auto minmax(112px, 1fr) auto;
   gap: 8px;
+  height: 100%;
   min-height: 0;
   padding: 10px;
 }
@@ -2086,11 +2177,18 @@ select:focus-visible,
 .image-split-quick-grid {
   position: relative;
   width: 100%;
-  min-height: 92px;
+  min-height: 0;
+  height: 100%;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #10151c;
+  cursor: default;
+}
+
+/* 预览图无论横竖都在节点剩余空间内 contain，不再因为竖图的 aspect-ratio 撑高整张卡片。 */
+.image-split-quick-grid {
+  aspect-ratio: auto !important;
 }
 
 .image-split-quick-grid > img {
@@ -2100,18 +2198,24 @@ select:focus-visible,
   object-fit: contain;
 }
 
-.image-split-quick-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+.image-split-quick-empty {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  align-content: center;
+  gap: 5px;
   color: var(--muted, #8e9bab);
   font-size: 11px;
 }
 
-.image-split-quick-footer .btn-primary {
-  min-height: 30px;
-  padding: 5px 10px;
+.image-split-quick-summary {
+  overflow: hidden;
+  color: var(--muted, #8e9bab);
+  font-size: 10px;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .image-split-head {
@@ -4599,8 +4703,10 @@ select:focus-visible,
 .image-edit-workbench-body .image-edit-settings-workbench .image-edit-preview {
   grid-column: 1;
   grid-row: 1 / span 7;
-  max-height: min(52vh, 500px);
-  justify-self: stretch;
+  width: auto;
+  height: min(52vh, 500px);
+  max-width: 100%;
+  justify-self: center;
 }
 
 .image-edit-workbench-body .image-edit-settings-workbench > :not(.image-edit-preview) {
@@ -6216,6 +6322,102 @@ select:focus-visible,
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
+}
+
+/* 视频：模型与模式是同一层级的运行条件，保持同行可见；参考素材以内嵌折叠卡呈现。 */
+.video-model-mode-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(106px, 0.85fr);
+  gap: 7px;
+}
+
+.video-model-mode-row > label {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.video-model-mode-row .gen-select {
+  width: 100%;
+  min-width: 0;
+}
+
+.video-reference-strip {
+  min-width: 0;
+  padding: 5px;
+  border: 1px solid rgba(74, 222, 181, 0.28);
+  border-radius: 8px;
+  background: linear-gradient(110deg, rgba(16, 185, 129, 0.09), rgba(45, 120, 218, 0.07));
+}
+
+.video-reference-chips {
+  display: flex;
+  min-width: 0;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 1px;
+}
+
+.video-reference-chip {
+  display: inline-flex;
+  align-items: center;
+  min-width: 34px;
+  max-width: 42px;
+  height: 30px;
+  flex: 0 0 auto;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid rgba(123, 241, 205, 0.38);
+  border-radius: 7px;
+  background: rgba(9, 24, 31, 0.8);
+  color: var(--txt);
+  transition: max-width 180ms ease, transform 180ms ease, border-color 180ms ease;
+}
+
+.video-reference-chip:hover {
+  max-width: 164px;
+  border-color: rgba(102, 221, 255, 0.9);
+  transform: translateY(-1px);
+}
+
+.video-reference-chip img {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  object-fit: cover;
+}
+
+.video-reference-name {
+  min-width: 0;
+  padding: 0 7px 0 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+/* 已连接素材的细微渐变流光仅在节点内部运行，不干扰连线或读取文字。 */
+.reference-flow {
+  position: relative;
+  isolation: isolate;
+}
+
+.reference-flow::after {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: 7px;
+  background: linear-gradient(90deg, transparent, rgba(51, 211, 255, 0.24), rgba(192, 92, 255, 0.2), transparent);
+  background-size: 180% 100%;
+  content: '';
+  opacity: 0.7;
+  animation: node-reference-flow 3.4s linear infinite;
+}
+
+@keyframes node-reference-flow {
+  to { background-position: -180% 0; }
 }
 
 .ref-image-bar {

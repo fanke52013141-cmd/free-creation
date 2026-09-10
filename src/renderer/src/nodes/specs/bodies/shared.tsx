@@ -120,7 +120,10 @@ export function createImageContinuation(
       nodeType: targetType,
       title,
       w: spec.defaultSize.w,
-      h: spec.defaultSize.h
+      h: spec.defaultSize.h,
+      ...(targetType === 'video'
+        ? { config: JSON.stringify({ prompt: '', modelKey: '', mode: 'reference', params: {} }) }
+        : {})
     } satisfies Partial<NodeCardProps>
   })
   if (
@@ -252,7 +255,7 @@ export function ImageContinuationActions({
     },
     { type: 'image-gen', icon: 'spark', label: '继续生图', title: '创建生图节点并连接当前图片' },
     { type: 'image-edit', icon: 'edit', label: '修改图片', title: '对当前图片添加标注并修改' },
-    { type: 'video', icon: 'video', label: '生成视频', title: '创建视频节点并将当前图片作为首帧' }
+    { type: 'video', icon: 'video', label: '生成视频', title: '创建视频节点并将当前图片作为多参素材' }
   ]
   return (
     <div className="node-media-next-actions" aria-label="图片后续操作">
