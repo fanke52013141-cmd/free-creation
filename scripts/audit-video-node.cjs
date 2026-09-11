@@ -116,6 +116,16 @@ async function main() {
       })
       await modelSelect.selectOption({ label: '演示 MiniMax · MiniMax-H3' })
       await page.waitForTimeout(250)
+      const promptInput = video.locator('textarea')
+      await promptInput.fill('审查正文：人物转身，镜头缓慢推进')
+      await promptInput.blur()
+      await page.waitForTimeout(150)
+      report.assertions.push({
+        name: 'prompt-remains-editable-after-model-selection',
+        pass: (await promptInput.inputValue()) === '审查正文：人物转身，镜头缓慢推进',
+        actual: await promptInput.inputValue(),
+        expected: 'node body prompt remains available after fixed model config changes'
+      })
       report.states.push({ name: 'h3-selected', ...(await cardState(page, video)) })
       await screenshot(page, '02-h3-selected')
 
