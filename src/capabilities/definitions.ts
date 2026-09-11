@@ -160,8 +160,8 @@ const imageGenCapability = defineCapability({
 
 const videoCapability = defineCapability({
   id: 'video.generate',
-  version: '4.0.0',
-  contractVersion: 4,
+  version: '5.0.0',
+  contractVersion: 5,
   nodeType: 'video',
   title: '视频',
   description:
@@ -221,8 +221,35 @@ const videoCapability = defineCapability({
     }
   ],
   configSchema: {
-    providerId: { type: 'string', required: true, description: '供应商 ID' },
-    modelId: { type: 'string', required: true, description: '模型 ID' }
+    prompt: { type: 'string', required: false, description: '节点内视频提示词' },
+    modelKey: {
+      type: 'string',
+      required: true,
+      description: '已选择的供应商与模型组合键（providerId::modelId）'
+    },
+    mode: {
+      type: 'enum',
+      required: false,
+      enumValues: ['text', 'first-frame', 'first-last-frame', 'reference'],
+      description: '生成模式；实际可选项由模型能力和已连接素材共同决定'
+    },
+    params: {
+      type: 'object',
+      required: false,
+      description: '视频生成参数；字段可用性由所选模型能力决定',
+      properties: {
+        ratio: {
+          type: 'enum',
+          enumValues: ['adaptive', '21:9', '16:9', '4:3', '1:1', '3:4', '9:16'],
+          description: '画幅比例'
+        },
+        duration: { type: 'number', minimum: 4, maximum: 30, description: '时长（秒）' },
+        resolution: { type: 'string', description: '清晰度档位' },
+        generateAudio: { type: 'boolean', description: '是否生成同步音频（仅支持的模型）' },
+        seed: { type: 'number', description: '随机种子（仅支持的模型）' },
+        watermark: { type: 'boolean', description: '是否保留水印（仅支持的模型）' }
+      }
+    }
   },
   commands: { execute: 'video.generate.execute' },
   runtime: { headless: true, preview: true, batch: false, executionMode: 'auto' },
@@ -429,8 +456,8 @@ const imageEditCapability = defineCapability({
 
 const videoFrameCapability = defineCapability({
   id: 'video.frame',
-  version: '2.0.0',
-  contractVersion: 2,
+  version: '3.0.0',
+  contractVersion: 3,
   nodeType: 'video-frame',
   title: '取帧',
   description: '从上游视频提取首帧、尾帧或任意指定时刻的画面，输出新的 PNG/JPG 图片资产。',
@@ -456,18 +483,26 @@ const videoFrameCapability = defineCapability({
     }
   ],
   configSchema: {
-    timestamps: {
-      type: 'array',
-      required: false,
-      description: '取帧时间点列表（秒）',
-      items: { type: 'number' }
+    version: { type: 'number', required: true, defaultValue: 2, description: '取帧配置版本' },
+    mode: {
+      type: 'enum',
+      required: true,
+      defaultValue: 'first',
+      enumValues: ['first', 'last', 'custom'],
+      description: '取帧位置：首帧、尾帧或指定时间'
     },
-    count: {
+    timeMs: {
       type: 'number',
       required: false,
-      minimum: 1,
-      maximum: 100,
-      description: '均匀取帧数量'
+      minimum: 0,
+      description: '指定时间点（毫秒；仅 custom 模式使用）'
+    },
+    format: {
+      type: 'enum',
+      required: true,
+      defaultValue: 'png',
+      enumValues: ['png', 'jpg'],
+      description: '输出图片格式'
     }
   },
   commands: { execute: 'video.frame.extract' },
@@ -477,8 +512,8 @@ const videoFrameCapability = defineCapability({
 
 const videoClipCapability = defineCapability({
   id: 'video.clip',
-  version: '2.0.0',
-  contractVersion: 2,
+  version: '3.0.0',
+  contractVersion: 3,
   nodeType: 'video-clip',
   title: '截取',
   description: '从上游视频按起止毫秒精确截取片段，默认重编码输出 MP4 视频资产。',
@@ -504,8 +539,22 @@ const videoClipCapability = defineCapability({
     }
   ],
   configSchema: {
-    startTime: { type: 'number', required: true, minimum: 0, description: '开始时间（秒）' },
-    endTime: { type: 'number', required: true, minimum: 0, description: '结束时间（秒）' }
+    version: { type: 'number', required: true, defaultValue: 2, description: '截取配置版本' },
+    startMs: { type: 'number', required: true, minimum: 0, description: '开始时间（毫秒）' },
+    endMs: { type: 'number', required: true, minimum: 1, description: '结束时间（毫秒）' },
+    includeAudio: {
+      type: 'boolean',
+      required: true,
+      defaultValue: true,
+      description: '是否保留音轨'
+    },
+    quality: {
+      type: 'enum',
+      required: true,
+      defaultValue: 'balanced',
+      enumValues: ['fast', 'balanced', 'high'],
+      description: '输出编码质量'
+    }
   },
   commands: { execute: 'video.clip.extract' },
   runtime: { headless: true, preview: false, batch: false, executionMode: 'auto' },
@@ -514,8 +563,8 @@ const videoClipCapability = defineCapability({
 
 const videoAudioCapability = defineCapability({
   id: 'video.audio',
-  version: '2.0.0',
-  contractVersion: 2,
+  version: '3.0.0',
+  contractVersion: 3,
   nodeType: 'video-audio',
   title: '提音',
   description: '从上游视频的指定时间范围忠实提取原始音轨，输出 WAV 或 M4A 音频资产。',
@@ -540,7 +589,26 @@ const videoAudioCapability = defineCapability({
       description: '从指定范围提取并转码的新音频资产。'
     }
   ],
-  configSchema: {},
+  configSchema: {
+    version: { type: 'number', required: true, defaultValue: 2, description: '提音配置版本' },
+    startMs: { type: 'number', required: true, minimum: 0, description: '开始时间（毫秒）' },
+    endMs: { type: 'number', required: true, minimum: 1, description: '结束时间（毫秒）' },
+    format: {
+      type: 'enum',
+      required: true,
+      defaultValue: 'm4a',
+      enumValues: ['wav', 'm4a'],
+      description: '输出音频格式'
+    },
+    sampleRate: {
+      type: 'number',
+      required: true,
+      defaultValue: 44100,
+      minimum: 44100,
+      maximum: 48000,
+      description: '输出采样率（Hz）'
+    }
+  },
   commands: { execute: 'video.audio.extract' },
   runtime: { headless: true, preview: false, batch: false, executionMode: 'auto' },
   expose: ALL_EXPOSED
@@ -550,8 +618,8 @@ const videoAudioCapability = defineCapability({
 
 const vocalSeparateCapability = defineCapability({
   id: 'audio.vocal',
-  version: '3.0.0',
-  contractVersion: 3,
+  version: '4.0.0',
+  contractVersion: 4,
   nodeType: 'vocal-separate',
   title: '人声分离',
   description:
@@ -577,7 +645,22 @@ const vocalSeparateCapability = defineCapability({
       description: '分离产出的人声音轨；高质量模式的伴奏会作为关联独立音频节点显示在画布中。'
     }
   ],
-  configSchema: {},
+  configSchema: {
+    version: { type: 'number', required: true, defaultValue: 1, description: '人声分离配置版本' },
+    mode: {
+      type: 'enum',
+      required: true,
+      defaultValue: 'fast',
+      enumValues: ['fast', 'quality'],
+      description: '快速增强或本地高质量分离'
+    },
+    outputAccompaniment: {
+      type: 'boolean',
+      required: true,
+      defaultValue: true,
+      description: '是否额外物化伴奏为关联的独立音频资产'
+    }
+  },
   commands: { execute: 'audio.vocal.separate' },
   runtime: { headless: true, preview: false, batch: false, executionMode: 'auto' },
   expose: ALL_EXPOSED
@@ -585,8 +668,8 @@ const vocalSeparateCapability = defineCapability({
 
 const speechCapability = defineCapability({
   id: 'audio.speech',
-  version: '1.0.0',
-  contractVersion: 1,
+  version: '2.0.0',
+  contractVersion: 2,
   nodeType: 'speech',
   title: '配音',
   description: '通用文本配音节点：将节点内或上游文本交给已配置的语音模型，生成新的音频资产。',
@@ -611,7 +694,34 @@ const speechCapability = defineCapability({
       description: '模型生成并落盘的配音资产。'
     }
   ],
-  configSchema: {},
+  configSchema: {
+    mode: {
+      type: 'enum',
+      required: false,
+      enumValues: ['generate'],
+      defaultValue: 'generate',
+      description: '配音节点仅支持生成模式；上传音频应使用音频资产节点。'
+    },
+    modelKey: {
+      type: 'string',
+      required: true,
+      description: '已选择的供应商与语音模型组合键（providerId::modelId）'
+    },
+    voice: {
+      type: 'enum',
+      required: false,
+      enumValues: ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'],
+      defaultValue: 'alloy',
+      description: '模型预设音色'
+    },
+    format: {
+      type: 'enum',
+      required: false,
+      enumValues: ['mp3', 'opus', 'aac', 'flac', 'wav', 'pcm'],
+      defaultValue: 'mp3',
+      description: '生成音频格式'
+    }
+  },
   commands: { execute: 'audio.speech.execute' },
   runtime: { headless: true, preview: false, batch: false, executionMode: 'auto' },
   expose: ALL_EXPOSED
@@ -619,8 +729,8 @@ const speechCapability = defineCapability({
 
 const ttsCapability = defineCapability({
   id: 'audio.tts',
-  version: '1.0.0',
-  contractVersion: 1,
+  version: '2.0.0',
+  contractVersion: 2,
   nodeType: 'tts',
   title: '语音克隆',
   description:
@@ -655,7 +765,45 @@ const ttsCapability = defineCapability({
     }
   ],
   configSchema: {
-    voice: { type: 'string', required: false, description: '音色 ID' },
+    backend: {
+      type: 'enum',
+      required: false,
+      enumValues: ['comfyui', 'minimax'],
+      defaultValue: 'comfyui',
+      description: '执行后端：本地 IndexTTS 或 MiniMax 快速复刻'
+    },
+    providerId: {
+      type: 'string',
+      required: false,
+      description: 'MiniMax 供应商 ID（MiniMax 后端必填）'
+    },
+    modelId: { type: 'string', required: false, description: 'MiniMax 合成模型 ID' },
+    voiceId: { type: 'string', required: false, description: '可选的已保存音色 ID' },
+    needNoiseReduction: {
+      type: 'boolean',
+      required: false,
+      defaultValue: false,
+      description: '复刻前降噪'
+    },
+    needVolumeNormalization: {
+      type: 'boolean',
+      required: false,
+      defaultValue: false,
+      description: '复刻前音量归一化'
+    },
+    aigcWatermark: {
+      type: 'boolean',
+      required: false,
+      defaultValue: false,
+      description: '写入 AIGC 水印'
+    },
+    lang: {
+      type: 'enum',
+      required: false,
+      enumValues: ['zhen', 'ZH', 'EN', 'JA', 'ES', 'AR'],
+      defaultValue: 'zhen',
+      description: '合成语言'
+    },
     speed: {
       type: 'number',
       required: false,
@@ -663,6 +811,26 @@ const ttsCapability = defineCapability({
       maximum: 2,
       defaultValue: 1,
       description: '语速'
+    },
+    emotion: {
+      type: 'number',
+      required: false,
+      minimum: 0,
+      maximum: 1,
+      defaultValue: 1,
+      description: '情绪强度（本地 IndexTTS）'
+    },
+    format: {
+      type: 'enum',
+      required: false,
+      enumValues: ['wav', 'mp3', 'flac'],
+      defaultValue: 'wav',
+      description: '生成音频格式'
+    },
+    refMediaId: {
+      type: 'string',
+      required: false,
+      description: '节点内上传的参考音频 ID；上游连线优先'
     }
   },
   commands: { execute: 'audio.tts.synthesize' },

@@ -9,22 +9,10 @@ import {
   isSeedanceGatewayProxy,
   normalizeVideoGenParams,
   videoCapabilitiesFor,
+  videoCapabilityIssues,
+  resolveVideoMode,
   videoRatioIsDerivedByFrames
 } from '@shared/video-capabilities'
-import type { VideoGenerationMode } from '@shared/types'
-
-function resolvedMode(mode: unknown, _imageCount: number): VideoGenerationMode {
-  if (
-    mode === 'text' ||
-    mode === 'first-frame' ||
-    mode === 'first-last-frame' ||
-    mode === 'reference'
-  ) {
-    return mode
-  }
-  // 缺少保存模式的节点统一按多参协议处理；无参考素材时上游会自然作为文生视频提交。
-  return 'reference'
-}
 
 export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
   const data = parseVideoGen(readNodeConfig(ctx.shape))
@@ -38,26 +26,41 @@ export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
   // 视频节点只有一个图片多值端口：连接顺序即语义。第一张是主图/首帧，
   // 后续图片是有序参考图，避免在画布边缘摆出多个同色、同类型端口。
   const images = inputMedia(ctx.inputs, 'in-images', 'image')
-  const mode = resolvedMode(data.mode, images.length)
+  const motionReferences = inputMedia(ctx.inputs, 'in-reference-video', 'video')
+  const audioReferences = inputMedia(ctx.inputs, 'in-reference-audio', 'audio')
+  const capabilities = videoCapabilitiesFor(option.provider.specId, option.model.id, {
+    gatewayProxy: isSeedanceGatewayProxy(option.provider.specId, option.provider.baseURL)
+  })
+  const { mode } = resolveVideoMode(capabilities, {
+    mode: data.mode,
+    imageCount: images.length,
+    referenceVideoCount: motionReferences.length,
+    referenceAudioCount: audioReferences.length
+  })
+  if (!mode) return { status: 'skipped', reason: '当前模型不支持已连接的参考素材组合' }
   const firstFrame = mode === 'first-frame' || mode === 'first-last-frame' ? images[0] : undefined
   const lastFrame = mode === 'first-last-frame' ? images[1] : undefined
   const referenceImages = mode === 'reference' ? images : []
-  const motionReferences = inputMedia(ctx.inputs, 'in-reference-video', 'video')
-  const audioReferences = inputMedia(ctx.inputs, 'in-reference-audio', 'audio')
-  const params = normalizeVideoGenParams(
-    videoCapabilitiesFor(option.provider.specId, option.model.id, {
-      gatewayProxy: isSeedanceGatewayProxy(option.provider.specId, option.provider.baseURL)
-    }),
-    data.params,
-    {
-      framesDetermineRatio: videoRatioIsDerivedByFrames(
-        option.provider.specId,
-        option.model.id,
-        Boolean(firstFrame || lastFrame)
-      )
-    }
-  )
+  const params = normalizeVideoGenParams(capabilities, data.params, {
+    framesDetermineRatio: videoRatioIsDerivedByFrames(
+      option.provider.specId,
+      option.model.id,
+      Boolean(firstFrame || lastFrame)
+    )
+  })
   if (!prompt.trim()) return { status: 'skipped', reason: '无提示词' }
+  const inputIssues = videoCapabilityIssues(capabilities, {
+    prompt,
+    params,
+    mode,
+    hasFirstFrame: Boolean(firstFrame),
+    hasLastFrame: Boolean(lastFrame),
+    imageCount: images.length,
+    referenceImageCount: referenceImages.length,
+    referenceVideoCount: motionReferences.length,
+    referenceAudioCount: audioReferences.length
+  })
+  if (inputIssues.length > 0) return { status: 'skipped', reason: inputIssues.join('；') }
   try {
     const submitted = await ctx.gateway.videoSubmit({
       projectId: ctx.projectId,

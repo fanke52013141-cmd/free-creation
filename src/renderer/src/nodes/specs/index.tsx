@@ -301,7 +301,7 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'video',
-    contractVersion: 4,
+    contractVersion: 5,
     label: '图片生成视频',
     icon: 'video',
     color: '#f472b6',
@@ -371,7 +371,7 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'video-frame',
-    contractVersion: 2,
+    contractVersion: 3,
     label: '取帧',
     icon: 'frame',
     color: '#fb7185',
@@ -389,7 +389,7 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'video-clip',
-    contractVersion: 2,
+    contractVersion: 3,
     label: '截取',
     icon: 'clip',
     color: '#ec4899',
@@ -407,7 +407,7 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'video-audio',
-    contractVersion: 2,
+    contractVersion: 3,
     label: '提音',
     icon: 'audio',
     color: '#f59e0b',
@@ -425,7 +425,7 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'vocal-separate',
-    contractVersion: 3,
+    contractVersion: 4,
     label: '人声分离',
     icon: 'audio',
     color: '#a78bfa',
@@ -473,7 +473,7 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'speech',
-    contractVersion: 1,
+    contractVersion: 2,
     label: '配音',
     icon: 'audio',
     color: '#fbbf24',
@@ -494,7 +494,7 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'tts',
-    contractVersion: 1,
+    contractVersion: 2,
     label: '语音克隆',
     icon: 'audio',
     color: '#fbbf24',

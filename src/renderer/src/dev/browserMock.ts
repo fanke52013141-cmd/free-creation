@@ -50,8 +50,31 @@ export function installBrowserMock(): void {
       createdAt: now,
       models: [
         { id: 'gpt-image-2', modality: 'image' },
-        { id: 'gpt-5.2', modality: 'text' },
-        { id: 'MiniMax-H3', modality: 'video' }
+        { id: 'gpt-5.2', modality: 'text' }
+      ]
+    },
+    {
+      id: 'mock-minimax',
+      name: '演示 MiniMax',
+      specId: 'minimax',
+      baseURL: 'https://api.minimax.example/v2',
+      hasApiKey: true,
+      createdAt: now,
+      models: [
+        { id: 'MiniMax-H3', modality: 'video' },
+        { id: 'MiniMax-H3-Max', modality: 'video' }
+      ]
+    },
+    {
+      id: 'mock-seedance',
+      name: '演示 Seedance',
+      specId: 'seedance',
+      baseURL: 'https://ark.example/api/v3',
+      hasApiKey: true,
+      createdAt: now,
+      models: [
+        { id: 'Seedance-2.0', modality: 'video' },
+        { id: 'Seedance-2.0-Fast', modality: 'video' }
       ]
     }
   ]

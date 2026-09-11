@@ -10,6 +10,8 @@
 >
 > 产品定位：单用户、本地优先的 Windows Electron 无限画布创作工具。
 
+> **最新审查与 P0 修复（2026-09-11）**：新增 [docs/NODE_DEEP_AUDIT_2026_09_11.md](./docs/NODE_DEEP_AUDIT_2026_09_11.md) 与 `scripts/audit-video-node.cjs`。本轮重新采集 23 个 Active 节点空态截图，并对视频节点执行“未选模型 → 选 H3 → 连接图片 → 手动选择模式”的浏览器证据审查。已完成视频 P0/P1 协议收口：未选模型不再 fallback；接图后自动收敛为模型支持的多参/首帧/首尾帧，文生模式不再残留；MiniMax 与 Seedance 演示 fixture 分离；renderer 与 executor 共用模式解析；连接图片展示缩略图、名称和角色；默认 16:9 / 5 秒 / 稳定分辨率；视频 `configSchema`、配音与语音克隆 `configSchema` 已补齐并提高契约版本。配音与语音克隆的用户正文也已从 config JSON 收回 `props.text`，执行器只从正文和声明的文本端口取内容。**这仅代表本地浏览器 UI/连线/提交前约束通过，不代表真实供应商端到端已验收**。下一步是按审查矩阵逐节点完成真实桌面运行、结果入库和保存重开验证。截图产物仅保留本地 `artifacts/`，不提交。
+
 > **最新交付（2026-09-09 节点 UI/关系审计与规范收口）**：本轮完成 23 个 Active 节点的隔离浏览器截图审查、端口关系矩阵审查与节点值追踪审查。详细报告见 [docs/NODE_UI_RELATION_AUDIT_2026_09_09.md](./docs/NODE_UI_RELATION_AUDIT_2026_09_09.md)，强制呈现规范见 [docs/NODE_CANVAS_PRESENTATION_SPEC.md](./docs/NODE_CANVAS_PRESENTATION_SPEC.md)，截图脚本见 `scripts/audit-node-ui.cjs`（截图产物仅保留在本地 `artifacts/`，不提交）。
 >
 > 本轮变更：①选区虚线框、四个外置视觉角点和批量连接柄统一使用同一 page→screen 几何，修复缩放/分组后的角点漂移；②新增严格的异构 `ConnectionPlan`，文本+图片框选后可一次创建 `out-text → in-text`、`out-image → in-images` 等真实端口边，类型、Schema、基数、占用和环路均在创建前预检；③所有节点统一显示真实 Arrow binding、端口和 `projectOutputs` 派生的已连接输入摘要；④生图节点改为模型/画幅→弹性提示词→底部生成按钮；⑤图片资产与音频资产删除不被执行器消费的假输入，分别升级至 contract v2/v3，并同步 `generated/agent-contracts.json`；⑥节点类型色条固定在底部 4px。

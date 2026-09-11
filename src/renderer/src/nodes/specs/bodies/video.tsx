@@ -1,5 +1,5 @@
 // 视频节点 Body（路线图 R6：bodies.tsx 拆分）
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { stopEventPropagation, useEditor, type TLShapeId } from 'tldraw'
 import type { VideoGenerationMode, VideoGenParams } from '@shared/types'
 import {
@@ -7,6 +7,7 @@ import {
   normalizeVideoGenParams,
   videoCapabilitiesFor,
   videoCapabilityIssues,
+  resolveVideoMode,
   videoRatioIsDerivedByFrames
 } from '@shared/video-capabilities'
 import { getNodeType, mediaUrl, type NodeBodyProps } from '../../registry'
@@ -43,20 +44,6 @@ interface VideoGenData {
   params: VideoGenParams
 }
 
-function resolvedMode(mode: unknown, _imageCount: number): VideoGenerationMode {
-  if (
-    mode === 'text' ||
-    mode === 'first-frame' ||
-    mode === 'first-last-frame' ||
-    mode === 'reference'
-  ) {
-    return mode
-  }
-  // 新节点的默认语义是「多参模式」：空输入时它等价于文生视频，连接图片后
-  // 直接把这些图片作为有序参考素材提交。旧节点仍保留其显式保存的模式。
-  return 'reference'
-}
-
 const MODE_LABELS: Record<VideoGenerationMode, string> = {
   text: '文生视频',
   'first-frame': '首帧生视频',
@@ -64,14 +51,10 @@ const MODE_LABELS: Record<VideoGenerationMode, string> = {
   reference: '多参模式'
 }
 
-/** 输入变化时优先使用不需要用户重复选择的多参模式；模型不支持时才回退到首帧。 */
-function automaticMode(
-  capabilities: ReturnType<typeof videoCapabilitiesFor>,
-  imageCount: number
-): VideoGenerationMode {
-  if (capabilities.modes.includes('reference')) return 'reference'
-  if (imageCount > 0 && capabilities.modes.includes('first-frame')) return 'first-frame'
-  return capabilities.modes.includes('text') ? 'text' : capabilities.modes[0] ?? 'text'
+function imageRole(mode: VideoGenerationMode | undefined, index: number): string {
+  if (mode === 'first-frame') return '首帧'
+  if (mode === 'first-last-frame') return index === 0 ? '首帧' : '尾帧'
+  return `参考图 ${index + 1}`
 }
 
 function parseVideoGen(text: string): VideoGenData {
@@ -156,18 +139,16 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const [draft, setDraft] = useState(data.prompt)
   const [submitting, setSubmitting] = useState(false)
   const [mentionOpen, setMentionOpen] = useState(false)
-  const priorImageCount = useRef<number | null>(null)
   // 视频的所有图片只占一个绿色端口；模式决定连接顺序的协议角色。
   const images = gatherUpstreamMediaList(editor, shape.id, 'in-images', 'image')
   const motionReferences = gatherUpstreamMediaList(editor, shape.id, 'in-reference-video', 'video')
   const audioReferences = gatherUpstreamMediaList(editor, shape.id, 'in-reference-audio', 'audio')
   const connectedImageNames = new Map(
-    readConnectedNodeInputs(editor, shape.id)
-      .flatMap((input) =>
-        input.targetPortId === 'in-images' && input.value?.kind === 'image'
-          ? [[input.value.mediaPath, input.sourceNodeName] as const]
-          : []
-      )
+    readConnectedNodeInputs(editor, shape.id).flatMap((input) =>
+      input.targetPortId === 'in-images' && input.value?.kind === 'image'
+        ? [[input.value.mediaPath, input.sourceNodeName] as const]
+        : []
+    )
   )
   const availableMentions = imageMentions(editor, shape.id)
   const opt = options.find((o) => o.key === data.modelKey)
@@ -177,54 +158,56 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   )
   const capabilities = opt
     ? videoCapabilitiesFor(opt.provider.specId, opt.model.id, { gatewayProxy })
-    : videoCapabilitiesFor('seedance')
-  const mode = resolvedMode(data.mode, images.length)
+    : null
+  const modeResolution = capabilities
+    ? resolveVideoMode(capabilities, {
+        mode: data.mode,
+        imageCount: images.length,
+        referenceVideoCount: motionReferences.length,
+        referenceAudioCount: audioReferences.length
+      })
+    : null
+  const mode = modeResolution?.mode
   const firstFrame = mode === 'first-frame' || mode === 'first-last-frame' ? images[0] : undefined
   const lastFrame = mode === 'first-last-frame' ? images[1] : undefined
   const framesDetermineRatio = Boolean(
     opt &&
     videoRatioIsDerivedByFrames(opt.provider.specId, opt.model.id, Boolean(firstFrame || lastFrame))
   )
-  const params = normalizeVideoGenParams(capabilities, data.params, { framesDetermineRatio })
-  const capabilityIssues = videoCapabilityIssues(capabilities, {
-    params,
-    mode,
-    hasFirstFrame: Boolean(firstFrame),
-    hasLastFrame: Boolean(lastFrame),
-    imageCount: images.length,
-    referenceImageCount: mode === 'reference' ? images.length : 0,
-    referenceVideoCount: motionReferences.length,
-    referenceAudioCount: audioReferences.length
-  })
+  const params = capabilities
+    ? normalizeVideoGenParams(capabilities, data.params, { framesDetermineRatio })
+    : data.params
+  const capabilityIssues = !opt
+    ? ['请选择视频模型']
+    : !mode || !capabilities
+      ? ['当前模型不支持已连接的参考素材组合']
+      : videoCapabilityIssues(capabilities, {
+          params,
+          mode,
+          hasFirstFrame: Boolean(firstFrame),
+          hasLastFrame: Boolean(lastFrame),
+          imageCount: images.length,
+          referenceImageCount: mode === 'reference' ? images.length : 0,
+          referenceVideoCount: motionReferences.length,
+          referenceAudioCount: audioReferences.length
+        })
 
   useEffect(() => {
     if (!loaded) void loadProviders()
   }, [loaded, loadProviders])
 
-  // 连上一张图片时，自动把旧的文生视频切为多参模式。只在输入数量变化时运行，
-  // 因此用户随后手动选择首帧 / 首尾帧不会被渲染过程反复改回去。
+  // 连接素材或切换模型后，修复不再有效的已保存模式。共享解析器也用于 executor，
+  // 因而不会出现 UI 显示一种模式、提交时采用另一种模式的分歧。
   useEffect(() => {
-    const previous = priorImageCount.current
-    priorImageCount.current = images.length
-    const hasExplicitNonTextMode =
-      data.mode === 'first-frame' || data.mode === 'first-last-frame' || data.mode === 'reference'
-    if (
-      images.length === 0 ||
-      // 打开已有节点时尊重已保存的首帧/首尾帧选择；只迁移旧的文生视频或未设置模式。
-      (previous === null && hasExplicitNonTextMode) ||
-      (previous !== null && previous === images.length && data.mode !== 'text')
-    ) {
-      return
-    }
-    const nextMode = automaticMode(capabilities, images.length)
-    if (data.mode !== nextMode) {
+    if (!mode || data.mode === mode) return
+    if (capabilities) {
       editor.updateShape({
         id: shape.id,
         type: 'node-card',
-        props: { config: JSON.stringify({ ...data, mode: nextMode, params }) }
+        props: { config: JSON.stringify({ ...data, mode, params }) }
       })
     }
-  }, [capabilities, data, editor, images.length, params, shape.id])
+  }, [capabilities, data, editor, images.length, mode, params, shape.id])
 
   const update = (next: VideoGenData): void => {
     editor.updateShape({
@@ -240,19 +223,36 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
       ? videoCapabilitiesFor(next.provider.specId, next.model.id, {
           gatewayProxy: isSeedanceGatewayProxy(next.provider.specId, next.provider.baseURL)
         })
-      : videoCapabilitiesFor('seedance')
+      : null
+    const nextMode = nextCapabilities
+      ? resolveVideoMode(nextCapabilities, {
+          mode: data.mode,
+          imageCount: images.length,
+          referenceVideoCount: motionReferences.length,
+          referenceAudioCount: audioReferences.length
+        }).mode
+      : undefined
+    const nextFrames = nextMode === 'first-frame' || nextMode === 'first-last-frame'
     update({
       ...data,
       modelKey,
-      mode: nextCapabilities.modes.includes(mode)
-        ? mode
-        : automaticMode(nextCapabilities, images.length),
-      params: normalizeVideoGenParams(nextCapabilities, data.params)
+      mode: nextMode,
+      params: nextCapabilities
+        ? normalizeVideoGenParams(nextCapabilities, data.params, {
+            framesDetermineRatio: Boolean(
+              nextFrames &&
+              images.length > 0 &&
+              next &&
+              videoRatioIsDerivedByFrames(next.provider.specId, next.model.id, true)
+            )
+          })
+        : data.params
     })
   }
 
   const submit = async (): Promise<void> => {
     if (!project) return toast('项目未就绪')
+    if (!mode || !capabilities) return toast('请选择支持当前素材的模型')
     if (capabilityIssues.length > 0) return toast(capabilityIssues[0])
     // 配置先落盘，再由统一运行器读取真实端口输入、校验契约并调用视频执行器。
     update({
@@ -448,6 +448,14 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           <span>{capabilityIssues.join('；')}；请更换模型、调整参数或断开该输入后再运行。</span>
         </div>
       )}
+      {capabilities?.parameterTransport === 'gateway-compatibility' && (
+        <div className="gen-capability-note">
+          <Icon name="info" size={13} />
+          <span>
+            当前模型经兼容网关提交；画幅、时长与清晰度会按网关兼容格式传递，以任务回执为准。
+          </span>
+        </div>
+      )}
       {motionReferences.length > 0 && (
         <div className="ref-image-bar">
           <Icon name="director" size={15} />
@@ -460,10 +468,17 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
         <div className="video-reference-strip" aria-label="已连接图片">
           <div className="video-reference-chips reference-flow">
             {images.map((image, index) => (
-              <span className="video-reference-chip" key={`${image.mediaPath}-${index}`} title={connectedImageNames.get(image.mediaPath) ?? '图片'}>
+              <span
+                className="video-reference-chip"
+                key={`${image.mediaPath}-${index}`}
+                title={connectedImageNames.get(image.mediaPath) ?? '图片'}
+              >
                 <img src={mediaUrl(image.mediaPath)} alt="" draggable={false} />
-                <span className="video-reference-name">
-                  {connectedImageNames.get(image.mediaPath) ?? '未命名图片'}
+                <span className="video-reference-copy">
+                  <span className="video-reference-name">
+                    {connectedImageNames.get(image.mediaPath) ?? '未命名图片'}
+                  </span>
+                  <span className="video-reference-role">{imageRole(mode, index)}</span>
                 </span>
               </span>
             ))}
@@ -486,27 +501,30 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
         <label>
           <span>生成模式</span>
           <AppSelect
-          className="gen-select"
-          value={mode}
-          onPointerDown={(event) => event.stopPropagation()}
-          onChange={(event) => {
-            const nextMode = event.target.value as VideoGenerationMode
-            const nextFrames = nextMode === 'first-frame' || nextMode === 'first-last-frame'
-            update({
-              ...data,
-              mode: nextMode,
-              params: normalizeVideoGenParams(capabilities, data.params, {
-                framesDetermineRatio: Boolean(
-                  nextFrames &&
-                  images.length > 0 &&
-                  opt &&
-                  videoRatioIsDerivedByFrames(opt.provider.specId, opt.model.id, true)
-                )
+            className="gen-select"
+            value={mode ?? ''}
+            disabled={!capabilities || !mode}
+            onPointerDown={(event) => event.stopPropagation()}
+            onChange={(event) => {
+              if (!capabilities) return
+              const nextMode = event.target.value as VideoGenerationMode
+              const nextFrames = nextMode === 'first-frame' || nextMode === 'first-last-frame'
+              update({
+                ...data,
+                mode: nextMode,
+                params: normalizeVideoGenParams(capabilities, data.params, {
+                  framesDetermineRatio: Boolean(
+                    nextFrames &&
+                    images.length > 0 &&
+                    opt &&
+                    videoRatioIsDerivedByFrames(opt.provider.specId, opt.model.id, true)
+                  )
+                })
               })
-            })
-          }}
+            }}
           >
-            {capabilities.modes.map((candidate) => (
+            {!mode && <option value="">当前素材组合不可用</option>}
+            {(modeResolution?.availableModes ?? []).map((candidate) => (
               <option key={candidate} value={candidate}>
                 {MODE_LABELS[candidate]}
               </option>
@@ -519,6 +537,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
         value={draft}
         rows={3}
         spellCheck={false}
+        maxLength={capabilities?.maxPromptChars}
         placeholder="描述视频内容、镜头与氛围…"
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => update({ ...data, prompt: draft, params })}
@@ -528,6 +547,11 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
         }}
         onPointerDown={(e) => e.stopPropagation()}
       />
+      {capabilities?.maxPromptChars && (
+        <div className="video-prompt-meta">
+          {draft.length} / {capabilities.maxPromptChars} 字
+        </div>
+      )}
       <div className="video-reference-mention">
         <button
           type="button"
@@ -566,60 +590,64 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           </div>
         )}
       </div>
-      <div className="video-param-grid" aria-label="视频生成参数">
-        {framesDetermineRatio ? (
-          <span className="gen-capability-note">画幅由首/尾帧决定</span>
-        ) : (
+      {capabilities && (
+        <div className="video-param-grid" aria-label="视频生成参数">
+          {framesDetermineRatio ? (
+            <span className="gen-capability-note">画幅由首/尾帧决定</span>
+          ) : (
+            <label>
+              <span>画幅</span>
+              <AppSelect
+                className="gen-select"
+                value={params.ratio ?? capabilities.defaultRatio}
+                onPointerDown={(e) => e.stopPropagation()}
+                onChange={(e) => update({ ...data, params: { ...params, ratio: e.target.value } })}
+              >
+                {capabilities.ratios.map((ratio) => (
+                  <option key={ratio} value={ratio}>
+                    {ratio === 'adaptive' ? '自适应' : ratio}
+                  </option>
+                ))}
+              </AppSelect>
+            </label>
+          )}
           <label>
-            <span>画幅</span>
+            <span>时长（秒）</span>
             <AppSelect
               className="gen-select"
-              value={params.ratio ?? capabilities.ratios[0]}
+              value={String(params.duration ?? capabilities.defaultDuration)}
               onPointerDown={(e) => e.stopPropagation()}
-              onChange={(e) => update({ ...data, params: { ...params, ratio: e.target.value } })}
+              onChange={(e) =>
+                update({ ...data, params: { ...params, duration: Number(e.target.value) } })
+              }
             >
-              {capabilities.ratios.map((ratio) => (
-                <option key={ratio} value={ratio}>
-                  {ratio === 'adaptive' ? '自适应' : ratio}
+              {capabilities.durations.map((d) => (
+                <option key={d} value={d}>
+                  {d}s
                 </option>
               ))}
             </AppSelect>
           </label>
-        )}
-        <label>
-          <span>时长（秒）</span>
-          <AppSelect
-            className="gen-select"
-            value={String(params.duration ?? 5)}
-            onPointerDown={(e) => e.stopPropagation()}
-            onChange={(e) =>
-              update({ ...data, params: { ...params, duration: Number(e.target.value) } })
-            }
-          >
-            {capabilities.durations.map((d) => (
-              <option key={d} value={d}>
-                {d}s
-              </option>
-            ))}
-          </AppSelect>
-        </label>
-        <label>
-          <span>分辨率</span>
-          <AppSelect
-            className="gen-select"
-            value={params.resolution ?? capabilities.resolutions.at(-1)}
-            onPointerDown={(e) => e.stopPropagation()}
-            onChange={(e) => update({ ...data, params: { ...params, resolution: e.target.value } })}
-          >
-            {capabilities.resolutions.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </AppSelect>
-        </label>
-      </div>
-      {capabilities.supportsGeneratedAudio && (
+          <label>
+            <span>分辨率</span>
+            <AppSelect
+              className="gen-select"
+              value={params.resolution ?? capabilities.defaultResolution}
+              onPointerDown={(e) => e.stopPropagation()}
+              onChange={(e) =>
+                update({ ...data, params: { ...params, resolution: e.target.value } })
+              }
+            >
+              {capabilities.resolutions.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </AppSelect>
+          </label>
+        </div>
+      )}
+      {capabilities?.supportsGeneratedAudio && (
         <div className="gen-row video-advanced-row">
           {capabilities.supportsGeneratedAudio && (
             <label className="video-checkbox">

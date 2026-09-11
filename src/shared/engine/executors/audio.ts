@@ -41,7 +41,9 @@ export const audioExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
   const data = parseAudio(readNodeConfig(ctx.shape))
   const option = modelsByModality(ctx.providers, 'audio').find((item) => item.key === data.modelKey)
   if (!option) return { status: 'skipped', reason: '未选择可用音频模型' }
-  const text = mergedPrompt(data.text, inputText(ctx.inputs, 'in-text'))
+  // 节点正文是用户可编辑内容，固定参数仅从 config 读取；不可再让 config 中的
+  // 历史 text 悄悄覆盖画布正文。
+  const text = mergedPrompt(ctx.shape.props.text, inputText(ctx.inputs, 'in-text'))
   if (!text.trim()) return { status: 'skipped', reason: '无朗读文本' }
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
   try {

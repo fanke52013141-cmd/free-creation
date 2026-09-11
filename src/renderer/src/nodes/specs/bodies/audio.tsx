@@ -65,8 +65,11 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const openSettings = useGatewayStore((s) => s.openSettings)
   const options = modelsByModality(providers, 'audio')
   const isSpeechNode = shape.props.nodeType === 'speech'
-  const data = parseAudioGen(readNodeConfig(shape))
-  const [draft, setDraft] = useState(data.text)
+  // 配音节点不存在“上传模式”。旧的共用解析默认值不能让它在用户只选择模型时
+  // 落成 upload，避免配置契约和实际 UI 语义出现分叉。
+  const parsedData = parseAudioGen(readNodeConfig(shape))
+  const data = isSpeechNode ? { ...parsedData, mode: 'generate' as const } : parsedData
+  const [draft, setDraft] = useState(isSpeechNode ? shape.props.text : data.text)
   const [busy, setBusy] = useState(false)
   const [playing, setPlaying] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -94,11 +97,18 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   }, [shape.props.mediaPath])
 
   const update = (next: AudioData): void => {
+    const { text: legacyText, ...config } = next
+    void legacyText
     editor.updateShape({
       id: shape.id,
       type: 'node-card',
-      props: { config: JSON.stringify(next) }
+      props: { config: JSON.stringify(config) }
     })
+  }
+
+  const updateSpeechText = (text: string): void => {
+    if (!isSpeechNode || text === shape.props.text) return
+    editor.updateShape({ id: shape.id, type: 'node-card', props: { text } })
   }
 
   const uploadAudio = async (): Promise<void> => {
@@ -158,7 +168,8 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const generate = async (): Promise<void> => {
     if (!project) return toast('项目未就绪')
     // 文本与配置先落到节点，再由统一执行路径填充真实上游输入。
-    update({ ...data, mode: 'generate', text: draft })
+    update({ ...data, mode: 'generate' })
+    updateSpeechText(draft)
     setBusy(true)
     try {
       await runNodeManually(editor, project.id, providers, shape.id)
@@ -341,6 +352,7 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
             placeholder="输入要朗读的文本…"
             onPointerDown={(e) => e.stopPropagation()}
             onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => updateSpeechText(draft)}
           />
           <div className="audio-text-meta">{draft.length} 字 · 可由文本节点提供内容</div>
           <div className="audio-options">

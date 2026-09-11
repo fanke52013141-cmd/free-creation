@@ -8,7 +8,8 @@ import { parseTtsConfig } from '@shared/tts'
 
 export const ttsExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
   const config = parseTtsConfig(readNodeConfig(ctx.shape))
-  const text = mergedPrompt(config.text, inputText(ctx.inputs, 'in-text')).trim()
+  // 固定参数归 config，用户正文归 props.text；这与节点契约和保存模型一致。
+  const text = mergedPrompt(ctx.shape.props.text, inputText(ctx.inputs, 'in-text')).trim()
   if (!text) return { status: 'skipped', reason: '无朗读文本' }
 
   // 优先使用上游连接传入的参考音频；否则从节点配置中手动上传的参考音频获取。

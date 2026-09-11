@@ -31,7 +31,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
   const providersLoaded = useGatewayStore((s) => s.loaded)
   const loadProviders = useGatewayStore((s) => s.load)
   const config = parseTtsConfig(readNodeConfig(shape))
-  const [draft, setDraft] = useState(config.text)
+  const [draft, setDraft] = useState(shape.props.text)
   const [busy, setBusy] = useState(false)
   const [playing, setPlaying] = useState(false)
   const [refPlaying, setRefPlaying] = useState(false)
@@ -68,11 +68,18 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
 
   const updateConfig = (patch: Partial<TtsConfig>): void => {
     const next = { ...config, ...patch }
+    const { text: legacyText, ...persisted } = next
+    void legacyText
     editor.updateShape({
       id: shape.id,
       type: 'node-card',
-      props: { config: JSON.stringify(next) }
+      props: { config: JSON.stringify(persisted) }
     })
+  }
+
+  const updateText = (text: string): void => {
+    if (text === shape.props.text) return
+    editor.updateShape({ id: shape.id, type: 'node-card', props: { text } })
   }
 
   const uploadRefAudio = async (): Promise<void> => {
@@ -143,7 +150,8 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
 
   const generate = async (): Promise<void> => {
     if (!project) return toast('项目未就绪')
-    updateConfig({ ...config, text: draft })
+    updateConfig(config)
+    updateText(draft)
     setBusy(true)
     try {
       await runNodeManually(editor, project.id, [], shape.id)
@@ -227,6 +235,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
           placeholder="输入要朗读的文本，上游文本节点内容会自动合并…"
           onPointerDown={(e) => e.stopPropagation()}
           onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => updateText(draft)}
         />
         <div className="audio-text-meta">{draft.length} 字 · 可由文本节点提供</div>
       </div>

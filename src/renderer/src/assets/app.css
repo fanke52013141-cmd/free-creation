@@ -1433,6 +1433,14 @@ select:focus-visible,
   pointer-events: none;
 }
 
+/* 图片连线不是一个抽象“已连接”标记：用略大的缩略图和真实来源名称，让生成、修改等
+   节点能在卡片内部确认其当前消费的是哪一张图片。 */
+.connected-input-item.connected-input-image {
+  height: 36px;
+  padding-block: 3px;
+  background: color-mix(in srgb, var(--brand) 7%, var(--bg));
+}
+
 .connected-input-target {
   flex: 0 0 auto;
   color: var(--brand);
@@ -1486,6 +1494,12 @@ select:focus-visible,
   height: 18px;
   border-radius: 3px;
   object-fit: cover;
+}
+
+.connected-input-item.connected-input-image .connected-input-media img {
+  width: 30px;
+  height: 28px;
+  border: 1px solid color-mix(in srgb, var(--brand) 36%, transparent);
 }
 
 /* 模型 / 本地媒体任务运行时的明确状态层。状态来自统一运行器的 exec 字段，而不是
@@ -1634,10 +1648,26 @@ select:focus-visible,
   box-shadow: 0 0 0 1px rgba(4, 35, 48, 0.8);
 }
 
-.crop-inline-handle.corner-0 { top: -6px; left: -6px; cursor: nwse-resize; }
-.crop-inline-handle.corner-1 { top: -6px; right: -6px; cursor: nesw-resize; }
-.crop-inline-handle.corner-2 { bottom: -6px; left: -6px; cursor: nesw-resize; }
-.crop-inline-handle.corner-3 { right: -6px; bottom: -6px; cursor: nwse-resize; }
+.crop-inline-handle.corner-0 {
+  top: -6px;
+  left: -6px;
+  cursor: nwse-resize;
+}
+.crop-inline-handle.corner-1 {
+  top: -6px;
+  right: -6px;
+  cursor: nesw-resize;
+}
+.crop-inline-handle.corner-2 {
+  bottom: -6px;
+  left: -6px;
+  cursor: nesw-resize;
+}
+.crop-inline-handle.corner-3 {
+  right: -6px;
+  bottom: -6px;
+  cursor: nwse-resize;
+}
 
 .crop-inline-actions {
   display: grid;
@@ -6373,7 +6403,10 @@ select:focus-visible,
   border-radius: 7px;
   background: rgba(9, 24, 31, 0.8);
   color: var(--txt);
-  transition: max-width 180ms ease, transform 180ms ease, border-color 180ms ease;
+  transition:
+    max-width 180ms ease,
+    transform 180ms ease,
+    border-color 180ms ease;
 }
 
 .video-reference-chip:hover {
@@ -6398,6 +6431,25 @@ select:focus-visible,
   font-size: 10px;
 }
 
+/* 图片输入的业务角色不是装饰：同一个 many 端口会因模式变化成为首帧、尾帧或参考图。
+   在卡片上保留该角色，用户无需再猜测连线顺序。 */
+.video-reference-copy {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.video-reference-role {
+  overflow: hidden;
+  padding: 0 7px 0 5px;
+  color: color-mix(in srgb, var(--txt-dim, #9aa4b5) 88%, #6ee7b7);
+  font-size: 9px;
+  font-weight: 650;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* 已连接素材的细微渐变流光仅在节点内部运行，不干扰连线或读取文字。 */
 .reference-flow {
   position: relative;
@@ -6409,7 +6461,13 @@ select:focus-visible,
   z-index: -1;
   inset: 0;
   border-radius: 7px;
-  background: linear-gradient(90deg, transparent, rgba(51, 211, 255, 0.24), rgba(192, 92, 255, 0.2), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(51, 211, 255, 0.24),
+    rgba(192, 92, 255, 0.2),
+    transparent
+  );
   background-size: 180% 100%;
   content: '';
   opacity: 0.7;
@@ -6417,7 +6475,9 @@ select:focus-visible,
 }
 
 @keyframes node-reference-flow {
-  to { background-position: -180% 0; }
+  to {
+    background-position: -180% 0;
+  }
 }
 
 .ref-image-bar {

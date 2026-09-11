@@ -21,28 +21,28 @@ function previewText(input: ConnectedNodeInput): React.JSX.Element {
       return (
         <span className="connected-input-media image">
           <img src={mediaUrl(input.value.mediaPath)} alt="" draggable={false} />
-          <span>图片</span>
+          <span>{input.sourceNodeName || '图片'}</span>
         </span>
       )
     case 'video':
       return (
         <span className="connected-input-media video">
           <Icon name="video" size={13} />
-          <span>视频</span>
+          <span>{input.sourceNodeName || '视频'}</span>
         </span>
       )
     case 'audio':
       return (
         <span className="connected-input-media audio">
           <Icon name="audio" size={13} />
-          <span>音频</span>
+          <span>{input.sourceNodeName || '音频'}</span>
         </span>
       )
     case 'file':
       return (
         <span className="connected-input-media file">
           <Icon name="document" size={13} />
-          <span>文件</span>
+          <span>{input.sourceNodeName || '文件'}</span>
         </span>
       )
     case 'json':

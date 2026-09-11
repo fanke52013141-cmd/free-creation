@@ -7,6 +7,7 @@ import type { NodeValuePacket } from '@renderer/engine/contracts'
 import { audioExecutor } from '@renderer/engine/executors/audio'
 import { chatExecutor } from '@renderer/engine/executors/chat'
 import { imageGenExecutor } from '@renderer/engine/executors/imageGen'
+import { ttsExecutor } from '@renderer/engine/executors/tts'
 import { waitForChat, waitForVideo } from '@renderer/engine/executors/shared'
 import { videoExecutor } from '@renderer/engine/executors/video'
 
@@ -19,6 +20,20 @@ const provider = (modality: 'text' | 'audio' | 'video' | 'image'): ProviderSumma
     hasApiKey: true,
     createdAt: 0,
     models: [{ id: `${modality}-model`, name: '测试模型', modality, providerId: 'provider-1' }]
+  }) as ProviderSummary
+
+const minimaxVideoProvider = (): ProviderSummary =>
+  ({
+    ...provider('video'),
+    specId: 'minimax',
+    models: [
+      {
+        id: 'MiniMax-H3',
+        name: 'MiniMax H3',
+        modality: 'video',
+        providerId: 'provider-1'
+      }
+    ]
   }) as ProviderSummary
 
 let currentGateway: Record<string, unknown> = {}
@@ -37,7 +52,8 @@ function installGateway(gateway: Record<string, unknown>): void {
 function makeContext(
   nodeType: string,
   config: string,
-  providers: ProviderSummary[]
+  providers: ProviderSummary[],
+  text = config
 ): {
   ctx: NodeExecutionContext
   props: Partial<NodeCardShape['props']>
@@ -61,7 +77,7 @@ function makeContext(
       nodeType,
       title: nodeType,
       config,
-      text: config,
+      text,
       mediaId: '',
       mediaPath: '',
       mediaMime: '',
@@ -247,11 +263,11 @@ describe('chat / audio / video executors with a mocked gateway', () => {
       JSON.stringify({
         mode: 'generate',
         modelKey: 'provider-1::audio-model',
-        text: '旁白',
         voice: 'alloy',
         format: 'mp3'
       }),
-      [provider('audio')]
+      [provider('audio')],
+      '旁白'
     )
     await expect(audioExecutor(ctx)).resolves.toEqual({ status: 'done' })
     expect(props.mediaId).toBeUndefined()
@@ -276,6 +292,26 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     ctx.shape.props.mediaPath = 'projects/p/imported.wav'
     await expect(audioExecutor(ctx)).resolves.toEqual({ status: 'done' })
     expect(audioGenerate).not.toHaveBeenCalled()
+  })
+
+  it('语音克隆执行器从节点正文读取朗读内容，而不读取配置中的遗留 text', async () => {
+    const ttsGenerate = vi.fn().mockResolvedValue({
+      ok: true,
+      data: { id: 'tts-1', path: 'projects/p/tts.wav', mime: 'audio/wav', name: '复刻旁白' }
+    })
+    installGateway({ ttsGenerate })
+    const { ctx, artifacts } = makeContext(
+      'tts',
+      JSON.stringify({ refMediaId: 'reference-audio', text: '不应作为当前正文执行' }),
+      [],
+      '当前画布正文'
+    )
+
+    await expect(ttsExecutor(ctx)).resolves.toEqual({ status: 'done' })
+    expect(ttsGenerate).toHaveBeenCalledWith(
+      expect.objectContaining({ referenceAudioId: 'reference-audio', text: '当前画布正文' })
+    )
+    expect(artifacts).toContainEqual(expect.objectContaining({ kind: 'audio', mediaId: 'tts-1' }))
   })
 
   it('video executor submits, polls, and records the completed media result', async () => {
@@ -315,8 +351,8 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     })
     const { ctx } = makeContext(
       'video',
-      JSON.stringify({ prompt: '跟随人物移动', modelKey: 'provider-1::video-model', params: {} }),
-      [provider('video')]
+      JSON.stringify({ prompt: '跟随人物移动', modelKey: 'provider-1::MiniMax-H3', params: {} }),
+      [minimaxVideoProvider()]
     )
     ;(ctx.inputs as Map<string, NodeValuePacket[]>).set(
       'in-reference-video',
@@ -359,10 +395,10 @@ describe('chat / audio / video executors with a mocked gateway', () => {
       'video',
       JSON.stringify({
         prompt: '图片 1 中的人物说话',
-        modelKey: 'provider-1::video-model',
+        modelKey: 'provider-1::MiniMax-H3',
         params: {}
       }),
-      [provider('video')]
+      [minimaxVideoProvider()]
     )
     const mediaPacket = (kind: 'image' | 'audio', mediaId: string): NodeValuePacket => ({
       type: kind,
@@ -390,6 +426,50 @@ describe('chat / audio / video executors with a mocked gateway', () => {
         referenceImageMediaIds: ['first', 'ref-1', 'ref-2'],
         referenceAudioMediaIds: ['audio-1']
       })
+    )
+  })
+
+  it('视频执行器不会把历史遗留的文生模式带入已连接图片的请求', async () => {
+    const videoSubmit = vi.fn().mockResolvedValue({ ok: true, data: { taskId: 'video-mode-task' } })
+    installGateway({
+      videoSubmit,
+      videoTask: vi.fn().mockResolvedValue({
+        ok: true,
+        data: { status: 'success', mediaId: 'video-4', mediaPath: 'projects/p/video-4.mp4' }
+      }),
+      videoCancel: vi.fn()
+    })
+    const { ctx } = makeContext(
+      'video',
+      JSON.stringify({
+        prompt: '人物转身',
+        modelKey: 'provider-1::MiniMax-H3',
+        mode: 'text',
+        params: {}
+      }),
+      [minimaxVideoProvider()]
+    )
+    ;(ctx.inputs as Map<string, NodeValuePacket[]>).set('in-images', [
+      {
+        type: 'image',
+        value: {
+          kind: 'image',
+          mediaId: 'connected-image',
+          mediaPath: 'projects/p/image.png',
+          mime: 'image/png'
+        },
+        source: { nodeId: 'image-1', portId: 'out-image', runId: 'run-1' },
+        createdAt: Date.now()
+      }
+    ])
+
+    const pending = videoExecutor(ctx)
+    await vi.runAllTicks()
+    await vi.advanceTimersByTimeAsync(3_000)
+    await pending
+
+    expect(videoSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'reference', referenceImageMediaIds: ['connected-image'] })
     )
   })
 })

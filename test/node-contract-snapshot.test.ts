@@ -239,6 +239,7 @@ describe('关键端口契约快照（防回归）', () => {
 
   it('语音克隆节点：参考语音(one) + 文本(many) → 音频', () => {
     const spec = getNodeType('tts')!
+    expect(spec.contractVersion).toBe(2)
     expect(snapshotPorts(spec.ports.in)).toEqual([
       { id: 'in-audio', dir: 'in', type: 'audio', required: false, cardinality: 'one' },
       { id: 'in-text', dir: 'in', type: 'text', required: false, cardinality: 'many' }
@@ -256,6 +257,7 @@ describe('关键端口契约快照（防回归）', () => {
     expect(snapshotPorts(getNodeType('speech')!.ports.in)).toEqual([
       { id: 'in-text', dir: 'in', type: 'text', required: false, cardinality: 'many' }
     ])
+    expect(getNodeType('speech')!.contractVersion).toBe(2)
     expect(snapshotPorts(getNodeType('speech')!.ports.out)).toEqual([
       { id: 'out-audio', dir: 'out', type: 'audio', required: true, cardinality: 'one' }
     ])
@@ -336,7 +338,7 @@ describe('关键端口契约快照（防回归）', () => {
   it('视频节点只保留一个 image many 输入，避免并列的同色图片端口', () => {
     const spec = getNodeType('video')!
     const imageInputs = spec.ports.in.filter((port) => port.type === 'image')
-    expect(spec.contractVersion).toBe(4)
+    expect(spec.contractVersion).toBe(5)
     expect(imageInputs).toHaveLength(1)
     expect(imageInputs[0]).toMatchObject({ id: 'in-images', cardinality: 'many' })
   })

@@ -3,6 +3,7 @@ import {
   canonicalVideoModelId,
   isSeedanceGatewayProxy,
   normalizeVideoGenParams,
+  resolveVideoMode,
   videoCapabilitiesFor,
   videoCapabilityIssues,
   videoInputHints,
@@ -18,7 +19,7 @@ describe('视频供应商能力描述', () => {
       resolution: '1080p',
       generateAudio: true
     })
-    expect(params).toEqual({ ratio: '21:9', duration: 5, resolution: '2K' })
+    expect(params).toEqual({ ratio: '16:9', duration: 5, resolution: '768P' })
   })
 
   it('MiniMax H3 按协议暴露 4–15 秒、2K 和完整多模态参考能力', () => {
@@ -29,6 +30,7 @@ describe('视频供应商能力描述', () => {
     expect(caps.maxReferenceImages).toBe(9)
     expect(caps.maxReferenceVideos).toBe(3)
     expect(caps.maxReferenceAudios).toBe(3)
+    expect(caps.maxPromptChars).toBe(7000)
     expect(videoRatioIsDerivedByFrames('minimax', 'minimax-h3', true)).toBe(true)
     expect(videoRatioIsDerivedByFrames('minimax', 'minimax-h3', false)).toBe(false)
   })
@@ -69,6 +71,16 @@ describe('视频供应商能力描述', () => {
     ])
   })
 
+  it('已验证提示词上限在 UI、执行器和主进程校验中共享', () => {
+    const caps = videoCapabilitiesFor('minimax', 'minimax-h3')
+    expect(videoCapabilityIssues(caps, { prompt: 'a'.repeat(7001) })).toContain(
+      '当前模型的提示词不能超过 7000 个字符'
+    )
+    expect(videoCapabilityIssues(caps, { prompt: 'a'.repeat(7000) })).not.toContain(
+      '当前模型的提示词不能超过 7000 个字符'
+    )
+  })
+
   it('结构化声明参数能力：Seedance 与 H3 都不向接口声明未支持的种子参数', () => {
     expect(videoCapabilitiesFor('seedance', 'seedance-2.0').supportsSeed).toBe(false)
     expect(videoCapabilitiesFor('minimax', 'minimax-h3').supportsSeed).toBe(false)
@@ -91,6 +103,8 @@ describe('视频供应商能力描述', () => {
     expect(direct.supportsSeed).toBe(false)
     expect(proxy.supportsGeneratedAudio).toBe(false)
     expect(proxy.supportsSeed).toBe(false)
+    expect(proxy.parameterTransport).toBe('gateway-compatibility')
+    expect(direct.parameterTransport).toBe('structured')
     expect(proxy.ratios).toEqual(direct.ratios)
     expect(proxy.durations).toEqual(direct.durations)
     expect(proxy.resolutions).toEqual(direct.resolutions)
@@ -144,6 +158,41 @@ describe('视频供应商能力描述', () => {
         referenceImageCount: 1
       })
     ).toContain('当前模型不支持此视频生成模式')
+  })
+
+  it('输入端口决定可选模式：连接图片后不再暴露文生视频，并优先多参模式', () => {
+    const h3 = videoCapabilitiesFor('minimax', 'minimax-h3')
+    expect(resolveVideoMode(h3, { imageCount: 1 })).toEqual({
+      mode: 'reference',
+      availableModes: ['reference', 'first-frame']
+    })
+    expect(resolveVideoMode(h3, { imageCount: 2, mode: 'first-frame' })).toEqual({
+      mode: 'reference',
+      availableModes: ['reference', 'first-last-frame']
+    })
+
+    const h3Max = videoCapabilitiesFor('minimax', 'minimax-h3-max')
+    expect(resolveVideoMode(h3Max, { imageCount: 1 })).toEqual({
+      mode: 'first-frame',
+      availableModes: ['first-frame']
+    })
+    expect(resolveVideoMode(h3Max, { imageCount: 2 })).toEqual({
+      mode: 'first-last-frame',
+      availableModes: ['first-last-frame']
+    })
+  })
+
+  it('含运动或音频参考时只允许模型明确支持的多参模式', () => {
+    const h3 = videoCapabilitiesFor('minimax', 'minimax-h3')
+    expect(resolveVideoMode(h3, { imageCount: 1, referenceAudioCount: 1 })).toEqual({
+      mode: 'reference',
+      availableModes: ['reference']
+    })
+    const h3Max = videoCapabilitiesFor('minimax', 'minimax-h3-max')
+    expect(resolveVideoMode(h3Max, { referenceVideoCount: 1 })).toEqual({
+      mode: undefined,
+      availableModes: []
+    })
   })
 
   it('Seedance 2.5 与 2.0 的时长、清晰度和参考上限各自独立', () => {

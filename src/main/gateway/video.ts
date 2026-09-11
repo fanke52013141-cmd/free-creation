@@ -22,6 +22,10 @@ import {
   videoCapabilityIssues,
   isSeedanceGatewayProxy
 } from '../../shared/video-capabilities'
+import {
+  videoReferenceAssetIssues,
+  type VideoReferenceAssetInput
+} from '../../shared/video-reference-validation'
 
 type Send = (e: GatewayEvent) => void
 
@@ -104,6 +108,7 @@ function validateReferenceLimits(p: ProviderConfig, input: VideoSubmitInput): vo
     gatewayProxy: isSeedanceGatewayProxy(p.specId, p.baseURL)
   })
   const issues = videoCapabilityIssues(capabilities, {
+    prompt: input.prompt,
     params: input.params,
     mode: submittedMode(input),
     hasFirstFrame: Boolean(input.firstFrameMediaId),
@@ -136,6 +141,7 @@ function validateVideoCapabilities(p: ProviderConfig, input: VideoSubmitInput): 
     gatewayProxy: isSeedanceGatewayProxy(p.specId, p.baseURL)
   })
   const issues = videoCapabilityIssues(capabilities, {
+    prompt: input.prompt,
     params: input.params,
     mode: submittedMode(input),
     hasFirstFrame: Boolean(input.firstFrameMediaId),
@@ -151,6 +157,47 @@ function validateVideoCapabilities(p: ProviderConfig, input: VideoSubmitInput): 
     ]).length,
     referenceAudioCount: uniqueMediaIds(input.referenceAudioMediaIds).length
   })
+  if (issues.length > 0) throw new GatewayError('INVALID_INPUT', issues.join('；'))
+}
+
+/**
+ * The media table is the authoritative local source for file size and kind. Do
+ * this before mediaToDataUrl reads an entire source file into memory.
+ */
+function validateReferenceAssets(p: ProviderConfig, input: VideoSubmitInput): void {
+  const references: VideoReferenceAssetInput[] = [
+    ...(input.firstFrameMediaId
+      ? [{ id: input.firstFrameMediaId, expectedKind: 'image' as const }]
+      : []),
+    ...(input.lastFrameMediaId
+      ? [{ id: input.lastFrameMediaId, expectedKind: 'image' as const }]
+      : []),
+    ...uniqueMediaIds(input.referenceImageMediaIds).map((id) => ({
+      id,
+      expectedKind: 'image' as const
+    })),
+    ...uniqueMediaIds([
+      ...(input.referenceVideoMediaIds ?? []),
+      ...(input.referenceVideoMediaId ? [input.referenceVideoMediaId] : [])
+    ]).map((id) => ({ id, expectedKind: 'video' as const })),
+    ...uniqueMediaIds(input.referenceAudioMediaIds).map((id) => ({
+      id,
+      expectedKind: 'audio' as const
+    }))
+  ]
+  if (!references.length) return
+
+  const read = getDb().prepare('SELECT id, kind, size_bytes FROM media WHERE id = ?')
+  const assets = new Map(
+    references.flatMap((reference) => {
+      const row = read.get(reference.id) as
+        { id: string; kind: string; size_bytes: number } | undefined
+      return row
+        ? [[row.id, { id: row.id, kind: row.kind, sizeBytes: row.size_bytes }] as const]
+        : []
+    })
+  )
+  const issues = videoReferenceAssetIssues(p.specId, input.modelId, references, assets)
   if (issues.length > 0) throw new GatewayError('INVALID_INPUT', issues.join('；'))
 }
 
@@ -513,6 +560,7 @@ export function submitVideoTask(send: Send, input: VideoSubmitInput): VideoSubmi
   }
   validateReferenceLimits(p, input)
   validateVideoCapabilities(p, input)
+  validateReferenceAssets(p, input)
 
   const taskId = nanoid(10)
   const now = Date.now()
