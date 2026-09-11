@@ -90,24 +90,6 @@ async function addNode(page, label) {
   return page.locator(`.node-card-wrap[data-node-id="${newId}"]`)
 }
 
-async function connectPorts(
-  page,
-  source,
-  target,
-  sourcePort = '.port-dot.out',
-  targetPort = '.port-dot.in'
-) {
-  const a = await source.locator(sourcePort).first().boundingBox()
-  const b = await target.locator(targetPort).first().boundingBox()
-  if (!a || !b) throw new Error('连接审查找不到端口')
-  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2)
-  await page.mouse.down()
-  await page.waitForTimeout(80)
-  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 24 })
-  await page.mouse.up()
-  await page.waitForTimeout(250)
-}
-
 async function main() {
   mkdirSync(outputDir, { recursive: true })
   const browser = await launchBrowser()
@@ -122,7 +104,6 @@ async function main() {
 
       const selects = video.locator('select')
       const modelSelect = selects.nth(0)
-      const modeSelect = selects.nth(1)
       report.assertions.push({
         name: 'fresh-requires-an-explicit-model-choice',
         pass:
