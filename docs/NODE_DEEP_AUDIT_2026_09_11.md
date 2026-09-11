@@ -283,7 +283,7 @@ video deep browser audit                  P0 断言 PASS（不代表真实供应
 
 仍缺少的关键证据：
 
-- MiniMax H3/H3-Max 的真实 HTTP body 逐字段断言；
+- 当前网关标作 MiniMax H3/H3-Max 的真实 HTTP body 逐字段断言；
 - Seedance 2.0 官方方舟 endpoint、content role、参数和轮询响应的 wire fixture；
 - 每个远程生成节点成功/失败/取消/重试的桌面端结果入库；
 - 每个节点至少一条真实“上游输出 → 下游输入 → executor 消费”的保存重开链路；
@@ -291,22 +291,33 @@ video deep browser audit                  P0 断言 PASS（不代表真实供应
 
 ## 7. 模型协议核对基线
 
-MiniMax 官方文档明确说明：
+### 7.1 已能由公开官方文档证明的协议
 
-- H3 支持文生、图生、首尾帧和多模态参考；768P/2K，4–15 秒；
-- H3-Max 只支持文生和图生（首帧/尾帧），不支持多模态参考；480P/768P，5–15 秒；
-- V2 使用 `content[]`，必须有非空 text；首帧/尾帧和 reference role 互斥；图片 ≤9、参考视频 ≤3、参考音频 ≤3，总输入 ≤12；
-- 文生视频 ratio 必须是明确比例；首/尾帧画幅由输入图片决定；参考模式可使用 adaptive 或明确比例；创建返回 `task_id`，成功后从 `task.content.url` 下载。
+MiniMax 当前公开 API 文档列出的模型是 Hailuo 2.3 / 2.3 Fast / 02，而不是本地
+TokenDance 网关中标作 `MiniMax-H3` / `MiniMax-H3-Max` 的模型。因此，不能再把 H3 的
+私有网关 profile 误写成 MiniMax 官方事实。官方 Hailuo API 的证据是：文生、图生和首尾帧
+使用 `POST /v1/video_generation`；图生使用 `first_frame_image`，首尾帧使用
+`first_frame_image` + `last_frame_image`；支持的时长和分辨率由具体模型组合决定；任务异步
+返回 `task_id`。参考：
 
-来源：
+- [MiniMax 文生视频 API](https://platform.minimax.io/docs/api-reference/video-generation-t2v)
+- [MiniMax 图生视频 API](https://platform.minimax.io/docs/api-reference/video-generation-i2v)
+- [MiniMax 首尾帧视频 API](https://platform.minimax.io/docs/api-reference/video-generation-fl2v)
 
-- [MiniMax 官方视频模型概览](https://platform.minimaxi.com/docs/api-reference/api-overview)
-- [MiniMax 官方视频生成指南](https://platform.minimaxi.com/docs/guides/video-generation)
-- [MiniMax H3/H3-Max V2 创建任务 API](https://platform.minimaxi.com/docs/api-reference/video-generation-v2-create)
+火山引擎的 Seedance 2.0 官方 LAS 文档则明确：请求使用 `content[]` 多模态项，支持
+`text`、`image_url`、`video_url` 等输入，输出为异步 task；2.0 的参考图为 1–9 张、参考视频
+最多 3 段，单视频 2–15 秒、单音频 2–30 秒；每张图小于 30MB、请求体不超过 64MB；`resolution`、
+`generate_audio`、`watermark` 是独立字段。参考：[Seedance 增强版视频生成官方文档](https://docs.byteplus.com/en/docs/byteplus_las/video_gen_enhanced)。
 
-火山引擎官方资料确认 Seedance 2.0 面向 API 采用任务提交与 task id 查询的异步形态，并支持视频创作场景；但当前项目中具体字段、角色和兼容网关语法必须以当前方舟账户/endpoint 的正式接口响应为准，不能仅凭模型名称或第三方适配器推断。
+### 7.2 当前项目的适配结论
 
-来源：[火山引擎 Seedance 2.0 API 接入教程](https://www.volcengine.com/article/40550)
+- `MiniMax-H3` / `MiniMax-H3-Max` 是用户已配置中转网关的模型命名与接口约定，当前
+  `/v2/video_generation` + `content[]` 适配只能被视作该网关的契约，不能伪称为上游 MiniMax
+  官方 Hailuo REST API。
+- 因此 H3 的 4–15 秒、768P/2K、12 个总素材等 profile 保留为**网关已验证能力配置**，但必须
+  补该网关的成功/失败 wire fixture 或获得其正式文档后，才能标记为供应商级验收通过。
+- Seedance 的 official/proxy 双通道继续分开：官方通道使用结构化字段；兼容网关仅在已有真实
+  响应证据证明其 prompt 后缀语法时使用 `gateway-compatibility`，绝不把兼容写法传播到官方端点。
 
 ## 8. 后续实施顺序
 
@@ -321,7 +332,8 @@ MiniMax 官方文档明确说明：
 ### P1：按真实模型能力收口参数和请求（进行中）
 
 1. ✅ profile 已有显式默认值、提示词上限和 H3 媒体体积/总量约束；
-2. ⏳ 补 MiniMax V2 的 text、first-frame、first-last、reference request fixture；
+2. ⏳ 补当前 H3 网关的 text、first-frame、first-last、reference request fixture；若接入
+   MiniMax 官方 Hailuo，必须新建 `/v1/video_generation` 独立适配器，不能复用 H3 网关路径；
 3. ✅ H3-Max 的禁止 reference 已有 capability/UI 回归；
 4. ⏳ 补 Seedance 官方方舟和兼容网关两套真实 adapter fixture；
 5. ✅ configSchema 已声明 mode/params，并已更新生成的 Agent 契约。
