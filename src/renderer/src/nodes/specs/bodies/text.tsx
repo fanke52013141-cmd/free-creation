@@ -101,7 +101,9 @@ export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
             title: `${slashCmd.command.label} ${i + 1}`,
             w: 340,
             h: 260,
-            config: JSON.stringify({ prompt, modelKey: '', size: 'auto' })
+            // 用户可编辑的生成描述属于正文；config 只保存模型的固定参数。
+            text: prompt,
+            config: JSON.stringify({ modelKey: '', size: 'auto' })
           }
         })
       })
