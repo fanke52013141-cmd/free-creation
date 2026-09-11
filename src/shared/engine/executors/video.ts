@@ -20,7 +20,7 @@ export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
   if (!option) return { status: 'skipped', reason: '未选择可用视频模型' }
   const bundlePrompt = promptBundleText(inputJson(ctx.inputs, 'in-prompt')[0])
   const prompt = mergedPrompt(
-    data.prompt,
+    ctx.shape.props.text,
     [bundlePrompt, inputText(ctx.inputs, 'in-text')].filter(Boolean).join('\n')
   )
   // 视频节点只有一个图片多值端口：连接顺序即语义。第一张是主图/首帧，

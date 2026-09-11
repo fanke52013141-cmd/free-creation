@@ -120,7 +120,6 @@ describe('parseVideoGen · 视频生成配置解析', () => {
   it('解析合法 JSON 配置', () => {
     const d = parseVideoGen(
       JSON.stringify({
-        prompt: '奔跑的猫',
         modelKey: 'p1::m1',
         params: {
           ratio: '16:9',
@@ -133,7 +132,6 @@ describe('parseVideoGen · 视频生成配置解析', () => {
         taskId: 't1'
       })
     )
-    expect(d.prompt).toBe('奔跑的猫')
     expect(d.modelKey).toBe('p1::m1')
     expect(d.params.ratio).toBe('16:9')
     expect(d.params.duration).toBe(5)
@@ -144,29 +142,23 @@ describe('parseVideoGen · 视频生成配置解析', () => {
     expect(d.taskId).toBe('t1')
   })
 
-  it('非 JSON 文本回退为纯 prompt，其余字段为默认', () => {
+  it('非 JSON 文本不被当作固定配置', () => {
     const d = parseVideoGen('只是提示词')
-    expect(d.prompt).toBe('只是提示词')
     expect(d.modelKey).toBe('')
     expect(d.taskId).toBe('')
     expect(d.params).toEqual({})
   })
 
   it('params 字段类型不匹配时安全降级为 undefined', () => {
-    const d = parseVideoGen(
-      JSON.stringify({ prompt: 'x', params: { ratio: 123, duration: 'bad' } })
-    )
+    const d = parseVideoGen(JSON.stringify({ params: { ratio: 123, duration: 'bad' } }))
     expect(d.params.ratio).toBeUndefined()
     expect(d.params.duration).toBeUndefined()
   })
 })
 
-describe('parseImageGen · 生图配置解析（R5 种子）', () => {
+describe('parseImageGen · 生图固定配置解析（R5 种子）', () => {
   it('解析带 seed 的配置', () => {
-    const d = parseImageGen(
-      JSON.stringify({ prompt: '猫', modelKey: 'p1::m1', size: '1024x1024', seed: 42 })
-    )
-    expect(d.prompt).toBe('猫')
+    const d = parseImageGen(JSON.stringify({ modelKey: 'p1::m1', size: '1024x1024', seed: 42 }))
     expect(d.modelKey).toBe('p1::m1')
     expect(d.size).toBe('1024x1024')
     expect(d.aspectRatio).toBe('1:1')
@@ -174,13 +166,13 @@ describe('parseImageGen · 生图配置解析（R5 种子）', () => {
   })
 
   it('无 seed 时安全降级为 undefined', () => {
-    const d = parseImageGen(JSON.stringify({ prompt: 'x', modelKey: '', size: 'auto' }))
+    const d = parseImageGen(JSON.stringify({ modelKey: '', size: 'auto' }))
     expect(d.seed).toBeUndefined()
   })
 
-  it('非 JSON 文本回退为纯 prompt', () => {
+  it('非 JSON 文本不被当作固定配置', () => {
     const d = parseImageGen('只是提示词')
-    expect(d.prompt).toBe('只是提示词')
+    expect(d.modelKey).toBe('')
     expect(d.seed).toBeUndefined()
   })
 })

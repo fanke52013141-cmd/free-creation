@@ -117,7 +117,7 @@ describe('契约版本稳定性（防破坏性变化漏升版本）', () => {
 
   it.each(types)('节点 %s 的契约版本与已发布契约一致', (type) => {
     const spec = getNodeType(type)
-    const v5Types: NodeTypeId[] = ['video']
+    const v6Types: NodeTypeId[] = ['video']
     const v4Types: NodeTypeId[] = ['vocal-separate']
     const v3Types: NodeTypeId[] = [
       'audio',
@@ -129,8 +129,8 @@ describe('契约版本稳定性（防破坏性变化漏升版本）', () => {
     ]
     const v2Types: NodeTypeId[] = ['text', 'image', 'code', 'iterate', 'speech', 'tts']
     expect(spec?.contractVersion).toBe(
-      v5Types.includes(type)
-        ? 5
+      v6Types.includes(type)
+        ? 6
         : v4Types.includes(type)
           ? 4
           : v3Types.includes(type)

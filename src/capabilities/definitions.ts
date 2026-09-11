@@ -160,8 +160,8 @@ const imageGenCapability = defineCapability({
 
 const videoCapability = defineCapability({
   id: 'video.generate',
-  version: '5.0.0',
-  contractVersion: 5,
+  version: '6.0.0',
+  contractVersion: 6,
   nodeType: 'video',
   title: '视频',
   description:
@@ -221,7 +221,6 @@ const videoCapability = defineCapability({
     }
   ],
   configSchema: {
-    prompt: { type: 'string', required: false, description: '节点内视频提示词' },
     modelKey: {
       type: 'string',
       required: true,

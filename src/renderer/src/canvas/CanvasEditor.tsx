@@ -961,7 +961,7 @@ export function CanvasEditor({
         w: spec.defaultSize.w,
         h: spec.defaultSize.h,
         ...(type === 'video'
-          ? { config: JSON.stringify({ prompt: '', modelKey: '', mode: 'reference', params: {} }) }
+          ? { config: JSON.stringify({ modelKey: '', mode: 'reference', params: {} }) }
           : {})
       } satisfies Partial<NodeCardProps>
     })

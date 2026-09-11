@@ -197,8 +197,9 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     installGateway({ imageGenerate })
     const { ctx } = makeContext(
       'image-gen',
-      JSON.stringify({ modelKey: 'provider-1::image-model', prompt: '角色正面图' }),
-      [provider('image')]
+      JSON.stringify({ modelKey: 'provider-1::image-model' }),
+      [provider('image')],
+      '角色正面图'
     )
     ctx.inputs = new Map([
       [
@@ -221,7 +222,7 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     ])
     await expect(imageGenExecutor(ctx)).resolves.toEqual({ status: 'done' })
     expect(imageGenerate).toHaveBeenCalledWith(
-      expect.objectContaining({ referenceMediaIds: ['a', 'b'] })
+      expect.objectContaining({ prompt: '角色正面图', referenceMediaIds: ['a', 'b'] })
     )
   })
 
@@ -315,8 +316,9 @@ describe('chat / audio / video executors with a mocked gateway', () => {
   })
 
   it('video executor submits, polls, and records the completed media result', async () => {
+    const videoSubmit = vi.fn().mockResolvedValue({ ok: true, data: { taskId: 'video-task' } })
     installGateway({
-      videoSubmit: vi.fn().mockResolvedValue({ ok: true, data: { taskId: 'video-task' } }),
+      videoSubmit,
       videoTask: vi.fn().mockResolvedValue({
         ok: true,
         data: { status: 'success', mediaId: 'video-1', mediaPath: 'projects/p/video.mp4' }
@@ -325,13 +327,15 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     })
     const { ctx, props, result, artifacts } = makeContext(
       'video',
-      JSON.stringify({ prompt: '猫咪挥爪', modelKey: 'provider-1::video-model', params: {} }),
-      [provider('video')]
+      JSON.stringify({ modelKey: 'provider-1::video-model', params: {} }),
+      [provider('video')],
+      '猫咪挥爪'
     )
     const pending = videoExecutor(ctx)
     await vi.runAllTicks()
     await vi.advanceTimersByTimeAsync(3_000)
     await expect(pending).resolves.toEqual({ status: 'done' })
+    expect(videoSubmit).toHaveBeenCalledWith(expect.objectContaining({ prompt: '猫咪挥爪' }))
     expect(props.mediaId).toBeUndefined()
     expect(artifacts).toContainEqual(expect.objectContaining({ kind: 'video', mediaId: 'video-1' }))
     expect(JSON.parse(result.value ?? '{}').results[0].runId).toBe('run-1')
@@ -351,8 +355,9 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     })
     const { ctx } = makeContext(
       'video',
-      JSON.stringify({ prompt: '跟随人物移动', modelKey: 'provider-1::MiniMax-H3', params: {} }),
-      [minimaxVideoProvider()]
+      JSON.stringify({ modelKey: 'provider-1::MiniMax-H3', params: {} }),
+      [minimaxVideoProvider()],
+      '跟随人物移动'
     )
     ;(ctx.inputs as Map<string, NodeValuePacket[]>).set(
       'in-reference-video',
@@ -394,11 +399,11 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     const { ctx } = makeContext(
       'video',
       JSON.stringify({
-        prompt: '图片 1 中的人物说话',
         modelKey: 'provider-1::MiniMax-H3',
         params: {}
       }),
-      [minimaxVideoProvider()]
+      [minimaxVideoProvider()],
+      '图片 1 中的人物说话'
     )
     const mediaPacket = (kind: 'image' | 'audio', mediaId: string): NodeValuePacket => ({
       type: kind,
@@ -442,12 +447,12 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     const { ctx } = makeContext(
       'video',
       JSON.stringify({
-        prompt: '人物转身',
         modelKey: 'provider-1::MiniMax-H3',
         mode: 'text',
         params: {}
       }),
-      [minimaxVideoProvider()]
+      [minimaxVideoProvider()],
+      '人物转身'
     )
     ;(ctx.inputs as Map<string, NodeValuePacket[]>).set('in-images', [
       {

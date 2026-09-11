@@ -192,7 +192,6 @@ export function waitForVideo(
 
 /** 视频生成解析出的配置（来自视频节点的持久化文本）。 */
 export interface VideoGenData {
-  prompt: string
   modelKey: string
   mode?: VideoGenerationMode
   params: VideoGenParams
@@ -201,10 +200,9 @@ export interface VideoGenData {
 
 export function parseVideoGen(text: string): VideoGenData {
   const value = parseJsonObj(text)
-  if (value && typeof value.prompt === 'string') {
+  if (value) {
     const rawParams = parseJsonObj(JSON.stringify(value.params ?? {})) ?? {}
     return {
-      prompt: value.prompt,
       modelKey: typeof value.modelKey === 'string' ? value.modelKey : '',
       mode:
         value.mode === 'text' ||
@@ -225,7 +223,7 @@ export function parseVideoGen(text: string): VideoGenData {
       taskId: typeof value.taskId === 'string' ? value.taskId : ''
     }
   }
-  return { prompt: text, modelKey: '', params: {}, taskId: '' }
+  return { modelKey: '', params: {}, taskId: '' }
 }
 
 /** 在全部供应商里按 key 查文本模型；allowDefault 为真时可回落到第一个可用选项。 */

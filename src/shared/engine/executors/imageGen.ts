@@ -15,10 +15,10 @@ export type ImageGenData = ImageGenerationConfig
 
 export function parseImageGen(text: string): ImageGenData {
   const value = parseJsonObj(text)
-  if (value && typeof value.prompt === 'string') {
+  if (value) {
     return normalizeImageGenerationConfig(value, imageCapabilitiesFor('relay'))
   }
-  return normalizeImageGenerationConfig({ prompt: text }, imageCapabilitiesFor('relay'))
+  return normalizeImageGenerationConfig({}, imageCapabilitiesFor('relay'))
 }
 
 export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
@@ -29,7 +29,7 @@ export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeE
   const config = normalizeImageGenerationConfig(data, capabilities)
   const bundlePrompt = promptBundleText(inputJson(ctx.inputs, 'in-prompt')[0])
   const prompt = mergedPrompt(
-    config.prompt,
+    ctx.shape.props.text,
     [bundlePrompt, inputText(ctx.inputs, 'in-text')].filter(Boolean).join('\n')
   )
   // 所有参考图只有一个多值入口；按真实连线顺序提交，保证“图片 1/2/3”的提示词指代可复跑。

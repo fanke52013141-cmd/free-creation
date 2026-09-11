@@ -20,7 +20,6 @@ export interface ImageCapabilities {
 }
 
 export interface ImageGenerationConfig {
-  prompt: string
   modelKey: string
   size: string
   aspectRatio: ImageAspectRatio
@@ -93,7 +92,6 @@ export function normalizeImageGenerationConfig(
     ? input.size!
     : (sizeOptions[0]?.value ?? capabilities.sizeOptions[0]?.value ?? 'auto')
   return {
-    prompt: typeof input.prompt === 'string' ? input.prompt : '',
     modelKey: typeof input.modelKey === 'string' ? input.modelKey : '',
     size: requestedSize,
     aspectRatio: requestedRatio,

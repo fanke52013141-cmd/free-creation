@@ -301,7 +301,7 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'video',
-    contractVersion: 5,
+    contractVersion: 6,
     label: '图片生成视频',
     icon: 'video',
     color: '#f472b6',

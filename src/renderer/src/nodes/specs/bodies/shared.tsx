@@ -122,7 +122,7 @@ export function createImageContinuation(
       w: spec.defaultSize.w,
       h: spec.defaultSize.h,
       ...(targetType === 'video'
-        ? { config: JSON.stringify({ prompt: '', modelKey: '', mode: 'reference', params: {} }) }
+        ? { config: JSON.stringify({ modelKey: '', mode: 'reference', params: {} }) }
         : {})
     } satisfies Partial<NodeCardProps>
   })

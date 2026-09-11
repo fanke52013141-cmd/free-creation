@@ -1140,10 +1140,6 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "prompt": {
-            "type": "string",
-            "description": "节点内视频提示词"
-          },
           "modelKey": {
             "type": "string",
             "description": "已选择的供应商与模型组合键（providerId::modelId）"
@@ -1438,8 +1434,8 @@
       "capability": "video.generate",
       "node": "视频",
       "nodeType": "video",
-      "version": "5.0.0",
-      "contractVersion": 5,
+      "version": "6.0.0",
+      "contractVersion": 6,
       "cli": true,
       "mcp": true,
       "inputs": 5,
@@ -2633,7 +2629,7 @@
     },
     {
       "capabilityId": "video.generate",
-      "version": "5.0.0",
+      "version": "6.0.0",
       "inputs": [
         {
           "id": "in-images",
@@ -2691,11 +2687,6 @@
         }
       ],
       "configSchema": {
-        "prompt": {
-          "type": "string",
-          "required": false,
-          "description": "节点内视频提示词"
-        },
         "modelKey": {
           "type": "string",
           "required": true,

@@ -17,9 +17,7 @@ describe('图片模型能力描述', () => {
 
   it('旧 size-only 配置和模型切换后的无效值都归一为合法比例/尺寸组合', () => {
     const capabilities = imageCapabilitiesFor('relay')
-    expect(
-      normalizeImageGenerationConfig({ prompt: '海边', size: '1024x1536' }, capabilities)
-    ).toMatchObject({
+    expect(normalizeImageGenerationConfig({ size: '1024x1536' }, capabilities)).toMatchObject({
       aspectRatio: '9:16',
       size: 'auto'
     })

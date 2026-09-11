@@ -338,7 +338,7 @@ describe('关键端口契约快照（防回归）', () => {
   it('视频节点只保留一个 image many 输入，避免并列的同色图片端口', () => {
     const spec = getNodeType('video')!
     const imageInputs = spec.ports.in.filter((port) => port.type === 'image')
-    expect(spec.contractVersion).toBe(5)
+    expect(spec.contractVersion).toBe(6)
     expect(imageInputs).toHaveLength(1)
     expect(imageInputs[0]).toMatchObject({ id: 'in-images', cardinality: 'many' })
   })

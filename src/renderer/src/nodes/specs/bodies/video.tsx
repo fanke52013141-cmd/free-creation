@@ -38,7 +38,6 @@ import {
 } from './shared'
 
 interface VideoGenData {
-  prompt: string
   modelKey: string
   mode?: VideoGenerationMode
   params: VideoGenParams
@@ -62,7 +61,7 @@ function parseVideoGen(text: string): VideoGenData {
     text,
     (v) => {
       const o = v as Record<string, unknown>
-      if (typeof o === 'object' && o !== null && typeof o.prompt === 'string') {
+      if (typeof o === 'object' && o !== null) {
         const params = (typeof o.params === 'object' && o.params !== null ? o.params : {}) as {
           ratio?: unknown
           duration?: unknown
@@ -72,7 +71,6 @@ function parseVideoGen(text: string): VideoGenData {
           watermark?: unknown
         }
         return {
-          prompt: o.prompt,
           modelKey: typeof o.modelKey === 'string' ? o.modelKey : '',
           mode:
             o.mode === 'text' ||
@@ -94,7 +92,7 @@ function parseVideoGen(text: string): VideoGenData {
       }
       return null
     },
-    { prompt: '', modelKey: '', params: {} }
+    { modelKey: '', params: {} }
   )
 }
 
@@ -136,7 +134,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const openSettings = useGatewayStore((s) => s.openSettings)
   const options = modelsByModality(providers, 'video')
   const data = parseVideoGen(readNodeConfig(shape))
-  const [draft, setDraft] = useState(data.prompt)
+  const [draft, setDraft] = useState(shape.props.text)
   const [submitting, setSubmitting] = useState(false)
   const [mentionOpen, setMentionOpen] = useState(false)
   // 视频的所有图片只占一个绿色端口；模式决定连接顺序的协议角色。
@@ -182,6 +180,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     : !mode || !capabilities
       ? ['当前模型不支持已连接的参考素材组合']
       : videoCapabilityIssues(capabilities, {
+          prompt: draft,
           params,
           mode,
           hasFirstFrame: Boolean(firstFrame),
@@ -215,6 +214,11 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
       type: 'node-card',
       props: { config: JSON.stringify(next) }
     })
+  }
+
+  const updateText = (text: string): void => {
+    if (text !== shape.props.text)
+      editor.updateShape({ id: shape.id, type: 'node-card', props: { text } })
   }
 
   const updateModel = (modelKey: string): void => {
@@ -258,9 +262,9 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     update({
       ...data,
       mode,
-      prompt: draft,
       params: normalizeVideoGenParams(capabilities, data.params, { framesDetermineRatio })
     })
+    updateText(draft)
     setSubmitting(true)
     try {
       await runNodeManually(editor, project.id, providers, shape.id)
@@ -294,7 +298,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     // 提示词引用使用资产名，不暴露“图片 1 / 图片 2”这类内部序号。
     const nextPrompt = `${draft}${draft && !/\s$/.test(draft) ? ' ' : ''}@${item.title}`
     setDraft(nextPrompt)
-    update({ ...data, prompt: nextPrompt })
+    updateText(nextPrompt)
     setMentionOpen(false)
     if (linked) toast(`已将“${item.title}”加入多参素材`)
     else toast('该图片可能已经引用；已保留提示词标记')
@@ -540,7 +544,10 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
         maxLength={capabilities?.maxPromptChars}
         placeholder="描述视频内容、镜头与氛围…"
         onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => update({ ...data, prompt: draft, params })}
+        onBlur={() => {
+          update({ ...data, params })
+          updateText(draft)
+        }}
         onKeyDown={(e) => {
           if (e.key === '@' && availableMentions.length > 0) setMentionOpen(true)
           if (e.key === 'Escape') setMentionOpen(false)

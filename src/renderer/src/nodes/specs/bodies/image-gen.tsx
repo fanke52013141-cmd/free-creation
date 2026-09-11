@@ -26,7 +26,7 @@ function parseImageGen(text: string): ImageGenData {
     text,
     (v) => {
       const o = v as Record<string, unknown>
-      if (typeof o === 'object' && o !== null && typeof o.prompt === 'string') {
+      if (typeof o === 'object' && o !== null) {
         return normalizeImageGenerationConfig(o, imageCapabilitiesFor('relay'))
       }
       return null
@@ -49,7 +49,7 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
     ? imageCapabilitiesFor(selected.provider.specId, selected.model.id)
     : imageCapabilitiesFor('relay')
   const config = normalizeImageGenerationConfig(data, capabilities)
-  const [draft, setDraft] = useState(data.prompt)
+  const [draft, setDraft] = useState(shape.props.text)
   const [busy, setBusy] = useState(false)
   const promptRef = useRef<HTMLTextAreaElement | null>(null)
 
@@ -63,6 +63,11 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
       type: 'node-card',
       props: { config: JSON.stringify(normalizeImageGenerationConfig(next, capabilities)) }
     })
+  }
+
+  const updateText = (text: string): void => {
+    if (text !== shape.props.text)
+      editor.updateShape({ id: shape.id, type: 'node-card', props: { text } })
   }
 
   // 所有图片都使用同一个多值端口，连接顺序就是 @图片 1～4 的顺序。
@@ -92,7 +97,8 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
   const generate = async (): Promise<void> => {
     if (!project) return toast('项目未就绪')
     // 先提交本次编辑，再由统一运行器读取节点配置和真实上游端口输入。
-    update({ ...config, prompt: draft })
+    update(config)
+    updateText(draft)
     setBusy(true)
     try {
       await runNodeManually(editor, project.id, providers, shape.id)
@@ -114,14 +120,14 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
             const nextCapabilities = next
               ? imageCapabilitiesFor(next.provider.specId, next.model.id)
               : imageCapabilitiesFor('relay')
+            const nextConfig = normalizeImageGenerationConfig(
+              { ...config, modelKey: key },
+              nextCapabilities
+            )
             editor.updateShape({
               id: shape.id,
               type: 'node-card',
-              props: {
-                config: JSON.stringify(
-                  normalizeImageGenerationConfig({ ...config, modelKey: key }, nextCapabilities)
-                )
-              }
+              props: { config: JSON.stringify(nextConfig) }
             })
           }}
         />
@@ -152,7 +158,7 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
         spellCheck={false}
         placeholder="描述要生成的画面…"
         onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => update({ ...config, prompt: draft })}
+        onBlur={() => updateText(draft)}
         onPointerDown={(e) => e.stopPropagation()}
       />
       {showMentionMenu && (
