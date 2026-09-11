@@ -443,7 +443,11 @@ function isSeedanceProxy(p: ProviderConfig): boolean {
   return isSeedanceGatewayProxy(p.specId, p.baseURL)
 }
 
-async function seedanceSubmit(p: ProviderConfig, input: VideoSubmitInput): Promise<string> {
+export async function buildSeedanceRequestBody(
+  p: ProviderConfig,
+  input: VideoSubmitInput,
+  resolveMedia: (mediaId: string) => Promise<string | undefined> = mediaToDataUrl
+): Promise<Record<string, unknown>> {
   const isProxy = isSeedanceProxy(p)
   const mode = submittedMode(input)
   const suffix = isProxy
@@ -464,14 +468,14 @@ async function seedanceSubmit(p: ProviderConfig, input: VideoSubmitInput): Promi
     if (input.firstFrameMediaId) {
       content.push({
         type: 'image_url',
-        image_url: { url: await mediaToDataUrl(input.firstFrameMediaId) },
+        image_url: { url: await resolveMedia(input.firstFrameMediaId) },
         ...(!isProxy ? { role: 'first_frame' } : {})
       })
     }
     if (mode === 'first-last-frame' && input.lastFrameMediaId) {
       content.push({
         type: 'image_url',
-        image_url: { url: await mediaToDataUrl(input.lastFrameMediaId) },
+        image_url: { url: await resolveMedia(input.lastFrameMediaId) },
         ...(!isProxy ? { role: 'last_frame' } : {})
       })
     }
@@ -479,7 +483,7 @@ async function seedanceSubmit(p: ProviderConfig, input: VideoSubmitInput): Promi
   for (const mediaId of mode === 'reference' ? (input.referenceImageMediaIds ?? []) : []) {
     content.push({
       type: 'image_url',
-      image_url: { url: await mediaToDataUrl(mediaId) },
+      image_url: { url: await resolveMedia(mediaId) },
       ...(!isProxy ? { role: 'reference_image' } : {})
     })
   }
@@ -490,7 +494,7 @@ async function seedanceSubmit(p: ProviderConfig, input: VideoSubmitInput): Promi
   for (const mediaId of mode === 'reference' ? referenceVideoIds : []) {
     content.push({
       type: 'video_url',
-      video_url: { url: await mediaToDataUrl(mediaId) },
+      video_url: { url: await resolveMedia(mediaId) },
       // 兼容网关延续无 role 的多模态格式；官方端点可识别参考视频语义。
       ...(!isProxy ? { role: 'reference_video' } : {})
     })
@@ -498,7 +502,7 @@ async function seedanceSubmit(p: ProviderConfig, input: VideoSubmitInput): Promi
   for (const mediaId of mode === 'reference' ? (input.referenceAudioMediaIds ?? []) : []) {
     content.push({
       type: 'audio_url',
-      audio_url: { url: await mediaToDataUrl(mediaId) },
+      audio_url: { url: await resolveMedia(mediaId) },
       ...(!isProxy ? { role: 'reference_audio' } : {})
     })
   }
@@ -512,7 +516,11 @@ async function seedanceSubmit(p: ProviderConfig, input: VideoSubmitInput): Promi
     if (typeof params?.seed === 'number') body.seed = params.seed
     if (typeof params?.watermark === 'boolean') body.watermark = params.watermark
   }
+  return body
+}
 
+async function seedanceSubmit(p: ProviderConfig, input: VideoSubmitInput): Promise<string> {
+  const body = await buildSeedanceRequestBody(p, input)
   const res = await fetchJson(seedanceTasksUrl(p), {
     method: 'POST',
     headers: authHeaders(p),
