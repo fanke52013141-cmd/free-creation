@@ -283,8 +283,8 @@ video deep browser audit                  P0 断言 PASS（不代表真实供应
 
 仍缺少的关键证据：
 
-- 当前网关标作 MiniMax H3/H3-Max 的真实 HTTP body 逐字段断言；
-- Seedance 2.0 官方方舟 endpoint、content role、参数和轮询响应的 wire fixture；
+- 当前网关标作 MiniMax H3/H3-Max 的真实桌面 HTTP 成功/失败响应；
+- Seedance 2.0 官方方舟和兼容网关的真实桌面 HTTP 成功/失败响应；
 - 每个远程生成节点成功/失败/取消/重试的桌面端结果入库；
 - 每个节点至少一条真实“上游输出 → 下游输入 → executor 消费”的保存重开链路；
 - 模式切换后图片角色、画幅来源和输出结果摘要的截图门禁。
@@ -332,10 +332,12 @@ TokenDance 网关中标作 `MiniMax-H3` / `MiniMax-H3-Max` 的模型。因此，
 ### P1：按真实模型能力收口参数和请求（进行中）
 
 1. ✅ profile 已有显式默认值、提示词上限和 H3 媒体体积/总量约束；
-2. ⏳ 补当前 H3 网关的 text、first-frame、first-last、reference request fixture；若接入
-   MiniMax 官方 Hailuo，必须新建 `/v1/video_generation` 独立适配器，不能复用 H3 网关路径；
+2. ✅ `test/video-gateway-wire.test.ts` 已覆盖当前 H3 网关的首尾帧和多参 request fixture，以及
+   Seedance 官方/兼容网关的字段隔离；若接入 MiniMax 官方 Hailuo，必须新建
+   `/v1/video_generation` 独立适配器，不能复用 H3 网关路径；
 3. ✅ H3-Max 的禁止 reference 已有 capability/UI 回归；
-4. ⏳ 补 Seedance 官方方舟和兼容网关两套真实 adapter fixture；
+4. ✅ Seedance 官方方舟和兼容网关两套 adapter wire fixture 已补；真实请求成功/失败仍属于桌面端
+   验收，不能由 mock fixture 替代；
 5. ✅ configSchema 已声明 mode/params，并已更新生成的 Agent 契约。
 
 ### P2：全节点操作验收
