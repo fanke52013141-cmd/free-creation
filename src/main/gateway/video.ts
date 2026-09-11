@@ -329,26 +329,30 @@ async function finalizeVideo(
 
 // ── MiniMax 适配 ──
 
-async function minimaxSubmit(p: ProviderConfig, input: VideoSubmitInput): Promise<string> {
+/** H3 中转网关 payload；媒体解析可注入，以便逐字段 wire fixture 测试。 */
+export async function buildMiniMaxH3RequestBody(
+  input: VideoSubmitInput,
+  resolveMedia: (mediaId: string) => Promise<string | undefined> = mediaToDataUrl
+): Promise<Record<string, unknown>> {
   const content: Array<Record<string, unknown>> = [{ type: 'text', text: input.prompt }]
   if (input.firstFrameMediaId) {
     content.push({
       type: 'image_url',
-      image_url: { url: await mediaToDataUrl(input.firstFrameMediaId) },
+      image_url: { url: await resolveMedia(input.firstFrameMediaId) },
       role: 'first_frame'
     })
   }
   if (input.lastFrameMediaId) {
     content.push({
       type: 'image_url',
-      image_url: { url: await mediaToDataUrl(input.lastFrameMediaId) },
+      image_url: { url: await resolveMedia(input.lastFrameMediaId) },
       role: 'last_frame'
     })
   }
   for (const mediaId of input.referenceImageMediaIds ?? []) {
     content.push({
       type: 'image_url',
-      image_url: { url: await mediaToDataUrl(mediaId) },
+      image_url: { url: await resolveMedia(mediaId) },
       role: 'reference_image'
     })
   }
@@ -359,14 +363,14 @@ async function minimaxSubmit(p: ProviderConfig, input: VideoSubmitInput): Promis
   for (const mediaId of referenceVideoIds) {
     content.push({
       type: 'video_url',
-      video_url: { url: await mediaToDataUrl(mediaId) },
+      video_url: { url: await resolveMedia(mediaId) },
       role: 'reference_video'
     })
   }
   for (const mediaId of input.referenceAudioMediaIds ?? []) {
     content.push({
       type: 'audio_url',
-      audio_url: { url: await mediaToDataUrl(mediaId) },
+      audio_url: { url: await resolveMedia(mediaId) },
       role: 'reference_audio'
     })
   }
@@ -378,7 +382,11 @@ async function minimaxSubmit(p: ProviderConfig, input: VideoSubmitInput): Promis
   if (params?.ratio && !input.firstFrameMediaId && !input.lastFrameMediaId)
     body.ratio = params.ratio
   if (typeof params?.watermark === 'boolean') body.aigc_watermark = params.watermark
+  return body
+}
 
+async function minimaxSubmit(p: ProviderConfig, input: VideoSubmitInput): Promise<string> {
+  const body = await buildMiniMaxH3RequestBody(input)
   const res = await fetchJson(`${p.baseURL}/v2/video_generation`, {
     method: 'POST',
     headers: authHeaders(p),
