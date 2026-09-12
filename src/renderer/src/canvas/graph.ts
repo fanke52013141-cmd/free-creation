@@ -3,7 +3,13 @@
 import { createShapeId, type Editor, type TLShapeId } from 'tldraw'
 import type { CanvasEdge, CanvasNode, ExecStatus, GroupDecl, PortDecl } from '@shared/types'
 import { nodeSchemasCompatible } from '@shared/node-schemas'
-import { getNodePorts, getNodeType, portCompatible, portOffsets } from '../nodes/registry'
+import {
+  getNodePorts,
+  getNodeType,
+  portCompatible,
+  portOffsets,
+  type NodeTypeSpec
+} from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
 import type { BatchConnectionMember, ConnectionFrom } from '../stores/connection'
 import { projectNodeOutputs, type NodeValue } from '../nodes/nodeValues'
@@ -534,6 +540,135 @@ export function tryConnectBatch(
  * 尝试连接：选目标节点上最合适的输入端口（类型兼容 + 距离落点最近），
  * 校验重复/环后建边。返回错误信息（null = 成功）。
  */
+interface ResolvedTargetPort {
+  port: PortDecl
+  /** 离落点最近的输入端口（不论兼容性）；用于解释"磁吸改连"。 */
+  aimed: PortDecl | null
+}
+
+/**
+ * 解析单条连线应接入的目标输入端口。
+ * 在兼容且可用的端口里取离落点最近者；`aimed` 记录落点最近的端口（可能不兼容或被占用），
+ * 供 `connectionRetargetNotice` 向用户解释实际接入端口与意图不一致的情况。
+ */
+function resolveTargetInputPort(
+  editor: Editor,
+  target: NodeCardShape,
+  targetSpec: NodeTypeSpec,
+  sourcePort: PortDecl,
+  dropPagePt?: { x: number; y: number },
+  preferredTargetPortId?: string
+): ResolvedTargetPort | { error: string } {
+  const targetPorts = getNodePorts(targetSpec, target)
+  const compatible = targetPorts.in.filter(
+    (port) =>
+      portCompatible(port.type, sourcePort.type) &&
+      !(
+        port.type === 'json' &&
+        sourcePort.type === 'json' &&
+        !nodeSchemasCompatible(sourcePort.schema, port.schema)
+      )
+  )
+  if (compatible.length === 0) {
+    return {
+      error: `类型或 Schema 不兼容：${sourcePort.type} 输出无法接入 ${targetSpec.label} 节点`
+    }
+  }
+  const usable = compatible.filter(
+    (port) =>
+      port.cardinality === 'many' ||
+      !inputPortOccupied(editor, { shapeId: target.id, portId: port.id })
+  )
+  if (usable.length === 0) {
+    return { error: `${targetSpec.label} 的兼容输入均为单值端口且已有连线，请先断开原连线` }
+  }
+
+  // 落点最近端口（不限兼容性）：仅用于解释改连，不影响选口结果。
+  let aimed: PortDecl | null = null
+  const targetBounds = dropPagePt ? editor.getShapePageBounds(target.id) : null
+  if (dropPagePt && targetBounds) {
+    const offsets = portOffsets(targetPorts.in.length, target.props.h)
+    let bestDist = Infinity
+    for (const p of targetPorts.in) {
+      const idx = targetPorts.in.indexOf(p)
+      const y = offsets[idx] ?? target.props.h / 2
+      const pageY =
+        target.props.h > 0
+          ? targetBounds.y + (targetBounds.height * y) / target.props.h
+          : targetBounds.y
+      const d = Math.hypot(dropPagePt.x - targetBounds.x, dropPagePt.y - pageY)
+      if (d < bestDist) {
+        bestDist = d
+        aimed = p
+      }
+    }
+  }
+
+  let port: PortDecl = usable[0]
+  if (preferredTargetPortId) {
+    const preferredPort = usable.find((candidate) => candidate.id === preferredTargetPortId)
+    if (!preferredPort) return { error: `${targetSpec.label} 的目标输入不可用` }
+    port = preferredPort
+  } else if (dropPagePt && usable.length > 1) {
+    const targetBounds = editor.getShapePageBounds(target.id)
+    if (!targetBounds) return { error: '目标节点位置不可用' }
+    const offsets = portOffsets(targetPorts.in.length, target.props.h)
+    let bestDist = Infinity
+    for (const p of usable) {
+      const idx = targetPorts.in.indexOf(p)
+      const y = offsets[idx] ?? target.props.h / 2
+      const pageY =
+        target.props.h > 0
+          ? targetBounds.y + (targetBounds.height * y) / target.props.h
+          : targetBounds.y
+      const d = Math.hypot(dropPagePt.x - targetBounds.x, dropPagePt.y - pageY)
+      if (d < bestDist) {
+        bestDist = d
+        port = p
+      }
+    }
+  }
+  return { port, aimed }
+}
+
+/**
+ * 连线成功后的改连解释：用户把线落在一个不兼容（dim）或已被占用的端口上，
+ * 而边实际接入了另一个端口时，返回需要 toast 的说明；无差异返回 null。
+ */
+export function connectionRetargetNotice(
+  editor: Editor,
+  from: ConnectionFrom,
+  targetShapeId: TLShapeId,
+  dropPagePt?: { x: number; y: number }
+): string | null {
+  if (!dropPagePt || (from.memberIds?.length ?? 0) > 1) return null
+  const target = editor.getShape<NodeCardShape>(targetShapeId)
+  const targetSpec = target ? getNodeType(target.props.nodeType) : undefined
+  if (!target || !targetSpec) return null
+  const source = editor.getShape<NodeCardShape>(from.shapeId)
+  const sourceSpec = source ? getNodeType(source.props.nodeType) : undefined
+  const sourcePort =
+    source && sourceSpec
+      ? getNodePorts(sourceSpec, source).out.find((port) => port.id === from.portId)
+      : undefined
+  if (!sourcePort) return null
+
+  const resolved = resolveTargetInputPort(editor, target, targetSpec, sourcePort, dropPagePt)
+  if ('error' in resolved || !resolved.aimed || resolved.aimed.id === resolved.port.id) {
+    return null
+  }
+  const aimed = resolved.aimed
+  const aimedCompatible =
+    portCompatible(aimed.type, sourcePort.type) &&
+    !(
+      aimed.type === 'json' &&
+      sourcePort.type === 'json' &&
+      !nodeSchemasCompatible(sourcePort.schema, aimed.schema)
+    )
+  const reason = aimedCompatible ? '端口已被占用' : `端口不接收 ${sourcePort.type}`
+  return `已改连「${resolved.port.name}」：落点「${aimed.name}」${reason}`
+}
+
 export function tryConnect(
   editor: Editor,
   from: ConnectionFrom,
@@ -561,52 +696,16 @@ export function tryConnect(
   const sourcePort = sourcePorts?.out.find((port) => port.id === from.portId)
   if (!source || !sourceSpec || !sourcePort) return '源节点或输出端口不存在'
 
-  const targetPorts = getNodePorts(targetSpec, target)
-  const compatible = targetPorts.in.filter(
-    (port) =>
-      portCompatible(port.type, sourcePort.type) &&
-      !(
-        port.type === 'json' &&
-        sourcePort.type === 'json' &&
-        !nodeSchemasCompatible(sourcePort.schema, port.schema)
-      )
+  const resolved = resolveTargetInputPort(
+    editor,
+    target,
+    targetSpec,
+    sourcePort,
+    dropPagePt,
+    preferredTargetPortId
   )
-  if (compatible.length === 0) {
-    return `类型或 Schema 不兼容：${sourcePort.type} 输出无法接入 ${targetSpec.label} 节点`
-  }
-  const usable = compatible.filter(
-    (port) =>
-      port.cardinality === 'many' ||
-      !inputPortOccupied(editor, { shapeId: targetShapeId, portId: port.id })
-  )
-  if (usable.length === 0) {
-    return `${targetSpec.label} 的兼容输入均为单值端口且已有连线，请先断开原连线`
-  }
-
-  let port: PortDecl = usable[0]
-  if (preferredTargetPortId) {
-    const preferredPort = usable.find((candidate) => candidate.id === preferredTargetPortId)
-    if (!preferredPort) return `${targetSpec.label} 的目标输入不可用`
-    port = preferredPort
-  } else if (dropPagePt && usable.length > 1) {
-    const targetBounds = editor.getShapePageBounds(target.id)
-    if (!targetBounds) return '目标节点位置不可用'
-    const offsets = portOffsets(targetPorts.in.length, target.props.h)
-    let bestDist = Infinity
-    for (const p of usable) {
-      const idx = targetPorts.in.indexOf(p)
-      const y = offsets[idx] ?? target.props.h / 2
-      const pageY =
-        target.props.h > 0
-          ? targetBounds.y + (targetBounds.height * y) / target.props.h
-          : targetBounds.y
-      const d = Math.hypot(dropPagePt.x - targetBounds.x, dropPagePt.y - pageY)
-      if (d < bestDist) {
-        bestDist = d
-        port = p
-      }
-    }
-  }
+  if ('error' in resolved) return resolved.error
+  const port = resolved.port
 
   const endpoint: EdgeEndpoint = { shapeId: targetShapeId, portId: port.id }
   if (edgeExists(editor, { shapeId: from.shapeId, portId: from.portId }, endpoint)) {
@@ -699,7 +798,14 @@ export function deriveGraph(editor: Editor): {
         h: s.props.h,
         ports,
         // 图数据中保留固定配置，但不再把它混入用户正文 content。
-        params: s.props.config ? { config: s.props.config } : {},
+        // 媒体的"位置"必须随节点走 params（F-IMG-02）：headless toShape 与画布
+        // nodeCardProps 都从 params.mediaPath/mediaMime 恢复媒体，缺了它
+        // 桌面建的项目无法 headless 运行，headless 产出也无法在画布恢复。
+        params: {
+          ...(s.props.config ? { config: s.props.config } : {}),
+          ...(s.props.mediaPath ? { mediaPath: s.props.mediaPath } : {}),
+          ...(s.props.mediaMime ? { mediaMime: s.props.mediaMime } : {})
+        },
         content: s.props.mediaId
           ? { kind: 'media', mediaId: s.props.mediaId }
           : s.props.text

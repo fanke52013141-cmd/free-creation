@@ -495,7 +495,9 @@ function hasInlineInput(node: CanvasNode, portId: string): boolean {
     )
   }
   if (portId === 'in-image' || portId === 'in-video' || portId === 'in-audio') {
-    return node.content.kind === 'media' || typeof node.params.mediaId === 'string'
+    // 执行器（shared executors + headless toShape）消费的是 mediaPath；
+    // 就绪判定必须与执行语义一致（F-IMG-02），params.mediaId 单独存在并不能执行。
+    return node.content.kind === 'media' || typeof node.params.mediaPath === 'string'
   }
   return false
 }

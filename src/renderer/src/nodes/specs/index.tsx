@@ -145,7 +145,7 @@ const PREVIS_PROJECT: PortSchemaRef = { id: 'previs.project', version: 2 }
 export function registerBaseNodeTypes(): void {
   registerNodeType({
     type: 'text',
-    contractVersion: 2,
+    contractVersion: 3,
     label: '文本',
     icon: 'text',
     color: '#8ab4f8',
@@ -166,7 +166,7 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'image',
-    contractVersion: 2,
+    contractVersion: 3,
     label: '图片',
     icon: 'image',
     color: '#34d399',
@@ -183,7 +183,7 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'image-crop',
-    contractVersion: 1,
+    contractVersion: 2,
     label: '裁剪',
     icon: 'crop',
     color: '#22c55e',
@@ -206,7 +206,7 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'image-split',
-    contractVersion: 1,
+    contractVersion: 2,
     label: '拆图',
     icon: 'grid',
     color: '#14b8a6',
@@ -278,7 +278,7 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'image-edit',
-    contractVersion: 1,
+    contractVersion: 2,
     label: 'P图',
     icon: 'edit',
     color: '#f97316',

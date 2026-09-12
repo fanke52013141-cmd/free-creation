@@ -830,27 +830,39 @@
         "properties": {
           "mode": {
             "type": "string",
-            "description": "裁剪模式：固定比例或自由裁剪",
+            "description": "裁剪模式：rect 矩形 / quad 四角透视",
             "enum": [
-              "fixed-ratio",
-              "free"
+              "rect",
+              "quad"
             ],
-            "default": "fixed-ratio"
+            "default": "rect"
           },
-          "ratio": {
+          "aspectRatio": {
             "type": "string",
-            "description": "裁剪比例（仅 fixed-ratio 模式有效）",
+            "description": "矩形选区的视觉宽高比（编辑约束，输出仍由归一化 rect 决定）",
             "enum": [
+              "free",
               "1:1",
               "16:9",
               "9:16",
               "4:3",
-              "3:4"
-            ]
+              "3:4",
+              "3:2",
+              "2:3",
+              "21:9",
+              "9:21",
+              "5:4",
+              "4:5"
+            ],
+            "default": "free"
           },
-          "cropRect": {
+          "rect": {
             "type": "object",
-            "description": "自定义裁剪区域 {x, y, w, h}"
+            "description": "归一化裁剪区域 {x, y, width, height}，0~1"
+          },
+          "points": {
+            "type": "array",
+            "description": "quad 模式的四角点（左上/右上/左下/右下），归一化坐标"
           }
         },
         "required": [
@@ -864,22 +876,36 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "providerId": {
+          "modelKey": {
             "type": "string",
-            "description": "供应商 ID"
+            "description": "图片模型选择键（providerId::modelId）"
           },
-          "modelId": {
+          "size": {
             "type": "string",
-            "description": "模型 ID"
+            "description": "输出尺寸",
+            "enum": [
+              "auto",
+              "1024x1024",
+              "1536x1024",
+              "1024x1536"
+            ],
+            "default": "auto"
+          },
+          "instruction": {
+            "type": "string",
+            "description": "修改说明（≤4000 字；与标注至少有一项）"
+          },
+          "annotations": {
+            "type": "array",
+            "description": "标注列表（≤64 个；颜色语义：红=修改、蓝=替换、黄=保留）"
           },
           "mask": {
-            "type": "string",
-            "description": "蒙版区域（base64 或区域描述）"
+            "type": "object",
+            "description": "遮罩：仅修改遮罩区域（发送给模型时转为透明区域）"
           }
         },
         "required": [
-          "providerId",
-          "modelId"
+          "modelKey"
         ]
       }
     },
@@ -926,9 +952,13 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "mediaId": {
+          "mediaPath": {
             "type": "string",
-            "description": "已导入的媒体资产 ID"
+            "description": "已落盘媒体文件的路径"
+          },
+          "mediaMime": {
+            "type": "string",
+            "description": "媒体 MIME 类型"
           }
         },
         "required": []
@@ -942,23 +972,27 @@
         "properties": {
           "rows": {
             "type": "number",
-            "description": "行数",
-            "default": 2,
+            "description": "行数（1~64，与列数乘积不超过 64 格）",
+            "default": 3,
             "minimum": 1,
-            "maximum": 10
+            "maximum": 64
           },
-          "cols": {
+          "columns": {
             "type": "number",
-            "description": "列数",
-            "default": 2,
+            "description": "列数（1~64，超上限时保持行数并下调列数）",
+            "default": 3,
             "minimum": 1,
-            "maximum": 10
+            "maximum": 64
+          },
+          "scalePercent": {
+            "type": "number",
+            "description": "每格输出面积相对原格面积的百分比（边长为开平方）",
+            "default": 100,
+            "minimum": 1,
+            "maximum": 100
           }
         },
-        "required": [
-          "rows",
-          "cols"
-        ]
+        "required": []
       }
     },
     {
@@ -989,12 +1023,7 @@
       "description": "文本 — 可编辑的原始文本。连线输出会作为下游节点的文本输入。",
       "inputSchema": {
         "type": "object",
-        "properties": {
-          "text": {
-            "type": "string",
-            "description": "节点文本内容"
-          }
-        },
+        "properties": {},
         "required": []
       }
     },
@@ -1302,8 +1331,8 @@
       "capability": "image.crop",
       "node": "裁剪",
       "nodeType": "image-crop",
-      "version": "1.0.0",
-      "contractVersion": 1,
+      "version": "2.0.0",
+      "contractVersion": 2,
       "cli": true,
       "mcp": true,
       "inputs": 1,
@@ -1314,8 +1343,8 @@
       "capability": "image.edit",
       "node": "修改",
       "nodeType": "image-edit",
-      "version": "1.0.0",
-      "contractVersion": 1,
+      "version": "2.0.0",
+      "contractVersion": 2,
       "cli": true,
       "mcp": true,
       "inputs": 2,
@@ -1338,8 +1367,8 @@
       "capability": "image.source",
       "node": "图片",
       "nodeType": "image",
-      "version": "2.0.0",
-      "contractVersion": 2,
+      "version": "3.0.0",
+      "contractVersion": 3,
       "cli": true,
       "mcp": true,
       "inputs": 0,
@@ -1350,8 +1379,8 @@
       "capability": "image.split",
       "node": "拆分",
       "nodeType": "image-split",
-      "version": "1.0.0",
-      "contractVersion": 1,
+      "version": "2.0.0",
+      "contractVersion": 2,
       "cli": true,
       "mcp": true,
       "inputs": 1,
@@ -1386,8 +1415,8 @@
       "capability": "text.source",
       "node": "文本",
       "nodeType": "text",
-      "version": "2.0.0",
-      "contractVersion": 2,
+      "version": "3.0.0",
+      "contractVersion": 3,
       "cli": true,
       "mcp": true,
       "inputs": 1,
@@ -2092,7 +2121,7 @@
     },
     {
       "capabilityId": "image.crop",
-      "version": "1.0.0",
+      "version": "2.0.0",
       "inputs": [
         {
           "id": "in-image",
@@ -2117,35 +2146,61 @@
         "mode": {
           "type": "enum",
           "required": true,
-          "defaultValue": "fixed-ratio",
+          "defaultValue": "rect",
           "enumValues": [
-            "fixed-ratio",
-            "free"
+            "rect",
+            "quad"
           ],
-          "description": "裁剪模式：固定比例或自由裁剪"
+          "description": "裁剪模式：rect 矩形 / quad 四角透视"
         },
-        "ratio": {
+        "aspectRatio": {
           "type": "enum",
           "required": false,
+          "defaultValue": "free",
           "enumValues": [
+            "free",
             "1:1",
             "16:9",
             "9:16",
             "4:3",
-            "3:4"
+            "3:4",
+            "3:2",
+            "2:3",
+            "21:9",
+            "9:21",
+            "5:4",
+            "4:5"
           ],
-          "description": "裁剪比例（仅 fixed-ratio 模式有效）"
+          "description": "矩形选区的视觉宽高比（编辑约束，输出仍由归一化 rect 决定）"
         },
-        "cropRect": {
+        "rect": {
           "type": "rect",
           "required": false,
-          "description": "自定义裁剪区域 {x, y, w, h}"
+          "description": "归一化裁剪区域 {x, y, width, height}，0~1"
+        },
+        "points": {
+          "type": "array",
+          "required": false,
+          "description": "quad 模式的四角点（左上/右上/左下/右下），归一化坐标",
+          "items": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number",
+                "description": "0~1"
+              },
+              "y": {
+                "type": "number",
+                "description": "0~1"
+              }
+            }
+          }
         }
       }
     },
     {
       "capabilityId": "image.edit",
-      "version": "1.0.0",
+      "version": "2.0.0",
       "inputs": [
         {
           "id": "in-image",
@@ -2175,20 +2230,87 @@
         }
       ],
       "configSchema": {
-        "providerId": {
+        "modelKey": {
           "type": "string",
           "required": true,
-          "description": "供应商 ID"
+          "description": "图片模型选择键（providerId::modelId）"
         },
-        "modelId": {
-          "type": "string",
-          "required": true,
-          "description": "模型 ID"
+        "size": {
+          "type": "enum",
+          "required": false,
+          "defaultValue": "auto",
+          "enumValues": [
+            "auto",
+            "1024x1024",
+            "1536x1024",
+            "1024x1536"
+          ],
+          "description": "输出尺寸"
         },
-        "mask": {
+        "instruction": {
           "type": "string",
           "required": false,
-          "description": "蒙版区域（base64 或区域描述）"
+          "description": "修改说明（≤4000 字；与标注至少有一项）"
+        },
+        "annotations": {
+          "type": "array",
+          "required": false,
+          "description": "标注列表（≤64 个；颜色语义：红=修改、蓝=替换、黄=保留）",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "enum",
+                "enumValues": [
+                  "arrow",
+                  "rect",
+                  "brush",
+                  "text"
+                ],
+                "description": "标注类型"
+              },
+              "color": {
+                "type": "enum",
+                "enumValues": [
+                  "red",
+                  "yellow",
+                  "blue"
+                ],
+                "description": "标注颜色"
+              },
+              "text": {
+                "type": "string",
+                "description": "文字标注内容（type=text 时必填）"
+              },
+              "strokeWidth": {
+                "type": "number",
+                "description": "线宽 1~12"
+              }
+            }
+          }
+        },
+        "mask": {
+          "type": "object",
+          "required": false,
+          "description": "遮罩：仅修改遮罩区域（发送给模型时转为透明区域）",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "是否启用遮罩"
+            },
+            "strokes": {
+              "type": "array",
+              "description": "归一化画笔轨迹（≤64 笔，每笔 ≤512 点）"
+            },
+            "brushSize": {
+              "type": "number",
+              "description": "画笔尺寸 0.01~0.5（归一化）"
+            },
+            "invert": {
+              "type": "boolean",
+              "description": "反选区域"
+            }
+          }
         }
       }
     },
@@ -2268,7 +2390,7 @@
     },
     {
       "capabilityId": "image.source",
-      "version": "2.0.0",
+      "version": "3.0.0",
       "inputs": [],
       "outputs": [
         {
@@ -2281,16 +2403,21 @@
         }
       ],
       "configSchema": {
-        "mediaId": {
+        "mediaPath": {
           "type": "string",
           "required": false,
-          "description": "已导入的媒体资产 ID"
+          "description": "已落盘媒体文件的路径"
+        },
+        "mediaMime": {
+          "type": "string",
+          "required": false,
+          "description": "媒体 MIME 类型"
         }
       }
     },
     {
       "capabilityId": "image.split",
-      "version": "1.0.0",
+      "version": "2.0.0",
       "inputs": [
         {
           "id": "in-image",
@@ -2326,19 +2453,27 @@
       "configSchema": {
         "rows": {
           "type": "number",
-          "required": true,
-          "defaultValue": 2,
+          "required": false,
+          "defaultValue": 3,
           "minimum": 1,
-          "maximum": 10,
-          "description": "行数"
+          "maximum": 64,
+          "description": "行数（1~64，与列数乘积不超过 64 格）"
         },
-        "cols": {
+        "columns": {
           "type": "number",
-          "required": true,
-          "defaultValue": 2,
+          "required": false,
+          "defaultValue": 3,
           "minimum": 1,
-          "maximum": 10,
-          "description": "列数"
+          "maximum": 64,
+          "description": "列数（1~64，超上限时保持行数并下调列数）"
+        },
+        "scalePercent": {
+          "type": "number",
+          "required": false,
+          "defaultValue": 100,
+          "minimum": 1,
+          "maximum": 100,
+          "description": "每格输出面积相对原格面积的百分比（边长为开平方）"
         }
       }
     },
@@ -2416,7 +2551,7 @@
     },
     {
       "capabilityId": "text.source",
-      "version": "2.0.0",
+      "version": "3.0.0",
       "inputs": [
         {
           "id": "in-text",
@@ -2437,13 +2572,7 @@
           "description": "节点最终保存的纯文本内容。"
         }
       ],
-      "configSchema": {
-        "text": {
-          "type": "string",
-          "required": false,
-          "description": "节点文本内容"
-        }
-      }
+      "configSchema": {}
     },
     {
       "capabilityId": "video.audio",

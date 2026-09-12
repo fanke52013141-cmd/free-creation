@@ -12,8 +12,7 @@
   --surface-2: #242424;
   --panel: #1b222b;
   --border-soft: rgba(255, 255, 255, 0.1);
-  --node-radius: 12px;
-  --node-header-h: 42px;
+  /* --node-radius / --node-header-h 的唯一定义在 ui-foundation.css（呈现规范 §8.1 token 边界） */
   --elevation-1: 0 5px 18px rgba(0, 0, 0, 0.24);
   /* C1: --txt-dim 原被多处引用却从未定义，始终退回 #9aa4b5，此处显式补齐 */
   --txt-dim: #9aa4b5;
@@ -1459,16 +1458,21 @@ select:focus-visible,
   font-variant-numeric: tabular-nums;
 }
 
-.connected-input-value,
 .connected-input-source {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* 文本/JSON 摘要按呈现规范 §2.2 最多两行省略；来源标签保持单行。 */
 .connected-input-value {
   max-width: 84px;
   color: var(--txt);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  word-break: break-all;
 }
 
 .connected-input-source {

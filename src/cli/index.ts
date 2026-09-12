@@ -13,7 +13,7 @@
  *   canvas capability get <id>
  *   canvas node types
  *   canvas node list --project <id>
- *   canvas node create --project <id> --type <type> [--title <title>] [--param key=value]
+ *   canvas node create --project <id> --type <type> [--title <title>] [--text <value>] [--param key=value]
  *   canvas node connect --project <id> --from <nodeId:portId> --to <nodeId:portId>
  *   canvas workflow validate --project <id>
  *   canvas workflow estimate --project <id>
@@ -337,7 +337,9 @@ async function handleNode(
       const projectId = args.options.project
       const type = args.options.type
       if (!projectId || !type) {
-        console.error('用法: canvas node create --project <id> --type <type> [--title <title>]')
+        console.error(
+          '用法: canvas node create --project <id> --type <type> [--title <title>] [--text <value>]'
+        )
         process.exit(1)
       }
 

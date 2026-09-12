@@ -19,8 +19,9 @@
   --muted: #9aa4b2;
   --txt-dim: #737f8e;
   --brand: #42b9f5;
-  --node-radius: 14px;
-  --node-header-h: 22px;
+  --node-radius: 12px;
+  /* 悬浮标题条的唯一高度事实（呈现规范 §3.1；标题悬浮于卡片上方，见 §3.2 附注） */
+  --node-header-h: 28px;
   --elevation-1: 0 14px 34px rgba(0, 0, 0, 0.22);
   --elevation-float: 0 18px 48px rgba(0, 0, 0, 0.34);
 }
@@ -279,7 +280,7 @@ body {
   left: 0;
   width: auto;
   max-width: calc(100% - 4px);
-  height: 22px;
+  height: var(--node-header-h);
   gap: 5px;
   padding: 0 2px;
   border: 0;

@@ -728,10 +728,16 @@ describe('CapabilityService', () => {
   })
 
   it('getConfigSchema 应返回配置 Schema', async () => {
+    // text.source 的正文存 props.text / content.text（CLI --text），config 不承载字段。
     const result = await env.services.capabilityService.getConfigSchema('text.source')
     expect(result.ok).toBe(true)
     if (result.ok) {
-      expect(result.data.text).toBeDefined()
+      expect(Object.keys(result.data)).toHaveLength(0)
+    }
+    const cropSchema = await env.services.capabilityService.getConfigSchema('image.crop')
+    expect(cropSchema.ok).toBe(true)
+    if (cropSchema.ok) {
+      expect(Object.keys(cropSchema.data).length).toBeGreaterThan(0)
     }
   })
 

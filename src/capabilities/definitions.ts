@@ -28,8 +28,8 @@ const ALL_EXPOSED = { desktop: true, cli: true, mcp: true } as const
 
 const textCapability = defineCapability({
   id: 'text.source',
-  version: '2.0.0',
-  contractVersion: 2,
+  version: '3.0.0',
+  contractVersion: 3,
   nodeType: 'text',
   title: '文本',
   description: '可编辑的原始文本。连线输出会作为下游节点的文本输入。',
@@ -54,9 +54,9 @@ const textCapability = defineCapability({
       description: '节点最终保存的纯文本内容。'
     }
   ],
-  configSchema: {
-    text: { type: 'string', required: false, description: '节点文本内容' }
-  },
+  // 文本节点的用户正文存 props.text（画布）与 content.text（Agent 通道），不经 config。
+  // CLI/MCP 通过 node create --text 设置正文，因此 configSchema 不声明 text 字段。
+  configSchema: {},
   commands: { execute: 'text.source.execute' },
   runtime: { headless: true, preview: false, batch: false, executionMode: 'auto' },
   expose: ALL_EXPOSED
@@ -64,8 +64,8 @@ const textCapability = defineCapability({
 
 const imageCapability = defineCapability({
   id: 'image.source',
-  version: '2.0.0',
-  contractVersion: 2,
+  version: '3.0.0',
+  contractVersion: 3,
   nodeType: 'image',
   title: '图片',
   description: '图片资产节点，只负责保存和输出一张已导入的图片，不承担生成逻辑。',
@@ -82,8 +82,11 @@ const imageCapability = defineCapability({
       description: '已导入并落盘的图片资产引用。'
     }
   ],
+  // 媒体的可执行事实是 mediaPath/mediaMime（headless toShape 与画布 nodeCardProps
+  // 都从 params 读取，F-IMG-02）；单独的 mediaId 无法执行，不再声明。
   configSchema: {
-    mediaId: { type: 'string', required: false, description: '已导入的媒体资产 ID' }
+    mediaPath: { type: 'string', required: false, description: '已落盘媒体文件的路径' },
+    mediaMime: { type: 'string', required: false, description: '媒体 MIME 类型' }
   },
   commands: { execute: 'image.source.execute' },
   runtime: {
@@ -293,8 +296,8 @@ const audioCapability = defineCapability({
 
 const imageCropCapability = defineCapability({
   id: 'image.crop',
-  version: '1.0.0',
-  contractVersion: 1,
+  version: '2.0.0',
+  contractVersion: 2,
   nodeType: 'image-crop',
   title: '裁剪',
   description: '对一张上游图片执行本地矩形或四角透视裁剪。每次运行产生新的图片资产，原图保持不变。',
@@ -319,24 +322,52 @@ const imageCropCapability = defineCapability({
       description: '本地裁剪完成并落盘的新图片资产。'
     }
   ],
+  // 与 shared/image-crop.ts 的 ImageCropConfig 逐字段对齐（F-CROP-01）：
+  // 此前声明的 fixed-ratio/free、ratio、cropRect 从未是执行器读取的键。
   configSchema: {
     mode: {
       type: 'enum',
       required: true,
-      defaultValue: 'fixed-ratio',
-      enumValues: ['fixed-ratio', 'free'],
-      description: '裁剪模式：固定比例或自由裁剪'
+      defaultValue: 'rect',
+      enumValues: ['rect', 'quad'],
+      description: '裁剪模式：rect 矩形 / quad 四角透视'
     },
-    ratio: {
+    aspectRatio: {
       type: 'enum',
       required: false,
-      enumValues: ['1:1', '16:9', '9:16', '4:3', '3:4'],
-      description: '裁剪比例（仅 fixed-ratio 模式有效）'
+      defaultValue: 'free',
+      enumValues: [
+        'free',
+        '1:1',
+        '16:9',
+        '9:16',
+        '4:3',
+        '3:4',
+        '3:2',
+        '2:3',
+        '21:9',
+        '9:21',
+        '5:4',
+        '4:5'
+      ],
+      description: '矩形选区的视觉宽高比（编辑约束，输出仍由归一化 rect 决定）'
     },
-    cropRect: {
+    rect: {
       type: 'rect',
       required: false,
-      description: '自定义裁剪区域 {x, y, w, h}'
+      description: '归一化裁剪区域 {x, y, width, height}，0~1'
+    },
+    points: {
+      type: 'array',
+      required: false,
+      description: 'quad 模式的四角点（左上/右上/左下/右下），归一化坐标',
+      items: {
+        type: 'object',
+        properties: {
+          x: { type: 'number', description: '0~1' },
+          y: { type: 'number', description: '0~1' }
+        }
+      }
     }
   },
   commands: { execute: 'image.crop.execute', preview: 'image.crop.preview' },
@@ -346,8 +377,8 @@ const imageCropCapability = defineCapability({
 
 const imageSplitCapability = defineCapability({
   id: 'image.split',
-  version: '1.0.0',
-  contractVersion: 1,
+  version: '2.0.0',
+  contractVersion: 2,
   nodeType: 'image-split',
   title: '拆分',
   description:
@@ -382,22 +413,32 @@ const imageSplitCapability = defineCapability({
       schema: { id: 'list.items', version: 1 }
     }
   ],
+  // 与 shared/image-split.ts 的 ImageSplitConfig 逐字段对齐（F-SPLIT-02）：
+  // 此前声明的 cols（真实键是 columns）、上限 10 与缺失的 scalePercent 均与执行器不符。
   configSchema: {
     rows: {
       type: 'number',
-      required: true,
-      defaultValue: 2,
+      required: false,
+      defaultValue: 3,
       minimum: 1,
-      maximum: 10,
-      description: '行数'
+      maximum: 64,
+      description: '行数（1~64，与列数乘积不超过 64 格）'
     },
-    cols: {
+    columns: {
       type: 'number',
-      required: true,
-      defaultValue: 2,
+      required: false,
+      defaultValue: 3,
       minimum: 1,
-      maximum: 10,
-      description: '列数'
+      maximum: 64,
+      description: '列数（1~64，超上限时保持行数并下调列数）'
+    },
+    scalePercent: {
+      type: 'number',
+      required: false,
+      defaultValue: 100,
+      minimum: 1,
+      maximum: 100,
+      description: '每格输出面积相对原格面积的百分比（边长为开平方）'
     }
   },
   commands: { execute: 'image.split.execute' },
@@ -407,8 +448,8 @@ const imageSplitCapability = defineCapability({
 
 const imageEditCapability = defineCapability({
   id: 'image.edit',
-  version: '1.0.0',
-  contractVersion: 1,
+  version: '2.0.0',
+  contractVersion: 2,
   nodeType: 'image-edit',
   title: '修改',
   description: '以一张上游图片为原图，结合标注与文字说明生成新的图片；原图保持不变。',
@@ -441,10 +482,56 @@ const imageEditCapability = defineCapability({
       description: '模型修改并落盘后的新图片资产。'
     }
   ],
+  // 与 shared/image-edit.ts 的 ImageEditConfig 逐字段对齐（F-EDIT-01）：
+  // 此前的 providerId/modelId 是幽灵必填键（执行器读 modelKey），mask 描述也与
+  // 真实的结构化遮罩不符；标注与修改说明此前完全未声明。
   configSchema: {
-    providerId: { type: 'string', required: true, description: '供应商 ID' },
-    modelId: { type: 'string', required: true, description: '模型 ID' },
-    mask: { type: 'string', required: false, description: '蒙版区域（base64 或区域描述）' }
+    modelKey: {
+      type: 'string',
+      required: true,
+      description: '图片模型选择键（providerId::modelId）'
+    },
+    size: {
+      type: 'enum',
+      required: false,
+      defaultValue: 'auto',
+      enumValues: ['auto', '1024x1024', '1536x1024', '1024x1536'],
+      description: '输出尺寸'
+    },
+    instruction: {
+      type: 'string',
+      required: false,
+      description: '修改说明（≤4000 字；与标注至少有一项）'
+    },
+    annotations: {
+      type: 'array',
+      required: false,
+      description: '标注列表（≤64 个；颜色语义：红=修改、蓝=替换、黄=保留）',
+      items: {
+        type: 'object',
+        properties: {
+          type: {
+            type: 'enum',
+            enumValues: ['arrow', 'rect', 'brush', 'text'],
+            description: '标注类型'
+          },
+          color: { type: 'enum', enumValues: ['red', 'yellow', 'blue'], description: '标注颜色' },
+          text: { type: 'string', description: '文字标注内容（type=text 时必填）' },
+          strokeWidth: { type: 'number', description: '线宽 1~12' }
+        }
+      }
+    },
+    mask: {
+      type: 'object',
+      required: false,
+      description: '遮罩：仅修改遮罩区域（发送给模型时转为透明区域）',
+      properties: {
+        enabled: { type: 'boolean', description: '是否启用遮罩' },
+        strokes: { type: 'array', description: '归一化画笔轨迹（≤64 笔，每笔 ≤512 点）' },
+        brushSize: { type: 'number', description: '画笔尺寸 0.01~0.5（归一化）' },
+        invert: { type: 'boolean', description: '反选区域' }
+      }
+    }
   },
   commands: { execute: 'image.edit.execute' },
   runtime: { headless: true, preview: false, batch: true, executionMode: 'auto' },

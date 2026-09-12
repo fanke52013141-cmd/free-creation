@@ -1425,7 +1425,7 @@
   left: 0;
   width: 100%;
   max-width: none;
-  height: 28px;
+  height: var(--node-header-h);
   box-sizing: border-box;
   gap: 6px;
   padding: 0 2px;

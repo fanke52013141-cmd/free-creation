@@ -250,7 +250,7 @@ describe('关键端口契约快照（防回归）', () => {
   })
 
   it('图片/音频资产都是纯源节点，通用配音只接朗读文本', () => {
-    expect(getNodeType('image')!.contractVersion).toBe(2)
+    expect(getNodeType('image')!.contractVersion).toBe(3)
     expect(snapshotPorts(getNodeType('image')!.ports.in)).toEqual([])
     expect(getNodeType('audio')!.contractVersion).toBe(3)
     expect(snapshotPorts(getNodeType('audio')!.ports.in)).toEqual([])

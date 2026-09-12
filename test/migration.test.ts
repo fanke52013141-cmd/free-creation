@@ -121,13 +121,23 @@ describe('契约版本稳定性（防破坏性变化漏升版本）', () => {
     const v4Types: NodeTypeId[] = ['vocal-separate']
     const v3Types: NodeTypeId[] = [
       'audio',
+      'image',
       'image-gen',
       'director',
       'video-frame',
       'video-clip',
-      'video-audio'
+      'video-audio',
+      'text'
     ]
-    const v2Types: NodeTypeId[] = ['text', 'image', 'code', 'iterate', 'speech', 'tts']
+    const v2Types: NodeTypeId[] = [
+      'code',
+      'iterate',
+      'speech',
+      'tts',
+      'image-crop',
+      'image-split',
+      'image-edit'
+    ]
     expect(spec?.contractVersion).toBe(
       v6Types.includes(type)
         ? 6

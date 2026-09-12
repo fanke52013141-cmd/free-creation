@@ -25,7 +25,13 @@ import {
   teardownConnectionDrag,
   type ConnectionFinish
 } from './connection-drag'
-import { deriveGraph, tryAutoConnectNearby, tryConnect, createEdge } from './graph'
+import {
+  connectionRetargetNotice,
+  deriveGraph,
+  tryAutoConnectNearby,
+  tryConnect,
+  createEdge
+} from './graph'
 import { mergeUnsavedLocalRecords, countRestorableRecords } from './external-reload'
 import { NODE_PORT_OUTSET } from './edge-geometry'
 import type { AiProcessConfig } from '../engine/executors/aiProcess'
@@ -193,7 +199,10 @@ function removeUnsupportedCanvasShapes(editor: Editor): number {
 function topbarSafeScreenY(editor: Editor): number {
   const topbar = editor.getContainer().ownerDocument.querySelector('.canvas-topbar')
   if (!topbar) return 0
-  return topbar.getBoundingClientRect().bottom + 12
+  // 悬浮标题条从卡片顶边向上伸出 34px（ui-surfaces .node-header top:-34px），
+  // 只保证卡片顶边会让标题/运行按钮被顶栏截获（F-IMG-01）。
+  const FLOATING_HEADER_OVERHANG = 34
+  return topbar.getBoundingClientRect().bottom + 12 + FLOATING_HEADER_OVERHANG
 }
 
 /**
@@ -1415,6 +1424,11 @@ export function CanvasEditor({
       else {
         const batchCount = r.from.memberIds?.length ?? 0
         if (batchCount > 1) toast(`已批量连接 ${batchCount} 个节点`)
+        // 落点端口与实际接入端口不一致（dim 端口磁吸改连）时，明确告知用户。
+        else {
+          const notice = connectionRetargetNotice(editor, r.from, target.id, pagePt)
+          if (notice) toast(notice)
+        }
       }
       return
     }
@@ -1439,7 +1453,10 @@ export function CanvasEditor({
         else {
           const batchCount = r.from.memberIds?.length ?? 0
           if (batchCount > 1) toast(`已批量连接 ${batchCount} 个节点`)
-          else toast('已吸附连接到已选节点')
+          else {
+            const notice = connectionRetargetNotice(editor, r.from, candidate.id, pagePt)
+            toast(notice ?? '已吸附连接到已选节点')
+          }
         }
         return
       }

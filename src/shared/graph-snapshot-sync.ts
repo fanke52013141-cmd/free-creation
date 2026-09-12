@@ -147,6 +147,10 @@ function stringOr(value: unknown, fallback: string): string {
 function nodeCardProps(node: CanvasNode): UnknownRecord {
   const config = typeof node.params?.config === 'string' ? node.params.config : ''
   const content = node.content ?? { kind: 'empty' }
+  // 媒体位置（F-IMG-02）：headless/Agent 通道把 mediaPath/mediaMime 存在 params，
+  // 物化到画布时必须带回，否则产出媒体节点在画布上是空态、执行器会 skipped。
+  const mediaPath = typeof node.params?.mediaPath === 'string' ? node.params.mediaPath : ''
+  const mediaMime = typeof node.params?.mediaMime === 'string' ? node.params.mediaMime : ''
   return {
     w: node.w,
     h: node.h,
@@ -155,8 +159,8 @@ function nodeCardProps(node: CanvasNode): UnknownRecord {
     config,
     text: content.kind === 'text' ? content.text : '',
     mediaId: content.kind === 'media' ? content.mediaId : '',
-    mediaPath: '',
-    mediaMime: '',
+    mediaPath,
+    mediaMime,
     exec: node.exec?.status ?? 'idle'
   }
 }

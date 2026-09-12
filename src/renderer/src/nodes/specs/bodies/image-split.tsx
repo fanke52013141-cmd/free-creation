@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import {
   buildImageSplitTiles,
@@ -27,17 +27,9 @@ export function ImageSplitBody({ shape, openPreview }: NodeBodyProps): React.JSX
   const tiles = buildImageSplitTiles(config)
   const [previewAspect, setPreviewAspect] = useState<number | null>(null)
 
-  // 移除卡片底部的按钮后，将旧卡片也只压缩一次为原高的 5/6；元数据标记避免
-  // 后续刷新或用户手动改变尺寸时再次缩小。'快速拆分' 仍由卡片右上角统一运行按钮执行。
-  useEffect(() => {
-    if (shape.meta?.splitCompactApplied || shape.props.h <= 220) return
-    editor.updateShape({
-      id: shape.id,
-      type: 'node-card',
-      props: { h: Math.max(220, Math.round(shape.props.h * (5 / 6))) },
-      meta: { ...(shape.meta ?? {}), splitCompactApplied: true }
-    })
-  }, [editor, shape.id, shape.meta, shape.props.h])
+  // 快速拆分卡片保持契约统一的 340×260 初始尺寸（呈现规范 §3.1）：
+  // 预览网格由 CSS flex + overflow 钳制；旧卡一次性压缩逻辑随"尚无历史用户数据"移除，
+  // '快速拆分' 仍由卡片右上角统一运行按钮执行。
 
   const save = (partial: Partial<ImageSplitConfig>, reason: string): void => {
     const next = parseImageSplitConfig(JSON.stringify({ ...config, ...partial }))
@@ -61,7 +53,10 @@ export function ImageSplitBody({ shape, openPreview }: NodeBodyProps): React.JSX
             value={config.rows}
             onPointerDown={stopEventPropagation}
             onChange={(event) =>
-              save({ rows: positiveInteger(event.currentTarget.value, config.rows) }, 'image-split-rows')
+              save(
+                { rows: positiveInteger(event.currentTarget.value, config.rows) },
+                'image-split-rows'
+              )
             }
           />
         </label>
@@ -92,7 +87,12 @@ export function ImageSplitBody({ shape, openPreview }: NodeBodyProps): React.JSX
               onPointerDown={stopEventPropagation}
               onChange={(event) =>
                 save(
-                  { scalePercent: Math.min(100, positiveInteger(event.currentTarget.value, config.scalePercent)) },
+                  {
+                    scalePercent: Math.min(
+                      100,
+                      positiveInteger(event.currentTarget.value, config.scalePercent)
+                    )
+                  },
                   'image-split-scale'
                 )
               }
@@ -124,11 +124,14 @@ export function ImageSplitBody({ shape, openPreview }: NodeBodyProps): React.JSX
             draggable={false}
             onLoad={(event) => {
               const image = event.currentTarget
-              if (image.naturalWidth && image.naturalHeight) setPreviewAspect(image.naturalWidth / image.naturalHeight)
+              if (image.naturalWidth && image.naturalHeight)
+                setPreviewAspect(image.naturalWidth / image.naturalHeight)
             }}
           />
         ) : (
-          <span className="image-split-quick-empty"><Icon name="image" size={19} /> 连接原图</span>
+          <span className="image-split-quick-empty">
+            <Icon name="image" size={19} /> 连接原图
+          </span>
         )}
         {tiles.map((tile) => (
           <span
@@ -146,7 +149,9 @@ export function ImageSplitBody({ shape, openPreview }: NodeBodyProps): React.JSX
         ))}
       </div>
       <span className="image-split-quick-summary">
-        {source ? `${config.rows} × ${config.columns}，共 ${imageSplitCount(config)} 张；右上角运行即可拆分` : '连接原图后可从右上角运行'}
+        {source
+          ? `${config.rows} × ${config.columns}，共 ${imageSplitCount(config)} 张；右上角运行即可拆分`
+          : '连接原图后可从右上角运行'}
       </span>
     </div>
   )
