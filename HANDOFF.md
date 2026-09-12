@@ -1,6 +1,6 @@
 # Canvas Studio 开发交接文档
 
-> 最后更新：2026-09-06
+> 最后更新：2026-09-12
 >
 > 当前分支：`main`。接手前必须执行 `git fetch origin` 与 `git status -sb`，不得依据本文旧哈希判断推送状态。
 >
@@ -9,6 +9,8 @@
 > 远程仓库：https://github.com/fanke52013141-cmd/free-creation
 >
 > 产品定位：单用户、本地优先的 Windows Electron 无限画布创作工具。
+
+> **全节点审查启动 + 前 5 节点审查修复（2026-09-12）**：按 [docs/NODE_FULL_AUDIT_TEST_PLAN_2026_09_12.md](./docs/NODE_FULL_AUDIT_TEST_PLAN_2026_09_12.md) 的四通道方案（代码契约 / 浏览器呈现 / 桌面真实运行 / 联合 E2E）启动 23 节点全量审查，本轮完成 **文本、图片、裁剪、拆图、P图** 前 5 个节点的"审查→报告→修复→验证"闭环，报告见 [docs/NODE_FULL_AUDIT_2026_09_12.md](./docs/NODE_FULL_AUDIT_2026_09_12.md）。**共修复 12 项缺陷（P0×1、P1×6、P2×5），全部同日闭环**：①P0-画布全局：`DataEdgeLayer` window 捕获阶段拦截 pointerdown，连线端点恰覆盖端口圆心，导致**有连线的输出端口永远无法再拖出新连线**（所有"一输出扇出多输入"工作流被阻断），修复为对 `.node-card-wrap` 内按下放行（`DataEdgeLayer.tsx`）；②CSS token 双源冲突（header 42/22/28px 三重定义、radius 12/14px），收敛到 `ui-foundation.css` 单源并按悬浮标题形态修订 [docs/NODE_CANVAS_PRESENTATION_SPEC.md](./docs/NODE_CANVAS_PRESENTATION_SPEC.md) §3.1/§3.2（28px）；③落点在非法端口被"磁吸改连"无反馈，新增 `connectionRetargetNotice` toast（`graph.ts` + `CanvasEditor.tsx`）；④顶栏避让漏算悬浮标题 34px（粘贴导入节点被遮挡）；⑤**媒体跨通道断层**：`mediaPath/mediaMime` 此前不随图模型流动（画布→图模型、图模型→画布、headless、就绪校验四层各说各话），统一为 `params.mediaPath/mediaMime` 携带（`graph.ts`/`graph-snapshot-sync.ts`/`workflow-service.ts`）；⑥**5 个能力的 configSchema 全部漂移**（幽灵键 providerId/modelId/cols/fixed-ratio/cropRect 或字段缺失），已按真实配置逐一重写——契约版本 text.source→3、image.source→3、image.crop→2、image.split→2、image.edit→2，全部走破坏性变更门禁并同步 `generated/agent-contracts.json` 与 migration 版本矩阵；⑦拆图节点删除挂载自压缩 effect，恢复 340×260 统一初始尺寸。**新增可复跑审查脚本**：`scripts/audit-{text,image,image-crop,image-split,image-edit}-node.cjs`（Playwright 驱动 `npm run dev:browser`，逐节点九状态断言+截图，产物仅存本地 `artifacts/` 不提交）。**验证基线**：`npm test` 950/950、`npm run verify` 全绿、门禁 293 项全绿、五节点审查断言 20/20+20/20+20/20+18/18+20/20、23 节点空态 0 溢出。**移交项**：①生图节点审查时须修 `providerId/modelId` vs `modelKey` 契约漂移（文本/图片节点审查已两次实锤）；②CLI/MCP 缺媒体导入工具；③`providers` 表存在同一组供应商重复 16 次的写入去重缺失；④P图/视频真实供应商调用、透视裁剪桌面端验收留桌面阶段；⑤本机 git 代理 127.0.0.1:7897 未运行，推送需 `-c http.proxy= -c https.proxy=` 直连。**下一节点：生图（image-gen）**。
 
 > **最新审查与 P0 修复（2026-09-11）**：新增 [docs/NODE_DEEP_AUDIT_2026_09_11.md](./docs/NODE_DEEP_AUDIT_2026_09_11.md) 与 `scripts/audit-video-node.cjs`。本轮重新采集 23 个 Active 节点空态截图，并对视频节点执行“未选模型 → 选 H3 → 连接图片 → 手动选择模式”的浏览器证据审查。已完成视频 P0/P1 协议收口：未选模型不再 fallback；接图后自动收敛为模型支持的多参/首帧/首尾帧，文生模式不再残留；MiniMax 与 Seedance 演示 fixture 分离；renderer 与 executor 共用模式解析；连接图片展示缩略图、名称和角色；默认 16:9 / 5 秒 / 稳定分辨率；视频 `configSchema`、配音与语音克隆 `configSchema` 已补齐并提高契约版本。**图片生成与视频生成（视频升至 contract v6）现也与配音/语音克隆一致：用户提示词只写入 `props.text`，`props.config` 只保存模型和固定生成参数；执行器经过回归测试确认不会读取 config 内的旧 prompt。H3 中转网关、Seedance 官方端点和 Seedance 兼容网关的 payload 已各有逐字段 wire fixture，防止角色、素材顺序和参数通道回归。** **这仅代表本地浏览器 UI/连线/提交前约束通过，不代表真实供应商端到端已验收**。下一步是按审查矩阵逐节点完成真实桌面运行、结果入库和保存重开验证。截图产物仅保留本地 `artifacts/`，不提交。
 
