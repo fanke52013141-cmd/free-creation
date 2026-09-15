@@ -1,6 +1,6 @@
 # Canvas Studio 开发交接文档
 
-> 最后更新：2026-09-12
+> 最后更新：2026-09-15
 >
 > 当前分支：`main`。接手前必须执行 `git fetch origin` 与 `git status -sb`，不得依据本文旧哈希判断推送状态。
 >
@@ -9,6 +9,8 @@
 > 远程仓库：https://github.com/fanke52013141-cmd/free-creation
 >
 > 产品定位：单用户、本地优先的 Windows Electron 无限画布创作工具。
+
+> **代码同步与全库代码审查（2026-09-15，基线 `555a77e`）**：本轮为**只读审查，未修复业务代码**。①同步：本地 104 个提交已推送，服务器 main 与本地 HEAD 均为 `555a77e`；**判断推送状态以 `git ls-remote` 为准**（本机 origin/main 跟踪缓存可能滞留旧值显示 ahead 104）。②审查：确认 11 项问题（P1×8、P2×3），最关键为保存早期失败回滚删有效文件、关窗保存绕过乐观锁覆盖外部修改、同步保存失败信封被 preload 丢弃、headless 代码节点可越过 node:vm 隔离、桌面与 headless 的配置/输出/JSON 往返语义分裂、循环取消后部分结果被 resume 错误复用；完整证据与 7 步修复拆分见 [docs/HANDOFF_2026_09_15_CODE_REVIEW.md](./docs/HANDOFF_2026_09_15_CODE_REVIEW.md)。③验证：typecheck 通过、eslint 0 error/129 prettier warning、生产构建重试通过；全量测试低并发跑出 **950 项 / 932 过 / 18 失败，18 项失败均因 better-sqlite3 ABI（NODE_MODULE_VERSION 140 vs 127）不匹配，不代表业务缺陷**，须修复测试环境 ABI 后复跑。审查材料在本地未跟踪目录 `outputs/code-review-2026-09-15/`（不提交）。**下一轮：按 F01–F08 优先级修复并先写复现测试。**
 
 > **全节点审查启动 + 前 5 节点审查修复（2026-09-12）**：按 [docs/NODE_FULL_AUDIT_TEST_PLAN_2026_09_12.md](./docs/NODE_FULL_AUDIT_TEST_PLAN_2026_09_12.md) 的四通道方案（代码契约 / 浏览器呈现 / 桌面真实运行 / 联合 E2E）启动 23 节点全量审查，本轮完成 **文本、图片、裁剪、拆图、P图** 前 5 个节点的"审查→报告→修复→验证"闭环，报告见 [docs/NODE_FULL_AUDIT_2026_09_12.md](./docs/NODE_FULL_AUDIT_2026_09_12.md）。**共修复 12 项缺陷（P0×1、P1×6、P2×5），全部同日闭环**：①P0-画布全局：`DataEdgeLayer` window 捕获阶段拦截 pointerdown，连线端点恰覆盖端口圆心，导致**有连线的输出端口永远无法再拖出新连线**（所有"一输出扇出多输入"工作流被阻断），修复为对 `.node-card-wrap` 内按下放行（`DataEdgeLayer.tsx`）；②CSS token 双源冲突（header 42/22/28px 三重定义、radius 12/14px），收敛到 `ui-foundation.css` 单源并按悬浮标题形态修订 [docs/NODE_CANVAS_PRESENTATION_SPEC.md](./docs/NODE_CANVAS_PRESENTATION_SPEC.md) §3.1/§3.2（28px）；③落点在非法端口被"磁吸改连"无反馈，新增 `connectionRetargetNotice` toast（`graph.ts` + `CanvasEditor.tsx`）；④顶栏避让漏算悬浮标题 34px（粘贴导入节点被遮挡）；⑤**媒体跨通道断层**：`mediaPath/mediaMime` 此前不随图模型流动（画布→图模型、图模型→画布、headless、就绪校验四层各说各话），统一为 `params.mediaPath/mediaMime` 携带（`graph.ts`/`graph-snapshot-sync.ts`/`workflow-service.ts`）；⑥**5 个能力的 configSchema 全部漂移**（幽灵键 providerId/modelId/cols/fixed-ratio/cropRect 或字段缺失），已按真实配置逐一重写——契约版本 text.source→3、image.source→3、image.crop→2、image.split→2、image.edit→2，全部走破坏性变更门禁并同步 `generated/agent-contracts.json` 与 migration 版本矩阵；⑦拆图节点删除挂载自压缩 effect，恢复 340×260 统一初始尺寸。**新增可复跑审查脚本**：`scripts/audit-{text,image,image-crop,image-split,image-edit}-node.cjs`（Playwright 驱动 `npm run dev:browser`，逐节点九状态断言+截图，产物仅存本地 `artifacts/` 不提交）。**验证基线**：`npm test` 950/950、`npm run verify` 全绿、门禁 293 项全绿、五节点审查断言 20/20+20/20+20/20+18/18+20/20、23 节点空态 0 溢出。**移交项**：①生图节点审查时须修 `providerId/modelId` vs `modelKey` 契约漂移（文本/图片节点审查已两次实锤）；②CLI/MCP 缺媒体导入工具；③`providers` 表存在同一组供应商重复 16 次的写入去重缺失；④P图/视频真实供应商调用、透视裁剪桌面端验收留桌面阶段；⑤本机 git 代理 127.0.0.1:7897 未运行，推送需 `-c http.proxy= -c https.proxy=` 直连。**下一节点：生图（image-gen）**。
 
