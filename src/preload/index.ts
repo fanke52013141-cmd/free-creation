@@ -62,17 +62,16 @@ const api = {
     ipcRenderer.invoke(IPC.project.open, id),
   saveProject: (input: SaveProjectInput): Promise<IpcEnvelope<{ graphVersion: number } | null>> =>
     ipcRenderer.invoke(IPC.project.save, input),
-  saveProjectSync: (input: SaveProjectInput): void => {
-    ipcRenderer.sendSync(IPC.project.saveSync, input)
-  },
+  // F03 修复：sendSync 会阻塞渲染进程直到主进程应答，必须把真实结果信封带回给
+  // 调用方，否则关窗保存的失败（冲突/写锁/磁盘错误）会被静默吞掉。
+  saveProjectSync: (input: SaveProjectInput): IpcEnvelope<{ graphVersion: number } | null> =>
+    ipcRenderer.sendSync(IPC.project.saveSync, input),
   closeProject: (): Promise<IpcEnvelope<true>> => ipcRenderer.invoke(IPC.project.close),
   onExternalProjectChange: (
     cb: (payload: { projectId: string; graphVersion: number }) => void
   ): (() => void) => {
-    const listener = (
-      _e: unknown,
-      payload: { projectId: string; graphVersion: number }
-    ): void => cb(payload)
+    const listener = (_e: unknown, payload: { projectId: string; graphVersion: number }): void =>
+      cb(payload)
     ipcRenderer.on(IPC.project.externalChange, listener)
     return () => {
       ipcRenderer.off(IPC.project.externalChange, listener)

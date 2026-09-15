@@ -126,6 +126,7 @@ export function installBrowserMock(): void {
     saveProjectSync: (input: { tldrawSnapshot?: unknown }) => {
       snapshot = input.tldrawSnapshot
       writeSession(snapshotKey, snapshot)
+      return { ok: true, data: { graphVersion } }
     },
     closeProject: () => Promise.resolve({ ok: true, data: true }),
     onExternalProjectChange: () => () => undefined,

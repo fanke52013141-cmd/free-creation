@@ -122,14 +122,25 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
   })
 
   // 同步保存：渲染进程 beforeunload 时用 sendSync 保证落盘后才销毁页面。
-  // 不带乐观锁：关窗时无法重载，用户当前视图最后写入胜出。
+  // F02/F03 修复：语义与异步 save 对齐 —— expectedGraphVersion 原样透传，冲突时
+  // 返回 REVISION_CONFLICT 信封（含服务端最新版本），由渲染层决定是否接受覆盖。
+  // 不再在主进程里剥离乐观锁，也不再把失败伪装成 ok:true。
   ipcMain.on(IPC.project.saveSync, (e, input: SaveProjectInput) => {
     try {
       const result = repo.saveProject(input)
       if (result) watcher?.notifySelfSave(result.graphVersion)
-      e.returnValue = { ok: true, data: null }
+      e.returnValue = ok(result)
     } catch (saveErr) {
-      e.returnValue = { ok: false, error: { code: 'FLUSH_FAILED', message: String(saveErr) } }
+      if (saveErr instanceof GraphVersionConflictError) {
+        e.returnValue = err('REVISION_CONFLICT', saveErr.message)
+      } else if (saveErr instanceof GraphWriteInProgressError) {
+        e.returnValue = err('REVISION_CONFLICT', '项目正在被另一项写入操作更新，请稍后重试')
+      } else {
+        e.returnValue = err(
+          'SAVE_FAILED',
+          saveErr instanceof Error ? saveErr.message : String(saveErr)
+        )
+      }
     }
   })
 }

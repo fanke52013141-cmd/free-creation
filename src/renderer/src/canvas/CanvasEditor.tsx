@@ -534,14 +534,24 @@ export function CanvasEditor({
   }
 
   useEffect(() => {
-    // 关窗时异步 invoke 可能赶不上页面销毁，用同步 IPC 确保落盘。
-    // 关窗时已无法重载冲突数据，这里不带乐观锁：用户当前视图最后写入胜出。
+    // 关窗时异步 invoke 可能赶不上页面销毁，用同步 IPC 确保落盘后才销毁页面。
+    // F02 修复：关窗保存同样携带 expectedGraphVersion 乐观锁。冲突时（Agent 刚
+    // 写入而本地未刷新）降级为一次无锁强制保存 —— 关窗场景无法重载冲突数据，
+    // 用户当前视图的最后写入胜出，但这一决策显式落在渲染层而非主进程静默剥离。
+    // 保存失败（磁盘/写锁等）记录 console 错误，不再静默吞掉。
     const onBeforeUnload = (): void => {
       if (restoreFailedRef.current) return
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
       saveTimerRef.current = null
       const input = collectSaveInput()
-      if (input) window.api.saveProjectSync({ ...input, expectedGraphVersion: undefined })
+      if (!input) return
+      const res = window.api.saveProjectSync(input)
+      if (res && !res.ok && res.error.code === 'REVISION_CONFLICT') {
+        // 乐观锁冲突：外部版本已推进。关窗前以最后视图数据无锁覆盖一次。
+        window.api.saveProjectSync({ ...input, expectedGraphVersion: undefined })
+      } else if (res && !res.ok) {
+        console.error('关窗保存失败', res.error)
+      }
     }
     window.addEventListener('beforeunload', onBeforeUnload)
     return () => {
