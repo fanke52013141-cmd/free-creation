@@ -156,8 +156,9 @@ export function openProject(id: string): ProjectFile | null {
  * - expectedGraphVersion 提供原子乐观锁：以 project.json 内的 meta.graphVersion
  *   为准在同一同步代码块内完成"读取-校验-写入"，关闭服务层先读后写的竞态窗口。
  *   不匹配时抛 GraphVersionConflictError，文件保持原样。
- * - 写入顺序：tmp → 旧文件转 .bak → tmp 转正 → SQLite 更新。任何一步失败都会
- *   尽力把 .bak 恢复为主文件，保证图数据与快照不会停留在半提交状态。
+ * - 写入顺序：tmp → 旧文件转 .bak → tmp 转正 → SQLite 更新。回滚按失败阶段
+ *   精确撤销：tmp 写入失败只清 tmp；轮转失败不动主文件；转正/SQLite 失败才用
+ *   .bak 恢复主文件。任何情况下都不会删除主文件上唯一有效的数据。
  */
 export function saveProject(input: {
   id: string
@@ -221,20 +222,42 @@ function saveProjectUnlocked(input: {
 
   const tmp = path + '.tmp'
   const bak = path + '.bak'
+  // 阶段标记（F01 修复）：回滚必须知道失败发生在哪一步，才能只撤销已落盘的变更。
+  // 此前的固定回滚序列（path→tmp→删除 tmp）在 tmp 写入或轮转阶段失败时，
+  // 会把主文件上唯一有效的数据移进 tmp 再删除，造成 project.json 整体丢失。
+  let phase: 'write-tmp' | 'rotate-bak' | 'promote-tmp' | 'update-db' = 'write-tmp'
   try {
     writeFileSync(tmp, JSON.stringify(file, null, 2), 'utf-8')
+    phase = 'rotate-bak'
     if (existsSync(path)) renameSync(path, bak)
+    phase = 'promote-tmp'
     renameSync(tmp, path)
+    phase = 'update-db'
     getDb()
       .prepare('UPDATE projects SET updated_at = ?, graph_version = ? WHERE id = ?')
       .run(now, nextVersion, input.id)
   } catch (error) {
-    // 回滚：把最后一份完整数据恢复为主文件，清理事务残留
+    // 分阶段回滚：rename 具备原子性（要么完成要么未动），phase 在每步成功后立即推进，
+    // 因此各阶段的主文件/.bak 状态是确定的；只清理真正未提交的残留。
     try {
-      if (existsSync(tmp)) rmSync(tmp, { force: true })
-      if (existsSync(path)) renameSync(path, tmp)
-      if (existsSync(bak)) renameSync(bak, path)
-      if (existsSync(tmp)) rmSync(tmp, { force: true })
+      if (phase === 'write-tmp') {
+        // tmp 写入失败：主文件与 .bak 均未触碰，清掉可能半写的 tmp 即可。
+        if (existsSync(tmp)) rmSync(tmp, { force: true })
+      } else if (phase === 'rotate-bak') {
+        // 轮转失败：path 仍在且完好，tmp 是未提交的新数据，直接丢弃。
+        if (existsSync(tmp)) rmSync(tmp, { force: true })
+        // 极端环境下若 path 意外缺失，从 bak 恢复最后一份完整数据。
+        if (!existsSync(path) && existsSync(bak)) renameSync(bak, path)
+      } else if (phase === 'promote-tmp') {
+        // 转正失败：bak 持有旧主文件而 path 缺失；恢复 bak 并丢弃未提交的 tmp。
+        if (existsSync(tmp)) rmSync(tmp, { force: true })
+        if (!existsSync(path) && existsSync(bak)) renameSync(bak, path)
+      } else {
+        // SQLite 更新失败：文件已提交新版（path=新、bak=旧），回滚文件到旧版本。
+        if (existsSync(path)) renameSync(path, tmp)
+        if (existsSync(bak)) renameSync(bak, path)
+        if (existsSync(tmp)) rmSync(tmp, { force: true })
+      }
     } catch {
       // 回滚本身失败：保留 .bak/tmp 现场，交给下次读取的 .bak 回退逻辑兜底
     }
