@@ -36,7 +36,7 @@ function normalizeModel(v: unknown): GatewayModelInfo | null {
   return null
 }
 
-function rowToConfig(row: ProviderRow): ProviderConfig {
+function toConfig(row: ProviderRow, decryptedApiKey: string): ProviderConfig {
   let models: unknown = []
   try {
     models = JSON.parse(row.models || '[]')
@@ -51,7 +51,7 @@ function rowToConfig(row: ProviderRow): ProviderConfig {
     name: row.name,
     specId: row.spec_id as ProviderConfig['specId'],
     baseURL: row.base_url,
-    apiKey: decryptSecret(row.api_key_ref),
+    apiKey: decryptedApiKey,
     models: list,
     createdAt: row.created_at
   }
@@ -88,7 +88,7 @@ export function listProviders(): ProviderSummary[] {
 export function getProvider(id: string): ProviderConfig | null {
   const row = getDb().prepare('SELECT * FROM providers WHERE id = ?').get(id) as
     ProviderRow | undefined
-  return row ? rowToConfig(row) : null
+  return row ? toConfig(row, decryptSecret(row.api_key_ref)) : null
 }
 
 export function saveProvider(input: SaveProviderInput): ProviderSummary {
@@ -97,17 +97,26 @@ export function saveProvider(input: SaveProviderInput): ProviderSummary {
   const existing = input.id ? getProvider(input.id) : null
   const apiKey = input.apiKey?.trim() ?? ''
   if (!apiKey && !existing) throw new Error('新建供应商必须提供 API Key')
+
+  // F11 修复：读取原始行（而非解密后的 ProviderConfig），编辑未提交新 key 时
+  // 把库里的 api_key_ref 逐字节原样写回。此前经 decryptSecret → encryptSecret
+  // 往返，safeStorage 暂不可用时解密返回空串，空串被当作"用户清除"重新加密
+  // 落盘，密文永久丢失。
+  const existingRow = input.id
+    ? (getDb().prepare('SELECT * FROM providers WHERE id = ?').get(id) as ProviderRow | undefined)
+    : undefined
+  const apiKeyRef = apiKey
+    ? encryptSecret(apiKey)
+    : existingRow
+      ? existingRow.api_key_ref
+      : null
+
   const row: ProviderRow = {
     id,
     name: input.name.trim(),
     spec_id: input.specId,
     base_url: input.baseURL.trim().replace(/\/+$/, ''),
-    // 编辑表单不会回显密钥；空值明确表示保留旧密钥，而不是写入 NULL。
-    api_key_ref: apiKey
-      ? encryptSecret(apiKey)
-      : existing?.apiKey
-        ? encryptSecret(existing.apiKey)
-        : null,
+    api_key_ref: apiKeyRef,
     models: JSON.stringify(models),
     created_at: existing?.createdAt ?? Date.now()
   }
