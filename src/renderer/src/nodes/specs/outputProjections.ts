@@ -80,6 +80,32 @@ export const projectImageEditOutputs = (shape: NodeCardShape): RawNodeOutputs =>
   latestResultMediaOutput(shape, 'image', 'out-image')
 
 /**
+ * 宫格拆分的 out-image 投影「当前选中格」：selectedMediaId 命中则取选中格，
+ * 否则回退第一格（与执行器写入 selectedMediaId = 第一格 的语义一致）。
+ * 不复用 latestResultMediaOutput 的 at(-1)（最后一格）：那会把「最后一格」
+ * 伪装成「当前输出」，与执行器的选中语义互相矛盾（F10）。
+ */
+function selectedGridMediaOutput(shape: NodeCardShape, portId: string): RawNodeOutputs {
+  const collection = parseMediaResultCollection(
+    typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
+  )
+  const results = collection?.results ?? []
+  if (results.length === 0) return {}
+  const selectedMediaId = collection?.selectedMediaId
+  const selected =
+    (selectedMediaId ? results.find((item) => item.mediaId === selectedMediaId) : undefined) ??
+    results[0]
+  return {
+    [portId]: {
+      kind: 'image',
+      mediaId: selected.mediaId,
+      mediaPath: selected.mediaPath,
+      mime: selected.mime
+    }
+  }
+}
+
+/**
  * 宫格拆分同时暴露当前选中的单张图片与全部真实产物列表：
  * 前者兼容图片类下游；后者可交给循环节点逐项批处理，绝不把多张图片伪装成一张。
  */
@@ -89,7 +115,7 @@ export const projectImageSplitOutputs = (shape: NodeCardShape): RawNodeOutputs =
   )
   const results = collection?.results ?? []
   return {
-    ...latestResultMediaOutput(shape, 'image', 'out-image'),
+    ...selectedGridMediaOutput(shape, 'out-image'),
     ...(results.length > 0
       ? {
           'out-images': {

@@ -243,6 +243,10 @@ async function runItem(
         itemTargets: targets.map((edge) => ({ nodeId: edge.nodeId, portId: edge.toPortId }))
       })) as Record<string, unknown> | undefined
     } catch (e) {
+      // 中途取消不是失败：runSubflowForIterate 在取消时抛错而非返回部分输出。
+      // 该项必须标记为已取消（不参与 onFailure 重试），resume 模式才不会把
+      // 残缺产物当 done 复用（F08）。
+      if (ctx.signal.cancelled) return { item, status: 'skipped', error: '已取消', ...base }
       const msg = e instanceof Error ? e.message : String(e)
       if (config.onFailure === 'retry' && retries < config.maxRetries) {
         retries += 1

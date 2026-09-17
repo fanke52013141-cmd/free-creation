@@ -682,6 +682,8 @@ function restoreSubflowStaticInputs(
  * 与主流程的区别：迭代体是线性链，后续节点依赖前节点；任一节点失败（执行或输出
  * 契约）即中断并抛出错因，由迭代器的 runItem 捕获后按 onFailure 策略处理，避免
  * 错误结构悄悄进入下游、也避免「部分节点成功」被误判为该项成功。
+ * 中途取消同样抛错而非返回部分输出：runItem 会把「输出非空」当作该项完成，
+ * 残缺产物一旦被标 done，resume 模式会把它当完整结果复用（F08）。
  */
 async function runSubflowForIterate(
   ctx: WorkflowContext,
@@ -731,6 +733,9 @@ async function runSubflowForIterate(
       results[node.id] = projected.value
     }
   }
+  // 取消优先于失败判定：用户意图是停止，该项必须整体作废（resume 时重跑），
+  // 绝不能把部分输出当成功结果交回（F08）。
+  if (itemCtx.token.cancelled) throw new Error('迭代体执行已取消')
   if (failureReason) throw new Error(failureReason)
   return results
 }
