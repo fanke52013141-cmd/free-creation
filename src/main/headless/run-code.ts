@@ -18,14 +18,23 @@ import {
 const DEFAULT_TIMEOUT_MS = 10_000
 
 /**
- * vm 沙箱初始化源码。在隔离上下文中设置确定性运行时、离线工具库和 API 封锁。
- * 用户源码和参数通过沙箱变量 __source / __args / __seed 传入，不嵌入源码字符串。
+ * vm 沙箱初始化源码。在隔离上下文中设置确定性运行时、离线工具库和 API 封锁，
+ * 返回一个接收 (args, source) 的执行函数。
+ *
+ * F04 加固：
+ *  1. 上下文仅含 __seed（原始值无原型链风险）；args 以 JSON 文本传入、在本引导码
+ *     内 JSON.parse 重建——沙箱内对象的构造器链全部落在沙箱 realm，宿主
+ *     Function/process 不可达（原实现直接注入宿主 args 对象，
+ *     args.constructor.constructor 即宿主 Function，可完整逃逸）。
+ *  2. vm.createContext({ codeGeneration: { strings: false } }) 让沙箱内
+ *     eval / new Function 直接抛错。用户源码由宿主侧 vm.Script 预编译为
+ *     沙箱 realm 函数后传入本引导码，不依赖沙箱内字符串编译。
  */
 const SANDBOX_BOOTSTRAP = `
-(async () => {
+(function (__argsJson, userMain, userSnippet) {
   "use strict";
+  const __args = JSON.parse(__argsJson);
   const NativeDate = Date;
-  const compileUserFunction = Function;
   const blockedRuntimeApi = () => { throw new Error('代码节点已禁用网络、模块加载与动态执行；请将数据通过输入端口传入'); };
 
   // ── 确定性运行时 ──
@@ -97,18 +106,23 @@ const SANDBOX_BOOTSTRAP = `
   globalThis.global = undefined;
   globalThis.Buffer = undefined;
 
-  // ── 编译并执行用户代码 ──
-  const isMain = /^(async\\s+)?function\\s+main\\b/.test(__source.trim());
-  const fn = isMain
-    ? compileUserFunction('args', '_', 'dayjs', '"use strict";\\n' + __source + '\\n; return typeof main === "function" ? main(args) : undefined')
-    : compileUserFunction('input', '_', 'dayjs', '"use strict";\\n' + __source);
-  return isMain ? fn(__args, _, dayjs) : fn(__args, _, dayjs);
-})()
-`
+  // ── 执行用户代码（userMain/userSnippet 由宿主 vm.Script 编译，运行在本 realm） ──
+  return Promise.resolve(userMain ? userMain(__args, _, dayjs) : userSnippet(__args, _, dayjs));
+})`
 
 /**
  * Headless 代码执行入口。在 Node.js vm 沙箱中运行用户代码，等价于 renderer 的
  * runCodeTransform（Web Worker 实现）。
+ *
+ * F04 修复（三层防御）：
+ *  1. **数据通道**：args 以 JSON 文本传入沙箱、在沙箱 realm 内 JSON.parse 重建。
+ *     原实现把宿主 args 对象直接注入沙箱，用户代码沿
+ *     `args.constructor.constructor` 即可拿到宿主 realm 的 Function 构造器并
+ *     执行 `return process` 等任意宿主代码，vm 隔离完全失效。
+ *  2. **编译通道**：用户源码由宿主侧 vm.Script 预编译（编译产物绑定沙箱
+ *     realm），沙箱引导码只调用不编译。
+ *  3. **动态编译封锁**：`codeGeneration: { strings: false }` 使沙箱内
+ *     eval / new Function 直接抛错，用户代码无法在运行时再编译新代码。
  */
 export async function runCodeHeadless(
   source: string,
@@ -119,13 +133,36 @@ export async function runCodeHeadless(
   assertCodeSourcePolicy(source)
 
   const seed = deterministicCodeSeed(source, args)
-  const sandbox = { __source: source, __args: args, __seed: seed }
+  const argsJson = safeArgsJson(args)
 
-  const promise = vm.runInNewContext(SANDBOX_BOOTSTRAP, sandbox, {
+  const isMain = /^(async\s+)?function\s+main\b/.test(source.trim())
+  const compileForSandbox = (body: string): vm.Script =>
+    new vm.Script(`(function (input, _, dayjs) { "use strict";\n${body}\n})`, {
+      filename: 'code-node.user'
+    })
+  const userMainScript = isMain
+    ? new vm.Script(
+        `(function (input, _, dayjs) { "use strict";\n${source}\n; return typeof main === "function" ? main(input) : undefined })`,
+        { filename: 'code-node.user' }
+      )
+    : null
+  const userSnippetScript = isMain ? null : compileForSandbox(source)
+
+  // codeGeneration.strings=false：沙箱内 eval / new Function 直接抛错，
+  // 用户代码无法在运行时编译新代码（配合无宿主引用，动态逃逸通道关闭）。
+  const context = vm.createContext({ __seed: seed }, { codeGeneration: { strings: false } })
+
+  const bootstrap = vm.runInContext(SANDBOX_BOOTSTRAP, context, {
+    filename: 'code-node.vm',
     timeout: timeoutMs,
-    displayErrors: true,
-    filename: 'code-node.vm'
-  }) as Promise<unknown>
+    displayErrors: true
+  }) as (argsJson: string, main: unknown, snippet: unknown) => Promise<unknown>
+
+  const promise = bootstrap(
+    argsJson,
+    userMainScript ? userMainScript.runInContext(context) : null,
+    userSnippetScript ? userSnippetScript.runInContext(context) : null
+  )
 
   const value = await Promise.race([
     promise,
@@ -140,4 +177,16 @@ export async function runCodeHeadless(
 
   if (value === undefined) throw new Error('代码必须 return 一个文本或 JSON 值')
   return validateCodeOutput(value)
+}
+
+/**
+ * 输入参数 JSON 序列化。包含函数/循环引用等不可序列化内容时直接拒绝——
+ * 代码节点输入按契约是 JSON 数据，不可序列化即非法输入。
+ */
+function safeArgsJson(value: Record<string, unknown>): string {
+  try {
+    return JSON.stringify(value) ?? 'null'
+  } catch {
+    throw new Error('代码节点输入包含不可序列化数据（函数/循环引用等），请传入 JSON 数据')
+  }
 }
