@@ -1,6 +1,6 @@
 # Canvas Studio 开发交接文档
 
-> 最后更新：2026-09-15
+> 最后更新：2026-09-17
 >
 > 当前分支：`main`。接手前必须执行 `git fetch origin` 与 `git status -sb`，不得依据本文旧哈希判断推送状态。
 >
@@ -9,6 +9,8 @@
 > 远程仓库：https://github.com/fanke52013141-cmd/free-creation
 >
 > 产品定位：单用户、本地优先的 Windows Electron 无限画布创作工具。
+
+> **生图节点多供应商接入 + F04 沙箱加固（2026-09-17，提交 `e069079`–`177576a`）**：①**F04**（`e069079`）：headless 代码节点 vm 隔离逃逸修复落地——args 以 JSON 文本传入沙箱内重建（构造器链全部留在沙箱 realm）、用户源码由宿主 vm.Script 预编译、`codeGeneration:{strings:false}` 封锁沙箱内动态编译；原复现脚本改写为回归断言（`test/f04-repro.test.ts`，2 用例：逃逸必须被拒、失败不得伪装成功结果）。②**生图多供应商**（`177576a`）：生图节点新增供应商级联选择（ToAPIS 默认优先 / ChatGPT 官方 / OpenRouter / 自定义 relay），四张供应商能力表驱动参数显隐与提交——ToAPIS：13 画幅比例串 + 1k/2k/4k + 参考图 ≤6（上传换 URL 的异步任务驱动）；OpenAI 官方：固定像素 size + quality 固定 low；OpenRouter：chat-completions modalities + 参考图内联；relay 维持旧行为零变化。质量按决策固定 low 不暴露 UI；分辨率跨供应商保留用户意图。`image.generate` 升 4.0.0，configSchema 修正幽灵键 providerId/modelId → modelKey 并新增 providerKey/resolution，`generated/agent-contracts.json` 已同步（幂等验证）。新增测试：能力表四分册 + 跨供应商归一化、三驱动 6 用例（mock fetch/AI SDK/media 仓库）、parseImageGen 新字段用例。**验证基线：`npm run verify` 全绿（eslint、tsc node/web、vitest 985 用例、electron-vite 构建）。** 设计与决策记录见 [docs/IMAGE_PROVIDER_GATEWAY_PLAN.md](./docs/IMAGE_PROVIDER_GATEWAY_PLAN.md)。**移交项：ToAPIS 真实 Key 冒烟验收——任务查询端点候选路径（`/images/tasks/`、`/tasks/`、`/images/generations/`）、上传端点 `/uploads/images`（multipart 字段 `file`）与 `quality` 字段接受度均属实现假设（实现环境无法访问 docs.toapis.com），假设清单与单点修正位置见方案 §12；若 API 拒绝 quality，将 toapis 能力表 `supportsQuality` 置 false 即可。**
 
 > **P1 缺陷修复第一轮（2026-09-15，提交 `b9a825a`–`bb2d175`）**：按审查报告 §7 优先级完成 4 项 P1 修复并已推送远端。①**F01**（`b9a825a`）：`saveProject` 写入事务引入阶段标记，回滚只撤销已落盘变更——此前 tmp 写入或轮转失败会把主文件上唯一有效数据移入 .tmp 后删除（project.json 整体丢失）；新增 `test/agent/save-transaction-rollback.test.ts`（vi.mock node:fs 局部故障注入，5 用例，已验证在未修复代码上必失败）。②**F02/F03**（`12f64dd`）：主进程 saveSync 透传 `expectedGraphVersion`、冲突映射 REVISION_CONFLICT；preload `saveProjectSync` 返回 IpcEnvelope（原丢弃返回值）；`CanvasEditor.beforeunload` 携带乐观锁，冲突时降级一次无锁保存（关窗最后视图胜出），其他失败 `console.error` 不再静默；新增 `test/project-save-sync.test.ts`（6 用例）。③**F11**（`bb2d175`）：`saveProvider` 未提交新密钥时从原始 ProviderRow 逐字节写回 `api_key_ref`——此前 decrypt→encrypt 往返在 safeStorage 暂不可用时把密文永久变成空值；新增 `test/providers-apikey-preserve.test.ts`（7 用例）。**验证基线：全量 vitest 968/968 通过（80 文件，0 失败——此前 18 个 ABI 失败在 `rm -rf node_modules/.vite .vitest` 清缓存后消失）、`tsc` node/web 均通过、eslint 改动文件 0 error 0 warning、electron-vite 生产构建通过。** 本轮环境排障：`.git/refs` 目录两度丢失（stash 被 SIGTERM 中断所致），恢复方式为 `mkdir -p .git/refs/{heads,remotes/origin,tags}` + `git fetch origin main --refetch` 补齐缺失对象；构建若被 `rmSync(out)` 沙箱拦截，先手动删除 `out/` 再跑 `electron-vite build`。**下一轮：F04（headless 代码节点 vm 隔离逃逸）→ F05–F07（双入口语义统一）→ F08–F10。**
 
