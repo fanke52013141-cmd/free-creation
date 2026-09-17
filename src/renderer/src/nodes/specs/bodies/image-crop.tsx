@@ -227,7 +227,7 @@ export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.
       <div className="asset-empty crop-empty">
         <Icon name="crop" size={24} />
         <span>图片裁剪</span>
-        <small>连接一张图片后，即可在节点中选择比例并裁剪；精细框选也可随时打开。</small>
+        <small>连接图片后选择比例裁剪。</small>
         <button
           className="btn-ghost small"
           onPointerDown={stopEventPropagation}

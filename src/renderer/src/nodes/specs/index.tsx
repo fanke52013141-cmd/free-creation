@@ -188,8 +188,7 @@ export function registerBaseNodeTypes(): void {
     icon: 'crop',
     color: '#22c55e',
     defaultSize: { w: 340, h: 260 },
-    description:
-      '对一张上游图片执行本地矩形或四角透视裁剪。每次运行产生新的图片资产，原图保持不变。',
+    description: '对上游图片做矩形或透视裁剪；每次运行产出新图片，原图不变。',
     category: 'image',
     ports: {
       in: [
@@ -212,8 +211,7 @@ export function registerBaseNodeTypes(): void {
     color: '#14b8a6',
     // 结果网格在卡片内限高滚动（见 .media-result-grid），不通过放大默认卡片容纳内容。
     defaultSize: { w: 340, h: 260 },
-    description:
-      '把一张上游图片按行列派生为多张独立图片。面积缩放以每个格子的中心为锚点；输出同时提供当前图片和可批处理的图片集合。',
+    description: '把一张上游图片按行列拆成多张；输出当前图与图片集合。',
     category: 'image',
     ports: {
       in: [
@@ -306,8 +304,7 @@ export function registerBaseNodeTypes(): void {
     icon: 'video',
     color: '#f472b6',
     defaultSize: { w: 340, h: 260 },
-    description:
-      '根据文本和多模态参考生成视频。图片统一连入一个多值端口，按连接顺序使用；其他参考素材也必须通过明确端口连入。',
+    description: '由文本与参考素材生成视频；所有参考必须经端口连入。',
     category: 'input',
     ports: {
       in: [
@@ -376,7 +373,7 @@ export function registerBaseNodeTypes(): void {
     icon: 'frame',
     color: '#fb7185',
     defaultSize: { w: 340, h: 260 },
-    description: '从上游视频提取首帧、尾帧或任意指定时刻的画面，输出新的 PNG/JPG 图片资产。',
+    description: '提取上游视频首帧/尾帧/指定时刻画面为新图片。',
     category: 'video',
     ports: {
       in: [input('in-video', '源视频', 'video', '必须连接的一段源视频。', { required: true })],
@@ -430,8 +427,7 @@ export function registerBaseNodeTypes(): void {
     icon: 'audio',
     color: '#a78bfa',
     defaultSize: { w: 340, h: 260 },
-    description:
-      '将一段音频分离为人声与伴奏。操作节点只输出人声；伴奏作为关联的独立音频资产节点创建。',
+    description: '把音频分离为人声与伴奏；伴奏另建独立音频资产节点。',
     category: 'audio',
     ports: {
       in: [
@@ -499,8 +495,7 @@ export function registerBaseNodeTypes(): void {
     icon: 'audio',
     color: '#fbbf24',
     defaultSize: { w: 340, h: 260 },
-    description:
-      '语音克隆节点：可选本地 ComfyUI IndexTTS-2.5 或 MiniMax 快速复刻；运行产物始终作为独立音频资产输出。',
+    description: '语音克隆：本地 ComfyUI 或 MiniMax 复刻，输出独立音频资产。',
     category: 'audio',
     ports: {
       in: [
@@ -548,7 +543,7 @@ export function registerScriptNodeType(): void {
     icon: 'script',
     color: '#fb923c',
     defaultSize: { w: 340, h: 260 },
-    description: '旧版复合脚本节点，仅为已有项目兼容保留；新流程请使用"文本 → 处理 → JSON"。',
+    description: '旧版复合脚本节点，仅兼容保留；新流程用「文本 → 处理 → JSON」。',
     category: 'logic',
     creatable: false,
     ports: {
@@ -602,7 +597,7 @@ export function registerExtendedNodeTypes(): void {
     icon: 'json',
     color: '#c084fc',
     defaultSize: { w: 340, h: 260 },
-    description: '结构化 JSON 数据节点。可接收 JSON 或可解析的文本，并以字段卡片形式呈现。',
+    description: '结构化 JSON 数据节点；可接 JSON 或可解析文本，字段卡片呈现。',
     category: 'logic',
     ports: {
       in: [
@@ -625,8 +620,7 @@ export function registerExtendedNodeTypes(): void {
     icon: 'json',
     color: '#c084fc',
     defaultSize: { w: 340, h: 260 },
-    description:
-      '通用结构编辑与字段映射节点。选择输出 Schema，在正文中维护 JSON，并只通过已连接的上下文端口引用数据。',
+    description: '结构编辑与字段映射：选 Schema、维护 JSON、经端口引用数据。',
     category: 'logic',
     ports: {
       in: [
@@ -787,8 +781,7 @@ export function registerExtendedNodeTypes(): void {
     icon: 'spark',
     color: '#c084fc',
     defaultSize: { w: 340, h: 260 },
-    description:
-      '一次性、可复跑的工作流转换：把上游文本或 JSON 交给文本模型，输出文本、Markdown 或符合指定 Schema 的 JSON。不保留多轮历史，脚本/数据转换用它，对话节点用于多轮交互。',
+    description: '把上游文本/JSON 交给文本模型，产出文本、Markdown 或 JSON。',
     category: 'logic',
     ports: {
       in: [
@@ -821,8 +814,7 @@ export function registerExtendedNodeTypes(): void {
     icon: 'grid',
     color: '#8b5cf6',
     defaultSize: { w: 340, h: 260 },
-    description:
-      '列表批处理控制：把 in-list 的每个元素按顺序作为一次「循环体」执行，逐项驱动下游子流程节点（如生图/视频/文本节点），并输出结构化结果列表。支持失败策略、重试、限数与取消。',
+    description: '按列表逐项执行循环体，驱动下游子流程并汇总结果列表。',
     category: 'logic',
     ports: {
       in: [
@@ -860,8 +852,7 @@ export function registerExtendedNodeTypes(): void {
     icon: 'director',
     color: '#f59e0b',
     defaultSize: { w: 340, h: 260 },
-    description:
-      '3D 白模预演工作区。接收分镜、场景参考图与机位参数；只有用户明确发布后，帧、预演视频和机位参数才会成为下游真实输入。',
+    description: '3D 白模预演台；发布后帧、视频与机位才成为下游输入。',
     category: 'logic',
     executionMode: 'manual-publish',
     ports: {

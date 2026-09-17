@@ -33,6 +33,11 @@ describe('节点合规门禁', () => {
       }
       expect(spec.contractVersion).toBeGreaterThanOrEqual(1)
       expect(spec.description.trim()).not.toBe('')
+      // 一句话定位（≤40 字），细节只留 NodeContractPanel：防止描述退化成长段落。
+      expect(
+        spec.description.length,
+        `${spec.type} 描述过长（${spec.description.length} 字）：${spec.description}`
+      ).toBeLessThanOrEqual(40)
       expect(spec.category, `${spec.type} 缺少创建菜单分类`).toBeTruthy()
     }
   })
