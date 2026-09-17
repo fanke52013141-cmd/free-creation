@@ -381,7 +381,10 @@ body {
   flex: 1;
   min-height: 0;
   position: relative;
-  overflow: hidden;
+  /* 超过 autoMax=440 档位后，内容在此处内部滚动（呈现规范 §3.2），
+     不再把卡片撑成任意像素高度。 */
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .node-body-content {

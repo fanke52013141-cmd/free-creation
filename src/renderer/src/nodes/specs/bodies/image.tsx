@@ -49,7 +49,7 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
       <div className="asset-empty image-asset-empty">
         <Icon name="image" size={40} />
         <span>图片资产</span>
-        <small>上传或粘贴图片后，可连接给生图、视频等节点。</small>
+        <small>上传或粘贴图片。</small>
         <button
           className="btn-ghost image-import-button"
           onPointerDown={(e) => stopEventPropagation(e)}

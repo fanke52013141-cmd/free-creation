@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { NODE_UI, resolveNodeHeight } from '../src/renderer/src/canvas/node-ui-tokens'
 
 const root = resolve(__dirname, '..')
 const foundation = readFileSync(resolve(root, 'src/renderer/src/assets/ui-foundation.css'), 'utf8')
@@ -88,5 +89,50 @@ describe('统一画布视觉基础', () => {
     expect(colorBarIdx).toBeLessThan(bodyIdx)
     expect(headerIdx).toBeGreaterThan(-1)
     expect(headerIdx).toBeLessThan(cardIdx)
+  })
+
+  it('节点高度按固定档位跳档，autoMax 封顶后内部滚动（呈现规范 §3）', () => {
+    expect(resolveNodeHeight(100)).toBe(260)
+    expect(resolveNodeHeight(260)).toBe(260)
+    expect(resolveNodeHeight(261)).toBe(320)
+    expect(resolveNodeHeight(320)).toBe(320)
+    expect(resolveNodeHeight(321)).toBe(380)
+    expect(resolveNodeHeight(380)).toBe(380)
+    expect(resolveNodeHeight(381)).toBe(440)
+    expect(resolveNodeHeight(900)).toBe(NODE_UI.height.autoMax)
+    // 超档内容在 node-body 内部滚动，不再撑高卡片。
+    expect(foundation).toMatch(/\.node-body\s*\{[^}]*overflow-y:\s*auto/)
+  })
+
+  it('节点尺寸单一真值：NodeCardShape 与 Registry 同源 NODE_UI（§24A）', () => {
+    const shapeSource = readFileSync(
+      resolve(root, 'src/renderer/src/canvas/NodeCardShape.tsx'),
+      'utf8'
+    )
+    const registrySource = readFileSync(
+      resolve(root, 'src/renderer/src/nodes/registry.tsx'),
+      'utf8'
+    )
+    expect(shapeSource).toContain('NODE_UI.height.default')
+    expect(registrySource).toContain('NODE_UI.width')
+    expect(registrySource).not.toContain('STANDARD_NODE_SIZE = { w: 340')
+    const view = readFileSync(resolve(root, 'src/renderer/src/canvas/NodeCardView.tsx'), 'utf8')
+    expect(view).toContain('resolveNodeHeight(')
+    expect(view).not.toContain('MAX_AUTO_NODE_HEIGHT')
+  })
+
+  it('节点 UI 不再携带操作教学文案（呈现规范 §11：身份留、教学删）', () => {
+    const view = readFileSync(resolve(root, 'src/renderer/src/canvas/NodeCardView.tsx'), 'utf8')
+    for (const teaching of [
+      '按住圆点',
+      '反向拖线',
+      '批量连接',
+      '当前输出可用',
+      '当前尚无可用输出'
+    ]) {
+      expect(view).not.toContain(teaching)
+    }
+    const editor = readFileSync(resolve(root, 'src/renderer/src/canvas/CanvasEditor.tsx'), 'utf8')
+    expect(editor).not.toContain('将在此处创建节点')
   })
 })

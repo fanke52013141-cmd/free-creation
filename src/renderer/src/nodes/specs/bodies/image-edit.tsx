@@ -111,7 +111,7 @@ export function ImageEditBody({ shape, openPreview }: NodeBodyProps): React.JSX.
       <div className="asset-empty image-edit-empty">
         <Icon name="edit" size={24} />
         <span>图片修改</span>
-        <small>连接图片后，点击打开工作台添加标注和修改说明。</small>
+        <small>连接图片后开始标注。</small>
         <button
           className="btn-ghost small"
           onPointerDown={stopEventPropagation}

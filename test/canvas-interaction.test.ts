@@ -148,7 +148,8 @@ describe('画布创建节点交互', () => {
   it('连线可以从输入端口反向拖出：方向由 ConnectionFrom.direction 声明，建边仍保持 out→in', () => {
     // 输入端口也具备 pointerdown 手势，拖出的草稿带 direction: 'in'。
     expect(nodeCardViewSource).toContain("direction: 'in'")
-    expect(nodeCardViewSource).toContain('按住圆点可反向拖线寻找上游')
+    // 操作教学不再随 tooltip 重复（呈现规范 §11）；能力由手势本身承担。
+    expect(nodeCardViewSource).not.toContain('按住圆点')
     // 松手与“拉线到空白新建节点”都按方向分派；反向建立的上游边仍是正向数据流。
     expect(canvasEditorSource).toContain('tryConnectFromInput')
     expect(canvasEditorSource).toContain("r.from.direction === 'in'")
@@ -181,7 +182,6 @@ describe('画布创建节点交互', () => {
   it('外部视频、图片或文件拖入时只在落点显示投放提示，不给整张画布加虚线边框', () => {
     expect(canvasEditorSource).toContain('const [dropPoint, setDropPoint]')
     expect(canvasEditorSource).toContain('松开以添加资产')
-    expect(canvasEditorSource).toContain('将在此处创建节点')
     expect(canvasSurfaceSource).toContain('.drop-hint-icon')
     expect(canvasSurfaceSource).not.toContain('.canvas-host.drag-over::after')
     expect(canvasEditorSource).toContain("window.addEventListener('dragend', clearDropFeedback")

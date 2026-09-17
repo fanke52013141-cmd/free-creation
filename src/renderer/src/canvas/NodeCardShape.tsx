@@ -9,6 +9,7 @@ import {
   type TLShapePartial
 } from 'tldraw'
 import { NodeCardView } from './NodeCardView'
+import { NODE_UI } from './node-ui-tokens'
 
 // 声明合并：把 node-card 并入 tldraw 的 TLShape 联合类型（官方扩展点）
 declare module '@tldraw/tlschema' {
@@ -69,9 +70,11 @@ export class NodeCardUtil extends BaseBoxShapeUtil<NodeCardShape> {
   }
 
   override getDefaultProps(): NodeCardProps {
+    // 默认尺寸与 Registry 的 STANDARD_NODE_SIZE 同源（呈现规范 §24A：
+    // 修复双真值——此处曾为 340×200，与 Registry 强制的 340×260 不一致）。
     return {
-      w: 340,
-      h: 200,
+      w: NODE_UI.width,
+      h: NODE_UI.height.default,
       nodeType: 'text',
       title: '文本',
       config: '',

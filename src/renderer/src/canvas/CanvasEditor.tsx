@@ -1823,7 +1823,6 @@ export function CanvasEditor({
           </span>
           <span>
             <strong>松开以添加资产</strong>
-            <small>将在此处创建节点</small>
           </span>
         </div>
       )}

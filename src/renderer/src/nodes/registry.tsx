@@ -13,6 +13,7 @@ import { nodeSchemaRegistered } from '@shared/node-schemas'
 import { NODE_CATEGORY_IDS, type NodeCategoryId } from '@shared/palette-preferences'
 import type { NodeExecutor } from '../engine/executor-types'
 import type { NodeCardShape } from '../canvas/NodeCardShape'
+import { NODE_UI } from '../canvas/node-ui-tokens'
 import type { IconName } from '../components/Icon'
 import type { RawNodeOutputs } from './nodeValues'
 
@@ -88,8 +89,9 @@ export interface NodeTypeSpec {
 /**
  * 所有可创建节点的初始画布尺寸。节点内部可以呈现不同内容，但初始占位必须一致；
  * 复杂配置放入右侧详情面板，不能以更大的默认卡片破坏画布节奏。
+ * 真值来源是 NODE_UI Token（呈现规范 v1.0 §22），NodeCardShape 同源引用。
  */
-export const STANDARD_NODE_SIZE = { w: 340, h: 260 } as const
+export const STANDARD_NODE_SIZE = { w: NODE_UI.width, h: NODE_UI.height.default } as const
 
 // 端口类型配色（圆点描边）
 export const PORT_COLORS: Record<PortType, string> = {
@@ -156,8 +158,10 @@ const PRIOR_UNIFIED_SIZES: Partial<Record<NodeTypeId, { w: number; h: number }>>
   storyboard: { w: 340, h: 300 }
 }
 
-/** fitHeight 内容自适应的节点高度上限；高度迁移阈值必须高于它，见 needsNodeSizeMigration。 */
-export const MAX_AUTO_NODE_HEIGHT = 1200
+/** 历史兼容保护值（呈现规范 §3.2）：仅作为旧项目异常尺寸迁移阈值使用；
+ *  内容自适应高度已改为固定档位（见 node-ui-tokens 的 resolveNodeHeight），
+ *  自动增长封顶 440，不再以此值作为产品设计层的自动高度标准。 */
+export const MAX_AUTO_NODE_HEIGHT = NODE_UI.height.legacyGuard
 
 export function needsNodeSizeMigration(type: string, w: number, h: number): boolean {
   const legacy = LEGACY_DEFAULT_SIZES[type as NodeTypeId]

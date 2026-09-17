@@ -2,13 +2,7 @@
 import { HTMLContainer, stopEventPropagation, useEditor, useValue } from 'tldraw'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import {
-  getNodePorts,
-  getNodeType,
-  MAX_AUTO_NODE_HEIGHT,
-  portOffsets,
-  PORT_COLORS
-} from '../nodes/registry'
+import { getNodePorts, getNodeType, portOffsets, PORT_COLORS } from '../nodes/registry'
 import type { PortDecl, PortSchemaRef, PortType } from '@shared/types'
 import { useConnectionStore } from '../stores/connection'
 import { useNodePanelStore } from '../stores/nodePanel'
@@ -18,6 +12,7 @@ import { portPairCompatible } from './graph'
 import { markUndoPoint } from './history'
 import type { NodeCardShape } from './NodeCardShape'
 import { Icon } from '../components/Icon'
+import { resolveNodeHeight } from './node-ui-tokens'
 import { parseSlashCommand } from '../nodes/slash-commands'
 import { nodeExecLabel } from './node-status'
 import { deriveInputPortReadiness, deriveNodeReadiness } from './node-readiness'
@@ -245,8 +240,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   const readiness = readinessState.readiness
   const inputReadiness = readinessState.inputs
 
-  // 节点有一个规范的初始尺寸，但内容（尤其是视频参数、图片工具）不应被固定高度截断。
-  // 只在内容溢出时向下扩展，不会反过来压缩用户手动拉大的节点。
+  // 节点有规范的初始档位尺寸；内容溢出时只按固定档位跳档（呈现规范 v1.0 §3.2/§3.4：
+  // 260→320→380→440），超过 autoMax 的内容在 node-body 内部滚动，
+  // 绝不把卡片撑成任意像素高度，也不会压缩用户手动拉大的节点。
   useEffect(() => {
     const body = bodyRef.current
     if (!body) return
@@ -258,7 +254,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         // 媒体结果网格等嵌套滚动容器（flex min-height:0 链 + overflow-y:auto）会把溢出
         // 吸收在自己的滚动条里，body.scrollHeight 因此恒等于 clientHeight。此时扫描
         // body 内所有纵向滚动容器，把它们的隐藏溢出计入，拆分 9/16 格等大结果才能
-        // 撑高卡片，而不是挤在小窗口里滚动、视觉上“叠在一起”。
+        // 撑高档位，而不是挤在小窗口里滚动、视觉上“叠在一起”。
         if (overflow <= 2) {
           for (const el of body.querySelectorAll<HTMLElement>('*')) {
             const oy = getComputedStyle(el).overflowY
@@ -267,10 +263,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           }
         }
         if (overflow <= 2) return
-        // 上限需覆盖拆分 16 格等大内容场景；迁移阈值（needsNodeSizeMigration）与之联动。
-        const nextHeight = Math.min(MAX_AUTO_NODE_HEIGHT, Math.ceil(shape.props.h + overflow + 16))
-        if (nextHeight > shape.props.h + 2) {
-          editor.updateShape({ id: shape.id, type: 'node-card', props: { h: nextHeight } })
+        const tier = resolveNodeHeight(shape.props.h + overflow)
+        if (tier > shape.props.h + 2) {
+          editor.updateShape({ id: shape.id, type: 'node-card', props: { h: tier } })
         }
       })
     }
@@ -295,16 +290,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     }
   }, [editor, shape.id, shape.props.h])
 
-  const portSummary = (port: PortDecl, direction: '输入' | '输出'): string =>
-    [
-      `${port.name}（${port.type}）${direction}`,
-      port.required ? '必填' : '可选',
-      port.cardinality === 'many' ? '多值' : '单值',
-      port.schema ? `${port.schema.id}@${port.schema.version}` : null,
-      port.description
-    ]
-      .filter(Boolean)
-      .join(' · ')
+  // 端口 tooltip 只保留身份信息（呈现规范 v1.0 §11：名称 · 类型），
+  // 连接手势、多选建线等操作教学不再随 tooltip 重复。
 
   // 裁剪、拆图和视频各自已经在正文内呈现可操作的素材区；继续显示通用输入条会
   // 重复“原图 / 图片名称”，并挤占预览高度。其他节点仍保留统一的关系可见性。
@@ -385,10 +372,10 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           />
           {selected && spec?.executor && (
             <span className="node-action-float" aria-label="节点动作">
-              <Tooltip label="运行此节点（使用已连接的上游结果）">
+              <Tooltip label="运行节点">
                 <button
                   className="node-run-btn"
-                  aria-label="运行此节点"
+                  aria-label="运行节点"
                   disabled={shape.props.exec === 'running' || !project}
                   onPointerDown={(event) => stopEventPropagation(event)}
                   onClick={(event) => {
@@ -433,7 +420,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             </div>
           )}
         </div>
-        {/* 输入端口（左侧）：out 方向拖线时按类型兼容高亮；按住可反向拖线寻找上游输出 */}
+        {/* 输入端口（左侧）：out 方向拖线时按类型兼容高亮；从输入端口也可发起反向连线 */}
         {inPorts.map((p, i) => {
           const draftIn = draft && draft.from.direction === 'in' ? draft.from : null
           const isAnchor = draftIn && draftIn.shapeId === shape.id && draftIn.portId === p.id
@@ -451,7 +438,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                 top: inY[i] - NODE_PORT_SIZE / 2,
                 ['--pc' as string]: PORT_COLORS[p.type]
               }}
-              title={`${portSummary(p, '输入')} · ${state?.label ?? '未连接'} · 按住圆点可反向拖线寻找上游`}
+              title={`${p.name} · ${p.type}`}
               onPointerDown={(e) => {
                 stopEventPropagation(e)
                 beginConnectionDrag(
@@ -485,7 +472,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                 top: outY[i] - NODE_PORT_SIZE / 2,
                 ['--pc' as string]: PORT_COLORS[p.type]
               }}
-              title={`${portSummary(p, '输出')} · ${hasOutput ? '当前输出可用' : '当前尚无可用输出'} · 按住圆点拖出连线；多选同类节点时会批量连接`}
+              title={`${p.name} · ${p.type}`}
               onPointerDown={(e) => {
                 stopEventPropagation(e)
                 const selectedNodeIds = editor

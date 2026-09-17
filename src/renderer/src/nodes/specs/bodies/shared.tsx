@@ -620,7 +620,6 @@ export function MediaResultGrid({
           <em>{selected ? '当前输出已确定' : '尚未选择输出'}</em>
         </span>
         <span className="media-result-collection-tools">
-          <small>双击候选查看预览</small>
           {onClear && collection.results.length > 1 ? (
             <button
               type="button"
