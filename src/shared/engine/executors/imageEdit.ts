@@ -1,6 +1,6 @@
 import { inputMedia, inputText } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
-import { modelsByModality } from '../models'
+import { modelsByModality, resolveImageModelOption } from '../models'
 import { readNodeConfig } from '../node-config'
 import { parseImageEditConfig, validateImageEditConfig } from '@shared/image-edit'
 import { appendMediaResult, serializeMediaResultCollection } from '../values'
@@ -13,9 +13,9 @@ export const imageEditExecutor = async (
   const config = parseImageEditConfig(readNodeConfig(ctx.shape))
   const invalid = validateImageEditConfig(config)
   if (invalid) return { status: 'skipped', reason: invalid }
-  const option = modelsByModality(ctx.providers, 'image').find(
-    (item) => item.key === config.modelKey
-  )
+  const option = resolveImageModelOption(modelsByModality(ctx.providers, 'image'), {
+    modelKey: config.modelKey
+  })
   if (!option) return { status: 'skipped', reason: '未选择可用图片模型' }
   const prompt = [
     config.instruction.trim(),

@@ -1,4 +1,4 @@
-import { createCanvas, loadImage } from '@napi-rs/canvas'
+import { createCanvas, loadImage, type SKRSContext2D } from '@napi-rs/canvas'
 import { readFile } from 'fs/promises'
 import type { ImageEditInput } from '../../shared/contracts'
 import {
@@ -52,6 +52,28 @@ export async function transformImageEdit(input: ImageEditInput): Promise<MediaAs
 
 type CanvasImage = Awaited<ReturnType<typeof loadImage>>
 
+function drawRoundedRect(
+  ctx: SKRSContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number
+): void {
+  const r = Math.min(radius, width / 2, height / 2)
+  ctx.beginPath()
+  ctx.moveTo(x + r, y)
+  ctx.lineTo(x + width - r, y)
+  ctx.arcTo(x + width, y, x + width, y + r, r)
+  ctx.lineTo(x + width, y + height - r)
+  ctx.arcTo(x + width, y + height, x + width - r, y + height, r)
+  ctx.lineTo(x + r, y + height)
+  ctx.arcTo(x, y + height, x, y + height - r, r)
+  ctx.lineTo(x, y + r)
+  ctx.arcTo(x, y, x + r, y, r)
+  ctx.closePath()
+}
+
 export function renderAnnotatedReference(
   image: CanvasImage,
   annotations: ImageEditAnnotation[]
@@ -85,41 +107,73 @@ export function renderAnnotatedReference(
     if (annotation.type === 'rect' && points.length >= 2) {
       const x = Math.min(points[0].x, points[1].x)
       const y = Math.min(points[0].y, points[1].y)
-      const width = Math.abs(points[1].x - points[0].x)
-      const height = Math.abs(points[1].y - points[0].y)
-      ctx.strokeRect(x, y, width, height)
+      const rectWidth = Math.abs(points[1].x - points[0].x)
+      const rectHeight = Math.abs(points[1].y - points[0].y)
+      drawRoundedRect(ctx, x, y, rectWidth, rectHeight, 4 * scale)
+      ctx.stroke()
     } else if (annotation.type === 'text' && points[0]) {
-      const fontSize = Math.max(14, Math.round(24 * scale))
-      ctx.font = `${fontSize}px sans-serif`
+      const fontSize = Math.max(14, Math.round(22 * scale))
+      ctx.font = `600 ${fontSize}px sans-serif`
       const text = annotation.text ?? ''
       const metrics = ctx.measureText(text)
-      ctx.fillStyle = 'rgba(0,0,0,0.62)'
-      ctx.fillRect(points[0].x - 4, points[0].y - fontSize - 5, metrics.width + 8, fontSize + 8)
-      ctx.fillStyle = color
-      ctx.fillText(text, points[0].x, points[0].y)
-    } else if (points.length >= 2) {
-      ctx.beginPath()
-      ctx.moveTo(points[0].x, points[0].y)
-      for (const p of points.slice(1)) ctx.lineTo(p.x, p.y)
+      const padX = 7 * scale
+      const padY = 4 * scale
+      const boxW = metrics.width + padX * 2
+      const boxH = fontSize + padY * 2
+      const boxX = points[0].x - 2 * scale
+      const boxY = points[0].y - fontSize - 2 * scale
+
+      ctx.save()
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.88)'
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)'
+      ctx.lineWidth = 1 * scale
+      drawRoundedRect(ctx, boxX, boxY, boxW, boxH, 4 * scale)
+      ctx.fill()
       ctx.stroke()
+      ctx.fillStyle = color
+      ctx.fillText(text, boxX + padX, points[0].y)
+      ctx.restore()
+    } else if (points.length >= 2) {
       if (annotation.type === 'arrow') {
         const end = points[points.length - 1]
         const prev = points[Math.max(0, points.length - 2)]
-        const angle = Math.atan2(end.y - prev.y, end.x - prev.x)
-        // 长而尖的标准三角箭头；避免导出的参考图把箭头看成“平头线段”。
-        const size = Math.max(10, 18 * scale)
+        const dx = end.x - prev.x
+        const dy = end.y - prev.y
+        const dist = Math.hypot(dx, dy)
+        if (dist > 1) {
+          const angle = Math.atan2(dy, dx)
+          const strokeW = Math.max(1, (annotation.strokeWidth ?? 3) * scale)
+          const length = Math.min(dist * 0.42, Math.max(14 * scale, strokeW * 3.5 + 8 * scale))
+          const theta = (26 * Math.PI) / 180
+          const indent = length * 0.26
+          const leftX = end.x - length * Math.cos(angle - theta)
+          const leftY = end.y - length * Math.sin(angle - theta)
+          const rightX = end.x - length * Math.cos(angle + theta)
+          const rightY = end.y - length * Math.sin(angle + theta)
+          const notchX = end.x - (length - indent) * Math.cos(angle)
+          const notchY = end.y - (length - indent) * Math.sin(angle)
+
+          // 绘制线条到倒钩凹槽处，不穿透箭头头部
+          ctx.beginPath()
+          ctx.moveTo(points[0].x, points[0].y)
+          for (const p of points.slice(1, -1)) ctx.lineTo(p.x, p.y)
+          ctx.lineTo(notchX, notchY)
+          ctx.stroke()
+
+          // 绘制流线型倒钩箭头
+          ctx.beginPath()
+          ctx.moveTo(end.x, end.y)
+          ctx.lineTo(leftX, leftY)
+          ctx.lineTo(notchX, notchY)
+          ctx.lineTo(rightX, rightY)
+          ctx.closePath()
+          ctx.fill()
+        }
+      } else {
         ctx.beginPath()
-        ctx.moveTo(end.x, end.y)
-        ctx.lineTo(
-          end.x - size * Math.cos(angle - Math.PI / 7),
-          end.y - size * Math.sin(angle - Math.PI / 7)
-        )
-        ctx.lineTo(
-          end.x - size * Math.cos(angle + Math.PI / 7),
-          end.y - size * Math.sin(angle + Math.PI / 7)
-        )
-        ctx.closePath()
-        ctx.fill()
+        ctx.moveTo(points[0].x, points[0].y)
+        for (const p of points.slice(1)) ctx.lineTo(p.x, p.y)
+        ctx.stroke()
       }
     }
   }

@@ -84,6 +84,52 @@ export function NoModelHint({ onOpen }: { onOpen: () => void }): React.JSX.Eleme
 }
 
 /**
+ * 计算下游衍生节点的放置坐标：
+ * 1. 初始线距离由原来的 80px 减半为 40px；
+ * 2. 避免节点重叠：当同一源节点多次派生（如点击“裁剪图片”再点击“宫格拆分”），
+ *    自动探测同列已有节点，将其整齐排列在已有节点的正下方，杜绝完全重合。
+ */
+export function findContinuationPlacement(
+  editor: Editor,
+  source: NodeCardShape,
+  targetW: number,
+  targetH: number,
+  gapX = 40,
+  gapY = 24
+): { x: number; y: number } {
+  const targetX = source.x + source.props.w + gapX
+  // 查找当前画布在目标列 X 跨度范围内的所有现有节点
+  const existingInColumn = editor
+    .getCurrentPageShapes()
+    .filter((shape): shape is NodeCardShape => shape.type === 'node-card' && shape.id !== source.id)
+    .filter((shape) => {
+      const shapeRight = shape.x + shape.props.w
+      const targetRight = targetX + targetW
+      return shape.x < targetRight - 10 && shapeRight > targetX + 10
+    })
+
+  if (existingInColumn.length === 0) {
+    return { x: targetX, y: source.y }
+  }
+
+  // 检查在 source.y 是否发生垂直重叠
+  const targetTop = source.y
+  const targetBottom = source.y + targetH
+  const hasOverlap = existingInColumn.some((shape) => {
+    const shapeBottom = shape.y + shape.props.h
+    return shape.y < targetBottom && shapeBottom > targetTop
+  })
+
+  if (!hasOverlap) {
+    return { x: targetX, y: source.y }
+  }
+
+  // 发生重叠时向下排布在已有节点的最底部
+  const maxBottom = Math.max(...existingInColumn.map((shape) => shape.y + shape.props.h))
+  return { x: targetX, y: maxBottom + gapY }
+}
+
+/**
  * 从已有图片输出创建一个真实的下游媒体节点。快捷操作只负责创建节点和
  * 声明端口连线，数据仍由统一 executor 按 portId 收集。
  */
@@ -111,11 +157,17 @@ export function createImageContinuation(
           : targetType === 'image-edit'
             ? '图片修改'
             : '图片生成视频'
+  const placement = findContinuationPlacement(
+    editor,
+    source,
+    spec.defaultSize.w,
+    spec.defaultSize.h
+  )
   editor.createShape({
     id,
     type: 'node-card',
-    x: source.x + source.props.w + 80,
-    y: source.y,
+    x: placement.x,
+    y: placement.y,
     props: {
       nodeType: targetType,
       title,
@@ -154,11 +206,17 @@ export function createAudioContinuation(
   const titles: Record<typeof targetType, string> = {
     'vocal-separate': '人声分离'
   }
+  const placement = findContinuationPlacement(
+    editor,
+    source,
+    spec.defaultSize.w,
+    spec.defaultSize.h
+  )
   editor.createShape({
     id,
     type: 'node-card',
-    x: source.x + source.props.w + 80,
-    y: source.y,
+    x: placement.x,
+    y: placement.y,
     props: {
       nodeType: targetType,
       title: titles[targetType],
@@ -255,7 +313,12 @@ export function ImageContinuationActions({
     },
     { type: 'image-gen', icon: 'spark', label: '继续生图', title: '创建生图节点并连接当前图片' },
     { type: 'image-edit', icon: 'edit', label: '修改图片', title: '对当前图片添加标注并修改' },
-    { type: 'video', icon: 'video', label: '生成视频', title: '创建视频节点并将当前图片作为多参素材' }
+    {
+      type: 'video',
+      icon: 'video',
+      label: '生成视频',
+      title: '创建视频节点并将当前图片作为多参素材'
+    }
   ]
   return (
     <div className="node-media-next-actions" aria-label="图片后续操作">
@@ -291,11 +354,17 @@ export function createVideoContinuation(
     'video-audio': '提取音频'
   }
   const id = createShapeId()
+  const placement = findContinuationPlacement(
+    editor,
+    source,
+    spec.defaultSize.w,
+    spec.defaultSize.h
+  )
   editor.createShape({
     id,
     type: 'node-card',
-    x: source.x + source.props.w + 80,
-    y: source.y,
+    x: placement.x,
+    y: placement.y,
     props: {
       nodeType: targetType,
       title: titles[targetType],
@@ -324,11 +393,17 @@ export function createPrevisVideoReference(editor: Editor, source: NodeCardShape
   const spec = getNodeType('video')
   if (!spec) return
   const id = createShapeId()
+  const placement = findContinuationPlacement(
+    editor,
+    source,
+    spec.defaultSize.w,
+    spec.defaultSize.h
+  )
   editor.createShape({
     id,
     type: 'node-card',
-    x: source.x + source.props.w + 80,
-    y: source.y,
+    x: placement.x,
+    y: placement.y,
     props: {
       nodeType: 'video',
       title: '参考视频生成',

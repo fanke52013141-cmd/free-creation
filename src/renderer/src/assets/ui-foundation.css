@@ -269,7 +269,7 @@ body {
   height: 8px;
   border-radius: var(--node-radius) var(--node-radius) 0 0;
   background: var(--node-accent, var(--brand)) !important;
-  opacity: 0.94;
+  opacity: 0.7;
   pointer-events: none;
 }
 
@@ -470,11 +470,23 @@ body {
   border: 2px dashed;
   border-radius: 50%;
   background: color-mix(in srgb, #15191f 82%, var(--pc, #42b9f5));
-  opacity: 0.94;
+  opacity: 1;
   transition:
     transform 140ms ease,
     box-shadow 140ms ease,
     opacity 140ms ease;
+}
+
+.port-dot.connected {
+  opacity: 1;
+}
+
+.port-dot.unconnected {
+  opacity: 0.45;
+}
+
+.node-card-wrap:hover .port-dot.unconnected {
+  opacity: 0.7;
 }
 
 .port-dot::before {
@@ -502,14 +514,12 @@ body {
   cursor: crosshair;
 }
 
-.node-card-wrap:hover .port-dot {
-  opacity: 0.9;
-}
-
 .port-dot.out:hover,
+.port-dot.in:hover,
 .port-dot.ok {
   transform: scale(1.22);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--pc, #42b9f5) 16%, transparent);
+  opacity: 1 !important;
 }
 
 .port-dot.out:hover::before,

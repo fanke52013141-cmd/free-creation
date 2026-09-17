@@ -527,8 +527,33 @@ const imageEditCapability = defineCapability({
       type: 'enum',
       required: false,
       defaultValue: 'auto',
-      enumValues: ['auto', '1024x1024', '1536x1024', '1024x1536'],
-      description: '输出尺寸'
+      enumValues: [
+        'auto',
+        '1:1',
+        '16:9',
+        '9:16',
+        '4:3',
+        '3:4',
+        '3:2',
+        '2:3',
+        '1024x1024',
+        '1536x1024',
+        '1024x1536'
+      ],
+      description: '输出尺寸或比例'
+    },
+    aspectRatio: {
+      type: 'enum',
+      required: false,
+      defaultValue: 'auto',
+      enumValues: ['auto', '1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'],
+      description: '目标画幅比例'
+    },
+    resolution: {
+      type: 'enum',
+      required: false,
+      enumValues: ['1k', '2k', '4k'],
+      description: '生成清晰度档位（支持的供应商如 ToAPIS 可选）'
     },
     instruction: {
       type: 'string',

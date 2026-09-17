@@ -184,15 +184,31 @@ export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.
   const source = gatherUpstreamMedia(editor, shape.id, 'in-image', 'image')
   const config = parseImageCropConfig(readNodeConfig(shape))
   const [previewAspect, setPreviewAspect] = useState(1)
+  const previewContainerRef = useRef<HTMLDivElement>(null)
+  const [containerSize, setContainerSize] = useState<{ w: number; h: number } | null>(null)
   const inlineDrag = useRef<InlineCropDrag | null>(null)
+
+  useEffect(() => {
+    const el = previewContainerRef.current
+    if (!el) return
+    const updateSize = (): void => {
+      const rect = el.getBoundingClientRect()
+      if (rect.width > 0 && rect.height > 0) {
+        setContainerSize({ w: rect.width, h: rect.height })
+      }
+    }
+    updateSize()
+    const observer = new ResizeObserver(updateSize)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [source?.mediaPath])
+
   const openSettings = (): void =>
     useNodePanelStore.getState().open('contract', shape.id, 'settings')
   const setAspectRatio = (aspectRatio: ImageCropAspectRatio): void => {
     const ratio = IMAGE_CROP_ASPECT_RATIOS[aspectRatio]
     const base: ImageCropConfig = { ...config, mode: 'rect', aspectRatio }
-    const next = ratio
-      ? fitRectToAspect(base, ratio, previewAspect)
-      : base
+    const next = ratio ? fitRectToAspect(base, ratio, previewAspect) : base
     editor.updateShape({
       id: shape.id,
       type: 'node-card',
@@ -295,24 +311,51 @@ export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.
           ))}
         </div>
         <div
+          ref={previewContainerRef}
           className="crop-inline-preview"
           data-node-interactive="media-preview"
           onPointerDown={guard.onPointerDown}
           onDoubleClick={(event) =>
             guard.onDoubleClick(event, () =>
-              openPreview({ kind: 'image', url: mediaUrl(source.mediaPath), title: shape.props.title })
+              openPreview({
+                kind: 'image',
+                url: mediaUrl(source.mediaPath),
+                title: shape.props.title
+              })
             )
           }
         >
           <div
             className="crop-inline-canvas"
-            style={{ aspectRatio: previewAspect }}
+            style={
+              containerSize && previewAspect
+                ? containerSize.w / containerSize.h > previewAspect
+                  ? {
+                      height: `${containerSize.h}px`,
+                      width: `${Math.round(containerSize.h * previewAspect)}px`,
+                      aspectRatio: previewAspect
+                    }
+                  : {
+                      width: `${containerSize.w}px`,
+                      height: `${Math.round(containerSize.w / previewAspect)}px`,
+                      aspectRatio: previewAspect
+                    }
+                : { aspectRatio: previewAspect }
+            }
             onPointerDown={beginInlineDrag}
             onPointerMove={moveInlineDrag}
             onPointerUp={finishInlineDrag}
             onPointerCancel={finishInlineDrag}
           >
             <img
+              ref={(img) => {
+                if (img?.complete && img.naturalWidth && img.naturalHeight) {
+                  const aspect = img.naturalWidth / img.naturalHeight
+                  if (Math.abs(previewAspect - aspect) > 0.001) {
+                    setPreviewAspect(aspect)
+                  }
+                }
+              }}
               src={mediaUrl(source.mediaPath)}
               alt="待裁剪图片"
               draggable={false}
@@ -332,7 +375,9 @@ export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.
                 height: `${config.rect.height * 100}%`
               }}
             >
-              {[0, 1, 2, 3].map((corner) => <i key={corner} className={`crop-inline-handle corner-${corner}`} />)}
+              {[0, 1, 2, 3].map((corner) => (
+                <i key={corner} className={`crop-inline-handle corner-${corner}`} />
+              ))}
             </span>
           </div>
         </div>

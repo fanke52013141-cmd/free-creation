@@ -71,7 +71,12 @@ export function resolveImageModelOption(
     const byProvider = options.find((item) => item.provider.id === config.providerKey)
     if (byProvider) return byProvider
   }
-  const preferred = options.find((item) => item.provider.specId === 'toapis')
+  const preferred = options.find(
+    (item) =>
+      item.provider.specId === 'toapis' ||
+      item.provider.name.toLowerCase().includes('toapis') ||
+      item.provider.id.toLowerCase().includes('toapis')
+  )
   return preferred ?? options[0]
 }
 

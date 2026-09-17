@@ -10,8 +10,12 @@ import {
   type ImageEditColor,
   type ImageEditConfig,
   type ImageEditPoint,
-  IMAGE_EDIT_SIZES
+  IMAGE_EDIT_ASPECT_RATIOS,
+  type ImageEditAspectRatio,
+  type ImageEditResolution
 } from '@shared/image-edit'
+import { resolveImageModelOption } from '@shared/engine/models'
+import { imageCapabilitiesFor } from '@shared/image-capabilities'
 import { gatherUpstreamMedia } from '../../../canvas/graph'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import type { NodeCardShape } from '../../../canvas/NodeCardShape'
@@ -265,23 +269,39 @@ function pointFromEvent(event: React.PointerEvent, element: HTMLDivElement): Ima
   }
 }
 
-function arrowHead(points: ImageEditPoint[]): string {
+function arrowHead(
+  points: ImageEditPoint[],
+  strokeWidth = 3
+): { polygon: string; lineEnd: { x: number; y: number } } | null {
   const end = points[points.length - 1]
   const previous = points[points.length - 2]
-  if (!end || !previous) return ''
-  const angle = Math.atan2(end.y - previous.y, end.x - previous.x)
-  // 加长而尖锐的三角箭头：在图片预览、导出的标注参考图和不同缩放级别下都保留
-  // 明确的指向，不会因线帽覆盖而看成一条“平头质量线”。
-  const size = 0.06
+  if (!end || !previous) return null
+  const dx = (end.x - previous.x) * 100
+  const dy = (end.y - previous.y) * 100
+  const dist = Math.hypot(dx, dy)
+  if (dist < 0.2) return null
+  const angle = Math.atan2(dy, dx)
+  // 流线型倒钩箭头：长度随画笔粗细自适应，夹角约 26°，尾部做内凹倒钩
+  const length = Math.min(dist * 0.42, Math.max(2.6, strokeWidth * 0.85 + 1.8))
+  const theta = (26 * Math.PI) / 180
+  const indent = length * 0.26
+  const tip = { x: end.x * 100, y: end.y * 100 }
   const left = {
-    x: end.x - size * Math.cos(angle - Math.PI / 7),
-    y: end.y - size * Math.sin(angle - Math.PI / 7)
+    x: tip.x - length * Math.cos(angle - theta),
+    y: tip.y - length * Math.sin(angle - theta)
   }
   const right = {
-    x: end.x - size * Math.cos(angle + Math.PI / 7),
-    y: end.y - size * Math.sin(angle + Math.PI / 7)
+    x: tip.x - length * Math.cos(angle + theta),
+    y: tip.y - length * Math.sin(angle + theta)
   }
-  return [end, left, right].map((p) => `${p.x * 100},${p.y * 100}`).join(' ')
+  const notch = {
+    x: tip.x - (length - indent) * Math.cos(angle),
+    y: tip.y - (length - indent) * Math.sin(angle)
+  }
+  const polygon = [tip, left, notch, right]
+    .map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`)
+    .join(' ')
+  return { polygon, lineEnd: notch }
 }
 
 function normalizedRect(
@@ -414,11 +434,7 @@ function ImageEditEditorCore({
   useEffect(() => {
     if (!loaded) void load()
   }, [loaded, load])
-  useEffect(() => {
-    if (!textEntry) return
-    const frame = requestAnimationFrame(() => textEntryRef.current?.focus())
-    return () => cancelAnimationFrame(frame)
-  }, [textEntry])
+
   const save = (next: ImageEditConfig, preserveRedo = false): void => {
     setConfig(next)
     if (!preserveRedo) setRedoAnnotations([])
@@ -428,6 +444,18 @@ function ImageEditEditorCore({
       props: { config: serializeImageEditConfig(next) }
     })
   }
+
+  const selectedOption =
+    options.find((item) => item.key === config.modelKey) ?? resolveImageModelOption(options, config)
+  const capabilities = selectedOption
+    ? imageCapabilitiesFor(selectedOption.provider.specId, selectedOption.model.id)
+    : null
+
+  useEffect(() => {
+    if (!textEntry) return
+    const frame = requestAnimationFrame(() => textEntryRef.current?.focus())
+    return () => cancelAnimationFrame(frame)
+  }, [textEntry])
   const add = (annotation: ImageEditAnnotation): void =>
     save({ ...config, annotations: [...config.annotations, annotation].slice(-64) })
   const findMoveTarget = (point: ImageEditPoint): MoveTarget | null => {
@@ -645,6 +673,11 @@ function ImageEditEditorCore({
               }}
             />
             <svg className="image-edit-overlay" viewBox="0 0 100 100" preserveAspectRatio="none">
+              <defs>
+                <filter id="edit-overlay-shadow" x="-20%" y="-20%" width="140%" height="140%">
+                  <feDropShadow dx="0" dy="0.6" stdDeviation="0.8" floodColor="rgba(0,0,0,0.65)" />
+                </filter>
+              </defs>
               {config.mask?.enabled &&
                 config.mask.strokes.map((stroke, index) => (
                   <polyline
@@ -667,45 +700,78 @@ function ImageEditEditorCore({
                       <rect
                         key={a.id}
                         {...rect}
+                        rx="1.5"
+                        ry="1.5"
+                        filter="url(#edit-overlay-shadow)"
                         className={`image-edit-mark ${a.color} ${selected ? 'selected' : ''}`}
                         style={{ fill: 'none', strokeWidth: a.strokeWidth ?? 3 }}
                       />
                     )
                 }
-                if (a.type === 'text')
+                if (a.type === 'text') {
+                  const x = a.points[0].x * 100
+                  const y = a.points[0].y * 100
+                  const textLen = (a.text ?? '').length
+                  const padX = 1.4
+                  const bgW = Math.max(6, textLen * 2.8 + padX * 2)
+                  const bgH = 5.2
                   return (
-                    <text
+                    <g
                       key={a.id}
-                      x={a.points[0].x * 100}
-                      y={a.points[0].y * 100}
-                      className={`image-edit-text ${a.color} ${selected ? 'selected' : ''}`}
+                      filter="url(#edit-overlay-shadow)"
+                      className={`image-edit-text-group ${selected ? 'selected' : ''}`}
                     >
-                      {a.text}
-                    </text>
+                      <rect
+                        x={x - padX}
+                        y={y - bgH / 2}
+                        width={bgW}
+                        height={bgH}
+                        rx="1.2"
+                        ry="1.2"
+                        className="image-edit-text-bg"
+                      />
+                      <text x={x} y={y} className={`image-edit-text ${a.color}`}>
+                        {a.text}
+                      </text>
+                    </g>
                   )
-                if (a.type === 'arrow')
+                }
+                if (a.type === 'arrow') {
+                  const arrowInfo = arrowHead(a.points, a.strokeWidth ?? 3)
                   return (
-                    <g key={a.id} className={selected ? 'selected' : ''}>
+                    <g
+                      key={a.id}
+                      filter="url(#edit-overlay-shadow)"
+                      className={selected ? 'selected' : ''}
+                    >
                       <line
                         x1={a.points[0].x * 100}
                         y1={a.points[0].y * 100}
-                        x2={a.points[a.points.length - 1].x * 100}
-                        y2={a.points[a.points.length - 1].y * 100}
+                        x2={arrowInfo ? arrowInfo.lineEnd.x : a.points[a.points.length - 1].x * 100}
+                        y2={arrowInfo ? arrowInfo.lineEnd.y : a.points[a.points.length - 1].y * 100}
                         className={`image-edit-mark ${a.color} ${selected ? 'selected' : ''}`}
-                        style={{ strokeWidth: a.strokeWidth ?? 3 }}
+                        style={{ strokeWidth: a.strokeWidth ?? 3, strokeLinecap: 'round' }}
                       />
-                      <polygon
-                        points={arrowHead(a.points)}
-                        className={`image-edit-arrow-head ${a.color} ${selected ? 'selected' : ''}`}
-                      />
+                      {arrowInfo ? (
+                        <polygon
+                          points={arrowInfo.polygon}
+                          className={`image-edit-arrow-head ${a.color} ${selected ? 'selected' : ''}`}
+                        />
+                      ) : null}
                     </g>
                   )
+                }
                 return (
                   <polyline
                     key={a.id}
                     points={pts}
+                    filter="url(#edit-overlay-shadow)"
                     className={`image-edit-mark ${a.color} ${selected ? 'selected' : ''}`}
-                    style={{ strokeWidth: a.strokeWidth ?? 3 }}
+                    style={{
+                      strokeWidth: a.strokeWidth ?? 3,
+                      strokeLinecap: 'round',
+                      strokeLinejoin: 'round'
+                    }}
                   />
                 )
               })}
@@ -878,26 +944,45 @@ function ImageEditEditorCore({
       )}
       <div className="gen-row">
         <ModelSelect
-          value={config.modelKey}
+          value={config.modelKey || (selectedOption?.key ?? '')}
           options={options}
           onChange={(modelKey) => save({ ...config, modelKey })}
         />
         <AppSelect
           className="gen-select w92"
-          value={config.size}
+          value={config.aspectRatio ?? config.size ?? 'auto'}
           onPointerDown={(e) => e.stopPropagation()}
-          onChange={(e) => save({ ...config, size: e.target.value })}
+          onChange={(e) => {
+            const val = e.target.value as ImageEditAspectRatio
+            save({ ...config, aspectRatio: val, size: val })
+          }}
+          aria-label="选择画幅比例"
         >
-          {IMAGE_EDIT_SIZES.map((size) => (
-            <option key={size} value={size}>
-              {size === 'auto' ? '默认尺寸' : size}
+          {IMAGE_EDIT_ASPECT_RATIOS.map((ratio) => (
+            <option key={ratio} value={ratio}>
+              {ratio === 'auto' ? '默认比例' : ratio}
             </option>
           ))}
         </AppSelect>
+        {capabilities && capabilities.resolutions.length > 0 && (
+          <AppSelect
+            className="gen-select w86"
+            value={config.resolution ?? capabilities.resolutions[0]}
+            onPointerDown={(e) => e.stopPropagation()}
+            onChange={(e) => save({ ...config, resolution: e.target.value as ImageEditResolution })}
+            aria-label="选择分辨率"
+          >
+            {capabilities.resolutions.map((res) => (
+              <option key={res} value={res}>
+                {res}
+              </option>
+            ))}
+          </AppSelect>
+        )}
       </div>
       <textarea
-        className="gen-prompt"
-        rows={3}
+        className="gen-prompt image-edit-instruction-input"
+        rows={5}
         value={config.instruction}
         placeholder="描述需要修改的内容…"
         onPointerDown={(e) => e.stopPropagation()}

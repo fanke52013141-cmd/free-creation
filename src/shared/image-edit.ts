@@ -25,10 +25,42 @@ export interface ImageEditAnnotation {
   strokeWidth?: number
 }
 
+export const IMAGE_EDIT_ASPECT_RATIOS = [
+  'auto',
+  '1:1',
+  '16:9',
+  '9:16',
+  '4:3',
+  '3:4',
+  '3:2',
+  '2:3'
+] as const
+export type ImageEditAspectRatio = (typeof IMAGE_EDIT_ASPECT_RATIOS)[number]
+
+export const IMAGE_EDIT_RESOLUTIONS = ['1k', '2k', '4k'] as const
+export type ImageEditResolution = (typeof IMAGE_EDIT_RESOLUTIONS)[number]
+
+export const IMAGE_EDIT_SIZES = [
+  'auto',
+  '1:1',
+  '16:9',
+  '9:16',
+  '4:3',
+  '3:4',
+  '3:2',
+  '2:3',
+  '1024x1024',
+  '1536x1024',
+  '1024x1536'
+] as const
+export type ImageEditSize = (typeof IMAGE_EDIT_SIZES)[number]
+
 export interface ImageEditConfig {
   version: 1
   modelKey: string
   size: string
+  aspectRatio?: ImageEditAspectRatio
+  resolution?: ImageEditResolution
   instruction: string
   annotations: ImageEditAnnotation[]
   mask?: ImageEditMask
@@ -39,13 +71,12 @@ export const MAX_IMAGE_EDIT_INSTRUCTION = 4000
 export const MAX_IMAGE_EDIT_ANNOTATION_TEXT = 500
 export const MAX_IMAGE_EDIT_MASK_STROKES = 64
 export const MAX_IMAGE_EDIT_MASK_POINTS = 512
-export const IMAGE_EDIT_SIZES = ['auto', '1024x1024', '1536x1024', '1024x1536'] as const
-export type ImageEditSize = (typeof IMAGE_EDIT_SIZES)[number]
 
 export const DEFAULT_IMAGE_EDIT_CONFIG: ImageEditConfig = {
   version: 1,
   modelKey: '',
   size: 'auto',
+  aspectRatio: 'auto',
   instruction: '',
   annotations: [],
   mask: { enabled: false, strokes: [], brushSize: 0.08, invert: false }
@@ -143,6 +174,19 @@ export function parseImageEditConfig(text: string): ImageEditConfig {
       typeof raw.size === 'string' && IMAGE_EDIT_SIZES.includes(raw.size as ImageEditSize)
         ? raw.size
         : 'auto',
+    aspectRatio:
+      typeof raw.aspectRatio === 'string' &&
+      IMAGE_EDIT_ASPECT_RATIOS.includes(raw.aspectRatio as ImageEditAspectRatio)
+        ? (raw.aspectRatio as ImageEditAspectRatio)
+        : typeof raw.size === 'string' &&
+            IMAGE_EDIT_ASPECT_RATIOS.includes(raw.size as ImageEditAspectRatio)
+          ? (raw.size as ImageEditAspectRatio)
+          : 'auto',
+    resolution:
+      typeof raw.resolution === 'string' &&
+      IMAGE_EDIT_RESOLUTIONS.includes(raw.resolution as ImageEditResolution)
+        ? (raw.resolution as ImageEditResolution)
+        : undefined,
     instruction:
       typeof raw.instruction === 'string'
         ? raw.instruction.slice(0, MAX_IMAGE_EDIT_INSTRUCTION)

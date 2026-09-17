@@ -386,10 +386,61 @@ export async function generateImageEditToAsset(
   referenceImages: readonly Buffer[],
   maskImage?: Buffer
 ): Promise<MediaAsset> {
-  if (!input.prompt?.trim()) throw new GatewayError('INVALID_INPUT', '修改说明不能为空')
-  if (input.prompt.length > 8000) throw new GatewayError('INVALID_INPUT', '修改说明超过 8000 字')
+  const prompt = input.prompt?.trim() ?? ''
+  if (!prompt) throw new GatewayError('INVALID_INPUT', '修改说明不能为空')
+  if (prompt.length > 8000) throw new GatewayError('INVALID_INPUT', '修改说明超过 8000 字')
   if (input.size && !IMAGE_EDIT_SIZES.includes(input.size as (typeof IMAGE_EDIT_SIZES)[number])) {
     throw new GatewayError('INVALID_INPUT', '图片修改尺寸不受支持')
   }
+  const provider = requireProvider(input.providerId)
+  const capabilities = imageCapabilitiesFor(provider.specId, input.modelId)
+
+  if (capabilities.driver === 'toapis-task') {
+    const referenceUrls: string[] = []
+    for (const buf of referenceImages) {
+      referenceUrls.push(await toapisUploadReference(provider, { buf, mime: 'image/png' }))
+    }
+    const size =
+      input.config?.aspectRatio && input.config.aspectRatio !== 'auto'
+        ? input.config.aspectRatio
+        : input.size && input.size !== 'auto'
+          ? input.size
+          : undefined
+
+    const body: Record<string, unknown> = {
+      model: input.modelId,
+      prompt,
+      n: 1,
+      response_format: 'url'
+    }
+    if (size) body.size = size
+    if (capabilities.resolutions.length > 0 && input.config?.resolution) {
+      body.resolution = input.config.resolution
+    }
+    if (capabilities.supportsQuality) body.quality = 'low'
+    if (referenceUrls.length > 0) body.reference_images = referenceUrls
+
+    const res = await fetch(`${provider.baseURL}/images/generations`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${provider.apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(60_000)
+    })
+    if (!res.ok) {
+      throw new GatewayError(
+        'UPSTREAM_ERROR',
+        `TOAPIS 图片修改提交失败：HTTP ${res.status}${await errorTail(res)}`
+      )
+    }
+    const task = (await res.json().catch(() => null)) as ToapisResponseLike | null
+    const taskId = typeof task?.id === 'string' && task.id ? task.id : null
+    if (!taskId) throw new GatewayError('EMPTY_RESULT', 'TOAPIS 未返回任务 ID')
+
+    const finished = await pollToapisTask(provider, taskId)
+    const imageUrl = extractFirstImageValue(finished, new Set(referenceUrls))
+    if (!imageUrl) throw new GatewayError('EMPTY_RESULT', 'TOAPIS 任务完成但未返回图片')
+    return downloadImageAsAsset(input.projectId, imageUrl, prompt.slice(0, 24))
+  }
+
   return generateImageWithReference(input, referenceImages, undefined, maskImage)
 }

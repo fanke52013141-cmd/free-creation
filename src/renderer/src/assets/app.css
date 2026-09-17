@@ -1272,6 +1272,7 @@ select:focus-visible,
   flex-shrink: 0;
   border-radius: 0 0 10px 10px;
   background: var(--node-accent);
+  opacity: 0.7;
 }
 
 .node-header {
@@ -1610,9 +1611,12 @@ select:focus-visible,
 
 .crop-inline-preview {
   position: relative;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   min-height: 0;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1621,9 +1625,9 @@ select:focus-visible,
 
 .crop-inline-canvas {
   position: relative;
-  width: auto;
-  height: 100%;
+  display: block;
   max-width: 100%;
+  max-height: 100%;
   touch-action: none;
 }
 
@@ -2218,18 +2222,26 @@ select:focus-visible,
   border-radius: 8px;
   background: #10151c;
   cursor: default;
-}
-
-/* 预览图无论横竖都在节点剩余空间内 contain，不再因为竖图的 aspect-ratio 撑高整张卡片。 */
-.image-split-quick-grid {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   aspect-ratio: auto !important;
 }
 
-.image-split-quick-grid > img {
+.image-split-canvas {
+  position: relative;
+  max-width: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  display: block;
+}
+
+.image-split-canvas > img {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: fill;
+  pointer-events: none;
 }
 
 .image-split-quick-empty {
@@ -4368,10 +4380,24 @@ select:focus-visible,
 .image-edit-preview.tool-text {
   cursor: text;
 }
+.image-edit-text-bg {
+  fill: rgba(15, 23, 42, 0.88);
+  stroke: rgba(255, 255, 255, 0.22);
+  stroke-width: 0.35;
+}
+
 .image-edit-text {
-  font-size: 4px;
-  paint-order: stroke;
-  stroke-width: 0.35px;
+  font-size: 3.4px;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  dominant-baseline: central;
+}
+
+.image-edit-instruction-input {
+  min-height: 130px !important;
+  height: 130px;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .image-edit-tools,

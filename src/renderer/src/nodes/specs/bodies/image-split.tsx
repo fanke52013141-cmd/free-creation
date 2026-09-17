@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import {
   buildImageSplitTiles,
@@ -26,6 +26,23 @@ export function ImageSplitBody({ shape, openPreview }: NodeBodyProps): React.JSX
   const config = parseImageSplitConfig(readNodeConfig(shape))
   const tiles = buildImageSplitTiles(config)
   const [previewAspect, setPreviewAspect] = useState<number | null>(null)
+  const previewContainerRef = useRef<HTMLDivElement>(null)
+  const [containerSize, setContainerSize] = useState<{ w: number; h: number } | null>(null)
+
+  useEffect(() => {
+    const el = previewContainerRef.current
+    if (!el) return
+    const updateSize = (): void => {
+      const rect = el.getBoundingClientRect()
+      if (rect.width > 0 && rect.height > 0) {
+        setContainerSize({ w: rect.width, h: rect.height })
+      }
+    }
+    updateSize()
+    const observer = new ResizeObserver(updateSize)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [source?.mediaPath])
 
   // 快速拆分卡片保持契约统一的 340×260 初始尺寸（呈现规范 §3.1）：
   // 预览网格由 CSS flex + overflow 钳制；旧卡一次性压缩逻辑随"尚无历史用户数据"移除，
@@ -102,8 +119,8 @@ export function ImageSplitBody({ shape, openPreview }: NodeBodyProps): React.JSX
         </label>
       </div>
       <div
+        ref={previewContainerRef}
         className="image-split-quick-grid"
-        style={{ aspectRatio: previewAspect ?? 16 / 10 }}
         aria-label={`${config.rows} 行 ${config.columns} 列拆分预览`}
         data-node-interactive="media-preview"
         role="button"
@@ -118,35 +135,63 @@ export function ImageSplitBody({ shape, openPreview }: NodeBodyProps): React.JSX
         }}
       >
         {source ? (
-          <img
-            src={mediaUrl(source.mediaPath)}
-            alt="拆分范围预览"
-            draggable={false}
-            onLoad={(event) => {
-              const image = event.currentTarget
-              if (image.naturalWidth && image.naturalHeight)
-                setPreviewAspect(image.naturalWidth / image.naturalHeight)
-            }}
-          />
+          <div
+            className="image-split-canvas"
+            style={
+              containerSize && previewAspect
+                ? containerSize.w / containerSize.h > previewAspect
+                  ? {
+                      height: `${containerSize.h}px`,
+                      width: `${Math.round(containerSize.h * previewAspect)}px`,
+                      aspectRatio: previewAspect
+                    }
+                  : {
+                      width: `${containerSize.w}px`,
+                      height: `${Math.round(containerSize.w / previewAspect)}px`,
+                      aspectRatio: previewAspect
+                    }
+                : previewAspect
+                  ? { aspectRatio: previewAspect }
+                  : { width: '100%', height: '100%' }
+            }
+          >
+            <img
+              ref={(image) => {
+                if (image?.complete && image.naturalWidth && image.naturalHeight) {
+                  const aspect = image.naturalWidth / image.naturalHeight
+                  if (aspect !== previewAspect) setPreviewAspect(aspect)
+                }
+              }}
+              src={mediaUrl(source.mediaPath)}
+              alt="拆分范围预览"
+              draggable={false}
+              onLoad={(event) => {
+                const image = event.currentTarget
+                if (image.naturalWidth && image.naturalHeight) {
+                  setPreviewAspect(image.naturalWidth / image.naturalHeight)
+                }
+              }}
+            />
+            {tiles.map((tile) => (
+              <span
+                className="image-split-preview-tile"
+                key={tile.index}
+                style={{
+                  left: `${tile.rect.x * 100}%`,
+                  top: `${tile.rect.y * 100}%`,
+                  width: `${tile.rect.width * 100}%`,
+                  height: `${tile.rect.height * 100}%`
+                }}
+              >
+                <em>{tile.index + 1}</em>
+              </span>
+            ))}
+          </div>
         ) : (
           <span className="image-split-quick-empty">
             <Icon name="image" size={19} /> 连接原图
           </span>
         )}
-        {tiles.map((tile) => (
-          <span
-            className="image-split-preview-tile"
-            key={tile.index}
-            style={{
-              left: `${tile.rect.x * 100}%`,
-              top: `${tile.rect.y * 100}%`,
-              width: `${tile.rect.width * 100}%`,
-              height: `${tile.rect.height * 100}%`
-            }}
-          >
-            <em>{tile.index + 1}</em>
-          </span>
-        ))}
       </div>
       <span className="image-split-quick-summary">
         {source
@@ -253,6 +298,12 @@ export function ImageSplitSettings({ shape, editor }: NodeSettingsProps): React.
           aria-label={`${config.rows} 行 ${config.columns} 列拆分预览`}
         >
           <img
+            ref={(image) => {
+              if (image?.complete && image.naturalWidth && image.naturalHeight) {
+                const aspect = image.naturalWidth / image.naturalHeight
+                if (aspect !== previewAspect) setPreviewAspect(aspect)
+              }
+            }}
             src={mediaUrl(source.mediaPath)}
             alt="待拆分原图"
             draggable={false}

@@ -204,12 +204,25 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     'node readiness',
     () => {
       const incomingCounts = new Map<string, number>()
+      const outgoingCounts = new Map<string, number>()
       for (const arrow of editor.getCurrentPageShapes()) {
-        if (arrow.type !== 'arrow' || arrow.meta?.toPort === undefined) continue
+        if (arrow.type !== 'arrow') continue
         const bindings = editor.getBindingsFromShape(arrow.id, 'arrow')
-        const end = bindings.find((binding) => binding.props.terminal === 'end')
-        if (end?.toId !== shape.id || typeof arrow.meta.toPort !== 'string') continue
-        incomingCounts.set(arrow.meta.toPort, (incomingCounts.get(arrow.meta.toPort) ?? 0) + 1)
+        if (typeof arrow.meta?.toPort === 'string') {
+          const end = bindings.find((binding) => binding.props.terminal === 'end')
+          if (end?.toId === shape.id) {
+            incomingCounts.set(arrow.meta.toPort, (incomingCounts.get(arrow.meta.toPort) ?? 0) + 1)
+          }
+        }
+        if (typeof arrow.meta?.fromPort === 'string') {
+          const start = bindings.find((binding) => binding.props.terminal === 'start')
+          if (start?.toId === shape.id) {
+            outgoingCounts.set(
+              arrow.meta.fromPort,
+              (outgoingCounts.get(arrow.meta.fromPort) ?? 0) + 1
+            )
+          }
+        }
       }
       return {
         readiness: deriveNodeReadiness({
@@ -219,7 +232,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           incomingCounts,
           outputs: spec?.projectOutputs?.(shape) ?? {}
         }),
-        inputs: deriveInputPortReadiness(inPorts, incomingCounts)
+        inputs: deriveInputPortReadiness(inPorts, incomingCounts),
+        incomingCounts,
+        outgoingCounts
       }
     },
     [editor, shape, spec, inPorts]
@@ -313,7 +328,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             <span className="node-seq" title={`节点序号 ${seq}`}>
               {seq}
             </span>
-            <span className="node-icon" style={{ color: spec?.color }}>
+            <span className="node-icon" style={{ color: spec?.color, opacity: 0.82 }}>
               {spec ? <Icon name={spec.icon} size={15} /> : <Icon name="help" size={15} />}
             </span>
             <div
@@ -419,10 +434,11 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         {inPorts.map((p, i) => {
           const ok = draft && !isSource && canAttachPort(draft.from, p)
           const state = inputReadiness.get(p.id)
+          const isConnected = (readinessState.incomingCounts?.get(p.id) ?? 0) > 0
           return (
             <span
               key={p.id}
-              className={`port-dot in input-${state?.kind ?? 'optional'} ${draft ? (ok ? 'ok' : 'dim') : ''}`}
+              className={`port-dot in input-${state?.kind ?? 'optional'} ${isConnected ? 'connected' : 'unconnected'} ${draft ? (ok ? 'ok' : 'dim') : ''}`}
               style={{
                 top: inY[i] - NODE_PORT_SIZE / 2,
                 borderColor: PORT_COLORS[p.type],
@@ -438,10 +454,11 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         {/* 输出端口：与输入端口同样是纯圆形，按住后拖出连线。 */}
         {outPorts.map((p, i) => {
           const hasOutput = Boolean(spec?.projectOutputs?.(shape)[p.id])
+          const isConnected = (readinessState.outgoingCounts?.get(p.id) ?? 0) > 0
           return (
             <span
               key={p.id}
-              className={`port-dot out ${hasOutput ? 'has-output' : 'no-output'} ${isSource && draft?.from.portId === p.id ? 'ok' : ''}`}
+              className={`port-dot out ${hasOutput ? 'has-output' : 'no-output'} ${isConnected ? 'connected' : 'unconnected'} ${isSource && draft?.from.portId === p.id ? 'ok' : ''}`}
               style={{
                 top: outY[i] - NODE_PORT_SIZE / 2,
                 borderColor: PORT_COLORS[p.type],
