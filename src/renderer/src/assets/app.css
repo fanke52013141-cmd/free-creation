@@ -1318,8 +1318,8 @@ select:focus-visible,
   opacity: 1;
 }
 
-/* 统一的已连接输入：由真实 arrow + port + projectOutputs 驱动，所有节点共用。
-   仅存在实际边时渲染，避免未连接节点出现无意义空态。 */
+/* 统一的已连接输入（呈现规范 v1.0 §11–§17）：由真实 arrow + port + projectOutputs 驱动，
+   所有节点共用。仅存在实际边时渲染；图片引用为 48×36 缩略图卡，其余为单行 chip。 */
 .connected-inputs {
   display: flex;
   flex-direction: column;
@@ -1327,20 +1327,10 @@ select:focus-visible,
   padding: 8px 10px 0;
 }
 
-.connected-inputs-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--txt-dim, #9aa4b5);
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: 0.02em;
-}
-
 .connected-input-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: 6px;
 }
 
 .connected-input-item {
@@ -1360,12 +1350,88 @@ select:focus-visible,
   pointer-events: none;
 }
 
-/* 图片连线不是一个抽象“已连接”标记：用略大的缩略图和真实来源名称，让生成、修改等
-   节点能在卡片内部确认其当前消费的是哪一张图片。 */
-.connected-input-item.connected-input-image {
+/* 图片引用缩略图（§11）：48×36 无名称文字，序号叠加在角落；
+   来源与端口信息在 tooltip 与 hover 全貌浮层中，不占用正文行宽。 */
+.reference-thumb {
+  position: relative;
+  display: block;
+  width: 48px;
   height: 36px;
-  padding-block: 3px;
-  background: color-mix(in srgb, var(--brand) 7%, var(--bg));
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--line) 90%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg) 62%, transparent);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.reference-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.reference-thumb:hover {
+  border-color: color-mix(in srgb, var(--brand) 45%, transparent);
+}
+
+.reference-thumb .connected-input-order {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  border: 1px solid color-mix(in srgb, var(--bg) 70%, transparent);
+}
+
+/* 引用超过约两行（§17）时折叠为 +N，点击展开后由 node-body 内部滚动承载。 */
+.reference-more {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 9px;
+  border: 1px dashed color-mix(in srgb, var(--line) 90%, transparent);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--txt-dim, #9aa4b5);
+  font-size: 10px;
+  line-height: 1;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.reference-more:hover {
+  color: var(--txt);
+  border-color: color-mix(in srgb, var(--brand) 45%, transparent);
+}
+
+/* hover 300ms 后的全貌浮层：portal 到 document.body、fixed 定位，纯预览不拦截指针。 */
+.reference-fullview {
+  position: fixed;
+  z-index: 960;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--line) 90%, transparent);
+  border-radius: 10px;
+  background: rgba(16, 20, 26, 0.92);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+
+.reference-fullview img {
+  max-width: min(56vw, 460px);
+  max-height: 300px;
+  border-radius: 6px;
+  object-fit: contain;
+}
+
+.reference-fullview-caption {
+  color: var(--txt-dim, #9aa4b5);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .connected-input-target {
@@ -1411,27 +1477,6 @@ select:focus-visible,
 .connected-input-empty {
   color: var(--muted);
   font-style: italic;
-}
-
-.connected-input-media {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  flex: 0 0 auto;
-  color: var(--txt);
-}
-
-.connected-input-media img {
-  width: 20px;
-  height: 18px;
-  border-radius: 3px;
-  object-fit: cover;
-}
-
-.connected-input-item.connected-input-image .connected-input-media img {
-  width: 30px;
-  height: 28px;
-  border: 1px solid color-mix(in srgb, var(--brand) 36%, transparent);
 }
 
 /* 模型 / 本地媒体任务运行时的明确状态层。状态来自统一运行器的 exec 字段，而不是

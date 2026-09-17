@@ -399,7 +399,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             style={{ ['--node-accent' as string]: spec?.color ?? '#42b9f5' }}
           />
           <div ref={bodyRef} className="node-body">
-            {!hasDedicatedInputSurface && <ConnectedInputPreview editor={editor} shape={shape} />}
+            {!hasDedicatedInputSurface && (
+              <ConnectedInputPreview editor={editor} shape={shape} openPreview={openMediaPreview} />
+            )}
             <div className="node-body-content">
               {spec ? (
                 <spec.Body shape={shape} openPreview={openMediaPreview} />

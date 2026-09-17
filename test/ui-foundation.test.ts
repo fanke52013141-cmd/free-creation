@@ -135,4 +135,24 @@ describe('统一画布视觉基础', () => {
     const editor = readFileSync(resolve(root, 'src/renderer/src/canvas/CanvasEditor.tsx'), 'utf8')
     expect(editor).not.toContain('将在此处创建节点')
   })
+
+  it('图片引用为 48×36 缩略图卡 + hover 全貌浮层（呈现规范 §11/§17）', () => {
+    // 缩略图尺寸与 NODE_UI Token 同源；无名称文字，来源信息进 tooltip/浮层。
+    expect(NODE_UI.reference.imageWidth).toBe(48)
+    expect(NODE_UI.reference.imageHeight).toBe(36)
+    expect(legacy).toMatch(/\.reference-thumb\s*\{[^}]*width:\s*48px;/)
+    expect(legacy).toMatch(/\.reference-thumb\s*\{[^}]*height:\s*36px;/)
+    expect(legacy).toContain('.reference-fullview')
+    expect(legacy).not.toContain('.connected-inputs-title')
+    const preview = readFileSync(
+      resolve(root, 'src/renderer/src/canvas/ConnectedInputPreview.tsx'),
+      'utf8'
+    )
+    expect(preview).toContain('createPortal')
+    expect(preview).toContain('setTimeout(showFullView, 300)')
+    expect(preview).toContain("openPreview({ url: mediaUrl(mediaPath), kind: 'image'")
+    // 引用超过约两行时折叠为 +N。
+    expect(preview).toContain('REFERENCE_VISIBLE_LIMIT')
+    expect(preview).toContain('reference-more')
+  })
 })
