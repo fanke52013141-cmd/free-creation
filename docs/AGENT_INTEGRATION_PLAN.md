@@ -1,7 +1,28 @@
 # Canvas Studio 与 Agent 对接方案
 
-> 状态：核心适配层已实现；生产启动、受控草稿写入和 Headless Run 已落地。
-> 实际上线边界与验收命令以 [HANDOFF_2026_09_01_AGENT_PRODUCTION.md](./HANDOFF_2026_09_01_AGENT_PRODUCTION.md) 为准；本文保留为目标架构与后续工具扩展清单。
+> 状态（2026-09-17）：**Agent 对接实现已从仓库移除，本文档保留为重接规划。**
+>
+> - 下线范围：`src/capabilities`（能力定义/生成器）、`src/application`（无界面应用服务层）、
+> `src/cli`、`src/mcp`、`src/main/headless`（headless 运行器）、`test/agent`、
+> `generated/agent-contracts.json`、6 个 `agent:*` npm 脚本与 CI 步骤。下线提交前的
+> 完整实现见 git 历史（`9eefc33` 及之前）。
+> - 下线原因：桌面端尚未稳定，Agent 对接面随节点演进反复返工；headless 链路存在
+> 契约缺口（F05 config 嵌套失真 / F06 通用投影绕过 Schema / F07 只落首个输出 /
+> F08 取消误标完成（已修）/ F09 many 输入覆盖，详见
+> [HANDOFF_2026_09_15_CODE_REVIEW.md](./HANDOFF_2026_09_15_CODE_REVIEW.md)）。
+> - 删除后运行时契约回归单一事实源：renderer `NodeTypeSpec` 自持（specs/index.tsx），
+> 由 `test/node-contract-snapshot.test.ts` 与 `test/node-compliance.test.ts` 守门。
+>
+> ## 重接前提（按顺序）
+>
+> 1. 桌面节点面稳定：六个月内无大现模端口/Schema 重构；
+> 2. 先写“同一画布 桌面 vs headless 输出一致性”对比测试并全绿（覆盖全部 23 个活跃节点）；
+> 3. headless 运行器接入 shared 契约层：解包 `params.config`、复用各 spec 的专用
+> `projectOutputs` 与 `buildOutputPackets`、many 输入追加而非覆盖；
+> 4. 能力定义从 renderer specs 机器派生（单一方向 spec→capability），不再人工双维护；
+> 5. 契约同步门禁按 [AGENT_SYNC_MECHANISM.md](./AGENT_SYNC_MECHANISM.md) 重建。
+>
+> 以下为原方案正文（目标架构、入口分层、工具清单），重接时仍适用。
 >
 > 制定日期：2026-09-01
 >

@@ -17,13 +17,15 @@
 不得在 React 组件中绕过 executor 调用模型，不得按上游节点标题或类型猜测输入，不得用
 快捷按钮隐式产生未声明的业务输出。任何新处理能力必须是独立节点或明确的工作流模板。
 
-## Agent 契约同步
+## Agent 对接已下线（2026-09-17）
 
-任何触及节点能力面（端口 / Schema / configSchema / contractVersion / MCP 工具）的改动，
-必须在同一提交内运行 `npm run agent:generate` 并提交 `generated/agent-contracts.json`。
-破坏性变更（删除端口 / 修改端口类型 / required 收紧为必填）必须 bump `contractVersion`
-并同步 renderer spec。`npm run test` 中的两个门禁测试会拦截契约漂移与漏 bump。
-完整流程见 `docs/AGENT_SYNC_MECHANISM.md`。
+Agent/CLI/MCP/headless 的全部实现代码已从本仓库移除（`src/capabilities`、`src/application`、
+`src/cli`、`src/mcp`、`src/main/headless`、`test/agent`、`generated/` 及相关脚本与 CI 步骤）。
+原因：项目未稳定前对接反复返工，且 headless 链路存在契约缺口（详见
+`docs/HANDOFF_2026_09_15_CODE_REVIEW.md` F05–F09）。**对接规划已保留**：
+目标架构、入口分层与重接前提见 `docs/AGENT_INTEGRATION_PLAN.md`（含下线记录与
+重接清单）；契约同步门禁设计见 `docs/AGENT_SYNC_MECHANISM.md`（历史机制存档）。
+重接前必须先补“桌面 vs headless 输出一致性”对比测试。
 
 ## 本地数据安全
 

@@ -8,11 +8,7 @@
     "baseUrl": ".",
     "paths": {
       "@shared/*": ["src/shared/*"],
-      "@renderer/*": ["src/renderer/src/*"],
-      "@capabilities": ["src/capabilities/index.ts"],
-      "@capabilities/*": ["src/capabilities/*"],
-      "@application": ["src/application/index.ts"],
-      "@application/*": ["src/application/*"]
+      "@renderer/*": ["src/renderer/src/*"]
     }
   }
 }

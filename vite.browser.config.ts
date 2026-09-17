@@ -13,11 +13,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@renderer': resolve(__dirname, 'src/renderer/src'),
-      '@shared': resolve(__dirname, 'src/shared'),
-      '@capabilities/renderer': resolve(__dirname, 'src/capabilities/renderer.ts'),
-      '@capabilities': resolve(__dirname, 'src/capabilities/index.ts'),
-      '@application': resolve(__dirname, 'src/application/index.ts'),
-      '@application/': resolve(__dirname, 'src/application/')
+      '@shared': resolve(__dirname, 'src/shared')
     }
   },
   server: {
