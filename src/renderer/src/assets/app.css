@@ -1227,72 +1227,8 @@ select:focus-visible,
 }
 
 /* ── 节点卡片（LibTV 风格：深色卡片 + 顶部色带 + 柔和阴影） ── */
-.node-card-wrap {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  /* 让触屏和触控板指针交给画布选择工具，按住节点即可直接拖动。 */
-  touch-action: none;
-}
-
-.node-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: 100%;
-  /* 磨砂玻璃：半透明底 + backdrop 模糊透出画布网格与背后内容，
-     实线细边与顶部内高光构成玻璃厚度；不再是不透明色块。 */
-  background: color-mix(in srgb, var(--card) 74%, transparent);
-  -webkit-backdrop-filter: blur(14px) saturate(1.4);
-  backdrop-filter: blur(14px) saturate(1.4);
-  border: 1px solid color-mix(in srgb, var(--txt) 10%, transparent);
-  border-radius: var(--node-radius);
-  overflow: hidden;
-  user-select: none;
-  box-shadow:
-    var(--elevation-1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.07);
-  transition:
-    box-shadow 0.2s ease,
-    border-color 0.2s ease;
-}
-
-/* tldraw 选中节点时：卡片边框变为品牌色发光（tldraw 选中容器是卡片的祖先元素） */
-.tl-shape__inner--selected .node-card {
-  border-color: color-mix(in srgb, var(--brand) 50%, var(--line));
-  box-shadow:
-    0 0 0 1.5px color-mix(in srgb, var(--brand) 40%, transparent),
-    0 4px 16px rgba(0, 0, 0, 0.3);
-}
-
-/* 第一次单击后的明确选中态：与 tldraw 外层选框叠加，拖动前不再含糊。 */
-.node-card-wrap.is-selected .node-header {
-  background: color-mix(in srgb, var(--brand) 10%, var(--card));
-}
-
-/* 节点底部颜色条：全宽固定 4px，仅表达类型，不挤压标题。 */
-.node-color-bar {
-  height: 4px;
-  width: 100%;
-  flex-shrink: 0;
-  border-radius: 0 0 10px 10px;
-  background: var(--node-accent);
-  opacity: 0.7;
-}
-
-.node-header {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  height: var(--node-header-h);
-  padding: 0 10px;
-  flex-shrink: 0;
-  border-bottom: 1px solid var(--line);
-  font-size: 15px;
-  font-weight: 600;
-  background: rgba(255, 255, 255, 0.03);
-}
+/* 节点外壳（card / header / color-bar / body / wrap）的唯一权威定义在
+   ui-foundation.css；本文件不再承载任何 .node-* 结构规则（呈现规范 §14）。 */
 
 /* 节点序号徽章 */
 .node-seq {
@@ -1380,21 +1316,6 @@ select:focus-visible,
 .node-card-wrap.is-selected .node-info-btn {
   color: var(--brand);
   opacity: 1;
-}
-
-.node-body {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  position: relative;
-}
-
-.node-body-content {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  flex-direction: column;
 }
 
 /* 统一的已连接输入：由真实 arrow + port + projectOutputs 驱动，所有节点共用。
@@ -1690,51 +1611,6 @@ select:focus-visible,
 }
 
 /* 参考节点悬浮操作，但只提供不会绕过节点协议的查看/复制能力。 */
-.node-hover-toolbar {
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  padding: 3px;
-  border: 1px solid color-mix(in srgb, var(--line) 90%, white 10%);
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--card) 90%, black 10%);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.24);
-  opacity: 0;
-  transform: translateY(3px);
-  pointer-events: none;
-  transition:
-    opacity 0.14s ease,
-    transform 0.14s ease;
-}
-
-.node-card-wrap:hover .node-hover-toolbar,
-.node-card-wrap.is-selected .node-hover-toolbar {
-  opacity: 1;
-  transform: translateY(0);
-  pointer-events: auto;
-}
-
-.node-hover-toolbar button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  color: var(--txt-dim);
-  background: transparent;
-  cursor: pointer;
-}
-
-.node-hover-toolbar button:hover {
-  color: var(--txt);
-  background: rgba(255, 255, 255, 0.09);
-}
 .node-status-label {
   max-width: 64px;
   overflow: hidden;
@@ -4263,35 +4139,7 @@ select:focus-visible,
   color: #fca5a5;
 }
 
-/* ── R1：低噪声节点视觉与滚动体验 ── */
-.node-card-wrap:not(.is-selected):hover .node-card {
-  border-color: color-mix(in srgb, #fff 16%, var(--line));
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-}
-
-.node-card-wrap.is-selected .node-card {
-  transform: translateZ(0);
-}
-
-.node-header {
-  letter-spacing: 0.01em;
-}
-
-.node-status {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--card) 80%, transparent);
-}
-
-.node-card:has(.node-status[title='running']) .node-status {
-  animation: node-status-pulse 1.35s ease-in-out infinite;
-}
-
-@keyframes node-status-pulse {
-  50% {
-    box-shadow:
-      0 0 0 4px rgba(251, 191, 36, 0.16),
-      0 0 12px rgba(251, 191, 36, 0.45);
-  }
-}
+/* R1 的节点外壳视觉（hover/选中/标题字距/状态脉冲）已收敛到 ui-foundation.css。 */
 
 .image-edit-settings {
   display: flex;

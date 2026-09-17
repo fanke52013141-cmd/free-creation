@@ -226,20 +226,36 @@ body {
   backdrop-filter: blur(14px);
 }
 
-/* ── Node shell: title lives above the card, content owns the card ──────── */
+/* ── Node shell：唯一权威定义（呈现规范 §14）──────────────────────────────
+   标题悬浮在卡片外上方；卡内为「4px 类型色条 + body」的纯文档流结构。
+   app.css 不再承载任何 .node-* 外壳结构，层叠顺序由 ui-foundation.test.ts 门禁。 */
 .node-card-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  /* 让触屏和触控板指针交给画布选择工具，按住节点即可直接拖动。 */
+  touch-action: none;
   overflow: visible;
 }
 
 .node-card {
   position: relative;
-  overflow: visible;
-  border-color: rgba(231, 238, 247, 0.13);
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  /* 磨砂玻璃：半透明底 + backdrop 模糊透出画布网格与背后内容。
+     卡片 overflow:hidden 统一裁切内容；悬浮标题在卡片外的 .node-card-wrap 上。 */
+  background: color-mix(in srgb, var(--card) 74%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  backdrop-filter: blur(14px) saturate(1.4);
+  border: 1px solid color-mix(in srgb, var(--txt) 10%, transparent);
   border-radius: var(--node-radius);
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.025), transparent 42%), #20242a;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.19);
-  /* 底部为类型色条（.node-color-bar）留出独立 8px，避免盖住文档流中的操作行。 */
-  padding-bottom: 8px;
+  overflow: hidden;
+  user-select: none;
+  box-shadow:
+    var(--elevation-1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
   transition:
     border-color 160ms ease,
     box-shadow 160ms ease,
@@ -258,36 +274,40 @@ body {
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.08),
     0 18px 40px rgba(0, 0, 0, 0.31);
+  transform: translateZ(0);
 }
 
+/* 类型色条：文档流内、卡片顶部 4px（呈现规范 v1.0 §8.1）。
+   不再 absolute 悬浮，高度计算无需任何 padding 补偿。 */
 .node-color-bar {
-  position: absolute;
-  z-index: 4;
-  top: 0;
-  left: 0;
-  width: 100% !important;
-  height: 8px;
-  border-radius: var(--node-radius) var(--node-radius) 0 0;
-  background: var(--node-accent, var(--brand)) !important;
+  height: 4px;
+  width: 100%;
+  flex-shrink: 0;
+  background: var(--node-accent, var(--brand));
   opacity: 0.7;
-  pointer-events: none;
 }
 
+/* 悬浮标题：位于 .node-card-wrap（卡片外上方 -34px），全宽单行布局，
+   运行按钮才能贴齐节点右上角。app.css / ui-surfaces.css 的同名定义已收敛至此。 */
 .node-header {
   position: absolute;
   z-index: 8;
-  top: -29px;
+  top: -34px;
   left: 0;
-  width: auto;
-  max-width: calc(100% - 4px);
+  width: 100%;
+  max-width: none;
   height: var(--node-header-h);
-  gap: 5px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 0 2px;
   border: 0;
   background: transparent;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
+  letter-spacing: 0.01em;
   pointer-events: auto;
 }
 
@@ -332,6 +352,15 @@ body {
   box-shadow: 0 0 0 2px #15191f;
 }
 
+/* 运行中状态灯脉冲（ui-surfaces.css 的 .node-status-running 引用同一动画）。 */
+@keyframes node-status-pulse {
+  50% {
+    box-shadow:
+      0 0 0 4px rgba(251, 191, 36, 0.16),
+      0 0 12px rgba(251, 191, 36, 0.45);
+  }
+}
+
 .node-info-btn {
   width: 20px;
   height: 20px;
@@ -347,26 +376,19 @@ body {
 }
 
 .node-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  position: relative;
   overflow: hidden;
-  border-radius: inherit;
 }
 
-.node-hover-toolbar {
-  right: 9px;
-  bottom: 9px;
-  gap: 2px;
-  padding: 3px;
-  border-color: rgba(231, 238, 247, 0.1);
-  border-radius: 8px;
-  background: rgba(20, 24, 29, 0.88);
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.26);
-  backdrop-filter: blur(10px);
-}
-
-.node-hover-toolbar button {
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
+.node-body-content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
 }
 
 /* ── Node content typography and reusable surfaces ──────────────────────── */
@@ -839,10 +861,6 @@ body {
 .media-result-collection {
   border-color: rgba(231, 238, 247, 0.08);
   background: rgba(10, 13, 17, 0.28);
-}
-
-.node-hover-toolbar {
-  border-color: rgba(231, 238, 247, 0.13);
 }
 
 .node-context-menu .node-menu-item,

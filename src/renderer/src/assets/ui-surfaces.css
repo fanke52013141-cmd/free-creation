@@ -57,7 +57,6 @@
     0 1px 3px rgba(58, 49, 38, 0.2);
 }
 
-.canvas-theme-light .node-hover-toolbar,
 .canvas-theme-light .node-media-actions,
 .canvas-theme-light .node-media-next-actions,
 .canvas-theme-light .media-result-collection {
@@ -78,12 +77,6 @@
   border-color: rgba(24, 143, 202, 0.45);
   background: rgba(66, 185, 245, 0.12);
   color: #11658e;
-}
-
-.canvas-theme-light .node-hover-toolbar {
-  border-color: rgba(42, 55, 67, 0.14);
-  background: rgba(255, 253, 250, 0.94);
-  box-shadow: 0 8px 22px rgba(58, 49, 38, 0.13);
 }
 
 .canvas-theme-light .node-media-file-actions .icon-btn,
@@ -546,11 +539,6 @@
 .run-card.failed,
 .run-card.running {
   border-left-width: 3px;
-}
-
-/* ── UI-R2: keep canvas cards quiet; details and destructive actions live elsewhere ── */
-.node-hover-toolbar {
-  display: none !important;
 }
 
 .node-card-wrap {
@@ -1431,22 +1419,6 @@
   padding: 0;
 }
 
-/* 标题完全悬浮在节点上方。基础层曾保留 auto 宽度，导致右侧运行按钮只能紧跟标题，
-   无法真正贴齐节点右上角；最终层在这里收口为全宽的单行布局。 */
-.node-header {
-  top: -34px;
-  left: 0;
-  width: 100%;
-  max-width: none;
-  height: var(--node-header-h);
-  box-sizing: border-box;
-  gap: 6px;
-  padding: 0 2px;
-  border: 0;
-  background: transparent;
-  font-size: 15px;
-}
-
 .node-header-spacer {
   display: none;
 }
@@ -1690,14 +1662,6 @@
 
 .node-hint {
   padding: 7px 9px;
-}
-
-/* 类型色只作为卡片的底部识别条：标题区保持纯净，不抢占节点名称的视觉注意力。 */
-.node-color-bar {
-  top: auto;
-  bottom: 0;
-  height: 8px;
-  border-radius: 0 0 var(--node-radius) var(--node-radius);
 }
 
 /* tldraw Arrow 仅保留为端口 binding / 持久化载体；业务线由 DataEdgeLayer 统一绘制。 */

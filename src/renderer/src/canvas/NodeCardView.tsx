@@ -321,91 +321,96 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         style={{ width: shape.props.w, height: shape.props.h }}
         onPointerDown={handleCardPointerDown}
       >
+        <div className="node-header">
+          {/* 标题行布局：左侧依次为 序号 → 图标 → 名称 → 查看输入输出说明；
+                状态灯保留在标题行，运行动作独立浮在卡片右上角，避免挤压标题。 */}
+          <span className="node-seq" title={`节点序号 ${seq}`}>
+            {seq}
+          </span>
+          <span className="node-icon" style={{ color: spec?.color, opacity: 0.82 }}>
+            {spec ? <Icon name={spec.icon} size={15} /> : <Icon name="help" size={15} />}
+          </span>
+          <div
+            ref={titleRef}
+            className={`node-title ${titleEditable ? 'editable' : ''} ${editing ? 'editing' : ''}`}
+            data-node-interactive="node-title"
+            title={shape.props.title}
+            contentEditable={editing}
+            suppressContentEditableWarning
+            spellCheck={false}
+            onDoubleClick={handleTitleDoubleClick}
+            onBlur={handleTitleBlur}
+            onPointerDown={handleTitlePointerDown}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                ;(e.currentTarget as HTMLDivElement).blur()
+              }
+            }}
+          >
+            {shape.props.title}
+          </div>
+          {/* info 按钮（查看输入输出说明）：紧跟节点名称，点击显式打开右侧面板
+                （对话节点→聊天面板，其余→契约信息窗）。 */}
+          <button
+            className="node-info-btn"
+            title={
+              shape.props.nodeType === 'chat'
+                ? '打开对话面板'
+                : shape.props.nodeType === 'director'
+                  ? '打开 3D 预演台'
+                  : '查看输入输出说明'
+            }
+            aria-label="打开节点说明"
+            onPointerDown={handleInfoOpen}
+            onClick={(e) => {
+              e.stopPropagation()
+              openNodePanel()
+            }}
+          >
+            <Icon name="document" size={16} />
+          </button>
+          {/* 文本节点字数徽标：位于“查看输入输出说明”右侧。
+                格式见 formatCharCount（N 字 / N 多字 / X.XK）。 */}
+          {shape.props.nodeType === 'text' && shape.props.text && !slashCmdForText && (
+            <span className="node-text-count">{formatCharCount(shape.props.text.length)}</span>
+          )}
+          {/* 弹性占位：运行与状态都固定在标题行的右侧。 */}
+          <span className="node-header-spacer" />
+          <span
+            className={`node-status node-status-${shape.props.exec}`}
+            style={{ background: EXEC_COLORS[shape.props.exec] ?? EXEC_COLORS.idle }}
+            title={`${statusLabel} · ${readiness.label}`}
+            aria-label={`${statusLabel} · ${readiness.label}`}
+          />
+          {selected && spec?.executor && (
+            <span className="node-action-float" aria-label="节点动作">
+              <Tooltip label="运行此节点（使用已连接的上游结果）">
+                <button
+                  className="node-run-btn"
+                  aria-label="运行此节点"
+                  disabled={shape.props.exec === 'running' || !project}
+                  onPointerDown={(event) => stopEventPropagation(event)}
+                  onClick={(event) => {
+                    stopEventPropagation(event)
+                    if (project) void runNodeManually(editor, project.id, providers, shape.id)
+                  }}
+                >
+                  <Icon name="play" size={14} />
+                </button>
+              </Tooltip>
+            </span>
+          )}
+        </div>
         <div
           className={`node-card type-${shape.props.nodeType}`}
           data-node-type={shape.props.nodeType}
         >
-          <div className="node-header">
-            {/* 标题行布局：左侧依次为 序号 → 图标 → 名称 → 查看输入输出说明；
-                状态灯保留在标题行，运行动作独立浮在卡片右上角，避免挤压标题。 */}
-            <span className="node-seq" title={`节点序号 ${seq}`}>
-              {seq}
-            </span>
-            <span className="node-icon" style={{ color: spec?.color, opacity: 0.82 }}>
-              {spec ? <Icon name={spec.icon} size={15} /> : <Icon name="help" size={15} />}
-            </span>
-            <div
-              ref={titleRef}
-              className={`node-title ${titleEditable ? 'editable' : ''} ${editing ? 'editing' : ''}`}
-              data-node-interactive="node-title"
-              title={shape.props.title}
-              contentEditable={editing}
-              suppressContentEditableWarning
-              spellCheck={false}
-              onDoubleClick={handleTitleDoubleClick}
-              onBlur={handleTitleBlur}
-              onPointerDown={handleTitlePointerDown}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault()
-                  ;(e.currentTarget as HTMLDivElement).blur()
-                }
-              }}
-            >
-              {shape.props.title}
-            </div>
-            {/* info 按钮（查看输入输出说明）：紧跟节点名称，点击显式打开右侧面板
-                （对话节点→聊天面板，其余→契约信息窗）。 */}
-            <button
-              className="node-info-btn"
-              title={
-                shape.props.nodeType === 'chat'
-                  ? '打开对话面板'
-                  : shape.props.nodeType === 'director'
-                    ? '打开 3D 预演台'
-                    : '查看输入输出说明'
-              }
-              aria-label="打开节点说明"
-              onPointerDown={handleInfoOpen}
-              onClick={(e) => {
-                e.stopPropagation()
-                openNodePanel()
-              }}
-            >
-              <Icon name="document" size={16} />
-            </button>
-            {/* 文本节点字数徽标：位于“查看输入输出说明”右侧。
-                格式见 formatCharCount（N 字 / N 多字 / X.XK）。 */}
-            {shape.props.nodeType === 'text' && shape.props.text && !slashCmdForText && (
-              <span className="node-text-count">{formatCharCount(shape.props.text.length)}</span>
-            )}
-            {/* 弹性占位：运行与状态都固定在标题行的右侧。 */}
-            <span className="node-header-spacer" />
-            <span
-              className={`node-status node-status-${shape.props.exec}`}
-              style={{ background: EXEC_COLORS[shape.props.exec] ?? EXEC_COLORS.idle }}
-              title={`${statusLabel} · ${readiness.label}`}
-              aria-label={`${statusLabel} · ${readiness.label}`}
-            />
-            {selected && spec?.executor && (
-              <span className="node-action-float" aria-label="节点动作">
-                <Tooltip label="运行此节点（使用已连接的上游结果）">
-                  <button
-                    className="node-run-btn"
-                    aria-label="运行此节点"
-                    disabled={shape.props.exec === 'running' || !project}
-                    onPointerDown={(event) => stopEventPropagation(event)}
-                    onClick={(event) => {
-                      stopEventPropagation(event)
-                      if (project) void runNodeManually(editor, project.id, providers, shape.id)
-                    }}
-                  >
-                    <Icon name="play" size={14} />
-                  </button>
-                </Tooltip>
-              </span>
-            )}
-          </div>
+          {/* 顶部类型色条：文档流内 4px（呈现规范 v1.0 §8.1），高度计算无 padding 补偿。 */}
+          <div
+            className="node-color-bar"
+            style={{ ['--node-accent' as string]: spec?.color ?? '#42b9f5' }}
+          />
           <div ref={bodyRef} className="node-body">
             {!hasDedicatedInputSurface && <ConnectedInputPreview editor={editor} shape={shape} />}
             <div className="node-body-content">
@@ -416,11 +421,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               )}
             </div>
           </div>
-          {/* 底部颜色条：固定像素、只表达节点类型，不占用标题和正文的可读空间。 */}
-          <div
-            className="node-color-bar"
-            style={{ ['--node-accent' as string]: spec?.color ?? '#42b9f5' }}
-          />
           {activeExecution && spec?.executor && (
             <div className="node-execution-overlay" role="status" aria-live="polite">
               <span className="node-execution-spinner" aria-hidden="true">
