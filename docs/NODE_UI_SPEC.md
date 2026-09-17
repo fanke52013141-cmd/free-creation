@@ -1,8 +1,11 @@
 # 节点 UI 统一规范（Node UI Spec）
 
-> 状态：设计稿 v2（2026-09-18），待评审后实施。
+> 状态：v1.1（2026-09-18），已拍板实施；P-1/P0/P2 已落地（见 §15 实施记录）。
 > v2 增补：§11 说明文字精简、§12 引用图片缩略图形态、§13 颜色条外置、
 > §14 CSS 层叠收敛（修复 v1 遗留的磨砂覆盖 bug）。
+> v1.1 集成决定（用户 v1.0 规范评审拍板）：颜色条采用方案 A（文档流内顶部 4px）；
+> 引用缩略图 48×36 无名称文字，hover 全貌保留；高度档位制 260/320/380/440；
+> NODE_UI Token 单一真值；端口 tooltip 只留「名称 · 类型」。
 > 适用范围：画布上全部 23 个活跃节点。本规范与 `NODE_CONTRACT_SPEC.md` 平行：
 > 契约规范管端口与数据，本规范管视觉结构与操作布局。
 
@@ -341,3 +344,38 @@ app.css 与 ui-foundation.css 双重定义，后者覆盖前者；v1 阶段 4 �
 4. `ui-foundation.test.ts` 增加门禁：app.css 不得再包含 `.node-card {`、
    `.node-color-bar` 定义（防止层叠债务回潮）；
 5. 本节作为 P0 实施的第一步（后续所有视觉改动都建立在单一权威层上）。
+
+## 15. 实施记录（v1.1，2026-09-18）
+
+用户对 v2 规范评审后拍板的关键决定（覆盖/细化上文相应章节）：
+
+| 决定 | 采纳内容 |
+|------|----------|
+| 颜色条（§8/§13） | **方案 A**：文档流内、卡片顶部 4px；删除 absolute 悬浮与 `padding-bottom: 8px` 让位补偿 |
+| 引用缩略图（§12） | **48×36 无名称文字**；hover 全貌浮层保留（300ms 延时、portal 到 body、不拦截指针）；点击进入媒体预览 |
+| 高度体系（§3） | 档位制 260/320/380/440；超 440 由 node-body 内部滚动承载；1200 仅作旧项目迁移保护值 |
+| 尺寸真值（§24A） | 新增 `canvas/node-ui-tokens.ts`（NODE_UI + resolveNodeHeight），NodeCardShape 与 Registry 同源 |
+| 文案（§11） | 端口 tooltip 只留「名称 · 类型」；运行 tooltip→「运行节点」；教学句（按住圆点/批量连接/双击预览）删除 |
+| 折叠（§17） | 引用超过约两行（12 项）折叠为 +N，展开后由 body 滚动承载 |
+
+三个已落地提交：
+
+1. **P-1 `1c7e7b6` CSS 层叠收敛**：ui-foundation.css 成为 `.node-*` 外壳唯一
+   权威层；修复阶段 4 磨砂被不透明背景覆盖、从未生效的 bug；色条改文档流顶部；
+   `.node-hover-toolbar` 死代码三处全删；NodeCardView DOM 调整（标题移到
+   .node-card-wrap、色条为卡片首子元素）；门禁防回潮。
+2. **P0 `894b63c` 高度档位制 + 单一真值**：NODE_UI Token 与 resolveNodeHeight
+   档位函数；NodeCardShape 默认 340×200 → 260（消除与 Registry 双真值）；
+   fitHeight 改为只升不降的档位跳档；node-body overflow-y:auto；
+   教学文案删除；`MAX_AUTO_NODE_HEIGHT` 降级为 legacyGuard 派生。
+3. **P2 `0c4086d` 图片引用缩略图**：ConnectedInputPreview 重写——图片引用
+   48×36 缩略图卡（无名称、序号角标、tooltip 含来源）、hover 全貌浮层、
+   点击预览、+N 折叠；删「已连接输入」标题行；非图片引用保持单行 chip。
+
+后续（未实施，另立阶段）：
+
+- **P1 footerActions 协议**：spec 声明 `(ctx) => NodeFooterAction[]`，
+  41 处按钮迁移与 More Menu（§5–§7）；
+- **@ 引用**（§12.3）：正文中 `@` 弹出候选、引用仅作可见标记，
+  不隐式产生端口数据流；
+- **P3**：Result Collection 统一（§19）、媒体行为对齐（§18）、manual max 720 评估。
