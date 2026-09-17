@@ -1241,12 +1241,18 @@ select:focus-visible,
   flex-direction: column;
   width: 100%;
   height: 100%;
-  background: var(--card);
-  border: 1px solid var(--line);
+  /* 磨砂玻璃：半透明底 + backdrop 模糊透出画布网格与背后内容，
+     实线细边与顶部内高光构成玻璃厚度；不再是不透明色块。 */
+  background: color-mix(in srgb, var(--card) 74%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  backdrop-filter: blur(14px) saturate(1.4);
+  border: 1px solid color-mix(in srgb, var(--txt) 10%, transparent);
   border-radius: var(--node-radius);
   overflow: hidden;
   user-select: none;
-  box-shadow: var(--elevation-1);
+  box-shadow:
+    var(--elevation-1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
   transition:
     box-shadow 0.2s ease,
     border-color 0.2s ease;

@@ -21,4 +21,29 @@ describe('统一画布视觉基础', () => {
       readFileSync(resolve(root, 'src/renderer/src/assets/ui-surfaces.css'), 'utf8')
     ).toContain('.app-tooltip')
   })
+
+  it('节点卡片与端口点是磨砂玻璃材质（半透明底 + backdrop 模糊 + 内高光）', () => {
+    // 卡片：不再是不透明色块；透出画布网格与背后内容。
+    expect(legacy).toMatch(/\.node-card\s*\{[\s\S]*?backdrop-filter:\s*blur\(14px\)/)
+    expect(legacy).toMatch(/\.node-card\s*\{[\s\S]*?inset 0 1px 0 rgba\(255, 255, 255, 0\.07\)/)
+    expect(legacy).not.toMatch(/\.node-card\s*\{[^}]*background:\s*var\(--card\);/)
+    // 端口：18px 命中区不变，视觉收缩为 10px 玻璃珠（::after），不再是大号虚线圈。
+    expect(foundation).toMatch(/\.port-dot::after\s*\{[\s\S]*?width:\s*10px;/)
+    expect(foundation).toMatch(/\.port-dot::after\s*\{[\s\S]*?backdrop-filter:\s*blur\(5px\)/)
+    expect(foundation).not.toMatch(/\.port-dot\s*\{[\s\S]*?border:\s*2px dashed/)
+    // 拖线光标是镜面玻璃珠：端口色底 + 径向渐变高光。
+    expect(foundation).toContain('.conn-cursor-glass')
+    const connectionLayer = readFileSync(
+      resolve(root, 'src/renderer/src/canvas/ConnectionLayer.tsx'),
+      'utf8'
+    )
+    expect(connectionLayer).toContain('radialGradient')
+    expect(connectionLayer).toContain('conn-cursor-glass')
+    // 浅色主题有对应玻璃变体。
+    const surfaces = readFileSync(resolve(root, 'src/renderer/src/assets/ui-surfaces.css'), 'utf8')
+    expect(surfaces).toMatch(
+      /\.canvas-theme-light \.node-card\s*\{[\s\S]*?backdrop-filter:\s*blur\(14px\)/
+    )
+    expect(surfaces).toMatch(/\.canvas-theme-light \.port-dot::after\s*\{/)
+  })
 })

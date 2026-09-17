@@ -449,7 +449,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               className={`port-dot in input-${state?.kind ?? 'optional'} ${isConnected ? 'connected' : 'unconnected'} ${isAnchor ? 'ok' : draft && draft.from.direction !== 'in' ? (ok ? 'ok' : 'dim') : ''}`}
               style={{
                 top: inY[i] - NODE_PORT_SIZE / 2,
-                borderColor: PORT_COLORS[p.type],
                 ['--pc' as string]: PORT_COLORS[p.type]
               }}
               title={`${portSummary(p, '输入')} · ${state?.label ?? '未连接'} · 按住圆点可反向拖线寻找上游`}
@@ -484,7 +483,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               className={`port-dot out ${hasOutput ? 'has-output' : 'no-output'} ${isConnected ? 'connected' : 'unconnected'} ${isSource && draft?.from.portId === p.id && draft.from.direction !== 'in' ? 'ok' : ''} ${draftIn ? (okUpstream ? 'ok' : 'dim') : ''}`}
               style={{
                 top: outY[i] - NODE_PORT_SIZE / 2,
-                borderColor: PORT_COLORS[p.type],
                 ['--pc' as string]: PORT_COLORS[p.type]
               }}
               title={`${portSummary(p, '输出')} · ${hasOutput ? '当前输出可用' : '当前尚无可用输出'} · 按住圆点拖出连线；多选同类节点时会批量连接`}

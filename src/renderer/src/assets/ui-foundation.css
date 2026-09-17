@@ -458,6 +458,8 @@ body {
 }
 
 /* ── Ports: meaningful but quiet until an interaction needs them ───────── */
+/* 18px 保留为命中区（CanvasEditor 捕获代理按 rect 半径命中）；视觉收缩为
+   ::after 的 10px 磨砂玻璃珠 + 5px 色芯，拖线寻找端口时不再是大号虚线圈。 */
 .port-dot {
   position: absolute;
   width: 18px;
@@ -467,14 +469,33 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px dashed;
-  border-radius: 50%;
-  background: color-mix(in srgb, #15191f 82%, var(--pc, #42b9f5));
+  border: none;
+  background: transparent;
+  cursor: crosshair;
   opacity: 1;
+  transition: opacity 140ms ease;
+}
+
+.port-dot::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  /* 磨砂玻璃珠：半透明底 + 端口色描边 + 顶部内高光，能透出背后的画布内容 */
+  background: color-mix(in srgb, var(--pc, #42b9f5) 26%, rgba(13, 17, 23, 0.6));
+  border: 1px solid color-mix(in srgb, var(--pc, #42b9f5) 62%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 1px 4px rgba(0, 0, 0, 0.38);
+  -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
   transition:
     transform 140ms ease,
-    box-shadow 140ms ease,
-    opacity 140ms ease;
+    box-shadow 140ms ease;
 }
 
 .port-dot.connected {
@@ -482,27 +503,19 @@ body {
 }
 
 .port-dot.unconnected {
-  opacity: 0.45;
+  opacity: 0.5;
 }
 
 .node-card-wrap:hover .port-dot.unconnected {
-  opacity: 0.7;
-}
-
-.port-dot::before {
-  inset: -5px;
-  border: 1px dashed var(--pc, #42b9f5);
+  opacity: 0.78;
 }
 
 .port-dot-inner {
   width: 5px;
   height: 5px;
-  opacity: 0.68;
-}
-
-.port-dot.in,
-.port-dot.out {
-  margin-top: 0;
+  border-radius: 50%;
+  opacity: 0.75;
+  z-index: 1;
 }
 
 .port-dot.in {
@@ -511,36 +524,39 @@ body {
 
 .port-dot.out {
   right: -25px;
-  cursor: crosshair;
 }
 
 .port-dot.out:hover,
 .port-dot.in:hover,
 .port-dot.ok {
-  transform: scale(1.22);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--pc, #42b9f5) 16%, transparent);
   opacity: 1 !important;
 }
 
-.port-dot.out:hover::before,
-.port-dot.in.ok::before {
-  opacity: 0.58;
-  animation: none;
+.port-dot.out:hover::after,
+.port-dot.in:hover::after,
+.port-dot.ok::after {
+  transform: translate(-50%, -50%) scale(1.3);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 0 0 3px color-mix(in srgb, var(--pc, #42b9f5) 18%, transparent),
+    0 2px 8px rgba(0, 0, 0, 0.45);
 }
 
 .port-dot.dim {
   opacity: 0.16;
 }
 
-.port-dot.input-missing {
+/* 缺失必填输入：虚线描边保留“缺口”语义，材质仍是玻璃珠 */
+.port-dot.input-missing::after {
   border-style: dashed;
+}
+
+.port-dot.input-missing {
   opacity: 1;
 }
 
 .port-dot.has-output .port-dot-inner {
-  width: 5px;
-  height: 5px;
-  opacity: 0.92;
+  opacity: 0.95;
 }
 
 .port-dot.no-output .port-dot-inner {
@@ -581,13 +597,20 @@ body {
 }
 
 .conn-overlay .conn-start {
-  stroke: #15191f;
+  stroke: rgba(13, 17, 23, 0.85);
   stroke-width: 1.5px;
 }
 
+/* 拖线光标：端口色底 + 白描边，叠加 conn-cursor-glass 径向渐变形成镜面玻璃珠 */
 .conn-overlay .conn-cursor {
-  fill-opacity: 0.32;
-  stroke-width: 1.5px;
+  fill-opacity: 0.9;
+  stroke: rgba(255, 255, 255, 0.92);
+  stroke-width: 1.2px;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.4));
+}
+
+.conn-overlay .conn-cursor-glass {
+  mix-blend-mode: screen;
 }
 
 /* tldraw Arrow 形状仅是端口 binding / 持久化载体，已被 ui-surfaces.css 整体隐藏

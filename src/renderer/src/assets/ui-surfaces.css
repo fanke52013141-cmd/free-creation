@@ -26,8 +26,13 @@
 
 .canvas-theme-light .node-card {
   border-color: rgba(34, 48, 61, 0.16);
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(250, 247, 240, 0.8)), #fffdfa;
-  box-shadow: 0 12px 28px rgba(58, 49, 38, 0.12);
+  /* 浅色米黄画布上的磨砂玻璃：暖白半透明底，顶部内高光更亮 */
+  background: rgba(252, 249, 243, 0.72);
+  -webkit-backdrop-filter: blur(14px) saturate(1.25);
+  backdrop-filter: blur(14px) saturate(1.25);
+  box-shadow:
+    0 12px 28px rgba(58, 49, 38, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 
 .canvas-theme-light .node-title,
@@ -39,9 +44,17 @@
 .canvas-theme-light .node-card textarea,
 .canvas-theme-light .node-card input,
 .canvas-theme-light .node-card select,
-.canvas-theme-light .node-media,
-.canvas-theme-light .port-dot {
+.canvas-theme-light .node-media {
   background: #f7f3ec;
+}
+
+/* 浅色主题下的端口玻璃珠：暖白玻璃底，内高光更亮 */
+.canvas-theme-light .port-dot::after {
+  background: color-mix(in srgb, var(--pc, #42b9f5) 22%, rgba(255, 253, 250, 0.62));
+  border-color: color-mix(in srgb, var(--pc, #42b9f5) 58%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 1px 3px rgba(58, 49, 38, 0.2);
 }
 
 .canvas-theme-light .node-hover-toolbar,
