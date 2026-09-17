@@ -4,7 +4,11 @@ import { allNodeTypes, getNodeType, NODE_CATEGORIES } from '../nodes/registry'
 import type { NodeCategoryId } from '../nodes/registry'
 import type { ConnectionFrom } from '../stores/connection'
 import { Icon } from '../components/Icon'
-import { compatibleNodeCreateChoices, type NodeCreateChoice } from './node-create-options'
+import {
+  compatibleNodeCreateChoices,
+  compatibleUpstreamCreateChoices,
+  type NodeCreateChoice
+} from './node-create-options'
 
 interface NodeCreateMenuProps {
   x: number
@@ -17,7 +21,7 @@ interface NodeCreateMenuProps {
   pasteCount?: number
   onPaste?: () => void
   onClose: () => void
-  /** 从输出端口拉线到空白时，只展示能接收该端口的节点。 */
+  /** 拉线到空白时，只展示能接收该端口的节点（out）或可提供该输入的上游（in）。 */
   source?: ConnectionFrom | null
 }
 
@@ -82,8 +86,11 @@ export function NodeCreateMenu({
   // and intentionally does not affect the primary menu's viewport clamping.
   const menuH = menuHeight || 420
   const top = Math.max(12, Math.min(y, window.innerHeight - menuH - 12))
+  const upstream = source?.direction === 'in'
   const allChoices: NodeCreateChoice[] = source
-    ? compatibleNodeCreateChoices(source)
+    ? upstream
+      ? compatibleUpstreamCreateChoices(source)
+      : compatibleNodeCreateChoices(source)
     : allNodeTypes().map((spec) => ({ type: spec.type }))
 
   const availableCategories = NODE_CATEGORIES.filter((cat) =>
@@ -153,7 +160,11 @@ export function NodeCreateMenu({
                   {choice.targetPort.schema
                     ? ` · ${choice.targetPort.schema.id}@${choice.targetPort.schema.version}`
                     : ''}
-                  {choice.targetPort.cardinality === 'many' ? ' · 可接多条' : ' · 单条输入'}
+                  {upstream
+                    ? ' · 输出端口'
+                    : choice.targetPort.cardinality === 'many'
+                      ? ' · 可接多条'
+                      : ' · 单条输入'}
                 </small>
               )}
             </span>
@@ -170,7 +181,11 @@ export function NodeCreateMenu({
     <div className="node-menu" ref={ref} style={{ left, top }}>
       <div className="node-menu-main" style={{ width: primaryWidth }}>
         <div className="node-menu-title">
-          {source ? `可连接 ${source.portType} 输出` : '新建节点'}
+          {source
+            ? upstream
+              ? `可提供 ${source.portType} 输入的上游`
+              : `可连接 ${source.portType} 输出`
+            : '新建节点'}
         </div>
         {showPaste && (
           <>

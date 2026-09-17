@@ -30,6 +30,7 @@ import {
   deriveGraph,
   tryAutoConnectNearby,
   tryConnect,
+  tryConnectFromInput,
   createEdge
 } from './graph'
 import { mergeUnsavedLocalRecords, countRestorableRecords } from './external-reload'
@@ -863,16 +864,21 @@ export function CanvasEditor({
     return () => window.removeEventListener('keydown', onKey, { capture: true })
   }, [copySelectionToClipboard, pasteClipboardAt])
 
-  // 消费「拉线到空白」的待连线；返回是否成功建线（失败也要打撤销分段点）
+  // 消费「拉线到空白」的待连线；返回是否成功建线（失败也要打撤销分段点）。
+  // out 方向：新建节点作为目标，pending 指向其目标输入；
+  // in 方向：新建节点作为上游，pending 指向已存在的输入，新节点需解析源输出。
   const connectPendingTo = (
     editor: Editor,
     targetId: TLShapeId,
-    preferredTargetPortId?: string
+    preferredPortId?: string
   ): boolean => {
     const pending = pendingConnectRef.current
     pendingConnectRef.current = null
     if (!pending) return false
-    const error = tryConnect(editor, pending, targetId, undefined, preferredTargetPortId)
+    const error =
+      pending.direction === 'in'
+        ? tryConnectFromInput(editor, pending, targetId, undefined, preferredPortId)
+        : tryConnect(editor, pending, targetId, undefined, preferredPortId)
     if (error) {
       toast(`未连线：${error}`)
       return false
@@ -1417,10 +1423,19 @@ export function CanvasEditor({
     })
   }
 
-  // 连线松手：命中节点则校验连线；落在空白则暂存来源并弹创建菜单（新节点自动连线）
+  // 连线松手：命中节点则校验连线；落在空白则暂存来源并弹创建菜单（新节点自动连线）。
+  // out 方向：找目标输入；in 方向（从输入口反向拖出）：找上游输出。
   const handleConnectionFinish = useCallback((r: ConnectionFinish): void => {
     const editor = editorRef.current
     if (!editor) return
+    const upstreamDrag = r.from.direction === 'in'
+    const connectDropped = (
+      targetId: TLShapeId,
+      pagePt: { x: number; y: number }
+    ): string | null =>
+      upstreamDrag
+        ? tryConnectFromInput(editor, r.from, targetId, pagePt)
+        : tryConnect(editor, r.from, targetId, pagePt)
     const pagePt = editor.screenToPage(r.screenPt)
     const target = editor.getShapeAtPoint(pagePt, {
       hitInside: true,
@@ -1429,14 +1444,16 @@ export function CanvasEditor({
       filter: (s) => s.type === 'node-card' && s.id !== r.from.shapeId && !s.isLocked
     })
     if (target) {
-      const error = tryConnect(editor, r.from, target.id, pagePt)
+      const error = connectDropped(target.id, pagePt)
       if (error) toast(error)
       else {
         const batchCount = r.from.memberIds?.length ?? 0
         if (batchCount > 1) toast(`已批量连接 ${batchCount} 个节点`)
         // 落点端口与实际接入端口不一致（dim 端口磁吸改连）时，明确告知用户。
         else {
-          const notice = connectionRetargetNotice(editor, r.from, target.id, pagePt)
+          const notice = upstreamDrag
+            ? null
+            : connectionRetargetNotice(editor, r.from, target.id, pagePt)
           if (notice) toast(notice)
         }
       }
@@ -1458,13 +1475,15 @@ export function CanvasEditor({
       const dx = Math.max(bounds ? bounds.x - pagePt.x : 0, 0, bounds ? pagePt.x - bounds.maxX : 0)
       const dy = Math.max(bounds ? bounds.y - pagePt.y : 0, 0, bounds ? pagePt.y - bounds.maxY : 0)
       if (bounds && Math.hypot(dx, dy) <= 56 / zoom) {
-        const error = tryConnect(editor, r.from, candidate.id, pagePt)
+        const error = connectDropped(candidate.id, pagePt)
         if (error) toast(error)
         else {
           const batchCount = r.from.memberIds?.length ?? 0
           if (batchCount > 1) toast(`已批量连接 ${batchCount} 个节点`)
           else {
-            const notice = connectionRetargetNotice(editor, r.from, candidate.id, pagePt)
+            const notice = upstreamDrag
+              ? null
+              : connectionRetargetNotice(editor, r.from, candidate.id, pagePt)
             toast(notice ?? '已吸附连接到已选节点')
           }
         }

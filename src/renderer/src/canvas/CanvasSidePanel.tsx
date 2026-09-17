@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createShapeId, type Editor, type TLShapeId } from 'tldraw'
 import type { MediaAsset } from '@shared/types'
-import { getNodeType, portCompatible } from '../nodes/registry'
+import { getNodeType } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
 import {
   buildRunIndex,
@@ -21,7 +21,7 @@ import {
   useWorkflowStore,
   type WorkflowTemplate
 } from '../stores/workflow'
-import { createEdge } from './graph'
+import { createEdge, portPairCompatible } from './graph'
 import { markUndoPoint } from './history'
 import { toast } from '../stores/toast'
 import { useHistorySnapshots, type HistorySnapshot } from '../stores/history-snapshots'
@@ -400,7 +400,7 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
             ? fromSpec.ports.out[0]
             : undefined
         const compatibleTargets = fromPort
-          ? (toSpec?.ports.in.filter((port) => portCompatible(port.type, fromPort.type)) ?? [])
+          ? (toSpec?.ports.in.filter((port) => portPairCompatible(fromPort, port)) ?? [])
           : []
         const toPort = edge.toPort
           ? compatibleTargets.find((port) => port.id === edge.toPort)

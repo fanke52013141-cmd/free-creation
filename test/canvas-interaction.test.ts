@@ -35,6 +35,10 @@ const groupOutlineSource = readFileSync(
   'utf8'
 )
 const graphSource = readFileSync(resolve(process.cwd(), 'src/renderer/src/canvas/graph.ts'), 'utf8')
+const canvasSidePanelSource = readFileSync(
+  resolve(process.cwd(), 'src/renderer/src/canvas/CanvasSidePanel.tsx'),
+  'utf8'
+)
 const nodeCreateOptionsSource = readFileSync(
   resolve(process.cwd(), 'src/renderer/src/canvas/node-create-options.ts'),
   'utf8'
@@ -139,6 +143,33 @@ describe('画布创建节点交互', () => {
     expect(graphSource).toContain("port.cardinality === 'many'")
     expect(graphSource).toContain('批量连接会形成循环，未创建任何连线')
     expect(nodeCreateOptionsSource).toContain("port.cardinality === 'many'")
+  })
+
+  it('连线可以从输入端口反向拖出：方向由 ConnectionFrom.direction 声明，建边仍保持 out→in', () => {
+    // 输入端口也具备 pointerdown 手势，拖出的草稿带 direction: 'in'。
+    expect(nodeCardViewSource).toContain("direction: 'in'")
+    expect(nodeCardViewSource).toContain('按住圆点可反向拖线寻找上游')
+    // 松手与“拉线到空白新建节点”都按方向分派；反向建立的上游边仍是正向数据流。
+    expect(canvasEditorSource).toContain('tryConnectFromInput')
+    expect(canvasEditorSource).toContain("r.from.direction === 'in'")
+    expect(canvasEditorSource).toContain("pending.direction === 'in'")
+    expect(graphSource).toContain('export function tryConnectFromInput')
+    expect(graphSource).toContain('不存在反向数据流')
+    // 反向拖到空白时创建菜单提供的是“可作上游”的节点（按输出端口匹配）。
+    expect(nodeCreateOptionsSource).toContain('export function compatibleUpstreamCreateChoices')
+    expect(nodeCreateOptionsSource).toContain('portPairCompatible(port, asPort)')
+  })
+
+  it('端口兼容判断统一走 portPairCompatible(out, in)，不再出现参数顺序写反', () => {
+    // 回归门禁：resolveTargetInputPort 曾把参数写成 (in, out)，导致 iteration→json
+    // 高亮允许但建线拒绝。统一谓词后，任何新增判断点都必须复用同一函数。
+    expect(graphSource).toContain('export function portPairCompatible')
+    expect(graphSource).toContain('参数方向固定为 (out, in)')
+    // 旧的直接调用点应全部消失（改经 portPairCompatible）。
+    expect(graphSource).not.toMatch(/portCompatible\(port\.type, sourcePort\.type\)/)
+    expect(graphSource).not.toMatch(/portCompatible\(aimed\.type, sourcePort\.type\)/)
+    expect(nodeCardViewSource).not.toContain('portCompatible(source.portType, target.type)')
+    expect(canvasSidePanelSource).not.toContain('portCompatible(port.type, fromPort.type)')
   })
 
   it('导入图片保留资产名称作为图片节点名称，并将过长标题限制在固定操作区前', () => {

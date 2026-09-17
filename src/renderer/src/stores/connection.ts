@@ -8,6 +8,12 @@ export interface ConnectionFrom {
   portId: string
   portType: PortType
   schema?: PortSchemaRef
+  /**
+   * 拖拽方向：缺省 'out'（从输出端口拖出，落点是目标输入）；
+   * 'in' 表示从输入端口反向拖出，落点应是某个上游输出。
+   * 建出的边永远保持 out→in 数据流方向，反向只影响找端口的解析方式。
+   */
+  direction?: 'out' | 'in'
   /** 多选资产以一个临时“共有输出”拖出时，包含全部实际源节点。 */
   memberIds?: TLShapeId[]
   /**

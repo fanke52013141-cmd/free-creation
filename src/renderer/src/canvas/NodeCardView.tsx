@@ -6,16 +6,15 @@ import {
   getNodePorts,
   getNodeType,
   MAX_AUTO_NODE_HEIGHT,
-  portCompatible,
   portOffsets,
   PORT_COLORS
 } from '../nodes/registry'
-import type { PortDecl } from '@shared/types'
-import { nodeSchemasCompatible } from '@shared/node-schemas'
+import type { PortDecl, PortSchemaRef, PortType } from '@shared/types'
 import { useConnectionStore } from '../stores/connection'
 import { useNodePanelStore } from '../stores/nodePanel'
 import { beginConnectionDrag } from './connection-drag'
 import { batchConnectionFromSelection } from './batch-connection'
+import { portPairCompatible } from './graph'
 import { markUndoPoint } from './history'
 import type { NodeCardShape } from './NodeCardShape'
 import { Icon } from '../components/Icon'
@@ -52,18 +51,22 @@ function formatCharCount(n: number): string {
   return `${n} 字`
 }
 
+/**
+ * 拖线草稿与候选端口的兼容判断。
+ *
+ * - out 方向：source 是拖出的输出端口，target 是候选输入端口；
+ * - in 方向：source 是候选输出端口，target 是拖出的输入端口。
+ * 两种方向都统一走 portPairCompatible(out, in)，由函数签名固定参数顺序。
+ */
 function canAttachPort(
-  source: { portType: PortDecl['type']; schema?: PortDecl['schema'] },
-  target: PortDecl
+  source: { portType: PortType; schema?: PortSchemaRef },
+  target: PortDecl,
+  direction: 'out' | 'in' = 'out'
 ): boolean {
-  return (
-    portCompatible(source.portType, target.type) &&
-    !(
-      source.portType === 'json' &&
-      target.type === 'json' &&
-      !nodeSchemasCompatible(source.schema, target.schema)
-    )
-  )
+  const asPort = { type: source.portType, schema: source.schema }
+  return direction === 'out'
+    ? portPairCompatible(asPort, target)
+    : portPairCompatible(target, asPort)
 }
 
 export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Element {
@@ -430,35 +433,55 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             </div>
           )}
         </div>
-        {/* 输入端口（左侧）：拖线时按类型兼容高亮 */}
+        {/* 输入端口（左侧）：out 方向拖线时按类型兼容高亮；按住可反向拖线寻找上游输出 */}
         {inPorts.map((p, i) => {
-          const ok = draft && !isSource && canAttachPort(draft.from, p)
+          const draftIn = draft && draft.from.direction === 'in' ? draft.from : null
+          const isAnchor = draftIn && draftIn.shapeId === shape.id && draftIn.portId === p.id
+          const ok =
+            draft && draft.from.direction !== 'in'
+              ? !isSource && canAttachPort(draft.from, p)
+              : false
           const state = inputReadiness.get(p.id)
           const isConnected = (readinessState.incomingCounts?.get(p.id) ?? 0) > 0
           return (
             <span
               key={p.id}
-              className={`port-dot in input-${state?.kind ?? 'optional'} ${isConnected ? 'connected' : 'unconnected'} ${draft ? (ok ? 'ok' : 'dim') : ''}`}
+              className={`port-dot in input-${state?.kind ?? 'optional'} ${isConnected ? 'connected' : 'unconnected'} ${isAnchor ? 'ok' : draft && draft.from.direction !== 'in' ? (ok ? 'ok' : 'dim') : ''}`}
               style={{
                 top: inY[i] - NODE_PORT_SIZE / 2,
                 borderColor: PORT_COLORS[p.type],
                 ['--pc' as string]: PORT_COLORS[p.type]
               }}
-              title={`${portSummary(p, '输入')} · ${state?.label ?? '未连接'}`}
+              title={`${portSummary(p, '输入')} · ${state?.label ?? '未连接'} · 按住圆点可反向拖线寻找上游`}
+              onPointerDown={(e) => {
+                stopEventPropagation(e)
+                beginConnectionDrag(
+                  {
+                    shapeId: shape.id,
+                    portId: p.id,
+                    portType: p.type,
+                    schema: p.schema,
+                    direction: 'in'
+                  },
+                  { x: e.clientX, y: e.clientY }
+                )
+              }}
             >
               <span className="port-dot-inner" style={{ background: PORT_COLORS[p.type] }} />
             </span>
           )
         })}
 
-        {/* 输出端口：与输入端口同样是纯圆形，按住后拖出连线。 */}
+        {/* 输出端口：与输入端口同样是纯圆形，按住后拖出连线；in 方向拖线时反向高亮。 */}
         {outPorts.map((p, i) => {
           const hasOutput = Boolean(spec?.projectOutputs?.(shape)[p.id])
           const isConnected = (readinessState.outgoingCounts?.get(p.id) ?? 0) > 0
+          const draftIn = draft && draft.from.direction === 'in' ? draft.from : null
+          const okUpstream = draftIn && !isSource ? canAttachPort(draftIn, p, 'in') : false
           return (
             <span
               key={p.id}
-              className={`port-dot out ${hasOutput ? 'has-output' : 'no-output'} ${isConnected ? 'connected' : 'unconnected'} ${isSource && draft?.from.portId === p.id ? 'ok' : ''}`}
+              className={`port-dot out ${hasOutput ? 'has-output' : 'no-output'} ${isConnected ? 'connected' : 'unconnected'} ${isSource && draft?.from.portId === p.id && draft.from.direction !== 'in' ? 'ok' : ''} ${draftIn ? (okUpstream ? 'ok' : 'dim') : ''}`}
               style={{
                 top: outY[i] - NODE_PORT_SIZE / 2,
                 borderColor: PORT_COLORS[p.type],

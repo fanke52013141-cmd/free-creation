@@ -6,7 +6,8 @@
 // 固化允许与拒绝的连线矩阵，防止端口类型或 Schema 变化悄悄改变连线行为。
 import { describe, it, expect, beforeAll } from 'vitest'
 import { registerAllNodeTypes } from './helpers/registerNodes'
-import { getNodeType, portCompatible } from '@renderer/nodes/registry'
+import { getNodeType, portCompatible, allNodeTypes } from '@renderer/nodes/registry'
+import { portPairCompatible } from '@renderer/canvas/graph'
 import { nodeSchemasCompatible } from '@shared/node-schemas'
 import type { NodeTypeId, PortType } from '@shared/types'
 
@@ -199,4 +200,56 @@ describe('端口类型兼容矩阵完整性', () => {
       expect(portCompatible(a, b)).toBe(expected(a, b))
     }
   )
+})
+
+describe('端口对兼容 portPairCompatible（方向固定 out→in）', () => {
+  // 回归：历史上 resolveTargetInputPort 曾把参数写反（(in, out)），导致
+  // iterate.out-item（iteration）拖到 JSON 输入时高亮/菜单允许但实际建线被拒。
+  // 真值：iteration 只能作为输出注入 json 输入；反向不存在。
+  it('iteration 输出 → json 输入允许；json 输出 → iteration 输入拒绝', () => {
+    expect(portPairCompatible({ type: 'iteration' }, { type: 'json' })).toBe(true)
+    expect(portPairCompatible({ type: 'json' }, { type: 'iteration' })).toBe(false)
+  })
+
+  it('json↔json 需要同 Schema（json.any 除外）；缺 Schema 视为不兼容', () => {
+    expect(
+      portPairCompatible(
+        { type: 'json', schema: { id: 'list.items', version: 1 } },
+        { type: 'json', schema: { id: 'list.items', version: 1 } }
+      )
+    ).toBe(true)
+    expect(
+      portPairCompatible(
+        { type: 'json', schema: { id: 'list.items', version: 1 } },
+        { type: 'json', schema: { id: 'storyboard.shots', version: 1 } }
+      )
+    ).toBe(false)
+    expect(
+      portPairCompatible(
+        { type: 'json', schema: { id: 'json.any', version: 1 } },
+        { type: 'json', schema: { id: 'list.items', version: 1 } }
+      )
+    ).toBe(true)
+    expect(
+      portPairCompatible(
+        { type: 'json' },
+        { type: 'json', schema: { id: 'list.items', version: 1 } }
+      )
+    ).toBe(false)
+  })
+
+  it('真实契约：iterate.out-item 可接入所有 json 类型输入（回归 bug 的完整链条）', () => {
+    const iterate = getNodeType('iterate')
+    const itemPort = iterate?.ports.out.find((port) => port.id === 'out-item')
+    expect(itemPort?.type).toBe('iteration')
+    // iteration 不是 json，schema 双重校验不参与；类型层必须对全部 json 输入放行。
+    const jsonInputs = allNodeTypes().flatMap((spec) =>
+      spec.ports.in.filter((port) => port.type === 'json').map((port) => ({ spec, port }))
+    )
+    expect(jsonInputs.length).toBeGreaterThan(0)
+    for (const { spec, port } of jsonInputs) {
+      expect(portPairCompatible({ type: 'iteration' }, port)).toBe(true)
+      expect(spec.type).toBeTruthy()
+    }
+  })
 })

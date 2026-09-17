@@ -14,6 +14,28 @@ import type { NodeCardShape } from './NodeCardShape'
 import type { BatchConnectionMember, ConnectionFrom } from '../stores/connection'
 import { projectNodeOutputs, type NodeValue } from '../nodes/nodeValues'
 
+/**
+ * 源输出端口能否接入目标输入端口（类型 + JSON Schema 双重校验）。
+ *
+ * 参数方向固定为 (out, in)：`portCompatible` 对 iteration→json 是非对称规则
+ * （循环项只能作为输出注入 JSON 输入），历史上曾出现调用点把参数写反，导致
+ * 高亮/菜单认为可连而 tryConnect 实际拒绝。所有兼容判断统一经过本函数，
+ * 方向由函数签名约束，不再依赖每个调用点自觉。
+ */
+export function portPairCompatible(
+  out: { type: PortDecl['type']; schema?: PortDecl['schema'] },
+  input: { type: PortDecl['type']; schema?: PortDecl['schema'] }
+): boolean {
+  return (
+    portCompatible(out.type, input.type) &&
+    !(
+      out.type === 'json' &&
+      input.type === 'json' &&
+      !nodeSchemasCompatible(out.schema, input.schema)
+    )
+  )
+}
+
 // 默认连线保持中性灰，避免同一画布被端口类型色切成多种视觉噪声；
 // 类型辨识交给端口色与详情面板，悬浮/选中/拖线则由统一蓝色交互态强调。
 // 仍使用 tldraw 内置色名，确保 DefaultColorStyle 校验安全。
@@ -292,12 +314,7 @@ export function planHeterogeneousBatchConnections(
         return false
       }
       if (target.cardinality === 'one' && occupiedOnePortIds.has(target.id)) return false
-      if (!portCompatible(source.portType, target.type)) return false
-      return !(
-        source.portType === 'json' &&
-        target.type === 'json' &&
-        !nodeSchemasCompatible(source.schema, target.schema)
-      )
+      return portPairCompatible({ type: source.portType, schema: source.schema }, target)
     })
     return { source, candidates }
   })
@@ -472,16 +489,7 @@ export function tryConnectBatch(
   const compatible = targetPorts.in.filter(
     (port) =>
       port.cardinality === 'many' &&
-      sources.every(
-        ({ port: sourcePort }) =>
-          sourcePort &&
-          portCompatible(port.type, sourcePort.type) &&
-          !(
-            port.type === 'json' &&
-            sourcePort.type === 'json' &&
-            !nodeSchemasCompatible(sourcePort.schema, port.schema)
-          )
-      )
+      sources.every(({ port: sourcePort }) => sourcePort && portPairCompatible(sourcePort, port))
   )
   if (compatible.length === 0) {
     return {
@@ -560,15 +568,7 @@ function resolveTargetInputPort(
   preferredTargetPortId?: string
 ): ResolvedTargetPort | { error: string } {
   const targetPorts = getNodePorts(targetSpec, target)
-  const compatible = targetPorts.in.filter(
-    (port) =>
-      portCompatible(port.type, sourcePort.type) &&
-      !(
-        port.type === 'json' &&
-        sourcePort.type === 'json' &&
-        !nodeSchemasCompatible(sourcePort.schema, port.schema)
-      )
-  )
+  const compatible = targetPorts.in.filter((port) => portPairCompatible(sourcePort, port))
   if (compatible.length === 0) {
     return {
       error: `类型或 Schema 不兼容：${sourcePort.type} 输出无法接入 ${targetSpec.label} 节点`
@@ -658,13 +658,7 @@ export function connectionRetargetNotice(
     return null
   }
   const aimed = resolved.aimed
-  const aimedCompatible =
-    portCompatible(aimed.type, sourcePort.type) &&
-    !(
-      aimed.type === 'json' &&
-      sourcePort.type === 'json' &&
-      !nodeSchemasCompatible(sourcePort.schema, aimed.schema)
-    )
+  const aimedCompatible = portPairCompatible(sourcePort, aimed)
   const reason = aimedCompatible ? '端口已被占用' : `端口不接收 ${sourcePort.type}`
   return `已改连「${resolved.port.name}」：落点「${aimed.name}」${reason}`
 }
@@ -718,6 +712,107 @@ export function tryConnect(
   if (!createEdge(editor, { shapeId: from.shapeId, portId: from.portId }, endpoint)) {
     return '创建连线失败'
   }
+  return null
+}
+
+interface ResolvedSourcePort {
+  port: PortDecl
+}
+
+/**
+ * 解析反向拖线（从输入端口拖出）应使用的源输出端口：
+ * 在目标节点兼容输出口里取离落点最近者；`preferredSourcePortId` 来自创建菜单
+ * 的显式选择（新建节点的具体输出端口）。
+ */
+function resolveSourceOutputPort(
+  editor: Editor,
+  source: NodeCardShape,
+  sourceSpec: NodeTypeSpec,
+  inputPort: PortDecl,
+  dropPagePt?: { x: number; y: number },
+  preferredSourcePortId?: string
+): ResolvedSourcePort | { error: string } {
+  const sourcePorts = getNodePorts(sourceSpec, source)
+  const compatible = sourcePorts.out.filter((port) => portPairCompatible(port, inputPort))
+  if (compatible.length === 0) {
+    return { error: `${sourceSpec.label} 没有可接入「${inputPort.name}」的兼容输出端口` }
+  }
+  let port: PortDecl = compatible[0]
+  if (preferredSourcePortId) {
+    const preferred = compatible.find((candidate) => candidate.id === preferredSourcePortId)
+    if (!preferred) return { error: `${sourceSpec.label} 的指定输出端口不可用` }
+    port = preferred
+  } else if (dropPagePt && compatible.length > 1) {
+    const bounds = editor.getShapePageBounds(source.id)
+    if (!bounds) return { error: '源节点位置不可用' }
+    const offsets = portOffsets(sourcePorts.out.length, source.props.h)
+    let bestDist = Infinity
+    for (const candidate of compatible) {
+      const idx = sourcePorts.out.indexOf(candidate)
+      const y = offsets[idx] ?? source.props.h / 2
+      const pageY = source.props.h > 0 ? bounds.y + (bounds.height * y) / source.props.h : bounds.y
+      // 输出端口位于卡片右侧；距离按 (右缘, 端口纵向位置) 计算。
+      const d = Math.hypot(dropPagePt.x - bounds.maxX, dropPagePt.y - pageY)
+      if (d < bestDist) {
+        bestDist = d
+        port = candidate
+      }
+    }
+  }
+  return { port }
+}
+
+/**
+ * 反向拖线：从输入端口拖出，落到上游节点的输出侧建立正向边。
+ *
+ * 与 tryConnect 共用同一套校验语义（类型/Schema、单值占用、重复、环路），
+ * 只是把“解析目标输入端口”换成“解析源输出端口”；建出的边永远是
+ * source.out → target.in，与正向拖线同构，不存在反向数据流。
+ */
+export function tryConnectFromInput(
+  editor: Editor,
+  from: ConnectionFrom,
+  upstreamShapeId: TLShapeId,
+  dropPagePt?: { x: number; y: number },
+  preferredSourcePortId?: string
+): string | null {
+  if (from.direction !== 'in') return '连线方向错误'
+  if ((from.memberIds?.length ?? 0) > 1) return '输入端口拖线不支持批量'
+  const target = editor.getShape<NodeCardShape>(from.shapeId)
+  if (!target) return '目标节点不存在'
+  if (target.id === upstreamShapeId) return '不能连接到自身'
+  const targetSpec = getNodeType(target.props.nodeType)
+  if (!targetSpec) return '目标节点类型未知'
+  const targetPorts = getNodePorts(targetSpec, target)
+  const inputPort = targetPorts.in.find((port) => port.id === from.portId)
+  if (!inputPort) return '目标输入端口不存在'
+  if (
+    inputPort.cardinality === 'one' &&
+    inputPortOccupied(editor, { shapeId: target.id, portId: inputPort.id })
+  ) {
+    return `「${inputPort.name}」已有连线，单值输入请先断开原连线`
+  }
+
+  const upstream = editor.getShape<NodeCardShape>(upstreamShapeId)
+  const upstreamSpec = upstream ? getNodeType(upstream.props.nodeType) : undefined
+  if (!upstream || !upstreamSpec) return '源节点不存在'
+
+  const resolved = resolveSourceOutputPort(
+    editor,
+    upstream,
+    upstreamSpec,
+    inputPort,
+    dropPagePt,
+    preferredSourcePortId
+  )
+  if ('error' in resolved) return resolved.error
+
+  const fromEndpoint: EdgeEndpoint = { shapeId: upstreamShapeId, portId: resolved.port.id }
+  const toEndpoint: EdgeEndpoint = { shapeId: target.id, portId: inputPort.id }
+  if (edgeExists(editor, fromEndpoint, toEndpoint)) return '已存在相同连线'
+  // 新边是 upstream → target；成环当且仅当 target 已能沿连线到达 upstream。
+  if (reaches(editor, target.id, upstreamShapeId)) return '不能创建循环连线'
+  if (!createEdge(editor, fromEndpoint, toEndpoint)) return '创建连线失败'
   return null
 }
 
