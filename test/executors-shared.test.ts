@@ -175,4 +175,17 @@ describe('parseImageGen · 生图固定配置解析（R5 种子）', () => {
     expect(d.modelKey).toBe('')
     expect(d.seed).toBeUndefined()
   })
+
+  it('多供应商字段（providerKey/resolution）被保留', () => {
+    const d = parseImageGen(
+      JSON.stringify({ modelKey: 'p1::m1', size: '1024x1024', providerKey: 'p1', resolution: '2k' })
+    )
+    expect(d.providerKey).toBe('p1')
+    expect(d.resolution).toBe('2k')
+  })
+
+  it('非法分辨率档位被剔除', () => {
+    const d = parseImageGen(JSON.stringify({ modelKey: 'p1::m1', resolution: '8k' }))
+    expect(d.resolution).toBeUndefined()
+  })
 })

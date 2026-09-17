@@ -19,7 +19,7 @@ export function driverForSpec(specId: ProviderSpecId): 'openai-compatible' | 'vi
   return specId === 'minimax' || specId === 'seedance' ? 'video' : 'openai-compatible'
 }
 
-function requireProvider(providerId: string): ProviderConfig {
+export function requireProvider(providerId: string): ProviderConfig {
   const p = getProvider(providerId)
   if (!p) throw new GatewayError('PROVIDER_NOT_FOUND', `供应商不存在：${providerId}`)
   if (!p.baseURL) throw new GatewayError('PROVIDER_NO_URL', `供应商「${p.name}」未配置 Base URL`)

@@ -316,6 +316,8 @@ export interface ImageGenerateInput {
   seed?: number
   /** 宽高比（部分供应商支持） */
   aspectRatio?: string
+  /** 分辨率档位（1k/2k/4k）；仅当供应商能力表声明支持时由网关提交 */
+  resolution?: string
 }
 
 export interface ImageEditInput {

@@ -101,7 +101,7 @@ const imageCapability = defineCapability({
 
 const imageGenCapability = defineCapability({
   id: 'image.generate',
-  version: '3.0.0',
+  version: '4.0.0',
   contractVersion: 3,
   nodeType: 'image-gen',
   title: '生图',
@@ -144,15 +144,47 @@ const imageGenCapability = defineCapability({
       description: '模型生成并落盘后的图片资产引用。'
     }
   ],
+  // 与 shared/image-capabilities.ts 的 ImageGenerationConfig 逐字段对齐：
+  // 执行器读取 modelKey（providerId::modelId）；providerId/modelId 曾是幽灵必填键。
   configSchema: {
-    providerId: { type: 'string', required: true, description: '供应商 ID' },
-    modelId: { type: 'string', required: true, description: '模型 ID' },
+    modelKey: {
+      type: 'string',
+      required: true,
+      description: '图片模型选择键（providerId::modelId）'
+    },
+    providerKey: {
+      type: 'string',
+      required: false,
+      description: '选中的供应商实例 ID；缺省时由 modelKey 反推或回退默认供应商（ToAPIS 优先）'
+    },
     ratio: {
       type: 'enum',
       required: false,
-      enumValues: ['1:1', '16:9', '9:16', '4:3', '3:4'],
+      enumValues: [
+        'auto',
+        '1:1',
+        '3:2',
+        '2:3',
+        '4:3',
+        '3:4',
+        '5:4',
+        '4:5',
+        '16:9',
+        '9:16',
+        '2:1',
+        '1:2',
+        '21:9',
+        '9:21'
+      ],
       defaultValue: '1:1',
-      description: '图片比例'
+      description: '图片画幅比例；实际提交值由供应商能力表决定'
+    },
+    resolution: {
+      type: 'enum',
+      required: false,
+      enumValues: ['1k', '2k', '4k'],
+      defaultValue: '1k',
+      description: '分辨率档位；仅能力表声明支持的供应商（如 ToAPIS）会提交，其余忽略'
     },
     seed: { type: 'number', required: false, description: '随机种子（-1 为随机）' }
   },

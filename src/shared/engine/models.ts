@@ -51,3 +51,31 @@ export function findTextModel(
   }
   return fallback ? textModels[0] : undefined
 }
+
+/**
+ * 生图节点共享的模型解析（renderer Body 与执行器使用同一套默认值逻辑）：
+ * modelKey 显式命中 > providerKey 供应商的首个图片模型 > 默认供应商（ToAPIS 优先）。
+ * `fallbackToDefault: false` 时只做显式 modelKey 命中（执行器用，保持既有跳过语义）。
+ */
+export function resolveImageModelOption(
+  options: ModelOption[],
+  config: { modelKey?: string; providerKey?: string },
+  { fallbackToDefault = true }: { fallbackToDefault?: boolean } = {}
+): ModelOption | undefined {
+  if (config.modelKey) {
+    const found = options.find((item) => item.key === config.modelKey)
+    if (found) return found
+  }
+  if (!fallbackToDefault) return undefined
+  if (config.providerKey) {
+    const byProvider = options.find((item) => item.provider.id === config.providerKey)
+    if (byProvider) return byProvider
+  }
+  const preferred = options.find((item) => item.provider.specId === 'toapis')
+  return preferred ?? options[0]
+}
+
+/** 生图供应商下拉的默认选中：ToAPIS 实例优先，其次第一个含图片模型的供应商。 */
+export function defaultImageProviderId(options: ModelOption[]): string | undefined {
+  return resolveImageModelOption(options, {})?.provider.id
+}

@@ -237,7 +237,17 @@ export interface GatewayModelInfo {
 }
 
 export type ProviderSpecId =
-  'openai' | 'deepseek' | 'qwen' | 'kimi' | 'glm' | 'doubao' | 'relay' | 'minimax' | 'seedance'
+  | 'openai'
+  | 'deepseek'
+  | 'qwen'
+  | 'kimi'
+  | 'glm'
+  | 'doubao'
+  | 'relay'
+  | 'minimax'
+  | 'seedance'
+  | 'toapis'
+  | 'openrouter'
 
 export interface ProviderConfig {
   id: string
@@ -284,12 +294,28 @@ export const PROVIDER_SPECS: ProviderSpec[] = [
     suggestions: ['gpt-image-2', 'gpt-5.2']
   },
   {
+    id: 'toapis',
+    label: 'ToAPIS',
+    desc: 'ToAPIS 生图（gpt-image-2 异步任务端点；大陆可用 toapis.cn）',
+    baseURL: 'https://toapis.com/v1',
+    modality: 'image',
+    suggestions: ['gpt-image-2']
+  },
+  {
+    id: 'openrouter',
+    label: 'OpenRouter',
+    desc: 'OpenRouter 中转站，生图走 chat-completions 多模态端点',
+    baseURL: 'https://openrouter.ai/api/v1',
+    modality: 'image',
+    suggestions: ['google/gemini-2.5-flash-image']
+  },
+  {
     id: 'openai',
     label: 'OpenAI 官方',
-    desc: 'ChatGPT 官方 API',
+    desc: 'ChatGPT 官方 API（文本与 gpt-image 系列生图）',
     baseURL: 'https://api.openai.com/v1',
     modality: 'text',
-    suggestions: ['gpt-5.2']
+    suggestions: ['gpt-5.2', 'gpt-image-1']
   },
   {
     id: 'deepseek',

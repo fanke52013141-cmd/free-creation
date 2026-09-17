@@ -1,4 +1,5 @@
 // 生图节点 Body（路线图 R6：bodies.tsx 拆分）
+// 多供应商级联：选中哪个供应商，就按其能力表呈现参数页（画幅/分辨率），默认 ToAPIS 优先。
 import { useEffect, useRef, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import {
@@ -6,8 +7,10 @@ import {
   normalizeImageGenerationConfig,
   sizesForImageAspectRatio,
   type ImageAspectRatio,
-  type ImageGenerationConfig
+  type ImageGenerationConfig,
+  type ImageResolution
 } from '@shared/image-capabilities'
+import { defaultImageProviderId } from '@shared/engine/models'
 import { mediaUrl, type NodeBodyProps } from '../../registry'
 import { toast } from '../../../stores/toast'
 import { gatherUpstreamMediaList } from '../../../canvas/graph'
@@ -44,7 +47,13 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
   const openSettings = useGatewayStore((s) => s.openSettings)
   const options = modelsByModality(providers, 'image')
   const data = parseImageGen(readNodeConfig(shape))
-  const selected = options.find((option) => option.key === data.modelKey)
+  // 供应商解析：显式 providerKey > modelKey 反推 > 默认供应商（ToAPIS 实例优先）。
+  const selectedProviderId =
+    data.providerKey ?? resolveExplicitProviderId(options, data) ?? defaultImageProviderId(options)
+  const providerIds = [...new Set(options.map((option) => option.provider.id))]
+  const providerModels = options.filter((option) => option.provider.id === selectedProviderId)
+  const selected =
+    providerModels.find((option) => option.key === data.modelKey) ?? providerModels[0]
   const capabilities = selected
     ? imageCapabilitiesFor(selected.provider.specId, selected.model.id)
     : imageCapabilitiesFor('relay')
@@ -68,6 +77,23 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
   const updateText = (text: string): void => {
     if (text !== shape.props.text)
       editor.updateShape({ id: shape.id, type: 'node-card', props: { text } })
+  }
+
+  // 切换供应商：模型列表级联过滤，模型重置为该供应商首个图片模型，参数按新能力表归一化。
+  const changeProvider = (providerId: string): void => {
+    const first = options.find((option) => option.provider.id === providerId)
+    const nextCapabilities = first
+      ? imageCapabilitiesFor(first.provider.specId, first.model.id)
+      : imageCapabilitiesFor('relay')
+    const nextConfig = normalizeImageGenerationConfig(
+      { ...config, providerKey: providerId, modelKey: first?.key ?? '' },
+      nextCapabilities
+    )
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      props: { config: JSON.stringify(nextConfig) }
+    })
   }
 
   // 所有图片都使用同一个多值端口，连接顺序就是 @图片 1～4 的顺序。
@@ -96,8 +122,9 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
 
   const generate = async (): Promise<void> => {
     if (!project) return toast('项目未就绪')
-    // 先提交本次编辑，再由统一运行器读取节点配置和真实上游端口输入。
-    update(config)
+    if (!selected) return toast('未选择可用图片模型')
+    // 先提交包含默认供应商/模型解析的完整配置，再由统一运行器读取节点配置和真实上游端口输入。
+    update({ ...config, modelKey: selected.key, providerKey: selected.provider.id })
     updateText(draft)
     setBusy(true)
     try {
@@ -112,16 +139,33 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
   return (
     <div className="gen-panel">
       <div className="gen-row">
+        <AppSelect
+          className="gen-select gen-provider"
+          value={selectedProviderId ?? ''}
+          onPointerDown={(e) => e.stopPropagation()}
+          onChange={(e) => changeProvider(e.target.value)}
+          aria-label="选择供应商"
+        >
+          {!providerIds.includes(selectedProviderId ?? '') && <option value="">选择供应商…</option>}
+          {providerIds.map((providerId) => {
+            const option = options.find((item) => item.provider.id === providerId)
+            return (
+              <option key={providerId} value={providerId}>
+                {option?.provider.name ?? providerId}
+              </option>
+            )
+          })}
+        </AppSelect>
         <ModelSelect
           value={data.modelKey}
-          options={options}
+          options={providerModels}
           onChange={(key) => {
             const next = options.find((option) => option.key === key)
             const nextCapabilities = next
               ? imageCapabilitiesFor(next.provider.specId, next.model.id)
               : imageCapabilitiesFor('relay')
             const nextConfig = normalizeImageGenerationConfig(
-              { ...config, modelKey: key },
+              { ...config, modelKey: key, providerKey: next?.provider.id ?? selectedProviderId },
               nextCapabilities
             )
             editor.updateShape({
@@ -131,6 +175,8 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
             })
           }}
         />
+      </div>
+      <div className="gen-row">
         <AppSelect
           className="gen-select w92"
           value={config.aspectRatio}
@@ -150,6 +196,21 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
             </option>
           ))}
         </AppSelect>
+        {capabilities.resolutions.length > 0 && (
+          <AppSelect
+            className="gen-select w86"
+            value={config.resolution ?? capabilities.resolutions[0]}
+            onPointerDown={(e) => e.stopPropagation()}
+            onChange={(e) => update({ ...config, resolution: e.target.value as ImageResolution })}
+            aria-label="选择分辨率"
+          >
+            {capabilities.resolutions.map((resolution) => (
+              <option key={resolution} value={resolution}>
+                {resolution}
+              </option>
+            ))}
+          </AppSelect>
+        )}
       </div>
       <textarea
         ref={promptRef}
@@ -199,4 +260,13 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
       </button>
     </div>
   )
+}
+
+/** 从 modelKey 反推已选供应商（仅显式命中，不做默认回退）。 */
+function resolveExplicitProviderId(
+  options: ReturnType<typeof modelsByModality>,
+  data: ImageGenData
+): string | undefined {
+  if (!data.modelKey) return undefined
+  return options.find((option) => option.key === data.modelKey)?.provider.id
 }

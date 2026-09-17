@@ -6635,6 +6635,12 @@ select:focus-visible,
   min-width: 150px;
 }
 
+/* 生图节点级联选择：供应商是父级，固定窄列；模型占满剩余宽度 */
+.gen-row > .gen-select.gen-provider {
+  flex: 0 0 92px;
+  min-width: 92px;
+}
+
 .gen-select:focus {
   border-color: var(--brand);
 }

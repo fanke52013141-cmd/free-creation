@@ -38,6 +38,7 @@ const newDraft = (specId: ProviderSpecId): Draft => {
 // 从模板/服务端带出的模型 ID 猜模态（用户可在面板里改）
 function guessModality(id: string, specId: ProviderSpecId): GatewayModelInfo['modality'] {
   if (specId === 'seedance') return 'video'
+  if (specId === 'toapis') return 'image'
   if (specId === 'minimax') return /speech|tts|voice/i.test(id) ? 'audio' : 'video'
   if (/(image|dall|flux|seedream|mj|midjourney|banana)/i.test(id)) return 'image'
   return 'text'
