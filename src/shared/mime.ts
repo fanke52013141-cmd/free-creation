@@ -40,6 +40,21 @@ export function mimeForExtension(extension: string): string {
   return MIME_BY_EXTENSION[extension.toLowerCase()] ?? 'application/octet-stream'
 }
 
+/** 可直接按 UTF-8 读出的文本扩展名；文件节点的 out-text 第一类来源。 */
+export const INLINE_TEXT_EXTS: readonly string[] = ['.txt', '.md', '.markdown', '.csv', '.json']
+
+/**
+ * OOXML 文档（zip + XML）：由主进程 `media/document-text.ts` 抽取正文后同样进 out-text。
+ * 刻意不含 .doc/.xls/.ppt 旧二进制格式。
+ */
+export const OOXML_DOC_EXTS: readonly string[] = ['.docx', '.xlsx', '.pptx']
+
+/** PDF：同一份抽取器用 pdf.js（`unpdf`）逐页取文字，与 Office 共用 out-text 通道。 */
+export const PDF_DOC_EXTS: readonly string[] = ['.pdf']
+
+/** 主进程能抽出正文的二进制文档（Office + PDF）；导入判定与节点展示共用这一份清单。 */
+export const BINARY_DOC_EXTS: readonly string[] = [...OOXML_DOC_EXTS, ...PDF_DOC_EXTS]
+
 export function mediaKindForMime(mime: string): MediaKind {
   if (mime.startsWith('image/')) return 'image'
   if (mime.startsWith('video/')) return 'video'

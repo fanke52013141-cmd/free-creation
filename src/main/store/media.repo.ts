@@ -4,13 +4,13 @@ import { nanoid } from 'nanoid'
 import { copyFile, mkdir, readFile, rename, stat, unlink, writeFile } from 'fs/promises'
 import { basename, dirname, extname, join } from 'path'
 import type { MediaAsset, MediaKind } from '../../shared/types'
-import { mimeForExtension } from '../../shared/mime'
+import { BINARY_DOC_EXTS, INLINE_TEXT_EXTS, mimeForExtension } from '../../shared/mime'
+import { MAX_DOC_BYTES, extractDocumentText } from '../media/document-text'
 import { getDataDir, getDb } from './db'
 
 // 单文件上限 2GB；文本内容内联上限 1MB（超限的文本文件不读内容，仅存文件）
 const MAX_MEDIA_BYTES = 2 * 1024 * 1024 * 1024
 const MAX_TEXT_INLINE_BYTES = 1024 * 1024
-const TEXT_EXTS = new Set(['.txt', '.md', '.json'])
 
 function detectKind(ext: string, mime: string): MediaKind {
   if (mime.startsWith('image/')) return 'image'
@@ -77,8 +77,12 @@ export async function importMedia(projectId: string, srcAbsPath: string): Promis
       createdAt: now,
       name: basename(srcAbsPath, ext)
     }
-    if (kind === 'file' && TEXT_EXTS.has(ext) && st.size <= MAX_TEXT_INLINE_BYTES) {
+    if (kind === 'file' && st.size <= MAX_TEXT_INLINE_BYTES && INLINE_TEXT_EXTS.includes(ext)) {
       asset.textContent = await readFile(destAbs, 'utf-8')
+    } else if (kind === 'file' && st.size <= MAX_DOC_BYTES && BINARY_DOC_EXTS.includes(ext)) {
+      // Office / PDF 在导入时就抽取正文：out-text 与节点预览共用同一份结果，失败则只留原始文件。
+      const text = await extractDocumentText(ext, await readFile(destAbs))
+      if (text) asset.textContent = text
     }
     return { ok: true, asset }
   } catch (e) {

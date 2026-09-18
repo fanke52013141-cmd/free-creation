@@ -1,7 +1,7 @@
 // 文件资产节点 Body（用户 2026-09-18 拍板新增）：
 // 与图片 / 音频 / 视频资产节点同构——导入本地文档，只负责保存、展示和向下游输出。
-// Excel / Word / PDF 等二进制文档不在这里解析，只把原始文件作为 file 资产暴露；
-// 可解析为文本的 txt / md / json / csv 会把内容写入 props.text，供文本类下游直接使用。
+// 纯文本、Office（Word/Excel/PPT）与 PDF 在导入时由主进程抽出正文写入 props.text，供文本类
+// 下游直接使用；旧版 .doc/.xls/.ppt 与无文字层的扫描件不解析，节点会如实显示并给出系统程序打开入口。
 import { useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import type { NodeBodyProps } from '../../registry'
@@ -10,9 +10,10 @@ import { markUndoPoint } from '../../../canvas/history'
 import { useAppStore } from '../../../stores/app'
 import { Icon } from '../../../components/Icon'
 import { MediaFileActions } from './shared'
+import { BINARY_DOC_EXTS, INLINE_TEXT_EXTS } from '@shared/mime'
 
-/** 可直接内联为文本的扩展名；与主进程 TEXT_EXTS 保持一致的语义。 */
-const TEXT_EXTS = ['.txt', '.md', '.markdown', '.json', '.csv']
+/** 能内联出正文的格式；与主进程 media.repo 的 textContent 判定共用同一份清单。 */
+const PARSABLE_EXTS = [...INLINE_TEXT_EXTS, ...BINARY_DOC_EXTS]
 
 function extensionOf(path: string): string {
   const index = path.lastIndexOf('.')
@@ -25,7 +26,7 @@ export function FileBody({ shape }: NodeBodyProps): React.JSX.Element {
   const [busy, setBusy] = useState(false)
 
   const chooseAsset = async (): Promise<void> => {
-    if (!project) return
+    if (!project) return toast('项目未就绪')
     setBusy(true)
     try {
       const res = await window.api.pickMedia(project.id)
@@ -81,7 +82,7 @@ export function FileBody({ shape }: NodeBodyProps): React.JSX.Element {
   }
 
   const extension = extensionOf(shape.props.mediaPath)
-  const inlineText = TEXT_EXTS.includes(extension) ? shape.props.text : ''
+  const inlineText = PARSABLE_EXTS.includes(extension) ? shape.props.text : ''
   const lineCount = inlineText ? inlineText.split('\n').length : 0
 
   return (
