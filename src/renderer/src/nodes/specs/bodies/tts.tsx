@@ -10,8 +10,16 @@ import { useAppStore } from '../../../stores/app'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
 import { parseTtsConfig } from '@shared/tts'
-import { TTS_LANGS, type TtsConfig, type TtsLang } from '@shared/tts'
+import {
+  MINIMAX_CLONE_RETENTION_DAYS,
+  TTS_LANGS,
+  TTS_LANGUAGE_BOOSTS,
+  isValidMiniMaxVoiceId,
+  type TtsConfig,
+  type TtsLang
+} from '@shared/tts'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
+import { parseNodeExtra } from '../../nodeValues'
 import {
   clearSelectedMediaHistory,
   MediaFileActions,
@@ -22,6 +30,14 @@ import {
 } from './shared'
 
 const TTS_FORMATS: Array<TtsConfig['format']> = ['wav', 'mp3', 'flac']
+
+/** 本次运行登记出的可复用音色 ID（来自 out-json 音色档案）。 */
+function clonedVoiceId(shape: NodeBodyProps['shape']): string {
+  const value = parseNodeExtra(shape.meta?.nodeExtra)['out-json']
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return ''
+  const voiceId = (value as { voice_id?: unknown }).voice_id
+  return typeof voiceId === 'string' ? voiceId : ''
+}
 
 export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Element {
   const guard = useClickGuard()
@@ -97,6 +113,32 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
     markUndoPoint(editor, 'tts-ref-upload')
   }
 
+  const uploadPromptAudio = async (): Promise<void> => {
+    if (!project) return toast('项目未就绪')
+    const res = await window.api.pickMedia(project.id)
+    if (!res.ok) return toast(`上传失败：${res.error.message}`)
+    const audioAsset = res.data.assets.find((a) => a.kind === 'audio')
+    if (!audioAsset) return toast('请选择音频文件')
+    updateConfig({
+      promptMediaId: audioAsset.id,
+      promptMediaPath: audioAsset.path,
+      promptMediaMime: audioAsset.mime,
+      promptMediaName: audioAsset.name ?? '克隆提示音'
+    })
+    markUndoPoint(editor, 'tts-prompt-upload')
+  }
+
+  const removePromptAudio = (): void => {
+    updateConfig({
+      promptMediaId: '',
+      promptMediaPath: '',
+      promptMediaMime: '',
+      promptMediaName: '',
+      promptText: ''
+    })
+    markUndoPoint(editor, 'tts-prompt-remove')
+  }
+
   const removeRefAudio = (): void => {
     refAudioRef.current?.pause()
     refAudioRef.current = null
@@ -162,6 +204,11 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
 
   const hasRefAudio = Boolean(config.refMediaId && config.refMediaPath)
   const hasOutput = Boolean(shape.props.mediaPath)
+  const voiceIdInvalid =
+    config.backend === 'minimax' &&
+    Boolean(config.voiceId.trim()) &&
+    !isValidMiniMaxVoiceId(config.voiceId.trim())
+  const resultVoiceId = clonedVoiceId(shape)
 
   return (
     <div className="node-tts">
@@ -284,12 +331,44 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
               ))}
             </AppSelect>
             <input
-              className="gen-input"
+              className={`gen-input ${voiceIdInvalid ? 'invalid' : ''}`}
               value={config.voiceId}
               placeholder="可选：自定义 Voice ID"
               onPointerDown={(e) => e.stopPropagation()}
               onChange={(e) => updateConfig({ voiceId: e.target.value })}
             />
+            {voiceIdInvalid && (
+              <div className="gen-capability-note error">
+                Voice ID 需 8～256 位、以字母开头、只含字母数字与 - _，末位不能是 - 或 _
+              </div>
+            )}
+            <div className="tts-slider-row">
+              <label className="opt-label">相似度 {config.accuracy.toFixed(2)}</label>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={config.accuracy}
+                onPointerDown={(e) => e.stopPropagation()}
+                onChange={(e) => updateConfig({ accuracy: Number(e.target.value) })}
+              />
+            </div>
+            <div className="tts-options">
+              <label className="opt-label">语言增强</label>
+              <AppSelect
+                className="gen-select small"
+                value={config.languageBoost}
+                onPointerDown={(e) => e.stopPropagation()}
+                onChange={(e) => updateConfig({ languageBoost: e.target.value })}
+              >
+                {TTS_LANGUAGE_BOOSTS.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </AppSelect>
+            </div>
             <div className="tts-toggle-row">
               <label>
                 <input
@@ -310,15 +389,83 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
               <label>
                 <input
                   type="checkbox"
+                  checked={config.textValidation}
+                  onChange={(e) => updateConfig({ textValidation: e.target.checked })}
+                />{' '}
+                文本校验
+              </label>
+              <label>
+                <input
+                  type="checkbox"
                   checked={config.aigcWatermark}
                   onChange={(e) => updateConfig({ aigcWatermark: e.target.checked })}
                 />{' '}
                 添加水印
               </label>
             </div>
+
+            {/* ── 克隆提示音（clone_prompt）：可选的第二段参考音频 + 其原文 ── */}
+            <div className="tts-prompt-block">
+              <div className="tts-section-label">
+                <Icon name="audio" size={12} />
+                <span>克隆提示音（可选）</span>
+              </div>
+              {config.promptMediaId ? (
+                <>
+                  <div className="tts-ref-player">
+                    <span className="tts-ref-name">{config.promptMediaName || '克隆提示音'}</span>
+                    <button
+                      className="btn-ghost small danger"
+                      title="替换克隆提示音"
+                      onPointerDown={(e) => stopEventPropagation(e)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void uploadPromptAudio()
+                      }}
+                    >
+                      替换
+                    </button>
+                    <button
+                      className="btn-ghost small danger"
+                      title="移除克隆提示音"
+                      onPointerDown={(e) => stopEventPropagation(e)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        removePromptAudio()
+                      }}
+                    >
+                      移除
+                    </button>
+                  </div>
+                  <input
+                    className="gen-input"
+                    value={config.promptText}
+                    placeholder="提示音对应的原文（必填）"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onChange={(e) => updateConfig({ promptText: e.target.value })}
+                  />
+                </>
+              ) : (
+                <button
+                  className="btn-ghost small"
+                  onPointerDown={(e) => stopEventPropagation(e)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    void uploadPromptAudio()
+                  }}
+                >
+                  上传提示音
+                </button>
+              )}
+            </div>
+
             <div className="gen-capability-note">
               参考音频需为 mp3 / m4a / wav，10 秒至 5 分钟且不超过 20MB；复刻音色会通过 MiniMax T2A
               生成新的独立音频资产。
+            </div>
+            <div className="gen-capability-note warn">
+              复刻音色连续 {MINIMAX_CLONE_RETENTION_DAYS} 天未被调用会被 MiniMax
+              自动删除；长期不用请重新复刻。
             </div>
           </div>
         )}
@@ -403,6 +550,33 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
       {/* ── 合成结果 ── */}
       {hasOutput && (
         <>
+          {resultVoiceId && (
+            <div className="tts-section voice-id-card">
+              <div className="tts-section-label">
+                <Icon name="check" size={13} />
+                <span>复刻音色 ID</span>
+              </div>
+              <div className="voice-id-row">
+                <code className="voice-id-value">{resultVoiceId}</code>
+                <button
+                  className="btn-ghost small"
+                  title="复制音色 ID"
+                  onPointerDown={(e) => stopEventPropagation(e)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    void navigator.clipboard
+                      .writeText(resultVoiceId)
+                      .then(() => toast('已复制音色 ID'))
+                  }}
+                >
+                  复制
+                </button>
+              </div>
+              <div className="gen-capability-note">
+                该 ID 已通过 out-json 输出给下游配音节点；也可手动填入配音节点的音色 ID。
+              </div>
+            </div>
+          )}
           {/* 媒体区统一交互：单击选中节点，双击打开大窗播放器（与图片/视频节点一致） */}
           <div
             className="node-audio-player"

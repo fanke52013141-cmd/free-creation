@@ -4,6 +4,7 @@
 // 留在 renderer 层。这里只保留执行器直接使用的类型安全和提取函数。
 import type { PortType } from '../types'
 import type { NodeValue } from './values'
+import { TEXT_MERGE_SEPARATOR } from './helpers'
 
 export interface NodeValuePacket {
   type: PortType
@@ -32,7 +33,7 @@ export function inputText(inputs: ContractInputMap, portId: string): string {
       packet.value.kind === 'text' || packet.value.kind === 'markdown' ? packet.value.text : ''
     )
     .filter(Boolean)
-    .join('\n\n---\n\n')
+    .join(TEXT_MERGE_SEPARATOR)
 }
 
 export function inputJson(inputs: ContractInputMap, portId: string): unknown[] {

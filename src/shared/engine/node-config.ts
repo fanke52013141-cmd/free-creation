@@ -13,6 +13,7 @@ export const CONFIG_NODE_TYPES = new Set([
   'vocal-separate',
   'speech',
   'tts',
+  'voice-design',
   'processor',
   'structured',
   'code',

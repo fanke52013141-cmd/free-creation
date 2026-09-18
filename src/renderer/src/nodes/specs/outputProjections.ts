@@ -9,6 +9,7 @@ import type { RawNodeOutputs } from '../nodeValues'
 import {
   parseNodeRecord,
   parseMediaResultCollection,
+  parseNodeExtra,
   parseStoredAiResult,
   parseStoredIterateResult,
   parseStoredNodeValue,
@@ -36,7 +37,9 @@ function mediaOutput(
           kind,
           mediaId: shape.props.mediaId,
           mediaPath: shape.props.mediaPath,
-          mime: shape.props.mediaMime
+          mime: shape.props.mediaMime,
+          // 显示名随媒体值向下游传递，供 P 图等节点命名产物（如「（改）原图名」）。
+          ...(shape.props.title ? { name: shape.props.title } : {})
         }
       }
     : {}
@@ -52,16 +55,32 @@ function latestResultMediaOutput(
     typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
   )
   const result = collection?.results.at(-1)
-  return result
-    ? {
-        [portId]: {
-          kind,
-          mediaId: result.mediaId,
-          mediaPath: result.mediaPath,
-          mime: result.mime
-        }
+  if (result) {
+    return {
+      [portId]: {
+        kind,
+        mediaId: result.mediaId,
+        mediaPath: result.mediaPath,
+        mime: result.mime,
+        ...(shape.props.title ? { name: shape.props.title } : {})
       }
-    : {}
+    }
+  }
+  // 历史兼容（用户 2026-09-18 反馈的“取帧/截视频/截音频全部不可用”）：
+  // 早期版本把产物直接写在节点 props 上，没有结果集合、也没有运行记录。
+  // 这类旧项目必须继续可用，否则下游节点永远读不到源视频。
+  // 只要存在运行记录就绝不回退——失败运行不得继续暴露上一次的媒体输出。
+  if (readNodeRunRecord(shape.meta?.nodeRun)) return {}
+  return mediaOutput(shape, kind, portId)
+}
+
+/**
+ * 非媒体端口值统一从 meta.nodeExtra 取（执行器在成功运行时写入）。
+ * 运行失败时 projectNodeOutputs 已提前返回空，不会暴露上一次的陈旧值。
+ */
+function extraJsonOutput(shape: NodeCardShape, portId: string): RawNodeOutputs {
+  const value = parseNodeExtra(shape.meta?.nodeExtra)[portId]
+  return value === undefined ? {} : { [portId]: { kind: 'json' as const, data: value } }
 }
 
 export const projectTextOutputs = (shape: NodeCardShape): RawNodeOutputs =>
@@ -100,7 +119,8 @@ function selectedGridMediaOutput(shape: NodeCardShape, portId: string): RawNodeO
       kind: 'image',
       mediaId: selected.mediaId,
       mediaPath: selected.mediaPath,
-      mime: selected.mime
+      mime: selected.mime,
+      ...(shape.props.title ? { name: shape.props.title } : {})
     }
   }
 }
@@ -161,8 +181,32 @@ export const projectAudioOutputs = (shape: NodeCardShape): RawNodeOutputs =>
 export const projectVideoAssetOutputs = (shape: NodeCardShape): RawNodeOutputs =>
   mediaOutput(shape, 'video', 'out-video')
 
-export const projectTtsOutputs = (shape: NodeCardShape): RawNodeOutputs =>
-  latestResultMediaOutput(shape, 'audio', 'out-audio')
+/**
+ * 文件资产节点：原始文件永远作为 out-file 暴露；可解析为文本的文档
+ * （txt / md / json / csv）同时提供 out-text，让文本类下游不必再猜文件内容。
+ */
+export const projectFileOutputs = (shape: NodeCardShape): RawNodeOutputs => {
+  const base = mediaOutput(shape, 'file', 'out-file')
+  const text = typeof shape.props.text === 'string' ? shape.props.text : ''
+  return text.trim() ? { ...base, 'out-text': { kind: 'text', text } } : base
+}
+
+export const projectTtsOutputs = (shape: NodeCardShape): RawNodeOutputs => ({
+  ...latestResultMediaOutput(shape, 'audio', 'out-audio'),
+  ...extraJsonOutput(shape, 'out-json')
+})
+
+/** 配音节点：音频输出永远来自本次运行；字幕只在豆包开启字幕时存在。 */
+export const projectSpeechOutputs = (shape: NodeCardShape): RawNodeOutputs => ({
+  ...latestResultMediaOutput(shape, 'audio', 'out-audio'),
+  ...extraJsonOutput(shape, 'out-subtitle')
+})
+
+/** 音色设计节点：试听音频 + 可被下游配音节点引用的音色档案。 */
+export const projectVoiceDesignOutputs = (shape: NodeCardShape): RawNodeOutputs => ({
+  ...latestResultMediaOutput(shape, 'audio', 'out-audio'),
+  ...extraJsonOutput(shape, 'out-json')
+})
 
 export const projectChatOutputs = (shape: NodeCardShape): RawNodeOutputs => {
   const data = parseNodeRecord(shape.props.text)

@@ -183,14 +183,14 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   const activeExecution = ['pending', 'queued', 'running'].includes(shape.props.exec)
   const executionLabel: Record<string, string> = {
     'image-gen': '图片生成中',
-    'image-edit': '图片修改中',
+    'image-edit': 'P图中',
     'image-split': '正在拆分图片',
     'image-crop': '正在裁剪图片',
     video: '视频生成中'
   }
   const executionDetail: Record<string, string> = {
     'image-gen': '正在调用已选模型，完成后会自动替换为生成结果。',
-    'image-edit': '正在发送原图、标注参考与修改说明。',
+    'image-edit': '正在发送原图与标注参考。',
     'image-split': '正在按当前行列导出独立图片，不会覆盖原图。',
     'image-crop': '正在导出裁剪后的新图片，原图保持不变。',
     video: '正在提交视频任务，完成后会自动显示成片。'
@@ -225,7 +225,10 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       for (const card of editor.getCurrentPageShapes()) {
         if (card.type !== 'node-card') continue
         const meta = card.meta as Record<string, unknown> | undefined
-        if (meta?.artifactProducerId === shape.id && typeof meta.artifactProducerPortId === 'string') {
+        if (
+          meta?.artifactProducerId === shape.id &&
+          typeof meta.artifactProducerPortId === 'string'
+        ) {
           outgoingCounts.set(
             meta.artifactProducerPortId,
             (outgoingCounts.get(meta.artifactProducerPortId) ?? 0) + 1
@@ -249,6 +252,17 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   )
   const readiness = readinessState.readiness
   const inputReadiness = readinessState.inputs
+
+  // 运行按钮常驻在标题行右侧（用户 2026-09-18 拍板：不能用时置灰，而不是消失）。
+  // 置灰原因复用契约派生的 readiness，不引入第二套“能不能跑”的判断。
+  const runBusy = activeExecution
+  const runBlockedReason = !project
+    ? '项目未就绪'
+    : runBusy
+      ? '节点正在运行'
+      : readiness.kind === 'blocked'
+        ? readiness.label
+        : null
 
   // 节点有规范的初始档位尺寸；内容溢出时只按固定档位跳档（呈现规范 v1.0 §3.2/§3.4：
   // 260→320→380→440），超过 autoMax 的内容在 node-body 内部滚动，
@@ -380,17 +394,19 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             title={`${statusLabel} · ${readiness.label}`}
             aria-label={`${statusLabel} · ${readiness.label}`}
           />
-          {selected && spec?.executor && (
+          {spec?.executor && (
             <span className="node-action-float" aria-label="节点动作">
-              <Tooltip label="运行节点">
+              <Tooltip label={runBlockedReason ?? '运行节点'}>
                 <button
                   className="node-run-btn"
                   aria-label="运行节点"
-                  disabled={shape.props.exec === 'running' || !project}
+                  disabled={Boolean(runBlockedReason)}
                   onPointerDown={(event) => stopEventPropagation(event)}
                   onClick={(event) => {
                     stopEventPropagation(event)
-                    if (project) void runNodeManually(editor, project.id, providers, shape.id)
+                    if (project && !runBlockedReason) {
+                      void runNodeManually(editor, project.id, providers, shape.id)
+                    }
                   }}
                 >
                   <Icon name="play" size={14} />
@@ -464,33 +480,27 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                   { x: e.clientX, y: e.clientY }
                 )
               }}
-            >
-              <span className="port-dot-inner" style={{ background: PORT_COLORS[p.type] }} />
-            </span>
+            ></span>
           )
         })}
 
         {/* 产物节点溯源输入圆点：宫格拆分等节点产出的独立图片/视频节点，虽然不是 DAG 消费端，
             但在视觉上有追溯连线连接。按规范“节点与节点之间一定连接的是圆连接点”，此处在左侧
             居中渲染溯源圆点，让追溯连线精确落在圆连接点上。 */}
-        {inPorts.length === 0 && Boolean((shape.meta as Record<string, unknown> | undefined)?.artifactProducerId) && (
-          <span
-            key="artifact-in-provenance"
-            className="port-dot in connected input-optional"
-            style={{
-              top: shape.props.h / 2 - NODE_PORT_SIZE / 2,
-              ['--pc' as string]: PORT_COLORS[shape.props.nodeType === 'video-asset' ? 'video' : 'image'] ?? '#34d399'
-            }}
-            title="来源产物连线"
-          >
+        {inPorts.length === 0 &&
+          Boolean((shape.meta as Record<string, unknown> | undefined)?.artifactProducerId) && (
             <span
-              className="port-dot-inner"
+              key="artifact-in-provenance"
+              className="port-dot in connected input-optional"
               style={{
-                background: PORT_COLORS[shape.props.nodeType === 'video-asset' ? 'video' : 'image'] ?? '#34d399'
+                top: shape.props.h / 2 - NODE_PORT_SIZE / 2,
+                ['--pc' as string]:
+                  PORT_COLORS[shape.props.nodeType === 'video-asset' ? 'video' : 'image'] ??
+                  '#34d399'
               }}
+              title="来源产物连线"
             />
-          </span>
-        )}
+          )}
 
         {/* 输出端口：与输入端口同样是纯圆形，按住后拖出连线；in 方向拖线时反向高亮。 */}
         {outPorts.map((p, i) => {
@@ -521,9 +531,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                   { x: e.clientX, y: e.clientY }
                 )
               }}
-            >
-              <span className="port-dot-inner" style={{ background: PORT_COLORS[p.type] }} />
-            </span>
+            ></span>
           )
         })}
       </div>

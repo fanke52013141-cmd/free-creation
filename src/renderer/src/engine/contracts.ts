@@ -2,6 +2,7 @@ import type { CanvasEdge, CanvasNode, PortDecl, PortSchemaRef, PortType } from '
 import { nodeSchemasCompatible, validateNodeSchema } from '@shared/node-schemas'
 import { getNodeType, portCompatible } from '../nodes/registry'
 import type { NodeValue, RawNodeOutputs } from '../nodes/nodeValues'
+import { inputText as sharedInputText } from '@shared/engine/inputs'
 
 export interface NodeValuePacket {
   type: PortType
@@ -195,12 +196,9 @@ export function inputPackets(inputs: ContractInputMap, portId: string): readonly
 }
 
 export function inputText(inputs: ContractInputMap, portId: string): string {
-  return inputPackets(inputs, portId)
-    .map((packet) =>
-      packet.value.kind === 'text' || packet.value.kind === 'markdown' ? packet.value.text : ''
-    )
-    .filter(Boolean)
-    .join('\n\n---\n\n')
+  // 分隔符是共享层的单一真值（$$$，见 shared/engine/helpers）；渲染层不再自带一份，
+  // 否则同一次运行里画布预览与执行器会拼出不同的文本。
+  return sharedInputText(inputs, portId)
 }
 
 export function inputJson(inputs: ContractInputMap, portId: string): unknown[] {

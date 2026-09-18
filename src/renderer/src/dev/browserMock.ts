@@ -3,10 +3,7 @@
 import type { ProjectMeta, ProjectFile, ProviderSummary } from '@shared/types'
 import type { ImageGenerateInput, SaveProviderInput } from '@shared/contracts'
 import { createBrowserMedia } from './browserMedia'
-import {
-  defaultPalettePreferences,
-  type PalettePreferences
-} from '@shared/palette-preferences'
+import { defaultPalettePreferences, type PalettePreferences } from '@shared/palette-preferences'
 
 export function installBrowserMock(): void {
   if (window.api) return
@@ -47,9 +44,7 @@ export function installBrowserMock(): void {
       baseURL: 'https://toapis.com/v1',
       hasApiKey: true,
       createdAt: now - 1000,
-      models: [
-        { id: 'gpt-image-2', modality: 'image' }
-      ]
+      models: [{ id: 'gpt-image-2', modality: 'image' }]
     },
     {
       id: 'mock-relay',
@@ -297,7 +292,9 @@ export function installBrowserMock(): void {
           name: input.name,
           specId: input.specId,
           baseURL: input.baseURL,
-          hasApiKey: Boolean(input.apiKey?.trim() || existing?.hasApiKey || inMemoryApiKeys.has(id)),
+          hasApiKey: Boolean(
+            input.apiKey?.trim() || existing?.hasApiKey || inMemoryApiKeys.has(id)
+          ),
           models: input.models.map((model) => ({ ...model })),
           createdAt: existing?.createdAt ?? Date.now()
         }
@@ -328,6 +325,16 @@ export function installBrowserMock(): void {
         Promise.resolve({
           ok: false,
           error: { code: 'MOCK', message: '浏览器演示不支持音频生成' }
+        }),
+      speechGenerate: () =>
+        Promise.resolve({
+          ok: false,
+          error: { code: 'MOCK', message: '浏览器演示不支持配音合成' }
+        }),
+      voiceDesign: () =>
+        Promise.resolve({
+          ok: false,
+          error: { code: 'MOCK', message: '浏览器演示不支持音色设计' }
         }),
       imageGenerate: async (input: ImageGenerateInput) => {
         const prov = providers.find((p) => p.id === input.providerId)

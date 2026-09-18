@@ -15,8 +15,18 @@ export class GatewayError extends Error {
   }
 }
 
-export function driverForSpec(specId: ProviderSpecId): 'openai-compatible' | 'video' {
-  return specId === 'minimax' || specId === 'seedance' ? 'video' : 'openai-compatible'
+/**
+ * 供应商协议驱动。
+ *   openai-compatible → AI SDK（文本/图片）与 /audio/speech
+ *   video             → 任务式视频适配器（video.ts）
+ *   native-speech     → 豆包语音等自有协议，不实现 /models，首次生成时验证
+ */
+export function driverForSpec(
+  specId: ProviderSpecId
+): 'openai-compatible' | 'video' | 'native-speech' {
+  if (specId === 'minimax' || specId === 'seedance') return 'video'
+  if (specId === 'doubao-speech') return 'native-speech'
+  return 'openai-compatible'
 }
 
 export function requireProvider(providerId: string): ProviderConfig {
@@ -56,8 +66,12 @@ export async function testProvider(
   const apiKey = input.apiKey?.trim() || (input.id ? (getProvider(input.id)?.apiKey ?? '') : '')
   if (!apiKey) throw new GatewayError('PROVIDER_NO_KEY', 'API Key 不能为空')
 
-  if (driverForSpec(input.specId) === 'video') {
+  const driver = driverForSpec(input.specId)
+  if (driver === 'video') {
     return { models: [], message: '配置已保存（视频供应商在首次生成时验证）' }
+  }
+  if (driver === 'native-speech') {
+    return { models: [], message: '配置已保存（该协议供应商在首次生成时验证）' }
   }
 
   const res = await fetch(`${baseURL}/models`, {

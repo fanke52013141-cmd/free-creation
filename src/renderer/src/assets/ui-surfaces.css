@@ -46,14 +46,14 @@
 .canvas-theme-light .node-card input,
 .canvas-theme-light .node-card select,
 .canvas-theme-light .node-media {
-  background: #f7f3ec;
+  background: #ffffff;
 }
 
-/* 浅色主题下的端口：暖白底，内高光 */
+/* 浅色主题下的端口：仍是类型色实心圆点，不做渐变/内阴影。 */
 .canvas-theme-light .port-dot::after {
-  background: color-mix(in srgb, var(--pc, #42b9f5) 24%, rgba(255, 253, 250, 0.72));
+  background: var(--pc, #42b9f5);
   border: none;
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.7);
+  box-shadow: none;
 }
 
 .canvas-theme-light .node-media-actions,
@@ -368,6 +368,11 @@
   background: #090d12;
 }
 
+/* 图片预览一律白底（用户 2026-09-18 拍板）：大图预览也要能看清图片边界。 */
+.media-preview-image .media-preview-stage {
+  background: #ffffff;
+}
+
 .media-preview-video .media-preview-stage video {
   width: 100%;
   height: 100%;
@@ -384,7 +389,7 @@
   max-width: 100%;
   max-height: 100%;
   border-radius: 8px;
-  background: #05070a;
+  background: #ffffff;
   object-fit: contain;
 }
 
@@ -479,8 +484,8 @@
 .media-result-compare-item {
   border-color: rgba(231, 238, 247, 0.12);
   border-radius: 7px;
-  background: #11161d;
-  box-shadow: inset 0 1px rgba(255, 255, 255, 0.035);
+  /* 结果缩略图同样白底（用户 2026-09-18 拍板）：每格的图片边界必须可见。 */
+  background: #ffffff;
   transition:
     border-color 140ms ease,
     transform 140ms ease,
@@ -1513,6 +1518,14 @@
   color: #e8f9ff;
   filter: drop-shadow(0 0 5px rgba(105, 220, 255, 0.38));
   transform: translateY(-1px) scale(1.08);
+}
+
+/* 运行按钮常驻：不可用时置灰而不是消失（用户 2026-09-18 拍板）。 */
+.node-run-btn:disabled,
+.canvas-theme-light .node-run-btn:disabled {
+  color: rgba(158, 173, 189, 0.42);
+  filter: none;
+  transform: none;
 }
 
 /* 运行按钮与标题行垂直居中，并固定在节点右上角。 */

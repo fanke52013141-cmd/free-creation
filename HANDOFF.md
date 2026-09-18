@@ -1,6 +1,6 @@
 # Canvas Studio 开发交接文档
 
-> 最后更新：2026-09-17
+> 最后更新：2026-09-18
 >
 > 当前分支：`main`。接手前必须执行 `git fetch origin` 与 `git status -sb`，不得依据本文旧哈希判断推送状态。
 >
@@ -9,6 +9,15 @@
 > 远程仓库：https://github.com/fanke52013141-cmd/free-creation
 >
 > 产品定位：单用户、本地优先的 Windows Electron 无限画布创作工具。
+
+> **节点 UI 统一 + 媒体/视频缺陷修复 + 语音节点族（2026-09-18）**：按用户 10 张截图反馈完成 A/B/C 三组改动，完整交接见 [docs/HANDOFF_2026_09_18_UI_UNIFICATION_AND_NODE_BATCH.md](./docs/HANDOFF_2026_09_18_UI_UNIFICATION_AND_NODE_BATCH.md)，UI 决定的权威条款见 [docs/NODE_UI_SPEC.md](./docs/NODE_UI_SPEC.md) §16（v1.2）。
+> **①A 组 UI（9 条，全部覆盖旧条款）**：端口圆点改**实色**（删掉磨砂/内阴影/玻璃珠与 5px 色芯）、媒体预览**一律白底 + 可见边框**、运行按钮**常驻并在缺必填输入时置灰**（原因复用 `deriveNodeReadiness`，不引入第二套判断）、已连线无值的输入**整条不渲染**（「等待上游输出」消失）、媒体后续按钮**去图标**（这才是"文字不居中"的真因：8 个按钮塞进 340px 被图标挤出按钮外）、悬浮全貌**统一在上方**且去来源名、拆图**行/列/面积一行** + 序号圆点 `line-height:1` + 追溯线颜色**跟随被产出资产类型**、图片节点去掉格式徽标、命名统一 `修改→P图` / `图片生成视频→生视频` / `取帧·截取·提音→抽帧·截视频·截音频`。
+> **②B 组修复**：**B1 是真实功能阻断**——读用户机器上的 `project.json` 取证发现旧项目的视频节点是 `video`（操作节点）且 `props.mediaPath` 有值、但 `meta.nodeResult` 为空且 `nodeRun=null`（早期版本把产物直接写在 props 上），而 `projectVideoOutputs` 只认结果集合 → 下游抽帧/截视频/截音频/截人声**全部读不到源视频**；`latestResultMediaOutput` 增加**历史兼容回退**（无结果集合**且无运行记录**时才回退，保住"失败运行不暴露旧产物"的既有门禁）。B2 文本拼接 `---` → `$$$`（`\n$$$\n`，无空行），并**收敛掉渲染层 `contracts.ts` 里第二份 `inputText`**（它会让画布预览与执行器拼出不同文本）。B3 P 图产物命名 `（改）原图名` → `（改1）…`（媒体 `NodeValue` 新增可选 `name` 随连线传递）。B4/B5 **核实为原实现已正确**：颜色语义确实写进了 prompt，发给模型确实是两张图（原图 + canvas 绘制的标注图）。B6 cowart **未完成**（本会话无网络检索通道），替代做法是自查出并修复了「标注文字从未进入提示词」这一真实缺口。
+> **③C 组节点**：新增 **视频资产节点**（`video-asset` 从 `INTERNAL` 升级为可新建，与图片节点同构）、**文件节点**（`file`，Excel/Word/PDF/Markdown；二进制不假装能解析，文本类额外输出 `out-text`）、**音色设计节点**（`voice-design`，`trial_audio` 是 hex，已解码落盘为真实资产）；**配音节点改为模型驱动**（`resolvePorts` 按 `config.backend` 派生互斥结构，MiniMax 走完整异步链路 `t2a_async_v2 → 轮询 → files/retrieve → 下载落盘`）；**语音克隆**补齐 `text_validation`/`accuracy`/`clone_prompt` 等并新增 `out-json` 音色档案；豆包 `seed-audio-1.0` 接入（含字幕时间轴）。
+> **④名字收敛为单一来源**：删除 `CanvasEditor.tsx` 的 `paletteLabels` 覆盖表——它曾让同一节点有两个名字（左侧「克隆」/ 卡片「语音克隆」、左侧「数据」/ 卡片「JSON」等）。现在面板文字、tooltip、`aria-label`、新建卡片标题全部取 `spec.label`。
+> **验证基线**：`eslint --no-cache .` **0 error**（126 prettier warning 为既有存量）、`tsc` node/web 均通过、`vitest run` **72 文件 / 864 用例全通过**、`electron-vite build` 通过；另有 Playwright 打运行中 dev server 的真实渲染验收（A 组 25 项 + 新节点 13 项全通过，截图在本地 `artifacts/verify-2026-09-18/`，不提交）。新增回归门禁 `test/node-ui-decisions.test.ts`（16 项）把本轮"删掉某个覆盖"型决定固化。
+> **移交项**：①cowart 调研未完成，需用户提供链接/截图或可用检索通道；②箭头/矩形/涂画承载标注文字（提示词侧已就绪，缺行内输入，待用户确认）；③豆包 `references[]`/`audio_data`/`audio_url`/参考图片未实现（官方文档未给 `references[]` 条目结构，连线时明确报错而非静默忽略）；④MiniMax 复刻参考音频时长 10 秒–5 分钟未强制（无 ffprobe 探测）；⑤tldraw 会拉 `cdn.tldraw.com` 被应用自身 CSP 拦下，浏览器验收里产生 300+ 条控制台噪声，不影响功能但淹没真实错误；⑥本轮全部为本地/浏览器验证，**未做真实供应商端到端出片验收**。
+> **环境坑（本机实测）**：`npm run dev` 会崩在 `isPackaged`——DSH 的 `node` shim 注入了 `ELECTRON_RUN_AS_NODE=1`，需清掉该变量后用真实 node 直接跑 `electron-vite dev`；浏览器验收脚本要用 `localhost`/`[::1]`（dev server 只绑 IPv6）；`eslint --cache` 会掩盖未改动文件里的历史 error（本轮因此暴露并修掉了 `video.tsx` 条件 Hook 与 `CanvasEditor.tsx` `prefer-const` 两个旧 error），建议去掉缓存。
 
 > **生图节点多供应商接入 + F04 沙箱加固（2026-09-17，提交 `e069079`–`177576a`）**：①**F04**（`e069079`）：headless 代码节点 vm 隔离逃逸修复落地——args 以 JSON 文本传入沙箱内重建（构造器链全部留在沙箱 realm）、用户源码由宿主 vm.Script 预编译、`codeGeneration:{strings:false}` 封锁沙箱内动态编译；原复现脚本改写为回归断言（`test/f04-repro.test.ts`，2 用例：逃逸必须被拒、失败不得伪装成功结果）。②**生图多供应商**（`177576a`）：生图节点新增供应商级联选择（ToAPIS 默认优先 / ChatGPT 官方 / OpenRouter / 自定义 relay），四张供应商能力表驱动参数显隐与提交——ToAPIS：13 画幅比例串 + 1k/2k/4k + 参考图 ≤6（上传换 URL 的异步任务驱动）；OpenAI 官方：固定像素 size + quality 固定 low；OpenRouter：chat-completions modalities + 参考图内联；relay 维持旧行为零变化。质量按决策固定 low 不暴露 UI；分辨率跨供应商保留用户意图。`image.generate` 升 4.0.0，configSchema 修正幽灵键 providerId/modelId → modelKey 并新增 providerKey/resolution，`generated/agent-contracts.json` 已同步（幂等验证）。新增测试：能力表四分册 + 跨供应商归一化、三驱动 6 用例（mock fetch/AI SDK/media 仓库）、parseImageGen 新字段用例。**验证基线：`npm run verify` 全绿（eslint、tsc node/web、vitest 985 用例、electron-vite 构建）。** 设计与决策记录见 [docs/IMAGE_PROVIDER_GATEWAY_PLAN.md](./docs/IMAGE_PROVIDER_GATEWAY_PLAN.md)。**移交项：ToAPIS 真实 Key 冒烟验收——任务查询端点候选路径（`/images/tasks/`、`/tasks/`、`/images/generations/`）、上传端点 `/uploads/images`（multipart 字段 `file`）与 `quality` 字段接受度均属实现假设（实现环境无法访问 docs.toapis.com），假设清单与单点修正位置见方案 §12；若 API 拒绝 quality，将 toapis 能力表 `supportsQuality` 置 false 即可。**
 

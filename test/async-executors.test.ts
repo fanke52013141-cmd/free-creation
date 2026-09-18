@@ -5,6 +5,8 @@ import type { NodeExecutionContext } from '@renderer/engine/executor-types'
 import type { GatewayClient } from '@shared/engine/gateway-client'
 import type { NodeValuePacket } from '@renderer/engine/contracts'
 import { audioExecutor } from '@renderer/engine/executors/audio'
+import { speechExecutor } from '@renderer/engine/executors/speech'
+import { voiceDesignExecutor } from '@renderer/engine/executors/voiceDesign'
 import { chatExecutor } from '@renderer/engine/executors/chat'
 import { imageGenExecutor } from '@renderer/engine/executors/imageGen'
 import { ttsExecutor } from '@renderer/engine/executors/tts'
@@ -58,10 +60,12 @@ function makeContext(
   ctx: NodeExecutionContext
   props: Partial<NodeCardShape['props']>
   result: { value: string | null }
+  meta: Record<string, unknown>
   artifacts: unknown[]
 } {
   const props: Partial<NodeCardShape['props']> = {}
   const result = { value: null as string | null }
+  const meta: Record<string, unknown> = {}
   const artifacts: unknown[] = []
   const shape = {
     id: `shape:${nodeType}`,
@@ -88,6 +92,7 @@ function makeContext(
   return {
     props,
     result,
+    meta,
     ctx: {
       node: {
         id: shape.id,
@@ -115,6 +120,7 @@ function makeContext(
       updateResult: (value) => {
         result.value = value
       },
+      updateMeta: (patch) => Object.assign(meta, patch),
       emitArtifact: (artifact) => artifacts.push(artifact)
     },
     artifacts
@@ -252,28 +258,106 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     })
   })
 
-  it('audio executor records a generated result with its precise run provenance', async () => {
-    installGateway({
-      audioGenerate: vi.fn().mockResolvedValue({
-        ok: true,
-        data: { id: 'audio-1', path: 'projects/p/audio.mp3', mime: 'audio/mpeg', name: '旁白' }
-      })
+  it('配音执行器按 config.backend 走模型驱动网关，并记录精确运行来源', async () => {
+    const speechGenerate = vi.fn().mockResolvedValue({
+      ok: true,
+      data: {
+        asset: { id: 'speech-1', path: 'projects/p/speech.mp3', mime: 'audio/mpeg', name: '旁白' }
+      }
     })
-    const { ctx, props, result, artifacts } = makeContext(
+    installGateway({ speechGenerate })
+    const { ctx, props, result, meta, artifacts } = makeContext(
       'speech',
-      JSON.stringify({
-        mode: 'generate',
-        modelKey: 'provider-1::audio-model',
-        voice: 'alloy',
-        format: 'mp3'
-      }),
+      JSON.stringify({ backend: 'minimax', providerId: 'provider-1', modelId: 'speech-2.8-hd' }),
       [provider('audio')],
       '旁白'
     )
-    await expect(audioExecutor(ctx)).resolves.toEqual({ status: 'done' })
+    await expect(speechExecutor(ctx)).resolves.toEqual({ status: 'done' })
+    expect(speechGenerate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerId: 'provider-1',
+        modelId: 'speech-2.8-hd',
+        text: '旁白'
+      })
+    )
     expect(props.mediaId).toBeUndefined()
-    expect(artifacts).toContainEqual(expect.objectContaining({ kind: 'audio', mediaId: 'audio-1' }))
+    expect(artifacts).toContainEqual(
+      expect.objectContaining({ kind: 'audio', mediaId: 'speech-1' })
+    )
     expect(JSON.parse(result.value ?? '{}').results[0].runId).toBe('run-1')
+    // 本次没有字幕，必须清空而不是保留上一次的 nodeExtra。
+    expect(meta.nodeExtra).toBeUndefined()
+  })
+
+  it('配音执行器在豆包开启字幕时写入 out-subtitle 的结构化结果', async () => {
+    installGateway({
+      speechGenerate: vi.fn().mockResolvedValue({
+        ok: true,
+        data: {
+          asset: {
+            id: 'speech-2',
+            path: 'projects/p/speech.mp3',
+            mime: 'audio/mpeg',
+            name: '旁白'
+          },
+          subtitle: {
+            text: '你好世界',
+            sentences: [{ start_time: 0, end_time: 1200, text: '你好世界' }]
+          }
+        }
+      })
+    })
+    const { ctx, meta } = makeContext(
+      'speech',
+      JSON.stringify({ backend: 'doubao', providerId: 'provider-1', modelId: 'seed-audio-1.0' }),
+      [provider('audio')],
+      '你好世界'
+    )
+    await expect(speechExecutor(ctx)).resolves.toEqual({ status: 'done' })
+    expect(JSON.parse(String(meta.nodeExtra))['out-subtitle'].sentences).toHaveLength(1)
+  })
+
+  it('配音执行器不猜测供应商：未选模型时跳过而不是发起请求', async () => {
+    const speechGenerate = vi.fn()
+    installGateway({ speechGenerate })
+    const { ctx } = makeContext(
+      'speech',
+      JSON.stringify({ backend: 'minimax' }),
+      [provider('audio')],
+      '旁白'
+    )
+    await expect(speechExecutor(ctx)).resolves.toEqual({
+      status: 'skipped',
+      reason: '未选择语音模型'
+    })
+    expect(speechGenerate).not.toHaveBeenCalled()
+  })
+
+  it('音色设计执行器产出试听音频与可复用的音色档案', async () => {
+    const voiceDesign = vi.fn().mockResolvedValue({
+      ok: true,
+      data: {
+        asset: {
+          id: 'voice-1',
+          path: 'projects/p/trial.mp3',
+          mime: 'audio/mpeg',
+          name: '音色试听'
+        },
+        voiceId: 'CanvasVoice_2026'
+      }
+    })
+    installGateway({ voiceDesign })
+    const { ctx, meta, artifacts } = makeContext(
+      'voice-design',
+      JSON.stringify({ providerId: 'provider-1' }),
+      [],
+      '清亮温柔的年轻女声'
+    )
+    await expect(voiceDesignExecutor(ctx)).resolves.toEqual({ status: 'done' })
+    expect(JSON.parse(String(meta.nodeExtra))['out-json'].voice_id).toBe('CanvasVoice_2026')
+    expect(artifacts).toContainEqual(
+      expect.objectContaining({ kind: 'audio', mediaId: 'voice-1', portId: 'out-audio' })
+    )
   })
 
   it('audio asset executor only publishes its own imported media and never makes a remote speech request', async () => {
@@ -295,13 +379,16 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     expect(audioGenerate).not.toHaveBeenCalled()
   })
 
-  it('语音克隆执行器从节点正文读取朗读内容，而不读取配置中的遗留 text', async () => {
+  it('语音克隆执行器从节点正文读取朗读内容，并回写可复用的音色档案', async () => {
     const ttsGenerate = vi.fn().mockResolvedValue({
       ok: true,
-      data: { id: 'tts-1', path: 'projects/p/tts.wav', mime: 'audio/wav', name: '复刻旁白' }
+      data: {
+        asset: { id: 'tts-1', path: 'projects/p/tts.wav', mime: 'audio/wav', name: '复刻旁白' },
+        voiceId: 'CanvasVoice_2026'
+      }
     })
     installGateway({ ttsGenerate })
-    const { ctx, artifacts } = makeContext(
+    const { ctx, meta, artifacts } = makeContext(
       'tts',
       JSON.stringify({ refMediaId: 'reference-audio', text: '不应作为当前正文执行' }),
       [],
@@ -313,6 +400,27 @@ describe('chat / audio / video executors with a mocked gateway', () => {
       expect.objectContaining({ referenceAudioId: 'reference-audio', text: '当前画布正文' })
     )
     expect(artifacts).toContainEqual(expect.objectContaining({ kind: 'audio', mediaId: 'tts-1' }))
+    expect(JSON.parse(String(meta.nodeExtra))['out-json'].voice_id).toBe('CanvasVoice_2026')
+  })
+
+  it('本地 IndexTTS 链路没有服务端音色，音色档案必须清空而不是伪造', async () => {
+    installGateway({
+      ttsGenerate: vi.fn().mockResolvedValue({
+        ok: true,
+        data: {
+          asset: { id: 'tts-2', path: 'projects/p/tts.wav', mime: 'audio/wav', name: '本地复刻' },
+          voiceId: ''
+        }
+      })
+    })
+    const { ctx, meta } = makeContext(
+      'tts',
+      JSON.stringify({ backend: 'comfyui', refMediaId: 'reference-audio' }),
+      [],
+      '本地合成'
+    )
+    await expect(ttsExecutor(ctx)).resolves.toEqual({ status: 'done' })
+    expect(meta.nodeExtra).toBeUndefined()
   })
 
   it('video executor submits, polls, and records the completed media result', async () => {

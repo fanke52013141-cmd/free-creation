@@ -117,7 +117,8 @@ function collectEdges(editor: Editor, host: HTMLDivElement): ScreenEdge[] {
     const assetBounds = editor.getShapePageBounds(asset.id)
     if (!producerBounds || !assetBounds) continue
     const producerPorts = getNodePortsForShape(producer)
-    const artifactPortId = (asset.meta as Record<string, unknown> | undefined)?.artifactProducerPortId
+    const artifactPortId = (asset.meta as Record<string, unknown> | undefined)
+      ?.artifactProducerPortId
     const fromIndex =
       typeof artifactPortId === 'string'
         ? producerPorts.out.findIndex((p) => p.id === artifactPortId)
@@ -133,7 +134,9 @@ function collectEdges(editor: Editor, host: HTMLDivElement): ScreenEdge[] {
     const assetPorts = getNodePortsForShape(asset as NodeCardShape)
     const inIdx = assetPorts.in.length > 0 ? 0 : -1
     const toY =
-      inIdx >= 0 ? portOffsets(assetPorts.in.length, (asset as NodeCardShape).props.h)[inIdx] : undefined
+      inIdx >= 0
+        ? portOffsets(assetPorts.in.length, (asset as NodeCardShape).props.h)[inIdx]
+        : undefined
     const targetAnchorY =
       toY !== undefined && (asset as NodeCardShape).props.h > 0
         ? assetBounds.y + (assetBounds.height * toY) / (asset as NodeCardShape).props.h
@@ -148,9 +151,17 @@ function collectEdges(editor: Editor, host: HTMLDivElement): ScreenEdge[] {
       y: targetAnchorY
     })
     const outPort = outIdx >= 0 ? producerPorts.out[outIdx] : undefined
+    // 追溯线的颜色跟随“被产出的资产类型”，而不是生产者的端口类型：宫格拆分的
+    // 集合端口是 json（紫），但它产出的每一个都是图片，画成紫色会让用户以为
+    // 拆分结果不是图片（用户 2026-09-18 反馈）。无资产输出端口时回退生产者端口。
+    const assetOutType = assetPorts.out[0]?.type
     result.push({
       id: `artifact:${asset.id}` as TLShapeId,
-      color: outPort ? (PORT_COLORS[outPort.type] ?? '#94a3b8') : '#94a3b8',
+      color: assetOutType
+        ? (PORT_COLORS[assetOutType] ?? '#94a3b8')
+        : outPort
+          ? (PORT_COLORS[outPort.type] ?? '#94a3b8')
+          : '#94a3b8',
       provenance: true,
       path: buildDataEdgePath(
         { x: start.x - hostRect.left, y: start.y - hostRect.top },

@@ -6,10 +6,19 @@ export type NodeValue =
   | { kind: 'text'; text: string }
   | { kind: 'markdown'; text: string }
   | { kind: 'json'; data: unknown }
-  | { kind: 'image'; mediaId: string; mediaPath: string; mime: string }
-  | { kind: 'video'; mediaId: string; mediaPath: string; mime: string }
-  | { kind: 'audio'; mediaId: string; mediaPath: string; mime: string }
-  | { kind: 'file'; mediaId: string; mediaPath: string; mime: string }
+  | MediaNodeValue<'image'>
+  | MediaNodeValue<'video'>
+  | MediaNodeValue<'audio'>
+  | MediaNodeValue<'file'>
+
+/** 媒体值统一携带可选的显示名（来源节点标题）；只用于产物命名与来源展示。 */
+export interface MediaNodeValue<K extends 'image' | 'video' | 'audio' | 'file'> {
+  kind: K
+  mediaId: string
+  mediaPath: string
+  mime: string
+  name?: string
+}
 
 export type RawNodeOutputs = Partial<Record<string, NodeValue>>
 
@@ -208,8 +217,23 @@ export function parseNodeRecord(text: string): Record<string, unknown> | null {
   }
 }
 
-/** 解析 AI 处理节点存在 meta.nodeResult 的运行结果。 */
-export function parseStoredAiResult(
+/**
+ * 解析 meta.nodeExtra：一次运行产生的非媒体端口值，按端口 ID 存放。
+ * 配音节点的字幕、音色设计/复刻节点的音色档案都走这里，避免污染媒体结果集合。
+ */
+export function parseNodeExtra(stored: unknown): Record<string, unknown> {
+  if (typeof stored !== 'string' || !stored) return {}
+  try {
+    const value = JSON.parse(stored) as unknown
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {}
+  } catch {
+    return {}
+  }
+}
+
+/** 解析 AI 处理节点存在 meta.nodeResult 的运行结果。 */ export function parseStoredAiResult(
   stored: string
 ): { kind: 'text' | 'markdown' | 'json'; text?: string; data?: unknown } | null {
   if (!stored) return null

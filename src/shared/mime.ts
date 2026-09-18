@@ -19,7 +19,21 @@ export const MIME_BY_EXTENSION: Record<string, string> = {
   '.ogg': 'audio/ogg',
   '.m4a': 'audio/mp4',
   '.flac': 'audio/flac',
-  '.aac': 'audio/aac'
+  '.aac': 'audio/aac',
+  // 文件节点（2026-09-18）：常见文档格式也要能被识别为 file 媒体，
+  // 否则 mime 会退化成 application/octet-stream，节点无法如实展示类型。
+  '.pdf': 'application/pdf',
+  '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xls': 'application/vnd.ms-excel',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.ppt': 'application/vnd.ms-powerpoint',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.csv': 'text/csv',
+  '.txt': 'text/plain',
+  '.md': 'text/markdown',
+  '.json': 'application/json',
+  '.zip': 'application/zip'
 }
 
 export function mimeForExtension(extension: string): string {

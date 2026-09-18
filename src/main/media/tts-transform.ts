@@ -4,12 +4,17 @@
 import { randomUUID } from 'crypto'
 import { readFile } from 'fs/promises'
 import { extname } from 'path'
-import type { TtsGenerateInput } from '../../shared/contracts'
-import type { MediaAsset } from '../../shared/types'
+import type { TtsGenerateInput, VoiceCloneResult } from '../../shared/contracts'
+import {
+  MINIMAX_CLONE_MAX_BYTES,
+  MINIMAX_CLONE_MIMES,
+  isValidMiniMaxVoiceId
+} from '../../shared/tts'
 import { getDb } from '../store/db'
 import { getMediaAbsPath, saveBufferAsset } from '../store/media.repo'
 import { getProvider } from '../gateway/providers.repo'
 import { generateAudioToAsset } from '../gateway/audio'
+import { cloneMiniMaxVoice } from '../gateway/voice'
 import { GatewayError } from '../gateway/factory'
 import {
   ComfyuiError,
@@ -135,7 +140,7 @@ async function pollUntilDone(
   throw new ComfyuiError('TIMEOUT', `语音合成超时（${POLL_TIMEOUT_MS / 60000} 分钟）`)
 }
 
-export async function transformTts(input: TtsGenerateInput): Promise<MediaAsset> {
+export async function transformTts(input: TtsGenerateInput): Promise<VoiceCloneResult> {
   if (!input.text?.trim()) throw new ComfyuiError('INVALID_INPUT', '朗读文本不能为空')
   const config = input.config
   if (config.backend === 'minimax') return transformMiniMaxTts(input)
@@ -164,29 +169,23 @@ export async function transformTts(input: TtsGenerateInput): Promise<MediaAsset>
   if (!outputFile) throw new ComfyuiError('EMPTY_RESULT', '工作流完成但没有产出音频')
 
   const audioBuf = await comfyuiFetchView(baseUrl, outputFile)
-  return saveBufferAsset(
+  const asset = await saveBufferAsset(
     input.projectId,
     audioBuf,
     `.${config.format}`,
     input.text.trim().slice(0, 24)
   )
+  // 本地 IndexTTS 是「就地克隆」，没有可复用的服务端音色标识——返回空串而不是
+  // 编造一个 voice_id 让下游误以为可以引用。
+  return { asset, voiceId: '' }
 }
 
-const MINIMAX_CLONE_MIMES = new Set([
-  'audio/mpeg',
-  'audio/wav',
-  'audio/x-wav',
-  'audio/mp4',
-  'audio/m4a'
-])
-const MINIMAX_CLONE_MAX_BYTES = 20 * 1024 * 1024
-
 /**
- * MiniMax 快速复刻的正式链路：上传本地参考音频 → 创建 voice_id → 用该音色调用
+ * MiniMax 快速复刻的正式链路：上传本地参考音频 → 登记 voice_id → 用该音色调用
  * T2A。clone 接口只负责登记音色（和可选试听），真正的运行产物必须由 T2A 落入
  * 本地资产库，才能和其他音频节点保持同一种输出语义。
  */
-async function transformMiniMaxTts(input: TtsGenerateInput): Promise<MediaAsset> {
+async function transformMiniMaxTts(input: TtsGenerateInput): Promise<VoiceCloneResult> {
   const config = input.config
   if (!config.providerId) throw new GatewayError('INVALID_INPUT', '请选择 MiniMax 供应商')
   const provider = getProvider(config.providerId)
@@ -196,76 +195,42 @@ async function transformMiniMaxTts(input: TtsGenerateInput): Promise<MediaAsset>
   }
 
   const reference = await readReferenceAudio(input.referenceAudioId)
-  if (!MINIMAX_CLONE_MIMES.has(reference.mime.toLowerCase())) {
+  if (!MINIMAX_CLONE_MIMES.includes((reference.mime || '').toLowerCase())) {
     throw new GatewayError('INVALID_INPUT', 'MiniMax 复刻参考音频仅支持 mp3、m4a 或 wav')
   }
   if (reference.buf.length > MINIMAX_CLONE_MAX_BYTES) {
     throw new GatewayError('INVALID_INPUT', 'MiniMax 复刻参考音频不能超过 20MB')
   }
+  if (config.voiceId.trim() && !isValidMiniMaxVoiceId(config.voiceId.trim())) {
+    throw new GatewayError(
+      'INVALID_INPUT',
+      '自定义 Voice ID 需 8～256 位、以字母开头、只含字母数字与 - _、且末位不能是 - 或 _'
+    )
+  }
 
-  const baseUrl = provider.baseURL.replace(/\/+$/, '')
-  const fileName = `canvas_clone_${randomUUID().slice(0, 12)}${extname(reference.path) || '.wav'}`
-  const form = new FormData()
-  form.set('purpose', 'voice_clone')
-  form.set('file', new Blob([new Uint8Array(reference.buf)], { type: reference.mime }), fileName)
-  const upload = await fetch(`${baseUrl}/v1/files/upload`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${provider.apiKey}` },
-    body: form
+  const promptAudio = config.promptMediaId
+    ? await readReferenceAudio(config.promptMediaId, '克隆提示音')
+    : null
+
+  const voiceId = await cloneMiniMaxVoice({
+    providerId: provider.id,
+    reference: {
+      buf: reference.buf,
+      mime: reference.mime,
+      fileName: `canvas_clone_${randomUUID().slice(0, 12)}${extname(reference.path) || '.wav'}`
+    },
+    prompt: promptAudio
+      ? {
+          buf: promptAudio.buf,
+          mime: promptAudio.mime,
+          fileName: `canvas_prompt_${randomUUID().slice(0, 12)}${extname(promptAudio.path) || '.wav'}`,
+          text: config.promptText
+        }
+      : null,
+    config
   })
-  if (!upload.ok) {
-    const detail = await upload.text().catch(() => '')
-    throw new GatewayError(
-      'UPSTREAM_ERROR',
-      `MiniMax 上传参考音频失败：HTTP ${upload.status}${detail ? `：${detail.slice(0, 180)}` : ''}`
-    )
-  }
-  const uploadPayload = (await upload.json().catch(() => null)) as {
-    file?: { file_id?: number | string }
-    base_resp?: { status_code?: number; status_msg?: string }
-  } | null
-  const fileId = uploadPayload?.file?.file_id
-  if (
-    !fileId ||
-    (uploadPayload?.base_resp?.status_code && uploadPayload.base_resp.status_code !== 0)
-  ) {
-    throw new GatewayError(
-      'UPSTREAM_ERROR',
-      `MiniMax 未返回有效复刻文件：${uploadPayload?.base_resp?.status_msg || '未知错误'}`
-    )
-  }
 
-  const voiceId = normalizeMiniMaxVoiceId(config.voiceId)
-  const clone = await fetch(`${baseUrl}/v1/voice_clone`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${provider.apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      file_id: typeof fileId === 'string' ? Number(fileId) : fileId,
-      voice_id: voiceId,
-      model: config.modelId || 'speech-2.8-turbo',
-      need_noise_reduction: config.needNoiseReduction,
-      need_volume_normalization: config.needVolumeNormalization,
-      aigc_watermark: config.aigcWatermark
-    })
-  })
-  if (!clone.ok) {
-    const detail = await clone.text().catch(() => '')
-    throw new GatewayError(
-      'UPSTREAM_ERROR',
-      `MiniMax 创建克隆音色失败：HTTP ${clone.status}${detail ? `：${detail.slice(0, 180)}` : ''}`
-    )
-  }
-  const clonePayload = (await clone.json().catch(() => null)) as {
-    base_resp?: { status_code?: number; status_msg?: string }
-  } | null
-  if (clonePayload?.base_resp?.status_code !== 0) {
-    throw new GatewayError(
-      'UPSTREAM_ERROR',
-      `MiniMax 创建克隆音色失败：${clonePayload?.base_resp?.status_msg || '未知错误'}`
-    )
-  }
-
-  return generateAudioToAsset({
+  const asset = await generateAudioToAsset({
     projectId: input.projectId,
     providerId: provider.id,
     modelId: config.modelId || 'speech-2.8-turbo',
@@ -274,12 +239,7 @@ async function transformMiniMaxTts(input: TtsGenerateInput): Promise<MediaAsset>
     format: config.format,
     aigcWatermark: config.aigcWatermark
   })
-}
-
-function normalizeMiniMaxVoiceId(raw: string): string {
-  const compact = raw.trim().replace(/[^A-Za-z0-9_-]/g, '-')
-  if (/^[A-Za-z][A-Za-z0-9_-]{6,254}[A-Za-z0-9]$/.test(compact)) return compact
-  return `canvas-voice-${randomUUID().replace(/-/g, '').slice(0, 20)}`
+  return { asset, voiceId }
 }
 
 interface ReferenceAudioPayload {
@@ -289,18 +249,21 @@ interface ReferenceAudioPayload {
 }
 
 /** 读取本地图库中的参考音频；mediaId 无效或文件丢失时抛出明确错误。 */
-async function readReferenceAudio(mediaId: string): Promise<ReferenceAudioPayload> {
-  if (!mediaId) throw new ComfyuiError('INVALID_INPUT', '缺少参考音频')
+async function readReferenceAudio(
+  mediaId: string,
+  label = '参考音频'
+): Promise<ReferenceAudioPayload> {
+  if (!mediaId) throw new ComfyuiError('INVALID_INPUT', `缺少${label}`)
   const row = getDb().prepare('SELECT mime, path FROM media WHERE id = ?').get(mediaId) as
     { mime: string; path: string } | undefined
-  if (!row) throw new ComfyuiError('MEDIA_NOT_FOUND', '参考音频不存在或已删除')
+  if (!row) throw new ComfyuiError('MEDIA_NOT_FOUND', `${label}不存在或已删除`)
   const abs = getMediaAbsPath(row.path)
-  if (!abs) throw new ComfyuiError('MEDIA_NOT_FOUND', '参考音频路径不合法')
+  if (!abs) throw new ComfyuiError('MEDIA_NOT_FOUND', `${label}路径不合法`)
   let buf: Buffer
   try {
     buf = await readFile(abs)
   } catch {
-    throw new ComfyuiError('MEDIA_NOT_FOUND', '参考音频文件读取失败')
+    throw new ComfyuiError('MEDIA_NOT_FOUND', `${label}文件读取失败`)
   }
   return { buf, mime: row.mime || 'audio/wav', path: row.path }
 }

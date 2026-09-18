@@ -14,6 +14,11 @@ import type {
   ImageCropTransformInput,
   ImageSplitTransformInput,
   TtsGenerateInput,
+  VoiceCloneResult,
+  SpeechGenerateInput,
+  SpeechGenerateResult,
+  VoiceDesignInput,
+  VoiceDesignResult,
   VideoFrameTransformInput,
   VideoProbeInput,
   VideoProbeResult,
@@ -108,7 +113,7 @@ const api = {
     ipcRenderer.invoke(IPC.media.vocalSeparate, input),
   getLocalMediaCapabilities: (): Promise<IpcEnvelope<LocalMediaCapabilities>> =>
     ipcRenderer.invoke(IPC.media.localCapabilities),
-  ttsGenerate: (input: TtsGenerateInput): Promise<IpcEnvelope<MediaAsset>> =>
+  ttsGenerate: (input: TtsGenerateInput): Promise<IpcEnvelope<VoiceCloneResult>> =>
     ipcRenderer.invoke(IPC.media.ttsGenerate, input),
   comfyui: {
     status: (): Promise<IpcEnvelope<ComfyuiStatus>> => ipcRenderer.invoke(IPC.comfyui.status),
@@ -181,6 +186,10 @@ const api = {
       ipcRenderer.invoke(IPC.gateway.videoTask, { taskId }),
     audioGenerate: (input: AudioGenerateInput): Promise<IpcEnvelope<MediaAsset>> =>
       ipcRenderer.invoke(IPC.gateway.audioGenerate, input),
+    speechGenerate: (input: SpeechGenerateInput): Promise<IpcEnvelope<SpeechGenerateResult>> =>
+      ipcRenderer.invoke(IPC.gateway.speechGenerate, input),
+    voiceDesign: (input: VoiceDesignInput): Promise<IpcEnvelope<VoiceDesignResult>> =>
+      ipcRenderer.invoke(IPC.gateway.voiceDesign, input),
     // 网关事件订阅（聊天流式分片 / 视频任务进度），返回取消订阅函数
     onEvent: (cb: (e: GatewayEvent) => void): (() => void) => {
       const listener = (_e: unknown, payload: GatewayEvent): void => cb(payload)

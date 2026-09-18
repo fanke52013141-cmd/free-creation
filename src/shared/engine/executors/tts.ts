@@ -1,4 +1,4 @@
-// TTS 语音复刻节点执行器：用本地 ComfyUI IndexTTS-2.5 合成音频。
+// TTS 语音复刻节点执行器：本地 ComfyUI IndexTTS-2.5 或 MiniMax 快速复刻。
 import { inputMedia, inputText } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
 import { mergedPrompt } from '../helpers'
@@ -29,14 +29,15 @@ export const ttsExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecut
     if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
     if (!result.ok) return { status: 'failed', reason: result.error.message }
 
+    const { asset, voiceId } = result.data
     ctx.updateResult(
       serializeMediaResultCollection(
         appendMediaResult(
           typeof ctx.shape.meta?.nodeResult === 'string' ? ctx.shape.meta.nodeResult : '',
           {
-            mediaId: result.data.id,
-            mediaPath: result.data.path,
-            mime: result.data.mime
+            mediaId: asset.id,
+            mediaPath: asset.path,
+            mime: asset.mime
           },
           {
             nodeId: ctx.node.id,
@@ -46,13 +47,28 @@ export const ttsExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecut
         )
       )
     )
+    // 复刻出的音色本身是可复用结果：以结构化音色档案暴露给下游配音节点。
+    // 本地 IndexTTS 链路没有服务端音色标识，此时清空而不是保留上一次的档案。
+    ctx.updateMeta?.({
+      nodeExtra: voiceId
+        ? JSON.stringify({
+            'out-json': {
+              voice_id: voiceId,
+              provider: 'minimax',
+              source: 'voice_clone',
+              label: config.voiceId.trim() || voiceId,
+              preview_media_id: asset.id
+            }
+          })
+        : undefined
+    })
     ctx.emitArtifact?.({
       kind: 'audio',
-      mediaId: result.data.id,
-      mediaPath: result.data.path,
-      mime: result.data.mime,
+      mediaId: asset.id,
+      mediaPath: asset.path,
+      mime: asset.mime,
       portId: 'out-audio',
-      title: result.data.name || '语音复刻结果'
+      title: asset.name || '语音复刻结果'
     })
     return { status: 'done' }
   } catch (error) {

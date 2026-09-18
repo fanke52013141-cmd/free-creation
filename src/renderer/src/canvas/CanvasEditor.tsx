@@ -356,29 +356,12 @@ export function CanvasEditor({
   // 左侧节点面板：点击在视口中心创建；拖拽到画布在落点创建
   const SIDEBAR_W = 72
   const nodeTypes = allNodeTypes()
-  const paletteLabels: Partial<Record<NodeTypeId, string>> = {
-    text: '文本',
-    image: '图片',
-    'image-gen': '生图',
-    'image-crop': '裁剪',
-    'image-split': '拆分',
-    'image-edit': '修改',
-    video: '视频',
-    'video-frame': '取帧',
-    'video-clip': '截取',
-    'video-audio': '提音',
-    'vocal-separate': '人声分离',
-    audio: '音频',
-    speech: '配音',
-    tts: '克隆',
-    chat: '对话',
-    script: '脚本',
-    processor: '处理',
-    json: '数据',
-    code: '代码',
-    storyboard: '分镜',
-    director: '预演'
-  }
+  // 左侧面板直接使用 spec.label —— 不再维护第二份名字表。
+  //
+  // 用户 2026-09-18 的规则是「节点叫什么，左侧就得叫什么」。此前这里有一份
+  // paletteLabels 覆盖表，于是同一个节点出现了两个名字：左侧「克隆」而卡片默认标题
+  // 是「语音克隆」、左侧「数据」而卡片是「JSON」。删除覆盖表后，面板文字、tooltip、
+  // aria-label 与新建卡片的标题同源，分叉在结构上不再可能发生。
   const handleNodePick = (type: NodeTypeId): void => {
     if (suppressNodePickRef.current) {
       suppressNodePickRef.current = false
@@ -934,7 +917,7 @@ export function CanvasEditor({
       )
 
     let startX = point.x - size.w / 2
-    let startY = point.y - size.h / 2
+    const startY = point.y - size.h / 2
 
     if (sourceBounds && connectionDirection === 'out') {
       // 从输出端口拉线：放置在源节点右侧，保持至少 64px 间距，杜绝遮挡源卡片
@@ -1679,20 +1662,20 @@ export function CanvasEditor({
             {nodeTypes.map((t) => (
               <Tooltip
                 key={t.type}
-                label={'添加' + t.label + '节点'}
+                label={`添加${t.label}节点`}
                 placement="right"
                 anchorSelector=".palette-icon"
               >
                 <button
                   className="palette-item palette-node-item"
-                  aria-label={'添加' + t.label + '节点'}
+                  aria-label={`添加${t.label}节点`}
                   onClick={() => handleNodePick(t.type)}
                   onPointerDown={(e) => startNodeDrag(e, t.type)}
                 >
                   <span className="palette-icon" style={{ color: t.color }}>
                     <Icon name={t.icon} size={20} />
                   </span>
-                  <span className="palette-label">{paletteLabels[t.type] ?? t.label}</span>
+                  <span className="palette-label">{t.label}</span>
                 </button>
               </Tooltip>
             ))}

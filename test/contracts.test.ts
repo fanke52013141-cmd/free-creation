@@ -229,7 +229,7 @@ describe('collectContractInputs · 单值端口占用规则', () => {
     ])
     const result = collectContractInputs(target, [edge1, edge2], outs)
     expect(result.errors).toHaveLength(0)
-    expect(inputText(result.value, 'in-text')).toBe('第一段\n\n---\n\n第二段')
+    expect(inputText(result.value, 'in-text')).toBe('第一段\n$$$\n第二段')
   })
 })
 

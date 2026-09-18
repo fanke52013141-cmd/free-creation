@@ -20,7 +20,12 @@ import type {
   VideoAudioTransformInput,
   VocalSeparateInput,
   VocalSeparationResult,
-  TtsGenerateInput
+  TtsGenerateInput,
+  VoiceCloneResult,
+  SpeechGenerateInput,
+  SpeechGenerateResult,
+  VoiceDesignInput,
+  VoiceDesignResult
 } from '../contracts'
 import type { MediaAsset, ProviderSummary, VideoTaskInfo } from '../types'
 
@@ -45,6 +50,10 @@ export interface GatewayClient {
   videoCancel(taskId: string): Promise<IpcEnvelope<boolean>>
   videoTask(taskId: string): Promise<IpcEnvelope<VideoTaskInfo | null>>
   audioGenerate(input: AudioGenerateInput): Promise<IpcEnvelope<MediaAsset>>
+  /** 配音节点：按 config.backend 走 MiniMax 异步 / 豆包 / OpenAI 兼容协议。 */
+  speechGenerate(input: SpeechGenerateInput): Promise<IpcEnvelope<SpeechGenerateResult>>
+  /** 音色设计：返回试听音频资产与可复用的 voice_id。 */
+  voiceDesign(input: VoiceDesignInput): Promise<IpcEnvelope<VoiceDesignResult>>
   /** 订阅网关事件（流式分片 / 视频进度），返回取消订阅函数。 */
   onEvent(cb: (event: GatewayEvent) => void): () => void
 
@@ -61,5 +70,5 @@ export interface GatewayClient {
   clipVideo(input: VideoClipTransformInput): Promise<IpcEnvelope<MediaAsset>>
   extractVideoAudio(input: VideoAudioTransformInput): Promise<IpcEnvelope<MediaAsset>>
   separateVocals(input: VocalSeparateInput): Promise<IpcEnvelope<VocalSeparationResult>>
-  ttsGenerate(input: TtsGenerateInput): Promise<IpcEnvelope<MediaAsset>>
+  ttsGenerate(input: TtsGenerateInput): Promise<IpcEnvelope<VoiceCloneResult>>
 }

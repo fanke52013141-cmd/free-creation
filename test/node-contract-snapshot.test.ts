@@ -237,29 +237,110 @@ describe('关键端口契约快照（防回归）', () => {
     })
   })
 
-  it('语音克隆节点：参考语音(one) + 文本(many) → 音频', () => {
+  it('语音克隆节点：参考语音(one) + 文本(many) → 音频 + 音色档案', () => {
     const spec = getNodeType('tts')!
-    expect(spec.contractVersion).toBe(2)
+    expect(spec.contractVersion).toBe(3)
     expect(snapshotPorts(spec.ports.in)).toEqual([
       { id: 'in-audio', dir: 'in', type: 'audio', required: false, cardinality: 'one' },
       { id: 'in-text', dir: 'in', type: 'text', required: false, cardinality: 'many' }
     ])
     expect(snapshotPorts(spec.ports.out)).toEqual([
-      { id: 'out-audio', dir: 'out', type: 'audio', required: true, cardinality: 'one' }
+      { id: 'out-audio', dir: 'out', type: 'audio', required: true, cardinality: 'one' },
+      {
+        id: 'out-json',
+        dir: 'out',
+        type: 'json',
+        required: false,
+        cardinality: 'one',
+        schema: 'voice.profile@1'
+      }
     ])
   })
 
-  it('图片/音频资产都是纯源节点，通用配音只接朗读文本', () => {
+  it('音色设计节点：音色描述 → 试听音频 + 音色档案', () => {
+    const spec = getNodeType('voice-design')!
+    expect(spec.contractVersion).toBe(1)
+    expect(snapshotPorts(spec.ports.in)).toEqual([
+      { id: 'in-text', dir: 'in', type: 'text', required: false, cardinality: 'many' }
+    ])
+    expect(snapshotPorts(spec.ports.out)).toEqual([
+      { id: 'out-audio', dir: 'out', type: 'audio', required: true, cardinality: 'one' },
+      {
+        id: 'out-json',
+        dir: 'out',
+        type: 'json',
+        required: true,
+        cardinality: 'one',
+        schema: 'voice.profile@1'
+      }
+    ])
+  })
+
+  it('配音节点端口随所选协议变化：MiniMax / 豆包 / OpenAI 兼容三套结构', () => {
+    const spec = getNodeType('speech')!
+    expect(spec.contractVersion).toBe(3)
+
+    const shapeFor = (backend: string): NodeCardShape =>
+      ({
+        id: 'shape:speech' as never,
+        type: 'node-card',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        index: 'a1' as never,
+        isLocked: false,
+        props: {
+          w: 340,
+          h: 260,
+          nodeType: 'speech',
+          title: '配音',
+          config: JSON.stringify({ backend }),
+          text: '',
+          mediaId: '',
+          mediaPath: '',
+          mediaMime: '',
+          exec: 'idle'
+        },
+        meta: {}
+      }) as NodeCardShape
+
+    // MiniMax（默认）：朗读文本 + 音色档案 → 音频
+    expect(
+      getNodePorts(spec, shapeFor('minimax'))
+        .in.map((p) => p.id)
+        .sort()
+    ).toEqual(['in-text', 'in-voice'])
+    expect(getNodePorts(spec, shapeFor('minimax')).out.map((p) => p.id)).toEqual(['out-audio'])
+
+    // 豆包：多出参考音频输入与字幕输出
+    expect(
+      getNodePorts(spec, shapeFor('doubao'))
+        .in.map((p) => p.id)
+        .sort()
+    ).toEqual(['in-audio', 'in-text', 'in-voice'])
+    expect(
+      getNodePorts(spec, shapeFor('doubao'))
+        .out.map((p) => p.id)
+        .sort()
+    ).toEqual(['out-audio', 'out-subtitle'])
+
+    // OpenAI 兼容旧通道：只接朗读文本，不产生字幕
+    expect(getNodePorts(spec, shapeFor('openai')).in.map((p) => p.id)).toEqual(['in-text'])
+    expect(getNodePorts(spec, shapeFor('openai')).out.map((p) => p.id)).toEqual(['out-audio'])
+  })
+
+  it('图片/音频资产都是纯源节点，配音与语音克隆各有独立契约', () => {
     expect(getNodeType('image')!.contractVersion).toBe(3)
     expect(snapshotPorts(getNodeType('image')!.ports.in)).toEqual([])
     expect(getNodeType('audio')!.contractVersion).toBe(3)
     expect(snapshotPorts(getNodeType('audio')!.ports.in)).toEqual([])
-    expect(snapshotPorts(getNodeType('speech')!.ports.in)).toEqual([
-      { id: 'in-text', dir: 'in', type: 'text', required: false, cardinality: 'many' }
-    ])
-    expect(getNodeType('speech')!.contractVersion).toBe(2)
-    expect(snapshotPorts(getNodeType('speech')!.ports.out)).toEqual([
+    expect(snapshotPorts(getNodeType('audio')!.ports.out)).toEqual([
       { id: 'out-audio', dir: 'out', type: 'audio', required: true, cardinality: 'one' }
+    ])
+    expect(getNodeType('speech')!.contractVersion).toBe(3)
+    expect(snapshotPorts(getNodeType('tts')!.ports.in)).toEqual([
+      { id: 'in-audio', dir: 'in', type: 'audio', required: false, cardinality: 'one' },
+      { id: 'in-text', dir: 'in', type: 'text', required: false, cardinality: 'many' }
     ])
   })
 
@@ -338,9 +419,19 @@ describe('关键端口契约快照（防回归）', () => {
   it('视频节点只保留一个 image many 输入，避免并列的同色图片端口', () => {
     const spec = getNodeType('video')!
     const imageInputs = spec.ports.in.filter((port) => port.type === 'image')
-    expect(spec.contractVersion).toBe(6)
+    expect(spec.contractVersion).toBe(7)
     expect(imageInputs).toHaveLength(1)
     expect(imageInputs[0]).toMatchObject({ id: 'in-images', cardinality: 'many' })
+  })
+
+  it('视频资产节点可直接新建，用于上传本地视频素材', () => {
+    const spec = getNodeType('video-asset')!
+    expect(spec.creatable).not.toBe(false)
+    expect(spec.ports.in).toEqual([])
+    expect(snapshotPorts(spec.ports.out)).toEqual([
+      { id: 'out-video', dir: 'out', type: 'video', required: true, cardinality: 'one' }
+    ])
+    expect(allNodeTypes().some((item) => item.type === 'video-asset')).toBe(true)
   })
 
   it('所有活跃节点的同一种输入或输出类型都只声明一次', () => {

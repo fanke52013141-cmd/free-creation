@@ -194,6 +194,9 @@ export async function runNodeTest(
         meta: { ...(testShape.meta ?? {}), nodeResult: result ?? undefined }
       }
     },
+    updateMeta: (patch) => {
+      testShape = { ...testShape, meta: { ...(testShape.meta ?? {}), ...patch } }
+    },
     runSubflow: async () => {
       throw new Error('节点测试不执行下游子流程')
     }
@@ -395,6 +398,14 @@ async function invokeExecutor(
           ...(current?.meta ?? {}),
           nodeResult: result ?? undefined
         }
+      })
+    },
+    updateMeta: (patch) => {
+      const current = ctx.editor.getShape<NodeCardShape>(id)
+      ctx.editor.updateShape({
+        id,
+        type: 'node-card',
+        meta: { ...(current?.meta ?? {}), ...patch }
       })
     },
     emitArtifact: (artifact) => {

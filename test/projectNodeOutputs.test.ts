@@ -99,7 +99,8 @@ describe('projectNodeOutputs · 媒体节点（资产 / 操作节点）', () => 
       kind: 'image',
       mediaId: 'm-crop',
       mediaPath: '/crop.png',
-      mime: 'image/png'
+      mime: 'image/png',
+      name: 'image-crop'
     })
     const split = projectNodeOutputs(
       shape(
@@ -187,6 +188,112 @@ describe('projectNodeOutputs · 媒体节点（资产 / 操作节点）', () => 
         )
       )
     ).toEqual({})
+  })
+
+  it('历史项目：产物直接写在 props 且没有运行记录时仍投影输出', () => {
+    // 早期版本把成片写在 video 节点的 props 上，没有结果集合。若不兼容，
+    // 下游「抽帧 / 截视频 / 截音频」会全部读不到源视频（用户 2026-09-18 反馈）。
+    expect(
+      projectNodeOutputs(
+        shape('video', { mediaId: 'legacy', mediaPath: '/legacy.mp4', mediaMime: 'video/mp4' })
+      )['out-video']
+    ).toEqual({
+      kind: 'video',
+      mediaId: 'legacy',
+      mediaPath: '/legacy.mp4',
+      mime: 'video/mp4',
+      name: 'video'
+    })
+  })
+})
+
+describe('projectNodeOutputs · 语音节点（Batch C：配音 / 复刻 / 音色设计）', () => {
+  const audioResult = operationResult('a1', '/voice.mp3', 'audio/mpeg')
+
+  it('配音节点：成功运行后同时投影音频与非媒体字幕输出', () => {
+    const out = projectNodeOutputs(
+      shape(
+        'speech',
+        {},
+        {
+          ...audioResult,
+          nodeExtra: JSON.stringify({
+            'out-subtitle': {
+              text: '你好世界',
+              sentences: [{ start_time: 0, end_time: 1200, text: '你好世界' }]
+            }
+          })
+        }
+      )
+    )
+    expect(out['out-audio']).toMatchObject({ kind: 'audio', mediaId: 'a1' })
+    expect(out['out-subtitle']).toEqual({
+      kind: 'json',
+      data: {
+        text: '你好世界',
+        sentences: [{ start_time: 0, end_time: 1200, text: '你好世界' }]
+      }
+    })
+  })
+
+  it('配音节点：没有字幕时不产出 out-subtitle，而不是给一个空结构', () => {
+    const out = projectNodeOutputs(shape('speech', {}, { ...audioResult }))
+    expect(out['out-audio']).toMatchObject({ kind: 'audio' })
+    expect(out).not.toHaveProperty('out-subtitle')
+  })
+
+  it('音色设计节点：试听音频与音色档案同时可用', () => {
+    const out = projectNodeOutputs(
+      shape(
+        'voice-design',
+        {},
+        {
+          ...audioResult,
+          nodeExtra: JSON.stringify({
+            'out-json': { voice_id: 'CanvasVoice_2026', provider: 'minimax' }
+          })
+        }
+      )
+    )
+    expect(out['out-audio']).toMatchObject({ kind: 'audio', mediaId: 'a1' })
+    expect(out['out-json']).toEqual({
+      kind: 'json',
+      data: { voice_id: 'CanvasVoice_2026', provider: 'minimax' }
+    })
+  })
+
+  it('语音克隆节点：MiniMax 登记出音色时暴露音色档案', () => {
+    const out = projectNodeOutputs(
+      shape(
+        'tts',
+        {},
+        {
+          ...audioResult,
+          nodeExtra: JSON.stringify({ 'out-json': { voice_id: 'CanvasVoice_2026' } })
+        }
+      )
+    )
+    expect(out['out-json']).toEqual({
+      kind: 'json',
+      data: { voice_id: 'CanvasVoice_2026' }
+    })
+  })
+
+  it('运行失败时不暴露上一次的音色档案或字幕（陈旧结果必须清空）', () => {
+    const failed = {
+      ...audioResult,
+      nodeExtra: JSON.stringify({ 'out-json': { voice_id: 'CanvasVoice_2026' } }),
+      nodeRun: { runId: 'run-2', status: 'failed', startedAt: 2, inputs: {} }
+    }
+    expect(projectNodeOutputs(shape('voice-design', {}, failed))).toEqual({})
+  })
+
+  it('损坏的 nodeExtra 不抛异常，只是不产出该端口', () => {
+    const out = projectNodeOutputs(
+      shape('voice-design', {}, { ...audioResult, nodeExtra: '{not json' })
+    )
+    expect(out).not.toHaveProperty('out-json')
+    expect(out['out-audio']).toMatchObject({ kind: 'audio' })
   })
 })
 

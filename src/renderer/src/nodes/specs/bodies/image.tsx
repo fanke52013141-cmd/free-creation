@@ -2,12 +2,7 @@
 import { useEditor } from 'tldraw'
 import { stopEventPropagation } from 'tldraw'
 import { mediaUrl, type NodeBodyProps } from '../../registry'
-import {
-  ImageContinuationActions,
-  MediaFileActions,
-  MediaSourceBadge,
-  useClickGuard
-} from './shared'
+import { ImageContinuationActions, MediaFileActions, useClickGuard } from './shared'
 import { useAppStore } from '../../../stores/app'
 import { toast } from '../../../stores/toast'
 import { markUndoPoint } from '../../../canvas/history'
@@ -80,9 +75,6 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
         }
       >
         <img src={mediaUrl(shape.props.mediaPath)} alt={shape.props.title} draggable={false} />
-        <span className="node-media-badge-overlay">
-          <MediaSourceBadge shape={shape} fallback={shape.props.mediaMime || '本地图片'} />
-        </span>
       </div>
       <ImageContinuationActions
         editor={editor}
@@ -98,7 +90,6 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
                 void chooseAsset()
               }}
             >
-              <Icon name="upload" size={12} />
               替换
             </button>
             <MediaFileActions shape={shape} />

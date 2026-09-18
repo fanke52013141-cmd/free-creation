@@ -8,10 +8,22 @@ export type NodeValue =
   | { kind: 'text'; text: string }
   | { kind: 'markdown'; text: string }
   | { kind: 'json'; data: unknown }
-  | { kind: 'image'; mediaId: string; mediaPath: string; mime: string }
-  | { kind: 'video'; mediaId: string; mediaPath: string; mime: string }
-  | { kind: 'audio'; mediaId: string; mediaPath: string; mime: string }
-  | { kind: 'file'; mediaId: string; mediaPath: string; mime: string }
+  | MediaNodeValue<'image'>
+  | MediaNodeValue<'video'>
+  | MediaNodeValue<'audio'>
+  | MediaNodeValue<'file'>
+
+/**
+ * 媒体值统一携带可选的显示名（来源节点的标题）。它只用于产物命名与来源展示，
+ * 不参与类型校验，也不能被当成“按标题猜测输入”的依据。
+ */
+export interface MediaNodeValue<K extends 'image' | 'video' | 'audio' | 'file'> {
+  kind: K
+  mediaId: string
+  mediaPath: string
+  mime: string
+  name?: string
+}
 
 export type RawNodeOutputs = Partial<Record<string, NodeValue>>
 

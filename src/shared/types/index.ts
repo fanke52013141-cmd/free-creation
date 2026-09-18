@@ -12,13 +12,16 @@ export const ACTIVE_NODE_TYPE_IDS = [
   'image-gen',
   'image-edit',
   'video',
+  'video-asset',
   'video-frame',
   'video-clip',
   'video-audio',
   'vocal-separate',
   'audio',
+  'file',
   'speech',
   'tts',
+  'voice-design',
   'chat',
   'processor',
   'code',
@@ -32,8 +35,13 @@ export const ACTIVE_NODE_TYPE_IDS = [
 
 export type ActiveNodeTypeId = (typeof ACTIVE_NODE_TYPE_IDS)[number]
 
-/** 仅由运行器物化、不能从节点面板新建的资产承载类型。 */
-export const INTERNAL_NODE_TYPE_IDS = ['video-asset'] as const
+/**
+ * 仅由运行器物化、不能从节点面板新建的资产承载类型。
+ *
+ * `video-asset` 曾在此列（只能由视频节点产物生成）。用户 2026-09-18 拍板：
+ * 视频必须像图片一样可以直接上传素材，因此它升级为可创建节点，本清单目前为空。
+ */
+export const INTERNAL_NODE_TYPE_IDS = [] as const
 export type InternalNodeTypeId = (typeof INTERNAL_NODE_TYPE_IDS)[number]
 
 /**
@@ -246,6 +254,7 @@ export type ProviderSpecId =
   | 'relay'
   | 'minimax'
   | 'seedance'
+  | 'doubao-speech'
   | 'toapis'
   | 'openrouter'
 
@@ -377,6 +386,16 @@ export const PROVIDER_SPECS: ProviderSpec[] = [
       'doubao-seedance-2-0-fast-260128',
       'doubao-seedance-2-0-mini-260128'
     ]
+  },
+  {
+    // 豆包语音（Seed-Audio）是 specId 之外的第二套原生协议：不走 OpenAI 兼容
+    // /audio/speech，而是 POST /api/v3/tts/create 并返回 Base64 音频与字幕时间轴。
+    id: 'doubao-speech',
+    label: '豆包语音（Seed-Audio）',
+    desc: '火山语音合成原生协议 /api/v3/tts/create，用 X-Api-Key 鉴权，可返回字幕',
+    baseURL: 'https://openspeech.bytedance.com',
+    modality: 'audio',
+    suggestions: ['seed-audio-1.0']
   }
 ]
 

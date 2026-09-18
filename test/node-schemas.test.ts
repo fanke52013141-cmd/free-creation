@@ -21,6 +21,8 @@ describe('nodeSchemaRegistered', () => {
     expect(nodeSchemaRegistered({ id: 'previs.camera', version: 1 })).toBe(true)
     expect(nodeSchemaRegistered({ id: 'previs.project', version: 1 })).toBe(true)
     expect(nodeSchemaRegistered({ id: 'previs.project', version: 2 })).toBe(true)
+    expect(nodeSchemaRegistered({ id: 'voice.profile', version: 1 })).toBe(true)
+    expect(nodeSchemaRegistered({ id: 'voice.subtitle', version: 1 })).toBe(true)
   })
 
   it('拒绝未注册的 Schema ID 或错误版本', () => {
@@ -232,5 +234,55 @@ describe('validateNodeSchema · list.items@1', () => {
     expect(validateNodeSchema(listSchema, [1, 2]).ok).toBe(false)
     expect(validateNodeSchema(listSchema, [{ a: 1 }, null]).ok).toBe(false)
     expect(validateNodeSchema(listSchema, ['x']).ok).toBe(false)
+  })
+})
+
+describe('validateNodeSchema · voice.profile@1 / voice.subtitle@1（Batch C）', () => {
+  const profileSchema = { id: 'voice.profile', version: 1 }
+  const subtitleSchema = { id: 'voice.subtitle', version: 1 }
+
+  it('音色档案：voice_id 必填，来源字段可选', () => {
+    expect(validateNodeSchema(profileSchema, { voice_id: 'CanvasVoice_2026' }).ok).toBe(true)
+    expect(
+      validateNodeSchema(profileSchema, {
+        voice_id: 'CanvasVoice_2026',
+        provider: 'minimax',
+        source: 'voice_design',
+        label: '清亮女声',
+        preview_media_id: 'm1'
+      }).ok
+    ).toBe(true)
+    expect(validateNodeSchema(profileSchema, { voice_id: '' }).ok).toBe(false)
+    expect(validateNodeSchema(profileSchema, { label: '缺少 ID' }).ok).toBe(false)
+    expect(validateNodeSchema(profileSchema, { voice_id: 1 }).ok).toBe(false)
+    expect(validateNodeSchema(profileSchema, { voice_id: 'a', provider: 2 }).ok).toBe(false)
+  })
+
+  it('字幕：句子必须有可用的起止时间与文本', () => {
+    expect(
+      validateNodeSchema(subtitleSchema, {
+        text: '你好世界',
+        sentences: [{ start_time: 0, end_time: 1200, text: '你好世界' }]
+      }).ok
+    ).toBe(true)
+    expect(
+      validateNodeSchema(subtitleSchema, {
+        text: '你好',
+        sentences: [{ start_time: 0, end_time: 1200, text: '你好', words: [{ w: '你好' }] }]
+      }).ok
+    ).toBe(true)
+    expect(validateNodeSchema(subtitleSchema, { text: '你好', sentences: [] }).ok).toBe(true)
+    // 时间必须是有限数字，缺失或非数字都拒绝。
+    expect(
+      validateNodeSchema(subtitleSchema, { text: '你好', sentences: [{ text: '你好' }] }).ok
+    ).toBe(false)
+    expect(
+      validateNodeSchema(subtitleSchema, {
+        text: '你好',
+        sentences: [{ start_time: 0, end_time: Number.NaN, text: '你好' }]
+      }).ok
+    ).toBe(false)
+    expect(validateNodeSchema(subtitleSchema, { text: '你好', sentences: 'nope' }).ok).toBe(false)
+    expect(validateNodeSchema(subtitleSchema, { sentences: [] }).ok).toBe(false)
   })
 })

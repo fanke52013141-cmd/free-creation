@@ -21,8 +21,7 @@ function compactJson(value: unknown): string {
 /** 非图片引用的正文：媒体类型只留类型图标，文本/JSON 留摘要；
  *  来源名称由统一的 connected-input-source 呈现，不再重复。 */
 function previewBody(input: ConnectedNodeInput): React.JSX.Element | null {
-  if (!input.value) return <span className="connected-input-empty">等待上游输出</span>
-  switch (input.value.kind) {
+  switch (input.value?.kind) {
     case 'image':
       return null // 图片走缩略图卡（ReferenceThumb）
     case 'video':
@@ -36,6 +35,8 @@ function previewBody(input: ConnectedNodeInput): React.JSX.Element | null {
     case 'markdown':
     case 'text':
       return <span className="connected-input-value">{input.value.text || '空文本'}</span>
+    default:
+      return null
   }
 }
 
@@ -62,7 +63,6 @@ function ReferenceThumb({
 
   if (input.value?.kind !== 'image') return <></>
   const mediaPath = input.value.mediaPath
-  const sourceLabel = `${input.sourceNodeName} · ${input.sourcePortName}`
 
   const showFullView = (): void => {
     const el = thumbRef.current
@@ -74,15 +74,16 @@ function ReferenceThumb({
     setFullRect(null)
   }
 
-  // 全貌浮层默认落在缩略图下方；空间不足时翻到上方。
+  // 全貌浮层统一落在缩略图上方（用户 2026-09-18 拍板：下方会遮挡节点内容）；
+  // 上方空间不足时才翻到下方。
   let overlayStyle: React.CSSProperties | undefined
   if (fullRect) {
     const estimatedHeight = 340
-    const placeAbove = fullRect.bottom + 8 + estimatedHeight > window.innerHeight
+    const placeBelow = fullRect.top - 8 - estimatedHeight < 0
     overlayStyle = {
       left: Math.max(8, Math.min(fullRect.left, window.innerWidth - 480)),
-      top: placeAbove ? undefined : fullRect.bottom + 8,
-      bottom: placeAbove ? window.innerHeight - fullRect.top + 8 : undefined
+      top: placeBelow ? fullRect.bottom + 8 : undefined,
+      bottom: placeBelow ? undefined : window.innerHeight - fullRect.top + 8
     }
   }
 
@@ -91,7 +92,6 @@ function ReferenceThumb({
       <div
         ref={thumbRef}
         className="reference-thumb"
-        title={`${input.targetPortName} · ${sourceLabel}`}
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation()
@@ -112,7 +112,6 @@ function ReferenceThumb({
         createPortal(
           <div className="reference-fullview" style={overlayStyle}>
             <img src={mediaUrl(mediaPath)} alt="" draggable={false} />
-            <span className="reference-fullview-caption">{sourceLabel}</span>
           </div>,
           document.body
         )}
@@ -146,9 +145,12 @@ export function ConnectedInputPreview({
     setExpanded(false)
   }
 
-  if (inputs.length === 0) return null
-  const visible = expanded ? inputs : inputs.slice(0, REFERENCE_VISIBLE_LIMIT)
-  const hiddenCount = inputs.length - visible.length
+  // 只呈现真正有值的上游输入：已连线但尚未产出结果的输入不再显示“等待上游输出”
+  // 这类操作提示（用户 2026-09-18 拍板：没有必要的提示语都不需要）。
+  const resolved = inputs.filter((input) => input.value !== null)
+  if (resolved.length === 0) return null
+  const visible = expanded ? resolved : resolved.slice(0, REFERENCE_VISIBLE_LIMIT)
+  const hiddenCount = resolved.length - visible.length
 
   return (
     <section className="connected-inputs" aria-label="已连接输入">

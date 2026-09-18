@@ -266,7 +266,21 @@ schema: {
 - 分镜、字幕、角色、镜头参数等业务结构必须使用独立 Schema ID。
 - 列表批处理使用 `list.items@1`：根值必须是数组，每个元素必须是对象（建议带稳定 id）。迭代/批处理节点的输入输出用它，使批量结果仍是可连接的结构化列表，而不是把几十个生成资产藏进一个不可连接的节点内部。
 - P2 已注册 `character.profile@1`、`scene.definition@1`、`shot.definition@1`、`prompt.bundle@1`；字段定义、校验错误和模板用法见 [docs/STRUCTURED_CREATIVE_DATA.md](./docs/STRUCTURED_CREATIVE_DATA.md)。
+- Batch C 新增语音相关 Schema：
+  - `voice.profile@1`：音色档案。`voice_id` 必填（非空字符串）；`provider`、`source`、`label`、`preview_media_id` 可选。它只携带标识与来源，**不含音频二进制**。生产者是音色设计节点（`voice_design`）与语音克隆节点（`voice_clone`），消费者是配音节点的 `in-voice`。
+  - `voice.subtitle@1`：字幕时间轴。`text` 必填；`sentences` 必须是数组，每项含有限的 `start_time` / `end_time` 数字与字符串 `text`，`words` 可选。只有豆包语音合成在 `enable_subtitle` 打开时才产出该输出，其他协议不产生空字幕。
 - Schema 的字段定义必须集中到共享目录，并在运行前后执行实际校验。
+
+#### 模型驱动端口的声明原则（配音节点）
+
+配音（`speech`）节点的端口结构由 `props.config.backend` 决定，而不是由上游节点类型推断：
+
+- 静态 `ports` 声明三套结构的并集，只用于注册校验与契约快照；运行时以 `resolvePorts(shape)` 为准。
+- `minimax`（默认）：`in-text` + `in-voice` → `out-audio`。
+- `doubao`：`in-text` + `in-voice` + `in-audio` → `out-audio` + `out-subtitle`。
+- `openai`：`in-text` → `out-audio`。
+- 同一协议下，执行器只读取该协议声明过的输入；未接入的通道（如豆包 `references` 参考音频）必须在执行时**明确失败**，不能静默忽略上游连线。
+- 非媒体端口值（字幕、音色档案）由执行器经 `updateMeta` 写入 `meta.nodeExtra`（按端口 ID 存放的 JSON），再由 `projectOutputs` 投影；不塞进 `meta.nodeResult` 的媒体结果集合，避免破坏「一个媒体输出」的既有语义。
 
 #### 动态输出的 Schema 声明原则
 

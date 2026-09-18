@@ -91,8 +91,8 @@ describe('mergedPrompt · 提示词合并（防累积）', () => {
     expect(mergedPrompt('', '上游')).toBe('上游')
   })
 
-  it('上游与节点文本用分隔符合并', () => {
-    expect(mergedPrompt('节点', '上游')).toBe('上游\n\n---\n\n节点')
+  it('上游与节点文本用 $$$ 分隔符合并，且不插入空行', () => {
+    expect(mergedPrompt('节点', '上游')).toBe('上游\n$$$\n节点')
   })
 
   it('重复运行不重复累积（幂等）', () => {

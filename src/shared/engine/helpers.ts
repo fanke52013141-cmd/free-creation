@@ -60,11 +60,22 @@ export function extractShots(raw: string): ShotShape[] | null {
 
 export type VariableValueType = 'string' | 'number' | 'boolean' | 'object' | 'array' | 'any'
 
+/**
+ * 文本节点拼接分隔符（用户 2026-09-18 拍板）。
+ *
+ * 为什么不是 `---`：三个减号在 Markdown 里是分隔线，而用户正文本身可能就含分隔线，
+ * 拼出来的结果无法与内容区分，也无法可靠地反向拆分。
+ * 三段美元符号既不会与常见正文冲突，又便于下游用代码 `split('$$$')` 还原每段来源。
+ * 拼接不插入空行。
+ */
+export const TEXT_MERGE_DELIMITER = '$$$'
+export const TEXT_MERGE_SEPARATOR = `\n${TEXT_MERGE_DELIMITER}\n`
+
 /** 节点运行会持久化文本/脚本内容；合并提示词时去掉已存在的前缀，避免重复累积。 */
 export function mergedPrompt(nodeValue: string, upstreamValue: string): string {
   if (!upstreamValue.trim()) return nodeValue
   if (!nodeValue.trim()) return upstreamValue
-  const prefix = `${upstreamValue}\n\n---\n\n`
+  const prefix = `${upstreamValue}${TEXT_MERGE_SEPARATOR}`
   return nodeValue.startsWith(prefix) ? nodeValue : `${prefix}${nodeValue}`
 }
 

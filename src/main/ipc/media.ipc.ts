@@ -12,6 +12,7 @@ import type {
   ImageSplitTransformInput,
   ImportMediaBufferInput,
   TtsGenerateInput,
+  VoiceCloneResult,
   VideoAudioTransformInput,
   VideoClipTransformInput,
   VideoFrameTransformInput,
@@ -76,6 +77,25 @@ const MEDIA_FILTERS = [
       'md',
       'json'
     ]
+  },
+  {
+    // 文件节点的专用过滤器：Excel / Word / PDF / Markdown 等常见文档。
+    name: '文档文件',
+    extensions: [
+      'pdf',
+      'doc',
+      'docx',
+      'xls',
+      'xlsx',
+      'ppt',
+      'pptx',
+      'csv',
+      'txt',
+      'md',
+      'markdown',
+      'json',
+      'zip'
+    ]
   }
 ]
 
@@ -104,8 +124,16 @@ const OPENABLE_EXTS = new Set([
   'aac',
   'txt',
   'md',
+  'markdown',
   'json',
-  'pdf'
+  'csv',
+  'pdf',
+  'doc',
+  'docx',
+  'xls',
+  'xlsx',
+  'ppt',
+  'pptx'
 ])
 
 async function importAll(projectId: string, paths: string[]): Promise<MediaImportResult> {
@@ -295,7 +323,7 @@ export function registerMediaIpc(): void {
   /** 本地 ComfyUI 语音复刻：同步等待合成完成（轮询在主进程内完成）。 */
   ipcMain.handle(
     IPC.media.ttsGenerate,
-    async (_e, input: TtsGenerateInput): Promise<IpcEnvelope<MediaAsset>> => {
+    async (_e, input: TtsGenerateInput): Promise<IpcEnvelope<VoiceCloneResult>> => {
       if (!input?.projectId || !input.referenceAudioId || !input.text?.trim()) {
         return err('INVALID_INPUT', '缺少参考音频或合成文本')
       }

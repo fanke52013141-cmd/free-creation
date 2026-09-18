@@ -110,7 +110,7 @@ export function ImageEditBody({ shape, openPreview }: NodeBodyProps): React.JSX.
     return (
       <div className="asset-empty image-edit-empty">
         <Icon name="image" size={40} />
-        <span>图片修改</span>
+        <span>P图</span>
         <button
           className="btn-ghost small"
           onPointerDown={stopEventPropagation}
@@ -175,7 +175,7 @@ export function ImageEditBody({ shape, openPreview }: NodeBodyProps): React.JSX.
             <Icon name="compare" size={13} /> {compareSource ? '收起对比' : '对比原图'}
           </button>
         ) : null}
-        <MediaSourceBadge shape={shape} fallback="图片修改" />
+        <MediaSourceBadge shape={shape} fallback="P图" />
         <MediaFileActions shape={shape} />
       </div>
       <div className="image-edit-inline">
@@ -210,7 +210,7 @@ export function ImageEditBody({ shape, openPreview }: NodeBodyProps): React.JSX.
             }}
           >
             <Icon name="edit" size={12} />
-            <span className="image-edit-inline-text">{instruction || '点击输入修改说明…'}</span>
+            <span className="image-edit-inline-text">{instruction || '点击输入 P 图说明…'}</span>
           </button>
         )}
       </div>
@@ -388,7 +388,7 @@ export function ImageEditSettings({
 }: NodeSettingsProps): React.JSX.Element {
   return (
     <section className="contract-section">
-      <h4>图片修改</h4>
+      <h4>P图</h4>
       <p className="contract-settings-hint">
         原图来自 in-image；标注仅作为修改参考，运行后输出新的图片资产。
       </p>
@@ -705,10 +705,7 @@ function ImageEditEditorCore({
                   const x = a.points[0].x * 100
                   const y = a.points[0].y * 100
                   return (
-                    <g
-                      key={a.id}
-                      className={`image-edit-text-group ${selected ? 'selected' : ''}`}
-                    >
+                    <g key={a.id} className={`image-edit-text-group ${selected ? 'selected' : ''}`}>
                       <text x={x} y={y} className={`image-edit-text ${a.color}`}>
                         {a.text}
                       </text>
@@ -718,10 +715,7 @@ function ImageEditEditorCore({
                 if (a.type === 'arrow') {
                   const arrowInfo = arrowHead(a.points, a.strokeWidth ?? 3)
                   return (
-                    <g
-                      key={a.id}
-                      className={selected ? 'selected' : ''}
-                    >
+                    <g key={a.id} className={selected ? 'selected' : ''}>
                       <line
                         x1={a.points[0].x * 100}
                         y1={a.points[0].y * 100}
@@ -921,6 +915,8 @@ function ImageEditEditorCore({
       )}
       <div className="gen-row">
         <ModelSelect
+          // 未显式选择模型时下拉直接落在解析出的默认模型上（ToAPIS 优先），
+          // 用户 2026-09-18 拍板：图片节点默认就是 TOAPIS。
           value={config.modelKey || (selectedOption?.key ?? '')}
           options={options}
           onChange={(modelKey) => save({ ...config, modelKey })}
@@ -981,7 +977,7 @@ function ImageEditEditorCore({
         ) : (
           <>
             <Icon name="spark" size={14} />
-            运行图片修改
+            运行 P 图
           </>
         )}
       </button>
@@ -989,7 +985,7 @@ function ImageEditEditorCore({
   )
 }
 
-/** 图片修改工作台：全屏弹窗，复用标注编辑器核心。 */
+/** P图工作台：全屏弹窗，复用标注编辑器核心。 */
 function ImageEditWorkbench({
   shape,
   editor,
@@ -1012,7 +1008,7 @@ function ImageEditWorkbench({
       className="director-studio-mask image-edit-workbench-mask"
       role="dialog"
       aria-modal="true"
-      aria-label="图片修改工作台"
+      aria-label="P图工作台"
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose()
       }}
@@ -1021,7 +1017,7 @@ function ImageEditWorkbench({
         <header className="image-edit-workbench-head">
           <div className="image-edit-workbench-title">
             <Icon name="edit" size={15} />
-            <span>图片修改工作台</span>
+            <span>P图工作台</span>
           </div>
           <button
             className="btn-ghost small"

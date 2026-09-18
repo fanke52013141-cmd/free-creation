@@ -13,6 +13,7 @@ import {
 import type { NodeCardShape } from './NodeCardShape'
 import type { BatchConnectionMember, ConnectionFrom } from '../stores/connection'
 import { projectNodeOutputs, type NodeValue } from '../nodes/nodeValues'
+import { TEXT_MERGE_SEPARATOR } from '@shared/engine/helpers'
 
 /**
  * 源输出端口能否接入目标输入端口（类型 + JSON Schema 双重校验）。
@@ -1022,7 +1023,7 @@ export function gatherUpstreamText(
       parts.push(output.text.trim())
     }
   }
-  return parts.join('\n\n---\n\n')
+  return parts.join(TEXT_MERGE_SEPARATOR)
 }
 
 /**

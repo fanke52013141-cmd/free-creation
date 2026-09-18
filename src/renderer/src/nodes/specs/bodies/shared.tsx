@@ -157,7 +157,7 @@ export function createImageContinuation(
         : targetType === 'image-split'
           ? '图片拆分'
           : targetType === 'image-edit'
-            ? '图片修改'
+            ? 'P图'
             : '图片生成视频'
   const placement = findContinuationPlacement(
     editor,
@@ -260,7 +260,7 @@ export function createVocalExtractionTemplate(editor: Editor, source: NodeCardSh
       y: source.y - vocalSpec.defaultSize.h / 4,
       props: {
         nodeType: 'video-audio',
-        title: '提取音频',
+        title: '截音频',
         w: audioSpec.defaultSize.w,
         h: audioSpec.defaultSize.h
       } satisfies Partial<NodeCardProps>
@@ -304,25 +304,14 @@ export function ImageContinuationActions({
 }): React.JSX.Element {
   const actions: Array<{
     type: 'image-crop' | 'image-split' | 'image-gen' | 'image-edit' | 'video'
-    icon: 'crop' | 'grid' | 'spark' | 'edit' | 'video'
     label: string
     title: string
   }> = [
-    { type: 'image-crop', icon: 'crop', label: '裁剪', title: '创建裁剪节点并连接当前图片' },
-    {
-      type: 'image-split',
-      icon: 'grid',
-      label: '拆分',
-      title: '创建图片拆分节点并连接当前图片'
-    },
-    { type: 'image-gen', icon: 'spark', label: '生图', title: '创建生图节点并连接当前图片' },
-    { type: 'image-edit', icon: 'edit', label: '修改', title: '对当前图片添加标注并修改' },
-    {
-      type: 'video',
-      icon: 'video',
-      label: '生视频',
-      title: '创建视频节点并将当前图片作为多参素材'
-    }
+    { type: 'image-crop', label: '裁剪', title: '创建裁剪节点并连接当前图片' },
+    { type: 'image-split', label: '拆分', title: '创建图片拆分节点并连接当前图片' },
+    { type: 'image-gen', label: '生图', title: '创建生图节点并连接当前图片' },
+    { type: 'image-edit', label: 'P图', title: '对当前图片添加标注并 P 图' },
+    { type: 'video', label: '生视频', title: '创建视频节点并将当前图片作为多参素材' }
   ]
   return (
     <div className="node-media-next-actions" aria-label="图片后续操作">
@@ -337,7 +326,7 @@ export function ImageContinuationActions({
             createImageContinuation(editor, shape, action.type)
           }}
         >
-          <Icon name={action.icon} size={12} /> {action.label}
+          {action.label}
         </button>
       ))}
       {extra}
@@ -354,9 +343,9 @@ export function createVideoContinuation(
   const spec = getNodeType(targetType)
   if (!spec) return
   const titles: Record<typeof targetType, string> = {
-    'video-frame': '视频取帧',
-    'video-clip': '视频截取',
-    'video-audio': '提取音频'
+    'video-frame': '抽帧',
+    'video-clip': '截视频',
+    'video-audio': '截音频'
   }
   const id = createShapeId()
   const placement = findContinuationPlacement(

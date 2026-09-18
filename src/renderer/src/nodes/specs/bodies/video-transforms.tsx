@@ -511,7 +511,8 @@ export function VideoTransformBody({
 }: NodeBodyProps & { mode: BodyMode }): React.JSX.Element {
   const guard = useClickGuard()
   const editor = useEditor()
-  const label = mode === 'frame' ? '视频取帧' : mode === 'clip' ? '视频截取' : '提取音频'
+  // 空态文案与节点 label / 视频节点底部按钮保持同一套命名（用户 2026-09-18 拍板）。
+  const label = mode === 'frame' ? '抽帧' : mode === 'clip' ? '截视频' : '截音频'
   const openSettings = (): void =>
     useNodePanelStore.getState().open('contract', shape.id, 'settings')
   if (!shape.props.mediaPath) {
@@ -607,7 +608,7 @@ export function VideoTransformBody({
               createVideoContinuation(editor, shape, 'video-frame')
             }}
           >
-            <Icon name="frame" size={12} /> 取帧
+            抽帧
           </button>
           <button
             className="btn-ghost small"
@@ -617,7 +618,7 @@ export function VideoTransformBody({
               createVideoContinuation(editor, shape, 'video-audio')
             }}
           >
-            <Icon name="audio" size={12} /> 提音
+            截音频
           </button>
         </div>
       )}
@@ -677,7 +678,7 @@ function VideoTransformSettings({
 
   const isFrame = mode === 'frame'
   const isClip = mode === 'clip'
-  const label = isFrame ? '视频取帧' : isClip ? '视频截取' : '提取音频'
+  const label = isFrame ? '抽帧' : isClip ? '截视频' : '截音频'
 
   useEffect(() => {
     let active = true
@@ -1092,7 +1093,7 @@ function VideoTransformSettings({
                 </AppSelect>
               </label>
               <small className="crop-coordinate-hint">
-                提音只忠实提取原始音频，不做降噪或人声分离。如需分离，请将输出连到独立的“人声分离”节点。
+                截音频只忠实提取原始音频，不做降噪或人声分离。如需分离，请将输出连到独立的“人声分离”节点。
               </small>
             </>
           )}

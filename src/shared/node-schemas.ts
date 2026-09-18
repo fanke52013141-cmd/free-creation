@@ -16,7 +16,9 @@ export function nodeSchemaRegistered(schema: PortSchemaRef): boolean {
     `${schema.id}@${schema.version}` === 'prompt.bundle@1' ||
     `${schema.id}@${schema.version}` === 'previs.camera@1' ||
     `${schema.id}@${schema.version}` === 'previs.project@1' ||
-    `${schema.id}@${schema.version}` === 'previs.project@2'
+    `${schema.id}@${schema.version}` === 'previs.project@2' ||
+    `${schema.id}@${schema.version}` === 'voice.profile@1' ||
+    `${schema.id}@${schema.version}` === 'voice.subtitle@1'
   )
 }
 
@@ -208,6 +210,43 @@ function validatePrevisProject(value: unknown, version: 1 | 2): string[] {
 }
 
 /**
+ * 音色档案 voice.profile@1：音色设计/复刻节点的 out-json，也是配音节点 in-voice
+ * 的输入。voice_id 是唯一必填字段；只保存标识与来源，不携带音频二进制。
+ */
+function validateVoiceProfile(value: unknown): string[] {
+  const data = objectValue(value)
+  if (!data) return ['根值必须是对象']
+  const errors: string[] = []
+  requiredString(data, 'voice_id', errors)
+  for (const field of ['provider', 'source', 'label', 'preview_media_id'] as const)
+    optionalString(data, field, errors)
+  return errors
+}
+
+/** 字幕时间轴 voice.subtitle@1：句子必须有可用的起止时间与文本。 */
+function validateVoiceSubtitle(value: unknown): string[] {
+  const data = objectValue(value)
+  if (!data) return ['根值必须是对象']
+  const errors: string[] = []
+  requiredString(data, 'text', errors)
+  if (!Array.isArray(data.sentences)) return [...errors, 'sentences 必须是数组']
+  data.sentences.forEach((item, index) => {
+    const sentence = objectValue(item)
+    if (!sentence) {
+      errors.push(`sentences[${index}] 必须是对象`)
+      return
+    }
+    for (const field of ['start_time', 'end_time'] as const) {
+      if (typeof sentence[field] !== 'number' || !Number.isFinite(sentence[field])) {
+        errors.push(`sentences[${index}].${field} 必须是有限数字`)
+      }
+    }
+    if (typeof sentence.text !== 'string') errors.push(`sentences[${index}].text 必须是字符串`)
+  })
+  return errors
+}
+
+/**
  * JSON Schema 的轻量版本化仓库。这里返回可直接展示给用户的字段级错误；
  * 新增业务 Schema 时必须同时补充 NODE_CONTRACT_SPEC.md 中的结构说明。
  */
@@ -243,6 +282,12 @@ export function validateNodeSchema(schema: PortSchemaRef, value: unknown): Schem
       break
     case 'previs.project@2':
       errors = [...jsonSerializable(value), ...validatePrevisProject(value, 2)]
+      break
+    case 'voice.profile@1':
+      errors = [...jsonSerializable(value), ...validateVoiceProfile(value)]
+      break
+    case 'voice.subtitle@1':
+      errors = [...jsonSerializable(value), ...validateVoiceSubtitle(value)]
       break
     default:
       errors = [`未注册的 Schema：${schema.id}@${schema.version}`]

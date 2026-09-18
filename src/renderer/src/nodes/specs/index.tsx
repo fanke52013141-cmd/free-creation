@@ -3,6 +3,7 @@
 import type { PortCardinality, PortDecl, PortSchemaRef } from '@shared/types'
 import { registerNodeType, unregisterNodeType } from '../registry'
 import { readNodeConfig } from '../../canvas/node-persistence'
+import { parseSpeechConfig } from '@shared/speech'
 import {
   AudioBody,
   AiProcessBody,
@@ -17,6 +18,7 @@ import {
   ImageEditBody,
   ImageEditSettings,
   ImageGenerateBody,
+  FileBody,
   IterateBody,
   JsonBody,
   ProcessorBody,
@@ -25,6 +27,9 @@ import {
   StructuredBody,
   TextBody,
   TtsBody,
+  SpeechBody,
+  SpeechSettings,
+  VoiceDesignBody,
   VideoBody,
   VideoAudioBody,
   VideoAudioSettings,
@@ -36,7 +41,8 @@ import {
   VocalSeparateSettings
 } from './bodies'
 import { aiProcessExecutor } from '../../engine/executors/aiProcess'
-import { audioExecutor } from '../../engine/executors/audio'
+import { speechExecutor } from '../../engine/executors/speech'
+import { voiceDesignExecutor } from '../../engine/executors/voiceDesign'
 import { ttsExecutor } from '../../engine/executors/tts'
 import { chatExecutor } from '../../engine/executors/chat'
 import {
@@ -73,6 +79,7 @@ import {
   projectChatOutputs,
   projectCodeOutputs,
   projectDirectorOutputs,
+  projectFileOutputs,
   projectImageGenOutputs,
   projectImageCropOutputs,
   projectImageSplitOutputs,
@@ -86,6 +93,8 @@ import {
   projectStructuredOutputs,
   projectTextOutputs,
   projectTtsOutputs,
+  projectSpeechOutputs,
+  projectVoiceDesignOutputs,
   projectVideoOutputs,
   projectVideoAssetOutputs,
   projectVideoAudioOutputs,
@@ -141,6 +150,62 @@ const LIST_ITEMS: PortSchemaRef = { id: 'list.items', version: 1 }
 const PROMPT_BUNDLE: PortSchemaRef = { id: 'prompt.bundle', version: 1 }
 const PREVIS_CAMERA: PortSchemaRef = { id: 'previs.camera', version: 1 }
 const PREVIS_PROJECT: PortSchemaRef = { id: 'previs.project', version: 2 }
+/** 音色档案：音色设计/复刻 → 配音节点 in-voice 的稳定结构。 */
+const VOICE_PROFILE: PortSchemaRef = { id: 'voice.profile', version: 1 }
+/** 字幕时间轴：豆包语音合成在开启字幕时产出的结构化结果。 */
+const VOICE_SUBTITLE: PortSchemaRef = { id: 'voice.subtitle', version: 1 }
+
+/**
+ * 配音节点端口声明。返回三套互斥结构，由 config.backend 决定：
+ *   minimax → 朗读文本 + 音色档案 → 音频
+ *   doubao  → 朗读文本 + 音色档案 + 参考音频 → 音频 + 字幕
+ *   openai  → 朗读文本 → 音频
+ * 静态 ports 是这三套的并集，只用于注册校验与契约快照；运行时以本函数为准。
+ */
+function speechPorts(backend: 'minimax' | 'doubao' | 'openai'): {
+  in: PortDecl[]
+  out: PortDecl[]
+} {
+  const inVoice = input(
+    'in-voice',
+    '音色档案',
+    'json',
+    '上游「音色设计」或「语音克隆」产出的 voice_id；连线时优先于节点内填写的音色 ID。',
+    { schema: VOICE_PROFILE }
+  )
+  const inAudio = input(
+    'in-audio',
+    '参考音频',
+    'audio',
+    '豆包 references 通道的参考音频；该通道尚未接入，连线后执行会明确失败而不是静默忽略。',
+    { cardinality: 'many' }
+  )
+  const inText = input(
+    'in-text',
+    '朗读文本',
+    'text',
+    '节点内文本与一个或多个上游文本合并后进行朗读。',
+    {
+      cardinality: 'many'
+    }
+  )
+  const outAudio = output('out-audio', '配音', 'audio', '模型生成并落盘的配音资产。')
+  const outSubtitle = output(
+    'out-subtitle',
+    '字幕时间轴',
+    'json',
+    '豆包语音合成在开启字幕时返回的分句时间轴；其他协议不产生该输出。',
+    { required: false, schema: VOICE_SUBTITLE }
+  )
+
+  if (backend === 'doubao') {
+    return { in: [inText, inVoice, inAudio], out: [outAudio, outSubtitle] }
+  }
+  if (backend === 'openai') {
+    return { in: [inText], out: [outAudio] }
+  }
+  return { in: [inText, inVoice], out: [outAudio] }
+}
 
 export function registerBaseNodeTypes(): void {
   registerNodeType({
@@ -205,8 +270,8 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'image-split',
-    contractVersion: 2,
-    label: '拆图',
+    contractVersion: 3,
+    label: '拆分',
     icon: 'grid',
     color: '#14b8a6',
     // 结果网格在卡片内限高滚动（见 .media-result-grid），不通过放大默认卡片容纳内容。
@@ -299,8 +364,8 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'video',
-    contractVersion: 6,
-    label: '图片生成视频',
+    contractVersion: 7,
+    label: '生视频',
     icon: 'video',
     color: '#f472b6',
     defaultSize: { w: 340, h: 260 },
@@ -350,14 +415,13 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'video-asset',
-    contractVersion: 1,
-    label: '视频资产',
+    contractVersion: 2,
+    label: '视频',
     icon: 'video',
     color: '#f472b6',
     defaultSize: { w: 340, h: 260 },
-    description: '运行产出的独立视频资产。它只负责预览、选择和向下游输出，不承担生成逻辑。',
+    description: '视频资产节点：导入本地视频，只负责预览、替换和向下游输出。',
     category: 'input',
-    creatable: false,
     ports: { in: [], out: [output('out-video', '视频', 'video', '不可变的视频资产引用。')] },
     projectOutputs: projectVideoAssetOutputs,
     executor: (ctx) =>
@@ -368,8 +432,8 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'video-frame',
-    contractVersion: 3,
-    label: '取帧',
+    contractVersion: 4,
+    label: '抽帧',
     icon: 'frame',
     color: '#fb7185',
     defaultSize: { w: 340, h: 260 },
@@ -386,8 +450,8 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'video-clip',
-    contractVersion: 3,
-    label: '截取',
+    contractVersion: 4,
+    label: '截视频',
     icon: 'clip',
     color: '#ec4899',
     defaultSize: { w: 340, h: 260 },
@@ -404,8 +468,8 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'video-audio',
-    contractVersion: 3,
-    label: '提音',
+    contractVersion: 4,
+    label: '截音频',
     icon: 'audio',
     color: '#f59e0b',
     defaultSize: { w: 340, h: 260 },
@@ -468,34 +532,57 @@ export function registerBaseNodeTypes(): void {
     Body: AudioBody
   })
   registerNodeType({
+    type: 'file',
+    contractVersion: 1,
+    label: '文件',
+    icon: 'document',
+    color: '#94a3b8',
+    defaultSize: { w: 340, h: 260 },
+    description: '文件资产节点：导入 Excel / Word / PDF 等文档并输出。',
+    category: 'input',
+    ports: {
+      in: [],
+      out: [
+        output('out-file', '文件', 'file', '已导入并落盘的原始文件资产引用。'),
+        output('out-text', '文本', 'text', '可解析为文本的文件内容（txt / md / json / csv）。', {
+          required: false
+        })
+      ]
+    },
+    projectOutputs: projectFileOutputs,
+    executor: (ctx) =>
+      ctx.shape.props.mediaPath
+        ? { status: 'done' }
+        : { status: 'skipped', reason: '未导入文件资产' },
+    Body: FileBody
+  })
+  registerNodeType({
     type: 'speech',
-    contractVersion: 2,
+    contractVersion: 3,
     label: '配音',
     icon: 'audio',
     color: '#fbbf24',
     defaultSize: { w: 340, h: 260 },
-    description: '通用文本配音节点：将节点内或上游文本交给已配置的语音模型，生成新的音频资产。',
+    description: '模型驱动配音：按所选协议决定输入与输出结构。',
     category: 'audio',
     ports: {
-      in: [
-        input('in-text', '朗读文本', 'text', '节点内文本与一个或多个上游文本合并后进行朗读。', {
-          cardinality: 'many'
-        })
-      ],
-      out: [output('out-audio', '配音', 'audio', '模型生成并落盘的配音资产。')]
+      in: speechPorts('doubao').in,
+      out: speechPorts('doubao').out
     },
-    projectOutputs: projectAudioOutputs,
-    executor: audioExecutor,
-    Body: AudioBody
+    resolvePorts: (shape) => speechPorts(parseSpeechConfig(readNodeConfig(shape)).backend),
+    projectOutputs: projectSpeechOutputs,
+    executor: speechExecutor,
+    SettingsPanel: SpeechSettings,
+    Body: SpeechBody
   })
   registerNodeType({
     type: 'tts',
-    contractVersion: 2,
+    contractVersion: 3,
     label: '语音克隆',
     icon: 'audio',
     color: '#fbbf24',
     defaultSize: { w: 340, h: 260 },
-    description: '语音克隆：本地 ComfyUI 或 MiniMax 复刻，输出独立音频资产。',
+    description: '语音克隆：本地 ComfyUI 或 MiniMax 复刻，输出音频与音色档案。',
     category: 'audio',
     ports: {
       in: [
@@ -504,11 +591,50 @@ export function registerBaseNodeTypes(): void {
           cardinality: 'many'
         })
       ],
-      out: [output('out-audio', '音频', 'audio', '语音复刻合成并落盘后的音频资产引用。')]
+      out: [
+        output('out-audio', '音频', 'audio', '语音复刻合成并落盘后的音频资产引用。'),
+        output(
+          'out-json',
+          '音色档案',
+          'json',
+          'MiniMax 复刻登记出的 voice_id；本地 IndexTTS 链路没有服务端音色，此时不产出。',
+          { required: false, schema: VOICE_PROFILE }
+        )
+      ]
     },
     projectOutputs: projectTtsOutputs,
     executor: ttsExecutor,
     Body: TtsBody
+  })
+  registerNodeType({
+    type: 'voice-design',
+    contractVersion: 1,
+    label: '音色设计',
+    icon: 'audio',
+    color: '#f472b6',
+    defaultSize: { w: 340, h: 260 },
+    description: '用文字描述设计音色，产出试听音频与可复用的音色 ID。',
+    category: 'audio',
+    ports: {
+      in: [
+        input('in-text', '音色描述', 'text', '音色特征描述；与节点内描述合并后提交。', {
+          cardinality: 'many'
+        })
+      ],
+      out: [
+        output('out-audio', '试听音频', 'audio', '服务端返回的 hex 试听音频解码落盘后的资产。'),
+        output(
+          'out-json',
+          '音色档案',
+          'json',
+          '设计出的 voice_id 与来源，可直接连接配音节点的音色档案输入。',
+          { schema: VOICE_PROFILE }
+        )
+      ]
+    },
+    projectOutputs: projectVoiceDesignOutputs,
+    executor: voiceDesignExecutor,
+    Body: VoiceDesignBody
   })
   registerNodeType({
     type: 'chat',

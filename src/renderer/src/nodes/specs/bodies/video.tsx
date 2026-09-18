@@ -26,7 +26,6 @@ import {
   MediaFileActions,
   MediaResultGrid,
   removeMediaResultFromShape,
-  MediaSourceSummary,
   createVideoContinuation,
   createVocalExtractionTemplate,
   clearSelectedMediaHistory,
@@ -155,25 +154,6 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     } catch (error) {
       toast(`导入失败：${error instanceof Error ? error.message : String(error)}`)
     }
-  }
-
-  if (isAssetNode && !shape.props.mediaPath) {
-    return (
-      <div className="asset-empty video-asset-empty">
-        <Icon name="video" size={40} />
-        <span>视频资产</span>
-        <button
-          className="btn-ghost video-import-button"
-          onPointerDown={(e) => stopEventPropagation(e)}
-          onClick={(e) => {
-            e.stopPropagation()
-            void chooseAsset()
-          }}
-        >
-          导入视频
-        </button>
-      </div>
-    )
   }
 
   const options = modelsByModality(providers, 'video')
@@ -348,6 +328,26 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     else toast('该图片可能已经引用；已保留提示词标记')
   }
 
+  if (isAssetNode && !shape.props.mediaPath) {
+    // 视频资产空态：所有 Hook 已在上方无条件调用，这里早退是安全的。
+    return (
+      <div className="asset-empty video-asset-empty">
+        <Icon name="video" size={40} />
+        <span>视频资产</span>
+        <button
+          className="btn-ghost video-import-button"
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onClick={(e) => {
+            e.stopPropagation()
+            void chooseAsset()
+          }}
+        >
+          导入视频
+        </button>
+      </div>
+    )
+  }
+
   if (shape.props.mediaPath) {
     const chooseResult = (item: Parameters<typeof selectMediaResult>[1]): void => {
       const selected = selectMediaResult(shape, item)
@@ -393,83 +393,20 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
               替换
             </button>
           ) : (
-            <>
-              <button
-                className="btn-ghost small"
-                disabled={submitting}
-                onPointerDown={(e) => stopEventPropagation(e)}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  void regenerate()
-                }}
-              >
-                <Icon name="reset" size={13} />
-                {submitting ? '重新生成中…' : '重新生成'}
-              </button>
-              <button
-                className="btn-ghost small"
-                onPointerDown={(e) => stopEventPropagation(e)}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  // 编辑配置：清空成片，回到配置面板
-                  editor.updateShape({
-                    id: shape.id,
-                    type: 'node-card',
-                    props: { mediaId: '', mediaPath: '', mediaMime: '' }
-                  })
-                  markUndoPoint(editor, 'video-edit-config')
-                }}
-              >
-                <Icon name="edit" size={13} />
-                编辑
-              </button>
-            </>
+            <button
+              className="btn-ghost small"
+              disabled={submitting}
+              onPointerDown={(e) => stopEventPropagation(e)}
+              onClick={(e) => {
+                e.stopPropagation()
+                void regenerate()
+              }}
+            >
+              <Icon name="reset" size={13} />
+              {submitting ? '重新生成中…' : '重新生成'}
+            </button>
           )}
           <MediaFileActions shape={shape} />
-        </div>
-        <MediaSourceSummary shape={shape} fallback={isAssetNode ? '本地视频' : 'AI 生成'} />
-        <div className="node-media-next-actions" aria-label="视频后续操作">
-          <button
-            className="btn-ghost small"
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onClick={(e) => {
-              e.stopPropagation()
-              createVideoContinuation(editor, shape, 'video-frame')
-            }}
-          >
-            <Icon name="frame" size={12} /> 取帧
-          </button>
-          <button
-            className="btn-ghost small"
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onClick={(e) => {
-              e.stopPropagation()
-              createVideoContinuation(editor, shape, 'video-clip')
-            }}
-          >
-            <Icon name="clip" size={12} /> 截取
-          </button>
-          <button
-            className="btn-ghost small"
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onClick={(e) => {
-              e.stopPropagation()
-              createVideoContinuation(editor, shape, 'video-audio')
-            }}
-          >
-            <Icon name="audio" size={12} /> 提音
-          </button>
-          <button
-            className="btn-ghost small"
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onClick={(e) => {
-              e.stopPropagation()
-              createVocalExtractionTemplate(editor, shape)
-            }}
-            title="一键创建 视频提音 → 人声分离 并预连线"
-          >
-            <Icon name="audio" size={12} /> 一键提取人声
-          </button>
         </div>
         <MediaResultGrid
           shape={shape}
@@ -499,6 +436,50 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
             openPreview({ kind: 'video', url: mediaUrl(item.mediaPath), title: shape.props.title })
           }
         />
+        {/* 视频后续动作：只保留动作名，不带图标（用户 2026-09-18 拍板）。 */}
+        <div className="node-media-next-actions" aria-label="视频后续操作">
+          <button
+            className="btn-ghost small"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              createVideoContinuation(editor, shape, 'video-frame')
+            }}
+          >
+            抽帧
+          </button>
+          <button
+            className="btn-ghost small"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              createVideoContinuation(editor, shape, 'video-clip')
+            }}
+          >
+            截视频
+          </button>
+          <button
+            className="btn-ghost small"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              createVideoContinuation(editor, shape, 'video-audio')
+            }}
+          >
+            截音频
+          </button>
+          <button
+            className="btn-ghost small"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              createVocalExtractionTemplate(editor, shape)
+            }}
+            title="一键创建 截音频 → 人声分离 并预连线"
+          >
+            截人声
+          </button>
+        </div>
       </div>
     )
   }

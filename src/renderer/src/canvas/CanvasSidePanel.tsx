@@ -221,12 +221,12 @@ export const BUILTIN_TEMPLATES: {
     edges: [{ from: 0, to: 1, fromPort: 'out-json', toPort: 'in-prompt' }]
   },
   {
-    name: '图片修改→后续创作',
+    name: 'P图→后续创作',
     icon: 'edit',
-    desc: '导入原图后，经图片修改分别连接裁剪、生图参考图和首帧视频',
+    desc: '导入原图后，经 P 图分别连接裁剪、生图参考图和首帧视频',
     nodes: [
       { type: 'image', title: '原图资产', dx: -760, dy: 0 },
-      { type: 'image-edit', title: '图片修改', dx: -380, dy: 0 },
+      { type: 'image-edit', title: 'P图', dx: -380, dy: 0 },
       { type: 'image-crop', title: '图片裁剪', dx: 0, dy: -240 },
       { type: 'image-gen', title: '继续生图', dx: 0, dy: 0 },
       { type: 'video', title: '图片生成视频', dx: 0, dy: 240 }

@@ -23,6 +23,8 @@ export const rendererGateway: GatewayClient = {
   videoCancel: (taskId) => window.api.gateway.videoCancel(taskId),
   videoTask: (taskId) => window.api.gateway.videoTask(taskId),
   audioGenerate: (input) => window.api.gateway.audioGenerate(input),
+  speechGenerate: (input) => window.api.gateway.speechGenerate(input),
+  voiceDesign: (input) => window.api.gateway.voiceDesign(input),
   onEvent: (cb) => window.api.gateway.onEvent(cb),
 
   // ── 本地媒体处理 ──

@@ -486,8 +486,9 @@ body {
 }
 
 /* ── Ports: meaningful but quiet until an interaction needs them ───────── */
-/* 18px 保留为命中区（CanvasEditor 捕获代理按 rect 半径命中）；视觉收缩为
-   ::after 的 10px 磨砂玻璃珠 + 5px 色芯，拖线寻找端口时不再是大号虚线圈。 */
+/* 18px 保留为命中区（CanvasEditor 捕获代理按 rect 半径命中）；视觉为 ::after 的
+   10px 实色圆点。用户 2026-09-18 拍板：端口色就是端口色——不做渐变、不做磨砂、
+   不带内阴影；未连接时只降低不透明度。 */
 .port-dot {
   position: absolute;
   width: 18px;
@@ -513,15 +514,13 @@ body {
   height: 10px;
   border-radius: 50%;
   transform: translate(-50%, -50%);
-  /* 磨砂玻璃圆点：柔和半透明底色，无生硬外描边 */
-  background: color-mix(in srgb, var(--pc, #42b9f5) 30%, rgba(13, 17, 23, 0.65));
+  /* 实色圆点：类型色即视觉，无渐变、无磨砂、无内阴影。 */
+  background: var(--pc, #42b9f5);
   border: none;
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.2);
-  -webkit-backdrop-filter: blur(5px);
-  backdrop-filter: blur(5px);
+  box-shadow: none;
   transition:
     transform 140ms ease,
-    box-shadow 140ms ease;
+    opacity 140ms ease;
 }
 
 .port-dot.connected {
@@ -529,36 +528,11 @@ body {
 }
 
 .port-dot.unconnected {
-  opacity: 0.5;
+  opacity: 0.45;
 }
 
 .node-card-wrap:hover .port-dot.unconnected {
-  opacity: 0.78;
-}
-
-.port-dot-inner {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  opacity: 0;
-  transform: translate(-50%, -50%) scale(0.6);
-  z-index: 1;
-  transition:
-    opacity 140ms ease,
-    transform 140ms ease;
-}
-
-.port-dot.connected .port-dot-inner {
-  opacity: 1;
-  transform: translate(-50%, -50%) scale(1);
-}
-
-.port-dot.unconnected .port-dot-inner {
-  opacity: 0;
-  display: none;
+  opacity: 0.8;
 }
 
 .port-dot.in {
@@ -578,29 +552,21 @@ body {
 .port-dot.out:hover::after,
 .port-dot.in:hover::after,
 .port-dot.ok::after {
-  transform: translate(-50%, -50%) scale(1.25);
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.3);
+  transform: translate(-50%, -50%) scale(1.3);
 }
 
 .port-dot.dim {
   opacity: 0.16;
 }
 
-/* 缺失必填输入：虚线描边保留“缺口”语义，材质仍是玻璃珠 */
+/* 缺失必填输入：虚线描边保留“缺口”语义，填充让位给虚线轮廓。 */
 .port-dot.input-missing::after {
-  border-style: dashed;
+  background: transparent;
+  border: 1px dashed var(--pc, #42b9f5);
 }
 
 .port-dot.input-missing {
   opacity: 1;
-}
-
-.port-dot.connected.has-output .port-dot-inner {
-  opacity: 0.95;
-}
-
-.port-dot.connected.no-output .port-dot-inner {
-  opacity: 0.6;
 }
 
 /* ── Connections: a restrained directional line, not a neon decoration ── */
@@ -641,16 +607,12 @@ body {
   stroke-width: 1.5px;
 }
 
-/* 拖线光标：端口色底 + 白描边，叠加 conn-cursor-glass 径向渐变形成镜面玻璃珠 */
+/* 拖线光标：端口色实心圆 + 白描边（用户拍板：不做渐变/玻璃质感）。 */
 .conn-overlay .conn-cursor {
-  fill-opacity: 0.9;
+  fill-opacity: 0.92;
   stroke: rgba(255, 255, 255, 0.92);
   stroke-width: 1.2px;
   filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.4));
-}
-
-.conn-overlay .conn-cursor-glass {
-  mix-blend-mode: screen;
 }
 
 /* tldraw Arrow 形状仅是端口 binding / 持久化载体，已被 ui-surfaces.css 整体隐藏
@@ -869,9 +831,12 @@ body {
   color: #e5f6ff;
 }
 
+/* 媒体预览面：一律白底 + 可见边框（用户 2026-09-18 拍板）。
+   这是 .node-media 材质的唯一权威定义（呈现规范 §14：.node-* 结构/材质只在
+   ui-foundation.css）；app.css 只保留布局，不再重复声明背景。 */
 .node-media {
-  background:
-    radial-gradient(circle at 50% 28%, rgba(101, 139, 166, 0.11), transparent 52%), #15191f;
+  background: #ffffff;
+  border: 1px solid var(--line);
 }
 
 .node-media-actions,

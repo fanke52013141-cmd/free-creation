@@ -1,6 +1,7 @@
 # 节点 UI 统一规范（Node UI Spec）
 
-> 状态：v1.1（2026-09-18），已拍板实施；P-1/P0/P2 已落地（见 §15 实施记录）。
+> 状态：v1.2（2026-09-18），用户第二轮截图反馈已落地（见 §16）。
+> v1.1（2026-09-18），已拍板实施；P-1/P0/P2 已落地（见 §15 实施记录）。
 > v2 增补：§11 说明文字精简、§12 引用图片缩略图形态、§13 颜色条外置、
 > §14 CSS 层叠收敛（修复 v1 遗留的磨砂覆盖 bug）。
 > v1.1 集成决定（用户 v1.0 规范评审拍板）：颜色条采用方案 A（文档流内顶部 4px）；
@@ -379,3 +380,53 @@ app.css 与 ui-foundation.css 双重定义，后者覆盖前者；v1 阶段 4 �
 - **@ 引用**（§12.3）：正文中 `@` 弹出候选、引用仅作可见标记，
   不隐式产生端口数据流；
 - **P3**：Result Collection 统一（§19）、媒体行为对齐（§18）、manual max 720 评估。
+
+---
+
+## 16. v1.2 决定（2026-09-18 用户第二轮截图反馈）
+
+用户逐张截图评审后拍板，**覆盖**前文与之冲突的条款。本节优先于 §11/§13/§15。
+
+| # | 决定 | 落地位置 | 覆盖了 |
+|---|------|----------|--------|
+| 1 | **端口圆点必须是实色**：类型色就是类型色，不做渐变、不做磨砂、不带内阴影；未连接只降不透明度（0.45，hover 0.8） | `ui-foundation.css` `.port-dot::after`（唯一权威层）；`.port-dot-inner` 与 `.conn-cursor-glass` 已整体删除 | §15「10px 磨砂玻璃珠」、原 `ui-foundation.test.ts` 的玻璃材质断言 |
+| 2 | **媒体预览一律白底 + 可见边框**：非图片区域与图片区域必须一眼可分；覆盖节点内预览、结果网格、拆图预览、引用缩略图、hover 全貌、全屏预览 | `ui-foundation.css` `.node-media`（材质唯一权威）、`ui-surfaces.css` `.media-result-tile` / `.media-preview-image .media-preview-stage` | 原深色 `#15191f` / `#11161d` / `#090d12` |
+| 3 | **运行按钮常驻**：不再 `selected &&` 才渲染；不可用时置灰并给出原因 tooltip（项目未就绪 / 正在运行 / 缺少输入），绝不消失 | `NodeCardView.tsx` `runBlockedReason` + `.node-run-btn:disabled` | §5.4「移除浮动运行按钮」只废除了位置，不废除常驻 |
+| 4 | **无必要提示语一律删除**：已连线但无值的输入不再显示「等待上游输出」（整条不渲染）；音频资产节点的说明段、视频节点的「AI 生成」小字删除 | `ConnectedInputPreview.tsx`（`input.value !== null` 过滤）、`audio.tsx`、`video.tsx` | §11.2 只删了教学句，未删状态占位 |
+| 5 | **媒体后续动作按钮只放文字**：图标会挤掉文字居中，`.node-media-next-actions button` 去图标、`gap: 0`、强制居中 | `shared.tsx` / `video.tsx` / `video-transforms.tsx` / `app.css` | — |
+| 6 | **悬浮全貌统一显示在上方**：下方会遮挡节点内容；仅上方空间不足时翻下。来源名称文字与原生 tooltip 一并删除 | `ConnectedInputPreview.tsx` `ReferenceThumb` | §12.2「浮层底部一行：完整来源」 |
+| 7 | **命名统一**：`修改` → `P图`（调色板、图片节点按钮、派生标题）；`图片生成视频` → `生视频`；`取帧/截取/提音` → `抽帧/截视频/截音频`（spec label、调色板、空态文案、底部按钮同步） | `CanvasEditor.tsx` `paletteLabels`、`specs/index.tsx` label、各 body | — |
+| 8 | **拆图节点**：行/列/面积收成一行；序号圆点 `line-height: 1` 修复不居中；追溯连线颜色跟随**被产出资产类型**（图片→绿），不再用集合端口的紫色 | `image-split.tsx`、`app.css`、`DataEdgeLayer.tsx` | — |
+| 9 | **图片资产节点不显示格式徽标** | `image.tsx` | — |
+
+### 16.1 门禁更新
+
+`ui-foundation.test.ts` 的端口材质断言按 #1 改写（实色 + 无 `backdrop-filter` + `box-shadow: none`）。
+新增 `test/node-ui-decisions.test.ts`（16 项）把本节决定固化为源码断言，防止"删掉某个覆盖"类
+改动被悄悄改回去。另有两支临时真实渲染验收脚本（不入库）覆盖 #2–#9 与全部新节点，均通过。
+
+### 16.1.1 名字只有一个来源（v1.2 追加）
+
+`CanvasEditor.tsx` 里的 `paletteLabels` 覆盖表**已删除**。它曾让同一个节点出现两个名字：
+
+| 节点 | 左侧面板 | 卡片默认标题 |
+|------|----------|--------------|
+| tts | 克隆 | 语音克隆 |
+| json | 数据 | JSON |
+| storyboard | 分镜 | 分镜板 |
+| director | 预演 | 3D 预演台 |
+
+现在面板可见文字、tooltip、`aria-label` 与新建卡片的默认标题**全部取 `spec.label`**，
+分叉在结构上不再可能发生。`image-split` 的 label 也由「拆图」统一为「拆分」（与图片节点
+按钮、用户用语一致），契约版本随之升到 3。
+
+### 16.2 待办（用户已确认方向，尚未实施）
+
+- **标注文字承载**：目前只有「文字」工具能带文字，箭头 / 矩形 / 涂画还不行。
+  提示词侧的编号清单（`annotationInstructionLines`）已就绪，缺的是「画完顺手写一句」的行内输入。
+- **豆包参考素材通道**：`references[]` 条目的字段结构官方文档未给出，`audio_data` /
+  `audio_url` / 参考图片亦未实现。豆包模式下若检测到上游 `in-audio` 有连线会明确失败并
+  提示"该通道尚未接入"，不会静默丢弃输入后假装成功。
+- **tldraw CDN 噪声**：tldraw 会去 `cdn.tldraw.com` 拉图标雪碧图与 `translations/en.json`，
+  被应用自己的 CSP 拦下，在浏览器验收里产生 300+ 条控制台错误与 2 次未处理 `Failed to fetch`。
+  不影响功能（自绘 UI 不用它的工具栏图标），但会淹没真实错误，值得单独评估。

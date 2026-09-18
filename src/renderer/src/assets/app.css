@@ -1362,7 +1362,8 @@ select:focus-visible,
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--line) 90%, transparent);
   border-radius: 6px;
-  background: color-mix(in srgb, var(--bg) 62%, transparent);
+  /* 图片预览一律白底（用户 2026-09-18 拍板：白底才能看清图片边界）。 */
+  background: #ffffff;
   pointer-events: auto;
   cursor: pointer;
 }
@@ -1405,7 +1406,8 @@ select:focus-visible,
   border-color: color-mix(in srgb, var(--brand) 45%, transparent);
 }
 
-/* hover 300ms 后的全貌浮层：portal 到 document.body、fixed 定位，纯预览不拦截指针。 */
+/* hover 300ms 后的全貌浮层：portal 到 document.body、fixed 定位，纯预览不拦截指针。
+   图片一律白底（用户 2026-09-18 拍板：白底才能看清图片边界）。 */
 .reference-fullview {
   position: fixed;
   z-index: 960;
@@ -1415,7 +1417,7 @@ select:focus-visible,
   padding: 8px;
   border: 1px solid color-mix(in srgb, var(--line) 90%, transparent);
   border-radius: 10px;
-  background: rgba(16, 20, 26, 0.92);
+  background: #ffffff;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
   pointer-events: none;
 }
@@ -1425,14 +1427,7 @@ select:focus-visible,
   max-height: 300px;
   border-radius: 6px;
   object-fit: contain;
-}
-
-.reference-fullview-caption {
-  color: var(--txt-dim, #9aa4b5);
-  font-size: 11px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  background: #ffffff;
 }
 
 .connected-input-target {
@@ -1475,10 +1470,8 @@ select:focus-visible,
   color: var(--muted);
 }
 
-.connected-input-empty {
-  color: var(--muted);
-  font-style: italic;
-}
+/* 「等待上游输出」占位已删除（用户 2026-09-18：无必要提示语不要），
+   对应的 .connected-input-empty 规则一并移除，不留无人引用的死 CSS。 */
 
 /* 模型 / 本地媒体任务运行时的明确状态层。状态来自统一运行器的 exec 字段，而不是
    用“绿色结果图”猜测；用户能区分生成中、完成和失败。 */
@@ -1744,7 +1737,8 @@ select:focus-visible,
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #171717;
+  /* 背景与边框是材质，权威定义在 ui-foundation.css（呈现规范 §14）：
+     统一白底 + 可见边框，让非图片区域与图片区域一眼可分。 */
   /* 单击只选中节点、双击才预览；不能把媒体区伪装成“点击放大”的热区。 */
   cursor: default;
   position: relative;
@@ -1832,12 +1826,18 @@ select:focus-visible,
   overflow-x: auto;
 }
 
+/* 媒体后续动作行：按钮只放文字（用户 2026-09-18 拍板去图标），
+   这样在 340px 卡片里文字能真正居中，而不会被图标挤出按钮外。 */
 .node-media-next-actions button {
   min-width: 0;
   flex: 1 1 0;
   padding: 2px 4px;
   font-size: 11px;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
+  gap: 0;
+  text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1903,7 +1903,8 @@ select:focus-visible,
   padding: 0;
   border: 1px solid var(--line);
   border-radius: 4px;
-  background: #0e141b;
+  /* 结果缩略图同样白底，让每格的图片边界可见。 */
+  background: #ffffff;
   /* 单击仍用于选中节点，双击才打开预览。 */
   cursor: default;
 }
@@ -2031,10 +2032,7 @@ select:focus-visible,
 /* 拆图结果必须完整展示每一个派生区域。通用候选图可以 cover，但拆图使用 cover
    会把窄条图片再裁掉，视觉上像相邻格子相互叠在一起。 */
 .media-result-collection-split .media-result-tile {
-  background:
-    linear-gradient(45deg, rgba(255, 255, 255, 0.025) 25%, transparent 25%) 0 0 / 10px 10px,
-    linear-gradient(-45deg, rgba(255, 255, 255, 0.025) 25%, transparent 25%) 0 0 / 10px 10px,
-    #0e141b;
+  background: #ffffff;
 }
 
 .media-result-collection-split .media-result-tile img {
@@ -2117,21 +2115,27 @@ select:focus-visible,
   text-align: center;
 }
 
+/* 行数 / 列数 / 面积 收成一行（用户 2026-09-18 拍板：不要两行）。 */
 .image-split-quick-controls {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .image-split-quick-controls label {
-  display: grid;
-  gap: 4px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1 1 0;
+  min-width: 0;
   color: var(--muted, #8e9bab);
   font-size: 10px;
+  white-space: nowrap;
 }
 
 .image-split-quick-controls input {
   min-width: 0;
+  width: 100%;
   height: 28px;
   padding: 4px 6px;
   border: 1px solid var(--line);
@@ -2145,6 +2149,8 @@ select:focus-visible,
   display: flex;
   align-items: center;
   gap: 3px;
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .image-split-quick-controls .image-split-percent-input b {
@@ -2160,7 +2166,7 @@ select:focus-visible,
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #10151c;
+  background: #ffffff;
   cursor: default;
   display: flex;
   align-items: center;
@@ -3664,7 +3670,7 @@ select:focus-visible,
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #111;
+  background: #ffffff;
   user-select: none;
 }
 
@@ -3697,6 +3703,9 @@ select:focus-visible,
   font-size: 9px;
   font-style: normal;
   font-weight: 700;
+  /* 行高必须归零，否则 1.6 的全局行高会把序号推离圆心（用户 2026-09-18 反馈）。 */
+  line-height: 1;
+  text-align: center;
 }
 
 /* M2-M4 视频处理：时间轴和预览仅属于节点详情，避免让画布卡片膨胀。 */
@@ -6264,6 +6273,89 @@ select:focus-visible,
   max-width: 86vw;
   max-height: 74vh;
   object-fit: contain;
+}
+
+/* ── 文件资产节点（2026-09-18）────────────────────────────────────── */
+.file-asset {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  height: 100%;
+  min-height: 0;
+}
+
+.file-asset-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.file-asset-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--txt-dim, #9aa4b5);
+}
+
+.file-asset-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.file-asset-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--txt);
+  font-size: 12px;
+}
+
+.file-asset-sub {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.file-asset-preview {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 8px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(7, 12, 18, 0.42);
+  color: var(--txt);
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.file-asset-binary {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.file-asset-empty .file-import-button {
+  min-height: 34px;
+  padding: 6px 14px;
 }
 
 /* ── M4 模型网关：生成面板 / 对话节点 / 供应商设置 ── */
@@ -9622,4 +9714,139 @@ canvas.tl-canvas-indicators {
 .tl-selection__fg__outline,
 .tl-selection__bg {
   display: none !important;
+}
+
+/* ============================================================
+   配音 / 音色设计节点（Batch C：模型驱动语音）
+   只补充卡片内部的结构类；.node-card / .node-header / .node-body 等外壳
+   结构类仍只由 ui-foundation.css 定义（呈现规范 §14）。
+   ============================================================ */
+.node-speech .tts-options,
+.node-voice-design .tts-options {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.tts-inline-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--txt-dim, #9aa4b5);
+  cursor: pointer;
+  user-select: none;
+}
+
+.tts-inline-toggle input {
+  accent-color: var(--brand);
+}
+
+.gen-textarea.tts.short {
+  min-height: 52px;
+}
+
+.audio-text-meta.over-limit {
+  color: var(--red);
+}
+
+.gen-input.invalid {
+  border-color: rgba(248, 113, 113, 0.5);
+}
+
+.gen-capability-note.error {
+  border-color: rgba(248, 113, 113, 0.34);
+  background: rgba(127, 29, 29, 0.2);
+  color: #fecaca;
+}
+
+.gen-capability-note.warn {
+  border-color: rgba(251, 191, 36, 0.32);
+  background: rgba(120, 53, 15, 0.18);
+  color: #fde68a;
+}
+
+/* 克隆提示音（clone_prompt）区块 */
+.tts-prompt-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px dashed var(--line);
+  border-radius: 7px;
+}
+
+/* 音色 ID 结果卡：可复制，供下游配音节点引用 */
+.voice-id-card {
+  padding: 6px 8px;
+  border: 1px solid rgba(9, 202, 245, 0.28);
+  border-radius: 7px;
+  background: rgba(9, 202, 245, 0.06);
+}
+
+.voice-id-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.voice-id-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--txt);
+}
+
+/* 字幕时间轴（豆包 out-subtitle 的卡片内预览） */
+.speech-subtitle-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 96px;
+  overflow-y: auto;
+}
+
+.speech-subtitle-list li {
+  display: flex;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.speech-subtitle-time {
+  flex: 0 0 auto;
+  color: var(--txt-dim, #9aa4b5);
+  font-variant-numeric: tabular-nums;
+}
+
+.speech-subtitle-text {
+  min-width: 0;
+  color: var(--txt);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 右侧设置面板的通用行布局 */
+.node-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 2px;
+}
+
+.settings-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 6px 8px;
 }

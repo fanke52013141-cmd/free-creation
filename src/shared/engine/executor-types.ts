@@ -29,11 +29,24 @@ export interface NodeShape {
   meta?: {
     nodeRun?: unknown
     nodeResult?: string
+    /**
+     * 一次运行产生的「非媒体」结构化端口值，按端口 ID 存放（JSON 字符串）。
+     * 例如配音节点的 out-subtitle 字幕、音色设计节点的 out-json 音色档案。
+     * 用独立字段而不是塞进 nodeResult，避免破坏媒体结果集合的同一种输出语义。
+     */
+    nodeExtra?: string
   }
 }
 
-/** 运行控制信号。暂停在当前原子任务结束后生效；停止会解除暂停等待。 */
-export interface CancelSignal {
+/**
+ * 执行器允许写入的额外 meta 字段白名单。
+ * 运行器据此更新 shape.meta，执行器不直接改 shape.meta（保持单一写入入口）。
+ */
+export interface NodeMetaPatch {
+  nodeExtra?: string
+}
+
+/** 运行控制信号。暂停在当前原子任务结束后生效；停止会解除暂停等待。 */ export interface CancelSignal {
   readonly cancelled: boolean
   readonly paused?: boolean
 }
@@ -82,6 +95,11 @@ export interface NodeExecutionContext {
   waitForResume?: () => Promise<void>
   updateProps: (patch: Partial<NodeShape['props']>) => void
   updateResult: (result: string | null) => void
+  /**
+   * 写入非 nodeResult 的运行产物（当前只有语音字幕与音色档案使用）。
+   * 可选：纯执行器单测的最小 mock 可以不注入。
+   */
+  updateMeta?: (patch: NodeMetaPatch) => void
   /**
    * 将一次运行产生的不可变媒体落为独立资产节点。操作节点不得把运行产物
    * 回写到自身 props；这样“再次生成”仍然使用同一个操作节点，而每个结果

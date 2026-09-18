@@ -10,12 +10,15 @@ const guardedFiles = [
   'nodes/specs/bodies/code.tsx',
   'nodes/specs/bodies/image-gen.tsx',
   'nodes/specs/bodies/script.tsx',
+  'nodes/specs/bodies/speech.tsx',
   'nodes/specs/bodies/storyboard.tsx',
-  'nodes/specs/bodies/video.tsx'
+  'nodes/specs/bodies/tts.tsx',
+  'nodes/specs/bodies/video.tsx',
+  'nodes/specs/bodies/voice-design.tsx'
 ]
 
 const forbiddenModelCalls =
-  /window\.api\.gateway\.(chatStart|chatCancel|imageGenerate|videoSubmit|videoTask|videoCancel|audioGenerate)|\bwaitFor(Chat|Video)\b/
+  /window\.api\.gateway\.(chatStart|chatCancel|imageGenerate|videoSubmit|videoTask|videoCancel|audioGenerate|speechGenerate|voiceDesign)|\bwaitFor(Chat|Video)\b|window\.api\.ttsGenerate/
 
 describe('React 与模型执行边界', () => {
   it('节点 UI 和聊天面板不直接调用网关或执行器等待函数', () => {

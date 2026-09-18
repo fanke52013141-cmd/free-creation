@@ -1,0 +1,91 @@
+// 配音节点执行器：按 config.backend 选择供应商协议合成语音。
+//
+// 这是「模型驱动输入/输出结构」的执行侧：端口由 NodeTypeSpec.resolvePorts 按
+// backend 派生，执行器同样只读取当前 backend 真正需要的输入——不按上游节点标题
+// 或类型猜测，也不会把某家供应商的参数发给另一家。
+import { parseSpeechConfig, SPEECH_TEXT_LIMITS } from '@shared/speech'
+import { parseVoiceProfile } from '@shared/voice-design'
+import { inputJson, inputMedia, inputText } from '../inputs'
+import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
+import { mergedPrompt } from '../helpers'
+import { readNodeConfig } from '../node-config'
+import { appendMediaResult, serializeMediaResultCollection } from '../values'
+
+export const speechExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
+  const config = parseSpeechConfig(readNodeConfig(ctx.shape))
+  // 固定参数归 config，用户正文归 props.text；与节点契约和保存模型一致。
+  const text = mergedPrompt(ctx.shape.props.text, inputText(ctx.inputs, 'in-text')).trim()
+  if (!text) return { status: 'skipped', reason: '无朗读文本' }
+
+  if (!config.providerId) return { status: 'skipped', reason: '未选择语音模型' }
+
+  const limit = SPEECH_TEXT_LIMITS[config.backend]
+  if (text.length > limit) {
+    return { status: 'failed', reason: `朗读文本超过 ${limit} 字符上限（当前 ${text.length}）` }
+  }
+
+  // 音色优先级：上游「音色设计」节点的音色档案 > 节点内填写的 Voice ID。
+  const profile = inputJson(ctx.inputs, 'in-voice')
+    .map((value) => parseVoiceProfile(value))
+    .find((value): value is NonNullable<typeof value> => value !== null)
+  const voiceId = profile?.voice_id ?? config.voiceId.trim()
+
+  // 豆包参考音频通道尚未接入（见 gateway/audio.ts 的实现边界说明），
+  // 因此这里只做存在性提示，不把上游音频悄悄丢弃后假装合成成功。
+  const referenceAudio = inputMedia(ctx.inputs, 'in-audio', 'audio')
+  if (config.backend === 'doubao' && referenceAudio.length > 0) {
+    return {
+      status: 'failed',
+      reason: '豆包参考音频（references）通道尚未接入，请改用音色 ID 或 MiniMax 通道'
+    }
+  }
+
+  if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
+
+  try {
+    const result = await ctx.gateway.speechGenerate({
+      projectId: ctx.projectId,
+      providerId: config.providerId,
+      modelId: config.modelId,
+      text,
+      voiceId,
+      config
+    })
+    if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
+    if (!result.ok) return { status: 'failed', reason: result.error.message }
+
+    const asset = result.data.asset
+    const subtitle = result.data.subtitle
+    ctx.updateResult(
+      serializeMediaResultCollection(
+        appendMediaResult(
+          typeof ctx.shape.meta?.nodeResult === 'string' ? ctx.shape.meta.nodeResult : '',
+          { mediaId: asset.id, mediaPath: asset.path, mime: asset.mime },
+          {
+            nodeId: ctx.node.id,
+            modelKey: config.modelId,
+            prompt: text.slice(0, 80),
+            runId: ctx.runId
+          }
+        )
+      )
+    )
+    // 字幕只在本次运行真的产出时存在；没有就清空，避免上一次的字幕继续暴露给下游。
+    ctx.updateMeta?.({
+      nodeExtra: subtitle ? JSON.stringify({ 'out-subtitle': subtitle }) : undefined
+    })
+    ctx.emitArtifact?.({
+      kind: 'audio',
+      mediaId: asset.id,
+      mediaPath: asset.path,
+      mime: asset.mime,
+      portId: 'out-audio',
+      title: asset.name || '配音结果'
+    })
+    return { status: 'done' }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (message === '已取消') return { status: 'skipped', reason: '已取消' }
+    return { status: 'failed', reason: `配音异常：${message}` }
+  }
+}

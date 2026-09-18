@@ -35,7 +35,7 @@ function shapeFor(node: (typeof BUILTIN_TEMPLATES)[number]['nodes'][number]): No
 }
 
 describe('P2/P3 内置创作模板', () => {
-  it.each(['角色→场景→分镜', '分镜→3D预演', '提示词包→生图', '图片修改→后续创作', '分镜→批量生图'])(
+  it.each(['角色→场景→分镜', '分镜→3D预演', '提示词包→生图', 'P图→后续创作', '分镜→批量生图'])(
     '%s 的每条连线均为真实契约连接',
     (name) => {
       const template = BUILTIN_TEMPLATES.find((item) => item.name === name)!
@@ -71,8 +71,8 @@ describe('P2/P3 内置创作模板', () => {
     expect(template.nodes[iterateIndex]?.config).toContain('"runMode":"resume"')
   })
 
-  it('图片修改后续创作从同一张修改结果分支到三个正式图片输入', () => {
-    const template = BUILTIN_TEMPLATES.find((item) => item.name === '图片修改→后续创作')!
+  it('P图后续创作从同一张修改结果分支到三个正式图片输入', () => {
+    const template = BUILTIN_TEMPLATES.find((item) => item.name === 'P图→后续创作')!
     expect(template.nodes.map((node) => node.type)).toEqual([
       'image',
       'image-edit',

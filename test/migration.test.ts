@@ -96,13 +96,16 @@ describe('契约版本稳定性（防破坏性变化漏升版本）', () => {
     'image-gen',
     'image-edit',
     'video',
+    'video-asset',
     'video-frame',
     'video-clip',
     'video-audio',
     'vocal-separate',
     'audio',
+    'file',
     'speech',
     'tts',
+    'voice-design',
     'chat',
     'processor',
     'json',
@@ -117,30 +120,25 @@ describe('契约版本稳定性（防破坏性变化漏升版本）', () => {
 
   it.each(types)('节点 %s 的契约版本与已发布契约一致', (type) => {
     const spec = getNodeType(type)
-    const v6Types: NodeTypeId[] = ['video']
-    const v4Types: NodeTypeId[] = ['vocal-separate']
+    const v7Types: NodeTypeId[] = ['video']
+    const v4Types: NodeTypeId[] = ['vocal-separate', 'video-frame', 'video-clip', 'video-audio']
+    // speech 3：配音改为模型驱动（按协议派生输入/输出结构）；
+    // tts 3：语音克隆新增 out-json 音色档案输出；
+    // image-split 3：label 由「拆图」统一为「拆分」，与调色板可见文字同源。
     const v3Types: NodeTypeId[] = [
       'audio',
       'image',
       'image-gen',
       'director',
-      'video-frame',
-      'video-clip',
-      'video-audio',
-      'text'
-    ]
-    const v2Types: NodeTypeId[] = [
-      'code',
-      'iterate',
+      'text',
       'speech',
       'tts',
-      'image-crop',
-      'image-split',
-      'image-edit'
+      'image-split'
     ]
+    const v2Types: NodeTypeId[] = ['code', 'iterate', 'image-crop', 'image-edit', 'video-asset']
     expect(spec?.contractVersion).toBe(
-      v6Types.includes(type)
-        ? 6
+      v7Types.includes(type)
+        ? 7
         : v4Types.includes(type)
           ? 4
           : v3Types.includes(type)

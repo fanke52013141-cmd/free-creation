@@ -11,6 +11,8 @@ import type { ImageCropConfig } from '../image-crop'
 import type { ImageSplitConfig } from '../image-split'
 import type { ImageEditConfig } from '../image-edit'
 import type { TtsConfig } from '../tts'
+import type { SpeechConfig } from '../speech'
+import type { VoiceDesignConfig } from '../voice-design'
 import type {
   VideoFrameConfig,
   VideoClipConfig,
@@ -85,6 +87,8 @@ export const IPC = {
     videoCancel: 'gateway:video:cancel',
     videoTask: 'gateway:video:task',
     audioGenerate: 'gateway:audio:generate',
+    speechGenerate: 'gateway:speech:generate',
+    voiceDesign: 'gateway:voice:design',
     event: 'gateway:event'
   }
 } as const
@@ -220,6 +224,15 @@ export interface TtsGenerateInput {
   text: string
   /** 合成参数（语言 / 语速 / 情绪 / 输出格式）。 */
   config: TtsConfig
+}
+
+/**
+ * 语音复刻结果。MiniMax 链路会额外登记一个可复用的 voice_id；
+ * 本地 ComfyUI 链路没有音色概念，voiceId 为空串而不是伪造一个。
+ */
+export interface VoiceCloneResult {
+  asset: import('../types').MediaAsset
+  voiceId: string
 }
 
 export interface ComfyuiSettingsInput {
@@ -377,6 +390,59 @@ export interface AudioGenerateInput {
   format?: string
   /** MiniMax 非流式合成可选的 AIGC 音频水印。 */
   aigcWatermark?: boolean
+}
+
+// ── 配音节点：模型驱动的语音合成 ──
+
+/**
+ * 配音节点的合成请求。`config.backend` 决定主进程走哪条协议：
+ * minimax（异步 t2a_async_v2，默认）/ doubao（tts/create）/ openai（兼容端点）。
+ */
+export interface SpeechGenerateInput {
+  projectId: string
+  providerId: string
+  modelId: string
+  /** 已与上游文本合并后的朗读正文。 */
+  text: string
+  /** 音色档案里的 voice_id（上游「音色设计」节点或节点内填写）；空串表示用服务端默认音色。 */
+  voiceId: string
+  config: SpeechConfig
+}
+
+/** 豆包返回的字幕时间轴；只有声明了字幕输出的模型才会带回来。 */
+export interface SpeechSubtitleSentence {
+  start_time: number
+  end_time: number
+  text: string
+  words?: unknown[]
+}
+
+export interface SpeechSubtitle {
+  text: string
+  sentences: SpeechSubtitleSentence[]
+}
+
+export interface SpeechGenerateResult {
+  asset: import('../types').MediaAsset
+  /** 仅豆包在 enable_subtitle 打开时存在；其余协议不产生字幕。 */
+  subtitle?: SpeechSubtitle
+}
+
+// ── 音色设计节点（MiniMax voice_design）──
+
+export interface VoiceDesignInput {
+  projectId: string
+  providerId: string
+  /** 音色描述（已与上游文本合并）。 */
+  prompt: string
+  config: VoiceDesignConfig
+}
+
+export interface VoiceDesignResult {
+  /** 试听音频（服务端 hex 解码后落盘的本地资产）。 */
+  asset: import('../types').MediaAsset
+  /** 设计出的 voice_id，可直接被下游配音节点引用。 */
+  voiceId: string
 }
 
 /** 主进程 → 渲染进程的网关事件（聊天流式分片 / 视频任务进度） */

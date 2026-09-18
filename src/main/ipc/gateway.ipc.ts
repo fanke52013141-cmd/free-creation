@@ -1,4 +1,4 @@
-﻿// 模型网关 IPC handlers（信封规范见《技术框架与规范》§10）
+// 模型网关 IPC handlers（信封规范见《技术框架与规范》§10）
 import { ipcMain, type BrowserWindow } from 'electron'
 import { IPC } from '../../shared/contracts'
 import type {
@@ -20,7 +20,8 @@ import {
   resumePendingVideoTasks,
   submitVideoTask
 } from '../gateway/video'
-import { generateAudioToAsset } from '../gateway/audio'
+import { generateAudioToAsset, generateSpeechToAsset } from '../gateway/audio'
+import { designMiniMaxVoice } from '../gateway/voice'
 
 function ok<T>(data: T): IpcEnvelope<T> {
   return { ok: true, data }
@@ -108,6 +109,18 @@ export function registerGatewayIpc(win: BrowserWindow): void {
     IPC.gateway.audioGenerate,
     (_e, input: Parameters<typeof generateAudioToAsset>[0]) =>
       wrapAsync<MediaAsset>(() => generateAudioToAsset(input))
+  )
+
+  // 配音节点：协议由 config.backend 决定（MiniMax 异步 / 豆包 / OpenAI 兼容）。
+  ipcMain.handle(
+    IPC.gateway.speechGenerate,
+    (_e, input: Parameters<typeof generateSpeechToAsset>[0]) =>
+      wrapAsync(() => generateSpeechToAsset(input))
+  )
+
+  // 音色设计节点：返回试听音频资产与可复用的 voice_id。
+  ipcMain.handle(IPC.gateway.voiceDesign, (_e, input: Parameters<typeof designMiniMaxVoice>[0]) =>
+    wrapAsync(() => designMiniMaxVoice(input))
   )
 
   // 启动恢复：重启前仍在途的视频任务继续轮询

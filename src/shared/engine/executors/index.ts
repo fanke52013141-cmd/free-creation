@@ -18,6 +18,8 @@ import { aiProcessExecutor } from './aiProcess'
 import { imageGenExecutor } from './imageGen'
 import { imageEditExecutor } from './imageEdit'
 import { audioExecutor } from './audio'
+import { speechExecutor } from './speech'
+import { voiceDesignExecutor } from './voiceDesign'
 import { ttsExecutor } from './tts'
 import { videoExecutor } from './video'
 import { scriptExecutor } from './script'
@@ -52,7 +54,8 @@ export const EXECUTOR_REGISTRY: Record<string, NodeExecutor> = {
   // ── 音频语音 ──
   'vocal-separate': vocalSeparateExecutor,
   tts: ttsExecutor,
-  speech: audioExecutor,
+  speech: speechExecutor,
+  'voice-design': voiceDesignExecutor,
   chat: chatExecutor,
   // ── 逻辑流程 ──
   processor: processorExecutor,
@@ -85,7 +88,9 @@ export { chatExecutor } from './chat'
 export { aiProcessExecutor, parseAiProcess } from './aiProcess'
 export { imageGenExecutor, parseImageGen } from './imageGen'
 export { imageEditExecutor } from './imageEdit'
-export { audioExecutor, parseAudio } from './audio'
+export { audioExecutor } from './audio'
+export { speechExecutor } from './speech'
+export { voiceDesignExecutor } from './voiceDesign'
 export { ttsExecutor } from './tts'
 export { videoExecutor } from './video'
 export { scriptExecutor, parseScript } from './script'

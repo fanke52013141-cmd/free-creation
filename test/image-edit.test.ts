@@ -5,11 +5,48 @@ import {
   parseImageEditConfig,
   validateImageEditConfig
 } from '@shared/image-edit'
-import { imageEditExecutor } from '@renderer/engine/executors/imageEdit'
+import {
+  imageEditExecutor,
+  imageEditResultName,
+  annotationInstructionLines
+} from '@renderer/engine/executors/imageEdit'
 import type { NodeExecutionContext } from '@renderer/engine/executor-types'
 import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
 
 afterEach(() => vi.restoreAllMocks())
+
+describe('P图标注文字必须进入提示词（cowart 式「图形定位 + 文字语义」）', () => {
+  it('带文字的标注被编号，并同时给出标注类型与颜色角色', () => {
+    expect(
+      annotationInstructionLines([
+        { id: 'a1', type: 'arrow', color: 'red', points: [], text: '把袖口改成深蓝色' },
+        { id: 'a2', type: 'rect', color: 'yellow', points: [], text: '这块花纹保留' },
+        { id: 'a3', type: 'brush', color: 'blue', points: [] }
+      ])
+    ).toEqual([
+      '标注 1（箭头·需要修改）：把袖口改成深蓝色',
+      '标注 2（矩形框选·需要保留或重点注意）：这块花纹保留'
+    ])
+  })
+
+  it('没有任何带文字的标注时返回空数组，不污染提示词', () => {
+    expect(
+      annotationInstructionLines([{ id: 'a1', type: 'arrow', color: 'red', points: [] }])
+    ).toEqual([])
+  })
+})
+
+describe('P图产物命名（用户 2026-09-18 拍板）', () => {
+  it('第一次为「（改）原图名」，之后依次为「（改1）」「（改2）」', () => {
+    expect(imageEditResultName('ChatGPT Image', 0)).toBe('（改）ChatGPT Image')
+    expect(imageEditResultName('ChatGPT Image', 1)).toBe('（改1）ChatGPT Image')
+    expect(imageEditResultName('ChatGPT Image', 2)).toBe('（改2）ChatGPT Image')
+  })
+
+  it('来源没有显示名时回退到「图片」', () => {
+    expect(imageEditResultName('   ', 0)).toBe('（改）图片')
+  })
+})
 
 describe('图片修改配置', () => {
   it('限制坐标、数量与类型，损坏配置回到默认值', () => {
@@ -148,7 +185,13 @@ describe('imageEditExecutor', () => {
     )
     expect(update).toEqual({})
     expect(artifacts).toContainEqual(
-      expect.objectContaining({ kind: 'image', mediaId: 'edited-1', mime: 'image/png' })
+      expect.objectContaining({
+        kind: 'image',
+        mediaId: 'edited-1',
+        mime: 'image/png',
+        // 无来源显示名时回退到「图片」，前缀仍是「（改）」。
+        title: '（改）图片'
+      })
     )
   })
 
