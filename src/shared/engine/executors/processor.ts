@@ -1,4 +1,6 @@
 // 处理节点执行器：上游值原样传递；未连线时用固定值兜底（按声明类型推断）。
+// 输入/输出端口固定为 in-value / out-value，因此配置里没有“变量名”概念：
+// 任何名字都不会影响连线，曾经的名字输入框只是装饰，已删除。
 import { inputValue } from '../inputs'
 import type { NodeValue } from '../values'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
@@ -6,8 +8,6 @@ import { parseJsonObj, type VariableValueType } from '../helpers'
 import { readNodeConfig } from '../node-config'
 
 interface ProcessorData {
-  inputName: string
-  outputName: string
   valueType: VariableValueType
   fallback: string
   operation: 'pass' | 'pick' | 'template'
@@ -18,8 +18,6 @@ interface ProcessorData {
 export function parseProcessor(text: string): ProcessorData {
   const value = parseJsonObj(text)
   return {
-    inputName: typeof value?.inputName === 'string' ? value.inputName : 'input',
-    outputName: typeof value?.outputName === 'string' ? value.outputName : 'output',
     valueType: (typeof value?.valueType === 'string'
       ? value.valueType
       : 'any') as VariableValueType,
@@ -79,6 +77,6 @@ export const processorExecutor = (ctx: NodeExecutionContext): NodeExecutionResul
     const template = data.template || '{{value}}'
     output = { kind: 'text', text: template.replace(/\{\{\s*value\s*\}\}/g, stringifyValue(value)) }
   }
-  ctx.updateResult(JSON.stringify({ ...output, variableName: data.outputName }))
+  ctx.updateResult(JSON.stringify(output))
   return { status: 'done' }
 }

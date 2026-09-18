@@ -45,7 +45,10 @@ describe('图片模型能力描述', () => {
       '9:21'
     ])
     expect(capabilities.resolutions).toEqual(['1k', '2k', '4k'])
-    expect(capabilities.supportsQuality).toBe(true)
+    // 官方文档的提交字段是封闭集合，quality 只属于 -vip / -official，普通 gpt-image-2 不发。
+    expect(capabilities.supportsQuality).toBe(false)
+    expect(capabilities.supportsTransparentBackground).toBe(true)
+    expect(capabilities.maxPromptChars).toBe(32000)
     expect(capabilities.maxReferenceImages).toBe(6)
     expect(capabilities.driver).toBe('toapis-task')
     expect(capabilities.referenceMode).toBe('upload-url')

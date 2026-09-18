@@ -21,10 +21,7 @@ export type {
   VariableValueType
 } from '@shared/engine/helpers'
 
-import {
-  waitForChat as _waitForChat,
-  waitForVideo as _waitForVideo
-} from '@shared/engine/helpers'
+import { waitForChat as _waitForChat, waitForVideo as _waitForVideo } from '@shared/engine/helpers'
 import type { ChatInput, VideoMedia } from '@shared/engine/helpers'
 import type { CancelSignal } from '../executor-types'
 import { rendererGateway } from '../rendererGateway'

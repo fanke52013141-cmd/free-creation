@@ -9,6 +9,7 @@ export interface VideoCapabilities {
   resolutions: string[]
   /** Product defaults are explicit. Array order must never decide cost or quality. */
   defaultRatio: string
+  /** 时长按秒计费：默认值取该模型允许的最短时长，且不依赖 durations 的排列顺序。 */
   defaultDuration: number
   defaultResolution: string
   modes: VideoGenerationMode[]
@@ -62,7 +63,8 @@ const H3: VideoCapabilities = {
   durations: range(4, 15),
   resolutions: ['768P', '2K'],
   defaultRatio: '16:9',
-  defaultDuration: 5,
+  // 视频按秒计费，默认取该模型允许的最短时长：让用户手动加长，而不是默认多花。
+  defaultDuration: 4,
   defaultResolution: '768P',
   modes: ['text', 'first-frame', 'first-last-frame', 'reference'],
   supportsFirstLastFrames: true,
@@ -81,6 +83,8 @@ const H3: VideoCapabilities = {
 const H3_MAX: VideoCapabilities = {
   ...H3,
   durations: range(5, 15),
+  // 继承 H3 的 4 秒默认值会落在自己的时长区间之外，这里必须跟着收窄。
+  defaultDuration: 5,
   resolutions: ['480P', '768P'],
   defaultResolution: '768P',
   modes: ['text', 'first-frame', 'first-last-frame'],
@@ -103,7 +107,7 @@ const seedance = (
   durations,
   resolutions,
   defaultRatio: '16:9',
-  defaultDuration: durations.includes(5) ? 5 : (durations[0] ?? 5),
+  defaultDuration: Math.min(...durations),
   defaultResolution: resolutions.includes('720p') ? '720p' : (resolutions[0] ?? '720p'),
   modes: ['text', 'first-frame', 'first-last-frame', 'reference'],
   supportsFirstLastFrames: true,
@@ -134,7 +138,7 @@ const FALLBACK: VideoCapabilities = {
   durations: [4, 5, 6, 8, 10, 12, 15],
   resolutions: ['720p'],
   defaultRatio: '16:9',
-  defaultDuration: 5,
+  defaultDuration: 4,
   defaultResolution: '720p',
   modes: ['text'],
   supportsFirstLastFrames: false,

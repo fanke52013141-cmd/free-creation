@@ -16,6 +16,7 @@ import { getNodeType, mediaUrl } from '../../registry'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
 import { parseImageSplitConfig } from '@shared/image-split'
+import { parseVideoClipConfig, serializeVideoClipConfig } from '@shared/video-transform'
 import {
   clearMediaResultHistory,
   parseMediaResultCollection,
@@ -240,11 +241,11 @@ export function createAudioContinuation(
 }
 
 /**
- * 一键提取人声模板：从视频节点创建 视频提音 → 人声分离 两个节点并预连线。
+ * 一键提取人声模板：从视频节点创建 视频截取（只保留音频）→ 人声分离 两个节点并预连线。
  * 底层是两个真实节点 + 两条真实边，不生成隐藏逻辑或超级节点。
  */
 export function createVocalExtractionTemplate(editor: Editor, source: NodeCardShape): void {
-  const audioSpec = getNodeType('video-audio')
+  const audioSpec = getNodeType('video-clip')
   const vocalSpec = getNodeType('vocal-separate')
   if (!audioSpec || !vocalSpec) return
 
@@ -259,8 +260,13 @@ export function createVocalExtractionTemplate(editor: Editor, source: NodeCardSh
       x: source.x + source.props.w + gap,
       y: source.y - vocalSpec.defaultSize.h / 4,
       props: {
-        nodeType: 'video-audio',
-        title: '截音频',
+        nodeType: 'video-clip',
+        title: '提取音频',
+        config: serializeVideoClipConfig({
+          ...parseVideoClipConfig(''),
+          keepVideo: false,
+          keepAudio: true
+        }),
         w: audioSpec.defaultSize.w,
         h: audioSpec.defaultSize.h
       } satisfies Partial<NodeCardProps>
@@ -338,14 +344,14 @@ export function ImageContinuationActions({
 export function createVideoContinuation(
   editor: Editor,
   source: NodeCardShape,
-  targetType: 'video-frame' | 'video-clip' | 'video-audio'
-): void {
+  targetType: 'video-frame' | 'video-clip',
+  options?: { title?: string; config?: string }
+): TLShapeId | null {
   const spec = getNodeType(targetType)
-  if (!spec) return
+  if (!spec) return null
   const titles: Record<typeof targetType, string> = {
     'video-frame': '抽帧',
-    'video-clip': '截视频',
-    'video-audio': '截音频'
+    'video-clip': '视频截取'
   }
   const id = createShapeId()
   const placement = findContinuationPlacement(
@@ -361,7 +367,8 @@ export function createVideoContinuation(
     y: placement.y,
     props: {
       nodeType: targetType,
-      title: titles[targetType],
+      title: options?.title ?? titles[targetType],
+      ...(options?.config ? { config: options.config } : {}),
       w: spec.defaultSize.w,
       h: spec.defaultSize.h
     } satisfies Partial<NodeCardProps>
@@ -374,9 +381,10 @@ export function createVideoContinuation(
     )
   ) {
     editor.deleteShape(id)
-    return
+    return null
   }
   editor.select(id)
+  return id
 }
 
 /**
@@ -798,6 +806,19 @@ export function useWheelScroll(ref: React.RefObject<HTMLElement | null>): void {
       document.removeEventListener('wheel', onWheel, { capture: true } as EventListenerOptions)
     }
   }, [ref])
+}
+
+/**
+ * 把 JSON.parse 的报错换算成行号：新引擎自带行列，旧引擎按 position 推算。
+ * JSON / 结构数据节点共用同一份读法，避免同一类错误在两个节点里说法不一致。
+ */
+export function jsonErrorLocation(raw: string, message: string): string {
+  const located = /\(line (\d+) column (\d+)\)/.exec(message)
+  if (located) return `第 ${located[1]} 行第 ${located[2]} 列格式有误`
+  const at = /at position (\d+)/.exec(message)
+  if (!at) return '无法解析 JSON'
+  const index = Math.min(Number(at[1]), raw.length)
+  return `第 ${raw.slice(0, index).split('\n').length} 行格式有误`
 }
 
 // 变量值类型（被处理/代码/脚本节点共享）：决定变量映射的类型约束。

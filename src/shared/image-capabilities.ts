@@ -43,6 +43,10 @@ export interface ImageCapabilities {
   resolutions: ImageResolution[]
   /** true 时请求固定携带 quality: 'low'；质量不暴露 UI、不进节点配置。 */
   supportsQuality: boolean
+  /** 供应商是否接受 background: 'transparent'；关闭时 UI 隐藏且请求不携带该字段。 */
+  supportsTransparentBackground: boolean
+  /** 文档化的提示词字符上限；未文档化时留空，不做臆测性拦截。 */
+  maxPromptChars?: number
   driver: ImageGatewayDriver
   referenceMode: ImageReferenceMode
 }
@@ -55,6 +59,8 @@ export interface ImageGenerationConfig {
   aspectRatio: ImageAspectRatio
   /** 分辨率是用户意图；当前供应商不支持时仅不发送，配置保留以便切回。 */
   resolution?: ImageResolution
+  /** 透明背景开关；供应商不支持时仅在网关不发送，配置保留以便切回。 */
+  background?: 'transparent'
   /** 旧项目配置兼容字段；生图 UI 不再暴露，也不会发送给供应商。 */
   seed?: number
 }
@@ -82,7 +88,9 @@ const AUTO_SIZE_OPTION: ImageSizeOption = { value: 'auto', label: '默认尺寸'
 
 /**
  * ToAPIS：OpenAI 形态的异步任务端点；size 为比例串，参考图必须先上传换 URL。
- * quality 官方文档未列出，按产品决策固定提交 low；若实测被拒只需改本表。
+ * 提交字段以官方 gpt-image-2 文档为准且是封闭集合：model / prompt(≤32000) / size(比例串) /
+ * resolution(1k|2k|4k) / background / n / response_format / reference_images(≤6, 仅 URL)。
+ * quality 只存在于 gpt-image-2-vip 与 gpt-image-2-official 两个模型，普通 gpt-image-2 不发送。
  */
 const TOAPIS_CAPABILITIES: ImageCapabilities = {
   ratios: ['auto', ...TOAPIS_RATIOS],
@@ -95,7 +103,9 @@ const TOAPIS_CAPABILITIES: ImageCapabilities = {
   maxReferenceImages: 6,
   forwardsAspectRatio: false,
   resolutions: IMAGE_RESOLUTIONS,
-  supportsQuality: true,
+  supportsQuality: false,
+  supportsTransparentBackground: true,
+  maxPromptChars: 32000,
   driver: 'toapis-task',
   referenceMode: 'upload-url'
 }
@@ -115,6 +125,7 @@ const OPENAI_IMAGE_CAPABILITIES: ImageCapabilities = {
   forwardsAspectRatio: false,
   resolutions: [],
   supportsQuality: true,
+  supportsTransparentBackground: false,
   driver: 'openai-images',
   referenceMode: 'binary'
 }
@@ -129,6 +140,7 @@ const OPENROUTER_IMAGE_CAPABILITIES: ImageCapabilities = {
   forwardsAspectRatio: false,
   resolutions: [],
   supportsQuality: false,
+  supportsTransparentBackground: false,
   driver: 'openrouter-chat',
   referenceMode: 'chat-inline'
 }
@@ -152,6 +164,7 @@ const SAFE_OPENAI_COMPAT_CAPABILITIES: ImageCapabilities = {
   forwardsAspectRatio: true,
   resolutions: [],
   supportsQuality: false,
+  supportsTransparentBackground: false,
   driver: 'openai-images',
   referenceMode: 'binary'
 }
@@ -234,6 +247,8 @@ export function normalizeImageGenerationConfig(
     size: requestedSize,
     aspectRatio: requestedRatio,
     ...(resolution ? { resolution } : {}),
+    // 与分辨率同理：配置层保留用户意图，发送与否由能力表在网关决定（parseImageGen 用保守表归一化）。
+    ...(input.background === 'transparent' ? { background: 'transparent' as const } : {}),
     ...(typeof input.seed === 'number' && Number.isFinite(input.seed) ? { seed: input.seed } : {})
   }
 }

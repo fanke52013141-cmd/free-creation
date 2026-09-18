@@ -1,10 +1,13 @@
 // 循环节点 Body（原迭代节点 Body）
+//
+// 界面上必须先能看出「有没有列表、有没有循环体」：这两项缺一即整节点跳过，
+// 只给配置下拉而不给连线状态，用户就只能靠猜。
 import { useRef } from 'react'
 import { stopEventPropagation, useEditor, useValue } from 'tldraw'
 import type { NodeBodyProps } from '../../registry'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { AppSelect } from '../../../components/AppSelect'
-import { deriveGraph } from '../../../canvas/graph'
+import { deriveGraph, readConnectedNodeInputs } from '../../../canvas/graph'
 import { useWheelScroll } from './shared'
 import {
   parseIterate,
@@ -15,9 +18,9 @@ import {
 } from '../../../engine/executors/iterate'
 
 const ITERATE_FAILURE_OPTIONS: Array<{ value: IterateConfig['onFailure']; label: string }> = [
-  { value: 'skip', label: '跳过失败项' },
-  { value: 'fail', label: '全部中止' },
-  { value: 'retry', label: '重试' }
+  { value: 'skip', label: '失败项跳过' },
+  { value: 'fail', label: '一出错就中止' },
+  { value: 'retry', label: '重试后仍失败则跳过' }
 ]
 
 const ITERATE_RUN_MODE_OPTIONS: Array<{ value: IterateConfig['runMode']; label: string }> = [
@@ -89,13 +92,34 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
     },
     [editor, shape.id]
   )
+  // 列表元素数量：执行器要求 in-list 是数组，否则整节点跳过，因此这里必须如实报出来。
+  const listCount = useValue<number | null>(
+    'iterate list size',
+    () => {
+      const entry = readConnectedNodeInputs(editor, shape.id).find(
+        (item) => item.targetPortId === 'in-list'
+      )
+      const value = entry?.value
+      return value && value.kind === 'json' && Array.isArray(value.data) ? value.data.length : null
+    },
+    [editor, shape.id]
+  )
+  const effectiveCount =
+    listCount === null ? null : data.limit > 0 ? Math.min(data.limit, listCount) : listCount
 
   return (
     <div className="iterate-body" ref={scrollRef}>
+      <div className="iterate-contract">
+        <code className="variable-expr">in-list</code>
+        <span>逐项交给</span>
+        <code className="variable-expr">out-item</code>
+        <span>循环体，汇总到</span>
+        <code className="variable-expr">out-items</code>
+      </div>
       <div className="iterate-config">
         <div className="ai-row ai-row-num">
-          <label>
-            <span className="ai-row-label">限数</span>
+          <label title="只处理列表前 N 项，0 表示不限">
+            <span className="ai-row-label">上限</span>
             <input
               type="number"
               min="0"
@@ -106,7 +130,12 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
           </label>
         </div>
         <label className="ai-row">
-          <span className="ai-row-label">范围</span>
+          <span
+            className="ai-row-label"
+            title="续跑与只重跑失败都按上一次运行记录判定，首次运行没有记录可复用"
+          >
+            运行
+          </span>
           <AppSelect
             className="gen-select"
             value={data.runMode}
@@ -123,7 +152,9 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
           </AppSelect>
         </label>
         <label className="ai-row">
-          <span className="ai-row-label">失败</span>
+          <span className="ai-row-label" title="决定某一项失败时是否继续处理后面的项">
+            失败时
+          </span>
           <AppSelect
             className="gen-select"
             value={data.onFailure}
@@ -141,7 +172,9 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
         </label>
         {data.onFailure === 'retry' && (
           <label className="ai-row">
-            <span className="ai-row-label">重试</span>
+            <span className="ai-row-label" title="单项失败后额外执行几次，用尽仍失败才跳过">
+              重试
+            </span>
             <input
               type="number"
               min="0"
@@ -153,7 +186,17 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
         )}
       </div>
       <div className="iterate-meta">
-        <span>循环体入口：{downstreamCount} 个</span>
+        <span className={`iterate-wiring ${listCount === null ? 'warn' : 'ok'}`}>
+          列表：{listCount === null ? '未接入或不是数组，运行会跳过' : `${listCount} 项`}
+          {effectiveCount !== null && listCount !== null && effectiveCount < listCount
+            ? ` · 本次处理 ${effectiveCount} 项`
+            : ''}
+        </span>
+        <span className={`iterate-wiring ${downstreamCount === 0 ? 'warn' : 'ok'}`}>
+          {downstreamCount === 0
+            ? '循环体：未从「当前项」连线，运行会跳过'
+            : `循环体入口：${downstreamCount} 个`}
+        </span>
         {result?.progress && (
           <div className="iterate-progress-wrap">
             <div className="iterate-progress-bar">

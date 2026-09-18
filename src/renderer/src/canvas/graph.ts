@@ -1108,8 +1108,20 @@ export function hasIncomingConnection(
   targetNodeId: TLShapeId,
   targetPortId: string
 ): boolean {
-  return editor.getCurrentPageShapes().some((shape) => {
+  return countIncomingConnections(editor, targetNodeId, targetPortId) > 0
+}
+
+/**
+ * 多值输入端口上的连线数量。结构数据节点用它决定 {{input[n]}} 的可用下标，
+ * 因此 UI 不必再让用户猜测「第几个输入」对应哪条边。
+ */
+export function countIncomingConnections(
+  editor: Editor,
+  targetNodeId: TLShapeId,
+  targetPortId: string
+): number {
+  return editor.getCurrentPageShapes().filter((shape) => {
     if (shape.type !== 'arrow' || shape.meta?.toPort !== targetPortId) return false
     return getArrowBindings(editor, shape.id).end?.toId === targetNodeId
-  })
+  }).length
 }

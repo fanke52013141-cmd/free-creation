@@ -98,7 +98,7 @@ describe('image gateway drivers', () => {
   })
 
   describe('toapis-task 驱动', () => {
-    it('文生图：提交体含比例串 size/分辨率/固定 low，轮询完成后下载落盘', async () => {
+    it('文生图：提交体只带文档化字段（比例串 size、分辨率、透明背景），轮询完成后下载落盘', async () => {
       const pollResponses = [
         { id: 'task_1', status: 'in_progress', progress: 40 },
         {
@@ -118,7 +118,7 @@ describe('image gateway drivers', () => {
             progress: 0
           })
         }
-        if (url.includes('/images/tasks/task_1')) {
+        if (url.includes('/images/generations/task_1')) {
           return jsonResponse(
             pollResponses.shift() ?? {
               id: 'task_1',
@@ -139,7 +139,7 @@ describe('image gateway drivers', () => {
       vi.stubGlobal('fetch', fetchMock)
       requireProviderMock.mockReturnValue(makeProvider('toapis'))
 
-      const pending = generateImageToAsset(makeInput())
+      const pending = generateImageToAsset(makeInput({ background: 'transparent' }))
       await advancePolling()
       await pending
 
@@ -153,10 +153,12 @@ describe('image gateway drivers', () => {
         prompt: '未来城市夜景海报',
         size: '1:1',
         resolution: '2k',
-        quality: 'low',
+        background: 'transparent',
         n: 1,
         response_format: 'url'
       })
+      // quality 不属于 gpt-image-2 的文档字段；能力表关闭后网关不得再注入。
+      expect(submitBody.quality).toBeUndefined()
       expect(submitBody.reference_images).toBeUndefined()
       expect(saveBufferAssetMock).toHaveBeenCalledWith(
         'proj-1',
@@ -176,7 +178,7 @@ describe('image gateway drivers', () => {
         if (url.endsWith('/images/generations') && (init?.method ?? 'GET') === 'POST') {
           return jsonResponse({ id: 'task_2', status: 'queued' })
         }
-        if (url.includes('/images/tasks/task_2')) {
+        if (url.includes('/images/generations/task_2')) {
           return jsonResponse({
             id: 'task_2',
             status: 'completed',
@@ -223,7 +225,7 @@ describe('image gateway drivers', () => {
           if (url.endsWith('/images/generations')) {
             return jsonResponse({ id: 'task_3', status: 'queued' })
           }
-          if (url.includes('/images/tasks/task_3')) {
+          if (url.includes('/images/generations/task_3')) {
             return jsonResponse({ id: 'task_3', status: 'failed', error: { message: '内容违规' } })
           }
           return new Response(`unexpected ${url} ${String(init?.method)}`, { status: 500 })
@@ -276,7 +278,7 @@ describe('image gateway drivers', () => {
         if (url.endsWith('/images/generations') && (init?.method ?? 'GET') === 'POST') {
           return jsonResponse({ task_id: 'task_custom_1' })
         }
-        if (url.includes('/images/tasks/task_custom_1')) {
+        if (url.includes('/images/generations/task_custom_1')) {
           return jsonResponse({
             id: 'task_custom_1',
             status: 'SUCCESS',

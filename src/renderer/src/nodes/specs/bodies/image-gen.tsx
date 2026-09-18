@@ -96,7 +96,7 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
     })
   }
 
-  // 所有图片都使用同一个多值端口，连接顺序就是 @图片 1～4 的顺序。
+  // 所有图片都使用同一个多值端口，连接顺序就是 @图片 1…N 的顺序；N 的上限来自能力表。
   const referenceImages = gatherUpstreamMediaList(editor, shape.id, 'in-images', 'image')
   const mentionMatch = draft.match(/@([^\s]*)$/)
   const showMentionMenu = referenceImages.length > 0 && mentionMatch !== null
@@ -211,6 +211,19 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
             ))}
           </AppSelect>
         )}
+        {capabilities.supportsTransparentBackground && (
+          <label className="gen-check" title="输出透明背景 PNG；关闭时由供应商决定背景">
+            <input
+              type="checkbox"
+              checked={config.background === 'transparent'}
+              onPointerDown={(e) => e.stopPropagation()}
+              onChange={(e) =>
+                update({ ...config, background: e.target.checked ? 'transparent' : undefined })
+              }
+            />
+            透明底
+          </label>
+        )}
       </div>
       <textarea
         ref={promptRef}
@@ -224,7 +237,7 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
       />
       {showMentionMenu && (
         <div className="ref-mention-menu" role="listbox" aria-label="选择参考图片">
-          {referenceImages.slice(0, 4).map((image, index) => (
+          {referenceImages.slice(0, capabilities.maxReferenceImages).map((image, index) => (
             <button
               type="button"
               key={image.mediaId}

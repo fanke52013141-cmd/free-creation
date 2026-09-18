@@ -4,7 +4,7 @@ import { stopEventPropagation, useEditor } from 'tldraw'
 import { markUndoPoint } from '../../../canvas/history'
 import { toast } from '../../../stores/toast'
 import { Icon } from '../../../components/Icon'
-import { useWheelScroll } from './shared'
+import { useWheelScroll, jsonErrorLocation } from './shared'
 import type { NodeBodyProps } from '../../registry'
 
 function JsonValueCards({ value }: { value: unknown }): React.JSX.Element {
@@ -138,22 +138,21 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
   const text = shape.props.text || ''
   let formatted = text
   let parsedJson: unknown
-  let parseError = false
+  let parseError: string | null = null
   try {
     parsedJson = JSON.parse(text)
     formatted = JSON.stringify(parsedJson, null, 2)
-  } catch {
-    // 非合法 JSON 原样展示
-    parseError = Boolean(text)
+  } catch (error) {
+    // 非合法 JSON 原样展示；短标签给行号，完整原因留在 tooltip 里
+    const message = error instanceof Error ? error.message : String(error)
+    parseError = text ? message : null
   }
   const isValid = Boolean(text) && !parseError
-  const summary = Array.isArray(parsedJson)
+  const structSummary = Array.isArray(parsedJson)
     ? `${parsedJson.length} 项`
-    : typeof parsedJson === 'object' && parsedJson !== null
+    : parsedJson && typeof parsedJson === 'object'
       ? `${Object.keys(parsedJson).length} 个字段`
-      : isValid
-        ? '基础值'
-        : '等待输入'
+      : 'JSON 有效'
 
   const formatJson = (): void => {
     try {
@@ -194,13 +193,18 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
             enterEditing()
           }}
         >
-          双击输入 JSON 数据
+          暂无数据
         </div>
       )}
       <div className="code-toolbar">
-        <span className={`json-status ${isValid ? 'valid' : parseError ? 'invalid' : ''}`}>
-          {isValid ? 'JSON 有效' : parseError ? 'JSON 格式有误' : summary}
-        </span>
+        {text && (
+          <span
+            className={`json-status ${isValid ? 'valid' : 'invalid'}`}
+            title={parseError ?? undefined}
+          >
+            {isValid ? structSummary : jsonErrorLocation(text, parseError ?? '')}
+          </span>
+        )}
         <button
           className="btn-ghost small"
           onPointerDown={(e) => stopEventPropagation(e)}
@@ -211,7 +215,7 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
         >
           <>
             <Icon name="edit" size={14} />
-            {text ? '编辑' : '输入'}
+            {text ? '编辑数据' : '粘贴 JSON'}
           </>
         </button>
         {text && (

@@ -107,6 +107,23 @@ export const PORT_COLORS: Record<PortType, string> = {
   any: '#f7f7f7'
 }
 
+/**
+ * 端口类型的中文名。端口 tooltip 与拖线时的可连接标签都用它，
+ * 避免用户看到 `源视频 · video` 这类中英混排、需要自己猜的类型串。
+ */
+export const PORT_TYPE_LABELS: Record<PortType, string> = {
+  text: '文本',
+  markdown: 'Markdown',
+  json: 'JSON',
+  iteration: '循环项',
+  camera: '摄像机',
+  image: '图片',
+  video: '视频',
+  audio: '音频',
+  file: '文件',
+  any: '任意'
+}
+
 export function portCompatible(a: PortType, b: PortType): boolean {
   const bothTextual = (a === 'text' || a === 'markdown') && (b === 'text' || b === 'markdown')
   // 当前循环项是控制作用域，不是第二个普通 JSON 输出；只允许注入 JSON 输入。

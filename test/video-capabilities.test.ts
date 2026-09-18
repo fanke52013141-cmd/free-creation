@@ -19,7 +19,26 @@ describe('视频供应商能力描述', () => {
       resolution: '1080p',
       generateAudio: true
     })
-    expect(params).toEqual({ ratio: '16:9', duration: 5, resolution: '768P' })
+    expect(params).toEqual({ ratio: '16:9', duration: 4, resolution: '768P' })
+  })
+
+  it('默认时长取模型允许的最短秒数，且始终落在自身时长区间内', () => {
+    const profiles: Array<[ReturnType<typeof videoCapabilitiesFor>, string]> = [
+      [videoCapabilitiesFor('minimax', 'minimax-h3'), 'H3'],
+      [videoCapabilitiesFor('minimax', 'minimax-h3-max'), 'H3-Max'],
+      [videoCapabilitiesFor('seedance', 'seedance-2-0'), 'Seedance 2.0'],
+      [videoCapabilitiesFor('seedance', 'seedance-2-0-fast'), 'Seedance 2.0-fast'],
+      [videoCapabilitiesFor('seedance', 'seedance-2-0-mini'), 'Seedance 2.0-mini'],
+      [videoCapabilitiesFor('seedance', 'seedance-2-5'), 'Seedance 2.5'],
+      [videoCapabilitiesFor('openai', 'anything-else'), '兜底配置']
+    ]
+    for (const [caps, label] of profiles) {
+      // 按秒计费：默认必须是该模型的最短时长，而不是数组里的某个中间值。
+      expect(caps.defaultDuration, label).toBe(Math.min(...caps.durations))
+      expect(caps.durations, label).toContain(caps.defaultDuration)
+      expect(caps.ratios, label).toContain(caps.defaultRatio)
+      expect(caps.resolutions, label).toContain(caps.defaultResolution)
+    }
   })
 
   it('MiniMax H3 按协议暴露 4–15 秒、2K 和完整多模态参考能力', () => {

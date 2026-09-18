@@ -31,14 +31,29 @@ export interface VideoFrameConfig {
   format: 'png' | 'jpg'
 }
 
+/**
+ * 视频截取配置。v3 起「截视频」与「截音频」合并为同一节点（用户 2026-09-18 拍板：
+ * 少了 一个节点），因此同一份起止时间同时驱动画面与音频两条输出。
+ *
+ * 与 v2 的语义差异：v2 的 `includeAudio` 只表示「截出的视频是否带原声」；v3 新增
+ * `keepVideo` / `keepAudio` 决定产出哪几条资产，`includeAudio` 语义不变。
+ */
 export interface VideoClipConfig {
-  version: 2
+  version: 3
   startMs: number
   endMs: number
-  /** 是否保留音轨；无音轨视频此项无效。 */
+  /** 是否产出画面（视频片段资产）。 */
+  keepVideo: boolean
+  /** 是否产出独立的音频片段资产。 */
+  keepAudio: boolean
+  /** 视频片段是否保留原音轨；仅 keepVideo 为真时有效。 */
   includeAudio: boolean
-  /** 输出编码质量。 */
+  /** 画面输出编码质量。 */
   quality: ClipQuality
+  /** 音频片段输出格式。 */
+  audioFormat: AudioFormat
+  /** 音频片段采样率。 */
+  audioSampleRate: 44100 | 48000
 }
 
 export interface VideoAudioConfig {
@@ -70,11 +85,12 @@ const parseFrameMode = (value: unknown): FrameMode => {
 }
 
 const parseClipQuality = (value: unknown): ClipQuality => {
-  if (value === 'fast' || value === 'high') return value
-  return 'balanced'
+  if (value === 'fast' || value === 'balanced') return value
+  return 'high'
 }
 
-const parseAudioFormat = (value: unknown): AudioFormat => (value === 'wav' ? 'wav' : 'm4a')
+// 提音默认无损 WAV：下游人声分离需要高质量输入；仅显式配置 m4a 时才压缩。
+const parseAudioFormat = (value: unknown): AudioFormat => (value === 'm4a' ? 'm4a' : 'wav')
 
 const parseVocalMode = (value: unknown): VocalMode => (value === 'quality' ? 'quality' : 'fast')
 
@@ -116,28 +132,75 @@ export function parseVideoFrameConfig(text: string): VideoFrameConfig {
 }
 
 /**
- * 解析截取配置，兼容 v1 VideoRangeConfig。
+ * 解析视频截取配置。
+ *
+ * - v3：直接读取 keepVideo / keepAudio。
+ * - v2（历史「截视频」节点）：只产画面，等价 keepVideo=true、keepAudio=false，
+ *   保证旧项目行为完全不变。
+ * - 无配置（新建节点）：画面与音频都保留（用户 2026-09-18 拍板的默认值）。
  */
 export function parseVideoClipConfig(text: string): VideoClipConfig {
   try {
     const raw = JSON.parse(text) as Record<string, unknown>
-    if (raw.version === 2) {
-      const startMs = clampTime(raw.startMs, 0)
-      const endMs = Math.max(startMs + 1, clampTime(raw.endMs, startMs + 1000))
+    const baseStart = clampTime(raw.startMs, 0)
+    const startMs = baseStart
+    const endMs = Math.max(startMs + 1, clampTime(raw.endMs, startMs + 1000))
+    const quality = parseClipQuality(raw.quality)
+    const includeAudio = parseBoolean(raw.includeAudio, true)
+    const audioFormat = parseAudioFormat(raw.audioFormat ?? raw.format)
+    const audioSampleRate = parseSampleRate(raw.audioSampleRate ?? raw.sampleRate)
+    if (raw.version === 3) {
+      const hasKeepFlags = typeof raw.keepVideo === 'boolean' || typeof raw.keepAudio === 'boolean'
       return {
-        version: 2,
+        version: 3,
         startMs,
         endMs,
-        includeAudio: parseBoolean(raw.includeAudio, true),
-        quality: parseClipQuality(raw.quality)
+        keepVideo: parseBoolean(raw.keepVideo, true),
+        // 两个开关都没落盘时按新节点默认值「画面+音频」；已显式保存的按保存值。
+        keepAudio: hasKeepFlags ? parseBoolean(raw.keepAudio, false) : true,
+        includeAudio,
+        quality,
+        audioFormat,
+        audioSampleRate
+      }
+    }
+    if (raw.version === 2) {
+      return {
+        version: 3,
+        startMs,
+        endMs,
+        keepVideo: true,
+        keepAudio: false,
+        includeAudio,
+        quality,
+        audioFormat,
+        audioSampleRate
       }
     }
     // v1 VideoRangeConfig 兼容
-    const startMs = clampTime(raw.startMs, 0)
-    const endMs = Math.max(startMs + 1, clampTime(raw.endMs, startMs + 1000))
-    return { version: 2, startMs, endMs, includeAudio: true, quality: 'balanced' }
+    return {
+      version: 3,
+      startMs,
+      endMs,
+      keepVideo: true,
+      keepAudio: false,
+      includeAudio: true,
+      quality: 'high',
+      audioFormat: 'wav',
+      audioSampleRate: 44100
+    }
   } catch {
-    return { version: 2, startMs: 0, endMs: 1000, includeAudio: true, quality: 'balanced' }
+    return {
+      version: 3,
+      startMs: 0,
+      endMs: 1000,
+      keepVideo: true,
+      keepAudio: true,
+      includeAudio: true,
+      quality: 'high',
+      audioFormat: 'wav',
+      audioSampleRate: 44100
+    }
   }
 }
 
@@ -169,7 +232,7 @@ export function parseVideoAudioConfig(text: string): VideoAudioConfig {
       sampleRate: 44100
     }
   } catch {
-    return { version: 2, startMs: 0, endMs: 1000, format: 'm4a', sampleRate: 44100 }
+    return { version: 2, startMs: 0, endMs: 1000, format: 'wav', sampleRate: 44100 }
   }
 }
 

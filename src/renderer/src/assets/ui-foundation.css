@@ -557,6 +557,39 @@ body {
 
 .port-dot.dim {
   opacity: 0.16;
+  cursor: not-allowed;
+}
+
+/* 拖线时的“可落点”标记：类型色外环与圆点之间留一道背景色间隙，
+   深色/浅色画布上都能看清，不再与单纯 hover 的放大效果混淆。 */
+.port-dot.ok::after {
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 0 4px var(--pc, #42b9f5);
+}
+
+/* 兼容端口的名称标签：只在拖线过程中出现，回答“这个口收的是什么”。 */
+.port-label {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 1px 6px;
+  border-radius: 5px;
+  border: 1px solid var(--pc, #42b9f5);
+  background: var(--panel);
+  color: var(--txt);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.port-dot.in .port-label {
+  right: calc(100% + 5px);
+}
+
+.port-dot.out .port-label {
+  left: calc(100% + 5px);
 }
 
 /* 缺失必填输入：虚线描边保留“缺口”语义，填充让位给虚线轮廓。 */

@@ -14,7 +14,7 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const project = useAppStore((s) => s.currentProject)
 
   const chooseAsset = async (): Promise<void> => {
-    if (!project) return
+    if (!project) return toast('项目未就绪')
     try {
       const res = await window.api.pickMedia(project.id)
       if (!res.ok) return toast(`导入失败：${res.error.message}`)

@@ -43,29 +43,49 @@ describe('视频处理配置 · v2', () => {
 
   it('截取：损坏配置回退到安全默认值，区间至少 1ms', () => {
     expect(parseVideoClipConfig('{bad')).toEqual({
-      version: 2,
+      version: 3,
       startMs: 0,
       endMs: 1000,
+      keepVideo: true,
+      keepAudio: true,
       includeAudio: true,
-      quality: 'balanced'
+      quality: 'high',
+      audioFormat: 'wav',
+      audioSampleRate: 44100
     })
-    // startMs > endMs 时自动纠正
+    // startMs > endMs 时自动纠正；无 version 的历史数据只产画面
     expect(parseVideoClipConfig(JSON.stringify({ startMs: 900, endMs: 100 }))).toEqual({
-      version: 2,
+      version: 3,
       startMs: 900,
       endMs: 901,
+      keepVideo: true,
+      keepAudio: false,
       includeAudio: true,
-      quality: 'balanced'
+      quality: 'high',
+      audioFormat: 'wav',
+      audioSampleRate: 44100
     })
+  })
+
+  it('截取：v2 历史配置只产画面，不新增音频输出', () => {
+    expect(
+      parseVideoClipConfig(
+        JSON.stringify({ version: 2, startMs: 10, endMs: 20, includeAudio: true, quality: 'fast' })
+      )
+    ).toMatchObject({ version: 3, keepVideo: true, keepAudio: false })
   })
 
   it('截取：序列化后可稳定解析', () => {
     const cfg = {
-      version: 2,
+      version: 3,
       startMs: 400,
       endMs: 2400,
+      keepVideo: true,
+      keepAudio: true,
       includeAudio: false,
-      quality: 'fast' as const
+      quality: 'fast' as const,
+      audioFormat: 'm4a' as const,
+      audioSampleRate: 48000 as const
     }
     expect(parseVideoClipConfig(serializeVideoClipConfig(cfg))).toEqual(cfg)
   })
@@ -75,7 +95,7 @@ describe('视频处理配置 · v2', () => {
       version: 2,
       startMs: 0,
       endMs: 1000,
-      format: 'm4a',
+      format: 'wav',
       sampleRate: 44100
     })
   })
@@ -242,6 +262,116 @@ describe('视频处理执行器', () => {
       })
     }
   )
+
+  it('视频截取 v3：一次运行同时物化画面与音频两条产物', async () => {
+    const api = {
+      clipVideo: vi.fn().mockResolvedValue({
+        ok: true,
+        data: {
+          id: 'clip-1',
+          path: 'projects/project-a/media/clip-1',
+          mime: 'video/mp4',
+          name: 'clip-1'
+        }
+      }),
+      extractVideoAudio: vi.fn().mockResolvedValue({
+        ok: true,
+        data: {
+          id: 'audio-1',
+          path: 'projects/project-a/media/audio-1',
+          mime: 'audio/wav',
+          name: 'audio-1'
+        }
+      })
+    }
+    currentGateway = api
+    const item = context('video-clip')
+    item.ctx.shape.props.config = JSON.stringify({
+      version: 3,
+      startMs: 500,
+      endMs: 1700,
+      keepVideo: true,
+      keepAudio: true,
+      includeAudio: true,
+      quality: 'balanced',
+      audioFormat: 'm4a',
+      audioSampleRate: 48000
+    })
+
+    await expect(videoClipExecutor(item.ctx)).resolves.toEqual({ status: 'done' })
+    expect(item.artifacts).toContainEqual(
+      expect.objectContaining({ kind: 'video', portId: 'out-video', mediaId: 'clip-1' })
+    )
+    expect(item.artifacts).toContainEqual(
+      expect.objectContaining({ kind: 'audio', portId: 'out-audio', mediaId: 'audio-1' })
+    )
+    const results = parseMediaResultCollection(item.result.value ?? '')?.results ?? []
+    expect(results.map((entry) => entry.mediaId)).toEqual(['clip-1', 'audio-1'])
+    // 音频分支沿用同一份起止时间，并把格式/采样率透传给 IPC
+    expect(api.extractVideoAudio.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        config: { version: 2, startMs: 500, endMs: 1700, format: 'm4a', sampleRate: 48000 }
+      })
+    )
+  })
+
+  it('视频截取：只保留音频时不调用画面重编码', async () => {
+    const api = {
+      clipVideo: vi.fn(),
+      extractVideoAudio: vi.fn().mockResolvedValue({
+        ok: true,
+        data: {
+          id: 'audio-1',
+          path: 'projects/project-a/media/audio-1',
+          mime: 'audio/wav',
+          name: 'audio-1'
+        }
+      })
+    }
+    currentGateway = api
+    const item = context('video-clip')
+    item.ctx.shape.props.config = JSON.stringify({
+      version: 3,
+      startMs: 500,
+      endMs: 1700,
+      keepVideo: false,
+      keepAudio: true,
+      includeAudio: true,
+      quality: 'balanced',
+      audioFormat: 'wav',
+      audioSampleRate: 44100
+    })
+
+    await expect(videoClipExecutor(item.ctx)).resolves.toEqual({ status: 'done' })
+    expect(api.clipVideo).not.toHaveBeenCalled()
+    expect(item.artifacts).toEqual([
+      expect.objectContaining({ kind: 'audio', portId: 'out-audio' })
+    ])
+  })
+
+  it('视频截取：画面与音频都不保留时执行前失败', async () => {
+    const api = { clipVideo: vi.fn(), extractVideoAudio: vi.fn() }
+    currentGateway = api
+    const item = context('video-clip')
+    item.ctx.shape.props.config = JSON.stringify({
+      version: 3,
+      startMs: 500,
+      endMs: 1700,
+      keepVideo: false,
+      keepAudio: false,
+      includeAudio: true,
+      quality: 'balanced',
+      audioFormat: 'wav',
+      audioSampleRate: 44100
+    })
+
+    await expect(videoClipExecutor(item.ctx)).resolves.toEqual({
+      status: 'failed',
+      reason: '请至少选择保留画面或音频'
+    })
+    expect(api.clipVideo).not.toHaveBeenCalled()
+    expect(api.extractVideoAudio).not.toHaveBeenCalled()
+  })
 
   it('没有真实视频连线时明确跳过', async () => {
     const item = context('video-frame')

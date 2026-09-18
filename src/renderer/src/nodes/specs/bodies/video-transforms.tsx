@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { stopEventPropagation, useEditor } from 'tldraw'
+import { createPortal } from 'react-dom'
+import { stopEventPropagation, useEditor, type Editor } from 'tldraw'
 import type { NodeBodyProps, NodeSettingsProps } from '../../registry'
 import { mediaUrl } from '../../registry'
-import { gatherUpstreamMedia } from '../../../canvas/graph'
+import { gatherUpstreamMedia, countIncomingConnections } from '../../../canvas/graph'
 import { markUndoPoint } from '../../../canvas/history'
 import { readNodeConfig } from '../../../canvas/node-persistence'
-import { useNodePanelStore } from '../../../stores/nodePanel'
+import type { NodeCardShape } from '../../../canvas/NodeCardShape'
 import { useAppStore } from '../../../stores/app'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
@@ -233,32 +234,61 @@ function MediaTimeline({
     onCommit()
   }
 
-  // 截取/提音起点逐帧
-  const prevStart = (): void => {
-    const t = stepFrame(currentStart, -1)
-    onSeek(t)
-    onRange?.(t, currentEnd)
-    onCommit()
-  }
-  const nextStart = (): void => {
-    const t = Math.min(stepFrame(currentStart, 1), currentEnd - 1)
-    onSeek(t)
-    onRange?.(t, currentEnd)
-    onCommit()
+  // 统一坐标系：手柄中心与粉色柱边界用同一 `value / max` 百分比定位，
+  // 拖动时二者恒等对齐（修复手柄与柱间距随位置漂移的问题）。
+  const trackRef = useRef<HTMLDivElement>(null)
+
+  const clientXToMs = (clientX: number): number => {
+    const el = trackRef.current
+    if (!el) return 0
+    const rect = el.getBoundingClientRect()
+    const ratio = rect.width > 0 ? (clientX - rect.left) / rect.width : 0
+    return clamp(ratio * max, max)
   }
 
-  // 截取/提音终点逐帧
-  const prevEnd = (): void => {
-    const t = Math.max(stepFrame(currentEnd, -1), currentStart + 1)
-    onSeek(t)
-    onRange?.(currentStart, t)
-    onCommit()
+  const dragHandle = (kind: 'point' | 'start' | 'end', startClientX: number): void => {
+    const el = trackRef.current
+    if (!el) return
+    const fromMs = kind === 'point' ? currentPoint : kind === 'start' ? currentStart : currentEnd
+    let lastMs = fromMs
+    const move = (event: PointerEvent): void => {
+      let ms = clientXToMs(event.clientX)
+      if (kind === 'start') ms = Math.min(ms, currentEnd - 1)
+      else if (kind === 'end') ms = Math.max(ms, currentStart + 1)
+      lastMs = ms
+      onSeek(ms)
+      if (kind === 'point') onPoint?.(ms)
+      else if (kind === 'start') onRange?.(ms, currentEnd)
+      else onRange?.(currentStart, ms)
+    }
+    const up = (): void => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      if (kind === 'point') onPoint?.(lastMs)
+      else if (kind === 'start') onRange?.(lastMs, currentEnd)
+      else onRange?.(currentStart, lastMs)
+      onCommit()
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    void startClientX
   }
-  const nextEnd = (): void => {
-    const t = stepFrame(currentEnd, 1)
-    onSeek(t)
-    onRange?.(currentStart, t)
-    onCommit()
+
+  // 点击轨道：单点模式直接设定；双游标模式移动最近的手柄。
+  const handleTrackPointerDown = (event: React.PointerEvent): void => {
+    stopEventPropagation(event)
+    const ms = clientXToMs(event.clientX)
+    onSeek(ms)
+    if (isPoint) {
+      onPoint?.(ms)
+      dragHandle('point', event.clientX)
+    } else {
+      const kind: 'start' | 'end' =
+        Math.abs(ms - currentStart) <= Math.abs(ms - currentEnd) ? 'start' : 'end'
+      if (kind === 'start') onRange?.(Math.min(ms, currentEnd - 1), currentEnd)
+      else onRange?.(currentStart, Math.max(ms, currentStart + 1))
+      dragHandle(kind, event.clientX)
+    }
   }
 
   return (
@@ -288,9 +318,11 @@ function MediaTimeline({
         <span>{timecode(max)}</span>
       </div>
 
-      {/* 滑块轨道 */}
+      {/* 滑块轨道：手柄与粉色柱共用同一百分比坐标系 */}
       <div
+        ref={trackRef}
         className="video-timeline-track"
+        data-point={isPoint || undefined}
         style={
           isPoint
             ? ({ '--point': percent(currentPoint) } as React.CSSProperties)
@@ -299,53 +331,37 @@ function MediaTimeline({
                 '--end': percent(currentEnd)
               } as React.CSSProperties)
         }
+        onPointerDown={handleTrackPointerDown}
       >
         {isPoint ? (
-          <input
-            type="range"
-            min="0"
-            max={max}
-            step={frameInterval ?? 1}
-            value={currentPoint}
-            onInput={(event) => {
-              const value = Number(event.currentTarget.value)
-              onSeek(value)
-              onPoint?.(value)
-            }}
-            onPointerUp={onCommit}
-            onKeyUp={(event) => event.key.startsWith('Arrow') && onCommit()}
+          <div
+            className="video-timeline-handle"
+            style={{ left: percent(currentPoint) }}
+            role="slider"
+            aria-label="取帧位置"
+            aria-valuemin={0}
+            aria-valuemax={max}
+            aria-valuenow={currentPoint}
           />
         ) : (
           <>
-            <input
-              className="video-range-start"
-              type="range"
-              min="0"
-              max={max - 1}
-              step={frameInterval ?? 1}
-              value={currentStart}
-              onInput={(event) => {
-                const value = Number(event.currentTarget.value)
-                onSeek(value)
-                onRange?.(value, currentEnd)
-              }}
-              onPointerUp={onCommit}
-              onKeyUp={(event) => event.key.startsWith('Arrow') && onCommit()}
+            <div
+              className="video-timeline-handle"
+              style={{ left: percent(currentStart) }}
+              role="slider"
+              aria-label="起始时间"
+              aria-valuemin={0}
+              aria-valuemax={max}
+              aria-valuenow={currentStart}
             />
-            <input
-              className="video-range-end"
-              type="range"
-              min="1"
-              max={max}
-              step={frameInterval ?? 1}
-              value={currentEnd}
-              onInput={(event) => {
-                const value = Number(event.currentTarget.value)
-                onSeek(value)
-                onRange?.(currentStart, value)
-              }}
-              onPointerUp={onCommit}
-              onKeyUp={(event) => event.key.startsWith('Arrow') && onCommit()}
+            <div
+              className="video-timeline-handle"
+              style={{ left: percent(currentEnd) }}
+              role="slider"
+              aria-label="结束时间"
+              aria-valuemin={0}
+              aria-valuemax={max}
+              aria-valuenow={currentEnd}
             />
           </>
         )}
@@ -410,28 +426,6 @@ function MediaTimeline({
           </>
         ) : (
           <>
-            {hasFrames && (
-              <>
-                <button
-                  type="button"
-                  className="video-timeline-btn"
-                  onPointerDown={stopEventPropagation}
-                  onClick={handleBtn(prevStart)}
-                  title="起点上一帧"
-                >
-                  {'\u23EE'}
-                </button>
-                <button
-                  type="button"
-                  className="video-timeline-btn"
-                  onPointerDown={stopEventPropagation}
-                  onClick={handleBtn(nextStart)}
-                  title="起点下一帧"
-                >
-                  {'\u23ED'}
-                </button>
-              </>
-            )}
             <TimeInput
               key={`start-${currentStart}`}
               label="起"
@@ -444,28 +438,6 @@ function MediaTimeline({
                 onCommit()
               }}
             />
-            {hasFrames && (
-              <>
-                <button
-                  type="button"
-                  className="video-timeline-btn"
-                  onPointerDown={stopEventPropagation}
-                  onClick={handleBtn(prevEnd)}
-                  title="终点上一帧"
-                >
-                  {'\u23EE'}
-                </button>
-                <button
-                  type="button"
-                  className="video-timeline-btn"
-                  onPointerDown={stopEventPropagation}
-                  onClick={handleBtn(nextEnd)}
-                  title="终点下一帧"
-                >
-                  {'\u23ED'}
-                </button>
-              </>
-            )}
             <TimeInput
               key={`end-${currentEnd}`}
               label="终"
@@ -502,6 +474,68 @@ function MediaTimeline({
   )
 }
 
+// ── 裁剪工作台弹窗（A2：抽帧/截视频/截音频从右侧面板改为弹窗，看得更清晰）──
+
+function VideoTrimWorkbench({
+  shape,
+  editor,
+  projectId,
+  mode,
+  onClose
+}: {
+  shape: NodeCardShape
+  editor: Editor
+  projectId: string
+  mode: BodyMode
+  onClose: () => void
+}): React.JSX.Element {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onClose])
+  const title = mode === 'frame' ? '抽帧' : mode === 'clip' ? '视频截取' : '截音频'
+  return createPortal(
+    <div
+      className="director-studio-mask video-trim-workbench-mask"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${title}工作台`}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
+    >
+      <div className="video-trim-workbench">
+        <header className="video-trim-workbench-head">
+          <div className="video-trim-workbench-title">
+            <Icon
+              name={mode === 'frame' ? 'frame' : mode === 'clip' ? 'clip' : 'audio'}
+              size={15}
+            />
+            <span>{title}工作台</span>
+          </div>
+          <button
+            className="btn-ghost small"
+            onPointerDown={stopEventPropagation}
+            onClick={(event) => {
+              stopEventPropagation(event)
+              onClose()
+            }}
+          >
+            <Icon name="close" size={14} />
+          </button>
+        </header>
+        <div className="video-trim-workbench-body">
+          <VideoTransformSettings shape={shape} editor={editor} projectId={projectId} mode={mode} />
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
 // ── 卡片 Body（画布上展示）──
 
 export function VideoTransformBody({
@@ -511,10 +545,29 @@ export function VideoTransformBody({
 }: NodeBodyProps & { mode: BodyMode }): React.JSX.Element {
   const guard = useClickGuard()
   const editor = useEditor()
+  const projectId = useAppStore((s) => s.currentProject?.id ?? '')
+  const [workbenchOpen, setWorkbenchOpen] = useState(false)
+  // 执行器（videoFrameExecutor / videoClipExecutor / videoAudioExecutor）只看 in-video 连线；
+  // 卡片历史结果 mediaPath 不是运行条件，所以判据按连线给出。
+  const sourceCount = countIncomingConnections(editor, shape.id, 'in-video')
+  const sourceWiring = (
+    <span className={`node-wiring ${sourceCount === 0 ? 'warn' : 'ok'}`}>
+      {sourceCount === 0
+        ? '源视频（in-video）未连线，运行会跳过'
+        : `源视频（in-video）：${sourceCount} 个`}
+    </span>
+  )
   // 空态文案与节点 label / 视频节点底部按钮保持同一套命名（用户 2026-09-18 拍板）。
-  const label = mode === 'frame' ? '抽帧' : mode === 'clip' ? '截视频' : '截音频'
-  const openSettings = (): void =>
-    useNodePanelStore.getState().open('contract', shape.id, 'settings')
+  const label = mode === 'frame' ? '抽帧' : mode === 'clip' ? '视频截取' : '截音频'
+  const workbenchEl = workbenchOpen ? (
+    <VideoTrimWorkbench
+      shape={shape}
+      editor={editor}
+      projectId={projectId}
+      mode={mode}
+      onClose={() => setWorkbenchOpen(false)}
+    />
+  ) : null
   if (!shape.props.mediaPath) {
     return (
       <div className="asset-empty crop-empty">
@@ -525,11 +578,13 @@ export function VideoTransformBody({
           onPointerDown={stopEventPropagation}
           onClick={(event) => {
             stopEventPropagation(event)
-            openSettings()
+            setWorkbenchOpen(true)
           }}
         >
           配置{label}
         </button>
+        {sourceWiring}
+        {workbenchEl}
       </div>
     )
   }
@@ -555,24 +610,36 @@ export function VideoTransformBody({
         ) : mode === 'clip' ? (
           <video src={mediaUrl(shape.props.mediaPath)} muted preload="metadata" playsInline />
         ) : (
-          <Icon name="audio" size={36} />
+          <div className="node-audio-thumb">
+            <Icon name="audio" size={30} />
+          </div>
         )}
         {mode === 'clip' && <span className="play-badge">▶</span>}
       </div>
+      {mode === 'audio' && (
+        <audio
+          className="node-inline-audio"
+          controls
+          preload="metadata"
+          src={mediaUrl(shape.props.mediaPath)}
+          onPointerDown={stopEventPropagation}
+        />
+      )}
       <div className="node-media-actions">
         <button
           className="btn-ghost small"
           onPointerDown={stopEventPropagation}
           onClick={(event) => {
             stopEventPropagation(event)
-            openSettings()
+            setWorkbenchOpen(true)
           }}
         >
-          <Icon name="edit" size={13} /> 调整
+          调整
         </button>
         <MediaSourceBadge shape={shape} fallback="本地视频处理" />
         <MediaFileActions shape={shape} />
       </div>
+      {sourceWiring}
       {/* 输出后续操作快捷入口 */}
       {mode === 'frame' && (
         <div className="node-media-next-actions" aria-label="图片后续操作">
@@ -584,7 +651,7 @@ export function VideoTransformBody({
               createImageContinuation(editor, shape, 'image-edit')
             }}
           >
-            <Icon name="edit" size={12} /> 修改
+            修改
           </button>
           <button
             className="btn-ghost small"
@@ -594,7 +661,7 @@ export function VideoTransformBody({
               createImageContinuation(editor, shape, 'image-gen')
             }}
           >
-            <Icon name="spark" size={12} /> 继续生图
+            继续生图
           </button>
         </div>
       )}
@@ -610,16 +677,6 @@ export function VideoTransformBody({
           >
             抽帧
           </button>
-          <button
-            className="btn-ghost small"
-            onPointerDown={stopEventPropagation}
-            onClick={(event) => {
-              stopEventPropagation(event)
-              createVideoContinuation(editor, shape, 'video-audio')
-            }}
-          >
-            截音频
-          </button>
         </div>
       )}
       {mode === 'audio' && (
@@ -632,10 +689,11 @@ export function VideoTransformBody({
               createAudioContinuation(editor, shape, 'vocal-separate')
             }}
           >
-            <Icon name="audio" size={12} /> 人声分离
+            人声分离
           </button>
         </div>
       )}
+      {workbenchEl}
     </div>
   )
 }
@@ -672,13 +730,14 @@ function VideoTransformSettings({
   const [waveform, setWaveform] = useState<number[]>([])
   const [isPlaying, setIsPlaying] = useState(false)
   const [loopEnabled, setLoopEnabled] = useState(false)
+  const [clipTab, setClipTab] = useState<'video' | 'audio'>('video')
   const [localCapabilities, setLocalCapabilities] = useState<Awaited<
     ReturnType<typeof window.api.getLocalMediaCapabilities>
   > | null>(null)
 
   const isFrame = mode === 'frame'
   const isClip = mode === 'clip'
-  const label = isFrame ? '抽帧' : isClip ? '截视频' : '截音频'
+  const label = isFrame ? '抽帧' : isClip ? '视频截取' : '截音频'
 
   useEffect(() => {
     let active = true
@@ -734,9 +793,9 @@ function VideoTransformSettings({
     }
   }, [project, source?.mediaId, durationMs])
 
-  // 波形数据拉取（仅提音模式需要）
+  // 波形数据拉取（提音模式、以及会产出音频的视频截取模式）
   useEffect(() => {
-    if (!project || !source?.mediaId || isFrame || isClip) return
+    if (!project || !source?.mediaId || isFrame || (isClip && !clipCfg.keepAudio)) return
     let active = true
     void window.api
       .generateAudioWaveform({
@@ -751,7 +810,7 @@ function VideoTransformSettings({
     return () => {
       active = false
     }
-  }, [project, source?.mediaId, isFrame, isClip])
+  }, [project, source?.mediaId, isFrame, isClip, clipCfg.keepAudio])
 
   // ── 取帧配置操作 ──
   const saveFrame = (timeMs: number): void => {
@@ -795,8 +854,8 @@ function VideoTransformSettings({
     clipRef.current = next
     setClipCfg(next)
   }
-  const setClipQuality = (quality: ClipQuality): void => {
-    const next: VideoClipConfig = { ...clipRef.current, quality }
+  const patchClip = (patch: Partial<VideoClipConfig>, undoLabel: string): void => {
+    const next: VideoClipConfig = { ...clipRef.current, ...patch }
     clipRef.current = next
     setClipCfg(next)
     editor.updateShape({
@@ -804,19 +863,19 @@ function VideoTransformSettings({
       type: 'node-card',
       props: { config: serializeVideoClipConfig(next) }
     })
-    markUndoPoint(editor, 'video-clip-quality')
+    markUndoPoint(editor, undoLabel)
   }
-  const toggleClipAudio = (includeAudio: boolean): void => {
-    const next: VideoClipConfig = { ...clipRef.current, includeAudio }
-    clipRef.current = next
-    setClipCfg(next)
-    editor.updateShape({
-      id: shape.id,
-      type: 'node-card',
-      props: { config: serializeVideoClipConfig(next) }
-    })
-    markUndoPoint(editor, 'video-clip-audio')
-  }
+  const setClipQuality = (quality: ClipQuality): void =>
+    patchClip({ quality }, 'video-clip-quality')
+  const toggleClipAudio = (includeAudio: boolean): void =>
+    patchClip({ includeAudio }, 'video-clip-audio')
+  /** 保留内容三态：只画面 / 只音频 / 画面+音频。至少保留一条由调用方保证。 */
+  const setClipKeep = (keepVideo: boolean, keepAudio: boolean): void =>
+    patchClip({ keepVideo, keepAudio }, 'video-clip-keep')
+  const setClipAudioFormat = (audioFormat: AudioFormat): void =>
+    patchClip({ audioFormat }, 'video-clip-audio-format')
+  const setClipAudioSampleRate = (audioSampleRate: 44100 | 48000): void =>
+    patchClip({ audioSampleRate }, 'video-clip-audio-rate')
   const persistClip = (): void => {
     editor.updateShape({
       id: shape.id,
@@ -833,28 +892,6 @@ function VideoTransformSettings({
     const next: VideoAudioConfig = { ...audioRef.current, startMs: start, endMs: end }
     audioRef.current = next
     setAudioCfg(next)
-  }
-  const setAudioFormat = (format: AudioFormat): void => {
-    const next: VideoAudioConfig = { ...audioRef.current, format }
-    audioRef.current = next
-    setAudioCfg(next)
-    editor.updateShape({
-      id: shape.id,
-      type: 'node-card',
-      props: { config: serializeVideoAudioConfig(next) }
-    })
-    markUndoPoint(editor, 'video-audio-format')
-  }
-  const setAudioSampleRate = (sampleRate: 44100 | 48000): void => {
-    const next: VideoAudioConfig = { ...audioRef.current, sampleRate }
-    audioRef.current = next
-    setAudioCfg(next)
-    editor.updateShape({
-      id: shape.id,
-      type: 'node-card',
-      props: { config: serializeVideoAudioConfig(next) }
-    })
-    markUndoPoint(editor, 'video-audio-samplerate')
   }
   const persistAudio = (): void => {
     editor.updateShape({
@@ -910,10 +947,6 @@ function VideoTransformSettings({
   return (
     <section className="contract-section video-transform-settings">
       <h4>{label}</h4>
-      <p className="contract-settings-hint">
-        源视频来自 in-video
-        连线；时间以毫秒保存。拖动滑块会立即定位预览，松开后才写入配置，原视频不会被改写。
-      </p>
       {mediaEngineReady === false && (
         <div className="local-capability-alert" role="alert">
           <strong>本机媒体引擎未就绪</strong>
@@ -1025,6 +1058,7 @@ function VideoTransformSettings({
                 endMs={clipCfg.endMs}
                 fps={fps}
                 thumbnails={thumbnails}
+                waveform={clipCfg.keepAudio ? waveform : undefined}
                 isPlaying={isPlaying}
                 loopEnabled={loopEnabled}
                 onSeek={seek}
@@ -1033,81 +1067,130 @@ function VideoTransformSettings({
                 onPlayPause={togglePlay}
                 onToggleLoop={toggleLoop}
               />
-              <label className="audio-isolation-mode">
-                编码质量
-                <AppSelect
-                  value={clipCfg.quality}
-                  onChange={(event) => setClipQuality(event.currentTarget.value as ClipQuality)}
-                >
-                  <option value="fast">快速（关键帧复制，边界可能不精确）</option>
-                  <option value="balanced">平衡（重编码 CRF 18）</option>
-                  <option value="high">高质量（重编码 CRF 14）</option>
-                </AppSelect>
-              </label>
-              <label className="audio-checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={clipCfg.includeAudio}
-                  onChange={(event) => toggleClipAudio(event.currentTarget.checked)}
-                />
-                保留音轨
-              </label>
+              {/* A3：画面/音频并入同一节点后由「保留内容」决定产出哪几条资产。 */}
+              <div className="clip-keep-row" role="group" aria-label="保留内容">
+                <span className="clip-keep-label">保留内容</span>
+                {(
+                  [
+                    { v: true, a: false, text: '只保留画面' },
+                    { v: false, a: true, text: '只保留音频' },
+                    { v: true, a: true, text: '画面 + 音频' }
+                  ] as const
+                ).map((preset) => (
+                  <button
+                    key={preset.text}
+                    type="button"
+                    className={`btn-ghost small frame-preset-btn ${
+                      clipCfg.keepVideo === preset.v && clipCfg.keepAudio === preset.a
+                        ? 'active'
+                        : ''
+                    }`}
+                    onPointerDown={stopEventPropagation}
+                    onClick={(event) => {
+                      stopEventPropagation(event)
+                      setClipKeep(preset.v, preset.a)
+                      setClipTab(preset.v ? 'video' : 'audio')
+                    }}
+                  >
+                    {preset.text}
+                  </button>
+                ))}
+              </div>
+              {clipCfg.keepVideo && clipCfg.keepAudio && (
+                <div className="clip-tabs" role="tablist" aria-label="截取参数">
+                  {(['video', 'audio'] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      role="tab"
+                      aria-selected={clipTab === tab}
+                      className={`clip-tab ${clipTab === tab ? 'active' : ''}`}
+                      onPointerDown={stopEventPropagation}
+                      onClick={(event) => {
+                        stopEventPropagation(event)
+                        setClipTab(tab)
+                      }}
+                    >
+                      {tab === 'video' ? '画面参数' : '音频参数'}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {(!clipCfg.keepAudio || clipTab === 'video') && clipCfg.keepVideo && (
+                <>
+                  <label className="audio-isolation-mode">
+                    编码质量
+                    <AppSelect
+                      value={clipCfg.quality}
+                      onChange={(event) => setClipQuality(event.currentTarget.value as ClipQuality)}
+                    >
+                      <option value="fast">快速（关键帧复制，边界可能不精确）</option>
+                      <option value="balanced">平衡（重编码 CRF 18）</option>
+                      <option value="high">高质量（重编码 CRF 14）</option>
+                    </AppSelect>
+                  </label>
+                  <label className="audio-checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={clipCfg.includeAudio}
+                      onChange={(event) => toggleClipAudio(event.currentTarget.checked)}
+                    />
+                    视频片段内保留原声
+                  </label>
+                </>
+              )}
+              {(!clipCfg.keepVideo || clipTab === 'audio') && clipCfg.keepAudio && (
+                <>
+                  <label className="audio-isolation-mode">
+                    音频格式
+                    <AppSelect
+                      value={clipCfg.audioFormat}
+                      onChange={(event) =>
+                        setClipAudioFormat(event.currentTarget.value as AudioFormat)
+                      }
+                    >
+                      <option value="wav">WAV（无损，适合人声分离）</option>
+                      <option value="m4a">M4A（体积小）</option>
+                    </AppSelect>
+                  </label>
+                  <label className="audio-isolation-mode">
+                    采样率
+                    <AppSelect
+                      value={String(clipCfg.audioSampleRate)}
+                      onChange={(event) =>
+                        setClipAudioSampleRate(
+                          event.currentTarget.value === '48000' ? 48000 : 44100
+                        )
+                      }
+                    >
+                      <option value="44100">44.1 kHz</option>
+                      <option value="48000">48 kHz</option>
+                    </AppSelect>
+                  </label>
+                </>
+              )}
             </>
           ) : (
-            <>
-              <MediaTimeline
-                durationMs={max}
-                startMs={audioCfg.startMs}
-                endMs={audioCfg.endMs}
-                fps={fps}
-                thumbnails={thumbnails}
-                waveform={waveform}
-                isPlaying={isPlaying}
-                loopEnabled={loopEnabled}
-                onSeek={seek}
-                onRange={saveAudio}
-                onCommit={commit}
-                onPlayPause={togglePlay}
-                onToggleLoop={toggleLoop}
-              />
-              <label className="audio-isolation-mode">
-                输出格式
-                <AppSelect
-                  value={audioCfg.format}
-                  onChange={(event) => setAudioFormat(event.currentTarget.value as AudioFormat)}
-                >
-                  <option value="m4a">M4A（体积小）</option>
-                  <option value="wav">WAV（无损，适合后续人声分离）</option>
-                </AppSelect>
-              </label>
-              <label className="audio-isolation-mode">
-                采样率
-                <AppSelect
-                  value={audioCfg.sampleRate}
-                  onChange={(event) =>
-                    setAudioSampleRate(Number(event.currentTarget.value) as 44100 | 48000)
-                  }
-                >
-                  <option value={44100}>44100 Hz</option>
-                  <option value={48000}>48000 Hz</option>
-                </AppSelect>
-              </label>
-              <small className="crop-coordinate-hint">
-                截音频只忠实提取原始音频，不做降噪或人声分离。如需分离，请将输出连到独立的“人声分离”节点。
-              </small>
-            </>
+            <MediaTimeline
+              durationMs={max}
+              startMs={audioCfg.startMs}
+              endMs={audioCfg.endMs}
+              fps={fps}
+              thumbnails={thumbnails}
+              waveform={waveform}
+              isPlaying={isPlaying}
+              loopEnabled={loopEnabled}
+              onSeek={seek}
+              onRange={saveAudio}
+              onCommit={commit}
+              onPlayPause={togglePlay}
+              onToggleLoop={toggleLoop}
+            />
           )}
         </>
       ) : (
         <div className="crop-no-source">请从视频节点连线到左侧“源视频”端口。</div>
       )}
-      <p className="crop-coordinate-hint">
-        {isFrame
-          ? `运行后输出 ${frameCfg.format.toUpperCase()} 图片。`
-          : isClip
-            ? `运行后${clipCfg.quality === 'fast' ? '快速复制' : '精确重编码'}为 MP4 片段。`
-            : `运行后输出 ${audioCfg.format.toUpperCase()} 音频。`}
-      </p>
     </section>
   )
 }

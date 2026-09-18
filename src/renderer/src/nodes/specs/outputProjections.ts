@@ -159,8 +159,39 @@ export const projectVideoOutputs = (shape: NodeCardShape): RawNodeOutputs =>
 export const projectVideoFrameOutputs = (shape: NodeCardShape): RawNodeOutputs =>
   latestResultMediaOutput(shape, 'image', 'out-image')
 
-export const projectVideoClipOutputs = (shape: NodeCardShape): RawNodeOutputs =>
-  latestResultMediaOutput(shape, 'video', 'out-video')
+/**
+ * 视频截取（合并节点，契约 v5）一次运行可物化两条产物：画面写入 out-video、
+ * 音频写入 out-audio。结果集合是扁平列表，因此按 MIME 主类型各取最近一条，
+ * 而不是共用 latestResultMediaOutput 的「最后一条」。
+ */
+export const projectVideoClipOutputs = (shape: NodeCardShape): RawNodeOutputs => {
+  const collection = parseMediaResultCollection(
+    typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
+  )
+  const results = collection?.results
+  if (!results?.length) return latestResultMediaOutput(shape, 'video', 'out-video')
+  const runFailed = readNodeRunRecord(shape.meta?.nodeRun)?.status === 'failed'
+  if (runFailed) return {}
+  const byKind = (kind: 'video' | 'audio'): (typeof results)[number] | undefined =>
+    results.filter((item) => (item.mime ?? '').startsWith(`${kind}/`)).at(-1)
+  const output: RawNodeOutputs = {}
+  const name = shape.props.title ? { name: shape.props.title } : {}
+  for (const [kind, portId] of [
+    ['video', 'out-video'],
+    ['audio', 'out-audio']
+  ] as const) {
+    const item = byKind(kind)
+    if (item)
+      output[portId] = {
+        kind,
+        mediaId: item.mediaId,
+        mediaPath: item.mediaPath,
+        mime: item.mime,
+        ...name
+      }
+  }
+  return output
+}
 
 export const projectVideoAudioOutputs = (shape: NodeCardShape): RawNodeOutputs =>
   latestResultMediaOutput(shape, 'audio', 'out-audio')
@@ -182,8 +213,8 @@ export const projectVideoAssetOutputs = (shape: NodeCardShape): RawNodeOutputs =
   mediaOutput(shape, 'video', 'out-video')
 
 /**
- * 文件资产节点：原始文件永远作为 out-file 暴露；可解析为文本的文档
- * （txt / md / json / csv）同时提供 out-text，让文本类下游不必再猜文件内容。
+ * 文件资产节点：原始文件永远作为 out-file 暴露；导入时已抽出正文的文档
+ * （纯文本 / CSV / Word / Excel / PPT）同时提供 out-text，文本类下游不必再猜文件内容。
  */
 export const projectFileOutputs = (shape: NodeCardShape): RawNodeOutputs => {
   const base = mediaOutput(shape, 'file', 'out-file')

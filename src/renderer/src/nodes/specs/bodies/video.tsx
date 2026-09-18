@@ -378,36 +378,6 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           <video src={mediaUrl(shape.props.mediaPath)} preload="metadata" muted playsInline />
           <span className="play-badge">▶</span>
         </div>
-        <div className="node-media-actions">
-          {isAssetNode ? (
-            <button
-              className="btn-ghost small"
-              title="替换视频"
-              onPointerDown={(e) => stopEventPropagation(e)}
-              onClick={(e) => {
-                e.stopPropagation()
-                void chooseAsset()
-              }}
-            >
-              <Icon name="reset" size={13} />
-              替换
-            </button>
-          ) : (
-            <button
-              className="btn-ghost small"
-              disabled={submitting}
-              onPointerDown={(e) => stopEventPropagation(e)}
-              onClick={(e) => {
-                e.stopPropagation()
-                void regenerate()
-              }}
-            >
-              <Icon name="reset" size={13} />
-              {submitting ? '重新生成中…' : '重新生成'}
-            </button>
-          )}
-          <MediaFileActions shape={shape} />
-        </div>
         <MediaResultGrid
           shape={shape}
           kind="video"
@@ -436,8 +406,33 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
             openPreview({ kind: 'video', url: mediaUrl(item.mediaPath), title: shape.props.title })
           }
         />
-        {/* 视频后续动作：只保留动作名，不带图标（用户 2026-09-18 拍板）。 */}
+        {/* 视频节点全部动作统一收在最后一行（用户 2026-09-18 拍板：去图标、单行窄按钮）。 */}
         <div className="node-media-next-actions" aria-label="视频后续操作">
+          {isAssetNode ? (
+            <button
+              className="btn-ghost small"
+              title="替换视频"
+              onPointerDown={(e) => stopEventPropagation(e)}
+              onClick={(e) => {
+                e.stopPropagation()
+                void chooseAsset()
+              }}
+            >
+              替换
+            </button>
+          ) : (
+            <button
+              className="btn-ghost small"
+              disabled={submitting}
+              onPointerDown={(e) => stopEventPropagation(e)}
+              onClick={(e) => {
+                e.stopPropagation()
+                void regenerate()
+              }}
+            >
+              {submitting ? '生成中…' : '重新生成'}
+            </button>
+          )}
           <button
             className="btn-ghost small"
             onPointerDown={(e) => stopEventPropagation(e)}
@@ -450,35 +445,27 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           </button>
           <button
             className="btn-ghost small"
+            title="创建视频截取节点并连接当前视频"
             onPointerDown={(e) => stopEventPropagation(e)}
             onClick={(e) => {
               e.stopPropagation()
               createVideoContinuation(editor, shape, 'video-clip')
             }}
           >
-            截视频
+            视频截取
           </button>
           <button
             className="btn-ghost small"
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onClick={(e) => {
-              e.stopPropagation()
-              createVideoContinuation(editor, shape, 'video-audio')
-            }}
-          >
-            截音频
-          </button>
-          <button
-            className="btn-ghost small"
+            title="一键创建 提取音频 → 人声分离 并预连线"
             onPointerDown={(e) => stopEventPropagation(e)}
             onClick={(e) => {
               e.stopPropagation()
               createVocalExtractionTemplate(editor, shape)
             }}
-            title="一键创建 截音频 → 人声分离 并预连线"
           >
             截人声
           </button>
+          <MediaFileActions shape={shape} />
         </div>
       </div>
     )
@@ -661,9 +648,12 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
             </label>
           )}
           <label>
-            <span>时长（秒）</span>
+            <span>
+              时长 {Math.min(...capabilities.durations)}–{Math.max(...capabilities.durations)}s
+            </span>
             <AppSelect
               className="gen-select"
+              title="时长按秒计费，超出模型支持范围的取值会自动回到最短档"
               value={String(params.duration ?? capabilities.defaultDuration)}
               onPointerDown={(e) => e.stopPropagation()}
               onChange={(e) =>

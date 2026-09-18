@@ -68,7 +68,7 @@ export function VocalSeparateBody({ shape, openPreview }: NodeBodyProps): React.
           onPointerDown={stopEventPropagation}
           onClick={openSettings}
         >
-          <Icon name="edit" size={13} /> 调整
+          调整
         </button>
         <MediaSourceBadge
           shape={shape}
@@ -152,13 +152,17 @@ export function VocalSeparateSettings({ shape, editor }: NodeSettingsProps): Rea
               ? localCapabilities.data.audioSeparator.message
               : '无法读取 audio-separator 状态。'}
           </span>
-          <small>可切换为“快速增强”，或安装本地 AI 分离器后重新打开此面板。</small>
+          <small>
+            安装方法：用 Python 执行 <code>pip install audio-separator</code>（提供 audio-separator
+            命令行），或把已安装的可执行文件路径写入环境变量
+            CANVAS_STUDIO_AUDIO_SEPARATOR_PATH，然后重新打开此面板即可再次检测。也可先切换为“快速增强”。
+          </small>
         </div>
       )}
       {source ? (
         <audio className="vocal-source-preview" controls src={mediaUrl(source.mediaPath)} />
       ) : (
-        <div className="crop-no-source">请将音频连线到“源音频”。</div>
+        <div className="crop-no-source">源音频（in-audio）未连线，运行会跳过。</div>
       )}
 
       <label className="audio-isolation-mode">

@@ -53,9 +53,12 @@ export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeE
       ...(capabilities.forwardsAspectRatio && config.aspectRatio !== 'auto'
         ? { aspectRatio: config.aspectRatio }
         : {}),
-      // 分辨率是用户意图；供应商能力表声明支持才发送（质量由网关按能力表固定注入 low）。
+      // 分辨率与透明背景都是用户意图；能力表不支持时既不发送也不出现在提交入参里。
       ...(capabilities.resolutions.length > 0 && config.resolution
         ? { resolution: config.resolution }
+        : {}),
+      ...(capabilities.supportsTransparentBackground && config.background
+        ? { background: config.background }
         : {}),
       ...(referenceMediaIds.length > 0 ? { referenceMediaIds } : {})
     })

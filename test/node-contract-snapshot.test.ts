@@ -154,7 +154,7 @@ describe('关键端口契约快照（防回归）', () => {
     expect(spec.SettingsPanel).toBeTypeOf('function')
   })
 
-  it('视频媒体处理：取帧/截取/提音只接受真实视频，并分别输出图片/视频/音频', () => {
+  it('视频媒体处理：取帧/截取/提音只接受真实视频，并分别输出图片/视频+音频/音频', () => {
     const expected = [
       ['video-frame', 'out-image', 'image'],
       ['video-clip', 'out-video', 'video'],
@@ -165,11 +165,36 @@ describe('关键端口契约快照（防回归）', () => {
       expect(snapshotPorts(spec.ports.in)).toEqual([
         { id: 'in-video', dir: 'in', type: 'video', required: true, cardinality: 'one' }
       ])
-      expect(snapshotPorts(spec.ports.out)).toEqual([
-        { id: outputId, dir: 'out', type: outputType, required: true, cardinality: 'one' }
-      ])
+      expect(snapshotPorts(spec.ports.out)).toContainEqual({
+        id: outputId,
+        dir: 'out',
+        type: outputType,
+        required: type === 'video-clip' ? false : true,
+        cardinality: 'one'
+      })
       expect(spec.SettingsPanel).toBeTypeOf('function')
     }
+  })
+
+  it('视频截取（合并节点）同时声明画面与音频两条输出，截音频已退役', () => {
+    const spec = getNodeType('video-clip')!
+    expect(spec.contractVersion).toBe(5)
+    expect(spec.ports.out).toHaveLength(2)
+    for (const [id, type] of [
+      ['out-video', 'video'],
+      ['out-audio', 'audio']
+    ] as const) {
+      expect(snapshotPorts(spec.ports.out)).toContainEqual({
+        id,
+        dir: 'out',
+        type,
+        required: false,
+        cardinality: 'one'
+      })
+    }
+    // 截音频不能再从面板新建，但历史节点仍完整注册
+    expect(getNodeType('video-audio')?.creatable).toBe(false)
+    expect(allNodeTypes().some((item) => item.type === 'video-audio')).toBe(false)
   })
 
   it('JSON 节点端口带 storyboard-independent 的 json.any Schema', () => {

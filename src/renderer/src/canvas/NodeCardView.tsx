@@ -2,7 +2,13 @@
 import { HTMLContainer, stopEventPropagation, useEditor, useValue } from 'tldraw'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { getNodePorts, getNodeType, portOffsets, PORT_COLORS } from '../nodes/registry'
+import {
+  getNodePorts,
+  getNodeType,
+  portOffsets,
+  PORT_COLORS,
+  PORT_TYPE_LABELS
+} from '../nodes/registry'
 import type { PortDecl, PortSchemaRef, PortType } from '@shared/types'
 import { useConnectionStore } from '../stores/connection'
 import { useNodePanelStore } from '../stores/nodePanel'
@@ -62,6 +68,11 @@ function canAttachPort(
   return direction === 'out'
     ? portPairCompatible(asPort, target)
     : portPairCompatible(target, asPort)
+}
+
+/** 端口身份信息：中文名 · 中文类型名。同一份文案同时用于 tooltip 与拖线标签。 */
+function portHint(p: PortDecl): string {
+  return `${p.name} · ${PORT_TYPE_LABELS[p.type]}`
 }
 
 export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Element {
@@ -314,8 +325,10 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     }
   }, [editor, shape.id, shape.props.h])
 
-  // 端口 tooltip 只保留身份信息（呈现规范 v1.0 §11：名称 · 类型），
+  // 端口 tooltip 只保留身份信息（呈现规范 v1.0 §11：名称 · 类型，类型给中文名），
   // 连接手势、多选建线等操作教学不再随 tooltip 重复。
+  // 拖线过程中，兼容端口额外浮出端口名标签：圆点本身无法回答“这个口收的是什么”，
+  // 而用户正是在这里最容易松错手；不兼容的端口保持淡出，校验不因可发现性而放宽。
 
   // 裁剪、拆图和视频各自已经在正文内呈现可操作的素材区；继续显示通用输入条会
   // 重复“原图 / 图片名称”，并挤占预览高度。其他节点仍保留统一的关系可见性。
@@ -466,7 +479,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                 top: inY[i] - NODE_PORT_SIZE / 2,
                 ['--pc' as string]: PORT_COLORS[p.type]
               }}
-              title={`${p.name} · ${p.type}`}
+              title={portHint(p)}
               onPointerDown={(e) => {
                 stopEventPropagation(e)
                 beginConnectionDrag(
@@ -480,7 +493,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                   { x: e.clientX, y: e.clientY }
                 )
               }}
-            ></span>
+            >
+              {ok ? <span className="port-label">{p.name}</span> : null}
+            </span>
           )
         })}
 
@@ -516,7 +531,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                 top: outY[i] - NODE_PORT_SIZE / 2,
                 ['--pc' as string]: PORT_COLORS[p.type]
               }}
-              title={`${p.name} · ${p.type}`}
+              title={portHint(p)}
               onPointerDown={(e) => {
                 stopEventPropagation(e)
                 const selectedNodeIds = editor
@@ -531,7 +546,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                   { x: e.clientX, y: e.clientY }
                 )
               }}
-            ></span>
+            >
+              {draftIn && okUpstream ? <span className="port-label">{p.name}</span> : null}
+            </span>
           )
         })}
       </div>

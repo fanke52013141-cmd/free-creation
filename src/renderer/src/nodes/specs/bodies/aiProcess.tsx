@@ -1,11 +1,15 @@
 // AI 处理节点 Body（路线图 R6：bodies.tsx 拆分）
+//
+// 执行器只在 in-text / in-json 都为空时跳过，所以连线状态必须印在卡片上：
+// 只看模型和温度，用户无法判断运行会发生什么。
 import { useEffect, useRef, useState } from 'react'
-import { stopEventPropagation, useEditor } from 'tldraw'
+import { stopEventPropagation, useEditor, useValue } from 'tldraw'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { parseAiProcess, type AiProcessConfig } from '../../../engine/executors/aiProcess'
 import { ModelSelect, NoModelHint, useWheelScroll } from './shared'
 import type { NodeBodyProps } from '../../registry'
 import { readNodeConfig } from '../../../canvas/node-persistence'
+import { countIncomingConnections } from '../../../canvas/graph'
 import { AppSelect } from '../../../components/AppSelect'
 
 /** 从 meta.nodeResult 解析 AI 处理节点的上次运行结果。 */
@@ -31,11 +35,31 @@ const AI_SCHEMA_OPTIONS = [
   { id: 'storyboard.shots', version: 1, label: '分镜（storyboard.shots@1）' }
 ] as const
 
-const AI_MODE_OPTIONS: Array<{ value: AiProcessConfig['mode']; label: string }> = [
-  { value: 'text', label: '文本' },
-  { value: 'markdown', label: 'Markdown' },
-  { value: 'json', label: 'JSON' }
+const AI_MODE_OPTIONS: Array<{
+  value: AiProcessConfig['mode']
+  label: string
+  /** 该模式唯一会写入的输出端口，与 projectAiProcessOutputs 的分支一致。 */
+  portId: string
+  hint: string
+}> = [
+  { value: 'text', label: '文本', portId: 'out-text', hint: '结果只写入 out-text。' },
+  {
+    value: 'markdown',
+    label: 'Markdown',
+    portId: 'out-markdown',
+    hint: '结果只写入 out-markdown，保留 Markdown 标记。'
+  },
+  {
+    value: 'json',
+    label: 'JSON',
+    portId: 'out-json',
+    hint: '按所选 Schema 校验后写入 out-json；模型返回不合法则节点失败。'
+  }
 ]
+
+function modeOption(mode: AiProcessConfig['mode']): (typeof AI_MODE_OPTIONS)[number] {
+  return AI_MODE_OPTIONS.find((o) => o.value === mode) ?? AI_MODE_OPTIONS[0]
+}
 
 function schemaKey(schema: AiProcessConfig['jsonSchema']): string {
   return schema ? `${schema.id}@${schema.version}` : ''
@@ -76,7 +100,16 @@ export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
   const options = modelsByModality(providers, 'text')
   const selectedModel = options.find((o) => o.key === data.modelKey)
   const modelName = selectedModel?.model.name || selectedModel?.model.id || '未选择模型'
-
+  const textCount = useValue(
+    'ai-process text inputs',
+    () => countIncomingConnections(editor, shape.id, 'in-text'),
+    [editor, shape.id]
+  )
+  const jsonCount = useValue(
+    'ai-process json inputs',
+    () => countIncomingConnections(editor, shape.id, 'in-json'),
+    [editor, shape.id]
+  )
   const updateConfig = (next: AiProcessConfig): void => {
     editor.updateShape({
       id: shape.id,
@@ -91,6 +124,7 @@ export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
   }
 
   const summary = resultSummary(storedResult)
+  const mode = modeOption(data.mode)
 
   if (options.length === 0) {
     return <NoModelHint onOpen={() => openSettings()} />
@@ -101,41 +135,45 @@ export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
       <div className="ai-process-config">
         <label className="ai-row">
           <span className="ai-row-label">模型</span>
-          {options.length > 0 ? (
-            <ModelSelect
-              value={data.modelKey}
-              options={options}
-              onChange={(key) => updateConfig({ ...data, modelKey: key })}
-            />
-          ) : (
-            <NoModelHint onOpen={() => openSettings()} />
-          )}
+          <ModelSelect
+            value={data.modelKey}
+            options={options}
+            onChange={(key) => updateConfig({ ...data, modelKey: key })}
+          />
         </label>
 
-        <label className="ai-row">
+        <div className="ai-row">
           <span className="ai-row-label">输出</span>
-          <AppSelect
-            className="gen-select"
-            value={data.mode}
-            onPointerDown={(e) => e.stopPropagation()}
-            onChange={(e) =>
-              updateConfig({
-                ...data,
-                mode: e.target.value as AiProcessConfig['mode'],
-                // 切出 json 模式时清掉 schema，切回时保持显式选择
-                ...(e.target.value === 'json' && !data.jsonSchema
-                  ? { jsonSchema: schemaFromKey('json.any@1') }
-                  : {})
-              })
-            }
-          >
-            {AI_MODE_OPTIONS.map((m) => (
-              <option key={m.value} value={m.value}>
-                {m.label}
-              </option>
-            ))}
-          </AppSelect>
-        </label>
+          <div className="ai-process-mode-col">
+            <AppSelect
+              className="gen-select"
+              value={data.mode}
+              title={`本次结果写入 ${mode.portId} 端口`}
+              onPointerDown={(e) => stopEventPropagation(e)}
+              onChange={(e) => {
+                const next = e.target.value as AiProcessConfig['mode']
+                updateConfig({
+                  ...data,
+                  mode: next,
+                  // 切出 json 模式时清掉 schema，切回时保持显式选择
+                  ...(next === 'json' && !data.jsonSchema
+                    ? { jsonSchema: schemaFromKey('json.any@1') }
+                    : {})
+                })
+              }}
+            >
+              {AI_MODE_OPTIONS.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </AppSelect>
+            <div className="ai-process-mode-hint">
+              <span>{mode.hint}</span>
+              <code className="variable-expr">{mode.portId}</code>
+            </div>
+          </div>
+        </div>
 
         {data.mode === 'json' && (
           <label className="ai-row">
@@ -143,7 +181,8 @@ export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
             <AppSelect
               className="gen-select"
               value={schemaKey(data.jsonSchema)}
-              onPointerDown={(e) => e.stopPropagation()}
+              title="决定 out-json 声明的结构，并作为运行时校验标准；不符合则节点失败"
+              onPointerDown={(e) => stopEventPropagation(e)}
               onChange={(e) => updateConfig({ ...data, jsonSchema: schemaFromKey(e.target.value) })}
             >
               {AI_SCHEMA_OPTIONS.map((s) => (
@@ -180,7 +219,7 @@ export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
                 setEditingSystem(true)
               }}
             >
-              {data.system.trim() ? data.system : '（无系统提示词，点击编辑）'}
+              {data.system.trim() ? data.system : '未设置系统提示词'}
             </button>
           )}
         </div>
@@ -193,22 +232,38 @@ export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
               step="0.1"
               min="0"
               max="2"
+              title="0 更稳定重复，2 更发散"
               value={data.temperature}
-              onPointerDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => stopEventPropagation(e)}
               onChange={(e) => updateConfig({ ...data, temperature: Number(e.target.value) || 0 })}
             />
           </label>
           <label>
-            <span className="ai-row-label">Tokens</span>
+            <span className="ai-row-label">上限</span>
             <input
               type="number"
               step="256"
               min="256"
+              title="本次回复的 token 上限，超出部分模型不会写完"
               value={data.maxTokens}
-              onPointerDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => stopEventPropagation(e)}
               onChange={(e) => updateConfig({ ...data, maxTokens: Number(e.target.value) || 4096 })}
             />
           </label>
+        </div>
+
+        <div className={`ai-process-wiring ${textCount + jsonCount > 0 ? 'ok' : 'warn'}`}>
+          <span className="ai-process-wiring-ports">
+            <code className="variable-expr">in-text</code>
+            <span>{textCount} 条</span>
+            <code className="variable-expr">in-json</code>
+            <span>{jsonCount} 项</span>
+          </span>
+          <span className="ai-process-wiring-note">
+            {textCount + jsonCount > 0
+              ? '两类输入合并成一次提问'
+              : '两个输入端口都没连线，运行会跳过'}
+          </span>
         </div>
       </div>
 
@@ -218,12 +273,12 @@ export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
           {summary ? (
             <span>{summary.length > 120 ? `${summary.slice(0, 120)}…` : summary}</span>
           ) : (
-            <span className="ai-result-empty">（尚未运行，或等待上游输入）</span>
+            <span className="ai-result-empty">尚未运行</span>
           )}
         </div>
       </div>
       <div className="ai-process-mode">
-        {modelName} · {data.mode}
+        {modelName} → {mode.portId}
       </div>
     </div>
   )

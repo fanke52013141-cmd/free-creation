@@ -61,48 +61,94 @@ export async function videoFrameExecutor(ctx: NodeExecutionContext): Promise<Nod
   }
 }
 
-// ── 视频截取 ──
+// ── 视频截取（A3：画面 + 音频合并为同一节点，contractVersion 5）──
 
 export async function videoClipExecutor(ctx: NodeExecutionContext): Promise<NodeExecutionResult> {
   const source = inputMedia(ctx.inputs, 'in-video', 'video')[0]
   if (!source) return { status: 'skipped', reason: '请连接一段视频到"源视频"输入' }
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
-  const capabilityReason = await unavailableLocalCapability(ctx.gateway, 'ffmpeg')
-  if (capabilityReason)
-    return { status: 'failed', reason: capabilityFailure('ffmpeg', capabilityReason) }
+  const config = parseVideoClipConfig(readNodeConfig(ctx.shape))
+  if (!config.keepVideo && !config.keepAudio)
+    return { status: 'failed', reason: '请至少选择保留画面或音频' }
+  for (const key of ['ffmpeg'] as const) {
+    const capabilityReason = await unavailableLocalCapability(ctx.gateway, key)
+    if (capabilityReason)
+      return { status: 'failed', reason: capabilityFailure(key, capabilityReason) }
+  }
   try {
-    const config = parseVideoClipConfig(readNodeConfig(ctx.shape))
+    type Produced = {
+      kind: 'video' | 'audio'
+      portId: string
+      modelKey: string
+      data: { id: string; path: string; mime: string; name?: string }
+    }
+    const produced: Produced[] = []
+    if (config.keepVideo) {
+      if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
+      const result = await ctx.gateway.clipVideo({
+        projectId: ctx.projectId,
+        sourceMediaId: source.mediaId,
+        config
+      })
+      if (!result.ok) return { status: 'failed', reason: result.error.message }
+      produced.push({
+        kind: 'video',
+        portId: 'out-video',
+        modelKey: 'local:ffmpeg-clip',
+        data: result.data
+      })
+    }
+    if (config.keepAudio) {
+      if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
+      const result = await ctx.gateway.extractVideoAudio({
+        projectId: ctx.projectId,
+        sourceMediaId: source.mediaId,
+        config: {
+          version: 2,
+          startMs: config.startMs,
+          endMs: config.endMs,
+          format: config.audioFormat,
+          sampleRate: config.audioSampleRate
+        }
+      })
+      if (!result.ok) return { status: 'failed', reason: result.error.message }
+      produced.push({
+        kind: 'audio',
+        portId: 'out-audio',
+        modelKey: 'local:ffmpeg-audio',
+        data: result.data
+      })
+    }
     if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
-    const result = await ctx.gateway.clipVideo({
-      projectId: ctx.projectId,
-      sourceMediaId: source.mediaId,
-      config
-    })
-    if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
-    if (!result.ok) return { status: 'failed', reason: result.error.message }
-    const prompt = `源视频 ${source.mediaId} · ${config.startMs}-${config.endMs}ms · audio=${config.includeAudio} · ${config.quality}`
-    ctx.updateResult(
-      serializeMediaResultCollection(
-        appendMediaResult(
-          typeof ctx.shape.meta?.nodeResult === 'string' ? ctx.shape.meta.nodeResult : '',
-          { mediaId: result.data.id, mediaPath: result.data.path, mime: result.data.mime },
-          {
-            nodeId: ctx.node.id,
-            modelKey: 'local:ffmpeg-clip',
-            prompt,
-            runId: ctx.runId
-          }
-        )
-      )
+    const prompt = `${config.keepVideo ? '画面' : ''}${config.keepVideo && config.keepAudio ? '+' : ''}${config.keepAudio ? '音频' : ''} · 源视频 ${source.mediaId} · ${config.startMs}-${config.endMs}ms`
+    const previous = typeof ctx.shape.meta?.nodeResult === 'string' ? ctx.shape.meta.nodeResult : ''
+    let collection = appendMediaResult(
+      previous,
+      {
+        mediaId: produced[0].data.id,
+        mediaPath: produced[0].data.path,
+        mime: produced[0].data.mime
+      },
+      { nodeId: ctx.node.id, modelKey: produced[0].modelKey, prompt, runId: ctx.runId }
     )
-    ctx.emitArtifact?.({
-      kind: 'video',
-      mediaId: result.data.id,
-      mediaPath: result.data.path,
-      mime: result.data.mime,
-      portId: 'out-video',
-      title: result.data.name || '视频片段'
-    })
+    for (const item of produced.slice(1)) {
+      collection = appendMediaResult(
+        serializeMediaResultCollection(collection),
+        { mediaId: item.data.id, mediaPath: item.data.path, mime: item.data.mime },
+        { nodeId: ctx.node.id, modelKey: item.modelKey, prompt, runId: ctx.runId }
+      )
+    }
+    ctx.updateResult(serializeMediaResultCollection(collection))
+    for (const item of produced) {
+      ctx.emitArtifact?.({
+        kind: item.kind,
+        mediaId: item.data.id,
+        mediaPath: item.data.path,
+        mime: item.data.mime,
+        portId: item.portId,
+        title: item.data.name || (item.kind === 'video' ? '视频片段' : '音频片段')
+      })
+    }
     return { status: 'done' }
   } catch (error) {
     return { status: 'failed', reason: error instanceof Error ? error.message : String(error) }
@@ -149,7 +195,7 @@ export async function videoAudioExecutor(ctx: NodeExecutionContext): Promise<Nod
       mediaPath: result.data.path,
       mime: result.data.mime,
       portId: 'out-audio',
-      title: result.data.name || '提取音频'
+      title: result.data.name || '音频片段'
     })
     return { status: 'done' }
   } catch (error) {

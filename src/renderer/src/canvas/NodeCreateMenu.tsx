@@ -150,9 +150,7 @@ export function NodeCreateMenu({
             <span className="item-icon" style={{ color: spec.color }}>
               <Icon name={spec.icon} size={18} />
             </span>
-            <span className="node-menu-label">
-              {spec.label}
-            </span>
+            <span className="node-menu-label">{spec.label}</span>
           </button>
         )
       })}

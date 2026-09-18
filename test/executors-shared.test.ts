@@ -188,4 +188,13 @@ describe('parseImageGen · 生图固定配置解析（R5 种子）', () => {
     const d = parseImageGen(JSON.stringify({ modelKey: 'p1::m1', resolution: '8k' }))
     expect(d.resolution).toBeUndefined()
   })
+
+  // parseImageGen 用保守能力表归一化：透明底必须与分辨率一样跨供应商保留意图，
+  // 是否发送交给执行器/网关按真实能力表判断，否则「透支持」的供应商永远收不到该字段。
+  it('透明背景意图被保留，其他取值被剔除', () => {
+    expect(parseImageGen(JSON.stringify({ background: 'transparent' })).background).toBe(
+      'transparent'
+    )
+    expect(parseImageGen(JSON.stringify({ background: 'white' })).background).toBeUndefined()
+  })
 })

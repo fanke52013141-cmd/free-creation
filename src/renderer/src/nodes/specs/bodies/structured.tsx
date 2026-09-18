@@ -1,9 +1,14 @@
+// 结构数据节点 Body：Schema 选择 + JSON 模板编辑 + 占位符可用性。
+//
+// 占位符（{{text}} / {{input[n].field}}）由执行器按 in-context / in-text 端口的连接顺序
+// 解析，界面上必须把「有几个可引用」显式画出来，否则用户无从知道下标从哪来。
 import { useRef, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import { validateNodeSchema } from '@shared/node-schemas'
 import { markUndoPoint } from '../../../canvas/history'
+import { countIncomingConnections } from '../../../canvas/graph'
 import { readNodeConfig } from '../../../canvas/node-persistence'
-import { useWheelScroll } from './shared'
+import { jsonErrorLocation, useWheelScroll } from './shared'
 import {
   parseStructuredDataConfig,
   schemaOption,
@@ -22,26 +27,81 @@ function fieldEntries(value: unknown, prefix = '', depth = 0): { path: string; v
   })
 }
 
+/** 占位符卡片：把执行器认得的 token 与端口真实连线数一起呈现。 */
+function PlaceholderTokens({
+  textCount,
+  contextCount
+}: {
+  textCount: number
+  contextCount: number
+}): React.JSX.Element {
+  const indexes = Array.from({ length: Math.max(contextCount, 1) }, (_, index) => index).slice(0, 4)
+  const copy = (token: string): void => {
+    void navigator.clipboard.writeText(token)
+  }
+  return (
+    <div className="structured-tokens" aria-label="占位符">
+      <button
+        type="button"
+        className={`structured-token ${textCount ? 'ready' : 'idle'}`}
+        title={
+          textCount > 1
+            ? `替换为 ${textCount} 条文本上下文按顺序拼接的结果`
+            : '替换为 in-text 端口连入的文本'
+        }
+        onPointerDown={(event) => stopEventPropagation(event)}
+        onClick={(event) => {
+          event.stopPropagation()
+          copy('{{text}}')
+        }}
+      >
+        <code>{'{{text}}'}</code>
+        <span>文本上下文 ×{textCount}</span>
+      </button>
+      {indexes.map((index) => (
+        <button
+          type="button"
+          key={index}
+          className={`structured-token ${contextCount > index ? 'ready' : 'idle'}`}
+          title={`替换为 in-context 第 ${index + 1} 个 JSON 输入，字段写作 {{input[${index}].名称}}`}
+          onPointerDown={(event) => stopEventPropagation(event)}
+          onClick={(event) => {
+            event.stopPropagation()
+            copy(`{{input[${index}]}}`)
+          }}
+        >
+          <code>{`{{input[${index}]}}`}</code>
+          <span>结构上下文 ×{contextCount}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export function StructuredBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
   const scrollRef = useRef<HTMLDivElement | null>(null)
   useWheelScroll(scrollRef)
   const config = parseStructuredDataConfig(readNodeConfig(shape))
   const option = schemaOption(config.schema)
+  const raw = shape.props.text
+  const hasText = Boolean(raw.trim())
   const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(shape.props.text)
+  const [draft, setDraft] = useState(raw)
+  const contextCount = countIncomingConnections(editor, shape.id, 'in-context')
+  const textCount = countIncomingConnections(editor, shape.id, 'in-text')
   let parsed: unknown = null
-  let parseError = Boolean(shape.props.text.trim())
+  let parseError: string | null = null
   try {
-    parsed = shape.props.text.trim() ? JSON.parse(shape.props.text) : null
-    parseError = false
-  } catch {
-    // 在界面内保留原文，运行时会给出明确字段错误。
+    parsed = hasText ? JSON.parse(raw) : null
+  } catch (error) {
+    parseError = error instanceof Error ? error.message : String(error)
   }
-  const validation = shape.props.text.trim()
-    ? validateNodeSchema(config.schema, parsed)
-    : { ok: false, errors: ['等待输入'] }
-  const waitingForMapping = !parseError && !validation.ok && shape.props.text.includes('{{')
+  const validation = hasText && !parseError ? validateNodeSchema(config.schema, parsed) : null
+  // 含占位符的模板在运行前必然校验不过，那是待注入而不是写错了。
+  const pendingPlaceholders =
+    !parseError && validation !== null && !validation.ok && raw.includes('{{')
+  const fields = validation?.ok ? fieldEntries(parsed) : []
 
   const updateConfig = (schemaId: string): void => {
     const next = STRUCTURED_SCHEMA_OPTIONS.find((item) => schemaKey(item.schema) === schemaId)
@@ -54,13 +114,35 @@ export function StructuredBody({ shape }: NodeBodyProps): React.JSX.Element {
     markUndoPoint(editor, 'structured-schema')
   }
 
-  const fields = validation.ok ? fieldEntries(parsed) : []
   const commit = (): void => {
     setEditing(false)
-    if (draft === shape.props.text) return
+    if (draft === raw) return
     editor.updateShape({ id: shape.id, type: 'node-card', props: { text: draft } })
     markUndoPoint(editor, 'structured-edit')
   }
+
+  const status: { tone: 'valid' | 'invalid' | 'pending'; text: string; title?: string } | null =
+    !hasText
+      ? null
+      : parseError
+        ? {
+            tone: 'invalid',
+            text: jsonErrorLocation(raw, parseError),
+            title: parseError
+          }
+        : validation?.ok
+          ? { tone: 'valid', text: `符合${option.label}，可连线使用` }
+          : pendingPlaceholders
+            ? {
+                tone: 'pending',
+                text: '含占位符，运行注入连线值后才校验',
+                title: validation?.errors.join('；')
+              }
+            : {
+                tone: 'invalid',
+                text: `不符合${option.label}`,
+                title: validation?.errors.join('；')
+              }
 
   return (
     <div className="json-body structured-body" ref={scrollRef}>
@@ -68,6 +150,7 @@ export function StructuredBody({ shape }: NodeBodyProps): React.JSX.Element {
         <AppSelect
           className="gen-select"
           aria-label="结构 Schema"
+          title="决定 out-json 端口声明的结构，以及运行时按哪套字段校验"
           value={schemaKey(config.schema)}
           onChange={(event) => updateConfig(event.target.value)}
         >
@@ -77,23 +160,11 @@ export function StructuredBody({ shape }: NodeBodyProps): React.JSX.Element {
             </option>
           ))}
         </AppSelect>
-        <span
-          className={
-            validation.ok
-              ? 'json-status valid'
-              : waitingForMapping
-                ? 'json-status'
-                : 'json-status invalid'
-          }
-        >
-          {validation.ok
-            ? '字段有效'
-            : waitingForMapping
-              ? '等待映射'
-              : parseError
-                ? 'JSON 格式有误'
-                : validation.errors[0]}
-        </span>
+        {status && (
+          <span className={`json-status ${status.tone}`} title={status.title}>
+            {status.text}
+          </span>
+        )}
       </div>
       {editing ? (
         <textarea
@@ -114,16 +185,15 @@ export function StructuredBody({ shape }: NodeBodyProps): React.JSX.Element {
           onPointerDown={(event) => stopEventPropagation(event)}
           onDoubleClick={(event) => {
             event.stopPropagation()
-            setDraft(shape.props.text)
+            setDraft(raw)
             setEditing(true)
           }}
           onClick={(event) => event.stopPropagation()}
         >
-          {shape.props.text.trim()
-            ? JSON.stringify(parsed, null, 2)
-            : '双击输入 JSON；可使用 {{text}} 或 {{input[0].field}} 引用已连接输入。'}
+          {hasText ? (parseError ? raw : JSON.stringify(parsed, null, 2)) : '暂无结构数据'}
         </button>
       )}
+      <PlaceholderTokens textCount={textCount} contextCount={contextCount} />
       {fields.length > 0 && (
         <div className="structured-field-tree" aria-label="结构字段">
           <div className="structured-field-tree-title">字段路径</div>
@@ -153,11 +223,11 @@ export function StructuredBody({ shape }: NodeBodyProps): React.JSX.Element {
           onPointerDown={(event) => stopEventPropagation(event)}
           onClick={(event) => {
             event.stopPropagation()
-            setDraft(shape.props.text)
+            setDraft(raw)
             setEditing(true)
           }}
         >
-          {shape.props.text.trim() ? '编辑' : '输入'}
+          {hasText ? '编辑' : '输入 JSON'}
         </button>
       </div>
     </div>

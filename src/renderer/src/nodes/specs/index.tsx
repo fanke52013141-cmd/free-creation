@@ -3,7 +3,7 @@
 import type { PortCardinality, PortDecl, PortSchemaRef } from '@shared/types'
 import { registerNodeType, unregisterNodeType } from '../registry'
 import { readNodeConfig } from '../../canvas/node-persistence'
-import { parseSpeechConfig } from '@shared/speech'
+import { parseSpeechConfig, type SpeechBackend } from '@shared/speech'
 import {
   AudioBody,
   AiProcessBody,
@@ -156,13 +156,14 @@ const VOICE_PROFILE: PortSchemaRef = { id: 'voice.profile', version: 1 }
 const VOICE_SUBTITLE: PortSchemaRef = { id: 'voice.subtitle', version: 1 }
 
 /**
- * 配音节点端口声明。返回三套互斥结构，由 config.backend 决定：
+ * 配音节点端口声明。返回四套互斥结构，由 config.backend 决定：
  *   minimax → 朗读文本 + 音色档案 → 音频
  *   doubao  → 朗读文本 + 音色档案 + 参考音频 → 音频 + 字幕
+ *   volc    → 朗读文本 → 音频（1.0 的音色是 voice_type 字符串，不接受 MiniMax 音色档案）
  *   openai  → 朗读文本 → 音频
- * 静态 ports 是这三套的并集，只用于注册校验与契约快照；运行时以本函数为准。
+ * 静态 ports 是这几套的并集，只用于注册校验与契约快照；运行时以本函数为准。
  */
-function speechPorts(backend: 'minimax' | 'doubao' | 'openai'): {
+function speechPorts(backend: SpeechBackend): {
   in: PortDecl[]
   out: PortDecl[]
 } {
@@ -201,7 +202,7 @@ function speechPorts(backend: 'minimax' | 'doubao' | 'openai'): {
   if (backend === 'doubao') {
     return { in: [inText, inVoice, inAudio], out: [outAudio, outSubtitle] }
   }
-  if (backend === 'openai') {
+  if (backend === 'openai' || backend === 'volc') {
     return { in: [inText], out: [outAudio] }
   }
   return { in: [inText, inVoice], out: [outAudio] }
@@ -450,16 +451,23 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'video-clip',
-    contractVersion: 4,
-    label: '截视频',
+    contractVersion: 5,
+    label: '视频截取',
     icon: 'clip',
     color: '#ec4899',
     defaultSize: { w: 340, h: 260 },
-    description: '从上游视频按起止毫秒精确截取片段，默认重编码输出 MP4 视频资产。',
+    description: '按起止毫秒截取视频，可选择保留画面、音频或两者。',
     category: 'video',
     ports: {
       in: [input('in-video', '源视频', 'video', '必须连接的一段源视频。', { required: true })],
-      out: [output('out-video', '视频片段', 'video', '精确重编码后的 MP4 视频片段。')]
+      out: [
+        output('out-video', '视频片段', 'video', '精确重编码后的 MP4 视频片段。', {
+          required: false
+        }),
+        output('out-audio', '音频片段', 'audio', '同一时间范围提取并转码的新音频资产。', {
+          required: false
+        })
+      ]
     },
     projectOutputs: projectVideoClipOutputs,
     executor: videoClipExecutor,
@@ -473,8 +481,10 @@ export function registerBaseNodeTypes(): void {
     icon: 'audio',
     color: '#f59e0b',
     defaultSize: { w: 340, h: 260 },
-    description: '从上游视频的指定时间范围忠实提取原始音轨，输出 WAV 或 M4A 音频资产。',
+    description:
+      '已退役：功能并入「视频截取」。历史画布中的本节点仍可正常执行与连线，但不能再新建。',
     category: 'video',
+    creatable: false,
     ports: {
       in: [input('in-video', '源视频', 'video', '必须连接的一段源视频。', { required: true })],
       out: [output('out-audio', '音频片段', 'audio', '从指定范围提取并转码的新音频资产。')]
@@ -533,7 +543,7 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'file',
-    contractVersion: 1,
+    contractVersion: 2,
     label: '文件',
     icon: 'document',
     color: '#94a3b8',
@@ -544,7 +554,7 @@ export function registerBaseNodeTypes(): void {
       in: [],
       out: [
         output('out-file', '文件', 'file', '已导入并落盘的原始文件资产引用。'),
-        output('out-text', '文本', 'text', '可解析为文本的文件内容（txt / md / json / csv）。', {
+        output('out-text', '文本', 'text', '抽取出的文档正文（文本/CSV/Word/Excel/PPT/PDF）。', {
           required: false
         })
       ]
@@ -582,7 +592,7 @@ export function registerBaseNodeTypes(): void {
     icon: 'audio',
     color: '#fbbf24',
     defaultSize: { w: 340, h: 260 },
-    description: '语音克隆：本地 ComfyUI 或 MiniMax 复刻，输出音频与音色档案。',
+    description: '语音克隆：MiniMax 云端或本地 IndexTTS，输出音频与音色档案',
     category: 'audio',
     ports: {
       in: [
@@ -706,7 +716,7 @@ export function registerExtendedNodeTypes(): void {
     icon: 'processor',
     color: '#22d3ee',
     defaultSize: { w: 340, h: 260 },
-    description: '通用变量处理节点。收到上游值后原样传递；未连线时可使用固定值。',
+    description: '传递连线值或固定值，可提取 JSON 字段或套入文本模板。',
     category: 'logic',
     ports: {
       in: [input('in-value', '输入变量', 'any', '需要原样传递或后续转换的单个变量。')],
@@ -746,7 +756,7 @@ export function registerExtendedNodeTypes(): void {
     icon: 'json',
     color: '#c084fc',
     defaultSize: { w: 340, h: 260 },
-    description: '结构编辑与字段映射：选 Schema、维护 JSON、经端口引用数据。',
+    description: '按 Schema 校验 JSON 正文，运行时可插入连线值占位符。',
     category: 'logic',
     ports: {
       in: [

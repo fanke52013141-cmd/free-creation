@@ -121,7 +121,9 @@ describe('契约版本稳定性（防破坏性变化漏升版本）', () => {
   it.each(types)('节点 %s 的契约版本与已发布契约一致', (type) => {
     const spec = getNodeType(type)
     const v7Types: NodeTypeId[] = ['video']
-    const v4Types: NodeTypeId[] = ['vocal-separate', 'video-frame', 'video-clip', 'video-audio']
+    // video-clip 5：截视频与截音频合并为「视频截取」，新增 out-audio 与 keep* 配置。
+    const v5Types: NodeTypeId[] = ['video-clip']
+    const v4Types: NodeTypeId[] = ['vocal-separate', 'video-frame', 'video-audio']
     // speech 3：配音改为模型驱动（按协议派生输入/输出结构）；
     // tts 3：语音克隆新增 out-json 音色档案输出；
     // image-split 3：label 由「拆图」统一为「拆分」，与调色板可见文字同源。
@@ -135,17 +137,27 @@ describe('契约版本稳定性（防破坏性变化漏升版本）', () => {
       'tts',
       'image-split'
     ]
-    const v2Types: NodeTypeId[] = ['code', 'iterate', 'image-crop', 'image-edit', 'video-asset']
+    // file 2：out-text 从"只有纯文本"扩到 Word / Excel / PPT 正文（导入时由主进程抽取）。
+    const v2Types: NodeTypeId[] = [
+      'code',
+      'iterate',
+      'image-crop',
+      'image-edit',
+      'video-asset',
+      'file'
+    ]
     expect(spec?.contractVersion).toBe(
       v7Types.includes(type)
         ? 7
-        : v4Types.includes(type)
-          ? 4
-          : v3Types.includes(type)
-            ? 3
-            : v2Types.includes(type)
-              ? 2
-              : 1
+        : v5Types.includes(type)
+          ? 5
+          : v4Types.includes(type)
+            ? 4
+            : v3Types.includes(type)
+              ? 3
+              : v2Types.includes(type)
+                ? 2
+                : 1
     )
   })
 })

@@ -2,6 +2,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import type { NodeBodyProps } from '../../registry'
+import { countIncomingConnections } from '../../../canvas/graph'
 import { markUndoPoint } from '../../../canvas/history'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
@@ -141,6 +142,8 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
   useWheelScroll(scrollRef)
 
   const [showOutputSettings, setShowOutputSettings] = useState(false)
+  // 执行器（scriptExecutor）：剧本 = 本框 source + in-text 合并；分镜为空时才走对话模型拆解。
+  const inTextCount = countIncomingConnections(editor, shape.id, 'in-text')
 
   const update = (next: ScriptData): void => {
     editor.updateShape({
@@ -209,7 +212,7 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
         value={data.source}
         rows={3}
         spellCheck={false}
-        placeholder="输入或粘贴剧本文本；AI 拆解请使用“文本 → AI 处理 → 结构数据 → 分镜板”工作流。"
+        placeholder="输入或粘贴剧本文本…"
         onChange={(e) => update({ ...data, source: e.target.value })}
         onBlur={markSession}
         onPointerDown={(e) => stopEventPropagation(e)}
@@ -438,7 +441,11 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
           </>
         </button>
         <span className="script-template-hint">
-          AI 拆解请使用“文本 → AI 处理 → 结构数据 → 分镜板”工作流模板。
+          {data.shots.length === 0
+            ? '分镜为空：运行会调用对话模型拆解剧本'
+            : `已有 ${data.shots.length} 个分镜：运行只合并剧本，不调用模型`}
+          {' · '}
+          {inTextCount > 0 ? `in-text 已连线 ${inTextCount} 个` : 'in-text 未连线，只用本框剧本'}
         </span>
       </div>
     </div>

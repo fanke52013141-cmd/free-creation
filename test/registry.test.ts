@@ -12,6 +12,7 @@ import {
   getNodePorts,
   unregisterNodeType,
   PORT_COLORS,
+  PORT_TYPE_LABELS,
   type NodeTypeSpec
 } from '@renderer/nodes/registry'
 
@@ -130,6 +131,14 @@ describe('PORT_COLORS · 每个端口类型都有配色', () => {
     ] as const) {
       expect(PORT_COLORS[t]).toBeTruthy()
     }
+  })
+
+  // 端口 tooltip 与拖线标签读的是中文名；新增 PortType 时若漏配，
+  // NodeCardView 会在运行时给出 undefined。两张表的键集必须同源。
+  it('PORT_TYPE_LABELS 与配色表覆盖同一组端口类型', () => {
+    expect(Object.keys(PORT_TYPE_LABELS).sort()).toEqual(Object.keys(PORT_COLORS).sort())
+    expect(PORT_TYPE_LABELS.video).toBe('视频')
+    expect(PORT_TYPE_LABELS.image).toBe('图片')
   })
 })
 

@@ -331,6 +331,8 @@ export interface ImageGenerateInput {
   aspectRatio?: string
   /** 分辨率档位（1k/2k/4k）；仅当供应商能力表声明支持时由网关提交 */
   resolution?: string
+  /** 透明背景；仅能力表声明 supportsTransparentBackground 的供应商会携带该字段 */
+  background?: 'transparent'
 }
 
 export interface ImageEditInput {

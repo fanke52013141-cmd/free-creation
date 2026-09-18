@@ -9,7 +9,7 @@ import { readNodeConfig } from '../../../canvas/node-persistence'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
 import { useWheelScroll, VARIABLE_TYPES, type VariableValueType } from './shared'
-import { codePortConfigErrors } from '../../../engine/executors/code'
+import { codePortConfigErrors, outputPortId } from '../../../engine/executors/code'
 
 interface CodeParam {
   name: string
@@ -344,14 +344,9 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
 
   const text = data.source
   const isMainStyle = /^\s*(async\s+)?function\s+main\b/.test(text)
+  const inputExpr = isMainStyle ? `args.${data.inputName}` : `input.${data.inputName}`
   return (
     <div className="code-body" ref={scrollRef}>
-      <div className="code-ai-section">
-        <span className="code-ai-guidance">
-          AI 代码生成不在此节点内隐式执行；请使用 AI 处理节点生成文本后，审阅并粘贴代码。
-        </span>
-      </div>
-
       <div className="code-variable-contract">
         <div className="variable-row input">
           <span className="variable-direction">输入</span>
@@ -375,6 +370,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
               </option>
             ))}
           </AppSelect>
+          <code className="variable-expr">{inputExpr}</code>
         </div>
         <div className="variable-row output">
           <span className="variable-direction">输出</span>
@@ -398,11 +394,12 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
               </option>
             ))}
           </AppSelect>
+          <code className="variable-expr">return → 端口</code>
         </div>
         <div className="code-variable-help">
           {isMainStyle ? (
             <>
-              读取 <code>args.text</code> / <code>args.json</code>
+              代码里读 <code>args.text</code> / <code>args.json</code> / <code>{inputExpr}</code>
               {data.params.length > 0 && (
                 <>
                   {' '}
@@ -415,11 +412,12 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
                   ))}
                 </>
               )}
-              ，本地帮助 <code>_</code> <code>dayjs</code>（不联网；时间固定、随机数可复跑）
+              ；<code>return</code> 的值从右侧 <code>{outputPortId(data.outputName)}</code> 端口流出
             </>
           ) : (
             <>
-              读取 <code>input.{data.inputName}</code>，return 值写入 <code>{data.outputName}</code>
+              读取 <code>{inputExpr}</code>，<code>return</code> 的值写入端口{' '}
+              <code>{outputPortId(data.outputName)}</code>
             </>
           )}
         </div>
@@ -486,9 +484,6 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
             动态端口配置无效：{portConfigErrors.join('；')}。请修改后再连线或运行。
           </div>
         )}
-        {data.params.length === 0 && (
-          <div className="code-params-empty">添加自定义输入参数，每个参数生成一个独立输入端口</div>
-        )}
       </div>
       {text ? (
         <pre
@@ -512,7 +507,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
             setEditing(true)
           }}
         >
-          双击编写代码
+          暂无代码
         </div>
       )}
       {resultDisplay && (
@@ -533,7 +528,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
         >
           <>
             <Icon name="edit" size={14} />
-            {text ? '编辑' : '输入'}
+            {text ? '编辑代码' : '编写代码'}
           </>
         </button>
       </div>
