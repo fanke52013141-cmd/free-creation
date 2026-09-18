@@ -803,11 +803,8 @@ export async function runNodeManually(
 
   if (result.status === 'done') toast(`${node.title || node.type} 已完成`)
   else if (result.status === 'failed') {
-    // 输入契约失败时失败原因已列出具体缺失的必填端口；只提示笼统的「执行失败」
-    // 会让用户无从下手（QA-NODE-AUDIT-2026-09-06 P2-4），这里直接透出原因。
-    const detail = result.reason ?? ''
-    if (detail.includes('输入契约校验失败')) toast(`${node.title || node.type}：${detail}`)
-    else toast(`${node.title || node.type} 执行失败`)
+    const detail = result.reason?.trim() ?? ''
+    toast(`${node.title || node.type} 执行失败${detail ? `：${detail}` : ''}`)
   } else if (result.reason) toast(result.reason)
   return result
 }

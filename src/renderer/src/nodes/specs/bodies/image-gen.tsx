@@ -157,7 +157,7 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
           })}
         </AppSelect>
         <ModelSelect
-          value={data.modelKey}
+          value={data.modelKey || selected?.key || ''}
           options={providerModels}
           onChange={(key) => {
             const next = options.find((option) => option.key === key)

@@ -75,7 +75,9 @@ export function resolveImageModelOption(
     (item) =>
       item.provider.specId === 'toapis' ||
       item.provider.name.toLowerCase().includes('toapis') ||
-      item.provider.id.toLowerCase().includes('toapis')
+      item.provider.id.toLowerCase().includes('toapis') ||
+      item.model.id.toLowerCase().includes('gpt-image-2') ||
+      item.model.id.toLowerCase().includes('image-2')
   )
   return preferred ?? options[0]
 }

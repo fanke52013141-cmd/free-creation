@@ -408,12 +408,12 @@ export function CanvasEditor({
       window.removeEventListener('pointerup', onUp)
       setNodeDrag(null)
       if (dragged && ev.clientX > SIDEBAR_W) {
-        // 拖到画布区域：在落点创建
+        // 拖到画布区域：以光标落点为中心放置，不触发避让位移
         suppressNodePickRef.current = true
         window.setTimeout(() => {
           suppressNodePickRef.current = false
         }, 0)
-        createNodeAt(type, ev.clientX, ev.clientY)
+        createNodeAt(type, ev.clientX, ev.clientY, undefined, true)
       }
     }
     window.addEventListener('pointermove', onMove)
@@ -903,7 +903,9 @@ export function CanvasEditor({
   const findNodePlacement = (
     editor: Editor,
     point: { x: number; y: number },
-    size: { w: number; h: number }
+    size: { w: number; h: number },
+    connectionDirection?: 'in' | 'out',
+    sourceBounds?: { x: number; y: number; maxX: number; maxY: number }
   ): { x: number; y: number } => {
     const minScreenY = topbarSafeScreenY(editor)
     const minScreenX = paletteSafeScreenX(editor)
@@ -920,28 +922,64 @@ export function CanvasEditor({
         y: screen.y >= minScreenY ? candidate.y : candidate.y + (minScreenY - screen.y) / zoom
       }
     }
+    // 节点卡片顶部有向上伸出 34px 的悬浮标题栏，垂直重叠判断必须计入标题高度和边距。
+    const HEADER_OVERHANG = 38
     const overlaps = (x: number, y: number): boolean =>
       existing.some(
         (bounds) =>
-          x < bounds.maxX + 24 &&
-          x + size.w > bounds.x - 24 &&
-          y < bounds.maxY + 24 &&
-          y + size.h > bounds.y - 24
+          x < bounds.maxX + 32 &&
+          x + size.w > bounds.x - 32 &&
+          y - HEADER_OVERHANG < bounds.maxY + 32 &&
+          y + size.h > bounds.y - HEADER_OVERHANG - 32
       )
-    const origin = normalize({ x: point.x - size.w / 2, y: point.y - size.h / 2 })
+
+    let startX = point.x - size.w / 2
+    let startY = point.y - size.h / 2
+
+    if (sourceBounds && connectionDirection === 'out') {
+      // 从输出端口拉线：放置在源节点右侧，保持至少 64px 间距，杜绝遮挡源卡片
+      startX = Math.max(startX, sourceBounds.maxX + 64)
+    } else if (sourceBounds && connectionDirection === 'in') {
+      // 从输入端口拉线：放置在源节点左侧，保持至少 64px 间距，杜绝遮挡源卡片
+      startX = Math.min(startX, sourceBounds.x - size.w - 64)
+    }
+
+    const origin = normalize({ x: startX, y: startY })
     if (!overlaps(origin.x, origin.y)) return origin
 
     const stepX = size.w + 48
     const stepY = size.h + 48
-    // 逐圈枚举网格，避免固定候选数量在连续添加 20+ 个节点时再次回退到重叠位置。
     const offsets: Array<[number, number]> = []
-    for (let radius = 1; radius <= 8; radius += 1) {
-      for (let dx = -radius; dx <= radius; dx += 1) {
-        for (let dy = -radius; dy <= radius; dy += 1) {
-          if (Math.max(Math.abs(dx), Math.abs(dy)) === radius) offsets.push([dx, dy])
+
+    if (connectionDirection === 'out') {
+      // 向后延伸优先往右及上下寻找空位，禁止跳回源节点重合区
+      for (let dx = 0; dx <= 6; dx += 1) {
+        for (let dy = 0; dy <= 6; dy += 1) {
+          if (dx === 0 && dy === 0) continue
+          offsets.push([dx, dy])
+          if (dy > 0) offsets.push([dx, -dy])
+        }
+      }
+    } else if (connectionDirection === 'in') {
+      // 向前延伸优先往左及上下寻找空位，禁止跳向源节点重合区
+      for (let dx = 0; dx >= -6; dx -= 1) {
+        for (let dy = 0; dy <= 6; dy += 1) {
+          if (dx === 0 && dy === 0) continue
+          offsets.push([dx, dy])
+          if (dy > 0) offsets.push([dx, -dy])
+        }
+      }
+    } else {
+      // 逐圈枚举网格，避免固定候选数量在连续添加 20+ 个节点时再次回退到重叠位置。
+      for (let radius = 1; radius <= 8; radius += 1) {
+        for (let dx = -radius; dx <= radius; dx += 1) {
+          for (let dy = -radius; dy <= radius; dy += 1) {
+            if (Math.max(Math.abs(dx), Math.abs(dy)) === radius) offsets.push([dx, dy])
+          }
         }
       }
     }
+
     for (const [dx, dy] of offsets) {
       const candidate = normalize({ x: origin.x + dx * stepX, y: origin.y + dy * stepY })
       if (!overlaps(candidate.x, candidate.y)) return candidate
@@ -960,7 +998,8 @@ export function CanvasEditor({
     type: NodeTypeId,
     screenX: number,
     screenY: number,
-    preferredTargetPortId?: string
+    preferredTargetPortId?: string,
+    exactCentered?: boolean
   ): void => {
     const editor = editorRef.current
     if (!editor) {
@@ -971,9 +1010,17 @@ export function CanvasEditor({
     const spec = getNodeType(type)
     if (!spec) return
     const point = editor.screenToPage({ x: screenX, y: screenY })
-    const placement = pendingConnectRef.current
+    const pending = pendingConnectRef.current
+    const sourceBounds = pending ? editor.getShapePageBounds(pending.shapeId) : undefined
+    const placement = exactCentered
       ? { x: point.x - spec.defaultSize.w / 2, y: point.y - spec.defaultSize.h / 2 }
-      : findNodePlacement(editor, point, spec.defaultSize)
+      : findNodePlacement(
+          editor,
+          point,
+          spec.defaultSize,
+          pending?.direction,
+          sourceBounds ?? undefined
+        )
     const id = createShapeId()
     editor.createShape({
       id,

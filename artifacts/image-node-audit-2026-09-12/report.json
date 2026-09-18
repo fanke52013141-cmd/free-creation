@@ -1,0 +1,185 @@
+{
+  "baseUrl": "http://127.0.0.1:5173/",
+  "viewport": {
+    "width": 1708,
+    "height": 879
+  },
+  "states": {
+    "fresh": {
+      "size": {
+        "w": 340,
+        "h": 260
+      },
+      "headerHeight": 28,
+      "colorBar": {
+        "h": 8,
+        "atBottom": true
+      },
+      "borderRadius": "12px",
+      "ports": [
+        {
+          "dir": "out",
+          "id": "图片",
+          "size": 18,
+          "hasOutput": false
+        }
+      ],
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "status": "node-status-idle",
+      "bodyText": "图片资产上传或粘贴图片后，可连接给生图、视频等节点。导入图片",
+      "hasMedia": false,
+      "mediaTitle": "图片",
+      "connectedInputs": []
+    },
+    "imported": {
+      "size": {
+        "w": 340,
+        "h": 260
+      },
+      "headerHeight": 28,
+      "colorBar": {
+        "h": 8,
+        "atBottom": true
+      },
+      "borderRadius": "12px",
+      "ports": [
+        {
+          "dir": "out",
+          "id": "图片",
+          "size": 18,
+          "hasOutput": true
+        }
+      ],
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "status": "node-status-idle",
+      "bodyText": "替换image/png 裁剪图片 宫格拆分 继续生图 修改图片 生成视频",
+      "hasMedia": true,
+      "mediaTitle": "image-audit",
+      "connectedInputs": []
+    }
+  },
+  "assertions": [
+    {
+      "name": "fresh-size-340x260",
+      "pass": true,
+      "actual": {
+        "w": 340,
+        "h": 260
+      },
+      "expected": {
+        "w": 340,
+        "h": 260
+      }
+    },
+    {
+      "name": "fresh-header-28-floating",
+      "pass": true,
+      "actual": 28,
+      "expected": 28
+    },
+    {
+      "name": "fresh-colorbar-8-bottom",
+      "pass": true,
+      "actual": {
+        "h": 8,
+        "atBottom": true
+      },
+      "expected": {
+        "h": 8,
+        "atBottom": true
+      }
+    },
+    {
+      "name": "fresh-radius-12",
+      "pass": true,
+      "actual": "12px",
+      "expected": "12px"
+    },
+    {
+      "name": "fresh-ports-no-in-one-out",
+      "pass": true,
+      "actual": [
+        {
+          "dir": "out",
+          "id": "图片",
+          "size": 18,
+          "hasOutput": false
+        }
+      ],
+      "expected": "仅 1 个 out-image 端口，18px，无输入端口"
+    },
+    {
+      "name": "fresh-no-overflow",
+      "pass": true,
+      "actual": {
+        "x": false,
+        "y": false
+      },
+      "expected": {
+        "x": false,
+        "y": false
+      }
+    },
+    {
+      "name": "fresh-hint-and-import-button",
+      "pass": true,
+      "actual": "图片资产上传或粘贴图片后，可连接给生图、视频等节点。导入图片",
+      "expected": "空态提示 + 导入按钮"
+    },
+    {
+      "name": "paste-import-shows-thumbnail",
+      "pass": true,
+      "actual": true,
+      "expected": true
+    },
+    {
+      "name": "paste-import-sets-title",
+      "pass": true,
+      "actual": "image-audit",
+      "expected": "标题=文件名"
+    },
+    {
+      "name": "imported-no-overflow",
+      "pass": true,
+      "actual": {
+        "x": false,
+        "y": false
+      },
+      "expected": {
+        "x": false,
+        "y": false
+      }
+    },
+    {
+      "name": "imported-output-port-available",
+      "pass": true,
+      "actual": [
+        {
+          "dir": "out",
+          "id": "图片",
+          "size": 18,
+          "hasOutput": true
+        }
+      ],
+      "expected": "out 端口 has-output"
+    },
+    {
+      "name": "doubleclick-opens-media-preview",
+      "pass": true,
+      "actual": true,
+      "expected": true
+    },
+    {
+      "name": "media-preview-closes-on-mask-click",
+      "pass": true,
+      "actual": true,
+      "expected": true
+    }
+  ]
+}

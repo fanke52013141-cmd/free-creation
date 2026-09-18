@@ -121,4 +121,13 @@ describe('图片模型能力描述', () => {
     )
     expect(invalid).not.toHaveProperty('providerKey')
   })
+
+  it('中转站配置的 gpt-image-2 自动匹配 ToAPIS 异步任务与分辨率能力', () => {
+    const capabilities = imageCapabilitiesFor('relay', 'gpt-image-2')
+    expect(capabilities.driver).toBe('toapis-task')
+    expect(capabilities.referenceMode).toBe('upload-url')
+    expect(capabilities.resolutions).toEqual(['1k', '2k', '4k'])
+    expect(capabilities.ratios).toContain('16:9')
+    expect(capabilities.ratios).toContain('3:2')
+  })
 })

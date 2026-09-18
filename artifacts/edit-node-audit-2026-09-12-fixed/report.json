@@ -1,0 +1,275 @@
+{
+  "baseUrl": "http://127.0.0.1:5173/",
+  "viewport": {
+    "width": 1708,
+    "height": 879
+  },
+  "states": {
+    "fresh": {
+      "size": {
+        "w": 340,
+        "h": 260
+      },
+      "headerHeight": 28,
+      "colorBar": {
+        "h": 8,
+        "atBottom": true
+      },
+      "borderRadius": "12px",
+      "ports": [
+        {
+          "dir": "in",
+          "id": "原图",
+          "size": 18,
+          "hasOutput": false,
+          "connected": false
+        },
+        {
+          "dir": "in",
+          "id": "修改说明",
+          "size": 18,
+          "hasOutput": false,
+          "connected": false
+        },
+        {
+          "dir": "out",
+          "id": "修改图",
+          "size": 18,
+          "hasOutput": false,
+          "connected": false
+        }
+      ],
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "status": "node-status-idle",
+      "bodyText": "图片修改连接图片后，点击打开工作台添加标注和修改说明。打开工作台",
+      "hasOpenWorkbench": false,
+      "inlineText": ""
+    },
+    "emptyRun": {
+      "toast": "修改：输入契约校验失败：缺少必需输入：原图（in-image）",
+      "status": "node-status-failed"
+    },
+    "connected": {
+      "menu": false,
+      "inConnected": true
+    },
+    "reopen": {
+      "reopened": true,
+      "marks": 1,
+      "instruction": "把天空替换成黄昏色调"
+    },
+    "illegal": {
+      "toast": "类型或 Schema 不兼容：audio 输出无法接入 修改 节点"
+    },
+    "reload": {
+      "survived": 3,
+      "before": 3,
+      "inConnected": true,
+      "marks": 1,
+      "instruction": "把天空替换成黄昏色调"
+    }
+  },
+  "assertions": [
+    {
+      "name": "fresh-size-340x260",
+      "pass": true,
+      "actual": {
+        "w": 340,
+        "h": 260
+      },
+      "expected": {
+        "w": 340,
+        "h": 260
+      }
+    },
+    {
+      "name": "fresh-header-28-floating",
+      "pass": true,
+      "actual": 28,
+      "expected": 28
+    },
+    {
+      "name": "fresh-radius-12",
+      "pass": true,
+      "actual": "12px",
+      "expected": "12px"
+    },
+    {
+      "name": "fresh-colorbar-8-bottom",
+      "pass": true,
+      "actual": {
+        "h": 8,
+        "atBottom": true
+      },
+      "expected": {
+        "h": 8,
+        "atBottom": true
+      }
+    },
+    {
+      "name": "fresh-ports",
+      "pass": true,
+      "actual": [
+        {
+          "dir": "in",
+          "id": "原图",
+          "size": 18,
+          "hasOutput": false,
+          "connected": false
+        },
+        {
+          "dir": "in",
+          "id": "修改说明",
+          "size": 18,
+          "hasOutput": false,
+          "connected": false
+        },
+        {
+          "dir": "out",
+          "id": "修改图",
+          "size": 18,
+          "hasOutput": false,
+          "connected": false
+        }
+      ],
+      "expected": "in-原图(req) + in-修改说明(many) + out-修改图，18px"
+    },
+    {
+      "name": "fresh-no-overflow",
+      "pass": true,
+      "actual": {
+        "x": false,
+        "y": false
+      },
+      "expected": {
+        "x": false,
+        "y": false
+      }
+    },
+    {
+      "name": "fresh-empty-hint-and-workbench-entry",
+      "pass": true,
+      "actual": "图片修改连接图片后，点击打开工作台添加标注和修改说明。打开工作台",
+      "expected": "空态提示 + 打开工作台入口"
+    },
+    {
+      "name": "empty-run-blocked-with-port-hint",
+      "pass": true,
+      "actual": {
+        "toast": "修改：输入契约校验失败：缺少必需输入：原图（in-image）",
+        "status": "node-status-failed"
+      },
+      "expected": "非 success + toast 指明缺原图"
+    },
+    {
+      "name": "source-connected",
+      "pass": true,
+      "actual": [
+        {
+          "dir": "in",
+          "id": "原图",
+          "size": 20,
+          "hasOutput": false,
+          "connected": true
+        },
+        {
+          "dir": "in",
+          "id": "修改说明",
+          "size": 18,
+          "hasOutput": false,
+          "connected": false
+        },
+        {
+          "dir": "out",
+          "id": "修改图",
+          "size": 18,
+          "hasOutput": false,
+          "connected": false
+        }
+      ],
+      "expected": "in-原图 已连接"
+    },
+    {
+      "name": "workbench-opens",
+      "pass": true,
+      "actual": true,
+      "expected": true
+    },
+    {
+      "name": "workbench-shows-source",
+      "pass": true,
+      "actual": true,
+      "expected": true
+    },
+    {
+      "name": "brush-annotation-added",
+      "pass": true,
+      "actual": 1,
+      "expected": 1
+    },
+    {
+      "name": "annotation-color-blue-applied",
+      "pass": true,
+      "actual": true,
+      "expected": true
+    },
+    {
+      "name": "undo-redo-annotation",
+      "pass": true,
+      "actual": {
+        "marksUndo": 0,
+        "marksRedo": 1
+      },
+      "expected": "撤销到 0 再重做到 1"
+    },
+    {
+      "name": "browser-mock-edit-honest-failure",
+      "pass": true,
+      "actual": "node-status-failed",
+      "expected": "浏览器演示不支持图片修改 → failed"
+    },
+    {
+      "name": "failure-reason-in-run-center",
+      "pass": true,
+      "actual": true,
+      "expected": "运行中心记录失败原因"
+    },
+    {
+      "name": "workbench-closes",
+      "pass": true,
+      "actual": true,
+      "expected": true
+    },
+    {
+      "name": "workbench-config-persists-after-reopen",
+      "pass": true,
+      "actual": {
+        "reopened": true,
+        "marks": 1,
+        "instruction": "把天空替换成黄昏色调"
+      },
+      "expected": "标注与修改说明均从 config 恢复"
+    },
+    {
+      "name": "illegal-audio-to-edit-rejected",
+      "pass": true,
+      "actual": "类型或 Schema 不兼容：audio 输出无法接入 修改 节点",
+      "expected": "toast 含不兼容"
+    },
+    {
+      "name": "reload-keeps-connection-and-config",
+      "pass": true,
+      "actual": {
+        "survived": 3,
+        "before": 3,
+        "inConnected": true,
+        "marks": 1,
+        "instruction": "把天空替换成黄昏色调"
+      },
+      "expected": "连线与标注配置全部保留"
+    }
+  ]
+}

@@ -519,7 +519,6 @@ export function VideoTransformBody({
       <div className="asset-empty crop-empty">
         <Icon name={mode === 'frame' ? 'frame' : mode === 'clip' ? 'clip' : 'audio'} size={24} />
         <span>{label}</span>
-        <small>连接源视频后定位时间，运行生成新媒体。</small>
         <button
           className="btn-ghost small"
           onPointerDown={stopEventPropagation}

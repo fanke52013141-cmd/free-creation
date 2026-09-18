@@ -961,9 +961,10 @@ select:focus-visible,
 
 .canvas-selection-outline {
   position: absolute;
-  border: 1px dashed rgba(224, 231, 239, 0.68);
-  border-radius: 4px;
+  border: 1.5px dashed color-mix(in srgb, var(--brand) 80%, white);
+  border-radius: 6px;
   background: transparent;
+  pointer-events: none;
 }
 
 /* 多选范围的公共输出口。它只是一个临时操作柄，不创建任何“集合节点”；
@@ -1822,20 +1823,32 @@ select:focus-visible,
 .node-media-next-actions {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 8px 5px;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 6px 5px;
   border-top: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.015);
   flex-shrink: 0;
+  overflow-x: auto;
 }
 
 .node-media-next-actions button {
   min-width: 0;
   flex: 1 1 0;
+  padding: 2px 4px;
+  font-size: 11px;
   justify-content: center;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.node-media-badge-overlay {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  pointer-events: none;
+  z-index: 2;
 }
 
 .crop-run-hint {
@@ -4280,14 +4293,12 @@ select:focus-visible,
   cursor: text;
 }
 .image-edit-text-bg {
-  fill: rgba(15, 23, 42, 0.88);
-  stroke: rgba(255, 255, 255, 0.22);
-  stroke-width: 0.35;
+  display: none;
 }
 
 .image-edit-text {
   font-size: 3.4px;
-  font-weight: 600;
+  font-weight: 400;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   dominant-baseline: central;
 }
@@ -4619,8 +4630,8 @@ select:focus-visible,
 .image-edit-workbench {
   display: flex;
   flex-direction: column;
-  width: min(980px, 92vw);
-  max-height: min(820px, 90vh);
+  width: min(1320px, 96vw);
+  max-height: min(920px, 94vh);
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -4654,16 +4665,16 @@ select:focus-visible,
 
 .image-edit-workbench-body .image-edit-settings-workbench {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.9fr);
+  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.8fr);
   align-items: start;
-  gap: 14px 18px;
+  gap: 16px 22px;
 }
 
 .image-edit-workbench-body .image-edit-settings-workbench .image-edit-preview {
   grid-column: 1;
   grid-row: 1 / span 7;
   width: auto;
-  height: min(52vh, 500px);
+  height: min(76vh, 720px);
   max-width: 100%;
   justify-self: center;
 }

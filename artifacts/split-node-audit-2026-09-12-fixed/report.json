@@ -1,0 +1,354 @@
+{
+  "baseUrl": "http://127.0.0.1:5173/",
+  "viewport": {
+    "width": 1708,
+    "height": 879
+  },
+  "states": {
+    "fresh": {
+      "size": {
+        "w": 340,
+        "h": 260
+      },
+      "headerHeight": 28,
+      "colorBar": {
+        "h": 8,
+        "atBottom": true
+      },
+      "borderRadius": "12px",
+      "ports": [
+        {
+          "dir": "in",
+          "id": "原图",
+          "size": 18,
+          "hasOutput": false,
+          "connected": false
+        },
+        {
+          "dir": "out",
+          "id": "当前图片",
+          "size": 18,
+          "hasOutput": false,
+          "connected": false
+        },
+        {
+          "dir": "out",
+          "id": "图片集合",
+          "size": 18,
+          "hasOutput": false,
+          "connected": false
+        }
+      ],
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "status": "node-status-idle",
+      "bodyText": "行数列数面积% 连接原图123456789连接原图后可从右上角运行",
+      "previewTiles": 9,
+      "hasSourceImg": false,
+      "workbenchImg": false,
+      "rows": "3",
+      "cols": "3",
+      "scale": "100",
+      "connectedInputs": []
+    },
+    "emptyRun": {
+      "toast": "拆分：输入契约校验失败：缺少必需输入：原图（in-image）",
+      "status": "node-status-failed"
+    },
+    "configured": {
+      "size": {
+        "w": 340,
+        "h": 260
+      },
+      "headerHeight": 28,
+      "colorBar": {
+        "h": 8,
+        "atBottom": true
+      },
+      "borderRadius": "12px",
+      "ports": [
+        {
+          "dir": "in",
+          "id": "原图",
+          "size": 18,
+          "hasOutput": false,
+          "connected": true
+        },
+        {
+          "dir": "out",
+          "id": "当前图片",
+          "size": 18,
+          "hasOutput": false,
+          "connected": false
+        },
+        {
+          "dir": "out",
+          "id": "图片集合",
+          "size": 18,
+          "hasOutput": false,
+          "connected": false
+        }
+      ],
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "status": "node-status-failed",
+      "bodyText": "行数列数面积%12342 × 2，共 4 张；右上角运行即可拆分",
+      "previewTiles": 4,
+      "hasSourceImg": true,
+      "workbenchImg": false,
+      "rows": "2",
+      "cols": "2",
+      "scale": "100",
+      "connectedInputs": []
+    },
+    "runSuccess": {
+      "status": "node-status-success",
+      "artifacts": 4,
+      "ports": [
+        {
+          "dir": "out",
+          "id": "当前图片",
+          "size": 18,
+          "hasOutput": true,
+          "connected": false
+        },
+        {
+          "dir": "out",
+          "id": "图片集合",
+          "size": 18,
+          "hasOutput": true,
+          "connected": false
+        }
+      ]
+    },
+    "iterateLink": {
+      "menu": false,
+      "inputs": [
+        {
+          "target": "列表",
+          "source": "拆分 · 图片集合"
+        }
+      ]
+    },
+    "chain": {
+      "menu": false,
+      "workbenchImg": true
+    },
+    "illegal": {
+      "toast": "类型或 Schema 不兼容：text 输出无法接入 拆分 节点"
+    },
+    "reload": {
+      "before": 9,
+      "after": 9,
+      "survived": 9,
+      "rows": "2",
+      "cols": "2",
+      "inConnected": true,
+      "outsHasOutput": [
+        true,
+        true
+      ]
+    }
+  },
+  "assertions": [
+    {
+      "name": "fresh-size-340x260",
+      "pass": true,
+      "actual": {
+        "w": 340,
+        "h": 260
+      },
+      "expected": {
+        "w": 340,
+        "h": 260
+      }
+    },
+    {
+      "name": "fresh-header-28-floating",
+      "pass": true,
+      "actual": 28,
+      "expected": 28
+    },
+    {
+      "name": "fresh-radius-12",
+      "pass": true,
+      "actual": "12px",
+      "expected": "12px"
+    },
+    {
+      "name": "fresh-colorbar-8-bottom",
+      "pass": true,
+      "actual": {
+        "h": 8,
+        "atBottom": true
+      },
+      "expected": {
+        "h": 8,
+        "atBottom": true
+      }
+    },
+    {
+      "name": "fresh-ports-one-in-two-out",
+      "pass": true,
+      "actual": [
+        {
+          "dir": "in",
+          "id": "原图",
+          "size": 18,
+          "hasOutput": false,
+          "connected": false
+        },
+        {
+          "dir": "out",
+          "id": "当前图片",
+          "size": 18,
+          "hasOutput": false,
+          "connected": false
+        },
+        {
+          "dir": "out",
+          "id": "图片集合",
+          "size": 18,
+          "hasOutput": false,
+          "connected": false
+        }
+      ],
+      "expected": "in-原图 + out-当前图片 + out-图片集合，18px"
+    },
+    {
+      "name": "fresh-no-overflow",
+      "pass": true,
+      "actual": {
+        "x": false,
+        "y": false
+      },
+      "expected": {
+        "x": false,
+        "y": false
+      }
+    },
+    {
+      "name": "fresh-default-3x3",
+      "pass": true,
+      "actual": {
+        "rows": "3",
+        "cols": "3"
+      },
+      "expected": "默认 3×3"
+    },
+    {
+      "name": "fresh-hint-connect",
+      "pass": true,
+      "actual": "行数列数面积% 连接原图123456789连接原图后可从右上角运行",
+      "expected": "空态提示连接原图"
+    },
+    {
+      "name": "empty-run-blocked-with-port-hint",
+      "pass": true,
+      "actual": {
+        "toast": "拆分：输入契约校验失败：缺少必需输入：原图（in-image）",
+        "status": "node-status-failed"
+      },
+      "expected": "非 success + toast 指明缺原图"
+    },
+    {
+      "name": "source-connected-and-tiles-preview",
+      "pass": true,
+      "actual": {
+        "menu": false,
+        "img": true,
+        "tiles": 4
+      },
+      "expected": "原图预览 + 2×2 四格预览"
+    },
+    {
+      "name": "config-2x2-persisted",
+      "pass": true,
+      "actual": {
+        "rows": "2",
+        "cols": "2"
+      },
+      "expected": "行列写入配置"
+    },
+    {
+      "name": "run-status-success",
+      "pass": true,
+      "actual": "node-status-success",
+      "expected": "node-status-success"
+    },
+    {
+      "name": "run-produces-4-tile-assets",
+      "pass": true,
+      "actual": 4,
+      "expected": 4
+    },
+    {
+      "name": "both-out-ports-has-output",
+      "pass": true,
+      "actual": [
+        {
+          "dir": "out",
+          "id": "当前图片",
+          "size": 18,
+          "hasOutput": true,
+          "connected": false
+        },
+        {
+          "dir": "out",
+          "id": "图片集合",
+          "size": 18,
+          "hasOutput": true,
+          "connected": false
+        }
+      ],
+      "expected": "当前图片 + 图片集合 都可用"
+    },
+    {
+      "name": "out-images-feeds-iterate-list",
+      "pass": true,
+      "actual": [
+        {
+          "target": "列表",
+          "source": "拆分 · 图片集合"
+        }
+      ],
+      "expected": "图片集合接入循环 in-列表并显示来源"
+    },
+    {
+      "name": "current-image-consumable-downstream",
+      "pass": true,
+      "actual": {
+        "menu": false,
+        "workbenchImg": true
+      },
+      "expected": "下游裁剪工作台显示当前图片"
+    },
+    {
+      "name": "illegal-text-to-split-rejected",
+      "pass": true,
+      "actual": "类型或 Schema 不兼容：text 输出无法接入 拆分 节点",
+      "expected": "toast 含不兼容"
+    },
+    {
+      "name": "reload-keeps-config-connection-results",
+      "pass": true,
+      "actual": {
+        "before": 9,
+        "after": 9,
+        "survived": 9,
+        "rows": "2",
+        "cols": "2",
+        "inConnected": true,
+        "outsHasOutput": [
+          true,
+          true
+        ]
+      },
+      "expected": "配置/连线/双输出全部保留"
+    }
+  ]
+}

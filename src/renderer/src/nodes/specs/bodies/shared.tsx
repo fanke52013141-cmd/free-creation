@@ -94,7 +94,7 @@ export function findContinuationPlacement(
   source: NodeCardShape,
   targetW: number,
   targetH: number,
-  gapX = 40,
+  gapX = 96,
   gapY = 24
 ): { x: number; y: number } {
   const targetX = source.x + source.props.w + gapX
@@ -112,21 +112,23 @@ export function findContinuationPlacement(
     return { x: targetX, y: source.y }
   }
 
-  // 检查在 source.y 是否发生垂直重叠
-  const targetTop = source.y
-  const targetBottom = source.y + targetH
+  // 悬浮标题栏向上伸出约 34px，并且卡片顶部按钮需要安全间距；计算垂直覆盖时必须将标题与安全间隙一并计入。
+  const HEADER_OVERHANG = 38
+  const targetTop = source.y - HEADER_OVERHANG
+  const targetBottom = source.y + targetH + 16
   const hasOverlap = existingInColumn.some((shape) => {
-    const shapeBottom = shape.y + shape.props.h
-    return shape.y < targetBottom && shapeBottom > targetTop
+    const shapeTop = shape.y - HEADER_OVERHANG
+    const shapeBottom = shape.y + shape.props.h + 16
+    return shapeTop < targetBottom && shapeBottom > targetTop
   })
 
   if (!hasOverlap) {
     return { x: targetX, y: source.y }
   }
 
-  // 发生重叠时向下排布在已有节点的最底部
+  // 发生重叠时向下排布在已有节点的最底部，并预留目标节点的悬浮标题空间与额外间隙
   const maxBottom = Math.max(...existingInColumn.map((shape) => shape.y + shape.props.h))
-  return { x: targetX, y: maxBottom + gapY }
+  return { x: targetX, y: maxBottom + gapY + HEADER_OVERHANG }
 }
 
 /**
@@ -293,10 +295,12 @@ export function createVocalExtractionTemplate(editor: Editor, source: NodeCardSh
 /** 图片结果的统一下游入口。它只创建节点和声明端口边，不复制任何媒体。 */
 export function ImageContinuationActions({
   editor,
-  shape
+  shape,
+  extra
 }: {
   editor: Editor
   shape: NodeCardShape
+  extra?: React.ReactNode
 }): React.JSX.Element {
   const actions: Array<{
     type: 'image-crop' | 'image-split' | 'image-gen' | 'image-edit' | 'video'
@@ -304,19 +308,19 @@ export function ImageContinuationActions({
     label: string
     title: string
   }> = [
-    { type: 'image-crop', icon: 'crop', label: '裁剪图片', title: '创建裁剪节点并连接当前图片' },
+    { type: 'image-crop', icon: 'crop', label: '裁剪', title: '创建裁剪节点并连接当前图片' },
     {
       type: 'image-split',
       icon: 'grid',
-      label: '宫格拆分',
+      label: '拆分',
       title: '创建图片拆分节点并连接当前图片'
     },
-    { type: 'image-gen', icon: 'spark', label: '继续生图', title: '创建生图节点并连接当前图片' },
-    { type: 'image-edit', icon: 'edit', label: '修改图片', title: '对当前图片添加标注并修改' },
+    { type: 'image-gen', icon: 'spark', label: '生图', title: '创建生图节点并连接当前图片' },
+    { type: 'image-edit', icon: 'edit', label: '修改', title: '对当前图片添加标注并修改' },
     {
       type: 'video',
       icon: 'video',
-      label: '生成视频',
+      label: '生视频',
       title: '创建视频节点并将当前图片作为多参素材'
     }
   ]
@@ -336,6 +340,7 @@ export function ImageContinuationActions({
           <Icon name={action.icon} size={12} /> {action.label}
         </button>
       ))}
+      {extra}
     </div>
   )
 }

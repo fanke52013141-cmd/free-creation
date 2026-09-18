@@ -49,7 +49,6 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
       <div className="asset-empty image-asset-empty">
         <Icon name="image" size={40} />
         <span>图片资产</span>
-        <small>上传或粘贴图片。</small>
         <button
           className="btn-ghost image-import-button"
           onPointerDown={(e) => stopEventPropagation(e)}
@@ -81,23 +80,31 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
         }
       >
         <img src={mediaUrl(shape.props.mediaPath)} alt={shape.props.title} draggable={false} />
+        <span className="node-media-badge-overlay">
+          <MediaSourceBadge shape={shape} fallback={shape.props.mediaMime || '本地图片'} />
+        </span>
       </div>
-      <div className="node-media-actions">
-        <button
-          className="btn-ghost small"
-          onPointerDown={(e) => stopEventPropagation(e)}
-          onClick={(e) => {
-            e.stopPropagation()
-            void chooseAsset()
-          }}
-        >
-          <Icon name="upload" size={13} />
-          替换
-        </button>
-        <MediaSourceBadge shape={shape} fallback={shape.props.mediaMime || '本地图片'} />
-        <MediaFileActions shape={shape} />
-      </div>
-      <ImageContinuationActions editor={editor} shape={shape} />
+      <ImageContinuationActions
+        editor={editor}
+        shape={shape}
+        extra={
+          <>
+            <button
+              className="btn-ghost small"
+              title="替换图片"
+              onPointerDown={(e) => stopEventPropagation(e)}
+              onClick={(e) => {
+                e.stopPropagation()
+                void chooseAsset()
+              }}
+            >
+              <Icon name="upload" size={12} />
+              替换
+            </button>
+            <MediaFileActions shape={shape} />
+          </>
+        }
+      />
     </div>
   )
 }

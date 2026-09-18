@@ -1,0 +1,451 @@
+{
+  "baseUrl": "http://127.0.0.1:5173/",
+  "viewport": {
+    "width": 1708,
+    "height": 879
+  },
+  "states": {
+    "fresh": {
+      "size": {
+        "w": 340,
+        "h": 260
+      },
+      "headerHeight": 28,
+      "colorBar": {
+        "h": 8,
+        "atBottom": true
+      },
+      "borderRadius": "12px",
+      "ports": [
+        {
+          "dir": "in",
+          "id": "文本",
+          "size": 18
+        },
+        {
+          "dir": "out",
+          "id": "文本",
+          "size": 18
+        }
+      ],
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "status": "node-status-idle",
+      "bodyText": "双击输入文本内容",
+      "connectedInputs": []
+    },
+    "typed": {
+      "size": {
+        "w": 340,
+        "h": 260
+      },
+      "headerHeight": 28,
+      "colorBar": {
+        "h": 8,
+        "atBottom": true
+      },
+      "borderRadius": "12px",
+      "ports": [
+        {
+          "dir": "in",
+          "id": "文本",
+          "size": 18
+        },
+        {
+          "dir": "out",
+          "id": "文本",
+          "size": 18
+        }
+      ],
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "status": "node-status-idle",
+      "bodyText": "主角站在雨中的十字路口",
+      "connectedInputs": []
+    },
+    "multiInput": {
+      "size": {
+        "w": 340,
+        "h": 260
+      },
+      "headerHeight": 28,
+      "colorBar": {
+        "h": 8,
+        "atBottom": true
+      },
+      "borderRadius": "12px",
+      "ports": [
+        {
+          "dir": "in",
+          "id": "文本",
+          "size": 18
+        },
+        {
+          "dir": "out",
+          "id": "文本",
+          "size": 18
+        }
+      ],
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "status": "node-status-idle",
+      "bodyText": "已连接输入文本1上游文本甲文本 · 文本文本2上游文本乙文本 · 文本主角站在雨中的十字路口",
+      "connectedInputs": [
+        {
+          "target": "文本",
+          "order": "1",
+          "value": "上游文本甲",
+          "source": "文本 · 文本"
+        },
+        {
+          "target": "文本",
+          "order": "2",
+          "value": "上游文本乙",
+          "source": "文本 · 文本"
+        }
+      ]
+    },
+    "runMerged": {
+      "size": {
+        "w": 340,
+        "h": 260
+      },
+      "headerHeight": 28,
+      "colorBar": {
+        "h": 8,
+        "atBottom": true
+      },
+      "borderRadius": "12px",
+      "ports": [
+        {
+          "dir": "in",
+          "id": "文本",
+          "size": 18
+        },
+        {
+          "dir": "out",
+          "id": "文本",
+          "size": 18
+        }
+      ],
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "status": "node-status-success",
+      "bodyText": "已连接输入文本1上游文本甲文本 · 文本文本2上游文本乙文本 · 文本上游文本甲\n\n---\n\n上游文本乙\n\n---\n\n主角站在雨中的十字路口",
+      "connectedInputs": [
+        {
+          "target": "文本",
+          "order": "1",
+          "value": "上游文本甲",
+          "source": "文本 · 文本"
+        },
+        {
+          "target": "文本",
+          "order": "2",
+          "value": "上游文本乙",
+          "source": "文本 · 文本"
+        }
+      ]
+    },
+    "illegalDropRejected": {
+      "toast": "类型或 Schema 不兼容：text 输出无法接入 取帧 节点",
+      "connectedInputs": []
+    },
+    "midwayPortStates": [
+      {
+        "port": "参考图",
+        "dim": true,
+        "ok": false
+      },
+      {
+        "port": "提示词包",
+        "dim": true,
+        "ok": false
+      },
+      {
+        "port": "提示词",
+        "dim": false,
+        "ok": true
+      }
+    ],
+    "dropOnIllegalPort": [
+      {
+        "target": "提示词",
+        "order": "1",
+        "value": "上游文本甲\n\n---\n\n上游文本乙\n\n---\n\n主角站在雨中的十字路口",
+        "source": "文本 · 文本"
+      }
+    ],
+    "slashBar": {
+      "size": {
+        "w": 340,
+        "h": 260
+      },
+      "headerHeight": 28,
+      "colorBar": {
+        "h": 8,
+        "atBottom": true
+      },
+      "borderRadius": "12px",
+      "ports": [
+        {
+          "dir": "in",
+          "id": "文本",
+          "size": 18
+        },
+        {
+          "dir": "out",
+          "id": "文本",
+          "size": 18
+        }
+      ],
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "status": "node-status-idle",
+      "bodyText": "/三视图 赛博朋克女孩三视图：赛博朋克女孩 生成3图",
+      "connectedInputs": []
+    },
+    "slashCreated": 3,
+    "emptyRun": {
+      "size": {
+        "w": 210,
+        "h": 161
+      },
+      "headerHeight": 17,
+      "colorBar": {
+        "h": 5,
+        "atBottom": true
+      },
+      "borderRadius": "12px",
+      "ports": [
+        {
+          "dir": "in",
+          "id": "文本",
+          "size": 11
+        },
+        {
+          "dir": "out",
+          "id": "文本",
+          "size": 11
+        }
+      ],
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "status": "node-status-idle",
+      "bodyText": "双击输入文本内容",
+      "connectedInputs": []
+    },
+    "reload": {
+      "before": 10,
+      "after": 10,
+      "survived": 10
+    }
+  },
+  "assertions": [
+    {
+      "name": "fresh-size-340x260",
+      "pass": true,
+      "actual": {
+        "w": 340,
+        "h": 260
+      },
+      "expected": {
+        "w": 340,
+        "h": 260
+      }
+    },
+    {
+      "name": "fresh-header-28-floating",
+      "pass": true,
+      "actual": 28,
+      "expected": 28
+    },
+    {
+      "name": "fresh-colorbar-8-bottom",
+      "pass": true,
+      "actual": {
+        "h": 8,
+        "atBottom": true
+      },
+      "expected": {
+        "h": 8,
+        "atBottom": true
+      }
+    },
+    {
+      "name": "fresh-radius-12",
+      "pass": true,
+      "actual": "12px",
+      "expected": "12px"
+    },
+    {
+      "name": "fresh-ports",
+      "pass": true,
+      "actual": [
+        {
+          "dir": "in",
+          "id": "文本",
+          "size": 18
+        },
+        {
+          "dir": "out",
+          "id": "文本",
+          "size": 18
+        }
+      ],
+      "expected": "in-text + out-text, 18px"
+    },
+    {
+      "name": "fresh-no-overflow",
+      "pass": true,
+      "actual": {
+        "x": false,
+        "y": false
+      },
+      "expected": {
+        "x": false,
+        "y": false
+      }
+    },
+    {
+      "name": "fresh-hint",
+      "pass": true,
+      "actual": "双击输入文本内容",
+      "expected": "包含空态提示"
+    },
+    {
+      "name": "dblclick-enters-editing",
+      "pass": true,
+      "actual": {
+        "editingVisible": true,
+        "focused": true
+      },
+      "expected": true
+    },
+    {
+      "name": "commit-persists-text",
+      "pass": true,
+      "actual": "主角站在雨中的十字路口",
+      "expected": "正文已保存"
+    },
+    {
+      "name": "typed-no-overflow",
+      "pass": true,
+      "actual": {
+        "x": false,
+        "y": false
+      },
+      "expected": {
+        "x": false,
+        "y": false
+      }
+    },
+    {
+      "name": "multi-input-preview-2-sources-with-order",
+      "pass": true,
+      "actual": [
+        {
+          "target": "文本",
+          "order": "1",
+          "value": "上游文本甲",
+          "source": "文本 · 文本"
+        },
+        {
+          "target": "文本",
+          "order": "2",
+          "value": "上游文本乙",
+          "source": "文本 · 文本"
+        }
+      ],
+      "expected": "两条来源，顺序 1,2，含来源名"
+    },
+    {
+      "name": "run-merges-upstream-then-own-text",
+      "pass": true,
+      "actual": "已连接输入文本1上游文本甲文本 · 文本文本2上游文本乙文本 · 文本上游文本甲\n\n---\n\n上游文本乙\n\n---\n\n主角站在雨中的十字路口",
+      "expected": "上游文本甲\n\n---\n\n上游文本乙\n\n---\n\n主角站在雨中的十字路口"
+    },
+    {
+      "name": "run-status-success",
+      "pass": true,
+      "actual": "node-status-success",
+      "expected": "node-status-success"
+    },
+    {
+      "name": "illegal-text-to-video-port-rejected",
+      "pass": true,
+      "actual": {
+        "toast": "类型或 Schema 不兼容：text 输出无法接入 取帧 节点",
+        "connectedInputs": []
+      },
+      "expected": "无连线 + toast 含\"不兼容\""
+    },
+    {
+      "name": "drag-dims-illegal-targets-and-marks-compatible",
+      "pass": true,
+      "actual": [
+        {
+          "port": "参考图",
+          "dim": true,
+          "ok": false
+        },
+        {
+          "port": "提示词包",
+          "dim": true,
+          "ok": false
+        },
+        {
+          "port": "提示词",
+          "dim": false,
+          "ok": true
+        }
+      ],
+      "expected": {
+        "参考图": "dim",
+        "提示词": "ok"
+      }
+    },
+    {
+      "name": "retarget-toast-explains-actual-port",
+      "pass": true,
+      "actual": "已改连「提示词」：落点「参考图」端口不接收 text",
+      "expected": "含 已改连「提示词」+ 落点「参考图」原因"
+    },
+    {
+      "name": "slash-bar-appears-after-commit",
+      "pass": true,
+      "actual": true,
+      "expected": true
+    },
+    {
+      "name": "slash-creates-3-image-gen-nodes",
+      "pass": true,
+      "actual": 3,
+      "expected": 3
+    },
+    {
+      "name": "slash-prompts-carry-subject",
+      "pass": true,
+      "actual": 3,
+      "expected": 3
+    },
+    {
+      "name": "empty-run-does-not-fake-success",
+      "pass": true,
+      "actual": "node-status-idle",
+      "expected": "非 success"
+    }
+  ]
+}

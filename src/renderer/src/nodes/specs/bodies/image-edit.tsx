@@ -109,9 +109,8 @@ export function ImageEditBody({ shape, openPreview }: NodeBodyProps): React.JSX.
   if (!shape.props.mediaPath)
     return (
       <div className="asset-empty image-edit-empty">
-        <Icon name="edit" size={24} />
+        <Icon name="image" size={40} />
         <span>图片修改</span>
-        <small>连接图片后开始标注。</small>
         <button
           className="btn-ghost small"
           onPointerDown={stopEventPropagation}
@@ -673,11 +672,6 @@ function ImageEditEditorCore({
               }}
             />
             <svg className="image-edit-overlay" viewBox="0 0 100 100" preserveAspectRatio="none">
-              <defs>
-                <filter id="edit-overlay-shadow" x="-20%" y="-20%" width="140%" height="140%">
-                  <feDropShadow dx="0" dy="0.6" stdDeviation="0.8" floodColor="rgba(0,0,0,0.65)" />
-                </filter>
-              </defs>
               {config.mask?.enabled &&
                 config.mask.strokes.map((stroke, index) => (
                   <polyline
@@ -702,7 +696,6 @@ function ImageEditEditorCore({
                         {...rect}
                         rx="1.5"
                         ry="1.5"
-                        filter="url(#edit-overlay-shadow)"
                         className={`image-edit-mark ${a.color} ${selected ? 'selected' : ''}`}
                         style={{ fill: 'none', strokeWidth: a.strokeWidth ?? 3 }}
                       />
@@ -711,25 +704,11 @@ function ImageEditEditorCore({
                 if (a.type === 'text') {
                   const x = a.points[0].x * 100
                   const y = a.points[0].y * 100
-                  const textLen = (a.text ?? '').length
-                  const padX = 1.4
-                  const bgW = Math.max(6, textLen * 2.8 + padX * 2)
-                  const bgH = 5.2
                   return (
                     <g
                       key={a.id}
-                      filter="url(#edit-overlay-shadow)"
                       className={`image-edit-text-group ${selected ? 'selected' : ''}`}
                     >
-                      <rect
-                        x={x - padX}
-                        y={y - bgH / 2}
-                        width={bgW}
-                        height={bgH}
-                        rx="1.2"
-                        ry="1.2"
-                        className="image-edit-text-bg"
-                      />
                       <text x={x} y={y} className={`image-edit-text ${a.color}`}>
                         {a.text}
                       </text>
@@ -741,7 +720,6 @@ function ImageEditEditorCore({
                   return (
                     <g
                       key={a.id}
-                      filter="url(#edit-overlay-shadow)"
                       className={selected ? 'selected' : ''}
                     >
                       <line
@@ -765,7 +743,6 @@ function ImageEditEditorCore({
                   <polyline
                     key={a.id}
                     points={pts}
-                    filter="url(#edit-overlay-shadow)"
                     className={`image-edit-mark ${a.color} ${selected ? 'selected' : ''}`}
                     style={{
                       strokeWidth: a.strokeWidth ?? 3,

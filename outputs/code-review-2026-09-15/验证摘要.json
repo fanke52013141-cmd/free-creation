@@ -1,0 +1,92 @@
+{
+  "generatedAt": "2026-09-15T14:26:27.442428+08:00",
+  "baseline": "555a77ec0d738f5d35c7b1a4d922391f61b93231",
+  "sync": {
+    "repository": "https://github.com/fanke52013141-cmd/free-creation.git",
+    "localHead": "555a77ec0d738f5d35c7b1a4d922391f61b93231",
+    "serverMain": "555a77ec0d738f5d35c7b1a4d922391f61b93231",
+    "headEqualsServer": true,
+    "trackedWorktreeClean": true,
+    "indexClean": true,
+    "localTrackingRef": "363f2d142b8fc8f7a13a5a6ef4132648f0332250",
+    "trackingCacheMatchesServer": false,
+    "note": "使用服务器直接查询核验；本机跟踪引用多次刷新后仍读取旧值。未强推或修改业务代码。"
+  },
+  "review": {
+    "confirmedFindings": 11,
+    "P1": 8,
+    "P2": 3,
+    "bugsFixed": 0
+  },
+  "typecheck": {
+    "nodeExitCode": 0,
+    "webExitCode": 0
+  },
+  "lint": {
+    "exitCode": 0,
+    "errors": 0,
+    "warnings": 129
+  },
+  "build": {
+    "initial": "memory allocation failed",
+    "retryExitCode": 0,
+    "rendererMainJsKB": 8833.63,
+    "rendererCssKB": 353.24,
+    "installerTested": false
+  },
+  "tests": {
+    "total": 950,
+    "passed": 932,
+    "failed": 18,
+    "pending": 0,
+    "fileCount": 77,
+    "passedFiles": 71,
+    "failedFiles": [
+      {
+        "file": "d:/software/free-creation/test/project-persistence.test.ts",
+        "failures": 1
+      },
+      {
+        "file": "d:/software/free-creation/test/providers-security.test.ts",
+        "failures": 1
+      },
+      {
+        "file": "d:/software/free-creation/test/transfer.integration.test.ts",
+        "failures": 2
+      },
+      {
+        "file": "d:/software/free-creation/test/video-transform-main.test.ts",
+        "failures": 3
+      },
+      {
+        "file": "d:/software/free-creation/test/agent/concurrent-write-lock.test.ts",
+        "failures": 8
+      },
+      {
+        "file": "d:/software/free-creation/test/agent/graph-write-transaction.test.ts",
+        "failures": 3
+      }
+    ],
+    "cause": "better-sqlite3 NODE_MODULE_VERSION 140 versus Node requirement 127",
+    "nativeDependencyRebuilt": false,
+    "command": "vitest run --maxWorkers=2 --no-file-parallelism --reporter=json"
+  },
+  "coverage": {
+    "measured": false,
+    "configuredIncludeFiles": 8
+  },
+  "scope": {
+    "sourceFiles": 237,
+    "sourceLinesIncludingBlankAndComments": 59169,
+    "testFilesIncludingHelper": 78,
+    "testLinesIncludingBlankAndComments": 13680
+  },
+  "limitations": [
+    "未运行真实桌面端到端",
+    "未调用真实模型服务",
+    "未测试安装包",
+    "未查询远端CI",
+    "未运行依赖漏洞数据库扫描",
+    "隔离验证不等于真实文件系统/GUI验证"
+  ]
+}

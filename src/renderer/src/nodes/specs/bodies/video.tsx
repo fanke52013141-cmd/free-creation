@@ -132,6 +132,50 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const loaded = useGatewayStore((s) => s.loaded)
   const loadProviders = useGatewayStore((s) => s.load)
   const openSettings = useGatewayStore((s) => s.openSettings)
+  const isAssetNode = shape.props.nodeType === 'video-asset'
+  const chooseAsset = async (): Promise<void> => {
+    if (!project) return
+    try {
+      const res = await window.api.pickMedia(project.id)
+      if (!res.ok) return toast(`导入失败：${res.error.message}`)
+      if (res.data.assets.length === 0 && res.data.errors.length === 0) return
+      const asset = res.data.assets.find((item) => item.kind === 'video')
+      if (!asset) return toast('请选择一个视频文件')
+      editor.updateShape({
+        id: shape.id,
+        type: 'node-card',
+        props: {
+          title: asset.name || '视频',
+          mediaId: asset.id,
+          mediaPath: asset.path,
+          mediaMime: asset.mime
+        }
+      })
+      markUndoPoint(editor, 'video-asset-import')
+    } catch (error) {
+      toast(`导入失败：${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  if (isAssetNode && !shape.props.mediaPath) {
+    return (
+      <div className="asset-empty video-asset-empty">
+        <Icon name="video" size={40} />
+        <span>视频资产</span>
+        <button
+          className="btn-ghost video-import-button"
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onClick={(e) => {
+            e.stopPropagation()
+            void chooseAsset()
+          }}
+        >
+          导入视频
+        </button>
+      </div>
+    )
+  }
+
   const options = modelsByModality(providers, 'video')
   const data = parseVideoGen(readNodeConfig(shape))
   const [draft, setDraft] = useState(shape.props.text)
@@ -335,38 +379,55 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           <span className="play-badge">▶</span>
         </div>
         <div className="node-media-actions">
-          <button
-            className="btn-ghost small"
-            disabled={submitting}
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onClick={(e) => {
-              e.stopPropagation()
-              void regenerate()
-            }}
-          >
-            <Icon name="reset" size={13} />
-            {submitting ? '重新生成中…' : '重新生成'}
-          </button>
-          <button
-            className="btn-ghost small"
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onClick={(e) => {
-              e.stopPropagation()
-              // 编辑配置：清空成片，回到配置面板
-              editor.updateShape({
-                id: shape.id,
-                type: 'node-card',
-                props: { mediaId: '', mediaPath: '', mediaMime: '' }
-              })
-              markUndoPoint(editor, 'video-edit-config')
-            }}
-          >
-            <Icon name="edit" size={13} />
-            编辑
-          </button>
+          {isAssetNode ? (
+            <button
+              className="btn-ghost small"
+              title="替换视频"
+              onPointerDown={(e) => stopEventPropagation(e)}
+              onClick={(e) => {
+                e.stopPropagation()
+                void chooseAsset()
+              }}
+            >
+              <Icon name="reset" size={13} />
+              替换
+            </button>
+          ) : (
+            <>
+              <button
+                className="btn-ghost small"
+                disabled={submitting}
+                onPointerDown={(e) => stopEventPropagation(e)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void regenerate()
+                }}
+              >
+                <Icon name="reset" size={13} />
+                {submitting ? '重新生成中…' : '重新生成'}
+              </button>
+              <button
+                className="btn-ghost small"
+                onPointerDown={(e) => stopEventPropagation(e)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  // 编辑配置：清空成片，回到配置面板
+                  editor.updateShape({
+                    id: shape.id,
+                    type: 'node-card',
+                    props: { mediaId: '', mediaPath: '', mediaMime: '' }
+                  })
+                  markUndoPoint(editor, 'video-edit-config')
+                }}
+              >
+                <Icon name="edit" size={13} />
+                编辑
+              </button>
+            </>
+          )}
           <MediaFileActions shape={shape} />
         </div>
-        <MediaSourceSummary shape={shape} fallback="AI 生成" />
+        <MediaSourceSummary shape={shape} fallback={isAssetNode ? '本地视频' : 'AI 生成'} />
         <div className="node-media-next-actions" aria-label="视频后续操作">
           <button
             className="btn-ghost small"

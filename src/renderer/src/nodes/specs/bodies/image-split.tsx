@@ -193,11 +193,6 @@ export function ImageSplitBody({ shape, openPreview }: NodeBodyProps): React.JSX
           </span>
         )}
       </div>
-      <span className="image-split-quick-summary">
-        {source
-          ? `${config.rows} × ${config.columns}，共 ${imageSplitCount(config)} 张；右上角运行即可拆分`
-          : '连接原图后可从右上角运行'}
-      </span>
     </div>
   )
 }

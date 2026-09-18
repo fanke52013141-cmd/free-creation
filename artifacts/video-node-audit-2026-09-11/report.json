@@ -1,0 +1,738 @@
+{
+  "baseUrl": "http://127.0.0.1:3123/",
+  "viewport": {
+    "width": 1708,
+    "height": 879
+  },
+  "states": [
+    {
+      "name": "fresh",
+      "nodeType": "video",
+      "title": "视频",
+      "rect": {
+        "x": 682.8897094726562,
+        "y": 341.4736022949219,
+        "width": 342.41400146484375,
+        "height": 358.5275573730469
+      },
+      "text": "1视频当前模型不支持此视频生成模式；请更换模型、调整参数或断开该输入后再运行。模型选择模型…演示中转站 · MiniMax-H3生成模式文生视频 @ 引用图片画幅16:99:161:14:33:4时长（秒）4s5s6s8s10s12s15s分辨率720p生成视频",
+      "controls": [
+        {
+          "tag": "button",
+          "type": null,
+          "label": "打开节点说明",
+          "value": "",
+          "text": "",
+          "disabled": false
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "选择模型…演示中转站 · MiniMax-H3",
+          "disabled": false,
+          "options": [
+            "",
+            "mock-relay::MiniMax-H3"
+          ]
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "text",
+          "text": "文生视频",
+          "disabled": false,
+          "options": [
+            "text"
+          ]
+        },
+        {
+          "tag": "textarea",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "",
+          "disabled": false
+        },
+        {
+          "tag": "button",
+          "type": "button",
+          "label": null,
+          "value": "",
+          "text": "@ 引用图片",
+          "disabled": true
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "16:9",
+          "text": "16:99:161:14:33:4",
+          "disabled": false,
+          "options": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ]
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "5",
+          "text": "4s5s6s8s10s12s15s",
+          "disabled": false,
+          "options": [
+            "4",
+            "5",
+            "6",
+            "8",
+            "10",
+            "12",
+            "15"
+          ]
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "720p",
+          "text": "720p",
+          "disabled": false,
+          "options": [
+            "720p"
+          ]
+        },
+        {
+          "tag": "button",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "生成视频",
+          "disabled": true
+        }
+      ],
+      "inputs": [
+        {
+          "id": null,
+          "color": "rgb(52, 211, 153)"
+        },
+        {
+          "id": null,
+          "color": "rgb(244, 114, 182)"
+        },
+        {
+          "id": null,
+          "color": "rgb(251, 191, 36)"
+        },
+        {
+          "id": null,
+          "color": "rgb(167, 139, 250)"
+        },
+        {
+          "id": null,
+          "color": "rgb(138, 180, 248)"
+        }
+      ],
+      "outputs": [
+        {
+          "id": null,
+          "color": "rgb(244, 114, 182)"
+        }
+      ],
+      "alerts": [
+        "当前模型不支持此视频生成模式；请更换模型、调整参数或断开该输入后再运行。"
+      ]
+    },
+    {
+      "name": "h3-selected",
+      "nodeType": "video",
+      "title": "视频",
+      "rect": {
+        "x": 527.2318725585938,
+        "y": 130.87271118164062,
+        "width": 653.2420043945312,
+        "height": 683.9827880859375
+      },
+      "text": "1视频模型演示中转站 · MiniMax-H3生成模式文生视频 @ 引用图片画幅16:99:161:14:33:4时长（秒）4s5s6s8s10s12s15s分辨率720p生成视频",
+      "controls": [
+        {
+          "tag": "button",
+          "type": null,
+          "label": "打开节点说明",
+          "value": "",
+          "text": "",
+          "disabled": false
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "mock-relay::MiniMax-H3",
+          "text": "演示中转站 · MiniMax-H3",
+          "disabled": false,
+          "options": [
+            "mock-relay::MiniMax-H3"
+          ]
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "text",
+          "text": "文生视频",
+          "disabled": false,
+          "options": [
+            "text"
+          ]
+        },
+        {
+          "tag": "textarea",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "",
+          "disabled": false
+        },
+        {
+          "tag": "button",
+          "type": "button",
+          "label": null,
+          "value": "",
+          "text": "@ 引用图片",
+          "disabled": true
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "16:9",
+          "text": "16:99:161:14:33:4",
+          "disabled": false,
+          "options": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ]
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "5",
+          "text": "4s5s6s8s10s12s15s",
+          "disabled": false,
+          "options": [
+            "4",
+            "5",
+            "6",
+            "8",
+            "10",
+            "12",
+            "15"
+          ]
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "720p",
+          "text": "720p",
+          "disabled": false,
+          "options": [
+            "720p"
+          ]
+        },
+        {
+          "tag": "button",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "生成视频",
+          "disabled": false
+        }
+      ],
+      "inputs": [
+        {
+          "id": null,
+          "color": "rgb(52, 211, 153)"
+        },
+        {
+          "id": null,
+          "color": "rgb(244, 114, 182)"
+        },
+        {
+          "id": null,
+          "color": "rgb(251, 191, 36)"
+        },
+        {
+          "id": null,
+          "color": "rgb(167, 139, 250)"
+        },
+        {
+          "id": null,
+          "color": "rgb(138, 180, 248)"
+        }
+      ],
+      "outputs": [
+        {
+          "id": null,
+          "color": "rgb(244, 114, 182)"
+        }
+      ],
+      "alerts": []
+    },
+    {
+      "name": "h3-one-image",
+      "nodeType": "video",
+      "title": "视频",
+      "rect": {
+        "x": 203.94677734375,
+        "y": 179.23159790039062,
+        "width": 607.10400390625,
+        "height": 635.673583984375
+      },
+      "text": "1视频模型演示中转站 · MiniMax-H3生成模式文生视频 @ 引用图片画幅16:99:161:14:33:4时长（秒）4s5s6s8s10s12s15s分辨率720p生成视频",
+      "controls": [
+        {
+          "tag": "button",
+          "type": null,
+          "label": "打开节点说明",
+          "value": "",
+          "text": "",
+          "disabled": false
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "mock-relay::MiniMax-H3",
+          "text": "演示中转站 · MiniMax-H3",
+          "disabled": false,
+          "options": [
+            "mock-relay::MiniMax-H3"
+          ]
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "text",
+          "text": "文生视频",
+          "disabled": false,
+          "options": [
+            "text"
+          ]
+        },
+        {
+          "tag": "textarea",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "",
+          "disabled": false
+        },
+        {
+          "tag": "button",
+          "type": "button",
+          "label": null,
+          "value": "",
+          "text": "@ 引用图片",
+          "disabled": false
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "16:9",
+          "text": "16:99:161:14:33:4",
+          "disabled": false,
+          "options": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ]
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "5",
+          "text": "4s5s6s8s10s12s15s",
+          "disabled": false,
+          "options": [
+            "4",
+            "5",
+            "6",
+            "8",
+            "10",
+            "12",
+            "15"
+          ]
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "720p",
+          "text": "720p",
+          "disabled": false,
+          "options": [
+            "720p"
+          ]
+        },
+        {
+          "tag": "button",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "生成视频",
+          "disabled": false
+        }
+      ],
+      "inputs": [
+        {
+          "id": null,
+          "color": "rgb(52, 211, 153)"
+        },
+        {
+          "id": null,
+          "color": "rgb(244, 114, 182)"
+        },
+        {
+          "id": null,
+          "color": "rgb(251, 191, 36)"
+        },
+        {
+          "id": null,
+          "color": "rgb(167, 139, 250)"
+        },
+        {
+          "id": null,
+          "color": "rgb(138, 180, 248)"
+        }
+      ],
+      "outputs": [
+        {
+          "id": null,
+          "color": "rgb(244, 114, 182)"
+        }
+      ],
+      "alerts": []
+    },
+    {
+      "name": "h3-one-image-manual-text",
+      "nodeType": "video",
+      "title": "视频",
+      "rect": {
+        "x": 203.94677734375,
+        "y": 179.23159790039062,
+        "width": 607.10400390625,
+        "height": 635.673583984375
+      },
+      "text": "1视频模型演示中转站 · MiniMax-H3生成模式文生视频 @ 引用图片画幅16:99:161:14:33:4时长（秒）4s5s6s8s10s12s15s分辨率720p生成视频",
+      "controls": [
+        {
+          "tag": "button",
+          "type": null,
+          "label": "打开节点说明",
+          "value": "",
+          "text": "",
+          "disabled": false
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "mock-relay::MiniMax-H3",
+          "text": "演示中转站 · MiniMax-H3",
+          "disabled": false,
+          "options": [
+            "mock-relay::MiniMax-H3"
+          ]
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "text",
+          "text": "文生视频",
+          "disabled": false,
+          "options": [
+            "text"
+          ]
+        },
+        {
+          "tag": "textarea",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "",
+          "disabled": false
+        },
+        {
+          "tag": "button",
+          "type": "button",
+          "label": null,
+          "value": "",
+          "text": "@ 引用图片",
+          "disabled": false
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "16:9",
+          "text": "16:99:161:14:33:4",
+          "disabled": false,
+          "options": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ]
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "5",
+          "text": "4s5s6s8s10s12s15s",
+          "disabled": false,
+          "options": [
+            "4",
+            "5",
+            "6",
+            "8",
+            "10",
+            "12",
+            "15"
+          ]
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "720p",
+          "text": "720p",
+          "disabled": false,
+          "options": [
+            "720p"
+          ]
+        },
+        {
+          "tag": "button",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "生成视频",
+          "disabled": false
+        }
+      ],
+      "inputs": [
+        {
+          "id": null,
+          "color": "rgb(52, 211, 153)"
+        },
+        {
+          "id": null,
+          "color": "rgb(244, 114, 182)"
+        },
+        {
+          "id": null,
+          "color": "rgb(251, 191, 36)"
+        },
+        {
+          "id": null,
+          "color": "rgb(167, 139, 250)"
+        },
+        {
+          "id": null,
+          "color": "rgb(138, 180, 248)"
+        }
+      ],
+      "outputs": [
+        {
+          "id": null,
+          "color": "rgb(244, 114, 182)"
+        }
+      ],
+      "alerts": []
+    },
+    {
+      "name": "fresh-second-context",
+      "nodeType": "video",
+      "title": "视频",
+      "rect": {
+        "x": 684.125,
+        "y": 343.125,
+        "width": 340,
+        "height": 356
+      },
+      "text": "1视频当前模型不支持此视频生成模式；请更换模型、调整参数或断开该输入后再运行。模型选择模型…演示中转站 · MiniMax-H3生成模式文生视频 @ 引用图片画幅16:99:161:14:33:4时长（秒）4s5s6s8s10s12s15s分辨率720p生成视频",
+      "controls": [
+        {
+          "tag": "button",
+          "type": null,
+          "label": "打开节点说明",
+          "value": "",
+          "text": "",
+          "disabled": false
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "选择模型…演示中转站 · MiniMax-H3",
+          "disabled": false,
+          "options": [
+            "",
+            "mock-relay::MiniMax-H3"
+          ]
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "text",
+          "text": "文生视频",
+          "disabled": false,
+          "options": [
+            "text"
+          ]
+        },
+        {
+          "tag": "textarea",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "",
+          "disabled": false
+        },
+        {
+          "tag": "button",
+          "type": "button",
+          "label": null,
+          "value": "",
+          "text": "@ 引用图片",
+          "disabled": true
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "16:9",
+          "text": "16:99:161:14:33:4",
+          "disabled": false,
+          "options": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ]
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "5",
+          "text": "4s5s6s8s10s12s15s",
+          "disabled": false,
+          "options": [
+            "4",
+            "5",
+            "6",
+            "8",
+            "10",
+            "12",
+            "15"
+          ]
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "720p",
+          "text": "720p",
+          "disabled": false,
+          "options": [
+            "720p"
+          ]
+        },
+        {
+          "tag": "button",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "生成视频",
+          "disabled": true
+        }
+      ],
+      "inputs": [
+        {
+          "id": null,
+          "color": "rgb(52, 211, 153)"
+        },
+        {
+          "id": null,
+          "color": "rgb(244, 114, 182)"
+        },
+        {
+          "id": null,
+          "color": "rgb(251, 191, 36)"
+        },
+        {
+          "id": null,
+          "color": "rgb(167, 139, 250)"
+        },
+        {
+          "id": null,
+          "color": "rgb(138, 180, 248)"
+        }
+      ],
+      "outputs": [
+        {
+          "id": null,
+          "color": "rgb(244, 114, 182)"
+        }
+      ],
+      "alerts": [
+        "当前模型不支持此视频生成模式；请更换模型、调整参数或断开该输入后再运行。"
+      ]
+    }
+  ],
+  "assertions": [
+    {
+      "name": "fresh-model-is-selected",
+      "pass": false,
+      "actual": "",
+      "expected": "non-empty model key or explicit no-model state"
+    },
+    {
+      "name": "one-image-forces-non-text-mode",
+      "pass": false,
+      "actual": "text",
+      "expected": "reference (H3)"
+    },
+    {
+      "name": "manual-text-with-image-blocked",
+      "pass": false,
+      "actual": {
+        "buttonDisabled": false,
+        "alerts": []
+      },
+      "expected": "explicit capability error and disabled submit"
+    }
+  ]
+}

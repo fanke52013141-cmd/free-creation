@@ -23,9 +23,9 @@ export function parseImageGen(text: string): ImageGenData {
 
 export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
   const data = parseImageGen(readNodeConfig(ctx.shape))
-  // 供应商/模型解析与 Body 共用同一套逻辑；执行器保持显式命中语义（未选模型则跳过）。
+  // 供应商/模型解析与 Body 共用同一套逻辑；未明确指定时回退到默认可用模型（如 ToAPIS）。
   const option = resolveImageModelOption(modelsByModality(ctx.providers, 'image'), data, {
-    fallbackToDefault: false
+    fallbackToDefault: true
   })
   if (!option) return { status: 'skipped', reason: '未选择可用图片模型' }
   const capabilities = imageCapabilitiesFor(option.provider.specId, option.model.id)

@@ -161,8 +161,6 @@ const SAFE_OPENAI_COMPAT_CAPABILITIES: ImageCapabilities = {
  * 选中哪个供应商就按哪张能力表提交参数、呈现 UI；未知模型一律使用保守集合。
  */
 export function imageCapabilitiesFor(specId: ProviderSpecId, modelId = ''): ImageCapabilities {
-  // 保留模型 ID 作为能力表的稳定扩展键；当前能力只按供应商模板区分。
-  void modelId
   switch (specId) {
     case 'toapis':
       return TOAPIS_CAPABILITIES
@@ -170,8 +168,18 @@ export function imageCapabilitiesFor(specId: ProviderSpecId, modelId = ''): Imag
       return OPENAI_IMAGE_CAPABILITIES
     case 'openrouter':
       return OPENROUTER_IMAGE_CAPABILITIES
-    default:
+    default: {
+      const normalized = (modelId || '').toLowerCase().trim()
+      if (
+        normalized === 'gpt-image-2' ||
+        normalized.includes('gpt-image-2') ||
+        normalized.includes('image-2') ||
+        normalized.includes('toapis')
+      ) {
+        return TOAPIS_CAPABILITIES
+      }
       return SAFE_OPENAI_COMPAT_CAPABILITIES
+    }
   }
 }
 

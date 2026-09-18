@@ -239,6 +239,72 @@ describe('image gateway drivers', () => {
       expect((error as Error & { code?: string }).code).toBe('TOAPIS_TASK_FAILED')
       expect(error.message).toContain('内容违规')
     })
+
+    it('中转站直接返回图片 URL 时免轮询直接落盘', async () => {
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input)
+        if (url.endsWith('/images/generations') && (init?.method ?? 'GET') === 'POST') {
+          return jsonResponse({
+            created: Date.now(),
+            data: [{ url: OUT_URL }]
+          })
+        }
+        if (url === OUT_URL) {
+          return new Response(new Uint8Array([5, 6, 7]), {
+            status: 200,
+            headers: { 'content-type': 'image/png' }
+          })
+        }
+        return new Response(`unexpected ${url}`, { status: 500 })
+      })
+      vi.stubGlobal('fetch', fetchMock)
+      requireProviderMock.mockReturnValue(makeProvider('relay'))
+
+      await generateImageToAsset(makeInput({ modelId: 'gpt-image-2' }))
+
+      expect(saveBufferAssetMock).toHaveBeenCalledWith(
+        'proj-1',
+        expect.toSatisfy((buf: Buffer) => buf.equals(Buffer.from([5, 6, 7]))),
+        '.png',
+        '未来城市夜景海报'
+      )
+    })
+
+    it('兼容 task_id 字段与 SUCCESS 大写状态', async () => {
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input)
+        if (url.endsWith('/images/generations') && (init?.method ?? 'GET') === 'POST') {
+          return jsonResponse({ task_id: 'task_custom_1' })
+        }
+        if (url.includes('/images/tasks/task_custom_1')) {
+          return jsonResponse({
+            id: 'task_custom_1',
+            status: 'SUCCESS',
+            output: [OUT_URL]
+          })
+        }
+        if (url === OUT_URL) {
+          return new Response(new Uint8Array([8, 8, 8]), {
+            status: 200,
+            headers: { 'content-type': 'image/png' }
+          })
+        }
+        return new Response(`unexpected ${url}`, { status: 500 })
+      })
+      vi.stubGlobal('fetch', fetchMock)
+      requireProviderMock.mockReturnValue(makeProvider('toapis'))
+
+      const pending = generateImageToAsset(makeInput())
+      await advancePolling()
+      await pending
+
+      expect(saveBufferAssetMock).toHaveBeenCalledWith(
+        'proj-1',
+        expect.toSatisfy((buf: Buffer) => buf.equals(Buffer.from([8, 8, 8]))),
+        '.png',
+        '未来城市夜景海报'
+      )
+    })
   })
 
   describe('openrouter-chat 驱动', () => {

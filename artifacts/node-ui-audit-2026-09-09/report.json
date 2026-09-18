@@ -1,0 +1,790 @@
+{
+  "baseUrl": "http://127.0.0.1:3123/",
+  "viewport": {
+    "width": 1708,
+    "height": 879
+  },
+  "nodes": [
+    {
+      "entry": {
+        "label": "添加文本节点",
+        "text": "文本"
+      },
+      "screenshot": "01-text.png",
+      "nodeType": "text",
+      "title": "文本",
+      "rect": {
+        "width": 894.4720458984375,
+        "height": 684.0079345703125,
+        "top": 130.743896484375,
+        "left": 406.51708984375
+      },
+      "cardRect": {
+        "width": 894.4720458984375,
+        "height": 684.0079345703125
+      },
+      "bodyRect": {
+        "width": 889.2103271484375,
+        "height": 657.7000122070312
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 1,
+      "outputs": 1,
+      "buttons": [
+        ""
+      ],
+      "text": "1文本双击输入文本内容"
+    },
+    {
+      "entry": {
+        "label": "添加图片节点",
+        "text": "图片"
+      },
+      "screenshot": "02-image.png",
+      "nodeType": "image",
+      "title": "图片",
+      "rect": {
+        "width": 409.42803955078125,
+        "height": 313.092041015625,
+        "top": 501.95379638671875,
+        "left": 577.2889404296875
+      },
+      "cardRect": {
+        "width": 409.42803955078125,
+        "height": 313.092041015625
+      },
+      "bodyRect": {
+        "width": 407.0196533203125,
+        "height": 301.04998779296875
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 1,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "导入图片"
+      ],
+      "text": "2图片图片资产上传或粘贴图片后，可连接给生图、视频等节点。导入图片"
+    },
+    {
+      "entry": {
+        "label": "添加裁剪节点",
+        "text": "裁剪"
+      },
+      "screenshot": "03-image-crop.png",
+      "nodeType": "image-crop",
+      "title": "裁剪",
+      "rect": {
+        "width": 380.4940185546875,
+        "height": 290.9659729003906,
+        "top": 131.08489990234375,
+        "left": 413.2264404296875
+      },
+      "cardRect": {
+        "width": 380.4940185546875,
+        "height": 290.9659729003906
+      },
+      "bodyRect": {
+        "width": 378.25579833984375,
+        "height": 279.77496337890625
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 1,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "配置裁剪"
+      ],
+      "text": "3裁剪图片裁剪连接一张图片后，在右侧详情中框选区域，再运行生成新的图片资产。配置裁剪"
+    },
+    {
+      "entry": {
+        "label": "添加拆分节点",
+        "text": "拆分"
+      },
+      "screenshot": "04-image-crop.png",
+      "nodeType": "image-crop",
+      "title": "裁剪",
+      "rect": {
+        "width": 262.31005859375,
+        "height": 200.5900115966797,
+        "top": 130.7948455810547,
+        "left": 613.1937255859375
+      },
+      "cardRect": {
+        "width": 262.31005859375,
+        "height": 200.5900115966797
+      },
+      "bodyRect": {
+        "width": 260.76702880859375,
+        "height": 192.87498474121094
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 1,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "配置裁剪"
+      ],
+      "text": "3裁剪图片裁剪连接一张图片后，在右侧详情中框选区域，再运行生成新的图片资产。配置裁剪"
+    },
+    {
+      "entry": {
+        "label": "添加生图节点",
+        "text": "生图"
+      },
+      "screenshot": "05-image-crop.png",
+      "nodeType": "image-crop",
+      "title": "裁剪",
+      "rect": {
+        "width": 243.77996826171875,
+        "height": 186.42001342773438,
+        "top": 179.08010864257812,
+        "left": 798.6686401367188
+      },
+      "cardRect": {
+        "width": 243.77996826171875,
+        "height": 186.42001342773438
+      },
+      "bodyRect": {
+        "width": 242.3460693359375,
+        "height": 179.25
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 1,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "配置裁剪"
+      ],
+      "text": "3裁剪图片裁剪连接一张图片后，在右侧详情中框选区域，再运行生成新的图片资产。配置裁剪"
+    },
+    {
+      "entry": {
+        "label": "添加修改节点",
+        "text": "修改"
+      },
+      "screenshot": "06-image-edit.png",
+      "nodeType": "image-edit",
+      "title": "修改",
+      "rect": {
+        "width": 243.77999877929688,
+        "height": 186.41998291015625,
+        "top": 379.54937744140625,
+        "left": 259.7408752441406
+      },
+      "cardRect": {
+        "width": 243.77999877929688,
+        "height": 186.41998291015625
+      },
+      "bodyRect": {
+        "width": 242.34600830078125,
+        "height": 179.24996948242188
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 2,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "打开工作台"
+      ],
+      "text": "6修改图片修改连接图片后，点击打开工作台添加标注和修改说明。打开工作台"
+    },
+    {
+      "entry": {
+        "label": "添加视频节点",
+        "text": "视频"
+      },
+      "screenshot": "07-image-edit.png",
+      "nodeType": "image-edit",
+      "title": "修改",
+      "rect": {
+        "width": 233.71600341796875,
+        "height": 178.7239990234375,
+        "top": 369.25634765625,
+        "left": 284.1820068359375
+      },
+      "cardRect": {
+        "width": 233.71600341796875,
+        "height": 178.7239990234375
+      },
+      "bodyRect": {
+        "width": 232.34115600585938,
+        "height": 171.84994506835938
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 2,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "打开工作台"
+      ],
+      "text": "6修改图片修改连接图片后，点击打开工作台添加标注和修改说明。打开工作台"
+    },
+    {
+      "entry": {
+        "label": "添加取帧节点",
+        "text": "取帧"
+      },
+      "screenshot": "08-image-edit.png",
+      "nodeType": "image-edit",
+      "title": "修改",
+      "rect": {
+        "width": 233.71600341796875,
+        "height": 178.7239990234375,
+        "top": 369.25634765625,
+        "left": 324.570556640625
+      },
+      "cardRect": {
+        "width": 233.71600341796875,
+        "height": 178.7239990234375
+      },
+      "bodyRect": {
+        "width": 232.34115600585938,
+        "height": 171.84994506835938
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 2,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "打开工作台"
+      ],
+      "text": "6修改图片修改连接图片后，点击打开工作台添加标注和修改说明。打开工作台"
+    },
+    {
+      "entry": {
+        "label": "添加截取节点",
+        "text": "截取"
+      },
+      "screenshot": "09-image-edit.png",
+      "nodeType": "image-edit",
+      "title": "修改",
+      "rect": {
+        "width": 217.22598266601562,
+        "height": 166.11398315429688,
+        "top": 400.7427062988281,
+        "left": 380.7413635253906
+      },
+      "cardRect": {
+        "width": 217.22598266601562,
+        "height": 166.11398315429688
+      },
+      "bodyRect": {
+        "width": 215.94821166992188,
+        "height": 159.7249755859375
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 2,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "打开工作台"
+      ],
+      "text": "6修改图片修改连接图片后，点击打开工作台添加标注和修改说明。打开工作台"
+    },
+    {
+      "entry": {
+        "label": "添加提音节点",
+        "text": "提音"
+      },
+      "screenshot": "10-image-edit.png",
+      "nodeType": "image-edit",
+      "title": "修改",
+      "rect": {
+        "width": 181.49197387695312,
+        "height": 138.78799438476562,
+        "top": 356.3141174316406,
+        "left": 450.6299743652344
+      },
+      "cardRect": {
+        "width": 181.49197387695312,
+        "height": 138.78799438476562
+      },
+      "bodyRect": {
+        "width": 180.42437744140625,
+        "height": 133.45001220703125
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 2,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "打开工作台"
+      ],
+      "text": "6修改图片修改连接图片后，点击打开工作台添加标注和修改说明。打开工作台"
+    },
+    {
+      "entry": {
+        "label": "添加人声分离节点",
+        "text": "人声分离"
+      },
+      "screenshot": "11-image-edit.png",
+      "nodeType": "image-edit",
+      "title": "修改",
+      "rect": {
+        "width": 167.72201538085938,
+        "height": 128.25799560546875,
+        "top": 339.2163391113281,
+        "left": 484.9332580566406
+      },
+      "cardRect": {
+        "width": 167.72201538085938,
+        "height": 128.25799560546875
+      },
+      "bodyRect": {
+        "width": 166.73538208007812,
+        "height": 123.32501220703125
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 2,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "打开工作台"
+      ],
+      "text": "6修改图片修改连接图片后，点击打开工作台添加标注和修改说明。打开工作台"
+    },
+    {
+      "entry": {
+        "label": "添加音频节点",
+        "text": "音频"
+      },
+      "screenshot": "12-image-edit.png",
+      "nodeType": "image-edit",
+      "title": "修改",
+      "rect": {
+        "width": 161.5679931640625,
+        "height": 123.552001953125,
+        "top": 331.5682678222656,
+        "left": 498.3878173828125
+      },
+      "cardRect": {
+        "width": 161.5679931640625,
+        "height": 123.552001953125
+      },
+      "bodyRect": {
+        "width": 160.61761474609375,
+        "height": 118.80001831054688
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 2,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "打开工作台"
+      ],
+      "text": "6修改图片修改连接图片后，点击打开工作台添加标注和修改说明。打开工作台"
+    },
+    {
+      "entry": {
+        "label": "添加配音节点",
+        "text": "配音"
+      },
+      "screenshot": "13-image-edit.png",
+      "nodeType": "image-edit",
+      "title": "修改",
+      "rect": {
+        "width": 158.67800903320312,
+        "height": 121.34197998046875,
+        "top": 327.9853820800781,
+        "left": 504.8178405761719
+      },
+      "cardRect": {
+        "width": 158.67800903320312,
+        "height": 121.34197998046875
+      },
+      "bodyRect": {
+        "width": 157.74456787109375,
+        "height": 116.67498779296875
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 2,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "打开工作台"
+      ],
+      "text": "6修改图片修改连接图片后，点击打开工作台添加标注和修改说明。打开工作台"
+    },
+    {
+      "entry": {
+        "label": "添加语音克隆节点",
+        "text": "克隆"
+      },
+      "screenshot": "14-image-edit.png",
+      "nodeType": "image-edit",
+      "title": "修改",
+      "rect": {
+        "width": 138.03997802734375,
+        "height": 105.55999755859375,
+        "top": 302.37371826171875,
+        "left": 550.264404296875
+      },
+      "cardRect": {
+        "width": 138.03997802734375,
+        "height": 105.55999755859375
+      },
+      "bodyRect": {
+        "width": 137.22796630859375,
+        "height": 101.49996948242188
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 2,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "打开工作台"
+      ],
+      "text": "6修改图片修改连接图片后，点击打开工作台添加标注和修改说明。打开工作台"
+    },
+    {
+      "entry": {
+        "label": "添加对话节点",
+        "text": "对话"
+      },
+      "screenshot": "15-image-edit.png",
+      "nodeType": "image-edit",
+      "title": "修改",
+      "rect": {
+        "width": 138.0400390625,
+        "height": 105.55999755859375,
+        "top": 302.37371826171875,
+        "left": 548.7734375
+      },
+      "cardRect": {
+        "width": 138.0400390625,
+        "height": 105.55999755859375
+      },
+      "bodyRect": {
+        "width": 137.22802734375,
+        "height": 101.49996948242188
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 2,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "打开工作台"
+      ],
+      "text": "6修改图片修改连接图片后，点击打开工作台添加标注和修改说明。打开工作台"
+    },
+    {
+      "entry": {
+        "label": "添加处理节点",
+        "text": "处理"
+      },
+      "screenshot": "16-image-edit.png",
+      "nodeType": "image-edit",
+      "title": "修改",
+      "rect": {
+        "width": 128.281982421875,
+        "height": 98.09799194335938,
+        "top": 338.5939636230469,
+        "left": 644.2178955078125
+      },
+      "cardRect": {
+        "width": 128.281982421875,
+        "height": 98.09799194335938
+      },
+      "bodyRect": {
+        "width": 127.52740478515625,
+        "height": 94.32501220703125
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 2,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "打开工作台"
+      ],
+      "text": "6修改图片修改连接图片后，点击打开工作台添加标注和修改说明。打开工作台"
+    },
+    {
+      "entry": {
+        "label": "添加JSON节点",
+        "text": "数据"
+      },
+      "screenshot": "17-image-edit.png",
+      "nodeType": "image-edit",
+      "title": "修改",
+      "rect": {
+        "width": 128.281982421875,
+        "height": 98.09799194335938,
+        "top": 338.5939636230469,
+        "left": 644.2178955078125
+      },
+      "cardRect": {
+        "width": 128.281982421875,
+        "height": 98.09799194335938
+      },
+      "bodyRect": {
+        "width": 127.52740478515625,
+        "height": 94.32501220703125
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 2,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "打开工作台"
+      ],
+      "text": "6修改图片修改连接图片后，点击打开工作台添加标注和修改说明。打开工作台"
+    },
+    {
+      "entry": {
+        "label": "添加结构数据节点",
+        "text": "结构数据"
+      },
+      "screenshot": "18-image-edit.png",
+      "nodeType": "image-edit",
+      "title": "修改",
+      "rect": {
+        "width": 128.281982421875,
+        "height": 98.09799194335938,
+        "top": 338.5939636230469,
+        "left": 681.162353515625
+      },
+      "cardRect": {
+        "width": 128.281982421875,
+        "height": 98.09799194335938
+      },
+      "bodyRect": {
+        "width": 127.52740478515625,
+        "height": 94.32501220703125
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 2,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "打开工作台"
+      ],
+      "text": "6修改图片修改连接图片后，点击打开工作台添加标注和修改说明。打开工作台"
+    },
+    {
+      "entry": {
+        "label": "添加代码节点",
+        "text": "代码"
+      },
+      "screenshot": "19-image-edit.png",
+      "nodeType": "image-edit",
+      "title": "修改",
+      "rect": {
+        "width": 128.281982421875,
+        "height": 98.09799194335938,
+        "top": 338.5939636230469,
+        "left": 681.162353515625
+      },
+      "cardRect": {
+        "width": 128.281982421875,
+        "height": 98.09799194335938
+      },
+      "bodyRect": {
+        "width": 127.52740478515625,
+        "height": 94.32501220703125
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 2,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "打开工作台"
+      ],
+      "text": "6修改图片修改连接图片后，点击打开工作台添加标注和修改说明。打开工作台"
+    },
+    {
+      "entry": {
+        "label": "添加分镜板节点",
+        "text": "分镜"
+      },
+      "screenshot": "20-image-edit.png",
+      "nodeType": "image-edit",
+      "title": "修改",
+      "rect": {
+        "width": 128.281982421875,
+        "height": 98.09799194335938,
+        "top": 338.5939636230469,
+        "left": 699.634521484375
+      },
+      "cardRect": {
+        "width": 128.281982421875,
+        "height": 98.09799194335938
+      },
+      "bodyRect": {
+        "width": 127.52740478515625,
+        "height": 94.32501220703125
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 2,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "打开工作台"
+      ],
+      "text": "6修改图片修改连接图片后，点击打开工作台添加标注和修改说明。打开工作台"
+    },
+    {
+      "entry": {
+        "label": "添加AI 处理节点",
+        "text": "AI 处理"
+      },
+      "screenshot": "21-image-edit.png",
+      "nodeType": "image-edit",
+      "title": "修改",
+      "rect": {
+        "width": 128.281982421875,
+        "height": 98.09799194335938,
+        "top": 338.5939636230469,
+        "left": 708.8706665039062
+      },
+      "cardRect": {
+        "width": 128.281982421875,
+        "height": 98.09799194335938
+      },
+      "bodyRect": {
+        "width": 127.52740478515625,
+        "height": 94.32501220703125
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 2,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "打开工作台"
+      ],
+      "text": "6修改图片修改连接图片后，点击打开工作台添加标注和修改说明。打开工作台"
+    },
+    {
+      "entry": {
+        "label": "添加循环节点",
+        "text": "循环"
+      },
+      "screenshot": "22-image-edit.png",
+      "nodeType": "image-edit",
+      "title": "修改",
+      "rect": {
+        "width": 128.281982421875,
+        "height": 98.09799194335938,
+        "top": 338.5939636230469,
+        "left": 708.8706665039062
+      },
+      "cardRect": {
+        "width": 128.281982421875,
+        "height": 98.09799194335938
+      },
+      "bodyRect": {
+        "width": 127.52740478515625,
+        "height": 94.32501220703125
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 2,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "打开工作台"
+      ],
+      "text": "6修改图片修改连接图片后，点击打开工作台添加标注和修改说明。打开工作台"
+    },
+    {
+      "entry": {
+        "label": "添加3D 预演台节点",
+        "text": "预演"
+      },
+      "screenshot": "23-image-edit.png",
+      "nodeType": "image-edit",
+      "title": "修改",
+      "rect": {
+        "width": 119.2039794921875,
+        "height": 91.156005859375,
+        "top": 372.2301330566406,
+        "left": 723.3421630859375
+      },
+      "cardRect": {
+        "width": 119.2039794921875,
+        "height": 91.156005859375
+      },
+      "bodyRect": {
+        "width": 118.5028076171875,
+        "height": 87.6500244140625
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 2,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "打开工作台"
+      ],
+      "text": "6修改图片修改连接图片后，点击打开工作台添加标注和修改说明。打开工作台"
+    }
+  ]
+}

@@ -1,0 +1,791 @@
+{
+  "baseUrl": "http://127.0.0.1:5173/",
+  "viewport": {
+    "width": 1708,
+    "height": 879
+  },
+  "nodes": [
+    {
+      "entry": {
+        "label": "添加文本节点",
+        "text": "文本"
+      },
+      "screenshot": "01-text.png",
+      "nodeType": "text",
+      "title": "文本",
+      "rect": {
+        "width": 340,
+        "height": 260,
+        "top": 343.125,
+        "left": 684.125
+      },
+      "cardRect": {
+        "width": 340,
+        "height": 260
+      },
+      "bodyRect": {
+        "width": 338,
+        "height": 250
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 1,
+      "outputs": 1,
+      "buttons": [
+        ""
+      ],
+      "text": "1文本双击输入文本内容"
+    },
+    {
+      "entry": {
+        "label": "添加图片节点",
+        "text": "图片"
+      },
+      "screenshot": "02-image.png",
+      "nodeType": "image",
+      "title": "图片",
+      "rect": {
+        "width": 340,
+        "height": 260,
+        "top": 343.125,
+        "left": 684.125
+      },
+      "cardRect": {
+        "width": 340,
+        "height": 260
+      },
+      "bodyRect": {
+        "width": 338,
+        "height": 250
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 0,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "导入图片"
+      ],
+      "text": "1图片图片资产上传或粘贴图片后，可连接给生图、视频等节点。导入图片"
+    },
+    {
+      "entry": {
+        "label": "添加裁剪节点",
+        "text": "裁剪"
+      },
+      "screenshot": "03-image-crop.png",
+      "nodeType": "image-crop",
+      "title": "裁剪",
+      "rect": {
+        "width": 340,
+        "height": 260,
+        "top": 343.125,
+        "left": 684.125
+      },
+      "cardRect": {
+        "width": 340,
+        "height": 260
+      },
+      "bodyRect": {
+        "width": 338,
+        "height": 250
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 1,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "配置裁剪"
+      ],
+      "text": "1裁剪图片裁剪连接一张图片后，即可在节点中选择比例并裁剪；精细框选也可随时打开。配置裁剪"
+    },
+    {
+      "entry": {
+        "label": "添加拆分节点",
+        "text": "拆分"
+      },
+      "screenshot": "04-image-split.png",
+      "nodeType": "image-split",
+      "title": "拆分",
+      "rect": {
+        "width": 340,
+        "height": 220,
+        "top": 343.125,
+        "left": 684.125
+      },
+      "cardRect": {
+        "width": 340,
+        "height": 220
+      },
+      "bodyRect": {
+        "width": 338,
+        "height": 210
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 1,
+      "outputs": 2,
+      "buttons": [
+        ""
+      ],
+      "text": "1拆分行数列数面积% 连接原图123456789连接原图后可从右上角运行"
+    },
+    {
+      "entry": {
+        "label": "添加生图节点",
+        "text": "生图"
+      },
+      "screenshot": "05-image-gen.png",
+      "nodeType": "image-gen",
+      "title": "生图",
+      "rect": {
+        "width": 340,
+        "height": 260,
+        "top": 343.125,
+        "left": 684.125
+      },
+      "cardRect": {
+        "width": 340,
+        "height": 260
+      },
+      "bodyRect": {
+        "width": 338,
+        "height": 250
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 3,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "生成图片"
+      ],
+      "text": "1生图选择模型…演示中转站 · gpt-image-2默认画幅1:116:99:164:33:421:9生成图片"
+    },
+    {
+      "entry": {
+        "label": "添加修改节点",
+        "text": "修改"
+      },
+      "screenshot": "06-image-edit.png",
+      "nodeType": "image-edit",
+      "title": "修改",
+      "rect": {
+        "width": 340,
+        "height": 260,
+        "top": 343.125,
+        "left": 684.125
+      },
+      "cardRect": {
+        "width": 340,
+        "height": 260
+      },
+      "bodyRect": {
+        "width": 338,
+        "height": 250
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 2,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "打开工作台"
+      ],
+      "text": "1修改图片修改连接图片后，点击打开工作台添加标注和修改说明。打开工作台"
+    },
+    {
+      "entry": {
+        "label": "添加视频节点",
+        "text": "视频"
+      },
+      "screenshot": "07-video.png",
+      "nodeType": "video",
+      "title": "视频",
+      "rect": {
+        "width": 340,
+        "height": 293,
+        "top": 343.125,
+        "left": 684.125
+      },
+      "cardRect": {
+        "width": 340,
+        "height": 293
+      },
+      "bodyRect": {
+        "width": 338,
+        "height": 283
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 5,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "@ 引用图片",
+        "生成视频"
+      ],
+      "text": "1视频请选择视频模型；请更换模型、调整参数或断开该输入后再运行。模型选择模型…演示 MiniMax · MiniMax-H3演示 MiniMax · MiniMax-H3-Max演示 Seedance · Seedance-2.0演示 Seedance · Seedance-2.0-Fast生成模式当前素材组合不可用 @ 引用图片生成视频"
+    },
+    {
+      "entry": {
+        "label": "添加取帧节点",
+        "text": "取帧"
+      },
+      "screenshot": "08-video-frame.png",
+      "nodeType": "video-frame",
+      "title": "取帧",
+      "rect": {
+        "width": 340,
+        "height": 260,
+        "top": 343.125,
+        "left": 684.125
+      },
+      "cardRect": {
+        "width": 340,
+        "height": 260
+      },
+      "bodyRect": {
+        "width": 338,
+        "height": 250
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 1,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "配置视频取帧"
+      ],
+      "text": "1取帧视频取帧连接源视频后，在右侧详情中定位时间；运行会生成可连接的新媒体资产。配置视频取帧"
+    },
+    {
+      "entry": {
+        "label": "添加截取节点",
+        "text": "截取"
+      },
+      "screenshot": "09-video-clip.png",
+      "nodeType": "video-clip",
+      "title": "截取",
+      "rect": {
+        "width": 340,
+        "height": 260,
+        "top": 343.125,
+        "left": 684.125
+      },
+      "cardRect": {
+        "width": 340,
+        "height": 260
+      },
+      "bodyRect": {
+        "width": 338,
+        "height": 250
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 1,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "配置视频截取"
+      ],
+      "text": "1截取视频截取连接源视频后，在右侧详情中定位时间；运行会生成可连接的新媒体资产。配置视频截取"
+    },
+    {
+      "entry": {
+        "label": "添加提音节点",
+        "text": "提音"
+      },
+      "screenshot": "10-video-audio.png",
+      "nodeType": "video-audio",
+      "title": "提音",
+      "rect": {
+        "width": 340,
+        "height": 260,
+        "top": 343.125,
+        "left": 684.125
+      },
+      "cardRect": {
+        "width": 340,
+        "height": 260
+      },
+      "bodyRect": {
+        "width": 338,
+        "height": 250
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 1,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "配置提取音频"
+      ],
+      "text": "1提音提取音频连接源视频后，在右侧详情中定位时间；运行会生成可连接的新媒体资产。配置提取音频"
+    },
+    {
+      "entry": {
+        "label": "添加人声分离节点",
+        "text": "人声分离"
+      },
+      "screenshot": "11-vocal-separate.png",
+      "nodeType": "vocal-separate",
+      "title": "人声分离",
+      "rect": {
+        "width": 340,
+        "height": 260,
+        "top": 343.125,
+        "left": 684.125
+      },
+      "cardRect": {
+        "width": 340,
+        "height": 260
+      },
+      "bodyRect": {
+        "width": 338,
+        "height": 250
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 1,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "配置人声分离"
+      ],
+      "text": "1人声分离人声分离连接音频后在右侧选择模式；快速增强输出人声，高质量 AI 分离可额外输出伴奏。配置人声分离"
+    },
+    {
+      "entry": {
+        "label": "添加音频节点",
+        "text": "音频"
+      },
+      "screenshot": "12-audio.png",
+      "nodeType": "audio",
+      "title": "音频",
+      "rect": {
+        "width": 340,
+        "height": 260,
+        "top": 343.125,
+        "left": 684.125
+      },
+      "cardRect": {
+        "width": 340,
+        "height": 260
+      },
+      "bodyRect": {
+        "width": 338,
+        "height": 250
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 0,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "点击上传音频文件支持 mp3 / wav / aac / flac 等"
+      ],
+      "text": "1音频这是音频资产节点。需要模型配音请使用「配音」，需要复刻音色请使用「克隆」。点击上传音频文件支持 mp3 / wav / aac / flac 等"
+    },
+    {
+      "entry": {
+        "label": "添加配音节点",
+        "text": "配音"
+      },
+      "screenshot": "13-speech.png",
+      "nodeType": "speech",
+      "title": "配音",
+      "rect": {
+        "width": 340,
+        "height": 260,
+        "top": 343.125,
+        "left": 684.125
+      },
+      "cardRect": {
+        "width": 340,
+        "height": 260
+      },
+      "bodyRect": {
+        "width": 338,
+        "height": 250
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 1,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "配置",
+        "生成语音"
+      ],
+      "text": "1配音这是通用配音节点；上游文本会与此处文本合并后再合成。未配置音频模型配置0 字 · 可由文本节点提供内容音色alloyechofableonyxnovashimmer格式mp3opusaacflacwavpcm生成语音"
+    },
+    {
+      "entry": {
+        "label": "添加语音克隆节点",
+        "text": "克隆"
+      },
+      "screenshot": "14-tts.png",
+      "nodeType": "tts",
+      "title": "语音克隆",
+      "rect": {
+        "width": 340,
+        "height": 466,
+        "top": 343.125,
+        "left": 684.125
+      },
+      "cardRect": {
+        "width": 340,
+        "height": 466
+      },
+      "bodyRect": {
+        "width": 338,
+        "height": 456
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 2,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "上传参考语音选择一段目标音色的音频",
+        "语音复刻"
+      ],
+      "text": "1语音克隆参考语音上传参考语音选择一段目标音色的音频合成文字0 字 · 可由文本节点提供复刻引擎后端本地 ComfyUI · IndexTTSMiniMax · 快速复刻语言中英混说中文英文日语西语阿语格式WAVMP3FLAC语速 1.0x情绪 1.0语音复刻"
+    },
+    {
+      "entry": {
+        "label": "添加对话节点",
+        "text": "对话"
+      },
+      "screenshot": "15-chat.png",
+      "nodeType": "chat",
+      "title": "对话",
+      "rect": {
+        "width": 340,
+        "height": 260,
+        "top": 343.125,
+        "left": 684.125
+      },
+      "cardRect": {
+        "width": 340,
+        "height": 260
+      },
+      "bodyRect": {
+        "width": 338,
+        "height": 250
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 1,
+      "outputs": 1,
+      "buttons": [
+        ""
+      ],
+      "text": "1对话未选择模型暂无对话 · T0.7 · 4096 tok选中此节点 → 右侧面板对话"
+    },
+    {
+      "entry": {
+        "label": "添加处理节点",
+        "text": "处理"
+      },
+      "screenshot": "16-processor.png",
+      "nodeType": "processor",
+      "title": "处理",
+      "rect": {
+        "width": 340,
+        "height": 260,
+        "top": 343.125,
+        "left": 684.125
+      },
+      "cardRect": {
+        "width": 340,
+        "height": 260
+      },
+      "bodyRect": {
+        "width": 338,
+        "height": 250
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 1,
+      "outputs": 1,
+      "buttons": [
+        ""
+      ],
+      "text": "1处理变量映射原样传递提取字段字符串模板输入任意文本数字布尔对象数组↓ 原样传递输出any等待连线或填写固定值"
+    },
+    {
+      "entry": {
+        "label": "添加JSON节点",
+        "text": "数据"
+      },
+      "screenshot": "17-json.png",
+      "nodeType": "json",
+      "title": "JSON",
+      "rect": {
+        "width": 340,
+        "height": 617,
+        "top": 343.125,
+        "left": 684.125
+      },
+      "cardRect": {
+        "width": 340,
+        "height": 617
+      },
+      "bodyRect": {
+        "width": 338,
+        "height": 607
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 2,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "输入"
+      ],
+      "text": "1JSON双击输入 JSON 数据等待输入输入"
+    },
+    {
+      "entry": {
+        "label": "添加结构数据节点",
+        "text": "结构数据"
+      },
+      "screenshot": "18-structured.png",
+      "nodeType": "structured",
+      "title": "结构数据",
+      "rect": {
+        "width": 340,
+        "height": 260,
+        "top": 343.125,
+        "left": 684.125
+      },
+      "cardRect": {
+        "width": 340,
+        "height": 260
+      },
+      "bodyRect": {
+        "width": 338,
+        "height": 250
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 2,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "双击输入 JSON；可使用 {{text}} 或 {{input[0].field}} 引用已连接输入。",
+        "输入"
+      ],
+      "text": "1结构数据角色设定场景设定镜头定义提示词包分镜列表对象列表通用 JSON等待输入双击输入 JSON；可使用 {{text}} 或 {{input[0].field}} 引用已连接输入。任意 JSON 数据输入"
+    },
+    {
+      "entry": {
+        "label": "添加代码节点",
+        "text": "代码"
+      },
+      "screenshot": "19-code.png",
+      "nodeType": "code",
+      "title": "代码",
+      "rect": {
+        "width": 340,
+        "height": 342,
+        "top": 343.125,
+        "left": 684.125
+      },
+      "cardRect": {
+        "width": 340,
+        "height": 342
+      },
+      "bodyRect": {
+        "width": 338,
+        "height": 332
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 2,
+      "outputs": 1,
+      "buttons": [
+        "",
+        "添加",
+        "输入"
+      ],
+      "text": "1代码AI 代码生成不在此节点内隐式执行；请使用 AI 处理节点生成文本后，审阅并粘贴代码。输入任意文本数字布尔对象数组输出任意文本数字布尔对象数组读取 input.input，return 值写入 output输入参数添加添加自定义输入参数，每个参数生成一个独立输入端口双击编写代码输入"
+    },
+    {
+      "entry": {
+        "label": "添加分镜板节点",
+        "text": "分镜"
+      },
+      "screenshot": "20-storyboard.png",
+      "nodeType": "storyboard",
+      "title": "分镜板",
+      "rect": {
+        "width": 340,
+        "height": 260,
+        "top": 343.125,
+        "left": 684.125
+      },
+      "cardRect": {
+        "width": 340,
+        "height": 260
+      },
+      "bodyRect": {
+        "width": 338,
+        "height": 250
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 2,
+      "outputs": 2,
+      "buttons": [
+        "",
+        "输入 JSON"
+      ],
+      "text": "1分镜板将脚本节点连入此节点，或双击输入分镜 JSON输入 JSON"
+    },
+    {
+      "entry": {
+        "label": "添加AI 处理节点",
+        "text": "AI 处理"
+      },
+      "screenshot": "21-ai-process.png",
+      "nodeType": "ai-process",
+      "title": "AI 处理",
+      "rect": {
+        "width": 340,
+        "height": 260,
+        "top": 343.125,
+        "left": 684.125
+      },
+      "cardRect": {
+        "width": 340,
+        "height": 260
+      },
+      "bodyRect": {
+        "width": 338,
+        "height": 250
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 2,
+      "outputs": 3,
+      "buttons": [
+        "",
+        "（无系统提示词，点击编辑）"
+      ],
+      "text": "1AI 处理模型选择模型…演示中转站 · gpt-5.2输出文本MarkdownJSON系统提示词（无系统提示词，点击编辑）温度Tokens上次结果（尚未运行，或等待上游输入）未选择模型 · text"
+    },
+    {
+      "entry": {
+        "label": "添加循环节点",
+        "text": "循环"
+      },
+      "screenshot": "22-iterate.png",
+      "nodeType": "iterate",
+      "title": "循环",
+      "rect": {
+        "width": 340,
+        "height": 260,
+        "top": 343.125,
+        "left": 684.125
+      },
+      "cardRect": {
+        "width": 340,
+        "height": 260
+      },
+      "bodyRect": {
+        "width": 338,
+        "height": 250
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 1,
+      "outputs": 2,
+      "buttons": [
+        ""
+      ],
+      "text": "1循环限数范围全部运行续跑未完成只重跑失败失败跳过失败项全部中止重试循环体入口：0 个（尚未运行）"
+    },
+    {
+      "entry": {
+        "label": "添加3D 预演台节点",
+        "text": "预演"
+      },
+      "screenshot": "23-director.png",
+      "nodeType": "director",
+      "title": "3D 预演台",
+      "rect": {
+        "width": 340,
+        "height": 260,
+        "top": 343.125,
+        "left": 684.125
+      },
+      "cardRect": {
+        "width": 340,
+        "height": 260
+      },
+      "bodyRect": {
+        "width": 338,
+        "height": 250
+      },
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "inputs": 3,
+      "outputs": 4,
+      "buttons": [
+        "",
+        "打开 3D 预演台"
+      ],
+      "text": "13D 预演台16:9镜头 011 个镜头 · 35 mm尚未发布输出 打开 3D 预演台"
+    }
+  ]
+}

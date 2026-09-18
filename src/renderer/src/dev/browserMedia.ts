@@ -255,12 +255,9 @@ export function createBrowserMedia(): {
     context.fill()
     context.fillStyle = '#f7fbff'
     context.font = `600 ${Math.max(24, Math.round(Math.min(width, height) / 20))}px sans-serif`
-    context.fillText('浏览器演示生图', width * 0.1, height * 0.18)
-    context.fillStyle = 'rgba(247,251,255,.78)'
-    context.font = `400 ${Math.max(18, Math.round(Math.min(width, height) / 32))}px sans-serif`
     const label = prompt.trim().slice(0, 42) || '未命名提示词'
-    context.fillText(label, width * 0.1, height * 0.27, width * 0.8)
-    return saveCanvas(projectId, canvas, '浏览器演示生图')
+    context.fillText(label, width * 0.1, height * 0.22, width * 0.8)
+    return saveCanvas(projectId, canvas, '生成图片')
   }
 
   function pick(projectId: string): Promise<MediaImportResult> {

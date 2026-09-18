@@ -1,0 +1,803 @@
+{
+  "baseUrl": "http://127.0.0.1:3123/",
+  "viewport": {
+    "width": 1708,
+    "height": 879
+  },
+  "states": [
+    {
+      "name": "fresh",
+      "nodeType": "video",
+      "title": "视频",
+      "rect": {
+        "x": 683.97509765625,
+        "y": 342.9689636230469,
+        "width": 340.3739013671875,
+        "height": 293.3222961425781
+      },
+      "text": "1视频请选择视频模型；请更换模型、调整参数或断开该输入后再运行。模型选择模型…演示 MiniMax · MiniMax-H3演示 MiniMax · MiniMax-H3-Max演示 Seedance · Seedance-2.0演示 Seedance · Seedance-2.0-Fast生成模式当前素材组合不可用 @ 引用图片生成视频",
+      "controls": [
+        {
+          "tag": "button",
+          "type": null,
+          "label": "打开节点说明",
+          "value": "",
+          "text": "",
+          "disabled": false
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "选择模型…演示 MiniMax · MiniMax-H3演示 MiniMax · MiniMax-H3-Max演示 Seedance · Seedance-2.0演示 Seedance · Seedance-2.0-Fast",
+          "disabled": false,
+          "options": [
+            "",
+            "mock-minimax::MiniMax-H3",
+            "mock-minimax::MiniMax-H3-Max",
+            "mock-seedance::Seedance-2.0",
+            "mock-seedance::Seedance-2.0-Fast"
+          ]
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "当前素材组合不可用",
+          "disabled": true,
+          "options": [
+            ""
+          ]
+        },
+        {
+          "tag": "textarea",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "",
+          "disabled": false
+        },
+        {
+          "tag": "button",
+          "type": "button",
+          "label": null,
+          "value": "",
+          "text": "@ 引用图片",
+          "disabled": true
+        },
+        {
+          "tag": "button",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "生成视频",
+          "disabled": true
+        }
+      ],
+      "inputs": [
+        {
+          "id": null,
+          "color": "rgb(52, 211, 153)"
+        },
+        {
+          "id": null,
+          "color": "rgb(244, 114, 182)"
+        },
+        {
+          "id": null,
+          "color": "rgb(251, 191, 36)"
+        },
+        {
+          "id": null,
+          "color": "rgb(167, 139, 250)"
+        },
+        {
+          "id": null,
+          "color": "rgb(138, 180, 248)"
+        }
+      ],
+      "outputs": [
+        {
+          "id": null,
+          "color": "rgb(244, 114, 182)"
+        }
+      ],
+      "alerts": [
+        "请选择视频模型；请更换模型、调整参数或断开该输入后再运行。"
+      ]
+    },
+    {
+      "name": "h3-selected",
+      "nodeType": "video",
+      "title": "视频",
+      "rect": {
+        "x": 456.93701171875,
+        "y": 130.79229736328125,
+        "width": 793.72998046875,
+        "height": 754.0435791015625
+      },
+      "text": "1视频模型演示 MiniMax · MiniMax-H3演示 MiniMax · MiniMax-H3-Max演示 Seedance · Seedance-2.0演示 Seedance · Seedance-2.0-Fast生成模式文生视频0 / 7000 字 @ 引用图片画幅21:916:94:31:13:49:16时长（秒）4s5s6s7s8s9s10s11s12s13s14s15s分辨率768P2K生成视频",
+      "controls": [
+        {
+          "tag": "button",
+          "type": null,
+          "label": "打开节点说明",
+          "value": "",
+          "text": "",
+          "disabled": false
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "mock-minimax::MiniMax-H3",
+          "text": "演示 MiniMax · MiniMax-H3演示 MiniMax · MiniMax-H3-Max演示 Seedance · Seedance-2.0演示 Seedance · Seedance-2.0-Fast",
+          "disabled": false,
+          "options": [
+            "mock-minimax::MiniMax-H3",
+            "mock-minimax::MiniMax-H3-Max",
+            "mock-seedance::Seedance-2.0",
+            "mock-seedance::Seedance-2.0-Fast"
+          ]
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "text",
+          "text": "文生视频",
+          "disabled": false,
+          "options": [
+            "text"
+          ]
+        },
+        {
+          "tag": "textarea",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "",
+          "disabled": false
+        },
+        {
+          "tag": "button",
+          "type": "button",
+          "label": null,
+          "value": "",
+          "text": "@ 引用图片",
+          "disabled": true
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "16:9",
+          "text": "21:916:94:31:13:49:16",
+          "disabled": false,
+          "options": [
+            "21:9",
+            "16:9",
+            "4:3",
+            "1:1",
+            "3:4",
+            "9:16"
+          ]
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "5",
+          "text": "4s5s6s7s8s9s10s11s12s13s14s15s",
+          "disabled": false,
+          "options": [
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "10",
+            "11",
+            "12",
+            "13",
+            "14",
+            "15"
+          ]
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "768P",
+          "text": "768P2K",
+          "disabled": false,
+          "options": [
+            "768P",
+            "2K"
+          ]
+        },
+        {
+          "tag": "button",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "生成视频",
+          "disabled": false
+        }
+      ],
+      "inputs": [
+        {
+          "id": null,
+          "color": "rgb(52, 211, 153)"
+        },
+        {
+          "id": null,
+          "color": "rgb(244, 114, 182)"
+        },
+        {
+          "id": null,
+          "color": "rgb(251, 191, 36)"
+        },
+        {
+          "id": null,
+          "color": "rgb(167, 139, 250)"
+        },
+        {
+          "id": null,
+          "color": "rgb(138, 180, 248)"
+        }
+      ],
+      "outputs": [
+        {
+          "id": null,
+          "color": "rgb(244, 114, 182)"
+        }
+      ],
+      "alerts": []
+    },
+    {
+      "name": "pasted-image",
+      "nodeType": "image",
+      "title": "video-audit",
+      "rect": {
+        "x": 1362.722900390625,
+        "y": 78.79156494140625,
+        "width": 793.730224609375,
+        "height": 606.969970703125
+      },
+      "text": "2video-audit替换image/png 裁剪图片 宫格拆分 继续生图 修改图片 生成视频",
+      "controls": [
+        {
+          "tag": "button",
+          "type": null,
+          "label": "打开节点说明",
+          "value": "",
+          "text": "",
+          "disabled": false
+        },
+        {
+          "tag": "button",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "替换",
+          "disabled": false
+        },
+        {
+          "tag": "button",
+          "type": null,
+          "label": "在资源管理器中定位",
+          "value": "",
+          "text": "",
+          "disabled": false
+        },
+        {
+          "tag": "button",
+          "type": null,
+          "label": "复制文件路径",
+          "value": "",
+          "text": "",
+          "disabled": false
+        },
+        {
+          "tag": "button",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "裁剪图片",
+          "disabled": false
+        },
+        {
+          "tag": "button",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "宫格拆分",
+          "disabled": false
+        },
+        {
+          "tag": "button",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "继续生图",
+          "disabled": false
+        },
+        {
+          "tag": "button",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "修改图片",
+          "disabled": false
+        },
+        {
+          "tag": "button",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "生成视频",
+          "disabled": false
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "id": null,
+          "color": "rgb(52, 211, 153)"
+        }
+      ],
+      "alerts": []
+    },
+    {
+      "name": "h3-one-image",
+      "nodeType": "video",
+      "title": "图片生成视频",
+      "rect": {
+        "x": 1733.4119873046875,
+        "y": 130.86007690429688,
+        "width": 673.5401611328125,
+        "height": 766.64697265625
+      },
+      "text": "3图片生成视频video-audit参考图 1模型演示 MiniMax · MiniMax-H3演示 MiniMax · MiniMax-H3-Max演示 Seedance · Seedance-2.0演示 Seedance · Seedance-2.0-Fast生成模式多参模式首帧生视频0 / 7000 字 @ 引用图片画幅21:916:94:31:13:49:16时长（秒）4s5s6s7s8s9s10s11s12s13s14s15s分辨率768P2K生成视频",
+      "controls": [
+        {
+          "tag": "button",
+          "type": null,
+          "label": "打开节点说明",
+          "value": "",
+          "text": "",
+          "disabled": false
+        },
+        {
+          "tag": "button",
+          "type": null,
+          "label": "运行此节点",
+          "value": "",
+          "text": "",
+          "disabled": false
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "mock-minimax::MiniMax-H3",
+          "text": "演示 MiniMax · MiniMax-H3演示 MiniMax · MiniMax-H3-Max演示 Seedance · Seedance-2.0演示 Seedance · Seedance-2.0-Fast",
+          "disabled": false,
+          "options": [
+            "mock-minimax::MiniMax-H3",
+            "mock-minimax::MiniMax-H3-Max",
+            "mock-seedance::Seedance-2.0",
+            "mock-seedance::Seedance-2.0-Fast"
+          ]
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "reference",
+          "text": "多参模式首帧生视频",
+          "disabled": false,
+          "options": [
+            "reference",
+            "first-frame"
+          ]
+        },
+        {
+          "tag": "textarea",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "",
+          "disabled": false
+        },
+        {
+          "tag": "button",
+          "type": "button",
+          "label": null,
+          "value": "",
+          "text": "@ 引用图片",
+          "disabled": false
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "16:9",
+          "text": "21:916:94:31:13:49:16",
+          "disabled": false,
+          "options": [
+            "21:9",
+            "16:9",
+            "4:3",
+            "1:1",
+            "3:4",
+            "9:16"
+          ]
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "5",
+          "text": "4s5s6s7s8s9s10s11s12s13s14s15s",
+          "disabled": false,
+          "options": [
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "10",
+            "11",
+            "12",
+            "13",
+            "14",
+            "15"
+          ]
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "768P",
+          "text": "768P2K",
+          "disabled": false,
+          "options": [
+            "768P",
+            "2K"
+          ]
+        },
+        {
+          "tag": "button",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "生成视频",
+          "disabled": false
+        }
+      ],
+      "inputs": [
+        {
+          "id": null,
+          "color": "rgb(52, 211, 153)"
+        },
+        {
+          "id": null,
+          "color": "rgb(244, 114, 182)"
+        },
+        {
+          "id": null,
+          "color": "rgb(251, 191, 36)"
+        },
+        {
+          "id": null,
+          "color": "rgb(167, 139, 250)"
+        },
+        {
+          "id": null,
+          "color": "rgb(138, 180, 248)"
+        }
+      ],
+      "outputs": [
+        {
+          "id": null,
+          "color": "rgb(244, 114, 182)"
+        }
+      ],
+      "alerts": []
+    },
+    {
+      "name": "h3-one-image-filtered-modes",
+      "nodeType": "video",
+      "title": "图片生成视频",
+      "rect": {
+        "x": 1733.4119873046875,
+        "y": 130.86007690429688,
+        "width": 673.5401611328125,
+        "height": 766.64697265625
+      },
+      "text": "3图片生成视频video-audit参考图 1模型演示 MiniMax · MiniMax-H3演示 MiniMax · MiniMax-H3-Max演示 Seedance · Seedance-2.0演示 Seedance · Seedance-2.0-Fast生成模式多参模式首帧生视频0 / 7000 字 @ 引用图片画幅21:916:94:31:13:49:16时长（秒）4s5s6s7s8s9s10s11s12s13s14s15s分辨率768P2K生成视频",
+      "controls": [
+        {
+          "tag": "button",
+          "type": null,
+          "label": "打开节点说明",
+          "value": "",
+          "text": "",
+          "disabled": false
+        },
+        {
+          "tag": "button",
+          "type": null,
+          "label": "运行此节点",
+          "value": "",
+          "text": "",
+          "disabled": false
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "mock-minimax::MiniMax-H3",
+          "text": "演示 MiniMax · MiniMax-H3演示 MiniMax · MiniMax-H3-Max演示 Seedance · Seedance-2.0演示 Seedance · Seedance-2.0-Fast",
+          "disabled": false,
+          "options": [
+            "mock-minimax::MiniMax-H3",
+            "mock-minimax::MiniMax-H3-Max",
+            "mock-seedance::Seedance-2.0",
+            "mock-seedance::Seedance-2.0-Fast"
+          ]
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "reference",
+          "text": "多参模式首帧生视频",
+          "disabled": false,
+          "options": [
+            "reference",
+            "first-frame"
+          ]
+        },
+        {
+          "tag": "textarea",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "",
+          "disabled": false
+        },
+        {
+          "tag": "button",
+          "type": "button",
+          "label": null,
+          "value": "",
+          "text": "@ 引用图片",
+          "disabled": false
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "16:9",
+          "text": "21:916:94:31:13:49:16",
+          "disabled": false,
+          "options": [
+            "21:9",
+            "16:9",
+            "4:3",
+            "1:1",
+            "3:4",
+            "9:16"
+          ]
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "5",
+          "text": "4s5s6s7s8s9s10s11s12s13s14s15s",
+          "disabled": false,
+          "options": [
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "10",
+            "11",
+            "12",
+            "13",
+            "14",
+            "15"
+          ]
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "768P",
+          "text": "768P2K",
+          "disabled": false,
+          "options": [
+            "768P",
+            "2K"
+          ]
+        },
+        {
+          "tag": "button",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "生成视频",
+          "disabled": false
+        }
+      ],
+      "inputs": [
+        {
+          "id": null,
+          "color": "rgb(52, 211, 153)"
+        },
+        {
+          "id": null,
+          "color": "rgb(244, 114, 182)"
+        },
+        {
+          "id": null,
+          "color": "rgb(251, 191, 36)"
+        },
+        {
+          "id": null,
+          "color": "rgb(167, 139, 250)"
+        },
+        {
+          "id": null,
+          "color": "rgb(138, 180, 248)"
+        }
+      ],
+      "outputs": [
+        {
+          "id": null,
+          "color": "rgb(244, 114, 182)"
+        }
+      ],
+      "alerts": []
+    },
+    {
+      "name": "fresh-second-context",
+      "nodeType": "video",
+      "title": "视频",
+      "rect": {
+        "x": 679.1174926757812,
+        "y": 338.45220947265625,
+        "width": 349.96197509765625,
+        "height": 301.58489990234375
+      },
+      "text": "1视频请选择视频模型；请更换模型、调整参数或断开该输入后再运行。模型选择模型…演示 MiniMax · MiniMax-H3演示 MiniMax · MiniMax-H3-Max演示 Seedance · Seedance-2.0演示 Seedance · Seedance-2.0-Fast生成模式当前素材组合不可用 @ 引用图片生成视频",
+      "controls": [
+        {
+          "tag": "button",
+          "type": null,
+          "label": "打开节点说明",
+          "value": "",
+          "text": "",
+          "disabled": false
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "选择模型…演示 MiniMax · MiniMax-H3演示 MiniMax · MiniMax-H3-Max演示 Seedance · Seedance-2.0演示 Seedance · Seedance-2.0-Fast",
+          "disabled": false,
+          "options": [
+            "",
+            "mock-minimax::MiniMax-H3",
+            "mock-minimax::MiniMax-H3-Max",
+            "mock-seedance::Seedance-2.0",
+            "mock-seedance::Seedance-2.0-Fast"
+          ]
+        },
+        {
+          "tag": "select",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "当前素材组合不可用",
+          "disabled": true,
+          "options": [
+            ""
+          ]
+        },
+        {
+          "tag": "textarea",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "",
+          "disabled": false
+        },
+        {
+          "tag": "button",
+          "type": "button",
+          "label": null,
+          "value": "",
+          "text": "@ 引用图片",
+          "disabled": true
+        },
+        {
+          "tag": "button",
+          "type": null,
+          "label": null,
+          "value": "",
+          "text": "生成视频",
+          "disabled": true
+        }
+      ],
+      "inputs": [
+        {
+          "id": null,
+          "color": "rgb(52, 211, 153)"
+        },
+        {
+          "id": null,
+          "color": "rgb(244, 114, 182)"
+        },
+        {
+          "id": null,
+          "color": "rgb(251, 191, 36)"
+        },
+        {
+          "id": null,
+          "color": "rgb(167, 139, 250)"
+        },
+        {
+          "id": null,
+          "color": "rgb(138, 180, 248)"
+        }
+      ],
+      "outputs": [
+        {
+          "id": null,
+          "color": "rgb(244, 114, 182)"
+        }
+      ],
+      "alerts": [
+        "请选择视频模型；请更换模型、调整参数或断开该输入后再运行。"
+      ]
+    }
+  ],
+  "assertions": [
+    {
+      "name": "fresh-requires-an-explicit-model-choice",
+      "pass": true,
+      "actual": "",
+      "expected": "empty model key with an explicit select-model state"
+    },
+    {
+      "name": "one-image-forces-non-text-mode",
+      "pass": true,
+      "actual": "reference",
+      "expected": "reference (H3)"
+    },
+    {
+      "name": "text-mode-is-not-selectable-after-image-connects",
+      "pass": true,
+      "actual": {
+        "buttonDisabled": false,
+        "availableModes": [
+          "reference",
+          "first-frame"
+        ]
+      },
+      "expected": "reference mode only; text mode is absent and submit remains available"
+    }
+  ]
+}

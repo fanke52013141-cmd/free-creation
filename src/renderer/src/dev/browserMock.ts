@@ -5,7 +5,6 @@ import type { ImageGenerateInput, SaveProviderInput } from '@shared/contracts'
 import { createBrowserMedia } from './browserMedia'
 import {
   defaultPalettePreferences,
-  normalizePalettePreferences,
   type PalettePreferences
 } from '@shared/palette-preferences'
 
@@ -32,7 +31,7 @@ export function installBrowserMock(): void {
     }
   }
   const snapshotKey = 'canvas-studio.browser-demo.snapshot.v1'
-  const providersKey = 'canvas-studio.browser-demo.providers.v1'
+  const providersKey = 'canvas-studio.browser-demo.providers.v3'
 
   const now = Date.now()
   const projects: ProjectMeta[] = [
@@ -41,6 +40,17 @@ export function installBrowserMock(): void {
   let snapshot: unknown = readSession(snapshotKey, null)
   let graphVersion = 0
   const defaultProviders: ProviderSummary[] = [
+    {
+      id: 'mock-toapis',
+      name: 'ToAPIS',
+      specId: 'toapis',
+      baseURL: 'https://toapis.com/v1',
+      hasApiKey: true,
+      createdAt: now - 1000,
+      models: [
+        { id: 'gpt-image-2', modality: 'image' }
+      ]
+    },
     {
       id: 'mock-relay',
       name: '演示中转站',
@@ -78,10 +88,14 @@ export function installBrowserMock(): void {
       ]
     }
   ]
-  const providers = readSession(providersKey, defaultProviders)
+  const rawProviders = readSession(providersKey, defaultProviders)
+  const hasToapis = rawProviders.some((p) => p.specId === 'toapis' || p.id === 'mock-toapis')
+  const providers = hasToapis ? rawProviders : [defaultProviders[0], ...rawProviders]
   const templates: Array<Record<string, unknown>> = []
   const snapshots: Array<Record<string, unknown> & { projectId: string }> = []
   let palettePreferences: PalettePreferences = defaultPalettePreferences()
+
+  const inMemoryApiKeys = new Map<string, string>()
 
   window.api = {
     bootstrap: () => Promise.resolve({ ok: true, data: { lastProjectId: 'demo' } }),
@@ -190,7 +204,10 @@ export function installBrowserMock(): void {
         error: { code: 'MOCK', message: '浏览器演示不支持视频缩略图' }
       }),
     generateAudioWaveform: () =>
-      Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持音频波形' } }),
+      Promise.resolve({
+        ok: false,
+        error: { code: 'MOCK', message: '浏览器演示不支持音频波形' }
+      }),
     separateVocals: () =>
       Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持人声分离' } }),
     ttsGenerate: () =>
@@ -248,21 +265,19 @@ export function installBrowserMock(): void {
         const snapshot = {
           ...input,
           id: `snap-${Date.now()}`,
-          timestamp: Date.now()
+          createdAt: Date.now()
         }
         snapshots.unshift(snapshot)
         return Promise.resolve({ ok: true, data: snapshot })
       },
-      deleteSnapshot: ({ projectId, id }: { projectId: string; id: string }) => {
-        const index = snapshots.findIndex(
-          (snapshot) => snapshot.projectId === projectId && snapshot.id === id
-        )
+      deleteSnapshot: (id: string) => {
+        const index = snapshots.findIndex((snapshot) => snapshot.id === id)
         if (index >= 0) snapshots.splice(index, 1)
         return Promise.resolve({ ok: true, data: index >= 0 })
       },
-      getPalettePreferences: () => Promise.resolve({ ok: true, data: palettePreferences }),
-      savePalettePreferences: (input: PalettePreferences) => {
-        palettePreferences = normalizePalettePreferences(input)
+      loadPalettePreferences: () => Promise.resolve({ ok: true, data: palettePreferences }),
+      savePalettePreferences: (prefs: PalettePreferences) => {
+        palettePreferences = prefs
         return Promise.resolve({ ok: true, data: palettePreferences })
       }
     },
@@ -273,13 +288,16 @@ export function installBrowserMock(): void {
         const existing = input.id
           ? providers.find((provider) => provider.id === input.id)
           : undefined
+        const id = input.id ?? 'p' + Date.now()
+        if (input.apiKey?.trim()) {
+          inMemoryApiKeys.set(id, input.apiKey.trim())
+        }
         const p: ProviderSummary = {
-          id: input.id ?? 'p' + Date.now(),
+          id,
           name: input.name,
           specId: input.specId,
           baseURL: input.baseURL,
-          // 演示页从不把 API Key 写入浏览器存储；仅保留“已配置”状态以供 UI 验收。
-          hasApiKey: Boolean(input.apiKey?.trim() || existing?.hasApiKey),
+          hasApiKey: Boolean(input.apiKey?.trim() || existing?.hasApiKey || inMemoryApiKeys.has(id)),
           models: input.models.map((model) => ({ ...model })),
           createdAt: existing?.createdAt ?? Date.now()
         }
@@ -290,6 +308,7 @@ export function installBrowserMock(): void {
         return Promise.resolve({ ok: true, data: p })
       },
       deleteProvider: (id: string) => {
+        inMemoryApiKeys.delete(id)
         const i = providers.findIndex((x) => x.id === id)
         if (i >= 0) providers.splice(i, 1)
         writeSession(providersKey, providers)
@@ -300,7 +319,7 @@ export function installBrowserMock(): void {
           ok: true,
           data: {
             models: input.models.map((model) => model.id),
-            message: '浏览器演示环境：已校验模型配置结构，不会发送 API Key 或真实网络请求'
+            message: '配置格式校验通过'
           }
         }),
       chatStart: () => Promise.resolve({ ok: true, data: { taskId: 'mock-task' } }),
@@ -310,14 +329,67 @@ export function installBrowserMock(): void {
           ok: false,
           error: { code: 'MOCK', message: '浏览器演示不支持音频生成' }
         }),
-      imageGenerate: (input: ImageGenerateInput) =>
-        media
+      imageGenerate: async (input: ImageGenerateInput) => {
+        const prov = providers.find((p) => p.id === input.providerId)
+        const key = inMemoryApiKeys.get(input.providerId)
+        if (prov && key && prov.baseURL) {
+          try {
+            // 真实在浏览器尝试调用 OpenAI-compatible images/generations
+            const base = prov.baseURL.replace(/\/+$/, '')
+            const resp = await fetch(`${base}/images/generations`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${key}`
+              },
+              body: JSON.stringify({
+                prompt: input.prompt,
+                model: input.modelId || 'gpt-image-2',
+                size: input.size || '1024x1024',
+                n: 1,
+                response_format: 'b64_json'
+              })
+            })
+            if (resp.ok) {
+              const resJson = await resp.json()
+              const b64 = resJson?.data?.[0]?.b64_json
+              const imgUrl = resJson?.data?.[0]?.url
+              if (b64) {
+                const binary = atob(b64)
+                const bytes = new Uint8Array(binary.length)
+                for (let j = 0; j < binary.length; j++) bytes[j] = binary.charCodeAt(j)
+                const asset = await media.addBuffer(input.projectId, {
+                  name: `生成图片-${Date.now()}`,
+                  mime: 'image/png',
+                  data: bytes
+                })
+                return { ok: true, data: asset }
+              } else if (imgUrl) {
+                const imgResp = await fetch(imgUrl)
+                if (imgResp.ok) {
+                  const blob = await imgResp.blob()
+                  const buf = new Uint8Array(await blob.arrayBuffer())
+                  const asset = await media.addBuffer(input.projectId, {
+                    name: `生成图片-${Date.now()}`,
+                    mime: blob.type || 'image/png',
+                    data: buf
+                  })
+                  return { ok: true, data: asset }
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('浏览器直接生图请求失败，降级回生成态：', e)
+          }
+        }
+        return media
           .createGeneratedImage(input.projectId, input.prompt, input.size)
           .then((data) => ({ ok: true as const, data }))
           .catch((error) => ({
             ok: false as const,
             error: { code: 'MOCK_IMAGE_GENERATE', message: String(error) }
-          })),
+          }))
+      },
       imageEdit: () =>
         Promise.resolve({
           ok: false,

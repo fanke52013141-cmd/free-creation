@@ -25,7 +25,6 @@ export function VocalSeparateBody({ shape, openPreview }: NodeBodyProps): React.
       <div className="asset-empty crop-empty">
         <Icon name="audio" size={24} />
         <span>人声分离</span>
-        <small>连接音频后选择分离模式。</small>
         <button
           className="btn-ghost small"
           onPointerDown={stopEventPropagation}

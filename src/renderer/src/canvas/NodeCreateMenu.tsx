@@ -116,16 +116,14 @@ export function NodeCreateMenu({
         return spec ? [spec.label] : []
       })
   const primaryWidth = menuWidth(primaryLabels, 128, showTabs ? 42 : 52)
-  const submenuWidth = source
-    ? 276
-    : menuWidth(
-        submenuChoices.flatMap((choice) => {
-          const spec = getNodeType(choice.type)
-          return spec ? [spec.label] : []
-        }),
-        128,
-        52
-      )
+  const submenuWidth = menuWidth(
+    submenuChoices.flatMap((choice) => {
+      const spec = getNodeType(choice.type)
+      return spec ? [spec.label] : []
+    }),
+    128,
+    52
+  )
   const left = Math.max(12, Math.min(x, window.innerWidth - primaryWidth - 24))
   const showCategoryMenu = (category: NodeCategoryId): void => {
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current)
@@ -154,19 +152,6 @@ export function NodeCreateMenu({
             </span>
             <span className="node-menu-label">
               {spec.label}
-              {choice.targetPort && (
-                <small>
-                  {choice.targetPort.name} · {choice.targetPort.type}
-                  {choice.targetPort.schema
-                    ? ` · ${choice.targetPort.schema.id}@${choice.targetPort.schema.version}`
-                    : ''}
-                  {upstream
-                    ? ' · 输出端口'
-                    : choice.targetPort.cardinality === 'many'
-                      ? ' · 可接多条'
-                      : ' · 单条输入'}
-                </small>
-              )}
             </span>
           </button>
         )
@@ -180,13 +165,7 @@ export function NodeCreateMenu({
   return (
     <div className="node-menu" ref={ref} style={{ left, top }}>
       <div className="node-menu-main" style={{ width: primaryWidth }}>
-        <div className="node-menu-title">
-          {source
-            ? upstream
-              ? `可提供 ${source.portType} 输入的上游`
-              : `可连接 ${source.portType} 输出`
-            : '新建节点'}
-        </div>
+        {!source && <div className="node-menu-title">新建节点</div>}
         {showPaste && (
           <>
             <button className="node-menu-action" onClick={onPaste}>

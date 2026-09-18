@@ -225,9 +225,8 @@ export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.
   if (!shape.props.mediaPath && !source) {
     return (
       <div className="asset-empty crop-empty">
-        <Icon name="crop" size={24} />
+        <Icon name="crop" size={40} />
         <span>图片裁剪</span>
-        <small>连接图片后选择比例裁剪。</small>
         <button
           className="btn-ghost small"
           onPointerDown={stopEventPropagation}

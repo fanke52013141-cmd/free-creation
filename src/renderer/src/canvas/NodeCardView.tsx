@@ -222,6 +222,16 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           }
         }
       }
+      for (const card of editor.getCurrentPageShapes()) {
+        if (card.type !== 'node-card') continue
+        const meta = card.meta as Record<string, unknown> | undefined
+        if (meta?.artifactProducerId === shape.id && typeof meta.artifactProducerPortId === 'string') {
+          outgoingCounts.set(
+            meta.artifactProducerPortId,
+            (outgoingCounts.get(meta.artifactProducerPortId) ?? 0) + 1
+          )
+        }
+      }
       return {
         readiness: deriveNodeReadiness({
           executionMode: spec?.executionMode ?? 'auto',
@@ -460,6 +470,28 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           )
         })}
 
+        {/* 产物节点溯源输入圆点：宫格拆分等节点产出的独立图片/视频节点，虽然不是 DAG 消费端，
+            但在视觉上有追溯连线连接。按规范“节点与节点之间一定连接的是圆连接点”，此处在左侧
+            居中渲染溯源圆点，让追溯连线精确落在圆连接点上。 */}
+        {inPorts.length === 0 && Boolean((shape.meta as Record<string, unknown> | undefined)?.artifactProducerId) && (
+          <span
+            key="artifact-in-provenance"
+            className="port-dot in connected input-optional"
+            style={{
+              top: shape.props.h / 2 - NODE_PORT_SIZE / 2,
+              ['--pc' as string]: PORT_COLORS[shape.props.nodeType === 'video-asset' ? 'video' : 'image'] ?? '#34d399'
+            }}
+            title="来源产物连线"
+          >
+            <span
+              className="port-dot-inner"
+              style={{
+                background: PORT_COLORS[shape.props.nodeType === 'video-asset' ? 'video' : 'image'] ?? '#34d399'
+              }}
+            />
+          </span>
+        )}
+
         {/* 输出端口：与输入端口同样是纯圆形，按住后拖出连线；in 方向拖线时反向高亮。 */}
         {outPorts.map((p, i) => {
           const hasOutput = Boolean(spec?.projectOutputs?.(shape)[p.id])
@@ -489,7 +521,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                   { x: e.clientX, y: e.clientY }
                 )
               }}
-            />
+            >
+              <span className="port-dot-inner" style={{ background: PORT_COLORS[p.type] }} />
+            </span>
           )
         })}
       </div>

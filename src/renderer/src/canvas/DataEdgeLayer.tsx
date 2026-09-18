@@ -116,14 +116,41 @@ function collectEdges(editor: Editor, host: HTMLDivElement): ScreenEdge[] {
     const producerBounds = editor.getShapePageBounds(producer.id)
     const assetBounds = editor.getShapePageBounds(asset.id)
     if (!producerBounds || !assetBounds) continue
+    const producerPorts = getNodePortsForShape(producer)
+    const artifactPortId = (asset.meta as Record<string, unknown> | undefined)?.artifactProducerPortId
+    const fromIndex =
+      typeof artifactPortId === 'string'
+        ? producerPorts.out.findIndex((p) => p.id === artifactPortId)
+        : -1
+    const outIdx = fromIndex >= 0 ? fromIndex : producerPorts.out.length > 0 ? 0 : -1
+    const fromY =
+      outIdx >= 0 ? portOffsets(producerPorts.out.length, producer.props.h)[outIdx] : undefined
+    const sourceAnchorY =
+      fromY !== undefined && producer.props.h > 0
+        ? producerBounds.y + (producerBounds.height * fromY) / producer.props.h
+        : producerBounds.y + producerBounds.height / 2
+
+    const assetPorts = getNodePortsForShape(asset as NodeCardShape)
+    const inIdx = assetPorts.in.length > 0 ? 0 : -1
+    const toY =
+      inIdx >= 0 ? portOffsets(assetPorts.in.length, (asset as NodeCardShape).props.h)[inIdx] : undefined
+    const targetAnchorY =
+      toY !== undefined && (asset as NodeCardShape).props.h > 0
+        ? assetBounds.y + (assetBounds.height * toY) / (asset as NodeCardShape).props.h
+        : assetBounds.y + assetBounds.height / 2
+
     const start = editor.pageToScreen({
-      x: producerBounds.maxX,
-      y: producerBounds.y + producerBounds.height / 2
+      x: producerBounds.maxX + NODE_PORT_OUTSET,
+      y: sourceAnchorY
     })
-    const end = editor.pageToScreen({ x: assetBounds.x, y: assetBounds.y + assetBounds.height / 2 })
+    const end = editor.pageToScreen({
+      x: assetBounds.x - NODE_PORT_OUTSET,
+      y: targetAnchorY
+    })
+    const outPort = outIdx >= 0 ? producerPorts.out[outIdx] : undefined
     result.push({
       id: `artifact:${asset.id}` as TLShapeId,
-      color: '#94a3b8',
+      color: outPort ? (PORT_COLORS[outPort.type] ?? '#94a3b8') : '#94a3b8',
       provenance: true,
       path: buildDataEdgePath(
         { x: start.x - hostRect.left, y: start.y - hostRect.top },

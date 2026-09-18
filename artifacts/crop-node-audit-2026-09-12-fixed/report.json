@@ -1,0 +1,328 @@
+{
+  "baseUrl": "http://127.0.0.1:5173/",
+  "viewport": {
+    "width": 1708,
+    "height": 879
+  },
+  "states": {
+    "fresh": {
+      "size": {
+        "w": 340,
+        "h": 260
+      },
+      "headerHeight": 28,
+      "colorBar": {
+        "h": 8,
+        "atBottom": true
+      },
+      "borderRadius": "12px",
+      "ports": [
+        {
+          "dir": "in",
+          "id": "原图",
+          "size": 18,
+          "hasOutput": false,
+          "connected": false
+        },
+        {
+          "dir": "out",
+          "id": "裁剪图",
+          "size": 18,
+          "hasOutput": false,
+          "connected": false
+        }
+      ],
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "status": "node-status-idle",
+      "bodyText": "图片裁剪连接一张图片后，即可在节点中选择比例并裁剪；精细框选也可随时打开。配置裁剪",
+      "workbenchImg": false,
+      "selectionStyle": "",
+      "activeAspect": ""
+    },
+    "emptyRun": {
+      "toast": "裁剪：输入契约校验失败：缺少必需输入：原图（in-image）",
+      "status": "node-status-failed"
+    },
+    "withSource": {
+      "size": {
+        "w": 340,
+        "h": 260
+      },
+      "headerHeight": 28,
+      "colorBar": {
+        "h": 8,
+        "atBottom": true
+      },
+      "borderRadius": "12px",
+      "ports": [
+        {
+          "dir": "in",
+          "id": "原图",
+          "size": 20,
+          "hasOutput": false,
+          "connected": true
+        },
+        {
+          "dir": "out",
+          "id": "裁剪图",
+          "size": 18,
+          "hasOutput": false,
+          "connected": false
+        }
+      ],
+      "overflow": {
+        "x": false,
+        "y": false
+      },
+      "status": "node-status-failed",
+      "bodyText": "自由1:116:99:164:33:4 精细框选 裁剪图片",
+      "workbenchImg": true,
+      "selectionStyle": "left: 10%; top: 10%; width: 80%; height: 80%;",
+      "activeAspect": "自由"
+    },
+    "aspectDrag": {
+      "activeAspect": "16:9",
+      "selectionBefore": "left: 10%; top: 27.5%; width: 80%; height: 45%;",
+      "selectionAfter": "left: 10%; top: 27.5%; width: 90%; height: 50.625%;"
+    },
+    "runSuccess": {
+      "status": "node-status-success",
+      "artifacts": 1,
+      "outHasOutput": true
+    },
+    "chain": {
+      "menu": false,
+      "workbenchImg": true
+    },
+    "illegal": {
+      "toast": "类型或 Schema 不兼容：text 输出无法接入 裁剪 节点",
+      "portStillSingle": 1
+    },
+    "quadRun": {
+      "status": "node-status-failed",
+      "quadActive": true,
+      "reasonVisible": true
+    },
+    "reload": {
+      "before": 5,
+      "after": 5,
+      "survived": 5,
+      "activeAspect": "16:9",
+      "inConnected": true,
+      "outHasOutput": true
+    }
+  },
+  "assertions": [
+    {
+      "name": "fresh-size-340x260",
+      "pass": true,
+      "actual": {
+        "w": 340,
+        "h": 260
+      },
+      "expected": {
+        "w": 340,
+        "h": 260
+      }
+    },
+    {
+      "name": "fresh-header-28-floating",
+      "pass": true,
+      "actual": 28,
+      "expected": 28
+    },
+    {
+      "name": "fresh-radius-12",
+      "pass": true,
+      "actual": "12px",
+      "expected": "12px"
+    },
+    {
+      "name": "fresh-colorbar-8-bottom",
+      "pass": true,
+      "actual": {
+        "h": 8,
+        "atBottom": true
+      },
+      "expected": {
+        "h": 8,
+        "atBottom": true
+      }
+    },
+    {
+      "name": "fresh-ports",
+      "pass": true,
+      "actual": [
+        {
+          "dir": "in",
+          "id": "原图",
+          "size": 18,
+          "hasOutput": false,
+          "connected": false
+        },
+        {
+          "dir": "out",
+          "id": "裁剪图",
+          "size": 18,
+          "hasOutput": false,
+          "connected": false
+        }
+      ],
+      "expected": "in-原图(req) + out-裁剪图，18px"
+    },
+    {
+      "name": "fresh-no-overflow",
+      "pass": true,
+      "actual": {
+        "x": false,
+        "y": false
+      },
+      "expected": {
+        "x": false,
+        "y": false
+      }
+    },
+    {
+      "name": "fresh-empty-hint",
+      "pass": true,
+      "actual": "图片裁剪连接一张图片后，即可在节点中选择比例并裁剪；精细框选也可随时打开。配置裁剪",
+      "expected": "空态提示 + 配置裁剪入口"
+    },
+    {
+      "name": "empty-run-blocked-with-port-hint",
+      "pass": true,
+      "actual": {
+        "toast": "裁剪：输入契约校验失败：缺少必需输入：原图（in-image）",
+        "status": "node-status-failed"
+      },
+      "expected": "非 success + toast 提示缺原图输入"
+    },
+    {
+      "name": "workbench-shows-source-image",
+      "pass": true,
+      "actual": {
+        "menu": false,
+        "workbenchImg": true,
+        "ports": [
+          {
+            "dir": "in",
+            "id": "原图",
+            "size": 20,
+            "hasOutput": false,
+            "connected": true
+          },
+          {
+            "dir": "out",
+            "id": "裁剪图",
+            "size": 18,
+            "hasOutput": false,
+            "connected": false
+          }
+        ]
+      },
+      "expected": "工作台显示待裁剪图片 + in-端口已连接"
+    },
+    {
+      "name": "aspect-16-9-active",
+      "pass": true,
+      "actual": "16:9",
+      "expected": "16:9"
+    },
+    {
+      "name": "corner-drag-changes-selection",
+      "pass": true,
+      "actual": {
+        "before": "left: 10%; top: 27.5%; width: 80%; height: 45%;",
+        "after": "left: 10%; top: 27.5%; width: 90%; height: 50.625%;"
+      },
+      "expected": "角点拖拽改写选区"
+    },
+    {
+      "name": "run-status-success",
+      "pass": true,
+      "actual": "node-status-success",
+      "expected": "node-status-success"
+    },
+    {
+      "name": "run-produces-artifact-asset",
+      "pass": true,
+      "actual": 1,
+      "expected": 1
+    },
+    {
+      "name": "run-out-port-has-output",
+      "pass": true,
+      "actual": [
+        {
+          "dir": "in",
+          "id": "原图",
+          "size": 18,
+          "hasOutput": false,
+          "connected": true
+        },
+        {
+          "dir": "out",
+          "id": "裁剪图",
+          "size": 18,
+          "hasOutput": true,
+          "connected": false
+        }
+      ],
+      "expected": "out-裁剪图 has-output"
+    },
+    {
+      "name": "crop-output-consumable-downstream",
+      "pass": true,
+      "actual": {
+        "menu": false,
+        "workbenchImg": true
+      },
+      "expected": "下游裁剪节点工作台显示裁剪产物"
+    },
+    {
+      "name": "illegal-text-to-crop-rejected",
+      "pass": true,
+      "actual": {
+        "toast": "类型或 Schema 不兼容：text 输出无法接入 裁剪 节点",
+        "portStillSingle": 1
+      },
+      "expected": "toast 不兼容 + 原连接未被破坏"
+    },
+    {
+      "name": "quad-mode-switch-persists",
+      "pass": true,
+      "actual": true,
+      "expected": "四角透视按钮激活"
+    },
+    {
+      "name": "quad-in-browser-honest-failure",
+      "pass": true,
+      "actual": {
+        "status": "node-status-failed"
+      },
+      "expected": "演示环境明确拒绝透视（failed，不伪装成功）"
+    },
+    {
+      "name": "quad-failure-reason-in-run-center",
+      "pass": true,
+      "actual": true,
+      "expected": "运行中心含透视失败原因"
+    },
+    {
+      "name": "reload-keeps-config-connection-result",
+      "pass": true,
+      "actual": {
+        "before": 5,
+        "after": 5,
+        "survived": 5,
+        "activeAspect": "16:9",
+        "inConnected": true,
+        "outHasOutput": true
+      },
+      "expected": "比例/连线/产物输出全部保留"
+    }
+  ]
+}

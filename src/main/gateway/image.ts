@@ -115,11 +115,6 @@ const TOAPIS_TIMEOUT_MS = 10 * 60_000
 const TOAPIS_TASK_QUERY_PATHS = ['/images/tasks/', '/tasks/', '/images/generations/']
 const toapisTaskQueryPathByProvider = new Map<string, string>()
 
-interface ToapisResponseLike {
-  id?: unknown
-  status?: unknown
-  error?: unknown
-}
 
 const delay = (ms: number): Promise<void> =>
   new Promise((resolve) => {
@@ -176,7 +171,8 @@ async function toapisUploadReference(
     new Blob([new Uint8Array(media.buf)], { type: media.mime }),
     `reference-${Date.now()}`
   )
-  const res = await fetch(`${provider.baseURL}/uploads/images`, {
+  const base = provider.baseURL.replace(/\/+$/, '')
+  const res = await fetch(`${base}/uploads/images`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${provider.apiKey}` },
     body: form,
@@ -197,13 +193,23 @@ async function toapisUploadReference(
 }
 
 function toapisTaskErrorMessage(task: Record<string, unknown>): string {
-  const err = task.error
+  const err = task.error ?? (task.data as Record<string, unknown>)?.error
   if (typeof err === 'string' && err.trim()) return err.slice(0, 300)
   if (err && typeof err === 'object') {
-    const msg = (err as Record<string, unknown>).message
+    const msg =
+      (err as Record<string, unknown>).message ||
+      (err as Record<string, unknown>).msg ||
+      (err as Record<string, unknown>).detail
     if (typeof msg === 'string' && msg.trim()) return msg.slice(0, 300)
   }
-  return `TOAPIS 生图任务失败（status=${String(task.status ?? 'failed')}）`
+  const failReason =
+    task.fail_reason ||
+    task.failure_reason ||
+    (task.data as Record<string, unknown>)?.fail_reason ||
+    task.message ||
+    task.msg
+  if (typeof failReason === 'string' && failReason.trim()) return failReason.slice(0, 300)
+  return `TOAPIS 生图任务失败（status=${String(task.status ?? (task.data as Record<string, unknown>)?.status ?? 'failed')}）`
 }
 
 async function pollToapisTask(
@@ -211,6 +217,7 @@ async function pollToapisTask(
   taskId: string
 ): Promise<Record<string, unknown>> {
   const deadline = Date.now() + TOAPIS_TIMEOUT_MS
+  const base = provider.baseURL.replace(/\/+$/, '')
   const knownPath = toapisTaskQueryPathByProvider.get(provider.id) ?? null
   let pathResolved = knownPath !== null
   while (Date.now() < deadline) {
@@ -218,7 +225,7 @@ async function pollToapisTask(
     const candidates = knownPath ? [knownPath] : TOAPIS_TASK_QUERY_PATHS
     let notFoundCount = 0
     for (const path of candidates) {
-      const res = await fetch(`${provider.baseURL}${path}${taskId}`, {
+      const res = await fetch(`${base}${path}${taskId}`, {
         headers: { Authorization: `Bearer ${provider.apiKey}` },
         signal: AbortSignal.timeout(30_000)
       }).catch(() => null)
@@ -242,9 +249,29 @@ async function pollToapisTask(
         pathResolved = true
       }
       const task = json as Record<string, unknown>
-      const status = typeof task.status === 'string' ? task.status : ''
-      if (status === 'completed') return task
-      if (status === 'failed') {
+      const rawStatus = (
+        (typeof task.status === 'string' ? task.status : '') ||
+        (typeof (task.data as Record<string, unknown>)?.status === 'string'
+          ? ((task.data as Record<string, unknown>).status as string)
+          : '')
+      ).toLowerCase()
+
+      const isCompleted =
+        rawStatus === 'completed' ||
+        rawStatus === 'success' ||
+        rawStatus === 'succeeded' ||
+        rawStatus === 'done' ||
+        rawStatus === 'finished' ||
+        (Boolean(extractFirstImageValue(task, new Set())) &&
+          rawStatus !== 'failed' &&
+          rawStatus !== 'error' &&
+          rawStatus !== 'in_progress' &&
+          rawStatus !== 'queued' &&
+          rawStatus !== 'processing' &&
+          rawStatus !== 'pending')
+
+      if (isCompleted) return task
+      if (rawStatus === 'failed' || rawStatus === 'error') {
         throw new GatewayError('TOAPIS_TASK_FAILED', toapisTaskErrorMessage(task))
       }
       break
@@ -307,7 +334,8 @@ async function generateWithToapisTask(
   if (capabilities.supportsQuality) body.quality = 'low'
   if (referenceUrls.length > 0) body.reference_images = referenceUrls
 
-  const res = await fetch(`${provider.baseURL}/images/generations`, {
+  const base = provider.baseURL.replace(/\/+$/, '')
+  const res = await fetch(`${base}/images/generations`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${provider.apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -319,9 +347,29 @@ async function generateWithToapisTask(
       `TOAPIS 生图提交失败：HTTP ${res.status}${await errorTail(res)}`
     )
   }
-  const task = (await res.json().catch(() => null)) as ToapisResponseLike | null
-  const taskId = typeof task?.id === 'string' && task.id ? task.id : null
-  if (!taskId) throw new GatewayError('EMPTY_RESULT', 'TOAPIS 未返回任务 ID')
+  const task = (await res.json().catch(() => null)) as Record<string, unknown> | null
+  if (!task || typeof task !== 'object') {
+    throw new GatewayError('EMPTY_RESULT', 'TOAPIS 生图提交未返回有效数据')
+  }
+
+  const immediateUrl = extractFirstImageValue(task, new Set(referenceUrls))
+  if (immediateUrl) {
+    return downloadImageAsAsset(input.projectId, immediateUrl, prompt.slice(0, 24))
+  }
+
+  const rawTaskId =
+    task.id ??
+    task.task_id ??
+    task.taskId ??
+    (task.data as Record<string, unknown>)?.id ??
+    (task.data as Record<string, unknown>)?.task_id
+  const taskId = typeof rawTaskId === 'string' && rawTaskId.trim() ? rawTaskId.trim() : null
+  if (!taskId) {
+    throw new GatewayError(
+      'EMPTY_RESULT',
+      `TOAPIS 未返回任务 ID（响应：${JSON.stringify(task).slice(0, 150)}）`
+    )
+  }
 
   const finished = await pollToapisTask(provider, taskId)
   const imageUrl = extractFirstImageValue(finished, new Set(referenceUrls))
@@ -420,7 +468,8 @@ export async function generateImageEditToAsset(
     if (capabilities.supportsQuality) body.quality = 'low'
     if (referenceUrls.length > 0) body.reference_images = referenceUrls
 
-    const res = await fetch(`${provider.baseURL}/images/generations`, {
+    const base = provider.baseURL.replace(/\/+$/, '')
+    const res = await fetch(`${base}/images/generations`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${provider.apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -432,9 +481,29 @@ export async function generateImageEditToAsset(
         `TOAPIS 图片修改提交失败：HTTP ${res.status}${await errorTail(res)}`
       )
     }
-    const task = (await res.json().catch(() => null)) as ToapisResponseLike | null
-    const taskId = typeof task?.id === 'string' && task.id ? task.id : null
-    if (!taskId) throw new GatewayError('EMPTY_RESULT', 'TOAPIS 未返回任务 ID')
+    const task = (await res.json().catch(() => null)) as Record<string, unknown> | null
+    if (!task || typeof task !== 'object') {
+      throw new GatewayError('EMPTY_RESULT', 'TOAPIS 图片修改提交未返回有效数据')
+    }
+
+    const immediateUrl = extractFirstImageValue(task, new Set(referenceUrls))
+    if (immediateUrl) {
+      return downloadImageAsAsset(input.projectId, immediateUrl, prompt.slice(0, 24))
+    }
+
+    const rawTaskId =
+      task.id ??
+      task.task_id ??
+      task.taskId ??
+      (task.data as Record<string, unknown>)?.id ??
+      (task.data as Record<string, unknown>)?.task_id
+    const taskId = typeof rawTaskId === 'string' && rawTaskId.trim() ? rawTaskId.trim() : null
+    if (!taskId) {
+      throw new GatewayError(
+        'EMPTY_RESULT',
+        `TOAPIS 未返回任务 ID（响应：${JSON.stringify(task).slice(0, 150)}）`
+      )
+    }
 
     const finished = await pollToapisTask(provider, taskId)
     const imageUrl = extractFirstImageValue(finished, new Set(referenceUrls))
