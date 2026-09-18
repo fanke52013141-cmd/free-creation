@@ -15,6 +15,16 @@ import { VOICE_DESIGN_PREVIEW_LIMIT } from '../../shared/voice-design'
 import { saveBufferAsset } from '../store/media.repo'
 import { getProvider } from './providers.repo'
 import { GatewayError } from './factory'
+import { describeUpstreamHttpError } from '../../shared/upstream-error'
+
+/**
+ * 上游错误统一出口：MiniMax 失败时可能是 JSON 错误体，也可能是网关的 HTML 错误页。
+ * 归一化后节点看到的是一句能行动的话，而不是被截断的响应体。
+ */
+function upstreamError(status: number, body: string, context: string): GatewayError {
+  const error = describeUpstreamHttpError(status, body, context)
+  return new GatewayError(error.code, error.message)
+}
 
 interface MiniMaxEnvelope {
   base_resp?: { status_code?: number; status_msg?: string }
@@ -57,10 +67,7 @@ export async function uploadMiniMaxFile(
   })
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
-    throw new GatewayError(
-      'UPSTREAM_ERROR',
-      `MiniMax 上传音频失败：HTTP ${res.status}${detail ? `：${detail.slice(0, 180)}` : ''}`
-    )
+    throw upstreamError(res.status, detail, 'MiniMax 上传音频失败')
   }
   const payload = (await res.json().catch(() => null)) as MiniMaxEnvelope & {
     file?: { file_id?: number | string }
@@ -159,10 +166,7 @@ export async function cloneMiniMaxVoice(request: CloneVoiceRequest): Promise<str
   })
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
-    throw new GatewayError(
-      'UPSTREAM_ERROR',
-      `MiniMax 创建克隆音色失败：HTTP ${res.status}${detail ? `：${detail.slice(0, 180)}` : ''}`
-    )
+    throw upstreamError(res.status, detail, 'MiniMax 创建克隆音色失败')
   }
   assertMiniMaxOk(
     (await res.json().catch(() => null)) as MiniMaxEnvelope | null,
@@ -200,10 +204,7 @@ export async function designMiniMaxVoice(input: VoiceDesignInput): Promise<Voice
   })
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
-    throw new GatewayError(
-      'UPSTREAM_ERROR',
-      `MiniMax 音色设计失败：HTTP ${res.status}${detail ? `：${detail.slice(0, 180)}` : ''}`
-    )
+    throw upstreamError(res.status, detail, 'MiniMax 音色设计失败')
   }
   const payload = (await res.json().catch(() => null)) as MiniMaxEnvelope & {
     voice_id?: string

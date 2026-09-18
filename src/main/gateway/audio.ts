@@ -5,10 +5,12 @@
 // TokenDance 等网关以 /gateway/minimax 前缀转发原生 MiniMax 协议，路径结构一致。
 //
 // 配音（speech）节点是「模型驱动」的：由 config.backend 明确选择协议，而不是
-// 按上游节点类型猜测。三条协议各自只发送自己文档化的字段：
+// 按上游节点类型猜测。各条协议各自只发送自己文档化的字段：
 //   minimax → POST {base}/v1/t2a_async_v2（异步任务 + 文件检索下载，默认主通道）
 //   doubao  → POST {base}/api/v3/tts/create（seed-audio-1.0，可返回字幕时间轴）
+//   volc    → POST {base}/api/v1/tts（火山引擎语音合成 1.0，非流式，data 为 Base64）
 //   openai  → POST {base}/audio/speech（保留的旧通道）
+import { randomUUID } from 'node:crypto'
 import type {
   AudioGenerateInput,
   SpeechGenerateInput,
@@ -22,6 +24,16 @@ import { saveBufferAsset } from '../store/media.repo'
 import { getDb } from '../store/db'
 import { getProvider } from './providers.repo'
 import { GatewayError } from './factory'
+import { describeUpstreamHttpError } from '../../shared/upstream-error'
+
+/**
+ * 上游错误统一出口：服务商可能返回 JSON 错误体、嵌套 base_resp，
+ * 甚至整页 HTML 错误页。归一化后节点上看到的是一句可行动的话，而不是 markup。
+ */
+function upstreamError(status: number, body: string, context: string): GatewayError {
+  const error = describeUpstreamHttpError(status, body, context)
+  return new GatewayError(error.code, error.message)
+}
 
 const EXT_BY_FORMAT: Record<string, string> = {
   mp3: '.mp3',
@@ -47,6 +59,13 @@ const MIME_BY_FORMAT: Record<string, string> = {
 
 /** MiniMax T2A v2 只接受 mp3/pcm/flac；其余请求格式回落 mp3。 */
 const MINIMAX_FORMATS = new Set(['mp3', 'pcm', 'flac'])
+
+/** 火山语音合成 1.0 的 audio.encoding 枚举（没有 flac）。 */
+const VOLC_ENCODINGS = new Set(['mp3', 'wav', 'pcm', 'ogg_opus'])
+/** 1.0 的 user.uid 只用于服务端链路追踪；本地没有账号体系，用固定标识。 */
+const VOLC_UID = 'canvas-studio'
+/** 非流式合成的成功码；其他取值都要带着 message 抛错。 */
+const VOLC_OK_CODE = 3000
 
 /** 配音节点默认音色是 OpenAI 命名（alloy 等），MiniMax 端没有这些音色，映射到系统音色。 */
 const OPENAI_DEFAULT_VOICES = new Set(['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'])
@@ -101,6 +120,22 @@ export async function generateSpeechToAsset(
       throw new GatewayError('INVALID_INPUT', '豆包语音通道只能选择豆包语音（Seed-Audio）供应商')
     }
     return generateViaDoubao(p, input)
+  }
+
+  if (config.backend === 'volc') {
+    if (p.specId !== 'doubao-speech') {
+      throw new GatewayError(
+        'INVALID_INPUT',
+        '火山语音合成 1.0 与豆包语音共用 openspeech 供应商实例'
+      )
+    }
+    if (!config.volcAppId) {
+      throw new GatewayError('INVALID_INPUT', '火山语音合成 1.0 需要填写节点里的 AppID')
+    }
+    if (!input.voiceId?.trim()) {
+      throw new GatewayError('INVALID_INPUT', '火山语音合成 1.0 的 voice_type 不能为空')
+    }
+    return generateViaVolc(p, input)
   }
 
   assertOpenAiCompatible(p)
@@ -190,6 +225,33 @@ export function buildDoubaoSpeechBody(
 }
 
 /**
+ * 火山引擎语音合成 1.0 的请求体（纯函数，便于对协议做 wire 断言）。
+ *
+ * 实现边界：只发送 /api/v1/tts 文档化的四个对象——app（appid + token + cluster）、
+ * user（uid 用于链路追踪）、audio（voice_type / encoding / speed_ratio）、request
+ * （reqid / text / operation=query）。1.0 的输出规格由 voice_type 决定，请求体里没有
+ * 采样率与码率字段，所以节点上那两项对该通道既不呈现也不发送。aigc 水印在 1.0 是另一
+ * 组字段且非通用能力，这里不猜字段名，因此不发送。
+ */
+export function buildVolcTtsBody(
+  p: Pick<ProviderConfig, 'apiKey'>,
+  input: Pick<SpeechGenerateInput, 'text' | 'voiceId'>,
+  config: SpeechConfig,
+  reqid: string
+): Record<string, unknown> {
+  return {
+    app: { appid: config.volcAppId, token: p.apiKey, cluster: config.volcCluster },
+    user: { uid: VOLC_UID },
+    audio: {
+      voice_type: input.voiceId.trim(),
+      encoding: VOLC_ENCODINGS.has(config.format) ? config.format : 'mp3',
+      speed_ratio: config.speed
+    },
+    request: { reqid, text: input.text.trim(), operation: 'query' }
+  }
+}
+
+/**
  * MiniMax 异步语音合成：创建任务 → 轮询 → 用 file_id 走文件检索拿下载地址 → 落盘。
  * 异步通道是配音节点的默认主通道，因为它承载了完整的 voice_setting / audio_setting /
  * pronunciation_dict / voice_modify 参数面，同步的 t2a_v2 只接受其中一小部分。
@@ -213,10 +275,7 @@ async function generateViaMiniMaxAsync(
 
   if (!res.ok) {
     const body = await res.text().catch(() => '')
-    throw new GatewayError(
-      'UPSTREAM_ERROR',
-      `MiniMax 创建语音合成任务失败：HTTP ${res.status}${body ? `：${body.slice(0, 200)}` : ''}`
-    )
+    throw upstreamError(res.status, body, 'MiniMax 创建语音合成任务失败')
   }
   const created = (await res.json().catch(() => null)) as MiniMaxEnvelope & {
     task_id?: string | number
@@ -268,10 +327,7 @@ async function pollMiniMaxAsyncTask(
     )
     if (!res.ok) {
       const body = await res.text().catch(() => '')
-      throw new GatewayError(
-        'UPSTREAM_ERROR',
-        `MiniMax 查询语音合成任务失败：HTTP ${res.status}${body ? `：${body.slice(0, 200)}` : ''}`
-      )
+      throw upstreamError(res.status, body, 'MiniMax 查询语音合成任务失败')
     }
     const payload = (await res.json().catch(() => null)) as MiniMaxEnvelope & {
       task_id?: string | number
@@ -307,10 +363,7 @@ async function retrieveMiniMaxFileUrl(
   })
   if (!res.ok) {
     const body = await res.text().catch(() => '')
-    throw new GatewayError(
-      'UPSTREAM_ERROR',
-      `MiniMax 检索合成文件失败：HTTP ${res.status}${body ? `：${body.slice(0, 200)}` : ''}`
-    )
+    throw upstreamError(res.status, body, 'MiniMax 检索合成文件失败')
   }
   const payload = (await res.json().catch(() => null)) as MiniMaxEnvelope & {
     file?: { download_url?: string }
@@ -353,10 +406,7 @@ async function generateViaDoubao(
 
   if (!res.ok) {
     const body = await res.text().catch(() => '')
-    throw new GatewayError(
-      'UPSTREAM_ERROR',
-      `豆包语音合成失败：HTTP ${res.status}${body ? `：${body.slice(0, 200)}` : ''}`
-    )
+    throw upstreamError(res.status, body, '豆包语音合成失败')
   }
   const payload = (await res.json().catch(() => null)) as {
     code?: number
@@ -380,6 +430,52 @@ async function generateViaDoubao(
   const asset = await saveAudioAsset(input.projectId, buf, config.format, input.text.trim())
   const subtitle = config.enableSubtitle ? normalizeSubtitle(payload?.subtitle) : undefined
   return subtitle ? { asset, subtitle } : { asset }
+}
+
+/**
+ * 火山引擎语音合成 1.0：一次请求同步返回 Base64 音频。鉴权头是 `Bearer;{token}`，
+ * 分号是协议要求而不是笔误。
+ */
+async function generateViaVolc(
+  p: ProviderConfig,
+  input: SpeechGenerateInput
+): Promise<SpeechGenerateResult> {
+  const config = input.config
+  const base = p.baseURL.replace(/\/+$/, '')
+
+  const res = await fetch(`${base}/api/v1/tts`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer;${p.apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(buildVolcTtsBody(p, input, config, randomUUID()))
+  })
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw upstreamError(res.status, body, '火山语音合成失败')
+  }
+  const payload = (await res.json().catch(() => null)) as {
+    code?: number
+    message?: string
+    data?: string
+  } | null
+
+  if (typeof payload?.code === 'number' && payload.code !== VOLC_OK_CODE) {
+    throw new GatewayError(
+      'UPSTREAM_ERROR',
+      `火山语音合成失败 ${payload.code}：${payload.message || '未知错误'}`
+    )
+  }
+  const audio = payload?.data
+  if (!audio) throw new GatewayError('EMPTY_RESULT', '火山语音合成未返回音频数据')
+
+  const buf = Buffer.from(audio, 'base64')
+  if (!buf.length) throw new GatewayError('EMPTY_RESULT', '火山语音返回的音频数据无效')
+
+  const encoding = VOLC_ENCODINGS.has(config.format) ? config.format : 'mp3'
+  return { asset: await saveAudioAsset(input.projectId, buf, encoding, input.text.trim()) }
 }
 
 /** 字幕只保留结构化时间轴；字段缺失时丢弃整条字幕而不是伪造空句子。 */
@@ -441,10 +537,7 @@ async function generateViaMiniMax(
 
   if (!res.ok) {
     const body = await res.text().catch(() => '')
-    throw new GatewayError(
-      'UPSTREAM_ERROR',
-      `HTTP ${res.status}${body ? `：${body.slice(0, 200)}` : ''}`
-    )
+    throw upstreamError(res.status, body, 'MiniMax 同步语音合成失败')
   }
   const payload = (await res.json().catch(() => null)) as {
     data?: { audio?: string }
@@ -483,10 +576,7 @@ async function generateViaOpenAICompatible(
 
   if (!res.ok) {
     const body = await res.text().catch(() => '')
-    throw new GatewayError(
-      'UPSTREAM_ERROR',
-      `HTTP ${res.status}${body ? `：${body.slice(0, 200)}` : ''}`
-    )
+    throw upstreamError(res.status, body, 'OpenAI 兼容配音失败')
   }
 
   const buf = Buffer.from(await res.arrayBuffer())

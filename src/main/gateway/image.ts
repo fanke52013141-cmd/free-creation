@@ -8,6 +8,7 @@ import type { ImageEditInput, ImageGenerateInput } from '../../shared/contracts'
 import { IMAGE_EDIT_SIZES } from '../../shared/image-edit'
 import { imageCapabilitiesFor, type ImageCapabilities } from '../../shared/image-capabilities'
 import type { MediaAsset, ProviderConfig } from '../../shared/types'
+import { describeUpstreamHttpError } from '../../shared/upstream-error'
 import { readMediaBuffer, saveBufferAsset } from '../store/media.repo'
 import { createImageModel, GatewayError, requireProvider } from './factory'
 
@@ -34,15 +35,23 @@ function uniqueReferenceIds(
   )
 }
 
-async function errorTail(res: Response): Promise<string> {
+/** 上游错误体归一化：中转站会返回 JSON 错误体甚至整页 HTML，节点上只该留下一句能行动的话。 */
+async function errorTail(res: Response, context = ''): Promise<string> {
   const body = await res.text().catch(() => '')
-  return body ? `：${body.slice(0, 180)}` : ''
+  return describeUpstreamHttpError(res.status, body, context).message
 }
 
 export async function generateImageToAsset(input: ImageGenerateInput): Promise<MediaAsset> {
   if (!input.prompt?.trim()) throw new GatewayError('INVALID_INPUT', '提示词不能为空')
   const provider = requireProvider(input.providerId)
   const capabilities = imageCapabilitiesFor(provider.specId, input.modelId)
+  const promptChars = input.prompt.trim().length
+  if (capabilities.maxPromptChars && promptChars > capabilities.maxPromptChars) {
+    throw new GatewayError(
+      'INVALID_INPUT',
+      `该模型提示词上限为 ${capabilities.maxPromptChars} 个字符，当前 ${promptChars} 个`
+    )
+  }
   switch (capabilities.driver) {
     case 'toapis-task':
       return generateWithToapisTask(provider, input, capabilities)
@@ -109,12 +118,10 @@ async function generateImageWithReference(
 
 const TOAPIS_POLL_INTERVAL_MS = 2_500
 const TOAPIS_TIMEOUT_MS = 10 * 60_000
-// ToAPIS 文档在开发环境不可抓取（DNS 受限）；任务查询端点按常见形态给出候选，
-// 首个命中的路径按供应商缓存。验收阶段用真实 Key 冒烟确认并收紧本表。
-// （docs/IMAGE_PROVIDER_GATEWAY_PLAN.md §10）
-const TOAPIS_TASK_QUERY_PATHS = ['/images/tasks/', '/tasks/', '/images/generations/']
+// 官方文档已确认任务查询为 GET /v1/images/generations/{task_id}；后两条只覆盖个别旧中转
+// 部署的路径形态，仅在文档路径返回 404 时才会用到，命中结果按供应商缓存。
+const TOAPIS_TASK_QUERY_PATHS = ['/images/generations/', '/images/tasks/', '/tasks/']
 const toapisTaskQueryPathByProvider = new Map<string, string>()
-
 
 const delay = (ms: number): Promise<void> =>
   new Promise((resolve) => {
@@ -179,10 +186,7 @@ async function toapisUploadReference(
     signal: AbortSignal.timeout(60_000)
   })
   if (!res.ok) {
-    throw new GatewayError(
-      'TOAPIS_UPLOAD_FAILED',
-      `参考图上传失败：HTTP ${res.status}${await errorTail(res)}`
-    )
+    throw new GatewayError('TOAPIS_UPLOAD_FAILED', await errorTail(res, '参考图上传失败'))
   }
   const json: unknown = await res.json().catch(() => null)
   const url = extractFirstImageValue(json, new Set())
@@ -235,10 +239,7 @@ async function pollToapisTask(
         continue
       }
       if (!res.ok) {
-        throw new GatewayError(
-          'UPSTREAM_ERROR',
-          `TOAPIS 任务查询失败：HTTP ${res.status}${await errorTail(res)}`
-        )
+        throw new GatewayError('UPSTREAM_ERROR', await errorTail(res, 'TOAPIS 任务查询失败'))
       }
       const json: unknown = await res.json().catch(() => null)
       if (!json || typeof json !== 'object') {
@@ -322,7 +323,7 @@ async function generateWithToapisTask(
     referenceUrls.push(await toapisUploadReference(provider, media))
   }
 
-  // 提交体按 ToAPIS 文档：size 为比例串，resolution/quality 仅在能力表允许时携带。
+  // 提交体只带文档化字段：size 为比例串，resolution 与 background 由能力表放行才发送。
   const body: Record<string, unknown> = {
     model: input.modelId,
     prompt,
@@ -331,7 +332,8 @@ async function generateWithToapisTask(
   }
   if (input.size && input.size !== 'auto') body.size = input.size
   if (capabilities.resolutions.length > 0 && input.resolution) body.resolution = input.resolution
-  if (capabilities.supportsQuality) body.quality = 'low'
+  if (capabilities.supportsTransparentBackground && input.background === 'transparent')
+    body.background = 'transparent'
   if (referenceUrls.length > 0) body.reference_images = referenceUrls
 
   const base = provider.baseURL.replace(/\/+$/, '')
@@ -342,10 +344,7 @@ async function generateWithToapisTask(
     signal: AbortSignal.timeout(60_000)
   })
   if (!res.ok) {
-    throw new GatewayError(
-      'UPSTREAM_ERROR',
-      `TOAPIS 生图提交失败：HTTP ${res.status}${await errorTail(res)}`
-    )
+    throw new GatewayError('UPSTREAM_ERROR', await errorTail(res, 'TOAPIS 生图提交失败'))
   }
   const task = (await res.json().catch(() => null)) as Record<string, unknown> | null
   if (!task || typeof task !== 'object') {
@@ -412,10 +411,7 @@ async function generateWithOpenRouterChat(
     signal: AbortSignal.timeout(180_000)
   })
   if (!res.ok) {
-    throw new GatewayError(
-      'UPSTREAM_ERROR',
-      `OpenRouter 生图失败：HTTP ${res.status}${await errorTail(res)}`
-    )
+    throw new GatewayError('UPSTREAM_ERROR', await errorTail(res, 'OpenRouter 生图失败'))
   }
   const json: unknown = await res.json().catch(() => null)
   const message = (
@@ -465,7 +461,6 @@ export async function generateImageEditToAsset(
     if (capabilities.resolutions.length > 0 && input.config?.resolution) {
       body.resolution = input.config.resolution
     }
-    if (capabilities.supportsQuality) body.quality = 'low'
     if (referenceUrls.length > 0) body.reference_images = referenceUrls
 
     const base = provider.baseURL.replace(/\/+$/, '')
@@ -476,10 +471,7 @@ export async function generateImageEditToAsset(
       signal: AbortSignal.timeout(60_000)
     })
     if (!res.ok) {
-      throw new GatewayError(
-        'UPSTREAM_ERROR',
-        `TOAPIS 图片修改提交失败：HTTP ${res.status}${await errorTail(res)}`
-      )
+      throw new GatewayError('UPSTREAM_ERROR', await errorTail(res, 'TOAPIS 图片修改提交失败'))
     }
     const task = (await res.json().catch(() => null)) as Record<string, unknown> | null
     if (!task || typeof task !== 'object') {

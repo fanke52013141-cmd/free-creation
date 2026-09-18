@@ -16,6 +16,12 @@ import { getDb, getDataDir } from '../store/db'
 import { readMediaBuffer, saveFileAsset } from '../store/media.repo'
 import { GatewayError } from './factory'
 import { getProvider } from './providers.repo'
+import { describeUpstreamHttpError } from '../../shared/upstream-error'
+import {
+  providerDriftMessage,
+  snapshotProviderConnection,
+  type ProviderConnectionSnapshot
+} from '../../shared/provider-connection'
 import {
   canonicalVideoModelId,
   videoCapabilitiesFor,
@@ -32,6 +38,8 @@ type Send = (e: GatewayEvent) => void
 // 官方建议轮询间隔 10s，避免对服务端造成压力
 const POLL_INTERVAL_MS = 10_000
 const VIDEO_TIMEOUT_MS = 30 * 60 * 1000
+// 提交被 429 拒绝时的退避重试预算；只覆盖「任务还没建起来」这一种失败。
+const SUBMIT_RETRY_DELAYS_MS = [5_000, 15_000]
 
 interface TaskRow {
   id: string
@@ -58,6 +66,8 @@ interface VideoInputState {
   referenceVideoMediaId?: string
   referenceAudioMediaIds?: string[]
   upstreamTaskId?: string
+  /** 提交时刻的供应商连接，续查前用于检测漂移 */
+  connection?: ProviderConnectionSnapshot
 }
 
 interface UpstreamState {
@@ -241,15 +251,14 @@ function mediaPathById(mediaId: string): string | undefined {
 
 async function fetchJson(
   url: string,
-  init: RequestInit
+  init: RequestInit,
+  context = ''
 ): Promise<Record<string, unknown> & { status?: number }> {
   const res = await fetch(url, init)
   if (!res.ok) {
     const body = await res.text().catch(() => '')
-    throw new GatewayError(
-      'UPSTREAM_ERROR',
-      `HTTP ${res.status}${body ? `：${body.slice(0, 200)}` : ''}`
-    )
+    const error = describeUpstreamHttpError(res.status, body, context)
+    throw new GatewayError(error.code, error.message)
   }
   return (await res.json()) as Record<string, unknown>
 }
@@ -387,11 +396,15 @@ export async function buildMiniMaxH3RequestBody(
 
 async function minimaxSubmit(p: ProviderConfig, input: VideoSubmitInput): Promise<string> {
   const body = await buildMiniMaxH3RequestBody(input)
-  const res = await fetchJson(`${p.baseURL}/v2/video_generation`, {
-    method: 'POST',
-    headers: authHeaders(p),
-    body: JSON.stringify(body)
-  })
+  const res = await fetchJson(
+    `${p.baseURL}/v2/video_generation`,
+    {
+      method: 'POST',
+      headers: authHeaders(p),
+      body: JSON.stringify(body)
+    },
+    'MiniMax 提交视频任务失败'
+  )
   const taskId = res.task_id ?? res.taskId ?? (res as { id?: string }).id
   if (typeof taskId !== 'string' || !taskId) {
     throw new GatewayError(
@@ -403,9 +416,11 @@ async function minimaxSubmit(p: ProviderConfig, input: VideoSubmitInput): Promis
 }
 
 async function minimaxPoll(p: ProviderConfig, upstreamId: string): Promise<UpstreamState> {
-  const res = await fetchJson(`${p.baseURL}/v2/query/video_generation/${upstreamId}`, {
-    headers: authHeaders(p)
-  })
+  const res = await fetchJson(
+    `${p.baseURL}/v2/query/video_generation/${upstreamId}`,
+    { headers: authHeaders(p) },
+    'MiniMax 查询视频任务失败'
+  )
   const task = (res.task ?? {}) as {
     status?: string
     content?: { url?: string }
@@ -521,11 +536,15 @@ export async function buildSeedanceRequestBody(
 
 async function seedanceSubmit(p: ProviderConfig, input: VideoSubmitInput): Promise<string> {
   const body = await buildSeedanceRequestBody(p, input)
-  const res = await fetchJson(seedanceTasksUrl(p), {
-    method: 'POST',
-    headers: authHeaders(p),
-    body: JSON.stringify(body)
-  })
+  const res = await fetchJson(
+    seedanceTasksUrl(p),
+    {
+      method: 'POST',
+      headers: authHeaders(p),
+      body: JSON.stringify(body)
+    },
+    'Seedance 提交视频任务失败'
+  )
   const id = res.id
   if (typeof id !== 'string' || !id) {
     throw new GatewayError(
@@ -537,9 +556,11 @@ async function seedanceSubmit(p: ProviderConfig, input: VideoSubmitInput): Promi
 }
 
 async function seedancePoll(p: ProviderConfig, upstreamId: string): Promise<UpstreamState> {
-  const res = await fetchJson(seedanceTasksUrl(p, upstreamId), {
-    headers: authHeaders(p)
-  })
+  const res = await fetchJson(
+    seedanceTasksUrl(p, upstreamId),
+    { headers: authHeaders(p) },
+    'Seedance 查询视频任务失败'
+  )
   const status = res.status as string | undefined
   const content = res.content as { video_url?: string } | undefined
   if (status === 'succeeded') {
@@ -567,6 +588,63 @@ function adaptersFor(p: ProviderConfig): {
     : { submit: seedanceSubmit, poll: seedancePoll }
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/** 供应商连接可能在任务在途时被用户改动，因此每轮续查前重新读取。 */
+function requireLiveProvider(providerId: string): ProviderConfig {
+  const p = getProvider(providerId)
+  if (!p) throw new GatewayError('PROVIDER_NOT_FOUND', '供应商已被删除')
+  return p
+}
+
+/**
+ * 提交只在被 429 拒绝时重发：那一定是任务还没建起来，重发不产生第二次扣费。
+ * 超时与 5xx 都可能已经创建了任务，重发等于同一支视频扣两次额度。
+ */
+async function submitWithBackoff(
+  submit: (p: ProviderConfig, input: VideoSubmitInput) => Promise<string>,
+  p: ProviderConfig,
+  input: VideoSubmitInput
+): Promise<string> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await submit(p, input)
+    } catch (error) {
+      const delay = SUBMIT_RETRY_DELAYS_MS[attempt]
+      if (
+        delay === undefined ||
+        !(error instanceof GatewayError) ||
+        error.code !== 'UPSTREAM_RATE_LIMIT'
+      )
+        throw error
+      await sleep(delay)
+    }
+  }
+}
+
+/**
+ * 单次续查：先确认连接没有漂移，再查询上游。轮询被限流不算任务失败——
+ * 任务已经在付费运行，误判成失败会让用户重新提交并再扣一次费。
+ */
+async function pollUpstream(
+  poll: (p: ProviderConfig, upstreamId: string) => Promise<UpstreamState>,
+  provider: ProviderConfig,
+  connection: ProviderConnectionSnapshot | undefined,
+  upstreamId: string
+): Promise<UpstreamState> {
+  const drift = providerDriftMessage(connection, provider, upstreamId)
+  if (drift) throw new GatewayError('PROVIDER_DRIFTED', drift)
+  try {
+    return await poll(provider, upstreamId)
+  } catch (error) {
+    if (error instanceof GatewayError && error.code === 'UPSTREAM_RATE_LIMIT')
+      return { status: 'running' }
+    throw error
+  }
+}
+
 export function submitVideoTask(send: Send, input: VideoSubmitInput): VideoSubmitResult {
   if (!input.prompt?.trim()) throw new GatewayError('INVALID_INPUT', '提示词不能为空')
   const p = getProvider(input.providerId)
@@ -592,7 +670,8 @@ export function submitVideoTask(send: Send, input: VideoSubmitInput): VideoSubmi
       ...(input.referenceVideoMediaId ? [input.referenceVideoMediaId] : [])
     ]),
     referenceVideoMediaId: input.referenceVideoMediaId,
-    referenceAudioMediaIds: uniqueMediaIds(input.referenceAudioMediaIds)
+    referenceAudioMediaIds: uniqueMediaIds(input.referenceAudioMediaIds),
+    connection: snapshotProviderConnection(p)
   }
   getDb()
     .prepare(
@@ -616,11 +695,9 @@ export function submitVideoTask(send: Send, input: VideoSubmitInput): VideoSubmi
 
 async function pollLoop(send: Send, taskId: string, input: VideoSubmitInput): Promise<void> {
   try {
-    const p = getProvider(input.providerId)
-    if (!p) throw new GatewayError('PROVIDER_NOT_FOUND', '供应商已被删除')
-
+    const p = requireLiveProvider(input.providerId)
     const { submit, poll } = adaptersFor(p)
-    const upstreamId = await submit(p, input)
+    const upstreamId = await submitWithBackoff(submit, p, input)
     const state = parseInput(taskId)
     updateTask(taskId, {
       input: JSON.stringify({ ...state, upstreamTaskId: upstreamId }),
@@ -639,10 +716,15 @@ async function pollLoop(send: Send, taskId: string, input: VideoSubmitInput): Pr
       if (Date.now() > deadline) {
         throw new GatewayError('TIMEOUT', '视频生成超时（30 分钟）')
       }
-      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
+      await sleep(POLL_INTERVAL_MS)
       if (cancelled.has(taskId)) continue // 唤醒后走取消分支
 
-      const st = await poll(p, upstreamId)
+      const st = await pollUpstream(
+        poll,
+        requireLiveProvider(input.providerId),
+        state.connection,
+        upstreamId
+      )
       if (st.status === 'succeeded' && st.url) {
         await finalizeVideo(send, taskId, input.projectId, st.url)
         return
@@ -692,7 +774,7 @@ export function getVideoTask(taskId: string): VideoTaskInfo | null {
   return row ? rowToInfo(row) : null
 }
 
-// 应用启动恢复：重启前仍在途的任务，有 upstreamTaskId 则继续轮询，否则标失败
+// 应用启动恢复：重启前仍在途的任务，有 upstreamTaskId 且连接未漂移才继续轮询，否则标失败
 export function resumePendingVideoTasks(send: Send): void {
   const rows = getDb()
     .prepare("SELECT * FROM tasks WHERE kind = 'video' AND status IN ('submitted', 'running')")
@@ -705,7 +787,7 @@ export function resumePendingVideoTasks(send: Send): void {
       send({ kind: 'video-error', taskId: row.id, error: '应用重启导致任务状态丢失' })
       continue
     }
-    void resumeLoop(send, row, p, state.upstreamTaskId)
+    void resumeLoop(send, row, p, state.upstreamTaskId, state.connection)
   }
 }
 
@@ -713,7 +795,8 @@ async function resumeLoop(
   send: Send,
   row: TaskRow,
   p: ProviderConfig,
-  upstreamId: string
+  upstreamId: string,
+  connection?: ProviderConnectionSnapshot
 ): Promise<void> {
   const { poll } = adaptersFor(p)
   try {
@@ -727,7 +810,7 @@ async function resumeLoop(
 
       // 恢复时先 poll 一次：上游任务可能在我们离线期间已经成功（或失败），
       // 此时即便已超过 deadline，也应取回已成片的 URL 而不是立即判超时失败。
-      const st = await poll(p, upstreamId)
+      const st = await pollUpstream(poll, p, connection, upstreamId)
       if (st.status === 'succeeded' && st.url) {
         await finalizeVideo(send, row.id, row.project_id, st.url)
         return
@@ -744,8 +827,10 @@ async function resumeLoop(
       if (Date.now() > row.updated_at + VIDEO_TIMEOUT_MS) {
         throw new GatewayError('TIMEOUT', '视频生成超时（30 分钟）')
       }
-      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
+      await sleep(POLL_INTERVAL_MS)
       if (cancelled.has(row.id)) continue
+      // 重启后用户可能改过供应商；每轮重新读取，漂移即停手
+      p = requireLiveProvider(row.provider_id)
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)

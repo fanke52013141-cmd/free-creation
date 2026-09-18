@@ -105,11 +105,7 @@ export function saveProvider(input: SaveProviderInput): ProviderSummary {
   const existingRow = input.id
     ? (getDb().prepare('SELECT * FROM providers WHERE id = ?').get(id) as ProviderRow | undefined)
     : undefined
-  const apiKeyRef = apiKey
-    ? encryptSecret(apiKey)
-    : existingRow
-      ? existingRow.api_key_ref
-      : null
+  const apiKeyRef = apiKey ? encryptSecret(apiKey) : existingRow ? existingRow.api_key_ref : null
 
   const row: ProviderRow = {
     id,
