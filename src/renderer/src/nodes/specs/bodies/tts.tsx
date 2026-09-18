@@ -1,8 +1,9 @@
-// TTS 语音复刻节点 Body（本地 ComfyUI IndexTTS-2.5）
+// TTS 语音复刻节点 Body（默认 MiniMax 云端快速复刻，本地 IndexTTS 为显式选项）
 import { useEffect, useRef, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import { mediaUrl, type NodeBodyProps } from '../../registry'
 import { toast } from '../../../stores/toast'
+import { countIncomingConnections } from '../../../canvas/graph'
 import { markUndoPoint } from '../../../canvas/history'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { runNodeManually } from '../../../engine/executor'
@@ -12,10 +13,12 @@ import { AppSelect } from '../../../components/AppSelect'
 import { parseTtsConfig } from '@shared/tts'
 import {
   MINIMAX_CLONE_RETENTION_DAYS,
+  TTS_FORMATS_BY_BACKEND,
   TTS_LANGS,
   TTS_LANGUAGE_BOOSTS,
   isValidMiniMaxVoiceId,
   type TtsConfig,
+  type TtsFormat,
   type TtsLang
 } from '@shared/tts'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
@@ -28,8 +31,6 @@ import {
   selectMediaResult,
   useClickGuard
 } from './shared'
-
-const TTS_FORMATS: Array<TtsConfig['format']> = ['wav', 'mp3', 'flac']
 
 /** 本次运行登记出的可复用音色 ID（来自 out-json 音色档案）。 */
 function clonedVoiceId(shape: NodeBodyProps['shape']): string {
@@ -202,7 +203,11 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
     }
   }
 
-  const hasRefAudio = Boolean(config.refMediaId && config.refMediaPath)
+  // 执行器取 in-audio 连线的参考音频，其次才用节点内上传的那份；朗读文本是本框正文与
+  // in-text 连线合并的结果（shared/engine/executors/tts.ts）。
+  const uploadedRef = Boolean(config.refMediaId && config.refMediaPath)
+  const incomingRef = countIncomingConnections(editor, shape.id, 'in-audio')
+  const incomingText = countIncomingConnections(editor, shape.id, 'in-text')
   const hasOutput = Boolean(shape.props.mediaPath)
   const voiceIdInvalid =
     config.backend === 'minimax' &&
@@ -218,7 +223,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
           <Icon name="audio" size={13} />
           <span>参考语音</span>
         </div>
-        {hasRefAudio ? (
+        {uploadedRef ? (
           <div className="tts-ref-player">
             <button
               className="audio-play-btn"
@@ -268,6 +273,13 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
             <span className="tts-upload-hint">选择一段目标音色的音频</span>
           </button>
         )}
+        <span className={`node-wiring ${incomingRef > 0 || uploadedRef ? 'ok' : 'warn'}`}>
+          {incomingRef > 0
+            ? `参考语音：取 in-audio 连线（${incomingRef} 个，用第一个）`
+            : uploadedRef
+              ? '参考语音：取本节点上传的那份'
+              : '参考语音：未上传且 in-audio 未连线，运行会跳过'}
+        </span>
       </div>
 
       {/* ── 合成文字 ── */}
@@ -279,12 +291,17 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
         <textarea
           className="gen-textarea tts"
           value={draft}
-          placeholder="输入要朗读的文本，上游文本节点内容会自动合并…"
+          placeholder="输入要朗读的文本…"
           onPointerDown={(e) => e.stopPropagation()}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={() => updateText(draft)}
         />
-        <div className="audio-text-meta">{draft.length} 字 · 可由文本节点提供</div>
+        <div className="audio-text-meta">
+          {draft.length} 字 ·{' '}
+          {incomingText > 0
+            ? `in-text 已连线 ${incomingText} 个，运行会与本文合并`
+            : 'in-text 未连线，运行只用本文'}
+        </div>
       </div>
 
       {/* ── 合成参数 ── */}
@@ -307,8 +324,8 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
               })
             }}
           >
+            <option value="minimax">MiniMax · 快速复刻（云端）</option>
             <option value="comfyui">本地 ComfyUI · IndexTTS</option>
-            <option value="minimax">MiniMax · 快速复刻</option>
           </AppSelect>
         </div>
         {config.backend === 'minimax' && (
@@ -470,67 +487,76 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
           </div>
         )}
       </div>
+      {/* 语言/语速/情绪只被本地 IndexTTS 工作流读取；MiniMax 快速复刻链路不发送这些字段。 */}
       <div className="tts-options">
-        <label className="opt-label">语言</label>
-        <AppSelect
-          className="gen-select small"
-          value={config.lang}
-          onPointerDown={(e) => e.stopPropagation()}
-          onChange={(e) => updateConfig({ lang: e.target.value as TtsLang })}
-        >
-          {TTS_LANGS.map((item) => (
-            <option key={item.value} value={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </AppSelect>
+        {config.backend === 'comfyui' && (
+          <>
+            <label className="opt-label">语言</label>
+            <AppSelect
+              className="gen-select small"
+              value={config.lang}
+              onPointerDown={(e) => e.stopPropagation()}
+              onChange={(e) => updateConfig({ lang: e.target.value as TtsLang })}
+            >
+              {TTS_LANGS.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </AppSelect>
+          </>
+        )}
         <label className="opt-label">格式</label>
         <AppSelect
           className="gen-select small"
           value={config.format}
           onPointerDown={(e) => e.stopPropagation()}
-          onChange={(e) => updateConfig({ format: e.target.value as TtsConfig['format'] })}
+          onChange={(e) => updateConfig({ format: e.target.value as TtsFormat })}
         >
-          {(config.backend === 'minimax'
-            ? TTS_FORMATS.filter((f) => f !== 'wav')
-            : TTS_FORMATS
-          ).map((f) => (
+          {TTS_FORMATS_BY_BACKEND[config.backend].map((f) => (
             <option key={f} value={f}>
               {f.toUpperCase()}
             </option>
           ))}
         </AppSelect>
       </div>
-      <div className="tts-sliders">
-        <div className="tts-slider-row">
-          <label className="opt-label">语速 {config.speed.toFixed(1)}x</label>
-          <input
-            type="range"
-            min="0.5"
-            max="2"
-            step="0.1"
-            value={config.speed}
-            onPointerDown={(e) => e.stopPropagation()}
-            onChange={(e) => updateConfig({ speed: Number(e.target.value) })}
-          />
+      {config.backend === 'comfyui' && (
+        <div className="tts-sliders">
+          <div className="tts-slider-row">
+            <label className="opt-label">语速 {config.speed.toFixed(1)}x</label>
+            <input
+              type="range"
+              min="0.5"
+              max="2"
+              step="0.1"
+              value={config.speed}
+              onPointerDown={(e) => e.stopPropagation()}
+              onChange={(e) => updateConfig({ speed: Number(e.target.value) })}
+            />
+          </div>
+          <div className="tts-slider-row">
+            <label className="opt-label">情绪 {config.emotion.toFixed(1)}</label>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.1"
+              value={config.emotion}
+              onPointerDown={(e) => e.stopPropagation()}
+              onChange={(e) => updateConfig({ emotion: Number(e.target.value) })}
+            />
+          </div>
         </div>
-        <div className="tts-slider-row">
-          <label className="opt-label">情绪 {config.emotion.toFixed(1)}</label>
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.1"
-            value={config.emotion}
-            onPointerDown={(e) => e.stopPropagation()}
-            onChange={(e) => updateConfig({ emotion: Number(e.target.value) })}
-          />
-        </div>
-      </div>
+      )}
 
       <button
         className="btn-generate"
-        disabled={busy || !draft.trim() || (config.backend === 'minimax' && !config.providerId)}
+        disabled={
+          busy ||
+          (!draft.trim() && incomingText === 0) ||
+          (incomingRef === 0 && !uploadedRef) ||
+          (config.backend === 'minimax' && !config.providerId)
+        }
         onPointerDown={(e) => stopEventPropagation(e)}
         onClick={(e) => {
           e.stopPropagation()
@@ -605,7 +631,8 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
             <div className="audio-player-info">
               <span className="audio-player-name">{shape.props.title}</span>
               <span className="audio-player-meta">
-                {config.lang} · {config.format.toUpperCase()}
+                {config.backend === 'minimax' ? config.modelId : config.lang} ·{' '}
+                {config.format.toUpperCase()}
               </span>
             </div>
             <div className="audio-player-actions">

@@ -15,7 +15,6 @@ export const ACTIVE_NODE_TYPE_IDS = [
   'video-asset',
   'video-frame',
   'video-clip',
-  'video-audio',
   'vocal-separate',
   'audio',
   'file',
@@ -45,10 +44,13 @@ export const INTERNAL_NODE_TYPE_IDS = [] as const
 export type InternalNodeTypeId = (typeof INTERNAL_NODE_TYPE_IDS)[number]
 
 /**
- * 已退役的内部类型。它们绝不能出现在新增节点入口；当前项目没有历史数据迁移需求，
- * 该集合仅用于让注册表和类型边界保持明确。
+ * 已退役的内部类型。它们绝不能出现在新增节点入口；仍注册以读取历史项目。
+ *
+ * `video-audio`（截音频）2026-09-18 起退役：用户拍板与「截视频」合并为「视频截取」
+ * 单节点（画面/音频两条输出由同一份起止时间驱动）。旧画布里的截音频节点继续按原契约
+ * 执行，不会被改写。
  */
-export const LEGACY_NODE_TYPE_IDS = ['script', 'group', 'compose'] as const
+export const LEGACY_NODE_TYPE_IDS = ['script', 'video-audio', 'group', 'compose'] as const
 
 export type LegacyNodeTypeId = (typeof LEGACY_NODE_TYPE_IDS)[number]
 
@@ -392,7 +394,7 @@ export const PROVIDER_SPECS: ProviderSpec[] = [
     // /audio/speech，而是 POST /api/v3/tts/create 并返回 Base64 音频与字幕时间轴。
     id: 'doubao-speech',
     label: '豆包语音（Seed-Audio）',
-    desc: '火山语音合成原生协议 /api/v3/tts/create，用 X-Api-Key 鉴权，可返回字幕',
+    desc: '火山语音原生协议供应商：豆包 /api/v3/tts/create 用 X-Api-Key，语音合成 1.0 用 /api/v1/tts',
     baseURL: 'https://openspeech.bytedance.com',
     modality: 'audio',
     suggestions: ['seed-audio-1.0']

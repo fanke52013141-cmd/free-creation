@@ -40,6 +40,15 @@ export const speechExecutor = async (ctx: NodeExecutionContext): Promise<NodeExe
     }
   }
 
+  // 火山 1.0 的两个必填前置条件：AppID 在节点配置里、voice_type 是必填音色标识。
+  // 缺任何一项都直接跳过，不发一个必然 4xx 的请求。
+  if (config.backend === 'volc' && !config.volcAppId) {
+    return { status: 'skipped', reason: '火山语音合成 1.0 未填写 AppID' }
+  }
+  if (config.backend === 'volc' && !voiceId) {
+    return { status: 'skipped', reason: '火山语音合成 1.0 未填写音色 ID（voice_type）' }
+  }
+
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
 
   try {

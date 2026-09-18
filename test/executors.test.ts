@@ -243,13 +243,14 @@ describe('processorExecutor · 固定值兜底与透传', () => {
     const parsed = JSON.parse(result.value as string)
     expect(parsed.kind).toBe('json')
     expect(parsed.data).toEqual({ x: 1 })
-    expect(parsed.variableName).toBe('output')
+    // 结果里不再写 variableName：端口固定为 out-value，名字不参与任何连线解析。
+    expect(parsed.variableName).toBeUndefined()
   })
 
   it('处理节点支持提取字段和字符串模板', () => {
     const picked = makeCtx({
       nodeType: 'processor',
-      config: JSON.stringify({ operation: 'pick', path: 'scene.name', outputName: 'name' }),
+      config: JSON.stringify({ operation: 'pick', path: 'scene.name' }),
       inputs: new Map([
         [
           'in-value',

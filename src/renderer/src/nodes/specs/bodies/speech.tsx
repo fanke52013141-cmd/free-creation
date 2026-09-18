@@ -20,9 +20,11 @@ import {
   SPEECH_EMOTIONS,
   SPEECH_FORMATS_BY_BACKEND,
   SPEECH_LANGUAGE_BOOSTS,
+  SPEECH_SAMPLE_RATE_BACKENDS,
   SPEECH_SAMPLE_RATES,
   SPEECH_SOUND_EFFECTS,
   SPEECH_TEXT_LIMITS,
+  VOLC_CLUSTERS,
   parseSpeechConfig,
   serializeSpeechConfig,
   type SpeechBackend,
@@ -50,7 +52,9 @@ interface SubtitleSentence {
 /** 每种协议只接受对应供应商：原生协议与 OpenAI 兼容端点不能互相顶替。 */
 function acceptsProvider(backend: SpeechBackend, specId: ProviderSpecId): boolean {
   if (backend === 'minimax') return specId === 'minimax'
-  if (backend === 'doubao') return specId === 'doubao-speech'
+  // 火山 1.0 与豆包共用 openspeech.bytedance.com 的供应商实例：同一份 baseURL 与
+  // access token，只是路径不同（/api/v1/tts 与 /api/v3/tts/create）。
+  if (backend === 'doubao' || backend === 'volc') return specId === 'doubao-speech'
   return specId !== 'minimax' && specId !== 'doubao-speech'
 }
 
@@ -171,7 +175,18 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
   }
 
   const hasOutput = Boolean(shape.props.mediaPath)
-  const canGenerate = Boolean(draft.trim()) && Boolean(config.providerId) && draft.length <= limit
+  // 火山 1.0 的 appid 与 voice_type 都是请求体必填项，缺任何一项执行器都会跳过，
+  // 所以按钮与卡片上的事实句都按同一判据给出（§16.16：运行前就能看出会不会跳过）。
+  const volcMissing =
+    config.backend !== 'volc'
+      ? ''
+      : !config.volcAppId
+        ? '未填写 AppID，运行会跳过'
+        : !config.voiceId.trim()
+          ? '未填写音色 ID（voice_type），运行会跳过'
+          : ''
+  const canGenerate =
+    Boolean(draft.trim()) && Boolean(config.providerId) && draft.length <= limit && !volcMissing
 
   return (
     <div className="node-tts node-speech">
@@ -243,14 +258,75 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
         <input
           className="gen-input"
           value={config.voiceId}
-          placeholder="音色 ID（留空用服务端默认音色）"
+          placeholder={
+            config.backend === 'volc'
+              ? 'voice_type，例如 BV001_streaming'
+              : '音色 ID（留空用服务端默认音色）'
+          }
           onPointerDown={(e) => e.stopPropagation()}
           onChange={(e) => updateConfig({ voiceId: e.target.value })}
         />
         <div className="gen-capability-note">
-          连接上游「音色设计 / 语音克隆」节点的音色档案时，以连线传入的 voice_id 为准。
+          {config.backend === 'volc'
+            ? '火山 1.0 只认自家的 voice_type；上游「音色设计 / 语音克隆」的 MiniMax 音色档案不是它的输入，节点上也没有 in-voice 端口。'
+            : '连接上游「音色设计 / 语音克隆」节点的音色档案时，以连线传入的 voice_id 为准。'}
         </div>
       </div>
+
+      {/* ── 火山引擎语音合成 1.0：appid 与 cluster 是请求体字段，不是供应商凭据 ── */}
+      {config.backend === 'volc' && (
+        <div className="tts-section">
+          <div className="tts-options">
+            <label className="opt-label" title="请求体 app.appid，取自火山引擎控制台的应用 ID">
+              AppID
+            </label>
+            <input
+              className="gen-input"
+              value={config.volcAppId}
+              placeholder="控制台应用 AppID"
+              onPointerDown={(e) => e.stopPropagation()}
+              onChange={(e) => updateConfig({ volcAppId: e.target.value })}
+            />
+          </div>
+          <div className="tts-options">
+            <label
+              className="opt-label"
+              title="请求体 app.cluster，音色所属集群；两个集群的音色不互通"
+            >
+              集群
+            </label>
+            <AppSelect
+              className="gen-select small"
+              value={config.volcCluster}
+              onPointerDown={(e) => e.stopPropagation()}
+              onChange={(e) => updateConfig({ volcCluster: e.target.value })}
+            >
+              {VOLC_CLUSTERS.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </AppSelect>
+          </div>
+          <div className="tts-slider-row">
+            <label className="opt-label" title="请求体 audio.speed_ratio">
+              语速 {config.speed}
+            </label>
+            <input
+              type="range"
+              min="0.5"
+              max="2"
+              step="0.05"
+              value={config.speed}
+              onPointerDown={(e) => e.stopPropagation()}
+              onChange={(e) => updateConfig({ speed: Number(e.target.value) })}
+            />
+          </div>
+          <span className={`node-wiring ${volcMissing ? 'warn' : 'ok'}`}>
+            {volcMissing || `AppID 与 voice_type 已填写，POST /api/v1/tts`}
+          </span>
+        </div>
+      )}
 
       {/* ── 朗读文本 ── */}
       <div className="tts-section">
@@ -427,7 +503,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
         </div>
       )}
 
-      {/* ── 输出格式与采样率：三条协议都要 ── */}
+      {/* ── 输出格式：所有协议都要；采样率只有 MiniMax 与豆包的请求体读取 ── */}
       <div className="tts-options">
         <label className="opt-label">格式</label>
         <AppSelect
@@ -442,19 +518,23 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
             </option>
           ))}
         </AppSelect>
-        <label className="opt-label">采样率</label>
-        <AppSelect
-          className="gen-select small"
-          value={String(config.sampleRate)}
-          onPointerDown={(e) => e.stopPropagation()}
-          onChange={(e) => updateConfig({ sampleRate: Number(e.target.value) })}
-        >
-          {SPEECH_SAMPLE_RATES.map((rate) => (
-            <option key={rate} value={rate}>
-              {rate / 1000} kHz
-            </option>
-          ))}
-        </AppSelect>
+        {SPEECH_SAMPLE_RATE_BACKENDS.includes(config.backend) && (
+          <>
+            <label className="opt-label">采样率</label>
+            <AppSelect
+              className="gen-select small"
+              value={String(config.sampleRate)}
+              onPointerDown={(e) => e.stopPropagation()}
+              onChange={(e) => updateConfig({ sampleRate: Number(e.target.value) })}
+            >
+              {SPEECH_SAMPLE_RATES.map((rate) => (
+                <option key={rate} value={rate}>
+                  {rate / 1000} kHz
+                </option>
+              ))}
+            </AppSelect>
+          </>
+        )}
       </div>
 
       <button
@@ -602,33 +682,34 @@ export function SpeechSettings({ shape, editor }: NodeSettingsProps): React.JSX.
 
   return (
     <div className="node-settings speech-settings">
-      <div className="settings-row">
-        <label className="opt-label">码率</label>
-        <AppSelect
-          className="gen-select small"
-          value={String(config.bitrate)}
-          onChange={(e) => save({ bitrate: Number(e.target.value) })}
-        >
-          {SPEECH_BITRATES.map((rate) => (
-            <option key={rate} value={rate}>
-              {rate / 1000} kbps
-            </option>
-          ))}
-        </AppSelect>
-      </div>
-      <div className="settings-row">
-        <label className="opt-label">声道</label>
-        <AppSelect
-          className="gen-select small"
-          value={String(config.audioChannel)}
-          onChange={(e) => save({ audioChannel: Number(e.target.value) === 2 ? 2 : 1 })}
-        >
-          <option value="1">单声道</option>
-          <option value="2">双声道</option>
-        </AppSelect>
-      </div>
       {config.backend === 'minimax' && (
         <>
+          {/* 码率与声道只被 MiniMax 异步通道的 audio_setting 读取；其他后端不收这两个字段，故不呈现。 */}
+          <div className="settings-row">
+            <label className="opt-label">码率</label>
+            <AppSelect
+              className="gen-select small"
+              value={String(config.bitrate)}
+              onChange={(e) => save({ bitrate: Number(e.target.value) })}
+            >
+              {SPEECH_BITRATES.map((rate) => (
+                <option key={rate} value={rate}>
+                  {rate / 1000} kbps
+                </option>
+              ))}
+            </AppSelect>
+          </div>
+          <div className="settings-row">
+            <label className="opt-label">声道</label>
+            <AppSelect
+              className="gen-select small"
+              value={String(config.audioChannel)}
+              onChange={(e) => save({ audioChannel: Number(e.target.value) === 2 ? 2 : 1 })}
+            >
+              <option value="1">单声道</option>
+              <option value="2">双声道</option>
+            </AppSelect>
+          </div>
           <label className="tts-inline-toggle">
             <input
               type="checkbox"

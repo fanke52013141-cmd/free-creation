@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_TTS_CONFIG, parseTtsConfig } from '@shared/tts'
+import { DEFAULT_TTS_CONFIG, parseTtsConfig, TTS_FORMATS_BY_BACKEND } from '@shared/tts'
 
 describe('语音克隆配置', () => {
   it('旧的本地 ComfyUI 配置会安全补齐新的后端字段', () => {
@@ -81,11 +81,21 @@ describe('语音克隆配置', () => {
     })
   })
 
-  it('本地 ComfyUI 默认配置不含任何 MiniMax 专属参数', () => {
+  it('新建节点的空配置默认走云端 MiniMax，格式落在它发得出的取值域', () => {
     const config = parseTtsConfig('{}')
-    expect(config.backend).toBe('comfyui')
-    expect(config.textValidation).toBe(false)
-    expect(config.promptMediaId).toBe('')
-    expect(config.languageBoost).toBe('')
+    expect(config.backend).toBe('minimax')
+    expect(config.format).toBe('mp3')
+    expect(DEFAULT_TTS_CONFIG.backend).toBe('minimax')
+    expect(TTS_FORMATS_BY_BACKEND.minimax).not.toContain('wav')
+    expect(TTS_FORMATS_BY_BACKEND.comfyui[0]).toBe('wav')
+  })
+
+  it('MiniMax 不会保留它发送不了的 wav，本地后端不受影响', () => {
+    expect(parseTtsConfig(JSON.stringify({ backend: 'minimax', format: 'wav' })).format).toBe('mp3')
+    expect(parseTtsConfig(JSON.stringify({ backend: 'comfyui', format: 'flac' })).format).toBe(
+      'flac'
+    )
+    // 显式选择本地链路是用户的决定，不会被默认值翻回云端。
+    expect(parseTtsConfig(JSON.stringify({ backend: 'comfyui' })).backend).toBe('comfyui')
   })
 })

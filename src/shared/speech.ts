@@ -8,10 +8,11 @@
  *
  *   minimax → MiniMax 异步语音合成 POST /v1/t2a_async_v2（配音节点的默认主通道）
  *   doubao  → 豆包语音合成 POST /api/v3/tts/create（seed-audio-1.0）
+ *   volc    → 火山引擎语音合成 1.0 POST /api/v1/tts（大模型 HTTP 非流式，需 AppID + 集群）
  *   openai  → OpenAI 兼容 /audio/speech（保留的旧通道，不再作为默认）
  */
 
-export type SpeechBackend = 'minimax' | 'doubao' | 'openai'
+export type SpeechBackend = 'minimax' | 'doubao' | 'volc' | 'openai'
 
 export type SpeechFormat = 'mp3' | 'wav' | 'pcm' | 'flac' | 'ogg_opus'
 
@@ -78,6 +79,15 @@ export interface SpeechConfig {
   /** 豆包 enable_subtitle：为真时节点额外产出 out-subtitle。 */
   enableSubtitle: boolean
 
+  // ── 火山引擎语音合成 1.0（/api/v1/tts）──
+  /**
+   * 控制台应用 AppID。它与 access token 不是同一个东西：token 存在供应商实例里
+   * （Authorization: Bearer;{token}），AppID 是请求体 app.appid，因此放在节点配置。
+   */
+  volcAppId: string
+  /** 请求体 app.cluster；1.0 的普通音色与复刻音色走不同集群。 */
+  volcCluster: string
+
   // ── 水印 ──
   aigcWatermark: boolean
 }
@@ -96,6 +106,11 @@ export const SPEECH_BACKENDS: ReadonlyArray<{
     value: 'doubao',
     label: '豆包语音 · seed-audio',
     hint: 'tts/create，可按需产出字幕时间轴；文本最长 3000 字'
+  },
+  {
+    value: 'volc',
+    label: '火山引擎 · 语音合成 1.0',
+    hint: 'api/v1/tts 非流式，需要 AppID 与集群；单次文本最长 1024 字'
   },
   {
     value: 'openai',
@@ -155,13 +170,27 @@ export const SPEECH_BITRATES: ReadonlyArray<number> = [32000, 64000, 128000, 256
 export const SPEECH_FORMATS_BY_BACKEND: Record<SpeechBackend, ReadonlyArray<SpeechFormat>> = {
   minimax: ['mp3', 'pcm', 'flac', 'wav'],
   doubao: ['mp3', 'wav', 'pcm', 'ogg_opus'],
+  volc: ['mp3', 'wav', 'pcm', 'ogg_opus'],
   openai: ['mp3', 'wav', 'pcm', 'flac']
 }
+
+/**
+ * 各协议实际会发送采样率的通道。1.0 的 /api/v1/tts 由音色决定输出规格，请求体里没有
+ * 采样率字段，所以它的控件不能对 volc 呈现（§16.15 的判据：网关会发出去才显示）。
+ */
+export const SPEECH_SAMPLE_RATE_BACKENDS: ReadonlyArray<SpeechBackend> = ['minimax', 'doubao']
+
+/** 火山 1.0 的 app.cluster 取值：普通大模型音色与声音复刻音色不在同一集群。 */
+export const VOLC_CLUSTERS: ReadonlyArray<{ value: string; label: string }> = [
+  { value: 'volcano_tts', label: 'volcano_tts（普通音色）' },
+  { value: 'volcengine_tts', label: 'volcengine_tts（部分大模型/复刻音色）' }
+]
 
 /** 豆包 text_prompt 的上限；MiniMax 为 5 万字符。执行前按后端分别校验。 */
 export const SPEECH_TEXT_LIMITS: Record<SpeechBackend, number> = {
   minimax: 50000,
   doubao: 3000,
+  volc: 1024,
   openai: 4096
 }
 
@@ -190,6 +219,8 @@ export const DEFAULT_SPEECH_CONFIG: SpeechConfig = {
   loudnessRate: 0,
   pitchRate: 0,
   enableSubtitle: false,
+  volcAppId: '',
+  volcCluster: 'volcano_tts',
   aigcWatermark: false
 }
 
@@ -235,7 +266,13 @@ export function parseSpeechConfig(text: string): SpeechConfig {
   const legacy = raw.backend === undefined ? migrateLegacy(raw) : {}
   const merged = { ...raw, ...legacy }
   const backend: SpeechBackend =
-    merged.backend === 'doubao' ? 'doubao' : merged.backend === 'openai' ? 'openai' : 'minimax'
+    merged.backend === 'doubao'
+      ? 'doubao'
+      : merged.backend === 'volc'
+        ? 'volc'
+        : merged.backend === 'openai'
+          ? 'openai'
+          : 'minimax'
   const emotion = EMOTION_VALUES.has(merged.emotion as SpeechEmotion)
     ? (merged.emotion as SpeechEmotion)
     : ''
@@ -276,6 +313,11 @@ export function parseSpeechConfig(text: string): SpeechConfig {
     loudnessRate: clamp(merged.loudnessRate, -50, 100, 0),
     pitchRate: clamp(merged.pitchRate, -12, 12, 0),
     enableSubtitle: merged.enableSubtitle === true,
+    volcAppId: typeof merged.volcAppId === 'string' ? merged.volcAppId.trim() : '',
+    volcCluster:
+      typeof merged.volcCluster === 'string' && merged.volcCluster.trim()
+        ? merged.volcCluster.trim()
+        : DEFAULT_SPEECH_CONFIG.volcCluster,
     aigcWatermark: merged.aigcWatermark === true
   }
 }

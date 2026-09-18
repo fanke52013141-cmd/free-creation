@@ -4,7 +4,11 @@
 // 请求体是纯函数，返回值解码走可单独调用的解析函数，因此这里的失败都能
 // 精确定位到某个字段，而不是「网关挂了」。
 import { describe, expect, it } from 'vitest'
-import { buildDoubaoSpeechBody, buildMiniMaxAsyncTtsBody } from '../src/main/gateway/audio'
+import {
+  buildDoubaoSpeechBody,
+  buildMiniMaxAsyncTtsBody,
+  buildVolcTtsBody
+} from '../src/main/gateway/audio'
 import { buildVoiceCloneBody, buildVoiceDesignBody } from '../src/main/gateway/voice'
 import { DEFAULT_SPEECH_CONFIG, parseSpeechConfig } from '../src/shared/speech'
 import { DEFAULT_TTS_CONFIG, parseTtsConfig, isValidMiniMaxVoiceId } from '../src/shared/tts'
@@ -134,6 +138,72 @@ describe('豆包语音合成 /api/v3/tts/create', () => {
     expect(body).not.toHaveProperty('audio_data')
     expect(body).not.toHaveProperty('audio_url')
     expect(body).not.toHaveProperty('speaker')
+  })
+})
+
+describe('火山引擎语音合成 1.0 /api/v1/tts', () => {
+  it('发送 app / user / audio / request 四段请求体', () => {
+    const body = buildVolcTtsBody(
+      { apiKey: 'tok' },
+      { text: '  你好  ', voiceId: '  BV001_streaming ' },
+      speechConfig({
+        backend: 'volc',
+        volcAppId: 'app-1',
+        volcCluster: 'volcano_tts',
+        speed: 1.1,
+        format: 'mp3'
+      }),
+      'req-1'
+    )
+    expect(body).toEqual({
+      app: { appid: 'app-1', token: 'tok', cluster: 'volcano_tts' },
+      user: { uid: 'canvas-studio' },
+      audio: { voice_type: 'BV001_streaming', encoding: 'mp3', speed_ratio: 1.1 },
+      request: { reqid: 'req-1', text: '你好', operation: 'query' }
+    })
+  })
+
+  it('1.0 不支持的编码回落 mp3，且不会把 MiniMax / 豆包的参数发过来', () => {
+    const body = buildVolcTtsBody(
+      { apiKey: 'tok' },
+      { text: '你好', voiceId: 'BV001_streaming' },
+      speechConfig({
+        backend: 'volc',
+        volcAppId: 'app-1',
+        format: 'flac',
+        sampleRate: 44100,
+        bitrate: 256000,
+        audioChannel: 2,
+        emotion: 'happy',
+        languageBoost: 'Chinese',
+        enableSubtitle: true
+      }),
+      'req-2'
+    )
+    expect((body.audio as Record<string, unknown>).encoding).toBe('mp3')
+    for (const key of [
+      'audio_setting',
+      'voice_setting',
+      'audio_config',
+      'pronunciation_dict',
+      'subtitle'
+    ])
+      expect(body).not.toHaveProperty(key)
+    const audio = body.audio as Record<string, unknown>
+    expect(audio).not.toHaveProperty('sample_rate')
+    expect(audio).not.toHaveProperty('bitrate')
+    expect(audio).not.toHaveProperty('channel')
+  })
+
+  it('AppID 与集群可持久化，缺省回落普通音色集群', () => {
+    const config = parseSpeechConfig(
+      JSON.stringify({ backend: 'volc', volcAppId: '  app-9  ', volcCluster: '  ' })
+    )
+    expect(config.backend).toBe('volc')
+    expect(config.volcAppId).toBe('app-9')
+    expect(config.volcCluster).toBe(DEFAULT_SPEECH_CONFIG.volcCluster)
+    expect(DEFAULT_SPEECH_CONFIG.volcCluster).toBe('volcano_tts')
+    expect(parseSpeechConfig(JSON.stringify({ volcAppId: 123 })).volcAppId).toBe('')
   })
 })
 
