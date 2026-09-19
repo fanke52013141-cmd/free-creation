@@ -169,6 +169,25 @@ describe('parseIterateResult · 结果读取', () => {
     expect(parseIterateResult('{bad')).toBeNull()
     expect(parseIterateResult('')).toBeNull()
   })
+
+  it('进度跟着结果一起回来（卡片进度条读的就是它）', () => {
+    const text = JSON.stringify({
+      items: [{ status: 'done', source: { index: 0, itemId: 's1' } }],
+      progress: {
+        total: 1,
+        completed: 1,
+        pending: 0,
+        done: 1,
+        reused: 0,
+        failed: 0,
+        skipped: 0,
+        mode: 'all'
+      }
+    })
+    expect(parseIterateResult(text)?.progress).toMatchObject({ total: 1, completed: 1, done: 1 })
+    // 只有 items 的旧记录不该凭空多出进度。
+    expect(parseIterateResult(JSON.stringify({ items: [] }))?.progress).toBeUndefined()
+  })
 })
 
 describe('iterate 执行器 · 成功批量', () => {

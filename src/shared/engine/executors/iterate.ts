@@ -161,8 +161,16 @@ function resultIdentity(entry: unknown): string | null {
 export function parseIterateResult(text: string): IterateResult | null {
   if (!text) return null
   try {
-    const value = JSON.parse(text) as { items?: unknown }
-    if (Array.isArray(value.items)) return { items: value.items as IterateItemResult[] }
+    const value = JSON.parse(text) as { items?: unknown; progress?: unknown }
+    if (Array.isArray(value.items))
+      return {
+        items: value.items as IterateItemResult[],
+        // progress 必须跟着回来：卡片上的进度条与「续跑 · 4/4 · 成功 4」文案都读它，
+        // 以前只回填 items，进度条因此永远渲染不出来。
+        ...(value.progress && typeof value.progress === 'object'
+          ? { progress: value.progress as IterateProgress }
+          : {})
+      }
   } catch {
     // 忽略
   }
