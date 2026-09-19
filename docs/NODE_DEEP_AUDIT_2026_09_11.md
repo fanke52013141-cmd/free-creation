@@ -630,6 +630,49 @@ MiniMax-H3、`duration:4`、`resolution:768P`、`ratio:16:9`（即 §7.5 末尾�
 - §7.4 与 §7.5 遗留的「计费成功响应体字段」到此收口：视频是 `task.content.url`，
   语音异步是 `status:"Success"` + `file_id` + tar。
 
+### 7.8 真实 Electron 端到端：配音节点在「成功那一刻」把画布炸掉（2026-09-19 追加）
+
+前七节全部是「读代码 + 零成本探测 + 单测」。这一节是第一次把 `out/` 构建产物用真实 Electron
+窗口跑起来（Playwright `_electron`，只把数据目录换成 `CANVAS_DATA_DIR` 临时副本，其余全是真
+代码：真窗口、真设置面板点击、真 SQLite、真主进程 fetch、真落盘、真 ffprobe）。密钥只从环境
+变量注入，绝不打印、绝不入库。
+
+| 环节 | 实测回执 |
+| --- | --- |
+| 项目创建 → 可读回 | `WcTbkso1ac-4` |
+| 面板新增 MiniMax 预设 | Base URL 自带 `https://api.minimaxi.com`，带入 4 个建议模型（2 video + 2 audio） |
+| 密钥可见性 | `listProviders()` 返回体里没有 `apiKey` 字段——渲染层读不回来，符合约束 |
+| 免费自检 | 「通过（2 项只读探测）」，两个只读探测 `pass`，四个计费探测 `idle`，无 `fail` |
+| 配音节点默认通道 | `minimax`（异步语音合成），`speech-2.8-hd` 可被选到 |
+| 端口 | `朗读文本 · 文本` / `音色档案 · JSON` / `配音 · 音频` 三个都在卡片上可见 |
+| 真实合成 | `RMQXlx3t0P.mp3` 54 132 B、`audio/mpeg`；ffprobe 解出 **3.239188 s** |
+| 运行反馈 | toast「配音 已完成」，无错误提示 |
+| 产物落点 | 独立 `type-audio` 资产节点，卡片内 `<audio>` 的 `media:///projects/…/RMQXlx3t0P.mp3` 指向磁盘真文件并解出时长 |
+| 文档真值 | `meta.nodeResult` = `media-source`（含 `selectedMediaId`/`runId`/`modelKey`/`prompt`），`meta.nodeRun.status = "success"`，`nodeRunHistory` 同步 |
+| 溯源 | 资产节点 `meta.artifactProducerId` 等于配音 shape id，`props.mediaId` 与库内一致 |
+| 持久化 | 整窗 `reload()` 后播放器与结果仍在 |
+
+- **P0（第一次真跑就撞上）：配音合成成功之后，画布当场崩掉**。资产已经落库落盘（上一轮
+  55 860 B），紧随其后的 `updateMeta({ nodeExtra: undefined })` 让 tldraw 抛
+  `ValidationError: At shape(type = node-card).meta: Expected json serializable value, got
+  undefined`——卡片永远不显示结果，用户看到的是「点了运行然后画布废了」。触发点是
+  `src/shared/engine/executors/speech.ts:84` 与 `tts.ts:52` 的「本次没有字幕就清空」语义，
+  写法本身没错，错在运行器把补丁直接展开进 `meta`。收口在唯一合并点 `mergeShapeMeta()`：
+  值为 `undefined`/`null` 的键按删除键处理，正好对上 `updateResult(null)` 文档里写的清空
+  语义；四处调用点（测试路径与真实路径的 `updateResult`/`updateMeta`、子流程还原）统一走它。
+- **为什么 1 082 个单测全绿却看不见它**：`test/async-executors.test.ts` 的替身用
+  `Object.assign(meta, patch)`，把 `nodeExtra: undefined` 原样抄进一个普通对象——JS 对象允许
+  undefined 值，tldraw 的 schema 校验不允许。测试替身比被测系统宽松，就等于没有这条覆盖。
+  现在替身与运行器共用同一份 `mergeShapeMeta`，并额外断言 `'nodeExtra' in meta === false` 与
+  meta 里不存在 undefined 值；把 `delete next[key]` 改成死代码会以 3 个失败复现。
+- **验收脚本自己的断言也要逐条核**：首版脚本有三处自身错误，全都是「看有没有报错」看不出来
+  的——把播放器找成配音卡片内的 `<audio>`（产物按契约是独立资产节点）、对已经是对象的
+  `tldrawSnapshot` 做 `JSON.parse`（只有浏览器 mock 才存字符串）、按 `type === 'shape'` 挑记录
+  （序列化记录是 `typeName:'shape'` + `type:'node-card'`，节点身份在 `props.nodeType`）。
+- **仍未真机跑到的**：语音克隆与音色设计的真实登记（需要一个可复用的 `voice_id` 上游，隔离
+  副本库里没有），以及 Seedance 真实提交（本轮明确只保留静态契约）。这两项要跑仍需用户先在
+  真实 App 面板里配置并授权计费。
+
 ## 8. 后续实施顺序
 
 ### P0：先让视频节点不再产生非法状态（已完成）
