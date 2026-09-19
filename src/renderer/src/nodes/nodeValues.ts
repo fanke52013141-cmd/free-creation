@@ -1,6 +1,18 @@
 import type { NodeCardShape } from '../canvas/NodeCardShape'
 import { getNodeType } from './registry'
 import { readNodeRunRecord } from '../engine/runRecord'
+import type {
+  GenParamSummary,
+  MediaResultCollection,
+  MediaResultItem,
+  SourceSummary
+} from '@shared/engine/values'
+import {
+  appendMediaResult,
+  MEDIA_RESULT_LIMIT,
+  parseMediaResultCollection,
+  serializeMediaResultCollection
+} from '@shared/engine/values'
 
 export type NodeValue =
   | { kind: 'text'; text: string }
@@ -22,127 +34,18 @@ export interface MediaNodeValue<K extends 'image' | 'video' | 'audio' | 'file'> 
 
 export type RawNodeOutputs = Partial<Record<string, NodeValue>>
 
-export interface MediaResultItem {
-  mediaId: string
-  mediaPath: string
-  mime: string
-  createdAt: number
-  modelKey?: string
-  prompt?: string
-  /** 生成该媒体的工作流运行 ID；旧结果可能没有此字段。 */
-  runId?: string
-}
-
-/** 生成参数摘要：记录本次生成使用的关键参数，用于来源摘要展示。 */
-export interface GenParamSummary {
-  ratio?: string
-  duration?: number
-  resolution?: string
-  generateAudio?: boolean
-  seed?: number
-}
-
-/** 输入来源摘要：记录本次生成引用了哪些上游输入。 */
-export interface SourceSummary {
-  firstFrame?: boolean
-  lastFrame?: boolean
-  referenceImages?: number
-  referenceVideo?: number
-  referenceAudio?: number
-}
-
-export interface MediaResultCollection {
-  kind: 'media-source'
-  version: 1
-  nodeId?: string
-  modelKey?: string
-  prompt?: string
-  at?: number
-  selectedMediaId?: string
-  /** 生成参数摘要（Sprint 2 来源摘要） */
-  genParams?: GenParamSummary
-  /** 输入来源摘要（Sprint 2 来源摘要） */
-  sourceSummary?: SourceSummary
-  results: MediaResultItem[]
-}
-
-/** 防止长期重复生成导致 nodeResult 无限增长；最新结果优先保留。 */
-export const MEDIA_RESULT_LIMIT = 12
-
-export function parseMediaResultCollection(text: string): MediaResultCollection | null {
-  if (!text) return null
-  try {
-    const value = JSON.parse(text) as Partial<MediaResultCollection>
-    if (value.kind !== 'media-source') return null
-    const results = Array.isArray(value.results)
-      ? value.results.filter(
-          (item): item is MediaResultItem =>
-            Boolean(item) &&
-            typeof item.mediaId === 'string' &&
-            typeof item.mediaPath === 'string' &&
-            typeof item.mime === 'string' &&
-            typeof item.createdAt === 'number'
-        )
-      : []
-    return {
-      kind: 'media-source',
-      version: 1,
-      ...(typeof value.nodeId === 'string' ? { nodeId: value.nodeId } : {}),
-      ...(typeof value.modelKey === 'string' ? { modelKey: value.modelKey } : {}),
-      ...(typeof value.prompt === 'string' ? { prompt: value.prompt } : {}),
-      ...(typeof value.at === 'number' ? { at: value.at } : {}),
-      ...(typeof value.selectedMediaId === 'string'
-        ? { selectedMediaId: value.selectedMediaId }
-        : {}),
-      ...(value.genParams && typeof value.genParams === 'object'
-        ? { genParams: value.genParams as GenParamSummary }
-        : {}),
-      ...(value.sourceSummary && typeof value.sourceSummary === 'object'
-        ? { sourceSummary: value.sourceSummary as SourceSummary }
-        : {}),
-      results
-    }
-  } catch {
-    return null
-  }
-}
-
-export function serializeMediaResultCollection(value: MediaResultCollection): string {
-  return JSON.stringify(value)
-}
-
-export function appendMediaResult(
-  previous: string,
-  item: Omit<MediaResultItem, 'createdAt'> & { createdAt?: number },
-  meta: Pick<MediaResultCollection, 'nodeId' | 'modelKey' | 'prompt'> & {
-    runId?: string
-    genParams?: GenParamSummary
-    sourceSummary?: SourceSummary
-  } = {}
-): MediaResultCollection {
-  const current = parseMediaResultCollection(previous)
-  const results = current?.results.filter((result) => result.mediaId !== item.mediaId) ?? []
-  const nextItem: MediaResultItem = {
-    ...item,
-    createdAt: item.createdAt ?? Date.now(),
-    ...(meta.runId ? { runId: meta.runId } : {})
-  }
-  return {
-    kind: 'media-source',
-    version: 1,
-    ...(current?.nodeId || meta.nodeId ? { nodeId: meta.nodeId || current?.nodeId } : {}),
-    ...(meta.modelKey || current?.modelKey ? { modelKey: meta.modelKey || current?.modelKey } : {}),
-    ...(meta.prompt || current?.prompt ? { prompt: meta.prompt || current?.prompt } : {}),
-    at: nextItem.createdAt,
-    selectedMediaId: nextItem.mediaId,
-    ...(meta.genParams || current?.genParams
-      ? { genParams: meta.genParams ?? current?.genParams }
-      : {}),
-    ...(meta.sourceSummary || current?.sourceSummary
-      ? { sourceSummary: meta.sourceSummary ?? current?.sourceSummary }
-      : {}),
-    results: [...results, nextItem].slice(-MEDIA_RESULT_LIMIT)
-  }
+/**
+ * 媒体结果集合的类型与「解析 / 追加」口径只保留一份实现。执行器
+ * （`src/shared/engine/executors/*`）写它，资产索引与节点卡片读它；此前这里逐字复制
+ * 了一份，于是给产物加溯源字段必须同步改两处，漏一处就是「执行器写进去了、UI 永远
+ * 读不到」的静默丢失。删除与清空两个 UI 专属操作留在本文件。
+ */
+export type { GenParamSummary, MediaResultCollection, MediaResultItem, SourceSummary }
+export {
+  appendMediaResult,
+  MEDIA_RESULT_LIMIT,
+  parseMediaResultCollection,
+  serializeMediaResultCollection
 }
 
 /** 删除一个非当前结果；若误删当前结果，调用方应先切换到其他结果。 */
