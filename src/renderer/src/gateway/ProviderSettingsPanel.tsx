@@ -15,7 +15,7 @@ import type {
   ProviderProbeItem,
   SaveProviderInput
 } from '@shared/contracts'
-import { driverForSpec } from '@shared/provider-driver'
+import { driverForSpec, guessModelModality } from '@shared/provider-driver'
 import { useGatewayStore } from '../stores/gateway'
 import { useConfirmStore } from '../stores/confirm'
 import { toast } from '../stores/toast'
@@ -36,18 +36,9 @@ const newDraft = (specId: ProviderSpecId): Draft => {
     apiKey: '',
     models: (spec?.suggestions ?? []).map((id) => ({
       id,
-      modality: guessModality(id, specId)
+      modality: guessModelModality(id, specId)
     }))
   }
-}
-
-// 从模板/服务端带出的模型 ID 猜模态（用户可在面板里改）
-function guessModality(id: string, specId: ProviderSpecId): GatewayModelInfo['modality'] {
-  if (specId === 'seedance') return 'video'
-  if (specId === 'toapis') return 'image'
-  if (specId === 'minimax') return /speech|tts|voice/i.test(id) ? 'audio' : 'video'
-  if (/(image|dall|flux|seedream|mj|midjourney|banana)/i.test(id)) return 'image'
-  return 'text'
 }
 
 const specLabel = (id: string): string => PROVIDER_SPECS.find((s) => s.id === id)?.label ?? id
@@ -107,7 +98,10 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
             baseURL: spec?.baseURL ?? '',
             models: d.models.length
               ? d.models
-              : (spec?.suggestions ?? []).map((id) => ({ id, modality: guessModality(id, specId) }))
+              : (spec?.suggestions ?? []).map((id) => ({
+                  id,
+                  modality: guessModelModality(id, specId)
+                }))
           }
         : d
     )
@@ -159,7 +153,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
     const known = new Set(draft.models.map((m) => m.id))
     const fresh = res.data.models
       .filter((id) => !known.has(id))
-      .map((id) => ({ id, modality: guessModality(id, draft.specId) }))
+      .map((id) => ({ id, modality: guessModelModality(id, draft.specId) }))
     if (fresh.length) patch({ models: [...draft.models, ...fresh] })
     setTestMsg(
       `测试成功：${res.data.message}${fresh.length ? `，已并入 ${fresh.length} 个新模型` : ''}`
@@ -361,7 +355,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                       patch({
                         models: [
                           ...draft.models,
-                          { id: '', modality: guessModality('', draft.specId) }
+                          { id: '', modality: guessModelModality('', draft.specId) }
                         ]
                       })
                     }

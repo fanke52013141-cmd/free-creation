@@ -323,10 +323,10 @@ export const PROVIDER_SPECS: ProviderSpec[] = [
   {
     id: 'openai',
     label: 'OpenAI 官方',
-    desc: 'ChatGPT 官方 API（文本与 gpt-image 系列生图）',
+    desc: 'ChatGPT 官方 API（文本、gpt-image 系列生图与 TTS 配音）',
     baseURL: 'https://api.openai.com/v1',
     modality: 'text',
-    suggestions: ['gpt-5.2', 'gpt-image-1']
+    suggestions: ['gpt-5.2', 'gpt-image-1', 'gpt-4o-mini-tts']
   },
   {
     id: 'deepseek',
@@ -374,7 +374,9 @@ export const PROVIDER_SPECS: ProviderSpec[] = [
     desc: 'MiniMax H3 / H3-Max 视频及 Speech 语音服务',
     baseURL: 'https://api.minimaxi.com',
     modality: 'video',
-    suggestions: ['MiniMax-H3', 'MiniMax-H3-Max', 'speech-2.8-turbo']
+    // speech-2.8-hd 是配音节点的默认 modelId：预设里没有它，按模板建好供应商后
+    // 只能选到 turbo 档，要用 HD 得回设置面板手动加一行。
+    suggestions: ['MiniMax-H3', 'MiniMax-H3-Max', 'speech-2.8-hd', 'speech-2.8-turbo']
   },
   {
     id: 'seedance',

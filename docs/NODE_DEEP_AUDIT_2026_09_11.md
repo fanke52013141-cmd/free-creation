@@ -319,6 +319,23 @@ TokenDance 网关中标作 `MiniMax-H3` / `MiniMax-H3-Max` 的模型。因此，
 - Seedance 的 official/proxy 双通道继续分开：官方通道使用结构化字段；兼容网关仅在已有真实
   响应证据证明其 prompt 后缀语法时使用 `gateway-compatibility`，绝不把兼容写法传播到官方端点。
 
+### 7.3 供应商预设必须与节点的模型过滤对得上（2026-09-19 追加）
+
+「填好 Key 就能跑」还依赖一条此前没人核对的链路：设置面板按模板预填模型时，会用
+`guessModelModality(id, specId)` 猜每个模型的模态，而语音/视频类节点的下拉一律是
+`modelsByModality(providers, X)` 再按协议过滤。**猜错模态等于该模型在节点里选不到**，
+而且不报错、只显示空列表。实测到两处断链并已修：
+
+- 豆包语音（Seed-Audio）模板的建议模型 `seed-audio-1.0` 曾被猜成 `text`，于是配音节点的
+  豆包与火山语音合成 1.0 两条通道都列出 0 个模型（协议自检同样报「未配置语音模型 ID」）。
+  现在 `doubao-speech` 直接判为 `audio`（该实例只有语音），并把 `speech|tts|voice|audio`
+  的识别从「仅 MiniMax 模板」提升为通用规则。
+- MiniMax 模板缺 `speech-2.8-hd`（配音节点的默认 `modelId`），OpenAI 模板缺任何 TTS 模型，
+  两条通道新建供应商后都要用户手填模型 ID。预设已补齐（OpenAI 加 `gpt-4o-mini-tts`）。
+
+门禁：`test/provider-preset-modality.test.ts`。它刻意**不复用**组件里的 `acceptsProvider`，
+而是照节点契约重写一份协议↔供应商对照表——两边都复用时，一起写错就测不出来。
+
 ## 8. 后续实施顺序
 
 ### P0：先让视频节点不再产生非法状态（已完成）
