@@ -1,4 +1,6 @@
 /** 图片修改节点的稳定配置：标注是配置，不是隐藏的数据端口。 */
+import { type ImageAspectRatio, isImageAspectRatio } from './image-capabilities'
+
 export type ImageEditAnnotationType = 'arrow' | 'rect' | 'brush' | 'text'
 /** orange 仅用于兼容旧项目；读取时会迁移为蓝色标注。 */
 export type ImageEditColor = 'red' | 'yellow' | 'blue' | 'orange'
@@ -25,17 +27,11 @@ export interface ImageEditAnnotation {
   strokeWidth?: number
 }
 
-export const IMAGE_EDIT_ASPECT_RATIOS = [
-  'auto',
-  '1:1',
-  '16:9',
-  '9:16',
-  '4:3',
-  '3:4',
-  '3:2',
-  '2:3'
-] as const
-export type ImageEditAspectRatio = (typeof IMAGE_EDIT_ASPECT_RATIOS)[number]
+/**
+ * P 图的画幅取值域与生图共用同一份图片比例全集；节点上的可选项由所选模型的
+ * `capabilities.ratios` 决定（NODE_UI_SPEC §16.15），这里只保留「是不是一个合法比例」的判定。
+ */
+export type ImageEditAspectRatio = ImageAspectRatio
 
 export const IMAGE_EDIT_RESOLUTIONS = ['1k', '2k', '4k'] as const
 export type ImageEditResolution = (typeof IMAGE_EDIT_RESOLUTIONS)[number]
@@ -170,18 +166,17 @@ export function parseImageEditConfig(text: string): ImageEditConfig {
   return {
     version: 1,
     modelKey: typeof raw.modelKey === 'string' ? raw.modelKey.trim().slice(0, 200) : '',
+    // 旧版本把比例镜像进 size；现在比例只有 aspectRatio 一个来源，读回时把比例串从 size 收敛掉。
     size:
-      typeof raw.size === 'string' && IMAGE_EDIT_SIZES.includes(raw.size as ImageEditSize)
+      isImageAspectRatio(typeof raw.size === 'string' ? raw.size : '') ||
+      !IMAGE_EDIT_SIZES.includes((raw.size ?? '') as ImageEditSize)
+        ? 'auto'
+        : (raw.size as string),
+    aspectRatio: isImageAspectRatio(raw.aspectRatio)
+      ? raw.aspectRatio
+      : isImageAspectRatio(raw.size)
         ? raw.size
         : 'auto',
-    aspectRatio:
-      typeof raw.aspectRatio === 'string' &&
-      IMAGE_EDIT_ASPECT_RATIOS.includes(raw.aspectRatio as ImageEditAspectRatio)
-        ? (raw.aspectRatio as ImageEditAspectRatio)
-        : typeof raw.size === 'string' &&
-            IMAGE_EDIT_ASPECT_RATIOS.includes(raw.size as ImageEditAspectRatio)
-          ? (raw.size as ImageEditAspectRatio)
-          : 'auto',
     resolution:
       typeof raw.resolution === 'string' &&
       IMAGE_EDIT_RESOLUTIONS.includes(raw.resolution as ImageEditResolution)

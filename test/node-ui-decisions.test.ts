@@ -563,3 +563,73 @@ describe('v1.2 §16.22 隐藏能力要出现在节点上：slash 指令清单与
     expect(stripComments(storyboardBody)).not.toContain('将脚本节点连入此节点')
   })
 })
+
+describe('v1.2 §16.23 图片族：遮罩与画幅按网关真实发送字段呈现，缺输入结论按真实连线', () => {
+  const caps = read('src/shared/image-capabilities.ts')
+  const editShared = read('src/shared/image-edit.ts')
+  const editBody = read('src/renderer/src/nodes/specs/bodies/image-edit.tsx')
+  const cropBody = read('src/renderer/src/nodes/specs/bodies/image-crop.tsx')
+  const splitBody = read('src/renderer/src/nodes/specs/bodies/image-split.tsx')
+  const editExecutor = read('src/shared/engine/executors/imageEdit.ts')
+  const gateway = read('src/main/gateway/image.ts')
+  const sidePanel = read('src/renderer/src/canvas/CanvasSidePanel.tsx')
+
+  it('P 图的两个控件各由一条「网关会不会发」的判定决定', () => {
+    expect(caps).toContain(
+      'export function imageEditSendsMask(capabilities: ImageCapabilities): boolean'
+    )
+    expect(caps).toContain("return capabilities.driver !== 'toapis-task'")
+    expect(caps).toContain(
+      "return capabilities.driver === 'toapis-task' || capabilities.forwardsAspectRatio"
+    )
+    expect(editBody).toContain(
+      'const sendsMask = capabilities ? imageEditSendsMask(capabilities) : false'
+    )
+    expect(editBody).toContain('const visibleTools = sendsMask ? TOOLS : TOOLS.filter(')
+    expect(editBody).toContain('{sendsMask && (')
+    expect(editBody).toContain('{sendsRatio && (')
+    // 隐藏控件不能把用户已经画好的遮罩变成静默失效。
+    expect(editBody).toContain('当前模型通道不接收遮罩字段')
+  })
+
+  it('执行器里那句「仅修改遮罩区域」的提示词只在遮罩真的发送时出现', () => {
+    expect(editExecutor).toContain('const sendsMask = imageEditSendsMask(')
+    expect(editExecutor).toContain("config.mask?.enabled && sendsMask ? '请仅修改遮罩指定区域")
+    // 无条件拼接该句会让模型以为收到了一个并不存在的输入。
+    expect(stripComments(editExecutor)).not.toMatch(/^\s*config\.mask\?\.enabled \? '请仅修改遮罩/m)
+  })
+
+  it('画幅只有一份来源：选项取能力表，比例不再镜像进 size', () => {
+    expect(editBody).toContain('const ratioOptions: ImageEditAspectRatio[] = capabilities?.ratios')
+    expect(stripComments(editShared)).not.toContain('IMAGE_EDIT_ASPECT_RATIOS')
+    expect(editShared).toContain('isImageAspectRatio(typeof raw.size ===')
+    // 网关两条通道各自把画幅写进自己的字段：TOAPIS 用 size，兼容网关用 aspectRatio。
+    expect(gateway).toContain("if (capabilities.driver === 'toapis-task')")
+    expect(gateway).toContain('providerOptions.aspectRatio = input.config.aspectRatio')
+    // 同步接口只接受像素尺寸：比例串绝不能当 size 发出去。
+    expect(gateway).toContain("/^\\d+x\\d+$/.test(input.size ?? '')")
+  })
+
+  it('缺输入结论只有一处实现，并按真实连线区分「未连线」与「无产出」', () => {
+    expect(sharedBodies).toContain('export function useSourceWiringNotice(')
+    expect(sharedBodies).toContain('countIncomingConnections(editor, shapeId as TLShapeId, portId)')
+    expect(sharedBodies).toContain('未连线，运行会跳过')
+    expect(sharedBodies).toContain('但上游还没有产出')
+    for (const [name, source] of [
+      ['image-edit', editBody],
+      ['image-crop', cropBody],
+      ['image-split', splitBody]
+    ] as const) {
+      expect(source, name).toContain("useSourceWiringNotice(editor, shape.id, 'in-image', '原图')")
+      // 教学式指令文案不能留在任何一处空态里。
+      expect(stripComments(source), name).not.toContain('请从图片或生图节点连线')
+    }
+  })
+
+  it('续跑与模板的下游节点标题统一为「生视频」', () => {
+    expect(stripComments(sharedBodies)).not.toContain('图片生成视频')
+    expect(stripComments(sidePanel)).not.toContain('图片生成视频')
+    expect(sidePanel).toContain("{ type: 'video', title: '生视频'")
+    expect(sharedBodies).toContain("{ type: 'video', label: '生视频'")
+  })
+})

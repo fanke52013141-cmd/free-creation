@@ -3,21 +3,29 @@ import type { ProviderSpecId } from './types'
 /** 图片生成的稳定配置；比例是用户意图，尺寸是当前模型的实际落点。 */
 export type ImageResolution = '1k' | '2k' | '4k'
 
-export type ImageAspectRatio =
-  | 'auto'
-  | '1:1'
-  | '3:2'
-  | '2:3'
-  | '4:3'
-  | '3:4'
-  | '5:4'
-  | '4:5'
-  | '16:9'
-  | '9:16'
-  | '2:1'
-  | '1:2'
-  | '21:9'
-  | '9:21'
+export const ALL_IMAGE_ASPECT_RATIOS = [
+  'auto',
+  '1:1',
+  '3:2',
+  '2:3',
+  '4:3',
+  '3:4',
+  '5:4',
+  '4:5',
+  '16:9',
+  '9:16',
+  '2:1',
+  '1:2',
+  '21:9',
+  '9:21'
+] as const
+
+export type ImageAspectRatio = (typeof ALL_IMAGE_ASPECT_RATIOS)[number]
+
+/** 读回存量配置时的取值域判定：P 图的比例不再有第二份清单，所以只能按这份全集校验。 */
+export function isImageAspectRatio(value: unknown): value is ImageAspectRatio {
+  return (ALL_IMAGE_ASPECT_RATIOS as readonly string[]).includes(String(value))
+}
 
 /** 网关提交驱动：OpenAI Images 兼容 / TOAPIS 异步任务 / OpenRouter chat 生图。 */
 export type ImageGatewayDriver = 'openai-images' | 'toapis-task' | 'openrouter-chat'
@@ -208,6 +216,19 @@ export function imageAspectRatioForSize(
   size: string
 ): ImageAspectRatio {
   return capabilities.sizeOptions.find((item) => item.value === size)?.ratio ?? 'auto'
+}
+
+/**
+ * P 图遮罩是否随请求发送。TOAPIS 的 /images/generations 提交字段是封闭集合，里面没有
+ * mask，因此那条通道上遮罩既不发、也不许在界面上出现（NODE_UI_SPEC §16.15）。
+ */
+export function imageEditSendsMask(capabilities: ImageCapabilities): boolean {
+  return capabilities.driver !== 'toapis-task'
+}
+
+/** P 图画幅的落点：TOAPIS 把比例串写进 size，兼容网关写进 aspectRatio，其余驱动不接收。 */
+export function imageEditSendsAspectRatio(capabilities: ImageCapabilities): boolean {
+  return capabilities.driver === 'toapis-task' || capabilities.forwardsAspectRatio
 }
 
 /** 将旧 size-only 配置和模型切换后的无效值收敛为能力表中的合法组合。 */

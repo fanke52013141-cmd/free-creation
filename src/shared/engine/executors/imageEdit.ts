@@ -2,6 +2,7 @@ import { inputMedia, inputText } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
 import { modelsByModality, resolveImageModelOption } from '../models'
 import { readNodeConfig } from '../node-config'
+import { imageCapabilitiesFor, imageEditSendsMask } from '@shared/image-capabilities'
 import {
   parseImageEditConfig,
   validateImageEditConfig,
@@ -73,6 +74,11 @@ export const imageEditExecutor = async (
   })
   if (!option) return { status: 'skipped', reason: '未选择可用图片模型' }
   const annotationLines = annotationInstructionLines(config.annotations)
+  // 遮罩提示词必须与网关的实际行为一致：TOAPIS 那条异步任务通道没有 mask 字段，
+  // 画了遮罩也不会发送，此时再写「请仅修改遮罩指定区域」就是让模型猜一个不存在的输入。
+  const sendsMask = imageEditSendsMask(
+    imageCapabilitiesFor(option.provider.specId, option.model.id)
+  )
   const prompt = [
     config.instruction.trim(),
     inputText(ctx.inputs, 'in-text').trim(),
@@ -80,7 +86,7 @@ export const imageEditExecutor = async (
       ? '输入包含两张参考：第 1 张是原图，第 2 张是带标注的原图。请以原图为准，根据第 2 张的标注修改，最终图像不要保留标注本身。红色表示需要修改，蓝色表示替换或调整，黄色表示需要保留或重点注意。'
       : '',
     annotationLines.length ? `标注说明：\n${annotationLines.join('\n')}` : '',
-    config.mask?.enabled ? '请仅修改遮罩指定区域，未遮罩区域尽量保持不变。' : ''
+    config.mask?.enabled && sendsMask ? '请仅修改遮罩指定区域，未遮罩区域尽量保持不变。' : ''
   ]
     .filter(Boolean)
     .join('\n\n')

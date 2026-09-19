@@ -6,10 +6,10 @@
 // 是共享模块而非单一组件文件，故豁免 React Fast Refresh 的组件-only 规则。
 /* eslint-disable react-refresh/only-export-components */
 import { useEffect, useRef } from 'react'
-import { createShapeId, stopEventPropagation, type Editor, type TLShapeId } from 'tldraw'
+import { createShapeId, stopEventPropagation, useValue, type Editor, type TLShapeId } from 'tldraw'
 import { modelsByModality } from '../../../stores/gateway'
 import type { NodeCardShape, NodeCardProps } from '../../../canvas/NodeCardShape'
-import { createEdge } from '../../../canvas/graph'
+import { countIncomingConnections, createEdge } from '../../../canvas/graph'
 import { markUndoPoint } from '../../../canvas/history'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { getNodeType, mediaUrl } from '../../registry'
@@ -36,6 +36,26 @@ export function parseJsonProp<T>(text: string, validate: (v: unknown) => T | nul
     // 非结构化内容按 fallback 处理
   }
   return fallback
+}
+
+/**
+ * 缺少必需输入时的结论文案（NODE_UI_SPEC §16.16）：按真实连线数区分「没连线」与
+ * 「连了但上游还没出图」，否则用户会去检查错的那一侧。只读已有端口，不新增契约。
+ */
+export function useSourceWiringNotice(
+  editor: Editor,
+  shapeId: string,
+  portId: string,
+  label: string
+): string {
+  const count = useValue(
+    `${shapeId}:${portId} incoming`,
+    () => countIncomingConnections(editor, shapeId as TLShapeId, portId),
+    [editor, shapeId, portId]
+  )
+  return count === 0
+    ? `${label}（${portId}）未连线，运行会跳过。`
+    : `${label}（${portId}）已连线 ${count} 条，但上游还没有产出。`
 }
 
 // 节点内模型选择下拉（按模态过滤全部供应商的模型）
@@ -159,7 +179,7 @@ export function createImageContinuation(
           ? '图片拆分'
           : targetType === 'image-edit'
             ? 'P图'
-            : '图片生成视频'
+            : '生视频'
   const placement = findContinuationPlacement(
     editor,
     source,

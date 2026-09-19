@@ -2197,6 +2197,10 @@ select:focus-visible,
   place-items: center;
   align-content: center;
   gap: 5px;
+  /* 缺输入提示是一句完整结论，需要换行而不是溢出裁掉 */
+  padding: 0 12px;
+  line-height: 1.5;
+  text-align: center;
   color: var(--muted, #8e9bab);
   font-size: 11px;
 }

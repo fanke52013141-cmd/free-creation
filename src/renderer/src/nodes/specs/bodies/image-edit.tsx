@@ -10,12 +10,15 @@ import {
   type ImageEditColor,
   type ImageEditConfig,
   type ImageEditPoint,
-  IMAGE_EDIT_ASPECT_RATIOS,
   type ImageEditAspectRatio,
   type ImageEditResolution
 } from '@shared/image-edit'
 import { resolveImageModelOption } from '@shared/engine/models'
-import { imageCapabilitiesFor } from '@shared/image-capabilities'
+import {
+  imageCapabilitiesFor,
+  imageEditSendsAspectRatio,
+  imageEditSendsMask
+} from '@shared/image-capabilities'
 import { gatherUpstreamMedia } from '../../../canvas/graph'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import type { NodeCardShape } from '../../../canvas/NodeCardShape'
@@ -36,7 +39,8 @@ import {
   NoModelHint,
   removeMediaResultFromShape,
   selectMediaResult,
-  useClickGuard
+  useClickGuard,
+  useSourceWiringNotice
 } from './shared'
 import { markUndoPoint } from '../../../canvas/history'
 
@@ -64,6 +68,7 @@ export function ImageEditBody({ shape, openPreview }: NodeBodyProps): React.JSX.
   const guard = useClickGuard()
   const editor = useEditor()
   const source = gatherUpstreamMedia(editor, shape.id, 'in-image', 'image')
+  const noSourceLine = useSourceWiringNotice(editor, shape.id, 'in-image', '原图')
   const [compareSource, setCompareSource] = useState(false)
   const [workbenchOpen, setWorkbenchOpen] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -111,6 +116,7 @@ export function ImageEditBody({ shape, openPreview }: NodeBodyProps): React.JSX.
       <div className="asset-empty image-edit-empty">
         <Icon name="image" size={40} />
         <span>P图</span>
+        <span className="node-wiring warn">{noSourceLine}</span>
         <button
           className="btn-ghost small"
           onPointerDown={stopEventPropagation}
@@ -416,7 +422,7 @@ function ImageEditEditorCore({
     latest: ImageEditConfig
   } | null>(null)
   const [config, setConfig] = useState(() => parseImageEditConfig(readNodeConfig(shape)))
-  const [tool, setTool] = useState<ImageEditTool>('arrow')
+  const [storedTool, setStoredTool] = useState<ImageEditTool>('arrow')
   const [color, setColor] = useState<ImageEditColor>('red')
   const [aspect, setAspect] = useState(16 / 10)
   const [busy, setBusy] = useState(false)
@@ -425,6 +431,7 @@ function ImageEditEditorCore({
   const [brushSize, setBrushSize] = useState(4)
   const [selectedMoveTarget, setSelectedMoveTarget] = useState<MoveTarget | null>(null)
   const source = gatherUpstreamMedia(editor, shape.id, 'in-image', 'image')
+  const noSourceLine = useSourceWiringNotice(editor, shape.id, 'in-image', '原图')
   const providers = useGatewayStore((s) => s.providers)
   const options = modelsByModality(providers, 'image')
   const loaded = useGatewayStore((s) => s.loaded)
@@ -449,6 +456,17 @@ function ImageEditEditorCore({
   const capabilities = selectedOption
     ? imageCapabilitiesFor(selectedOption.provider.specId, selectedOption.model.id)
     : null
+  // 控件是否呈现由「网关会不会把这个字段发出去」决定（NODE_UI_SPEC §16.15）：TOAPIS 的
+  // 异步任务端点没有 mask 字段，也不接收画幅遮罩，所以那条通道上连遮罩工具都不出现。
+  const sendsMask = capabilities ? imageEditSendsMask(capabilities) : false
+  const sendsRatio = capabilities ? imageEditSendsAspectRatio(capabilities) : false
+  const ratioOptions: ImageEditAspectRatio[] = capabilities?.ratios ?? ['auto']
+  const currentRatio: ImageEditAspectRatio = ratioOptions.includes(config.aspectRatio ?? 'auto')
+    ? (config.aspectRatio ?? 'auto')
+    : 'auto'
+  const visibleTools = sendsMask ? TOOLS : TOOLS.filter((item) => item.id !== 'mask')
+  // 切到不接收遮罩的通道时按渲染期派生回箭头，而不是在 effect 里补一次 setState。
+  const tool: ImageEditTool = sendsMask || storedTool !== 'mask' ? storedTool : 'arrow'
 
   useEffect(() => {
     if (!textEntry) return
@@ -650,7 +668,7 @@ function ImageEditEditorCore({
   return (
     <div className={`image-edit-settings ${workbench ? 'image-edit-settings-workbench' : ''}`}>
       {!source ? (
-        <div className="crop-no-source">请从图片或生图节点连线到“原图”端口。</div>
+        <div className="crop-no-source">{noSourceLine}</div>
       ) : (
         <>
           <div
@@ -774,7 +792,7 @@ function ImageEditEditorCore({
             )}
           </div>
           <div className="image-edit-tools">
-            {TOOLS.map((item) => (
+            {visibleTools.map((item) => (
               <button
                 key={item.id}
                 className={tool === item.id ? 'active' : ''}
@@ -782,7 +800,7 @@ function ImageEditEditorCore({
                 aria-pressed={tool === item.id}
                 onPointerDown={stopEventPropagation}
                 onClick={() => {
-                  setTool(item.id)
+                  setStoredTool(item.id)
                   if (item.id !== 'move') setSelectedMoveTarget(null)
                 }}
               >
@@ -872,45 +890,52 @@ function ImageEditEditorCore({
               </output>
             </label>
           )}
-          <div className="image-edit-mask-options">
-            <label>
-              <input
-                type="checkbox"
-                checked={config.mask?.enabled ?? false}
-                onPointerDown={(e) => e.stopPropagation()}
-                onChange={(event) =>
-                  save({
-                    ...config,
-                    mask: {
-                      enabled: event.target.checked,
-                      strokes: config.mask?.strokes ?? [],
-                      brushSize: config.mask?.brushSize ?? 0.08,
-                      invert: config.mask?.invert ?? false
-                    }
-                  })
-                }
-              />
-              启用遮罩
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={config.mask?.invert ?? false}
-                disabled={!config.mask?.enabled}
-                onPointerDown={(e) => e.stopPropagation()}
-                onChange={(event) =>
-                  save({
-                    ...config,
-                    mask: {
-                      ...(config.mask ?? { enabled: true, strokes: [], brushSize: 0.08 }),
-                      invert: event.target.checked
-                    }
-                  })
-                }
-              />
-              反选区域
-            </label>
-          </div>
+          {sendsMask && (
+            <div className="image-edit-mask-options">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={config.mask?.enabled ?? false}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onChange={(event) =>
+                    save({
+                      ...config,
+                      mask: {
+                        enabled: event.target.checked,
+                        strokes: config.mask?.strokes ?? [],
+                        brushSize: config.mask?.brushSize ?? 0.08,
+                        invert: config.mask?.invert ?? false
+                      }
+                    })
+                  }
+                />
+                启用遮罩
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={config.mask?.invert ?? false}
+                  disabled={!config.mask?.enabled}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onChange={(event) =>
+                    save({
+                      ...config,
+                      mask: {
+                        ...(config.mask ?? { enabled: true, strokes: [], brushSize: 0.08 }),
+                        invert: event.target.checked
+                      }
+                    })
+                  }
+                />
+                反选区域
+              </label>
+            </div>
+          )}
+          {!sendsMask && config.mask?.strokes.length ? (
+            <p className="node-wiring warn">
+              已画遮罩，但当前模型通道不接收遮罩字段，这次运行只按标注与修改说明处理。
+            </p>
+          ) : null}
         </>
       )}
       <div className="gen-row">
@@ -921,22 +946,24 @@ function ImageEditEditorCore({
           options={options}
           onChange={(modelKey) => save({ ...config, modelKey })}
         />
-        <AppSelect
-          className="gen-select w92"
-          value={config.aspectRatio ?? config.size ?? 'auto'}
-          onPointerDown={(e) => e.stopPropagation()}
-          onChange={(e) => {
-            const val = e.target.value as ImageEditAspectRatio
-            save({ ...config, aspectRatio: val, size: val })
-          }}
-          aria-label="选择画幅比例"
-        >
-          {IMAGE_EDIT_ASPECT_RATIOS.map((ratio) => (
-            <option key={ratio} value={ratio}>
-              {ratio === 'auto' ? '默认比例' : ratio}
-            </option>
-          ))}
-        </AppSelect>
+        {sendsRatio && (
+          <AppSelect
+            className="gen-select w92"
+            value={currentRatio}
+            onPointerDown={(e) => e.stopPropagation()}
+            onChange={(e) => {
+              const val = e.target.value as ImageEditAspectRatio
+              save({ ...config, aspectRatio: val })
+            }}
+            aria-label="选择画幅比例"
+          >
+            {ratioOptions.map((ratio) => (
+              <option key={ratio} value={ratio}>
+                {ratio === 'auto' ? '默认比例' : ratio}
+              </option>
+            ))}
+          </AppSelect>
+        )}
         {capabilities && capabilities.resolutions.length > 0 && (
           <AppSelect
             className="gen-select w86"

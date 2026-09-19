@@ -12,7 +12,7 @@ import { markUndoPoint } from '../../../canvas/history'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { mediaUrl, type NodeBodyProps, type NodeSettingsProps } from '../../registry'
 import { Icon } from '../../../components/Icon'
-import { useClickGuard } from './shared'
+import { useClickGuard, useSourceWiringNotice } from './shared'
 
 function positiveInteger(value: string, fallback: number): number {
   const number = Number(value)
@@ -23,6 +23,7 @@ export function ImageSplitBody({ shape, openPreview }: NodeBodyProps): React.JSX
   const editor = useEditor()
   const guard = useClickGuard()
   const source = gatherUpstreamMedia(editor, shape.id, 'in-image', 'image')
+  const noSourceLine = useSourceWiringNotice(editor, shape.id, 'in-image', '原图')
   const config = parseImageSplitConfig(readNodeConfig(shape))
   const tiles = buildImageSplitTiles(config)
   const [previewAspect, setPreviewAspect] = useState<number | null>(null)
@@ -189,7 +190,8 @@ export function ImageSplitBody({ shape, openPreview }: NodeBodyProps): React.JSX
           </div>
         ) : (
           <span className="image-split-quick-empty">
-            <Icon name="image" size={19} /> 连接原图
+            <Icon name="image" size={19} />
+            {noSourceLine}
           </span>
         )}
       </div>
@@ -202,6 +204,7 @@ export function ImageSplitSettings({ shape, editor }: NodeSettingsProps): React.
   const [config, setConfig] = useState(() => parseImageSplitConfig(readNodeConfig(shape)))
   const [previewAspect, setPreviewAspect] = useState<number | null>(null)
   const source = gatherUpstreamMedia(editor, shape.id, 'in-image', 'image')
+  const noSourceLine = useSourceWiringNotice(editor, shape.id, 'in-image', '原图')
   const tiles = buildImageSplitTiles(config)
   const linearPercent = Math.sqrt(config.scalePercent / 100) * 100
 
@@ -325,7 +328,7 @@ export function ImageSplitSettings({ shape, editor }: NodeSettingsProps): React.
           ))}
         </div>
       ) : (
-        <div className="crop-no-source">请从图片或生图节点连线到左侧“原图”端口。</div>
+        <div className="crop-no-source">{noSourceLine}</div>
       )}
       <p className="crop-coordinate-hint">
         输出「图片集合」可连接到循环节点批处理；「当前图片」是从集合中选中的一格，可直接接生图、裁剪或视频。

@@ -229,7 +229,7 @@ export const BUILTIN_TEMPLATES: {
       { type: 'image-edit', title: 'P图', dx: -380, dy: 0 },
       { type: 'image-crop', title: '图片裁剪', dx: 0, dy: -240 },
       { type: 'image-gen', title: '继续生图', dx: 0, dy: 0 },
-      { type: 'video', title: '图片生成视频', dx: 0, dy: 240 }
+      { type: 'video', title: '生视频', dx: 0, dy: 240 }
     ],
     edges: [
       { from: 0, to: 1, fromPort: 'out-image', toPort: 'in-image' },

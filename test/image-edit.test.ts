@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   DEFAULT_IMAGE_EDIT_CONFIG,
   parseImageEditConfig,
+  serializeImageEditConfig,
   validateImageEditConfig
 } from '@shared/image-edit'
 import {
@@ -69,6 +70,29 @@ describe('图片修改配置', () => {
       { x: 1, y: 0 }
     ])
     expect(parseImageEditConfig(JSON.stringify({ size: 'not-a-size' })).size).toBe('auto')
+  })
+
+  it('旧配置把比例镜像进 size：读回后画幅只有一个来源', () => {
+    // 历史版本在选比例时同时写 size 与 aspectRatio，而 size 会被同步接口当成像素尺寸发出。
+    expect(parseImageEditConfig(JSON.stringify({ size: '16:9' }))).toMatchObject({
+      size: 'auto',
+      aspectRatio: '16:9'
+    })
+    expect(
+      parseImageEditConfig(JSON.stringify({ size: '9:16', aspectRatio: '4:3' }))
+    ).toMatchObject({ size: 'auto', aspectRatio: '4:3' })
+    // 像素尺寸是真尺寸，不能被当成比例搬走。
+    expect(parseImageEditConfig(JSON.stringify({ size: '1024x1024' }))).toMatchObject({
+      size: '1024x1024',
+      aspectRatio: 'auto'
+    })
+    // 合法域之外的比例不入库。
+    expect(parseImageEditConfig(JSON.stringify({ aspectRatio: '7:3' }))).toMatchObject({
+      aspectRatio: 'auto'
+    })
+    expect(
+      serializeImageEditConfig(parseImageEditConfig(JSON.stringify({ size: '16:9' })))
+    ).toContain('"aspectRatio":"16:9"')
   })
 
   it('没有说明或标注时拒绝执行', () => {

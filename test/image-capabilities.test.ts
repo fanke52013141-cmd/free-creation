@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  ALL_IMAGE_ASPECT_RATIOS,
   imageCapabilitiesFor,
+  imageEditSendsAspectRatio,
+  imageEditSendsMask,
+  isImageAspectRatio,
   normalizeImageGenerationConfig,
   sizesForImageAspectRatio
 } from '@shared/image-capabilities'
@@ -132,5 +136,44 @@ describe('图片模型能力描述', () => {
     expect(capabilities.resolutions).toEqual(['1k', '2k', '4k'])
     expect(capabilities.ratios).toContain('16:9')
     expect(capabilities.ratios).toContain('3:2')
+  })
+})
+
+// P 图上「遮罩」「画幅」两个控件的可见性来源：网关会不会把该字段写进请求。
+describe('P 图能力门禁：控件只在真正会发送的通道上出现', () => {
+  it('ToAPIS 异步任务的提交字段是封闭集合：没有 mask，但比例写进 size', () => {
+    const capabilities = imageCapabilitiesFor('toapis')
+    expect(imageEditSendsMask(capabilities)).toBe(false)
+    expect(imageEditSendsAspectRatio(capabilities)).toBe(true)
+  })
+
+  it('中转站上的 gpt-image-2 同属任务通道：遮罩一样不发', () => {
+    const capabilities = imageCapabilitiesFor('relay', 'gpt-image-2')
+    expect(imageEditSendsMask(capabilities)).toBe(false)
+    expect(imageEditSendsAspectRatio(capabilities)).toBe(true)
+  })
+
+  it('兼容网关声明透传 aspectRatio 时遮罩与画幅都发送', () => {
+    const capabilities = imageCapabilitiesFor('relay', 'custom-image-model')
+    expect(capabilities.forwardsAspectRatio).toBe(true)
+    expect(imageEditSendsMask(capabilities)).toBe(true)
+    expect(imageEditSendsAspectRatio(capabilities)).toBe(true)
+  })
+
+  it('OpenAI 官方与 OpenRouter 不接收画幅参数，只有遮罩可用', () => {
+    for (const specId of ['openai', 'openrouter'] as const) {
+      const capabilities = imageCapabilitiesFor(specId)
+      expect(imageEditSendsMask(capabilities)).toBe(true)
+      expect(imageEditSendsAspectRatio(capabilities)).toBe(false)
+    }
+  })
+
+  it('P 图可选画幅只有一处来源：直接取能力表 ratios', () => {
+    expect(isImageAspectRatio('16:9')).toBe(true)
+    expect(isImageAspectRatio('auto')).toBe(true)
+    // 像素尺寸不是比例：混进 size 时按旧数据收敛，不能当成画幅。
+    expect(isImageAspectRatio('1024x1024')).toBe(false)
+    expect(isImageAspectRatio(undefined)).toBe(false)
+    expect([...imageCapabilitiesFor('toapis').ratios]).toEqual([...ALL_IMAGE_ASPECT_RATIOS])
   })
 })

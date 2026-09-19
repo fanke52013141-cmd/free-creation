@@ -19,7 +19,7 @@ import { useGatewayStore } from '../../../stores/gateway'
 import { toast } from '../../../stores/toast'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
-import { MediaFileActions, MediaSourceBadge, useClickGuard } from './shared'
+import { MediaFileActions, MediaSourceBadge, useClickGuard, useSourceWiringNotice } from './shared'
 
 type DragTarget =
   | { kind: 'rect'; corner: 0 | 1 | 2 | 3 }
@@ -182,6 +182,7 @@ export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.
   const project = useAppStore((state) => state.currentProject)
   const providers = useGatewayStore((state) => state.providers)
   const source = gatherUpstreamMedia(editor, shape.id, 'in-image', 'image')
+  const noSourceLine = useSourceWiringNotice(editor, shape.id, 'in-image', '原图')
   const config = parseImageCropConfig(readNodeConfig(shape))
   const [previewAspect, setPreviewAspect] = useState(1)
   const previewContainerRef = useRef<HTMLDivElement>(null)
@@ -227,6 +228,7 @@ export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.
       <div className="asset-empty crop-empty">
         <Icon name="crop" size={40} />
         <span>图片裁剪</span>
+        <span className="node-wiring warn">{noSourceLine}</span>
         <button
           className="btn-ghost small"
           onPointerDown={stopEventPropagation}
@@ -461,6 +463,7 @@ export function ImageCropSettings({ shape, editor }: NodeSettingsProps): React.J
   const persistFrame = useRef<number | null>(null)
   const [previewAspect, setPreviewAspect] = useState<number | null>(null)
   const source = gatherUpstreamMedia(editor, shape.id, 'in-image', 'image')
+  const noSourceLine = useSourceWiringNotice(editor, shape.id, 'in-image', '原图')
 
   const persist = useCallback(
     (next: ImageCropConfig): void => {
@@ -694,7 +697,7 @@ export function ImageCropSettings({ shape, editor }: NodeSettingsProps): React.J
           )}
         </>
       ) : (
-        <div className="crop-no-source">请从图片或生图节点连线到左侧“原图”端口。</div>
+        <div className="crop-no-source">{noSourceLine}</div>
       )}
       {invalid && <p className="crop-invalid">{invalid}</p>}
       <p className="crop-coordinate-hint">

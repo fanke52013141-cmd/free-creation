@@ -182,7 +182,12 @@ async function main() {
     )
     assert('fresh-no-overflow', state.overflow && !state.overflow.x && !state.overflow.y, state.overflow, { x: false, y: false })
     assert('fresh-default-3x3', state.rows === '3' && state.cols === '3', { rows: state.rows, cols: state.cols }, '默认 3×3')
-    assert('fresh-hint-connect', (state.bodyText ?? '').includes('连接原图'), state.bodyText, '空态提示连接原图')
+    assert(
+      'fresh-hint-connect',
+      (state.bodyText ?? '').includes('原图（in-image）未连线'),
+      state.bodyText,
+      '空态按真实连线给出缺输入结论'
+    )
 
     // ── 2. 空跑：缺必填输入不得伪装成功 ───────────────────────
     await runNode(page, split.card, '.image-split-quick')

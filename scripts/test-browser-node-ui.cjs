@@ -137,7 +137,7 @@ async function main() {
     await page.getByRole('button', { name: '适配画布（缩放到所有节点）', exact: true }).click()
     const splitNode = page.locator('.node-card-wrap:has(.type-image-split)').first()
     await splitNode.waitFor()
-    assert.match(await splitNode.innerText(), /连接原图/)
+    assert.match(await splitNode.innerText(), /原图（in-image）未连线/)
     assert.equal(
       await splitNode.locator('.image-split-quick-controls').count(),
       1,

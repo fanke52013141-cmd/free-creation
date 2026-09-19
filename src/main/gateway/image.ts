@@ -93,13 +93,15 @@ async function generateImageWithReference(
   maskImage?: Buffer
 ): Promise<MediaAsset> {
   const prompt = input.prompt.trim()
+  // P 图的存量配置里 size 可能存的是比例串（旧版把画幅镜像进 size），同步接口只接受像素尺寸。
+  const pixelSize = /^\d+x\d+$/.test(input.size ?? '') ? input.size : undefined
   const { images } = await generateImage({
     model: createImageModel(input.providerId, input.modelId),
     prompt:
       referenceImages.length > 0
         ? { text: prompt, images: [...referenceImages], ...(maskImage ? { mask: maskImage } : {}) }
         : prompt,
-    ...(input.size && input.size !== 'auto' ? { size: input.size as `${number}x${number}` } : {}),
+    ...(pixelSize ? { size: pixelSize as `${number}x${number}` } : {}),
     ...(providerOptions && Object.keys(providerOptions).length > 0
       ? { providerOptions: { [input.providerId]: providerOptions } }
       : {})
@@ -503,5 +505,19 @@ export async function generateImageEditToAsset(
     return downloadImageAsAsset(input.projectId, imageUrl, prompt.slice(0, 24))
   }
 
-  return generateImageWithReference(input, referenceImages, undefined, maskImage)
+  // 非 TOAPIS 通道：遮罩与画幅都要真正写进请求，否则节点上就不该出现这两个控件。
+  const providerOptions: Record<string, string | number | boolean> = {}
+  if (
+    capabilities.forwardsAspectRatio &&
+    input.config?.aspectRatio &&
+    input.config.aspectRatio !== 'auto'
+  ) {
+    providerOptions.aspectRatio = input.config.aspectRatio
+  }
+  return generateImageWithReference(
+    input,
+    referenceImages,
+    Object.keys(providerOptions).length > 0 ? providerOptions : undefined,
+    maskImage
+  )
 }
