@@ -14,6 +14,7 @@ import { registerComfyuiIpc } from './ipc/comfyui.ipc'
 import { registerWorkspaceStateIpc } from './ipc/workspace-state.ipc'
 import { closeDb, getDb, getProjectsDir } from './store/db'
 import { reconcileWorkspace } from './store/workspace-health'
+import { upgradeLegacyApiKeys } from './gateway/providers.repo'
 import { getMediaAbsPath } from './store/media.repo'
 import { mimeForExtension } from '../shared/mime'
 
@@ -150,6 +151,9 @@ app.whenReady().then(() => {
   })
 
   const database = getDb()
+  // safeStorage 上线前保存的 Key 至今是裸明文；启动时补一次收口，日志只记数量。
+  const reEncrypted = upgradeLegacyApiKeys()
+  if (reEncrypted) log.info(`providers: ${reEncrypted} 个历史明文 API Key 已重新加密`)
   const health = reconcileWorkspace({
     projectsDir: getProjectsDir(),
     projectIds: (

@@ -1,10 +1,11 @@
 // 供应商配置仓库：providers 表 CRUD（表结构 db.ts 迁移已建）
-// api_key_ref 列存明文 key：本地单用户应用，DPAPI 加密列为 P2 增强项
+// api_key_ref 存 safeStorage 密文（enc:）；加密上线前写入的裸明文行由
+// upgradeLegacyApiKeys() 在启动时收口。
 import { nanoid } from 'nanoid'
 import type { GatewayModelInfo, ProviderConfig, ProviderSummary } from '../../shared/types'
 import type { SaveProviderInput } from '../../shared/contracts'
 import { getDb } from '../store/db'
-import { decryptSecret, encryptSecret } from './keycrypto'
+import { decryptSecret, encryptionAvailable, encryptSecret, isEncryptedSecret } from './keycrypto'
 
 interface ProviderRow {
   id: string
@@ -132,4 +133,28 @@ export function saveProvider(input: SaveProviderInput): ProviderSummary {
 export function deleteProvider(id: string): boolean {
   const res = getDb().prepare('DELETE FROM providers WHERE id = ?').run(id)
   return res.changes > 0
+}
+
+/**
+ * safeStorage 上线前写入的 Key 是裸明文（或 plain: 降级串），它们至今明文躺在 app.db 里。
+ * 启动时把这些行重新加密成 enc:；本机暂无加密能力时一行都不写——写成 plain: 不是升级，
+ * 只是把「也许还能读」换成「一定更糟」。
+ */
+export function upgradeLegacyApiKeys(): number {
+  if (!encryptionAvailable()) return 0
+  const db = getDb()
+  const rows = db.prepare('SELECT id, api_key_ref FROM providers').all() as Array<{
+    id: string
+    api_key_ref: string | null
+  }>
+  let upgraded = 0
+  for (const row of rows) {
+    const stored = row.api_key_ref
+    if (!stored || isEncryptedSecret(stored)) continue
+    const cipher = encryptSecret(decryptSecret(stored))
+    if (!isEncryptedSecret(cipher)) continue
+    db.prepare('UPDATE providers SET api_key_ref = ? WHERE id = ?').run(cipher, row.id)
+    upgraded++
+  }
+  return upgraded
 }
