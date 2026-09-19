@@ -12,6 +12,7 @@ import {
   parseVideoGen
 } from '@renderer/engine/executors/shared'
 import { parseImageGen } from '@renderer/engine/executors/imageGen'
+import { parseStoryboardData, readStoryboardText } from '@shared/engine/helpers'
 
 describe('parseJsonObj', () => {
   it('解析合法对象', () => {
@@ -196,5 +197,35 @@ describe('parseImageGen · 生图固定配置解析（R5 种子）', () => {
       'transparent'
     )
     expect(parseImageGen(JSON.stringify({ background: 'white' })).background).toBeUndefined()
+  })
+})
+
+describe('parseStoryboardData / readStoryboardText · 分镜解析唯一出口', () => {
+  it('镜头数组与 { shots } 对象都能解析，未知字段原样保留', () => {
+    const shot = {
+      id: 's1',
+      scene: '街头',
+      dialogue: '',
+      duration: '5s',
+      sound: '雨声',
+      camera: '跟拍'
+    }
+    expect(parseStoryboardData([shot])).toEqual({ shots: [shot], imageModelKey: undefined })
+    const board = parseStoryboardData({ shots: [shot], imageModelKey: 'p::m' })
+    expect(board?.imageModelKey).toBe('p::m')
+    expect(board?.shots[0]).toMatchObject({ sound: '雨声', camera: '跟拍' })
+  })
+
+  it('缺 shots 或非对象输入返回 null，不猜测内容', () => {
+    expect(parseStoryboardData({ foo: 1 })).toBeNull()
+    expect(parseStoryboardData('[]')).toBeNull()
+    expect(parseStoryboardData(null)).toBeNull()
+  })
+
+  it('读正文区分空、非 JSON、无 shots 三种状态', () => {
+    expect(readStoryboardText('   ')).toEqual({ kind: 'empty' })
+    expect(readStoryboardText('一段剧本正文').kind).toBe('not-json')
+    expect(readStoryboardText('{"shots":[]}').kind).toBe('ok')
+    expect(readStoryboardText('{"foo":1}').kind).toBe('not-shots')
   })
 })

@@ -3,20 +3,14 @@
  *
  * 这里刻意不依赖 React / tldraw：UI 仅负责将返回值写回节点 text，
  * 所以新增、编辑、排序、删除的语义可以独立回归，且不会就地修改旧数据。
+ *
+ * 镜头结构不复定义：它直接是共享层的 ShotShape。执行器与卡片必须看到同一份字段口径，
+ * 否则剧本产出的 sound、批量生图模板用到的 camera 会在某一层被静默丢掉。
  */
-export interface StoryboardShot {
-  id: string
-  scene: string
-  dialogue: string
-  duration: string
-  imageMediaId?: string
-  imageMediaPath?: string
-}
+import type { ShotShape, StoryboardData } from '@shared/engine/helpers'
 
-export interface StoryboardData {
-  shots: StoryboardShot[]
-  imageModelKey?: string
-}
+export type StoryboardShot = ShotShape
+export type { StoryboardData }
 
 export type StoryboardShotDraft = Pick<StoryboardShot, 'scene' | 'dialogue' | 'duration'>
 

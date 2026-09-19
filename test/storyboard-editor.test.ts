@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { parseStoryboardData, readStoryboardText } from '@shared/engine/helpers'
 import {
   createStoryboardShot,
   moveStoryboardShot,
@@ -45,5 +46,29 @@ describe('storyboard-editor · 逐镜编辑数据模型', () => {
     expect(removed.shots.map((shot) => shot.id)).toEqual(['b'])
     expect(JSON.parse(JSON.stringify(removed))).toEqual(removed)
     expect(original.shots.map((shot) => shot.id)).toEqual(['a', 'b'])
+  })
+
+  // 剧本和批量生图模板会往镜头上写 scene/dialogue/duration 之外的字段。卡片的读与写必须
+  // 走共享解析出口，否则编辑任意一格就把其他镜头的 sound、camera 静默写丢。
+  it('逐镜编辑往返保留镜头上的额外字段', () => {
+    const board = parseStoryboardData({
+      shots: [
+        { id: 'a', scene: '雨夜', sound: '细雨', camera: '中近景' },
+        { id: 'b', scene: '巷口', sound: '脚步声', camera: '广角' }
+      ],
+      imageModelKey: 'image-model'
+    })
+    if (!board) throw new Error('分镜解析失败')
+    const edited = updateStoryboardShot(board, 'a', {
+      scene: '雨夜街头',
+      dialogue: '别回头',
+      duration: '5s'
+    })
+    const reread = readStoryboardText(JSON.stringify(edited))
+    expect(reread.kind).toBe('ok')
+    if (reread.kind !== 'ok') return
+    expect(reread.data).toEqual(edited)
+    expect(reread.data.shots[1]).toMatchObject({ sound: '脚步声', camera: '广角' })
+    expect(reread.data.imageModelKey).toBe('image-model')
   })
 })

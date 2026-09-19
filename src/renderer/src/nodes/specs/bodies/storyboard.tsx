@@ -1,12 +1,17 @@
 // 分镜板节点 Body（路线图 R6：bodies.tsx 拆分）
-import { useEffect, useRef, useState } from 'react'
+//
+// 解析只走共享出口 readStoryboardText / parseStoryboardData：卡片与执行器必须同一口径，
+// 且镜头上的额外字段（剧本的 sound、批量生图的 camera）必须原样保留，否则一次逐镜编辑
+// 就会把这些字段静默写丢。
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { stopEventPropagation, useEditor, useValue } from 'tldraw'
-import { mediaUrl, type NodeBodyProps } from '../../registry'
+import { parseStoryboardData, readStoryboardText } from '@shared/engine/helpers'
+import type { NodeBodyProps } from '../../registry'
 import { toast } from '../../../stores/toast'
 import { markUndoPoint } from '../../../canvas/history'
 import { countIncomingConnections, gatherUpstreamJson } from '../../../canvas/graph'
 import { Icon } from '../../../components/Icon'
-import { useClickGuard, useWheelScroll } from './shared'
+import { useWheelScroll } from './shared'
 import {
   createStoryboardShot,
   moveStoryboardShot,
@@ -16,60 +21,19 @@ import {
   type StoryboardShot
 } from '../../storyboard-editor'
 
-function parseStoryboard(text: string): StoryboardData {
-  if (!text) return { shots: [] }
-  try {
-    const v = JSON.parse(text) as { shots?: unknown; imageModelKey?: unknown }
-    if (v && typeof v === 'object' && Array.isArray(v.shots)) {
-      return {
-        shots: v.shots.map(
-          (s) =>
-            ({
-              id:
-                typeof (s as Record<string, unknown>).id === 'string'
-                  ? (s as { id: string }).id
-                  : Math.random().toString(36).slice(2, 9),
-              scene:
-                typeof (s as Record<string, unknown>).scene === 'string'
-                  ? (s as { scene: string }).scene
-                  : '',
-              dialogue:
-                typeof (s as Record<string, unknown>).dialogue === 'string'
-                  ? (s as { dialogue: string }).dialogue
-                  : '',
-              duration:
-                typeof (s as Record<string, unknown>).duration === 'string'
-                  ? (s as { duration: string }).duration
-                  : '',
-              imageMediaId:
-                typeof (s as Record<string, unknown>).imageMediaId === 'string'
-                  ? (s as { imageMediaId: string }).imageMediaId
-                  : undefined,
-              imageMediaPath:
-                typeof (s as Record<string, unknown>).imageMediaPath === 'string'
-                  ? (s as { imageMediaPath: string }).imageMediaPath
-                  : undefined
-            }) as StoryboardShot
-        ),
-        imageModelKey: typeof v.imageModelKey === 'string' ? v.imageModelKey : undefined
-      }
-    }
-  } catch {
-    // 非结构化内容
-  }
-  return { shots: [] }
-}
+const EMPTY_BOARD: StoryboardData = { shots: [] }
 
 function newShotId(): string {
   return globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 11)
 }
 
-export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX.Element {
-  const guard = useClickGuard()
+export function StoryboardBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
   const scrollRef = useRef<HTMLDivElement>(null)
   useWheelScroll(scrollRef)
-  const data = parseStoryboard(shape.props.text)
+  const board = useMemo(() => readStoryboardText(shape.props.text), [shape.props.text])
+  const data = board.kind === 'ok' ? board.data : EMPTY_BOARD
+  const shotCount = data.shots.length
   // 执行器按 in-json → in-text → 本卡片正文 的优先级取数并写回正文，所以连线状态必须
   // 印在卡片上：否则「连着上游又在卡片上手改过镜头」的用户不知道运行会覆盖自己的编辑。
   const jsonCount = useValue(
@@ -82,20 +46,27 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
     () => countIncomingConnections(editor, shape.id, 'in-text'),
     [editor, shape.id]
   )
-  const wiring: { text: string; warn: boolean } =
-    jsonCount + textCount === 0
-      ? data.shots.length
-        ? { text: `上游未连线，运行使用本卡片的 ${data.shots.length} 个镜头`, warn: false }
-        : { text: '分镜数据（in-json）未连线，且本卡片为空，运行会跳过', warn: true }
-      : data.shots.length
+  const wired = jsonCount + textCount > 0
+  // 「卡片为空」和「卡片里有字但不是分镜」是两件事：前者要连线或新建镜头，后者要修 JSON。
+  // 合并成一句提示就是在骗用户，所以四个状态各自给一句话。
+  const wiring: { text: string; warn: boolean } = !wired
+    ? shotCount
+      ? { text: `上游未连线，运行使用本卡片的 ${shotCount} 个镜头`, warn: false }
+      : board.kind !== 'empty'
         ? {
-            text: `已连线 in-json ${jsonCount} · in-text ${textCount}，运行会用它覆盖本卡片的 ${data.shots.length} 个镜头`,
-            warn: false
+            text: '上游未连线，且本卡片正文不是分镜数据（需要 shots 数组），运行会失败',
+            warn: true
           }
-        : {
-            text: `已连线 in-json ${jsonCount} · in-text ${textCount}，运行后写入本卡片`,
-            warn: false
-          }
+        : { text: '分镜数据（in-json）未连线，且本卡片为空，运行会跳过', warn: true }
+    : shotCount
+      ? {
+          text: `已连线 in-json ${jsonCount} · in-text ${textCount}，运行会用它覆盖本卡片的 ${shotCount} 个镜头`,
+          warn: false
+        }
+      : {
+          text: `已连线 in-json ${jsonCount} · in-text ${textCount}，运行后写入本卡片`,
+          warn: false
+        }
   // 上游自动导入只应发生一次；用户手动清空或编辑后不再被覆盖（A9）
   const importedRef = useRef(false)
   const [editingInput, setEditingInput] = useState(false)
@@ -117,54 +88,38 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
     })
   }
 
+  const openJsonEditor = (): void => {
+    setDraftInput(shotCount ? JSON.stringify(data, null, 2) : shape.props.text)
+    setEditingInput(true)
+  }
+
   // 从上游接收分镜数据。监听画布变更，保证“先创建节点、后连接连线”也能同步。
   useEffect(() => {
     const importUpstream = (): void => {
       if (importedRef.current) return
-      if (data.shots.length > 0) {
+      if (shotCount > 0) {
         importedRef.current = true
         return
       }
-      const upstream = gatherUpstreamJson(editor, shape.id)
-      const parsed = Array.isArray(upstream)
-        ? { shots: upstream }
-        : (upstream as { shots?: unknown } | null)
-      if (parsed && Array.isArray(parsed.shots) && parsed.shots.length > 0) {
-        update({
-          shots: parsed.shots.map(
-            (s) =>
-              ({
-                id: newShotId(),
-                scene: (s as Record<string, string>).scene ?? '',
-                dialogue: (s as Record<string, string>).dialogue ?? '',
-                duration: (s as Record<string, string>).duration ?? ''
-              }) as StoryboardShot
-          )
-        })
-        importedRef.current = true
-        markUndoPoint(editor, 'storyboard-import')
-      }
+      const parsed = parseStoryboardData(gatherUpstreamJson(editor, shape.id))
+      if (!parsed || parsed.shots.length === 0) return
+      update(parsed)
+      importedRef.current = true
+      markUndoPoint(editor, 'storyboard-import')
     }
     importUpstream()
     return editor.store.listen(importUpstream, { scope: 'document' })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editor, shape.id, data.shots.length])
+  }, [editor, shape.id, shotCount])
 
   const commitInput = (): void => {
-    let raw: unknown
-    try {
-      raw = JSON.parse(draftInput)
-    } catch {
-      toast('分镜 JSON 格式有误')
+    const next = readStoryboardText(draftInput)
+    if (next.kind !== 'ok') {
+      toast(next.kind === 'not-json' ? '分镜 JSON 格式有误' : '分镜 JSON 需要包含 shots 数组')
       return
     }
-    if (!raw || typeof raw !== 'object' || !Array.isArray((raw as { shots?: unknown }).shots)) {
-      toast('分镜 JSON 需要包含 shots 数组')
-      return
-    }
-    const next = parseStoryboard(draftInput)
     setEditingInput(false)
-    update(next)
+    update(next.data)
     markUndoPoint(editor, 'storyboard-json-edit')
   }
 
@@ -222,32 +177,45 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
     )
   }
 
-  if (data.shots.length === 0) {
+  if (shotCount === 0) {
     return (
       <div
         className="node-hint center"
         onPointerDown={(e) => stopEventPropagation(e)}
         onDoubleClick={(e) => {
           e.stopPropagation()
-          setDraftInput(shape.props.text)
-          setEditingInput(true)
+          openJsonEditor()
         }}
       >
         {wiring.text}
         <br />
-        或双击输入分镜 JSON
-        <button
-          className="btn-ghost small"
-          onPointerDown={(e) => stopEventPropagation(e)}
-          onClick={(e) => {
-            e.stopPropagation()
-            setDraftInput(shape.props.text)
-            setEditingInput(true)
-          }}
-        >
-          <Icon name="edit" size={14} />
-          输入 JSON
-        </button>
+        可逐镜填写，也可直接粘贴分镜 JSON
+        <div className="storyboard-empty-actions">
+          <button
+            type="button"
+            className="btn-ghost small"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              addShot()
+            }}
+          >
+            <Icon name="add" size={14} />
+            新增镜头
+          </button>
+          <button
+            type="button"
+            className="btn-ghost small"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              openJsonEditor()
+            }}
+          >
+            <Icon name="edit" size={14} />
+            编辑 JSON
+          </button>
+        </div>
       </div>
     )
   }
@@ -255,7 +223,7 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
   return (
     <div className="storyboard-body" ref={scrollRef}>
       <div className="storyboard-toolbar">
-        <span>逐镜编辑后可用「分镜→批量生图」模板继续创作。</span>
+        <span>编辑结果通过右侧「分镜数据」端口输出给下游节点。</span>
         <div className="storyboard-toolbar-actions">
           <button type="button" onPointerDown={stopEventPropagation} onClick={addShot}>
             <Icon name="add" size={12} /> 新增镜头
@@ -264,13 +232,9 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
             type="button"
             title="编辑原始分镜 JSON"
             onPointerDown={stopEventPropagation}
-            onClick={(event) => {
-              stopEventPropagation(event)
-              setDraftInput(JSON.stringify(data, null, 2))
-              setEditingInput(true)
-            }}
+            onClick={openJsonEditor}
           >
-            JSON
+            编辑 JSON
           </button>
         </div>
       </div>
@@ -286,29 +250,6 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
           }}
         >
           <div className="storyboard-num">#{i + 1}</div>
-          {shot.imageMediaPath ? (
-            <div
-              className="storyboard-thumb"
-              data-node-interactive="media-preview"
-              title="双击预览镜头图片"
-              onPointerDown={guard.onPointerDown}
-              onDoubleClick={(e) =>
-                guard.onDoubleClick(e, () =>
-                  openPreview({
-                    kind: 'image',
-                    url: mediaUrl(shot.imageMediaPath!),
-                    title: `镜头 ${i + 1}`
-                  })
-                )
-              }
-            >
-              <img src={mediaUrl(shot.imageMediaPath!)} alt={shot.scene} draggable={false} />
-            </div>
-          ) : (
-            <div className="storyboard-thumb-empty" title="请通过分镜批量生图工作流生成媒体">
-              <Icon name="image" size={13} />
-            </div>
-          )}
           {editingShotId === shot.id ? (
             <div className="storyboard-edit" onPointerDown={stopEventPropagation}>
               <label>

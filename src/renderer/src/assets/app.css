@@ -8946,36 +8946,6 @@ select:focus-visible,
   color: var(--muted);
   font-weight: 600;
 }
-.storyboard-thumb {
-  flex-shrink: 0;
-  width: 56px;
-  height: 42px;
-  border-radius: 4px;
-  overflow: hidden;
-  cursor: pointer;
-  background: rgba(255, 255, 255, 0.04);
-}
-.storyboard-thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.storyboard-thumb:hover img {
-  opacity: 0.85;
-}
-.storyboard-thumb-empty {
-  flex-shrink: 0;
-  width: 56px;
-  height: 42px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px dashed rgba(255, 255, 255, 0.1);
-  font-size: 16px;
-  color: var(--muted);
-}
 .storyboard-info {
   flex: 1;
   min-width: 0;
@@ -9339,7 +9309,13 @@ select:focus-visible,
   border-color: var(--red);
 }
 
-/* ── P0-3 Storyboard 逐镜生图扩展 ── */
+/* ── Storyboard 分镜板工具条与空态 ── */
+.storyboard-empty-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  margin-top: 6px;
+}
 .storyboard-toolbar {
   display: flex;
   align-items: center;
@@ -9439,36 +9415,6 @@ select:focus-visible,
 }
 .storyboard-card-actions .danger {
   color: var(--red);
-}
-.storyboard-thumb-empty.generating {
-  animation: sb-pulse 1s ease-in-out infinite;
-  cursor: wait;
-}
-@keyframes sb-pulse {
-  0%,
-  100% {
-    opacity: 0.4;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-.storyboard-thumb-gen {
-  width: 56px;
-  height: 42px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(9, 202, 245, 0.08);
-  border: 1px dashed rgba(9, 202, 245, 0.3);
-  font-size: 16px;
-  cursor: pointer;
-  transition: background 0.15s;
-  color: var(--brand);
-}
-.storyboard-thumb-gen:hover {
-  background: rgba(9, 202, 245, 0.18);
 }
 
 /* ── P1-4 搜索覆盖层 ── */

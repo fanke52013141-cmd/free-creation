@@ -58,6 +58,53 @@ export function extractShots(raw: string): ShotShape[] | null {
   return null
 }
 
+/** 分镜板的完整数据结构：镜头列表，外加可选的整板生图模型键。 */
+export interface StoryboardData {
+  shots: ShotShape[]
+  imageModelKey?: string
+}
+
+/**
+ * 分镜 JSON 的唯一解析出口——执行器取数与分镜板卡片渲染必须共用它。
+ *
+ * 卡片若自己写一份解析，就会漏掉 normalizeShot 保留下来的未知字段（剧本产出的
+ * sound、批量生图模板用到的 camera），导致「卡片看得到、下游拿不到」的静默丢数据。
+ * 输入既可以是镜头数组，也可以是 { shots: [...] } 对象；两者都解析不出来返回 null。
+ */
+export function parseStoryboardData(value: unknown): StoryboardData | null {
+  const raw = Array.isArray(value)
+    ? { shots: value }
+    : typeof value === 'object' && value !== null
+      ? (value as Record<string, unknown>)
+      : null
+  if (!raw || !Array.isArray(raw.shots)) return null
+  return {
+    shots: raw.shots.map(normalizeShot),
+    imageModelKey: typeof raw.imageModelKey === 'string' ? raw.imageModelKey : undefined
+  }
+}
+
+/** 分镜正文的读取结果：把「没有正文」与「正文不是分镜」分开，两者对用户的下一步完全不同。 */
+export type StoryboardRead =
+  | { kind: 'empty' }
+  | { kind: 'not-json' }
+  | { kind: 'not-shots' }
+  | { kind: 'ok'; data: StoryboardData }
+
+/** 读取一段分镜正文；卡片渲染与执行器取数共用，避免两边判断标准漂移。 */
+export function readStoryboardText(text: string): StoryboardRead {
+  const trimmed = (text ?? '').trim()
+  if (!trimmed) return { kind: 'empty' }
+  let value: unknown
+  try {
+    value = JSON.parse(trimmed)
+  } catch {
+    return { kind: 'not-json' }
+  }
+  const data = parseStoryboardData(value)
+  return data ? { kind: 'ok', data } : { kind: 'not-shots' }
+}
+
 export type VariableValueType = 'string' | 'number' | 'boolean' | 'object' | 'array' | 'any'
 
 /**

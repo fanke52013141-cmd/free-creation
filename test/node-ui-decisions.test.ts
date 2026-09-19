@@ -796,3 +796,60 @@ describe('v1.2 §16.26 导入落空要有去向说明，输入上限等于引擎
     expect(gate).toContain('canvas-studio.browser-demo.media.v1')
   })
 })
+
+describe('v1.2 §16.27 分镜板：解析只有一份，空态与非分镜正文分开说', () => {
+  const boardBody = stripComments(read('src/renderer/src/nodes/specs/bodies/storyboard.tsx'))
+  const boardExecutor = stripComments(read('src/shared/engine/executors/storyboard.ts'))
+  const boardEditor = stripComments(read('src/renderer/src/nodes/storyboard-editor.ts'))
+
+  it('卡片、执行器、编辑模型共用共享层解析，不再各写一份', () => {
+    // 卡片自己写一份字段白名单，就是一次逐镜编辑把 sound/camera 静默写丢的根源。
+    expect(boardBody).toContain('readStoryboardText')
+    expect(boardBody).toContain('parseStoryboardData')
+    expect(boardBody).not.toMatch(/function parseStoryboard\(/)
+    expect(boardExecutor).not.toMatch(/function parseStoryboard\(/)
+    expect(boardExecutor).toContain("from '../helpers'")
+    expect(boardEditor).toContain('export type StoryboardShot = ShotShape')
+    expect(boardEditor).not.toContain('imageMediaId')
+  })
+
+  it('空卡片与「有正文但不是分镜」分开提示，执行器同样分路给原因', () => {
+    expect(boardBody).toContain('本卡片为空，运行会跳过')
+    expect(boardBody).toContain('正文不是分镜数据（需要 shots 数组），运行会失败')
+    expect(boardExecutor).toContain('本卡片正文不是分镜 JSON')
+    expect(boardExecutor).toContain('in-json 输入不是分镜数据')
+    // 一句「无分镜数据」让用户去猜是没连线还是 JSON 写错，正是本轮修掉的假提示形状。
+    expect(boardExecutor).not.toContain('无分镜数据')
+  })
+
+  it('永久为空的镜头缩略图连同假提示一起删除', () => {
+    expect(boardBody).not.toContain('storyboard-thumb')
+    expect(boardBody).not.toContain('请通过分镜批量生图工作流生成媒体')
+    expect(app).not.toContain('.storyboard-thumb')
+    expect(app).not.toContain('sb-pulse')
+  })
+
+  it('工具条只说本卡片真的会做的事：端口输出 + 编辑 JSON + 空态可直接新增镜头', () => {
+    // 「分镜→批量生图」模板里没有分镜板节点，指它是误导。
+    expect(boardBody).not.toContain('分镜→批量生图')
+    expect(boardBody).toContain('编辑结果通过右侧「分镜数据」端口输出给下游节点')
+    expect(boardBody).toContain('编辑 JSON')
+    expect(boardBody).not.toMatch(/>\s*JSON\s*</)
+    // 不写 JSON 也要能开工：空态必须给「新增镜头」出口。
+    expect(
+      stripComments(boardBody.match(/if \(shotCount === 0\)[\s\S]*?\n {2}\}/)?.[0] ?? '')
+    ).toContain('新增镜头')
+  })
+})
+
+describe('v1.2 §16.27 浏览器门禁存在：逐镜编辑必须保住镜头额外字段', () => {
+  const gate = read('scripts/test-browser-storyboard.cjs')
+
+  it('门禁已注册并断言 sound/camera 活过编辑与空态出口', () => {
+    expect(read('package.json')).toContain('"test:browser-storyboard"')
+    expect(gate).toContain('编辑第 1 镜不得写丢第 1 镜的 sound')
+    expect(gate).toContain('未编辑的镜头必须原样保留 camera')
+    expect(gate).toContain('空分镜板必须给出「新增镜头」出口')
+    expect(gate).toContain('请通过分镜批量生图工作流生成媒体')
+  })
+})
