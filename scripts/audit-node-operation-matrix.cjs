@@ -10,6 +10,7 @@
 // 节点间有依赖（循环吃结构数据的列表输出），因此按 RECIPES 顺序整跑；
 // MATRIX=text,json 可只跑前几项做定位。
 const { _electron } = require('playwright')
+const { execFileSync } = require('child_process')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
@@ -61,16 +62,27 @@ function obj(v) {
   }
 }
 
-/** 读一次落库快照，节点卡与连线都从这里派生。 */
+/**
+ * 读一次落盘真值：直接读主进程写出的 projects/<id>/project.json。
+ * 「保存重载」要验的就是这个文件，读它比再调一次 openProject 更直白，
+ * 也不会让验收脚本反复去打开项目。
+ */
 async function readDoc() {
-  return win.evaluate(async ({ pid }) => {
-    const r = await window.api.openProject(pid)
-    if (!r.ok || !r.data) return { error: r.error ? r.error.message : 'openProject 没有返回项目' }
-    const s = r.data.tldrawSnapshot
-    const doc = typeof s === 'string' ? JSON.parse(s) : s
-    if (!doc) return []
-    return Object.values(doc.store || doc)
-  }, { pid: projectId })
+  const file = path.join(DATA_DIR, 'projects', projectId, 'project.json')
+  for (let round = 0; round < 10; round += 1) {
+    if (fs.existsSync(file)) {
+      try {
+        const project = JSON.parse(fs.readFileSync(file, 'utf8'))
+        const snap = project.tldrawSnapshot
+        const doc = typeof snap === 'string' ? JSON.parse(snap) : snap
+        if (doc) return Object.values(doc.store || doc)
+      } catch {
+        // 正在写盘：下一轮再读
+      }
+    }
+    await win.waitForTimeout(300)
+  }
+  return { error: `读不到 ${file} 里的 tldrawSnapshot` }
 }
 
 async function readShapes() {
@@ -88,6 +100,8 @@ async function readShapes() {
           text: v.props.text ?? '',
           exec: v.props.exec,
           config: obj(v.props.config),
+          mediaId: v.props.mediaId ?? '',
+          mediaPath: v.props.mediaPath ?? '',
           run: obj((v.meta || {}).nodeRun),
           resultRaw:
             typeof (v.meta || {}).nodeResult === 'string'
@@ -794,6 +808,435 @@ async function recipeIterate() {
   await shot('iterate-reload')
 }
 
+// ============================ 媒体夹具 ============================
+
+const FIX_DIR = path.join(DATA_DIR, 'fixtures')
+
+/** 用 ffmpeg 造真实字节（不是 1×1 占位图）；文件只留在隔离目录里，界面走的是拖拽导入。 */
+function makeFixtures() {
+  fs.mkdirSync(FIX_DIR, { recursive: true })
+  const run = (args) => execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args])
+  const out = {}
+  out.png = path.join(FIX_DIR, 'rgb-640x480.png')
+  if (!fs.existsSync(out.png))
+    run(['-f', 'lavfi', '-i', 'rgbtestsrc=size=640x480:rate=1', '-frames:v', '1', out.png])
+  out.mp4 = path.join(FIX_DIR, 'clip-4s.mp4')
+  if (!fs.existsSync(out.mp4))
+    run([
+      '-f', 'lavfi', '-i', 'testsrc2=size=320x240:rate=25:duration=4',
+      '-f', 'lavfi', '-i', 'sine=frequency=440:duration=4',
+      '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', out.mp4
+    ])
+  out.txt = path.join(FIX_DIR, 'notes.txt')
+  if (!fs.existsSync(out.txt))
+    fs.writeFileSync(out.txt, '第一行\n第二行\n', 'utf8')
+  return out
+}
+
+let FIX
+
+/**
+ * 把文件拖进画布：Chromium 里合成的 File 拿不到本机路径，
+ * 于是走 handleDrop 的 importMediaBuffer 分支——字节进主进程、探测真实类型、落盘、建卡，
+ * 与原生对话框用的是同一条导入实现。
+ */
+async function dropFile(name, mime, file, x, y) {
+  const base64 = fs.readFileSync(file).toString('base64')
+  await win.evaluate(
+    ({ fileName, fileMime, b64, cx, cy }) => {
+      const bytes = Uint8Array.from(atob(b64), (char) => char.charCodeAt(0))
+      const transfer = new DataTransfer()
+      transfer.items.add(new File([bytes], fileName, { type: fileMime }))
+      const target = document.querySelector('.canvas-host')
+      if (!target) throw new Error('找不到画布宿主元素')
+      target.dispatchEvent(
+        new DragEvent('drop', {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer: transfer,
+          clientX: cx,
+          clientY: cy
+        })
+      )
+    },
+    { fileName: name, fileMime: mime, b64: base64, cx: x, cy: y }
+  )
+  await win.waitForTimeout(700)
+}
+
+async function cardIds() {
+  return win.$$eval('.node-card-wrap', (els) => els.map((e) => e.dataset.nodeId))
+}
+
+// ============================ 媒体族配方 ============================
+
+/** 拖入文件后新出现的卡：id + 实际节点类型（导入建的是哪种卡，本身就是要验的行为）。 */
+async function freshCards(before) {
+  for (let i = 0; i < 40; i += 1) {
+    await win.waitForTimeout(400)
+    const found = await win.evaluate((known) => {
+      return Array.from(document.querySelectorAll('.node-card-wrap[data-node-id]'))
+        .filter((el) => !known.includes(el.dataset.nodeId))
+        .map((el) => ({ id: el.dataset.nodeId, type: el.querySelector('.node-card')?.dataset.nodeType }))
+    }, before)
+    if (found.length) return found
+  }
+  return []
+}
+
+/**
+ * 拖入一个真实文件：返回建出来的卡 + 当时那条提示条原文。
+ * 合成的 File 在 Chromium 里拿不到本机路径，所以走的是 handleDrop 的 importBuffer 分支
+ * （真实资源管理器拖入会拿到 webUtils.getPathForFile，走的是 importMedia 路径分支）。
+ */
+async function dropAsset(file, name, mime, x, y) {
+  const before = await cardIds()
+  await dropFile(name, mime, file, x ?? 470, y ?? 250)
+  const note = await win.locator('.global-toast').innerText().catch(() => '')
+  const created = await freshCards(before)
+  return { created, note: note.trim() }
+}
+
+/** 拖入一段真实 MP4，返回它建出来的视频资产卡。 */
+async function dropVideo() {
+  const { created } = await dropAsset(FIX.mp4, 'clip-4s.mp4', 'video/mp4')
+  const video = created.find((c) => c.type === 'video-asset')
+  if (!video) throw new Error(`拖入 MP4 没有建出视频资产卡：${JSON.stringify(created)}`)
+  return video.id
+}
+
+/** 产物文件是否真的在磁盘上（mediaPath 是相对数据目录的路径）。 */
+function assetOnDisk(relativePath) {
+  if (!relativePath) return false
+  const abs = path.join(DATA_DIR, relativePath)
+  return fs.existsSync(abs) && fs.statSync(abs).size > 0
+}
+
+/** 图片资产：拖入真实 PNG → 缩略图解码 → 输出可被裁剪节点取用 → 重载不丢。 */
+async function recipeImage() {
+  // 空态先验收：新建的图片卡必须自己说清「要导入一张图片」，且不能拿任何旧值冒充已导入。
+  const empty = await addNode('图片')
+  const emptyText = await card(empty).innerText()
+  check('图片：空卡片给出可发现的导入入口', /导入图片/.test(emptyText), emptyText.replace(/\n+/g, ' / ').slice(0, 90))
+  check(
+    '图片：空卡片没有 mediaPath',
+    !(await disk(empty)).mediaPath,
+    JSON.stringify((await disk(empty)).mediaPath)
+  )
+
+  const { created } = await dropAsset(FIX.png, 'rgb-640x480.png', 'image/png')
+  check(
+    '图片：拖入 PNG 建出的是图片资产节点',
+    created.length === 1 && created[0].type === 'image',
+    JSON.stringify(created)
+  )
+  const a = created[0].id
+  await checkPorts(a, '图片', [], ['out-image'])
+  const decoded = await card(a)
+    .locator('.node-media img')
+    .evaluate((el) => ({ w: el.naturalWidth, h: el.naturalHeight, complete: el.complete }))
+    .catch(() => null)
+  check(
+    '图片：卡片里的缩略图真的解码成 640×480',
+    decoded && decoded.w === 640 && decoded.h === 480,
+    JSON.stringify(decoded)
+  )
+  const diskA = await disk(a, (s) => Boolean(s.mediaPath))
+  check('图片：导入落盘后 mediaPath 已写进节点', Boolean(diskA.mediaPath), JSON.stringify(diskA.mediaPath))
+  const asset = await win.evaluate(
+    async ({ pid }) => (await window.api.listMedia(pid)).data.filter((x) => x.kind === 'image'),
+    { pid: projectId }
+  )
+  check('图片：项目资产表里能查到这张图', asset.length === 1, JSON.stringify(asset[0] && { kind: asset[0].kind, size: asset[0].sizeBytes }))
+  await shot('image-imported')
+
+  // 下游真的取到这张图：图片 → 裁剪
+  const crop = await addNode('裁剪')
+  check('图片：out-image → 裁剪 in-image 建连', await connect(a, 'out-image', crop, 'in-image'))
+  const cropStatus = await statusOf(crop)
+  check('裁剪：接上原图后不再报缺少输入', !/缺少输入/.test(cropStatus.aria), cropStatus.aria)
+  const r = await runNode(crop)
+  const cropShape = r.shape
+  check('裁剪：按默认参数运行成功', cropShape.run.status === 'success', JSON.stringify(cropShape.run.error ?? cropShape.run.status))
+  const cropped = await win.evaluate(
+    async ({ pid, seen }) =>
+      (await window.api.listMedia(pid)).data.filter(
+        (x) => x.kind === 'image' && !seen.includes(x.id)
+      ),
+    { pid: projectId, seen: asset.map((x) => x.id) }
+  )
+  check('裁剪：产物是一张新的图片资产', cropped.length === 1, JSON.stringify(cropped[0] && { id: cropped[0].id, size: cropped[0].sizeBytes }))
+  // 产物的落点是独立资产卡：源卡 + 产物卡各渲染一张解得开的图。
+  const rendered = await win.locator('.type-image .node-media img').count()
+  const decodable = await win.$$eval('.type-image .node-media img', (els) =>
+    els.filter((el) => el.naturalWidth > 0).length
+  )
+  check(
+    '裁剪：源卡与产物卡各自渲染出图片',
+    rendered === 2 && decodable === 2,
+    `${decodable}/${rendered} 张解码成功`
+  )
+
+  await reload()
+  const after = await disk(a, (s) => s.mediaPath === diskA.mediaPath && Boolean(s.mediaPath))
+  check('图片：重载后 mediaPath 仍在', Boolean(after.mediaPath), after.mediaPath)
+  check(
+    '图片：重载后缩略图仍解码',
+    await card(a)
+      .locator('.node-media img')
+      .evaluate((el) => el.naturalWidth === 640)
+      .catch(() => false)
+  )
+  await shot('image-reload')
+}
+
+/** 图片拆分：真实宫格 → 每格都是磁盘上存在的图片资产。 */
+async function recipeSplit() {
+  const { created } = await dropAsset(FIX.png, 'rgb-640x480.png', 'image/png')
+  const src = created[0].id
+  const split = await addNode('拆分')
+  await checkPorts(split, '图片拆分', ['in-image'], ['out-image', 'out-images'])
+  const empty = await statusOf(split)
+  check('图片拆分：未接原图时按钮置灰并写明缺少输入', empty.disabled === true && /缺少输入/.test(empty.aria), empty.aria)
+  check('图片拆分：out-image → in-image 建连', await connect(src, 'out-image', split, 'in-image'))
+  const r = await runNode(split)
+  check('图片拆分：按默认宫格运行成功', r.shape.run.status === 'success', JSON.stringify(r.shape.run.error ?? r.shape.run.status))
+  const collection = obj(r.shape.resultRaw)
+  const results = Array.isArray(collection.results) ? collection.results : []
+  check('图片拆分：结果集合里每一格都落盘了', results.length >= 2 && results.every((x) => assetOnDisk(x.mediaPath)), `${results.length} 格`)
+  check('图片拆分：默认选中第一格作为当前输出', Boolean(collection.selectedMediaId) && collection.selectedMediaId === results[0]?.mediaId, JSON.stringify(collection.selectedMediaId))
+  await shot('split-grid')
+  await reload()
+  const after = obj((await disk(split)).resultRaw)
+  check('图片拆分：重载后每格仍可取用', Array.isArray(after.results) && after.results.length === results.length, `${after.results?.length} 格`)
+  await shot('split-reload')
+}
+
+/** 文件节点：空态诚实；文本类文件走拖拽导入时按契约进文本节点正文。 */
+async function recipeFile() {
+  const f = await addNode('文件')
+  await checkPorts(f, '文件', [], ['out-file', 'out-text'])
+  const body = await card(f).innerText()
+  check('文件：空卡片说清要导入什么', /导入|拖入|支持/.test(body), body.replace(/\n+/g, ' / ').slice(0, 120))
+  const r = await runNode(f)
+  check('文件：没导入时不假成功', r.blocked || r.shape.run.status !== 'success', JSON.stringify({ blocked: r.blocked, run: r.shape && r.shape.run.status }))
+
+  const dropped = await dropAsset(FIX.txt, 'notes.txt', 'text/plain', 900, 250)
+  check('文件：拖入 txt 没有静默失败（要么建卡，要么给原因）', Boolean(dropped.created.length || dropped.note), JSON.stringify(dropped))
+  check(
+    '文件：缓冲导入只收图片/视频时，提示条把原因说清楚',
+    !dropped.created.length && /仅支持|失败/.test(dropped.note),
+    JSON.stringify(dropped.note)
+  )
+  await shot('file-txt-drop-feedback')
+}
+
+/** 视频资产：拖入真实 MP4 建出来的必须是视频资产节点，且带可播放的媒体引用。 */
+async function recipeVideoAsset() {
+  const { created } = await dropAsset(FIX.mp4, 'clip-4s.mp4', 'video/mp4')
+  check(
+    '视频资产：拖入 MP4 建出的是视频资产节点',
+    created.length === 1 && created[0].type === 'video-asset',
+    JSON.stringify(created)
+  )
+  if (!created.length) return
+  const v = created[0].id
+  await checkPorts(v, '视频资产', [], ['out-video'])
+  const shape = await disk(v, (s) => Boolean(s.mediaPath))
+  check('视频资产：mediaPath 已落盘且文件存在', assetOnDisk(shape.mediaPath), shape.mediaPath)
+  check('视频资产：卡片渲染出可播放的视频元素', (await card(v).locator('video').count()) >= 1)
+  await reload()
+  check('视频资产：重载后 mediaPath 仍在', assetOnDisk((await disk(v)).mediaPath), (await disk(v)).mediaPath)
+  await shot('video-asset-reload')
+}
+
+/** 当前画布上所有卡的类型（产物落点评的是「有没有建成卡」）。 */
+async function allCards() {
+  return win.evaluate(() =>
+    Array.from(document.querySelectorAll('.node-card-wrap[data-node-id]')).map((el) => ({
+      id: el.dataset.nodeId,
+      type: el.querySelector('.node-card')?.dataset.nodeType
+    }))
+  )
+}
+
+/** 搭一条「视频资产 → 视频截取」并跑到出产物；返回两张卡与运行结果。 */
+async function runClipOnFixtureVideo() {
+  const src = await dropVideo()
+  const clip = await addNode('视频截取')
+  await checkPorts(clip, '视频截取', ['in-video'], ['out-video', 'out-audio'])
+  if (!(await connect(src, 'out-video', clip, 'in-video')))
+    throw new Error('视频截取：out-video → in-video 建连失败')
+  const r = await runNode(clip)
+  return { src, clip, run: r }
+}
+
+/** 视频取帧：真实首帧落盘成图片资产。 */
+async function recipeVideoFrame() {
+  const src = await dropVideo()
+  const frame = await addNode('抽帧')
+  await checkPorts(frame, '视频取帧', ['in-video'], ['out-image'])
+  check('视频取帧：未接源视频时按钮置灰', (await statusOf(frame)).disabled === true, (await statusOf(frame)).aria)
+  check('视频取帧：out-video → in-video 建连', await connect(src, 'out-video', frame, 'in-video'))
+  const r = await runNode(frame)
+  check('视频取帧：默认首帧运行成功', r.shape.run.status === 'success', JSON.stringify(r.shape.run.error ?? r.shape.run.status))
+  const collection = obj(r.shape.resultRaw)
+  const first = (collection.results || [])[0]
+  check('视频取帧：产物是一张真实存在的图片', Boolean(first) && assetOnDisk(first.mediaPath), JSON.stringify(first && first.mediaPath))
+  // 产物的唯一落点是独立资产卡（操作节点自己不保存预览），所以要验的是「有没有长出这张卡」。
+  const frameCards = (await allCards()).filter((c) => c.type === 'image')
+  check('视频取帧：取到的帧建成独立图片卡', frameCards.length === 1, JSON.stringify(frameCards.map((c) => c.id.slice(-4))))
+  if (frameCards.length) {
+    check(
+      '视频取帧：那张帧卡真的解码出一张图',
+      await card(frameCards[0].id)
+        .locator('img')
+        .first()
+        .evaluate((el) => el.naturalWidth > 0)
+        .catch(() => false)
+    )
+  }
+  await shot('video-frame-output')
+  await reload()
+  check(
+    '视频取帧：重载后运行记录与产物仍在',
+    obj((await disk(frame)).resultRaw).results?.length === collection.results.length
+  )
+}
+
+/** 视频截取：产物时长必须真的落在源片之内，且音频输出也建成卡。 */
+async function recipeVideoClip() {
+  const { run } = await runClipOnFixtureVideo()
+  check('视频截取：按默认区间运行成功', run.shape.run.status === 'success', JSON.stringify(run.shape.run.error ?? run.shape.run.status))
+  const collection = obj(run.shape.resultRaw)
+  const first = (collection.results || [])[0]
+  check('视频截取：产物视频已落盘', Boolean(first) && assetOnDisk(first.mediaPath), JSON.stringify(first && first.mediaPath))
+  if (first && assetOnDisk(first.mediaPath)) {
+    const seconds = probeDuration(path.join(DATA_DIR, first.mediaPath))
+    check('视频截取：产物时长不超过 4 秒的源片', seconds > 0.2 && seconds <= 4.2, `${seconds}s`)
+  }
+  const cards = await allCards()
+  const produced = cards.filter((c) => c.type === 'video-asset').length
+  check('视频截取：截出来的视频落成独立资产卡', produced >= 2, `${produced} 张视频资产卡`)
+  await shot('video-clip-output')
+}
+
+/** 音频资产 + 人声分离：音频卡由截取节点的 out-audio 产物建立。 */
+async function recipeAudio() {
+  const { run } = await runClipOnFixtureVideo()
+  const cards = await allCards()
+  const audio = cards.find((c) => c.type === 'audio')
+  check(
+    '音频：视频截取的音频产物建成独立音频资产卡',
+    Boolean(audio) && run.shape.run.status === 'success',
+    JSON.stringify({ types: cards.map((c) => c.type) })
+  )
+  if (!audio) return
+  await checkPorts(audio.id, '音频', [], ['out-audio'])
+  check('音频：卡片渲染出播放器', (await card(audio.id).locator('audio').count()) >= 1)
+  const shape = await disk(audio.id, (s) => Boolean(s.mediaPath))
+  check('音频：产物文件真的在磁盘上', assetOnDisk(shape.mediaPath), shape.mediaPath)
+  const r = await runNode(audio.id)
+  check('音频：运行后把自身音频交给下游', r.shape.run.status === 'success', JSON.stringify(r.shape.run.error ?? r.shape.run.status))
+
+  const sep = await addNode('人声分离')
+  await checkPorts(sep, '人声分离', ['in-audio'], ['out-audio'])
+  check('人声分离：out-audio → in-audio 建连', await connect(audio.id, 'out-audio', sep, 'in-audio'))
+  const rs = await runNode(sep)
+  check('人声分离：快速模式运行成功', rs.shape.run.status === 'success', JSON.stringify(rs.shape.run.error ?? rs.shape.run.status))
+  const result = obj(rs.shape.resultRaw)
+  check(
+    '人声分离：人声轨是真实存在的音频文件',
+    Boolean(result.vocals) && assetOnDisk(result.vocals.mediaPath),
+    JSON.stringify(result.vocals && result.vocals.mediaPath)
+  )
+  if (result.vocals && assetOnDisk(result.vocals.mediaPath)) {
+    const seconds = probeDuration(path.join(DATA_DIR, result.vocals.mediaPath))
+    check('人声分离：人声轨时长与源音频同量级', seconds > 0.5 && seconds <= 5, `${seconds}s`)
+  }
+  await shot('vocal-separate-output')
+  await reload()
+  check('人声分离：重载后运行结果仍在', Boolean(obj((await disk(sep)).resultRaw).vocals))
+  check('音频：源卡与产物卡重载后都还在', (await allCards()).filter((c) => c.type === 'audio').length >= 2, JSON.stringify((await allCards()).map((c) => c.type)))
+}
+
+/** 导演台：卡片摘要 → 打开预演台 → 发布当前帧 → 产物与漂移状态 → 重载。 */
+async function recipeDirector() {
+  const d = await addNode('3D 预演台')
+  await checkPorts(
+    d,
+    '导演台',
+    ['in-storyboard', 'in-reference-images', 'in-camera-preset'],
+    ['out-frame', 'out-preview-video', 'out-camera', 'out-project']
+  )
+  const summary = await card(d).innerText()
+  check('导演台：卡片未发布时说清当前状态', /尚未发布|已发布/.test(summary), summary.replace(/\n+/g, ' / ').slice(0, 120))
+  const st = await statusOf(d)
+  check('导演台：没发布输出时状态灯说「等待发布」而不是「可运行」', /等待发布|已发布/.test(st.aria), st.aria)
+
+  const open = card(d).getByRole('button', { name: /打开 3D 预演台/ })
+  await ensureClickable(open, '打开 3D 预演台 按钮')
+  await open.click()
+  const panel = win.locator('.director-studio')
+  await panel.waitFor({ timeout: 20000 })
+  check('导演台：预演台以对话框打开', (await win.locator('[role="dialog"][aria-label="3D 预演台"]').count()) === 1)
+  await shot('director-opened')
+
+  await win.locator('button[title="发布当前预演帧"]').click()
+  let note = ''
+  for (let i = 0; i < 25; i += 1) {
+    await win.waitForTimeout(800)
+    note = await win.locator('.global-toast').innerText().catch(() => '')
+    if (note.trim()) break
+  }
+  check('导演台：发布当前帧给出明确结果', /已发布/.test(note), note.trim())
+  const shape = await disk(d, (s) => Boolean(s.resultRaw))
+  check('导演台：发布记录写进 meta.nodeResult', Boolean(shape.resultRaw), JSON.stringify(shape.resultRaw).slice(0, 120))
+
+  // 发布的帧不自动长卡，而是作为 out-frame 端口供下游取用——那就让裁剪节点真去吃它。
+  const close = win.locator('button[title="关闭 3D 预演台"]')
+  if (await close.count()) await close.click()
+  else await win.keyboard.press('Escape')
+  await win.locator('.director-studio').waitFor({ state: 'detached', timeout: 10000 })
+  const crop = await addNode('裁剪')
+  check('导演台：out-frame → 裁剪 in-image 建连', await connect(d, 'out-frame', crop, 'in-image'))
+  const cropped = await runNode(crop)
+  check(
+    '导演台：发布的帧能被下游节点当真实图片消费',
+    cropped.shape.run.status === 'success',
+    JSON.stringify(cropped.shape.run.error ?? cropped.shape.run.status)
+  )
+  const images = await win.evaluate(
+    async ({ pid }) => (await window.api.listMedia(pid)).data.filter((x) => x.kind === 'image').length,
+    { pid: projectId }
+  )
+  check('导演台：帧与裁剪产物都进了项目图片资产', images >= 2, `${images} 张`)
+  await reload()
+  const after = await disk(d)
+  check('导演台：重载后发布记录仍在', Boolean(after.resultRaw))
+  const reloaded = (await card(d).innerText()).replace(/\n+/g, ' / ')
+  check(
+    '导演台：重载后卡片说「当前镜头已发布」，不谎报成另一个镜头',
+    /已发布/.test(reloaded) && !/另一个镜头|尚未发布/.test(reloaded),
+    reloaded.slice(0, 140)
+  )
+  await shot('director-reload')
+}
+
+/** ffprobe 量真实时长（只用于产物字节，不用于任何界面断言）。 */
+function probeDuration(absFile) {
+  try {
+    const out = execFileSync('ffprobe', [
+      '-v', 'error', '-show_entries', 'format=duration',
+      '-of', 'default=noprint_wrappers=1', absFile
+    ]).toString()
+    return Number(/duration=([\d.]+)/.exec(out)?.[1] ?? '0')
+  } catch (error) {
+    log('ffprobe 失败', error.message)
+    return -1
+  }
+}
+
 const RECIPES = [
   ['text', '文本', recipeText],
   ['json', 'JSON', recipeJson],
@@ -801,12 +1244,21 @@ const RECIPES = [
   ['storyboard', '分镜板', recipeStoryboard],
   ['structured', '结构数据', recipeStructured],
   ['iterate', '循环', recipeIterate],
-  ['code', '代码', recipeCode]
+  ['code', '代码', recipeCode],
+  ['image', '图片', recipeImage],
+  ['split', '图片拆分', recipeSplit],
+  ['file', '文件', recipeFile],
+  ['video-asset', '视频资产', recipeVideoAsset],
+  ['video-frame', '视频取帧', recipeVideoFrame],
+  ['video-clip', '视频截取', recipeVideoClip],
+  ['audio', '音频 + 人声分离', recipeAudio],
+  ['director', '导演台', recipeDirector]
 ]
 
 async function main() {
   fs.mkdirSync(DATA_DIR, { recursive: true })
   fs.mkdirSync(SHOT_DIR, { recursive: true })
+  FIX = makeFixtures()
   log('数据目录（与用户真实库隔离）', DATA_DIR)
   const app = await _electron.launch({
     executablePath: path.join(ROOT, 'node_modules/electron/dist/electron.exe'),

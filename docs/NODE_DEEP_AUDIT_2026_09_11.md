@@ -527,10 +527,10 @@ HTTPS 探测（未鉴权即被拒，零计费），主机是设置面板默认�
 同一份 `probeProvider()` 跑一遍。结果证明这套自检对 MiniMax 完全没有产出——两项只读探测
 全都落在「无法判定」，总结语是「请核对 Base URL 与密钥」，而密钥其实是对的：
 
-| 探测项                                | 上游原话回执                                             | 修复前判定 | 修复后判定 |
-| ------------------------------------- | -------------------------------------------------------- | ---------- | ---------- |
-| `GET /v2/query/video_generation/<假>` | HTTP 500 `record not found (1000)`                        | 上游服务异常 | 通过       |
-| `GET /v1/query/t2a_async_query_v2`    | HTTP 200 `base_resp 2013 invalid params, task not found`   | 未判定     | 通过       |
+| 探测项                                | 上游原话回执                                                                                   | 修复前判定                   | 修复后判定   |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------- | ------------ |
+| `GET /v2/query/video_generation/<假>` | HTTP 500 `record not found (1000)`                                                             | 上游服务异常                 | 通过         |
+| `GET /v1/query/t2a_async_query_v2`    | HTTP 200 `base_resp 2013 invalid params, task not found`                                       | 未判定                       | 通过         |
 | 同一端点 + 故意错的 Key（控制组）     | HTTP 401 `authorized_error … (1004)` / HTTP 200 `login fail: Please carry the API secret key…` | 401 失败；200 那条也是未判定 | 两条都判失败 |
 
 三处缺陷与对策：
@@ -576,32 +576,33 @@ HTTPS 探测（未鉴权即被拒，零计费），主机是设置面板默认�
 - **`voice_clone` 的 `text_validation` 不是开关**：真实字段要的是**参考音频原文**（字符串，
   ≤200 字）。用同一个 `file_id` 逐字段实测（全部卡在校验门或时长门前，零计费）：
 
-  | 请求体                                                  | 上游回执                        |
-  | ------------------------------------------------------- | ------------------------------- |
+  | 请求体                                                   | 上游回执                        |
+  | -------------------------------------------------------- | ------------------------------- |
   | 原样：`model` + `text_validation:false` + `accuracy:0.7` | `2013 invalid params`           |
-  | 去掉 `text_validation`                                  | `2037 voice duration too short` |
-  | `text_validation:"一段原文"`                            | `2037 voice duration too short` |
-  | 只给 `file_id`+`voice_id`（带不带 `model` 都一样）      | `2037 voice duration too short` |
+  | 去掉 `text_validation`                                   | `2037 voice duration too short` |
+  | `text_validation:"一段原文"`                             | `2037 voice duration too short` |
+  | 只给 `file_id`+`voice_id`（带不带 `model` 都一样）       | `2037 voice duration too short` |
 
   即这条复刻链路此前**在任何用户配置下都发不出合法请求**。已从 `TtsConfig` 删除该布尔
   （连同节点上那个永远无效的「文本校验」勾选框）；老节点存量的 `textValidation` 在
   `parseTtsConfig` 时被丢弃，不静默转成别的语义。
+
 - **`2037` 的根因顺手补了门禁**：参考音频需 10 秒～5 分钟，而 `MINIMAX_CLONE_MIN_SECONDS`
   与 `MINIMAX_CLONE_MAX_SECONDS` 此前是两个没人引用的常量。现在 `transformMiniMaxTts` 在
   上传前用 FFprobe 量时长并给中文提示，上传按钮的提示语也写清区间与格式；本机没有 FFprobe
   时跳过这道检查（不把 FFmpeg 变成复刻的硬依赖）。`test/tts-clone-gate.test.ts` 用真
   FFmpeg 合成的 2 秒 / 12 秒素材跑真代码：把阈值改成 1 秒会同时红两条，断言吃得住。
 - **成功回执的语义**：`{"input_sensitive":false,"input_sensitive_type":0,"demo_audio":"",
-  "base_resp":{"status_code":0}}`。`base_resp` 为 0 而 `input_sensitive` 为真时音色其实没有
+"base_resp":{"status_code":0}}`。`base_resp` 为 0 而 `input_sensitive` 为真时音色其实没有
   登记，现在就在这一层停下（`test/voice-clone-response.test.ts`），而不是让下游拿着不存在的
   `voice_id` 去合成。
 
 真跑产物一律用 ffprobe 独立复核（不复用被测代码的解析结果）：
 
-| 环节                             | 产物                                       |
-| -------------------------------- | ------------------------------------------ |
-| `t2a_async_v2`（95 字 → 解 tar） | 365 748 B mp3，时长 22.69 s                |
-| `voice_design`                   | `ttv-voice-…` + 32 676 B mp3，时长 2.55 s  |
+| 环节                             | 产物                                        |
+| -------------------------------- | ------------------------------------------- |
+| `t2a_async_v2`（95 字 → 解 tar） | 365 748 B mp3，时长 22.69 s                 |
+| `voice_design`                   | `ttv-voice-…` + 32 676 B mp3，时长 2.55 s   |
 | `voice_clone` + 克隆音色合成     | 登记 `canvas-voice-…`，45 492 B mp3，2.68 s |
 
 ### 7.7 唯一一条授权视频：成片是好的，是我们的下载把它弄丢了（2026-09-19 追加）
@@ -609,13 +610,13 @@ HTTPS 探测（未鉴权即被拒，零计费），主机是设置面板默认�
 MiniMax-H3、`duration:4`、`resolution:768P`、`ratio:16:9`（即 §7.5 末尾那份自检请求体）
 真实提交一次，链路事实如下：
 
-| 环节          | 回执                                                                                                       |
-| ------------- | ---------------------------------------------------------------------------------------------------------- |
-| 提交          | `POST /v2/video_generation` → `{"task_id":"…"}`（无 `base_resp` 信封，与 v1 不同）                          |
-| 轮询          | `GET /v2/query/video_generation/{id}` → `task.status` 为 `running`，约 96 秒后为 `succeeded`                |
-| 成功字段      | `task.content.url`（OSS 预签名 mp4）、`task.resolution:"768P"`、`task.duration:4`、`task.usage.total_seconds:4` |
-| 成片          | 1 830 710 B；ffprobe：h264 **1344×768**、时长 4.458 s、另带一条 aac 音轨                                    |
-| 计费前无法知道 | `768P` 在 16:9 下是 1344×768，而不是 1280×720；最短时长确实是 4 s                                            |
+| 环节           | 回执                                                                                                            |
+| -------------- | --------------------------------------------------------------------------------------------------------------- |
+| 提交           | `POST /v2/video_generation` → `{"task_id":"…"}`（无 `base_resp` 信封，与 v1 不同）                              |
+| 轮询           | `GET /v2/query/video_generation/{id}` → `task.status` 为 `running`，约 96 秒后为 `succeeded`                    |
+| 成功字段       | `task.content.url`（OSS 预签名 mp4）、`task.resolution:"768P"`、`task.duration:4`、`task.usage.total_seconds:4` |
+| 成片           | 1 830 710 B；ffprobe：h264 **1344×768**、时长 4.458 s、另带一条 aac 音轨                                        |
+| 计费前无法知道 | `768P` 在 16:9 下是 1344×768，而不是 1280×720；最短时长确实是 4 s                                               |
 
 - **P0：`downloadToTempFile` 用 `FileHandle.createWriteStream()`，pipeline 结束时 fd 已被
   流关闭，紧随其后的 `fh.sync()` 必然抛 EBADF `file closed`**。后果不是报错难听，而是
@@ -638,25 +639,25 @@ MiniMax-H3、`duration:4`、`resolution:768P`、`ratio:16:9`（即 §7.5 末尾�
 代码：真窗口、真设置面板点击、真 SQLite、真主进程 fetch、真落盘、真 ffprobe）。密钥只从环境
 变量注入，绝不打印、绝不入库。
 
-| 环节 | 实测回执 |
-| --- | --- |
-| 项目创建 → 可读回 | `WcTbkso1ac-4` |
-| 面板新增 MiniMax 预设 | Base URL 自带 `https://api.minimaxi.com`，带入 4 个建议模型（2 video + 2 audio） |
-| 密钥可见性 | `listProviders()` 返回体里没有 `apiKey` 字段——渲染层读不回来，符合约束 |
-| 免费自检 | 「通过（2 项只读探测）」，两个只读探测 `pass`，四个计费探测 `idle`，无 `fail` |
-| 配音节点默认通道 | `minimax`（异步语音合成），`speech-2.8-hd` 可被选到 |
-| 端口 | `朗读文本 · 文本` / `音色档案 · JSON` / `配音 · 音频` 三个都在卡片上可见 |
-| 真实合成 | `RMQXlx3t0P.mp3` 54 132 B、`audio/mpeg`；ffprobe 解出 **3.239188 s** |
-| 运行反馈 | toast「配音 已完成」，无错误提示 |
-| 产物落点 | 独立 `type-audio` 资产节点，卡片内 `<audio>` 的 `media:///projects/…/RMQXlx3t0P.mp3` 指向磁盘真文件并解出时长 |
-| 文档真值 | `meta.nodeResult` = `media-source`（含 `selectedMediaId`/`runId`/`modelKey`/`prompt`），`meta.nodeRun.status = "success"`，`nodeRunHistory` 同步 |
-| 溯源 | 资产节点 `meta.artifactProducerId` 等于配音 shape id，`props.mediaId` 与库内一致 |
-| 持久化 | 整窗 `reload()` 后播放器与结果仍在 |
+| 环节                  | 实测回执                                                                                                                                         |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 项目创建 → 可读回     | `WcTbkso1ac-4`                                                                                                                                   |
+| 面板新增 MiniMax 预设 | Base URL 自带 `https://api.minimaxi.com`，带入 4 个建议模型（2 video + 2 audio）                                                                 |
+| 密钥可见性            | `listProviders()` 返回体里没有 `apiKey` 字段——渲染层读不回来，符合约束                                                                           |
+| 免费自检              | 「通过（2 项只读探测）」，两个只读探测 `pass`，四个计费探测 `idle`，无 `fail`                                                                    |
+| 配音节点默认通道      | `minimax`（异步语音合成），`speech-2.8-hd` 可被选到                                                                                              |
+| 端口                  | `朗读文本 · 文本` / `音色档案 · JSON` / `配音 · 音频` 三个都在卡片上可见                                                                         |
+| 真实合成              | `RMQXlx3t0P.mp3` 54 132 B、`audio/mpeg`；ffprobe 解出 **3.239188 s**                                                                             |
+| 运行反馈              | toast「配音 已完成」，无错误提示                                                                                                                 |
+| 产物落点              | 独立 `type-audio` 资产节点，卡片内 `<audio>` 的 `media:///projects/…/RMQXlx3t0P.mp3` 指向磁盘真文件并解出时长                                    |
+| 文档真值              | `meta.nodeResult` = `media-source`（含 `selectedMediaId`/`runId`/`modelKey`/`prompt`），`meta.nodeRun.status = "success"`，`nodeRunHistory` 同步 |
+| 溯源                  | 资产节点 `meta.artifactProducerId` 等于配音 shape id，`props.mediaId` 与库内一致                                                                 |
+| 持久化                | 整窗 `reload()` 后播放器与结果仍在                                                                                                               |
 
 - **P0（第一次真跑就撞上）：配音合成成功之后，画布当场崩掉**。资产已经落库落盘（上一轮
   55 860 B），紧随其后的 `updateMeta({ nodeExtra: undefined })` 让 tldraw 抛
   `ValidationError: At shape(type = node-card).meta: Expected json serializable value, got
-  undefined`——卡片永远不显示结果，用户看到的是「点了运行然后画布废了」。触发点是
+undefined`——卡片永远不显示结果，用户看到的是「点了运行然后画布废了」。触发点是
   `src/shared/engine/executors/speech.ts:84` 与 `tts.ts:52` 的「本次没有字幕就清空」语义，
   写法本身没错，错在运行器把补丁直接展开进 `meta`。收口在唯一合并点 `mergeShapeMeta()`：
   值为 `undefined`/`null` 的键按删除键处理，正好对上 `updateResult(null)` 文档里写的清空
@@ -728,25 +729,26 @@ MiniMax-H3、`duration:4`、`resolution:768P`、`ratio:16:9`（即 §7.5 末尾�
 - **真机补验（2026-09-19 20:09，隔离库 `canvas-e2e-5`，15/15）**：把配音节点的音色**清空**再跑
   一条真实合成，验证记下来的确实是兜底后的音色而不是空值。
 
-  | 断言 | 结果 |
-  | --- | --- |
-  | 留空状态下合成成功并产出音频 | `613uNail8o.mp3`，47 796 B，ffprobe 2.809625 s |
-  | 磁盘上 `props.config.voiceId` | `""`（排除输入框残留） |
-  | `meta.nodeRun.status` | `success` |
-  | 本次结果条目 `voiceId` | `"male-qn-qingse"` |
-  | 历史条目未被补齐 | 3 条里只有新那条有 `voiceId`（前两条是本功能之前跑的，没写键） |
-  | 资产卡片来源 tooltip | `配音 · speech · speech-2.8-hd · male-qn-qingse` |
-  | 按音色名搜索 | `male-qn-qingse` 命中 1；`male-qn-qingseXYZ` 命中 0（反向锚定） |
-  | 整窗重载后 | 该条 `voiceId` 仍是 `male-qn-qingse`，3 个音频节点各自渲染播放器 |
+  | 断言                          | 结果                                                             |
+  | ----------------------------- | ---------------------------------------------------------------- |
+  | 留空状态下合成成功并产出音频  | `613uNail8o.mp3`，47 796 B，ffprobe 2.809625 s                   |
+  | 磁盘上 `props.config.voiceId` | `""`（排除输入框残留）                                           |
+  | `meta.nodeRun.status`         | `success`                                                        |
+  | 本次结果条目 `voiceId`        | `"male-qn-qingse"`                                               |
+  | 历史条目未被补齐              | 3 条里只有新那条有 `voiceId`（前两条是本功能之前跑的，没写键）   |
+  | 资产卡片来源 tooltip          | `配音 · speech · speech-2.8-hd · male-qn-qingse`                 |
+  | 按音色名搜索                  | `male-qn-qingse` 命中 1；`male-qn-qingseXYZ` 命中 0（反向锚定）  |
+  | 整窗重载后                    | 该条 `voiceId` 仍是 `male-qn-qingse`，3 个音频节点各自渲染播放器 |
 
   同一句 15 字文本、同一语速，preset 音色那条是 54 132 B / 3.239 s，兜底音色这条是
   47 796 B / 2.810 s——时长与体积都不同，再次说明"同尺寸不等于同音频"不能当判据。
+
 - **顺带纠正一处会说谎的占位文案**：配音节点的音色输入框原本写"留空用服务端默认音色"，
   而 MiniMax 通道留空时网关是**主动发出** `male-qn-qingse`（缺 `voice_id` 会被上游在建任务前
   拒掉），并没有"交给服务端"。现按协议分支：MiniMax 点明兜底音色名，豆包/OpenAI 兼容才说
   "留空由服务端决定音色"。
 
-### 7.9 §8 P2 逐节点操作矩阵：7 个免费节点真机全绿，顺带查出「上游有值、下游读不到」（2026-09-19 追加）
+### 7.9 §8 P2 逐节点操作矩阵：17 个免费节点真机全绿，查出六处「界面说可以、实际用不了」（2026-09-19 追加）
 
 前面几节的真跑都是单点验收。这一节把 §8 P2 要求的
 「新建 → 配置 → 单输入 → 多输入 → 运行 → 成功/失败 → 保存重载」做成一条可重复门禁：
@@ -762,10 +764,13 @@ MiniMax-H3、`duration:4`、`resolution:768P`、`ratio:16:9`（即 §7.5 末尾�
   `.code-result` 结果条；磁盘读 `tldrawSnapshot` 里的 `props.text/config`、`meta.nodeRun`
   （含 `error.phase/reason`）与 `meta.nodeResult`。运行落库以 `runId` 当栅栏——只等
   「状态落定」会读到上一次运行的旧记录（本轮就差点被它骗过一次）。
-- 本轮 7 个不依赖模型 Key 的节点（文本 / JSON / 处理 / 分镜板 / 结构数据 / 循环 / 代码）
-  **77/77 全绿**，截图在 `artifacts/node-matrix-2026-09-19/`。
+- 本轮覆盖 **17 个不依赖模型 Key 的节点**（文本 / JSON / 处理 / 分镜板 / 结构数据 / 循环 /
+  代码 / 图片 / 图片裁剪 / 图片拆分 / 文件 / 视频资产 / 视频取帧 / 视频截取 / 音频 /
+  人声分离 / 导演台），**161/161 全绿**，28 张截图在 `artifacts/node-matrix-2026-09-19/`。
+  媒体素材由 ffmpeg 现造真实字节（640×480 色条 PNG、4 秒带音轨 MP4），走画布拖拽导入；
+  产物不只查数据库记录，还用 `ffprobe` 量真实时长、按字节确认文件真的落在磁盘上。
 
-查出并修掉的三件事：
+查出并修掉的六件事：
 
 1. **误点一次运行，节点就再也喂不进下游**（`renderer/src/engine/executor.ts`）。
    `seedPersistedOutputs` 对"有运行记录且不是 success"的上游一律不发输出，而
@@ -783,6 +788,37 @@ MiniMax-H3、`duration:4`、`resolution:768P`、`ratio:16:9`（即 §7.5 末尾�
    自动化只能按序号猜端口，而代码/结构数据节点的端口是按配置动态解析的，序号根本不确定。
    现在输入/输出圆点都带 `data-port-id`，"端口渲染与契约矩阵一致"这条断言才第一次能真的
    拿界面去比文档。
+4. **拖进画布的视频被建成「生视频」节点**（`canvas/CanvasEditor.tsx` + 新增
+   `canvas/asset-node-type.ts`）。`createMediaNodes` 直接拿 `asset.kind` 当 nodeType，
+   而 `kind: 'video'` 对应的 `video` 是**生成**节点：要选模型、带计费动作、端口是
+   首帧/参考图/提示词那一套。用户拖一段素材进去，得到的是一张"等着生成视频"的卡，
+   而项目里本来就有负责承载素材的 `video-asset`。现在 kind→nodeType 收敛成一个函数，
+   并与 `materializeArtifact` 共用（产物落点那条路径早就是对的，只有导入漏了一层）。
+   测试：`test/asset-node-type.test.ts`（含反向断言：视频不得落到 `video`）；
+   真机回执：拖入 MP4 建出 `video-asset`、端口 `无 → out-video`、重载后 mediaPath 仍在。
+5. **导演台发布的预演帧此前根本连不进下游**（`nodes/specs/outputProjections.ts`）。
+   `out-camera` 声明为专用 `camera` 通道，但 `NodeValue` 里压根没有 camera 这一类值，
+   投影它必然被判「声明为 camera，实际输出为 json」；而手动运行的上游预填是
+   **整节点有错就整个跳过**——于是一个永远给不出值的端口，把同节点里合法的 `out-frame`
+   / `out-project` 一起拖没，界面上却只报"上游未产生 out-frame 输出"，看不出原因。
+   现在不再投影 `out-camera`（端口保留，连线规则一字未改），帧可以正常被下游裁剪消费
+   （真机：`out-frame → 裁剪 in-image` 建线、裁剪运行 success、图片资产 2 张）。
+   测试：`test/manual-run.test.ts` 新增一条；变异验证：把投影加回去该条立刻变红。
+   **机位通道要真正可用仍需拍板**：给值系统加 `camera` 类型，还是把端口改回
+   `json` + `previs.camera@1`（后者会放开 json.any → 机位的连线，与"可发现性不放开校验"
+   的既定裁定相冲，所以本轮没做）。
+6. **没编辑过的导演卡会对用户说谎**（`shared/director-data.ts`）。`config` 为空时
+   `parseDirectorProject('')` 每次都重新生成默认工程，镜头 id 是随机的——发布记录里存的
+   `shotId` 下一次渲染就对不上，卡片于是显示「已发布的是「另一个镜头」，当前镜头尚未发布」，
+   而用户其实一个键都没碰过。默认工程现在给出确定 id（`shot-default-1` / `cut-default-1`）。
+   测试：`test/director-data.test.ts` 钉住"重复解析默认工程 id 一致且 drift 为 current"；
+   真机回执：发布后重载，卡片文案为「当前镜头已发布，可供下游使用」。
+
+顺带把 `NODE_COMPLIANCE_MATRIX.md` 追平现实：它的基线是 2026-08-31，逐行比对发现
+**6 行的端口写错了、11 行的契约版本落后、3 个可创建节点（视频资产、文件、音色设计）
+压根没有行**。现在新增 `test/compliance-matrix-doc.test.ts` 把这张表变成可执行检查
+（每行的版本列与端口 id 都要对上注册契约，且每个可创建节点都得有一行），文档再漂移就会
+让测试变红。
 
 两条记录在案、本轮**没有**改的观察：
 
@@ -824,11 +860,12 @@ MiniMax-H3、`duration:4`、`resolution:768P`、`ratio:16:9`（即 §7.5 末尾�
 
 1. ✅ 门禁已落地并跑通 7 个免费节点（文本 / JSON / 处理 / 分镜板 / 结构数据 / 循环 / 代码）
    ——见 §7.9，`npm run test:node-matrix`；
-2. ⏳ 媒体族 9 个（图片、裁剪、拆分、文件、视频资产、抽帧、视频截取、人声分离、音频）：
-   素材只能靠 `window.api.importMedia` 注入，因为 Electron 的原生文件对话框驱动不了，
-   而「从图库选择」目前还是一句 toast；
+2. ✅ 媒体族 9 个（图片、裁剪、拆分、文件、视频资产、抽帧、视频截取、人声分离、音频）
+   与导演台已跑完，17 个免费节点 161/161（§7.9）。素材走画布拖拽导入：合成 File 拿不到
+   本机路径，因此命中的是 `importMediaBuffer` 分支，而该 IPC 只收图片/视频——
+   真实资源管理器拖入会拿到路径、走 `importMedia`，音频与文档不受影响；
 3. ⏳ 依赖模型 Key 的 8 个（生图、P 图、生视频、配音、语音克隆、音色设计、对话、AI 处理）
-   与导演台，需要真跑授权，排在付费环节一起做。
+   需要真跑授权，排在付费环节一起做。
 
 ### P3：桌面端真实发布验收
 
