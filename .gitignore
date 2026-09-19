@@ -13,3 +13,7 @@ M4-模型网关-开源方案调研.md
 backend/data/
 **/__pycache__/
 *.py[cod]
+# TypeScript 增量构建缓存：每次 verify 都会重画，跟踪它只会让工作树常脏。
+*.tsbuildinfo
+# 验收截图与脚本进仓库（artifacts/ 的历史约定），但成片体积不进。
+artifacts/*.mp4

@@ -626,7 +626,8 @@ MiniMax-H3、`duration:4`、`resolution:768P`、`ratio:16:9`（即 §7.5 末尾�
   把 `fh.close(); fh.sync()` 加回去会以完全相同的 `file closed` 复现失败。
 - 已经付过费的那一条没有重复提交：修复后用 `resumePendingVideoTasks()`（应用重启恢复路径，
   读回同一个 `upstreamTaskId` 继续轮询）零额外计费地把成片捞回，顺带证明恢复链路真的可用。
-  产物留在 `artifacts/minimax-h3-4s-768p.mp4`（未跟踪目录，不进仓库）。
+  产物留在 `artifacts/minimax-h3-4s-768p.mp4`（`artifacts/` 本身是入库的验收证据目录，
+  但成片按 `.gitignore` 里 `artifacts/*.mp4` 这条体积规则不入版本库）。
 - §7.4 与 §7.5 遗留的「计费成功响应体字段」到此收口：视频是 `task.content.url`，
   语音异步是 `status:"Success"` + `file_id` + tar。
 
