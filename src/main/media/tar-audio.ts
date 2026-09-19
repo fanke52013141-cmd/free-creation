@@ -52,8 +52,9 @@ export function pickAudioFromTar(buf: Buffer): Buffer | null {
     // 校验和对不上说明这份归档不可信（下载被截断或被改写），此时不猜内容。
     if (!checksumMatches(header)) return null
     const name = readCString(header, 0, 100)
-    const prefix =
-      header.toString('ascii', 257, 263).startsWith('ustar') ? readCString(header, 345, 500) : ''
+    const prefix = header.toString('ascii', 257, 263).startsWith('ustar')
+      ? readCString(header, 345, 500)
+      : ''
     const fullName = prefix && name ? `${prefix}/${name}` : name || prefix
     const size = readFieldSize(header, 124)
     if (size < 0) return null
