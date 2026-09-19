@@ -778,8 +778,14 @@ function seedPersistedOutputs(ctx: WorkflowContext): void {
     const shape = ctx.editor.getShape<NodeCardShape>(node.id as TLShapeId)
     if (!shape) continue
     // 有运行记录时，仅成功结果可作为手动运行的上游输入，避免失败节点遗留旧值。
+    // 例外：正文/资产类节点（outputSource: 'document'）的输出就是卡片当前内容，
+    // 而「跳过」代表那次运行什么都没产出（正文为空、没有固定值…）。两者都不存在
+    // 可泄露的遗留值。不加这条例外的后果：用户在一个空文本节点上误点一次运行，
+    // 之后它写好的正文就再也连不进下游，报「上游未产生 out-text 输出」。
     const lastRun = readNodeRunRecord(shape.meta?.nodeRun)
-    if (lastRun && lastRun.status !== 'success') continue
+    const fromDocument = getNodeType(node.type)?.outputSource === 'document'
+    if (lastRun && lastRun.status !== 'success' && !(fromDocument && lastRun.status === 'skipped'))
+      continue
     const projected = buildOutputPackets(node, projectNodeOutputs(shape), ctx.runId)
     if (projected.errors.length === 0 && Object.keys(projected.value).length > 0) {
       ctx.outputs.set(node.id, projected.value)

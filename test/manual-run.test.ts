@@ -372,6 +372,60 @@ describe('runNodeManually · 卡片内统一执行入口', () => {
       error: { phase: 'input' }
     })
   })
+
+  it('正文类上游被误点一次运行（跳过）后，仍能把当前正文喂给下游', async () => {
+    const source = node('shape:skipped-source', 'text', '空正文那次运行之后补上的正文')
+    // 用户在空卡片上点过一次运行：执行器什么都没产出，只留下 skipped 记录。
+    source.meta.nodeRun = {
+      runId: 'old-run',
+      status: 'skipped',
+      startedAt: 1,
+      finishedAt: 2,
+      durationMs: 1,
+      inputs: {}
+    }
+    const target = node('shape:skipped-target', 'processor', '')
+    const arrow = {
+      id: 'shape:skipped-arrow',
+      type: 'arrow',
+      meta: { fromPort: 'out-text', toPort: 'in-value' }
+    }
+    const shapes = new Map<string, typeof source | typeof target | typeof arrow>([
+      [source.id, source],
+      [target.id, target],
+      [arrow.id, arrow]
+    ])
+    const editor = {
+      getCurrentPageShapes: () => Array.from(shapes.values()),
+      getShape: (id: string) => shapes.get(id),
+      getBindingsFromShape: (id: string) =>
+        id === arrow.id
+          ? [
+              { props: { terminal: 'start' }, toId: source.id },
+              { props: { terminal: 'end' }, toId: target.id }
+            ]
+          : [],
+      updateShape: (patch: {
+        id: string
+        props?: Record<string, unknown>
+        meta?: Record<string, unknown>
+      }) => {
+        const current = shapes.get(patch.id)
+        if (!current || current.type !== 'node-card') return
+        if (patch.props) Object.assign(current.props, patch.props)
+        if (patch.meta) Object.assign(current.meta, patch.meta)
+      },
+      markHistoryStoppingPoint: () => undefined
+    } as unknown as Editor
+
+    const result = await runNodeManually(editor, 'project-1', [], target.id)
+
+    expect(result.status).toBe('done')
+    expect(JSON.parse(String(target.meta.nodeResult))).toMatchObject({
+      kind: 'text',
+      text: '空正文那次运行之后补上的正文'
+    })
+  })
 })
 
 describe('runWorkflow · 迭代体输入隔离', () => {
