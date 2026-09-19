@@ -703,3 +703,51 @@ describe('v1.2 §16.24 本地媒体产物只写人话：内部 ID、mime 与枚�
     expect(stripComments(contractPanel)).not.toContain('${value.mediaId}')
   })
 })
+
+describe('v1.2 §16.25 卡片与设置面板共享文档真值，禁止挂载时快照', () => {
+  const bodiesDir = 'src/renderer/src/nodes/specs/bodies'
+  const cropBody = read(`${bodiesDir}/image-crop.tsx`)
+  const editBody = read(`${bodiesDir}/image-edit.tsx`)
+  const splitBody = read(`${bodiesDir}/image-split.tsx`)
+  const panels = [
+    ['image-crop.tsx', cropBody],
+    ['image-edit.tsx', editBody],
+    ['image-split.tsx', splitBody]
+  ] as const
+  const browserGate = read('scripts/test-browser-panel-sync.cjs')
+
+  it('配置读取只有一个响应式出口 useStoredNodeConfig', () => {
+    expect(sharedBodies).toContain('export function useStoredNodeConfig(')
+    // 必须走 useValue（文档变化要重算），而不是挂载时 getShape 一次。
+    expect(sharedBodies).toContain('readNodeConfig(current)')
+    for (const [file, source] of panels) {
+      expect(source, file).toContain('useStoredNodeConfig(editor, shape.id)')
+    }
+  })
+
+  it('任何节点面板都不许把 config 拷进只在挂载时取一次的 useState', () => {
+    for (const file of readdirSync(resolve(root, bodiesDir))) {
+      if (!file.endsWith('.tsx')) continue
+      const source = stripComments(read(`${bodiesDir}/${file}`))
+      expect(source, file).not.toMatch(/useState\(\s*\(\)\s*=>\s*parse[A-Za-z]*Config\(/)
+      expect(source, file).not.toMatch(/useState\([^)]*readNodeConfig/)
+    }
+  })
+
+  it('手势预览用可清除的 overlay，落库和抬手都必须交还文档', () => {
+    // 覆盖值只活在一次拖拽里：save() 落库后必须清空，否则残影会变成新的过期快照。
+    expect(cropBody).toContain('const config = dragConfig ?? docConfig')
+    expect(cropBody).toContain('setDragConfig(null)')
+    expect(editBody).toContain('const config = overlay ?? docConfig')
+    expect(stripComments(editBody)).toMatch(/const save = [\s\S]{0,120}setOverlay\(null\)/)
+    // 抬手但不落库的分支（起笔即松手）同样要清掉预览。
+    expect(editBody).toContain('setOverlay(null)')
+  })
+
+  it('真实浏览器门禁存在：卡片写入必须反映到面板，面板写入不得回退卡片', () => {
+    expect(read('package.json')).toContain('"test:browser-panel-sync"')
+    expect(browserGate).toContain('label:has-text("行数")')
+    expect(browserGate).toContain('卡片改行数后面板必须跟随（过期快照缺陷）')
+    expect(browserGate).toContain('面板写面积不得回退卡片行数')
+  })
+})

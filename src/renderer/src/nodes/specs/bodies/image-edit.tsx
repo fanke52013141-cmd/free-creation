@@ -40,7 +40,8 @@ import {
   removeMediaResultFromShape,
   selectMediaResult,
   useClickGuard,
-  useSourceWiringNotice
+  useSourceWiringNotice,
+  useStoredNodeConfig
 } from './shared'
 import { markUndoPoint } from '../../../canvas/history'
 
@@ -421,7 +422,11 @@ function ImageEditEditorCore({
     base: ImageEditConfig
     latest: ImageEditConfig
   } | null>(null)
-  const [config, setConfig] = useState(() => parseImageEditConfig(readNodeConfig(shape)))
+  // 卡片上可以直接改「修改说明」，弹窗工作台与设置面板也是同一份配置的两份视图，所以
+  // 这里读文档而不是拷一份挂载时的镜像；overlay 只活在一次绘制手势里（见 save/finish）。
+  const docConfig = parseImageEditConfig(useStoredNodeConfig(editor, shape.id))
+  const [overlay, setOverlay] = useState<ImageEditConfig | null>(null)
+  const config = overlay ?? docConfig
   const [storedTool, setStoredTool] = useState<ImageEditTool>('arrow')
   const [color, setColor] = useState<ImageEditColor>('red')
   const [aspect, setAspect] = useState(16 / 10)
@@ -442,7 +447,8 @@ function ImageEditEditorCore({
   }, [loaded, load])
 
   const save = (next: ImageEditConfig, preserveRedo = false): void => {
-    setConfig(next)
+    // 落库即交还给文档真值，overlay 只负责绘制手势中的即时预览。
+    setOverlay(null)
     if (!preserveRedo) setRedoAnnotations([])
     editor.updateShape({
       id: shape.id,
@@ -549,15 +555,15 @@ function ImageEditEditorCore({
     if (maskDraft.current) {
       const next = [...maskDraft.current, pointFromEvent(event, previewRef.current)]
       maskDraft.current = next
-      setConfig((current) => ({
-        ...current,
+      setOverlay({
+        ...config,
         mask: {
           enabled: true,
           strokes: [...maskBase.current, next],
-          brushSize: current.mask?.brushSize ?? 0.08,
-          invert: current.mask?.invert ?? false
+          brushSize: config.mask?.brushSize ?? 0.08,
+          invert: config.mask?.invert ?? false
         }
-      }))
+      })
       return
     }
     if (moveDraft.current) {
@@ -591,7 +597,7 @@ function ImageEditEditorCore({
         }
       }
       active.latest = next
-      setConfig(next)
+      setOverlay(next)
       return
     }
     if (!draft.current) return
@@ -605,25 +611,29 @@ function ImageEditEditorCore({
           : [...draft.current.points, endPoint]
     }
     draft.current = next
-    setConfig((current) => ({
-      ...current,
-      annotations: [...current.annotations.filter((a) => a.id !== next.id), next]
-    }))
+    setOverlay({
+      ...config,
+      annotations: [...config.annotations.filter((a) => a.id !== next.id), next]
+    })
   }
   const finish = (): void => {
     if (maskDraft.current) {
       const stroke = maskDraft.current
       maskDraft.current = null
-      if (stroke.length >= 2)
-        save({
-          ...config,
-          mask: {
-            enabled: true,
-            strokes: [...maskBase.current, stroke],
-            brushSize: config.mask?.brushSize ?? 0.08,
-            invert: config.mask?.invert ?? false
-          }
-        })
+      if (stroke.length < 2) {
+        // 起笔后又抬手：不落库，但预览残影必须交还给文档，否则会一直挂在图上。
+        setOverlay(null)
+        return
+      }
+      save({
+        ...config,
+        mask: {
+          enabled: true,
+          strokes: [...maskBase.current, stroke],
+          brushSize: config.mask?.brushSize ?? 0.08,
+          invert: config.mask?.invert ?? false
+        }
+      })
       return
     }
     if (moveDraft.current) {
@@ -635,8 +645,10 @@ function ImageEditEditorCore({
     if (!draft.current) return
     const next = draft.current
     draft.current = null
-    const valid = next.points.length >= 2
-    if (!valid) return
+    if (next.points.length < 2) {
+      setOverlay(null)
+      return
+    }
     save({ ...config, annotations: [...config.annotations.filter((a) => a.id !== next.id), next] })
   }
   const removeLast = (): void => {

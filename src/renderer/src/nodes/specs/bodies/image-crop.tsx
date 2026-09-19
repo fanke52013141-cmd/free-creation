@@ -19,7 +19,13 @@ import { useGatewayStore } from '../../../stores/gateway'
 import { toast } from '../../../stores/toast'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
-import { MediaFileActions, MediaSourceBadge, useClickGuard, useSourceWiringNotice } from './shared'
+import {
+  MediaFileActions,
+  MediaSourceBadge,
+  useClickGuard,
+  useSourceWiringNotice,
+  useStoredNodeConfig
+} from './shared'
 
 type DragTarget =
   | { kind: 'rect'; corner: 0 | 1 | 2 | 3 }
@@ -457,8 +463,12 @@ export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.
 export function ImageCropSettings({ shape, editor }: NodeSettingsProps): React.JSX.Element {
   const previewRef = useRef<HTMLDivElement>(null)
   const drag = useRef<DragTarget | null>(null)
-  const [config, setConfig] = useState(() => parseImageCropConfig(readNodeConfig(shape)))
-  const configRef = useRef(config)
+  // 卡片上可以直接拖裁剪框，面板必须读文档而不是拷一份挂载时的镜像，否则下一次保存会把
+  // 画布那次改动整份写回旧值；只有拖动过程中才需要本地覆盖值（持久化被合并成一帧一次）。
+  const docConfig = parseImageCropConfig(useStoredNodeConfig(editor, shape.id))
+  const [dragConfig, setDragConfig] = useState<ImageCropConfig | null>(null)
+  const config = dragConfig ?? docConfig
+  const configRef = useRef(docConfig)
   const pendingPersist = useRef<ImageCropConfig | null>(null)
   const persistFrame = useRef<number | null>(null)
   const [previewAspect, setPreviewAspect] = useState<number | null>(null)
@@ -469,6 +479,7 @@ export function ImageCropSettings({ shape, editor }: NodeSettingsProps): React.J
     (next: ImageCropConfig): void => {
       pendingPersist.current = null
       persistFrame.current = null
+      configRef.current = next
       editor.updateShape({
         id: shape.id,
         type: 'node-card',
@@ -486,10 +497,10 @@ export function ImageCropSettings({ shape, editor }: NodeSettingsProps): React.J
   }, [persist])
   const save = (next: ImageCropConfig): void => {
     configRef.current = next
-    setConfig(next)
     // 拖动每个 pointermove 都写入 tldraw 文档会让画布重排、产生明显掉帧。
     // 预览仍每帧更新，持久化则合并为最多一帧一次并在松手时立即落盘。
     if (!drag.current) return persist(next)
+    setDragConfig(next)
     pendingPersist.current = next
     if (persistFrame.current === null) {
       persistFrame.current = requestAnimationFrame(() => {
@@ -532,10 +543,13 @@ export function ImageCropSettings({ shape, editor }: NodeSettingsProps): React.J
     if (!drag.current) return
     drag.current = null
     flushPersist()
+    // 覆盖值只活在这一次手势里：松手后预览交还给文档真值。
+    setDragConfig(null)
     markUndoPoint(editor, 'image-crop-config')
   }
   const begin = (target: DragTarget, event: React.PointerEvent<HTMLElement>): void => {
     stopEventPropagation(event)
+    configRef.current = config
     drag.current = target
     event.currentTarget.setPointerCapture(event.pointerId)
   }

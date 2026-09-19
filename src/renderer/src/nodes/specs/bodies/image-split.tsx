@@ -12,7 +12,7 @@ import { markUndoPoint } from '../../../canvas/history'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { mediaUrl, type NodeBodyProps, type NodeSettingsProps } from '../../registry'
 import { Icon } from '../../../components/Icon'
-import { useClickGuard, useSourceWiringNotice } from './shared'
+import { useClickGuard, useSourceWiringNotice, useStoredNodeConfig } from './shared'
 
 function positiveInteger(value: string, fallback: number): number {
   const number = Number(value)
@@ -199,9 +199,11 @@ export function ImageSplitBody({ shape, openPreview }: NodeBodyProps): React.JSX
   )
 }
 
-/** 右侧仅保留高级说明；行列、面积、预览和拆分入口均在节点卡片中。 */
+/** 拆分工作台：与卡片上的快捷输入写同一份 props.config，两边都读文档真值。 */
 export function ImageSplitSettings({ shape, editor }: NodeSettingsProps): React.JSX.Element {
-  const [config, setConfig] = useState(() => parseImageSplitConfig(readNodeConfig(shape)))
+  // 卡片上有同一份配置的快捷入口，所以这里读文档而不是拷一份本地镜像：拷镜像会让
+  // 「卡片改了行列 → 面板拖面积」把行列写回旧值（NODE_UI_SPEC §16.25）。
+  const config = parseImageSplitConfig(useStoredNodeConfig(editor, shape.id))
   const [previewAspect, setPreviewAspect] = useState<number | null>(null)
   const source = gatherUpstreamMedia(editor, shape.id, 'in-image', 'image')
   const noSourceLine = useSourceWiringNotice(editor, shape.id, 'in-image', '原图')
@@ -210,7 +212,6 @@ export function ImageSplitSettings({ shape, editor }: NodeSettingsProps): React.
 
   const save = (partial: Partial<ImageSplitConfig>, reason: string): void => {
     const next = parseImageSplitConfig(JSON.stringify({ ...config, ...partial }))
-    setConfig(next)
     editor.updateShape({
       id: shape.id,
       type: 'node-card',

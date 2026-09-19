@@ -58,6 +58,22 @@ export function useSourceWiringNotice(
     : `${label}（${portId}）已连线 ${count} 条，但上游还没有产出。`
 }
 
+/**
+ * 节点 config 的响应式读法：文档才是配置真值。设置面板若把 config 拷进只在挂载时取一次
+ * 的 useState，面板开着时画布卡片上的写入（拖裁剪框、改行列、改修改说明）就不会反映到
+ * 面板，面板下一次保存会把那次改动整份覆盖掉。手势期间的本地预览由调用方自己叠加。
+ */
+export function useStoredNodeConfig(editor: Editor, shapeId: string): string {
+  return useValue(
+    `${shapeId}:config`,
+    () => {
+      const current = editor.getShape<NodeCardShape>(shapeId as TLShapeId)
+      return current ? readNodeConfig(current) : ''
+    },
+    [editor, shapeId]
+  )
+}
+
 // 节点内模型选择下拉（按模态过滤全部供应商的模型）
 export function ModelSelect({
   value,

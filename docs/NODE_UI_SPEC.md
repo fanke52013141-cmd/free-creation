@@ -413,11 +413,12 @@ app.css 与 ui-foundation.css 双重定义，后者覆盖前者；v1 阶段 4 �
 | 22  | **隐藏能力必须出现在节点上：文本节点的批量视角指令清单 + 分镜板的取数来源事实行**（C6 节点可用性审查，用户 2026-09-18 需求 4「审查我们的每一个节点…说实话，有些节点我根本看不懂」）：两处「代码能做但界面上看不出来」的缺陷。**文本节点**：`/三视图`、`/九宫格`、`/25宫格` 三条 slash 指令由 `SLASH_COMMANDS` 驱动、能一键铺开多视角图片节点，但节点上只在**已经打对指令之后**才显示那条工具栏——空节点和打错前缀（`/`）的用户得到的是一句「双击输入文本内容」，等于这项能力不存在。现在空态与未识别前缀两种情况下渲染指令清单，条目由 `SLASH_COMMANDS.map` 生成（模式、张数、说明 tooltip 全部来自那份表，节点里不再抄第二份文案），打错前缀时标题变成「未识别的指令，可用：」。**分镜板**：执行器 `storyboard` 的取数优先级是 `in-json` → `in-text` → 本卡片正文，运行完再把结果 `updateProps` 写回正文；但卡片上的空态文案是「将脚本节点连入此节点」，正文已填镜头时也看不出这次运行会不会覆盖手改内容。现在按 #16 用 `countIncomingConnections`（`useValue` 保持响应式）算出真实连线数，并在工具栏下方常驻一行 `.node-wiring` 事实句：无连线有正文＝「上游未连线，运行使用本卡片的 N 个镜头」，无连线且空＝「分镜数据（in-json）未连线，且本卡片为空，运行会跳过」（`warn`），有连线且本卡已有镜头＝「已连线…运行会用它覆盖本卡片的 N 个镜头」（这句是本项的关键，覆盖用户手改内容属于不可逆后果，必须在按钮旁边而不是失败后才说），有连线且空＝「运行后写入本卡片」。**刻意保留**：分镜板的一次性上游自动导入（`importedRef`，A9）不删——它的行为是对的，缺的只是可见性，本项把它从「悄悄发生」改成「明写在事实行里」；文本节点的工具栏（指令已识别时）与清单（未识别时）互斥渲染，不叠加                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `bodies/text.tsx`、`bodies/storyboard.tsx`、`app.css`、`test/node-ui-decisions.test.ts` §16.22                                                                                                                                                                                                | 不新增端口、Schema 或 `contractVersion`；文本与分镜节点的执行器、连线校验与产出契约均未变，只改渲染层可见性                                                                     |
 | 23  | **图片族节点：#15 / #16 两条判据落到 P 图、裁剪、拆图上**（C6 节点可用性审查，用户需求 3「审查我们的每一个节点…有些节点我根本看不懂」）：① **P 图的遮罩与画幅按网关实际发送字段呈现**——TOAPIS 的 `/images/generations` 提交字段是封闭集合（`model` `prompt` `size` `resolution` `background` `n` `response_format` `reference_images`），里面**没有 mask**，但此前节点上摆着遮罩笔刷、执行器还会拼一句「请仅修改遮罩指定区域」，等于让模型猜一个不存在的输入。现新增 `imageEditSendsMask()`（`driver !== 'toapis-task'`）与 `imageEditSendsAspectRatio()`（TOAPIS 或 `forwardsAspectRatio`）两条判定，遮罩工具、遮罩选项、比例下拉三处控件与那句提示词全部走同一判据；已画过遮罩后切到不接收的通道时**不静默失效**，而是印一条 `warn` 事实句说明这次只按标注与修改说明处理。② **画幅只有一个来源**：P 图不再抄第二份比例清单（删 `IMAGE_EDIT_ASPECT_RATIOS`），选项直接取所选模型的 `capabilities.ratios`（与生图同源），也不再镜像进 `size`；`parseImageEditConfig` 读回时把存量配置里的比例串从 `size` 收敛掉，发送侧由网关分流——TOAPIS 写 `body.size = 比例串`、兼容网关写 `providerOptions.aspectRatio`、其余通道不发，同步 `generateImage` 只接受像素尺寸（非 `宽x高` 形态一律不带 `size`）。③ **缺输入结论按真实连线**：P 图、裁剪、拆图五处空态此前各写一份「请从图片或生图节点连线到左侧…」祈使句，且不区分「没连线」与「连了但上游没出图」；现统一为一个 `useSourceWiringNotice()`（`bodies/shared.tsx`，响应式读取 `countIncomingConnections`），输出 `原图（in-image）未连线，运行会跳过。` 或 `原图（in-image）已连线 N 条，但上游还没有产出。`。④ 收口 §16.1.1 的遗留命名：模板画布与「继续生成」菜单的下游节点标题从 `图片生成视频` 统一成 `生视频` | `src/shared/image-capabilities.ts`、`src/shared/image-edit.ts`、`src/main/gateway/image.ts`、`src/shared/engine/executors/imageEdit.ts`、`bodies/{image-edit,image-crop,image-split,shared}.tsx`、`CanvasSidePanel.tsx`、`app.css`、`test/{image-capabilities,image-edit,node-ui-decisions}.test.ts` §16.23 | #15「网关不发送就不呈现」与 #16「判据是真实连线」推广到图片族；三节点端口、Schema、`contractVersion` 与产出契约未变 |
 | 24  | **本地媒体产物只写人话：内部 ID、mime 与枚举不再进用户可见文案**（C6 节点可用性审查，用户需求 4「有些节点我根本看不懂」）：图片 / 视频本地媒体族此前有三类泄露。① 结果卡的来源徽章与来源摘要优先打印 `modelKey`，而本地执行器写进去的是 `local:canvas-crop`、`local:ffmpeg-frame` 这类内部引擎 ID，用户在卡片上读到的是字符串而不是动作。② 执行器把 `mediaId` 和配置枚举烤进 `meta.nodeResult.prompt`（`源图片 media_9f3a… · rect 裁剪`、`mode=first`），悬浮提示跟着一起外泄。③ 产物标题沿用主进程给的固定资产名（`裁剪图片`、`视频帧`、`音频片段`），同一节点裁十次得到十张同名卡，用户没有任何办法区分。**现在的做法**：命名走 `values.ts` 里唯一的 `mediaDisplayName(source, 类型词)`——取来源节点标题，缺标题回退到「图片 / 视频」；标题沿用 #23 已拍板的 P 图规则，依次为裁剪 `（裁）原图名`、抽帧 `（帧）`、截取 `（截）`、音频 `（音）`、拆图 `原图名 · 第 N 格`，同一节点多次裁剪按已有结果数编号成 `（裁1）`；来源标签收敛到 `mediaSourceLabel()` 单一出口加 `LOCAL_ENGINE_SOURCE_LABELS` 表，未登记的 `local:` ID 也只回退到卡片自带的人话 fallback，不外泄，远端模型仍显示 `供应商 · 模型`；裁剪工作台把 `输入：mime · mediaId` 换成 `输入：原图名`，把指错标签页的「在右侧「运行」中重新裁剪」改成「设置」（节点工作台在**设置**页，运行页只有历史），试运行结果预览同样不再打印 `mediaId`。**命名只在执行器里做**：`media` 表没有名称列，主进程资产名承载不了「来源节点标题」，而 `emitArtifact.title` 才是用户看到的那一行，因此不改三层 IPC、不做数据库迁移 | `src/shared/engine/values.ts`、`src/shared/engine/executors/{imageCrop,imageSplit,videoTransforms}.ts`、`bodies/{shared,image-crop}.tsx`、`NodeContractPanel.tsx`、`test/{image-crop,image-split,video-transform,node-ui-decisions}.test.ts` §16.24 | #7 / §16.1.1「名字只有一个来源」从节点标题推广到产物标题与来源徽章；端口、Schema、`contractVersion`、`media` 表结构与产出契约全部未变，只改展示文案与提示词 |
+| 25  | **卡片与设置面板共享同一份文档真值，禁止「挂载时快照」**（§16.2 待办落地，用户需求 4「能不能在 UI 层面让它的可用性更强一点」）：裁剪 / P 图 / 拆图三个设置面板此前都写成 `useState(() => parse(readNodeConfig(shape)))`，配置只在面板挂载那一帧拷一份。这类写法有**两个**症状：面板开着时在卡片上拖裁剪框、改行列、改「修改说明」，面板仍显示旧值；更糟的是面板下一次保存会把整份旧配置写回文档，**静默回滚**画布那一侧的改动。浏览器实测复现路径：新建拆分节点（默认 3×3）→ 打开设置面板 → 卡片上改成 2×4 → 面板里拖面积 → 行列被写回 3×3。不接受的两种修法：提交前与最新配置合并（面板和卡片改的是同一批字段，合并无从仲裁）、按 config 键重挂载面板（textarea 掉焦点）。**现在的做法**：`bodies/shared.tsx` 新增 `useStoredNodeConfig(editor, shapeId)`（tldraw `useValue` 包 `readNodeConfig`）作为节点配置的唯一响应式读法，文档即真值；只有**一次手势内**的即时预览留在本地覆盖值里（裁剪 `dragConfig`、P 图 `overlay`），落库与抬手都必须清掉覆盖值把预览交还文档——P 图原先在「起笔即松手」这条不落库分支上不清预览，会留一张残影标注，一并修掉。手势期间对 tldraw 文档的写入仍按一帧合并一次，没有增加写入次数 | `bodies/{shared,image-crop,image-edit,image-split}.tsx`、`test/node-ui-decisions.test.ts` §16.25、`scripts/test-browser-panel-sync.cjs`、`package.json` | 配置的真值只有一份，卡片、设置面板与弹窗工作台都只是它的投影；端口、Schema、`contractVersion`、`props.config` 序列化格式全未变 |
 
 ### 16.1 门禁更新
 
 `ui-foundation.test.ts` 的端口材质断言按 #1 改写（实色 + 无 `backdrop-filter` + `box-shadow: none`）。
-`test/node-ui-decisions.test.ts`（20 组 / 65 项）把本节决定固化为源码断言，防止"删掉某个覆盖"类
+`test/node-ui-decisions.test.ts`（21 组 / 69 项）把本节决定固化为源码断言，防止"删掉某个覆盖"类
 改动被悄悄改回去。另有两支临时真实渲染验收脚本（不入库）覆盖 #2–#16 与全部新节点，均通过。
 #17 的火山后端与 #18 的默认后端切换都只到 wire 断言与源码门禁这一层：本工作区没有任何火山 / MiniMax 凭据
 （密钥按供应商实例存在本机 SQLite 里），因此**未做真实调用**，交付时按「代码就绪、线上未验证」对待。
@@ -455,6 +456,17 @@ Type0/Identity-H + ToUnicode 中文各一份，外加一支无文字层的纯图
 另外钉住命名只有一个出口（三支执行器都调 `mediaDisplayName(`）、`{source?.modelKey}` 不再作为 JSX 文案、
 `${source.mediaId}` 与 `mode=` 不进提示词、bodies 目录不再出现「「运行」中」这种指错标签页的说法、
 试运行预览走 `PORT_TYPE_LABELS` 而不是 `mediaId`。
+#25 的门禁分两层，因为缺陷本身分两层。**源码门禁**在 `node-ui-decisions.test.ts` §16.25（4 项）：遍历
+`bodies/` 全部 `.tsx`（剥注释后）断言没有任何 `useState(() => parse…Config(` 形态的挂载时快照、三个面板
+都调用同一个 `useStoredNodeConfig(editor, shape.id)`、手势覆盖值必须在落库与抬手时清空。**真实浏览器门禁**
+是新增的 `scripts/test-browser-panel-sync.cjs`（`npm run test:browser-panel-sync`，需要 `npm run dev:browser`）：
+vitest 不挂载 React 组件、也不测 tldraw Editor（`vitest.config.ts` 顶部写明的边界），而这条缺陷**只在
+组件树里存在**，所以源码断言不足以证明它被修好。脚本在真实 Chromium 里建拆分节点、打开设置面板，
+断言「卡片改 2×4 后面板立刻显示 2×4」「面板再改面积后卡片行列不回退」。**双向验证过**：把面板临时
+换回挂载时快照，脚本立刻在 `卡片改行数后面板必须跟随` 处失败（`'3' !== '2'`），换回 `useStoredNodeConfig`
+后通过；因此这条不是自证的空跑。**覆盖范围**：裁剪与 P 图两条面板没有在浏览器里单独跑一遍——它们的
+卡片侧写入（裁剪卡上的比例快捷键 `setAspectRatio`、P 图卡上的「修改说明」）要先给节点连一张原图才会
+出现，本轮只在拆分节点上做了双向实测；另两条面板依赖同一个 `useStoredNodeConfig` 出口与 §16.25 源码门禁。
 
 ### 16.1.1 名字只有一个来源（v1.2 追加）
 
@@ -473,10 +485,6 @@ Type0/Identity-H + ToUnicode 中文各一份，外加一支无文字层的纯图
 
 ### 16.2 待办（用户已确认方向，尚未实施）
 
-- **设置面板的过期快照覆盖**：裁剪 / P 图 / 拆图三个设置面板都用 `useState(() => parse(config))`
-  只在挂载时取一次配置，因此面板开着时在画布上改了遮罩或裁剪矩形，保存会把整份配置写回，
-  静默丢掉画布那一侧的写入。修法是让面板状态跟随外部配置变化，但必须避开
-  `react-hooks/set-state-in-effect`（该规则是 error），只能在渲染期派生，或改成「提交前与最新配置合并」。
 - **标注文字承载**：目前只有「文字」工具能带文字，箭头 / 矩形 / 涂画还不行。
   提示词侧的编号清单（`annotationInstructionLines`）已就绪，缺的是「画完顺手写一句」的行内输入。
 - **豆包参考素材通道**：`references[]` 条目的字段结构官方文档未给出，`audio_data` /
