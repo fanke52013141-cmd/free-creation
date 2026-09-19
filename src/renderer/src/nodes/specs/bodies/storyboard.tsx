@@ -1,10 +1,10 @@
 // 分镜板节点 Body（路线图 R6：bodies.tsx 拆分）
 import { useEffect, useRef, useState } from 'react'
-import { stopEventPropagation, useEditor } from 'tldraw'
+import { stopEventPropagation, useEditor, useValue } from 'tldraw'
 import { mediaUrl, type NodeBodyProps } from '../../registry'
 import { toast } from '../../../stores/toast'
 import { markUndoPoint } from '../../../canvas/history'
-import { gatherUpstreamJson } from '../../../canvas/graph'
+import { countIncomingConnections, gatherUpstreamJson } from '../../../canvas/graph'
 import { Icon } from '../../../components/Icon'
 import { useClickGuard, useWheelScroll } from './shared'
 import {
@@ -70,6 +70,32 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
   const scrollRef = useRef<HTMLDivElement>(null)
   useWheelScroll(scrollRef)
   const data = parseStoryboard(shape.props.text)
+  // 执行器按 in-json → in-text → 本卡片正文 的优先级取数并写回正文，所以连线状态必须
+  // 印在卡片上：否则「连着上游又在卡片上手改过镜头」的用户不知道运行会覆盖自己的编辑。
+  const jsonCount = useValue(
+    'storyboard in-json inputs',
+    () => countIncomingConnections(editor, shape.id, 'in-json'),
+    [editor, shape.id]
+  )
+  const textCount = useValue(
+    'storyboard in-text inputs',
+    () => countIncomingConnections(editor, shape.id, 'in-text'),
+    [editor, shape.id]
+  )
+  const wiring: { text: string; warn: boolean } =
+    jsonCount + textCount === 0
+      ? data.shots.length
+        ? { text: `上游未连线，运行使用本卡片的 ${data.shots.length} 个镜头`, warn: false }
+        : { text: '分镜数据（in-json）未连线，且本卡片为空，运行会跳过', warn: true }
+      : data.shots.length
+        ? {
+            text: `已连线 in-json ${jsonCount} · in-text ${textCount}，运行会用它覆盖本卡片的 ${data.shots.length} 个镜头`,
+            warn: false
+          }
+        : {
+            text: `已连线 in-json ${jsonCount} · in-text ${textCount}，运行后写入本卡片`,
+            warn: false
+          }
   // 上游自动导入只应发生一次；用户手动清空或编辑后不再被覆盖（A9）
   const importedRef = useRef(false)
   const [editingInput, setEditingInput] = useState(false)
@@ -207,7 +233,7 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
           setEditingInput(true)
         }}
       >
-        将脚本节点连入此节点，
+        {wiring.text}
         <br />
         或双击输入分镜 JSON
         <button
@@ -248,6 +274,7 @@ export function StoryboardBody({ shape, openPreview }: NodeBodyProps): React.JSX
           </button>
         </div>
       </div>
+      <span className={`node-wiring ${wiring.warn ? 'warn' : 'ok'}`}>{wiring.text}</span>
       {/* 分镜卡片 */}
       {data.shots.map((shot, i) => (
         <div

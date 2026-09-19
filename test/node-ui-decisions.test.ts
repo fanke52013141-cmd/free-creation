@@ -528,3 +528,38 @@ describe('v1.2 §16.20 文档解析：PDF 交给 pdf.js，可解析格式只有�
     expect(extractor).toContain('第 ${page.index + 1} 页')
   })
 })
+
+describe('v1.2 §16.22 隐藏能力要出现在节点上：slash 指令清单与分镜取数来源', () => {
+  const textBody = read('src/renderer/src/nodes/specs/bodies/text.tsx')
+  const storyboardBody = read('src/renderer/src/nodes/specs/bodies/storyboard.tsx')
+  const slashCommands = read('src/renderer/src/nodes/slash-commands.ts')
+
+  it('批量视角指令清单只来自 SLASH_COMMANDS，不在节点里抄第二份', () => {
+    expect(slashCommands).toMatch(/export const SLASH_COMMANDS/)
+    expect(textBody).toMatch(/SLASH_COMMANDS\.map\(\(cmd\) =>/)
+    expect(textBody).toMatch(/<code>\{cmd\.pattern\}<\/code>/)
+    // 清单一旦回到硬编码，新增指令就会静默地不出现在节点上。
+    expect(stripComments(textBody)).not.toContain('九宫格')
+  })
+
+  it('空态与打错前缀都给回执，且已识别指令时不叠加清单', () => {
+    expect(textBody).toMatch(/const showSlashHint =\n?\s*!slashCmd &&/)
+    expect(textBody).toContain('未识别的指令，可用：')
+    expect(app).toContain('.slash-cmd-hint')
+    expect(app).toContain('.slash-cmd-option')
+  })
+
+  it('分镜板按真实连线给出取数来源（in-json / in-text）', () => {
+    expect(storyboardBody).toMatch(/countIncomingConnections\(editor, shape\.id, 'in-json'\)/)
+    expect(storyboardBody).toMatch(/countIncomingConnections\(editor, shape\.id, 'in-text'\)/)
+    // 必须响应式读取，否则连上上游后事实行会停在旧值。
+    expect(storyboardBody).toMatch(/useValue\(\s*\n?\s*'storyboard in-json inputs'/)
+    expect(storyboardBody).toContain('node-wiring')
+  })
+
+  it('覆盖用户手改镜头这件事写在卡片上，旧的空态指令文案清零', () => {
+    expect(storyboardBody).toContain('运行会用它覆盖本卡片的')
+    expect(storyboardBody).toContain('运行会跳过')
+    expect(stripComments(storyboardBody)).not.toContain('将脚本节点连入此节点')
+  })
+})

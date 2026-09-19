@@ -1,7 +1,7 @@
 // 文本节点 Body（路线图 R6：bodies.tsx 拆分）
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createShapeId, stopEventPropagation, useEditor, type TLShapeId } from 'tldraw'
-import { generateSlashPrompts, parseSlashCommand } from '../../slash-commands'
+import { generateSlashPrompts, parseSlashCommand, SLASH_COMMANDS } from '../../slash-commands'
 import { markUndoPoint } from '../../../canvas/history'
 import { toast } from '../../../stores/toast'
 import { Icon } from '../../../components/Icon'
@@ -61,6 +61,10 @@ export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
 
   // Slash 指令检测：/九宫格 /25宫格 /三视图
   const slashCmd = parseSlashCommand(shape.props.text)
+  // 指令清单只有 SLASH_COMMANDS 一个来源。此前指令能用但界面上从不出现，
+  // 用户只能靠别人告诉才知道文本节点有批量视角能力；打错前缀也没有任何回执。
+  const trimmed = shape.props.text.trim()
+  const showSlashHint = !slashCmd && (trimmed === '' || trimmed.startsWith('/'))
 
   const commit = (): void => {
     exitEditing()
@@ -149,6 +153,20 @@ export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
       }}
     >
       {shape.props.text || <span className="node-hint">双击输入文本内容</span>}
+      {showSlashHint && (
+        <div className="slash-cmd-hint">
+          <div className="slash-cmd-hint-title">
+            {trimmed.startsWith('/')
+              ? '未识别的指令，可用：'
+              : '批量视角指令（指令 + 空格 + 主题）'}
+          </div>
+          {SLASH_COMMANDS.map((cmd) => (
+            <div className="slash-cmd-option" key={cmd.pattern} title={cmd.desc}>
+              <code>{cmd.pattern}</code> + 主题 · {cmd.count} 图
+            </div>
+          ))}
+        </div>
+      )}
       {slashCmd && (
         <div className="slash-cmd-bar">
           <div className="slash-cmd-info">
