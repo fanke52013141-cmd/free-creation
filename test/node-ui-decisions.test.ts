@@ -420,7 +420,8 @@ describe('v1.2 §16.16 媒体 / 剧本节点：判据是真实连线，不是卡
 
   it('导入素材的每种落空都要留下提示，取消选择除外', () => {
     const audio = read('src/renderer/src/nodes/specs/bodies/audio.tsx')
-    expect(audio).toContain("if (!audioAsset) return toast('请选择一个音频文件')")
+    expect(audio).toContain('pickImportedAsset({')
+    expect(audio).toContain("mismatch: '请选择一个音频文件'")
     expect(audio).toContain('catch (error)')
     for (const path of [
       'src/renderer/src/nodes/specs/bodies/image.tsx',
@@ -428,9 +429,9 @@ describe('v1.2 §16.16 媒体 / 剧本节点：判据是真实连线，不是卡
     ]) {
       expect(read(path)).toContain("if (!project) return toast('项目未就绪')")
     }
-    // 卡片里的选择器取消是正常路径，两种文件节点都必须保持静默。
-    expect(read('src/renderer/src/nodes/specs/bodies/image.tsx')).toContain(
-      'if (res.data.assets.length === 0 && res.data.errors.length === 0) return'
+    // 卡片里的选择器取消是正常路径：判据收在共享出口里，assets 为空一律静默。
+    expect(read('src/renderer/src/nodes/specs/bodies/shared.tsx')).toContain(
+      'if (result.assets.length > 0) toast(mismatch)'
     )
   })
 
@@ -749,5 +750,49 @@ describe('v1.2 §16.25 卡片与设置面板共享文档真值，禁止挂载时
     expect(browserGate).toContain('label:has-text("行数")')
     expect(browserGate).toContain('卡片改行数后面板必须跟随（过期快照缺陷）')
     expect(browserGate).toContain('面板写面积不得回退卡片行数')
+  })
+})
+
+describe('v1.2 §16.26 导入落空要有去向说明，输入上限等于引擎上限', () => {
+  const bodies = 'src/renderer/src/nodes/specs/bodies'
+
+  it('单资产导入只剩一个出口，不再各自取第一个匹配项', () => {
+    for (const file of ['image.tsx', 'video.tsx', 'audio.tsx', 'file.tsx', 'tts.tsx']) {
+      const source = stripComments(read(`${bodies}/${file}`))
+      expect(source, file).toContain('pickImportedAsset({')
+      // .find() 会静默丢掉多选的其余文件，正是本轮修掉的缺陷形状。
+      expect(source, file).not.toMatch(/assets\.find\(/)
+    }
+    // tts 有两个上传口（参考语音 + 克隆提示音），都必须走同一个出口。
+    expect(read(`${bodies}/tts.tsx`).match(/pickImportedAsset\(\{/g)).toHaveLength(2)
+  })
+
+  it('多出的文件说明去向并真的刷进素材库，取消选择保持静默', () => {
+    expect(sharedBodies).toContain('已导入项目素材库')
+    expect(sharedBodies).toContain('useMediaStore.getState().refresh(projectId)')
+    expect(sharedBodies).toContain('导入失败：')
+    // assets 为空 = 用户点了取消，这时报「请选对文件」是错的。
+    expect(sharedBodies).toContain('if (result.assets.length > 0) toast(mismatch)')
+  })
+
+  it('拆分列数上限取自解析用的同一个函数', () => {
+    const parser = read('src/shared/image-split.ts')
+    expect(parser).toContain('export function maxImageSplitColumns(')
+    expect(parser).toContain('Math.min(requestedColumns, maxImageSplitColumns(rows))')
+    const splitBody = stripComments(read(`${bodies}/image-split.tsx`))
+    expect(splitBody).toContain('max={maxImageSplitColumns(config.rows)}')
+    expect(splitBody).toContain('const columnCap = maxImageSplitColumns(config.rows)')
+    expect(splitBody).toContain('max={columnCap}')
+    // 「列数」写死 64 就是漂移源头：解析会按行数下调，界面不许先答应下来。
+    expect(splitBody).not.toMatch(/列数\s*<input[\s\S]{0,120}max="64"/)
+    // 上限收紧时必须把规则讲清楚，而不是让数字自己缩回去。
+    expect(splitBody).toContain('行时列数最多')
+  })
+
+  it('真实浏览器门禁存在：多选导入的其余文件必须被交代', () => {
+    const gate = read('scripts/test-browser-media-import.cjs')
+    expect(read('package.json')).toContain('"test:browser-media-import"')
+    expect(gate).toContain('一次只用一张图片：另外 1 个已导入项目素材库')
+    expect(gate).toContain('canvas-studio.browser-demo.media.v1')
   })
 })

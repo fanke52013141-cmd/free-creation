@@ -3,7 +3,9 @@ import {
   buildImageSplitTiles,
   DEFAULT_IMAGE_SPLIT_CONFIG,
   imageSplitCount,
-  parseImageSplitConfig
+  maxImageSplitColumns,
+  parseImageSplitConfig,
+  MAX_IMAGE_SPLIT_TILES
 } from '@shared/image-split'
 import { imageSplitExecutor } from '@renderer/engine/executors/imageSplit'
 import { parseMediaResultCollection } from '@renderer/nodes/nodeValues'
@@ -71,6 +73,25 @@ describe('图片宫格拆分配置', () => {
     )
     expect(config.rows * config.columns).toBeLessThanOrEqual(64)
     expect(config.scalePercent).toBe(100)
+  })
+
+  it('列数输入框的上限就是解析真正接受的上限', () => {
+    expect(maxImageSplitColumns(1)).toBe(MAX_IMAGE_SPLIT_TILES)
+    expect(maxImageSplitColumns(8)).toBe(8)
+    expect(maxImageSplitColumns(64)).toBe(1)
+    // 界面按 maxImageSplitColumns 放行过的列数，解析后必须原样保留：两处只要各写一份数字就会漂移。
+    for (let rows = 1; rows <= MAX_IMAGE_SPLIT_TILES; rows++) {
+      const columns = maxImageSplitColumns(rows)
+      const config = parseImageSplitConfig(JSON.stringify({ rows, columns }))
+      expect(config.rows).toBe(rows)
+      expect(config.columns).toBe(columns)
+    }
+    // 超限时保持行数、下调列数，而不是整份配置回默认。
+    const clamped = parseImageSplitConfig(
+      JSON.stringify({ rows: 8, columns: MAX_IMAGE_SPLIT_TILES })
+    )
+    expect(clamped.rows).toBe(8)
+    expect(clamped.columns).toBe(maxImageSplitColumns(8))
   })
 })
 

@@ -15,6 +15,9 @@ import { readNodeConfig } from '../../../canvas/node-persistence'
 import { getNodeType, mediaUrl } from '../../registry'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
+import { toast } from '../../../stores/toast'
+import { useMediaStore } from '../../../stores/media'
+import type { MediaAsset, MediaImportResult } from '@shared/types'
 import { parseImageSplitConfig } from '@shared/image-split'
 import { parseVideoClipConfig, serializeVideoClipConfig } from '@shared/video-transform'
 import {
@@ -72,6 +75,39 @@ export function useStoredNodeConfig(editor: Editor, shapeId: string): string {
     },
     [editor, shapeId]
   )
+}
+
+/**
+ * 单资产卡片（图片 / 视频 / 音频 / 文件 / 语音参考素材）拿到 media.pick 结果后的统一收尾。
+ *
+ * 系统文件框开了多选（`IPC.media.pick` 的 `multiSelections`），选中的文件会全部落进
+ * 项目素材库，但一张卡片只承载一个资产。旧代码只取 `.find(kind)` 的第一个，于是用户
+ * 多选时看到的现象是「其余文件凭空消失」，个别文件导入失败时也完全静默。这里把两件
+ * 事都说出来，并在素材库确实多出卡片没吃下的文件时刷新素材列表，保证提示可兑现。
+ */
+export function pickImportedAsset(options: {
+  result: MediaImportResult
+  kind: MediaAsset['kind']
+  /** 计数提示用的量词 + 名词，如「一张图片」。 */
+  noun: string
+  /** 选了文件但没有一个属于本卡片能承载的类型时的提示。 */
+  mismatch: string
+  projectId: string
+}): MediaAsset | null {
+  const { result, kind, noun, mismatch, projectId } = options
+  for (const error of result.errors.slice(0, 3)) {
+    toast(`导入失败：${error.path.split(/[\\/]/).pop()}（${error.reason}）`)
+  }
+  if (result.errors.length > 3) toast(`另有 ${result.errors.length - 3} 个文件导入失败`)
+  const matched = result.assets.filter((asset) => asset.kind === kind)
+  if (matched.length === 0) {
+    // assets 为空 = 用户在系统对话框点了取消，这时报「请选对文件」是错的。
+    if (result.assets.length > 0) toast(mismatch)
+    return null
+  }
+  if (result.assets.length > 1) void useMediaStore.getState().refresh(projectId)
+  if (matched.length > 1) toast(`一次只用${noun}：另外 ${matched.length - 1} 个已导入项目素材库`)
+  return matched[0]
 }
 
 // 节点内模型选择下拉（按模态过滤全部供应商的模型）

@@ -13,6 +13,7 @@ import {
   clearSelectedMediaHistory,
   MediaFileActions,
   MediaResultGrid,
+  pickImportedAsset,
   removeMediaResultFromShape,
   selectMediaResult,
   useClickGuard
@@ -28,8 +29,14 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     try {
       const res = await window.api.pickMedia(project.id)
       if (!res.ok) return toast(`上传失败：${res.error.message}`)
-      const audioAsset = res.data.assets.find((a) => a.kind === 'audio')
-      if (!audioAsset) return toast('请选择一个音频文件')
+      const audioAsset = pickImportedAsset({
+        result: res.data,
+        kind: 'audio',
+        noun: '一个音频',
+        mismatch: '请选择一个音频文件',
+        projectId: project.id
+      })
+      if (!audioAsset) return
       editor.updateShape({
         id: shape.id,
         type: 'node-card',

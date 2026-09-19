@@ -2,7 +2,12 @@
 import { useEditor } from 'tldraw'
 import { stopEventPropagation } from 'tldraw'
 import { mediaUrl, type NodeBodyProps } from '../../registry'
-import { ImageContinuationActions, MediaFileActions, useClickGuard } from './shared'
+import {
+  ImageContinuationActions,
+  MediaFileActions,
+  pickImportedAsset,
+  useClickGuard
+} from './shared'
 import { useAppStore } from '../../../stores/app'
 import { toast } from '../../../stores/toast'
 import { markUndoPoint } from '../../../canvas/history'
@@ -18,9 +23,14 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     try {
       const res = await window.api.pickMedia(project.id)
       if (!res.ok) return toast(`导入失败：${res.error.message}`)
-      if (res.data.assets.length === 0 && res.data.errors.length === 0) return
-      const asset = res.data.assets.find((item) => item.kind === 'image')
-      if (!asset) return toast('请选择一张图片文件')
+      const asset = pickImportedAsset({
+        result: res.data,
+        kind: 'image',
+        noun: '一张图片',
+        mismatch: '请选择一张图片文件',
+        projectId: project.id
+      })
+      if (!asset) return
       editor.updateShape({
         id: shape.id,
         type: 'node-card',

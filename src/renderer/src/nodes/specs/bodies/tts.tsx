@@ -27,6 +27,7 @@ import {
   clearSelectedMediaHistory,
   MediaFileActions,
   MediaResultGrid,
+  pickImportedAsset,
   removeMediaResultFromShape,
   selectMediaResult,
   useClickGuard
@@ -103,8 +104,14 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
     if (!project) return toast('项目未就绪')
     const res = await window.api.pickMedia(project.id)
     if (!res.ok) return toast(`上传失败：${res.error.message}`)
-    const audioAsset = res.data.assets.find((a) => a.kind === 'audio')
-    if (!audioAsset) return toast('请选择音频文件')
+    const audioAsset = pickImportedAsset({
+      result: res.data,
+      kind: 'audio',
+      noun: '一段参考语音',
+      mismatch: '请选择音频文件',
+      projectId: project.id
+    })
+    if (!audioAsset) return
     updateConfig({
       refMediaId: audioAsset.id,
       refMediaPath: audioAsset.path,
@@ -118,8 +125,14 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
     if (!project) return toast('项目未就绪')
     const res = await window.api.pickMedia(project.id)
     if (!res.ok) return toast(`上传失败：${res.error.message}`)
-    const audioAsset = res.data.assets.find((a) => a.kind === 'audio')
-    if (!audioAsset) return toast('请选择音频文件')
+    const audioAsset = pickImportedAsset({
+      result: res.data,
+      kind: 'audio',
+      noun: '一段提示音',
+      mismatch: '请选择音频文件',
+      projectId: project.id
+    })
+    if (!audioAsset) return
     updateConfig({
       promptMediaId: audioAsset.id,
       promptMediaPath: audioAsset.path,

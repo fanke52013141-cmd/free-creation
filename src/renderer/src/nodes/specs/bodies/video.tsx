@@ -31,6 +31,7 @@ import {
   clearSelectedMediaHistory,
   ModelSelect,
   NoModelHint,
+  pickImportedAsset,
   selectMediaResult,
   useClickGuard,
   parseJsonProp
@@ -137,9 +138,14 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     try {
       const res = await window.api.pickMedia(project.id)
       if (!res.ok) return toast(`导入失败：${res.error.message}`)
-      if (res.data.assets.length === 0 && res.data.errors.length === 0) return
-      const asset = res.data.assets.find((item) => item.kind === 'video')
-      if (!asset) return toast('请选择一个视频文件')
+      const asset = pickImportedAsset({
+        result: res.data,
+        kind: 'video',
+        noun: '一个视频',
+        mismatch: '请选择一个视频文件',
+        projectId: project.id
+      })
+      if (!asset) return
       editor.updateShape({
         id: shape.id,
         type: 'node-card',

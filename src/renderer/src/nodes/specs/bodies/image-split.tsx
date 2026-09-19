@@ -3,8 +3,10 @@ import { stopEventPropagation, useEditor } from 'tldraw'
 import {
   buildImageSplitTiles,
   imageSplitCount,
+  maxImageSplitColumns,
   parseImageSplitConfig,
   serializeImageSplitConfig,
+  MAX_IMAGE_SPLIT_TILES,
   type ImageSplitConfig
 } from '@shared/image-split'
 import { gatherUpstreamMedia } from '../../../canvas/graph'
@@ -83,7 +85,7 @@ export function ImageSplitBody({ shape, openPreview }: NodeBodyProps): React.JSX
           <input
             type="number"
             min="1"
-            max="64"
+            max={maxImageSplitColumns(config.rows)}
             value={config.columns}
             onPointerDown={stopEventPropagation}
             onChange={(event) =>
@@ -209,6 +211,7 @@ export function ImageSplitSettings({ shape, editor }: NodeSettingsProps): React.
   const noSourceLine = useSourceWiringNotice(editor, shape.id, 'in-image', '原图')
   const tiles = buildImageSplitTiles(config)
   const linearPercent = Math.sqrt(config.scalePercent / 100) * 100
+  const columnCap = maxImageSplitColumns(config.rows)
 
   const save = (partial: Partial<ImageSplitConfig>, reason: string): void => {
     const next = parseImageSplitConfig(JSON.stringify({ ...config, ...partial }))
@@ -247,7 +250,7 @@ export function ImageSplitSettings({ shape, editor }: NodeSettingsProps): React.
           <input
             type="number"
             min="1"
-            max="64"
+            max={columnCap}
             value={config.columns}
             onChange={(event) =>
               save(
@@ -289,6 +292,11 @@ export function ImageSplitSettings({ shape, editor }: NodeSettingsProps): React.
           每格以自身中心缩放；面积为原格的 {config.scalePercent}%（边长约 {linearPercent.toFixed(1)}
           %）。
         </span>
+        {columnCap < MAX_IMAGE_SPLIT_TILES && (
+          <span>
+            行数 × 列数不超过 {MAX_IMAGE_SPLIT_TILES}，{config.rows} 行时列数最多 {columnCap}。
+          </span>
+        )}
       </p>
       {source ? (
         <div

@@ -27,6 +27,14 @@ export const DEFAULT_IMAGE_SPLIT_CONFIG: ImageSplitConfig = {
   scalePercent: 100
 }
 
+/**
+ * 给定行数时列数的真实上限。输入框的 max 必须取这里而不是写死 64：解析会按「行数 ×
+ * 列数 ≤ 64」下调列数，写死上限会让界面承诺一个引擎不接受的范围。
+ */
+export function maxImageSplitColumns(rows: number): number {
+  return Math.max(1, Math.floor(MAX_IMAGE_SPLIT_TILES / Math.max(1, Math.round(rows))))
+}
+
 function integerInRange(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value)
     ? Math.min(MAX_IMAGE_SPLIT_TILES, Math.max(1, Math.round(value)))
@@ -48,7 +56,7 @@ export function parseImageSplitConfig(text: string): ImageSplitConfig {
     return {
       version: 1,
       rows,
-      columns: Math.max(1, Math.min(requestedColumns, Math.floor(MAX_IMAGE_SPLIT_TILES / rows))),
+      columns: Math.min(requestedColumns, maxImageSplitColumns(rows)),
       scalePercent: percentageInRange(raw.scalePercent, DEFAULT_IMAGE_SPLIT_CONFIG.scalePercent)
     }
   } catch {
