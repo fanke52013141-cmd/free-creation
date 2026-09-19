@@ -6860,6 +6860,14 @@ select:focus-visible,
   font-size: 12px;
 }
 
+/* NoModelHint 第二行：点明该节点要哪个供应商预设，措辞比主标题弱一档 */
+.gen-empty-presets {
+  font-size: 11px;
+  opacity: 0.75;
+  text-align: center;
+  padding: 0 8px;
+}
+
 .gen-running {
   display: flex;
   gap: 10px;

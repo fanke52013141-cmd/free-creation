@@ -1001,7 +1001,9 @@ function ImageEditEditorCore({
         onChange={(e) => save({ ...config, instruction: e.target.value.slice(0, 4000) })}
       />
       {invalid && <p className="crop-invalid">{invalid}</p>}
-      {!options.length && <NoModelHint onOpen={openProviderSettings} />}
+      {!options.length && (
+        <NoModelHint onOpen={openProviderSettings} presetIds={['toapis', 'relay']} />
+      )}
       <button
         className="btn-primary small gen-go"
         disabled={busy || !source || !options.length || Boolean(invalid)}

@@ -480,7 +480,8 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     )
   }
 
-  if (!options.length) return <NoModelHint onOpen={openSettings} />
+  if (!options.length)
+    return <NoModelHint onOpen={openSettings} presetIds={['minimax', 'seedance']} />
 
   return (
     <div className="gen-panel">

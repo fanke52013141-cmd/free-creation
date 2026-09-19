@@ -134,7 +134,7 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
     }
   }
 
-  if (!options.length) return <NoModelHint onOpen={openSettings} />
+  if (!options.length) return <NoModelHint onOpen={openSettings} presetIds={['toapis', 'relay']} />
 
   return (
     <div className="gen-panel">

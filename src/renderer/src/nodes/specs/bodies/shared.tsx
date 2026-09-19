@@ -17,7 +17,8 @@ import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
 import { toast } from '../../../stores/toast'
 import { useMediaStore } from '../../../stores/media'
-import type { MediaAsset, MediaImportResult } from '@shared/types'
+import type { MediaAsset, MediaImportResult, ProviderSpecId } from '@shared/types'
+import { PROVIDER_SPECS } from '@shared/types'
 import { parseImageSplitConfig } from '@shared/image-split'
 import { parseVideoClipConfig, serializeVideoClipConfig } from '@shared/video-transform'
 import {
@@ -138,10 +139,21 @@ export function ModelSelect({
 }
 
 // 未配置任何对应模态模型时的占位引导
-export function NoModelHint({ onOpen }: { onOpen: () => void }): React.JSX.Element {
+export function NoModelHint({
+  onOpen,
+  presetIds = []
+}: {
+  onOpen: () => void
+  /** 该节点需要哪个供应商预设；名字直接取自 PROVIDER_SPECS，避免两处各写一套。 */
+  presetIds?: ProviderSpecId[]
+}): React.JSX.Element {
+  const labels = presetIds.map((id) => PROVIDER_SPECS.find((s) => s.id === id)?.label ?? id)
   return (
     <div className="gen-empty">
       <span>尚未配置可用模型</span>
+      {labels.length > 0 && (
+        <span className="gen-empty-presets">可新增预设：{labels.join('、')}</span>
+      )}
       <button
         className="btn-ghost small"
         onPointerDown={(e) => stopEventPropagation(e)}

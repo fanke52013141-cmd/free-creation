@@ -32,7 +32,7 @@ export function ChatBody({ shape }: NodeBodyProps): React.JSX.Element {
   const selectedModel = options.find((o) => o.key === data.modelKey)
 
   if (options.length === 0) {
-    return <NoModelHint onOpen={() => openSettings()} />
+    return <NoModelHint onOpen={() => openSettings()} presetIds={['relay']} />
   }
 
   const modelName = selectedModel

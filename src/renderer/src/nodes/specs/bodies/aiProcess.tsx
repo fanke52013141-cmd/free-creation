@@ -127,7 +127,7 @@ export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
   const mode = modeOption(data.mode)
 
   if (options.length === 0) {
-    return <NoModelHint onOpen={() => openSettings()} />
+    return <NoModelHint onOpen={() => openSettings()} presetIds={['relay']} />
   }
 
   return (
