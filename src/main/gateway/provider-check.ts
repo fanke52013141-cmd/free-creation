@@ -30,7 +30,12 @@ import { describeUpstreamHttpError, extractUpstreamMessage } from '../../shared/
 import { GatewayError } from './factory'
 import { getProvider } from './providers.repo'
 import { buildDoubaoSpeechBody, buildMiniMaxAsyncTtsBody, buildVolcTtsBody } from './audio'
-import { buildMiniMaxH3RequestBody, buildSeedanceRequestBody, seedanceTasksUrl } from './video'
+import {
+  buildMiniMaxH3RequestBody,
+  buildSeedanceRequestBody,
+  minimaxApiUrl,
+  seedanceTasksUrl
+} from './video'
 import { buildVoiceDesignBody } from './voice'
 
 /** 只读查询探测用的假任务号：查不到才是预期结果，且一定不产生费用。 */
@@ -121,7 +126,8 @@ export async function buildProbeSpecs(p: ProviderConfig): Promise<ProbeSpec[]> {
   if (p.specId === 'minimax' || p.specId === 'seedance') {
     const modelId = pickModel(p.models, 'video', /h3|seedance|video/i)
     const body = await probeVideoBody(p, modelId)
-    const submitUrl = p.specId === 'minimax' ? `${base}/v2/video_generation` : seedanceTasksUrl(p)
+    const submitUrl =
+      p.specId === 'minimax' ? minimaxApiUrl(p, '/v2/video_generation') : seedanceTasksUrl(p)
     specs.push({
       item: probeItem({
         id: 'video-submit',
@@ -142,7 +148,7 @@ export async function buildProbeSpecs(p: ProviderConfig): Promise<ProbeSpec[]> {
         method: 'GET',
         url:
           p.specId === 'minimax'
-            ? `${base}/v2/query/video_generation/${PROBE_UPSTREAM_TASK_ID}`
+            ? minimaxApiUrl(p, `/v2/query/video_generation/${PROBE_UPSTREAM_TASK_ID}`)
             : seedanceTasksUrl(p, PROBE_UPSTREAM_TASK_ID),
         missing: [],
         cost: 'free'

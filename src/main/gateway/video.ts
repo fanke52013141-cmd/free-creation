@@ -70,7 +70,7 @@ interface VideoInputState {
   connection?: ProviderConnectionSnapshot
 }
 
-interface UpstreamState {
+export interface UpstreamState {
   status: 'running' | 'succeeded' | 'failed' | 'cancelled'
   url?: string
   error?: string
@@ -338,7 +338,16 @@ async function finalizeVideo(
 
 // ── MiniMax 适配 ──
 
-/** H3 中转网关 payload；媒体解析可注入，以便逐字段 wire fixture 测试。 */
+/**
+ * MiniMax 官方 v2 端点：`{base}/v2/…`。用户常把 BaseURL 填成 `…/`（307）或干脆带上
+ * `/v2`（会拼成 `/v2/v2/…` 404），所以这里统一去尾斜杠并去掉重复的版本段。
+ */
+export function minimaxApiUrl(p: ProviderConfig, path: string): string {
+  const base = p.baseURL.replace(/\/+$/, '').replace(/\/v2$/i, '')
+  return `${base}${path}`
+}
+
+/** H3/H3-Max 官方 v2 payload；媒体解析可注入，以便逐字段 wire fixture 测试。 */
 export async function buildMiniMaxH3RequestBody(
   input: VideoSubmitInput,
   resolveMedia: (mediaId: string) => Promise<string | undefined> = mediaToDataUrl
@@ -397,7 +406,7 @@ export async function buildMiniMaxH3RequestBody(
 async function minimaxSubmit(p: ProviderConfig, input: VideoSubmitInput): Promise<string> {
   const body = await buildMiniMaxH3RequestBody(input)
   const res = await fetchJson(
-    `${p.baseURL}/v2/video_generation`,
+    minimaxApiUrl(p, '/v2/video_generation'),
     {
       method: 'POST',
       headers: authHeaders(p),
@@ -405,6 +414,8 @@ async function minimaxSubmit(p: ProviderConfig, input: VideoSubmitInput): Promis
     },
     'MiniMax 提交视频任务失败'
   )
+  const rejected = minimaxBaseRespError(res)
+  if (rejected) throw new GatewayError('UPSTREAM_ERROR', `MiniMax 提交视频任务失败：${rejected}`)
   const taskId = res.task_id ?? res.taskId ?? (res as { id?: string }).id
   if (typeof taskId !== 'string' || !taskId) {
     throw new GatewayError(
@@ -415,16 +426,47 @@ async function minimaxSubmit(p: ProviderConfig, input: VideoSubmitInput): Promis
   return taskId
 }
 
-async function minimaxPoll(p: ProviderConfig, upstreamId: string): Promise<UpstreamState> {
-  const res = await fetchJson(
-    `${p.baseURL}/v2/query/video_generation/${upstreamId}`,
-    { headers: authHeaders(p) },
-    'MiniMax 查询视频任务失败'
-  )
-  const task = (res.task ?? {}) as {
-    status?: string
-    content?: { url?: string }
-    error?: { message?: string } | string
+/**
+ * MiniMax 会在 HTTP 200 的响应体里用 `base_resp.status_code` 表达业务错误。
+ * 不先看它，错误响应就会被轮询当成「任务还没好」，一路白等到超时——而任务早已扣费。
+ */
+function minimaxBaseRespError(res: Record<string, unknown>): string | undefined {
+  const base = res.base_resp
+  if (!base || typeof base !== 'object') return undefined
+  const { status_code: rawCode, status_msg: rawMsg } = base as Record<string, unknown>
+  const code = typeof rawCode === 'number' ? rawCode : Number(rawCode)
+  if (!Number.isFinite(code) || code === 0) return undefined
+  const msg = typeof rawMsg === 'string' && rawMsg ? `${rawMsg}（status_code ${code}）` : ''
+  return msg || `status_code ${code}`
+}
+
+/**
+ * 官方 v2 的任务状态是 queued / running / succeeded / failed / cancelled。
+ * 这里只把「结构根本不是 v2」判成失败（缺 task 或缺 status）：那种响应等下去也不会变好。
+ * 反之，一个没见过但存在的状态仍按运行中处理——误判成失败会诱导用户重投同一条视频、
+ * 再扣一次费，代价比多等一轮大。
+ */
+export function classifyMiniMaxTask(res: Record<string, unknown>): UpstreamState {
+  const rejected = minimaxBaseRespError(res)
+  if (rejected) return { status: 'failed', error: rejected }
+  const task = res.task as
+    | {
+        status?: string
+        content?: { url?: string }
+        error?: { message?: string } | string
+      }
+    | undefined
+  if (!task || typeof task !== 'object') {
+    return {
+      status: 'failed',
+      error: 'MiniMax 查询响应里没有 task 字段：供应商 BaseURL 指向的不是 /v2 视频协议'
+    }
+  }
+  if (typeof task.status !== 'string' || !task.status) {
+    return {
+      status: 'failed',
+      error: `MiniMax 任务响应缺少 status：${JSON.stringify(task).slice(0, 200)}`
+    }
   }
   if (task.status === 'succeeded') {
     if (!task.content?.url) return { status: 'failed', error: '成功态缺少成片地址' }
@@ -440,6 +482,15 @@ async function minimaxPoll(p: ProviderConfig, upstreamId: string): Promise<Upstr
   return { status: 'running' }
 }
 
+async function minimaxPoll(p: ProviderConfig, upstreamId: string): Promise<UpstreamState> {
+  const res = await fetchJson(
+    minimaxApiUrl(p, `/v2/query/video_generation/${upstreamId}`),
+    { headers: authHeaders(p) },
+    'MiniMax 查询视频任务失败'
+  )
+  return classifyMiniMaxTask(res)
+}
+
 // ── Seedance 适配 ──
 
 /**
@@ -448,10 +499,9 @@ async function minimaxPoll(p: ProviderConfig, upstreamId: string): Promise<Upstr
  * 官方方舟仍使用 /contents/generations/tasks。
  */
 export function seedanceTasksUrl(p: ProviderConfig, taskId?: string): string {
-  const path = p.baseURL.includes('/gateway/ark/')
-    ? '/generations/tasks'
-    : '/contents/generations/tasks'
-  return `${p.baseURL}${path}${taskId ? `/${taskId}` : ''}`
+  const base = p.baseURL.replace(/\/+$/, '')
+  const path = base.includes('/gateway/ark/') ? '/generations/tasks' : '/contents/generations/tasks'
+  return `${base}${path}${taskId ? `/${taskId}` : ''}`
 }
 
 function isSeedanceProxy(p: ProviderConfig): boolean {

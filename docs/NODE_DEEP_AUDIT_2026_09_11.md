@@ -293,12 +293,18 @@ video deep browser audit                  P0 断言 PASS（不代表真实供应
 
 ### 7.1 已能由公开官方文档证明的协议
 
-MiniMax 当前公开 API 文档列出的模型是 Hailuo 2.3 / 2.3 Fast / 02，而不是本地
-TokenDance 网关中标作 `MiniMax-H3` / `MiniMax-H3-Max` 的模型。因此，不能再把 H3 的
-私有网关 profile 误写成 MiniMax 官方事实。官方 Hailuo API 的证据是：文生、图生和首尾帧
-使用 `POST /v1/video_generation`；图生使用 `first_frame_image`，首尾帧使用
-`first_frame_image` + `last_frame_image`；支持的时长和分辨率由具体模型组合决定；任务异步
-返回 `task_id`。参考：
+此前本节把 `/v2/video_generation` 判成「只有中转网关才有、不能算官方」，结论是错的，
+2026-09-19 用零成本探测推翻（不带 Key 的 HTTPS 请求，未鉴权即被拒，不产生任何计费）：
+
+- `POST https://api.minimaxi.com/v2/video_generation` → HTTP 401 `authorized_error`；
+- 同主机 `POST /v2/nope_xyz` → HTTP 404 `404 page not found`。**存在的路由才会在鉴权层拒绝**，
+  所以 `/v2/video_generation` 与 `/v2/query/video_generation/{id}` 都是官方主机的真实路由；
+- `GET /v2/video_generation` 返回 404 只是因为它没有 GET 方法，不能据此判定路由不存在——
+  这正是当初得出错误结论的原因。
+- 官方 Hailuo 2.3 / 2.3 Fast / 02 的老契约仍在：文生、图生和首尾帧使用
+  `POST /v1/video_generation`；图生使用 `first_frame_image`，首尾帧使用
+  `first_frame_image` + `last_frame_image`；时长/分辨率由具体模型组合决定；任务异步返回
+  `task_id`。参考：
 
 - [MiniMax 文生视频 API](https://platform.minimax.io/docs/api-reference/video-generation-t2v)
 - [MiniMax 图生视频 API](https://platform.minimax.io/docs/api-reference/video-generation-i2v)
@@ -311,11 +317,17 @@ TokenDance 网关中标作 `MiniMax-H3` / `MiniMax-H3-Max` 的模型。因此，
 
 ### 7.2 当前项目的适配结论
 
-- `MiniMax-H3` / `MiniMax-H3-Max` 是用户已配置中转网关的模型命名与接口约定，当前
-  `/v2/video_generation` + `content[]` 适配只能被视作该网关的契约，不能伪称为上游 MiniMax
-  官方 Hailuo REST API。
-- 因此 H3 的 4–15 秒、768P/2K、12 个总素材等 profile 保留为**网关已验证能力配置**，但必须
-  补该网关的成功/失败 wire fixture 或获得其正式文档后，才能标记为供应商级验收通过。
+- `MiniMax-H3` / `MiniMax-H3-Max` 走 `/v2/video_generation` + `content[]`：按 7.1 的探测，这
+  就是 MiniMax 官方 v2 视频协议（不是私有网关方言），因此适配可以按官方契约维护。仍未证明
+  的是**模型名**：公开文档目前列出的仍是 Hailuo 2.3 / 2.3 Fast / 02，`MiniMax-H3` 这类 ID
+  是否被官方端点接受，只有拿真实 Key 跑一次最低秒数任务才知道。
+- 因此 H3 的 4–15 秒、768P/2K、12 个总素材等 profile 保留为**待验收能力配置**：协议方向已
+  由零成本探测确认，计费成功/失败 wire fixture 仍缺，补上之前不得标记为供应商级验收通过。
+- MiniMax 有两种错误信封，两条都得读：v1 会在 **HTTP 200** 里塞
+  `base_resp.status_code`（探测 `/v1/video_generation` 未鉴权即返回 200 + `status_code 1004`），
+  v2 的非 2xx 则用 `{"type":"error","error":{"message":…}}`。前者不看就会把业务错误当成
+  「任务还在跑」，白等到超时且已扣费；`classifyMiniMaxTask` / `minimaxBaseRespError` 负责 v1
+  式信封，`extractUpstreamMessage` 的递归取值负责 v2 式信封。
 - Seedance 的 official/proxy 双通道继续分开：官方通道使用结构化字段；兼容网关仅在已有真实
   响应证据证明其 prompt 后缀语法时使用 `gateway-compatibility`，绝不把兼容写法传播到官方端点。
 
@@ -349,9 +361,10 @@ TokenDance 网关中标作 `MiniMax-H3` / `MiniMax-H3-Max` 的模型。因此，
 ### P1：按真实模型能力收口参数和请求（进行中）
 
 1. ✅ profile 已有显式默认值、提示词上限和 H3 媒体体积/总量约束；
-2. ✅ `test/video-gateway-wire.test.ts` 已覆盖当前 H3 网关的首尾帧和多参 request fixture，以及
-   Seedance 官方/兼容网关的字段隔离；若接入 MiniMax 官方 Hailuo，必须新建
-   `/v1/video_generation` 独立适配器，不能复用 H3 网关路径；
+2. ✅ `test/video-gateway-wire.test.ts` 已覆盖当前 H3（官方 v2 `/v2/video_generation`）的首尾帧和
+   多参 request fixture、任务状态归一化与 BaseURL 拼接口径，以及 Seedance 官方/兼容网关的字段
+   隔离；若改为接入 Hailuo 2.3 / 02 的 `/v1/video_generation`，必须新建独立适配器，不能复用
+   v2 的 `content[]` 路径；
 3. ✅ H3-Max 的禁止 reference 已有 capability/UI 回归；
 4. ✅ Seedance 官方方舟和兼容网关两套 adapter wire fixture 已补；真实请求成功/失败仍属于桌面端
    验收，不能由 mock fixture 替代；
