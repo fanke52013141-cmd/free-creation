@@ -9,7 +9,13 @@ import {
   type ProviderSummary,
   type ProviderSpecId
 } from '@shared/types'
-import type { SaveProviderInput } from '@shared/contracts'
+import type {
+  ProbeProviderInput,
+  ProbeProviderResult,
+  ProviderProbeItem,
+  SaveProviderInput
+} from '@shared/contracts'
+import { driverForSpec } from '@shared/provider-driver'
 import { useGatewayStore } from '../stores/gateway'
 import { useConfirmStore } from '../stores/confirm'
 import { toast } from '../stores/toast'
@@ -69,6 +75,10 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
   const [picking, setPicking] = useState(false)
   const [busy, setBusy] = useState<'test' | 'save' | null>(null)
   const [testMsg, setTestMsg] = useState('')
+  const [probe, setProbe] = useState<ProbeProviderResult | null>(null)
+  /** 'free' 表示整表自检，其余为某个计费项正在真实调用。 */
+  const [probing, setProbing] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState<string | null>(null)
 
   useEffect(() => {
     if (open) void load()
@@ -156,6 +166,71 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
     )
   }
 
+  const probeInput = (runItemId?: string, allowCost?: true): ProbeProviderInput => {
+    if (!draft) throw new Error('没有选中的供应商')
+    return {
+      id: draft.id,
+      name: draft.name,
+      specId: draft.specId,
+      baseURL: draft.baseURL.trim(),
+      apiKey: draft.apiKey.trim() || undefined,
+      models: draft.models,
+      runItemId,
+      allowCost
+    }
+  }
+
+  const readyToProbe = (): boolean => {
+    if (!draft) return false
+    if (!draft.baseURL.trim()) {
+      toast('请先填写 Base URL')
+      return false
+    }
+    if (!draft.apiKey.trim() && !draft.hasApiKey) {
+      toast('请先填写 API Key')
+      return false
+    }
+    return true
+  }
+
+  // 免费自检：构造真实请求体 + 只读探测，不向任何生成端点提交。
+  const runProbe = async (): Promise<void> => {
+    if (!readyToProbe()) return
+    setProbing('free')
+    const res = await window.api.gateway.probeProvider(probeInput())
+    setProbing(null)
+    if (!res.ok) {
+      setProbe(null)
+      toast(`自检失败：${res.error.message}`)
+      return
+    }
+    setProbe(res.data)
+  }
+
+  // 计费自检：必须逐条二次确认，且明确说明取的是该模型的最低消费参数。
+  const runPaidProbe = async (item: ProviderProbeItem): Promise<void> => {
+    if (!readyToProbe()) return
+    if (
+      !(await useConfirmStore.getState().confirm({
+        title: `真实调用一次：${item.label}`,
+        message:
+          `这会向服务商真实提交一次请求并产生费用。参数已按最低成本取值：` +
+          '视频用该模型允许的最短时长，文本只有一句自检用语；产物不会落盘到本项目。',
+        confirmText: '确认计费调用',
+        danger: true
+      }))
+    )
+      return
+    setProbing(item.id)
+    const res = await window.api.gateway.probeProvider(probeInput(item.id, true))
+    setProbing(null)
+    if (!res.ok) {
+      toast(`计费调用失败：${res.error.message}`)
+      return
+    }
+    setProbe(res.data)
+  }
+
   const remove = async (): Promise<void> => {
     if (!draft?.id) return
     if (
@@ -194,6 +269,8 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                   setDraft(draftFromConfig(p))
                   setPicking(false)
                   setTestMsg('')
+                  setProbe(null)
+                  setExpanded(null)
                 }}
               >
                 <span className="gw-item-name">{p.name}</span>
@@ -357,6 +434,78 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                 </div>
 
                 {testMsg && <div className="gw-test-msg">{testMsg}</div>}
+
+                {driverForSpec(draft.specId) !== 'openai-compatible' && (
+                  <div className="gw-probe">
+                    <div className="gw-probe-head">
+                      <span className="gw-label">协议自检</span>
+                      <button
+                        className="btn-ghost small"
+                        disabled={probing !== null}
+                        onClick={() => void runProbe()}
+                      >
+                        {probing === 'free' ? '自检中…' : '免费自检（不提交生成）'}
+                      </button>
+                    </div>
+                    <p className="gw-probe-hint">
+                      该协议没有模型列表可拉取。自检会用与真实生成完全相同的请求构造器拼出将要发送的
+                      地址与字段，并对只读查询端点做一次零计费探测，用来区分「密钥被拒绝」与「端点可达」。
+                    </p>
+                    {probe && (
+                      <>
+                        <div
+                          className={`gw-probe-summary ${
+                            probe.items.some((item) => item.probe?.status === 'fail')
+                              ? 'danger'
+                              : ''
+                          }`}
+                        >
+                          {probe.summary}
+                        </div>
+                        {probe.items.map((item) => (
+                          <div className="gw-probe-item" key={item.id}>
+                            <button
+                              className="gw-probe-title"
+                              onClick={() => setExpanded(expanded === item.id ? null : item.id)}
+                            >
+                              <span className={`gw-probe-dot ${item.probe?.status ?? 'idle'}`} />
+                              <span className="gw-probe-name">{item.label}</span>
+                              <span className="gw-probe-method">{item.method}</span>
+                              <span className="gw-probe-tag">
+                                {item.cost === 'free' ? '只读' : '计费'}
+                              </span>
+                            </button>
+                            {item.probe && (
+                              <div className={`gw-probe-outcome ${item.probe.status}`}>
+                                {item.probe.detail}
+                              </div>
+                            )}
+                            {item.missing.map((reason) => (
+                              <div className="gw-probe-missing" key={reason}>
+                                还缺：{reason}
+                              </div>
+                            ))}
+                            {expanded === item.id && (
+                              <>
+                                <div className="gw-probe-url">{item.url}</div>
+                                {item.body && <pre className="gw-probe-body">{item.body}</pre>}
+                              </>
+                            )}
+                            {item.cost === 'paid' && !item.missing.length && (
+                              <button
+                                className="btn-ghost small danger-text"
+                                disabled={probing !== null}
+                                onClick={() => void runPaidProbe(item)}
+                              >
+                                {probing === item.id ? '调用中…' : '真实调用一次（会计费）'}
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                )}
 
                 <div className="gw-foot">
                   <button

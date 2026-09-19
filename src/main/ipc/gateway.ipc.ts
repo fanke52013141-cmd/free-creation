@@ -4,13 +4,17 @@ import { IPC } from '../../shared/contracts'
 import type {
   GatewayEvent,
   IpcEnvelope,
+  ProbeProviderInput,
+  ProbeProviderResult,
   SaveProviderInput,
   TestProviderResult,
   VideoSubmitResult
 } from '../../shared/contracts'
 import type { MediaAsset, ProviderSummary, VideoTaskInfo } from '../../shared/types'
+import { driverForSpec } from '../../shared/provider-driver'
 import { startChat, cancelChat } from '../gateway/chat'
 import { GatewayError, testProvider } from '../gateway/factory'
+import { draftToConfig, freeConnectionMessage, probeProvider } from '../gateway/provider-check'
 import { generateImageToAsset } from '../gateway/image'
 import { transformImageEdit } from '../media/image-edit'
 import { deleteProvider, listProviders, saveProvider } from '../gateway/providers.repo'
@@ -71,8 +75,18 @@ export function registerGatewayIpc(win: BrowserWindow): void {
     wrap(() => deleteProvider(id ?? ''))
   )
 
+  // openai-compatible 走 /models；原生协议没有 /models，改用只读的协议探测，
+  // 这样「测试」按钮对视频/语音供应商也能给出一句可行动的结论，而不是「首次生成时验证」。
   ipcMain.handle(IPC.gateway.testProvider, (_e, input: SaveProviderInput) =>
-    wrapAsync<TestProviderResult>(() => testProvider(input))
+    wrapAsync<TestProviderResult>(async () => {
+      if (driverForSpec(input.specId) === 'openai-compatible') return testProvider(input)
+      return { models: [], message: await freeConnectionMessage(draftToConfig(input)) }
+    })
+  )
+
+  // 协议自检：默认只做请求构造 + 零计费只读探测；带 runItemId 且 allowCost 才真实提交。
+  ipcMain.handle(IPC.gateway.probeProvider, (_e, input: ProbeProviderInput) =>
+    wrapAsync<ProbeProviderResult>(() => probeProvider(input))
   )
 
   ipcMain.handle(IPC.gateway.chatStart, (_e, input: Parameters<typeof startChat>[1]) =>

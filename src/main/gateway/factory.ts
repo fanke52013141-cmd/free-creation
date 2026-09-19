@@ -3,7 +3,7 @@
 // 中转站天然对口）；视频走 video.ts 的任务式适配器，不经 AI SDK。
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import type { ImageModel, LanguageModel } from 'ai'
-import type { ProviderConfig, ProviderSpecId } from '../../shared/types'
+import type { ProviderConfig } from '../../shared/types'
 import type { SaveProviderInput } from '../../shared/contracts'
 import { getProvider } from './providers.repo'
 
@@ -15,20 +15,7 @@ export class GatewayError extends Error {
   }
 }
 
-/**
- * 供应商协议驱动。
- *   openai-compatible → AI SDK（文本/图片）与 /audio/speech
- *   video             → 任务式视频适配器（video.ts）
- *   native-speech     → 豆包语音等自有协议，不实现 /models，首次生成时验证
- */
-export function driverForSpec(
-  specId: ProviderSpecId
-): 'openai-compatible' | 'video' | 'native-speech' {
-  if (specId === 'minimax' || specId === 'seedance') return 'video'
-  if (specId === 'doubao-speech') return 'native-speech'
-  return 'openai-compatible'
-}
-
+/** 供应商协议驱动见 shared/provider-driver：网关与设置面板共用一份判定。 */
 export function requireProvider(providerId: string): ProviderConfig {
   const p = getProvider(providerId)
   if (!p) throw new GatewayError('PROVIDER_NOT_FOUND', `供应商不存在：${providerId}`)
@@ -54,9 +41,10 @@ export function createImageModel(providerId: string, modelId: string): ImageMode
   return createCompatible(p).imageModel(modelId)
 }
 
-// 连通性测试：OpenAI 兼容驱动优先拉 GET /models（兼作「从服务端拉取模型列表」）；
-// 部分中转站不实现 /models（如微信 chatapi 返回 400），回退到最小流式对话探测
-// （必须 stream:true——实测部分端点非流式请求会挂起到超时）
+// 连通性测试（仅 openai-compatible 驱动；原生协议走 provider-check 的协议自检，
+// 由 gateway.ipc 按 driverForSpec 分派）。优先拉 GET /models（兼作「从服务端拉取
+// 模型列表」）；部分中转站不实现 /models（如微信 chatapi 返回 400），回退到最小流式
+// 对话探测（必须 stream:true——实测部分端点非流式请求会挂起到超时）
 export async function testProvider(
   input: SaveProviderInput
 ): Promise<{ models: string[]; message: string }> {
@@ -65,14 +53,6 @@ export async function testProvider(
   // 已保存供应商的编辑面板不回显密钥；测试未保存的 URL/模型变更时可安全复用主进程密钥。
   const apiKey = input.apiKey?.trim() || (input.id ? (getProvider(input.id)?.apiKey ?? '') : '')
   if (!apiKey) throw new GatewayError('PROVIDER_NO_KEY', 'API Key 不能为空')
-
-  const driver = driverForSpec(input.specId)
-  if (driver === 'video') {
-    return { models: [], message: '配置已保存（视频供应商在首次生成时验证）' }
-  }
-  if (driver === 'native-speech') {
-    return { models: [], message: '配置已保存（该协议供应商在首次生成时验证）' }
-  }
 
   const res = await fetch(`${baseURL}/models`, {
     headers: { Authorization: `Bearer ${apiKey}` }

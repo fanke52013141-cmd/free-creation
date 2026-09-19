@@ -447,7 +447,7 @@ async function minimaxPoll(p: ProviderConfig, upstreamId: string): Promise<Upstr
  * 网关地址形如 /gateway/ark/v3 时沿用用户已验证的 /generations/tasks，
  * 官方方舟仍使用 /contents/generations/tasks。
  */
-function seedanceTasksUrl(p: ProviderConfig, taskId?: string): string {
+export function seedanceTasksUrl(p: ProviderConfig, taskId?: string): string {
   const path = p.baseURL.includes('/gateway/ark/')
     ? '/generations/tasks'
     : '/contents/generations/tasks'

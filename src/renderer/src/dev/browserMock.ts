@@ -319,6 +319,16 @@ export function installBrowserMock(): void {
             message: '配置格式校验通过'
           }
         }),
+      // 协议自检的请求体由主进程的真实构造器生成，浏览器演示里没有那套代码，
+      // 也不该拿一份假的请求体骗用户说「构造成功」。
+      probeProvider: () =>
+        Promise.resolve({
+          ok: false,
+          error: {
+            code: 'MOCK',
+            message: '浏览器演示不提供供应商协议自检，请在桌面端打开设置面板'
+          }
+        }),
       chatStart: () => Promise.resolve({ ok: true, data: { taskId: 'mock-task' } }),
       chatCancel: () => Promise.resolve({ ok: true, data: true }),
       audioGenerate: () =>

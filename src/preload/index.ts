@@ -37,6 +37,8 @@ import type {
   SaveProjectInput,
   SaveProviderInput,
   SaveWorkflowTemplateInput,
+  ProbeProviderInput,
+  ProbeProviderResult,
   TestProviderResult,
   HistorySnapshotRecord,
   PalettePreferences,
@@ -170,6 +172,8 @@ const api = {
       ipcRenderer.invoke(IPC.gateway.deleteProvider, id),
     testProvider: (input: SaveProviderInput): Promise<IpcEnvelope<TestProviderResult>> =>
       ipcRenderer.invoke(IPC.gateway.testProvider, input),
+    probeProvider: (input: ProbeProviderInput): Promise<IpcEnvelope<ProbeProviderResult>> =>
+      ipcRenderer.invoke(IPC.gateway.probeProvider, input),
     chatStart: (input: ChatStartInput): Promise<IpcEnvelope<{ taskId: string }>> =>
       ipcRenderer.invoke(IPC.gateway.chatStart, input),
     chatCancel: (taskId: string): Promise<IpcEnvelope<boolean>> =>

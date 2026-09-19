@@ -79,6 +79,7 @@ export const IPC = {
     saveProvider: 'gateway:providers:save',
     deleteProvider: 'gateway:providers:delete',
     testProvider: 'gateway:providers:test',
+    probeProvider: 'gateway:providers:probe',
     chatStart: 'gateway:chat:start',
     chatCancel: 'gateway:chat:cancel',
     imageGenerate: 'gateway:image:generate',
@@ -303,6 +304,43 @@ export interface SaveProviderInput {
 export interface TestProviderResult {
   models: string[]
   message: string
+}
+
+/** 供应商协议自检：一条「该协议会这样发请求」的可核对记录。 */
+export interface ProviderProbeOutcome {
+  /**
+   * pass 只在端点可达且回执不含鉴权语义时给出；判定刻意保守，宁可 unknown 也不
+   * 能把「我没验证成」说成「你的密钥没问题」。
+   */
+  status: 'pass' | 'fail' | 'unknown'
+  httpStatus?: number
+  detail: string
+}
+
+export interface ProviderProbeItem {
+  id: string
+  label: string
+  method: 'GET' | 'POST'
+  url: string
+  /** 将要发送的请求体（密钥已掩码）；只读探测项没有请求体 */
+  body?: string
+  /** 仍然缺失的必填项；非空时不提供真实调用 */
+  missing: string[]
+  /** free 由自检自动探测（零计费）；paid 必须用户逐条确认后才真实提交 */
+  cost: 'free' | 'paid'
+  probe?: ProviderProbeOutcome
+}
+
+export interface ProbeProviderInput extends SaveProviderInput {
+  /** 要真实调用的条目 id；缺省表示只做免费预览与只读探测 */
+  runItemId?: string
+  /** 必须显式为 true 才允许计费调用，防止误触 */
+  allowCost?: true
+}
+
+export interface ProbeProviderResult {
+  items: ProviderProbeItem[]
+  summary: string
 }
 
 export interface ChatStartInput {
