@@ -179,6 +179,7 @@ export function VocalSeparateSettings({ shape, editor }: NodeSettingsProps): Rea
       {config.mode === 'fast' ? (
         <p className="crop-coordinate-hint">
           快速模式使用 FFmpeg 中置声道提取 + EQ + 降噪，速度极快但无法保证完全移除背景音乐。
+          人声与伴奏混在同一声道（单声道录音）时左右没有差值，此时它只等于降噪，请改用高质量模式。
         </p>
       ) : (
         <p className="crop-coordinate-hint">

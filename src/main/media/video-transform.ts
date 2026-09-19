@@ -232,14 +232,16 @@ async function enhanceWithFfmpeg(input: VocalSeparateInput): Promise<VocalSepara
   const dir = await mkdtemp(join(tmpdir(), 'canvas-studio-vocal-'))
   try {
     const vocalPath = join(dir, 'vocals_enhanced.wav')
-    // 中置提取 + 带通 + 降噪 + 增益
+    // 中置保留 + 带通 + 降噪 + 增益
     await runFfmpeg([
       '-i',
       source.path,
       '-vn',
       '-af',
       [
-        'pan=mono|c0=0.5*c0+-0.5*c1',
+        // 左右声道相加才是"保留居中人声"：相减（0.5L-0.5R）抵消的是同相内容，
+        // 居中的人声会被整体抹掉，双单声道素材更是直接变成数字静音。
+        'pan=mono|c0=0.5*c0+0.5*c1',
         'highpass=f=85',
         'lowpass=f=8000',
         'afftdn=nr=15',
@@ -400,6 +402,10 @@ export async function generateAudioWaveform(
 ): Promise<AudioWaveformResult> {
   const source = await resolveAudioSource(input.projectId, input.sourceMediaId)
   const samples = Math.max(50, Math.min(500, Math.floor(input.samples)))
+  // 解码固定 8kHz 单声道（Nyquist 4kHz，够覆盖人声频带），分桶由下面的 JS 完成。
+  // 按采样数反推采样率会把低通压到人声之下：300 桶 → 1200Hz → 600Hz 以上整体抹掉，
+  // 时间轴上的波形于是永远是一条平线。
+  const sampleRate = 8000
   const dir = await mkdtemp(join(tmpdir(), 'canvas-studio-waveform-'))
   try {
     const rawFile = join(dir, 'raw.pcm')
@@ -413,14 +419,14 @@ export async function generateAudioWaveform(
       '-c:a',
       'pcm_u8',
       '-ar',
-      String(Math.min(8000, samples * 4)),
+      String(sampleRate),
       '-f',
       'u8',
       '-y',
       rawFile
     ]).catch(() => undefined)
     const buf = await readFile(rawFile).catch(() => null)
-    if (!buf || buf.length === 0) return { peaks: new Array(samples).fill(0), sampleRate: 8000 }
+    if (!buf || buf.length === 0) return { peaks: new Array(samples).fill(0), sampleRate }
 
     // 将原始 PCM 均匀分桶，每桶取最大绝对值（峰值）
     const peaks: number[] = new Array(samples).fill(0)
@@ -435,7 +441,7 @@ export async function generateAudioWaveform(
       }
       peaks[i] = peak
     }
-    return { peaks, sampleRate: Math.min(8000, samples * 4) }
+    return { peaks, sampleRate }
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => undefined)
   }
