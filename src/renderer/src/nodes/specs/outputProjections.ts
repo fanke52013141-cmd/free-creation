@@ -378,9 +378,13 @@ export const projectDirectorOutputs = (shape: NodeCardShape): RawNodeOutputs => 
             mime: currentPublish.video.mime
           }
         }
-      : {}),
-    ...(currentPublish
-      ? { 'out-camera': { kind: 'json' as const, data: currentPublish.camera } }
       : {})
+    // out-camera 刻意不投影：它声明为专用 'camera' 通道，而 NodeValue 里没有 camera
+    // 这一类值，任何产出值都会被判成「声明为 camera，实际输出为 json」。
+    // 后果不止这一个端口拿不到值——手动运行前的上游预填按「整节点有错就跳过」处理，
+    // 这条错会让 out-frame / out-project 一起消失，发布的预演帧永远连不进下游
+    //（§8 P2 真机矩阵实测：连线 shape:… 的上游未产生 out-frame 输出）。
+    // 机位通道要真正可用，得先决定是给值系统加 camera 类型、还是把端口改回 json +
+    // previs.camera Schema；在那之前宁可不产出这个端口，也不能拖垮同节点的其它输出。
   }
 }

@@ -658,7 +658,7 @@ describe('projectNodeOutputs · 导演台节点', () => {
     expect(out['out-camera']).toBeUndefined()
   })
 
-  it('发布记录同时投影为帧、视频和机位参数', () => {
+  it('发布记录投影为帧与视频；机位端口不投影，以免拖垮同节点输出', () => {
     const record = {
       kind: 'director-publish',
       version: 1,
@@ -674,7 +674,9 @@ describe('projectNodeOutputs · 导演台节点', () => {
     )
     expect(out['out-frame']).toEqual({ kind: 'image', ...record.frame })
     expect(out['out-preview-video']).toEqual({ kind: 'video', ...record.video })
-    expect(out['out-camera']).toEqual({ kind: 'json', data: record.camera })
+    // out-camera 声明为专用 camera 通道，而 NodeValue 没有 camera 这一类值：投影它会让
+    // 整节点被判为契约违规，手动运行的上游预填因此连 out-frame 一起丢掉（§7.9 第 5 条）。
+    expect(out['out-camera']).toBeUndefined()
   })
 
   it('工程编辑后不再把旧发布媒体投影为当前下游输出', () => {

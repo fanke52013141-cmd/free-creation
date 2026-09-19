@@ -10,6 +10,7 @@ import {
   runWorkflowToNode
 } from '@renderer/engine/executor'
 import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
+import { createDirectorProject, createDirectorPublishRecord } from '@renderer/nodes/director-data'
 import { registerAllNodeTypes } from './helpers/registerNodes'
 
 beforeAll(() => registerAllNodeTypes())
@@ -370,6 +371,58 @@ describe('runNodeManually · 卡片内统一执行入口', () => {
     expect(target.meta.nodeRun).toMatchObject({
       status: 'failed',
       error: { phase: 'input' }
+    })
+  })
+
+  it('导演台发布的预演帧能作为上游喂给下游节点', async () => {
+    // out-camera 声明为专用 camera 通道，而值系统里没有 camera 这一类值；
+    // 投影它会让整节点被判为「输出不符合声明」，连带 out-frame 一起消失。
+    const project = createDirectorProject()
+    const published = createDirectorPublishRecord(project, project.shots[0], null, {
+      frame: { mediaId: 'frame-1', mediaPath: 'projects/p/frame-1.png', mime: 'image/png' }
+    })
+    const source = node('shape:director', 'director', '')
+    source.meta.nodeResult = JSON.stringify(published)
+    const target = node('shape:director-down', 'processor', '')
+    const arrow = {
+      id: 'shape:director-arrow',
+      type: 'arrow',
+      meta: { fromPort: 'out-frame', toPort: 'in-value' }
+    }
+    const shapes = new Map<string, typeof source | typeof target | typeof arrow>([
+      [source.id, source],
+      [target.id, target],
+      [arrow.id, arrow]
+    ])
+    const editor = {
+      getCurrentPageShapes: () => Array.from(shapes.values()),
+      getShape: (id: string) => shapes.get(id),
+      getBindingsFromShape: (id: string) =>
+        id === arrow.id
+          ? [
+              { props: { terminal: 'start' }, toId: source.id },
+              { props: { terminal: 'end' }, toId: target.id }
+            ]
+          : [],
+      updateShape: (patch: {
+        id: string
+        props?: Record<string, unknown>
+        meta?: Record<string, unknown>
+      }) => {
+        const current = shapes.get(patch.id)
+        if (!current || current.type !== 'node-card') return
+        if (patch.props) Object.assign(current.props, patch.props)
+        if (patch.meta) Object.assign(current.meta, patch.meta)
+      },
+      markHistoryStoppingPoint: () => undefined
+    } as unknown as Editor
+
+    const result = await runNodeManually(editor, 'project-1', [], target.id)
+
+    expect(result.status).toBe('done')
+    expect(JSON.parse(String(target.meta.nodeResult))).toMatchObject({
+      kind: 'image',
+      mediaPath: 'projects/p/frame-1.png'
     })
   })
 
