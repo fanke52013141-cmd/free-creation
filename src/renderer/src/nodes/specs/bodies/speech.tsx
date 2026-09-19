@@ -261,7 +261,11 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
           placeholder={
             config.backend === 'volc'
               ? 'voice_type，例如 BV001_streaming'
-              : '音色 ID（留空用服务端默认音色）'
+              : config.backend === 'minimax'
+                ? // 留空不是"交给服务端"：MiniMax 两条 t2a 通道缺 voice_id 会在建任务前就被拒，
+                  // 所以网关固定兜底成这个系统音色。写出来才知道留空跑出来的是谁的声音。
+                  '音色 ID（留空用 MiniMax 系统音色 male-qn-qingse）'
+                : '音色 ID（留空由服务端决定音色）'
           }
           onPointerDown={(e) => e.stopPropagation()}
           onChange={(e) => updateConfig({ voiceId: e.target.value })}
