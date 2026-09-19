@@ -280,9 +280,17 @@ export function storyboardSummary(shots: unknown[]): string {
 
 /**
  * 统一输出入口。节点具体投影由各自 Spec 注册，运行器永远不根据 nodeType 猜测。
+ *
+ * `outputSource` 决定运行状态能不能把输出静音：缺省（run 型）下上一次运行没成功就不暴露，
+ * 免得把旧产物伪装成新结果；document 型（文本正文、资产 mediaPath）的投影只读 props，
+ * 用户改完即真值，与运行无关——这类节点此前被同一个闸门误伤：空正文点一次「运行」得到
+ * skipped，之后照常用双击填好正文，下游却永远读不到，卡片上状态点还显示「未运行」。
  */
 export function projectNodeOutputs(shape: NodeCardShape): RawNodeOutputs {
-  const lastRun = readNodeRunRecord(shape.meta?.nodeRun)
-  if (lastRun && lastRun.status !== 'success') return {}
-  return getNodeType(shape.props.nodeType)?.projectOutputs?.(shape) ?? {}
+  const spec = getNodeType(shape.props.nodeType)
+  if (spec?.outputSource !== 'document') {
+    const lastRun = readNodeRunRecord(shape.meta?.nodeRun)
+    if (lastRun && lastRun.status !== 'success') return {}
+  }
+  return spec?.projectOutputs?.(shape) ?? {}
 }

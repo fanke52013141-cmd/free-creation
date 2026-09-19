@@ -80,6 +80,62 @@ describe('projectNodeOutputs · 文本节点', () => {
   })
 })
 
+describe('projectNodeOutputs · 文档真值节点不被运行状态静音（§16.30）', () => {
+  const skipped = { nodeRun: { runId: 'r1', status: 'skipped', startedAt: 1, inputs: {} } }
+  const failed = { nodeRun: { runId: 'r2', status: 'failed', startedAt: 2, inputs: {} } }
+  const media = { mediaId: 'm1', mediaPath: '/a.png', mediaMime: 'image/png' }
+
+  it('文本节点：空正文点过一次运行后，再填入正文下游立刻可读', () => {
+    // 旧语义下 skipped 会把整张卡片静音：用户照常用双击填好正文，下游却永远拿不到字，
+    // 卡片状态点还显示「未运行」，看不出任何原因。
+    expect(projectNodeOutputs(shape('text', { text: '正文已填' }, skipped))['out-text']).toEqual({
+      kind: 'text',
+      text: '正文已填'
+    })
+    expect(
+      projectNodeOutputs(shape('text', { text: '正文已填' }, failed))['out-text']
+    ).toBeDefined()
+    // 正文仍为空时不该凭空造输出。
+    expect(projectNodeOutputs(shape('text', { text: '  ' }, skipped))).toEqual({})
+  })
+
+  it('图片 / 视频 / 音频 / 文件资产：导入即向下游输出，与运行记录无关', () => {
+    expect(projectNodeOutputs(shape('image', media, skipped))['out-image']?.kind).toBe('image')
+    expect(
+      projectNodeOutputs(
+        shape(
+          'video-asset',
+          { mediaId: 'v1', mediaPath: '/a.mp4', mediaMime: 'video/mp4' },
+          skipped
+        )
+      )['out-video']?.kind
+    ).toBe('video')
+    expect(
+      projectNodeOutputs(
+        shape('audio', { mediaId: 'a1', mediaPath: '/a.mp3', mediaMime: 'audio/mpeg' }, failed)
+      )['out-audio']?.kind
+    ).toBe('audio')
+    expect(
+      projectNodeOutputs(
+        shape('file', { mediaId: 'f1', mediaPath: '/a.pdf', mediaMime: 'application/pdf' }, skipped)
+      )['out-file']?.kind
+    ).toBe('file')
+  })
+
+  it('操作节点的旧语义保留：运行没成功时不得把上一次产物投影成当前输出', () => {
+    expect(
+      projectNodeOutputs(
+        shape('image-crop', {}, { ...operationResult('m', '/c.png', 'image/png'), ...skipped })
+      )
+    ).toEqual({})
+    expect(
+      projectNodeOutputs(
+        shape('image-gen', {}, { ...operationResult('m', '/g.png', 'image/png'), ...failed })
+      )
+    ).toEqual({})
+  })
+})
+
 describe('projectNodeOutputs · 媒体节点（资产 / 操作节点）', () => {
   it('资产从自身媒体投影；操作节点从运行结果投影对应类型输出', () => {
     const img = projectNodeOutputs(

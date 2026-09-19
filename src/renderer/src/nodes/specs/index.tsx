@@ -216,7 +216,7 @@ export function registerBaseNodeTypes(): void {
     icon: 'text',
     color: '#8ab4f8',
     defaultSize: { w: 340, h: 260 },
-    description: '可编辑的原始文本。连线输出会作为下游节点的文本输入。',
+    description: '可编辑的原始文本。上游文本在运行时并入正文，再经 out-text 输出。',
     category: 'input',
     ports: {
       in: [
@@ -227,6 +227,7 @@ export function registerBaseNodeTypes(): void {
       out: [output('out-text', '文本', 'text', '节点最终保存的纯文本内容。')]
     },
     projectOutputs: projectTextOutputs,
+    outputSource: 'document',
     executor: textExecutor,
     Body: TextBody
   })
@@ -244,6 +245,7 @@ export function registerBaseNodeTypes(): void {
       out: [output('out-image', '图片', 'image', '已导入并落盘的图片资产引用。')]
     },
     projectOutputs: projectImageOutputs,
+    outputSource: 'document',
     executor: imageExecutor,
     Body: ImageBody
   })
@@ -425,6 +427,7 @@ export function registerBaseNodeTypes(): void {
     category: 'input',
     ports: { in: [], out: [output('out-video', '视频', 'video', '不可变的视频资产引用。')] },
     projectOutputs: projectVideoAssetOutputs,
+    outputSource: 'document',
     executor: (ctx) =>
       ctx.shape.props.mediaPath
         ? { status: 'done' }
@@ -535,6 +538,7 @@ export function registerBaseNodeTypes(): void {
       out: [output('out-audio', '音频', 'audio', '已导入并落盘的音频资产引用。')]
     },
     projectOutputs: projectAudioOutputs,
+    outputSource: 'document',
     executor: (ctx) =>
       ctx.shape.props.mediaPath
         ? { status: 'done' }
@@ -560,6 +564,7 @@ export function registerBaseNodeTypes(): void {
       ]
     },
     projectOutputs: projectFileOutputs,
+    outputSource: 'document',
     executor: (ctx) =>
       ctx.shape.props.mediaPath
         ? { status: 'done' }

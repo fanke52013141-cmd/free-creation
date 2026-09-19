@@ -962,3 +962,49 @@ describe('v1.2 §16.28 浏览器门禁存在：预演台必须跟随文档、夹
     expect(gate).toContain('尚未发布输出')
   })
 })
+
+describe('v1.2 §16.30 文档真值节点：跳过运行不得静音输出，卡片要说清正文与连线的关系', () => {
+  const nodeValues = read('src/renderer/src/nodes/nodeValues.ts')
+  const registry = read('src/renderer/src/nodes/registry.tsx')
+  const textBody = read('src/renderer/src/nodes/specs/bodies/text.tsx')
+  const lf = (source: string): string => source.replace(/\r\n/g, '\n')
+
+  it('契约声明 outputSource，缺省仍是 run：旧的「失败运行不暴露产物」语义一字未动', () => {
+    expect(registry).toMatch(/outputSource\?:\s*'run'\s*\|\s*'document'/)
+    expect(nodeValues).toMatch(/if \(spec\?\.outputSource !== 'document'\) \{/)
+    // 静音闸门仍在，只是不再作用在 document 型上。
+    expect(nodeValues).toContain("if (lastRun && lastRun.status !== 'success') return {}")
+  })
+
+  it('只有投影完全只读 props 的文本 / 资产节点才声明 document', () => {
+    const source = lf(specs)
+    for (const projection of [
+      'projectTextOutputs',
+      'projectImageOutputs',
+      'projectVideoAssetOutputs',
+      'projectAudioOutputs',
+      'projectFileOutputs'
+    ]) {
+      expect(source).toContain(`projectOutputs: ${projection},\n    outputSource: 'document',`)
+    }
+    // 操作节点（产物来自运行结果）不得被顺手改成 document。
+    expect(source).not.toContain('projectOutputs: projectImageCropOutputs,\n    outputSource:')
+    expect(source).not.toContain('projectOutputs: projectVideoOutputs,\n    outputSource:')
+  })
+
+  it('文本卡片按真实连线给事实句：上游不会自己出现在正文里', () => {
+    expect(textBody).toContain("countIncomingConnections(editor, shape.id, 'in-text')")
+    expect(textBody).toContain('className={`node-wiring ${wiring.warn')
+    expect(textBody).toContain('运行一次才会并入正文')
+    expect(textBody).toContain('或从上游连一条文本线进来')
+    expect(specs).toContain('上游文本在运行时并入正文，再经 out-text 输出。')
+  })
+
+  it('资产节点空态说明「导入即生效」，运行遮罩不再承诺生成', () => {
+    for (const body of ['video', 'image', 'file', 'audio']) {
+      expect(read(`src/renderer/src/nodes/specs/bodies/${body}.tsx`)).toContain('不需要运行本节点')
+    }
+    expect(stripComments(nodeCardView)).not.toContain('正在处理输入和生成输出')
+    expect(nodeCardView).toContain('正在运行本节点，完成后自动更新。')
+  })
+})

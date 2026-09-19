@@ -68,6 +68,7 @@ export function FileBody({ shape }: NodeBodyProps): React.JSX.Element {
       <div className="asset-empty file-asset-empty">
         <Icon name="document" size={40} />
         <span>文件资产</span>
+        <small>导入后下游即可取用这个文件，不需要运行本节点</small>
         <button
           className="btn-ghost file-import-button"
           disabled={busy}

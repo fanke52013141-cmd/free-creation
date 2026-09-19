@@ -138,6 +138,28 @@ async function main() {
         minRendered
       )
     }
+    // 端口只有在「这一点上真的是端口本身」时才拖得动：相机动画未停、或 tldraw 每次按下后
+    // 临时铺的 .tl-hit-test-blocker 盖住端口，都会让随后的拖线拖在空处。这两件事都不该靠写死
+    // 的毫秒数猜（2026-09-19 试过「等 blocker 从 DOM 消失」，实测那层一直留在 DOM 里，直接把
+    // 门禁卡死），所以要问命中测试本身：端口中心点上是不是就是那个端口。
+    const portHitBox = async (locator) => {
+      for (let attempt = 0; attempt < 12; attempt++) {
+        const box = await locator.boundingBox()
+        if (
+          box &&
+          (await locator.evaluate(
+            (el, center) => {
+              const hit = document.elementFromPoint(center.x, center.y)
+              return hit === el || el.contains(hit)
+            },
+            { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+          ))
+        )
+          return box
+        await page.waitForTimeout(150)
+      }
+      return null
+    }
     await assertCardsClearOfTopbar(2)
     await page.getByRole('button', { name: '适配画布（缩放到所有节点）', exact: true }).click()
     const splitNode = page.locator('.node-card-wrap:has(.type-image-split)').first()
@@ -175,8 +197,8 @@ async function main() {
     await source.locator('.node-card').click({ position: { x: 120, y: 100 } })
     assert.match(await source.getAttribute('class'), /is-selected/)
     const before = await source.boundingBox()
-    const a = await source.locator('.port-dot.out').boundingBox()
-    const b = await destination.locator('.port-dot.in').boundingBox()
+    const a = await portHitBox(source.locator('.port-dot.out'))
+    const b = await portHitBox(destination.locator('.port-dot.in'))
     const sourceRect = await source.boundingBox()
     const destinationRect = await destination.boundingBox()
     assert.equal(
@@ -231,6 +253,37 @@ async function main() {
     assert.ok(
       await page.locator('.data-edge-visible[data-edge-obscured], .data-edge-obscured').count(),
       '数据线必须存在节点遮挡片段的淡化层'
+    )
+    // §16.1 文本节点：连线一到位，卡片必须说出正文来自哪里。这句话由真实连接数
+    // 算出（不按上游节点标题或类型猜），门禁要钉两端：连上的卡片印「1 路」，
+    // 没连的卡片绝不能声称有上游。
+    // 这里按内容而不是 first/last 取卡片：2026-09-19 实测导入卡和新建卡在 DOM 里的
+    // 先后顺序会随运行变化，靠顺序取卡片本身就是一条假前提。
+    const cardFacts = await nodes.evaluateAll((cards) =>
+      cards.map((c) => ({ wiring: c.querySelector('.node-wiring')?.textContent ?? null }))
+    )
+    assert.equal(cardFacts.length, 2)
+    const wiringSentences = cardFacts.map((f) => f.wiring)
+    const upstream = wiringSentences.filter((w) => w !== null && w.startsWith('上游'))
+    assert.equal(
+      upstream.length,
+      1,
+      `只有一张卡片真的连着上游，实测 ${JSON.stringify(wiringSentences)}`
+    )
+    assert.ok(
+      upstream[0] === '上游 1 路文本，运行时并入正文' ||
+        upstream[0] === '上游 1 路文本已连，运行一次才会并入正文',
+      `连线卡片必须印出真实连线数「1 路」，实测「${upstream[0]}」`
+    )
+    const untouched = wiringSentences.find((w) => w !== upstream[0])
+    assert.ok(
+      untouched === null || untouched === '正文由本节点输入',
+      `未连上游的卡片不得声称有上游，实测「${untouched}」`
+    )
+    assert.equal(
+      await page.locator('.data-edge').count(),
+      1,
+      '卡片上的「1 路」必须与画布上真实连线数一致'
     )
     const after = await source.boundingBox()
     assert.equal(after.width, before.width, 'port drag must not resize width')
@@ -411,33 +464,93 @@ async function main() {
     // 重载后的相机可能仍停在上一处工作区；先适配全部节点，确保回归测试实际拖到
     // 可见的外置端口，而不是把空的视口坐标误判成端口命中失败。
     await page.getByRole('button', { name: '适配画布（缩放到所有节点）', exact: true }).click()
-    await page.waitForTimeout(260)
-    const deleteSource = textCards.nth(initialTextCount)
-    const deleteTarget = textCards.nth(initialTextCount + 1)
-    await deleteSource.locator('.port-dot.out').waitFor({ state: 'visible' })
-    await deleteTarget.locator('.port-dot.in').waitFor({ state: 'visible' })
-    const deleteOut = await deleteSource.locator('.port-dot.out').boundingBox()
-    const deleteIn = await deleteTarget.locator('.port-dot.in').boundingBox()
-    assert.ok(deleteOut && deleteIn, '批量删除回归必须从两个可见的外置端口建立连线')
-    const edgeCountBeforeConnectForDelete = await page.locator('.data-edge').count()
-    await page.mouse.move(deleteOut.x + deleteOut.width / 2, deleteOut.y + deleteOut.height / 2)
-    await page.mouse.down()
-    // tldraw 需先处理 pointerdown 才会进入端口连线态；没有这小段等待时，CI 或高负载
-    // 机器偶尔会把紧随的第一帧移动当成普通画布拖动，造成假阴性的删除回归。
-    await page.waitForTimeout(80)
-    await page.mouse.move(deleteIn.x + deleteIn.width / 2, deleteIn.y + deleteIn.height / 2, {
-      steps: 20
-    })
-    await page.mouse.up()
-    await page.waitForFunction(
-      (count) => document.querySelectorAll('.data-edge').length > count,
-      edgeCountBeforeConnectForDelete
+    // 候选配对按横向位置从左到右、从最远的目标开始试：两张新建卡可能叠在同一处（端口被
+    // 对方卡片压住就拖不动），所以「哪两张卡来做回归」不能写死 DOM 下标也不能写死新建对，
+    // 只能现场验证「这两个端口都可命中、而且这一拖真的产出了一条线」。
+    const textCardRects = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('.node-card-wrap:has(.type-text)'))
+        .map((c) => {
+          const r = c.getBoundingClientRect()
+          return { id: c.getAttribute('data-node-id'), x: r.x, w: r.width }
+        })
+        .filter((c) => c.w > 40)
+        .sort((p, q) => p.x - q.x)
     )
+    assert.ok(textCardRects.length >= 2, '批量删除回归需要至少两张已渲染的文本卡片')
+    const cardWrap = (id) => page.locator(`.node-card-wrap[data-node-id="${id}"]`)
+    const candidates = []
+    textCardRects.forEach((from, i) => {
+      for (let j = textCardRects.length - 1; j > i; j--) candidates.push([from.id, textCardRects[j].id])
+    })
+    const edgeCountBeforeConnectForDelete = await page.locator('.data-edge').count()
+    let connectedPair = null
+    for (const [fromId, toId] of candidates) {
+      const out = await portHitBox(cardWrap(fromId).locator('.port-dot.out'))
+      const into = await portHitBox(cardWrap(toId).locator('.port-dot.in'))
+      if (!out || !into) continue
+      await page.mouse.move(out.x + out.width / 2, out.y + out.height / 2)
+      await page.mouse.down()
+      // tldraw 需先处理 pointerdown 才会进入端口连线态；没有这小段等待时，CI 或高负载
+      // 机器偶尔会把紧随的第一帧移动当成普通画布拖动，造成假阴性的删除回归。
+      await page.waitForTimeout(120)
+      await page.mouse.move(into.x + into.width / 2, into.y + into.height / 2, { steps: 20 })
+      await page.mouse.up()
+      const connected = await page
+        .waitForFunction(
+          (count) => document.querySelectorAll('.data-edge').length > count,
+          edgeCountBeforeConnectForDelete,
+          { timeout: 2_000 }
+        )
+        .then(
+          () => true,
+          () => false
+        )
+      if (connected) {
+        connectedPair = [fromId, toId]
+        break
+      }
+    }
+    assert.ok(
+      connectedPair,
+      `批量删除回归要先连出一条线：${candidates.length} 组候选端口配对都没能建立连线`
+    )
+    const deleteSource = cardWrap(connectedPair[0])
+    const deleteTarget = cardWrap(connectedPair[1])
     const edgeCountBeforeDelete = await page.locator('.data-edge').count()
+    // 「一次 Delete 删掉整批」的前提是两张卡都真的在选中态里，所以先把选中态确认到位再按
+    // Delete。实测（2026-09-19，11/11）：自动化里紧接普通单击之后的第一次 Shift 单击会落空
+    // ——选中态仍只有第一张卡——再发一次一模一样的 Shift 单击就能加选成功；中间等 260ms、
+    // 700ms 或先 hover 都不能救回第一次，可见它是「那一次按下没被识别成 Shift 加选」而不是
+    // 「发得太快」。门禁不该把这种落空当失败，也不该把它当常态，所以按选中态断言重试，
+    // 三次仍选不齐才报错。
+    const bothSelected = () =>
+      page
+        .waitForFunction(
+          () => {
+            const picked = [...document.querySelectorAll('.node-card-wrap.is-selected')]
+            return picked.length === 2 && picked.every((c) => c.querySelector('.type-text'))
+          },
+          undefined,
+          { timeout: 1_500 }
+        )
+        .then(
+          () => true,
+          () => false
+        )
     await deleteSource.locator('.node-card').click({ position: { x: 120, y: 80 } })
-    await deleteTarget
-      .locator('.node-card')
-      .click({ position: { x: 120, y: 80 }, modifiers: ['Shift'] })
+    let bothPicked = false
+    for (let attempt = 0; attempt < 3 && !bothPicked; attempt++) {
+      await deleteTarget
+        .locator('.node-card')
+        .click({ position: { x: 120, y: 80 }, modifiers: ['Shift'] })
+      bothPicked = await bothSelected()
+    }
+    assert.ok(
+      bothPicked,
+      `批量删除回归要先选中两张卡：Shift 加选重试 3 次后选中态仍未同时包含 ${connectedPair.join(
+        ' 和 '
+      )}`
+    )
     await page.keyboard.press('Delete')
     await page.waitForFunction(
       (count) => document.querySelectorAll('.node-card-wrap:has(.type-text)').length === count,

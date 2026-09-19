@@ -67,6 +67,15 @@ export interface NodeTypeSpec {
    * switch 猜测节点类型；执行器只负责产生状态，投影只负责暴露已声明的输出。
    */
   projectOutputs?: (shape: NodeCardShape) => RawNodeOutputs
+  /**
+   * 输出真值来自哪里，决定「上一次运行没成功」时下游还能不能读到输出：
+   * - `run`（缺省）：输出只是最近一次成功运行的产物。运行失败或被跳过时不得向下游暴露，
+   *   否则上游卡片上留着旧产物、下游却按它继续算，等于把旧结果伪装成新结果。
+   * - `document`：props 本身就是真值（文本节点的正文、资产节点的 mediaPath），
+   *   用户改完即生效，不需要先跑一次；这类节点的运行只做校验与审计。
+   * 只有 projectOutputs 完全不读 meta.nodeResult / meta.nodeExtra 的节点才能声明 document。
+   */
+  outputSource?: 'run' | 'document'
   /** 节点运行方式；默认 auto。 */
   executionMode?: NodeExecutionMode
   /**

@@ -2518,6 +2518,11 @@ select:focus-visible,
   color: var(--muted);
 }
 
+/* 音频资产空态下方的「导入即生效」事实句：上传区是居中弹性列，这句要跟着居中。 */
+.audio-asset-note {
+  text-align: center;
+}
+
 /* TTS 语音克隆节点 */
 .node-tts {
   display: flex;

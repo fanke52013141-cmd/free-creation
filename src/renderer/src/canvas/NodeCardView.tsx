@@ -208,7 +208,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   }
   const executionTitle = executionLabel[shape.props.nodeType] ?? '节点执行中'
   const executionDescription =
-    executionDetail[shape.props.nodeType] ?? '正在处理输入和生成输出，请稍候。'
+    executionDetail[shape.props.nodeType] ?? '正在运行本节点，完成后自动更新。'
   const readinessState = useValue(
     'node readiness',
     () => {

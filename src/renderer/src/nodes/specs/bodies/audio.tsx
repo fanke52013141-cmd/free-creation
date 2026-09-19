@@ -155,6 +155,10 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           <span className="audio-upload-hint">支持 mp3 / wav / aac / flac 等</span>
         </button>
       </div>
+      {/* 与图片 / 视频 / 文件资产同规则：props 就是输出真值，导入即生效，不必先点运行。 */}
+      <span className="audio-upload-hint audio-asset-note">
+        导入后下游即可取用这段音频，不需要运行本节点
+      </span>
     </div>
   )
 }
