@@ -230,13 +230,76 @@ describe('§16.21 计费边界与回执判定', () => {
     stubFetch(async (url) => {
       return url.includes('/v2/query/')
         ? jsonResponse(401, { base_resp: { status_code: 1004, status_msg: 'invalid api key' } })
-        : jsonResponse(200, { base_resp: { status_code: 2013, status_msg: 'task not found' } })
+        : jsonResponse(200, { base_resp: { status_code: 2013, status_msg: 'invalid params' } })
     })
     const result = await probeProvider(probeInput)
     for (const item of result.items) if (item.probe) outcomes[item.id] = item.probe.status
     expect(outcomes['video-query']).toBe('fail')
     expect(outcomes['minimax-tts-query']).toBe('unknown')
     expect(result.summary).toContain('自检失败')
+  })
+
+  // 下面两份回执是 2026-09-19 拿真实 MiniMax 密钥打真端点抄回来的原文（假密钥那份是控制组）。
+  // 为什么要抄下来：MiniMax 对「任务不存在」不给 404，而是 HTTP 500 / HTTP 200 里塞业务码，
+  // 按状态码判会把一把刚填对的密钥报成「上游服务异常，无法判定」。
+  it('真实 MiniMax 回执：密钥可用但查不到探测任务，判为通过', async () => {
+    stubFetch(async (url) =>
+      url.includes('/v2/query/video_generation/')
+        ? jsonResponse(500, {
+            type: 'error',
+            error: { type: 'server_error', message: 'record not found (1000)', http_code: '500' }
+          })
+        : jsonResponse(200, {
+            status: '',
+            task_id: 0,
+            file_id: 0,
+            base_resp: { status_code: 2013, status_msg: 'invalid params, task not found' }
+          })
+    )
+    const result = await probeProvider(probeInput)
+    const free = result.items.filter((item) => item.cost === 'free')
+    expect(free.map((item) => item.probe?.status)).toEqual(['pass', 'pass'])
+    expect(free.map((item) => item.probe?.detail)).toEqual([
+      expect.stringContaining('record not found (1000)'),
+      expect.stringContaining('task not found')
+    ])
+    expect(result.summary).toContain('免费自检通过')
+    // 语音查询必须用数字 task_id：非数字会先被参数校验挡住，探测结论就退化成了「参数错」。
+    expect(free[1]?.url).toMatch(/t2a_async_query_v2\?task_id=\d+$/)
+  })
+
+  it('同一份判定遇到假密钥必须翻成失败，不许把 login fail 说成通过', async () => {
+    stubFetch(async (url) =>
+      url.includes('/v2/query/video_generation/')
+        ? jsonResponse(401, {
+            type: 'error',
+            error: {
+              type: 'authorized_error',
+              message:
+                "login fail: Please carry the API secret key in the 'Authorization' field of the request header (1004)",
+              http_code: '401'
+            }
+          })
+        : jsonResponse(200, {
+            base_resp: {
+              status_code: 1004,
+              status_msg:
+                "login fail: Please carry the API secret key in the 'Authorization' field of the request header"
+            }
+          })
+    )
+    const result = await probeProvider(probeInput)
+    const free = result.items.filter((item) => item.cost === 'free')
+    expect(free.map((item) => item.probe?.status)).toEqual(['fail', 'fail'])
+    expect(result.summary).toContain('自检失败')
+  })
+
+  it('Base URL 填错的 404 page not found 不许被「not found」规则误判成通过', async () => {
+    stubFetch(async () => new Response('404 page not found', { status: 404 }))
+    const result = await probeProvider(probeInput)
+    const free = result.items.filter((item) => item.cost === 'free')
+    expect(free.map((item) => item.probe?.status)).toEqual(['unknown', 'unknown'])
+    expect(free.map((item) => item.probe?.detail).join()).not.toContain('密钥被接受')
   })
 
   it('网络失败不冒充成上游结论', async () => {

@@ -40,6 +40,12 @@ import { buildVoiceDesignBody } from './voice'
 
 /** 只读查询探测用的假任务号：查不到才是预期结果，且一定不产生费用。 */
 export const PROBE_UPSTREAM_TASK_ID = 'canvas-studio-connection-probe'
+/**
+ * MiniMax 的 t2a 查询只接受数字 task_id：非数字会被参数校验直接挡在「查任务」之前
+ * （实测回执 `invalid params`），探测就退化成「参数写错了」而不是「密钥可用但任务不存在」。
+ * 取一个必然不存在的数字号段，真实密钥下返回 `invalid params, task not found`。
+ */
+const PROBE_MINIMAX_TTS_TASK_ID = '999999999999'
 const PROBE_PROMPT = '连通性自检：一列蓝色火车缓缓驶入雨夜中的车站'
 const PROBE_TEXT = '这是一次连通性自检。'
 const PROBE_VOICE_PROMPT = '沉稳的中年男声，语速平缓'
@@ -181,7 +187,7 @@ export async function buildProbeSpecs(p: ProviderConfig): Promise<ProbeSpec[]> {
         id: 'minimax-tts-query',
         label: '查询语音任务（只读，零计费）',
         method: 'GET',
-        url: `${base}/v1/query/t2a_async_query_v2?task_id=${PROBE_UPSTREAM_TASK_ID}`,
+        url: `${base}/v1/query/t2a_async_query_v2?task_id=${PROBE_MINIMAX_TTS_TASK_ID}`,
         missing: [],
         cost: 'free'
       })
@@ -273,7 +279,31 @@ export async function buildProbeSpecs(p: ProviderConfig): Promise<ProbeSpec[]> {
 }
 
 function authFlavored(text: string): boolean {
-  return /(api[ _-]?key|token|鉴权|认证|unauthoriz|forbidden|permission|密钥|签名)/i.test(text)
+  // 「login fail」「API secret key」是 MiniMax 在 HTTP 200 的 base_resp 里说密钥不可用的原话
+  // （实测假密钥回执 status_code 1004），漏掉它们会把坏密钥报成「无法判定」。
+  return /(api[ _-]?key|secret key|login fail|invalid key|token|鉴权|认证|unauthoriz|forbidden|permission|密钥|签名)/i.test(
+    text
+  )
+}
+
+/**
+ * 上游回执说「这个任务查不到」= 请求已经通过鉴权、进到业务层才查不到记录。
+ *
+ * MiniMax 对不存在的任务号不给 404：视频查询是 HTTP 500 + `record not found (1000)`，
+ * 语音查询是 HTTP 200 + `2013 invalid params, task not found`。按状态码判会落到
+ * 「上游服务异常 / 无法判定」，用户据此会去怀疑自己刚填对的密钥。
+ * 只匹配这两句原话，`404 page not found`（Base URL 填错）不在其中。
+ */
+function taskLookupAccepted(message: string): boolean {
+  return /(record|task) not found/i.test(message)
+}
+
+function taskNotFoundOutcome(httpStatus: number, message: string): ProviderProbeOutcome {
+  return {
+    status: 'pass',
+    httpStatus,
+    detail: `端点可达且密钥被接受：上游按预期查不到探测任务（${message}）`
+  }
 }
 
 /** 上游回执的判定刻意保守：只有明确不是鉴权问题才说「可达且密钥被接受」。 */
@@ -338,6 +368,11 @@ async function requestProbe(
     })
     const text = await res.text().catch(() => '')
     if (!res.ok) {
+      const message = extractUpstreamMessage(safeJson(text))
+      // 鉴权状态优先：401/403 一律算密钥被拒，只有非鉴权失败才允许按「查不到任务」判通过。
+      if (res.status !== 401 && res.status !== 403 && taskLookupAccepted(message)) {
+        return { outcome: taskNotFoundOutcome(res.status, message) }
+      }
       const error = describeUpstreamHttpError(res.status, text, '上游回执')
       return {
         outcome: {
@@ -356,6 +391,9 @@ async function requestProbe(
     const innerCode = envelope.base_resp?.status_code ?? envelope.code
     if (typeof innerCode === 'number' && innerCode !== 0 && innerCode !== 3000) {
       const msg = envelope.base_resp?.status_msg ?? envelope.message ?? `错误码 ${innerCode}`
+      if (!authFlavored(msg) && taskLookupAccepted(msg)) {
+        return { outcome: taskNotFoundOutcome(res.status, msg), payload }
+      }
       return {
         outcome: {
           status: authFlavored(msg) ? 'fail' : 'unknown',
