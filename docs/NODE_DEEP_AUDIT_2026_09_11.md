@@ -224,6 +224,17 @@ SQLite 索引→把抽出的正文写进 `asset.textContent`，而 `CanvasEditor
 「未抽出文字：扫描件、纯图文或文件过大」并补一句「下游 out-text 会是空的，先用系统程序确认
 文件里有可选中的文字」；真正的未知格式仍保留原文案。
 
+真 Chromium 核对这两条分支时发现第三处缺陷：节点判断格式只看 `mediaPath` 的扩展名，而浏览器
+验收页把小文件存成 data/blob URL——路径里没有可信扩展名，于是**导入一个正常 `.txt` 也会显示
+“该格式不在画布内解析”**，正文预览整块出不来。现补 `extensionForMime()`（`src/shared/mime.ts`
+的反查，同 mime 多扩展名取表里第一个），路径给不出可信扩展名时按 `mediaMime` 还原。
+两条分支都在验收页跑过（`window.api` 为 mock，但组件、CSS、文件选择器都是真的）：
+
+- `扫描页.pdf`（无文字层）→ 标题「扫描页」、副标题「PDF · application/pdf」、新文案两行，
+  `.file-asset-binary` 的 `scrollHeight == clientHeight == 174`，底部「替换 / 定位」仍在卡片内。
+- `剧本.txt` → 预览「第一幕：雨夜 / 第二幕：天台」，副标题「TXT · text/plain · 2 行」。
+  修复前这一张显示的正是那句误导文案。
+
 ## 4. 视频节点详细问题
 
 ### P0-VIDEO-001：未选择模型时直接进入错误态（已修复）

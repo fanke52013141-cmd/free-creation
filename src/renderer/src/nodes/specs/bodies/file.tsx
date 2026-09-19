@@ -10,7 +10,7 @@ import { markUndoPoint } from '../../../canvas/history'
 import { useAppStore } from '../../../stores/app'
 import { Icon } from '../../../components/Icon'
 import { MediaFileActions, pickImportedAsset } from './shared'
-import { BINARY_DOC_EXTS, INLINE_TEXT_EXTS } from '@shared/mime'
+import { BINARY_DOC_EXTS, INLINE_TEXT_EXTS, extensionForMime } from '@shared/mime'
 
 /** 能内联出正文的格式；与主进程 media.repo 的 textContent 判定共用同一份清单。 */
 const PARSABLE_EXTS = [...INLINE_TEXT_EXTS, ...BINARY_DOC_EXTS]
@@ -18,6 +18,17 @@ const PARSABLE_EXTS = [...INLINE_TEXT_EXTS, ...BINARY_DOC_EXTS]
 function extensionOf(path: string): string {
   const index = path.lastIndexOf('.')
   return index >= 0 ? path.slice(index).toLowerCase() : ''
+}
+
+/**
+ * 节点上的扩展名以媒体路径为准；路径不带扩展名（浏览器验收页把小文件存成 data URL）时
+ * 回落到 mime，否则支持的文档会被说成「该格式不在画布内解析」。
+ */
+function extensionOfAsset(mediaPath: string, mime: string): string {
+  const fromPath = extensionOf(mediaPath)
+  // data:application/pdf;base64,... 这类 URL 里 lastIndexOf('.') 会命中错误位置，只认真扩展名。
+  if (PARSABLE_EXTS.includes(fromPath) || /^\.[a-z0-9]{1,5}$/.test(fromPath)) return fromPath
+  return extensionForMime(mime)
 }
 
 export function FileBody({ shape }: NodeBodyProps): React.JSX.Element {
@@ -84,7 +95,7 @@ export function FileBody({ shape }: NodeBodyProps): React.JSX.Element {
     )
   }
 
-  const extension = extensionOf(shape.props.mediaPath)
+  const extension = extensionOfAsset(shape.props.mediaPath, shape.props.mediaMime)
   const parsable = PARSABLE_EXTS.includes(extension)
   const inlineText = parsable ? shape.props.text : ''
   const lineCount = inlineText ? inlineText.split('\n').length : 0

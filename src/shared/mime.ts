@@ -40,6 +40,17 @@ export function mimeForExtension(extension: string): string {
   return MIME_BY_EXTENSION[extension.toLowerCase()] ?? 'application/octet-stream'
 }
 
+/**
+ * 反向还原扩展名：媒体路径不一定带扩展名（浏览器验收页把小文件存成 data URL），
+ * 只看路径会让文件节点把支持的文档说成「该格式不在画布内解析」。
+ * 同 mime 多个扩展名时取表里第一个（image/jpeg → .jpg）。
+ */
+export function extensionForMime(mime: string): string {
+  if (!mime || mime === 'application/octet-stream') return ''
+  const entry = Object.entries(MIME_BY_EXTENSION).find(([, value]) => value === mime)
+  return entry?.[0] ?? ''
+}
+
 /** 可直接按 UTF-8 读出的文本扩展名；文件节点的 out-text 第一类来源。 */
 export const INLINE_TEXT_EXTS: readonly string[] = ['.txt', '.md', '.markdown', '.csv', '.json']
 
