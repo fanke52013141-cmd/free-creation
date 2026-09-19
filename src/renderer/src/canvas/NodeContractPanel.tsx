@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Editor } from 'tldraw'
 import type { MediaAsset, PortDecl, PortType, ProviderSummary } from '@shared/types'
-import { getNodePorts, getNodeType } from '../nodes/registry'
+import { getNodePorts, getNodeType, PORT_TYPE_LABELS } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
 import { Icon } from '../components/Icon'
 import { projectNodeOutputs, type NodeValue } from '../nodes/nodeValues'
@@ -161,7 +161,9 @@ function defaultDraft(port: PortDecl): TestDraft {
 function previewTestValue(value: NodeValue): string {
   if (value.kind === 'text' || value.kind === 'markdown') return value.text || '（空文本）'
   if (value.kind === 'json') return JSON.stringify(value.data, null, 2)
-  return `${value.kind} · ${value.mime} · ${value.mediaId}`
+  // mediaId 是数据库主键，写进试运行结果只会让用户猜。这里只写类型与来源节点标题。
+  const name = value.name?.trim()
+  return `${PORT_TYPE_LABELS[value.kind]} · ${name || '已产出资产'}`
 }
 
 function TestHarness({

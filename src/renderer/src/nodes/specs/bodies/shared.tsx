@@ -478,6 +478,26 @@ function mediaSourceMeta(shape: NodeCardShape): MediaSourceMeta | null {
   }
 }
 
+/**
+ * 本地引擎写进结果的内部 ID 不直接进 UI：结果卡展示动作名（本地裁剪），而不是
+ * `local:canvas-crop`。新增本地执行器时必须在这里补一行；
+ * test/node-ui-decisions.test.ts 会扫描执行器源码，强制每个 local: ID 都有标签。
+ */
+export const LOCAL_ENGINE_SOURCE_LABELS: Readonly<Record<string, string>> = {
+  'local:canvas-crop': '本地裁剪',
+  'local:image-grid-split': '本地拆图',
+  'local:ffmpeg-frame': '本地抽帧',
+  'local:ffmpeg-clip': '本地截视频',
+  'local:ffmpeg-audio': '本地提取音频'
+}
+
+/** 来源标签的唯一出口：内部 ID 一律换成人话，未登记的 local ID 也不外泄。 */
+export function mediaSourceLabel(modelKey: string | undefined, fallback: string): string {
+  if (!modelKey) return fallback
+  if (modelKey.startsWith('local:')) return LOCAL_ENGINE_SOURCE_LABELS[modelKey] ?? fallback
+  return modelKey.replace('::', ' · ')
+}
+
 /** 所有媒体结果卡统一展示来源摘要；完整提示词仍只在悬浮 title 中提供。 */
 export function MediaSourceBadge({
   shape,
@@ -490,7 +510,9 @@ export function MediaSourceBadge({
   // 浏览器验收环境生成的是确定性的本地演示图，而不是远端模型返回结果。
   // 明确标识它，避免把“mock-relay”误认为一个异常的生成状态或真实模型名。
   const isBrowserDemo = source?.modelKey === 'mock-relay::gpt-image-2'
-  const label = isBrowserDemo ? '浏览器演示生成 · 已完成' : source?.modelKey || fallback
+  const label = isBrowserDemo
+    ? '浏览器演示生成 · 已完成'
+    : mediaSourceLabel(source?.modelKey, fallback)
   const time = source?.at ? ` · ${new Date(source.at).toLocaleTimeString()}` : ''
   return (
     <span className="node-media-source" title={source?.prompt || shape.props.mediaPath}>
@@ -549,7 +571,9 @@ export function MediaSourceSummary({
     <div className="media-source-summary" title={source?.prompt || shape.props.mediaPath}>
       <div className="media-source-summary-head">
         <Icon name="info" size={11} />
-        <span className="media-source-summary-model">{source?.modelKey || fallback}</span>
+        <span className="media-source-summary-model">
+          {mediaSourceLabel(source?.modelKey, fallback)}
+        </span>
         {paramBadges.length > 0 && (
           <span className="media-source-summary-params">{paramBadges.join(' · ')}</span>
         )}

@@ -25,6 +25,18 @@ export interface MediaNodeValue<K extends 'image' | 'video' | 'audio' | 'file'> 
   name?: string
 }
 
+/**
+ * 产物命名与来源展示用的人可读名。mediaId 是内部主键，写进提示词/标题会让用户
+ * 看到 `media_Xxxxx` 这种无法理解的字串，因此缺标题时回退到资产类型词。
+ * 仅用于展示与命名，不得作为“按标题猜测输入”的依据。
+ */
+export function mediaDisplayName(
+  source: { name?: string } | null | undefined,
+  fallback: string
+): string {
+  return source?.name?.trim() || fallback
+}
+
 export type RawNodeOutputs = Partial<Record<string, NodeValue>>
 
 export interface MediaResultItem {

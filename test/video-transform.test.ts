@@ -127,7 +127,10 @@ describe('视频处理配置 · v2', () => {
 
 let currentGateway: Record<string, unknown> = {}
 
-function context(type: 'video-frame' | 'video-clip' | 'video-audio'): {
+function context(
+  type: 'video-frame' | 'video-clip' | 'video-audio',
+  sourceName?: string
+): {
   ctx: NodeExecutionContext
   props: Record<string, unknown>
   result: { value: string | null }
@@ -206,7 +209,8 @@ function context(type: 'video-frame' | 'video-clip' | 'video-audio'): {
                 kind: 'video',
                 mediaId: 'source-video',
                 mediaPath: 'projects/project-a/media/source.mp4',
-                mime: 'video/mp4'
+                mime: 'video/mp4',
+                ...(sourceName ? { name: sourceName } : {})
               },
               schema: undefined,
               source: { nodeId: 'source-node', portId: 'out-video', runId: 'run-source' },
@@ -260,6 +264,38 @@ describe('视频处理执行器', () => {
         mediaId: id,
         runId: 'run-video-transform'
       })
+    }
+  )
+
+  // §16.24：产物标题与来源摘要写「源视频名 + 动作」，内部 mediaId 与 mode 枚举都不进文案。
+  it.each([
+    ['video-frame', videoFrameExecutor, 'extractVideoFrame', '（帧）发布会录像'],
+    ['video-clip', videoClipExecutor, 'clipVideo', '（截）发布会录像'],
+    ['video-audio', videoAudioExecutor, 'extractVideoAudio', '（音）发布会录像']
+  ] as const)(
+    '%s 的产物标题用源视频名，不沿用主进程给的固定资产名',
+    async (type, executor, apiName, title) => {
+      const api = {
+        extractVideoFrame: vi.fn(),
+        clipVideo: vi.fn(),
+        extractVideoAudio: vi.fn()
+      }
+      api[apiName].mockResolvedValue({
+        ok: true,
+        data: {
+          id: 'produced-1',
+          path: 'projects/project-a/media/produced-1',
+          mime: 'video/mp4',
+          name: '提取音频'
+        }
+      })
+      currentGateway = api
+      const item = context(type, '发布会录像')
+      await executor(item.ctx)
+      expect(item.artifacts[0]).toMatchObject({ title })
+      const serialized = JSON.stringify({ artifacts: item.artifacts, result: item.result.value })
+      expect(serialized).not.toContain('source-video')
+      expect(serialized).not.toContain('mode=')
     }
   )
 

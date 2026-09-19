@@ -447,7 +447,7 @@ export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.
           openSettings()
         }}
       >
-        在右侧「运行」中重新裁剪
+        在右侧「设置」中重新裁剪
       </button>
     </div>
   )
@@ -672,9 +672,7 @@ export function ImageCropSettings({ shape, editor }: NodeSettingsProps): React.J
               />
             ))}
           </div>
-          <small className="crop-source-label">
-            输入：{source.mime} · {source.mediaId}
-          </small>
+          <small className="crop-source-label">输入：{source.name?.trim() || '未命名图片'}</small>
           {config.mode === 'rect' && (
             <div
               className="crop-result-preview"

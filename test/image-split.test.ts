@@ -170,6 +170,10 @@ describe('imageSplitExecutor', () => {
     )
     expect(props).toMatchObject({ mediaId: '', mediaMime: '' })
     expect(artifacts).toHaveLength(4)
+    // §16.24：拆图按原图命名并编号，来源摘要不写内部 mediaId；缺标题时回退到类型词。
+    expect(artifacts[0]).toMatchObject({ title: '图片 · 第 1 格' })
+    expect(parseMediaResultCollection(result.value)?.prompt).toBe('拆图 图片 · 2×2 · 面积 90%')
+    expect(result.value).not.toContain('source-image')
     expect(parseMediaResultCollection(result.value)?.results).toHaveLength(4)
   })
 })

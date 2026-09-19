@@ -3,7 +3,7 @@ import { inputMedia } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
 import { readNodeConfig } from '../node-config'
 import { parseImageSplitConfig } from '@shared/image-split'
-import { serializeMediaResultCollection } from '../values'
+import { mediaDisplayName, serializeMediaResultCollection } from '../values'
 
 export const imageSplitExecutor = async (
   ctx: NodeExecutionContext
@@ -12,6 +12,7 @@ export const imageSplitExecutor = async (
   if (!source) return { status: 'skipped', reason: '请连接一张图片到“原图”输入' }
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
   const config = parseImageSplitConfig(readNodeConfig(ctx.shape))
+  const sourceName = mediaDisplayName(source, '图片')
   try {
     const response = await ctx.gateway.splitImageGrid({
       projectId: ctx.projectId,
@@ -29,7 +30,7 @@ export const imageSplitExecutor = async (
         version: 1,
         nodeId: ctx.node.id,
         modelKey: 'local:image-grid-split',
-        prompt: `源图片 ${source.mediaId} · ${config.rows}×${config.columns} · 面积 ${config.scalePercent}%`,
+        prompt: `拆图 ${sourceName} · ${config.rows}×${config.columns} · 面积 ${config.scalePercent}%`,
         at: now,
         selectedMediaId: response.data[0].id,
         results: response.data.map((asset) => ({
@@ -48,7 +49,7 @@ export const imageSplitExecutor = async (
         mediaPath: asset.path,
         mime: asset.mime,
         portId: 'out-images',
-        title: `拆图 · 第 ${index + 1} 格`
+        title: `${sourceName} · 第 ${index + 1} 格`
       })
     })
     return { status: 'done' }

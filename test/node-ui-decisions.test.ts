@@ -3,7 +3,7 @@
 // 这一轮的决定大多是「删掉某个覆盖」「去掉某个材质」「某个按钮不许再消失」——
 // 都是**容易在后续改动里被悄悄改回去**的那类规则。这里把它们固化成源码断言：
 // 不依赖浏览器、不依赖快照，改坏了立刻失败。
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { TEXT_MERGE_SEPARATOR, mergedPrompt } from '@shared/engine/helpers'
@@ -631,5 +631,75 @@ describe('v1.2 §16.23 图片族：遮罩与画幅按网关真实发送字段呈
     expect(stripComments(sidePanel)).not.toContain('图片生成视频')
     expect(sidePanel).toContain("{ type: 'video', title: '生视频'")
     expect(sharedBodies).toContain("{ type: 'video', label: '生视频'")
+  })
+})
+
+describe('v1.2 §16.24 本地媒体产物只写人话：内部 ID、mime 与枚举不进文案', () => {
+  const values = read('src/shared/engine/values.ts')
+  const cropExecutor = read('src/shared/engine/executors/imageCrop.ts')
+  const splitExecutor = read('src/shared/engine/executors/imageSplit.ts')
+  const videoExecutor = read('src/shared/engine/executors/videoTransforms.ts')
+  const cropBody = read('src/renderer/src/nodes/specs/bodies/image-crop.tsx')
+  const contractPanel = read('src/renderer/src/canvas/NodeContractPanel.tsx')
+  const localExecutors = [
+    ['imageCrop', cropExecutor],
+    ['imageSplit', splitExecutor],
+    ['videoTransforms', videoExecutor]
+  ] as const
+
+  it('产物命名只有一个来源：mediaDisplayName + 各执行器的动作前缀', () => {
+    expect(values).toContain('export function mediaDisplayName(')
+    for (const [name, source] of localExecutors) {
+      expect(source, name).toContain('mediaDisplayName(')
+    }
+    // 标题必须落在源节点名上，固定资产名会让每张结果卡长得一模一样。
+    expect(cropExecutor).toContain('（裁')
+    expect(videoExecutor).toContain('（帧）')
+    expect(videoExecutor).toContain('（截）')
+    expect(videoExecutor).toContain('（音）')
+    expect(stripComments(videoExecutor)).not.toContain("'视频帧'")
+  })
+
+  it('执行器里的每个 local: 引擎 ID 都在 UI 侧登记了人话标签', () => {
+    const ids = new Set<string>()
+    for (const file of readdirSync(resolve(root, 'src/shared/engine/executors'))) {
+      if (!file.endsWith('.ts')) continue
+      for (const match of read(`src/shared/engine/executors/${file}`).matchAll(/'local:[a-z-]+'/g))
+        ids.add(match[0].slice(1, -1))
+    }
+    expect(ids.size).toBeGreaterThan(0)
+    for (const id of [...ids].sort()) expect(sharedBodies, id).toContain(`'${id}':`)
+  })
+
+  it('来源标签只有一个出口，未登记的 local ID 也不外泄', () => {
+    expect(sharedBodies).toContain('export function mediaSourceLabel(')
+    expect(sharedBodies).toContain("modelKey.startsWith('local:')")
+    expect(sharedBodies).toContain('LOCAL_ENGINE_SOURCE_LABELS[modelKey] ?? fallback')
+    // 徽章与来源摘要都不能再把原始 modelKey 当文案打印。
+    expect(stripComments(sharedBodies)).not.toContain('{source?.modelKey}')
+  })
+
+  it('本地执行器的提示词里没有 mediaId 与内部枚举', () => {
+    for (const [name, source] of localExecutors) {
+      expect(source, name).not.toMatch(/\$\{source\.mediaId\}/)
+      expect(stripComments(source), name).not.toContain('mode=')
+    }
+  })
+
+  it('裁剪工作台显示原图名，重新裁剪入口指向「设置」而不是「运行」', () => {
+    expect(cropBody).toContain("输入：{source.name?.trim() || '未命名图片'}")
+    expect(stripComments(cropBody)).not.toContain('输入：{source.mime}')
+    expect(cropBody).toContain('在右侧「设置」中重新裁剪')
+    for (const file of readdirSync(resolve(root, 'src/renderer/src/nodes/specs/bodies'))) {
+      // 「在右侧「运行」里改配置」是错的：节点工作台在「设置」页，「运行」只有历史。
+      expect(stripComments(read(`src/renderer/src/nodes/specs/bodies/${file}`)), file).not.toMatch(
+        /「运行」中/
+      )
+    }
+  })
+
+  it('试运行结果同样只写类型与来源名，不打印 mediaId', () => {
+    expect(contractPanel).toContain('PORT_TYPE_LABELS[value.kind]')
+    expect(stripComments(contractPanel)).not.toContain('${value.mediaId}')
   })
 })

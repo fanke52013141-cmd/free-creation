@@ -5,7 +5,7 @@ import {
   parseImageCropConfig,
   validateImageCropConfig
 } from '@shared/image-crop'
-import { imageCropExecutor } from '@renderer/engine/executors/imageCrop'
+import { imageCropExecutor, imageCropResultName } from '@renderer/engine/executors/imageCrop'
 import { parseMediaResultCollection } from '@renderer/nodes/nodeValues'
 import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
 import type { NodeExecutionContext } from '@renderer/engine/executor-types'
@@ -48,7 +48,7 @@ describe('图片裁剪配置', () => {
 describe('imageCropExecutor', () => {
   let currentGateway: Record<string, unknown> = {}
 
-  function context(): {
+  function context(sourceName?: string): {
     ctx: NodeExecutionContext
     props: Record<string, unknown>
     result: { value: string | null }
@@ -109,7 +109,8 @@ describe('imageCropExecutor', () => {
                   kind: 'image',
                   mediaId: 'source',
                   mediaPath: 'projects/p/media/source.jpg',
-                  mime: 'image/jpeg'
+                  mime: 'image/jpeg',
+                  ...(sourceName ? { name: sourceName } : {})
                 },
                 schema: undefined,
                 source: { nodeId: 'source-node', portId: 'out-image', runId: 'run-source' },
@@ -166,5 +167,43 @@ describe('imageCropExecutor', () => {
       status: 'skipped',
       reason: '请连接一张图片到“原图”输入'
     })
+  })
+
+  it('产物标题与来源摘要写原图名，不写 mediaId 和内部枚举', async () => {
+    currentGateway = {
+      cropImage: vi.fn(async () => ({
+        ok: true as const,
+        data: {
+          id: 'crop-1',
+          path: 'projects/project-a/media/crop-1.png',
+          mime: 'image/png',
+          name: '裁剪图片'
+        }
+      }))
+    }
+    const item = context('海报原图')
+    await imageCropExecutor(item.ctx)
+    expect(item.artifacts[0]).toMatchObject({ title: '（裁）海报原图' })
+    const collection = parseMediaResultCollection(item.result.value ?? '')
+    expect(collection?.prompt).toBe('裁剪 海报原图 · 矩形')
+  })
+
+  it('来源没有标题时回退到资产类型词', async () => {
+    currentGateway = {
+      cropImage: vi.fn(async () => ({
+        ok: true as const,
+        data: { id: 'crop-1', path: 'p.png', mime: 'image/png', name: '裁剪图片' }
+      }))
+    }
+    const item = context('   ')
+    await imageCropExecutor(item.ctx)
+    expect(item.artifacts[0]).toMatchObject({ title: '（裁）图片' })
+    expect(parseMediaResultCollection(item.result.value ?? '')?.prompt).toBe('裁剪 图片 · 矩形')
+  })
+
+  it('同一节点多次裁剪按已有结果数编号，与 P 图命名规则同构', () => {
+    expect(imageCropResultName('海报原图', 0)).toBe('（裁）海报原图')
+    expect(imageCropResultName('海报原图', 1)).toBe('（裁1）海报原图')
+    expect(imageCropResultName('', 0)).toBe('（裁）图片')
   })
 })

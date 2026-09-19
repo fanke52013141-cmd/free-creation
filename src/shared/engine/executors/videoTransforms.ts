@@ -6,7 +6,7 @@ import {
   parseVideoClipConfig,
   parseVideoAudioConfig
 } from '@shared/video-transform'
-import { appendMediaResult, serializeMediaResultCollection } from '../values'
+import { appendMediaResult, mediaDisplayName, serializeMediaResultCollection } from '../values'
 import { capabilityFailure, unavailableLocalCapability } from '../preflight'
 
 // ── 视频取帧 ──
@@ -16,6 +16,7 @@ export async function videoFrameExecutor(ctx: NodeExecutionContext): Promise<Nod
   if (!source) return { status: 'skipped', reason: '请连接一段视频到"源视频"输入' }
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
   const config = parseVideoFrameConfig(readNodeConfig(ctx.shape))
+  const videoName = mediaDisplayName(source, '视频')
   for (const key of config.mode === 'last'
     ? (['ffmpeg', 'ffprobe'] as const)
     : (['ffmpeg'] as const)) {
@@ -32,7 +33,8 @@ export async function videoFrameExecutor(ctx: NodeExecutionContext): Promise<Nod
     })
     if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
     if (!result.ok) return { status: 'failed', reason: result.error.message }
-    const prompt = `源视频 ${source.mediaId} · mode=${config.mode} · ${config.timeMs}ms · ${config.format}`
+    // 来源摘要只写用户看得懂的动作与时间点：mode=first 这类内部枚举和 mediaId 都不进文案。
+    const prompt = `抽帧 ${videoName} · ${config.timeMs}ms · ${config.format}`
     ctx.updateResult(
       serializeMediaResultCollection(
         appendMediaResult(
@@ -53,7 +55,7 @@ export async function videoFrameExecutor(ctx: NodeExecutionContext): Promise<Nod
       mediaPath: result.data.path,
       mime: result.data.mime,
       portId: 'out-image',
-      title: result.data.name || '视频帧'
+      title: `（帧）${videoName}`
     })
     return { status: 'done' }
   } catch (error) {
@@ -68,6 +70,7 @@ export async function videoClipExecutor(ctx: NodeExecutionContext): Promise<Node
   if (!source) return { status: 'skipped', reason: '请连接一段视频到"源视频"输入' }
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
   const config = parseVideoClipConfig(readNodeConfig(ctx.shape))
+  const videoName = mediaDisplayName(source, '视频')
   if (!config.keepVideo && !config.keepAudio)
     return { status: 'failed', reason: '请至少选择保留画面或音频' }
   for (const key of ['ffmpeg'] as const) {
@@ -120,7 +123,7 @@ export async function videoClipExecutor(ctx: NodeExecutionContext): Promise<Node
       })
     }
     if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
-    const prompt = `${config.keepVideo ? '画面' : ''}${config.keepVideo && config.keepAudio ? '+' : ''}${config.keepAudio ? '音频' : ''} · 源视频 ${source.mediaId} · ${config.startMs}-${config.endMs}ms`
+    const prompt = `${config.keepVideo ? '画面' : ''}${config.keepVideo && config.keepAudio ? '+' : ''}${config.keepAudio ? '音频' : ''} · 截取 ${videoName} · ${config.startMs}-${config.endMs}ms`
     const previous = typeof ctx.shape.meta?.nodeResult === 'string' ? ctx.shape.meta.nodeResult : ''
     let collection = appendMediaResult(
       previous,
@@ -146,7 +149,7 @@ export async function videoClipExecutor(ctx: NodeExecutionContext): Promise<Node
         mediaPath: item.data.path,
         mime: item.data.mime,
         portId: item.portId,
-        title: item.data.name || (item.kind === 'video' ? '视频片段' : '音频片段')
+        title: item.kind === 'video' ? `（截）${videoName}` : `（音）${videoName}`
       })
     }
     return { status: 'done' }
@@ -166,6 +169,7 @@ export async function videoAudioExecutor(ctx: NodeExecutionContext): Promise<Nod
     return { status: 'failed', reason: capabilityFailure('ffmpeg', capabilityReason) }
   try {
     const config = parseVideoAudioConfig(readNodeConfig(ctx.shape))
+    const videoName = mediaDisplayName(source, '视频')
     if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
     const result = await ctx.gateway.extractVideoAudio({
       projectId: ctx.projectId,
@@ -174,7 +178,7 @@ export async function videoAudioExecutor(ctx: NodeExecutionContext): Promise<Nod
     })
     if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
     if (!result.ok) return { status: 'failed', reason: result.error.message }
-    const prompt = `源视频 ${source.mediaId} · ${config.startMs}-${config.endMs}ms · ${config.format} · ${config.sampleRate}Hz`
+    const prompt = `提取音频 ${videoName} · ${config.startMs}-${config.endMs}ms · ${config.format} · ${config.sampleRate}Hz`
     ctx.updateResult(
       serializeMediaResultCollection(
         appendMediaResult(
@@ -195,7 +199,7 @@ export async function videoAudioExecutor(ctx: NodeExecutionContext): Promise<Nod
       mediaPath: result.data.path,
       mime: result.data.mime,
       portId: 'out-audio',
-      title: result.data.name || '音频片段'
+      title: `（音）${videoName}`
     })
     return { status: 'done' }
   } catch (error) {
