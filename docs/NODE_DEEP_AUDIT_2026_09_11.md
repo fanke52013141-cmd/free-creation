@@ -554,6 +554,82 @@ HTTPS 探测（未鉴权即被拒，零计费），主机是设置面板默认�
 即该模型能力表允许的最短时长与最低分辨率档——§7.4 剩下的「计费成功响应体字段」仍需一次真实
 提交才能收口，那一步会计费，须用户逐条确认。
 
+### 7.6 语音三项真跑：配音节点的默认通道此前一次都没有成功过（2026-09-19 追加）
+
+§7.5 只证明了「请求能发出去」。用户批准最低成本的真实调用（语音三项 + 一条最短档视频）之后，
+语音链路暴露出**四个 P0**，全都只在计费响应面上才会露头：
+
+- **异步合成不带 `voice_id`**：建任务即回 `invalid params, voice id wrong`。旧注释写的是
+  「不指定音色时让服务端用它自己的默认音色」——那是一句从未验证过的猜测。现在空音色与
+  OpenAI 的占位名统一落到 MiniMax 系统音色（`resolveMiniMaxVoiceId`）。
+  `test/voice-protocol-wire.test.ts` 里原先那条测试恰好把错误前提写成了断言，已按实测改写。
+- **建任务后立刻取件**：`t2a_async_v2` 的创建响应里就带 `file_id`（与 `task_id` 同号），
+  旧代码直接 `files/retrieve` → `2013 file not found`。异步任务必须先轮询到
+  `status:"Success"`，之后同一个 `file_id` 可正常检索（复测零计费）。
+- **产物是 tar，不是音频**：检索得到 `application/x-tar` 56 832 B，成员是
+  `content-<uid>/content-*.mp3`（52 980 B）、`.titles`、`.extra`，而且长目录名写在 ustar 的
+  `prefix` 字段里、`name` 只剩尾巴。旧代码会把整个归档当 mp3 落盘——节点得到一个改名
+  `.mp3` 的 tar，播放器只会显示坏文件。新增 `src/main/media/tar-audio.ts`（只读 ustar 解析：
+  校验和、长度字段、越界任一不合法就返回 `null`；只有非音频成员时也返回 `null`，绝不把
+  字幕文本当音频兜底），配 `test/minimax-tts-tar.test.ts` 七条，其中一条用系统
+  `tar -tvf` 独立复核同一份 fixture，避免「我的解析器只跟我自己对齐」。
+- **`voice_clone` 的 `text_validation` 不是开关**：真实字段要的是**参考音频原文**（字符串，
+  ≤200 字）。用同一个 `file_id` 逐字段实测（全部卡在校验门或时长门前，零计费）：
+
+  | 请求体                                                  | 上游回执                        |
+  | ------------------------------------------------------- | ------------------------------- |
+  | 原样：`model` + `text_validation:false` + `accuracy:0.7` | `2013 invalid params`           |
+  | 去掉 `text_validation`                                  | `2037 voice duration too short` |
+  | `text_validation:"一段原文"`                            | `2037 voice duration too short` |
+  | 只给 `file_id`+`voice_id`（带不带 `model` 都一样）      | `2037 voice duration too short` |
+
+  即这条复刻链路此前**在任何用户配置下都发不出合法请求**。已从 `TtsConfig` 删除该布尔
+  （连同节点上那个永远无效的「文本校验」勾选框）；老节点存量的 `textValidation` 在
+  `parseTtsConfig` 时被丢弃，不静默转成别的语义。
+- **`2037` 的根因顺手补了门禁**：参考音频需 10 秒～5 分钟，而 `MINIMAX_CLONE_MIN_SECONDS`
+  与 `MINIMAX_CLONE_MAX_SECONDS` 此前是两个没人引用的常量。现在 `transformMiniMaxTts` 在
+  上传前用 FFprobe 量时长并给中文提示，上传按钮的提示语也写清区间与格式；本机没有 FFprobe
+  时跳过这道检查（不把 FFmpeg 变成复刻的硬依赖）。`test/tts-clone-gate.test.ts` 用真
+  FFmpeg 合成的 2 秒 / 12 秒素材跑真代码：把阈值改成 1 秒会同时红两条，断言吃得住。
+- **成功回执的语义**：`{"input_sensitive":false,"input_sensitive_type":0,"demo_audio":"",
+  "base_resp":{"status_code":0}}`。`base_resp` 为 0 而 `input_sensitive` 为真时音色其实没有
+  登记，现在就在这一层停下（`test/voice-clone-response.test.ts`），而不是让下游拿着不存在的
+  `voice_id` 去合成。
+
+真跑产物一律用 ffprobe 独立复核（不复用被测代码的解析结果）：
+
+| 环节                             | 产物                                       |
+| -------------------------------- | ------------------------------------------ |
+| `t2a_async_v2`（95 字 → 解 tar） | 365 748 B mp3，时长 22.69 s                |
+| `voice_design`                   | `ttv-voice-…` + 32 676 B mp3，时长 2.55 s  |
+| `voice_clone` + 克隆音色合成     | 登记 `canvas-voice-…`，45 492 B mp3，2.68 s |
+
+### 7.7 唯一一条授权视频：成片是好的，是我们的下载把它弄丢了（2026-09-19 追加）
+
+MiniMax-H3、`duration:4`、`resolution:768P`、`ratio:16:9`（即 §7.5 末尾那份自检请求体）
+真实提交一次，链路事实如下：
+
+| 环节          | 回执                                                                                                       |
+| ------------- | ---------------------------------------------------------------------------------------------------------- |
+| 提交          | `POST /v2/video_generation` → `{"task_id":"…"}`（无 `base_resp` 信封，与 v1 不同）                          |
+| 轮询          | `GET /v2/query/video_generation/{id}` → `task.status` 为 `running`，约 96 秒后为 `succeeded`                |
+| 成功字段      | `task.content.url`（OSS 预签名 mp4）、`task.resolution:"768P"`、`task.duration:4`、`task.usage.total_seconds:4` |
+| 成片          | 1 830 710 B；ffprobe：h264 **1344×768**、时长 4.458 s、另带一条 aac 音轨                                    |
+| 计费前无法知道 | `768P` 在 16:9 下是 1344×768，而不是 1280×720；最短时长确实是 4 s                                            |
+
+- **P0：`downloadToTempFile` 用 `FileHandle.createWriteStream()`，pipeline 结束时 fd 已被
+  流关闭，紧随其后的 `fh.sync()` 必然抛 EBADF `file closed`**。后果不是报错难听，而是
+  「上游已经扣费出片、我们把任务标成 failed 并把成片丢在临时目录」。这条路径此前从未真跑过，
+  所以两家视频供应商的成片在真实环境里**无一能落库**。改为路径流
+  （`pipeline(nodeStream, createWriteStream(tmpAbs))`），并加
+  `test/video-download-tempfile.test.ts`：本机 HTTP 服务发 4 MB 真字节，走真 fetch 与真磁盘；
+  把 `fh.close(); fh.sync()` 加回去会以完全相同的 `file closed` 复现失败。
+- 已经付过费的那一条没有重复提交：修复后用 `resumePendingVideoTasks()`（应用重启恢复路径，
+  读回同一个 `upstreamTaskId` 继续轮询）零额外计费地把成片捞回，顺带证明恢复链路真的可用。
+  产物留在 `artifacts/minimax-h3-4s-768p.mp4`（未跟踪目录，不进仓库）。
+- §7.4 与 §7.5 遗留的「计费成功响应体字段」到此收口：视频是 `task.content.url`，
+  语音异步是 `status:"Success"` + `file_id` + tar。
+
 ## 8. 后续实施顺序
 
 ### P0：先让视频节点不再产生非法状态（已完成）
