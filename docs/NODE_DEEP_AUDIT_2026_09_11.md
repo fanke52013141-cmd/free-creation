@@ -355,15 +355,15 @@ HTTPS 探测（未鉴权即被拒，零计费），主机是设置面板默认�
 对照路径 `/v1/definitely_not_real_xyz` 与 `/v2/t2a_async_v2` 都返回 404，所以下面的
 200/401 只能解释为「路由真实存在，只是没给 Key」：
 
-| 代码里的调用 | 方法 | 探测结果 | 结论 |
-| --- | --- | --- | --- |
-| `/v1/t2a_async_v2`（`audio.ts` 异步合成主通道） | POST | 200 + `base_resp 1004` | 官方存在 |
-| `/v1/t2a_v2`（同步兜底） | POST | 200 + `base_resp 1004` | 官方存在 |
-| `/v1/query/t2a_async_query_v2?task_id=`（轮询） | GET | 200；POST 为 404 | 只能 GET，代码正确 |
-| `/v1/files/retrieve?file_id=`（取成片） | GET | 200；POST 为 404 | 只能 GET，代码正确 |
-| `/v1/files/upload`（克隆参考音与提示音） | POST | 200 + `base_resp 1004` | 官方存在 |
-| `/v1/voice_clone`（语音克隆） | POST | 200 + `base_resp 1004` | 官方存在 |
-| `/v1/voice_design`（音色设计，返回 `trial_audio` hex） | POST | 200 + `base_resp 1004` | 官方存在 |
+| 代码里的调用                                           | 方法 | 探测结果               | 结论               |
+| ------------------------------------------------------ | ---- | ---------------------- | ------------------ |
+| `/v1/t2a_async_v2`（`audio.ts` 异步合成主通道）        | POST | 200 + `base_resp 1004` | 官方存在           |
+| `/v1/t2a_v2`（同步兜底）                               | POST | 200 + `base_resp 1004` | 官方存在           |
+| `/v1/query/t2a_async_query_v2?task_id=`（轮询）        | GET  | 200；POST 为 404       | 只能 GET，代码正确 |
+| `/v1/files/retrieve?file_id=`（取成片）                | GET  | 200；POST 为 404       | 只能 GET，代码正确 |
+| `/v1/files/upload`（克隆参考音与提示音）               | POST | 200 + `base_resp 1004` | 官方存在           |
+| `/v1/voice_clone`（语音克隆）                          | POST | 200 + `base_resp 1004` | 官方存在           |
+| `/v1/voice_design`（音色设计，返回 `trial_audio` hex） | POST | 200 + `base_resp 1004` | 官方存在           |
 
 - MiniMax 语音/音色全族走 **v1 + `base_resp`**，视频走 **v2 + `/v2/query/…`**，两套错误信封
   不同：v1 即使 HTTP 200 也可能是业务失败。因此 `assertMiniMaxOk`（语音）与

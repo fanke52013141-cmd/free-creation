@@ -57,15 +57,30 @@ export function canonicalVideoModelId(modelId: string): string {
 const range = (from: number, to: number): number[] =>
   Array.from({ length: to - from + 1 }, (_, index) => from + index)
 
+/** 厂商按分辨率档位定价，各家档位名写法不同，所以按像素档排序而不是数组位置。 */
+const RESOLUTION_COST_ORDER = ['480p', '720p', '768p', '1080p', '2k', '4k']
+
+/** 该模型支持范围内最便宜的一档；认不出的写法排最后，宁可显式也不要猜。 */
+export function cheapestResolution(resolutions: string[]): string {
+  const rank = (value: string): number => {
+    const index = RESOLUTION_COST_ORDER.indexOf(value.trim().toLowerCase())
+    return index === -1 ? RESOLUTION_COST_ORDER.length : index
+  }
+  return [...resolutions].sort((a, b) => rank(a) - rank(b))[0] ?? ''
+}
+
+const H3_RESOLUTIONS = ['768P', '2K']
+const H3_MAX_RESOLUTIONS = ['480P', '768P']
+
 const H3: VideoCapabilities = {
   parameterTransport: 'structured',
   ratios: ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'],
   durations: range(4, 15),
-  resolutions: ['768P', '2K'],
+  resolutions: H3_RESOLUTIONS,
   defaultRatio: '16:9',
   // 视频按秒计费，默认取该模型允许的最短时长：让用户手动加长，而不是默认多花。
   defaultDuration: 4,
-  defaultResolution: '768P',
+  defaultResolution: cheapestResolution(H3_RESOLUTIONS),
   modes: ['text', 'first-frame', 'first-last-frame', 'reference'],
   supportsFirstLastFrames: true,
   supportsReferenceImages: true,
@@ -85,8 +100,8 @@ const H3_MAX: VideoCapabilities = {
   durations: range(5, 15),
   // 继承 H3 的 4 秒默认值会落在自己的时长区间之外，这里必须跟着收窄。
   defaultDuration: 5,
-  resolutions: ['480P', '768P'],
-  defaultResolution: '768P',
+  resolutions: H3_MAX_RESOLUTIONS,
+  defaultResolution: cheapestResolution(H3_MAX_RESOLUTIONS),
   modes: ['text', 'first-frame', 'first-last-frame'],
   supportsReferenceImages: false,
   supportsReferenceVideo: false,
@@ -108,7 +123,7 @@ const seedance = (
   resolutions,
   defaultRatio: '16:9',
   defaultDuration: Math.min(...durations),
-  defaultResolution: resolutions.includes('720p') ? '720p' : (resolutions[0] ?? '720p'),
+  defaultResolution: cheapestResolution(resolutions),
   modes: ['text', 'first-frame', 'first-last-frame', 'reference'],
   supportsFirstLastFrames: true,
   supportsReferenceImages: true,

@@ -680,6 +680,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
             <span>分辨率</span>
             <AppSelect
               className="gen-select"
+              title="分辨率按档位计费，默认已选该模型最低档；要成片质量再手动调高"
               value={params.resolution ?? capabilities.defaultResolution}
               onPointerDown={(e) => e.stopPropagation()}
               onChange={(e) =>

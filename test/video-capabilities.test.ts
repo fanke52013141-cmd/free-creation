@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   canonicalVideoModelId,
+  cheapestResolution,
   isSeedanceGatewayProxy,
   normalizeVideoGenParams,
   resolveVideoMode,
@@ -22,7 +23,7 @@ describe('视频供应商能力描述', () => {
     expect(params).toEqual({ ratio: '16:9', duration: 4, resolution: '768P' })
   })
 
-  it('默认时长取模型允许的最短秒数，且始终落在自身时长区间内', () => {
+  it('默认时长与默认分辨率都取模型允许的最便宜一档', () => {
     const profiles: Array<[ReturnType<typeof videoCapabilitiesFor>, string]> = [
       [videoCapabilitiesFor('minimax', 'minimax-h3'), 'H3'],
       [videoCapabilitiesFor('minimax', 'minimax-h3-max'), 'H3-Max'],
@@ -38,7 +39,22 @@ describe('视频供应商能力描述', () => {
       expect(caps.durations, label).toContain(caps.defaultDuration)
       expect(caps.ratios, label).toContain(caps.defaultRatio)
       expect(caps.resolutions, label).toContain(caps.defaultResolution)
+      // 分辨率同样按档位计费：默认必须是最低档，且不能靠数组顺序猜。
+      expect(caps.defaultResolution, label).toBe(cheapestResolution(caps.resolutions))
+      expect(cheapestResolution([...caps.resolutions].reverse()), label).toBe(
+        caps.defaultResolution
+      )
     }
+  })
+
+  it('默认分辨率取最低档：Seedance 480p、H3-Max 480P，H3 没有更低档时停在 768P', () => {
+    expect(videoCapabilitiesFor('seedance', 'seedance-2-0').defaultResolution).toBe('480p')
+    expect(videoCapabilitiesFor('minimax', 'MiniMax-H3-Max').defaultResolution).toBe('480P')
+    expect(videoCapabilitiesFor('minimax', 'MiniMax-H3').defaultResolution).toBe('768P')
+    // 档位名各家写法不同：2K/4K 不能因为字面排在前面就被当成低档。
+    expect(cheapestResolution(['2K', '768P'])).toBe('768P')
+    expect(cheapestResolution(['4K', '1080p', '480P'])).toBe('480P')
+    expect(cheapestResolution(['厂商新档', '720p'])).toBe('720p')
   })
 
   it('MiniMax H3 按协议暴露 4–15 秒、2K 和完整多模态参考能力', () => {
