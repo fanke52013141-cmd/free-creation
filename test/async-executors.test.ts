@@ -5,6 +5,7 @@ import type { NodeExecutionContext } from '@renderer/engine/executor-types'
 import type { GatewayClient } from '@shared/engine/gateway-client'
 import type { NodeValuePacket } from '@renderer/engine/contracts'
 import { audioExecutor } from '@renderer/engine/executors/audio'
+import { mergeShapeMeta } from '@renderer/engine/executor'
 import { speechExecutor } from '@renderer/engine/executors/speech'
 import { voiceDesignExecutor } from '@renderer/engine/executors/voiceDesign'
 import { chatExecutor } from '@renderer/engine/executors/chat'
@@ -120,7 +121,14 @@ function makeContext(
       updateResult: (value) => {
         result.value = value
       },
-      updateMeta: (patch) => Object.assign(meta, patch),
+      // 与真实运行器同一份合并语义：meta 只能有 JSON 值，undefined/null 是删除键。
+      // 早先这里直接 Object.assign，把 `nodeExtra: undefined` 原样抄进 meta，
+      // 单测全绿而真机画布被 tldraw 的 schema 校验炸掉（2026-09-19 真机验收）。
+      updateMeta: (patch) => {
+        const next = mergeShapeMeta(meta, patch)
+        for (const key of Object.keys(meta)) delete meta[key]
+        Object.assign(meta, next)
+      },
       emitArtifact: (artifact) => artifacts.push(artifact)
     },
     artifacts
@@ -272,6 +280,8 @@ describe('chat / audio / video executors with a mocked gateway', () => {
       [provider('audio')],
       '旁白'
     )
+    // 上一次运行留下的字幕：本次没有字幕就必须把它清掉，而不是留着过期值。
+    meta.nodeExtra = '{"out-subtitle":"stale"}'
     await expect(speechExecutor(ctx)).resolves.toEqual({ status: 'done' })
     expect(speechGenerate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -287,6 +297,10 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     expect(JSON.parse(result.value ?? '{}').results[0].runId).toBe('run-1')
     // 本次没有字幕，必须清空而不是保留上一次的 nodeExtra。
     expect(meta.nodeExtra).toBeUndefined()
+    // 清空只能是「删掉这个键」：meta 里留一个值为 undefined 的键会被 tldraw 的
+    // schema 校验整条拒掉（真机验收里配音成功之后画布就是这么炸的）。
+    expect('nodeExtra' in meta).toBe(false)
+    expect(Object.values(meta).some((v) => v === undefined)).toBe(false)
   })
 
   it('配音执行器在豆包开启字幕时写入 out-subtitle 的结构化结果', async () => {
@@ -584,5 +598,25 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     expect(videoSubmit).toHaveBeenCalledWith(
       expect.objectContaining({ mode: 'reference', referenceImageMediaIds: ['connected-image'] })
     )
+  })
+})
+
+describe('shape.meta 只能是 JSON 值（2026-09-19 真机验收 P0）', () => {
+  it('补丁里的 undefined 与 null 都是删除该键，而不是留下一个非法值', () => {
+    expect(mergeShapeMeta({ nodeExtra: '旧字幕', keep: 1 }, { nodeExtra: undefined })).toEqual({
+      keep: 1
+    })
+    expect('nodeExtra' in mergeShapeMeta({ nodeExtra: '旧字幕' }, { nodeExtra: null })).toBe(false)
+  })
+
+  it('合法但为假的值必须原样保留，清空语义不能顺手吃掉它们', () => {
+    const merged = mergeShapeMeta({}, { a: '', b: 0, c: false, d: null, e: undefined })
+    expect(merged).toEqual({ a: '', b: 0, c: false })
+  })
+
+  it('合并不改动传进来的 meta（运行器每轮都从文档重新读一份）', () => {
+    const current = { nodeRun: { status: 'running' } }
+    mergeShapeMeta(current, { nodeRun: { status: 'success' }, nodeExtra: undefined })
+    expect(current).toEqual({ nodeRun: { status: 'running' } })
   })
 })

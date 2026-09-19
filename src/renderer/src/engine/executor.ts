@@ -22,6 +22,7 @@ import {
   type ContractOutputs
 } from './contracts'
 import type { NodeExecutionContext, NodeExecutionResult, SubflowRequest } from './executor-types'
+import type { NodeMetaPatch } from '@shared/engine/executor-types'
 import { rendererGateway } from './rendererGateway'
 import { operationPatchViolation } from '@shared/engine/node-invariants'
 import { runCodeTransform } from './codeRuntime'
@@ -191,11 +192,11 @@ export async function runNodeTest(
     updateResult: (result) => {
       testShape = {
         ...testShape,
-        meta: { ...(testShape.meta ?? {}), nodeResult: result ?? undefined }
+        meta: mergeShapeMeta(testShape.meta, { nodeResult: result })
       }
     },
     updateMeta: (patch) => {
-      testShape = { ...testShape, meta: { ...(testShape.meta ?? {}), ...patch } }
+      testShape = { ...testShape, meta: mergeShapeMeta(testShape.meta, patch) }
     },
     runSubflow: async () => {
       throw new Error('节点测试不执行下游子流程')
@@ -314,6 +315,26 @@ function setExec(editor: Editor, id: TLShapeId, status: ExecStatus): void {
   editor.updateShape({ id, type: 'node-card', props: { exec: status } })
 }
 
+/**
+ * shape.meta 只能是 JSON 值：tldraw 的 schema 校验会把显式的 `undefined` 整个拒掉
+ * （`ValidationError: At shape(type = node-card).meta: Expected json serializable
+ * value, got undefined`），而这条更新是运行成功那一刻发出的，于是配音 / 语音克隆
+ * 这类「本次没有副产物」的执行会把画布直接炸掉——资产已经落库，卡片却永远不显示。
+ * 统一在这里收口：补丁里值为 undefined 或 null 的键按「删除该键」处理，正好对上
+ * `updateResult(null)` 文档写的清空语义。
+ */
+export function mergeShapeMeta(
+  current: Record<string, unknown> | NodeMetaPatch | undefined,
+  patch: Record<string, unknown> | NodeMetaPatch | undefined
+): NodeCardShape['meta'] {
+  const next: Record<string, unknown> = { ...(current ?? {}) }
+  for (const [key, value] of Object.entries(patch ?? {})) {
+    if (value === undefined || value === null) delete next[key]
+    else next[key] = value
+  }
+  return next as NodeCardShape['meta']
+}
+
 function writeRunRecord(editor: Editor, id: TLShapeId, record: NodeRunRecord): void {
   const current = editor.getShape<NodeCardShape>(id)
   editor.updateShape({
@@ -394,10 +415,7 @@ async function invokeExecutor(
       ctx.editor.updateShape({
         id,
         type: 'node-card',
-        meta: {
-          ...(current?.meta ?? {}),
-          nodeResult: result ?? undefined
-        }
+        meta: mergeShapeMeta(current?.meta, { nodeResult: result })
       })
     },
     updateMeta: (patch) => {
@@ -405,7 +423,7 @@ async function invokeExecutor(
       ctx.editor.updateShape({
         id,
         type: 'node-card',
-        meta: { ...(current?.meta ?? {}), ...patch }
+        meta: mergeShapeMeta(current?.meta, patch)
       })
     },
     emitArtifact: (artifact) => {
@@ -660,7 +678,7 @@ function resetSubflowRunState(ctx: WorkflowContext, nodeIds: string[]): void {
           ...(restoreInputs ? baseInputs : {}),
           ...(hasMedia ? { mediaId: '', mediaPath: '', mediaMime: '' } : {})
         },
-        ...(hasResult ? { meta: { ...(shape.meta ?? {}), nodeResult: undefined } } : {})
+        ...(hasResult ? { meta: mergeShapeMeta(shape.meta, { nodeResult: undefined }) } : {})
       })
     }
     ctx.outputs.delete(nodeId)
