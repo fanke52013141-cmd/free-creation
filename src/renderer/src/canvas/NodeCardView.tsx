@@ -132,14 +132,12 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     stopEventPropagation(e)
   }
 
+  // 图标只做一件事：说明这个节点的契约。导演台有自己的全屏工作区，但它从卡片按钮
+  // 进入；若 info 图标也跳去工作区，这个节点 7 个端口的契约就没有任何入口了。
   const openNodePanel = (): void => {
-    const kind =
-      shape.props.nodeType === 'chat'
-        ? 'chat'
-        : shape.props.nodeType === 'director'
-          ? 'director'
-          : 'contract'
-    useNodePanelStore.getState().open(kind, shape.id, 'settings')
+    useNodePanelStore
+      .getState()
+      .open(shape.props.nodeType === 'chat' ? 'chat' : 'contract', shape.id, 'settings')
   }
 
   const beginTitleEditing = (): void => {
@@ -375,16 +373,11 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             {shape.props.title}
           </div>
           {/* info 按钮（查看输入输出说明）：紧跟节点名称，点击显式打开右侧面板
-                （对话节点→聊天面板，其余→契约信息窗）。 */}
+                （对话节点→聊天面板，其余→契约信息窗）。标题必须和 openNodePanel 的
+                去向一致——预演台从卡片按钮进，这里写「打开 3D 预演台」会是假提示。 */}
           <button
             className="node-info-btn"
-            title={
-              shape.props.nodeType === 'chat'
-                ? '打开对话面板'
-                : shape.props.nodeType === 'director'
-                  ? '打开 3D 预演台'
-                  : '查看输入输出说明'
-            }
+            title={shape.props.nodeType === 'chat' ? '打开对话面板' : '查看输入输出说明'}
             aria-label="打开节点说明"
             onPointerDown={handleInfoOpen}
             onClick={(e) => {

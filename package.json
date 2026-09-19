@@ -16,6 +16,7 @@
     "test:browser-panel-sync": "node scripts/test-browser-panel-sync.cjs",
     "test:browser-media-import": "node scripts/test-browser-media-import.cjs",
     "test:browser-storyboard": "node scripts/test-browser-storyboard.cjs",
+    "test:browser-director-studio": "node scripts/test-browser-director-studio.cjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:contract": "vitest run test/node-compliance.test.ts test/node-contract-snapshot.test.ts test/connection-matrix.test.ts",

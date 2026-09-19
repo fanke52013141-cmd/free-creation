@@ -993,9 +993,15 @@ export function registerExtendedNodeTypes(): void {
     executionMode: 'manual-publish',
     ports: {
       in: [
-        input('in-storyboard', '分镜', 'json', '可选的分镜列表；在导演台中同步为镜头。', {
-          schema: STORYBOARD_SHOTS
-        }),
+        input(
+          'in-storyboard',
+          '分镜',
+          'json',
+          '可选的分镜列表；连线后需在 3D 预演台点「同步连线输入」才会成为镜头。',
+          {
+            schema: STORYBOARD_SHOTS
+          }
+        ),
         input(
           'in-reference-images',
           '场景参考图',

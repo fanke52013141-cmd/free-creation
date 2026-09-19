@@ -9,6 +9,10 @@ import {
   directorSequenceDuration,
   directorCameraFov,
   directorCameraTarget,
+  directorPublishDrift,
+  directorPublishStateText,
+  DIRECTOR_DURATION_RANGE_SEC,
+  DIRECTOR_FOCAL_RANGE_MM,
   evaluateDirectorShot,
   moveDirectorShot,
   nextDirectorProjectRevision,
@@ -116,6 +120,17 @@ describe('导演台 2D 预演数据', () => {
     expect(warnings.some((warning) => warning.includes('12 秒'))).toBe(true)
   })
 
+  it('过长镜头的告警说明导出截断后果，而不是只喊「太长」', () => {
+    const project = createDirectorProject()
+    const shot = {
+      ...project.shots[0],
+      camera: { ...project.shots[0].camera, durationSec: DIRECTOR_DURATION_RANGE_SEC[1] + 8 }
+    }
+    const [warning] = directorShotWarnings(project, shot).filter((item) => item.includes('秒超过'))
+    expect(warning).toContain(`导出只取前 ${DIRECTOR_DURATION_RANGE_SEC[1]} 秒`)
+    expect(warning).toContain(`${shot.camera.durationSec} 秒`)
+  })
+
   it('3D 预演与发布使用同一套焦段和机位朝向语义', () => {
     const camera = { ...createDirectorShot().camera, heading: 90, pitch: 0, focalLengthMm: 50 }
     expect(directorCameraFov(50)).toBe(43.25)
@@ -195,5 +210,82 @@ describe('导演台 2D 预演数据', () => {
     expect(deleted?.shots.map((shot) => shot.id)).toEqual([project.shots[0].id, third.id])
     expect(deleted?.activeShotId).toBe(third.id)
     expect(removeDirectorShot(project, project.activeShotId)).toBeNull()
+  })
+})
+
+describe('导演台参数范围与发布状态语义', () => {
+  it('焦段上限就是画面停止变化的那一个整数，超过它任何值都渲染同一帧', () => {
+    const [, maxFocal] = DIRECTOR_FOCAL_RANGE_MM
+    // 上限之内必须还在变，否则这个控件本身就是装饰。
+    expect(directorCameraFov(maxFocal)).toBeGreaterThan(18)
+    expect(directorCameraFov(maxFocal)).toBeLessThan(directorCameraFov(maxFocal - 1))
+    // 上限之外 FOV 已经饱和：界面此前放行到 200mm，用户改的是无效数字。
+    expect(directorCameraFov(maxFocal + 1)).toBe(18)
+    expect(directorCameraFov(500)).toBe(18)
+  })
+
+  it('序列切片把越界时长夹回界面同一个区间', () => {
+    const project = createDirectorProject()
+    const clamp = (durationSec: number): number =>
+      syncDirectorSequence({
+        ...project,
+        shots: [{ ...project.shots[0], camera: { ...project.shots[0].camera, durationSec } }]
+      }).cuts[0]!.durationSec
+    // 旧序列上限 30 秒：切出来的片段会比界面允许的最长镜头还长。
+    expect(clamp(DIRECTOR_DURATION_RANGE_SEC[1] * 3)).toBe(DIRECTOR_DURATION_RANGE_SEC[1])
+    expect(clamp(0)).toBe(DIRECTOR_DURATION_RANGE_SEC[0])
+    expect(clamp(5)).toBe(5)
+  })
+
+  it('旧工程存着的切片时长在读取时跟镜头重算，切片只保留身份', () => {
+    const project = createDirectorProject()
+    const first = project.shots[0]
+    const parsed = parseDirectorProject(
+      JSON.stringify({
+        ...project,
+        shots: [{ ...first, camera: { ...first.camera, durationSec: 9 } }],
+        // 现场复现：镜头 9 秒，切片还留着旧上限 30 秒——「导出整段」会按 30 秒走。
+        sequence: { version: 1, cuts: [{ id: 'cut-keep', shotId: first.id, durationSec: 30 }] }
+      })
+    )
+    expect(parsed.sequence.cuts[0]?.id).toBe('cut-keep')
+    expect(parsed.sequence.cuts[0]?.durationSec).toBe(9)
+    expect(directorSequenceDuration(parsed)).toBe(9)
+  })
+
+  it('发布偏差分四种，「没发布」「改过」「发布的是别的镜头」不再混成一句', () => {
+    const project = createDirectorProject()
+    const first = project.shots[0]
+    const second = createDirectorShot('镜头 02')
+    const full = { ...project, shots: [first, second] }
+    const published = createDirectorPublishRecord(full, second, null, {
+      frame: { mediaId: 'frame-b', mediaPath: 'projects/b.png', mime: 'image/png' }
+    })
+    expect(directorPublishDrift(full, published, second.id)).toBe('current')
+    expect(directorPublishDrift(full, published, first.id)).toBe('other-shot')
+    expect(directorPublishDrift(full, null, first.id)).toBe('unpublished')
+    const edited = nextDirectorProjectRevision(full, {
+      ...full,
+      shots: full.shots.map((shot) => ({ ...shot, scene: '雨夜街口' }))
+    })
+    expect(directorPublishDrift(edited, published, second.id)).toBe('edited')
+  })
+
+  it('卡片与预演台共用同一句发布状态，另一个镜头要点名', () => {
+    const project = createDirectorProject()
+    const first = project.shots[0]
+    const second = createDirectorShot('镜头 02')
+    const full = { ...project, shots: [first, second] }
+    const published = createDirectorPublishRecord(full, second, null, {
+      frame: { mediaId: 'frame-b', mediaPath: 'projects/b.png', mime: 'image/png' }
+    })
+    expect(directorPublishStateText(full, published, second.id)).toContain('当前镜头已发布')
+    expect(directorPublishStateText(full, published, first.id)).toContain('镜头 02')
+    expect(directorPublishStateText(full, null, first.id)).toBe('尚未发布输出')
+    const edited = nextDirectorProjectRevision(full, {
+      ...full,
+      shots: full.shots.map((shot) => ({ ...shot, scene: '雨夜街口' }))
+    })
+    expect(directorPublishStateText(edited, published, second.id)).toContain('需重新发布')
   })
 })

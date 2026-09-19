@@ -30,7 +30,7 @@ export const STRUCTURED_SCHEMA_OPTIONS: Array<{
   {
     schema: { id: 'storyboard.shots', version: 1 },
     label: '分镜列表',
-    hint: '可交给分镜板或导演台'
+    hint: '可交给分镜板或 3D 预演台'
   },
   { schema: { id: 'list.items', version: 1 }, label: '对象列表', hint: '可交给循环节点批处理' },
   JSON_ANY_OPTION

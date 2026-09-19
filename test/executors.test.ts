@@ -408,7 +408,7 @@ describe('directorExecutor · 手动发布门禁', () => {
     expect(directorExecutor(ctx)).toEqual({ status: 'done' })
   })
 
-  it('发布记录与当前导演工程修订不一致时必须跳过', () => {
+  it('发布记录与当前导演工程修订不一致时必须跳过，并说明是「改过」而不是「没发布」', () => {
     const project = createDirectorProject()
     project.revision = 2
     const { ctx } = makeCtx({
@@ -426,7 +426,40 @@ describe('directorExecutor · 手动发布门禁', () => {
         })
       }
     })
-    expect(directorExecutor(ctx)).toMatchObject({ status: 'skipped' })
+    const result = directorExecutor(ctx)
+    expect(result).toMatchObject({ status: 'skipped' })
+    const reason = String((result as { reason?: string }).reason)
+    expect(reason).toContain('上次发布之后工程又改过')
+    expect(reason).not.toContain('尚未发布')
+    // 没连任何输入时不该扯「同步连线输入」，否则原因里出现了用户没做过的动作。
+    expect(reason).not.toContain('同步连线输入')
+  })
+
+  it('连了分镜但从未同步发布时，原因点名连线而不是让用户以为读不到', () => {
+    const project = createDirectorProject()
+    const { ctx } = makeCtx({
+      nodeType: 'director',
+      config: JSON.stringify(project),
+      inputs: new Map([
+        [
+          'in-storyboard',
+          [
+            {
+              type: 'json',
+              value: { kind: 'json', data: { shots: [] } },
+              source: { nodeId: 'u', portId: 'out-shots', runId: 'r1' },
+              createdAt: 0
+            }
+          ]
+        ]
+      ])
+    })
+    const result = directorExecutor(ctx)
+    const reason = String((result as { reason?: string }).reason)
+    expect(result.status).toBe('skipped')
+    expect(reason).toContain('尚未发布过输出')
+    expect(reason).toContain('已连接 分镜')
+    expect(reason).toContain('同步连线输入')
   })
 })
 

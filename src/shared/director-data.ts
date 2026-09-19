@@ -290,6 +290,52 @@ export function directorCameraFov(focalLengthMm: number): number {
   return Math.max(18, Math.min(85, 50 - (focalLengthMm - 35) * 0.45))
 }
 
+/**
+ * 焦段对画面的有效上限：`directorCameraFov` 把视角夹在 18–85°，50−(f−35)×0.45 解到 18°
+ * 是 106.1mm，也就是 107mm 与 500mm 渲染出的画面一模一样（85° 那头要负焦段才到，正数
+ * 区间不会饱和）。界面此前放行到 200mm，用户改的是一个不再影响任何画面的数字，所以这里
+ * 给出唯一一份「最后一个还会改变画面的整数」上限；下限沿用原有的 12mm 广角端。
+ */
+export const DIRECTOR_FOCAL_RANGE_MM = [12, 106] as const
+
+/**
+ * 单镜头时长的唯一上限：界面输入、序列切片、WebM 导出与「超过 12 秒」告警此前分别写
+ * 10 / 30 / 10 / 12，四个数互相对不上——12 秒那条告警在界面上永远够不到，而导出会在
+ * 10 秒处静默截断更长的镜头。四处现在都读这里，告警也直接说清截断后果。
+ */
+export const DIRECTOR_DURATION_RANGE_SEC = [1, 12] as const
+
+/** 发布记录与当前工程/镜头的偏差种类；界面必须按种类说清「为什么要重新发布」。 */
+export type DirectorPublishDrift = 'current' | 'unpublished' | 'other-shot' | 'edited'
+
+export function directorPublishDrift(
+  project: DirectorProjectData,
+  publish: DirectorPublishRecord | null,
+  shotId: string
+): DirectorPublishDrift {
+  if (!publish) return 'unpublished'
+  if (!isDirectorPublishCurrent(project, publish)) return 'edited'
+  return publish.shotId === shotId ? 'current' : 'other-shot'
+}
+
+/**
+ * 发布状态的唯一一句人话：卡片与预演台各写一份时会漂移（卡片说「已发布，可供下游使用」，
+ * 预演台说「当前镜头已发布」，用户以为两个镜头各自发布）。下游投影只按修订号判定，
+ * 因此「发布的是另一个镜头」依然有真实输出，必须点名是哪一路镜头，不能谎称可用。
+ */
+export function directorPublishStateText(
+  project: DirectorProjectData,
+  publish: DirectorPublishRecord | null,
+  shotId: string
+): string {
+  const drift = directorPublishDrift(project, publish, shotId)
+  if (drift === 'current') return '当前镜头已发布，可供下游使用'
+  if (drift === 'other-shot')
+    return `已发布的是「${project.shots.find((shot) => shot.id === publish?.shotId)?.name ?? '另一个镜头'}」，当前镜头尚未发布`
+  if (drift === 'edited') return '发布后工程又改过，需重新发布'
+  return '尚未发布输出'
+}
+
 /** 根据导演机位的方位与俯仰计算注视点，避免预演和发布使用不同朝向。 */
 export function directorCameraTarget(
   camera: DirectorCamera,
@@ -684,6 +730,14 @@ function normalizeDirectorSpace(value: unknown): DirectorSpace {
   }
 }
 
+/** 切片时长的唯一算法：永远由镜头时长夹出来，界面只有一处能改它。 */
+function directorCutDurationSec(shot: DirectorShot): number {
+  return Math.max(
+    DIRECTOR_DURATION_RANGE_SEC[0],
+    Math.min(DIRECTOR_DURATION_RANGE_SEC[1], shot.camera.durationSec)
+  )
+}
+
 function normalizeDirectorSequence(
   value: unknown,
   shots: DirectorShot[]
@@ -693,7 +747,7 @@ function normalizeDirectorSequence(
     cuts: shots.map((shot) => ({
       id: createDirectorId('cut'),
       shotId: shot.id,
-      durationSec: shot.camera.durationSec
+      durationSec: directorCutDurationSec(shot)
     }))
   }
   if (!value || typeof value !== 'object' || Array.isArray(value)) return fallback
@@ -718,11 +772,18 @@ function normalizeDirectorSequence(
       cuts.push({
         id: createDirectorId('cut'),
         shotId: shot.id,
-        durationSec: shot.camera.durationSec
+        durationSec: directorCutDurationSec(shot)
       })
     }
   }
-  return { version: 1, cuts }
+  return {
+    version: 1,
+    // 读入时同样按镜头时长重算：旧工程里存着的切片时长是「导出整段」和「时长」分叉的现场。
+    cuts: cuts.map((cut) => ({
+      ...cut,
+      durationSec: directorCutDurationSec(shots.find((shot) => shot.id === cut.shotId)!)
+    }))
+  }
 }
 
 export function parseDirectorProject(text: string): DirectorProjectData {
@@ -812,14 +873,13 @@ export function syncDirectorSequence(
   const previous = new Map(project.sequence.cuts.map((cut) => [cut.shotId, cut]))
   return {
     version: 1,
-    cuts: project.shots.map((shot) => {
-      const cut = previous.get(shot.id)
-      return {
-        id: cut?.id ?? createDirectorId('cut'),
-        shotId: shot.id,
-        durationSec: Math.max(1, Math.min(30, cut?.durationSec ?? shot.camera.durationSec))
-      }
-    })
+    cuts: project.shots.map((shot) => ({
+      // 切片只带身份与顺序：没有任何界面能单独编辑切片时长，若沿用它自己的旧值，
+      // 「时长」就只作用于单镜头导出，「导出整段」继续按旧秒数走——同一次编辑，两个答案。
+      id: previous.get(shot.id)?.id ?? createDirectorId('cut'),
+      shotId: shot.id,
+      durationSec: directorCutDurationSec(shot)
+    }))
   }
 }
 
@@ -833,8 +893,10 @@ export function directorSequenceDuration(project: DirectorProjectData): number {
  */
 export function directorShotWarnings(project: DirectorProjectData, shot: DirectorShot): string[] {
   const warnings: string[] = []
-  if (shot.camera.durationSec > 12)
-    warnings.push('当前镜头超过 12 秒，建议拆分以提高视频模型跟随度。')
+  if (shot.camera.durationSec > DIRECTOR_DURATION_RANGE_SEC[1])
+    warnings.push(
+      `当前镜头 ${shot.camera.durationSec} 秒超过 ${DIRECTOR_DURATION_RANGE_SEC[1]} 秒：导出只取前 ${DIRECTOR_DURATION_RANGE_SEC[1]} 秒，建议拆分以提高视频模型跟随度。`
+    )
   const tracks = [shot.timeline.camera, ...Object.values(shot.timeline.actors)]
   if (
     tracks.some((frames) =>

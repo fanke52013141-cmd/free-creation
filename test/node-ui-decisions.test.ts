@@ -853,3 +853,112 @@ describe('v1.2 §16.27 浏览器门禁存在：逐镜编辑必须保住镜头额
     expect(gate).toContain('请通过分镜批量生图工作流生成媒体')
   })
 })
+
+describe('v1.2 §16.28 3D 预演台：读文档真值、连线数上按钮、只摆画面在变的控件', () => {
+  const studio = stripComments(read('src/renderer/src/canvas/DirectorStudioPanel.tsx'))
+  const viewport3d = stripComments(read('src/renderer/src/canvas/Director3DViewport.tsx'))
+  const dataLayer = read('src/shared/director-data.ts')
+  const studioExecutor = stripComments(read('src/shared/engine/executors/director.ts'))
+  const studioCard = stripComments(read('src/renderer/src/nodes/specs/bodies/director.tsx'))
+  // 「构图与参考」整组：从组名到组内最后一句提示，是门控是否成立的最小现场。
+  const guidesGroup = studio.match(/构图与参考[\s\S]*?参考图仅供构图对照/)?.[0] ?? ''
+
+  it('面板不持有挂载快照，工程、发布记录与连线数都从文档响应式读取', () => {
+    expect(studio).toContain('const project = useValue(')
+    expect(studio).toContain('const published = useValue<DirectorPublishRecord | null>(')
+    expect(studio).toContain('const inputCounts = useValue(')
+    // 换 shapeId 时必须整块重建，否则面板带着上一个节点的工程去保存当前节点。
+    expect(canvasEditor).toMatch(/<DirectorStudioPanel\s*\n\s*key=\{nodePanelShapeId\}/)
+    expect(studio).not.toMatch(/const \[project, setProject\]/)
+    expect(studio).not.toMatch(/const \[published, setPublished\]/)
+  })
+
+  it('同步按钮上写的是三个端口的真实连线数，没连线不给点', () => {
+    expect(studio).toContain("countIncomingConnections(editor, shapeId, 'in-storyboard')")
+    expect(studio).toContain("countIncomingConnections(editor, shapeId, 'in-reference-images')")
+    expect(studio).toContain("countIncomingConnections(editor, shapeId, 'in-camera-preset')")
+    expect(studio).toContain('disabled={wiredInputCount === 0}')
+    expect(studio).toContain('同步连线输入（分镜 {inputCounts.storyboard}')
+    expect(studio).toContain('分镜、场景参考图、机位参数三个输入端口都没有连线，连上之后才能同步')
+  })
+
+  it('执行器按原因分路说清楚，不再把「连了线没同步」讲成读不到', () => {
+    expect(studioExecutor).toContain('inputPackets(ctx.inputs, port)')
+    expect(studioExecutor).toContain('连线不会自动变成镜头，请在预演台点「同步连线输入」后发布')
+    expect(studioExecutor).not.toContain('请打开导演台后重新发布')
+    // 端口说明也必须写明要手动同步，否则连线看起来和数据节点完全一样。
+    expect(specs).toContain('连线后需在 3D 预演台点「同步连线输入」才会成为镜头')
+  })
+
+  it('只有画面真的会变的控件才摆出来：2D 专属项在 3D 只留一句去向', () => {
+    expect(guidesGroup).toContain("viewportMode === '3d' ? (")
+    expect(guidesGroup).toContain('三分线、安全框、视线高度与参考图透明度只在 2D 取景器绘制')
+    // 开关必须排在 3D 分支之后（3D 那一支只有提示文字）。
+    expect(guidesGroup.indexOf("viewportMode === '3d' ? (")).toBeLessThan(
+      guidesGroup.indexOf('director-guide-toggles')
+    )
+    expect(studio).toMatch(/viewportMode === '2d' && \(\s*<select[\s\S]{0,200}姿态/)
+    // 3D 视口压根不消费这些字段——上面所有门控的事实来源。
+    expect(viewport3d).not.toMatch(/\.pose\b/)
+    expect(viewport3d).not.toContain('referenceOpacity')
+    expect(viewport3d).not.toContain('guides')
+  })
+
+  it('焦距与时长只有一个真值，切片时长由镜头时长夹出来', () => {
+    expect(studio).toContain('max={DIRECTOR_FOCAL_RANGE_MM[1]}')
+    expect(studio).toContain(
+      'Math.min(DIRECTOR_FOCAL_RANGE_MM[1], Number(event.target.value) || 35)'
+    )
+    expect(studio).toContain('max={DIRECTOR_DURATION_RANGE_SEC[1]}')
+    expect(studio).toContain(
+      'Math.min(DIRECTOR_DURATION_RANGE_SEC[1], Number(event.target.value) || 5)'
+    )
+    // WebM 导出与界面同一上限：曾经界面 10 秒、告警 12 秒、导出又截成 10 秒。
+    expect(studio).toContain('DIRECTOR_DURATION_RANGE_SEC[1] * 1000')
+    expect(studio).not.toMatch(/焦距[\s\S]{0,200}max="200"/)
+    expect(dataLayer).toContain('durationSec: directorCutDurationSec(shot)')
+    // 切片沿用自己的旧秒数，就是「时长」和「导出整段」分叉的现场。
+    expect(dataLayer).not.toContain('cut?.durationSec ?? shot.camera.durationSec')
+    expect(dataLayer).toContain('directorShotWarnings')
+  })
+
+  it('发布状态一句人话只有一份，卡片与面板共用', () => {
+    expect(dataLayer).toContain('export function directorPublishDrift(')
+    expect(dataLayer).toContain('export function directorPublishStateText(')
+    expect(studio).toContain('directorPublishStateText(project, published, shot.id)')
+    expect(studioCard).toContain('directorPublishStateText(project, publish, active.id)')
+    // 卡片自己写死「已发布」时，另一个镜头的发布会冒充当前镜头。
+    expect(studioCard).not.toContain('已发布，可供下游使用')
+  })
+
+  it('图标进契约、工作区进按钮，名字只有一个来源', () => {
+    // info 图标曾把导演台跳去工作区，7 个端口的契约就没有任何入口了。
+    expect(nodeCardView).toContain("open(shape.props.nodeType === 'chat' ? 'chat' : 'contract'")
+    expect(nodeCardView).not.toMatch(/nodeType === 'director'/)
+    // 标题与 openNodePanel 的去向必须一致，否则 tooltip 是假提示。
+    expect(nodeCardView).toContain(
+      "title={shape.props.nodeType === 'chat' ? '打开对话面板' : '查看输入输出说明'}"
+    )
+    for (const source of [studio, studioCard, studioExecutor, stripComments(nodeCardView)]) {
+      expect(source).not.toContain('导演台')
+    }
+    expect(read('src/shared/structured-data.ts')).not.toContain('导演台')
+    expect(studio).toContain('title="关闭 3D 预演台"')
+    expect(studio).toContain("toast('3D 预演台至少保留一个镜头')")
+  })
+})
+
+describe('v1.2 §16.28 浏览器门禁存在：预演台必须跟随文档、夹住区间、按视角摆控件', () => {
+  const gate = read('scripts/test-browser-director-studio.cjs')
+
+  it('门禁已注册并断言撤销跟随、区间夹取与 2D 专属门控', () => {
+    expect(read('package.json')).toContain('"test:browser-director-studio"')
+    expect(gate).toContain('const FOCAL_MAX =')
+    expect(gate).toContain('const DURATION_MAX =')
+    expect(gate).toContain('同步连线输入（分镜0·参考图0·机位0）')
+    expect(gate).toContain('3D 视口不得摆出只有 2D 消费的三分线开关')
+    expect(gate).toContain('撤销后面板必须跟随文档焦距')
+    expect(gate).toContain('卡片必须跟随面板写进文档的焦距（过期快照缺陷的形状）')
+    expect(gate).toContain('尚未发布输出')
+  })
+})

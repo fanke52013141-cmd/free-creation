@@ -1829,6 +1829,7 @@ export function CanvasEditor({
       )}
       {!panelTab && editorInstance && nodePanelKind === 'director' && nodePanelShapeId && (
         <DirectorStudioPanel
+          key={nodePanelShapeId}
           editor={editorInstance}
           projectId={project.id}
           shapeId={nodePanelShapeId}

@@ -2,18 +2,22 @@
 // 明确的 portId 完成。当前版本提供构图/机位/镜头/角色/时间轴和 PNG/WebM 发布，
 // 后续可在同一数据协议上替换为 Three.js 白模视口。
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { Editor, TLShapeId } from 'tldraw'
-import { gatherUpstreamJson, gatherUpstreamMediaList } from './graph'
+import { useValue, type Editor, type TLShapeId } from 'tldraw'
+import { countIncomingConnections, gatherUpstreamJson, gatherUpstreamMediaList } from './graph'
 import { markUndoPoint } from './history'
 import { Icon } from '../components/Icon'
 import {
   createDirectorId,
   createDirectorPublishRecord,
   createDirectorShot,
+  DIRECTOR_DURATION_RANGE_SEC,
+  DIRECTOR_FOCAL_RANGE_MM,
+  directorCameraFov,
+  directorPublishDrift,
+  directorPublishStateText,
   directorSequenceDuration,
   directorShotWarnings,
   evaluateDirectorShot,
-  isDirectorPublishCurrent,
   moveDirectorShot,
   nextDirectorProjectRevision,
   parseDirectorProject,
@@ -194,7 +198,12 @@ async function recordShotPreview(shot: DirectorShot): Promise<Blob> {
   recorder.ondataavailable = (event) => {
     if (event.data.size > 0) chunks.push(event.data)
   }
-  const durationMs = Math.max(1000, Math.min(10_000, shot.camera.durationSec * 1000))
+  // 导出时长与镜头时长用同一份上限：此前这里写死 10 秒，长镜头的 WebM 会被静默截断，
+  // 而界面告警却在说 12 秒。
+  const durationMs = Math.max(
+    1000,
+    Math.min(DIRECTOR_DURATION_RANGE_SEC[1] * 1000, shot.camera.durationSec * 1000)
+  )
   const startedAt = performance.now()
   return await new Promise<Blob>((resolve, reject) => {
     recorder.onerror = () => reject(new Error('预演视频编码失败'))
@@ -218,8 +227,40 @@ export function DirectorStudioPanel({
   onClose
 }: DirectorStudioPanelProps): React.JSX.Element | null {
   const shape = editor.getShape<NodeCardShape>(shapeId)
-  const initial = shape?.type === 'node-card' ? parseDirectorProject(readNodeConfig(shape)) : null
-  const [project, setProject] = useState<DirectorProjectData | null>(initial)
+  // 工程与发布记录都从文档响应式读取（§16.25）：本地再存一份挂载时的拷贝会串台——
+  // 同一个面板实例换到另一个节点时，保存写的是当前 shapeId 的配置、内容却是上一个
+  // 节点的工程；Cmd+Z 撤销文档后面板也会继续显示被撤销掉的旧工程并在下次保存复活。
+  const project = useValue(
+    'director-project',
+    () => {
+      const current = editor.getShape<NodeCardShape>(shapeId)
+      return current?.type === 'node-card' ? parseDirectorProject(readNodeConfig(current)) : null
+    },
+    [editor, shapeId]
+  )
+  const published = useValue<DirectorPublishRecord | null>(
+    'director-published',
+    () => {
+      const current = editor.getShape<NodeCardShape>(shapeId)
+      if (current?.type !== 'node-card' || typeof current.meta?.nodeResult !== 'string') return null
+      try {
+        return parseDirectorPublishRecord(JSON.parse(current.meta.nodeResult))
+      } catch {
+        // 损坏记录按未发布处理。
+        return null
+      }
+    },
+    [editor, shapeId]
+  )
+  const inputCounts = useValue(
+    'director-input-counts',
+    () => ({
+      storyboard: countIncomingConnections(editor, shapeId, 'in-storyboard'),
+      references: countIncomingConnections(editor, shapeId, 'in-reference-images'),
+      preset: countIncomingConnections(editor, shapeId, 'in-camera-preset')
+    }),
+    [editor, shapeId]
+  )
   const [timeline, setTimeline] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [mobilePanel, setMobilePanel] = useState<'shots' | 'inspector' | null>(null)
@@ -299,16 +340,12 @@ export function DirectorStudioPanel({
 
   if (!shape || shape.type !== 'node-card' || !project || !shot || !previewShot) return null
 
-  let published: DirectorPublishRecord | null = null
-  try {
-    published = parseDirectorPublishRecord(
-      typeof shape.meta?.nodeResult === 'string' ? JSON.parse(shape.meta.nodeResult) : null
-    )
-  } catch {
-    // 损坏记录按未发布处理。
-  }
-  const activeShotPublished =
-    isDirectorPublishCurrent(project, published) && published.shotId === shot.id
+  // 「尚未发布」与「发布后工程又改过」「发布的是另一个镜头」是三件不同的事，混成一句
+  // 状态用户就不知道下一步该点哪个按钮。
+  const publishDrift = directorPublishDrift(project, published, shot.id)
+  const activeShotPublished = publishDrift === 'current'
+  const publishStateLabel = directorPublishStateText(project, published, shot.id)
+  const wiredInputCount = inputCounts.storyboard + inputCounts.references + inputCounts.preset
 
   const save = (next: Omit<DirectorProjectData, 'revision'>, affectsPublish = true): void => {
     const normalized = {
@@ -317,7 +354,6 @@ export function DirectorStudioPanel({
       sequence: syncDirectorSequence({ ...next, version: 2, revision: project.revision })
     }
     const revised = nextDirectorProjectRevision(project, normalized, affectsPublish)
-    setProject(revised)
     editor.updateShape({
       id: shapeId,
       type: 'node-card',
@@ -630,7 +666,7 @@ export function DirectorStudioPanel({
 
   const deleteShot = (): void => {
     const next = removeDirectorShot(project, shot.id)
-    if (!next) return toast('导演工程至少保留一个镜头')
+    if (!next) return toast('3D 预演台至少保留一个镜头')
     save(next)
     markUndoPoint(editor, 'director-delete-shot')
   }
@@ -649,7 +685,7 @@ export function DirectorStudioPanel({
                 activeShotPublished ? 'director-publish-state published' : 'director-publish-state'
               }
             >
-              {activeShotPublished ? '当前镜头已发布' : published ? '当前镜头尚未发布' : '尚未发布'}
+              {publishStateLabel}
             </small>
           </div>
           <div className="director-top-actions">
@@ -672,8 +708,17 @@ export function DirectorStudioPanel({
             >
               <Icon name="image" size={14} /> 图片视差
             </button>
-            <button onClick={syncInputs} title="同步连线输入">
-              <Icon name="reset" size={14} /> 同步连线输入
+            <button
+              onClick={syncInputs}
+              disabled={wiredInputCount === 0}
+              title={
+                wiredInputCount === 0
+                  ? '分镜、场景参考图、机位参数三个输入端口都没有连线，连上之后才能同步'
+                  : '把已连线的上游输入同步进本工程（会替换当前镜头列表）'
+              }
+            >
+              <Icon name="reset" size={14} /> 同步连线输入（分镜 {inputCounts.storyboard} · 参考图{' '}
+              {inputCounts.references} · 机位 {inputCounts.preset}）
             </button>
             <button
               aria-pressed={advancedMode}
@@ -743,7 +788,7 @@ export function DirectorStudioPanel({
             >
               <Icon name="settings" size={15} /> 属性
             </button>
-            <button className="director-close" onClick={onClose} title="关闭导演台">
+            <button className="director-close" onClick={onClose} title="关闭 3D 预演台">
               <Icon name="close" size={17} />
             </button>
           </div>
@@ -1006,15 +1051,22 @@ export function DirectorStudioPanel({
                 </div>
               )}
               {advancedMode && (
-                <label>
-                  焦距
+                <label
+                  title={`等效水平视角 ${directorCameraFov(shot.camera.focalLengthMm).toFixed(0)}°；超过 ${DIRECTOR_FOCAL_RANGE_MM[1]}mm 画面不再变化`}
+                >
+                  焦距（{DIRECTOR_FOCAL_RANGE_MM[0]}–{DIRECTOR_FOCAL_RANGE_MM[1]}mm）
                   <input
                     type="number"
-                    min="12"
-                    max="200"
+                    min={DIRECTOR_FOCAL_RANGE_MM[0]}
+                    max={DIRECTOR_FOCAL_RANGE_MM[1]}
                     value={shot.camera.focalLengthMm}
                     onChange={(event) =>
-                      patchCamera({ focalLengthMm: Number(event.target.value) || 35 })
+                      patchCamera({
+                        focalLengthMm: Math.max(
+                          DIRECTOR_FOCAL_RANGE_MM[0],
+                          Math.min(DIRECTOR_FOCAL_RANGE_MM[1], Number(event.target.value) || 35)
+                        )
+                      })
                     }
                   />
                 </label>
@@ -1036,15 +1088,18 @@ export function DirectorStudioPanel({
                 </select>
               </label>
               <label>
-                时长（秒）
+                时长（秒，{DIRECTOR_DURATION_RANGE_SEC[0]}–{DIRECTOR_DURATION_RANGE_SEC[1]}）
                 <input
                   type="number"
-                  min="1"
-                  max="10"
+                  min={DIRECTOR_DURATION_RANGE_SEC[0]}
+                  max={DIRECTOR_DURATION_RANGE_SEC[1]}
                   value={shot.camera.durationSec}
                   onChange={(event) =>
                     patchCamera({
-                      durationSec: Math.max(1, Math.min(10, Number(event.target.value) || 5))
+                      durationSec: Math.max(
+                        DIRECTOR_DURATION_RANGE_SEC[0],
+                        Math.min(DIRECTOR_DURATION_RANGE_SEC[1], Number(event.target.value) || 5)
+                      )
                     })
                   }
                 />
@@ -1067,37 +1122,49 @@ export function DirectorStudioPanel({
             </div>
             <div className="director-inspector-group">
               <strong>构图与参考</strong>
-              <div className="director-guide-toggles">
-                {(
-                  [
-                    ['thirds', '三分线'],
-                    ['safeFrame', '安全框'],
-                    ['eyeline', '视线高度']
-                  ] as const
-                ).map(([key, label]) => (
-                  <button
-                    className={shot.guides[key] ? 'active' : ''}
-                    key={key}
-                    onClick={() =>
-                      patchShot({ guides: { ...shot.guides, [key]: !shot.guides[key] } })
-                    }
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <label>
-                参考图透明度
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  disabled={shot.referenceMediaPaths.length === 0}
-                  value={shot.referenceOpacity}
-                  onChange={(event) => patchShot({ referenceOpacity: Number(event.target.value) })}
-                />
-              </label>
+              {/* 辅助线与参考图透明度只有 2D 取景器会画（drawShotFrame / 覆盖层），3D 白模
+                  视口不消费这两个字段，所以切到 3D 时不摆出一堆按了没反应的开关，只留一句去向。 */}
+              {viewportMode === '3d' ? (
+                <small className="director-reference-hint">
+                  三分线、安全框、视线高度与参考图透明度只在 2D 取景器绘制，切到 2D 可调。
+                </small>
+              ) : (
+                <>
+                  <div className="director-guide-toggles">
+                    {(
+                      [
+                        ['thirds', '三分线'],
+                        ['safeFrame', '安全框'],
+                        ['eyeline', '视线高度']
+                      ] as const
+                    ).map(([key, label]) => (
+                      <button
+                        className={shot.guides[key] ? 'active' : ''}
+                        key={key}
+                        onClick={() =>
+                          patchShot({ guides: { ...shot.guides, [key]: !shot.guides[key] } })
+                        }
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <label>
+                    参考图透明度
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      disabled={shot.referenceMediaPaths.length === 0}
+                      value={shot.referenceOpacity}
+                      onChange={(event) =>
+                        patchShot({ referenceOpacity: Number(event.target.value) })
+                      }
+                    />
+                  </label>
+                </>
+              )}
               <small className="director-reference-hint">
                 参考图仅供构图对照，不会写入发布的 PNG 或 WebM。
               </small>
@@ -1105,7 +1172,8 @@ export function DirectorStudioPanel({
             <div className="director-inspector-group">
               <strong>角色 ({shot.actors.length})</strong>
               <small className="director-reference-hint">
-                单击角色选中，3D 视口直接拖动坐标轴；“起点/终点”会自动写入关键帧。
+                单击角色选中，3D 视口直接拖动坐标轴；「起点/终点」会自动写入关键帧。姿态只在 2D
+                取景器画出走动动画，3D 白模不消费它。
               </small>
               {shot.actors.map((actor) => (
                 <div
@@ -1121,19 +1189,21 @@ export function DirectorStudioPanel({
                         patchActor(actor.id, { name: event.target.value || '角色' })
                       }
                     />
-                    <select
-                      value={actor.pose}
-                      aria-label={`${actor.name} 姿态`}
-                      onChange={(event) =>
-                        patchActor(actor.id, { pose: event.target.value as typeof actor.pose })
-                      }
-                    >
-                      <option>站立</option>
-                      <option>行走</option>
-                      <option>坐姿</option>
-                      <option>招手</option>
-                      <option>奔跑</option>
-                    </select>
+                    {viewportMode === '2d' && (
+                      <select
+                        value={actor.pose}
+                        aria-label={`${actor.name} 姿态`}
+                        onChange={(event) =>
+                          patchActor(actor.id, { pose: event.target.value as typeof actor.pose })
+                        }
+                      >
+                        <option>站立</option>
+                        <option>行走</option>
+                        <option>坐姿</option>
+                        <option>招手</option>
+                        <option>奔跑</option>
+                      </select>
+                    )}
                   </div>
                   <div className="director-actor-transform">
                     <label>

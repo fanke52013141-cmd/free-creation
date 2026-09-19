@@ -3,7 +3,8 @@ import type { NodeBodyProps } from '../../registry'
 import {
   parseDirectorProject,
   parseDirectorPublishRecord,
-  isDirectorPublishCurrent,
+  directorPublishDrift,
+  directorPublishStateText,
   type DirectorPublishRecord
 } from '../../director-data'
 import { useNodePanelStore } from '../../../stores/nodePanel'
@@ -24,7 +25,10 @@ export function DirectorBody({ shape }: NodeBodyProps): React.JSX.Element {
     // 不完整的历史记录按未发布处理。
   }
   const active = project.shots.find((shot) => shot.id === project.activeShotId) ?? project.shots[0]
-  const publishCurrent = isDirectorPublishCurrent(project, publish)
+  // 下游投影只看修订号，所以「发布的是另一个镜头」仍有真实输出可用；但这句话必须点名
+  // 是哪一路镜头，否则用户会以为当前镜头的参数已经发出去了。
+  const drift = directorPublishDrift(project, publish, active.id)
+  const publishUsable = drift === 'current' || drift === 'other-shot'
 
   return (
     // 注意：不要在容器上整块 stopEventPropagation——那会同时吞掉卡片空白区的
@@ -44,13 +48,9 @@ export function DirectorBody({ shape }: NodeBodyProps): React.JSX.Element {
           </span>
         </div>
       </div>
-      <div className={`director-node-publish ${publishCurrent ? 'published' : ''}`}>
+      <div className={`director-node-publish ${publishUsable ? 'published' : ''}`}>
         <span className="node-status-dot" />
-        {publishCurrent
-          ? '已发布，可供下游使用'
-          : publish
-            ? '工程已更新，请重新发布'
-            : '尚未发布输出'}
+        {directorPublishStateText(project, publish, active.id)}
       </div>
       <button
         className="director-open-btn"
@@ -63,7 +63,7 @@ export function DirectorBody({ shape }: NodeBodyProps): React.JSX.Element {
       >
         <Icon name="director" size={15} /> 打开 3D 预演台
       </button>
-      {publishCurrent && publish?.video && (
+      {publishUsable && publish?.video && (
         <button
           className="director-open-btn"
           onPointerDown={(event) => stopEventPropagation(event)}
