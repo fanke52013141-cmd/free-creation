@@ -470,6 +470,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             <span
               key={p.id}
               className={`port-dot in input-${state?.kind ?? 'optional'} ${isConnected ? 'connected' : 'unconnected'} ${isAnchor ? 'ok' : draft && draft.from.direction !== 'in' ? (ok ? 'ok' : 'dim') : ''}`}
+              data-port-id={p.id}
               style={{
                 top: inY[i] - NODE_PORT_SIZE / 2,
                 ['--pc' as string]: PORT_COLORS[p.type]
@@ -522,6 +523,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             <span
               key={p.id}
               className={`port-dot out ${hasOutput ? 'has-output' : 'no-output'} ${isConnected ? 'connected' : 'unconnected'} ${isSource && draft?.from.portId === p.id && draft.from.direction !== 'in' ? 'ok' : ''} ${draftIn ? (okUpstream ? 'ok' : 'dim') : ''}`}
+              data-port-id={p.id}
               style={{
                 top: outY[i] - NODE_PORT_SIZE / 2,
                 ['--pc' as string]: PORT_COLORS[p.type]
