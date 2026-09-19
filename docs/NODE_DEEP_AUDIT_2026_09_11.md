@@ -348,6 +348,29 @@ video deep browser audit                  P0 断言 PASS（不代表真实供应
 门禁：`test/provider-preset-modality.test.ts`。它刻意**不复用**组件里的 `acceptsProvider`，
 而是照节点契约重写一份协议↔供应商对照表——两边都复用时，一起写错就测不出来。
 
+### 7.4 MiniMax 语音与音色契约的零成本探测（2026-09-19）
+
+用户要求「确认」音色设计与语音克隆/合成接的是不是官方接口。下表全部来自不带 Key 的
+HTTPS 探测（未鉴权即被拒，零计费），主机是设置面板默认的 `https://api.minimaxi.com`；
+对照路径 `/v1/definitely_not_real_xyz` 与 `/v2/t2a_async_v2` 都返回 404，所以下面的
+200/401 只能解释为「路由真实存在，只是没给 Key」：
+
+| 代码里的调用 | 方法 | 探测结果 | 结论 |
+| --- | --- | --- | --- |
+| `/v1/t2a_async_v2`（`audio.ts` 异步合成主通道） | POST | 200 + `base_resp 1004` | 官方存在 |
+| `/v1/t2a_v2`（同步兜底） | POST | 200 + `base_resp 1004` | 官方存在 |
+| `/v1/query/t2a_async_query_v2?task_id=`（轮询） | GET | 200；POST 为 404 | 只能 GET，代码正确 |
+| `/v1/files/retrieve?file_id=`（取成片） | GET | 200；POST 为 404 | 只能 GET，代码正确 |
+| `/v1/files/upload`（克隆参考音与提示音） | POST | 200 + `base_resp 1004` | 官方存在 |
+| `/v1/voice_clone`（语音克隆） | POST | 200 + `base_resp 1004` | 官方存在 |
+| `/v1/voice_design`（音色设计，返回 `trial_audio` hex） | POST | 200 + `base_resp 1004` | 官方存在 |
+
+- MiniMax 语音/音色全族走 **v1 + `base_resp`**，视频走 **v2 + `/v2/query/…`**，两套错误信封
+  不同：v1 即使 HTTP 200 也可能是业务失败。因此 `assertMiniMaxOk`（语音）与
+  `classifyMiniMaxTask`（视频）都必须保留，缺一处就会出现「白等到超时且已扣费」。
+- 探测不能证明的只剩两件事：账号是否接受 `MiniMax-H3` / `speech-2.8-hd` 这类模型 ID，以及
+  计费成功响应体的字段。这两项只能由真实 Key 跑最低成本任务收口（任务 B2 / B4）。
+
 ## 8. 后续实施顺序
 
 ### P0：先让视频节点不再产生非法状态（已完成）
