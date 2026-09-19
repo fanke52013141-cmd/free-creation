@@ -91,6 +91,22 @@ describe('MiniMax 异步语音合成 t2a_async_v2', () => {
     expect((custom.voice_setting as { voice_id: string }).voice_id).toBe('CanvasVoice_2026')
   })
 
+  // MiniMax 音色库（控制台里能直接复制的官方 preset）ID 形如
+  // `Chinese (Mandarin)_News_Anchor`，带空格与括号；2026-09-19 真机用它跑通了配音。
+  // 它同时**不满足**克隆/设计那条「只允许字母数字 -_ 」的命名规则——那条规则约束的是
+  // 用户给新音色起的名字，不是引用已有音色。两处口径必须分开，谁把配音也接到
+  // isValidMiniMaxVoiceId / normalizeMiniMaxVoiceId 上，这条就会红。
+  it('音色库 preset 音色 ID 原样发出，不被克隆命名规则改写', () => {
+    const preset = 'Chinese (Mandarin)_News_Anchor'
+    const body = buildMiniMaxAsyncTtsBody(
+      { modelId: 'speech-2.8-hd', text: '你好', voiceId: preset },
+      speechConfig()
+    )
+    expect((body.voice_setting as { voice_id: string }).voice_id).toBe(preset)
+    // 反向锚定：preset 确实不合法于复刻命名规则，所以「配音不校验」是有意的分叉，不是漏写。
+    expect(isValidMiniMaxVoiceId(preset)).toBe(false)
+  })
+
   it('发音词典与音色修饰按解析结果写入', () => {
     const body = buildMiniMaxAsyncTtsBody(
       { modelId: 'speech-2.8-turbo', text: '你好', voiceId: '' },

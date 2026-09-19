@@ -673,6 +673,31 @@ MiniMax-H3、`duration:4`、`resolution:768P`、`ratio:16:9`（即 §7.5 末尾�
   副本库里没有），以及 Seedance 真实提交（本轮明确只保留静态契约）。这两项要跑仍需用户先在
   真实 App 面板里配置并授权计费。
 
+#### 7.8.1 补：MiniMax 音色库 preset 音色 ID（2026-09-19 同日追加）
+
+用户给出音色库里的 preset ID `Chinese (Mandarin)_News_Anchor`（带空格与括号），用它再跑
+一条真实配音。结果 10/10：输入框原样回显 → 配音节点不判它非法 → 落盘的
+`props.config.voiceId` 与输入逐字符相同 → 合成成功（`_dk0IP0J3A.mp3`，54 132 B，ffprobe
+3.239188 s）→ 两条产物各自成节点并各自渲染播放器 → 整窗重载后音色 ID 仍是原值。
+
+- **两条口径必须分开，这是有意设计不是漏写校验**：`isValidMiniMaxVoiceId`
+  （`^[A-Za-z][A-Za-z0-9_-]{6,254}[A-Za-z0-9]$`）拒绝空格，因此**它不适用于配音**。该规则
+  来源于 `/v1/voice_clone` 与 `voice_design` 对"用户给新音色起的名字"的官方约束；而
+  `voice_setting.voice_id` 引用的是已有音色，音色库里的官方 preset 就叫
+  `Chinese (Mandarin)_News_Anchor` 这种形式。配音路径
+  （`resolveMiniMaxVoiceId`）只做 trim 与原样透传，所以能用。
+- **风险点已被测试钉住**：`normalizeMiniMaxVoiceId()` 会把非法字符替换成 `-`，一旦有人"统
+  一校验"把它接到配音上，这个 preset 会静默变成 `Chinese--Mandarin-_News_Anchor` 并发给上
+  游。`test/voice-protocol-wire.test.ts` 新增一条双向断言（preset 原样发出 **且** 确实不合法
+  于复刻规则），把"不校验"变成显式契约；变异验证：给 `resolveMiniMaxVoiceId` 加上那条替换
+  即以完全相同的损坏形态变红。
+- **同尺寸不等于同音频**：两条 mp3 都是 54 132 B / 3.239188 s（同一句话在固定语速下落到同
+  一个 mp3 帧数），但 sha256 不同，说明换音色确实改变了内容。
+- **顺带暴露的溯源缺口（未擅自改代码）**：`MediaAsset` 上并没有 `origin` 字段，产物溯源实际
+  只存在 `meta.nodeResult` 的 `{nodeId, modelKey, prompt, runId}` 里，**不含 voice_id**。于是
+  同一节点用两个音色跑出的两条音频，在资产面板里除了试听无法区分。是否把 voice_id 写进结果
+  溯源需要拍板（它动的是持久化结构）。
+
 ## 8. 后续实施顺序
 
 ### P0：先让视频节点不再产生非法状态（已完成）
