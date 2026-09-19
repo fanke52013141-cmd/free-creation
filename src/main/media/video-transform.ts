@@ -181,6 +181,23 @@ export async function transformVideoAudio(input: VideoAudioTransformInput): Prom
   const ext = wav ? '.wav' : '.m4a'
   const sr = String(config.sampleRate)
 
+  // 无声视频先过一道音轨检查：直接喂给 FFmpeg 会得到
+  // 「Output file does not contain any stream」外加一个临时目录路径，用户无法据此判断原因。
+  // 探测本身失败时不做判断，继续交给 FFmpeg 报错，免得把「FFprobe 不可用」说成「没有音轨」。
+  const audioStreams = await runFfprobe([
+    '-v',
+    'error',
+    '-select_streams',
+    'a:0',
+    '-show_entries',
+    'stream=index',
+    '-of',
+    'csv=p=0',
+    source.path
+  ]).catch(() => null)
+  if (audioStreams !== null && !audioStreams.trim())
+    throw new Error('这段视频没有音轨，提取不出音频。请换一段带声音的视频，或只截取画面。')
+
   return runToAsset(input.projectId, name, ext, '提取音频', [
     '-i',
     source.path,

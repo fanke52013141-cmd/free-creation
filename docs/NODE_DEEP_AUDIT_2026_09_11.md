@@ -131,6 +131,28 @@ node scripts/audit-video-node.cjs http://127.0.0.1:3123/ artifacts/video-node-au
 
 截图 `04-h3-one-image-filtered-modes.png` 同时确认输入卡展示缩略图、`video-audit` 资产名称和“参考图 1”角色。这是 browserMock 证据；真实模型请求、任务轮询、资产落盘仍须在 Electron + 已配置供应商环境完成。
 
+### 3.4 本地媒体节点的真实 FFmpeg 验收（2026-09-19 追加）
+
+§2.4 要求“本地媒体节点用真实 MP4/WAV 检查转换结果”，但此前 `test/video-transform.test.ts`
+mock 的是 `window.api`，`test/video-transform-main.test.ts` mock 的是 `child_process.spawn`——
+**主进程那批真调 FFmpeg 的处理器一次都没有跑过真二进制**。新增
+`test/video-transform-real-media.test.ts`：用 `lavfi` 合成一段 2 秒 320×240 带音轨的测试片和
+一段完全无声的测试片，只 mock 持久层（`media.repo` 落盘 + `db` 查询），产物文件再交给
+`ffprobe` 独立复核，避免「FFmpeg 自己产的文件自己说没问题」。本机没有 FFmpeg 时整组跳过。
+
+真跑出来的结论：
+
+- 通过：`probeVideo` 的时长/帧率/音轨判定；取帧的首帧、自定义时间、**尾帧**（尾帧是越界输出
+  空文件的高危路径，实测产物是有效 PNG）；精确重编码截取 500–1500ms 实得约 1.0s 且带 aac 音轨；
+  提音产出 `RIFF`/48000 的 WAV 且时长吻合。
+- 缺陷（已修）：对**没有音轨的视频**执行提音，FFmpeg 直接失败，用户看到的是
+  `视频处理失败：[out#0/wav @ …] Output file does not contain any stream` 加一条系统临时目录
+  绝对路径。现在 `transformVideoAudio` 先用一次 `ffprobe -select_streams a:0` 判定，改报
+  「这段视频没有音轨，提取不出音频」；探测本身失败时不猜测，仍交给 FFmpeg 报错，免得把
+  「FFprobe 不可用」说成「没有音轨」。
+- 已知取舍（未改）：快速截取按关键帧流复制，实测 500–1500ms 得 998ms——边界不精确是 `-c copy`
+  的设计代价，测试据此只断言“不少给、仍可解码”，没有把它写成精确区间。
+
 ## 4. 视频节点详细问题
 
 ### P0-VIDEO-001：未选择模型时直接进入错误态（已修复）
