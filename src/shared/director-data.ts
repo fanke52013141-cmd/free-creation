@@ -502,7 +502,10 @@ function normalizeDirectorShot(value: unknown): DirectorShot | null {
 }
 
 export function createDirectorProject(): DirectorProjectData {
-  const shot = createDirectorShot()
+  // 默认工程的 id 必须是确定的：config 为空时每次解析都会走这里，用随机 id 的话
+  // 同一张导演卡在两次渲染之间「换了镜头」——刚发布的帧会被 drift 判成「另一个镜头」，
+  // 卡片上一句「已发布的是「另一个镜头」」就是在对没编辑过的用户说谎。
+  const shot = { ...createDirectorShot(), id: 'shot-default-1' }
   return {
     version: 2,
     revision: 1,
@@ -511,7 +514,7 @@ export function createDirectorProject(): DirectorProjectData {
     space: createEmptyDirectorSpace(),
     sequence: {
       version: 1,
-      cuts: [{ id: createDirectorId('cut'), shotId: shot.id, durationSec: shot.camera.durationSec }]
+      cuts: [{ id: 'cut-default-1', shotId: shot.id, durationSec: shot.camera.durationSec }]
     }
   }
 }

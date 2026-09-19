@@ -67,6 +67,21 @@ describe('导演台发布记录', () => {
     expect(published.frame?.mediaId).toBe('frame-a')
     expect(published.video?.mediaId).toBe('video-a')
   })
+
+  it('没编辑过的导演卡：重复解析默认工程不会把刚发布的帧说成「另一个镜头」', () => {
+    // config 为空时每次渲染都重新解析默认工程；id 一旦随机，发布记录里的 shotId
+    // 就永远对不上，卡片会对没动过的用户谎报漂移。
+    const first = parseDirectorProject('')
+    const published = createDirectorPublishRecord(first, first.shots[0], null, {
+      frame: { mediaId: 'frame-default', mediaPath: 'projects/default.png', mime: 'image/png' }
+    })
+    const again = parseDirectorProject('')
+    expect(again.activeShotId).toBe(first.activeShotId)
+    expect(again.sequence.cuts.map((cut) => cut.id)).toEqual(
+      first.sequence.cuts.map((cut) => cut.id)
+    )
+    expect(directorPublishDrift(again, published, again.activeShotId)).toBe('current')
+  })
 })
 
 describe('导演台 2D 预演数据', () => {
