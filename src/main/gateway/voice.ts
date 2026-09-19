@@ -93,6 +93,9 @@ export interface CloneVoiceRequest {
  * MiniMax voice_clone 请求体（纯函数，便于 wire 断言）。
  * clone_prompt 只在真的上传了提示音时才出现——缺了 prompt_text 就是坏数据，
  * 由调用方在执行前拒绝，而不是发一个半成品字段。
+ *
+ * 这里刻意没有 text_validation：真实接口要的是参考音频原文（字符串），传布尔值
+ * 会被 2013 invalid params 挡在登记之前（2026-09-19 用同一 file_id 逐字段实测）。
  */
 export function buildVoiceCloneBody(
   fileId: number,
@@ -104,7 +107,6 @@ export function buildVoiceCloneBody(
     file_id: fileId,
     voice_id: voiceId,
     model: config.modelId || DEFAULT_TTS_CONFIG.modelId,
-    text_validation: config.textValidation,
     accuracy: config.accuracy,
     need_noise_reduction: config.needNoiseReduction,
     need_volume_normalization: config.needVolumeNormalization,
@@ -168,10 +170,20 @@ export async function cloneMiniMaxVoice(request: CloneVoiceRequest): Promise<str
     const detail = await res.text().catch(() => '')
     throw upstreamError(res.status, detail, 'MiniMax 创建克隆音色失败')
   }
-  assertMiniMaxOk(
-    (await res.json().catch(() => null)) as MiniMaxEnvelope | null,
-    'MiniMax 创建克隆音色失败'
-  )
+  // 2026-09-19 真跑回执：成功登记时是
+  // {"input_sensitive":false,"input_sensitive_type":0,"demo_audio":"","base_resp":{"status_code":0,…}}
+  // base_resp 为 0 但 input_sensitive 为真时音色并不存在，必须在这里停下，
+  // 否则下游拿着一个没登记的 voice_id 去合成，只会收到一句看不懂的 upstream 报错。
+  const payload = (await res.json().catch(() => null)) as MiniMaxEnvelope & {
+    input_sensitive?: boolean
+  }
+  assertMiniMaxOk(payload, 'MiniMax 创建克隆音色失败')
+  if (payload?.input_sensitive === true) {
+    throw new GatewayError(
+      'UPSTREAM_ERROR',
+      'MiniMax 判定参考音频内容敏感，没有登记这个音色；请换一段干净的录音'
+    )
+  }
   return voiceId
 }
 

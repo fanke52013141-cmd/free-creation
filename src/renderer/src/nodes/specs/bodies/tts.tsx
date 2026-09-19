@@ -283,7 +283,9 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
           >
             <Icon name="upload" size={18} />
             <span>上传参考语音</span>
-            <span className="tts-upload-hint">选择一段目标音色的音频</span>
+            <span className="tts-upload-hint">
+              目标音色的录音，10 秒～5 分钟、不超过 20MB 的 mp3/m4a/wav
+            </span>
           </button>
         )}
         <span className={`node-wiring ${incomingRef > 0 || uploadedRef ? 'ok' : 'warn'}`}>
@@ -415,14 +417,6 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
                   onChange={(e) => updateConfig({ needVolumeNormalization: e.target.checked })}
                 />{' '}
                 音量归一
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={config.textValidation}
-                  onChange={(e) => updateConfig({ textValidation: e.target.checked })}
-                />{' '}
-                文本校验
               </label>
               <label>
                 <input

@@ -22,6 +22,7 @@ import { SPEECH_TEXT_LIMITS, parsePronunciationTones, voiceModifyOf } from '../.
 import type { SpeechConfig } from '../../shared/speech'
 import { saveBufferAsset } from '../store/media.repo'
 import { getDb } from '../store/db'
+import { looksLikeTar, pickAudioFromTar } from '../media/tar-audio'
 import { getProvider } from './providers.repo'
 import { GatewayError } from './factory'
 import { describeUpstreamHttpError } from '../../shared/upstream-error'
@@ -70,6 +71,17 @@ const VOLC_OK_CODE = 3000
 /** 配音节点默认音色是 OpenAI 命名（alloy 等），MiniMax 端没有这些音色，映射到系统音色。 */
 const OPENAI_DEFAULT_VOICES = new Set(['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'])
 const MINIMAX_DEFAULT_VOICE = 'male-qn-qingse'
+
+/**
+ * MiniMax 两条 t2a 通道都要求 `voice_setting.voice_id`，实测缺它会在创建任务之前就被
+ * 上游拒掉（`invalid params, voice id wrong`，不计费）。旧实现假设「不发就让服务端用
+ * 它自己的默认音色」，那是没有真跑过的猜测——配音节点默认音色为空，于是默认状态必失败。
+ * 空值与 OpenAI 命名都落到 MiniMax 的系统音色，两条通道同一个解析口径。
+ */
+function resolveMiniMaxVoiceId(voiceId: string | undefined): string {
+  const trimmed = voiceId?.trim() ?? ''
+  return !trimmed || OPENAI_DEFAULT_VOICES.has(trimmed) ? MINIMAX_DEFAULT_VOICE : trimmed
+}
 
 /** 异步 T2A 的轮询节奏；合成任务通常数十秒完成。 */
 const ASYNC_POLL_INTERVAL_MS = 2000
@@ -169,14 +181,13 @@ export function buildMiniMaxAsyncTtsBody(
   const tones = parsePronunciationTones(config.pronunciationTones)
   const voiceModify = voiceModifyOf(config)
   const voiceSetting: Record<string, unknown> = {
+    voice_id: resolveMiniMaxVoiceId(input.voiceId),
     speed: config.speed,
     vol: config.volume,
     pitch: config.pitch,
     ...(config.emotion ? { emotion: config.emotion } : {}),
     ...(config.englishNormalization ? { english_normalization: true } : {})
   }
-  // 未指定音色时不发 voice_id，让服务端用它自己的默认音色，而不是伪造一个本地默认。
-  if (input.voiceId) voiceSetting.voice_id = input.voiceId
 
   return {
     model: input.modelId,
@@ -283,18 +294,27 @@ async function generateViaMiniMaxAsync(
   }
   assertMiniMaxOk(created, 'MiniMax 创建语音合成任务失败')
 
-  let fileId = created?.file_id ? String(created.file_id) : ''
   const taskId = created?.task_id !== undefined ? String(created.task_id) : ''
-
+  // 提交回执里就带着 file_id，但那只是「将来那个文件的号」：实测立刻检索必然得到
+  // `invalid params, file not found`，文件要等任务成功之后才存在。所以只要有 task_id
+  // 就必须先轮询到成功，再按查询回执的 file_id 去检索。
+  const fileId = taskId
+    ? await pollMiniMaxAsyncTask(base, p, taskId)
+    : created?.file_id
+      ? String(created.file_id)
+      : ''
   if (!fileId) {
-    if (!taskId) {
-      throw new GatewayError('EMPTY_RESULT', 'MiniMax 未返回 task_id 或 file_id')
-    }
-    fileId = await pollMiniMaxAsyncTask(base, p, taskId)
+    throw new GatewayError('EMPTY_RESULT', 'MiniMax 未返回 task_id 或 file_id')
   }
 
   const downloadUrl = await retrieveMiniMaxFileUrl(base, p, fileId)
-  const audio = await downloadBinary(downloadUrl)
+  const downloaded = await downloadBinary(downloadUrl)
+  // 下载地址给的是 ustar 归档（实测 content-type application/x-tar），音频在成员里；
+  // 不解包就把归档按 .mp3 落盘，节点上是一个永远播不出声的假音频。
+  const audio = looksLikeTar(downloaded) ? pickAudioFromTar(downloaded) : downloaded
+  if (!audio) {
+    throw new GatewayError('EMPTY_RESULT', 'MiniMax 异步合成的产物里没有可播放的音频成员')
+  }
   return saveAudioAsset(input.projectId, audio, format, input.text.trim())
 }
 
@@ -338,7 +358,8 @@ async function pollMiniMaxAsyncTask(
     lastStatus = typeof payload?.status === 'string' ? payload.status : lastStatus
     const fileId = payload?.file_id ? String(payload.file_id) : ''
     if (fileId && /success/i.test(lastStatus)) return fileId
-    if (/fail|error|expired/i.test(lastStatus)) {
+    // Success 是实测值；超时/取消的状态不匹配失败就会白轮满 10 分钟，用户以为还在合成。
+    if (/fail|error|expired|timeout|cancel/i.test(lastStatus)) {
       throw new GatewayError(
         'UPSTREAM_ERROR',
         `MiniMax 语音合成任务失败（状态 ${lastStatus || '未知'}）`
@@ -516,8 +537,7 @@ async function generateViaMiniMax(
 ): Promise<MediaAsset> {
   const requestedFormat = input.format || 'mp3'
   const format = MINIMAX_FORMATS.has(requestedFormat) ? requestedFormat : 'mp3'
-  const voiceId =
-    input.voice && !OPENAI_DEFAULT_VOICES.has(input.voice) ? input.voice : MINIMAX_DEFAULT_VOICE
+  const voiceId = resolveMiniMaxVoiceId(input.voice)
 
   const res = await fetch(`${p.baseURL.replace(/\/+$/, '')}/v1/t2a_v2`, {
     method: 'POST',

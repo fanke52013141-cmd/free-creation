@@ -41,7 +41,7 @@ describe('语音克隆配置', () => {
     expect(parseTtsConfig('{bad json')).toEqual(DEFAULT_TTS_CONFIG)
   })
 
-  it('补齐 MiniMax 复刻的文本校验、相似度与语言增强', () => {
+  it('相似度与语言增强入库；老配置里的布尔 textValidation 被丢掉', () => {
     const config = parseTtsConfig(
       JSON.stringify({
         backend: 'minimax',
@@ -50,7 +50,9 @@ describe('语音克隆配置', () => {
         languageBoost: 'Chinese'
       })
     )
-    expect(config.textValidation).toBe(true)
+    // 上游的 text_validation 要的是参考音频原文（字符串），布尔值一律 2013；
+    // 因此配置里不再保留这个开关，老节点存量的 true 也在解析时被丢弃。
+    expect(config).not.toHaveProperty('textValidation')
     expect(config.accuracy).toBe(0.85)
     expect(config.languageBoost).toBe('Chinese')
   })

@@ -61,14 +61,34 @@ describe('MiniMax 异步语音合成 t2a_async_v2', () => {
     })
   })
 
-  it('未指定音色时不伪造 voice_id，可选项为空时不出现空字段', () => {
+  // 上游原话回执（2026-09-19 真 Key 实测，未建任务因此不计费）：不发 voice_id 时 MiniMax 直接
+  // 回 `invalid params, voice id wrong`。配音节点默认音色就是空的，所以「让服务端自己决定」
+  // 这个假设一旦写进请求体，节点在默认状态下永远合不出声音。
+  it('音色为空时落到 MiniMax 系统音色，而不是省略 voice_id 被上游拒掉', () => {
     const body = buildMiniMaxAsyncTtsBody(
       { modelId: 'speech-2.8-hd', text: '你好', voiceId: '' },
       speechConfig({ emotion: '', englishNormalization: false, pronunciationTones: '' })
     )
-    expect(body.voice_setting).toEqual({ speed: 1, vol: 1, pitch: 0 })
+    expect(body.voice_setting).toEqual({
+      voice_id: 'male-qn-qingse',
+      speed: 1,
+      vol: 1,
+      pitch: 0
+    })
     expect(body).not.toHaveProperty('pronunciation_dict')
     expect(body).not.toHaveProperty('voice_modify')
+    // OpenAI 命名的旧默认音色在 MiniMax 端不存在，同样要映射过去。
+    const legacy = buildMiniMaxAsyncTtsBody(
+      { modelId: 'speech-2.8-hd', text: '你好', voiceId: 'alloy' },
+      speechConfig()
+    )
+    expect((legacy.voice_setting as { voice_id: string }).voice_id).toBe('male-qn-qingse')
+    // 真正的复刻/设计音色必须原样带过去，不许被默认值盖掉。
+    const custom = buildMiniMaxAsyncTtsBody(
+      { modelId: 'speech-2.8-hd', text: '你好', voiceId: ' CanvasVoice_2026 ' },
+      speechConfig()
+    )
+    expect((custom.voice_setting as { voice_id: string }).voice_id).toBe('CanvasVoice_2026')
   })
 
   it('发音词典与音色修饰按解析结果写入', () => {
@@ -214,7 +234,6 @@ describe('MiniMax 快速复刻 voice_clone', () => {
         backend: 'minimax',
         modelId: 'speech-2.8-hd',
         voiceId: 'CanvasVoice_2026',
-        textValidation: true,
         accuracy: 0.85,
         needNoiseReduction: true,
         needVolumeNormalization: true,
@@ -226,13 +245,26 @@ describe('MiniMax 快速复刻 voice_clone', () => {
       file_id: 12345,
       voice_id: 'CanvasVoice_2026',
       model: 'speech-2.8-hd',
-      text_validation: true,
       accuracy: 0.85,
       need_noise_reduction: true,
       need_volume_normalization: true,
       aigc_watermark: true,
       language_boost: 'Chinese'
     })
+  })
+
+  // 2026-09-19 真机逐字段实测（同一 file_id，全部在校验/时长门前失败，零计费）：
+  //   带 text_validation:false → 2013 invalid params
+  //   去掉该字段 → 2037 voice duration too short（说明已通过参数校验）
+  //   text_validation:"一段原文" → 同上，通过
+  // 该字段要的是参考音频原文，不是一个开关；把它当布尔值发出去会让复刻永远失败。
+  it('text_validation 是字符串字段，绝不以布尔值发出', () => {
+    const body = buildVoiceCloneBody(1, 'CanvasVoice_2026', DEFAULT_TTS_CONFIG, null)
+    expect(typeof body.text_validation).not.toBe('boolean')
+    expect(body).not.toHaveProperty('text_validation')
+    expect(
+      parseTtsConfig(JSON.stringify({ backend: 'minimax', textValidation: true }))
+    ).not.toHaveProperty('textValidation')
   })
 
   it('有提示音时才出现 clone_prompt', () => {

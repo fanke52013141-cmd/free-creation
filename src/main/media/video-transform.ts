@@ -524,6 +524,23 @@ function runFfprobe(args: string[]): Promise<string> {
   )
 }
 
+/** 只读时长（毫秒），供「输入文件是否在下游接口的允许区间内」这类执行前校验使用。 */
+export async function probeMediaDurationMs(absPath: string): Promise<number> {
+  const raw = await runFfprobe([
+    '-v',
+    'error',
+    '-show_entries',
+    'format=duration',
+    '-of',
+    'json',
+    absPath
+  ])
+  const parsed = JSON.parse(raw) as { format?: { duration?: string } }
+  const ms = Math.round(Number(parsed.format?.duration ?? 0) * 1000)
+  if (!Number.isFinite(ms) || ms <= 0) throw new Error('FFprobe 没有读出有效时长')
+  return ms
+}
+
 function runAudioSeparator(args: string[]): Promise<string> {
   const binary = process.env.CANVAS_STUDIO_AUDIO_SEPARATOR_PATH?.trim() || 'audio-separator'
   return runProcess(

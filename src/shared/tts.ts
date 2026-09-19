@@ -39,11 +39,10 @@ export interface TtsConfig {
   needVolumeNormalization: boolean
   aigcWatermark: boolean
   /**
-   * MiniMax 复刻的文本校验开关（文档字段 text_validation）：
-   * 打开后服务端会校验复刻文本与参考音频的一致性，失败即拒绝登记音色。
+   * 复刻相似度，[0, 1]；越接近 1 越贴近原音，但更易放大底噪。
+   * MiniMax 的 text_validation 是「参考音频原文」字符串（≤200 字），不是开关：
+   * 实测发布尔值一律 2013 invalid params，所以这里没有对应的布尔配置项。
    */
-  textValidation: boolean
-  /** 复刻相似度，[0, 1]；越接近 1 越贴近原音，但更易放大底噪。 */
   accuracy: number
   /** 语言增强（language_boost）；空串表示不传。 */
   languageBoost: string
@@ -115,7 +114,6 @@ export const DEFAULT_TTS_CONFIG: TtsConfig = {
   needNoiseReduction: false,
   needVolumeNormalization: false,
   aigcWatermark: false,
-  textValidation: false,
   accuracy: 0.7,
   languageBoost: '',
   promptMediaId: '',
@@ -166,7 +164,6 @@ export function parseTtsConfig(text: string): TtsConfig {
       needNoiseReduction: raw.needNoiseReduction === true,
       needVolumeNormalization: raw.needVolumeNormalization === true,
       aigcWatermark: raw.aigcWatermark === true,
-      textValidation: raw.textValidation === true,
       accuracy: clampNumber(raw.accuracy, 0, 1, 0.7),
       languageBoost: typeof raw.languageBoost === 'string' ? raw.languageBoost : '',
       promptMediaId: typeof raw.promptMediaId === 'string' ? raw.promptMediaId : '',

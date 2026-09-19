@@ -7,7 +7,9 @@ import { extname } from 'path'
 import type { TtsGenerateInput, VoiceCloneResult } from '../../shared/contracts'
 import {
   MINIMAX_CLONE_MAX_BYTES,
+  MINIMAX_CLONE_MAX_SECONDS,
   MINIMAX_CLONE_MIMES,
+  MINIMAX_CLONE_MIN_SECONDS,
   isValidMiniMaxVoiceId
 } from '../../shared/tts'
 import { getDb } from '../store/db'
@@ -15,6 +17,7 @@ import { getMediaAbsPath, saveBufferAsset } from '../store/media.repo'
 import { getProvider } from '../gateway/providers.repo'
 import { generateAudioToAsset } from '../gateway/audio'
 import { cloneMiniMaxVoice } from '../gateway/voice'
+import { probeMediaDurationMs } from './video-transform'
 import { GatewayError } from '../gateway/factory'
 import {
   ComfyuiError,
@@ -201,6 +204,18 @@ async function transformMiniMaxTts(input: TtsGenerateInput): Promise<VoiceCloneR
   if (reference.buf.length > MINIMAX_CLONE_MAX_BYTES) {
     throw new GatewayError('INVALID_INPUT', 'MiniMax 复刻参考音频不能超过 20MB')
   }
+  // 参考音频必须 10 秒～5 分钟：不先量时长，用户只会收到一句英文的
+  // "voice duration too short"。本机没有 FFprobe 时跳过这道检查，交给上游判断。
+  const durationMs = await probeMediaDurationMs(reference.abs).catch(() => 0)
+  if (durationMs > 0) {
+    const seconds = durationMs / 1000
+    if (seconds < MINIMAX_CLONE_MIN_SECONDS || seconds > MINIMAX_CLONE_MAX_SECONDS) {
+      throw new GatewayError(
+        'INVALID_INPUT',
+        `参考音频需 ${MINIMAX_CLONE_MIN_SECONDS} 秒～${MINIMAX_CLONE_MAX_SECONDS / 60} 分钟，当前约 ${seconds.toFixed(1)} 秒`
+      )
+    }
+  }
   if (config.voiceId.trim() && !isValidMiniMaxVoiceId(config.voiceId.trim())) {
     throw new GatewayError(
       'INVALID_INPUT',
@@ -246,6 +261,7 @@ interface ReferenceAudioPayload {
   buf: Buffer
   mime: string
   path: string
+  abs: string
 }
 
 /** 读取本地图库中的参考音频；mediaId 无效或文件丢失时抛出明确错误。 */
@@ -265,5 +281,5 @@ async function readReferenceAudio(
   } catch {
     throw new ComfyuiError('MEDIA_NOT_FOUND', `${label}文件读取失败`)
   }
-  return { buf, mime: row.mime || 'audio/wav', path: row.path }
+  return { buf, mime: row.mime || 'audio/wav', path: row.path, abs }
 }
