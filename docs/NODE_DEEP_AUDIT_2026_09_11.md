@@ -176,6 +176,31 @@ mock 的是 `window.api`，`test/video-transform-main.test.ts` mock 的是 `chil
 - 通过：缩略图按请求数量产出、每张都是可解码 JPEG，`count` 越界被夹在 1–12；波形对静音素材给
   全零而非 NaN；三条路径对不存在的源都在执行前报错，不去调用 FFmpeg。
 
+### 3.6 文档导入链路的真实落盘验收（2026-09-19 追加）
+
+`extractDocumentText` 一直有 `test/document-text.test.ts` 覆盖，但它只证明**解析器**认这些字节。
+真正的入口是 `importMedia()`：扩展名→`detectKind`→白名单判断→复制进 `projects/<pid>/media/`→
+SQLite 索引→把抽出的正文写进 `asset.textContent`，而 `CanvasEditor` 只在那一刻把
+`asset.textContent` 塞进节点 `props.text`。也就是说这条链路一断，表现就是“拖进去一个 Word，
+文档解析节点的 out-text 是空的”，而它此前在测试里**一次都没有被调用过**。
+
+新增 `test/media-import-real.test.ts`：样张字节抽到 `test/helpers/document-fixtures.ts`，
+由解析器用例与导入用例共用（两边看着同一份字节，才不会一边修好另一边还蒙在鼓里）。
+只 mock 数据目录与 SQLite，文件读写、adm-zip、unpdf 全是真的；每条用例都额外把落盘副本
+读回来与源字节逐字节比对，并断言 `INSERT INTO media` 的六个绑定参数。
+
+覆盖到的结论（7 例全绿；把抽取那一行还原成空串后，Word/Excel/PPT/PDF 两例确实报错，非恒真断言）：
+
+- Word / Excel / PPT / 中文 PDF 导入即得正文，且正文与解析器用例的期望字符串完全一致。
+- 节点标题取用户文件名去扩展名（`分镜 草稿.docx` → `分镜 草稿`），媒体路径是随机 ID：
+  中文名与空格不会泄漏进路径。
+- 拉丁 PDF 与中文 PDF 同链路，不依赖外部 cmaps 目录。
+- 旧版 `.doc`、无文字层扫描件、`.bin`：照常导入，只是没有正文——文档解析节点据此显示“不解析”，
+  而不是把导入整个失败掉。
+- 体积闸门（文本内联 1MB、Office/PDF 抽取 50MB）只跳过抽取，不拒绝导入。
+- 目录路径 → `{ ok: false, reason: '不是有效文件' }`；`.mp4` / `.wav` 仍按视频/音频分类，
+  不会因为“抽取失败”退化成 `file`。
+
 ## 4. 视频节点详细问题
 
 ### P0-VIDEO-001：未选择模型时直接进入错误态（已修复）
