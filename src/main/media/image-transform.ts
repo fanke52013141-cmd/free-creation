@@ -95,8 +95,11 @@ function renderRect(image: CanvasImage, config: Pick<ImageCropConfig, 'rect'>): 
   const sourceH = Math.max(1, Math.floor(image.height * height))
   const canvas = createCanvas(sourceW, sourceH)
   const ctx = canvas.getContext('2d')
-  ctx.imageSmoothingEnabled = true
-  ctx.imageSmoothingQuality = 'high'
+  // 输出与源区恒为 1:1（drawImage 的两组尺寸相同，不发生缩放），此时开平滑只剩副作用：
+  // 采样核会读到裁剪区之外的相邻像素，把框外一圈颜色渗进产物。实测源图 120×60 的 3×2
+  // 拆分，R1C1 右下角像素是 [209,39,32]（红 220,30,30 混进了右邻格的绿），而不是纯红。
+  // 需要重采样的只有四角透视分支，它自己做双线性。
+  ctx.imageSmoothingEnabled = false
   ctx.drawImage(image, sourceX, sourceY, sourceW, sourceH, 0, 0, sourceW, sourceH)
   return canvas.toBuffer('image/png')
 }

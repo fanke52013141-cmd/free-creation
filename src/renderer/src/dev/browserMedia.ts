@@ -184,6 +184,8 @@ export function createBrowserMedia(): {
         canvas.height = sh
         const context = canvas.getContext('2d')
         if (!context) throw new Error('浏览器无法创建图片拆分画布')
+        // 与主进程 renderRect 一致：1:1 拷贝时关闭平滑，否则每格边缘会渗进邻格颜色。
+        context.imageSmoothingEnabled = false
         context.drawImage(image, sx, sy, sw, sh, 0, 0, sw, sh)
         output.push(await saveCanvas(projectId, canvas, `拆分图-R${tile.row}C${tile.column}`))
       }
@@ -215,8 +217,7 @@ export function createBrowserMedia(): {
       canvas.height = sourceH
       const context = canvas.getContext('2d')
       if (!context) throw new Error('浏览器无法创建图片裁剪画布')
-      context.imageSmoothingEnabled = true
-      context.imageSmoothingQuality = 'high'
+      context.imageSmoothingEnabled = false
       context.drawImage(image, sourceX, sourceY, sourceW, sourceH, 0, 0, sourceW, sourceH)
       return saveCanvas(projectId, canvas, '裁剪图片')
     } finally {
