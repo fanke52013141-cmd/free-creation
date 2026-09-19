@@ -5,6 +5,7 @@ import type { NodeCardProps, NodeCardShape } from './NodeCardShape'
 
 import { parseImageSplitConfig } from '@shared/image-split'
 import { readNodeConfig } from '@shared/engine/node-config'
+import { assetNodeTypeFor } from './asset-node-type'
 
 /**
  * 运行产物的唯一落点：创建独立、不可变的资产节点，并在 meta 中保存生产关系。
@@ -16,7 +17,7 @@ export function materializeArtifact(
   artifact: ProducedArtifact,
   runId?: string
 ): void {
-  const assetNodeType = artifact.kind === 'video' ? 'video-asset' : artifact.kind
+  const assetNodeType = assetNodeTypeFor(artifact.kind)
   const spec = getNodeType(assetNodeType)
   if (!spec) return
   const siblings = editor

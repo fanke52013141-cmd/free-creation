@@ -35,6 +35,7 @@ import {
 } from './graph'
 import { mergeUnsavedLocalRecords, countRestorableRecords } from './external-reload'
 import { NODE_PORT_OUTSET } from './edge-geometry'
+import { assetNodeTypeFor } from './asset-node-type'
 import type { AiProcessConfig } from '../engine/executors/aiProcess'
 import { markUndoPoint } from './history'
 import { getNodeType, allNodeTypes, needsNodeSizeMigration } from '../nodes/registry'
@@ -1033,7 +1034,8 @@ export function CanvasEditor({
     assets.forEach((asset, i) => {
       // 文本类文件（txt/md/json）：内容直接填进文本节点，可编辑
       const isTextFile = asset.kind === 'file'
-      const spec = getNodeType(isTextFile ? 'text' : asset.kind)
+      const nodeType = isTextFile ? 'text' : assetNodeTypeFor(asset.kind)
+      const spec = getNodeType(nodeType)
       if (!spec) return
       const point = editor.screenToPage({ x: screenX + i * 24, y: screenY + i * 24 })
       // 与调色板/右键菜单建节点一致地走避让网格：反复导入时不再堆叠在同一坐标
@@ -1046,7 +1048,7 @@ export function CanvasEditor({
         x: placement.x,
         y: placement.y,
         props: {
-          nodeType: isTextFile ? 'text' : asset.kind,
+          nodeType,
           title: asset.name ?? spec.label,
           text: asset.textContent ?? '',
           w: spec.defaultSize.w,
