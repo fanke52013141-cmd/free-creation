@@ -6453,6 +6453,13 @@ select:focus-visible,
   font-size: 11px;
 }
 
+/* 「没有抽出文字」比「格式不支持」更需要一句下一步，否则用户只会看到空输出。 */
+.file-asset-binary small {
+  padding: 0 12px;
+  line-height: 1.45;
+  text-align: center;
+}
+
 .file-asset-empty .file-import-button {
   min-height: 34px;
   padding: 6px 14px;

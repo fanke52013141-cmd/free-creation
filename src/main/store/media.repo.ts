@@ -6,6 +6,7 @@ import { basename, dirname, extname, join } from 'path'
 import type { MediaAsset, MediaKind } from '../../shared/types'
 import { BINARY_DOC_EXTS, INLINE_TEXT_EXTS, mimeForExtension } from '../../shared/mime'
 import { MAX_DOC_BYTES, extractDocumentText } from '../media/document-text'
+import { decodeTextFile } from '../media/text-decode'
 import { getDataDir, getDb } from './db'
 
 // 单文件上限 2GB；文本内容内联上限 1MB（超限的文本文件不读内容，仅存文件）
@@ -78,7 +79,7 @@ export async function importMedia(projectId: string, srcAbsPath: string): Promis
       name: basename(srcAbsPath, ext)
     }
     if (kind === 'file' && st.size <= MAX_TEXT_INLINE_BYTES && INLINE_TEXT_EXTS.includes(ext)) {
-      asset.textContent = await readFile(destAbs, 'utf-8')
+      asset.textContent = decodeTextFile(await readFile(destAbs))
     } else if (kind === 'file' && st.size <= MAX_DOC_BYTES && BINARY_DOC_EXTS.includes(ext)) {
       // Office / PDF 在导入时就抽取正文：out-text 与节点预览共用同一份结果，失败则只留原始文件。
       const text = await extractDocumentText(ext, await readFile(destAbs))

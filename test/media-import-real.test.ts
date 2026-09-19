@@ -28,6 +28,9 @@ const h = vi.hoisted(() => ({
   rows: [] as Array<{ sql: string; args: unknown[] }>
 }))
 
+/** 「第一幕」的 GBK 字节：Node 只能编码 utf-8，这里用记事本「ANSI」保存出来的真实字节。 */
+const GBK_FIRST_ACT = Buffer.from([0xb5, 0xda, 0xd2, 0xbb, 0xc4, 0xbb])
+
 vi.mock('../src/main/store/db', () => ({
   getDataDir: () => h.dataDir,
   getDb: () => ({
@@ -108,6 +111,27 @@ describe('真实文件导入链路', () => {
     expect(asset.kind).toBe('file')
     expect(asset.textContent).toBe('# 天台\n\n雨停了对白')
     await expect(readFile(join(h.dataDir, asset.path), 'utf-8')).resolves.toContain('天台')
+  })
+
+  // 中文用户从记事本/PowerShell 拿到的剧本常是 GBK 或 UTF-16：按 utf-8 硬读会得到一串
+  // U+FFFD，文档解析节点于是把乱码喂给模型，垃圾进垃圾出。
+  it('记事本 ANSI(GBK)、PowerShell UTF-16、带 BOM 的 UTF-8 都能还原成正文', async () => {
+    expect((await importFirst('剧本(ANSI).txt', GBK_FIRST_ACT)).textContent).toBe('第一幕')
+    const utf16 = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from('第二幕：天台', 'utf16le')])
+    expect((await importFirst('导出.txt', utf16)).textContent).toBe('第二幕：天台')
+    const bom = Buffer.concat([
+      Buffer.from([0xef, 0xbb, 0xbf]),
+      Buffer.from('第三幕：雨停', 'utf-8')
+    ])
+    expect((await importFirst('带签名.txt', bom)).textContent).toBe('第三幕：雨停')
+  })
+
+  // 兜底不能反过来伤害本来正常的文件：纯 ASCII 同时是合法的 GBK，识别顺序错了就会串位。
+  it('ASCII 的 JSON / CSV 原样还原，长度与内容都不被改动', async () => {
+    const json = '{"acts":[{"title":"opening","sec":4}]}'
+    expect((await importFirst('分场.json', Buffer.from(json, 'utf-8'))).textContent).toBe(json)
+    const csv = 'name,city\nXiao Ming,Chengdu\n'
+    expect((await importFirst('角色.csv', Buffer.from(csv, 'utf-8'))).textContent).toBe(csv)
   })
 
   it('旧版 .doc 与无文字层扫描件：照常导入，只是没有正文（节点据此显示不解析）', async () => {

@@ -85,7 +85,8 @@ export function FileBody({ shape }: NodeBodyProps): React.JSX.Element {
   }
 
   const extension = extensionOf(shape.props.mediaPath)
-  const inlineText = PARSABLE_EXTS.includes(extension) ? shape.props.text : ''
+  const parsable = PARSABLE_EXTS.includes(extension)
+  const inlineText = parsable ? shape.props.text : ''
   const lineCount = inlineText ? inlineText.split('\n').length : 0
 
   return (
@@ -113,7 +114,8 @@ export function FileBody({ shape }: NodeBodyProps): React.JSX.Element {
       ) : (
         <div className="file-asset-binary">
           <Icon name="document" size={26} />
-          <span>该格式不在画布内解析</span>
+          <span>{parsable ? '未抽出文字：扫描件、纯图文或文件过大' : '该格式不在画布内解析'}</span>
+          {parsable && <small>下游 out-text 会是空的，先用系统程序确认文件里有可选中的文字</small>}
           <button
             className="btn-ghost small"
             onPointerDown={(e) => stopEventPropagation(e)}
