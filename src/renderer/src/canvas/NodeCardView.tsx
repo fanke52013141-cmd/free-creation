@@ -125,8 +125,10 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     [editor, shape.id]
   )
 
-  // 行首 info 图标：显式打开该节点的右侧面板。对话节点→聊天面板，其余→契约信息窗。
-  // 单击节点只负责选中，不再自动弹出；点击此图标才呈现，避免选中与点图标打架。
+  // 行首 info 图标：显式打开该节点的右侧面板（对话节点→聊天面板，其余→契约信息窗）。
+  // 单击卡片本身只负责选中，不直接调面板；对话节点是唯一的例外——CanvasEditor 里监听
+  // 选中变化的 store listener 会在单选对话节点时自动打开聊天面板（P2-2），因为它的正文
+  // 就在右侧面板里。图标按钮自己吞掉指针事件，避免与选中/拖动打架。
   const handleInfoOpen = (e: React.PointerEvent<HTMLButtonElement>): void => {
     // 阻止指针事件继续，避免落入卡片选中/拖动逻辑
     stopEventPropagation(e)

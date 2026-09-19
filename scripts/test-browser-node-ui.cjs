@@ -3,6 +3,9 @@
 const { chromium } = require('playwright')
 const assert = require('node:assert/strict')
 
+// 与另外四支浏览器门禁一致：默认 5173，可用 BROWSER_ORIGIN 指到别的端口。
+const ORIGIN = process.env.BROWSER_ORIGIN || 'http://127.0.0.1:5173'
+
 // 优先真实 Chrome（历史基线），缺失时回退 Edge / Playwright 内置 Chromium，
 // 保证审查通道在不同机器上都能启动。
 async function launchBrowser() {
@@ -23,7 +26,7 @@ async function main() {
   try {
     const page = await browser.newPage({ viewport: { width: 1707, height: 900 } })
     page.setDefaultTimeout(8_000)
-    await page.goto('http://127.0.0.1:5173/')
+    await page.goto(`${ORIGIN}/`)
     await page.getByRole('button', { name: '添加图片节点', exact: true }).click()
     const chooser = page.waitForEvent('filechooser')
     await page.getByRole('button', { name: '导入图片', exact: true }).click()
@@ -116,24 +119,26 @@ async function main() {
     })
     // 浏览器演示同样要能完成真实的画布内图片拆分，而不是把能力 mock 成失败。
     await page.getByRole('button', { name: '添加拆分节点', exact: true }).click()
-    // P1-1 回归（QA-NODE-AUDIT-2026-09-06）：新建节点必须整体落在顶栏之下，
-    // 否则卡片标题行的运行/说明按钮会被顶栏截获命中而不可点。
-    const assertCardsClearOfTopbar = async () => {
-      const topbarBottom = await page.evaluate(() => {
-        const bar = document.querySelector('.canvas-topbar')
-        return bar ? bar.getBoundingClientRect().bottom : 0
-      })
+    // P1-1 回归（QA-NODE-AUDIT-2026-09-06）：卡片必须整体落在顶栏之下，否则标题行的
+    // 运行/说明按钮会被顶栏截获命中而不可点。
+    // 只统计**已渲染**的卡片：tldraw 会剔除视口外的形状，被剔除的 `.node-card-wrap`
+    // 量出来是 0×0 且 top 为 0，会被当成「顶在顶栏里」。2026-09-19 实测：适配画布把
+    // 相机对准旧节点后，刚新建的那张卡还在视口外，门禁就是被这个假形状卡住的。
+    // minRendered 用来防止「全部被剔除 → 断言空转通过」。
+    const assertCardsClearOfTopbar = async (minRendered) => {
       await page.waitForFunction(
-        (minY) =>
-          Math.min(
-            ...Array.from(document.querySelectorAll('.node-card-wrap')).map(
-              (c) => c.getBoundingClientRect().top
-            )
-          ) >= minY,
-        topbarBottom
+        (want) => {
+          const bar = document.querySelector('.canvas-topbar')
+          const minY = bar ? bar.getBoundingClientRect().bottom : 0
+          const rendered = Array.from(document.querySelectorAll('.node-card-wrap'))
+            .map((c) => c.getBoundingClientRect())
+            .filter((r) => r.height > 0)
+          return rendered.length >= want && Math.min(...rendered.map((r) => r.top)) >= minY
+        },
+        minRendered
       )
     }
-    await assertCardsClearOfTopbar()
+    await assertCardsClearOfTopbar(2)
     await page.getByRole('button', { name: '适配画布（缩放到所有节点）', exact: true }).click()
     const splitNode = page.locator('.node-card-wrap:has(.type-image-split)').first()
     await splitNode.waitFor()
@@ -159,8 +164,10 @@ async function main() {
     })
     await page.getByText('你好，导入测试', { exact: true }).waitFor()
     await page.getByRole('button', { name: '添加文本节点', exact: true }).click()
-    await assertCardsClearOfTopbar()
+    await assertCardsClearOfTopbar(2)
     await page.getByRole('button', { name: '适配画布（缩放到所有节点）', exact: true }).click()
+    // 适配是 220ms 的相机动画；不等它就量端口坐标，拖线会拖在上一帧的位置上。
+    await page.waitForTimeout(260)
     const nodes = page.locator('.node-card-wrap:has(.type-text)')
     assert.equal(await nodes.count(), 2)
     const source = nodes.first()
@@ -179,9 +186,30 @@ async function main() {
     )
     assert.ok(a.x >= sourceRect.x + sourceRect.width, '输出端口必须完整位于节点外侧')
     assert.ok(b.x + b.width <= destinationRect.x, '输入端口必须完整位于节点外侧')
-    assert.equal(
-      await source.locator('.port-dot.out').evaluate((port) => getComputedStyle(port).borderStyle),
-      'dashed'
+    // §16.1 端口材质：类型色就是类型色。18px 只是透明命中区，视觉是 ::after 的
+    // 10px 实色圆点，描边一律没有；未连接只降不透明度。旧版本这里断言
+    // borderStyle === 'dashed'，那是被 #1 废止的虚线空心口，不是缺陷。
+    const outPortStyle = await source
+      .locator('.port-dot.out')
+      .evaluate((port) => {
+        const after = getComputedStyle(port, '::after')
+        return {
+          hitAreaBorder: getComputedStyle(port).borderStyle,
+          hitAreaBackground: getComputedStyle(port).backgroundColor,
+          dotBorder: after.borderStyle,
+          dotWidth: after.width,
+          dotBackground: after.backgroundColor,
+          dotOpacity: getComputedStyle(port).opacity
+        }
+      })
+    assert.equal(outPortStyle.hitAreaBorder, 'none', '命中区不得自带描边')
+    assert.equal(outPortStyle.hitAreaBackground, 'rgba(0, 0, 0, 0)', '命中区必须透明')
+    assert.equal(outPortStyle.dotBorder, 'none', '未连接端口不得用虚线描边，只降不透明度')
+    assert.equal(outPortStyle.dotWidth, '10px', '视觉圆点固定 10px')
+    assert.notEqual(outPortStyle.dotBackground, 'rgba(0, 0, 0, 0)', '圆点必须是实色填充')
+    assert.ok(
+      Number(outPortStyle.dotOpacity) < 1,
+      `未连接端口必须降低不透明度，实测 ${outPortStyle.dotOpacity}`
     )
     const edgeCountBeforeTextConnect = await page.locator('.data-edge').count()
     await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2)
@@ -279,16 +307,75 @@ async function main() {
     await page.locator('.node-card-wrap:has(.type-text)').first().locator('.node-info-btn').click()
     await page.locator('.node-contract-panel').waitFor()
     assert.equal(await page.locator('.side-panel').count(), 0, '运行中心必须被节点详情请求收口')
-    // P2-2 回归：选中对话节点即打开右侧对话面板（与卡片空态文案一致）。
+    // 后加的节点可能落在相机之外：tldraw 用 transform 平移画布，DOM 不会滚动，
+    // Playwright 的 scrollIntoView 因此无效，点击会被 tl-background 截获。所以先适配
+    // 画布，再在卡片内现算一个非控件落点单击（固定偏移在放大后会压到运行按钮和模型
+    // 芯片，而 .node-header-spacer 在样式里是 display:none，都不能当靶子）。
+    // 找落点要重试：相机动画 220ms，且 tldraw 在每次按下后临时铺一层
+    // .tl-hit-test-blocker，抢在窗口里探测会 20 个点全部命中遮挡层、误判成“没有可点区”。
+    const findNeutralCardPoint = async (wrap) => {
+      for (let attempt = 0; attempt < 12; attempt++) {
+        const point = await wrap.evaluate((el) => {
+          const card = el.querySelector('.node-card')
+          const rect = card.getBoundingClientRect()
+          // 卡片正文带 data-node-interactive 是允许的：单击由卡片承接为选中，双击才编辑。
+          const isControl = (node) =>
+            !!node.closest(
+              'button, input, select, textarea, [contenteditable="true"], [class*="btn"], [class*="run"]'
+            )
+          for (const fy of [0.5, 0.65, 0.8, 0.35]) {
+            for (const fx of [0.5, 0.6, 0.4, 0.7, 0.3]) {
+              const x = Math.round(rect.x + rect.width * fx)
+              const y = Math.round(rect.y + rect.height * fy)
+              const hit = document.elementFromPoint(x, y)
+              if (hit && card.contains(hit) && !isControl(hit)) return { x, y }
+            }
+          }
+          return null
+        })
+        if (point) return point
+        await page.waitForTimeout(150)
+      }
+      assert.fail('卡片内必须存在可单击的中性区域')
+    }
+    const clickNeutralCardPoint = async (wrap) => {
+      const point = await findNeutralCardPoint(wrap)
+      await page.mouse.click(point.x, point.y)
+    }
     await page.keyboard.press('Escape')
     await page.getByRole('button', { name: '添加对话节点', exact: true }).click()
     const chatCard = page.locator('.node-card-wrap:has(.type-chat)').first()
     await chatCard.waitFor()
-    await chatCard.locator('.node-card').click({ position: { x: 120, y: 60 } })
+    await page.getByRole('button', { name: '适配画布（缩放到所有节点）', exact: true }).click()
+    await page.waitForTimeout(260)
+    // P2-2 回归（QA-NODE-AUDIT-2026-09-06）：单选对话节点必须自动打开右侧聊天面板，
+    // 由 CanvasEditor 里监听选中变化的 store listener 实现。新建节点不算选中，所以下面
+    // 的单击才是第一次选中；关掉面板、改选别的节点、再选回来，能证明弹面板确实由
+    // “选中变化”触发，而不是建节点或刷新时的残留。
+    await clickNeutralCardPoint(chatCard)
+    assert.match(await chatCard.getAttribute('class'), /is-selected/, '单击卡片必须选中节点')
     await page.locator('.chat-side-panel').waitFor()
+    await page.keyboard.press('Escape')
+    await page.locator('.chat-side-panel').waitFor({ state: 'detached' })
+    await clickNeutralCardPoint(page.locator('.node-card-wrap:has(.type-text)').first())
+    await clickNeutralCardPoint(chatCard)
+    await page.locator('.chat-side-panel').waitFor()
+    // 收口再刷新：面板展开时盖住画布右侧，后面所有按视口坐标操作的回归都会被它吞掉。
+    await page.keyboard.press('Escape')
+    await page.locator('.chat-side-panel').waitFor({ state: 'detached' })
     await page.reload()
-    await page.locator('.node-card-wrap').first().waitFor()
+    // 刷新后相机回到默认机位，视口外的卡片被 tldraw 剔除成 0×0 的隐藏 wrapper，
+    // `.node-card-wrap` 的 first() 可能就是它们，所以要先适配画布再按“真正渲染出来”
+    // 的卡片数量判定（顺带复验 P1-1：卡片不得顶进顶栏）。
+    await page
+      .getByRole('button', { name: '适配画布（缩放到所有节点）', exact: true })
+      .waitFor()
+    await page.getByRole('button', { name: '适配画布（缩放到所有节点）', exact: true }).click()
+    await assertCardsClearOfTopbar(2)
     assert.ok(await page.locator('.node-card-wrap').count(), '刷新浏览器演示页不能丢失画布节点')
+    // 刷新会保留选中态，对话节点因此可能又自动弹出面板；同样收口后再继续。
+    await page.keyboard.press('Escape')
+    await page.locator('.chat-side-panel').waitFor({ state: 'detached' })
     const persistedMedia = await page.evaluate(async () => {
       const media = await window.api.listMedia('demo')
       const source = media.ok ? media.data.find((item) => item.kind === 'image') : undefined
@@ -367,7 +454,7 @@ async function main() {
     )
     if (process.env.UI_SCREENSHOT) await page.screenshot({ path: process.env.UI_SCREENSHOT })
     console.log(
-      'PASS: image double-click preview, browser crop/split/model generation, external dashed ports, refresh persistence and crop, zoom-stable grouping, light inspector, sequence color, topbar clearance, run-center/contract handoff, chat select-to-open, one-key batch node delete'
+      'PASS: image double-click preview, browser crop/split/model generation, outside solid-color ports, refresh persistence and crop, zoom-stable grouping, light inspector, sequence color, topbar clearance, run-center/contract handoff, chat select-to-open, one-key batch node delete'
     )
   } finally {
     await browser.close()
