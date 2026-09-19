@@ -724,8 +724,26 @@ MiniMax-H3、`duration:4`、`resolution:768P`、`ratio:16:9`（即 §7.5 末尾�
   `test/voice-protocol-wire.test.ts`（后端四分支的生效音色判定）。变异验证：删掉 append 处的
   voiceId、删掉索引透传、把 MiniMax 兜底改成透传，各自以对应断言变红。全量 `npm run verify`
   1097 passed / 1 skipped。
-- **仍留一步**：真机再跑一条"音色留空"的配音，确认落盘的 `voiceId` 是 `male-qn-qingse`。这是
-  本链条里唯一还没在真实 Electron 里验证过的一环，需要再计一次合成费用，故未擅自执行。
+- **真机补验（2026-09-19 20:09，隔离库 `canvas-e2e-5`，15/15）**：把配音节点的音色**清空**再跑
+  一条真实合成，验证记下来的确实是兜底后的音色而不是空值。
+
+  | 断言 | 结果 |
+  | --- | --- |
+  | 留空状态下合成成功并产出音频 | `613uNail8o.mp3`，47 796 B，ffprobe 2.809625 s |
+  | 磁盘上 `props.config.voiceId` | `""`（排除输入框残留） |
+  | `meta.nodeRun.status` | `success` |
+  | 本次结果条目 `voiceId` | `"male-qn-qingse"` |
+  | 历史条目未被补齐 | 3 条里只有新那条有 `voiceId`（前两条是本功能之前跑的，没写键） |
+  | 资产卡片来源 tooltip | `配音 · speech · speech-2.8-hd · male-qn-qingse` |
+  | 按音色名搜索 | `male-qn-qingse` 命中 1；`male-qn-qingseXYZ` 命中 0（反向锚定） |
+  | 整窗重载后 | 该条 `voiceId` 仍是 `male-qn-qingse`，3 个音频节点各自渲染播放器 |
+
+  同一句 15 字文本、同一语速，preset 音色那条是 54 132 B / 3.239 s，兜底音色这条是
+  47 796 B / 2.810 s——时长与体积都不同，再次说明"同尺寸不等于同音频"不能当判据。
+- **顺带纠正一处会说谎的占位文案**：配音节点的音色输入框原本写"留空用服务端默认音色"，
+  而 MiniMax 通道留空时网关是**主动发出** `male-qn-qingse`（缺 `voice_id` 会被上游在建任务前
+  拒掉），并没有"交给服务端"。现按协议分支：MiniMax 点明兜底音色名，豆包/OpenAI 兼容才说
+  "留空由服务端决定音色"。
 
 ## 8. 后续实施顺序
 
