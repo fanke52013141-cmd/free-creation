@@ -36,9 +36,47 @@ function check(name, ok, detail) {
   )
 }
 
+let app
 let win
 let projectId
+let currentProject = ''
 let shotSeq = 0
+
+async function launchApp() {
+  app = await _electron.launch({
+    executablePath: path.join(ROOT, 'node_modules/electron/dist/electron.exe'),
+    args: [path.join(ROOT, 'out/main/index.js')],
+    env: { ...process.env, CANVAS_DATA_DIR: DATA_DIR, NODE_ENV: 'production' }
+  })
+  win = await app.firstWindow()
+  win.on('console', (m) => {
+    const t = m.text()
+    if (m.type() === 'error' && !/Content Security Policy|cdn\.tldraw|NetworkError/.test(t)) {
+      log('renderer>', t.slice(0, 200))
+    }
+  })
+  win.on('pageerror', (e) => {
+    const msg = String(e.message).slice(0, 160)
+    pageErrors.set(msg, (pageErrors.get(msg) || 0) + 1)
+    if (!firstStack.has(msg)) firstStack.set(msg, String(e.stack || '').slice(0, 500))
+  })
+  await win.waitForLoadState()
+}
+
+/** 真的关掉进程再开一次：重载窗口验证不了主进程重启后的恢复。 */
+async function restartApp() {
+  await win.waitForTimeout(1500)
+  await app.close()
+  await launchApp()
+  for (let i = 0; i < 30; i += 1) {
+    await win.waitForTimeout(400)
+    if ((await win.locator('.node-card-wrap').count()) > 0) break
+    const open = win.getByRole('button', { name: new RegExp(`^打开项目 ${currentProject}$`) })
+    if (await open.count()) await open.first().click()
+  }
+  await win.locator('.node-palette').waitFor({ timeout: 30000 })
+  check('关掉应用重开后回到同一个项目', (await win.locator('.node-card-wrap').count()) > 0)
+}
 
 async function shot(name) {
   shotSeq += 1
@@ -228,6 +266,7 @@ async function freshProject(key) {
   await create.waitFor({ timeout: 15000 })
   await create.click()
   const name = `矩阵-${key}`
+  currentProject = name
   await win.locator('input[placeholder="项目名称"]').fill(name)
   await win.getByRole('button', { name: '创建', exact: true }).click()
   await win.locator('.node-palette').waitFor({ timeout: 30000 })
@@ -1237,6 +1276,150 @@ function probeDuration(absFile) {
   }
 }
 
+/** 等整条工作流回到空闲（顶栏重新出现「运行」，停止按钮消失）。 */
+async function waitWorkflowIdle(rounds = 60) {
+  for (let i = 0; i < rounds; i += 1) {
+    if ((await win.getByRole('button', { name: '运行', exact: true }).count()) === 1) return true
+    await win.waitForTimeout(500)
+  }
+  return false
+}
+
+/** §8 P3：工作流跑一半停止 → 续跑复用已完成项 → 关掉进程重开恢复。 */
+async function recipeCancelResume() {
+  const TOTAL = 4
+  // 每项一个 2 秒忙等的代码节点：单项远低于代码运行的 10 秒上限，整轮却够长，能在中途停下。
+  const list = await addNode('结构数据')
+  await card(list).locator('select[aria-label="结构 Schema"]').selectOption('list.items@1')
+  await win.waitForTimeout(500)
+  await editCodeLike(
+    list,
+    '输入 JSON',
+    JSON.stringify(Array.from({ length: TOTAL }, (_, i) => ({ id: `s${i + 1 }` })))
+  )
+  const loop = await addNode('循环')
+  check('停止续跑：结构数据可接入 in-list', await connect(list, 'out-json', loop, 'in-list'))
+  const body = await addNode('代码')
+  await editCodeLike(
+    body,
+    '编写代码',
+    'async function main(args) {\n  await new Promise((resolve) => setTimeout(resolve, 2000))\n  return { ok: true }\n}'
+  )
+  check('停止续跑：out-item 接进循环体', await connect(loop, 'out-item', body, 'in-json'))
+
+  const runAll = win.getByRole('button', { name: '运行', exact: true })
+  await ensureClickable(runAll, '顶栏运行工作流')
+  await runAll.click()
+  let progressSeen = false
+  for (let i = 0; i < 40; i += 1) {
+    if (await win.locator('.engine-progress-text').count()) {
+      progressSeen = true
+      break
+    }
+    await win.waitForTimeout(100)
+  }
+  check(
+    '停止续跑：点「运行」后顶栏真的进入运行态',
+    progressSeen,
+    `顶栏文案：${await win.locator('.engine-controls').innerText().catch(() => '（无）')}｜循环运行记录：${JSON.stringify((await disk(loop)).run)}`
+  )
+  if (!progressSeen) {
+    log(
+      '带「运行」字样的按钮：',
+      JSON.stringify(
+        await win.evaluate(() =>
+          Array.from(document.querySelectorAll('button'))
+            .filter((b) => (b.textContent || '').includes('运行'))
+            .map((b) => `${b.className}#${(b.textContent || '').trim()}#${b.closest('.engine-controls') ? 'topbar' : b.closest('.canvas-dock') ? 'dock' : 'other'}`)
+        )
+      )
+    )
+    await shot('p3-no-run-state')
+    return
+  }
+  // 单项 2 秒：等 4.5 秒再停，让前 1~2 项真正跑完，续跑时才有「复用」可验。
+  await win.waitForTimeout(4500)
+  const stop = win.getByRole('button', { name: '停止', exact: true })
+  check('停止续跑：运行中顶栏出现可点的停止按钮', (await stop.count()) === 1)
+  await stop.click()
+  check('停止续跑：工作流能回到空闲（不是停不下来）', await waitWorkflowIdle())
+  // 停止之后节点必须落定：自动保存有防抖，等它写完再判定，别把「还没落盘」当成「卡住」。
+  const stoppedShape = await disk(loop, (s) => s.run.status !== 'running')
+  const stoppedProgress = obj(stoppedShape.resultRaw).progress || {}
+  check(
+    '停止续跑：停止后循环节点落定，不留在执行中',
+    stoppedShape.run.status !== 'running',
+    JSON.stringify({ status: stoppedShape.run.status, error: stoppedShape.run.error })
+  )
+  check(
+    '停止续跑：停止时确实有项没跑完（不是跑完才返回）',
+    stoppedProgress.skipped > 0 && stoppedProgress.done < TOTAL,
+    JSON.stringify(stoppedProgress)
+  )
+  check(
+    '停止续跑：被中止的这一轮不记成成功',
+    stoppedShape.run.status !== 'success',
+    JSON.stringify({ status: stoppedShape.run.status, error: stoppedShape.run.error })
+  )
+  await shot('cancel-mid-run')
+
+  // 续跑：只补未完成项，已完成的必须复用而不是重跑
+  await card(loop).locator('.iterate-config select').first().selectOption('resume')
+  await win.waitForTimeout(900)
+  check(
+    '停止续跑：运行策略下拉能切到「续跑未完成」',
+    (await card(loop).locator('.iterate-config select').first().inputValue()) === 'resume',
+    await card(loop).locator('.iterate-config select').first().inputValue()
+  )
+  await runAll.click()
+  await win.waitForTimeout(1000)
+  check('停止续跑：续跑能跑到收尾', await waitWorkflowIdle(120))
+  const resumedShape = await disk(loop, (s) => s.run.status !== 'running')
+  const resumedItems = obj(resumedShape.resultRaw).items || []
+  const resumed = obj(resumedShape.resultRaw).progress || {}
+  // 复用过的项保留自己的 status:'reused'，所以「补完」= 每项都是 done 或 reused，而不是全是 done。
+  const finished = resumedItems.filter((item) => item.status === 'done' || item.status === 'reused')
+  check(
+    '停止续跑：续跑把每一项都补完',
+    finished.length === TOTAL && resumed.pending === 0,
+    JSON.stringify({ statuses: resumedItems.map((item) => item.status), progress: resumed })
+  )
+  check(
+    '停止续跑：上一轮已成功的项被复用而不是重跑',
+    resumed.reused > 0 && resumed.done + resumed.reused === TOTAL,
+    JSON.stringify(resumed)
+  )
+  await shot('resume-after-cancel')
+
+  await restartApp()
+  // 重启后相机可能停在别处，卡片没进视口就不会渲染 DOM——先适配画布再读界面。
+  if (!(await win.locator(`.node-card-wrap[data-node-id="${loop}"]`).count())) {
+    const fit = win.getByRole('button', { name: '适配画布（缩放到所有节点）', exact: true })
+    if (await fit.count()) {
+      await fit.click()
+      await win.waitForTimeout(1500)
+    }
+  }
+  const after = obj((await disk(loop)).resultRaw)
+  check(
+    '重启恢复：逐项结果全部回来',
+    (after.items || []).length === TOTAL,
+    `${(after.items || []).length} / ${TOTAL} 条`
+  )
+  const loopText = await card(loop).innerText()
+  check(
+    '重启恢复：卡片仍显示满进度',
+    loopText.includes(`${TOTAL}/${TOTAL}`),
+    loopText.replace(/\n+/g, ' / ').slice(0, 180)
+  )
+  check(
+    '重启恢复：循环体节点的运行结果仍在磁盘上',
+    Boolean((await disk(body)).resultRaw),
+    JSON.stringify((await disk(body)).resultRaw).slice(0, 80)
+  )
+  await shot('restart-recovered')
+}
+
 const RECIPES = [
   ['text', '文本', recipeText],
   ['json', 'JSON', recipeJson],
@@ -1252,7 +1435,8 @@ const RECIPES = [
   ['video-frame', '视频取帧', recipeVideoFrame],
   ['video-clip', '视频截取', recipeVideoClip],
   ['audio', '音频 + 人声分离', recipeAudio],
-  ['director', '导演台', recipeDirector]
+  ['director', '导演台', recipeDirector],
+  ['p3', '停止续跑与重启恢复', recipeCancelResume]
 ]
 
 async function main() {
@@ -1260,24 +1444,7 @@ async function main() {
   fs.mkdirSync(SHOT_DIR, { recursive: true })
   FIX = makeFixtures()
   log('数据目录（与用户真实库隔离）', DATA_DIR)
-  const app = await _electron.launch({
-    executablePath: path.join(ROOT, 'node_modules/electron/dist/electron.exe'),
-    args: [path.join(ROOT, 'out/main/index.js')],
-    env: { ...process.env, CANVAS_DATA_DIR: DATA_DIR, NODE_ENV: 'production' }
-  })
-  win = await app.firstWindow()
-  win.on('console', (m) => {
-    const t = m.text()
-    if (m.type() === 'error' && !/Content Security Policy|cdn\.tldraw|NetworkError/.test(t)) {
-      log('renderer>', t.slice(0, 200))
-    }
-  })
-  win.on('pageerror', (e) => {
-    const msg = String(e.message).slice(0, 160)
-    pageErrors.set(msg, (pageErrors.get(msg) || 0) + 1)
-    if (!firstStack.has(msg)) firstStack.set(msg, String(e.stack || '').slice(0, 500))
-  })
-  await win.waitForLoadState()
+  await launchApp()
   // 首条配方自己会建项目；这里只确认落地页可用。
   await win.getByRole('button', { name: '新建项目' }).waitFor({ timeout: 30000 })
   check('全新数据目录进入项目列表页', true, DATA_DIR)
