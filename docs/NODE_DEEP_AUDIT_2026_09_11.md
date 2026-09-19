@@ -344,6 +344,12 @@ video deep browser audit                  P0 断言 PASS（不代表真实供应
   的识别从「仅 MiniMax 模板」提升为通用规则。
 - MiniMax 模板缺 `speech-2.8-hd`（配音节点的默认 `modelId`），OpenAI 模板缺任何 TTS 模型，
   两条通道新建供应商后都要用户手填模型 ID。预设已补齐（OpenAI 加 `gpt-4o-mini-tts`）。
+- 反方向的断链更贵：`minimax` 原先是「不是语音就算视频」，而同一个 Key 还能调 MiniMax 的
+  大模型（`MiniMax-M2`、`MiniMax-Text-01`、`abab6.5s-chat`）。用户在面板里手动补一行 M2，
+  它就会出现在视频节点下拉里——视频节点没有能力白名单，任何 `video` 行都会按 `FALLBACK`
+  档位拼请求发出去。现在 `minimax` 按型号族分流（语音/图片/视频/大模型），**认不出时仍兜底
+  成视频**：新发布的 H 系列不能因为这份正则落后就选不到，这是两害相权的取舍。
+  `seedance` 保持整家 `video`——方舟接入点 ID 形如 `ep-2025xxxx-xxxx`，没有任何可辨认词汇。
 
 门禁：`test/provider-preset-modality.test.ts`。它刻意**不复用**组件里的 `acceptsProvider`，
 而是照节点契约重写一份协议↔供应商对照表——两边都复用时，一起写错就测不出来。

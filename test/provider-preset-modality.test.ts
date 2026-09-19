@@ -87,3 +87,54 @@ describe('供应商预设的模态与语音模型可选性', () => {
     }
   })
 })
+
+// MiniMax 没有 /models 端点（自检那里就写死了），所以它家模型的模态只能按 ID 猜；
+// 而同一个 Key 既能调 H3 视频、也能调 speech 语音和 M2 大模型。猜错的代价是不对称的：
+// 视频节点不做能力白名单，任何被标成 video 的行都会进下拉并按 FALLBACK 参数发请求。
+describe('MiniMax 一个供应商三种产品线时的模态归类', () => {
+  it('视频族按视频建模，H3 之外的历史型号也一样', () => {
+    for (const id of [
+      'MiniMax-H3',
+      'MiniMax-H3-Max',
+      'MiniMax-Hailuo-02',
+      'T2V-01-Director',
+      'I2V-01',
+      'S2V-01'
+    ]) {
+      expect(guessModelModality(id, 'minimax'), id).toBe('video')
+    }
+  })
+
+  it('大模型不再被当成视频模型，语音与图片各归各位', () => {
+    for (const id of [
+      'MiniMax-M2',
+      'MiniMax-M2.1',
+      'MiniMax-M1-80k',
+      'MiniMax-Text-01',
+      'abab6.5s-chat'
+    ]) {
+      expect(guessModelModality(id, 'minimax'), id).toBe('text')
+    }
+    expect(guessModelModality('speech-2.8-hd', 'minimax')).toBe('audio')
+    expect(guessModelModality('voice-clone-001', 'minimax')).toBe('audio')
+    expect(guessModelModality('MiniMax-Image-01', 'minimax')).toBe('image')
+  })
+
+  it('认不出型号时仍兜底成视频：新发布的 H 系列不能因为这份表落后就选不到', () => {
+    expect(guessModelModality('MiniMax-H4', 'minimax')).toBe('video')
+  })
+
+  it('用户手动补的 MiniMax-M2 不会出现在视频节点下拉里', () => {
+    const provider = providerFromSpec('minimax')
+    provider.models.push({
+      id: 'MiniMax-M2',
+      modality: guessModelModality('MiniMax-M2', 'minimax')
+    })
+    const video = modelsByModality([provider], 'video').map((option) => option.model.id)
+    expect(video).toEqual(['MiniMax-H3', 'MiniMax-H3-Max'])
+    // 反过来，M2 得能在文本通道里被选到，否则用户会以为 MiniMax 的大模型没接上。
+    expect(modelsByModality([provider], 'text').map((option) => option.model.id)).toContain(
+      'MiniMax-M2'
+    )
+  })
+})
