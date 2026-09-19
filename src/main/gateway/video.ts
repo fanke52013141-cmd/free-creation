@@ -8,7 +8,7 @@
 import { nanoid } from 'nanoid'
 import { Readable } from 'stream'
 import { pipeline } from 'stream/promises'
-import { open } from 'fs/promises'
+import { createWriteStream } from 'fs'
 import { join } from 'path'
 import type { GatewayEvent, VideoSubmitInput, VideoSubmitResult } from '../../shared/contracts'
 import type { ProviderConfig, VideoGenerationMode, VideoTaskInfo } from '../../shared/types'
@@ -283,23 +283,19 @@ async function mediaToDataUrl(mediaId: string): Promise<string | undefined> {
  * 落盘，几百 MB 成片会让主进程内存尖峰。这里用 pipeline 把响应流直接写到磁盘，
  * 内存占用恒定。调用方负责把返回的临时文件交给 saveFileAsset（登记后即被移走）。
  */
-async function downloadToTempFile(url: string): Promise<string> {
+export async function downloadToTempFile(url: string): Promise<string> {
   const res = await fetch(url)
   if (!res.ok || !res.body) {
     throw new GatewayError('DOWNLOAD_FAILED', `下载成片失败：HTTP ${res.status}`)
   }
   const tmpAbs = join(getDataDir(), `tmp-video-${nanoid(10)}.mp4`)
-  const fh = await open(tmpAbs, 'w')
-  try {
-    const ws = fh.createWriteStream()
-    // fetch 的 body 是 DOM ReadableStream；Readable.fromWeb 需要 stream/web 类型。
-    // 运行时两者兼容，这里用双重断言绕过 TS 的不透明类型不匹配。
-    const nodeStream = Readable.fromWeb(res.body as unknown as import('stream/web').ReadableStream)
-    await pipeline(nodeStream, ws)
-    await fh.sync()
-  } finally {
-    await fh.close()
-  }
+  // 必须用路径流：FileHandle.createWriteStream() 把 fd 交给流之后，pipeline 结束即关闭
+  // fd，随后任何 fh.sync()/fh.close() 都是 EBADF「file closed」——2026-09-19 真跑时
+  // 成片已经完整落盘，任务却被这句异常标成 failed，白烧了一次计费。
+  // fetch 的 body 是 DOM ReadableStream；Readable.fromWeb 需要 stream/web 类型。
+  // 运行时两者兼容，这里用双重断言绕过 TS 的不透明类型不匹配。
+  const nodeStream = Readable.fromWeb(res.body as unknown as import('stream/web').ReadableStream)
+  await pipeline(nodeStream, createWriteStream(tmpAbs))
   return tmpAbs
 }
 
