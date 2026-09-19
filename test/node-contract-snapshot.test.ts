@@ -411,6 +411,8 @@ describe('关键端口契约快照（防回归）', () => {
     const inList = spec.ports.in.find((p) => p.id === 'in-list')!
     expect(inList.type).toBe('json')
     expect(inList.schema).toEqual({ id: 'list.items', version: 1 })
+    // 与 NODE_COMPLIANCE_MATRIX 的「必填」一致：没接列表时运行按钮要置灰并说明缺什么。
+    expect(inList.required).toBe(true)
     const outItems = spec.ports.out.find((p) => p.id === 'out-items')!
     expect(outItems.type).toBe('json')
     expect(outItems.schema).toEqual({ id: 'list.items', version: 1 })

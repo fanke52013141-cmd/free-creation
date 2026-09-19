@@ -960,7 +960,10 @@ export function registerExtendedNodeTypes(): void {
     ports: {
       in: [
         input('in-list', '列表', 'json', '要逐项批量处理的列表（每个元素作为一次循环体输入）。', {
-          schema: LIST_ITEMS
+          schema: LIST_ITEMS,
+          // 契约矩阵把 in-list 记为必填：没有列表时循环体一项都不会跑，
+          // 与其让按钮可点、跑完给一句「没有可循环的列表输入」，不如直接标出缺什么。
+          required: true
         })
       ],
       out: [
