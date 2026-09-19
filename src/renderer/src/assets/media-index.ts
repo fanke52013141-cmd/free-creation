@@ -13,6 +13,8 @@ export interface MediaSourceSummary {
   nodeTitle: string
   nodeType: string
   modelKey?: string
+  /** 该条音频实际用的音色 ID；只有语音类产物与非默认音色通道才有值。 */
+  voiceId?: string
   resultCount: number
   isCurrentOutput: boolean
   /** 产物对应的真实运行 ID；旧产物没有时回退到节点最近一次运行。 */
@@ -35,26 +37,33 @@ export interface MediaIndexFilters {
 
 type SourceCandidate = MediaSourceSummary & { priority: number; createdAt: number }
 
+/** 逐条产物各自记住的来源；缺省时回退到节点级/集合级的值。 */
+interface ResultProvenance {
+  modelKey?: string
+  runId?: string
+  voiceId?: string
+}
+
 function sourceForShape(
   shape: NodeCardShape,
   resultCount: number,
   isCurrentOutput: boolean,
-  modelKey?: string,
-  resultRunId?: string
+  provenance: ResultProvenance = {}
 ): MediaSourceSummary {
   const currentRun = readNodeRunRecord(shape.meta?.nodeRun)
   const run =
-    (resultRunId && currentRun?.runId === resultRunId ? currentRun : undefined) ??
-    (resultRunId
+    (provenance.runId && currentRun?.runId === provenance.runId ? currentRun : undefined) ??
+    (provenance.runId
       ? readNodeRunHistory(shape.meta?.nodeRunHistory).find(
-          (record) => record.runId === resultRunId
+          (record) => record.runId === provenance.runId
         )
       : currentRun)
   return {
     nodeId: shape.id,
     nodeTitle: shape.props.title,
     nodeType: shape.props.nodeType,
-    ...(modelKey ? { modelKey } : {}),
+    ...(provenance.modelKey ? { modelKey: provenance.modelKey } : {}),
+    ...(provenance.voiceId ? { voiceId: provenance.voiceId } : {}),
     resultCount,
     isCurrentOutput,
     ...(run
@@ -63,8 +72,8 @@ function sourceForShape(
           runStatus: run.status,
           runStartedAt: run.startedAt
         }
-      : resultRunId
-        ? { runId: resultRunId }
+      : provenance.runId
+        ? { runId: provenance.runId }
         : {})
   }
 }
@@ -98,13 +107,11 @@ export function buildMediaAssetIndex(
     if (collection?.results.length) {
       for (const result of collection.results) {
         setCandidate(result.mediaId, {
-          ...sourceForShape(
-            shape,
-            collection.results.length,
-            result.mediaId === selectedMediaId,
-            result.modelKey || collection.modelKey,
-            result.runId
-          ),
+          ...sourceForShape(shape, collection.results.length, result.mediaId === selectedMediaId, {
+            modelKey: result.modelKey || collection.modelKey,
+            runId: result.runId,
+            voiceId: result.voiceId
+          }),
           priority: 2,
           createdAt: result.createdAt
         })
@@ -116,7 +123,9 @@ export function buildMediaAssetIndex(
           shape,
           collection?.results.length ?? 1,
           shape.props.mediaId === selectedMediaId,
-          collection?.modelKey
+          {
+            modelKey: collection?.modelKey
+          }
         ),
         priority: 1,
         createdAt: collection?.at ?? 0
@@ -135,6 +144,7 @@ export function buildMediaAssetIndex(
           nodeTitle: candidate.nodeTitle,
           nodeType: candidate.nodeType,
           ...(candidate.modelKey ? { modelKey: candidate.modelKey } : {}),
+          ...(candidate.voiceId ? { voiceId: candidate.voiceId } : {}),
           resultCount: candidate.resultCount,
           isCurrentOutput: candidate.isCurrentOutput,
           ...(candidate.runId ? { runId: candidate.runId } : {}),
@@ -182,7 +192,13 @@ export function filterMediaAssets(
     if (filters.runStatus !== 'all' && status !== filters.runStatus) return false
     if (start !== null && asset.createdAt < start) return false
     if (!keyword) return true
-    return [asset.name, asset.id, asset.source?.nodeTitle, asset.source?.modelKey]
+    return [
+      asset.name,
+      asset.id,
+      asset.source?.nodeTitle,
+      asset.source?.modelKey,
+      asset.source?.voiceId
+    ]
       .filter((value): value is string => typeof value === 'string')
       .some((value) => value.toLocaleLowerCase().includes(keyword))
   })

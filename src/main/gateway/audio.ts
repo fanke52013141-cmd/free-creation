@@ -104,6 +104,19 @@ export async function generateAudioToAsset(input: AudioGenerateInput): Promise<M
 
 // ── 配音节点：模型驱动的合成入口 ──
 
+/**
+ * 本次请求真正会用的音色 ID，用于产物溯源。只有 MiniMax 通道存在「用户留空 → 兜底成
+ * 系统音色」的改写；豆包 / OpenAI 兼容留空时服务端用了哪个音色我们无从得知，返回
+ * undefined 让调用方跳过溯源，而不是编一个默认值冒充已溯源。
+ */
+export function effectiveSpeechVoiceId(
+  backend: SpeechConfig['backend'],
+  voiceId: string | undefined
+): string | undefined {
+  if (backend === 'minimax') return resolveMiniMaxVoiceId(voiceId)
+  return voiceId?.trim() || undefined
+}
+
 export async function generateSpeechToAsset(
   input: SpeechGenerateInput
 ): Promise<SpeechGenerateResult> {
@@ -119,19 +132,24 @@ export async function generateSpeechToAsset(
   const p = getProvider(input.providerId)
   if (!p) throw new GatewayError('PROVIDER_NOT_FOUND', '供应商不存在')
 
+  // 回传「实际生效」的音色供产物溯源：只有 MiniMax 通道存在「用户留空 → 网关兜底成
+  // 系统音色」的改写；其余通道留空时服务端用了什么音色我们并不知道，因此回传
+  // undefined 而不是编一个默认值冒充已溯源。
+  const spokenAs = effectiveSpeechVoiceId(config.backend, input.voiceId)
+
   if (config.backend === 'minimax') {
     if (p.specId !== 'minimax') {
       throw new GatewayError('INVALID_INPUT', 'MiniMax 配音通道只能选择 MiniMax 供应商')
     }
     const asset = await generateViaMiniMaxAsync(p, input)
-    return { asset }
+    return { asset, voiceId: spokenAs }
   }
 
   if (config.backend === 'doubao') {
     if (p.specId !== 'doubao-speech') {
       throw new GatewayError('INVALID_INPUT', '豆包语音通道只能选择豆包语音（Seed-Audio）供应商')
     }
-    return generateViaDoubao(p, input)
+    return { ...(await generateViaDoubao(p, input)), voiceId: spokenAs }
   }
 
   if (config.backend === 'volc') {
@@ -147,7 +165,7 @@ export async function generateSpeechToAsset(
     if (!input.voiceId?.trim()) {
       throw new GatewayError('INVALID_INPUT', '火山语音合成 1.0 的 voice_type 不能为空')
     }
-    return generateViaVolc(p, input)
+    return { ...(await generateViaVolc(p, input)), voiceId: spokenAs }
   }
 
   assertOpenAiCompatible(p)
@@ -156,10 +174,10 @@ export async function generateSpeechToAsset(
     providerId: input.providerId,
     modelId: input.modelId,
     text,
-    voice: input.voiceId || undefined,
+    voice: spokenAs,
     format: config.format
   })
-  return { asset }
+  return { asset, voiceId: spokenAs }
 }
 
 /** OpenAI 兼容通道不接受原生协议供应商，避免把 MiniMax/豆包实例打到 /audio/speech。 */

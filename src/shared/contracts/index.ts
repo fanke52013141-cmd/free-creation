@@ -466,6 +466,12 @@ export interface SpeechGenerateResult {
   asset: import('../types').MediaAsset
   /** 仅豆包在 enable_subtitle 打开时存在；其余协议不产生字幕。 */
   subtitle?: SpeechSubtitle
+  /**
+   * 本次真正生效的音色 ID，用于产物溯源。只有网关能确定的才写：MiniMax 空值会兜底成
+   * 系统音色、火山的 voice_type 是必填，两者都给；豆包与 OpenAI 兼容在用户留空时服务端
+   * 用了哪个音色无从得知，此时不写——绝不拿"用户没填"冒充"用了默认音色"。
+   */
+  voiceId?: string
 }
 
 // ── 音色设计节点（MiniMax voice_design）──

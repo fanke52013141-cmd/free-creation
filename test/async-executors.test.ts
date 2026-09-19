@@ -303,6 +303,54 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     expect(Object.values(meta).some((v) => v === undefined)).toBe(false)
   })
 
+  // 溯源记的是「实际生效」的音色。用户在节点上留空时，MiniMax 通道会被网关兜底成系统
+  // 音色——记输入框里的空值等于什么都没记，两条留空跑出来的音频就又分不开了。
+  it('配音执行器记录网关回传的实际音色，而不是节点上的空值', async () => {
+    installGateway({
+      speechGenerate: vi.fn().mockResolvedValue({
+        ok: true,
+        data: {
+          asset: {
+            id: 'speech-1',
+            path: 'projects/p/speech.mp3',
+            mime: 'audio/mpeg',
+            name: '旁白'
+          },
+          voiceId: 'male-qn-qingse'
+        }
+      })
+    })
+    const { ctx, result } = makeContext(
+      'speech',
+      JSON.stringify({ backend: 'minimax', providerId: 'provider-1', modelId: 'speech-2.8-hd' }),
+      [provider('audio')],
+      '旁白'
+    )
+    await expect(speechExecutor(ctx)).resolves.toEqual({ status: 'done' })
+    expect(JSON.parse(result.value ?? '{}').results[0].voiceId).toBe('male-qn-qingse')
+  })
+
+  // 豆包 / OpenAI 兼容在用户留空时，服务端用了哪个音色我们确实不知道——那就别写，
+  // 而不是拿一个猜出来的 ID 冒充已溯源。
+  it('网关无法确定音色时不写 voiceId 键', async () => {
+    installGateway({
+      speechGenerate: vi.fn().mockResolvedValue({
+        ok: true,
+        data: {
+          asset: { id: 'speech-1', path: 'projects/p/speech.mp3', mime: 'audio/mpeg', name: '旁白' }
+        }
+      })
+    })
+    const { ctx, result } = makeContext(
+      'speech',
+      JSON.stringify({ backend: 'openai', providerId: 'provider-1', modelId: 'gpt-tts' }),
+      [provider('audio')],
+      '旁白'
+    )
+    await expect(speechExecutor(ctx)).resolves.toEqual({ status: 'done' })
+    expect('voiceId' in JSON.parse(result.value ?? '{}').results[0]).toBe(false)
+  })
+
   it('配音执行器在豆包开启字幕时写入 out-subtitle 的结构化结果', async () => {
     installGateway({
       speechGenerate: vi.fn().mockResolvedValue({

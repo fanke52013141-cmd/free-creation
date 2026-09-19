@@ -48,6 +48,12 @@ export interface MediaResultItem {
   prompt?: string
   /** 生成该媒体的工作流运行 ID；旧结果可能没有此字段。 */
   runId?: string
+  /**
+   * 这条音频实际用的音色 ID。必须逐条记录而不是记在节点上：同一个配音节点换音色
+   * 重跑会留下多条产物，只有每条各自记住音色才能区分。值取服务端真正接受/登记
+   * 的那个 ID，因此 MiniMax 音色库的 preset（含空格与括号）也原样保存。
+   */
+  voiceId?: string
 }
 
 /** 生成参数摘要：记录本次生成使用的关键参数，用于来源摘要展示。 */
@@ -133,6 +139,7 @@ export function appendMediaResult(
   item: Omit<MediaResultItem, 'createdAt'> & { createdAt?: number },
   meta: Pick<MediaResultCollection, 'nodeId' | 'modelKey' | 'prompt'> & {
     runId?: string
+    voiceId?: string
     genParams?: GenParamSummary
     sourceSummary?: SourceSummary
   } = {}
@@ -142,7 +149,8 @@ export function appendMediaResult(
   const nextItem: MediaResultItem = {
     ...item,
     createdAt: item.createdAt ?? Date.now(),
-    ...(meta.runId ? { runId: meta.runId } : {})
+    ...(meta.runId ? { runId: meta.runId } : {}),
+    ...(meta.voiceId?.trim() ? { voiceId: meta.voiceId.trim() } : {})
   }
   return {
     kind: 'media-source',

@@ -42,7 +42,9 @@ export const ttsExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecut
           {
             nodeId: ctx.node.id,
             prompt: text.slice(0, 80),
-            runId: ctx.runId
+            runId: ctx.runId,
+            // 试听音频的溯源用服务端登记回来的 ID，而不是用户填进输入框的那个。
+            voiceId
           }
         )
       )

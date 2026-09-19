@@ -7,7 +7,8 @@ import { describe, expect, it } from 'vitest'
 import {
   buildDoubaoSpeechBody,
   buildMiniMaxAsyncTtsBody,
-  buildVolcTtsBody
+  buildVolcTtsBody,
+  effectiveSpeechVoiceId
 } from '../src/main/gateway/audio'
 import { buildVoiceCloneBody, buildVoiceDesignBody } from '../src/main/gateway/voice'
 import { DEFAULT_SPEECH_CONFIG, parseSpeechConfig } from '../src/shared/speech'
@@ -240,6 +241,28 @@ describe('火山引擎语音合成 1.0 /api/v1/tts', () => {
     expect(config.volcCluster).toBe(DEFAULT_SPEECH_CONFIG.volcCluster)
     expect(DEFAULT_SPEECH_CONFIG.volcCluster).toBe('volcano_tts')
     expect(parseSpeechConfig(JSON.stringify({ volcAppId: 123 })).volcAppId).toBe('')
+  })
+})
+
+describe('配音产物溯源用的「实际生效音色」', () => {
+  it('MiniMax 留空回传兜底后的系统音色，而不是空值', () => {
+    // 网关确实把 male-qn-qingse 发出去了，所以溯源记空值等于漏记一条链路。
+    expect(effectiveSpeechVoiceId('minimax', '')).toBe('male-qn-qingse')
+    expect(effectiveSpeechVoiceId('minimax', undefined)).toBe('male-qn-qingse')
+    expect(effectiveSpeechVoiceId('minimax', ' alloy ')).toBe('male-qn-qingse')
+    expect(effectiveSpeechVoiceId('minimax', 'Chinese (Mandarin)_News_Anchor')).toBe(
+      'Chinese (Mandarin)_News_Anchor'
+    )
+  })
+
+  it('其余通道留空时回传 undefined，不拿「用户没填」冒充「用了默认音色」', () => {
+    for (const backend of ['doubao', 'volc', 'openai'] as const) {
+      expect(effectiveSpeechVoiceId(backend, '')).toBeUndefined()
+      expect(effectiveSpeechVoiceId(backend, '   ')).toBeUndefined()
+      expect(effectiveSpeechVoiceId(backend, ' BV001_streaming ')).toBe('BV001_streaming')
+    }
+    // 兜底只属于 MiniMax 那一条改写；别的通道不能借用它。
+    expect(effectiveSpeechVoiceId('doubao', '')).not.toBe('male-qn-qingse')
   })
 })
 

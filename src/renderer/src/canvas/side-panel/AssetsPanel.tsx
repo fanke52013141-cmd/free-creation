@@ -94,7 +94,7 @@ function AssetCard({
         {asset.source && (
           <span
             className={`asset-source ${asset.source.runStatus ?? 'unavailable'}`}
-            title={`${asset.source.nodeTitle} · ${asset.source.nodeType}${asset.source.modelKey ? ` · ${asset.source.modelKey}` : ''}`}
+            title={`${asset.source.nodeTitle} · ${asset.source.nodeType}${asset.source.modelKey ? ` · ${asset.source.modelKey}` : ''}${asset.source.voiceId ? ` · ${asset.source.voiceId}` : ''}`}
           >
             <Icon name="target" size={10} />
             {asset.source.nodeTitle}

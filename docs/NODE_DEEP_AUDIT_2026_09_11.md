@@ -693,10 +693,39 @@ MiniMax-H3、`duration:4`、`resolution:768P`、`ratio:16:9`（即 §7.5 末尾�
   即以完全相同的损坏形态变红。
 - **同尺寸不等于同音频**：两条 mp3 都是 54 132 B / 3.239188 s（同一句话在固定语速下落到同
   一个 mp3 帧数），但 sha256 不同，说明换音色确实改变了内容。
-- **顺带暴露的溯源缺口（未擅自改代码）**：`MediaAsset` 上并没有 `origin` 字段，产物溯源实际
-  只存在 `meta.nodeResult` 的 `{nodeId, modelKey, prompt, runId}` 里，**不含 voice_id**。于是
-  同一节点用两个音色跑出的两条音频，在资产面板里除了试听无法区分。是否把 voice_id 写进结果
-  溯源需要拍板（它动的是持久化结构）。
+- **顺带暴露的溯源缺口**：`MediaAsset` 上并没有 `origin` 字段，产物溯源实际只存在
+  `meta.nodeResult` 的 `{nodeId, modelKey, prompt, runId}` 里，**不含 voice_id**。于是同一节点
+  用两个音色跑出的两条音频，在资产面板里除了试听无法区分。该缺口已在 §7.8.2 修复。
+
+#### 7.8.2 语音产物溯源补 voiceId（2026-09-19，用户拍板方案 A）
+
+方案 A 的原话是"逐条记"而不是"记在节点上"：一个配音节点换音色重跑会留下多条产物，集合级或
+节点级的单个字段无法回答"这条音频是哪个音色"。同时明确**没有老数据、不做兼容**，因此不写
+迁移、不写回退分支。
+
+- **持久化结构**：`MediaResultItem` 增加 `voiceId?`，`appendMediaResult` 的 origin 参数透传它；
+  trim 后为空则**不写这个键**（不是写 `undefined`）——往 `shape.meta` 里塞显式 `undefined` 会触
+  发 tldraw 的 `ValidationError: Expected json serializable value`，见 §7.8 的 P0。
+- **"实际生效"而非"用户填的"**：网关新增纯函数 `effectiveSpeechVoiceId(backend, voiceId)`。只有
+  MiniMax 通道存在改写（留空与 OpenAI 命名都兜底成 `male-qn-qingse`），所以它总是给值；豆包与
+  OpenAI 兼容留空时服务端用了哪个音色我们无从得知，返回 `undefined` 让上游跳过溯源，绝不拿
+  "用户没填"冒充"用了默认音色"。火山必填，因此等同于原样透传。
+- **三个语音执行器口径统一**：配音记网关回传值，语音克隆与音色设计记服务端登记回来的
+  `voiceId`（不是输入框里的字符串）。
+- **UI 侧**：`MediaSourceSummary.voiceId` 进入资产卡片来源 tooltip，并加入关键词搜索的命中字段
+  ——搜 `News_Anchor` 能定位到用它的产物。
+- **顺带灭掉一处真隐患**：`renderer/src/nodes/nodeValues.ts` 里那份
+  `{MediaResultItem, parse/serialize/appendMediaResult}` 是 `shared/engine/values.ts` 的逐字复制
+  （−121 行改为 import + re-export）。不合并的后果正是本次要加字段时最容易踩的坑：执行器写的
+  是 shared 那份，UI 读的是复制那份，新字段静默丢失且测试全绿。
+- **测试**：`test/voice-provenance.test.ts`（4 条：两条不同音色逐条共存且过序列化往返、空值不写
+  键、资产索引暴露 `source.voiceId`、按音色名可搜到）＋ `test/async-executors.test.ts`（网关回传
+  `male-qn-qingse` 时节点配置为空也要记上；网关没回传时结果里**不存在** `voiceId` 键）＋
+  `test/voice-protocol-wire.test.ts`（后端四分支的生效音色判定）。变异验证：删掉 append 处的
+  voiceId、删掉索引透传、把 MiniMax 兜底改成透传，各自以对应断言变红。全量 `npm run verify`
+  1097 passed / 1 skipped。
+- **仍留一步**：真机再跑一条"音色留空"的配音，确认落盘的 `voiceId` 是 `male-qn-qingse`。这是
+  本链条里唯一还没在真实 Electron 里验证过的一环，需要再计一次合成费用，故未擅自执行。
 
 ## 8. 后续实施顺序
 

@@ -74,7 +74,10 @@ export const speechExecutor = async (ctx: NodeExecutionContext): Promise<NodeExe
             nodeId: ctx.node.id,
             modelKey: config.modelId,
             prompt: text.slice(0, 80),
-            runId: ctx.runId
+            runId: ctx.runId,
+            // 溯源只记网关确认「实际发出去」的音色：MiniMax 留空时网关会兜底成系统音色，
+            // 节点上的原值是空的；豆包/OpenAI 留空时服务端用了谁我们不知道，那就宁可不写。
+            voiceId: result.data.voiceId
           }
         )
       )

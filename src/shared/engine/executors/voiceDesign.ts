@@ -37,7 +37,7 @@ export const voiceDesignExecutor = async (
         appendMediaResult(
           typeof ctx.shape.meta?.nodeResult === 'string' ? ctx.shape.meta.nodeResult : '',
           { mediaId: asset.id, mediaPath: asset.path, mime: asset.mime },
-          { nodeId: ctx.node.id, prompt: prompt.slice(0, 80), runId: ctx.runId }
+          { nodeId: ctx.node.id, prompt: prompt.slice(0, 80), runId: ctx.runId, voiceId }
         )
       )
     )
