@@ -5,6 +5,7 @@ import { mergedPrompt } from '../helpers'
 import { readNodeConfig } from '../node-config'
 import { appendMediaResult, serializeMediaResultCollection } from '../values'
 import { parseTtsConfig } from '@shared/tts'
+import { featureKeyOf, resolveFeatureOption } from '../models'
 
 export const ttsExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
   const config = parseTtsConfig(readNodeConfig(ctx.shape))
@@ -17,6 +18,14 @@ export const ttsExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecut
   const referenceAudioId = refAudio?.mediaId ?? config.refMediaId
   if (!referenceAudioId) return { status: 'skipped', reason: '缺少参考语音' }
 
+  const effectiveConfig = { ...config }
+  if (config.backend === 'minimax') {
+    const option = await resolveFeatureOption(ctx.gateway, ctx.providers, featureKeyOf(config, 'voice.clone'), 'voice.clone')
+    if (!option) return { status: 'skipped', reason: '功能 voice.clone 尚未绑定已验证语音复刻模型' }
+    effectiveConfig.providerId = option.provider.id
+    effectiveConfig.modelId = option.model.id
+  }
+
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
 
   try {
@@ -24,7 +33,7 @@ export const ttsExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecut
       projectId: ctx.projectId,
       referenceAudioId,
       text,
-      config
+      config: effectiveConfig
     })
     if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
     if (!result.ok) return { status: 'failed', reason: result.error.message }
@@ -58,7 +67,7 @@ export const ttsExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecut
               voice_id: voiceId,
               provider: 'minimax',
               source: 'voice_clone',
-              label: config.voiceId.trim() || voiceId,
+              label: effectiveConfig.voiceId.trim() || voiceId,
               preview_media_id: asset.id
             }
           })

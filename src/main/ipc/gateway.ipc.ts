@@ -17,7 +17,7 @@ import { GatewayError, testProvider } from '../gateway/factory'
 import { draftToConfig, freeConnectionMessage, probeProvider } from '../gateway/provider-check'
 import { generateImageToAsset } from '../gateway/image'
 import { transformImageEdit } from '../media/image-edit'
-import { deleteProvider, listProviders, saveProvider } from '../gateway/providers.repo'
+import { deleteProvider, listProviders, listVerifiedProviders, saveProvider } from '../gateway/providers.repo'
 import {
   cancelVideoTask,
   getVideoTask,
@@ -59,6 +59,7 @@ export function registerGatewayIpc(win: BrowserWindow): void {
   }
 
   ipcMain.handle(IPC.gateway.providers, (): IpcEnvelope<ProviderSummary[]> => ok(listProviders()))
+  ipcMain.handle(IPC.gateway.executableProviders, (): IpcEnvelope<ProviderSummary[]> => ok(listVerifiedProviders()))
 
   ipcMain.handle(IPC.gateway.saveProvider, (_e, input: SaveProviderInput) =>
     wrap(() => {

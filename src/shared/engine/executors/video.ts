@@ -1,7 +1,7 @@
 // 视频节点执行器：已有成片优先；否则提交文本/首帧任务并轮询至完成。
 import { inputJson, inputMedia, inputText } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
-import { modelsByModality } from '../models'
+import { featureKeyOf, resolveFeatureOption } from '../models'
 import { mergedPrompt, parseVideoGen, promptBundleText, waitForVideo } from '../helpers'
 import { readNodeConfig } from '../node-config'
 import { appendMediaResult, serializeMediaResultCollection } from '../values'
@@ -16,8 +16,8 @@ import {
 
 export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
   const data = parseVideoGen(readNodeConfig(ctx.shape))
-  const option = modelsByModality(ctx.providers, 'video').find((item) => item.key === data.modelKey)
-  if (!option) return { status: 'skipped', reason: '未选择可用视频模型' }
+  const option = await resolveFeatureOption(ctx.gateway, ctx.providers, featureKeyOf(data, 'video.generate'), 'video.generate')
+  if (!option) return { status: 'skipped', reason: '功能 video.generate 尚未绑定已验证视频模型' }
   const bundlePrompt = promptBundleText(inputJson(ctx.inputs, 'in-prompt')[0])
   const prompt = mergedPrompt(
     ctx.shape.props.text,

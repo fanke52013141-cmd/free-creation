@@ -52,6 +52,7 @@ export const IMAGE_EDIT_SIZES = [
 export type ImageEditSize = (typeof IMAGE_EDIT_SIZES)[number]
 
 export interface ImageEditConfig {
+  featureKey?: string
   version: 1
   modelKey: string
   size: string
@@ -165,6 +166,7 @@ export function parseImageEditConfig(text: string): ImageEditConfig {
     }
   return {
     version: 1,
+    featureKey: typeof raw.featureKey === 'string' ? raw.featureKey.trim().slice(0, 200) : undefined,
     modelKey: typeof raw.modelKey === 'string' ? raw.modelKey.trim().slice(0, 200) : '',
     // 旧版本把比例镜像进 size；现在比例只有 aspectRatio 一个来源，读回时把比例串从 size 收敛掉。
     size:

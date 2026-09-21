@@ -17,6 +17,9 @@
       ],
       "@shared/*": [
         "src/shared/*"
+      ],
+      "@free-creation/model-contracts": [
+        "packages/model-contracts/src/index.ts"
       ]
     }
   }

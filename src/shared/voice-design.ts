@@ -8,6 +8,7 @@
  */
 
 export interface VoiceDesignConfig {
+  featureKey?: string
   version: 1
   /** MiniMax 供应商实例 ID。 */
   providerId: string

@@ -60,6 +60,7 @@ export interface ImageCapabilities {
 }
 
 export interface ImageGenerationConfig {
+  featureKey?: string
   modelKey: string
   /** 选中的供应商实例 id；缺省时由 modelKey 反推，再回退默认供应商（ToAPIS 优先）。 */
   providerKey?: string

@@ -12,6 +12,9 @@ import { registerMediaIpc } from './ipc/media.ipc'
 import { registerGatewayIpc } from './ipc/gateway.ipc'
 import { registerComfyuiIpc } from './ipc/comfyui.ipc'
 import { registerWorkspaceStateIpc } from './ipc/workspace-state.ipc'
+import { registerModelIpc } from './ipc/models.ipc'
+import { SqliteModelHost } from './model-host/sqlite-model-host'
+import { createDesktopModelRuntime } from './model-host/runtime'
 import { closeDb, getDb, getProjectsDir } from './store/db'
 import { reconcileWorkspace } from './store/workspace-health'
 import { upgradeLegacyApiKeys } from './gateway/providers.repo'
@@ -178,6 +181,8 @@ app.whenReady().then(() => {
   registerMediaIpc()
   registerComfyuiIpc()
   registerWorkspaceStateIpc()
+  const modelHost = new SqliteModelHost(database)
+  registerModelIpc(modelHost, createDesktopModelRuntime(modelHost))
   mainWindow = createWindow()
   registerGatewayIpc(mainWindow)
 

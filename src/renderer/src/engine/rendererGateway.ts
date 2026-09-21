@@ -15,6 +15,7 @@ import type { GatewayClient } from '@shared/engine/gateway-client'
 export const rendererGateway: GatewayClient = {
   // ── 模型网关 ──
   listProviders: () => window.api.gateway.listProviders(),
+  resolveModelFeature: (input) => window.api.models.resolveBinding(input),
   chatStart: (input) => window.api.gateway.chatStart(input),
   chatCancel: (taskId) => window.api.gateway.chatCancel(taskId),
   imageGenerate: (input) => window.api.gateway.imageGenerate(input),

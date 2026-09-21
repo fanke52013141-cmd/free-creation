@@ -5,7 +5,7 @@
 //
 // renderer 实现：包装 window.api.gateway（IPC 调用）。
 // main 实现：直接调用 gateway 模块（chat/image/video/audio）。
-import type { IpcEnvelope, GatewayEvent, LocalMediaCapabilities } from '../contracts'
+import type { IpcEnvelope, GatewayEvent, LocalMediaCapabilities, ResolveModelFeatureInput, ResolvedModelFeature } from '../contracts'
 import type {
   ChatStartInput,
   ImageGenerateInput,
@@ -42,6 +42,8 @@ import type { MediaAsset, ProviderSummary, VideoTaskInfo } from '../types'
 export interface GatewayClient {
   // ── 模型网关 ──
   listProviders(): Promise<IpcEnvelope<ProviderSummary[]>>
+  /** Resolves a product-owned feature key to an exact, verified model target. */
+  resolveModelFeature?(input: ResolveModelFeatureInput): Promise<IpcEnvelope<ResolvedModelFeature>>
   chatStart(input: ChatStartInput): Promise<IpcEnvelope<{ taskId: string }>>
   chatCancel(taskId: string): Promise<IpcEnvelope<boolean>>
   imageGenerate(input: ImageGenerateInput): Promise<IpcEnvelope<MediaAsset>>

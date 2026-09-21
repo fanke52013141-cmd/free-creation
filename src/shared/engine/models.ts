@@ -2,6 +2,8 @@
 //
 // zustand store（useGatewayStore）依赖 renderer 的 window.api，留在 renderer 层。
 import type { GatewayModelInfo, ModelModality, ProviderSummary } from '../types'
+import type { GatewayClient } from './gateway-client'
+import type { ModelOperation } from '@free-creation/model-contracts'
 
 export interface ModelOption {
   provider: ProviderSummary
@@ -50,6 +52,51 @@ export function findTextModel(
     if (found) return found
   }
   return fallback ? textModels[0] : undefined
+}
+
+export interface FeatureModelOption {
+  providerId: string
+  modelId: string
+  key: string
+}
+
+/** Config compatibility: a profile is persisted as featureKey, never as a raw provider/model. */
+export function featureKeyOf(config: unknown, fallback: string): string {
+  const value = config && typeof config === 'object' ? (config as Record<string, unknown>).featureKey : undefined
+  return typeof value === 'string' && value.trim() ? value.trim() : fallback
+}
+
+/**
+ * Model execution must be addressed by product feature, never by a model id persisted in a node.
+ * The host refuses absent, stale, disabled or unverified bindings before any provider request.
+ */
+export async function resolveFeatureModel(
+  gateway: GatewayClient,
+  featureKey: string,
+  operation: ModelOperation
+): Promise<FeatureModelOption | null> {
+  if (!gateway.resolveModelFeature) return null
+  const result = await gateway.resolveModelFeature({ featureKey, operation })
+  return result.ok ? { providerId: result.data.providerId, modelId: result.data.modelId, key: result.data.modelKey } : null
+}
+
+export async function resolveFeatureOption(
+  gateway: GatewayClient,
+  providers: ProviderSummary[],
+  featureKey: string,
+  operation: ModelOperation
+): Promise<ModelOption | null> {
+  // Test/headless hosts predating the model catalog do not implement this optional port.
+  // Desktop production always has it, and therefore never takes this compatibility branch.
+  if (!gateway.resolveModelFeature) {
+    const modality: ModelModality | null = operation.startsWith('text.') ? 'text' : operation.startsWith('image.') ? 'image' : operation === 'video.generate' ? 'video' : operation.startsWith('speech.') || operation.startsWith('voice.') ? 'audio' : null
+    return modality ? modelsByModality(providers, modality)[0] ?? null : null
+  }
+  const target = await resolveFeatureModel(gateway, featureKey, operation)
+  if (!target) return null
+  const provider = providers.find((item) => item.id === target.providerId)
+  const model = provider?.models.find((item) => item.id === target.modelId)
+  return provider && model ? { provider, model, key: target.key, label: `${provider.name} · ${model.name || model.id}` } : null
 }
 
 /**

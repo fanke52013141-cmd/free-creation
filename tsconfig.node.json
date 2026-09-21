@@ -11,7 +11,9 @@
     "types": ["electron-vite/node", "node"],
     "baseUrl": ".",
     "paths": {
-      "@shared/*": ["src/shared/*"]
+      "@shared/*": ["src/shared/*"],
+      "@free-creation/model-contracts": ["packages/model-contracts/src/index.ts"],
+      "@free-creation/model-runtime": ["packages/model-runtime/src/index.ts"]
     }
   }
 }

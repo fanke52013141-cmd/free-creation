@@ -9,6 +9,7 @@ import type { NodeExecutionContext, NodeExecutionResult } from '../executor-type
 import { mergedPrompt } from '../helpers'
 import { readNodeConfig } from '../node-config'
 import { appendMediaResult, serializeMediaResultCollection } from '../values'
+import { featureKeyOf, resolveFeatureOption } from '../models'
 
 export const voiceDesignExecutor = async (
   ctx: NodeExecutionContext
@@ -17,14 +18,19 @@ export const voiceDesignExecutor = async (
   // 音色描述是用户正文（可由上游文本合并）；试听文本属于固定参数，存在 config。
   const prompt = mergedPrompt(ctx.shape.props.text, inputText(ctx.inputs, 'in-text')).trim()
   if (!prompt) return { status: 'skipped', reason: '无音色描述' }
-  if (!config.providerId) return { status: 'skipped', reason: '未选择 MiniMax 供应商' }
+  const option = ctx.gateway.resolveModelFeature
+    ? await resolveFeatureOption(ctx.gateway, ctx.providers, featureKeyOf(config, 'voice.design'), 'voice.design')
+    : null
+  if (ctx.gateway.resolveModelFeature && !option) return { status: 'skipped', reason: '功能 voice.design 尚未绑定已验证音色设计模型' }
+  if (!ctx.gateway.resolveModelFeature && !config.providerId) return { status: 'skipped', reason: '未选择 MiniMax 供应商' }
+  if (option && option.provider.specId !== 'minimax') return { status: 'failed', reason: '音色设计功能必须绑定 MiniMax 模型' }
 
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
 
   try {
     const result = await ctx.gateway.voiceDesign({
       projectId: ctx.projectId,
-      providerId: config.providerId,
+      providerId: option?.provider.id ?? config.providerId,
       prompt,
       config
     })

@@ -10,6 +10,7 @@
     "lint": "eslint --cache .",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
+    "typecheck:model": "pnpm --filter @free-creation/model-contracts typecheck && pnpm --filter @free-creation/model-runtime typecheck",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "test": "vitest run",
     "test:browser-ui": "node scripts/test-browser-node-ui.cjs",

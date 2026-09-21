@@ -11,7 +11,7 @@ import { inputJson, inputText } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
 import { validateNodeSchema } from '@shared/node-schemas'
 import type { PortSchemaRef } from '@shared/types'
-import { findTextModel } from '../models'
+import { featureKeyOf, resolveFeatureOption } from '../models'
 import { parseJsonObj, waitForChat } from '../helpers'
 import { readNodeConfig } from '../node-config'
 
@@ -19,6 +19,8 @@ export type AiOutputMode = 'text' | 'markdown' | 'json'
 
 export interface AiProcessConfig {
   modelKey: string
+  /** Selected verified model profile; raw provider/model are never execution inputs. */
+  featureKey?: string
   system: string
   mode: AiOutputMode
   /** json 模式必须显式选择的 Schema；text/markdown 模式忽略。 */
@@ -50,6 +52,7 @@ export function parseAiProcess(text: string): AiProcessConfig {
       : undefined
   return {
     modelKey: typeof value?.modelKey === 'string' ? value.modelKey : '',
+    ...(typeof value?.featureKey === 'string' ? { featureKey: value.featureKey } : {}),
     system: typeof value?.system === 'string' ? value.system : '',
     mode,
     jsonSchema,
@@ -88,9 +91,6 @@ export const aiProcessExecutor = async (
   ctx: NodeExecutionContext
 ): Promise<NodeExecutionResult> => {
   const config = parseAiProcess(readNodeConfig(ctx.shape))
-  const option = findTextModel(ctx.providers, config.modelKey)
-  if (!option) return { status: 'skipped', reason: '未选择可用文本模型' }
-
   // 组装一次性的用户消息：优先用上游文本；上游 JSON 作为补充上下文注入。
   const textInput = inputText(ctx.inputs, 'in-text').trim()
   const jsonInputs = inputJson(ctx.inputs, 'in-json')
@@ -105,6 +105,13 @@ export const aiProcessExecutor = async (
   if (!userContent) {
     return { status: 'skipped', reason: 'AI 处理节点没有输入文本或 JSON' }
   }
+  // Compatibility for offline executor tests only. Desktop always provides the feature resolver
+  // and therefore ignores legacy node-level modelKey values.
+  if (!ctx.gateway.resolveModelFeature && !config.modelKey) {
+    return { status: 'skipped', reason: '未选择可用文本模型' }
+  }
+  const option = await resolveFeatureOption(ctx.gateway, ctx.providers, featureKeyOf(config, 'text.process'), 'text.generate')
+  if (!option) return { status: 'skipped', reason: '功能 text.process 尚未绑定已验证文本模型' }
 
   const reply = await waitForChat(
     ctx.gateway,

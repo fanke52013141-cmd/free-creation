@@ -8,7 +8,7 @@ export interface MigrationDatabase {
   pragma(statement: string, options?: { simple?: boolean }): unknown
 }
 
-export const DB_SCHEMA_VERSION = 4
+export const DB_SCHEMA_VERSION = 5
 
 const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
@@ -110,6 +110,60 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
       );
       CREATE INDEX IF NOT EXISTS idx_agent_idempotency_pending
         ON agent_idempotency(status, updated_at);
+    `)
+  }
+  ,
+  // M5 模型模块：全新数据域。这里不转换或读取旧 providers 表；旧设置不会被新模块继承。
+  (database) => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS model_connections (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        protocol TEXT NOT NULL,
+        base_url TEXT NOT NULL,
+        secret_ref TEXT,
+        headers_json TEXT NOT NULL DEFAULT '{}',
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS model_definitions (
+        id TEXT PRIMARY KEY,
+        connection_id TEXT NOT NULL,
+        model_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        capabilities_json TEXT NOT NULL,
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(connection_id, model_id)
+      );
+      CREATE TABLE IF NOT EXISTS model_validations (
+        connection_id TEXT NOT NULL,
+        model_definition_id TEXT NOT NULL,
+        operation TEXT NOT NULL,
+        status TEXT NOT NULL,
+        message TEXT,
+        action TEXT,
+        checked_at TEXT NOT NULL,
+        verified_at TEXT,
+        PRIMARY KEY(connection_id, model_definition_id, operation)
+      );
+      CREATE TABLE IF NOT EXISTS model_feature_bindings (
+        feature_key TEXT PRIMARY KEY,
+        connection_id TEXT NOT NULL,
+        model_definition_id TEXT NOT NULL,
+        operation TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        overrides_json TEXT NOT NULL DEFAULT '{}',
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_model_definitions_connection
+        ON model_definitions(connection_id);
+      CREATE INDEX IF NOT EXISTS idx_model_validations_status
+        ON model_validations(status);
     `)
   }
 ]

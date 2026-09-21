@@ -29,14 +29,17 @@ export default defineConfig({
   main: {
     resolve: {
       alias: {
-        '@shared': resolve('src/shared')
+        '@shared': resolve('src/shared'),
+        '@free-creation/model-contracts': resolve('packages/model-contracts/src/index.ts'),
+        '@free-creation/model-runtime': resolve('packages/model-runtime/src/index.ts')
       }
     }
   },
   preload: {
     resolve: {
       alias: {
-        '@shared': resolve('src/shared')
+        '@shared': resolve('src/shared'),
+        '@free-creation/model-contracts': resolve('packages/model-contracts/src/index.ts')
       }
     }
   },
@@ -44,7 +47,8 @@ export default defineConfig({
     resolve: {
       alias: {
         '@renderer': resolve('src/renderer/src'),
-        '@shared': resolve('src/shared')
+        '@shared': resolve('src/shared'),
+        '@free-creation/model-contracts': resolve('packages/model-contracts/src/index.ts')
       }
     },
     plugins: [forceReloadCanvasShapes(), react()]

@@ -48,6 +48,16 @@ import type {
   AudioGenerateInput
 } from '../shared/contracts'
 import type {
+  SaveModelConnectionInput,
+  SaveModelDefinitionInput,
+  SaveModelFeatureBindingInput,
+  ResolveModelFeatureInput,
+  ResolvedModelFeature,
+  ValidateModelDefinitionInput,
+  ModelValidationResult
+} from '../shared/contracts'
+import type { Connection, ModelDefinition } from '@free-creation/model-contracts'
+import type {
   MediaAsset,
   MediaImportResult,
   ProjectFile,
@@ -166,6 +176,8 @@ const api = {
   gateway: {
     listProviders: (): Promise<IpcEnvelope<ProviderSummary[]>> =>
       ipcRenderer.invoke(IPC.gateway.providers),
+    listExecutableProviders: (): Promise<IpcEnvelope<ProviderSummary[]>> =>
+      ipcRenderer.invoke(IPC.gateway.executableProviders),
     saveProvider: (input: SaveProviderInput): Promise<IpcEnvelope<ProviderSummary>> =>
       ipcRenderer.invoke(IPC.gateway.saveProvider, input),
     deleteProvider: (id: string): Promise<IpcEnvelope<boolean>> =>
@@ -202,6 +214,24 @@ const api = {
         ipcRenderer.off(IPC.gateway.event, listener)
       }
     }
+  }
+  ,
+  models: {
+    listConnections: (): Promise<IpcEnvelope<Connection[]>> => ipcRenderer.invoke(IPC.models.connections),
+    listDefinitions: (connectionId?: string): Promise<IpcEnvelope<ModelDefinition[]>> =>
+      ipcRenderer.invoke(IPC.models.definitions, connectionId),
+    listBindings: (): Promise<IpcEnvelope<import('@free-creation/model-contracts').FeatureBinding[]>> =>
+      ipcRenderer.invoke(IPC.models.bindings),
+    saveConnection: (input: SaveModelConnectionInput): Promise<IpcEnvelope<Connection>> =>
+      ipcRenderer.invoke(IPC.models.saveConnection, input),
+    saveDefinition: (input: SaveModelDefinitionInput): Promise<IpcEnvelope<ModelDefinition>> =>
+      ipcRenderer.invoke(IPC.models.saveDefinition, input),
+    validate: (input: ValidateModelDefinitionInput): Promise<IpcEnvelope<ModelValidationResult>> =>
+      ipcRenderer.invoke(IPC.models.validate, input),
+    saveBinding: (input: SaveModelFeatureBindingInput): Promise<IpcEnvelope<import('@free-creation/model-contracts').FeatureBinding>> =>
+      ipcRenderer.invoke(IPC.models.saveBinding, input),
+    resolveBinding: (input: ResolveModelFeatureInput): Promise<IpcEnvelope<ResolvedModelFeature>> =>
+      ipcRenderer.invoke(IPC.models.resolveBinding, input)
   }
 }
 

@@ -21,6 +21,7 @@ export type SpeechEmotion =
   '' | 'happy' | 'sad' | 'angry' | 'fearful' | 'disgusted' | 'surprised' | 'neutral'
 
 export interface SpeechConfig {
+  featureKey?: string
   version: 1
   backend: SpeechBackend
   /** 供应商实例 ID（backend 对应的那家）。 */
@@ -279,6 +280,7 @@ export function parseSpeechConfig(text: string): SpeechConfig {
 
   return {
     version: 1,
+    featureKey: typeof merged.featureKey === 'string' ? merged.featureKey : undefined,
     backend,
     providerId: typeof merged.providerId === 'string' ? merged.providerId : '',
     modelId:

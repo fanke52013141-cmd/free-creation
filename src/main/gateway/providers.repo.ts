@@ -17,6 +17,63 @@ interface ProviderRow {
   created_at: number
 }
 
+interface CatalogRow {
+  connection_id: string
+  definition_id: string
+  name: string
+  protocol: string
+  base_url: string
+  secret_ref: string | null
+  created_at: string
+  model_id: string
+  model_name: string
+  capabilities_json: string
+}
+
+const catalogSpec = (protocol: string): ProviderConfig['specId'] => {
+  if (protocol === 'minimax') return 'minimax'
+  if (protocol === 'toapis') return 'toapis'
+  if (protocol === 'volcengine') return 'doubao-speech'
+  if (protocol === 'openrouter') return 'openrouter'
+  return 'relay'
+}
+
+const operationModality: Record<string, GatewayModelInfo['modality'] | undefined> = {
+  'text.generate': 'text', 'text.embed': 'text', 'image.generate': 'image', 'image.edit': 'image',
+  'video.generate': 'video', 'speech.synthesize': 'audio', 'speech.transcribe': 'audio',
+  'voice.clone': 'audio', 'voice.design': 'audio'
+}
+
+function catalogRows(): CatalogRow[] {
+  return getDb().prepare(`SELECT c.id AS connection_id, m.id AS definition_id, c.name, c.protocol, c.base_url, c.secret_ref, c.created_at,
+      m.model_id, m.name AS model_name, m.capabilities_json
+    FROM model_connections c JOIN model_definitions m ON m.connection_id = c.id
+    WHERE c.enabled = 1 AND m.enabled = 1
+      AND EXISTS (SELECT 1 FROM model_validations v WHERE v.connection_id = c.id
+        AND v.model_definition_id = m.id AND v.status = 'verified')
+    ORDER BY c.created_at ASC, m.name ASC`).all() as CatalogRow[]
+}
+
+function catalogModels(row: CatalogRow): GatewayModelInfo[] {
+  let capabilities: Array<{ operation?: string }> = []
+  try { capabilities = JSON.parse(row.capabilities_json) as Array<{ operation?: string }> } catch { /* invalid rows stay invisible */ }
+  const verified = new Set((getDb().prepare(`SELECT operation FROM model_validations WHERE connection_id = ? AND model_definition_id = ? AND status = 'verified'`).all(row.connection_id, row.definition_id) as Array<{ operation: string }>).map((v) => v.operation))
+  return [...new Set(capabilities.map((c) => c.operation).filter((x): x is string => Boolean(x) && verified.has(x!)).map((x) => operationModality[x]).filter((x): x is GatewayModelInfo['modality'] => Boolean(x)))]
+    .map((modality) => ({ id: row.model_id, name: row.model_name, modality }))
+}
+
+function catalogConfigs(): ProviderConfig[] {
+  const grouped = new Map<string, ProviderConfig>()
+  for (const row of catalogRows()) {
+    const models = catalogModels(row)
+    if (!models.length) continue
+    const current = grouped.get(row.connection_id)
+    if (current) { current.models.push(...models); continue }
+    grouped.set(row.connection_id, { id: row.connection_id, name: row.name, specId: catalogSpec(row.protocol), baseURL: row.base_url, apiKey: decryptSecret(row.secret_ref), models, createdAt: Date.parse(row.created_at) || Date.now() })
+  }
+  return [...grouped.values()].map((p) => ({ ...p, models: p.models.filter((m, i, list) => list.findIndex((x) => x.id === m.id && x.modality === m.modality) === i) }))
+}
+
 function normalizeModel(v: unknown): GatewayModelInfo | null {
   if (typeof v === 'string') return { id: v, modality: 'text' }
   if (typeof v === 'object' && v !== null) {
@@ -78,18 +135,25 @@ function toSummary(row: ProviderRow): ProviderSummary {
   }
 }
 
-/** 渲染进程只能读取此公开摘要，不能接触 api_key_ref 的解密值。 */
+/** Renderer-facing settings summary; legacy data remains visible but is never node-executable. */
 export function listProviders(): ProviderSummary[] {
   const rows = getDb()
     .prepare('SELECT * FROM providers ORDER BY created_at ASC')
     .all() as ProviderRow[]
-  return rows.map(toSummary)
+  const legacy = rows.map(toSummary)
+  const catalog = catalogConfigs().map((p) => ({ id: p.id, name: p.name, specId: p.specId, baseURL: p.baseURL, models: p.models, createdAt: p.createdAt, hasApiKey: Boolean(p.apiKey) }))
+  return [...legacy, ...catalog]
+}
+
+/** The sole source used by canvas node selectors and executors. */
+export function listVerifiedProviders(): ProviderSummary[] {
+  return catalogConfigs().map((p) => ({ id: p.id, name: p.name, specId: p.specId, baseURL: p.baseURL, models: p.models, createdAt: p.createdAt, hasApiKey: Boolean(p.apiKey) }))
 }
 
 export function getProvider(id: string): ProviderConfig | null {
   const row = getDb().prepare('SELECT * FROM providers WHERE id = ?').get(id) as
     ProviderRow | undefined
-  return row ? toConfig(row, decryptSecret(row.api_key_ref)) : null
+  return row ? toConfig(row, decryptSecret(row.api_key_ref)) : catalogConfigs().find((provider) => provider.id === id) ?? null
 }
 
 export function saveProvider(input: SaveProviderInput): ProviderSummary {

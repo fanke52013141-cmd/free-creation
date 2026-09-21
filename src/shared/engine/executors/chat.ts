@@ -2,7 +2,7 @@
 import { inputText } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
 import { parseChat } from '../chat-data'
-import { findTextModel } from '../models'
+import { featureKeyOf, findTextModel, resolveFeatureOption } from '../models'
 import { waitForChat } from '../helpers'
 import { buildChatCompressionPrompt, splitChatForCompression } from '../chat-memory'
 
@@ -21,8 +21,10 @@ function effectiveSystem(data: ReturnType<typeof parseChat>): string {
 
 export const chatExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
   const data = parseChat(ctx.shape.props.text)
-  const option = findTextModel(ctx.providers, data.modelKey)
-  if (!option) return { status: 'skipped', reason: '未选择可用对话模型' }
+  const option = ctx.gateway.resolveModelFeature
+    ? await resolveFeatureOption(ctx.gateway, ctx.providers, featureKeyOf(data, 'chat.generate'), 'text.generate')
+    : findTextModel(ctx.providers, data.modelKey)
+  if (!option) return { status: 'skipped', reason: '功能 chat.generate 尚未绑定已验证文本模型' }
   const textInput = inputText(ctx.inputs, 'in-text').trim()
   const hasPendingUserMessage = data.messages.at(-1)?.role === 'user'
   const messages = hasPendingUserMessage

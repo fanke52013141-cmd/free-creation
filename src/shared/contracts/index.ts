@@ -20,6 +20,7 @@ import type {
   VocalSeparationConfig
 } from '../video-transform'
 import type { PalettePreferences } from '../palette-preferences'
+import type { Capability, Connection, JsonValue, ModelDefinition, ModelOperation } from '@free-creation/model-contracts'
 
 export const IPC = {
   app: {
@@ -76,6 +77,7 @@ export const IPC = {
   },
   gateway: {
     providers: 'gateway:providers:list',
+    executableProviders: 'gateway:providers:executable',
     saveProvider: 'gateway:providers:save',
     deleteProvider: 'gateway:providers:delete',
     testProvider: 'gateway:providers:test',
@@ -91,6 +93,16 @@ export const IPC = {
     speechGenerate: 'gateway:speech:generate',
     voiceDesign: 'gateway:voice:design',
     event: 'gateway:event'
+  },
+  models: {
+    connections: 'models:connections:list',
+    saveConnection: 'models:connections:save',
+    definitions: 'models:definitions:list',
+    saveDefinition: 'models:definitions:save',
+    validate: 'models:definitions:validate',
+    saveBinding: 'models:bindings:save',
+    bindings: 'models:bindings:list',
+    resolveBinding: 'models:bindings:resolve'
   }
 } as const
 
@@ -99,6 +111,73 @@ export type IpcEnvelope<T> =
 
 export interface BootstrapInfo {
   lastProjectId: string | null
+}
+
+// ── 新模型模块（与 legacy gateway providers 完全独立）──────────────────────
+
+export interface SaveModelConnectionInput {
+  id: string
+  name: string
+  protocol: Connection['protocol']
+  baseUrl: string
+  /** 省略时保留已保存的密钥；绝不会回传到 renderer。 */
+  apiKey?: string
+  headers?: Record<string, string>
+  metadata?: Record<string, unknown>
+  enabled?: boolean
+}
+
+export interface SaveModelDefinitionInput {
+  id: string
+  connectionId: string
+  name: string
+  modelId: string
+  capabilities: Capability[]
+  metadata?: Record<string, unknown>
+  enabled?: boolean
+}
+
+export interface ValidateModelDefinitionInput {
+  connectionId: string
+  modelDefinitionId: string
+  operation: ModelOperation
+  /** 真实验证会按该模型的最低请求计费，调用方必须显式确认。 */
+  allowCost: true
+}
+
+export interface ModelValidationResult {
+  status: 'unverified' | 'validating' | 'verified' | 'failed' | 'unsupported'
+  message: string
+  action?: string
+  checkedAt: string
+}
+
+export interface SaveModelFeatureBindingInput {
+  featureKey: string
+  connectionId: string
+  modelDefinitionId: string
+  operation: ModelOperation
+  enabled?: boolean
+  overrides?: Record<string, JsonValue>
+}
+
+export interface ResolveModelFeatureInput {
+  featureKey: string
+  operation: ModelOperation
+}
+
+/** Redacted execution target: it deliberately never contains a connection secret. */
+export interface ResolvedModelFeature {
+  featureKey: string
+  providerId: string
+  modelId: string
+  operation: ModelOperation
+  modelKey: string
+}
+
+export interface ModelCatalogSnapshot {
+  connections: Connection[]
+  models: ModelDefinition[]
 }
 
 export interface CreateProjectInput {

@@ -25,6 +25,7 @@ export const TTS_LANGUAGE_BOOSTS: ReadonlyArray<{ value: string; label: string }
 ]
 
 export interface TtsConfig {
+  featureKey?: string
   version: 1
   /** MiniMax 快速复刻（默认，云端）或本地 ComfyUI IndexTTS；两者参数互不发送。 */
   backend: TtsBackend

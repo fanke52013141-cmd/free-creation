@@ -14,21 +14,30 @@ interface GatewayState {
   providers: ProviderSummary[]
   loaded: boolean
   settingsOpen: boolean
+  catalogOpen: boolean
   load: () => Promise<void>
   openSettings: () => void
   closeSettings: () => void
+  openCatalog: () => void
+  closeCatalog: () => void
 }
 
 export const useGatewayStore = create<GatewayState>((set) => ({
   providers: [],
   loaded: false,
   settingsOpen: false,
+  catalogOpen: false,
   load: async () => {
-    const res = await window.api.gateway.listProviders()
+    const res = await window.api.gateway.listExecutableProviders()
     if (res.ok) set({ providers: res.data, loaded: true })
   },
-  openSettings: () => set({ settingsOpen: true }),
+  // 模型目录是唯一可调用模型的配置入口。旧 providers 表不参与已验证模型解析，
+  // 因此不能再把节点的“配置模型”按钮带到旧表单，避免出现“已填写却不可调用”。
+  openSettings: () => set({ settingsOpen: false, catalogOpen: true }),
   closeSettings: () => set({ settingsOpen: false })
+  ,
+  openCatalog: () => set({ settingsOpen: false, catalogOpen: true }),
+  closeCatalog: () => set({ catalogOpen: false })
 }))
 
 /** 全部供应商里指定模态的模型，展平成下拉选项 */

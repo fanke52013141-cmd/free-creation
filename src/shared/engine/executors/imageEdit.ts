@@ -1,6 +1,6 @@
 import { inputMedia, inputText } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
-import { modelsByModality, resolveImageModelOption } from '../models'
+import { featureKeyOf, resolveFeatureOption } from '../models'
 import { readNodeConfig } from '../node-config'
 import { imageCapabilitiesFor, imageEditSendsMask } from '@shared/image-capabilities'
 import {
@@ -69,10 +69,8 @@ export const imageEditExecutor = async (
   const config = parseImageEditConfig(readNodeConfig(ctx.shape))
   const invalid = validateImageEditConfig(config)
   if (invalid) return { status: 'skipped', reason: invalid }
-  const option = resolveImageModelOption(modelsByModality(ctx.providers, 'image'), {
-    modelKey: config.modelKey
-  })
-  if (!option) return { status: 'skipped', reason: '未选择可用图片模型' }
+  const option = await resolveFeatureOption(ctx.gateway, ctx.providers, featureKeyOf(config, 'image.edit'), 'image.edit')
+  if (!option) return { status: 'skipped', reason: '功能 image.edit 尚未绑定已验证图片模型' }
   const annotationLines = annotationInstructionLines(config.annotations)
   // 遮罩提示词必须与网关的实际行为一致：TOAPIS 那条异步任务通道没有 mask 字段，
   // 画了遮罩也不会发送，此时再写「请仅修改遮罩指定区域」就是让模型猜一个不存在的输入。
