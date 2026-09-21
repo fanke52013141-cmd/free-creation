@@ -11,7 +11,7 @@ import { inputJson, inputText } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
 import { validateNodeSchema } from '@shared/node-schemas'
 import type { PortSchemaRef } from '@shared/types'
-import { featureKeyOf, resolveFeatureOption } from '../models'
+import { featureKeyOf, modelKeyOf, resolveFeatureOption } from '../models'
 import { parseJsonObj, waitForChat } from '../helpers'
 import { readNodeConfig } from '../node-config'
 
@@ -110,7 +110,7 @@ export const aiProcessExecutor = async (
   if (!ctx.gateway.resolveModelFeature && !config.modelKey) {
     return { status: 'skipped', reason: '未选择可用文本模型' }
   }
-  const option = await resolveFeatureOption(ctx.gateway, ctx.providers, featureKeyOf(config, 'text.process'), 'text.generate')
+  const option = await resolveFeatureOption(ctx.gateway, ctx.providers, featureKeyOf(config, 'text.process'), 'text.generate', modelKeyOf(config))
   if (!option) return { status: 'skipped', reason: '功能 text.process 尚未绑定已验证文本模型' }
 
   const reply = await waitForChat(

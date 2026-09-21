@@ -58,8 +58,14 @@ function catalogModels(row: CatalogRow): GatewayModelInfo[] {
   let capabilities: Array<{ operation?: string }> = []
   try { capabilities = JSON.parse(row.capabilities_json) as Array<{ operation?: string }> } catch { /* invalid rows stay invisible */ }
   const verified = new Set((getDb().prepare(`SELECT operation FROM model_validations WHERE connection_id = ? AND model_definition_id = ? AND status = 'verified'`).all(row.connection_id, row.definition_id) as Array<{ operation: string }>).map((v) => v.operation))
-  return [...new Set(capabilities.map((c) => c.operation).filter((x): x is string => Boolean(x) && verified.has(x!)).map((x) => operationModality[x]).filter((x): x is GatewayModelInfo['modality'] => Boolean(x)))]
-    .map((modality) => ({ id: row.model_id, name: row.model_name, modality }))
+  const byModality = new Map<GatewayModelInfo['modality'], string[]>()
+  for (const capability of capabilities) {
+    const operation = capability.operation
+    if (!operation || !verified.has(operation)) continue
+    const modality = operationModality[operation]
+    if (modality) byModality.set(modality, [...(byModality.get(modality) ?? []), operation])
+  }
+  return [...byModality.entries()].map(([modality, verifiedOperations]) => ({ id: row.model_id, name: row.model_name, modality, operations: verifiedOperations }))
 }
 
 function catalogConfigs(): ProviderConfig[] {

@@ -179,12 +179,7 @@ async function main() {
       state.overflow,
       { x: false, y: false }
     )
-    assert(
-      'fresh-hint',
-      (state.bodyText ?? '').includes('双击输入文本内容'),
-      state.bodyText,
-      '包含空态提示'
-    )
+    assert('fresh-body-is-empty', state.bodyText === '', state.bodyText, '空白正文')
 
     // ── 2. 编辑态 + 输入提交 ─────────────────────────────────
     await target.card.locator('.node-text').dblclick()
@@ -303,40 +298,7 @@ async function main() {
       `OBSERVE drop-on-illegal-port: aimed=参考图 connected=${JSON.stringify(state.connectedInputs.map((i) => `${i.target}#${i.order}`))} toast=${retargetToast}`
     )
 
-    // ── 6. slash 指令：/三视图 → 一键创建 3 个生图节点 ────────
-    const slashNode = await createNode(page, '文本')
-    await typeTextAndCommit(page, slashNode.card, '/三视图 赛博朋克女孩')
-    await page.waitForTimeout(200)
-    state = await cardState(page, slashNode.card)
-    report.states.slashBar = state
-    await shot(page, '07a-slash-bar')
-    const genBtn = slashNode.card.locator('.slash-cmd-gen')
-    const slashBarVisible = await genBtn.isVisible().catch(() => false)
-    assert('slash-bar-appears-after-commit', slashBarVisible, slashBarVisible, true)
-    const beforeGen = await page
-      .locator('.node-card-wrap[data-node-id]')
-      .evaluateAll((cards) => cards.map((c) => c.getAttribute('data-node-id')))
-    if (slashBarVisible) {
-      await genBtn.click()
-      await page.waitForTimeout(500)
-      const afterGen = await page
-        .locator('.node-card-wrap[data-node-id]')
-        .evaluateAll((cards) => cards.map((c) => c.getAttribute('data-node-id')))
-      const created = afterGen.filter((nid) => !beforeGen.includes(nid))
-      report.states.slashCreated = created.length
-      await shot(page, '07-slash-generated-3-nodes')
-      assert('slash-creates-3-image-gen-nodes', created.length === 3, created.length, 3)
-      const promptCount = await page.evaluate((ids) => {
-        const cards = Array.from(document.querySelectorAll('.node-card-wrap[data-node-id]'))
-        return cards
-          .filter((c) => ids.includes(c.getAttribute('data-node-id')))
-          .filter((c) => c.querySelector('.node-card.type-image-gen'))
-          .filter((c) => (c.textContent ?? '').includes('赛博朋克女孩')).length
-      }, created)
-      assert('slash-prompts-carry-subject', promptCount === 3, promptCount, 3)
-    }
-
-    // ── 7. 空文本节点运行（skipped 语义） ─────────────────────
+    // ── 6. 空文本节点运行（skipped 语义） ─────────────────────
     const emptyNode = await createNode(page, '文本')
     await page.getByRole('button', { name: '适配画布（缩放到所有节点）', exact: true }).click()
     await page.waitForTimeout(300)
@@ -352,7 +314,7 @@ async function main() {
       '非 success'
     )
 
-    // ── 8. 重载持久性（browserMock 环境如实记录） ─────────────
+    // ── 7. 重载持久性（browserMock 环境如实记录） ─────────────
     const idsBefore = await page
       .locator('.node-card-wrap[data-node-id]')
       .evaluateAll((cards) => cards.map((c) => c.getAttribute('data-node-id')))

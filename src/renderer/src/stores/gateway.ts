@@ -28,12 +28,15 @@ export const useGatewayStore = create<GatewayState>((set) => ({
   settingsOpen: false,
   catalogOpen: false,
   load: async () => {
-    const res = await window.api.gateway.listExecutableProviders()
+    // The provider manager saves legacy-compatible providers. Nodes must immediately see
+    // those saved models so users can select one; a selected model is still checked by the
+    // real provider request rather than being silently treated as absent.
+    const res = await window.api.gateway.listProviders()
     if (res.ok) set({ providers: res.data, loaded: true })
   },
-  // 模型目录是唯一可调用模型的配置入口。旧 providers 表不参与已验证模型解析，
-  // 因此不能再把节点的“配置模型”按钮带到旧表单，避免出现“已填写却不可调用”。
-  openSettings: () => set({ settingsOpen: false, catalogOpen: true }),
+  // The user-facing model manager is the proven provider panel: it can test a Base URL and
+  // merge the returned /models list into the editable model table.
+  openSettings: () => set({ settingsOpen: true, catalogOpen: false }),
   closeSettings: () => set({ settingsOpen: false })
   ,
   openCatalog: () => set({ settingsOpen: false, catalogOpen: true }),

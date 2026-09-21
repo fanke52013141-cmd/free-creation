@@ -20,7 +20,7 @@ export const ttsExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecut
 
   const effectiveConfig = { ...config }
   if (config.backend === 'minimax') {
-    const option = await resolveFeatureOption(ctx.gateway, ctx.providers, featureKeyOf(config, 'voice.clone'), 'voice.clone')
+    const option = await resolveFeatureOption(ctx.gateway, ctx.providers, featureKeyOf(config, 'voice.clone'), 'voice.clone', config.providerId && config.modelId ? `${config.providerId}::${config.modelId}` : undefined)
     if (!option) return { status: 'skipped', reason: '功能 voice.clone 尚未绑定已验证语音复刻模型' }
     effectiveConfig.providerId = option.provider.id
     effectiveConfig.modelId = option.model.id

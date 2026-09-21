@@ -4,7 +4,7 @@ import { ProjectListPage } from './pages/ProjectListPage'
 import { CanvasPage } from './pages/CanvasPage'
 import { Toast } from './components/Toast'
 import { ConfirmDialog } from './components/ConfirmDialog'
-import { ModelCatalogPanel } from './gateway/ModelCatalogPanel'
+import { ProviderSettingsPanel } from './gateway/ProviderSettingsPanel'
 
 type BootState = { kind: 'loading' } | { kind: 'ready' } | { kind: 'failed'; message: string }
 
@@ -94,7 +94,7 @@ export default function App(): React.JSX.Element {
       <Content />
       <Toast />
       <ConfirmDialog />
-      <ModelCatalogPanel />
+      <ProviderSettingsPanel />
     </AppErrorBoundary>
   )
 }

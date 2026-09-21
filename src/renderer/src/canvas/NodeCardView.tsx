@@ -19,7 +19,6 @@ import { markUndoPoint } from './history'
 import type { NodeCardShape } from './NodeCardShape'
 import { Icon } from '../components/Icon'
 import { resolveNodeHeight } from './node-ui-tokens'
-import { parseSlashCommand } from '../nodes/slash-commands'
 import { nodeExecLabel } from './node-status'
 import { deriveInputPortReadiness, deriveNodeReadiness } from './node-readiness'
 import { runNodeManually } from '../engine/executor'
@@ -80,9 +79,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   const project = useAppStore((s) => s.currentProject)
   const providers = useGatewayStore((s) => s.providers)
   const spec = getNodeType(shape.props.nodeType)
-  // 文本开头是 slash 指令时，字数角标让位给"生成宫格"操作栏（与 TextBody 内部判断保持一致）。
-  const slashCmdForText =
-    shape.props.nodeType === 'text' ? Boolean(parseSlashCommand(shape.props.text ?? '')) : false
   const draft = useConnectionStore((s) => s.draft)
   const [preview, setPreview] = useState<{
     url: string
@@ -391,7 +387,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           </button>
           {/* 文本节点字数徽标：位于“查看输入输出说明”右侧。
                 格式见 formatCharCount（N 字 / N 多字 / X.XK）。 */}
-          {shape.props.nodeType === 'text' && shape.props.text && !slashCmdForText && (
+          {shape.props.nodeType === 'text' && shape.props.text && (
             <span className="node-text-count">{formatCharCount(shape.props.text.length)}</span>
           )}
           {/* 弹性占位：运行与状态都固定在标题行的右侧。 */}

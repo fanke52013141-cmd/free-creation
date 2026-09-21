@@ -242,6 +242,8 @@ export interface GatewayModelInfo {
   /** UI 显示名（缺省用 id） */
   name?: string
   modality: ModelModality
+  /** 已验证且允许节点调用的精确操作；旧供应商记录缺省时保持兼容。 */
+  operations?: string[]
   contextLimit?: number
   outputLimit?: number
 }

@@ -1,7 +1,7 @@
 // 脚本节点执行器（旧版兼容）：剧本文本拆解为分镜 JSON；已有分镜则仅合并文本。
 import { inputText } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
-import { featureKeyOf, resolveFeatureOption } from '../models'
+import { featureKeyOf, modelKeyOf, resolveFeatureOption } from '../models'
 import { extractShots, mergedPrompt, normalizeShot, parseJsonObj, waitForChat } from '../helpers'
 
 export interface ScriptShot {
@@ -73,7 +73,7 @@ export const scriptExecutor = async (ctx: NodeExecutionContext): Promise<NodeExe
     if (source !== data.source) ctx.updateProps({ text: JSON.stringify({ ...data, source }) })
     return { status: 'done' }
   }
-  const option = await resolveFeatureOption(ctx.gateway, ctx.providers, featureKeyOf(data, 'script.breakdown'), 'text.generate')
+  const option = await resolveFeatureOption(ctx.gateway, ctx.providers, featureKeyOf(data, 'script.breakdown'), 'text.generate', modelKeyOf(data))
   if (!option) return { status: 'skipped', reason: '功能 script.breakdown 尚未绑定已验证文本模型' }
   const reply = await waitForChat(
     ctx.gateway,

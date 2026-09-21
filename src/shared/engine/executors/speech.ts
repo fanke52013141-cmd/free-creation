@@ -19,7 +19,7 @@ export const speechExecutor = async (ctx: NodeExecutionContext): Promise<NodeExe
   if (!text) return { status: 'skipped', reason: '无朗读文本' }
 
   const option = ctx.gateway.resolveModelFeature
-    ? await resolveFeatureOption(ctx.gateway, ctx.providers, featureKeyOf(config, 'speech.synthesize'), 'speech.synthesize')
+    ? await resolveFeatureOption(ctx.gateway, ctx.providers, featureKeyOf(config, 'speech.synthesize'), 'speech.synthesize', config.providerId && config.modelId ? `${config.providerId}::${config.modelId}` : undefined)
     : null
   if (ctx.gateway.resolveModelFeature && !option) return { status: 'skipped', reason: '功能 speech.synthesize 尚未绑定已验证语音模型' }
   if (!ctx.gateway.resolveModelFeature && !config.providerId) return { status: 'skipped', reason: '未选择语音模型' }

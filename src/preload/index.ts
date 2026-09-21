@@ -49,6 +49,7 @@ import type {
 } from '../shared/contracts'
 import type {
   SaveModelConnectionInput,
+  DeleteModelDefinitionInput,
   SaveModelDefinitionInput,
   SaveModelFeatureBindingInput,
   ResolveModelFeatureInput,
@@ -226,6 +227,14 @@ const api = {
       ipcRenderer.invoke(IPC.models.saveConnection, input),
     saveDefinition: (input: SaveModelDefinitionInput): Promise<IpcEnvelope<ModelDefinition>> =>
       ipcRenderer.invoke(IPC.models.saveDefinition, input),
+    deleteDefinition: (input: DeleteModelDefinitionInput): Promise<IpcEnvelope<boolean>> =>
+      ipcRenderer.invoke(IPC.models.deleteDefinition, input),
+    deleteDefinitions: (input: import('../shared/contracts').DeleteModelDefinitionsInput): Promise<IpcEnvelope<number>> =>
+      ipcRenderer.invoke(IPC.models.deleteDefinitions, input),
+    deleteConnection: (input: import('../shared/contracts').DeleteModelConnectionInput): Promise<IpcEnvelope<boolean>> =>
+      ipcRenderer.invoke(IPC.models.deleteConnection, input),
+    discover: (input: import('../shared/contracts').DiscoverModelDefinitionsInput): Promise<IpcEnvelope<import('../shared/contracts').DiscoveredModel[]>> =>
+      ipcRenderer.invoke(IPC.models.discover, input),
     validate: (input: ValidateModelDefinitionInput): Promise<IpcEnvelope<ModelValidationResult>> =>
       ipcRenderer.invoke(IPC.models.validate, input),
     saveBinding: (input: SaveModelFeatureBindingInput): Promise<IpcEnvelope<import('@free-creation/model-contracts').FeatureBinding>> =>

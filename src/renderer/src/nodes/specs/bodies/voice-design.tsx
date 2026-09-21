@@ -54,11 +54,8 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
   const [playing, setPlaying] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  // 音色设计只存在于 MiniMax 协议；列出生效的 MiniMax 供应商实例即可。
-  const minimaxProviders = providers.filter((p) => p.specId === 'minimax')
-  const hasMinimaxModel = modelsByModality(providers, 'audio').some(
-    (option) => option.provider.specId === 'minimax'
-  )
+  // 音色设计只存在于 MiniMax；选择目录中已经验证的具体模型，而非只有供应商。
+  const minimaxModels = modelsByModality(providers, 'audio').filter((option) => option.provider.specId === 'minimax')
   const voiceId = designedVoiceId(shape)
   const customVoiceInvalid =
     Boolean(config.voiceId.trim()) && !isValidMiniMaxVoiceId(config.voiceId.trim())
@@ -129,29 +126,32 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
   }
 
   const hasOutput = Boolean(shape.props.mediaPath)
-  const canGenerate = Boolean(draft.trim()) && Boolean(config.providerId) && !customVoiceInvalid
+  const canGenerate = Boolean(draft.trim()) && Boolean(config.providerId) && Boolean(config.modelId) && !customVoiceInvalid
 
   return (
     <div className="node-tts node-voice-design">
       <div className="tts-section">
         <div className="tts-section-label">
           <Icon name="spark" size={13} />
-          <span>MiniMax 供应商</span>
+          <span>音色设计模型</span>
         </div>
         <AppSelect
           className="gen-select"
-          value={config.providerId}
+          value={config.providerId && config.modelId ? `${config.providerId}::${config.modelId}` : ''}
           onPointerDown={(e) => e.stopPropagation()}
-          onChange={(e) => updateConfig({ providerId: e.target.value })}
+          onChange={(e) => {
+            const selected = minimaxModels.find((item) => item.key === e.target.value)
+            if (selected) updateConfig({ providerId: selected.provider.id, modelId: selected.model.id })
+          }}
         >
-          <option value="">{providersLoaded ? '选择 MiniMax 供应商…' : '加载中…'}</option>
-          {minimaxProviders.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
+          <option value="">{providersLoaded ? '选择已验证模型…' : '加载中…'}</option>
+          {minimaxModels.map((item) => (
+            <option key={item.key} value={item.key}>
+              {item.provider.name} · {item.model.name || item.model.id}
             </option>
           ))}
         </AppSelect>
-        {providersLoaded && (!minimaxProviders.length || !hasMinimaxModel) && (
+        {providersLoaded && !minimaxModels.length && (
           <button
             className="btn-ghost small"
             onPointerDown={(e) => stopEventPropagation(e)}
@@ -160,7 +160,7 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
               void openSettings()
             }}
           >
-            去配置 MiniMax 供应商与语音模型
+            去配置 MiniMax 音色设计模型
           </button>
         )}
       </div>

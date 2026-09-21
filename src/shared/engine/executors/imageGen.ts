@@ -1,7 +1,7 @@
 // 生图节点执行器：已有成片优先复用；否则按提示词与可选参考图调用图片模型。
 import { inputJson, inputMedia, inputText } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
-import { featureKeyOf, resolveFeatureOption } from '../models'
+import { featureKeyOf, modelKeyOf, resolveFeatureOption } from '../models'
 import { mergedPrompt, parseJsonObj, promptBundleText } from '../helpers'
 import { readNodeConfig } from '../node-config'
 import { appendMediaResult, serializeMediaResultCollection } from '../values'
@@ -24,7 +24,7 @@ export function parseImageGen(text: string): ImageGenData {
 export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
   const data = parseImageGen(readNodeConfig(ctx.shape))
   // 供应商/模型解析与 Body 共用同一套逻辑；未明确指定时回退到默认可用模型（如 ToAPIS）。
-  const option = await resolveFeatureOption(ctx.gateway, ctx.providers, featureKeyOf(data, 'image.generate'), 'image.generate')
+  const option = await resolveFeatureOption(ctx.gateway, ctx.providers, featureKeyOf(data, 'image.generate'), 'image.generate', modelKeyOf(data))
   if (!option) return { status: 'skipped', reason: '功能 image.generate 尚未绑定已验证图片模型' }
   const capabilities = imageCapabilitiesFor(option.provider.specId, option.model.id)
   const config = normalizeImageGenerationConfig(data, capabilities)

@@ -12,6 +12,8 @@ export interface VoiceDesignConfig {
   version: 1
   /** MiniMax 供应商实例 ID。 */
   providerId: string
+  /** 目录中验证过的音色设计模型；请求本身不发送 model，但用于选择已验证能力。 */
+  modelId: string
   /** 试听文本，≤500 字符；决定试听音频读什么。 */
   previewText: string
   /** 可选自定义 voice_id；留空时由服务端生成。 */
@@ -25,6 +27,7 @@ export const VOICE_DESIGN_PREVIEW_LIMIT = 500
 export const DEFAULT_VOICE_DESIGN_CONFIG: VoiceDesignConfig = {
   version: 1,
   providerId: '',
+  modelId: '',
   previewText: '你好，很高兴认识你。',
   voiceId: '',
   aigcWatermark: false
@@ -40,6 +43,7 @@ export function parseVoiceDesignConfig(text: string): VoiceDesignConfig {
     return {
       version: 1,
       providerId: typeof raw.providerId === 'string' ? raw.providerId : '',
+      modelId: typeof raw.modelId === 'string' ? raw.modelId : '',
       previewText,
       voiceId: typeof raw.voiceId === 'string' ? raw.voiceId : '',
       aigcWatermark: raw.aigcWatermark === true

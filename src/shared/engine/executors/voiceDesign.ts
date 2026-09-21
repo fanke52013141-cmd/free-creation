@@ -19,7 +19,7 @@ export const voiceDesignExecutor = async (
   const prompt = mergedPrompt(ctx.shape.props.text, inputText(ctx.inputs, 'in-text')).trim()
   if (!prompt) return { status: 'skipped', reason: '无音色描述' }
   const option = ctx.gateway.resolveModelFeature
-    ? await resolveFeatureOption(ctx.gateway, ctx.providers, featureKeyOf(config, 'voice.design'), 'voice.design')
+    ? await resolveFeatureOption(ctx.gateway, ctx.providers, featureKeyOf(config, 'voice.design'), 'voice.design', config.providerId && config.modelId ? `${config.providerId}::${config.modelId}` : undefined)
     : null
   if (ctx.gateway.resolveModelFeature && !option) return { status: 'skipped', reason: '功能 voice.design 尚未绑定已验证音色设计模型' }
   if (!ctx.gateway.resolveModelFeature && !config.providerId) return { status: 'skipped', reason: '未选择 MiniMax 供应商' }

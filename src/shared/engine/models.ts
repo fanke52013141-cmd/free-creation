@@ -66,6 +66,12 @@ export function featureKeyOf(config: unknown, fallback: string): string {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback
 }
 
+/** A node may explicitly select one verified catalog model. */
+export function modelKeyOf(config: unknown): string | undefined {
+  const value = config && typeof config === 'object' ? (config as Record<string, unknown>).modelKey : undefined
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
 /**
  * Model execution must be addressed by product feature, never by a model id persisted in a node.
  * The host refuses absent, stale, disabled or unverified bindings before any provider request.
@@ -84,8 +90,15 @@ export async function resolveFeatureOption(
   gateway: GatewayClient,
   providers: ProviderSummary[],
   featureKey: string,
-  operation: ModelOperation
+  operation: ModelOperation,
+  selectedModelKey?: string
 ): Promise<ModelOption | null> {
+  if (selectedModelKey) {
+    const selected = providers.flatMap((provider) =>
+      provider.models.map((model) => ({ provider, model, key: `${provider.id}::${model.id}`, label: `${provider.name} · ${model.name || model.id}` }))
+    ).find((option) => option.key === selectedModelKey && (!option.model.operations || option.model.operations.includes(operation)))
+    if (selected) return selected
+  }
   // Test/headless hosts predating the model catalog do not implement this optional port.
   // Desktop production always has it, and therefore never takes this compatibility branch.
   if (!gateway.resolveModelFeature) {

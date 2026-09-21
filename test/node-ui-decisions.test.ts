@@ -531,24 +531,17 @@ describe('v1.2 §16.20 文档解析：PDF 交给 pdf.js，可解析格式只有�
   })
 })
 
-describe('v1.2 §16.22 隐藏能力要出现在节点上：slash 指令清单与分镜取数来源', () => {
+describe('v1.2 §16.22 文本节点不显示预置提示语，分镜保留取数来源', () => {
   const textBody = read('src/renderer/src/nodes/specs/bodies/text.tsx')
   const storyboardBody = read('src/renderer/src/nodes/specs/bodies/storyboard.tsx')
-  const slashCommands = read('src/renderer/src/nodes/slash-commands.ts')
 
-  it('批量视角指令清单只来自 SLASH_COMMANDS，不在节点里抄第二份', () => {
-    expect(slashCommands).toMatch(/export const SLASH_COMMANDS/)
-    expect(textBody).toMatch(/SLASH_COMMANDS\.map\(\(cmd\) =>/)
-    expect(textBody).toMatch(/<code>\{cmd\.pattern\}<\/code>/)
-    // 清单一旦回到硬编码，新增指令就会静默地不出现在节点上。
-    expect(stripComments(textBody)).not.toContain('九宫格')
-  })
-
-  it('空态与打错前缀都给回执，且已识别指令时不叠加清单', () => {
-    expect(textBody).toMatch(/const showSlashHint =\n?\s*!slashCmd &&/)
-    expect(textBody).toContain('未识别的指令，可用：')
-    expect(app).toContain('.slash-cmd-hint')
-    expect(app).toContain('.slash-cmd-option')
+  it('文本节点只呈现用户正文，不显示空态、连线或批量视角提示', () => {
+    const body = stripComments(textBody)
+    for (const removed of ['node-hint', 'node-wiring', 'slash-cmd', '双击输入', '批量视角']) {
+      expect(body).not.toContain(removed)
+    }
+    expect(body).toContain('shape.props.text && <span className="node-text-body">')
+    expect(stripComments(app)).not.toContain('.slash-cmd-')
   })
 
   it('分镜板按真实连线给出取数来源（in-json / in-text）', () => {
@@ -993,11 +986,11 @@ describe('v1.2 §16.30 文档真值节点：跳过运行不得静音输出，卡
     expect(source).not.toContain('projectOutputs: projectVideoOutputs,\n    outputSource:')
   })
 
-  it('文本卡片按真实连线给事实句：上游不会自己出现在正文里', () => {
-    expect(textBody).toContain("countIncomingConnections(editor, shape.id, 'in-text')")
-    expect(textBody).toContain('className={`node-wiring ${wiring.warn')
-    expect(textBody).toContain('运行一次才会并入正文')
-    expect(textBody).toContain('或从上游连一条文本线进来')
+  it('文本卡片不呈现预置提示，正文与连线语义由契约处理', () => {
+    const body = stripComments(textBody)
+    expect(body).not.toContain('countIncomingConnections')
+    expect(body).not.toContain('node-wiring')
+    expect(body).not.toContain('双击输入')
     expect(specs).toContain('上游文本在运行时并入正文，再经 out-text 输出。')
   })
 
@@ -1052,5 +1045,32 @@ describe('v1.2 §16.31 空模型引导点名供应商预设', () => {
 
   it('预设行有样式归属，不会和主标题糊成一行', () => {
     expect(app).toMatch(/\.gen-empty-presets\s*\{[^}]*font-size/)
+  })
+})
+
+describe('模型目录：已有连接可直接管理模型', () => {
+  const catalog = read('src/renderer/src/gateway/ModelCatalogPanel.tsx')
+  const modelHost = read('src/main/model-host/sqlite-model-host.ts')
+  const modelIpc = read('src/main/ipc/models.ipc.ts')
+  const contracts = read('src/shared/contracts/index.ts')
+
+  it('不再把连接、模型和验证伪装成固定三步，已有连接直接显示模型操作', () => {
+    expect(catalog).not.toContain('添加模型步骤')
+    expect(catalog).toContain("{ value: 'text', label: '文本模型'")
+    expect(catalog).toContain("{ value: 'design', label: '音色设计'")
+    expect(catalog).toContain('编辑连接')
+    expect(catalog).toContain('拉取可用模型')
+    expect(catalog).toContain('节点设置决定“引用哪个模型”')
+  })
+
+  it('删除模型会同时清除所有功能绑定与验证记录', () => {
+    expect(contracts).toContain("deleteDefinitions: 'models:definitions:delete-many'")
+    expect(modelIpc).toContain('IPC.models.deleteDefinitions')
+    expect(modelHost).toContain('deleteModel(modelDefinitionId: string): boolean')
+    expect(modelHost).toContain('DELETE FROM model_feature_bindings WHERE model_definition_id = ?')
+    expect(modelHost).toContain('DELETE FROM model_validations WHERE model_definition_id = ?')
+    expect(modelHost).toContain('DELETE FROM model_definitions WHERE id = ?')
+    expect(catalog).toContain('删除所选（{selected.size}）')
+    expect(catalog).toContain('window.api.models.deleteDefinitions')
   })
 })

@@ -99,6 +99,10 @@ export const IPC = {
     saveConnection: 'models:connections:save',
     definitions: 'models:definitions:list',
     saveDefinition: 'models:definitions:save',
+    deleteDefinition: 'models:definitions:delete',
+    deleteDefinitions: 'models:definitions:delete-many',
+    deleteConnection: 'models:connections:delete',
+    discover: 'models:connections:discover',
     validate: 'models:definitions:validate',
     saveBinding: 'models:bindings:save',
     bindings: 'models:bindings:list',
@@ -135,6 +139,28 @@ export interface SaveModelDefinitionInput {
   capabilities: Capability[]
   metadata?: Record<string, unknown>
   enabled?: boolean
+}
+
+export interface DeleteModelDefinitionInput {
+  modelDefinitionId: string
+}
+
+export interface DeleteModelDefinitionsInput {
+  modelDefinitionIds: string[]
+}
+
+export interface DeleteModelConnectionInput {
+  connectionId: string
+}
+
+/** A redacted result of the provider's optional OpenAI-compatible /models endpoint. */
+export interface DiscoverModelDefinitionsInput {
+  connectionId: string
+}
+
+export interface DiscoveredModel {
+  id: string
+  name: string
 }
 
 export interface ValidateModelDefinitionInput {

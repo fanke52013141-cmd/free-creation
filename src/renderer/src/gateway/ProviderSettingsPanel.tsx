@@ -34,14 +34,39 @@ const newDraft = (specId: ProviderSpecId): Draft => {
     specId,
     baseURL: spec?.baseURL ?? '',
     apiKey: '',
-    models: (spec?.suggestions ?? []).map((id) => ({
+    models: normalizeModelsForSpec((spec?.suggestions ?? []).map((id) => ({
       id,
       modality: guessModelModality(id, specId)
-    }))
+    })), specId)
   }
 }
 
 const specLabel = (id: string): string => PROVIDER_SPECS.find((s) => s.id === id)?.label ?? id
+
+/** Product-level compatibility boundary. A model row cannot be classified into a node family
+ * that its selected provider adapter cannot execute. */
+const modalitiesForSpec = (specId: ProviderSpecId): GatewayModelInfo['modality'][] => {
+  if (specId === 'toapis' || specId === 'openrouter') return ['image']
+  if (specId === 'seedance') return ['video']
+  if (specId === 'minimax') return ['video', 'audio']
+  if (specId === 'doubao-speech') return ['audio']
+  return ['text']
+}
+
+const normalizeModelsForSpec = (
+  models: GatewayModelInfo[],
+  specId: ProviderSpecId
+): GatewayModelInfo[] => {
+  const allowed = modalitiesForSpec(specId)
+  return models.map((model) =>
+    allowed.includes(model.modality) ? model : { ...model, modality: allowed[0] }
+  )
+}
+
+const categoryLabel = (modality: GatewayModelInfo['modality'], specId: ProviderSpecId): string => {
+  if (modality !== 'audio') return modality === 'text' ? '文本' : modality === 'image' ? '图片' : '视频'
+  return specId === 'doubao-speech' ? '语音合成' : '音频（合成/设计/克隆）'
+}
 
 function draftFromConfig(p: ProviderSummary): Draft {
   return {
@@ -59,21 +84,29 @@ function draftFromConfig(p: ProviderSummary): Draft {
 export function ProviderSettingsPanel(): React.JSX.Element | null {
   const open = useGatewayStore((s) => s.settingsOpen)
   const close = useGatewayStore((s) => s.closeSettings)
-  const providers = useGatewayStore((s) => s.providers)
-  const load = useGatewayStore((s) => s.load)
+  const [providers, setProviders] = useState<ProviderSummary[]>([])
 
   const [draft, setDraft] = useState<Draft | null>(null)
   const [picking, setPicking] = useState(false)
   const [busy, setBusy] = useState<'test' | 'save' | null>(null)
   const [testMsg, setTestMsg] = useState('')
   const [probe, setProbe] = useState<ProbeProviderResult | null>(null)
+  const [fetchedModels, setFetchedModels] = useState<string[]>([])
+  const [modelPickerOpen, setModelPickerOpen] = useState(false)
+  const [modelSearch, setModelSearch] = useState('')
+  const [pickedModelIds, setPickedModelIds] = useState<Set<string>>(new Set())
   /** 'free' 表示整表自检，其余为某个计费项正在真实调用。 */
   const [probing, setProbing] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
 
+  const loadSettingsProviders = async (): Promise<void> => {
+    const result = await window.api.gateway.listProviders()
+    if (result.ok) setProviders(result.data)
+  }
+
   useEffect(() => {
-    if (open) void load()
-  }, [open, load])
+    if (open) void loadSettingsProviders()
+  }, [open])
 
   useEffect(() => {
     if (!open) return
@@ -97,7 +130,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
             specId,
             baseURL: spec?.baseURL ?? '',
             models: d.models.length
-              ? d.models
+              ? normalizeModelsForSpec(d.models, specId)
               : (spec?.suggestions ?? []).map((id) => ({
                   id,
                   modality: guessModelModality(id, specId)
@@ -125,7 +158,11 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
     setBusy(null)
     if (!res.ok) return toast(`保存失败：${res.error.message}`)
     setDraft(draftFromConfig(res.data))
-    await load()
+    setProviders((current) => {
+      const next = current.filter((provider) => provider.id !== res.data.id)
+      return [...next, res.data]
+    })
+    void loadSettingsProviders()
     toast('供应商已保存')
   }
 
@@ -149,15 +186,23 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
       setTestMsg(`测试失败：${res.error.message}`)
       return
     }
-    // 合并服务端新发现的模型（已有 id 跳过，模态按 ID 猜测，可手改）
+    // Never add a remote list implicitly: users choose a searchable subset first.
     const known = new Set(draft.models.map((m) => m.id))
     const fresh = res.data.models
       .filter((id) => !known.has(id))
-      .map((id) => ({ id, modality: guessModelModality(id, draft.specId) }))
-    if (fresh.length) patch({ models: [...draft.models, ...fresh] })
-    setTestMsg(
-      `测试成功：${res.data.message}${fresh.length ? `，已并入 ${fresh.length} 个新模型` : ''}`
-    )
+    setTestMsg(`测试成功：${res.data.message}`)
+    if (!fresh.length) return
+    setFetchedModels(fresh)
+    setPickedModelIds(new Set())
+    setModelSearch('')
+    setModelPickerOpen(true)
+  }
+
+  const addPickedModels = (): void => {
+    if (!draft || !pickedModelIds.size) return
+    patch({ models: [...draft.models, ...[...pickedModelIds].map((id) => ({ id, modality: modalitiesForSpec(draft.specId)[0] }))] })
+    setModelPickerOpen(false)
+    setPickedModelIds(new Set())
   }
 
   const probeInput = (runItemId?: string, allowCost?: true): ProbeProviderInput => {
@@ -239,7 +284,8 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
     const res = await window.api.gateway.deleteProvider(draft.id)
     if (res.ok) {
       setDraft(null)
-      await load()
+      setProviders((current) => current.filter((provider) => provider.id !== draft.id))
+      void loadSettingsProviders()
       toast('供应商已删除')
     }
   }
@@ -289,9 +335,12 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                     {s.label}
                   </button>
                 ))}
+                <button className="gw-add" onClick={() => { setPicking(false); setDraft(null); setTestMsg('') }}>
+                  返回
+                </button>
               </div>
             ) : (
-              <button className="gw-add" onClick={() => setPicking(true)}>
+              <button className="gw-add gw-add-bottom" onClick={() => setPicking(true)}>
                 <Icon name="add" size={14} />
                 新增供应商
               </button>
@@ -348,14 +397,14 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                 </div>
 
                 <div className="gw-models-head">
-                  <span className="gw-label">模型列表（{draft.models.length}）</span>
+                  <span className="gw-label gw-model-count">模型列表 · {draft.models.length}</span>
                   <button
                     className="btn-ghost small"
                     onClick={() =>
                       patch({
                         models: [
                           ...draft.models,
-                          { id: '', modality: guessModelModality('', draft.specId) }
+                          { id: '', modality: modalitiesForSpec(draft.specId)[0] }
                         ]
                       })
                     }
@@ -366,6 +415,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                     </>
                   </button>
                 </div>
+                <div className="gw-model-column-head"><span>模型名称</span><span>显示名称</span><span>类别</span></div>
                 <div className="gw-models">
                   {draft.models.map((m, i) => (
                     <div className="gw-model-row" key={i}>
@@ -408,10 +458,11 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                           })
                         }
                       >
-                        <option value="text">文本</option>
-                        <option value="image">图片</option>
-                        <option value="video">视频</option>
-                        <option value="audio">音频</option>
+                        {modalitiesForSpec(draft.specId).map((modality) => (
+                          <option key={modality} value={modality}>
+                            {categoryLabel(modality, draft.specId)}
+                          </option>
+                        ))}
                       </select>
                       <button
                         className="shot-op danger"
@@ -429,7 +480,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
 
                 {testMsg && <div className="gw-test-msg">{testMsg}</div>}
 
-                {driverForSpec(draft.specId) !== 'openai-compatible' && (
+                {false && driverForSpec(draft!.specId) !== 'openai-compatible' && (
                   <div className="gw-probe">
                     <div className="gw-probe-head">
                       <span className="gw-label">协议自检</span>
@@ -449,14 +500,14 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                       <>
                         <div
                           className={`gw-probe-summary ${
-                            probe.items.some((item) => item.probe?.status === 'fail')
+                            probe!.items.some((item) => item.probe?.status === 'fail')
                               ? 'danger'
                               : ''
                           }`}
                         >
-                          {probe.summary}
+                          {probe!.summary}
                         </div>
-                        {probe.items.map((item) => (
+                        {probe!.items.map((item) => (
                           <div className="gw-probe-item" key={item.id}>
                             <button
                               className="gw-probe-title"
@@ -510,6 +561,11 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                     {busy === 'test' ? '测试中…' : '测试并拉取模型'}
                   </button>
                   <div className="gw-foot-right">
+                    {!draft.id && (
+                      <button className="btn-ghost" disabled={busy !== null} onClick={() => { setDraft(null); setPicking(false); setTestMsg('') }}>
+                        取消新增
+                      </button>
+                    )}
                     {draft.id && (
                       <button
                         className="btn-ghost danger-text"
@@ -528,6 +584,20 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                     </button>
                   </div>
                 </div>
+                {modelPickerOpen && (
+                  <div className="gw-model-picker-mask" role="presentation">
+                    <section className="gw-model-picker" role="dialog" aria-modal="true" aria-label="选择要添加的模型">
+                      <div className="gw-models-head"><span className="gw-label">选择要添加的模型</span><button className="icon-btn" onClick={() => setModelPickerOpen(false)} aria-label="关闭">×</button></div>
+                      <input className="gw-input" autoFocus value={modelSearch} placeholder="搜索模型 ID" onChange={(e) => setModelSearch(e.target.value)} />
+                      <div className="gw-model-picker-list">
+                        {fetchedModels.filter((id) => id.toLowerCase().includes(modelSearch.trim().toLowerCase())).map((id) => (
+                          <label key={id} className="gw-model-picker-item"><input type="checkbox" checked={pickedModelIds.has(id)} onChange={() => setPickedModelIds((current) => { const next = new Set(current); next.has(id) ? next.delete(id) : next.add(id); return next })} /><span>{id}</span></label>
+                        ))}
+                      </div>
+                      <div className="gw-foot"><button className="btn-ghost" onClick={() => setModelPickerOpen(false)}>取消</button><button className="btn-primary" disabled={!pickedModelIds.size} onClick={addPickedModels}>添加所选（{pickedModelIds.size}）</button></div>
+                    </section>
+                  </div>
+                )}
               </>
             ) : (
               <div className="gw-empty big">

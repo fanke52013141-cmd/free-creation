@@ -164,6 +164,33 @@ export class SqliteModelHost
     return this.modelFromRow(this.db.prepare('SELECT * FROM model_definitions WHERE id = ?').get(definitionId) as ModelRow)
   }
 
+  /** Removes a configured model and every local record that can make it executable. */
+  deleteModel(modelDefinitionId: string): boolean {
+    const existing = this.db.prepare('SELECT id FROM model_definitions WHERE id = ?').get(modelDefinitionId)
+    if (!existing) return false
+    this.db.prepare('DELETE FROM model_feature_bindings WHERE model_definition_id = ?').run(modelDefinitionId)
+    this.db.prepare('DELETE FROM model_validations WHERE model_definition_id = ?').run(modelDefinitionId)
+    this.db.prepare('DELETE FROM model_definitions WHERE id = ?').run(modelDefinitionId)
+    return true
+  }
+
+  /** Used by the catalog's batch action. Each deletion also clears stale bindings/validation. */
+  deleteModels(modelDefinitionIds: string[]): number {
+    return [...new Set(modelDefinitionIds)].reduce(
+      (count, modelDefinitionId) => count + (this.deleteModel(modelDefinitionId) ? 1 : 0),
+      0
+    )
+  }
+
+  /** A connection cannot leave models behind: remove its model records before the connection. */
+  deleteConnection(connectionId: string): boolean {
+    const existing = this.db.prepare('SELECT id FROM model_connections WHERE id = ?').get(connectionId)
+    if (!existing) return false
+    this.listModels(connectionId).forEach((model) => this.deleteModel(model.id))
+    this.db.prepare('DELETE FROM model_connections WHERE id = ?').run(connectionId)
+    return true
+  }
+
   saveBinding(input: ModelFeatureBindingInput): FeatureBinding {
     const model = this.db.prepare('SELECT model_id, connection_id FROM model_definitions WHERE id = ?').get(input.modelDefinitionId) as { model_id: string; connection_id: string } | undefined
     if (!model || model.connection_id !== input.connectionId) throw new Error('功能引用的模型不存在或不属于该连接')
