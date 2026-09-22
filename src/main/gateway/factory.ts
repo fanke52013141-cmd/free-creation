@@ -20,6 +20,12 @@ export function requireProvider(providerId: string): ProviderConfig {
   const p = getProvider(providerId)
   if (!p) throw new GatewayError('PROVIDER_NOT_FOUND', `供应商不存在：${providerId}`)
   if (!p.baseURL) throw new GatewayError('PROVIDER_NO_URL', `供应商「${p.name}」未配置 Base URL`)
+  if (!p.apiKey) {
+    throw new GatewayError(
+      'PROVIDER_NO_KEY',
+      `供应商「${p.name}」的 API Key 不可用。请在“模型供应商”中重新输入 API Key 并点击测试。`
+    )
+  }
   return p
 }
 

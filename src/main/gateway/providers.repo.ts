@@ -137,7 +137,9 @@ function toSummary(row: ProviderRow): ProviderSummary {
       ? models.map(normalizeModel).filter((model): model is GatewayModelInfo => model !== null)
       : [],
     createdAt: row.created_at,
-    hasApiKey: Boolean(row.api_key_ref)
+    // 密文存在不等于当前桌面环境能解密。若 DPAPI/安全存储上下文已变化，仍把它
+    // 显示为“已保存”会让用户选中模型后只得到一条无 Key 的失败请求。
+    hasApiKey: Boolean(decryptSecret(row.api_key_ref))
   }
 }
 

@@ -94,7 +94,8 @@ describe('saveProvider 密文保留（F11）', () => {
     // 修复前：existing.apiKey 为空串 → falsy → api_key_ref 被写成 null，密文丢失
     // 修复后：原始密文原样保留
     expect(dbState.rows.get('p1')!.api_key_ref).toBe(ORIGINAL_CIPHER)
-    expect(summary.hasApiKey).toBe(true)
+    // 密文仍然原样保存以便未来安全存储恢复；但当前无法解密就不能在 UI 中冒充可调用。
+    expect(summary.hasApiKey).toBe(false)
     // 其余字段正常更新
     expect(dbState.rows.get('p1')!.name).toBe('只改名')
     expect(dbState.rows.get('p1')!.base_url).toBe('https://new.example/v1')
