@@ -12,6 +12,8 @@ export interface ChatData {
   messages: ChatMessage[]
   temperature: number
   maxTokens: number
+  /** 推理模型的思考强度；普通模型会忽略此配置。 */
+  reasoningEffort?: 'off' | 'high'
   documents?: ChatDocument[]
   summary?: string
   autoCompress?: boolean
@@ -23,6 +25,7 @@ const EMPTY_CHAT: ChatData = {
   messages: [],
   temperature: 0.7,
   maxTokens: 4096,
+  reasoningEffort: 'high',
   documents: [],
   summary: '',
   autoCompress: true
@@ -67,6 +70,7 @@ export function parseChat(text: string): ChatData {
       messages,
       temperature: typeof value.temperature === 'number' ? value.temperature : 0.7,
       maxTokens: typeof value.maxTokens === 'number' ? value.maxTokens : 4096,
+      reasoningEffort: value.reasoningEffort === 'off' ? 'off' : 'high',
       documents,
       summary: typeof value.summary === 'string' ? value.summary : '',
       autoCompress: typeof value.autoCompress === 'boolean' ? value.autoCompress : true

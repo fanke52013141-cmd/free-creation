@@ -877,7 +877,8 @@
   top: 50%;
   bottom: auto;
   left: 16px;
-  width: 112px;
+  /* 一级项略收窄，给鱼眼放大后的二级项留出明确间距。 */
+  width: 120px;
   transform: translateY(-50%);
   overflow: visible;
 }
@@ -912,17 +913,20 @@
 /* 一级分类与二级节点采用透明级联菜单。 */
 .palette-category-section {
   align-items: stretch;
-  gap: 16px;
+  gap: 14px;
   padding: 8px 0;
 }
 
 .palette-category-item {
   position: relative;
   transform-origin: left center;
-  transition: transform 0.16s cubic-bezier(0.2, 0, 0, 1), color 0.16s ease, opacity 0.16s ease;
+  transition:
+    transform 0.16s cubic-bezier(0.2, 0, 0, 1),
+    color 0.16s ease,
+    opacity 0.16s ease;
   justify-content: flex-start;
   gap: 8px;
-  width: 108px;
+  width: 120px;
   height: 32px;
   min-height: 32px;
   padding: 0 8px;
@@ -934,8 +938,14 @@
 
 .palette-category-item:hover,
 .palette-category-item.is-active {
-  background: rgba(255, 255, 255, 0.055);
+  background: transparent;
   color: var(--brand, #7edbff);
+}
+
+/* 不用矩形底框表示状态；选中项与悬浮项都只通过鱼眼放大和颜色识别。 */
+.palette-category-item.is-active {
+  transform: scale(1.14);
+  z-index: 5;
 }
 
 .palette-category-item .palette-label {
@@ -945,6 +955,11 @@
   font-weight: 500;
   line-height: 14px;
   letter-spacing: 0.02em;
+}
+
+/* 一级项仅保留图标与文字，不再使用“可展开”的三角形暗示。 */
+.palette-category-item::after {
+  content: none;
 }
 
 .palette-node-flyout {
@@ -993,7 +1008,11 @@
 
 .palette-node-flyout .palette-node-item {
   transform-origin: left center;
-  transition: transform 0.15s cubic-bezier(0.2, 0, 0, 1), color 0.15s ease, text-shadow 0.15s ease, background-color 0.15s ease;
+  transition:
+    transform 0.15s cubic-bezier(0.2, 0, 0, 1),
+    color 0.15s ease,
+    text-shadow 0.15s ease,
+    background-color 0.15s ease;
   flex-direction: row;
   justify-content: flex-start;
   gap: 8px;
@@ -1002,7 +1021,7 @@
   height: 32px;
   min-height: 32px;
   padding: 0 8px;
-  border: 1px solid transparent;
+  border: 0;
   border-radius: 10px;
   background: transparent;
 }
@@ -1656,30 +1675,6 @@
   stroke-linecap: round;
 }
 
-/*
- * 原生手柄只保留其较大的命中区域。视觉点由 GroupOutlineLayer 用同一套
- * page -> screen 几何绘制，避免给 tldraw SVG 手柄再叠加 CSS transform 后漂移。
- */
-.tl-corner-handle {
-  opacity: 0 !important;
-}
-
-.canvas-selection-corner {
-  position: absolute;
-  z-index: 3;
-  box-sizing: border-box;
-  width: 10px;
-  height: 10px;
-  border: 2px solid #8ec7ff;
-  border-radius: 50%;
-  background: var(--canvas-bg, #171b22);
-  box-shadow:
-    0 0 0 3px var(--canvas-bg, #171b22),
-    0 1px 3px rgba(0, 0, 0, 0.28);
-  pointer-events: none;
-  transform: translate(-50%, -50%);
-}
-
 /* 文本占位语再靠近左上角，编辑态和展示态保持同一排版基线。 */
 .node-text,
 .node-textarea {
@@ -1709,7 +1704,7 @@
 
 .data-edge-visible {
   fill: none;
-  stroke-width: 1.5;
+  stroke-width: 1.15;
   stroke-linecap: round;
   opacity: 0.74;
   pointer-events: none;
@@ -1719,15 +1714,21 @@
     filter 140ms ease;
 }
 
-/* 统一线条规则：节点之上的片段是实线；被节点覆盖的片段显示为虚线，
-   与低不透明度一起表达“这条线从节点下方穿过”。 */
-.data-edge-obscured {
-  stroke-dasharray: 4 6;
-  opacity: 0.18;
+/* 选中节点的下游数据边叠一层独立的彩色流光；底层语义色仍然可见。 */
+.data-edge-flow {
+  fill: none;
+  stroke-width: 1.65;
+  stroke-linecap: round;
+  /* 与拖拽态保持同一段长极光水流：256 / 64 = 4。 */
+  stroke-dasharray: 256 744;
+  stroke-dashoffset: 1000;
+  opacity: 0.98;
+  pointer-events: none;
+  filter: drop-shadow(0 0 5px rgba(104, 236, 210, 0.58));
+  animation: edge-water-flow 1.85s linear infinite;
 }
 
-/* 追溯线只表达“由该操作产生”，不具备可运行的数据流含义；它比数据线更细更淡，
-   虚实同样遵循统一线条规则（追溯线自身不再自带虚线）。 */
+/* 追溯线只表达“由该操作产生”，不具备可运行的数据流含义；它比数据线更细更淡。 */
 .artifact-provenance-edge {
   stroke-width: 1.2;
   opacity: 0.52;
@@ -1745,18 +1746,51 @@
 
 .data-edge.is-hovered .data-edge-visible {
   opacity: 0.98;
-  stroke-width: 1.8;
+  stroke-width: 1.35;
 }
 
 .data-edge.is-selected .data-edge-visible {
-  stroke-width: 2.2;
+  stroke-width: 1.55;
   opacity: 1;
   filter: drop-shadow(0 0 5px rgb(138 111 255 / 45%));
 }
 
-.data-edge.is-selected .data-edge-obscured,
-.data-edge.is-hovered .data-edge-obscured {
-  opacity: 0.4;
+/* 连线上的精确删除入口：始终紧贴鼠标与线的交点，不影响画布其他命中。 */
+.data-edge-scissors {
+  position: fixed;
+  z-index: 60;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgba(169, 218, 255, 0.62);
+  border-radius: 50%;
+  background: rgba(15, 22, 30, 0.94);
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.35),
+    0 0 0 3px rgba(77, 192, 255, 0.12);
+  color: #e7f7ff;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1;
+  transform: translate(-50%, -50%);
+}
+
+.data-edge-scissors:hover {
+  border-color: #e5f8ff;
+  background: #1a2c39;
+  color: #fff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .data-edge-flow {
+    opacity: 0.68;
+    filter: none;
+    animation: none;
+  }
 }
 
 .contract-test-harness {
@@ -2161,7 +2195,9 @@
   background-image:
     radial-gradient(circle at 1px 1px, rgba(74, 96, 112, 0.16) 0.68px, transparent 0.8px),
     radial-gradient(ellipse at 48% 36%, rgba(80, 153, 196, 0.055), transparent 52%) !important;
-  background-size: 24px 24px, 100% 100% !important;
+  background-size:
+    24px 24px,
+    100% 100% !important;
 }
 
 .canvas-page.canvas-theme-light .canvas-topbar {
@@ -2184,9 +2220,9 @@
 
 .canvas-theme-light .palette-category-item:hover,
 .canvas-theme-light .palette-category-item.is-active {
-  background: #ffffff;
+  background: transparent;
   color: #1976a8;
-  box-shadow: 0 4px 12px rgba(31, 47, 61, 0.1);
+  box-shadow: none;
 }
 
 .canvas-theme-light .palette-node-flyout {
@@ -2201,13 +2237,13 @@
 }
 
 .canvas-theme-light .palette-node-flyout .palette-node-item:hover {
-  background: #edf7fc;
-  border-color: rgba(34, 128, 177, 0.18);
+  background: transparent;
+  border-color: transparent;
 }
 
 .palette-node-flyout .palette-node-item:hover {
   border-color: transparent;
-  background: rgba(255, 255, 255, 0.045);
+  background: transparent;
 }
 
 @media (max-width: 1040px) {
@@ -2239,7 +2275,17 @@
   max-width: none !important;
 }
 
-.canvas-theme-light :is(.engine-controls, .topbar-actions, .undo-redo-group, .dock-minimap, .dock-controls, .multi-select-toolbar, .dock-tool-group, .dock-zoom) {
+.canvas-theme-light
+  :is(
+    .engine-controls,
+    .topbar-actions,
+    .undo-redo-group,
+    .dock-minimap,
+    .dock-controls,
+    .multi-select-toolbar,
+    .dock-tool-group,
+    .dock-zoom
+  ) {
   border-color: rgba(35, 52, 66, 0.13);
   background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 6px 18px rgba(31, 47, 61, 0.1);

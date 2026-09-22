@@ -3,10 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { allNodeTypes, getNodeType } from '../nodes/registry'
 import type { ConnectionFrom } from '../stores/connection'
 import { Icon } from '../components/Icon'
-import {
-  PALETTE_CATEGORY_META,
-  paletteCategoryForNode
-} from './palette-categories'
+import { PALETTE_CATEGORY_META, paletteCategoryForNode } from './palette-categories'
 import type { PaletteCategoryId } from '@shared/palette-preferences'
 import {
   compatibleNodeCreateChoices,
@@ -58,7 +55,10 @@ export function NodeCreateMenu({
 }: NodeCreateMenuProps): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   const [menuHeight, setMenuHeight] = useState(0)
-  const [hoverCategory, setHoverCategory] = useState<Exclude<PaletteCategoryId, 'favorites'> | null>(null)
+  const [hoverCategory, setHoverCategory] = useState<Exclude<
+    PaletteCategoryId,
+    'favorites'
+  > | null>(null)
   const hoverTimer = useRef<number | null>(null)
 
   useEffect(() => {
@@ -97,13 +97,15 @@ export function NodeCreateMenu({
       : compatibleNodeCreateChoices(source)
     : allNodeTypes().map((spec) => ({ type: spec.type }))
 
-  const availableCategories = (['input', 'image', 'video', 'audio', 'logic'] as const).filter((category) =>
-    allChoices.some((choice) => paletteCategoryForNode(choice.type) === category)
+  const availableCategories = (['input', 'image', 'video', 'audio', 'logic'] as const).filter(
+    (category) => allChoices.some((choice) => paletteCategoryForNode(choice.type) === category)
   )
   const showTabs = availableCategories.length > 1
-  const categoryOptions: Array<{ id: Exclude<PaletteCategoryId, 'favorites'>; label: string }> = availableCategories.map(
-    (category) => ({ id: category, label: PALETTE_CATEGORY_META[category].label })
-  )
+  const categoryOptions: Array<{ id: Exclude<PaletteCategoryId, 'favorites'>; label: string }> =
+    availableCategories.map((category) => ({
+      id: category,
+      label: PALETTE_CATEGORY_META[category].label
+    }))
   const submenuChoices =
     hoverCategory === null
       ? allChoices
@@ -190,7 +192,6 @@ export function NodeCreateMenu({
                 onClick={() => showCategoryMenu(category.id)}
               >
                 <span>{category.label}</span>
-                <span className="node-menu-expand-arrow" aria-hidden="true" />
               </button>
             ))}
           </div>
@@ -208,12 +209,7 @@ export function NodeCreateMenu({
             <button className="node-menu-action" onClick={onUpload}>
               上传本地文件
             </button>
-            <button
-              className="node-menu-action"
-              disabled
-              title="后续版本开放"
-              onClick={onGallery}
-            >
+            <button className="node-menu-action" disabled title="后续版本开放" onClick={onGallery}>
               从图库选择
             </button>
           </>
@@ -228,9 +224,6 @@ export function NodeCreateMenu({
           onFocus={keepCategoryMenu}
           onBlur={hideCategoryMenu}
         >
-          <div className="node-menu-submenu-title">
-            {categoryOptions.find((category) => category.id === hoverCategory)?.label ?? ''}
-          </div>
           {renderChoices()}
         </div>
       )}

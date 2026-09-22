@@ -1,6 +1,7 @@
 // 模型网关渲染端状态：供应商配置缓存 + 设置面板开关
 import { create } from 'zustand'
 import type { GatewayModelInfo, ModelModality, ProviderSummary } from '@shared/types'
+import { guessModelModality } from '@shared/provider-driver'
 
 export interface ModelOption {
   provider: ProviderSummary
@@ -37,8 +38,7 @@ export const useGatewayStore = create<GatewayState>((set) => ({
   // The user-facing model manager is the proven provider panel: it can test a Base URL and
   // merge the returned /models list into the editable model table.
   openSettings: () => set({ settingsOpen: true, catalogOpen: false }),
-  closeSettings: () => set({ settingsOpen: false })
-  ,
+  closeSettings: () => set({ settingsOpen: false }),
   openCatalog: () => set({ settingsOpen: false, catalogOpen: true }),
   closeCatalog: () => set({ catalogOpen: false })
 }))
@@ -51,7 +51,14 @@ export function modelsByModality(
   const out: ModelOption[] = []
   for (const p of providers) {
     for (const m of p.models) {
-      if (m.modality !== modality) continue
+      // 兼容早期 OpenRouter 配置：当时设置页把所有模型强制写成 image。按模型 ID
+      // 重新识别文本条目，让既有文本模型立刻能在对话/AI 处理节点选择，无需重建供应商。
+      const isLegacyOpenRouterText =
+        modality === 'text' &&
+        p.specId === 'openrouter' &&
+        m.modality === 'image' &&
+        guessModelModality(m.id, p.specId) === 'text'
+      if (m.modality !== modality && !isLegacyOpenRouterText) continue
       out.push({
         provider: p,
         model: m,

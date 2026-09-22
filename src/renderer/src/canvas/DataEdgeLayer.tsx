@@ -4,11 +4,16 @@ import { getNodePorts, getNodeType, portOffsets, PORT_COLORS } from '../nodes/re
 import type { NodeCardShape } from './NodeCardShape'
 import { useEdgeSelectionStore } from '../stores/edgeSelection'
 import { buildDataEdgePath, NODE_PORT_OUTSET } from './edge-geometry'
+import { markUndoPoint } from './history'
+import { toast } from '../stores/toast'
 
 interface ScreenEdge {
   id: TLShapeId
   path: string
   color: string
+  /** 视觉流向始终由真实数据源指向真实消费者（或由操作节点指向其产物）。 */
+  sourceId: TLShapeId
+  targetId: TLShapeId
   provenance?: boolean
 }
 
@@ -22,8 +27,7 @@ interface ScreenNodeRect {
 /**
  * 返回节点卡片在当前 SVG 坐标系中的边界。
  *
- * 数据线的底图会被这些矩形挖空，随后仅在挖空区再绘制一条低透明度的同色线。
- * 这样“穿过节点”的部分是变淡而不是变成另一种线型，线的其余部分保持完整实线。
+ * 数据线会被这些矩形挖空。节点始终是画布最上层的实体，连线不能穿透其内容区。
  */
 function collectNodeRects(editor: Editor, host: HTMLDivElement): ScreenNodeRect[] {
   const hostRect = host.getBoundingClientRect()
@@ -100,6 +104,8 @@ function collectEdges(editor: Editor, host: HTMLDivElement): ScreenEdge[] {
     result.push({
       id: arrow.id,
       color: PORT_COLORS[fromPort.type] ?? '#8f73ff',
+      sourceId: source.id,
+      targetId: target.id,
       path: buildDataEdgePath(
         { x: startScreen.x - hostRect.left, y: startScreen.y - hostRect.top },
         { x: endScreen.x - hostRect.left, y: endScreen.y - hostRect.top }
@@ -162,6 +168,8 @@ function collectEdges(editor: Editor, host: HTMLDivElement): ScreenEdge[] {
         : outPort
           ? (PORT_COLORS[outPort.type] ?? '#94a3b8')
           : '#94a3b8',
+      sourceId: producer.id,
+      targetId: asset.id,
       provenance: true,
       path: buildDataEdgePath(
         { x: start.x - hostRect.left, y: start.y - hostRect.top },
@@ -170,6 +178,18 @@ function collectEdges(editor: Editor, host: HTMLDivElement): ScreenEdge[] {
     })
   }
   return result
+}
+
+/**
+ * 仅在用户明确关注一条链路时播放动效：从选中节点出发的边，以及用户主动选中的边。
+ * 全画布常驻流光会掩盖端口类型色，也会在大型流程里持续消耗合成资源。
+ */
+function isFlowActive(
+  edge: ScreenEdge,
+  selectedNodeIds: ReadonlySet<TLShapeId>,
+  selectedEdgeId: string | null
+): boolean {
+  return selectedNodeIds.has(edge.sourceId) || edge.id === selectedEdgeId
 }
 
 function getNodePortsForShape(shape: NodeCardShape): {
@@ -200,11 +220,16 @@ export function DataEdgeLayer({
   const [host, setHost] = useState<HTMLDivElement | null>(null)
   const selectedEdgeId = useEdgeSelectionStore((state) => state.selectedEdgeId)
   const select = useEdgeSelectionStore((state) => state.select)
-  const [hoveredEdgeId, setHoveredEdgeId] = useState<TLShapeId | null>(null)
+  const clearEdgeSelection = useEdgeSelectionStore((state) => state.clear)
+  const [hoveredEdge, setHoveredEdge] = useState<{
+    id: TLShapeId
+    clientX: number
+    clientY: number
+  } | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
   const reactId = useId().replace(/:/g, '')
   const overlapMaskId = `data-edge-node-mask-${reactId}`
-  const overlapClipId = `${overlapMaskId}-clip`
+  const flowGradientId = `data-edge-flow-gradient-${reactId}`
 
   useEffect(() => {
     let frame = 0
@@ -241,6 +266,14 @@ export function DataEdgeLayer({
   // store/视口监听会触发本组件重绘，确保拖动、缩放和连线后重新换算屏幕坐标。
   const edges = host ? collectEdges(editor, host) : []
   const nodeRects = host ? collectNodeRects(editor, host) : []
+  const nodeRectsRef = useRef<ScreenNodeRect[]>([])
+  nodeRectsRef.current = nodeRects
+  const selectedNodeIds = new Set(
+    editor
+      .getSelectedShapes()
+      .filter((shape): shape is NodeCardShape => shape.type === 'node-card')
+      .map((shape) => shape.id)
+  )
 
   /** 判断屏幕坐标是否落在任一连线的可点击描边区域内。 */
   const hitTest = (clientX: number, clientY: number): TLShapeId | null => {
@@ -249,6 +282,31 @@ export function DataEdgeLayer({
     const rect = svg.getBoundingClientRect()
     if (rect.width === 0 && rect.height === 0) return null
     const point = new DOMPoint(clientX - rect.left, clientY - rect.top)
+    // 数据线即使几何上穿过卡片，也只能在节点下方；节点内部不能选中线、更不能出现剪刀。
+    if (
+      nodeRectsRef.current.some(
+        (node) =>
+          point.x >= node.x &&
+          point.x <= node.x + node.width &&
+          point.y >= node.y &&
+          point.y <= node.y + node.height
+      )
+    ) {
+      return null
+    }
+    // 端口可在无可见半圆提示的范围内跟随鼠标。该范围优先属于端口，不属于连线删除。
+    const insidePortZone = Array.from(document.querySelectorAll<HTMLElement>('.port-dot')).some(
+      (port) => {
+        const portRect = port.getBoundingClientRect()
+        return (
+          Math.hypot(
+            clientX - (portRect.left + portRect.width / 2),
+            clientY - (portRect.top + portRect.height / 2)
+          ) <= 27
+        )
+      }
+    )
+    if (insidePortZone) return null
     for (const path of svg.querySelectorAll<SVGPathElement>('.data-edge-hit')) {
       if (path.isPointInStroke(point)) return path.dataset.edgeId as TLShapeId
     }
@@ -259,6 +317,8 @@ export function DataEdgeLayer({
   // “这次按下属于连线选中”还是“完全放行给画布框选”。
   useEffect(() => {
     const onPointerDown = (event: PointerEvent): void => {
+      // 剪刀是唯一会删除连线的显式操作，不能被窗口捕获阶段的连线选中逻辑截获。
+      if (event.target instanceof Element && event.target.closest('.data-edge-scissors')) return
       // 预览弹层通过 portal 挂到 body；弹层上方即使覆盖着一条画布连线，也不能
       // 被连线的 window 捕获监听抢走 pointerdown，否则关闭按钮会收不到 click。
       if (event.target instanceof Element && event.target.closest('.media-preview-mask')) return
@@ -271,6 +331,9 @@ export function DataEdgeLayer({
       // 命中连线：选中并终止传播，画布不会开始框选/平移，已选连线也不会被清除。
       event.preventDefault()
       event.stopPropagation()
+      // 一条数据线被选中时，必须解除之前的节点选区。否则 Delete 会按节点批量删除
+      // 的分支执行，把上游节点和其余关联线一并删掉。
+      editor.setSelectedShapes([])
       select(hit)
     }
     const onContextMenu = (event: MouseEvent): void => {
@@ -282,6 +345,7 @@ export function DataEdgeLayer({
       // 右键落在连线上：选中该连线，且不让空白处的创建菜单弹出。
       event.preventDefault()
       event.stopPropagation()
+      editor.setSelectedShapes([])
       select(hit)
     }
     let moveFrame = 0
@@ -291,7 +355,13 @@ export function DataEdgeLayer({
       moveFrame = requestAnimationFrame(() => {
         moveFrame = 0
         const hit = hitTest(clientX, clientY)
-        setHoveredEdgeId((current) => (current === hit ? current : hit))
+        setHoveredEdge((current) => {
+          if (!hit) return current === null ? current : null
+          if (current?.id === hit && current.clientX === clientX && current.clientY === clientY) {
+            return current
+          }
+          return { id: hit, clientX, clientY }
+        })
       })
     }
     window.addEventListener('pointerdown', onPointerDown, { capture: true })
@@ -303,76 +373,113 @@ export function DataEdgeLayer({
       window.removeEventListener('contextmenu', onContextMenu, { capture: true })
       if (moveFrame) cancelAnimationFrame(moveFrame)
     }
-  }, [select])
+  }, [editor, select])
 
   if (!host) return null
   const hostBounds = host.getBoundingClientRect()
+  const hoveredEdgeId = hoveredEdge?.id ?? null
+
+  const deleteHoveredEdge = (): void => {
+    if (!hoveredEdge || !editor.getShape(hoveredEdge.id)) return
+    markUndoPoint(editor, 'delete-connection')
+    editor.deleteShapes([hoveredEdge.id])
+    clearEdgeSelection()
+    setHoveredEdge(null)
+    toast('已断开 1 条连线')
+  }
+
   return (
-    <svg className="data-edge-layer" ref={svgRef} aria-label="节点数据连线">
-      <defs>
-        <mask
-          id={overlapMaskId}
-          maskUnits="userSpaceOnUse"
-          x={0}
-          y={0}
-          width={hostBounds.width}
-          height={hostBounds.height}
-        >
-          <rect width={hostBounds.width} height={hostBounds.height} fill="white" />
-          {nodeRects.map((rect, index) => (
-            <rect key={index} {...rect} fill="black" />
-          ))}
-        </mask>
-        <clipPath id={overlapClipId} clipPathUnits="userSpaceOnUse">
-          {nodeRects.map((rect, index) => (
-            <rect key={index} {...rect} />
-          ))}
-        </clipPath>
-      </defs>
-      {edges.map((edge) => {
-        if (edge.provenance) {
-          // 追溯线与数据线共用统一的线条规则：节点之上的片段实线、被节点覆盖的
-          // 片段虚线。它不可交互（没有 hit 路径），只是“由该操作产生”的视觉标注。
+    <>
+      <svg className="data-edge-layer" ref={svgRef} aria-label="节点数据连线">
+        <defs>
+          <mask
+            id={overlapMaskId}
+            maskUnits="userSpaceOnUse"
+            x={0}
+            y={0}
+            width={hostBounds.width}
+            height={hostBounds.height}
+          >
+            <rect width={hostBounds.width} height={hostBounds.height} fill="white" />
+            {nodeRects.map((rect, index) => (
+              <rect key={index} {...rect} fill="black" />
+            ))}
+          </mask>
+          {/* 彩色只绘制在沿路径移动的一小段“水流”上，底层始终保留端口语义色。 */}
+          <linearGradient
+            id={flowGradientId}
+            gradientUnits="userSpaceOnUse"
+            spreadMethod="repeat"
+            x1="0"
+            y1="0"
+            x2="220"
+            y2="0"
+          >
+            <stop offset="0" stopColor="#54f4cb" />
+            <stop offset="0.22" stopColor="#4fc4ff" />
+            <stop offset="0.48" stopColor="#a889ff" />
+            <stop offset="0.7" stopColor="#6ff3b9" />
+            <stop offset="1" stopColor="#54f4cb" />
+          </linearGradient>
+        </defs>
+        {edges.map((edge) => {
+          if (edge.provenance) {
+            // 追溯线只在节点之外可见，且不可交互。
+            return (
+              <g key={edge.id}>
+                <path
+                  className="data-edge-visible artifact-provenance-edge"
+                  d={edge.path}
+                  mask={`url(#${overlapMaskId})`}
+                  style={{ stroke: edge.color, pointerEvents: 'none' }}
+                />
+              </g>
+            )
+          }
+          const active = edge.id === selectedEdgeId
+          const hovered = edge.id === hoveredEdgeId
+          const flowing = isFlowActive(edge, selectedNodeIds, selectedEdgeId)
           return (
-            <g key={edge.id}>
+            <g
+              className={`data-edge${active ? ' is-selected' : ''}${hovered ? ' is-hovered' : ''}${flowing ? ' is-flowing' : ''}`}
+              key={edge.id}
+            >
               <path
-                className="data-edge-visible artifact-provenance-edge"
+                className="data-edge-visible"
                 d={edge.path}
                 mask={`url(#${overlapMaskId})`}
-                style={{ stroke: edge.color, pointerEvents: 'none' }}
+                style={{ stroke: edge.color }}
               />
-              <path
-                className="data-edge-visible data-edge-obscured artifact-provenance-edge"
-                d={edge.path}
-                clipPath={`url(#${overlapClipId})`}
-                style={{ stroke: edge.color, pointerEvents: 'none' }}
-              />
+              {flowing && (
+                <path
+                  className="data-edge-flow"
+                  d={edge.path}
+                  pathLength="1000"
+                  mask={`url(#${overlapMaskId})`}
+                  style={{ stroke: `url(#${flowGradientId})` }}
+                />
+              )}
+              <path className="data-edge-hit" d={edge.path} data-edge-id={edge.id} />
             </g>
           )
-        }
-        const active = edge.id === selectedEdgeId
-        const hovered = edge.id === hoveredEdgeId
-        return (
-          <g
-            className={`data-edge${active ? ' is-selected' : ''}${hovered ? ' is-hovered' : ''}`}
-            key={edge.id}
-          >
-            <path
-              className="data-edge-visible"
-              d={edge.path}
-              mask={`url(#${overlapMaskId})`}
-              style={{ stroke: edge.color }}
-            />
-            <path
-              className="data-edge-visible data-edge-obscured"
-              d={edge.path}
-              clipPath={`url(#${overlapClipId})`}
-              style={{ stroke: edge.color }}
-            />
-            <path className="data-edge-hit" d={edge.path} data-edge-id={edge.id} />
-          </g>
-        )
-      })}
-    </svg>
+        })}
+      </svg>
+      {hoveredEdge && !hoveredEdge.id.startsWith('artifact:') && (
+        <button
+          className="data-edge-scissors"
+          type="button"
+          aria-label="删除此连线"
+          title="删除此连线"
+          style={{ left: hoveredEdge.clientX, top: hoveredEdge.clientY }}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation()
+            deleteHoveredEdge()
+          }}
+        >
+          <span aria-hidden="true">✂</span>
+        </button>
+      )}
+    </>
   )
 }

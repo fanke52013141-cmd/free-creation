@@ -20,7 +20,13 @@ import type {
   VocalSeparationConfig
 } from '../video-transform'
 import type { PalettePreferences } from '../palette-preferences'
-import type { Capability, Connection, JsonValue, ModelDefinition, ModelOperation } from '@free-creation/model-contracts'
+import type {
+  Capability,
+  Connection,
+  JsonValue,
+  ModelDefinition,
+  ModelOperation
+} from '@free-creation/model-contracts'
 
 export const IPC = {
   app: {
@@ -455,6 +461,7 @@ export interface ChatStartInput {
   messages: ChatMessage[]
   temperature?: number
   maxTokens?: number
+  reasoningEffort?: 'high'
 }
 
 export interface ImageGenerateInput {

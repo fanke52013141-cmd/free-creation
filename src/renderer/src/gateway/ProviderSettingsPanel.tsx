@@ -34,10 +34,13 @@ const newDraft = (specId: ProviderSpecId): Draft => {
     specId,
     baseURL: spec?.baseURL ?? '',
     apiKey: '',
-    models: normalizeModelsForSpec((spec?.suggestions ?? []).map((id) => ({
-      id,
-      modality: guessModelModality(id, specId)
-    })), specId)
+    models: normalizeModelsForSpec(
+      (spec?.suggestions ?? []).map((id) => ({
+        id,
+        modality: guessModelModality(id, specId)
+      })),
+      specId
+    )
   }
 }
 
@@ -46,7 +49,10 @@ const specLabel = (id: string): string => PROVIDER_SPECS.find((s) => s.id === id
 /** Product-level compatibility boundary. A model row cannot be classified into a node family
  * that its selected provider adapter cannot execute. */
 const modalitiesForSpec = (specId: ProviderSpecId): GatewayModelInfo['modality'][] => {
-  if (specId === 'toapis' || specId === 'openrouter') return ['image']
+  if (specId === 'toapis') return ['image']
+  // OpenRouter 的 chat/completions 适配器可执行文本，也可保留图片模型；旧版错误地
+  // 限制为图片，导致用户已添加的文本模型被改类，聊天和 AI 处理节点始终提示未配置。
+  if (specId === 'openrouter') return ['text', 'image']
   if (specId === 'seedance') return ['video']
   if (specId === 'minimax') return ['video', 'audio']
   if (specId === 'doubao-speech') return ['audio']
@@ -64,7 +70,8 @@ const normalizeModelsForSpec = (
 }
 
 const categoryLabel = (modality: GatewayModelInfo['modality'], specId: ProviderSpecId): string => {
-  if (modality !== 'audio') return modality === 'text' ? '文本' : modality === 'image' ? '图片' : '视频'
+  if (modality !== 'audio')
+    return modality === 'text' ? '文本' : modality === 'image' ? '图片' : '视频'
   return specId === 'doubao-speech' ? '语音合成' : '音频（合成/设计/克隆）'
 }
 
@@ -171,6 +178,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
       return [...next, res.data]
     })
     void loadSettingsProviders()
+    void useGatewayStore.getState().load()
     toast('供应商已保存')
   }
 
@@ -196,8 +204,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
     }
     // Never add a remote list implicitly: users choose a searchable subset first.
     const known = new Set(draft.models.map((m) => m.id))
-    const fresh = res.data.models
-      .filter((id) => !known.has(id))
+    const fresh = res.data.models.filter((id) => !known.has(id))
     setTestMsg(`测试成功：${res.data.message}`)
     if (!fresh.length) return
     setFetchedModels(fresh)
@@ -208,7 +215,12 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
 
   const addPickedModels = (): void => {
     if (!draft || !pickedModelIds.size) return
-    patch({ models: [...draft.models, ...[...pickedModelIds].map((id) => ({ id, modality: modalitiesForSpec(draft.specId)[0] }))] })
+    patch({
+      models: [
+        ...draft.models,
+        ...[...pickedModelIds].map((id) => ({ id, modality: modalitiesForSpec(draft.specId)[0] }))
+      ]
+    })
     setModelPickerOpen(false)
     setPickedModelIds(new Set())
   }
@@ -296,6 +308,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
       setDraft(null)
       setProviders((current) => current.filter((provider) => provider.id !== draft.id))
       void loadSettingsProviders()
+      void useGatewayStore.getState().load()
       toast('供应商已删除')
     }
   }
@@ -323,7 +336,8 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
         confirmText: '删除所选供应商',
         danger: true
       }))
-    ) return
+    )
+      return
     setBusy('delete')
     const results = await Promise.all(
       [...selectedProviderIds].map((providerId) => window.api.gateway.deleteProvider(providerId))
@@ -345,7 +359,12 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
       <div className="gw-panel" onClick={(e) => e.stopPropagation()}>
         <div className="gw-head">
           <span className="gw-title">模型供应商</span>
-          <button className="icon-btn" onClick={close} title="关闭 (Esc)" aria-label="关闭供应商设置">
+          <button
+            className="icon-btn"
+            onClick={close}
+            title="关闭 (Esc)"
+            aria-label="关闭供应商设置"
+          >
             <Icon name="close" size={16} />
           </button>
         </div>
@@ -367,7 +386,14 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                     {s.label}
                   </button>
                 ))}
-                <button className="gw-add" onClick={() => { setPicking(false); setDraft(null); setTestMsg('') }}>
+                <button
+                  className="gw-add"
+                  onClick={() => {
+                    setPicking(false)
+                    setDraft(null)
+                    setTestMsg('')
+                  }}
+                >
                   返回
                 </button>
               </div>
@@ -391,41 +417,55 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
               </div>
             ) : null}
             <div className="gw-provider-list" aria-label="模型供应商列表">
-              {providers.map((p) => selecting ? (
-                <label className="gw-item gw-item-selectable" key={p.id}>
-                  <input
-                    type="checkbox"
-                    checked={selectedProviderIds.has(p.id)}
-                    onChange={() => toggleProviderSelection(p.id)}
-                  />
-                  <span>
+              {providers.map((p) =>
+                selecting ? (
+                  <label className="gw-item gw-item-selectable" key={p.id}>
+                    <input
+                      type="checkbox"
+                      checked={selectedProviderIds.has(p.id)}
+                      onChange={() => toggleProviderSelection(p.id)}
+                    />
+                    <span>
+                      <span className="gw-item-name">{p.name}</span>
+                      <span className="gw-item-sub">
+                        {specLabel(p.specId)} · {p.models.length} 模型
+                      </span>
+                    </span>
+                  </label>
+                ) : (
+                  <button
+                    key={p.id}
+                    className={`gw-item ${draft?.id === p.id ? 'active' : ''}`}
+                    onClick={() => {
+                      setDraft(draftFromConfig(p))
+                      setPicking(false)
+                      setTestMsg('')
+                      setProbe(null)
+                      setExpanded(null)
+                    }}
+                  >
                     <span className="gw-item-name">{p.name}</span>
-                    <span className="gw-item-sub">{specLabel(p.specId)} · {p.models.length} 模型</span>
-                  </span>
-                </label>
-              ) : (
-                <button
-                  key={p.id}
-                  className={`gw-item ${draft?.id === p.id ? 'active' : ''}`}
-                  onClick={() => {
-                    setDraft(draftFromConfig(p))
-                    setPicking(false)
-                    setTestMsg('')
-                    setProbe(null)
-                    setExpanded(null)
-                  }}
-                >
-                  <span className="gw-item-name">{p.name}</span>
-                  <span className="gw-item-sub">
-                    {specLabel(p.specId)} · {p.models.length} 模型
-                  </span>
-                </button>
-              ))}
+                    <span className="gw-item-sub">
+                      {specLabel(p.specId)} · {p.models.length} 模型
+                    </span>
+                  </button>
+                )
+              )}
             </div>
             {selecting && (
               <div className="gw-selection-actions">
-                <button className="btn-ghost small" disabled={busy !== null} onClick={cancelSelection}>取消</button>
-                <button className="btn-ghost small danger-text" disabled={busy !== null || !selectedProviderIds.size} onClick={() => void deleteSelectedProviders()}>
+                <button
+                  className="btn-ghost small"
+                  disabled={busy !== null}
+                  onClick={cancelSelection}
+                >
+                  取消
+                </button>
+                <button
+                  className="btn-ghost small danger-text"
+                  disabled={busy !== null || !selectedProviderIds.size}
+                  onClick={() => void deleteSelectedProviders()}
+                >
                   {busy === 'delete' ? '删除中…' : '删除'}
                 </button>
               </div>
@@ -433,7 +473,10 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
           </div>
           <div className="gw-main">
             {selecting ? (
-              <div className="gw-empty big"><p>勾选要管理的供应商</p><p className="dim">删除会同时清除 API Key 与模型配置。</p></div>
+              <div className="gw-empty big">
+                <p>勾选要管理的供应商</p>
+                <p className="dim">删除会同时清除 API Key 与模型配置。</p>
+              </div>
             ) : draft ? (
               <>
                 <div className="gw-form">
@@ -502,7 +545,11 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                     </>
                   </button>
                 </div>
-                <div className="gw-model-column-head"><span>模型名称</span><span>显示名称</span><span>类别</span></div>
+                <div className="gw-model-column-head">
+                  <span>模型名称</span>
+                  <span>显示名称</span>
+                  <span>类别</span>
+                </div>
                 <div className="gw-models">
                   {draft.models.map((m, i) => (
                     <div className="gw-model-row" key={i}>
@@ -653,7 +700,15 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                   </button>
                   <div className="gw-foot-right">
                     {!draft.id && (
-                      <button className="btn-ghost" disabled={busy !== null} onClick={() => { setDraft(null); setPicking(false); setTestMsg('') }}>
+                      <button
+                        className="btn-ghost"
+                        disabled={busy !== null}
+                        onClick={() => {
+                          setDraft(null)
+                          setPicking(false)
+                          setTestMsg('')
+                        }}
+                      >
                         取消新增
                       </button>
                     )}
@@ -677,15 +732,64 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                 </div>
                 {modelPickerOpen && (
                   <div className="gw-model-picker-mask" role="presentation">
-                    <section className="gw-model-picker" role="dialog" aria-modal="true" aria-label="选择要添加的模型">
-                      <div className="gw-models-head"><span className="gw-label">选择要添加的模型</span><button className="icon-btn" onClick={() => setModelPickerOpen(false)} aria-label="关闭">×</button></div>
-                      <input className="gw-input" autoFocus aria-label="搜索模型 ID" value={modelSearch} placeholder="搜索模型 ID" onChange={(e) => setModelSearch(e.target.value)} />
-                      <div className="gw-model-picker-list">
-                        {fetchedModels.filter((id) => id.toLowerCase().includes(modelSearch.trim().toLowerCase())).map((id) => (
-                          <label key={id} className="gw-model-picker-item"><input type="checkbox" checked={pickedModelIds.has(id)} onChange={() => setPickedModelIds((current) => { const next = new Set(current); next.has(id) ? next.delete(id) : next.add(id); return next })} /><span>{id}</span></label>
-                        ))}
+                    <section
+                      className="gw-model-picker"
+                      role="dialog"
+                      aria-modal="true"
+                      aria-label="选择要添加的模型"
+                    >
+                      <div className="gw-models-head">
+                        <span className="gw-label">选择要添加的模型</span>
+                        <button
+                          className="icon-btn"
+                          onClick={() => setModelPickerOpen(false)}
+                          aria-label="关闭"
+                        >
+                          ×
+                        </button>
                       </div>
-                      <div className="gw-foot"><button className="btn-ghost" onClick={() => setModelPickerOpen(false)}>取消</button><button className="btn-primary" disabled={!pickedModelIds.size} onClick={addPickedModels}>添加所选（{pickedModelIds.size}）</button></div>
+                      <input
+                        className="gw-input"
+                        autoFocus
+                        aria-label="搜索模型 ID"
+                        value={modelSearch}
+                        placeholder="搜索模型 ID"
+                        onChange={(e) => setModelSearch(e.target.value)}
+                      />
+                      <div className="gw-model-picker-list">
+                        {fetchedModels
+                          .filter((id) =>
+                            id.toLowerCase().includes(modelSearch.trim().toLowerCase())
+                          )
+                          .map((id) => (
+                            <label key={id} className="gw-model-picker-item">
+                              <input
+                                type="checkbox"
+                                checked={pickedModelIds.has(id)}
+                                onChange={() =>
+                                  setPickedModelIds((current) => {
+                                    const next = new Set(current)
+                                    next.has(id) ? next.delete(id) : next.add(id)
+                                    return next
+                                  })
+                                }
+                              />
+                              <span>{id}</span>
+                            </label>
+                          ))}
+                      </div>
+                      <div className="gw-foot">
+                        <button className="btn-ghost" onClick={() => setModelPickerOpen(false)}>
+                          取消
+                        </button>
+                        <button
+                          className="btn-primary"
+                          disabled={!pickedModelIds.size}
+                          onClick={addPickedModels}
+                        >
+                          添加所选（{pickedModelIds.size}）
+                        </button>
+                      </div>
                     </section>
                   </div>
                 )}

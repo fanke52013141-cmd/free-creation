@@ -238,16 +238,29 @@ body {
   overflow: visible;
 }
 
+/*
+ * 选中框由节点自己的 HTML 外壳绘制，而不是 tldraw 通用 indicator：这能精确
+ * 贴合磨砂圆角卡片，也不会让作为持久化载体的隐藏 arrow 露出选中描边。
+ */
+.node-card-wrap.is-selected::after {
+  content: '';
+  position: absolute;
+  z-index: 7;
+  inset: -4px;
+  border: 1px solid rgba(239, 246, 255, 0.84);
+  border-radius: calc(var(--node-radius) + 4px);
+  box-shadow: none;
+  pointer-events: none;
+}
+
 .node-card {
   position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
   height: 100%;
-  /* 悬浮磨砂玻璃：无硬边框，通过背景模糊 + 多层柔和环境光漫反射阴影实现物理悬浮感 */
-  background: color-mix(in srgb, var(--card) 82%, transparent);
-  -webkit-backdrop-filter: blur(14px) saturate(1.4);
-  backdrop-filter: blur(14px) saturate(1.4);
+  /* 节点正文始终使用不透明材质：在大缩放与高 DPI 下也保持文字、媒体清晰。 */
+  background: var(--card);
   border: none;
   border-radius: var(--node-radius);
   overflow: hidden;
@@ -263,31 +276,63 @@ body {
 
 .node-card-wrap:not(.is-selected):hover .node-card {
   box-shadow:
-    0 6px 16px -2px rgba(0, 0, 0, 0.32),
-    0 22px 46px -6px rgba(0, 0, 0, 0.48),
+    0 10px 20px -5px rgba(0, 0, 0, 0.42),
+    0 28px 52px -8px rgba(0, 0, 0, 0.54),
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  transform: translateY(-1px);
+  /* 仅悬浮时像一张刚从桌面抬起的卡片；选中状态仍完全静止。 */
+  transform: translateY(-2px);
+  transform-origin: 50% 62%;
 }
 
 .tl-shape__inner--selected .node-card,
 .node-card-wrap.is-selected .node-card {
-  /* 选中态：通过光晕与柔和层次呈现，保持无硬边框 */
+  /* 边框由 wrap::after 绘制；卡片本体只承担玻璃材质与深度。 */
   box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.12),
     0 8px 20px -2px rgba(0, 0, 0, 0.35),
     0 26px 52px -6px rgba(0, 0, 0, 0.52),
-    inset 0 1px 0 rgba(255, 255, 255, 0.15);
-  transform: translateZ(0);
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  transform: none;
 }
 
-/* 类型色条：文档流内、卡片顶部 4px（呈现规范 v1.0 §8.1）。
-   不再 absolute 悬浮，高度计算无需任何 padding 补偿。 */
+/*
+ * 连线时才出现“纸张向前侧倾”的提示。没有 translateY：节点没有被抬起，
+ * 端口仍停在原始坐标；perspective + rotateY/rotateZ 只改变卡片内部的材质姿态。
+ */
+.node-card-wrap.is-connection-source .node-card {
+  transform: perspective(960px) rotateX(-2.5deg) rotateY(-5deg) rotateZ(-0.7deg);
+  transform-origin: right center;
+  box-shadow:
+    0 10px 26px -7px rgba(0, 0, 0, 0.56),
+    0 0 18px rgba(67, 196, 255, 0.13),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.node-card-wrap.is-connection-target .node-card {
+  transform: perspective(960px) rotateX(1.8deg) rotateY(4deg) rotateZ(0.45deg);
+  transform-origin: left center;
+  box-shadow:
+    0 10px 26px -7px rgba(0, 0, 0, 0.5),
+    0 0 18px rgba(127, 215, 255, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.17);
+}
+
+/* 类型色改为左上角的 45° 切角标识，不占正文高度也不横跨内容。 */
 .node-color-bar {
-  height: 4px;
-  width: 100%;
-  flex-shrink: 0;
+  display: none;
+}
+
+.node-card::before {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 0;
+  width: 22px;
+  height: 22px;
   background: var(--node-accent, var(--brand));
-  opacity: 0.7;
+  clip-path: polygon(0 0, 100% 0, 0 100%);
+  opacity: 0.9;
+  pointer-events: none;
 }
 
 /* 悬浮标题：位于 .node-card-wrap（卡片外上方 -34px），全宽单行布局，
@@ -514,7 +559,7 @@ body {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%) translate(var(--port-follow-x, 0), var(--port-follow-y, 0));
   /* 实色圆点：类型色即视觉，无渐变、无磨砂、无内阴影。 */
   background: var(--pc, #42b9f5);
   border: none;
@@ -522,6 +567,14 @@ body {
   transition:
     transform 140ms ease,
     opacity 140ms ease;
+}
+
+/* 扩大的是透明命中区，不是可见的半圆控件。 */
+.port-dot::before {
+  content: '';
+  position: absolute;
+  inset: -12px;
+  border-radius: 50%;
 }
 
 .port-dot.connected {
@@ -553,7 +606,8 @@ body {
 .port-dot.out:hover::after,
 .port-dot.in:hover::after,
 .port-dot.ok::after {
-  transform: translate(-50%, -50%) scale(1.3);
+  transform: translate(-50%, -50%) translate(var(--port-follow-x, 0), var(--port-follow-y, 0))
+    scale(1.22);
 }
 
 .port-dot.dim {
@@ -623,12 +677,10 @@ body {
 
 .conn-main-path {
   fill: none;
-  stroke-width: 1.7px;
-  stroke-dasharray: 7 7;
+  stroke-width: 1.2px;
   stroke-linecap: round;
   stroke-linejoin: round;
-  opacity: 0.92;
-  animation: none;
+  opacity: 0.76;
 }
 
 .conn-start-ring,
@@ -649,6 +701,26 @@ body {
   filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.4));
 }
 
+.conn-water-path {
+  fill: none;
+  stroke-width: 1.7px;
+  stroke-linecap: round;
+  /* 单段长度提升为旧值的四倍：像一条连续的极光水带，而不是短促闪点。 */
+  stroke-dasharray: 256 744;
+  stroke-dashoffset: 1000;
+  filter: drop-shadow(0 0 5px rgba(104, 236, 210, 0.58));
+  animation: edge-water-flow 1.6s linear infinite;
+}
+
+@keyframes edge-water-flow {
+  from {
+    stroke-dashoffset: 1000;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
 /* tldraw Arrow 形状仅是端口 binding / 持久化载体，已被 ui-surfaces.css 整体隐藏
    （opacity: 0），不再为它保留任何可见样式；业务连线由 DataEdgeLayer 统一绘制。 */
 
@@ -659,6 +731,10 @@ body {
   .topbar-shortcut,
   .undo-redo-btn {
     transition: none;
+  }
+
+  .conn-water-path {
+    animation: none;
   }
 }
 

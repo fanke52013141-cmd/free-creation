@@ -1,5 +1,11 @@
 import { useEffect, useState, type RefObject } from 'react'
-import type { Editor, TLShapeId } from 'tldraw'
+import {
+  useEditor,
+  useValue,
+  type Editor,
+  type TLSelectionBackgroundProps,
+  type TLShapeId
+} from 'tldraw'
 import { markUndoPoint } from './history'
 import { beginConnectionDrag } from './connection-drag'
 import { batchConnectionFromSelection } from './batch-connection'
@@ -26,7 +32,6 @@ interface SelectionOutline {
   top: number
   width: number
   height: number
-  corners: SelectionCornerPositions
   batchSource: ConnectionFrom | null
 }
 
@@ -42,30 +47,20 @@ interface ScreenPoint {
   y: number
 }
 
-interface SelectionCornerPositions {
-  topLeft: ScreenPoint
-  topRight: ScreenPoint
-  bottomRight: ScreenPoint
-  bottomLeft: ScreenPoint
-}
-
 interface SelectionGeometry {
   left: number
   top: number
   width: number
   height: number
-  corners: SelectionCornerPositions
 }
 
-// The visual point is deliberately a fixed screen-space affordance. It is outside the
-// dashed rectangle, while tldraw's larger, invisible target stays centered on the actual
-// rectangle corner. This makes the visual easy to read without changing resize hit testing.
-const SELECTION_CORNER_OUTSET_PX = 7
+// 选区框是纯视觉背景，固定为屏幕空间的留白，避免缩放后显得忽大忽小。
+export const SELECTION_FRAME_OUTSET_PX = 24
 
 /**
  * Derive every selection decoration from one page -> screen conversion. Do not add padding
- * here: tldraw's resize targets are based on the unpadded selection bounds, and a padded
- * outline was the source of the previous handle drift at different zoom levels.
+ * here: tldraw's resize targets remain based on the unpadded bounds. The visual frame itself
+ * has a separate fixed screen-space outset so it reads as a container around the selected nodes.
  */
 function selectionGeometryFromPageBounds(
   bounds: PageBoundsLike,
@@ -74,32 +69,50 @@ function selectionGeometryFromPageBounds(
 ): SelectionGeometry {
   const topLeft = pageToScreen({ x: bounds.x, y: bounds.y })
   const bottomRight = pageToScreen({ x: bounds.maxX, y: bounds.maxY })
-  const left = topLeft.x - hostBounds.left
-  const top = topLeft.y - hostBounds.top
-  const width = bottomRight.x - topLeft.x
-  const height = bottomRight.y - topLeft.y
+  const left = topLeft.x - hostBounds.left - SELECTION_FRAME_OUTSET_PX
+  const top = topLeft.y - hostBounds.top - SELECTION_FRAME_OUTSET_PX
+  const width = bottomRight.x - topLeft.x + SELECTION_FRAME_OUTSET_PX * 2
+  const height = bottomRight.y - topLeft.y + SELECTION_FRAME_OUTSET_PX * 2
 
   return {
     left,
     top,
     width,
-    height,
-    corners: {
-      topLeft: { x: left - SELECTION_CORNER_OUTSET_PX, y: top - SELECTION_CORNER_OUTSET_PX },
-      topRight: {
-        x: left + width + SELECTION_CORNER_OUTSET_PX,
-        y: top - SELECTION_CORNER_OUTSET_PX
-      },
-      bottomRight: {
-        x: left + width + SELECTION_CORNER_OUTSET_PX,
-        y: top + height + SELECTION_CORNER_OUTSET_PX
-      },
-      bottomLeft: {
-        x: left - SELECTION_CORNER_OUTSET_PX,
-        y: top + height + SELECTION_CORNER_OUTSET_PX
-      }
-    }
+    height
   }
+}
+
+/**
+ * 多选的磨砂框必须处于节点之下。把它挂到 tldraw 的 SelectionBackground 插槽，
+ * 而不是作为 CanvasEditor 的兄弟覆盖层，才能维持正确的渲染顺序。
+ */
+export function CanvasSelectionBackground({
+  bounds,
+  rotation
+}: TLSelectionBackgroundProps): React.JSX.Element | null {
+  const editor = useEditor()
+  const selectedCount = useValue(
+    'selected node count for selection backdrop',
+    () => selectedNodeIds(editor).length,
+    [editor]
+  )
+  const zoom = useValue('selection backdrop zoom', () => editor.getCamera().z || 1, [editor])
+
+  if (selectedCount < 2) return null
+
+  const outset = SELECTION_FRAME_OUTSET_PX / zoom
+  return (
+    <div
+      className="canvas-selection-underlay"
+      aria-hidden="true"
+      draggable={false}
+      style={{
+        width: bounds.width + outset * 2,
+        height: bounds.height + outset * 2,
+        transform: `translate(${bounds.x}px, ${bounds.y}px) rotate(${rotation}rad) translate(${-outset}px, ${-outset}px)`
+      }}
+    />
+  )
 }
 
 function batchKey(source: ConnectionFrom | null): string {
@@ -225,10 +238,6 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
         current.top === nextSelection.top &&
         current.width === nextSelection.width &&
         current.height === nextSelection.height &&
-        current.corners.topLeft.x === nextSelection.corners.topLeft.x &&
-        current.corners.topLeft.y === nextSelection.corners.topLeft.y &&
-        current.corners.bottomRight.x === nextSelection.corners.bottomRight.x &&
-        current.corners.bottomRight.y === nextSelection.corners.bottomRight.y &&
         batchKey(current.batchSource) === batchKey(nextSelection.batchSource)
           ? current
           : nextSelection
@@ -334,44 +343,38 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
       ))}
       {selection && (
         <>
-          <div
-            className="canvas-selection-outline"
-            aria-hidden="true"
-            style={{
-              left: selection.left,
-              top: selection.top,
-              width: selection.width,
-              height: selection.height
-            }}
-          />
-          {Object.entries(selection.corners).map(([corner, position]) => (
-            <span
-              key={corner}
-              className="canvas-selection-corner"
-              aria-hidden="true"
-              style={{ left: position.x, top: position.y }}
-            />
-          ))}
           {selection.batchSource && (
-            <button
-              type="button"
-              className="canvas-selection-batch-port"
-              aria-label={`批量连接 ${selection.batchSource.memberIds?.length ?? 0} 个节点`}
-              title="拖动此端口，将所有已选同类节点连接到目标的多值输入"
-              style={{
-                // 挂在选区右侧外沿、垂直居中：位置沿用原批量端口，仅形态改为圆形。
-                left: selection.left + selection.width,
-                top: selection.top + selection.height / 2
-              }}
-              onPointerDown={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-                beginConnectionDrag(selection.batchSource!, { x: event.clientX, y: event.clientY })
-              }}
-            >
-              {/* 只显示成员数量数字：不带图标、不带“项”字。 */}
-              <span>{selection.batchSource.memberIds?.length}</span>
-            </button>
+            <>
+              <span
+                className="canvas-selection-batch-connector"
+                aria-hidden="true"
+                style={{
+                  left: selection.left + selection.width,
+                  top: selection.top + selection.height / 2
+                }}
+              />
+              <button
+                type="button"
+                className="canvas-selection-batch-port"
+                aria-label={`批量连接 ${selection.batchSource.memberIds?.length ?? 0} 个节点`}
+                title="拖动此端口，将所有已选同类节点连接到目标的多值输入"
+                style={{
+                  // 端口和容器之间由细断续线相连，既保持轻盈，也明确它属于此选区。
+                  left: selection.left + selection.width,
+                  top: selection.top + selection.height / 2
+                }}
+                onPointerDown={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  beginConnectionDrag(selection.batchSource!, {
+                    x: event.clientX,
+                    y: event.clientY
+                  })
+                }}
+              >
+                <span>{selection.batchSource.memberIds?.length}</span>
+              </button>
+            </>
           )}
         </>
       )}

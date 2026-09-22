@@ -206,6 +206,9 @@ export function createEdge(
   const fromPort = fromPorts?.out.find((p) => p.id === from.portId)
   const toPort = toPorts?.in.find((p) => p.id === to.portId)
   if (!fromSpec || !toSpec || !fromPorts || !toPorts || !fromPort || !toPort) return false
+  // createEdge 也会被模板和快捷操作直接调用；关系的唯一性必须在这里兜底。
+  // 节点 ID 属于关系键的一部分，因此内容相同的两个不同节点仍可各连一条边。
+  if (edgeExists(editor, from, to)) return false
   if (!portCompatible(fromPort.type, toPort.type)) return false
   if (
     fromPort.type === 'json' &&
@@ -964,6 +967,7 @@ export function readConnectedNodeInputs(
 
   const targetPorts = getNodePorts(targetSpec, target).in
   const perPortOrder = new Map<string, number>()
+  const seenConnections = new Set<string>()
   const connected: ConnectedNodeInput[] = []
   // tldraw 的 shape index 是保存到快照的稳定顺序。显式排序让 many 输入在刷新后
   // 仍以同一顺序呈现，并与执行器读取连线时采用的边顺序保持一致。
@@ -974,6 +978,9 @@ export function readConnectedNodeInputs(
     const sourcePortId = typeof arrow.meta?.fromPort === 'string' ? arrow.meta.fromPort : null
     const targetPortId = typeof arrow.meta?.toPort === 'string' ? arrow.meta.toPort : null
     if (!start || !end || !sourcePortId || !targetPortId || end.toId !== targetNodeId) continue
+    const connectionKey = `${start.toId}:${sourcePortId}->${end.toId}:${targetPortId}`
+    if (seenConnections.has(connectionKey)) continue
+    seenConnections.add(connectionKey)
 
     const targetPort = targetPorts.find((port) => port.id === targetPortId)
     const source = editor.getShape<NodeCardShape>(start.toId)
@@ -1010,6 +1017,7 @@ export function gatherUpstreamText(
   targetPortId = 'in-text'
 ): string {
   const parts: string[] = []
+  const seenConnections = new Set<string>()
   for (const shape of orderedPageArrows(editor)) {
     const { start, end } = getArrowBindings(editor, shape.id)
     if (!start || !end) continue
@@ -1018,6 +1026,9 @@ export function gatherUpstreamText(
     if (!src || src.type !== 'node-card') continue
     const fromPort = shape.meta?.fromPort as string | undefined
     if (!fromPort) continue
+    const connectionKey = `${start.toId}:${fromPort}->${end.toId}:${targetPortId}`
+    if (seenConnections.has(connectionKey)) continue
+    seenConnections.add(connectionKey)
     const output = projectNodeOutputs(src)[fromPort]
     if ((output?.kind === 'text' || output?.kind === 'markdown') && output.text.trim()) {
       parts.push(output.text.trim())

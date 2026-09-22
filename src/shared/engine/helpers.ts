@@ -142,6 +142,13 @@ export interface ChatInput {
   messages: ChatMessage[]
   temperature?: number
   maxTokens?: number
+  reasoningEffort?: 'high'
+}
+
+/** 仅在本地运行期使用的流式回调，不会经过 IPC 序列化。 */
+export interface ChatStreamProgress {
+  text: string
+  reasoning: string
 }
 
 /**
@@ -151,11 +158,13 @@ export interface ChatInput {
 export function waitForChat(
   gateway: GatewayClient,
   input: ChatInput,
-  signal: CancelSignal
+  signal: CancelSignal,
+  onProgress?: (progress: ChatStreamProgress) => void
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     let taskId = ''
     let text = ''
+    let reasoning = ''
     let done = false
     const finish = (): void => {
       if (done) return
@@ -165,7 +174,14 @@ export function waitForChat(
     }
     const off = gateway.onEvent((event) => {
       if (!taskId || event.taskId !== taskId) return
-      if (event.kind === 'chat-delta') text += event.text
+      if (event.kind === 'chat-delta') {
+        text += event.text
+        onProgress?.({ text, reasoning })
+      }
+      if (event.kind === 'chat-reasoning') {
+        reasoning += event.text
+        onProgress?.({ text, reasoning })
+      }
       if (event.kind === 'chat-done') {
         finish()
         resolve(text)

@@ -421,15 +421,6 @@ export function CanvasBottomDock({ editor }: DockProps): React.JSX.Element {
               <Icon name="zoom-out" size={16} />
             </button>
           </Tooltip>
-          <Tooltip label="适配画布（缩放到所有节点）">
-            <button
-              className="dock-btn"
-              aria-label="适配画布（缩放到所有节点）"
-              onClick={() => editor && editor.zoomToFit({ animation: { duration: 220 } })}
-            >
-              <Icon name="fit" size={16} />
-            </button>
-          </Tooltip>
           <Tooltip label="重置缩放到 100%">
             <button
               className="dock-btn"

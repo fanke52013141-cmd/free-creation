@@ -15,6 +15,7 @@ import { toast } from '../stores/toast'
 import { Icon } from '../components/Icon'
 import { AppSelect } from '../components/AppSelect'
 import { getNodeType } from '../nodes/registry'
+import { isReasoningModelId } from '@shared/model-reasoning'
 
 interface ChatSidePanelProps {
   editor: Editor
@@ -121,6 +122,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
             messages: [],
             temperature: 0.7,
             maxTokens: 4096,
+            reasoningEffort: 'high',
             documents: [],
             summary: '',
             autoCompress: true
@@ -133,6 +135,10 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
   const [running, setRunning] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const systemComposingRef = useRef(false)
+  const latestMessage = data.messages.at(-1)
+  const latestMessageContent = latestMessage?.content
+  const latestMessageReasoning = latestMessage?.reasoning
 
   useEffect(() => {
     if (!loaded) void loadProviders()
@@ -141,7 +147,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
   useEffect(() => {
     const el = scrollRef.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [data.messages.length, running])
+  }, [data.messages.length, latestMessageContent, latestMessageReasoning, running])
 
   const update = (next: ChatData): void => {
     editor.updateShape({
@@ -218,6 +224,9 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
   }
 
   const selectedModel = options.find((o) => o.key === data.modelKey)
+  const selectedModelSupportsReasoning = Boolean(
+    selectedModel && isReasoningModelId(selectedModel.model.id)
+  )
   const docCount = data.documents?.length ?? 0
   const contract = getNodeType('chat')
 
@@ -285,14 +294,45 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
           <div className="csp-field">
             <label className="csp-label">系统提示词</label>
             <textarea
+              key={`system-${shapeId}`}
               className="csp-textarea"
-              value={data.system}
+              defaultValue={data.system}
               rows={4}
               spellCheck={false}
               placeholder="系统提示词（人设 / 输出要求）…"
-              onChange={(e) => update({ ...data, system: e.target.value })}
+              onCompositionStart={() => {
+                systemComposingRef.current = true
+              }}
+              onCompositionEnd={(e) => {
+                systemComposingRef.current = false
+                update({ ...data, system: e.currentTarget.value })
+              }}
+              onChange={(e) => {
+                // 组合输入法在候选阶段不能写回 tldraw store；写回会导致 textarea 重挂载，
+                // 中文候选词便会退回拼音。非组合输入仍实时保存。
+                if (!systemComposingRef.current) {
+                  update({ ...data, system: e.currentTarget.value })
+                }
+              }}
+              onBlur={(e) => update({ ...data, system: e.currentTarget.value })}
             />
           </div>
+
+          {selectedModelSupportsReasoning && (
+            <div className="csp-field">
+              <label className="csp-label csp-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={data.reasoningEffort !== 'off'}
+                  onChange={(e) =>
+                    update({ ...data, reasoningEffort: e.target.checked ? 'high' : 'off' })
+                  }
+                />
+                深度思考
+                <span className="csp-toggle-hint">已使用该模型支持的最高标准档（high）</span>
+              </label>
+            </div>
+          )}
 
           {/* 温度 */}
           <div className="csp-field">

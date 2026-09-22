@@ -3,13 +3,12 @@
 // 执行器只在 in-text / in-json 都为空时跳过，所以连线状态必须印在卡片上：
 // 只看模型和温度，用户无法判断运行会发生什么。
 import { useEffect, useRef, useState } from 'react'
-import { stopEventPropagation, useEditor, useValue } from 'tldraw'
+import { stopEventPropagation, useEditor } from 'tldraw'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { parseAiProcess, type AiProcessConfig } from '../../../engine/executors/aiProcess'
 import { ModelSelect, NoModelHint, useWheelScroll } from './shared'
 import type { NodeBodyProps } from '../../registry'
 import { readNodeConfig } from '../../../canvas/node-persistence'
-import { countIncomingConnections } from '../../../canvas/graph'
 import { AppSelect } from '../../../components/AppSelect'
 
 /** 从 meta.nodeResult 解析 AI 处理节点的上次运行结果。 */
@@ -100,16 +99,6 @@ export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
   const options = modelsByModality(providers, 'text')
   const selectedModel = options.find((o) => o.key === data.modelKey)
   const modelName = selectedModel?.model.name || selectedModel?.model.id || '未选择模型'
-  const textCount = useValue(
-    'ai-process text inputs',
-    () => countIncomingConnections(editor, shape.id, 'in-text'),
-    [editor, shape.id]
-  )
-  const jsonCount = useValue(
-    'ai-process json inputs',
-    () => countIncomingConnections(editor, shape.id, 'in-json'),
-    [editor, shape.id]
-  )
   const updateConfig = (next: AiProcessConfig): void => {
     editor.updateShape({
       id: shape.id,
@@ -250,20 +239,6 @@ export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
               onChange={(e) => updateConfig({ ...data, maxTokens: Number(e.target.value) || 4096 })}
             />
           </label>
-        </div>
-
-        <div className={`ai-process-wiring ${textCount + jsonCount > 0 ? 'ok' : 'warn'}`}>
-          <span className="ai-process-wiring-ports">
-            <code className="variable-expr">in-text</code>
-            <span>{textCount} 条</span>
-            <code className="variable-expr">in-json</code>
-            <span>{jsonCount} 项</span>
-          </span>
-          <span className="ai-process-wiring-note">
-            {textCount + jsonCount > 0
-              ? '两类输入合并成一次提问'
-              : '两个输入端口都没连线，运行会跳过'}
-          </span>
         </div>
       </div>
 

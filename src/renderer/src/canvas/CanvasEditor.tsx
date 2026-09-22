@@ -8,7 +8,7 @@ import { CarrierArrowUtil } from './CarrierArrowUtil'
 import { repairTldrawSnapshot } from './tldrawSnapshotRepair'
 import { NodeCreateMenu } from './NodeCreateMenu'
 import { NodeContextMenu } from './NodeContextMenu'
-import { ConnectionLayer } from './ConnectionLayer'
+import { ConnectionLayer, PendingConnectionLayer } from './ConnectionLayer'
 import { CanvasBottomDock } from './CanvasMinimap'
 import { MultiSelectToolbar } from './MultiSelectToolbar'
 import { CanvasSidePanel, type SidePanelTab } from './CanvasSidePanel'
@@ -17,7 +17,7 @@ import { NodeContractPanel } from './NodeContractPanel'
 import { DirectorStudioPanel } from './DirectorStudioPanel'
 import { useNodePanelStore } from '../stores/nodePanel'
 import { SearchPalette } from './SearchPalette'
-import { GroupOutlineLayer } from './GroupOutlineLayer'
+import { CanvasSelectionBackground, GroupOutlineLayer } from './GroupOutlineLayer'
 import { DataEdgeLayer } from './DataEdgeLayer'
 import { useDockMagnify } from './useDockMagnify'
 import {
@@ -55,6 +55,24 @@ import { Icon } from '../components/Icon'
 import { useEdgeSelectionStore } from '../stores/edgeSelection'
 import { PALETTE_CATEGORY_META, nodesForPaletteCategory } from './palette-categories'
 import { PALETTE_CATEGORY_IDS, type PaletteCategoryId } from '@shared/palette-preferences'
+
+// Stable by design: tldraw requires component overrides to keep their identity across renders.
+const TL_COMPONENTS = {
+  Toolbar: null,
+  StylePanel: null,
+  HelpMenu: null,
+  PageMenu: null,
+  DebugPanel: null,
+  MainMenu: null,
+  ZoomMenu: null,
+  Minimap: null,
+  NavigationPanel: null,
+  SharePanel: null,
+  ContextMenu: null,
+  SelectionBackground: CanvasSelectionBackground,
+  // 画布节点只允许移动、连接与分组；不提供框选后的旋转/缩放控制点。
+  SelectionForeground: null
+} as const
 
 registerBaseNodeTypes()
 registerScriptNodeType()
@@ -160,6 +178,8 @@ interface CreateMenuState {
   x: number
   y: number
   source?: ConnectionFrom
+  // 画布坐标：缩放、平移后临时引线仍能重新投影到源端口。
+  startPage?: { x: number; y: number }
 }
 
 interface NodeMenuState {
@@ -297,21 +317,22 @@ export function CanvasEditor({
     id: PaletteCategoryId
     top: number
   } | null>(null)
+  const paletteCloseTimerRef = useRef<number | null>(null)
   // macOS Dock 风格鱼眼放大：左侧节点面板（纵向）+ 底部工具栏（横向）
   const nodeScrollRef = useRef<HTMLDivElement>(null)
   const nodeFlyoutRef = useRef<HTMLDivElement>(null)
   const paletteUtilityRef = useRef<HTMLDivElement>(null)
   const nodeMagnify = useDockMagnify(nodeScrollRef, {
     direction: 'vertical',
-    maxScale: 1.18,
+    maxScale: 1.28,
     range: 85,
-    maxTranslate: 6
+    maxTranslate: 3
   })
   const nodeFlyoutMagnify = useDockMagnify(nodeFlyoutRef, {
     direction: 'vertical',
-    maxScale: 1.22,
+    maxScale: 1.28,
     range: 64,
-    maxTranslate: 5
+    maxTranslate: 3
   })
   const utilityMagnify = useDockMagnify(paletteUtilityRef, {
     direction: 'horizontal',
@@ -371,13 +392,17 @@ export function CanvasEditor({
   // 左侧节点面板：点击在视口中心创建；拖拽到画布在落点创建
   const SIDEBAR_W = 72
   const nodeTypes = allNodeTypes()
-  const paletteCategories = PALETTE_CATEGORY_IDS.filter((category) =>
-    nodesForPaletteCategory(nodeTypes, category).length > 0
+  const paletteCategories = PALETTE_CATEGORY_IDS.filter(
+    (category) => nodesForPaletteCategory(nodeTypes, category).length > 0
   )
   const activePaletteNodes = activePaletteCategory
     ? nodesForPaletteCategory(nodeTypes, activePaletteCategory.id)
     : []
   const openPaletteCategory = (category: PaletteCategoryId, target: HTMLElement): void => {
+    if (paletteCloseTimerRef.current !== null) {
+      window.clearTimeout(paletteCloseTimerRef.current)
+      paletteCloseTimerRef.current = null
+    }
     const rect = target.getBoundingClientRect()
     setActivePaletteCategory({
       id: category,
@@ -385,8 +410,20 @@ export function CanvasEditor({
       top: Math.max(12, Math.min(rect.top + rect.height / 2 - 16, window.innerHeight - 220))
     })
   }
-  // 居中选择器与贴边 hover 菜单不同：用户需要从左栏移动到画布中央，因此只在
-  // 点击外部或 Esc 时关闭，不能用 pointerleave 自动收起。
+  const keepPaletteOpen = (): void => {
+    if (paletteCloseTimerRef.current !== null) {
+      window.clearTimeout(paletteCloseTimerRef.current)
+      paletteCloseTimerRef.current = null
+    }
+  }
+  // 允许指针越过一级、二级菜单之间的留白；真正离开后立即回收，避免菜单悬在画布上。
+  const schedulePaletteClose = (): void => {
+    keepPaletteOpen()
+    paletteCloseTimerRef.current = window.setTimeout(() => {
+      paletteCloseTimerRef.current = null
+      setActivePaletteCategory(null)
+    }, 180)
+  }
   useEffect(() => {
     if (!activePaletteCategory) return
     const onPointerDown = (event: PointerEvent): void => {
@@ -402,6 +439,10 @@ export function CanvasEditor({
     return () => {
       window.removeEventListener('pointerdown', onPointerDown, true)
       window.removeEventListener('keydown', onKeyDown)
+      if (paletteCloseTimerRef.current !== null) {
+        window.clearTimeout(paletteCloseTimerRef.current)
+        paletteCloseTimerRef.current = null
+      }
     }
   }, [activePaletteCategory])
   // 左侧面板直接使用 spec.label —— 不再维护第二份名字表。
@@ -771,7 +812,7 @@ export function CanvasEditor({
   }, [])
 
   // 全局快捷键（window 捕获阶段，先于 tldraw 容器自身的快捷键管线）：
-  // Delete 删除选中节点/分组/连线，Ctrl+C/V 复制粘贴节点，Ctrl+D 原地复制，Ctrl+Shift+F 适配画布
+  // Delete 删除选中节点/分组/连线，Ctrl+C/V 复制粘贴节点，Ctrl+D 原地复制。
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       const editor = editorRef.current
@@ -793,9 +834,18 @@ export function CanvasEditor({
       if (!inCanvas) return
       const mod = e.ctrlKey || e.metaKey
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        // 节点/分组的批量删除永远优先于连线选择。框选节点时 tldraw 也可能把其
-        // 载体 arrow 纳入选区，若先删线就会出现“第一次 Delete 只删线”的两步操作。
-        // 删除节点后的 afterDelete handler 会一次性清理所有悬空连线。
+        // 专用连线选中态优先于画布历史选区：点选一条线后，Delete 必须只断开该线。
+        const selectedDataEdge = useEdgeSelectionStore.getState().selectedEdgeId
+        if (selectedDataEdge && editor.getShape(selectedDataEdge as TLShapeId)?.type === 'arrow') {
+          e.preventDefault()
+          e.stopPropagation()
+          markUndoPoint(editor, 'delete-connections')
+          editor.deleteShapes([selectedDataEdge as TLShapeId])
+          useEdgeSelectionStore.getState().clear()
+          toast('已断开 1 条连线')
+          return
+        }
+        // 节点/分组批量删除会一起回收关联线。
         const selected = editor
           .getSelectedShapes()
           .filter((shape) => shape.type === 'node-card' || shape.type === 'group')
@@ -822,17 +872,6 @@ export function CanvasEditor({
           toast(`已删除 ${selected.length} 项及 ${linkedArrows.length} 条关联连线`)
           return
         }
-        // 数据连线由专用连接层选中，不能平移但可明确断开。
-        const selectedDataEdge = useEdgeSelectionStore.getState().selectedEdgeId
-        if (selectedDataEdge && editor.getShape(selectedDataEdge as TLShapeId)?.type === 'arrow') {
-          e.preventDefault()
-          e.stopPropagation()
-          markUndoPoint(editor, 'delete-connections')
-          editor.deleteShapes([selectedDataEdge as TLShapeId])
-          useEdgeSelectionStore.getState().clear()
-          toast('已断开 1 条连线')
-          return
-        }
         // 兼容历史上曾被 tldraw 默认工具选中的箭头。
         const arrows = editor
           .getSelectedShapes()
@@ -846,13 +885,6 @@ export function CanvasEditor({
           toast(`已断开 ${arrows.length} 条连线`)
           return
         }
-      }
-      if (mod && e.shiftKey && (e.key === 'f' || e.key === 'F')) {
-        if (e.altKey) return // Shift+Alt+F 整理画布交给小地图
-        e.preventDefault()
-        e.stopPropagation()
-        editor.zoomToFit({ animation: { duration: 200 } })
-        return
       }
       if (mod && !e.shiftKey && (e.key === 'c' || e.key === 'C')) {
         const n = copySelectionToClipboard(editor)
@@ -1570,7 +1602,13 @@ export function CanvasEditor({
       }
     }
     pendingConnectRef.current = r.from
-    setMenu({ kind: 'create', x: r.screenPt.x, y: r.screenPt.y, source: r.from })
+    setMenu({
+      kind: 'create',
+      x: r.screenPt.x,
+      y: r.screenPt.y,
+      source: r.from,
+      startPage: editor.screenToPage(r.startPt)
+    })
   }, [])
 
   useEffect(() => {
@@ -1682,20 +1720,7 @@ export function CanvasEditor({
           zoomSpeed: 0.85,
           zoomSteps: [0.1, 0.25, 0.5, 1, 2, 4]
         }}
-        components={{
-          Toolbar: null,
-          StylePanel: null,
-          HelpMenu: null,
-          PageMenu: null,
-          DebugPanel: null,
-          MainMenu: null,
-          ZoomMenu: null,
-          Minimap: null,
-          NavigationPanel: null,
-          SharePanel: null,
-          // 禁用 tldraw 内置英文右键菜单，画布右键统一走自定义中文菜单
-          ContextMenu: null
-        }}
+        components={TL_COMPONENTS}
       />
       {editorInstance && <GroupOutlineLayer editor={editorInstance} hostRef={wrapRef} />}
       {editorInstance && <DataEdgeLayer editor={editorInstance} hostRef={wrapRef} />}
@@ -1705,7 +1730,11 @@ export function CanvasEditor({
           className="palette-node-scroll"
           ref={nodeScrollRef}
           onPointerMove={nodeMagnify.onPointerMove}
-          onPointerLeave={nodeMagnify.onPointerLeave}
+          onPointerEnter={keepPaletteOpen}
+          onPointerLeave={() => {
+            nodeMagnify.onPointerLeave()
+            schedulePaletteClose()
+          }}
         >
           <div className="palette-section palette-category-section">
             {paletteCategories.map((category) => {
@@ -1724,7 +1753,7 @@ export function CanvasEditor({
                   <span className="palette-icon">
                     <Icon name={meta.icon} size={20} />
                   </span>
-                  <span className="palette-label">{meta.shortLabel}</span>
+                  <span className="palette-label">{meta.label}</span>
                 </button>
               )
             })}
@@ -1732,31 +1761,32 @@ export function CanvasEditor({
         </div>
       </div>
       {activePaletteCategory && (
-        <div
-          className="palette-node-flyout"
-          style={{ left: 142, top: activePaletteCategory.top }}
-        >
+        <div className="palette-node-flyout" style={{ left: 174, top: activePaletteCategory.top }}>
           <div
             className="palette-node-flyout-list"
             ref={nodeFlyoutRef}
             onPointerMove={nodeFlyoutMagnify.onPointerMove}
-            onPointerLeave={nodeFlyoutMagnify.onPointerLeave}
+            onPointerEnter={keepPaletteOpen}
+            onPointerLeave={() => {
+              nodeFlyoutMagnify.onPointerLeave()
+              schedulePaletteClose()
+            }}
           >
             {activePaletteNodes.map((t) => (
               <button
                 key={t.type}
-                  className="palette-item palette-node-item"
-                  aria-label={`添加${t.label}节点`}
-                  onClick={() => {
-                    handleNodePick(t.type)
-                    setActivePaletteCategory(null)
-                  }}
-                  onPointerDown={(event) => startNodeDrag(event, t.type)}
-                >
-                  <span className="palette-icon" style={{ color: t.color }}>
-                    <Icon name={t.icon} size={20} />
-                  </span>
-                  <span className="palette-label">{t.label}</span>
+                className="palette-item palette-node-item"
+                aria-label={`添加${t.label}节点`}
+                onClick={() => {
+                  handleNodePick(t.type)
+                  setActivePaletteCategory(null)
+                }}
+                onPointerDown={(event) => startNodeDrag(event, t.type)}
+              >
+                <span className="palette-icon" style={{ color: t.color }}>
+                  <Icon name={t.icon} size={20} />
+                </span>
+                <span className="palette-label">{t.label}</span>
               </button>
             ))}
           </div>
@@ -1938,6 +1968,14 @@ export function CanvasEditor({
         </div>
       )}
       <ConnectionLayer />
+      {editorInstance && menu?.kind === 'create' && menu.source && menu.startPage && (
+        <PendingConnectionLayer
+          editor={editorInstance}
+          startPage={menu.startPage}
+          endPt={{ x: menu.x, y: menu.y }}
+          from={menu.source}
+        />
+      )}
       {menu?.kind === 'create' && (
         <NodeCreateMenu
           x={menu.x}

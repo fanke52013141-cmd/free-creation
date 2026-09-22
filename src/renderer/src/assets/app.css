@@ -647,9 +647,19 @@ select:focus-visible,
   min-height: 0;
 }
 
-/* tldraw 画布背景对齐 LibTV 中性灰 */
+/*
+ * 深色工作台：用低对比度密点阵给空间感，但绝不与端口、选择框竞争。
+ * 点阵单位是屏幕像素，缩放时由 tldraw 画布本身承载，不会被节点 transform 拉伸。
+ */
 .tl-background {
-  background: #171717 !important;
+  background-color: #111315 !important;
+  background-image: radial-gradient(
+    circle,
+    rgba(218, 229, 242, 0.28) 0.72px,
+    transparent 0.9px
+  ) !important;
+  background-position: 0 0 !important;
+  background-size: 22px 22px !important;
 }
 
 /* 隐藏 tldraw 未授权水印（"Get a license for production"） */
@@ -960,11 +970,17 @@ select:focus-visible,
   pointer-events: auto;
 }
 
-.canvas-selection-outline {
+.canvas-selection-underlay {
   position: absolute;
-  border: 1.5px dashed color-mix(in srgb, var(--brand) 80%, white);
-  border-radius: 6px;
-  background: transparent;
+  box-sizing: border-box;
+  border: 1px dashed rgba(234, 242, 250, 0.54);
+  border-radius: 18px;
+  background: rgba(223, 236, 249, 0.055);
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.055),
+    0 10px 34px rgba(0, 0, 0, 0.12);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
   pointer-events: none;
 }
 
@@ -976,26 +992,45 @@ select:focus-visible,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   padding: 0;
-  border: 1px dashed rgba(73, 221, 172, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: 50%;
-  background: rgba(12, 31, 30, 0.96);
-  color: #8ef0cf;
+  background: rgba(238, 247, 255, 0.94);
+  color: #18222c;
   font-size: 12px;
   font-weight: 700;
   line-height: 1;
   pointer-events: auto;
   cursor: crosshair;
   /* 组件里给的是选区右边缘坐标，再向右偏移 10px、垂直居中（原批量端口位置）。 */
-  transform: translate(10px, -50%);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
+  transform: translate(13px, -50%);
+  box-shadow:
+    0 0 0 5px rgba(255, 255, 255, 0.07),
+    0 3px 14px rgba(0, 0, 0, 0.35);
 }
 
 .canvas-selection-batch-port:hover {
-  background: rgba(20, 75, 61, 0.98);
-  border-style: solid;
+  background: #fff;
+  transform: translate(13px, -50%) scale(1.08);
+}
+
+/* 批量端口不是悬浮的数字：用短促断续线把它接回选区边缘。线段轻到近似断开，
+   但在视觉上始终明确“3 来自这组三个节点”。 */
+.canvas-selection-batch-connector {
+  position: absolute;
+  z-index: 1;
+  width: 29px;
+  height: 1px;
+  transform: translateY(-50%);
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(229, 241, 251, 0.62) 0 4px,
+    rgba(229, 241, 251, 0) 4px 7px
+  );
+  box-shadow: 0 0 5px rgba(126, 213, 255, 0.2);
+  pointer-events: none;
 }
 
 /* ── 节点创建菜单 ── */
@@ -1051,15 +1086,6 @@ select:focus-visible,
   color: var(--brand);
 }
 
-.node-menu-expand-arrow {
-  width: 0;
-  height: 0;
-  border-top: 4px solid transparent;
-  border-bottom: 4px solid transparent;
-  border-left: 4px solid currentColor;
-  opacity: 0.72;
-}
-
 .node-menu-submenu {
   position: absolute;
   z-index: 2;
@@ -1079,13 +1105,6 @@ select:focus-visible,
   background: var(--card);
   border-color: var(--line);
   box-shadow: 0 10px 28px rgba(20, 32, 44, 0.18);
-}
-
-.node-menu-submenu-title {
-  padding: 6px 10px 5px;
-  border-bottom: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 12px;
 }
 
 .node-menu-submenu .node-menu-list {
@@ -8245,20 +8264,91 @@ select:focus-visible,
   gap: 8px;
 }
 
-.gw-model-picker-mask { position: absolute; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center; background: rgba(6, 8, 12, .62); }
-.gw-model-picker { width: min(560px, calc(100% - 32px)); max-height: min(520px, calc(100% - 32px)); display: flex; flex-direction: column; gap: 10px; padding: 16px; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--card); box-shadow: 0 18px 60px rgba(0, 0, 0, .5); }
-.gw-model-picker-list { display: flex; flex: 1; flex-direction: column; gap: 2px; overflow: auto; overscroll-behavior: contain; }
-.gw-model-picker-item { display: flex; align-items: center; gap: 8px; padding: 7px 4px; color: var(--txt); font-size: 12px; cursor: pointer; }
-.gw-model-picker-item:hover { background: var(--card-hover); }
+.gw-model-picker-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 8, 12, 0.62);
+}
+.gw-model-picker {
+  width: min(560px, calc(100% - 32px));
+  max-height: min(520px, calc(100% - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5);
+}
+.gw-model-picker-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.gw-model-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 4px;
+  color: var(--txt);
+  font-size: 12px;
+  cursor: pointer;
+}
+.gw-model-picker-item:hover {
+  background: var(--card-hover);
+}
 
-.gw-side-label { padding: 2px 4px 4px; color: var(--muted); font-size: 11px; }
-.gw-model-count { width: auto; white-space: nowrap; }
-.gw-model-column-head { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 24px; gap: 6px; margin: 2px 0 4px; color: var(--muted); font-size: 11px; }
-.gw-model-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 24px; gap: 6px; align-items: center; }
-.gw-model-row .gw-input.grow, .gw-model-row .gw-input.w110, .gw-model-row .gw-input.w86 { width: 100%; flex: auto; }
-.gw-spec-picker { flex: 1; display: flex; flex-direction: column; }
-.gw-spec-picker .gw-add { margin-top: auto; border-style: solid; color: var(--txt); }
-.gw-add-bottom { margin-top: auto; }
+.gw-side-label {
+  padding: 2px 4px 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.gw-model-count {
+  width: auto;
+  white-space: nowrap;
+}
+.gw-model-column-head {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) 24px;
+  gap: 6px;
+  margin: 2px 0 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.gw-model-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) 24px;
+  gap: 6px;
+  align-items: center;
+}
+.gw-model-row .gw-input.grow,
+.gw-model-row .gw-input.w110,
+.gw-model-row .gw-input.w86 {
+  width: 100%;
+  flex: auto;
+}
+.gw-spec-picker {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.gw-spec-picker .gw-add {
+  margin-top: auto;
+  border-style: solid;
+  color: var(--txt);
+}
+.gw-add-bottom {
+  margin-top: auto;
+}
 /* ── M5 扩展节点样式 ── */
 
 /* JSON 节点 */
@@ -10086,6 +10176,16 @@ select:focus-visible,
   color: #fbbf24;
 }
 
+/* 节点卡片保持静默：连接缺失等使用提示不以黄色常驻打扰创作。真实执行错误仍保留。 */
+.chat-compact-run.warn,
+.ai-process-wiring.warn,
+.iterate-wiring.warn,
+.node-wiring.warn,
+.processor-status.warn,
+.gen-capability-note.warn {
+  display: none !important;
+}
+
 /* 循环节点运行中进度条 */
 .iterate-progress-wrap {
   display: flex;
@@ -10170,10 +10270,16 @@ canvas.tl-canvas-indicators {
    - 单节点选中框由 NodeCardUtil.indicator() 绘制（已改为无描边）。
    - 多选/拖动时的整体外框：SelectionForeground 的实线 rect
      (.tl-selection__fg__outline) 与 SelectionBackground 的填充
-     (.tl-selection__bg)。这里一并隐藏，保留 .tl-handle 圆圈。
+   (.tl-selection__bg)。这里一并隐藏，也不显示缩放/旋转控制点。
    ============================================================ */
 .tl-selection__fg__outline,
 .tl-selection__bg {
+  display: none !important;
+}
+
+.tl-handle,
+.tl-corner-handle,
+.tl-rotate-handle {
   display: none !important;
 }
 

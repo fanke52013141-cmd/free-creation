@@ -28,6 +28,11 @@ export function startChat(send: Send, input: ChatStartInput): string {
         temperature: input.temperature,
         // AI SDK v7 使用 maxOutputTokens；IPC 仍保留 maxTokens 以保持现有 UI 数据兼容。
         maxOutputTokens: input.maxTokens,
+        // @ai-sdk/openai-compatible 会将该配置转换为 reasoning_effort；仅由执行器
+        // 在确认是推理模型时传入，因此普通模型不会收到未知参数。
+        providerOptions: input.reasoningEffort
+          ? { [input.providerId]: { reasoningEffort: input.reasoningEffort } }
+          : undefined,
         abortSignal: ctrl.signal
       })
       let receivedTextDelta = false

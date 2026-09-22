@@ -122,6 +122,7 @@ export function collectContractInputs(
 
   const errors: string[] = []
   const mutable = new Map<string, NodeValuePacket[]>()
+  const seenConnections = new Set<string>()
   const resolved = portsOf(node)
   const inputPorts = new Map(resolved.in.map((port) => [port.id, port]))
 
@@ -158,6 +159,9 @@ export function collectContractInputs(
   for (const edge of edges) {
     if (edge.to.nodeId !== node.id) continue
     if (options.ignoreEdgeIds?.includes(edge.id)) continue
+    const connectionKey = `${edge.from.nodeId}:${edge.from.portId}->${edge.to.nodeId}:${edge.to.portId}`
+    if (seenConnections.has(connectionKey)) continue
+    seenConnections.add(connectionKey)
     const target = inputPorts.get(edge.to.portId)
     if (!target) {
       errors.push(`连线 ${edge.id} 指向不存在的输入端口：${edge.to.portId}`)
