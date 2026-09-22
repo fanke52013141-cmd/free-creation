@@ -88,7 +88,9 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
 
   const [draft, setDraft] = useState<Draft | null>(null)
   const [picking, setPicking] = useState(false)
-  const [busy, setBusy] = useState<'test' | 'save' | null>(null)
+  const [selecting, setSelecting] = useState(false)
+  const [selectedProviderIds, setSelectedProviderIds] = useState<Set<string>>(new Set())
+  const [busy, setBusy] = useState<'test' | 'save' | 'delete' | null>(null)
   const [testMsg, setTestMsg] = useState('')
   const [probe, setProbe] = useState<ProbeProviderResult | null>(null)
   const [fetchedModels, setFetchedModels] = useState<string[]>([])
@@ -281,13 +283,55 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
       }))
     )
       return
+    setBusy('delete')
     const res = await window.api.gateway.deleteProvider(draft.id)
+    setBusy(null)
     if (res.ok) {
       setDraft(null)
       setProviders((current) => current.filter((provider) => provider.id !== draft.id))
       void loadSettingsProviders()
       toast('供应商已删除')
     }
+  }
+
+  const toggleProviderSelection = (providerId: string): void => {
+    setSelectedProviderIds((current) => {
+      const next = new Set(current)
+      if (next.has(providerId)) next.delete(providerId)
+      else next.add(providerId)
+      return next
+    })
+  }
+
+  const cancelSelection = (): void => {
+    setSelecting(false)
+    setSelectedProviderIds(new Set())
+  }
+
+  const deleteSelectedProviders = async (): Promise<void> => {
+    if (!selectedProviderIds.size) return
+    if (
+      !(await useConfirmStore.getState().confirm({
+        title: `删除 ${selectedProviderIds.size} 个供应商`,
+        message: '会同时删除这些供应商的 API Key 与模型配置；删除后需重新配置才能使用。',
+        confirmText: '删除所选供应商',
+        danger: true
+      }))
+    ) return
+    setBusy('delete')
+    const results = await Promise.all(
+      [...selectedProviderIds].map((providerId) => window.api.gateway.deleteProvider(providerId))
+    )
+    setBusy(null)
+    if (results.some((result) => !result.ok || !result.data)) {
+      toast('部分供应商删除失败，请重试')
+      void loadSettingsProviders()
+      return
+    }
+    setProviders((current) => current.filter((provider) => !selectedProviderIds.has(provider.id)))
+    setDraft(null)
+    cancelSelection()
+    toast(`已删除 ${results.length} 个供应商`)
   }
 
   return createPortal(
@@ -321,14 +365,39 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                   返回
                 </button>
               </div>
-            ) : (
-              <button className="gw-add gw-side-actions" onClick={() => setPicking(true)}>
-                <Icon name="add" size={14} />
-                新增供应商
-              </button>
-            )}
-            <div className="gw-provider-list">
-              {providers.map((p) => (
+            ) : !selecting ? (
+              <div className="gw-side-toolbar gw-side-actions">
+                <button className="gw-add" onClick={() => setPicking(true)}>
+                  <Icon name="add" size={14} />
+                  新建
+                </button>
+                <button
+                  className="gw-select-toggle"
+                  onClick={() => {
+                    setSelecting(true)
+                    setSelectedProviderIds(new Set())
+                    setDraft(null)
+                    setTestMsg('')
+                  }}
+                >
+                  多选
+                </button>
+              </div>
+            ) : null}
+            <div className="gw-provider-list" aria-label="模型供应商列表">
+              {providers.map((p) => selecting ? (
+                <label className="gw-item gw-item-selectable" key={p.id}>
+                  <input
+                    type="checkbox"
+                    checked={selectedProviderIds.has(p.id)}
+                    onChange={() => toggleProviderSelection(p.id)}
+                  />
+                  <span>
+                    <span className="gw-item-name">{p.name}</span>
+                    <span className="gw-item-sub">{specLabel(p.specId)} · {p.models.length} 模型</span>
+                  </span>
+                </label>
+              ) : (
                 <button
                   key={p.id}
                   className={`gw-item ${draft?.id === p.id ? 'active' : ''}`}
@@ -347,9 +416,19 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                 </button>
               ))}
             </div>
+            {selecting && (
+              <div className="gw-selection-actions">
+                <button className="btn-ghost small" disabled={busy !== null} onClick={cancelSelection}>取消</button>
+                <button className="btn-ghost small danger-text" disabled={busy !== null || !selectedProviderIds.size} onClick={() => void deleteSelectedProviders()}>
+                  {busy === 'delete' ? '删除中…' : '删除'}
+                </button>
+              </div>
+            )}
           </div>
           <div className="gw-main">
-            {draft ? (
+            {selecting ? (
+              <div className="gw-empty big"><p>勾选要管理的供应商</p><p className="dim">删除会同时清除 API Key 与模型配置。</p></div>
+            ) : draft ? (
               <>
                 <div className="gw-form">
                   <label className="gw-row">

@@ -7851,6 +7851,31 @@ select:focus-visible,
   flex: 0 0 auto;
 }
 
+.gw-side-toolbar,
+.gw-selection-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.gw-side-toolbar .gw-add {
+  flex: 1;
+}
+
+.gw-select-toggle {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.gw-select-toggle:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
 .gw-provider-list {
   display: flex;
   min-height: 0;
@@ -7890,6 +7915,32 @@ select:focus-visible,
 .gw-item-sub {
   font-size: 11px;
   color: var(--muted);
+}
+
+.gw-item-selectable {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.gw-item-selectable input {
+  margin: 3px 0 0;
+  accent-color: var(--brand);
+}
+
+.gw-item-selectable > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gw-selection-actions {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
 }
 
 .gw-add {
