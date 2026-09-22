@@ -181,6 +181,7 @@ app.whenReady().then(async () => {
     const kindArg = process.argv.find((arg) => arg.startsWith('--model-smoke-kind='))
     const runVoiceClone = process.argv.includes('--model-smoke-voice-clone')
     const runVoiceDesign = process.argv.includes('--model-smoke-voice-design')
+    const runChatNode = process.argv.includes('--model-smoke-chat-node')
     const requestedKinds = kindArg
       ?.slice('--model-smoke-kind='.length)
       .split(',')
@@ -193,7 +194,8 @@ app.whenReady().then(async () => {
       kinds: requestedKinds?.length ? requestedKinds : undefined,
       // 单项复测不应顺带再花一次音色设计费用。
       includeVoiceDesign: !requestedKinds || runVoiceDesign,
-      includeVoiceClone: !requestedKinds || runVoiceClone
+      includeVoiceClone: !requestedKinds || runVoiceClone,
+      includeChatNode: runChatNode
     })
     log.info(`model smoke test finished: ${reportPath}`)
     // stdout 只输出路径和汇总，完整报告不含密钥并写入用户数据目录。

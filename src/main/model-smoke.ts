@@ -18,6 +18,7 @@ import { DEFAULT_IMAGE_EDIT_CONFIG } from '../shared/image-edit'
 import { getDataDir } from './store/db'
 import { generateSpeechToAsset } from './gateway/audio'
 import { createChatModel } from './gateway/factory'
+import { startChat } from './gateway/chat'
 import { generateImageEditToAsset, generateImageToAsset } from './gateway/image'
 import { bootstrapLegacyProvidersToCatalog, getProvider, listProviders, type LegacyCatalogEntry } from './gateway/providers.repo'
 import { designMiniMaxVoice } from './gateway/voice'
@@ -27,7 +28,7 @@ import { SqliteModelHost } from './model-host/sqlite-model-host'
 import type { ModelOperation } from '@free-creation/model-contracts'
 
 export type SmokeKind =
-  'configuration' | 'text' | 'image' | 'image-edit' | 'speech' | 'voice-design' | 'voice-clone'
+  'configuration' | 'text' | 'chat' | 'image' | 'image-edit' | 'speech' | 'voice-design' | 'voice-clone'
 export type SmokeStatus = 'pass' | 'fail' | 'skipped'
 
 export interface SmokeTarget {
@@ -64,6 +65,8 @@ export interface ModelSmokeOptions {
   includeVoiceDesign?: boolean
   /** 使用本轮生成的非真人参考音频，验证 MiniMax 克隆及用新音色再合成的完整链路。 */
   includeVoiceClone?: boolean
+  /** 验证对话节点实际使用的主进程流式事件通道（不是仅探测模型）。 */
+  includeChatNode?: boolean
 }
 
 const DEFAULT_FEATURE_KEYS: Partial<Record<ModelOperation, string[]>> = {
@@ -79,6 +82,7 @@ const SMOKE_TIMEOUT_MS: Record<SmokeKind, number> = {
   configuration: 0,
   // 对话最小请求不该长期无回执；中转站卡住时继续下一项并留下失败证据。
   text: 90_000,
+  chat: 90_000,
   // 图片任务与 MiniMax 异步语音本身允许更长的服务端轮询时间。
   image: 12 * 60_000,
   'image-edit': 12 * 60_000,
@@ -201,6 +205,51 @@ async function runText(target: SmokeTarget): Promise<Omit<SmokeResult, 'id'>> {
       durationMs: Date.now() - started,
       detail: errorDetail(error, provider)
     }
+  }
+}
+
+/**
+ * 对话节点不直接 await 模型，而是通过 gateway/chat 的流式事件写回渲染器。此验收刻意
+ * 走同一个 startChat 入口，确认真实供应商能返回 text-delta 且以 chat-done 正常收尾。
+ */
+async function runChatNodeTransport(target: SmokeTarget): Promise<Omit<SmokeResult, 'id'>> {
+  const started = Date.now()
+  const provider = getProvider(target.provider.id)
+  if (!provider) {
+    return { kind: 'chat', status: 'fail', provider: publicProvider(target.provider), modelId: target.model.id, durationMs: Date.now() - started, detail: '供应商记录不存在' }
+  }
+  try {
+    const response = await new Promise<string>((resolve, reject) => {
+      let taskId = ''
+      let text = ''
+      const timer = setTimeout(() => reject(new Error('对话流式事件未在期限内完成')), SMOKE_TIMEOUT_MS.chat)
+      taskId = startChat(
+        (event) => {
+          if (event.taskId !== taskId) return
+          if (event.kind === 'chat-delta') text += event.text
+          if (event.kind === 'chat-error') {
+            clearTimeout(timer)
+            reject(new Error(event.error))
+          }
+          if (event.kind === 'chat-done') {
+            clearTimeout(timer)
+            resolve(text)
+          }
+        },
+        {
+          providerId: provider.id,
+          modelId: target.model.id,
+          // 与文本模型验收使用同一条最小指令，排除具体措辞触发上游内容策略的干扰。
+          messages: [{ role: 'user', content: '这是连通性验收。请只回复 OK。' }],
+          temperature: 0,
+          maxTokens: 96
+        }
+      )
+    })
+    if (!response.trim()) throw new Error('对话流式通道完成但未收到正文分片')
+    return { kind: 'chat', status: 'pass', provider: publicProvider(provider), modelId: target.model.id, durationMs: Date.now() - started, detail: `对话节点流式通道成功，收到 ${response.trim().slice(0, 80)}` }
+  } catch (error) {
+    return { kind: 'chat', status: 'fail', provider: publicProvider(provider), modelId: target.model.id, durationMs: Date.now() - started, detail: errorDetail(error, provider) }
   }
 }
 
@@ -605,6 +654,17 @@ export async function runModelSmokeTest(
       }
       results.push({ id: randomUUID(), ...editResult })
       if (editResult.status === 'pass') await recordCatalogPass(editResult.kind, target.provider.id, target.model.id, editResult.detail)
+      await persist()
+    }
+    if (target.kind === 'text' && options.includeChatNode) {
+      let chatResult: Omit<SmokeResult, 'id'>
+      try {
+        chatResult = await withTimeout('chat', runChatNodeTransport(target))
+      } catch (error) {
+        const provider = getProvider(target.provider.id)
+        chatResult = { kind: 'chat', status: 'fail', provider: publicProvider(provider ?? target.provider), modelId: target.model.id, durationMs: SMOKE_TIMEOUT_MS.chat, detail: provider ? errorDetail(error, provider) : String(error) }
+      }
+      results.push({ id: randomUUID(), ...chatResult })
       await persist()
     }
   }

@@ -30,12 +30,20 @@ export function startChat(send: Send, input: ChatStartInput): string {
         maxOutputTokens: input.maxTokens,
         abortSignal: ctrl.signal
       })
+      let receivedTextDelta = false
       for await (const part of result.fullStream) {
         if (part.type === 'text-delta') {
+          receivedTextDelta = true
           send({ kind: 'chat-delta', taskId, text: part.text })
         } else if (part.type === 'reasoning-delta') {
           send({ kind: 'chat-reasoning', taskId, text: part.text })
         }
+      }
+      // 部分 OpenAI 兼容中转站只在最终聚合结果中给出正文，不发送 text-delta。
+      // 若不回退，模型实际已回答，节点却只会收到 chat-done 并显示空白回复。
+      if (!receivedTextDelta) {
+        const finalText = await result.text
+        if (finalText.trim()) send({ kind: 'chat-delta', taskId, text: finalText })
       }
       send({ kind: 'chat-done', taskId })
     } catch (e) {

@@ -33,6 +33,7 @@
     "model:smoke": "electron . --model-smoke-test",
     "model:smoke:build": "pnpm build && pnpm model:smoke",
     "model:smoke:text": "electron . --model-smoke-test --model-smoke-kind=text",
+    "model:smoke:chat": "electron . --model-smoke-test --model-smoke-kind=text --model-smoke-chat-node",
     "model:smoke:voice": "electron . --model-smoke-test --model-smoke-kind=speech --model-smoke-voice-clone",
     "model:smoke:voice-design": "electron . --model-smoke-test --model-smoke-kind=speech --model-smoke-voice-design",
     "postinstall": "electron-builder install-app-deps",
