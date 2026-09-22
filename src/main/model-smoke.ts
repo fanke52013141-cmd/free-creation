@@ -9,24 +9,29 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { streamText } from 'ai'
+import { createCanvas } from '@napi-rs/canvas'
 import type { GatewayModelInfo, ProviderConfig, ProviderSummary } from '../shared/types'
 import { DEFAULT_SPEECH_CONFIG, type SpeechBackend, type SpeechConfig } from '../shared/speech'
 import { DEFAULT_TTS_CONFIG } from '../shared/tts'
 import { DEFAULT_VOICE_DESIGN_CONFIG } from '../shared/voice-design'
+import { DEFAULT_IMAGE_EDIT_CONFIG } from '../shared/image-edit'
 import { getDataDir } from './store/db'
 import { generateSpeechToAsset } from './gateway/audio'
 import { createChatModel } from './gateway/factory'
-import { generateImageToAsset } from './gateway/image'
-import { getProvider, listProviders } from './gateway/providers.repo'
+import { generateImageEditToAsset, generateImageToAsset } from './gateway/image'
+import { bootstrapLegacyProvidersToCatalog, getProvider, listProviders, type LegacyCatalogEntry } from './gateway/providers.repo'
 import { designMiniMaxVoice } from './gateway/voice'
 import { transformTts } from './media/tts-transform'
+import { getDb } from './store/db'
+import { SqliteModelHost } from './model-host/sqlite-model-host'
+import type { ModelOperation } from '@free-creation/model-contracts'
 
 export type SmokeKind =
-  'configuration' | 'text' | 'image' | 'speech' | 'voice-design' | 'voice-clone'
+  'configuration' | 'text' | 'image' | 'image-edit' | 'speech' | 'voice-design' | 'voice-clone'
 export type SmokeStatus = 'pass' | 'fail' | 'skipped'
 
 export interface SmokeTarget {
-  kind: Exclude<SmokeKind, 'voice-design' | 'voice-clone' | 'configuration'>
+  kind: Exclude<SmokeKind, 'voice-design' | 'voice-clone' | 'configuration' | 'image-edit'>
   provider: ProviderSummary
   model: GatewayModelInfo
 }
@@ -61,12 +66,22 @@ export interface ModelSmokeOptions {
   includeVoiceClone?: boolean
 }
 
+const DEFAULT_FEATURE_KEYS: Partial<Record<ModelOperation, string[]>> = {
+  'text.generate': ['chat.generate', 'text.process', 'script.breakdown'],
+  'image.generate': ['image.generate'],
+  'image.edit': ['image.edit'],
+  'speech.synthesize': ['speech.synthesize'],
+  'voice.design': ['voice.design'],
+  'voice.clone': ['voice.clone']
+}
+
 const SMOKE_TIMEOUT_MS: Record<SmokeKind, number> = {
   configuration: 0,
   // 对话最小请求不该长期无回执；中转站卡住时继续下一项并留下失败证据。
   text: 90_000,
   // 图片任务与 MiniMax 异步语音本身允许更长的服务端轮询时间。
   image: 12 * 60_000,
+  'image-edit': 12 * 60_000,
   speech: 12 * 60_000,
   'voice-design': 90_000,
   'voice-clone': 12 * 60_000
@@ -227,6 +242,47 @@ async function runImage(target: SmokeTarget, projectId: string): Promise<Omit<Sm
       durationMs: Date.now() - started,
       detail: errorDetail(error, provider)
     }
+  }
+}
+
+/** 生成标准 PNG：只为确认图生图请求真正携带了参考图片，不读取用户素材。 */
+function smokeReferencePng(): Buffer {
+  const canvas = createCanvas(64, 64)
+  const context = canvas.getContext('2d')
+  context.fillStyle = '#ffffff'
+  context.fillRect(0, 0, 64, 64)
+  context.fillStyle = '#1976d2'
+  context.beginPath()
+  context.arc(32, 32, 14, 0, Math.PI * 2)
+  context.fill()
+  return canvas.toBuffer('image/png')
+}
+
+async function runImageEdit(target: SmokeTarget, projectId: string): Promise<Omit<SmokeResult, 'id'>> {
+  const started = Date.now()
+  const provider = getProvider(target.provider.id)
+  if (!provider) {
+    return { kind: 'image-edit', status: 'fail', provider: publicProvider(target.provider), modelId: target.model.id, durationMs: Date.now() - started, detail: '供应商记录不存在' }
+  }
+  try {
+    const asset = await generateImageEditToAsset(
+      {
+        projectId,
+        sourceMediaId: 'model-smoke-reference-image',
+        providerId: provider.id,
+        modelId: target.model.id,
+        prompt: '将参考图中的蓝色圆点改为绿色圆点，保持白色背景且不要添加文字。',
+        size: 'auto',
+        config: { ...DEFAULT_IMAGE_EDIT_CONFIG, instruction: '将蓝色圆点改为绿色圆点。' }
+      },
+      [smokeReferencePng()]
+    )
+    return {
+      kind: 'image-edit', status: 'pass', provider: publicProvider(provider), modelId: target.model.id,
+      durationMs: Date.now() - started, detail: '真实图片编辑成功，参考图片已上传并返回编辑结果', asset: assetSummary(asset)
+    }
+  } catch (error) {
+    return { kind: 'image-edit', status: 'fail', provider: publicProvider(provider), modelId: target.model.id, durationMs: Date.now() - started, detail: errorDetail(error, provider) }
   }
 }
 
@@ -397,6 +453,13 @@ export async function runModelSmokeTest(
   const runId = randomUUID()
   const startedAt = new Date().toISOString()
   const projectId = `model-smoke-${runId}`
+  const catalogHost = new SqliteModelHost(getDb())
+  const importedEntries = bootstrapLegacyProvidersToCatalog(catalogHost)
+  // 旧配置导入后，仍用导入前读取到的 legacy provider 做本轮真实调用；新目录只有
+  // 在以下实际调用成功后才会出现 verified 记录并成为节点的唯一可选来源。
+  const importedByLegacyModel = new Map(
+    importedEntries.map((entry) => [`${entry.legacyProviderId}::${entry.modelId}`, entry])
+  )
   const providers = listProviders()
   const allowedKinds = new Set(options.kinds ?? ['text', 'image', 'speech'])
   const targets = collectSmokeTargets(providers).filter((target) => allowedKinds.has(target.kind))
@@ -426,6 +489,61 @@ export async function runModelSmokeTest(
       skipped: results.filter((result) => result.status === 'skipped').length
     }
     await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8')
+  }
+
+  const recordCatalogPass = async (
+    kind: SmokeKind,
+    providerId: string,
+    modelId: string | undefined,
+    detail: string
+  ): Promise<void> => {
+    if (!modelId) return
+    // 首次导入的同一轮可直接用内存映射；之后的低成本单项复测也必须能回写
+    // 既有目录，不能因为“不是第一轮”而只显示成功却没有真正激活功能键。
+    const entry: LegacyCatalogEntry | undefined =
+      importedByLegacyModel.get(`${providerId}::${modelId}`) ?? (() => {
+        // 已接管的 providerId 本身就是 legacy-<oldId>；不可再加一次前缀，
+        // 否则“真实验收通过”会找不到同一条目录连接，验证记录无法回写。
+        const connectionId = providerId.startsWith('legacy-') ? providerId : `legacy-${providerId}`
+        const model = catalogHost.listModels(connectionId).find((item) => item.modelId === modelId)
+        return model
+          ? {
+              legacyProviderId: providerId,
+              modelId,
+              connectionId,
+              modelDefinitionId: model.id,
+              capabilities: model.capabilities
+            }
+          : undefined
+      })()
+    if (!entry) return
+    const operation: ModelOperation | null =
+      kind === 'text' ? 'text.generate'
+        : kind === 'image' ? 'image.generate'
+          : kind === 'image-edit' ? 'image.edit'
+          : kind === 'speech' ? 'speech.synthesize'
+            : kind === 'voice-design' ? 'voice.design'
+              : kind === 'voice-clone' ? 'voice.clone'
+                : null
+    if (!operation || !entry.capabilities.some((capability) => capability.operation === operation)) return
+    const checkedAt = new Date().toISOString()
+    await catalogHost.saveValidation({
+      connectionId: entry.connectionId,
+      modelDefinitionId: entry.modelDefinitionId,
+      operation,
+      status: 'verified',
+      message: `真实端到端验收通过：${detail}`,
+      checkedAt,
+      verifiedAt: checkedAt
+    })
+    for (const featureKey of DEFAULT_FEATURE_KEYS[operation] ?? []) {
+      catalogHost.saveBinding({
+        featureKey,
+        connectionId: entry.connectionId,
+        modelDefinitionId: entry.modelDefinitionId,
+        operation
+      })
+    }
   }
   await persist()
 
@@ -468,7 +586,27 @@ export async function runModelSmokeTest(
       }
     }
     results.push({ id: randomUUID(), ...result })
+    if (result.status === 'pass') {
+      await recordCatalogPass(result.kind, target.provider.id, target.model.id, result.detail)
+    }
     await persist()
+    // 只有明确支持参考图编辑的 ToAPIS 图片模型才会进入这一项；不能把纯文生图
+    // 的 2xx 当成 image.edit 已通过。
+    if (target.kind === 'image' && target.provider.specId === 'toapis') {
+      let editResult: Omit<SmokeResult, 'id'>
+      try {
+        editResult = await withTimeout('image-edit', runImageEdit(target, projectId))
+      } catch (error) {
+        const provider = getProvider(target.provider.id)
+        editResult = {
+          kind: 'image-edit', status: 'fail', provider: publicProvider(provider ?? target.provider), modelId: target.model.id,
+          durationMs: SMOKE_TIMEOUT_MS['image-edit'], detail: provider ? errorDetail(error, provider) : String(error)
+        }
+      }
+      results.push({ id: randomUUID(), ...editResult })
+      if (editResult.status === 'pass') await recordCatalogPass(editResult.kind, target.provider.id, target.model.id, editResult.detail)
+      await persist()
+    }
   }
 
   // 音色设计是 MiniMax 的供应商级能力，做一次即可。没有 MiniMax 时明确记录为跳过。
@@ -476,7 +614,12 @@ export async function runModelSmokeTest(
   if (options.includeVoiceDesign !== false && minimax?.hasApiKey) {
     const task = runVoiceDesign(minimax, projectId)
     try {
-      results.push({ id: randomUUID(), ...(await withTimeout('voice-design', task)) })
+      const result = await withTimeout('voice-design', task)
+      results.push({ id: randomUUID(), ...result })
+      if (result.status === 'pass') {
+        const modelId = minimax.models.find((model) => model.modality === 'audio')?.id
+        await recordCatalogPass(result.kind, minimax.id, modelId, result.detail)
+      }
     } catch (error) {
       const provider = getProvider(minimax.id)
       results.push({
@@ -502,7 +645,11 @@ export async function runModelSmokeTest(
   if (options.includeVoiceClone !== false && minimax?.hasApiKey && minimaxAudioModel) {
     const task = runVoiceClone(minimax, minimaxAudioModel.id, projectId)
     try {
-      results.push({ id: randomUUID(), ...(await withTimeout('voice-clone', task)) })
+      const result = await withTimeout('voice-clone', task)
+      results.push({ id: randomUUID(), ...result })
+      if (result.status === 'pass') {
+        await recordCatalogPass(result.kind, minimax.id, minimaxAudioModel.id, result.detail)
+      }
     } catch (error) {
       const provider = getProvider(minimax.id)
       results.push({

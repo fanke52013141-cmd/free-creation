@@ -6,6 +6,8 @@ import type { GatewayModelInfo, ProviderConfig, ProviderSummary } from '../../sh
 import type { SaveProviderInput } from '../../shared/contracts'
 import { getDb } from '../store/db'
 import { decryptSecret, encryptionAvailable, encryptSecret, isEncryptedSecret } from './keycrypto'
+import type { Capability, Connection, ModelOperation } from '@free-creation/model-contracts'
+import type { SqliteModelHost } from '../model-host/sqlite-model-host'
 
 interface ProviderRow {
   id: string
@@ -80,6 +82,91 @@ function catalogConfigs(): ProviderConfig[] {
   return [...grouped.values()].map((p) => ({ ...p, models: p.models.filter((m, i, list) => list.findIndex((x) => x.id === m.id && x.modality === m.modality) === i) }))
 }
 
+export interface LegacyCatalogEntry {
+  legacyProviderId: string
+  modelId: string
+  connectionId: string
+  modelDefinitionId: string
+  capabilities: Capability[]
+}
+
+/**
+ * 旧供应商面板曾直接写 providers 表，而当前节点运行已经要求「功能键 → 已验证模型」。
+ * 这是一条一次性、非破坏性的接管桥：只在新目录为空时复制现有的可用连接；不删除旧行，
+ * 不把“已保存”冒充为“已验证”。真实 smoke 验收成功后才会由调用方写验证/绑定记录。
+ */
+export function bootstrapLegacyProvidersToCatalog(host: SqliteModelHost): LegacyCatalogEntry[] {
+  if (host.listConnections().length > 0) return []
+  const protocolFor = (specId: ProviderConfig['specId']): Connection['protocol'] => {
+    if (specId === 'minimax') return 'minimax'
+    if (specId === 'toapis') return 'toapis'
+    if (specId === 'doubao-speech') return 'volcengine'
+    if (specId === 'openrouter') return 'openrouter'
+    return 'openai-compatible'
+  }
+  const operationsFor = (provider: ProviderConfig, model: GatewayModelInfo): ModelOperation[] => {
+    if (model.modality === 'text') return ['text.generate']
+    // ToAPIS gpt-image-2 的生产驱动使用同一异步任务接口完成图生图；将两个能力
+    // 一起登记，但 image.edit 仍须独立真实验收后才能被功能键绑定。
+    if (model.modality === 'image')
+      return provider.specId === 'toapis' ? ['image.generate', 'image.edit'] : ['image.generate']
+    if (model.modality === 'audio') {
+      return provider.specId === 'minimax'
+        ? ['speech.synthesize', 'voice.design', 'voice.clone']
+        : ['speech.synthesize']
+    }
+    if (model.modality === 'video') return ['video.generate']
+    return []
+  }
+  const capabilitiesFor = (operations: ModelOperation[]): Capability[] =>
+    operations.map((operation) => ({
+      operation,
+      asynchronous: ['video.generate', 'voice.clone', 'voice.design'].includes(operation),
+      streaming: operation === 'text.generate',
+      acceptedAssetKinds: [],
+      producedAssetKinds: [],
+      controls: {}
+    }))
+
+  const entries: LegacyCatalogEntry[] = []
+  const legacyRows = getDb()
+    .prepare('SELECT id FROM providers ORDER BY created_at ASC')
+    .all() as Array<{ id: string }>
+  for (const row of legacyRows) {
+    const provider = getProvider(row.id)
+    if (!provider?.apiKey) continue
+    const connectionId = `legacy-${provider.id}`
+    host.saveConnection({
+      id: connectionId,
+      name: provider.name,
+      protocol: protocolFor(provider.specId),
+      baseUrl: provider.baseURL,
+      apiKey: provider.apiKey
+    })
+    for (const model of provider.models) {
+      const operations = operationsFor(provider, model)
+      if (!operations.length) continue
+      const modelDefinitionId = `legacy-${provider.id}-${model.id}`.replace(/[^a-zA-Z0-9_-]/g, '_')
+      const capabilities = capabilitiesFor(operations)
+      host.saveModel({
+        id: modelDefinitionId,
+        connectionId,
+        modelId: model.id,
+        name: model.name || model.id,
+        capabilities
+      })
+      entries.push({
+        legacyProviderId: provider.id,
+        modelId: model.id,
+        connectionId,
+        modelDefinitionId,
+        capabilities
+      })
+    }
+  }
+  return entries
+}
+
 function normalizeModel(v: unknown): GatewayModelInfo | null {
   if (typeof v === 'string') return { id: v, modality: 'text' }
   if (typeof v === 'object' && v !== null) {
@@ -150,7 +237,19 @@ export function listProviders(): ProviderSummary[] {
     .all() as ProviderRow[]
   const legacy = rows.map(toSummary)
   const catalog = catalogConfigs().map((p) => ({ id: p.id, name: p.name, specId: p.specId, baseURL: p.baseURL, models: p.models, createdAt: p.createdAt, hasApiKey: Boolean(p.apiKey) }))
-  return [...legacy, ...catalog]
+  // 接管是逐能力完成的：图片已经验收进新目录时，不能把尚未接管的文本/语音档案
+  // 一并藏掉。相同“模型 ID + 模态”则由已验证目录档案取代旧行；其余旧档案保留到
+  // 自己通过真实验收。这样既不出现同一模型的双份选择，也不会在半程接管时断业务。
+  const catalogModelKeys = new Set(
+    catalog.flatMap((provider) => provider.models.map((model) => `${model.id}:${model.modality}`))
+  )
+  const remainingLegacy = legacy
+    .map((provider) => ({
+      ...provider,
+      models: provider.models.filter((model) => !catalogModelKeys.has(`${model.id}:${model.modality}`))
+    }))
+    .filter((provider) => provider.models.length > 0)
+  return [...catalog, ...remainingLegacy]
 }
 
 /** The sole source used by canvas node selectors and executors. */

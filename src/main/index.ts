@@ -180,6 +180,7 @@ app.whenReady().then(async () => {
   if (isModelSmokeTest) {
     const kindArg = process.argv.find((arg) => arg.startsWith('--model-smoke-kind='))
     const runVoiceClone = process.argv.includes('--model-smoke-voice-clone')
+    const runVoiceDesign = process.argv.includes('--model-smoke-voice-design')
     const requestedKinds = kindArg
       ?.slice('--model-smoke-kind='.length)
       .split(',')
@@ -191,7 +192,7 @@ app.whenReady().then(async () => {
     const { report, reportPath } = await runModelSmokeTest({
       kinds: requestedKinds?.length ? requestedKinds : undefined,
       // 单项复测不应顺带再花一次音色设计费用。
-      includeVoiceDesign: !requestedKinds,
+      includeVoiceDesign: !requestedKinds || runVoiceDesign,
       includeVoiceClone: !requestedKinds || runVoiceClone
     })
     log.info(`model smoke test finished: ${reportPath}`)
