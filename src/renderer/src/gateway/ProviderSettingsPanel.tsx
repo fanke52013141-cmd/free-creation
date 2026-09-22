@@ -301,26 +301,8 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
         </div>
         <div className="gw-body">
           <div className="gw-side">
-            {providers.map((p) => (
-              <button
-                key={p.id}
-                className={`gw-item ${draft?.id === p.id ? 'active' : ''}`}
-                onClick={() => {
-                  setDraft(draftFromConfig(p))
-                  setPicking(false)
-                  setTestMsg('')
-                  setProbe(null)
-                  setExpanded(null)
-                }}
-              >
-                <span className="gw-item-name">{p.name}</span>
-                <span className="gw-item-sub">
-                  {specLabel(p.specId)} · {p.models.length} 模型
-                </span>
-              </button>
-            ))}
             {picking ? (
-              <div className="gw-spec-picker">
+              <div className="gw-spec-picker gw-side-actions">
                 {PROVIDER_SPECS.map((s) => (
                   <button
                     key={s.id}
@@ -340,11 +322,31 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                 </button>
               </div>
             ) : (
-              <button className="gw-add gw-add-bottom" onClick={() => setPicking(true)}>
+              <button className="gw-add gw-side-actions" onClick={() => setPicking(true)}>
                 <Icon name="add" size={14} />
                 新增供应商
               </button>
             )}
+            <div className="gw-provider-list">
+              {providers.map((p) => (
+                <button
+                  key={p.id}
+                  className={`gw-item ${draft?.id === p.id ? 'active' : ''}`}
+                  onClick={() => {
+                    setDraft(draftFromConfig(p))
+                    setPicking(false)
+                    setTestMsg('')
+                    setProbe(null)
+                    setExpanded(null)
+                  }}
+                >
+                  <span className="gw-item-name">{p.name}</span>
+                  <span className="gw-item-sub">
+                    {specLabel(p.specId)} · {p.models.length} 模型
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
           <div className="gw-main">
             {draft ? (

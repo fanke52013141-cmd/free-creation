@@ -7843,6 +7843,20 @@ select:focus-visible,
   display: flex;
   flex-direction: column;
   gap: 6px;
+  overflow: hidden;
+}
+
+/* The create action remains available while a long provider catalog scrolls. */
+.gw-side-actions {
+  flex: 0 0 auto;
+}
+
+.gw-provider-list {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
   overflow-y: auto;
 }
 
