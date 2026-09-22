@@ -8,7 +8,7 @@ export interface MigrationDatabase {
   pragma(statement: string, options?: { simple?: boolean }): unknown
 }
 
-export const DB_SCHEMA_VERSION = 5
+export const DB_SCHEMA_VERSION = 6
 
 const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
@@ -164,6 +164,20 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
         ON model_definitions(connection_id);
       CREATE INDEX IF NOT EXISTS idx_model_validations_status
         ON model_validations(status);
+    `)
+  },
+  // M6：媒体名称是资产中心的用户可见信息，不能在重新读取 SQLite 后退化为随机 ID。
+  (database) => {
+    database.exec(`
+      ALTER TABLE media ADD COLUMN name TEXT;
+      UPDATE media
+      SET name = CASE kind
+        WHEN 'image' THEN '图片素材-' || substr(id, 1, 6)
+        WHEN 'video' THEN '视频素材-' || substr(id, 1, 6)
+        WHEN 'audio' THEN '音频素材-' || substr(id, 1, 6)
+        ELSE '文件素材-' || substr(id, 1, 6)
+      END
+      WHERE name IS NULL OR trim(name) = '';
     `)
   }
 ]

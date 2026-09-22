@@ -219,7 +219,7 @@ export function importProject(srcPath: string): ProjectMetaInfo {
       'INSERT INTO projects (id, name, created_at, updated_at, graph_version) VALUES (?, ?, ?, ?, 0)'
     )
     const insertMedia = database.prepare(
-      'INSERT INTO media (id, kind, mime, path, size_bytes, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+      'INSERT INTO media (id, kind, mime, path, size_bytes, created_at, name) VALUES (?, ?, ?, ?, ?, ?, ?)'
     )
     database.transaction(() => {
       insertProject.run(newId, name, now, now)
@@ -233,7 +233,8 @@ export function importProject(srcPath: string): ProjectMetaInfo {
           mime,
           ref.newPath,
           readFileSync(stagedPath).byteLength,
-          now
+          now,
+          `${kindFor(mime) === 'image' ? '图片' : kindFor(mime) === 'video' ? '视频' : kindFor(mime) === 'audio' ? '音频' : '文件'}素材-${ref.newId.slice(0, 6)}`
         )
       }
     })()

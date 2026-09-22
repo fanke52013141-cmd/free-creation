@@ -5790,6 +5790,8 @@ select:focus-visible,
 .assets-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  grid-auto-rows: max-content;
+  align-content: start;
   gap: 8px;
   overflow-y: auto;
   flex: 1;
@@ -5797,6 +5799,9 @@ select:focus-visible,
 
 .asset-card {
   position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--line);
   border-radius: 8px;
   overflow: hidden;
@@ -5818,7 +5823,9 @@ select:focus-visible,
 
 .asset-thumb {
   width: 100%;
-  aspect-ratio: 16 / 10;
+  aspect-ratio: 16 / 9;
+  min-height: 72px;
+  flex: 0 0 auto;
   background: var(--bg);
   display: flex;
   align-items: center;
@@ -5827,18 +5834,33 @@ select:focus-visible,
 }
 
 .asset-thumb img {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
 .asset-thumb-icon {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
   font-size: 28px;
   opacity: 0.7;
 }
 
+.asset-thumb-icon.failed {
+  color: var(--muted);
+}
+
+.asset-thumb-icon.failed small {
+  font-size: 10px;
+}
+
 .asset-info {
   padding: 6px 8px;
+  min-height: 42px;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: 2px;

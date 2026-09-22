@@ -65,9 +65,9 @@ export async function importMedia(projectId: string, srcAbsPath: string): Promis
 
     getDb()
       .prepare(
-        'INSERT INTO media (id, kind, mime, path, size_bytes, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+        'INSERT INTO media (id, kind, mime, path, size_bytes, created_at, name) VALUES (?, ?, ?, ?, ?, ?, ?)'
       )
-      .run(id, kind, mime, relPath, st.size, now)
+      .run(id, kind, mime, relPath, st.size, now, basename(srcAbsPath, ext))
 
     const asset: MediaAsset = {
       id,
@@ -117,11 +117,12 @@ export async function saveBufferAsset(
   await writeFile(destAbs, buf)
 
   const now = Date.now()
+  const assetName = name.replace(/[\\/:*?"<>|\s]+/g, '-').slice(0, 40) || id
   getDb()
     .prepare(
-      'INSERT INTO media (id, kind, mime, path, size_bytes, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+      'INSERT INTO media (id, kind, mime, path, size_bytes, created_at, name) VALUES (?, ?, ?, ?, ?, ?, ?)'
     )
-    .run(id, kind, mime, relPath, buf.length, now)
+    .run(id, kind, mime, relPath, buf.length, now, assetName)
 
   return {
     id,
@@ -130,7 +131,7 @@ export async function saveBufferAsset(
     path: relPath,
     sizeBytes: buf.length,
     createdAt: now,
-    name: name.replace(/[\\/:*?"<>|\s]+/g, '-').slice(0, 40) || id
+    name: assetName
   }
 }
 
@@ -165,11 +166,12 @@ export async function saveFileAsset(
   const sizeBytes = (await stat(destAbs)).size
 
   const now = Date.now()
+  const assetName = name.replace(/[\\/:*?"<>|\s]+/g, '-').slice(0, 40) || id
   getDb()
     .prepare(
-      'INSERT INTO media (id, kind, mime, path, size_bytes, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+      'INSERT INTO media (id, kind, mime, path, size_bytes, created_at, name) VALUES (?, ?, ?, ?, ?, ?, ?)'
     )
-    .run(id, kind, mime, relPath, sizeBytes, now)
+    .run(id, kind, mime, relPath, sizeBytes, now, assetName)
 
   return {
     id,
@@ -178,7 +180,7 @@ export async function saveFileAsset(
     path: relPath,
     sizeBytes,
     createdAt: now,
-    name: name.replace(/[\\/:*?"<>|\s]+/g, '-').slice(0, 40) || id
+    name: assetName
   }
 }
 export async function readMediaBuffer(
@@ -200,7 +202,7 @@ export async function readMediaBuffer(
 export function listMedia(projectId: string): MediaAsset[] {
   const rows = getDb()
     .prepare(
-      `SELECT id, kind, mime, path, size_bytes, created_at FROM media
+      `SELECT id, kind, mime, path, size_bytes, created_at, name FROM media
        WHERE path LIKE ? ORDER BY created_at DESC`
     )
     .all(`projects/${projectId}/media/%`) as {
@@ -210,6 +212,7 @@ export function listMedia(projectId: string): MediaAsset[] {
     path: string
     size_bytes: number
     created_at: number
+    name: string | null
   }[]
 
   return rows.map((r) => ({
@@ -218,7 +221,8 @@ export function listMedia(projectId: string): MediaAsset[] {
     mime: r.mime,
     path: r.path,
     sizeBytes: r.size_bytes,
-    createdAt: r.created_at
+    createdAt: r.created_at,
+    ...(r.name ? { name: r.name } : {})
   }))
 }
 

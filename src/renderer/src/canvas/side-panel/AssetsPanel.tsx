@@ -72,13 +72,14 @@ function AssetCard({
   onLocate: () => void
   onOpenRun: () => void
 }): React.JSX.Element {
-  const name = asset.name ?? asset.id
+  const [imageFailed, setImageFailed] = useState(false)
+  const name = asset.name ?? `${asset.kind === 'image' ? '图片' : asset.kind === 'video' ? '视频' : asset.kind === 'audio' ? '音频' : '文件'}素材-${asset.id.slice(0, 6)}`
   return (
     <div
       className="asset-card"
       role="button"
       tabIndex={0}
-      title={`${asset.name ?? asset.id} · ${formatSize(asset.sizeBytes)}`}
+      title={`${name} · ${formatSize(asset.sizeBytes)}`}
       aria-label={`添加 ${name} 到画布`}
       onClick={onAdd}
       onKeyDown={(event) => {
@@ -89,16 +90,23 @@ function AssetCard({
       }}
     >
       <div className="asset-thumb">
-        {asset.kind === 'image' ? (
-          <img src={mediaUrl(asset.path)} alt={asset.name ?? ''} loading="lazy" draggable={false} />
+        {asset.kind === 'image' && !imageFailed ? (
+          <img
+            src={mediaUrl(asset.path)}
+            alt={name}
+            loading="lazy"
+            draggable={false}
+            onError={() => setImageFailed(true)}
+          />
         ) : (
-          <span className="asset-thumb-icon">
+          <span className={`asset-thumb-icon${imageFailed ? ' failed' : ''}`}>
             <Icon name={KIND_ICON[asset.kind]} size={24} />
+            {imageFailed && <small>图片不可读取</small>}
           </span>
         )}
       </div>
       <div className="asset-info">
-        <span className="asset-name">{asset.name ?? asset.id.slice(0, 8)}</span>
+        <span className="asset-name">{name}</span>
         <span className="asset-meta">
           {formatSize(asset.sizeBytes)} · {formatTime(asset.createdAt)}
         </span>
