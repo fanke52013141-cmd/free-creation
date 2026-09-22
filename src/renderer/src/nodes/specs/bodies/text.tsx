@@ -100,7 +100,13 @@ export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
         enterEditing()
       }}
     >
-      {shape.props.text && <span className="node-text-body">{shape.props.text}</span>}
+      {shape.props.text ? (
+        <span className="node-text-body">{shape.props.text}</span>
+      ) : (
+        <span className="node-text-body" style={{ opacity: 0.55 }}>
+          双击输入文本
+        </span>
+      )}
     </div>
   )
 }

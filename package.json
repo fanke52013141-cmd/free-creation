@@ -12,7 +12,7 @@
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck:model": "pnpm --filter @free-creation/model-contracts typecheck && pnpm --filter @free-creation/model-runtime typecheck",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
-    "test": "vitest run",
+    "test": "vitest run --maxWorkers=1 --minWorkers=1",
     "test:browser-ui": "node scripts/test-browser-node-ui.cjs",
     "test:browser-panel-sync": "node scripts/test-browser-panel-sync.cjs",
     "test:browser-media-import": "node scripts/test-browser-media-import.cjs",

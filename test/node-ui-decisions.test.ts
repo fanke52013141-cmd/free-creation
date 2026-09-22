@@ -531,16 +531,17 @@ describe('v1.2 §16.20 文档解析：PDF 交给 pdf.js，可解析格式只有�
   })
 })
 
-describe('v1.2 §16.22 文本节点不显示预置提示语，分镜保留取数来源', () => {
+describe('v1.2 §16.22 文本节点空态可发现，分镜保留取数来源', () => {
   const textBody = read('src/renderer/src/nodes/specs/bodies/text.tsx')
   const storyboardBody = read('src/renderer/src/nodes/specs/bodies/storyboard.tsx')
 
-  it('文本节点只呈现用户正文，不显示空态、连线或批量视角提示', () => {
+  it('文本节点呈现用户正文或空态编辑入口，不显示连线或批量视角提示', () => {
     const body = stripComments(textBody)
-    for (const removed of ['node-hint', 'node-wiring', 'slash-cmd', '双击输入', '批量视角']) {
+    for (const removed of ['node-hint', 'node-wiring', 'slash-cmd', '批量视角']) {
       expect(body).not.toContain(removed)
     }
-    expect(body).toContain('shape.props.text && <span className="node-text-body">')
+    expect(body).toContain('双击输入文本')
+    expect(body).toContain('shape.props.text ? (')
     expect(stripComments(app)).not.toContain('.slash-cmd-')
   })
 
@@ -986,11 +987,11 @@ describe('v1.2 §16.30 文档真值节点：跳过运行不得静音输出，卡
     expect(source).not.toContain('projectOutputs: projectVideoOutputs,\n    outputSource:')
   })
 
-  it('文本卡片不呈现预置提示，正文与连线语义由契约处理', () => {
+  it('文本卡片空态提供可发现的编辑入口，连线语义仍由契约处理', () => {
     const body = stripComments(textBody)
     expect(body).not.toContain('countIncomingConnections')
     expect(body).not.toContain('node-wiring')
-    expect(body).not.toContain('双击输入')
+    expect(body).toContain('双击输入文本')
     expect(specs).toContain('上游文本在运行时并入正文，再经 out-text 输出。')
   })
 

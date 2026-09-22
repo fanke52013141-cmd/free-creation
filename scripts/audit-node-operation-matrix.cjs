@@ -15,11 +15,16 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 
-const ROOT = 'D:/Program Files (x86)/free-creation'
+// 必须指向当前工作区：硬编码旧安装目录会让 CI/本地开发启动到过期构建，甚至直接找不到
+// Electron。脚本所在目录稳定在仓库根的 scripts/ 下，因此由自身位置解析即可。
+const ROOT = path.resolve(__dirname, '..')
 const DATA_DIR =
   process.env.E2E_DATA_DIR ||
   path.join(process.env.LOCALAPPDATA || os.tmpdir(), `canvas-node-matrix-${Date.now()}`)
 const SHOT_DIR = path.join(ROOT, 'artifacts/node-matrix-2026-09-19')
+const RESULT_FILE = process.env.MATRIX_RESULT_PATH
+  ? path.resolve(process.env.MATRIX_RESULT_PATH)
+  : null
 const SELECTED = (process.env.MATRIX || '')
   .split(',')
   .map((s) => s.trim())
@@ -1488,6 +1493,24 @@ async function main() {
 main()
   .then(() => {
     const failed = results.filter((r) => !r.ok)
+    if (RESULT_FILE) {
+      fs.mkdirSync(path.dirname(RESULT_FILE), { recursive: true })
+      fs.writeFileSync(
+        RESULT_FILE,
+        JSON.stringify(
+          {
+            passed: results.length - failed.length,
+            failed: failed.length,
+            total: results.length,
+            results,
+            dataDir: DATA_DIR,
+            shotDir: SHOT_DIR
+          },
+          null,
+          2
+        ) + '\n'
+      )
+    }
     console.log('\n==== 节点操作矩阵 SUMMARY ====')
     for (const r of results) console.log(`${r.ok ? 'PASS' : 'FAIL'} | ${r.name} | ${r.detail}`)
     if (pageErrors.size) {

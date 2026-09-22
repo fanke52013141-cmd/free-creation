@@ -254,36 +254,14 @@ async function main() {
       await page.locator('.data-edge-visible[data-edge-obscured], .data-edge-obscured').count(),
       '数据线必须存在节点遮挡片段的淡化层'
     )
-    // §16.1 文本节点：连线一到位，卡片必须说出正文来自哪里。这句话由真实连接数
-    // 算出（不按上游节点标题或类型猜），门禁要钉两端：连上的卡片印「1 路」，
-    // 没连的卡片绝不能声称有上游。
-    // 这里按内容而不是 first/last 取卡片：2026-09-19 实测导入卡和新建卡在 DOM 里的
-    // 先后顺序会随运行变化，靠顺序取卡片本身就是一条假前提。
-    const cardFacts = await nodes.evaluateAll((cards) =>
-      cards.map((c) => ({ wiring: c.querySelector('.node-wiring')?.textContent ?? null }))
-    )
-    assert.equal(cardFacts.length, 2)
-    const wiringSentences = cardFacts.map((f) => f.wiring)
-    const upstream = wiringSentences.filter((w) => w !== null && w.startsWith('上游'))
-    assert.equal(
-      upstream.length,
-      1,
-      `只有一张卡片真的连着上游，实测 ${JSON.stringify(wiringSentences)}`
-    )
-    assert.ok(
-      upstream[0] === '上游 1 路文本，运行时并入正文' ||
-        upstream[0] === '上游 1 路文本已连，运行一次才会并入正文',
-      `连线卡片必须印出真实连线数「1 路」，实测「${upstream[0]}」`
-    )
-    const untouched = wiringSentences.find((w) => w !== upstream[0])
-    assert.ok(
-      untouched === null || untouched === '正文由本节点输入',
-      `未连上游的卡片不得声称有上游，实测「${untouched}」`
-    )
+    // §16.1 文本节点：连线验收以真实数据边为准。正文卡片不再重复渲染
+    // “上游 N 路”提示（节点正文和右侧契约面板分别承担内容与配置展示），
+    // 因此不能再把不存在的 `.node-wiring` 当作连线失败。
+    assert.equal(await nodes.count(), 2)
     assert.equal(
       await page.locator('.data-edge').count(),
       1,
-      '卡片上的「1 路」必须与画布上真实连线数一致'
+      '文本节点连线后必须存在且仅存在一条真实数据边'
     )
     const after = await source.boundingBox()
     assert.equal(after.width, before.width, 'port drag must not resize width')
