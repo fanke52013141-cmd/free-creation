@@ -86,18 +86,19 @@ function SearchPaletteInner({ editor }: { editor: Editor }): React.JSX.Element {
           <input
             ref={inputRef}
             className="search-input"
+            aria-label="搜索节点标题或内容"
             value={query}
             placeholder="搜索节点标题或内容…"
             onChange={(e) => setQuery(e.target.value)}
             onPointerDown={(e) => stopEventPropagation(e)}
             onKeyDown={(e) => e.stopPropagation()}
           />
-          <button className="search-close" onClick={close}>
+          <button className="search-close" aria-label="关闭搜索面板" onClick={close}>
             <Icon name="close" size={16} />
           </button>
         </div>
         {query.trim() && (
-          <div className="search-results">
+          <div className="search-results" aria-live="polite">
             {hits.length === 0 ? (
               <div className="search-empty">未找到匹配的节点</div>
             ) : (

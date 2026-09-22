@@ -198,7 +198,7 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
             : `循环体入口：${downstreamCount} 个`}
         </span>
         {result?.progress && (
-          <div className="iterate-progress-wrap">
+          <div className="iterate-progress-wrap" role="status">
             <div className="iterate-progress-bar">
               <div
                 className="iterate-progress-fill"
@@ -214,7 +214,7 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
             <span className="iterate-progress-text">{progressLabel(result.progress)}</span>
           </div>
         )}
-        <span className={result ? 'iterate-hint has-result' : 'iterate-hint'}>
+        <span className={result ? 'iterate-hint has-result' : 'iterate-hint'} role="status">
           {shape.props.exec === 'running'
             ? '正在按顺序处理…'
             : result

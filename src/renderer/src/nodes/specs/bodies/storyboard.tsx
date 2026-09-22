@@ -8,6 +8,7 @@ import { stopEventPropagation, useEditor, useValue } from 'tldraw'
 import { parseStoryboardData, readStoryboardText } from '@shared/engine/helpers'
 import type { NodeBodyProps } from '../../registry'
 import { toast } from '../../../stores/toast'
+import { useConfirmStore } from '../../../stores/confirm'
 import { markUndoPoint } from '../../../canvas/history'
 import { countIncomingConnections, gatherUpstreamJson } from '../../../canvas/graph'
 import { Icon } from '../../../components/Icon'
@@ -149,7 +150,17 @@ export function StoryboardBody({ shape }: NodeBodyProps): React.JSX.Element {
     markUndoPoint(editor, 'storyboard-shot-move')
   }
 
-  const removeShot = (shotId: string): void => {
+  const removeShot = async (shotId: string): Promise<void> => {
+    // 删除镜头不可逆：与项目菜单同款危险确认弹窗，取消即中止。
+    if (
+      !(await useConfirmStore.getState().confirm({
+        title: '删除镜头',
+        message: '该镜头将从分镜板移除，不可恢复。',
+        confirmText: '删除',
+        danger: true
+      }))
+    )
+      return
     update(removeStoryboardShot(data, shotId))
     if (editingShotId === shotId) setEditingShotId(null)
     markUndoPoint(editor, 'storyboard-shot-remove')
@@ -304,17 +315,28 @@ export function StoryboardBody({ shape }: NodeBodyProps): React.JSX.Element {
                 <button type="button" onClick={() => startShotEdit(shot)}>
                   编辑
                 </button>
-                <button type="button" disabled={i === 0} onClick={() => moveShot(i, -1)}>
+                <button
+                  type="button"
+                  aria-label={`上移镜头 ${i + 1}`}
+                  disabled={i === 0}
+                  onClick={() => moveShot(i, -1)}
+                >
                   上移
                 </button>
                 <button
                   type="button"
+                  aria-label={`下移镜头 ${i + 1}`}
                   disabled={i === data.shots.length - 1}
                   onClick={() => moveShot(i, 1)}
                 >
                   下移
                 </button>
-                <button type="button" className="danger" onClick={() => removeShot(shot.id)}>
+                <button
+                  type="button"
+                  className="danger"
+                  aria-label={`删除镜头 ${i + 1}`}
+                  onClick={() => void removeShot(shot.id)}
+                >
                   删除
                 </button>
               </div>

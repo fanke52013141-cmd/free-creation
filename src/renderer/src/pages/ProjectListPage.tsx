@@ -5,9 +5,16 @@ import { useConfirmStore } from '../stores/confirm'
 import { useToastStore } from '../stores/toast'
 import { Icon } from '../components/Icon'
 
+const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit'
+})
+
 function formatDate(ts: number): string {
-  const d = new Date(ts)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  return dateTimeFormatter.format(new Date(ts))
 }
 
 export function ProjectListPage(): React.JSX.Element {
@@ -114,6 +121,7 @@ export function ProjectListPage(): React.JSX.Element {
         <div className="create-row">
           <input
             autoFocus
+            aria-label="项目名称"
             placeholder="项目名称"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -141,6 +149,7 @@ export function ProjectListPage(): React.JSX.Element {
             {renamingId === p.id ? (
               <input
                 autoFocus
+                aria-label={`重命名项目 ${renameValue}`}
                 value={renameValue}
                 onChange={(e) => setRenameValue(e.target.value)}
                 onKeyDown={(e) => {
@@ -162,6 +171,7 @@ export function ProjectListPage(): React.JSX.Element {
               <button
                 className="icon-btn"
                 title="导出"
+                aria-label={`导出项目 ${p.name}`}
                 onClick={(e) => {
                   e.stopPropagation()
                   void handleExport(p)
@@ -172,6 +182,7 @@ export function ProjectListPage(): React.JSX.Element {
               <button
                 className="icon-btn"
                 title="重命名"
+                aria-label={`重命名项目 ${p.name}`}
                 onClick={(e) => {
                   e.stopPropagation()
                   setRenamingId(p.id)
@@ -183,6 +194,7 @@ export function ProjectListPage(): React.JSX.Element {
               <button
                 className="icon-btn danger"
                 title="删除"
+                aria-label={`删除项目 ${p.name}`}
                 onClick={(e) => {
                   e.stopPropagation()
                   void handleDelete(p.id, p.name)

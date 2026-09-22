@@ -368,7 +368,7 @@ export function registerBaseNodeTypes(): void {
   registerNodeType({
     type: 'video',
     contractVersion: 7,
-    label: '生视频',
+    label: '视频生成',
     icon: 'video',
     color: '#f472b6',
     defaultSize: { w: 340, h: 260 },
@@ -419,7 +419,7 @@ export function registerBaseNodeTypes(): void {
   registerNodeType({
     type: 'video-asset',
     contractVersion: 2,
-    label: '视频',
+    label: '视频素材',
     icon: 'video',
     color: '#f472b6',
     defaultSize: { w: 340, h: 260 },
@@ -654,7 +654,7 @@ export function registerBaseNodeTypes(): void {
   registerNodeType({
     type: 'chat',
     contractVersion: 1,
-    label: '对话',
+    label: 'AI 对话',
     icon: 'chat',
     color: '#a78bfa',
     defaultSize: { w: 340, h: 260 },
@@ -717,7 +717,7 @@ export function registerExtendedNodeTypes(): void {
   registerNodeType({
     type: 'processor',
     contractVersion: 1,
-    label: '处理',
+    label: '数据处理',
     icon: 'processor',
     color: '#22d3ee',
     defaultSize: { w: 340, h: 260 },
@@ -951,7 +951,7 @@ export function registerExtendedNodeTypes(): void {
   registerNodeType({
     type: 'iterate',
     contractVersion: 2,
-    label: '循环',
+    label: '批量处理',
     icon: 'grid',
     color: '#8b5cf6',
     defaultSize: { w: 340, h: 260 },

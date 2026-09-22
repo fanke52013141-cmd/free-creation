@@ -305,6 +305,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
         </div>
         <textarea
           className="gen-textarea tts"
+          aria-label="合成文字"
           value={draft}
           placeholder="输入要朗读的文本…"
           onPointerDown={(e) => e.stopPropagation()}
@@ -329,6 +330,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
           <label className="opt-label">后端</label>
           <AppSelect
             className="gen-select small"
+            aria-label="后端"
             value={config.backend}
             onPointerDown={(e) => e.stopPropagation()}
             onChange={(e) => {
@@ -347,6 +349,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
           <div className="tts-minimax-options">
             <AppSelect
               className="gen-select"
+              aria-label="MiniMax 语音模型"
               value={config.providerId ? `${config.providerId}::${config.modelId}` : ''}
               onPointerDown={(e) => e.stopPropagation()}
               onChange={(e) => {
@@ -364,13 +367,15 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
             </AppSelect>
             <input
               className={`gen-input ${voiceIdInvalid ? 'invalid' : ''}`}
+              aria-label="自定义 Voice ID"
+              spellCheck={false}
               value={config.voiceId}
               placeholder="可选：自定义 Voice ID"
               onPointerDown={(e) => e.stopPropagation()}
               onChange={(e) => updateConfig({ voiceId: e.target.value })}
             />
             {voiceIdInvalid && (
-              <div className="gen-capability-note error">
+              <div className="gen-capability-note error" role="alert">
                 Voice ID 需 8～256 位、以字母开头、只含字母数字与 - _，末位不能是 - 或 _
               </div>
             )}
@@ -378,6 +383,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
               <label className="opt-label">相似度 {config.accuracy.toFixed(2)}</label>
               <input
                 type="range"
+                aria-label="相似度"
                 min="0"
                 max="1"
                 step="0.05"
@@ -390,6 +396,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
               <label className="opt-label">语言增强</label>
               <AppSelect
                 className="gen-select small"
+                aria-label="语言增强"
                 value={config.languageBoost}
                 onPointerDown={(e) => e.stopPropagation()}
                 onChange={(e) => updateConfig({ languageBoost: e.target.value })}
@@ -463,6 +470,8 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
                   </div>
                   <input
                     className="gen-input"
+                    aria-label="提示音对应的原文（必填）"
+                    spellCheck={false}
                     value={config.promptText}
                     placeholder="提示音对应的原文（必填）"
                     onPointerDown={(e) => e.stopPropagation()}
@@ -501,6 +510,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
             <label className="opt-label">语言</label>
             <AppSelect
               className="gen-select small"
+              aria-label="语言"
               value={config.lang}
               onPointerDown={(e) => e.stopPropagation()}
               onChange={(e) => updateConfig({ lang: e.target.value as TtsLang })}
@@ -516,6 +526,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
         <label className="opt-label">格式</label>
         <AppSelect
           className="gen-select small"
+          aria-label="格式"
           value={config.format}
           onPointerDown={(e) => e.stopPropagation()}
           onChange={(e) => updateConfig({ format: e.target.value as TtsFormat })}
@@ -533,6 +544,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
             <label className="opt-label">语速 {config.speed.toFixed(1)}x</label>
             <input
               type="range"
+              aria-label="语速"
               min="0.5"
               max="2"
               step="0.1"
@@ -545,6 +557,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
             <label className="opt-label">情绪 {config.emotion.toFixed(1)}</label>
             <input
               type="range"
+              aria-label="情绪"
               min="0"
               max="1"
               step="0.1"

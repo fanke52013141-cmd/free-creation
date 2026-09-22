@@ -480,7 +480,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
           </div>
         )}
         {portConfigErrors.length > 0 && (
-          <div className="code-ai-error">
+          <div className="code-ai-error" role="alert">
             动态端口配置无效：{portConfigErrors.join('；')}。请修改后再连线或运行。
           </div>
         )}

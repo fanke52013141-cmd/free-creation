@@ -189,6 +189,7 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
         <label className="opt-label">试听文本</label>
         <input
           className="gen-input"
+          aria-label="试听文本"
           value={config.previewText}
           maxLength={VOICE_DESIGN_PREVIEW_LIMIT}
           placeholder={DEFAULT_VOICE_DESIGN_CONFIG.previewText}
@@ -198,13 +199,15 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
         <label className="opt-label">自定义 Voice ID（可选）</label>
         <input
           className={`gen-input ${customVoiceInvalid ? 'invalid' : ''}`}
+          aria-label="自定义 Voice ID（可选）"
+          spellCheck={false}
           value={config.voiceId}
           placeholder="留空由服务端生成"
           onPointerDown={(e) => e.stopPropagation()}
           onChange={(e) => updateConfig({ voiceId: e.target.value })}
         />
         {customVoiceInvalid && (
-          <div className="gen-capability-note error">
+          <div className="gen-capability-note error" role="alert">
             需 8～256 位、以字母开头、只含字母数字与 - _，且末位不能是 - 或 _
           </div>
         )}

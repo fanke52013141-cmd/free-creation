@@ -788,7 +788,7 @@ export function DirectorStudioPanel({
             >
               <Icon name="settings" size={15} /> 属性
             </button>
-            <button className="director-close" onClick={onClose} title="关闭 3D 预演台">
+            <button className="director-close" onClick={onClose} title="关闭 3D 预演台" aria-label="关闭 3D 预演台">
               <Icon name="close" size={17} />
             </button>
           </div>
@@ -797,7 +797,7 @@ export function DirectorStudioPanel({
           <aside className="director-left-panel">
             <div className="director-panel-head">
               <strong>镜头</strong>
-              <button onClick={addShot} title="新增镜头">
+              <button onClick={addShot} title="新增镜头" aria-label="新增镜头">
                 <Icon name="add" size={15} />
               </button>
             </div>
@@ -954,7 +954,7 @@ export function DirectorStudioPanel({
           <aside className="director-inspector">
             <div className="director-panel-head">
               <strong>属性</strong>
-              <button onClick={duplicateShot} title="复制当前镜头">
+              <button onClick={duplicateShot} title="复制当前镜头" aria-label="复制当前镜头">
                 <Icon name="copy" size={14} />
               </button>
             </div>
@@ -1179,7 +1179,16 @@ export function DirectorStudioPanel({
                 <div
                   className={`director-actor ${effectiveSelectedActorId === actor.id ? 'selected' : ''}`}
                   key={actor.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`选中角色 ${actor.name}`}
                   onClick={() => setSelectedActorId(actor.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      setSelectedActorId(actor.id)
+                    }
+                  }}
                 >
                   <div className="director-actor-row">
                     <input
@@ -1352,12 +1361,14 @@ export function DirectorStudioPanel({
               setIsPlaying(true)
             }}
             title={isPlaying ? '暂停预演' : '播放预演'}
+            aria-label={isPlaying ? '暂停预演' : '播放预演'}
           >
             <Icon name="play" size={14} />
           </button>
           <span>00:{timeline.toFixed(2).padStart(5, '0')}</span>
           <input
             type="range"
+            aria-label="预演时间轴"
             min="0"
             max={shot.camera.durationSec}
             step="0.01"

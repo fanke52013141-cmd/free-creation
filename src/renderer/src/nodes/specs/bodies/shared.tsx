@@ -16,6 +16,7 @@ import { getNodeType, mediaUrl } from '../../registry'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
 import { toast } from '../../../stores/toast'
+import { useConfirmStore } from '../../../stores/confirm'
 import { useMediaStore } from '../../../stores/media'
 import type { MediaAsset, MediaImportResult, ProviderSpecId } from '@shared/types'
 import { PROVIDER_SPECS } from '@shared/types'
@@ -243,7 +244,7 @@ export function createImageContinuation(
           ? '图片拆分'
           : targetType === 'image-edit'
             ? 'P图'
-            : '生视频'
+            : '视频生成'
   const placement = findContinuationPlacement(
     editor,
     source,
@@ -401,7 +402,7 @@ export function ImageContinuationActions({
     { type: 'image-split', label: '拆分', title: '创建图片拆分节点并连接当前图片' },
     { type: 'image-gen', label: '生图', title: '创建生图节点并连接当前图片' },
     { type: 'image-edit', label: 'P图', title: '对当前图片添加标注并 P 图' },
-    { type: 'video', label: '生视频', title: '创建视频节点并将当前图片作为多参素材' }
+    { type: 'video', label: '视频生成', title: '创建视频节点并将当前图片作为多参素材' }
   ]
   return (
     <div className="node-media-next-actions" aria-label="图片后续操作">
@@ -719,6 +720,13 @@ export function MediaResultGrid({
   )
   if (!collection || collection.results.length < 2) return null
   const selected = collection.selectedMediaId || shape.props.mediaId
+  // 破坏性操作先经确认弹窗（与项目菜单同一 useConfirmStore），取消即中止。
+  const confirmDanger = async (
+    title: string,
+    message: string,
+    confirmText: string
+  ): Promise<boolean> =>
+    await useConfirmStore.getState().confirm({ title, message, confirmText, danger: true })
   return (
     <div
       className={`media-result-collection${className ? ` ${className}` : ''}`}
@@ -739,7 +747,17 @@ export function MediaResultGrid({
               onPointerDown={(event) => stopEventPropagation(event)}
               onClick={(event) => {
                 event.stopPropagation()
-                onClear()
+                void (async () => {
+                  if (
+                    !(await confirmDanger(
+                      '清空历史结果',
+                      '仅保留当前输出，其余历史结果将从该节点移除。',
+                      '清空'
+                    ))
+                  )
+                    return
+                  onClear()
+                })()
               }}
             >
               <Icon name="trash" size={11} />
@@ -761,8 +779,6 @@ export function MediaResultGrid({
           const label = itemLabel?.(index)
           return (
             <div
-              role="button"
-              tabIndex={0}
               key={item.mediaId}
               className={`media-result-tile ${active ? 'selected' : ''}`}
               data-node-interactive="media-preview"
@@ -773,11 +789,6 @@ export function MediaResultGrid({
               }}
               onDoubleClick={(event) => {
                 event.stopPropagation()
-                openPreview(item)
-              }}
-              onKeyDown={(event) => {
-                if (event.key !== 'Enter' && event.key !== ' ') return
-                event.preventDefault()
                 openPreview(item)
               }}
             >
@@ -794,6 +805,19 @@ export function MediaResultGrid({
               {active ? <span className="media-result-selected">当前</span> : null}
               {label ? <span className="media-result-tile-label">{label}</span> : null}
               <span className="media-result-tile-actions">
+                <button
+                  type="button"
+                  className="icon-btn"
+                  title="打开预览"
+                  aria-label="预览"
+                  onPointerDown={(event) => stopEventPropagation(event)}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    openPreview(item)
+                  }}
+                >
+                  <Icon name="search" size={11} />
+                </button>
                 <button
                   type="button"
                   className="icon-btn"
@@ -817,7 +841,17 @@ export function MediaResultGrid({
                     onPointerDown={(event) => stopEventPropagation(event)}
                     onClick={(event) => {
                       event.stopPropagation()
-                      onDelete(item)
+                      void (async () => {
+                        if (
+                          !(await confirmDanger(
+                            '删除历史结果',
+                            '该历史结果将从节点移除，不可恢复。',
+                            '删除'
+                          ))
+                        )
+                          return
+                        onDelete(item)
+                      })()
                     }}
                   >
                     <Icon name="trash" size={11} />

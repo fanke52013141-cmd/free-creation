@@ -290,6 +290,7 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
                 <button
                   className="shot-op danger"
                   title="删除字段"
+                  aria-label={`删除字段「${field.label || field.path || `第 ${index + 1} 个`}」`}
                   disabled={data.outputFields.length <= 1}
                   onPointerDown={(e) => stopEventPropagation(e)}
                   onClick={() =>

@@ -2,12 +2,24 @@ import type { PaletteCategoryId } from '@shared/palette-preferences'
 import type { IconName } from '../components/Icon'
 import type { NodeTypeSpec } from '../nodes/registry'
 
+/**
+ * 节点在画布入口的展示分类。它刻意不复用 NodeTypeSpec.category：后者是早期创建菜单
+ * 的技术分类（例如生视频曾被放在 input），不应该决定用户看到的创作任务分类。
+ */
+export const PALETTE_NODE_GROUPS = {
+  input: ['text', 'file', 'chat', 'ai-process'],
+  image: ['image', 'image-gen', 'image-edit', 'image-crop', 'image-split'],
+  video: ['video-asset', 'video', 'video-frame', 'video-clip'],
+  audio: ['audio', 'speech', 'tts', 'voice-design', 'vocal-separate'],
+  logic: ['storyboard', 'structured', 'json', 'processor', 'iterate', 'code', 'director']
+} as const
+
 export const PALETTE_CATEGORY_META: Record<
   PaletteCategoryId,
   { label: string; shortLabel: string; icon: IconName; description: string }
 > = {
   favorites: { label: '常用', shortLabel: '常用', icon: 'spark', description: '常用创作节点' },
-  input: { label: '素材与导入', shortLabel: '素材', icon: 'upload', description: '导入文字、文件和媒体素材' },
+  input: { label: '文本与 AI', shortLabel: '文本', icon: 'text', description: '写作、对话与文本处理' },
   image: { label: '图片创作', shortLabel: '图片', icon: 'image-gen', description: '生成、修改和整理图片' },
   video: { label: '视频创作', shortLabel: '视频', icon: 'video', description: '生成、截取和处理视频' },
   audio: { label: '声音创作', shortLabel: '声音', icon: 'audio', description: '配音、音色与声音处理' },
@@ -31,7 +43,16 @@ export function nodesForPaletteCategory(
   if (category === 'favorites') {
     return nodeTypes.filter((node) => FAVORITE_NODE_TYPES.has(node.type))
   }
-  return nodeTypes.filter((node) => node.category === category)
+  return nodeTypes.filter((node) => PALETTE_NODE_GROUPS[category].includes(node.type as never))
+}
+
+export function paletteCategoryForNode(type: string): Exclude<PaletteCategoryId, 'favorites'> | null {
+  for (const [category, nodeTypes] of Object.entries(PALETTE_NODE_GROUPS)) {
+    if ((nodeTypes as readonly string[]).includes(type)) {
+      return category as Exclude<PaletteCategoryId, 'favorites'>
+    }
+  }
+  return null
 }
 
 export function movePaletteCategory<T extends string>(order: readonly T[], from: T, to: T): T[] {

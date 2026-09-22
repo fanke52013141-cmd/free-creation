@@ -9,6 +9,8 @@ interface DockMagnifyOptions {
   maxScale?: number
   /** 影响半径（px），超出此距离的项不放大，默认 85 */
   range?: number
+  /** 鱼眼凸起时朝展开方向的最大水平位移（px），默认不位移 */
+  maxTranslate?: number
 }
 
 /**
@@ -29,7 +31,7 @@ export function useDockMagnify(
   onPointerMove: (e: React.PointerEvent<HTMLElement>) => void
   onPointerLeave: () => void
 } {
-  const { direction, maxScale = 1.4, range = 85 } = options
+  const { direction, maxScale = 1.4, range = 85, maxTranslate = 0 } = options
   const rafRef = useRef<number | undefined>(undefined)
   const mousePosRef = useRef<number | null>(null)
 
@@ -76,10 +78,11 @@ export function useDockMagnify(
         const magnification = (Math.cos(ratio * Math.PI) + 1) / 2
         const scale = 1 + (maxScale - 1) * magnification
         el.style.zIndex = scale > 1.02 ? '5' : ''
-        el.style.transform = `scale(${scale.toFixed(3)})`
+        const translate = maxTranslate * magnification
+        el.style.transform = `translate3d(${translate.toFixed(1)}px, 0, 0) scale3d(${scale.toFixed(3)}, ${scale.toFixed(3)}, 1)`
       }
     })
-  }, [containerRef, direction, maxScale, range])
+  }, [containerRef, direction, maxScale, range, maxTranslate])
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent<HTMLElement>): void => {

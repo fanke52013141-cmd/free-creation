@@ -312,6 +312,7 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
           {editingId === outline.id ? (
             <input
               className="canvas-group-name-input"
+              aria-label="分组名称"
               defaultValue={outline.label || '分组'}
               autoFocus
               onFocus={(e) => e.currentTarget.select()}

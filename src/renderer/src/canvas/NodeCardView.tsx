@@ -101,6 +101,15 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     setPreviewError(null)
     setPreview(next)
   }
+  // 媒体预览浮层与「Esc 关闭」的全局面板行为保持一致
+  useEffect(() => {
+    if (!preview) return
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setPreview(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [preview])
   // 计算节点序号：按创建顺序排序所有 node-card，返回当前节点的序号
   const seq = useValue(
     'node sequence',
@@ -548,7 +557,13 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       {/* tldraw 画布容器带 transform，fixed 元素会以它为包含块导致错位，必须 portal 到 body */}
       {preview &&
         createPortal(
-          <div className="media-preview-mask" onClick={() => setPreview(null)}>
+          <div
+            className="media-preview-mask"
+            role="dialog"
+            aria-modal="true"
+            aria-label="媒体预览"
+            onClick={() => setPreview(null)}
+          >
             <div
               className={`media-preview-box media-preview-${preview.kind}`}
               onClick={(e) => e.stopPropagation()}
@@ -559,6 +574,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                   <button
                     className="icon-btn"
                     title="在资源管理器中定位"
+                    aria-label="在资源管理器中定位"
                     onClick={(e) => {
                       e.stopPropagation()
                       void window.api.revealMedia(shape.props.mediaId)
@@ -569,6 +585,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                   <button
                     className="icon-btn"
                     title="复制文件路径"
+                    aria-label="复制文件路径"
                     onClick={(e) => {
                       e.stopPropagation()
                       void window.api.copyMediaPath(shape.props.mediaId)
@@ -610,7 +627,11 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                         )
                       }
                     />
-                    {previewError ? <p className="media-preview-error">{previewError}</p> : null}
+                    {previewError ? (
+                      <p className="media-preview-error" role="alert">
+                        {previewError}
+                      </p>
+                    ) : null}
                   </>
                 )}
                 {preview.kind === 'audio' && <audio src={preview.url} controls autoPlay />}

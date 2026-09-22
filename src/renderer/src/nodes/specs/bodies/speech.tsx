@@ -200,6 +200,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
           <label className="opt-label">协议</label>
           <AppSelect
             className="gen-select small"
+            aria-label="协议"
             value={config.backend}
             onPointerDown={(e) => e.stopPropagation()}
             onChange={(e) => switchBackend(e.target.value as SpeechBackend)}
@@ -218,6 +219,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
           <label className="opt-label">模型</label>
           <AppSelect
             className="gen-select"
+            aria-label="模型"
             value={config.providerId ? `${config.providerId}::${config.modelId}` : ''}
             onPointerDown={(e) => e.stopPropagation()}
             onChange={(e) => {
@@ -257,6 +259,8 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
         </div>
         <input
           className="gen-input"
+          aria-label="音色 ID"
+          spellCheck={false}
           value={config.voiceId}
           placeholder={
             config.backend === 'volc'
@@ -286,6 +290,8 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
             </label>
             <input
               className="gen-input"
+              aria-label="AppID"
+              spellCheck={false}
               value={config.volcAppId}
               placeholder="控制台应用 AppID"
               onPointerDown={(e) => e.stopPropagation()}
@@ -301,6 +307,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
             </label>
             <AppSelect
               className="gen-select small"
+              aria-label="集群"
               value={config.volcCluster}
               onPointerDown={(e) => e.stopPropagation()}
               onChange={(e) => updateConfig({ volcCluster: e.target.value })}
@@ -318,6 +325,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
             </label>
             <input
               type="range"
+              aria-label="语速"
               min="0.5"
               max="2"
               step="0.05"
@@ -340,13 +348,17 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
         </div>
         <textarea
           className="gen-textarea tts"
+          aria-label="朗读文本"
           value={draft}
           placeholder="输入要朗读的文本，上游文本节点内容会自动合并…"
           onPointerDown={(e) => e.stopPropagation()}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={() => updateText(draft)}
         />
-        <div className={`audio-text-meta ${draft.length > limit ? 'over-limit' : ''}`}>
+        <div
+          className={`audio-text-meta ${draft.length > limit ? 'over-limit' : ''}`}
+          role={draft.length > limit ? 'alert' : undefined}
+        >
           {draft.length} / {limit} 字 · 可由文本节点提供
         </div>
       </div>
@@ -363,6 +375,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
               <label className="opt-label">语速 {config.speed.toFixed(2)}x</label>
               <input
                 type="range"
+                aria-label="语速"
                 min="0.5"
                 max="2"
                 step="0.05"
@@ -375,6 +388,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
               <label className="opt-label">音量 {config.volume.toFixed(1)}</label>
               <input
                 type="range"
+                aria-label="音量"
                 min="0.1"
                 max="10"
                 step="0.1"
@@ -387,6 +401,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
               <label className="opt-label">音调 {config.pitch}</label>
               <input
                 type="range"
+                aria-label="音调"
                 min="-12"
                 max="12"
                 step="1"
@@ -400,6 +415,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
             <label className="opt-label">情绪</label>
             <AppSelect
               className="gen-select small"
+              aria-label="情绪"
               value={config.emotion}
               onPointerDown={(e) => e.stopPropagation()}
               onChange={(e) => updateConfig({ emotion: e.target.value as SpeechEmotion })}
@@ -413,6 +429,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
             <label className="opt-label">音效</label>
             <AppSelect
               className="gen-select small"
+              aria-label="音效"
               value={config.soundEffects}
               onPointerDown={(e) => e.stopPropagation()}
               onChange={(e) => updateConfig({ soundEffects: e.target.value })}
@@ -428,6 +445,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
             <label className="opt-label">语言增强</label>
             <AppSelect
               className="gen-select small"
+              aria-label="语言增强"
               value={config.languageBoost}
               onPointerDown={(e) => e.stopPropagation()}
               onChange={(e) => updateConfig({ languageBoost: e.target.value })}
@@ -442,6 +460,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
           <label className="opt-label">发音词典（每行「词 拼音」）</label>
           <textarea
             className="gen-textarea tts short"
+            aria-label="发音词典（每行「词 拼音」）"
             value={config.pronunciationTones}
             placeholder={'例如：\n调音台 tiao2 yin1 tai2'}
             onPointerDown={(e) => e.stopPropagation()}
@@ -462,6 +481,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
               <label className="opt-label">语速 {config.speechRate}</label>
               <input
                 type="range"
+                aria-label="语速"
                 min="-50"
                 max="100"
                 step="1"
@@ -474,6 +494,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
               <label className="opt-label">音量 {config.loudnessRate}</label>
               <input
                 type="range"
+                aria-label="音量"
                 min="-50"
                 max="100"
                 step="1"
@@ -486,6 +507,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
               <label className="opt-label">音调 {config.pitchRate}</label>
               <input
                 type="range"
+                aria-label="音调"
                 min="-12"
                 max="12"
                 step="1"
@@ -512,6 +534,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
         <label className="opt-label">格式</label>
         <AppSelect
           className="gen-select small"
+          aria-label="格式"
           value={config.format}
           onPointerDown={(e) => e.stopPropagation()}
           onChange={(e) => updateConfig({ format: e.target.value as SpeechFormat })}
@@ -527,6 +550,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
             <label className="opt-label">采样率</label>
             <AppSelect
               className="gen-select small"
+              aria-label="采样率"
               value={String(config.sampleRate)}
               onPointerDown={(e) => e.stopPropagation()}
               onChange={(e) => updateConfig({ sampleRate: Number(e.target.value) })}
@@ -693,6 +717,7 @@ export function SpeechSettings({ shape, editor }: NodeSettingsProps): React.JSX.
             <label className="opt-label">码率</label>
             <AppSelect
               className="gen-select small"
+              aria-label="码率"
               value={String(config.bitrate)}
               onChange={(e) => save({ bitrate: Number(e.target.value) })}
             >
@@ -707,6 +732,7 @@ export function SpeechSettings({ shape, editor }: NodeSettingsProps): React.JSX.
             <label className="opt-label">声道</label>
             <AppSelect
               className="gen-select small"
+              aria-label="声道"
               value={String(config.audioChannel)}
               onChange={(e) => save({ audioChannel: Number(e.target.value) === 2 ? 2 : 1 })}
             >
@@ -727,6 +753,7 @@ export function SpeechSettings({ shape, editor }: NodeSettingsProps): React.JSX.
               <label className="opt-label">音色修饰 · 音调 {config.voicePitch}</label>
               <input
                 type="range"
+                aria-label="音色修饰 · 音调"
                 min="-100"
                 max="100"
                 step="1"
@@ -738,6 +765,7 @@ export function SpeechSettings({ shape, editor }: NodeSettingsProps): React.JSX.
               <label className="opt-label">音色修饰 · 强度 {config.voiceIntensity}</label>
               <input
                 type="range"
+                aria-label="音色修饰 · 强度"
                 min="-100"
                 max="100"
                 step="1"
@@ -749,6 +777,7 @@ export function SpeechSettings({ shape, editor }: NodeSettingsProps): React.JSX.
               <label className="opt-label">音色修饰 · 音色 {config.voiceTimbre}</label>
               <input
                 type="range"
+                aria-label="音色修饰 · 音色"
                 min="-100"
                 max="100"
                 step="1"

@@ -24,6 +24,7 @@ import {
 import { createEdge, portPairCompatible } from './graph'
 import { markUndoPoint } from './history'
 import { toast } from '../stores/toast'
+import { useConfirmStore } from '../stores/confirm'
 import { useHistorySnapshots, type HistorySnapshot } from '../stores/history-snapshots'
 import { Icon, type IconName } from '../components/Icon'
 import { AppSelect } from '../components/AppSelect'
@@ -229,7 +230,7 @@ export const BUILTIN_TEMPLATES: {
       { type: 'image-edit', title: 'P图', dx: -380, dy: 0 },
       { type: 'image-crop', title: '图片裁剪', dx: 0, dy: -240 },
       { type: 'image-gen', title: '继续生图', dx: 0, dy: 0 },
-      { type: 'video', title: '生视频', dx: 0, dy: 240 }
+      { type: 'video', title: '视频生成', dx: 0, dy: 240 }
     ],
     edges: [
       { from: 0, to: 1, fromPort: 'out-image', toPort: 'in-image' },
@@ -474,6 +475,19 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
     )
   }
 
+  const handleRemoveTemplate = async (tmpl: WorkflowTemplate): Promise<void> => {
+    if (
+      !(await useConfirmStore.getState().confirm({
+        title: `删除工作流模板「${tmpl.name}」`,
+        message: '删除后模板不可恢复，画布上已创建的节点不受影响。',
+        confirmText: '删除',
+        danger: true
+      }))
+    )
+      return
+    await wfRemove(tmpl.id).catch((error) => toast(`删除模板失败：${String(error)}`))
+  }
+
   return (
     <div className="side-panel-body workflow-panel" ref={scrollRef}>
       {/* 保存当前选中 */}
@@ -481,6 +495,7 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
         <input
           className="wf-name-input"
           placeholder="模板名称…"
+          aria-label="模板名称"
           value={name}
           onChange={(e) => setName(e.target.value)}
           onPointerDown={(e) => e.stopPropagation()}
@@ -550,9 +565,8 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
                 <button
                   className="wf-action-btn delete"
                   title="删除模板"
-                  onClick={() =>
-                    void wfRemove(tmpl.id).catch((error) => toast(`删除模板失败：${String(error)}`))
-                  }
+                  aria-label={`删除工作流模板 ${tmpl.name}`}
+                  onClick={() => void handleRemoveTemplate(tmpl)}
                 >
                   <Icon name="close" size={13} />
                 </button>
@@ -633,6 +647,7 @@ function RunsPanel({
         <input
           className="assets-search"
           placeholder="搜索节点、运行 ID 或端口…"
+          aria-label="搜索运行记录"
           value={keyword}
           onChange={(event) => setKeyword(event.target.value)}
           onPointerDown={(event) => event.stopPropagation()}
@@ -754,9 +769,18 @@ function HistoryPanel({
     }
   }
 
-  const handleRemove = async (id: string): Promise<void> => {
+  const handleRemove = async (snap: HistorySnapshot): Promise<void> => {
+    if (
+      !(await useConfirmStore.getState().confirm({
+        title: `删除历史版本「${snap.label}」`,
+        message: '删除后该版本快照不可恢复，当前画布不受影响。',
+        confirmText: '删除',
+        danger: true
+      }))
+    )
+      return
     try {
-      await remove(projectId, id)
+      await remove(projectId, snap.id)
     } catch (error) {
       toast(`删除历史版本失败：${String(error)}`)
     }
@@ -768,6 +792,7 @@ function HistoryPanel({
         <input
           className="wf-name-input"
           placeholder="版本名称（可选）…"
+          aria-label="版本名称（可选）"
           value={label}
           onChange={(e) => setLabel(e.target.value)}
           onPointerDown={(e) => e.stopPropagation()}
@@ -809,7 +834,8 @@ function HistoryPanel({
                 <button
                   className="history-action-btn delete"
                   title="删除此版本"
-                  onClick={() => void handleRemove(snap.id)}
+                  aria-label={`删除历史版本 ${snap.label}`}
+                  onClick={() => void handleRemove(snap)}
                 >
                   <Icon name="close" size={13} />
                 </button>
@@ -855,7 +881,7 @@ export function CanvasSidePanel({
           <Icon name={meta.icon} size={17} />
         </span>
         <strong className="side-panel-title">{meta.title}</strong>
-        <button className="side-panel-close" title="关闭" onClick={onClose}>
+        <button className="side-panel-close" title="关闭" aria-label="关闭面板" onClick={onClose}>
           <Icon name="close" size={15} />
         </button>
       </div>

@@ -140,14 +140,14 @@ describe('v1.2 §16.7 命名统一', () => {
     expect(stripComments(canvasEditor)).not.toContain('paletteLabels')
     expect(canvasEditor).toContain('label={`添加${t.label}节点`}')
     expect(canvasEditor).toContain('aria-label={`添加${t.label}节点`}')
-    expect(canvasEditor).toContain('<span className="palette-label">{t.label}</span>')
+    expect(canvasEditor).toContain('<span className="palette-label">{meta.shortLabel}</span>')
   })
 
   it('spec label 使用新名字', () => {
     for (const label of [
       "label: 'P图'",
-      "label: '生视频'",
-      "label: '视频'",
+      "label: '视频生成'",
+      "label: '视频素材'",
       "label: '抽帧'",
       "label: '视频截取'",
       "label: '截音频'",
@@ -622,11 +622,11 @@ describe('v1.2 §16.23 图片族：遮罩与画幅按网关真实发送字段呈
     }
   })
 
-  it('续跑与模板的下游节点标题统一为「生视频」', () => {
+  it('续跑与模板的下游节点标题统一为「视频生成」', () => {
     expect(stripComments(sharedBodies)).not.toContain('图片生成视频')
     expect(stripComments(sidePanel)).not.toContain('图片生成视频')
-    expect(sidePanel).toContain("{ type: 'video', title: '生视频'")
-    expect(sharedBodies).toContain("{ type: 'video', label: '生视频'")
+    expect(sidePanel).toContain("{ type: 'video', title: '视频生成'")
+    expect(sharedBodies).toContain("{ type: 'video', label: '视频生成'")
   })
 })
 

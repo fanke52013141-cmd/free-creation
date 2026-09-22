@@ -61,6 +61,11 @@ export function ImageSplitBody({ shape, openPreview }: NodeBodyProps): React.JSX
     markUndoPoint(editor, reason)
   }
 
+  const openSourcePreview = (): void => {
+    if (!source) return
+    openPreview({ kind: 'image', url: mediaUrl(source.mediaPath), title: '待拆分原图' })
+  }
+
   return (
     <div className="image-split-quick">
       <div className="image-split-quick-controls" aria-label="快速拆分设置">
@@ -124,17 +129,22 @@ export function ImageSplitBody({ shape, openPreview }: NodeBodyProps): React.JSX
       <div
         ref={previewContainerRef}
         className="image-split-quick-grid"
-        aria-label={`${config.rows} 行 ${config.columns} 列拆分预览`}
+        aria-label={source ? '预览原图' : `${config.rows} 行 ${config.columns} 列拆分预览`}
         data-node-interactive="media-preview"
         role="button"
         tabIndex={source ? 0 : -1}
-        title={source ? '双击预览原图' : '请先连接原图'}
+        title={source ? '回车或双击预览原图' : '请先连接原图'}
         onPointerDown={guard.onPointerDown}
         onDoubleClick={(event) => {
           if (!source) return
-          guard.onDoubleClick(event, () =>
-            openPreview({ kind: 'image', url: mediaUrl(source.mediaPath), title: '待拆分原图' })
-          )
+          guard.onDoubleClick(event, openSourcePreview)
+        }}
+        onKeyDown={(event) => {
+          if (!source) return
+          if (event.key !== 'Enter' && event.key !== ' ') return
+          event.preventDefault()
+          event.stopPropagation()
+          openSourcePreview()
         }}
       >
         {source ? (

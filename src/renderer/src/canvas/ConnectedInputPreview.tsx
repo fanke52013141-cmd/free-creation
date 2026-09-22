@@ -92,10 +92,20 @@ function ReferenceThumb({
       <div
         ref={thumbRef}
         className="reference-thumb"
+        role="button"
+        tabIndex={0}
+        aria-label={`预览 ${input.sourceNodeName}`}
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation()
           openPreview({ url: mediaUrl(mediaPath), kind: 'image', title: input.sourceNodeName })
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            e.stopPropagation()
+            openPreview({ url: mediaUrl(mediaPath), kind: 'image', title: input.sourceNodeName })
+          }
         }}
         onMouseEnter={() => {
           if (timerRef.current !== null) window.clearTimeout(timerRef.current)

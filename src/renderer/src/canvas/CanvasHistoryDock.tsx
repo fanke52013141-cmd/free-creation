@@ -28,6 +28,7 @@ export function CanvasTopHistory(): React.JSX.Element {
       <button
         className="undo-redo-btn"
         title="撤销（Ctrl+Z）"
+        aria-label="撤销"
         disabled={!canUndo}
         onClick={() => editor?.undo()}
       >
@@ -36,6 +37,7 @@ export function CanvasTopHistory(): React.JSX.Element {
       <button
         className="undo-redo-btn"
         title="重做（Ctrl+Shift+Z）"
+        aria-label="重做"
         disabled={!canRedo}
         onClick={() => editor?.redo()}
       >

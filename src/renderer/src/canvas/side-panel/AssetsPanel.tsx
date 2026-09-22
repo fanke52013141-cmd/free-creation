@@ -12,6 +12,7 @@ import {
 } from '../../assets/media-index'
 import type { NodeCardShape } from '../NodeCardShape'
 import { toast } from '../../stores/toast'
+import { useConfirmStore } from '../../stores/confirm'
 import { Icon, type IconName } from '../../components/Icon'
 import { AppSelect } from '../../components/AppSelect'
 
@@ -71,11 +72,21 @@ function AssetCard({
   onLocate: () => void
   onOpenRun: () => void
 }): React.JSX.Element {
+  const name = asset.name ?? asset.id
   return (
     <div
       className="asset-card"
+      role="button"
+      tabIndex={0}
       title={`${asset.name ?? asset.id} · ${formatSize(asset.sizeBytes)}`}
+      aria-label={`添加 ${name} 到画布`}
       onClick={onAdd}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onAdd()
+        }
+      }}
     >
       <div className="asset-thumb">
         {asset.kind === 'image' ? (
@@ -131,6 +142,7 @@ function AssetCard({
       <button
         className="asset-delete"
         title="删除"
+        aria-label={`删除素材 ${asset.name ?? asset.id}`}
         onClick={(event) => {
           event.stopPropagation()
           onDelete()
@@ -209,6 +221,19 @@ export function AssetsPanel({
     editor.zoomToSelection({ animation: { duration: 220 } })
     toast(`已定位到「${source.nodeTitle}」`)
   }
+  const handleDelete = async (asset: IndexedMediaAsset): Promise<void> => {
+    const name = asset.name ?? asset.id
+    if (
+      !(await useConfirmStore.getState().confirm({
+        title: `删除素材「${name}」`,
+        message: '删除后素材文件将从项目中移除，不可恢复。',
+        confirmText: '删除',
+        danger: true
+      }))
+    )
+      return
+    await remove(projectId, asset.id)
+  }
   const handleBatchExport = async (): Promise<void> => {
     if (visible.length === 0) return toast('当前筛选没有可导出的素材')
     const res = await window.api.batchExportMedia(
@@ -241,6 +266,7 @@ export function AssetsPanel({
         <input
           className="assets-search"
           placeholder="搜索素材、来源或模型…"
+          aria-label="搜索素材"
           value={keyword}
           onChange={(event) => setKeyword(event.target.value)}
           onPointerDown={(event) => event.stopPropagation()}
@@ -313,7 +339,7 @@ export function AssetsPanel({
               key={asset.id}
               asset={asset}
               onAdd={() => onAddToCanvas(asset)}
-              onDelete={() => void remove(projectId, asset.id)}
+              onDelete={() => void handleDelete(asset)}
               onLocate={() => locateSource(asset)}
               onOpenRun={() => {
                 if (asset.source?.runId) onOpenRun(asset.source.nodeId, asset.source.runId)

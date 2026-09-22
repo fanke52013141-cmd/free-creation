@@ -1,9 +1,13 @@
 // LibTV 式节点创建菜单：双击空白画布弹出（指南 1.2.1）
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { allNodeTypes, getNodeType, NODE_CATEGORIES } from '../nodes/registry'
-import type { NodeCategoryId } from '../nodes/registry'
+import { allNodeTypes, getNodeType } from '../nodes/registry'
 import type { ConnectionFrom } from '../stores/connection'
 import { Icon } from '../components/Icon'
+import {
+  PALETTE_CATEGORY_META,
+  paletteCategoryForNode
+} from './palette-categories'
+import type { PaletteCategoryId } from '@shared/palette-preferences'
 import {
   compatibleNodeCreateChoices,
   compatibleUpstreamCreateChoices,
@@ -54,7 +58,7 @@ export function NodeCreateMenu({
 }: NodeCreateMenuProps): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   const [menuHeight, setMenuHeight] = useState(0)
-  const [hoverCategory, setHoverCategory] = useState<NodeCategoryId | null>(null)
+  const [hoverCategory, setHoverCategory] = useState<Exclude<PaletteCategoryId, 'favorites'> | null>(null)
   const hoverTimer = useRef<number | null>(null)
 
   useEffect(() => {
@@ -93,17 +97,17 @@ export function NodeCreateMenu({
       : compatibleNodeCreateChoices(source)
     : allNodeTypes().map((spec) => ({ type: spec.type }))
 
-  const availableCategories = NODE_CATEGORIES.filter((cat) =>
-    allChoices.some((c) => getNodeType(c.type)?.category === cat.id)
+  const availableCategories = (['input', 'image', 'video', 'audio', 'logic'] as const).filter((category) =>
+    allChoices.some((choice) => paletteCategoryForNode(choice.type) === category)
   )
   const showTabs = availableCategories.length > 1
-  const categoryOptions: Array<{ id: NodeCategoryId; label: string }> = availableCategories.map(
-    (cat) => ({ id: cat.id, label: cat.label })
+  const categoryOptions: Array<{ id: Exclude<PaletteCategoryId, 'favorites'>; label: string }> = availableCategories.map(
+    (category) => ({ id: category, label: PALETTE_CATEGORY_META[category].label })
   )
   const submenuChoices =
     hoverCategory === null
       ? allChoices
-      : allChoices.filter((c) => getNodeType(c.type)?.category === hoverCategory)
+      : allChoices.filter((choice) => paletteCategoryForNode(choice.type) === hoverCategory)
   const showPaste = !source && pasteCount > 0 && !!onPaste
   const primaryLabels = showTabs
     ? [
@@ -125,7 +129,7 @@ export function NodeCreateMenu({
     52
   )
   const left = Math.max(12, Math.min(x, window.innerWidth - primaryWidth - 24))
-  const showCategoryMenu = (category: NodeCategoryId): void => {
+  const showCategoryMenu = (category: Exclude<PaletteCategoryId, 'favorites'>): void => {
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current)
     setHoverCategory(category)
   }
@@ -204,7 +208,12 @@ export function NodeCreateMenu({
             <button className="node-menu-action" onClick={onUpload}>
               上传本地文件
             </button>
-            <button className="node-menu-action" onClick={onGallery}>
+            <button
+              className="node-menu-action"
+              disabled
+              title="后续版本开放"
+              onClick={onGallery}
+            >
               从图库选择
             </button>
           </>

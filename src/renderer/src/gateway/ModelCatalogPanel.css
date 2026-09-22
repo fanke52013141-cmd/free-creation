@@ -194,7 +194,7 @@
 .gw-model-card { border: 0; border-radius: 0; background: transparent; padding: 0; }
 .gw-model-card > div { flex: 1; }
 .gw-discovered { border-top: 1px solid var(--line); padding-top: 8px; }
-.gw-discovered-list { display: flex; flex-direction: column; gap: 4px; max-height: 160px; overflow: auto; }
+.gw-discovered-list { display: flex; flex-direction: column; gap: 4px; max-height: 160px; overflow: auto; overscroll-behavior: contain; }
 .gw-discovered-row { display: flex; justify-content: space-between; border: 0; background: transparent; color: var(--txt); cursor: pointer; padding: 5px 2px; text-align: left; }
 .gw-discovered-row:hover, .gw-discovered-row em { color: var(--brand); }
 .gw-search { width: 140px; }

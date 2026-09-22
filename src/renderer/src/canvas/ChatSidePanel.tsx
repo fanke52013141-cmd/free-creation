@@ -229,7 +229,12 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
           <span className="csp-title">
             <Icon name="settings" size={15} /> 对话设置
           </span>
-          <button className="csp-close" title="返回对话" onClick={() => setShowSettings(false)}>
+          <button
+            className="csp-close"
+            title="返回对话"
+            aria-label="返回对话"
+            onClick={() => setShowSettings(false)}
+          >
             <Icon name="undo" size={15} />
           </button>
         </div>
@@ -346,7 +351,12 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
                   <span className="csp-doc-name" title={d.content.slice(0, 100)}>
                     {d.name}
                   </span>
-                  <button className="csp-doc-remove" title="移除" onClick={() => removeDoc(i)}>
+                  <button
+                    className="csp-doc-remove"
+                    title="移除"
+                    aria-label={`移除 ${d.name}`}
+                    onClick={() => removeDoc(i)}
+                  >
                     <Icon name="close" size={13} />
                   </button>
                 </div>
@@ -389,10 +399,15 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
               <Icon name="history" size={13} />
             </span>
           )}
-          <button className="csp-icon-btn" title="参数设置" onClick={() => setShowSettings(true)}>
+          <button
+            className="csp-icon-btn"
+            title="参数设置"
+            aria-label="参数设置"
+            onClick={() => setShowSettings(true)}
+          >
             <Icon name="settings" size={15} />
           </button>
-          <button className="csp-icon-btn" title="关闭面板" onClick={onClose}>
+          <button className="csp-icon-btn" title="关闭面板" aria-label="关闭面板" onClick={onClose}>
             <Icon name="close" size={15} />
           </button>
         </div>
@@ -402,7 +417,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
           <Icon name="history" size={13} /> 已压缩历史 · {data.messages.length} 条近期消息
         </div>
       )}
-      <div className="csp-messages" ref={scrollRef}>
+      <div className="csp-messages" ref={scrollRef} aria-live="polite" aria-atomic="false">
         {data.messages.map((m, i) => (
           <div key={i} className={`csp-msg ${m.role}`}>
             <div className="csp-bubble">
@@ -427,12 +442,14 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
         <button
           className="csp-attach-btn"
           title="上传文档到上下文"
+          aria-label="上传文档到上下文"
           onClick={() => fileInputRef.current?.click()}
         >
           <Icon name="attach" size={16} />
         </button>
         <textarea
           className="csp-input"
+          aria-label="输入消息"
           value={draft}
           rows={1}
           spellCheck={false}
@@ -448,6 +465,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
         />
         <button
           className="csp-send-btn"
+          aria-label="发送消息"
           disabled={!draft.trim() || running}
           onClick={() => void send()}
         >

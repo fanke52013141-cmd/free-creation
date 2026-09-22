@@ -113,11 +113,17 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') close()
+      if (e.key !== 'Escape') return
+      // 弹层打开时 Esc 只关弹层，不关整个面板
+      if (modelPickerOpen) {
+        setModelPickerOpen(false)
+        return
+      }
+      close()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, close])
+  }, [open, close, modelPickerOpen])
 
   if (!open) return null
 
@@ -339,7 +345,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
       <div className="gw-panel" onClick={(e) => e.stopPropagation()}>
         <div className="gw-head">
           <span className="gw-title">模型供应商</span>
-          <button className="icon-btn" onClick={close} title="关闭 (Esc)">
+          <button className="icon-btn" onClick={close} title="关闭 (Esc)" aria-label="关闭供应商设置">
             <Icon name="close" size={16} />
           </button>
         </div>
@@ -504,6 +510,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                         className="gw-input grow"
                         value={m.id}
                         spellCheck={false}
+                        aria-label={`模型 ID（第 ${i + 1} 行）`}
                         placeholder="模型 ID（发给 API 的名字）"
                         onChange={(e) =>
                           patch({
@@ -517,6 +524,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                         className="gw-input w110"
                         value={m.name ?? ''}
                         spellCheck={false}
+                        aria-label={`模型显示名（第 ${i + 1} 行）`}
                         placeholder="显示名"
                         onChange={(e) =>
                           patch({
@@ -529,6 +537,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                       <select
                         className="gw-input w86"
                         value={m.modality}
+                        aria-label={`模型类别（第 ${i + 1} 行）`}
                         onChange={(e) =>
                           patch({
                             models: draft.models.map((x, j) =>
@@ -548,6 +557,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                       <button
                         className="shot-op danger"
                         title="删除模型"
+                        aria-label={`删除模型 ${m.id || `第 ${i + 1} 行`}`}
                         onClick={() => patch({ models: draft.models.filter((_, j) => j !== i) })}
                       >
                         <Icon name="close" size={14} />
@@ -669,7 +679,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                   <div className="gw-model-picker-mask" role="presentation">
                     <section className="gw-model-picker" role="dialog" aria-modal="true" aria-label="选择要添加的模型">
                       <div className="gw-models-head"><span className="gw-label">选择要添加的模型</span><button className="icon-btn" onClick={() => setModelPickerOpen(false)} aria-label="关闭">×</button></div>
-                      <input className="gw-input" autoFocus value={modelSearch} placeholder="搜索模型 ID" onChange={(e) => setModelSearch(e.target.value)} />
+                      <input className="gw-input" autoFocus aria-label="搜索模型 ID" value={modelSearch} placeholder="搜索模型 ID" onChange={(e) => setModelSearch(e.target.value)} />
                       <div className="gw-model-picker-list">
                         {fetchedModels.filter((id) => id.toLowerCase().includes(modelSearch.trim().toLowerCase())).map((id) => (
                           <label key={id} className="gw-model-picker-item"><input type="checkbox" checked={pickedModelIds.has(id)} onChange={() => setPickedModelIds((current) => { const next = new Set(current); next.has(id) ? next.delete(id) : next.add(id); return next })} /><span>{id}</span></label>

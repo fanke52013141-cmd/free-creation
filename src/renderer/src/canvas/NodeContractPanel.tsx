@@ -305,7 +305,11 @@ function TestHarness({
         {running ? '测试运行中…' : '测试此节点'}
       </button>
       {result && (
-        <div className={`contract-test-result ${result.status}`}>
+        <div
+          className={`contract-test-result ${result.status}`}
+          aria-live="polite"
+          aria-atomic="false"
+        >
           <strong>{result.status === 'done' ? '测试成功' : '测试未通过'}</strong>
           {result.reason && <small>{result.reason}</small>}
           {Object.entries(result.outputs).map(([portId, packet]) => {
@@ -479,7 +483,7 @@ export function NodeContractPanel({
             {spec.label}节点 · 契约 v{spec.contractVersion}
           </small>
         </div>
-        <button className="side-panel-close" title="关闭说明" onClick={onClose}>
+        <button className="side-panel-close" title="关闭说明" aria-label="关闭节点说明面板" onClick={onClose}>
           <Icon name="close" size={15} />
         </button>
       </header>
@@ -497,7 +501,9 @@ export function NodeContractPanel({
               key={id}
               className={tab === id ? 'active' : ''}
               role="tab"
+              id={`contract-tab-${id}`}
               aria-selected={tab === id}
+              aria-controls={`contract-tabpanel-${id}`}
               onClick={() => setTab(id)}
             >
               {label}
@@ -506,7 +512,7 @@ export function NodeContractPanel({
         </nav>
         <div className="contract-scroll">
           {tab === 'overview' && (
-            <>
+            <div role="tabpanel" id="contract-tabpanel-overview">
               <p className="contract-description">{spec.description}</p>
               <div className="contract-rule">
                 连线会把上游端口的真实输出填入对应输入；没有连线时才使用节点内的固定内容。
@@ -535,10 +541,10 @@ export function NodeContractPanel({
                   <strong>{shape.props.exec}</strong>
                 </span>
               </div>
-            </>
+            </div>
           )}
           {tab === 'io' && (
-            <>
+            <div role="tabpanel" id="contract-tabpanel-io">
               <PortRows
                 title="输入"
                 ports={ports.in}
@@ -559,22 +565,25 @@ export function NodeContractPanel({
                 connections={outgoing}
                 previews={outputPreviews}
               />
-            </>
+            </div>
           )}
-          {tab === 'settings' &&
-            (SettingsPanel ? (
-              <SettingsPanel key={shape.id} shape={shape} editor={editor} projectId={projectId} />
-            ) : (
-              <section className="contract-section">
-                <h4>节点固定配置</h4>
-                <p className="contract-settings-hint">连线值优先于固定值；敏感字段会自动隐藏。</p>
-                <pre className="contract-settings-code">
-                  {safeConfigPreview(readNodeConfig(shape))}
-                </pre>
-              </section>
-            ))}
+          {tab === 'settings' && (
+            <div role="tabpanel" id="contract-tabpanel-settings">
+              {SettingsPanel ? (
+                <SettingsPanel key={shape.id} shape={shape} editor={editor} projectId={projectId} />
+              ) : (
+                <section className="contract-section">
+                  <h4>节点固定配置</h4>
+                  <p className="contract-settings-hint">连线值优先于固定值；敏感字段会自动隐藏。</p>
+                  <pre className="contract-settings-code">
+                    {safeConfigPreview(readNodeConfig(shape))}
+                  </pre>
+                </section>
+              )}
+            </div>
+          )}
           {tab === 'run' && (
-            <>
+            <div role="tabpanel" id="contract-tabpanel-run">
               <section className="contract-section">
                 <h4>运行操作</h4>
                 <div className="contract-run-actions">
@@ -651,7 +660,7 @@ export function NodeContractPanel({
                   </div>
                 </section>
               )}
-            </>
+            </div>
           )}
         </div>
       </div>

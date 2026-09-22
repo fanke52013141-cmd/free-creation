@@ -388,6 +388,7 @@ body {
      不再把卡片撑成任意像素高度。 */
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .node-body-content {

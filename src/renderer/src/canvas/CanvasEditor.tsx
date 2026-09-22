@@ -297,14 +297,21 @@ export function CanvasEditor({
     id: PaletteCategoryId
     top: number
   } | null>(null)
-  const paletteCloseTimer = useRef<number | null>(null)
   // macOS Dock 风格鱼眼放大：左侧节点面板（纵向）+ 底部工具栏（横向）
   const nodeScrollRef = useRef<HTMLDivElement>(null)
+  const nodeFlyoutRef = useRef<HTMLDivElement>(null)
   const paletteUtilityRef = useRef<HTMLDivElement>(null)
   const nodeMagnify = useDockMagnify(nodeScrollRef, {
     direction: 'vertical',
-    maxScale: 1.42,
-    range: 90
+    maxScale: 1.18,
+    range: 85,
+    maxTranslate: 6
+  })
+  const nodeFlyoutMagnify = useDockMagnify(nodeFlyoutRef, {
+    direction: 'vertical',
+    maxScale: 1.22,
+    range: 64,
+    maxTranslate: 5
   })
   const utilityMagnify = useDockMagnify(paletteUtilityRef, {
     direction: 'horizontal',
@@ -370,28 +377,33 @@ export function CanvasEditor({
   const activePaletteNodes = activePaletteCategory
     ? nodesForPaletteCategory(nodeTypes, activePaletteCategory.id)
     : []
-  const clearPaletteCloseTimer = (): void => {
-    if (paletteCloseTimer.current !== null) {
-      window.clearTimeout(paletteCloseTimer.current)
-      paletteCloseTimer.current = null
-    }
-  }
-  const closePaletteSoon = (): void => {
-    clearPaletteCloseTimer()
-    paletteCloseTimer.current = window.setTimeout(() => setActivePaletteCategory(null), 180)
-  }
-  const openPaletteCategory = (
-    category: PaletteCategoryId,
-    target: HTMLElement
-  ): void => {
-    clearPaletteCloseTimer()
+  const openPaletteCategory = (category: PaletteCategoryId, target: HTMLElement): void => {
     const rect = target.getBoundingClientRect()
     setActivePaletteCategory({
       id: category,
-      top: Math.max(12, Math.min(rect.top - 8, window.innerHeight - 350))
+      // 以可见按钮的中心线校准首个二级项；鱼眼放大时仍与一级项严格齐平。
+      top: Math.max(12, Math.min(rect.top + rect.height / 2 - 16, window.innerHeight - 220))
     })
   }
-  useEffect(() => () => clearPaletteCloseTimer(), [])
+  // 居中选择器与贴边 hover 菜单不同：用户需要从左栏移动到画布中央，因此只在
+  // 点击外部或 Esc 时关闭，不能用 pointerleave 自动收起。
+  useEffect(() => {
+    if (!activePaletteCategory) return
+    const onPointerDown = (event: PointerEvent): void => {
+      const target = event.target as HTMLElement
+      if (target.closest('.node-palette') || target.closest('.palette-node-flyout')) return
+      setActivePaletteCategory(null)
+    }
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setActivePaletteCategory(null)
+    }
+    window.addEventListener('pointerdown', onPointerDown, true)
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown, true)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [activePaletteCategory])
   // 左侧面板直接使用 spec.label —— 不再维护第二份名字表。
   //
   // 用户 2026-09-18 的规则是「节点叫什么，左侧就得叫什么」。此前这里有一份
@@ -1688,7 +1700,7 @@ export function CanvasEditor({
       {editorInstance && <GroupOutlineLayer editor={editorInstance} hostRef={wrapRef} />}
       {editorInstance && <DataEdgeLayer editor={editorInstance} hostRef={wrapRef} />}
       {/* 左侧节点面板：一级分类保持鱼眼 Dock，二级节点在右侧抽屉中展开。 */}
-      <div className="node-palette" onPointerLeave={closePaletteSoon}>
+      <div className="node-palette">
         <div
           className="palette-node-scroll"
           ref={nodeScrollRef}
@@ -1700,31 +1712,20 @@ export function CanvasEditor({
               const meta = PALETTE_CATEGORY_META[category]
               const active = activePaletteCategory?.id === category
               return (
-              <Tooltip
-                key={category}
-                label={meta.description}
-                placement="right"
-                anchorSelector=".palette-icon"
-              >
                 <button
+                  key={category}
                   className={`palette-item palette-category-item${active ? ' is-active' : ''}`}
                   aria-label={`展开${meta.label}节点`}
                   aria-expanded={active}
                   onPointerEnter={(event) => openPaletteCategory(category, event.currentTarget)}
                   onFocus={(event) => openPaletteCategory(category, event.currentTarget)}
-                  onClick={(event) =>
-                    active
-                      ? setActivePaletteCategory(null)
-                      : openPaletteCategory(category, event.currentTarget)
-                  }
+                  onClick={(event) => openPaletteCategory(category, event.currentTarget)}
                 >
                   <span className="palette-icon">
                     <Icon name={meta.icon} size={20} />
                   </span>
                   <span className="palette-label">{meta.shortLabel}</span>
-                  <span className="palette-expand-arrow" aria-hidden="true" />
                 </button>
-              </Tooltip>
               )
             })}
           </div>
@@ -1733,19 +1734,17 @@ export function CanvasEditor({
       {activePaletteCategory && (
         <div
           className="palette-node-flyout"
-          style={{ left: 80, top: activePaletteCategory.top }}
-          onPointerEnter={clearPaletteCloseTimer}
-          onPointerLeave={closePaletteSoon}
+          style={{ left: 142, top: activePaletteCategory.top }}
         >
-          <div className="palette-node-flyout-head">
-            <Icon name={PALETTE_CATEGORY_META[activePaletteCategory.id].icon} size={15} />
-            <strong>{PALETTE_CATEGORY_META[activePaletteCategory.id].label}</strong>
-            <small>{activePaletteNodes.length} 个节点</small>
-          </div>
-          <div className="palette-node-flyout-list">
+          <div
+            className="palette-node-flyout-list"
+            ref={nodeFlyoutRef}
+            onPointerMove={nodeFlyoutMagnify.onPointerMove}
+            onPointerLeave={nodeFlyoutMagnify.onPointerLeave}
+          >
             {activePaletteNodes.map((t) => (
-              <Tooltip key={t.type} label={`添加${t.label}节点`} placement="right">
-                <button
+              <button
+                key={t.type}
                   className="palette-item palette-node-item"
                   aria-label={`添加${t.label}节点`}
                   onClick={() => {
@@ -1758,8 +1757,7 @@ export function CanvasEditor({
                     <Icon name={t.icon} size={20} />
                   </span>
                   <span className="palette-label">{t.label}</span>
-                </button>
-              </Tooltip>
+              </button>
             ))}
           </div>
         </div>

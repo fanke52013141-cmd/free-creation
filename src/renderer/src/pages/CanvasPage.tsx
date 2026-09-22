@@ -118,8 +118,18 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
             <Tooltip label="双击重命名">
               <span
                 className="canvas-title editable"
+                role="button"
+                tabIndex={0}
+                aria-label="项目名称，按 Enter 重命名"
                 onDoubleClick={() => {
                   if (currentProject) {
+                    setNameDraft(currentProject.name)
+                    setRenaming(true)
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if ((e.key === 'Enter' || e.key === ' ') && currentProject) {
+                    e.preventDefault()
                     setNameDraft(currentProject.name)
                     setRenaming(true)
                   }
@@ -160,6 +170,7 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
           <Tooltip label="搜索节点（Ctrl+K）">
             <button
               className="run-btn search-trigger"
+              aria-label="搜索节点（Ctrl+K）"
               onClick={() => useSearchStore.getState().toggle()}
             >
               <Icon name="search" size={16} />
