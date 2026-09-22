@@ -179,6 +179,7 @@ app.whenReady().then(async () => {
   // 外部 GUI 自动化是否能捕获 Electron 窗口这一不稳定前提上。
   if (isModelSmokeTest) {
     const kindArg = process.argv.find((arg) => arg.startsWith('--model-smoke-kind='))
+    const runVoiceClone = process.argv.includes('--model-smoke-voice-clone')
     const requestedKinds = kindArg
       ?.slice('--model-smoke-kind='.length)
       .split(',')
@@ -190,7 +191,8 @@ app.whenReady().then(async () => {
     const { report, reportPath } = await runModelSmokeTest({
       kinds: requestedKinds?.length ? requestedKinds : undefined,
       // 单项复测不应顺带再花一次音色设计费用。
-      includeVoiceDesign: !requestedKinds
+      includeVoiceDesign: !requestedKinds,
+      includeVoiceClone: !requestedKinds || runVoiceClone
     })
     log.info(`model smoke test finished: ${reportPath}`)
     // stdout 只输出路径和汇总，完整报告不含密钥并写入用户数据目录。

@@ -11,6 +11,7 @@ import { join } from 'node:path'
 import { streamText } from 'ai'
 import type { GatewayModelInfo, ProviderConfig, ProviderSummary } from '../shared/types'
 import { DEFAULT_SPEECH_CONFIG, type SpeechBackend, type SpeechConfig } from '../shared/speech'
+import { DEFAULT_TTS_CONFIG } from '../shared/tts'
 import { DEFAULT_VOICE_DESIGN_CONFIG } from '../shared/voice-design'
 import { getDataDir } from './store/db'
 import { generateSpeechToAsset } from './gateway/audio'
@@ -18,12 +19,14 @@ import { createChatModel } from './gateway/factory'
 import { generateImageToAsset } from './gateway/image'
 import { getProvider, listProviders } from './gateway/providers.repo'
 import { designMiniMaxVoice } from './gateway/voice'
+import { transformTts } from './media/tts-transform'
 
-export type SmokeKind = 'configuration' | 'text' | 'image' | 'speech' | 'voice-design'
+export type SmokeKind =
+  'configuration' | 'text' | 'image' | 'speech' | 'voice-design' | 'voice-clone'
 export type SmokeStatus = 'pass' | 'fail' | 'skipped'
 
 export interface SmokeTarget {
-  kind: Exclude<SmokeKind, 'voice-design'>
+  kind: Exclude<SmokeKind, 'voice-design' | 'voice-clone' | 'configuration'>
   provider: ProviderSummary
   model: GatewayModelInfo
 }
@@ -52,8 +55,10 @@ export interface ModelSmokeReport {
 
 export interface ModelSmokeOptions {
   /** 未传时按完整范围验收；传入后只执行指定模态，适合修复后的低成本复测。 */
-  kinds?: ReadonlyArray<Exclude<SmokeKind, 'voice-design' | 'configuration'>>
+  kinds?: ReadonlyArray<Exclude<SmokeKind, 'voice-design' | 'voice-clone' | 'configuration'>>
   includeVoiceDesign?: boolean
+  /** 使用本轮生成的非真人参考音频，验证 MiniMax 克隆及用新音色再合成的完整链路。 */
+  includeVoiceClone?: boolean
 }
 
 const SMOKE_TIMEOUT_MS: Record<SmokeKind, number> = {
@@ -63,7 +68,8 @@ const SMOKE_TIMEOUT_MS: Record<SmokeKind, number> = {
   // 图片任务与 MiniMax 异步语音本身允许更长的服务端轮询时间。
   image: 12 * 60_000,
   speech: 12 * 60_000,
-  'voice-design': 90_000
+  'voice-design': 90_000,
+  'voice-clone': 12 * 60_000
 }
 
 async function withTimeout<T>(kind: SmokeKind, task: Promise<T>): Promise<T> {
@@ -306,6 +312,69 @@ async function runVoiceDesign(
   }
 }
 
+/**
+ * 不读取用户素材：先合成一段足够长的机器语音，再将这段本地产物作为参考音频。
+ * 这会覆盖上传、voice_clone、返回 voice_id 以及用新音色再合成的完整生产链路。
+ */
+async function runVoiceClone(
+  providerSummary: ProviderSummary,
+  modelId: string,
+  projectId: string
+): Promise<Omit<SmokeResult, 'id'>> {
+  const started = Date.now()
+  const provider = getProvider(providerSummary.id)
+  if (!provider) {
+    return {
+      kind: 'voice-clone',
+      status: 'fail',
+      provider: publicProvider(providerSummary),
+      modelId,
+      durationMs: Date.now() - started,
+      detail: '供应商记录不存在'
+    }
+  }
+  try {
+    const reference = await generateSpeechToAsset({
+      projectId,
+      providerId: provider.id,
+      modelId,
+      // 约 20 秒，满足 MiniMax 参考音频至少 10 秒的限制。
+      text: '这是用于模型连通性验收的合成参考语音，不包含任何真人录音或个人信息。它以平稳清晰的普通话朗读一段足够长的测试内容，用于验证上传、音色复刻和后续语音合成的完整流程。',
+      voiceId: '',
+      config: speechConfigFor(provider, modelId)
+    })
+    const cloned = await transformTts({
+      projectId,
+      referenceAudioId: reference.asset.id,
+      text: '语音克隆链路验证成功。',
+      config: {
+        ...DEFAULT_TTS_CONFIG,
+        providerId: provider.id,
+        modelId,
+        text: '语音克隆链路验证成功。'
+      }
+    })
+    return {
+      kind: 'voice-clone',
+      status: 'pass',
+      provider: publicProvider(provider),
+      modelId,
+      durationMs: Date.now() - started,
+      detail: `真实语音克隆与新音色合成成功，已获得 voice_id：${cloned.voiceId}`,
+      asset: assetSummary(cloned.asset)
+    }
+  } catch (error) {
+    return {
+      kind: 'voice-clone',
+      status: 'fail',
+      provider: publicProvider(provider),
+      modelId,
+      durationMs: Date.now() - started,
+      detail: errorDetail(error, provider)
+    }
+  }
+}
+
 function skippedResult(target: SmokeTarget, reason: string): SmokeResult {
   return {
     id: randomUUID(),
@@ -320,7 +389,7 @@ function skippedResult(target: SmokeTarget, reason: string): SmokeResult {
 
 /**
  * 逐个真实调用已配置的文本、图片和音频模型。每次运行使用独立 projectId，产物保留为
- * 可复核证据；语音克隆需要用户上传含生物特征的参考音频，故本命令有意不执行。
+ * 可复核证据；克隆验收只使用本轮生成的机器语音，不上传用户录音。
  */
 export async function runModelSmokeTest(
   options: ModelSmokeOptions = {}
@@ -427,6 +496,33 @@ export async function runModelSmokeTest(
       provider: publicProvider(minimax),
       durationMs: 0,
       detail: 'MiniMax 未保存可用 API Key，未发起真实调用'
+    })
+  }
+  const minimaxAudioModel = minimax?.models.find((model) => model.modality === 'audio')
+  if (options.includeVoiceClone !== false && minimax?.hasApiKey && minimaxAudioModel) {
+    const task = runVoiceClone(minimax, minimaxAudioModel.id, projectId)
+    try {
+      results.push({ id: randomUUID(), ...(await withTimeout('voice-clone', task)) })
+    } catch (error) {
+      const provider = getProvider(minimax.id)
+      results.push({
+        id: randomUUID(),
+        kind: 'voice-clone',
+        status: 'fail',
+        provider: publicProvider(provider ?? minimax),
+        modelId: minimaxAudioModel.id,
+        durationMs: SMOKE_TIMEOUT_MS['voice-clone'],
+        detail: provider ? errorDetail(error, provider) : String(error)
+      })
+    }
+  } else if (options.includeVoiceClone !== false) {
+    results.push({
+      id: randomUUID(),
+      kind: 'voice-clone',
+      status: 'skipped',
+      provider: minimax ? publicProvider(minimax) : { id: '', name: 'MiniMax', specId: 'minimax' },
+      durationMs: 0,
+      detail: '未找到保存了可用 API Key 与音频模型的 MiniMax 供应商，未发起克隆调用'
     })
   }
   await persist()
