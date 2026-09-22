@@ -53,6 +53,8 @@ import { useMediaStore } from '../stores/media'
 import { useEditorStore } from '../stores/editor'
 import { Icon } from '../components/Icon'
 import { useEdgeSelectionStore } from '../stores/edgeSelection'
+import { PALETTE_CATEGORY_META, nodesForPaletteCategory } from './palette-categories'
+import { PALETTE_CATEGORY_IDS, type PaletteCategoryId } from '@shared/palette-preferences'
 
 registerBaseNodeTypes()
 registerScriptNodeType()
@@ -291,6 +293,11 @@ export function CanvasEditor({
   const [canvasTheme, setCanvasTheme] = useState<'dark' | 'light'>('dark')
   // 左侧节点面板拖拽状态
   const [nodeDrag, setNodeDrag] = useState<{ type: NodeTypeId; x: number; y: number } | null>(null)
+  const [activePaletteCategory, setActivePaletteCategory] = useState<{
+    id: PaletteCategoryId
+    top: number
+  } | null>(null)
+  const paletteCloseTimer = useRef<number | null>(null)
   // macOS Dock 风格鱼眼放大：左侧节点面板（纵向）+ 底部工具栏（横向）
   const nodeScrollRef = useRef<HTMLDivElement>(null)
   const paletteUtilityRef = useRef<HTMLDivElement>(null)
@@ -357,6 +364,34 @@ export function CanvasEditor({
   // 左侧节点面板：点击在视口中心创建；拖拽到画布在落点创建
   const SIDEBAR_W = 72
   const nodeTypes = allNodeTypes()
+  const paletteCategories = PALETTE_CATEGORY_IDS.filter((category) =>
+    nodesForPaletteCategory(nodeTypes, category).length > 0
+  )
+  const activePaletteNodes = activePaletteCategory
+    ? nodesForPaletteCategory(nodeTypes, activePaletteCategory.id)
+    : []
+  const clearPaletteCloseTimer = (): void => {
+    if (paletteCloseTimer.current !== null) {
+      window.clearTimeout(paletteCloseTimer.current)
+      paletteCloseTimer.current = null
+    }
+  }
+  const closePaletteSoon = (): void => {
+    clearPaletteCloseTimer()
+    paletteCloseTimer.current = window.setTimeout(() => setActivePaletteCategory(null), 180)
+  }
+  const openPaletteCategory = (
+    category: PaletteCategoryId,
+    target: HTMLElement
+  ): void => {
+    clearPaletteCloseTimer()
+    const rect = target.getBoundingClientRect()
+    setActivePaletteCategory({
+      id: category,
+      top: Math.max(12, Math.min(rect.top - 8, window.innerHeight - 350))
+    })
+  }
+  useEffect(() => () => clearPaletteCloseTimer(), [])
   // 左侧面板直接使用 spec.label —— 不再维护第二份名字表。
   //
   // 用户 2026-09-18 的规则是「节点叫什么，左侧就得叫什么」。此前这里有一份
@@ -1652,27 +1687,72 @@ export function CanvasEditor({
       />
       {editorInstance && <GroupOutlineLayer editor={editorInstance} hostRef={wrapRef} />}
       {editorInstance && <DataEdgeLayer editor={editorInstance} hostRef={wrapRef} />}
-      {/* 左侧节点面板：悬浮图标条，点击创建或拖拽到画布 */}
-      <div className="node-palette">
+      {/* 左侧节点面板：一级分类保持鱼眼 Dock，二级节点在右侧抽屉中展开。 */}
+      <div className="node-palette" onPointerLeave={closePaletteSoon}>
         <div
           className="palette-node-scroll"
           ref={nodeScrollRef}
           onPointerMove={nodeMagnify.onPointerMove}
           onPointerLeave={nodeMagnify.onPointerLeave}
         >
-          <div className="palette-section palette-node-section">
-            {nodeTypes.map((t) => (
+          <div className="palette-section palette-category-section">
+            {paletteCategories.map((category) => {
+              const meta = PALETTE_CATEGORY_META[category]
+              const active = activePaletteCategory?.id === category
+              return (
               <Tooltip
-                key={t.type}
-                label={`添加${t.label}节点`}
+                key={category}
+                label={meta.description}
                 placement="right"
                 anchorSelector=".palette-icon"
               >
                 <button
+                  className={`palette-item palette-category-item${active ? ' is-active' : ''}`}
+                  aria-label={`展开${meta.label}节点`}
+                  aria-expanded={active}
+                  onPointerEnter={(event) => openPaletteCategory(category, event.currentTarget)}
+                  onFocus={(event) => openPaletteCategory(category, event.currentTarget)}
+                  onClick={(event) =>
+                    active
+                      ? setActivePaletteCategory(null)
+                      : openPaletteCategory(category, event.currentTarget)
+                  }
+                >
+                  <span className="palette-icon">
+                    <Icon name={meta.icon} size={20} />
+                  </span>
+                  <span className="palette-label">{meta.shortLabel}</span>
+                  <span className="palette-expand-arrow" aria-hidden="true" />
+                </button>
+              </Tooltip>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+      {activePaletteCategory && (
+        <div
+          className="palette-node-flyout"
+          style={{ left: 80, top: activePaletteCategory.top }}
+          onPointerEnter={clearPaletteCloseTimer}
+          onPointerLeave={closePaletteSoon}
+        >
+          <div className="palette-node-flyout-head">
+            <Icon name={PALETTE_CATEGORY_META[activePaletteCategory.id].icon} size={15} />
+            <strong>{PALETTE_CATEGORY_META[activePaletteCategory.id].label}</strong>
+            <small>{activePaletteNodes.length} 个节点</small>
+          </div>
+          <div className="palette-node-flyout-list">
+            {activePaletteNodes.map((t) => (
+              <Tooltip key={t.type} label={`添加${t.label}节点`} placement="right">
+                <button
                   className="palette-item palette-node-item"
                   aria-label={`添加${t.label}节点`}
-                  onClick={() => handleNodePick(t.type)}
-                  onPointerDown={(e) => startNodeDrag(e, t.type)}
+                  onClick={() => {
+                    handleNodePick(t.type)
+                    setActivePaletteCategory(null)
+                  }}
+                  onPointerDown={(event) => startNodeDrag(event, t.type)}
                 >
                   <span className="palette-icon" style={{ color: t.color }}>
                     <Icon name={t.icon} size={20} />
@@ -1683,7 +1763,7 @@ export function CanvasEditor({
             ))}
           </div>
         </div>
-      </div>
+      )}
       <div
         className="palette-utility"
         ref={paletteUtilityRef}

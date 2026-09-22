@@ -930,7 +930,10 @@
 }
 
 .palette-category-item .palette-label {
-  display: none;
+  display: block;
+  color: currentColor;
+  font-size: 10px;
+  line-height: 12px;
 }
 
 .palette-expand-arrow {
@@ -2117,4 +2120,81 @@
     left: 14px;
     bottom: 76px;
   }
+}
+
+/* ── UI-R4: quiet daylight canvas ─────────────────────────────────────── */
+/* 浅色不是深色反相：采用低对比冷灰画布、干净白色操作面和深墨文字，减少米黄玻璃
+   堆叠产生的“旧后台”感。颜色只在画布主题边界内生效，不影响项目列表等页面。 */
+.canvas-theme-light,
+.canvas-page.canvas-theme-light {
+  color-scheme: light;
+  --bg: #eef2f5;
+  --card: #ffffff;
+  --card-hover: #f6f8fa;
+  --sunk: #e5eaee;
+  --panel: #f8fafb;
+  --surface-1: #f5f7f9;
+  --surface-2: #e9eef2;
+  --line: rgba(35, 52, 66, 0.14);
+  --border-soft: rgba(35, 52, 66, 0.18);
+  --txt: #17212b;
+  --muted: #5e6c78;
+  --txt-dim: #7a8792;
+  --elevation-1: 0 8px 24px rgba(31, 47, 61, 0.1);
+  --elevation-float: 0 16px 42px rgba(31, 47, 61, 0.14);
+  background: #eef2f5;
+}
+
+.canvas-theme-light .tl-background {
+  background-color: #eef2f5 !important;
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(74, 96, 112, 0.16) 0.68px, transparent 0.8px),
+    radial-gradient(ellipse at 48% 36%, rgba(80, 153, 196, 0.055), transparent 52%) !important;
+  background-size: 24px 24px, 100% 100% !important;
+}
+
+.canvas-page.canvas-theme-light .canvas-topbar {
+  border-bottom-color: rgba(35, 52, 66, 0.13);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 4px 18px rgba(31, 47, 61, 0.08);
+}
+
+.canvas-theme-light .node-card {
+  border: 1px solid rgba(35, 52, 66, 0.13);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 6px 20px rgba(31, 47, 61, 0.11);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.canvas-theme-light :is(.node-palette, .palette-node-scroll) {
+  background: transparent;
+}
+
+.canvas-theme-light .palette-category-item:hover,
+.canvas-theme-light .palette-category-item.is-active {
+  background: #ffffff;
+  color: #1976a8;
+  box-shadow: 0 4px 12px rgba(31, 47, 61, 0.1);
+}
+
+.canvas-theme-light .palette-node-flyout {
+  border-color: rgba(35, 52, 66, 0.14);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 16px 38px rgba(31, 47, 61, 0.16);
+}
+
+.canvas-theme-light .palette-node-flyout-head {
+  border-bottom-color: rgba(35, 52, 66, 0.11);
+  color: #1c2c38;
+}
+
+.canvas-theme-light .palette-node-flyout .palette-node-item:hover {
+  background: #edf7fc;
+}
+
+.canvas-theme-light :is(.engine-controls, .topbar-actions, .undo-redo-group, .dock-minimap, .dock-controls, .multi-select-toolbar, .dock-tool-group, .dock-zoom) {
+  border-color: rgba(35, 52, 66, 0.13);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 6px 18px rgba(31, 47, 61, 0.1);
 }
