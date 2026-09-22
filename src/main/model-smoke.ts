@@ -1,0 +1,434 @@
+/**
+ * 真实模型验收器。
+ *
+ * 它运行在 Electron 主进程中，因此和桌面端共用同一份 safeStorage、SQLite 配置和
+ * 网关实现；不会把 API Key 交给 shell、报告文件或渲染进程。用于在无法自动化桌面 UI
+ * 时，仍能对用户已保存的模型配置做一次真正的、可追溯的最小调用。
+ */
+import { randomUUID } from 'node:crypto'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { streamText } from 'ai'
+import type { GatewayModelInfo, ProviderConfig, ProviderSummary } from '../shared/types'
+import { DEFAULT_SPEECH_CONFIG, type SpeechBackend, type SpeechConfig } from '../shared/speech'
+import { DEFAULT_VOICE_DESIGN_CONFIG } from '../shared/voice-design'
+import { getDataDir } from './store/db'
+import { generateSpeechToAsset } from './gateway/audio'
+import { createChatModel } from './gateway/factory'
+import { generateImageToAsset } from './gateway/image'
+import { getProvider, listProviders } from './gateway/providers.repo'
+import { designMiniMaxVoice } from './gateway/voice'
+
+export type SmokeKind = 'configuration' | 'text' | 'image' | 'speech' | 'voice-design'
+export type SmokeStatus = 'pass' | 'fail' | 'skipped'
+
+export interface SmokeTarget {
+  kind: Exclude<SmokeKind, 'voice-design'>
+  provider: ProviderSummary
+  model: GatewayModelInfo
+}
+
+export interface SmokeResult {
+  id: string
+  kind: SmokeKind
+  status: SmokeStatus
+  provider: { id: string; name: string; specId: string }
+  modelId?: string
+  durationMs: number
+  detail: string
+  asset?: { id: string; path: string; mime: string }
+}
+
+export interface ModelSmokeReport {
+  version: 1
+  runId: string
+  startedAt: string
+  finishedAt: string
+  projectId: string
+  scope: 'text-image-audio-no-video'
+  totals: { pass: number; fail: number; skipped: number }
+  results: SmokeResult[]
+}
+
+export interface ModelSmokeOptions {
+  /** 未传时按完整范围验收；传入后只执行指定模态，适合修复后的低成本复测。 */
+  kinds?: ReadonlyArray<Exclude<SmokeKind, 'voice-design' | 'configuration'>>
+  includeVoiceDesign?: boolean
+}
+
+const SMOKE_TIMEOUT_MS: Record<SmokeKind, number> = {
+  configuration: 0,
+  // 对话最小请求不该长期无回执；中转站卡住时继续下一项并留下失败证据。
+  text: 90_000,
+  // 图片任务与 MiniMax 异步语音本身允许更长的服务端轮询时间。
+  image: 12 * 60_000,
+  speech: 12 * 60_000,
+  'voice-design': 90_000
+}
+
+async function withTimeout<T>(kind: SmokeKind, task: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      task,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`${kind} 验收超过 ${SMOKE_TIMEOUT_MS[kind] / 1000} 秒仍未完成`)),
+          SMOKE_TIMEOUT_MS[kind]
+        )
+      })
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
+/** 只取明确标为三个本次验收模态的模型；视频永远不在这个入口调用。 */
+export function collectSmokeTargets(providers: ProviderSummary[]): SmokeTarget[] {
+  const seen = new Set<string>()
+  const targets: SmokeTarget[] = []
+  for (const provider of providers) {
+    for (const model of provider.models) {
+      if (model.modality !== 'text' && model.modality !== 'image' && model.modality !== 'audio')
+        continue
+      const key = `${provider.id}:${model.id}:${model.modality}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      targets.push({
+        kind: model.modality === 'audio' ? 'speech' : model.modality,
+        provider,
+        model
+      })
+    }
+  }
+  return targets
+}
+
+function publicProvider(provider: ProviderSummary | ProviderConfig): SmokeResult['provider'] {
+  return { id: provider.id, name: provider.name, specId: provider.specId }
+}
+
+function assetSummary(asset: { id: string; path: string; mime: string }): SmokeResult['asset'] {
+  return { id: asset.id, path: asset.path, mime: asset.mime }
+}
+
+function errorDetail(error: unknown, provider: ProviderConfig): string {
+  const raw = error instanceof Error ? error.message : String(error)
+  // 防御性脱敏：上游错误和 SDK 堆栈不应有机会把已保存密钥写进报告。
+  return raw.replaceAll(provider.apiKey, '***').replace(/\s+/g, ' ').slice(0, 600)
+}
+
+function speechBackendFor(provider: ProviderConfig): SpeechBackend {
+  if (provider.specId === 'minimax') return 'minimax'
+  if (provider.specId === 'doubao-speech') return 'doubao'
+  return 'openai'
+}
+
+function speechConfigFor(provider: ProviderConfig, modelId: string): SpeechConfig {
+  return {
+    ...DEFAULT_SPEECH_CONFIG,
+    backend: speechBackendFor(provider),
+    providerId: provider.id,
+    modelId
+  }
+}
+
+async function runText(target: SmokeTarget): Promise<Omit<SmokeResult, 'id'>> {
+  const started = Date.now()
+  const provider = getProvider(target.provider.id)
+  if (!provider) {
+    return {
+      kind: 'text',
+      status: 'fail',
+      provider: publicProvider(target.provider),
+      modelId: target.model.id,
+      durationMs: Date.now() - started,
+      detail: '供应商记录不存在'
+    }
+  }
+  try {
+    const result = streamText({
+      model: createChatModel(provider.id, target.model.id),
+      prompt: '这是连通性验收。请只回复 OK。',
+      // 推理型模型可能先耗掉一小段输出预算再给正文；16 会造成“请求成功但正文为空”的假失败。
+      maxOutputTokens: 96,
+      temperature: 0
+    })
+    let text = ''
+    for await (const part of result.fullStream) {
+      if (part.type === 'text-delta') text += part.text
+    }
+    // AI SDK 会在流消费完后汇总最终文本。少数兼容服务只填最终值、不发 text-delta，
+    // 两个来源合并后才判断为空，避免把协议差异误报成模型不可用。
+    text ||= await result.text
+    if (!text.trim())
+      throw new Error('模型未返回可用正文（可能只返回推理内容或该模型不支持当前流式协议）')
+    return {
+      kind: 'text',
+      status: 'pass',
+      provider: publicProvider(provider),
+      modelId: target.model.id,
+      durationMs: Date.now() - started,
+      detail: `真实对话成功，收到 ${text.trim().slice(0, 80)}`
+    }
+  } catch (error) {
+    return {
+      kind: 'text',
+      status: 'fail',
+      provider: publicProvider(provider),
+      modelId: target.model.id,
+      durationMs: Date.now() - started,
+      detail: errorDetail(error, provider)
+    }
+  }
+}
+
+async function runImage(target: SmokeTarget, projectId: string): Promise<Omit<SmokeResult, 'id'>> {
+  const started = Date.now()
+  const provider = getProvider(target.provider.id)
+  if (!provider)
+    return {
+      kind: 'image',
+      status: 'fail',
+      provider: publicProvider(target.provider),
+      modelId: target.model.id,
+      durationMs: Date.now() - started,
+      detail: '供应商记录不存在'
+    }
+  try {
+    const asset = await generateImageToAsset({
+      projectId,
+      providerId: provider.id,
+      modelId: target.model.id,
+      prompt: '极简测试图：白色背景中央一枚纯蓝色圆点，无文字，无水印。',
+      size: 'auto'
+    })
+    return {
+      kind: 'image',
+      status: 'pass',
+      provider: publicProvider(provider),
+      modelId: target.model.id,
+      durationMs: Date.now() - started,
+      detail: '真实生图成功，结果已落入测试媒体库',
+      asset: assetSummary(asset)
+    }
+  } catch (error) {
+    return {
+      kind: 'image',
+      status: 'fail',
+      provider: publicProvider(provider),
+      modelId: target.model.id,
+      durationMs: Date.now() - started,
+      detail: errorDetail(error, provider)
+    }
+  }
+}
+
+async function runSpeech(target: SmokeTarget, projectId: string): Promise<Omit<SmokeResult, 'id'>> {
+  const started = Date.now()
+  const provider = getProvider(target.provider.id)
+  if (!provider)
+    return {
+      kind: 'speech',
+      status: 'fail',
+      provider: publicProvider(target.provider),
+      modelId: target.model.id,
+      durationMs: Date.now() - started,
+      detail: '供应商记录不存在'
+    }
+  try {
+    const result = await generateSpeechToAsset({
+      projectId,
+      providerId: provider.id,
+      modelId: target.model.id,
+      text: '模型连通性测试成功。',
+      voiceId: '',
+      config: speechConfigFor(provider, target.model.id)
+    })
+    return {
+      kind: 'speech',
+      status: 'pass',
+      provider: publicProvider(provider),
+      modelId: target.model.id,
+      durationMs: Date.now() - started,
+      detail: '真实语音合成成功，结果已落入测试媒体库',
+      asset: assetSummary(result.asset)
+    }
+  } catch (error) {
+    return {
+      kind: 'speech',
+      status: 'fail',
+      provider: publicProvider(provider),
+      modelId: target.model.id,
+      durationMs: Date.now() - started,
+      detail: errorDetail(error, provider)
+    }
+  }
+}
+
+async function runVoiceDesign(
+  providerSummary: ProviderSummary,
+  projectId: string
+): Promise<Omit<SmokeResult, 'id'>> {
+  const started = Date.now()
+  const provider = getProvider(providerSummary.id)
+  if (!provider)
+    return {
+      kind: 'voice-design',
+      status: 'fail',
+      provider: publicProvider(providerSummary),
+      durationMs: Date.now() - started,
+      detail: '供应商记录不存在'
+    }
+  try {
+    const result = await designMiniMaxVoice({
+      projectId,
+      providerId: provider.id,
+      prompt: '清晰、温和、自然的中文旁白声线，语速平稳。',
+      config: { ...DEFAULT_VOICE_DESIGN_CONFIG, providerId: provider.id }
+    })
+    return {
+      kind: 'voice-design',
+      status: 'pass',
+      provider: publicProvider(provider),
+      durationMs: Date.now() - started,
+      detail: `真实音色设计成功，已获得可引用的 voice_id：${result.voiceId}`,
+      asset: assetSummary(result.asset)
+    }
+  } catch (error) {
+    return {
+      kind: 'voice-design',
+      status: 'fail',
+      provider: publicProvider(provider),
+      durationMs: Date.now() - started,
+      detail: errorDetail(error, provider)
+    }
+  }
+}
+
+function skippedResult(target: SmokeTarget, reason: string): SmokeResult {
+  return {
+    id: randomUUID(),
+    kind: target.kind,
+    status: 'skipped',
+    provider: publicProvider(target.provider),
+    modelId: target.model.id,
+    durationMs: 0,
+    detail: reason
+  }
+}
+
+/**
+ * 逐个真实调用已配置的文本、图片和音频模型。每次运行使用独立 projectId，产物保留为
+ * 可复核证据；语音克隆需要用户上传含生物特征的参考音频，故本命令有意不执行。
+ */
+export async function runModelSmokeTest(
+  options: ModelSmokeOptions = {}
+): Promise<{ report: ModelSmokeReport; reportPath: string }> {
+  const runId = randomUUID()
+  const startedAt = new Date().toISOString()
+  const projectId = `model-smoke-${runId}`
+  const providers = listProviders()
+  const allowedKinds = new Set(options.kinds ?? ['text', 'image', 'speech'])
+  const targets = collectSmokeTargets(providers).filter((target) => allowedKinds.has(target.kind))
+  const results: SmokeResult[] = []
+  const reportsDir = join(getDataDir(), 'model-smoke-reports')
+  await mkdir(reportsDir, { recursive: true })
+  const reportPath = join(
+    reportsDir,
+    `${startedAt.replaceAll(':', '-').replaceAll('.', '-')}-${runId}.json`
+  )
+  const report: ModelSmokeReport = {
+    version: 1,
+    runId,
+    startedAt,
+    finishedAt: startedAt,
+    projectId,
+    scope: 'text-image-audio-no-video',
+    totals: { pass: 0, fail: 0, skipped: 0 },
+    results
+  }
+  // 每完成一项立即覆盖同一份报告；故障/超时不会让之前已经完成的真跑证据丢失。
+  const persist = async (): Promise<void> => {
+    report.finishedAt = new Date().toISOString()
+    report.totals = {
+      pass: results.filter((result) => result.status === 'pass').length,
+      fail: results.filter((result) => result.status === 'fail').length,
+      skipped: results.filter((result) => result.status === 'skipped').length
+    }
+    await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8')
+  }
+  await persist()
+
+  if (!targets.length) {
+    results.push({
+      id: randomUUID(),
+      kind: 'configuration',
+      status: 'fail',
+      provider: { id: '', name: '模型目录', specId: 'system' },
+      durationMs: 0,
+      detail: '未发现可执行的文本、图片或音频模型。请确认模型已保存、已验证并绑定对应功能键。'
+    })
+    await persist()
+  }
+
+  for (const target of targets) {
+    if (!target.provider.hasApiKey) {
+      results.push(skippedResult(target, '未保存可用 API Key，未发起真实调用'))
+      await persist()
+      continue
+    }
+    const task =
+      target.kind === 'text'
+        ? runText(target)
+        : target.kind === 'image'
+          ? runImage(target, projectId)
+          : runSpeech(target, projectId)
+    let result: Omit<SmokeResult, 'id'>
+    try {
+      result = await withTimeout(target.kind, task)
+    } catch (error) {
+      const provider = getProvider(target.provider.id)
+      result = {
+        kind: target.kind,
+        status: 'fail',
+        provider: publicProvider(provider ?? target.provider),
+        modelId: target.model.id,
+        durationMs: SMOKE_TIMEOUT_MS[target.kind],
+        detail: provider ? errorDetail(error, provider) : String(error)
+      }
+    }
+    results.push({ id: randomUUID(), ...result })
+    await persist()
+  }
+
+  // 音色设计是 MiniMax 的供应商级能力，做一次即可。没有 MiniMax 时明确记录为跳过。
+  const minimax = providers.find((provider) => provider.specId === 'minimax')
+  if (options.includeVoiceDesign !== false && minimax?.hasApiKey) {
+    const task = runVoiceDesign(minimax, projectId)
+    try {
+      results.push({ id: randomUUID(), ...(await withTimeout('voice-design', task)) })
+    } catch (error) {
+      const provider = getProvider(minimax.id)
+      results.push({
+        id: randomUUID(),
+        kind: 'voice-design',
+        status: 'fail',
+        provider: publicProvider(provider ?? minimax),
+        durationMs: SMOKE_TIMEOUT_MS['voice-design'],
+        detail: provider ? errorDetail(error, provider) : String(error)
+      })
+    }
+  } else if (options.includeVoiceDesign !== false && minimax) {
+    results.push({
+      id: randomUUID(),
+      kind: 'voice-design',
+      status: 'skipped',
+      provider: publicProvider(minimax),
+      durationMs: 0,
+      detail: 'MiniMax 未保存可用 API Key，未发起真实调用'
+    })
+  }
+  await persist()
+  return { report, reportPath }
+}

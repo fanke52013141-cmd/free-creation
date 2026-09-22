@@ -20,6 +20,7 @@ import { reconcileWorkspace } from './store/workspace-health'
 import { upgradeLegacyApiKeys } from './gateway/providers.repo'
 import { getMediaAbsPath } from './store/media.repo'
 import { mimeForExtension } from '../shared/mime'
+import { runModelSmokeTest } from './model-smoke'
 
 log.initialize()
 log.info('main process starting')
@@ -146,7 +147,9 @@ function createWindow(): BrowserWindow {
   return mainWindow
 }
 
-app.whenReady().then(() => {
+const isModelSmokeTest = process.argv.includes('--model-smoke-test')
+
+app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.canvas-studio.app')
 
   app.on('browser-window-created', (_, window) => {
@@ -171,6 +174,30 @@ app.whenReady().then(() => {
     log.warn('workspace health check found recoverable items', health)
   }
   registerMediaProtocol()
+
+  // 无界面真实验收：复用桌面端主进程的安全存储与网关，避免把真实 Token 测试建立在
+  // 外部 GUI 自动化是否能捕获 Electron 窗口这一不稳定前提上。
+  if (isModelSmokeTest) {
+    const kindArg = process.argv.find((arg) => arg.startsWith('--model-smoke-kind='))
+    const requestedKinds = kindArg
+      ?.slice('--model-smoke-kind='.length)
+      .split(',')
+      .map((kind) => kind.trim())
+      .filter(
+        (kind): kind is 'text' | 'image' | 'speech' =>
+          kind === 'text' || kind === 'image' || kind === 'speech'
+      )
+    const { report, reportPath } = await runModelSmokeTest({
+      kinds: requestedKinds?.length ? requestedKinds : undefined,
+      // 单项复测不应顺带再花一次音色设计费用。
+      includeVoiceDesign: !requestedKinds
+    })
+    log.info(`model smoke test finished: ${reportPath}`)
+    // stdout 只输出路径和汇总，完整报告不含密钥并写入用户数据目录。
+    console.log(JSON.stringify({ reportPath, totals: report.totals }))
+    app.exit(report.totals.fail > 0 ? 1 : 0)
+    return
+  }
 
   // 文件监听器：CLI/MCP 写入 project.json 时通知渲染进程实时刷新。
   // 窗口创建后赋值给引用，监听器通过 getter 延迟获取。
