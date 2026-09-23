@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { stopEventPropagation } from 'tldraw'
 import type { Capability, Connection, ModelDefinition, ModelOperation } from '@free-creation/model-contracts'
 import { useGatewayStore } from '../stores/gateway'
 import { toast } from '../stores/toast'
@@ -58,7 +59,23 @@ export function ModelCatalogPanel(): React.JSX.Element | null {
     if (connectionResult.ok) { setConnections(connectionResult.data); setConnectionId((x) => x || connectionResult.data[0]?.id || '') }
     if (modelResult.ok) setModels(modelResult.data)
   }
-  useEffect(() => { if (open) void load() }, [open])
+  useEffect(() => {
+    if (!open) return
+    let active = true
+    void Promise.all([window.api.models.listConnections(), window.api.models.listDefinitions()]).then(
+      ([connectionResult, modelResult]) => {
+        if (!active) return
+        if (connectionResult.ok) {
+          setConnections(connectionResult.data)
+          setConnectionId((current) => current || connectionResult.data[0]?.id || '')
+        }
+        if (modelResult.ok) setModels(modelResult.data)
+      }
+    )
+    return () => {
+      active = false
+    }
+  }, [open])
   const dialogRef = useRef<HTMLElement | null>(null)
   useEffect(() => {
     if (!open) return
@@ -122,7 +139,7 @@ export function ModelCatalogPanel(): React.JSX.Element | null {
   }
   const toggle = (modelId: string): void => setSelected((current) => { const next = new Set(current); next.has(modelId) ? next.delete(modelId) : next.add(modelId); return next })
   const options = categories.find((x) => x.value === category)!
-  return createPortal(<div className="gw-mask" onClick={close}><section ref={dialogRef} tabIndex={-1} className="gw-panel gw-catalog" role="dialog" aria-modal="true" aria-label="模型管理" onClick={(e) => e.stopPropagation()}>
+  return createPortal(<div className="gw-mask" onPointerDown={(event) => stopEventPropagation(event)} onClick={(event) => { stopEventPropagation(event); if (event.target === event.currentTarget) close() }}><section ref={dialogRef} tabIndex={-1} className="gw-panel gw-catalog" role="dialog" aria-modal="true" aria-label="模型管理" onClick={(e) => e.stopPropagation()}>
     <header className="gw-head"><div><span className="gw-title">模型管理</span><span className="gw-subtitle">连接管理“有什么模型”；节点设置决定“引用哪个模型”。</span></div><button className="icon-btn" onClick={close} aria-label="关闭">×</button></header>
     <div className="gw-body"><aside className="gw-side gw-connections"><div className="gw-side-head"><b>连接</b><button className="gw-side-add" onClick={resetConnection}>+ 添加连接</button></div>{connections.map((x) => <button key={x.id} className={`gw-item ${connectionId === x.id ? 'active' : ''}`} onClick={() => chooseConnection(x)}><span className="gw-item-name">{x.name}</span><span className="gw-item-sub">{x.baseUrl}</span></button>)}{!connections.length && <p className="gw-empty">还没有连接</p>}</aside>
     <main className="gw-main gw-catalog-main"><section className="gw-card"><div className="gw-card-head"><div><h2>{connectionId ? '编辑连接' : '添加连接'}</h2><p>编辑时 API Key 留空即保留原值。</p></div>{connectionId && <button className="btn-ghost small danger" disabled={busy} onClick={() => void deleteConnection()}>删除连接</button>}</div><div className="gw-grid"><label><span>连接名称</span><input className="gw-input" value={connectionName} onChange={(e) => setConnectionName(e.target.value)} /></label><label><span>服务商类型</span><select className="gw-input" value={protocol} onChange={(e) => setProtocol(e.target.value as Connection['protocol'])}>{protocolOptions.map((x) => <option key={x.value} value={x.value}>{x.label}</option>)}</select></label><label className="wide"><span>API 地址</span><input className="gw-input" value={baseUrl} placeholder="https://api.example.com/v1" onChange={(e) => setBaseUrl(e.target.value)} /></label><label className="wide"><span>API Key</span><input className="gw-input" type="password" value={apiKey} placeholder={connectionId ? '留空以保留已保存的 API Key' : '粘贴 API Key，仅加密保存于本机'} onChange={(e) => setApiKey(e.target.value)} /></label></div><div className="gw-actions"><button className="btn-primary" disabled={busy} onClick={() => void saveConnection()}>保存连接</button>{connectionId && <button className="btn-ghost" disabled={busy} onClick={() => void discover()}>拉取可用模型</button>}</div></section>

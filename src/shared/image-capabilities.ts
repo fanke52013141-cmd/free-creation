@@ -72,6 +72,8 @@ export interface ImageGenerationConfig {
   background?: 'transparent'
   /** 旧项目配置兼容字段；生图 UI 不再暴露，也不会发送给供应商。 */
   seed?: number
+  /** 本次生成的独立图片数量。执行器逐张产出，避免假定所有供应商都支持 n 参数。 */
+  count: number
 }
 
 const IMAGE_RESOLUTIONS: ImageResolution[] = ['1k', '2k', '4k']
@@ -261,6 +263,8 @@ export function normalizeImageGenerationConfig(
     : (sizeOptions[0]?.value ?? capabilities.sizeOptions[0]?.value ?? 'auto')
   // 分辨率与供应商无关，跨供应商保留用户意图；发送与否由能力表决定。
   const resolution = IMAGE_RESOLUTIONS.find((item) => item === input.resolution)
+  const rawCount = typeof input.count === 'number' ? input.count : Number(input.count)
+  const count = Number.isFinite(rawCount) ? Math.max(1, Math.min(9, Math.trunc(rawCount))) : 1
   return {
     modelKey: typeof input.modelKey === 'string' ? input.modelKey : '',
     ...(typeof input.providerKey === 'string' && input.providerKey
@@ -271,6 +275,7 @@ export function normalizeImageGenerationConfig(
     ...(resolution ? { resolution } : {}),
     // 与分辨率同理：配置层保留用户意图，发送与否由能力表在网关决定（parseImageGen 用保守表归一化）。
     ...(input.background === 'transparent' ? { background: 'transparent' as const } : {}),
-    ...(typeof input.seed === 'number' && Number.isFinite(input.seed) ? { seed: input.seed } : {})
+    ...(typeof input.seed === 'number' && Number.isFinite(input.seed) ? { seed: input.seed } : {}),
+    count
   }
 }

@@ -134,4 +134,29 @@ describe('imageGenExecutor · 媒体结果集合', () => {
     expect((await imageGenExecutor(failed.ctx)).status).toBe('failed')
     expect(failed.result.value).toBeNull()
   })
+
+  it('按 count 逐张生成并给产物提供 2×2 / 3×3 的画布布局提示', async () => {
+    let count = 0
+    currentGateway = {
+      imageGenerate: vi.fn(async () => {
+        count += 1
+        return {
+          ok: true,
+          data: { id: `batch-${count}`, path: `/tmp/batch-${count}.png`, mime: 'image/png' }
+        }
+      })
+    }
+    const { ctx, result, artifacts } = makeContext()
+    ctx.shape.props.config = JSON.stringify({ modelKey: 'p1::img-1', size: 'auto', count: 4 })
+
+    await expect(imageGenExecutor(ctx)).resolves.toEqual({ status: 'done' })
+    expect(currentGateway.imageGenerate).toHaveBeenCalledTimes(4)
+    expect(parseMediaResultCollection(result.value ?? '')?.results).toHaveLength(4)
+    expect(artifacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ mediaId: 'batch-1', layoutColumns: 2 }),
+        expect.objectContaining({ mediaId: 'batch-4', layoutColumns: 2 })
+      ])
+    )
+  })
 })

@@ -180,18 +180,6 @@ function collectEdges(editor: Editor, host: HTMLDivElement): ScreenEdge[] {
   return result
 }
 
-/**
- * 仅在用户明确关注一条链路时播放动效：从选中节点出发的边，以及用户主动选中的边。
- * 全画布常驻流光会掩盖端口类型色，也会在大型流程里持续消耗合成资源。
- */
-function isFlowActive(
-  edge: ScreenEdge,
-  selectedNodeIds: ReadonlySet<TLShapeId>,
-  selectedEdgeId: string | null
-): boolean {
-  return selectedNodeIds.has(edge.sourceId) || edge.id === selectedEdgeId
-}
-
 function getNodePortsForShape(shape: NodeCardShape): {
   in: ReturnType<typeof getNodePorts>['in']
   out: ReturnType<typeof getNodePorts>['out']
@@ -229,7 +217,6 @@ export function DataEdgeLayer({
   const svgRef = useRef<SVGSVGElement | null>(null)
   const reactId = useId().replace(/:/g, '')
   const overlapMaskId = `data-edge-node-mask-${reactId}`
-  const flowGradientId = `data-edge-flow-gradient-${reactId}`
 
   useEffect(() => {
     let frame = 0
@@ -267,13 +254,9 @@ export function DataEdgeLayer({
   const edges = host ? collectEdges(editor, host) : []
   const nodeRects = host ? collectNodeRects(editor, host) : []
   const nodeRectsRef = useRef<ScreenNodeRect[]>([])
-  nodeRectsRef.current = nodeRects
-  const selectedNodeIds = new Set(
-    editor
-      .getSelectedShapes()
-      .filter((shape): shape is NodeCardShape => shape.type === 'node-card')
-      .map((shape) => shape.id)
-  )
+  useEffect(() => {
+    nodeRectsRef.current = nodeRects
+  })
 
   /** 判断屏幕坐标是否落在任一连线的可点击描边区域内。 */
   const hitTest = (clientX: number, clientY: number): TLShapeId | null => {
@@ -405,22 +388,6 @@ export function DataEdgeLayer({
               <rect key={index} {...rect} fill="black" />
             ))}
           </mask>
-          {/* 彩色只绘制在沿路径移动的一小段“水流”上，底层始终保留端口语义色。 */}
-          <linearGradient
-            id={flowGradientId}
-            gradientUnits="userSpaceOnUse"
-            spreadMethod="repeat"
-            x1="0"
-            y1="0"
-            x2="220"
-            y2="0"
-          >
-            <stop offset="0" stopColor="#54f4cb" />
-            <stop offset="0.22" stopColor="#4fc4ff" />
-            <stop offset="0.48" stopColor="#a889ff" />
-            <stop offset="0.7" stopColor="#6ff3b9" />
-            <stop offset="1" stopColor="#54f4cb" />
-          </linearGradient>
         </defs>
         {edges.map((edge) => {
           if (edge.provenance) {
@@ -438,10 +405,9 @@ export function DataEdgeLayer({
           }
           const active = edge.id === selectedEdgeId
           const hovered = edge.id === hoveredEdgeId
-          const flowing = isFlowActive(edge, selectedNodeIds, selectedEdgeId)
           return (
             <g
-              className={`data-edge${active ? ' is-selected' : ''}${hovered ? ' is-hovered' : ''}${flowing ? ' is-flowing' : ''}`}
+              className={`data-edge${active ? ' is-selected' : ''}${hovered ? ' is-hovered' : ''}`}
               key={edge.id}
             >
               <path
@@ -450,15 +416,6 @@ export function DataEdgeLayer({
                 mask={`url(#${overlapMaskId})`}
                 style={{ stroke: edge.color }}
               />
-              {flowing && (
-                <path
-                  className="data-edge-flow"
-                  d={edge.path}
-                  pathLength="1000"
-                  mask={`url(#${overlapMaskId})`}
-                  style={{ stroke: `url(#${flowGradientId})` }}
-                />
-              )}
               <path className="data-edge-hit" d={edge.path} data-edge-id={edge.id} />
             </g>
           )

@@ -1,33 +1,14 @@
-// AI 处理节点 Body（路线图 R6：bodies.tsx 拆分）
-//
-// 执行器只在 in-text / in-json 都为空时跳过，所以连线状态必须印在卡片上：
-// 只看模型和温度，用户无法判断运行会发生什么。
-import { useEffect, useRef, useState } from 'react'
-import { stopEventPropagation, useEditor } from 'tldraw'
+// AI 处理是一个纯处理节点：卡片只说明它接收什么、会从哪个正式端口给下游，
+// 模型和生成参数统一放在右侧「设置」页，避免把运行结果误看成一个资产节点。
+import { useEffect } from 'react'
+import { useEditor, useValue } from 'tldraw'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { parseAiProcess, type AiProcessConfig } from '../../../engine/executors/aiProcess'
-import { ModelSelect, NoModelHint, useWheelScroll } from './shared'
-import type { NodeBodyProps } from '../../registry'
+import { ModelSelect, NoModelHint } from './shared'
+import type { NodeBodyProps, NodeSettingsProps } from '../../registry'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { AppSelect } from '../../../components/AppSelect'
-
-/** 从 meta.nodeResult 解析 AI 处理节点的上次运行结果。 */
-function parseStoredAiResult(stored: string): AiProcessConfig['result'] | undefined {
-  if (!stored) return undefined
-  try {
-    const value = JSON.parse(stored) as Record<string, unknown>
-    if (value.kind === 'text' || value.kind === 'markdown' || value.kind === 'json') {
-      return {
-        kind: value.kind,
-        ...(typeof value.text === 'string' ? { text: value.text } : {}),
-        ...('data' in value ? { data: value.data } : {})
-      } as AiProcessConfig['result']
-    }
-  } catch {
-    // 未产生过有效运行结果。
-  }
-  return undefined
-}
+import { countIncomingConnections } from '../../../canvas/graph'
 
 const AI_SCHEMA_OPTIONS = [
   { id: 'json.any', version: 1, label: '通用 JSON（json.any@1）' },
@@ -37,27 +18,32 @@ const AI_SCHEMA_OPTIONS = [
 const AI_MODE_OPTIONS: Array<{
   value: AiProcessConfig['mode']
   label: string
-  /** 该模式唯一会写入的输出端口，与 projectAiProcessOutputs 的分支一致。 */
+  /** 唯一正式输出端口；由 projectAiProcessOutputs 投影，不能由 UI 另造结果。 */
   portId: string
-  hint: string
+  downstream: string
 }> = [
-  { value: 'text', label: '文本', portId: 'out-text', hint: '结果只写入 out-text。' },
+  {
+    value: 'text',
+    label: '文本',
+    portId: 'out-text',
+    downstream: '连接文本节点或声明文本输入的处理节点。'
+  },
   {
     value: 'markdown',
     label: 'Markdown',
     portId: 'out-markdown',
-    hint: '结果只写入 out-markdown，保留 Markdown 标记。'
+    downstream: '连接接受 Markdown 的文本输入；保留标题、列表和代码标记。'
   },
   {
     value: 'json',
     label: 'JSON',
     portId: 'out-json',
-    hint: '按所选 Schema 校验后写入 out-json；模型返回不合法则节点失败。'
+    downstream: '只连接声明匹配 Schema 的 JSON / 结构数据节点。'
   }
 ]
 
 function modeOption(mode: AiProcessConfig['mode']): (typeof AI_MODE_OPTIONS)[number] {
-  return AI_MODE_OPTIONS.find((o) => o.value === mode) ?? AI_MODE_OPTIONS[0]
+  return AI_MODE_OPTIONS.find((option) => option.value === mode) ?? AI_MODE_OPTIONS[0]
 }
 
 function schemaKey(schema: AiProcessConfig['jsonSchema']): string {
@@ -65,196 +51,165 @@ function schemaKey(schema: AiProcessConfig['jsonSchema']): string {
 }
 
 function schemaFromKey(key: string): AiProcessConfig['jsonSchema'] {
-  const found = AI_SCHEMA_OPTIONS.find((s) => `${s.id}@${s.version}` === key)
+  const found = AI_SCHEMA_OPTIONS.find((option) => `${option.id}@${option.version}` === key)
   return found ? { id: found.id, version: found.version } : undefined
 }
 
-function resultSummary(result: AiProcessConfig['result']): string {
-  if (!result) return ''
-  if (result.kind === 'json') return JSON.stringify(result.data)
-  if (typeof result.text === 'string') return result.text.trim()
-  return ''
-}
-
+/** 卡片只显示已声明的输入和输出状态；配置与历史结果在右侧详情中查看。 */
 export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
-  const providers = useGatewayStore((s) => s.providers)
-  const loaded = useGatewayStore((s) => s.loaded)
-  const loadProviders = useGatewayStore((s) => s.load)
-  const openSettings = useGatewayStore((s) => s.openSettings)
-  const data = parseAiProcess(readNodeConfig(shape))
-  // 运行结果从 meta.nodeResult 读取（配置/结果分离）；配置写入不再混入 result。
-  const storedResult = parseStoredAiResult(
-    typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
+  const textCount = useValue(
+    `${shape.id}:in-text-count`,
+    () => countIncomingConnections(editor, shape.id, 'in-text'),
+    [editor, shape.id]
   )
-  const [editingSystem, setEditingSystem] = useState(false)
-  const [systemDraft, setSystemDraft] = useState(data.system)
-  const scrollRef = useRef<HTMLDivElement>(null)
-  useWheelScroll(scrollRef)
+  const jsonCount = useValue(
+    `${shape.id}:in-json-count`,
+    () => countIncomingConnections(editor, shape.id, 'in-json'),
+    [editor, shape.id]
+  )
+  const config = parseAiProcess(readNodeConfig(shape))
+  const mode = modeOption(config.mode)
+  const hasInput = textCount + jsonCount > 0
+
+  return (
+    <div className="ai-process-body">
+      <div className={`ai-process-wiring ${hasInput ? 'ok' : 'warn'}`}>
+        <span className="ai-process-wiring-ports">
+          <span>文本输入 {textCount} 条</span>
+          <span>JSON 输入 {jsonCount} 条</span>
+        </span>
+        {!hasInput && <span className="ai-process-wiring-note">等待文本或 JSON 输入</span>}
+      </div>
+      <div className="ai-process-mode" title={mode.downstream}>
+        输出 {mode.label} → <code>{mode.portId}</code>
+      </div>
+    </div>
+  )
+}
+
+/** AI 处理的固定配置只在右侧详情「设置」中编辑，卡片不再承担配置表单。 */
+export function AiProcessSettings({ shape, editor }: NodeSettingsProps): React.JSX.Element {
+  const providers = useGatewayStore((state) => state.providers)
+  const loaded = useGatewayStore((state) => state.loaded)
+  const loadProviders = useGatewayStore((state) => state.load)
+  const openSettings = useGatewayStore((state) => state.openSettings)
+  const config = parseAiProcess(readNodeConfig(shape))
+  const options = modelsByModality(providers, 'text')
+  const mode = modeOption(config.mode)
 
   useEffect(() => {
     if (!loaded) void loadProviders()
   }, [loaded, loadProviders])
 
-  const options = modelsByModality(providers, 'text')
-  const selectedModel = options.find((o) => o.key === data.modelKey)
-  const modelName = selectedModel?.model.name || selectedModel?.model.id || '未选择模型'
-  const updateConfig = (next: AiProcessConfig): void => {
+  const save = (patch: Partial<AiProcessConfig>): void => {
     editor.updateShape({
       id: shape.id,
       type: 'node-card',
-      props: { config: JSON.stringify(next) }
+      props: { config: JSON.stringify({ ...config, ...patch }) }
     })
   }
-
-  const commitSystem = (): void => {
-    setEditingSystem(false)
-    if (systemDraft !== data.system) updateConfig({ ...data, system: systemDraft })
-  }
-
-  const summary = resultSummary(storedResult)
-  const mode = modeOption(data.mode)
 
   if (options.length === 0) {
     return <NoModelHint onOpen={() => openSettings()} presetIds={['relay']} />
   }
 
   return (
-    <div className="ai-process-body" ref={scrollRef}>
-      <div className="ai-process-config">
-        <label className="ai-row">
-          <span className="ai-row-label">模型</span>
-          <ModelSelect
-            value={data.modelKey}
-            options={options}
-            onChange={(key) => updateConfig({ ...data, modelKey: key })}
-          />
+    <section className="node-settings ai-process-settings">
+      <div className="settings-row">
+        <span className="opt-label">模型</span>
+        <ModelSelect
+          value={config.modelKey}
+          options={options}
+          onChange={(modelKey) => save({ modelKey })}
+        />
+      </div>
+      <div className="settings-row">
+        <label className="opt-label" htmlFor={`ai-process-output-${shape.id}`}>
+          输出类型
         </label>
-
-        <div className="ai-row">
-          <span className="ai-row-label">输出</span>
-          <div className="ai-process-mode-col">
-            <AppSelect
-              className="gen-select"
-              value={data.mode}
-              title={`本次结果写入 ${mode.portId} 端口`}
-              onPointerDown={(e) => stopEventPropagation(e)}
-              onChange={(e) => {
-                const next = e.target.value as AiProcessConfig['mode']
-                updateConfig({
-                  ...data,
-                  mode: next,
-                  // 切出 json 模式时清掉 schema，切回时保持显式选择
-                  ...(next === 'json' && !data.jsonSchema
-                    ? { jsonSchema: schemaFromKey('json.any@1') }
-                    : {})
-                })
-              }}
-            >
-              {AI_MODE_OPTIONS.map((m) => (
-                <option key={m.value} value={m.value}>
-                  {m.label}
-                </option>
-              ))}
-            </AppSelect>
-            <div className="ai-process-mode-hint">
-              <span>{mode.hint}</span>
-              <code className="variable-expr">{mode.portId}</code>
-            </div>
-          </div>
-        </div>
-
-        {data.mode === 'json' && (
-          <label className="ai-row">
-            <span className="ai-row-label">Schema</span>
-            <AppSelect
-              className="gen-select"
-              value={schemaKey(data.jsonSchema)}
-              title="决定 out-json 声明的结构，并作为运行时校验标准；不符合则节点失败"
-              onPointerDown={(e) => stopEventPropagation(e)}
-              onChange={(e) => updateConfig({ ...data, jsonSchema: schemaFromKey(e.target.value) })}
-            >
-              {AI_SCHEMA_OPTIONS.map((s) => (
-                <option key={`${s.id}@${s.version}`} value={`${s.id}@${s.version}`}>
-                  {s.label}
-                </option>
-              ))}
-            </AppSelect>
-          </label>
-        )}
-
-        <div className="ai-row">
-          <span className="ai-row-label">系统提示词</span>
-          {editingSystem ? (
-            <textarea
-              className="node-textarea ai-system-edit"
-              autoFocus
-              value={systemDraft}
-              onChange={(e) => setSystemDraft(e.target.value)}
-              onBlur={commitSystem}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') commitSystem()
-              }}
-              onPointerDown={(e) => e.stopPropagation()}
-              spellCheck={false}
-            />
-          ) : (
-            <button
-              className="ai-system-preview"
-              onPointerDown={(e) => stopEventPropagation(e)}
-              onClick={(e) => {
-                e.stopPropagation()
-                setSystemDraft(data.system)
-                setEditingSystem(true)
-              }}
-            >
-              {data.system.trim() ? data.system : '未设置系统提示词'}
-            </button>
-          )}
-        </div>
-
-        <div className="ai-row ai-row-num">
-          <label>
-            <span className="ai-row-label">温度</span>
-            <input
-              type="number"
-              step="0.1"
-              min="0"
-              max="2"
-              title="0 更稳定重复，2 更发散"
-              value={data.temperature}
-              onPointerDown={(e) => stopEventPropagation(e)}
-              onChange={(e) => updateConfig({ ...data, temperature: Number(e.target.value) || 0 })}
-            />
-          </label>
-          <label>
-            <span className="ai-row-label">上限</span>
-            <input
-              type="number"
-              step="256"
-              min="256"
-              title="本次回复的 token 上限，超出部分模型不会写完"
-              value={data.maxTokens}
-              onPointerDown={(e) => stopEventPropagation(e)}
-              onChange={(e) => updateConfig({ ...data, maxTokens: Number(e.target.value) || 4096 })}
-            />
-          </label>
-        </div>
+        <AppSelect
+          id={`ai-process-output-${shape.id}`}
+          className="gen-select"
+          value={config.mode}
+          onChange={(event) => {
+            const nextMode = event.target.value as AiProcessConfig['mode']
+            save({
+              mode: nextMode,
+              ...(nextMode === 'json' && !config.jsonSchema
+                ? { jsonSchema: schemaFromKey('json.any@1') }
+                : {})
+            })
+          }}
+        >
+          {AI_MODE_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </AppSelect>
       </div>
-
-      <div className="ai-process-result">
-        <span className="ai-result-label">上次结果</span>
-        <div className="ai-result-preview">
-          {summary ? (
-            <span>{summary.length > 120 ? `${summary.slice(0, 120)}…` : summary}</span>
-          ) : (
-            <span className="ai-result-empty">尚未运行</span>
-          )}
+      <p className="contract-settings-hint">
+        本节点只处理数据；成功后由 <code>{mode.portId}</code> 提供给下游。{mode.downstream}
+      </p>
+      {config.mode === 'json' && (
+        <div className="settings-row">
+          <label className="opt-label" htmlFor={`ai-process-schema-${shape.id}`}>
+            JSON Schema
+          </label>
+          <AppSelect
+            id={`ai-process-schema-${shape.id}`}
+            className="gen-select"
+            value={schemaKey(config.jsonSchema)}
+            onChange={(event) => save({ jsonSchema: schemaFromKey(event.target.value) })}
+          >
+            {AI_SCHEMA_OPTIONS.map((schema) => (
+              <option
+                key={`${schema.id}@${schema.version}`}
+                value={`${schema.id}@${schema.version}`}
+              >
+                {schema.label}
+              </option>
+            ))}
+          </AppSelect>
         </div>
+      )}
+      <label className="settings-field" htmlFor={`ai-process-system-${shape.id}`}>
+        系统提示词
+        <textarea
+          id={`ai-process-system-${shape.id}`}
+          className="node-textarea"
+          defaultValue={config.system}
+          rows={4}
+          placeholder="定义处理目标、语气或输出约束…"
+          onBlur={(event) => save({ system: event.currentTarget.value })}
+        />
+      </label>
+      <div className="settings-row ai-process-number-settings">
+        <label className="opt-label" htmlFor={`ai-process-temperature-${shape.id}`}>
+          温度
+        </label>
+        <input
+          id={`ai-process-temperature-${shape.id}`}
+          type="number"
+          min="0"
+          max="2"
+          step="0.1"
+          value={config.temperature}
+          onChange={(event) => save({ temperature: Number(event.target.value) || 0 })}
+        />
+        <label className="opt-label" htmlFor={`ai-process-tokens-${shape.id}`}>
+          最大输出
+        </label>
+        <input
+          id={`ai-process-tokens-${shape.id}`}
+          type="number"
+          min="256"
+          step="256"
+          value={config.maxTokens}
+          onChange={(event) => save({ maxTokens: Number(event.target.value) || 4096 })}
+        />
       </div>
-      <div className="ai-process-mode">
-        {modelName} → {mode.portId}
-      </div>
-    </div>
+    </section>
   )
 }

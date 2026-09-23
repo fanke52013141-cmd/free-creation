@@ -8,7 +8,8 @@ export const NODE_CATEGORY_IDS = ['input', 'image', 'video', 'audio', 'logic'] a
 
 export type NodeCategoryId = (typeof NODE_CATEGORY_IDS)[number]
 
-export const PALETTE_CATEGORY_IDS = ['favorites', ...NODE_CATEGORY_IDS] as const
+/** 左侧 Dock 只展示任务分类；“常用”快捷入口已移除，避免同一节点重复出现。 */
+export const PALETTE_CATEGORY_IDS = [...NODE_CATEGORY_IDS] as const
 
 export type PaletteCategoryId = (typeof PALETTE_CATEGORY_IDS)[number]
 

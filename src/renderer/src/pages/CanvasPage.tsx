@@ -37,7 +37,6 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
   const isRunning = enginePhase !== 'idle'
   const isPaused = enginePhase === 'paused'
   const [showErrors, setShowErrors] = useState(true)
-  const [canvasTheme, setCanvasTheme] = useState<'dark' | 'light'>('dark')
 
   // Ctrl+K 唤起搜索面板
   useEffect(() => {
@@ -95,7 +94,7 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
   }
 
   return (
-    <div className={`canvas-page canvas-theme-${canvasTheme}`}>
+    <div className="canvas-page canvas-theme-dark">
       <div className="canvas-topbar">
         {/* 左侧：项目菜单（撤销/重做已移到画布右侧历史簇） */}
         <ProjectMenu project={currentProject ?? file.meta} />
@@ -271,7 +270,6 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
       <CanvasEditor
         project={currentProject ?? file.meta}
         initialSnapshot={file.tldrawSnapshot}
-        onThemeChange={setCanvasTheme}
       />
     </div>
   )

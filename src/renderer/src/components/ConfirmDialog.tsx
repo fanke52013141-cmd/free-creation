@@ -55,7 +55,9 @@ export function ConfirmDialog(): React.JSX.Element | null {
   return createPortal(
     <div
       className="confirm-overlay"
+      onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => {
+        e.stopPropagation()
         if (e.target === e.currentTarget) resolve(false)
       }}
     >

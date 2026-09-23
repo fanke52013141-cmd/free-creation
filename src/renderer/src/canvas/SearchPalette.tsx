@@ -75,10 +75,11 @@ function SearchPaletteInner({ editor }: { editor: Editor }): React.JSX.Element {
       className="search-overlay"
       onPointerDown={(e) => stopEventPropagation(e)}
       onClick={(e) => {
+        stopEventPropagation(e)
         if (e.target === e.currentTarget) close()
       }}
     >
-      <div className="search-panel">
+      <div className="search-panel" role="dialog" aria-modal="true" aria-label="搜索节点">
         <div className="search-header">
           <span className="search-icon">
             <Icon name="search" size={17} />

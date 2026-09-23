@@ -1,0 +1,36 @@
+/* 处理节点工作台局部视觉：不改变画布或其他节点的全局规则。 */
+.crop-inline-preview .crop-inline-canvas {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  overflow: hidden;
+}
+
+.crop-inline-preview .crop-inline-canvas > img {
+  position: absolute;
+  max-width: none;
+  max-height: none;
+  object-fit: fill;
+  user-select: none;
+}
+
+.crop-inline-preview .crop-inline-selection {
+  min-width: 2px;
+  min-height: 2px;
+}
+
+.node-workbench-run {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 42px;
+  margin-top: 18px;
+}
+
+.image-edit-workbench-mask,
+.video-trim-workbench-mask {
+  cursor: default;
+}

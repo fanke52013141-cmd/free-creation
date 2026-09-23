@@ -72,7 +72,7 @@ export function PendingConnectionLayer({
   // 避免缩放时仅节点移动、临时引线却停留在旧屏幕位置。
   useEffect(() => {
     let frame = 0
-    const redraw = () => {
+    const redraw = (): void => {
       if (frame) return
       frame = requestAnimationFrame(() => {
         frame = 0

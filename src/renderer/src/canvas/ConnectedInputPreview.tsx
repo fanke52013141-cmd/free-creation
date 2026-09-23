@@ -40,6 +40,10 @@ function previewBody(input: ConnectedNodeInput): React.JSX.Element | null {
   }
 }
 
+function isTextualInput(input: ConnectedNodeInput): boolean {
+  return input.value?.kind === 'text' || input.value?.kind === 'markdown'
+}
+
 type OpenPreview = (next: { url: string; kind: 'image' | 'video' | 'audio'; title: string }) => void
 
 /** 图片引用缩略图：hover 延时 300ms 显示全貌浮层（portal 到 body、不拦截指针），
@@ -174,7 +178,7 @@ export function ConnectedInputPreview({
             />
           ) : (
             <div
-              className={`connected-input-item connected-input-${input.value?.kind ?? 'pending'}`}
+              className={`connected-input-item connected-input-${input.value?.kind ?? 'pending'}${isTextualInput(input) ? ' connected-input-textual' : ''}`}
               key={`${input.targetPortId}:${input.sourceNodeId}:${input.sourcePortId}:${input.order}`}
             >
               <span className="connected-input-target">{input.targetPortName}</span>

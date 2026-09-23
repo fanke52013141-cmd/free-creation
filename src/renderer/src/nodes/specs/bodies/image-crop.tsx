@@ -26,6 +26,7 @@ import {
   useSourceWiringNotice,
   useStoredNodeConfig
 } from './shared'
+import './node-workbench.css'
 
 type DragTarget =
   | { kind: 'rect'; corner: 0 | 1 | 2 | 3 }
@@ -229,6 +230,18 @@ export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.
     await runNodeManually(editor, project.id, providers, shape.id)
   }
 
+  // 预览采用 cover 而非把竖图缩到中间。映射始终保持在原图归一化坐标中，
+  // 因而视觉填满后拖拽、四角和最终执行仍然操作同一份裁剪配置。
+  const cropPreviewMapping = (() => {
+    const viewportAspect = containerSize ? containerSize.w / containerSize.h : previewAspect
+    if (previewAspect >= viewportAspect) {
+      const scaleX = previewAspect / Math.max(viewportAspect, 0.0001)
+      return { scaleX, scaleY: 1, offsetX: (1 - scaleX) / 2, offsetY: 0 }
+    }
+    const scaleY = viewportAspect / Math.max(previewAspect, 0.0001)
+    return { scaleX: 1, scaleY, offsetX: 0, offsetY: (1 - scaleY) / 2 }
+  })()
+
   if (!shape.props.mediaPath && !source) {
     return (
       <div className="asset-empty crop-empty">
@@ -252,8 +265,14 @@ export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.
     const pointForInlineEvent = (event: React.PointerEvent<HTMLDivElement>): NormalizedPoint => {
       const bounds = event.currentTarget.getBoundingClientRect()
       return {
-        x: clamp((event.clientX - bounds.left) / bounds.width),
-        y: clamp((event.clientY - bounds.top) / bounds.height)
+        x: clamp(
+          ((event.clientX - bounds.left) / bounds.width - cropPreviewMapping.offsetX) /
+            cropPreviewMapping.scaleX
+        ),
+        y: clamp(
+          ((event.clientY - bounds.top) / bounds.height - cropPreviewMapping.offsetY) /
+            cropPreviewMapping.scaleY
+        )
       }
     }
     const beginInlineDrag = (event: React.PointerEvent<HTMLDivElement>): void => {
@@ -334,21 +353,6 @@ export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.
         >
           <div
             className="crop-inline-canvas"
-            style={
-              containerSize && previewAspect
-                ? containerSize.w / containerSize.h > previewAspect
-                  ? {
-                      height: `${containerSize.h}px`,
-                      width: `${Math.round(containerSize.h * previewAspect)}px`,
-                      aspectRatio: previewAspect
-                    }
-                  : {
-                      width: `${containerSize.w}px`,
-                      height: `${Math.round(containerSize.w / previewAspect)}px`,
-                      aspectRatio: previewAspect
-                    }
-                : { aspectRatio: previewAspect }
-            }
             onPointerDown={beginInlineDrag}
             onPointerMove={moveInlineDrag}
             onPointerUp={finishInlineDrag}
@@ -366,6 +370,12 @@ export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.
               src={mediaUrl(source.mediaPath)}
               alt="待裁剪图片"
               draggable={false}
+              style={{
+                width: `${cropPreviewMapping.scaleX * 100}%`,
+                height: `${cropPreviewMapping.scaleY * 100}%`,
+                left: `${cropPreviewMapping.offsetX * 100}%`,
+                top: `${cropPreviewMapping.offsetY * 100}%`
+              }}
               onLoad={(event) => {
                 const image = event.currentTarget
                 if (image.naturalWidth && image.naturalHeight) {
@@ -376,10 +386,10 @@ export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.
             <span
               className="crop-inline-selection"
               style={{
-                left: `${config.rect.x * 100}%`,
-                top: `${config.rect.y * 100}%`,
-                width: `${config.rect.width * 100}%`,
-                height: `${config.rect.height * 100}%`
+                left: `${(cropPreviewMapping.offsetX + config.rect.x * cropPreviewMapping.scaleX) * 100}%`,
+                top: `${(cropPreviewMapping.offsetY + config.rect.y * cropPreviewMapping.scaleY) * 100}%`,
+                width: `${config.rect.width * cropPreviewMapping.scaleX * 100}%`,
+                height: `${config.rect.height * cropPreviewMapping.scaleY * 100}%`
               }}
             >
               {[0, 1, 2, 3].map((corner) => (
@@ -566,9 +576,6 @@ export function ImageCropSettings({ shape, editor }: NodeSettingsProps): React.J
   return (
     <section className="contract-section crop-settings">
       <h4>图片裁剪</h4>
-      <p className="contract-settings-hint">
-        原图来自 in-image 连线；裁剪结果是新的图片资产，不会改写原图。
-      </p>
       <div className="crop-mode-row" role="group" aria-label="裁剪方式">
         <button
           className={config.mode === 'rect' ? 'active' : ''}

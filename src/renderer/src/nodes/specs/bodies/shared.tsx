@@ -7,6 +7,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useEffect, useRef } from 'react'
 import { createShapeId, stopEventPropagation, useValue, type Editor, type TLShapeId } from 'tldraw'
+import { findNodeContinuationPlacement } from '../../../canvas/node-placement'
 import { modelsByModality } from '../../../stores/gateway'
 import type { NodeCardShape, NodeCardProps } from '../../../canvas/NodeCardShape'
 import { countIncomingConnections, createEdge } from '../../../canvas/graph'
@@ -171,9 +172,7 @@ export function NoModelHint({
 
 /**
  * 计算下游衍生节点的放置坐标：
- * 1. 初始线距离由原来的 80px 减半为 40px；
- * 2. 避免节点重叠：当同一源节点多次派生（如点击“裁剪图片”再点击“宫格拆分”），
- *    自动探测同列已有节点，将其整齐排列在已有节点的正下方，杜绝完全重合。
+ * 新节点优先放在来源节点右侧并与其顶边对齐；被占用时从该行开始逐行向下找最近空位。
  */
 export function findContinuationPlacement(
   editor: Editor,
@@ -183,38 +182,22 @@ export function findContinuationPlacement(
   gapX = 96,
   gapY = 24
 ): { x: number; y: number } {
-  const targetX = source.x + source.props.w + gapX
-  // 查找当前画布在目标列 X 跨度范围内的所有现有节点
   const existingInColumn = editor
     .getCurrentPageShapes()
     .filter((shape): shape is NodeCardShape => shape.type === 'node-card' && shape.id !== source.id)
-    .filter((shape) => {
-      const shapeRight = shape.x + shape.props.w
-      const targetRight = targetX + targetW
-      return shape.x < targetRight - 10 && shapeRight > targetX + 10
-    })
-
-  if (existingInColumn.length === 0) {
-    return { x: targetX, y: source.y }
-  }
-
-  // 悬浮标题栏向上伸出约 34px，并且卡片顶部按钮需要安全间距；计算垂直覆盖时必须将标题与安全间隙一并计入。
-  const HEADER_OVERHANG = 38
-  const targetTop = source.y - HEADER_OVERHANG
-  const targetBottom = source.y + targetH + 16
-  const hasOverlap = existingInColumn.some((shape) => {
-    const shapeTop = shape.y - HEADER_OVERHANG
-    const shapeBottom = shape.y + shape.props.h + 16
-    return shapeTop < targetBottom && shapeBottom > targetTop
+  return findNodeContinuationPlacement({
+    source: { x: source.x, y: source.y, w: source.props.w, h: source.props.h },
+    existing: existingInColumn.map((shape) => ({
+      x: shape.x,
+      y: shape.y,
+      w: shape.props.w,
+      h: shape.props.h
+    })),
+    targetW,
+    targetH,
+    gapX,
+    gapY
   })
-
-  if (!hasOverlap) {
-    return { x: targetX, y: source.y }
-  }
-
-  // 发生重叠时向下排布在已有节点的最底部，并预留目标节点的悬浮标题空间与额外间隙
-  const maxBottom = Math.max(...existingInColumn.map((shape) => shape.y + shape.props.h))
-  return { x: targetX, y: maxBottom + gapY + HEADER_OVERHANG }
 }
 
 /**

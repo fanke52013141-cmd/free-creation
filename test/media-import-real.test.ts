@@ -96,7 +96,8 @@ describe('真实文件导入链路', () => {
         asset.mime,
         asset.path,
         asset.sizeBytes,
-        expect.any(Number)
+        expect.any(Number),
+        asset.name
       ])
     }
   })

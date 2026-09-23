@@ -11,7 +11,8 @@ describe('统一画布视觉基础', () => {
   it('连线和端口只保留低噪声的基础样式来源', () => {
     expect(foundation).toContain('.conn-main-path')
     expect(foundation).toContain('.port-dot')
-    expect(foundation).toMatch(/stroke-dasharray\s*:\s*7\s+7/)
+    expect(foundation).toMatch(/\.conn-main-path\s*\{[^}]*stroke-width:\s*1\.2px;/)
+    expect(foundation).not.toMatch(/\.conn-main-path\s*\{[^}]*stroke-dasharray/)
     expect(legacy).not.toContain('.conn-main-path')
     expect(legacy).not.toContain('.conn-glow-path')
   })
@@ -23,14 +24,19 @@ describe('统一画布视觉基础', () => {
     ).toContain('.app-tooltip')
   })
 
-  it('节点卡片保持磨砂玻璃，端口点是类型色实心圆（用户 2026-09-18 拍板去渐变）', () => {
-    // 卡片：不再是不透明色块；透出画布网格与背后内容。
-    expect(foundation).toMatch(/\.node-card\s*\{[\s\S]*?backdrop-filter:\s*blur\(14px\)/)
+  it('节点卡片保持清晰不透明材质，类型色角标与端口圆点同源（2026-09-23）', () => {
+    // 深色主题卡片保持不透明，避免节点重叠时背景纹理穿透正文。
+    const nodeCardRule = foundation.match(/\.node-card\s*\{[^}]*\}/)?.[0] ?? ''
+    expect(nodeCardRule).toContain('background: var(--card);')
+    expect(nodeCardRule).not.toContain('backdrop-filter:')
     expect(foundation).toMatch(/\.node-card\s*\{[\s\S]*?inset 0 1px 0 rgba\(255, 255, 255, 0\.07\)/)
-    expect(foundation).not.toMatch(/\.node-card\s*\{[^}]*background:\s*var\(--card\);/)
-    // 端口：18px 命中区不变，视觉是 10px 实色圆点——不做渐变、不做磨砂、不带内阴影。
-    expect(foundation).toMatch(/\.port-dot::after\s*\{[^}]*width:\s*10px;/)
-    expect(foundation).toMatch(/\.port-dot::after\s*\{[^}]*background:\s*var\(--pc/)
+    expect(foundation).toMatch(/\.node-card::before\s*\{[^}]*background:\s*var\(--node-accent,\s*var\(--brand\)\)/)
+    expect(foundation).toMatch(/\.node-card::before\s*\{[^}]*clip-path:\s*polygon\(/)
+    // 空闲端口采用节点主色；可见点 14px，透明命中区扩到 46px。
+    expect(foundation).toMatch(/\.port-dot::after\s*\{[^}]*width:\s*14px;/)
+    expect(foundation).toMatch(/\.port-dot::after\s*\{[^}]*background:\s*var\(--node-port-color,\s*var\(--pc/)
+    expect(foundation).toMatch(/\.port-dot::before\s*\{[^}]*inset:\s*-14px;/)
+    expect(foundation).toMatch(/\.port-dot\.connected::after\s*\{[^}]*background:\s*var\(--pc/)
     expect(foundation).not.toMatch(/\.port-dot::after\s*\{[^}]*backdrop-filter/)
     expect(foundation).toMatch(/\.port-dot::after\s*\{[^}]*box-shadow:\s*none;/)
     expect(foundation).not.toContain('.port-dot-inner')
@@ -71,25 +77,20 @@ describe('统一画布视觉基础', () => {
     // ui-surfaces.css 只保留浅色主题变体，不再收口结构定义。
     expect(surfaces).not.toMatch(/(^|\n)\.node-header\s*\{/)
     expect(surfaces).not.toMatch(/(^|\n)\.node-color-bar\s*\{/)
-    // 类型色条：文档流内、卡片顶部 4px（v1.0 §8.1），不再 absolute 悬浮。
-    expect(foundation).toMatch(/\.node-color-bar\s*\{[^}]*height:\s*4px;/)
-    expect(foundation).toMatch(/\.node-color-bar\s*\{[^}]*flex-shrink:\s*0;/)
-    expect(foundation).not.toMatch(/\.node-color-bar\s*\{[^}]*position:\s*absolute/)
-    expect(foundation).not.toMatch(/\.node-card\s*\{[^}]*padding-bottom:\s*8px/)
+    // 类型色不再占用横向色条，以左上角 CSS 切角呈现，不挤压正文高度。
+    expect(foundation).toMatch(/\.node-color-bar\s*\{[^}]*display:\s*none;/)
+    expect(foundation).toMatch(/\.node-card::before\s*\{[^}]*width:\s*22px;/)
+    expect(foundation).toMatch(/\.node-card::before\s*\{[^}]*height:\s*22px;/)
     // 死代码已删：.node-hover-toolbar 无任何组件引用。
     expect(foundation).not.toContain('.node-hover-toolbar')
     const nodeCardView = readFileSync(
       resolve(root, 'src/renderer/src/canvas/NodeCardView.tsx'),
       'utf8'
     )
-    // 色条是卡片内首个文档流元素，标题悬浮在卡片外的 .node-card-wrap 上。
-    const colorBarIdx = nodeCardView.indexOf('className="node-color-bar"')
-    const bodyIdx = nodeCardView.indexOf('className="node-body"')
+    // 卡片保留同一壳层结构；装饰角标由 CSS 伪元素绘制，不参与 DOM 布局。
     const headerIdx = nodeCardView.indexOf('className="node-header"')
     const cardIdx = nodeCardView.indexOf('node-card type-')
-    expect(colorBarIdx).toBeGreaterThan(-1)
-    expect(colorBarIdx).toBeGreaterThan(cardIdx)
-    expect(colorBarIdx).toBeLessThan(bodyIdx)
+    expect(nodeCardView).toContain('className="node-color-bar"')
     expect(headerIdx).toBeGreaterThan(-1)
     expect(headerIdx).toBeLessThan(cardIdx)
   })

@@ -1,7 +1,7 @@
 // 对话节点执行器：把显式输入端口或已持久化的待发送消息作为本轮用户消息。
 import { inputText } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
-import { parseChat } from '../chat-data'
+import { activeChatConversation, parseChat, serializeChat, updateActiveChatConversation } from '../chat-data'
 import { featureKeyOf, findTextModel, modelKeyOf, resolveFeatureOption } from '../models'
 import { waitForChat } from '../helpers'
 import { buildChatCompressionPrompt, splitChatForCompression } from '../chat-memory'
@@ -21,7 +21,16 @@ function effectiveSystem(data: ReturnType<typeof parseChat>): string {
 }
 
 export const chatExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
-  const data = parseChat(ctx.shape.props.text)
+  const savedData = parseChat(ctx.shape.props.text)
+  // The executor has one unambiguous source of context: the active session
+  // mirrored in props.text. It never scans a different conversation or calls
+  // the model from a React component.
+  const activeConversation = activeChatConversation(savedData)
+  const data = {
+    ...savedData,
+    messages: activeConversation.messages,
+    summary: activeConversation.summary ?? savedData.summary ?? ''
+  }
   const option = ctx.gateway.resolveModelFeature
     ? await resolveFeatureOption(
         ctx.gateway,
@@ -43,19 +52,16 @@ export const chatExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecu
   let streamedText = ''
   let streamedReasoning = ''
   const persistStreamingReply = (): void => {
+    const next = updateActiveChatConversation(savedData, [
+      ...messages,
+      {
+        role: 'assistant' as const,
+        content: streamedText,
+        ...(streamedReasoning ? { reasoning: streamedReasoning } : {})
+      }
+    ])
     ctx.updateProps({
-      text: JSON.stringify({
-        ...data,
-        modelKey: option.key,
-        messages: [
-          ...messages,
-          {
-            role: 'assistant' as const,
-            content: streamedText,
-            ...(streamedReasoning ? { reasoning: streamedReasoning } : {})
-          }
-        ]
-      })
+      text: serializeChat({ ...next, modelKey: option.key })
     })
   }
   const reply = await waitForChat(
@@ -111,13 +117,7 @@ export const chatExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecu
       // 主回复已经成功；摘要失败时绝不丢历史，下一轮可重试压缩。
     }
   }
-  ctx.updateProps({
-    text: JSON.stringify({
-      ...data,
-      modelKey: option.key,
-      summary,
-      messages: persistedMessages
-    })
-  })
+  const next = updateActiveChatConversation(savedData, persistedMessages, summary)
+  ctx.updateProps({ text: serializeChat({ ...next, modelKey: option.key }) })
   return { status: 'done' }
 }

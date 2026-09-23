@@ -1,7 +1,11 @@
 // 浏览器直连 vite dev 时的 window.api 模拟：Electron 内 preload 已提供真实 api，
 // 此 mock 仅在开发期用浏览器验证画布交互；媒体仅保存在当前浏览器会话。
 import type { ProjectMeta, ProjectFile, ProviderSummary } from '@shared/types'
-import type { ImageGenerateInput, SaveProviderInput } from '@shared/contracts'
+import type {
+  ImageGenerateInput,
+  ImageGenerationTimingSample,
+  SaveProviderInput
+} from '@shared/contracts'
 import { createBrowserMedia } from './browserMedia'
 import { defaultPalettePreferences, type PalettePreferences } from '@shared/palette-preferences'
 
@@ -89,6 +93,10 @@ export function installBrowserMock(): void {
   const templates: Array<Record<string, unknown>> = []
   const snapshots: Array<Record<string, unknown> & { projectId: string }> = []
   let palettePreferences: PalettePreferences = defaultPalettePreferences()
+  // 浏览器演示没有 SQLite，因此只在当前页内存中模拟这一 API；绝不写入 localStorage。
+  const imageGenerationTimings: ImageGenerationTimingSample[] = []
+  const isTimingKey = (value: string): boolean =>
+    /^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,95}$/.test(value)
 
   const inMemoryApiKeys = new Map<string, string>()
 
@@ -274,7 +282,46 @@ export function installBrowserMock(): void {
       savePalettePreferences: (prefs: PalettePreferences) => {
         palettePreferences = prefs
         return Promise.resolve({ ok: true, data: palettePreferences })
-      }
+      },
+      recordImageGenerationTiming: (input: ImageGenerationTimingSample) => {
+        if (
+          !isTimingKey(input.runId) ||
+          !isTimingKey(input.providerKey) ||
+          !isTimingKey(input.modelKey) ||
+          !Number.isInteger(input.durationMs) ||
+          input.durationMs < 100 ||
+          input.durationMs > 30 * 60 * 1000 ||
+          !Number.isInteger(input.recordedAt) ||
+          input.recordedAt <= 0
+        ) {
+          return Promise.resolve({
+            ok: false as const,
+            error: { code: 'WORKSPACE_STATE_ERROR', message: '图片生成耗时记录格式无效' }
+          })
+        }
+        if (imageGenerationTimings.some((sample) => sample.runId === input.runId)) {
+          return Promise.resolve({ ok: true as const, data: [...imageGenerationTimings] })
+        }
+        imageGenerationTimings.unshift({
+          runId: input.runId,
+          providerKey: input.providerKey,
+          modelKey: input.modelKey,
+          durationMs: input.durationMs,
+          recordedAt: input.recordedAt
+        })
+        const sameModel = imageGenerationTimings.filter(
+          (sample) =>
+            sample.providerKey === input.providerKey && sample.modelKey === input.modelKey
+        )
+        if (sameModel.length > 20) {
+          const oldest = sameModel[20]
+          const index = imageGenerationTimings.indexOf(oldest)
+          if (index >= 0) imageGenerationTimings.splice(index, 1)
+        }
+        return Promise.resolve({ ok: true as const, data: [...imageGenerationTimings] })
+      },
+      getImageGenerationTimings: () =>
+        Promise.resolve({ ok: true as const, data: [...imageGenerationTimings] })
     },
     getDroppedFilePath: () => '',
     gateway: {

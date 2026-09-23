@@ -20,7 +20,7 @@ import type {
 } from './ports.js'
 
 const copy = <T>(value: T): T => structuredClone(value)
-const validationKey = (connectionId: string, modelId: string, operation: ModelOperation) =>
+const validationKey = (connectionId: string, modelId: string, operation: ModelOperation): string =>
   `${connectionId}\u0000${modelId}\u0000${operation}`
 
 /** Test/demo host. Production hosts supply encrypted secrets and persistent stores. */

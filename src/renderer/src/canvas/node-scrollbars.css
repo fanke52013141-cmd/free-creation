@@ -1,0 +1,73 @@
+/*
+ * 画布节点的内部滚动条只是不必要的浏览器材质：它们会在代码、JSON、文本或
+ * 生成结果变长时显得突兀，但内容本身必须仍可用鼠标滚轮、键盘和触控板滚动。
+ *
+ * 作用域严格收在 `.node-card-wrap` 内，故不改变画布、原生 select 弹层、右侧
+ * 面板、节点菜单及系统滚动条。不要在这里更改 overflow 或 pointer-events。
+ */
+.node-card-wrap :is(
+  .node-body,
+  .node-text,
+  .node-text-body,
+  .node-media-next-actions,
+  .media-result-grid,
+  .node-audio-player,
+  .file-asset-preview,
+  .image-edit-workbench-body,
+  .video-trim-workbench-body,
+  .ai-process-body,
+  .ai-system-preview,
+  .ai-result-preview,
+  .chat-body-compact,
+  .chat-messages,
+  .json-body,
+  .structured-preview,
+  .code-body,
+  .code-editor-wrap,
+  .processor-body,
+  .script-body,
+  .storyboard-body,
+  .iterate-body,
+  .director-node-preview,
+  .speech-subtitle-list,
+  textarea,
+  [contenteditable='true']
+) {
+  /* Firefox / legacy Edge: hide the rail without changing scrollability. */
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Chromium / Electron: zero-sized pseudo elements preserve wheel and keyboard scrolling. */
+.node-card-wrap :is(
+  .node-body,
+  .node-text,
+  .node-text-body,
+  .node-media-next-actions,
+  .media-result-grid,
+  .node-audio-player,
+  .file-asset-preview,
+  .image-edit-workbench-body,
+  .video-trim-workbench-body,
+  .ai-process-body,
+  .ai-system-preview,
+  .ai-result-preview,
+  .chat-body-compact,
+  .chat-messages,
+  .json-body,
+  .structured-preview,
+  .code-body,
+  .code-editor-wrap,
+  .processor-body,
+  .script-body,
+  .storyboard-body,
+  .iterate-body,
+  .director-node-preview,
+  .speech-subtitle-list,
+  textarea,
+  [contenteditable='true']
+)::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}

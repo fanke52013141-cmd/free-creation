@@ -275,6 +275,19 @@ export function DirectorStudioPanel({
   const director3dRef = useRef<Director3DViewportHandle>(null)
   const playbackStartedAtRef = useRef<number | null>(null)
   const videoAbortRef = useRef<AbortController | null>(null)
+  const studioRef = useRef<HTMLElement>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    previousFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const frame = window.requestAnimationFrame(() => studioRef.current?.focus())
+    return () => {
+      window.cancelAnimationFrame(frame)
+      if (previousFocusRef.current?.isConnected) previousFocusRef.current.focus()
+      previousFocusRef.current = null
+    }
+  }, [])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
@@ -672,8 +685,22 @@ export function DirectorStudioPanel({
   }
 
   return (
-    <div className="director-studio-mask" role="dialog" aria-modal="true" aria-label="3D 预演台">
-      <section className="director-studio">
+    <div
+      className="director-studio-mask"
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation()
+        if (event.target === event.currentTarget) onClose()
+      }}
+    >
+      <section
+        ref={studioRef}
+        className="director-studio"
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label="3D 预演台"
+      >
         <header className="director-topbar">
           <div className="director-brand">
             <Icon name="director" size={18} /> 3D 预演台 <small>PREVIS</small>

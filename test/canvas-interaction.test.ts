@@ -74,12 +74,9 @@ describe('画布创建节点交互', () => {
   })
 
   it('批量删除节点时优先删除节点及关联连线，不要求先执行一次删线', () => {
-    const nodePriority = canvasEditorSource.indexOf('节点/分组的批量删除永远优先于连线选择')
-    const edgeDelete = canvasEditorSource.indexOf('数据连线由专用连接层选中')
-    expect(nodePriority).toBeGreaterThan(-1)
-    expect(edgeDelete).toBeGreaterThan(nodePriority)
+    expect(canvasEditorSource).toContain(".filter((shape) => shape.type === 'node-card' || shape.type === 'group')")
     expect(canvasEditorSource).toContain("getBindingsFromShape(shape.id, 'arrow')")
-    expect(canvasEditorSource).toContain('editor.deleteShapes([...selected, ...linkedArrows])')
+    expect(canvasEditorSource).toContain('editor.run(() => editor.deleteShapes([...selected, ...linkedArrows]))')
   })
 
   it('媒体导入与调色板建节点共用避让网格，反复导入不再堆叠', () => {
@@ -99,12 +96,11 @@ describe('画布创建节点交互', () => {
     expect(canvasEditorSource).toContain('未保存的新增内容')
   })
 
-  it('数据线穿过节点时只降低被遮挡片段的不透明度，正常段保持实线', () => {
+  it('数据线在节点卡片范围内被遮罩，不遮挡正文，节点外仍保持实线', () => {
     expect(dataEdgeLayerSource).toContain('function collectNodeRects')
     expect(dataEdgeLayerSource).toContain('mask={`url(#${overlapMaskId})`}')
-    expect(dataEdgeLayerSource).toContain('clipPath={`url(#${overlapClipId})`}')
-    expect(dataEdgeLayerSource).toContain('data-edge-obscured')
-    expect(edgeSurfaceSource).toContain('.data-edge-obscured')
+    expect(dataEdgeLayerSource).toContain('<rect key={index} {...rect} fill="black" />')
+    expect(dataEdgeLayerSource).toContain('className="data-edge-visible"')
     expect(edgeSurfaceSource).not.toMatch(/\.data-edge-visible\s*\{[^}]*stroke-dasharray/m)
   })
 

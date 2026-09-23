@@ -234,7 +234,6 @@ export function StoryboardBody({ shape }: NodeBodyProps): React.JSX.Element {
   return (
     <div className="storyboard-body" ref={scrollRef}>
       <div className="storyboard-toolbar">
-        <span>编辑结果通过右侧「分镜数据」端口输出给下游节点。</span>
         <div className="storyboard-toolbar-actions">
           <button type="button" onPointerDown={stopEventPropagation} onClick={addShot}>
             <Icon name="add" size={12} /> 新增镜头

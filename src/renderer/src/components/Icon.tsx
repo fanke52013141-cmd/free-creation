@@ -9,13 +9,16 @@ export type IconName =
   | 'crop'
   | 'image-gen'
   | 'video'
+  | 'video-asset'
   | 'frame'
   | 'clip'
   | 'audio'
+  | 'mic'
   | 'chat'
   | 'script'
   | 'processor'
   | 'json'
+  | 'structured'
   | 'code'
   | 'storyboard'
   | 'director'
@@ -79,35 +82,41 @@ interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {
 const PATHS: Record<IconName, React.ReactNode> = {
   text: (
     <>
-      <path d="M5 6h14M5 12h14M5 18h10" />
+      <path d="M3 6h18M3 12h18M3 18h18" />
     </>
   ),
   image: (
     <>
-      <rect x="3.5" y="4" width="17" height="16" rx="2" />
-      <circle cx="8.5" cy="9" r="1.5" />
-      <path d="m4.5 17 4.5-4 3 2.5 2.5-2 5.5 4.5" />
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <path d="m21 15-5-5L5 21" />
     </>
   ),
   crop: (
     <>
-      <path d="M7 3v14a4 4 0 0 0 4 4h10" />
-      <path d="M3 7h14a4 4 0 0 1 4 4v10" />
-      <path d="M17 3v4M3 17h4" />
+      <path d="M6 2v14a2 2 0 0 0 2 2h14" />
+      <path d="M18 22V8a2 2 0 0 0-2-2H2" />
     </>
   ),
   'image-gen': (
     <>
-      <rect x="3.5" y="4" width="17" height="16" rx="2" />
-      <circle cx="8.5" cy="9" r="1.5" />
-      <path d="m4.5 17 4.5-4 3 2.5 2.5-2 5.5 4.5" />
-      <path d="m18 2.5.65 2.85L21.5 6l-2.85.65L18 9.5l-.65-2.85L14.5 6l2.85-.65L18 2.5Z" />
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="m14 14 2 2 4-4" />
+      <path d="M15 4l.8 1.8 1.8.8-1.8.8-.8 1.8-.8-1.8-1.8-.8 1.8-.8L15 4Z" />
+      <circle cx="8" cy="9" r="1.5" />
     </>
   ),
   video: (
     <>
-      <rect x="3.5" y="4" width="17" height="16" rx="2" />
-      <path d="m10 8 5 4-5 4V8Z" />
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="m10 9 5 3-5 3V9Z" />
+    </>
+  ),
+  'video-asset': (
+    <>
+      <rect x="2" y="4" width="20" height="16" rx="2" />
+      <path d="m10 8 6 4-6 4V8Z" />
+      <path d="M2 8h4M2 16h4M18 8h4M18 16h4" />
     </>
   ),
   frame: (
@@ -119,15 +128,19 @@ const PATHS: Record<IconName, React.ReactNode> = {
   ),
   clip: (
     <>
-      <rect x="3.5" y="5" width="17" height="14" rx="2" />
-      <path d="M9 7.5v9M15 7.5v9M6 12h3M15 12h3" />
-      <path d="m8 10-2 2 2 2M16 10l2 2-2 2" />
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="m9 12 3-3v6l-3-3ZM15 12l-3-3v6l3-3Z" />
     </>
   ),
   audio: (
     <>
       <path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4" />
-      <path d="m16 12 3-2v4l-3-2Z" />
+    </>
+  ),
+  mic: (
+    <>
+      <rect x="9" y="2" width="6" height="13" rx="3" />
+      <path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8" />
     </>
   ),
   chat: (
@@ -145,16 +158,22 @@ const PATHS: Record<IconName, React.ReactNode> = {
   ),
   processor: (
     <>
-      <circle cx="6" cy="7" r="2" />
-      <circle cx="18" cy="17" r="2" />
-      <path d="M8 7h4l4 4M16 17h-4l-4-4" />
-      <path d="m14 9 2 2-2 2M10 13l-2-2 2-2" />
+      <path d="M10 14a3.5 3.5 0 0 0 5 0l4-4a3.5 3.5 0 0 0-5-5l-.5.5" />
+      <path d="M14 10a3.5 3.5 0 0 0-5 0l-4 4a3.5 3.5 0 0 0 5 5l.5-.5" />
     </>
   ),
   json: (
     <>
-      <path d="M8 4c-2 0-2 2-2 4v1c0 1-.5 2-2 2 1.5 0 2 1 2 2v1c0 2 0 4 2 4M16 4c2 0 2 2 2 4v1c0 1 .5 2 2 2-1.5 0-2 1-2 2v1c0 2 0 4-2 4" />
-      <path d="M10 8h4M10 12h4M10 16h4" />
+      <path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1" />
+      <path d="M16 3h1a2 2 0 0 1 2 2v5a2 2 0 0 0 2 2 2 2 0 0 0-2 2v5a2 2 0 0 1-2 2h-1" />
+    </>
+  ),
+  structured: (
+    <>
+      <rect x="3" y="4" width="6" height="6" rx="1" />
+      <rect x="15" y="4" width="6" height="6" rx="1" />
+      <rect x="9" y="14" width="6" height="6" rx="1" />
+      <path d="M6 10v2a2 2 0 0 0 2 2h4M18 10v2a2 2 0 0 1-2 2h-4" />
     </>
   ),
   code: (
@@ -164,16 +183,14 @@ const PATHS: Record<IconName, React.ReactNode> = {
   ),
   storyboard: (
     <>
-      <rect x="3.5" y="4" width="17" height="16" rx="2" />
-      <path d="M8.5 4v16M8.5 9.3h12M8.5 14.7h12" />
-      <path d="M5.8 6.7h.01M5.8 12h.01M5.8 17.3h.01" />
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M3 9h18M3 15h18M9 3v18" />
     </>
   ),
   director: (
     <>
-      <path d="m4 15 8 4 8-4-8-4-8 4Z" />
-      <path d="M12 11V4M8.5 7.5 12 4l3.5 3.5" />
-      <path d="M8 15.2 12 17l4-1.8" />
+      <path d="M12 2 2 7l10 5 10-5-10-5Z" />
+      <path d="m2 12 10 5 10-5M2 17l10 5 10-5" />
     </>
   ),
   upload: (

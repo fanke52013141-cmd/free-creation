@@ -29,17 +29,40 @@ const processor = read('src/renderer/src/nodes/specs/bodies/processor.tsx')
 const processorExecutor = read('src/shared/engine/executors/processor.ts')
 const aiProcess = read('src/renderer/src/nodes/specs/bodies/aiProcess.tsx')
 const chat = read('src/renderer/src/nodes/specs/bodies/chat.tsx')
+const contractPanel = read('src/renderer/src/canvas/NodeContractPanel.tsx')
+const chatPanel = read('src/renderer/src/canvas/ChatSidePanel.tsx')
 const iterate = read('src/renderer/src/nodes/specs/bodies/iterate.tsx')
+const imageBody = read('src/renderer/src/nodes/specs/bodies/image.tsx')
+const audioBody = read('src/renderer/src/nodes/specs/bodies/audio.tsx')
+const videoBody = read('src/renderer/src/nodes/specs/bodies/video.tsx')
+const fileBody = read('src/renderer/src/nodes/specs/bodies/file.tsx')
 
-describe('v1.2 §16.1 端口圆点是实色（覆盖 v1.1 磨砂玻璃珠）', () => {
-  it('类型色即视觉：无 backdrop-filter、无内阴影、无 color-mix 半透明底', () => {
-    expect(foundation).toMatch(/\.port-dot::after\s*\{[^}]*background:\s*var\(--pc/)
+describe('v1.3 §16.1 端口圆点是安静的节点色（覆盖多色玻璃珠）', () => {
+  it('空闲态使用节点主色；类型色只在连线或可落点时出现，且无磨砂/内阴影', () => {
+    expect(foundation).toMatch(
+      /\.port-dot::after\s*\{[^}]*background:\s*var\(--node-port-color, var\(--pc/
+    )
+    expect(foundation).toMatch(/\.port-dot\.connected::after\s*\{[^}]*background:\s*var\(--pc/)
+    expect(foundation).toMatch(/\.port-dot\.ok::after\s*\{[^}]*background:\s*var\(--pc/)
     expect(foundation).not.toMatch(/\.port-dot::after\s*\{[^}]*backdrop-filter/)
     expect(foundation).toMatch(/\.port-dot::after\s*\{[^}]*box-shadow:\s*none;/)
     expect(foundation).not.toMatch(/\.port-dot::after\s*\{[^}]*color-mix/)
     // 5px 色芯与拖线玻璃珠整体删除，避免出现第二种圆点材质。
     expect(foundation).not.toContain('.port-dot-inner')
     expect(foundation).not.toContain('.conn-cursor-glass')
+  })
+
+  it('端口的节点色与类型色分别由卡片契约渲染，端口 ID/schema 不参与视觉猜测', () => {
+    expect(nodeCardView).toContain("const nodePortColor = spec?.color ?? '#42b9f5'")
+    expect(nodeCardView).toContain("['--node-port-color' as string]: nodePortColor")
+    expect(nodeCardView).toContain("['--pc' as string]: PORT_COLORS[p.type]")
+  })
+
+  it('可见圆点和透明命中区都扩大，锚点元素尺寸仍由 edge-geometry 统一', () => {
+    expect(foundation).toMatch(/\.port-dot::after\s*\{[^}]*width:\s*14px;[^}]*height:\s*14px;/)
+    expect(foundation).toMatch(/\.port-dot::before\s*\{[^}]*inset:\s*-14px;/)
+    expect(nodeCardView).toContain('top: inY[i] - NODE_PORT_SIZE / 2')
+    expect(nodeCardView).toContain('top: outY[i] - NODE_PORT_SIZE / 2')
   })
 })
 
@@ -140,7 +163,9 @@ describe('v1.2 §16.7 命名统一', () => {
     expect(stripComments(canvasEditor)).not.toContain('paletteLabels')
     expect(canvasEditor).toContain('label={`添加${t.label}节点`}')
     expect(canvasEditor).toContain('aria-label={`添加${t.label}节点`}')
-    expect(canvasEditor).toContain('<span className="palette-label">{meta.shortLabel}</span>')
+    expect(canvasEditor).toContain('<span className="palette-label">{meta.label}</span>')
+    expect(canvasEditor).toContain('<span className="palette-label">{t.label}</span>')
+    expect(canvasEditor).toContain('className="palette-node-flyout-list"')
   })
 
   it('spec label 使用新名字', () => {
@@ -162,9 +187,18 @@ describe('v1.2 §16.7 命名统一', () => {
   })
 
   it('图片资产节点不再显示格式/来源徽标', () => {
-    expect(read('src/renderer/src/nodes/specs/bodies/image.tsx')).not.toContain(
-      'node-media-badge-overlay'
-    )
+    expect(imageBody).not.toContain('node-media-badge-overlay')
+  })
+
+  it('资产空态只保留资产名称和导入操作，不复述导入后无需运行', () => {
+    for (const body of [imageBody, audioBody, videoBody, fileBody]) {
+      expect(stripComments(body)).not.toContain('导入后下游即可取用')
+      expect(stripComments(body)).not.toContain('不需要运行本节点')
+    }
+    expect(imageBody).toContain('导入图片')
+    expect(audioBody).toContain('点击上传音频文件')
+    expect(videoBody).toContain('导入视频')
+    expect(fileBody).toContain('导入文件')
   })
 })
 
@@ -254,11 +288,12 @@ describe('v1.2 §16.12 处理/结构数据节点：只留真会改变行为的�
 })
 
 describe('v1.2 §16.10 端口可发现性：可落点有环、有名称，且校验不放宽', () => {
-  it('兼容端口浮出名称标签，两侧都定位在卡片外，且不吃端口命中区', () => {
-    expect(foundation).toMatch(/\.port-dot\.in \.port-label\s*\{[^}]*right:/)
-    expect(foundation).toMatch(/\.port-dot\.out \.port-label\s*\{[^}]*left:/)
-    expect(foundation).toMatch(/\.port-label\s*\{[^}]*pointer-events:\s*none;/)
-    expect(nodeCardView).toContain('<span className="port-label">{p.name}</span>')
+  it('端口悬浮提示统一在上方显示契约名和类型，不改变端口命中区', () => {
+    expect(nodeCardView).toContain('function portHint(port: PortDecl): string')
+    expect(
+      nodeCardView.match(/<Tooltip key=\{p\.id\} label=\{portHint\(p\)\} placement="top">/g)
+    ).toHaveLength(2)
+    expect(nodeCardView).toContain('aria-label={portHint(p)}')
   })
 
   it('可落点用类型色外环区分于普通 hover；不兼容端口另给禁止光标', () => {
@@ -269,8 +304,8 @@ describe('v1.2 §16.10 端口可发现性：可落点有环、有名称，且校
   })
 
   it('tooltip 走 portHint 单一入口，类型不再输出英文裸串', () => {
-    expect(nodeCardView).toContain('function portHint(p: PortDecl): string')
-    expect(nodeCardView).toContain('title={portHint(p)}')
+    expect(nodeCardView).toContain('function portHint(port: PortDecl): string')
+    expect(nodeCardView).toContain('<Tooltip key={p.id} label={portHint(p)} placement="top">')
     expect(nodeCardView).not.toContain('`${p.name} · ${p.type}`')
   })
 
@@ -293,35 +328,37 @@ describe('v1.2 文本拼接分隔符是 $$$ 且不插入空行', () => {
 })
 
 describe('v1.2 §16.13 AI 处理 / 对话：把执行器分支映射成端口与连线状态', () => {
-  it('输出模式各自绑定唯一真实输出端口，页脚不再印英文枚举', () => {
+  it('输出模式各自绑定唯一真实输出端口，卡片只保留端口状态', () => {
     expect(aiProcess).toContain("portId: 'out-text'")
     expect(aiProcess).toContain("portId: 'out-markdown'")
     expect(aiProcess).toContain("portId: 'out-json'")
-    expect(aiProcess).toContain('{mode.hint}')
-    expect(aiProcess).toContain('{modelName} → {mode.portId}')
+    expect(aiProcess).toContain('{mode.downstream}')
+    expect(aiProcess).toContain('输出 {mode.label}')
     expect(stripComments(aiProcess)).not.toContain('· {data.mode}')
-    // Schema 下拉只影响 out-json，这句话必须印在控件上而不是藏在说明里。
-    expect(aiProcess).toContain('title="决定 out-json 声明的结构')
+    // 模型与 Schema 是固定配置，只能由右侧设置页编辑，不能继续留在卡片正文。
+    expect(aiProcess).toContain('export function AiProcessSettings')
+    expect(aiProcess).not.toContain('ai-process-config')
   })
 
-  it('in-text / in-json 连线数直接呈现，空输入说明会跳过', () => {
+  it('in-text / in-json 连线数直接呈现，空输入不会把卡片伪装为结果节点', () => {
     expect(aiProcess).toContain("countIncomingConnections(editor, shape.id, 'in-text')")
     expect(aiProcess).toContain("countIncomingConnections(editor, shape.id, 'in-json')")
-    expect(aiProcess).toContain("'两个输入端口都没连线，运行会跳过'")
-    // 早期版本在早退分支后再判一次 options.length，那条 else 永远不可达。
-    expect(aiProcess).not.toContain('{options.length > 0 ?')
-    expect(stripComments(aiProcess)).not.toContain('（尚未运行，或等待上游输入）')
-    expect(stripComments(aiProcess)).not.toContain('（无系统提示词，点击编辑）')
+    expect(aiProcess).toContain('等待文本或 JSON 输入')
+    expect(aiProcess).not.toContain('ai-process-result')
+    expect(aiProcess).not.toContain('parseStoredAiResult')
   })
 
-  it('对话节点说明本轮提问的真实来源顺序（末条提问优先于 in-text）', () => {
-    expect(chat).toContain("countIncomingConnections(editor, shape.id, 'in-text')")
-    expect(chat).toContain('data.messages.at(-1)?.role')
-    expect(chat).toContain('in-text ${textCount} 条拼接成本轮提问')
-    expect(chat).toContain('运行会跳过')
-    expect(chat).toContain('<code className="variable-expr">out-markdown</code>')
+  it('对话节点卡片不展示底部统计说明、端口提示或跳过条件', () => {
+    expect(chat).toContain('chat-compact-model')
+    expect(chat).not.toContain('chat-compact-stats')
+    expect(chat).not.toContain('chat-compact-hint')
+    expect(chat).not.toContain('chat-compact-run')
+    expect(chat).not.toContain("' · 温度 '")
+    expect(chat).not.toContain('选中此节点')
+    const chatCard = chat.slice(0, chat.indexOf('export function ChatSettings'))
+    expect(chatCard).not.toContain('out-markdown</code>')
+    expect(chatCard).not.toContain('运行会跳过')
     // 旧的 `T0.7 · 4096 tok` 缩写没人读得懂。
-    expect(chat).toContain("' · 温度 '")
     expect(stripComments(chat)).not.toContain(' tok')
   })
 
@@ -332,14 +369,30 @@ describe('v1.2 §16.13 AI 处理 / 对话：把执行器分支映射成端口与
       '.iterate-wiring.ok',
       '.iterate-wiring.warn',
       '.ai-process-wiring.ok',
-      '.ai-process-wiring.warn',
-      '.chat-compact-run.ok',
-      '.chat-compact-run.warn'
+      '.ai-process-wiring.warn'
     ]) {
       expect(app).toContain(`${selector} {`)
     }
     expect(app).toMatch(/\.ai-process-wiring\.warn\s*\{\s*color:\s*#fbbf24;/)
-    expect(app).toMatch(/\.chat-compact-run\.ok\s*\{\s*color:\s*#34d399;/)
+    expect(app).not.toContain('.chat-compact-run')
+  })
+})
+
+describe('v1.3 §16.32 AI 节点详情与可关闭浮层', () => {
+  it('AI 处理和对话均向通用详情注册设置页，端口契约仍是唯一输出解释', () => {
+    expect(specs).toContain('SettingsPanel: AiProcessSettings')
+    expect(specs).toContain('SettingsPanel: ChatSettings')
+    expect(aiProcess).toContain('本节点只处理数据；成功后由')
+    expect(chat).toContain('本节点的上游文本经')
+    expect(chat).toContain('out-markdown')
+  })
+
+  it('详情侧栏、聊天弹窗均可通过面板外区域或关闭按钮收起', () => {
+    expect(contractPanel).toContain("window.addEventListener('pointerdown', onPointerDown, true)")
+    expect(contractPanel).toContain('panelRef.current?.contains')
+    expect(chatPanel).toContain('className="chat-dialog-overlay"')
+    expect(chatPanel).toContain('onPointerDown={(event) => {')
+    expect(chatPanel).toContain('aria-label="关闭对话"')
   })
 })
 
@@ -824,10 +877,10 @@ describe('v1.2 §16.27 分镜板：解析只有一份，空态与非分镜正文
     expect(app).not.toContain('sb-pulse')
   })
 
-  it('工具条只说本卡片真的会做的事：端口输出 + 编辑 JSON + 空态可直接新增镜头', () => {
+  it('分镜工具条只保留直接操作，端口语义交给卡片端口与详情面板', () => {
     // 「分镜→批量生图」模板里没有分镜板节点，指它是误导。
     expect(boardBody).not.toContain('分镜→批量生图')
-    expect(boardBody).toContain('编辑结果通过右侧「分镜数据」端口输出给下游节点')
+    expect(boardBody).not.toContain('编辑结果通过右侧「分镜数据」端口输出给下游节点')
     expect(boardBody).toContain('编辑 JSON')
     expect(boardBody).not.toMatch(/>\s*JSON\s*</)
     // 不写 JSON 也要能开工：空态必须给「新增镜头」出口。
@@ -928,12 +981,10 @@ describe('v1.2 §16.28 3D 预演台：读文档真值、连线数上按钮、只
 
   it('图标进契约、工作区进按钮，名字只有一个来源', () => {
     // info 图标曾把导演台跳去工作区，7 个端口的契约就没有任何入口了。
-    expect(nodeCardView).toContain("open(shape.props.nodeType === 'chat' ? 'chat' : 'contract'")
+    expect(nodeCardView).toContain(".open('contract', shape.id, 'overview')")
     expect(nodeCardView).not.toMatch(/nodeType === 'director'/)
     // 标题与 openNodePanel 的去向必须一致，否则 tooltip 是假提示。
-    expect(nodeCardView).toContain(
-      "title={shape.props.nodeType === 'chat' ? '打开对话面板' : '查看输入输出说明'}"
-    )
+    expect(nodeCardView).toContain('title="查看输入输出说明"')
     for (const source of [studio, studioCard, studioExecutor, stripComments(nodeCardView)]) {
       expect(source).not.toContain('导演台')
     }
@@ -995,9 +1046,11 @@ describe('v1.2 §16.30 文档真值节点：跳过运行不得静音输出，卡
     expect(specs).toContain('上游文本在运行时并入正文，再经 out-text 输出。')
   })
 
-  it('资产节点空态说明「导入即生效」，运行遮罩不再承诺生成', () => {
+  it('资产节点的导入即生效由契约保障，空态不再重复说明，运行遮罩不承诺生成', () => {
     for (const body of ['video', 'image', 'file', 'audio']) {
-      expect(read(`src/renderer/src/nodes/specs/bodies/${body}.tsx`)).toContain('不需要运行本节点')
+      const source = stripComments(read(`src/renderer/src/nodes/specs/bodies/${body}.tsx`))
+      expect(source).not.toContain('导入后下游即可取用')
+      expect(source).not.toContain('不需要运行本节点')
     }
     expect(stripComments(nodeCardView)).not.toContain('正在处理输入和生成输出')
     expect(nodeCardView).toContain('正在运行本节点，完成后自动更新。')

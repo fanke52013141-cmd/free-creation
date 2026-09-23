@@ -21,8 +21,27 @@ import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
 import { ModelSelect, NoModelHint, parseJsonProp } from './shared'
+import './node-workbench.css'
 
 type ImageGenData = ImageGenerationConfig
+
+const IMAGE_RATIO_PRIORITY: readonly ImageAspectRatio[] = [
+  '9:16',
+  '16:9',
+  '1:1',
+  '21:9',
+  '4:3',
+  '3:4'
+]
+
+function orderedImageRatios(ratios: readonly ImageAspectRatio[]): ImageAspectRatio[] {
+  const priority = new Map(IMAGE_RATIO_PRIORITY.map((ratio, index) => [ratio, index]))
+  return [...ratios].sort((left, right) => {
+    const leftPriority = priority.get(left) ?? IMAGE_RATIO_PRIORITY.length
+    const rightPriority = priority.get(right) ?? IMAGE_RATIO_PRIORITY.length
+    return leftPriority - rightPriority || left.localeCompare(right)
+  })
+}
 
 function parseImageGen(text: string): ImageGenData {
   return parseJsonProp(
@@ -58,6 +77,7 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
     ? imageCapabilitiesFor(selected.provider.specId, selected.model.id)
     : imageCapabilitiesFor('relay')
   const config = normalizeImageGenerationConfig(data, capabilities)
+  const orderedRatios = orderedImageRatios(capabilities.ratios)
   const [draft, setDraft] = useState(shape.props.text)
   const [busy, setBusy] = useState(false)
   const promptRef = useRef<HTMLTextAreaElement | null>(null)
@@ -190,7 +210,7 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
             })
           }}
         >
-          {capabilities.ratios.map((ratio) => (
+          {orderedRatios.map((ratio) => (
             <option key={ratio} value={ratio}>
               {ratio === 'auto' ? '默认画幅' : ratio}
             </option>
@@ -211,6 +231,20 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
             ))}
           </AppSelect>
         )}
+        <AppSelect
+          className="gen-select w70"
+          value={String(config.count)}
+          onPointerDown={(e) => e.stopPropagation()}
+          onChange={(e) => update({ ...config, count: Number(e.target.value) })}
+          aria-label="生成图片数量"
+          title="本次生成数量；每张图片都会成为可单独使用的结果"
+        >
+          {Array.from({ length: 9 }, (_, index) => index + 1).map((count) => (
+            <option key={count} value={count}>
+              {count} 张
+            </option>
+          ))}
+        </AppSelect>
         {capabilities.supportsTransparentBackground && (
           <label className="gen-check" title="输出透明背景 PNG；关闭时由供应商决定背景">
             <input

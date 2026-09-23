@@ -939,13 +939,42 @@
 .palette-category-item:hover,
 .palette-category-item.is-active {
   background: transparent;
-  color: var(--brand, #7edbff);
+  color: #ffffff;
 }
 
 /* 不用矩形底框表示状态；选中项与悬浮项都只通过鱼眼放大和颜色识别。 */
 .palette-category-item.is-active {
   transform: scale(1.14);
   z-index: 5;
+}
+
+/* 参考 Dock 的点亮规则：一级保持冷白图标，当前分类用蓝色文字与柔和光晕确认；
+   二级沿用节点自己的契约颜色，不混用一个全局蓝色。 */
+.palette-category-item .palette-icon,
+.palette-category-item .palette-label,
+.palette-node-flyout .palette-node-item .palette-icon,
+.palette-node-flyout .palette-node-item .palette-label {
+  transition:
+    color 160ms ease,
+    filter 160ms ease,
+    text-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.palette-category-item:hover .palette-icon,
+.palette-category-item.is-active .palette-icon {
+  color: #ffffff;
+  filter: drop-shadow(0 0 8px rgba(241, 245, 249, 0.45));
+}
+
+.palette-category-item:hover .palette-label {
+  color: #ffffff;
+}
+
+.palette-category-item.is-active .palette-label {
+  color: #38bdf8;
+  font-weight: 600;
+  text-shadow: 0 0 12px rgba(56, 189, 248, 0.38);
 }
 
 .palette-category-item .palette-label {
@@ -1034,6 +1063,39 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.palette-node-flyout .palette-node-item:hover .palette-icon,
+.palette-node-flyout .palette-node-item:focus-visible .palette-icon {
+  filter: drop-shadow(0 0 9px var(--palette-accent, #38bdf8));
+  transform: scale(1.1);
+}
+
+.palette-node-flyout .palette-node-item:hover .palette-label,
+.palette-node-flyout .palette-node-item:focus-visible .palette-label {
+  color: #ffffff;
+  text-shadow: 0 0 12px rgba(255, 255, 255, 0.35);
+}
+
+@keyframes palette-cascade-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(-8px, 0, 0) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+.palette-node-flyout {
+  animation: palette-cascade-enter 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .palette-node-flyout {
+    animation: none;
+  }
 }
 
 .canvas-theme-light .palette-node-flyout {
@@ -1714,20 +1776,6 @@
     filter 140ms ease;
 }
 
-/* 选中节点的下游数据边叠一层独立的彩色流光；底层语义色仍然可见。 */
-.data-edge-flow {
-  fill: none;
-  stroke-width: 1.65;
-  stroke-linecap: round;
-  /* 与拖拽态保持同一段长极光水流：256 / 64 = 4。 */
-  stroke-dasharray: 256 744;
-  stroke-dashoffset: 1000;
-  opacity: 0.98;
-  pointer-events: none;
-  filter: drop-shadow(0 0 5px rgba(104, 236, 210, 0.58));
-  animation: edge-water-flow 1.85s linear infinite;
-}
-
 /* 追溯线只表达“由该操作产生”，不具备可运行的数据流含义；它比数据线更细更淡。 */
 .artifact-provenance-edge {
   stroke-width: 1.2;
@@ -1760,37 +1808,27 @@
   position: fixed;
   z-index: 60;
   display: grid;
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   place-items: center;
   margin: 0;
   padding: 0;
-  border: 1px solid rgba(169, 218, 255, 0.62);
-  border-radius: 50%;
-  background: rgba(15, 22, 30, 0.94);
-  box-shadow:
-    0 4px 12px rgba(0, 0, 0, 0.35),
-    0 0 0 3px rgba(77, 192, 255, 0.12);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   color: #e7f7ff;
   cursor: pointer;
   font-family: inherit;
-  font-size: 14px;
+  font-size: 17px;
   line-height: 1;
+  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.8);
   transform: translate(-50%, -50%);
 }
 
 .data-edge-scissors:hover {
-  border-color: #e5f8ff;
-  background: #1a2c39;
   color: #fff;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .data-edge-flow {
-    opacity: 0.68;
-    filter: none;
-    animation: none;
-  }
+  transform: translate(-50%, -50%) scale(1.14);
 }
 
 .contract-test-harness {

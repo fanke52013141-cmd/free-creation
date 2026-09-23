@@ -24,7 +24,13 @@ export function parseImageGen(text: string): ImageGenData {
 export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
   const data = parseImageGen(readNodeConfig(ctx.shape))
   // 供应商/模型解析与 Body 共用同一套逻辑；未明确指定时回退到默认可用模型（如 ToAPIS）。
-  const option = await resolveFeatureOption(ctx.gateway, ctx.providers, featureKeyOf(data, 'image.generate'), 'image.generate', modelKeyOf(data))
+  const option = await resolveFeatureOption(
+    ctx.gateway,
+    ctx.providers,
+    featureKeyOf(data, 'image.generate'),
+    'image.generate',
+    modelKeyOf(data)
+  )
   if (!option) return { status: 'skipped', reason: '功能 image.generate 尚未绑定已验证图片模型' }
   const capabilities = imageCapabilitiesFor(option.provider.specId, option.model.id)
   const config = normalizeImageGenerationConfig(data, capabilities)
@@ -42,36 +48,37 @@ export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeE
   if (!prompt.trim()) return { status: 'skipped', reason: '无提示词' }
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
   try {
-    const result = await ctx.gateway.imageGenerate({
-      projectId: ctx.projectId,
-      providerId: option.provider.id,
-      modelId: option.model.id,
-      prompt,
-      size: config.size,
-      ...(capabilities.forwardsAspectRatio && config.aspectRatio !== 'auto'
-        ? { aspectRatio: config.aspectRatio }
-        : {}),
-      // 分辨率与透明背景都是用户意图；能力表不支持时既不发送也不出现在提交入参里。
-      ...(capabilities.resolutions.length > 0 && config.resolution
-        ? { resolution: config.resolution }
-        : {}),
-      ...(capabilities.supportsTransparentBackground && config.background
-        ? { background: config.background }
-        : {}),
-      ...(referenceMediaIds.length > 0 ? { referenceMediaIds } : {})
-    })
-    if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
-    if (!result.ok) return { status: 'failed', reason: result.error.message }
-    // 来源追溯：记录产生本节点的模型、输入摘要与时间，供「追踪到产生它的节点和输入」。
-    ctx.updateResult(
-      serializeMediaResultCollection(
+    // 不把“多张”偷偷折叠成某个供应商私有的 n 参数：每张都是一次明确的模型请求、
+    // 一份可追溯的媒体资产。这样能力未知的供应商也不会伪造批量成功。
+    let nodeResult = typeof ctx.shape.meta?.nodeResult === 'string' ? ctx.shape.meta.nodeResult : ''
+    const layoutColumns = config.count <= 4 ? 2 : 3
+    for (let index = 0; index < config.count; index += 1) {
+      if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
+      const result = await ctx.gateway.imageGenerate({
+        projectId: ctx.projectId,
+        providerId: option.provider.id,
+        modelId: option.model.id,
+        prompt,
+        size: config.size,
+        ...(capabilities.forwardsAspectRatio && config.aspectRatio !== 'auto'
+          ? { aspectRatio: config.aspectRatio }
+          : {}),
+        // 分辨率与透明背景都是用户意图；能力表不支持时既不发送也不出现在提交入参里。
+        ...(capabilities.resolutions.length > 0 && config.resolution
+          ? { resolution: config.resolution }
+          : {}),
+        ...(capabilities.supportsTransparentBackground && config.background
+          ? { background: config.background }
+          : {}),
+        ...(referenceMediaIds.length > 0 ? { referenceMediaIds } : {})
+      })
+      if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
+      if (!result.ok) return { status: 'failed', reason: result.error.message }
+      // 每一张成功后立即持久化；后续失败不会抹掉已完成的真实结果。
+      nodeResult = serializeMediaResultCollection(
         appendMediaResult(
-          typeof ctx.shape.meta?.nodeResult === 'string' ? ctx.shape.meta.nodeResult : '',
-          {
-            mediaId: result.data.id,
-            mediaPath: result.data.path,
-            mime: result.data.mime
-          },
+          nodeResult,
+          { mediaId: result.data.id, mediaPath: result.data.path, mime: result.data.mime },
           {
             nodeId: ctx.node.id,
             modelKey: option.key,
@@ -80,15 +87,17 @@ export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeE
           }
         )
       )
-    )
-    ctx.emitArtifact?.({
-      kind: 'image',
-      mediaId: result.data.id,
-      mediaPath: result.data.path,
-      mime: result.data.mime,
-      portId: 'out-image',
-      title: result.data.name || '生成图片'
-    })
+      ctx.updateResult(nodeResult)
+      ctx.emitArtifact?.({
+        kind: 'image',
+        mediaId: result.data.id,
+        mediaPath: result.data.path,
+        mime: result.data.mime,
+        portId: 'out-image',
+        title: result.data.name || (config.count > 1 ? `生成图片 ${index + 1}` : '生成图片'),
+        layoutColumns
+      })
+    }
     return { status: 'done' }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

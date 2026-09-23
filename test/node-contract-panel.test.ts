@@ -32,4 +32,9 @@ describe('节点详情面板', () => {
     expect(surfaceSource).toContain('bottom: 0')
     expect(surfaceSource).toContain('flex: 1 1 auto')
   })
+
+  it('详情侧栏在点击面板外时关闭，而不会拦截侧栏内控件', () => {
+    expect(panelSource).toContain('panelRef.current?.contains(event.target as Node)')
+    expect(panelSource).toContain("window.addEventListener('pointerdown', onPointerDown, true)")
+  })
 })

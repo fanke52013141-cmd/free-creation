@@ -27,6 +27,13 @@ import { useGatewayStore } from '../stores/gateway'
 import { Tooltip } from '../components/Tooltip'
 import { NODE_PORT_OUTSET, NODE_PORT_SIZE } from './edge-geometry'
 import { ConnectedInputPreview } from './ConnectedInputPreview'
+import {
+  DEFAULT_IMAGE_GENERATION_ESTIMATE_MS,
+  estimateImageGenerationDuration,
+  imageGenerationProgressPercent,
+} from './image-generation-progress'
+import { readNodeRunRecord } from '../engine/runRecord'
+import { canConsumeWheel } from './node-wheel-scroll'
 
 const EXEC_COLORS: Record<string, string> = {
   idle: '#6b7280',
@@ -37,6 +44,10 @@ const EXEC_COLORS: Record<string, string> = {
   failed: '#ff6b6b',
   cancelled: '#6b7280',
   cached: '#60a5fa'
+}
+
+function portHint(port: PortDecl): string {
+  return `${port.name} · ${PORT_TYPE_LABELS[port.type]}`
 }
 
 /**
@@ -183,10 +194,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     [editor, shape.id]
   )
 
-  // 行首 info 图标：显式打开该节点的右侧面板（对话节点→聊天面板，其余→契约信息窗）。
-  // 单击卡片本身只负责选中，不直接调面板；对话节点是唯一的例外——CanvasEditor 里监听
-  // 选中变化的 store listener 会在单选对话节点时自动打开聊天面板（P2-2），因为它的正文
-  // 就在右侧面板里。图标按钮自己吞掉指针事件，避免与选中/拖动打架。
+  // 行首 info 图标统一打开节点契约详情；聊天工作区仍由聊天节点选中/工作区入口打开。
   const handleInfoOpen = (e: React.PointerEvent<HTMLButtonElement>): void => {
     // 阻止指针事件继续，避免落入卡片选中/拖动逻辑
     stopEventPropagation(e)
@@ -197,7 +205,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   const openNodePanel = (): void => {
     useNodePanelStore
       .getState()
-      .open(shape.props.nodeType === 'chat' ? 'chat' : 'contract', shape.id, 'settings')
+      .open('contract', shape.id, 'overview')
   }
 
   const beginTitleEditing = (): void => {
@@ -231,6 +239,37 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     if (!editor.getSelectedShapeIds().includes(shape.id)) editor.select(shape.id)
   }
 
+  // Scroll ownership is deterministic: scrollable node content consumes the wheel while it
+  // can move; at its edge the event bubbles to the canvas. Ctrl/Meta-wheel remains zoom.
+  const handleNodeWheel = (event: React.WheelEvent<HTMLDivElement>): void => {
+    if (event.ctrlKey || event.metaKey) return
+    const target = event.target instanceof Element ? event.target : null
+    if (!target) return
+    let element: HTMLElement | null =
+      target instanceof HTMLElement ? target : target.parentElement
+    while (element && element !== event.currentTarget) {
+      const style = window.getComputedStyle(element)
+      const verticalCanScroll =
+        ['auto', 'scroll', 'overlay'].includes(style.overflowY) &&
+        canConsumeWheel(
+          { position: element.scrollTop, extent: element.scrollHeight, viewport: element.clientHeight },
+          event.deltaY
+        )
+      const horizontalDelta = event.shiftKey ? event.deltaY || event.deltaX : event.deltaX
+      const horizontalCanScroll =
+        ['auto', 'scroll', 'overlay'].includes(style.overflowX) &&
+        canConsumeWheel(
+          { position: element.scrollLeft, extent: element.scrollWidth, viewport: element.clientWidth },
+          horizontalDelta
+        )
+      if (verticalCanScroll || horizontalCanScroll) {
+        event.stopPropagation()
+        return
+      }
+      element = element.parentElement
+    }
+  }
+
   const handleTitleBlur = (e: React.FocusEvent<HTMLDivElement>): void => {
     const next = e.currentTarget.textContent ?? ''
     if (next !== shape.props.title) {
@@ -245,6 +284,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     : { in: [] as PortDecl[], out: [] as PortDecl[] }
   const inPorts = resolvedPorts.in
   const outPorts = resolvedPorts.out
+  // 空闲端口只表明“这是这个节点的一部分”，不提前泄露每个端口可传递的数据类型。
+  // 类型色只在已连线或拖线候选态出现；端口 ID、schema 和连线判断仍完全来自契约。
+  const nodePortColor = spec?.color ?? '#42b9f5'
   const inY = portOffsets(inPorts.length, shape.props.h)
   const outY = portOffsets(outPorts.length, shape.props.h)
   const isSource = draft?.from.shapeId === shape.id
@@ -259,6 +301,93 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   )
   const statusLabel = nodeExecLabel(shape.props.exec)
   const activeExecution = ['pending', 'queued', 'running'].includes(shape.props.exec)
+  const imageRun = shape.props.nodeType === 'image-gen' ? readNodeRunRecord(shape.meta?.nodeRun) : null
+  const imageRunActive = Boolean(
+    shape.props.nodeType === 'image-gen' && activeExecution && imageRun?.status === 'running'
+  )
+  const imageConfig = (() => {
+    if (shape.props.nodeType !== 'image-gen') return null
+    try {
+      const parsed = JSON.parse(shape.props.config) as Record<string, unknown>
+      return parsed && typeof parsed === 'object' ? parsed : null
+    } catch {
+      return null
+    }
+  })()
+  const imageProviderKey =
+    typeof imageConfig?.providerKey === 'string' && imageConfig.providerKey
+      ? imageConfig.providerKey
+      : typeof imageConfig?.modelKey === 'string'
+        ? imageConfig.modelKey.split('::')[0]
+        : ''
+  const imageModelKey = typeof imageConfig?.modelKey === 'string' ? imageConfig.modelKey : ''
+  const imageCount =
+    typeof imageConfig?.count === 'number' && Number.isFinite(imageConfig.count)
+      ? Math.max(1, Math.min(9, Math.floor(imageConfig.count)))
+      : 1
+  const [imageTimingEstimateMs, setImageTimingEstimateMs] = useState(
+    DEFAULT_IMAGE_GENERATION_ESTIMATE_MS
+  )
+  const [imageExecutionElapsedMs, setImageExecutionElapsedMs] = useState(0)
+  const timingRecordedRunRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!imageRunActive || !imageRun) return
+    const startedAt = imageRun.startedAt
+    const refreshElapsed = (): void =>
+      setImageExecutionElapsedMs(Math.max(0, Date.now() - startedAt))
+    const frame = window.requestAnimationFrame(refreshElapsed)
+    const timer = window.setInterval(refreshElapsed, 500)
+    let current = true
+    if (imageProviderKey && imageModelKey) {
+      void window.api.workspace
+        .getImageGenerationTimings()
+        .then((response) => {
+          if (!current || !response.ok) return
+          setImageTimingEstimateMs(
+            estimateImageGenerationDuration(
+              response.data,
+              imageProviderKey,
+              imageModelKey,
+              imageCount
+            )
+          )
+        })
+        .catch(() => undefined)
+    }
+    return () => {
+      current = false
+      window.cancelAnimationFrame(frame)
+      window.clearInterval(timer)
+    }
+  }, [imageRunActive, imageRun?.runId, imageRun?.startedAt, imageProviderKey, imageModelKey, imageCount])
+
+  useEffect(() => {
+    if (
+      shape.props.nodeType !== 'image-gen' ||
+      imageRun?.status !== 'success' ||
+      !imageRun.runId ||
+      !imageProviderKey ||
+      !imageModelKey ||
+      typeof imageRun.durationMs !== 'number' ||
+      imageRun.durationMs <= 0 ||
+      timingRecordedRunRef.current === imageRun.runId
+    ) {
+      return
+    }
+    timingRecordedRunRef.current = imageRun.runId
+    void window.api.workspace.recordImageGenerationTiming({
+      runId: imageRun.runId,
+      providerKey: imageProviderKey,
+      modelKey: imageModelKey,
+      durationMs: Math.round(imageRun.durationMs / imageCount),
+      recordedAt: imageRun.finishedAt ?? Date.now()
+    }).catch(() => undefined)
+  }, [shape.props.nodeType, imageRun?.runId, imageRun?.status, imageRun?.durationMs, imageRun?.finishedAt, imageProviderKey, imageModelKey, imageCount])
+
+  const imageProgress = imageRunActive
+    ? imageGenerationProgressPercent(imageExecutionElapsedMs, imageTimingEstimateMs)
+    : 0
   const executionLabel: Record<string, string> = {
     'image-gen': '图片生成中',
     'image-edit': 'P图中',
@@ -455,6 +584,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         data-node-id={shape.id}
         style={{ width: shape.props.w, height: shape.props.h }}
         onPointerDown={handleCardPointerDown}
+        onWheel={handleNodeWheel}
       >
         <div className="node-header">
           {/* 标题行布局：左侧依次为 序号 → 图标 → 名称 → 查看输入输出说明；
@@ -485,12 +615,12 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           >
             {shape.props.title}
           </div>
-          {/* info 按钮（查看输入输出说明）：紧跟节点名称，点击显式打开右侧面板
-                （对话节点→聊天面板，其余→契约信息窗）。标题必须和 openNodePanel 的
+          {/* info 按钮（查看输入输出说明）：紧跟节点名称，点击显式打开右侧契约面板。
+                对话节点也必须能查看与其他节点相同的输入输出契约。标题必须和 openNodePanel 的
                 去向一致——预演台从卡片按钮进，这里写「打开 3D 预演台」会是假提示。 */}
           <button
             className="node-info-btn"
-            title={shape.props.nodeType === 'chat' ? '打开对话面板' : '查看输入输出说明'}
+            title="查看输入输出说明"
             aria-label="打开节点说明"
             onPointerDown={handleInfoOpen}
             onClick={(e) => {
@@ -563,7 +693,23 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               </span>
               <span className="node-execution-copy">
                 <strong>{executionTitle}</strong>
-                <small>{executionDescription}</small>
+                {shape.props.nodeType === 'image-gen' ? (
+                  <span
+                    className="node-execution-progress"
+                    role="progressbar"
+                    aria-label="图片生成预计进度"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={imageProgress}
+                  >
+                    <span className="node-execution-progress-track">
+                      <span style={{ width: `${imageProgress}%` }} />
+                    </span>
+                    <small>预计进度 {imageProgress}%</small>
+                  </span>
+                ) : (
+                  <small>{executionDescription}</small>
+                )}
               </span>
             </div>
           )}
@@ -580,16 +726,17 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           const state = inputReadiness.get(p.id)
           const isConnected = (readinessState.incomingCounts?.get(p.id) ?? 0) > 0
           return (
-            <span
-              key={p.id}
+            <Tooltip key={p.id} label={portHint(p)} placement="top">
+              <span
               className={`port-dot in input-${state?.kind ?? 'optional'} ${isConnected ? 'connected' : 'unconnected'} ${isAnchor ? 'ok' : draft && draft.from.direction !== 'in' ? (ok ? 'ok' : 'dim') : ''}`}
               data-port-id={p.id}
               style={{
                 top: inY[i] - NODE_PORT_SIZE / 2,
                 ['--pc' as string]: PORT_COLORS[p.type],
+                ['--node-port-color' as string]: nodePortColor,
                 ...portFollowStyle(`in:${p.id}`)
               }}
-              aria-label={`${p.name} · ${PORT_TYPE_LABELS[p.type]}`}
+              aria-label={portHint(p)}
               onPointerEnter={(event) => updatePortFollow(event, `in:${p.id}`, 'in')}
               onPointerMove={(event) => updatePortFollow(event, `in:${p.id}`, 'in')}
               onPointerLeave={() => clearPortFollow(`in:${p.id}`)}
@@ -606,7 +753,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                   portCenter(e, `in:${p.id}`)
                 )
               }}
-            ></span>
+              ></span>
+            </Tooltip>
           )
         })}
 
@@ -623,7 +771,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                 top: shape.props.h / 2 - NODE_PORT_SIZE / 2,
                 ['--pc' as string]:
                   PORT_COLORS[shape.props.nodeType === 'video-asset' ? 'video' : 'image'] ??
-                  '#34d399'
+                  '#34d399',
+                ['--node-port-color' as string]: nodePortColor
               }}
               aria-label="来源产物连线"
             />
@@ -637,16 +786,17 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           const draftIn = draft && draft.from.direction === 'in' ? draft.from : null
           const okUpstream = draftIn && !isSource ? canAttachPort(draftIn, p, 'in') : false
           return (
-            <span
-              key={p.id}
+            <Tooltip key={p.id} label={portHint(p)} placement="top">
+              <span
               className={`port-dot out ${hasOutput ? 'has-output' : 'no-output'} ${isConnected ? 'connected' : 'unconnected'} ${isSource && draft?.from.portId === p.id && draft.from.direction !== 'in' ? 'ok' : ''} ${draftIn ? (okUpstream ? 'ok' : 'dim') : ''}`}
               data-port-id={p.id}
               style={{
                 top: outY[i] - NODE_PORT_SIZE / 2,
                 ['--pc' as string]: PORT_COLORS[p.type],
+                ['--node-port-color' as string]: nodePortColor,
                 ...portFollowStyle(`out:${p.id}`)
               }}
-              aria-label={`${p.name} · ${PORT_TYPE_LABELS[p.type]}`}
+              aria-label={portHint(p)}
               onPointerEnter={(event) => updatePortFollow(event, `out:${p.id}`, 'out')}
               onPointerMove={(event) => updatePortFollow(event, `out:${p.id}`, 'out')}
               onPointerLeave={() => clearPortFollow(`out:${p.id}`)}
@@ -664,7 +814,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                   portCenter(e, `out:${p.id}`)
                 )
               }}
-            ></span>
+              ></span>
+            </Tooltip>
           )
         })}
       </div>
@@ -676,7 +827,11 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             role="dialog"
             aria-modal="true"
             aria-label="媒体预览"
-            onClick={() => setPreview(null)}
+            onPointerDown={(event) => stopEventPropagation(event)}
+            onClick={(event) => {
+              stopEventPropagation(event)
+              if (event.target === event.currentTarget) setPreview(null)
+            }}
           >
             <div
               className={`media-preview-box media-preview-${preview.kind}`}

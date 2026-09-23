@@ -44,6 +44,7 @@ import {
   useStoredNodeConfig
 } from './shared'
 import { markUndoPoint } from '../../../canvas/history'
+import './node-workbench.css'
 
 const COLORS: Array<{ id: ImageEditColor; label: string }> = [
   { id: 'red', label: '红 · 修改' },
@@ -396,9 +397,6 @@ export function ImageEditSettings({
   return (
     <section className="contract-section">
       <h4>P图</h4>
-      <p className="contract-settings-hint">
-        原图来自 in-image；标注仅作为修改参考，运行后输出新的图片资产。
-      </p>
       <ImageEditEditorCore shape={shape} editor={editor} projectId={projectId} />
     </section>
   )
@@ -409,8 +407,9 @@ function ImageEditEditorCore({
   shape,
   editor,
   projectId,
-  workbench = false
-}: NodeSettingsProps & { workbench?: boolean }): React.JSX.Element {
+  workbench = false,
+  onRunSubmitted
+}: NodeSettingsProps & { workbench?: boolean; onRunSubmitted?: () => void }): React.JSX.Element {
   const previewRef = useRef<HTMLDivElement>(null)
   const textEntryRef = useRef<HTMLInputElement>(null)
   const draft = useRef<ImageEditAnnotation | null>(null)
@@ -670,6 +669,8 @@ function ImageEditEditorCore({
       return
     }
     setBusy(true)
+    // 工作台只是配置界面；提交后立即回到画布查看真实节点运行状态和产物。
+    if (workbench) onRunSubmitted?.()
     try {
       await runNodeManually(editor, projectId, providers, shape.id)
     } finally {
@@ -1050,7 +1051,9 @@ function ImageEditWorkbench({
       role="dialog"
       aria-modal="true"
       aria-label="P图工作台"
+      onPointerDown={(event) => stopEventPropagation(event)}
       onClick={(event) => {
+        stopEventPropagation(event)
         if (event.target === event.currentTarget) onClose()
       }}
     >
@@ -1072,7 +1075,13 @@ function ImageEditWorkbench({
           </button>
         </header>
         <div className="image-edit-workbench-body">
-          <ImageEditEditorCore shape={shape} editor={editor} projectId={projectId} workbench />
+          <ImageEditEditorCore
+            shape={shape}
+            editor={editor}
+            projectId={projectId}
+            workbench
+            onRunSubmitted={onClose}
+          />
         </div>
       </div>
     </div>,

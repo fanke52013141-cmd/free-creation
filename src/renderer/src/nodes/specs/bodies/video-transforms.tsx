@@ -8,6 +8,9 @@ import { markUndoPoint } from '../../../canvas/history'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import type { NodeCardShape } from '../../../canvas/NodeCardShape'
 import { useAppStore } from '../../../stores/app'
+import { useGatewayStore } from '../../../stores/gateway'
+import { toast } from '../../../stores/toast'
+import { runNodeManually } from '../../../engine/executor'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
 import {
@@ -33,6 +36,7 @@ import type {
   ClipQuality,
   AudioFormat
 } from '@shared/video-transform'
+import './node-workbench.css'
 
 type BodyMode = 'frame' | 'clip' | 'audio'
 
@@ -503,7 +507,9 @@ function VideoTrimWorkbench({
       role="dialog"
       aria-modal="true"
       aria-label={`${title}工作台`}
+      onPointerDown={(event) => stopEventPropagation(event)}
       onClick={(event) => {
+        stopEventPropagation(event)
         if (event.target === event.currentTarget) onClose()
       }}
     >
@@ -528,7 +534,13 @@ function VideoTrimWorkbench({
           </button>
         </header>
         <div className="video-trim-workbench-body">
-          <VideoTransformSettings shape={shape} editor={editor} projectId={projectId} mode={mode} />
+          <VideoTransformSettings
+            shape={shape}
+            editor={editor}
+            projectId={projectId}
+            mode={mode}
+            onRunSubmitted={onClose}
+          />
         </div>
       </div>
     </div>,
@@ -703,12 +715,14 @@ export function VideoTransformBody({
 function VideoTransformSettings({
   shape,
   editor,
-  mode
-}: NodeSettingsProps & { mode: BodyMode }): React.JSX.Element {
+  mode,
+  onRunSubmitted
+}: NodeSettingsProps & { mode: BodyMode; onRunSubmitted?: () => void }): React.JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [durationMs, setDurationMs] = useState(0)
   const [fps, setFps] = useState<number | null>(null)
   const project = useAppStore((state) => state.currentProject)
+  const providers = useGatewayStore((state) => state.providers)
   const source = gatherUpstreamMedia(editor, shape.id, 'in-video', 'video')
 
   // 各模式独立配置状态
@@ -942,6 +956,24 @@ function VideoTransformSettings({
     if (isFrame) persistFrame()
     else if (isClip) persistClip()
     else persistAudio()
+  }
+
+  const submitAndRun = (): void => {
+    if (!source) {
+      toast('请先连接一段视频')
+      return
+    }
+    if (!project) {
+      toast('项目未就绪')
+      return
+    }
+    // 配置先落盘，之后仅通过统一节点运行器执行；工作台不会直接触发媒体转换。
+    commit()
+    onRunSubmitted?.()
+    // 让关闭状态先完成一次 React 提交，下一事件周期再启动节点运行。
+    window.setTimeout(() => {
+      void runNodeManually(editor, project.id, providers, shape.id)
+    }, 0)
   }
 
   return (
@@ -1187,6 +1219,18 @@ function VideoTransformSettings({
               onToggleLoop={toggleLoop}
             />
           )}
+          <button
+            type="button"
+            className="btn-primary node-workbench-run"
+            onPointerDown={stopEventPropagation}
+            onClick={(event) => {
+              stopEventPropagation(event)
+              submitAndRun()
+            }}
+          >
+            <Icon name={isFrame ? 'frame' : isClip ? 'clip' : 'audio'} size={15} />
+            {isFrame ? '开始抽帧' : isClip ? '截取视频' : '截取音频'}
+          </button>
         </>
       ) : (
         <div className="crop-no-source">请从视频节点连线到左侧“源视频”端口。</div>

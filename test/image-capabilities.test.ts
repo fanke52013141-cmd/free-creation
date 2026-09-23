@@ -129,6 +129,14 @@ describe('图片模型能力描述', () => {
     expect(invalid).not.toHaveProperty('providerKey')
   })
 
+  it('生成数量默认一张，并严格收敛到 1–9 张', () => {
+    const capabilities = imageCapabilitiesFor('relay')
+    expect(normalizeImageGenerationConfig({}, capabilities).count).toBe(1)
+    expect(normalizeImageGenerationConfig({ count: 0 }, capabilities).count).toBe(1)
+    expect(normalizeImageGenerationConfig({ count: 3.8 }, capabilities).count).toBe(3)
+    expect(normalizeImageGenerationConfig({ count: 99 }, capabilities).count).toBe(9)
+  })
+
   it('中转站配置的 gpt-image-2 自动匹配 ToAPIS 异步任务与分辨率能力', () => {
     const capabilities = imageCapabilitiesFor('relay', 'gpt-image-2')
     expect(capabilities.driver).toBe('toapis-task')

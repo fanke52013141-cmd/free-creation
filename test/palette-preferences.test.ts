@@ -25,6 +25,15 @@ describe('节点分类 Dock 偏好', () => {
     expect(result.labels).toEqual({ video: '动态影像', input: '素材入口' })
   })
 
+  it('清理已移除的常用入口，避免节点在 Dock 中重复出现', () => {
+    const result = normalizePalettePreferences({
+      order: ['favorites', 'image'],
+      labels: { favorites: '常用', image: '图像' }
+    })
+    expect(result.order).not.toContain('favorites')
+    expect(result.labels).toEqual({ image: '图像' })
+  })
+
   it('拖动排序只移动分类键，不会生成或丢失分类', () => {
     const original = [...PALETTE_CATEGORY_IDS]
     const moved = movePaletteCategory(original, 'video', 'input')

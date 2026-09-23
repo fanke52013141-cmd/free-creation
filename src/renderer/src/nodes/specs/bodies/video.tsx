@@ -340,9 +340,6 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
       <div className="asset-empty video-asset-empty">
         <Icon name="video" size={40} />
         <span>视频资产</span>
-        {/* 资产节点的 props 就是输出真值（契约 outputSource: 'document'）：导入即生效，
-            不需要先点运行。不写这一句，用户会以为它和生成节点一样要跑一次。 */}
-        <small>导入后下游即可取用这段视频，不需要运行本节点</small>
         <button
           className="btn-ghost video-import-button"
           onPointerDown={(e) => stopEventPropagation(e)}

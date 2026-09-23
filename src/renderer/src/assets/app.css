@@ -1090,7 +1090,8 @@ select:focus-visible,
   position: absolute;
   z-index: 2;
   top: 6px;
-  left: calc(100% + 7px);
+  /* 一级与二级菜单保持同一操作组，间距收紧为此前的一半。 */
+  left: calc(100% + 4px);
   max-width: min(276px, calc(100vw - 24px));
   max-height: 388px;
   padding: 6px;
@@ -1474,7 +1475,28 @@ select:focus-visible,
   white-space: nowrap;
 }
 
-/* 文本/JSON 摘要按呈现规范 §2.2 最多两行省略；来源标签保持单行。 */
+/* 文本引用是紧凑的两列单行 chip：正文和来源都允许省略，不能挤成两排。 */
+.connected-input-item.connected-input-textual {
+  flex: 0 1 calc((100% - 6px) / 2);
+  max-width: calc((100% - 6px) / 2);
+}
+
+.connected-input-item.connected-input-textual .connected-input-value {
+  min-width: 0;
+  max-width: none;
+  flex: 1 1 auto;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: normal;
+}
+
+.connected-input-item.connected-input-textual .connected-input-source {
+  max-width: 34px;
+  flex: 0 1 auto;
+}
+
 .connected-input-value {
   max-width: 84px;
   color: var(--txt);
@@ -1545,6 +1567,46 @@ select:focus-visible,
   color: rgba(219, 247, 239, 0.75);
   font-size: 11px;
   line-height: 1.45;
+}
+
+.node-execution-progress {
+  display: grid;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.node-execution-progress-track {
+  display: block;
+  width: min(210px, 70vw);
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(226, 238, 249, 0.2);
+}
+
+.node-execution-progress-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #36c99b, #62d9c1);
+  box-shadow: 0 0 12px rgba(54, 201, 155, 0.42);
+  transition: width 420ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .node-execution-spinner svg {
+    animation: none;
+  }
+
+  .node-execution-progress-track > span {
+    transition: none;
+  }
+}
+
+.node-execution-progress small {
+  color: rgba(219, 247, 239, 0.78);
+  font-size: 10px;
+  line-height: 1.2;
 }
 
 @keyframes node-execution-rotate {
@@ -7093,36 +7155,6 @@ select:focus-visible,
   text-overflow: ellipsis;
 }
 
-.chat-compact-stats {
-  font-size: 10px;
-  color: var(--muted);
-  line-height: 1.4;
-}
-
-.chat-compact-hint {
-  font-size: 10px;
-  color: var(--muted);
-  margin-top: auto;
-  padding-top: 4px;
-}
-/* 对话节点：本轮提问来自哪里（与 chatExecutor 的分支一一对应） */
-.chat-compact-run {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  font-size: 11px;
-  line-height: 1.4;
-  padding-top: 6px;
-  border-top: 1px solid var(--line);
-}
-.chat-compact-run.ok {
-  color: #34d399;
-}
-.chat-compact-run.warn {
-  color: #fbbf24;
-}
-
 /* ── 对话节点右侧聊天面板（ChatSidePanel）── */
 .chat-side-panel {
   position: absolute;
@@ -10199,8 +10231,6 @@ select:focus-visible,
 }
 
 /* 节点卡片保持静默：连接缺失等使用提示不以黄色常驻打扰创作。真实执行错误仍保留。 */
-.chat-compact-run.warn,
-.ai-process-wiring.warn,
 .iterate-wiring.warn,
 .node-wiring.warn,
 .processor-status.warn,
@@ -10295,7 +10325,7 @@ canvas.tl-canvas-indicators {
    (.tl-selection__bg)。这里一并隐藏，也不显示缩放/旋转控制点。
    ============================================================ */
 .tl-selection__fg__outline,
-.tl-selection__bg {
+.tl-selection__bg:not(:has(.canvas-selection-underlay)) {
   display: none !important;
 }
 

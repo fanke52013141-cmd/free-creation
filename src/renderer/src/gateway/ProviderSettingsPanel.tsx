@@ -27,6 +27,9 @@ interface Draft extends Omit<SaveProviderInput, 'apiKey'> {
   hasApiKey?: boolean
 }
 
+// Keep the paid protocol probe hidden until the complete provider support matrix is verified.
+const isProviderProtocolProbeEnabled = (): boolean => false
+
 const newDraft = (specId: ProviderSpecId): Draft => {
   const spec = PROVIDER_SPECS.find((s) => s.id === specId)
   return {
@@ -114,7 +117,14 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
   }
 
   useEffect(() => {
-    if (open) void loadSettingsProviders()
+    if (!open) return
+    let active = true
+    void window.api.gateway.listProviders().then((result) => {
+      if (active && result.ok) setProviders(result.data)
+    })
+    return () => {
+      active = false
+    }
   }, [open])
 
   useEffect(() => {
@@ -355,7 +365,14 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
   }
 
   return createPortal(
-    <div className="gw-mask" onPointerDown={(e) => stopEventPropagation(e)} onClick={close}>
+    <div
+      className="gw-mask"
+      onPointerDown={(event) => stopEventPropagation(event)}
+      onClick={(event) => {
+        stopEventPropagation(event)
+        if (event.target === event.currentTarget) close()
+      }}
+    >
       <div className="gw-panel" onClick={(e) => e.stopPropagation()}>
         <div className="gw-head">
           <span className="gw-title">模型供应商</span>
@@ -618,7 +635,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
 
                 {testMsg && <div className="gw-test-msg">{testMsg}</div>}
 
-                {false && driverForSpec(draft!.specId) !== 'openai-compatible' && (
+                {isProviderProtocolProbeEnabled() && driverForSpec(draft!.specId) !== 'openai-compatible' && (
                   <div className="gw-probe">
                     <div className="gw-probe-head">
                       <span className="gw-label">协议自检</span>
@@ -731,7 +748,15 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                   </div>
                 </div>
                 {modelPickerOpen && (
-                  <div className="gw-model-picker-mask" role="presentation">
+                  <div
+                    className="gw-model-picker-mask"
+                    role="presentation"
+                    onPointerDown={(event) => stopEventPropagation(event)}
+                    onClick={(event) => {
+                      stopEventPropagation(event)
+                      if (event.target === event.currentTarget) setModelPickerOpen(false)
+                    }}
+                  >
                     <section
                       className="gw-model-picker"
                       role="dialog"

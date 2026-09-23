@@ -21,7 +21,10 @@ const ROOT = path.resolve(__dirname, '..')
 const DATA_DIR =
   process.env.E2E_DATA_DIR ||
   path.join(process.env.LOCALAPPDATA || os.tmpdir(), `canvas-node-matrix-${Date.now()}`)
-const SHOT_DIR = path.join(ROOT, 'artifacts/node-matrix-2026-09-19')
+// 每轮矩阵使用独立证据目录，避免覆盖以前的截图或用户留下的审计结果。
+const SHOT_DIR = process.env.MATRIX_SHOT_DIR
+  ? path.resolve(process.env.MATRIX_SHOT_DIR)
+  : path.join(ROOT, 'artifacts', `node-matrix-${new Date().toISOString().replace(/[:.]/g, '-')}`)
 const RESULT_FILE = process.env.MATRIX_RESULT_PATH
   ? path.resolve(process.env.MATRIX_RESULT_PATH)
   : null
@@ -293,7 +296,7 @@ async function addNode(label) {
   const y =
     GRID.originY + Math.floor(slot / GRID.cols) * GRID.cellH + (NODE_H * zoom) / 2
   const before = await win.$$eval('.node-card-wrap', (els) => els.map((e) => e.dataset.nodeId))
-  const btn = win.getByRole('button', { name: `添加${label}节点`, exact: true })
+  const btn = await revealNodeButton(label)
   await btn.scrollIntoViewIfNeeded()
   slot += 1
   // 从面板按住拖到画布指定位置松手：走的是真实用户的第二种创建手势，
@@ -322,6 +325,34 @@ async function addNode(label) {
     }
   }
   throw new Error(`点击「添加${label}节点」后没有出现新卡片`)
+}
+
+/** 左侧入口为两级 Dock：逐个悬浮一级分类，直到二级列表提供目标创建按钮。 */
+async function revealNodeButton(label) {
+  const btn = win.getByRole('button', { name: `添加${label}节点`, exact: true })
+  if (await btn.isVisible().catch(() => false)) return btn
+  const categories = win.locator('.palette-category-item')
+  const count = await categories.count()
+  for (let index = 0; index < count; index += 1) {
+    const category = categories.nth(index)
+    const categoryName = (await category.getAttribute('aria-label')) || `分类 ${index + 1}`
+    await category.hover()
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      if ((await category.getAttribute('aria-expanded')) === 'true' && await btn.isVisible().catch(() => false)) {
+        check(`${label}：两级分类展开并显示创建入口`, true, categoryName)
+        return btn
+      }
+      await win.waitForTimeout(80)
+    }
+    // 某些屏幕阅读器/自动化指针路径下 hover 会被合成 click 状态覆盖，点击可确定展开。
+    await category.click()
+    if (await btn.isVisible().catch(() => false)) {
+      check(`${label}：两级分类展开并显示创建入口`, true, categoryName)
+      return btn
+    }
+  }
+  check(`${label}：两级分类展开并显示创建入口`, false, '未找到对应二级节点按钮')
+  throw new Error(`一级分类均已检查，但没有展开出「添加${label}节点」`)
 }
 
 async function portBox(id, dir, portId) {
@@ -597,8 +628,8 @@ async function recipeJson() {
 
 /** 处理：固定值兜底、字段提取的成功/失败两态。 */
 async function recipeProcessor() {
-  const a = await addNode('处理')
-  await checkPorts(a, '处理', ['in-value'], ['out-value'])
+  const a = await addNode('数据处理')
+  await checkPorts(a, '数据处理', ['in-value'], ['out-value'])
   const empty = await runNode(a)
   const emptyShape = empty.shape ?? (await disk(a))
   check(
@@ -624,7 +655,7 @@ async function recipeProcessor() {
   const feeder = await addNode('JSON')
   await editCodeLike(feeder, '粘贴 JSON', '{"scene":"雨夜街道"}')
 
-  const pick = await addNode('处理')
+  const pick = await addNode('数据处理')
   await card(pick).locator('select[aria-label="处理方式"]').selectOption('pick')
   await win.waitForTimeout(500)
   const pathInput = card(pick).locator('input[aria-label="字段路径"]')
@@ -794,8 +825,8 @@ async function recipeCode() {
 
 /** 循环：in-list 必填（未连时按钮必须置灰），循环体逐项执行。 */
 async function recipeIterate() {
-  const a = await addNode('循环')
-  await checkPorts(a, '循环', ['in-list'], ['out-item', 'out-items'])
+  const a = await addNode('批量处理')
+  await checkPorts(a, '批量处理', ['in-list'], ['out-item', 'out-items'])
   const st = await statusOf(a)
   check(
     '循环：未接列表时运行按钮置灰并写明缺少输入',
@@ -1302,7 +1333,7 @@ async function recipeCancelResume() {
     '输入 JSON',
     JSON.stringify(Array.from({ length: TOTAL }, (_, i) => ({ id: `s${i + 1 }` })))
   )
-  const loop = await addNode('循环')
+  const loop = await addNode('批量处理')
   check('停止续跑：结构数据可接入 in-list', await connect(list, 'out-json', loop, 'in-list'))
   const body = await addNode('代码')
   await editCodeLike(

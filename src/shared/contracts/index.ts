@@ -79,7 +79,9 @@ export const IPC = {
     saveSnapshot: 'workspace:snapshots:save',
     deleteSnapshot: 'workspace:snapshots:delete',
     getPalettePreferences: 'workspace:palette-preferences:get',
-    savePalettePreferences: 'workspace:palette-preferences:save'
+    savePalettePreferences: 'workspace:palette-preferences:save',
+    recordImageGenerationTiming: 'workspace:image-generation-timing:record',
+    getImageGenerationTimings: 'workspace:image-generation-timings:get'
   },
   gateway: {
     providers: 'gateway:providers:list',
@@ -398,6 +400,19 @@ export interface SaveHistorySnapshotInput {
 
 /** 本机 UI 偏好；不属于项目文件，导入导出不会携带。 */
 export type { PalettePreferences }
+
+/**
+ * 单张图片生成的本机耗时样本。它刻意不包含 prompt、项目 ID、媒体 ID 或供应商密钥：
+ * 这份数据只用于估算同一供应商/模型的完成进度，且不随项目导入导出。
+ */
+export interface ImageGenerationTimingSample {
+  /** 同一次节点运行的稳定 ID；主进程以它幂等去重，重载界面不会重复采样。 */
+  runId: string
+  providerKey: string
+  modelKey: string
+  durationMs: number
+  recordedAt: number
+}
 
 // ── 模型网关契约 ──
 

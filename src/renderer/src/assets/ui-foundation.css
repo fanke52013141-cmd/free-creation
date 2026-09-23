@@ -532,9 +532,9 @@ body {
 }
 
 /* ── Ports: meaningful but quiet until an interaction needs them ───────── */
-/* 18px 保留为命中区（CanvasEditor 捕获代理按 rect 半径命中）；视觉为 ::after 的
-   10px 实色圆点。用户 2026-09-18 拍板：端口色就是端口色——不做渐变、不做磨砂、
-   不带内阴影；未连接时只降低不透明度。 */
+/* 18px 元素与 edge-geometry 的锚点保持一致；视觉为更容易抓取的 14px 实色圆点。
+   空闲端口只使用节点主色，不在未连线时暴露“它可能连接什么”的多种类型色。
+   类型色保留给已连线、拖线候选和契约错误态；不做渐变、磨砂或内阴影。 */
 .port-dot {
   position: absolute;
   width: 18px;
@@ -556,12 +556,11 @@ body {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 10px;
-  height: 10px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   transform: translate(-50%, -50%) translate(var(--port-follow-x, 0), var(--port-follow-y, 0));
-  /* 实色圆点：类型色即视觉，无渐变、无磨砂、无内阴影。 */
-  background: var(--pc, #42b9f5);
+  background: var(--node-port-color, var(--pc, #42b9f5));
   border: none;
   box-shadow: none;
   transition:
@@ -569,16 +568,21 @@ body {
     opacity 140ms ease;
 }
 
-/* 扩大的是透明命中区，不是可见的半圆控件。 */
+/* 扩大的是透明命中区，不是可见的半圆控件。46px 有效范围能在缩放画布中稳定拖拽。 */
 .port-dot::before {
   content: '';
   position: absolute;
-  inset: -12px;
+  inset: -14px;
   border-radius: 50%;
 }
 
 .port-dot.connected {
   opacity: 1;
+}
+
+/* 连线落到这个端口后，才明确呈现契约数据类型的颜色。 */
+.port-dot.connected::after {
+  background: var(--pc, #42b9f5);
 }
 
 .port-dot.unconnected {
@@ -608,6 +612,11 @@ body {
 .port-dot.ok::after {
   transform: translate(-50%, -50%) translate(var(--port-follow-x, 0), var(--port-follow-y, 0))
     scale(1.22);
+}
+
+/* 拖线中的兼容候选同样要显出类型色；普通 hover 仍维持节点主色。 */
+.port-dot.ok::after {
+  background: var(--pc, #42b9f5);
 }
 
 .port-dot.dim {
@@ -650,11 +659,17 @@ body {
 /* 缺失必填输入：虚线描边保留“缺口”语义，填充让位给虚线轮廓。 */
 .port-dot.input-missing::after {
   background: transparent;
-  border: 1px dashed var(--pc, #42b9f5);
+  border: 1px dashed var(--node-port-color, var(--pc, #42b9f5));
 }
 
 .port-dot.input-missing {
   opacity: 1;
+}
+
+/* 必填输入处于可落点状态时，以类型色实心点优先表示“可以连接”。 */
+.port-dot.input-missing.ok::after {
+  background: var(--pc, #42b9f5);
+  border: none;
 }
 
 /* ── Connections: a restrained directional line, not a neon decoration ── */
@@ -705,20 +720,8 @@ body {
   fill: none;
   stroke-width: 1.7px;
   stroke-linecap: round;
-  /* 单段长度提升为旧值的四倍：像一条连续的极光水带，而不是短促闪点。 */
-  stroke-dasharray: 256 744;
-  stroke-dashoffset: 1000;
-  filter: drop-shadow(0 0 5px rgba(104, 236, 210, 0.58));
-  animation: edge-water-flow 1.6s linear infinite;
-}
-
-@keyframes edge-water-flow {
-  from {
-    stroke-dashoffset: 1000;
-  }
-  to {
-    stroke-dashoffset: 0;
-  }
+  opacity: 0.88;
+  filter: none;
 }
 
 /* tldraw Arrow 形状仅是端口 binding / 持久化载体，已被 ui-surfaces.css 整体隐藏
@@ -743,22 +746,17 @@ body {
   isolation: isolate;
   min-height: 62px;
   padding: 10px 14px;
+  border-bottom: 0;
 }
 
 .canvas-topbar::after {
-  position: absolute;
-  right: 0;
-  bottom: -1px;
-  left: 0;
-  height: 1px;
-  content: '';
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(157, 179, 199, 0.16) 12%,
-    rgba(157, 179, 199, 0.16) 88%,
-    transparent 100%
-  );
+  display: none;
+}
+
+/* tldraw otherwise draws a focus outline around the whole canvas container. It
+   appears as an intermittent bright-blue rule at the canvas/topbar boundary. */
+.canvas-host .tl-container__focused {
+  outline: none !important;
 }
 
 .logo-btn {

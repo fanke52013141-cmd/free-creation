@@ -120,6 +120,8 @@ export interface ProducedArtifact {
   /** 产物在同一次运行中的端口归属；用于溯源展示，不参与数据拓扑。 */
   portId: string
   title?: string
+  /** 同一批媒体资产在画布上的栅格列数；仅是画布排版提示，不参与节点数据流。 */
+  layoutColumns?: number
 }
 
 export interface NodeExecutionResult {

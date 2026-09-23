@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Editor } from 'tldraw'
 import type { MediaAsset, PortDecl, PortType, ProviderSummary } from '@shared/types'
 import { getNodePorts, getNodeType, PORT_TYPE_LABELS } from '../nodes/registry'
@@ -338,6 +338,7 @@ export function NodeContractPanel({
   const initialTab = useNodePanelStore((s) => s.initialTab)
   const [tab, setTab] = useState<InspectorTab>(initialTab === 'settings' ? 'settings' : 'overview')
   const [runningAction, setRunningAction] = useState<'node' | 'subgraph' | null>(null)
+  const panelRef = useRef<HTMLElement>(null)
   // 打开/切换节点（或配置类入口改变 initialTab）时，渲染期同步重置 tab，
   // 不用 effect 里 setState（避免级联渲染告警）。
   const [tabAnchor, setTabAnchor] = useState<{
@@ -359,6 +360,17 @@ export function NodeContractPanel({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  // 节点详情是临时侧栏而不是固定页面：点击侧栏以外的位置立即收起。使用捕获阶段，
+  // 避免画布先处理选择事件而让关闭动作失效；面板内的控件仍完全不受影响。
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent): void => {
+      if (panelRef.current?.contains(event.target as Node)) return
+      onClose()
+    }
+    window.addEventListener('pointerdown', onPointerDown, true)
+    return () => window.removeEventListener('pointerdown', onPointerDown, true)
   }, [onClose])
 
   if (!shapeId) return null
@@ -472,7 +484,7 @@ export function NodeContractPanel({
   }
 
   return (
-    <aside className="node-contract-panel" aria-label="节点输入输出说明">
+    <aside ref={panelRef} className="node-contract-panel" aria-label="节点输入输出说明">
       <header className="contract-head">
         <span style={{ color: spec.color }}>
           <Icon name={spec.icon} size={17} />
@@ -483,7 +495,12 @@ export function NodeContractPanel({
             {spec.label}节点 · 契约 v{spec.contractVersion}
           </small>
         </div>
-        <button className="side-panel-close" title="关闭说明" aria-label="关闭节点说明面板" onClick={onClose}>
+        <button
+          className="side-panel-close"
+          title="关闭说明"
+          aria-label="关闭节点说明面板"
+          onClick={onClose}
+        >
           <Icon name="close" size={15} />
         </button>
       </header>

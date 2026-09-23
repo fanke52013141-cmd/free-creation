@@ -1,5 +1,6 @@
 import { Tldraw, createShapeId, type Editor, type TLShapeId } from 'tldraw'
 import 'tldraw/tldraw.css'
+import './node-scrollbars.css'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ProjectMeta, MediaAsset, NodeTypeId } from '@shared/types'
 import { Tooltip } from '../components/Tooltip'
@@ -170,7 +171,6 @@ function migrateLegacyNodeSizes(editor: Editor): number {
 interface CanvasEditorProps {
   project: ProjectMeta
   initialSnapshot: unknown
-  onThemeChange?: (theme: 'dark' | 'light') => void
 }
 
 interface CreateMenuState {
@@ -241,8 +241,7 @@ function paletteSafeScreenX(editor: Editor): number {
 
 export function CanvasEditor({
   project,
-  initialSnapshot,
-  onThemeChange
+  initialSnapshot
 }: CanvasEditorProps): React.JSX.Element {
   const editorRef = useRef<Editor | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -268,6 +267,8 @@ export function CanvasEditor({
   // 剪贴板节点数进入 React 状态，让「新建节点」菜单能响应式显示「粘贴」入口
   const [clipboardCount, setClipboardCount] = useState(0)
   const [menu, setMenu] = useState<MenuState | null>(null)
+  // 拉线到空白后的菜单锚点由实际 DOM 尺寸测得；不能再把鼠标松手点误当菜单左上角。
+  const [menuAnchor, setMenuAnchor] = useState<{ x: number; y: number } | null>(null)
   const [dragOver, setDragOver] = useState(false)
   // 外部文件拖入时只在指针落点提供反馈，不能用整张画布的高亮边框抢走视觉焦点。
   const [dropPoint, setDropPoint] = useState<{ x: number; y: number } | null>(null)
@@ -310,7 +311,6 @@ export function CanvasEditor({
     []
   )
   // 画布配色：dark（深色）/ light（米黄色）
-  const [canvasTheme, setCanvasTheme] = useState<'dark' | 'light'>('dark')
   // 左侧节点面板拖拽状态
   const [nodeDrag, setNodeDrag] = useState<{ type: NodeTypeId; x: number; y: number } | null>(null)
   const [activePaletteCategory, setActivePaletteCategory] = useState<{
@@ -1453,15 +1453,23 @@ export function CanvasEditor({
       },
       { scope: 'document' }
     )
-    // 对话节点的交互主体在右侧聊天面板：卡片空态文案承诺「选中此节点 → 右侧面板对话」。
-    // 这里监听选中变化，单选对话节点时自动打开其聊天面板（QA-NODE-AUDIT-2026-09-06 P2-2）。
-    // 只在选中变化时触发：用户主动关闭面板后，不重新选中不会再次弹出。
+    // 对话节点单选后打开居中聊天 Dialog。记录上次打开的选中节点，避免正文/运行状态
+    // 更新时重复弹出；用户关闭后重新选中（先切换到其他节点）即可再次打开。
+    let lastOpenedChatSelection: string | null = null
     editor.store.listen(
       () => {
         const selected = editor.getSelectedShapeIds()
-        if (selected.length !== 1) return
+        if (selected.length !== 1) {
+          lastOpenedChatSelection = null
+          return
+        }
         const shape = editor.getShape<NodeCardShape>(selected[0])
-        if (!shape || shape.type !== 'node-card' || shape.props.nodeType !== 'chat') return
+        if (!shape || shape.type !== 'node-card' || shape.props.nodeType !== 'chat') {
+          lastOpenedChatSelection = null
+          return
+        }
+        if (lastOpenedChatSelection === shape.id) return
+        lastOpenedChatSelection = shape.id
         const panel = useNodePanelStore.getState()
         if (panel.kind === 'chat' && panel.shapeId === shape.id) return
         panel.open('chat', shape.id, 'settings')
@@ -1602,6 +1610,7 @@ export function CanvasEditor({
       }
     }
     pendingConnectRef.current = r.from
+    setMenuAnchor(null)
     setMenu({
       kind: 'create',
       x: r.screenPt.x,
@@ -1621,12 +1630,21 @@ export function CanvasEditor({
 
   const closeMenu = (): void => {
     pendingConnectRef.current = null
+    setMenuAnchor(null)
     setMenu(null)
   }
 
+  const updateCreateMenuAnchor = useCallback((next: { x: number; y: number }): void => {
+    setMenuAnchor((current) =>
+      current && Math.abs(current.x - next.x) < 1 && Math.abs(current.y - next.y) < 1
+        ? current
+        : next
+    )
+  }, [])
+
   return (
     <div
-      className={`canvas-host canvas-theme-${canvasTheme} ${dragOver ? 'drag-over' : ''}`}
+      className={`canvas-host canvas-theme-dark ${dragOver ? 'drag-over' : ''}`}
       ref={wrapRef}
       onPointerDownCapture={(event) => {
         const target = event.target as HTMLElement
@@ -1751,7 +1769,7 @@ export function CanvasEditor({
                   onClick={(event) => openPaletteCategory(category, event.currentTarget)}
                 >
                   <span className="palette-icon">
-                    <Icon name={meta.icon} size={20} />
+                    <Icon name={meta.icon} size={20} strokeWidth={2} />
                   </span>
                   <span className="palette-label">{meta.label}</span>
                 </button>
@@ -1783,8 +1801,11 @@ export function CanvasEditor({
                 }}
                 onPointerDown={(event) => startNodeDrag(event, t.type)}
               >
-                <span className="palette-icon" style={{ color: t.color }}>
-                  <Icon name={t.icon} size={20} />
+                <span
+                  className="palette-icon"
+                  style={{ color: t.color, ['--palette-accent' as string]: t.color }}
+                >
+                  <Icon name={t.icon} size={20} strokeWidth={2} />
                 </span>
                 <span className="palette-label">{t.label}</span>
               </button>
@@ -1868,26 +1889,6 @@ export function CanvasEditor({
           </Tooltip>
         </div>
         <div className="palette-divider" />
-        {/* 画布配色切换 */}
-        <Tooltip label={canvasTheme === 'dark' ? '切换为浅色画布' : '切换为深色画布'}>
-          <button
-            className="palette-item"
-            aria-label={canvasTheme === 'dark' ? '切换为浅色画布' : '切换为深色画布'}
-            onClick={() => {
-              const next = canvasTheme === 'dark' ? 'light' : 'dark'
-              setCanvasTheme(next)
-              onThemeChange?.(next)
-              editorRef.current?.user.updateUserPreferences({
-                colorScheme: next === 'dark' ? 'dark' : 'light'
-              })
-            }}
-          >
-            <span className="palette-icon">
-              <Icon name="theme" size={20} />
-            </span>
-            <span className="palette-label">主题</span>
-          </button>
-        </Tooltip>
       </div>
       <CanvasBottomDock editor={editorInstance} />
       {/* 多选浮动工具栏：选中 2+ 节点时显示对齐与打组 */}
@@ -1929,9 +1930,10 @@ export function CanvasEditor({
           onClose={() => useNodePanelStore.getState().close()}
         />
       )}
-      {/* 对话节点右侧聊天面板（由节点右上角图标显式打开） */}
+      {/* 对话节点的居中聊天 Dialog（选中节点或点右上角图标打开） */}
       {!panelTab && editorInstance && nodePanelKind === 'chat' && nodePanelShapeId && (
         <ChatSidePanel
+          key={nodePanelShapeId}
           editor={editorInstance}
           shapeId={nodePanelShapeId}
           onClose={() => useNodePanelStore.getState().close()}
@@ -1972,7 +1974,7 @@ export function CanvasEditor({
         <PendingConnectionLayer
           editor={editorInstance}
           startPage={menu.startPage}
-          endPt={{ x: menu.x, y: menu.y }}
+          endPt={menuAnchor ?? { x: menu.x, y: menu.y }}
           from={menu.source}
         />
       )}
@@ -2004,6 +2006,7 @@ export function CanvasEditor({
           }}
           onClose={closeMenu}
           source={menu.source ?? null}
+          onAnchorChange={menu.source ? updateCreateMenuAnchor : undefined}
         />
       )}
       {menu?.kind === 'node' && editorInstance && (

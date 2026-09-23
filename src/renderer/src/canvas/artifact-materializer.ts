@@ -28,7 +28,7 @@ export function materializeArtifact(
         (shape.meta as Record<string, unknown> | undefined)?.artifactProducerId === producer.id
     ).length
   // 宫格拆分产物按拆分列数与行数精准排布（如 2×2 排 2 列 2 排，3×3 排 3 列 3 排），不再死板地写死 3 列。
-  let cols = 3
+  let cols = artifact.layoutColumns === 2 ? 2 : 3
   if (producer.props.nodeType === 'image-split') {
     const splitConfig = parseImageSplitConfig(readNodeConfig(producer))
     cols = Math.max(1, splitConfig.columns || 3)

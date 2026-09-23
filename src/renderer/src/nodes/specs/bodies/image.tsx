@@ -54,7 +54,6 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
       <div className="asset-empty image-asset-empty">
         <Icon name="image" size={40} />
         <span>图片资产</span>
-        <small>导入后下游即可取用这张图片，不需要运行本节点</small>
         <button
           className="btn-ghost image-import-button"
           onPointerDown={(e) => stopEventPropagation(e)}

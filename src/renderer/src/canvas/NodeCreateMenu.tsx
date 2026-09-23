@@ -24,6 +24,8 @@ interface NodeCreateMenuProps {
   onClose: () => void
   /** 拉线到空白时，只展示能接收该端口的节点（out）或可提供该输入的上游（in）。 */
   source?: ConnectionFrom | null
+  /** 拖线到空白时，回传菜单左侧中点，使临时线落在菜单中部而不是左上角。 */
+  onAnchorChange?: (anchor: { x: number; y: number }) => void
 }
 
 function estimatedTextWidth(label: string): number {
@@ -51,14 +53,12 @@ export function NodeCreateMenu({
   pasteCount = 0,
   onPaste,
   onClose,
-  source = null
+  source = null,
+  onAnchorChange
 }: NodeCreateMenuProps): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   const [menuHeight, setMenuHeight] = useState(0)
-  const [hoverCategory, setHoverCategory] = useState<Exclude<
-    PaletteCategoryId,
-    'favorites'
-  > | null>(null)
+  const [hoverCategory, setHoverCategory] = useState<PaletteCategoryId | null>(null)
   const hoverTimer = useRef<number | null>(null)
 
   useEffect(() => {
@@ -78,13 +78,15 @@ export function NodeCreateMenu({
 
   useLayoutEffect(() => {
     const update = (): void => {
-      const height = ref.current?.getBoundingClientRect().height ?? 0
-      setMenuHeight(height)
+      const rect = ref.current?.getBoundingClientRect()
+      const height = rect?.height ?? 0
+      setMenuHeight((current) => (current === height ? current : height))
+      if (rect) onAnchorChange?.({ x: rect.left, y: rect.top + rect.height / 2 })
     }
     update()
     window.addEventListener('resize', update)
     return () => window.removeEventListener('resize', update)
-  }, [])
+  }, [menuHeight, onAnchorChange])
 
   // Position against the compact primary menu; the submenu is absolutely positioned
   // and intentionally does not affect the primary menu's viewport clamping.
@@ -101,11 +103,12 @@ export function NodeCreateMenu({
     (category) => allChoices.some((choice) => paletteCategoryForNode(choice.type) === category)
   )
   const showTabs = availableCategories.length > 1
-  const categoryOptions: Array<{ id: Exclude<PaletteCategoryId, 'favorites'>; label: string }> =
-    availableCategories.map((category) => ({
+  const categoryOptions: Array<{ id: PaletteCategoryId; label: string }> = availableCategories.map(
+    (category) => ({
       id: category,
       label: PALETTE_CATEGORY_META[category].label
-    }))
+    })
+  )
   const submenuChoices =
     hoverCategory === null
       ? allChoices
@@ -131,7 +134,7 @@ export function NodeCreateMenu({
     52
   )
   const left = Math.max(12, Math.min(x, window.innerWidth - primaryWidth - 24))
-  const showCategoryMenu = (category: Exclude<PaletteCategoryId, 'favorites'>): void => {
+  const showCategoryMenu = (category: PaletteCategoryId): void => {
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current)
     setHoverCategory(category)
   }
@@ -154,7 +157,7 @@ export function NodeCreateMenu({
             onClick={() => onPick(choice)}
           >
             <span className="item-icon" style={{ color: spec.color }}>
-              <Icon name={spec.icon} size={18} />
+              <Icon name={spec.icon} size={18} strokeWidth={2} />
             </span>
             <span className="node-menu-label">{spec.label}</span>
           </button>

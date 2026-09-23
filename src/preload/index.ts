@@ -41,6 +41,7 @@ import type {
   ProbeProviderResult,
   TestProviderResult,
   HistorySnapshotRecord,
+  ImageGenerationTimingSample,
   PalettePreferences,
   WorkflowTemplateRecord,
   VideoSubmitInput,
@@ -170,7 +171,13 @@ const api = {
     getPalettePreferences: (): Promise<IpcEnvelope<PalettePreferences>> =>
       ipcRenderer.invoke(IPC.workspace.getPalettePreferences),
     savePalettePreferences: (input: PalettePreferences): Promise<IpcEnvelope<PalettePreferences>> =>
-      ipcRenderer.invoke(IPC.workspace.savePalettePreferences, input)
+      ipcRenderer.invoke(IPC.workspace.savePalettePreferences, input),
+    recordImageGenerationTiming: (
+      input: ImageGenerationTimingSample
+    ): Promise<IpcEnvelope<ImageGenerationTimingSample[]>> =>
+      ipcRenderer.invoke(IPC.workspace.recordImageGenerationTiming, input),
+    getImageGenerationTimings: (): Promise<IpcEnvelope<ImageGenerationTimingSample[]>> =>
+      ipcRenderer.invoke(IPC.workspace.getImageGenerationTimings)
   },
   // 拖拽落盘的 File 对象拿真实路径（Electron 32+ 移除了 File.path）
   getDroppedFilePath: (file: File): string => webUtils.getPathForFile(file),

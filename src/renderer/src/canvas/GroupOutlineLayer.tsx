@@ -9,6 +9,12 @@ import {
 import { markUndoPoint } from './history'
 import { beginConnectionDrag } from './connection-drag'
 import { batchConnectionFromSelection } from './batch-connection'
+import {
+  SELECTION_FRAME_OUTSET_PX,
+  selectionBoundsUnion,
+  selectionGeometryFromPageBounds
+} from './selection-geometry'
+import type { PageBoundsLike } from './selection-geometry'
 import type { ConnectionFrom } from '../stores/connection'
 
 interface GroupOutlineLayerProps {
@@ -35,70 +41,28 @@ interface SelectionOutline {
   batchSource: ConnectionFrom | null
 }
 
-interface PageBoundsLike {
-  x: number
-  y: number
-  maxX: number
-  maxY: number
-}
-
-interface ScreenPoint {
-  x: number
-  y: number
-}
-
-interface SelectionGeometry {
-  left: number
-  top: number
-  width: number
-  height: number
-}
-
-// 选区框是纯视觉背景，固定为屏幕空间的留白，避免缩放后显得忽大忽小。
-export const SELECTION_FRAME_OUTSET_PX = 24
-
-/**
- * Derive every selection decoration from one page -> screen conversion. Do not add padding
- * here: tldraw's resize targets remain based on the unpadded bounds. The visual frame itself
- * has a separate fixed screen-space outset so it reads as a container around the selected nodes.
- */
-function selectionGeometryFromPageBounds(
-  bounds: PageBoundsLike,
-  hostBounds: Pick<DOMRect, 'left' | 'top'>,
-  pageToScreen: (point: ScreenPoint) => ScreenPoint
-): SelectionGeometry {
-  const topLeft = pageToScreen({ x: bounds.x, y: bounds.y })
-  const bottomRight = pageToScreen({ x: bounds.maxX, y: bounds.maxY })
-  const left = topLeft.x - hostBounds.left - SELECTION_FRAME_OUTSET_PX
-  const top = topLeft.y - hostBounds.top - SELECTION_FRAME_OUTSET_PX
-  const width = bottomRight.x - topLeft.x + SELECTION_FRAME_OUTSET_PX * 2
-  const height = bottomRight.y - topLeft.y + SELECTION_FRAME_OUTSET_PX * 2
-
-  return {
-    left,
-    top,
-    width,
-    height
-  }
-}
-
 /**
  * 多选的磨砂框必须处于节点之下。把它挂到 tldraw 的 SelectionBackground 插槽，
  * 而不是作为 CanvasEditor 的兄弟覆盖层，才能维持正确的渲染顺序。
  */
 export function CanvasSelectionBackground({
-  bounds,
-  rotation
+  bounds: _tldrawSelectionBounds,
+  rotation: _tldrawSelectionRotation
 }: TLSelectionBackgroundProps): React.JSX.Element | null {
   const editor = useEditor()
-  const selectedCount = useValue(
-    'selected node count for selection backdrop',
-    () => selectedNodeIds(editor).length,
+  // tldraw 的 SelectionBackground bounds 会把已选 arrow / edge 算进去。这里明确从
+  // node-card（或所选 group 的直属 node-card 子项）重新计算，避免框选范围吞掉连线。
+  const selectedNodeBounds = useValue(
+    'selected node-only bounds for selection backdrop',
+    () => selectionBoundsForNodes(editor, selectedNodeIds(editor)),
     [editor]
   )
   const zoom = useValue('selection backdrop zoom', () => editor.getCamera().z || 1, [editor])
 
-  if (selectedCount < 2) return null
+  // Props 仍由 tldraw 注入；不以它的 bounds/rotation 作为视觉范围，见上方说明。
+  void _tldrawSelectionBounds
+  void _tldrawSelectionRotation
+  if (!selectedNodeBounds) return null
 
   const outset = SELECTION_FRAME_OUTSET_PX / zoom
   return (
@@ -107,9 +71,9 @@ export function CanvasSelectionBackground({
       aria-hidden="true"
       draggable={false}
       style={{
-        width: bounds.width + outset * 2,
-        height: bounds.height + outset * 2,
-        transform: `translate(${bounds.x}px, ${bounds.y}px) rotate(${rotation}rad) translate(${-outset}px, ${-outset}px)`
+        width: selectedNodeBounds.maxX - selectedNodeBounds.x + outset * 2,
+        height: selectedNodeBounds.maxY - selectedNodeBounds.y + outset * 2,
+        transform: `translate(${selectedNodeBounds.x}px, ${selectedNodeBounds.y}px) translate(${-outset}px, ${-outset}px)`
       }}
     />
   )
@@ -130,6 +94,14 @@ function selectedNodeIds(editor: Editor): TLShapeId[] {
     }
   }
   return [...ids]
+}
+
+function selectionBoundsForNodes(
+  editor: Editor,
+  ids: readonly TLShapeId[]
+): PageBoundsLike | null {
+  if (ids.length < 2) return null
+  return selectionBoundsUnion(ids.map((id) => editor.getShapePageBounds(id)))
 }
 
 function outlinesEqual(left: GroupOutline[], right: GroupOutline[]): boolean {
@@ -215,19 +187,16 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
         setSelection((current) => (current === null ? current : null))
         return
       }
-      const bounds = selectedIds
-        .map((id) => editor.getShapePageBounds(id))
-        .filter((bound): bound is NonNullable<typeof bound> => Boolean(bound))
-      if (bounds.length < 2) return
-      const minX = Math.min(...bounds.map((bound) => bound.x))
-      const minY = Math.min(...bounds.map((bound) => bound.y))
-      const maxX = Math.max(...bounds.map((bound) => bound.maxX))
-      const maxY = Math.max(...bounds.map((bound) => bound.maxY))
+      const nodeBounds = selectionBoundsForNodes(editor, selectedIds)
       const geometry = selectionGeometryFromPageBounds(
-        { x: minX, y: minY, maxX, maxY },
+        nodeBounds,
         hostBounds,
         (point) => editor.pageToScreen(point)
       )
+      if (!geometry) {
+        setSelection((current) => (current === null ? current : null))
+        return
+      }
       const nextSelection = {
         ...geometry,
         batchSource: batchConnectionFromSelection(editor, selectedIds)
