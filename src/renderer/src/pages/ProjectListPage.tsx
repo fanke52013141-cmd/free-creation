@@ -4,17 +4,13 @@ import { useAppStore } from '../stores/app'
 import { useConfirmStore } from '../stores/confirm'
 import { useToastStore } from '../stores/toast'
 import { Icon } from '../components/Icon'
-
-const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit'
-})
+import freeCreationLogo from '../assets/free-creation-logo.png'
+import './project-list-page.css'
 
 function formatDate(ts: number): string {
-  return dateTimeFormatter.format(new Date(ts))
+  const date = new Date(ts)
+  const pad = (value: number): string => String(value).padStart(2, '0')
+  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
 
 export function ProjectListPage(): React.JSX.Element {
@@ -104,107 +100,127 @@ export function ProjectListPage(): React.JSX.Element {
   }
 
   return (
-    <div className="home">
-      <header className="home-header">
-        <h1>无限画布创作平台</h1>
-        <div className="home-actions">
-          <button className="btn-ghost" onClick={() => void handleImport()}>
-            <Icon name="upload" size={16} /> 导入项目
-          </button>
-          <button className="btn-primary" onClick={() => setCreating(true)}>
-            <Icon name="add" size={16} /> 新建项目
-          </button>
-        </div>
-      </header>
+    <div className="project-home">
+      <div className="project-home-ambient" aria-hidden="true" />
+      <div className="project-home-content">
+        <header className="project-home-header">
+          <div className="project-home-brand" aria-label="Free Creation">
+            <img src={freeCreationLogo} alt="" />
+            <h1>Free Creation</h1>
+          </div>
+          <div className="project-home-actions">
+            <button
+              className="project-home-button project-home-button-quiet"
+              onClick={() => void handleImport()}
+            >
+              <Icon name="upload" size={16} /> 导入项目
+            </button>
+            <button
+              className="project-home-button project-home-button-primary"
+              onClick={() => setCreating(true)}
+            >
+              <Icon name="add" size={16} /> 新建项目
+            </button>
+          </div>
+        </header>
 
-      {creating && (
-        <div className="create-row">
-          <input
-            autoFocus
-            aria-label="项目名称"
-            placeholder="项目名称"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') void handleCreate()
-              if (e.key === 'Escape') setCreating(false)
-            }}
-          />
-          <button className="btn-primary" onClick={() => void handleCreate()}>
-            创建
-          </button>
-          <button className="btn-ghost" onClick={() => setCreating(false)}>
-            取消
-          </button>
-        </div>
-      )}
-
-      <div className="project-grid">
-        {loading && <div className="empty">加载中…</div>}
-        {!loading && projects.length === 0 && !creating && (
-          <div className="empty">还没有项目，点击右上角新建一个开始创作</div>
+        {creating && (
+          <div className="project-home-create-row">
+            <input
+              autoFocus
+              aria-label="项目名称"
+              placeholder="项目名称"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void handleCreate()
+                if (e.key === 'Escape') setCreating(false)
+              }}
+            />
+            <button
+              className="project-home-button project-home-button-primary"
+              onClick={() => void handleCreate()}
+            >
+              创建
+            </button>
+            <button
+              className="project-home-button project-home-button-quiet"
+              onClick={() => setCreating(false)}
+            >
+              取消
+            </button>
+          </div>
         )}
-        {projects.map((p) => (
-          <article key={p.id} className="project-card">
-            {renamingId === p.id ? (
-              <input
-                autoFocus
-                aria-label={`重命名项目 ${renameValue}`}
-                value={renameValue}
-                onChange={(e) => setRenameValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void handleRename()
-                  if (e.key === 'Escape') setRenamingId(null)
-                }}
-              />
-            ) : (
-              <button
-                className="project-card-open"
-                aria-label={`打开项目 ${p.name}`}
-                onClick={() => handleOpen(p)}
-              >
-                <span className="project-name">{p.name}</span>
-                <span className="project-time">{formatDate(p.updatedAt)}</span>
-              </button>
+
+        <main className="project-home-workspace">
+          <div className="project-home-grid">
+            {loading && <div className="project-home-empty">加载中…</div>}
+            {!loading && projects.length === 0 && !creating && (
+              <div className="project-home-empty">还没有项目，点击右上角新建一个开始创作</div>
             )}
-            <div className="project-actions">
-              <button
-                className="icon-btn"
-                title="导出"
-                aria-label={`导出项目 ${p.name}`}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  void handleExport(p)
-                }}
-              >
-                <Icon name="download" size={15} />
-              </button>
-              <button
-                className="icon-btn"
-                title="重命名"
-                aria-label={`重命名项目 ${p.name}`}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setRenamingId(p.id)
-                  setRenameValue(p.name)
-                }}
-              >
-                <Icon name="edit" size={15} />
-              </button>
-              <button
-                className="icon-btn danger"
-                title="删除"
-                aria-label={`删除项目 ${p.name}`}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  void handleDelete(p.id, p.name)
-                }}
-              >
-                <Icon name="trash" size={15} />
-              </button>
-            </div>
-          </article>
-        ))}
+            {projects.map((p) => (
+              <article key={p.id} className="project-home-card">
+                {renamingId === p.id ? (
+                  <input
+                    autoFocus
+                    aria-label={`重命名项目 ${renameValue}`}
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') void handleRename()
+                      if (e.key === 'Escape') setRenamingId(null)
+                    }}
+                  />
+                ) : (
+                  <button
+                    className="project-home-card-open"
+                    aria-label={`打开项目 ${p.name}`}
+                    onClick={() => handleOpen(p)}
+                  >
+                    <span className="project-home-name">{p.name}</span>
+                    <span className="project-home-time">{formatDate(p.updatedAt)}</span>
+                  </button>
+                )}
+                <div className="project-home-card-actions">
+                  <button
+                    className="project-home-icon-button"
+                    title="导出"
+                    aria-label={`导出项目 ${p.name}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void handleExport(p)
+                    }}
+                  >
+                    <Icon name="download" size={15} />
+                  </button>
+                  <button
+                    className="project-home-icon-button"
+                    title="重命名"
+                    aria-label={`重命名项目 ${p.name}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setRenamingId(p.id)
+                      setRenameValue(p.name)
+                    }}
+                  >
+                    <Icon name="edit" size={15} />
+                  </button>
+                  <button
+                    className="project-home-icon-button project-home-icon-button-danger"
+                    title="删除"
+                    aria-label={`删除项目 ${p.name}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void handleDelete(p.id, p.name)
+                    }}
+                  >
+                    <Icon name="trash" size={15} />
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </main>
       </div>
     </div>
   )

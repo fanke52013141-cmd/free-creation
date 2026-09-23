@@ -14,7 +14,7 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  width: min(1440px, calc(100vw - 32px));
+  width: 50vw;
   height: calc(100vh - 32px);
   overflow: hidden;
   color: #e7eefb;

@@ -18,11 +18,6 @@ const foundationSource = readFileSync(
   resolve(process.cwd(), 'src/renderer/src/assets/ui-foundation.css'),
   'utf8'
 )
-const readinessSource = readFileSync(
-  resolve(process.cwd(), 'src/renderer/src/canvas/node-readiness.ts'),
-  'utf8'
-)
-
 describe('canvas interaction details', () => {
   it('shows the minimap from its own trigger or panel, then dismisses it on pointer leave', () => {
     expect(minimapSource).toContain('onPointerEnter={revealMinimap}')
@@ -31,11 +26,13 @@ describe('canvas interaction details', () => {
     expect(minimapSource).not.toContain('setShowMap((v) => !v)')
   })
 
-  it('keeps connection previews and visible port dots on the same fixed center', () => {
-    expect(nodeCardSource).toContain('x: rect.left + rect.width / 2')
-    expect(nodeCardSource).toContain('y: rect.top + rect.height / 2')
-    expect(nodeCardSource).not.toContain('portFollow')
-    expect(foundationSource).not.toContain('var(--port-follow-')
+  it('lets connector dots follow the pointer within a bounded outer semicircle', () => {
+    expect(nodeCardSource).toContain('const radius = 16')
+    expect(nodeCardSource).toContain('portFollowRef.current')
+    expect(nodeCardSource).toContain('portCenter(e, portKey)')
+    expect(foundationSource).toContain(
+      'translate(var(--port-follow-x, 0), var(--port-follow-y, 0))'
+    )
   })
 
   it('removes the canvas focus rule and the default multi-selection handles', () => {
@@ -44,9 +41,13 @@ describe('canvas interaction details', () => {
     expect(canvasEditorSource).toContain('SelectionForeground: () => null')
   })
 
-  it('retains the dashed outline only for a required input that is still missing', () => {
-    expect(readinessSource).toContain("port.required ? 'missing' : 'optional'")
-    expect(foundationSource).toContain('.port-dot.input-missing::after')
-    expect(foundationSource).toContain('.port-dot.input-missing.ok::after')
+  it('shows one solid node-colored input and output until the node is connected', () => {
+    expect(nodeCardSource).toContain('readinessState.incomingCounts.size > 0')
+    expect(nodeCardSource).toContain('readinessState.outgoingCounts.size > 0')
+    expect(nodeCardSource).toContain('inPorts.slice(0, 1)')
+    expect(nodeCardSource).toContain('outPorts.slice(0, 1)')
+    expect(nodeCardSource).toContain("['--node-port-color' as string]: nodePortColor")
+    expect(foundationSource).toContain('.port-dot.unconnected {\n  opacity: 1;')
+    expect(foundationSource).not.toContain('.port-dot.input-missing::after')
   })
 })

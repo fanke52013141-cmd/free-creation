@@ -43,6 +43,8 @@ export const IPC = {
     close: 'project:close',
     export: 'project:export',
     import: 'project:import',
+    exportStructure: 'project:export-structure',
+    importStructure: 'project:import-structure',
     externalChange: 'project:external-change'
   },
   media: {
@@ -88,6 +90,8 @@ export const IPC = {
     executableProviders: 'gateway:providers:executable',
     saveProvider: 'gateway:providers:save',
     deleteProvider: 'gateway:providers:delete',
+    exportProviders: 'gateway:providers:export',
+    importProviders: 'gateway:providers:import',
     testProvider: 'gateway:providers:test',
     probeProvider: 'gateway:providers:probe',
     chatStart: 'gateway:chat:start',
@@ -232,6 +236,13 @@ export interface SaveProjectInput {
    * 不匹配（画布外有 Agent/其他写入）返回 REVISION_CONFLICT 而不是静默覆盖。
    */
   expectedGraphVersion?: number
+}
+
+export interface ExportCanvasStructureInput {
+  id: string
+  name: string
+  snapshot: unknown
+  graph: { nodes: unknown[]; edges: unknown[]; groups: unknown[] }
 }
 
 export interface ImportMediaBufferInput {

@@ -102,17 +102,17 @@ export interface NodeTypeSpec {
  */
 export const STANDARD_NODE_SIZE = { w: NODE_UI.width, h: NODE_UI.height.default } as const
 
-// 端口类型配色（圆点描边）
+// 端口类型配色（仅已连接端口使用；未连接端口沿用节点主色）
 export const PORT_COLORS: Record<PortType, string> = {
-  text: '#8ab4f8',
+  text: '#cbd5e1',
   markdown: '#38bdf8',
   json: '#a78bfa',
   iteration: '#2dd4bf',
   camera: '#f59e0b',
-  image: '#34d399',
-  video: '#f472b6',
-  audio: '#fbbf24',
-  file: '#ffffff60',
+  image: '#22c55e',
+  video: '#f43f5e',
+  audio: '#3b82f6',
+  file: '#94a3b8',
   any: '#f7f7f7'
 }
 

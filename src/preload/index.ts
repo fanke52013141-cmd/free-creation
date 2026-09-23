@@ -7,6 +7,7 @@ import type {
   ComfyuiSettingsInput,
   ComfyuiStatus,
   CreateProjectInput,
+  ExportCanvasStructureInput,
   GatewayEvent,
   IpcEnvelope,
   ImageGenerateInput,
@@ -99,6 +100,12 @@ const api = {
   exportProject: (input: { id: string; name?: string }): Promise<IpcEnvelope<{ path: string }>> =>
     ipcRenderer.invoke(IPC.project.export, input),
   importProject: (): Promise<IpcEnvelope<ProjectMeta>> => ipcRenderer.invoke(IPC.project.import),
+  exportCanvasStructure: (
+    input: ExportCanvasStructureInput
+  ): Promise<IpcEnvelope<{ path: string; nodeCount: number }>> =>
+    ipcRenderer.invoke(IPC.project.exportStructure, input),
+  importCanvasStructure: (): Promise<IpcEnvelope<ProjectMeta>> =>
+    ipcRenderer.invoke(IPC.project.importStructure),
   importMedia: (input: {
     projectId: string
     paths: string[]
@@ -188,6 +195,10 @@ const api = {
       ipcRenderer.invoke(IPC.gateway.executableProviders),
     saveProvider: (input: SaveProviderInput): Promise<IpcEnvelope<ProviderSummary>> =>
       ipcRenderer.invoke(IPC.gateway.saveProvider, input),
+    exportProviders: (input: { password: string }): Promise<IpcEnvelope<{ path: string; count: number }>> =>
+      ipcRenderer.invoke(IPC.gateway.exportProviders, input),
+    importProviders: (input: { password: string }): Promise<IpcEnvelope<{ added: number; updated: number; count: number }>> =>
+      ipcRenderer.invoke(IPC.gateway.importProviders, input),
     deleteProvider: (id: string): Promise<IpcEnvelope<boolean>> =>
       ipcRenderer.invoke(IPC.gateway.deleteProvider, id),
     testProvider: (input: SaveProviderInput): Promise<IpcEnvelope<TestProviderResult>> =>

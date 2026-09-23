@@ -274,6 +274,23 @@ body {
     transform 200ms ease;
 }
 
+/* Voice clone keeps the shared node shell, with the darker framed surface from its reference. */
+.node-card.type-tts {
+  --tts-card-surface: #161a25;
+  --tts-input-surface: #10131c;
+  --tts-edge: rgba(255, 255, 255, 0.1);
+  --tts-text: #e2e8f0;
+  --tts-muted: #94a3b8;
+  --tts-accent: #38bdf8;
+  background:
+    radial-gradient(150px 130px at 0 0, rgba(56, 189, 248, 0.1), transparent 76%),
+    var(--tts-card-surface);
+  border-radius: 16px;
+  box-shadow:
+    inset 0 0 0 1px var(--tts-edge),
+    0 12px 28px -20px rgba(0, 0, 0, 0.76);
+}
+
 .node-card-wrap:not(.is-selected):hover .node-card {
   box-shadow:
     0 10px 20px -5px rgba(0, 0, 0, 0.42),
@@ -292,28 +309,6 @@ body {
     0 26px 52px -6px rgba(0, 0, 0, 0.52),
     inset 0 1px 0 rgba(255, 255, 255, 0.18);
   transform: none;
-}
-
-/*
- * 连线时才出现“纸张向前侧倾”的提示。没有 translateY：节点没有被抬起，
- * 端口仍停在原始坐标；perspective + rotateY/rotateZ 只改变卡片内部的材质姿态。
- */
-.node-card-wrap.is-connection-source .node-card {
-  transform: perspective(960px) rotateX(-2.5deg) rotateY(-5deg) rotateZ(-0.7deg);
-  transform-origin: right center;
-  box-shadow:
-    0 10px 26px -7px rgba(0, 0, 0, 0.56),
-    0 0 18px rgba(67, 196, 255, 0.13),
-    inset 0 1px 0 rgba(255, 255, 255, 0.16);
-}
-
-.node-card-wrap.is-connection-target .node-card {
-  transform: perspective(960px) rotateX(1.8deg) rotateY(4deg) rotateZ(0.45deg);
-  transform-origin: left center;
-  box-shadow:
-    0 10px 26px -7px rgba(0, 0, 0, 0.5),
-    0 0 18px rgba(127, 215, 255, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.17);
 }
 
 /* 类型色改为左上角的 45° 切角标识，不占正文高度也不横跨内容。 */
@@ -559,13 +554,18 @@ body {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%) translate(var(--port-follow-x, 0), var(--port-follow-y, 0));
   background: var(--node-port-color, var(--pc, #42b9f5));
   border: none;
   box-shadow: none;
   transition:
     transform 140ms ease,
     opacity 140ms ease;
+}
+
+/* 命中区内的跟随要即时反馈；仅保留缩放和透明度的短过渡。 */
+.port-dot[style*='--port-follow-x']::after {
+  transition: none;
 }
 
 /* 扩大的是透明命中区，不是可见的半圆控件。46px 有效范围能在缩放画布中稳定拖拽。 */
@@ -586,11 +586,7 @@ body {
 }
 
 .port-dot.unconnected {
-  opacity: 0.45;
-}
-
-.node-card-wrap:hover .port-dot.unconnected {
-  opacity: 0.8;
+  opacity: 1;
 }
 
 .port-dot.in {
@@ -610,7 +606,8 @@ body {
 .port-dot.out:hover::after,
 .port-dot.in:hover::after,
 .port-dot.ok::after {
-  transform: translate(-50%, -50%) scale(1.22);
+  transform: translate(-50%, -50%) translate(var(--port-follow-x, 0), var(--port-follow-y, 0))
+    scale(1.1);
 }
 
 /* 拖线中的兼容候选同样要显出类型色；普通 hover 仍维持节点主色。 */
@@ -621,14 +618,6 @@ body {
 .port-dot.dim {
   opacity: 0.16;
   cursor: not-allowed;
-}
-
-/* 拖线时的“可落点”标记：类型色外环与圆点之间留一道背景色间隙，
-   深色/浅色画布上都能看清，不再与单纯 hover 的放大效果混淆。 */
-.port-dot.ok::after {
-  box-shadow:
-    0 0 0 2px var(--bg),
-    0 0 0 4px var(--pc, #42b9f5);
 }
 
 /* 兼容端口的名称标签：只在拖线过程中出现，回答“这个口收的是什么”。 */
@@ -653,22 +642,6 @@ body {
 
 .port-dot.out .port-label {
   left: calc(100% + 5px);
-}
-
-/* 缺失必填输入：虚线描边保留“缺口”语义，填充让位给虚线轮廓。 */
-.port-dot.input-missing::after {
-  background: transparent;
-  border: 1px dashed var(--node-port-color, var(--pc, #42b9f5));
-}
-
-.port-dot.input-missing {
-  opacity: 1;
-}
-
-/* 必填输入处于可落点状态时，以类型色实心点优先表示“可以连接”。 */
-.port-dot.input-missing.ok::after {
-  background: var(--pc, #42b9f5);
-  border: none;
 }
 
 /* ── Connections: a restrained directional line, not a neon decoration ── */

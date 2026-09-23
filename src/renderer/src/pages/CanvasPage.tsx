@@ -9,6 +9,7 @@ import { useSearchStore } from '../stores/search'
 import { Icon } from '../components/Icon'
 import { Tooltip } from '../components/Tooltip'
 import { CanvasTopHistory } from '../canvas/CanvasHistoryDock'
+import { CanvasTransferMenu } from '../canvas/CanvasTransferMenu'
 
 interface CanvasPageProps {
   projectId: string
@@ -140,7 +141,7 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
           )}
         </div>
 
-        {/* 右侧：进度 + 版本 + 搜索 + 运行 + 个人中心 */}
+        {/* 右侧：进度 + 搜索 + 运行 + 个人中心 */}
         <span className="topbar-spacer" />
 
         {/* 运行/停止工作流 + 进度（执行引擎核心控件） */}
@@ -163,8 +164,7 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
               </span>
             </div>
           )}
-          {/* 版本号 + 搜索按钮；撤销 / 重做紧挨搜索左侧 */}
-          <span className="engine-version">v1.0</span>
+          {/* 搜索按钮；撤销 / 重做紧挨搜索左侧 */}
           <CanvasTopHistory />
           <Tooltip label="搜索节点（Ctrl+K）">
             <button
@@ -209,6 +209,7 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
         </div>
 
         <div className="topbar-actions">
+          <CanvasTransferMenu project={currentProject ?? file.meta} />
           {/* 模型供应商设置：常驻顶栏快捷按钮 */}
           <Tooltip label="模型供应商设置">
             <button className="topbar-shortcut" aria-label="模型供应商设置" onClick={openSettings}>

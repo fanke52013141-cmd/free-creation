@@ -20,7 +20,7 @@ import type { NodeCardShape } from './NodeCardShape'
 import { Icon } from '../components/Icon'
 import { resolveNodeHeight } from './node-ui-tokens'
 import { nodeExecLabel } from './node-status'
-import { deriveInputPortReadiness, deriveNodeReadiness } from './node-readiness'
+import { deriveNodeReadiness } from './node-readiness'
 import { runNodeManually } from '../engine/executor'
 import { useAppStore } from '../stores/app'
 import { useGatewayStore } from '../stores/gateway'
@@ -48,6 +48,12 @@ const EXEC_COLORS: Record<string, string> = {
 
 function portHint(port: PortDecl): string {
   return `${port.name} · ${PORT_TYPE_LABELS[port.type]}`
+}
+
+interface PortFollowPosition {
+  key: string
+  x: number
+  y: number
 }
 
 /**
@@ -93,16 +99,64 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   } | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
+  const [portFollow, setPortFollow] = useState<PortFollowPosition | null>(null)
+  const portFollowRef = useRef<PortFollowPosition | null>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
   const titleRef = useRef<HTMLDivElement>(null)
   const titleEditable = true
 
-  /** 连接引线始终从可见端口的圆心开始。 */
-  const portCenter = (event: React.PointerEvent<HTMLSpanElement>): { x: number; y: number } => {
+  /** 圆点只在节点外侧的半圆命中区内随鼠标移动。 */
+  const updatePortFollow = (
+    event: React.PointerEvent<HTMLSpanElement>,
+    key: string,
+    side: 'in' | 'out'
+  ): void => {
     const rect = event.currentTarget.getBoundingClientRect()
+    let x = event.clientX - (rect.left + rect.width / 2)
+    let y = event.clientY - (rect.top + rect.height / 2)
+    x = side === 'out' ? Math.max(0, x) : Math.min(0, x)
+    const radius = 16
+    const length = Math.hypot(x, y)
+    if (length > radius) {
+      const ratio = radius / length
+      x *= ratio
+      y *= ratio
+    }
+    const position = { key, x, y }
+    portFollowRef.current = position
+    setPortFollow((current) =>
+      current?.key === key && Math.abs(current.x - x) < 0.5 && Math.abs(current.y - y) < 0.5
+        ? current
+        : position
+    )
+  }
+
+  const clearPortFollow = (key: string): void => {
+    if (portFollowRef.current?.key !== key) return
+    portFollowRef.current = null
+    setPortFollow(null)
+  }
+
+  const portFollowStyle = (key: string): Record<string, string> => {
+    const position = portFollow?.key === key ? portFollow : null
+    return position
+      ? {
+          ['--port-follow-x' as string]: `${position?.x ?? 0}px`,
+          ['--port-follow-y' as string]: `${position?.y ?? 0}px`
+        }
+      : {}
+  }
+
+  /** 连线起点取随鼠标移动后的可见圆心，而不是透明命中区中的任意点。 */
+  const portCenter = (
+    event: React.PointerEvent<HTMLSpanElement>,
+    key: string
+  ): { x: number; y: number } => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    const follow = portFollowRef.current?.key === key ? portFollowRef.current : null
     return {
-      x: rect.left + rect.width / 2,
-      y: rect.top + rect.height / 2
+      x: rect.left + rect.width / 2 + (follow?.x ?? 0),
+      y: rect.top + rect.height / 2 + (follow?.y ?? 0)
     }
   }
 
@@ -241,15 +295,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   const inY = portOffsets(inPorts.length, shape.props.h)
   const outY = portOffsets(outPorts.length, shape.props.h)
   const isSource = draft?.from.shapeId === shape.id
-  // 连接中的视觉姿态仅提示“我正在从这里连出 / 可以落在这里”，不能改变节点真实
-  // 位置或端口锚点。这样纸张般的轻微透视倾斜不会让用户误以为节点被抬起。
-  const isConnectionTarget = Boolean(
-    draft &&
-    !isSource &&
-    (draft.from.direction === 'in'
-      ? outPorts.some((port) => canAttachPort(draft.from, port, 'in'))
-      : inPorts.some((port) => canAttachPort(draft.from, port)))
-  )
   const statusLabel = nodeExecLabel(shape.props.exec)
   const activeExecution = ['pending', 'queued', 'running'].includes(shape.props.exec)
   const imageRun = shape.props.nodeType === 'image-gen' ? readNodeRunRecord(shape.meta?.nodeRun) : null
@@ -401,7 +446,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           incomingCounts,
           outputs: spec?.projectOutputs?.(shape) ?? {}
         }),
-        inputs: deriveInputPortReadiness(inPorts, incomingCounts),
         incomingCounts,
         outgoingCounts
       }
@@ -409,7 +453,14 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     [editor, shape, spec, inPorts]
   )
   const readiness = readinessState.readiness
-  const inputReadiness = readinessState.inputs
+  const hasNodeConnections =
+    readinessState.incomingCounts.size > 0 || readinessState.outgoingCounts.size > 0
+  // 未连接的节点只显示一个居中的入口和出口。连上线后恢复完整端口布局；这些圆点
+  // 始终映射到真实契约端口，端口 ID、类型和运行时校验不变。
+  const visibleInPorts = hasNodeConnections ? inPorts : inPorts.slice(0, 1)
+  const visibleOutPorts = hasNodeConnections ? outPorts : outPorts.slice(0, 1)
+  const visibleInY = hasNodeConnections ? inY : portOffsets(visibleInPorts.length, shape.props.h)
+  const visibleOutY = hasNodeConnections ? outY : portOffsets(visibleOutPorts.length, shape.props.h)
 
   /** 被更上层卡片盖住的端口不可见、不可命中，不能从节点覆盖关系中穿透出来。 */
   const occludedPortKeys = useValue(
@@ -435,12 +486,12 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       const pageY = (offset: number): number =>
         shape.props.h > 0 ? bounds.y + (bounds.height * offset) / shape.props.h : bounds.y
       const keys = new Set<string>()
-      inPorts.forEach((port, index) => {
-        if (isCovered(bounds.x - NODE_PORT_OUTSET, pageY(inY[index] ?? 0)))
+      visibleInPorts.forEach((port, index) => {
+        if (isCovered(bounds.x - NODE_PORT_OUTSET, pageY(visibleInY[index] ?? 0)))
           keys.add(`in:${port.id}`)
       })
-      outPorts.forEach((port, index) => {
-        if (isCovered(bounds.maxX + NODE_PORT_OUTSET, pageY(outY[index] ?? 0))) {
+      visibleOutPorts.forEach((port, index) => {
+        if (isCovered(bounds.maxX + NODE_PORT_OUTSET, pageY(visibleOutY[index] ?? 0))) {
           keys.add(`out:${port.id}`)
         }
       })
@@ -452,7 +503,16 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       }
       return keys
     },
-    [editor, shape.id, shape.index, shape.props.h, inPorts, outPorts, inY, outY]
+    [
+      editor,
+      shape.id,
+      shape.index,
+      shape.props.h,
+      visibleInPorts,
+      visibleOutPorts,
+      visibleInY,
+      visibleOutY
+    ]
   )
 
   // 运行按钮常驻在标题行右侧（用户 2026-09-18 拍板：不能用时置灰，而不是消失）。
@@ -531,7 +591,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     <HTMLContainer style={{ pointerEvents: 'all' }}>
       {/* 外层包一层无裁切的容器：端口圆点要压在卡片边缘外侧，不能被卡片 overflow:hidden 裁掉 */}
       <div
-        className={`node-card-wrap ${selected ? 'is-selected' : ''}${isSource ? ' is-connection-source' : ''}${isConnectionTarget ? ' is-connection-target' : ''}`}
+        className={`node-card-wrap ${selected ? 'is-selected' : ''}`}
         data-node-id={shape.id}
         style={{ width: shape.props.w, height: shape.props.h }}
         onPointerDown={handleCardPointerDown}
@@ -666,40 +726,47 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           )}
         </div>
         {/* 输入端口（左侧）：out 方向拖线时按类型兼容高亮；从输入端口也可发起反向连线 */}
-        {inPorts.map((p, i) => {
+        {visibleInPorts.map((p, i) => {
           if (occludedPortKeys.has(`in:${p.id}`)) return null
           const draftIn = draft && draft.from.direction === 'in' ? draft.from : null
           const isAnchor = draftIn && draftIn.shapeId === shape.id && draftIn.portId === p.id
           const ok =
             draft && draft.from.direction !== 'in'
-              ? !isSource && canAttachPort(draft.from, p)
+              ? !isSource &&
+                (hasNodeConnections
+                  ? canAttachPort(draft.from, p)
+                  : inPorts.some((candidate) => canAttachPort(draft.from, candidate)))
               : false
-          const state = inputReadiness.get(p.id)
           const isConnected = (readinessState.incomingCounts?.get(p.id) ?? 0) > 0
+          const portKey = `in:${p.id}`
           return (
             <Tooltip key={p.id} label={portHint(p)} placement="top">
               <span
-              className={`port-dot in input-${state?.kind ?? 'optional'} ${isConnected ? 'connected' : 'unconnected'} ${isAnchor ? 'ok' : draft && draft.from.direction !== 'in' ? (ok ? 'ok' : 'dim') : ''}`}
-              data-port-id={p.id}
-              style={{
-                top: inY[i] - NODE_PORT_SIZE / 2,
-                ['--pc' as string]: PORT_COLORS[p.type],
-                ['--node-port-color' as string]: nodePortColor
-              }}
-              aria-label={portHint(p)}
-              onPointerDown={(e) => {
-                stopEventPropagation(e)
-                beginConnectionDrag(
-                  {
-                    shapeId: shape.id,
-                    portId: p.id,
-                    portType: p.type,
-                    schema: p.schema,
-                    direction: 'in'
-                  },
-                  portCenter(e)
-                )
-              }}
+                className={`port-dot in ${isConnected ? 'connected' : 'unconnected'} ${isAnchor ? 'ok' : draft && draft.from.direction !== 'in' ? (ok ? 'ok' : 'dim') : ''}`}
+                data-port-id={p.id}
+                style={{
+                  top: visibleInY[i] - NODE_PORT_SIZE / 2,
+                  ['--pc' as string]: PORT_COLORS[p.type],
+                  ['--node-port-color' as string]: nodePortColor,
+                  ...portFollowStyle(portKey)
+                }}
+                aria-label={portHint(p)}
+                onPointerEnter={(event) => updatePortFollow(event, portKey, 'in')}
+                onPointerMove={(event) => updatePortFollow(event, portKey, 'in')}
+                onPointerLeave={() => clearPortFollow(portKey)}
+                onPointerDown={(e) => {
+                  stopEventPropagation(e)
+                  beginConnectionDrag(
+                    {
+                      shapeId: shape.id,
+                      portId: p.id,
+                      portType: p.type,
+                      schema: p.schema,
+                      direction: 'in'
+                    },
+                    portCenter(e, portKey)
+                  )
+                }}
               ></span>
             </Tooltip>
           )
@@ -717,7 +784,13 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               style={{
                 top: shape.props.h / 2 - NODE_PORT_SIZE / 2,
                 ['--pc' as string]:
-                  PORT_COLORS[shape.props.nodeType === 'video-asset' ? 'video' : 'image'] ??
+                  PORT_COLORS[
+                    shape.props.nodeType === 'video-asset'
+                      ? 'video'
+                      : shape.props.nodeType === 'audio'
+                        ? 'audio'
+                        : 'image'
+                  ] ??
                   '#34d399',
                 ['--node-port-color' as string]: nodePortColor
               }}
@@ -726,37 +799,52 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           )}
 
         {/* 输出端口：与输入端口同样是纯圆形，按住后拖出连线；in 方向拖线时反向高亮。 */}
-        {outPorts.map((p, i) => {
+        {visibleOutPorts.map((p, i) => {
           if (occludedPortKeys.has(`out:${p.id}`)) return null
           const hasOutput = Boolean(spec?.projectOutputs?.(shape)[p.id])
           const isConnected = (readinessState.outgoingCounts?.get(p.id) ?? 0) > 0
           const draftIn = draft && draft.from.direction === 'in' ? draft.from : null
-          const okUpstream = draftIn && !isSource ? canAttachPort(draftIn, p, 'in') : false
+          const okUpstream =
+            draftIn && !isSource
+              ? hasNodeConnections
+                ? canAttachPort(draftIn, p, 'in')
+                : outPorts.some((candidate) => canAttachPort(draftIn, candidate, 'in'))
+              : false
+          const portKey = `out:${p.id}`
           return (
             <Tooltip key={p.id} label={portHint(p)} placement="top">
               <span
-              className={`port-dot out ${hasOutput ? 'has-output' : 'no-output'} ${isConnected ? 'connected' : 'unconnected'} ${isSource && draft?.from.portId === p.id && draft.from.direction !== 'in' ? 'ok' : ''} ${draftIn ? (okUpstream ? 'ok' : 'dim') : ''}`}
-              data-port-id={p.id}
-              style={{
-                top: outY[i] - NODE_PORT_SIZE / 2,
-                ['--pc' as string]: PORT_COLORS[p.type],
-                ['--node-port-color' as string]: nodePortColor
-              }}
-              aria-label={portHint(p)}
-              onPointerDown={(e) => {
-                stopEventPropagation(e)
-                const selectedNodeIds = editor
-                  .getSelectedShapes()
-                  .filter((candidate) => candidate.type === 'node-card')
-                  .map((candidate) => candidate.id)
-                const batch = selectedNodeIds.includes(shape.id)
-                  ? batchConnectionFromSelection(editor, selectedNodeIds, p.id)
-                  : null
-                beginConnectionDrag(
-                  batch ?? { shapeId: shape.id, portId: p.id, portType: p.type, schema: p.schema },
-                  portCenter(e)
-                )
-              }}
+                className={`port-dot out ${hasOutput ? 'has-output' : 'no-output'} ${isConnected ? 'connected' : 'unconnected'} ${isSource && draft?.from.portId === p.id && draft.from.direction !== 'in' ? 'ok' : ''} ${draftIn ? (okUpstream ? 'ok' : 'dim') : ''}`}
+                data-port-id={p.id}
+                style={{
+                  top: visibleOutY[i] - NODE_PORT_SIZE / 2,
+                  ['--pc' as string]: PORT_COLORS[p.type],
+                  ['--node-port-color' as string]: nodePortColor,
+                  ...portFollowStyle(portKey)
+                }}
+                aria-label={portHint(p)}
+                onPointerEnter={(event) => updatePortFollow(event, portKey, 'out')}
+                onPointerMove={(event) => updatePortFollow(event, portKey, 'out')}
+                onPointerLeave={() => clearPortFollow(portKey)}
+                onPointerDown={(e) => {
+                  stopEventPropagation(e)
+                  const selectedNodeIds = editor
+                    .getSelectedShapes()
+                    .filter((candidate) => candidate.type === 'node-card')
+                    .map((candidate) => candidate.id)
+                  const batch = selectedNodeIds.includes(shape.id)
+                    ? batchConnectionFromSelection(editor, selectedNodeIds, p.id)
+                    : null
+                  beginConnectionDrag(
+                    batch ?? {
+                      shapeId: shape.id,
+                      portId: p.id,
+                      portType: p.type,
+                      schema: p.schema
+                    },
+                    portCenter(e, portKey)
+                  )
+                }}
               ></span>
             </Tooltip>
           )

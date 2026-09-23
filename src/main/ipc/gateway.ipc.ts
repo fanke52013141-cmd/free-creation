@@ -1,5 +1,5 @@
 // 模型网关 IPC handlers（信封规范见《技术框架与规范》§10）
-import { ipcMain, type BrowserWindow } from 'electron'
+import { dialog, ipcMain, type BrowserWindow } from 'electron'
 import { IPC } from '../../shared/contracts'
 import type {
   GatewayEvent,
@@ -18,6 +18,7 @@ import { draftToConfig, freeConnectionMessage, probeProvider } from '../gateway/
 import { generateImageToAsset } from '../gateway/image'
 import { transformImageEdit } from '../media/image-edit'
 import { deleteProvider, listProviders, listVerifiedProviders, saveProvider } from '../gateway/providers.repo'
+import { exportProviders, importProviders } from '../gateway/provider-transfer'
 import {
   cancelVideoTask,
   getVideoTask,
@@ -60,6 +61,41 @@ export function registerGatewayIpc(win: BrowserWindow): void {
 
   ipcMain.handle(IPC.gateway.providers, (): IpcEnvelope<ProviderSummary[]> => ok(listProviders()))
   ipcMain.handle(IPC.gateway.executableProviders, (): IpcEnvelope<ProviderSummary[]> => ok(listVerifiedProviders()))
+
+  ipcMain.handle(
+    IPC.gateway.exportProviders,
+    async (_e, input: { password: string }): Promise<IpcEnvelope<{ path: string; count: number }>> => {
+      if (typeof input?.password !== 'string' || input.password.length < 8) {
+        return err('INVALID_INPUT', '加密密码至少需要 8 个字符')
+      }
+      const result = await dialog.showSaveDialog(win, {
+        title: '导出加密的供应商配置',
+        defaultPath: 'Canvas Studio 供应商配置.canvasproviders',
+        filters: [{ name: 'Canvas Studio 供应商配置（已加密）', extensions: ['canvasproviders'] }]
+      })
+      if (result.canceled || !result.filePath) return err('CANCELLED', '已取消导出')
+      return wrap(() => ({
+        path: result.filePath,
+        count: exportProviders(result.filePath, input.password)
+      }))
+    }
+  )
+
+  ipcMain.handle(
+    IPC.gateway.importProviders,
+    async (_e, input: { password: string }): Promise<IpcEnvelope<{ added: number; updated: number; count: number }>> => {
+      if (typeof input?.password !== 'string' || input.password.length < 8) {
+        return err('INVALID_INPUT', '密码至少需要 8 个字符')
+      }
+      const result = await dialog.showOpenDialog(win, {
+        title: '导入供应商配置',
+        properties: ['openFile'],
+        filters: [{ name: 'Canvas Studio 供应商配置（已加密）', extensions: ['canvasproviders'] }]
+      })
+      if (result.canceled || result.filePaths.length === 0) return err('CANCELLED', '已取消导入')
+      return wrap(() => importProviders(result.filePaths[0], input.password))
+    }
+  )
 
   ipcMain.handle(IPC.gateway.saveProvider, (_e, input: SaveProviderInput) =>
     wrap(() => {

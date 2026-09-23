@@ -1,7 +1,7 @@
 // 项目 IPC handlers（信封规范见《技术框架与规范》§10）
 import { ipcMain, dialog } from 'electron'
 import { IPC } from '../../shared/contracts'
-import type { IpcEnvelope, SaveProjectInput } from '../../shared/contracts'
+import type { ExportCanvasStructureInput, IpcEnvelope, SaveProjectInput } from '../../shared/contracts'
 import type { ProjectFile, ProjectMeta } from '../../shared/types'
 import {
   GraphVersionConflictError,
@@ -10,6 +10,10 @@ import {
 import { getSetting, setSetting } from '../store/db'
 import * as repo from '../store/projects.repo'
 import { exportProject, importProject } from '../store/transfer'
+import {
+  exportCanvasStructure,
+  importCanvasStructure
+} from '../store/canvas-structure-transfer'
 import { ProjectFileWatcher } from './project-watcher'
 
 function ok<T>(data: T): IpcEnvelope<T> {
@@ -118,6 +122,41 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
       return ok(meta as ProjectMeta)
     } catch (e) {
       return err('IMPORT_FAILED', e instanceof Error ? e.message : String(e))
+    }
+  })
+
+  ipcMain.handle(
+    IPC.project.exportStructure,
+    async (_e, input: ExportCanvasStructureInput): Promise<IpcEnvelope<{ path: string; nodeCount: number }>> => {
+      if (!input?.id || !input.name || !input.snapshot || !input.graph) {
+        return err('INVALID_INPUT', '画布结构参数不完整')
+      }
+      const defaultName = input.name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-').slice(0, 100)
+      const result = await dialog.showSaveDialog({
+        title: '导出画布结构',
+        defaultPath: `${defaultName || '画布'}.canvasflow`,
+        filters: [{ name: 'Canvas Studio 画布结构', extensions: ['canvasflow'] }]
+      })
+      if (result.canceled || !result.filePath) return err('CANCELLED', '已取消导出')
+      try {
+        return ok(exportCanvasStructure(result.filePath, input))
+      } catch (error) {
+        return err('EXPORT_FAILED', error instanceof Error ? error.message : String(error))
+      }
+    }
+  )
+
+  ipcMain.handle(IPC.project.importStructure, async (): Promise<IpcEnvelope<ProjectMeta>> => {
+    const result = await dialog.showOpenDialog({
+      title: '导入画布结构',
+      properties: ['openFile'],
+      filters: [{ name: 'Canvas Studio 画布结构', extensions: ['canvasflow'] }]
+    })
+    if (result.canceled || result.filePaths.length === 0) return err('CANCELLED', '已取消导入')
+    try {
+      return ok(importCanvasStructure(result.filePaths[0]))
+    } catch (error) {
+      return err('IMPORT_FAILED', error instanceof Error ? error.message : String(error))
     }
   })
 

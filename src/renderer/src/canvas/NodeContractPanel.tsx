@@ -9,6 +9,7 @@ import { useNodePanelStore, type NodePanelInitialTab } from '../stores/nodePanel
 import { readNodeRunHistory, readNodeRunRecord, type NodeRunRecord } from '../engine/runRecord'
 import { readNodeConfig } from './node-persistence'
 import { markUndoPoint } from './history'
+import { nodeExecLabel } from './node-status'
 import {
   runNodeManually,
   runNodeTest,
@@ -32,6 +33,17 @@ function runSummary(record: NodeRunRecord): string {
   })
   const duration = typeof record.durationMs === 'number' ? ` · ${record.durationMs} ms` : ''
   return `${time} · ${record.status}${duration}`
+}
+
+function contractPanelTitle(nodeType: string, title: string): string {
+  if (
+    nodeType === 'video' &&
+    (title === '视频生成' || title === '视频节点' || title === '视频生成节点')
+  ) {
+    return '视频'
+  }
+  if (nodeType === 'video-clip' && title === '视频截取节点') return '视频截取'
+  return title
 }
 
 function PortRows({
@@ -240,9 +252,6 @@ function TestHarness({
   return (
     <section className="contract-section contract-test-harness">
       <h4>未连线测试</h4>
-      <p className="contract-settings-hint">
-        输入内容在失焦时自动保存到节点，下次打开面板会自动回填；也可直接点击下方测试运行。
-      </p>
       {ports.length === 0 ? (
         <p className="contract-empty">此节点没有可注入的输入，可直接点击下方测试运行。</p>
       ) : (
@@ -490,10 +499,7 @@ export function NodeContractPanel({
           <Icon name={spec.icon} size={17} />
         </span>
         <div>
-          <strong>{shape.props.title}</strong>
-          <small>
-            {spec.label}节点 · 契约 v{spec.contractVersion}
-          </small>
+          <strong>{contractPanelTitle(shape.props.nodeType, shape.props.title)}</strong>
         </div>
         <button
           className="side-panel-close"
@@ -529,13 +535,18 @@ export function NodeContractPanel({
         </nav>
         <div className="contract-scroll">
           {tab === 'overview' && (
-            <div role="tabpanel" id="contract-tabpanel-overview">
+            <div role="tabpanel" id="contract-tabpanel-overview" className="contract-overview">
               <p className="contract-description">{spec.description}</p>
               <div className="contract-rule">
-                连线会把上游端口的真实输出填入对应输入；没有连线时才使用节点内的固定内容。
+                <span className="contract-rule-icon" aria-hidden="true">
+                  <Icon name="info" size={14} />
+                </span>
+                <span>
+                  连线会把上游端口的真实输出填入对应输入；没有连线时才使用节点内的固定内容。
+                </span>
               </div>
               <div className="contract-overview-grid">
-                <span>
+                <span className="contract-overview-stat">
                   <small>执行方式</small>
                   <strong>
                     {executionMode === 'manual-publish'
@@ -545,17 +556,23 @@ export function NodeContractPanel({
                         : '自动执行'}
                   </strong>
                 </span>
-                <span>
+                <span className="contract-overview-stat">
                   <small>输入端口</small>
                   <strong>{ports.in.length} 个</strong>
                 </span>
-                <span>
+                <span className="contract-overview-stat">
                   <small>输出端口</small>
                   <strong>{ports.out.length} 个</strong>
                 </span>
-                <span>
+                <span
+                  className="contract-overview-stat contract-overview-stat-status"
+                  data-exec={shape.props.exec}
+                >
                   <small>当前状态</small>
-                  <strong>{shape.props.exec}</strong>
+                  <strong className="contract-overview-state">
+                    <span aria-hidden="true" />
+                    {nodeExecLabel(shape.props.exec)}
+                  </strong>
                 </span>
               </div>
             </div>

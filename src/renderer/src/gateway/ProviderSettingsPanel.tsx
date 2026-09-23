@@ -110,6 +110,11 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
   /** 'free' 表示整表自检，其余为某个计费项正在真实调用。 */
   const [probing, setProbing] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [transferMode, setTransferMode] = useState<'import' | 'export' | null>(null)
+  const [transferPassword, setTransferPassword] = useState('')
+  const [transferPasswordConfirm, setTransferPasswordConfirm] = useState('')
+  const [transferError, setTransferError] = useState('')
+  const [transferBusy, setTransferBusy] = useState(false)
 
   const loadSettingsProviders = async (): Promise<void> => {
     const result = await window.api.gateway.listProviders()
@@ -131,6 +136,13 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
     if (!open) return
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape') return
+      if (transferMode) {
+        setTransferMode(null)
+        setTransferPassword('')
+        setTransferPasswordConfirm('')
+        setTransferError('')
+        return
+      }
       // 弹层打开时 Esc 只关弹层，不关整个面板
       if (modelPickerOpen) {
         setModelPickerOpen(false)
@@ -140,7 +152,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, close, modelPickerOpen])
+  }, [open, close, modelPickerOpen, transferMode])
 
   if (!open) return null
 
@@ -364,6 +376,62 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
     toast(`已删除 ${results.length} 个供应商`)
   }
 
+  const beginProviderTransfer = (mode: 'import' | 'export'): void => {
+    setTransferMode(mode)
+    setTransferPassword('')
+    setTransferPasswordConfirm('')
+    setTransferError('')
+  }
+
+  const finishProviderTransfer = (): void => {
+    setTransferMode(null)
+    setTransferPassword('')
+    setTransferPasswordConfirm('')
+    setTransferError('')
+  }
+
+  const submitProviderTransfer = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault()
+    if (!transferMode) return
+    if (transferPassword.length < 8) {
+      setTransferError('密码至少需要 8 个字符')
+      return
+    }
+    if (transferMode === 'export' && transferPassword !== transferPasswordConfirm) {
+      setTransferError('两次输入的密码不一致')
+      return
+    }
+    setTransferBusy(true)
+    setTransferError('')
+    try {
+      if (transferMode === 'export') {
+        const result = await window.api.gateway.exportProviders({ password: transferPassword })
+        if (!result.ok) {
+          if (result.error.code === 'CANCELLED') return finishProviderTransfer()
+          setTransferError(result.error.message)
+          return
+        }
+        finishProviderTransfer()
+        toast(`已加密导出 ${result.data.count} 个供应商`)
+      } else {
+        const result = await window.api.gateway.importProviders({ password: transferPassword })
+        if (!result.ok) {
+          if (result.error.code === 'CANCELLED') return finishProviderTransfer()
+          setTransferError(result.error.message)
+          return
+        }
+        finishProviderTransfer()
+        await loadSettingsProviders()
+        void useGatewayStore.getState().load()
+        toast(`已导入 ${result.data.count} 个供应商（新增 ${result.data.added}，更新 ${result.data.updated}）`)
+      }
+    } catch (error) {
+      setTransferError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setTransferBusy(false)
+    }
+  }
+
   return createPortal(
     <div
       className="gw-mask"
@@ -433,42 +501,54 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                 </button>
               </div>
             ) : null}
-            <div className="gw-provider-list" aria-label="模型供应商列表">
-              {providers.map((p) =>
-                selecting ? (
-                  <label className="gw-item gw-item-selectable" key={p.id}>
-                    <input
-                      type="checkbox"
-                      checked={selectedProviderIds.has(p.id)}
-                      onChange={() => toggleProviderSelection(p.id)}
-                    />
-                    <span>
+            {!picking && (
+              <div className="gw-provider-list" aria-label="模型供应商列表">
+                {providers.map((p) =>
+                  selecting ? (
+                    <label className="gw-item gw-item-selectable" key={p.id}>
+                      <input
+                        type="checkbox"
+                        checked={selectedProviderIds.has(p.id)}
+                        onChange={() => toggleProviderSelection(p.id)}
+                      />
+                      <span>
+                        <span className="gw-item-name">{p.name}</span>
+                        <span className="gw-item-sub">
+                          {specLabel(p.specId)} · {p.models.length} 模型
+                        </span>
+                      </span>
+                    </label>
+                  ) : (
+                    <button
+                      key={p.id}
+                      className={`gw-item ${draft?.id === p.id ? 'active' : ''}`}
+                      onClick={() => {
+                        setDraft(draftFromConfig(p))
+                        setPicking(false)
+                        setTestMsg('')
+                        setProbe(null)
+                        setExpanded(null)
+                      }}
+                    >
                       <span className="gw-item-name">{p.name}</span>
                       <span className="gw-item-sub">
                         {specLabel(p.specId)} · {p.models.length} 模型
                       </span>
-                    </span>
-                  </label>
-                ) : (
-                  <button
-                    key={p.id}
-                    className={`gw-item ${draft?.id === p.id ? 'active' : ''}`}
-                    onClick={() => {
-                      setDraft(draftFromConfig(p))
-                      setPicking(false)
-                      setTestMsg('')
-                      setProbe(null)
-                      setExpanded(null)
-                    }}
-                  >
-                    <span className="gw-item-name">{p.name}</span>
-                    <span className="gw-item-sub">
-                      {specLabel(p.specId)} · {p.models.length} 模型
-                    </span>
-                  </button>
-                )
-              )}
-            </div>
+                    </button>
+                  )
+                )}
+              </div>
+            )}
+            {!picking && !selecting && (
+              <div className="gw-provider-transfer-actions">
+                <button className="btn-ghost small" onClick={() => beginProviderTransfer('import')}>
+                  导入
+                </button>
+                <button className="btn-ghost small" onClick={() => beginProviderTransfer('export')}>
+                  导出
+                </button>
+              </div>
+            )}
             {selecting && (
               <div className="gw-selection-actions">
                 <button
@@ -830,6 +910,70 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
             )}
           </div>
         </div>
+        {transferMode && (
+          <div className="gw-transfer-mask">
+            <section
+              className="gw-transfer-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="gw-transfer-title"
+            >
+              <h2 id="gw-transfer-title">
+                {transferMode === 'export' ? '导出供应商配置' : '导入供应商配置'}
+              </h2>
+              <p>
+                {transferMode === 'export'
+                  ? '配置文件包含 API Key，会用此密码加密。请在另一台设备上使用同一密码导入。'
+                  : '选择加密配置文件并输入导出时设置的密码。已有同 ID 的供应商将更新，其余配置保留。'}
+              </p>
+              <form onSubmit={(event) => void submitProviderTransfer(event)}>
+                <label className="gw-transfer-field">
+                  <span>{transferMode === 'export' ? '设置加密密码' : '文件密码'}</span>
+                  <input
+                    className="gw-input"
+                    type="password"
+                    autoFocus
+                    autoComplete="new-password"
+                    minLength={8}
+                    value={transferPassword}
+                    onChange={(event) => setTransferPassword(event.target.value)}
+                    placeholder="至少 8 个字符"
+                  />
+                </label>
+                {transferMode === 'export' && (
+                  <label className="gw-transfer-field">
+                    <span>再次输入密码</span>
+                    <input
+                      className="gw-input"
+                      type="password"
+                      autoComplete="new-password"
+                      minLength={8}
+                      value={transferPasswordConfirm}
+                      onChange={(event) => setTransferPasswordConfirm(event.target.value)}
+                      placeholder="确认加密密码"
+                    />
+                  </label>
+                )}
+                {transferError && <div className="gw-transfer-error" role="alert">{transferError}</div>}
+                <div className="gw-transfer-actions">
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    disabled={transferBusy}
+                    onClick={finishProviderTransfer}
+                  >
+                    取消
+                  </button>
+                  <button type="submit" className="btn-primary" disabled={transferBusy}>
+                    {transferBusy
+                      ? transferMode === 'export' ? '加密中…' : '导入中…'
+                      : transferMode === 'export' ? '加密导出' : '选择文件并导入'}
+                  </button>
+                </div>
+              </form>
+            </section>
+          </div>
+        )}
       </div>
     </div>,
     document.body

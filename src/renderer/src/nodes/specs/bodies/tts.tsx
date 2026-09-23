@@ -231,7 +231,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
   return (
     <div className="node-tts">
       {/* ── 参考语音 ── */}
-      <div className="tts-section">
+      <div className="tts-section tts-reference-section">
         <div className="tts-section-label">
           <Icon name="audio" size={13} />
           <span>参考语音</span>
@@ -298,7 +298,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
       </div>
 
       {/* ── 合成文字 ── */}
-      <div className="tts-section">
+      <div className="tts-section tts-text-section">
         <div className="tts-section-label">
           <Icon name="text" size={13} />
           <span>合成文字</span>
@@ -321,7 +321,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
       </div>
 
       {/* ── 合成参数 ── */}
-      <div className="tts-section">
+      <div className="tts-section tts-engine-section">
         <div className="tts-section-label">
           <Icon name="settings" size={13} />
           <span>复刻引擎</span>
@@ -504,7 +504,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
         )}
       </div>
       {/* 语言/语速/情绪只被本地 IndexTTS 工作流读取；MiniMax 快速复刻链路不发送这些字段。 */}
-      <div className="tts-options">
+      <div className="tts-options tts-output-options">
         {config.backend === 'comfyui' && (
           <>
             <label className="opt-label">语言</label>
