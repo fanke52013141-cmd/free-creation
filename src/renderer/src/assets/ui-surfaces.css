@@ -1776,6 +1776,19 @@
     filter 140ms ease;
 }
 
+/* 已连接的数据边始终显示一段沿真实数据方向移动的彩色流光。 */
+.data-edge-flow {
+  fill: none;
+  stroke-width: 1.65;
+  stroke-linecap: round;
+  stroke-dasharray: 256 744;
+  stroke-dashoffset: 1000;
+  opacity: 0.98;
+  pointer-events: none;
+  filter: drop-shadow(0 0 5px rgba(104, 236, 210, 0.58));
+  animation: edge-water-flow 1.85s linear infinite;
+}
+
 /* 追溯线只表达“由该操作产生”，不具备可运行的数据流含义；它比数据线更细更淡。 */
 .artifact-provenance-edge {
   stroke-width: 1.2;

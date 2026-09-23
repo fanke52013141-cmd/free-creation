@@ -217,6 +217,7 @@ export function DataEdgeLayer({
   const svgRef = useRef<SVGSVGElement | null>(null)
   const reactId = useId().replace(/:/g, '')
   const overlapMaskId = `data-edge-node-mask-${reactId}`
+  const flowGradientId = `data-edge-flow-gradient-${reactId}`
 
   useEffect(() => {
     let frame = 0
@@ -388,6 +389,21 @@ export function DataEdgeLayer({
               <rect key={index} {...rect} fill="black" />
             ))}
           </mask>
+          <linearGradient
+            id={flowGradientId}
+            gradientUnits="userSpaceOnUse"
+            spreadMethod="repeat"
+            x1="0"
+            y1="0"
+            x2="220"
+            y2="0"
+          >
+            <stop offset="0" stopColor="#54f4cb" />
+            <stop offset="0.22" stopColor="#4fc4ff" />
+            <stop offset="0.48" stopColor="#a889ff" />
+            <stop offset="0.7" stopColor="#6ff3b9" />
+            <stop offset="1" stopColor="#54f4cb" />
+          </linearGradient>
         </defs>
         {edges.map((edge) => {
           if (edge.provenance) {
@@ -415,6 +431,13 @@ export function DataEdgeLayer({
                 d={edge.path}
                 mask={`url(#${overlapMaskId})`}
                 style={{ stroke: edge.color }}
+              />
+              <path
+                className="data-edge-flow"
+                d={edge.path}
+                pathLength="1000"
+                mask={`url(#${overlapMaskId})`}
+                style={{ stroke: `url(#${flowGradientId})` }}
               />
               <path className="data-edge-hit" d={edge.path} data-edge-id={edge.id} />
             </g>
