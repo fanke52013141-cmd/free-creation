@@ -71,8 +71,8 @@ const TL_COMPONENTS = {
   SharePanel: null,
   ContextMenu: null,
   SelectionBackground: CanvasSelectionBackground,
-  // 画布节点只允许移动、连接与分组；不提供框选后的旋转/缩放控制点。
-  SelectionForeground: null
+  // 画布节点只允许移动、连接与分组；null 会回退默认组件，因此必须用空组件关闭控制点。
+  SelectionForeground: () => null
 } as const
 
 registerBaseNodeTypes()

@@ -80,12 +80,6 @@ function canAttachPort(
     : portPairCompatible(target, asPort)
 }
 
-interface PortFollowPosition {
-  key: string
-  x: number
-  y: number
-}
-
 export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Element {
   const editor = useEditor()
   const project = useAppStore((s) => s.currentProject)
@@ -99,59 +93,16 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   } | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
-  const [portFollow, setPortFollow] = useState<PortFollowPosition | null>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
   const titleRef = useRef<HTMLDivElement>(null)
   const titleEditable = true
 
-  /**
-   * 端口的命中区比可见圆点大，但不画出半圆范围。圆点只在节点外侧半圆内跟随
-   * 鼠标，像被轻轻拨动；半径受限，所以不会出现“盒子被撕开”的视觉断层。
-   */
-  const updatePortFollow = (
-    event: React.PointerEvent<HTMLSpanElement>,
-    key: string,
-    side: 'in' | 'out'
-  ): void => {
+  /** 连接引线始终从可见端口的圆心开始。 */
+  const portCenter = (event: React.PointerEvent<HTMLSpanElement>): { x: number; y: number } => {
     const rect = event.currentTarget.getBoundingClientRect()
-    let x = event.clientX - (rect.left + rect.width / 2)
-    let y = event.clientY - (rect.top + rect.height / 2)
-    x = side === 'out' ? Math.max(0, x) : Math.min(0, x)
-    const radius = 16
-    const length = Math.hypot(x, y)
-    if (length > radius) {
-      const ratio = radius / length
-      x *= ratio
-      y *= ratio
-    }
-    setPortFollow((current) =>
-      current?.key === key && Math.abs(current.x - x) < 0.5 && Math.abs(current.y - y) < 0.5
-        ? current
-        : { key, x, y }
-    )
-  }
-
-  const clearPortFollow = (key: string): void =>
-    setPortFollow((current) => (current?.key === key ? null : current))
-
-  const portFollowStyle = (key: string): Record<string, string> => {
-    const position = portFollow?.key === key ? portFollow : null
     return {
-      ['--port-follow-x' as string]: `${position?.x ?? 0}px`,
-      ['--port-follow-y' as string]: `${position?.y ?? 0}px`
-    }
-  }
-
-  /** 连线必须从可见端口的圆心开始，而不是扩大的命中区中鼠标落下的位置。 */
-  const portCenter = (
-    event: React.PointerEvent<HTMLSpanElement>,
-    key: string
-  ): { x: number; y: number } => {
-    const rect = event.currentTarget.getBoundingClientRect()
-    const follow = portFollow?.key === key ? portFollow : null
-    return {
-      x: rect.left + rect.width / 2 + (follow?.x ?? 0),
-      y: rect.top + rect.height / 2 + (follow?.y ?? 0)
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2
     }
   }
 
@@ -733,13 +684,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               style={{
                 top: inY[i] - NODE_PORT_SIZE / 2,
                 ['--pc' as string]: PORT_COLORS[p.type],
-                ['--node-port-color' as string]: nodePortColor,
-                ...portFollowStyle(`in:${p.id}`)
+                ['--node-port-color' as string]: nodePortColor
               }}
               aria-label={portHint(p)}
-              onPointerEnter={(event) => updatePortFollow(event, `in:${p.id}`, 'in')}
-              onPointerMove={(event) => updatePortFollow(event, `in:${p.id}`, 'in')}
-              onPointerLeave={() => clearPortFollow(`in:${p.id}`)}
               onPointerDown={(e) => {
                 stopEventPropagation(e)
                 beginConnectionDrag(
@@ -750,7 +697,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                     schema: p.schema,
                     direction: 'in'
                   },
-                  portCenter(e, `in:${p.id}`)
+                  portCenter(e)
                 )
               }}
               ></span>
@@ -793,13 +740,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               style={{
                 top: outY[i] - NODE_PORT_SIZE / 2,
                 ['--pc' as string]: PORT_COLORS[p.type],
-                ['--node-port-color' as string]: nodePortColor,
-                ...portFollowStyle(`out:${p.id}`)
+                ['--node-port-color' as string]: nodePortColor
               }}
               aria-label={portHint(p)}
-              onPointerEnter={(event) => updatePortFollow(event, `out:${p.id}`, 'out')}
-              onPointerMove={(event) => updatePortFollow(event, `out:${p.id}`, 'out')}
-              onPointerLeave={() => clearPortFollow(`out:${p.id}`)}
               onPointerDown={(e) => {
                 stopEventPropagation(e)
                 const selectedNodeIds = editor
@@ -811,7 +754,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                   : null
                 beginConnectionDrag(
                   batch ?? { shapeId: shape.id, portId: p.id, portType: p.type, schema: p.schema },
-                  portCenter(e, `out:${p.id}`)
+                  portCenter(e)
                 )
               }}
               ></span>

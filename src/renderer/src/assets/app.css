@@ -3020,7 +3020,7 @@ select:focus-visible,
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
 }
 
-/* 弹出式小地图附加样式（点地图图标展开 / 收起） */
+/* 弹出式小地图附加样式（悬浮地图图标或面板时显示） */
 .dock-minimap-popup {
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
   animation: dock-popup 0.2s cubic-bezier(0.16, 1, 0.3, 1);

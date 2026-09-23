@@ -108,6 +108,30 @@ export function CanvasBottomDock({ editor }: DockProps): React.JSX.Element {
   const [showMap, setShowMap] = useState(false)
   const svgRef = useRef<SVGSVGElement>(null)
   const draggingRef = useRef(false)
+  const hideMapTimerRef = useRef<number | null>(null)
+
+  const revealMinimap = (): void => {
+    if (hideMapTimerRef.current !== null) {
+      window.clearTimeout(hideMapTimerRef.current)
+      hideMapTimerRef.current = null
+    }
+    setShowMap(true)
+  }
+
+  const hideMinimapSoon = (): void => {
+    if (hideMapTimerRef.current !== null) window.clearTimeout(hideMapTimerRef.current)
+    hideMapTimerRef.current = window.setTimeout(() => {
+      hideMapTimerRef.current = null
+      setShowMap(false)
+    }, 100)
+  }
+
+  useEffect(
+    () => () => {
+      if (hideMapTimerRef.current !== null) window.clearTimeout(hideMapTimerRef.current)
+    },
+    []
+  )
 
   // 直接读取数据（无 rAF 延迟）：解决"不跟手"问题
   const readData = useCallback((ed: Editor): MinimapData => {
@@ -291,7 +315,14 @@ export function CanvasBottomDock({ editor }: DockProps): React.JSX.Element {
   return (
     <div className="canvas-dock">
       {showMap && (
-        <div className="dock-minimap dock-minimap-popup">
+        <div
+          className="dock-minimap dock-minimap-popup"
+          id="canvas-minimap"
+          onPointerEnter={revealMinimap}
+          onPointerLeave={hideMinimapSoon}
+          onFocusCapture={revealMinimap}
+          onBlurCapture={hideMinimapSoon}
+        >
           {data.nodes.length === 0 ? (
             <span className="dock-minimap-empty">空画布</span>
           ) : (
@@ -381,15 +412,30 @@ export function CanvasBottomDock({ editor }: DockProps): React.JSX.Element {
       )}
       <div className="dock-controls">
         <div className="dock-tool-group">
-          <Tooltip label="小地图导航">
-            <button
-              className="dock-btn"
-              aria-label="小地图导航"
-              onClick={() => setShowMap((v) => !v)}
-            >
-              <Icon name="minimap" size={16} />
-            </button>
-          </Tooltip>
+          <div
+            className="dock-minimap-trigger"
+            onPointerEnter={revealMinimap}
+            onPointerLeave={hideMinimapSoon}
+            onFocusCapture={revealMinimap}
+            onBlurCapture={(event) => {
+              const nextTarget = event.relatedTarget
+              if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) {
+                hideMinimapSoon()
+              }
+            }}
+          >
+            <Tooltip label="小地图导航">
+              <button
+                className="dock-btn"
+                aria-label="小地图导航"
+                aria-controls="canvas-minimap"
+                aria-expanded={showMap}
+                onClick={revealMinimap}
+              >
+                <Icon name="minimap" size={16} />
+              </button>
+            </Tooltip>
+          </div>
         </div>
         <div className="dock-zoom">
           <Tooltip label="放大">
