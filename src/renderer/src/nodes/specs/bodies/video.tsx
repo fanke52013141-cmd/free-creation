@@ -26,8 +26,6 @@ import {
   MediaFileActions,
   MediaResultGrid,
   removeMediaResultFromShape,
-  createVideoContinuation,
-  createVocalExtractionTemplate,
   clearSelectedMediaHistory,
   ModelSelect,
   NoModelHint,
@@ -36,6 +34,7 @@ import {
   useClickGuard,
   parseJsonProp
 } from './shared'
+import { VideoOperationsWorkbench } from './video-transforms'
 
 interface VideoGenData {
   modelKey: string
@@ -133,6 +132,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const loadProviders = useGatewayStore((s) => s.load)
   const openSettings = useGatewayStore((s) => s.openSettings)
   const isAssetNode = shape.props.nodeType === 'video-asset'
+  const [videoOperationsOpen, setVideoOperationsOpen] = useState(false)
   const chooseAsset = async (): Promise<void> => {
     if (!project) return
     try {
@@ -441,38 +441,24 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           )}
           <button
             className="btn-ghost small"
+            title="截取视频、抽帧或分离人声"
             onPointerDown={(e) => stopEventPropagation(e)}
             onClick={(e) => {
               e.stopPropagation()
-              createVideoContinuation(editor, shape, 'video-frame')
+              setVideoOperationsOpen(true)
             }}
           >
-            抽帧
-          </button>
-          <button
-            className="btn-ghost small"
-            title="创建视频截取节点并连接当前视频"
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onClick={(e) => {
-              e.stopPropagation()
-              createVideoContinuation(editor, shape, 'video-clip')
-            }}
-          >
-            视频截取
-          </button>
-          <button
-            className="btn-ghost small"
-            title="一键创建 提取音频 → 人声分离 并预连线"
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onClick={(e) => {
-              e.stopPropagation()
-              createVocalExtractionTemplate(editor, shape)
-            }}
-          >
-            截人声
+            视频操作
           </button>
           <MediaFileActions shape={shape} />
         </div>
+        {videoOperationsOpen && (
+          <VideoOperationsWorkbench
+            source={shape}
+            editor={editor}
+            onClose={() => setVideoOperationsOpen(false)}
+          />
+        )}
       </div>
     )
   }

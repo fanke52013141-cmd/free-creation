@@ -455,6 +455,52 @@ export function createVideoContinuation(
   return id
 }
 
+/** 从已创建的音频结果节点创建人声分离节点，并通过声明的音频端口连接。 */
+export function createVocalSeparationContinuation(
+  editor: Editor,
+  source: NodeCardShape,
+  options?: { title?: string; config?: string }
+): TLShapeId | null {
+  const sourceSpec = getNodeType(source.props.nodeType)
+  const targetSpec = getNodeType('vocal-separate')
+  const sourcePortId = sourceSpec?.ports.out.find((port) => port.type === 'audio')?.id
+  const targetPortId = targetSpec?.ports.in.find((port) => port.type === 'audio')?.id
+  if (!targetSpec || !sourcePortId || !targetPortId) return null
+
+  const id = createShapeId()
+  const placement = findContinuationPlacement(
+    editor,
+    source,
+    targetSpec.defaultSize.w,
+    targetSpec.defaultSize.h
+  )
+  editor.createShape({
+    id,
+    type: 'node-card',
+    x: placement.x,
+    y: placement.y,
+    props: {
+      nodeType: 'vocal-separate',
+      title: options?.title ?? '人声分离',
+      ...(options?.config ? { config: options.config } : {}),
+      w: targetSpec.defaultSize.w,
+      h: targetSpec.defaultSize.h
+    } satisfies Partial<NodeCardProps>
+  })
+  if (
+    !createEdge(
+      editor,
+      { shapeId: source.id, portId: sourcePortId },
+      { shapeId: id, portId: targetPortId }
+    )
+  ) {
+    editor.deleteShape(id)
+    return null
+  }
+  editor.select(id)
+  return id
+}
+
 /**
  * 导演台的预演视频不是“下载提示”，而是可以直接注入视频节点的真实运动参考。
  * 此快捷入口只创建 video.in-reference-video 边，不复制视频、不读取隐藏状态。
