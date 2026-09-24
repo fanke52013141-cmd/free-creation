@@ -29,6 +29,8 @@ export const NODE_UI = {
   },
   actionBar: {
     height: 40,
+    /** 主操作按钮与节点卡片底边的统一留白 */
+    bottomInset: 8,
     maxVisibleActions: 3
   }
 } as const

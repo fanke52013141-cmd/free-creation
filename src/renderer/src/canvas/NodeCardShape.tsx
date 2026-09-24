@@ -112,7 +112,15 @@ export class NodeCardUtil extends BaseBoxShapeUtil<NodeCardShape> {
     info: TLResizeInfo<NodeCardShape>
   ): Omit<TLShapePartial<NodeCardShape>, 'id' | 'type'> | undefined {
     if (info.mode === 'scale_shape') return undefined
-    return super.onResize(shape, info)
+    const resized = super.onResize(shape, info)
+    if (shape.props.nodeType !== 'image-gen' || info.mode !== 'resize_bounds') return resized
+
+    // 生图节点按内容自动调整高度；用户一旦手动拖动尺寸，就将高度切换为用户所有。
+    // 该标记放在 shape meta，不参与节点业务配置或运行契约。
+    return {
+      ...(resized ?? {}),
+      meta: { ...shape.meta, nodeHeightMode: 'manual' }
+    }
   }
 
   /** 选中时不再绘制节点外框实线，只保留 tldraw 自带的圆形缩放手柄。 */

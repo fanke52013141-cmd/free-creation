@@ -18,7 +18,7 @@ import { portPairCompatible } from './graph'
 import { markUndoPoint } from './history'
 import type { NodeCardShape } from './NodeCardShape'
 import { Icon } from '../components/Icon'
-import { resolveNodeHeight } from './node-ui-tokens'
+import { NODE_UI, resolveNodeHeight } from './node-ui-tokens'
 import { nodeExecLabel } from './node-status'
 import { deriveNodeReadiness } from './node-readiness'
 import { runNodeManually } from '../engine/executor'
@@ -34,6 +34,7 @@ import {
 } from './image-generation-progress'
 import { readNodeRunRecord } from '../engine/runRecord'
 import { canConsumeWheel } from './node-wheel-scroll'
+import './image-gen-adaptive.css'
 
 const EXEC_COLORS: Record<string, string> = {
   idle: '#6b7280',
@@ -526,9 +527,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         ? readiness.label
         : null
 
-  // 节点有规范的初始档位尺寸；内容溢出时只按固定档位跳档（呈现规范 v1.0 §3.2/§3.4：
-  // 260→320→380→440），超过 autoMax 的内容在 node-body 内部滚动，
-  // 绝不把卡片撑成任意像素高度，也不会压缩用户手动拉大的节点。
+  // 生图节点按正文自然高度双向匹配固定档位；其他节点保留溢出时逐档增长。
+  // 手动 resize 会在 shape.meta.nodeHeightMode 留下标记，自动布局不再覆盖用户尺寸。
   useEffect(() => {
     const body = bodyRef.current
     if (!body) return
@@ -536,6 +536,43 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     const fitHeight = (): void => {
       cancelAnimationFrame(frame)
       frame = requestAnimationFrame(() => {
+        if (shape.props.nodeType === 'image-gen') {
+          const heightMode = shape.meta.nodeHeightMode
+          const standardTiers = [
+            NODE_UI.height.default,
+            NODE_UI.height.expanded,
+            NODE_UI.height.rich,
+            NODE_UI.height.autoMax
+          ]
+          // 老项目没有 mode 标记：标准自动档位视为自动管理，非标准尺寸按手动高度保留。
+          const isAutoManaged =
+            heightMode === 'auto' ||
+            (heightMode !== 'manual' && standardTiers.some((tier) => tier === shape.props.h))
+          if (!isAutoManaged) return
+
+          const children = Array.from(body.children).filter(
+            (child): child is HTMLElement => child instanceof HTMLElement
+          )
+          const rowGap = Number.parseFloat(getComputedStyle(body).rowGap) || 0
+          const contentHeight = children.reduce(
+            (total, child) =>
+              total + Math.max(child.getBoundingClientRect().height, child.scrollHeight),
+            0
+          ) + Math.max(0, children.length - 1) * rowGap
+          const shellHeight = shape.props.h - body.clientHeight
+          const requiredHeight = Math.ceil(shellHeight + contentHeight)
+          const tier = resolveNodeHeight(requiredHeight)
+          if (tier !== shape.props.h) {
+            editor.updateShape({
+              id: shape.id,
+              type: 'node-card',
+              props: { h: tier },
+              meta: { ...shape.meta, nodeHeightMode: 'auto' }
+            })
+          }
+          return
+        }
+
         let overflow = Math.ceil(body.scrollHeight - body.clientHeight)
         // 媒体结果网格等嵌套滚动容器（flex min-height:0 链 + overflow-y:auto）会把溢出
         // 吸收在自己的滚动条里，body.scrollHeight 因此恒等于 clientHeight。此时扫描
@@ -574,7 +611,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       observer.disconnect()
       mutations.disconnect()
     }
-  }, [editor, shape.id, shape.props.h])
+  }, [editor, shape.id, shape.props.h, shape.props.nodeType, shape.meta.nodeHeightMode])
 
   // 端口 tooltip 只保留身份信息（呈现规范 v1.0 §11：名称 · 类型，类型给中文名），
   // 连接手势、多选建线等操作教学不再随 tooltip 重复。
@@ -678,7 +715,10 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         <div
           className={`node-card type-${shape.props.nodeType}`}
           data-node-type={shape.props.nodeType}
-          style={{ ['--node-accent' as string]: spec?.color ?? '#42b9f5' }}
+          style={{
+            ['--node-accent' as string]: spec?.color ?? '#42b9f5',
+            ['--node-action-bottom-inset' as string]: `${NODE_UI.actionBar.bottomInset}px`
+          }}
         >
           {/* 保留 DOM 锚点以兼容旧快照；视觉改由 card 左上角的 45° 类型切角承担。 */}
           <div

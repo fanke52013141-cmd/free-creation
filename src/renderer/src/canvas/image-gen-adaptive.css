@@ -1,0 +1,16 @@
+/* 生图节点随引用内容在规范档位间自适应，主操作到底边留 8px。 */
+.node-card.type-image-gen .node-body-content {
+  flex: 0 0 auto;
+  min-height: auto;
+}
+
+.node-card.type-image-gen .gen-panel {
+  height: auto;
+  min-height: max-content;
+  flex: 0 0 auto;
+  padding-bottom: var(--node-action-bottom-inset, 8px);
+}
+
+.node-card.type-image-gen .gen-go {
+  margin-top: 0;
+}
