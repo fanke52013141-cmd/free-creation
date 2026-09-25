@@ -466,33 +466,6 @@
   pointer-events: none;
 }
 
-.video-operations-timeline .video-timeline-playhead {
-  position: absolute;
-  z-index: 4;
-  top: -3px;
-  bottom: -3px;
-  left: var(--playhead, 0%);
-  width: 2px;
-  transform: translateX(-50%);
-  border-radius: 2px;
-  background: #7dd3fc;
-  box-shadow: 0 0 8px rgba(56, 189, 248, 0.78);
-  pointer-events: none;
-}
-
-.video-operations-timeline .video-timeline-playhead::before {
-  position: absolute;
-  top: -2px;
-  left: 50%;
-  width: 9px;
-  height: 9px;
-  transform: translateX(-50%);
-  border: 2px solid #38bdf8;
-  border-radius: 50%;
-  background: #f8fafc;
-  content: '';
-}
-
 .video-operations-timeline .video-timeline-handle {
   top: -4px;
   bottom: -4px;

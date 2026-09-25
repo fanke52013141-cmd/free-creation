@@ -184,7 +184,7 @@ function MediaTimeline({
   pointMs,
   startMs,
   endMs,
-  playheadMs,
+  progressMs,
   integrated = false,
   playbackOnly = false,
   fps,
@@ -205,8 +205,8 @@ function MediaTimeline({
   /** 双游标模式（截取/提音）传入这两个值 */
   startMs?: number
   endMs?: number
-  /** 播放时间轴上的播放头位置 */
-  playheadMs?: number
+  /** 播放时间轴上的进度 */
+  progressMs?: number
   /** 紧凑播放器模式：进度与截取范围共用轨道，控制项由调用方渲染 */
   integrated?: boolean
   /** 仅显示并拖动原始播放进度，不显示截取手柄 */
@@ -385,21 +385,15 @@ function MediaTimeline({
             ...(isPoint
               ? { '--point': percent(currentPoint) }
               : { '--start': percent(currentStart), '--end': percent(currentEnd) }),
-            ...(integrated && typeof playheadMs === 'number'
-              ? {
-                  '--played': percent(clamp(playheadMs, max)),
-                  '--playhead': percent(clamp(playheadMs, max))
-                }
+            ...(integrated && typeof progressMs === 'number'
+              ? { '--played': percent(clamp(progressMs, max)) }
               : {})
           } as React.CSSProperties
         }
         onPointerDown={handleTrackPointerDown}
       >
-        {integrated && typeof playheadMs === 'number' && (
-          <>
-            <div className="video-timeline-progress" />
-            <div className="video-timeline-playhead" />
-          </>
+        {integrated && typeof progressMs === 'number' && (
+          <div className="video-timeline-progress" />
         )}
         {isPoint ? (
           playbackOnly ? null : (
@@ -988,7 +982,7 @@ export function VideoOperationsWorkbench({
                   <MediaTimeline
                     durationMs={max}
                     pointMs={currentTimeMs}
-                    playheadMs={currentTimeMs}
+                    progressMs={currentTimeMs}
                     integrated
                     playbackOnly
                     fps={fps}
