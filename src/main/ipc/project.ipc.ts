@@ -131,7 +131,12 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
       if (!input?.id || !input.name || !input.snapshot || !input.graph) {
         return err('INVALID_INPUT', '画布结构参数不完整')
       }
-      const defaultName = input.name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-').slice(0, 100)
+      const defaultName = input.name
+        .replace(/[<>:"/\\|?*]/g, '-')
+        .split('')
+        .map((character) => (character.charCodeAt(0) <= 0x1f ? '-' : character))
+        .join('')
+        .slice(0, 100)
       const result = await dialog.showSaveDialog({
         title: '导出画布结构',
         defaultPath: `${defaultName || '画布'}.canvasflow`,

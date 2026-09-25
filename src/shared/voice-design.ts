@@ -12,7 +12,7 @@ export interface VoiceDesignConfig {
   version: 1
   /** MiniMax 供应商实例 ID。 */
   providerId: string
-  /** 目录中验证过的音色设计模型；请求本身不发送 model，但用于选择已验证能力。 */
+  /** 内部模型网关能力路由所需；MiniMax voice_design 请求体不发送此字段。 */
   modelId: string
   /** 试听文本，≤500 字符；决定试听音频读什么。 */
   previewText: string

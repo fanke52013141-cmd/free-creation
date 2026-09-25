@@ -5,14 +5,18 @@
 // 精确定位到某个字段，而不是「网关挂了」。
 import { describe, expect, it } from 'vitest'
 import {
-  buildDoubaoSpeechBody,
   buildMiniMaxAsyncTtsBody,
-  buildVolcTtsBody,
+  buildVolcSpeechBody,
   effectiveSpeechVoiceId
 } from '../src/main/gateway/audio'
 import { buildVoiceCloneBody, buildVoiceDesignBody } from '../src/main/gateway/voice'
-import { DEFAULT_SPEECH_CONFIG, parseSpeechConfig } from '../src/shared/speech'
-import { DEFAULT_TTS_CONFIG, parseTtsConfig, isValidMiniMaxVoiceId } from '../src/shared/tts'
+import { parseSpeechConfig } from '../src/shared/speech'
+import {
+  DEFAULT_TTS_CONFIG,
+  MINIMAX_VOICE_CLONE_MODELS,
+  parseTtsConfig,
+  isValidMiniMaxVoiceId
+} from '../src/shared/tts'
 import {
   DEFAULT_VOICE_DESIGN_CONFIG,
   parseVoiceDesignConfig,
@@ -52,12 +56,12 @@ describe('MiniMax 异步语音合成 t2a_async_v2', () => {
         english_normalization: true
       },
       audio_setting: {
-        audio_sample_rate: 44100,
+        audio_sample_rate: 32000,
         bitrate: 256000,
-        format: 'flac',
+        format: 'mp3',
         channel: 2
       },
-      language_boost: 'Chinese',
+      language_boost: 'auto',
       aigc_watermark: true
     })
   })
@@ -108,139 +112,83 @@ describe('MiniMax 异步语音合成 t2a_async_v2', () => {
     expect(isValidMiniMaxVoiceId(preset)).toBe(false)
   })
 
-  it('发音词典与音色修饰按解析结果写入', () => {
+  it('读音纠正按 MiniMax tone 格式发送，遗留音效设置忽略', () => {
     const body = buildMiniMaxAsyncTtsBody(
       { modelId: 'speech-2.8-turbo', text: '你好', voiceId: '' },
       speechConfig({
-        pronunciationTones: '调音台 tiao2 yin1 tai2',
+        pronunciationTones: '调音台/(tiao2)(yin1)(tai2)',
         soundEffects: 'spacious_echo',
         voicePitch: 20
       })
     )
-    expect(body.pronunciation_dict).toEqual({ tone: ['调音台 tiao2 yin1 tai2'] })
+    expect(body.pronunciation_dict).toEqual({
+      tone: ['调音台/(tiao2)(yin1)(tai2)']
+    })
     expect(body.voice_modify).toEqual({
       pitch: 20,
       intensity: 0,
-      timbre: 0,
-      sound_effects: 'spacious_echo'
+      timbre: 0
     })
   })
 
-  it('MiniMax 只接受 mp3/pcm/flac，wav 请求回落 mp3', () => {
+  it('MiniMax 配音固定使用默认 MP3 输出与码率', () => {
     const body = buildMiniMaxAsyncTtsBody(
       { modelId: 'speech-2.8-hd', text: '你好', voiceId: '' },
       speechConfig({ backend: 'minimax', format: 'wav' })
     )
     expect((body.audio_setting as Record<string, unknown>).format).toBe('mp3')
+    expect((body.audio_setting as Record<string, unknown>).bitrate).toBe(128000)
   })
 })
 
-describe('豆包语音合成 /api/v3/tts/create', () => {
-  it('只发送文档化字段：speaker 与 audio_config / watermark / aigc_metadata', () => {
-    const body = buildDoubaoSpeechBody(
+describe('火山引擎语音合成 1.0 /api/v3/tts/create', () => {
+  it('speaker 可与 references 同时传入，提示文本按上传顺序引用音频', () => {
+    const body = buildVolcSpeechBody(
       { modelId: 'seed-audio-1.0', text: '  你好  ', voiceId: 'speaker-a' },
       speechConfig({
-        backend: 'doubao',
+        backend: 'volc',
         speechRate: 20,
         loudnessRate: -10,
         pitchRate: 2,
         enableSubtitle: true,
         format: 'ogg_opus',
-        sampleRate: 24000
-      })
+        sampleRate: 48000
+      }),
+      ['ZmFrZS1hdWRpbw==']
     )
     expect(body).toEqual({
       model: 'seed-audio-1.0',
-      text_prompt: '你好',
+      text_prompt: '参考 @音频1 的音色朗读以下文本：\n你好',
+      references: [{ audio_data: 'ZmFrZS1hdWRpbw==' }],
       speaker: 'speaker-a',
       audio_config: {
-        format: 'ogg_opus',
-        sample_rate: 24000,
+        format: 'wav',
+        sample_rate: 40000,
         speech_rate: 20,
         loudness_rate: -10,
         pitch_rate: 2,
         enable_subtitle: true
       },
-      watermark: { aigc_watermark: false },
-      aigc_metadata: { enable: false }
+      watermark: { aigc_watermark: false, aigc_metadata: { enable: false } }
     })
   })
 
-  it('未接入的 references / audio_data / audio_url 不出现在请求体里', () => {
-    const body = buildDoubaoSpeechBody(
+  it('不设置参考音频和 speaker 时省略可选字段', () => {
+    const body = buildVolcSpeechBody(
       { modelId: 'seed-audio-1.0', text: '你好', voiceId: '' },
-      speechConfig({ backend: 'doubao' })
+      speechConfig({ backend: 'volc' })
     )
     expect(body).not.toHaveProperty('references')
-    expect(body).not.toHaveProperty('audio_data')
-    expect(body).not.toHaveProperty('audio_url')
     expect(body).not.toHaveProperty('speaker')
   })
-})
 
-describe('火山引擎语音合成 1.0 /api/v1/tts', () => {
-  it('发送 app / user / audio / request 四段请求体', () => {
-    const body = buildVolcTtsBody(
-      { apiKey: 'tok' },
-      { text: '  你好  ', voiceId: '  BV001_streaming ' },
-      speechConfig({
-        backend: 'volc',
-        volcAppId: 'app-1',
-        volcCluster: 'volcano_tts',
-        speed: 1.1,
-        format: 'mp3'
-      }),
-      'req-1'
-    )
-    expect(body).toEqual({
-      app: { appid: 'app-1', token: 'tok', cluster: 'volcano_tts' },
-      user: { uid: 'canvas-studio' },
-      audio: { voice_type: 'BV001_streaming', encoding: 'mp3', speed_ratio: 1.1 },
-      request: { reqid: 'req-1', text: '你好', operation: 'query' }
-    })
-  })
-
-  it('1.0 不支持的编码回落 mp3，且不会把 MiniMax / 豆包的参数发过来', () => {
-    const body = buildVolcTtsBody(
-      { apiKey: 'tok' },
-      { text: '你好', voiceId: 'BV001_streaming' },
-      speechConfig({
-        backend: 'volc',
-        volcAppId: 'app-1',
-        format: 'flac',
-        sampleRate: 44100,
-        bitrate: 256000,
-        audioChannel: 2,
-        emotion: 'happy',
-        languageBoost: 'Chinese',
-        enableSubtitle: true
-      }),
-      'req-2'
-    )
-    expect((body.audio as Record<string, unknown>).encoding).toBe('mp3')
-    for (const key of [
-      'audio_setting',
-      'voice_setting',
-      'audio_config',
-      'pronunciation_dict',
-      'subtitle'
-    ])
-      expect(body).not.toHaveProperty(key)
-    const audio = body.audio as Record<string, unknown>
-    expect(audio).not.toHaveProperty('sample_rate')
-    expect(audio).not.toHaveProperty('bitrate')
-    expect(audio).not.toHaveProperty('channel')
-  })
-
-  it('AppID 与集群可持久化，缺省回落普通音色集群', () => {
-    const config = parseSpeechConfig(
-      JSON.stringify({ backend: 'volc', volcAppId: '  app-9  ', volcCluster: '  ' })
-    )
-    expect(config.backend).toBe('volc')
-    expect(config.volcAppId).toBe('app-9')
-    expect(config.volcCluster).toBe(DEFAULT_SPEECH_CONFIG.volcCluster)
-    expect(DEFAULT_SPEECH_CONFIG.volcCluster).toBe('volcano_tts')
-    expect(parseSpeechConfig(JSON.stringify({ volcAppId: 123 })).volcAppId).toBe('')
+  it('不接受 1.0 之外的模型 ID', () => {
+    expect(() =>
+      buildVolcSpeechBody(
+        { modelId: 'seed-audio-2.0', text: '你好', voiceId: '' },
+        speechConfig({ backend: 'volc' })
+      )
+    ).toThrow('仅支持 seed-audio-1.0')
   })
 })
 
@@ -255,14 +203,11 @@ describe('配音产物溯源用的「实际生效音色」', () => {
     )
   })
 
-  it('其余通道留空时回传 undefined，不拿「用户没填」冒充「用了默认音色」', () => {
-    for (const backend of ['doubao', 'volc', 'openai'] as const) {
-      expect(effectiveSpeechVoiceId(backend, '')).toBeUndefined()
-      expect(effectiveSpeechVoiceId(backend, '   ')).toBeUndefined()
-      expect(effectiveSpeechVoiceId(backend, ' BV001_streaming ')).toBe('BV001_streaming')
-    }
-    // 兜底只属于 MiniMax 那一条改写；别的通道不能借用它。
-    expect(effectiveSpeechVoiceId('doubao', '')).not.toBe('male-qn-qingse')
+  it('火山留空时回传 undefined，不拿「用户没填」冒充「用了默认音色」', () => {
+    expect(effectiveSpeechVoiceId('volc', '')).toBeUndefined()
+    expect(effectiveSpeechVoiceId('volc', '   ')).toBeUndefined()
+    expect(effectiveSpeechVoiceId('volc', 'speaker-a')).toBe('speaker-a')
+    expect(effectiveSpeechVoiceId('volc', '')).not.toBe('male-qn-qingse')
   })
 })
 
@@ -273,6 +218,7 @@ describe('MiniMax 快速复刻 voice_clone', () => {
         backend: 'minimax',
         modelId: 'speech-2.8-hd',
         voiceId: 'CanvasVoice_2026',
+        textValidation: '参考音频的转写文本。',
         accuracy: 0.85,
         needNoiseReduction: true,
         needVolumeNormalization: true,
@@ -284,6 +230,7 @@ describe('MiniMax 快速复刻 voice_clone', () => {
       file_id: 12345,
       voice_id: 'CanvasVoice_2026',
       model: 'speech-2.8-hd',
+      text_validation: '参考音频的转写文本。',
       accuracy: 0.85,
       need_noise_reduction: true,
       need_volume_normalization: true,
@@ -302,8 +249,8 @@ describe('MiniMax 快速复刻 voice_clone', () => {
     expect(typeof body.text_validation).not.toBe('boolean')
     expect(body).not.toHaveProperty('text_validation')
     expect(
-      parseTtsConfig(JSON.stringify({ backend: 'minimax', textValidation: true }))
-    ).not.toHaveProperty('textValidation')
+      parseTtsConfig(JSON.stringify({ backend: 'minimax', textValidation: true })).textValidation
+    ).toBe('')
   })
 
   it('有提示音时才出现 clone_prompt', () => {
@@ -357,6 +304,19 @@ describe('MiniMax 音色设计 voice_design', () => {
     const config = parseVoiceDesignConfig(JSON.stringify({ previewText: long }))
     expect(config.previewText).toHaveLength(500)
     expect(parseVoiceDesignConfig('{bad').previewText).toBe(DEFAULT_VOICE_DESIGN_CONFIG.previewText)
+  })
+
+  it('MiniMax 快速复刻覆盖接口列出的八种预览合成模型', () => {
+    expect(MINIMAX_VOICE_CLONE_MODELS).toEqual([
+      'speech-2.8-hd',
+      'speech-2.8-turbo',
+      'speech-2.6-hd',
+      'speech-2.6-turbo',
+      'speech-02-hd',
+      'speech-02-turbo',
+      'speech-01-hd',
+      'speech-01-turbo'
+    ])
   })
 })
 

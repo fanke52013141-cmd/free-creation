@@ -7,7 +7,7 @@ export type ProviderDriver = 'openai-compatible' | 'video' | 'native-speech'
 
 export function driverForSpec(specId: ProviderSpecId): ProviderDriver {
   if (specId === 'minimax' || specId === 'seedance') return 'video'
-  if (specId === 'doubao-speech') return 'native-speech'
+  if (specId === 'volc-speech') return 'native-speech'
   return 'openai-compatible'
 }
 
@@ -24,9 +24,9 @@ const MINIMAX_LLM_ID_RE = /(^|[^a-z])m[12]([^a-z]|$)|abab|minimax-(text|characte
  * 语音节点只列 audio 模型，所以猜错模态等于该模型在节点里选不到。
  */
 export function guessModelModality(id: string, specId: ProviderSpecId): ModelModality {
-  // 豆包语音（Seed-Audio）与火山语音合成 1.0 共用这一个供应商实例，它没有文本
-  // 模型；ID 形如 seed-audio-1.0 或音色名，只靠下面的正则会猜成 text。
-  if (specId === 'doubao-speech') return 'audio'
+  // 火山语音合成使用 /api/v3/tts/create，模型 ID 形如 seed-audio-1.0，
+  // 不能仅靠一般的模型名正则推断模态。
+  if (specId === 'volc-speech') return 'audio'
   // 方舟的接入点 ID 形如 ep-2025xxxx-xxxx，没有任何可辨认的词汇，只能整家按视频建模；
   // 要文本模型请建「豆包（方舟）」模板。
   if (specId === 'seedance') return 'video'

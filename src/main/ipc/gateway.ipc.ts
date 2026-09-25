@@ -162,7 +162,7 @@ export function registerGatewayIpc(win: BrowserWindow): void {
       wrapAsync<MediaAsset>(() => generateAudioToAsset(input))
   )
 
-  // 配音节点：协议由 config.backend 决定（MiniMax 异步 / 豆包 / OpenAI 兼容）。
+  // 配音节点：协议由 config.backend 决定（MiniMax 异步 / 火山语音合成 1.0）。
   ipcMain.handle(
     IPC.gateway.speechGenerate,
     (_e, input: Parameters<typeof generateSpeechToAsset>[0]) =>

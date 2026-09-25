@@ -1,15 +1,13 @@
 // 音频生成（TTS）：按供应商协议分派
 //   specId === 'minimax' → MiniMax T2A v2（POST {base}/v1/t2a_v2，返回 hex 音频）
-//   其余 → OpenAI 兼容 /audio/speech（OpenAI TTS、中转站等）
+//   其余 → OpenAI 兼容 /audio/speech（独立音频生成节点使用）
 // 产物 Buffer 走 media 管线入库，节点侧拿到 MediaAsset 即可播放。
 // TokenDance 等网关以 /gateway/minimax 前缀转发原生 MiniMax 协议，路径结构一致。
 //
 // 配音（speech）节点是「模型驱动」的：由 config.backend 明确选择协议，而不是
 // 按上游节点类型猜测。各条协议各自只发送自己文档化的字段：
-//   minimax → POST {base}/v1/t2a_async_v2（异步任务 + 文件检索下载，默认主通道）
-//   doubao  → POST {base}/api/v3/tts/create（seed-audio-1.0，可返回字幕时间轴）
-//   volc    → POST {base}/api/v1/tts（火山引擎语音合成 1.0，非流式，data 为 Base64）
-//   openai  → POST {base}/audio/speech（保留的旧通道）
+//   minimax → POST {base}/v1/t2a_async_v2（异步任务 + 文件检索下载）
+//   volc    → POST {base}/api/v3/tts/create（火山引擎语音合成 1.0）
 import { randomUUID } from 'node:crypto'
 import type {
   AudioGenerateInput,
@@ -18,10 +16,22 @@ import type {
   SpeechSubtitle
 } from '../../shared/contracts'
 import type { MediaAsset, ProviderConfig } from '../../shared/types'
-import { SPEECH_TEXT_LIMITS, parsePronunciationTones, voiceModifyOf } from '../../shared/speech'
-import type { SpeechConfig } from '../../shared/speech'
-import { saveBufferAsset } from '../store/media.repo'
+import {
+  VOLC_REFERENCE_AUDIO_MAX_BYTES,
+  VOLC_REFERENCE_AUDIO_MAX_COUNT,
+  VOLC_REFERENCE_AUDIO_MAX_SECONDS,
+  volcReferencePromptPrefix,
+  MINIMAX_ASYNC_SPEECH_MODELS,
+  SPEECH_TEXT_LIMITS,
+  isSpeechEmotionSupported,
+  isSpeechLanguageBoostSupported,
+  parsePronunciationTones,
+  voiceModifyOf,
+  type SpeechConfig
+} from '../../shared/speech'
+import { getMediaAbsPath, readMediaBuffer, saveBufferAsset } from '../store/media.repo'
 import { getDb } from '../store/db'
+import { probeMediaDurationMs } from '../media/video-transform'
 import { looksLikeTar, pickAudioFromTar } from '../media/tar-audio'
 import { getProvider } from './providers.repo'
 import { GatewayError } from './factory'
@@ -43,30 +53,38 @@ const EXT_BY_FORMAT: Record<string, string> = {
   flac: '.flac',
   wav: '.wav',
   pcm: '.pcm',
+  pcmu_raw: '.ulaw',
+  pcmu_wav: '.wav',
   ogg_opus: '.ogg',
   ogg: '.ogg'
 }
 
 const MIME_BY_FORMAT: Record<string, string> = {
   mp3: 'audio/mpeg',
-  opus: 'audio/opus',
+  opus: 'audio/ogg',
   aac: 'audio/aac',
   flac: 'audio/flac',
   wav: 'audio/wav',
   pcm: 'audio/pcm',
+  pcmu_raw: 'audio/basic',
+  pcmu_wav: 'audio/wav',
   ogg_opus: 'audio/ogg',
   ogg: 'audio/ogg'
 }
 
-/** MiniMax T2A v2 只接受 mp3/pcm/flac；其余请求格式回落 mp3。 */
-const MINIMAX_FORMATS = new Set(['mp3', 'pcm', 'flac'])
+/** MiniMax async T2A v2 支持的完整音频格式枚举。 */
+const MINIMAX_FORMATS = new Set([
+  'mp3',
+  'pcm',
+  'flac',
+  'wav',
+  'pcmu_raw',
+  'pcmu_wav',
+  'opus'
+])
 
-/** 火山语音合成 1.0 的 audio.encoding 枚举（没有 flac）。 */
-const VOLC_ENCODINGS = new Set(['mp3', 'wav', 'pcm', 'ogg_opus'])
-/** 1.0 的 user.uid 只用于服务端链路追踪；本地没有账号体系，用固定标识。 */
-const VOLC_UID = 'canvas-studio'
-/** 非流式合成的成功码；其他取值都要带着 message 抛错。 */
-const VOLC_OK_CODE = 3000
+/** 火山 1.0 输出格式；格式支持范围与 MiniMax 不同。 */
+const VOLC_FORMATS = new Set(['mp3', 'wav', 'pcm', 'ogg_opus'])
 
 /** 配音节点默认音色是 OpenAI 命名（alloy 等），MiniMax 端没有这些音色，映射到系统音色。 */
 const OPENAI_DEFAULT_VOICES = new Set(['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'])
@@ -106,7 +124,7 @@ export async function generateAudioToAsset(input: AudioGenerateInput): Promise<M
 
 /**
  * 本次请求真正会用的音色 ID，用于产物溯源。只有 MiniMax 通道存在「用户留空 → 兜底成
- * 系统音色」的改写；豆包 / OpenAI 兼容留空时服务端用了哪个音色我们无从得知，返回
+ * 系统音色」的改写；火山留空时服务端用了哪个音色我们无从得知，返回
  * undefined 让调用方跳过溯源，而不是编一个默认值冒充已溯源。
  */
 export function effectiveSpeechVoiceId(
@@ -124,7 +142,7 @@ export async function generateSpeechToAsset(
   if (!text) throw new GatewayError('INVALID_INPUT', '朗读文本不能为空')
 
   const config = input.config
-  const limit = SPEECH_TEXT_LIMITS[config.backend] ?? SPEECH_TEXT_LIMITS.openai
+  const limit = SPEECH_TEXT_LIMITS[config.backend]
   if (text.length > limit) {
     throw new GatewayError('INVALID_INPUT', `朗读文本超过 ${limit} 字符上限（当前 ${text.length}）`)
   }
@@ -133,7 +151,7 @@ export async function generateSpeechToAsset(
   if (!p) throw new GatewayError('PROVIDER_NOT_FOUND', '供应商不存在')
 
   // 回传「实际生效」的音色供产物溯源：只有 MiniMax 通道存在「用户留空 → 网关兜底成
-  // 系统音色」的改写；其余通道留空时服务端用了什么音色我们并不知道，因此回传
+  // 系统音色」的改写；火山通道留空时服务端用了什么音色我们并不知道，因此回传
   // undefined 而不是编一个默认值冒充已溯源。
   const spokenAs = effectiveSpeechVoiceId(config.backend, input.voiceId)
 
@@ -145,46 +163,13 @@ export async function generateSpeechToAsset(
     return { asset, voiceId: spokenAs }
   }
 
-  if (config.backend === 'doubao') {
-    if (p.specId !== 'doubao-speech') {
-      throw new GatewayError('INVALID_INPUT', '豆包语音通道只能选择豆包语音（Seed-Audio）供应商')
-    }
-    return { ...(await generateViaDoubao(p, input)), voiceId: spokenAs }
-  }
-
   if (config.backend === 'volc') {
-    if (p.specId !== 'doubao-speech') {
-      throw new GatewayError(
-        'INVALID_INPUT',
-        '火山语音合成 1.0 与豆包语音共用 openspeech 供应商实例'
-      )
-    }
-    if (!config.volcAppId) {
-      throw new GatewayError('INVALID_INPUT', '火山语音合成 1.0 需要填写节点里的 AppID')
-    }
-    if (!input.voiceId?.trim()) {
-      throw new GatewayError('INVALID_INPUT', '火山语音合成 1.0 的 voice_type 不能为空')
+    if (p.specId !== 'volc-speech') {
+      throw new GatewayError('INVALID_INPUT', '火山语音合成 1.0 只能选择火山引擎语音供应商')
     }
     return { ...(await generateViaVolc(p, input)), voiceId: spokenAs }
   }
-
-  assertOpenAiCompatible(p)
-  const asset = await generateViaOpenAICompatible(p, {
-    projectId: input.projectId,
-    providerId: input.providerId,
-    modelId: input.modelId,
-    text,
-    voice: spokenAs,
-    format: config.format
-  })
-  return { asset, voiceId: spokenAs }
-}
-
-/** OpenAI 兼容通道不接受原生协议供应商，避免把 MiniMax/豆包实例打到 /audio/speech。 */
-function assertOpenAiCompatible(p: ProviderConfig): void {
-  if (p.specId === 'minimax' || p.specId === 'doubao-speech') {
-    throw new GatewayError('INVALID_INPUT', 'OpenAI 兼容配音通道不支持该原生协议供应商')
-  }
+  throw new GatewayError('INVALID_INPUT', '不支持的语音合成供应商')
 }
 
 /**
@@ -195,15 +180,20 @@ export function buildMiniMaxAsyncTtsBody(
   input: Pick<SpeechGenerateInput, 'modelId' | 'text' | 'voiceId'>,
   config: SpeechConfig
 ): Record<string, unknown> {
+  if (!MINIMAX_ASYNC_SPEECH_MODELS.includes(input.modelId)) {
+    throw new GatewayError('INVALID_INPUT', `MiniMax 异步语音合成不支持模型 ${input.modelId}`)
+  }
   const format = MINIMAX_FORMATS.has(config.format) ? config.format : 'mp3'
   const tones = parsePronunciationTones(config.pronunciationTones)
-  const voiceModify = voiceModifyOf(config)
+  const voiceModify = ['mp3', 'wav', 'flac'].includes(format) ? voiceModifyOf(config) : null
   const voiceSetting: Record<string, unknown> = {
     voice_id: resolveMiniMaxVoiceId(input.voiceId),
     speed: config.speed,
     vol: config.volume,
     pitch: config.pitch,
-    ...(config.emotion ? { emotion: config.emotion } : {}),
+    ...(isSpeechEmotionSupported(input.modelId, config.emotion) && config.emotion
+      ? { emotion: config.emotion }
+      : {}),
     ...(config.englishNormalization ? { english_normalization: true } : {})
   }
 
@@ -213,70 +203,46 @@ export function buildMiniMaxAsyncTtsBody(
     voice_setting: voiceSetting,
     audio_setting: {
       audio_sample_rate: config.sampleRate,
-      bitrate: config.bitrate,
+      ...(format === 'mp3' ? { bitrate: config.bitrate } : {}),
       format,
       channel: config.audioChannel
     },
     ...(tones.length ? { pronunciation_dict: { tone: tones } } : {}),
-    ...(config.languageBoost ? { language_boost: config.languageBoost } : {}),
+    ...(config.languageBoost && isSpeechLanguageBoostSupported(input.modelId, config.languageBoost)
+      ? { language_boost: config.languageBoost }
+      : {}),
     ...(voiceModify ? { voice_modify: voiceModify } : {}),
     aigc_watermark: config.aigcWatermark
   }
 }
 
-/**
- * 豆包语音合成的请求体（纯函数）。
- *
- * 实现边界：只发送本会话文档化的字段——model、text_prompt、speaker（互斥三选一
- * 中的 speaker）、audio_config、watermark、aigc_metadata。references[] 参考音频、
- * audio_data 内联音频与 audio_url 远程音频需要额外的素材上传/托管链路，本节点
- * 尚未接入，因此既不暴露端口也不发送半成品字段。
- */
-export function buildDoubaoSpeechBody(
+/** 火山引擎语音合成 1.0 请求体；references 与 speaker 可以同时传入。 */
+export function buildVolcSpeechBody(
   input: Pick<SpeechGenerateInput, 'modelId' | 'text' | 'voiceId'>,
-  config: SpeechConfig
+  config: SpeechConfig,
+  referenceAudioData: readonly string[] = []
 ): Record<string, unknown> {
+  if (input.modelId !== 'seed-audio-1.0') {
+    throw new GatewayError('INVALID_INPUT', '火山语音合成仅支持 seed-audio-1.0')
+  }
+  const textPrompt = `${volcReferencePromptPrefix(referenceAudioData.length)}${input.text.trim()}`
+  const format = VOLC_FORMATS.has(config.format) ? config.format : 'wav'
   return {
     model: input.modelId,
-    text_prompt: input.text.trim(),
-    ...(input.voiceId ? { speaker: input.voiceId } : {}),
+    text_prompt: textPrompt,
+    ...(referenceAudioData.length
+      ? { references: referenceAudioData.map((audio_data) => ({ audio_data })) }
+      : {}),
+    ...(input.voiceId.trim() ? { speaker: input.voiceId.trim() } : {}),
     audio_config: {
-      format: config.format,
+      format,
       sample_rate: config.sampleRate,
       speech_rate: config.speechRate,
       loudness_rate: config.loudnessRate,
       pitch_rate: config.pitchRate,
       enable_subtitle: config.enableSubtitle
     },
-    watermark: { aigc_watermark: config.aigcWatermark },
-    aigc_metadata: { enable: false }
-  }
-}
-
-/**
- * 火山引擎语音合成 1.0 的请求体（纯函数，便于对协议做 wire 断言）。
- *
- * 实现边界：只发送 /api/v1/tts 文档化的四个对象——app（appid + token + cluster）、
- * user（uid 用于链路追踪）、audio（voice_type / encoding / speed_ratio）、request
- * （reqid / text / operation=query）。1.0 的输出规格由 voice_type 决定，请求体里没有
- * 采样率与码率字段，所以节点上那两项对该通道既不呈现也不发送。aigc 水印在 1.0 是另一
- * 组字段且非通用能力，这里不猜字段名，因此不发送。
- */
-export function buildVolcTtsBody(
-  p: Pick<ProviderConfig, 'apiKey'>,
-  input: Pick<SpeechGenerateInput, 'text' | 'voiceId'>,
-  config: SpeechConfig,
-  reqid: string
-): Record<string, unknown> {
-  return {
-    app: { appid: config.volcAppId, token: p.apiKey, cluster: config.volcCluster },
-    user: { uid: VOLC_UID },
-    audio: {
-      voice_type: input.voiceId.trim(),
-      encoding: VOLC_ENCODINGS.has(config.format) ? config.format : 'mp3',
-      speed_ratio: config.speed
-    },
-    request: { reqid, text: input.text.trim(), operation: 'query' }
+    watermark: { aigc_watermark: config.aigcWatermark, aigc_metadata: { enable: false } }
   }
 }
 
@@ -423,29 +389,37 @@ async function downloadBinary(url: string): Promise<Buffer> {
   return buf
 }
 
-/**
- * 豆包语音合成（seed-audio-1.0）：一次请求同步返回 Base64 音频与可选字幕。
- * 请求体的实现边界见 buildDoubaoSpeechBody。
- */
-async function generateViaDoubao(
+/** 火山引擎语音合成 1.0：一次请求同步返回 Base64 音频与可选字幕。 */
+async function generateViaVolc(
   p: ProviderConfig,
   input: SpeechGenerateInput
 ): Promise<SpeechGenerateResult> {
   const config = input.config
   const base = p.baseURL.replace(/\/+$/, '')
+  const referenceAudioData = await readVolcReferenceAudio(input)
+  const body = buildVolcSpeechBody(input, config, referenceAudioData)
+  const textPrompt = typeof body.text_prompt === 'string' ? body.text_prompt : ''
+  const audioConfig = body.audio_config as { format: string }
+  if (textPrompt.length > SPEECH_TEXT_LIMITS.volc) {
+    throw new GatewayError(
+      'INVALID_INPUT',
+      `火山语音合成 1.0 提示词超过 ${SPEECH_TEXT_LIMITS.volc} 字符（参考音频引用也计入上限）`
+    )
+  }
 
   const res = await fetch(`${base}/api/v3/tts/create`, {
     method: 'POST',
     headers: {
       'X-Api-Key': p.apiKey,
+      'X-Api-Request-Id': randomUUID(),
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify(buildDoubaoSpeechBody(input, config))
+    body: JSON.stringify(body)
   })
 
   if (!res.ok) {
     const body = await res.text().catch(() => '')
-    throw upstreamError(res.status, body, '豆包语音合成失败')
+    throw upstreamError(res.status, body, '火山语音合成失败')
   }
   const payload = (await res.json().catch(() => null)) as {
     code?: number
@@ -457,64 +431,61 @@ async function generateViaDoubao(
   if (typeof payload?.code === 'number' && payload.code !== 0) {
     throw new GatewayError(
       'UPSTREAM_ERROR',
-      `豆包语音合成失败 ${payload.code}：${payload.message || '未知错误'}`
+      `火山语音合成失败 ${payload.code}：${payload.message || '未知错误'}`
     )
   }
   const audio = payload?.audio
-  if (!audio) throw new GatewayError('EMPTY_RESULT', '豆包语音合成未返回音频数据')
+  if (!audio) throw new GatewayError('EMPTY_RESULT', '火山语音合成未返回音频数据')
 
   const buf = Buffer.from(audio, 'base64')
-  if (!buf.length) throw new GatewayError('EMPTY_RESULT', '豆包返回的音频数据无效')
+  if (!buf.length) throw new GatewayError('EMPTY_RESULT', '火山返回的音频数据无效')
 
-  const asset = await saveAudioAsset(input.projectId, buf, config.format, input.text.trim())
+  const asset = await saveAudioAsset(input.projectId, buf, audioConfig.format, input.text.trim())
   const subtitle = config.enableSubtitle ? normalizeSubtitle(payload?.subtitle) : undefined
   return subtitle ? { asset, subtitle } : { asset }
 }
 
-/**
- * 火山引擎语音合成 1.0：一次请求同步返回 Base64 音频。鉴权头是 `Bearer;{token}`，
- * 分号是协议要求而不是笔误。
- */
-async function generateViaVolc(
-  p: ProviderConfig,
-  input: SpeechGenerateInput
-): Promise<SpeechGenerateResult> {
-  const config = input.config
-  const base = p.baseURL.replace(/\/+$/, '')
-
-  const res = await fetch(`${base}/api/v1/tts`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer;${p.apiKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(buildVolcTtsBody(p, input, config, randomUUID()))
-  })
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw upstreamError(res.status, body, '火山语音合成失败')
-  }
-  const payload = (await res.json().catch(() => null)) as {
-    code?: number
-    message?: string
-    data?: string
-  } | null
-
-  if (typeof payload?.code === 'number' && payload.code !== VOLC_OK_CODE) {
+/** 从项目媒体库读取火山语音合成 1.0 的参考音频，并在发请求前执行文档限制。 */
+async function readVolcReferenceAudio(input: SpeechGenerateInput): Promise<string[]> {
+  const ids = input.referenceAudioIds ?? []
+  if (ids.length > VOLC_REFERENCE_AUDIO_MAX_COUNT) {
     throw new GatewayError(
-      'UPSTREAM_ERROR',
-      `火山语音合成失败 ${payload.code}：${payload.message || '未知错误'}`
+      'INVALID_INPUT',
+      `火山语音合成 1.0 最多支持 ${VOLC_REFERENCE_AUDIO_MAX_COUNT} 段参考音频`
     )
   }
-  const audio = payload?.data
-  if (!audio) throw new GatewayError('EMPTY_RESULT', '火山语音合成未返回音频数据')
 
-  const buf = Buffer.from(audio, 'base64')
-  if (!buf.length) throw new GatewayError('EMPTY_RESULT', '火山语音返回的音频数据无效')
-
-  const encoding = VOLC_ENCODINGS.has(config.format) ? config.format : 'mp3'
-  return { asset: await saveAudioAsset(input.projectId, buf, encoding, input.text.trim()) }
+  const encoded: string[] = []
+  for (const id of ids) {
+    const row = getDb()
+      .prepare('SELECT path FROM media WHERE id = ?')
+      .get(id) as { path: string } | undefined
+    if (!row || !row.path.startsWith(`projects/${input.projectId}/media/`)) {
+      throw new GatewayError('MEDIA_NOT_FOUND', '火山参考音频不存在或不属于当前项目')
+    }
+    const extension = row.path.slice(row.path.lastIndexOf('.')).toLowerCase()
+    if (!['.wav', '.mp3', '.pcm', '.ogg', '.opus'].includes(extension)) {
+      throw new GatewayError(
+        'INVALID_INPUT',
+        '火山参考音频仅支持 wav、mp3、pcm 或 ogg_opus 格式'
+      )
+    }
+    const media = await readMediaBuffer(id)
+    if (!media) throw new GatewayError('MEDIA_NOT_FOUND', '火山参考音频文件读取失败')
+    if (media.buf.length > VOLC_REFERENCE_AUDIO_MAX_BYTES) {
+      throw new GatewayError('INVALID_INPUT', '火山参考音频单段不能超过 10MB')
+    }
+    const absPath = getMediaAbsPath(row.path)
+    const durationMs = absPath ? await probeMediaDurationMs(absPath).catch(() => 0) : 0
+    if (durationMs > VOLC_REFERENCE_AUDIO_MAX_SECONDS * 1000) {
+      throw new GatewayError(
+        'INVALID_INPUT',
+        `火山参考音频单段不能超过 ${VOLC_REFERENCE_AUDIO_MAX_SECONDS} 秒，当前约 ${(durationMs / 1000).toFixed(1)} 秒`
+      )
+    }
+    encoded.push(media.buf.toString('base64'))
+  }
+  return encoded
 }
 
 /** 字幕只保留结构化时间轴；字段缺失时丢弃整条字幕而不是伪造空句子。 */

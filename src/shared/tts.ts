@@ -1,33 +1,28 @@
-/** TTS 语音复刻节点配置：云端 MiniMax 是默认通道，本地 ComfyUI 保留为显式选项。 */
+/** MiniMax 语音克隆节点配置；ComfyUI 字段仅留给旧配置兼容读取。 */
+import {
+  MINIMAX_ASYNC_SPEECH_MODELS,
+  SPEECH_LANGUAGE_BOOSTS,
+  isSpeechLanguageBoostSupported
+} from './speech'
 
 /** IndexTTS-2.5 支持的合成语言；zhen 为中英混说自动判别。 */
 export type TtsLang = 'zhen' | 'ZH' | 'EN' | 'JA' | 'ES' | 'AR'
 export type TtsBackend = 'comfyui' | 'minimax'
-/** 输出音频格式；MiniMax 的 T2A 不产出 wav，取值域按后端划分。 */
-export type TtsFormat = 'wav' | 'mp3' | 'flac'
+/** 输出音频格式；MiniMax async T2A 与本地旧格式按后端收敛。 */
+export type TtsFormat = 'wav' | 'mp3' | 'flac' | 'pcm' | 'pcmu_raw' | 'pcmu_wav' | 'opus'
 
-/** MiniMax language_boost 在复刻链路里的常用取值；空串表示不传该字段。 */
+export const MINIMAX_VOICE_CLONE_MODELS: ReadonlyArray<string> = MINIMAX_ASYNC_SPEECH_MODELS
+
+/** 克隆节点不指定 language_boost 时省略；其余枚举与异步 T2A 共用。 */
 export const TTS_LANGUAGE_BOOSTS: ReadonlyArray<{ value: string; label: string }> = [
   { value: '', label: '不指定' },
-  { value: 'auto', label: '自动判别' },
-  { value: 'Chinese', label: '中文' },
-  { value: 'Chinese,Yue', label: '中文（粤语）' },
-  { value: 'English', label: '英文' },
-  { value: 'Japanese', label: '日语' },
-  { value: 'Korean', label: '韩语' },
-  { value: 'Spanish', label: '西语' },
-  { value: 'French', label: '法语' },
-  { value: 'German', label: '德语' },
-  { value: 'Russian', label: '俄语' },
-  { value: 'Portuguese', label: '葡语' },
-  { value: 'Italian', label: '意语' },
-  { value: 'Arabic', label: '阿语' }
+  ...SPEECH_LANGUAGE_BOOSTS
 ]
 
 export interface TtsConfig {
   featureKey?: string
   version: 1
-  /** MiniMax 快速复刻（默认，云端）或本地 ComfyUI IndexTTS；两者参数互不发送。 */
+  /** 当前音色克隆固定使用 MiniMax；comfyui 仅是旧配置的兼容值。 */
   backend: TtsBackend
   /** MiniMax 供应商 ID（backend=minimax 时必填）。 */
   providerId: string
@@ -39,11 +34,9 @@ export interface TtsConfig {
   needNoiseReduction: boolean
   needVolumeNormalization: boolean
   aigcWatermark: boolean
-  /**
-   * 复刻相似度，[0, 1]；越接近 1 越贴近原音，但更易放大底噪。
-   * MiniMax 的 text_validation 是「参考音频原文」字符串（≤200 字），不是开关：
-   * 实测发布尔值一律 2013 invalid params，所以这里没有对应的布尔配置项。
-   */
+  /** MiniMax 参考音频原文校验，可选，最多 200 字；空串时不发送校验字段。 */
+  textValidation: string
+  /** 原文校验阈值，[0, 1]；仅在填写 textValidation 时生效。 */
   accuracy: number
   /** 语言增强（language_boost）；空串表示不传。 */
   languageBoost: string
@@ -94,15 +87,17 @@ export const MINIMAX_CLONE_MIMES = [
 export const MINIMAX_CLONE_MAX_BYTES = 20 * 1024 * 1024
 export const MINIMAX_CLONE_MIN_SECONDS = 10
 export const MINIMAX_CLONE_MAX_SECONDS = 5 * 60
+/** 可选 clone_prompt 音频时长必须小于 8 秒。 */
+export const MINIMAX_CLONE_PROMPT_MAX_SECONDS = 8
 /** 复刻音色 7 天未调用会被服务端删除；UI 必须显式提示。 */
 export const MINIMAX_CLONE_RETENTION_DAYS = 7
 
 /**
  * 每个后端真正会落盘的格式取值域。UI 下拉与 `parseTtsConfig` 共用这一份，
- * 避免出现「下拉里根本没有、却仍是当前值」的格式（MiniMax 的 T2A 不产出 wav）。
+ * 避免出现「下拉里根本没有、却仍是当前值」的格式。
  */
 export const TTS_FORMATS_BY_BACKEND: Record<TtsBackend, ReadonlyArray<TtsFormat>> = {
-  minimax: ['mp3', 'flac'],
+  minimax: ['mp3', 'wav', 'pcm', 'flac', 'pcmu_raw', 'pcmu_wav', 'opus'],
   comfyui: ['wav', 'mp3', 'flac']
 }
 
@@ -115,6 +110,7 @@ export const DEFAULT_TTS_CONFIG: TtsConfig = {
   needNoiseReduction: false,
   needVolumeNormalization: false,
   aigcWatermark: false,
+  textValidation: '',
   accuracy: 0.7,
   languageBoost: '',
   promptMediaId: '',
@@ -156,17 +152,24 @@ export function parseTtsConfig(text: string): TtsConfig {
     const format: TtsFormat = formats.includes(raw.format as TtsFormat)
       ? (raw.format as TtsFormat)
       : formats[0]
+    const modelId = typeof raw.modelId === 'string' && raw.modelId ? raw.modelId : 'speech-2.8-turbo'
+    const languageBoost =
+      TTS_LANGUAGE_BOOSTS.some((item) => item.value === raw.languageBoost) &&
+      isSpeechLanguageBoostSupported(modelId, String(raw.languageBoost))
+        ? (raw.languageBoost as string)
+        : ''
     return {
       version: 1,
       backend,
       providerId: typeof raw.providerId === 'string' ? raw.providerId : '',
-      modelId: typeof raw.modelId === 'string' && raw.modelId ? raw.modelId : 'speech-2.8-turbo',
+      modelId,
       voiceId: typeof raw.voiceId === 'string' ? raw.voiceId : '',
       needNoiseReduction: raw.needNoiseReduction === true,
       needVolumeNormalization: raw.needVolumeNormalization === true,
       aigcWatermark: raw.aigcWatermark === true,
+      textValidation: typeof raw.textValidation === 'string' ? raw.textValidation.slice(0, 200) : '',
       accuracy: clampNumber(raw.accuracy, 0, 1, 0.7),
-      languageBoost: typeof raw.languageBoost === 'string' ? raw.languageBoost : '',
+      languageBoost,
       promptMediaId: typeof raw.promptMediaId === 'string' ? raw.promptMediaId : '',
       promptMediaPath: typeof raw.promptMediaPath === 'string' ? raw.promptMediaPath : '',
       promptMediaMime: typeof raw.promptMediaMime === 'string' ? raw.promptMediaMime : '',

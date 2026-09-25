@@ -3,7 +3,11 @@
 // 这是「模型驱动输入/输出结构」的执行侧：端口由 NodeTypeSpec.resolvePorts 按
 // backend 派生，执行器同样只读取当前 backend 真正需要的输入——不按上游节点标题
 // 或类型猜测，也不会把某家供应商的参数发给另一家。
-import { parseSpeechConfig, SPEECH_TEXT_LIMITS } from '@shared/speech'
+import {
+  VOLC_REFERENCE_AUDIO_MAX_COUNT,
+  parseSpeechConfig,
+  SPEECH_TEXT_LIMITS
+} from '@shared/speech'
 import { parseVoiceProfile } from '@shared/voice-design'
 import { inputJson, inputMedia, inputText } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
@@ -25,7 +29,7 @@ export const speechExecutor = async (ctx: NodeExecutionContext): Promise<NodeExe
   if (!ctx.gateway.resolveModelFeature && !config.providerId) return { status: 'skipped', reason: '未选择语音模型' }
   const effectiveConfig = option ? {
     ...config,
-    backend: option.provider.specId === 'minimax' ? 'minimax' : option.provider.specId === 'doubao-speech' ? 'doubao' : config.backend
+    backend: option.provider.specId === 'minimax' ? 'minimax' : option.provider.specId === 'volc-speech' ? 'volc' : config.backend
   } : config
 
   const limit = SPEECH_TEXT_LIMITS[effectiveConfig.backend]
@@ -34,29 +38,47 @@ export const speechExecutor = async (ctx: NodeExecutionContext): Promise<NodeExe
   }
 
   // 音色优先级：上游「音色设计」节点的音色档案 > 节点内填写的 Voice ID。
-  const profile = inputJson(ctx.inputs, 'in-voice')
-    .map((value) => parseVoiceProfile(value))
-    .find((value): value is NonNullable<typeof value> => value !== null)
-  const voiceId = profile?.voice_id ?? config.voiceId.trim()
-
-  // 豆包参考音频通道尚未接入（见 gateway/audio.ts 的实现边界说明），
-  // 因此这里只做存在性提示，不把上游音频悄悄丢弃后假装合成成功。
-  const referenceAudio = inputMedia(ctx.inputs, 'in-audio', 'audio')
-  if (effectiveConfig.backend === 'doubao' && referenceAudio.length > 0) {
+  const profile =
+    effectiveConfig.backend === 'minimax'
+      ? inputJson(ctx.inputs, 'in-voice')
+          .map((value) => parseVoiceProfile(value))
+          .find((value): value is NonNullable<typeof value> => value !== null)
+      : undefined
+  // 连线音频按连线顺序排列，节点上传项追加在末尾；两种来源合并后共同受三段上限约束。
+  const connectedAudio =
+    effectiveConfig.backend === 'volc' ? inputMedia(ctx.inputs, 'in-audio', 'audio') : []
+  const referenceAudioIds = [
+    ...connectedAudio.map((item) => item.mediaId),
+    ...(effectiveConfig.backend === 'volc' && config.referenceAudioId && config.referenceAudioPath
+      ? [config.referenceAudioId]
+      : [])
+  ]
+  if (
+    effectiveConfig.backend === 'volc' &&
+    referenceAudioIds.length > VOLC_REFERENCE_AUDIO_MAX_COUNT
+  ) {
     return {
       status: 'failed',
-      reason: '豆包参考音频（references）通道尚未接入，请改用音色 ID 或 MiniMax 通道'
+      reason: `火山语音合成 1.0 最多支持 ${VOLC_REFERENCE_AUDIO_MAX_COUNT} 段参考音频，当前连接了 ${referenceAudioIds.length} 段`
     }
   }
 
-  // 火山 1.0 的两个必填前置条件：AppID 在节点配置里、voice_type 是必填音色标识。
-  // 缺任何一项都直接跳过，不发一个必然 4xx 的请求。
-  if (config.backend === 'volc' && !config.volcAppId) {
-    return { status: 'skipped', reason: '火山语音合成 1.0 未填写 AppID' }
+  if (
+    effectiveConfig.backend === 'minimax' &&
+    referenceAudioIds.length === 0 &&
+    profile?.provider === 'volc-speech'
+  ) {
+    return {
+      status: 'failed',
+      reason: '火山 speaker ID 不能用作 MiniMax voice_id；请连接 MiniMax 音色设计/克隆结果或填写 MiniMax voice_id'
+    }
   }
-  if (config.backend === 'volc' && !voiceId) {
-    return { status: 'skipped', reason: '火山语音合成 1.0 未填写音色 ID（voice_type）' }
-  }
+
+  // 火山 speaker 在节点参数中填写，MiniMax 音色档案只会进入 MiniMax 请求。
+  const voiceId =
+    effectiveConfig.backend === 'minimax'
+      ? profile?.voice_id ?? config.voiceId.trim()
+      : config.voiceId.trim()
 
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
 
@@ -67,6 +89,7 @@ export const speechExecutor = async (ctx: NodeExecutionContext): Promise<NodeExe
       modelId: option?.model.id ?? config.modelId,
       text,
       voiceId,
+      ...(referenceAudioIds.length ? { referenceAudioIds } : {}),
       config: effectiveConfig
     })
     if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
@@ -85,7 +108,7 @@ export const speechExecutor = async (ctx: NodeExecutionContext): Promise<NodeExe
             prompt: text.slice(0, 80),
             runId: ctx.runId,
             // 溯源只记网关确认「实际发出去」的音色：MiniMax 留空时网关会兜底成系统音色，
-            // 节点上的原值是空的；豆包/OpenAI 留空时服务端用了谁我们不知道，那就宁可不写。
+            // 节点上的原值是空的；火山留空时服务端用了谁我们不知道，那就宁可不写。
             voiceId: result.data.voiceId
           }
         )

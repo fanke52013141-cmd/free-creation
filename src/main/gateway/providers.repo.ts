@@ -35,7 +35,7 @@ interface CatalogRow {
 const catalogSpec = (protocol: string): ProviderConfig['specId'] => {
   if (protocol === 'minimax') return 'minimax'
   if (protocol === 'toapis') return 'toapis'
-  if (protocol === 'volcengine') return 'doubao-speech'
+  if (protocol === 'volcengine') return 'volc-speech'
   if (protocol === 'openrouter') return 'openrouter'
   return 'relay'
 }
@@ -100,7 +100,7 @@ export function bootstrapLegacyProvidersToCatalog(host: SqliteModelHost): Legacy
   const protocolFor = (specId: ProviderConfig['specId']): Connection['protocol'] => {
     if (specId === 'minimax') return 'minimax'
     if (specId === 'toapis') return 'toapis'
-    if (specId === 'doubao-speech') return 'volcengine'
+    if (specId === 'volc-speech') return 'volcengine'
     if (specId === 'openrouter') return 'openrouter'
     return 'openai-compatible'
   }

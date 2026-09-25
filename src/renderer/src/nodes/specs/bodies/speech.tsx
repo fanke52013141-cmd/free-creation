@@ -1,4 +1,4 @@
-// 配音节点 Body（模型驱动：MiniMax 异步 / 豆包语音 / OpenAI 兼容）。
+// 配音节点 Body（MiniMax 异步 / 火山引擎语音合成 1.0）。
 //
 // 这里不绕过 executor 调用模型：按钮只把当前配置与正文写回节点，然后交给统一的
 // runNodeManually 运行路径。参数分组随 config.backend 变化——这正是用户要的
@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import { mediaUrl, type NodeBodyProps, type NodeSettingsProps } from '../../registry'
 import { toast } from '../../../stores/toast'
+import { countIncomingConnections } from '../../../canvas/graph'
 import { markUndoPoint } from '../../../canvas/history'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { runNodeManually } from '../../../engine/executor'
@@ -18,25 +19,27 @@ import {
   SPEECH_BACKENDS,
   SPEECH_BITRATES,
   SPEECH_EMOTIONS,
-  SPEECH_FORMATS_BY_BACKEND,
-  SPEECH_LANGUAGE_BOOSTS,
-  SPEECH_SAMPLE_RATE_BACKENDS,
-  SPEECH_SAMPLE_RATES,
-  SPEECH_SOUND_EFFECTS,
+  MINIMAX_ASYNC_SPEECH_MODELS,
   SPEECH_TEXT_LIMITS,
-  VOLC_CLUSTERS,
+  VOLC_REFERENCE_AUDIO_MAX_BYTES,
+  VOLC_REFERENCE_AUDIO_MAX_COUNT,
+  VOLC_REFERENCE_AUDIO_MAX_SECONDS,
+  volcReferencePromptPrefix,
+  defaultSpeechFormat,
+  defaultSpeechSampleRate,
   parseSpeechConfig,
+  isSpeechEmotionSupported,
   serializeSpeechConfig,
   type SpeechBackend,
   type SpeechConfig,
-  type SpeechEmotion,
-  type SpeechFormat
+  type SpeechEmotion
 } from '@shared/speech'
 import type { ProviderSpecId } from '@shared/types'
 import {
   clearSelectedMediaHistory,
   MediaFileActions,
   MediaResultGrid,
+  pickImportedAsset,
   removeMediaResultFromShape,
   selectMediaResult,
   useClickGuard
@@ -49,13 +52,10 @@ interface SubtitleSentence {
   text: string
 }
 
-/** 每种协议只接受对应供应商：原生协议与 OpenAI 兼容端点不能互相顶替。 */
+/** 每种当前协议只接受对应供应商：MiniMax 与火山引擎原生 API 不能互相顶替。 */
 function acceptsProvider(backend: SpeechBackend, specId: ProviderSpecId): boolean {
   if (backend === 'minimax') return specId === 'minimax'
-  // 火山 1.0 与豆包共用 openspeech.bytedance.com 的供应商实例：同一份 baseURL 与
-  // access token，只是路径不同（/api/v1/tts 与 /api/v3/tts/create）。
-  if (backend === 'doubao' || backend === 'volc') return specId === 'doubao-speech'
-  return specId !== 'minimax' && specId !== 'doubao-speech'
+  return specId === 'volc-speech'
 }
 
 function subtitleSentences(shape: NodeBodyProps['shape']): SubtitleSentence[] {
@@ -87,14 +87,29 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
   const [draft, setDraft] = useState(shape.props.text)
   const [busy, setBusy] = useState(false)
   const [playing, setPlaying] = useState(false)
+  const [referencePlaying, setReferencePlaying] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const referenceAudioRef = useRef<HTMLAudioElement | null>(null)
 
-  const options = modelsByModality(providers, 'audio').filter((option) =>
-    acceptsProvider(config.backend, option.provider.specId)
+  const incomingReferences = countIncomingConnections(editor, shape.id, 'in-audio')
+  const uploadedReference = Boolean(config.referenceAudioId && config.referenceAudioPath)
+  const referenceCount =
+    config.backend === 'volc' ? incomingReferences + (uploadedReference ? 1 : 0) : 0
+
+  const options = modelsByModality(providers, 'audio').filter(
+    (option) =>
+      acceptsProvider(config.backend, option.provider.specId) &&
+      (config.backend === 'minimax'
+        ? MINIMAX_ASYNC_SPEECH_MODELS.includes(option.model.id)
+        : option.model.id === 'seed-audio-1.0')
   )
-  const formats = SPEECH_FORMATS_BY_BACKEND[config.backend]
+  const emotionOptions = SPEECH_EMOTIONS.filter((item) =>
+    isSpeechEmotionSupported(config.modelId, item.value)
+  )
   const sentences = subtitleSentences(shape)
-  const limit = SPEECH_TEXT_LIMITS[config.backend]
+  const limit =
+    SPEECH_TEXT_LIMITS[config.backend] -
+    (config.backend === 'volc' ? volcReferencePromptPrefix(referenceCount).length : 0)
 
   useEffect(() => {
     if (!providersLoaded) void loadProviders()
@@ -103,8 +118,11 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
   useEffect(() => {
     return () => {
       audioRef.current?.pause()
+      referenceAudioRef.current?.pause()
       if (audioRef.current) audioRef.current.src = ''
+      if (referenceAudioRef.current) referenceAudioRef.current.src = ''
       audioRef.current = null
+      referenceAudioRef.current = null
     }
   }, [])
 
@@ -129,15 +147,76 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
     editor.updateShape({ id: shape.id, type: 'node-card', props: { text } })
   }
 
+  const uploadReferenceAudio = async (): Promise<void> => {
+    if (!project) return toast('项目未就绪')
+    const result = await window.api.pickMedia(project.id)
+    if (!result.ok) return toast(`上传失败：${result.error.message}`)
+    const asset = pickImportedAsset({
+      result: result.data,
+      kind: 'audio',
+      noun: '一段参考音频',
+      mismatch: '请选择音频文件',
+      projectId: project.id
+    })
+    if (!asset) return
+    const extension = asset.path.slice(asset.path.lastIndexOf('.')).toLowerCase()
+    if (!['.wav', '.mp3', '.pcm', '.ogg', '.opus'].includes(extension)) {
+      toast('火山语音合成 1.0 参考音频仅支持 wav、mp3、pcm 或 ogg_opus 格式')
+      return
+    }
+    if (asset.sizeBytes > VOLC_REFERENCE_AUDIO_MAX_BYTES) {
+      toast(
+        `火山语音合成 1.0 参考音频单段不能超过 ${VOLC_REFERENCE_AUDIO_MAX_BYTES / (1024 * 1024)} MB`
+      )
+      return
+    }
+    updateConfig({
+      referenceAudioId: asset.id,
+      referenceAudioPath: asset.path,
+      referenceAudioName: asset.name ?? '参考音频'
+    })
+    markUndoPoint(editor, 'speech-reference-upload')
+  }
+
+  const removeReferenceAudio = (): void => {
+    referenceAudioRef.current?.pause()
+    referenceAudioRef.current = null
+    setReferencePlaying(false)
+    updateConfig({
+      referenceAudioId: '',
+      referenceAudioPath: '',
+      referenceAudioName: ''
+    })
+    markUndoPoint(editor, 'speech-reference-remove')
+  }
+
+  const toggleReferencePlay = (): void => {
+    if (!config.referenceAudioPath) return
+    if (referencePlaying) {
+      referenceAudioRef.current?.pause()
+      setReferencePlaying(false)
+      return
+    }
+    referenceAudioRef.current?.pause()
+    const player = new Audio(mediaUrl(config.referenceAudioPath))
+    player.currentTime = 0
+    player.onended = () => setReferencePlaying(false)
+    player.onpause = () => setReferencePlaying(false)
+    referenceAudioRef.current = player
+    void player.play().then(() => setReferencePlaying(true))
+  }
+
   const switchBackend = (backend: SpeechBackend): void => {
-    const allowed = SPEECH_FORMATS_BY_BACKEND[backend]
+    const format = defaultSpeechFormat(backend)
     updateConfig({
       backend,
-      // 换协议时把不适用的格式收敛到该协议的第一档，避免配置与请求体互相矛盾。
-      ...(allowed.includes(config.format) ? {} : { format: allowed[0] }),
-      // 供应商与协议强绑定：换协议必须重选，不能把 MiniMax 实例留给豆包通道。
+      format,
+      sampleRate: defaultSpeechSampleRate(backend, format),
+      // 供应商与协议强绑定：换协议必须重选，不能把 MiniMax 实例留给火山通道。
       providerId: '',
-      modelId: backend === 'doubao' ? 'seed-audio-1.0' : 'speech-2.8-hd'
+      modelId: backend === 'volc' ? 'seed-audio-1.0' : 'speech-2.8-hd',
+      // 两家供应商的音色 ID 不兼容，切换时清空以免把旧 ID 发给另一家。
+      voiceId: ''
     })
     markUndoPoint(editor, 'speech-backend')
   }
@@ -175,18 +254,13 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
   }
 
   const hasOutput = Boolean(shape.props.mediaPath)
-  // 火山 1.0 的 appid 与 voice_type 都是请求体必填项，缺任何一项执行器都会跳过，
-  // 所以按钮与卡片上的事实句都按同一判据给出（§16.16：运行前就能看出会不会跳过）。
-  const volcMissing =
-    config.backend !== 'volc'
-      ? ''
-      : !config.volcAppId
-        ? '未填写 AppID，运行会跳过'
-        : !config.voiceId.trim()
-          ? '未填写音色 ID（voice_type），运行会跳过'
-          : ''
   const canGenerate =
-    Boolean(draft.trim()) && Boolean(config.providerId) && draft.length <= limit && !volcMissing
+    Boolean(draft.trim()) &&
+    options.some(
+      (option) => option.provider.id === config.providerId && option.model.id === config.modelId
+    ) &&
+    draft.length <= limit &&
+    referenceCount <= VOLC_REFERENCE_AUDIO_MAX_COUNT
 
   return (
     <div className="node-tts node-speech">
@@ -197,10 +271,10 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
           <span>合成通道</span>
         </div>
         <div className="tts-options">
-          <label className="opt-label">协议</label>
+          <label className="opt-label">供应商</label>
           <AppSelect
             className="gen-select small"
-            aria-label="协议"
+            aria-label="语音合成供应商"
             value={config.backend}
             onPointerDown={(e) => e.stopPropagation()}
             onChange={(e) => switchBackend(e.target.value as SpeechBackend)}
@@ -225,7 +299,13 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
             onChange={(e) => {
               const selected = options.find((item) => item.key === e.target.value)
               if (selected) {
-                updateConfig({ providerId: selected.provider.id, modelId: selected.model.id })
+                updateConfig({
+                  providerId: selected.provider.id,
+                  modelId: selected.model.id,
+                  emotion: isSpeechEmotionSupported(selected.model.id, config.emotion)
+                    ? config.emotion
+                    : ''
+                })
               }
             }}
           >
@@ -263,80 +343,99 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
           spellCheck={false}
           value={config.voiceId}
           placeholder={
-            config.backend === 'volc'
-              ? 'voice_type，例如 BV001_streaming'
-              : config.backend === 'minimax'
-                ? // 留空不是"交给服务端"：MiniMax 两条 t2a 通道缺 voice_id 会在建任务前就被拒，
-                  // 所以网关固定兜底成这个系统音色。写出来才知道留空跑出来的是谁的声音。
-                  '音色 ID（留空用 MiniMax 系统音色 male-qn-qingse）'
-                : '音色 ID（留空由服务端决定音色）'
+            config.backend === 'minimax'
+              ? // 留空不是"交给服务端"：MiniMax 两条 t2a 通道缺 voice_id 会在建任务前就被拒，
+                // 所以网关固定兜底成这个系统音色。写出来才知道留空跑出来的是谁的声音。
+                '音色 ID（留空用 MiniMax 系统音色 male-qn-qingse）'
+              : 'speaker 音色 ID（可选）'
           }
           onPointerDown={(e) => e.stopPropagation()}
           onChange={(e) => updateConfig({ voiceId: e.target.value })}
         />
         <div className="gen-capability-note">
           {config.backend === 'volc'
-            ? '火山 1.0 只认自家的 voice_type；上游「音色设计 / 语音克隆」的 MiniMax 音色档案不是它的输入，节点上也没有 in-voice 端口。'
-            : '连接上游「音色设计 / 语音克隆」节点的音色档案时，以连线传入的 voice_id 为准。'}
+            ? '火山 speaker ID 可与参考音频同时使用；MiniMax 音色设计/克隆生成的 voice_id 不兼容。'
+            : '连接上游 MiniMax「音色设计 / 语音克隆」节点的音色档案时，以连线传入的 voice_id 为准。'}
         </div>
       </div>
 
-      {/* ── 火山引擎语音合成 1.0：appid 与 cluster 是请求体字段，不是供应商凭据 ── */}
+      {/* ── 火山引擎语音合成 1.0 可选参考音频 ── */}
       {config.backend === 'volc' && (
-        <div className="tts-section">
-          <div className="tts-options">
-            <label className="opt-label" title="请求体 app.appid，取自火山引擎控制台的应用 ID">
-              AppID
-            </label>
-            <input
-              className="gen-input"
-              aria-label="AppID"
-              spellCheck={false}
-              value={config.volcAppId}
-              placeholder="控制台应用 AppID"
-              onPointerDown={(e) => e.stopPropagation()}
-              onChange={(e) => updateConfig({ volcAppId: e.target.value })}
-            />
+        <div className="tts-section tts-reference-section">
+          <div className="tts-section-label">
+            <Icon name="audio" size={13} />
+            <span>参考音频（可选）</span>
           </div>
-          <div className="tts-options">
-            <label
-              className="opt-label"
-              title="请求体 app.cluster，音色所属集群；两个集群的音色不互通"
+          {uploadedReference ? (
+            <div className="tts-ref-player">
+              <button
+                className="audio-play-btn"
+                onPointerDown={(e) => stopEventPropagation(e)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  toggleReferencePlay()
+                }}
+              >
+                {referencePlaying ? '暂停' : '试听'}
+              </button>
+              <span className="tts-ref-name">{config.referenceAudioName || '参考音频'}</span>
+              <button
+                className="btn-ghost small"
+                title="替换参考音频"
+                onPointerDown={(e) => stopEventPropagation(e)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void uploadReferenceAudio()
+                }}
+              >
+                替换
+              </button>
+              <button
+                className="btn-ghost small danger"
+                title="移除参考音频"
+                onPointerDown={(e) => stopEventPropagation(e)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  removeReferenceAudio()
+                }}
+              >
+                移除
+              </button>
+            </div>
+          ) : (
+            <button
+              className="tts-upload-btn"
+              disabled={referenceCount >= VOLC_REFERENCE_AUDIO_MAX_COUNT}
+              onPointerDown={(e) => stopEventPropagation(e)}
+              onClick={(e) => {
+                e.stopPropagation()
+                void uploadReferenceAudio()
+              }}
             >
-              集群
-            </label>
-            <AppSelect
-              className="gen-select small"
-              aria-label="集群"
-              value={config.volcCluster}
-              onPointerDown={(e) => e.stopPropagation()}
-              onChange={(e) => updateConfig({ volcCluster: e.target.value })}
-            >
-              {VOLC_CLUSTERS.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </AppSelect>
-          </div>
-          <div className="tts-slider-row">
-            <label className="opt-label" title="请求体 audio.speed_ratio">
-              语速 {config.speed}
-            </label>
-            <input
-              type="range"
-              aria-label="语速"
-              min="0.5"
-              max="2"
-              step="0.05"
-              value={config.speed}
-              onPointerDown={(e) => e.stopPropagation()}
-              onChange={(e) => updateConfig({ speed: Number(e.target.value) })}
-            />
-          </div>
-          <span className={`node-wiring ${volcMissing ? 'warn' : 'ok'}`}>
-            {volcMissing || `AppID 与 voice_type 已填写，POST /api/v1/tts`}
+              <Icon name="upload" size={18} />
+              <span>上传参考音频</span>
+              <span className="tts-upload-hint">
+                可留空；最多 {VOLC_REFERENCE_AUDIO_MAX_COUNT} 段，每段不超过{' '}
+                {VOLC_REFERENCE_AUDIO_MAX_SECONDS} 秒 /{' '}
+                {VOLC_REFERENCE_AUDIO_MAX_BYTES / (1024 * 1024)} MB，支持 wav、mp3、pcm、ogg_opus
+              </span>
+            </button>
+          )}
+          <span className={`node-wiring ${referenceCount > 0 ? 'ok' : ''}`}>
+            {referenceCount > 0
+              ? `使用 ${incomingReferences} 段连线音频${uploadedReference ? '和 1 段本节点上传音频' : ''}`
+              : '未设置参考音频，按 text_prompt 描述生成，也可填写 speaker ID'}
           </span>
+          <div className="gen-capability-note">
+            {referenceCount > 0
+              ? `按连线顺序引用音频，本节点上传项追加在末尾；文本会自动引用 @音频1～@音频${Math.min(referenceCount, VOLC_REFERENCE_AUDIO_MAX_COUNT)}。speaker ID 可与参考音频一起发送。`
+              : '参考音频可选；speaker ID 也可单独使用。'}
+          </div>
+          {referenceCount > VOLC_REFERENCE_AUDIO_MAX_COUNT && (
+            <div className="gen-capability-note error" role="alert">
+              最多使用 {VOLC_REFERENCE_AUDIO_MAX_COUNT} 段参考音频，请减少连线数量。
+            </div>
+          )}
         </div>
       )}
 
@@ -385,13 +484,13 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
               />
             </div>
             <div className="tts-slider-row">
-              <label className="opt-label">音量 {config.volume.toFixed(1)}</label>
+              <label className="opt-label">音量 {config.volume.toFixed(2)}</label>
               <input
                 type="range"
                 aria-label="音量"
-                min="0.1"
+                min="0.01"
                 max="10"
-                step="0.1"
+                step="0.01"
                 value={config.volume}
                 onPointerDown={(e) => e.stopPropagation()}
                 onChange={(e) => updateConfig({ volume: Number(e.target.value) })}
@@ -420,57 +519,31 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
               onPointerDown={(e) => e.stopPropagation()}
               onChange={(e) => updateConfig({ emotion: e.target.value as SpeechEmotion })}
             >
-              {SPEECH_EMOTIONS.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </AppSelect>
-            <label className="opt-label">音效</label>
-            <AppSelect
-              className="gen-select small"
-              aria-label="音效"
-              value={config.soundEffects}
-              onPointerDown={(e) => e.stopPropagation()}
-              onChange={(e) => updateConfig({ soundEffects: e.target.value })}
-            >
-              {SPEECH_SOUND_EFFECTS.map((item) => (
+              {emotionOptions.map((item) => (
                 <option key={item.value} value={item.value}>
                   {item.label}
                 </option>
               ))}
             </AppSelect>
           </div>
-          <div className="tts-options">
-            <label className="opt-label">语言增强</label>
-            <AppSelect
-              className="gen-select small"
-              aria-label="语言增强"
-              value={config.languageBoost}
-              onPointerDown={(e) => e.stopPropagation()}
-              onChange={(e) => updateConfig({ languageBoost: e.target.value })}
-            >
-              {SPEECH_LANGUAGE_BOOSTS.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </AppSelect>
-          </div>
-          <label className="opt-label">发音词典（每行「词 拼音」）</label>
+          <label className="opt-label">读音纠正（可选）</label>
           <textarea
             className="gen-textarea tts short"
-            aria-label="发音词典（每行「词 拼音」）"
+            aria-label="读音纠正（可选）"
             value={config.pronunciationTones}
-            placeholder={'例如：\n调音台 tiao2 yin1 tai2'}
+            placeholder={'重庆/(chong2)(qing4)\n银行/(yin2)(hang2)'}
             onPointerDown={(e) => e.stopPropagation()}
             onChange={(e) => updateConfig({ pronunciationTones: e.target.value })}
           />
+          <div className="gen-capability-note">
+            仅 MiniMax
+            使用。每行一条，写“词/(拼音)(拼音)”，每个字一个拼音，数字标声调。例：朗读文本写“我去重庆的一家银行。”，这里写“重庆/(chong2)(qing4)”和“银行/(yin2)(hang2)”。
+          </div>
         </div>
       )}
 
-      {/* ── 豆包语音参数 ── */}
-      {config.backend === 'doubao' && (
+      {/* ── 火山引擎语音合成 1.0 参数 ── */}
+      {config.backend === 'volc' && (
         <div className="tts-section">
           <div className="tts-section-label">
             <Icon name="spark" size={13} />
@@ -529,42 +602,6 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
         </div>
       )}
 
-      {/* ── 输出格式：所有协议都要；采样率只有 MiniMax 与豆包的请求体读取 ── */}
-      <div className="tts-options">
-        <label className="opt-label">格式</label>
-        <AppSelect
-          className="gen-select small"
-          aria-label="格式"
-          value={config.format}
-          onPointerDown={(e) => e.stopPropagation()}
-          onChange={(e) => updateConfig({ format: e.target.value as SpeechFormat })}
-        >
-          {formats.map((f) => (
-            <option key={f} value={f}>
-              {f.toUpperCase()}
-            </option>
-          ))}
-        </AppSelect>
-        {SPEECH_SAMPLE_RATE_BACKENDS.includes(config.backend) && (
-          <>
-            <label className="opt-label">采样率</label>
-            <AppSelect
-              className="gen-select small"
-              aria-label="采样率"
-              value={String(config.sampleRate)}
-              onPointerDown={(e) => e.stopPropagation()}
-              onChange={(e) => updateConfig({ sampleRate: Number(e.target.value) })}
-            >
-              {SPEECH_SAMPLE_RATES.map((rate) => (
-                <option key={rate} value={rate}>
-                  {rate / 1000} kHz
-                </option>
-              ))}
-            </AppSelect>
-          </>
-        )}
-      </div>
-
       <button
         className="btn-generate"
         disabled={busy || !canGenerate}
@@ -612,9 +649,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
             </div>
             <div className="audio-player-info">
               <span className="audio-player-name">{shape.props.title}</span>
-              <span className="audio-player-meta">
-                {config.voiceId || '默认音色'} · {config.format.toUpperCase()}
-              </span>
+              <span className="audio-player-meta">{config.voiceId || '默认音色'}</span>
             </div>
             <div className="audio-player-actions">
               <button
@@ -674,7 +709,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
         </>
       )}
 
-      {/* ── 字幕：只有豆包开启字幕时才有内容 ── */}
+      {/* ── 字幕：只有火山语音合成 1.0 开启字幕时才有内容 ── */}
       {sentences.length > 0 && (
         <div className="tts-section speech-subtitle">
           <div className="tts-section-label">

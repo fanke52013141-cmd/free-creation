@@ -1,4 +1,4 @@
-// TTS 语音复刻节点 Body（默认 MiniMax 云端快速复刻，本地 IndexTTS 为显式选项）
+// TTS 语音克隆节点 Body（MiniMax voice_clone）。
 import { useEffect, useRef, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import { mediaUrl, type NodeBodyProps } from '../../registry'
@@ -11,15 +11,20 @@ import { useAppStore } from '../../../stores/app'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
 import { parseTtsConfig } from '@shared/tts'
+import { SPEECH_TEXT_LIMITS, isSpeechLanguageBoostSupported } from '@shared/speech'
 import {
   MINIMAX_CLONE_RETENTION_DAYS,
+  MINIMAX_CLONE_MAX_BYTES,
+  MINIMAX_CLONE_MAX_SECONDS,
+  MINIMAX_CLONE_MIMES,
+  MINIMAX_CLONE_MIN_SECONDS,
+  MINIMAX_CLONE_PROMPT_MAX_SECONDS,
+  MINIMAX_VOICE_CLONE_MODELS,
   TTS_FORMATS_BY_BACKEND,
-  TTS_LANGS,
   TTS_LANGUAGE_BOOSTS,
   isValidMiniMaxVoiceId,
   type TtsConfig,
-  type TtsFormat,
-  type TtsLang
+  type TtsFormat
 } from '@shared/tts'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { parseNodeExtra } from '../../nodeValues'
@@ -48,6 +53,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
   const providers = useGatewayStore((s) => s.providers)
   const providersLoaded = useGatewayStore((s) => s.loaded)
   const loadProviders = useGatewayStore((s) => s.load)
+  const openSettings = useGatewayStore((s) => s.openSettings)
   const config = parseTtsConfig(readNodeConfig(shape))
   const [draft, setDraft] = useState(shape.props.text)
   const [busy, setBusy] = useState(false)
@@ -56,7 +62,11 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const refAudioRef = useRef<HTMLAudioElement | null>(null)
   const minimaxModels = modelsByModality(providers, 'audio').filter(
-    (option) => option.provider.specId === 'minimax'
+    (option) =>
+      option.provider.specId === 'minimax' && MINIMAX_VOICE_CLONE_MODELS.includes(option.model.id)
+  )
+  const languageBoostOptions = TTS_LANGUAGE_BOOSTS.filter((item) =>
+    isSpeechLanguageBoostSupported(config.modelId, item.value)
   )
 
   useEffect(() => {
@@ -112,6 +122,30 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
       projectId: project.id
     })
     if (!audioAsset) return
+    const extension = audioAsset.path.slice(audioAsset.path.lastIndexOf('.')).toLowerCase()
+    if (!['.mp3', '.m4a', '.wav'].includes(extension)) {
+      toast('MiniMax 复刻参考音频仅支持 mp3、m4a 或 wav 格式')
+      return
+    }
+    if (audioAsset.sizeBytes > MINIMAX_CLONE_MAX_BYTES) {
+      toast(`MiniMax 复刻参考音频不能超过 ${MINIMAX_CLONE_MAX_BYTES / (1024 * 1024)} MB`)
+      return
+    }
+    if (
+      typeof audioAsset.durationSec === 'number' &&
+      audioAsset.durationSec > 0 &&
+      (audioAsset.durationSec < MINIMAX_CLONE_MIN_SECONDS ||
+        audioAsset.durationSec > MINIMAX_CLONE_MAX_SECONDS)
+    ) {
+      toast(
+        `MiniMax 复刻参考音频需 ${MINIMAX_CLONE_MIN_SECONDS} 秒至 ${MINIMAX_CLONE_MAX_SECONDS / 60} 分钟`
+      )
+      return
+    }
+    if (!MINIMAX_CLONE_MIMES.includes(audioAsset.mime.toLowerCase())) {
+      toast('MiniMax 复刻参考音频仅支持 mp3、m4a 或 wav 格式')
+      return
+    }
     updateConfig({
       refMediaId: audioAsset.id,
       refMediaPath: audioAsset.path,
@@ -133,6 +167,26 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
       projectId: project.id
     })
     if (!audioAsset) return
+    const extension = audioAsset.path.slice(audioAsset.path.lastIndexOf('.')).toLowerCase()
+    if (!['.mp3', '.m4a', '.wav'].includes(extension)) {
+      toast('MiniMax 克隆提示音仅支持 mp3、m4a 或 wav 格式')
+      return
+    }
+    if (audioAsset.sizeBytes > MINIMAX_CLONE_MAX_BYTES) {
+      toast(`MiniMax 克隆提示音不能超过 ${MINIMAX_CLONE_MAX_BYTES / (1024 * 1024)} MB`)
+      return
+    }
+    if (
+      typeof audioAsset.durationSec === 'number' &&
+      audioAsset.durationSec >= MINIMAX_CLONE_PROMPT_MAX_SECONDS
+    ) {
+      toast(`MiniMax 克隆提示音必须小于 ${MINIMAX_CLONE_PROMPT_MAX_SECONDS} 秒`)
+      return
+    }
+    if (!MINIMAX_CLONE_MIMES.includes(audioAsset.mime.toLowerCase())) {
+      toast('MiniMax 克隆提示音仅支持 mp3、m4a 或 wav 格式')
+      return
+    }
     updateConfig({
       promptMediaId: audioAsset.id,
       promptMediaPath: audioAsset.path,
@@ -295,6 +349,33 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
               ? '参考语音：取本节点上传的那份'
               : '参考语音：未上传且 in-audio 未连线，运行会跳过'}
         </span>
+        <label className="opt-label">参考语音原文（可选，最多 200 字）</label>
+        <input
+          className="gen-input"
+          aria-label="参考语音原文（可选，最多 200 字）"
+          value={config.textValidation}
+          maxLength={200}
+          placeholder="填写后校验录音内容是否与原文相符"
+          onPointerDown={(e) => e.stopPropagation()}
+          onChange={(e) => updateConfig({ textValidation: e.target.value })}
+        />
+        {config.textValidation.trim() && (
+          <div className="tts-slider-row">
+            <label className="opt-label">
+              原文校验阈值 {config.accuracy > 0 ? config.accuracy.toFixed(2) : '默认 0.70'}
+            </label>
+            <input
+              type="range"
+              aria-label="原文校验阈值"
+              min="0"
+              max="1"
+              step="0.05"
+              value={config.accuracy}
+              onPointerDown={(e) => e.stopPropagation()}
+              onChange={(e) => updateConfig({ accuracy: Number(e.target.value) })}
+            />
+          </div>
+        )}
       </div>
 
       {/* ── 合成文字 ── */}
@@ -312,8 +393,8 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
           onChange={(e) => setDraft(e.target.value)}
           onBlur={() => updateText(draft)}
         />
-        <div className="audio-text-meta">
-          {draft.length} 字 ·{' '}
+        <div className={`audio-text-meta ${draft.length > SPEECH_TEXT_LIMITS.minimax ? 'over-limit' : ''}`}>
+          {draft.length} / {SPEECH_TEXT_LIMITS.minimax} 字 ·{' '}
           {incomingText > 0
             ? `in-text 已连线 ${incomingText} 个，运行会与本文合并`
             : 'in-text 未连线，运行只用本文'}
@@ -324,27 +405,28 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
       <div className="tts-section tts-engine-section">
         <div className="tts-section-label">
           <Icon name="settings" size={13} />
-          <span>复刻引擎</span>
+          <span>MiniMax 音色克隆</span>
         </div>
-        <div className="tts-options">
-          <label className="opt-label">后端</label>
-          <AppSelect
-            className="gen-select small"
-            aria-label="后端"
-            value={config.backend}
-            onPointerDown={(e) => e.stopPropagation()}
-            onChange={(e) => {
-              const backend = e.target.value === 'minimax' ? 'minimax' : 'comfyui'
-              updateConfig({
-                backend,
-                ...(backend === 'minimax' && config.format === 'wav' ? { format: 'mp3' } : {})
-              })
-            }}
-          >
-            <option value="minimax">MiniMax · 快速复刻（云端）</option>
-            <option value="comfyui">本地 ComfyUI · IndexTTS</option>
-          </AppSelect>
-        </div>
+        {config.backend === 'comfyui' && (
+          <div className="gen-capability-note warn">
+            此节点保存了旧的本地 IndexTTS 配置。音色克隆现统一使用 MiniMax，请切换后选择 MiniMax 语音模型。
+            <button
+              className="btn-ghost small"
+              onPointerDown={(e) => stopEventPropagation(e)}
+              onClick={(e) => {
+                e.stopPropagation()
+                updateConfig({
+                  backend: 'minimax',
+                  providerId: '',
+                  modelId: 'speech-2.8-turbo',
+                  ...(config.format === 'wav' ? { format: 'mp3' } : {})
+                })
+              }}
+            >
+              切换到 MiniMax
+            </button>
+          </div>
+        )}
         {config.backend === 'minimax' && (
           <div className="tts-minimax-options">
             <AppSelect
@@ -355,7 +437,16 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
               onChange={(e) => {
                 const selected = minimaxModels.find((item) => item.key === e.target.value)
                 if (selected)
-                  updateConfig({ providerId: selected.provider.id, modelId: selected.model.id })
+                  updateConfig({
+                    providerId: selected.provider.id,
+                    modelId: selected.model.id,
+                    languageBoost: isSpeechLanguageBoostSupported(
+                      selected.model.id,
+                      config.languageBoost
+                    )
+                      ? config.languageBoost
+                      : ''
+                  })
               }}
             >
               <option value="">{providersLoaded ? '选择 MiniMax 语音模型…' : '加载模型中…'}</option>
@@ -365,6 +456,18 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
                 </option>
               ))}
             </AppSelect>
+            {providersLoaded && minimaxModels.length === 0 && (
+              <button
+                className="btn-ghost small"
+                onPointerDown={(e) => stopEventPropagation(e)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void openSettings()
+                }}
+              >
+                去配置 MiniMax 音色克隆模型
+              </button>
+            )}
             <input
               className={`gen-input ${voiceIdInvalid ? 'invalid' : ''}`}
               aria-label="自定义 Voice ID"
@@ -379,19 +482,6 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
                 Voice ID 需 8～256 位、以字母开头、只含字母数字与 - _，末位不能是 - 或 _
               </div>
             )}
-            <div className="tts-slider-row">
-              <label className="opt-label">相似度 {config.accuracy.toFixed(2)}</label>
-              <input
-                type="range"
-                aria-label="相似度"
-                min="0"
-                max="1"
-                step="0.05"
-                value={config.accuracy}
-                onPointerDown={(e) => e.stopPropagation()}
-                onChange={(e) => updateConfig({ accuracy: Number(e.target.value) })}
-              />
-            </div>
             <div className="tts-options">
               <label className="opt-label">语言增强</label>
               <AppSelect
@@ -401,7 +491,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
                 onPointerDown={(e) => e.stopPropagation()}
                 onChange={(e) => updateConfig({ languageBoost: e.target.value })}
               >
-                {TTS_LANGUAGE_BOOSTS.map((item) => (
+                {languageBoostOptions.map((item) => (
                   <option key={item.value} value={item.value}>
                     {item.label}
                   </option>
@@ -477,6 +567,11 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
                     onPointerDown={(e) => e.stopPropagation()}
                     onChange={(e) => updateConfig({ promptText: e.target.value })}
                   />
+                  {!config.promptText.trim() && (
+                    <div className="gen-capability-note error" role="alert">
+                      使用克隆提示音时，必须填写与该音频对应的原文。
+                    </div>
+                  )}
                 </>
               ) : (
                 <button
@@ -493,8 +588,8 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
             </div>
 
             <div className="gen-capability-note">
-              参考音频需为 mp3 / m4a / wav，10 秒至 5 分钟且不超过 20MB；复刻音色会通过 MiniMax T2A
-              生成新的独立音频资产。
+              参考音频需为 mp3 / m4a / wav，10 秒至 5 分钟且不超过 20MB；可选克隆提示音需小于 8
+              秒且不超过 20MB。复刻音色会通过 MiniMax 异步语音合成生成新的独立音频资产。
             </div>
             <div className="gen-capability-note warn">
               复刻音色连续 {MINIMAX_CLONE_RETENTION_DAYS} 天未被调用会被 MiniMax
@@ -503,80 +598,40 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
           </div>
         )}
       </div>
-      {/* 语言/语速/情绪只被本地 IndexTTS 工作流读取；MiniMax 快速复刻链路不发送这些字段。 */}
       <div className="tts-options tts-output-options">
-        {config.backend === 'comfyui' && (
+        {config.backend === 'minimax' && (
           <>
-            <label className="opt-label">语言</label>
+            <label className="opt-label">试听格式</label>
             <AppSelect
               className="gen-select small"
-              aria-label="语言"
-              value={config.lang}
+              aria-label="试听格式"
+              value={config.format}
               onPointerDown={(e) => e.stopPropagation()}
-              onChange={(e) => updateConfig({ lang: e.target.value as TtsLang })}
+              onChange={(e) => updateConfig({ format: e.target.value as TtsFormat })}
             >
-              {TTS_LANGS.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
+              {TTS_FORMATS_BY_BACKEND.minimax.map((format) => (
+                <option key={format} value={format}>
+                  {format.toUpperCase()}
                 </option>
               ))}
             </AppSelect>
           </>
         )}
-        <label className="opt-label">格式</label>
-        <AppSelect
-          className="gen-select small"
-          aria-label="格式"
-          value={config.format}
-          onPointerDown={(e) => e.stopPropagation()}
-          onChange={(e) => updateConfig({ format: e.target.value as TtsFormat })}
-        >
-          {TTS_FORMATS_BY_BACKEND[config.backend].map((f) => (
-            <option key={f} value={f}>
-              {f.toUpperCase()}
-            </option>
-          ))}
-        </AppSelect>
       </div>
-      {config.backend === 'comfyui' && (
-        <div className="tts-sliders">
-          <div className="tts-slider-row">
-            <label className="opt-label">语速 {config.speed.toFixed(1)}x</label>
-            <input
-              type="range"
-              aria-label="语速"
-              min="0.5"
-              max="2"
-              step="0.1"
-              value={config.speed}
-              onPointerDown={(e) => e.stopPropagation()}
-              onChange={(e) => updateConfig({ speed: Number(e.target.value) })}
-            />
-          </div>
-          <div className="tts-slider-row">
-            <label className="opt-label">情绪 {config.emotion.toFixed(1)}</label>
-            <input
-              type="range"
-              aria-label="情绪"
-              min="0"
-              max="1"
-              step="0.1"
-              value={config.emotion}
-              onPointerDown={(e) => e.stopPropagation()}
-              onChange={(e) => updateConfig({ emotion: Number(e.target.value) })}
-            />
-          </div>
-        </div>
-      )}
 
       <button
         className="btn-generate"
-        disabled={
-          busy ||
+      disabled={
+        busy ||
+        config.backend !== 'minimax' ||
           (!draft.trim() && incomingText === 0) ||
-          (incomingRef === 0 && !uploadedRef) ||
-          (config.backend === 'minimax' && !config.providerId)
-        }
+          draft.length > SPEECH_TEXT_LIMITS.minimax ||
+        (incomingRef === 0 && !uploadedRef) ||
+        (Boolean(config.promptMediaId) && !config.promptText.trim()) ||
+        !minimaxModels.some(
+          (item) => item.provider.id === config.providerId && item.model.id === config.modelId
+        )
+      }
         onPointerDown={(e) => stopEventPropagation(e)}
         onClick={(e) => {
           e.stopPropagation()

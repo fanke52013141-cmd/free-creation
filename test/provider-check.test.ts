@@ -98,23 +98,24 @@ describe('§16.21 协议自检的请求构造', () => {
     expect(proxyBody.content[0]?.text ?? '').toContain('--dur')
   })
 
-  it('预览文本里绝不出现明文密钥，火山 1.0 的 token 字段同样被掩码', async () => {
+  it('预览文本与请求体不泄露密钥；火山密钥只放在 X-Api-Key 请求头', async () => {
     const minimax = await buildProbeSpecs(draftProvider())
     for (const spec of minimax) {
       expect(spec.item.body ?? '').not.toContain('sk-secret-value-1234567890')
     }
     const volc = await buildProbeSpecs(
       draftProvider({
-        specId: 'doubao-speech',
+        specId: 'volc-speech',
         baseURL: 'https://openspeech.bytedance.com',
         models: [{ id: 'seed-audio-1.0', modality: 'audio' }]
       })
     )
     const volcItem = itemOf(volc, 'volc-tts').item
-    // 构造出来的真实请求体带 token，掩码只发生在展示层。
-    expect(JSON.stringify(itemOf(volc, 'volc-tts').body)).toContain('sk-secret-value-1234567890')
+    const volcSpec = itemOf(volc, 'volc-tts')
+    // 密钥只进入请求头，预览请求体始终不包含凭证。
+    expect(volcSpec.headers).toMatchObject({ 'X-Api-Key': 'sk-secret-value-1234567890' })
+    expect(JSON.stringify(volcSpec.body)).not.toContain('sk-secret-value-1234567890')
     expect(volcItem.body ?? '').not.toContain('sk-secret-value-1234567890')
-    expect(volcItem.body ?? '').toContain('***已掩码***')
   })
 
   it('缺必填项时列出来，而不是发一个看起来成功的半成品', async () => {
@@ -128,16 +129,17 @@ describe('§16.21 协议自检的请求构造', () => {
     )
     expect(itemOf(unknownModel, 'video-submit').item.missing.join()).toContain('未命中能力表')
 
-    // 豆包语音：AppID/音色在配音节点里，供应商面板拿不到，因此永远不算就绪。
-    const doubao = await buildProbeSpecs(
+    const volc = await buildProbeSpecs(
       draftProvider({
-        specId: 'doubao-speech',
+        specId: 'volc-speech',
         baseURL: 'https://openspeech.bytedance.com',
         models: [{ id: 'seed-audio-1.0', modality: 'audio' }]
       })
     )
-    expect(itemOf(doubao, 'volc-tts').item.missing.join()).toContain('AppID')
-    expect(itemOf(doubao, 'doubao-tts').item.missing).toEqual([])
+    expect(itemOf(volc, 'volc-tts').item.missing).toEqual([])
+    expect(itemOf(volc, 'volc-tts').item.url).toBe(
+      'https://openspeech.bytedance.com/api/v3/tts/create'
+    )
     // 克隆要上传素材，语音克隆节点才拥有它。
     const clone = itemOf(await buildProbeSpecs(draftProvider()), 'minimax-voice-clone').item
     expect(clone.missing.join()).toContain('语音克隆')
@@ -148,14 +150,14 @@ describe('§16.21 协议自检的请求构造', () => {
     expect(minimax.filter((spec) => spec.item.cost === 'free').map((spec) => spec.item.id)).toEqual(
       ['video-query', 'minimax-tts-query']
     )
-    const doubao = await buildProbeSpecs(
+    const volc = await buildProbeSpecs(
       draftProvider({
-        specId: 'doubao-speech',
+        specId: 'volc-speech',
         baseURL: 'https://openspeech.bytedance.com',
         models: [{ id: 'seed-audio-1.0', modality: 'audio' }]
       })
     )
-    expect(doubao.every((spec) => spec.item.cost === 'paid')).toBe(true)
+    expect(volc.every((spec) => spec.item.cost === 'paid')).toBe(true)
   })
 })
 
@@ -318,7 +320,7 @@ describe('§16.21 自检接线（源码门禁）', () => {
   it('协议驱动只有一份判定，主进程与渲染层共用', () => {
     expect(driverForSpec('minimax')).toBe('video')
     expect(driverForSpec('seedance')).toBe('video')
-    expect(driverForSpec('doubao-speech')).toBe('native-speech')
+    expect(driverForSpec('volc-speech')).toBe('native-speech')
     expect(driverForSpec('toapis')).toBe('openai-compatible')
     const factory = read('src/main/gateway/factory.ts')
     expect(factory).not.toContain('function driverForSpec')
@@ -353,8 +355,7 @@ describe('§16.21 自检接线（源码门禁）', () => {
       'buildMiniMaxH3RequestBody',
       'buildSeedanceRequestBody',
       'buildMiniMaxAsyncTtsBody',
-      'buildDoubaoSpeechBody',
-      'buildVolcTtsBody',
+      'buildVolcSpeechBody',
       'buildVoiceDesignBody'
     ]) {
       expect(check).toContain(builder)

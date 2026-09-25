@@ -7,11 +7,14 @@ import type { ProviderConfig } from '../../shared/types'
 import { randomUUID } from 'crypto'
 import {
   DEFAULT_TTS_CONFIG,
+  MINIMAX_VOICE_CLONE_MODELS,
   isValidMiniMaxVoiceId,
   normalizeMiniMaxVoiceId,
+  TTS_LANGUAGE_BOOSTS,
   type TtsConfig
 } from '../../shared/tts'
 import { VOICE_DESIGN_PREVIEW_LIMIT } from '../../shared/voice-design'
+import { isSpeechLanguageBoostSupported } from '../../shared/speech'
 import { saveBufferAsset } from '../store/media.repo'
 import { getProvider } from './providers.repo'
 import { GatewayError } from './factory'
@@ -49,10 +52,10 @@ function requireMiniMax(providerId: string): ProviderConfig {
   return provider
 }
 
-/** 上传一个本地文件到 MiniMax，返回 file_id（用于 voice_clone / prompt_audio）。 */
+/** 上传一个本地文件到 MiniMax，返回 voice_clone 用途的 file_id。 */
 export async function uploadMiniMaxFile(
   provider: ProviderConfig,
-  purpose: 'voice_clone' | 'prompt_audio',
+  purpose: 'voice_clone',
   file: { buf: Buffer; mime: string; fileName: string }
 ): Promise<number> {
   const base = provider.baseURL.replace(/\/+$/, '')
@@ -94,8 +97,9 @@ export interface CloneVoiceRequest {
  * clone_prompt 只在真的上传了提示音时才出现——缺了 prompt_text 就是坏数据，
  * 由调用方在执行前拒绝，而不是发一个半成品字段。
  *
- * 这里刻意没有 text_validation：真实接口要的是参考音频原文（字符串），传布尔值
- * 会被 2013 invalid params 挡在登记之前（2026-09-19 用同一 file_id 逐字段实测）。
+ * text_validation 只在用户填写参考音频原文时发送；它是字符串而不是布尔开关，
+ * 与它配套的 accuracy 阈值也只在该字段存在时生效。accuracy=0 会被 MiniMax 当作默认
+ * 阈值 0.7，因此为 0 时省略该字段，界面也会显示默认值。
  */
 export function buildVoiceCloneBody(
   fileId: number,
@@ -103,15 +107,28 @@ export function buildVoiceCloneBody(
   config: TtsConfig,
   prompt?: { prompt_audio: number; prompt_text: string } | null
 ): Record<string, unknown> {
+  const model = config.modelId || DEFAULT_TTS_CONFIG.modelId
+  if (!MINIMAX_VOICE_CLONE_MODELS.includes(model)) {
+    throw new GatewayError('INVALID_INPUT', `MiniMax 音色克隆不支持模型 ${model}`)
+  }
   return {
     file_id: fileId,
     voice_id: voiceId,
-    model: config.modelId || DEFAULT_TTS_CONFIG.modelId,
-    accuracy: config.accuracy,
+    model,
+    ...(config.textValidation.trim()
+      ? {
+          text_validation: config.textValidation.trim(),
+          ...(config.accuracy > 0 ? { accuracy: config.accuracy } : {})
+        }
+      : {}),
     need_noise_reduction: config.needNoiseReduction,
     need_volume_normalization: config.needVolumeNormalization,
     aigc_watermark: config.aigcWatermark,
-    ...(config.languageBoost ? { language_boost: config.languageBoost } : {}),
+    ...(TTS_LANGUAGE_BOOSTS.some((item) => item.value === config.languageBoost) &&
+    config.languageBoost &&
+    isSpeechLanguageBoostSupported(config.modelId, config.languageBoost)
+      ? { language_boost: config.languageBoost }
+      : {}),
     ...(prompt ? { clone_prompt: prompt } : {})
   }
 }
@@ -148,17 +165,12 @@ export async function cloneMiniMaxVoice(request: CloneVoiceRequest): Promise<str
     if (!request.prompt.text.trim()) {
       throw new GatewayError('INVALID_INPUT', '填写克隆提示音后必须同时提供其原文')
     }
-    const promptAudioId = await uploadMiniMaxFile(provider, 'prompt_audio', request.prompt)
+    // 文档化的上传接口只接受 purpose=voice_clone；clone_prompt 复用该 file_id。
+    const promptAudioId = await uploadMiniMaxFile(provider, 'voice_clone', request.prompt)
     promptPayload = { prompt_audio: promptAudioId, prompt_text: request.prompt.text.trim() }
   }
 
   const requested = config.voiceId.trim()
-  if (requested && !isValidMiniMaxVoiceId(requested)) {
-    throw new GatewayError(
-      'INVALID_INPUT',
-      '自定义 Voice ID 需 8～256 位、以字母开头、只含字母数字与 - _、且末位不能是 - 或 _'
-    )
-  }
   const voiceId = normalizeMiniMaxVoiceId(requested) || `canvas-voice-${randomSuffix()}`
 
   const res = await fetch(`${base}/v1/voice_clone`, {
@@ -199,7 +211,14 @@ export async function designMiniMaxVoice(input: VoiceDesignInput): Promise<Voice
   const provider = requireMiniMax(input.providerId)
   const base = provider.baseURL.replace(/\/+$/, '')
   const config = input.config
-  const previewText = config.previewText.slice(0, VOICE_DESIGN_PREVIEW_LIMIT)
+  const previewText = config.previewText.trim()
+  if (!previewText) throw new GatewayError('INVALID_INPUT', '试听文本不能为空')
+  if (previewText.length > VOICE_DESIGN_PREVIEW_LIMIT) {
+    throw new GatewayError(
+      'INVALID_INPUT',
+      `试听文本不能超过 ${VOICE_DESIGN_PREVIEW_LIMIT} 字符`
+    )
+  }
 
   const requested = config.voiceId.trim()
   if (requested && !isValidMiniMaxVoiceId(requested)) {

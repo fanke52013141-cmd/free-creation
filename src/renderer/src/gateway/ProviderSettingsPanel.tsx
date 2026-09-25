@@ -58,7 +58,7 @@ const modalitiesForSpec = (specId: ProviderSpecId): GatewayModelInfo['modality']
   if (specId === 'openrouter') return ['text', 'image']
   if (specId === 'seedance') return ['video']
   if (specId === 'minimax') return ['video', 'audio']
-  if (specId === 'doubao-speech') return ['audio']
+  if (specId === 'volc-speech') return ['audio']
   return ['text']
 }
 
@@ -75,7 +75,7 @@ const normalizeModelsForSpec = (
 const categoryLabel = (modality: GatewayModelInfo['modality'], specId: ProviderSpecId): string => {
   if (modality !== 'audio')
     return modality === 'text' ? '文本' : modality === 'image' ? '图片' : '视频'
-  return specId === 'doubao-speech' ? '语音合成' : '音频（合成/设计/克隆）'
+  return specId === 'volc-speech' ? '语音合成' : '音频（合成/设计/克隆）'
 }
 
 function draftFromConfig(p: ProviderSummary): Draft {

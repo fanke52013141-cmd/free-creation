@@ -25,6 +25,24 @@ const provider = (modality: 'text' | 'audio' | 'video' | 'image'): ProviderSumma
     models: [{ id: `${modality}-model`, name: '测试模型', modality, providerId: 'provider-1' }]
   }) as ProviderSummary
 
+const volcSpeechProvider = (): ProviderSummary =>
+  ({
+    ...provider('audio'),
+    specId: 'volc-speech',
+    models: [
+      { id: 'seed-audio-1.0', name: 'Seed Audio 1.0', modality: 'audio', providerId: 'provider-1' }
+    ]
+  }) as ProviderSummary
+
+const minimaxSpeechProvider = (): ProviderSummary =>
+  ({
+    ...provider('audio'),
+    specId: 'minimax',
+    models: [
+      { id: 'speech-2.8-turbo', name: 'Speech 2.8 Turbo', modality: 'audio', providerId: 'provider-1' }
+    ]
+  }) as ProviderSummary
+
 const minimaxVideoProvider = (): ProviderSummary =>
   ({
     ...provider('video'),
@@ -330,8 +348,7 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     expect(JSON.parse(result.value ?? '{}').results[0].voiceId).toBe('male-qn-qingse')
   })
 
-  // 豆包 / OpenAI 兼容在用户留空时，服务端用了哪个音色我们确实不知道——那就别写，
-  // 而不是拿一个猜出来的 ID 冒充已溯源。
+  // 火山用户留空时，服务端最终选用了哪个 speaker 未知，因此产物追溯不写 voiceId。
   it('网关无法确定音色时不写 voiceId 键', async () => {
     installGateway({
       speechGenerate: vi.fn().mockResolvedValue({
@@ -343,15 +360,15 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     })
     const { ctx, result } = makeContext(
       'speech',
-      JSON.stringify({ backend: 'openai', providerId: 'provider-1', modelId: 'gpt-tts' }),
-      [provider('audio')],
+      JSON.stringify({ backend: 'volc', providerId: 'provider-1', modelId: 'seed-audio-1.0' }),
+      [volcSpeechProvider()],
       '旁白'
     )
     await expect(speechExecutor(ctx)).resolves.toEqual({ status: 'done' })
     expect('voiceId' in JSON.parse(result.value ?? '{}').results[0]).toBe(false)
   })
 
-  it('配音执行器在豆包开启字幕时写入 out-subtitle 的结构化结果', async () => {
+  it('配音执行器在火山 1.0 开启字幕时写入 out-subtitle 的结构化结果', async () => {
     installGateway({
       speechGenerate: vi.fn().mockResolvedValue({
         ok: true,
@@ -371,8 +388,8 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     })
     const { ctx, meta } = makeContext(
       'speech',
-      JSON.stringify({ backend: 'doubao', providerId: 'provider-1', modelId: 'seed-audio-1.0' }),
-      [provider('audio')],
+      JSON.stringify({ backend: 'volc', providerId: 'provider-1', modelId: 'seed-audio-1.0' }),
+      [volcSpeechProvider()],
       '你好世界'
     )
     await expect(speechExecutor(ctx)).resolves.toEqual({ status: 'done' })
@@ -452,8 +469,14 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     installGateway({ ttsGenerate })
     const { ctx, meta, artifacts } = makeContext(
       'tts',
-      JSON.stringify({ refMediaId: 'reference-audio', text: '不应作为当前正文执行' }),
-      [],
+      JSON.stringify({
+        backend: 'minimax',
+        providerId: 'provider-1',
+        modelId: 'speech-2.8-turbo',
+        refMediaId: 'reference-audio',
+        text: '不应作为当前正文执行'
+      }),
+      [minimaxSpeechProvider()],
       '当前画布正文'
     )
 
@@ -465,23 +488,20 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     expect(JSON.parse(String(meta.nodeExtra))['out-json'].voice_id).toBe('CanvasVoice_2026')
   })
 
-  it('本地 IndexTTS 链路没有服务端音色，音色档案必须清空而不是伪造', async () => {
-    installGateway({
-      ttsGenerate: vi.fn().mockResolvedValue({
-        ok: true,
-        data: {
-          asset: { id: 'tts-2', path: 'projects/p/tts.wav', mime: 'audio/wav', name: '本地复刻' },
-          voiceId: ''
-        }
-      })
-    })
+  it('旧本地 IndexTTS 配置不再走音色克隆请求', async () => {
+    const ttsGenerate = vi.fn()
+    installGateway({ ttsGenerate })
     const { ctx, meta } = makeContext(
       'tts',
       JSON.stringify({ backend: 'comfyui', refMediaId: 'reference-audio' }),
       [],
       '本地合成'
     )
-    await expect(ttsExecutor(ctx)).resolves.toEqual({ status: 'done' })
+    await expect(ttsExecutor(ctx)).resolves.toEqual({
+      status: 'skipped',
+      reason: '语音克隆已统一使用 MiniMax；请在节点内切换旧的本地 IndexTTS 配置'
+    })
+    expect(ttsGenerate).not.toHaveBeenCalled()
     expect(meta.nodeExtra).toBeUndefined()
   })
 

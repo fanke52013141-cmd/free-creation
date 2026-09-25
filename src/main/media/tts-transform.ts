@@ -9,13 +9,20 @@ import {
   MINIMAX_CLONE_MAX_BYTES,
   MINIMAX_CLONE_MAX_SECONDS,
   MINIMAX_CLONE_MIMES,
+  MINIMAX_CLONE_PROMPT_MAX_SECONDS,
   MINIMAX_CLONE_MIN_SECONDS,
+  MINIMAX_VOICE_CLONE_MODELS,
   isValidMiniMaxVoiceId
 } from '../../shared/tts'
+import {
+  DEFAULT_SPEECH_CONFIG,
+  defaultSpeechSampleRate,
+  type SpeechConfig
+} from '../../shared/speech'
 import { getDb } from '../store/db'
 import { getMediaAbsPath, saveBufferAsset } from '../store/media.repo'
 import { getProvider } from '../gateway/providers.repo'
-import { generateAudioToAsset } from '../gateway/audio'
+import { generateSpeechToAsset } from '../gateway/audio'
 import { cloneMiniMaxVoice } from '../gateway/voice'
 import { probeMediaDurationMs } from './video-transform'
 import { GatewayError } from '../gateway/factory'
@@ -191,6 +198,12 @@ export async function transformTts(input: TtsGenerateInput): Promise<VoiceCloneR
 async function transformMiniMaxTts(input: TtsGenerateInput): Promise<VoiceCloneResult> {
   const config = input.config
   if (!config.providerId) throw new GatewayError('INVALID_INPUT', '请选择 MiniMax 供应商')
+  if (!MINIMAX_VOICE_CLONE_MODELS.includes(config.modelId)) {
+    throw new GatewayError('INVALID_INPUT', `MiniMax 音色克隆不支持模型 ${config.modelId}`)
+  }
+  if (input.text.trim().length > 50000) {
+    throw new GatewayError('INVALID_INPUT', 'MiniMax 异步语音合成文本不能超过 50000 字符')
+  }
   const provider = getProvider(config.providerId)
   if (!provider) throw new GatewayError('PROVIDER_NOT_FOUND', 'MiniMax 供应商不存在')
   if (provider.specId !== 'minimax') {
@@ -226,6 +239,21 @@ async function transformMiniMaxTts(input: TtsGenerateInput): Promise<VoiceCloneR
   const promptAudio = config.promptMediaId
     ? await readReferenceAudio(config.promptMediaId, '克隆提示音')
     : null
+  if (promptAudio) {
+    if (!MINIMAX_CLONE_MIMES.includes(promptAudio.mime.toLowerCase())) {
+      throw new GatewayError('INVALID_INPUT', 'MiniMax 克隆提示音仅支持 mp3、m4a 或 wav 格式')
+    }
+    if (promptAudio.buf.length > MINIMAX_CLONE_MAX_BYTES) {
+      throw new GatewayError('INVALID_INPUT', 'MiniMax 克隆提示音不能超过 20MB')
+    }
+    const promptDurationMs = await probeMediaDurationMs(promptAudio.abs).catch(() => 0)
+    if (promptDurationMs >= MINIMAX_CLONE_PROMPT_MAX_SECONDS * 1000) {
+      throw new GatewayError(
+        'INVALID_INPUT',
+        `MiniMax 克隆提示音必须小于 ${MINIMAX_CLONE_PROMPT_MAX_SECONDS} 秒`
+      )
+    }
+  }
 
   const voiceId = await cloneMiniMaxVoice({
     providerId: provider.id,
@@ -245,14 +273,22 @@ async function transformMiniMaxTts(input: TtsGenerateInput): Promise<VoiceCloneR
     config
   })
 
-  const asset = await generateAudioToAsset({
+  const speechConfig: SpeechConfig = {
+    ...DEFAULT_SPEECH_CONFIG,
+    providerId: provider.id,
+    modelId: config.modelId,
+    format: config.format,
+    sampleRate: defaultSpeechSampleRate('minimax', config.format),
+    languageBoost: config.languageBoost,
+    aigcWatermark: config.aigcWatermark
+  }
+  const { asset } = await generateSpeechToAsset({
     projectId: input.projectId,
     providerId: provider.id,
     modelId: config.modelId || 'speech-2.8-turbo',
     text: input.text.trim(),
-    voice: voiceId,
-    format: config.format,
-    aigcWatermark: config.aigcWatermark
+    voiceId,
+    config: speechConfig
   })
   return { asset, voiceId }
 }

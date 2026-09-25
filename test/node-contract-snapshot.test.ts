@@ -301,9 +301,9 @@ describe('关键端口契约快照（防回归）', () => {
     ])
   })
 
-  it('配音节点端口随所选协议变化：MiniMax / 豆包 / OpenAI 兼容三套结构', () => {
+  it('配音节点端口随供应商变化：MiniMax 音色档案 / 火山参考音频与字幕', () => {
     const spec = getNodeType('speech')!
-    expect(spec.contractVersion).toBe(3)
+    expect(spec.contractVersion).toBe(4)
 
     const shapeFor = (backend: string): NodeCardShape =>
       ({
@@ -337,21 +337,17 @@ describe('关键端口契约快照（防回归）', () => {
     ).toEqual(['in-text', 'in-voice'])
     expect(getNodePorts(spec, shapeFor('minimax')).out.map((p) => p.id)).toEqual(['out-audio'])
 
-    // 豆包：多出参考音频输入与字幕输出
+    // 火山 1.0：参考音频输入与字幕输出；speaker 在节点参数中填写。
     expect(
-      getNodePorts(spec, shapeFor('doubao'))
+      getNodePorts(spec, shapeFor('volc'))
         .in.map((p) => p.id)
         .sort()
-    ).toEqual(['in-audio', 'in-text', 'in-voice'])
+    ).toEqual(['in-audio', 'in-text'])
     expect(
-      getNodePorts(spec, shapeFor('doubao'))
+      getNodePorts(spec, shapeFor('volc'))
         .out.map((p) => p.id)
         .sort()
     ).toEqual(['out-audio', 'out-subtitle'])
-
-    // OpenAI 兼容旧通道：只接朗读文本，不产生字幕
-    expect(getNodePorts(spec, shapeFor('openai')).in.map((p) => p.id)).toEqual(['in-text'])
-    expect(getNodePorts(spec, shapeFor('openai')).out.map((p) => p.id)).toEqual(['out-audio'])
   })
 
   it('图片/音频资产都是纯源节点，配音与语音克隆各有独立契约', () => {
@@ -362,7 +358,7 @@ describe('关键端口契约快照（防回归）', () => {
     expect(snapshotPorts(getNodeType('audio')!.ports.out)).toEqual([
       { id: 'out-audio', dir: 'out', type: 'audio', required: true, cardinality: 'one' }
     ])
-    expect(getNodeType('speech')!.contractVersion).toBe(3)
+    expect(getNodeType('speech')!.contractVersion).toBe(4)
     expect(snapshotPorts(getNodeType('tts')!.ports.in)).toEqual([
       { id: 'in-audio', dir: 'in', type: 'audio', required: false, cardinality: 'one' },
       { id: 'in-text', dir: 'in', type: 'text', required: false, cardinality: 'many' }

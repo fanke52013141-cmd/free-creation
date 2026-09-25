@@ -258,7 +258,7 @@ export type ProviderSpecId =
   | 'relay'
   | 'minimax'
   | 'seedance'
-  | 'doubao-speech'
+  | 'volc-speech'
   | 'toapis'
   | 'openrouter'
 
@@ -378,7 +378,18 @@ export const PROVIDER_SPECS: ProviderSpec[] = [
     modality: 'video',
     // speech-2.8-hd 是配音节点的默认 modelId：预设里没有它，按模板建好供应商后
     // 只能选到 turbo 档，要用 HD 得回设置面板手动加一行。
-    suggestions: ['MiniMax-H3', 'MiniMax-H3-Max', 'speech-2.8-hd', 'speech-2.8-turbo']
+    suggestions: [
+      'MiniMax-H3',
+      'MiniMax-H3-Max',
+      'speech-2.8-hd',
+      'speech-2.8-turbo',
+      'speech-2.6-hd',
+      'speech-2.6-turbo',
+      'speech-02-hd',
+      'speech-02-turbo',
+      'speech-01-hd',
+      'speech-01-turbo'
+    ]
   },
   {
     id: 'seedance',
@@ -394,11 +405,11 @@ export const PROVIDER_SPECS: ProviderSpec[] = [
     ]
   },
   {
-    // 豆包语音（Seed-Audio）是 specId 之外的第二套原生协议：不走 OpenAI 兼容
-    // /audio/speech，而是 POST /api/v3/tts/create 并返回 Base64 音频与字幕时间轴。
-    id: 'doubao-speech',
-    label: '豆包语音（Seed-Audio）',
-    desc: '火山语音原生协议供应商：豆包 /api/v3/tts/create 用 X-Api-Key，语音合成 1.0 用 /api/v1/tts',
+    // 火山引擎语音合成 1.0：不走 OpenAI 兼容 /audio/speech，
+    // 而是 POST /api/v3/tts/create 并返回 Base64 音频与可选字幕时间轴。
+    id: 'volc-speech',
+    label: '火山引擎语音合成',
+    desc: '语音合成 1.0：POST /api/v3/tts/create，使用 X-Api-Key 鉴权',
     baseURL: 'https://openspeech.bytedance.com',
     modality: 'audio',
     suggestions: ['seed-audio-1.0']

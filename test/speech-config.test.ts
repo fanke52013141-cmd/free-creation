@@ -7,7 +7,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_SPEECH_CONFIG,
-  SPEECH_FORMATS_BY_BACKEND,
   parsePronunciationTones,
   parseSpeechConfig,
   serializeSpeechConfig,
@@ -21,18 +20,18 @@ describe('配音配置解析', () => {
     expect(DEFAULT_SPEECH_CONFIG.backend).toBe('minimax')
   })
 
-  it('旧 speech 配置迁移为 openai 兼容通道，并拆出 provider/model', () => {
+  it('不识别的旧通道回到 MiniMax，且不继承旧供应商和音色 ID', () => {
     const config = parseSpeechConfig(
       JSON.stringify({ mode: 'generate', modelKey: 'prov-1::tts-1', voice: 'nova', format: 'wav' })
     )
-    expect(config.backend).toBe('openai')
-    expect(config.providerId).toBe('prov-1')
-    expect(config.modelId).toBe('tts-1')
-    expect(config.voiceId).toBe('nova')
-    expect(config.format).toBe('wav')
+    expect(config.backend).toBe('minimax')
+    expect(config.providerId).toBe('')
+    expect(config.modelId).toBe('speech-2.8-hd')
+    expect(config.voiceId).toBe('')
+    expect(config.format).toBe('mp3')
   })
 
-  it('OpenAI 命名音色不会污染 MiniMax/豆包音色字段', () => {
+  it('旧命名音色不会污染 MiniMax 音色字段', () => {
     const config = parseSpeechConfig(JSON.stringify({ modelKey: 'prov-1::tts-1', voice: 'alloy' }))
     expect(config.voiceId).toBe('')
   })
@@ -42,30 +41,56 @@ describe('配音配置解析', () => {
       JSON.stringify({ speed: 9, volume: -3, pitch: 40, voicePitch: 900, accuracy: 7 })
     )
     expect(config.speed).toBe(2)
-    expect(config.volume).toBe(0.1)
+    expect(config.volume).toBe(0.01)
     expect(config.pitch).toBe(12)
     expect(config.voicePitch).toBe(100)
   })
 
-  it('豆包的语速/音量/音调区间与 MiniMax 不同，必须分别收敛', () => {
+  it('火山的语速/音量/音调区间按 1.0 参数收敛', () => {
     const config = parseSpeechConfig(
-      JSON.stringify({ backend: 'doubao', speechRate: 500, loudnessRate: -500, pitchRate: -40 })
+      JSON.stringify({ backend: 'volc', speechRate: 500, loudnessRate: -500, pitchRate: -40 })
     )
     expect(config.speechRate).toBe(100)
     expect(config.loudnessRate).toBe(-50)
     expect(config.pitchRate).toBe(-12)
   })
 
-  it('输出格式按协议收窄：豆包不支持 flac，MiniMax 不支持 ogg_opus', () => {
-    expect(parseSpeechConfig(JSON.stringify({ backend: 'doubao', format: 'flac' })).format).toBe(
-      SPEECH_FORMATS_BY_BACKEND.doubao[0]
+  it('配音节点固定采用供应商默认格式和采样率，忽略旧配置里的自定义值', () => {
+    const minimax = parseSpeechConfig(
+      JSON.stringify({ backend: 'minimax', format: 'flac', sampleRate: 44100 })
     )
+    expect(minimax.format).toBe('mp3')
+    expect(minimax.sampleRate).toBe(32000)
+
+    const volc = parseSpeechConfig(
+      JSON.stringify({ backend: 'volc', format: 'ogg_opus', sampleRate: 48000 })
+    )
+    expect(volc.format).toBe('wav')
+    expect(volc.sampleRate).toBe(40000)
+  })
+
+  it('按模型收敛情绪值，语言增强自动判别且读音纠正仅对 MiniMax 保留', () => {
     expect(
-      parseSpeechConfig(JSON.stringify({ backend: 'minimax', format: 'ogg_opus' })).format
-    ).toBe(SPEECH_FORMATS_BY_BACKEND.minimax[0])
+      parseSpeechConfig(JSON.stringify({ modelId: 'speech-2.8-hd', emotion: 'whisper' })).emotion
+    ).toBe('')
     expect(
-      parseSpeechConfig(JSON.stringify({ backend: 'doubao', format: 'ogg_opus' })).format
-    ).toBe('ogg_opus')
+      parseSpeechConfig(JSON.stringify({ modelId: 'speech-2.6-turbo', emotion: 'whisper' })).emotion
+    ).toBe('whisper')
+    const hiddenOptions = parseSpeechConfig(
+      JSON.stringify({
+        languageBoost: 'Chinese',
+        pronunciationTones: '调音台 tiao2 yin1 tai2',
+        soundEffects: 'robotic'
+      })
+    )
+    expect(hiddenOptions.languageBoost).toBe('auto')
+    expect(hiddenOptions.pronunciationTones).toBe('调音台 tiao2 yin1 tai2')
+    expect(hiddenOptions.soundEffects).toBe('')
+    expect(
+      parseSpeechConfig(
+        JSON.stringify({ backend: 'volc', pronunciationTones: '行长/(hang2)(zhang3)' })
+      ).pronunciationTones
+    ).toBe('')
   })
 
   it('未知情绪回落为空串，采样率/码率只接受受控档位', () => {
@@ -95,11 +120,10 @@ describe('配音配置解析', () => {
 })
 
 describe('发音词典与音色修饰', () => {
-  it('每行「词 拼音」解析为 tone 数组，坏行被丢弃而不是发出去', () => {
-    expect(parsePronunciationTones('调音台 tiao2 yin1 tai2\n\n好  hao3\n只有一段')).toEqual([
-      '调音台 tiao2 yin1 tai2',
-      '好 hao3'
-    ])
+  it('解析 MiniMax 官方读音格式，并兼容早期的空格拼音写法', () => {
+    expect(
+      parsePronunciationTones('重庆/(chong2)(qing4)\n银行 yin2 hang2\n危险/dangerous\n只有一段')
+    ).toEqual(['重庆/(chong2)(qing4)', '银行/(yin2)(hang2)', '危险/dangerous'])
     expect(parsePronunciationTones('')).toEqual([])
   })
 
@@ -108,13 +132,9 @@ describe('发音词典与音色修饰', () => {
     expect(voiceModifyOf(config)).toBeNull()
   })
 
-  it('只改音效也会产生 voice_modify', () => {
+  it('遗留音效设置被忽略，不会改变 voice_modify', () => {
     const config = parseSpeechConfig(JSON.stringify({ soundEffects: 'robotic' }))
-    expect(voiceModifyOf(config)).toEqual({
-      pitch: 0,
-      intensity: 0,
-      timbre: 0,
-      sound_effects: 'robotic'
-    })
+    expect(config.soundEffects).toBe('')
+    expect(voiceModifyOf(config)).toBeNull()
   })
 })

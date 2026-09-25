@@ -409,26 +409,34 @@ describe('v1.2 §16.15 语音节点：控件只在所选后端真会发送该字
   const tts = read('src/renderer/src/nodes/specs/bodies/tts.tsx')
   const speech = read('src/renderer/src/nodes/specs/bodies/speech.tsx')
 
-  it('语音复刻的语言/语速/情绪只在本地 IndexTTS 后端出现（MiniMax 链路不读取）', () => {
-    expect(tts).toMatch(/backend === 'comfyui' && \(\s*<>\s*<label className="opt-label">语言/)
-    expect(tts).toMatch(/backend === 'comfyui' && \(\s*<div className="tts-sliders">/)
-    // 格式两个后端都会发送，只是取值域不同，必须留在门控之外。
+  it('音色克隆只呈现 MiniMax 参数，旧本地配置会被禁用', () => {
+    expect(tts).not.toMatch(/backend === 'comfyui' && \(\s*<>\s*<label className="opt-label">语言/)
+    expect(tts).not.toMatch(/backend === 'comfyui' && \(\s*<div className="tts-sliders">/)
     expect(tts).toContain("config.backend === 'minimax'")
-    expect(tts).toContain('TTS_FORMATS_BY_BACKEND[config.backend].map')
-    // 结果卡片的语言标记不再印 MiniMax 用不到的 IndexTTS 取值。
-    expect(tts).toContain("config.backend === 'minimax' ? config.modelId : config.lang")
+    expect(tts).toContain('TTS_FORMATS_BY_BACKEND.minimax.map')
+    expect(tts).toContain("config.backend !== 'minimax'")
+    expect(tts).toContain('MiniMax 音色克隆')
   })
 
   it('格式的取值域只有一份真值，新建节点默认走云端', () => {
-    // UI 不再自己写死「排除 wav」，域表就是网关会发出去的那一份。
+    // UI 和网关共用 MiniMax 异步 T2A 文档支持的格式域。
     expect(tts).not.toContain("TTS_FORMATS.filter((f) => f !== 'wav')")
     const shared = read('src/shared/tts.ts')
     expect(shared).toMatch(
-      /TTS_FORMATS_BY_BACKEND: Record<TtsBackend, ReadonlyArray<TtsFormat>> = \{\s*minimax: \['mp3', 'flac'\],\s*comfyui: \['wav', 'mp3', 'flac'\]/
+      /TTS_FORMATS_BY_BACKEND: Record<TtsBackend, ReadonlyArray<TtsFormat>> = \{\s*minimax: \['mp3', 'wav', 'pcm', 'flac', 'pcmu_raw', 'pcmu_wav', 'opus'\],\s*comfyui: \['wav', 'mp3', 'flac'\]/
     )
     // 云端优先（用户决定：先做云端合成，本地链路留到后面）：空配置新节点是 MiniMax。
     expect(shared).toMatch(/DEFAULT_TTS_CONFIG: TtsConfig = \{\s*version: 1,\s*backend: 'minimax'/)
     expect(shared).toMatch(/Object\.keys\(raw\)\.length === 0\s*\?\s*'minimax'\s*:\s*'comfyui'/)
+  })
+
+  it('音色设计按 MiniMax 供应商选择，试听文本是必填字段', () => {
+    const voiceDesign = read('src/renderer/src/nodes/specs/bodies/voice-design.tsx')
+    expect(voiceDesign).toContain('voice-design-provider-select')
+    expect(voiceDesign).toContain('MiniMax 供应商')
+    expect(voiceDesign).toContain('Boolean(config.previewText.trim())')
+    expect(voiceDesign).not.toContain('voice-design-model-select')
+    expect(voiceDesign).not.toContain('音色设计模型')
   })
 
   it('配音面板的码率与声道跟随 MiniMax 异步通道（audio_setting 的唯一消费者）', () => {
@@ -437,8 +445,14 @@ describe('v1.2 §16.15 语音节点：控件只在所选后端真会发送该字
     expect(gate).toBeGreaterThan(-1)
     expect(settings.indexOf('码率')).toBeGreaterThan(gate)
     expect(settings.indexOf('audioChannel')).toBeGreaterThan(gate)
-    // 采样率被 MiniMax 与豆包共用，不能一起收进 MiniMax 门控。
-    expect(speech).toContain('SPEECH_SAMPLE_RATES')
+    const body = speech.slice(0, speech.indexOf('export function SpeechSettings'))
+    expect(body).toContain('音调 {config.pitch}')
+    expect(body).not.toContain('音效')
+    expect(body).not.toContain('语言增强')
+    expect(body).toContain('读音纠正（可选）')
+    expect(body).toContain('重庆/(chong2)(qing4)')
+    expect(body).not.toContain('aria-label="格式"')
+    expect(body).not.toContain('aria-label="采样率"')
   })
 })
 
@@ -504,55 +518,55 @@ describe('v1.2 §16.16 媒体 / 剧本节点：判据是真实连线，不是卡
   })
 })
 
-describe('v1.2 §16.17 火山语音合成 1.0：第四后端只暴露它自己会发送的字段', () => {
+describe('v1.2 §16.17 火山语音合成 1.0：表单按同步接口请求体呈现参数', () => {
   const speech = read('src/renderer/src/nodes/specs/bodies/speech.tsx')
   const gateway = read('src/main/gateway/audio.ts')
   const executor = read('src/shared/engine/executors/speech.ts')
 
-  it('采样率跟随能力表而不是写死两个后端', () => {
-    expect(speech).toMatch(
-      /SPEECH_SAMPLE_RATE_BACKENDS\.includes\(config\.backend\) && \(\s*<>\s*<label className="opt-label">采样率/
-    )
+  it('格式与采样率隐藏并固定为供应商默认值，火山的其他 1.0 参数仍显示', () => {
+    const body = speech.slice(0, speech.indexOf('export function SpeechSettings'))
+    expect(body).not.toContain('aria-label="格式"')
+    expect(body).not.toContain('aria-label="采样率"')
+    expect(body).toContain('const format = defaultSpeechFormat(backend)')
+    expect(body).toContain('defaultSpeechSampleRate(backend, format)')
   })
 
-  it('AppID / 集群 / 语速整段只在 volc 后端出现，并把必填判据写在按钮上', () => {
-    expect(speech).toMatch(/config\.backend === 'volc' && \(\s*<div className="tts-section">/)
-    expect(speech).toContain('请求体 app.appid')
-    expect(speech).toContain('请求体 app.cluster')
-    expect(speech).toContain('请求体 audio.speed_ratio')
-    expect(speech).toContain('未填写 AppID，运行会跳过')
-    expect(speech).toContain('未填写音色 ID（voice_type），运行会跳过')
-    expect(speech).toMatch(/canGenerate =[\s\S]{0,160}!volcMissing/)
+  it('显示可选参考音频与 1.0 参数，不要求旧版 AppID / 集群', () => {
+    expect(speech).toContain('参考音频（可选）')
+    expect(speech).toContain('speaker ID')
+    expect(speech).toContain('loudnessRate')
+    expect(speech).toContain('speechRate')
+    expect(speech).toContain('enableSubtitle')
+    expect(speech).not.toContain('volcAppId')
+    expect(speech).not.toContain('volcCluster')
+    const switchBackend = speech.slice(
+      speech.indexOf('const switchBackend'),
+      speech.indexOf('const togglePlay')
+    )
+    expect(switchBackend).toContain("voiceId: ''")
   })
 
-  it('1.0 没有 in-voice 端口，音色说明就直说 MiniMax 音色档案不是它的输入', () => {
-    expect(speech).toContain('火山 1.0 只认自家的 voice_type')
-    expect(speech).toContain("config.backend === 'volc'")
-    // 端口集合与占位符同源：volc 复用 openai 的「只有文本」集合。
-    expect(specs).toContain("if (backend === 'openai' || backend === 'volc')")
-    expect(specs).toMatch(
-      /backend === 'openai' \|\| backend === 'volc'\) \{\s*return \{ in: \[inText\], out: \[outAudio\] \}/
-    )
+  it('火山端口接文本和参考音频，MiniMax 音色档案只接到 MiniMax', () => {
+    expect(specs).toContain('return { in: [inText, inAudio], out: [outAudio, outSubtitle] }')
+    expect(specs).toContain('return { in: [inText, inVoice], out: [outAudio] }')
   })
 
-  it('执行器不发必然 4xx 的请求，网关只发 1.0 文档化的四个字段', () => {
-    expect(executor).toMatch(
-      /config\.backend === 'volc' && !config\.volcAppId[\s\S]{0,80}火山语音合成 1\.0 未填写 AppID/
-    )
-    expect(executor).toMatch(
-      /config\.backend === 'volc' && !voiceId[\s\S]{0,90}火山语音合成 1\.0 未填写音色 ID/
-    )
-    expect(gateway).toContain('Authorization: `Bearer;${p.apiKey}`')
-    expect(gateway).toContain('${base}/api/v1/tts')
+  it('网关使用 /api/v3/tts/create、X-Api-Key 和文档字段', () => {
+    expect(executor).toContain('referenceAudioIds')
+    expect(gateway).toContain("'X-Api-Key': p.apiKey")
+    expect(gateway).toContain('${base}/api/v3/tts/create')
     const volcBody = gateway.slice(
-      gateway.indexOf('export function buildVolcTtsBody'),
+      gateway.indexOf('export function buildVolcSpeechBody'),
       gateway.indexOf('MiniMax 异步语音合成：创建任务')
     )
     expect(volcBody.length).toBeGreaterThan(100)
-    // 采样率/码率的字段名未被供应商文档证实，宁可不发也不猜。
-    expect(volcBody).not.toContain('sample_rate')
-    expect(volcBody).not.toContain('bitrate')
-    expect(volcBody).toContain('operation:')
+    expect(volcBody).toContain('text_prompt')
+    expect(volcBody).toContain('references:')
+    expect(volcBody).toContain('audio_config:')
+    expect(volcBody).toContain('loudness_rate')
+    expect(volcBody).toContain('speaker:')
+    expect(volcBody).not.toContain('appid:')
+    expect(volcBody).not.toContain('cluster:')
   })
 })
 

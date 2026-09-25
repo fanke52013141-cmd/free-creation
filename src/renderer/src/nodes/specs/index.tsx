@@ -154,16 +154,14 @@ const PREVIS_CAMERA: PortSchemaRef = { id: 'previs.camera', version: 1 }
 const PREVIS_PROJECT: PortSchemaRef = { id: 'previs.project', version: 2 }
 /** 音色档案：音色设计/复刻 → 配音节点 in-voice 的稳定结构。 */
 const VOICE_PROFILE: PortSchemaRef = { id: 'voice.profile', version: 1 }
-/** 字幕时间轴：豆包语音合成在开启字幕时产出的结构化结果。 */
+/** 字幕时间轴：火山语音合成 1.0 在开启字幕时产出的结构化结果。 */
 const VOICE_SUBTITLE: PortSchemaRef = { id: 'voice.subtitle', version: 1 }
 
 /**
- * 配音节点端口声明。返回四套互斥结构，由 config.backend 决定：
- *   minimax → 朗读文本 + 音色档案 → 音频
- *   doubao  → 朗读文本 + 音色档案 + 参考音频 → 音频 + 字幕
- *   volc    → 朗读文本 → 音频（1.0 的音色是 voice_type 字符串，不接受 MiniMax 音色档案）
- *   openai  → 朗读文本 → 音频
- * 静态 ports 是这几套的并集，只用于注册校验与契约快照；运行时以本函数为准。
+ * 配音节点端口声明。返回两套互斥结构，由 config.backend 决定：
+ *   minimax → 朗读文本 + MiniMax 音色档案 → 音频
+ *   volc    → 朗读文本 + 可选参考音频 → 音频 + 可选字幕（speaker 在节点参数中填写）
+ * 静态 ports 是这两套的并集，只用于注册校验与契约快照；运行时以本函数为准。
  */
 function speechPorts(backend: SpeechBackend): {
   in: PortDecl[]
@@ -173,14 +171,14 @@ function speechPorts(backend: SpeechBackend): {
     'in-voice',
     '音色档案',
     'json',
-    '上游「音色设计」或「语音克隆」产出的 voice_id；连线时优先于节点内填写的音色 ID。',
+    '连线音色 ID 时优先于节点内填写值；供应商不同的 voice_id / speaker 不兼容。',
     { schema: VOICE_PROFILE }
   )
   const inAudio = input(
     'in-audio',
     '参考音频',
     'audio',
-    '豆包 references 通道的参考音频；该通道尚未接入，连线后执行会明确失败而不是静默忽略。',
+    '火山语音合成 1.0 的可选参考音频；连接 1～3 段音频后，运行时优先使用连线输入。',
     { cardinality: 'many' }
   )
   const inText = input(
@@ -197,15 +195,12 @@ function speechPorts(backend: SpeechBackend): {
     'out-subtitle',
     '字幕时间轴',
     'json',
-    '豆包语音合成在开启字幕时返回的分句时间轴；其他协议不产生该输出。',
+    '火山语音合成 1.0 在开启字幕时返回的分句时间轴；MiniMax 不产生该输出。',
     { required: false, schema: VOICE_SUBTITLE }
   )
 
-  if (backend === 'doubao') {
-    return { in: [inText, inVoice, inAudio], out: [outAudio, outSubtitle] }
-  }
-  if (backend === 'openai' || backend === 'volc') {
-    return { in: [inText], out: [outAudio] }
+  if (backend === 'volc') {
+    return { in: [inText, inAudio], out: [outAudio, outSubtitle] }
   }
   return { in: [inText, inVoice], out: [outAudio] }
 }
@@ -575,7 +570,7 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'speech',
-    contractVersion: 3,
+    contractVersion: 4,
     label: '配音',
     icon: 'mic',
     color: '#3b82f6',
@@ -583,8 +578,8 @@ export function registerBaseNodeTypes(): void {
     description: '模型驱动配音：按所选协议决定输入与输出结构。',
     category: 'audio',
     ports: {
-      in: speechPorts('doubao').in,
-      out: speechPorts('doubao').out
+      in: speechPorts('volc').in,
+      out: speechPorts('volc').out
     },
     resolvePorts: (shape) => speechPorts(parseSpeechConfig(readNodeConfig(shape)).backend),
     projectOutputs: projectSpeechOutputs,
@@ -599,7 +594,7 @@ export function registerBaseNodeTypes(): void {
     icon: 'audio',
     color: '#3b82f6',
     defaultSize: { w: 340, h: 260 },
-    description: '语音克隆：MiniMax 云端或本地 IndexTTS，输出音频与音色档案',
+    description: 'MiniMax 音色克隆，输出试听音频与可复用的音色档案',
     category: 'audio',
     ports: {
       in: [

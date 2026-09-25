@@ -21,7 +21,8 @@ const h = vi.hoisted(() => ({
   byId: new Map<string, { mime: string; rel: string }>(),
   byRel: new Map<string, string>(),
   cloneCalls: 0,
-  synthCalls: 0
+  synthCalls: 0,
+  synthInputs: [] as Array<Record<string, any>>
 }))
 
 vi.mock('../src/main/store/db', () => ({
@@ -65,16 +66,20 @@ vi.mock('../src/main/gateway/voice', () => ({
 }))
 
 vi.mock('../src/main/gateway/audio', () => ({
-  generateAudioToAsset: async (): Promise<MediaAsset> => {
+  generateSpeechToAsset: async (input: Record<string, any>) => {
     h.synthCalls += 1
+    h.synthInputs.push(input)
     return {
-      id: 'asset-1',
-      kind: 'audio',
-      mime: 'audio/mpeg',
-      path: 'projects/p1/media/asset.mp3',
-      name: '克隆合成',
-      sizeBytes: 1
-    } as MediaAsset
+      asset: {
+        id: 'asset-1',
+        kind: 'audio',
+        mime: 'audio/mpeg',
+        path: 'projects/p1/media/asset.mp3',
+        name: '克隆合成',
+        sizeBytes: 1
+      } as MediaAsset,
+      voiceId: input.voiceId
+    }
   }
 }))
 
@@ -138,6 +143,11 @@ describe.skipIf(!toolsReady)('MiniMax 复刻的参考音频时长门禁', () => 
     expect(result.asset.id).toBe('asset-1')
     expect(h.cloneCalls).toBe(1)
     expect(h.synthCalls).toBe(1)
+    expect(h.synthInputs[0]).toMatchObject({
+      modelId: 'speech-2.8-turbo',
+      voiceId: 'canvas-voice-mock',
+      config: { backend: 'minimax', modelId: 'speech-2.8-turbo', format: 'mp3' }
+    })
   })
 
   it('参考音频记录缺失时报的是「不存在或已删除」，不是探测超时的误导提示', async () => {

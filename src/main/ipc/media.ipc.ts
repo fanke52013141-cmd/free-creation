@@ -70,9 +70,12 @@ const MEDIA_FILTERS = [
       'mp3',
       'wav',
       'ogg',
+      'opus',
       'm4a',
       'flac',
       'aac',
+      'pcm',
+      'ulaw',
       'txt',
       'md',
       'json'

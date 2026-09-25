@@ -116,6 +116,13 @@ export function collectSmokeTargets(providers: ProviderSummary[]): SmokeTarget[]
     for (const model of provider.models) {
       if (model.modality !== 'text' && model.modality !== 'image' && model.modality !== 'audio')
         continue
+      if (
+        model.modality === 'audio' &&
+        provider.specId !== 'minimax' &&
+        provider.specId !== 'volc-speech'
+      ) {
+        continue
+      }
       const key = `${provider.id}:${model.id}:${model.modality}`
       if (seen.has(key)) continue
       seen.add(key)
@@ -145,8 +152,7 @@ function errorDetail(error: unknown, provider: ProviderConfig): string {
 
 function speechBackendFor(provider: ProviderConfig): SpeechBackend {
   if (provider.specId === 'minimax') return 'minimax'
-  if (provider.specId === 'doubao-speech') return 'doubao'
-  return 'openai'
+  return 'volc'
 }
 
 function speechConfigFor(provider: ProviderConfig, modelId: string): SpeechConfig {

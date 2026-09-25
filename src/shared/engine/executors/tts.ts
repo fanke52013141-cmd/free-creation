@@ -9,6 +9,12 @@ import { featureKeyOf, resolveFeatureOption } from '../models'
 
 export const ttsExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
   const config = parseTtsConfig(readNodeConfig(ctx.shape))
+  if (config.backend !== 'minimax') {
+    return {
+      status: 'skipped',
+      reason: '语音克隆已统一使用 MiniMax；请在节点内切换旧的本地 IndexTTS 配置'
+    }
+  }
   // 固定参数归 config，用户正文归 props.text；这与节点契约和保存模型一致。
   const text = mergedPrompt(ctx.shape.props.text, inputText(ctx.inputs, 'in-text')).trim()
   if (!text) return { status: 'skipped', reason: '无朗读文本' }

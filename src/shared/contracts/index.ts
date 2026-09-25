@@ -574,7 +574,7 @@ export interface AudioGenerateInput {
 
 /**
  * 配音节点的合成请求。`config.backend` 决定主进程走哪条协议：
- * minimax（异步 t2a_async_v2，默认）/ doubao（tts/create）/ openai（兼容端点）。
+ * minimax（异步 t2a_async_v2）/ volc（火山语音合成 1.0 tts/create）。
  */
 export interface SpeechGenerateInput {
   projectId: string
@@ -582,12 +582,14 @@ export interface SpeechGenerateInput {
   modelId: string
   /** 已与上游文本合并后的朗读正文。 */
   text: string
-  /** 音色档案里的 voice_id（上游「音色设计」节点或节点内填写）；空串表示用服务端默认音色。 */
+  /** MiniMax 音色档案里的 voice_id（上游「音色设计」节点或节点内填写）；火山使用节点内 speaker。 */
   voiceId: string
+  /** 火山语音合成 1.0 可选参考音频；引用本地素材库中的 1～3 个音频资产。 */
+  referenceAudioIds?: string[]
   config: SpeechConfig
 }
 
-/** 豆包返回的字幕时间轴；只有声明了字幕输出的模型才会带回来。 */
+/** 火山语音合成 1.0 返回的字幕时间轴。 */
 export interface SpeechSubtitleSentence {
   start_time: number
   end_time: number
@@ -602,12 +604,12 @@ export interface SpeechSubtitle {
 
 export interface SpeechGenerateResult {
   asset: import('../types').MediaAsset
-  /** 仅豆包在 enable_subtitle 打开时存在；其余协议不产生字幕。 */
+  /** 仅火山语音合成 1.0 在 enableSubtitle 打开时存在。 */
   subtitle?: SpeechSubtitle
   /**
    * 本次真正生效的音色 ID，用于产物溯源。只有网关能确定的才写：MiniMax 空值会兜底成
-   * 系统音色、火山的 voice_type 是必填，两者都给；豆包与 OpenAI 兼容在用户留空时服务端
-   * 用了哪个音色无从得知，此时不写——绝不拿"用户没填"冒充"用了默认音色"。
+   * 系统音色；火山留空时服务端可能采用默认音色，因此不写——绝不拿"用户没填"冒充
+   * "用了默认音色"。
    */
   voiceId?: string
 }

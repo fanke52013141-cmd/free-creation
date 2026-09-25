@@ -10774,7 +10774,7 @@ canvas.tl-canvas-indicators {
   color: var(--txt);
 }
 
-/* 字幕时间轴（豆包 out-subtitle 的卡片内预览） */
+/* 字幕时间轴（火山语音合成 1.0 的卡片内预览） */
 .speech-subtitle-list {
   display: flex;
   flex-direction: column;
@@ -10848,7 +10848,7 @@ canvas.tl-canvas-indicators {
   text-transform: none;
 }
 
-.node-card.type-voice-design .voice-design-model-section .tts-section-label svg {
+.node-card.type-voice-design .voice-design-provider-section .tts-section-label svg {
   color: var(--voice-design-accent);
 }
 
@@ -10857,7 +10857,7 @@ canvas.tl-canvas-indicators {
   color: var(--voice-design-muted);
 }
 
-.node-card.type-voice-design .voice-design-model-select,
+.node-card.type-voice-design .voice-design-provider-select,
 .node-card.type-voice-design .voice-design-prompt,
 .node-card.type-voice-design .voice-design-parameters-section .gen-input {
   box-sizing: border-box;
@@ -10872,7 +10872,7 @@ canvas.tl-canvas-indicators {
     box-shadow 160ms ease;
 }
 
-.node-card.type-voice-design .voice-design-model-select {
+.node-card.type-voice-design .voice-design-provider-select {
   min-height: 40px;
   padding: 9px 11px;
 }
@@ -10894,7 +10894,7 @@ canvas.tl-canvas-indicators {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-.node-card.type-voice-design .voice-design-model-select:focus,
+.node-card.type-voice-design .voice-design-provider-select:focus,
 .node-card.type-voice-design .voice-design-prompt:focus,
 .node-card.type-voice-design .voice-design-parameters-section .gen-input:focus {
   border-color: color-mix(in srgb, var(--voice-design-accent) 70%, transparent);
@@ -10930,7 +10930,7 @@ canvas.tl-canvas-indicators {
   text-align: right;
 }
 
-.node-card.type-voice-design .voice-design-model-section [data-purpose='config-model-button'] {
+.node-card.type-voice-design .voice-design-provider-section [data-purpose='config-model-button'] {
   display: flex;
   width: 100%;
   min-height: 38px;
@@ -10946,7 +10946,7 @@ canvas.tl-canvas-indicators {
 }
 
 .node-card.type-voice-design
-  .voice-design-model-section
+  .voice-design-provider-section
   [data-purpose='config-model-button']:hover {
   border-color: rgba(56, 189, 248, 0.4);
   background: #20273a;
@@ -11034,7 +11034,7 @@ canvas.tl-canvas-indicators {
 
 .canvas-theme-light
   .node-card.type-voice-design
-  .voice-design-model-section
+  .voice-design-provider-section
   [data-purpose='config-model-button'] {
   border-color: var(--voice-design-edge);
   background: #eef3f8;
@@ -11043,7 +11043,7 @@ canvas.tl-canvas-indicators {
 
 .canvas-theme-light
   .node-card.type-voice-design
-  .voice-design-model-section
+  .voice-design-provider-section
   [data-purpose='config-model-button']:hover {
   border-color: rgba(24, 143, 202, 0.4);
   background: #e6f4fa;

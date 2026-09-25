@@ -186,6 +186,7 @@ function MediaTimeline({
   endMs,
   playheadMs,
   integrated = false,
+  playbackOnly = false,
   fps,
   thumbnails,
   waveform,
@@ -208,6 +209,8 @@ function MediaTimeline({
   playheadMs?: number
   /** 紧凑播放器模式：进度与截取范围共用轨道，控制项由调用方渲染 */
   integrated?: boolean
+  /** 仅显示并拖动原始播放进度，不显示截取手柄 */
+  playbackOnly?: boolean
   fps: number | null
   /** 8~12 张缩略图 data URL 数组 */
   thumbnails?: string[]
@@ -306,18 +309,27 @@ function MediaTimeline({
     const ms = clientXToMs(event.clientX)
     onSeek(ms)
     if (integrated) {
-      if (isPoint) {
+      if (playbackOnly) {
+        dragHandle('point', event.clientX)
+      } else if (isPoint) {
         onPoint?.(ms)
         dragHandle('point', event.clientX)
       } else {
         const target = event.target instanceof Element ? event.target : null
         const handle = target?.closest('.video-timeline-handle')
-        if (handle) {
-          const handles = Array.from(
-            trackRef.current?.querySelectorAll('.video-timeline-handle') ?? []
-          )
-          dragHandle(handles.indexOf(handle) === 0 ? 'start' : 'end', event.clientX)
-        }
+        const handles = Array.from(
+          trackRef.current?.querySelectorAll('.video-timeline-handle') ?? []
+        )
+        const kind: 'start' | 'end' = handle
+          ? handles.indexOf(handle) === 0
+            ? 'start'
+            : 'end'
+          : Math.abs(ms - currentStart) <= Math.abs(ms - currentEnd)
+            ? 'start'
+            : 'end'
+        if (kind === 'start') onRange?.(Math.min(ms, currentEnd - 1), currentEnd)
+        else onRange?.(currentStart, Math.max(ms, currentStart + 1))
+        dragHandle(kind, event.clientX)
       }
       return
     }
@@ -366,7 +378,8 @@ function MediaTimeline({
       <div
         ref={trackRef}
         className="video-timeline-track"
-        data-point={isPoint || undefined}
+        data-point={(isPoint && !playbackOnly) || undefined}
+        data-playback-only={playbackOnly || undefined}
         style={
           {
             ...(isPoint
@@ -389,6 +402,7 @@ function MediaTimeline({
           </>
         )}
         {isPoint ? (
+          playbackOnly ? null : (
           <div
             className="video-timeline-handle"
             style={{ left: percent(currentPoint) }}
@@ -398,6 +412,7 @@ function MediaTimeline({
             aria-valuemax={max}
             aria-valuenow={currentPoint}
           />
+          )
         ) : (
           <>
             <div
@@ -778,13 +793,9 @@ export function VideoOperationsWorkbench({
   const toggleMute = (): void => {
     const video = videoRef.current
     if (!video) return
-    if (video.muted || video.volume === 0) {
-      if (video.volume === 0) video.volume = 1
-      video.muted = false
-    } else {
-      video.muted = true
-    }
-    setIsMuted(video.muted)
+    const nextMuted = !video.muted
+    video.muted = nextMuted
+    setIsMuted(nextMuted)
   }
   const toggleFullscreen = (): void => {
     const player = playerRef.current
@@ -971,36 +982,54 @@ export function VideoOperationsWorkbench({
             </div>
 
             <div className="video-operations-timeline">
-              {mode === 'frame' ? (
-                <MediaTimeline
-                  durationMs={max}
-                  pointMs={
-                    frameCfg.mode === 'first'
-                      ? 0
-                      : frameCfg.mode === 'last'
-                        ? max - 1
-                        : frameCfg.timeMs
-                  }
-                  playheadMs={currentTimeMs}
-                  integrated
-                  fps={fps}
-                  onSeek={seek}
-                  onPoint={savePoint}
-                  onCommit={() => undefined}
-                />
-              ) : (
-                <MediaTimeline
-                  durationMs={max}
-                  startMs={clipCfg.startMs}
-                  endMs={clipCfg.endMs}
-                  playheadMs={currentTimeMs}
-                  integrated
-                  fps={fps}
-                  onSeek={seek}
-                  onRange={saveRange}
-                  onCommit={() => undefined}
-                />
-              )}
+              <div className="video-operations-axes">
+                <div className="video-operations-axis">
+                  <span className="video-operations-axis-label">播放</span>
+                  <MediaTimeline
+                    durationMs={max}
+                    pointMs={currentTimeMs}
+                    playheadMs={currentTimeMs}
+                    integrated
+                    playbackOnly
+                    fps={fps}
+                    onSeek={seek}
+                    onCommit={() => undefined}
+                  />
+                </div>
+                <div className="video-operations-axis">
+                  <span className="video-operations-axis-label">
+                    {mode === 'frame' ? '抽帧' : '截取'}
+                  </span>
+                  {mode === 'frame' ? (
+                    <MediaTimeline
+                      durationMs={max}
+                      pointMs={
+                        frameCfg.mode === 'first'
+                          ? 0
+                          : frameCfg.mode === 'last'
+                            ? max - 1
+                            : frameCfg.timeMs
+                      }
+                      integrated
+                      fps={fps}
+                      onSeek={seek}
+                      onPoint={savePoint}
+                      onCommit={() => undefined}
+                    />
+                  ) : (
+                    <MediaTimeline
+                      durationMs={max}
+                      startMs={clipCfg.startMs}
+                      endMs={clipCfg.endMs}
+                      integrated
+                      fps={fps}
+                      onSeek={seek}
+                      onRange={saveRange}
+                      onCommit={() => undefined}
+                    />
+                  )}
+                </div>
+              </div>
               <div className="video-operations-controls">
                 <div className="video-operations-controls-main">
                   <button
@@ -1089,13 +1118,12 @@ export function VideoOperationsWorkbench({
                   <div className="video-operations-volume-control">
                     <button
                       type="button"
-                      className="video-operations-player-button"
-                      aria-label={isMuted || volume === 0 ? '取消静音' : '静音'}
-                      title={isMuted || volume === 0 ? '取消静音' : '静音'}
+                      className="video-operations-player-button video-operations-volume-button"
+                      aria-label={isMuted ? '取消静音' : '静音'}
                       disabled={!sourceMediaPath}
                       onClick={toggleMute}
                     >
-                      <Icon name={isMuted || volume === 0 ? 'volume-off' : 'volume'} size={15} />
+                      <Icon name={isMuted ? 'volume-off' : 'volume'} size={15} />
                     </button>
                     <input
                       className="video-operations-player-volume"
@@ -1104,16 +1132,14 @@ export function VideoOperationsWorkbench({
                       min={0}
                       max={1}
                       step={0.05}
-                      value={isMuted ? 0 : volume}
+                      value={volume}
                       disabled={!sourceMediaPath}
                       onChange={(event) => {
                         const nextVolume = Number(event.currentTarget.value)
                         const video = videoRef.current
                         if (!video) return
                         video.volume = nextVolume
-                        video.muted = false
                         setVolume(nextVolume)
-                        setIsMuted(false)
                       }}
                     />
                   </div>

@@ -228,7 +228,7 @@ export const projectTtsOutputs = (shape: NodeCardShape): RawNodeOutputs => ({
   ...extraJsonOutput(shape, 'out-json')
 })
 
-/** 配音节点：音频输出永远来自本次运行；字幕只在豆包开启字幕时存在。 */
+/** 配音节点：音频输出永远来自本次运行；字幕只在火山语音合成 1.0 开启字幕时存在。 */
 export const projectSpeechOutputs = (shape: NodeCardShape): RawNodeOutputs => ({
   ...latestResultMediaOutput(shape, 'audio', 'out-audio'),
   ...extraJsonOutput(shape, 'out-subtitle')

@@ -2,7 +2,7 @@
 // 变成两层明确的动作。
 //
 // 背景：testProvider 对 openai-compatible 驱动会 GET /models，但 MiniMax / Seedance /
-// 豆包语音没有 /models，此前直接回一句「配置已保存（首次生成时验证）」——也就是设置
+// 火山 1.0 语音没有 /models，此前直接回一句「配置已保存（首次生成时验证）」——也就是设置
 // 面板对这几家完全不校验，用户唯一能验证的方式就是真的点一次计费的生成。
 //
 //   免费层：用真实请求构造器（video.ts / audio.ts / voice.ts 里那批纯函数）拼出即将
@@ -20,7 +20,11 @@ import type {
   SaveProviderInput
 } from '../../shared/contracts'
 import type { GatewayModelInfo, ProviderConfig } from '../../shared/types'
-import { DEFAULT_SPEECH_CONFIG, type SpeechConfig } from '../../shared/speech'
+import {
+  DEFAULT_SPEECH_CONFIG,
+  MINIMAX_ASYNC_SPEECH_MODELS,
+  type SpeechConfig
+} from '../../shared/speech'
 import {
   canonicalVideoModelId,
   normalizeVideoGenParams,
@@ -29,7 +33,7 @@ import {
 import { describeUpstreamHttpError, extractUpstreamMessage } from '../../shared/upstream-error'
 import { GatewayError } from './factory'
 import { getProvider } from './providers.repo'
-import { buildDoubaoSpeechBody, buildMiniMaxAsyncTtsBody, buildVolcTtsBody } from './audio'
+import { buildMiniMaxAsyncTtsBody, buildVolcSpeechBody } from './audio'
 import {
   buildMiniMaxH3RequestBody,
   buildSeedanceRequestBody,
@@ -163,7 +167,11 @@ export async function buildProbeSpecs(p: ProviderConfig): Promise<ProbeSpec[]> {
   }
 
   if (p.specId === 'minimax') {
-    const ttsModel = pickModel(p.models, 'audio', /speech|tts|voice|audio/i)
+    const configuredTtsModel = p.models.find(
+      (model) =>
+        model.modality === 'audio' && MINIMAX_ASYNC_SPEECH_MODELS.includes(model.id.trim())
+    )?.id.trim()
+    const ttsModel = configuredTtsModel || DEFAULT_SPEECH_CONFIG.modelId
     const config: SpeechConfig = { ...BASE_SPEECH_CONFIG, backend: 'minimax', modelId: ttsModel }
     const ttsBody = buildMiniMaxAsyncTtsBody(
       { modelId: ttsModel, text: PROBE_TEXT, voiceId: '' },
@@ -172,11 +180,11 @@ export async function buildProbeSpecs(p: ProviderConfig): Promise<ProbeSpec[]> {
     specs.push({
       item: probeItem({
         id: 'minimax-tts',
-        label: `异步语音合成（${ttsModel || '未选模型'}）`,
+        label: `异步语音合成（${configuredTtsModel || '未选模型'}）`,
         method: 'POST',
         url: `${base}/v1/t2a_async_v2`,
         body: maskSecret(JSON.stringify(ttsBody, null, 2), p.apiKey),
-        missing: ttsModel ? [] : ['未配置语音模型 ID（MiniMax speech 系列）'],
+        missing: configuredTtsModel ? [] : ['未配置 MiniMax 异步语音合成模型'],
         cost: 'paid'
       }),
       body: ttsBody,
@@ -223,55 +231,33 @@ export async function buildProbeSpecs(p: ProviderConfig): Promise<ProbeSpec[]> {
     )
   }
 
-  if (p.specId === 'doubao-speech') {
-    const seedAudio = pickModel(p.models, 'audio', /seed-audio|audio/i)
-    const doubaoConfig: SpeechConfig = {
+  if (p.specId === 'volc-speech') {
+    const seedAudio = 'seed-audio-1.0'
+    const modelConfigured = p.models.some(
+      (model) => model.modality === 'audio' && model.id === seedAudio
+    )
+    const volcConfig: SpeechConfig = {
       ...BASE_SPEECH_CONFIG,
-      backend: 'doubao',
+      backend: 'volc',
       modelId: seedAudio
     }
-    const doubaoBody = buildDoubaoSpeechBody(
+    const volcBody = buildVolcSpeechBody(
       { modelId: seedAudio, text: PROBE_TEXT, voiceId: '' },
-      doubaoConfig
-    )
-    specs.push({
-      item: probeItem({
-        id: 'doubao-tts',
-        label: `豆包语音合成（${seedAudio || '未选模型'}）`,
-        method: 'POST',
-        url: `${base}/api/v3/tts/create`,
-        body: maskSecret(JSON.stringify(doubaoBody, null, 2), p.apiKey),
-        missing: seedAudio ? [] : ['未配置语音模型 ID（seed-audio-1.0）'],
-        cost: 'paid'
-      }),
-      body: doubaoBody,
-      // 豆包原生协议用 X-Api-Key，而不是 Bearer。
-      headers: { 'X-Api-Key': p.apiKey, 'Content-Type': 'application/json' }
-    })
-
-    const volcConfig: SpeechConfig = { ...BASE_SPEECH_CONFIG, backend: 'volc' }
-    const volcBody = buildVolcTtsBody(
-      { apiKey: p.apiKey },
-      { text: PROBE_TEXT, voiceId: '' },
-      volcConfig,
-      PROBE_UPSTREAM_TASK_ID
+      volcConfig
     )
     specs.push({
       item: probeItem({
         id: 'volc-tts',
-        label: '火山语音合成 1.0',
+        label: `火山语音合成 1.0（${seedAudio || '未选模型'}）`,
         method: 'POST',
-        url: `${base}/api/v1/tts`,
+        url: `${base}/api/v3/tts/create`,
         body: maskSecret(JSON.stringify(volcBody, null, 2), p.apiKey),
-        missing: [
-          'AppID 与 cluster 存在配音节点的配置里，供应商面板不保存：请在配音节点填好后由该节点直接验证',
-          'voice_type 同样来自配音节点的音色选择'
-        ],
+        missing: modelConfigured ? [] : ['未配置语音模型 ID（seed-audio-1.0）'],
         cost: 'paid'
       }),
       body: volcBody,
-      // 火山 1.0 的鉴权头是分号形式：Bearer;{token}。
-      headers: { Authorization: `Bearer;${p.apiKey}`, 'Content-Type': 'application/json' }
+      // 火山语音合成 1.0 使用 X-Api-Key。
+      headers: { 'X-Api-Key': p.apiKey, 'Content-Type': 'application/json' }
     })
   }
 
@@ -490,7 +476,7 @@ export async function freeConnectionMessage(p: ProviderConfig): Promise<string> 
 }
 
 function authHeaderFor(p: ProviderConfig): string {
-  return p.specId === 'doubao-speech' ? `Bearer;${p.apiKey}` : `Bearer ${p.apiKey}`
+  return `Bearer ${p.apiKey}`
 }
 
 /** 面板里未保存的草稿也要能自检，因此密钥解析规则与 testProvider 完全一致。 */

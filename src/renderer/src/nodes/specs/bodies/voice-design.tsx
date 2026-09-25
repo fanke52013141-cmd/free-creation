@@ -13,7 +13,7 @@ import { runNodeManually } from '../../../engine/executor'
 import { useAppStore } from '../../../stores/app'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
-import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
+import { useGatewayStore } from '../../../stores/gateway'
 import {
   DEFAULT_VOICE_DESIGN_CONFIG,
   VOICE_DESIGN_PREVIEW_LIMIT,
@@ -21,7 +21,6 @@ import {
   serializeVoiceDesignConfig,
   type VoiceDesignConfig
 } from '@shared/voice-design'
-import { isValidMiniMaxVoiceId } from '@shared/tts'
 import {
   clearSelectedMediaHistory,
   MediaFileActions,
@@ -54,13 +53,18 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
   const [playing, setPlaying] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  // 音色设计只存在于 MiniMax；选择目录中已经验证的具体模型，而非只有供应商。
-  const minimaxModels = modelsByModality(providers, 'audio').filter(
-    (option) => option.provider.specId === 'minimax'
-  )
+  // voice_design 的请求体没有 model 字段；这里按供应商选择 MiniMax 账号，
+  // 内部取一个已配置的音频模型用于模型网关的 voice.design 能力路由。
+  const minimaxProviders = providers.flatMap((provider) => {
+    if (provider.specId !== 'minimax') return []
+    const model = provider.models.find(
+      (item) =>
+        item.modality === 'audio' &&
+        (!item.operations || item.operations.includes('voice.design'))
+    )
+    return model ? [{ provider, model }] : []
+  })
   const voiceId = designedVoiceId(shape)
-  const customVoiceInvalid =
-    Boolean(config.voiceId.trim()) && !isValidMiniMaxVoiceId(config.voiceId.trim())
 
   useEffect(() => {
     if (!providersLoaded) void loadProviders()
@@ -130,38 +134,37 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
   const hasOutput = Boolean(shape.props.mediaPath)
   const canGenerate =
     Boolean(draft.trim()) &&
-    Boolean(config.providerId) &&
-    Boolean(config.modelId) &&
-    !customVoiceInvalid
+    Boolean(config.previewText.trim()) &&
+    minimaxProviders.some(
+      (item) => item.provider.id === config.providerId && item.model.id === config.modelId
+    )
 
   return (
     <div className="node-tts node-voice-design">
-      <div className="tts-section voice-design-model-section">
+      <div className="tts-section voice-design-provider-section">
         <div className="tts-section-label">
-          <Icon name="spark" size={13} />
-          <span>音色设计模型</span>
+          <Icon name="settings" size={13} />
+          <span>MiniMax 供应商</span>
         </div>
         <AppSelect
-          className="gen-select voice-design-model-select"
-          aria-label="音色设计模型"
-          value={
-            config.providerId && config.modelId ? `${config.providerId}::${config.modelId}` : ''
-          }
+          className="gen-select voice-design-provider-select"
+          aria-label="MiniMax 供应商"
+          value={config.providerId}
           onPointerDown={(e) => e.stopPropagation()}
           onChange={(e) => {
-            const selected = minimaxModels.find((item) => item.key === e.target.value)
+            const selected = minimaxProviders.find((item) => item.provider.id === e.target.value)
             if (selected)
               updateConfig({ providerId: selected.provider.id, modelId: selected.model.id })
           }}
         >
-          <option value="">{providersLoaded ? '选择已验证模型…' : '加载中…'}</option>
-          {minimaxModels.map((item) => (
-            <option key={item.key} value={item.key}>
-              {item.provider.name} · {item.model.name || item.model.id}
+          <option value="">{providersLoaded ? '选择 MiniMax 供应商…' : '加载中…'}</option>
+          {minimaxProviders.map(({ provider }) => (
+            <option key={provider.id} value={provider.id}>
+              {provider.name}
             </option>
           ))}
         </AppSelect>
-        {providersLoaded && !minimaxModels.length && (
+        {providersLoaded && !minimaxProviders.length && (
           <button
             className="btn-ghost small"
             data-purpose="config-model-button"
@@ -171,7 +174,7 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
               void openSettings()
             }}
           >
-            去配置 MiniMax 音色设计模型
+            去配置 MiniMax 供应商
           </button>
         )}
       </div>
@@ -217,6 +220,9 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
           onPointerDown={(e) => e.stopPropagation()}
           onChange={(e) => updateConfig({ previewText: e.target.value })}
         />
+        <div className="audio-text-meta" aria-live="polite">
+          {config.previewText.length} / {VOICE_DESIGN_PREVIEW_LIMIT} 字 · 试听按 2 元/万字计费
+        </div>
         <label
           className="opt-label voice-design-field-label"
           htmlFor={`voice-design-id-${shape.id}`}
@@ -224,7 +230,7 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
           自定义 Voice ID（可选）
         </label>
         <input
-          className={`gen-input voice-design-id-input ${customVoiceInvalid ? 'invalid' : ''}`}
+          className="gen-input voice-design-id-input"
           id={`voice-design-id-${shape.id}`}
           aria-label="自定义 Voice ID（可选）"
           spellCheck={false}
@@ -233,11 +239,6 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
           onPointerDown={(e) => e.stopPropagation()}
           onChange={(e) => updateConfig({ voiceId: e.target.value })}
         />
-        {customVoiceInvalid && (
-          <div className="gen-capability-note error" role="alert">
-            需 8～256 位、以字母开头、只含字母数字与 - _，且末位不能是 - 或 _
-          </div>
-        )}
       </div>
 
       <button

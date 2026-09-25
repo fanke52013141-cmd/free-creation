@@ -52,7 +52,7 @@ export interface GatewayClient {
   videoCancel(taskId: string): Promise<IpcEnvelope<boolean>>
   videoTask(taskId: string): Promise<IpcEnvelope<VideoTaskInfo | null>>
   audioGenerate(input: AudioGenerateInput): Promise<IpcEnvelope<MediaAsset>>
-  /** 配音节点：按 config.backend 走 MiniMax 异步 / 豆包 / OpenAI 兼容协议。 */
+  /** 配音节点：按 config.backend 走 MiniMax 异步或火山语音合成 1.0。 */
   speechGenerate(input: SpeechGenerateInput): Promise<IpcEnvelope<SpeechGenerateResult>>
   /** 音色设计：返回试听音频资产与可复用的 voice_id。 */
   voiceDesign(input: VoiceDesignInput): Promise<IpcEnvelope<VoiceDesignResult>>

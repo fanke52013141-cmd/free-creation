@@ -50,9 +50,8 @@ describe('语音克隆配置', () => {
         languageBoost: 'Chinese'
       })
     )
-    // 上游的 text_validation 要的是参考音频原文（字符串），布尔值一律 2013；
-    // 因此配置里不再保留这个开关，老节点存量的 true 也在解析时被丢弃。
-    expect(config).not.toHaveProperty('textValidation')
+    // text_validation 要的是参考音频原文（字符串）；错误类型被归一为空串，请求体会省略它。
+    expect(config.textValidation).toBe('')
     expect(config.accuracy).toBe(0.85)
     expect(config.languageBoost).toBe('Chinese')
   })
@@ -88,12 +87,15 @@ describe('语音克隆配置', () => {
     expect(config.backend).toBe('minimax')
     expect(config.format).toBe('mp3')
     expect(DEFAULT_TTS_CONFIG.backend).toBe('minimax')
-    expect(TTS_FORMATS_BY_BACKEND.minimax).not.toContain('wav')
+    expect(TTS_FORMATS_BY_BACKEND.minimax).toContain('wav')
     expect(TTS_FORMATS_BY_BACKEND.comfyui[0]).toBe('wav')
   })
 
-  it('MiniMax 不会保留它发送不了的 wav，本地后端不受影响', () => {
-    expect(parseTtsConfig(JSON.stringify({ backend: 'minimax', format: 'wav' })).format).toBe('mp3')
+  it('MiniMax 异步通道保留文档支持的格式，非法格式回退', () => {
+    expect(parseTtsConfig(JSON.stringify({ backend: 'minimax', format: 'wav' })).format).toBe('wav')
+    expect(parseTtsConfig(JSON.stringify({ backend: 'minimax', format: 'ogg_opus' })).format).toBe(
+      'mp3'
+    )
     expect(parseTtsConfig(JSON.stringify({ backend: 'comfyui', format: 'flac' })).format).toBe(
       'flac'
     )
