@@ -50,9 +50,9 @@ import { chatExecutor } from '../../engine/executors/chat'
 import {
   codeExecutor,
   codePortConfigErrors,
+  codeParamPortId,
   mapVarTypeToPortType,
-  outputPortId,
-  paramPortId,
+  outputFieldPortId,
   parseCodeConfigs
 } from '../../engine/executors/code'
 import { imageGenExecutor } from '../../engine/executors/imageGen'
@@ -724,11 +724,20 @@ export function registerExtendedNodeTypes(): void {
     icon: 'processor',
     color: '#06b6d4',
     defaultSize: { w: 340, h: 260 },
-    description: '传递连线值或固定值，可提取 JSON 字段或套入文本模板。',
+    description: '单值透传并保持原类型；也可从 JSON 取字段或转成文本模板。',
     category: 'logic',
     ports: {
-      in: [input('in-value', '输入变量', 'any', '需要原样传递或后续转换的单个变量。')],
-      out: [output('out-value', '输出变量', 'any', '处理完成后的变量；实际类型由配置决定。')]
+      in: [
+        input('in-value', '输入变量', 'any', '一个文本、JSON 或媒体资产值；此端口不接收多条连线。')
+      ],
+      out: [
+        output(
+          'out-value',
+          '输出变量',
+          'any',
+          '透传时保留原值类型；取字段保留其文本或 JSON 类型；模板模式输出文本。'
+        )
+      ]
     },
     projectOutputs: projectProcessorOutputs,
     executor: processorExecutor,
@@ -741,15 +750,26 @@ export function registerExtendedNodeTypes(): void {
     icon: 'json',
     color: '#c084fc',
     defaultSize: { w: 340, h: 260 },
-    description: '结构化 JSON 数据节点；可接 JSON 或可解析文本，字段卡片呈现。',
+    description: '解析并格式化通用 JSON，支持手工编辑；多条 JSON 连线会汇总成数组。',
     category: 'logic',
     ports: {
       in: [
-        input('in-json', '数据', 'json', '一个或多个需要汇总或展示的结构化值。', {
-          cardinality: 'many',
-          schema: JSON_ANY
-        }),
-        input('in-text', '文本', 'text', '可被 JSON.parse 解析的单段文本。')
+        input(
+          'in-json',
+          '数据',
+          'json',
+          '优先输入：一条保留原值；多条按连线顺序汇总为 JSON 数组。',
+          {
+            cardinality: 'many',
+            schema: JSON_ANY
+          }
+        ),
+        input(
+          'in-text',
+          '文本',
+          'text',
+          '仅在没有 JSON 数据输入时解析；两类同时连接时使用 JSON 数据。'
+        )
       ],
       out: [output('out-json', '数据', 'json', '校验并格式化后的结构化值。', { schema: JSON_ANY })]
     },
@@ -817,12 +837,12 @@ export function registerExtendedNodeTypes(): void {
   })
   registerNodeType({
     type: 'code',
-    contractVersion: 2,
+    contractVersion: 3,
     label: '代码',
     icon: 'code',
     color: '#e2e8f0',
     defaultSize: { w: 340, h: 260 },
-    description: '代码转换节点。读取命名输入变量，执行后将 return 值写入命名输出变量。',
+    description: '本地运行 JavaScript，支持具名输入和多字段输出。',
     category: 'logic',
     ports: {
       in: [
@@ -845,22 +865,27 @@ export function registerExtendedNodeTypes(): void {
     },
     resolvePorts: (shape) => {
       const cfg = parseCodeConfigs(readNodeConfig(shape))
+      const configErrors = codePortConfigErrors(readNodeConfig(shape))
       // 配置有冲突时不暴露半真半假的动态端口；执行器会提供相同的硬错误。
-      const paramPorts: PortDecl[] = (
-        codePortConfigErrors(readNodeConfig(shape)).length ? [] : cfg.params
-      ).map((p) => {
+      const paramPorts: PortDecl[] = (configErrors.length ? [] : cfg.params).map((p) => {
         const type = mapVarTypeToPortType(p.type)
         return {
-          id: paramPortId(p.name),
+          id: codeParamPortId(p),
           name: p.name,
           dir: 'in',
           type,
           description: `自定义参数：${p.name}（${p.type}）`,
           required: false,
-          cardinality: 'one',
-          ...(type === 'json' ? { schema: JSON_ANY } : {})
+          cardinality: p.cardinality ?? 'one',
+          ...(type === 'json' ? { schema: JSON_ANY } : {}),
+          ...(type === 'camera' ? { schema: PREVIS_CAMERA } : {})
         }
       })
+      const outputFields = configErrors.length
+        ? []
+        : cfg.outputMode === 'fields'
+          ? cfg.outputs
+          : [{ name: cfg.outputName, type: cfg.outputType }]
       return {
         in: [
           input('in-text', '文本输入', 'text', '代码运行时 input.text 读取的合并文本。', {
@@ -872,17 +897,19 @@ export function registerExtendedNodeTypes(): void {
           }),
           ...paramPorts
         ],
-        out: [
-          output(
-            outputPortId(cfg.outputName),
-            cfg.outputName,
-            mapVarTypeToPortType(cfg.outputType),
-            `代码 return 写入变量 ${cfg.outputName}（${cfg.outputType}）。`,
+        out: outputFields.map((field) => {
+          const type = mapVarTypeToPortType(field.type)
+          return output(
+            outputFieldPortId(field),
+            field.name,
+            type,
+            `代码 return 对象字段 ${field.name}（${field.type}）。`,
             {
-              ...(mapVarTypeToPortType(cfg.outputType) === 'json' ? { schema: JSON_ANY } : {})
+              ...(type === 'json' ? { schema: JSON_ANY } : {}),
+              ...(type === 'camera' ? { schema: PREVIS_CAMERA } : {})
             }
           )
-        ]
+        })
       }
     },
     projectOutputs: projectCodeOutputs,
@@ -896,7 +923,7 @@ export function registerExtendedNodeTypes(): void {
     icon: 'storyboard',
     color: '#3b82f6',
     defaultSize: { w: 340, h: 260 },
-    description: '将分镜 JSON 呈现为可编辑的镜头卡片，并输出结构化分镜数据与文字摘要。',
+    description: '按镜头 JSON 字段生成可编辑表格，并输出完整分镜数据与文字摘要。',
     category: 'logic',
     ports: {
       in: [
@@ -955,15 +982,15 @@ export function registerExtendedNodeTypes(): void {
   registerNodeType({
     type: 'iterate',
     contractVersion: 2,
-    label: '批量处理',
+    label: '循环',
     icon: 'grid',
     color: '#9333ea',
     defaultSize: { w: 340, h: 260 },
-    description: '按列表逐项执行循环体，驱动下游子流程并汇总结果列表。',
+    description: '按顺序逐项运行循环体，并汇总结果。',
     category: 'logic',
     ports: {
       in: [
-        input('in-list', '列表', 'json', '要逐项批量处理的列表（每个元素作为一次循环体输入）。', {
+        input('in-list', '列表', 'json', '列表项按顺序逐个运行连接的循环体。', {
           schema: LIST_ITEMS,
           // 契约矩阵把 in-list 记为必填：没有列表时循环体一项都不会跑，
           // 与其让按钮可点、跑完给一句「没有可循环的列表输入」，不如直接标出缺什么。
@@ -975,7 +1002,7 @@ export function registerExtendedNodeTypes(): void {
           'out-item',
           '当前项',
           'iteration',
-          '循环体专用的临时作用域。可连接下游 JSON 输入；循环结束后不作为项目级输出。',
+          '循环体专用的临时作用域。普通列表项进入 JSON 输入；带 kind 与资产引用字段的媒体项可进入同类型媒体输入。',
           { required: false }
         ),
         output(

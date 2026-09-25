@@ -189,8 +189,8 @@ describe('projectNodeOutputs · 媒体节点（资产 / 操作节点）', () => 
     expect(split['out-images']).toMatchObject({
       kind: 'json',
       data: [
-        { index: 1, mediaId: 'm-split-1' },
-        { index: 2, mediaId: 'm-split-2' }
+        { index: 1, kind: 'image', mediaId: 'm-split-1' },
+        { index: 2, kind: 'image', mediaId: 'm-split-2' }
       ]
     })
     const edit = projectNodeOutputs(
@@ -555,6 +555,29 @@ describe('projectNodeOutputs · 代码节点（读 meta.nodeResult）', () => {
     expect(out['out-payload']).toEqual({ kind: 'json', data: { x: 1 } })
   })
 
+  it('多输出运行结果分别映射到配置中的输出端口', () => {
+    const config = JSON.stringify({
+      source: '',
+      outputMode: 'fields',
+      outputs: [
+        { name: 'caption', type: 'string', portId: 'out-caption' },
+        { name: 'count', type: 'number', portId: 'out-count' }
+      ]
+    })
+    const result = JSON.stringify({
+      kind: 'code-outputs',
+      values: {
+        'out-caption': { kind: 'text', text: '镜头一' },
+        'out-count': { kind: 'json', data: 3 }
+      }
+    })
+    const out = projectNodeOutputs(shape('code', { config }, { nodeResult: result }))
+    expect(out).toEqual({
+      'out-caption': { kind: 'text', text: '镜头一' },
+      'out-count': { kind: 'json', data: 3 }
+    })
+  })
+
   it('无运行结果返回空', () => {
     expect(projectNodeOutputs(shape('code'))).toEqual({})
   })
@@ -658,7 +681,7 @@ describe('projectNodeOutputs · 导演台节点', () => {
     expect(out['out-camera']).toBeUndefined()
   })
 
-  it('发布记录投影为帧与视频；机位端口不投影，以免拖垮同节点输出', () => {
+  it('发布记录投影为帧、视频和类型化机位数据', () => {
     const record = {
       kind: 'director-publish',
       version: 1,
@@ -674,9 +697,7 @@ describe('projectNodeOutputs · 导演台节点', () => {
     )
     expect(out['out-frame']).toEqual({ kind: 'image', ...record.frame })
     expect(out['out-preview-video']).toEqual({ kind: 'video', ...record.video })
-    // out-camera 声明为专用 camera 通道，而 NodeValue 没有 camera 这一类值：投影它会让
-    // 整节点被判为契约违规，手动运行的上游预填因此连 out-frame 一起丢掉（§7.9 第 5 条）。
-    expect(out['out-camera']).toBeUndefined()
+    expect(out['out-camera']).toEqual({ kind: 'camera', data: record.camera })
   })
 
   it('工程编辑后不再把旧发布媒体投影为当前下游输出', () => {

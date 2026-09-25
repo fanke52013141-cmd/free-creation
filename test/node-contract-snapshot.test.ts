@@ -377,7 +377,7 @@ describe('关键端口契约快照（防回归）', () => {
 
   it('代码节点以默认 out-output 作为静态契约，实例可解析为命名输出端口', () => {
     const spec = getNodeType('code')!
-    expect(spec.contractVersion).toBe(2)
+    expect(spec.contractVersion).toBe(3)
     expect(snapshotPorts(spec.ports.out)).toEqual([
       { id: 'out-output', dir: 'out', type: 'any', required: true, cardinality: 'one' }
     ])

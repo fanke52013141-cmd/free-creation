@@ -58,6 +58,15 @@ describe('v1.3 §16.1 端口圆点是安静的节点色（覆盖多色玻璃珠�
     expect(nodeCardView).toContain("['--pc' as string]: PORT_COLORS[p.type]")
   })
 
+  it('节点未连线时仍显示所有契约端口，避免多路输入无法发现', () => {
+    expect(nodeCardView).toContain('const visibleInPorts = inPorts')
+    expect(nodeCardView).toContain('const visibleOutPorts = outPorts')
+    expect(nodeCardView).not.toContain('inPorts.slice(0, 1)')
+    expect(nodeCardView).not.toContain('outPorts.slice(0, 1)')
+    expect(nodeCardView).toContain('!isSource && canAttachPort(draft.from, p)')
+    expect(nodeCardView).toContain("canAttachPort(draftIn, p, 'in')")
+  })
+
   it('可见圆点和透明命中区都扩大，锚点元素尺寸仍由 edge-geometry 统一', () => {
     expect(foundation).toMatch(/\.port-dot::after\s*\{[^}]*width:\s*14px;[^}]*height:\s*14px;/)
     expect(foundation).toMatch(/\.port-dot::before\s*\{[^}]*inset:\s*-14px;/)

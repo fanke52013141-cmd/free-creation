@@ -17,12 +17,22 @@ import {
   createStoryboardShot,
   moveStoryboardShot,
   removeStoryboardShot,
-  updateStoryboardShot,
+  updateStoryboardField,
   type StoryboardData,
   type StoryboardShot
 } from '../../storyboard-editor'
 
 const EMPTY_BOARD: StoryboardData = { shots: [] }
+
+function displayStoryboardValue(value: unknown): string {
+  if (value === undefined) return '—'
+  if (typeof value === 'string') return value || '—'
+  try {
+    return JSON.stringify(value) ?? String(value)
+  } catch {
+    return String(value)
+  }
+}
 
 function newShotId(): string {
   return globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 11)
@@ -72,14 +82,12 @@ export function StoryboardBody({ shape }: NodeBodyProps): React.JSX.Element {
   const importedRef = useRef(false)
   const [editingInput, setEditingInput] = useState(false)
   const [draftInput, setDraftInput] = useState(shape.props.text)
-  const [editingShotId, setEditingShotId] = useState<string | null>(null)
-  const [shotDraft, setShotDraft] = useState<
-    Pick<StoryboardShot, 'scene' | 'dialogue' | 'duration'>
-  >({
-    scene: '',
-    dialogue: '',
-    duration: ''
-  })
+  const [editingCell, setEditingCell] = useState<{ shotId: string; field: string } | null>(null)
+  const [cellDraft, setCellDraft] = useState('')
+  const fields = useMemo(
+    () => Array.from(new Set(data.shots.flatMap((shot) => Object.keys(shot)))),
+    [data.shots]
+  )
 
   const update = (next: StoryboardData): void => {
     editor.updateShape({
@@ -124,22 +132,36 @@ export function StoryboardBody({ shape }: NodeBodyProps): React.JSX.Element {
     markUndoPoint(editor, 'storyboard-json-edit')
   }
 
-  const startShotEdit = (shot: StoryboardShot): void => {
-    setEditingShotId(shot.id)
-    setShotDraft({ scene: shot.scene, dialogue: shot.dialogue, duration: shot.duration })
+  const startCellEdit = (shot: StoryboardShot, field: string): void => {
+    if (field === 'id') return
+    setEditingCell({ shotId: shot.id, field })
+    const value = shot[field]
+    setCellDraft(
+      value === undefined ? '' : typeof value === 'string' ? value : displayStoryboardValue(value)
+    )
   }
 
-  const saveShotEdit = (): void => {
-    if (!editingShotId) return
-    update(updateStoryboardShot(data, editingShotId, shotDraft))
-    setEditingShotId(null)
-    markUndoPoint(editor, 'storyboard-shot-edit')
+  const saveCellEdit = (shot: StoryboardShot): void => {
+    if (!editingCell || editingCell.shotId !== shot.id) return
+    const current = shot[editingCell.field]
+    let nextValue: unknown = cellDraft
+    if (current !== undefined && typeof current !== 'string') {
+      try {
+        nextValue = JSON.parse(cellDraft)
+      } catch {
+        toast('该字段原本是 JSON 值，请输入合法 JSON')
+        return
+      }
+    }
+    update(updateStoryboardField(data, shot.id, editingCell.field, nextValue))
+    setEditingCell(null)
+    markUndoPoint(editor, 'storyboard-field-edit')
   }
 
   const addShot = (): void => {
     const shot = createStoryboardShot(newShotId())
     update({ ...data, shots: [...data.shots, shot] })
-    startShotEdit(shot)
+    startCellEdit(shot, 'scene')
     markUndoPoint(editor, 'storyboard-shot-add')
   }
 
@@ -162,7 +184,7 @@ export function StoryboardBody({ shape }: NodeBodyProps): React.JSX.Element {
     )
       return
     update(removeStoryboardShot(data, shotId))
-    if (editingShotId === shotId) setEditingShotId(null)
+    if (editingCell?.shotId === shotId) setEditingCell(null)
     markUndoPoint(editor, 'storyboard-shot-remove')
   }
 
@@ -234,6 +256,7 @@ export function StoryboardBody({ shape }: NodeBodyProps): React.JSX.Element {
   return (
     <div className="storyboard-body" ref={scrollRef}>
       <div className="storyboard-toolbar">
+        <span>输出：out-json 分镜数据 · out-text 文字摘要</span>
         <div className="storyboard-toolbar-actions">
           <button type="button" onPointerDown={stopEventPropagation} onClick={addShot}>
             <Icon name="add" size={12} /> 新增镜头
@@ -249,100 +272,110 @@ export function StoryboardBody({ shape }: NodeBodyProps): React.JSX.Element {
         </div>
       </div>
       <span className={`node-wiring ${wiring.warn ? 'warn' : 'ok'}`}>{wiring.text}</span>
-      {/* 分镜卡片 */}
-      {data.shots.map((shot, i) => (
-        <div
-          key={shot.id}
-          className={`storyboard-card ${editingShotId === shot.id ? 'editing' : ''}`}
-          onDoubleClick={(event) => {
-            stopEventPropagation(event)
-            startShotEdit(shot)
-          }}
-        >
-          <div className="storyboard-num">#{i + 1}</div>
-          {editingShotId === shot.id ? (
-            <div className="storyboard-edit" onPointerDown={stopEventPropagation}>
-              <label>
-                画面
-                <textarea
-                  autoFocus
-                  value={shotDraft.scene}
-                  placeholder="描述镜头画面、构图与动作"
-                  onChange={(event) => setShotDraft({ ...shotDraft, scene: event.target.value })}
-                />
-              </label>
-              <label>
-                台词
-                <input
-                  value={shotDraft.dialogue}
-                  placeholder="可选"
-                  onChange={(event) => setShotDraft({ ...shotDraft, dialogue: event.target.value })}
-                />
-              </label>
-              <label>
-                时长
-                <input
-                  value={shotDraft.duration}
-                  placeholder="例如 3s"
-                  onChange={(event) => setShotDraft({ ...shotDraft, duration: event.target.value })}
-                  onKeyDown={(event) => {
-                    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') saveShotEdit()
-                    if (event.key === 'Escape') setEditingShotId(null)
-                  }}
-                />
-              </label>
-              <div className="storyboard-edit-actions">
-                <button type="button" onClick={saveShotEdit}>
-                  保存
-                </button>
-                <button type="button" onClick={() => setEditingShotId(null)}>
-                  取消
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="storyboard-info">
-              <div className="storyboard-scene">{shot.scene || '（无画面描述）'}</div>
-              {shot.dialogue && (
-                <div className="storyboard-dialogue">
-                  <Icon name="chat" size={12} />
-                  {shot.dialogue}
-                </div>
-              )}
-              {shot.duration && <div className="storyboard-duration">⏱ {shot.duration}</div>}
-              <div className="storyboard-card-actions" onPointerDown={stopEventPropagation}>
-                <button type="button" onClick={() => startShotEdit(shot)}>
-                  编辑
-                </button>
-                <button
-                  type="button"
-                  aria-label={`上移镜头 ${i + 1}`}
-                  disabled={i === 0}
-                  onClick={() => moveShot(i, -1)}
-                >
-                  上移
-                </button>
-                <button
-                  type="button"
-                  aria-label={`下移镜头 ${i + 1}`}
-                  disabled={i === data.shots.length - 1}
-                  onClick={() => moveShot(i, 1)}
-                >
-                  下移
-                </button>
-                <button
-                  type="button"
-                  className="danger"
-                  aria-label={`删除镜头 ${i + 1}`}
-                  onClick={() => void removeShot(shot.id)}
-                >
-                  删除
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      ))}
+      <div className="storyboard-table-scroll">
+        <table className="storyboard-table">
+          <thead>
+            <tr>
+              <th className="storyboard-row-number">#</th>
+              {fields.map((field) => (
+                <th key={field} title={field}>
+                  {field}
+                </th>
+              ))}
+              <th className="storyboard-row-actions">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.shots.map((shot, i) => (
+              <tr key={shot.id} data-shot-id={shot.id}>
+                <td className="storyboard-row-number">{i + 1}</td>
+                {fields.map((field) => {
+                  const editing = editingCell?.shotId === shot.id && editingCell.field === field
+                  const value = shot[field]
+                  return (
+                    <td
+                      key={field}
+                      data-field={field}
+                      className={field === 'id' ? 'storyboard-id-cell' : undefined}
+                    >
+                      {editing ? (
+                        <div
+                          className="storyboard-cell-editor"
+                          onPointerDown={stopEventPropagation}
+                        >
+                          <textarea
+                            autoFocus
+                            aria-label={`编辑 ${field}`}
+                            value={cellDraft}
+                            onChange={(event) => setCellDraft(event.target.value)}
+                            onKeyDown={(event) => {
+                              if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                                saveCellEdit(shot)
+                              }
+                              if (event.key === 'Escape') setEditingCell(null)
+                            }}
+                          />
+                          <div className="storyboard-edit-actions">
+                            <button type="button" onClick={() => saveCellEdit(shot)}>
+                              保存
+                            </button>
+                            <button type="button" onClick={() => setEditingCell(null)}>
+                              取消
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="storyboard-cell-value"
+                          title={field === 'id' ? '内部稳定 ID，不可编辑' : '双击编辑该字段'}
+                          onPointerDown={stopEventPropagation}
+                          onDoubleClick={(event) => {
+                            stopEventPropagation(event)
+                            startCellEdit(shot, field)
+                          }}
+                        >
+                          {displayStoryboardValue(value)}
+                        </button>
+                      )}
+                    </td>
+                  )
+                })}
+                <td className="storyboard-row-actions" onPointerDown={stopEventPropagation}>
+                  <div className="storyboard-row-action-buttons">
+                    <button
+                      type="button"
+                      title="上移"
+                      aria-label={`上移镜头 ${i + 1}`}
+                      disabled={i === 0}
+                      onClick={() => moveShot(i, -1)}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      title="下移"
+                      aria-label={`下移镜头 ${i + 1}`}
+                      disabled={i === data.shots.length - 1}
+                      onClick={() => moveShot(i, 1)}
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
+                      className="danger"
+                      aria-label={`删除镜头 ${i + 1}`}
+                      onClick={() => void removeShot(shot.id)}
+                    >
+                      <Icon name="close" size={11} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

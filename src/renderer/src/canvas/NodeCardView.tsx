@@ -454,14 +454,10 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     [editor, shape, spec, inPorts]
   )
   const readiness = readinessState.readiness
-  const hasNodeConnections =
-    readinessState.incomingCounts.size > 0 || readinessState.outgoingCounts.size > 0
-  // 未连接的节点只显示一个居中的入口和出口。连上线后恢复完整端口布局；这些圆点
-  // 始终映射到真实契约端口，端口 ID、类型和运行时校验不变。
-  const visibleInPorts = hasNodeConnections ? inPorts : inPorts.slice(0, 1)
-  const visibleOutPorts = hasNodeConnections ? outPorts : outPorts.slice(0, 1)
-  const visibleInY = hasNodeConnections ? inY : portOffsets(visibleInPorts.length, shape.props.h)
-  const visibleOutY = hasNodeConnections ? outY : portOffsets(visibleOutPorts.length, shape.props.h)
+  // 所有已声明端口始终可见。隐藏未连接的附加端口会让 JSON 文本输入、媒体参考图等
+  // 合法目标无法从画布上发现；位置由完整契约计算，连线前后保持稳定。
+  const visibleInPorts = inPorts
+  const visibleOutPorts = outPorts
 
   /** 被更上层卡片盖住的端口不可见、不可命中，不能从节点覆盖关系中穿透出来。 */
   const occludedPortKeys = useValue(
@@ -488,11 +484,11 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         shape.props.h > 0 ? bounds.y + (bounds.height * offset) / shape.props.h : bounds.y
       const keys = new Set<string>()
       visibleInPorts.forEach((port, index) => {
-        if (isCovered(bounds.x - NODE_PORT_OUTSET, pageY(visibleInY[index] ?? 0)))
+        if (isCovered(bounds.x - NODE_PORT_OUTSET, pageY(inY[index] ?? 0)))
           keys.add(`in:${port.id}`)
       })
       visibleOutPorts.forEach((port, index) => {
-        if (isCovered(bounds.maxX + NODE_PORT_OUTSET, pageY(visibleOutY[index] ?? 0))) {
+        if (isCovered(bounds.maxX + NODE_PORT_OUTSET, pageY(outY[index] ?? 0))) {
           keys.add(`out:${port.id}`)
         }
       })
@@ -511,8 +507,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       shape.props.h,
       visibleInPorts,
       visibleOutPorts,
-      visibleInY,
-      visibleOutY
+      inY,
+      outY
     ]
   )
 
@@ -772,10 +768,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           const isAnchor = draftIn && draftIn.shapeId === shape.id && draftIn.portId === p.id
           const ok =
             draft && draft.from.direction !== 'in'
-              ? !isSource &&
-                (hasNodeConnections
-                  ? canAttachPort(draft.from, p)
-                  : inPorts.some((candidate) => canAttachPort(draft.from, candidate)))
+              ? !isSource && canAttachPort(draft.from, p)
               : false
           const isConnected = (readinessState.incomingCounts?.get(p.id) ?? 0) > 0
           const portKey = `in:${p.id}`
@@ -785,7 +778,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                 className={`port-dot in ${isConnected ? 'connected' : 'unconnected'} ${isAnchor ? 'ok' : draft && draft.from.direction !== 'in' ? (ok ? 'ok' : 'dim') : ''}`}
                 data-port-id={p.id}
                 style={{
-                  top: visibleInY[i] - NODE_PORT_SIZE / 2,
+                  top: inY[i] - NODE_PORT_SIZE / 2,
                   ['--pc' as string]: PORT_COLORS[p.type],
                   ['--node-port-color' as string]: nodePortColor,
                   ...portFollowStyle(portKey)
@@ -845,11 +838,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           const isConnected = (readinessState.outgoingCounts?.get(p.id) ?? 0) > 0
           const draftIn = draft && draft.from.direction === 'in' ? draft.from : null
           const okUpstream =
-            draftIn && !isSource
-              ? hasNodeConnections
-                ? canAttachPort(draftIn, p, 'in')
-                : outPorts.some((candidate) => canAttachPort(draftIn, candidate, 'in'))
-              : false
+            draftIn && !isSource ? canAttachPort(draftIn, p, 'in') : false
           const portKey = `out:${p.id}`
           return (
             <Tooltip key={p.id} label={portHint(p)} placement="top">
@@ -857,7 +846,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                 className={`port-dot out ${hasOutput ? 'has-output' : 'no-output'} ${isConnected ? 'connected' : 'unconnected'} ${isSource && draft?.from.portId === p.id && draft.from.direction !== 'in' ? 'ok' : ''} ${draftIn ? (okUpstream ? 'ok' : 'dim') : ''}`}
                 data-port-id={p.id}
                 style={{
-                  top: visibleOutY[i] - NODE_PORT_SIZE / 2,
+                  top: outY[i] - NODE_PORT_SIZE / 2,
                   ['--pc' as string]: PORT_COLORS[p.type],
                   ['--node-port-color' as string]: nodePortColor,
                   ...portFollowStyle(portKey)

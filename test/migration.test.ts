@@ -128,6 +128,7 @@ describe('契约版本稳定性（防破坏性变化漏升版本）', () => {
     // tts 3：语音克隆新增 out-json 音色档案输出；
     // image-split 3：label 由「拆图」统一为「拆分」，与调色板可见文字同源。
     const v3Types: NodeTypeId[] = [
+      'code',
       'audio',
       'image',
       'image-gen',
@@ -139,7 +140,6 @@ describe('契约版本稳定性（防破坏性变化漏升版本）', () => {
     ]
     // file 2：out-text 从"只有纯文本"扩到 Word / Excel / PPT 正文（导入时由主进程抽取）。
     const v2Types: NodeTypeId[] = [
-      'code',
       'iterate',
       'image-crop',
       'image-edit',

@@ -29,6 +29,20 @@ export function updateStoryboardShot(
   }
 }
 
+/** 更新任意镜头字段；id 是表格内部的稳定键，不允许从单元格直接修改。 */
+export function updateStoryboardField(
+  data: StoryboardData,
+  shotId: string,
+  field: string,
+  value: unknown
+): StoryboardData {
+  if (field === 'id') return data
+  return {
+    ...data,
+    shots: data.shots.map((shot) => (shot.id === shotId ? { ...shot, [field]: value } : shot))
+  }
+}
+
 /** 超出边界时保持原顺序；调用方无需额外处理第一/最后一张镜头。 */
 export function moveStoryboardShot(
   data: StoryboardData,

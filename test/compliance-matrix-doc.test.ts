@@ -1,5 +1,5 @@
 // NODE_COMPLIANCE_MATRIX.md 是发布前的协议索引；AGENTS.md 要求改节点必须同步它。
-// 这条测试把「表里写了端口 id 的行」变成可执行检查，防止文档单方面漂移。
+// 这条测试把「表里写出的端口 ID、类型、基数和 Schema」变成可执行检查，防止文档单方面漂移。
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -29,6 +29,35 @@ function parseRow(
 const portIds = (cell: string): string[] =>
   Array.from(new Set(Array.from(cell.matchAll(/\b(?:in|out)-[a-z-]+\b/g), (m) => m[0])))
 
+function explicitPortContracts(
+  cell: string,
+  dir: 'in' | 'out'
+): Array<{
+  id: string
+  type: string
+  schema?: string
+  cardinality?: 'one' | 'many'
+}> {
+  const result: Array<{
+    id: string
+    type: string
+    schema?: string
+    cardinality?: 'one' | 'many'
+  }> = []
+  const pattern =
+    /`(in|out)-([a-z0-9-]+)`\s+(text|markdown|json|iteration|camera|image|video|audio|file|any)(?:\s+`([^`]+)`)?(?:\s*\/\s*(one|many))?/g
+  for (const match of cell.matchAll(pattern)) {
+    if (match[1] !== dir) continue
+    result.push({
+      id: `${match[1]}-${match[2]}`,
+      type: match[3],
+      ...(match[4] ? { schema: match[4] } : {}),
+      ...(match[5] === 'one' || match[5] === 'many' ? { cardinality: match[5] } : {})
+    })
+  }
+  return result
+}
+
 const rows = DOC.split('\n')
   .map(parseRow)
   .filter((r): r is NonNullable<typeof r> => Boolean(r))
@@ -56,6 +85,26 @@ describe('NODE_COMPLIANCE_MATRIX · 文档端口与注册契约一致', () => {
         declared.out.length ? declared.out.slice().sort() : actual.out.slice().sort(),
         `文档输出列：${row.outCell}`
       ).toEqual(actual.out.slice().sort())
+
+      for (const dir of ['in', 'out'] as const) {
+        const actualPorts = dir === 'in' ? spec.ports.in : spec.ports.out
+        for (const documented of explicitPortContracts(
+          dir === 'in' ? row.inCell : row.outCell,
+          dir
+        )) {
+          const port = actualPorts.find((item) => item.id === documented.id)
+          expect(port?.type, `${documented.id} 的类型`).toBe(documented.type)
+          if (documented.cardinality) {
+            expect(port?.cardinality, `${documented.id} 的基数`).toBe(documented.cardinality)
+          }
+          if (documented.schema) {
+            expect(
+              port?.schema && `${port.schema.id}@${port.schema.version}`,
+              `${documented.id} 的 Schema`
+            ).toBe(documented.schema)
+          }
+        }
+      }
     })
   }
 

@@ -53,6 +53,11 @@ async function main() {
   page.setDefaultTimeout(15_000)
   await page.goto(`${ORIGIN}/`)
 
+  const openDemo = page.getByRole('button', { name: '打开项目 浏览器演示项目', exact: true })
+  if (await openDemo.count()) await openDemo.click()
+  const expandLogic = page.getByRole('button', { name: '展开流程与高级节点', exact: true })
+  if (await expandLogic.count()) await expandLogic.click()
+
   await page.getByRole('button', { name: '添加3D 预演台节点', exact: true }).click()
   const topbarBottom = await page.evaluate(() => {
     const bar = document.querySelector('.canvas-topbar')
@@ -65,7 +70,6 @@ async function main() {
       ) >= minY,
     topbarBottom
   )
-  await page.getByRole('button', { name: '适配画布（缩放到所有节点）', exact: true }).click()
   const card = page.locator('.node-card-wrap:has(.type-director)').first()
   await card.waitFor()
 

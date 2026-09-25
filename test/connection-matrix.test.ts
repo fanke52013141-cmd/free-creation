@@ -8,7 +8,6 @@ import { describe, it, expect, beforeAll } from 'vitest'
 import { registerAllNodeTypes } from './helpers/registerNodes'
 import { getNodeType, portCompatible, allNodeTypes } from '@renderer/nodes/registry'
 import { portPairCompatible } from '@renderer/canvas/graph'
-import { nodeSchemasCompatible } from '@shared/node-schemas'
 import type { NodeTypeId, PortType } from '@shared/types'
 
 beforeAll(() => {
@@ -27,14 +26,15 @@ function canConnect(
   const fromPort = fromSpec?.ports.out.find((p) => p.id === fromPortId)
   const toPort = toSpec?.ports.in.find((p) => p.id === toPortId)
   if (!fromPort || !toPort) return false
-  if (!portCompatible(fromPort.type, toPort.type)) return false
-  if (fromPort.type === 'json' && toPort.type === 'json') {
-    if (!nodeSchemasCompatible(fromPort.schema, toPort.schema)) return false
-  }
-  return true
+  return portPairCompatible(fromPort, toPort)
 }
 
 describe('标准连线 · 允许的组合', () => {
+  it('导演台发布机位只连接到 camera 输入，不混入工程 JSON', () => {
+    expect(canConnect('director', 'out-camera', 'director', 'in-camera-preset')).toBe(true)
+    expect(canConnect('director', 'out-project', 'director', 'in-camera-preset')).toBe(false)
+  })
+
   it('文本 → 文本类节点（生图/视频/对话/配音/脚本/代码）', () => {
     const textOut = [
       'image-gen',
@@ -71,6 +71,7 @@ describe('标准连线 · 允许的组合', () => {
     expect(canConnect('image-split', 'out-image', 'video', 'in-images')).toBe(true)
     expect(canConnect('audio', 'out-audio', 'video', 'in-reference-audio')).toBe(true)
     expect(canConnect('image-split', 'out-images', 'iterate', 'in-list')).toBe(true)
+    expect(canConnect('iterate', 'out-item', 'image-gen', 'in-images')).toBe(true)
   })
 
   it('视频 → 取帧 / 截取 / 提音（同一源视频生成新的类型明确资产）', () => {
@@ -189,7 +190,11 @@ describe('端口类型兼容矩阵完整性', () => {
   function expected(a: PortType, b: PortType): boolean {
     if (a === b) return true
     if (a === 'any' || b === 'any') return true
-    if (a === 'iteration' && b === 'json') return true
+    if (
+      a === 'iteration' &&
+      (b === 'json' || b === 'camera' || b === 'image' || b === 'video' || b === 'audio' || b === 'file')
+    )
+      return true
     const textual = (t: PortType): boolean => t === 'text' || t === 'markdown'
     return textual(a) && textual(b)
   }
@@ -204,10 +209,13 @@ describe('端口类型兼容矩阵完整性', () => {
 
 describe('端口对兼容 portPairCompatible（方向固定 out→in）', () => {
   // 回归：历史上 resolveTargetInputPort 曾把参数写反（(in, out)），导致
-  // iterate.out-item（iteration）拖到 JSON 输入时高亮/菜单允许但实际建线被拒。
-  // 真值：iteration 只能作为输出注入 json 输入；反向不存在。
-  it('iteration 输出 → json 输入允许；json 输出 → iteration 输入拒绝', () => {
+  // iterate.out-item（iteration）拖到兼容输入时高亮/菜单允许但实际建线被拒。
+  // 当前项可作为普通 JSON，也可在列表项携带完整资产引用时作为媒体输入；反向不存在。
+  it('iteration 输出 → JSON/媒体输入允许；json 输出 → iteration 输入拒绝', () => {
     expect(portPairCompatible({ type: 'iteration' }, { type: 'json' })).toBe(true)
+    for (const type of ['image', 'video', 'audio', 'file'] as const) {
+      expect(portPairCompatible({ type: 'iteration' }, { type })).toBe(true)
+    }
     expect(portPairCompatible({ type: 'json' }, { type: 'iteration' })).toBe(false)
   })
 
@@ -238,11 +246,27 @@ describe('端口对兼容 portPairCompatible（方向固定 out→in）', () => 
     ).toBe(false)
   })
 
+  it('camera↔camera 要求明确且相同的机位 Schema', () => {
+    expect(
+      portPairCompatible(
+        { type: 'camera', schema: { id: 'previs.camera', version: 1 } },
+        { type: 'camera', schema: { id: 'previs.camera', version: 1 } }
+      )
+    ).toBe(true)
+    expect(
+      portPairCompatible(
+        { type: 'camera', schema: { id: 'previs.camera', version: 1 } },
+        { type: 'camera', schema: { id: 'json.any', version: 1 } }
+      )
+    ).toBe(false)
+    expect(portPairCompatible({ type: 'camera' }, { type: 'camera' })).toBe(false)
+  })
+
   it('真实契约：iterate.out-item 可接入所有 json 类型输入（回归 bug 的完整链条）', () => {
     const iterate = getNodeType('iterate')
     const itemPort = iterate?.ports.out.find((port) => port.id === 'out-item')
     expect(itemPort?.type).toBe('iteration')
-    // iteration 不是 json，schema 双重校验不参与；类型层必须对全部 json 输入放行。
+    // iteration 不是 json，schema 双重校验不参与；类型层必须对全部 JSON 输入放行。
     const jsonInputs = allNodeTypes().flatMap((spec) =>
       spec.ports.in.filter((port) => port.type === 'json').map((port) => ({ spec, port }))
     )
@@ -250,6 +274,15 @@ describe('端口对兼容 portPairCompatible（方向固定 out→in）', () => 
     for (const { spec, port } of jsonInputs) {
       expect(portPairCompatible({ type: 'iteration' }, port)).toBe(true)
       expect(spec.type).toBeTruthy()
+    }
+  })
+
+  it('真实契约：iterate.out-item 可接入媒体端口，当前项类型在运行时校验', () => {
+    const iterate = getNodeType('iterate')
+    const itemPort = iterate?.ports.out.find((port) => port.id === 'out-item')
+    expect(itemPort?.type).toBe('iteration')
+    for (const type of ['image', 'video', 'audio', 'file'] as const) {
+      expect(portPairCompatible({ type: 'iteration' }, { type })).toBe(true)
     }
   })
 })

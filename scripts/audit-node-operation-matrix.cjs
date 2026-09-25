@@ -620,6 +620,28 @@ async function recipeJson() {
     rc.shape.text.includes('"title"') && rc.shape.run.status === 'success',
     JSON.stringify(rc.shape.text.slice(0, 40))
   )
+
+  const textSource = await addNode('文本')
+  await setText(textSource, '{"source":"text"}')
+  const textOnly = await addNode('JSON')
+  check('JSON：文本输出可连接到 in-text', await connect(textSource, 'out-text', textOnly, 'in-text'))
+  const fromText = await runNode(textOnly)
+  check(
+    'JSON：无 JSON 输入时解析上游文本',
+    fromText.shape.run.status === 'success' && JSON.parse(fromText.shape.text).source === 'text',
+    JSON.stringify({ status: fromText.shape.run.status, text: fromText.shape.text })
+  )
+
+  const both = await addNode('JSON')
+  check('JSON：JSON 输入连到 in-json', await connect(a, 'out-json', both, 'in-json'))
+  check('JSON：文本输入可同时连到 in-text', await connect(textSource, 'out-text', both, 'in-text'))
+  const fromBoth = await runNode(both)
+  const bothValue = fromBoth.shape.run.status === 'success' ? JSON.parse(fromBoth.shape.text) : null
+  check(
+    'JSON：同时收到两类输入时 JSON 优先',
+    bothValue?.title === '开场' && bothValue.source !== 'text',
+    JSON.stringify(bothValue)
+  )
   await reload()
   const after = await disk(a, (s) => s.text.includes('"title"'))
   check('JSON：重载后格式化结果仍在', after.text.includes('"title"'))
@@ -685,7 +707,7 @@ async function recipeProcessor() {
   await shot('processor-reload')
 }
 
-/** 分镜板：粘贴 JSON → 镜头卡渲染 → 合成文本流入下游。 */
+/** 分镜板：粘贴 JSON → 表格行渲染 → 合成文本流入下游。 */
 async function recipeStoryboard() {
   const a = await addNode('分镜板')
   await checkPorts(a, '分镜板', ['in-json', 'in-text'], ['out-json', 'out-text'])
@@ -694,8 +716,8 @@ async function recipeStoryboard() {
     '编辑 JSON',
     '{"shots":[{"scene":"雨夜街景","dialogue":"走吧。","duration":"3s"},{"scene":"天台","dialogue":"","duration":"5s"}]}'
   )
-  const shots = await card(a).locator('.storyboard-num').count()
-  check('分镜板：粘贴后渲染两张镜头卡', shots === 2, `${shots} 张`)
+  const shots = await card(a).locator('.storyboard-table tbody tr').count()
+  check('分镜板：粘贴后渲染两张表格行', shots === 2, `${shots} 行`)
   const r = await runNode(a)
   check('分镜板：运行成功', r.shape.run.status === 'success', JSON.stringify(r.shape.run))
   check(
@@ -714,8 +736,8 @@ async function recipeStoryboard() {
   )
   await shot('storyboard-flows-downstream')
   await reload()
-  const afterShots = await card(a).locator('.storyboard-num').count()
-  check('分镜板：重载后镜头卡仍渲染', afterShots === 2, `${afterShots} 张`)
+  const afterShots = await card(a).locator('.storyboard-table tbody tr').count()
+  check('分镜板：重载后表格行仍渲染', afterShots === 2, `${afterShots} 行`)
   await shot('storyboard-reload')
 }
 
@@ -799,34 +821,115 @@ async function recipeCode() {
   check('代码：卡片显示成功结果条', (await card(a).locator('.code-result.success').count()) === 1)
   await shot('code-run-success')
 
-  await card(a).locator('.code-params-header button').click()
+  const addInputParam = card(a).locator(
+    '.code-params-section:not(.code-outputs-section) .code-params-header button'
+  )
+  await addInputParam.click()
   await win.waitForTimeout(600)
   await card(a).locator('input.code-param-name').last().fill('prefix')
   await win.waitForTimeout(800)
+  const configuredParamShape = await disk(
+    a,
+    (shape) => (shape.config.params || []).some((item) => item.name === 'prefix')
+  )
+  const paramConfig = configuredParamShape?.config || {}
+  const prefixParam = (paramConfig.params || []).find((item) => item.name === 'prefix')
+  const prefixPortId = prefixParam?.portId || 'in-param-prefix'
   const withParam = await portsOf(a)
   check(
-    '代码：声明参数后浮出对应输入端口',
-    withParam.in.includes('in-param-prefix'),
-    `in=${withParam.in.join('/')}`
+    '代码：声明参数后浮出同名输入端口',
+    withParam.in.includes(prefixPortId),
+    `名称=prefix 端口=${prefixPortId} in=${withParam.in.join('/')}`
   )
   const feedJson = await addNode('JSON')
   await editCodeLike(feedJson, '粘贴 JSON', '{"k":"v"}')
-  check('代码：自定义参数端口可被连线接入', await connect(feedJson, 'out-json', a, 'in-param-prefix'))
+  check('代码：自定义参数端口可被连线接入', await connect(feedJson, 'out-json', a, prefixPortId))
+
+  const prefixRow = card(a).locator('.code-params-section:not(.code-outputs-section) .code-param-row').last()
+  await prefixRow.locator('select.code-param-type').selectOption('object')
+  await prefixRow.locator('select.code-param-cardinality').selectOption('many')
+  const feedJson2 = await addNode('JSON')
+  await editCodeLike(feedJson2, '粘贴 JSON', '{"k":"w"}')
+  check('代码：many 参数可接第二路同类型输入', await connect(feedJson2, 'out-json', a, prefixPortId))
+  await editCodeLike(
+    a,
+    '编辑代码',
+    'async function main(args) {\n  const text = String(args.text || "")\n  return { len: text.length, head: text.slice(0, 2), keys: args.prefix.map((item) => item.k) }\n}'
+  )
+  const customRun = await runNode(a)
+  check(
+    '代码：具名 many 输入按顺序作为数组进入真实 Worker',
+    customRun.shape.run.status === 'success' &&
+      String(customRun.shape.resultRaw).includes('["v","w"]'),
+    JSON.stringify(customRun.shape.resultRaw)
+  )
+
+  const outputSection = card(a).locator('.code-outputs-section')
+  await outputSection.locator('.code-params-header button').click()
+  await win.waitForTimeout(400)
+  const firstOutput = outputSection.locator('.code-output-row').nth(0)
+  await firstOutput.locator('input.code-param-name').fill('length')
+  await firstOutput.locator('select.code-param-type').selectOption('number')
+  await outputSection.locator('.code-params-header button').click()
+  await win.waitForTimeout(400)
+  const secondOutput = outputSection.locator('.code-output-row').nth(1)
+  await secondOutput.locator('input.code-param-name').fill('caption')
+  await secondOutput.locator('select.code-param-type').selectOption('string')
+  await editCodeLike(
+    a,
+    '编辑代码',
+    'async function main(args) {\n  const text = String(args.text || "")\n  return { length: text.length, caption: args.prefix.map((item) => item.k).join(",") }\n}'
+  )
+  const multiRun = await runNode(a)
+  const multiValues = obj(multiRun.shape.resultRaw).values || {}
+  check(
+    '代码：一个 return 对象映射为 number 与 text 两个端口',
+    multiRun.shape.run.status === 'success' &&
+      multiValues['out-output']?.kind === 'json' &&
+      multiValues['out-output']?.data === 6 &&
+      multiValues['out-output2']?.kind === 'text' &&
+      multiValues['out-output2']?.text === 'v,w',
+    JSON.stringify(multiValues)
+  )
+
+  const textConsumer = await addNode('文本')
+  check(
+    '代码：具名文本输出可供文本节点消费',
+    await connect(a, 'out-output2', textConsumer, 'in-text')
+  )
+  const textConsumed = await runNode(textConsumer)
+  check(
+    '代码：多输出文本字段真实流入下游',
+    textConsumed.shape.run.status === 'success' && textConsumed.shape.text.includes('v,w'),
+    JSON.stringify(textConsumed.shape.text)
+  )
+  const jsonConsumer = await addNode('JSON')
+  check(
+    '代码：具名 JSON 数值输出可供 JSON 节点消费',
+    await connect(a, 'out-output', jsonConsumer, 'in-json')
+  )
+  const jsonConsumed = await runNode(jsonConsumer)
+  check(
+    '代码：多输出数值字段真实流入下游',
+    jsonConsumed.shape.run.status === 'success' && JSON.parse(jsonConsumed.shape.text) === 6,
+    JSON.stringify(jsonConsumed.shape.text)
+  )
   await reload()
   const persisted = await disk(a)
+  const persistedPrefix = (persisted.config.params || []).find((item) => item.name === 'prefix')
+  const reloadedPorts = await portsOf(a)
   check(
     '代码：重载后自定义参数与端口仍在',
-    JSON.stringify(persisted.config).includes('prefix') &&
-      (await portsOf(a)).in.includes('in-param-prefix'),
-    JSON.stringify(persisted.config).slice(0, 140)
+    Boolean(persistedPrefix?.portId) && reloadedPorts.in.includes(persistedPrefix.portId),
+    `${JSON.stringify(persistedPrefix)} in=${reloadedPorts.in.join('/')}`
   )
   await shot('code-reload')
 }
 
 /** 循环：in-list 必填（未连时按钮必须置灰），循环体逐项执行。 */
 async function recipeIterate() {
-  const a = await addNode('批量处理')
-  await checkPorts(a, '批量处理', ['in-list'], ['out-item', 'out-items'])
+  const a = await addNode('循环')
+  await checkPorts(a, '循环', ['in-list'], ['out-item', 'out-items'])
   const st = await statusOf(a)
   check(
     '循环：未接列表时运行按钮置灰并写明缺少输入',
@@ -1333,7 +1436,7 @@ async function recipeCancelResume() {
     '输入 JSON',
     JSON.stringify(Array.from({ length: TOTAL }, (_, i) => ({ id: `s${i + 1 }` })))
   )
-  const loop = await addNode('批量处理')
+  const loop = await addNode('循环')
   check('停止续跑：结构数据可接入 in-list', await connect(list, 'out-json', loop, 'in-list'))
   const body = await addNode('代码')
   await editCodeLike(

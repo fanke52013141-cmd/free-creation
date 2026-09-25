@@ -135,9 +135,11 @@ export const PORT_TYPE_LABELS: Record<PortType, string> = {
 
 export function portCompatible(a: PortType, b: PortType): boolean {
   const bothTextual = (a === 'text' || a === 'markdown') && (b === 'text' || b === 'markdown')
-  // 当前循环项是控制作用域，不是第二个普通 JSON 输出；只允许注入 JSON 输入。
-  const iterationToJson = a === 'iteration' && b === 'json'
-  return a === b || bothTextual || iterationToJson || a === 'any' || b === 'any'
+  // 当前项不是普通项目级输出；运行时按列表项形态注入 JSON 或媒体资产引用。
+  const iterationTarget =
+    a === 'iteration' &&
+    (b === 'json' || b === 'camera' || b === 'image' || b === 'video' || b === 'audio' || b === 'file')
+  return a === b || bothTextual || iterationTarget || a === 'any' || b === 'any'
 }
 
 /** 旧版本曾把画布坐标误当成缩略图单位，历史快照中会出现几千像素宽的节点。 */
@@ -220,7 +222,7 @@ const registry = new Map<NodeTypeId, NodeTypeSpec>()
  */
 function portValidationErrors(
   ports: NodeTypeSpec['ports'],
-  options: { allowRepeatedNamedInputs?: boolean } = {}
+  options: { allowRepeatedNamedInputs?: boolean; allowRepeatedNamedOutputs?: boolean } = {}
 ): string[] {
   const errors: string[] = []
   const ids = new Set<string>()
@@ -246,7 +248,7 @@ function portValidationErrors(
         inputTypes.add(current.type)
       }
       if (direction === 'out') {
-        if (outputTypes.has(current.type)) {
+        if (outputTypes.has(current.type) && !options.allowRepeatedNamedOutputs) {
           errors.push(
             `输出端口类型重复：${current.type}。同类结果应使用一个 many 端口、集合 JSON，或独立资产节点承载。`
           )
@@ -353,10 +355,11 @@ export function getNodePorts(
   shape: NodeCardShape
 ): { in: PortDecl[]; out: PortDecl[] } {
   const ports = spec.resolvePorts ? spec.resolvePorts(shape) : spec.ports
-  // 代码节点的动态端口是用户声明的具名函数参数，不是并列的通用素材入口。
-  // 固定契约始终保持同类型唯一；动态参数依然由端口 ID 和参数名去重。
+  // 代码节点允许用户声明具名函数输入/输出字段。相同类型只在这一处重复，
+  // 每个字段仍有独立、稳定的端口 ID；其他节点继续遵守同类型单端口规则。
   const errors = portValidationErrors(ports, {
-    allowRepeatedNamedInputs: Boolean(spec.resolvePorts && spec.type === 'code')
+    allowRepeatedNamedInputs: Boolean(spec.resolvePorts && spec.type === 'code'),
+    allowRepeatedNamedOutputs: Boolean(spec.resolvePorts && spec.type === 'code')
   })
   if (errors.length > 0) {
     throw new Error(`节点动态端口不合法：${spec.type}\n- ${errors.join('\n- ')}`)

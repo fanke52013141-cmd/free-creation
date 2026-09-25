@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { registerAllNodeTypes } from './helpers/registerNodes'
 import { registerNodeType, unregisterNodeType } from '@renderer/nodes/registry'
+import { iterationItemValue } from '@shared/engine/inputs'
 import {
   collectContractInputs,
   buildOutputPackets,
@@ -309,6 +310,123 @@ describe('collectContractInputs · 成功路径', () => {
     expect(media).toHaveLength(1)
     expect(media[0].mediaId).toBe('m1')
   })
+
+  it('循环媒体列表项还原为类型化资产值；普通对象保留为 JSON', () => {
+    expect(
+      iterationItemValue(
+        {
+          id: 'tile-1',
+          kind: 'image',
+          mediaId: 'm1',
+          mediaPath: '/assets/tile.png',
+          mime: 'image/png'
+        },
+        'image'
+      )
+    ).toEqual({
+      kind: 'image',
+      mediaId: 'm1',
+      mediaPath: '/assets/tile.png',
+      mime: 'image/png'
+    })
+    const item = { id: 'row-1', title: '镜头一' }
+    expect(iterationItemValue(item)).toEqual({ kind: 'json', data: item })
+    const assetItem = {
+      id: 'tile-1',
+      kind: 'image',
+      mediaId: 'm1',
+      mediaPath: '/assets/tile.png',
+      mime: 'image/png'
+    }
+    expect(iterationItemValue(assetItem, 'json')).toEqual({ kind: 'json', data: assetItem })
+    expect(iterationItemValue(assetItem, 'audio')).toEqual({ kind: 'json', data: assetItem })
+    expect(
+      iterationItemValue({ kind: 'image', mediaId: 'm2', mediaPath: '/assets/tile.png', mime: '' })
+    ).toEqual({
+      kind: 'json',
+      data: { kind: 'image', mediaId: 'm2', mediaPath: '/assets/tile.png', mime: '' }
+    })
+    const camera = {
+      x: 0,
+      y: 1.6,
+      z: 5,
+      heading: 0,
+      pitch: 0,
+      focalLengthMm: 35,
+      aspectRatio: '16:9',
+      durationSec: 5,
+      fps: 25
+    }
+    expect(iterationItemValue(camera, 'camera')).toEqual({ kind: 'camera', data: camera })
+  })
+
+  it('循环当前图片注入生图多值端口后可被执行器按图片读取', () => {
+    const target = makeNode('t', 'image-gen')
+    const item = {
+      id: 'tile-1',
+      kind: 'image',
+      mediaId: 'm1',
+      mediaPath: '/assets/tile.png',
+      mime: 'image/png'
+    }
+    const value = iterationItemValue(item, 'image')
+    const result = collectContractInputs(target, [], new Map(), {
+      injections: [
+        {
+          portId: 'in-images',
+          packet: {
+            type: value.kind,
+            value,
+            source: { nodeId: 'loop', portId: 'out-item', runId: 'r1' },
+            createdAt: 0
+          }
+        }
+      ]
+    })
+    expect(result.errors).toEqual([])
+    expect(inputMedia(result.value, 'in-images', 'image')).toMatchObject([
+      { mediaId: 'm1', mediaPath: '/assets/tile.png' }
+    ])
+  })
+})
+
+describe('collectContractInputs · camera Schema', () => {
+  it('接受机位 NodeValue 并把 camera Schema 校验应用到输入包', () => {
+    const camera = {
+      x: 0,
+      y: 1.6,
+      z: 5,
+      heading: 0,
+      pitch: 0,
+      focalLengthMm: 35,
+      aspectRatio: '16:9',
+      durationSec: 5,
+      fps: 25
+    }
+    const edge = makeEdge('camera-edge', 'source', 'out-camera', 'target', 'in-camera-preset')
+    const outputs = outputsMap('source', {
+      'out-camera': makePacket('camera', { kind: 'camera', data: camera }, {
+        id: 'previs.camera',
+        version: 1
+      })
+    })
+    const result = collectContractInputs(makeNode('target', 'director'), [edge], outputs)
+    expect(result.errors).toEqual([])
+    expect(inputValue(result.value, 'in-camera-preset')).toEqual({ kind: 'camera', data: camera })
+  })
+
+  it('拒绝带错误 Schema 的机位包', () => {
+    const edge = makeEdge('camera-edge', 'source', 'out-camera', 'target', 'in-camera-preset')
+    const outputs = outputsMap('source', {
+      'out-camera': makePacket(
+        'camera',
+        { kind: 'camera', data: { focalLengthMm: 'bad' } },
+        { id: 'previs.camera', version: 1 }
+      )
+    })
+    const result = collectContractInputs(makeNode('target', 'director'), [edge], outputs)
+    expect(result.errors.some((error) => error.includes('校验失败'))).toBe(true)
+  })
 })
 
 describe('buildOutputPackets · 输出契约校验', () => {
@@ -346,6 +464,16 @@ describe('buildOutputPackets · 输出契约校验', () => {
       'r1'
     )
     expect(result.errors.some((e) => e.includes('storyboard.shots'))).toBe(true)
+  })
+
+  it('camera 输出按 previs.camera Schema 校验', () => {
+    const node = makeNode('director', 'director')
+    const result = buildOutputPackets(
+      node,
+      { 'out-camera': { kind: 'camera', data: { focalLengthMm: 'bad' } } },
+      'r1'
+    )
+    expect(result.errors.some((error) => error.includes('previs.camera'))).toBe(true)
   })
 
   it('合法输出产生带来源的数据包', () => {

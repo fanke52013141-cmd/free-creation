@@ -8946,6 +8946,17 @@ select:focus-visible,
   font-family: 'Cascadia Code', monospace;
 }
 
+.code-output-object {
+  min-width: 0;
+  overflow: hidden;
+  color: #7be8bd;
+  font:
+    10px 'Cascadia Code',
+    monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* 代码节点执行结果显示（成功/失败摘要） */
 .code-result {
   display: flex;
@@ -9077,9 +9088,13 @@ select:focus-visible,
 
 .code-param-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 56px 22px;
+  grid-template-columns: minmax(0, 1fr) 70px 62px 22px;
   align-items: center;
   gap: 4px;
+}
+
+.code-output-row {
+  grid-template-columns: minmax(0, 1fr) 70px minmax(56px, auto) 22px;
 }
 
 .code-param-name {
@@ -9111,6 +9126,32 @@ select:focus-visible,
   outline: none;
 }
 
+.code-param-cardinality {
+  min-width: 0;
+  height: 24px;
+  padding: 2px 4px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--txt);
+  font-size: 10px;
+  outline: none;
+}
+
+.code-param-cardinality:focus {
+  border-color: var(--brand);
+}
+
+.code-output-port-id {
+  overflow: hidden;
+  color: var(--muted);
+  font:
+    8px 'Cascadia Code',
+    monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .code-param-type:focus {
   border-color: var(--brand);
 }
@@ -9132,6 +9173,11 @@ select:focus-visible,
 .code-param-remove:hover {
   background: rgba(248, 113, 113, 0.12);
   color: #f87171;
+}
+
+.code-param-remove:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .code-params-empty {
@@ -9385,6 +9431,130 @@ select:focus-visible,
   gap: 6px;
   /* 原 6px 比同类节点 body（多为 8-10px）偏紧，统一为 8px（L8） */
   padding: 8px;
+}
+.storyboard-table-scroll {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.storyboard-table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  color: var(--txt);
+  font-size: 9px;
+}
+.storyboard-table th,
+.storyboard-table td {
+  min-width: 100px;
+  max-width: 220px;
+  padding: 4px 6px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.storyboard-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-panel, #171923);
+  color: var(--muted);
+  font-weight: 600;
+  text-align: left;
+}
+.storyboard-table tbody tr:hover td {
+  background: rgba(255, 255, 255, 0.035);
+}
+.storyboard-table .storyboard-row-number {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  min-width: 24px;
+  width: 24px;
+  max-width: 24px;
+  background: var(--bg-panel, #171923);
+  color: var(--muted);
+  text-align: center;
+}
+.storyboard-table .storyboard-row-actions {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  min-width: 74px;
+  width: 74px;
+  max-width: 74px;
+  background: var(--bg-panel, #171923);
+}
+.storyboard-row-action-buttons {
+  display: flex;
+  gap: 3px;
+}
+.storyboard-row-action-buttons button {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--txt-dim);
+  cursor: pointer;
+}
+.storyboard-row-action-buttons button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.storyboard-row-action-buttons button.danger {
+  color: var(--red);
+}
+.storyboard-cell-value {
+  display: block;
+  width: 100%;
+  min-height: 22px;
+  max-height: 56px;
+  overflow: hidden;
+  padding: 3px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--txt);
+  font: inherit;
+  line-height: 1.4;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-word;
+  cursor: text;
+}
+.storyboard-id-cell .storyboard-cell-value {
+  color: var(--muted);
+  font-family: 'Cascadia Code', monospace;
+  cursor: default;
+}
+.storyboard-cell-editor {
+  min-width: 130px;
+}
+.storyboard-cell-editor textarea {
+  width: 100%;
+  min-height: 48px;
+  box-sizing: border-box;
+  resize: vertical;
+  padding: 4px;
+  border: 1px solid var(--brand);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--txt);
+  font: inherit;
+  outline: none;
+}
+.storyboard-cell-editor .storyboard-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 3px;
 }
 .storyboard-card {
   display: flex;

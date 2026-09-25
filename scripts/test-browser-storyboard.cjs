@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type */
-// 浏览器验收：分镜板逐镜编辑不得写丢镜头额外字段（NODE_UI_SPEC §16.27）。
+// 浏览器验收：动态表格显示并编辑分镜字段，逐行写回不得丢失额外字段。
 //
 // 剧本节点的提示词要求模型为每个镜头产出 scene/dialogue/sound/duration，批量生图模板还用到
 // camera。旧卡片自带一份只认四个字段的解析，用户在卡片上编辑任意一格，其他镜头的 sound、
@@ -53,6 +53,10 @@ async function main() {
   page.setDefaultTimeout(15_000)
   await page.goto(`${ORIGIN}/`)
 
+  const openDemo = page.getByRole('button', { name: '打开项目 浏览器演示项目', exact: true })
+  if (await openDemo.count()) await openDemo.click()
+  const expandLogic = page.getByRole('button', { name: '展开流程与高级节点', exact: true })
+  if (await expandLogic.count()) await expandLogic.click()
   await page.getByRole('button', { name: '添加分镜板节点', exact: true }).click()
   const topbarBottom = await page.evaluate(() => {
     const bar = document.querySelector('.canvas-topbar')
@@ -65,7 +69,6 @@ async function main() {
       ) >= minY,
     topbarBottom
   )
-  await page.getByRole('button', { name: '适配画布（缩放到所有节点）', exact: true }).click()
   const card = page.locator('.node-card-wrap:has(.type-storyboard)').first()
   await card.waitFor()
 
@@ -82,12 +85,16 @@ async function main() {
   await card.getByRole('button', { name: '编辑 JSON', exact: true }).first().click()
   await card.locator('.node-textarea.code-edit').fill(SHOTS)
   await page.keyboard.press('Control+Enter')
-  await card.locator('.storyboard-card').first().waitFor()
-  assert.equal(await card.locator('.storyboard-card').count(), 2, '两个镜头都要渲染成卡片')
+  await card.locator('.storyboard-table tbody tr').first().waitFor()
+  assert.equal(await card.locator('.storyboard-table tbody tr').count(), 2, '两个镜头都要显示为表格行')
+  const headers = await card.locator('.storyboard-table thead th').allTextContents()
+  for (const field of ['id', 'scene', 'dialogue', 'sound', 'camera', 'duration']) {
+    assert.ok(headers.includes(field), `JSON 字段 ${field} 必须有对应表格列`)
+  }
 
   const bodyText = (await card.innerText()).replace(/\s+/g, '')
   assert.ok(
-    bodyText.includes('编辑结果通过右侧「分镜数据」端口输出给下游节点'),
+    bodyText.includes('输出：out-json分镜数据·out-text文字摘要'),
     `工具条必须说明数据从哪个端口离开本卡片，实际文案：${bodyText}`
   )
   // 缩略图那条回路永远不会有媒体写入，连带它的假提示一起删掉了。
@@ -96,11 +103,11 @@ async function main() {
   assert.ok(!bodyText.includes('逐镜编辑后可用'), '不得指向本卡片没参与的模板')
 
   // 只改第 1 镜的画面：这是缺陷触发点——保存时卡片会把整块数据重新解析写回。
-  await card.locator('.storyboard-card').first().hover()
-  await card.getByRole('button', { name: '编辑', exact: true }).first().click()
-  await card.locator('.storyboard-edit textarea').first().fill('雨夜街头，主角回头')
+  const sceneCell = card.locator('[data-shot-id="shot-1"] [data-field="scene"] .storyboard-cell-value')
+  await sceneCell.dblclick()
+  await card.locator('.storyboard-cell-editor textarea').fill('雨夜街头，主角回头')
   await card.getByRole('button', { name: '保存', exact: true }).click()
-  await card.locator('.storyboard-card').first().waitFor()
+  await card.locator('[data-shot-id="shot-1"] [data-field="scene"] .storyboard-cell-value').waitFor()
 
   // 再次打开原始 JSON，看卡片真正写回文档的内容：字段是否活过了这一次编辑。
   await card.getByRole('button', { name: '编辑 JSON', exact: true }).first().click()
@@ -114,7 +121,7 @@ async function main() {
   assert.equal(parsed.shots[1].camera, '广角远景', '未编辑的镜头必须原样保留 camera')
   assert.ok(!('imageMediaId' in parsed.shots[0]), '卡片不再承载镜头图片字段')
 
-  console.log('PASS: 分镜板逐镜编辑保留 sound/camera，端口去向说明替换了模板假提示')
+  console.log('PASS: 分镜板动态表格编辑保留 sound/camera，并展示真实输出端口')
   await browser.close()
 }
 

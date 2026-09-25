@@ -5,6 +5,7 @@ import {
   moveStoryboardShot,
   removeStoryboardShot,
   updateStoryboardShot,
+  updateStoryboardField,
   type StoryboardData
 } from '@renderer/nodes/storyboard-editor'
 
@@ -70,5 +71,22 @@ describe('storyboard-editor · 逐镜编辑数据模型', () => {
     expect(reread.data).toEqual(edited)
     expect(reread.data.shots[1]).toMatchObject({ sound: '脚步声', camera: '广角' })
     expect(reread.data.imageModelKey).toBe('image-model')
+  })
+
+  it('表格字段编辑可更新任意扩展字段并保留分镜其它数据', () => {
+    const board = {
+      imageModelKey: 'model-a',
+      shots: [{ id: 'a', scene: '夜景', dialogue: '', duration: '3s', camera: { lens: 35 } }]
+    }
+    const next = updateStoryboardField(board, 'a', 'camera', { lens: 50 })
+    expect(next.shots[0]).toEqual({
+      id: 'a',
+      scene: '夜景',
+      dialogue: '',
+      duration: '3s',
+      camera: { lens: 50 }
+    })
+    expect(next.imageModelKey).toBe('model-a')
+    expect(updateStoryboardField(next, 'a', 'id', 'changed')).toBe(next)
   })
 })

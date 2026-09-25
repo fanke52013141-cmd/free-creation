@@ -107,6 +107,10 @@ function valuePreview(value: NodeValue | undefined): string | null {
     const compact = JSON.stringify(value.data)
     return compact.length > 70 ? `${compact.slice(0, 70)}…` : compact
   }
+  if (value.kind === 'camera') {
+    const compact = JSON.stringify(value.data)
+    return compact.length > 70 ? `机位参数：${compact.slice(0, 65)}…` : `机位参数：${compact}`
+  }
   return `${value.mime || value.kind} · ${value.mediaId || '本地资产'}`
 }
 
@@ -173,6 +177,7 @@ function defaultDraft(port: PortDecl): TestDraft {
 function previewTestValue(value: NodeValue): string {
   if (value.kind === 'text' || value.kind === 'markdown') return value.text || '（空文本）'
   if (value.kind === 'json') return JSON.stringify(value.data, null, 2)
+  if (value.kind === 'camera') return JSON.stringify(value.data, null, 2)
   // mediaId 是数据库主键，写进试运行结果只会让用户猜。这里只写类型与来源节点标题。
   const name = value.name?.trim()
   return `${PORT_TYPE_LABELS[value.kind]} · ${name || '已产出资产'}`
@@ -225,6 +230,7 @@ function TestHarness({
         let value: NodeValue
         if (type === 'text' || type === 'markdown') value = { kind: type, text: draft.value }
         else if (type === 'json') value = { kind: 'json', data: JSON.parse(draft.value) }
+        else if (type === 'camera') value = { kind: 'camera', data: JSON.parse(draft.value) }
         else {
           const asset = assets.find((item) => item.id === draft.value)
           if (!asset) throw new Error(`${port.name} 请选择一个已导入的资产`)
@@ -258,7 +264,7 @@ function TestHarness({
         ports.map((port) => {
           const draft = readDraft(port)
           const type = port.type === 'any' ? draft.type : port.type
-          const isText = type === 'text' || type === 'markdown' || type === 'json'
+          const isText = type === 'text' || type === 'markdown' || type === 'json' || type === 'camera'
           return (
             <label className="contract-test-input" key={port.id}>
               <span>
@@ -276,7 +282,7 @@ function TestHarness({
                   }
                 >
                   {(
-                    ['text', 'markdown', 'json', 'image', 'video', 'audio', 'file'] as PortType[]
+                    ['text', 'markdown', 'json', 'camera', 'image', 'video', 'audio', 'file'] as PortType[]
                   ).map((item) => (
                     <option key={item} value={item}>
                       {item}
@@ -288,7 +294,9 @@ function TestHarness({
                 <textarea
                   value={draft.value}
                   placeholder={
-                    type === 'json' ? '输入合法 JSON，例如 {"title":"示例"}' : `输入${port.name}`
+                    type === 'json' || type === 'camera'
+                      ? '输入合法 JSON，例如 {"title":"示例"}'
+                      : `输入${port.name}`
                   }
                   onChange={(event) => updateDraft(port, { value: event.target.value })}
                   onBlur={(event) => onTextInputCommit?.(port, type, event.target.value)}

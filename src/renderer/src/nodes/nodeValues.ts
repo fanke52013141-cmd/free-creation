@@ -1,4 +1,6 @@
 import type { NodeCardShape } from '../canvas/NodeCardShape'
+import type { DirectorCamera } from '@shared/director-data'
+import { validateNodeSchema } from '@shared/node-schemas'
 import { getNodeType } from './registry'
 import { readNodeRunRecord } from '../engine/runRecord'
 import type {
@@ -18,6 +20,7 @@ export type NodeValue =
   | { kind: 'text'; text: string }
   | { kind: 'markdown'; text: string }
   | { kind: 'json'; data: unknown }
+  | { kind: 'camera'; data: Partial<DirectorCamera> }
   | MediaNodeValue<'image'>
   | MediaNodeValue<'video'>
   | MediaNodeValue<'audio'>
@@ -87,6 +90,13 @@ export function parseStoredNodeValue(text: string): NodeValue | null {
       return { kind: value.kind, text: value.text }
     }
     if (value.kind === 'json' && 'data' in value) return { kind: 'json', data: value.data }
+    if (
+      value.kind === 'camera' &&
+      'data' in value &&
+      validateNodeSchema({ id: 'previs.camera', version: 1 }, value.data).ok
+    ) {
+      return { kind: 'camera', data: value.data as Partial<DirectorCamera> }
+    }
     if (
       (value.kind === 'image' ||
         value.kind === 'video' ||

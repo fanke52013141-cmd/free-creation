@@ -3,11 +3,14 @@
 // 这里只包含执行器需要的类型和函数；projectNodeOutputs 依赖 renderer 注册表，
 // 留在 renderer 层。
 import type { PortType } from '../types'
+import type { DirectorCamera } from '../director-data'
+import { validateNodeSchema } from '../node-schemas'
 
 export type NodeValue =
   | { kind: 'text'; text: string }
   | { kind: 'markdown'; text: string }
   | { kind: 'json'; data: unknown }
+  | { kind: 'camera'; data: Partial<DirectorCamera> }
   | MediaNodeValue<'image'>
   | MediaNodeValue<'video'>
   | MediaNodeValue<'audio'>
@@ -179,6 +182,13 @@ export function parseStoredNodeValue(text: string): NodeValue | null {
       return { kind: value.kind, text: value.text }
     }
     if (value.kind === 'json' && 'data' in value) return { kind: 'json', data: value.data }
+    if (
+      value.kind === 'camera' &&
+      'data' in value &&
+      validateNodeSchema({ id: 'previs.camera', version: 1 }, value.data).ok
+    ) {
+      return { kind: 'camera', data: value.data as Partial<DirectorCamera> }
+    }
     if (
       (value.kind === 'image' ||
         value.kind === 'video' ||

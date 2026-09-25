@@ -16,10 +16,10 @@ import { projectNodeOutputs, type NodeValue } from '../nodes/nodeValues'
 import { TEXT_MERGE_SEPARATOR } from '@shared/engine/helpers'
 
 /**
- * 源输出端口能否接入目标输入端口（类型 + JSON Schema 双重校验）。
+ * 源输出端口能否接入目标输入端口（类型 + 结构化 Schema 双重校验）。
  *
- * 参数方向固定为 (out, in)：`portCompatible` 对 iteration→json 是非对称规则
- * （循环项只能作为输出注入 JSON 输入），历史上曾出现调用点把参数写反，导致
+ * 参数方向固定为 (out, in)：`portCompatible` 对 iteration 输出是非对称规则
+ * （循环项只能作为输出注入 JSON 或符合类型的媒体输入），历史上曾出现调用点把参数写反，导致
  * 高亮/菜单认为可连而 tryConnect 实际拒绝。所有兼容判断统一经过本函数，
  * 方向由函数签名约束，不再依赖每个调用点自觉。
  */
@@ -27,12 +27,23 @@ export function portPairCompatible(
   out: { type: PortDecl['type']; schema?: PortDecl['schema'] },
   input: { type: PortDecl['type']; schema?: PortDecl['schema'] }
 ): boolean {
+  const schemaCompatible =
+    out.type === 'camera'
+      ? Boolean(
+          out.schema &&
+            input.schema &&
+            out.schema.id === input.schema.id &&
+            out.schema.version === input.schema.version
+        )
+      : out.type === 'json'
+        ? nodeSchemasCompatible(out.schema, input.schema)
+        : true
   return (
     portCompatible(out.type, input.type) &&
     !(
-      out.type === 'json' &&
-      input.type === 'json' &&
-      !nodeSchemasCompatible(out.schema, input.schema)
+      out.type === input.type &&
+      (out.type === 'json' || out.type === 'camera') &&
+      !schemaCompatible
     )
   )
 }
@@ -209,13 +220,7 @@ export function createEdge(
   // createEdge 也会被模板和快捷操作直接调用；关系的唯一性必须在这里兜底。
   // 节点 ID 属于关系键的一部分，因此内容相同的两个不同节点仍可各连一条边。
   if (edgeExists(editor, from, to)) return false
-  if (!portCompatible(fromPort.type, toPort.type)) return false
-  if (
-    fromPort.type === 'json' &&
-    toPort.type === 'json' &&
-    !nodeSchemasCompatible(fromPort.schema, toPort.schema)
-  )
-    return false
+  if (!portPairCompatible(fromPort, toPort)) return false
   if (toPort.cardinality === 'one' && inputPortOccupied(editor, to)) return false
 
   const fromIdx = Math.max(0, fromPorts.out.indexOf(fromPort))
@@ -482,7 +487,7 @@ export function tryConnectBatch(
         !spec ||
         !port ||
         port.type !== from.portType ||
-        (port.type === 'json' && !nodeSchemasCompatible(port.schema, from.schema))
+        !portPairCompatible(port, { type: from.portType, schema: from.schema })
     )
   ) {
     return { created: 0, skipped: 0, error: '所选节点没有相同且兼容的输出端口' }
@@ -1055,7 +1060,7 @@ export function gatherUpstreamJson(
     const source = editor.getShape<NodeCardShape>(start.toId)
     if (!source || source.type !== 'node-card') continue
     const output = projectNodeOutputs(source)[fromPort]
-    if (output?.kind === 'json') return output.data
+    if (output?.kind === 'json' || output?.kind === 'camera') return output.data
   }
   return null
 }

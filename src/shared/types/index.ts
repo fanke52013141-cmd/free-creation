@@ -64,7 +64,7 @@ export type NodeTypeId = ActiveNodeTypeId | InternalNodeTypeId | LegacyNodeTypeI
  * 新增类型前必须同步更新：节点契约规范、兼容矩阵、执行器数据包和右侧契约面板。
  * 规范入口：/NODE_CONTRACT_SPEC.md
  */
-/** 循环的临时作用域通道：只可注入下游 JSON 输入，不是普通项目级 JSON 输出。 */
+/** 循环当前项的临时作用域通道；运行时按当前项内容注入 JSON 或类型化媒体值。 */
 export type PortType =
   | 'text'
   | 'markdown'
@@ -103,7 +103,7 @@ export interface PortDecl {
   type: PortType
   /** 输入：执行前必须存在；输出：成功执行后必须产生。 */
   required: boolean
-  /** 数据本身是单值还是列表；不代表一个输出可以连接多少个下游。 */
+  /** 输入端允许的一条/多条上游连线；与 JSON 值本身是否为数组无关。 */
   cardinality: PortCardinality
   /** 右侧契约面板展示的业务语义，禁止只写“输入/输出”。 */
   description: string

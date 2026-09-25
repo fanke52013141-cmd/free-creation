@@ -111,7 +111,7 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
     <div className="iterate-body" ref={scrollRef}>
       <div className="iterate-contract">
         <code className="variable-expr">in-list</code>
-        <span>逐项交给</span>
+        <span>按顺序逐项交给</span>
         <code className="variable-expr">out-item</code>
         <span>循环体，汇总到</span>
         <code className="variable-expr">out-items</code>

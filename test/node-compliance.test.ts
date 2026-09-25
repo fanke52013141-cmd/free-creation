@@ -42,6 +42,12 @@ describe('节点合规门禁', () => {
     }
   })
 
+  it('顺序迭代节点在界面上称为循环，并明确逐项执行方式', () => {
+    const iterate = getNodeType('iterate')
+    expect(iterate?.label).toBe('循环')
+    expect(iterate?.ports.in.find((port) => port.id === 'in-list')?.description).toContain('按顺序')
+  })
+
   it('历史节点的兼容状态必须显式而非悄然可创建', () => {
     expect(getNodeType('script')?.creatable).toBe(false)
     expect(getNodeType('group')).toBeUndefined()

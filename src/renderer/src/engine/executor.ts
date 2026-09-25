@@ -23,6 +23,7 @@ import {
 } from './contracts'
 import type { NodeExecutionContext, NodeExecutionResult, SubflowRequest } from './executor-types'
 import type { NodeMetaPatch } from '@shared/engine/executor-types'
+import { iterationItemValue } from '@shared/engine/inputs'
 import { rendererGateway } from './rendererGateway'
 import { operationPatchViolation } from '@shared/engine/node-invariants'
 import { runCodeTransform } from './codeRuntime'
@@ -463,15 +464,20 @@ function collectNodeInputs(
       edge.to.nodeId === node.id &&
       edge.to.portId === injection.targetPortId
   )
+  const targetType =
+    node.ports.find((port) => port.dir === 'in' && port.id === injection.targetPortId)?.type ??
+    getNodeType(node.type)?.ports.in.find((port) => port.id === injection.targetPortId)?.type
+  const value = iterationItemValue(injection.item, targetType)
   return collectContractInputs(node, ctx.graph.edges, ctx.outputs, {
     ignoreEdgeIds: controlEdges.map((edge) => edge.id),
     injections: [
       {
         portId: injection.targetPortId,
         packet: {
-          type: 'json',
-          value: { kind: 'json', data: injection.item },
-          schema: { id: 'json.any', version: 1 },
+          type: value.kind,
+          value,
+          ...(value.kind === 'json' ? { schema: { id: 'json.any', version: 1 } } : {}),
+          ...(value.kind === 'camera' ? { schema: { id: 'previs.camera', version: 1 } } : {}),
           source: {
             nodeId: injection.iterationNodeId,
             portId: 'out-item',

@@ -1,4 +1,3 @@
-import { nodeSchemasCompatible } from '@shared/node-schemas'
 import type { NodeTypeId, PortDecl } from '@shared/types'
 import { allNodeTypes } from '../nodes/registry'
 import { portPairCompatible } from './graph'
@@ -26,14 +25,6 @@ export function compatibleNodeCreateChoices(source: ConnectionFrom): NodeCreateC
       .filter(
         (port) =>
           portPairCompatible(asPort, port) &&
-          // 菜单层面的机位通道 Schema 收紧：机位端口成对出现时必须带同一 Schema。
-          // 正式连线校验（tryConnect/createEdge）只对 json 做 Schema 硬校验；
-          // 这里是入口过滤，保证菜单不会提出一个“选中后注定语义错误”的选项。
-          !(
-            source.portType === 'camera' &&
-            port.type === 'camera' &&
-            !nodeSchemasCompatible(source.schema, port.schema)
-          ) &&
           // 批量来源只能落到显式声明为多值的输入；新建节点后不会产生
           // “看起来连上、实际只消费第一张”的隐式降级。
           (!source.memberIds?.length || port.cardinality === 'many')
@@ -59,12 +50,7 @@ export function compatibleUpstreamCreateChoices(source: ConnectionFrom): NodeCre
     spec.ports.out
       .filter(
         (port) =>
-          portPairCompatible(port, asPort) &&
-          !(
-            source.portType === 'camera' &&
-            port.type === 'camera' &&
-            !nodeSchemasCompatible(port.schema, source.schema)
-          )
+          portPairCompatible(port, asPort)
       )
       .map((sourcePort) => ({
         type: spec.type,

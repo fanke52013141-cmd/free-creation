@@ -34,6 +34,10 @@ function valueMatchesPort(value: NodeValue, port: PortDecl): boolean {
   return portCompatible(valueType(value), port.type)
 }
 
+function structuredValueData(value: NodeValue): unknown | undefined {
+  return value.kind === 'json' || value.kind === 'camera' ? value.data : undefined
+}
+
 function describePort(port: PortDecl): string {
   return `${port.name}（${port.id}）`
 }
@@ -78,8 +82,12 @@ export function buildOutputPackets(
       errors.push(`${describePort(port)} 声明为 ${port.type}，实际输出为 ${valueType(raw)}`)
       continue
     }
-    if (port.type === 'json' && port.schema && raw.kind === 'json') {
-      const result = validateNodeSchema(port.schema, raw.data)
+    if (
+      (port.type === 'json' || port.type === 'camera') &&
+      port.schema &&
+      raw.kind === port.type
+    ) {
+      const result = validateNodeSchema(port.schema, structuredValueData(raw))
       if (!result.ok) {
         errors.push(
           `${describePort(port)} 不符合 ${port.schema.id}@${port.schema.version}：${result.errors.join('；')}`
@@ -134,18 +142,22 @@ export function collectContractInputs(
       )
       return
     }
-    if (packet.type === 'json' && target.type === 'json' && target.schema) {
+    if (
+      packet.type === target.type &&
+      (target.type === 'json' || target.type === 'camera') &&
+      target.schema
+    ) {
       if (packet.schema && !nodeSchemasCompatible(packet.schema, target.schema)) {
         errors.push(
           `${describePort(target)} 的 Schema ${target.schema.id}@${target.schema.version} 与上游 ${packet.schema.id}@${packet.schema.version} 不兼容`
         )
         return
       }
-      if (packet.value.kind !== 'json') {
-        errors.push(`${describePort(target)} 收到的 JSON 数据包内容类型无效`)
+      if (packet.value.kind !== target.type) {
+        errors.push(`${describePort(target)} 收到的数据包内容类型无效`)
         return
       }
-      const result = validateNodeSchema(target.schema, packet.value.data)
+      const result = validateNodeSchema(target.schema, structuredValueData(packet.value))
       if (!result.ok) {
         errors.push(`${describePort(target)} 校验失败：${result.errors.join('；')}`)
         return
