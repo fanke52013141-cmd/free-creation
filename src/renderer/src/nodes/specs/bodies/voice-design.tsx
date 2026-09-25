@@ -55,7 +55,9 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
   // 音色设计只存在于 MiniMax；选择目录中已经验证的具体模型，而非只有供应商。
-  const minimaxModels = modelsByModality(providers, 'audio').filter((option) => option.provider.specId === 'minimax')
+  const minimaxModels = modelsByModality(providers, 'audio').filter(
+    (option) => option.provider.specId === 'minimax'
+  )
   const voiceId = designedVoiceId(shape)
   const customVoiceInvalid =
     Boolean(config.voiceId.trim()) && !isValidMiniMaxVoiceId(config.voiceId.trim())
@@ -126,22 +128,30 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
   }
 
   const hasOutput = Boolean(shape.props.mediaPath)
-  const canGenerate = Boolean(draft.trim()) && Boolean(config.providerId) && Boolean(config.modelId) && !customVoiceInvalid
+  const canGenerate =
+    Boolean(draft.trim()) &&
+    Boolean(config.providerId) &&
+    Boolean(config.modelId) &&
+    !customVoiceInvalid
 
   return (
     <div className="node-tts node-voice-design">
-      <div className="tts-section">
+      <div className="tts-section voice-design-model-section">
         <div className="tts-section-label">
           <Icon name="spark" size={13} />
           <span>音色设计模型</span>
         </div>
         <AppSelect
-          className="gen-select"
-          value={config.providerId && config.modelId ? `${config.providerId}::${config.modelId}` : ''}
+          className="gen-select voice-design-model-select"
+          aria-label="音色设计模型"
+          value={
+            config.providerId && config.modelId ? `${config.providerId}::${config.modelId}` : ''
+          }
           onPointerDown={(e) => e.stopPropagation()}
           onChange={(e) => {
             const selected = minimaxModels.find((item) => item.key === e.target.value)
-            if (selected) updateConfig({ providerId: selected.provider.id, modelId: selected.model.id })
+            if (selected)
+              updateConfig({ providerId: selected.provider.id, modelId: selected.model.id })
           }}
         >
           <option value="">{providersLoaded ? '选择已验证模型…' : '加载中…'}</option>
@@ -154,6 +164,7 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
         {providersLoaded && !minimaxModels.length && (
           <button
             className="btn-ghost small"
+            data-purpose="config-model-button"
             onPointerDown={(e) => stopEventPropagation(e)}
             onClick={(e) => {
               e.stopPropagation()
@@ -165,30 +176,40 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
         )}
       </div>
 
-      <div className="tts-section">
+      <div className="tts-section voice-design-description-section">
         <div className="tts-section-label">
           <Icon name="text" size={13} />
           <span>音色描述</span>
         </div>
         <textarea
-          className="gen-textarea tts"
+          className="gen-textarea tts voice-design-prompt"
+          rows={3}
+          aria-label="音色描述"
           value={draft}
           placeholder="描述想要的音色，例如：年轻女性，声音清亮温柔，语速偏慢，略带笑意…"
           onPointerDown={(e) => e.stopPropagation()}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={() => updateText(draft)}
         />
-        <div className="audio-text-meta">{draft.length} 字 · 可由文本节点提供</div>
+        <div className="audio-text-meta voice-design-char-count" aria-live="polite">
+          {draft.length} 字 · 可由文本节点提供
+        </div>
       </div>
 
-      <div className="tts-section">
+      <div className="tts-section voice-design-parameters-section">
         <div className="tts-section-label">
           <Icon name="settings" size={13} />
           <span>设计参数</span>
         </div>
-        <label className="opt-label">试听文本</label>
+        <label
+          className="opt-label voice-design-field-label"
+          htmlFor={`voice-design-preview-${shape.id}`}
+        >
+          试听文本
+        </label>
         <input
           className="gen-input"
+          id={`voice-design-preview-${shape.id}`}
           aria-label="试听文本"
           value={config.previewText}
           maxLength={VOICE_DESIGN_PREVIEW_LIMIT}
@@ -196,9 +217,15 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
           onPointerDown={(e) => e.stopPropagation()}
           onChange={(e) => updateConfig({ previewText: e.target.value })}
         />
-        <label className="opt-label">自定义 Voice ID（可选）</label>
+        <label
+          className="opt-label voice-design-field-label"
+          htmlFor={`voice-design-id-${shape.id}`}
+        >
+          自定义 Voice ID（可选）
+        </label>
         <input
-          className={`gen-input ${customVoiceInvalid ? 'invalid' : ''}`}
+          className={`gen-input voice-design-id-input ${customVoiceInvalid ? 'invalid' : ''}`}
+          id={`voice-design-id-${shape.id}`}
           aria-label="自定义 Voice ID（可选）"
           spellCheck={false}
           value={config.voiceId}
@@ -211,15 +238,6 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
             需 8～256 位、以字母开头、只含字母数字与 - _，且末位不能是 - 或 _
           </div>
         )}
-        <label className="tts-inline-toggle">
-          <input
-            type="checkbox"
-            checked={config.aigcWatermark}
-            onPointerDown={(e) => e.stopPropagation()}
-            onChange={(e) => updateConfig({ aigcWatermark: e.target.checked })}
-          />
-          AIGC 音频水印
-        </label>
       </div>
 
       <button
@@ -235,8 +253,8 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
           '设计中…'
         ) : (
           <>
+            <span>设计音色</span>
             <Icon name="spark" size={14} />
-            设计音色
           </>
         )}
       </button>

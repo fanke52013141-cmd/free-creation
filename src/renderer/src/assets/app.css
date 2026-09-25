@@ -10651,3 +10651,242 @@ canvas.tl-canvas-indicators {
   align-items: center;
   gap: 6px 8px;
 }
+
+/* 音色设计节点内部：沿用参考稿的分组、深色输入区与青色主操作，不改节点外壳和端口。 */
+.node-card.type-voice-design .node-voice-design {
+  --voice-design-input: #10131d;
+  --voice-design-edge: #23293e;
+  --voice-design-text: #e2e8f0;
+  --voice-design-muted: #94a3b8;
+  --voice-design-accent: #38bdf8;
+  box-sizing: border-box;
+  gap: 14px;
+  padding: 14px;
+  color: var(--voice-design-text);
+}
+
+.node-card.type-voice-design .node-voice-design .tts-section {
+  gap: 8px;
+}
+
+.node-card.type-voice-design .node-voice-design .tts-section-label {
+  gap: 6px;
+  color: var(--voice-design-text);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  text-transform: none;
+}
+
+.node-card.type-voice-design .voice-design-model-section .tts-section-label svg {
+  color: var(--voice-design-accent);
+}
+
+.node-card.type-voice-design .voice-design-description-section .tts-section-label svg,
+.node-card.type-voice-design .voice-design-parameters-section .tts-section-label svg {
+  color: var(--voice-design-muted);
+}
+
+.node-card.type-voice-design .voice-design-model-select,
+.node-card.type-voice-design .voice-design-prompt,
+.node-card.type-voice-design .voice-design-parameters-section .gen-input {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid var(--voice-design-edge);
+  border-radius: 9px;
+  background: var(--voice-design-input);
+  color: var(--voice-design-text);
+  font-size: 12px;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.node-card.type-voice-design .voice-design-model-select {
+  min-height: 40px;
+  padding: 9px 11px;
+}
+
+.node-card.type-voice-design .voice-design-prompt {
+  min-height: 76px;
+  max-height: 100px;
+  padding: 11px 12px;
+  line-height: 1.65;
+  resize: none;
+}
+
+.node-card.type-voice-design .voice-design-parameters-section .gen-input {
+  min-height: 38px;
+  padding: 9px 11px;
+}
+
+.node-card.type-voice-design .voice-design-parameters-section .voice-design-id-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.node-card.type-voice-design .voice-design-model-select:focus,
+.node-card.type-voice-design .voice-design-prompt:focus,
+.node-card.type-voice-design .voice-design-parameters-section .gen-input:focus {
+  border-color: color-mix(in srgb, var(--voice-design-accent) 70%, transparent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--voice-design-accent) 15%, transparent);
+  outline: none;
+}
+
+.node-card.type-voice-design .voice-design-parameters-section .gen-input.invalid {
+  border-color: rgba(248, 113, 113, 0.65);
+}
+
+.node-card.type-voice-design .voice-design-parameters-section .gen-input.invalid:focus {
+  box-shadow: 0 0 10px rgba(248, 113, 113, 0.16);
+}
+
+.node-card.type-voice-design .voice-design-prompt::placeholder,
+.node-card.type-voice-design .voice-design-parameters-section .gen-input::placeholder {
+  color: color-mix(in srgb, var(--voice-design-muted) 78%, transparent);
+}
+
+.node-card.type-voice-design .voice-design-field-label {
+  display: block;
+  color: var(--voice-design-muted);
+  font-size: 11px;
+  white-space: normal;
+}
+
+.node-card.type-voice-design .voice-design-char-count {
+  margin-top: -3px;
+  color: var(--voice-design-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  text-align: right;
+}
+
+.node-card.type-voice-design .voice-design-model-section [data-purpose='config-model-button'] {
+  display: flex;
+  width: 100%;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 10px;
+  border: 1px solid #29324b;
+  border-radius: 9px;
+  background: #191f2e;
+  color: #cbd5e1;
+  font-size: 11px;
+  letter-spacing: 0.01em;
+}
+
+.node-card.type-voice-design
+  .voice-design-model-section
+  [data-purpose='config-model-button']:hover {
+  border-color: rgba(56, 189, 248, 0.4);
+  background: #20273a;
+  color: #f1f5f9;
+}
+
+.node-card.type-voice-design .btn-generate {
+  min-height: 42px;
+  padding: 10px 14px;
+  border: 1px solid rgba(103, 232, 249, 0.44);
+  border-radius: 10px;
+  background: linear-gradient(105deg, #06b6d4, #22d3ee);
+  box-shadow: 0 8px 20px rgba(8, 145, 178, 0.24);
+  color: #082f49;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.025em;
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease,
+    filter 150ms ease;
+}
+
+.node-card.type-voice-design .btn-generate:hover:not(:disabled) {
+  filter: brightness(1.08);
+  opacity: 1;
+  box-shadow: 0 10px 24px rgba(8, 145, 178, 0.32);
+  transform: translateY(-1px);
+}
+
+.node-card.type-voice-design .btn-generate:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+.node-card.type-voice-design .btn-generate:disabled {
+  box-shadow: none;
+}
+
+.node-card.type-voice-design .voice-id-card {
+  padding: 9px 10px;
+  border-color: rgba(34, 211, 238, 0.24);
+  border-radius: 10px;
+  background: rgba(8, 145, 178, 0.07);
+}
+
+.node-card.type-voice-design .node-audio-player {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: 'wave actions' 'info actions';
+  align-items: center;
+  gap: 3px 10px;
+  height: auto;
+  min-height: 70px;
+  padding: 9px 11px;
+  overflow: hidden;
+  border: 1px solid var(--voice-design-edge);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--voice-design-input) 86%, transparent);
+}
+
+.node-card.type-voice-design .audio-player-wave {
+  grid-area: wave;
+  justify-content: flex-start;
+  height: 22px;
+}
+
+.node-card.type-voice-design .audio-player-info {
+  grid-area: info;
+  min-width: 0;
+  text-align: left;
+}
+
+.node-card.type-voice-design .audio-player-actions {
+  grid-area: actions;
+}
+
+.canvas-theme-light .node-card.type-voice-design .node-voice-design {
+  --voice-design-input: #f7f9fc;
+  --voice-design-edge: rgba(42, 55, 67, 0.15);
+  --voice-design-text: #172b3a;
+  --voice-design-muted: #617486;
+  --voice-design-accent: #1177a6;
+}
+
+.canvas-theme-light
+  .node-card.type-voice-design
+  .voice-design-model-section
+  [data-purpose='config-model-button'] {
+  border-color: var(--voice-design-edge);
+  background: #eef3f8;
+  color: #3b5161;
+}
+
+.canvas-theme-light
+  .node-card.type-voice-design
+  .voice-design-model-section
+  [data-purpose='config-model-button']:hover {
+  border-color: rgba(24, 143, 202, 0.4);
+  background: #e6f4fa;
+  color: #11658e;
+}
+
+.canvas-theme-light .node-card.type-voice-design .voice-id-card {
+  border-color: rgba(17, 119, 166, 0.2);
+  background: rgba(17, 119, 166, 0.06);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .node-card.type-voice-design .btn-generate {
+    transition: none;
+  }
+}
