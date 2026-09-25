@@ -23,7 +23,6 @@ import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
 import {
-  MediaFileActions,
   MediaResultGrid,
   removeMediaResultFromShape,
   clearSelectedMediaHistory,
@@ -132,6 +131,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const loadProviders = useGatewayStore((s) => s.load)
   const openSettings = useGatewayStore((s) => s.openSettings)
   const isAssetNode = shape.props.nodeType === 'video-asset'
+  const [videoOperationsMode, setVideoOperationsMode] = useState<'clip' | 'frame'>('clip')
   const [videoOperationsOpen, setVideoOperationsOpen] = useState(false)
   const chooseAsset = async (): Promise<void> => {
     if (!project) return
@@ -303,17 +303,6 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     }
   }
 
-  /** 重新生成：清空成片后立即用相同参数重新提交，无需手动返回配置面板。 */
-  const regenerate = async (): Promise<void> => {
-    editor.updateShape({
-      id: shape.id,
-      type: 'node-card',
-      props: { mediaId: '', mediaPath: '', mediaMime: '' }
-    })
-    markUndoPoint(editor, 'video-regenerate')
-    await submit()
-  }
-
   const addImageMention = (item: MentionableImage): void => {
     if (images.some((image) => image.mediaPath === item.mediaPath)) {
       setMentionOpen(false)
@@ -412,50 +401,49 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
             openPreview({ kind: 'video', url: mediaUrl(item.mediaPath), title: shape.props.title })
           }
         />
-        {/* 视频节点全部动作统一收在最后一行（用户 2026-09-18 拍板：去图标、单行窄按钮）。 */}
-        <div className="node-media-next-actions" aria-label="视频后续操作">
-          {isAssetNode ? (
-            <button
-              className="btn-ghost small"
-              title="替换视频"
-              onPointerDown={(e) => stopEventPropagation(e)}
-              onClick={(e) => {
-                e.stopPropagation()
-                void chooseAsset()
-              }}
-            >
-              替换
-            </button>
-          ) : (
-            <button
-              className="btn-ghost small"
-              disabled={submitting}
-              onPointerDown={(e) => stopEventPropagation(e)}
-              onClick={(e) => {
-                e.stopPropagation()
-                void regenerate()
-              }}
-            >
-              {submitting ? '生成中…' : '重新生成'}
-            </button>
-          )}
+        {/* 视频节点只保留三个直接操作入口；文件定位与路径复制不挤占主要操作行。 */}
+        <div className="node-media-next-actions node-video-action-group" aria-label="视频操作">
           <button
             className="btn-ghost small"
-            title="截取视频、抽帧或分离人声"
+            title="替换视频"
             onPointerDown={(e) => stopEventPropagation(e)}
             onClick={(e) => {
               e.stopPropagation()
+              void chooseAsset()
+            }}
+          >
+            替换
+          </button>
+          <button
+            className="btn-ghost small"
+            title="打开视频截取"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              setVideoOperationsMode('clip')
               setVideoOperationsOpen(true)
             }}
           >
-            视频操作
+            视频截取
           </button>
-          <MediaFileActions shape={shape} />
+          <button
+            className="btn-ghost small"
+            title="打开抽帧"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              setVideoOperationsMode('frame')
+              setVideoOperationsOpen(true)
+            }}
+          >
+            抽帧
+          </button>
         </div>
         {videoOperationsOpen && (
           <VideoOperationsWorkbench
             source={shape}
             editor={editor}
+            initialMode={videoOperationsMode}
             onClose={() => setVideoOperationsOpen(false)}
           />
         )}

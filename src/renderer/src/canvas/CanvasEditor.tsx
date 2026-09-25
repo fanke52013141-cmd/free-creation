@@ -239,10 +239,7 @@ function paletteSafeScreenX(editor: Editor): number {
   return palette.getBoundingClientRect().right + 16
 }
 
-export function CanvasEditor({
-  project,
-  initialSnapshot
-}: CanvasEditorProps): React.JSX.Element {
+export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): React.JSX.Element {
   const editorRef = useRef<Editor | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -695,6 +692,23 @@ export function CanvasEditor({
     const onDoubleMouseDown = (event: MouseEvent): void => {
       if (event.detail !== 2) return // 只处理双击的第二击
       const target = event.target as HTMLElement
+      const chatCard = target.closest<HTMLElement>('.node-card[data-node-type="chat"]')
+      if (chatCard) {
+        // tldraw 会在首次选中后捕获指针；在第二次 mousedown 尚未被重定向时打开聊天。
+        // 不拦截 mousedown 本身，因此两次点击仍照常完成节点选择。
+        const nestedControl = target.closest<HTMLElement>(
+          'button, input, textarea, select, a, [contenteditable="true"]'
+        )
+        if (nestedControl && chatCard.contains(nestedControl)) return
+        const shapeId = chatCard.closest<HTMLElement>('.node-card-wrap')?.dataset.nodeId
+        if (shapeId) {
+          const panel = useNodePanelStore.getState()
+          if (panel.kind !== 'chat' || panel.shapeId !== shapeId) {
+            panel.open('chat', shapeId as TLShapeId, 'settings')
+          }
+        }
+        return
+      }
       const mediaBody = target.closest<HTMLElement>('[data-node-interactive="media-preview"]')
       if (mediaBody) {
         // 卡片内的“设为当前 / 删除 / 文件操作”等按钮维持自己的双击语义，不把它们
@@ -716,6 +730,18 @@ export function CanvasEditor({
     }
     const onDblClickCapture = (event: MouseEvent): void => {
       const target = event.target as HTMLElement
+      const chatCard =
+        target.closest<HTMLElement>('.node-card[data-node-type="chat"]') ??
+        document
+          .elementFromPoint(event.clientX, event.clientY)
+          ?.closest<HTMLElement>('.node-card[data-node-type="chat"]') ??
+        null
+      if (chatCard) {
+        // 聊天窗口只由第二次 mousedown 的桥接打开；拦住画布自身的双击动作。
+        event.preventDefault()
+        event.stopPropagation()
+        return
+      }
       const textBody =
         target.closest<HTMLElement>('[data-node-interactive="text-content"]') ??
         // pointer capture 重定向后 target 是 .tl-canvas，用双击坐标兜底重新命中。
@@ -1452,29 +1478,6 @@ export function CanvasEditor({
         })
       },
       { scope: 'document' }
-    )
-    // 对话节点单选后打开居中聊天 Dialog。记录上次打开的选中节点，避免正文/运行状态
-    // 更新时重复弹出；用户关闭后重新选中（先切换到其他节点）即可再次打开。
-    let lastOpenedChatSelection: string | null = null
-    editor.store.listen(
-      () => {
-        const selected = editor.getSelectedShapeIds()
-        if (selected.length !== 1) {
-          lastOpenedChatSelection = null
-          return
-        }
-        const shape = editor.getShape<NodeCardShape>(selected[0])
-        if (!shape || shape.type !== 'node-card' || shape.props.nodeType !== 'chat') {
-          lastOpenedChatSelection = null
-          return
-        }
-        if (lastOpenedChatSelection === shape.id) return
-        lastOpenedChatSelection = shape.id
-        const panel = useNodePanelStore.getState()
-        if (panel.kind === 'chat' && panel.shapeId === shape.id) return
-        panel.open('chat', shape.id, 'settings')
-      },
-      { scope: 'session' }
     )
     // 一次性兼容旧快照：只修正旧版本默认尺寸或明显异常的超大节点。
     const resizedNodes = migrateLegacyNodeSizes(editor)

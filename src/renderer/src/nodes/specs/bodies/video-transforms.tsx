@@ -571,10 +571,12 @@ type ClipOutput = 'video-only' | 'audio-only' | 'video-with-audio'
 export function VideoOperationsWorkbench({
   source,
   editor,
+  initialMode = 'clip',
   onClose
 }: {
   source: NodeCardShape
   editor: Editor
+  initialMode?: VideoOperationMode
   onClose: () => void
 }): React.JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -588,7 +590,7 @@ export function VideoOperationsWorkbench({
   const sourceMediaPath =
     videoOutput?.kind === 'video' ? videoOutput.mediaPath : (source.props.mediaPath ?? '')
 
-  const [mode, setMode] = useState<VideoOperationMode>('clip')
+  const [mode, setMode] = useState<VideoOperationMode>(initialMode)
   const [durationMs, setDurationMs] = useState(0)
   const [currentTimeMs, setCurrentTimeMs] = useState(0)
   const [previewBounds, setPreviewBounds] = useState({ width: 0, height: 0 })
