@@ -486,7 +486,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     return <NoModelHint onOpen={openSettings} presetIds={['minimax', 'seedance']} />
 
   return (
-    <div className="gen-panel">
+    <div className="gen-panel video-gen-panel">
       {capabilityIssues.length > 0 && (
         <div className="gen-capability-note capability-error" role="alert">
           <Icon name="info" size={13} />
@@ -538,191 +538,211 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           </span>
         </div>
       )}
-      <div className="video-model-mode-row">
-        <label>
-          <span>模型</span>
-          <ModelSelect value={data.modelKey} options={options} onChange={updateModel} />
-        </label>
-        <label>
-          <span>生成模式</span>
-          <AppSelect
-            className="gen-select"
-            value={mode ?? ''}
-            disabled={!capabilities || !mode}
-            onPointerDown={(event) => event.stopPropagation()}
-            onChange={(event) => {
-              if (!capabilities) return
-              const nextMode = event.target.value as VideoGenerationMode
-              const nextFrames = nextMode === 'first-frame' || nextMode === 'first-last-frame'
-              update({
-                ...data,
-                mode: nextMode,
-                params: normalizeVideoGenParams(capabilities, data.params, {
-                  framesDetermineRatio: Boolean(
-                    nextFrames &&
-                    images.length > 0 &&
-                    opt &&
-                    videoRatioIsDerivedByFrames(opt.provider.specId, opt.model.id, true)
-                  )
-                })
-              })
-            }}
-          >
-            {!mode && <option value="">当前素材组合不可用</option>}
-            {(modeResolution?.availableModes ?? []).map((candidate) => (
-              <option key={candidate} value={candidate}>
-                {MODE_LABELS[candidate]}
-              </option>
-            ))}
-          </AppSelect>
-        </label>
-      </div>
-      <textarea
-        className="gen-prompt"
-        value={draft}
-        rows={3}
-        spellCheck={false}
-        maxLength={capabilities?.maxPromptChars}
-        placeholder="描述视频内容、镜头与氛围…"
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => {
-          update({ ...data, params })
-          updateText(draft)
-        }}
-        onKeyDown={(e) => {
-          if (e.key === '@' && availableMentions.length > 0) setMentionOpen(true)
-          if (e.key === 'Escape') setMentionOpen(false)
-        }}
-        onPointerDown={(e) => e.stopPropagation()}
-      />
-      {capabilities?.maxPromptChars && (
-        <div className="video-prompt-meta">
-          {draft.length} / {capabilities.maxPromptChars} 字
+      <section className="video-gen-section video-gen-source" aria-label="生成配置">
+        <div className="video-gen-section-heading">
+          <span>生成配置</span>
+          <span className="video-gen-section-hint">模型与生成方式</span>
         </div>
-      )}
-      <div className="video-reference-mention">
-        <button
-          type="button"
-          className="btn-ghost small"
-          onPointerDown={stopEventPropagation}
-          onClick={(event) => {
-            stopEventPropagation(event)
-            setMentionOpen((open) => !open)
+        <div className="video-model-mode-row">
+          <label>
+            <span>模型</span>
+            <ModelSelect value={data.modelKey} options={options} onChange={updateModel} />
+          </label>
+          <label>
+            <span>生成模式</span>
+            <AppSelect
+              className="gen-select"
+              value={mode ?? ''}
+              disabled={!capabilities || !mode}
+              onPointerDown={(event) => event.stopPropagation()}
+              onChange={(event) => {
+                if (!capabilities) return
+                const nextMode = event.target.value as VideoGenerationMode
+                const nextFrames = nextMode === 'first-frame' || nextMode === 'first-last-frame'
+                update({
+                  ...data,
+                  mode: nextMode,
+                  params: normalizeVideoGenParams(capabilities, data.params, {
+                    framesDetermineRatio: Boolean(
+                      nextFrames &&
+                      images.length > 0 &&
+                      opt &&
+                      videoRatioIsDerivedByFrames(opt.provider.specId, opt.model.id, true)
+                    )
+                  })
+                })
+              }}
+            >
+              {!mode && <option value="">当前素材组合不可用</option>}
+              {(modeResolution?.availableModes ?? []).map((candidate) => (
+                <option key={candidate} value={candidate}>
+                  {MODE_LABELS[candidate]}
+                </option>
+              ))}
+            </AppSelect>
+          </label>
+        </div>
+      </section>
+      <section className="video-gen-section video-prompt-section" aria-label="视频描述">
+        <div className="video-gen-section-heading">
+          <span>视频描述</span>
+          {capabilities?.maxPromptChars && (
+            <span className="video-prompt-meta">
+              {draft.length} / {capabilities.maxPromptChars} 字
+            </span>
+          )}
+        </div>
+        <textarea
+          className="gen-prompt video-gen-prompt"
+          value={draft}
+          rows={3}
+          spellCheck={false}
+          maxLength={capabilities?.maxPromptChars}
+          placeholder="描述视频内容、镜头与氛围…"
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => {
+            update({ ...data, params })
+            updateText(draft)
           }}
-          disabled={availableMentions.length === 0}
-          title={
-            availableMentions.length
-              ? '从画布结果中引用图片（也可在提示词里输入 @）'
-              : '画布中还没有可引用的图片结果'
-          }
-        >
-          <Icon name="attach" size={13} /> @ 引用图片
-        </button>
-        {mentionOpen && (
-          <div className="video-mention-menu" role="listbox" aria-label="选择参考图">
-            {availableMentions.map((item) => (
-              <button
-                type="button"
-                key={item.shapeId}
-                role="option"
-                onPointerDown={stopEventPropagation}
-                onClick={(event) => {
-                  stopEventPropagation(event)
-                  addImageMention(item)
-                }}
-              >
-                <img src={mediaUrl(item.mediaPath)} alt="" draggable={false} />
-                <span>{item.title}</span>
-              </button>
-            ))}
+          onKeyDown={(e) => {
+            if (e.key === '@' && availableMentions.length > 0) setMentionOpen(true)
+            if (e.key === 'Escape') setMentionOpen(false)
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+        />
+        <div className="video-prompt-toolbar">
+          <div className="video-reference-mention">
+            <button
+              type="button"
+              className="btn-ghost small"
+              onPointerDown={stopEventPropagation}
+              onClick={(event) => {
+                stopEventPropagation(event)
+                setMentionOpen((open) => !open)
+              }}
+              disabled={availableMentions.length === 0}
+              title={
+                availableMentions.length
+                  ? '从画布结果中引用图片（也可在提示词里输入 @）'
+                  : '画布中还没有可引用的图片结果'
+              }
+            >
+              <Icon name="attach" size={13} /> @ 引用图片
+            </button>
+            {mentionOpen && (
+              <div className="video-mention-menu" role="listbox" aria-label="选择参考图">
+                {availableMentions.map((item) => (
+                  <button
+                    type="button"
+                    key={item.shapeId}
+                    role="option"
+                    onPointerDown={stopEventPropagation}
+                    onClick={(event) => {
+                      stopEventPropagation(event)
+                      addImageMention(item)
+                    }}
+                  >
+                    <img src={mediaUrl(item.mediaPath)} alt="" draggable={false} />
+                    <span>{item.title}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-        )}
-      </div>
+          <span>输入 @ 可插入画布图片</span>
+        </div>
+      </section>
       {capabilities && (
-        <div className="video-param-grid" aria-label="视频生成参数">
-          {framesDetermineRatio ? (
-            <span className="gen-capability-note">画幅由首/尾帧决定</span>
-          ) : (
+        <section className="video-gen-section video-output-settings" aria-label="视频输出参数">
+          <div className="video-gen-section-heading">
+            <span>输出参数</span>
+            <span className="video-gen-section-hint">按模型能力提供选项</span>
+          </div>
+          <div className="video-param-grid">
+            {framesDetermineRatio ? (
+              <span className="gen-capability-note">画幅由首/尾帧决定</span>
+            ) : (
+              <label>
+                <span>画幅</span>
+                <AppSelect
+                  className="gen-select"
+                  value={params.ratio ?? capabilities.defaultRatio}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onChange={(e) =>
+                    update({ ...data, params: { ...params, ratio: e.target.value } })
+                  }
+                >
+                  {capabilities.ratios.map((ratio) => (
+                    <option key={ratio} value={ratio}>
+                      {ratio === 'adaptive' ? '自适应' : ratio}
+                    </option>
+                  ))}
+                </AppSelect>
+              </label>
+            )}
             <label>
-              <span>画幅</span>
+              <span>
+                时长 {Math.min(...capabilities.durations)}–{Math.max(...capabilities.durations)}s
+              </span>
               <AppSelect
                 className="gen-select"
-                value={params.ratio ?? capabilities.defaultRatio}
+                title="时长按秒计费，超出模型支持范围的取值会自动回到最短档"
+                value={String(params.duration ?? capabilities.defaultDuration)}
                 onPointerDown={(e) => e.stopPropagation()}
-                onChange={(e) => update({ ...data, params: { ...params, ratio: e.target.value } })}
+                onChange={(e) =>
+                  update({ ...data, params: { ...params, duration: Number(e.target.value) } })
+                }
               >
-                {capabilities.ratios.map((ratio) => (
-                  <option key={ratio} value={ratio}>
-                    {ratio === 'adaptive' ? '自适应' : ratio}
+                {capabilities.durations.map((d) => (
+                  <option key={d} value={d}>
+                    {d}s
                   </option>
                 ))}
               </AppSelect>
             </label>
-          )}
-          <label>
-            <span>
-              时长 {Math.min(...capabilities.durations)}–{Math.max(...capabilities.durations)}s
-            </span>
-            <AppSelect
-              className="gen-select"
-              title="时长按秒计费，超出模型支持范围的取值会自动回到最短档"
-              value={String(params.duration ?? capabilities.defaultDuration)}
-              onPointerDown={(e) => e.stopPropagation()}
-              onChange={(e) =>
-                update({ ...data, params: { ...params, duration: Number(e.target.value) } })
-              }
-            >
-              {capabilities.durations.map((d) => (
-                <option key={d} value={d}>
-                  {d}s
-                </option>
-              ))}
-            </AppSelect>
-          </label>
-          <label>
-            <span>分辨率</span>
-            <AppSelect
-              className="gen-select"
-              title="分辨率按档位计费，默认已选该模型最低档；要成片质量再手动调高"
-              value={params.resolution ?? capabilities.defaultResolution}
-              onPointerDown={(e) => e.stopPropagation()}
-              onChange={(e) =>
-                update({ ...data, params: { ...params, resolution: e.target.value } })
-              }
-            >
-              {capabilities.resolutions.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </AppSelect>
-          </label>
-        </div>
-      )}
-      {capabilities?.supportsGeneratedAudio && (
-        <div className="gen-row video-advanced-row">
-          {capabilities.supportsGeneratedAudio && (
-            <label className="video-checkbox">
-              <input
-                type="checkbox"
-                checked={params.generateAudio ?? true}
+            <label>
+              <span>分辨率</span>
+              <AppSelect
+                className="gen-select"
+                title="分辨率按档位计费，默认已选该模型最低档；要成片质量再手动调高"
+                value={params.resolution ?? capabilities.defaultResolution}
                 onPointerDown={(e) => e.stopPropagation()}
                 onChange={(e) =>
-                  update({ ...data, params: { ...params, generateAudio: e.target.checked } })
+                  update({ ...data, params: { ...params, resolution: e.target.value } })
                 }
-              />
-              生成同步音频
+              >
+                {capabilities.resolutions.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </AppSelect>
             </label>
+          </div>
+          {capabilities.supportsGeneratedAudio && (
+            <div className="gen-row video-advanced-row">
+              <label className="video-checkbox">
+                <input
+                  type="checkbox"
+                  checked={params.generateAudio ?? true}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onChange={(e) =>
+                    update({ ...data, params: { ...params, generateAudio: e.target.checked } })
+                  }
+                />
+                生成同步音频
+              </label>
+            </div>
           )}
-        </div>
-      )}
-      {gatewayProxy && (
-        <small className="gen-capability-note">
-          当前兼容网关仅提交已验证的画幅、时长与清晰度参数；不展示未经验证的音频/种子开关。
-        </small>
+          {gatewayProxy && (
+            <small className="gen-capability-note">
+              当前兼容网关仅提交已验证的画幅、时长与清晰度参数；不展示未经验证的音频/种子开关。
+            </small>
+          )}
+        </section>
       )}
       <button
-        className="btn-primary small gen-go"
+        className="btn-primary small gen-go video-gen-submit"
         disabled={submitting || capabilityIssues.length > 0}
         onPointerDown={(e) => stopEventPropagation(e)}
         onClick={(e) => {
