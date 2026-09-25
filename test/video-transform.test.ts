@@ -51,7 +51,9 @@ describe('视频处理配置 · v2', () => {
       includeAudio: true,
       quality: 'high',
       audioFormat: 'wav',
-      audioSampleRate: 44100
+      audioSampleRate: 44100,
+      extractVocals: false,
+      vocalMode: 'quality'
     })
     // startMs > endMs 时自动纠正；无 version 的历史数据只产画面
     expect(parseVideoClipConfig(JSON.stringify({ startMs: 900, endMs: 100 }))).toEqual({
@@ -63,8 +65,21 @@ describe('视频处理配置 · v2', () => {
       includeAudio: true,
       quality: 'high',
       audioFormat: 'wav',
-      audioSampleRate: 44100
+      audioSampleRate: 44100,
+      extractVocals: false,
+      vocalMode: 'quality'
     })
+    expect(
+      parseVideoClipConfig(
+        JSON.stringify({
+          version: 3,
+          keepVideo: false,
+          keepAudio: true,
+          startMs: 0,
+          endMs: 1000
+        })
+      ).vocalMode
+    ).toBe('quality')
   })
 
   it('截取：v2 历史配置只产画面，不新增音频输出', () => {
@@ -85,7 +100,9 @@ describe('视频处理配置 · v2', () => {
       includeAudio: false,
       quality: 'fast' as const,
       audioFormat: 'm4a' as const,
-      audioSampleRate: 48000 as const
+      audioSampleRate: 48000 as const,
+      extractVocals: true,
+      vocalMode: 'fast' as const
     }
     expect(parseVideoClipConfig(serializeVideoClipConfig(cfg))).toEqual(cfg)
   })
@@ -382,6 +399,64 @@ describe('视频处理执行器', () => {
     expect(api.clipVideo).not.toHaveBeenCalled()
     expect(item.artifacts).toEqual([
       expect.objectContaining({ kind: 'audio', portId: 'out-audio' })
+    ])
+  })
+
+  it('视频操作内提取人声：单个视频截取节点完成处理并清理中间音频', async () => {
+    const api = {
+      clipVideo: vi.fn(),
+      extractVideoAudio: vi.fn().mockResolvedValue({
+        ok: true,
+        data: {
+          id: 'intermediate-audio',
+          path: 'projects/project-a/media/intermediate-audio.wav',
+          mime: 'audio/wav',
+          name: 'intermediate-audio'
+        }
+      }),
+      separateVocals: vi.fn().mockResolvedValue({
+        ok: true,
+        data: {
+          vocals: {
+            id: 'final-vocals',
+            path: 'projects/project-a/media/final-vocals.wav',
+            mime: 'audio/wav',
+            name: 'final-vocals'
+          }
+        }
+      }),
+      deleteMedia: vi.fn().mockResolvedValue({ ok: true, data: true })
+    }
+    currentGateway = api
+    const item = context('video-clip', '发布会录像')
+    item.ctx.shape.props.config = JSON.stringify({
+      version: 3,
+      startMs: 500,
+      endMs: 1700,
+      keepVideo: false,
+      keepAudio: true,
+      includeAudio: true,
+      quality: 'balanced',
+      audioFormat: 'wav',
+      audioSampleRate: 44100,
+      extractVocals: true,
+      vocalMode: 'quality'
+    })
+
+    await expect(videoClipExecutor(item.ctx)).resolves.toEqual({ status: 'done' })
+    expect(api.separateVocals).toHaveBeenCalledWith({
+      projectId: 'project-a',
+      sourceMediaId: 'intermediate-audio',
+      config: { version: 1, mode: 'quality', outputAccompaniment: false }
+    })
+    expect(api.deleteMedia).toHaveBeenCalledWith('intermediate-audio')
+    expect(item.artifacts).toEqual([
+      expect.objectContaining({
+        kind: 'audio',
+        portId: 'out-audio',
+        mediaId: 'final-vocals',
+        title: '（人声）发布会录像'
+      })
     ])
   })
 

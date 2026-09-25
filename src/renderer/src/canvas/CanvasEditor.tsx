@@ -352,35 +352,68 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
     }
   }, [project.id, providers])
 
-  // Ctrl/Cmd+滚轮缩放：tldraw 的 wheel 手势管线存在多重门控（容器 isFocused、
-  // 动量末事件过滤等），Ctrl+滚轮在这些门控下会被整体吞掉。这里在宿主捕获阶段
-  // 直接驱动相机：preventDefault 阻止浏览器页面缩放，stopPropagation 阻止 tldraw
-  // 把 Ctrl+滚轮当作平移处理，再以光标为锚点连续缩放。
+  // 滚轮路由统一在画布捕获阶段处理，避免依赖指针是否正好落在某个卡片或内部编辑区：
+  // 有选中节点时滚动选中节点正文；没有选中节点时由 tldraw 平移画布。
+  // Ctrl/Cmd+滚轮仍以光标为锚点缩放。
   useEffect(() => {
     const el = wrapRef.current
     if (!el || !editorInstance) return
     const onWheel = (e: WheelEvent): void => {
-      if (!e.ctrlKey && !e.metaKey) return
       const editor = editorRef.current
       if (!editor) return
-      e.preventDefault()
-      e.stopPropagation()
-      // 滚轮一格按 20% 步进；触控板捏合等小增量按比例缩放
-      const dy = Math.abs(e.deltaY) > 10 ? 10 * Math.sign(e.deltaY) : e.deltaY
-      const rect = editor.getContainer().getBoundingClientRect()
-      const px = e.clientX - rect.left
-      const py = e.clientY - rect.top
-      const { x: cx, y: cy, z: cz } = editor.getCamera()
-      const baseZoom = editor.getBaseZoom()
-      const steps = editor.getCameraOptions().zoomSteps ?? [0.1, 1]
-      const zoom = Math.min(
-        steps[steps.length - 1] * baseZoom,
-        Math.max(steps[0] * baseZoom, cz * (1 - (dy / 100) * 2))
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault()
+        e.stopPropagation()
+        // 滚轮一格按 20% 步进；触控板捏合等小增量按比例缩放
+        const dy = Math.abs(e.deltaY) > 10 ? 10 * Math.sign(e.deltaY) : e.deltaY
+        const rect = editor.getContainer().getBoundingClientRect()
+        const px = e.clientX - rect.left
+        const py = e.clientY - rect.top
+        const { x: cx, y: cy, z: cz } = editor.getCamera()
+        const baseZoom = editor.getBaseZoom()
+        const steps = editor.getCameraOptions().zoomSteps ?? [0.1, 1]
+        const zoom = Math.min(
+          steps[steps.length - 1] * baseZoom,
+          Math.max(steps[0] * baseZoom, cz * (1 - (dy / 100) * 2))
+        )
+        editor.setCamera(
+          { x: cx + px / zoom - px / cz, y: cy + py / zoom - py / cz, z: zoom },
+          { immediate: true }
+        )
+        return
+      }
+      if (e.altKey) return
+
+      const target = e.target
+      const container = editor.getContainer()
+      if (!(target instanceof Node) || !container.contains(target)) return
+
+      const selectedNodeIds = new Set<string>(
+        editor
+          .getSelectedShapes()
+          .filter((shape) => shape.type === 'node-card')
+          .map((shape) => shape.id)
       )
-      editor.setCamera(
-        { x: cx + px / zoom - px / cz, y: cy + py / zoom - py / cz, z: zoom },
-        { immediate: true }
-      )
+      if (selectedNodeIds.size > 0) {
+        e.preventDefault()
+        e.stopPropagation()
+
+        const cards = container.querySelectorAll<HTMLElement>('.node-card-wrap[data-node-id]')
+        let delta = e.deltaY
+        if (e.deltaMode === WheelEvent.DOM_DELTA_LINE) delta *= 16
+        if (e.deltaMode === WheelEvent.DOM_DELTA_PAGE) delta *= container.clientHeight
+        if (delta === 0 && e.shiftKey) delta = e.deltaX
+        for (const card of cards) {
+          if (!selectedNodeIds.has(card.dataset.nodeId ?? '')) continue
+          const body = card.querySelector<HTMLElement>('.node-body')
+          if (body && delta !== 0) body.scrollTop += delta
+        }
+        return
+      }
+
+      // 未选中节点时只允许画布接管滚轮，屏蔽 textarea / 内层列表的浏览器原生滚动。
+      const targetElement = target instanceof Element ? target : null
+      if (targetElement?.closest('.node-card-wrap')) e.preventDefault()
     }
     el.addEventListener('wheel', onWheel, { capture: true, passive: false })
     return () => el.removeEventListener('wheel', onWheel, { capture: true })

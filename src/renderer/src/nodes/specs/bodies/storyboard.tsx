@@ -12,7 +12,6 @@ import { useConfirmStore } from '../../../stores/confirm'
 import { markUndoPoint } from '../../../canvas/history'
 import { countIncomingConnections, gatherUpstreamJson } from '../../../canvas/graph'
 import { Icon } from '../../../components/Icon'
-import { useWheelScroll } from './shared'
 import {
   createStoryboardShot,
   moveStoryboardShot,
@@ -41,7 +40,6 @@ function newShotId(): string {
 export function StoryboardBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
   const scrollRef = useRef<HTMLDivElement>(null)
-  useWheelScroll(scrollRef)
   const board = useMemo(() => readStoryboardText(shape.props.text), [shape.props.text])
   const data = board.kind === 'ok' ? board.data : EMPTY_BOARD
   const shotCount = data.shots.length

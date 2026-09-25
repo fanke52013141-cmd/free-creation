@@ -10,7 +10,7 @@ export const PALETTE_NODE_GROUPS = {
   input: ['text', 'file', 'chat', 'ai-process'],
   image: ['image', 'image-gen', 'image-edit', 'image-crop', 'image-split'],
   video: ['video-asset', 'video', 'video-frame', 'video-clip'],
-  audio: ['audio', 'speech', 'tts', 'voice-design', 'vocal-separate'],
+  audio: ['audio', 'speech', 'tts', 'voice-design'],
   logic: ['storyboard', 'structured', 'json', 'processor', 'iterate', 'code', 'director']
 } as const
 
@@ -40,7 +40,7 @@ export const PALETTE_CATEGORY_META: Record<
     label: '声音创作',
     shortLabel: '声音',
     icon: 'audio',
-    description: '配音、音色与声音处理'
+    description: '语音合成、音色与声音处理'
   },
   logic: {
     label: '流程与高级',

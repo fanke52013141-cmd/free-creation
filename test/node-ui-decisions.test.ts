@@ -37,6 +37,23 @@ const audioBody = read('src/renderer/src/nodes/specs/bodies/audio.tsx')
 const videoBody = read('src/renderer/src/nodes/specs/bodies/video.tsx')
 const fileBody = read('src/renderer/src/nodes/specs/bodies/file.tsx')
 
+describe('节点与画布滚轮路由', () => {
+  it('选中节点时无论指针位置都滚动节点正文；没有选中节点时滚动画布', () => {
+    expect(canvasEditor).toContain(
+      "el.addEventListener('wheel', onWheel, { capture: true, passive: false })"
+    )
+    expect(canvasEditor).toContain('.getSelectedShapes()')
+    expect(canvasEditor).toContain(
+      "container.querySelectorAll<HTMLElement>('.node-card-wrap[data-node-id]')"
+    )
+    expect(canvasEditor).toContain("card.querySelector<HTMLElement>('.node-body')")
+    expect(canvasEditor).toContain('body.scrollTop += delta')
+    expect(canvasEditor).toContain("targetElement?.closest('.node-card-wrap')) e.preventDefault()")
+    expect(nodeCardView).not.toContain("addEventListener('wheel'")
+    expect(sharedBodies).not.toContain('useWheelScroll')
+  })
+})
+
 describe('v1.3 §16.1 端口圆点是安静的节点色（覆盖多色玻璃珠）', () => {
   it('空闲态使用节点主色；类型色只在连线或可落点时出现，且无磨砂/内阴影', () => {
     expect(foundation).toMatch(
@@ -142,16 +159,18 @@ describe('v1.2 §16.5 媒体后续动作按钮只放文字', () => {
     expect(block).toContain("label: 'P图'")
   })
 
-  it('视频节点后续按钮改名为 抽帧 / 视频截取 / 截人声 且无图标', () => {
+  it('视频节点操作只保留抽帧 / 视频截取，人声提取由视频操作处理', () => {
     const video = read('src/renderer/src/nodes/specs/bodies/video.tsx')
-    const block = video.match(/aria-label="视频后续操作"[\s\S]*?<\/div>/)?.[0] ?? ''
+    const block = video.match(/aria-label="视频操作"[\s\S]*?<\/div>/)?.[0] ?? ''
     expect(block).not.toBe('')
-    for (const label of ['抽帧', '视频截取', '截人声']) {
+    for (const label of ['抽帧', '视频截取']) {
       expect(block).toContain(label)
     }
+    const textActions = block.split('<span className="node-video-action-divider"')[0]
+    expect(block).not.toContain('截人声')
     // 截音频已并入「视频截取」，视频节点不再单独提供该入口
     expect(block).not.toContain('截音频')
-    expect(block).not.toContain('<Icon')
+    expect(textActions).not.toContain('<Icon')
     expect(video).not.toContain('一键提取人声')
   })
 })
@@ -305,10 +324,8 @@ describe('v1.2 §16.10 端口可发现性：可落点有环、有名称，且校
     expect(nodeCardView).toContain('aria-label={portHint(p)}')
   })
 
-  it('可落点用类型色外环区分于普通 hover；不兼容端口另给禁止光标', () => {
-    expect(foundation).toMatch(
-      /\.port-dot\.ok::after\s*\{[^}]*box-shadow:\s*0 0 0 2px var\(--bg\),\s*0 0 0 4px var\(--pc/
-    )
+  it('可落点用类型色区分于普通 hover；不兼容端口另给禁止光标', () => {
+    expect(foundation).toMatch(/\.port-dot\.ok::after\s*\{[^}]*background:\s*var\(--pc/)
     expect(foundation).toMatch(/\.port-dot\.dim\s*\{[^}]*cursor:\s*not-allowed;/)
   })
 
@@ -408,6 +425,8 @@ describe('v1.3 §16.32 AI 节点详情与可关闭浮层', () => {
 describe('v1.2 §16.15 语音节点：控件只在所选后端真会发送该字段时才呈现', () => {
   const tts = read('src/renderer/src/nodes/specs/bodies/tts.tsx')
   const speech = read('src/renderer/src/nodes/specs/bodies/speech.tsx')
+  const speechContracts = read('src/renderer/src/nodes/specs/index.tsx')
+  const speechConfig = read('src/shared/speech.ts')
 
   it('音色克隆只呈现 MiniMax 参数，旧本地配置会被禁用', () => {
     expect(tts).not.toMatch(/backend === 'comfyui' && \(\s*<>\s*<label className="opt-label">语言/)
@@ -439,7 +458,7 @@ describe('v1.2 §16.15 语音节点：控件只在所选后端真会发送该字
     expect(voiceDesign).not.toContain('音色设计模型')
   })
 
-  it('配音面板的码率与声道跟随 MiniMax 异步通道（audio_setting 的唯一消费者）', () => {
+  it('语音合成控件完整；供应商说明移入输入输出，读音规则示例保留在默认配置', () => {
     const settings = speech.slice(speech.indexOf('export function SpeechSettings'))
     const gate = settings.indexOf("config.backend === 'minimax'")
     expect(gate).toBeGreaterThan(-1)
@@ -447,10 +466,23 @@ describe('v1.2 §16.15 语音节点：控件只在所选后端真会发送该字
     expect(settings.indexOf('audioChannel')).toBeGreaterThan(gate)
     const body = speech.slice(0, speech.indexOf('export function SpeechSettings'))
     expect(body).toContain('音调 {config.pitch}')
+    for (const parameter of ['语速', '音量', '音调']) {
+      expect(body).toContain(`aria-label="${parameter}"`)
+    }
     expect(body).not.toContain('音效')
     expect(body).not.toContain('语言增强')
     expect(body).toContain('读音纠正（可选）')
-    expect(body).toContain('重庆/(chong2)(qing4)')
+    expect(body).not.toContain('t2a_async_v2')
+    expect(body).not.toContain('连接上游 MiniMax')
+    expect(body).not.toContain('读音纠正每行一条')
+    expect(body).not.toContain('tts-upload-hint')
+    expect(body).not.toContain('可由文本节点提供')
+    expect(speechContracts).not.toContain('每行一条')
+    expect(speechContracts).toContain('读音纠正格式为')
+    expect(speechContracts).toContain('连接上游 MiniMax 音色设计或语音克隆')
+    expect(speechContracts).toContain('支持语气词标签、音色 ID、情绪、语速、音量和音调')
+    expect(speechContracts).toContain('重庆/(chong2)(qing4)')
+    expect(speechConfig).toContain('重庆/(chong2)(qing4)')
     expect(body).not.toContain('aria-label="格式"')
     expect(body).not.toContain('aria-label="采样率"')
   })
@@ -468,6 +500,17 @@ describe('v1.2 §16.16 媒体 / 剧本节点：判据是真实连线，不是卡
     expect(videoBody).toContain('源视频（in-video）未连线，运行会跳过')
     // 空态与已有结果态各一次：mediaPath 只是历史结果，不能当成会不会跳过的依据。
     expect(videoBody.split('{sourceWiring}').length - 1).toBe(2)
+  })
+
+  it('视频操作在同一节点内提取人声，不再创建独立人声分离节点', () => {
+    expect(videoBody).toContain('提取人声')
+    expect(videoBody).not.toContain('createVocalSeparationContinuation')
+    expect(read('src/renderer/src/nodes/specs/bodies/shared.tsx')).not.toContain(
+      'createVocalSeparationContinuation'
+    )
+    expect(videoBody).not.toContain('音频后续操作')
+    expect(videoBody).not.toContain('createAudioContinuation')
+    expect(read('src/renderer/src/canvas/palette-categories.ts')).not.toContain("'vocal-separate'")
   })
 
   it('人声分离空态改成陈述事实，不再命令用户去连线', () => {
@@ -520,6 +563,7 @@ describe('v1.2 §16.16 媒体 / 剧本节点：判据是真实连线，不是卡
 
 describe('v1.2 §16.17 火山语音合成 1.0：表单按同步接口请求体呈现参数', () => {
   const speech = read('src/renderer/src/nodes/specs/bodies/speech.tsx')
+  const speechContracts = read('src/renderer/src/nodes/specs/index.tsx')
   const gateway = read('src/main/gateway/audio.ts')
   const executor = read('src/shared/engine/executors/speech.ts')
 
@@ -533,7 +577,8 @@ describe('v1.2 §16.17 火山语音合成 1.0：表单按同步接口请求体�
 
   it('显示可选参考音频与 1.0 参数，不要求旧版 AppID / 集群', () => {
     expect(speech).toContain('参考音频（可选）')
-    expect(speech).toContain('speaker ID')
+    expect(speechContracts).toContain('speaker ID 可与参考音频同时使用')
+    expect(speechContracts).toContain('参考音频可选')
     expect(speech).toContain('loudnessRate')
     expect(speech).toContain('speechRate')
     expect(speech).toContain('enableSubtitle')

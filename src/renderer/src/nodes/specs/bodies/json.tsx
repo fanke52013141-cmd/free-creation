@@ -4,7 +4,7 @@ import { stopEventPropagation, useEditor } from 'tldraw'
 import { markUndoPoint } from '../../../canvas/history'
 import { toast } from '../../../stores/toast'
 import { Icon } from '../../../components/Icon'
-import { useWheelScroll, jsonErrorLocation } from './shared'
+import { jsonErrorLocation } from './shared'
 import type { NodeBodyProps } from '../../registry'
 
 function JsonValueCards({ value }: { value: unknown }): React.JSX.Element {
@@ -67,7 +67,6 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const textRef = useRef(shape.props.text)
-  useWheelScroll(scrollRef)
 
   useEffect(() => {
     textRef.current = shape.props.text

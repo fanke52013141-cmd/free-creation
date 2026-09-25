@@ -674,7 +674,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
                 </button>
               </div>
               <div className="gen-capability-note">
-                该 ID 已通过 out-json 输出给下游配音节点；也可手动填入配音节点的音色 ID。
+                该 ID 已通过 out-json 输出给下游语音合成节点；也可手动填入语音合成节点的音色 ID。
               </div>
             </div>
           )}

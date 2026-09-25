@@ -7,7 +7,7 @@ import { stopEventPropagation, useEditor } from 'tldraw'
 import type { NodeBodyProps } from '../../registry'
 import { hasIncomingConnection } from '../../../canvas/graph'
 import { readNodeConfig } from '../../../canvas/node-persistence'
-import { VARIABLE_TYPES, parseJsonProp, useWheelScroll, type VariableValueType } from './shared'
+import { VARIABLE_TYPES, parseJsonProp, type VariableValueType } from './shared'
 import { AppSelect } from '../../../components/AppSelect'
 
 interface ProcessorData {
@@ -58,7 +58,6 @@ const MODE_HINTS: Record<ProcessorData['operation'], string> = {
 export function ProcessorBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
   const scrollRef = useRef<HTMLDivElement | null>(null)
-  useWheelScroll(scrollRef)
   const data = parseProcessor(readNodeConfig(shape))
   const hasInput = hasIncomingConnection(editor, shape.id, 'in-value')
   const usesFallback = !hasInput && Boolean(data.fallback.trim())

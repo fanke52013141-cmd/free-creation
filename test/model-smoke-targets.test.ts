@@ -5,7 +5,7 @@ import type { ProviderSummary } from '@shared/types'
 const provider: ProviderSummary = {
   id: 'provider-a',
   name: '验收供应商',
-  specId: 'relay',
+  specId: 'volc-speech',
   baseURL: 'https://example.test/v1',
   createdAt: 0,
   hasApiKey: true,

@@ -8,7 +8,6 @@ import type { NodeBodyProps } from '../../registry'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { AppSelect } from '../../../components/AppSelect'
 import { deriveGraph, readConnectedNodeInputs } from '../../../canvas/graph'
-import { useWheelScroll } from './shared'
 import {
   parseIterate,
   parseIterateResult,
@@ -68,7 +67,6 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
   // 循环节点内容可能超出卡片高度：滚轮落在节点上时在节点内滚动，而非缩放/平移画布。
   const scrollRef = useRef<HTMLDivElement | null>(null)
-  useWheelScroll(scrollRef)
   const data = parseIterate(readNodeConfig(shape))
   // 运行结果从 meta.nodeResult 读取（配置/结果分离）。
   const result = parseIterateResult(

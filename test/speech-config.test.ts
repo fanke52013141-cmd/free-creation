@@ -14,10 +14,11 @@ import {
 } from '@shared/speech'
 
 describe('配音配置解析', () => {
-  it('空/坏 JSON 回退为 MiniMax 默认通道', () => {
+  it('空/坏 JSON 回退为 MiniMax 默认通道和读音纠正示例', () => {
     expect(parseSpeechConfig('')).toEqual(DEFAULT_SPEECH_CONFIG)
     expect(parseSpeechConfig('{bad json')).toEqual(DEFAULT_SPEECH_CONFIG)
     expect(DEFAULT_SPEECH_CONFIG.backend).toBe('minimax')
+    expect(DEFAULT_SPEECH_CONFIG.pronunciationTones).toContain('重庆/(chong2)(qing4)')
   })
 
   it('不识别的旧通道回到 MiniMax，且不继承旧供应商和音色 ID', () => {

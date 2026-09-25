@@ -6,7 +6,7 @@ import { countIncomingConnections } from '../../../canvas/graph'
 import { markUndoPoint } from '../../../canvas/history'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
-import { useWheelScroll, VARIABLE_TYPES } from './shared'
+import { VARIABLE_TYPES } from './shared'
 
 interface ScriptShot {
   id: string
@@ -139,7 +139,6 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
   // 离散操作（加/删/移镜头）的分段点名：不在 handler 里立即打点，
   // 等下方布局副作用把自动撑高的 h 变更并入同一步后再打，避免污染撤销粒度
   const pendingMarkRef = useRef<string | null>(null)
-  useWheelScroll(scrollRef)
 
   const [showOutputSettings, setShowOutputSettings] = useState(false)
   // 执行器（scriptExecutor）：剧本 = 本框 source + in-text 合并；分镜为空时才走对话模型拆解。

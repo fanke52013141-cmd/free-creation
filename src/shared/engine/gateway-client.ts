@@ -5,7 +5,13 @@
 //
 // renderer 实现：包装 window.api.gateway（IPC 调用）。
 // main 实现：直接调用 gateway 模块（chat/image/video/audio）。
-import type { IpcEnvelope, GatewayEvent, LocalMediaCapabilities, ResolveModelFeatureInput, ResolvedModelFeature } from '../contracts'
+import type {
+  IpcEnvelope,
+  GatewayEvent,
+  LocalMediaCapabilities,
+  ResolveModelFeatureInput,
+  ResolvedModelFeature
+} from '../contracts'
 import type {
   ChatStartInput,
   ImageGenerateInput,
@@ -72,5 +78,7 @@ export interface GatewayClient {
   clipVideo(input: VideoClipTransformInput): Promise<IpcEnvelope<MediaAsset>>
   extractVideoAudio(input: VideoAudioTransformInput): Promise<IpcEnvelope<MediaAsset>>
   separateVocals(input: VocalSeparateInput): Promise<IpcEnvelope<VocalSeparationResult>>
+  /** Best-effort cleanup for intermediate assets created inside a composite media operation. */
+  deleteMedia?(mediaId: string): Promise<IpcEnvelope<boolean>>
   ttsGenerate(input: TtsGenerateInput): Promise<IpcEnvelope<VoiceCloneResult>>
 }

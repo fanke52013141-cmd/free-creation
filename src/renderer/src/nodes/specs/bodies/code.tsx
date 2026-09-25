@@ -8,7 +8,7 @@ import { markUndoPoint } from '../../../canvas/history'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
-import { useWheelScroll, VARIABLE_TYPES, type VariableValueType } from './shared'
+import { VARIABLE_TYPES, type VariableValueType } from './shared'
 import {
   CODE_VALUE_TYPES,
   codePortConfigErrors,
@@ -251,7 +251,6 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(data.source)
   const scrollRef = useRef<HTMLDivElement>(null)
-  useWheelScroll(scrollRef)
 
   const resultDisplay = parseCodeResult(shape.meta?.nodeResult as string | undefined)
 

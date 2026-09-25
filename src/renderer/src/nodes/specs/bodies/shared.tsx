@@ -5,7 +5,6 @@
 // 本文件同时导出工具函数（非组件）与少量 UI 组件（ModelSelect/NoModelHint），
 // 是共享模块而非单一组件文件，故豁免 React Fast Refresh 的组件-only 规则。
 /* eslint-disable react-refresh/only-export-components */
-import { useEffect, useRef } from 'react'
 import { createShapeId, stopEventPropagation, useValue, type Editor, type TLShapeId } from 'tldraw'
 import { findNodeContinuationPlacement } from '../../../canvas/node-placement'
 import { modelsByModality } from '../../../stores/gateway'
@@ -22,7 +21,6 @@ import { useMediaStore } from '../../../stores/media'
 import type { MediaAsset, MediaImportResult, ProviderSpecId } from '@shared/types'
 import { PROVIDER_SPECS } from '@shared/types'
 import { parseImageSplitConfig } from '@shared/image-split'
-import { parseVideoClipConfig, serializeVideoClipConfig } from '@shared/video-transform'
 import {
   clearMediaResultHistory,
   parseMediaResultCollection,
@@ -262,110 +260,6 @@ export function createImageContinuation(
   editor.select(id)
 }
 
-/**
- * 从音频输出创建独立处理节点（当前仅支持人声分离）。
- * 快捷入口只建真实边，不在源节点内隐藏产物。
- */
-export function createAudioContinuation(
-  editor: Editor,
-  source: NodeCardShape,
-  targetType: 'vocal-separate'
-): void {
-  const spec = getNodeType(targetType)
-  if (!spec) return
-  const id = createShapeId()
-  const titles: Record<typeof targetType, string> = {
-    'vocal-separate': '人声分离'
-  }
-  const placement = findContinuationPlacement(
-    editor,
-    source,
-    spec.defaultSize.w,
-    spec.defaultSize.h
-  )
-  editor.createShape({
-    id,
-    type: 'node-card',
-    x: placement.x,
-    y: placement.y,
-    props: {
-      nodeType: targetType,
-      title: titles[targetType],
-      w: spec.defaultSize.w,
-      h: spec.defaultSize.h
-    } satisfies Partial<NodeCardProps>
-  })
-  if (
-    !createEdge(
-      editor,
-      { shapeId: source.id, portId: 'out-audio' },
-      { shapeId: id, portId: 'in-audio' }
-    )
-  ) {
-    editor.deleteShape(id)
-    return
-  }
-  editor.select(id)
-}
-
-/**
- * 一键提取人声模板：从视频节点创建 视频截取（只保留音频）→ 人声分离 两个节点并预连线。
- * 底层是两个真实节点 + 两条真实边，不生成隐藏逻辑或超级节点。
- */
-export function createVocalExtractionTemplate(editor: Editor, source: NodeCardShape): void {
-  const audioSpec = getNodeType('video-clip')
-  const vocalSpec = getNodeType('vocal-separate')
-  if (!audioSpec || !vocalSpec) return
-
-  const audioId = createShapeId()
-  const vocalId = createShapeId()
-  const gap = 80
-
-  editor.run(() => {
-    editor.createShape({
-      id: audioId,
-      type: 'node-card',
-      x: source.x + source.props.w + gap,
-      y: source.y - vocalSpec.defaultSize.h / 4,
-      props: {
-        nodeType: 'video-clip',
-        title: '提取音频',
-        config: serializeVideoClipConfig({
-          ...parseVideoClipConfig(''),
-          keepVideo: false,
-          keepAudio: true
-        }),
-        w: audioSpec.defaultSize.w,
-        h: audioSpec.defaultSize.h
-      } satisfies Partial<NodeCardProps>
-    })
-    editor.createShape({
-      id: vocalId,
-      type: 'node-card',
-      x: source.x + source.props.w + gap + audioSpec.defaultSize.w + gap,
-      y: source.y + vocalSpec.defaultSize.h / 4,
-      props: {
-        nodeType: 'vocal-separate',
-        title: '人声分离',
-        w: vocalSpec.defaultSize.w,
-        h: vocalSpec.defaultSize.h
-      } satisfies Partial<NodeCardProps>
-    })
-  })
-  // 预连线：视频.out-video → 提音.in-video，提音.out-audio → 人声分离.in-audio
-  createEdge(
-    editor,
-    { shapeId: source.id, portId: 'out-video' },
-    { shapeId: audioId, portId: 'in-video' }
-  )
-  createEdge(
-    editor,
-    { shapeId: audioId, portId: 'out-audio' },
-    { shapeId: vocalId, portId: 'in-audio' }
-  )
-  editor.select(vocalId)
-}
-
 /** 图片结果的统一下游入口。它只创建节点和声明端口边，不复制任何媒体。 */
 export function ImageContinuationActions({
   editor,
@@ -446,52 +340,6 @@ export function createVideoContinuation(
       editor,
       { shapeId: source.id, portId: 'out-video' },
       { shapeId: id, portId: 'in-video' }
-    )
-  ) {
-    editor.deleteShape(id)
-    return null
-  }
-  editor.select(id)
-  return id
-}
-
-/** 从已创建的音频结果节点创建人声分离节点，并通过声明的音频端口连接。 */
-export function createVocalSeparationContinuation(
-  editor: Editor,
-  source: NodeCardShape,
-  options?: { title?: string; config?: string }
-): TLShapeId | null {
-  const sourceSpec = getNodeType(source.props.nodeType)
-  const targetSpec = getNodeType('vocal-separate')
-  const sourcePortId = sourceSpec?.ports.out.find((port) => port.type === 'audio')?.id
-  const targetPortId = targetSpec?.ports.in.find((port) => port.type === 'audio')?.id
-  if (!targetSpec || !sourcePortId || !targetPortId) return null
-
-  const id = createShapeId()
-  const placement = findContinuationPlacement(
-    editor,
-    source,
-    targetSpec.defaultSize.w,
-    targetSpec.defaultSize.h
-  )
-  editor.createShape({
-    id,
-    type: 'node-card',
-    x: placement.x,
-    y: placement.y,
-    props: {
-      nodeType: 'vocal-separate',
-      title: options?.title ?? '人声分离',
-      ...(options?.config ? { config: options.config } : {}),
-      w: targetSpec.defaultSize.w,
-      h: targetSpec.defaultSize.h
-    } satisfies Partial<NodeCardProps>
-  })
-  if (
-    !createEdge(
-      editor,
-      { shapeId: source.id, portId: sourcePortId },
-      { shapeId: id, portId: targetPortId }
     )
   ) {
     editor.deleteShape(id)
@@ -582,7 +430,8 @@ export const LOCAL_ENGINE_SOURCE_LABELS: Readonly<Record<string, string>> = {
   'local:image-grid-split': '本地拆图',
   'local:ffmpeg-frame': '本地抽帧',
   'local:ffmpeg-clip': '本地截视频',
-  'local:ffmpeg-audio': '本地提取音频'
+  'local:ffmpeg-audio': '本地提取音频',
+  'local:vocal-extraction': '本地提取人声'
 }
 
 /** 来源标签的唯一出口：内部 ID 一律换成人话，未登记的 local ID 也不外泄。 */
@@ -740,10 +589,7 @@ export function MediaResultGrid({
   /** 结果的业务位置标签，例如拆图的「R2 · C3」。 */
   itemLabel?: (index: number) => string | undefined
 }): React.JSX.Element | null {
-  // 结果网格在卡片内可滚动：鼠标滚轮落在网格上时消费滚动而交给画布缩放/平移。
-  // 必须放在任何早退 return 之前，保证 Hook 调用顺序稳定。
-  const gridRef = useRef<HTMLDivElement | null>(null)
-  useWheelScroll(gridRef)
+  // 滚轮由画布统一路由；结果网格不再自行截获事件。
   const collection = parseMediaResultCollection(
     typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
   )
@@ -796,7 +642,6 @@ export function MediaResultGrid({
       </div>
       <div
         className="media-result-grid"
-        ref={gridRef}
         style={
           gridColumns
             ? { ['--media-grid-columns' as string]: String(Math.max(1, gridColumns)) }
@@ -954,29 +799,6 @@ export function useClickGuard(): {
       open()
     }
   }
-}
-
-// 卡片内可滚动区域：内容可滚时消费滚轮，避免滚动手势被画布抢走（缩放/平移）。
-// 必须用原生监听（tldraw 的 wheel 在容器上，React 合成事件的 stopPropagation 到不了它）。
-// 在 document 捕获阶段拦截：始终读取 ref.current，故编辑态导致 div 重建后仍能生效。
-// 仅当事件落点在滚动容器内部、容器确有滚动量、且未按住修饰键时才 stopPropagation：
-//   修饰键（Ctrl/Meta/Alt）下的滚轮是画布缩放手势，应放行给 tldraw，不在此拦截。
-export function useWheelScroll(ref: React.RefObject<HTMLElement | null>): void {
-  useEffect(() => {
-    const onWheel = (e: WheelEvent): void => {
-      if (e.ctrlKey || e.metaKey || e.altKey) return
-      const el = ref.current
-      if (!el) return
-      if (!(e.target instanceof Node)) return
-      if (el === e.target || el.contains(e.target)) {
-        if (el.scrollHeight > el.clientHeight) e.stopPropagation()
-      }
-    }
-    document.addEventListener('wheel', onWheel, { capture: true, passive: true })
-    return () => {
-      document.removeEventListener('wheel', onWheel, { capture: true } as EventListenerOptions)
-    }
-  }, [ref])
 }
 
 /**

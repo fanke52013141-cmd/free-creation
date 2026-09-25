@@ -41,11 +41,11 @@ describe('canvas interaction details', () => {
     expect(canvasEditorSource).toContain('SelectionForeground: () => null')
   })
 
-  it('shows one solid node-colored input and output until the node is connected', () => {
-    expect(nodeCardSource).toContain('readinessState.incomingCounts.size > 0')
-    expect(nodeCardSource).toContain('readinessState.outgoingCounts.size > 0')
-    expect(nodeCardSource).toContain('inPorts.slice(0, 1)')
-    expect(nodeCardSource).toContain('outPorts.slice(0, 1)')
+  it('keeps every declared input and output port visible before connection', () => {
+    expect(nodeCardSource).toContain('const visibleInPorts = inPorts')
+    expect(nodeCardSource).toContain('const visibleOutPorts = outPorts')
+    expect(nodeCardSource).not.toContain('inPorts.slice(0, 1)')
+    expect(nodeCardSource).not.toContain('outPorts.slice(0, 1)')
     expect(nodeCardSource).toContain("['--node-port-color' as string]: nodePortColor")
     expect(foundationSource).toContain('.port-dot.unconnected {\n  opacity: 1;')
     expect(foundationSource).not.toContain('.port-dot.input-missing::after')

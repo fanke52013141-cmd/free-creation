@@ -8,7 +8,7 @@ import { validateNodeSchema } from '@shared/node-schemas'
 import { markUndoPoint } from '../../../canvas/history'
 import { countIncomingConnections } from '../../../canvas/graph'
 import { readNodeConfig } from '../../../canvas/node-persistence'
-import { jsonErrorLocation, useWheelScroll } from './shared'
+import { jsonErrorLocation } from './shared'
 import {
   parseStructuredDataConfig,
   schemaOption,
@@ -81,7 +81,6 @@ function PlaceholderTokens({
 export function StructuredBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
   const scrollRef = useRef<HTMLDivElement | null>(null)
-  useWheelScroll(scrollRef)
   const config = parseStructuredDataConfig(readNodeConfig(shape))
   const option = schemaOption(config.schema)
   const raw = shape.props.text

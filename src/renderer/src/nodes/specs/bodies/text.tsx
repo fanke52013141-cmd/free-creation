@@ -2,7 +2,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useEditor } from 'tldraw'
 import { markUndoPoint } from '../../../canvas/history'
-import { useWheelScroll } from './shared'
 import type { NodeBodyProps } from '../../registry'
 
 export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
@@ -13,7 +12,6 @@ export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   // 保持最新的 text 引用，让事件监听器始终读到当前值（避免闭包过期）
   const textRef = useRef(shape.props.text)
-  useWheelScroll(scrollRef)
 
   useEffect(() => {
     textRef.current = shape.props.text

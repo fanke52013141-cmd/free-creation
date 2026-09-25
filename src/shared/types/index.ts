@@ -15,7 +15,6 @@ export const ACTIVE_NODE_TYPE_IDS = [
   'video-asset',
   'video-frame',
   'video-clip',
-  'vocal-separate',
   'audio',
   'file',
   'speech',
@@ -49,8 +48,16 @@ export type InternalNodeTypeId = (typeof INTERNAL_NODE_TYPE_IDS)[number]
  * `video-audio`（截音频）2026-09-18 起退役：用户拍板与「截视频」合并为「视频截取」
  * 单节点（画面/音频两条输出由同一份起止时间驱动）。旧画布里的截音频节点继续按原契约
  * 执行，不会被改写。
+ * `vocal-separate`（独立人声分离）2026-09-25 起退役：视频操作直接在同一次任务内产出人声；
+ * 历史画布仍保留此类型以读取旧数据，但新流程不再创建独立节点。
  */
-export const LEGACY_NODE_TYPE_IDS = ['script', 'video-audio', 'group', 'compose'] as const
+export const LEGACY_NODE_TYPE_IDS = [
+  'script',
+  'video-audio',
+  'vocal-separate',
+  'group',
+  'compose'
+] as const
 
 export type LegacyNodeTypeId = (typeof LEGACY_NODE_TYPE_IDS)[number]
 

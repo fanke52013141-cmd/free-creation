@@ -29,7 +29,9 @@ function snapshotPorts(ports: PortDecl[]): Array<Record<string, unknown>> {
 }
 
 describe('全部标准节点都已注册', () => {
-  const expected: readonly NodeTypeId[] = ACTIVE_NODE_TYPE_IDS
+  const expected: readonly NodeTypeId[] = ACTIVE_NODE_TYPE_IDS.filter(
+    (type) => type !== 'vocal-separate'
+  )
 
   it.each(expected)('节点 %s 可通过 allNodeTypes 暴露（可创建）', (type) => {
     expect(allNodeTypes().some((s) => s.type === type)).toBe(true)
@@ -40,6 +42,13 @@ describe('全部标准节点都已注册', () => {
     expect(spec).toBeDefined()
     expect(spec?.creatable).toBe(false)
     expect(allNodeTypes().some((s) => s.type === 'script')).toBe(false)
+  })
+
+  it('人声分离保留给视频操作流程，但不再从声音创作入口单独新建', () => {
+    const spec = getNodeType('vocal-separate')
+    expect(spec).toBeDefined()
+    expect(spec?.creatable).toBe(false)
+    expect(allNodeTypes().some((item) => item.type === 'vocal-separate')).toBe(false)
   })
 
   it('退役的 group / compose 节点不在注册表中', () => {

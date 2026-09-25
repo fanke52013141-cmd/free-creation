@@ -73,7 +73,11 @@ export async function videoClipExecutor(ctx: NodeExecutionContext): Promise<Node
   const videoName = mediaDisplayName(source, '视频')
   if (!config.keepVideo && !config.keepAudio)
     return { status: 'failed', reason: '请至少选择保留画面或音频' }
-  for (const key of ['ffmpeg'] as const) {
+  const capabilityKeys =
+    config.extractVocals && config.vocalMode === 'quality'
+      ? (['ffmpeg', 'audioSeparator'] as const)
+      : (['ffmpeg'] as const)
+  for (const key of capabilityKeys) {
     const capabilityReason = await unavailableLocalCapability(ctx.gateway, key)
     if (capabilityReason)
       return { status: 'failed', reason: capabilityFailure(key, capabilityReason) }
@@ -84,75 +88,107 @@ export async function videoClipExecutor(ctx: NodeExecutionContext): Promise<Node
       portId: string
       modelKey: string
       data: { id: string; path: string; mime: string; name?: string }
+      title?: string
     }
     const produced: Produced[] = []
-    if (config.keepVideo) {
-      if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
-      const result = await ctx.gateway.clipVideo({
-        projectId: ctx.projectId,
-        sourceMediaId: source.mediaId,
-        config
-      })
-      if (!result.ok) return { status: 'failed', reason: result.error.message }
-      produced.push({
-        kind: 'video',
-        portId: 'out-video',
-        modelKey: 'local:ffmpeg-clip',
-        data: result.data
-      })
-    }
-    if (config.keepAudio) {
-      if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
-      const result = await ctx.gateway.extractVideoAudio({
-        projectId: ctx.projectId,
-        sourceMediaId: source.mediaId,
-        config: {
-          version: 2,
-          startMs: config.startMs,
-          endMs: config.endMs,
-          format: config.audioFormat,
-          sampleRate: config.audioSampleRate
+    let intermediateAudioId: string | null = null
+    let unpublishedVocalId: string | null = null
+    let published = false
+    try {
+      if (config.keepVideo) {
+        if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
+        const result = await ctx.gateway.clipVideo({
+          projectId: ctx.projectId,
+          sourceMediaId: source.mediaId,
+          config
+        })
+        if (!result.ok) return { status: 'failed', reason: result.error.message }
+        produced.push({
+          kind: 'video',
+          portId: 'out-video',
+          modelKey: 'local:ffmpeg-clip',
+          data: result.data
+        })
+      }
+      if (config.keepAudio) {
+        if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
+        const result = await ctx.gateway.extractVideoAudio({
+          projectId: ctx.projectId,
+          sourceMediaId: source.mediaId,
+          config: {
+            version: 2,
+            startMs: config.startMs,
+            endMs: config.endMs,
+            format: config.audioFormat,
+            sampleRate: config.audioSampleRate
+          }
+        })
+        if (!result.ok) return { status: 'failed', reason: result.error.message }
+        let audioData = result.data
+        let audioTitle = `（音）${videoName}`
+        if (config.extractVocals) {
+          intermediateAudioId = result.data.id
+          const vocalResult = await ctx.gateway.separateVocals({
+            projectId: ctx.projectId,
+            sourceMediaId: result.data.id,
+            config: {
+              version: 1,
+              mode: config.vocalMode,
+              outputAccompaniment: false
+            }
+          })
+          if (!vocalResult.ok) return { status: 'failed', reason: vocalResult.error.message }
+          audioData = vocalResult.data.vocals
+          unpublishedVocalId = audioData.id
+          audioTitle = `（人声）${videoName}`
         }
-      })
-      if (!result.ok) return { status: 'failed', reason: result.error.message }
-      produced.push({
-        kind: 'audio',
-        portId: 'out-audio',
-        modelKey: 'local:ffmpeg-audio',
-        data: result.data
-      })
-    }
-    if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
-    const prompt = `${config.keepVideo ? '画面' : ''}${config.keepVideo && config.keepAudio ? '+' : ''}${config.keepAudio ? '音频' : ''} · 截取 ${videoName} · ${config.startMs}-${config.endMs}ms`
-    const previous = typeof ctx.shape.meta?.nodeResult === 'string' ? ctx.shape.meta.nodeResult : ''
-    let collection = appendMediaResult(
-      previous,
-      {
-        mediaId: produced[0].data.id,
-        mediaPath: produced[0].data.path,
-        mime: produced[0].data.mime
-      },
-      { nodeId: ctx.node.id, modelKey: produced[0].modelKey, prompt, runId: ctx.runId }
-    )
-    for (const item of produced.slice(1)) {
-      collection = appendMediaResult(
-        serializeMediaResultCollection(collection),
-        { mediaId: item.data.id, mediaPath: item.data.path, mime: item.data.mime },
-        { nodeId: ctx.node.id, modelKey: item.modelKey, prompt, runId: ctx.runId }
+        produced.push({
+          kind: 'audio',
+          portId: 'out-audio',
+          modelKey: config.extractVocals ? 'local:vocal-extraction' : 'local:ffmpeg-audio',
+          data: audioData,
+          title: audioTitle
+        })
+      }
+      if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
+      const prompt = `${config.keepVideo ? '画面' : ''}${config.keepVideo && config.keepAudio ? '+' : ''}${config.keepAudio ? (config.extractVocals ? '人声' : '音频') : ''} · 截取 ${videoName} · ${config.startMs}-${config.endMs}ms`
+      const previous =
+        typeof ctx.shape.meta?.nodeResult === 'string' ? ctx.shape.meta.nodeResult : ''
+      let collection = appendMediaResult(
+        previous,
+        {
+          mediaId: produced[0].data.id,
+          mediaPath: produced[0].data.path,
+          mime: produced[0].data.mime
+        },
+        { nodeId: ctx.node.id, modelKey: produced[0].modelKey, prompt, runId: ctx.runId }
       )
+      for (const item of produced.slice(1)) {
+        collection = appendMediaResult(
+          serializeMediaResultCollection(collection),
+          { mediaId: item.data.id, mediaPath: item.data.path, mime: item.data.mime },
+          { nodeId: ctx.node.id, modelKey: item.modelKey, prompt, runId: ctx.runId }
+        )
+      }
+      ctx.updateResult(serializeMediaResultCollection(collection))
+      for (const item of produced) {
+        ctx.emitArtifact?.({
+          kind: item.kind,
+          mediaId: item.data.id,
+          mediaPath: item.data.path,
+          mime: item.data.mime,
+          portId: item.portId,
+          title: item.title ?? (item.kind === 'video' ? `（截）${videoName}` : `（音）${videoName}`)
+        })
+      }
+      published = true
+      return { status: 'done' }
+    } finally {
+      if (intermediateAudioId)
+        await ctx.gateway.deleteMedia?.(intermediateAudioId).catch(() => undefined)
+      if (!published && unpublishedVocalId)
+        await ctx.gateway.deleteMedia?.(unpublishedVocalId).catch(() => undefined)
     }
-    ctx.updateResult(serializeMediaResultCollection(collection))
-    for (const item of produced) {
-      ctx.emitArtifact?.({
-        kind: item.kind,
-        mediaId: item.data.id,
-        mediaPath: item.data.path,
-        mime: item.data.mime,
-        portId: item.portId,
-        title: item.kind === 'video' ? `（截）${videoName}` : `（音）${videoName}`
-      })
-    }
-    return { status: 'done' }
   } catch (error) {
     return { status: 'failed', reason: error instanceof Error ? error.message : String(error) }
   }

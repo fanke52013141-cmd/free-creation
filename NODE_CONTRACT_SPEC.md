@@ -170,7 +170,8 @@ FFmpeg（优先读取 `CANVAS_STUDIO_FFMPEG_PATH`，否则使用 PATH 中的 `ff
 
 音频相关节点的标准边界为：`audio` 使用 `audio -> audio` 承接或导入素材；`speech`
 使用 `text many -> audio` 生成通用配音；`tts` 使用 `audio one + text many -> audio` 做参考
-音色复刻。人声分离仍是独立的 `audio -> audio` 处理节点。任何快捷入口只能创建这些
+音色复刻。人声提取是视频操作中的可选输出处理，不再创建独立画布节点；历史 `vocal-separate`
+节点仍注册以读取旧项目。任何快捷入口只能创建这些
 普通节点和真实边，不能在音频资产节点中暗藏一次语音模型调用。
 
 **输出数量改变时必须创建独立节点。**例如 `image-split` 不属于 `image-crop` 的模式：

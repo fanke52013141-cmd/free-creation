@@ -80,7 +80,7 @@ export interface SpeechConfig {
   languageBoost: string
 
   // ── 自定义读音 pronunciation_dict.tone ──
-  /** 每行一条 MiniMax tone 规则；空串表示不传。 */
+  /** MiniMax 读音规则以换行分隔；空串表示不传。 */
   pronunciationTones: string
 
   // ── 音效与音色修饰 voice_modify ──
@@ -110,17 +110,14 @@ export interface SpeechConfig {
 export const SPEECH_BACKENDS: ReadonlyArray<{
   value: SpeechBackend
   label: string
-  hint: string
 }> = [
   {
     value: 'minimax',
-    label: 'MiniMax · 异步语音合成',
-    hint: 't2a_async_v2，支持语气词标签与完整音色参数；默认通道'
+    label: 'MiniMax · 异步语音合成'
   },
   {
     value: 'volc',
-    label: '火山引擎 · 语音合成 1.0',
-    hint: '同步生成，可选参考音频和音色 ID；支持字幕时间轴，文本最长 3000 字'
+    label: '火山引擎 · 语音合成 1.0'
   }
 ]
 
@@ -307,7 +304,7 @@ export const DEFAULT_SPEECH_CONFIG: SpeechConfig = {
   bitrate: 128000,
   audioChannel: 1,
   languageBoost: 'auto',
-  pronunciationTones: '',
+  pronunciationTones: '重庆/(chong2)(qing4)\n银行/(yin2)(hang2)\n行长/(hang2)(zhang3)',
   soundEffects: '',
   voicePitch: 0,
   voiceIntensity: 0,
@@ -379,7 +376,9 @@ export function parseSpeechConfig(text: string): SpeechConfig {
     pronunciationTones:
       backend === 'minimax' && typeof merged.pronunciationTones === 'string'
         ? merged.pronunciationTones
-        : '',
+        : backend === 'minimax'
+          ? DEFAULT_SPEECH_CONFIG.pronunciationTones
+          : '',
     soundEffects: '',
     voicePitch: clamp(merged.voicePitch, -100, 100, 0),
     voiceIntensity: clamp(merged.voiceIntensity, -100, 100, 0),

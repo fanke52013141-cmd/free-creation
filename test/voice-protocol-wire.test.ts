@@ -61,6 +61,9 @@ describe('MiniMax 异步语音合成 t2a_async_v2', () => {
         format: 'mp3',
         channel: 2
       },
+      pronunciation_dict: {
+        tone: ['重庆/(chong2)(qing4)', '银行/(yin2)(hang2)', '行长/(hang2)(zhang3)']
+      },
       language_boost: 'auto',
       aigc_watermark: true
     })

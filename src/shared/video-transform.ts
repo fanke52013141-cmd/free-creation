@@ -54,6 +54,10 @@ export interface VideoClipConfig {
   audioFormat: AudioFormat
   /** 音频片段采样率。 */
   audioSampleRate: 44100 | 48000
+  /** 只对音频输出生效：在同一次视频操作中提取人声，不创建额外处理节点。 */
+  extractVocals: boolean
+  /** 提取人声时使用的本地处理方式。 */
+  vocalMode: VocalMode
 }
 
 export interface VideoAudioConfig {
@@ -161,7 +165,9 @@ export function parseVideoClipConfig(text: string): VideoClipConfig {
         includeAudio,
         quality,
         audioFormat,
-        audioSampleRate
+        audioSampleRate,
+        extractVocals: parseBoolean(raw.extractVocals, false),
+        vocalMode: raw.vocalMode === 'fast' ? 'fast' : 'quality'
       }
     }
     if (raw.version === 2) {
@@ -174,7 +180,9 @@ export function parseVideoClipConfig(text: string): VideoClipConfig {
         includeAudio,
         quality,
         audioFormat,
-        audioSampleRate
+        audioSampleRate,
+        extractVocals: false,
+        vocalMode: 'quality'
       }
     }
     // v1 VideoRangeConfig 兼容
@@ -187,7 +195,9 @@ export function parseVideoClipConfig(text: string): VideoClipConfig {
       includeAudio: true,
       quality: 'high',
       audioFormat: 'wav',
-      audioSampleRate: 44100
+      audioSampleRate: 44100,
+      extractVocals: false,
+      vocalMode: 'quality'
     }
   } catch {
     return {
@@ -199,7 +209,9 @@ export function parseVideoClipConfig(text: string): VideoClipConfig {
       includeAudio: true,
       quality: 'high',
       audioFormat: 'wav',
-      audioSampleRate: 44100
+      audioSampleRate: 44100,
+      extractVocals: false,
+      vocalMode: 'quality'
     }
   }
 }

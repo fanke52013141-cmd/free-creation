@@ -50,6 +50,7 @@ describe('节点合规门禁', () => {
 
   it('历史节点的兼容状态必须显式而非悄然可创建', () => {
     expect(getNodeType('script')?.creatable).toBe(false)
+    expect(getNodeType('vocal-separate')?.creatable).toBe(false)
     expect(getNodeType('group')).toBeUndefined()
     expect(getNodeType('compose')).toBeUndefined()
   })

@@ -3,7 +3,13 @@
 import type { PortCardinality, PortDecl, PortSchemaRef } from '@shared/types'
 import { registerNodeType, unregisterNodeType } from '../registry'
 import { readNodeConfig } from '../../canvas/node-persistence'
-import { parseSpeechConfig, type SpeechBackend } from '@shared/speech'
+import {
+  parseSpeechConfig,
+  VOLC_REFERENCE_AUDIO_MAX_BYTES,
+  VOLC_REFERENCE_AUDIO_MAX_COUNT,
+  VOLC_REFERENCE_AUDIO_MAX_SECONDS,
+  type SpeechBackend
+} from '@shared/speech'
 import {
   AudioBody,
   AiProcessBody,
@@ -152,13 +158,13 @@ const LIST_ITEMS: PortSchemaRef = { id: 'list.items', version: 1 }
 const PROMPT_BUNDLE: PortSchemaRef = { id: 'prompt.bundle', version: 1 }
 const PREVIS_CAMERA: PortSchemaRef = { id: 'previs.camera', version: 1 }
 const PREVIS_PROJECT: PortSchemaRef = { id: 'previs.project', version: 2 }
-/** 音色档案：音色设计/复刻 → 配音节点 in-voice 的稳定结构。 */
+/** 音色档案：音色设计/复刻 → 语音合成节点 in-voice 的稳定结构。 */
 const VOICE_PROFILE: PortSchemaRef = { id: 'voice.profile', version: 1 }
 /** 字幕时间轴：火山语音合成 1.0 在开启字幕时产出的结构化结果。 */
 const VOICE_SUBTITLE: PortSchemaRef = { id: 'voice.subtitle', version: 1 }
 
 /**
- * 配音节点端口声明。返回两套互斥结构，由 config.backend 决定：
+ * 语音合成节点端口声明。返回两套互斥结构，由 config.backend 决定：
  *   minimax → 朗读文本 + MiniMax 音色档案 → 音频
  *   volc    → 朗读文本 + 可选参考音频 → 音频 + 可选字幕（speaker 在节点参数中填写）
  * 静态 ports 是这两套的并集，只用于注册校验与契约快照；运行时以本函数为准。
@@ -171,26 +177,35 @@ function speechPorts(backend: SpeechBackend): {
     'in-voice',
     '音色档案',
     'json',
-    '连线音色 ID 时优先于节点内填写值；供应商不同的 voice_id / speaker 不兼容。',
+    '连接上游 MiniMax 音色设计或语音克隆节点的音色档案；以连线传入的 voice_id 为准。未连接时使用节点内音色 ID，留空时使用系统音色 male-qn-qingse。',
     { schema: VOICE_PROFILE }
   )
   const inAudio = input(
     'in-audio',
     '参考音频',
     'audio',
-    '火山语音合成 1.0 的可选参考音频；连接 1～3 段音频后，运行时优先使用连线输入。',
+    `火山引擎语音合成 1.0 的可选参考音频；最多 ${VOLC_REFERENCE_AUDIO_MAX_COUNT} 段，节点上传项追加在连线音频之后；单段不超过 ${VOLC_REFERENCE_AUDIO_MAX_SECONDS} 秒 / ${VOLC_REFERENCE_AUDIO_MAX_BYTES / (1024 * 1024)} MB，支持 wav、mp3、pcm、ogg_opus。speaker ID 可与参考音频同时使用。`,
     { cardinality: 'many' }
   )
   const inText = input(
     'in-text',
     '朗读文本',
     'text',
-    '节点内文本与一个或多个上游文本合并后进行朗读。',
+    backend === 'minimax'
+      ? '节点正文与上游文本合并后朗读。MiniMax 支持语气词标签和读音纠正；读音纠正格式为“词/(拼音)(拼音)”，例如“重庆/(chong2)(qing4)”，示例已预填在节点配置中。'
+      : '节点正文与一个或多个上游文本合并后进行朗读。',
     {
       cardinality: 'many'
     }
   )
-  const outAudio = output('out-audio', '配音', 'audio', '模型生成并落盘的配音资产。')
+  const outAudio = output(
+    'out-audio',
+    '语音',
+    'audio',
+    backend === 'minimax'
+      ? 'MiniMax 异步语音合成（t2a_async_v2，默认通道）；支持语气词标签、音色 ID、情绪、语速、音量和音调。'
+      : '火山引擎语音合成 1.0；参考音频可选，可使用 speaker ID，并调节语速、音量和音调；可选返回字幕时间轴。'
+  )
   const outSubtitle = output(
     'out-subtitle',
     '字幕时间轴',
@@ -456,7 +471,7 @@ export function registerBaseNodeTypes(): void {
     icon: 'clip',
     color: '#f43f5e',
     defaultSize: { w: 340, h: 260 },
-    description: '按起止毫秒截取视频，可选择保留画面、音频或两者。',
+    description: '按起止毫秒截取视频，可选择画面或音频；提取音频时可在同次操作中提取人声。',
     category: 'video',
     ports: {
       in: [input('in-video', '源视频', 'video', '必须连接的一段源视频。', { required: true })],
@@ -501,8 +516,9 @@ export function registerBaseNodeTypes(): void {
     icon: 'audio',
     color: '#3b82f6',
     defaultSize: { w: 340, h: 260 },
-    description: '把音频分离为人声与伴奏；伴奏另建独立音频资产节点。',
+    description: '已退役：新视频操作直接提取人声；历史画布中的节点仍可运行。',
     category: 'audio',
+    creatable: false,
     ports: {
       in: [
         input('in-audio', '源音频', 'audio', '必须连接的一段完整音频资产。', { required: true })
@@ -571,11 +587,11 @@ export function registerBaseNodeTypes(): void {
   registerNodeType({
     type: 'speech',
     contractVersion: 4,
-    label: '配音',
+    label: '语音合成',
     icon: 'mic',
     color: '#3b82f6',
     defaultSize: { w: 340, h: 260 },
-    description: '模型驱动配音：按所选协议决定输入与输出结构。',
+    description: '按所选供应商和语音参数，把文本合成为音频。供应商相关输入输出规则见“输入输出”。',
     category: 'audio',
     ports: {
       in: speechPorts('volc').in,
@@ -639,7 +655,7 @@ export function registerBaseNodeTypes(): void {
           'out-json',
           '音色档案',
           'json',
-          '设计出的 voice_id 与来源，可直接连接配音节点的音色档案输入。',
+          '设计出的 voice_id 与来源，可直接连接语音合成节点的音色档案输入。',
           { schema: VOICE_PROFILE }
         )
       ]

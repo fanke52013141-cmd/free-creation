@@ -36,6 +36,7 @@ function runSummary(record: NodeRunRecord): string {
 }
 
 function contractPanelTitle(nodeType: string, title: string): string {
+  if (nodeType === 'speech' && title === '配音') return '语音合成'
   if (
     nodeType === 'video' &&
     (title === '视频生成' || title === '视频节点' || title === '视频生成节点')

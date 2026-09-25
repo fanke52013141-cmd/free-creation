@@ -1,4 +1,4 @@
-// 配音节点 Body（MiniMax 异步 / 火山引擎语音合成 1.0）。
+// 语音合成节点 Body（MiniMax 异步 / 火山引擎语音合成 1.0）。
 //
 // 这里不绕过 executor 调用模型：按钮只把当前配置与正文写回节点，然后交给统一的
 // runNodeManually 运行路径。参数分组随 config.backend 变化——这正是用户要的
@@ -23,7 +23,6 @@ import {
   SPEECH_TEXT_LIMITS,
   VOLC_REFERENCE_AUDIO_MAX_BYTES,
   VOLC_REFERENCE_AUDIO_MAX_COUNT,
-  VOLC_REFERENCE_AUDIO_MAX_SECONDS,
   volcReferencePromptPrefix,
   defaultSpeechFormat,
   defaultSpeechSampleRate,
@@ -265,12 +264,12 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
   return (
     <div className="node-tts node-speech">
       {/* ── 协议与模型：决定下面所有参数分组与节点端口 ── */}
-      <div className="tts-section">
-        <div className="tts-section-label">
+      <div className="tts-section speech-channel-section">
+        <div className="tts-section-label speech-section-label">
           <Icon name="settings" size={13} />
           <span>合成通道</span>
         </div>
-        <div className="tts-options">
+        <div className="tts-options speech-field-row">
           <label className="opt-label">供应商</label>
           <AppSelect
             className="gen-select small"
@@ -286,10 +285,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
             ))}
           </AppSelect>
         </div>
-        <div className="gen-capability-note">
-          {SPEECH_BACKENDS.find((item) => item.value === config.backend)?.hint}
-        </div>
-        <div className="tts-options">
+        <div className="tts-options speech-field-row">
           <label className="opt-label">模型</label>
           <AppSelect
             className="gen-select"
@@ -332,8 +328,8 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
       </div>
 
       {/* ── 音色：用户强调音色与 ID 是最重要的信息 ── */}
-      <div className="tts-section">
-        <div className="tts-section-label">
+      <div className="tts-section speech-voice-section">
+        <div className="tts-section-label speech-section-label">
           <Icon name="audio" size={13} />
           <span>音色</span>
         </div>
@@ -342,34 +338,25 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
           aria-label="音色 ID"
           spellCheck={false}
           value={config.voiceId}
-          placeholder={
-            config.backend === 'minimax'
-              ? // 留空不是"交给服务端"：MiniMax 两条 t2a 通道缺 voice_id 会在建任务前就被拒，
-                // 所以网关固定兜底成这个系统音色。写出来才知道留空跑出来的是谁的声音。
-                '音色 ID（留空用 MiniMax 系统音色 male-qn-qingse）'
-              : 'speaker 音色 ID（可选）'
-          }
+          placeholder={config.backend === 'minimax' ? '音色 ID' : 'speaker 音色 ID（可选）'}
           onPointerDown={(e) => e.stopPropagation()}
           onChange={(e) => updateConfig({ voiceId: e.target.value })}
         />
-        <div className="gen-capability-note">
-          {config.backend === 'volc'
-            ? '火山 speaker ID 可与参考音频同时使用；MiniMax 音色设计/克隆生成的 voice_id 不兼容。'
-            : '连接上游 MiniMax「音色设计 / 语音克隆」节点的音色档案时，以连线传入的 voice_id 为准。'}
-        </div>
       </div>
 
       {/* ── 火山引擎语音合成 1.0 可选参考音频 ── */}
       {config.backend === 'volc' && (
-        <div className="tts-section tts-reference-section">
-          <div className="tts-section-label">
+        <div className="tts-section tts-reference-section speech-reference-section">
+          <div className="tts-section-label speech-section-label">
             <Icon name="audio" size={13} />
             <span>参考音频（可选）</span>
           </div>
           {uploadedReference ? (
             <div className="tts-ref-player">
               <button
-                className="audio-play-btn"
+                className="audio-play-btn speech-reference-play"
+                type="button"
+                aria-label={referencePlaying ? '暂停参考音频' : '试听参考音频'}
                 onPointerDown={(e) => stopEventPropagation(e)}
                 onClick={(e) => {
                   e.stopPropagation()
@@ -405,6 +392,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
           ) : (
             <button
               className="tts-upload-btn"
+              type="button"
               disabled={referenceCount >= VOLC_REFERENCE_AUDIO_MAX_COUNT}
               onPointerDown={(e) => stopEventPropagation(e)}
               onClick={(e) => {
@@ -412,25 +400,20 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
                 void uploadReferenceAudio()
               }}
             >
-              <Icon name="upload" size={18} />
-              <span>上传参考音频</span>
-              <span className="tts-upload-hint">
-                可留空；最多 {VOLC_REFERENCE_AUDIO_MAX_COUNT} 段，每段不超过{' '}
-                {VOLC_REFERENCE_AUDIO_MAX_SECONDS} 秒 /{' '}
-                {VOLC_REFERENCE_AUDIO_MAX_BYTES / (1024 * 1024)} MB，支持 wav、mp3、pcm、ogg_opus
+              <span className="speech-reference-upload-icon" aria-hidden="true">
+                <Icon name="upload" size={17} />
+              </span>
+              <span className="speech-reference-upload-copy">
+                <span className="speech-reference-upload-title">上传参考音频</span>
+                <span className="tts-upload-hint">WAV / MP3 / PCM / OGG OPUS · ≤10 MB</span>
               </span>
             </button>
           )}
-          <span className={`node-wiring ${referenceCount > 0 ? 'ok' : ''}`}>
+          <span className={`node-wiring speech-reference-status ${referenceCount > 0 ? 'ok' : ''}`}>
             {referenceCount > 0
               ? `使用 ${incomingReferences} 段连线音频${uploadedReference ? '和 1 段本节点上传音频' : ''}`
-              : '未设置参考音频，按 text_prompt 描述生成，也可填写 speaker ID'}
+              : '未设置参考音频'}
           </span>
-          <div className="gen-capability-note">
-            {referenceCount > 0
-              ? `按连线顺序引用音频，本节点上传项追加在末尾；文本会自动引用 @音频1～@音频${Math.min(referenceCount, VOLC_REFERENCE_AUDIO_MAX_COUNT)}。speaker ID 可与参考音频一起发送。`
-              : '参考音频可选；speaker ID 也可单独使用。'}
-          </div>
           {referenceCount > VOLC_REFERENCE_AUDIO_MAX_COUNT && (
             <div className="gen-capability-note error" role="alert">
               最多使用 {VOLC_REFERENCE_AUDIO_MAX_COUNT} 段参考音频，请减少连线数量。
@@ -440,16 +423,17 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
       )}
 
       {/* ── 朗读文本 ── */}
-      <div className="tts-section">
-        <div className="tts-section-label">
+      <div className="tts-section speech-text-section">
+        <div className="tts-section-label speech-section-label">
           <Icon name="text" size={13} />
           <span>朗读文本</span>
         </div>
         <textarea
           className="gen-textarea tts"
           aria-label="朗读文本"
+          rows={3}
           value={draft}
-          placeholder="输入要朗读的文本，上游文本节点内容会自动合并…"
+          placeholder="输入要朗读的文本…"
           onPointerDown={(e) => e.stopPropagation()}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={() => updateText(draft)}
@@ -458,20 +442,23 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
           className={`audio-text-meta ${draft.length > limit ? 'over-limit' : ''}`}
           role={draft.length > limit ? 'alert' : undefined}
         >
-          {draft.length} / {limit} 字 · 可由文本节点提供
+          {draft.length} / {limit} 字
         </div>
       </div>
 
       {/* ── MiniMax 语音参数 ── */}
       {config.backend === 'minimax' && (
-        <div className="tts-section">
-          <div className="tts-section-label">
+        <div className="tts-section speech-parameter-panel">
+          <div className="tts-section-label speech-section-label">
             <Icon name="spark" size={13} />
             <span>语音参数</span>
           </div>
           <div className="tts-sliders">
-            <div className="tts-slider-row">
-              <label className="opt-label">语速 {config.speed.toFixed(2)}x</label>
+            <div className="tts-slider-row speech-range-row">
+              <div className="speech-range-labels">
+                <label className="opt-label">语速</label>
+                <output>{config.speed.toFixed(2)}x</output>
+              </div>
               <input
                 type="range"
                 aria-label="语速"
@@ -483,8 +470,11 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
                 onChange={(e) => updateConfig({ speed: Number(e.target.value) })}
               />
             </div>
-            <div className="tts-slider-row">
-              <label className="opt-label">音量 {config.volume.toFixed(2)}</label>
+            <div className="tts-slider-row speech-range-row">
+              <div className="speech-range-labels">
+                <label className="opt-label">音量</label>
+                <output>{config.volume.toFixed(2)}</output>
+              </div>
               <input
                 type="range"
                 aria-label="音量"
@@ -496,8 +486,11 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
                 onChange={(e) => updateConfig({ volume: Number(e.target.value) })}
               />
             </div>
-            <div className="tts-slider-row">
-              <label className="opt-label">音调 {config.pitch}</label>
+            <div className="tts-slider-row speech-range-row">
+              <div className="speech-range-labels">
+                <label className="opt-label">音调</label>
+                <output>{config.pitch}</output>
+              </div>
               <input
                 type="range"
                 aria-label="音调"
@@ -510,7 +503,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
               />
             </div>
           </div>
-          <div className="tts-options">
+          <div className="tts-options speech-field-row speech-emotion-row">
             <label className="opt-label">情绪</label>
             <AppSelect
               className="gen-select small"
@@ -526,32 +519,38 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
               ))}
             </AppSelect>
           </div>
-          <label className="opt-label">读音纠正（可选）</label>
+        </div>
+      )}
+
+      {config.backend === 'minimax' && (
+        <div className="tts-section speech-pronunciation-section">
+          <div className="tts-section-label speech-section-label">
+            <Icon name="text" size={13} />
+            <span>读音纠正（可选）</span>
+          </div>
           <textarea
-            className="gen-textarea tts short"
+            className="gen-textarea tts short speech-pronunciation-input"
             aria-label="读音纠正（可选）"
             value={config.pronunciationTones}
-            placeholder={'重庆/(chong2)(qing4)\n银行/(yin2)(hang2)'}
             onPointerDown={(e) => e.stopPropagation()}
             onChange={(e) => updateConfig({ pronunciationTones: e.target.value })}
           />
-          <div className="gen-capability-note">
-            仅 MiniMax
-            使用。每行一条，写“词/(拼音)(拼音)”，每个字一个拼音，数字标声调。例：朗读文本写“我去重庆的一家银行。”，这里写“重庆/(chong2)(qing4)”和“银行/(yin2)(hang2)”。
-          </div>
         </div>
       )}
 
       {/* ── 火山引擎语音合成 1.0 参数 ── */}
       {config.backend === 'volc' && (
-        <div className="tts-section">
-          <div className="tts-section-label">
+        <div className="tts-section speech-parameter-panel">
+          <div className="tts-section-label speech-section-label">
             <Icon name="spark" size={13} />
             <span>语音参数</span>
           </div>
           <div className="tts-sliders">
-            <div className="tts-slider-row">
-              <label className="opt-label">语速 {config.speechRate}</label>
+            <div className="tts-slider-row speech-range-row">
+              <div className="speech-range-labels">
+                <label className="opt-label">语速</label>
+                <output>{config.speechRate}</output>
+              </div>
               <input
                 type="range"
                 aria-label="语速"
@@ -563,8 +562,11 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
                 onChange={(e) => updateConfig({ speechRate: Number(e.target.value) })}
               />
             </div>
-            <div className="tts-slider-row">
-              <label className="opt-label">音量 {config.loudnessRate}</label>
+            <div className="tts-slider-row speech-range-row">
+              <div className="speech-range-labels">
+                <label className="opt-label">音量</label>
+                <output>{config.loudnessRate}</output>
+              </div>
               <input
                 type="range"
                 aria-label="音量"
@@ -576,8 +578,11 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
                 onChange={(e) => updateConfig({ loudnessRate: Number(e.target.value) })}
               />
             </div>
-            <div className="tts-slider-row">
-              <label className="opt-label">音调 {config.pitchRate}</label>
+            <div className="tts-slider-row speech-range-row">
+              <div className="speech-range-labels">
+                <label className="opt-label">音调</label>
+                <output>{config.pitchRate}</output>
+              </div>
               <input
                 type="range"
                 aria-label="音调"
@@ -597,7 +602,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
               onPointerDown={(e) => e.stopPropagation()}
               onChange={(e) => updateConfig({ enableSubtitle: e.target.checked })}
             />
-            返回字幕时间轴（新增 out-subtitle 输出）
+            返回字幕时间轴
           </label>
         </div>
       )}
@@ -616,7 +621,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
         ) : (
           <>
             <Icon name="audio" size={14} />
-            生成配音
+            合成语音
           </>
         )}
       </button>
@@ -732,7 +737,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
   )
 }
 
-/** 配音节点的右侧设置面板：高级输出参数，不挤占卡片正文。 */
+/** 语音合成节点的右侧设置面板：高级输出参数，不挤占卡片正文。 */
 export function SpeechSettings({ shape, editor }: NodeSettingsProps): React.JSX.Element {
   const config = parseSpeechConfig(readNodeConfig(shape))
   const save = (patch: Partial<SpeechConfig>): void => {

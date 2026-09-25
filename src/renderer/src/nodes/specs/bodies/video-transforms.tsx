@@ -19,9 +19,7 @@ import {
   MediaSourceBadge,
   useClickGuard,
   createImageContinuation,
-  createVideoContinuation,
-  createVocalSeparationContinuation,
-  createAudioContinuation
+  createVideoContinuation
 } from './shared'
 import {
   parseVideoFrameConfig,
@@ -30,8 +28,7 @@ import {
   parseVocalSeparationConfig,
   serializeVideoFrameConfig,
   serializeVideoClipConfig,
-  serializeVideoAudioConfig,
-  serializeVocalSeparationConfig
+  serializeVideoAudioConfig
 } from '@shared/video-transform'
 import type {
   VideoFrameConfig,
@@ -804,7 +801,6 @@ export function VideoOperationsWorkbench({
     if (!sourceMediaId || !sourceMediaPath) return toast('当前视频没有可用的媒体文件')
     setSubmitting(true)
     let clipNodeId: TLShapeId | null = null
-    let vocalNodeId: TLShapeId | null = null
     let targetNodeId: TLShapeId | null = null
 
     editor.run(() => {
@@ -820,34 +816,21 @@ export function VideoOperationsWorkbench({
         keepVideo: clipOutput !== 'audio-only',
         keepAudio: clipOutput === 'audio-only',
         includeAudio: clipOutput === 'video-with-audio',
-        audioFormat: needsVocalSeparation ? 'wav' : clipCfg.audioFormat
+        audioFormat: needsVocalSeparation ? 'wav' : clipCfg.audioFormat,
+        extractVocals: needsVocalSeparation,
+        vocalMode: vocalCfg.mode
       }
       clipNodeId = createVideoContinuation(editor, source, 'video-clip', {
-        title: clipOutput === 'audio-only' ? '提取音频' : '视频截取',
+        title:
+          clipOutput === 'audio-only'
+            ? needsVocalSeparation
+              ? '提取人声'
+              : '提取音频'
+            : '视频截取',
         config: serializeVideoClipConfig(clipConfig)
       })
       if (!clipNodeId) return
       targetNodeId = clipNodeId
-
-      if (needsVocalSeparation) {
-        const clipShape = editor.getShape(clipNodeId)
-        if (clipShape?.type !== 'node-card') {
-          editor.deleteShape(clipNodeId)
-          clipNodeId = null
-          targetNodeId = null
-          return
-        }
-        vocalNodeId = createVocalSeparationContinuation(editor, clipShape as NodeCardShape, {
-          config: serializeVocalSeparationConfig(vocalCfg)
-        })
-        if (!vocalNodeId) {
-          editor.deleteShape(clipNodeId)
-          clipNodeId = null
-          targetNodeId = null
-          return
-        }
-        targetNodeId = vocalNodeId
-      }
     })
 
     if (!targetNodeId) {
@@ -856,15 +839,11 @@ export function VideoOperationsWorkbench({
     }
     markUndoPoint(editor, 'video-operation-create')
     const clipId = clipNodeId
-    const vocalId = vocalNodeId
     const targetId = targetNodeId
     onClose()
     window.setTimeout(() => {
       if (clipId) {
-        void runNodeManually(editor, project.id, providers, clipId).then((result) => {
-          if (result.status === 'done' && vocalId)
-            void runNodeManually(editor, project.id, providers, vocalId)
-        })
+        void runNodeManually(editor, project.id, providers, clipId)
       } else {
         void runNodeManually(editor, project.id, providers, targetId)
       }
@@ -1257,7 +1236,7 @@ export function VideoOperationsWorkbench({
                         aria-pressed={extractVocals}
                         onClick={() => setExtractVocals(true)}
                       >
-                        原音频 + 提取人声
+                        提取人声
                       </button>
                     </div>
                   </div>
@@ -1391,7 +1370,7 @@ export function VideoOperationsWorkbench({
                 ? '抽取当前帧'
                 : clipOutput === 'audio-only'
                   ? extractVocals
-                    ? '提取音频和人声'
+                    ? '提取人声'
                     : '提取原音频'
                   : clipOutput === 'video-only'
                     ? '截取画面'
@@ -1553,20 +1532,6 @@ export function VideoTransformBody({
             }}
           >
             视频操作
-          </button>
-        </div>
-      )}
-      {mode === 'audio' && (
-        <div className="node-media-next-actions" aria-label="音频后续操作">
-          <button
-            className="btn-ghost small"
-            onPointerDown={stopEventPropagation}
-            onClick={(event) => {
-              stopEventPropagation(event)
-              createAudioContinuation(editor, shape, 'vocal-separate')
-            }}
-          >
-            人声分离
           </button>
         </div>
       )}

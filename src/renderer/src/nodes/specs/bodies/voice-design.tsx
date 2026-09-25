@@ -1,7 +1,7 @@
 // 音色设计节点 Body（MiniMax voice_design）。
 //
 // 节点定位：输入音色描述 → 输出试听音频与可复用的音色 ID。
-// 音色 ID 同时以 out-json（voice.profile@1）暴露给下游配音节点，并在这里就地展示
+// 音色 ID 同时以 out-json（voice.profile@1）暴露给下游语音合成节点，并在这里就地展示
 // 与复制，方便用户在没有连线时也能手动引用。
 import { useEffect, useRef, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
@@ -281,7 +281,7 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
             </button>
           </div>
           <div className="gen-capability-note">
-            已通过 out-json 输出给下游配音节点；连到配音节点的「音色档案」输入即可直接使用。
+            已通过 out-json 输出给下游语音合成节点；连接「音色档案」输入即可直接使用。
           </div>
         </div>
       )}

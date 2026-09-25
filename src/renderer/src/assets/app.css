@@ -2934,6 +2934,491 @@ select:focus-visible,
   }
 }
 
+/* 音频资产节点内容区：只设内部控件，不改变节点卡片和画布边框。 */
+.audio-empty-state {
+  min-width: 0;
+  min-height: 150px;
+  align-items: stretch;
+  justify-content: center;
+  padding: 12px 8px;
+}
+
+.audio-empty-trigger {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  padding: 12px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--txt);
+  cursor: pointer;
+  transition: background-color 0.18s ease;
+}
+
+.audio-empty-trigger:hover {
+  background: color-mix(in srgb, var(--brand) 5%, transparent);
+}
+
+.audio-empty-trigger:focus-visible {
+  outline-offset: -2px;
+}
+
+.audio-empty-icon-wrap {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  flex: 0 0 auto;
+}
+
+.audio-empty-icon-glow {
+  position: absolute;
+  inset: 2px;
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--brand) 22%, transparent);
+  filter: blur(19px);
+  opacity: 0.55;
+  transition: opacity 0.18s ease;
+}
+
+.audio-empty-trigger:hover .audio-empty-icon-glow {
+  opacity: 0.85;
+}
+
+.audio-empty-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 68px;
+  border: 1px solid color-mix(in srgb, var(--brand) 24%, var(--line));
+  border-radius: 19px;
+  background: linear-gradient(145deg, #233444, #18212d 70%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 8px 24px rgba(0, 0, 0, 0.2);
+  color: var(--brand);
+}
+
+.audio-empty-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  text-align: center;
+}
+
+.audio-empty-title {
+  color: var(--txt);
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.audio-empty-hint {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.audio-empty-select {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  margin-top: 2px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--card) 82%, transparent);
+  color: var(--txt);
+  font-size: 11px;
+  font-weight: 550;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.audio-empty-trigger:hover .audio-empty-select {
+  border-color: color-mix(in srgb, var(--brand) 42%, var(--line));
+  background: color-mix(in srgb, var(--brand) 10%, var(--card));
+  color: var(--brand);
+}
+
+.audio-asset-player {
+  justify-content: flex-start;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.audio-playback-element {
+  display: none;
+}
+
+.audio-asset-heading {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+.audio-asset-icon-wrap {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--brand) 24%, var(--line));
+  border-radius: 13px;
+  background: linear-gradient(145deg, #233444, #18212d 70%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  color: var(--brand);
+  cursor: pointer;
+}
+
+.audio-asset-icon-wrap::after {
+  position: absolute;
+  inset: auto 9px 7px;
+  height: 1px;
+  background: color-mix(in srgb, var(--brand) 50%, transparent);
+  content: '';
+  opacity: 0.55;
+}
+
+.audio-asset-icon-glow {
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--brand) 40%, transparent);
+  filter: blur(14px);
+  opacity: 0.25;
+  pointer-events: none;
+}
+
+.audio-asset-heading-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.audio-asset-track-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.audio-asset-name {
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--txt);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 620;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.audio-asset-timecode {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--txt-dim);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+}
+
+.audio-asset-time-divider,
+.audio-asset-duration {
+  color: var(--muted);
+}
+
+.audio-asset-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.audio-asset-status-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #84909d;
+  box-shadow: 0 0 0 3px rgba(132, 144, 157, 0.1);
+}
+
+.audio-asset-status.is-playing {
+  color: var(--brand);
+}
+
+.audio-asset-status.is-playing .audio-asset-status-dot {
+  background: var(--brand);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 16%, transparent);
+}
+
+.audio-playback-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 12px 10px;
+  border: 1px solid color-mix(in srgb, var(--brand) 10%, var(--line));
+  border-radius: 12px;
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--panel) 94%, var(--brand)),
+    var(--surface-1)
+  );
+}
+
+.audio-waveform-track {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  height: 52px;
+  border-radius: 5px;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+
+.audio-waveform-bars {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px;
+  padding: 0 2px;
+  pointer-events: none;
+}
+
+.audio-waveform-bars span {
+  display: block;
+  flex: 1 1 0;
+  min-width: 1px;
+  max-width: 4px;
+  border-radius: 3px;
+  background: #65717d;
+  opacity: 0.58;
+  transition:
+    background-color 0.12s ease,
+    opacity 0.12s ease;
+}
+
+.audio-waveform-bars span.is-played {
+  background: var(--brand);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--brand) 36%, transparent);
+  opacity: 0.92;
+}
+
+.audio-waveform-playhead {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: 2px;
+  background: #e8fbff;
+  box-shadow: 0 0 9px color-mix(in srgb, var(--brand) 70%, transparent);
+  pointer-events: none;
+}
+
+.audio-waveform-playhead-cap {
+  position: absolute;
+  top: -2px;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  transform: translateX(-50%);
+  border: 2px solid #e8fbff;
+  border-radius: 50%;
+  background: var(--brand);
+}
+
+.audio-waveform-playhead-tail {
+  position: absolute;
+  bottom: -1px;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: #e8fbff;
+}
+
+.audio-playback-progress {
+  height: 3px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.11);
+}
+
+.audio-playback-progress span {
+  display: block;
+  width: var(--audio-progress, 0%);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--brand);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--brand) 65%, transparent);
+}
+
+.audio-playback-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.audio-playback-toggle {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--brand) 25%, var(--line));
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--brand) 12%, var(--surface-2));
+  color: var(--brand);
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.audio-playback-toggle:hover {
+  transform: scale(1.04);
+  background: color-mix(in srgb, var(--brand) 22%, var(--surface-2));
+}
+
+.audio-volume-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(48%, 170px);
+  min-width: 86px;
+}
+
+.audio-mute-toggle {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--txt-dim);
+  cursor: pointer;
+}
+
+.audio-mute-toggle:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--txt);
+}
+
+.audio-volume-slider {
+  flex: 1;
+  width: 100%;
+  min-width: 48px;
+  height: 4px;
+  padding: 0;
+  appearance: none;
+  border: 0;
+  border-radius: 99px;
+  outline: none;
+  background: linear-gradient(
+    to right,
+    var(--brand) 0,
+    var(--brand) var(--audio-volume, 75%),
+    rgba(255, 255, 255, 0.18) var(--audio-volume, 75%),
+    rgba(255, 255, 255, 0.18) 100%
+  );
+  cursor: pointer;
+}
+
+.audio-volume-slider::-webkit-slider-thumb {
+  width: 11px;
+  height: 11px;
+  appearance: none;
+  border: 2px solid #dffaff;
+  border-radius: 50%;
+  background: var(--brand);
+  box-shadow: 0 0 7px color-mix(in srgb, var(--brand) 50%, transparent);
+}
+
+.audio-volume-slider::-moz-range-thumb {
+  width: 8px;
+  height: 8px;
+  border: 2px solid #dffaff;
+  border-radius: 50%;
+  background: var(--brand);
+  box-shadow: 0 0 7px color-mix(in srgb, var(--brand) 50%, transparent);
+}
+
+.audio-asset-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.audio-replace-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 29px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--txt-dim);
+  font-size: 10px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.audio-replace-button:hover {
+  border-color: color-mix(in srgb, var(--brand) 35%, var(--line));
+  background: color-mix(in srgb, var(--brand) 7%, transparent);
+  color: var(--brand);
+}
+
 .audio-player-info {
   text-align: center;
   max-width: 100%;
@@ -10698,6 +11183,203 @@ canvas.tl-canvas-indicators {
   grid-template-columns: auto 1fr;
   align-items: center;
   gap: 6px 8px;
+}
+
+/* 语音合成节点内部表单沿用项目的暗色输入与青色交互，只整理区块和字段排布。 */
+.node-speech {
+  gap: 12px;
+  min-width: 0;
+}
+
+.node-speech .tts-section {
+  gap: 7px;
+  min-width: 0;
+}
+
+.node-speech .speech-section-label {
+  gap: 6px;
+  color: var(--txt);
+  font-size: 11px;
+  letter-spacing: 0.01em;
+  text-transform: none;
+}
+
+.node-speech .speech-channel-section {
+  gap: 8px;
+}
+
+.node-speech .speech-field-row {
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 6px 8px;
+  min-width: 0;
+}
+
+.node-speech .speech-field-row > .opt-label {
+  font-size: 10px;
+}
+
+.node-speech .speech-field-row .gen-select {
+  width: 100%;
+  min-width: 0;
+}
+
+.node-speech .speech-voice-section .gen-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.node-speech .speech-reference-section {
+  gap: 6px;
+}
+
+.node-speech .speech-reference-section .tts-upload-btn {
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  min-height: 54px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg) 70%, var(--card));
+  text-align: left;
+}
+
+.node-speech .speech-reference-section .tts-upload-btn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--brand) 38%, var(--line));
+  background: color-mix(in srgb, var(--brand) 6%, var(--bg));
+}
+
+.node-speech .speech-reference-section .tts-upload-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.speech-reference-upload-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--card);
+  color: var(--txt-dim, #9aa4b5);
+}
+
+.speech-reference-upload-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.speech-reference-upload-title {
+  color: var(--txt);
+  font-size: 11px;
+  font-weight: 550;
+}
+
+.node-speech .speech-reference-section .tts-upload-hint {
+  margin: 0;
+  color: var(--txt-dim, #9aa4b5);
+  font-size: 9px;
+}
+
+.node-speech .speech-reference-status {
+  align-self: flex-end;
+  padding: 0 2px;
+  font-size: 9px;
+}
+
+.node-speech .tts-ref-player {
+  gap: 7px;
+  min-width: 0;
+  padding: 6px 7px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg) 70%, var(--card));
+}
+
+.node-speech .speech-reference-play {
+  width: 28px;
+  height: 28px;
+  font-size: 10px;
+}
+
+.node-speech .tts-ref-name {
+  min-width: 0;
+  font-size: 10px;
+}
+
+.node-speech .speech-text-section .gen-textarea {
+  min-height: 72px;
+  max-height: 136px;
+  resize: vertical;
+}
+
+.node-speech .speech-parameter-panel {
+  gap: 9px;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg) 64%, transparent);
+}
+
+.node-speech .speech-parameter-panel .tts-section-label svg {
+  color: var(--brand);
+}
+
+.node-speech .tts-sliders {
+  gap: 10px;
+}
+
+.node-speech .speech-range-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  min-width: 0;
+}
+
+.speech-range-labels {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.speech-range-labels output {
+  color: var(--brand);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.node-speech .speech-range-row input[type='range'] {
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+  height: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--brand);
+}
+
+.node-speech .speech-emotion-row {
+  grid-template-columns: 54px minmax(0, 1fr);
+  padding-top: 2px;
+}
+
+.node-speech .speech-pronunciation-section .speech-pronunciation-input {
+  min-height: 72px;
+  max-height: 116px;
+  background: var(--bg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  line-height: 1.5;
+  resize: vertical;
 }
 
 .tts-inline-toggle {

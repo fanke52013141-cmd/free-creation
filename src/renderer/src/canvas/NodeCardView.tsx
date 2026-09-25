@@ -30,10 +30,9 @@ import { ConnectedInputPreview } from './ConnectedInputPreview'
 import {
   DEFAULT_IMAGE_GENERATION_ESTIMATE_MS,
   estimateImageGenerationDuration,
-  imageGenerationProgressPercent,
+  imageGenerationProgressPercent
 } from './image-generation-progress'
 import { readNodeRunRecord } from '../engine/runRecord'
-import { canConsumeWheel } from './node-wheel-scroll'
 import './image-gen-adaptive.css'
 
 const EXEC_COLORS: Record<string, string> = {
@@ -92,6 +91,10 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   const project = useAppStore((s) => s.currentProject)
   const providers = useGatewayStore((s) => s.providers)
   const spec = getNodeType(shape.props.nodeType)
+  const displayTitle =
+    shape.props.nodeType === 'speech' && shape.props.title === '配音'
+      ? '语音合成'
+      : shape.props.title
   const draft = useConnectionStore((s) => s.draft)
   const [preview, setPreview] = useState<{
     url: string
@@ -209,9 +212,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   // 图标只做一件事：说明这个节点的契约。导演台有自己的全屏工作区，但它从卡片按钮
   // 进入；若 info 图标也跳去工作区，这个节点 7 个端口的契约就没有任何入口了。
   const openNodePanel = (): void => {
-    useNodePanelStore
-      .getState()
-      .open('contract', shape.id, 'overview')
+    useNodePanelStore.getState().open('contract', shape.id, 'overview')
   }
 
   const beginTitleEditing = (): void => {
@@ -245,37 +246,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     if (!editor.getSelectedShapeIds().includes(shape.id)) editor.select(shape.id)
   }
 
-  // Scroll ownership is deterministic: scrollable node content consumes the wheel while it
-  // can move; at its edge the event bubbles to the canvas. Ctrl/Meta-wheel remains zoom.
-  const handleNodeWheel = (event: React.WheelEvent<HTMLDivElement>): void => {
-    if (event.ctrlKey || event.metaKey) return
-    const target = event.target instanceof Element ? event.target : null
-    if (!target) return
-    let element: HTMLElement | null =
-      target instanceof HTMLElement ? target : target.parentElement
-    while (element && element !== event.currentTarget) {
-      const style = window.getComputedStyle(element)
-      const verticalCanScroll =
-        ['auto', 'scroll', 'overlay'].includes(style.overflowY) &&
-        canConsumeWheel(
-          { position: element.scrollTop, extent: element.scrollHeight, viewport: element.clientHeight },
-          event.deltaY
-        )
-      const horizontalDelta = event.shiftKey ? event.deltaY || event.deltaX : event.deltaX
-      const horizontalCanScroll =
-        ['auto', 'scroll', 'overlay'].includes(style.overflowX) &&
-        canConsumeWheel(
-          { position: element.scrollLeft, extent: element.scrollWidth, viewport: element.clientWidth },
-          horizontalDelta
-        )
-      if (verticalCanScroll || horizontalCanScroll) {
-        event.stopPropagation()
-        return
-      }
-      element = element.parentElement
-    }
-  }
-
   const handleTitleBlur = (e: React.FocusEvent<HTMLDivElement>): void => {
     const next = e.currentTarget.textContent ?? ''
     if (next !== shape.props.title) {
@@ -298,7 +268,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   const isSource = draft?.from.shapeId === shape.id
   const statusLabel = nodeExecLabel(shape.props.exec)
   const activeExecution = ['pending', 'queued', 'running'].includes(shape.props.exec)
-  const imageRun = shape.props.nodeType === 'image-gen' ? readNodeRunRecord(shape.meta?.nodeRun) : null
+  const imageRun =
+    shape.props.nodeType === 'image-gen' ? readNodeRunRecord(shape.meta?.nodeRun) : null
   const imageRunActive = Boolean(
     shape.props.nodeType === 'image-gen' && activeExecution && imageRun?.status === 'running'
   )
@@ -357,7 +328,14 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       window.cancelAnimationFrame(frame)
       window.clearInterval(timer)
     }
-  }, [imageRunActive, imageRun?.runId, imageRun?.startedAt, imageProviderKey, imageModelKey, imageCount])
+  }, [
+    imageRunActive,
+    imageRun?.runId,
+    imageRun?.startedAt,
+    imageProviderKey,
+    imageModelKey,
+    imageCount
+  ])
 
   useEffect(() => {
     if (
@@ -373,14 +351,25 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       return
     }
     timingRecordedRunRef.current = imageRun.runId
-    void window.api.workspace.recordImageGenerationTiming({
-      runId: imageRun.runId,
-      providerKey: imageProviderKey,
-      modelKey: imageModelKey,
-      durationMs: Math.round(imageRun.durationMs / imageCount),
-      recordedAt: imageRun.finishedAt ?? Date.now()
-    }).catch(() => undefined)
-  }, [shape.props.nodeType, imageRun?.runId, imageRun?.status, imageRun?.durationMs, imageRun?.finishedAt, imageProviderKey, imageModelKey, imageCount])
+    void window.api.workspace
+      .recordImageGenerationTiming({
+        runId: imageRun.runId,
+        providerKey: imageProviderKey,
+        modelKey: imageModelKey,
+        durationMs: Math.round(imageRun.durationMs / imageCount),
+        recordedAt: imageRun.finishedAt ?? Date.now()
+      })
+      .catch(() => undefined)
+  }, [
+    shape.props.nodeType,
+    imageRun?.runId,
+    imageRun?.status,
+    imageRun?.durationMs,
+    imageRun?.finishedAt,
+    imageProviderKey,
+    imageModelKey,
+    imageCount
+  ])
 
   const imageProgress = imageRunActive
     ? imageGenerationProgressPercent(imageExecutionElapsedMs, imageTimingEstimateMs)
@@ -500,16 +489,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       }
       return keys
     },
-    [
-      editor,
-      shape.id,
-      shape.index,
-      shape.props.h,
-      visibleInPorts,
-      visibleOutPorts,
-      inY,
-      outY
-    ]
+    [editor, shape.id, shape.index, shape.props.h, visibleInPorts, visibleOutPorts, inY, outY]
   )
 
   // 运行按钮常驻在标题行右侧（用户 2026-09-18 拍板：不能用时置灰，而不是消失）。
@@ -550,11 +530,13 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             (child): child is HTMLElement => child instanceof HTMLElement
           )
           const rowGap = Number.parseFloat(getComputedStyle(body).rowGap) || 0
-          const contentHeight = children.reduce(
-            (total, child) =>
-              total + Math.max(child.getBoundingClientRect().height, child.scrollHeight),
-            0
-          ) + Math.max(0, children.length - 1) * rowGap
+          const contentHeight =
+            children.reduce(
+              (total, child) =>
+                total + Math.max(child.getBoundingClientRect().height, child.scrollHeight),
+              0
+            ) +
+            Math.max(0, children.length - 1) * rowGap
           const shellHeight = shape.props.h - body.clientHeight
           const requiredHeight = Math.ceil(shellHeight + contentHeight)
           const tier = resolveNodeHeight(requiredHeight)
@@ -628,7 +610,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         data-node-id={shape.id}
         style={{ width: shape.props.w, height: shape.props.h }}
         onPointerDown={handleCardPointerDown}
-        onWheel={handleNodeWheel}
       >
         <div className="node-header">
           {/* 标题行布局：左侧依次为 序号 → 图标 → 名称 → 查看输入输出说明；
@@ -643,7 +624,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             ref={titleRef}
             className={`node-title ${titleEditable ? 'editable' : ''} ${editing ? 'editing' : ''}`}
             data-node-interactive="node-title"
-            title={shape.props.title}
+            title={displayTitle}
             contentEditable={editing}
             suppressContentEditableWarning
             spellCheck={false}
@@ -657,7 +638,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               }
             }}
           >
-            {shape.props.title}
+            {displayTitle}
           </div>
           {/* info 按钮（查看输入输出说明）：紧跟节点名称，点击显式打开右侧契约面板。
                 对话节点也必须能查看与其他节点相同的输入输出契约。标题必须和 openNodePanel 的
@@ -823,8 +804,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                       : shape.props.nodeType === 'audio'
                         ? 'audio'
                         : 'image'
-                  ] ??
-                  '#34d399',
+                  ] ?? '#34d399',
                 ['--node-port-color' as string]: nodePortColor
               }}
               aria-label="来源产物连线"
@@ -837,8 +817,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           const hasOutput = Boolean(spec?.projectOutputs?.(shape)[p.id])
           const isConnected = (readinessState.outgoingCounts?.get(p.id) ?? 0) > 0
           const draftIn = draft && draft.from.direction === 'in' ? draft.from : null
-          const okUpstream =
-            draftIn && !isSource ? canAttachPort(draftIn, p, 'in') : false
+          const okUpstream = draftIn && !isSource ? canAttachPort(draftIn, p, 'in') : false
           const portKey = `out:${p.id}`
           return (
             <Tooltip key={p.id} label={portHint(p)} placement="top">
