@@ -403,15 +403,15 @@ function MediaTimeline({
         )}
         {isPoint ? (
           playbackOnly ? null : (
-          <div
-            className="video-timeline-handle"
-            style={{ left: percent(currentPoint) }}
-            role="slider"
-            aria-label="取帧位置"
-            aria-valuemin={0}
-            aria-valuemax={max}
-            aria-valuenow={currentPoint}
-          />
+            <div
+              className="video-timeline-handle"
+              style={{ left: percent(currentPoint) }}
+              role="slider"
+              aria-label="取帧位置"
+              aria-valuemin={0}
+              aria-valuemax={max}
+              aria-valuenow={currentPoint}
+            />
           )
         ) : (
           <>
