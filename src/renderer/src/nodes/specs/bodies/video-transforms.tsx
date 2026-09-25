@@ -929,37 +929,86 @@ export function VideoOperationsWorkbench({
               )}
             </div>
             <div className="video-operations-player-controls">
-              <button
-                type="button"
-                className="video-operations-player-button primary"
-                aria-label={isPlaying ? '暂停' : '播放'}
-                title={isPlaying ? '暂停' : '播放'}
-                disabled={!sourceMediaPath}
-                onClick={togglePlayback}
-              >
-                <Icon name={isPlaying ? 'pause' : 'play'} size={18} />
-              </button>
-              <button
-                type="button"
-                className="video-operations-player-button"
-                aria-label="后退 5 秒"
-                title="后退 5 秒"
-                disabled={durationMs <= 0}
-                onClick={() => jumpBy(-5000)}
-              >
-                −5
-              </button>
-              <button
-                type="button"
-                className="video-operations-player-button"
-                aria-label="快进 5 秒"
-                title="快进 5 秒"
-                disabled={durationMs <= 0}
-                onClick={() => jumpBy(5000)}
-              >
-                +5
-              </button>
-              <span className="video-operations-player-time">{playbackTime(currentTimeMs)}</span>
+              <div className="video-operations-player-control-row">
+                <div className="video-operations-player-control-group">
+                  <button
+                    type="button"
+                    className="video-operations-player-button primary"
+                    aria-label={isPlaying ? '暂停' : '播放'}
+                    title={isPlaying ? '暂停' : '播放'}
+                    disabled={!sourceMediaPath}
+                    onClick={togglePlayback}
+                  >
+                    <Icon name={isPlaying ? 'pause' : 'play'} size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    className="video-operations-player-button step"
+                    aria-label="后退 5 秒"
+                    title="后退 5 秒"
+                    disabled={durationMs <= 0}
+                    onClick={() => jumpBy(-5000)}
+                  >
+                    −5
+                  </button>
+                  <button
+                    type="button"
+                    className="video-operations-player-button step"
+                    aria-label="快进 5 秒"
+                    title="快进 5 秒"
+                    disabled={durationMs <= 0}
+                    onClick={() => jumpBy(5000)}
+                  >
+                    +5
+                  </button>
+                  <span className="video-operations-player-time current">
+                    {playbackTime(currentTimeMs)}
+                  </span>
+                  <span className="video-operations-player-time-separator">/</span>
+                  <span className="video-operations-player-time">{playbackTime(durationMs)}</span>
+                </div>
+                <div className="video-operations-player-control-group secondary">
+                  <button
+                    type="button"
+                    className="video-operations-player-button"
+                    aria-label={isMuted || volume === 0 ? '取消静音' : '静音'}
+                    title={isMuted || volume === 0 ? '取消静音' : '静音'}
+                    disabled={!sourceMediaPath}
+                    onClick={toggleMute}
+                  >
+                    <Icon name={isMuted || volume === 0 ? 'volume-off' : 'volume'} size={17} />
+                  </button>
+                  <input
+                    className="video-operations-player-volume"
+                    type="range"
+                    aria-label="音量"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={isMuted ? 0 : volume}
+                    disabled={!sourceMediaPath}
+                    onChange={(event) => {
+                      const nextVolume = Number(event.currentTarget.value)
+                      const video = videoRef.current
+                      if (!video) return
+                      video.volume = nextVolume
+                      video.muted = false
+                      setVolume(nextVolume)
+                      setIsMuted(false)
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="video-operations-player-button"
+                    aria-label={isFullscreen ? '退出全屏' : '全屏'}
+                    title={isFullscreen ? '退出全屏' : '全屏'}
+                    disabled={!sourceMediaPath}
+                    onClick={toggleFullscreen}
+                  >
+                    <Icon name={isFullscreen ? 'fullscreen-exit' : 'fullscreen'} size={17} />
+                  </button>
+                </div>
+              </div>
               <input
                 className="video-operations-player-progress"
                 type="range"
@@ -976,46 +1025,6 @@ export function VideoOperationsWorkbench({
                 }
                 onChange={(event) => seek(Number(event.currentTarget.value))}
               />
-              <span className="video-operations-player-time">{playbackTime(durationMs)}</span>
-              <button
-                type="button"
-                className="video-operations-player-button"
-                aria-label={isMuted || volume === 0 ? '取消静音' : '静音'}
-                title={isMuted || volume === 0 ? '取消静音' : '静音'}
-                disabled={!sourceMediaPath}
-                onClick={toggleMute}
-              >
-                <Icon name={isMuted || volume === 0 ? 'volume-off' : 'volume'} size={17} />
-              </button>
-              <input
-                className="video-operations-player-volume"
-                type="range"
-                aria-label="音量"
-                min={0}
-                max={1}
-                step={0.05}
-                value={isMuted ? 0 : volume}
-                disabled={!sourceMediaPath}
-                onChange={(event) => {
-                  const nextVolume = Number(event.currentTarget.value)
-                  const video = videoRef.current
-                  if (!video) return
-                  video.volume = nextVolume
-                  video.muted = false
-                  setVolume(nextVolume)
-                  setIsMuted(false)
-                }}
-              />
-              <button
-                type="button"
-                className="video-operations-player-button"
-                aria-label={isFullscreen ? '退出全屏' : '全屏'}
-                title={isFullscreen ? '退出全屏' : '全屏'}
-                disabled={!sourceMediaPath}
-                onClick={toggleFullscreen}
-              >
-                <Icon name={isFullscreen ? 'fullscreen-exit' : 'fullscreen'} size={17} />
-              </button>
             </div>
           </div>
 
@@ -1169,13 +1178,51 @@ export function VideoOperationsWorkbench({
                     本机缺少高质量分离器；可安装 audio-separator，或选择快速人声增强。
                   </div>
                 )}
-                <details className="video-operations-advanced">
-                  <summary>输出设置</summary>
-                  <div className="video-operations-advanced-fields">
-                    {clipOutput === 'audio-only' ? (
-                      <>
+                <div className="video-operations-output-settings">
+                  <div className="video-operations-output-heading">
+                    <span aria-hidden="true">◆</span>
+                    输出参数设置
+                  </div>
+                  {clipOutput !== 'audio-only' && (
+                    <div className="video-operations-option-line">
+                      <span className="video-operations-option-label">画面质量</span>
+                      <div
+                        className="video-operations-choice-row quality"
+                        role="group"
+                        aria-label="画面质量"
+                      >
+                        {(
+                          [
+                            ['fast', '快速复制'],
+                            ['balanced', '平衡 · CRF 18'],
+                            ['high', '高质量 · CRF 14']
+                          ] as const
+                        ).map(([quality, label]) => (
+                          <button
+                            key={quality}
+                            type="button"
+                            className={clipCfg.quality === quality ? 'active' : ''}
+                            aria-pressed={clipCfg.quality === quality}
+                            title={
+                              quality === 'fast'
+                                ? '快速复制，不重新编码；截取边界可能不够精确'
+                                : quality === 'balanced'
+                                  ? '平衡文件体积与画面质量'
+                                  : '使用较高画面质量重新编码'
+                            }
+                            onClick={() => setClipCfg((previous) => ({ ...previous, quality }))}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {clipOutput !== 'video-only' && (
+                    <>
+                      <div className="video-operations-option-line">
+                        <span className="video-operations-option-label">音频格式</span>
                         <label className="video-operations-inline-select">
-                          音频格式
                           <AppSelect
                             value={needsVocalSeparation ? 'wav' : clipCfg.audioFormat}
                             disabled={needsVocalSeparation}
@@ -1188,8 +1235,10 @@ export function VideoOperationsWorkbench({
                             <option value="m4a">M4A（体积小）</option>
                           </AppSelect>
                         </label>
+                      </div>
+                      <div className="video-operations-option-line">
+                        <span className="video-operations-option-label">采样率</span>
                         <label className="video-operations-inline-select">
-                          采样率
                           <AppSelect
                             value={String(clipCfg.audioSampleRate)}
                             onChange={(event) => {
@@ -1202,25 +1251,10 @@ export function VideoOperationsWorkbench({
                             <option value="48000">48 kHz</option>
                           </AppSelect>
                         </label>
-                      </>
-                    ) : (
-                      <label className="video-operations-inline-select">
-                        编码质量
-                        <AppSelect
-                          value={clipCfg.quality}
-                          onChange={(event) => {
-                            const quality = event.currentTarget.value as ClipQuality
-                            setClipCfg((previous) => ({ ...previous, quality }))
-                          }}
-                        >
-                          <option value="fast">快速复制（边界可能不精确）</option>
-                          <option value="balanced">平衡（CRF 18）</option>
-                          <option value="high">高质量（CRF 14）</option>
-                        </AppSelect>
-                      </label>
-                    )}
-                  </div>
-                </details>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             )}
           </section>
