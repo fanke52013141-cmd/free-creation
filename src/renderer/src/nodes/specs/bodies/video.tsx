@@ -401,7 +401,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
             openPreview({ kind: 'video', url: mediaUrl(item.mediaPath), title: shape.props.title })
           }
         />
-        {/* 视频节点只保留三个直接操作入口；文件定位与路径复制不挤占主要操作行。 */}
+        {/* 功能按钮与节点级辅助操作同列呈现，定位/复制节点沿用参考稿中的图标入口。 */}
         <div className="node-media-next-actions node-video-action-group" aria-label="视频操作">
           <button
             className="btn-ghost small"
@@ -437,6 +437,37 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
             }}
           >
             抽帧
+          </button>
+          <span className="node-video-action-divider" aria-hidden="true" />
+          <button
+            className="icon-btn node-video-icon-action"
+            title="在画布中定位居中"
+            aria-label="在画布中定位居中"
+            onPointerDown={stopEventPropagation}
+            onClick={(event) => {
+              stopEventPropagation(event)
+              const bounds = editor.getShapePageBounds(shape.id)
+              if (!bounds) return
+              editor.centerOnPoint(
+                { x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 },
+                { animation: { duration: 250 } }
+              )
+            }}
+          >
+            <Icon name="target" size={14} />
+          </button>
+          <button
+            className="icon-btn node-video-icon-action"
+            title="复制节点"
+            aria-label="复制节点"
+            onPointerDown={stopEventPropagation}
+            onClick={(event) => {
+              stopEventPropagation(event)
+              markUndoPoint(editor, 'duplicate-video-node')
+              editor.duplicateShapes([shape.id])
+            }}
+          >
+            <Icon name="copy" size={14} />
           </button>
         </div>
         {videoOperationsOpen && (
