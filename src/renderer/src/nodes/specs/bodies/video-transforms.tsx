@@ -58,6 +58,16 @@ function timecode(ms: number): string {
   return `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}.${String(mmm).padStart(3, '0')}`
 }
 
+function playbackTime(ms: number): string {
+  const seconds = Math.floor(Math.max(0, ms) / 1000)
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  const remainder = seconds % 60
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`
+    : `${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`
+}
+
 // ── 统一时间轴组件 ──
 
 /** 手动时间码输入：接受 mm:ss.mmm 或纯秒数 */
@@ -554,7 +564,8 @@ function VideoTrimWorkbench({
   )
 }
 
-type VideoOperationMode = 'clip' | 'frame' | 'vocal'
+type VideoOperationMode = 'clip' | 'frame'
+type ClipOutput = 'video-only' | 'audio-only' | 'video-with-audio'
 
 /** 从视频来源统一打开的工作台；配置先保存在弹窗状态，确认后才创建真实节点。 */
 export function VideoOperationsWorkbench({
@@ -568,6 +579,7 @@ export function VideoOperationsWorkbench({
 }): React.JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null)
   const previewWrapRef = useRef<HTMLDivElement>(null)
+  const playerRef = useRef<HTMLDivElement>(null)
   const project = useAppStore((state) => state.currentProject)
   const providers = useGatewayStore((state) => state.providers)
   const videoOutput = projectNodeOutputs(source)['out-video']
@@ -583,13 +595,17 @@ export function VideoOperationsWorkbench({
   const [fps, setFps] = useState<number | null>(null)
   const [videoAspectRatio, setVideoAspectRatio] = useState<number | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
-  const [loopEnabled, setLoopEnabled] = useState(false)
+  const [isMuted, setIsMuted] = useState(false)
+  const [volume, setVolume] = useState(1)
+  const [isFullscreen, setIsFullscreen] = useState(false)
   const [clipCfg, setClipCfg] = useState<VideoClipConfig>(() => parseVideoClipConfig(''))
   const [frameCfg, setFrameCfg] = useState<VideoFrameConfig>(() => parseVideoFrameConfig(''))
-  const [separateVocals, setSeparateVocals] = useState(false)
+  const [clipOutput, setClipOutput] = useState<ClipOutput>('video-with-audio')
+  const [extractVocals, setExtractVocals] = useState(false)
   const [vocalCfg, setVocalCfg] = useState<VocalSeparationConfig>(() => ({
     ...parseVocalSeparationConfig(''),
-    mode: 'quality'
+    mode: 'quality',
+    outputAccompaniment: false
   }))
   const [localCapabilities, setLocalCapabilities] = useState<Awaited<
     ReturnType<typeof window.api.getLocalMediaCapabilities>
@@ -608,7 +624,7 @@ export function VideoOperationsWorkbench({
         aspectRatio: String(videoAspectRatio)
       }
     : undefined
-  const canSeparateVocals = clipCfg.keepAudio || (clipCfg.keepVideo && clipCfg.includeAudio)
+  const needsVocalSeparation = mode === 'clip' && clipOutput === 'audio-only' && extractVocals
   const ffmpegAvailable = localCapabilities?.ok ? localCapabilities.data.ffmpeg.available : null
   const separatorAvailable = localCapabilities?.ok
     ? localCapabilities.data.audioSeparator.available
@@ -663,6 +679,13 @@ export function VideoOperationsWorkbench({
   }, [])
 
   useEffect(() => {
+    const updateFullscreen = (): void =>
+      setIsFullscreen(document.fullscreenElement === playerRef.current)
+    document.addEventListener('fullscreenchange', updateFullscreen)
+    return () => document.removeEventListener('fullscreenchange', updateFullscreen)
+  }, [])
+
+  useEffect(() => {
     if (!project || !sourceMediaId) return
     let active = true
     void window.api.probeVideo({ projectId: project.id, sourceMediaId }).then((result) => {
@@ -695,43 +718,44 @@ export function VideoOperationsWorkbench({
   const handleTimeUpdate = (): void => {
     const video = videoRef.current
     if (!video) return
-    const timeMs = Math.round(video.currentTime * 1000)
-    setCurrentTimeMs(timeMs)
-    if (loopEnabled && mode !== 'frame' && timeMs >= clipCfg.endMs)
-      video.currentTime = clipCfg.startMs / 1000
+    setCurrentTimeMs(Math.round(video.currentTime * 1000))
   }
   const jumpBy = (deltaMs: number): void => {
-    const nextTime = clamp(currentTimeMs + deltaMs, Math.max(0, durationMs))
+    const nextTime = clamp(
+      Math.round((videoRef.current?.currentTime ?? currentTimeMs / 1000) * 1000) + deltaMs,
+      Math.max(0, durationMs)
+    )
     seek(nextTime)
     if (mode === 'frame') savePoint(nextTime)
   }
-  const chooseRetention = (keepVideo: boolean, keepAudio: boolean): void => {
-    setClipCfg((previous) => ({
-      ...previous,
-      keepVideo,
-      keepAudio,
-      includeAudio: keepVideo ? previous.includeAudio : false,
-      audioFormat: separateVocals && keepAudio ? 'wav' : previous.audioFormat
-    }))
-    if (!keepAudio) setSeparateVocals(false)
+  const togglePlayback = (): void => {
+    const video = videoRef.current
+    if (!video) return
+    if (video.paused) void video.play().catch(() => toast('视频暂时无法播放'))
+    else video.pause()
   }
-
-  const toggleSeparation = (checked: boolean): void => {
-    setSeparateVocals(checked)
-    if (checked) {
-      setClipCfg((previous) => ({ ...previous, keepAudio: true, audioFormat: 'wav' }))
-      setVocalCfg((previous) => ({ ...previous, mode: 'quality' }))
+  const toggleMute = (): void => {
+    const video = videoRef.current
+    if (!video) return
+    if (video.muted || video.volume === 0) {
+      if (video.volume === 0) video.volume = 1
+      video.muted = false
+    } else {
+      video.muted = true
     }
+    setIsMuted(video.muted)
+  }
+  const toggleFullscreen = (): void => {
+    const player = playerRef.current
+    if (!player) return
+    const action =
+      document.fullscreenElement === player ? document.exitFullscreen() : player.requestFullscreen()
+    void action.catch(() => toast('无法切换全屏播放'))
   }
 
   const makeOperation = (): void => {
     if (!project) return toast('项目未就绪')
     if (!sourceMediaId || !sourceMediaPath) return toast('当前视频没有可用的媒体文件')
-    if (mode === 'clip' && !clipCfg.keepVideo && !clipCfg.keepAudio)
-      return toast('至少选择一种截取结果')
-    if (mode === 'clip' && separateVocals && !clipCfg.keepAudio)
-      return toast('人声分离需要保留音频')
-
     setSubmitting(true)
     let clipNodeId: TLShapeId | null = null
     let vocalNodeId: TLShapeId | null = null
@@ -745,22 +769,21 @@ export function VideoOperationsWorkbench({
         return
       }
 
-      const doSeparation = mode === 'vocal' || separateVocals
       const clipConfig: VideoClipConfig = {
         ...clipCfg,
-        keepVideo: mode === 'vocal' ? false : clipCfg.keepVideo,
-        keepAudio: mode === 'vocal' ? true : clipCfg.keepAudio || doSeparation,
-        includeAudio: mode === 'vocal' ? false : clipCfg.keepVideo && clipCfg.includeAudio,
-        audioFormat: doSeparation ? 'wav' : clipCfg.audioFormat
+        keepVideo: clipOutput !== 'audio-only',
+        keepAudio: clipOutput === 'audio-only',
+        includeAudio: clipOutput === 'video-with-audio',
+        audioFormat: needsVocalSeparation ? 'wav' : clipCfg.audioFormat
       }
       clipNodeId = createVideoContinuation(editor, source, 'video-clip', {
-        title: mode === 'vocal' ? '提取音频' : '视频截取',
+        title: clipOutput === 'audio-only' ? '提取音频' : '视频截取',
         config: serializeVideoClipConfig(clipConfig)
       })
       if (!clipNodeId) return
       targetNodeId = clipNodeId
 
-      if (doSeparation) {
+      if (needsVocalSeparation) {
         const clipShape = editor.getShape(clipNodeId)
         if (clipShape?.type !== 'node-card') {
           editor.deleteShape(clipNodeId)
@@ -802,11 +825,8 @@ export function VideoOperationsWorkbench({
     }, 0)
   }
 
-  const activeTitle = mode === 'clip' ? '视频截取' : mode === 'frame' ? '抽帧' : '人声分离'
   const separatorUnavailable =
-    (mode === 'vocal' || separateVocals) &&
-    vocalCfg.mode === 'quality' &&
-    separatorAvailable === false
+    needsVocalSeparation && vocalCfg.mode === 'quality' && separatorAvailable === false
 
   return createPortal(
     <div
@@ -838,8 +858,7 @@ export function VideoOperationsWorkbench({
             {(
               [
                 ['clip', '视频截取'],
-                ['frame', '抽帧'],
-                ['vocal', '人声分离']
+                ['frame', '抽帧']
               ] as const
             ).map(([value, label]) => (
               <button
@@ -864,98 +883,170 @@ export function VideoOperationsWorkbench({
         </header>
 
         <div className="video-operations-body">
-          <div
-            ref={previewWrapRef}
-            className={`video-operations-preview-wrap ${videoAspectRatio !== null && videoAspectRatio < 1 ? 'portrait' : 'landscape'}`}
-          >
-            {sourceMediaPath ? (
-              <div className="video-operations-player-frame" style={playerFrameStyle}>
-                <video
-                  ref={videoRef}
-                  className="video-operations-preview"
-                  src={mediaUrl(sourceMediaPath)}
-                  controls
-                  preload="metadata"
-                  playsInline
-                  onLoadedMetadata={(event) => {
-                    const video = event.currentTarget
-                    const seconds = video.duration
-                    if (Number.isFinite(seconds) && seconds > 0)
-                      syncDuration(Math.round(seconds * 1000))
-                    setCurrentTimeMs(Math.round(video.currentTime * 1000))
-                    if (video.videoWidth > 0 && video.videoHeight > 0)
-                      setVideoAspectRatio(video.videoWidth / video.videoHeight)
-                  }}
-                  onPlay={() => setIsPlaying(true)}
-                  onPause={() => setIsPlaying(false)}
-                  onTimeUpdate={handleTimeUpdate}
-                  onSeeked={(event) => {
-                    const timeMs = Math.round(event.currentTarget.currentTime * 1000)
-                    setCurrentTimeMs(timeMs)
-                    if (mode === 'frame') savePoint(timeMs)
-                  }}
-                  onEnded={() => setIsPlaying(false)}
-                />
-                <div className="video-operations-skip-buttons" aria-label="快进快退">
-                  <button type="button" aria-label="后退 5 秒" onClick={() => jumpBy(-5000)}>
-                    −5 秒
-                  </button>
-                  <button type="button" aria-label="快进 5 秒" onClick={() => jumpBy(5000)}>
-                    +5 秒
-                  </button>
+          <div ref={playerRef} className="video-operations-player" aria-label="视频播放器">
+            <div
+              ref={previewWrapRef}
+              className={`video-operations-preview-wrap ${videoAspectRatio !== null && videoAspectRatio < 1 ? 'portrait' : 'landscape'}`}
+            >
+              {sourceMediaPath ? (
+                <div className="video-operations-player-frame" style={playerFrameStyle}>
+                  <video
+                    ref={videoRef}
+                    className="video-operations-preview"
+                    src={mediaUrl(sourceMediaPath)}
+                    preload="metadata"
+                    playsInline
+                    aria-label="视频预览，点击播放或暂停"
+                    onClick={togglePlayback}
+                    onLoadedMetadata={(event) => {
+                      const video = event.currentTarget
+                      const seconds = video.duration
+                      if (Number.isFinite(seconds) && seconds > 0)
+                        syncDuration(Math.round(seconds * 1000))
+                      setCurrentTimeMs(Math.round(video.currentTime * 1000))
+                      if (video.videoWidth > 0 && video.videoHeight > 0)
+                        setVideoAspectRatio(video.videoWidth / video.videoHeight)
+                    }}
+                    onPlay={() => setIsPlaying(true)}
+                    onPause={() => setIsPlaying(false)}
+                    onTimeUpdate={handleTimeUpdate}
+                    onSeeked={(event) => {
+                      const timeMs = Math.round(event.currentTarget.currentTime * 1000)
+                      setCurrentTimeMs(timeMs)
+                      if (mode === 'frame') savePoint(timeMs)
+                    }}
+                    onVolumeChange={(event) => {
+                      setVolume(event.currentTarget.volume)
+                      setIsMuted(event.currentTarget.muted)
+                    }}
+                    onEnded={() => setIsPlaying(false)}
+                  />
                 </div>
-              </div>
+              ) : (
+                <div className="video-operations-no-source">当前视频无法预览</div>
+              )}
+            </div>
+            <div className="video-operations-player-controls">
+              <button
+                type="button"
+                className="video-operations-player-button primary"
+                aria-label={isPlaying ? '暂停' : '播放'}
+                title={isPlaying ? '暂停' : '播放'}
+                disabled={!sourceMediaPath}
+                onClick={togglePlayback}
+              >
+                <Icon name={isPlaying ? 'pause' : 'play'} size={18} />
+              </button>
+              <button
+                type="button"
+                className="video-operations-player-button"
+                aria-label="后退 5 秒"
+                title="后退 5 秒"
+                disabled={durationMs <= 0}
+                onClick={() => jumpBy(-5000)}
+              >
+                −5
+              </button>
+              <button
+                type="button"
+                className="video-operations-player-button"
+                aria-label="快进 5 秒"
+                title="快进 5 秒"
+                disabled={durationMs <= 0}
+                onClick={() => jumpBy(5000)}
+              >
+                +5
+              </button>
+              <span className="video-operations-player-time">{playbackTime(currentTimeMs)}</span>
+              <input
+                className="video-operations-player-progress"
+                type="range"
+                aria-label="播放进度"
+                min={0}
+                max={Math.max(1, durationMs)}
+                step={1}
+                value={Math.min(currentTimeMs, Math.max(1, durationMs))}
+                disabled={durationMs <= 0}
+                style={
+                  {
+                    '--played': `${durationMs > 0 ? (Math.min(currentTimeMs, durationMs) / durationMs) * 100 : 0}%`
+                  } as React.CSSProperties
+                }
+                onChange={(event) => seek(Number(event.currentTarget.value))}
+              />
+              <span className="video-operations-player-time">{playbackTime(durationMs)}</span>
+              <button
+                type="button"
+                className="video-operations-player-button"
+                aria-label={isMuted || volume === 0 ? '取消静音' : '静音'}
+                title={isMuted || volume === 0 ? '取消静音' : '静音'}
+                disabled={!sourceMediaPath}
+                onClick={toggleMute}
+              >
+                <Icon name={isMuted || volume === 0 ? 'volume-off' : 'volume'} size={17} />
+              </button>
+              <input
+                className="video-operations-player-volume"
+                type="range"
+                aria-label="音量"
+                min={0}
+                max={1}
+                step={0.05}
+                value={isMuted ? 0 : volume}
+                disabled={!sourceMediaPath}
+                onChange={(event) => {
+                  const nextVolume = Number(event.currentTarget.value)
+                  const video = videoRef.current
+                  if (!video) return
+                  video.volume = nextVolume
+                  video.muted = false
+                  setVolume(nextVolume)
+                  setIsMuted(false)
+                }}
+              />
+              <button
+                type="button"
+                className="video-operations-player-button"
+                aria-label={isFullscreen ? '退出全屏' : '全屏'}
+                title={isFullscreen ? '退出全屏' : '全屏'}
+                disabled={!sourceMediaPath}
+                onClick={toggleFullscreen}
+              >
+                <Icon name={isFullscreen ? 'fullscreen-exit' : 'fullscreen'} size={17} />
+              </button>
+            </div>
+          </div>
+
+          <div className="video-operations-timeline">
+            {mode === 'frame' ? (
+              <MediaTimeline
+                durationMs={max}
+                pointMs={
+                  frameCfg.mode === 'first'
+                    ? 0
+                    : frameCfg.mode === 'last'
+                      ? max - 1
+                      : frameCfg.timeMs
+                }
+                fps={fps}
+                onSeek={seek}
+                onPoint={savePoint}
+                onCommit={() => undefined}
+              />
             ) : (
-              <div className="video-operations-no-source">当前视频无法预览</div>
+              <MediaTimeline
+                durationMs={max}
+                startMs={clipCfg.startMs}
+                endMs={clipCfg.endMs}
+                fps={fps}
+                onSeek={seek}
+                onRange={saveRange}
+                onCommit={() => undefined}
+              />
             )}
           </div>
 
-          {mode === 'frame' ? (
-            <MediaTimeline
-              durationMs={max}
-              pointMs={
-                frameCfg.mode === 'first' ? 0 : frameCfg.mode === 'last' ? max - 1 : frameCfg.timeMs
-              }
-              fps={fps}
-              isPlaying={isPlaying}
-              onSeek={seek}
-              onPoint={savePoint}
-              onCommit={() => undefined}
-            />
-          ) : (
-            <MediaTimeline
-              durationMs={max}
-              startMs={clipCfg.startMs}
-              endMs={clipCfg.endMs}
-              fps={fps}
-              isPlaying={isPlaying}
-              loopEnabled={loopEnabled}
-              onSeek={seek}
-              onRange={saveRange}
-              onCommit={() => undefined}
-              onToggleLoop={() => setLoopEnabled((previous) => !previous)}
-            />
-          )}
-
           <section className="video-operations-options">
-            <div className="video-operations-options-heading">
-              <div>
-                <h3>{activeTitle}</h3>
-                <p>
-                  {mode === 'frame'
-                    ? '选择一个时间点，生成独立图片。'
-                    : mode === 'vocal'
-                      ? '先按选区提取音频，再运行人声分离。'
-                      : '按选区生成视频片段和/或独立音频。'}
-                </p>
-              </div>
-              <span className="video-operations-range">
-                {mode === 'frame'
-                  ? `${timecode(frameCfg.mode === 'first' ? 0 : frameCfg.mode === 'last' ? max - 1 : frameCfg.timeMs)} · ${fps ? `${fps.toFixed(2)} fps` : '帧率读取中'}`
-                  : `${timecode(clipCfg.startMs)} — ${timecode(clipCfg.endMs)}`}
-              </span>
-            </div>
-
             {ffmpegAvailable === false && (
               <div className="local-capability-alert" role="alert">
                 <strong>本机未检测到 FFmpeg</strong>
@@ -964,8 +1055,9 @@ export function VideoOperationsWorkbench({
             )}
 
             {mode === 'frame' ? (
-              <>
-                <div className="frame-preset-row" role="group" aria-label="取帧位置">
+              <div className="video-operations-option-line">
+                <span className="video-operations-option-label">取帧位置</span>
+                <div className="video-operations-choice-row" role="group" aria-label="取帧位置">
                   {(
                     [
                       ['first', '首帧'],
@@ -989,8 +1081,8 @@ export function VideoOperationsWorkbench({
                     </button>
                   ))}
                 </div>
-                <label className="audio-isolation-mode">
-                  输出格式
+                <label className="video-operations-inline-select">
+                  格式
                   <AppSelect
                     value={frameCfg.format}
                     onChange={(event) => {
@@ -1002,179 +1094,133 @@ export function VideoOperationsWorkbench({
                     <option value="jpg">JPG（体积小）</option>
                   </AppSelect>
                 </label>
-              </>
+              </div>
             ) : (
-              <>
-                {mode === 'clip' && (
-                  <>
-                    <div className="clip-keep-row" role="group" aria-label="保留内容">
-                      <span className="clip-keep-label">保留内容</span>
-                      {(
-                        [
-                          { video: true, audio: false, label: '只保留画面' },
-                          { video: false, audio: true, label: '只保留音频' },
-                          { video: true, audio: true, label: '画面 + 音频' }
-                        ] as const
-                      ).map((preset) => (
-                        <button
-                          key={preset.label}
-                          type="button"
-                          className={`btn-ghost small frame-preset-btn ${clipCfg.keepVideo === preset.video && clipCfg.keepAudio === preset.audio ? 'active' : ''}`}
-                          onClick={() => chooseRetention(preset.video, preset.audio)}
-                        >
-                          {preset.label}
-                        </button>
-                      ))}
+              <div className="video-operations-clip-options">
+                <div className="video-operations-option-line">
+                  <span className="video-operations-option-label">保留内容</span>
+                  <div className="video-operations-choice-row" role="group" aria-label="保留内容">
+                    {(
+                      [
+                        ['video-only', '仅画面'],
+                        ['audio-only', '仅音频'],
+                        ['video-with-audio', '画面 + 音频']
+                      ] as const
+                    ).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        className={clipOutput === value ? 'active' : ''}
+                        aria-pressed={clipOutput === value}
+                        onClick={() => {
+                          setClipOutput(value)
+                          if (value !== 'audio-only') setExtractVocals(false)
+                        }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {clipOutput === 'audio-only' && (
+                  <div className="video-operations-option-line">
+                    <span className="video-operations-option-label">音频处理</span>
+                    <div className="video-operations-choice-row" role="group" aria-label="音频处理">
+                      <button
+                        type="button"
+                        className={!extractVocals ? 'active' : ''}
+                        aria-pressed={!extractVocals}
+                        onClick={() => setExtractVocals(false)}
+                      >
+                        保留原音频
+                      </button>
+                      <button
+                        type="button"
+                        className={extractVocals ? 'active' : ''}
+                        aria-pressed={extractVocals}
+                        onClick={() => setExtractVocals(true)}
+                      >
+                        原音频 + 提取人声
+                      </button>
                     </div>
-                    {clipCfg.keepVideo && (
-                      <div className="video-operations-settings-grid">
-                        <label className="audio-isolation-mode">
-                          编码质量
-                          <AppSelect
-                            value={clipCfg.quality}
-                            onChange={(event) => {
-                              const quality = event.currentTarget.value as ClipQuality
-                              setClipCfg((previous) => ({ ...previous, quality }))
-                            }}
-                          >
-                            <option value="fast">快速复制（边界可能不精确）</option>
-                            <option value="balanced">平衡（CRF 18）</option>
-                            <option value="high">高质量（CRF 14）</option>
-                          </AppSelect>
-                        </label>
-                        <label className="audio-checkbox-row">
-                          <input
-                            type="checkbox"
-                            checked={clipCfg.includeAudio}
-                            onChange={(event) => {
-                              const includeAudio = event.currentTarget.checked
-                              setClipCfg((previous) => ({ ...previous, includeAudio }))
-                            }}
-                          />
-                          视频片段保留原声
-                        </label>
-                      </div>
-                    )}
-                    {canSeparateVocals && (
-                      <>
-                        <label className="audio-checkbox-row video-operations-separation-toggle">
-                          <input
-                            type="checkbox"
-                            checked={separateVocals}
-                            onChange={(event) => toggleSeparation(event.currentTarget.checked)}
-                          />
-                          同时分离人声
-                        </label>
-                        {clipCfg.keepAudio && (
-                          <div className="video-operations-settings-grid">
-                            <label className="audio-isolation-mode">
-                              音频格式
-                              <AppSelect
-                                value={separateVocals ? 'wav' : clipCfg.audioFormat}
-                                disabled={separateVocals}
-                                onChange={(event) => {
-                                  const audioFormat = event.currentTarget.value as AudioFormat
-                                  setClipCfg((previous) => ({ ...previous, audioFormat }))
-                                }}
-                              >
-                                <option value="wav">WAV（无损）</option>
-                                <option value="m4a">M4A（体积小）</option>
-                              </AppSelect>
-                            </label>
-                            <label className="audio-isolation-mode">
-                              采样率
-                              <AppSelect
-                                value={String(clipCfg.audioSampleRate)}
-                                onChange={(event) => {
-                                  const audioSampleRate =
-                                    event.currentTarget.value === '48000' ? 48000 : 44100
-                                  setClipCfg((previous) => ({ ...previous, audioSampleRate }))
-                                }}
-                              >
-                                <option value="44100">44.1 kHz</option>
-                                <option value="48000">48 kHz</option>
-                              </AppSelect>
-                            </label>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </>
+                  </div>
                 )}
-                {(mode === 'vocal' || separateVocals) && (
-                  <div className="video-operations-vocal-settings">
-                    <label className="audio-isolation-mode">
-                      分离模式
+                {needsVocalSeparation && (
+                  <div className="video-operations-option-line">
+                    <span className="video-operations-option-label">分离方式</span>
+                    <label className="video-operations-inline-select">
                       <AppSelect
                         value={vocalCfg.mode}
                         onChange={(event) => {
                           const nextMode = event.currentTarget.value as VocalMode
-                          setVocalCfg((previous) => ({
-                            ...previous,
-                            mode: nextMode,
-                            outputAccompaniment:
-                              nextMode === 'quality' && previous.outputAccompaniment
-                          }))
+                          setVocalCfg((previous) => ({ ...previous, mode: nextMode }))
                         }}
                       >
-                        <option value="quality">高质量分离（本地 AI 模型）</option>
-                        <option value="fast">快速增强（FFmpeg，不保证完全分离）</option>
+                        <option value="quality">高质量分离（本地 AI）</option>
+                        <option value="fast">快速人声增强（效果有限）</option>
                       </AppSelect>
                     </label>
-                    {vocalCfg.mode === 'quality' ? (
-                      <>
-                        <label className="audio-checkbox-row">
-                          <input
-                            type="checkbox"
-                            checked={vocalCfg.outputAccompaniment}
-                            disabled={separatorAvailable === false}
-                            onChange={(event) => {
-                              const outputAccompaniment = event.currentTarget.checked
-                              setVocalCfg((previous) => ({ ...previous, outputAccompaniment }))
-                            }}
-                          />
-                          同时输出伴奏
-                        </label>
-                        {separatorAvailable === false && (
-                          <div className="local-capability-alert" role="alert">
-                            <strong>本机未检测到高质量分离器</strong>
-                            <span>
-                              安装 audio-separator（BS-RoFormer 等）后才能运行；也可以改用快速增强。
-                            </span>
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <p className="crop-coordinate-hint">
-                        快速模式使用 FFmpeg
-                        滤镜增强人声，无法保证完全分离背景音乐，且不会输出独立伴奏。
-                      </p>
-                    )}
                   </div>
                 )}
-              </>
+                {separatorUnavailable && (
+                  <div className="video-operations-capability" role="alert">
+                    本机缺少高质量分离器；可安装 audio-separator，或选择快速人声增强。
+                  </div>
+                )}
+                <details className="video-operations-advanced">
+                  <summary>输出设置</summary>
+                  <div className="video-operations-advanced-fields">
+                    {clipOutput === 'audio-only' ? (
+                      <>
+                        <label className="video-operations-inline-select">
+                          音频格式
+                          <AppSelect
+                            value={needsVocalSeparation ? 'wav' : clipCfg.audioFormat}
+                            disabled={needsVocalSeparation}
+                            onChange={(event) => {
+                              const audioFormat = event.currentTarget.value as AudioFormat
+                              setClipCfg((previous) => ({ ...previous, audioFormat }))
+                            }}
+                          >
+                            <option value="wav">WAV（无损）</option>
+                            <option value="m4a">M4A（体积小）</option>
+                          </AppSelect>
+                        </label>
+                        <label className="video-operations-inline-select">
+                          采样率
+                          <AppSelect
+                            value={String(clipCfg.audioSampleRate)}
+                            onChange={(event) => {
+                              const audioSampleRate =
+                                event.currentTarget.value === '48000' ? 48000 : 44100
+                              setClipCfg((previous) => ({ ...previous, audioSampleRate }))
+                            }}
+                          >
+                            <option value="44100">44.1 kHz</option>
+                            <option value="48000">48 kHz</option>
+                          </AppSelect>
+                        </label>
+                      </>
+                    ) : (
+                      <label className="video-operations-inline-select">
+                        编码质量
+                        <AppSelect
+                          value={clipCfg.quality}
+                          onChange={(event) => {
+                            const quality = event.currentTarget.value as ClipQuality
+                            setClipCfg((previous) => ({ ...previous, quality }))
+                          }}
+                        >
+                          <option value="fast">快速复制（边界可能不精确）</option>
+                          <option value="balanced">平衡（CRF 18）</option>
+                          <option value="high">高质量（CRF 14）</option>
+                        </AppSelect>
+                      </label>
+                    )}
+                  </div>
+                </details>
+              </div>
             )}
-
-            <div className="video-operations-output">
-              <span>执行后生成</span>
-              {mode === 'frame' ? (
-                <strong>{frameCfg.format.toUpperCase()} 图片</strong>
-              ) : mode === 'vocal' ? (
-                <strong>
-                  人声音频
-                  {vocalCfg.mode === 'quality' && vocalCfg.outputAccompaniment ? ' + 伴奏' : ''}
-                </strong>
-              ) : (
-                <strong>
-                  {clipCfg.keepVideo ? '视频片段' : ''}
-                  {clipCfg.keepVideo && clipCfg.keepAudio ? ' + ' : ''}
-                  {clipCfg.keepAudio ? '音频片段' : ''}
-                  {separateVocals
-                    ? ` + 人声${vocalCfg.mode === 'quality' && vocalCfg.outputAccompaniment ? ' / 伴奏' : ''}`
-                    : ''}
-                </strong>
-              )}
-            </div>
           </section>
         </div>
 
@@ -1194,16 +1240,20 @@ export function VideoOperationsWorkbench({
             }
           >
             <Icon
-              name={mode === 'frame' ? 'frame' : mode === 'vocal' ? 'audio' : 'clip'}
+              name={mode === 'frame' ? 'frame' : clipOutput === 'audio-only' ? 'audio' : 'clip'}
               size={15}
             />
             {submitting
               ? '正在创建…'
               : mode === 'frame'
                 ? '抽取当前帧'
-                : mode === 'vocal'
-                  ? '提取并分离人声'
-                  : '执行视频截取'}
+                : clipOutput === 'audio-only'
+                  ? extractVocals
+                    ? '提取音频和人声'
+                    : '提取原音频'
+                  : clipOutput === 'video-only'
+                    ? '截取画面'
+                    : '截取画面和音频'}
           </button>
         </footer>
       </div>

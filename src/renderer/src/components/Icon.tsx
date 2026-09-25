@@ -50,6 +50,10 @@ export type IconName =
   | 'send-back'
   | 'play'
   | 'pause'
+  | 'volume'
+  | 'volume-off'
+  | 'fullscreen'
+  | 'fullscreen-exit'
   | 'send'
   | 'attach'
   | 'document'
@@ -352,6 +356,28 @@ const PATHS: Record<IconName, React.ReactNode> = {
   pause: (
     <>
       <path d="M8 5v14M16 5v14" />
+    </>
+  ),
+  volume: (
+    <>
+      <path d="M4 9v6h4l5 4V5L8 9H4Z" />
+      <path d="M16 9a4 4 0 0 1 0 6M18.5 6a8 8 0 0 1 0 12" />
+    </>
+  ),
+  'volume-off': (
+    <>
+      <path d="M4 9v6h4l5 4V5L8 9H4Z" />
+      <path d="m17 9 5 6m0-6-5 6" />
+    </>
+  ),
+  fullscreen: (
+    <>
+      <path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5" />
+    </>
+  ),
+  'fullscreen-exit': (
+    <>
+      <path d="M3 8h5V3M21 8h-5V3M3 16h5v5M21 16h-5v5" />
     </>
   ),
   send: (
