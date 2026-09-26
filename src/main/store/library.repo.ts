@@ -754,7 +754,30 @@ function setResourceFolderInternal(resourceId: string, folderId: string | null):
   ).run(folderId, resourceId, Date.now())
 }
 
+const LIBRARY_ROOT_FOLDERS = ['工作流', 'Prompt', 'Skill', '资产', '笔记'] as const
+
+function seedLibraryRootFolders(): void {
+  const database = getDb()
+  database.transaction(() => {
+    const seedKey = 'library_root_folders_v1'
+    if (database.prepare('SELECT value FROM settings WHERE key = ?').get(seedKey)) return
+    const hasRootFolder = database.prepare(
+      'SELECT id FROM library_folders WHERE name = ? COLLATE NOCASE AND parent_id IS NULL'
+    )
+    const insertFolder = database.prepare(
+      'INSERT INTO library_folders (id, name, parent_id, created_at, updated_at) VALUES (?, ?, NULL, ?, ?)'
+    )
+    const now = Date.now()
+    for (const name of LIBRARY_ROOT_FOLDERS) {
+      if (!hasRootFolder.get(name)) insertFolder.run(nanoid(12), name, now, now)
+    }
+    database.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+      .run(seedKey, '1')
+  })()
+}
+
 export function listFolders(): LibraryFolder[] {
+  seedLibraryRootFolders()
   return (getDb().prepare(
     `SELECT f.id, f.name, f.parent_id, f.created_at, f.updated_at,
        COUNT(DISTINCT rf.resource_id) AS resource_count

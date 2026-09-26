@@ -44,6 +44,43 @@ function folderPathOptions(folders: LibraryFolder[]): Array<{ id: string; label:
   return result
 }
 
+const LIBRARY_ROOT_ORDER = ['工作流', 'Prompt', 'Skill', '资产', '笔记']
+
+function sortLibraryFolders(folders: LibraryFolder[], parentId: string | null): LibraryFolder[] {
+  return folders.filter((folder) => folder.parentId === parentId).sort((left, right) => {
+    if (parentId === null) {
+      const leftRank = LIBRARY_ROOT_ORDER.indexOf(left.name)
+      const rightRank = LIBRARY_ROOT_ORDER.indexOf(right.name)
+      if (leftRank >= 0 || rightRank >= 0) {
+        if (leftRank < 0) return 1
+        if (rightRank < 0) return -1
+        if (leftRank !== rightRank) return leftRank - rightRank
+      }
+    }
+    return left.name.localeCompare(right.name, 'zh-CN')
+  })
+}
+
+function resourceIcon(resource: LibraryResourceSummary): 'text' | 'image' | 'assets' {
+  if (resource.formPreset === 'prompt') return 'text'
+  if (resource.formPreset === 'image' || resource.formPreset === 'style') return 'image'
+  return 'assets'
+}
+
+function resourceMatchesTreeSearch(resource: LibraryResourceSummary, search: string): boolean {
+  if (!search) return true
+  return `${resource.title} ${resource.description} ${resource.category?.name ?? ''} ${resource.formPreset} ${resource.tags.join(' ')}`
+    .toLocaleLowerCase().includes(search)
+}
+
+function folderContainsTreeMatch(folder: LibraryFolder, folders: LibraryFolder[], resources: LibraryResourceSummary[], search: string, ancestors = new Set<string>()): boolean {
+  if (!search || folder.name.toLocaleLowerCase().includes(search)) return true
+  if (ancestors.has(folder.id)) return false
+  const nextAncestors = new Set(ancestors).add(folder.id)
+  return resources.some((resource) => resource.folderIds[0] === folder.id && resourceMatchesTreeSearch(resource, search))
+    || sortLibraryFolders(folders, folder.id).some((child) => folderContainsTreeMatch(child, folders, resources, search, nextAncestors))
+}
+
 function ResourceCard({ resource, onOpen, onDragStart }: { resource: LibraryResourceSummary; onOpen: () => void; onDragStart?: React.DragEventHandler<HTMLButtonElement> }): React.JSX.Element {
   const [failed, setFailed] = useState(false)
   return (
@@ -173,6 +210,7 @@ function comparisonValue(component: LibraryResourceDetail['components'][number] 
 
 export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.JSX.Element {
   const [resources, setResources] = useState<LibraryResourceSummary[]>([])
+  const [treeResources, setTreeResources] = useState<LibraryResourceSummary[]>([])
   const [projects, setProjects] = useState<ProjectMeta[]>([])
   const [categories, setCategories] = useState<LibraryCategory[]>([])
   const [categoryId, setCategoryId] = useState('')
@@ -206,6 +244,7 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
   const openProject = useAppStore((state) => state.openProject)
   const currentBoardItems = loadedBoardId === boardId ? boardItems : []
   const currentBoardDetails = loadedBoardId === boardId ? boardDetails : {}
+  const treeSearch = query.trim().toLocaleLowerCase()
   const activeRevisionId = selectedRevisionId ?? (detail?.id === selectedId ? detail.selectedRevisionId : undefined)
   const availableCompareRevisionId = detail?.id === selectedId
     ? detail.revisions.find((revision) => revision.id !== activeRevisionId)?.id ?? ''
@@ -220,6 +259,21 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     ? compareDetail
     : null
   const folderOptions = useMemo(() => folderPathOptions(folders), [folders])
+
+  const loadTreeResources = useCallback(async (): Promise<void> => {
+    const collected: LibraryResourceSummary[] = []
+    let cursor: string | undefined
+    do {
+      const result = await window.api.searchLibrary({ cursor, limit: 100 })
+      if (!result.ok) {
+        useToastStore.getState().show(`资源目录读取失败：${result.error.message}`)
+        return
+      }
+      collected.push(...result.data.items)
+      cursor = result.data.nextCursor ?? undefined
+    } while (cursor)
+    setTreeResources(collected)
+  }, [])
 
   const loadPageData = useCallback(async (): Promise<void> => {
     const [projectResult, boardResult, folderResult, categoryResult] = await Promise.all([
@@ -236,9 +290,14 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
       setBoards(boardResult.data)
       setBoardId((current) => current || boardResult.data[0]?.id || '')
     }
-    if (folderResult.ok) setFolders(folderResult.data)
+    if (folderResult.ok) {
+      setFolders(folderResult.data)
+      const starterIds = folderResult.data.filter((folder) => folder.parentId === null && LIBRARY_ROOT_ORDER.includes(folder.name)).map((folder) => folder.id)
+      setExpandedFolders((current) => new Set([...current, ...starterIds]))
+    }
     if (categoryResult.ok) setCategories(categoryResult.data)
-  }, [])
+    await loadTreeResources()
+  }, [loadTreeResources])
 
   const loadResources = useCallback(async (cursor?: string, append = false): Promise<void> => {
     const result = await window.api.searchLibrary({ query, folderId: folderId || undefined, categoryId: categoryId || undefined, cursor, limit: 48 })
@@ -339,6 +398,7 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
   }
 
   const startFolderCreation = (parentId: string | null): void => {
+    setQuery('')
     setFolderDraft('')
     setFolderDraftParentId(parentId)
     setFolderActionId(null)
@@ -407,6 +467,9 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     const result = await window.api.setLibraryResourceFolder({ resourceId: detail.id, folderId: nextFolderId || null })
     if (!result.ok) return useToastStore.getState().show(`移动资源失败：${result.error.message}`)
     await loadResources()
+    await loadTreeResources()
+    const folderResult = await window.api.listLibraryFolders()
+    if (folderResult.ok) setFolders(folderResult.data)
     const updated = await window.api.getLibraryResource({ resourceId: detail.id, revisionId: detail.selectedRevisionId })
     if (updated.ok && updated.data) setDetail(updated.data)
     useToastStore.getState().show('资源已移到所选文件夹')
@@ -419,6 +482,7 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     setDetail(null)
     setSelectedId(null)
     await loadResources()
+    await loadTreeResources()
     useToastStore.getState().show(archived ? '资源已归档' : '资源已恢复')
   }
 
@@ -512,9 +576,33 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     useToastStore.getState().show(`已导入 ${result.data.imported} 份资源`)
   }
 
+  const renderResourceTreeItem = (resource: LibraryResourceSummary, depth: number): React.JSX.Element => (
+    <button
+      className={`library-tree-resource${selectedId === resource.id ? ' active' : ''}`}
+      key={resource.id}
+      style={{ paddingLeft: 28 + depth * 15 }}
+      title={`${resource.title} · ${typeName(resource.formPreset, resource.category?.name)}`}
+      onClick={() => { setSelectedId(resource.id); setSelectedRevisionId(resource.latestRevisionId) }}
+    >
+      <Icon name={resourceIcon(resource)} size={13} />
+      <span>{resource.title}</span>
+      <small>{resource.category?.name ?? typeName(resource.formPreset)}</small>
+    </button>
+  )
+
   const renderFolder = (folder: LibraryFolder, depth = 0): React.JSX.Element => {
-    const hasChildren = folders.some((item) => item.parentId === folder.id)
-    const expanded = expandedFolders.has(folder.id)
+    const childFolders = sortLibraryFolders(folders, folder.id)
+    const folderMatches = Boolean(treeSearch && folder.name.toLocaleLowerCase().includes(treeSearch))
+    const visibleChildFolders = treeSearch && !folderMatches
+      ? childFolders.filter((child) => folderContainsTreeMatch(child, folders, treeResources, treeSearch))
+      : childFolders
+    const directResources = treeResources.filter((resource) => resource.folderIds[0] === folder.id
+      && (!treeSearch || folderMatches || resourceMatchesTreeSearch(resource, treeSearch)))
+    if (treeSearch && !folderMatches && directResources.length === 0 && visibleChildFolders.length === 0) {
+      return <Fragment key={folder.id} />
+    }
+    const hasChildren = childFolders.length > 0 || treeResources.some((resource) => resource.folderIds[0] === folder.id)
+    const expanded = expandedFolders.has(folder.id) || Boolean(treeSearch)
     return (
       <Fragment key={folder.id}>
         <div className="library-folder-row">
@@ -525,8 +613,8 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
             </form>
           ) : (
             <>
-              <button className={`library-folder-select${folderId === folder.id ? ' active' : ''}`} style={{ paddingLeft: 10 + depth * 15 }} onClick={() => { setFolderId(folder.id); setFolderDraftParentId(undefined) }}>
-                <span className="library-folder-caret" onClick={(event) => { event.stopPropagation(); setExpandedFolders((current) => { const next = new Set(current); if (next.has(folder.id)) next.delete(folder.id); else next.add(folder.id); return next }) }}>{hasChildren ? expanded ? '⌄' : '›' : ''}</span>
+              <button className={`library-folder-select${folderId === folder.id ? ' active' : ''}`} style={{ paddingLeft: 10 + depth * 15 }} onClick={() => { setFolderId(folder.id); setFolderDraftParentId(undefined); if (hasChildren) setExpandedFolders((current) => new Set(current).add(folder.id)) }}>
+                <span className="library-folder-caret" aria-hidden="true" onClick={(event) => { event.stopPropagation(); setExpandedFolders((current) => { const next = new Set(current); if (next.has(folder.id)) next.delete(folder.id); else next.add(folder.id); return next }) }}>{hasChildren ? expanded ? '⌄' : '›' : ''}</span>
                 <Icon name="assets" size={13} /><span>{folder.name}</span><small>{folder.resourceCount}</small>
               </button>
               <button className="library-folder-add-child" title={`在「${folder.name}」下新建子文件夹`} aria-label={`在「${folder.name}」下新建子文件夹`} onClick={() => startFolderCreation(folder.id)}><Icon name="add" size={13} /></button>
@@ -541,7 +629,10 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
           )}
         </div>
         {folderDraftParentId === folder.id && renderFolderCreator(folder.id, depth + 1)}
-        {expanded && folders.filter((item) => item.parentId === folder.id).map((child) => renderFolder(child, depth + 1))}
+        {expanded && <>
+          {visibleChildFolders.map((child) => renderFolder(child, depth + 1))}
+          {directResources.map((resource) => renderResourceTreeItem(resource, depth + 1))}
+        </>}
       </Fragment>
     )
   }
@@ -561,25 +652,35 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
       {view === 'resources' ? (
         <div className="library-workspace">
           <aside className="library-collections">
-            <div className="library-category-heading"><strong>资源分类</strong><button title="新建分类" aria-label="新建资源分类" onClick={() => setCategoryEditor({})}><Icon name="add" size={14} /></button></div>
-            <button className={!categoryId ? 'active' : ''} onClick={() => setCategoryId('')}><Icon name="assets" size={14} /><span>全部分类</span></button>
-            <button className={categoryId === 'legacy' ? 'active' : ''} onClick={() => setCategoryId('legacy')}><Icon name="assets" size={14} /><span>未分类资源</span></button>
-            {categories.map((category) => <div className="library-category-row" key={category.id}>
-              <button className={categoryId === category.id ? 'active' : ''} onClick={() => setCategoryId(category.id)}><Icon name="assets" size={14} /><span>{category.name}</span><small>v{category.version}</small></button>
-              <button aria-label={`编辑分类 ${category.name}`} title={`编辑分类 ${category.name}`} onClick={() => setCategoryEditor({ initial: category })}><Icon name="edit" size={12} /></button>
-            </div>)}
-            <div className="library-collection-heading library-folder-heading">
-              <strong>文件夹</strong><span>{folders.length}</span>
-              <button className="library-folder-create-trigger" title="新建文件夹" aria-label="新建文件夹" onClick={() => startFolderCreation(null)}><Icon name="add" size={13} /></button>
+            <div className="library-tree-heading">
+              <strong><Icon name="assets" size={15} />资源箱</strong>
+              <small>{treeResources.length} 项</small>
+              <button title="新建资源分类" aria-label="新建资源分类" onClick={() => setCategoryEditor({})}><Icon name="add" size={13} /></button>
+              <button title="新建资源" aria-label="新建资源" onClick={() => { setSelectedId(null); setFormOpen(true) }}><Icon name="add" size={15} /></button>
             </div>
-            {folderDraftParentId === null && renderFolderCreator(null, 0)}
-            <button className={!folderId ? 'active' : ''} onClick={() => { setFolderId(''); setFolderDraftParentId(undefined) }}><Icon name="assets" size={14} /><span>全部资源</span></button>
-            <button className={folderId === 'root' ? 'active' : ''} onClick={() => { setFolderId('root'); setFolderDraftParentId(undefined) }}><Icon name="assets" size={14} /><span>根目录</span></button>
-            {folders.filter((item) => item.parentId === null).map((folder) => renderFolder(folder))}
+            <label className="library-tree-search"><Icon name="search" size={14} /><input aria-label="搜索资源目录" value={query} placeholder="搜索资源" onChange={(event) => setQuery(event.currentTarget.value)} /></label>
+            <div className="library-tree">
+              <button className={`library-tree-root${!folderId ? ' active' : ''}`} onClick={() => { setFolderId(''); setFolderDraftParentId(undefined) }}><Icon name="assets" size={13} /><span>全部资源</span><small>{treeResources.length}</small></button>
+              <button className={`library-tree-root${folderId === 'root' ? ' active' : ''}`} onClick={() => { setFolderId('root'); setFolderDraftParentId(undefined) }}><Icon name="assets" size={13} /><span>未归档</span><small>{treeResources.filter((resource) => !resource.folderIds[0]).length}</small></button>
+              <div className="library-collection-heading library-folder-heading">
+                <strong>目录</strong><span>{folders.length}</span>
+                <button className="library-folder-create-trigger" title="新建文件夹" aria-label="新建文件夹" onClick={() => startFolderCreation(null)}><Icon name="add" size={13} /></button>
+              </div>
+              {folderDraftParentId === null && renderFolderCreator(null, 0)}
+              {sortLibraryFolders(folders, null).map((folder) => renderFolder(folder))}
+              {treeResources.filter((resource) => !resource.folderIds[0] && resourceMatchesTreeSearch(resource, treeSearch)).map((resource) => renderResourceTreeItem(resource, 0))}
+            </div>
           </aside>
           <main className="library-resource-browser">
             <div className="library-browser-toolbar">
-              <label className="library-search"><Icon name="search" size={15} /><input aria-label="搜索资源库" value={query} placeholder="搜索名称、说明、标签和提示词" onChange={(event) => setQuery(event.currentTarget.value)} /></label>
+              <div className="library-filter-row" aria-label="资源分类筛选">
+                <button className={!categoryId ? 'active' : ''} onClick={() => setCategoryId('')}>全部分类</button>
+                <button className={categoryId === 'legacy' ? 'active' : ''} onClick={() => setCategoryId('legacy')}>未分类资源</button>
+                {categories.map((category) => <span className="library-category-filter-item" key={category.id}>
+                  <button className={categoryId === category.id ? 'active' : ''} onClick={() => setCategoryId(category.id)} title={`筛选分类：${category.name}`}>{category.name}<small>v{category.version}</small></button>
+                  <button className="library-category-edit" aria-label={`编辑分类 ${category.name}`} title={`编辑分类 ${category.name}`} onClick={() => setCategoryEditor({ initial: category })}><Icon name="edit" size={10} /></button>
+                </span>)}
+              </div>
             </div>
             {resources.length ? (
               <div className="library-resource-grid">
