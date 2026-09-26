@@ -5,6 +5,7 @@ import { IPC, type IpcEnvelope } from '../../shared/contracts'
 import type {
   CreateLibraryCollectionInput,
   CreateLibraryFolderInput,
+  RenameLibraryFolderInput,
   CreateLibraryResourceInput,
   CaptureProjectMediaInput,
   CaptureProjectNodesInput,
@@ -70,6 +71,9 @@ export function registerLibraryIpc(): void {
   ipcMain.handle(IPC.library.createFolder, (_event, input: CreateLibraryFolderInput) => {
     try { return ok(library.createFolder(input)) } catch (error) { return err('CREATE_FAILED', error) }
   })
+  ipcMain.handle(IPC.library.renameFolder, (_event, input: RenameLibraryFolderInput) => {
+    try { return ok(library.renameFolder(input)) } catch (error) { return err('RENAME_FAILED', error) }
+  })
   ipcMain.handle(IPC.library.deleteFolder, (_event, folderId: string) => {
     if (!folderId) return err('INVALID_INPUT', '文件夹 ID 不完整')
     try { return ok(library.deleteFolder(folderId)) } catch (error) { return err('DELETE_FAILED', error) }
@@ -100,18 +104,18 @@ export function registerLibraryIpc(): void {
   })
   ipcMain.handle(IPC.library.export, async (_event, input: { resourceIds?: string[] }) => {
     const result = await dialog.showSaveDialog({
-      title: '导出资源库',
-      defaultPath: 'Canvas Studio 资源库.canvaslib',
-      filters: [{ name: 'Canvas Studio 资源包', extensions: ['canvaslib'] }]
+      title: '导出资产包',
+      defaultPath: 'Canvas Studio 资产包.canvaslib',
+      filters: [{ name: 'Canvas Studio 资产包', extensions: ['canvaslib'] }]
     })
     if (result.canceled || !result.filePath) return err('CANCELLED', '已取消导出')
     try { return ok({ path: library.exportResourcePackage(result.filePath, input?.resourceIds) }) } catch (error) { return err('EXPORT_FAILED', error) }
   })
   ipcMain.handle(IPC.library.import, async () => {
     const result = await dialog.showOpenDialog({
-      title: '导入资源包',
+      title: '导入资产包',
       properties: ['openFile'],
-      filters: [{ name: 'Canvas Studio 资源包', extensions: ['canvaslib'] }]
+      filters: [{ name: 'Canvas Studio 资产包', extensions: ['canvaslib'] }]
     })
     if (result.canceled || result.filePaths.length === 0) return err('CANCELLED', '已取消导入')
     try { return ok({ imported: library.importResourcePackage(result.filePaths[0]) }) } catch (error) { return err('IMPORT_FAILED', error) }

@@ -24,6 +24,7 @@ import type { WorkspaceProfile } from '../workspace-profile'
 import type {
   CreateLibraryCollectionInput,
   CreateLibraryFolderInput,
+  RenameLibraryFolderInput,
   CreateLibraryResourceInput,
   CaptureProjectMediaInput,
   CaptureProjectNodesInput,
@@ -126,6 +127,7 @@ export const IPC = {
     setCollections: 'library:collections:set',
     listFolders: 'library:folders:list',
     createFolder: 'library:folders:create',
+    renameFolder: 'library:folders:rename',
     deleteFolder: 'library:folders:delete',
     setResourceFolder: 'library:folders:set-resource',
     listBoards: 'library:boards:list',
@@ -321,6 +323,7 @@ export interface LibraryArchiveInput {
 export type {
   CreateLibraryCollectionInput,
   CreateLibraryFolderInput,
+  RenameLibraryFolderInput,
   CreateLibraryResourceInput,
   CaptureProjectMediaInput,
   CaptureProjectNodesInput,

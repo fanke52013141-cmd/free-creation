@@ -42,6 +42,7 @@ export interface CaptureProjectNodesInput {
   projectId: string
   title: string
   folderId?: string
+  category?: { id: string; version: number }
   /** When set, the selected nodes become a new immutable revision of this asset. */
   resourceId?: string
   baseRevisionId?: string
@@ -50,6 +51,7 @@ export interface CaptureProjectNodesInput {
     nodeId: string
     title: string
     nodeType: string
+    slotId?: string
     text?: string
     mediaId?: string
     mediaMime?: string
@@ -68,6 +70,11 @@ export interface LibraryFolder {
 export interface CreateLibraryFolderInput {
   name: string
   parentId?: string | null
+}
+
+export interface RenameLibraryFolderInput {
+  folderId: string
+  name: string
 }
 
 export interface PublishLibraryRevisionInput extends CreateLibraryResourceInput {

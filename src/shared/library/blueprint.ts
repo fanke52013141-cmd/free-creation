@@ -211,7 +211,7 @@ export function planResourceNodes(
             title: slot.titleTemplate.replace(
               /\{(resource|slot|index)\}/g,
               (_match, key: string) =>
-                key === 'resource' ? title : key === 'slot' ? slot.label : String(index + 1).padStart(2, '0')
+                key === 'resource' ? title : key === 'slot' ? slot.label : String(index + 1)
             ),
             ...(text !== undefined ? { text } : {})
           }

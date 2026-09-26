@@ -13,6 +13,7 @@ import type {
   GatewayEvent,
   IpcEnvelope,
   CreateLibraryFolderInput,
+  RenameLibraryFolderInput,
   CaptureProjectNodesInput,
   LibraryArchiveInput,
   LibraryDetailInput,
@@ -132,6 +133,8 @@ const api = {
     ipcRenderer.invoke(IPC.library.listFolders),
   createLibraryFolder: (input: CreateLibraryFolderInput): Promise<IpcEnvelope<LibraryFolder>> =>
     ipcRenderer.invoke(IPC.library.createFolder, input),
+  renameLibraryFolder: (input: RenameLibraryFolderInput): Promise<IpcEnvelope<LibraryFolder>> =>
+    ipcRenderer.invoke(IPC.library.renameFolder, input),
   deleteLibraryFolder: (folderId: string): Promise<IpcEnvelope<boolean>> =>
     ipcRenderer.invoke(IPC.library.deleteFolder, folderId),
   setLibraryResourceFolder: (input: { resourceId: string; folderId?: string | null }): Promise<IpcEnvelope<boolean>> =>

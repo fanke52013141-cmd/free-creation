@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Editor, TLShapeId } from 'tldraw'
+import type { LibraryCategory } from '@shared/library/blueprint'
 import type { LibraryFolder, LibraryResourceSummary } from '@shared/library/types'
 import type { NodeCardShape } from '../canvas/NodeCardShape'
 import { Icon } from '../components/Icon'
@@ -29,17 +30,46 @@ function folderOptions(folders: LibraryFolder[]): Array<{ id: string; label: str
   return result
 }
 
+function categoryKey(category: LibraryCategory): string {
+  return `${category.id}@${category.version}`
+}
+
+function slotMatchesCanvasNode(slotType: string, nodeType: string): boolean {
+  if (nodeType === 'video' || nodeType === 'video-asset') return slotType === 'video-asset'
+  return slotType === nodeType
+}
+
+function initialSlotAssignments(
+  category: LibraryCategory,
+  shapes: NodeCardShape[]
+): Record<string, string> {
+  const counts = new Map<string, number>()
+  const result: Record<string, string> = {}
+  for (const shape of shapes) {
+    const matchingSlots = category.blueprint.slots.filter((slot) =>
+      slotMatchesCanvasNode(slot.nodeType, shape.props.nodeType)
+    )
+    const slot = matchingSlots.find((candidate) => candidate.multiple || (counts.get(candidate.id) ?? 0) === 0)
+    if (!slot) continue
+    result[shape.id] = slot.id
+    counts.set(slot.id, (counts.get(slot.id) ?? 0) + 1)
+  }
+  return result
+}
+
 export function SaveCanvasNodesDialog({ editor, projectId, nodeIds, onClose, onSaved }: Props): React.JSX.Element {
   const shapes = useMemo(() => nodeIds.map((id) => editor.getShape<NodeCardShape>(id))
     .filter((shape): shape is NodeCardShape => shape?.type === 'node-card'), [editor, nodeIds])
   const supported = useMemo(() => shapes.filter((shape) => {
     const { nodeType, mediaId } = shape.props
     return nodeType === 'text'
-      ? Boolean(shape.props.text.trim()) && shapes.findIndex((item) => item.props.nodeType === 'text' && item.props.text.trim()) === shapes.indexOf(shape)
-      : (['image', 'audio', 'video', 'video-asset'].includes(nodeType) && Boolean(mediaId) &&
-        (nodeType !== 'audio' || shapes.findIndex((item) => item.props.nodeType === 'audio' && item.props.mediaId) === shapes.indexOf(shape)))
+      ? Boolean(shape.props.text.trim())
+      : ['image', 'audio', 'video', 'video-asset'].includes(nodeType) && Boolean(mediaId)
   }), [shapes])
   const [folders, setFolders] = useState<LibraryFolder[]>([])
+  const [categories, setCategories] = useState<LibraryCategory[]>([])
+  const [selectedCategoryKey, setSelectedCategoryKey] = useState('')
+  const [slotAssignments, setSlotAssignments] = useState<Record<string, string>>({})
   const [folderId, setFolderId] = useState('')
   const [mode, setMode] = useState<'new' | 'revision'>('new')
   const [resourceQuery, setResourceQuery] = useState('')
@@ -51,12 +81,20 @@ export function SaveCanvasNodesDialog({ editor, projectId, nodeIds, onClose, onS
     : shapes[0] ? `${shapes[0].props.title}等${shapes.length}项` : '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const targetResource = resources.find((resource) => resource.id === resourceId)
   const options = useMemo(() => folderOptions(folders), [folders])
+  const categoryChoices = [...categories]
+  if (targetResource?.category && !categoryChoices.some((item) => categoryKey(item) === categoryKey(targetResource.category!))) {
+    categoryChoices.push(targetResource.category)
+  }
+  const selectedCategory = categoryChoices.find((item) => categoryKey(item) === selectedCategoryKey)
 
   useEffect(() => {
     let cancelled = false
-    void window.api.listLibraryFolders().then((result) => {
-      if (!cancelled && result.ok) setFolders(result.data)
+    void Promise.all([window.api.listLibraryFolders(), window.api.listLibraryCategories()]).then(([folderResult, categoryResult]) => {
+      if (cancelled) return
+      if (folderResult.ok) setFolders(folderResult.data)
+      if (categoryResult.ok) setCategories(categoryResult.data)
     })
     return () => { cancelled = true }
   }, [])
@@ -75,11 +113,20 @@ export function SaveCanvasNodesDialog({ editor, projectId, nodeIds, onClose, onS
     return () => { cancelled = true; window.clearTimeout(timer) }
   }, [mode, resourceQuery])
 
-  const targetResource = resources.find((resource) => resource.id === resourceId)
-
   const save = async (): Promise<void> => {
     if (!title.trim()) return setError('请填写资源名称')
     if (supported.length === 0) return setError('所选节点没有可保存的文本或媒体内容')
+    if (supported.length > 100) return setError('一次最多保存 100 个节点，请分批保存')
+    if (mode === 'new' && !selectedCategory) return setError('新建资源前请先选择资源分类')
+    if (selectedCategory) {
+      const missingMapping = supported.find((shape) => !slotAssignments[shape.id])
+      if (missingMapping) return setError(`请为「${missingMapping.props.title || '未命名节点'}」选择分类槽位`)
+      for (const slot of selectedCategory.blueprint.slots) {
+        const count = Object.values(slotAssignments).filter((slotId) => slotId === slot.id).length
+        if (slot.required && count === 0) return setError(`分类要求至少关联一个「${slot.label}」节点`)
+        if (!slot.multiple && count > 1) return setError(`「${slot.label}」只允许关联一个节点`)
+      }
+    }
     setBusy(true)
     setError('')
     const result = await window.api.captureLibraryNodes({
@@ -91,10 +138,12 @@ export function SaveCanvasNodesDialog({ editor, projectId, nodeIds, onClose, onS
         baseRevisionId: targetResource.latestRevisionId,
         changeNote: changeNote.trim() || '从画布保存新版本'
       } : {}),
+      ...(selectedCategory ? { category: { id: selectedCategory.id, version: selectedCategory.version } } : {}),
       nodes: supported.map((shape) => ({
         nodeId: shape.id,
         title: shape.props.title,
         nodeType: shape.props.nodeType,
+        ...(selectedCategory && slotAssignments[shape.id] ? { slotId: slotAssignments[shape.id] } : {}),
         text: shape.props.text,
         mediaId: shape.props.mediaId || undefined,
         mediaMime: shape.props.mediaMime || undefined
@@ -121,6 +170,18 @@ export function SaveCanvasNodesDialog({ editor, projectId, nodeIds, onClose, onS
             <button className={mode === 'new' ? 'active' : ''} onClick={() => setMode('new')}>新建资源</button>
             <button className={mode === 'revision' ? 'active' : ''} onClick={() => setMode('revision')}>保存为已有资源的新版本</button>
           </div>
+          <label className="library-form-field"><span>资源分类与节点映射</span>
+            <select value={selectedCategoryKey} onChange={(event) => {
+              const nextKey = event.currentTarget.value
+              const nextCategory = categoryChoices.find((item) => categoryKey(item) === nextKey)
+              setSelectedCategoryKey(nextKey)
+              setSlotAssignments(nextCategory ? initialSlotAssignments(nextCategory, supported) : {})
+            }}>
+              <option value="">{mode === 'new' ? '选择分类…' : '沿用未分类资源 / 选择分类…'}</option>
+              {categoryChoices.map((category) => <option key={categoryKey(category)} value={categoryKey(category)}>{category.name} · v{category.version}</option>)}
+            </select>
+            <small>{selectedCategory ? '节点会按所选槽位绑定到这份资源蓝图。' : '新建资源必须选择分类；旧资源可保持未分类。'}</small>
+          </label>
           {mode === 'new' ? <>
             <label className="library-form-field"><span>资源名称</span><input autoFocus maxLength={180} value={title} onChange={(event) => setTitle(event.currentTarget.value)} placeholder="例如：主角设定" /></label>
             <label className="library-form-field"><span>保存到文件夹</span><select value={folderId} onChange={(event) => setFolderId(event.currentTarget.value)}>
@@ -133,7 +194,11 @@ export function SaveCanvasNodesDialog({ editor, projectId, nodeIds, onClose, onS
               const id = event.currentTarget.value
               setResourceId(id)
               const resource = resources.find((item) => item.id === id)
-              if (resource) setTitle(resource.title)
+              if (resource) {
+                setTitle(resource.title)
+                setSelectedCategoryKey(resource.category ? categoryKey(resource.category) : '')
+                setSlotAssignments(resource.category ? initialSlotAssignments(resource.category, supported) : {})
+              }
             }}>
               <option value="">选择资源…</option>
               {resources.map((resource) => <option key={resource.id} value={resource.id}>{resource.title} · v{resource.revisionNumber}</option>)}
@@ -145,11 +210,23 @@ export function SaveCanvasNodesDialog({ editor, projectId, nodeIds, onClose, onS
           </>}
           <div className="library-canvas-save-nodes">
             <strong>将保存 {supported.length} / {shapes.length} 个节点</strong>
-            {shapes.map((shape) => <div key={shape.id} className={supported.includes(shape) ? '' : 'unsupported'}>
-              <Icon name={shape.props.nodeType === 'image' ? 'image' : shape.props.nodeType === 'video' || shape.props.nodeType === 'video-asset' ? 'video' : shape.props.nodeType === 'audio' ? 'audio' : 'text'} size={14} />
-              <span>{shape.props.title || '未命名节点'}</span>
-              {!supported.includes(shape) && <small>无可保存内容或已达单项上限</small>}
-            </div>)}
+            {shapes.map((shape) => {
+              const isSupported = supported.includes(shape)
+              const matchingSlots = selectedCategory?.blueprint.slots.filter((slot) => slotMatchesCanvasNode(slot.nodeType, shape.props.nodeType)) ?? []
+              return <div key={shape.id} className={isSupported ? '' : 'unsupported'}>
+                <Icon name={shape.props.nodeType === 'image' ? 'image' : shape.props.nodeType === 'video' || shape.props.nodeType === 'video-asset' ? 'video' : shape.props.nodeType === 'audio' ? 'audio' : 'text'} size={14} />
+                <span>{shape.props.title || '未命名节点'}</span>
+                {isSupported && selectedCategory && <label className="library-canvas-slot-select"><small>关联槽位</small><select aria-label={`${shape.props.title || '未命名节点'}关联槽位`} value={slotAssignments[shape.id] ?? ''} onChange={(event) => { const slotId = event.currentTarget.value; setSlotAssignments((current) => ({ ...current, [shape.id]: slotId })) }}>
+                  <option value="">选择槽位…</option>
+                  {matchingSlots.map((slot) => {
+                    const mappedElsewhere = !slot.multiple && Object.entries(slotAssignments).some(([nodeId, slotId]) => nodeId !== shape.id && slotId === slot.id)
+                    return <option key={slot.id} value={slot.id} disabled={mappedElsewhere}>{slot.label}{mappedElsewhere ? '（单项已占用）' : ''}</option>
+                  })}
+                </select></label>}
+                {!isSupported && <small>无可保存的文本或媒体内容</small>}
+                {isSupported && selectedCategory && matchingSlots.length === 0 && <small>分类中没有兼容的节点槽位</small>}
+              </div>
+            })}
           </div>
           {error && <div className="library-form-error" role="alert">{error}</div>}
         </div>

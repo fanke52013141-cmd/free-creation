@@ -8,6 +8,7 @@ import { nanoid } from 'nanoid'
 import type {
   CreateLibraryCollectionInput,
   CreateLibraryFolderInput,
+  RenameLibraryFolderInput,
   CreateLibraryResourceInput,
   CaptureProjectMediaInput,
   CaptureProjectNodesInput,
@@ -597,7 +598,12 @@ export function captureProjectNodes(input: CaptureProjectNodesInput): LibraryRes
     }
     seen.add(node.nodeId)
     const role = cleanText(node.title, 80) || `内容-${String(index + 1).padStart(2, '0')}`
-    const metadata = { sourceProjectId: input.projectId, sourceNodeId: node.nodeId, sourceNodeType: node.nodeType }
+    const metadata = {
+      sourceProjectId: input.projectId,
+      sourceNodeId: node.nodeId,
+      sourceNodeType: node.nodeType,
+      ...(input.category && node.slotId ? { librarySlotId: node.slotId } : {})
+    }
     if (node.nodeType === 'text') {
       const text = typeof node.text === 'string' ? node.text : ''
       if (text.length > MAX_TEXT_CHARS) throw new Error(`节点「${role}」文本超过 2,000,000 字符限制`)
@@ -638,10 +644,6 @@ export function captureProjectNodes(input: CaptureProjectNodesInput): LibraryRes
       metadata: { ...metadata, sourceMediaId: row.id }
     }
   })
-  if (components.filter((component) => component.valueType === 'audio').length > 1) throw new Error('一份资源最多只能包含一个音频节点')
-  if (components.filter((component) => component.valueType === 'text' || component.valueType === 'markdown').length > 1) {
-    throw new Error('一份资源最多只能包含一个文本节点')
-  }
   const preset: LibraryPreset = components.every((component) => component.valueType === 'image') ? 'image' : 'custom'
   if (input.resourceId) {
     const resource = getResourceDetail(input.resourceId)
@@ -653,13 +655,14 @@ export function captureProjectNodes(input: CaptureProjectNodesInput): LibraryRes
       sourceRevisionId: resource.latestRevisionId,
       title,
       formPreset: preset,
+      category: input.category,
       tags: resource.tags,
       collectionIds: resource.collectionIds,
       components,
       changeNote: cleanText(input.changeNote, 1000) || '从画布保存新版本'
     })
   }
-  return createResource({ title, formPreset: preset, folderId: input.folderId, components })
+  return createResource({ title, formPreset: preset, category: input.category, folderId: input.folderId, components })
 }
 
 export function publishRevision(input: PublishLibraryRevisionInput): LibraryResourceDetail {
@@ -777,6 +780,36 @@ export function createFolder(input: CreateLibraryFolderInput): LibraryFolder {
   getDb().prepare('INSERT INTO library_folders (id, name, parent_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
     .run(id, name, parentId, now, now)
   return { id, name, parentId, resourceCount: 0, createdAt: now, updatedAt: now }
+}
+
+export function renameFolder(input: RenameLibraryFolderInput): LibraryFolder {
+  const folderId = cleanText(input?.folderId, 100)
+  const name = cleanText(input?.name, 100)
+  if (!folderId) throw new Error('文件夹 ID 不完整')
+  if (!name) throw new Error('文件夹名称不能为空')
+  const database = getDb()
+  const folder = database.prepare(
+    'SELECT parent_id, created_at FROM library_folders WHERE id = ?'
+  ).get(folderId) as { parent_id: string | null; created_at: number } | undefined
+  if (!folder) throw new Error('文件夹不存在')
+  const collision = database.prepare(
+    'SELECT id FROM library_folders WHERE name = ? AND id <> ? AND ((parent_id IS NULL AND ? IS NULL) OR parent_id = ?)'
+  ).get(name, folderId, folder.parent_id, folder.parent_id)
+  if (collision) throw new Error('同一文件夹下不能有重名文件夹')
+  const updatedAt = Date.now()
+  database.prepare('UPDATE library_folders SET name = ?, updated_at = ? WHERE id = ?')
+    .run(name, updatedAt, folderId)
+  const count = database.prepare(
+    'SELECT COUNT(DISTINCT resource_id) AS count FROM library_resource_folders WHERE folder_id = ?'
+  ).get(folderId) as { count: number }
+  return {
+    id: folderId,
+    name,
+    parentId: folder.parent_id,
+    resourceCount: count.count,
+    createdAt: folder.created_at,
+    updatedAt
+  }
 }
 
 export function deleteFolder(folderId: string): boolean {

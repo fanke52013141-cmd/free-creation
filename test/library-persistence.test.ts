@@ -39,9 +39,13 @@ import {
 } from '../src/main/store/library-categories.repo'
 import {
   createResource,
+  captureProjectNodes,
   getResourceDetail,
   publishRevision,
   searchResources,
+  createFolder,
+  listFolders,
+  renameFolder,
   exportResourcePackage,
   importResourcePackage
 } from '../src/main/store/library.repo'
@@ -148,6 +152,86 @@ describe('library category persistence and transfer', () => {
     input.components[0].metadata.librarySlotId = 'prompt'
     expect(() => createResource(input)).toThrow('不兼容')
     expect(searchResources({}).items).toHaveLength(0)
+  })
+  it('supports multiple text nodes when a category defines separate content slots', () => {
+    const multiTextCategory: LibraryCategory = {
+      ...category,
+      id: 'custom-character',
+      name: '人物设定',
+      blueprint: {
+        ...category.blueprint,
+        slots: [...category.blueprint.slots, {
+          id: 'description',
+          label: '人物描述',
+          nodeType: 'text',
+          contractVersion: 3,
+          required: false,
+          multiple: false,
+          titleTemplate: '{resource} · {slot}'
+        }]
+      }
+    }
+    saveCategory({ category: multiTextCategory, baseVersion: 0 })
+    const input = resourceInput()
+    const resource = createResource({
+      ...input,
+      category: { id: multiTextCategory.id, version: 1 },
+      components: [...input.components, {
+        role: '人物描述',
+        valueType: 'text',
+        text: '修长的红眼树蛙格斗角色',
+        metadata: { librarySlotId: 'description' }
+      }]
+    })
+    expect(resource.components.filter((component) => component.valueType === 'text')).toHaveLength(2)
+    expect(searchResources({ categoryId: multiTextCategory.id }).items).toHaveLength(1)
+  })
+  it('captures multiple canvas text nodes with explicit category-slot mappings', () => {
+    const textCategory: LibraryCategory = {
+      id: 'canvas-notes',
+      version: 1,
+      name: '创作笔记',
+      description: '',
+      presentation: 'list',
+      blueprint: {
+        protocolVersion: 1,
+        layout: 'row',
+        slots: ['summary', 'prompt'].map((id) => ({
+          id,
+          label: id === 'summary' ? '描述' : '提示词',
+          nodeType: 'text' as const,
+          contractVersion: 3,
+          required: true,
+          multiple: false,
+          titleTemplate: '{resource} · {slot}'
+        }))
+      }
+    }
+    saveCategory({ category: textCategory, baseVersion: 0 })
+    const resource = captureProjectNodes({
+      projectId: 'project',
+      title: '角色资料',
+      category: { id: textCategory.id, version: 1 },
+      nodes: [
+        { nodeId: 'shape:summary', title: '人物描述', nodeType: 'text', text: '一个年轻的探险家', slotId: 'summary' },
+        { nodeId: 'shape:prompt', title: '形象提示词', nodeType: 'text', text: '暖色电影光线', slotId: 'prompt' }
+      ]
+    })
+    expect(resource.category?.id).toBe(textCategory.id)
+    expect(resource.components.map((component) => component.metadata.librarySlotId)).toEqual(['summary', 'prompt'])
+    expect(resource.components.map((component) => component.text)).toEqual(['一个年轻的探险家', '暖色电影光线'])
+  })
+  it('renames folders while keeping their children and rejects sibling name collisions', () => {
+    const parent = createFolder({ name: '角色资产' })
+    const child = createFolder({ name: '主角', parentId: parent.id })
+    createFolder({ name: '场景资产' })
+    expect(() => renameFolder({ folderId: parent.id, name: '场景资产' })).toThrow('重名')
+    const renamed = renameFolder({ folderId: parent.id, name: '人物设定' })
+    expect(renamed.name).toBe('人物设定')
+    expect(listFolders().find((item) => item.id === child.id)).toMatchObject({
+      name: '主角',
+      parentId: parent.id
+    })
   })
   it('copies selected files, records node ids, and compensates a failed canvas insertion', async () => {
     const resource = createResource(resourceInput())

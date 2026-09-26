@@ -27,37 +27,25 @@ describe('SQLite user_version migrations', () => {
     const state = fakeDatabase(0)
     expect(migrateDatabase(state.db)).toBe(0)
     expect(state.execs).toHaveLength(DB_SCHEMA_VERSION)
-    expect(state.pragmas).toEqual([
-      'user_version = 1',
-      'user_version = 2',
-      'user_version = 3',
-      'user_version = 4',
-      'user_version = 5',
-      'user_version = 6',
-      'user_version = 7',
-      'user_version = 8'
-    ])
+    expect(state.pragmas).toEqual(
+      Array.from({ length: DB_SCHEMA_VERSION }, (_value, index) => `user_version = ${index + 1}`)
+    )
+    expect(state.execs.at(-1)).toContain('CREATE TABLE library_folders')
   })
 
   it('runs only the missing migration for an existing v1 database', () => {
     const state = fakeDatabase(1)
     migrateDatabase(state.db)
-    expect(state.execs).toHaveLength(7)
+    expect(state.execs).toHaveLength(DB_SCHEMA_VERSION - 1)
     expect(state.execs[0]).toContain('history_snapshots')
     expect(state.execs[1]).toContain('runs')
     expect(state.execs[2]).toContain('agent_idempotency')
     expect(state.execs[3]).toContain('model_connections')
     expect(state.execs[4]).toContain('ALTER TABLE media ADD COLUMN name')
     expect(state.execs[5]).toContain('CREATE TABLE IF NOT EXISTS library_blobs')
-    expect(state.pragmas).toEqual([
-      'user_version = 2',
-      'user_version = 3',
-      'user_version = 4',
-      'user_version = 5',
-      'user_version = 6',
-      'user_version = 7',
-      'user_version = 8'
-    ])
+    expect(state.pragmas).toEqual(
+      Array.from({ length: DB_SCHEMA_VERSION - 1 }, (_value, index) => `user_version = ${index + 2}`)
+    )
   })
 
   it('refuses a database newer than this application instead of guessing a downgrade', () => {
