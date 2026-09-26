@@ -96,6 +96,23 @@ function mapDraftsToCategory(drafts: ComponentDraft[], category: LibraryCategory
   })
 }
 
+function mapDraftsAndFillRequiredSlots(drafts: ComponentDraft[], category: LibraryCategory): ComponentDraft[] {
+  const mapped = mapDraftsToCategory(drafts, category)
+  const filledSlots = new Set(mapped.flatMap((component) => {
+    const slotId = component.metadata.librarySlotId
+    const slot = typeof slotId === 'string'
+      ? category.blueprint.slots.find((candidate) => candidate.id === slotId && acceptsValue(candidate, component.valueType))
+      : undefined
+    return slot ? [slot.id] : []
+  }))
+  return [
+    ...mapped,
+    ...category.blueprint.slots
+      .filter((slot) => slot.required && !filledSlots.has(slot.id))
+      .map((slot) => basicDraft(slot.label, valueTypeForSlot(slot), { librarySlotId: slot.id }))
+  ]
+}
+
 function initialDrafts(detail: LibraryResourceDetail): ComponentDraft[] {
   return detail.components.map((component) => ({
     key: component.id,
@@ -261,7 +278,9 @@ export function LibraryResourceForm({
     const nextCategory = availableCategories.find((item) => categoryKey(item) === nextKey)
     setSelectedCategoryKey(nextKey)
     setComponents((current) => {
-      if (nextCategory) return detail ? mapDraftsToCategory(current, nextCategory) : requiredSlotDrafts(nextCategory)
+      if (nextCategory) return current.length === 0
+        ? requiredSlotDrafts(nextCategory)
+        : mapDraftsAndFillRequiredSlots(current, nextCategory)
       if (!detail) return []
       return current.map((item) => {
         const metadata = { ...item.metadata }
