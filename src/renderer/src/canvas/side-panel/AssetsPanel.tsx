@@ -278,7 +278,8 @@ export function AssetsPanel({
       toast(`收藏失败：${error instanceof Error ? error.message : String(error)}`)
     } finally {
       setSavingMediaId(null)
-}
+    }
+  }
   const handleBatchExport = async (): Promise<void> => {
     if (visible.length === 0) return toast('当前筛选没有可导出的素材')
     const res = await window.api.batchExportMedia(
