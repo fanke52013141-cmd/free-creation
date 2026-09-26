@@ -1013,7 +1013,8 @@ export function importResourcePackage(filePath: string): number {
   if (raw.boards !== undefined && (!Array.isArray(raw.boards) || raw.boards.length > 1000 || !raw.boards.every(isPackageBoard))) {
     throw new Error('资源包展板数据无效')
   }
-  const zipEntries = new Map(entries.map((entry) => [entry.entryName, entry]))
+  const zipEntries = new Map<string, (typeof entries)[number]>()
+  for (const entry of entries) zipEntries.set(entry.entryName, entry)
   const database = getDb()
   const collectionCache = new Map<string, string>()
   const resourceCount = raw.resources.length
