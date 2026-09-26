@@ -327,10 +327,8 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
   }
 
   const createFolder = async (): Promise<void> => {
-    if (!folderDraft.trim()) return
-    const parentId = folderDraftParentId !== undefined
-      ? folderDraftParentId
-      : folderId && folderId !== 'all' && folderId !== 'root' ? folderId : null
+    if (!folderDraft.trim() || folderDraftParentId === undefined) return
+    const parentId = folderDraftParentId
     const result = await window.api.createLibraryFolder({ name: folderDraft.trim(), parentId })
     if (!result.ok) return useToastStore.getState().show(`创建文件夹失败：${result.error.message}`)
     setFolderDraft('')
@@ -339,6 +337,42 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     if (parentId) setExpandedFolders((current) => new Set(current).add(parentId))
     setFolderId(result.data.id)
   }
+
+  const startFolderCreation = (parentId: string | null): void => {
+    setFolderDraft('')
+    setFolderDraftParentId(parentId)
+    setFolderActionId(null)
+    if (parentId) {
+      setExpandedFolders((current) => new Set(current).add(parentId))
+      setFolderId(parentId)
+    }
+  }
+
+  const cancelFolderCreation = (): void => {
+    setFolderDraft('')
+    setFolderDraftParentId(undefined)
+  }
+
+  const renderFolderCreator = (parentId: string | null, depth: number): React.JSX.Element => (
+    <form
+      className="library-folder-create"
+      style={{ paddingLeft: 10 + depth * 15 }}
+      onSubmit={(event) => { event.preventDefault(); void createFolder() }}
+    >
+      <Icon name="assets" size={13} />
+      <input
+        autoFocus
+        value={folderDraft}
+        maxLength={100}
+        aria-label={parentId ? '新建子文件夹名称' : '新建文件夹名称'}
+        placeholder={parentId ? '输入子文件夹名称' : '输入文件夹名称'}
+        onChange={(event) => setFolderDraft(event.currentTarget.value)}
+        onKeyDown={(event) => { if (event.key === 'Escape') cancelFolderCreation() }}
+      />
+      <button type="submit" aria-label="创建文件夹" disabled={!folderDraft.trim()}><Icon name="check" size={12} /></button>
+      <button type="button" aria-label="取消创建文件夹" onClick={cancelFolderCreation}><Icon name="close" size={12} /></button>
+    </form>
+  )
 
   const renameFolder = async (folder: LibraryFolder): Promise<void> => {
     const name = folderRenameDraft.trim()
@@ -495,10 +529,10 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
                 <span className="library-folder-caret" onClick={(event) => { event.stopPropagation(); setExpandedFolders((current) => { const next = new Set(current); if (next.has(folder.id)) next.delete(folder.id); else next.add(folder.id); return next }) }}>{hasChildren ? expanded ? '⌄' : '›' : ''}</span>
                 <Icon name="assets" size={13} /><span>{folder.name}</span><small>{folder.resourceCount}</small>
               </button>
+              <button className="library-folder-add-child" title={`在「${folder.name}」下新建子文件夹`} aria-label={`在「${folder.name}」下新建子文件夹`} onClick={() => startFolderCreation(folder.id)}><Icon name="add" size={13} /></button>
               <div className="library-folder-menu-wrap">
                 <button className="library-folder-actions" title={`文件夹操作：${folder.name}`} aria-label={`文件夹操作：${folder.name}`} aria-expanded={folderActionId === folder.id} onClick={() => setFolderActionId((current) => current === folder.id ? null : folder.id)}>⋯</button>
                 {folderActionId === folder.id && <div className="library-folder-menu">
-                  <button onClick={() => { setFolderDraftParentId(folder.id); setFolderDraft(''); setFolderId(folder.id); setFolderActionId(null) }}><Icon name="add" size={12} />新建子文件夹</button>
                   <button onClick={() => { setRenamingFolderId(folder.id); setFolderRenameDraft(folder.name); setFolderActionId(null) }}><Icon name="edit" size={12} />重命名</button>
                   <button className="danger" onClick={() => { setFolderActionId(null); void removeFolder(folder) }}><Icon name="trash" size={12} />删除</button>
                 </div>}
@@ -506,6 +540,7 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
             </>
           )}
         </div>
+        {folderDraftParentId === folder.id && renderFolderCreator(folder.id, depth + 1)}
         {expanded && folders.filter((item) => item.parentId === folder.id).map((child) => renderFolder(child, depth + 1))}
       </Fragment>
     )
@@ -514,20 +549,14 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
   return (
     <div className="resource-library-page">
       <header className="library-page-header">
-        <div className="library-page-brand">
-          <div><span className="library-eyebrow">CREATION LIBRARY</span><h1>资产库</h1></div>
-          <button className="library-back" onClick={onBack}><Icon name="home" size={16} />返回项目</button>
-        </div>
         <div className="library-page-actions">
+          <span className="library-current-view"><Icon name="assets" size={15} />资源</span>
           <button className="library-secondary" onClick={() => void importLibrary()}><Icon name="upload" size={15} />导入资产包</button>
           <button className="library-secondary" onClick={() => void exportLibrary()}><Icon name="download" size={15} />导出资产包</button>
           <button className="library-primary" onClick={() => { setSelectedId(null); setFormOpen(true) }}><span className="library-primary-icon"><Icon name="add" size={14} /></span>新建资源</button>
+          <button className="library-back" onClick={onBack}><Icon name="home" size={16} />返回项目</button>
         </div>
       </header>
-
-      <div className="library-view-switch">
-        <button className="active" disabled>资源</button>
-      </div>
 
       {view === 'resources' ? (
         <div className="library-workspace">
@@ -539,14 +568,14 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
               <button className={categoryId === category.id ? 'active' : ''} onClick={() => setCategoryId(category.id)}><Icon name="assets" size={14} /><span>{category.name}</span><small>v{category.version}</small></button>
               <button aria-label={`编辑分类 ${category.name}`} title={`编辑分类 ${category.name}`} onClick={() => setCategoryEditor({ initial: category })}><Icon name="edit" size={12} /></button>
             </div>)}
-            <div className="library-collection-heading library-folder-heading"><strong>文件夹</strong><span>{folders.length}</span></div>
+            <div className="library-collection-heading library-folder-heading">
+              <strong>文件夹</strong><span>{folders.length}</span>
+              <button className="library-folder-create-trigger" title="新建文件夹" aria-label="新建文件夹" onClick={() => startFolderCreation(null)}><Icon name="add" size={13} /></button>
+            </div>
+            {folderDraftParentId === null && renderFolderCreator(null, 0)}
             <button className={!folderId ? 'active' : ''} onClick={() => { setFolderId(''); setFolderDraftParentId(undefined) }}><Icon name="assets" size={14} /><span>全部资源</span></button>
             <button className={folderId === 'root' ? 'active' : ''} onClick={() => { setFolderId('root'); setFolderDraftParentId(undefined) }}><Icon name="assets" size={14} /><span>根目录</span></button>
             {folders.filter((item) => item.parentId === null).map((folder) => renderFolder(folder))}
-            <div className="library-new-collection">
-              <input value={folderDraft} maxLength={100} placeholder={folderDraftParentId ? `在「${folders.find((item) => item.id === folderDraftParentId)?.name ?? '所选文件夹'}」下新建` : folderId && folderId !== 'root' ? '新建子文件夹' : '新建文件夹'} onChange={(event) => setFolderDraft(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') void createFolder() }} />
-              <button aria-label="创建文件夹" disabled={!folderDraft.trim()} onClick={() => void createFolder()}><Icon name="add" size={14} /></button>
-            </div>
           </aside>
           <main className="library-resource-browser">
             <div className="library-browser-toolbar">
