@@ -305,7 +305,7 @@
   border-color: #51555d;
 }
 
-.project-create-node:focus-within {
+.project-create-node:has(input:focus-visible) {
   outline: 2px solid #b8bec7;
   outline-offset: 2px;
 }
