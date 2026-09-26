@@ -61,7 +61,7 @@ function RecipePreview({ component, onCopy }: { component: LibraryResourceDetail
         {variables.length === 0 && <small>这个配方没有变量，可直接查看或复制模板。</small>}
       </div>
       <pre>{preview || '（空提示词模板）'}</pre>
-      {component.metadata.modelParameters && typeof component.metadata.modelParameters === 'object' && (
+      {Boolean(component.metadata.modelParameters) && typeof component.metadata.modelParameters === 'object' && (
         <details className="library-recipe-parameters"><summary>模型参数与参考用途</summary>
           <pre>{JSON.stringify(component.metadata.modelParameters, null, 2)}</pre>
           {Array.isArray(component.metadata.referenceRoles) && <small>参考组件：{component.metadata.referenceRoles.filter((role): role is string => typeof role === 'string').join('、') || '无'}</small>}
@@ -270,7 +270,11 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
         const resource = await window.api.getLibraryResource({ resourceId: item.resourceId, revisionId: item.revisionId })
         return [`${item.resourceId}:${item.revisionId}`, resource.ok && resource.data ? resource.data : null] as const
       }))
-      if (!cancelled) setBoardDetails(Object.fromEntries(pairs.filter((pair): pair is readonly [string, LibraryResourceDetail] => Boolean(pair[1]))))
+      const details: Record<string, LibraryResourceDetail> = {}
+      for (const [key, detail] of pairs) {
+        if (detail) details[key] = detail
+      }
+      if (!cancelled) setBoardDetails(details)
     })()
     return () => { cancelled = true }
   }, [boardId])

@@ -856,6 +856,7 @@ export function CanvasSidePanel({
   onClose,
   onImport,
   onAddToCanvas,
+  onAddTextToCanvas,
   onOpenRuns
 }: CanvasSidePanelProps): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)

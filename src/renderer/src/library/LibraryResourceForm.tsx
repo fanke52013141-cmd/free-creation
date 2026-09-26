@@ -40,6 +40,11 @@ const PRESET_LABELS = {
   custom: '自定义组合'
 } as const
 
+const basicDraft = (role: string, valueType: LibraryValueType = 'text'): ComponentDraft => ({
+  key: crypto.randomUUID(), role, valueType, text: '',
+  ...(valueType === 'recipe' ? { variablesText: '', parametersText: '{}', referenceRolesText: '' } : {})
+})
+
 function initialDrafts(detail: LibraryResourceDetail | undefined, preset: LibraryResourceDetail['formPreset'] | 'image'): ComponentDraft[] {
   if (detail) return detail.components.map((component) => ({
     key: component.id,
@@ -56,15 +61,11 @@ function initialDrafts(detail: LibraryResourceDetail | undefined, preset: Librar
       referenceRolesText: Array.isArray(component.metadata.referenceRoles) ? component.metadata.referenceRoles.join(', ') : ''
     } : {})
   }))
-  const basic = (role: string, valueType: LibraryValueType = 'text'): ComponentDraft => ({
-    key: crypto.randomUUID(), role, valueType, text: '',
-    ...(valueType === 'recipe' ? { variablesText: '', parametersText: '{}', referenceRolesText: '' } : {})
-  })
   switch (preset) {
-    case 'prompt': return [basic('prompt')]
-    case 'character': return [basic('description'), basic('prompt')]
-    case 'scene': return [basic('description'), basic('prompt')]
-    case 'style': return [basic('style-notes'), basic('style-prompt')]
+    case 'prompt': return [basicDraft('prompt')]
+    case 'character': return [basicDraft('description'), basicDraft('prompt')]
+    case 'scene': return [basicDraft('description'), basicDraft('prompt')]
+    case 'style': return [basicDraft('style-notes'), basicDraft('style-prompt')]
     default: return []
   }
 }
@@ -100,7 +101,7 @@ export function LibraryResourceForm({ collections, detail, onCancel, onSave }: L
     }])
   }
   const addRecipeComponent = (): void => {
-    setComponents((items) => [...items, basic('prompt-recipe', 'recipe')])
+    setComponents((items) => [...items, basicDraft('prompt-recipe', 'recipe')])
   }
   const addFiles = (files: FileList | null): void => {
     if (!files?.length) return
