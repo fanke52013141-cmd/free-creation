@@ -9,6 +9,8 @@ export const CONFIG_NODE_TYPES = new Set([
   'video',
   'video-frame',
   'video-clip',
+  'video-depth',
+  'video-clay',
   'video-audio',
   'vocal-separate',
   'speech',

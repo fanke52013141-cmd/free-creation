@@ -224,6 +224,33 @@ export function installBrowserMock(): void {
           audioSeparator: { available: false, message: '浏览器演示不检测本机工具' }
         }
       }),
+    getVideoEngineStatus: () =>
+      Promise.resolve({
+        ok: true,
+        data: {
+          pythonAvailable: false,
+          ready: false,
+          installing: false,
+          progress: '',
+          message: '浏览器演示不支持本地 CUDA 推理'
+        }
+      }),
+    installVideoEngine: () =>
+      Promise.resolve({
+        ok: false,
+        error: { code: 'MOCK', message: '请在桌面版应用中安装本地推理环境' }
+      }),
+    convertVideoDepth: () =>
+      Promise.resolve({
+        ok: false,
+        error: { code: 'MOCK', message: '浏览器演示不支持本地深度视频转换' }
+      }),
+    convertVideoClay: () =>
+      Promise.resolve({
+        ok: false,
+        error: { code: 'MOCK', message: '浏览器演示不支持本地白模视频转换' }
+      }),
+    cancelVideoConversion: () => Promise.resolve({ ok: true, data: false }),
     pickMedia: async (projectId: string) => ({ ok: true, data: await media.pick(projectId) }),
     listMedia: (projectId: string) => Promise.resolve({ ok: true, data: media.list(projectId) }),
     deleteMedia: (id: string) => Promise.resolve({ ok: true, data: media.remove(id) }),

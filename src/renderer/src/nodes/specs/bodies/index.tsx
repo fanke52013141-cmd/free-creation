@@ -10,6 +10,7 @@ export { ImageSplitBody, ImageSplitSettings } from './image-split'
 export { ImageGenerateBody } from './image-gen'
 export { ImageEditBody, ImageEditSettings } from './image-edit'
 export { VideoBody } from './video'
+export { VideoAiBody, VideoAiSettings } from './video-ai'
 export {
   VideoAudioBody,
   VideoAudioSettings,

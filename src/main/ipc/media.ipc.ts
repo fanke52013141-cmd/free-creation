@@ -42,6 +42,13 @@ import {
   generateAudioWaveform,
   getLocalMediaCapabilities
 } from '../media/video-transform'
+import {
+  cancelVideoConversion,
+  convertVideoClay,
+  convertVideoDepth,
+  getVideoEngineStatus,
+  installVideoEngine
+} from '../media/video-conversion'
 
 function ok<T>(data: T): IpcEnvelope<T> {
   return { ok: true, data }
@@ -151,6 +158,41 @@ async function importAll(projectId: string, paths: string[]): Promise<MediaImpor
 }
 
 export function registerMediaIpc(): void {
+  ipcMain.handle(IPC.media.videoEngineStatus, async (): Promise<IpcEnvelope<import('../../shared/contracts').VideoEngineStatus>> => {
+    try {
+      return ok(await getVideoEngineStatus())
+    } catch (error) {
+      return err('VIDEO_ENGINE_STATUS_FAILED', error instanceof Error ? error.message : String(error))
+    }
+  })
+  ipcMain.handle(IPC.media.videoEngineInstall, async (): Promise<IpcEnvelope<{ started: boolean }>> => {
+    try {
+      return ok(await installVideoEngine())
+    } catch (error) {
+      return err('VIDEO_ENGINE_INSTALL_FAILED', error instanceof Error ? error.message : String(error))
+    }
+  })
+  ipcMain.handle(IPC.media.videoConvertDepth, async (_event, input: import('../../shared/contracts').VideoConversionInput): Promise<IpcEnvelope<MediaAsset>> => {
+    if (!input?.projectId || !input.sourceMediaId || !input.jobId || !input.config)
+      return err('INVALID_INPUT', '缺少深度视频转换参数')
+    try {
+      return ok(await convertVideoDepth(input as Parameters<typeof convertVideoDepth>[0]))
+    } catch (error) {
+      return err('VIDEO_DEPTH_FAILED', error instanceof Error ? error.message : String(error))
+    }
+  })
+  ipcMain.handle(IPC.media.videoConvertClay, async (_event, input: import('../../shared/contracts').VideoConversionInput): Promise<IpcEnvelope<MediaAsset>> => {
+    if (!input?.projectId || !input.sourceMediaId || !input.jobId || !input.config)
+      return err('INVALID_INPUT', '缺少白模视频转换参数')
+    try {
+      return ok(await convertVideoClay(input as Parameters<typeof convertVideoClay>[0]))
+    } catch (error) {
+      return err('VIDEO_CLAY_FAILED', error instanceof Error ? error.message : String(error))
+    }
+  })
+  ipcMain.handle(IPC.media.videoConvertCancel, (_event, input: { jobId?: string }): IpcEnvelope<boolean> => {
+    return ok(typeof input?.jobId === 'string' ? cancelVideoConversion(input.jobId) : false)
+  })
   ipcMain.handle(
     IPC.media.localCapabilities,
     async (): Promise<IpcEnvelope<import('../../shared/contracts').LocalMediaCapabilities>> => {

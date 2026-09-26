@@ -9,6 +9,8 @@ import type {
   IpcEnvelope,
   GatewayEvent,
   LocalMediaCapabilities,
+  VideoConversionInput,
+  VideoEngineStatus,
   ResolveModelFeatureInput,
   ResolvedModelFeature
 } from '../contracts'
@@ -70,6 +72,11 @@ export interface GatewayClient {
    * 兼容旧版 headless 调用方与纯执行器单测注入的最小 Gateway mock。
    */
   getLocalMediaCapabilities?: () => Promise<IpcEnvelope<LocalMediaCapabilities>>
+  getVideoEngineStatus?: () => Promise<IpcEnvelope<VideoEngineStatus>>
+  installVideoEngine?: () => Promise<IpcEnvelope<{ started: boolean }>>
+  convertVideoDepth?: (input: VideoConversionInput) => Promise<IpcEnvelope<MediaAsset>>
+  convertVideoClay?: (input: VideoConversionInput) => Promise<IpcEnvelope<MediaAsset>>
+  cancelVideoConversion?: (jobId: string) => Promise<IpcEnvelope<boolean>>
 
   // ── 本地媒体处理 ──
   cropImage(input: ImageCropTransformInput): Promise<IpcEnvelope<MediaAsset>>

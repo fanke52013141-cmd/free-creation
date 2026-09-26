@@ -160,6 +160,10 @@ export const projectVideoOutputs = (shape: NodeCardShape): RawNodeOutputs =>
 export const projectVideoFrameOutputs = (shape: NodeCardShape): RawNodeOutputs =>
   latestResultMediaOutput(shape, 'image', 'out-image')
 
+/** Both local video AI transforms publish one independent MP4 asset through out-video. */
+export const projectVideoAiOutputs = (shape: NodeCardShape): RawNodeOutputs =>
+  latestResultMediaOutput(shape, 'video', 'out-video')
+
 /**
  * 视频截取（合并节点，契约 v5）一次运行可物化两条产物：画面写入 out-video、
  * 音频写入 out-audio。结果集合是扁平列表，因此按 MIME 主类型各取最近一条，

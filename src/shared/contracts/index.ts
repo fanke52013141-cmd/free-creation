@@ -60,6 +60,11 @@ export const IPC = {
     audioWaveform: 'media:audio-waveform',
     vocalSeparate: 'media:vocal-separate',
     localCapabilities: 'media:local-capabilities',
+    videoEngineStatus: 'media:video-engine-status',
+    videoEngineInstall: 'media:video-engine-install',
+    videoConvertDepth: 'media:video-convert-depth',
+    videoConvertClay: 'media:video-convert-clay',
+    videoConvertCancel: 'media:video-convert-cancel',
     pick: 'media:pick',
     list: 'media:list',
     delete: 'media:delete',
@@ -337,6 +342,24 @@ export interface LocalMediaCapabilities {
   ffmpeg: LocalToolCapability
   ffprobe: LocalToolCapability
   audioSeparator: LocalToolCapability
+}
+
+/** State of the app-managed local CUDA runtime used by the video conversion nodes. */
+export interface VideoEngineStatus {
+  pythonAvailable: boolean
+  ready: boolean
+  installing: boolean
+  progress: string
+  message: string
+  gpuName?: string
+}
+
+export interface VideoConversionInput {
+  projectId: string
+  sourceMediaId: string
+  /** Stable for one run so the UI can cancel its active child process. */
+  jobId: string
+  config: import('../video-conversion').VideoDepthConfig | import('../video-conversion').VideoClayConfig
 }
 
 // ── 本地 ComfyUI 语音复刻（IndexTTS-2.5）──

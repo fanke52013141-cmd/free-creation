@@ -30,6 +30,11 @@ export const rendererGateway: GatewayClient = {
 
   // ── 本地媒体处理 ──
   getLocalMediaCapabilities: () => window.api.getLocalMediaCapabilities(),
+  getVideoEngineStatus: () => window.api.getVideoEngineStatus(),
+  installVideoEngine: () => window.api.installVideoEngine(),
+  convertVideoDepth: (input) => window.api.convertVideoDepth(input),
+  convertVideoClay: (input) => window.api.convertVideoClay(input),
+  cancelVideoConversion: (jobId) => window.api.cancelVideoConversion(jobId),
   cropImage: (input) => window.api.cropImage(input),
   splitImageGrid: (input) => window.api.splitImageGrid(input),
   extractVideoFrame: (input) => window.api.extractVideoFrame(input),

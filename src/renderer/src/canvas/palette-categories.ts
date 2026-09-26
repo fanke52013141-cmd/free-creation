@@ -9,7 +9,7 @@ import type { NodeTypeSpec } from '../nodes/registry'
 export const PALETTE_NODE_GROUPS = {
   input: ['text', 'file', 'chat', 'ai-process'],
   image: ['image', 'image-gen', 'image-edit', 'image-crop', 'image-split'],
-  video: ['video-asset', 'video', 'video-frame', 'video-clip'],
+  video: ['video-asset', 'video', 'video-frame', 'video-clip', 'video-depth', 'video-clay'],
   audio: ['audio', 'speech', 'tts', 'voice-design'],
   logic: ['storyboard', 'structured', 'json', 'processor', 'iterate', 'code', 'director']
 } as const
@@ -34,7 +34,7 @@ export const PALETTE_CATEGORY_META: Record<
     label: '视频创作',
     shortLabel: '视频',
     icon: 'video',
-    description: '生成、截取和处理视频'
+    description: '生成、截取和转换视频'
   },
   audio: {
     label: '声音创作',

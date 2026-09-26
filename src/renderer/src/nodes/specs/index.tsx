@@ -43,6 +43,8 @@ import {
   VideoClipSettings,
   VideoFrameBody,
   VideoFrameSettings,
+  VideoAiBody,
+  VideoAiSettings,
   VocalSeparateBody,
   VocalSeparateSettings
 } from './bodies'
@@ -79,6 +81,7 @@ import {
   videoClipExecutor,
   videoFrameExecutor
 } from '../../engine/executors/videoTransforms'
+import { videoDepthExecutor, videoClayExecutor } from '../../engine/executors/videoAi'
 import { vocalSeparateExecutor } from '../../engine/executors/vocalSeparate'
 import { directorExecutor } from '../../engine/executors/director'
 import {
@@ -108,6 +111,7 @@ import {
   projectVideoAudioOutputs,
   projectVideoClipOutputs,
   projectVideoFrameOutputs,
+  projectVideoAiOutputs,
   projectVocalSeparateOutputs
 } from './outputProjections'
 import { parseStructuredDataConfig } from '../structured-data'
@@ -488,6 +492,42 @@ export function registerBaseNodeTypes(): void {
     executor: videoClipExecutor,
     SettingsPanel: VideoClipSettings,
     Body: VideoClipBody
+  })
+  registerNodeType({
+    type: 'video-depth',
+    contractVersion: 1,
+    label: '深度视频',
+    icon: 'video',
+    color: '#7c3aed',
+    defaultSize: { w: 340, h: 260 },
+    description: '使用本地 CUDA 推理将视频转换为灰度深度视频；源音频可选保留。',
+    category: 'video',
+    ports: {
+      in: [input('in-video', '源视频', 'video', '需要转换的输入视频。', { required: true })],
+      out: [output('out-video', '深度视频', 'video', '逐帧深度估计生成的灰度视频资产。')]
+    },
+    projectOutputs: projectVideoAiOutputs,
+    executor: videoDepthExecutor,
+    SettingsPanel: VideoAiSettings,
+    Body: VideoAiBody
+  })
+  registerNodeType({
+    type: 'video-clay',
+    contractVersion: 1,
+    label: '白模视频',
+    icon: 'video',
+    color: '#64748b',
+    defaultSize: { w: 340, h: 260 },
+    description: '使用视频深度估计生成白色浮雕光照视频，可调整浮雕强度与光源。',
+    category: 'video',
+    ports: {
+      in: [input('in-video', '源视频', 'video', '需要转换的输入视频。', { required: true })],
+      out: [output('out-video', '白模视频', 'video', '由估计深度和可调材质光照合成的视频资产。')]
+    },
+    projectOutputs: projectVideoAiOutputs,
+    executor: videoClayExecutor,
+    SettingsPanel: VideoAiSettings,
+    Body: VideoAiBody
   })
   registerNodeType({
     type: 'video-audio',

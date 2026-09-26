@@ -47,7 +47,9 @@ import type {
   WorkflowTemplateRecord,
   VideoSubmitInput,
   VideoSubmitResult,
-  AudioGenerateInput
+  AudioGenerateInput,
+  VideoConversionInput,
+  VideoEngineStatus
 } from '../shared/contracts'
 import type {
   SaveModelConnectionInput,
@@ -134,6 +136,16 @@ const api = {
     ipcRenderer.invoke(IPC.media.vocalSeparate, input),
   getLocalMediaCapabilities: (): Promise<IpcEnvelope<LocalMediaCapabilities>> =>
     ipcRenderer.invoke(IPC.media.localCapabilities),
+  getVideoEngineStatus: (): Promise<IpcEnvelope<VideoEngineStatus>> =>
+    ipcRenderer.invoke(IPC.media.videoEngineStatus),
+  installVideoEngine: (): Promise<IpcEnvelope<{ started: boolean }>> =>
+    ipcRenderer.invoke(IPC.media.videoEngineInstall),
+  convertVideoDepth: (input: VideoConversionInput): Promise<IpcEnvelope<MediaAsset>> =>
+    ipcRenderer.invoke(IPC.media.videoConvertDepth, input),
+  convertVideoClay: (input: VideoConversionInput): Promise<IpcEnvelope<MediaAsset>> =>
+    ipcRenderer.invoke(IPC.media.videoConvertClay, input),
+  cancelVideoConversion: (jobId: string): Promise<IpcEnvelope<boolean>> =>
+    ipcRenderer.invoke(IPC.media.videoConvertCancel, { jobId }),
   ttsGenerate: (input: TtsGenerateInput): Promise<IpcEnvelope<VoiceCloneResult>> =>
     ipcRenderer.invoke(IPC.media.ttsGenerate, input),
   comfyui: {

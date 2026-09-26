@@ -31,6 +31,7 @@ import { codeExecutor } from './code'
 import { structuredExecutor } from './structured'
 import { directorExecutor } from './director'
 import { iterateExecutor } from './iterate'
+import { videoDepthExecutor, videoClayExecutor } from './videoAi'
 
 /**
  * 全局执行器注册表。key = ActiveNodeTypeId，value = 该节点的执行函数。
@@ -51,6 +52,8 @@ export const EXECUTOR_REGISTRY: Record<string, NodeExecutor> = {
   'video-frame': videoFrameExecutor,
   'video-clip': videoClipExecutor,
   'video-audio': videoAudioExecutor,
+  'video-depth': videoDepthExecutor,
+  'video-clay': videoClayExecutor,
   // ── 音频语音 ──
   'vocal-separate': vocalSeparateExecutor,
   tts: ttsExecutor,

@@ -1,0 +1,110 @@
+.video-ai-body {
+  display: grid;
+  gap: 9px;
+  padding: 14px 16px;
+  color: var(--text-primary, #e5e7eb);
+  font-size: 12px;
+}
+
+.video-ai-body-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 650;
+}
+
+.video-ai-body p,
+.video-ai-engine p {
+  margin: 0;
+  color: var(--text-secondary, #9ca3af);
+  line-height: 1.55;
+}
+
+.video-ai-body-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.video-ai-body-meta span {
+  padding: 3px 7px;
+  border-radius: 5px;
+  color: var(--text-secondary, #a1a1aa);
+  background: rgb(255 255 255 / 5%);
+  font-size: 10px;
+}
+
+.video-ai-settings {
+  display: grid;
+  gap: 14px;
+}
+
+.video-ai-engine {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 3%);
+}
+
+.video-ai-engine-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #fbbf24;
+  font-size: 12px;
+}
+
+.video-ai-engine-state.is-ready { color: #4ade80; }
+
+.video-ai-state-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.video-ai-engine p,
+.video-ai-engine small,
+.contract-settings-hint { font-size: 11px; }
+
+.video-ai-engine small { color: var(--text-secondary, #9ca3af); }
+.video-ai-engine .video-ai-error { color: #f87171; }
+
+.video-ai-install-button {
+  width: fit-content;
+  padding: 7px 11px;
+  border: 0;
+  border-radius: 6px;
+  color: white;
+  background: #7c3aed;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.video-ai-install-button:disabled { cursor: not-allowed; opacity: .5; }
+
+.video-ai-settings select {
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 6px;
+  color: inherit;
+  background: #20202a;
+  font: inherit;
+}
+
+.video-ai-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.video-ai-range { display: grid; gap: 6px; font-size: 12px; }
+.video-ai-range span { display: flex; justify-content: space-between; }
+.video-ai-range b { color: var(--text-secondary, #a1a1aa); font-weight: 500; }
+.video-ai-range input { width: 100%; accent-color: #8b5cf6; }
