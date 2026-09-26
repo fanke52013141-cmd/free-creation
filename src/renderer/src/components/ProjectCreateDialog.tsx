@@ -1,7 +1,6 @@
 import { useEffect, useId, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { WorkspaceProfile } from '@shared/workspace-profile'
-import { defaultWorkspaceProfile, GENERAL_WORKSPACE_NODE_TYPES } from '@shared/workspace-profile'
 import { NODE_CATEGORY_IDS, type PaletteCategoryId } from '@shared/palette-preferences'
 import { allNodeTypes } from '../nodes/registry'
 import {
@@ -9,41 +8,13 @@ import {
   registerExtendedNodeTypes,
   registerScriptNodeType
 } from '../nodes/specs'
-import {
-  PALETTE_CATEGORY_META,
-  nodesForPaletteCategory,
-  paletteCategoryForNode
-} from '../canvas/palette-categories'
+import { PALETTE_CATEGORY_META, nodesForPaletteCategory } from '../canvas/palette-categories'
 import { Icon } from './Icon'
 import './project-create-dialog.css'
 
 registerBaseNodeTypes()
 registerScriptNodeType()
 registerExtendedNodeTypes()
-
-const PRESETS: Array<{ id: WorkspaceProfile['presetId']; label: string }> = [
-  { id: 'general', label: '通用创作' },
-  { id: 'image', label: '图像创作' },
-  { id: 'video', label: '视频创作' },
-  { id: 'audio', label: '音频创作' },
-  { id: 'all', label: '全部节点' }
-]
-
-function presetNodeIds(preset: WorkspaceProfile['presetId']): string[] {
-  const types = allNodeTypes()
-  if (preset === 'all') return types.map((node) => node.type)
-  if (preset === 'general') return [...GENERAL_WORKSPACE_NODE_TYPES]
-  const selected = new Set<PaletteCategoryId>(['input'])
-  if (preset === 'image') selected.add('image')
-  if (preset === 'video') selected.add('video')
-  if (preset === 'audio') selected.add('audio')
-  return types
-    .filter((node) => {
-      const category = paletteCategoryForNode(node.type)
-      return category !== null && selected.has(category)
-    })
-    .map((node) => node.type)
-}
 
 export interface ProjectCreateDialogProps {
   title: string
@@ -65,21 +36,14 @@ export function ProjectCreateDialog({
   onSubmit
 }: ProjectCreateDialogProps): React.JSX.Element {
   const dialogId = useId()
-  const descriptionId = `${dialogId}-description`
   const nameInputId = `${dialogId}-name`
   const searchInputId = `${dialogId}-search`
   const [name, setName] = useState(initialName)
   const [preset, setPreset] = useState<WorkspaceProfile['presetId']>(
-    initialProfile?.presetId ?? (nameRequired ? 'general' : 'all')
+    initialProfile?.presetId ?? 'all'
   )
   const [selected, setSelected] = useState<Set<string>>(
-    () =>
-      new Set(
-        initialProfile?.visibleNodeTypeIds ??
-          (nameRequired
-            ? defaultWorkspaceProfile().visibleNodeTypeIds
-            : allNodeTypes().map((node) => node.type))
-      )
+    () => new Set(initialProfile?.visibleNodeTypeIds ?? allNodeTypes().map((node) => node.type))
   )
   const [keyword, setKeyword] = useState('')
   const [busy, setBusy] = useState(false)
@@ -102,10 +66,6 @@ export function ProjectCreateDialog({
     return () => window.removeEventListener('keydown', onKey)
   }, [busy, onCancel])
 
-  const choosePreset = (next: WorkspaceProfile['presetId']): void => {
-    setPreset(next)
-    setSelected(new Set(presetNodeIds(next)))
-  }
   const toggleNode = (id: string): void => {
     setPreset('custom')
     setSelected((current) => {
@@ -131,7 +91,7 @@ export function ProjectCreateDialog({
       return
     }
     if (selected.size === 0) {
-      setError('至少选择一个节点，之后仍可在工作台设置中调整')
+      setError('至少选择一个节点')
       return
     }
     setBusy(true)
@@ -159,22 +119,14 @@ export function ProjectCreateDialog({
         if (event.target === event.currentTarget && !busy) onCancel()
       }}
     >
-      <section
-        className="project-create-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        aria-describedby={descriptionId}
-      >
+      <section className="project-create-dialog" role="dialog" aria-modal="true" aria-label={title}>
         <header className="project-create-header">
           <div className="project-create-heading">
             <span className="project-create-brand-icon" aria-hidden="true">
               <Icon name="workflow" size={18} />
             </span>
             <div>
-              <span className="project-create-eyebrow">工作空间配置</span>
               <h2>{title}</h2>
-              <p id={descriptionId}>配置项目名称和工作台中可使用的节点</p>
             </div>
           </div>
           <button
@@ -223,36 +175,6 @@ export function ProjectCreateDialog({
                 )}
               </span>
             </label>
-          </div>
-
-          <div className="project-create-section-heading">
-            <div className="project-create-section-title">
-              <span className="project-create-section-icon" aria-hidden="true">
-                <Icon name="grid" size={16} />
-              </span>
-              <div>
-                <div className="project-create-title-line">
-                  <h3>工作台节点</h3>
-                  <span className="project-create-count" aria-live="polite">
-                    已选 {selected.size}
-                  </span>
-                </div>
-                <p>选择后会控制工作台可添加的节点，不会自动放到画布上。</p>
-              </div>
-            </div>
-            <div className="project-create-presets" role="group" aria-label="工作台预设">
-              {PRESETS.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={preset === item.id ? 'is-selected' : ''}
-                  aria-pressed={preset === item.id}
-                  onClick={() => choosePreset(item.id)}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
           </div>
 
           <div className="project-create-categories" aria-label="按分类选择节点">
@@ -328,9 +250,6 @@ export function ProjectCreateDialog({
           <span className="project-create-error" role="alert">
             {error}
           </span>
-          {!error && (
-            <span className="project-create-footer-hint">已选择 {selected.size} 个节点</span>
-          )}
           <button
             type="button"
             className="project-create-cancel"
