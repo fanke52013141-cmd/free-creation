@@ -4,6 +4,7 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { registerAllNodeTypes } from './helpers/registerNodes'
 import { activeNodeTypes, getNodeType } from '@renderer/nodes/registry'
+import { LIBRARY_NODE_ADAPTERS } from '@shared/library/blueprint'
 import {
   ACTIVE_NODE_TYPE_IDS,
   LEGACY_NODE_TYPE_IDS,
@@ -16,6 +17,13 @@ beforeAll(registerAllNodeTypes)
 const legacy: readonly LegacyNodeTypeId[] = LEGACY_NODE_TYPE_IDS
 
 describe('节点合规门禁', () => {
+  it('资源蓝图的内容适配器必须匹配真实节点契约版本', () => {
+    for (const [type, adapter] of Object.entries(LIBRARY_NODE_ADAPTERS)) {
+      const spec = activeNodeTypes().find((node) => node.type === type)
+      expect(spec, `${type} 必须是可创建节点`).toBeDefined()
+      expect(spec?.contractVersion, `${type} 的资源适配器必须随契约一起更新`).toBe(adapter.contractVersion)
+    }
+  })
   it('所有可创建节点都是 ActiveNodeTypeId，历史节点不进入创建入口', () => {
     const active = activeNodeTypes()
     expect(active.length).toBeGreaterThan(0)
