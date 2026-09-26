@@ -421,7 +421,7 @@ export function LibraryResourceForm({
               {availableCategories.map((category) => <option key={categoryKey(category)} value={categoryKey(category)}>{category.name}</option>)}
             </select>
             {detail && selectedCategory && <small>本次保存会记录当前资源内容；之后可在详情中查看和对比每次迭代。</small>}
-            {!selectedCategory && <small>可以直接组合图片、音频、视频、文件和文本；未分类资源可在资源库的“未分类”中找到。</small>}
+            {!selectedCategory && <small>可以直接组合图片、音频、视频、文件和文本；未分类资源可在“未分类”中找到，也能之后再指定分类。</small>}
           </label>
           <label className="library-form-field"><span>资源名称</span><input autoFocus maxLength={180} value={title} onChange={(event) => setTitle(event.currentTarget.value)} placeholder="例如：主角设定" /></label>
           <label className="library-form-field"><span>说明</span><textarea value={description} maxLength={20000} onChange={(event) => setDescription(event.currentTarget.value)} placeholder="记录用途、来源或使用建议" /></label>
