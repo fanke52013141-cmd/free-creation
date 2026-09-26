@@ -431,7 +431,8 @@ export const LOCAL_ENGINE_SOURCE_LABELS: Readonly<Record<string, string>> = {
   'local:ffmpeg-frame': '本地抽帧',
   'local:ffmpeg-clip': '本地截视频',
   'local:ffmpeg-audio': '本地提取音频',
-  'local:vocal-extraction': '本地提取人声'
+  'local:vocal-extraction': '本地提取人声',
+  'local:video-depth-anything-small': '本地视频深度估计'
 }
 
 /** 来源标签的唯一出口：内部 ID 一律换成人话，未登记的 local ID 也不外泄。 */

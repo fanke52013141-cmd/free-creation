@@ -224,7 +224,7 @@ describe('v1.2 §16.7 命名统一', () => {
       expect(stripComments(body)).not.toContain('不需要运行本节点')
     }
     expect(imageBody).toContain('导入图片')
-    expect(audioBody).toContain('点击上传音频文件')
+    expect(audioBody).toContain('选择音频文件')
     expect(videoBody).toContain('导入视频')
     expect(fileBody).toContain('导入文件')
   })
@@ -465,7 +465,7 @@ describe('v1.2 §16.15 语音节点：控件只在所选后端真会发送该字
     expect(settings.indexOf('码率')).toBeGreaterThan(gate)
     expect(settings.indexOf('audioChannel')).toBeGreaterThan(gate)
     const body = speech.slice(0, speech.indexOf('export function SpeechSettings'))
-    expect(body).toContain('音调 {config.pitch}')
+    expect(body).toContain('value={config.pitch}')
     for (const parameter of ['语速', '音量', '音调']) {
       expect(body).toContain(`aria-label="${parameter}"`)
     }

@@ -2,7 +2,7 @@
 
 > 审计基线：`f519ac3` · 2026-08-31。详细审计、连线关系和参考项目差异见 [NODE_PROTOCOL_AUDIT_2026_08_31.md](./NODE_PROTOCOL_AUDIT_2026_08_31.md)。
 
-本表是当前 **24 个可创建节点** 的发布前协议索引。新增或修改节点前必须同步更新本表、`NODE_CONTRACT_SPEC.md`、契约快照与连线测试；历史节点仅为兼容读取，不进入创建菜单。表中「版本 / 端口 id」以及明确写出的端口类型、基数和 Schema 由 `test/compliance-matrix-doc.test.ts` 与注册契约逐行比对，写错或漏行会直接让测试变红。
+本表是当前 **27 个可创建节点** 的发布前协议索引。新增或修改节点前必须同步更新本表、`NODE_CONTRACT_SPEC.md`、契约快照与连线测试；历史节点仅为兼容读取，不进入创建菜单。表中「版本 / 端口 id」以及明确写出的端口类型、基数和 Schema 由 `test/compliance-matrix-doc.test.ts` 与注册契约逐行比对，写错或漏行会直接让测试变红。
 
 | 节点                      | 版本 | 输入端口（类型 / 基数）                                         | 输出端口（类型 / Schema）                                       | 执行与投影                               | 结论 |
 | ------------------------- | ---- | --------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------- | ---- |
@@ -14,6 +14,8 @@
 | 图片编辑 `image-edit`     | 2    | `in-image` image / one / 必填；`in-text` text / many            | `out-image` image                                               | executor + projectOutputs                | 通过 |
 | 视频生成 `video`          | 7    | 首帧、尾帧、参考图/视频/音频、提示词包、文本                    | `out-video` video                                               | executor + projectOutputs                | 通过 |
 | 视频资产 `video-asset`    | 2    | 无                                                              | `out-video` video                                               | executor + projectOutputs                | 通过 |
+| 深度视频 `video-depth`    | 1    | `in-video` video / one / 必填                                   | `out-video` video                                               | executor + projectOutputs                | 通过 |
+| 白模视频 `video-clay`     | 1    | `in-video` video / one / 必填                                   | `out-video` video                                               | executor + projectOutputs                | 通过 |
 | 视频取帧 `video-frame`    | 4    | `in-video` video / one / 必填                                   | `out-image` image                                               | executor + projectOutputs                | 通过 |
 | 视频截取 `video-clip`     | 5    | `in-video` video / one / 必填                                   | `out-video` video（可选）；`out-audio` audio（可选）            | executor + projectOutputs                | 通过 |
 | 视频提音 `video-audio`    | 4    | `in-video` video / one / 必填                                   | `out-audio` audio                                               | executor + projectOutputs                | 通过 |

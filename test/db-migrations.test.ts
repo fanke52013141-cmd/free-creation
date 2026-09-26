@@ -33,25 +33,28 @@ describe('SQLite user_version migrations', () => {
       'user_version = 3',
       'user_version = 4',
       'user_version = 5',
-      'user_version = 6'
+      'user_version = 6',
+      'user_version = 7'
     ])
   })
 
   it('runs only the missing migration for an existing v1 database', () => {
     const state = fakeDatabase(1)
     migrateDatabase(state.db)
-    expect(state.execs).toHaveLength(5)
+    expect(state.execs).toHaveLength(6)
     expect(state.execs[0]).toContain('history_snapshots')
     expect(state.execs[1]).toContain('runs')
     expect(state.execs[2]).toContain('agent_idempotency')
     expect(state.execs[3]).toContain('model_connections')
     expect(state.execs[4]).toContain('ALTER TABLE media ADD COLUMN name')
+    expect(state.execs[5]).toContain('CREATE TABLE IF NOT EXISTS library_blobs')
     expect(state.pragmas).toEqual([
       'user_version = 2',
       'user_version = 3',
       'user_version = 4',
       'user_version = 5',
-      'user_version = 6'
+      'user_version = 6',
+      'user_version = 7'
     ])
   })
 
