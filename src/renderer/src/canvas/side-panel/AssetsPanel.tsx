@@ -185,14 +185,12 @@ export function AssetsPanel({
   editor,
   onImport,
   onAddToCanvas,
-  onAddTextToCanvas,
   onOpenRun
 }: {
   projectId: string
   editor: Editor | null
   onImport: () => void
   onAddToCanvas: (asset: MediaAsset) => void
-  onAddTextToCanvas: (text: string, title: string) => void
   onOpenRun: (nodeId: string, runId: string) => void
 }): React.JSX.Element {
   const assets = useMediaStore((state) => state.assets)
@@ -302,7 +300,7 @@ export function AssetsPanel({
         <button className={libraryMode ? 'active' : ''} onClick={() => setLibraryMode(true)}>资源库</button>
       </div>
       {libraryMode ? (
-        <LibraryResourcePicker projectId={projectId} onAddMedia={onAddToCanvas} onAddText={onAddTextToCanvas} />
+        <LibraryResourcePicker projectId={projectId} editor={editor} />
       ) : (
       <>
       <div className="assets-toolbar">

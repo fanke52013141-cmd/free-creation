@@ -253,3 +253,29 @@
   .library-form-mask { padding: 8px; }
   .library-form-header,.library-form-scroll,.library-form-footer { padding-left: 14px; padding-right: 14px; }
 }
+
+/* Category schemas share the resource editor and preview the node mapping. */
+.library-slot-options, .library-slot-row, .library-picker-batch { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
+.library-slot-row { padding: 12px; border: 1px solid #ffffff20; border-radius: 8px; }
+.library-slot-row > span { flex: 1; min-width: 150px; }
+.library-slot-row small, .library-blueprint-nodes small { display: block; opacity: .65; margin-top: 6px; }
+.library-slot-upload { cursor: pointer; padding: 8px; border: 1px solid #ffffff25; border-radius: 6px; }
+.library-slot-upload input { max-width: 200px; display: block; }
+.library-blueprint-preview { border: 1px solid #ffffff25; border-radius: 10px; padding: 16px; margin-top: 20px; }
+.library-blueprint-nodes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 12px; overflow: auto; }
+.library-blueprint-nodes.layout-row { display: flex; }
+.library-blueprint-nodes > span { padding: 12px; border: 1px solid #ffffff25; border-radius: 8px; min-width: 130px; }
+.library-blueprint-nodes b { display: block; margin-top: 6px; overflow-wrap: anywhere; }
+.library-resource-card.presentation-profile .library-resource-cover { aspect-ratio: 3 / 4; }
+.library-resource-card.presentation-list { display: flex; align-items: center; }
+.library-resource-card.presentation-list .library-resource-cover { width: 80px; min-width: 80px; height: 80px; aspect-ratio: 1; }
+.library-resource-card.presentation-list .library-resource-type { display: none; }
+.library-picker-batch button { flex: 1; padding: 10px; }
+
+.library-category-dialog button:not(.library-form-primary), .library-slot-row button, .library-picker-batch button {
+  border: 1px solid #ffffff24; border-radius: 7px; background: #ffffff08; color: #c3cee2; padding: 7px 11px; cursor: pointer;
+}
+.library-category-dialog button:disabled, .library-slot-row button:disabled { opacity: .4; cursor: not-allowed; }
+.library-category-dialog .library-component-edit { margin-bottom: 12px; }
+.library-slot-options label { font-size: 12px; }
+.library-form-field small { color: #93a1bb; }

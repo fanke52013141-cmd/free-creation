@@ -39,7 +39,6 @@ interface CanvasSidePanelProps {
   onClose: () => void
   onImport: () => void
   onAddToCanvas: (asset: MediaAsset) => void
-  onAddTextToCanvas: (text: string, title: string) => void
   onOpenRuns: () => void
 }
 
@@ -856,7 +855,6 @@ export function CanvasSidePanel({
   onClose,
   onImport,
   onAddToCanvas,
-  onAddTextToCanvas,
   onOpenRuns
 }: CanvasSidePanelProps): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
@@ -893,7 +891,6 @@ export function CanvasSidePanel({
           editor={editor}
           onImport={onImport}
           onAddToCanvas={onAddToCanvas}
-          onAddTextToCanvas={onAddTextToCanvas}
           onOpenRun={(nodeId, runId) => {
             setRunFocus({ nodeId, runId })
             onOpenRuns()

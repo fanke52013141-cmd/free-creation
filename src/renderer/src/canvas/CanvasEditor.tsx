@@ -1,3 +1,4 @@
+import { ResourceInsertRequest } from '../library/ResourceInsertRequest'
 import { Tldraw, createShapeId, type Editor, type TLShapeId } from 'tldraw'
 import 'tldraw/tldraw.css'
 import './node-scrollbars.css'
@@ -1944,6 +1945,7 @@ export function CanvasEditor({ project, initialSnapshot, workspaceProfile }: Can
       )}
       {/* 搜索覆盖层（顶栏按钮触发，在 Tldraw 同级渲染） */}
       {editorInstance && <SearchPalette editor={editorInstance} />}
+      {editorInstance && <ResourceInsertRequest editor={editorInstance} projectId={project.id} />}
       <CanvasSidePanel
         tab={panelTab}
         projectId={project.id}
@@ -1962,29 +1964,6 @@ export function CanvasEditor({ project, initialSnapshot, workspaceProfile }: Can
           if (!editor) return
           const screen = editor.pageToScreen(editor.getViewportPageBounds().center)
           createMediaNodes([asset], screen.x, screen.y)
-        }}
-        onAddTextToCanvas={(text, title) => {
-          const editor = editorRef.current
-          const spec = getNodeType('text')
-          if (!editor || !spec) return
-          const center = editor.getViewportPageBounds().center
-          const placement = findNodePlacement(editor, center, spec.defaultSize)
-          const id = createShapeId()
-          editor.createShape({
-            id,
-            type: 'node-card',
-            x: placement.x,
-            y: placement.y,
-            props: {
-              nodeType: 'text',
-              title,
-              text,
-              w: spec.defaultSize.w,
-              h: spec.defaultSize.h
-            }
-          })
-          markUndoPoint(editor, 'insert-library-text')
-          editor.select(id)
         }}
         onOpenRuns={() => setPanelTab('runs')}
       />
