@@ -50,7 +50,7 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const [playing, setPlaying] = useState(false)
   const [volume, setVolume] = useState(0.75)
   const [muted, setMuted] = useState(false)
-  const waveform = waveformData?.projectId === project?.id && waveformData.mediaId === shape.props.mediaId
+  const waveform = waveformData !== null && waveformData.projectId === project?.id && waveformData.mediaId === shape.props.mediaId
     ? waveformData.peaks
     : []
 
