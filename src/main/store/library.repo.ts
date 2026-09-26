@@ -1,9 +1,10 @@
+import { validateCategoryContent } from '../../shared/library/blueprint'
+import { revisionCategory, pinCategory, importRevisionCategory, exportCategoryVersions, importCategoryDefinition } from './library-categories.repo'
 import { createHash } from 'crypto'
 import AdmZip from 'adm-zip'
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, renameSync, statSync, writeFileSync } from 'fs'
 import { basename, extname, join } from 'path'
 import { nanoid } from 'nanoid'
-import type { MediaAsset } from '../../shared/types'
 import type {
   CreateLibraryCollectionInput,
   CreateLibraryResourceInput,
@@ -22,7 +23,7 @@ import type {
   SetLibraryCollectionsInput
 } from '../../shared/library/types'
 import { getDataDir, getDb } from './db'
-import { deleteMedia, getMediaAbsPath, saveBufferAsset } from './media.repo'
+import { getMediaAbsPath } from './media.repo'
 
 const MAX_COMPONENT_BYTES = 128 * 1024 * 1024
 const MAX_TEXT_CHARS = 2_000_000
@@ -108,15 +109,19 @@ function resourceTags(resourceId: string): string[] {
 }
 
 function resourceSummary(row: ResourceRow): LibraryResourceSummary {
+  const category = revisionCategory(row.latest_revision_id)
+  const cover = category?.coverSlotId ? readComponents(row.latest_revision_id).find((component) =>
+    component.metadata.librarySlotId === category.coverSlotId && component.valueType === 'image')?.blobPath : row.cover_path
   return {
     id: row.id,
     formPreset: row.form_preset,
     title: row.title,
     description: row.description,
+    category,
     latestRevisionId: row.latest_revision_id,
     revisionNumber: row.revision_number,
     componentCount: row.component_count,
-    ...(row.cover_path ? { coverPath: row.cover_path } : {}),
+    ...(cover ? { coverPath: cover } : {}),
     tags: resourceTags(row.id),
     collectionIds: resourceCollections(row.id),
     updatedAt: row.updated_at,
@@ -347,6 +352,13 @@ export function searchResources(input: LibrarySearchInput = {}): {
     conditions.push('r.form_preset = ?')
     params.push(input.formPreset)
   }
+  if (input.categoryId) {
+    if (input.categoryId === 'legacy') conditions.push('NOT EXISTS (SELECT 1 FROM library_revision_blueprints bp WHERE bp.revision_id = rev.id)')
+    else {
+      conditions.push('EXISTS (SELECT 1 FROM library_revision_blueprints bp WHERE bp.revision_id = rev.id AND bp.category_id = ?)')
+      params.push(input.categoryId)
+    }
+  }
   if (input.collectionId) {
     conditions.push('EXISTS (SELECT 1 FROM library_collection_items ci WHERE ci.resource_id = r.id AND ci.collection_id = ?)')
     params.push(input.collectionId)
@@ -422,6 +434,7 @@ export function getResourceDetail(id: string, revisionId?: string): LibraryResou
   if (!current) return null
   return {
     ...resourceSummary(row),
+    category: revisionCategory(current.id),
     selectedRevisionId: current.id,
     selectedRevisionNumber: current.revision_number,
     selectedTitle: current.title,
@@ -464,6 +477,7 @@ function persistResource(
         (id, resource_id, revision_number, base_revision_id, title, description, change_note, created_at)
        VALUES (?, ?, 1, NULL, ?, ?, ?, ?)`
     ).run(revisionId, resourceId, title, description, cleanText(input.changeNote, 1000) || '初始版本', now)
+    pinCategory(revisionId, input.category, input.components)
     insertComponents(revisionId, input.components)
     insertTags(resourceId, input.tags)
     setCollectionsInternal(resourceId, collectionIds)
@@ -531,6 +545,7 @@ export function publishRevision(input: PublishLibraryRevisionInput): LibraryReso
   if (resource.latest_revision_id !== input.baseRevisionId) {
     throw new Error('资源已有新版本，请刷新后再保存，避免覆盖其他修改')
   }
+  if (revisionCategory(input.baseRevisionId) && !input.category) throw new Error('请选择资源分类，不能丢弃节点映射')
   const sourceRevisionId = input.sourceRevisionId ?? input.baseRevisionId
   const sourceRevision = getDb().prepare(
     'SELECT id FROM library_revisions WHERE id = ? AND resource_id = ?'
@@ -562,6 +577,7 @@ export function publishRevision(input: PublishLibraryRevisionInput): LibraryReso
       cleanText(input.changeNote, 1000) || `更新到 v${revisionNumber}`,
       now
     )
+    pinCategory(revisionId, input.category, input.components)
     insertComponents(revisionId, input.components, input.baseRevisionId)
     database.prepare(
       `UPDATE library_resources SET form_preset = ?, title = ?, description = ?,
@@ -686,71 +702,6 @@ export function saveBoard(input: SaveLibraryBoardInput): boolean {
   return true
 }
 
-export interface MaterializedLibraryResource {
-  assets: MediaAsset[]
-  textComponents: LibraryResourceComponent[]
-}
-
-export async function materializeResource(input: {
-  projectId: string
-  resourceId: string
-  revisionId: string
-  componentIds: string[]
-}): Promise<MaterializedLibraryResource> {
-  if (!Array.isArray(input.componentIds) || input.componentIds.length === 0) {
-    throw new Error('至少选择一个资源组件')
-  }
-  const project = getDb().prepare('SELECT id FROM projects WHERE id = ? AND deleted = 0').get(input.projectId)
-  if (!project) throw new Error('目标项目不存在')
-  const resource = getDb().prepare(
-    'SELECT id FROM library_revisions WHERE id = ? AND resource_id = ?'
-  ).get(input.revisionId, input.resourceId)
-  if (!resource) throw new Error('选择的资源版本不存在')
-  const components = readComponents(input.revisionId).filter((component) => input.componentIds.includes(component.id))
-  if (components.length !== new Set(input.componentIds).size) throw new Error('部分资源组件不存在')
-  const assets: MediaAsset[] = []
-  const textComponents = components.filter((component) => component.text !== undefined)
-  try {
-    for (const component of components) {
-      if (!component.blobPath) continue
-      const absolute = join(getDataDir(), component.blobPath)
-      if (!existsSync(absolute)) throw new Error(`资源文件缺失：${component.fileName ?? component.role}`)
-      const buffer = readFileSync(absolute)
-      if (buffer.byteLength !== component.sizeBytes) throw new Error(`资源文件大小校验失败：${component.fileName ?? component.role}`)
-      const ext = extname(component.fileName ?? '') || extensionForMime(component.mime)
-      assets.push(await saveBufferAsset(input.projectId, buffer, ext, component.fileName ?? component.role))
-    }
-    const now = Date.now()
-    getDb().prepare(
-      `INSERT INTO library_usages
-        (id, project_id, resource_id, revision_id, component_ids_json,
-         project_media_ids_json, materialized_node_ids_json, created_at, last_used_at)
-       VALUES (?, ?, ?, ?, ?, ?, '[]', ?, ?)`
-    ).run(
-      nanoid(12), input.projectId, input.resourceId, input.revisionId,
-      JSON.stringify(components.map((component) => component.id)),
-      JSON.stringify(assets.map((asset) => asset.id)), now, now
-    )
-    return { assets, textComponents }
-  } catch (error) {
-    // Best-effort compensation: an incomplete materialization must not leave extra project assets.
-    for (const asset of assets) await deleteMedia(asset.id).catch(() => false)
-    throw error
-  }
-}
-
-function extensionForMime(mime?: string): string {
-  if (mime === 'image/jpeg') return '.jpg'
-  if (mime === 'image/png') return '.png'
-  if (mime === 'image/webp') return '.webp'
-  if (mime === 'audio/wav' || mime === 'audio/wave') return '.wav'
-  if (mime === 'audio/mpeg') return '.mp3'
-  if (mime === 'video/mp4') return '.mp4'
-  if (mime === 'video/webm') return '.webm'
-  if (mime === 'text/markdown') return '.md'
-  if (mime === 'text/plain') return '.txt'
-  return '.bin'
-}
 
 export function exportLibrarySnapshot(resourceIds?: string[]): {
   resources: LibraryResourceDetail[]
@@ -775,7 +726,7 @@ export function exportLibrarySnapshot(resourceIds?: string[]): {
 }
 
 const LIBRARY_PACKAGE_FORMAT = 'canvas-studio-resource-library'
-const LIBRARY_PACKAGE_VERSION = 1
+const LIBRARY_PACKAGE_VERSION = 2
 
 export function exportResourcePackage(destination: string, requestedIds?: string[]): string {
   const database = getDb()
@@ -787,6 +738,7 @@ export function exportResourcePackage(destination: string, requestedIds?: string
   const blobEntries = new Map<string, Buffer>()
   let totalBlobBytes = 0
   const resources: Array<Record<string, unknown>> = []
+  const exportedCategoryIds = new Set<string>()
   for (const resourceId of resourceIds) {
     const resource = database.prepare(
       'SELECT id, form_preset, title, description, latest_revision_id, archived_at FROM library_resources WHERE id = ?'
@@ -807,6 +759,8 @@ export function exportResourcePackage(destination: string, requestedIds?: string
       description: string; change_note: string | null; created_at: number
     }>
     const packagedRevisions = revisions.map((revision) => {
+      const category = revisionCategory(revision.id)
+      if (category) exportedCategoryIds.add(category.id)
       const components = database.prepare(
         `SELECT c.id, c.role, c.value_type, c.text_content, c.metadata_json, c.sort_index,
           b.sha256, b.path AS blob_path, b.mime AS blob_mime, b.file_name, b.size_bytes
@@ -819,6 +773,7 @@ export function exportResourcePackage(destination: string, requestedIds?: string
       }>
       return {
         id: revision.id,
+        category,
         revisionNumber: revision.revision_number,
         baseRevisionId: revision.base_revision_id,
         title: revision.title,
@@ -892,6 +847,7 @@ export function exportResourcePackage(destination: string, requestedIds?: string
     version: LIBRARY_PACKAGE_VERSION,
     exportedAt: Date.now(),
     resources,
+    categories: exportCategoryVersions().filter((category) => !hasResourceFilter || exportedCategoryIds.has(category.id)),
     boards
   }
   const manifestBytes = Buffer.from(JSON.stringify(manifest), 'utf8')
@@ -917,6 +873,7 @@ interface PackageComponent {
 }
 
 interface PackageRevision {
+  category?: unknown
   id: string
   revisionNumber: number
   baseRevisionId?: string | null
@@ -979,6 +936,7 @@ export function importResourcePackage(filePath: string): number {
   if (!packageSize.isFile() || packageSize.size <= 0 || packageSize.size > MAX_LIBRARY_PACKAGE_BYTES) {
     throw new Error('资源包为空或超过 512 MB 限制')
   }
+  const categoryIdMap = new Map<string, string>()
   const packageHash = hashFile(filePath)
   const duplicate = getDb().prepare('SELECT resource_count FROM library_imports WHERE package_sha256 = ?').get(packageHash) as
     | { resource_count: number }
@@ -996,8 +954,8 @@ export function importResourcePackage(filePath: string): number {
     throw new Error('资源包清单不是有效 JSON')
   }
   if (!manifest || typeof manifest !== 'object') throw new Error('资源包清单无效')
-  const raw = manifest as { format?: unknown; version?: unknown; resources?: unknown; boards?: unknown }
-  if (raw.format !== LIBRARY_PACKAGE_FORMAT || raw.version !== LIBRARY_PACKAGE_VERSION || !Array.isArray(raw.resources)) {
+  const raw = manifest as { format?: unknown; version?: unknown; resources?: unknown; boards?: unknown; categories?: unknown }
+  if (raw.format !== LIBRARY_PACKAGE_FORMAT || (raw.version !== 1 && raw.version !== LIBRARY_PACKAGE_VERSION) || !Array.isArray(raw.resources)) {
     throw new Error('资源包格式或版本不受支持')
   }
   if (raw.resources.length > 10_000 || !raw.resources.every(isPackageResource)) throw new Error('资源包包含无效资源')
@@ -1010,6 +968,7 @@ export function importResourcePackage(filePath: string): number {
   const packagedRevisionOwners = new Map(
     packagedResources.flatMap((resource) => resource.revisions.map((revision) => [revision.id, resource.id] as const))
   )
+  if (raw.categories !== undefined && (!Array.isArray(raw.categories) || raw.categories.length > 10000)) throw new Error('资源包分类列表无效')
   if (raw.boards !== undefined && (!Array.isArray(raw.boards) || raw.boards.length > 1000 || !raw.boards.every(isPackageBoard))) {
     throw new Error('资源包展板数据无效')
   }
@@ -1024,6 +983,7 @@ export function importResourcePackage(filePath: string): number {
   const blobCache = new Map<string, string>()
 
   database.transaction(() => {
+    for (const category of (raw.categories ?? []) as unknown[]) importCategoryDefinition(category, categoryIdMap)
     for (const source of packagedResources) {
       const revisions = [...source.revisions].sort((a, b) => a.revisionNumber - b.revisionNumber)
       if (revisions.length === 0 || revisions.some((revision) => !Array.isArray(revision.components) || revision.components.length > 100)) {
@@ -1079,6 +1039,7 @@ export function importResourcePackage(filePath: string): number {
           cleanText(revision.description, 20_000), cleanText(revision.changeNote, 1000) || null,
           Number.isFinite(revision.createdAt) ? revision.createdAt : now
         )
+        importRevisionCategory(revisionId, revision.category, categoryIdMap)
         for (const component of revision.components) {
           if (!component || typeof component.role !== 'string' || !VALID_VALUE_TYPES.has(component.valueType)) throw new Error('资源包中的组件无效')
           const textType = ['text', 'markdown', 'json', 'recipe'].includes(component.valueType)
@@ -1120,6 +1081,11 @@ export function importResourcePackage(filePath: string): number {
             blobId, JSON.stringify(component.metadata ?? {}), Math.max(0, Math.floor(component.order ?? 0)), now
           )
         }
+      }
+      for (const revision of revisions) {
+        const id = idMap.get(revision.id)!
+        const category = revisionCategory(id)
+        if (category) validateCategoryContent(category, readComponents(id))
       }
       insertTags(resourceId, source.tags)
       const collectionIds = source.collections.flatMap((collection) => {

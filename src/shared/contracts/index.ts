@@ -108,6 +108,9 @@ export const IPC = {
     getImageGenerationTimings: 'workspace:image-generation-timings:get'
   },
   library: {
+    listCategories: 'library:categories:list',
+    saveCategory: 'library:categories:save',
+    discardMaterialization: 'library:materialize:discard',
     search: 'library:search',
     detail: 'library:detail',
     create: 'library:create',
@@ -274,6 +277,7 @@ export interface SaveWorkspaceProfileInput {
 }
 
 export interface LibraryMaterializeInput {
+  nodeBindings?: Array<{ componentId: string; nodeId: string }>
   projectId: string
   resourceId: string
   revisionId: string
@@ -286,6 +290,8 @@ export interface LibrarySearchResult {
 }
 
 export interface LibraryMaterializeResult {
+  usageId: string
+  componentAssets: Array<{ componentId: string; asset: import('../types').MediaAsset }>
   assets: import('../types').MediaAsset[]
   textComponents: import('../library/types').LibraryResourceComponent[]
 }

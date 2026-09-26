@@ -135,6 +135,9 @@ export function installBrowserMock(): void {
       project.updatedAt = Date.now()
       return Promise.resolve({ ok: true, data: project })
     },
+    listLibraryCategories: () => Promise.resolve({ ok: true, data: [] }),
+    saveLibraryCategory: () => Promise.resolve({ ok: false, error: { code: 'MOCK', message: '请在桌面应用中保存分类' } }),
+    discardLibraryMaterialization: () => Promise.resolve({ ok: true, data: false }),
     searchLibrary: () => Promise.resolve({ ok: true, data: { items: [], nextCursor: null } }),
     getLibraryResource: () => Promise.resolve({ ok: true, data: null }),
     createLibraryResource: () => Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持资源库写入' } }),

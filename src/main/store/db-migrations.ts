@@ -8,7 +8,7 @@ export interface MigrationDatabase {
   pragma(statement: string, options?: { simple?: boolean }): unknown
 }
 
-export const DB_SCHEMA_VERSION = 7
+export const DB_SCHEMA_VERSION = 8
 
 const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
@@ -251,7 +251,21 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
         package_sha256 TEXT PRIMARY KEY, imported_at INTEGER NOT NULL, resource_count INTEGER NOT NULL
       );
     `)
+  },
+  // M8: versioned user-defined categories; resource revisions pin a complete blueprint.
+  (database) => {
+    database.exec(`
+      CREATE TABLE library_category_versions (
+        category_id TEXT NOT NULL, version INTEGER NOT NULL, body_json TEXT NOT NULL,
+        PRIMARY KEY(category_id, version)
+      );
+      CREATE TABLE library_revision_blueprints (
+        revision_id TEXT PRIMARY KEY, category_id TEXT NOT NULL, category_json TEXT NOT NULL
+      );
+      CREATE INDEX idx_library_revision_category ON library_revision_blueprints(category_id);
+    `)
   }
+
 ]
 
 /** Applies each missing version exactly once and never downgrades a newer database. */

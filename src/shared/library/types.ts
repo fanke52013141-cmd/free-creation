@@ -1,3 +1,5 @@
+import type { LibraryCategory } from './blueprint'
+
 export type LibraryPreset = 'image' | 'prompt' | 'character' | 'scene' | 'style' | 'custom'
 
 export type LibraryValueType = 'text' | 'markdown' | 'image' | 'audio' | 'video' | 'file' | 'json' | 'recipe'
@@ -18,6 +20,7 @@ export interface LibraryComponentInput {
 export interface CreateLibraryResourceInput {
   title: string
   formPreset: LibraryPreset
+  category?: { id: string; version: number }
   description?: string
   tags?: string[]
   collectionIds?: string[]
@@ -43,6 +46,7 @@ export interface PublishLibraryRevisionInput extends CreateLibraryResourceInput 
 
 export interface LibrarySearchInput {
   query?: string
+  categoryId?: string
   formPreset?: LibraryPreset | 'all'
   collectionId?: string
   includeArchived?: boolean
@@ -55,6 +59,7 @@ export interface LibraryResourceSummary {
   formPreset: LibraryPreset
   title: string
   description: string
+  category?: LibraryCategory
   latestRevisionId: string
   revisionNumber: number
   componentCount: number

@@ -1,3 +1,4 @@
+import type { LibraryCategory, SaveLibraryCategoryInput } from '../shared/library/blueprint'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import { IPC } from '../shared/contracts'
@@ -101,6 +102,9 @@ const api = {
     input: SaveWorkspaceProfileInput
   ): Promise<IpcEnvelope<ProjectMeta | null>> =>
     ipcRenderer.invoke(IPC.project.saveWorkspaceProfile, input),
+  listLibraryCategories: (): Promise<IpcEnvelope<LibraryCategory[]>> => ipcRenderer.invoke(IPC.library.listCategories),
+  saveLibraryCategory: (input: SaveLibraryCategoryInput): Promise<IpcEnvelope<LibraryCategory>> => ipcRenderer.invoke(IPC.library.saveCategory, input),
+  discardLibraryMaterialization: (input: { usageId: string; projectId: string }): Promise<IpcEnvelope<boolean>> => ipcRenderer.invoke(IPC.library.discardMaterialization, input),
   searchLibrary: (input: LibrarySearchInput): Promise<IpcEnvelope<LibrarySearchResult>> =>
     ipcRenderer.invoke(IPC.library.search, input),
   getLibraryResource: (input: LibraryDetailInput): Promise<IpcEnvelope<LibraryResourceDetail | null>> =>

@@ -1,3 +1,5 @@
+import { materializeResource, discardMaterialization } from '../store/library-materialization.repo'
+import { listCategories, saveCategory } from '../store/library-categories.repo'
 import { dialog, ipcMain } from 'electron'
 import { IPC, type IpcEnvelope } from '../../shared/contracts'
 import type {
@@ -18,6 +20,15 @@ function err(code: string, error: unknown): IpcEnvelope<never> {
 }
 
 export function registerLibraryIpc(): void {
+  ipcMain.handle(IPC.library.listCategories, () => {
+    try { return ok(listCategories()) } catch (error) { return err('READ_FAILED', error) }
+  })
+  ipcMain.handle(IPC.library.saveCategory, (_event, input) => {
+    try { return ok(saveCategory(input)) } catch (error) { return err('SAVE_FAILED', error) }
+  })
+  ipcMain.handle(IPC.library.discardMaterialization, async (_event, input) => {
+    try { return ok(await discardMaterialization(input)) } catch (error) { return err('DISCARD_FAILED', error) }
+  })
   ipcMain.handle(IPC.library.search, (_event, input) => {
     try { return ok(library.searchResources(input)) } catch (error) { return err('SEARCH_FAILED', error) }
   })
@@ -66,7 +77,7 @@ export function registerLibraryIpc(): void {
     if (!input?.projectId || !input.resourceId || !input.revisionId || !Array.isArray(input.componentIds)) {
       return err('INVALID_INPUT', '资源使用参数不完整')
     }
-    try { return ok(await library.materializeResource(input)) } catch (error) { return err('MATERIALIZE_FAILED', error) }
+    try { return ok(await materializeResource(input)) } catch (error) { return err('MATERIALIZE_FAILED', error) }
   })
   ipcMain.handle(IPC.library.export, async (_event, input: { resourceIds?: string[] }) => {
     const result = await dialog.showSaveDialog({
