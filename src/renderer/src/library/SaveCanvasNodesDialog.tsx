@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Editor, TLShapeId } from 'tldraw'
 import type { LibraryCategory } from '@shared/library/blueprint'
-import type { LibraryFolder, LibraryResourceSummary } from '@shared/library/types'
+import type { LibraryResourceSummary } from '@shared/library/types'
 import type { NodeCardShape } from '../canvas/NodeCardShape'
 import { Icon } from '../components/Icon'
 import { useToastStore } from '../stores/toast'
@@ -12,22 +12,6 @@ interface Props {
   nodeIds: TLShapeId[]
   onClose: () => void
   onSaved: () => void
-}
-
-function folderOptions(folders: LibraryFolder[]): Array<{ id: string; label: string }> {
-  const children = new Map<string | null, LibraryFolder[]>()
-  for (const folder of folders) children.set(folder.parentId, [...(children.get(folder.parentId) ?? []), folder])
-  const result: Array<{ id: string; label: string }> = []
-  const visit = (parentId: string | null, prefix: string, visited: Set<string>): void => {
-    for (const folder of children.get(parentId) ?? []) {
-      if (visited.has(folder.id)) continue
-      result.push({ id: folder.id, label: `${prefix}${folder.name}` })
-      const next = new Set(visited).add(folder.id)
-      visit(folder.id, `${prefix}${folder.name} / `, next)
-    }
-  }
-  visit(null, '', new Set())
-  return result
 }
 
 function categoryKey(category: LibraryCategory): string {
@@ -66,11 +50,9 @@ export function SaveCanvasNodesDialog({ editor, projectId, nodeIds, onClose, onS
       ? Boolean(shape.props.text.trim())
       : ['image', 'audio', 'video', 'video-asset'].includes(nodeType) && Boolean(mediaId)
   }), [shapes])
-  const [folders, setFolders] = useState<LibraryFolder[]>([])
   const [categories, setCategories] = useState<LibraryCategory[]>([])
   const [selectedCategoryKey, setSelectedCategoryKey] = useState('')
   const [slotAssignments, setSlotAssignments] = useState<Record<string, string>>({})
-  const [folderId, setFolderId] = useState('')
   const [mode, setMode] = useState<'new' | 'revision'>('new')
   const [resourceQuery, setResourceQuery] = useState('')
   const [resources, setResources] = useState<LibraryResourceSummary[]>([])
@@ -82,18 +64,15 @@ export function SaveCanvasNodesDialog({ editor, projectId, nodeIds, onClose, onS
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const targetResource = resources.find((resource) => resource.id === resourceId)
-  const options = useMemo(() => folderOptions(folders), [folders])
-  const categoryChoices = [...categories]
-  if (targetResource?.category && !categoryChoices.some((item) => categoryKey(item) === categoryKey(targetResource.category!))) {
-    categoryChoices.push(targetResource.category)
-  }
+  const categoryChoices = targetResource?.category
+    ? [...categories.filter((item) => item.id !== targetResource.category!.id), targetResource.category]
+    : [...categories]
   const selectedCategory = categoryChoices.find((item) => categoryKey(item) === selectedCategoryKey)
 
   useEffect(() => {
     let cancelled = false
-    void Promise.all([window.api.listLibraryFolders(), window.api.listLibraryCategories()]).then(([folderResult, categoryResult]) => {
+    void window.api.listLibraryCategories().then((categoryResult) => {
       if (cancelled) return
-      if (folderResult.ok) setFolders(folderResult.data)
       if (categoryResult.ok) setCategories(categoryResult.data)
     })
     return () => { cancelled = true }
@@ -132,7 +111,6 @@ export function SaveCanvasNodesDialog({ editor, projectId, nodeIds, onClose, onS
     const result = await window.api.captureLibraryNodes({
       projectId,
       title: title.trim(),
-      ...(mode === 'new' && folderId ? { folderId } : {}),
       ...(mode === 'revision' && targetResource ? {
         resourceId: targetResource.id,
         baseRevisionId: targetResource.latestRevisionId,
@@ -178,16 +156,12 @@ export function SaveCanvasNodesDialog({ editor, projectId, nodeIds, onClose, onS
               setSlotAssignments(nextCategory ? initialSlotAssignments(nextCategory, supported) : {})
             }}>
               <option value="">{mode === 'new' ? '选择分类…' : '沿用未分类资源 / 选择分类…'}</option>
-              {categoryChoices.map((category) => <option key={categoryKey(category)} value={categoryKey(category)}>{category.name} · v{category.version}</option>)}
+              {categoryChoices.map((category) => <option key={categoryKey(category)} value={categoryKey(category)}>{category.name}</option>)}
             </select>
             <small>{selectedCategory ? '节点会按所选槽位绑定到这份资源蓝图。' : '新建资源必须选择分类；旧资源可保持未分类。'}</small>
           </label>
           {mode === 'new' ? <>
             <label className="library-form-field"><span>资源名称</span><input autoFocus maxLength={180} value={title} onChange={(event) => setTitle(event.currentTarget.value)} placeholder="例如：主角设定" /></label>
-            <label className="library-form-field"><span>保存到文件夹</span><select value={folderId} onChange={(event) => setFolderId(event.currentTarget.value)}>
-              <option value="">资源库根目录</option>
-              {options.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-            </select></label>
           </> : <>
             <label className="library-form-field"><span>查找资源</span><input value={resourceQuery} onChange={(event) => setResourceQuery(event.currentTarget.value)} placeholder="搜索资源名称" /></label>
             <label className="library-form-field"><span>更新哪一份资源</span><select value={resourceId} onChange={(event) => {

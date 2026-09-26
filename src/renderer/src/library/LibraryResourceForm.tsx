@@ -172,10 +172,9 @@ export function LibraryResourceForm({
   onCancel,
   onSave
 }: LibraryResourceFormProps): React.JSX.Element {
-  const availableCategories = [...categories]
-  if (detail?.category && !availableCategories.some((item) => categoryKey(item) === categoryKey(detail.category!))) {
-    availableCategories.push(detail.category)
-  }
+  const availableCategories = detail?.category
+    ? [...categories.filter((item) => item.id !== detail.category!.id), detail.category]
+    : categories
   const [selectedCategoryKey, setSelectedCategoryKey] = useState(
     detail?.category ? categoryKey(detail.category) : ''
   )
@@ -410,10 +409,10 @@ export function LibraryResourceForm({
           <label className="library-form-field"><span>资源分类</span>
             <select value={selectedCategoryKey} onChange={(event) => handleCategoryChange(event.currentTarget.value)}>
               <option value="">{detail ? '未分类资源' : '选择分类，自动加载对应节点'}</option>
-              {availableCategories.map((category) => <option key={categoryKey(category)} value={categoryKey(category)}>{category.name} · v{category.version}</option>)}
+              {availableCategories.map((category) => <option key={categoryKey(category)} value={categoryKey(category)}>{category.name}</option>)}
             </select>
-            {detail && selectedCategory && <small>本次新版本将固定使用分类 v{selectedCategory.version} 的蓝图；必要时可重新映射旧内容。</small>}
-            {!detail && availableCategories.length === 0 && <small>请先在左侧“资源分类”中创建分类。</small>}
+            {detail && selectedCategory && <small>本次保存会记录当前资源内容；之后可在详情中查看和对比每次迭代。</small>}
+            {!detail && availableCategories.length === 0 && <small>请先在资源库顶部创建分类。</small>}
           </label>
           <label className="library-form-field"><span>资源名称</span><input autoFocus maxLength={180} value={title} onChange={(event) => setTitle(event.currentTarget.value)} placeholder="例如：主角设定" /></label>
           <label className="library-form-field"><span>说明</span><textarea value={description} maxLength={20000} onChange={(event) => setDescription(event.currentTarget.value)} placeholder="记录用途、来源或使用建议" /></label>

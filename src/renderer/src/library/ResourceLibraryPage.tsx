@@ -1,6 +1,6 @@
 import { useResourceInsertRequest } from './insertRequestStore'
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { LibraryFolder, LibraryPreset, LibraryResourceDetail, LibraryResourceSummary, LibraryBoard, LibraryBoardItem, CreateLibraryResourceInput, PublishLibraryRevisionInput } from '@shared/library/types'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { LibraryPreset, LibraryResourceDetail, LibraryResourceSummary, LibraryBoard, LibraryBoardItem, CreateLibraryResourceInput, PublishLibraryRevisionInput } from '@shared/library/types'
 import type { LibraryCategory } from '@shared/library/blueprint'
 import type { ProjectMeta } from '@shared/types'
 import { Icon } from '../components/Icon'
@@ -9,7 +9,6 @@ import { useAppStore } from '../stores/app'
 import { useToastStore } from '../stores/toast'
 import { LibraryResourceForm } from './LibraryResourceForm'
 import { LibraryCategoryEditor } from './LibraryCategoryEditor'
-import { useConfirmStore } from '../stores/confirm'
 import './library.css'
 
 function typeName(preset: LibraryPreset, categoryName?: string): string {
@@ -17,68 +16,6 @@ function typeName(preset: LibraryPreset, categoryName?: string): string {
   if (preset === 'image') return '图片资产'
   if (preset === 'prompt') return '文本资产'
   return '组合资产'
-}
-
-function initialExpandedFolders(): Set<string> {
-  try {
-    const value: unknown = JSON.parse(localStorage.getItem('canvas.library.expanded-folders') ?? '[]')
-    return new Set(Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [])
-  } catch {
-    return new Set()
-  }
-}
-
-function folderPathOptions(folders: LibraryFolder[]): Array<{ id: string; label: string }> {
-  const children = new Map<string | null, LibraryFolder[]>()
-  for (const folder of folders) children.set(folder.parentId, [...(children.get(folder.parentId) ?? []), folder])
-  const result: Array<{ id: string; label: string }> = []
-  const visit = (parentId: string | null, path: string, ancestors: Set<string>): void => {
-    for (const folder of children.get(parentId) ?? []) {
-      if (ancestors.has(folder.id)) continue
-      const nextPath = path ? `${path} / ${folder.name}` : folder.name
-      result.push({ id: folder.id, label: nextPath })
-      visit(folder.id, nextPath, new Set(ancestors).add(folder.id))
-    }
-  }
-  visit(null, '', new Set())
-  return result
-}
-
-const LIBRARY_ROOT_ORDER = ['工作流', 'Prompt', 'Skill', '资产', '笔记']
-
-function sortLibraryFolders(folders: LibraryFolder[], parentId: string | null): LibraryFolder[] {
-  return folders.filter((folder) => folder.parentId === parentId).sort((left, right) => {
-    if (parentId === null) {
-      const leftRank = LIBRARY_ROOT_ORDER.indexOf(left.name)
-      const rightRank = LIBRARY_ROOT_ORDER.indexOf(right.name)
-      if (leftRank >= 0 || rightRank >= 0) {
-        if (leftRank < 0) return 1
-        if (rightRank < 0) return -1
-        if (leftRank !== rightRank) return leftRank - rightRank
-      }
-    }
-    return left.name.localeCompare(right.name, 'zh-CN')
-  })
-}
-
-function resourceIcon(resource: LibraryResourceSummary): 'text' | 'image' | 'assets' {
-  if (resource.formPreset === 'prompt') return 'text'
-  if (resource.formPreset === 'image' || resource.formPreset === 'style') return 'image'
-  return 'assets'
-}
-
-function resourceMatchesTreeSearch(resource: LibraryResourceSummary, search: string): boolean {
-  if (!search) return true
-  return `${resource.title} ${resource.description} ${resource.category?.name ?? ''} ${resource.formPreset} ${resource.tags.join(' ')}`
-    .toLocaleLowerCase().includes(search)
-}
-
-function folderContainsTreeMatch(folder: LibraryFolder, folders: LibraryFolder[], resources: LibraryResourceSummary[], search: string, ancestors = new Set<string>()): boolean {
-  if (!search || folder.name.toLocaleLowerCase().includes(search)) return true
-  if (ancestors.has(folder.id)) return false
-  const nextAncestors = new Set(ancestors).add(folder.id)
-  return resources.some((resource) => resource.folderIds[0] === folder.id && resourceMatchesTreeSearch(resource, search))
-    || sortLibraryFolders(folders, folder.id).some((child) => folderContainsTreeMatch(child, folders, resources, search, nextAncestors))
 }
 
 function ResourceCard({ resource, onOpen, onDragStart }: { resource: LibraryResourceSummary; onOpen: () => void; onDragStart?: React.DragEventHandler<HTMLButtonElement> }): React.JSX.Element {
@@ -210,20 +147,11 @@ function comparisonValue(component: LibraryResourceDetail['components'][number] 
 
 export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.JSX.Element {
   const [resources, setResources] = useState<LibraryResourceSummary[]>([])
-  const [treeResources, setTreeResources] = useState<LibraryResourceSummary[]>([])
   const [projects, setProjects] = useState<ProjectMeta[]>([])
   const [categories, setCategories] = useState<LibraryCategory[]>([])
   const [categoryId, setCategoryId] = useState('')
   const [categoryEditor, setCategoryEditor] = useState<{ initial?: LibraryCategory } | null>(null)
   const [query, setQuery] = useState('')
-  const [folders, setFolders] = useState<LibraryFolder[]>([])
-  const [folderId, setFolderId] = useState('')
-  const [folderDraft, setFolderDraft] = useState('')
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(initialExpandedFolders)
-  const [folderDraftParentId, setFolderDraftParentId] = useState<string | null | undefined>()
-  const [folderActionId, setFolderActionId] = useState<string | null>(null)
-  const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null)
-  const [folderRenameDraft, setFolderRenameDraft] = useState('')
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedRevisionId, setSelectedRevisionId] = useState<string | undefined>()
@@ -244,7 +172,6 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
   const openProject = useAppStore((state) => state.openProject)
   const currentBoardItems = loadedBoardId === boardId ? boardItems : []
   const currentBoardDetails = loadedBoardId === boardId ? boardDetails : {}
-  const treeSearch = query.trim().toLocaleLowerCase()
   const activeRevisionId = selectedRevisionId ?? (detail?.id === selectedId ? detail.selectedRevisionId : undefined)
   const availableCompareRevisionId = detail?.id === selectedId
     ? detail.revisions.find((revision) => revision.id !== activeRevisionId)?.id ?? ''
@@ -258,28 +185,10 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
   const currentCompareDetail = detail && compareDetail?.id === detail.id && compareDetail.selectedRevisionId === compareRevisionId
     ? compareDetail
     : null
-  const folderOptions = useMemo(() => folderPathOptions(folders), [folders])
-
-  const loadTreeResources = useCallback(async (): Promise<void> => {
-    const collected: LibraryResourceSummary[] = []
-    let cursor: string | undefined
-    do {
-      const result = await window.api.searchLibrary({ cursor, limit: 100 })
-      if (!result.ok) {
-        useToastStore.getState().show(`资源目录读取失败：${result.error.message}`)
-        return
-      }
-      collected.push(...result.data.items)
-      cursor = result.data.nextCursor ?? undefined
-    } while (cursor)
-    setTreeResources(collected)
-  }, [])
-
   const loadPageData = useCallback(async (): Promise<void> => {
-    const [projectResult, boardResult, folderResult, categoryResult] = await Promise.all([
+    const [projectResult, boardResult, categoryResult] = await Promise.all([
       window.api.listProjects(),
       window.api.listLibraryBoards(),
-      window.api.listLibraryFolders(),
       window.api.listLibraryCategories()
     ])
     if (projectResult.ok) {
@@ -290,24 +199,18 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
       setBoards(boardResult.data)
       setBoardId((current) => current || boardResult.data[0]?.id || '')
     }
-    if (folderResult.ok) {
-      setFolders(folderResult.data)
-      const starterIds = folderResult.data.filter((folder) => folder.parentId === null && LIBRARY_ROOT_ORDER.includes(folder.name)).map((folder) => folder.id)
-      setExpandedFolders((current) => new Set([...current, ...starterIds]))
-    }
     if (categoryResult.ok) setCategories(categoryResult.data)
-    await loadTreeResources()
-  }, [loadTreeResources])
+  }, [])
 
   const loadResources = useCallback(async (cursor?: string, append = false): Promise<void> => {
-    const result = await window.api.searchLibrary({ query, folderId: folderId || undefined, categoryId: categoryId || undefined, cursor, limit: 48 })
+    const result = await window.api.searchLibrary({ query, categoryId: categoryId || undefined, cursor, limit: 48 })
     if (!result.ok) {
       useToastStore.getState().show(`资源库读取失败：${result.error.message}`)
       return
     }
     setResources((current) => append ? [...current, ...result.data.items] : result.data.items)
     setNextCursor(result.data.nextCursor)
-  }, [categoryId, folderId, query])
+  }, [categoryId, query])
 
   useEffect(() => {
     const timer = window.setTimeout(() => { void loadPageData() }, 0)
@@ -317,10 +220,6 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     const timer = window.setTimeout(() => { void loadResources() }, 180)
     return () => window.clearTimeout(timer)
   }, [loadResources])
-
-  useEffect(() => {
-    try { localStorage.setItem('canvas.library.expanded-folders', JSON.stringify([...expandedFolders])) } catch { /* optional UI preference */ }
-  }, [expandedFolders])
 
   useEffect(() => {
     if (!selectedId) return
@@ -375,7 +274,7 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     const isRevision = 'resourceId' in input
     const result = isRevision
       ? await window.api.publishLibraryRevision(input as PublishLibraryRevisionInput)
-      : await window.api.createLibraryResource({ ...input, ...(folderId && folderId !== 'root' ? { folderId } : {}) })
+      : await window.api.createLibraryResource(input as CreateLibraryResourceInput)
     if (!result.ok) throw new Error(result.error.message)
     setFormOpen(false)
     setSelectedId(result.data.id)
@@ -385,96 +284,6 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     useToastStore.getState().show(isRevision ? `已发布「${result.data.title}」v${result.data.revisionNumber}` : `已保存资源「${result.data.title}」`)
   }
 
-  const createFolder = async (): Promise<void> => {
-    if (!folderDraft.trim() || folderDraftParentId === undefined) return
-    const parentId = folderDraftParentId
-    const result = await window.api.createLibraryFolder({ name: folderDraft.trim(), parentId })
-    if (!result.ok) return useToastStore.getState().show(`创建文件夹失败：${result.error.message}`)
-    setFolderDraft('')
-    setFolderDraftParentId(undefined)
-    setFolders((current) => [...current, result.data])
-    if (parentId) setExpandedFolders((current) => new Set(current).add(parentId))
-    setFolderId(result.data.id)
-  }
-
-  const startFolderCreation = (parentId: string | null): void => {
-    setQuery('')
-    setFolderDraft('')
-    setFolderDraftParentId(parentId)
-    setFolderActionId(null)
-    if (parentId) {
-      setExpandedFolders((current) => new Set(current).add(parentId))
-      setFolderId(parentId)
-    }
-  }
-
-  const cancelFolderCreation = (): void => {
-    setFolderDraft('')
-    setFolderDraftParentId(undefined)
-  }
-
-  const renderFolderCreator = (parentId: string | null, depth: number): React.JSX.Element => (
-    <form
-      className="library-folder-create"
-      style={{ paddingLeft: 10 + depth * 15 }}
-      onSubmit={(event) => { event.preventDefault(); void createFolder() }}
-    >
-      <Icon name="assets" size={13} />
-      <input
-        autoFocus
-        value={folderDraft}
-        maxLength={100}
-        aria-label={parentId ? '新建子文件夹名称' : '新建文件夹名称'}
-        placeholder={parentId ? '输入子文件夹名称' : '输入文件夹名称'}
-        onChange={(event) => setFolderDraft(event.currentTarget.value)}
-        onKeyDown={(event) => { if (event.key === 'Escape') cancelFolderCreation() }}
-      />
-      <button type="submit" aria-label="创建文件夹" disabled={!folderDraft.trim()}><Icon name="check" size={12} /></button>
-      <button type="button" aria-label="取消创建文件夹" onClick={cancelFolderCreation}><Icon name="close" size={12} /></button>
-    </form>
-  )
-
-  const renameFolder = async (folder: LibraryFolder): Promise<void> => {
-    const name = folderRenameDraft.trim()
-    if (!name || name === folder.name) {
-      setRenamingFolderId(null)
-      return
-    }
-    const result = await window.api.renameLibraryFolder({ folderId: folder.id, name })
-    if (!result.ok) return useToastStore.getState().show(`重命名文件夹失败：${result.error.message}`)
-    setFolders((current) => current.map((item) => item.id === folder.id ? result.data : item))
-    setRenamingFolderId(null)
-    useToastStore.getState().show('文件夹名称已更新')
-  }
-
-  const removeFolder = async (folder: LibraryFolder): Promise<void> => {
-    const accepted = await useConfirmStore.getState().confirm({
-      title: `删除文件夹「${folder.name}」`,
-      message: '文件夹中的资源会移到上一级，子文件夹会一起提升一级；资源本身不会删除。',
-      confirmText: '删除文件夹',
-      danger: true
-    })
-    if (!accepted) return
-    const result = await window.api.deleteLibraryFolder(folder.id)
-    if (!result.ok) return useToastStore.getState().show(`删除文件夹失败：${result.error.message}`)
-    if (folderDraftParentId === folder.id) setFolderDraftParentId(undefined)
-    if (folderId === folder.id) setFolderId(folder.parentId ?? 'root')
-    await loadPageData()
-  }
-
-  const moveResourceToFolder = async (nextFolderId: string): Promise<void> => {
-    if (!detail) return
-    const result = await window.api.setLibraryResourceFolder({ resourceId: detail.id, folderId: nextFolderId || null })
-    if (!result.ok) return useToastStore.getState().show(`移动资源失败：${result.error.message}`)
-    await loadResources()
-    await loadTreeResources()
-    const folderResult = await window.api.listLibraryFolders()
-    if (folderResult.ok) setFolders(folderResult.data)
-    const updated = await window.api.getLibraryResource({ resourceId: detail.id, revisionId: detail.selectedRevisionId })
-    if (updated.ok && updated.data) setDetail(updated.data)
-    useToastStore.getState().show('资源已移到所选文件夹')
-  }
-
   const archive = async (archived: boolean): Promise<void> => {
     if (!detail) return
     const result = await window.api.archiveLibraryResource({ resourceId: detail.id, archived })
@@ -482,7 +291,6 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     setDetail(null)
     setSelectedId(null)
     await loadResources()
-    await loadTreeResources()
     useToastStore.getState().show(archived ? '资源已归档' : '资源已恢复')
   }
 
@@ -576,67 +384,6 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     useToastStore.getState().show(`已导入 ${result.data.imported} 份资源`)
   }
 
-  const renderResourceTreeItem = (resource: LibraryResourceSummary, depth: number): React.JSX.Element => (
-    <button
-      className={`library-tree-resource${selectedId === resource.id ? ' active' : ''}`}
-      key={resource.id}
-      style={{ paddingLeft: 28 + depth * 15 }}
-      title={`${resource.title} · ${typeName(resource.formPreset, resource.category?.name)}`}
-      onClick={() => { setSelectedId(resource.id); setSelectedRevisionId(resource.latestRevisionId) }}
-    >
-      <Icon name={resourceIcon(resource)} size={13} />
-      <span>{resource.title}</span>
-      <small>{resource.category?.name ?? typeName(resource.formPreset)}</small>
-    </button>
-  )
-
-  const renderFolder = (folder: LibraryFolder, depth = 0): React.JSX.Element => {
-    const childFolders = sortLibraryFolders(folders, folder.id)
-    const folderMatches = Boolean(treeSearch && folder.name.toLocaleLowerCase().includes(treeSearch))
-    const visibleChildFolders = treeSearch && !folderMatches
-      ? childFolders.filter((child) => folderContainsTreeMatch(child, folders, treeResources, treeSearch))
-      : childFolders
-    const directResources = treeResources.filter((resource) => resource.folderIds[0] === folder.id
-      && (!treeSearch || folderMatches || resourceMatchesTreeSearch(resource, treeSearch)))
-    if (treeSearch && !folderMatches && directResources.length === 0 && visibleChildFolders.length === 0) {
-      return <Fragment key={folder.id} />
-    }
-    const hasChildren = childFolders.length > 0 || treeResources.some((resource) => resource.folderIds[0] === folder.id)
-    const expanded = expandedFolders.has(folder.id) || Boolean(treeSearch)
-    return (
-      <Fragment key={folder.id}>
-        <div className="library-folder-row">
-          {renamingFolderId === folder.id ? (
-            <form className="library-folder-rename" style={{ paddingLeft: 10 + depth * 15 }} onSubmit={(event) => { event.preventDefault(); void renameFolder(folder) }}>
-              <input autoFocus value={folderRenameDraft} maxLength={100} aria-label={`重命名文件夹 ${folder.name}`} onChange={(event) => setFolderRenameDraft(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Escape') setRenamingFolderId(null) }} />
-              <button type="submit" aria-label="保存文件夹名称">保存</button>
-            </form>
-          ) : (
-            <>
-              <button className={`library-folder-select${folderId === folder.id ? ' active' : ''}`} style={{ paddingLeft: 10 + depth * 15 }} onClick={() => { setFolderId(folder.id); setFolderDraftParentId(undefined); if (hasChildren) setExpandedFolders((current) => new Set(current).add(folder.id)) }}>
-                <span className="library-folder-caret" aria-hidden="true" onClick={(event) => { event.stopPropagation(); setExpandedFolders((current) => { const next = new Set(current); if (next.has(folder.id)) next.delete(folder.id); else next.add(folder.id); return next }) }}>{hasChildren ? expanded ? '⌄' : '›' : ''}</span>
-                <Icon name="assets" size={13} /><span>{folder.name}</span><small>{folder.resourceCount}</small>
-              </button>
-              <button className="library-folder-add-child" title={`在「${folder.name}」下新建子文件夹`} aria-label={`在「${folder.name}」下新建子文件夹`} onClick={() => startFolderCreation(folder.id)}><Icon name="add" size={13} /></button>
-              <div className="library-folder-menu-wrap">
-                <button className="library-folder-actions" title={`文件夹操作：${folder.name}`} aria-label={`文件夹操作：${folder.name}`} aria-expanded={folderActionId === folder.id} onClick={() => setFolderActionId((current) => current === folder.id ? null : folder.id)}>⋯</button>
-                {folderActionId === folder.id && <div className="library-folder-menu">
-                  <button onClick={() => { setRenamingFolderId(folder.id); setFolderRenameDraft(folder.name); setFolderActionId(null) }}><Icon name="edit" size={12} />重命名</button>
-                  <button className="danger" onClick={() => { setFolderActionId(null); void removeFolder(folder) }}><Icon name="trash" size={12} />删除</button>
-                </div>}
-              </div>
-            </>
-          )}
-        </div>
-        {folderDraftParentId === folder.id && renderFolderCreator(folder.id, depth + 1)}
-        {expanded && <>
-          {visibleChildFolders.map((child) => renderFolder(child, depth + 1))}
-          {directResources.map((resource) => renderResourceTreeItem(resource, depth + 1))}
-        </>}
-      </Fragment>
-    )
-  }
-
   return (
     <div className="resource-library-page">
       <header className="library-page-header">
@@ -651,36 +398,18 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
 
       {view === 'resources' ? (
         <div className="library-workspace">
-          <aside className="library-collections">
-            <div className="library-tree-heading">
-              <strong><Icon name="assets" size={15} />资源箱</strong>
-              <small>{treeResources.length} 项</small>
-              <button title="新建资源分类" aria-label="新建资源分类" onClick={() => setCategoryEditor({})}><Icon name="add" size={13} /></button>
-              <button title="新建资源" aria-label="新建资源" onClick={() => { setSelectedId(null); setFormOpen(true) }}><Icon name="add" size={15} /></button>
-            </div>
-            <label className="library-tree-search"><Icon name="search" size={14} /><input aria-label="搜索资源目录" value={query} placeholder="搜索资源" onChange={(event) => setQuery(event.currentTarget.value)} /></label>
-            <div className="library-tree">
-              <button className={`library-tree-root${!folderId ? ' active' : ''}`} onClick={() => { setFolderId(''); setFolderDraftParentId(undefined) }}><Icon name="assets" size={13} /><span>全部资源</span><small>{treeResources.length}</small></button>
-              <button className={`library-tree-root${folderId === 'root' ? ' active' : ''}`} onClick={() => { setFolderId('root'); setFolderDraftParentId(undefined) }}><Icon name="assets" size={13} /><span>未归档</span><small>{treeResources.filter((resource) => !resource.folderIds[0]).length}</small></button>
-              <div className="library-collection-heading library-folder-heading">
-                <strong>目录</strong><span>{folders.length}</span>
-                <button className="library-folder-create-trigger" title="新建文件夹" aria-label="新建文件夹" onClick={() => startFolderCreation(null)}><Icon name="add" size={13} /></button>
-              </div>
-              {folderDraftParentId === null && renderFolderCreator(null, 0)}
-              {sortLibraryFolders(folders, null).map((folder) => renderFolder(folder))}
-              {treeResources.filter((resource) => !resource.folderIds[0] && resourceMatchesTreeSearch(resource, treeSearch)).map((resource) => renderResourceTreeItem(resource, 0))}
-            </div>
-          </aside>
           <main className="library-resource-browser">
+            <nav className="library-filter-row" aria-label="资源分类">
+              <button className={!categoryId ? 'active' : ''} onClick={() => setCategoryId('')}>全部</button>
+              <button className={categoryId === 'legacy' ? 'active' : ''} onClick={() => setCategoryId('legacy')}>未分类</button>
+              {categories.map((category) => <span className="library-category-filter-item" key={category.id}>
+                <button className={categoryId === category.id ? 'active' : ''} onClick={() => setCategoryId(category.id)} title={`浏览分类：${category.name}`}>{category.name}</button>
+                <button className="library-category-edit" aria-label={`编辑分类 ${category.name}`} title={`编辑分类 ${category.name}`} onClick={() => setCategoryEditor({ initial: category })}><Icon name="edit" size={10} /></button>
+              </span>)}
+              <button className="library-category-add" aria-label="新建分类" title="新建分类" onClick={() => setCategoryEditor({})}><Icon name="add" size={13} />新建分类</button>
+            </nav>
             <div className="library-browser-toolbar">
-              <div className="library-filter-row" aria-label="资源分类筛选">
-                <button className={!categoryId ? 'active' : ''} onClick={() => setCategoryId('')}>全部分类</button>
-                <button className={categoryId === 'legacy' ? 'active' : ''} onClick={() => setCategoryId('legacy')}>未分类资源</button>
-                {categories.map((category) => <span className="library-category-filter-item" key={category.id}>
-                  <button className={categoryId === category.id ? 'active' : ''} onClick={() => setCategoryId(category.id)} title={`筛选分类：${category.name}`}>{category.name}<small>v{category.version}</small></button>
-                  <button className="library-category-edit" aria-label={`编辑分类 ${category.name}`} title={`编辑分类 ${category.name}`} onClick={() => setCategoryEditor({ initial: category })}><Icon name="edit" size={10} /></button>
-                </span>)}
-              </div>
+              <label className="library-search"><Icon name="search" size={15} /><input aria-label="搜索资源" value={query} placeholder="搜索资源名称、说明或标签" onChange={(event) => setQuery(event.currentTarget.value)} /></label>
             </div>
             {resources.length ? (
               <div className="library-resource-grid">
@@ -739,12 +468,6 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
               <>
                 <div className="library-detail-scroll">
                   <div className="library-detail-title"><span className="library-resource-type">{typeName(detail.formPreset, detail.category?.name)}</span><h2>{detail.selectedTitle}</h2><p>{detail.selectedDescription || '暂无说明'}</p><div className="library-detail-tags">{detail.tags.map((tag) => <span key={tag}>{tag}</span>)}</div></div>
-                  <div className="library-detail-section library-resource-location">
-                    <label>所在文件夹<select value={detail.folderIds[0] ?? ''} onChange={(event) => void moveResourceToFolder(event.currentTarget.value)}>
-                      <option value="">资源库根目录</option>
-                      {folderOptions.map((folder) => <option key={folder.id} value={folder.id}>{folder.label}</option>)}
-                    </select></label>
-                  </div>
                   <div className="library-detail-section">
                     <div className="library-detail-section-title"><h3>资源内容</h3><span>选择要复用的组件</span></div>
                     {detail.components.map((component) => (
@@ -760,7 +483,7 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
                     ))}
                   </div>
                   <div className="library-detail-section">
-                    <div className="library-detail-section-title"><h3>版本记录</h3><span>{detail.revisions.length} 个版本</span></div>
+                    <div className="library-detail-section-title"><h3>资源版本记录</h3><span>{detail.revisions.length} 次迭代</span></div>
                     <div className="library-version-history" role="group" aria-label="资源版本历史">
                       {detail.revisions.map((revision) => {
                         const selected = revision.id === detail.selectedRevisionId
@@ -833,7 +556,7 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
       {categoryEditor && <LibraryCategoryEditor initial={categoryEditor.initial} onClose={() => setCategoryEditor(null)} onSaved={(category) => {
         setCategoryEditor(null)
         setCategories((current) => [...current.filter((item) => item.id !== category.id), category].sort((a, b) => a.name.localeCompare(b.name)))
-        useToastStore.getState().show(`分类「${category.name}」已保存为 v${category.version}`)
+        useToastStore.getState().show(`分类「${category.name}」已保存`)
       }} />}
     </div>
   )

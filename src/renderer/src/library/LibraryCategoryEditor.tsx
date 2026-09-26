@@ -76,7 +76,7 @@ export function LibraryCategoryEditor({
         aria-label="资源分类编辑器"
       >
         <header className="library-form-header">
-          <h2>{initial ? '编辑分类 · 发布新版本' : '新建资源分类'}</h2>
+          <h2>{initial ? '编辑分类' : '新建资源分类'}</h2>
           <button disabled={busy} onClick={onClose}>
             关闭
           </button>
@@ -293,9 +293,7 @@ export function LibraryCategoryEditor({
               ))}
             </div>
           </div>
-          {initial && (
-            <p>发布 v{draft.version}。已有资源仍固定原分类版本，编辑资源时可选择升级。</p>
-          )}
+          {initial && <p>保存分类配置后，新建资源会使用更新后的节点组合；已有资源内容保持不变。</p>}
           {error && (
             <p className="library-form-error" role="alert">
               {error}

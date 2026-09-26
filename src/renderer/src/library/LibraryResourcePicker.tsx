@@ -78,7 +78,7 @@ export function LibraryResourcePicker({ projectId, editor }: {
               <div className="library-picker-components">
                 <div className="library-picker-batch"><button disabled={busy || !editor} onClick={() => void addComponents(detail.components.map((item) => item.id))}>整份加入画布（{detail.components.length} 个节点）</button>
                   <button disabled={busy || !editor || !selectedComponents.length} onClick={() => void addComponents(selectedComponents)}>加入所选（{selectedComponents.length}）</button></div>
-                <small>按当前资源固定的分类版本展开；即使创建入口隐藏，也会加入这些节点。</small>
+                <small>按这份资源保存时的节点组合展开并加入画布。</small>
                 {detail.components.map((component) => (
                   <div className="library-picker-component" key={component.id}>
                     <label><input type="checkbox" disabled={busy} checked={selectedComponents.includes(component.id)} onChange={(e) => setSelectedComponents((ids) => e.target.checked ? [...ids, component.id] : ids.filter((id) => id !== component.id))} /><strong>{component.role}</strong><span>{component.valueType}</span></label><small>{nodeLabel(component.id)}</small>
