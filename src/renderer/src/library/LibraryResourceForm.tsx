@@ -33,15 +33,6 @@ interface LibraryResourceFormProps {
   onSave: (input: CreateLibraryResourceInput | PublishLibraryRevisionInput) => Promise<void>
 }
 
-const PRESET_LABELS = {
-  image: '图片 / 海报',
-  prompt: '提示词',
-  character: '人物',
-  scene: '场景',
-  style: '风格',
-  custom: '自定义组合'
-} as const
-
 const TEXT_TYPES = new Set<LibraryValueType>(['text', 'markdown', 'json', 'recipe'])
 const MAX_COMPONENT_BYTES = 128 * 1024 * 1024
 
@@ -283,7 +274,6 @@ export function LibraryResourceForm({
 
   const submit = async (): Promise<void> => {
     if (!title.trim()) return setError('请填写资源名称')
-    if (!detail && !selectedCategory) return setError('请选择资源分类，分类蓝图会决定这份资源包含哪些节点')
     if (components.length === 0) return setError('至少填写一个内容槽位')
     for (const component of components) {
       if (TEXT_TYPES.has(component.valueType) && !component.text.trim()) {
@@ -408,17 +398,17 @@ export function LibraryResourceForm({
         <div className="library-form-scroll">
           <label className="library-form-field"><span>资源分类</span>
             <select value={selectedCategoryKey} onChange={(event) => handleCategoryChange(event.currentTarget.value)}>
-              <option value="">{detail ? '未分类资源' : '选择分类，自动加载对应节点'}</option>
+              <option value="">{detail ? '未分类自由组合' : '不选分类，保存为自由组合'}</option>
               {availableCategories.map((category) => <option key={categoryKey(category)} value={categoryKey(category)}>{category.name}</option>)}
             </select>
             {detail && selectedCategory && <small>本次保存会记录当前资源内容；之后可在详情中查看和对比每次迭代。</small>}
-            {!detail && availableCategories.length === 0 && <small>请先在资源库顶部创建分类。</small>}
+            {!selectedCategory && <small>可以直接组合图片、音频、视频、文件和文本；未分类资源可在资源库的“未分类”中找到。</small>}
           </label>
           <label className="library-form-field"><span>资源名称</span><input autoFocus maxLength={180} value={title} onChange={(event) => setTitle(event.currentTarget.value)} placeholder="例如：主角设定" /></label>
           <label className="library-form-field"><span>说明</span><textarea value={description} maxLength={20000} onChange={(event) => setDescription(event.currentTarget.value)} placeholder="记录用途、来源或使用建议" /></label>
 
           <div className="library-form-components-head">
-            <div><h3>资源内容</h3><p>{selectedCategory ? '每个内容槽位都映射到分类定义的画布节点，可按需添加多项。' : '旧资源兼容编辑：可添加文本、图片、音频、视频或文件。'}</p></div>
+            <div><h3>资源内容</h3><p>{selectedCategory ? '每个内容槽位都映射到分类定义的画布节点，可按需添加多项。' : '自由组合：可添加任意文本、图片、音频、视频或文件。'}</p></div>
             {!selectedCategory && <div className="library-component-add-actions">
               <button type="button" onClick={addUnmappedTextComponent}><Icon name="text" size={14} /> 添加文本</button>
               <label><Icon name="upload" size={14} /> 添加文件<input type="file" multiple onChange={(event) => { addUnmappedFiles(event.currentTarget.files); event.currentTarget.value = '' }} /></label>
@@ -471,7 +461,7 @@ export function LibraryResourceForm({
           ) : (
             <div className="library-component-list">
               {components.map((component, index) => renderComponent(component, index))}
-              {components.length === 0 && <div className="library-form-empty">旧资源暂无组件。</div>}
+              {components.length === 0 && <div className="library-form-empty">还没有添加资源内容。</div>}
             </div>
           )}
 
@@ -479,9 +469,9 @@ export function LibraryResourceForm({
           {error && <div className="library-form-error" role="alert">{error}</div>}
         </div>
         <footer className="library-form-footer">
-          <span>{detail ? `基于 v${detail.selectedRevisionNumber} 编辑，发布为新版本` : selectedCategory?.name ?? PRESET_LABELS[formPreset]}</span>
+          <span>{detail ? `基于 v${detail.selectedRevisionNumber} 编辑，发布为新版本` : selectedCategory?.name ?? '自由组合'}</span>
           <button type="button" className="library-form-secondary" disabled={busy} onClick={onCancel}>取消</button>
-          <button type="button" className="library-form-primary" disabled={busy || (!detail && !selectedCategory)} onClick={() => void submit()}>{busy ? '保存中…' : detail ? '发布新版本' : '保存资源'}</button>
+          <button type="button" className="library-form-primary" disabled={busy} onClick={() => void submit()}>{busy ? '保存中…' : detail ? '发布新版本' : '保存资源'}</button>
         </footer>
       </section>
     </div>

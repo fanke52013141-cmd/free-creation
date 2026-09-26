@@ -96,7 +96,6 @@ export function SaveCanvasNodesDialog({ editor, projectId, nodeIds, onClose, onS
     if (!title.trim()) return setError('请填写资源名称')
     if (supported.length === 0) return setError('所选节点没有可保存的文本或媒体内容')
     if (supported.length > 100) return setError('一次最多保存 100 个节点，请分批保存')
-    if (mode === 'new' && !selectedCategory) return setError('新建资源前请先选择资源分类')
     if (selectedCategory) {
       const missingMapping = supported.find((shape) => !slotAssignments[shape.id])
       if (missingMapping) return setError(`请为「${missingMapping.props.title || '未命名节点'}」选择分类槽位`)
@@ -155,10 +154,10 @@ export function SaveCanvasNodesDialog({ editor, projectId, nodeIds, onClose, onS
               setSelectedCategoryKey(nextKey)
               setSlotAssignments(nextCategory ? initialSlotAssignments(nextCategory, supported) : {})
             }}>
-              <option value="">{mode === 'new' ? '选择分类…' : '沿用未分类资源 / 选择分类…'}</option>
+              <option value="">{mode === 'new' ? '不选分类，保存为自由组合' : '保持未分类'}</option>
               {categoryChoices.map((category) => <option key={categoryKey(category)} value={categoryKey(category)}>{category.name}</option>)}
             </select>
-            <small>{selectedCategory ? '节点会按所选槽位绑定到这份资源蓝图。' : '新建资源必须选择分类；旧资源可保持未分类。'}</small>
+            <small>{selectedCategory ? '节点会按所选槽位绑定到这份资源蓝图。' : '可直接保存为未分类自由组合，之后也能再选择分类。'}</small>
           </label>
           {mode === 'new' ? <>
             <label className="library-form-field"><span>资源名称</span><input autoFocus maxLength={180} value={title} onChange={(event) => setTitle(event.currentTarget.value)} placeholder="例如：主角设定" /></label>
