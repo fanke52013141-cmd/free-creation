@@ -1,41 +1,48 @@
 import { useResourceInsertRequest } from './insertRequestStore'
-import type { LibraryCategory } from '@shared/library/blueprint'
-import { LibraryCategoryEditor } from './LibraryCategoryEditor'
-import { useCallback, useEffect, useRef, useState } from 'react'
-import type { LibraryCollection, LibraryPreset, LibraryResourceDetail, LibraryResourceSummary, LibraryBoard, LibraryBoardItem, CreateLibraryResourceInput, PublishLibraryRevisionInput } from '@shared/library/types'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { LibraryFolder, LibraryPreset, LibraryResourceDetail, LibraryResourceSummary, LibraryBoard, LibraryBoardItem, CreateLibraryResourceInput, PublishLibraryRevisionInput } from '@shared/library/types'
 import type { ProjectMeta } from '@shared/types'
 import { Icon } from '../components/Icon'
 import { mediaUrl } from '../nodes/registry'
 import { useAppStore } from '../stores/app'
 import { useToastStore } from '../stores/toast'
 import { LibraryResourceForm } from './LibraryResourceForm'
+import { useConfirmStore } from '../stores/confirm'
 import './library.css'
 
-const RESOURCE_FILTERS: Array<{ id: LibraryPreset | 'all'; label: string }> = [
-  { id: 'all', label: '全部资源' },
-  { id: 'image', label: '图片 / 海报' },
-  { id: 'prompt', label: '提示词' },
-  { id: 'character', label: '人物' },
-  { id: 'scene', label: '场景' },
-  { id: 'style', label: '风格' },
-  { id: 'custom', label: '自定义' }
-]
-
 function typeName(preset: LibraryPreset): string {
-  return RESOURCE_FILTERS.find((item) => item.id === preset)?.label ?? '组合资源'
+  if (preset === 'image') return '图片资产'
+  if (preset === 'prompt') return '文本资产'
+  return '组合资产'
+}
+
+function folderPathOptions(folders: LibraryFolder[]): Array<{ id: string; label: string }> {
+  const children = new Map<string | null, LibraryFolder[]>()
+  for (const folder of folders) children.set(folder.parentId, [...(children.get(folder.parentId) ?? []), folder])
+  const result: Array<{ id: string; label: string }> = []
+  const visit = (parentId: string | null, path: string, ancestors: Set<string>): void => {
+    for (const folder of children.get(parentId) ?? []) {
+      if (ancestors.has(folder.id)) continue
+      const nextPath = path ? `${path} / ${folder.name}` : folder.name
+      result.push({ id: folder.id, label: nextPath })
+      visit(folder.id, nextPath, new Set(ancestors).add(folder.id))
+    }
+  }
+  visit(null, '', new Set())
+  return result
 }
 
 function ResourceCard({ resource, onOpen, onDragStart }: { resource: LibraryResourceSummary; onOpen: () => void; onDragStart?: React.DragEventHandler<HTMLButtonElement> }): React.JSX.Element {
   const [failed, setFailed] = useState(false)
   return (
-    <button className={`library-resource-card presentation-${resource.category?.presentation ?? 'gallery'}`} draggable={Boolean(onDragStart)} onDragStart={onDragStart} onClick={onOpen}>
+    <button className="library-resource-card" draggable={Boolean(onDragStart)} onDragStart={onDragStart} onClick={onOpen}>
       <div className="library-resource-cover">
         {resource.coverPath && !failed ? (
           <img src={mediaUrl(resource.coverPath)} alt="" loading="lazy" onError={() => setFailed(true)} />
         ) : (
           <span className="library-resource-placeholder"><Icon name={resource.formPreset === 'image' || resource.formPreset === 'style' ? 'image' : 'assets'} size={27} /></span>
         )}
-        <span className="library-resource-type">{resource.category?.name ?? typeName(resource.formPreset)}</span>
+        <span className="library-resource-type">{typeName(resource.formPreset)}</span>
       </div>
       <div className="library-resource-card-body">
         <div className="library-resource-card-title"><strong>{resource.title}</strong><span>v{resource.revisionNumber}</span></div>
@@ -154,14 +161,12 @@ function comparisonValue(component: LibraryResourceDetail['components'][number] 
 
 export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.JSX.Element {
   const [resources, setResources] = useState<LibraryResourceSummary[]>([])
-  const [collections, setCollections] = useState<LibraryCollection[]>([])
   const [projects, setProjects] = useState<ProjectMeta[]>([])
   const [query, setQuery] = useState('')
-  const [categoryId, setCategoryId] = useState('')
-  const [categories, setCategories] = useState<LibraryCategory[]>([])
-  const [categoryEditor, setCategoryEditor] = useState<LibraryCategory | 'new' | null>(null)
-  const [collectionId, setCollectionId] = useState('')
-  const [includeArchived, setIncludeArchived] = useState(false)
+  const [folders, setFolders] = useState<LibraryFolder[]>([])
+  const [folderId, setFolderId] = useState('')
+  const [folderDraft, setFolderDraft] = useState('')
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedRevisionId, setSelectedRevisionId] = useState<string | undefined>()
@@ -169,7 +174,6 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
   const [compareRevisionSelection, setCompareRevisionSelection] = useState('')
   const [compareDetail, setCompareDetail] = useState<LibraryResourceDetail | null>(null)
   const [formOpen, setFormOpen] = useState(false)
-  const [collectionDraft, setCollectionDraft] = useState('')
   const [targetProjectId, setTargetProjectId] = useState('')
   const [selectedComponents, setSelectedComponents] = useState<Set<string>>(new Set())
   const [view, setView] = useState<'resources' | 'boards'>('resources')
@@ -196,17 +200,14 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
   const currentCompareDetail = detail && compareDetail?.id === detail.id && compareDetail.selectedRevisionId === compareRevisionId
     ? compareDetail
     : null
+  const folderOptions = useMemo(() => folderPathOptions(folders), [folders])
 
-  const loadCollections = useCallback(async (): Promise<void> => {
-    const [collectionResult, projectResult, boardResult, categoryResult] = await Promise.all([
-      window.api.listLibraryCollections(),
+  const loadPageData = useCallback(async (): Promise<void> => {
+    const [projectResult, boardResult, folderResult] = await Promise.all([
       window.api.listProjects(),
       window.api.listLibraryBoards(),
-      window.api.listLibraryCategories()
+      window.api.listLibraryFolders()
     ])
-    if (categoryResult.ok) setCategories(categoryResult.data)
-    else useToastStore.getState().show(categoryResult.error.message)
-    if (collectionResult.ok) setCollections(collectionResult.data)
     if (projectResult.ok) {
       setProjects(projectResult.data)
       setTargetProjectId((current) => current || projectResult.data[0]?.id || '')
@@ -215,22 +216,23 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
       setBoards(boardResult.data)
       setBoardId((current) => current || boardResult.data[0]?.id || '')
     }
+    if (folderResult.ok) setFolders(folderResult.data)
   }, [])
 
   const loadResources = useCallback(async (cursor?: string, append = false): Promise<void> => {
-    const result = await window.api.searchLibrary({ query, categoryId: categoryId || undefined, collectionId: collectionId || undefined, includeArchived, cursor, limit: 48 })
+    const result = await window.api.searchLibrary({ query, folderId: folderId || undefined, cursor, limit: 48 })
     if (!result.ok) {
       useToastStore.getState().show(`资源库读取失败：${result.error.message}`)
       return
     }
     setResources((current) => append ? [...current, ...result.data.items] : result.data.items)
     setNextCursor(result.data.nextCursor)
-  }, [collectionId, includeArchived, categoryId, query])
+  }, [folderId, query])
 
   useEffect(() => {
-    const timer = window.setTimeout(() => { void loadCollections() }, 0)
+    const timer = window.setTimeout(() => { void loadPageData() }, 0)
     return () => window.clearTimeout(timer)
-  }, [loadCollections])
+  }, [loadPageData])
   useEffect(() => {
     const timer = window.setTimeout(() => { void loadResources() }, 180)
     return () => window.clearTimeout(timer)
@@ -289,23 +291,49 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     const isRevision = 'resourceId' in input
     const result = isRevision
       ? await window.api.publishLibraryRevision(input as PublishLibraryRevisionInput)
-      : await window.api.createLibraryResource(input)
+      : await window.api.createLibraryResource({ ...input, ...(folderId && folderId !== 'root' ? { folderId } : {}) })
     if (!result.ok) throw new Error(result.error.message)
     setFormOpen(false)
     setSelectedId(result.data.id)
     setSelectedRevisionId(result.data.latestRevisionId)
     await loadResources()
-    await loadCollections()
+    await loadPageData()
     useToastStore.getState().show(isRevision ? `已发布「${result.data.title}」v${result.data.revisionNumber}` : `已保存资源「${result.data.title}」`)
   }
 
-  const createCollection = async (): Promise<void> => {
-    if (!collectionDraft.trim()) return
-    const result = await window.api.createLibraryCollection({ name: collectionDraft.trim() })
-    if (!result.ok) return useToastStore.getState().show(`创建收藏集失败：${result.error.message}`)
-    setCollectionDraft('')
-    await loadCollections()
-    setCollectionId(result.data.id)
+  const createFolder = async (): Promise<void> => {
+    if (!folderDraft.trim()) return
+    const parentId = folderId && folderId !== 'all' && folderId !== 'root' ? folderId : null
+    const result = await window.api.createLibraryFolder({ name: folderDraft.trim(), parentId })
+    if (!result.ok) return useToastStore.getState().show(`创建文件夹失败：${result.error.message}`)
+    setFolderDraft('')
+    setFolders((current) => [...current, result.data])
+    if (parentId) setExpandedFolders((current) => new Set(current).add(parentId))
+    setFolderId(result.data.id)
+  }
+
+  const removeFolder = async (folder: LibraryFolder): Promise<void> => {
+    const accepted = await useConfirmStore.getState().confirm({
+      title: `删除文件夹「${folder.name}」`,
+      message: '文件夹中的资源会移到上一级，子文件夹会一起提升一级；资源本身不会删除。',
+      confirmText: '删除文件夹',
+      danger: true
+    })
+    if (!accepted) return
+    const result = await window.api.deleteLibraryFolder(folder.id)
+    if (!result.ok) return useToastStore.getState().show(`删除文件夹失败：${result.error.message}`)
+    if (folderId === folder.id) setFolderId(folder.parentId ?? 'root')
+    await loadPageData()
+  }
+
+  const moveResourceToFolder = async (nextFolderId: string): Promise<void> => {
+    if (!detail) return
+    const result = await window.api.setLibraryResourceFolder({ resourceId: detail.id, folderId: nextFolderId || null })
+    if (!result.ok) return useToastStore.getState().show(`移动资源失败：${result.error.message}`)
+    await loadResources()
+    const updated = await window.api.getLibraryResource({ resourceId: detail.id, revisionId: detail.selectedRevisionId })
+    if (updated.ok && updated.data) setDetail(updated.data)
+    useToastStore.getState().show('资源已移到所选文件夹')
   }
 
   const archive = async (archived: boolean): Promise<void> => {
@@ -404,8 +432,25 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
       return
     }
     await loadResources()
-    await loadCollections()
+    await loadPageData()
     useToastStore.getState().show(`已导入 ${result.data.imported} 份资源`)
+  }
+
+  const renderFolder = (folder: LibraryFolder, depth = 0): React.JSX.Element => {
+    const hasChildren = folders.some((item) => item.parentId === folder.id)
+    const expanded = expandedFolders.has(folder.id)
+    return (
+      <Fragment key={folder.id}>
+        <div className="library-folder-row">
+          <button className={`library-folder-select${folderId === folder.id ? ' active' : ''}`} style={{ paddingLeft: 10 + depth * 15 }} onClick={() => setFolderId(folder.id)}>
+            <span className="library-folder-caret" onClick={(event) => { event.stopPropagation(); setExpandedFolders((current) => { const next = new Set(current); if (next.has(folder.id)) next.delete(folder.id); else next.add(folder.id); return next }) }}>{hasChildren ? expanded ? '⌄' : '›' : ''}</span>
+            <Icon name="assets" size={13} /><span>{folder.name}</span><small>{folder.resourceCount}</small>
+          </button>
+          <button className="library-folder-delete" title={`删除文件夹 ${folder.name}`} aria-label={`删除文件夹 ${folder.name}`} onClick={() => void removeFolder(folder)}><Icon name="trash" size={12} /></button>
+        </div>
+        {expanded && folders.filter((item) => item.parentId === folder.id).map((child) => renderFolder(child, depth + 1))}
+      </Fragment>
+    )
   }
 
   return (
@@ -413,53 +458,41 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
       <header className="library-page-header">
         <div className="library-page-brand">
           <button className="library-back" onClick={onBack}><Icon name="home" size={16} />返回项目</button>
-          <div><span className="library-eyebrow">CREATION LIBRARY</span><h1>资源库</h1><p>把图片、提示词、人物与风格设定积累成可复用的创作资产。</p></div>
+          <div><span className="library-eyebrow">CREATION LIBRARY</span><h1>资源库</h1></div>
         </div>
         <div className="library-page-actions">
           <button className="library-secondary" onClick={() => void importLibrary()}><Icon name="upload" size={15} />导入资源包</button>
           <button className="library-secondary" onClick={() => void exportLibrary()}><Icon name="download" size={15} />导出资源库</button>
-          <button className="library-secondary" onClick={() => setCategoryEditor('new')}>新建分类</button>
           <button className="library-primary" onClick={() => { setSelectedId(null); setFormOpen(true) }}><Icon name="add" size={15} />新建资源</button>
         </div>
       </header>
 
       <div className="library-view-switch">
-        <button className={view === 'resources' ? 'active' : ''} onClick={() => setView('resources')}>资源</button>
-        <button className={view === 'boards' ? 'active' : ''} onClick={() => setView('boards')}>展板 <span>{boards.length}</span></button>
+        <button className="active" disabled>资源</button>
       </div>
 
       {view === 'resources' ? (
         <div className="library-workspace">
           <aside className="library-collections">
-            <div className="library-collection-heading"><strong>收藏集</strong><span>{collections.length}</span></div>
-            <button className={!collectionId ? 'active' : ''} onClick={() => setCollectionId('')}><Icon name="assets" size={14} />全部收藏</button>
-            {collections.map((collection) => (
-              <button key={collection.id} className={collectionId === collection.id ? 'active' : ''} onClick={() => setCollectionId(collection.id)}>
-                <Icon name="assets" size={14} /><span>{collection.name}</span><small>{collection.resourceCount}</small>
-              </button>
-            ))}
+            <div className="library-collection-heading"><strong>文件夹</strong><span>{folders.length}</span></div>
+            <button className={!folderId ? 'active' : ''} onClick={() => setFolderId('')}><Icon name="assets" size={14} /><span>全部资源</span></button>
+            <button className={folderId === 'root' ? 'active' : ''} onClick={() => setFolderId('root')}><Icon name="assets" size={14} /><span>根目录</span></button>
+            {folders.filter((item) => item.parentId === null).map((folder) => renderFolder(folder))}
             <div className="library-new-collection">
-              <input value={collectionDraft} maxLength={100} placeholder="新建收藏集" onChange={(event) => setCollectionDraft(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') void createCollection() }} />
-              <button aria-label="创建收藏集" disabled={!collectionDraft.trim()} onClick={() => void createCollection()}><Icon name="add" size={14} /></button>
+              <input value={folderDraft} maxLength={100} placeholder={folderId && folderId !== 'root' ? '新建子文件夹' : '新建文件夹'} onChange={(event) => setFolderDraft(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') void createFolder() }} />
+              <button aria-label="创建文件夹" disabled={!folderDraft.trim()} onClick={() => void createFolder()}><Icon name="add" size={14} /></button>
             </div>
           </aside>
           <main className="library-resource-browser">
             <div className="library-browser-toolbar">
               <label className="library-search"><Icon name="search" size={15} /><input aria-label="搜索资源库" value={query} placeholder="搜索名称、说明、标签和提示词" onChange={(event) => setQuery(event.currentTarget.value)} /></label>
-              <label className="library-archived-toggle"><input type="checkbox" checked={includeArchived} onChange={(event) => setIncludeArchived(event.currentTarget.checked)} />显示归档</label>
-            </div>
-            <div className="library-filter-row">
-              <button className={!categoryId ? 'active' : ''} onClick={() => setCategoryId('')}>全部资源</button>
-              {categories.map((item) => <button key={item.id} className={categoryId === item.id ? 'active' : ''} onClick={() => setCategoryId(item.id)}>{item.name}</button>)}
-              <button className={categoryId === 'legacy' ? 'active' : ''} onClick={() => setCategoryId('legacy')}>旧版资源</button>
-              {categories.some((item) => item.id === categoryId) && <button onClick={() => setCategoryEditor(categories.find((item) => item.id === categoryId)!)}>编辑当前分类</button>}
             </div>
             {resources.length ? (
               <div className="library-resource-grid">
                 {resources.map((resource) => <ResourceCard key={resource.id} resource={resource} onOpen={() => { setSelectedId(resource.id); setSelectedRevisionId(resource.latestRevisionId) }} onDragStart={(event) => event.dataTransfer.setData('application/x-canvas-library-resource', resource.id)} />)}
               </div>
             ) : (
-              <div className="library-empty-state"><span><Icon name="assets" size={25} /></span><h2>你的创作宝库从这里开始</h2><p>把好用的图片、提示词、人物和风格设定收藏起来，后续项目都能查找和复用。</p><button className="library-primary" onClick={() => setFormOpen(true)}><Icon name="add" size={15} />新建第一份资源</button></div>
+              <div className="library-empty-state"><span><Icon name="assets" size={25} /></span><h2>这个位置还没有资源</h2><p>从画布选中节点后，右键选择“保存所选节点到资源库”，或手动新建资源。</p><button className="library-primary" onClick={() => setFormOpen(true)}><Icon name="add" size={15} />新建资源</button></div>
             )}
             {nextCursor && <button className="library-load-more" onClick={() => void loadResources(nextCursor, true)}>加载更多</button>}
           </main>
@@ -510,7 +543,13 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
             {detailLoading || !detail ? <div className="library-detail-loading">正在读取资源…</div> : (
               <>
                 <div className="library-detail-scroll">
-                  <div className="library-detail-title"><span className="library-resource-type">{detail.category?.name ?? typeName(detail.formPreset)}</span><h2>{detail.selectedTitle}</h2><p>{detail.selectedDescription || '暂无说明'}</p><div className="library-detail-tags">{detail.tags.map((tag) => <span key={tag}>{tag}</span>)}</div></div>
+                  <div className="library-detail-title"><span className="library-resource-type">{typeName(detail.formPreset)}</span><h2>{detail.selectedTitle}</h2><p>{detail.selectedDescription || '暂无说明'}</p><div className="library-detail-tags">{detail.tags.map((tag) => <span key={tag}>{tag}</span>)}</div></div>
+                  <div className="library-detail-section library-resource-location">
+                    <label>所在文件夹<select value={detail.folderIds[0] ?? ''} onChange={(event) => void moveResourceToFolder(event.currentTarget.value)}>
+                      <option value="">资源库根目录</option>
+                      {folderOptions.map((folder) => <option key={folder.id} value={folder.id}>{folder.label}</option>)}
+                    </select></label>
+                  </div>
                   <div className="library-detail-section">
                     <div className="library-detail-section-title"><h3>资源内容</h3><span>选择要复用的组件</span></div>
                     {detail.components.map((component) => (
@@ -585,8 +624,7 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
         </div>
       )}
 
-      {categoryEditor && <LibraryCategoryEditor initial={categoryEditor === 'new' ? undefined : categoryEditor} onClose={() => setCategoryEditor(null)} onSaved={() => { setCategoryEditor(null); void loadCollections() }} />}
-      {formOpen && <LibraryResourceForm categories={categories} detail={selectedId ? detail ?? undefined : undefined} collections={collections} onCancel={() => setFormOpen(false)} onSave={saveResource} />}
+      {formOpen && <LibraryResourceForm detail={selectedId ? detail ?? undefined : undefined} onCancel={() => setFormOpen(false)} onSave={saveResource} />}
     </div>
   )
 }

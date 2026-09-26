@@ -4,8 +4,10 @@ import { dialog, ipcMain } from 'electron'
 import { IPC, type IpcEnvelope } from '../../shared/contracts'
 import type {
   CreateLibraryCollectionInput,
+  CreateLibraryFolderInput,
   CreateLibraryResourceInput,
   CaptureProjectMediaInput,
+  CaptureProjectNodesInput,
   LibraryResourceDetail,
   PublishLibraryRevisionInput
 } from '../../shared/library/types'
@@ -42,6 +44,9 @@ export function registerLibraryIpc(): void {
   ipcMain.handle(IPC.library.captureProjectMedia, (_event, input: CaptureProjectMediaInput): IpcEnvelope<LibraryResourceDetail> => {
     try { return ok(library.captureProjectMedia(input)) } catch (error) { return err('CAPTURE_FAILED', error) }
   })
+  ipcMain.handle(IPC.library.captureProjectNodes, (_event, input: CaptureProjectNodesInput): IpcEnvelope<LibraryResourceDetail> => {
+    try { return ok(library.captureProjectNodes(input)) } catch (error) { return err('CAPTURE_FAILED', error) }
+  })
   ipcMain.handle(IPC.library.publishRevision, (_event, input: PublishLibraryRevisionInput): IpcEnvelope<LibraryResourceDetail> => {
     try { return ok(library.publishRevision(input)) } catch (error) { return err('REVISION_FAILED', error) }
   })
@@ -58,6 +63,20 @@ export function registerLibraryIpc(): void {
   ipcMain.handle(IPC.library.setCollections, (_event, input: { resourceId: string; collectionIds: string[] }) => {
     if (!input?.resourceId || !Array.isArray(input.collectionIds)) return err('INVALID_INPUT', '收藏集参数不完整')
     try { return ok(library.setResourceCollections(input)) } catch (error) { return err('UPDATE_FAILED', error) }
+  })
+  ipcMain.handle(IPC.library.listFolders, () => {
+    try { return ok(library.listFolders()) } catch (error) { return err('READ_FAILED', error) }
+  })
+  ipcMain.handle(IPC.library.createFolder, (_event, input: CreateLibraryFolderInput) => {
+    try { return ok(library.createFolder(input)) } catch (error) { return err('CREATE_FAILED', error) }
+  })
+  ipcMain.handle(IPC.library.deleteFolder, (_event, folderId: string) => {
+    if (!folderId) return err('INVALID_INPUT', '文件夹 ID 不完整')
+    try { return ok(library.deleteFolder(folderId)) } catch (error) { return err('DELETE_FAILED', error) }
+  })
+  ipcMain.handle(IPC.library.setResourceFolder, (_event, input: { resourceId: string; folderId?: string | null }) => {
+    if (!input?.resourceId) return err('INVALID_INPUT', '资源 ID 不完整')
+    try { return ok(library.setResourceFolder(input)) } catch (error) { return err('UPDATE_FAILED', error) }
   })
   ipcMain.handle(IPC.library.listBoards, () => {
     try { return ok(library.listBoards()) } catch (error) { return err('READ_FAILED', error) }

@@ -1,4 +1,5 @@
 import { ResourceInsertRequest } from '../library/ResourceInsertRequest'
+import { SaveCanvasNodesDialog } from '../library/SaveCanvasNodesDialog'
 import { Tldraw, createShapeId, type Editor, type TLShapeId } from 'tldraw'
 import 'tldraw/tldraw.css'
 import './node-scrollbars.css'
@@ -267,6 +268,7 @@ export function CanvasEditor({ project, initialSnapshot, workspaceProfile }: Can
   // 剪贴板节点数进入 React 状态，让「新建节点」菜单能响应式显示「粘贴」入口
   const [clipboardCount, setClipboardCount] = useState(0)
   const [menu, setMenu] = useState<MenuState | null>(null)
+  const [librarySaveSelection, setLibrarySaveSelection] = useState<TLShapeId[] | null>(null)
   // 拉线到空白后的菜单锚点由实际 DOM 尺寸测得；不能再把鼠标松手点误当菜单左上角。
   const [menuAnchor, setMenuAnchor] = useState<{ x: number; y: number } | null>(null)
   const [dragOver, setDragOver] = useState(false)
@@ -1946,6 +1948,15 @@ export function CanvasEditor({ project, initialSnapshot, workspaceProfile }: Can
       {/* 搜索覆盖层（顶栏按钮触发，在 Tldraw 同级渲染） */}
       {editorInstance && <SearchPalette editor={editorInstance} />}
       {editorInstance && <ResourceInsertRequest editor={editorInstance} projectId={project.id} />}
+      {editorInstance && librarySaveSelection && (
+        <SaveCanvasNodesDialog
+          editor={editorInstance}
+          projectId={project.id}
+          nodeIds={librarySaveSelection}
+          onClose={() => setLibrarySaveSelection(null)}
+          onSaved={() => setLibrarySaveSelection(null)}
+        />
+      )}
       <CanvasSidePanel
         tab={panelTab}
         projectId={project.id}
@@ -2062,6 +2073,7 @@ export function CanvasEditor({ project, initialSnapshot, workspaceProfile }: Can
           x={menu.x}
           y={menu.y}
           onCopy={() => copySelectionToClipboard(editorInstance)}
+          onSaveToLibrary={(ids) => setLibrarySaveSelection(ids)}
           onClose={closeMenu}
         />
       )}

@@ -8,7 +8,7 @@ export interface MigrationDatabase {
   pragma(statement: string, options?: { simple?: boolean }): unknown
 }
 
-export const DB_SCHEMA_VERSION = 8
+export const DB_SCHEMA_VERSION = 9
 
 const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
@@ -263,6 +263,26 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
         revision_id TEXT PRIMARY KEY, category_id TEXT NOT NULL, category_json TEXT NOT NULL
       );
       CREATE INDEX idx_library_revision_category ON library_revision_blueprints(category_id);
+    `)
+  },
+  // M9: hierarchical folders replace the library's implicit collection taxonomy.
+  // Existing collections and memberships are copied so migration never loses user organization.
+  (database) => {
+    database.exec(`
+      CREATE TABLE library_folders (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL, parent_id TEXT,
+        created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_library_folders_parent ON library_folders(parent_id, name COLLATE NOCASE);
+      CREATE TABLE library_resource_folders (
+        folder_id TEXT NOT NULL, resource_id TEXT NOT NULL, added_at INTEGER NOT NULL,
+        PRIMARY KEY(folder_id, resource_id)
+      );
+      CREATE INDEX idx_library_resource_folders_resource ON library_resource_folders(resource_id);
+      INSERT INTO library_folders (id, name, parent_id, created_at, updated_at)
+        SELECT id, name, NULL, created_at, updated_at FROM library_collections;
+      INSERT OR IGNORE INTO library_resource_folders (folder_id, resource_id, added_at)
+        SELECT collection_id, resource_id, added_at FROM library_collection_items;
     `)
   }
 

@@ -154,8 +154,8 @@ function AssetCard({
       )}
       <button
         className="asset-library-save"
-        title="收藏到资源库"
-        aria-label={`收藏素材 ${name} 到资源库`}
+        title="保存到资源库"
+        aria-label={`保存素材 ${name} 到资源库`}
         disabled={savingToLibrary}
         onClick={(event) => {
           event.stopPropagation()
@@ -270,10 +270,10 @@ export function AssetsPanel({
         mediaId: asset.id,
         title: asset.name ?? `${asset.kind}素材-${asset.id.slice(0, 6)}`
       })
-      if (!result.ok) return toast(`收藏失败：${result.error.message}`)
-      toast(`已收藏「${result.data.selectedTitle}」到资源库`)
+      if (!result.ok) return toast(`保存失败：${result.error.message}`)
+      toast(`已将「${result.data.selectedTitle}」保存到资源库`)
     } catch (error) {
-      toast(`收藏失败：${error instanceof Error ? error.message : String(error)}`)
+      toast(`保存失败：${error instanceof Error ? error.message : String(error)}`)
     } finally {
       setSavingMediaId(null)
     }

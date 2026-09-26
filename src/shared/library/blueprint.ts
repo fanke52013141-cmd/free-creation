@@ -139,14 +139,15 @@ export function legacyCategory(
           (LIBRARY_NODE_ADAPTERS[type].values as readonly string[]).includes(component.valueType)
         )
         if (!nodeType) throw new Error(`无法映射旧组件「${component.role}」`)
+        const occurrence = components.slice(0, index + 1).filter((item) => item.role === component.role).length
         return {
           id: `legacy-${index}`,
-          label: component.role,
+          label: `${component.role}-${String(occurrence).padStart(2, '0')}`,
           nodeType,
           contractVersion: LIBRARY_NODE_ADAPTERS[nodeType].contractVersion,
           required: false,
           multiple: false,
-          titleTemplate: '{resource} · {slot}'
+          titleTemplate: '{resource}-{slot}'
         }
       })
     }
@@ -210,7 +211,7 @@ export function planResourceNodes(
             title: slot.titleTemplate.replace(
               /\{(resource|slot|index)\}/g,
               (_match, key: string) =>
-                key === 'resource' ? title : key === 'slot' ? slot.label : String(index + 1)
+                key === 'resource' ? title : key === 'slot' ? slot.label : String(index + 1).padStart(2, '0')
             ),
             ...(text !== undefined ? { text } : {})
           }

@@ -12,6 +12,8 @@ import type {
   ExportCanvasStructureInput,
   GatewayEvent,
   IpcEnvelope,
+  CreateLibraryFolderInput,
+  CaptureProjectNodesInput,
   LibraryArchiveInput,
   LibraryDetailInput,
   LibraryExportInput,
@@ -52,6 +54,7 @@ import type {
   LibraryBoard,
   LibraryBoardItem,
   LibraryCollection,
+  LibraryFolder,
   LibraryResourceDetail,
   PublishLibraryRevisionInput,
   SaveLibraryBoardInput,
@@ -113,6 +116,8 @@ const api = {
     ipcRenderer.invoke(IPC.library.create, input),
   captureLibraryMedia: (input: CaptureProjectMediaInput): Promise<IpcEnvelope<LibraryResourceDetail>> =>
     ipcRenderer.invoke(IPC.library.captureProjectMedia, input),
+  captureLibraryNodes: (input: CaptureProjectNodesInput): Promise<IpcEnvelope<LibraryResourceDetail>> =>
+    ipcRenderer.invoke(IPC.library.captureProjectNodes, input),
   publishLibraryRevision: (input: PublishLibraryRevisionInput): Promise<IpcEnvelope<LibraryResourceDetail>> =>
     ipcRenderer.invoke(IPC.library.publishRevision, input),
   archiveLibraryResource: (input: LibraryArchiveInput): Promise<IpcEnvelope<boolean>> =>
@@ -123,6 +128,14 @@ const api = {
     ipcRenderer.invoke(IPC.library.createCollection, input),
   setLibraryCollections: (input: SetLibraryCollectionsInput): Promise<IpcEnvelope<boolean>> =>
     ipcRenderer.invoke(IPC.library.setCollections, input),
+  listLibraryFolders: (): Promise<IpcEnvelope<LibraryFolder[]>> =>
+    ipcRenderer.invoke(IPC.library.listFolders),
+  createLibraryFolder: (input: CreateLibraryFolderInput): Promise<IpcEnvelope<LibraryFolder>> =>
+    ipcRenderer.invoke(IPC.library.createFolder, input),
+  deleteLibraryFolder: (folderId: string): Promise<IpcEnvelope<boolean>> =>
+    ipcRenderer.invoke(IPC.library.deleteFolder, folderId),
+  setLibraryResourceFolder: (input: { resourceId: string; folderId?: string | null }): Promise<IpcEnvelope<boolean>> =>
+    ipcRenderer.invoke(IPC.library.setResourceFolder, input),
   listLibraryBoards: (): Promise<IpcEnvelope<LibraryBoard[]>> =>
     ipcRenderer.invoke(IPC.library.listBoards),
   createLibraryBoard: (input: { title: string; description?: string }): Promise<IpcEnvelope<LibraryBoard>> =>

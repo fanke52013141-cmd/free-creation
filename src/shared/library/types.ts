@@ -24,6 +24,8 @@ export interface CreateLibraryResourceInput {
   description?: string
   tags?: string[]
   collectionIds?: string[]
+  /** Folder where the resource is filed; omitted means library root. */
+  folderId?: string
   components: LibraryComponentInput[]
   changeNote?: string
 }
@@ -34,6 +36,38 @@ export interface CaptureProjectMediaInput {
   title?: string
   description?: string
   tags?: string[]
+}
+
+export interface CaptureProjectNodesInput {
+  projectId: string
+  title: string
+  folderId?: string
+  /** When set, the selected nodes become a new immutable revision of this asset. */
+  resourceId?: string
+  baseRevisionId?: string
+  changeNote?: string
+  nodes: Array<{
+    nodeId: string
+    title: string
+    nodeType: string
+    text?: string
+    mediaId?: string
+    mediaMime?: string
+  }>
+}
+
+export interface LibraryFolder {
+  id: string
+  name: string
+  parentId: string | null
+  resourceCount: number
+  createdAt: number
+  updatedAt: number
+}
+
+export interface CreateLibraryFolderInput {
+  name: string
+  parentId?: string | null
 }
 
 export interface PublishLibraryRevisionInput extends CreateLibraryResourceInput {
@@ -49,6 +83,7 @@ export interface LibrarySearchInput {
   categoryId?: string
   formPreset?: LibraryPreset | 'all'
   collectionId?: string
+  folderId?: string
   includeArchived?: boolean
   cursor?: string
   limit?: number
@@ -66,6 +101,7 @@ export interface LibraryResourceSummary {
   coverPath?: string
   tags: string[]
   collectionIds: string[]
+  folderIds: string[]
   updatedAt: number
   archivedAt?: number
 }

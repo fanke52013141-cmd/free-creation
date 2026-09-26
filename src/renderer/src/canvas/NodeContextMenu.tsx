@@ -9,6 +9,7 @@ interface NodeContextMenuProps {
   x: number
   y: number
   onClose: () => void
+  onSaveToLibrary?: (ids: TLShapeId[]) => void
   /** 复制按钮写入节点剪贴板（由 CanvasEditor 提供），之后可在空白处 Ctrl+V 或右键粘贴；不可用时回退为原地复制。 */
   onCopy?: () => number
 }
@@ -19,10 +20,11 @@ export function NodeContextMenu({
   x,
   y,
   onCopy,
+  onSaveToLibrary,
   onClose
 }: NodeContextMenuProps): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
-  const [height, setHeight] = useState(168)
+  const [height, setHeight] = useState(210)
 
   useEffect(() => {
     const close = (event: MouseEvent): void => {
@@ -39,7 +41,7 @@ export function NodeContextMenu({
     }
   }, [onClose])
 
-  useLayoutEffect(() => setHeight(ref.current?.getBoundingClientRect().height ?? 168), [])
+  useLayoutEffect(() => setHeight(ref.current?.getBoundingClientRect().height ?? 210), [])
   const left = Math.max(12, Math.min(x, window.innerWidth - 196))
   const top = Math.max(12, Math.min(y, window.innerHeight - height - 12))
   const run = (action: () => void): void => {
@@ -77,6 +79,10 @@ export function NodeContextMenu({
       >
         <Icon name="copy" size={16} />
         复制
+      </button>
+      <button className="node-menu-item" onClick={() => run(() => onSaveToLibrary?.(ids))}>
+        <Icon name="assets" size={16} />
+        保存所选节点到资源库…
       </button>
       <button
         className="node-menu-item"

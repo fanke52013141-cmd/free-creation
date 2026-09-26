@@ -7,11 +7,14 @@ import { basename, extname, join } from 'path'
 import { nanoid } from 'nanoid'
 import type {
   CreateLibraryCollectionInput,
+  CreateLibraryFolderInput,
   CreateLibraryResourceInput,
   CaptureProjectMediaInput,
+  CaptureProjectNodesInput,
   LibraryBoard,
   LibraryBoardItem,
   LibraryCollection,
+  LibraryFolder,
   LibraryComponentInput,
   LibraryPreset,
   LibraryResourceComponent,
@@ -108,6 +111,37 @@ function resourceTags(resourceId: string): string[] {
   ).all(resourceId) as Array<{ tag: string }>).map((row) => row.tag)
 }
 
+function resourceFolderIds(resourceId: string): string[] {
+  return (getDb().prepare(
+    'SELECT folder_id FROM library_resource_folders WHERE resource_id = ? ORDER BY added_at ASC'
+  ).all(resourceId) as Array<{ folder_id: string }>).map((row) => row.folder_id)
+}
+
+function folderPath(folderId: string): string[] {
+  const path: string[] = []
+  const visited = new Set<string>()
+  let currentId: string | null = folderId
+  while (currentId && !visited.has(currentId)) {
+    visited.add(currentId)
+    const current = getDb().prepare('SELECT name, parent_id FROM library_folders WHERE id = ?').get(currentId) as
+      | { name: string; parent_id: string | null }
+      | undefined
+    if (!current) break
+    path.unshift(current.name)
+    currentId = current.parent_id
+  }
+  return path
+}
+
+function resourceFolderPaths(resourceId: string): string[][] {
+  return resourceFolderIds(resourceId).map(folderPath).filter((path) => path.length > 0)
+}
+
+function allFolderPaths(): string[][] {
+  return (getDb().prepare('SELECT id FROM library_folders ORDER BY created_at ASC').all() as Array<{ id: string }>)
+    .map((row) => folderPath(row.id)).filter((path) => path.length > 0)
+}
+
 function resourceSummary(row: ResourceRow): LibraryResourceSummary {
   const category = revisionCategory(row.latest_revision_id)
   const cover = category?.coverSlotId ? readComponents(row.latest_revision_id).find((component) =>
@@ -124,6 +158,7 @@ function resourceSummary(row: ResourceRow): LibraryResourceSummary {
     ...(cover ? { coverPath: cover } : {}),
     tags: resourceTags(row.id),
     collectionIds: resourceCollections(row.id),
+    folderIds: resourceFolderIds(row.id),
     updatedAt: row.updated_at,
     ...(row.archived_at ? { archivedAt: row.archived_at } : {})
   }
@@ -363,6 +398,12 @@ export function searchResources(input: LibrarySearchInput = {}): {
     conditions.push('EXISTS (SELECT 1 FROM library_collection_items ci WHERE ci.resource_id = r.id AND ci.collection_id = ?)')
     params.push(input.collectionId)
   }
+  if (input.folderId === 'root') {
+    conditions.push('NOT EXISTS (SELECT 1 FROM library_resource_folders rf WHERE rf.resource_id = r.id)')
+  } else if (input.folderId) {
+    conditions.push('EXISTS (SELECT 1 FROM library_resource_folders rf WHERE rf.resource_id = r.id AND rf.folder_id = ?)')
+    params.push(input.folderId)
+  }
   const query = cleanText(input.query, 300)
   if (query) {
     conditions.push(`(
@@ -481,6 +522,7 @@ function persistResource(
     insertComponents(revisionId, input.components)
     insertTags(resourceId, input.tags)
     setCollectionsInternal(resourceId, collectionIds)
+    if (input.folderId) setResourceFolderInternal(resourceId, input.folderId)
   })()
 }
 
@@ -537,6 +579,89 @@ export function captureProjectMedia(input: CaptureProjectMediaInput): LibraryRes
   })
 }
 
+/** Explicitly snapshot a selected group of canvas nodes into one independent, versioned library asset. */
+export function captureProjectNodes(input: CaptureProjectNodesInput): LibraryResourceDetail {
+  if (!input?.projectId || !Array.isArray(input.nodes) || input.nodes.length === 0 || input.nodes.length > 100) {
+    throw new Error('请至少选择一个节点，最多可保存 100 个节点')
+  }
+  if (!getDb().prepare('SELECT id FROM projects WHERE id = ? AND deleted = 0').get(input.projectId)) {
+    throw new Error('当前项目不存在或已删除')
+  }
+  const title = cleanText(input.title, 180)
+  if (!title) throw new Error('请填写资源名称')
+  const seen = new Set<string>()
+  let totalMediaBytes = 0
+  const components: LibraryComponentInput[] = input.nodes.map((node, index) => {
+    if (!node || typeof node.nodeId !== 'string' || !node.nodeId || seen.has(node.nodeId)) {
+      throw new Error('所选节点包含无效或重复的节点标识')
+    }
+    seen.add(node.nodeId)
+    const role = cleanText(node.title, 80) || `内容-${String(index + 1).padStart(2, '0')}`
+    const metadata = { sourceProjectId: input.projectId, sourceNodeId: node.nodeId, sourceNodeType: node.nodeType }
+    if (node.nodeType === 'text') {
+      const text = typeof node.text === 'string' ? node.text : ''
+      if (text.length > MAX_TEXT_CHARS) throw new Error(`节点「${role}」文本超过 2,000,000 字符限制`)
+      if (!text.trim()) throw new Error(`节点「${role}」没有可保存的文本内容`)
+      return { role, valueType: 'text', text, metadata }
+    }
+    if ((node.nodeType !== 'image' && node.nodeType !== 'audio' && node.nodeType !== 'video' && node.nodeType !== 'video-asset') || !node.mediaId) {
+      throw new Error(`节点「${role}」暂不支持保存为资源`)
+    }
+    const expectedKind: 'image' | 'audio' | 'video' = node.nodeType === 'video-asset' ? 'video' : node.nodeType
+    const prefix = `projects/${input.projectId}/media/`
+    const row = getDb().prepare(
+      `SELECT m.id, m.kind, m.mime, m.path, m.size_bytes, m.name FROM media m
+       WHERE m.id = ? AND m.path LIKE ?`
+    ).get(node.mediaId, `${prefix}%`) as
+      | { id: string; kind: string; mime: string; path: string; size_bytes: number; name: string | null }
+      | undefined
+    if (!row || row.kind !== expectedKind || !row.path.replace(/\\/g, '/').startsWith(prefix)) {
+      throw new Error(`节点「${role}」的媒体文件不存在或类型不匹配`)
+    }
+    const relativeName = row.path.replace(/\\/g, '/').slice(prefix.length)
+    if (!relativeName || relativeName.includes('/') || relativeName.includes('..')) throw new Error('项目素材路径无效')
+    if (row.size_bytes <= 0 || row.size_bytes > MAX_COMPONENT_BYTES) throw new Error(`节点「${role}」的文件超过 128 MB 限制`)
+    totalMediaBytes += row.size_bytes
+    if (totalMediaBytes > MAX_LIBRARY_PACKAGE_BYTES) throw new Error('所选节点的文件总量超过 512 MB 限制')
+    const absolutePath = getMediaAbsPath(row.path)
+    if (!absolutePath || !existsSync(absolutePath)) throw new Error(`节点「${role}」的媒体文件缺失`)
+    const bytes = readFileSync(absolutePath)
+    if (bytes.byteLength !== row.size_bytes) throw new Error(`节点「${role}」的文件大小校验失败`)
+    const filename = basename(absolutePath)
+    const mime = row.mime || cleanText(node.mediaMime, 160) || 'application/octet-stream'
+    return {
+      role,
+      valueType: expectedKind,
+      data: new Uint8Array(bytes),
+      mime,
+      fileName: filename,
+      metadata: { ...metadata, sourceMediaId: row.id }
+    }
+  })
+  if (components.filter((component) => component.valueType === 'audio').length > 1) throw new Error('一份资源最多只能包含一个音频节点')
+  if (components.filter((component) => component.valueType === 'text' || component.valueType === 'markdown').length > 1) {
+    throw new Error('一份资源最多只能包含一个文本节点')
+  }
+  const preset: LibraryPreset = components.every((component) => component.valueType === 'image') ? 'image' : 'custom'
+  if (input.resourceId) {
+    const resource = getResourceDetail(input.resourceId)
+    if (!resource) throw new Error('要更新的资源不存在')
+    if (input.baseRevisionId !== resource.latestRevisionId) throw new Error('资源已有新版本，请重新选择后再保存')
+    return publishRevision({
+      resourceId: resource.id,
+      baseRevisionId: resource.latestRevisionId,
+      sourceRevisionId: resource.latestRevisionId,
+      title,
+      formPreset: preset,
+      tags: resource.tags,
+      collectionIds: resource.collectionIds,
+      components,
+      changeNote: cleanText(input.changeNote, 1000) || '从画布保存新版本'
+    })
+  }
+  return createResource({ title, formPreset: preset, folderId: input.folderId, components })
+}
+
 export function publishRevision(input: PublishLibraryRevisionInput): LibraryResourceDetail {
   const resource = getDb().prepare(
     'SELECT latest_revision_id FROM library_resources WHERE id = ? AND archived_at IS NULL'
@@ -545,7 +670,6 @@ export function publishRevision(input: PublishLibraryRevisionInput): LibraryReso
   if (resource.latest_revision_id !== input.baseRevisionId) {
     throw new Error('资源已有新版本，请刷新后再保存，避免覆盖其他修改')
   }
-  if (revisionCategory(input.baseRevisionId) && !input.category) throw new Error('请选择资源分类，不能丢弃节点映射')
   const sourceRevisionId = input.sourceRevisionId ?? input.baseRevisionId
   const sourceRevision = getDb().prepare(
     'SELECT id FROM library_revisions WHERE id = ? AND resource_id = ?'
@@ -614,6 +738,67 @@ export function listCollections(): LibraryCollection[] {
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }))
+}
+
+function setResourceFolderInternal(resourceId: string, folderId: string | null): void {
+  const database = getDb()
+  if (folderId) {
+    if (!database.prepare('SELECT id FROM library_folders WHERE id = ?').get(folderId)) throw new Error('目标文件夹不存在')
+  }
+  database.prepare('DELETE FROM library_resource_folders WHERE resource_id = ?').run(resourceId)
+  if (folderId) database.prepare(
+    'INSERT INTO library_resource_folders (folder_id, resource_id, added_at) VALUES (?, ?, ?)'
+  ).run(folderId, resourceId, Date.now())
+}
+
+export function listFolders(): LibraryFolder[] {
+  return (getDb().prepare(
+    `SELECT f.id, f.name, f.parent_id, f.created_at, f.updated_at,
+       COUNT(DISTINCT rf.resource_id) AS resource_count
+     FROM library_folders f LEFT JOIN library_resource_folders rf ON rf.folder_id = f.id
+     GROUP BY f.id ORDER BY f.parent_id, f.name COLLATE NOCASE ASC`
+  ).all() as Array<{ id: string; name: string; parent_id: string | null; created_at: number; updated_at: number; resource_count: number }>).map((row) => ({
+    id: row.id, name: row.name, parentId: row.parent_id, resourceCount: row.resource_count,
+    createdAt: row.created_at, updatedAt: row.updated_at
+  }))
+}
+
+export function createFolder(input: CreateLibraryFolderInput): LibraryFolder {
+  const name = cleanText(input?.name, 100)
+  if (!name) throw new Error('文件夹名称不能为空')
+  const parentId = input.parentId || null
+  if (parentId && !getDb().prepare('SELECT id FROM library_folders WHERE id = ?').get(parentId)) throw new Error('上级文件夹不存在')
+  const collision = getDb().prepare(
+    'SELECT id FROM library_folders WHERE name = ? AND ((parent_id IS NULL AND ? IS NULL) OR parent_id = ?)'
+  ).get(name, parentId, parentId)
+  if (collision) throw new Error('同一文件夹下不能有重名文件夹')
+  const id = nanoid(12)
+  const now = Date.now()
+  getDb().prepare('INSERT INTO library_folders (id, name, parent_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
+    .run(id, name, parentId, now, now)
+  return { id, name, parentId, resourceCount: 0, createdAt: now, updatedAt: now }
+}
+
+export function deleteFolder(folderId: string): boolean {
+  const folder = getDb().prepare('SELECT parent_id FROM library_folders WHERE id = ?').get(folderId) as { parent_id: string | null } | undefined
+  if (!folder) return false
+  const database = getDb()
+  database.transaction(() => {
+    const moveToParent = database.prepare(
+      'INSERT OR IGNORE INTO library_resource_folders (folder_id, resource_id, added_at) SELECT ?, resource_id, added_at FROM library_resource_folders WHERE folder_id = ?'
+    )
+    if (folder.parent_id) moveToParent.run(folder.parent_id, folderId)
+    database.prepare('DELETE FROM library_resource_folders WHERE folder_id = ?').run(folderId)
+    database.prepare('UPDATE library_folders SET parent_id = ?, updated_at = ? WHERE parent_id = ?').run(folder.parent_id, Date.now(), folderId)
+    database.prepare('DELETE FROM library_folders WHERE id = ?').run(folderId)
+  })()
+  return true
+}
+
+export function setResourceFolder(input: { resourceId: string; folderId?: string | null }): boolean {
+  if (!getDb().prepare('SELECT id FROM library_resources WHERE id = ?').get(input.resourceId)) return false
+  getDb().transaction(() => setResourceFolderInternal(input.resourceId, input.folderId ?? null))()
+  return true
 }
 
 export function createCollection(input: CreateLibraryCollectionInput): LibraryCollection {
@@ -751,6 +936,7 @@ export function exportResourcePackage(destination: string, requestedIds?: string
       `SELECT c.name, c.description FROM library_collection_items i
        JOIN library_collections c ON c.id = i.collection_id WHERE i.resource_id = ?`
     ).all(resourceId) as Array<{ name: string; description: string }>
+    const folders = resourceFolderPaths(resourceId)
     const revisions = database.prepare(
       `SELECT id, revision_number, base_revision_id, title, description, change_note, created_at
        FROM library_revisions WHERE resource_id = ? ORDER BY revision_number ASC`
@@ -817,6 +1003,7 @@ export function exportResourcePackage(destination: string, requestedIds?: string
       archived: Boolean(resource.archived_at),
       tags,
       collections: collectionRows,
+      folders,
       revisions: packagedRevisions
     })
   }
@@ -847,6 +1034,9 @@ export function exportResourcePackage(destination: string, requestedIds?: string
     version: LIBRARY_PACKAGE_VERSION,
     exportedAt: Date.now(),
     resources,
+    folders: hasResourceFilter
+      ? [...new Map(resources.flatMap((resource) => (resource.folders as string[][]).map((path) => [JSON.stringify(path), path] as const))).values()]
+      : allFolderPaths(),
     categories: exportCategoryVersions().filter((category) => !hasResourceFilter || exportedCategoryIds.has(category.id)),
     boards
   }
@@ -893,6 +1083,7 @@ interface PackageResource {
   archived: boolean
   tags: string[]
   collections: Array<{ name: string; description: string }>
+  folders?: string[][]
   revisions: PackageRevision[]
 }
 
@@ -916,7 +1107,9 @@ function isPackageResource(value: unknown): value is PackageResource {
   const raw = value as Partial<PackageResource>
   return typeof raw.id === 'string' && VALID_PRESETS.has(raw.formPreset as LibraryPreset) &&
     typeof raw.title === 'string' && typeof raw.latestRevisionId === 'string' &&
-    Array.isArray(raw.revisions) && Array.isArray(raw.tags) && Array.isArray(raw.collections)
+    Array.isArray(raw.revisions) && Array.isArray(raw.tags) && Array.isArray(raw.collections) &&
+    (raw.folders === undefined || (Array.isArray(raw.folders) && raw.folders.length <= 1000 && raw.folders.every((path) =>
+      Array.isArray(path) && path.length > 0 && path.length <= 256 && path.every((name) => typeof name === 'string' && name.trim().length > 0 && name.length <= 100))))
 }
 
 function isPackageBoard(value: unknown): value is PackageBoard {
@@ -954,11 +1147,15 @@ export function importResourcePackage(filePath: string): number {
     throw new Error('资源包清单不是有效 JSON')
   }
   if (!manifest || typeof manifest !== 'object') throw new Error('资源包清单无效')
-  const raw = manifest as { format?: unknown; version?: unknown; resources?: unknown; boards?: unknown; categories?: unknown }
+  const raw = manifest as { format?: unknown; version?: unknown; resources?: unknown; folders?: unknown; boards?: unknown; categories?: unknown }
   if (raw.format !== LIBRARY_PACKAGE_FORMAT || (raw.version !== 1 && raw.version !== LIBRARY_PACKAGE_VERSION) || !Array.isArray(raw.resources)) {
     throw new Error('资源包格式或版本不受支持')
   }
   if (raw.resources.length > 10_000 || !raw.resources.every(isPackageResource)) throw new Error('资源包包含无效资源')
+  if (raw.folders !== undefined && (!Array.isArray(raw.folders) || raw.folders.length > 10_000 || raw.folders.some((path) =>
+    !Array.isArray(path) || path.length === 0 || path.length > 256 || path.some((name) => typeof name !== 'string' || !name.trim() || name.length > 100)))) {
+    throw new Error('资源包文件夹结构无效')
+  }
   const packagedResources = raw.resources as PackageResource[]
   if (new Set(packagedResources.map((resource) => resource.id)).size !== packagedResources.length) {
     throw new Error('资源包包含重复资源 ID')
@@ -976,14 +1173,39 @@ export function importResourcePackage(filePath: string): number {
   for (const entry of entries) zipEntries.set(entry.entryName, entry)
   const database = getDb()
   const collectionCache = new Map<string, string>()
+  const folderCache = new Map<string, string>()
   const resourceCount = raw.resources.length
   const newResourceIds: string[] = []
   const resourceIdMap = new Map<string, string>()
   const revisionIdMap = new Map<string, string>()
   const blobCache = new Map<string, string>()
 
+  const ensureFolderPath = (rawPath: string[]): string | null => {
+    const path = rawPath.map((segment) => cleanText(segment, 100)).filter(Boolean)
+    if (path.length === 0 || path.length !== rawPath.length || path.length > 256) return null
+    let parentId: string | null = null
+    const now = Date.now()
+    for (const name of path) {
+      const key = JSON.stringify([parentId, name])
+      let folderId = folderCache.get(key)
+      if (!folderId) {
+        const existing = database.prepare(
+          'SELECT id FROM library_folders WHERE name = ? AND ((parent_id IS NULL AND ? IS NULL) OR parent_id = ?)'
+        ).get(name, parentId, parentId) as { id: string } | undefined
+        folderId = existing?.id ?? nanoid(12)
+        if (!existing) database.prepare(
+          'INSERT INTO library_folders (id, name, parent_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
+        ).run(folderId, name, parentId, now, now)
+        folderCache.set(key, folderId)
+      }
+      parentId = folderId
+    }
+    return parentId
+  }
+
   database.transaction(() => {
     for (const category of (raw.categories ?? []) as unknown[]) importCategoryDefinition(category, categoryIdMap)
+    for (const path of (raw.folders ?? []) as string[][]) ensureFolderPath(path)
     for (const source of packagedResources) {
       const revisions = [...source.revisions].sort((a, b) => a.revisionNumber - b.revisionNumber)
       if (revisions.length === 0 || revisions.some((revision) => !Array.isArray(revision.components) || revision.components.length > 100)) {
@@ -1094,6 +1316,15 @@ export function importResourcePackage(filePath: string): number {
         return id ? [id] : []
       })
       setCollectionsInternal(resourceId, collectionIds)
+      const importedFolderPaths = source.folders?.length
+        ? source.folders
+        : source.collections.map((collection) => [collection.name])
+      for (const path of importedFolderPaths) {
+        const folderId = ensureFolderPath(path)
+        if (folderId) database.prepare(
+          'INSERT OR IGNORE INTO library_resource_folders (folder_id, resource_id, added_at) VALUES (?, ?, ?)'
+        ).run(folderId, resourceId, now)
+      }
     }
     for (const board of (raw.boards ?? []) as PackageBoard[]) {
       const boardId = nanoid(12)
