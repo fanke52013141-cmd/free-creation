@@ -475,7 +475,7 @@ describe('v1.2 §16.15 语音节点：控件只在所选后端真会发送该字
     expect(body).not.toContain('t2a_async_v2')
     expect(body).not.toContain('连接上游 MiniMax')
     expect(body).not.toContain('读音纠正每行一条')
-    expect(body).not.toContain('tts-upload-hint')
+    expect(body).toContain('WAV / MP3 / PCM / OGG OPUS · ≤10 MB')
     expect(body).not.toContain('可由文本节点提供')
     expect(speechContracts).not.toContain('每行一条')
     expect(speechContracts).toContain('读音纠正格式为')
