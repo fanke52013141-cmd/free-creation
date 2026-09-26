@@ -13,6 +13,7 @@ import { registerGatewayIpc } from './ipc/gateway.ipc'
 import { registerComfyuiIpc } from './ipc/comfyui.ipc'
 import { registerWorkspaceStateIpc } from './ipc/workspace-state.ipc'
 import { registerModelIpc } from './ipc/models.ipc'
+import { registerLibraryIpc } from './ipc/library.ipc'
 import { SqliteModelHost } from './model-host/sqlite-model-host'
 import { createDesktopModelRuntime } from './model-host/runtime'
 import { closeDb, getDb, getProjectsDir } from './store/db'
@@ -210,6 +211,7 @@ app.whenReady().then(async () => {
   const projectWatcher = new ProjectFileWatcher(() => mainWindow)
 
   registerProjectIpc(projectWatcher)
+  registerLibraryIpc()
   registerMediaIpc()
   registerComfyuiIpc()
   registerWorkspaceStateIpc()

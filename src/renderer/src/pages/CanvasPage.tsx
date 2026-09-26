@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ProjectFile } from '@shared/types'
+import type { WorkspaceProfile } from '@shared/workspace-profile'
 import { useAppStore } from '../stores/app'
 import { useGatewayStore } from '../stores/gateway'
 import { useEngineStore } from '../engine/store'
@@ -10,6 +11,7 @@ import { Icon } from '../components/Icon'
 import { Tooltip } from '../components/Tooltip'
 import { CanvasTopHistory } from '../canvas/CanvasHistoryDock'
 import { CanvasTransferMenu } from '../canvas/CanvasTransferMenu'
+import { ProjectCreateDialog } from '../components/ProjectCreateDialog'
 
 interface CanvasPageProps {
   projectId: string
@@ -38,6 +40,8 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
   const isRunning = enginePhase !== 'idle'
   const isPaused = enginePhase === 'paused'
   const [showErrors, setShowErrors] = useState(true)
+  const [showCreateDialog, setShowCreateDialog] = useState(false)
+  const [showWorkspaceDialog, setShowWorkspaceDialog] = useState(false)
 
   // Ctrl+K 唤起搜索面板
   useEffect(() => {
@@ -87,6 +91,32 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
     }
   }
 
+  const createProject = async (
+    name: string,
+    workspaceProfile: WorkspaceProfile
+  ): Promise<void> => {
+    const result = await window.api.createProject({ name, workspaceProfile })
+    if (!result.ok) throw new Error(result.error.message)
+    setShowCreateDialog(false)
+    openProject(result.data)
+  }
+
+  const saveWorkspaceProfile = async (
+    _name: string,
+    workspaceProfile: WorkspaceProfile
+  ): Promise<void> => {
+    const result = await window.api.saveWorkspaceProfile({ projectId, workspaceProfile })
+    if (!result.ok) throw new Error(result.error.message)
+    if (!result.data) throw new Error('项目不存在，工作台设置未保存')
+    setFile((current) => current ? {
+      ...current,
+      meta: result.data!,
+      workspaceProfile
+    } : current)
+    openProject(result.data)
+    setShowWorkspaceDialog(false)
+  }
+
   if (loading) {
     return <div className="canvas-loading">打开项目中…</div>
   }
@@ -98,7 +128,11 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
     <div className="canvas-page canvas-theme-dark">
       <div className="canvas-topbar">
         {/* 左侧：项目菜单（撤销/重做已移到画布右侧历史簇） */}
-        <ProjectMenu project={currentProject ?? file.meta} />
+        <ProjectMenu
+          project={currentProject ?? file.meta}
+          onCreateProject={() => setShowCreateDialog(true)}
+          onConfigureWorkspace={() => setShowWorkspaceDialog(true)}
+        />
 
         {/* 中间：项目名称（绝对居中） */}
         <div className="topbar-center">
@@ -271,7 +305,26 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
       <CanvasEditor
         project={currentProject ?? file.meta}
         initialSnapshot={file.tldrawSnapshot}
+        workspaceProfile={file.workspaceProfile}
       />
+      {showCreateDialog && (
+        <ProjectCreateDialog
+          title="新建项目"
+          submitLabel="创建项目"
+          onCancel={() => setShowCreateDialog(false)}
+          onSubmit={createProject}
+        />
+      )}
+      {showWorkspaceDialog && (
+        <ProjectCreateDialog
+          title="工作台节点设置"
+          nameRequired={false}
+          initialProfile={file.workspaceProfile}
+          submitLabel="保存设置"
+          onCancel={() => setShowWorkspaceDialog(false)}
+          onSubmit={saveWorkspaceProfile}
+        />
+      )}
     </div>
   )
 }

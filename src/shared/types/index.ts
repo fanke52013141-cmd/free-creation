@@ -1,5 +1,7 @@
 // 核心数据模型（双进程共享单一事实源，见《技术框架与规范》§4）
 
+import type { WorkspaceProfile } from '../workspace-profile'
+
 /**
  * 能在新画布中创建、维护并完整执行的节点类型。
  * 类型、注册表和契约测试必须引用这一份运行时清单，避免新节点已上线却漏出快照门禁。
@@ -189,6 +191,8 @@ export interface ProjectFile {
   edges: CanvasEdge[]
   groups: GroupDecl[]
   tldrawSnapshot?: unknown
+  /** Optional for backwards compatibility with existing project files. */
+  workspaceProfile?: WorkspaceProfile
 }
 
 export interface MediaAsset {

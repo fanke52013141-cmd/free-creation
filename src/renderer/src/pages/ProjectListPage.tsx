@@ -4,6 +4,8 @@ import { useAppStore } from '../stores/app'
 import { useConfirmStore } from '../stores/confirm'
 import { useToastStore } from '../stores/toast'
 import { Icon } from '../components/Icon'
+import { ProjectCreateDialog } from '../components/ProjectCreateDialog'
+import { ResourceLibraryPage } from '../library/ResourceLibraryPage'
 import freeCreationLogo from '../assets/free-creation-logo.png'
 import './project-list-page.css'
 
@@ -17,7 +19,11 @@ export function ProjectListPage(): React.JSX.Element {
   const [projects, setProjects] = useState<ProjectMeta[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
-  const [name, setName] = useState('')
+  const [showLibrary, setShowLibrary] = useState(false)
+  const [cloning, setCloning] = useState<ProjectMeta | null>(null)
+  const [cloneName, setCloneName] = useState('')
+  const [cloneBusy, setCloneBusy] = useState(false)
+  const [cloneError, setCloneError] = useState('')
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const openProject = useAppStore((s) => s.openProject)
@@ -41,13 +47,31 @@ export function ProjectListPage(): React.JSX.Element {
     }
   }, [])
 
-  const handleCreate = async (): Promise<void> => {
-    if (!name.trim()) return
-    const res = await window.api.createProject({ name: name.trim() })
+  const handleCreate = async (name: string, workspaceProfile: import('@shared/workspace-profile').WorkspaceProfile): Promise<void> => {
+    const res = await window.api.createProject({ name, workspaceProfile })
     if (res.ok) {
-      setName('')
       setCreating(false)
       openProject(res.data)
+      return
+    }
+    throw new Error(res.error.message)
+  }
+
+  const handleClone = async (): Promise<void> => {
+    if (!cloning || !cloneName.trim()) return
+    setCloneBusy(true)
+    setCloneError('')
+    try {
+      const res = await window.api.cloneProject({ sourceId: cloning.id, name: cloneName.trim() })
+      if (!res.ok) throw new Error(res.error.message)
+      setCloning(null)
+      setCloneName('')
+      await refresh()
+      useToastStore.getState().show(`已复制项目「${res.data.name}」`)
+    } catch (error) {
+      setCloneError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setCloneBusy(false)
     }
   }
 
@@ -99,6 +123,8 @@ export function ProjectListPage(): React.JSX.Element {
     void refresh()
   }
 
+  if (showLibrary) return <ResourceLibraryPage onBack={() => setShowLibrary(false)} />
+
   return (
     <div className="project-home">
       <div className="project-home-ambient" aria-hidden="true" />
@@ -109,6 +135,9 @@ export function ProjectListPage(): React.JSX.Element {
             <h1>Free Creation</h1>
           </div>
           <div className="project-home-actions">
+            <button className="project-home-button project-home-button-quiet" onClick={() => setShowLibrary(true)}>
+              <Icon name="assets" size={16} /> 资源库
+            </button>
             <button
               className="project-home-button project-home-button-quiet"
               onClick={() => void handleImport()}
@@ -117,7 +146,7 @@ export function ProjectListPage(): React.JSX.Element {
             </button>
             <button
               className="project-home-button project-home-button-primary"
-              onClick={() => setCreating(true)}
+            onClick={() => setCreating(true)}
             >
               <Icon name="add" size={16} /> 新建项目
             </button>
@@ -125,30 +154,35 @@ export function ProjectListPage(): React.JSX.Element {
         </header>
 
         {creating && (
-          <div className="project-home-create-row">
-            <input
-              autoFocus
-              aria-label="项目名称"
-              placeholder="项目名称"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void handleCreate()
-                if (e.key === 'Escape') setCreating(false)
+          <ProjectCreateDialog
+            title="新建项目"
+            submitLabel="创建项目"
+            onCancel={() => setCreating(false)}
+            onSubmit={handleCreate}
+          />
+        )}
+
+        {cloning && (
+          <div className="project-clone-mask" onMouseDown={(event) => event.target === event.currentTarget && !cloneBusy && setCloning(null)}>
+            <form
+              className="project-clone-dialog"
+              onSubmit={(event) => {
+                event.preventDefault()
+                void handleClone()
               }}
-            />
-            <button
-              className="project-home-button project-home-button-primary"
-              onClick={() => void handleCreate()}
             >
-              创建
-            </button>
-            <button
-              className="project-home-button project-home-button-quiet"
-              onClick={() => setCreating(false)}
-            >
-              取消
-            </button>
+              <h2>复制项目</h2>
+              <p>复制画布、项目配置和全部项目素材，副本可以独立修改。</p>
+              <label>
+                <span>副本名称</span>
+                <input autoFocus maxLength={120} value={cloneName} onChange={(event) => setCloneName(event.currentTarget.value)} />
+              </label>
+              {cloneError && <div className="project-clone-error" role="alert">复制失败：{cloneError}</div>}
+              <div className="project-clone-actions">
+                <button type="button" disabled={cloneBusy} onClick={() => setCloning(null)}>取消</button>
+                <button type="submit" disabled={cloneBusy || !cloneName.trim()}>{cloneBusy ? '复制中…' : '创建副本'}</button>
+              </div>
+            </form>
           </div>
         )}
 
@@ -192,6 +226,18 @@ export function ProjectListPage(): React.JSX.Element {
                     }}
                   >
                     <Icon name="download" size={15} />
+                  </button>
+                  <button
+                    className="project-home-icon-button"
+                    title="复制项目"
+                    aria-label={`复制项目 ${p.name}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setCloning(p)
+                      setCloneName(`${p.name} · 副本`)
+                    }}
+                  >
+                    <Icon name="copy" size={15} />
                   </button>
                   <button
                     className="project-home-icon-button"

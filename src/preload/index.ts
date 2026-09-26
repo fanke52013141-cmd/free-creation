@@ -6,10 +6,18 @@ import type {
   ChatStartInput,
   ComfyuiSettingsInput,
   ComfyuiStatus,
+  CloneProjectInput,
   CreateProjectInput,
   ExportCanvasStructureInput,
   GatewayEvent,
   IpcEnvelope,
+  LibraryArchiveInput,
+  LibraryDetailInput,
+  LibraryExportInput,
+  LibraryMaterializeInput,
+  LibraryMaterializeResult,
+  LibrarySearchInput,
+  LibrarySearchResult,
   ImageGenerateInput,
   ImageEditInput,
   ImageCropTransformInput,
@@ -36,6 +44,17 @@ import type {
   RenameProjectInput,
   SaveHistorySnapshotInput,
   SaveProjectInput,
+  SaveWorkspaceProfileInput,
+  CreateLibraryCollectionInput,
+  CreateLibraryResourceInput,
+  CaptureProjectMediaInput,
+  LibraryBoard,
+  LibraryBoardItem,
+  LibraryCollection,
+  LibraryResourceDetail,
+  PublishLibraryRevisionInput,
+  SaveLibraryBoardInput,
+  SetLibraryCollectionsInput,
   SaveProviderInput,
   SaveWorkflowTemplateInput,
   ProbeProviderInput,
@@ -75,7 +94,45 @@ const api = {
   bootstrap: (): Promise<IpcEnvelope<BootstrapInfo>> => ipcRenderer.invoke(IPC.app.bootstrap),
   listProjects: (): Promise<IpcEnvelope<ProjectMeta[]>> => ipcRenderer.invoke(IPC.project.list),
   createProject: (input: CreateProjectInput): Promise<IpcEnvelope<ProjectMeta>> =>
-    ipcRenderer.invoke(IPC.project.create, input.name),
+    ipcRenderer.invoke(IPC.project.create, input),
+  cloneProject: (input: CloneProjectInput): Promise<IpcEnvelope<ProjectMeta>> =>
+    ipcRenderer.invoke(IPC.project.clone, input),
+  saveWorkspaceProfile: (
+    input: SaveWorkspaceProfileInput
+  ): Promise<IpcEnvelope<ProjectMeta | null>> =>
+    ipcRenderer.invoke(IPC.project.saveWorkspaceProfile, input),
+  searchLibrary: (input: LibrarySearchInput): Promise<IpcEnvelope<LibrarySearchResult>> =>
+    ipcRenderer.invoke(IPC.library.search, input),
+  getLibraryResource: (input: LibraryDetailInput): Promise<IpcEnvelope<LibraryResourceDetail | null>> =>
+    ipcRenderer.invoke(IPC.library.detail, input),
+  createLibraryResource: (input: CreateLibraryResourceInput): Promise<IpcEnvelope<LibraryResourceDetail>> =>
+    ipcRenderer.invoke(IPC.library.create, input),
+  captureLibraryMedia: (input: CaptureProjectMediaInput): Promise<IpcEnvelope<LibraryResourceDetail>> =>
+    ipcRenderer.invoke(IPC.library.captureProjectMedia, input),
+  publishLibraryRevision: (input: PublishLibraryRevisionInput): Promise<IpcEnvelope<LibraryResourceDetail>> =>
+    ipcRenderer.invoke(IPC.library.publishRevision, input),
+  archiveLibraryResource: (input: LibraryArchiveInput): Promise<IpcEnvelope<boolean>> =>
+    ipcRenderer.invoke(IPC.library.archive, input),
+  listLibraryCollections: (): Promise<IpcEnvelope<LibraryCollection[]>> =>
+    ipcRenderer.invoke(IPC.library.listCollections),
+  createLibraryCollection: (input: CreateLibraryCollectionInput): Promise<IpcEnvelope<LibraryCollection>> =>
+    ipcRenderer.invoke(IPC.library.createCollection, input),
+  setLibraryCollections: (input: SetLibraryCollectionsInput): Promise<IpcEnvelope<boolean>> =>
+    ipcRenderer.invoke(IPC.library.setCollections, input),
+  listLibraryBoards: (): Promise<IpcEnvelope<LibraryBoard[]>> =>
+    ipcRenderer.invoke(IPC.library.listBoards),
+  createLibraryBoard: (input: { title: string; description?: string }): Promise<IpcEnvelope<LibraryBoard>> =>
+    ipcRenderer.invoke(IPC.library.createBoard, input),
+  getLibraryBoardItems: (boardId: string): Promise<IpcEnvelope<LibraryBoardItem[]>> =>
+    ipcRenderer.invoke(IPC.library.getBoardItems, boardId),
+  saveLibraryBoard: (input: SaveLibraryBoardInput): Promise<IpcEnvelope<boolean>> =>
+    ipcRenderer.invoke(IPC.library.saveBoard, input),
+  materializeLibraryResource: (input: LibraryMaterializeInput): Promise<IpcEnvelope<LibraryMaterializeResult>> =>
+    ipcRenderer.invoke(IPC.library.materialize, input),
+  exportLibrary: (input: LibraryExportInput = {}): Promise<IpcEnvelope<{ path: string }>> =>
+    ipcRenderer.invoke(IPC.library.export, input),
+  importLibrary: (): Promise<IpcEnvelope<{ imported: number }>> =>
+    ipcRenderer.invoke(IPC.library.import),
   renameProject: (input: RenameProjectInput): Promise<IpcEnvelope<ProjectMeta | null>> =>
     ipcRenderer.invoke(IPC.project.rename, input),
   deleteProject: (id: string): Promise<IpcEnvelope<boolean>> =>

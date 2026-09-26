@@ -20,6 +20,21 @@ import type {
   VocalSeparationConfig
 } from '../video-transform'
 import type { PalettePreferences } from '../palette-preferences'
+import type { WorkspaceProfile } from '../workspace-profile'
+import type {
+  CreateLibraryCollectionInput,
+  CreateLibraryResourceInput,
+  CaptureProjectMediaInput,
+  LibraryBoard,
+  LibraryBoardItem,
+  LibraryCollection,
+  LibraryResourceDetail,
+  LibraryResourceSummary,
+  LibrarySearchInput,
+  PublishLibraryRevisionInput,
+  SaveLibraryBoardInput,
+  SetLibraryCollectionsInput
+} from '../library/types'
 import type {
   Capability,
   Connection,
@@ -35,6 +50,8 @@ export const IPC = {
   project: {
     list: 'project:list',
     create: 'project:create',
+    clone: 'project:clone',
+    saveWorkspaceProfile: 'project:workspace-profile:save',
     rename: 'project:rename',
     remove: 'project:delete',
     open: 'project:open',
@@ -89,6 +106,24 @@ export const IPC = {
     savePalettePreferences: 'workspace:palette-preferences:save',
     recordImageGenerationTiming: 'workspace:image-generation-timing:record',
     getImageGenerationTimings: 'workspace:image-generation-timings:get'
+  },
+  library: {
+    search: 'library:search',
+    detail: 'library:detail',
+    create: 'library:create',
+    captureProjectMedia: 'library:capture-project-media',
+    publishRevision: 'library:publish-revision',
+    archive: 'library:archive',
+    listCollections: 'library:collections:list',
+    createCollection: 'library:collections:create',
+    setCollections: 'library:collections:set',
+    listBoards: 'library:boards:list',
+    createBoard: 'library:boards:create',
+    getBoardItems: 'library:boards:items',
+    saveBoard: 'library:boards:save',
+    materialize: 'library:materialize',
+    export: 'library:export',
+    import: 'library:import'
   },
   gateway: {
     providers: 'gateway:providers:list',
@@ -225,6 +260,63 @@ export interface ModelCatalogSnapshot {
 
 export interface CreateProjectInput {
   name: string
+  workspaceProfile?: WorkspaceProfile
+}
+
+export interface CloneProjectInput {
+  sourceId: string
+  name: string
+}
+
+export interface SaveWorkspaceProfileInput {
+  projectId: string
+  workspaceProfile: WorkspaceProfile
+}
+
+export interface LibraryMaterializeInput {
+  projectId: string
+  resourceId: string
+  revisionId: string
+  componentIds: string[]
+}
+
+export interface LibrarySearchResult {
+  items: LibraryResourceSummary[]
+  nextCursor: string | null
+}
+
+export interface LibraryMaterializeResult {
+  assets: import('../types').MediaAsset[]
+  textComponents: import('../library/types').LibraryResourceComponent[]
+}
+
+export interface LibraryExportInput {
+  resourceIds?: string[]
+}
+
+export interface LibraryDetailInput {
+  resourceId: string
+  revisionId?: string
+}
+
+export interface LibraryArchiveInput {
+  resourceId: string
+  archived: boolean
+}
+
+export type {
+  CreateLibraryCollectionInput,
+  CreateLibraryResourceInput,
+  CaptureProjectMediaInput,
+  LibraryBoard,
+  LibraryBoardItem,
+  LibraryCollection,
+  LibraryResourceDetail,
+  LibraryResourceSummary,
+  LibrarySearchInput,
+  PublishLibraryRevisionInput,
+  SaveLibraryBoardInput,
+  SetLibraryCollectionsInput
 }
 
 export interface RenameProjectInput {

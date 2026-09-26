@@ -3,6 +3,7 @@ import 'tldraw/tldraw.css'
 import './node-scrollbars.css'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ProjectMeta, MediaAsset, NodeTypeId } from '@shared/types'
+import type { WorkspaceProfile } from '@shared/workspace-profile'
 import { Tooltip } from '../components/Tooltip'
 import { NodeCardUtil, type NodeCardProps, type NodeCardShape } from './NodeCardShape'
 import { CarrierArrowUtil } from './CarrierArrowUtil'
@@ -171,6 +172,7 @@ function migrateLegacyNodeSizes(editor: Editor): number {
 interface CanvasEditorProps {
   project: ProjectMeta
   initialSnapshot: unknown
+  workspaceProfile?: WorkspaceProfile
 }
 
 interface CreateMenuState {
@@ -239,7 +241,7 @@ function paletteSafeScreenX(editor: Editor): number {
   return palette.getBoundingClientRect().right + 16
 }
 
-export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): React.JSX.Element {
+export function CanvasEditor({ project, initialSnapshot, workspaceProfile }: CanvasEditorProps): React.JSX.Element {
   const editorRef = useRef<Editor | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -421,7 +423,12 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
 
   // 左侧节点面板：点击在视口中心创建；拖拽到画布在落点创建
   const SIDEBAR_W = 72
-  const nodeTypes = allNodeTypes()
+  const visibleNodeTypeIds = workspaceProfile
+    ? new Set(workspaceProfile.visibleNodeTypeIds)
+    : null
+  const nodeTypes = allNodeTypes().filter(
+    (node) => !visibleNodeTypeIds || visibleNodeTypeIds.has(node.type)
+  )
   const paletteCategories = PALETTE_CATEGORY_IDS.filter(
     (category) => nodesForPaletteCategory(nodeTypes, category).length > 0
   )
@@ -1956,6 +1963,29 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
           const screen = editor.pageToScreen(editor.getViewportPageBounds().center)
           createMediaNodes([asset], screen.x, screen.y)
         }}
+        onAddTextToCanvas={(text, title) => {
+          const editor = editorRef.current
+          const spec = getNodeType('text')
+          if (!editor || !spec) return
+          const center = editor.getViewportPageBounds().center
+          const placement = findNodePlacement(editor, center, spec.defaultSize)
+          const id = createShapeId()
+          editor.createShape({
+            id,
+            type: 'node-card',
+            x: placement.x,
+            y: placement.y,
+            props: {
+              nodeType: 'text',
+              title,
+              text,
+              w: spec.defaultSize.w,
+              h: spec.defaultSize.h
+            }
+          })
+          markUndoPoint(editor, 'insert-library-text')
+          editor.select(id)
+        }}
         onOpenRuns={() => setPanelTab('runs')}
       />
       {!panelTab && editorInstance && nodePanelKind === 'contract' && nodePanelShapeId && (
@@ -2042,6 +2072,7 @@ export function CanvasEditor({ project, initialSnapshot }: CanvasEditorProps): R
           }}
           onClose={closeMenu}
           source={menu.source ?? null}
+          visibleNodeTypeIds={workspaceProfile?.visibleNodeTypeIds}
           onAnchorChange={menu.source ? updateCreateMenuAnchor : undefined}
         />
       )}

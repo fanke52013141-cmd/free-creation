@@ -8,6 +8,7 @@ import type {
 } from '@shared/contracts'
 import { createBrowserMedia } from './browserMedia'
 import { defaultPalettePreferences, type PalettePreferences } from '@shared/palette-preferences'
+import { defaultWorkspaceProfile, type WorkspaceProfile } from '@shared/workspace-profile'
 
 export function installBrowserMock(): void {
   if (window.api) return
@@ -38,6 +39,9 @@ export function installBrowserMock(): void {
   const projects: ProjectMeta[] = [
     { id: 'demo', name: '浏览器演示项目', createdAt: now, updatedAt: now, graphVersion: 0 }
   ]
+  const workspaceProfiles = new Map<string, WorkspaceProfile>([
+    ['demo', defaultWorkspaceProfile()]
+  ])
   let snapshot: unknown = readSession(snapshotKey, null)
   let graphVersion = 0
   const defaultProviders: ProviderSummary[] = [
@@ -103,7 +107,7 @@ export function installBrowserMock(): void {
   window.api = {
     bootstrap: () => Promise.resolve({ ok: true, data: { lastProjectId: 'demo' } }),
     listProjects: () => Promise.resolve({ ok: true, data: projects }),
-    createProject: ({ name }: { name: string }) => {
+    createProject: ({ name, workspaceProfile }: { name: string; workspaceProfile?: WorkspaceProfile }) => {
       const p: ProjectMeta = {
         id: 'p' + Date.now(),
         name,
@@ -112,8 +116,41 @@ export function installBrowserMock(): void {
         graphVersion
       }
       projects.unshift(p)
+      if (workspaceProfile) workspaceProfiles.set(p.id, workspaceProfile)
       return Promise.resolve({ ok: true, data: p })
     },
+    cloneProject: ({ sourceId, name }: { sourceId: string; name: string }) => {
+      const source = projects.find((project) => project.id === sourceId)
+      if (!source) return Promise.resolve({ ok: false, error: { code: 'NOT_FOUND', message: '源项目不存在' } })
+      const p: ProjectMeta = { ...source, id: `p${Date.now()}`, name, createdAt: Date.now(), updatedAt: Date.now(), graphVersion: 0 }
+      projects.unshift(p)
+      const profile = workspaceProfiles.get(sourceId)
+      if (profile) workspaceProfiles.set(p.id, profile)
+      return Promise.resolve({ ok: true, data: p })
+    },
+    saveWorkspaceProfile: ({ projectId, workspaceProfile }: { projectId: string; workspaceProfile: WorkspaceProfile }) => {
+      const project = projects.find((item) => item.id === projectId)
+      if (!project) return Promise.resolve({ ok: true, data: null })
+      workspaceProfiles.set(projectId, workspaceProfile)
+      project.updatedAt = Date.now()
+      return Promise.resolve({ ok: true, data: project })
+    },
+    searchLibrary: () => Promise.resolve({ ok: true, data: { items: [], nextCursor: null } }),
+    getLibraryResource: () => Promise.resolve({ ok: true, data: null }),
+    createLibraryResource: () => Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持资源库写入' } }),
+    captureLibraryMedia: () => Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持收藏项目素材' } }),
+    publishLibraryRevision: () => Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持资源库写入' } }),
+    archiveLibraryResource: () => Promise.resolve({ ok: true, data: false }),
+    listLibraryCollections: () => Promise.resolve({ ok: true, data: [] }),
+    createLibraryCollection: () => Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持收藏集写入' } }),
+    setLibraryCollections: () => Promise.resolve({ ok: true, data: false }),
+    listLibraryBoards: () => Promise.resolve({ ok: true, data: [] }),
+    createLibraryBoard: () => Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持展板写入' } }),
+    getLibraryBoardItems: () => Promise.resolve({ ok: true, data: [] }),
+    saveLibraryBoard: () => Promise.resolve({ ok: true, data: false }),
+    materializeLibraryResource: () => Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持资源物化' } }),
+    exportLibrary: () => Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持资源库导出' } }),
+    importLibrary: () => Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持资源库导入' } }),
     renameProject: ({ id, name }: { id: string; name: string }) => {
       const p = projects.find((x) => x.id === id)
       if (!p) return Promise.resolve({ ok: false, error: { code: 'NOT_FOUND', message: '不存在' } })
@@ -130,7 +167,8 @@ export function installBrowserMock(): void {
         nodes: [],
         edges: [],
         groups: [],
-        tldrawSnapshot: snapshot
+        tldrawSnapshot: snapshot,
+        workspaceProfile: workspaceProfiles.get(id)
       }
       return Promise.resolve({ ok: true, data: file })
     },

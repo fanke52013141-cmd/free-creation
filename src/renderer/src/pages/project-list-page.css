@@ -223,6 +223,38 @@
   opacity: 1;
 }
 
+.project-clone-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 12001;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(5 8 14 / 72%);
+  backdrop-filter: blur(7px);
+}
+
+.project-clone-dialog {
+  width: min(440px, 100%);
+  padding: 24px;
+  color: #e9edf7;
+  background: #171c28;
+  border: 1px solid rgb(165 180 210 / 20%);
+  border-radius: 15px;
+  box-shadow: 0 28px 90px rgb(0 0 0 / 55%);
+}
+
+.project-clone-dialog h2 { margin: 0; font-size: 19px; }
+.project-clone-dialog p { margin: 8px 0 20px; color: #98a4ba; font-size: 12px; line-height: 1.65; }
+.project-clone-dialog label { display: grid; gap: 7px; color: #aeb9cd; font-size: 11px; }
+.project-clone-dialog input { height: 40px; padding: 0 11px; color: #f1f4fa; background: #0c111b; border: 1px solid #30394b; border-radius: 8px; outline: 0; }
+.project-clone-dialog input:focus { border-color: #768dff; box-shadow: 0 0 0 3px rgb(102 126 255 / 14%); }
+.project-clone-error { margin-top: 10px; color: #ff9d9d; font-size: 11px; }
+.project-clone-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
+.project-clone-actions button { height: 35px; padding: 0 13px; color: #b6c0d2; background: transparent; border: 1px solid #364053; border-radius: 8px; cursor: pointer; }
+.project-clone-actions button[type="submit"] { color: #fff; background: linear-gradient(135deg, #657df3, #825fe3); border-color: #8b8ef4; }
+.project-clone-actions button:disabled { opacity: .55; cursor: wait; }
+
 .project-home-icon-button {
   display: inline-flex;
   width: 22px;

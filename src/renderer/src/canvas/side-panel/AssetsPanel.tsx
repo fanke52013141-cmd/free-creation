@@ -15,6 +15,7 @@ import { toast } from '../../stores/toast'
 import { useConfirmStore } from '../../stores/confirm'
 import { Icon, type IconName } from '../../components/Icon'
 import { AppSelect } from '../../components/AppSelect'
+import { LibraryResourcePicker } from '../../library/LibraryResourcePicker'
 
 const FILTER_TABS: { key: MediaKind | 'all'; label: string }[] = [
   { key: 'all', label: '全部' },
@@ -64,13 +65,17 @@ function AssetCard({
   onAdd,
   onDelete,
   onLocate,
-  onOpenRun
+  onOpenRun,
+  onSaveToLibrary,
+  savingToLibrary
 }: {
   asset: IndexedMediaAsset
   onAdd: () => void
   onDelete: () => void
   onLocate: () => void
   onOpenRun: () => void
+  onSaveToLibrary: () => void
+  savingToLibrary: boolean
 }): React.JSX.Element {
   const [imageFailed, setImageFailed] = useState(false)
   const name = asset.name ?? `${asset.kind === 'image' ? '图片' : asset.kind === 'video' ? '视频' : asset.kind === 'audio' ? '音频' : '文件'}素材-${asset.id.slice(0, 6)}`
@@ -148,6 +153,19 @@ function AssetCard({
         </button>
       )}
       <button
+        className="asset-library-save"
+        title="收藏到资源库"
+        aria-label={`收藏素材 ${name} 到资源库`}
+        disabled={savingToLibrary}
+        onClick={(event) => {
+          event.stopPropagation()
+          onSaveToLibrary()
+        }}
+        onKeyDown={(event) => event.stopPropagation()}
+      >
+        <Icon name="assets" size={12} />
+      </button>
+      <button
         className="asset-delete"
         title="删除"
         aria-label={`删除素材 ${asset.name ?? asset.id}`}
@@ -167,12 +185,14 @@ export function AssetsPanel({
   editor,
   onImport,
   onAddToCanvas,
+  onAddTextToCanvas,
   onOpenRun
 }: {
   projectId: string
   editor: Editor | null
   onImport: () => void
   onAddToCanvas: (asset: MediaAsset) => void
+  onAddTextToCanvas: (text: string, title: string) => void
   onOpenRun: (nodeId: string, runId: string) => void
 }): React.JSX.Element {
   const assets = useMediaStore((state) => state.assets)
@@ -189,6 +209,8 @@ export function AssetsPanel({
   const setRunStatus = useMediaStore((state) => state.setRunStatus)
   const setTimeRange = useMediaStore((state) => state.setTimeRange)
   const [shapeRevision, setShapeRevision] = useState(0)
+  const [libraryMode, setLibraryMode] = useState(false)
+  const [savingMediaId, setSavingMediaId] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -242,6 +264,21 @@ export function AssetsPanel({
       return
     await remove(projectId, asset.id)
   }
+  const handleSaveToLibrary = async (asset: IndexedMediaAsset): Promise<void> => {
+    setSavingMediaId(asset.id)
+    try {
+      const result = await window.api.captureLibraryMedia({
+        projectId,
+        mediaId: asset.id,
+        title: asset.name ?? `${asset.kind}素材-${asset.id.slice(0, 6)}`
+      })
+      if (!result.ok) return toast(`收藏失败：${result.error.message}`)
+      toast(`已收藏「${result.data.selectedTitle}」到资源库`)
+    } catch (error) {
+      toast(`收藏失败：${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      setSavingMediaId(null)
+}
   const handleBatchExport = async (): Promise<void> => {
     if (visible.length === 0) return toast('当前筛选没有可导出的素材')
     const res = await window.api.batchExportMedia(
@@ -259,6 +296,14 @@ export function AssetsPanel({
 
   return (
     <div className="side-panel-body assets-panel" ref={scrollRef}>
+      <div className="assets-source-switch">
+        <button className={!libraryMode ? 'active' : ''} onClick={() => setLibraryMode(false)}>项目素材</button>
+        <button className={libraryMode ? 'active' : ''} onClick={() => setLibraryMode(true)}>资源库</button>
+      </div>
+      {libraryMode ? (
+        <LibraryResourcePicker projectId={projectId} onAddMedia={onAddToCanvas} onAddText={onAddTextToCanvas} />
+      ) : (
+      <>
       <div className="assets-toolbar">
         <button className="side-panel-primary" onClick={onImport}>
           <Icon name="upload" size={15} /> 导入素材
@@ -352,6 +397,8 @@ export function AssetsPanel({
               onOpenRun={() => {
                 if (asset.source?.runId) onOpenRun(asset.source.nodeId, asset.source.runId)
               }}
+              onSaveToLibrary={() => void handleSaveToLibrary(asset)}
+              savingToLibrary={savingMediaId === asset.id}
             />
           ))}
         </div>
@@ -360,6 +407,8 @@ export function AssetsPanel({
         <div className="assets-footer">
           显示 {visible.length} / {assets.length} 个素材
         </div>
+      )}
+      </>
       )}
     </div>
   )

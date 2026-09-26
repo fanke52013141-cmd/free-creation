@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { basename } from 'path'
-import type { ProjectMeta } from '../../shared/types'
+import { ACTIVE_NODE_TYPE_IDS, type ProjectMeta } from '../../shared/types'
 import * as projects from './projects.repo'
 
 const FORMAT = 'canvas-studio-canvas-structure'
@@ -248,7 +248,13 @@ export function importCanvasStructure(filePath: string): ProjectMeta {
   }
   const bundle = parseBundle(parsed)
   const projectName = `${basename(bundle.projectName).slice(0, 112)}（导入）`
-  const meta = projects.createProject(projectName)
+  // An imported structure can contain advanced nodes that the focused default hides.
+  // Keep every supported creation type visible so the imported graph remains easy to extend.
+  const meta = projects.createProject(projectName, {
+    schemaVersion: 1,
+    presetId: 'all',
+    visibleNodeTypeIds: [...ACTIVE_NODE_TYPE_IDS]
+  })
   try {
     const saved = projects.saveProject({
       id: meta.id,

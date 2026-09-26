@@ -8,13 +8,14 @@ import { Icon } from '../components/Icon'
 
 interface ProjectMenuProps {
   project: ProjectMeta
+  onCreateProject?: () => void
+  onConfigureWorkspace?: () => void
 }
 
-export function ProjectMenu({ project }: ProjectMenuProps): React.JSX.Element {
+export function ProjectMenu({ project, onCreateProject, onConfigureWorkspace }: ProjectMenuProps): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const setHome = useAppStore((s) => s.setHome)
-  const openProjectInStore = useAppStore((s) => s.openProject)
   const openSettings = useGatewayStore((s) => s.openSettings)
 
   useEffect(() => {
@@ -39,10 +40,9 @@ export function ProjectMenu({ project }: ProjectMenuProps): React.JSX.Element {
     setHome()
   }
 
-  const createNew = async (): Promise<void> => {
+  const createNew = (): void => {
     setOpen(false)
-    const res = await window.api.createProject({ name: '未命名项目' })
-    if (res.ok) openProjectInStore(res.data)
+    onCreateProject?.()
   }
 
   const removeCurrent = async (): Promise<void> => {
@@ -97,6 +97,16 @@ export function ProjectMenu({ project }: ProjectMenuProps): React.JSX.Element {
               <Icon name="add" size={17} />
             </span>
             <span>创建新项目</span>
+          </button>
+          <button
+            className="node-menu-item"
+            onClick={() => {
+              setOpen(false)
+              onConfigureWorkspace?.()
+            }}
+          >
+            <span className="item-icon"><Icon name="settings" size={17} /></span>
+            <span>工作台节点设置</span>
           </button>
           <div className="node-menu-divider" />
           <button

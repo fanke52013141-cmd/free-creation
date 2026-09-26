@@ -6616,6 +6616,38 @@ select:focus-visible,
   background: var(--brand);
 }
 
+.asset-library-save {
+  position: absolute;
+  top: 28px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.asset-card:hover .asset-library-save,
+.asset-library-save:focus-visible {
+  opacity: 1;
+}
+
+.asset-library-save:hover {
+  background: var(--brand);
+}
+
+.asset-library-save:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
 .asset-delete {
   position: absolute;
   top: 4px;

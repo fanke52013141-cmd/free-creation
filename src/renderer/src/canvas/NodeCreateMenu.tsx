@@ -24,6 +24,7 @@ interface NodeCreateMenuProps {
   onClose: () => void
   /** 拉线到空白时，只展示能接收该端口的节点（out）或可提供该输入的上游（in）。 */
   source?: ConnectionFrom | null
+  visibleNodeTypeIds?: readonly string[]
   /** 拖线到空白时，回传菜单左侧中点，使临时线落在菜单中部而不是左上角。 */
   onAnchorChange?: (anchor: { x: number; y: number }) => void
 }
@@ -54,6 +55,7 @@ export function NodeCreateMenu({
   onPaste,
   onClose,
   source = null,
+  visibleNodeTypeIds,
   onAnchorChange
 }: NodeCreateMenuProps): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
@@ -93,11 +95,15 @@ export function NodeCreateMenu({
   const menuH = menuHeight || 420
   const top = Math.max(12, Math.min(y, window.innerHeight - menuH - 12))
   const upstream = source?.direction === 'in'
-  const allChoices: NodeCreateChoice[] = source
+  const choices: NodeCreateChoice[] = source
     ? upstream
       ? compatibleUpstreamCreateChoices(source)
       : compatibleNodeCreateChoices(source)
     : allNodeTypes().map((spec) => ({ type: spec.type }))
+  const visibleTypes = visibleNodeTypeIds ? new Set(visibleNodeTypeIds) : null
+  const allChoices = visibleTypes
+    ? choices.filter((choice) => visibleTypes.has(choice.type))
+    : choices
 
   const availableCategories = (['input', 'image', 'video', 'audio', 'logic'] as const).filter(
     (category) => allChoices.some((choice) => paletteCategoryForNode(choice.type) === category)

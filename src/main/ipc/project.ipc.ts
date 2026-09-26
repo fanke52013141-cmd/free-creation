@@ -33,10 +33,38 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
     return ok(repo.listProjects())
   })
 
-  ipcMain.handle(IPC.project.create, (_e, name: string): IpcEnvelope<ProjectMeta> => {
-    if (!name || !name.trim()) return err('INVALID_NAME', '项目名不能为空')
-    return ok(repo.createProject(name.trim()))
+  ipcMain.handle(IPC.project.create, (_e, input: import('../../shared/contracts').CreateProjectInput): IpcEnvelope<ProjectMeta> => {
+    if (!input?.name || !input.name.trim()) return err('INVALID_NAME', '项目名不能为空')
+    try {
+      return ok(repo.createProject(input.name.trim(), input.workspaceProfile))
+    } catch (error) {
+      return err('CREATE_FAILED', error instanceof Error ? error.message : String(error))
+    }
   })
+
+  ipcMain.handle(
+    IPC.project.clone,
+    (_e, input: import('../../shared/contracts').CloneProjectInput): IpcEnvelope<ProjectMeta> => {
+      if (!input?.sourceId || !input?.name?.trim()) return err('INVALID_INPUT', '项目名称不能为空')
+      try {
+        return ok(repo.cloneProject(input.sourceId, input.name))
+      } catch (error) {
+        return err('CLONE_FAILED', error instanceof Error ? error.message : String(error))
+      }
+    }
+  )
+
+  ipcMain.handle(
+    IPC.project.saveWorkspaceProfile,
+    (_e, input: import('../../shared/contracts').SaveWorkspaceProfileInput): IpcEnvelope<ProjectMeta | null> => {
+      if (!input?.projectId || !input.workspaceProfile) return err('INVALID_INPUT', '工作台配置不完整')
+      try {
+        return ok(repo.saveWorkspaceProfile(input.projectId, input.workspaceProfile))
+      } catch (error) {
+        return err('SAVE_FAILED', error instanceof Error ? error.message : String(error))
+      }
+    }
+  )
 
   ipcMain.handle(
     IPC.project.rename,

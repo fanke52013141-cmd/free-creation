@@ -8,7 +8,7 @@ export interface MigrationDatabase {
   pragma(statement: string, options?: { simple?: boolean }): unknown
 }
 
-export const DB_SCHEMA_VERSION = 6
+export const DB_SCHEMA_VERSION = 7
 
 const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
@@ -178,6 +178,78 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
         ELSE '文件素材-' || substr(id, 1, 6)
       END
       WHERE name IS NULL OR trim(name) = '';
+    `)
+  },
+  // M7: first-class local resource library with immutable revisions and pinned board items.
+  (database) => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS library_blobs (
+        id TEXT PRIMARY KEY, sha256 TEXT NOT NULL UNIQUE, path TEXT NOT NULL,
+        mime TEXT NOT NULL, file_name TEXT NOT NULL, size_bytes INTEGER NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS library_resources (
+        id TEXT PRIMARY KEY, form_preset TEXT NOT NULL, title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '', latest_revision_id TEXT NOT NULL,
+        archived_at INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_library_resources_updated
+        ON library_resources(archived_at, updated_at DESC);
+      CREATE TABLE IF NOT EXISTS library_revisions (
+        id TEXT PRIMARY KEY, resource_id TEXT NOT NULL, revision_number INTEGER NOT NULL,
+        base_revision_id TEXT, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
+        change_note TEXT, created_at INTEGER NOT NULL,
+        UNIQUE(resource_id, revision_number)
+      );
+      CREATE INDEX IF NOT EXISTS idx_library_revisions_resource
+        ON library_revisions(resource_id, revision_number DESC);
+      CREATE TABLE IF NOT EXISTS library_components (
+        id TEXT PRIMARY KEY, revision_id TEXT NOT NULL, role TEXT NOT NULL,
+        value_type TEXT NOT NULL, text_content TEXT, blob_id TEXT,
+        metadata_json TEXT NOT NULL DEFAULT '{}', sort_index INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_library_components_revision
+        ON library_components(revision_id, sort_index);
+      CREATE TABLE IF NOT EXISTS library_tags (
+        resource_id TEXT NOT NULL, tag TEXT NOT NULL,
+        PRIMARY KEY(resource_id, tag)
+      );
+      CREATE INDEX IF NOT EXISTS idx_library_tags_tag ON library_tags(tag);
+      CREATE TABLE IF NOT EXISTS library_collections (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS library_collection_items (
+        collection_id TEXT NOT NULL, resource_id TEXT NOT NULL, added_at INTEGER NOT NULL,
+        PRIMARY KEY(collection_id, resource_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_library_collection_items_resource
+        ON library_collection_items(resource_id);
+      CREATE TABLE IF NOT EXISTS library_usages (
+        id TEXT PRIMARY KEY, project_id TEXT NOT NULL, resource_id TEXT NOT NULL,
+        revision_id TEXT NOT NULL, component_ids_json TEXT NOT NULL,
+        project_media_ids_json TEXT NOT NULL DEFAULT '[]',
+        materialized_node_ids_json TEXT NOT NULL DEFAULT '[]',
+        created_at INTEGER NOT NULL, last_used_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_library_usages_project
+        ON library_usages(project_id, last_used_at DESC);
+      CREATE TABLE IF NOT EXISTS library_boards (
+        id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS library_board_items (
+        id TEXT PRIMARY KEY, board_id TEXT NOT NULL, resource_id TEXT NOT NULL,
+        revision_id TEXT NOT NULL, x REAL NOT NULL, y REAL NOT NULL,
+        width REAL NOT NULL, height REAL NOT NULL, note TEXT NOT NULL DEFAULT '',
+        sort_index INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS idx_library_board_items_board
+        ON library_board_items(board_id, sort_index);
+      CREATE TABLE IF NOT EXISTS library_imports (
+        package_sha256 TEXT PRIMARY KEY, imported_at INTEGER NOT NULL, resource_count INTEGER NOT NULL
+      );
     `)
   }
 ]
