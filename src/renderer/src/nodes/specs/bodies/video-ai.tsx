@@ -89,7 +89,7 @@ function EngineSetup(): React.JSX.Element {
       </div>
       {!status?.ready && !status?.installing && (
         <>
-          <p>首次安装会下载 CUDA 版 PyTorch（约 3.3 GB）和 116 MB 的 Small 模型；推理环境与模型保存在应用数据目录，不改系统 Python 环境。</p>
+          <p>需要 Python 3.12、NVIDIA 显卡和 FFmpeg。首次安装会下载约 3.4 GB 的 CUDA 推理依赖与模型，建议预留 10 GB 磁盘空间；不会改系统 Python 环境。</p>
           <button
             type="button"
             className="video-ai-install-button"

@@ -265,7 +265,7 @@ export async function installVideoEngine(): Promise<{ started: boolean }> {
     }
     updateInstallStatus({ progress: '更新 pip' })
     await runProcess(python, ['-m', 'pip', 'install', '--upgrade', 'pip'], report('更新 pip'))
-    updateInstallStatus({ progress: '安装 CUDA 版 PyTorch（约 2–3 GB）' })
+    updateInstallStatus({ progress: '安装 CUDA 版 PyTorch（约 3.3 GB）' })
     await runProcess(
       python,
       [
