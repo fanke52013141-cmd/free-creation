@@ -203,6 +203,7 @@
   flex: 1;
   overflow: auto;
   padding: 0 24px 18px;
+  background: #191a1d;
   scrollbar-color: #44474d transparent;
   scrollbar-width: thin;
 }
@@ -296,14 +297,12 @@
   cursor: pointer;
   transition:
     color 0.15s ease,
-    border-color 0.15s ease,
-    transform 0.15s ease;
+    border-color 0.15s ease;
 }
 
 .project-create-node:hover {
   color: #f0f1f3;
-  border-color: #494d54;
-  transform: translateY(-1px);
+  border-color: #51555d;
 }
 
 .project-create-node:focus-within {
@@ -314,7 +313,7 @@
 .project-create-node.is-selected {
   color: #eff0f2;
   background: #191b1f;
-  border-color: #52565e;
+  border-color: #51555d;
   box-shadow: none;
 }
 
@@ -332,13 +331,12 @@
 .project-create-node-icon {
   width: 30px;
   height: 30px;
+  display: grid;
+  place-items: center;
   color: var(--node-color);
+  background: #090a0c;
+  border: 1px solid #292c31;
   border-radius: 8px;
-  transition: transform 0.15s ease;
-}
-
-.project-create-node:hover .project-create-node-icon {
-  transform: scale(1.04);
 }
 .project-create-node-label {
   min-width: 0;
