@@ -35,7 +35,7 @@ export function LibraryResourcePicker({
   }, [query])
 
   useEffect(() => {
-    if (!selectedId) { setDetail(null); return }
+    if (!selectedId) return
     let cancelled = false
     void window.api.getLibraryResource({ resourceId: selectedId }).then((result) => {
       if (cancelled) return

@@ -58,8 +58,17 @@ function EngineSetup(): React.JSX.Element {
   }, [])
 
   useEffect(() => {
-    void refresh()
-  }, [refresh])
+    let active = true
+    void window.api.getVideoEngineStatus().then((response) => {
+      if (!active) return
+      if (response.ok) setStatus(response.data)
+      else setError(response.error.message)
+    }).catch((statusError: unknown) => {
+      if (!active) return
+      setError(statusError instanceof Error ? statusError.message : String(statusError))
+    })
+    return () => { active = false }
+  }, [])
 
   useEffect(() => {
     if (!status?.installing) return

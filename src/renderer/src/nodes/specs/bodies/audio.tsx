@@ -44,23 +44,22 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const audioRef = useRef<HTMLAudioElement>(null)
   const waveformTrackRef = useRef<HTMLDivElement>(null)
   const seekingRef = useRef(false)
-  const [waveform, setWaveform] = useState<number[]>([])
+  const [waveformData, setWaveformData] = useState<{ projectId: string; mediaId: string; peaks: number[] } | null>(null)
   const [duration, setDuration] = useState(0)
   const [currentTime, setCurrentTime] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [volume, setVolume] = useState(0.75)
   const [muted, setMuted] = useState(false)
+  const waveform = waveformData?.projectId === project?.id && waveformData.mediaId === shape.props.mediaId
+    ? waveformData.peaks
+    : []
 
   useEffect(() => {
     const projectId = project?.id
     const mediaId = shape.props.mediaId
-    if (!projectId || !mediaId || !shape.props.mediaPath) {
-      setWaveform([])
-      return
-    }
+    if (!projectId || !mediaId || !shape.props.mediaPath) return
 
     let active = true
-    setWaveform([])
     void window.api
       .generateAudioWaveform({
         projectId,
@@ -68,7 +67,7 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
         samples: AUDIO_WAVEFORM_SAMPLES
       })
       .then((result) => {
-        if (active && result.ok) setWaveform(result.data.peaks)
+        if (active && result.ok) setWaveformData({ projectId, mediaId, peaks: result.data.peaks })
       })
       .catch(() => undefined)
     return () => {
@@ -86,9 +85,6 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   useEffect(() => {
     const audio = audioRef.current
     audio?.pause()
-    setDuration(0)
-    setCurrentTime(0)
-    setPlaying(false)
     return () => audio?.pause()
   }, [shape.props.mediaPath])
 
@@ -191,6 +187,11 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           onLoadedMetadata={(event) => {
             const nextDuration = event.currentTarget.duration
             if (Number.isFinite(nextDuration)) setDuration(nextDuration)
+          }}
+          onEmptied={() => {
+            setDuration(0)
+            setCurrentTime(0)
+            setPlaying(false)
           }}
           onDurationChange={(event) => {
             const nextDuration = event.currentTarget.duration

@@ -161,9 +161,8 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedRevisionId, setSelectedRevisionId] = useState<string | undefined>()
   const [detail, setDetail] = useState<LibraryResourceDetail | null>(null)
-  const [compareRevisionId, setCompareRevisionId] = useState('')
+  const [compareRevisionSelection, setCompareRevisionSelection] = useState('')
   const [compareDetail, setCompareDetail] = useState<LibraryResourceDetail | null>(null)
-  const [detailLoading, setDetailLoading] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
   const [collectionDraft, setCollectionDraft] = useState('')
   const [targetProjectId, setTargetProjectId] = useState('')
@@ -173,10 +172,26 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
   const [boardId, setBoardId] = useState('')
   const [boardItems, setBoardItems] = useState<LibraryBoardItem[]>([])
   const [boardDetails, setBoardDetails] = useState<Record<string, LibraryResourceDetail>>({})
+  const [loadedBoardId, setLoadedBoardId] = useState('')
   const [boardName, setBoardName] = useState('')
   const [busy, setBusy] = useState(false)
   const boardCanvasRef = useRef<HTMLDivElement>(null)
   const openProject = useAppStore((state) => state.openProject)
+  const currentBoardItems = loadedBoardId === boardId ? boardItems : []
+  const currentBoardDetails = loadedBoardId === boardId ? boardDetails : {}
+  const activeRevisionId = selectedRevisionId ?? (detail?.id === selectedId ? detail.selectedRevisionId : undefined)
+  const availableCompareRevisionId = detail?.id === selectedId
+    ? detail.revisions.find((revision) => revision.id !== activeRevisionId)?.id ?? ''
+    : ''
+  const compareRevisionId = detail?.id === selectedId
+    && compareRevisionSelection !== activeRevisionId
+    && detail.revisions.some((revision) => revision.id === compareRevisionSelection)
+    ? compareRevisionSelection
+    : availableCompareRevisionId
+  const detailLoading = Boolean(selectedId) && (!detail || detail.id !== selectedId || detail.selectedRevisionId !== selectedRevisionId)
+  const currentCompareDetail = detail && compareDetail?.id === detail.id && compareDetail.selectedRevisionId === compareRevisionId
+    ? compareDetail
+    : null
 
   const loadCollections = useCallback(async (): Promise<void> => {
     const [collectionResult, projectResult, boardResult] = await Promise.all([
@@ -205,19 +220,18 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     setNextCursor(result.data.nextCursor)
   }, [collectionId, includeArchived, preset, query])
 
-  useEffect(() => { void loadCollections() }, [loadCollections])
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void loadCollections() }, 0)
+    return () => window.clearTimeout(timer)
+  }, [loadCollections])
   useEffect(() => {
     const timer = window.setTimeout(() => { void loadResources() }, 180)
     return () => window.clearTimeout(timer)
   }, [loadResources])
 
   useEffect(() => {
-    if (!selectedId) {
-      setDetail(null)
-      return
-    }
+    if (!selectedId) return
     let cancelled = false
-    setDetailLoading(true)
     void window.api.getLibraryResource({ resourceId: selectedId, revisionId: selectedRevisionId }).then((result) => {
       if (cancelled) return
       if (result.ok) {
@@ -226,31 +240,13 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
       } else {
         useToastStore.getState().show(`读取资源详情失败：${result.error.message}`)
       }
-      setDetailLoading(false)
     })
     return () => { cancelled = true }
   }, [selectedId, selectedRevisionId])
 
   useEffect(() => {
-    if (!selectedId || !detail || detail.id !== selectedId) {
-      setCompareDetail(null)
-      return
-    }
-    const activeRevision = selectedRevisionId ?? detail.selectedRevisionId
-    const alternative = detail.revisions.find((revision) => revision.id !== activeRevision)?.id ?? ''
-    setCompareRevisionId((current) =>
-      current !== activeRevision && detail.revisions.some((revision) => revision.id === current)
-        ? current
-        : alternative
-    )
-  }, [selectedId, selectedRevisionId, detail?.id, detail?.selectedRevisionId, detail?.revisions])
-
-  useEffect(() => {
     const activeRevision = selectedRevisionId ?? (detail?.id === selectedId ? detail.selectedRevisionId : undefined)
-    if (!selectedId || !compareRevisionId || compareRevisionId === activeRevision) {
-      setCompareDetail(null)
-      return
-    }
+    if (!selectedId || !compareRevisionId || compareRevisionId === activeRevision) return
     let cancelled = false
     void window.api.getLibraryResource({ resourceId: selectedId, revisionId: compareRevisionId }).then((result) => {
       if (cancelled) return
@@ -260,7 +256,7 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
   }, [selectedId, selectedRevisionId, compareRevisionId, detail?.id, detail?.selectedRevisionId])
 
   useEffect(() => {
-    if (!boardId) { setBoardItems([]); setBoardDetails({}); return }
+    if (!boardId) return
     let cancelled = false
     void (async () => {
       const result = await window.api.getLibraryBoardItems(boardId)
@@ -274,7 +270,10 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
       for (const [key, detail] of pairs) {
         if (detail) details[key] = detail
       }
-      if (!cancelled) setBoardDetails(details)
+      if (!cancelled) {
+        setBoardDetails(details)
+        setLoadedBoardId(boardId)
+      }
     })()
     return () => { cancelled = true }
   }, [boardId])
@@ -287,7 +286,7 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     if (!result.ok) throw new Error(result.error.message)
     setFormOpen(false)
     setSelectedId(result.data.id)
-    setSelectedRevisionId(undefined)
+    setSelectedRevisionId(result.data.latestRevisionId)
     await loadResources()
     await loadCollections()
     useToastStore.getState().show(isRevision ? `已发布「${result.data.title}」v${result.data.revisionNumber}` : `已保存资源「${result.data.title}」`)
@@ -341,8 +340,8 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
 
   const addToBoard = async (summary: LibraryResourceSummary): Promise<void> => {
     if (!boardId) return useToastStore.getState().show('请先创建或选择一个展板')
-    const index = boardItems.length
-    const next = [...boardItems, {
+    const index = currentBoardItems.length
+    const next = [...currentBoardItems, {
       id: crypto.randomUUID(), resourceId: summary.id, revisionId: summary.latestRevisionId,
       x: 24 + (index % 3) * 300, y: 24 + Math.floor(index / 3) * 350,
       width: 270, height: 310, note: '', order: index
@@ -357,12 +356,12 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     const resourceId = event.dataTransfer.getData('application/x-canvas-library-resource')
     if (!resourceId || !boardCanvasRef.current || !boardId) return
     const summary = resources.find((resource) => resource.id === resourceId)
-    if (!summary || boardItems.some((item) => item.resourceId === resourceId)) return
+    if (!summary || currentBoardItems.some((item) => item.resourceId === resourceId)) return
     const rect = boardCanvasRef.current.getBoundingClientRect()
-    const next = [...boardItems, {
+    const next = [...currentBoardItems, {
       id: crypto.randomUUID(), resourceId, revisionId: summary.latestRevisionId,
       x: Math.max(0, event.clientX - rect.left - 120), y: Math.max(0, event.clientY - rect.top - 60),
-      width: 270, height: 310, note: '', order: boardItems.length
+      width: 270, height: 310, note: '', order: currentBoardItems.length
     }]
     setBoardItems(next)
     const result = await window.api.saveLibraryBoard({ boardId, items: next })
@@ -373,7 +372,7 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
     event.preventDefault()
     if (!boardCanvasRef.current) return
     const rect = boardCanvasRef.current.getBoundingClientRect()
-    const next = boardItems.map((current) => current.id === item.id
+    const next = currentBoardItems.map((current) => current.id === item.id
       ? { ...current, x: Math.max(0, event.clientX - rect.left - 130), y: Math.max(0, event.clientY - rect.top - 20) }
       : current)
     setBoardItems(next)
@@ -455,7 +454,7 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
             </div>
             {resources.length ? (
               <div className="library-resource-grid">
-                {resources.map((resource) => <ResourceCard key={resource.id} resource={resource} onOpen={() => { setSelectedId(resource.id); setSelectedRevisionId(undefined) }} onDragStart={(event) => event.dataTransfer.setData('application/x-canvas-library-resource', resource.id)} />)}
+                {resources.map((resource) => <ResourceCard key={resource.id} resource={resource} onOpen={() => { setSelectedId(resource.id); setSelectedRevisionId(resource.latestRevisionId) }} onDragStart={(event) => event.dataTransfer.setData('application/x-canvas-library-resource', resource.id)} />)}
               </div>
             ) : (
               <div className="library-empty-state"><span><Icon name="assets" size={25} /></span><h2>你的创作宝库从这里开始</h2><p>把好用的图片、提示词、人物和风格设定收藏起来，后续项目都能查找和复用。</p><button className="library-primary" onClick={() => setFormOpen(true)}><Icon name="add" size={15} />新建第一份资源</button></div>
@@ -474,8 +473,8 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
           <div className="library-board-canvas-scroll">
             {boardId ? (
               <div className="library-board-canvas" ref={boardCanvasRef} onDragOver={(event) => event.preventDefault()} onDrop={(event) => void dropOnBoard(event)}>
-                {boardItems.map((item) => {
-                  const resource = boardDetails[`${item.resourceId}:${item.revisionId}`]
+                {currentBoardItems.map((item) => {
+                  const resource = currentBoardDetails[`${item.resourceId}:${item.revisionId}`]
                   return (
                     <article key={item.id} className="library-board-card" style={{ left: item.x, top: item.y, width: item.width, minHeight: item.height }} draggable onDragStart={(event) => event.dataTransfer.setData('application/x-canvas-library-board-item', item.id)} onDragEnd={(event) => void moveBoardItem(event, item)} onDrop={(event) => event.stopPropagation()}>
                       {resource ? <button className="library-board-resource-open" onClick={() => { setSelectedId(resource.id); setSelectedRevisionId(item.revisionId) }}>
@@ -483,16 +482,16 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
                         <strong>{resource.selectedTitle}</strong><small>固定版本 v{resource.selectedRevisionNumber}</small>
                         {resource.revisionNumber > resource.selectedRevisionNumber && <em>已有新版本 v{resource.revisionNumber}</em>}
                       </button> : <div className="library-board-missing">资源已不可用</div>}
-                      <textarea value={item.note} placeholder="写下对照观察或灵感…" onChange={(event) => setBoardItems((items) => items.map((current) => current.id === item.id ? { ...current, note: event.currentTarget.value } : current))} onBlur={() => void window.api.saveLibraryBoard({ boardId, items: boardItems })} />
+                      <textarea value={item.note} placeholder="写下对照观察或灵感…" onChange={(event) => setBoardItems((items) => items.map((current) => current.id === item.id ? { ...current, note: event.currentTarget.value } : current))} onBlur={() => void window.api.saveLibraryBoard({ boardId, items: currentBoardItems })} />
                       <button className="library-board-remove" aria-label="从展板移除" onClick={() => {
-                        const next = boardItems.filter((current) => current.id !== item.id)
+                        const next = currentBoardItems.filter((current) => current.id !== item.id)
                         setBoardItems(next)
                         void window.api.saveLibraryBoard({ boardId, items: next })
                       }}><Icon name="close" size={13} /></button>
                     </article>
                   )
                 })}
-                {boardItems.length === 0 && <div className="library-board-empty">打开资源详情，点击“加入展板”，开始整理你的风格参考。</div>}
+                {currentBoardItems.length === 0 && <div className="library-board-empty">打开资源详情，点击“加入展板”，开始整理你的风格参考。</div>}
               </div>
             ) : <div className="library-empty-state"><h2>创建一个展板</h2><p>展板可固定资源版本，便于并排观察图片、设定和灵感。</p></div>}
           </div>
@@ -534,20 +533,20 @@ export function ResourceLibraryPage({ onBack }: { onBack: () => void }): React.J
                       <details className="library-version-compare">
                         <summary>比较两个版本</summary>
                         <label>对比版本
-                          <select value={compareRevisionId} onChange={(event) => setCompareRevisionId(event.currentTarget.value)}>
+                          <select value={compareRevisionId} onChange={(event) => setCompareRevisionSelection(event.currentTarget.value)}>
                             <option value="">选择另一个版本</option>
                             {detail.revisions.filter((revision) => revision.id !== detail.selectedRevisionId).map((revision) => (
                               <option key={revision.id} value={revision.id}>v{revision.revisionNumber} · {revision.changeNote || new Date(revision.createdAt).toLocaleDateString()}</option>
                             ))}
                           </select>
                         </label>
-                        {compareDetail && (
+                        {currentCompareDetail && (
                           <div className="library-version-compare-body">
                             <div className="library-version-compare-heading">
                               <span>v{detail.selectedRevisionNumber}（当前选择）</span>
-                              <span>v{compareDetail.selectedRevisionNumber}（对比）</span>
+                              <span>v{currentCompareDetail.selectedRevisionNumber}（对比）</span>
                             </div>
-                            {compareComponents(detail.components, compareDetail.components).map((row) => (
+                            {compareComponents(detail.components, currentCompareDetail.components).map((row) => (
                               <article key={row.key} className={`library-version-compare-row ${row.status}`}>
                                 <strong>{row.role}</strong>
                                 <div><pre>{comparisonValue(row.current)}</pre><pre>{comparisonValue(row.compared)}</pre></div>
