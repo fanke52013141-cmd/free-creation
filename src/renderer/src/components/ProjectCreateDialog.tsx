@@ -45,6 +45,7 @@ export function ProjectCreateDialog({
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(initialProfile?.visibleNodeTypeIds ?? allNodeTypes().map((node) => node.type))
   )
+  const [highlightedSelected, setHighlightedSelected] = useState<Set<string>>(() => new Set())
   const [keyword, setKeyword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -68,9 +69,16 @@ export function ProjectCreateDialog({
 
   const toggleNode = (id: string): void => {
     setPreset('custom')
+    const wasSelected = selected.has(id)
     setSelected((current) => {
       const next = new Set(current)
       if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+    setHighlightedSelected((current) => {
+      const next = new Set(current)
+      if (wasSelected) next.delete(id)
       else next.add(id)
       return next
     })
@@ -82,6 +90,14 @@ export function ProjectCreateDialog({
     setSelected((current) => {
       const next = new Set(current)
       for (const id of ids) allSelected ? next.delete(id) : next.add(id)
+      return next
+    })
+    setHighlightedSelected((current) => {
+      const next = new Set(current)
+      for (const id of ids) {
+        if (allSelected) next.delete(id)
+        else if (!selected.has(id)) next.add(id)
+      }
       return next
     })
   }
@@ -144,7 +160,10 @@ export function ProjectCreateDialog({
           <div className="project-create-top-config">
             {nameRequired && (
               <label className="project-create-name" htmlFor={nameInputId}>
-                <span>项目名称</span>
+                <span>
+                  <Icon name="edit" size={15} />
+                  <span>项目名称</span>
+                </span>
                 <input
                   id={nameInputId}
                   autoFocus
@@ -159,7 +178,10 @@ export function ProjectCreateDialog({
               </label>
             )}
             <label className="project-create-search" htmlFor={searchInputId}>
-              <span>快速定位节点</span>
+              <span>
+                <Icon name="search" size={15} />
+                <span>快速定位节点</span>
+              </span>
               <span className="project-create-search-field">
                 <Icon name="search" size={16} />
                 <input
@@ -211,7 +233,7 @@ export function ProjectCreateDialog({
                   <div className="project-create-node-grid">
                     {nodes.map((node) => (
                       <label
-                        className={`project-create-node ${selected.has(node.type) ? 'is-selected' : ''}`}
+                        className={`project-create-node ${selected.has(node.type) ? 'is-selected' : ''} ${highlightedSelected.has(node.type) ? 'is-highlighted' : ''}`}
                         key={node.type}
                         style={{ '--node-color': node.color } as React.CSSProperties}
                       >
