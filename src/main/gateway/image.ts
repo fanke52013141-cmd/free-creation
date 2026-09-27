@@ -4,6 +4,7 @@
 //   openrouter-chat —— OpenRouter：chat-completions modalities 生图，参考图内联 data URL
 // 产物统一走 media 管线 saveBufferAsset 入库，节点侧拿到 MediaAsset 即可展示。
 import { generateImage } from 'ai'
+import log from 'electron-log/main'
 import type { ImageEditInput, ImageGenerateInput } from '../../shared/contracts'
 import { IMAGE_EDIT_SIZES } from '../../shared/image-edit'
 import { imageCapabilitiesFor, type ImageCapabilities } from '../../shared/image-capabilities'
@@ -119,11 +120,22 @@ async function generateImageWithReference(
 // ── 驱动二：ToAPIS 异步任务（gpt-image-2） ─────────────────────────────────
 
 const TOAPIS_POLL_INTERVAL_MS = 2_500
-const TOAPIS_TIMEOUT_MS = 10 * 60_000
+// 4K 任务可能排队数分钟；两张图片由执行器逐张提交，每张单独计时。
+const TOAPIS_TIMEOUT_MS = 20 * 60_000
+const IMAGE_DOWNLOAD_TIMEOUT_MS = 5 * 60_000
 // 官方文档已确认任务查询为 GET /v1/images/generations/{task_id}；后两条只覆盖个别旧中转
 // 部署的路径形态，仅在文档路径返回 404 时才会用到，命中结果按供应商缓存。
 const TOAPIS_TASK_QUERY_PATHS = ['/images/generations/', '/images/tasks/', '/tasks/']
 const toapisTaskQueryPathByProvider = new Map<string, string>()
+
+function toapisNetworkError(phase: string, error: unknown): GatewayError {
+  const cause = error instanceof Error ? (error as Error & { cause?: unknown }).cause : undefined
+  const detail = cause instanceof Error
+    ? `${cause.message}${'code' in cause ? ` (${String(cause.code)})` : ''}`
+    : error instanceof Error ? error.message : String(error)
+  log.error('toapis image network error', { phase, detail })
+  return new GatewayError('UPSTREAM_ERROR', `TOAPIS ${phase}网络失败：${detail}`)
+}
 
 const delay = (ms: number): Promise<void> =>
   new Promise((resolve) => {
@@ -186,7 +198,7 @@ async function toapisUploadReference(
     headers: { Authorization: `Bearer ${provider.apiKey}` },
     body: form,
     signal: AbortSignal.timeout(60_000)
-  })
+  }).catch((error: unknown) => { throw toapisNetworkError('参考图上传', error) })
   if (!res.ok) {
     throw new GatewayError('TOAPIS_UPLOAD_FAILED', await errorTail(res, '参考图上传失败'))
   }
@@ -226,6 +238,7 @@ async function pollToapisTask(
   const base = provider.baseURL.replace(/\/+$/, '')
   const knownPath = toapisTaskQueryPathByProvider.get(provider.id) ?? null
   let pathResolved = knownPath !== null
+  let lastNetworkError = ''
   while (Date.now() < deadline) {
     await delay(TOAPIS_POLL_INTERVAL_MS)
     const candidates = knownPath ? [knownPath] : TOAPIS_TASK_QUERY_PATHS
@@ -234,7 +247,10 @@ async function pollToapisTask(
       const res = await fetch(`${base}${path}${taskId}`, {
         headers: { Authorization: `Bearer ${provider.apiKey}` },
         signal: AbortSignal.timeout(30_000)
-      }).catch(() => null)
+      }).catch((error: unknown) => {
+        lastNetworkError = toapisNetworkError('任务查询', error).message
+        return null
+      })
       if (!res) continue
       if (res.status === 404) {
         notFoundCount += 1
@@ -286,7 +302,7 @@ async function pollToapisTask(
       )
     }
   }
-  throw new GatewayError('TIMEOUT', 'TOAPIS 生图任务超时（10 分钟）')
+  throw new GatewayError('TIMEOUT', `TOAPIS 生图任务超时（20 分钟）${lastNetworkError ? `；最近一次请求：${lastNetworkError}` : ''}`)
 }
 
 function decodeDataUrl(url: string): { buf: Buffer; ext: string } {
@@ -305,7 +321,8 @@ async function downloadImageAsAsset(
     const { buf, ext } = decodeDataUrl(url)
     return saveBufferAsset(projectId, buf, ext, name)
   }
-  const res = await fetch(url, { signal: AbortSignal.timeout(120_000) })
+  const res = await fetch(url, { signal: AbortSignal.timeout(IMAGE_DOWNLOAD_TIMEOUT_MS) })
+    .catch((error: unknown) => { throw toapisNetworkError('图片下载', error) })
   if (!res.ok) throw new GatewayError('DOWNLOAD_FAILED', `生成图片下载失败：HTTP ${res.status}`)
   const buf = Buffer.from(await res.arrayBuffer())
   const mime = res.headers.get('content-type')?.split(';')[0]?.trim() ?? 'image/png'
@@ -333,21 +350,23 @@ async function generateWithToapisTask(
     response_format: 'url'
   }
   if (input.size && input.size !== 'auto') body.size = input.size
-  // UI stores lowercase tiers, while ToAPIS documents uppercase wire values (1K/2K/4K).
-  if (capabilities.resolutions.length > 0 && input.resolution) {
-    body.resolution = input.resolution.toUpperCase()
+  if (capabilities.resolutions.length > 0 && input.resolution) body.resolution = input.resolution
+  // VIP defaults to medium upstream; quality is deliberately fixed to low, independent of 4K size.
+  if (input.modelId === 'gpt-image-2-vip' || input.modelId === 'gpt-image-2-official') {
+    body.quality = 'low'
   }
   if (capabilities.supportsTransparentBackground && input.background === 'transparent')
     body.background = 'transparent'
   if (referenceUrls.length > 0) body.reference_images = referenceUrls
 
   const base = provider.baseURL.replace(/\/+$/, '')
+  log.info('toapis image submit', { model: input.modelId, resolution: body.resolution, quality: body.quality, referenceCount: referenceUrls.length })
   const res = await fetch(`${base}/images/generations`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${provider.apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(60_000)
-  })
+  }).catch((error: unknown) => { throw toapisNetworkError('生图提交', error) })
   if (!res.ok) {
     throw new GatewayError('UPSTREAM_ERROR', await errorTail(res, 'TOAPIS 生图提交失败'))
   }
@@ -375,7 +394,9 @@ async function generateWithToapisTask(
     )
   }
 
+  log.info('toapis image task accepted', { taskId })
   const finished = await pollToapisTask(provider, taskId)
+  log.info('toapis image task completed', { taskId })
   const imageUrl = extractFirstImageValue(finished, new Set(referenceUrls))
   if (!imageUrl) throw new GatewayError('EMPTY_RESULT', 'TOAPIS 任务完成但未返回图片')
   return downloadImageAsAsset(input.projectId, imageUrl, prompt.slice(0, 24))
@@ -464,7 +485,10 @@ export async function generateImageEditToAsset(
     }
     if (size) body.size = size
     if (capabilities.resolutions.length > 0 && input.config?.resolution) {
-      body.resolution = input.config.resolution.toUpperCase()
+      body.resolution = input.config.resolution
+    }
+    if (input.modelId === 'gpt-image-2-vip' || input.modelId === 'gpt-image-2-official') {
+      body.quality = 'low'
     }
     if (referenceUrls.length > 0) body.reference_images = referenceUrls
 

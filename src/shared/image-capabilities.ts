@@ -59,7 +59,7 @@ export interface ImageCapabilities {
   forwardsAspectRatio: boolean
   /** 分辨率档位；空数组表示供应商不支持：UI 隐藏且请求不携带。 */
   resolutions: ImageResolution[]
-  /** true 时请求固定携带 quality: 'low'；质量不暴露 UI、不进节点配置。 */
+  /** OpenAI Images SDK 驱动固定携带 quality: 'low'；ToAPIS VIP 由任务驱动按模型显式发送 low。 */
   supportsQuality: boolean
   /** 供应商是否接受 background: 'transparent'；关闭时 UI 隐藏且请求不携带该字段。 */
   supportsTransparentBackground: boolean

@@ -112,7 +112,7 @@ export function describeUpstreamHttpError(
     (status === 402 || status === 403 || status === 429) &&
     /(?:quota (?:is )?not enough|insufficient (?:credit|balance|quota)|quota exceeded|余额不足|额度不足)/i.test(detail)
   ) {
-    label = '供应商账户额度不足，请检查余额或套餐额度'
+    label = '当前 API Key 被上游判定额度不足，请核对该 Key 的额度与模型计费'
   }
   const message = [
     context ? `${context}：` : '',
