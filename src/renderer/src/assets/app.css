@@ -994,7 +994,7 @@ select:focus-visible,
 .canvas-selection-underlay {
   position: absolute;
   box-sizing: border-box;
-  border: 1px dashed rgba(234, 242, 250, 0.54);
+  border: 1px solid rgba(234, 242, 250, 0.24);
   border-radius: 18px;
   background: rgba(223, 236, 249, 0.055);
   box-shadow:
@@ -1025,10 +1025,11 @@ select:focus-visible,
   line-height: 1;
   pointer-events: auto;
   cursor: crosshair;
-  /* 组件里给的是选区右边缘坐标，再向右偏移 10px、垂直居中（原批量端口位置）。 */
   transform: translate(13px, -50%);
+  scale: 1;
+  animation: canvas-selection-batch-breathe 2.8s ease-in-out infinite;
   box-shadow:
-    0 0 0 5px rgba(255, 255, 255, 0.07),
+    0 0 9px 2px rgba(255, 255, 255, 0.28),
     0 3px 14px rgba(0, 0, 0, 0.35);
 }
 
@@ -1037,23 +1038,62 @@ select:focus-visible,
   transform: translate(13px, -50%) scale(1.08);
 }
 
-/* 批量端口不是悬浮的数字：用短促断续线把它接回选区边缘。线段轻到近似断开，
-   但在视觉上始终明确“3 来自这组三个节点”。 */
-.canvas-selection-batch-connector {
+.canvas-selection-batch-port::before {
+  content: '';
   position: absolute;
-  z-index: 1;
-  width: 29px;
-  height: 1px;
-  transform: translateY(-50%);
-  background: repeating-linear-gradient(
-    90deg,
-    rgba(229, 241, 251, 0.62) 0 4px,
-    rgba(229, 241, 251, 0) 4px 7px
+  z-index: -1;
+  inset: -16px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.62) 0%,
+    rgba(255, 255, 255, 0.3) 34%,
+    rgba(255, 255, 255, 0.12) 52%,
+    transparent 74%
   );
-  box-shadow: 0 0 5px rgba(126, 213, 255, 0.2);
+  filter: blur(3px);
+  opacity: 0;
+  animation: canvas-selection-batch-pulse 2.8s ease-out infinite;
   pointer-events: none;
 }
 
+@keyframes canvas-selection-batch-breathe {
+  0%,
+  100% {
+    scale: 1;
+    box-shadow:
+      0 0 9px 2px rgba(255, 255, 255, 0.28),
+      0 3px 14px rgba(0, 0, 0, 0.35);
+  }
+
+  50% {
+    scale: 1.12;
+    box-shadow:
+      0 0 13px 4px rgba(255, 255, 255, 0.5),
+      0 3px 16px rgba(0, 0, 0, 0.35);
+  }
+}
+
+@keyframes canvas-selection-batch-pulse {
+  0% {
+    transform: scale(0.55);
+    opacity: 0.82;
+  }
+
+  82%,
+  100% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas-selection-batch-port,
+  .canvas-selection-batch-port::before {
+    animation: none;
+    scale: 1;
+  }
+}
 /* ── 节点创建菜单 ── */
 .node-menu {
   position: fixed;

@@ -2148,7 +2148,7 @@ button {
 }
 
 .tl-selection__fg__outline {
-  stroke-dasharray: 7 5 !important;
+  stroke-dasharray: none !important;
 }
 
 /* 不让运行 / 保存工作流抢走多选工具栏的统一节奏。 */
@@ -2180,12 +2180,12 @@ button {
     0 0 26px color-mix(in srgb, var(--node-accent, var(--brand)) 16%, transparent);
 }
 
-/* 选中框：大间距清爽虚线，呼吸感强，不显厚重。 */
+/* 选中框保留轻描边；多选工具栏负责提示操作范围。 */
 .tl-selection__fg__outline {
   fill: none !important;
   stroke: color-mix(in srgb, var(--brand) 85%, white) !important;
   stroke-width: 1.5px !important;
-  stroke-dasharray: 8 6 !important;
+  stroke-dasharray: none !important;
   stroke-linecap: round;
   opacity: 0.6;
 }
