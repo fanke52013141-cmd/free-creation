@@ -3,6 +3,8 @@
 ## 更新内容
 
 - 默认连接点按端口类型合并显示：同类型端口共用锚点，不同类型端口平分节点高度；节点无连接时各侧使用单个代表端口。
+- 恢复节点色连接点的呼吸扩散：12 px 实心核心每 3 秒缓慢呼吸，悬浮时展示向外扩散环；减少动态效果时停用动画。
+- 连接点保留无障碍名称，但悬浮时不再显示端口类型提示气泡。
 - 基础连线宽度为 3 px，流动线宽度为 4.5 px。
 - 流动线段长度按整条线的六分之一计算，长度变化不再改变线宽。
 - 拖动连线预览使用同样的六分之一流动段比例。
@@ -14,6 +16,8 @@
 ## 主要实现位置
 
 - `src/renderer/src/canvas/node-port-layout.ts`：按端口类型合并连接点并计算垂直布局。
+- `src/renderer/src/canvas/NodeCardView.tsx`：实际挂载连接点核心与扩散环；端口不再套可见提示框。
+- `src/renderer/src/assets/ui-surfaces.css`：节点色呼吸光晕和悬浮扩散环动画。
 - `src/renderer/src/canvas/DataEdgeLayer.tsx`：数据连线、流动段长度及缩放补偿。
 - `src/renderer/src/canvas/ConnectionLayer.tsx`：拖线预览颜色与流动表现。
 - `src/renderer/src/assets/ui-surfaces.css`：正式连线宽度、流光长度与动画样式。
@@ -30,3 +34,4 @@
 ## 验证
 
 - `npm run verify` 通过：lint、Node/Web 类型检查、103 个测试文件（1,234 项通过、1 项跳过）和 Electron 构建。
+- 2026-09-27 连接点恢复后再次运行 `npm run verify`，同样通过上述检查。

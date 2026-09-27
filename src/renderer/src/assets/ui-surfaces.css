@@ -1991,14 +1991,14 @@ button {
 @keyframes node-port-pulse-glow {
   0%,
   100% {
-    transform: scale(1);
+    transform: translate(-50%, -50%) scale(1);
     box-shadow:
       0 0 5px 1.5px color-mix(in srgb, var(--node-port-color, var(--pc, #42b9f5)) 75%, transparent),
       0 0 11px 3px color-mix(in srgb, var(--node-port-color, var(--pc, #42b9f5)) 35%, transparent);
   }
 
   50% {
-    transform: scale(1.12);
+    transform: translate(-50%, -50%) scale(1.12);
     box-shadow:
       0 0 8px 2.5px color-mix(in srgb, var(--node-port-color, var(--pc, #42b9f5)) 90%, transparent),
       0 0 16px 5px color-mix(in srgb, var(--node-port-color, var(--pc, #42b9f5)) 50%, transparent);
@@ -2056,6 +2056,9 @@ button {
 }
 
 .port-core {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   background: var(--node-port-color, var(--pc, #42b9f5));
   animation: node-port-pulse-glow 3s ease-in-out infinite;
   box-shadow:
@@ -2072,6 +2075,17 @@ button {
 
 .port-dot:hover .port-radar {
   animation: node-port-radar-ring 2s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .port-core {
+    animation: none;
+  }
+
+  .port-dot:hover .port-radar {
+    animation: none;
+    opacity: 0;
+  }
 }
 
 /* 运行按钮与标题行垂直居中，并固定在节点右上角。 */

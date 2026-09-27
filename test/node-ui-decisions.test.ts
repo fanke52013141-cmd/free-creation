@@ -329,12 +329,14 @@ describe('v1.2 §16.12 处理/结构数据节点：只留真会改变行为的�
 })
 
 describe('v1.2 §16.10 端口可发现性：可落点有环、有名称，且校验不放宽', () => {
-  it('端口悬浮提示统一在上方显示契约名和类型，不改变端口命中区', () => {
+  it('节点颜色呼吸扩散效果挂载到实际端口，保留无障碍名称且不弹悬浮提示', () => {
     expect(nodeCardView).toContain('function portHint(port: PortDecl): string')
-    expect(
-      nodeCardView.match(/<Tooltip key=\{p\.id\} label=\{portHint\(p\)\} placement="top">/g)
-    ).toHaveLength(2)
+    expect(nodeCardView.match(/className="port-radar"/g)).toHaveLength(3)
+    expect(nodeCardView.match(/className="port-core"/g)).toHaveLength(3)
     expect(nodeCardView).toContain('aria-label={portHint(p)}')
+    expect(nodeCardView).not.toContain('<Tooltip key={p.id} label={portHint(p)} placement="top">')
+    expect(surfaces).toContain('animation: node-port-pulse-glow 3s ease-in-out infinite;')
+    expect(surfaces).toContain('var(--node-port-color, var(--pc, #42b9f5))')
   })
 
   it('可落点用类型色区分于普通 hover；不兼容端口另给禁止光标', () => {
@@ -342,9 +344,10 @@ describe('v1.2 §16.10 端口可发现性：可落点有环、有名称，且校
     expect(foundation).toMatch(/\.port-dot\.dim\s*\{[^}]*cursor:\s*not-allowed;/)
   })
 
-  it('tooltip 走 portHint 单一入口，类型不再输出英文裸串', () => {
+  it('端口无障碍名称走 portHint 单一入口，类型不再输出英文裸串', () => {
     expect(nodeCardView).toContain('function portHint(port: PortDecl): string')
-    expect(nodeCardView).toContain('<Tooltip key={p.id} label={portHint(p)} placement="top">')
+    expect(nodeCardView).toContain('aria-label={portHint(p)}')
+    expect(nodeCardView).not.toContain('<Tooltip key={p.id} label={portHint(p)} placement="top">')
     expect(nodeCardView).not.toContain('`${p.name} · ${p.type}`')
   })
 

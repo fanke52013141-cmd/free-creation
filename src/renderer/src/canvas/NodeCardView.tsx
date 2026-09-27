@@ -754,35 +754,37 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           const isConnected = (readinessState.incomingCounts?.get(p.id) ?? 0) > 0
           const portKey = `in:${p.id}`
           return (
-            <Tooltip key={p.id} label={portHint(p)} placement="top">
-              <span
-                className={`port-dot in ${isConnected ? 'connected' : 'unconnected'} ${isAnchor ? 'ok' : draft && draft.from.direction !== 'in' ? (ok ? 'ok' : 'dim') : ''}`}
-                data-port-id={p.id}
-                style={{
-                  top: inY[i] - NODE_PORT_SIZE / 2,
-                  ['--pc' as string]: PORT_COLORS[p.type],
-                  ['--node-port-color' as string]: nodePortColor,
-                  ...portFollowStyle(portKey)
-                }}
-                aria-label={portHint(p)}
-                onPointerEnter={(event) => updatePortFollow(event, portKey, 'in')}
-                onPointerMove={(event) => updatePortFollow(event, portKey, 'in')}
-                onPointerLeave={() => clearPortFollow(portKey)}
-                onPointerDown={(e) => {
-                  stopEventPropagation(e)
-                  beginConnectionDrag(
-                    {
-                      shapeId: shape.id,
-                      portId: p.id,
-                      portType: p.type,
-                      schema: p.schema,
-                      direction: 'in'
-                    },
-                    portCenter(e, portKey)
-                  )
-                }}
-              ></span>
-            </Tooltip>
+            <span
+              key={p.id}
+              className={`port-dot in ${isConnected ? 'connected' : 'unconnected'} ${isAnchor ? 'ok' : draft && draft.from.direction !== 'in' ? (ok ? 'ok' : 'dim') : ''}`}
+              data-port-id={p.id}
+              style={{
+                top: inY[i] - NODE_PORT_SIZE / 2,
+                ['--pc' as string]: PORT_COLORS[p.type],
+                ['--node-port-color' as string]: nodePortColor,
+                ...portFollowStyle(portKey)
+              }}
+              aria-label={portHint(p)}
+              onPointerEnter={(event) => updatePortFollow(event, portKey, 'in')}
+              onPointerMove={(event) => updatePortFollow(event, portKey, 'in')}
+              onPointerLeave={() => clearPortFollow(portKey)}
+              onPointerDown={(e) => {
+                stopEventPropagation(e)
+                beginConnectionDrag(
+                  {
+                    shapeId: shape.id,
+                    portId: p.id,
+                    portType: p.type,
+                    schema: p.schema,
+                    direction: 'in'
+                  },
+                  portCenter(e, portKey)
+                )
+              }}
+            >
+              <span className="port-radar" aria-hidden="true" />
+              <span className="port-core" aria-hidden="true" />
+            </span>
           )
         })}
 
@@ -808,7 +810,10 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                 ['--node-port-color' as string]: nodePortColor
               }}
               aria-label="来源产物连线"
-            />
+            >
+              <span className="port-radar" aria-hidden="true" />
+              <span className="port-core" aria-hidden="true" />
+            </span>
           )}
 
         {/* 输出端口：与输入端口同样是纯圆形，按住后拖出连线；in 方向拖线时反向高亮。 */}
@@ -820,41 +825,43 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           const okUpstream = draftIn && !isSource ? canAttachPort(draftIn, p, 'in') : false
           const portKey = `out:${p.id}`
           return (
-            <Tooltip key={p.id} label={portHint(p)} placement="top">
-              <span
-                className={`port-dot out ${hasOutput ? 'has-output' : 'no-output'} ${isConnected ? 'connected' : 'unconnected'} ${isSource && draft?.from.portId === p.id && draft.from.direction !== 'in' ? 'ok' : ''} ${draftIn ? (okUpstream ? 'ok' : 'dim') : ''}`}
-                data-port-id={p.id}
-                style={{
-                  top: outY[i] - NODE_PORT_SIZE / 2,
-                  ['--pc' as string]: PORT_COLORS[p.type],
-                  ['--node-port-color' as string]: nodePortColor,
-                  ...portFollowStyle(portKey)
-                }}
-                aria-label={portHint(p)}
-                onPointerEnter={(event) => updatePortFollow(event, portKey, 'out')}
-                onPointerMove={(event) => updatePortFollow(event, portKey, 'out')}
-                onPointerLeave={() => clearPortFollow(portKey)}
-                onPointerDown={(e) => {
-                  stopEventPropagation(e)
-                  const selectedNodeIds = editor
-                    .getSelectedShapes()
-                    .filter((candidate) => candidate.type === 'node-card')
-                    .map((candidate) => candidate.id)
-                  const batch = selectedNodeIds.includes(shape.id)
-                    ? batchConnectionFromSelection(editor, selectedNodeIds, p.id)
-                    : null
-                  beginConnectionDrag(
-                    batch ?? {
-                      shapeId: shape.id,
-                      portId: p.id,
-                      portType: p.type,
-                      schema: p.schema
-                    },
-                    portCenter(e, portKey)
-                  )
-                }}
-              ></span>
-            </Tooltip>
+            <span
+              key={p.id}
+              className={`port-dot out ${hasOutput ? 'has-output' : 'no-output'} ${isConnected ? 'connected' : 'unconnected'} ${isSource && draft?.from.portId === p.id && draft.from.direction !== 'in' ? 'ok' : ''} ${draftIn ? (okUpstream ? 'ok' : 'dim') : ''}`}
+              data-port-id={p.id}
+              style={{
+                top: outY[i] - NODE_PORT_SIZE / 2,
+                ['--pc' as string]: PORT_COLORS[p.type],
+                ['--node-port-color' as string]: nodePortColor,
+                ...portFollowStyle(portKey)
+              }}
+              aria-label={portHint(p)}
+              onPointerEnter={(event) => updatePortFollow(event, portKey, 'out')}
+              onPointerMove={(event) => updatePortFollow(event, portKey, 'out')}
+              onPointerLeave={() => clearPortFollow(portKey)}
+              onPointerDown={(e) => {
+                stopEventPropagation(e)
+                const selectedNodeIds = editor
+                  .getSelectedShapes()
+                  .filter((candidate) => candidate.type === 'node-card')
+                  .map((candidate) => candidate.id)
+                const batch = selectedNodeIds.includes(shape.id)
+                  ? batchConnectionFromSelection(editor, selectedNodeIds, p.id)
+                  : null
+                beginConnectionDrag(
+                  batch ?? {
+                    shapeId: shape.id,
+                    portId: p.id,
+                    portType: p.type,
+                    schema: p.schema
+                  },
+                  portCenter(e, portKey)
+                )
+              }}
+            >
+              <span className="port-radar" aria-hidden="true" />
+              <span className="port-core" aria-hidden="true" />
+            </span>
           )
         })}
       </div>
