@@ -97,7 +97,7 @@ export function describeUpstreamHttpError(
   body: string,
   context = ''
 ): UpstreamHttpError {
-  const label = labelForStatus(status)
+  let label = labelForStatus(status)
   const trimmed = (body ?? '').trim()
   let detail = ''
   if (trimmed && !looksLikeMarkup(trimmed)) {
@@ -107,6 +107,12 @@ export function describeUpstreamHttpError(
       // 非 JSON 的纯文本错误体（如 "insufficient credit"）本身就是最有用的信息
       detail = trimmed
     }
+  }
+  if (
+    (status === 402 || status === 403 || status === 429) &&
+    /(?:quota (?:is )?not enough|insufficient (?:credit|balance|quota)|quota exceeded|余额不足|额度不足)/i.test(detail)
+  ) {
+    label = '供应商账户额度不足，请检查余额或套餐额度'
   }
   const message = [
     context ? `${context}：` : '',

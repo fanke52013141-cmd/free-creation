@@ -457,12 +457,10 @@ async function runVoiceClone(
     const cloned = await transformTts({
       projectId,
       referenceAudioId: reference.asset.id,
-      text: '语音克隆链路验证成功。',
       config: {
         ...DEFAULT_TTS_CONFIG,
         providerId: provider.id,
-        modelId,
-        text: '语音克隆链路验证成功。'
+        modelId
       }
     })
     return {
@@ -471,8 +469,7 @@ async function runVoiceClone(
       provider: publicProvider(provider),
       modelId,
       durationMs: Date.now() - started,
-      detail: `真实语音克隆与新音色合成成功，已获得 voice_id：${cloned.voiceId}`,
-      asset: assetSummary(cloned.asset)
+      detail: `真实语音克隆成功，已获得 voice_id：${cloned.voiceId}`
     }
   } catch (error) {
     return {

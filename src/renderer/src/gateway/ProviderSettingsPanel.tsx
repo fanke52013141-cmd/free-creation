@@ -95,6 +95,7 @@ function draftFromConfig(p: ProviderSummary): Draft {
 export function ProviderSettingsPanel(): React.JSX.Element | null {
   const open = useGatewayStore((s) => s.settingsOpen)
   const close = useGatewayStore((s) => s.closeSettings)
+  const openCatalog = useGatewayStore((s) => s.openCatalog)
   const [providers, setProviders] = useState<ProviderSummary[]>([])
 
   const [draft, setDraft] = useState<Draft | null>(null)
@@ -445,13 +446,14 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
       <div className="gw-panel" onClick={(e) => e.stopPropagation()}>
         <div className="gw-head">
           <span className="gw-title">模型供应商</span>
-          <button
-            className="icon-btn"
-            onClick={close}
-            aria-label="关闭供应商设置"
-          >
-            <Icon name="close" size={16} />
-          </button>
+          <div className="gw-head-actions">
+            <button className="btn-ghost small" onClick={openCatalog}>
+              模型管理与验证
+            </button>
+            <button className="icon-btn" onClick={close} aria-label="关闭供应商设置">
+              <Icon name="close" size={16} />
+            </button>
+          </div>
         </div>
         <div className="gw-body">
           <div className="gw-side">

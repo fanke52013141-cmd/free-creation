@@ -16,7 +16,7 @@ import { mediaUrl, type NodeBodyProps } from '../../registry'
 import { toast } from '../../../stores/toast'
 import { gatherUpstreamMediaList } from '../../../canvas/graph'
 import { readNodeConfig } from '../../../canvas/node-persistence'
-import { runNodeManually } from '../../../engine/executor'
+import { canRunImageWhileVideo, runNodeManually } from '../../../engine/executor'
 import { useEngineStore } from '../../../engine/store'
 import { useAppStore } from '../../../stores/app'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
@@ -86,9 +86,10 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
   const [draft, setDraft] = useState(shape.props.text)
   const [busy, setBusy] = useState(false)
   const promptRef = useRef<HTMLTextAreaElement | null>(null)
-  // 画布引擎单任务串行：别的节点在跑时点击只会被 runNodeManually 静默跳过，
-  // 必须在按钮上直接呈现「被占用」，否则用户以为按钮坏了。
-  const engineBusy = useEngineStore((s) => s.phase !== 'idle')
+  const enginePhase = useEngineStore((s) => s.phase)
+  const currentNodeId = useEngineStore((s) => s.currentNodeId)
+  const engineBusy = enginePhase !== 'idle' &&
+    !(currentNodeId && canRunImageWhileVideo(editor))
 
   useEffect(() => {
     if (!loaded) void loadProviders()
@@ -318,7 +319,7 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
       <button
         className="btn-primary small gen-go"
         disabled={busy || engineBusy}
-        title={engineBusy && !busy ? '画布同一时间只执行一个节点，等待当前节点运行结束' : undefined}
+        title={engineBusy && !busy ? '等待当前节点运行结束' : undefined}
         onPointerDown={(e) => stopEventPropagation(e)}
         onClick={(e) => {
           e.stopPropagation()

@@ -108,7 +108,6 @@ function runClone(referenceMediaId: string) {
     m.transformTts({
       projectId: 'p1',
       referenceAudioId: referenceMediaId,
-      text: '这是一次复刻门禁验收。',
       config: { ...DEFAULT_TTS_CONFIG, backend: 'minimax', providerId: 'p-minimax' }
     })
   )

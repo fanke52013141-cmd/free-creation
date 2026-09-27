@@ -228,7 +228,6 @@ export const projectFileOutputs = (shape: NodeCardShape): RawNodeOutputs => {
 }
 
 export const projectTtsOutputs = (shape: NodeCardShape): RawNodeOutputs => ({
-  ...latestResultMediaOutput(shape, 'audio', 'out-audio'),
   ...extraJsonOutput(shape, 'out-json')
 })
 

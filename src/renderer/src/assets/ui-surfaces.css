@@ -4262,17 +4262,16 @@ button {
   background: linear-gradient(145deg, color-mix(in srgb, var(--node-accent) 3%, #222630), #20242d 72%);
 }
 
-/* 生图表单与通用输入预览保持同一张卡片内的平面流式布局。
-   自然高度交给 NodeCardView 的 260/320/380/440 档位测量；到 440 后由 node-body 滚动。 */
+/* 生图表单填满卡片，其提示词区域随卡片高度伸缩。 */
 .node-card.type-image-gen .node-body-content {
-  flex: 0 0 auto;
-  min-height: auto;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .node-card.type-image-gen .gen-panel {
-  height: auto;
-  min-height: max-content;
-  flex: 0 0 auto;
+  height: 100%;
+  min-height: 250px;
+  flex: 1 1 auto;
   border: 0;
   border-radius: 0;
   background: transparent;

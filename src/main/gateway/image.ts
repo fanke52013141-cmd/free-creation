@@ -333,7 +333,10 @@ async function generateWithToapisTask(
     response_format: 'url'
   }
   if (input.size && input.size !== 'auto') body.size = input.size
-  if (capabilities.resolutions.length > 0 && input.resolution) body.resolution = input.resolution
+  // UI stores lowercase tiers, while ToAPIS documents uppercase wire values (1K/2K/4K).
+  if (capabilities.resolutions.length > 0 && input.resolution) {
+    body.resolution = input.resolution.toUpperCase()
+  }
   if (capabilities.supportsTransparentBackground && input.background === 'transparent')
     body.background = 'transparent'
   if (referenceUrls.length > 0) body.reference_images = referenceUrls
@@ -461,7 +464,7 @@ export async function generateImageEditToAsset(
     }
     if (size) body.size = size
     if (capabilities.resolutions.length > 0 && input.config?.resolution) {
-      body.resolution = input.config.resolution
+      body.resolution = input.config.resolution.toUpperCase()
     }
     if (referenceUrls.length > 0) body.reference_images = referenceUrls
 

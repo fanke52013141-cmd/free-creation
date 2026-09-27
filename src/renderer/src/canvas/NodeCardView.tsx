@@ -26,12 +26,21 @@ import { Tooltip } from '../components/Tooltip'
 import { NODE_PORT_OUTSET, NODE_PORT_SIZE } from './edge-geometry'
 import { createNodePortLayout } from './node-port-layout'
 import { ConnectedInputPreview } from './ConnectedInputPreview'
+import { GenerationLoadingOverlay } from './GenerationLoadingOverlay'
+import {
+  averageNodeExecutionDuration,
+  DEFAULT_NODE_EXECUTION_ESTIMATE_MS,
+  DEFAULT_NODE_EXECUTION_ESTIMATES_MS,
+  nodeExecutionProgressPercent
+} from './node-execution-progress'
 import {
   DEFAULT_IMAGE_GENERATION_ESTIMATE_MS,
   estimateImageGenerationDuration,
   imageGenerationProgressPercent
 } from './image-generation-progress'
-import { readNodeRunRecord } from '../engine/runRecord'
+import { readNodeRunHistory, readNodeRunRecord } from '../engine/runRecord'
+import type { GenerationTimingSample } from '@shared/contracts'
+import { estimateGenerationDuration } from './generation-time-estimate'
 import './image-gen-adaptive.css'
 
 const EXEC_COLORS: Record<string, string> = {
@@ -273,13 +282,12 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   const isSource = draft?.from.shapeId === shape.id
   const statusLabel = nodeExecLabel(shape.props.exec)
   const activeExecution = ['pending', 'queued', 'running'].includes(shape.props.exec)
-  const imageRun =
-    shape.props.nodeType === 'image-gen' ? readNodeRunRecord(shape.meta?.nodeRun) : null
+  const nodeRun = readNodeRunRecord(shape.meta?.nodeRun)
+  const imageRun = shape.props.nodeType === 'image-gen' ? nodeRun : null
   const imageRunActive = Boolean(
     shape.props.nodeType === 'image-gen' && activeExecution && imageRun?.status === 'running'
   )
-  const imageConfig = (() => {
-    if (shape.props.nodeType !== 'image-gen') return null
+  const nodeConfig = (() => {
     try {
       const parsed = JSON.parse(shape.props.config) as Record<string, unknown>
       return parsed && typeof parsed === 'object' ? parsed : null
@@ -287,32 +295,53 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       return null
     }
   })()
-  const imageProviderKey =
-    typeof imageConfig?.providerKey === 'string' && imageConfig.providerKey
-      ? imageConfig.providerKey
-      : typeof imageConfig?.modelKey === 'string'
-        ? imageConfig.modelKey.split('::')[0]
+  const textConfig = (() => {
+    try {
+      const parsed = JSON.parse(shape.props.text) as Record<string, unknown>
+      return parsed && typeof parsed === 'object' ? parsed : null
+    } catch {
+      return null
+    }
+  })()
+  const configuredModelKey =
+    typeof nodeConfig?.modelKey === 'string' && nodeConfig.modelKey
+      ? nodeConfig.modelKey
+      : typeof textConfig?.modelKey === 'string'
+        ? textConfig.modelKey
         : ''
-  const imageModelKey = typeof imageConfig?.modelKey === 'string' ? imageConfig.modelKey : ''
+  const configuredProviderKey =
+    typeof nodeConfig?.providerKey === 'string' && nodeConfig.providerKey
+      ? nodeConfig.providerKey
+      : configuredModelKey.includes('::')
+        ? configuredModelKey.split('::')[0]
+        : ''
+  const imageProviderKey =
+    typeof nodeConfig?.providerKey === 'string' && nodeConfig.providerKey
+      ? nodeConfig.providerKey
+      : typeof nodeConfig?.modelKey === 'string'
+        ? nodeConfig.modelKey.split('::')[0]
+        : ''
+  const imageModelKey = typeof nodeConfig?.modelKey === 'string' ? nodeConfig.modelKey : ''
   const imageCount =
-    typeof imageConfig?.count === 'number' && Number.isFinite(imageConfig.count)
-      ? Math.max(1, Math.min(9, Math.floor(imageConfig.count)))
+    typeof nodeConfig?.count === 'number' && Number.isFinite(nodeConfig.count)
+      ? Math.max(1, Math.min(9, Math.floor(nodeConfig.count)))
       : 1
   const [imageTimingEstimateMs, setImageTimingEstimateMs] = useState(
     DEFAULT_IMAGE_GENERATION_ESTIMATE_MS
   )
-  const [imageExecutionElapsedMs, setImageExecutionElapsedMs] = useState(0)
+  const [executionElapsedMs, setExecutionElapsedMs] = useState(0)
+  const [generationTimingSamples, setGenerationTimingSamples] = useState<GenerationTimingSample[]>([])
   const timingRecordedRunRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!imageRunActive || !imageRun) return
-    const startedAt = imageRun.startedAt
+    if (!activeExecution || nodeRun?.status !== 'running') return
+    const startedAt = nodeRun.startedAt
     const refreshElapsed = (): void =>
-      setImageExecutionElapsedMs(Math.max(0, Date.now() - startedAt))
+      setExecutionElapsedMs(Math.max(0, Date.now() - startedAt))
     const frame = window.requestAnimationFrame(refreshElapsed)
     const timer = window.setInterval(refreshElapsed, 500)
     let current = true
-    if (imageProviderKey && imageModelKey) {
+    if (shape.props.nodeType === 'image-gen' && imageProviderKey && imageModelKey) {
       void window.api.workspace
         .getImageGenerationTimings()
         .then((response) => {
@@ -327,6 +356,10 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           )
         })
         .catch(() => undefined)
+    } else {
+      void window.api.workspace.getGenerationTimings().then((response) => {
+        if (current && response.ok) setGenerationTimingSamples(response.data)
+      }).catch(() => undefined)
     }
     return () => {
       current = false
@@ -334,9 +367,11 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       window.clearInterval(timer)
     }
   }, [
-    imageRunActive,
-    imageRun?.runId,
-    imageRun?.startedAt,
+    activeExecution,
+    nodeRun?.runId,
+    nodeRun?.status,
+    nodeRun?.startedAt,
+    shape.props.nodeType,
     imageProviderKey,
     imageModelKey,
     imageCount
@@ -366,6 +401,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       })
       .catch(() => undefined)
   }, [
+    activeExecution,
+    nodeRun?.status,
     shape.props.nodeType,
     imageRun?.runId,
     imageRun?.status,
@@ -376,26 +413,97 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     imageCount
   ])
 
-  const imageProgress = imageRunActive
-    ? imageGenerationProgressPercent(imageExecutionElapsedMs, imageTimingEstimateMs)
+  const nodeRunDurationEstimateMs = useValue(
+    'node execution average duration',
+    () => {
+      const runs = editor.getCurrentPageShapes().flatMap((candidate) => {
+        if (candidate.type !== 'node-card' || candidate.props.nodeType !== shape.props.nodeType) {
+          return []
+        }
+        const history = readNodeRunHistory(candidate.meta?.nodeRunHistory)
+        const latest = readNodeRunRecord(candidate.meta?.nodeRun)
+        const uniqueRuns = new Map(history.map((run) => [run.runId, run]))
+        if (latest && latest.status !== 'running') uniqueRuns.set(latest.runId, latest)
+        return [...uniqueRuns.values()]
+          .filter((run) => run.status === 'success' && typeof run.durationMs === 'number')
+          .map((run) => ({
+            durationMs: run.durationMs!,
+            providerId: run.target?.providerId,
+            modelId: run.target?.modelId,
+            recordedAt: run.finishedAt ?? run.startedAt
+          }))
+      })
+      const exactModelRuns = configuredModelKey
+        ? runs.filter((run) => run.modelId === configuredModelKey)
+        : []
+      const exactProviderRuns = configuredProviderKey
+        ? runs.filter((run) => run.providerId === configuredProviderKey)
+        : []
+      const matchingRuns = exactModelRuns.length
+        ? exactModelRuns
+        : exactProviderRuns.length
+          ? exactProviderRuns
+          : runs
+      const recentDurations = matchingRuns
+        .sort((left, right) => right.recordedAt - left.recordedAt)
+        .slice(0, 20)
+        .map((run) => run.durationMs)
+      return averageNodeExecutionDuration(
+        recentDurations,
+        DEFAULT_NODE_EXECUTION_ESTIMATES_MS[shape.props.nodeType] ??
+          DEFAULT_NODE_EXECUTION_ESTIMATE_MS
+      )
+    },
+    [editor, shape.props.nodeType, configuredProviderKey, configuredModelKey]
+  )
+  const executionEstimateMs = imageRunActive
+    ? imageTimingEstimateMs
+    : estimateGenerationDuration(
+        shape.props.nodeType,
+        nodeRun?.estimateFeatures,
+        nodeRun?.estimateProviderKey ?? configuredProviderKey,
+        nodeRun?.estimateModelKey ?? configuredModelKey,
+        generationTimingSamples,
+        nodeRunDurationEstimateMs
+      )
+  const executionProgress = activeExecution && nodeRun?.status === 'running'
+    ? shape.props.nodeType === 'image-gen'
+      ? imageGenerationProgressPercent(executionElapsedMs, executionEstimateMs)
+      : nodeExecutionProgressPercent(executionElapsedMs, executionEstimateMs)
     : 0
+  const remainingEstimateMs = executionEstimateMs - executionElapsedMs
   const executionLabel: Record<string, string> = {
+    audio: '音频处理中',
+    code: '代码执行中',
+    director: '导演任务处理中',
+    file: '文件处理中',
+    image: '图片处理中',
     'image-gen': '图片生成中',
     'image-edit': 'P图中',
     'image-split': '正在拆分图片',
     'image-crop': '正在裁剪图片',
-    video: '视频生成中'
-  }
-  const executionDetail: Record<string, string> = {
-    'image-gen': '正在调用已选模型，完成后会自动替换为生成结果。',
-    'image-edit': '正在发送原图与标注参考。',
-    'image-split': '正在按当前行列导出独立图片，不会覆盖原图。',
-    'image-crop': '正在导出裁剪后的新图片，原图保持不变。',
-    video: '正在提交视频任务，完成后会自动显示成片。'
+    json: 'JSON 处理中',
+    processor: 'AI 处理中',
+    video: '视频生成中',
+    'video-asset': '视频素材处理中',
+    'video-audio': '正在提取音轨',
+    'video-clip': '正在裁剪视频',
+    'video-depth': '深度视频生成中',
+    'video-clay': '白模视频生成中',
+    'video-frame': '正在提取视频帧',
+    chat: 'AI 对话处理中',
+    'ai-process': 'AI 处理中',
+    speech: '语音生成中',
+    tts: '配音生成中',
+    'voice-design': '音色生成中',
+    'vocal-separate': '人声分离中',
+    script: '脚本生成中',
+    iterate: '内容迭代中',
+    storyboard: '分镜生成中',
+    structured: '结构化内容生成中',
+    text: '文本生成中'
   }
   const executionTitle = executionLabel[shape.props.nodeType] ?? '节点执行中'
-  const executionDescription =
-    executionDetail[shape.props.nodeType] ?? '正在运行本节点，完成后自动更新。'
   const readinessState = useValue(
     'node readiness',
     () => {
@@ -782,30 +890,13 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             </div>
           </div>
           {activeExecution && spec?.executor && (
-            <div className="node-execution-overlay" role="status" aria-live="polite">
-              <span className="node-execution-spinner" aria-hidden="true">
-                <Icon name="loader" size={22} />
-              </span>
-              <span className="node-execution-copy">
-                <strong>{executionTitle}</strong>
-                {shape.props.nodeType === 'image-gen' ? (
-                  <span
-                    className="node-execution-progress"
-                    role="progressbar"
-                    aria-label="图片生成预计进度"
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={imageProgress}
-                  >
-                    <span className="node-execution-progress-track">
-                      <span style={{ width: `${imageProgress}%` }} />
-                    </span>
-                    <small>预计进度 {imageProgress}%</small>
-                  </span>
-                ) : (
-                  <small>{executionDescription}</small>
-                )}
-              </span>
+            <div className="node-execution-overlay">
+              <GenerationLoadingOverlay
+                title={executionTitle}
+                progress={executionProgress}
+                remainingMs={remainingEstimateMs}
+                waiting={nodeRun?.status !== 'running'}
+              />
             </div>
           )}
         </div>

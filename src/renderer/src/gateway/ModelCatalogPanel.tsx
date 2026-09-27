@@ -117,13 +117,29 @@ export function ModelCatalogPanel(): React.JSX.Element | null {
   const editModel = (model: ModelDefinition): void => { const next = categoryOf(model); setEditingModelId(model.id); setModelId(model.modelId); setModelName(model.name); setCategory(next); setImageEdit(next === 'image' && model.capabilities.some((x) => x.operation === 'image.edit')) }
   const validateModel = async (model: ModelDefinition): Promise<void> => {
     const operations = model.capabilities.map((capability) => capability.operation)
-    if (!await useConfirmStore.getState().confirm({ title: `验证模型「${model.name}」`, message: `将对 ${operations.join('、')} 发起最低成本的真实请求，供应商可能收费。验证只证明该能力可调用，不会把它自动指定给任何节点。`, confirmText: '开始验证', danger: true })) return
+    const includesVoiceClone = operations.includes('voice.clone')
+    const confirmationMessage = includesVoiceClone
+      ? `将验证 ${operations.join('、')}。语音克隆会先合成约 20 秒的机器测试语音，再上传并登记临时音色，之后用该音色合成一句短文本；其他已声明能力也会分别发起真实请求。MiniMax 可能按各项请求收费，临时音色会保留在 MiniMax 账号中，最长 7 天未调用后由服务端清理。验证通过后，语音克隆节点即可选择此模型。`
+      : `将对 ${operations.join('、')} 发起最低成本的真实请求，供应商可能收费。验证只证明该能力可调用，不会把它自动指定给任何节点。`
+    if (!await useConfirmStore.getState().confirm({ title: `验证模型「${model.name}」`, message: confirmationMessage, confirmText: includesVoiceClone ? '合成并验证' : '开始验证', danger: true })) return
     setBusy(true)
     const results = await Promise.all(operations.map((operation) => window.api.models.validate({ connectionId: model.connectionId, modelDefinitionId: model.id, operation, allowCost: true })))
     setBusy(false)
-    const failed = results.find((result) => !result.ok || result.data.status !== 'verified')
-    if (failed) return toast(!failed.ok ? `验证失败：${failed.error.message}` : `验证未通过：${failed.data.message}`)
-    await useGatewayStore.getState().load(); toast('验证通过；兼容节点现在可以引用该模型')
+    await useGatewayStore.getState().load()
+    const failedIndex = results.findIndex((result) => !result.ok || result.data.status !== 'verified')
+    if (failedIndex >= 0) {
+      const verifiedOperations = results.flatMap((result, index) =>
+        result.ok && result.data.status === 'verified' ? [operations[index]] : []
+      )
+      const failure = results[failedIndex]
+      const failureText = failure.ok ? failure.data.message : failure.error.message
+      return toast(
+        verifiedOperations.length
+          ? `${verifiedOperations.join('、')} 验证通过；${operations[failedIndex]}未通过：${failureText}`
+          : `验证失败：${failureText}`
+      )
+    }
+    toast('验证通过；兼容节点现在可以引用该模型')
   }
   const discover = async (): Promise<void> => {
     if (!connectionId) return

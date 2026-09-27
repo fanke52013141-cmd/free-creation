@@ -6,6 +6,7 @@ import { useValue, type Editor, type TLShapeId } from 'tldraw'
 import { countIncomingConnections, gatherUpstreamJson, gatherUpstreamMediaList } from './graph'
 import { markUndoPoint } from './history'
 import { Icon } from '../components/Icon'
+import { GenerationLoadingOverlay } from './GenerationLoadingOverlay'
 import { AppSelect } from '../components/AppSelect'
 import {
   createDirectorId,
@@ -702,6 +703,15 @@ export function DirectorStudioPanel({
         aria-modal="true"
         aria-label="3D 预演台"
       >
+        {(generatingSpace || publishing) && (
+          <div className="director-generation-indicator">
+            <GenerationLoadingOverlay
+              title={generatingSpace ? '空间生成中' : publishing === 'frame' ? '画面导出中' : '视频导出中'}
+              progress={publishing !== 'frame' && videoProgress !== null
+                ? Math.min(99, Math.round(videoProgress * 100)) : undefined}
+            />
+          </div>
+        )}
         <header className="director-topbar">
           <div className="director-brand">
             <Icon name="director" size={18} /> 3D 预演台 <small>PREVIS</small>

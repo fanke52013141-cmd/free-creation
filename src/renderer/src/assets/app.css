@@ -1587,104 +1587,256 @@ select:focus-visible,
 /* 「等待上游输出」占位已删除（用户 2026-09-18：无必要提示语不要），
    对应的 .connected-input-empty 规则一并移除，不留无人引用的死 CSS。 */
 
-/* 模型 / 本地媒体任务运行时的明确状态层。状态来自统一运行器的 exec 字段，而不是
-   用“绿色结果图”猜测；用户能区分生成中、完成和失败。 */
+/* 所有节点生成任务共用同一套轨道行星加载态；百分比由任务耗时估算驱动。 */
 .node-execution-overlay {
   position: absolute;
   z-index: 6;
   inset: 0;
-  display: flex;
+  display: grid;
   align-items: center;
   justify-content: center;
-  gap: 11px;
-  padding: 18px;
+  padding: 8px;
   background:
-    radial-gradient(circle at 50% 38%, rgba(35, 190, 159, 0.15), transparent 52%),
-    rgba(10, 15, 22, 0.74);
-  backdrop-filter: blur(3px);
-  color: #eaf7f4;
+    radial-gradient(circle at 50% 40%, rgba(32, 175, 159, 0.12), transparent 58%),
+    rgba(7, 11, 16, 0.76);
+  backdrop-filter: blur(4px);
   pointer-events: none;
 }
 
-.node-execution-spinner {
+.generation-loading-card {
+  display: flex;
+  width: min(100%, 500px);
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  overflow: hidden;
+  border: 1px solid rgba(112, 218, 211, 0.2);
+  border-radius: 15px;
+  background: linear-gradient(112deg, rgba(12, 20, 27, 0.96), rgba(13, 23, 29, 0.93));
+  box-shadow: 0 12px 38px rgba(0, 0, 0, 0.36), inset 0 1px rgba(225, 255, 251, 0.035);
+  color: #e8f5f5;
+}
+
+.generation-loading-planet {
+  position: relative;
   display: grid;
-  width: 42px;
-  height: 42px;
-  flex: 0 0 auto;
+  width: 58px;
+  height: 58px;
+  flex: 0 0 58px;
   place-items: center;
-  border: 1px solid rgba(80, 239, 191, 0.38);
+  isolation: isolate;
+}
+
+.generation-loading-glow {
+  position: absolute;
+  inset: 8px;
+  z-index: -1;
   border-radius: 50%;
-  background: rgba(24, 154, 124, 0.13);
-  color: #5cf0bf;
-  box-shadow: 0 0 26px rgba(34, 211, 160, 0.18);
+  background: rgba(26, 219, 196, 0.28);
+  filter: blur(12px);
+  animation: generation-loading-pulse 2.8s ease-in-out infinite;
 }
 
-.node-execution-spinner svg {
-  animation: node-execution-rotate 900ms linear infinite;
+.generation-loading-planet-core {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  overflow: hidden;
+  border: 1px solid rgba(185, 255, 248, 0.5);
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 28%, #bdfff0 0, #5be1cb 16%, #119d9e 48%, #174c70 78%, #101a37 100%);
+  box-shadow: inset -7px -4px 12px rgba(3, 13, 39, 0.62), 0 0 16px rgba(57, 236, 210, 0.35);
 }
 
-.node-execution-copy {
+.generation-loading-planet-core i {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(125deg, transparent 35%, rgba(206, 255, 248, 0.17) 47%, transparent 60%);
+}
+
+.generation-loading-orbit {
+  position: absolute;
+  width: 52px;
+  height: 19px;
+  border: 1px solid rgba(102, 230, 222, 0.38);
+  border-radius: 50%;
+  transform: rotate(-28deg);
+}
+
+.generation-loading-orbit-back {
+  opacity: 0.48;
+  transform: rotate(58deg) scale(0.88);
+}
+
+.generation-loading-orbit-front {
+  border-color: rgba(129, 255, 229, 0.7);
+  border-left-color: transparent;
+  border-right-color: transparent;
+  transform: rotate(-28deg) scaleY(0.68);
+}
+
+.generation-loading-satellite-orbit {
+  position: absolute;
+  inset: 2px;
+  animation: generation-loading-orbit 4.2s linear infinite;
+}
+
+.generation-loading-satellite-orbit i {
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  border: 1px solid rgba(222, 255, 251, 0.85);
+  border-radius: 50%;
+  background: #4af3d4;
+  box-shadow: 0 0 9px rgba(80, 255, 226, 0.9);
+}
+
+.generation-loading-copy {
   display: grid;
-  gap: 3px;
-  max-width: min(230px, 74%);
+  min-width: 0;
+  flex: 1;
+  gap: 4px;
 }
 
-.node-execution-copy strong {
-  color: #eafff7;
-  font-size: 14px;
+.generation-loading-copy > strong {
+  overflow: hidden;
+  color: #f2fffc;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.generation-loading-copy > strong::after {
+  display: inline-block;
+  width: 1.3em;
+  content: '...';
+  animation: generation-loading-dots 1.5s steps(4, end) infinite;
+}
+
+.generation-loading-copy > small {
+  overflow: hidden;
+  color: rgba(197, 220, 221, 0.7);
+  font-size: 9px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.generation-loading-progress {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  margin-top: 3px;
+}
+
+.generation-loading-track {
+  display: block;
+  height: 5px;
+  overflow: hidden;
+  border: 1px solid rgba(134, 193, 194, 0.16);
+  border-radius: 999px;
+  background: rgba(2, 8, 13, 0.8);
+}
+
+.generation-loading-track > span {
+  position: relative;
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #168d9c 0%, #29c9b0 58%, #88f5c9 100%);
+  box-shadow: 0 0 11px rgba(40, 231, 192, 0.42);
+  transition: width 420ms linear;
+}
+
+.generation-loading-track > span i {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 20%, rgba(235, 255, 249, 0.65) 50%, transparent 80%);
+  animation: generation-loading-shimmer 1.7s ease-in-out infinite;
+}
+
+.generation-loading-meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: rgba(180, 207, 209, 0.72);
+  font-size: 8px;
+  white-space: nowrap;
+}
+
+.generation-loading-meta b {
+  color: #78ecd1;
+  font-size: 9px;
   font-weight: 700;
 }
 
-.node-execution-copy small {
-  color: rgba(219, 247, 239, 0.75);
-  font-size: 11px;
-  line-height: 1.45;
+.generation-loading-eta {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 3px;
 }
 
-.node-execution-progress {
-  display: grid;
-  gap: 5px;
-  margin-top: 4px;
+.generation-loading-eta svg {
+  flex: 0 0 auto;
+  color: #56dcca;
+  animation: generation-loading-clock 3.6s linear infinite;
 }
 
-.node-execution-progress-track {
-  display: block;
-  width: min(210px, 70vw);
-  height: 5px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgba(226, 238, 249, 0.2);
+@keyframes generation-loading-orbit {
+  to { transform: rotate(360deg); }
 }
 
-.node-execution-progress-track > span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #36c99b, #62d9c1);
-  box-shadow: 0 0 12px rgba(54, 201, 155, 0.42);
-  transition: width 420ms ease-out;
+@keyframes generation-loading-pulse {
+  50% { opacity: 0.55; transform: scale(0.82); }
+}
+
+@keyframes generation-loading-shimmer {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+
+@keyframes generation-loading-clock {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes generation-loading-dots {
+  0% { opacity: 0.2; }
+  50% { opacity: 1; }
+  100% { opacity: 0.2; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .node-execution-spinner svg {
+  .generation-loading-glow,
+  .generation-loading-satellite-orbit,
+  .generation-loading-track > span i,
+  .generation-loading-eta svg,
+  .generation-loading-copy > strong::after {
     animation: none;
   }
 
-  .node-execution-progress-track > span {
+  .generation-loading-track > span {
     transition: none;
   }
 }
 
-.node-execution-progress small {
-  color: rgba(219, 247, 239, 0.78);
-  font-size: 10px;
-  line-height: 1.2;
-}
-
-@keyframes node-execution-rotate {
-  to {
-    transform: rotate(360deg);
-  }
+@media (max-width: 420px) {
+  .generation-loading-card { gap: 7px; padding: 8px; }
+  .generation-loading-planet { width: 48px; height: 48px; flex-basis: 48px; transform: scale(0.86); }
+  .generation-loading-copy > small { font-size: 8px; }
+  .generation-loading-meta { gap: 4px; font-size: 7px; }
+  .generation-loading-meta b { font-size: 8px; }
 }
 
 /* 画布内可点击动作统一采用可读尺寸；内容多时由节点自动向下扩展。 */
@@ -3524,6 +3676,31 @@ select:focus-visible,
 .audio-play-btn:hover {
   opacity: 0.88;
   transform: scale(1.08);
+}
+
+.node-tts .tts-ref-play {
+  width: 36px;
+  height: 36px;
+  border: 1px solid color-mix(in srgb, var(--brand) 72%, white);
+  border-radius: 10px;
+  background: var(--brand);
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--brand) 24%, transparent);
+}
+
+.node-tts .tts-ref-play:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--brand) 84%, white);
+  transform: translateY(-1px);
+}
+
+.node-tts .tts-ref-play .play-triangle path {
+  fill: currentColor;
+  stroke: none;
+}
+
+.node-tts .tts-ref-play:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--brand) 62%, white);
+  outline-offset: 2px;
 }
 
 .btn-ghost.small.danger:hover {
@@ -8681,6 +8858,12 @@ select:focus-visible,
   border-bottom: 1px solid var(--line);
 }
 
+.gw-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .gw-title {
   font-size: 14px;
   font-weight: 600;
@@ -11897,4 +12080,23 @@ canvas.tl-canvas-indicators {
   .node-card.type-voice-design .btn-generate {
     transition: none;
   }
+}
+.director-generation-indicator {
+  position: absolute;
+  top: 68px;
+  left: 50%;
+  z-index: 20;
+  width: min(360px, calc(100% - 32px));
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.director-studio {
+  position: relative;
+}
+
+.chat-dialog-thinking .generation-loading-card,
+.chat-dialog-bubble .generation-loading-card {
+  width: 100%;
+  min-width: 0;
 }

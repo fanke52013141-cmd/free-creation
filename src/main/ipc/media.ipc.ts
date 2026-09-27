@@ -373,7 +373,6 @@ export function registerMediaIpc(): void {
     async (_e, input: TtsGenerateInput): Promise<IpcEnvelope<VoiceCloneResult>> => {
       const startedAt = Date.now()
       const privateValues = [
-        input?.text ?? '',
         input?.config?.promptText ?? '',
         input?.config?.voiceId ?? '',
         input?.referenceAudioId ?? '',
@@ -391,19 +390,19 @@ export function registerMediaIpc(): void {
           backend: input?.config?.backend,
           providerId: input?.config?.providerId,
           modelId: input?.config?.modelId,
-          textCharacters: typeof input?.text === 'string' ? input.text.trim().length : 0
+          hasReferenceAudio: Boolean(input?.referenceAudioId)
         }
         if (level === 'error') log.error(JSON.stringify(event))
         else log.info(JSON.stringify(event))
       }
       logEvent('info', '收到语音克隆请求')
-      if (!input?.projectId || !input.referenceAudioId || !input.text?.trim()) {
-        logEvent('error', '请求校验失败：缺少项目、参考音频或合成文本')
-        return err('INVALID_INPUT', '缺少参考音频或合成文本')
+      if (!input?.projectId || !input.referenceAudioId) {
+        logEvent('error', '请求校验失败：缺少项目或参考音频')
+        return err('INVALID_INPUT', '缺少参考音频')
       }
       if (!input.config || typeof input.config !== 'object') {
-        logEvent('error', '请求校验失败：合成配置不完整')
-        return err('INVALID_INPUT', '合成配置不完整')
+        logEvent('error', '请求校验失败：克隆配置不完整')
+        return err('INVALID_INPUT', '克隆配置不完整')
       }
       try {
         const result = await transformTts(input)

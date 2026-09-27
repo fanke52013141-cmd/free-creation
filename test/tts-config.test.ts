@@ -2,14 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { DEFAULT_TTS_CONFIG, parseTtsConfig, TTS_FORMATS_BY_BACKEND } from '@shared/tts'
 
 describe('语音克隆配置', () => {
-  it('旧的本地 ComfyUI 配置会安全补齐新的后端字段', () => {
+  it('旧配置只读取通用字段，统一归到 MiniMax', () => {
     const config = parseTtsConfig(JSON.stringify({ text: '你好', lang: 'ZH', format: 'mp3' }))
     expect(config).toMatchObject({
-      backend: 'comfyui',
+      backend: 'minimax',
       providerId: '',
       modelId: 'speech-2.8-turbo',
       text: '你好',
-      lang: 'ZH',
       format: 'mp3'
     })
   })
@@ -37,7 +36,7 @@ describe('语音克隆配置', () => {
     })
   })
 
-  it('无效配置始终回退为可执行的本地默认值', () => {
+  it('无效配置始终回退为云端默认值', () => {
     expect(parseTtsConfig('{bad json')).toEqual(DEFAULT_TTS_CONFIG)
   })
 
@@ -88,7 +87,6 @@ describe('语音克隆配置', () => {
     expect(config.format).toBe('mp3')
     expect(DEFAULT_TTS_CONFIG.backend).toBe('minimax')
     expect(TTS_FORMATS_BY_BACKEND.minimax).toContain('wav')
-    expect(TTS_FORMATS_BY_BACKEND.comfyui[0]).toBe('wav')
   })
 
   it('MiniMax 异步通道保留文档支持的格式，非法格式回退', () => {
@@ -96,10 +94,7 @@ describe('语音克隆配置', () => {
     expect(parseTtsConfig(JSON.stringify({ backend: 'minimax', format: 'ogg_opus' })).format).toBe(
       'mp3'
     )
-    expect(parseTtsConfig(JSON.stringify({ backend: 'comfyui', format: 'flac' })).format).toBe(
-      'flac'
-    )
-    // 显式选择本地链路是用户的决定，不会被默认值翻回云端。
-    expect(parseTtsConfig(JSON.stringify({ backend: 'comfyui' })).backend).toBe('comfyui')
+    expect(parseTtsConfig(JSON.stringify({ backend: 'comfyui', format: 'flac' })).format).toBe('flac')
+    expect(parseTtsConfig(JSON.stringify({ backend: 'comfyui' })).backend).toBe('minimax')
   })
 })

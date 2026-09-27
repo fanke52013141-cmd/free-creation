@@ -458,13 +458,10 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     expect(audioGenerate).not.toHaveBeenCalled()
   })
 
-  it('语音克隆执行器从节点正文读取朗读内容，并回写可复用的音色档案', async () => {
+  it('语音克隆执行器只回写可复用的音色档案', async () => {
     const ttsGenerate = vi.fn().mockResolvedValue({
       ok: true,
-      data: {
-        asset: { id: 'tts-1', path: 'projects/p/tts.wav', mime: 'audio/wav', name: '复刻旁白' },
-        voiceId: 'CanvasVoice_2026'
-      }
+      data: { voiceId: 'CanvasVoice_2026' }
     })
     installGateway({ ttsGenerate })
     const { ctx, meta, artifacts } = makeContext(
@@ -481,28 +478,9 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     )
 
     await expect(ttsExecutor(ctx)).resolves.toEqual({ status: 'done' })
-    expect(ttsGenerate).toHaveBeenCalledWith(
-      expect.objectContaining({ referenceAudioId: 'reference-audio', text: '当前画布正文' })
-    )
-    expect(artifacts).toContainEqual(expect.objectContaining({ kind: 'audio', mediaId: 'tts-1' }))
+    expect(ttsGenerate).toHaveBeenCalledWith(expect.objectContaining({ referenceAudioId: 'reference-audio' }))
+    expect(artifacts).toHaveLength(0)
     expect(JSON.parse(String(meta.nodeExtra))['out-json'].voice_id).toBe('CanvasVoice_2026')
-  })
-
-  it('旧本地 IndexTTS 配置不再走音色克隆请求', async () => {
-    const ttsGenerate = vi.fn()
-    installGateway({ ttsGenerate })
-    const { ctx, meta } = makeContext(
-      'tts',
-      JSON.stringify({ backend: 'comfyui', refMediaId: 'reference-audio' }),
-      [],
-      '本地合成'
-    )
-    await expect(ttsExecutor(ctx)).resolves.toEqual({
-      status: 'skipped',
-      reason: '语音克隆已统一使用 MiniMax；请在节点内切换旧的本地 IndexTTS 配置'
-    })
-    expect(ttsGenerate).not.toHaveBeenCalled()
-    expect(meta.nodeExtra).toBeUndefined()
   })
 
   it('video executor submits, polls, and records the completed media result', async () => {

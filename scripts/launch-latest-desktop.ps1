@@ -1,8 +1,12 @@
 ﻿$ErrorActionPreference = 'Stop'
 
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$AppDirectory = Join-Path $ProjectRoot 'dist\current-source-release\win-unpacked'
+$DistRoot = [System.IO.Path]::GetFullPath((Join-Path $ProjectRoot 'dist'))
+$ReleaseRoot = [System.IO.Path]::GetFullPath((Join-Path $DistRoot 'current-source-release'))
+$AppDirectory = Join-Path $ReleaseRoot 'win-unpacked'
 $AppExecutable = Join-Path $AppDirectory 'canvas-studio.exe'
+$RendererIndex = Join-Path $AppDirectory 'resources\app\out\renderer\index.html'
+$GitCommand = Get-Command git.exe -ErrorAction SilentlyContinue
 $PnpmCommand = Get-Command pnpm.cmd -ErrorAction SilentlyContinue
 $PnpmCommandPath = if ($PnpmCommand) { $PnpmCommand.Source } else { $null }
 
@@ -20,54 +24,166 @@ if (-not $PnpmCommandPath -and $env:LOCALAPPDATA) {
   }
 }
 
+$LauncherMutex = New-Object System.Threading.Mutex($false, 'Local\CanvasStudioLatestDesktopLauncher')
+$MutexAcquired = $false
 $LocationPushed = $false
 $LaunchFailed = $false
 
 try {
-  # Some desktop launchers inherit this flag from a Node-based host. It causes
-  # Electron build commands to run in Node mode instead of as Electron.
-  Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
-
-  if (-not $PnpmCommandPath) {
-    throw '找不到 pnpm.cmd。已检查 PATH、用户 npm 目录和本地 pnpm 目录；请安装 pnpm 后重试。'
+  try {
+    $MutexAcquired = $LauncherMutex.WaitOne(0)
+  } catch [System.Threading.AbandonedMutexException] {
+    $MutexAcquired = $true
+  }
+  if (-not $MutexAcquired) {
+    throw '另一个 Canvas Studio 更新窗口正在运行，请等待它完成。'
   }
 
-  $RunningApp = Get-Process -Name 'canvas-studio' -ErrorAction SilentlyContinue
-  if ($RunningApp) {
-    throw '检测到 Canvas Studio 仍在运行。请先完全退出，再用桌面快捷方式重新打开。'
+  # A Node-based host can pass this flag through to the shortcut and break Electron builds.
+  Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+  $env:GIT_TERMINAL_PROMPT = '0'
+  $env:GCM_INTERACTIVE = 'Never'
+
+  if (-not $GitCommand) {
+    throw '找不到 git.exe，无法确认线上代码是否为最新。'
+  }
+  if (-not $PnpmCommandPath) {
+    throw '找不到 pnpm.cmd。已检查 PATH、用户 npm 目录和本地 pnpm 目录。'
+  }
+
+  if (Get-Process -Name 'canvas-studio' -ErrorAction SilentlyContinue) {
+    Write-Host 'Canvas Studio 正在运行。请先保存工作并完全退出应用。' -ForegroundColor Yellow
+    Read-Host '退出后按 Enter 继续更新' | Out-Null
+    $ExitDeadline = [DateTime]::UtcNow.AddSeconds(15)
+    while ((Get-Process -Name 'canvas-studio' -ErrorAction SilentlyContinue) -and
+           [DateTime]::UtcNow -lt $ExitDeadline) {
+      Start-Sleep -Milliseconds 500
+    }
+    if (Get-Process -Name 'canvas-studio' -ErrorAction SilentlyContinue) {
+      throw 'Canvas Studio 仍在运行，无法安全替换打包文件。'
+    }
   }
 
   Push-Location -LiteralPath $ProjectRoot
   $LocationPushed = $true
 
+  $RepoRoot = (& $GitCommand.Source rev-parse --show-toplevel).Trim()
+  if ($LASTEXITCODE -ne 0 -or
+      -not [string]::Equals([System.IO.Path]::GetFullPath($RepoRoot), $ProjectRoot,
+        [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "快捷方式指向的目录不是预期 Git 仓库：$ProjectRoot"
+  }
+
+  $Branch = (& $GitCommand.Source symbolic-ref --quiet --short HEAD).Trim()
+  if ($LASTEXITCODE -ne 0 -or $Branch -ne 'main') {
+    throw "当前分支为 '$Branch'；桌面版本要求使用 main 分支。"
+  }
+
   Write-Host "源码目录：$ProjectRoot" -ForegroundColor DarkGray
-  Write-Host "pnpm：$PnpmCommandPath" -ForegroundColor DarkGray
-  Write-Host '正在构建当前保存的源码并更新桌面版本，请稍候……' -ForegroundColor Cyan
+  Write-Host '正在检查 origin/main 的最新提交……' -ForegroundColor Cyan
+  & $GitCommand.Source -c credential.interactive=never fetch --no-tags origin main
+  if ($LASTEXITCODE -ne 0) {
+    throw '无法获取 origin/main。请检查网络或 Git 凭据；本次不会启动旧版本。'
+  }
+
+  $LocalCommit = (& $GitCommand.Source rev-parse HEAD).Trim()
+  $RemoteCommit = (& $GitCommand.Source rev-parse refs/remotes/origin/main).Trim()
+  if ($LASTEXITCODE -ne 0) {
+    throw '无法读取 origin/main 的提交。'
+  }
+
+  & $GitCommand.Source merge-base --is-ancestor HEAD refs/remotes/origin/main
+  if ($LASTEXITCODE -ne 0) {
+    throw '本地 main 与 origin/main 已分叉，或包含尚未推送的提交。请先处理 Git 历史。'
+  }
+
+  if ($LocalCommit -ne $RemoteCommit) {
+    Write-Host "正在快进 main：$($LocalCommit.Substring(0, 7)) → $($RemoteCommit.Substring(0, 7))" -ForegroundColor Cyan
+    & $GitCommand.Source merge --ff-only refs/remotes/origin/main
+    if ($LASTEXITCODE -ne 0) {
+      throw '快进更新失败。Git 已保护与远端冲突的本地文件；请检查仓库状态。'
+    }
+  }
+
+  $SourceCommit = (& $GitCommand.Source rev-parse HEAD).Trim()
+  if ($LASTEXITCODE -ne 0 -or $SourceCommit -ne $RemoteCommit) {
+    throw '本地 main 未与 origin/main 对齐，停止构建。'
+  }
+  $TrackedChanges = @(& $GitCommand.Source status --porcelain --untracked-files=no)
+  if ($LASTEXITCODE -ne 0) {
+    throw '无法检查构建前的本地文件状态。'
+  }
+
+  Write-Host "将构建提交：$($SourceCommit.Substring(0, 7))" -ForegroundColor Green
+  if ($TrackedChanges.Count -gt 0) {
+    Write-Host '检测到本地未提交的已跟踪文件改动；构建会包含这些改动。' -ForegroundColor Yellow
+  }
+
+  Write-Host '正在同步依赖……' -ForegroundColor Cyan
+  & $PnpmCommandPath install --frozen-lockfile
+  if ($LASTEXITCODE -ne 0) {
+    throw "依赖同步失败，退出代码：$LASTEXITCODE。"
+  }
+
+  # A partial build must never leave an older renderer bundle available for launch.
+  $DistPrefix = $DistRoot.TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+  if (-not $ReleaseRoot.StartsWith($DistPrefix, [System.StringComparison]::OrdinalIgnoreCase) -or
+      [System.IO.Path]::GetFileName($ReleaseRoot) -ne 'current-source-release') {
+    throw "发布目录不在预期位置：$ReleaseRoot"
+  }
+  foreach ($Path in @($DistRoot, $ReleaseRoot)) {
+    if (Test-Path -LiteralPath $Path) {
+      $Item = Get-Item -LiteralPath $Path
+      if ($Item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+        throw "发布目录包含重解析点，已停止清理：$Path"
+      }
+    }
+  }
+  if (Test-Path -LiteralPath $ReleaseRoot) {
+    $ReleaseLinks = @(Get-ChildItem -LiteralPath $ReleaseRoot -Recurse -Force -Attributes ReparsePoint)
+    if ($ReleaseLinks.Count -gt 0) {
+      throw "旧发布目录包含链接，已停止清理：$($ReleaseLinks[0].FullName)"
+    }
+    Remove-Item -LiteralPath $ReleaseRoot -Recurse -Force
+  }
+
+  Write-Host '正在从当前源码构建全新桌面版本……' -ForegroundColor Cyan
   & $PnpmCommandPath run build:desktop-latest
-  $BuildExitCode = $LASTEXITCODE
-  if ($BuildExitCode -ne 0) {
-    throw "构建失败，退出代码：$BuildExitCode。旧版本不会启动。"
+  if ($LASTEXITCODE -ne 0) {
+    throw "构建失败，退出代码：$LASTEXITCODE。"
+  }
+  if (-not (Test-Path -LiteralPath $AppExecutable -PathType Leaf) -or
+      -not (Test-Path -LiteralPath $RendererIndex -PathType Leaf)) {
+    throw '构建结束，但新应用或渲染页面缺失。'
   }
 
-  if (-not (Test-Path -LiteralPath $AppExecutable -PathType Leaf)) {
-    throw "构建结束，但没有找到程序：$AppExecutable"
-  }
+  [pscustomobject]@{
+    sourceCommit = $SourceCommit
+    builtAtUtc = [DateTime]::UtcNow.ToString('o')
+    includesUncommittedChanges = ($TrackedChanges.Count -gt 0)
+  } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $AppDirectory 'build-source.json') -Encoding UTF8
 
-  Write-Host '构建完成，正在启动最新版本……' -ForegroundColor Green
+  Write-Host "构建完成，正在启动版本 $($SourceCommit.Substring(0, 7))……" -ForegroundColor Green
   Start-Process -FilePath $AppExecutable -WorkingDirectory $AppDirectory | Out-Null
 }
 catch {
   $LaunchFailed = $true
-  Write-Host "启动最新版本失败：$($_.Exception.Message)" -ForegroundColor Red
-  Write-Host '应用没有启动；修复构建问题后再点桌面快捷方式即可。' -ForegroundColor Yellow
+  Write-Host "更新或启动失败：$($_.Exception.Message)" -ForegroundColor Red
+  Write-Host '本次没有启动旧版本。' -ForegroundColor Yellow
 }
 finally {
   if ($LocationPushed) {
     Pop-Location
   }
+  if ($MutexAcquired) {
+    $LauncherMutex.ReleaseMutex()
+  }
+  $LauncherMutex.Dispose()
 }
 
 if ($LaunchFailed) {
-  Read-Host '按 Enter 关闭此窗口'
+  Read-Host '按 Enter 关闭此窗口' | Out-Null
   exit 1
 }
+
+exit 0

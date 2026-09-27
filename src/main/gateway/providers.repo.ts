@@ -7,7 +7,7 @@ import type { SaveProviderInput } from '../../shared/contracts'
 import { getDb } from '../store/db'
 import { decryptSecret, encryptionAvailable, encryptSecret, isEncryptedSecret } from './keycrypto'
 import type { Capability, Connection, ModelOperation } from '@free-creation/model-contracts'
-import type { SqliteModelHost } from '../model-host/sqlite-model-host'
+import { SqliteModelHost } from '../model-host/sqlite-model-host'
 
 interface ProviderRow {
   id: string
@@ -91,12 +91,11 @@ export interface LegacyCatalogEntry {
 }
 
 /**
- * 旧供应商面板曾直接写 providers 表，而当前节点运行已经要求「功能键 → 已验证模型」。
- * 这是一条一次性、非破坏性的接管桥：只在新目录为空时复制现有的可用连接；不删除旧行，
- * 不把“已保存”冒充为“已验证”。真实 smoke 验收成功后才会由调用方写验证/绑定记录。
+ * 旧供应商面板曾直接写 providers 表，而当前节点运行要求模型能力通过真实验证。
+ * 把旧配置同步到目录连接供用户验证；保留旧记录，配置或模型清单变化时清掉过期验证，
+ * 绝不把“已保存”冒充为“已验证”。
  */
 export function bootstrapLegacyProvidersToCatalog(host: SqliteModelHost): LegacyCatalogEntry[] {
-  if (host.listConnections().length > 0) return []
   const protocolFor = (specId: ProviderConfig['specId']): Connection['protocol'] => {
     if (specId === 'minimax') return 'minimax'
     if (specId === 'toapis') return 'toapis'
@@ -136,13 +135,50 @@ export function bootstrapLegacyProvidersToCatalog(host: SqliteModelHost): Legacy
     const provider = getProvider(row.id)
     if (!provider?.apiKey) continue
     const connectionId = `legacy-${provider.id}`
+    const protocol = protocolFor(provider.specId)
+    const currentConnection = getDb()
+      .prepare('SELECT protocol, base_url, secret_ref FROM model_connections WHERE id = ?')
+      .get(connectionId) as
+      | { protocol: Connection['protocol']; base_url: string; secret_ref: string | null }
+      | undefined
+    const currentModels = host.listModels(connectionId)
+    const nextModelIds = new Set(provider.models.map((model) => model.id))
+    const currentModelIds = new Set(currentModels.map((model) => model.modelId))
+    const modelListChanged =
+      currentModelIds.size !== nextModelIds.size ||
+      [...currentModelIds].some((modelId) => !nextModelIds.has(modelId))
+    const changedCapabilityModelIds = new Set(
+      provider.models.flatMap((model) => {
+        const current = currentModels.find((candidate) => candidate.modelId === model.id)
+        if (!current) return []
+        const currentOperations = current.capabilities.map((capability) => capability.operation).sort()
+        const nextOperations = operationsFor(provider, model).sort()
+        return currentOperations.join(',') === nextOperations.join(',') ? [] : [model.id]
+      })
+    )
+    const connectionChanged =
+      Boolean(currentConnection) &&
+      (currentConnection!.protocol !== protocol ||
+        currentConnection!.base_url !== provider.baseURL ||
+        decryptSecret(currentConnection!.secret_ref) !== provider.apiKey ||
+        modelListChanged ||
+        changedCapabilityModelIds.size > 0)
+    if (connectionChanged) {
+      getDb().prepare('DELETE FROM model_feature_bindings WHERE connection_id = ?').run(connectionId)
+      getDb().prepare('DELETE FROM model_validations WHERE connection_id = ?').run(connectionId)
+    }
     host.saveConnection({
       id: connectionId,
       name: provider.name,
-      protocol: protocolFor(provider.specId),
+      protocol,
       baseUrl: provider.baseURL,
       apiKey: provider.apiKey
     })
+    for (const model of currentModels) {
+      if (!nextModelIds.has(model.modelId) || changedCapabilityModelIds.has(model.modelId)) {
+        host.deleteModel(model.id)
+      }
+    }
     for (const model of provider.models) {
       const operations = operationsFor(provider, model)
       if (!operations.length) continue
@@ -302,11 +338,14 @@ export function saveProvider(input: SaveProviderInput): ProviderSummary {
     )
     .run(row)
   const saved = getDb().prepare('SELECT * FROM providers WHERE id = ?').get(id) as ProviderRow
-  return toSummary(saved)
+  const summary = toSummary(saved)
+  bootstrapLegacyProvidersToCatalog(new SqliteModelHost(getDb()))
+  return summary
 }
 
 export function deleteProvider(id: string): boolean {
   const res = getDb().prepare('DELETE FROM providers WHERE id = ?').run(id)
+  new SqliteModelHost(getDb()).deleteConnection(`legacy-${id}`)
   return res.changes > 0
 }
 

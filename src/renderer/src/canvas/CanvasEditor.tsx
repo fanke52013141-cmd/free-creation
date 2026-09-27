@@ -1811,7 +1811,6 @@ export function CanvasEditor({ project, initialSnapshot, workspaceProfile }: Can
         onPointerMove={utilityMagnify.onPointerMove}
         onPointerLeave={utilityMagnify.onPointerLeave}
       >
-        <div className="palette-divider" />
         <div className="palette-section">
           <Tooltip label="上传本地文件">
             <button
@@ -1880,7 +1879,6 @@ export function CanvasEditor({ project, initialSnapshot, workspaceProfile }: Can
             </button>
           </Tooltip>
         </div>
-        <div className="palette-divider" />
       </div>
       <CanvasBottomDock editor={editorInstance} />
       {/* 多选浮动工具栏：选中 2+ 节点时显示对齐与打组 */}

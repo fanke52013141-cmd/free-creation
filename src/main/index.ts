@@ -10,7 +10,6 @@ import { registerProjectIpc } from './ipc/project.ipc'
 import { ProjectFileWatcher } from './ipc/project-watcher'
 import { registerMediaIpc } from './ipc/media.ipc'
 import { registerGatewayIpc } from './ipc/gateway.ipc'
-import { registerComfyuiIpc } from './ipc/comfyui.ipc'
 import { registerWorkspaceStateIpc } from './ipc/workspace-state.ipc'
 import { registerModelIpc } from './ipc/models.ipc'
 import { registerDiagnosticsIpc } from './ipc/diagnostics.ipc'
@@ -19,7 +18,7 @@ import { SqliteModelHost } from './model-host/sqlite-model-host'
 import { createDesktopModelRuntime } from './model-host/runtime'
 import { closeDb, getDb, getProjectsDir } from './store/db'
 import { reconcileWorkspace } from './store/workspace-health'
-import { upgradeLegacyApiKeys } from './gateway/providers.repo'
+import { bootstrapLegacyProvidersToCatalog, upgradeLegacyApiKeys } from './gateway/providers.repo'
 import { getMediaAbsPath } from './store/media.repo'
 import { mimeForExtension } from '../shared/mime'
 import { runModelSmokeTest } from './model-smoke'
@@ -222,10 +221,13 @@ app.whenReady().then(async () => {
   registerProjectIpc(projectWatcher)
   registerLibraryIpc()
   registerMediaIpc()
-  registerComfyuiIpc()
   registerWorkspaceStateIpc()
   registerDiagnosticsIpc()
   const modelHost = new SqliteModelHost(database)
+  const importedLegacyModels = bootstrapLegacyProvidersToCatalog(modelHost)
+  if (importedLegacyModels.length) {
+    log.info(`model catalog: 已同步 ${importedLegacyModels.length} 个旧版模型配置，等待能力验证`)
+  }
   registerModelIpc(modelHost, createDesktopModelRuntime(modelHost))
   mainWindow = createWindow()
   registerGatewayIpc(mainWindow)

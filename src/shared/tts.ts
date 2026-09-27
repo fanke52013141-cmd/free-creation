@@ -1,14 +1,12 @@
-/** MiniMax 语音克隆节点配置；ComfyUI 字段仅留给旧配置兼容读取。 */
+/** MiniMax 云端语音克隆节点配置。 */
 import {
   MINIMAX_ASYNC_SPEECH_MODELS,
   SPEECH_LANGUAGE_BOOSTS,
   isSpeechLanguageBoostSupported
 } from './speech'
 
-/** IndexTTS-2.5 支持的合成语言；zhen 为中英混说自动判别。 */
-export type TtsLang = 'zhen' | 'ZH' | 'EN' | 'JA' | 'ES' | 'AR'
-export type TtsBackend = 'comfyui' | 'minimax'
-/** 输出音频格式；MiniMax async T2A 与本地旧格式按后端收敛。 */
+export type TtsBackend = 'minimax'
+/** MiniMax 异步语音合成输出格式。 */
 export type TtsFormat = 'wav' | 'mp3' | 'flac' | 'pcm' | 'pcmu_raw' | 'pcmu_wav' | 'opus'
 
 export const MINIMAX_VOICE_CLONE_MODELS: ReadonlyArray<string> = MINIMAX_ASYNC_SPEECH_MODELS
@@ -22,7 +20,7 @@ export const TTS_LANGUAGE_BOOSTS: ReadonlyArray<{ value: string; label: string }
 export interface TtsConfig {
   featureKey?: string
   version: 1
-  /** 当前音色克隆固定使用 MiniMax；comfyui 仅是旧配置的兼容值。 */
+  /** 音色克隆当前仅使用 MiniMax。 */
   backend: TtsBackend
   /** MiniMax 供应商 ID（backend=minimax 时必填）。 */
   providerId: string
@@ -49,12 +47,6 @@ export interface TtsConfig {
   promptText: string
   /** 节点内编辑的合成文本；执行时与上游 in-text 输入合并。 */
   text: string
-  /** 合成语言。 */
-  lang: TtsLang
-  /** 语速因子（IndexTTS duration_factor）：0.5（慢）～ 2.0（快）。 */
-  speed: number
-  /** 情绪强度（IndexTTS emo_alpha）：0 ～ 1。 */
-  emotion: number
   /** 输出音频格式。 */
   format: TtsFormat
   /** 手动上传的参考语音在本地图库的 mediaId（由上游 in-audio 连线优先）。 */
@@ -66,15 +58,6 @@ export interface TtsConfig {
   /** 参考语音的显示名称。 */
   refMediaName: string
 }
-
-export const TTS_LANGS: ReadonlyArray<{ value: TtsLang; label: string }> = [
-  { value: 'zhen', label: '中英混说' },
-  { value: 'ZH', label: '中文' },
-  { value: 'EN', label: '英文' },
-  { value: 'JA', label: '日语' },
-  { value: 'ES', label: '西语' },
-  { value: 'AR', label: '阿语' }
-]
 
 /** MiniMax 复刻参考音频的硬约束；UI 提示与主进程校验共用这一份真值。 */
 export const MINIMAX_CLONE_MIMES = [
@@ -93,12 +76,11 @@ export const MINIMAX_CLONE_PROMPT_MAX_SECONDS = 8
 export const MINIMAX_CLONE_RETENTION_DAYS = 7
 
 /**
- * 每个后端真正会落盘的格式取值域。UI 下拉与 `parseTtsConfig` 共用这一份，
+ * 云端真正会落盘的格式取值域。UI 下拉与 `parseTtsConfig` 共用这一份，
  * 避免出现「下拉里根本没有、却仍是当前值」的格式。
  */
 export const TTS_FORMATS_BY_BACKEND: Record<TtsBackend, ReadonlyArray<TtsFormat>> = {
-  minimax: ['mp3', 'wav', 'pcm', 'flac', 'pcmu_raw', 'pcmu_wav', 'opus'],
-  comfyui: ['wav', 'mp3', 'flac']
+  minimax: ['mp3', 'wav', 'pcm', 'flac', 'pcmu_raw', 'pcmu_wav', 'opus']
 }
 
 export const DEFAULT_TTS_CONFIG: TtsConfig = {
@@ -119,9 +101,6 @@ export const DEFAULT_TTS_CONFIG: TtsConfig = {
   promptMediaName: '',
   promptText: '',
   text: '',
-  lang: 'zhen',
-  speed: 1,
-  emotion: 1,
   format: 'mp3',
   refMediaId: '',
   refMediaPath: '',
@@ -137,18 +116,8 @@ const clampNumber = (value: unknown, min: number, max: number, fallback: number)
 export function parseTtsConfig(text: string): TtsConfig {
   try {
     const raw = JSON.parse(text) as Partial<TtsConfig>
-    // 后端判定：显式取值永远优先；空对象是「什么都没配过」的新节点，走云端 MiniMax。
-    // 有字段却没有 backend 的，是本地 IndexTTS 时期存下的配置，保持 comfyui——不把用户
-    // 已有的节点悄悄换成按秒计费的云端调用。
-    const backend: TtsBackend =
-      raw.backend === 'minimax' || raw.backend === 'comfyui'
-        ? raw.backend
-        : Object.keys(raw).length === 0
-          ? 'minimax'
-          : 'comfyui'
-    const lang = TTS_LANGS.some((item) => item.value === raw.lang) ? (raw.lang as TtsLang) : 'zhen'
-    // 格式跟随后端的取值域：切到 MiniMax 后不再保留它发送不了的 wav。
-    const formats = TTS_FORMATS_BY_BACKEND[backend]
+    const backend: TtsBackend = 'minimax'
+    const formats = TTS_FORMATS_BY_BACKEND.minimax
     const format: TtsFormat = formats.includes(raw.format as TtsFormat)
       ? (raw.format as TtsFormat)
       : formats[0]
@@ -176,9 +145,6 @@ export function parseTtsConfig(text: string): TtsConfig {
       promptMediaName: typeof raw.promptMediaName === 'string' ? raw.promptMediaName : '',
       promptText: typeof raw.promptText === 'string' ? raw.promptText : '',
       text: typeof raw.text === 'string' ? raw.text : '',
-      lang,
-      speed: clampNumber(raw.speed, 0.5, 2, 1),
-      emotion: clampNumber(raw.emotion, 0, 1, 1),
       format,
       refMediaId: typeof raw.refMediaId === 'string' ? raw.refMediaId : '',
       refMediaPath: typeof raw.refMediaPath === 'string' ? raw.refMediaPath : '',

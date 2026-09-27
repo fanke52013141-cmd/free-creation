@@ -451,12 +451,11 @@ describe('v1.2 §16.15 语音节点：控件只在所选后端真会发送该字
   const speechContracts = read('src/renderer/src/nodes/specs/index.tsx')
   const speechConfig = read('src/shared/speech.ts')
 
-  it('音色克隆只呈现 MiniMax 参数，旧本地配置会被禁用', () => {
+  it('音色克隆只呈现 MiniMax 参数', () => {
     expect(tts).not.toMatch(/backend === 'comfyui' && \(\s*<>\s*<label className="opt-label">语言/)
     expect(tts).not.toMatch(/backend === 'comfyui' && \(\s*<div className="tts-sliders">/)
-    expect(tts).toContain("config.backend === 'minimax'")
+    expect(tts).not.toContain("config.backend === 'comfyui'")
     expect(tts).toContain('TTS_FORMATS_BY_BACKEND.minimax.map')
-    expect(tts).toContain("config.backend !== 'minimax'")
     expect(tts).toContain('MiniMax 音色克隆')
   })
 
@@ -465,11 +464,11 @@ describe('v1.2 §16.15 语音节点：控件只在所选后端真会发送该字
     expect(tts).not.toContain("TTS_FORMATS.filter((f) => f !== 'wav')")
     const shared = read('src/shared/tts.ts')
     expect(shared).toMatch(
-      /TTS_FORMATS_BY_BACKEND: Record<TtsBackend, ReadonlyArray<TtsFormat>> = \{\s*minimax: \['mp3', 'wav', 'pcm', 'flac', 'pcmu_raw', 'pcmu_wav', 'opus'\],\s*comfyui: \['wav', 'mp3', 'flac'\]/
+      /TTS_FORMATS_BY_BACKEND: Record<TtsBackend, ReadonlyArray<TtsFormat>> = \{\s*minimax: \['mp3', 'wav', 'pcm', 'flac', 'pcmu_raw', 'pcmu_wav', 'opus'\]/
     )
     // 云端优先（用户决定：先做云端合成，本地链路留到后面）：空配置新节点是 MiniMax。
     expect(shared).toMatch(/DEFAULT_TTS_CONFIG: TtsConfig = \{\s*version: 1,\s*backend: 'minimax'/)
-    expect(shared).toMatch(/Object\.keys\(raw\)\.length === 0\s*\?\s*'minimax'\s*:\s*'comfyui'/)
+    expect(shared).toContain("const backend: TtsBackend = 'minimax'")
   })
 
   it('音色设计按 MiniMax 供应商选择，试听文本是必填字段', () => {
@@ -541,13 +540,10 @@ describe('v1.2 §16.16 媒体 / 剧本节点：判据是真实连线，不是卡
     expect(vocal).toContain('源音频（in-audio）未连线，运行会跳过')
   })
 
-  it('语音复刻说明参考语音与文本的真实来源，并据此禁用按钮', () => {
+  it('语音复刻只要求参考语音，不要求朗读文本', () => {
     expect(tts).toContain("countIncomingConnections(editor, shape.id, 'in-audio')")
-    expect(tts).toContain("countIncomingConnections(editor, shape.id, 'in-text')")
-    expect(tts).toContain('参考语音：未上传且 in-audio 未连线，运行会跳过')
-    expect(tts).toContain('(!draft.trim() && incomingText === 0)')
-    expect(tts).toContain('(incomingRef === 0 && !uploadedRef)')
-    expect(stripComments(tts)).not.toContain('可由文本节点提供')
+    expect(tts).not.toContain("countIncomingConnections(editor, shape.id, 'in-text')")
+    expect(tts).toContain('(incomingRef === 0 && !config.refMediaId)')
   })
 
   it('剧本节点说明执行器的两个分支，不再否认自己能做 AI 拆解', () => {

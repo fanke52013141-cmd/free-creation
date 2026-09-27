@@ -259,6 +259,15 @@ async function generateViaMiniMaxAsync(
   p: ProviderConfig,
   input: SpeechGenerateInput
 ): Promise<MediaAsset> {
+  const { audio, format } = await generateMiniMaxAsyncAudioBuffer(p, input)
+  return saveAudioAsset(input.projectId, audio, format, input.text.trim())
+}
+
+/** MiniMax 异步 T2A 的无落盘变体，供模型能力验收复用真实生产请求链路。 */
+export async function generateMiniMaxAsyncAudioBuffer(
+  p: ProviderConfig,
+  input: Pick<SpeechGenerateInput, 'modelId' | 'text' | 'voiceId' | 'config'>
+): Promise<{ audio: Buffer; format: string }> {
   const config = input.config
   const base = p.baseURL.replace(/\/+$/, '')
   const format = MINIMAX_FORMATS.has(config.format) ? config.format : 'mp3'
@@ -308,7 +317,7 @@ async function generateViaMiniMaxAsync(
   if (!audio) {
     throw new GatewayError('EMPTY_RESULT', 'MiniMax 异步合成的产物里没有可播放的音频成员')
   }
-  return saveAudioAsset(input.projectId, audio, format, input.text.trim())
+  return { audio, format }
 }
 
 interface MiniMaxEnvelope {

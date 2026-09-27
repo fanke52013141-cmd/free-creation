@@ -41,6 +41,7 @@ import {
   type NodeRunStatus
 } from './runRecord'
 import { redactDiagnosticText } from '@shared/diagnostics'
+import { captureRunWorkload } from './run-workload'
 
 interface RunControl {
   cancelled: boolean
@@ -62,6 +63,27 @@ interface WorkflowContext {
    */
   subflowBaseInputs: Map<string, Pick<NodeCardProps, 'text' | 'config'>>
   runId: string
+  /** 独立生图任务不写入前台视频工作流的进度和错误汇总。 */
+  isolated?: boolean
+}
+
+const isolatedImageRuns = new Set<TLShapeId>()
+
+export function canRunImageWhileVideo(editor: Editor): boolean {
+  const { phase, currentNodeId } = useEngineStore.getState()
+  if (phase !== 'running' || !currentNodeId) return false
+  const current = editor.getShape<NodeCardShape>(currentNodeId as TLShapeId)
+  return current?.type === 'node-card' &&
+    (current.props.nodeType === 'video-depth' || current.props.nodeType === 'video-clay')
+}
+
+function reportRunError(
+  ctx: WorkflowContext,
+  label: string,
+  reason: string,
+  detail: { nodeId?: string; phase?: 'input' | 'execution' | 'output' }
+): void {
+  if (!ctx.isolated) useEngineStore.getState().addError(label, reason, detail)
 }
 
 function createRunControl(): RunControl {
@@ -403,6 +425,21 @@ function finishRunRecord(
       )
     }
   })
+  if (status === 'success' && current && current.props.nodeType !== 'image-gen' && record.estimateFeatures) {
+    try {
+      void window.api.workspace.recordGenerationTiming({
+        sampleId: `${record.runId}:${id}`,
+        operation: current.props.nodeType,
+        providerKey: record.estimateProviderKey ?? 'default',
+        modelKey: record.estimateModelKey ?? current.props.nodeType,
+        ...record.estimateFeatures,
+        durationMs: finalRecord.durationMs ?? 0,
+        recordedAt: finishedAt
+      }).catch(() => undefined)
+    } catch {
+      // Timing telemetry cannot affect a completed node run.
+    }
+  }
 }
 
 /** Persist every diagnostic event locally and mirror it to electron-log without blocking execution. */
@@ -601,6 +638,15 @@ async function executeNodeOnce(
     if (collected.errors.length > 0) {
       throw new Error(`输入契约校验失败：${collected.errors.join('；')}`)
     }
+    try {
+      const workload = await captureRunWorkload(shape, collected.value, ctx.projectId)
+      record.estimateFeatures = workload.features
+      record.estimateProviderKey = workload.providerKey
+      record.estimateModelKey = workload.modelKey
+      writeRunRecord(editor, shapeId, record)
+    } catch {
+      // Missing metadata must not stop generation.
+    }
     // 本次执行接管该节点的输出；失败或跳过时不能让本轮继续消费上一次结果。
     ctx.outputs.delete(node.id)
     recordRunTrace(editor, node, ctx.projectId, record, 'execution', 'info', '开始调用节点执行器')
@@ -630,9 +676,7 @@ async function executeNodeOnce(
       const projected = buildOutputPackets(node, projectNodeOutputs(outputShape), ctx.runId)
       if (projected.errors.length > 0) {
         setExec(editor, shapeId, 'failed')
-        useEngineStore
-          .getState()
-          .addError(node.title || node.type, `输出契约校验失败：${projected.errors.join('；')}`, {
+        reportRunError(ctx, node.title || node.type, `输出契约校验失败：${projected.errors.join('；')}`, {
             nodeId: node.id,
             phase: 'output'
           })
@@ -666,7 +710,7 @@ async function executeNodeOnce(
     if (result.status === 'failed') {
       const diagnosticPhase = result.diagnosticPhase ?? 'execution'
       setExec(editor, shapeId, 'failed')
-      useEngineStore.getState().addError(node.title || node.type, result.reason ?? '执行失败', {
+      reportRunError(ctx, node.title || node.type, result.reason ?? '执行失败', {
         nodeId: node.id,
         phase: 'execution'
       })
@@ -728,7 +772,7 @@ async function executeNodeOnce(
       const reason = error instanceof Error ? error.message : String(error)
       const phase: 'input' | 'execution' = reason.includes('输入契约') ? 'input' : 'execution'
       setExec(editor, shapeId, 'failed')
-      useEngineStore.getState().addError(node.title || node.type, reason, {
+      reportRunError(ctx, node.title || node.type, reason, {
         nodeId: node.id,
         phase
       })
@@ -914,15 +958,23 @@ export async function runNodeManually(
   nodeId: TLShapeId
 ): Promise<NodeExecutionResult> {
   const store = useEngineStore.getState()
-  if (store.phase !== 'idle') return { status: 'skipped', reason: '已有任务正在运行' }
+  const isolated = store.phase !== 'idle' && canRunImageWhileVideo(editor) &&
+    editor.getShape<NodeCardShape>(nodeId)?.props.nodeType === 'image-gen'
+  if (store.phase !== 'idle' && !isolated)
+    return { status: 'skipped', reason: '已有任务正在运行' }
+  if (isolatedImageRuns.has(nodeId))
+    return { status: 'skipped', reason: '当前生图节点正在运行' }
 
   const graph = deriveGraph(editor)
   const node = graph.nodes.find((item) => item.id === nodeId)
   if (!node) return { status: 'skipped', reason: '节点不存在或尚未保存到画布' }
 
   const token = createRunControl()
-  registerRunControls(token)
-  store.beginRun(1)
+  if (isolated) isolatedImageRuns.add(nodeId)
+  else {
+    registerRunControls(token)
+    store.beginRun(1)
+  }
   const ctx: WorkflowContext = {
     editor,
     projectId,
@@ -931,18 +983,26 @@ export async function runNodeManually(
     graph,
     outputs: new Map<string, ContractOutputs>(),
     subflowBaseInputs: new Map(),
-    runId: crypto.randomUUID()
+    runId: crypto.randomUUID(),
+    isolated
   }
   seedPersistedOutputs(ctx)
   const runSubflow = (request: SubflowRequest): Promise<Record<string, ContractOutputs>> =>
     runSubflowForIterate(ctx, runSubflow, request)
 
-  store.setCurrent(node.title || node.type)
-  const result = await executeNodeOnce(ctx, node, runSubflow)
-  store.nodeDone()
-  useEngineStore.getState().endRun()
-  clearRunControls()
-  markUndoPoint(editor, 'node-manual-run')
+  if (!isolated) store.setCurrent(node.title || node.type, node.id)
+  let result: NodeExecutionResult
+  try {
+    result = await executeNodeOnce(ctx, node, runSubflow)
+  } finally {
+    if (isolated) isolatedImageRuns.delete(nodeId)
+    else {
+      store.nodeDone()
+      useEngineStore.getState().endRun()
+      clearRunControls()
+    }
+    markUndoPoint(editor, 'node-manual-run')
+  }
 
   if (result.status === 'done') toast(`${node.title || node.type} 已完成`)
   else if (result.status === 'failed') {
@@ -986,7 +1046,7 @@ export async function runWorkflow(
   for (const node of executableOrder) {
     await waitForResume(token)
     if (token.cancelled) break
-    store.setCurrent(node.title || node.type)
+    store.setCurrent(node.title || node.type, node.id)
     await executeNodeOnce(ctx, node, runSubflow)
     store.nodeDone()
   }
@@ -1059,7 +1119,7 @@ export async function runWorkflowForNodes(
   for (const node of executableOrder) {
     await waitForResume(token)
     if (token.cancelled) break
-    store.setCurrent(node.title || node.type)
+    store.setCurrent(node.title || node.type, node.id)
     await executeNodeOnce(ctx, node, runSubflow)
     store.nodeDone()
   }

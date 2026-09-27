@@ -5,6 +5,7 @@ import type { Editor, TLShapeId } from 'tldraw'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { NodeCardShape } from './NodeCardShape'
+import { GenerationLoadingOverlay } from './GenerationLoadingOverlay'
 import {
   activeChatConversation,
   chatConversations,
@@ -586,6 +587,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
                               />
                             )}
                           <MarkdownMessage content={message.content} />
+                          {isStreaming && <GenerationLoadingOverlay title="AI 回复中" />}
                         </>
                       )}
                     </div>
@@ -626,13 +628,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
               {running && messages.at(-1)?.role !== 'assistant' && (
                 <article className="chat-dialog-message assistant" aria-label="正在生成">
                   <div className="chat-dialog-message-meta">AI</div>
-                  <div className="chat-dialog-thinking">
-                    <span />
-                    <div>
-                      <strong>正在思考…</strong>
-                      <small>回复会在生成时逐步显示</small>
-                    </div>
-                  </div>
+                  <div className="chat-dialog-thinking"><GenerationLoadingOverlay title="AI 回复中" /></div>
                 </article>
               )}
               {!messages.length && !running && (

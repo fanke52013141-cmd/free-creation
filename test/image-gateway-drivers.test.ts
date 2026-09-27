@@ -152,7 +152,7 @@ describe('image gateway drivers', () => {
         model: 'gpt-image-2',
         prompt: '未来城市夜景海报',
         size: '1:1',
-        resolution: '2k',
+        resolution: '2K',
         background: 'transparent',
         n: 1,
         response_format: 'url'

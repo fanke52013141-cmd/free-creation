@@ -4,6 +4,7 @@ import type { ProjectMeta, ProjectFile, ProviderSummary } from '@shared/types'
 import type {
   ImageGenerateInput,
   ImageGenerationTimingSample,
+  GenerationTimingSample,
   SaveProviderInput
 } from '@shared/contracts'
 import { createBrowserMedia } from './browserMedia'
@@ -99,6 +100,7 @@ export function installBrowserMock(): void {
   let palettePreferences: PalettePreferences = defaultPalettePreferences()
   // 浏览器演示没有 SQLite，因此只在当前页内存中模拟这一 API；绝不写入 localStorage。
   const imageGenerationTimings: ImageGenerationTimingSample[] = []
+  const generationTimings: GenerationTimingSample[] = []
   const isTimingKey = (value: string): boolean =>
     /^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,95}$/.test(value)
 
@@ -302,15 +304,6 @@ export function installBrowserMock(): void {
     openMedia: () => Promise.resolve({ ok: true, data: true }),
     batchExportMedia: () =>
       Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持媒体导出' } }),
-    comfyui: {
-      status: () =>
-        Promise.resolve({
-          ok: true,
-          data: { configured: false, available: false, baseUrl: '' }
-        }),
-      saveSettings: (input: { baseUrl: string }) =>
-        Promise.resolve({ ok: true, data: { baseUrl: input.baseUrl } })
-    },
     workspace: {
       listTemplates: () => Promise.resolve({ ok: true, data: templates }),
       saveTemplate: (input: Record<string, unknown>) => {
@@ -391,7 +384,15 @@ export function installBrowserMock(): void {
         return Promise.resolve({ ok: true as const, data: [...imageGenerationTimings] })
       },
       getImageGenerationTimings: () =>
-        Promise.resolve({ ok: true as const, data: [...imageGenerationTimings] })
+        Promise.resolve({ ok: true as const, data: [...imageGenerationTimings] }),
+      recordGenerationTiming: (input: GenerationTimingSample) => {
+        if (!generationTimings.some((sample) => sample.sampleId === input.sampleId)) {
+          generationTimings.unshift(input)
+        }
+        return Promise.resolve({ ok: true as const, data: [...generationTimings] })
+      },
+      getGenerationTimings: () =>
+        Promise.resolve({ ok: true as const, data: [...generationTimings] })
     },
     getDroppedFilePath: () => '',
     gateway: {

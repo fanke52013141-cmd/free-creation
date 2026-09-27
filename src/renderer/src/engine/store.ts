@@ -24,6 +24,7 @@ interface EngineState {
   total: number
   done: number
   currentLabel: string
+  currentNodeId: string | null
   errors: RunError[]
   /** CanvasEditor 挂载时注册、卸载时清空（捕获 editor + projectId 闭包） */
   run: (() => void) | null
@@ -37,7 +38,7 @@ interface EngineState {
   setPause: (pause: (() => void) | null) => void
   setResume: (resume: (() => void) | null) => void
   beginRun: (total: number) => void
-  setCurrent: (label: string) => void
+  setCurrent: (label: string, nodeId?: string) => void
   nodeDone: () => void
   addError: (
     label: string,
@@ -55,6 +56,7 @@ export const useEngineStore = create<EngineState>((set) => ({
   total: 0,
   done: 0,
   currentLabel: '',
+  currentNodeId: null,
   errors: [],
   run: null,
   stop: null,
@@ -64,8 +66,8 @@ export const useEngineStore = create<EngineState>((set) => ({
   setStop: (stop) => set({ stop }),
   setPause: (pause) => set({ pause }),
   setResume: (resume) => set({ resume }),
-  beginRun: (total) => set({ phase: 'running', total, done: 0, currentLabel: '', errors: [] }),
-  setCurrent: (label) => set({ currentLabel: label }),
+  beginRun: (total) => set({ phase: 'running', total, done: 0, currentLabel: '', currentNodeId: null, errors: [] }),
+  setCurrent: (label, nodeId) => set({ currentLabel: label, currentNodeId: nodeId ?? null }),
   nodeDone: () => set((s) => ({ done: s.done + 1 })),
   addError: (label, reason, detail) =>
     set((s) => ({
@@ -83,5 +85,5 @@ export const useEngineStore = create<EngineState>((set) => ({
   setStopping: () => set({ phase: 'stopping' }),
   setPaused: () => set({ phase: 'paused' }),
   setRunning: () => set({ phase: 'running' }),
-  endRun: () => set({ phase: 'idle', currentLabel: '' })
+  endRun: () => set({ phase: 'idle', currentLabel: '', currentNodeId: null })
 }))

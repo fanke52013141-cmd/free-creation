@@ -645,28 +645,24 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'tts',
-    contractVersion: 3,
+    contractVersion: 4,
     label: '语音克隆',
     icon: 'audio',
     color: NODE_ACCENTS.tts,
     defaultSize: { w: 340, h: 260 },
-    description: 'MiniMax 音色克隆，输出试听音频与可复用的音色档案',
+    description: '根据参考语音登记可复用音色 ID，连接语音合成节点使用。',
     category: 'audio',
     ports: {
       in: [
-        input('in-audio', '参考语音', 'audio', '可选的上游参考音频；也可在节点内上传。'),
-        input('in-text', '文本', 'text', '需要朗读的文本（与节点内文本合并）。', {
-          cardinality: 'many'
-        })
+        input('in-audio', '参考语音', 'audio', '上游参考音频；也可在节点内上传。')
       ],
       out: [
-        output('out-audio', '音频', 'audio', '语音复刻合成并落盘后的音频资产引用。'),
         output(
           'out-json',
           '音色档案',
           'json',
-          'MiniMax 复刻登记出的 voice_id；本地 IndexTTS 链路没有服务端音色，此时不产出。',
-          { required: false, schema: VOICE_PROFILE }
+          'MiniMax 复刻登记出的可复用 voice_id。',
+          { required: true, schema: VOICE_PROFILE }
         )
       ]
     },

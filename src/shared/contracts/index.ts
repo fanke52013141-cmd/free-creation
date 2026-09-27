@@ -95,10 +95,6 @@ export const IPC = {
     batchExport: 'media:batch-export',
     ttsGenerate: 'media:tts-generate'
   },
-  comfyui: {
-    status: 'comfyui:status',
-    saveSettings: 'comfyui:save-settings'
-  },
   workspace: {
     listTemplates: 'workspace:templates:list',
     saveTemplate: 'workspace:templates:save',
@@ -109,7 +105,9 @@ export const IPC = {
     getPalettePreferences: 'workspace:palette-preferences:get',
     savePalettePreferences: 'workspace:palette-preferences:save',
     recordImageGenerationTiming: 'workspace:image-generation-timing:record',
-    getImageGenerationTimings: 'workspace:image-generation-timings:get'
+    getImageGenerationTimings: 'workspace:image-generation-timings:get',
+    recordGenerationTiming: 'workspace:generation-timing:record',
+    getGenerationTimings: 'workspace:generation-timings:get'
   },
   library: {
     listCategories: 'library:categories:list',
@@ -525,7 +523,7 @@ export interface VideoConversionInput {
   config: import('../video-conversion').VideoDepthConfig | import('../video-conversion').VideoClayConfig
 }
 
-// ── 本地 ComfyUI 语音复刻（IndexTTS-2.5）──
+// ── MiniMax 云端语音复刻 ──
 
 export interface TtsGenerateInput {
   projectId: string
@@ -534,35 +532,13 @@ export interface TtsGenerateInput {
   nodeId?: string
   /** 参考音频（音色来源）在本地图库中的 mediaId。 */
   referenceAudioId: string
-  /** 要朗读的文本。 */
-  text: string
-  /** 合成参数（语言 / 语速 / 情绪 / 输出格式）。 */
+  /** 云端音色克隆参数。 */
   config: TtsConfig
 }
 
-/**
- * 语音复刻结果。MiniMax 链路会额外登记一个可复用的 voice_id；
- * 本地 ComfyUI 链路没有音色概念，voiceId 为空串而不是伪造一个。
- */
+/** 语音复刻结果，包含可复用的 MiniMax voice_id。 */
 export interface VoiceCloneResult {
-  asset: import('../types').MediaAsset
   voiceId: string
-}
-
-export interface ComfyuiSettingsInput {
-  /** ComfyUI 服务地址，如 http://127.0.0.1:8188。 */
-  baseUrl: string
-}
-
-export interface ComfyuiStatus {
-  online: boolean
-  baseUrl: string
-  /** ComfyUI 版本号（仅在线时返回）。 */
-  version?: string
-  /** IndexTTS-2.5 自定义节点是否已安装。 */
-  ttsNodeReady: boolean
-  /** 人类可读的状态说明（连接失败原因 / 缺节点提示）。 */
-  message: string
 }
 
 // ── 本地工作区状态（模板与手动历史版本）──
@@ -608,6 +584,27 @@ export type { PalettePreferences }
 export interface ImageGenerationTimingSample {
   /** 同一次节点运行的稳定 ID；主进程以它幂等去重，重载界面不会重复采样。 */
   runId: string
+  providerKey: string
+  modelKey: string
+  durationMs: number
+  recordedAt: number
+}
+
+/** 生成任务的匿名工作量特征；不保存提示词、项目或媒体标识。 */
+export interface GenerationTimingFeatures {
+  textUnits?: number
+  targetDurationSec?: number
+  sourceDurationSec?: number
+  sourceFps?: number
+  imageCount?: number
+  resolution?: string
+  mode?: string
+}
+
+export interface GenerationTimingSample extends GenerationTimingFeatures {
+  /** 工作流中的每个节点各有一条样本，用 runId + shapeId 幂等去重。 */
+  sampleId: string
+  operation: string
   providerKey: string
   modelKey: string
   durationMs: number

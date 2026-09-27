@@ -5,8 +5,6 @@ import { IPC } from '../shared/contracts'
 import type {
   BootstrapInfo,
   ChatStartInput,
-  ComfyuiSettingsInput,
-  ComfyuiStatus,
   CloneProjectInput,
   CreateProjectInput,
   ExportCanvasStructureInput,
@@ -67,6 +65,7 @@ import type {
   TestProviderResult,
   HistorySnapshotRecord,
   ImageGenerationTimingSample,
+  GenerationTimingSample,
   PalettePreferences,
   WorkflowTemplateRecord,
   VideoSubmitInput,
@@ -232,11 +231,6 @@ const api = {
     ipcRenderer.invoke(IPC.media.videoConvertCancel, { jobId }),
   ttsGenerate: (input: TtsGenerateInput): Promise<IpcEnvelope<VoiceCloneResult>> =>
     ipcRenderer.invoke(IPC.media.ttsGenerate, input),
-  comfyui: {
-    status: (): Promise<IpcEnvelope<ComfyuiStatus>> => ipcRenderer.invoke(IPC.comfyui.status),
-    saveSettings: (input: ComfyuiSettingsInput): Promise<IpcEnvelope<{ baseUrl: string }>> =>
-      ipcRenderer.invoke(IPC.comfyui.saveSettings, input)
-  },
   pickMedia: (projectId: string): Promise<IpcEnvelope<MediaImportResult>> =>
     ipcRenderer.invoke(IPC.media.pick, projectId),
   listMedia: (projectId: string): Promise<IpcEnvelope<MediaAsset[]>> =>
@@ -280,7 +274,13 @@ const api = {
     ): Promise<IpcEnvelope<ImageGenerationTimingSample[]>> =>
       ipcRenderer.invoke(IPC.workspace.recordImageGenerationTiming, input),
     getImageGenerationTimings: (): Promise<IpcEnvelope<ImageGenerationTimingSample[]>> =>
-      ipcRenderer.invoke(IPC.workspace.getImageGenerationTimings)
+      ipcRenderer.invoke(IPC.workspace.getImageGenerationTimings),
+    recordGenerationTiming: (
+      input: GenerationTimingSample
+    ): Promise<IpcEnvelope<GenerationTimingSample[]>> =>
+      ipcRenderer.invoke(IPC.workspace.recordGenerationTiming, input),
+    getGenerationTimings: (): Promise<IpcEnvelope<GenerationTimingSample[]>> =>
+      ipcRenderer.invoke(IPC.workspace.getGenerationTimings)
   },
   // 拖拽落盘的 File 对象拿真实路径（Electron 32+ 移除了 File.path）
   getDroppedFilePath: (file: File): string => webUtils.getPathForFile(file),

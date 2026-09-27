@@ -1,7 +1,7 @@
 ﻿[CmdletBinding()]
 param(
   [ValidateNotNullOrEmpty()]
-  [string]$Name = '自由画布',
+  [string]$Name = '启动 Canvas Studio',
 
   [ValidateNotNullOrEmpty()]
   [string]$DesktopPath = [Environment]::GetFolderPath([Environment+SpecialFolder]::Desktop)
@@ -39,11 +39,16 @@ if (-not (Test-Path -LiteralPath $WindowsPowerShell -PathType Leaf)) {
 $Shell = New-Object -ComObject WScript.Shell
 $Shortcut = $Shell.CreateShortcut($ShortcutPath)
 $Shortcut.TargetPath = $WindowsPowerShell
-$Shortcut.Arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -File `"$LauncherPath`""
+$Shortcut.Arguments = "-NoLogo -NoProfile -NoExit -ExecutionPolicy Bypass -File `"$LauncherPath`""
 $Shortcut.WorkingDirectory = $ProjectRoot
-$Shortcut.Description = '构建并启动当前本地源码版本'
-$Shortcut.IconLocation = "$env:SystemRoot\System32\shell32.dll,208"
+$Shortcut.Description = '同步线上 main、全新构建并启动 Canvas Studio'
+$AppIcon = Join-Path $ProjectRoot 'dist\current-source-release\win-unpacked\canvas-studio.exe'
+if (Test-Path -LiteralPath $AppIcon -PathType Leaf) {
+  $Shortcut.IconLocation = "$AppIcon,0"
+} elseif (-not $Shortcut.IconLocation) {
+  $Shortcut.IconLocation = "$env:SystemRoot\System32\shell32.dll,208"
+}
 $Shortcut.Save()
 
 Write-Host "已更新桌面快捷方式：$ShortcutPath" -ForegroundColor Green
-Write-Host '以后点击它会先构建当前保存的本地源码；构建失败时不会启动旧版本。' -ForegroundColor Cyan
+Write-Host '以后点击它会先同步 origin/main、全新构建，再启动桌面应用。' -ForegroundColor Cyan

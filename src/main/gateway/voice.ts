@@ -61,10 +61,10 @@ function requireMiniMax(providerId: string): ProviderConfig {
   return provider
 }
 
-/** 上传一个本地文件到 MiniMax，返回 voice_clone 用途的 file_id。 */
+/** 上传克隆参考音频或辅助提示音，返回 MiniMax file_id。 */
 export async function uploadMiniMaxFile(
   provider: ProviderConfig,
-  purpose: 'voice_clone',
+  purpose: 'voice_clone' | 'prompt_audio',
   file: { buf: Buffer; mime: string; fileName: string }
 ): Promise<number> {
   const base = provider.baseURL.replace(/\/+$/, '')
@@ -179,8 +179,7 @@ export async function cloneMiniMaxVoice(request: CloneVoiceRequest): Promise<str
     if (!request.prompt.text.trim()) {
       throw new GatewayError('INVALID_INPUT', '填写克隆提示音后必须同时提供其原文')
     }
-    // 文档化的上传接口只接受 purpose=voice_clone；clone_prompt 复用该 file_id。
-    const promptAudioId = await uploadMiniMaxFile(provider, 'voice_clone', request.prompt)
+    const promptAudioId = await uploadMiniMaxFile(provider, 'prompt_audio', request.prompt)
     promptPayload = { prompt_audio: promptAudioId, prompt_text: request.prompt.text.trim() }
   }
 

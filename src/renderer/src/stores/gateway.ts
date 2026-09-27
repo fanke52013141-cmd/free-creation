@@ -35,10 +35,10 @@ export const useGatewayStore = create<GatewayState>((set) => ({
     const res = await window.api.gateway.listProviders()
     if (res.ok) set({ providers: res.data, loaded: true })
   },
-  // The user-facing model manager is the proven provider panel: it can test a Base URL and
-  // merge the returned /models list into the editable model table.
+  // The compatibility panel keeps the original provider setup flow available.
   openSettings: () => set({ settingsOpen: true, catalogOpen: false }),
   closeSettings: () => set({ settingsOpen: false }),
+  // The model catalog owns capability verification used by the new node selectors.
   openCatalog: () => set({ settingsOpen: false, catalogOpen: true }),
   closeCatalog: () => set({ catalogOpen: false })
 }))

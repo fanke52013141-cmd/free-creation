@@ -3,6 +3,7 @@
 import { nanoid } from 'nanoid'
 import type {
   HistorySnapshotRecord,
+  GenerationTimingSample,
   ImageGenerationTimingSample,
   SaveHistorySnapshotInput,
   SaveWorkflowTemplateInput,
@@ -19,6 +20,7 @@ const MAX_HISTORY_SNAPSHOTS = 30
 const MAX_SNAPSHOT_BYTES = 8 * 1024 * 1024
 const PALETTE_PREFERENCES_KEY = 'ui.palette-preferences.v1'
 const IMAGE_GENERATION_TIMINGS_KEY = 'metrics.image-generation-timings.v1'
+const GENERATION_TIMINGS_KEY = 'metrics.generation-timings.v1'
 export const MAX_IMAGE_GENERATION_TIMING_SAMPLES_PER_MODEL = 20
 export const MAX_IMAGE_GENERATION_TIMING_MODELS = 100
 export const MIN_IMAGE_GENERATION_DURATION_MS = 100
@@ -69,6 +71,74 @@ function isTimingDuration(value: unknown): value is number {
 
 function isTimingRecordedAt(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value > 0
+}
+
+function isWorkloadNumber(value: unknown, max: number): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= max
+}
+
+function normalizeGenerationTimingSample(value: unknown): GenerationTimingSample | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const item = value as Record<string, unknown>
+  if (
+    !isTimingKey(item.sampleId) ||
+    !isTimingKey(item.operation) ||
+    !isTimingKey(item.providerKey) ||
+    !isTimingKey(item.modelKey) ||
+    !Number.isInteger(item.durationMs) ||
+    !isWorkloadNumber(item.durationMs, 4 * 60 * 60 * 1000) ||
+    item.durationMs < 100 ||
+    !isTimingRecordedAt(item.recordedAt)
+  ) return null
+  const numericFields = {
+    textUnits: 1_000_000,
+    targetDurationSec: 4 * 60 * 60,
+    sourceDurationSec: 4 * 60 * 60,
+    sourceFps: 240,
+    imageCount: 100
+  } as const
+  const features: Partial<GenerationTimingSample> = {}
+  for (const [key, max] of Object.entries(numericFields)) {
+    const field = key as keyof typeof numericFields
+    if (item[field] === undefined) continue
+    if (!isWorkloadNumber(item[field], max)) return null
+    ;(features as Record<string, number>)[field] = item[field] as number
+  }
+  for (const field of ['resolution', 'mode'] as const) {
+    if (item[field] === undefined) continue
+    if (!isTimingKey(item[field])) return null
+    features[field] = item[field]
+  }
+  return {
+    sampleId: item.sampleId,
+    operation: item.operation,
+    providerKey: item.providerKey,
+    modelKey: item.modelKey,
+    durationMs: item.durationMs as number,
+    recordedAt: item.recordedAt,
+    ...features
+  }
+}
+
+export function compactGenerationTimingSamples(value: unknown): GenerationTimingSample[] {
+  if (!Array.isArray(value)) return []
+  const groups = new Map<string, GenerationTimingSample[]>()
+  const sampleIds = new Set<string>()
+  for (const sample of value
+    .map(normalizeGenerationTimingSample)
+    .filter((item): item is GenerationTimingSample => item !== null)
+    .sort((a, b) => b.recordedAt - a.recordedAt)) {
+    if (sampleIds.has(sample.sampleId)) continue
+    sampleIds.add(sample.sampleId)
+    const key = `${sample.operation}\u0000${sample.providerKey}\u0000${sample.modelKey}`
+    const group = groups.get(key)
+    if (group) {
+      if (group.length < 20) group.push(sample)
+    } else if (groups.size < 100) {
+      groups.set(key, [sample])
+    }
+  }
+  return [...groups.values()].flat()
 }
 
 /** 仅接受无敏感正文的五字段历史记录；损坏/旧设置不会阻断工作区启动。 */
@@ -285,5 +355,21 @@ export function recordImageGenerationTiming(
   }
   const next = compactImageGenerationTimingSamples([sample, ...current])
   setSetting(IMAGE_GENERATION_TIMINGS_KEY, JSON.stringify(next))
+  return next
+}
+
+/** 所有任务共用的本机估时样本；仅持久化白名单字段。 */
+export function getGenerationTimings(): GenerationTimingSample[] {
+  const raw = getSetting(GENERATION_TIMINGS_KEY)
+  return compactGenerationTimingSamples(raw ? parseJson(raw) : null)
+}
+
+export function recordGenerationTiming(input: GenerationTimingSample): GenerationTimingSample[] {
+  const sample = normalizeGenerationTimingSample(input)
+  if (!sample) throw new Error('生成耗时样本格式无效')
+  const current = getGenerationTimings()
+  if (current.some((item) => item.sampleId === sample.sampleId)) return current
+  const next = compactGenerationTimingSamples([sample, ...current])
+  setSetting(GENERATION_TIMINGS_KEY, JSON.stringify(next))
   return next
 }

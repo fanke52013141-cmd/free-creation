@@ -2,6 +2,7 @@
 import type { ContractInputMap } from './contracts'
 import type { NodeExecutionPhase, NodeExecutionTarget } from '@shared/engine/executor-types'
 import { redactDiagnosticText } from '@shared/diagnostics'
+import type { GenerationTimingFeatures } from '@shared/contracts'
 
 export type NodeRunStatus = 'running' | 'success' | 'failed' | 'skipped' | 'cancelled'
 
@@ -33,6 +34,9 @@ export interface NodeRunRecord {
   outputPorts?: string[]
   error?: { phase: NodeRunPhase; reason: string }
   target?: NodeExecutionTarget
+  estimateFeatures?: GenerationTimingFeatures
+  estimateProviderKey?: string
+  estimateModelKey?: string
   /** 分阶段、脱敏的运行轨迹；不记录完整提示词、文件内容、媒体二进制或密钥。 */
   trace?: NodeRunTraceEntry[]
 }

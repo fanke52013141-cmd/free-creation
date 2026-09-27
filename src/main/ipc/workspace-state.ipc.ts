@@ -3,6 +3,7 @@ import { ipcMain } from 'electron'
 import { IPC } from '../../shared/contracts'
 import type {
   HistorySnapshotRecord,
+  GenerationTimingSample,
   ImageGenerationTimingSample,
   IpcEnvelope,
   PalettePreferences,
@@ -15,11 +16,13 @@ import {
   deleteWorkflowTemplate,
   getPalettePreferences,
   getImageGenerationTimings,
+  getGenerationTimings,
   listHistorySnapshots,
   listWorkflowTemplates,
   savePalettePreferences,
   saveHistorySnapshot,
   recordImageGenerationTiming,
+  recordGenerationTiming,
   saveWorkflowTemplate
 } from '../store/workspace-state.repo'
 
@@ -84,5 +87,14 @@ export function registerWorkspaceStateIpc(): void {
   ipcMain.handle(
     IPC.workspace.getImageGenerationTimings,
     (): IpcEnvelope<ImageGenerationTimingSample[]> => wrap(getImageGenerationTimings)
+  )
+  ipcMain.handle(
+    IPC.workspace.recordGenerationTiming,
+    (_event, input: GenerationTimingSample): IpcEnvelope<GenerationTimingSample[]> =>
+      wrap(() => recordGenerationTiming(input))
+  )
+  ipcMain.handle(
+    IPC.workspace.getGenerationTimings,
+    (): IpcEnvelope<GenerationTimingSample[]> => wrap(getGenerationTimings)
   )
 }
