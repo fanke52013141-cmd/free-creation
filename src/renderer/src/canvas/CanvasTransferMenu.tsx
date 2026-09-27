@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import type { ProjectMeta } from '@shared/types'
 import { deriveGraph } from './graph'
 import { useEditorStore } from '../stores/editor'
@@ -11,28 +11,9 @@ interface CanvasTransferMenuProps {
 }
 
 export function CanvasTransferMenu({ project }: CanvasTransferMenuProps): React.JSX.Element {
-  const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    const onDown = (event: MouseEvent): void => {
-      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false)
-    }
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setOpen(false)
-    }
-    window.addEventListener('mousedown', onDown)
-    window.addEventListener('keydown', onKey)
-    return () => {
-      window.removeEventListener('mousedown', onDown)
-      window.removeEventListener('keydown', onKey)
-    }
-  }, [open])
 
   const exportStructure = async (): Promise<void> => {
-    setOpen(false)
     const editor = useEditorStore.getState().editor
     if (!editor) return toast('画布尚未就绪，请稍后重试')
     setBusy(true)
@@ -56,7 +37,6 @@ export function CanvasTransferMenu({ project }: CanvasTransferMenuProps): React.
   }
 
   const importStructure = async (): Promise<void> => {
-    setOpen(false)
     setBusy(true)
     try {
       const result = await window.api.importCanvasStructure()
@@ -81,42 +61,25 @@ export function CanvasTransferMenu({ project }: CanvasTransferMenuProps): React.
   }
 
   return (
-    <div className="project-menu canvas-transfer-menu" ref={ref}>
+    <div className="canvas-transfer-actions" role="group" aria-label="画布导入导出">
       <button
-        className="canvas-transfer-trigger"
-        title="导入或导出当前画布结构，不包含音视频素材"
-        aria-haspopup="menu"
-        aria-expanded={open}
+        className="canvas-transfer-button"
+        title="导入画布结构"
+        aria-label="导入画布"
         disabled={busy}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => void importStructure()}
       >
-        <Icon name="upload" size={14} />
-        导入导出
+        <Icon name="upload" size={16} />
       </button>
-      {open && (
-        <div className="project-menu-panel canvas-transfer-panel" role="menu">
-          <button
-            className="node-menu-item"
-            role="menuitem"
-            disabled={busy}
-            title="创建一个新项目，不覆盖当前画布"
-            onClick={() => void importStructure()}
-          >
-            <span className="item-icon"><Icon name="upload" size={16} /></span>
-            <span>导入画布结构</span>
-          </button>
-          <button
-            className="node-menu-item"
-            role="menuitem"
-            disabled={busy}
-            title="导出节点、连线和配置；不含媒体文件与运行结果"
-            onClick={() => void exportStructure()}
-          >
-            <span className="item-icon"><Icon name="download" size={16} /></span>
-            <span>导出画布结构</span>
-          </button>
-        </div>
-      )}
+      <button
+        className="canvas-transfer-button"
+        title="导出画布结构"
+        aria-label="导出画布"
+        disabled={busy}
+        onClick={() => void exportStructure()}
+      >
+        <Icon name="download" size={16} />
+      </button>
     </div>
   )
 }
