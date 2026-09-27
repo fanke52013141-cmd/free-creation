@@ -1,8 +1,9 @@
 // 文本节点 Body（路线图 R6：bodies.tsx 拆分）
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { useEditor } from 'tldraw'
+import { stopEventPropagation, useEditor } from 'tldraw'
 import { markUndoPoint } from '../../../canvas/history'
 import type { NodeBodyProps } from '../../registry'
+import { Icon } from '../../../components/Icon'
 
 export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
@@ -101,9 +102,22 @@ export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
       {shape.props.text ? (
         <span className="node-text-body">{shape.props.text}</span>
       ) : (
-        <span className="node-text-body" style={{ opacity: 0.55 }}>
-          双击输入文本
-        </span>
+        <div className="node-empty-state text-empty-state">
+          <span className="node-empty-icon"><Icon name="text" size={48} strokeWidth={2} /></span>
+          <strong>文本输入</strong>
+          <button
+            type="button"
+            className="text-empty-action"
+            onPointerDown={stopEventPropagation}
+            onClick={(event) => {
+              event.stopPropagation()
+              enterEditing()
+            }}
+          >
+            <Icon name="edit" size={14} />
+            输入文本
+          </button>
+        </div>
       )}
     </div>
   )

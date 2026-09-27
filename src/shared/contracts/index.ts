@@ -362,6 +362,13 @@ export interface ExportCanvasStructureInput {
   graph: { nodes: unknown[]; edges: unknown[]; groups: unknown[] }
 }
 
+export interface ImportCanvasStructureResult {
+  projectName: string
+  nodeCount: number
+  graph: { nodes: unknown[]; edges: unknown[]; groups: unknown[] }
+  tldrawSnapshot: unknown
+}
+
 export interface ImportMediaBufferInput {
   projectId: string
   mime: string

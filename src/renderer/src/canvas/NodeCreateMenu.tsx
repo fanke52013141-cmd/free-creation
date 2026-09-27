@@ -218,7 +218,7 @@ export function NodeCreateMenu({
             <button className="node-menu-action" onClick={onUpload}>
               上传本地文件
             </button>
-            <button className="node-menu-action" disabled title="后续版本开放" onClick={onGallery}>
+            <button className="node-menu-action" disabled aria-label="后续版本开放" onClick={onGallery}>
               从图库选择
             </button>
           </>

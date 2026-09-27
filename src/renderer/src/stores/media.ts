@@ -14,7 +14,7 @@ interface MediaState {
   loaded: boolean
   /** 按类型筛选：all / image / video / audio / file */
   filter: MediaAsset['kind'] | 'all'
-  /** 搜索关键词（匹配文件名） */
+  /** 搜索关键词（匹配名称、来源信息、媒体类型与文件格式） */
   keyword: string
   /** 来源节点筛选；值始终为稳定 nodeId。 */
   sourceNodeId: string | 'all'

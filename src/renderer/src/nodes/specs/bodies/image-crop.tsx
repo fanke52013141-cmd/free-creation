@@ -257,6 +257,7 @@ export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.
           }}
         >
           配置裁剪
+          <Icon name="arrow" size={13} />
         </button>
       </div>
     )
@@ -464,6 +465,7 @@ export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.
         }}
       >
         在右侧「设置」中重新裁剪
+        <Icon name="settings" size={13} />
       </button>
     </div>
   )
@@ -582,14 +584,19 @@ export function ImageCropSettings({ shape, editor }: NodeSettingsProps): React.J
           onClick={() => save({ ...config, mode: 'rect' })}
         >
           矩形裁剪
+          <Icon name="crop" size={13} />
         </button>
         <button
           className={config.mode === 'quad' ? 'active' : ''}
           onClick={() => save({ ...config, mode: 'quad' })}
         >
           四角透视
+          <Icon name="crop" size={13} />
         </button>
-        <button onClick={() => save(structuredClone(DEFAULT_IMAGE_CROP_CONFIG))}>重置</button>
+        <button onClick={() => save(structuredClone(DEFAULT_IMAGE_CROP_CONFIG))}>
+          重置
+          <Icon name="reset" size={13} />
+        </button>
       </div>
       {config.mode === 'rect' && (
         <div className="crop-aspect-settings">

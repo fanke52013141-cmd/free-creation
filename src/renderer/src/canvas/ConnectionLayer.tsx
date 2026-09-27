@@ -16,7 +16,7 @@ export function ConnectionLayer(): React.JSX.Element | null {
   if (!draft) return null
 
   const { startPt, pointer, from } = draft
-  const color = PORT_COLORS[from.portType] ?? '#09caf5'
+  const color = from.nodeColor ?? PORT_COLORS[from.portType] ?? '#09caf5'
   // 与正式连线使用同一套比例几何，拖拽预览在反向拖动时也不会翻折成 S 型。
   const path = buildDataEdgePath(startPt, pointer)
   return createPortal(
@@ -45,7 +45,7 @@ export function ConnectionLayer(): React.JSX.Element | null {
         className="conn-water-path"
         d={path}
         pathLength="1000"
-        style={{ stroke: `url(#${gradientId})` }}
+        style={{ stroke: color, filter: `drop-shadow(0 0 5px ${color})` }}
       />
       <circle className="conn-start" cx={startPt.x} cy={startPt.y} r={5} fill={color} />
       <circle className="conn-cursor" cx={pointer.x} cy={pointer.y} r={6.5} fill={color} />
@@ -89,7 +89,7 @@ export function PendingConnectionLayer({
   }, [editor])
 
   const startPt = editor.pageToScreen(startPage)
-  const color = PORT_COLORS[from.portType] ?? '#09caf5'
+  const color = from.nodeColor ?? PORT_COLORS[from.portType] ?? '#09caf5'
   const path = buildDataEdgePath(startPt, endPt)
   return createPortal(
     <svg className="conn-overlay conn-menu-link" aria-hidden="true">

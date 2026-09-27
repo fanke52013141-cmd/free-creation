@@ -658,7 +658,11 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
             setEditing(true)
           }}
         >
-          暂无代码
+          <span className="node-empty-state code-empty-state">
+            <span className="node-empty-icon"><Icon name="code" size={24} /></span>
+            <strong>代码工作区</strong>
+            <small>编写处理逻辑，输入参数可在上方管理</small>
+          </span>
         </div>
       )}
       {resultDisplay && (

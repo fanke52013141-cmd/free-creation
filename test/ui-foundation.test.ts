@@ -6,6 +6,7 @@ import { NODE_UI, resolveNodeHeight } from '../src/renderer/src/canvas/node-ui-t
 const root = resolve(__dirname, '..')
 const foundation = readFileSync(resolve(root, 'src/renderer/src/assets/ui-foundation.css'), 'utf8')
 const legacy = readFileSync(resolve(root, 'src/renderer/src/assets/app.css'), 'utf8')
+const appSelect = readFileSync(resolve(root, 'src/renderer/src/components/AppSelect.tsx'), 'utf8')
 
 describe('统一画布视觉基础', () => {
   it('连线和端口只保留低噪声的基础样式来源', () => {
@@ -19,26 +20,45 @@ describe('统一画布视觉基础', () => {
 
   it('常用下拉框与悬浮提示有统一组件样式', () => {
     expect(foundation).toContain('.app-select')
+    expect(appSelect).toContain("import * as Select from '@radix-ui/react-select'")
+    expect(appSelect).toContain('<Select.Portal>')
+    expect(appSelect).toContain('position="popper"')
+    expect(appSelect).toContain('collisionPadding={8}')
+    expect(foundation).toContain('.app-select-content')
+    expect(foundation).toContain('.node-card .app-select-trigger')
+    expect(foundation).toContain(".app-select-item[data-state='checked']")
     expect(
       readFileSync(resolve(root, 'src/renderer/src/assets/ui-surfaces.css'), 'utf8')
     ).toContain('.app-tooltip')
   })
 
-  it('节点卡片保持清晰不透明材质，类型色角标与端口圆点同源（2026-09-23）', () => {
+  it('节点卡片保持清晰不透明材质，悬浮与角标采用节点色，端口具统一环形高光（2026-09-24）', () => {
     // 深色主题卡片保持不透明，避免节点重叠时背景纹理穿透正文。
     const nodeCardRule = foundation.match(/\.node-card\s*\{[^}]*\}/)?.[0] ?? ''
     expect(nodeCardRule).toContain('background: var(--card);')
     expect(nodeCardRule).not.toContain('backdrop-filter:')
     expect(foundation).toMatch(/\.node-card\s*\{[\s\S]*?inset 0 1px 0 rgba\(255, 255, 255, 0\.07\)/)
-    expect(foundation).toMatch(/\.node-card::before\s*\{[^}]*background:\s*var\(--node-accent,\s*var\(--brand\)\)/)
+    expect(foundation).toMatch(/\.node-card::before\s*\{[^}]*background:\s*linear-gradient\(/)
+    expect(foundation).toMatch(
+      /\.node-card::before\s*\{[^}]*var\(--node-accent,\s*var\(--brand\)\)/
+    )
+    expect(foundation).toMatch(/\.node-card::before\s*\{[^}]*right:\s*0;/)
     expect(foundation).toMatch(/\.node-card::before\s*\{[^}]*clip-path:\s*polygon\(/)
-    // 空闲端口采用节点主色；可见点 14px，透明命中区扩到 46px。
-    expect(foundation).toMatch(/\.port-dot::after\s*\{[^}]*width:\s*14px;/)
-    expect(foundation).toMatch(/\.port-dot::after\s*\{[^}]*background:\s*var\(--node-port-color,\s*var\(--pc/)
+    expect(foundation).toMatch(
+      /\.node-card-wrap\.is-selected::after\s*\{[^}]*var\(--node-accent,\s*var\(--brand\)\)/
+    )
+    expect(foundation).toMatch(
+      /\.node-card-wrap\.is-selected \.node-info-btn\s*\{[^}]*var\(--node-accent,\s*var\(--brand\)\)/
+    )
+    // 空闲端口采用节点色；可见点 12px、带环形柔光，透明命中区仍扩到 46px。
+    expect(foundation).toMatch(/\.port-dot::after\s*\{[^}]*width:\s*12px;/)
+    expect(foundation).toMatch(
+      /\.port-dot::after\s*\{[^}]*background:\s*var\(--node-port-color,\s*var\(--pc/
+    )
     expect(foundation).toMatch(/\.port-dot::before\s*\{[^}]*inset:\s*-14px;/)
     expect(foundation).toMatch(/\.port-dot\.connected::after\s*\{[^}]*background:\s*var\(--pc/)
     expect(foundation).not.toMatch(/\.port-dot::after\s*\{[^}]*backdrop-filter/)
-    expect(foundation).toMatch(/\.port-dot::after\s*\{[^}]*box-shadow:\s*none;/)
+    expect(foundation).toMatch(/\.port-dot::after\s*\{[^}]*box-shadow:[^}]*color-mix\(/)
     expect(foundation).not.toContain('.port-dot-inner')
     expect(foundation).not.toMatch(/\.port-dot\s*\{[\s\S]*?border:\s*2px dashed/)
     // 拖线光标同样是实心圆，玻璃珠高光已删除。
@@ -77,10 +97,10 @@ describe('统一画布视觉基础', () => {
     // ui-surfaces.css 只保留浅色主题变体，不再收口结构定义。
     expect(surfaces).not.toMatch(/(^|\n)\.node-header\s*\{/)
     expect(surfaces).not.toMatch(/(^|\n)\.node-color-bar\s*\{/)
-    // 类型色不再占用横向色条，以左上角 CSS 切角呈现，不挤压正文高度。
+    // 类型色不再占用横向色条，以右上角 CSS 切角呈现，不挤压正文高度。
     expect(foundation).toMatch(/\.node-color-bar\s*\{[^}]*display:\s*none;/)
-    expect(foundation).toMatch(/\.node-card::before\s*\{[^}]*width:\s*22px;/)
-    expect(foundation).toMatch(/\.node-card::before\s*\{[^}]*height:\s*22px;/)
+    expect(foundation).toMatch(/\.node-card::before\s*\{[^}]*width:\s*26px;/)
+    expect(foundation).toMatch(/\.node-card::before\s*\{[^}]*height:\s*26px;/)
     // 死代码已删：.node-hover-toolbar 无任何组件引用。
     expect(foundation).not.toContain('.node-hover-toolbar')
     const nodeCardView = readFileSync(

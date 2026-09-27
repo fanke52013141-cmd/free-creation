@@ -1,15 +1,16 @@
 import { useEffect } from 'react'
+import { stopEventPropagation } from 'tldraw'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { parseChat, serializeChat, type ChatData } from '../../chatData'
 import { Icon } from '../../../components/Icon'
 import { ModelSelect, NoModelHint } from './shared'
 import type { NodeBodyProps, NodeSettingsProps } from '../../registry'
+import { useNodePanelStore } from '../../../stores/nodePanel'
 
 export function ChatBody({ shape }: NodeBodyProps): React.JSX.Element {
   const providers = useGatewayStore((s) => s.providers)
   const loaded = useGatewayStore((s) => s.loaded)
   const loadProviders = useGatewayStore((s) => s.load)
-  const openSettings = useGatewayStore((s) => s.openSettings)
   const options = modelsByModality(providers, 'text')
   const data = parseChat(shape.props.text)
   useEffect(() => {
@@ -18,19 +19,31 @@ export function ChatBody({ shape }: NodeBodyProps): React.JSX.Element {
 
   const selectedModel = options.find((o) => o.key === data.modelKey)
 
-  if (options.length === 0) {
-    return <NoModelHint onOpen={() => openSettings()} presetIds={['relay']} />
-  }
-
-  const modelName = selectedModel
-    ? selectedModel.model.name || selectedModel.model.id
-    : '未选择模型'
-
   return (
     <div className="chat-body-compact">
-      <div className="chat-compact-model">
-        <Icon name="chat" size={14} />
-        {modelName}
+      <div className="chat-body-hero">
+        <span className="node-empty-icon chat-body-icon"><Icon name="chat" size={40} /></span>
+        <strong>AI 对话</strong>
+        {selectedModel && (
+          <span className="chat-compact-model is-ready">
+            <span className="chat-model-dot" />
+            <span className="chat-model-name">{selectedModel.model.name || selectedModel.model.id}</span>
+          </span>
+        )}
+        <button
+          type="button"
+          className="chat-open-button"
+          onPointerDown={stopEventPropagation}
+          onClick={(event) => {
+            event.stopPropagation()
+            useNodePanelStore.getState().open('chat', shape.id, 'settings')
+          }}
+        >
+          <span className="chat-open-content">
+            打开对话
+            <Icon name="chat" size={15} />
+          </span>
+        </button>
       </div>
     </div>
   )

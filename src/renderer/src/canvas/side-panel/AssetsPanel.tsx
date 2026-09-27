@@ -185,13 +185,15 @@ export function AssetsPanel({
   editor,
   onImport,
   onAddToCanvas,
-  onOpenRun
+  onOpenRun,
+  selectionMode
 }: {
   projectId: string
   editor: Editor | null
   onImport: () => void
   onAddToCanvas: (asset: MediaAsset) => void
   onOpenRun: (nodeId: string, runId: string) => void
+  selectionMode: boolean
 }): React.JSX.Element {
   const assets = useMediaStore((state) => state.assets)
   const filter = useMediaStore((state) => state.filter)
@@ -294,7 +296,10 @@ export function AssetsPanel({
   }
 
   return (
-    <div className="side-panel-body assets-panel" ref={scrollRef}>
+    <div
+      className={`side-panel-body assets-panel${selectionMode ? ' assets-panel-selection-mode' : ''}`}
+      ref={scrollRef}
+    >
       <div className="assets-source-switch">
         <button className={!libraryMode ? 'active' : ''} onClick={() => setLibraryMode(false)}>项目素材</button>
         <button className={libraryMode ? 'active' : ''} onClick={() => setLibraryMode(true)}>资源库</button>

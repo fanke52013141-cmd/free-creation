@@ -10,6 +10,7 @@ const imageGen = read('src/renderer/src/nodes/specs/bodies/image-gen.tsx')
 const imageEdit = read('src/renderer/src/nodes/specs/bodies/image-edit.tsx')
 const video = read('src/renderer/src/nodes/specs/bodies/video-transforms.tsx')
 const styles = read('src/renderer/src/nodes/specs/bodies/node-workbench.css')
+const imageCapabilities = read('src/shared/image-capabilities.ts')
 
 describe('处理工作台交互', () => {
   it('裁剪预览填满可用区域，且指针和选区都映射回原图归一化坐标', () => {
@@ -23,12 +24,17 @@ describe('处理工作台交互', () => {
     expect(styles).toContain('overflow: hidden;')
   })
 
-  it('生图画幅优先展示竖屏和横屏常用比例，其余能力仍保留', () => {
-    const priority = imageGen.indexOf("'9:16'")
+  it('生图画幅默认优先展示 16:9，随后排列其他常用比例', () => {
+    const priority = imageCapabilities.indexOf('IMAGE_GENERATION_ASPECT_RATIOS')
     expect(priority).toBeGreaterThan(-1)
-    expect(priority).toBeLessThan(imageGen.indexOf("'16:9'"))
-    expect(imageGen.indexOf("'16:9'")).toBeLessThan(imageGen.indexOf("'1:1'"))
+    expect(imageCapabilities.indexOf("'16:9'", priority)).toBeLessThan(
+      imageCapabilities.indexOf("'9:16'", priority)
+    )
+    expect(imageCapabilities.indexOf("'9:16'", priority)).toBeLessThan(
+      imageCapabilities.indexOf("'1:1'", priority)
+    )
     expect(imageGen).toContain('function orderedImageRatios')
+    expect(imageGen).toContain('IMAGE_GENERATION_ASPECT_RATIOS.includes')
     expect(imageGen).toContain('orderedRatios.map')
   })
 

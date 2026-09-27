@@ -17,6 +17,7 @@ import {
 } from '../../structured-data'
 import type { NodeBodyProps } from '../../registry'
 import { AppSelect } from '../../../components/AppSelect'
+import { Icon } from '../../../components/Icon'
 
 function fieldEntries(value: unknown, prefix = '', depth = 0): { path: string; value: unknown }[] {
   if (depth > 3 || !value || typeof value !== 'object' || Array.isArray(value)) return []
@@ -44,7 +45,7 @@ function PlaceholderTokens({
       <button
         type="button"
         className={`structured-token ${textCount ? 'ready' : 'idle'}`}
-        title={
+        aria-label={
           textCount > 1
             ? `替换为 ${textCount} 条文本上下文按顺序拼接的结果`
             : '替换为 in-text 端口连入的文本'
@@ -57,13 +58,14 @@ function PlaceholderTokens({
       >
         <code>{'{{text}}'}</code>
         <span>文本上下文 ×{textCount}</span>
+        <Icon name="add" size={12} />
       </button>
       {indexes.map((index) => (
         <button
           type="button"
           key={index}
           className={`structured-token ${contextCount > index ? 'ready' : 'idle'}`}
-          title={`替换为 in-context 第 ${index + 1} 个 JSON 输入，字段写作 {{input[${index}].名称}}`}
+          aria-label={`替换为 in-context 第 ${index + 1} 个 JSON 输入，字段写作 {{input[${index}].名称}}`}
           onPointerDown={(event) => stopEventPropagation(event)}
           onClick={(event) => {
             event.stopPropagation()
@@ -72,6 +74,7 @@ function PlaceholderTokens({
         >
           <code>{`{{input[${index}]}}`}</code>
           <span>结构上下文 ×{contextCount}</span>
+          <Icon name="add" size={12} />
         </button>
       ))}
     </div>
@@ -180,7 +183,7 @@ export function StructuredBody({ shape }: NodeBodyProps): React.JSX.Element {
         />
       ) : (
         <button
-          className="structured-preview"
+          className={`structured-preview ${hasText ? '' : 'is-empty'}`}
           onPointerDown={(event) => stopEventPropagation(event)}
           onDoubleClick={(event) => {
             event.stopPropagation()
@@ -189,7 +192,15 @@ export function StructuredBody({ shape }: NodeBodyProps): React.JSX.Element {
           }}
           onClick={(event) => event.stopPropagation()}
         >
-          {hasText ? (parseError ? raw : JSON.stringify(parsed, null, 2)) : '暂无结构数据'}
+          {hasText ? (
+            parseError ? raw : JSON.stringify(parsed, null, 2)
+          ) : (
+            <span className="node-empty-state structured-empty-state">
+              <span className="node-empty-icon"><Icon name="structured" size={22} /></span>
+              <strong>等待结构数据</strong>
+              <small>按当前 Schema 校验后供下游节点使用</small>
+            </span>
+          )}
         </button>
       )}
       <PlaceholderTokens textCount={textCount} contextCount={contextCount} />
@@ -201,7 +212,7 @@ export function StructuredBody({ shape }: NodeBodyProps): React.JSX.Element {
               type="button"
               className="structured-field-row"
               key={field.path}
-              title="复制字段路径"
+              aria-label="复制字段路径"
               onPointerDown={(event) => stopEventPropagation(event)}
               onClick={(event) => {
                 event.stopPropagation()
@@ -210,6 +221,7 @@ export function StructuredBody({ shape }: NodeBodyProps): React.JSX.Element {
             >
               <code>{field.path}</code>
               <span>{Array.isArray(field.value) ? '数组' : typeof field.value}</span>
+              <Icon name="copy" size={12} />
             </button>
           ))}
           {fields.length > 24 && <small>还有 {fields.length - 24} 个字段</small>}
@@ -227,6 +239,7 @@ export function StructuredBody({ shape }: NodeBodyProps): React.JSX.Element {
           }}
         >
           {hasText ? '编辑' : '输入 JSON'}
+          <Icon name={hasText ? 'edit' : 'json'} size={13} />
         </button>
       </div>
     </div>

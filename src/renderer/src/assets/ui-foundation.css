@@ -246,10 +246,11 @@ body {
   content: '';
   position: absolute;
   z-index: 7;
-  inset: -4px;
-  border: 1px solid rgba(239, 246, 255, 0.84);
-  border-radius: calc(var(--node-radius) + 4px);
-  box-shadow: none;
+  inset: -3px;
+  border: 1px solid color-mix(in srgb, var(--node-accent, var(--brand)) 82%, white);
+  border-radius: calc(var(--node-radius) + 3px);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--node-accent, var(--brand)) 14%, transparent);
+  opacity: 0.6;
   pointer-events: none;
 }
 
@@ -295,6 +296,7 @@ body {
   box-shadow:
     0 10px 20px -5px rgba(0, 0, 0, 0.42),
     0 28px 52px -8px rgba(0, 0, 0, 0.54),
+    0 0 26px color-mix(in srgb, var(--node-accent, var(--brand)) 15%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
   /* 仅悬浮时像一张刚从桌面抬起的卡片；选中状态仍完全静止。 */
   transform: translateY(-2px);
@@ -321,13 +323,32 @@ body {
   position: absolute;
   z-index: 2;
   top: 0;
-  left: 0;
-  width: 22px;
-  height: 22px;
-  background: var(--node-accent, var(--brand));
-  clip-path: polygon(0 0, 100% 0, 0 100%);
-  opacity: 0.9;
+  right: 0;
+  width: 26px;
+  height: 26px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--node-accent, var(--brand)) 74%, white),
+    var(--node-accent, var(--brand)) 54%,
+    color-mix(in srgb, var(--node-accent, var(--brand)) 76%, black)
+  );
+  clip-path: polygon(0 0, 100% 0, 100% 100%);
+  opacity: 0.4;
+  filter: drop-shadow(
+    0 0 8px color-mix(in srgb, var(--node-accent, var(--brand)) 44%, transparent)
+  );
   pointer-events: none;
+  transition:
+    opacity 180ms ease,
+    filter 180ms ease;
+}
+
+.node-card-wrap:hover .node-card::before,
+.node-card-wrap.is-selected .node-card::before {
+  opacity: 0.4;
+  filter: drop-shadow(
+    0 0 11px color-mix(in srgb, var(--node-accent, var(--brand)) 62%, transparent)
+  );
 }
 
 /* 悬浮标题：位于 .node-card-wrap（卡片外上方 -34px），全宽单行布局，
@@ -358,22 +379,35 @@ body {
   background: transparent;
 }
 
-/* 序号：纯文字数字，去掉外围边框/底色/内阴影（用户要求），颜色继承标题行 */
+/* 序号：对应节点类型色的方形编号标识，呼应参考图的编号徽标。 */
 .node-seq {
-  min-width: 0;
-  height: auto;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-  font-size: 10px;
-  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  padding: 0 2px;
+  border: 1px solid color-mix(in srgb, var(--node-accent, var(--brand)) 32%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--node-accent, var(--brand)) 12%, var(--surface-2));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 2px 6px rgba(0, 0, 0, 0.22);
+  color: color-mix(in srgb, var(--node-accent, var(--brand)) 72%, white);
+  font-family: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
 .node-icon {
   width: 18px;
   height: 18px;
-  filter: saturate(0.72);
+  opacity: 1;
+  filter: none;
 }
 
 .node-title {
@@ -383,9 +417,10 @@ body {
 
 .node-title.editing {
   padding: 0 5px;
-  border: 1px solid rgba(66, 185, 245, 0.38);
+  border: 1px solid color-mix(in srgb, var(--node-accent, var(--brand)) 52%, transparent);
   border-radius: 5px;
-  background: rgba(66, 185, 245, 0.1);
+  background: color-mix(in srgb, var(--node-accent, var(--brand)) 12%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--node-accent, var(--brand)) 12%, transparent);
 }
 
 .node-status {
@@ -407,15 +442,31 @@ body {
 .node-info-btn {
   width: 20px;
   height: 20px;
+  border: 1px solid transparent;
   border-radius: 6px;
   color: var(--txt-dim);
   opacity: 0.68;
+  transition:
+    color 140ms ease,
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    opacity 140ms ease;
 }
 
 .node-card-wrap:hover .node-info-btn,
 .node-card-wrap.is-selected .node-info-btn {
-  color: #cbd5df;
+  border-color: color-mix(in srgb, var(--node-accent, var(--brand)) 34%, transparent);
+  background: color-mix(in srgb, var(--node-accent, var(--brand)) 12%, transparent);
+  color: color-mix(in srgb, var(--node-accent, var(--brand)) 70%, white);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--node-accent, var(--brand)) 12%, transparent);
   opacity: 1;
+}
+
+.node-info-btn:focus-visible,
+.node-run-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--node-accent, var(--brand)) 78%, white);
+  outline-offset: 2px;
 }
 
 .node-body {
@@ -461,75 +512,183 @@ body {
   box-shadow: 0 0 0 2px rgba(66, 185, 245, 0.11);
 }
 
-/* 原生 select 保持可靠的键盘/读屏体验；统一由 AppSelect 承担可视外观。 */
-.app-select {
-  min-height: 32px;
-  padding: 5px 30px 5px 9px;
-  border: 1px solid var(--line);
+/* AppSelect：单选菜单统一走 Radix Portal，避免原生 option 被系统接管。 */
+.app-select-trigger {
+  box-sizing: border-box;
+  display: inline-flex;
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  min-height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
-  appearance: none;
-  -webkit-appearance: none;
-  background-color: color-mix(in srgb, var(--sunk) 78%, transparent);
-  background-image:
-    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
-    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
-  background-position:
-    calc(100% - 13px) calc(50% - 2px),
-    calc(100% - 8px) calc(50% - 2px);
-  background-repeat: no-repeat;
-  background-size:
-    5px 5px,
-    5px 5px;
-  color: var(--txt);
-  color-scheme: dark;
-  font-family: inherit;
+  background: #181b24;
+  color: #f1f5f9;
+  font: inherit;
   font-size: 13px;
-  font-weight: 600;
+  line-height: 1.2;
+  text-align: left;
   cursor: pointer;
   transition:
     border-color 140ms ease,
-    background-color 140ms ease,
-    box-shadow 140ms ease;
+    box-shadow 140ms ease,
+    background-color 140ms ease;
 }
 
-.app-select:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--brand) 38%, var(--line));
-  background-color: color-mix(in srgb, var(--sunk) 64%, var(--brand) 4%);
+.app-select-trigger:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.16);
 }
 
-.app-select:focus-visible {
-  border-color: color-mix(in srgb, var(--brand) 72%, var(--line));
+.app-select-trigger:focus-visible,
+.app-select-trigger[data-state='open'] {
+  border-color: #06b6d4;
   outline: none;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 16%, transparent);
+  box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.2);
 }
 
-.app-select:disabled {
+.app-select-trigger:disabled {
   cursor: not-allowed;
   opacity: 0.52;
 }
 
-/* Chromium 在 Electron 中会把 option 菜单交给系统绘制；color-scheme 和 option
-   颜色一起声明，可让深浅主题下的原生菜单与触发框保持同一套材质。 */
-.app-select option {
-  background: #20242a;
-  color: #f1f4f7;
-  font-family: inherit;
-  font-weight: 600;
+.app-select-trigger > [data-radix-select-value] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.canvas-theme-light .app-select {
-  color-scheme: light;
+.app-select-chevron {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
 }
 
-.canvas-theme-light .app-select option {
-  background: #fffdfa;
-  color: #263743;
+.app-select-chevron span {
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
 }
 
-/* ── Ports: meaningful but quiet until an interaction needs them ───────── */
-/* 18px 元素与 edge-geometry 的锚点保持一致；视觉为更容易抓取的 14px 实色圆点。
-   空闲端口只使用节点主色，不在未连线时暴露“它可能连接什么”的多种类型色。
-   类型色保留给已连线、拖线候选和契约错误态；不做渐变、磨砂或内阴影。 */
+.app-select-content {
+  z-index: var(--z-context-menu, 1200);
+  min-width: var(--radix-select-trigger-width);
+  max-width: min(420px, calc(100vw - 16px));
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(24, 27, 36, 0.96);
+  color: #f1f5f9;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(16px);
+  transform-origin: var(--radix-select-content-transform-origin);
+  animation: app-select-pop-in 120ms ease-out;
+}
+
+.app-select-viewport {
+  max-height: min(320px, var(--radix-select-content-available-height));
+  overflow: auto;
+  padding: 4px;
+  scrollbar-width: none;
+}
+
+.app-select-viewport::-webkit-scrollbar {
+  display: none;
+}
+
+.app-select-item {
+  position: relative;
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 30px 6px 10px;
+  border-radius: 5px;
+  color: #cbd5e1;
+  font-size: 12px;
+  line-height: 1.35;
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+}
+
+.app-select-item[data-highlighted] {
+  background: rgba(255, 255, 255, 0.06);
+  color: #f8fafc;
+}
+
+.app-select-item[data-state='checked'] {
+  color: #22d3ee;
+}
+
+.app-select-item[data-disabled] {
+  color: #64748b;
+  cursor: not-allowed;
+}
+
+.app-select-item-check {
+  position: absolute;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #22d3ee;
+}
+
+.app-select-item-check svg {
+  stroke-width: 2.2;
+}
+
+@keyframes app-select-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-select-content {
+    animation-duration: 1ms;
+  }
+}
+
+/* 节点卡片内使用紧凑档，避免选择器撑高卡片；侧栏和工作台保持 36px 标准档。 */
+.node-card .app-select-trigger {
+  height: 28px;
+  min-height: 28px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.node-card .app-select-trigger.gen-select {
+  padding: 4px 8px;
+}
+
+.gw-grid .app-select-trigger.gw-input {
+  height: 36px;
+  min-height: 36px;
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+
+/* ── Ports: one luminous, easy-to-grab connector language ──────────────── */
+/* 18px 元素与 edge-geometry 锚点一致；类型颜色仍表达端口契约，外圈和柔光统一样式。 */
 .port-dot {
   position: absolute;
   width: 18px;
@@ -551,19 +710,23 @@ body {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   transform: translate(-50%, -50%) translate(var(--port-follow-x, 0), var(--port-follow-y, 0));
   background: var(--node-port-color, var(--pc, #42b9f5));
-  border: none;
-  box-shadow: none;
+  border: 2px solid color-mix(in srgb, var(--card) 90%, white);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--node-port-color, var(--pc, #42b9f5)) 32%, transparent),
+    0 0 9px color-mix(in srgb, var(--node-port-color, var(--pc, #42b9f5)) 26%, transparent),
+    0 1px 4px rgba(0, 0, 0, 0.5);
   transition:
     transform 140ms ease,
-    opacity 140ms ease;
+    opacity 140ms ease,
+    box-shadow 140ms ease;
 }
 
-/* 命中区内的跟随要即时反馈；仅保留缩放和透明度的短过渡。 */
+/* 命中区内的跟随要即时反馈，避免拖动时端口视觉滞后。 */
 .port-dot[style*='--port-follow-x']::after {
   transition: none;
 }
@@ -583,6 +746,10 @@ body {
 /* 连线落到这个端口后，才明确呈现契约数据类型的颜色。 */
 .port-dot.connected::after {
   background: var(--pc, #42b9f5);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--pc, #42b9f5) 38%, transparent),
+    0 0 10px color-mix(in srgb, var(--pc, #42b9f5) 34%, transparent),
+    0 1px 4px rgba(0, 0, 0, 0.5);
 }
 
 .port-dot.unconnected {
@@ -607,12 +774,20 @@ body {
 .port-dot.in:hover::after,
 .port-dot.ok::after {
   transform: translate(-50%, -50%) translate(var(--port-follow-x, 0), var(--port-follow-y, 0))
-    scale(1.1);
+    scale(1.16);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--pc, var(--node-port-color, #42b9f5)) 55%, transparent),
+    0 0 13px color-mix(in srgb, var(--pc, var(--node-port-color, #42b9f5)) 62%, transparent),
+    0 1px 5px rgba(0, 0, 0, 0.55);
 }
 
 /* 拖线中的兼容候选同样要显出类型色；普通 hover 仍维持节点主色。 */
 .port-dot.ok::after {
   background: var(--pc, #42b9f5);
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 0 4px var(--pc, #42b9f5),
+    0 0 12px color-mix(in srgb, var(--pc, #42b9f5) 54%, transparent);
 }
 
 .port-dot.dim {
@@ -667,7 +842,7 @@ body {
   stroke-width: 1.2px;
   stroke-linecap: round;
   stroke-linejoin: round;
-  opacity: 0.76;
+  opacity: 0.7;
 }
 
 .conn-start-ring,
@@ -694,7 +869,7 @@ body {
   stroke-linecap: round;
   stroke-dasharray: 256 744;
   stroke-dashoffset: 1000;
-  opacity: 0.88;
+  opacity: 0.7;
   filter: drop-shadow(0 0 5px rgba(104, 236, 210, 0.58));
   animation: edge-water-flow 1.6s linear infinite;
 }

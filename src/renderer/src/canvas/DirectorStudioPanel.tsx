@@ -6,6 +6,7 @@ import { useValue, type Editor, type TLShapeId } from 'tldraw'
 import { countIncomingConnections, gatherUpstreamJson, gatherUpstreamMediaList } from './graph'
 import { markUndoPoint } from './history'
 import { Icon } from '../components/Icon'
+import { AppSelect } from '../components/AppSelect'
 import {
   createDirectorId,
   createDirectorPublishRecord,
@@ -719,7 +720,7 @@ export function DirectorStudioPanel({
             <button
               onClick={() => void buildLocalWhitebox()}
               disabled={generatingSpace}
-              title="依据最多三张真实连线参考图建立本地白模"
+              aria-label="依据最多三张真实连线参考图建立本地白模"
             >
               <Icon name="grid" size={14} />{' '}
               {generatingSpace
@@ -731,14 +732,14 @@ export function DirectorStudioPanel({
             <button
               onClick={() => void buildImageDepth()}
               disabled={generatingSpace}
-              title="用首张真实连线图片建立本地 2.5D 视差空间"
+              aria-label="用首张真实连线图片建立本地 2.5D 视差空间"
             >
               <Icon name="image" size={14} /> 图片视差
             </button>
             <button
               onClick={syncInputs}
               disabled={wiredInputCount === 0}
-              title={
+              aria-label={
                 wiredInputCount === 0
                   ? '分镜、场景参考图、机位参数三个输入端口都没有连线，连上之后才能同步'
                   : '把已连线的上游输入同步进本工程（会替换当前镜头列表）'
@@ -750,14 +751,14 @@ export function DirectorStudioPanel({
             <button
               aria-pressed={advancedMode}
               onClick={() => setAdvancedMode((value) => !value)}
-              title="显示或隐藏数值、关键帧等高级参数"
+              aria-label="显示或隐藏数值、关键帧等高级参数"
             >
               <Icon name="settings" size={14} /> {advancedMode ? '简洁模式' : '高级设置'}
             </button>
             <button
               onClick={() => void publishFrame()}
               disabled={publishing !== null}
-              title="发布当前预演帧"
+              aria-label="发布当前预演帧"
             >
               <Icon name="image" size={14} />{' '}
               {publishing === 'frame'
@@ -769,7 +770,7 @@ export function DirectorStudioPanel({
             <button
               onClick={() => void publishVideo()}
               disabled={publishing !== null}
-              title="导出当前镜头 WebM"
+              aria-label="导出当前镜头 WebM"
             >
               <Icon name="video" size={14} />{' '}
               {publishing === 'video'
@@ -782,7 +783,7 @@ export function DirectorStudioPanel({
               <button
                 onClick={() => void publishSequence()}
                 disabled={publishing !== null}
-                title="按时间轴硬切导出所有镜头的 3D 白模预演"
+                aria-label="按时间轴硬切导出所有镜头的 3D 白模预演"
               >
                 <Icon name="workflow" size={14} />{' '}
                 {publishing === 'sequence'
@@ -791,7 +792,7 @@ export function DirectorStudioPanel({
               </button>
             )}
             {(publishing === 'video' || publishing === 'sequence') && viewportMode === '3d' && (
-              <button onClick={() => videoAbortRef.current?.abort()} title="取消 3D 视频导出">
+              <button onClick={() => videoAbortRef.current?.abort()} aria-label="取消 3D 视频导出">
                 取消
               </button>
             )}
@@ -800,7 +801,6 @@ export function DirectorStudioPanel({
               aria-label="切换镜头列表"
               aria-pressed={mobilePanel === 'shots'}
               onClick={() => setMobilePanel((panel) => (panel === 'shots' ? null : 'shots'))}
-              title="镜头列表"
             >
               <Icon name="minimap" size={15} /> 镜头
             </button>
@@ -811,11 +811,10 @@ export function DirectorStudioPanel({
               onClick={() =>
                 setMobilePanel((panel) => (panel === 'inspector' ? null : 'inspector'))
               }
-              title="镜头属性"
             >
               <Icon name="settings" size={15} /> 属性
             </button>
-            <button className="director-close" onClick={onClose} title="关闭 3D 预演台" aria-label="关闭 3D 预演台">
+            <button className="director-close" onClick={onClose} aria-label="关闭 3D 预演台">
               <Icon name="close" size={17} />
             </button>
           </div>
@@ -824,7 +823,7 @@ export function DirectorStudioPanel({
           <aside className="director-left-panel">
             <div className="director-panel-head">
               <strong>镜头</strong>
-              <button onClick={addShot} title="新增镜头" aria-label="新增镜头">
+              <button onClick={addShot} aria-label="新增镜头">
                 <Icon name="add" size={15} />
               </button>
             </div>
@@ -854,17 +853,17 @@ export function DirectorStudioPanel({
                   </button>
                   {item.id === shot.id && (
                     <div className="director-shot-actions">
-                      <button disabled={index === 0} onClick={() => moveShot(-1)} title="上移镜头">
+                      <button disabled={index === 0} onClick={() => moveShot(-1)} aria-label="上移镜头">
                         上移
                       </button>
                       <button
                         disabled={index === project.shots.length - 1}
                         onClick={() => moveShot(1)}
-                        title="下移镜头"
+                        aria-label="下移镜头"
                       >
                         下移
                       </button>
-                      <button onClick={deleteShot} title="删除当前镜头">
+                      <button onClick={deleteShot} aria-label="删除当前镜头">
                         删除
                       </button>
                     </div>
@@ -883,14 +882,14 @@ export function DirectorStudioPanel({
                 <button
                   className={transformMode === 'translate' ? 'active' : ''}
                   onClick={() => setTransformMode('translate')}
-                  title="移动选中人物（G）"
+                  aria-label="移动选中人物（G）"
                 >
                   G 移动
                 </button>
                 <button
                   className={transformMode === 'rotate' ? 'active' : ''}
                   onClick={() => setTransformMode('rotate')}
-                  title="旋转选中人物（R）"
+                  aria-label="旋转选中人物（R）"
                 >
                   R 旋转
                 </button>
@@ -910,11 +909,11 @@ export function DirectorStudioPanel({
                     patchShot({ actors: [...shot.actors, actor] })
                     setSelectedActorId(actor.id)
                   }}
-                  title="添加白模人物"
+                  aria-label="添加白模人物"
                 >
                   <Icon name="add" size={13} /> 人物
                 </button>
-                <button onClick={alignCameraToEditorView} title="将拍摄机位匹配为当前观察角度">
+                <button onClick={alignCameraToEditorView} aria-label="将拍摄机位匹配为当前观察角度">
                   <Icon name="target" size={13} /> 对准视角
                 </button>
               </span>
@@ -981,7 +980,7 @@ export function DirectorStudioPanel({
           <aside className="director-inspector">
             <div className="director-panel-head">
               <strong>属性</strong>
-              <button onClick={duplicateShot} title="复制当前镜头" aria-label="复制当前镜头">
+              <button onClick={duplicateShot} aria-label="复制当前镜头">
                 <Icon name="copy" size={14} />
               </button>
             </div>
@@ -1100,7 +1099,7 @@ export function DirectorStudioPanel({
               )}
               <label>
                 画幅
-                <select
+                <AppSelect
                   value={shot.camera.aspectRatio}
                   onChange={(event) =>
                     patchCamera({
@@ -1112,7 +1111,7 @@ export function DirectorStudioPanel({
                   <option>9:16</option>
                   <option>4:3</option>
                   <option>3:4</option>
-                </select>
+                </AppSelect>
               </label>
               <label>
                 时长（秒，{DIRECTOR_DURATION_RANGE_SEC[0]}–{DIRECTOR_DURATION_RANGE_SEC[1]}）
@@ -1134,8 +1133,8 @@ export function DirectorStudioPanel({
               {advancedMode && (
                 <label>
                   帧率
-                  <select
-                    value={shot.camera.fps}
+                  <AppSelect
+                    value={String(shot.camera.fps)}
                     onChange={(event) =>
                       patchCamera({ fps: Number(event.target.value) as DirectorCamera['fps'] })
                     }
@@ -1143,7 +1142,7 @@ export function DirectorStudioPanel({
                     <option value="24">24 fps</option>
                     <option value="25">25 fps</option>
                     <option value="30">30 fps</option>
-                  </select>
+                  </AppSelect>
                 </label>
               )}
             </div>
@@ -1226,7 +1225,7 @@ export function DirectorStudioPanel({
                       }
                     />
                     {viewportMode === '2d' && (
-                      <select
+                      <AppSelect
                         value={actor.pose}
                         aria-label={`${actor.name} 姿态`}
                         onChange={(event) =>
@@ -1238,7 +1237,7 @@ export function DirectorStudioPanel({
                         <option>坐姿</option>
                         <option>招手</option>
                         <option>奔跑</option>
-                      </select>
+                      </AppSelect>
                     )}
                   </div>
                   <div className="director-actor-transform">
@@ -1311,7 +1310,7 @@ export function DirectorStudioPanel({
                     <button
                       className="director-remove-actor"
                       onClick={() => removeActor(actor.id)}
-                      title="移除角色"
+                      aria-label="移除角色"
                     >
                       移除
                     </button>
@@ -1387,7 +1386,6 @@ export function DirectorStudioPanel({
               playbackStartedAtRef.current = performance.now() - startTime * 1000
               setIsPlaying(true)
             }}
-            title={isPlaying ? '暂停预演' : '播放预演'}
             aria-label={isPlaying ? '暂停预演' : '播放预演'}
           >
             <Icon name="play" size={14} />

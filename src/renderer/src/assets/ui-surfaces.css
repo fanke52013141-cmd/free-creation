@@ -42,6 +42,24 @@
   color: #1d2a34;
 }
 
+.canvas-theme-light .node-seq {
+  border-color: color-mix(in srgb, var(--node-accent, var(--brand)) 48%, transparent);
+  background: color-mix(in srgb, var(--node-accent, var(--brand)) 11%, #fffdfa);
+  color: color-mix(in srgb, var(--node-accent, var(--brand)) 78%, #17232d);
+}
+
+.canvas-theme-light .node-card-wrap.is-selected::after {
+  border-color: color-mix(in srgb, var(--node-accent, var(--brand)) 78%, #17232d);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--node-accent, var(--brand)) 18%, transparent),
+    0 0 18px color-mix(in srgb, var(--node-accent, var(--brand)) 15%, transparent);
+}
+
+.canvas-theme-light .node-card-wrap:hover .node-info-btn,
+.canvas-theme-light .node-card-wrap.is-selected .node-info-btn {
+  color: color-mix(in srgb, var(--node-accent, var(--brand)) 82%, #17232d);
+}
+
 .canvas-theme-light .node-card textarea,
 .canvas-theme-light .node-card input,
 .canvas-theme-light .node-card select,
@@ -49,11 +67,23 @@
   background: #ffffff;
 }
 
-/* 浅色主题下的端口：仍是类型色实心圆点，不做渐变/内阴影。 */
+/* 浅色主题沿用相同的端口环与柔光，端口颜色仍来自输入输出契约类型。 */
 .canvas-theme-light .port-dot::after {
+  background: var(--node-port-color, var(--pc, #42b9f5));
+  border-color: color-mix(in srgb, var(--card) 90%, white);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--node-port-color, var(--pc, #42b9f5)) 28%, transparent),
+    0 0 8px color-mix(in srgb, var(--node-port-color, var(--pc, #42b9f5)) 22%, transparent),
+    0 1px 3px rgba(35, 45, 53, 0.22);
+}
+
+.canvas-theme-light .port-dot.connected::after,
+.canvas-theme-light .port-dot.ok::after {
   background: var(--pc, #42b9f5);
-  border: none;
-  box-shadow: none;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--pc, #42b9f5) 38%, transparent),
+    0 0 10px color-mix(in srgb, var(--pc, #42b9f5) 34%, transparent),
+    0 1px 3px rgba(35, 45, 53, 0.22);
 }
 
 .canvas-theme-light .node-media-actions,
@@ -787,6 +817,297 @@
   width: 30px;
   height: 30px;
   margin-left: 0;
+  border-radius: 9px;
+  color: #a5b0c0;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+/* Toolbar islands follow the supplied dark glass toolbar reference. */
+.canvas-topbar {
+  gap: 12px;
+  min-height: 62px;
+  padding: 8px 14px;
+  background: #15191f;
+}
+
+.engine-controls,
+.topbar-actions {
+  min-height: 38px;
+  padding: 3px;
+  gap: 4px;
+  border: 1px solid rgba(148, 163, 184, 0.17);
+  border-radius: 12px;
+  background: rgba(17, 22, 33, 0.84);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.035), 0 5px 14px rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(16px);
+}
+
+.undo-redo-group {
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.undo-redo-btn,
+.engine-controls .run-btn.search-trigger {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: #a5b0c0;
+}
+
+.undo-redo-btn:hover:not(:disabled),
+.engine-controls .run-btn.search-trigger:hover {
+  border-color: rgba(148, 163, 184, 0.16);
+  color: #f1f5f9;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.engine-controls .run-btn:not(.search-trigger) {
+  min-height: 32px;
+  margin: 0 0 0 3px;
+  padding: 0 16px;
+  border-radius: 9px;
+  background: linear-gradient(120deg, #39bdf8, #50a9e8);
+  box-shadow: 0 7px 20px rgba(37, 163, 232, 0.22), inset 0 1px rgba(255, 255, 255, 0.22);
+  font-size: 13px;
+}
+
+.engine-controls .run-btn:not(.search-trigger):hover {
+  background: linear-gradient(120deg, #57c8fb, #66b5ee);
+}
+
+.engine-controls .run-btn.running {
+  background: linear-gradient(120deg, #ef6269, #d9434d);
+}
+
+.topbar-actions {
+  gap: 4px;
+  margin-left: 0;
+}
+
+.topbar-shortcut:hover {
+  border-color: rgba(56, 189, 248, 0.42);
+  color: #e6f7ff;
+  background: rgba(56, 189, 248, 0.09);
+}
+
+.canvas-transfer-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 30px;
+  padding: 2px;
+  border: 0;
+  border-radius: 9px;
+  background: rgba(10, 14, 22, 0.52);
+}
+
+.canvas-transfer-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 7px;
+  color: #aeb9c8;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 560;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.canvas-transfer-button:hover:not(:disabled) {
+  color: #f3f7fb;
+  background: rgba(255, 255, 255, 0.065);
+}
+
+.canvas-transfer-button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.canvas-import-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(3, 6, 11, 0.67);
+  backdrop-filter: blur(7px);
+}
+
+.canvas-import-dialog {
+  width: min(480px, 100%);
+  padding: 22px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 20px;
+  color: #e7edf5;
+  background: linear-gradient(155deg, #151b28, #0e121c 72%);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.48), inset 0 1px rgba(255, 255, 255, 0.045);
+}
+
+.canvas-import-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.canvas-import-heading h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+}
+
+.canvas-import-heading p {
+  margin: 7px 0 0;
+  color: #93a1b3;
+  font-size: 12px;
+}
+
+.canvas-import-close {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgba(148, 163, 184, 0.13);
+  border-radius: 9px;
+  color: #aab5c3;
+  background: rgba(255, 255, 255, 0.035);
+  cursor: pointer;
+}
+
+.canvas-import-options {
+  display: grid;
+  gap: 9px;
+}
+
+.canvas-import-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 13px 14px;
+  border: 1px solid rgba(148, 163, 184, 0.13);
+  border-radius: 13px;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.025);
+  text-align: left;
+  cursor: pointer;
+}
+
+.canvas-import-option.selected {
+  border-color: rgba(56, 189, 248, 0.66);
+  background: rgba(14, 165, 233, 0.09);
+  box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.12);
+}
+
+.canvas-import-radio {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  place-items: center;
+  margin-top: 2px;
+  border: 1px solid #657489;
+  border-radius: 50%;
+}
+
+.canvas-import-option.selected .canvas-import-radio {
+  border-color: #38bdf8;
+}
+
+.canvas-import-option.selected .canvas-import-radio::after {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  content: '';
+  background: #38bdf8;
+}
+
+.canvas-import-option-copy {
+  display: grid;
+  gap: 5px;
+}
+
+.canvas-import-option-copy strong {
+  font-size: 13px;
+  font-weight: 620;
+}
+
+.canvas-import-option-copy small {
+  color: #97a5b5;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.canvas-import-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  margin-top: 20px;
+}
+
+.canvas-import-cancel,
+.canvas-import-confirm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 13px;
+  border: 1px solid rgba(148, 163, 184, 0.17);
+  border-radius: 10px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 580;
+  cursor: pointer;
+}
+
+.canvas-import-cancel {
+  color: #b7c2d0;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.canvas-import-confirm {
+  border-color: rgba(56, 189, 248, 0.48);
+  color: #f1faff;
+  background: linear-gradient(115deg, #159ad9, #168abf);
+  box-shadow: 0 5px 16px rgba(14, 165, 233, 0.19);
+}
+
+@media (max-width: 900px) {
+  .engine-controls,
+  .topbar-actions {
+    gap: 4px;
+    padding: 5px;
+    border-radius: 16px;
+  }
+
+  .engine-controls .run-btn:not(.search-trigger) {
+    padding-inline: 13px;
+  }
+
+  .canvas-transfer-button {
+    min-width: 26px;
+    padding: 0;
+  }
+}
+
+/* The product uses surfaces and spacing to express hierarchy; buttons never add a border. */
+button {
+  border: 0 !important;
 }
 
 .side-panel,
@@ -1569,6 +1890,8 @@
 .node-icon {
   width: 20px;
   height: 20px;
+  opacity: 1;
+  filter: none;
 }
 
 .node-icon svg {
@@ -1584,6 +1907,10 @@
 .node-info-btn {
   width: 22px;
   height: 22px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--txt-dim, #8b98a7);
+  opacity: 0.72;
 }
 
 .node-info-btn svg {
@@ -1591,15 +1918,19 @@
   height: 16px;
 }
 
-/* 单节点运行是轻量就地动作：只保留方向三角，不制造第二个按钮框。 */
+/* 节点选中属于卡片状态，右上角动作保持中性，仅承担图标操作。 */
 .node-run-btn,
 .canvas-theme-light .node-run-btn {
   width: 22px;
   height: 22px;
-  border: 0;
-  border-radius: 0;
+  border-radius: 6px;
   background: transparent;
-  color: #8bdcff;
+  box-shadow: none;
+  color: var(--txt-dim, #8b98a7);
+  opacity: 0.72;
+  transition:
+    color 140ms ease,
+    opacity 140ms ease;
 }
 
 .node-run-btn svg {
@@ -1607,12 +1938,44 @@
   height: 16px;
 }
 
+.node-info-btn:hover,
 .node-run-btn:hover:not(:disabled) {
-  border: 0;
   background: transparent;
-  color: #e8f9ff;
-  filter: drop-shadow(0 0 5px rgba(105, 220, 255, 0.38));
-  transform: translateY(-1px) scale(1.08);
+  box-shadow: none;
+  color: var(--txt, #e5edf5);
+  opacity: 1;
+  transform: none;
+}
+
+/* Selecting a card must not make its header actions look selected. */
+.node-card-wrap.is-selected .node-info-btn,
+.node-card-wrap.is-selected .node-run-btn:not(:disabled),
+.canvas-theme-light .node-card-wrap.is-selected .node-info-btn,
+.canvas-theme-light .node-card-wrap.is-selected .node-run-btn:not(:disabled) {
+  background: transparent;
+  box-shadow: none;
+  color: var(--txt-dim, #8b98a7);
+  opacity: 0.72;
+  transform: none;
+}
+
+/* The explanation action reacts only to its own hover, never to card hover. */
+.node-card-wrap:hover .node-info-btn,
+.canvas-theme-light .node-card-wrap:hover .node-info-btn {
+  background: transparent;
+  box-shadow: none;
+  color: var(--txt-dim, #8b98a7);
+  opacity: 0.72;
+}
+
+.node-card-wrap:hover .node-info-btn:hover,
+.node-card-wrap.is-selected .node-info-btn:hover,
+.canvas-theme-light .node-card-wrap:hover .node-info-btn:hover,
+.canvas-theme-light .node-card-wrap.is-selected .node-info-btn:hover {
+  background: transparent;
+  box-shadow: none;
+  color: var(--txt, #e5edf5);
+  opacity: 1;
 }
 
 /* 运行按钮常驻：不可用时置灰而不是消失（用户 2026-09-18 拍板）。 */
@@ -1621,6 +1984,94 @@
   color: rgba(158, 173, 189, 0.42);
   filter: none;
   transform: none;
+}
+
+/* Reference port structure: 12px solid core, 28px interaction wrapper, 3s pulse,
+   and a hover radar. Shadow radii are reduced for the zoomed canvas rendering. */
+@keyframes node-port-pulse-glow {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow:
+      0 0 5px 1.5px color-mix(in srgb, var(--node-port-color, var(--pc, #42b9f5)) 75%, transparent),
+      0 0 11px 3px color-mix(in srgb, var(--node-port-color, var(--pc, #42b9f5)) 35%, transparent);
+  }
+
+  50% {
+    transform: scale(1.12);
+    box-shadow:
+      0 0 8px 2.5px color-mix(in srgb, var(--node-port-color, var(--pc, #42b9f5)) 90%, transparent),
+      0 0 16px 5px color-mix(in srgb, var(--node-port-color, var(--pc, #42b9f5)) 50%, transparent);
+  }
+}
+
+@keyframes node-port-radar-ring {
+  0% {
+    transform: translate(-50%, -50%) scale(0.7);
+    opacity: 0.9;
+  }
+
+  100% {
+    transform: translate(-50%, -50%) scale(2.6);
+    opacity: 0;
+  }
+}
+
+.port-dot,
+.port-dot.in,
+.port-dot.out,
+.port-dot.connected,
+.port-dot.ok {
+  width: 28px;
+  height: 28px;
+  opacity: 0.4 !important;
+  transition: transform 200ms ease;
+}
+
+.port-dot.in {
+  left: -30px;
+}
+
+.port-dot.out {
+  right: -30px;
+}
+
+.port-dot:hover {
+  transform: scale(1.25);
+}
+
+.port-dot::before,
+.port-dot::after {
+  content: none !important;
+  display: none !important;
+}
+
+.port-radar,
+.port-core {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.port-core {
+  background: var(--node-port-color, var(--pc, #42b9f5));
+  animation: node-port-pulse-glow 3s ease-in-out infinite;
+  box-shadow:
+    0 0 5px 1.5px color-mix(in srgb, var(--node-port-color, var(--pc, #42b9f5)) 75%, transparent),
+    0 0 11px 3px color-mix(in srgb, var(--node-port-color, var(--pc, #42b9f5)) 35%, transparent);
+}
+
+.port-radar {
+  left: 50%;
+  top: 50%;
+  background: color-mix(in srgb, var(--node-port-color, var(--pc, #42b9f5)) 50%, transparent);
+  opacity: 0;
+}
+
+.port-dot:hover .port-radar {
+  animation: node-port-radar-ring 2s cubic-bezier(0, 0.2, 0.8, 1) infinite;
 }
 
 /* 运行按钮与标题行垂直居中，并固定在节点右上角。 */
@@ -1719,13 +2170,14 @@
   color: #72cdf8;
 }
 
-/* 选中态：卡片保持悬浮，不再使用粗厚的实线外发光。 */
+/* 选中态将类型色带入卡片阴影；外圈颜色由 node-card-wrap 的节点色描边提供。 */
 .tl-shape__inner--selected .node-card,
 .node-card-wrap.is-selected .node-card {
   border: none;
   box-shadow:
     0 8px 24px -4px rgba(0, 0, 0, 0.45),
-    0 24px 48px -8px rgba(0, 0, 0, 0.55);
+    0 24px 48px -8px rgba(0, 0, 0, 0.55),
+    0 0 26px color-mix(in srgb, var(--node-accent, var(--brand)) 16%, transparent);
 }
 
 /* 选中框：大间距清爽虚线，呼吸感强，不显厚重。 */
@@ -1735,6 +2187,7 @@
   stroke-width: 1.5px !important;
   stroke-dasharray: 8 6 !important;
   stroke-linecap: round;
+  opacity: 0.6;
 }
 
 /* 文本占位语再靠近左上角，编辑态和展示态保持同一排版基线。 */
@@ -1766,33 +2219,32 @@
 
 .data-edge-visible {
   fill: none;
-  stroke-width: 1.15;
+  stroke-width: 3;
   stroke-linecap: round;
-  opacity: 0.74;
+  opacity: 0.62;
   pointer-events: none;
-  transition:
-    stroke-width 140ms ease,
-    opacity 140ms ease,
-    filter 140ms ease;
+  transition: opacity 140ms ease, filter 140ms ease;
 }
 
 /* 已连接的数据边始终显示一段沿真实数据方向移动的彩色流光。 */
 .data-edge-flow {
   fill: none;
-  stroke-width: 1.65;
+  stroke: color-mix(in srgb, currentColor 58%, white);
+  stroke-width: 4.5;
   stroke-linecap: round;
-  stroke-dasharray: 256 744;
+  /* pathLength=1000：流动段占整条连接路径的 1/6，余下 5/6 为间隔。 */
+  stroke-dasharray: 166.667 833.333;
   stroke-dashoffset: 1000;
-  opacity: 0.98;
+  opacity: 0.96;
   pointer-events: none;
-  filter: drop-shadow(0 0 5px rgba(104, 236, 210, 0.58));
-  animation: edge-water-flow 1.85s linear infinite;
+  filter: drop-shadow(0 0 7px currentColor);
+  animation: edge-water-flow 1.35s linear infinite;
 }
 
-/* 追溯线只表达“由该操作产生”，不具备可运行的数据流含义；它比数据线更细更淡。 */
+/* 追溯线表达“由该操作产生”，不参与执行，但保持来源色与流向动画。 */
 .artifact-provenance-edge {
-  stroke-width: 1.2;
-  opacity: 0.52;
+  stroke-width: 3;
+  opacity: 0.62;
 }
 
 /* 命中路径不再拦截 DOM 指针事件：14px 描边宽度仅作为 isPointInStroke 的几何
@@ -1806,14 +2258,213 @@
 }
 
 .data-edge.is-hovered .data-edge-visible {
-  opacity: 0.98;
-  stroke-width: 1.35;
+  opacity: 0.68;
+  stroke-width: 3.8;
 }
 
 .data-edge.is-selected .data-edge-visible {
-  stroke-width: 1.55;
-  opacity: 1;
-  filter: drop-shadow(0 0 5px rgb(138 111 255 / 45%));
+  stroke-width: 4.1;
+  opacity: 0.72;
+  filter: none;
+}
+
+.artifact-provenance-flow {
+  pointer-events: none;
+}
+
+/* 裁剪空状态按参考图排列：绿色工具图标、说明和居中的完整操作按钮。 */
+.node-card.type-image-crop .crop-empty {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 15px 16px;
+  gap: 0;
+  color: #4edea3;
+}
+
+.node-card.type-image-crop .crop-empty > svg {
+  box-sizing: border-box;
+  width: 88px;
+  height: 88px;
+  margin-bottom: 15px;
+  padding: 22px;
+  border: 1px solid rgba(170, 187, 194, 0.16);
+  border-radius: 20px;
+  color: #4edea3;
+  background: linear-gradient(180deg, #2b3039, #22262f);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.08), 0 12px 24px rgba(0, 0, 0, 0.28);
+}
+
+.node-card.type-image-crop .crop-empty > span:first-of-type {
+  color: #e9edf2;
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.node-card.type-image-crop .crop-empty .node-wiring {
+  margin-top: 4px;
+  font-size: 10px;
+}
+
+.node-card.type-image-crop .crop-empty > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: min(200px, 100%);
+  min-height: 36px;
+  margin-top: 18px;
+  border-radius: 8px;
+  color: #cbd3dc;
+  background: #2b3039;
+  box-shadow: inset 0 0 0 1px rgba(170, 187, 194, 0.16), 0 2px 8px rgba(0, 0, 0, 0.22);
+  font-size: 12px;
+  font-weight: 580;
+}
+
+.node-card.type-image-crop .crop-empty > button:hover {
+  color: #f1faf5;
+  background: #343a43;
+  box-shadow: inset 0 0 0 1px rgba(78, 222, 163, 0.42), 0 0 16px rgba(78, 222, 163, 0.18);
+}
+
+.node-card.type-image-crop .crop-empty-chevron {
+  color: #919da7;
+  font-size: 20px;
+  line-height: 0.7;
+}
+
+/* 图片裁剪已连接状态：比例、预览、裁剪框和操作形成一块紧凑工作区。 */
+.node-card.type-image-crop .crop-inline-workbench {
+  gap: 8px;
+  padding: 10px;
+  background: linear-gradient(180deg, rgba(22, 163, 74, 0.045), transparent 42%);
+}
+
+.node-card.type-image-crop .crop-inline-toolbar {
+  gap: 5px;
+  padding: 2px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.node-card.type-image-crop .crop-inline-toolbar button {
+  height: 24px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  color: #98a5b4;
+  background: transparent;
+}
+
+.node-card.type-image-crop .crop-inline-toolbar button.active {
+  color: #d9fbe5;
+  background: rgba(34, 197, 94, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(74, 222, 128, 0.24);
+}
+
+.node-card.type-image-crop .crop-inline-preview {
+  border: 0;
+  border-radius: 10px;
+  background: #0c1114;
+  box-shadow: inset 0 0 0 1px rgba(134, 239, 172, 0.12);
+}
+
+.node-card.type-image-crop .crop-inline-selection {
+  border-color: #86efac;
+  box-shadow: 0 0 0 999px rgba(3, 9, 6, 0.48), 0 0 12px rgba(74, 222, 128, 0.34);
+}
+
+.node-card.type-image-crop .crop-inline-handle {
+  width: 8px;
+  height: 8px;
+  border: 1px solid #dcfce7;
+  background: #22c55e;
+  box-shadow: 0 0 0 2px rgba(6, 30, 15, 0.8);
+}
+
+.node-card.type-image-crop .crop-inline-actions {
+  gap: 5px;
+}
+
+.node-card.type-image-crop .crop-inline-actions button {
+  min-height: 28px;
+  border-radius: 7px;
+}
+
+/* 文件节点沿用裁剪节点的正文工作区层级，不改变外层卡片、标题或端口。 */
+.node-card.type-file .file-asset,
+.node-card.type-file .file-asset-empty {
+  gap: 8px;
+  padding: 10px;
+  background: linear-gradient(180deg, rgba(6, 182, 212, 0.055), transparent 42%);
+}
+
+.node-card.type-file .file-asset-head {
+  gap: 9px;
+  padding: 7px 8px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.node-card.type-file .file-asset-icon {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  color: #a5f3fc;
+  background: rgba(6, 182, 212, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(103, 232, 249, 0.2);
+}
+
+.node-card.type-file .file-asset-name {
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.node-card.type-file .file-asset-sub {
+  color: #80a8b4;
+}
+
+.node-card.type-file .file-asset-preview,
+.node-card.type-file .file-asset-binary {
+  border: 0;
+  border-radius: 10px;
+  background: #0c1114;
+  box-shadow: inset 0 0 0 1px rgba(103, 232, 249, 0.11);
+}
+
+.node-card.type-file .file-asset-preview {
+  padding: 10px;
+  color: #bfdae0;
+}
+
+.node-card.type-file .file-asset-binary > svg {
+  color: #67e8f9;
+}
+
+.node-card.type-file .file-asset-empty {
+  justify-content: center;
+}
+
+.node-card.type-file .file-asset-empty > svg {
+  padding: 10px;
+  border: 0;
+  border-radius: 11px;
+  color: #a5f3fc;
+  background: rgba(6, 182, 212, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(103, 232, 249, 0.2);
+}
+
+.node-card.type-file .file-import-button,
+.node-card.type-file .node-media-next-actions button {
+  min-height: 28px;
+  border-radius: 7px;
+}
+
+.node-card.type-file .file-import-button {
+  color: #d9fbff;
+  background: rgba(6, 182, 212, 0.18);
 }
 
 /* 连线上的精确删除入口：始终紧贴鼠标与线的交点，不影响画布其他命中。 */
@@ -2805,11 +3456,15 @@
   --overview-state: #0e7490;
 }
 
-.canvas-theme-light #contract-tabpanel-overview .contract-overview-stat-status[data-exec='running'] {
+.canvas-theme-light
+  #contract-tabpanel-overview
+  .contract-overview-stat-status[data-exec='running'] {
   --overview-state: #a16207;
 }
 
-.canvas-theme-light #contract-tabpanel-overview .contract-overview-stat-status[data-exec='success'] {
+.canvas-theme-light
+  #contract-tabpanel-overview
+  .contract-overview-stat-status[data-exec='success'] {
   --overview-state: #047857;
 }
 
@@ -2834,6 +3489,179 @@
     min-height: 64px;
     padding: 10px;
   }
+}
+
+/* Apply the crop-node empty-state hierarchy to every other asset node and
+   provider-missing state, while leaving each node's active workbench intact. */
+.node-card:not(.type-image-crop) :is(.asset-empty, .crop-empty) {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  gap: 0;
+  padding: 14px 16px;
+  color: color-mix(in srgb, var(--node-accent, #42b9f5) 68%, white);
+}
+
+.node-card:not(.type-image-crop) :is(.asset-empty, .crop-empty) > svg {
+  box-sizing: border-box;
+  width: 76px;
+  height: 76px;
+  margin-bottom: 13px;
+  padding: 19px;
+  border: 1px solid color-mix(in srgb, var(--node-accent, #42b9f5) 22%, transparent);
+  border-radius: 18px;
+  color: color-mix(in srgb, var(--node-accent, #42b9f5) 64%, white);
+  background: linear-gradient(180deg, #2b3039, #22262f);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.08),
+    0 12px 24px rgba(0, 0, 0, 0.22);
+}
+
+.node-card:not(.type-image-crop) :is(.asset-empty, .crop-empty) > span:not(.node-wiring) {
+  color: #e9edf2;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.node-card:not(.type-image-crop) :is(.asset-empty, .crop-empty) > small {
+  max-width: 250px;
+  margin-top: 7px;
+  color: #aab3bd;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.node-card:not(.type-image-crop) :is(.asset-empty, .crop-empty) > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: min(200px, 100%);
+  min-height: 36px;
+  margin-top: 16px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  color: #cbd3dc;
+  background: #2b3039;
+  box-shadow:
+    inset 0 0 0 1px rgba(170, 187, 194, 0.16),
+    0 2px 8px rgba(0, 0, 0, 0.22);
+  font-size: 12px;
+  font-weight: 580;
+}
+
+.node-card:not(.type-image-crop) :is(.asset-empty, .crop-empty) > button:hover:not(:disabled) {
+  color: #f1f5f8;
+  background: #343a43;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--node-accent, #42b9f5) 48%, transparent),
+    0 0 16px color-mix(in srgb, var(--node-accent, #42b9f5) 18%, transparent);
+}
+
+.node-card.type-file .file-asset-empty {
+  gap: 0;
+  padding: 14px 16px;
+  background: transparent;
+}
+
+/* Missing-model prompts use the same icon / title / detail / action rhythm. */
+.node-card .gen-empty {
+  gap: 0;
+  padding: 14px 16px;
+  color: #e9edf2;
+  text-align: center;
+}
+
+.node-card .gen-empty > svg {
+  box-sizing: border-box;
+  width: 68px;
+  height: 68px;
+  margin-bottom: 12px;
+  padding: 17px;
+  border: 1px solid color-mix(in srgb, var(--node-accent, #42b9f5) 22%, transparent);
+  border-radius: 17px;
+  color: color-mix(in srgb, var(--node-accent, #42b9f5) 64%, white);
+  background: linear-gradient(180deg, #2b3039, #22262f);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.08), 0 10px 20px rgba(0, 0, 0, 0.2);
+}
+
+.node-card .gen-empty > span:first-of-type {
+  color: #e9edf2;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.node-card .gen-empty-presets {
+  margin-top: 7px;
+  color: #aab3bd;
+  font-size: 11px;
+  line-height: 1.45;
+  opacity: 1;
+}
+
+.node-card .gen-empty > button {
+  width: min(200px, 100%);
+  min-height: 36px;
+  margin-top: 15px;
+  border: 0;
+  border-radius: 8px;
+  color: #cbd3dc;
+  background: #2b3039;
+  box-shadow: inset 0 0 0 1px rgba(170, 187, 194, 0.16), 0 2px 8px rgba(0, 0, 0, 0.22);
+}
+
+.node-card .gen-empty > button:hover:not(:disabled) {
+  color: #f1f5f8;
+  background: #343a43;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--node-accent, #42b9f5) 48%, transparent),
+    0 0 16px color-mix(in srgb, var(--node-accent, #42b9f5) 18%, transparent);
+}
+
+/* The audio upload tile is itself the action, so retain its click target and
+   give it the same accent tile and low-contrast surface. */
+.node-card .audio-upload-btn {
+  gap: 8px;
+  min-height: 148px;
+  border: 1px solid rgba(170, 187, 194, 0.16);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.node-card .audio-upload-icon {
+  box-sizing: border-box;
+  width: 68px;
+  height: 68px;
+  margin-bottom: 5px;
+  border: 1px solid color-mix(in srgb, var(--node-accent, #42b9f5) 22%, transparent);
+  border-radius: 17px;
+  color: color-mix(in srgb, var(--node-accent, #42b9f5) 64%, white);
+  background: linear-gradient(180deg, #2b3039, #22262f);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.08), 0 10px 20px rgba(0, 0, 0, 0.2);
+}
+
+.node-card .audio-upload-btn:hover {
+  border-color: color-mix(in srgb, var(--node-accent, #42b9f5) 48%, transparent);
+  background: color-mix(in srgb, var(--node-accent, #42b9f5) 5%, transparent);
+  color: color-mix(in srgb, var(--node-accent, #42b9f5) 64%, white);
+}
+
+.node-card .audio-upload-hint {
+  color: #aab3bd;
+}
+
+/* Keep configuration controls in every node on that node's own accent color. */
+.node-card :is(input, textarea, select, .app-select-trigger):focus {
+  border-color: color-mix(in srgb, var(--node-accent, #42b9f5) 70%, white);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--node-accent, #42b9f5) 19%, transparent);
+}
+
+.node-card :is(button, a, [role='button'], [contenteditable='true']):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--node-accent, #42b9f5) 72%, white);
+  outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2981,8 +3809,8 @@
   gap: 9px;
 }
 
-.node-card.type-tts .tts-minimax-options :is(.gen-select, .gen-input),
-.node-card.type-tts .tts-output-options .gen-select {
+.node-card.type-tts .tts-minimax-options .gen-input,
+.node-card.type-tts .tts-output-options .gen-input {
   box-sizing: border-box;
   min-height: 38px;
   padding: 9px 11px;
@@ -2996,8 +3824,15 @@
     box-shadow 180ms ease;
 }
 
-.node-card.type-tts .tts-minimax-options :is(.gen-select, .gen-input):focus,
-.node-card.type-tts .tts-output-options .gen-select:focus {
+.node-card.type-tts .tts-minimax-options .app-select-trigger,
+.node-card.type-tts .tts-output-options .app-select-trigger {
+  border-color: var(--tts-edge);
+  background-color: var(--tts-input-surface);
+  color: var(--tts-text);
+}
+
+.node-card.type-tts .tts-minimax-options .gen-input:focus,
+.node-card.type-tts .tts-output-options .gen-input:focus {
   border-color: color-mix(in srgb, var(--tts-accent) 64%, transparent);
   box-shadow: 0 0 10px color-mix(in srgb, var(--tts-accent) 12%, transparent);
   outline: none;
@@ -3136,7 +3971,7 @@
   background: rgba(247, 249, 252, 0.76);
 }
 
-.canvas-theme-light .node-card.type-tts :is(.gen-textarea.tts, .gen-select, .gen-input) {
+.canvas-theme-light .node-card.type-tts :is(.gen-textarea.tts, .gen-input) {
   border-color: var(--tts-edge);
   background-color: var(--tts-input-surface);
   color: var(--tts-text);
@@ -3224,5 +4059,1150 @@
   .node-contract-panel .contract-scroll {
     padding-top: 16px;
     padding-bottom: 18px;
+  }
+}
+
+/* ── Node body refresh: content surfaces only ──────────────────────────────
+   Keep the shared card/header/ports/actions untouched.  Each body gets clearer
+   input → work area → result hierarchy, with the node's declared accent. */
+.node-card .node-empty-state {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  text-align: center;
+  pointer-events: none;
+}
+
+.node-card .node-empty-state > strong {
+  color: #e7edf4;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.node-card .node-empty-state > small {
+  max-width: 244px;
+  color: #98a5b4;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.node-card .node-empty-icon {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  margin-bottom: 3px;
+  place-items: center;
+  border: 1px solid rgba(170, 187, 194, 0.16);
+  border-radius: 15px;
+  color: color-mix(in srgb, var(--node-accent, #42b9f5) 75%, white);
+  background: linear-gradient(180deg, #2b3039, #22262f);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.08), 0 12px 24px rgba(0, 0, 0, 0.22);
+}
+
+.node-card.type-text .node-text {
+  box-sizing: border-box;
+  display: grid;
+  align-content: start;
+  min-height: 100%;
+  padding: 11px;
+  border: 1px solid color-mix(in srgb, var(--node-accent) 16%, transparent);
+  border-radius: 10px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--node-accent) 4%, #20242d), #20242d 64%);
+}
+
+.node-card.type-text .text-empty-state {
+  min-height: 100%;
+  align-content: center;
+}
+
+.node-card.type-text .node-text-body {
+  color: #e2e8ef;
+  line-height: 1.65;
+}
+
+.node-card:is(.type-json, .type-code) .node-hint.center {
+  box-sizing: border-box;
+  display: grid;
+  min-height: 122px;
+  place-items: center;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--node-accent) 17%, transparent);
+  border-radius: 10px;
+  background: linear-gradient(155deg, color-mix(in srgb, var(--node-accent) 5%, #222630), #20242d 70%);
+}
+
+.node-card:is(.type-json, .type-code) .node-empty-state {
+  width: 100%;
+}
+
+.node-card.type-structured .structured-preview.is-empty {
+  display: grid;
+  place-items: center;
+  border-color: color-mix(in srgb, var(--node-accent) 24%, var(--line));
+  background: linear-gradient(155deg, color-mix(in srgb, var(--node-accent) 6%, var(--card)), var(--card) 72%);
+  font-family: inherit;
+  text-align: center;
+}
+
+.node-card.type-structured .structured-empty-state .node-empty-icon {
+  width: 48px;
+  height: 48px;
+}
+
+.node-card.type-structured .structured-empty-state > small {
+  max-width: 185px;
+}
+
+.node-card.type-storyboard .node-hint.center {
+  box-sizing: border-box;
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--node-accent) 17%, transparent);
+  border-radius: 10px;
+  background: linear-gradient(155deg, color-mix(in srgb, var(--node-accent) 5%, #222630), #20242d 72%);
+}
+
+.node-card.type-storyboard .storyboard-empty-state {
+  width: 100%;
+  gap: 4px;
+}
+
+.node-card.type-storyboard .storyboard-empty-state .node-empty-icon {
+  width: 46px;
+  height: 46px;
+  margin-bottom: 1px;
+}
+
+.node-card.type-storyboard .storyboard-empty-state > strong {
+  font-size: 12px;
+}
+
+.node-card.type-storyboard .storyboard-empty-state > small {
+  font-size: 9px;
+}
+
+.node-card.type-storyboard .storyboard-empty-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  width: min(250px, 100%);
+  margin-top: 6px;
+}
+
+.node-card.type-storyboard .storyboard-empty-actions button {
+  justify-content: center;
+  min-width: 0;
+  min-height: 30px;
+  padding: 0 7px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--node-accent) 8%, #2b3039);
+}
+
+.node-card.type-image-split .image-split-quick {
+  box-sizing: border-box;
+  gap: 7px;
+  padding: 9px;
+}
+
+.node-card.type-image-split .image-split-quick-preview {
+  border-color: color-mix(in srgb, var(--node-accent) 35%, transparent);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--node-accent) 11%, #202630), #171b23);
+}
+
+.node-card.type-image-split .image-split-quick-grid {
+  border-color: color-mix(in srgb, var(--node-accent) 24%, #3c4652);
+  background-color: #171c24;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--node-accent) 8%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--node-accent) 8%, transparent) 1px, transparent 1px),
+    radial-gradient(ellipse at center, color-mix(in srgb, var(--node-accent) 6%, #212630), #151a22 76%);
+  background-size: 24px 24px, 24px 24px, auto;
+}
+
+.node-card.type-image-split .image-split-quick-empty {
+  color: #aab5c2;
+}
+
+.node-card.type-image-split .image-split-quick-controls input {
+  border-color: color-mix(in srgb, var(--node-accent) 20%, var(--line));
+  background: #1c222b;
+}
+
+.node-card:is(.type-image-gen, .type-image-edit, .type-video) .gen-panel {
+  box-sizing: border-box;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--node-accent) 16%, transparent);
+  border-radius: 10px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--node-accent) 3%, #222630), #20242d 72%);
+}
+
+/* 生图表单与通用输入预览保持同一张卡片内的平面流式布局。
+   自然高度交给 NodeCardView 的 260/320/380/440 档位测量；到 440 后由 node-body 滚动。 */
+.node-card.type-image-gen .node-body-content {
+  flex: 0 0 auto;
+  min-height: auto;
+}
+
+.node-card.type-image-gen .gen-panel {
+  height: auto;
+  min-height: max-content;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.node-card:is(.type-image-gen, .type-image-edit, .type-video) :is(.gen-prompt, .gen-textarea) {
+  border-color: color-mix(in srgb, var(--node-accent) 22%, var(--line));
+  border-radius: 8px;
+  background: #1a1f28;
+}
+
+.node-card:is(.type-image-gen, .type-image-edit, .type-video) .gen-row {
+  gap: 6px;
+}
+
+.node-card:is(.type-image-gen, .type-image-edit, .type-video) .gen-capability-note {
+  padding: 6px 8px;
+  border-left: 2px solid color-mix(in srgb, var(--node-accent) 60%, transparent);
+  border-radius: 0 6px 6px 0;
+  background: color-mix(in srgb, var(--node-accent) 5%, transparent);
+  line-height: 1.45;
+}
+
+.node-card:is(.type-speech, .type-voice-design) .node-tts {
+  box-sizing: border-box;
+  gap: 9px;
+  padding: 9px;
+}
+
+.node-card:is(.type-speech, .type-voice-design) .tts-section {
+  gap: 7px;
+  padding: 9px;
+  border: 1px solid color-mix(in srgb, var(--node-accent) 17%, transparent);
+  border-radius: 9px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--node-accent) 4%, #242832), #20242d 78%);
+}
+
+.node-card:is(.type-speech, .type-voice-design) .tts-section-label {
+  padding-bottom: 5px;
+  border-bottom: 1px solid color-mix(in srgb, var(--node-accent) 16%, transparent);
+  color: #e5ebf2;
+}
+
+.node-card:is(.type-speech, .type-voice-design) .tts-section-label svg {
+  color: color-mix(in srgb, var(--node-accent) 78%, white);
+}
+
+.node-card.type-speech .tts-options {
+  gap: 8px;
+}
+
+.node-card.type-speech .tts-options > .opt-label {
+  flex: 0 0 38px;
+  overflow: hidden;
+  margin: 0;
+  color: #aab4c1;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-card.type-speech .tts-options > :is(.gen-select, input) {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.node-card:is(.type-speech, .type-voice-design) :is(.gen-input, .gen-textarea) {
+  border-color: color-mix(in srgb, var(--node-accent) 20%, var(--line));
+  border-radius: 7px;
+  background: #191e27;
+}
+
+.node-card.type-processor .processor-body,
+.node-card.type-iterate .iterate-body {
+  box-sizing: border-box;
+  gap: 8px;
+  padding: 9px;
+}
+
+.node-card.type-processor :is(.variable-row, .processor-mode),
+.node-card.type-iterate :is(.iterate-contract, .iterate-config, .iterate-meta) {
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--node-accent) 17%, transparent);
+  border-radius: 8px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--node-accent) 4%, #242832), #20242d 78%);
+}
+
+.node-card.type-processor .processor-mode-hint,
+.node-card.type-iterate .iterate-wiring {
+  line-height: 1.45;
+}
+
+.node-card.type-processor .processor-status,
+.node-card.type-iterate .iterate-progress-text {
+  padding: 5px 7px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--node-accent) 6%, #1b2029);
+  line-height: 1.45;
+}
+
+.node-card.type-json .json-body,
+.node-card.type-structured .structured-body,
+.node-card.type-code .code-body {
+  box-sizing: border-box;
+  gap: 8px;
+  padding: 9px;
+}
+
+.node-card.type-structured :is(.structured-preview, .json-data-card, .json-object-card) {
+  border-color: color-mix(in srgb, var(--node-accent) 23%, var(--line));
+  background-color: color-mix(in srgb, var(--node-accent) 4%, var(--card));
+}
+
+.node-card.type-structured .structured-token {
+  border-color: color-mix(in srgb, var(--node-accent) 20%, var(--line));
+}
+
+.node-card.type-director .director-node-body {
+  box-sizing: border-box;
+  gap: 9px;
+  padding: 9px;
+}
+
+.node-card.type-director .director-node-preview {
+  border: 1px solid color-mix(in srgb, var(--node-accent) 29%, transparent);
+  border-radius: 10px;
+  background: linear-gradient(150deg, color-mix(in srgb, var(--node-accent) 8%, #232832), #171b23 78%);
+}
+
+.node-card.type-director .director-node-frame {
+  border-color: color-mix(in srgb, var(--node-accent) 45%, #59616c);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--node-accent) 10%, transparent);
+}
+
+.node-card.type-director .director-node-publish {
+  border-color: color-mix(in srgb, var(--node-accent) 20%, transparent);
+  background: color-mix(in srgb, var(--node-accent) 5%, #20242d);
+}
+
+.node-card :is(.node-audio-player, .vocal-result-card, .file-asset, .video-asset-card) {
+  border-color: color-mix(in srgb, var(--node-accent) 22%, var(--line));
+  border-radius: 9px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--node-accent) 4%, var(--card)), var(--card) 75%);
+}
+
+.node-card :is(.node-media-actions, .node-media-next-actions) {
+  gap: 6px;
+  padding-top: 5px;
+}
+
+.node-card :is(.node-media-actions, .node-media-next-actions) button {
+  border-color: color-mix(in srgb, var(--node-accent) 19%, var(--line));
+}
+
+/* 文件定位/复制按钮共享 32px 方形样式；aria-label 保留给辅助技术，不显示悬浮提示。 */
+.node-media-file-actions .media-file-action-btn,
+.media-preview-actions .media-file-action-btn {
+  box-sizing: border-box;
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(51, 65, 85, 0.72);
+  border-radius: 8px;
+  background: rgba(30, 41, 59, 0.82);
+  color: #cbd5e1;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.node-media-file-actions .media-file-action-btn svg,
+.media-preview-actions .media-file-action-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.node-media-file-actions .media-file-action-btn:hover:not(:disabled),
+.media-preview-actions .media-file-action-btn:hover:not(:disabled) {
+  border-color: #475569;
+  background: rgba(51, 65, 85, 0.9);
+  color: #fff;
+}
+
+.node-media-file-actions .media-file-action-btn:first-child:active,
+.media-preview-actions .media-file-action-btn:first-child:active {
+  border-color: rgba(56, 189, 248, 0.5);
+  background: rgba(14, 165, 233, 0.18);
+  color: #38bdf8;
+}
+
+.node-media-file-actions .media-file-action-btn:last-child:active,
+.media-preview-actions .media-file-action-btn:last-child:active {
+  border-color: rgba(52, 211, 153, 0.5);
+  background: rgba(16, 185, 129, 0.18);
+  color: #34d399;
+}
+
+.canvas-theme-light .node-media-file-actions .media-file-action-btn {
+  border-color: rgba(42, 55, 67, 0.18);
+  background: rgba(255, 253, 250, 0.92);
+  color: #3d5262;
+}
+
+.canvas-theme-light .node-media-file-actions .media-file-action-btn:hover:not(:disabled) {
+  border-color: rgba(24, 143, 202, 0.45);
+  background: rgba(66, 185, 245, 0.12);
+  color: #11658e;
+}
+
+/* 图片节点精简操作条：主操作、替换、分隔线与文件操作沿用参考按钮的层级。 */
+.node-card.type-image .node-media-next-actions.image-node-action-toolbar {
+  box-sizing: border-box;
+  display: flex;
+  width: calc(100% - 12px);
+  max-width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+  margin: 6px auto 5px;
+  padding: 5px 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid rgba(71, 85, 105, 0.72);
+  border-radius: 12px;
+  background: rgba(21, 25, 36, 0.92);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(8px);
+  scrollbar-width: none;
+}
+
+.node-card.type-image .image-node-primary-actions {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.node-card.type-image .image-node-action-toolbar .image-node-action-button {
+  box-sizing: border-box;
+  display: inline-flex;
+  height: 32px;
+  min-height: 32px;
+  min-width: 0;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border: 1px solid rgba(51, 65, 85, 0.72);
+  border-radius: 8px;
+  background: rgba(30, 41, 59, 0.82);
+  color: #e2e8f0;
+  font-size: 11px;
+  font-weight: 550;
+  letter-spacing: 0;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.node-card.type-image .image-node-action-toolbar .image-node-action-video {
+  flex-grow: 1.25;
+}
+
+.node-card.type-image .image-node-action-toolbar .image-node-action-button:hover:not(:disabled) {
+  border-color: rgba(16, 185, 129, 0.45);
+  background: rgba(51, 65, 85, 0.9);
+  color: #fff;
+}
+
+.node-card.type-image .image-node-action-toolbar .image-node-action-button:active:not(:disabled) {
+  border-color: rgba(52, 211, 153, 0.5);
+  background: rgba(16, 185, 129, 0.18);
+  color: #34d399;
+}
+
+.node-card.type-image .image-node-action-toolbar .image-node-action-button:focus-visible,
+.node-card.type-image .image-node-action-toolbar .node-media-file-actions .icon-btn:focus-visible {
+  outline: 1px solid #34d399;
+  outline-offset: 1px;
+}
+
+.node-card.type-image .image-node-action-divider {
+  width: 1px;
+  height: 16px;
+  flex: 0 0 1px;
+  margin: 0 2px;
+  background: rgba(71, 85, 105, 0.85);
+}
+
+.node-card.type-image .image-node-action-toolbar .node-media-file-actions {
+  flex: 0 0 auto;
+  gap: 4px;
+  margin-left: 0;
+}
+
+.canvas-theme-light .node-card.type-image .node-media-next-actions.image-node-action-toolbar {
+  border-color: rgba(42, 55, 67, 0.2);
+  background: rgba(247, 243, 236, 0.94);
+  box-shadow: 0 8px 20px rgba(35, 45, 53, 0.14);
+}
+
+.canvas-theme-light .node-card.type-image .image-node-action-toolbar .image-node-action-button {
+  border-color: rgba(42, 55, 67, 0.18);
+  background: rgba(255, 253, 250, 0.92);
+  color: #3b5161;
+}
+
+.canvas-theme-light .node-card.type-image .image-node-action-toolbar .image-node-action-button:hover:not(:disabled) {
+  border-color: rgba(24, 143, 202, 0.45);
+  background: rgba(66, 185, 245, 0.12);
+  color: #11658e;
+}
+
+.node-card.type-ai-process .ai-process-body {
+  box-sizing: border-box;
+  gap: 9px;
+  padding: 10px;
+}
+
+.node-card.type-chat .chat-body-compact {
+  box-sizing: border-box;
+  display: grid;
+  min-height: 100%;
+  place-items: center;
+  padding: 12px;
+}
+
+.node-card.type-chat .chat-compact-model {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 42px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--node-accent) 26%, transparent);
+  border-radius: 9px;
+  background: linear-gradient(105deg, color-mix(in srgb, var(--node-accent) 9%, #252a34), #20242d 76%);
+  color: #e5ebf2;
+}
+
+.node-card.type-chat .chat-compact-model svg {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--node-accent) 82%, white);
+}
+
+.node-card.type-tts .node-tts {
+  gap: 10px;
+}
+
+.node-card.type-tts .tts-section-label {
+  padding-bottom: 5px;
+  border-bottom: 1px solid color-mix(in srgb, var(--node-accent) 15%, transparent);
+}
+
+.node-card.type-tts .tts-upload-btn {
+  border-color: color-mix(in srgb, var(--node-accent) 34%, transparent);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--node-accent) 5%, #242832), #1e232c 75%);
+}
+
+.node-card.type-tts .tts-text-section,
+.node-card.type-tts .tts-engine-section {
+  padding: 9px;
+  border: 1px solid color-mix(in srgb, var(--node-accent) 17%, transparent);
+  border-radius: 9px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--node-accent) 4%, #242832), #20242d 78%);
+}
+
+.node-card.type-tts .tts-text-section .gen-textarea.tts {
+  min-height: 56px;
+  border-color: color-mix(in srgb, var(--node-accent) 22%, var(--line));
+  border-radius: 7px;
+  background: #191e27;
+}
+
+.node-card.type-tts .tts-section-label svg {
+  color: color-mix(in srgb, var(--node-accent) 78%, white);
+}
+
+.node-card.type-voice-design .voice-id-card {
+  border-color: color-mix(in srgb, var(--node-accent) 25%, transparent);
+}
+
+.node-card.type-vocal-separate .vocal-result-card {
+  box-sizing: border-box;
+  gap: 8px;
+  padding: 9px;
+}
+
+.node-card.type-vocal-separate .vocal-result-row {
+  min-height: 36px;
+  border: 1px solid color-mix(in srgb, var(--node-accent) 18%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--node-accent) 5%, #242832);
+}
+
+.node-card.type-vocal-separate .vocal-result-row > svg {
+  color: color-mix(in srgb, var(--node-accent) 82%, white);
+}
+
+.node-card:is(.type-video-frame, .type-video-clip, .type-video-audio) .node-media-wrap {
+  gap: 7px;
+}
+
+.node-card:is(.type-video-frame, .type-video-clip, .type-video-audio) .node-media {
+  border-color: color-mix(in srgb, var(--node-accent) 26%, var(--line));
+  border-radius: 9px;
+  background: #171c24;
+}
+
+.node-card:is(.type-video-frame, .type-video-clip, .type-video-audio) .node-wiring {
+  padding: 5px 7px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--node-accent) 5%, #1b2029);
+  line-height: 1.45;
+}
+
+.node-card.type-image-crop .crop-inline-toolbar {
+  border: 1px solid color-mix(in srgb, var(--node-accent) 20%, transparent);
+  background: color-mix(in srgb, var(--node-accent) 4%, #1b2029);
+}
+
+.node-card.type-image-crop .crop-inline-preview {
+  border-color: color-mix(in srgb, var(--node-accent) 26%, #3c4652);
+  background-color: #161b23;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--node-accent) 7%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--node-accent) 7%, transparent) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.node-card.type-image-crop .crop-inline-actions button {
+  border-color: color-mix(in srgb, var(--node-accent) 22%, transparent);
+  background: color-mix(in srgb, var(--node-accent) 7%, #252a34);
+}
+
+/* Text uses the same centered icon → title → action composition as image crop. */
+.node-card.type-text .node-text {
+  box-sizing: border-box;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  justify-content: flex-start;
+  padding: 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.node-card.type-text .text-empty-state {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 100%;
+  flex: 1 0 auto;
+  align-content: center;
+  gap: 6px;
+}
+
+.node-card.type-text .text-empty-state .node-empty-icon {
+  width: 88px;
+  height: 88px;
+  margin-bottom: 7px;
+  border-radius: 20px;
+}
+
+.node-card.type-text .text-empty-state > strong {
+  font-size: 18px;
+}
+
+.node-card.type-text .text-empty-state > small {
+  font-size: 11px;
+}
+
+.node-card.type-text .text-empty-action {
+  display: inline-flex;
+  width: min(200px, 100%);
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 11px;
+  border-radius: 8px;
+  color: #cbd3dc;
+  background: #2b3039;
+  box-shadow: inset 0 0 0 1px rgba(170, 187, 194, 0.16), 0 2px 8px rgba(0, 0, 0, 0.22);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.node-card.type-text .text-empty-action:hover {
+  color: #f1faf5;
+  background: #343a43;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--node-accent) 42%, transparent),
+    0 0 14px color-mix(in srgb, var(--node-accent) 17%, transparent);
+}
+
+/* The conversation body gives the chat action its own clear entry point. */
+.node-card.type-chat .chat-body-compact {
+  box-sizing: border-box;
+  min-height: 100%;
+  padding: 10px;
+}
+
+.node-card.type-chat .chat-body-hero {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.node-card.type-chat .chat-body-icon {
+  width: 88px;
+  height: 88px;
+  margin-bottom: 3px;
+  border-radius: 19px;
+}
+
+.node-card.type-chat .chat-body-hero > strong {
+  color: #e8eaf3;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.node-card.type-chat .chat-compact-model {
+  display: inline-flex;
+  align-items: center;
+  justify-self: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: #e5ebf2;
+  background: transparent;
+  text-align: center;
+}
+
+.node-card.type-chat .chat-model-name {
+  display: block;
+  overflow: hidden;
+  min-width: 0;
+  color: #aeb6c5;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-card.type-chat .chat-model-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #8b93a5;
+}
+
+.node-card.type-chat .chat-compact-model.is-ready .chat-model-dot {
+  background: color-mix(in srgb, var(--node-accent) 78%, white);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--node-accent) 42%, transparent);
+}
+
+.node-card.type-chat .chat-open-button {
+  display: inline-flex;
+  width: min(200px, 100%);
+  min-height: 36px;
+  justify-self: center;
+  align-items: center;
+  justify-content: center;
+  margin-top: 6px;
+  border-radius: 8px;
+  color: #cbd3dc;
+  background: #2b3039;
+  box-shadow: inset 0 0 0 1px rgba(170, 187, 194, 0.16), 0 2px 8px rgba(0, 0, 0, 0.22);
+  font-size: 12px;
+  font-weight: 620;
+  cursor: pointer;
+  transition: background 140ms ease, transform 140ms ease;
+}
+
+.node-card.type-chat .chat-open-content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  line-height: 1;
+}
+
+/* Node action buttons keep labels first and place their single leading icon at the right. */
+.node-card button:not(.audio-upload-btn):not(.tts-upload-btn):has(> svg:first-child):not(:has(> svg:nth-child(2))) > svg:first-child,
+.node-contract-panel button:has(> svg:first-child):not(:has(> svg:nth-child(2))) > svg:first-child,
+.chat-dialog button:has(> svg:first-child):not(:has(> svg:nth-child(2))) > svg:first-child,
+.image-edit-workbench button:has(> svg:first-child):not(:has(> svg:nth-child(2))) > svg:first-child,
+.video-trim-workbench button:has(> svg:first-child):not(:has(> svg:nth-child(2))) > svg:first-child {
+  order: 1;
+  flex: 0 0 auto;
+}
+
+.node-card.type-chat .chat-open-button:hover {
+  color: #f1faf5;
+  background: #343a43;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--node-accent) 42%, transparent),
+    0 0 14px color-mix(in srgb, var(--node-accent) 17%, transparent);
+  transform: translateY(-1px);
+}
+
+/* AI processing keeps the same centered identity and action hierarchy as other processing nodes. */
+.node-card.type-ai-process .ai-process-body {
+  box-sizing: border-box;
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 16px;
+  overflow: auto;
+}
+
+.node-card.type-ai-process .ai-process-hero {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 4px;
+}
+
+.node-card.type-ai-process .ai-process-hero .node-empty-icon {
+  width: 88px;
+  height: 88px;
+  margin-bottom: 2px;
+  border-radius: 18px;
+}
+
+.node-card.type-ai-process .ai-process-hero > strong {
+  color: #e8eaf3;
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.node-card.type-ai-process .ai-process-config-button {
+  display: inline-flex;
+  width: min(200px, 100%);
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 8px;
+  color: #cbd3dc;
+  background: #2b3039;
+  box-shadow: inset 0 0 0 1px rgba(170, 187, 194, 0.16), 0 2px 8px rgba(0, 0, 0, 0.22);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease, transform 140ms ease;
+}
+
+.node-card.type-ai-process .ai-process-config-button svg:last-child {
+  opacity: 0.65;
+}
+
+.node-card.type-ai-process .ai-process-config-button:hover {
+  color: #f1faf5;
+  background: #343a43;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--node-accent) 42%, transparent),
+    0 0 14px color-mix(in srgb, var(--node-accent) 17%, transparent);
+  transform: translateY(-1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .node-card .node-empty-icon,
+  .node-card :is(.node-media, .node-audio-player, .director-node-preview) {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* Node entry/action buttons share the restrained surface used by “配置裁剪”. */
+.node-card.type-image-crop .crop-empty > button,
+.node-card:not(.type-image-crop) :is(.asset-empty, .crop-empty) > button,
+.node-card.type-text .text-empty-action,
+.node-card.type-chat .chat-open-button,
+.node-card.type-ai-process .ai-process-config-button,
+.node-card:is(.type-image-gen, .type-image-edit, .type-video) .gen-go {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 4px 10px;
+  border: 1px solid rgba(170, 187, 194, 0.16);
+  border-radius: 8px;
+  background: #2b3039;
+  box-shadow: inset 0 0 0 1px rgba(170, 187, 194, 0.16), 0 2px 8px rgba(0, 0, 0, 0.22);
+  color: #cbd3dc;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: normal;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    color 140ms ease;
+}
+
+.node-card:is(.type-image-gen, .type-image-edit, .type-video) .gen-go {
+  width: 100%;
+}
+
+.node-card.type-image-crop .crop-empty > button:hover:not(:disabled),
+.node-card:not(.type-image-crop) :is(.asset-empty, .crop-empty) > button:hover:not(:disabled),
+.node-card.type-text .text-empty-action:hover:not(:disabled),
+.node-card.type-chat .chat-open-button:hover:not(:disabled),
+.node-card.type-ai-process .ai-process-config-button:hover:not(:disabled),
+.node-card:is(.type-image-gen, .type-image-edit, .type-video) .gen-go:hover:not(:disabled) {
+  border-color: rgba(78, 222, 163, 0.42);
+  background: #343a43;
+  box-shadow: inset 0 0 0 1px rgba(78, 222, 163, 0.42), 0 0 16px rgba(78, 222, 163, 0.18);
+  color: #f1faf5;
+  transform: none;
+}
+
+/* Multi-select actions: an animated floating island, independent from canvas positioning. */
+.multiselect-toolbar {
+  gap: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.multiselect-toolbar__entrance {
+  display: flex;
+  animation: ms-toolbar-entrance 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.multiselect-toolbar__island {
+  box-sizing: border-box;
+  display: flex;
+  height: 56px;
+  align-items: center;
+  gap: 2px;
+  padding: 9px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(22, 25, 34, 0.95);
+  box-shadow:
+    0 20px 40px -10px rgba(0, 0, 0, 0.7),
+    0 0 1px 1px rgba(255, 255, 255, 0.06);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  animation: ms-toolbar-float 5.5s ease-in-out 800ms infinite;
+}
+
+.multiselect-toolbar .ms-btn {
+  position: relative;
+  box-sizing: border-box;
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: #94a0b2;
+  cursor: pointer;
+  transition:
+    color 150ms ease,
+    background-color 150ms ease,
+    border-color 150ms ease,
+    transform 150ms ease;
+}
+
+.multiselect-toolbar .ms-btn:hover:not(:disabled) {
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fafc;
+}
+
+.multiselect-toolbar .ms-btn:active:not(:disabled) {
+  transform: scale(0.9);
+}
+
+.multiselect-toolbar .ms-btn > svg {
+  transition:
+    color 180ms ease,
+    transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    filter 180ms ease;
+}
+
+.multiselect-toolbar .ms-divider {
+  width: 1px;
+  height: 16px;
+  flex: 0 0 1px;
+  margin: 0 6px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.multiselect-toolbar .ms-btn::after {
+  position: absolute;
+  z-index: 60;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  padding: 7px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 9px;
+  background: rgba(14, 17, 24, 0.96);
+  box-shadow:
+    0 8px 24px -4px rgba(0, 0, 0, 0.8),
+    0 0 0 1px rgba(255, 255, 255, 0.06);
+  color: #f8fafc;
+  content: attr(aria-label);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.25;
+  pointer-events: none;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, 6px) scale(0.95);
+  transform-origin: center bottom;
+  transition:
+    opacity 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    visibility 200ms;
+}
+
+.multiselect-toolbar .ms-btn:hover::after,
+.multiselect-toolbar .ms-btn:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0) scale(1);
+}
+
+.multiselect-toolbar .ms-btn[data-tool='align-left']:hover > svg {
+  transform: translateX(-1.5px);
+}
+
+.multiselect-toolbar .ms-btn[data-tool='align-right']:hover > svg {
+  transform: translateX(1.5px);
+}
+
+.multiselect-toolbar .ms-btn[data-tool='align-center']:hover > svg {
+  transform: scaleX(1.1);
+}
+
+.multiselect-toolbar .ms-btn[data-tool='align-middle']:hover > svg {
+  transform: scaleY(1.1);
+}
+
+.multiselect-toolbar .ms-btn[data-tool^='distribute-']:hover > svg {
+  transform: scale(1.08);
+}
+
+.multiselect-toolbar .ms-group:hover > svg {
+  animation: ms-toolbar-group-pulse 1.4s ease-in-out infinite alternate;
+}
+
+.multiselect-toolbar .ms-run:hover:not(:disabled) {
+  background: rgba(74, 222, 128, 0.12);
+  color: #86efac;
+}
+
+.multiselect-toolbar .ms-run:hover:not(:disabled) > svg {
+  transform: translateX(1px);
+}
+
+.multiselect-toolbar .ms-template:hover > svg {
+  transform: scale(1.06);
+}
+
+@keyframes ms-toolbar-entrance {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes ms-toolbar-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes ms-toolbar-group-pulse {
+  from {
+    transform: scale(1);
+    filter: drop-shadow(0 0 0 rgba(255, 255, 255, 0));
+  }
+
+  to {
+    transform: scale(1.12);
+    filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.28));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .multiselect-toolbar__entrance,
+  .multiselect-toolbar__island,
+  .multiselect-toolbar .ms-btn,
+  .multiselect-toolbar .ms-btn::after,
+  .multiselect-toolbar .ms-btn > svg {
+    animation: none !important;
+    transition: none !important;
   }
 }

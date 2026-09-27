@@ -92,6 +92,7 @@ export function FileBody({ shape }: NodeBodyProps): React.JSX.Element {
           }}
         >
           {busy ? '导入中…' : '导入文件'}
+          {!busy && <Icon name="upload" size={14} />}
         </button>
       </div>
     )
@@ -138,6 +139,7 @@ export function FileBody({ shape }: NodeBodyProps): React.JSX.Element {
             }}
           >
             用系统程序打开
+            <Icon name="external" size={13} />
           </button>
         </div>
       )}
@@ -151,6 +153,7 @@ export function FileBody({ shape }: NodeBodyProps): React.JSX.Element {
           }}
         >
           替换
+          <Icon name="upload" size={13} />
         </button>
         <button
           className="btn-ghost small"
@@ -161,6 +164,7 @@ export function FileBody({ shape }: NodeBodyProps): React.JSX.Element {
           }}
         >
           定位
+          <Icon name="target" size={13} />
         </button>
       </div>
     </div>

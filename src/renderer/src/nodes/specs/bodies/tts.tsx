@@ -301,11 +301,12 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
               }}
             >
               {refPlaying ? '暂停' : '试听'}
+              <Icon name={refPlaying ? 'pause' : 'play'} size={13} />
             </button>
             <span className="tts-ref-name">{config.refMediaName || '参考语音'}</span>
             <button
               className="btn-ghost small danger"
-              title="替换参考语音"
+              aria-label="替换参考语音"
               onPointerDown={(e) => stopEventPropagation(e)}
               onClick={(e) => {
                 e.stopPropagation()
@@ -313,10 +314,11 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
               }}
             >
               替换
+              <Icon name="upload" size={13} />
             </button>
             <button
               className="btn-ghost small danger"
-              title="移除参考语音"
+              aria-label="移除参考语音"
               onPointerDown={(e) => stopEventPropagation(e)}
               onClick={(e) => {
                 e.stopPropagation()
@@ -324,6 +326,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
               }}
             >
               移除
+              <Icon name="trash" size={13} />
             </button>
           </div>
         ) : (
@@ -537,7 +540,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
                     <span className="tts-ref-name">{config.promptMediaName || '克隆提示音'}</span>
                     <button
                       className="btn-ghost small danger"
-                      title="替换克隆提示音"
+                      aria-label="替换克隆提示音"
                       onPointerDown={(e) => stopEventPropagation(e)}
                       onClick={(e) => {
                         e.stopPropagation()
@@ -545,10 +548,11 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
                       }}
                     >
                       替换
+                      <Icon name="upload" size={13} />
                     </button>
                     <button
                       className="btn-ghost small danger"
-                      title="移除克隆提示音"
+                      aria-label="移除克隆提示音"
                       onPointerDown={(e) => stopEventPropagation(e)}
                       onClick={(e) => {
                         e.stopPropagation()
@@ -556,6 +560,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
                       }}
                     >
                       移除
+                      <Icon name="trash" size={13} />
                     </button>
                   </div>
                   <input
@@ -583,6 +588,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
                   }}
                 >
                   上传提示音
+                  <Icon name="upload" size={13} />
                 </button>
               )}
             </div>
@@ -642,8 +648,8 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
           '合成中…'
         ) : (
           <>
-            <Icon name="audio" size={14} />
             语音复刻
+            <Icon name="audio" size={14} />
           </>
         )}
       </button>
@@ -661,7 +667,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
                 <code className="voice-id-value">{resultVoiceId}</code>
                 <button
                   className="btn-ghost small"
-                  title="复制音色 ID"
+                  aria-label="复制音色 ID"
                   onPointerDown={(e) => stopEventPropagation(e)}
                   onClick={(e) => {
                     e.stopPropagation()
@@ -670,7 +676,8 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
                       .then(() => toast('已复制音色 ID'))
                   }}
                 >
-                  复制
+                复制
+                <Icon name="copy" size={13} />
                 </button>
               </div>
               <div className="gen-capability-note">
@@ -720,6 +727,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
                 }}
               >
                 {playing ? '暂停' : '播放'}
+                <Icon name={playing ? 'pause' : 'play'} size={13} />
               </button>
               <MediaFileActions shape={shape} />
             </div>

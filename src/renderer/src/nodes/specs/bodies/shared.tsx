@@ -150,6 +150,7 @@ export function NoModelHint({
   const labels = presetIds.map((id) => PROVIDER_SPECS.find((s) => s.id === id)?.label ?? id)
   return (
     <div className="gen-empty">
+      <Icon name="spark" size={30} />
       <span>尚未配置可用模型</span>
       {labels.length > 0 && (
         <span className="gen-empty-presets">可新增预设：{labels.join('、')}</span>
@@ -163,6 +164,7 @@ export function NoModelHint({
         }}
       >
         打开模型设置
+        <Icon name="settings" size={13} />
       </button>
     </div>
   )
@@ -264,11 +266,13 @@ export function createImageContinuation(
 export function ImageContinuationActions({
   editor,
   shape,
-  extra
+  extra,
+  variant = 'default'
 }: {
   editor: Editor
   shape: NodeCardShape
   extra?: React.ReactNode
+  variant?: 'default' | 'image-node'
 }): React.JSX.Element {
   const actions: Array<{
     type: 'image-crop' | 'image-split' | 'image-gen' | 'image-edit' | 'video'
@@ -281,23 +285,61 @@ export function ImageContinuationActions({
     { type: 'image-edit', label: 'P图', title: '对当前图片添加标注并 P 图' },
     { type: 'video', label: '视频生成', title: '创建视频节点并将当前图片作为多参素材' }
   ]
+  const actionButtons = actions.map((action) => {
+    const imageNodeAction = variant === 'image-node'
+    return (
+      <button
+        className={`btn-ghost small${imageNodeAction ? ' image-node-action-button' : ''}${imageNodeAction && action.type === 'video' ? ' image-node-action-video' : ''}`}
+        key={action.type}
+        aria-label={action.title}
+        type="button"
+        onPointerDown={stopEventPropagation}
+        onClick={(event) => {
+          stopEventPropagation(event)
+          createImageContinuation(editor, shape, action.type)
+        }}
+      >
+        {imageNodeAction && action.type === 'video' ? '生视频' : action.label}
+        {!imageNodeAction && (
+          <Icon
+            name={
+              action.type === 'image-crop'
+                ? 'crop'
+                : action.type === 'image-split'
+                  ? 'grid'
+                  : action.type === 'image-gen'
+                    ? 'spark'
+                    : action.type === 'image-edit'
+                      ? 'edit'
+                      : 'video'
+            }
+            size={13}
+          />
+        )}
+      </button>
+    )
+  })
   return (
-    <div className="node-media-next-actions" aria-label="图片后续操作">
-      {actions.map((action) => (
-        <button
-          className="btn-ghost small"
-          key={action.type}
-          title={action.title}
-          onPointerDown={stopEventPropagation}
-          onClick={(event) => {
-            stopEventPropagation(event)
-            createImageContinuation(editor, shape, action.type)
-          }}
-        >
-          {action.label}
-        </button>
-      ))}
-      {extra}
+    <div
+      className={`node-media-next-actions${variant === 'image-node' ? ' image-node-action-toolbar' : ''}`}
+      role="group"
+      aria-label="图片后续操作"
+    >
+      {variant === 'image-node' ? (
+        <>
+          <div className="image-node-primary-actions">
+            {actionButtons}
+            {extra}
+          </div>
+          <span className="image-node-action-divider" aria-hidden="true" />
+          <MediaFileActions shape={shape} />
+        </>
+      ) : (
+        <>
+          {actionButtons}
+          {extra}
+        </>
+      )}
     </div>
   )
 }
@@ -535,13 +577,23 @@ export function MediaSourceSummary({
 }
 
 /** 媒体结果统一的本地文件操作，不改变节点输出，只操作已落盘资产。 */
-export function MediaFileActions({ shape }: { shape: NodeCardShape }): React.JSX.Element | null {
+export function MediaFileActions({
+  shape,
+  className = ''
+}: {
+  shape: NodeCardShape
+  className?: string
+}): React.JSX.Element | null {
   if (!shape.props.mediaId) return null
   return (
-    <span className="node-media-file-actions" aria-label="媒体文件操作">
+    <span
+      className={`node-media-file-actions${className ? ` ${className}` : ''}`}
+      role="group"
+      aria-label="媒体文件操作"
+    >
       <button
-        className="icon-btn"
-        title="在资源管理器中定位"
+        type="button"
+        className="icon-btn media-file-action-btn"
         aria-label="在资源管理器中定位"
         onPointerDown={(e) => stopEventPropagation(e)}
         onClick={(e) => {
@@ -552,8 +604,8 @@ export function MediaFileActions({ shape }: { shape: NodeCardShape }): React.JSX
         <Icon name="target" size={11} />
       </button>
       <button
-        className="icon-btn"
-        title="复制文件路径"
+        type="button"
+        className="icon-btn media-file-action-btn"
         aria-label="复制文件路径"
         onPointerDown={(e) => stopEventPropagation(e)}
         onClick={(e) => {
@@ -618,7 +670,6 @@ export function MediaResultGrid({
             <button
               type="button"
               className="icon-btn"
-              title="清空历史结果，仅保留当前输出"
               aria-label="清空历史结果，仅保留当前输出"
               onPointerDown={(event) => stopEventPropagation(event)}
               onClick={(event) => {
@@ -683,7 +734,6 @@ export function MediaResultGrid({
                 <button
                   type="button"
                   className="icon-btn"
-                  title="打开预览"
                   aria-label="预览"
                   onPointerDown={(event) => stopEventPropagation(event)}
                   onClick={(event) => {
@@ -696,7 +746,6 @@ export function MediaResultGrid({
                 <button
                   type="button"
                   className="icon-btn"
-                  title={active ? '打开预览' : '设为当前输出'}
                   aria-label={active ? '打开预览' : '设为当前输出'}
                   onPointerDown={(event) => stopEventPropagation(event)}
                   onClick={(event) => {
@@ -711,7 +760,6 @@ export function MediaResultGrid({
                   <button
                     type="button"
                     className="icon-btn danger"
-                    title="删除历史结果"
                     aria-label="删除历史结果"
                     onPointerDown={(event) => stopEventPropagation(event)}
                     onClick={(event) => {

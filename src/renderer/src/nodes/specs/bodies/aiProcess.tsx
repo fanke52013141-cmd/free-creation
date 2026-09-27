@@ -1,14 +1,14 @@
-// AI 处理是一个纯处理节点：卡片只说明它接收什么、会从哪个正式端口给下游，
-// 模型和生成参数统一放在右侧「设置」页，避免把运行结果误看成一个资产节点。
+// AI 处理是一个纯处理节点：卡片保留清晰的操作入口，模型和生成参数统一放在右侧「设置」页。
 import { useEffect } from 'react'
-import { useEditor, useValue } from 'tldraw'
+import { stopEventPropagation } from 'tldraw'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { parseAiProcess, type AiProcessConfig } from '../../../engine/executors/aiProcess'
 import { ModelSelect, NoModelHint } from './shared'
 import type { NodeBodyProps, NodeSettingsProps } from '../../registry'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { AppSelect } from '../../../components/AppSelect'
-import { countIncomingConnections } from '../../../canvas/graph'
+import { Icon } from '../../../components/Icon'
+import { useNodePanelStore } from '../../../stores/nodePanel'
 
 const AI_SCHEMA_OPTIONS = [
   { id: 'json.any', version: 1, label: '通用 JSON（json.any@1）' },
@@ -55,35 +55,26 @@ function schemaFromKey(key: string): AiProcessConfig['jsonSchema'] {
   return found ? { id: found.id, version: found.version } : undefined
 }
 
-/** 卡片只显示已声明的输入和输出状态；配置与历史结果在右侧详情中查看。 */
+/** 卡片只保留节点身份和设置入口；端口契约与配置在右侧详情中查看。 */
 export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
-  const editor = useEditor()
-  const textCount = useValue(
-    `${shape.id}:in-text-count`,
-    () => countIncomingConnections(editor, shape.id, 'in-text'),
-    [editor, shape.id]
-  )
-  const jsonCount = useValue(
-    `${shape.id}:in-json-count`,
-    () => countIncomingConnections(editor, shape.id, 'in-json'),
-    [editor, shape.id]
-  )
-  const config = parseAiProcess(readNodeConfig(shape))
-  const mode = modeOption(config.mode)
-  const hasInput = textCount + jsonCount > 0
-
   return (
     <div className="ai-process-body">
-      <div className={`ai-process-wiring ${hasInput ? 'ok' : 'warn'}`}>
-        <span className="ai-process-wiring-ports">
-          <span>文本输入 {textCount} 条</span>
-          <span>JSON 输入 {jsonCount} 条</span>
-        </span>
-        {!hasInput && <span className="ai-process-wiring-note">等待文本或 JSON 输入</span>}
+      <div className="ai-process-hero">
+        <span className="node-empty-icon"><Icon name="spark" size={40} /></span>
+        <strong>AI 处理</strong>
       </div>
-      <div className="ai-process-mode" title={mode.downstream}>
-        输出 {mode.label} → <code>{mode.portId}</code>
-      </div>
+      <button
+        type="button"
+        className="ai-process-config-button"
+        onPointerDown={stopEventPropagation}
+        onClick={(event) => {
+          event.stopPropagation()
+          useNodePanelStore.getState().open('contract', shape.id, 'settings')
+        }}
+      >
+        配置处理
+        <Icon name="arrow" size={13} />
+      </button>
     </div>
   )
 }

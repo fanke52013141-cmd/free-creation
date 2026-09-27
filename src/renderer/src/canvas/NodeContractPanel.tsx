@@ -4,6 +4,7 @@ import type { MediaAsset, PortDecl, PortType, ProviderSummary } from '@shared/ty
 import { getNodePorts, getNodeType, PORT_TYPE_LABELS } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
 import { Icon } from '../components/Icon'
+import { AppSelect } from '../components/AppSelect'
 import { projectNodeOutputs, type NodeValue } from '../nodes/nodeValues'
 import { useNodePanelStore, type NodePanelInitialTab } from '../stores/nodePanel'
 import { readNodeRunHistory, readNodeRunRecord, type NodeRunRecord } from '../engine/runRecord'
@@ -276,7 +277,7 @@ function TestHarness({
                 </small>
               </span>
               {port.type === 'any' && (
-                <select
+                <AppSelect
                   value={draft.type}
                   onChange={(event) =>
                     updateDraft(port, { type: event.target.value as PortType, value: '' })
@@ -289,7 +290,7 @@ function TestHarness({
                       {item}
                     </option>
                   ))}
-                </select>
+                </AppSelect>
               )}
               {isText ? (
                 <textarea
@@ -303,7 +304,7 @@ function TestHarness({
                   onBlur={(event) => onTextInputCommit?.(port, type, event.target.value)}
                 />
               ) : (
-                <select
+                <AppSelect
                   value={draft.value}
                   onChange={(event) => updateDraft(port, { value: event.target.value })}
                 >
@@ -313,7 +314,7 @@ function TestHarness({
                       {asset.name || asset.id} · {asset.mime}
                     </option>
                   ))}
-                </select>
+                </AppSelect>
               )}
             </label>
           )
@@ -512,7 +513,6 @@ export function NodeContractPanel({
         </div>
         <button
           className="side-panel-close"
-          title="关闭说明"
           aria-label="关闭节点说明面板"
           onClick={onClose}
         >

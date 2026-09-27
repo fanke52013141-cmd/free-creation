@@ -8,7 +8,8 @@ export interface EdgePoint {
  * 也给卡片正文留出完整的点击/选中区域。视觉连线和端口渲染必须共享该距离。
  */
 export const NODE_PORT_OUTSET = 16
-export const NODE_PORT_SIZE = 18
+// 参考实现的连接点由 12px 实心核心和 8px 四周留白组成，命中盒为 28px。
+export const NODE_PORT_SIZE = 28
 
 /**
  * Build the visible data-edge curve in screen coordinates.

@@ -176,7 +176,7 @@ function timeStart(range: MediaTimeFilter, now: number): number | null {
   return now - (range === '7d' ? 7 : 30) * 24 * 60 * 60 * 1000
 }
 
-/** 资产筛选只使用资产字段和安全来源摘要，不搜索路径、密钥或完整提示词。 */
+/** 资产筛选只使用资产字段和安全来源摘要；路径仅取扩展名，不搜索目录或完整路径。 */
 export function filterMediaAssets(
   assets: readonly IndexedMediaAsset[],
   filters: MediaIndexFilters,
@@ -192,10 +192,18 @@ export function filterMediaAssets(
     if (filters.runStatus !== 'all' && status !== filters.runStatus) return false
     if (start !== null && asset.createdAt < start) return false
     if (!keyword) return true
+    const fileName = asset.path.split(/[\\/]/).pop() ?? ''
+    const extension = fileName.includes('.') ? fileName.slice(fileName.lastIndexOf('.') + 1) : ''
+    const kindLabel = { image: '图片', video: '视频', audio: '音频', file: '文件' }[asset.kind]
     return [
       asset.name,
       asset.id,
+      asset.mime,
+      asset.kind,
+      kindLabel,
+      extension,
       asset.source?.nodeTitle,
+      asset.source?.nodeType,
       asset.source?.modelKey,
       asset.source?.voiceId
     ]

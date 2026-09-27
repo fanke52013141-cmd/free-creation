@@ -1,5 +1,12 @@
 // AI 对话节点的沉浸式工作区。模型调用仍只通过 registered executor 进行。
-import { isValidElement, useEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  isValidElement,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode
+} from 'react'
 import { createPortal } from 'react-dom'
 import type { Editor, TLShapeId } from 'tldraw'
 import ReactMarkdown, { type Components } from 'react-markdown'
@@ -91,13 +98,50 @@ function ReasoningBlock({
   content: string
   live?: boolean
 }): React.JSX.Element {
+  const wasLive = useRef(live)
+  const [expanded, setExpanded] = useState(live)
+
+  useLayoutEffect(() => {
+    if (wasLive.current !== live) {
+      setExpanded(Boolean(live))
+      wasLive.current = live
+    }
+  }, [live])
+
   return (
-    <details className="chat-dialog-reasoning" open={live}>
-      <summary>
-        <Icon name="spark" size={13} /> {live ? '正在思考' : '思考过程'}
-      </summary>
-      <MarkdownMessage content={content} />
-    </details>
+    <section
+      className={`chat-dialog-reasoning${live ? ' is-live' : ''}${expanded ? ' is-expanded' : ''}`}
+      aria-label={live ? '思考中' : '思考过程'}
+    >
+      <button
+        type="button"
+        className="chat-dialog-reasoning-header"
+        aria-expanded={expanded}
+        aria-label={`${expanded ? '收起' : '展开'}思考过程`}
+        onClick={() => setExpanded((value) => !value)}
+      >
+        <span className="chat-dialog-reasoning-state">
+          <span className="chat-dialog-reasoning-dot" aria-hidden="true" />
+          <Icon name="spark" size={14} />
+          <strong>{live ? '思考中' : '思考过程'}</strong>
+          {live && <span className="chat-dialog-reasoning-live-label">实时</span>}
+        </span>
+        <span className="chat-dialog-reasoning-toggle" aria-hidden="true">
+          <span className="chat-dialog-reasoning-expand">点击展开</span>
+          <span className="chat-dialog-reasoning-collapse">点击收起</span>
+          <svg viewBox="0 0 24 24" focusable="false">
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </span>
+      </button>
+      <div className="chat-dialog-reasoning-content" aria-hidden={!expanded}>
+        {content.trim() ? (
+          <MarkdownMessage content={content} />
+        ) : (
+          <p className="chat-dialog-reasoning-placeholder">等待模型返回思考内容…</p>
+        )}
+      </div>
+    </section>
   )
 }
 
@@ -158,6 +202,12 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
   const selectedModelSupportsReasoning = Boolean(
     selectedModel && isReasoningModelId(selectedModel.model.id)
   )
+
+  // Opening a chat without a chosen model takes the user straight to the model controls.
+  // If no text models exist yet, those controls offer the provider setup action.
+  useEffect(() => {
+    if (loaded && !selectedModel) setShowSettings(true)
+  }, [loaded, selectedModel])
 
   useEffect(() => {
     const el = scrollRef.current
@@ -332,6 +382,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
         ) : (
           <button type="button" onClick={() => openSettings()}>
             配置对话模型
+            <Icon name="settings" size={13} />
           </button>
         )}
       </label>
@@ -451,7 +502,6 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
               type="button"
               className="chat-dialog-new"
               aria-label="新建对话"
-              title="新建对话"
               onClick={() => update(createChatConversation(data))}
             >
               <Icon name="add" size={16} />
@@ -467,7 +517,6 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
             <button
               type="button"
               aria-label="对话设置"
-              title="对话设置"
               aria-pressed={showSettings}
               onClick={() => setShowSettings((value) => !value)}
             >
@@ -476,7 +525,6 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
             <button
               type="button"
               aria-label="关闭对话"
-              title="关闭对话"
               onPointerDown={(event) => event.stopPropagation()}
               onClick={(event) => {
                 event.stopPropagation()
@@ -529,12 +577,14 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
                       </>
                     ) : (
                       <>
-                        {message.role === 'assistant' && message.reasoning && (
-                          <ReasoningBlock
-                            content={message.reasoning}
-                            live={running && index === messages.length - 1}
-                          />
-                        )}
+                        {message.role === 'assistant' &&
+                          (message.reasoning ||
+                            (running && index === messages.length - 1 && !message.content)) && (
+                            <ReasoningBlock
+                              content={message.reasoning ?? ''}
+                              live={running && index === messages.length - 1 && !message.content}
+                            />
+                          )}
                         <MarkdownMessage content={message.content} />
                       </>
                     )}
@@ -544,7 +594,6 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
                       <button
                         type="button"
                         aria-label="复制消息"
-                        title="复制"
                         onClick={() => copyText(message.content)}
                       >
                         <Icon name="copy" size={14} />
@@ -552,7 +601,6 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
                       <button
                         type="button"
                         aria-label="修改消息"
-                        title="修改"
                         onClick={() => {
                           setEditingIndex(index)
                           setEditingText(message.content)
@@ -564,7 +612,6 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
                         <button
                           type="button"
                           aria-label="重新生成"
-                          title="重新生成"
                           disabled={running}
                           onClick={() => void regenerate(index)}
                         >
@@ -575,7 +622,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
                   )}
                 </article>
               ))}
-              {running && (
+              {running && messages.at(-1)?.role !== 'assistant' && (
                 <article className="chat-dialog-message assistant" aria-label="正在生成">
                   <div className="chat-dialog-thinking">
                     <span />
@@ -594,7 +641,6 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
               <button
                 type="button"
                 aria-label="添加参考文档"
-                title="添加参考文档"
                 onClick={() => fileInputRef.current?.click()}
               >
                 <Icon name="attach" size={17} />

@@ -83,12 +83,12 @@ describe('图片模型能力描述', () => {
     expect(capabilities.referenceMode).toBe('chat-inline')
   })
 
-  it('ToAPIS 上保留 3:2/2:3 原生比例，非原生供应商沿用旧迁移', () => {
+  it('生图节点将旧版 3:2/2:3 比例迁移到常用比例', () => {
     expect(
       normalizeImageGenerationConfig({ aspectRatio: '3:2' }, imageCapabilitiesFor('toapis'))
     ).toMatchObject({
-      aspectRatio: '3:2',
-      size: '3:2'
+      aspectRatio: '16:9',
+      size: '16:9'
     })
     expect(
       normalizeImageGenerationConfig({ aspectRatio: '3:2' }, imageCapabilitiesFor('relay'))

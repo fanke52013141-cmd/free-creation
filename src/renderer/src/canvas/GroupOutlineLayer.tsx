@@ -1,4 +1,5 @@
 import { useEffect, useState, type RefObject } from 'react'
+import { createPortal } from 'react-dom'
 import {
   useEditor,
   useValue,
@@ -38,6 +39,8 @@ interface SelectionOutline {
   top: number
   width: number
   height: number
+  hostLeft: number
+  hostTop: number
   batchSource: ConnectionFrom | null
 }
 
@@ -65,6 +68,10 @@ export function CanvasSelectionBackground({
   if (!selectedNodeBounds) return null
 
   const outset = SELECTION_FRAME_OUTSET_PX / zoom
+  // .node-header is positioned at top: -34px relative to the card. Include it in
+  // the multi-selection bounds, with the same 12px breathing room as other edges.
+  const headerOverhang = 34
+  const topOutset = outset + headerOverhang
   return (
     <div
       className="canvas-selection-underlay"
@@ -72,8 +79,8 @@ export function CanvasSelectionBackground({
       draggable={false}
       style={{
         width: selectedNodeBounds.maxX - selectedNodeBounds.x + outset * 2,
-        height: selectedNodeBounds.maxY - selectedNodeBounds.y + outset * 2,
-        transform: `translate(${selectedNodeBounds.x}px, ${selectedNodeBounds.y}px) translate(${-outset}px, ${-outset}px)`
+        height: selectedNodeBounds.maxY - selectedNodeBounds.y + topOutset + outset,
+        transform: `translate(${selectedNodeBounds.x}px, ${selectedNodeBounds.y}px) translate(${-outset}px, ${-topOutset}px)`
       }}
     />
   )
@@ -123,9 +130,9 @@ function outlinesEqual(left: GroupOutline[], right: GroupOutline[]): boolean {
   )
 }
 
-// 分组框上边距：节点标题栏（node-header）高 29px 悬浮在卡片上方，分组框必须整体
-// 越过它，否则会框住最上一排节点的标题/正文（用户反馈的“框到节点信息”）。
-const OUTLINE_TOP_PAD = 44
+// 分组框要越过悬浮在卡片上方 34px 的 node-header，再留出固定屏幕边距。
+const OUTLINE_HEADER_OVERHANG = 34
+const OUTLINE_TOP_PAD = 12
 const OUTLINE_SIDE_PAD = 12
 // 标签条带：显示在分组框上边缘外，双击进入重命名（window 捕获命中带，不拦截常规画布交互）
 const LABEL_BAND_TOP = 26
@@ -148,11 +155,10 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
       if (!host) return
       const hostBounds = host.getBoundingClientRect()
       const zoom = editor.getCamera().z || 1
-      // 分组线框属于 page 几何的一部分：边距、圆角与标题都必须随画布缩放。
-      // 原先在屏幕像素上固定 44px 顶部留白，缩小画布后它会远大于组内节点，造成
-      // “分组变成细长胶囊”的错觉。
-      const sidePad = OUTLINE_SIDE_PAD * zoom
-      const topPad = OUTLINE_TOP_PAD * zoom
+      // 线框定位在屏幕覆盖层中，节点 page bounds 先转成屏幕坐标；留白使用固定屏幕像素，
+      // 不再乘画布 zoom，避免缩放时框与节点之间的距离跟着变化。
+      const sidePad = OUTLINE_SIDE_PAD
+      const topPad = OUTLINE_HEADER_OVERHANG * zoom + OUTLINE_TOP_PAD
       const next: GroupOutline[] = []
 
       for (const shape of editor.getCurrentPageShapes()) {
@@ -199,6 +205,8 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
       }
       const nextSelection = {
         ...geometry,
+        hostLeft: hostBounds.left,
+        hostTop: hostBounds.top,
         batchSource: batchConnectionFromSelection(editor, selectedIds)
       }
       setSelection((current) =>
@@ -207,6 +215,8 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
         current.top === nextSelection.top &&
         current.width === nextSelection.width &&
         current.height === nextSelection.height &&
+        current.hostLeft === nextSelection.hostLeft &&
+        current.hostTop === nextSelection.hostTop &&
         batchKey(current.batchSource) === batchKey(nextSelection.batchSource)
           ? current
           : nextSelection
@@ -227,11 +237,13 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
     const offDocument = editor.store.listen(update, { scope: 'document' })
     const offSession = editor.store.listen(update, { scope: 'session' })
     window.addEventListener('resize', update)
+    window.addEventListener('scroll', update, true)
     return () => {
       offDocument()
       offSession()
       if (frame) cancelAnimationFrame(frame)
       window.removeEventListener('resize', update)
+      window.removeEventListener('scroll', update, true)
     }
   }, [editor, hostRef])
 
@@ -273,6 +285,32 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
     setEditingId(null)
   }
 
+  const batchPort =
+    selection?.batchSource
+      ? createPortal(
+          <button
+            type="button"
+            className="canvas-selection-batch-port"
+            aria-label={`批量连接 ${selection.batchSource.memberIds?.length ?? 0} 个节点`}
+            style={{
+              left: selection.hostLeft + selection.left + selection.width,
+              top: selection.hostTop + selection.top + selection.height / 2
+            }}
+            onPointerDown={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              beginConnectionDrag(selection.batchSource!, {
+                x: event.clientX,
+                y: event.clientY
+              })
+            }}
+          >
+            <span>{selection.batchSource.memberIds?.length}</span>
+          </button>,
+          document.body
+        )
+      : null
+
   return (
     <div className="canvas-group-outline-layer">
       {outlines.map((outline) => (
@@ -310,43 +348,7 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
           )}
         </div>
       ))}
-      {selection && (
-        <>
-          {selection.batchSource && (
-            <>
-              <span
-                className="canvas-selection-batch-connector"
-                aria-hidden="true"
-                style={{
-                  left: selection.left + selection.width,
-                  top: selection.top + selection.height / 2
-                }}
-              />
-              <button
-                type="button"
-                className="canvas-selection-batch-port"
-                aria-label={`批量连接 ${selection.batchSource.memberIds?.length ?? 0} 个节点`}
-                title="拖动此端口，将所有已选同类节点连接到目标的多值输入"
-                style={{
-                  // 端口和容器之间由细断续线相连，既保持轻盈，也明确它属于此选区。
-                  left: selection.left + selection.width,
-                  top: selection.top + selection.height / 2
-                }}
-                onPointerDown={(event) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  beginConnectionDrag(selection.batchSource!, {
-                    x: event.clientX,
-                    y: event.clientY
-                  })
-                }}
-              >
-                <span>{selection.batchSource.memberIds?.length}</span>
-              </button>
-            </>
-          )}
-        </>
-      )}
+      {batchPort}
     </div>
   )
 }

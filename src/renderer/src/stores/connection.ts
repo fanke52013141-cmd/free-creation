@@ -7,6 +7,8 @@ export interface ConnectionFrom {
   shapeId: TLShapeId
   portId: string
   portType: PortType
+  /** 节点视觉主色：拖拽预览必须与源节点的输出端口一致。 */
+  nodeColor?: string
   schema?: PortSchemaRef
   /**
    * 拖拽方向：缺省 'out'（从输出端口拖出，落点是目标输入）；

@@ -31,6 +31,7 @@ export function VocalSeparateBody({ shape, openPreview }: NodeBodyProps): React.
           onClick={openSettings}
         >
           配置人声分离
+          <Icon name="settings" size={13} />
         </button>
       </div>
     )
@@ -69,6 +70,7 @@ export function VocalSeparateBody({ shape, openPreview }: NodeBodyProps): React.
           onClick={openSettings}
         >
           调整
+          <Icon name="edit" size={13} />
         </button>
         <MediaSourceBadge
           shape={shape}

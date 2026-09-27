@@ -231,7 +231,8 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
                 setShowOutputSettings(false)
               }}
             >
-              完成
+          完成
+          <Icon name="check" size={13} />
             </button>
           </div>
           <div className="script-field-list">
@@ -288,7 +289,6 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
                 </AppSelect>
                 <button
                   className="shot-op danger"
-                  title="删除字段"
                   aria-label={`删除字段「${field.label || field.path || `第 ${index + 1} 个`}」`}
                   disabled={data.outputFields.length <= 1}
                   onPointerDown={(e) => stopEventPropagation(e)}
@@ -387,7 +387,7 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
               <div className="shot-ops">
                 <button
                   className="shot-op"
-                  title="上移"
+                  aria-label="上移"
                   disabled={i === 0}
                   onClick={() => moveShot(i, -1)}
                   onPointerDown={(e) => stopEventPropagation(e)}
@@ -396,7 +396,7 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
                 </button>
                 <button
                   className="shot-op"
-                  title="下移"
+                  aria-label="下移"
                   disabled={i === data.shots.length - 1}
                   onClick={() => moveShot(i, 1)}
                   onPointerDown={(e) => stopEventPropagation(e)}
@@ -405,7 +405,7 @@ export function ScriptBody({ shape }: NodeBodyProps): React.JSX.Element {
                 </button>
                 <button
                   className="shot-op danger"
-                  title="删除镜头"
+                  aria-label="删除镜头"
                   onClick={() => {
                     update({ ...data, shots: data.shots.filter((s) => s.id !== shot.id) })
                     pendingMarkRef.current = 'shot-delete'

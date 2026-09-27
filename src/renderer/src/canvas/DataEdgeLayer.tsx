@@ -1,9 +1,12 @@
 import { useEffect, useId, useRef, useState, type RefObject } from 'react'
 import type { Editor, TLShapeId } from 'tldraw'
-import { getNodePorts, getNodeType, portOffsets, PORT_COLORS } from '../nodes/registry'
+import { getNodePorts, getNodeType, PORT_COLORS } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
 import { useEdgeSelectionStore } from '../stores/edgeSelection'
 import { buildDataEdgePath, NODE_PORT_OUTSET } from './edge-geometry'
+import { useConnectionStore, type ConnectionFrom } from '../stores/connection'
+import { portPairCompatible } from './graph'
+import { collectNodePortConnections, createNodePortLayout } from './node-port-layout'
 import { markUndoPoint } from './history'
 import { toast } from '../stores/toast'
 
@@ -50,9 +53,56 @@ function collectNodeRects(editor: Editor, host: HTMLDivElement): ScreenNodeRect[
     })
 }
 
-function collectEdges(editor: Editor, host: HTMLDivElement): ScreenEdge[] {
+function collectEdges(
+  editor: Editor,
+  host: HTMLDivElement,
+  draftFrom: ConnectionFrom | null
+): ScreenEdge[] {
   const hostRect = host.getBoundingClientRect()
   const result: ScreenEdge[] = []
+  const connections = collectNodePortConnections(editor)
+  const layouts = new Map<string, Map<string, number>>()
+  const getOffsets = (
+    shape: NodeCardShape,
+    direction: 'in' | 'out',
+    ports: ReturnType<typeof getNodePorts>['in']
+  ): Map<string, number> => {
+    const key = `${shape.id}:${direction}`
+    const cached = layouts.get(key)
+    if (cached) return cached
+    const candidates = new Set(
+      !draftFrom || draftFrom.shapeId === shape.id
+        ? []
+        : direction === 'in' && draftFrom.direction !== 'in'
+          ? ports
+              .filter((port) =>
+                portPairCompatible(
+                  { type: draftFrom.portType, schema: draftFrom.schema },
+                  port
+                )
+              )
+              .map((port) => port.id)
+          : direction === 'out' && draftFrom.direction === 'in'
+            ? ports
+                .filter((port) =>
+                  portPairCompatible(port, {
+                    type: draftFrom.portType,
+                    schema: draftFrom.schema
+                  })
+                )
+                .map((port) => port.id)
+            : []
+    )
+    const visible = createNodePortLayout(
+      ports,
+      connections.get(shape.id)?.[direction] ?? new Set<string>(),
+      shape.props.h,
+      candidates
+    ).offsets
+    layouts.set(key, visible)
+    return visible
+  }
+
   for (const arrow of editor.getCurrentPageShapes()) {
     if (arrow.type !== 'arrow') continue
     const bindings = editor.getBindingsFromShape(arrow.id, 'arrow')
@@ -74,8 +124,8 @@ function collectEdges(editor: Editor, host: HTMLDivElement): ScreenEdge[] {
     const fromIndex = sourcePorts.out.findIndex((port) => port.id === arrow.meta.fromPort)
     const toIndex = targetPorts.in.findIndex((port) => port.id === arrow.meta.toPort)
     if (fromIndex < 0 || toIndex < 0) continue
-    const fromY = portOffsets(sourcePorts.out.length, source.props.h)[fromIndex]
-    const toY = portOffsets(targetPorts.in.length, target.props.h)[toIndex]
+    const fromY = getOffsets(source, 'out', sourcePorts.out).get(arrow.meta.fromPort)
+    const toY = getOffsets(target, 'in', targetPorts.in).get(arrow.meta.toPort)
     if (fromY === undefined || toY === undefined) continue
     // 分组后 shape.x/y 是相对父 group 的局部坐标，直接相加会让连线“飘走”。
     // getShapePageBounds 返回页面绝对边界（含父级 group 的平移），端口纵向偏移
@@ -103,7 +153,8 @@ function collectEdges(editor: Editor, host: HTMLDivElement): ScreenEdge[] {
     const fromPort = sourcePorts.out[fromIndex]
     result.push({
       id: arrow.id,
-      color: PORT_COLORS[fromPort.type] ?? '#8f73ff',
+      // A connection inherits the source node accent, matching its output port.
+      color: getNodeType(source.props.nodeType)?.color ?? PORT_COLORS[fromPort.type] ?? '#8f73ff',
       sourceId: source.id,
       targetId: target.id,
       path: buildDataEdgePath(
@@ -130,8 +181,11 @@ function collectEdges(editor: Editor, host: HTMLDivElement): ScreenEdge[] {
         ? producerPorts.out.findIndex((p) => p.id === artifactPortId)
         : -1
     const outIdx = fromIndex >= 0 ? fromIndex : producerPorts.out.length > 0 ? 0 : -1
+    const producerOutOffsets = getOffsets(producer, 'out', producerPorts.out)
     const fromY =
-      outIdx >= 0 ? portOffsets(producerPorts.out.length, producer.props.h)[outIdx] : undefined
+      outIdx >= 0
+        ? producerOutOffsets.get(producerPorts.out[outIdx].id)
+        : undefined
     const sourceAnchorY =
       fromY !== undefined && producer.props.h > 0
         ? producerBounds.y + (producerBounds.height * fromY) / producer.props.h
@@ -141,7 +195,7 @@ function collectEdges(editor: Editor, host: HTMLDivElement): ScreenEdge[] {
     const inIdx = assetPorts.in.length > 0 ? 0 : -1
     const toY =
       inIdx >= 0
-        ? portOffsets(assetPorts.in.length, (asset as NodeCardShape).props.h)[inIdx]
+        ? getOffsets(asset as NodeCardShape, 'in', assetPorts.in).get(assetPorts.in[inIdx].id)
         : undefined
     const targetAnchorY =
       toY !== undefined && (asset as NodeCardShape).props.h > 0
@@ -157,17 +211,17 @@ function collectEdges(editor: Editor, host: HTMLDivElement): ScreenEdge[] {
       y: targetAnchorY
     })
     const outPort = outIdx >= 0 ? producerPorts.out[outIdx] : undefined
-    // 追溯线的颜色跟随“被产出的资产类型”，而不是生产者的端口类型：宫格拆分的
-    // 集合端口是 json（紫），但它产出的每一个都是图片，画成紫色会让用户以为
-    // 拆分结果不是图片（用户 2026-09-18 反馈）。无资产输出端口时回退生产者端口。
+    // 追溯线同样从生产节点出发，颜色必须跟随该节点的输出色。
     const assetOutType = assetPorts.out[0]?.type
     result.push({
       id: `artifact:${asset.id}` as TLShapeId,
-      color: assetOutType
-        ? (PORT_COLORS[assetOutType] ?? '#94a3b8')
-        : outPort
-          ? (PORT_COLORS[outPort.type] ?? '#94a3b8')
-          : '#94a3b8',
+      color:
+        getNodeType(producer.props.nodeType)?.color ??
+        (assetOutType
+          ? (PORT_COLORS[assetOutType] ?? '#94a3b8')
+          : outPort
+            ? (PORT_COLORS[outPort.type] ?? '#94a3b8')
+            : '#94a3b8'),
       sourceId: producer.id,
       targetId: asset.id,
       provenance: true,
@@ -207,6 +261,9 @@ export function DataEdgeLayer({
   const [, setRevision] = useState(0)
   const [host, setHost] = useState<HTMLDivElement | null>(null)
   const selectedEdgeId = useEdgeSelectionStore((state) => state.selectedEdgeId)
+  // `from` is stable while the pointer moves, so edge anchors reflow once when a
+  // connection gesture starts or ends instead of recalculating on every mouse frame.
+  const draftFrom = useConnectionStore((state) => state.draft?.from ?? null)
   const select = useEdgeSelectionStore((state) => state.select)
   const clearEdgeSelection = useEdgeSelectionStore((state) => state.clear)
   const [hoveredEdge, setHoveredEdge] = useState<{
@@ -217,7 +274,6 @@ export function DataEdgeLayer({
   const svgRef = useRef<SVGSVGElement | null>(null)
   const reactId = useId().replace(/:/g, '')
   const overlapMaskId = `data-edge-node-mask-${reactId}`
-  const flowGradientId = `data-edge-flow-gradient-${reactId}`
 
   useEffect(() => {
     let frame = 0
@@ -252,7 +308,7 @@ export function DataEdgeLayer({
   }, [hostRef])
 
   // store/视口监听会触发本组件重绘，确保拖动、缩放和连线后重新换算屏幕坐标。
-  const edges = host ? collectEdges(editor, host) : []
+  const edges = host ? collectEdges(editor, host, draftFrom) : []
   const nodeRects = host ? collectNodeRects(editor, host) : []
   const nodeRectsRef = useRef<ScreenNodeRect[]>([])
   useEffect(() => {
@@ -361,6 +417,10 @@ export function DataEdgeLayer({
 
   if (!host) return null
   const hostBounds = host.getBoundingClientRect()
+  // Edge paths are already expressed in screen coordinates, so SVG stroke widths
+  // do not inherit tldraw's camera zoom. Scale widths and glow with the camera to
+  // keep their proportions aligned with the zooming node cards.
+  const zoom = editor.getCamera().z || 1
   const hoveredEdgeId = hoveredEdge?.id ?? null
 
   const deleteHoveredEdge = (): void => {
@@ -389,32 +449,33 @@ export function DataEdgeLayer({
               <rect key={index} {...rect} fill="black" />
             ))}
           </mask>
-          <linearGradient
-            id={flowGradientId}
-            gradientUnits="userSpaceOnUse"
-            spreadMethod="repeat"
-            x1="0"
-            y1="0"
-            x2="220"
-            y2="0"
-          >
-            <stop offset="0" stopColor="#54f4cb" />
-            <stop offset="0.22" stopColor="#4fc4ff" />
-            <stop offset="0.48" stopColor="#a889ff" />
-            <stop offset="0.7" stopColor="#6ff3b9" />
-            <stop offset="1" stopColor="#54f4cb" />
-          </linearGradient>
         </defs>
         {edges.map((edge) => {
           if (edge.provenance) {
-            // 追溯线只在节点之外可见，且不可交互。
+            // 追溯线只在节点之外可见且不可交互，但沿用普通连线的颜色和流动层级。
             return (
               <g key={edge.id}>
                 <path
                   className="data-edge-visible artifact-provenance-edge"
                   d={edge.path}
                   mask={`url(#${overlapMaskId})`}
-                  style={{ stroke: edge.color, pointerEvents: 'none' }}
+                  style={{
+                    stroke: edge.color,
+                    strokeWidth: 3 * zoom,
+                    filter: `drop-shadow(0 0 ${5 * zoom}px ${edge.color})`,
+                    pointerEvents: 'none'
+                  }}
+                />
+                <path
+                  className="data-edge-flow artifact-provenance-flow"
+                  d={edge.path}
+                  pathLength="1000"
+                  mask={`url(#${overlapMaskId})`}
+                  style={{
+                    color: edge.color,
+                    strokeWidth: 4.5 * zoom,
+                    filter: `drop-shadow(0 0 ${7 * zoom}px ${edge.color})`
+                  }}
                 />
               </g>
             )
@@ -430,14 +491,22 @@ export function DataEdgeLayer({
                 className="data-edge-visible"
                 d={edge.path}
                 mask={`url(#${overlapMaskId})`}
-                style={{ stroke: edge.color }}
+                style={{
+                  stroke: edge.color,
+                  strokeWidth: (active ? 4.1 : hovered ? 3.8 : 3) * zoom,
+                  filter: `drop-shadow(0 0 ${5 * zoom}px ${edge.color})`
+                }}
               />
               <path
                 className="data-edge-flow"
                 d={edge.path}
                 pathLength="1000"
                 mask={`url(#${overlapMaskId})`}
-                style={{ stroke: `url(#${flowGradientId})` }}
+                style={{
+                  color: edge.color,
+                  strokeWidth: 4.5 * zoom,
+                  filter: `drop-shadow(0 0 ${7 * zoom}px ${edge.color})`
+                }}
               />
               <path className="data-edge-hit" d={edge.path} data-edge-id={edge.id} />
             </g>
@@ -449,7 +518,6 @@ export function DataEdgeLayer({
           className="data-edge-scissors"
           type="button"
           aria-label="删除此连线"
-          title="删除此连线"
           style={{ left: hoveredEdge.clientX, top: hoveredEdge.clientY }}
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => {

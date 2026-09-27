@@ -128,6 +128,7 @@ export function ImageEditBody({ shape, openPreview }: NodeBodyProps): React.JSX.
           }}
         >
           打开工作台
+          <Icon name="edit" size={13} />
         </button>
         {workbench}
       </div>
@@ -809,7 +810,7 @@ function ImageEditEditorCore({
               <button
                 key={item.id}
                 className={tool === item.id ? 'active' : ''}
-                title={item.label}
+                aria-label={item.label}
                 aria-pressed={tool === item.id}
                 onPointerDown={stopEventPropagation}
                 onClick={() => {
@@ -822,7 +823,6 @@ function ImageEditEditorCore({
               </button>
             ))}
             <button
-              title="撤销上一步标注"
               aria-label="撤销上一步标注"
               disabled={!config.annotations.length}
               onPointerDown={stopEventPropagation}
@@ -831,7 +831,6 @@ function ImageEditEditorCore({
               <Icon name="undo" size={14} />
             </button>
             <button
-              title="重做上一步标注"
               aria-label="重做上一步标注"
               disabled={!redoAnnotations.length}
               onPointerDown={stopEventPropagation}
@@ -844,6 +843,7 @@ function ImageEditEditorCore({
               onClick={() => save({ ...config, annotations: [] })}
             >
               清空
+              <Icon name="trash" size={13} />
             </button>
             {config.mask?.strokes.length ? (
               <button
@@ -851,6 +851,7 @@ function ImageEditEditorCore({
                 onClick={() => save({ ...config, mask: { ...config.mask!, strokes: [] } })}
               >
                 清空遮罩
+                <Icon name="trash" size={13} />
               </button>
             ) : null}
           </div>
@@ -1018,8 +1019,8 @@ function ImageEditEditorCore({
           '修改中…'
         ) : (
           <>
+            <span>运行 P 图</span>
             <Icon name="spark" size={14} />
-            运行 P 图
           </>
         )}
       </button>

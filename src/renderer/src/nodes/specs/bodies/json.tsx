@@ -192,7 +192,11 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
             enterEditing()
           }}
         >
-          暂无数据
+          <span className="node-empty-state data-empty-state">
+            <span className="node-empty-icon"><Icon name="json" size={24} /></span>
+            <strong>等待 JSON 数据</strong>
+            <small>粘贴数据，或连接上游结构化内容</small>
+          </span>
         </div>
       )}
       <div className="code-toolbar">
@@ -235,7 +239,7 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
         {text && (
           <button
             className="btn-ghost small"
-            title="复制当前 JSON"
+            aria-label="复制当前 JSON"
             onPointerDown={(e) => stopEventPropagation(e)}
             onClick={(e) => {
               e.stopPropagation()

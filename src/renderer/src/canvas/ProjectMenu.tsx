@@ -67,7 +67,7 @@ export function ProjectMenu({ project, onCreateProject, onConfigureWorkspace }: 
     <div className="project-menu" ref={ref}>
       <button
         className="logo-btn"
-        title="项目菜单"
+        aria-label="项目菜单"
         onClick={() => {
           setOpen((v) => !v)
         }}

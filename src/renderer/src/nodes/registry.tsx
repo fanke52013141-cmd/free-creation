@@ -28,6 +28,44 @@ export const NODE_CATEGORIES = [
 
 export { NODE_CATEGORY_IDS, type NodeCategoryId }
 
+/**
+ * 单一节点强调色板。相关节点共享色相家族：图片为绿、视频为青、音频为蓝、
+ * 对话/模型为紫、数据与流程为琥珀；明度保持在标题图标可辨识的范围。
+ */
+export const NODE_ACCENTS = {
+  text: '#38bdf8',
+  image: '#4ade80',
+  'image-crop': '#34d399',
+  'image-split': '#a3e635',
+  'image-gen': '#22c55e',
+  'image-edit': '#86efac',
+  video: '#06b6d4',
+  'video-asset': '#22d3ee',
+  'video-frame': '#67e8f9',
+  'video-clip': '#14b8a6',
+  'video-audio': '#2dd4bf',
+  'video-depth': '#7c3aed',
+  'video-clay': '#64748b',
+  audio: '#60a5fa',
+  'vocal-separate': '#3b82f6',
+  speech: '#93c5fd',
+  tts: '#818cf8',
+  'voice-design': '#a5b4fc',
+  file: '#94a3b8',
+  chat: '#a855f7',
+  'ai-process': '#c084fc',
+  processor: '#f59e0b',
+  json: '#fbbf24',
+  structured: '#d97706',
+  code: '#fb923c',
+  storyboard: '#f97316',
+  iterate: '#ea580c',
+  director: '#f59e0b',
+  script: '#f97316',
+  group: '#f59e0b',
+  compose: '#f97316'
+} satisfies Record<NodeTypeId, string>
+
 export interface PreviewPayload {
   kind: 'image' | 'video' | 'audio'
   url: string
@@ -102,18 +140,18 @@ export interface NodeTypeSpec {
  */
 export const STANDARD_NODE_SIZE = { w: NODE_UI.width, h: NODE_UI.height.default } as const
 
-// 端口类型配色（仅已连接端口使用；未连接端口沿用节点主色）
+// 端口类型色只用于拖线兼容提示；静止端口沿用节点主色，连接后的输入点继承来源节点色。
 export const PORT_COLORS: Record<PortType, string> = {
-  text: '#cbd5e1',
-  markdown: '#38bdf8',
-  json: '#a78bfa',
-  iteration: '#2dd4bf',
+  text: '#38bdf8',
+  markdown: '#7dd3fc',
+  json: '#fbbf24',
+  iteration: '#f97316',
   camera: '#f59e0b',
-  image: '#22c55e',
-  video: '#f43f5e',
-  audio: '#3b82f6',
+  image: '#4ade80',
+  video: '#22d3ee',
+  audio: '#60a5fa',
   file: '#94a3b8',
-  any: '#f7f7f7'
+  any: '#c084fc'
 }
 
 /**
@@ -206,9 +244,9 @@ export function needsNodeSizeMigration(type: string, w: number, h: number): bool
 
 /** 同侧端口在卡片上的纵向落点（px，相对卡片顶部） */
 export function portOffsets(count: number, cardH: number): number[] {
-  if (count <= 0) return []
-  // 端口按整张卡片（含标题）均分：1 个居中；2 个落在 1/4、3/4；
-  // 3 个及以上按 n + 1 等分，保证左右端口与连线锚点使用同一坐标。
+    if (count <= 0) return []
+    // count 是当前可见的类型组数：1 个居中；2 个落在 1/4、3/4；
+    // 3 个及以上按 n + 1 等分。同类型契约端口由 node-port-layout 先合并。
   if (count === 1) return [cardH / 2]
   if (count === 2) return [cardH / 4, (cardH * 3) / 4]
   return Array.from({ length: count }, (_, i) => (cardH * (i + 1)) / (count + 1))

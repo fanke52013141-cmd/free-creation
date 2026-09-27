@@ -22,6 +22,16 @@ export const ALL_IMAGE_ASPECT_RATIOS = [
 
 export type ImageAspectRatio = (typeof ALL_IMAGE_ASPECT_RATIOS)[number]
 
+/** 生图节点对 ToAPIS 图像模型暴露的常用画幅及优先顺序。 */
+export const IMAGE_GENERATION_ASPECT_RATIOS: readonly ImageAspectRatio[] = [
+  '16:9',
+  '9:16',
+  '1:1',
+  '21:9',
+  '4:3',
+  '3:4'
+]
+
 /** 读回存量配置时的取值域判定：P 图的比例不再有第二份清单，所以只能按这份全集校验。 */
 export function isImageAspectRatio(value: unknown): value is ImageAspectRatio {
   return (ALL_IMAGE_ASPECT_RATIOS as readonly string[]).includes(String(value))
@@ -77,6 +87,7 @@ export interface ImageGenerationConfig {
 }
 
 const IMAGE_RESOLUTIONS: ImageResolution[] = ['1k', '2k', '4k']
+const DEFAULT_IMAGE_ASPECT_RATIOS: ImageAspectRatio[] = ['16:9', '3:2', '1:1']
 
 /** TOAPIS gpt-image-2 官方支持的 13 种画幅比例（size 直接提交比例串）。 */
 const TOAPIS_RATIOS: ImageAspectRatio[] = [
@@ -221,6 +232,22 @@ export function imageAspectRatioForSize(
   return capabilities.sizeOptions.find((item) => item.value === size)?.ratio ?? 'auto'
 }
 
+function defaultImageAspectRatio(capabilities: ImageCapabilities): ImageAspectRatio {
+  const ratios = imageGenerationRatios(capabilities)
+  return (
+    DEFAULT_IMAGE_ASPECT_RATIOS.find((ratio) => ratios.includes(ratio)) ??
+    ratios[0] ??
+    'auto'
+  )
+}
+
+function imageGenerationRatios(capabilities: ImageCapabilities): ImageAspectRatio[] {
+  if (capabilities.driver === 'toapis-task') {
+    return capabilities.ratios.filter((ratio) => IMAGE_GENERATION_ASPECT_RATIOS.includes(ratio))
+  }
+  return capabilities.ratios
+}
+
 /**
  * P 图遮罩是否随请求发送。TOAPIS 的 /images/generations 提交字段是封闭集合，里面没有
  * mask，因此那条通道上遮罩既不发、也不许在界面上出现（NODE_UI_SPEC §16.15）。
@@ -239,24 +266,29 @@ export function normalizeImageGenerationConfig(
   input: Partial<ImageGenerationConfig>,
   capabilities: ImageCapabilities
 ): ImageGenerationConfig {
+  const ratios = imageGenerationRatios(capabilities)
   // 旧版本使用固定像素尺寸；将它们平滑迁移到等比画幅意图。
   const legacySizeRatio: Record<string, ImageAspectRatio> = {
     '1536x1024': '16:9',
     '1024x1536': '9:16'
   }
   const rawInputRatio = input.aspectRatio as string | undefined
-  // 3:2/2:3 曾被收敛为 16:9/9:16；目标供应商原生支持时保留原值（如 ToAPIS）。
+  // 3:2/2:3 曾被收敛为 16:9/9:16；若当前生图控件不提供该比例则迁移到对应常用比例。
   const legacyInputRatio =
-    rawInputRatio === '3:2' && !capabilities.ratios.includes('3:2')
+    rawInputRatio === '3:2' && !ratios.includes('3:2')
       ? '16:9'
-      : rawInputRatio === '2:3' && !capabilities.ratios.includes('2:3')
+      : rawInputRatio === '2:3' && !ratios.includes('2:3')
         ? '9:16'
         : input.aspectRatio
   const legacyRatio =
     legacySizeRatio[input.size ?? ''] ?? imageAspectRatioForSize(capabilities, input.size ?? '')
-  const requestedRatio = capabilities.ratios.includes(legacyInputRatio ?? legacyRatio)
-    ? (legacyInputRatio ?? legacyRatio)
-    : legacyRatio
+  const preferredRatio = legacyInputRatio ?? legacyRatio
+  const requestedRatio =
+    preferredRatio === 'auto' && ratios.some((ratio) => ratio !== 'auto')
+      ? defaultImageAspectRatio(capabilities)
+      : ratios.includes(preferredRatio)
+        ? preferredRatio
+        : defaultImageAspectRatio(capabilities)
   const sizeOptions = sizesForImageAspectRatio(capabilities, requestedRatio)
   const requestedSize = sizeOptions.some((item) => item.value === input.size)
     ? input.size!

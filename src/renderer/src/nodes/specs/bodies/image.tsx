@@ -4,7 +4,6 @@ import { stopEventPropagation } from 'tldraw'
 import { mediaUrl, type NodeBodyProps } from '../../registry'
 import {
   ImageContinuationActions,
-  MediaFileActions,
   pickImportedAsset,
   useClickGuard
 } from './shared'
@@ -63,6 +62,7 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           }}
         >
           导入图片
+          <Icon name="upload" size={14} />
         </button>
       </div>
     )
@@ -89,21 +89,20 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
       <ImageContinuationActions
         editor={editor}
         shape={shape}
+        variant="image-node"
         extra={
-          <>
-            <button
-              className="btn-ghost small"
-              title="替换图片"
-              onPointerDown={(e) => stopEventPropagation(e)}
-              onClick={(e) => {
-                e.stopPropagation()
-                void chooseAsset()
-              }}
-            >
-              替换
-            </button>
-            <MediaFileActions shape={shape} />
-          </>
+          <button
+            className="btn-ghost small image-node-action-button"
+            aria-label="替换图片"
+            type="button"
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onClick={(e) => {
+              e.stopPropagation()
+              void chooseAsset()
+            }}
+          >
+            替换
+          </button>
         }
       />
     </div>

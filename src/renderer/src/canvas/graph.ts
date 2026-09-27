@@ -7,10 +7,10 @@ import {
   getNodePorts,
   getNodeType,
   portCompatible,
-  portOffsets,
   type NodeTypeSpec
 } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
+import { collectNodePortConnections, createNodePortLayout } from './node-port-layout'
 import type { BatchConnectionMember, ConnectionFrom } from '../stores/connection'
 import { projectNodeOutputs, type NodeValue } from '../nodes/nodeValues'
 import { TEXT_MERGE_SEPARATOR } from '@shared/engine/helpers'
@@ -223,11 +223,21 @@ export function createEdge(
   if (!portPairCompatible(fromPort, toPort)) return false
   if (toPort.cardinality === 'one' && inputPortOccupied(editor, to)) return false
 
-  const fromIdx = Math.max(0, fromPorts.out.indexOf(fromPort))
-  const toIdx = Math.max(0, toPorts.in.indexOf(toPort))
-  const fromY =
-    portOffsets(fromPorts.out.length, fromShape.props.h)[fromIdx] ?? fromShape.props.h / 2
-  const toY = portOffsets(toPorts.in.length, toShape.props.h)[toIdx] ?? toShape.props.h / 2
+  // Include the edge being created before calculating positions, so the new type
+  // immediately joins the shared equal-spacing layout on both nodes.
+  const connections = collectNodePortConnections(editor)
+  const fromY = createNodePortLayout(
+    fromPorts.out,
+    connections.get(fromShape.id)?.out ?? new Set<string>(),
+    fromShape.props.h,
+    new Set([fromPort.id])
+  ).offsets.get(fromPort.id) ?? fromShape.props.h / 2
+  const toY = createNodePortLayout(
+    toPorts.in,
+    connections.get(toShape.id)?.in ?? new Set<string>(),
+    toShape.props.h,
+    new Set([toPort.id])
+  ).offsets.get(toPort.id) ?? toShape.props.h / 2
 
   const startPage = pagePortPoint(editor, fromShape, 'out', fromY)
   const endPage = pagePortPoint(editor, toShape, 'in', toY)
@@ -515,16 +525,21 @@ export function tryConnectBatch(
   } else if (dropPagePt && compatible.length > 1) {
     const targetBounds = editor.getShapePageBounds(target.id)
     if (!targetBounds) return { created: 0, skipped: 0, error: '目标节点位置不可用' }
-    const offsets = portOffsets(targetPorts.in.length, target.props.h)
+    const layout = createNodePortLayout(
+      targetPorts.in,
+      collectNodePortConnections(editor).get(target.id)?.in ?? new Set<string>(),
+      target.props.h,
+      new Set(compatible.map((port) => port.id))
+    )
     targetPort = compatible.reduce((best, port) => {
-      const bestIndex = targetPorts.in.indexOf(best)
-      const index = targetPorts.in.indexOf(port)
       const bestY =
         targetBounds.y +
-        (targetBounds.height * (offsets[bestIndex] ?? target.props.h / 2)) / target.props.h
+        (targetBounds.height * (layout.offsets.get(best.id) ?? target.props.h / 2)) /
+          target.props.h
       const y =
         targetBounds.y +
-        (targetBounds.height * (offsets[index] ?? target.props.h / 2)) / target.props.h
+        (targetBounds.height * (layout.offsets.get(port.id) ?? target.props.h / 2)) /
+          target.props.h
       return Math.abs(dropPagePt.y - y) < Math.abs(dropPagePt.y - bestY) ? port : best
     })
   }
@@ -594,13 +609,18 @@ function resolveTargetInputPort(
 
   // 落点最近端口（不限兼容性）：仅用于解释改连，不影响选口结果。
   let aimed: PortDecl | null = null
+  const inputLayout = createNodePortLayout(
+    targetPorts.in,
+    collectNodePortConnections(editor).get(target.id)?.in ?? new Set<string>(),
+    target.props.h,
+    new Set(compatible.map((port) => port.id))
+  )
   const targetBounds = dropPagePt ? editor.getShapePageBounds(target.id) : null
   if (dropPagePt && targetBounds) {
-    const offsets = portOffsets(targetPorts.in.length, target.props.h)
     let bestDist = Infinity
     for (const p of targetPorts.in) {
-      const idx = targetPorts.in.indexOf(p)
-      const y = offsets[idx] ?? target.props.h / 2
+      const y = inputLayout.offsets.get(p.id)
+      if (y === undefined) continue
       const pageY =
         target.props.h > 0
           ? targetBounds.y + (targetBounds.height * y) / target.props.h
@@ -621,11 +641,9 @@ function resolveTargetInputPort(
   } else if (dropPagePt && usable.length > 1) {
     const targetBounds = editor.getShapePageBounds(target.id)
     if (!targetBounds) return { error: '目标节点位置不可用' }
-    const offsets = portOffsets(targetPorts.in.length, target.props.h)
     let bestDist = Infinity
     for (const p of usable) {
-      const idx = targetPorts.in.indexOf(p)
-      const y = offsets[idx] ?? target.props.h / 2
+      const y = inputLayout.offsets.get(p.id) ?? target.props.h / 2
       const pageY =
         target.props.h > 0
           ? targetBounds.y + (targetBounds.height * y) / target.props.h
@@ -754,11 +772,15 @@ function resolveSourceOutputPort(
   } else if (dropPagePt && compatible.length > 1) {
     const bounds = editor.getShapePageBounds(source.id)
     if (!bounds) return { error: '源节点位置不可用' }
-    const offsets = portOffsets(sourcePorts.out.length, source.props.h)
+    const layout = createNodePortLayout(
+      sourcePorts.out,
+      collectNodePortConnections(editor).get(source.id)?.out ?? new Set<string>(),
+      source.props.h,
+      new Set(compatible.map((port) => port.id))
+    )
     let bestDist = Infinity
     for (const candidate of compatible) {
-      const idx = sourcePorts.out.indexOf(candidate)
-      const y = offsets[idx] ?? source.props.h / 2
+      const y = layout.offsets.get(candidate.id) ?? source.props.h / 2
       const pageY = source.props.h > 0 ? bounds.y + (bounds.height * y) / source.props.h : bounds.y
       // 输出端口位于卡片右侧；距离按 (右缘, 端口纵向位置) 计算。
       const d = Math.hypot(dropPagePt.x - bounds.maxX, dropPagePt.y - pageY)

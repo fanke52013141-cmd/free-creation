@@ -522,7 +522,7 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
             key={bt.name}
             className="wf-builtin-card"
             onClick={() => handleApplyBuiltin(bt)}
-            title={bt.desc}
+            aria-label={bt.desc}
           >
             <span className="wf-builtin-icon">
               <Icon name={bt.icon} size={20} />
@@ -557,14 +557,13 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
               <div className="wf-template-actions">
                 <button
                   className="wf-action-btn apply"
-                  title="套用模板"
+                  aria-label="套用模板"
                   onClick={() => handleApply(tmpl)}
                 >
                   <Icon name="add" size={13} /> 套用
                 </button>
                 <button
                   className="wf-action-btn delete"
-                  title="删除模板"
                   aria-label={`删除工作流模板 ${tmpl.name}`}
                   onClick={() => void handleRemoveTemplate(tmpl)}
                 >
@@ -826,14 +825,13 @@ function HistoryPanel({
               <div className="history-card-actions">
                 <button
                   className="history-action-btn restore"
-                  title="回溯到此版本"
+                  aria-label="回溯到此版本"
                   onClick={() => handleRestore(snap)}
                 >
                   ↩ 回溯
                 </button>
                 <button
                   className="history-action-btn delete"
-                  title="删除此版本"
                   aria-label={`删除历史版本 ${snap.label}`}
                   onClick={() => void handleRemove(snap)}
                 >
@@ -859,6 +857,7 @@ export function CanvasSidePanel({
 }: CanvasSidePanelProps): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   const [runFocus, setRunFocus] = useState<RunFocus>(null)
+  const [assetSelectionMode, setAssetSelectionMode] = useState(true)
 
   useEffect(() => {
     if (!tab) return
@@ -875,22 +874,35 @@ export function CanvasSidePanel({
   const meta = TAB_META[tab]
 
   return (
-    <div className="side-panel" ref={ref}>
-      <div className="side-panel-head">
+    <div className={`side-panel${tab === 'assets' ? ' assets-side-panel' : ''}`} ref={ref}>
+      <div className={`side-panel-head${tab === 'assets' ? ' assets-panel-head' : ''}`}>
         <span className="side-panel-icon">
           <Icon name={meta.icon} size={17} />
         </span>
         <strong className="side-panel-title">{meta.title}</strong>
-        <button className="side-panel-close" title="关闭" aria-label="关闭面板" onClick={onClose}>
+        {tab === 'assets' && (
+          <button
+            type="button"
+            className="assets-selection-toggle"
+            aria-pressed={assetSelectionMode}
+            onClick={() => setAssetSelectionMode((enabled) => !enabled)}
+          >
+            <Icon name="check" size={14} />
+            {assetSelectionMode ? '退出多选' : '多选导出'}
+          </button>
+        )}
+        <button className="side-panel-close" aria-label="关闭面板" onClick={onClose}>
           <Icon name="close" size={15} />
         </button>
       </div>
       {tab === 'assets' && (
         <AssetsPanel
+          key={projectId}
           projectId={projectId}
           editor={editor}
           onImport={onImport}
           onAddToCanvas={onAddToCanvas}
+          selectionMode={assetSelectionMode}
           onOpenRun={(nodeId, runId) => {
             setRunFocus({ nodeId, runId })
             onOpenRuns()

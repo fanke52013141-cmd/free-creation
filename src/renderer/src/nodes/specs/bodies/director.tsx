@@ -71,7 +71,7 @@ export function DirectorBody({ shape }: NodeBodyProps): React.JSX.Element {
             event.stopPropagation()
             createPrevisVideoReference(editor, shape)
           }}
-          title="创建视频节点，并以当前预演视频作为真实运动参考输入"
+          aria-label="创建视频节点，并以当前预演视频作为真实运动参考输入"
         >
           <Icon name="video" size={15} /> 用作运动参考
         </button>

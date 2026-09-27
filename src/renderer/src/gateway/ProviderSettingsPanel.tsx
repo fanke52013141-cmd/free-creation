@@ -20,6 +20,7 @@ import { useGatewayStore } from '../stores/gateway'
 import { useConfirmStore } from '../stores/confirm'
 import { toast } from '../stores/toast'
 import { Icon } from '../components/Icon'
+import { AppSelect } from '../components/AppSelect'
 
 interface Draft extends Omit<SaveProviderInput, 'apiKey'> {
   apiKey: string
@@ -447,7 +448,6 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
           <button
             className="icon-btn"
             onClick={close}
-            title="关闭 (Esc)"
             aria-label="关闭供应商设置"
           >
             <Icon name="close" size={16} />
@@ -461,7 +461,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                   <button
                     key={s.id}
                     className="gw-spec-btn"
-                    title={s.desc}
+                    aria-label={s.desc}
                     onClick={() => {
                       setDraft(newDraft(s.id))
                       setPicking(false)
@@ -588,7 +588,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                   </label>
                   <label className="gw-row">
                     <span className="gw-label">厂商模板</span>
-                    <select
+                    <AppSelect
                       className="gw-input"
                       value={draft.specId}
                       onChange={(e) => changeSpec(e.target.value as ProviderSpecId)}
@@ -598,7 +598,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                           {s.label}
                         </option>
                       ))}
-                    </select>
+                    </AppSelect>
                   </label>
                   <label className="gw-row">
                     <span className="gw-label">Base URL</span>
@@ -678,7 +678,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                           })
                         }
                       />
-                      <select
+                      <AppSelect
                         className="gw-input w86"
                         value={m.modality}
                         aria-label={`模型类别（第 ${i + 1} 行）`}
@@ -697,10 +697,9 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                             {categoryLabel(modality, draft.specId)}
                           </option>
                         ))}
-                      </select>
+                      </AppSelect>
                       <button
                         className="shot-op danger"
-                        title="删除模型"
                         aria-label={`删除模型 ${m.id || `第 ${i + 1} 行`}`}
                         onClick={() => patch({ models: draft.models.filter((_, j) => j !== i) })}
                       >

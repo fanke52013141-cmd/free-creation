@@ -14,6 +14,7 @@ import { createPortal } from 'react-dom'
  * 它只负责说明，不接管按钮的点击、键盘或可访问性语义。
  */
 type TooltipChildProps = {
+  role?: string
   'aria-describedby'?: string
   onMouseEnter?: (event: MouseEvent<HTMLElement>) => void
   onMouseLeave?: (event: MouseEvent<HTMLElement>) => void
@@ -42,6 +43,9 @@ export function Tooltip({
     left: number
     side: Exclude<TooltipPlacement, 'auto'>
   } | null>(null)
+  // Buttons keep their accessible name, but never show hover labels in the canvas UI.
+  if (children.type === 'button' || children.props.role === 'button') return children
+
   const show = (element: HTMLElement): void => {
     const anchor = anchorSelector
       ? (element.querySelector<HTMLElement>(anchorSelector) ?? element)

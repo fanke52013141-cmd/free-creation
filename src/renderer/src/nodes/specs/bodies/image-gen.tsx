@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import {
   imageCapabilitiesFor,
+  IMAGE_GENERATION_ASPECT_RATIOS,
   normalizeImageGenerationConfig,
   sizesForImageAspectRatio,
   type ImageAspectRatio,
@@ -25,14 +26,7 @@ import './node-workbench.css'
 
 type ImageGenData = ImageGenerationConfig
 
-const IMAGE_RATIO_PRIORITY: readonly ImageAspectRatio[] = [
-  '9:16',
-  '16:9',
-  '1:1',
-  '21:9',
-  '4:3',
-  '3:4'
-]
+const IMAGE_RATIO_PRIORITY: readonly ImageAspectRatio[] = IMAGE_GENERATION_ASPECT_RATIOS
 
 function orderedImageRatios(ratios: readonly ImageAspectRatio[]): ImageAspectRatio[] {
   const priority = new Map(IMAGE_RATIO_PRIORITY.map((ratio, index) => [ratio, index]))
@@ -77,7 +71,13 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
     ? imageCapabilitiesFor(selected.provider.specId, selected.model.id)
     : imageCapabilitiesFor('relay')
   const config = normalizeImageGenerationConfig(data, capabilities)
-  const orderedRatios = orderedImageRatios(capabilities.ratios)
+  // The image-2 generation UI exposes the six requested ratios. Other image APIs keep
+  // their own explicit capability set; the provider's automatic default is never an option.
+  const availableRatios =
+    capabilities.driver === 'toapis-task'
+      ? capabilities.ratios.filter((ratio) => IMAGE_GENERATION_ASPECT_RATIOS.includes(ratio))
+      : capabilities.ratios.filter((ratio) => ratio !== 'auto')
+  const orderedRatios = orderedImageRatios(availableRatios)
   const [draft, setDraft] = useState(shape.props.text)
   const [busy, setBusy] = useState(false)
   const promptRef = useRef<HTMLTextAreaElement | null>(null)
@@ -196,43 +196,9 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
           }}
         />
       </div>
-      <div className="gen-row">
+      <div className="gen-row gen-options-row">
         <AppSelect
-          className="gen-select w92"
-          value={config.aspectRatio}
-          onPointerDown={(e) => e.stopPropagation()}
-          onChange={(e) => {
-            const ratio = e.target.value as ImageAspectRatio
-            update({
-              ...config,
-              aspectRatio: ratio,
-              size: sizesForImageAspectRatio(capabilities, ratio)[0]?.value ?? 'auto'
-            })
-          }}
-        >
-          {orderedRatios.map((ratio) => (
-            <option key={ratio} value={ratio}>
-              {ratio === 'auto' ? '默认画幅' : ratio}
-            </option>
-          ))}
-        </AppSelect>
-        {capabilities.resolutions.length > 0 && (
-          <AppSelect
-            className="gen-select w86"
-            value={config.resolution ?? capabilities.resolutions[0]}
-            onPointerDown={(e) => e.stopPropagation()}
-            onChange={(e) => update({ ...config, resolution: e.target.value as ImageResolution })}
-            aria-label="选择分辨率"
-          >
-            {capabilities.resolutions.map((resolution) => (
-              <option key={resolution} value={resolution}>
-                {resolution}
-              </option>
-            ))}
-          </AppSelect>
-        )}
-        <AppSelect
-          className="gen-select w70"
+          className="gen-select gen-count"
           value={String(config.count)}
           onPointerDown={(e) => e.stopPropagation()}
           onChange={(e) => update({ ...config, count: Number(e.target.value) })}
@@ -245,6 +211,42 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
             </option>
           ))}
         </AppSelect>
+        {orderedRatios.length > 0 && (
+          <AppSelect
+            className="gen-select gen-aspect"
+            value={config.aspectRatio}
+            onPointerDown={(e) => e.stopPropagation()}
+            onChange={(e) => {
+              const ratio = e.target.value as ImageAspectRatio
+              update({
+                ...config,
+                aspectRatio: ratio,
+                size: sizesForImageAspectRatio(capabilities, ratio)[0]?.value ?? 'auto'
+              })
+            }}
+          >
+            {orderedRatios.map((ratio) => (
+              <option key={ratio} value={ratio}>
+                {ratio}
+              </option>
+            ))}
+          </AppSelect>
+        )}
+        {capabilities.resolutions.length > 0 && (
+          <AppSelect
+            className="gen-select gen-resolution"
+            value={config.resolution ?? capabilities.resolutions[0]}
+            onPointerDown={(e) => e.stopPropagation()}
+            onChange={(e) => update({ ...config, resolution: e.target.value as ImageResolution })}
+            aria-label="选择分辨率"
+          >
+            {capabilities.resolutions.map((resolution) => (
+              <option key={resolution} value={resolution}>
+                {resolution}
+              </option>
+            ))}
+          </AppSelect>
+        )}
         {capabilities.supportsTransparentBackground && (
           <label className="gen-check" title="输出透明背景 PNG；关闭时由供应商决定背景">
             <input
@@ -262,6 +264,7 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
       <textarea
         ref={promptRef}
         className="gen-prompt"
+        rows={4}
         value={draft}
         spellCheck={false}
         placeholder="描述要生成的画面…"
@@ -283,6 +286,7 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
             >
               <img src={mediaUrl(image.mediaPath)} alt="" />
               @图片 {index + 1}
+              <Icon name="attach" size={13} />
             </button>
           ))}
         </div>
@@ -300,8 +304,8 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
           '生成中…'
         ) : (
           <>
+            <span>生成图片</span>
             <Icon name="spark" size={14} />
-            生成图片
           </>
         )}
       </button>
