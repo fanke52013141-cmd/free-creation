@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { beforeAll, describe, expect, it } from 'vitest'
 import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
-import { BUILTIN_TEMPLATES } from '@renderer/canvas/CanvasSidePanel'
+import { BUILTIN_TEMPLATES } from './fixtures/workflow-builtin-fixtures'
 import { getNodePorts, getNodeType, portCompatible } from '@renderer/nodes/registry'
 import { nodeSchemasCompatible } from '@shared/node-schemas'
 import { registerAllNodeTypes } from './helpers/registerNodes'

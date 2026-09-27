@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Editor } from 'tldraw'
+import { useValue, type Editor } from 'tldraw'
 import type { MediaAsset, PortDecl, PortType, ProviderSummary } from '@shared/types'
 import { getNodePorts, getNodeType, PORT_TYPE_LABELS } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
@@ -404,14 +404,17 @@ export function NodeContractPanel({
   useEffect(() => {
     const onPointerDown = (event: PointerEvent): void => {
       if (panelRef.current?.contains(event.target as Node)) return
+      // AppSelect renders its options in a body portal, outside panelRef. Treat that
+      // portal as part of the panel so selecting a model does not unmount settings.
+      if (event.target instanceof Element && event.target.closest('.app-select-content')) return
       onClose()
     }
     window.addEventListener('pointerdown', onPointerDown, true)
     return () => window.removeEventListener('pointerdown', onPointerDown, true)
   }, [onClose])
 
+  const shape = useValue('node contract panel shape', () => shapeId ? editor.getShape<NodeCardShape>(shapeId) : undefined, [editor, shapeId])
   if (!shapeId) return null
-  const shape = editor.getShape<NodeCardShape>(shapeId)
   // 对话也有真实的 text → markdown 契约；不能因为它另有聊天工作区就隐藏 I/O 说明。
   if (!shape) return null
   const spec = getNodeType(shape.props.nodeType)

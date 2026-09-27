@@ -10434,15 +10434,28 @@ select:focus-visible,
   display: flex;
   flex-direction: column;
 }
-.wf-save-bar {
+.wf-search {
   display: flex;
-  gap: 6px;
-  padding: 8px 10px;
+  align-items: center;
+  gap: 9px;
+  margin: 12px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg);
+  color: var(--muted);
 }
-.wf-save-bar .side-panel-primary {
-  flex-shrink: 0;
-  white-space: nowrap;
+.wf-search:focus-within { border-color: var(--brand); }
+.wf-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--txt);
+  font: inherit;
 }
+.workflow-save-dialog { width: min(480px, 100%); }
 .wf-name-input {
   flex: 1;
   min-width: 0;
@@ -10463,70 +10476,6 @@ select:focus-visible,
   font-size: 11px;
   color: var(--muted);
   line-height: 1.4;
-}
-.wf-section-title {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 6px 12px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-.wf-builtin-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 0 8px 8px;
-}
-.wf-builtin-card {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  cursor: pointer;
-  text-align: left;
-  transition:
-    border-color 0.15s,
-    background 0.15s;
-}
-.wf-builtin-card:hover {
-  border-color: var(--brand);
-  background: rgba(9, 202, 245, 0.08);
-}
-.wf-builtin-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  flex-shrink: 0;
-}
-.wf-builtin-info {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-}
-.wf-builtin-info strong {
-  font-size: 12px;
-  color: var(--txt);
-}
-.wf-builtin-info span {
-  font-size: 10px;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.wf-builtin-info small {
-  color: color-mix(in srgb, var(--brand) 72%, var(--muted));
-  font-size: 10px;
 }
 .wf-template-list {
   display: flex;

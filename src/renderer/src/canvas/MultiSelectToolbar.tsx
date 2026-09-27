@@ -5,7 +5,7 @@ import { Icon } from '../components/Icon'
 interface MultiSelectToolbarProps {
   editor: Editor
   onRunFlow: (ids: TLShapeId[]) => void
-  onSaveWorkflow: () => void
+  onSaveWorkflow: (ids: TLShapeId[]) => void
 }
 
 type AlignMode = 'left' | 'right' | 'center-h' | 'center-v' | 'distribute-h' | 'distribute-v'
@@ -186,7 +186,7 @@ export function MultiSelectToolbar({
             className="ms-btn ms-template"
             data-tool="workflow"
             aria-label="保存为工作流"
-            onClick={onSaveWorkflow}
+            onClick={() => onSaveWorkflow(selectedIds)}
           >
             <Icon name="workflow" size={18} />
           </button>

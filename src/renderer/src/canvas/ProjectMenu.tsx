@@ -72,10 +72,7 @@ export function ProjectMenu({ project, onCreateProject, onConfigureWorkspace }: 
           setOpen((v) => !v)
         }}
       >
-        <span className="logo-mark">
-          <Icon name="grid" size={15} />
-        </span>
-        <span className="logo-text">无限画布</span>
+        <span className="logo-text">项目</span>
       </button>
       {open && (
         <div className="project-menu-panel">

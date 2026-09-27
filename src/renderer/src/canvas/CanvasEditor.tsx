@@ -1,5 +1,6 @@
 import { ResourceInsertRequest } from '../library/ResourceInsertRequest'
 import { SaveCanvasNodesDialog } from '../library/SaveCanvasNodesDialog'
+import { WorkflowSaveDialog } from './WorkflowSaveDialog'
 import { Tldraw, createShapeId, type Editor, type TLShapeId } from 'tldraw'
 import 'tldraw/tldraw.css'
 import './node-scrollbars.css'
@@ -270,6 +271,7 @@ export function CanvasEditor({ project, initialSnapshot, workspaceProfile }: Can
   const [clipboardCount, setClipboardCount] = useState(0)
   const [menu, setMenu] = useState<MenuState | null>(null)
   const [librarySaveSelection, setLibrarySaveSelection] = useState<TLShapeId[] | null>(null)
+  const [workflowSaveSelection, setWorkflowSaveSelection] = useState<TLShapeId[] | null>(null)
   // 拉线到空白后的菜单锚点由实际 DOM 尺寸测得；不能再把鼠标松手点误当菜单左上角。
   const [menuAnchor, setMenuAnchor] = useState<{ x: number; y: number } | null>(null)
   const [dragOver, setDragOver] = useState(false)
@@ -1851,7 +1853,7 @@ export function CanvasEditor({ project, initialSnapshot, workspaceProfile }: Can
               <span className="palette-icon">
                 <Icon name="workflow" size={20} />
               </span>
-              <span className="palette-label">流程</span>
+              <span className="palette-label">工作流</span>
             </button>
           </Tooltip>
           <Tooltip label="打开历史记录">
@@ -1886,7 +1888,7 @@ export function CanvasEditor({ project, initialSnapshot, workspaceProfile }: Can
         <MultiSelectToolbar
           editor={editorInstance}
           onRunFlow={(ids) => void runWorkflowForNodes(editorInstance, project.id, providers, ids)}
-          onSaveWorkflow={() => setPanelTab('workflow')}
+          onSaveWorkflow={(ids) => setWorkflowSaveSelection(ids)}
         />
       )}
       {/* 搜索覆盖层（顶栏按钮触发，在 Tldraw 同级渲染） */}
@@ -1899,6 +1901,14 @@ export function CanvasEditor({ project, initialSnapshot, workspaceProfile }: Can
           nodeIds={librarySaveSelection}
           onClose={() => setLibrarySaveSelection(null)}
           onSaved={() => setLibrarySaveSelection(null)}
+        />
+      )}
+      {editorInstance && workflowSaveSelection && (
+        <WorkflowSaveDialog
+          editor={editorInstance}
+          nodeIds={workflowSaveSelection}
+          onClose={() => setWorkflowSaveSelection(null)}
+          onSaved={() => { setWorkflowSaveSelection(null); setPanelTab('workflow') }}
         />
       )}
       <CanvasSidePanel
