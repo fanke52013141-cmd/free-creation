@@ -1,9 +1,11 @@
 // 媒体 IPC：拖拽导入 + 系统对话框选择导入（见《技术框架与规范》§10）
 import { ipcMain, dialog, clipboard, shell } from 'electron'
+import log from 'electron-log/main'
 import { constants as fsConstants } from 'fs'
 import { copyFile } from 'fs/promises'
 import { basename, extname, join } from 'path'
 import { IPC } from '../../shared/contracts'
+import { redactDiagnosticText } from '../../shared/diagnostics'
 import type { IpcEnvelope } from '../../shared/contracts'
 import type {
   AudioWaveformInput,
@@ -369,16 +371,52 @@ export function registerMediaIpc(): void {
   ipcMain.handle(
     IPC.media.ttsGenerate,
     async (_e, input: TtsGenerateInput): Promise<IpcEnvelope<VoiceCloneResult>> => {
+      const startedAt = Date.now()
+      const privateValues = [
+        input?.text ?? '',
+        input?.config?.promptText ?? '',
+        input?.config?.voiceId ?? '',
+        input?.referenceAudioId ?? '',
+        input?.config?.promptMediaId ?? ''
+      ]
+      const logEvent = (level: 'info' | 'error', message: string): void => {
+        const event = {
+          event: 'voice-clone-ipc',
+          at: new Date().toISOString(),
+          runId: input?.runId ?? 'unavailable',
+          nodeId: input?.nodeId ?? 'unavailable',
+          phase: 'ipc',
+          level,
+          message: redactDiagnosticText(message, 500, privateValues),
+          backend: input?.config?.backend,
+          providerId: input?.config?.providerId,
+          modelId: input?.config?.modelId,
+          textCharacters: typeof input?.text === 'string' ? input.text.trim().length : 0
+        }
+        if (level === 'error') log.error(JSON.stringify(event))
+        else log.info(JSON.stringify(event))
+      }
+      logEvent('info', '收到语音克隆请求')
       if (!input?.projectId || !input.referenceAudioId || !input.text?.trim()) {
+        logEvent('error', '请求校验失败：缺少项目、参考音频或合成文本')
         return err('INVALID_INPUT', '缺少参考音频或合成文本')
       }
       if (!input.config || typeof input.config !== 'object') {
+        logEvent('error', '请求校验失败：合成配置不完整')
         return err('INVALID_INPUT', '合成配置不完整')
       }
       try {
-        return ok(await transformTts(input))
+        const result = await transformTts(input)
+        logEvent('info', `语音克隆请求完成，耗时 ${Date.now() - startedAt} ms`)
+        return ok(result)
       } catch (error) {
-        return err('TTS_FAILED', error instanceof Error ? error.message : String(error))
+        const message = redactDiagnosticText(
+          error instanceof Error ? error.message : String(error),
+          500,
+          privateValues
+        )
+        logEvent('error', `语音克隆请求失败，耗时 ${Date.now() - startedAt} ms：${message}`)
+        return err('TTS_FAILED', message)
       }
     }
   )

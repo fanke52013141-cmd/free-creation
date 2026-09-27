@@ -1,12 +1,5 @@
 // AI 对话节点的沉浸式工作区。模型调用仍只通过 registered executor 进行。
-import {
-  isValidElement,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type ReactNode
-} from 'react'
+import { isValidElement, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { Editor, TLShapeId } from 'tldraw'
 import ReactMarkdown, { type Components } from 'react-markdown'
@@ -507,8 +500,12 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
               <Icon name="add" size={16} />
             </button>
           </div>
-          <div className="chat-dialog-heading">
-            <Icon name="chat" size={18} />
+          <div
+            className={`chat-dialog-heading${selectedModel ? ' is-ready' : ''}${running ? ' is-running' : ''}`}
+          >
+            <span className="chat-dialog-model-dot" aria-hidden="true">
+              <span />
+            </span>
             <span id="chat-dialog-title">
               {selectedModel ? selectedModel.model.name || selectedModel.model.id : 'AI 对话'}
             </span>
@@ -549,81 +546,86 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
               aria-live="polite"
               aria-atomic="false"
             >
-              {messages.map((message, index) => (
-                <article
-                  className={`chat-dialog-message ${message.role}`}
-                  key={`${index}-${message.content.slice(0, 24)}`}
-                >
-                  <div className="chat-dialog-message-meta">
-                    {message.role === 'user' ? '你' : 'AI'}
-                  </div>
-                  <div className="chat-dialog-bubble">
-                    {editingIndex === index ? (
-                      <>
-                        <textarea
-                          aria-label="修改消息"
-                          value={editingText}
-                          rows={4}
-                          onChange={(event) => setEditingText(event.target.value)}
-                        />
-                        <div className="chat-dialog-edit-actions">
-                          <button type="button" onClick={() => setEditingIndex(null)}>
-                            取消
-                          </button>
-                          <button type="button" onClick={saveEdit} disabled={!editingText.trim()}>
-                            保存
-                          </button>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        {message.role === 'assistant' &&
-                          (message.reasoning ||
-                            (running && index === messages.length - 1 && !message.content)) && (
-                            <ReasoningBlock
-                              content={message.reasoning ?? ''}
-                              live={running && index === messages.length - 1 && !message.content}
-                            />
-                          )}
-                        <MarkdownMessage content={message.content} />
-                      </>
-                    )}
-                  </div>
-                  {editingIndex !== index && (
-                    <div className="chat-dialog-message-actions">
-                      <button
-                        type="button"
-                        aria-label="复制消息"
-                        onClick={() => copyText(message.content)}
-                      >
-                        <Icon name="copy" size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="修改消息"
-                        onClick={() => {
-                          setEditingIndex(index)
-                          setEditingText(message.content)
-                        }}
-                      >
-                        <Icon name="edit" size={14} />
-                      </button>
-                      {message.role === 'assistant' && (
-                        <button
-                          type="button"
-                          aria-label="重新生成"
-                          disabled={running}
-                          onClick={() => void regenerate(index)}
-                        >
-                          <Icon name="reset" size={14} />
-                        </button>
+              {messages.map((message, index) => {
+                const isStreaming =
+                  running && message.role === 'assistant' && index === messages.length - 1
+                return (
+                  <article
+                    className={`chat-dialog-message ${message.role}${isStreaming && message.content ? ' is-streaming' : ''}`}
+                    key={`${index}-${message.content.slice(0, 24)}`}
+                  >
+                    <div className="chat-dialog-message-meta">
+                      {message.role === 'user' ? '你' : 'AI'}
+                    </div>
+                    <div className="chat-dialog-bubble">
+                      {editingIndex === index ? (
+                        <>
+                          <textarea
+                            aria-label="修改消息"
+                            value={editingText}
+                            rows={4}
+                            onChange={(event) => setEditingText(event.target.value)}
+                          />
+                          <div className="chat-dialog-edit-actions">
+                            <button type="button" onClick={() => setEditingIndex(null)}>
+                              取消
+                            </button>
+                            <button type="button" onClick={saveEdit} disabled={!editingText.trim()}>
+                              保存
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          {message.role === 'assistant' &&
+                            (message.reasoning ||
+                              (running && index === messages.length - 1 && !message.content)) && (
+                              <ReasoningBlock
+                                content={message.reasoning ?? ''}
+                                live={running && index === messages.length - 1 && !message.content}
+                              />
+                            )}
+                          <MarkdownMessage content={message.content} />
+                        </>
                       )}
                     </div>
-                  )}
-                </article>
-              ))}
+                    {editingIndex !== index && (
+                      <div className="chat-dialog-message-actions">
+                        <button
+                          type="button"
+                          aria-label="复制消息"
+                          onClick={() => copyText(message.content)}
+                        >
+                          <Icon name="copy" size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="修改消息"
+                          onClick={() => {
+                            setEditingIndex(index)
+                            setEditingText(message.content)
+                          }}
+                        >
+                          <Icon name="edit" size={14} />
+                        </button>
+                        {message.role === 'assistant' && (
+                          <button
+                            type="button"
+                            aria-label="重新生成"
+                            disabled={running}
+                            onClick={() => void regenerate(index)}
+                          >
+                            <Icon name="reset" size={14} />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </article>
+                )
+              })}
               {running && messages.at(-1)?.role !== 'assistant' && (
                 <article className="chat-dialog-message assistant" aria-label="正在生成">
+                  <div className="chat-dialog-message-meta">AI</div>
                   <div className="chat-dialog-thinking">
                     <span />
                     <div>

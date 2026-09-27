@@ -59,11 +59,17 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
   const [busy, setBusy] = useState(false)
   const [playing, setPlaying] = useState(false)
   const [refPlaying, setRefPlaying] = useState(false)
+  const [referenceError, setReferenceError] = useState('')
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const refAudioRef = useRef<HTMLAudioElement | null>(null)
   const minimaxModels = modelsByModality(providers, 'audio').filter(
     (option) =>
-      option.provider.specId === 'minimax' && MINIMAX_VOICE_CLONE_MODELS.includes(option.model.id)
+      option.provider.specId === 'minimax' &&
+      MINIMAX_VOICE_CLONE_MODELS.includes(option.model.id) &&
+      option.model.operations?.includes('voice.clone')
+  )
+  const selectedCloneModelAvailable = minimaxModels.some(
+    (item) => item.provider.id === config.providerId && item.model.id === config.modelId
   )
   const languageBoostOptions = TTS_LANGUAGE_BOOSTS.filter((item) =>
     isSpeechLanguageBoostSupported(config.modelId, item.value)
@@ -112,6 +118,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
 
   const uploadRefAudio = async (): Promise<void> => {
     if (!project) return toast('项目未就绪')
+    setReferenceError('')
     const res = await window.api.pickMedia(project.id)
     if (!res.ok) return toast(`上传失败：${res.error.message}`)
     const audioAsset = pickImportedAsset({
@@ -124,11 +131,13 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
     if (!audioAsset) return
     const extension = audioAsset.path.slice(audioAsset.path.lastIndexOf('.')).toLowerCase()
     if (!['.mp3', '.m4a', '.wav'].includes(extension)) {
-      toast('MiniMax 复刻参考音频仅支持 mp3、m4a 或 wav 格式')
+      setReferenceError('未添加：主参考音频仅支持 mp3、m4a 或 wav 格式。')
       return
     }
     if (audioAsset.sizeBytes > MINIMAX_CLONE_MAX_BYTES) {
-      toast(`MiniMax 复刻参考音频不能超过 ${MINIMAX_CLONE_MAX_BYTES / (1024 * 1024)} MB`)
+      setReferenceError(
+        `未添加：主参考音频不能超过 ${MINIMAX_CLONE_MAX_BYTES / (1024 * 1024)} MB。`
+      )
       return
     }
     if (
@@ -137,13 +146,20 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
       (audioAsset.durationSec < MINIMAX_CLONE_MIN_SECONDS ||
         audioAsset.durationSec > MINIMAX_CLONE_MAX_SECONDS)
     ) {
-      toast(
-        `MiniMax 复刻参考音频需 ${MINIMAX_CLONE_MIN_SECONDS} 秒至 ${MINIMAX_CLONE_MAX_SECONDS / 60} 分钟`
-      )
+      const durationSec = audioAsset.durationSec
+      const promptHint =
+        durationSec < MINIMAX_CLONE_PROMPT_MAX_SECONDS
+          ? ` 这段音频可改选为下方小于 ${MINIMAX_CLONE_PROMPT_MAX_SECONDS} 秒的可选克隆提示音，但仍需另选至少 ${MINIMAX_CLONE_MIN_SECONDS} 秒的主参考音频并填写提示音原文。`
+          : ''
+      const durationMessage =
+        durationSec < MINIMAX_CLONE_MIN_SECONDS
+          ? `只有 ${durationSec.toFixed(1)} 秒，至少需要 ${MINIMAX_CLONE_MIN_SECONDS} 秒（还差 ${(MINIMAX_CLONE_MIN_SECONDS - durationSec).toFixed(1)} 秒）。`
+          : `${(durationSec / 60).toFixed(1)} 分钟，最多只能 ${MINIMAX_CLONE_MAX_SECONDS / 60} 分钟。`
+      setReferenceError(`未添加：这段主参考音频${durationMessage}${promptHint}`)
       return
     }
     if (!MINIMAX_CLONE_MIMES.includes(audioAsset.mime.toLowerCase())) {
-      toast('MiniMax 复刻参考音频仅支持 mp3、m4a 或 wav 格式')
+      setReferenceError('未添加：主参考音频仅支持 mp3、m4a 或 wav 格式。')
       return
     }
     updateConfig({
@@ -152,6 +168,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
       refMediaMime: audioAsset.mime,
       refMediaName: audioAsset.name ?? '参考语音'
     })
+    setReferenceError('')
     markUndoPoint(editor, 'tts-ref-upload')
   }
 
@@ -211,6 +228,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
     refAudioRef.current?.pause()
     refAudioRef.current = null
     setRefPlaying(false)
+    setReferenceError('')
     updateConfig({ refMediaId: '', refMediaPath: '', refMediaMime: '', refMediaName: '' })
     markUndoPoint(editor, 'tts-ref-remove')
   }
@@ -264,7 +282,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
     updateText(draft)
     setBusy(true)
     try {
-      await runNodeManually(editor, project.id, [], shape.id)
+      await runNodeManually(editor, project.id, providers, shape.id)
     } finally {
       setBusy(false)
     }
@@ -341,9 +359,14 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
             <Icon name="upload" size={18} />
             <span>上传参考语音</span>
             <span className="tts-upload-hint">
-              目标音色的录音，10 秒～5 分钟、不超过 20MB 的 mp3/m4a/wav
+              主参考音频需 10 秒～5 分钟、≤20MB；小于 10 秒不能绑定，可改作小于 8 秒的可选提示音
             </span>
           </button>
+        )}
+        {referenceError && (
+          <div className="gen-capability-note error" role="alert">
+            {referenceError}
+          </div>
         )}
         <span className={`node-wiring ${incomingRef > 0 || uploadedRef ? 'ok' : 'warn'}`}>
           {incomingRef > 0
@@ -460,17 +483,31 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
               ))}
             </AppSelect>
             {providersLoaded && minimaxModels.length === 0 && (
-              <button
-                className="btn-ghost small"
-                onPointerDown={(e) => stopEventPropagation(e)}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  void openSettings()
-                }}
-              >
-                去配置 MiniMax 音色克隆模型
-              </button>
+              <>
+                <div className="gen-capability-note error" role="alert">
+                  暂无通过“语音克隆”能力验证的 MiniMax 模型；请先配置供应商并完成 voice.clone 验证。
+                </div>
+                <button
+                  className="btn-ghost small"
+                  onPointerDown={(e) => stopEventPropagation(e)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    void openSettings()
+                  }}
+                >
+                  去配置 MiniMax 音色克隆模型
+                </button>
+              </>
             )}
+            {providersLoaded &&
+              minimaxModels.length > 0 &&
+              config.providerId &&
+              config.modelId &&
+              !selectedCloneModelAvailable && (
+                <div className="gen-capability-note error" role="alert">
+                  当前选择的模型未通过 voice.clone 验证；请选择列表中的已验证模型。
+                </div>
+              )}
             <input
               className={`gen-input ${voiceIdInvalid ? 'invalid' : ''}`}
               aria-label="自定义 Voice ID"
@@ -634,9 +671,7 @@ export function TtsBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elemen
           draft.length > SPEECH_TEXT_LIMITS.minimax ||
         (incomingRef === 0 && !uploadedRef) ||
         (Boolean(config.promptMediaId) && !config.promptText.trim()) ||
-        !minimaxModels.some(
-          (item) => item.provider.id === config.providerId && item.model.id === config.modelId
-        )
+        !selectedCloneModelAvailable
       }
         onPointerDown={(e) => stopEventPropagation(e)}
         onClick={(e) => {

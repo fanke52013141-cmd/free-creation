@@ -1,9 +1,11 @@
 // 节点运行记录：只保存运行可观测性信息，不保存 API Key 或完整输入正文。
 import type { ContractInputMap } from './contracts'
+import type { NodeExecutionPhase, NodeExecutionTarget } from '@shared/engine/executor-types'
+import { redactDiagnosticText } from '@shared/diagnostics'
 
 export type NodeRunStatus = 'running' | 'success' | 'failed' | 'skipped' | 'cancelled'
 
-export type NodeRunPhase = 'input' | 'execution' | 'output'
+export type NodeRunPhase = NodeExecutionPhase
 
 export interface NodeRunTraceEntry {
   at: number
@@ -30,6 +32,7 @@ export interface NodeRunRecord {
   inputs: Record<string, NodeRunSource[]>
   outputPorts?: string[]
   error?: { phase: NodeRunPhase; reason: string }
+  target?: NodeExecutionTarget
   /** 分阶段、脱敏的运行轨迹；不记录完整提示词、文件内容、媒体二进制或密钥。 */
   trace?: NodeRunTraceEntry[]
 }
@@ -48,7 +51,7 @@ export function appendNodeRunTrace(
     ...record,
     trace: [
       ...(record.trace ?? []),
-      { at: Date.now(), phase, level, message: message.slice(0, 500) }
+      { at: Date.now(), phase, level, message: redactDiagnosticText(message) }
     ].slice(-NODE_RUN_TRACE_LIMIT)
   }
 }

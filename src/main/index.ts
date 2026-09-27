@@ -13,6 +13,7 @@ import { registerGatewayIpc } from './ipc/gateway.ipc'
 import { registerComfyuiIpc } from './ipc/comfyui.ipc'
 import { registerWorkspaceStateIpc } from './ipc/workspace-state.ipc'
 import { registerModelIpc } from './ipc/models.ipc'
+import { registerDiagnosticsIpc } from './ipc/diagnostics.ipc'
 import { registerLibraryIpc } from './ipc/library.ipc'
 import { SqliteModelHost } from './model-host/sqlite-model-host'
 import { createDesktopModelRuntime } from './model-host/runtime'
@@ -24,7 +25,15 @@ import { mimeForExtension } from '../shared/mime'
 import { runModelSmokeTest } from './model-smoke'
 
 log.initialize()
-log.info('main process starting')
+log.info('main process starting', {
+  appVersion: app.getVersion(),
+  packaged: app.isPackaged,
+  platform: process.platform,
+  arch: process.arch,
+  electron: process.versions.electron,
+  chromium: process.versions.chrome,
+  node: process.versions.node
+})
 
 // media:// 协议：渲染进程加载本地媒体（stream 支持 <video> 播放）
 protocol.registerSchemesAsPrivileged([
@@ -215,6 +224,7 @@ app.whenReady().then(async () => {
   registerMediaIpc()
   registerComfyuiIpc()
   registerWorkspaceStateIpc()
+  registerDiagnosticsIpc()
   const modelHost = new SqliteModelHost(database)
   registerModelIpc(modelHost, createDesktopModelRuntime(modelHost))
   mainWindow = createWindow()

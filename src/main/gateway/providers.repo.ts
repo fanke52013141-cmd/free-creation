@@ -258,9 +258,13 @@ export function listVerifiedProviders(): ProviderSummary[] {
 }
 
 export function getProvider(id: string): ProviderConfig | null {
+  // 节点只允许使用已验证目录中的模型，运行时必须取同一连接的 URL 和密钥。
+  // 旧 providers 表可能碰巧有同 ID 的残留行，不能让它覆盖目录连接。
+  const catalog = catalogConfigs().find((provider) => provider.id === id)
+  if (catalog) return catalog
   const row = getDb().prepare('SELECT * FROM providers WHERE id = ?').get(id) as
     ProviderRow | undefined
-  return row ? toConfig(row, decryptSecret(row.api_key_ref)) : catalogConfigs().find((provider) => provider.id === id) ?? null
+  return row ? toConfig(row, decryptSecret(row.api_key_ref)) : null
 }
 
 export function saveProvider(input: SaveProviderInput): ProviderSummary {

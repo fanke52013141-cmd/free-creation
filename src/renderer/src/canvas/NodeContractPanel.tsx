@@ -7,10 +7,16 @@ import { Icon } from '../components/Icon'
 import { AppSelect } from '../components/AppSelect'
 import { projectNodeOutputs, type NodeValue } from '../nodes/nodeValues'
 import { useNodePanelStore, type NodePanelInitialTab } from '../stores/nodePanel'
-import { readNodeRunHistory, readNodeRunRecord, type NodeRunRecord } from '../engine/runRecord'
+import {
+  readNodeRunHistory,
+  readNodeRunRecord,
+  type NodeRunPhase,
+  type NodeRunRecord
+} from '../engine/runRecord'
 import { readNodeConfig } from './node-persistence'
 import { markUndoPoint } from './history'
 import { nodeExecLabel } from './node-status'
+import { toast } from '../stores/toast'
 import {
   runNodeManually,
   runNodeTest,
@@ -34,6 +40,18 @@ function runSummary(record: NodeRunRecord): string {
   })
   const duration = typeof record.durationMs === 'number' ? ` · ${record.durationMs} ms` : ''
   return `${time} · ${record.status}${duration}`
+}
+
+function runPhaseLabel(phase: NodeRunPhase): string {
+  const labels = {
+    input: '输入校验',
+    capability: '能力解析',
+    execution: '执行',
+    request: '服务请求',
+    result: '结果处理',
+    output: '输出校验'
+  }
+  return labels[phase] ?? phase
 }
 
 function contractPanelTitle(nodeType: string, title: string): string {
@@ -464,6 +482,42 @@ export function NodeContractPanel({
     return runNodeTest(editor, projectId, providers, shape.id, inputs)
   }
 
+  const exportDiagnostics = async (): Promise<void> => {
+    if (!runRecord) return toast('该节点还没有运行记录')
+    try {
+      const records = [runRecord, ...runHistory.filter((record) => record.runId !== runRecord.runId)].slice(0, 13)
+      let nodeConfig: Record<string, unknown> = {}
+      try {
+        const parsed: unknown = JSON.parse(shape.props.config || '{}')
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          nodeConfig = parsed as Record<string, unknown>
+        }
+      } catch {
+        // Keep exporting the trace even when a hand-edited node config is malformed.
+      }
+      const result = await window.api.exportNodeRunDiagnostics({
+        projectId,
+        nodeId: shape.id,
+        nodeType: shape.props.nodeType,
+        nodeTitle: shape.props.title,
+        runs: records,
+        redactValues: [
+          shape.props.text,
+          ...Object.entries(nodeConfig)
+            .filter(([key, value]) => /text|prompt|voice.?id/i.test(key) && typeof value === 'string')
+            .map(([, value]) => value as string)
+        ]
+      })
+      if (!result.ok) {
+        if (result.error.code !== 'CANCELLED') toast(`导出诊断信息失败：${result.error.message}`)
+        return
+      }
+      toast('节点诊断信息已导出')
+    } catch (error) {
+      toast(`导出诊断信息失败：${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
   const syncTextInputOnBlur = (port: PortDecl, type: PortType, value: string): void => {
     if (type !== 'text' && type !== 'markdown' && type !== 'json') return
 
@@ -641,6 +695,12 @@ export function NodeContractPanel({
                     {runningAction === 'subgraph' ? '运行中…' : '运行至此节点'}
                   </button>
                 </div>
+                <div className="contract-diagnostic-export">
+                  <button disabled={!runRecord} onClick={() => void exportDiagnostics()}>
+                    导出节点诊断信息
+                  </button>
+                  <small>包含运行阶段、耗时和错误原因；不包含正文、媒体内容或 API Key。</small>
+                </div>
               </section>
               {runRecord ? (
                 <section className="contract-section">
@@ -650,6 +710,15 @@ export function NodeContractPanel({
                     <small>状态：{runRecord.status}</small>
                     {typeof runRecord.durationMs === 'number' && (
                       <small>耗时：{runRecord.durationMs} ms</small>
+                    )}
+                    {runRecord.target && (
+                      <small>
+                        执行目标：{runRecord.target.providerName || runRecord.target.providerId || '未知服务商'}
+                        {' · '}
+                        {runRecord.target.modelName || runRecord.target.modelId || '未知模型'}
+                        {' · '}
+                        {runRecord.target.operation}
+                      </small>
                     )}
                     {runRecord.outputPorts && (
                       <small>输出端口：{runRecord.outputPorts.join('、') || '无'}</small>
@@ -673,7 +742,7 @@ export function NodeContractPanel({
                               second: '2-digit'
                             })}
                             {' · '}
-                            {entry.phase} · {entry.message}
+                            {runPhaseLabel(entry.phase)} · {entry.message}
                           </small>
                         ))}
                       </details>

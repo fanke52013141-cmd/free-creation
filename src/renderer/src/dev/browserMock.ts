@@ -105,6 +105,8 @@ export function installBrowserMock(): void {
   const inMemoryApiKeys = new Map<string, string>()
 
   window.api = {
+    reportNodeRunEvent: () => Promise.resolve({ ok: true, data: true }),
+    exportNodeRunDiagnostics: () => Promise.resolve({ ok: false, error: { code: 'UNAVAILABLE', message: '诊断导出仅支持桌面端' } }),
     bootstrap: () => Promise.resolve({ ok: true, data: { lastProjectId: 'demo' } }),
     listProjects: () => Promise.resolve({ ok: true, data: projects }),
     createProject: ({ name, workspaceProfile }: { name: string; workspaceProfile?: WorkspaceProfile }) => {

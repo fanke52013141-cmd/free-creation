@@ -10,6 +10,10 @@ const nodeCardSource = readFileSync(
   resolve(process.cwd(), 'src/renderer/src/canvas/NodeCardView.tsx'),
   'utf8'
 )
+const nodePortLayoutSource = readFileSync(
+  resolve(process.cwd(), 'src/renderer/src/canvas/node-port-layout.ts'),
+  'utf8'
+)
 const canvasEditorSource = readFileSync(
   resolve(process.cwd(), 'src/renderer/src/canvas/CanvasEditor.tsx'),
   'utf8'
@@ -41,12 +45,15 @@ describe('canvas interaction details', () => {
     expect(canvasEditorSource).toContain('SelectionForeground: () => null')
   })
 
-  it('keeps every declared input and output port visible before connection', () => {
-    expect(nodeCardSource).toContain('const visibleInPorts = inPorts')
-    expect(nodeCardSource).toContain('const visibleOutPorts = outPorts')
-    expect(nodeCardSource).not.toContain('inPorts.slice(0, 1)')
-    expect(nodeCardSource).not.toContain('outPorts.slice(0, 1)')
-    expect(nodeCardSource).toContain("['--node-port-color' as string]: nodePortColor")
+  it('shows one connector per distinct input/output type and merges repeated same-type ports', () => {
+    expect(nodeCardSource).toContain('const visibleInPorts = inLayout.ports')
+    expect(nodeCardSource).toContain('const visibleOutPorts = outLayout.ports')
+    expect(nodePortLayoutSource).toContain(
+      'const groupTypes = [...new Set(ports.map((port) => port.type))]'
+    )
+    expect(nodePortLayoutSource).toContain('const sameType = ports.filter((port) => port.type === type)')
+    expect(nodeCardSource).toContain("['--pc' as string]: inputColor")
+    expect(nodeCardSource).toContain("['--node-port-color' as string]: inputColor")
     expect(foundationSource).toContain('.port-dot.unconnected {\n  opacity: 1;')
     expect(foundationSource).not.toContain('.port-dot.input-missing::after')
   })

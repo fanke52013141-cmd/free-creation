@@ -37,8 +37,10 @@ import {
   inputSources,
   readNodeRunRecord,
   type NodeRunRecord,
+  type NodeRunPhase,
   type NodeRunStatus
 } from './runRecord'
+import { redactDiagnosticText } from '@shared/diagnostics'
 
 interface RunControl {
   cancelled: boolean
@@ -346,6 +348,25 @@ function writeRunRecord(editor: Editor, id: TLShapeId, record: NodeRunRecord): v
   })
 }
 
+function nodeDiagnosticRedactions(shape: NodeCardShape | undefined): string[] {
+  if (!shape) return []
+  let config: Record<string, unknown> = {}
+  try {
+    const parsed: unknown = JSON.parse(shape.props.config || '{}')
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      config = parsed as Record<string, unknown>
+    }
+  } catch {
+    // A malformed config should not prevent the actual run from being diagnosed.
+  }
+  return [
+    shape.props.text,
+    ...Object.entries(config)
+      .filter(([key, value]) => /text|prompt|voice.?id/i.test(key) && typeof value === 'string')
+      .map(([, value]) => value as string)
+  ].filter((value): value is string => typeof value === 'string' && value.length >= 3)
+}
+
 function finishRunRecord(
   editor: Editor,
   id: TLShapeId,
@@ -353,15 +374,24 @@ function finishRunRecord(
   status: Exclude<NodeRunStatus, 'running'>,
   detail: Pick<NodeRunRecord, 'outputPorts' | 'error'> = {}
 ): void {
+  const current = editor.getShape<NodeCardShape>(id)
+  const privateValues = nodeDiagnosticRedactions(current)
   const finishedAt = Date.now()
   const finalRecord: NodeRunRecord = {
     ...record,
     status,
     finishedAt,
     durationMs: finishedAt - record.startedAt,
-    ...detail
+    ...detail,
+    ...(detail.error
+      ? {
+          error: {
+            ...detail.error,
+            reason: redactDiagnosticText(detail.error.reason, 500, privateValues)
+          }
+        }
+      : {})
   }
-  const current = editor.getShape<NodeCardShape>(id)
   editor.updateShape({
     id,
     type: 'node-card',
@@ -375,6 +405,40 @@ function finishRunRecord(
   })
 }
 
+/** Persist every diagnostic event locally and mirror it to electron-log without blocking execution. */
+function recordRunTrace(
+  editor: Editor,
+  node: CanvasNode,
+  projectId: string,
+  record: NodeRunRecord,
+  phase: NodeRunPhase,
+  level: 'info' | 'error',
+  message: string
+): void {
+  const safeMessage = redactDiagnosticText(
+    message,
+    500,
+    nodeDiagnosticRedactions(editor.getShape<NodeCardShape>(node.id as TLShapeId))
+  )
+  record.trace = appendNodeRunTrace(record, phase, level, safeMessage).trace
+  writeRunRecord(editor, node.id as TLShapeId, record)
+  try {
+    const report = typeof window !== 'undefined' ? window.api?.reportNodeRunEvent : undefined
+    if (typeof report !== 'function') return
+    void report({
+      projectId,
+      nodeId: node.id,
+      nodeType: node.type,
+      runId: record.runId,
+      phase,
+      level,
+      message: safeMessage
+    }).catch(() => undefined)
+  } catch {
+    // Diagnostics must never interrupt the node execution path.
+  }
+}
+
 /**
  * 取出节点声明中自注册的执行器并调用。执行器拿到的 NodeExecutionContext 把
  * 写回持久化状态的入口收敛为 updateProps / updateResult，运行器据此读取最新
@@ -385,7 +449,8 @@ async function invokeExecutor(
   node: CanvasNode,
   shape: NodeCardShape,
   inputs: NodeExecutionContext['inputs'],
-  runSubflow: (request: SubflowRequest) => Promise<Record<string, ContractOutputs>>
+  runSubflow: (request: SubflowRequest) => Promise<Record<string, ContractOutputs>>,
+  record: NodeRunRecord
 ): Promise<NodeExecutionResult> {
   const spec = getNodeType(node.type)
   if (!spec?.executor) return { status: 'failed', reason: `未实现节点类型：${node.type}` }
@@ -402,6 +467,12 @@ async function invokeExecutor(
     runId: ctx.runId,
     providers: ctx.providers,
     signal: ctx.token,
+    trace: (phase, level, message) =>
+      recordRunTrace(ctx.editor, node, ctx.projectId, record, phase, level, message),
+    setDiagnosticTarget: (target) => {
+      record.target = target
+      writeRunRecord(ctx.editor, id, record)
+    },
     gateway: rendererGateway,
     runCode: (source, args) => runCodeTransform(source, args),
     waitForResume: () => waitForResume(ctx.token),
@@ -510,35 +581,38 @@ async function executeNodeOnce(
     status: 'running',
     startedAt: Date.now(),
     inputs: {},
-    trace: [{ at: Date.now(), phase: 'input', level: 'info', message: '开始收集并校验输入端口' }]
+    trace: []
   }
   setExec(editor, shapeId, 'running')
   writeRunRecord(editor, shapeId, record)
+  recordRunTrace(editor, node, ctx.projectId, record, 'input', 'info', '开始收集并校验输入端口')
   try {
     const collected = collectNodeInputs(ctx, node, injection)
     record.inputs = inputSources(collected.value)
-    record.trace = appendNodeRunTrace(
+    recordRunTrace(
+      editor,
+      node,
+      ctx.projectId,
       record,
       'input',
       'info',
       `已收集 ${Object.keys(record.inputs).length} 个输入端口`
-    ).trace
-    writeRunRecord(editor, shapeId, record)
+    )
     if (collected.errors.length > 0) {
       throw new Error(`输入契约校验失败：${collected.errors.join('；')}`)
     }
     // 本次执行接管该节点的输出；失败或跳过时不能让本轮继续消费上一次结果。
     ctx.outputs.delete(node.id)
-    record.trace = appendNodeRunTrace(record, 'execution', 'info', '开始调用节点执行器').trace
-    writeRunRecord(editor, shapeId, record)
-    const result = await invokeExecutor(ctx, node, shape, collected.value, runSubflow)
+    recordRunTrace(editor, node, ctx.projectId, record, 'execution', 'info', '开始调用节点执行器')
+    const result = await invokeExecutor(ctx, node, shape, collected.value, runSubflow, record)
     const latest = editor.getShape<NodeCardShape>(shapeId)
     if (ctx.token.cancelled) {
       setExec(editor, shapeId, 'cancelled')
+      recordRunTrace(editor, node, ctx.projectId, record, 'execution', 'info', '运行已取消')
       finishRunRecord(
         editor,
         shapeId,
-        appendNodeRunTrace(record, 'execution', 'info', '运行已取消'),
+        record,
         'cancelled'
       )
       return { status: 'skipped', reason: '已取消' }
@@ -562,23 +636,26 @@ async function executeNodeOnce(
             nodeId: node.id,
             phase: 'output'
           })
+        const reason = `输出契约校验失败：${projected.errors.join('；')}`
+        recordRunTrace(editor, node, ctx.projectId, record, 'output', 'error', reason)
         finishRunRecord(
           editor,
           shapeId,
-          appendNodeRunTrace(record, 'output', 'error', '输出契约校验失败'),
+          record,
           'failed',
           {
-            error: { phase: 'output', reason: `输出契约校验失败：${projected.errors.join('；')}` }
+            error: { phase: 'output', reason }
           }
         )
         return { status: 'failed', reason: '输出契约校验失败' }
       }
       ctx.outputs.set(node.id, projected.value)
       setExec(editor, shapeId, 'success')
+      recordRunTrace(editor, node, ctx.projectId, record, 'output', 'info', '输出契约校验通过')
       finishRunRecord(
         editor,
         shapeId,
-        appendNodeRunTrace(record, 'output', 'info', '输出契约校验通过'),
+        record,
         'success',
         {
           outputPorts: Object.keys(projected.value)
@@ -587,29 +664,52 @@ async function executeNodeOnce(
       return { status: 'done' }
     }
     if (result.status === 'failed') {
+      const diagnosticPhase = result.diagnosticPhase ?? 'execution'
       setExec(editor, shapeId, 'failed')
       useEngineStore.getState().addError(node.title || node.type, result.reason ?? '执行失败', {
         nodeId: node.id,
         phase: 'execution'
       })
+      recordRunTrace(
+        editor,
+        node,
+        ctx.projectId,
+        record,
+        diagnosticPhase,
+        'error',
+        result.reason ?? '执行失败'
+      )
       finishRunRecord(
         editor,
         shapeId,
-        appendNodeRunTrace(record, 'execution', 'error', result.reason ?? '执行失败'),
+        record,
         'failed',
         {
-          error: { phase: 'execution', reason: result.reason ?? '执行失败' }
+          error: { phase: diagnosticPhase, reason: result.reason ?? '执行失败' }
         }
       )
     } else {
       setExec(editor, shapeId, 'idle')
+      if (result.reason) {
+        recordRunTrace(
+          editor,
+          node,
+          ctx.projectId,
+          record,
+          result.diagnosticPhase ?? 'execution',
+          result.diagnosticPhase ? 'error' : 'info',
+          result.reason
+        )
+      }
       finishRunRecord(
         editor,
         shapeId,
-        appendNodeRunTrace(record, 'execution', 'info', result.reason ?? '节点跳过执行'),
+        record,
         'skipped',
         {
-          error: result.reason ? { phase: 'execution', reason: result.reason } : undefined
+          error: result.reason
+            ? { phase: result.diagnosticPhase ?? 'execution', reason: result.reason }
+            : undefined
         }
       )
     }
@@ -617,10 +717,11 @@ async function executeNodeOnce(
   } catch (error) {
     if (ctx.token.cancelled) {
       setExec(editor, shapeId, 'cancelled')
+      recordRunTrace(editor, node, ctx.projectId, record, 'execution', 'info', '运行已取消')
       finishRunRecord(
         editor,
         shapeId,
-        appendNodeRunTrace(record, 'execution', 'info', '运行已取消'),
+        record,
         'cancelled'
       )
     } else {
@@ -631,10 +732,11 @@ async function executeNodeOnce(
         nodeId: node.id,
         phase
       })
+      recordRunTrace(editor, node, ctx.projectId, record, phase, 'error', reason)
       finishRunRecord(
         editor,
         shapeId,
-        appendNodeRunTrace(record, phase, 'error', reason),
+        record,
         'failed',
         { error: { phase, reason } }
       )

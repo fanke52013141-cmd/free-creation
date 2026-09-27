@@ -244,11 +244,10 @@ export function needsNodeSizeMigration(type: string, w: number, h: number): bool
 
 /** 同侧端口在卡片上的纵向落点（px，相对卡片顶部） */
 export function portOffsets(count: number, cardH: number): number[] {
-    if (count <= 0) return []
-    // count 是当前可见的类型组数：1 个居中；2 个落在 1/4、3/4；
-    // 3 个及以上按 n + 1 等分。同类型契约端口由 node-port-layout 先合并。
+  if (count <= 0) return []
+  // 首尾也留出相同间隔：n 个连接点把节点高度分成 n + 1 份。
+  // 因此 1 个居中，2 个位于 1/3、2/3，3 个位于 1/4、1/2、3/4。
   if (count === 1) return [cardH / 2]
-  if (count === 2) return [cardH / 4, (cardH * 3) / 4]
   return Array.from({ length: count }, (_, i) => (cardH * (i + 1)) / (count + 1))
 }
 

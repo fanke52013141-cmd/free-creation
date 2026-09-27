@@ -18,6 +18,12 @@ import { isSpeechLanguageBoostSupported } from '../../shared/speech'
 import { saveBufferAsset } from '../store/media.repo'
 import { getProvider } from './providers.repo'
 import { GatewayError } from './factory'
+import {
+  CONTROL_TIMEOUT_MS,
+  SYNTHESIS_TIMEOUT_MS,
+  UPLOAD_TIMEOUT_MS,
+  fetchUpstream
+} from './upstream-fetch'
 import { describeUpstreamHttpError } from '../../shared/upstream-error'
 
 /**
@@ -49,6 +55,9 @@ function requireMiniMax(providerId: string): ProviderConfig {
   if (provider.specId !== 'minimax') {
     throw new GatewayError('INVALID_INPUT', '音色复刻与音色设计只能选择 MiniMax 供应商')
   }
+  if (!provider.apiKey) {
+    throw new GatewayError('PROVIDER_NO_KEY', 'MiniMax API Key 不可用，请在模型供应商中重新配置密钥')
+  }
   return provider
 }
 
@@ -63,11 +72,16 @@ export async function uploadMiniMaxFile(
   form.set('purpose', purpose)
   form.set('file', new Blob([new Uint8Array(file.buf)], { type: file.mime }), file.fileName)
 
-  const res = await fetch(`${base}/v1/files/upload`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${provider.apiKey}` },
-    body: form
-  })
+  const res = await fetchUpstream(
+    `${base}/v1/files/upload`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${provider.apiKey}` },
+      body: form
+    },
+    UPLOAD_TIMEOUT_MS,
+    'MiniMax 上传音频'
+  )
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
     throw upstreamError(res.status, detail, 'MiniMax 上传音频失败')
@@ -173,11 +187,16 @@ export async function cloneMiniMaxVoice(request: CloneVoiceRequest): Promise<str
   const requested = config.voiceId.trim()
   const voiceId = normalizeMiniMaxVoiceId(requested) || `canvas-voice-${randomSuffix()}`
 
-  const res = await fetch(`${base}/v1/voice_clone`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${provider.apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(buildVoiceCloneBody(fileId, voiceId, config, promptPayload))
-  })
+  const res = await fetchUpstream(
+    `${base}/v1/voice_clone`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${provider.apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildVoiceCloneBody(fileId, voiceId, config, promptPayload))
+    },
+    CONTROL_TIMEOUT_MS,
+    'MiniMax 创建克隆音色'
+  )
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
     throw upstreamError(res.status, detail, 'MiniMax 创建克隆音色失败')
@@ -228,11 +247,17 @@ export async function designMiniMaxVoice(input: VoiceDesignInput): Promise<Voice
     )
   }
 
-  const res = await fetch(`${base}/v1/voice_design`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${provider.apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(buildVoiceDesignBody(prompt, previewText, requested, config.aigcWatermark))
-  })
+  const res = await fetchUpstream(
+    `${base}/v1/voice_design`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${provider.apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildVoiceDesignBody(prompt, previewText, requested, config.aigcWatermark))
+    },
+    // 音色设计同步返回试听音频，按合成请求给预算而不是控制面。
+    SYNTHESIS_TIMEOUT_MS,
+    'MiniMax 音色设计'
+  )
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
     throw upstreamError(res.status, detail, 'MiniMax 音色设计失败')

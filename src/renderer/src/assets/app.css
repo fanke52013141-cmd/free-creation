@@ -1402,12 +1402,15 @@ select:focus-visible,
 }
 
 /* 统一的已连接输入（呈现规范 v1.0 §11–§17）：由真实 arrow + port + projectOutputs 驱动，
-   所有节点共用。仅存在实际边时渲染；图片引用为 48×36 缩略图卡，其余为单行 chip。 */
+   所有节点共用。仅存在实际边时渲染；图片用缩略图，文本正文换行展开，其余保持紧凑摘要。 */
 .connected-inputs {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  min-width: 0;
   gap: 5px;
   padding: 8px 10px 0;
+  box-sizing: border-box;
 }
 
 .connected-input-list {
@@ -1536,10 +1539,14 @@ select:focus-visible,
   white-space: nowrap;
 }
 
-/* 文本引用是紧凑的两列单行 chip：正文和来源都允许省略，不能挤成两排。 */
+/* 文本引用展开完整正文并自然换行，内容变长时交给节点高度档位承载。 */
 .connected-input-item.connected-input-textual {
-  flex: 0 1 calc((100% - 6px) / 2);
-  max-width: calc((100% - 6px) / 2);
+  flex: 0 1 100%;
+  max-width: 100%;
+  height: auto;
+  min-height: 28px;
+  align-items: flex-start;
+  line-height: 1.4;
 }
 
 .connected-input-item.connected-input-textual .connected-input-value {
@@ -1547,15 +1554,19 @@ select:focus-visible,
   max-width: none;
   flex: 1 1 auto;
   display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   word-break: normal;
+  -webkit-line-clamp: unset;
 }
 
 .connected-input-item.connected-input-textual .connected-input-source {
-  max-width: 34px;
+  max-width: 88px;
   flex: 0 1 auto;
+  align-self: flex-start;
+  white-space: nowrap;
 }
 
 .connected-input-value {
@@ -4891,6 +4902,33 @@ select:focus-visible,
   opacity: 0.55;
 }
 
+.contract-diagnostic-export {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.contract-diagnostic-export button {
+  padding: 7px 10px;
+  border: 1px solid var(--ui-border, rgba(255, 255, 255, 0.12));
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--ui-text, #d7dbe4);
+  cursor: pointer;
+}
+
+.contract-diagnostic-export button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.contract-diagnostic-export small {
+  color: var(--ui-muted, #9199a8);
+  line-height: 1.45;
+}
+
 .contract-run-history {
   display: grid;
   gap: 5px;
@@ -7560,6 +7598,52 @@ select:focus-visible,
 .gen-row > .gen-select.gen-provider {
   flex: 0 0 92px;
   min-width: 92px;
+}
+
+/* 生图供应商与模型按全部可选文案中的最长项定宽，避免两个下拉框平分并撑满整行。 */
+.node-card.type-image-gen .gen-image-model-row {
+  flex-wrap: wrap;
+}
+
+.node-card.type-image-gen .gen-select-fit {
+  display: inline-grid;
+  grid-template-areas: 'control';
+  flex: 0 1 max-content;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.node-card.type-image-gen .gen-select-fit > * {
+  grid-area: control;
+}
+
+.node-card.type-image-gen .gen-select-fit-probe {
+  display: grid;
+  grid-template-columns: max-content;
+  grid-auto-rows: 0;
+  box-sizing: content-box;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+  padding-inline-end: 40px;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.node-card.type-image-gen .gen-select-fit > .gen-select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 1 auto;
+}
+
+/* 数量、画幅和分辨率只占文案加箭头所需宽度，不再被 flex 拉伸或挤重。 */
+.node-card.type-image-gen .gen-options-row > .gen-select {
+  width: max-content;
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 0 auto;
 }
 
 .gen-select:focus {

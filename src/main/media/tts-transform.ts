@@ -2,8 +2,10 @@
 // 上传参考音频 → 组装 IndexTTS 工作流 → 排队执行 → 轮询结果 → 下载产物落盘入库。
 // 节点端口的输入（参考音频 / 文本）在渲染层执行器已解析为 mediaId 与合并文本。
 import { randomUUID } from 'crypto'
+import log from 'electron-log/main'
 import { readFile } from 'fs/promises'
 import { extname } from 'path'
+import { redactDiagnosticText } from '../../shared/diagnostics'
 import type { TtsGenerateInput, VoiceCloneResult } from '../../shared/contracts'
 import {
   MINIMAX_CLONE_MAX_BYTES,
@@ -197,6 +199,35 @@ export async function transformTts(input: TtsGenerateInput): Promise<VoiceCloneR
  */
 async function transformMiniMaxTts(input: TtsGenerateInput): Promise<VoiceCloneResult> {
   const config = input.config
+  let phase = 'configuration'
+  const privateValues = [
+    input.text,
+    config.promptText,
+    config.voiceId,
+    input.referenceAudioId,
+    config.promptMediaId
+  ]
+  const report = (level: 'info' | 'error', message: string, fields: Record<string, unknown> = {}): void => {
+    const event = {
+      event: 'voice-clone',
+      at: new Date().toISOString(),
+      runId: input.runId ?? 'unavailable',
+      nodeId: input.nodeId ?? 'unavailable',
+      phase,
+      level,
+      message: redactDiagnosticText(message, 500, privateValues),
+      ...fields
+    }
+    if (level === 'error') log.error(JSON.stringify(event))
+    else log.info(JSON.stringify(event))
+  }
+  report('info', '开始 MiniMax 语音克隆', {
+    providerId: config.providerId,
+    modelId: config.modelId,
+    textCharacters: input.text.trim().length,
+    hasPromptAudio: Boolean(config.promptMediaId)
+  })
+  try {
   if (!config.providerId) throw new GatewayError('INVALID_INPUT', '请选择 MiniMax 供应商')
   if (!MINIMAX_VOICE_CLONE_MODELS.includes(config.modelId)) {
     throw new GatewayError('INVALID_INPUT', `MiniMax 音色克隆不支持模型 ${config.modelId}`)
@@ -210,7 +241,14 @@ async function transformMiniMaxTts(input: TtsGenerateInput): Promise<VoiceCloneR
     throw new GatewayError('INVALID_INPUT', '语音克隆只能选择 MiniMax 供应商')
   }
 
+  phase = 'reference-audio'
+  report('info', '开始读取参考音频')
   const reference = await readReferenceAudio(input.referenceAudioId)
+  report('info', '参考音频已读取', {
+    mime: reference.mime,
+    bytes: reference.buf.length,
+    extension: extname(reference.path).toLowerCase() || 'unknown'
+  })
   if (!MINIMAX_CLONE_MIMES.includes((reference.mime || '').toLowerCase())) {
     throw new GatewayError('INVALID_INPUT', 'MiniMax 复刻参考音频仅支持 mp3、m4a 或 wav')
   }
@@ -220,6 +258,13 @@ async function transformMiniMaxTts(input: TtsGenerateInput): Promise<VoiceCloneR
   // 参考音频必须 10 秒～5 分钟：不先量时长，用户只会收到一句英文的
   // "voice duration too short"。本机没有 FFprobe 时跳过这道检查，交给上游判断。
   const durationMs = await probeMediaDurationMs(reference.abs).catch(() => 0)
+  report(
+    'info',
+    durationMs > 0
+      ? '参考音频时长已检测'
+      : '本机无法检测参考音频时长，将由服务端继续校验',
+    { durationMs: durationMs || undefined }
+  )
   if (durationMs > 0) {
     const seconds = durationMs / 1000
     if (seconds < MINIMAX_CLONE_MIN_SECONDS || seconds > MINIMAX_CLONE_MAX_SECONDS) {
@@ -255,6 +300,8 @@ async function transformMiniMaxTts(input: TtsGenerateInput): Promise<VoiceCloneR
     }
   }
 
+  phase = 'voice-registration'
+  report('info', '开始向 MiniMax 登记参考音色')
   const voiceId = await cloneMiniMaxVoice({
     providerId: provider.id,
     reference: {
@@ -272,6 +319,7 @@ async function transformMiniMaxTts(input: TtsGenerateInput): Promise<VoiceCloneR
       : null,
     config
   })
+  report('info', '参考音色登记成功')
 
   const speechConfig: SpeechConfig = {
     ...DEFAULT_SPEECH_CONFIG,
@@ -282,6 +330,8 @@ async function transformMiniMaxTts(input: TtsGenerateInput): Promise<VoiceCloneR
     languageBoost: config.languageBoost,
     aigcWatermark: config.aigcWatermark
   }
+  phase = 'speech-generation'
+  report('info', '开始使用登记音色生成语音')
   const { asset } = await generateSpeechToAsset({
     projectId: input.projectId,
     providerId: provider.id,
@@ -290,7 +340,12 @@ async function transformMiniMaxTts(input: TtsGenerateInput): Promise<VoiceCloneR
     voiceId,
     config: speechConfig
   })
+  report('info', '语音生成并保存成功', { mime: asset.mime })
   return { asset, voiceId }
+  } catch (error) {
+    report('error', error instanceof Error ? error.message : String(error))
+    throw error
+  }
 }
 
 interface ReferenceAudioPayload {

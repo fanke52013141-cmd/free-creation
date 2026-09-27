@@ -5,8 +5,6 @@ import { createPortal } from 'react-dom'
 import {
   getNodePorts,
   getNodeType,
-  portOffsets,
-  PORT_COLORS,
   PORT_TYPE_LABELS
 } from '../nodes/registry'
 import type { PortDecl, PortSchemaRef, PortType } from '@shared/types'
@@ -26,6 +24,7 @@ import { useAppStore } from '../stores/app'
 import { useGatewayStore } from '../stores/gateway'
 import { Tooltip } from '../components/Tooltip'
 import { NODE_PORT_OUTSET, NODE_PORT_SIZE } from './edge-geometry'
+import { createNodePortLayout } from './node-port-layout'
 import { ConnectedInputPreview } from './ConnectedInputPreview'
 import {
   DEFAULT_IMAGE_GENERATION_ESTIMATE_MS,
@@ -260,11 +259,17 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     : { in: [] as PortDecl[], out: [] as PortDecl[] }
   const inPorts = resolvedPorts.in
   const outPorts = resolvedPorts.out
-  // 空闲端口只表明“这是这个节点的一部分”，不提前泄露每个端口可传递的数据类型。
-  // 类型色只在已连线或拖线候选态出现；端口 ID、schema 和连线判断仍完全来自契约。
+  // 空闲端口使用节点色；输入端口连接后继承上游节点色。端口 ID、类型与布局仍来自契约。
   const nodePortColor = spec?.color ?? '#42b9f5'
-  const inY = portOffsets(inPorts.length, shape.props.h)
-  const outY = portOffsets(outPorts.length, shape.props.h)
+  const artifactProducerId = (shape.meta as Record<string, unknown> | undefined)?.artifactProducerId
+  const artifactProducer =
+    typeof artifactProducerId === 'string'
+      ? editor.getShape<NodeCardShape>(artifactProducerId as NodeCardShape['id'])
+      : undefined
+  const artifactProducerColor =
+    artifactProducer?.type === 'node-card'
+      ? (getNodeType(artifactProducer.props.nodeType)?.color ?? nodePortColor)
+      : nodePortColor
   const isSource = draft?.from.shapeId === shape.id
   const statusLabel = nodeExecLabel(shape.props.exec)
   const activeExecution = ['pending', 'queued', 'running'].includes(shape.props.exec)
@@ -396,6 +401,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     () => {
       const incomingCounts = new Map<string, number>()
       const outgoingCounts = new Map<string, number>()
+      const incomingNodeColors = new Map<string, string>()
+      const incomingPortIds = new Set<string>()
+      const outgoingPortIds = new Set<string>()
       for (const arrow of editor.getCurrentPageShapes()) {
         if (arrow.type !== 'arrow') continue
         const bindings = editor.getBindingsFromShape(arrow.id, 'arrow')
@@ -403,11 +411,21 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           const end = bindings.find((binding) => binding.props.terminal === 'end')
           if (end?.toId === shape.id) {
             incomingCounts.set(arrow.meta.toPort, (incomingCounts.get(arrow.meta.toPort) ?? 0) + 1)
+            incomingPortIds.add(arrow.meta.toPort)
+            const start = bindings.find((binding) => binding.props.terminal === 'start')
+            const source = start ? editor.getShape<NodeCardShape>(start.toId) : undefined
+            const sourceColor =
+              source?.type === 'node-card' ? getNodeType(source.props.nodeType)?.color : undefined
+            // 同类型的多值输入共用一个连接点，按第一条真实来源取色。
+            if (sourceColor && !incomingNodeColors.has(arrow.meta.toPort)) {
+              incomingNodeColors.set(arrow.meta.toPort, sourceColor)
+            }
           }
         }
         if (typeof arrow.meta?.fromPort === 'string') {
           const start = bindings.find((binding) => binding.props.terminal === 'start')
           if (start?.toId === shape.id) {
+            outgoingPortIds.add(arrow.meta.fromPort)
             outgoingCounts.set(
               arrow.meta.fromPort,
               (outgoingCounts.get(arrow.meta.fromPort) ?? 0) + 1
@@ -437,16 +455,43 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           outputs: spec?.projectOutputs?.(shape) ?? {}
         }),
         incomingCounts,
-        outgoingCounts
+        outgoingCounts,
+        incomingNodeColors,
+        incomingPortIds,
+        outgoingPortIds
       }
     },
     [editor, shape, spec, inPorts]
   )
   const readiness = readinessState.readiness
-  // 所有已声明端口始终可见。隐藏未连接的附加端口会让 JSON 文本输入、媒体参考图等
-  // 合法目标无法从画布上发现；位置由完整契约计算，连线前后保持稳定。
-  const visibleInPorts = inPorts
-  const visibleOutPorts = outPorts
+  // 每侧每种数据类型呈现一个连接点：同类型端口共用锚点，不同类型分别均分卡片高度。
+  // 可见圆点始终绑定真实契约 portId，拖线候选只选择同类型组中的代表端口。
+  const candidateInPortIds = new Set(
+    draft && draft.from.direction !== 'in' && !isSource
+      ? inPorts.filter((port) => canAttachPort(draft.from, port)).map((port) => port.id)
+      : []
+  )
+  const candidateOutPortIds = new Set(
+    draft && draft.from.direction === 'in' && !isSource
+      ? outPorts.filter((port) => canAttachPort(draft.from, port, 'in')).map((port) => port.id)
+      : []
+  )
+  const inLayout = createNodePortLayout(
+    inPorts,
+    readinessState.incomingPortIds,
+    shape.props.h,
+    candidateInPortIds
+  )
+  const outLayout = createNodePortLayout(
+    outPorts,
+    readinessState.outgoingPortIds,
+    shape.props.h,
+    candidateOutPortIds
+  )
+  const visibleInPorts = inLayout.ports
+  const visibleOutPorts = outLayout.ports
+  const visibleInY = inLayout.offsets
+  const visibleOutY = outLayout.offsets
 
   /** 被更上层卡片盖住的端口不可见、不可命中，不能从节点覆盖关系中穿透出来。 */
   const occludedPortKeys = useValue(
@@ -472,12 +517,12 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       const pageY = (offset: number): number =>
         shape.props.h > 0 ? bounds.y + (bounds.height * offset) / shape.props.h : bounds.y
       const keys = new Set<string>()
-      visibleInPorts.forEach((port, index) => {
-        if (isCovered(bounds.x - NODE_PORT_OUTSET, pageY(inY[index] ?? 0)))
+      visibleInPorts.forEach((port) => {
+        if (isCovered(bounds.x - NODE_PORT_OUTSET, pageY(visibleInY.get(port.id) ?? 0)))
           keys.add(`in:${port.id}`)
       })
-      visibleOutPorts.forEach((port, index) => {
-        if (isCovered(bounds.maxX + NODE_PORT_OUTSET, pageY(outY[index] ?? 0))) {
+      visibleOutPorts.forEach((port) => {
+        if (isCovered(bounds.maxX + NODE_PORT_OUTSET, pageY(visibleOutY.get(port.id) ?? 0))) {
           keys.add(`out:${port.id}`)
         }
       })
@@ -489,7 +534,16 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       }
       return keys
     },
-    [editor, shape.id, shape.index, shape.props.h, visibleInPorts, visibleOutPorts, inY, outY]
+    [
+      editor,
+      shape.id,
+      shape.index,
+      shape.props.h,
+      visibleInPorts,
+      visibleOutPorts,
+      visibleInY,
+      visibleOutY
+    ]
   )
 
   // 运行按钮常驻在标题行右侧（用户 2026-09-18 拍板：不能用时置灰，而不是消失）。
@@ -573,6 +627,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     fitHeight()
     const observer = new ResizeObserver(fitHeight)
     observer.observe(body)
+    // 一些编辑器会在内容变化时维持自身盒子尺寸，ResizeObserver 不会触发；通过
+    // 冒泡 input 事件重新量高，确保引用文字和正文跨过档位后立即更新卡片高度。
+    body.addEventListener('input', fitHeight)
     // 图片等异步媒体在 onLoad 后才会改写子树的真实内容高度（如拆分九宫格按原图
     // 宽高比重设 aspect-ratio）。这只改变 body 内部的布局，body 自身盒子尺寸
     // 不变，ResizeObserver 不会触发；必须监听子树结构 / style / src 变化后重新
@@ -580,6 +637,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     const mutations = new MutationObserver(fitHeight)
     mutations.observe(body, {
       childList: true,
+      characterData: true,
       subtree: true,
       attributes: true,
       attributeFilter: ['style', 'src', 'class']
@@ -587,9 +645,18 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     return () => {
       cancelAnimationFrame(frame)
       observer.disconnect()
+      body.removeEventListener('input', fitHeight)
       mutations.disconnect()
     }
-  }, [editor, shape.id, shape.props.h, shape.props.nodeType, shape.meta.nodeHeightMode])
+  }, [
+    editor,
+    shape.id,
+    shape.props.h,
+    shape.props.nodeType,
+    shape.props.text,
+    shape.props.config,
+    shape.meta.nodeHeightMode
+  ])
 
   // 端口 tooltip 只保留身份信息（呈现规范 v1.0 §11：名称 · 类型，类型给中文名），
   // 连接手势、多选建线等操作教学不再随 tooltip 重复。
@@ -743,7 +810,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           )}
         </div>
         {/* 输入端口（左侧）：out 方向拖线时按类型兼容高亮；从输入端口也可发起反向连线 */}
-        {visibleInPorts.map((p, i) => {
+        {visibleInPorts.map((p) => {
           if (occludedPortKeys.has(`in:${p.id}`)) return null
           const draftIn = draft && draft.from.direction === 'in' ? draft.from : null
           const isAnchor = draftIn && draftIn.shapeId === shape.id && draftIn.portId === p.id
@@ -751,7 +818,15 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             draft && draft.from.direction !== 'in'
               ? !isSource && canAttachPort(draft.from, p)
               : false
-          const isConnected = (readinessState.incomingCounts?.get(p.id) ?? 0) > 0
+          const connectedPort = inPorts.find(
+            (candidate) =>
+              candidate.type === p.type && readinessState.incomingPortIds.has(candidate.id)
+          )
+          const isConnected = Boolean(connectedPort)
+          const inputColor =
+            (ok && draft?.from.nodeColor) ||
+            (connectedPort && readinessState.incomingNodeColors.get(connectedPort.id)) ||
+            nodePortColor
           const portKey = `in:${p.id}`
           return (
             <span
@@ -759,9 +834,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               className={`port-dot in ${isConnected ? 'connected' : 'unconnected'} ${isAnchor ? 'ok' : draft && draft.from.direction !== 'in' ? (ok ? 'ok' : 'dim') : ''}`}
               data-port-id={p.id}
               style={{
-                top: inY[i] - NODE_PORT_SIZE / 2,
-                ['--pc' as string]: PORT_COLORS[p.type],
-                ['--node-port-color' as string]: nodePortColor,
+                top: (visibleInY.get(p.id) ?? shape.props.h / 2) - NODE_PORT_SIZE / 2,
+                ['--pc' as string]: inputColor,
+                ['--node-port-color' as string]: inputColor,
                 ...portFollowStyle(portKey)
               }}
               aria-label={portHint(p)}
@@ -775,6 +850,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                     shapeId: shape.id,
                     portId: p.id,
                     portType: p.type,
+                    nodeColor: nodePortColor,
                     schema: p.schema,
                     direction: 'in'
                   },
@@ -799,15 +875,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               className="port-dot in connected input-optional"
               style={{
                 top: shape.props.h / 2 - NODE_PORT_SIZE / 2,
-                ['--pc' as string]:
-                  PORT_COLORS[
-                    shape.props.nodeType === 'video-asset'
-                      ? 'video'
-                      : shape.props.nodeType === 'audio'
-                        ? 'audio'
-                        : 'image'
-                  ] ?? '#34d399',
-                ['--node-port-color' as string]: nodePortColor
+                ['--pc' as string]: artifactProducerColor,
+                ['--node-port-color' as string]: artifactProducerColor
               }}
               aria-label="来源产物连线"
             >
@@ -817,10 +886,16 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           )}
 
         {/* 输出端口：与输入端口同样是纯圆形，按住后拖出连线；in 方向拖线时反向高亮。 */}
-        {visibleOutPorts.map((p, i) => {
+        {visibleOutPorts.map((p) => {
           if (occludedPortKeys.has(`out:${p.id}`)) return null
-          const hasOutput = Boolean(spec?.projectOutputs?.(shape)[p.id])
-          const isConnected = (readinessState.outgoingCounts?.get(p.id) ?? 0) > 0
+          const hasOutput = outPorts.some(
+            (candidate) =>
+              candidate.type === p.type && Boolean(spec?.projectOutputs?.(shape)[candidate.id])
+          )
+          const isConnected = outPorts.some(
+            (candidate) =>
+              candidate.type === p.type && readinessState.outgoingPortIds.has(candidate.id)
+          )
           const draftIn = draft && draft.from.direction === 'in' ? draft.from : null
           const okUpstream = draftIn && !isSource ? canAttachPort(draftIn, p, 'in') : false
           const portKey = `out:${p.id}`
@@ -830,8 +905,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               className={`port-dot out ${hasOutput ? 'has-output' : 'no-output'} ${isConnected ? 'connected' : 'unconnected'} ${isSource && draft?.from.portId === p.id && draft.from.direction !== 'in' ? 'ok' : ''} ${draftIn ? (okUpstream ? 'ok' : 'dim') : ''}`}
               data-port-id={p.id}
               style={{
-                top: outY[i] - NODE_PORT_SIZE / 2,
-                ['--pc' as string]: PORT_COLORS[p.type],
+                top: (visibleOutY.get(p.id) ?? shape.props.h / 2) - NODE_PORT_SIZE / 2,
+                ['--pc' as string]: nodePortColor,
                 ['--node-port-color' as string]: nodePortColor,
                 ...portFollowStyle(portKey)
               }}
@@ -849,12 +924,15 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                   ? batchConnectionFromSelection(editor, selectedNodeIds, p.id)
                   : null
                 beginConnectionDrag(
-                  batch ?? {
-                    shapeId: shape.id,
-                    portId: p.id,
-                    portType: p.type,
-                    schema: p.schema
-                  },
+                  batch
+                    ? { ...batch, nodeColor: nodePortColor }
+                    : {
+                        shapeId: shape.id,
+                        portId: p.id,
+                        portType: p.type,
+                        nodeColor: nodePortColor,
+                        schema: p.schema
+                      },
                   portCenter(e, portKey)
                 )
               }}

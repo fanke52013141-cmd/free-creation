@@ -172,6 +172,10 @@ export const IPC = {
     saveBinding: 'models:bindings:save',
     bindings: 'models:bindings:list',
     resolveBinding: 'models:bindings:resolve'
+  },
+  diagnostics: {
+    nodeRunEvent: 'diagnostics:node-run:event',
+    exportNodeRun: 'diagnostics:node-run:export'
   }
 } as const
 
@@ -180,6 +184,46 @@ export type IpcEnvelope<T> =
 
 export interface BootstrapInfo {
   lastProjectId: string | null
+}
+
+export interface NodeRunDiagnosticRecord {
+  runId: string
+  status: string
+  startedAt: number
+  finishedAt?: number
+  durationMs?: number
+  inputs: Record<string, Array<{ nodeId: string; portId: string }>>
+  outputPorts?: string[]
+  error?: { phase: string; reason: string }
+  target?: {
+    operation: string
+    featureKey?: string
+    providerId?: string
+    providerName?: string
+    modelId?: string
+    modelName?: string
+  }
+  trace?: Array<{ at: number; phase: string; level: 'info' | 'error'; message: string }>
+}
+
+export interface NodeRunLogEventInput {
+  projectId: string
+  nodeId: string
+  nodeType: string
+  runId: string
+  phase: string
+  level: 'info' | 'error'
+  message: string
+}
+
+export interface ExportNodeRunDiagnosticsInput {
+  projectId: string
+  nodeId: string
+  nodeType: string
+  nodeTitle: string
+  runs: NodeRunDiagnosticRecord[]
+  /** Values used only to redact older error messages; never written to the report. */
+  redactValues?: string[]
 }
 
 // ── 新模型模块（与 legacy gateway providers 完全独立）──────────────────────
@@ -485,6 +529,9 @@ export interface VideoConversionInput {
 
 export interface TtsGenerateInput {
   projectId: string
+  /** Correlates the renderer node run with main-process voice-clone logs. */
+  runId?: string
+  nodeId?: string
   /** 参考音频（音色来源）在本地图库中的 mediaId。 */
   referenceAudioId: string
   /** 要朗读的文本。 */

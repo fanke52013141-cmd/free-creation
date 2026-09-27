@@ -35,6 +35,7 @@ import { probeMediaDurationMs } from '../media/video-transform'
 import { looksLikeTar, pickAudioFromTar } from '../media/tar-audio'
 import { getProvider } from './providers.repo'
 import { GatewayError } from './factory'
+import { CONTROL_TIMEOUT_MS, SYNTHESIS_TIMEOUT_MS, fetchUpstream } from './upstream-fetch'
 import { describeUpstreamHttpError } from '../../shared/upstream-error'
 
 /**
@@ -149,6 +150,9 @@ export async function generateSpeechToAsset(
 
   const p = getProvider(input.providerId)
   if (!p) throw new GatewayError('PROVIDER_NOT_FOUND', '供应商不存在')
+  if (!p.apiKey) {
+    throw new GatewayError('PROVIDER_NO_KEY', '语音合成供应商的 API Key 不可用，请在模型供应商中重新配置密钥')
+  }
 
   // 回传「实际生效」的音色供产物溯源：只有 MiniMax 通道存在「用户留空 → 网关兜底成
   // 系统音色」的改写；火山通道留空时服务端用了什么音色我们并不知道，因此回传
@@ -259,14 +263,19 @@ async function generateViaMiniMaxAsync(
   const base = p.baseURL.replace(/\/+$/, '')
   const format = MINIMAX_FORMATS.has(config.format) ? config.format : 'mp3'
 
-  const res = await fetch(`${base}/v1/t2a_async_v2`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${p.apiKey}`,
-      'Content-Type': 'application/json'
+  const res = await fetchUpstream(
+    `${base}/v1/t2a_async_v2`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${p.apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(buildMiniMaxAsyncTtsBody(input, config))
     },
-    body: JSON.stringify(buildMiniMaxAsyncTtsBody(input, config))
-  })
+    CONTROL_TIMEOUT_MS,
+    'MiniMax 创建语音合成任务'
+  )
 
   if (!res.ok) {
     const body = await res.text().catch(() => '')
@@ -325,9 +334,11 @@ async function pollMiniMaxAsyncTask(
   const deadline = Date.now() + ASYNC_POLL_TIMEOUT_MS
   let lastStatus = ''
   while (Date.now() < deadline) {
-    const res = await fetch(
+    const res = await fetchUpstream(
       `${base}/v1/query/t2a_async_query_v2?task_id=${encodeURIComponent(taskId)}`,
-      { headers: { Authorization: `Bearer ${p.apiKey}` } }
+      { headers: { Authorization: `Bearer ${p.apiKey}` } },
+      CONTROL_TIMEOUT_MS,
+      'MiniMax 查询语音合成任务'
     )
     if (!res.ok) {
       const body = await res.text().catch(() => '')
@@ -363,9 +374,12 @@ async function retrieveMiniMaxFileUrl(
   p: ProviderConfig,
   fileId: string
 ): Promise<string> {
-  const res = await fetch(`${base}/v1/files/retrieve?file_id=${encodeURIComponent(fileId)}`, {
-    headers: { Authorization: `Bearer ${p.apiKey}` }
-  })
+  const res = await fetchUpstream(
+    `${base}/v1/files/retrieve?file_id=${encodeURIComponent(fileId)}`,
+    { headers: { Authorization: `Bearer ${p.apiKey}` } },
+    CONTROL_TIMEOUT_MS,
+    'MiniMax 检索合成文件'
+  )
   if (!res.ok) {
     const body = await res.text().catch(() => '')
     throw upstreamError(res.status, body, 'MiniMax 检索合成文件失败')
@@ -407,15 +421,20 @@ async function generateViaVolc(
     )
   }
 
-  const res = await fetch(`${base}/api/v3/tts/create`, {
-    method: 'POST',
-    headers: {
-      'X-Api-Key': p.apiKey,
-      'X-Api-Request-Id': randomUUID(),
-      'Content-Type': 'application/json'
+  const res = await fetchUpstream(
+    `${base}/api/v3/tts/create`,
+    {
+      method: 'POST',
+      headers: {
+        'X-Api-Key': p.apiKey,
+        'X-Api-Request-Id': randomUUID(),
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
     },
-    body: JSON.stringify(body)
-  })
+    SYNTHESIS_TIMEOUT_MS,
+    '火山语音合成'
+  )
 
   if (!res.ok) {
     const body = await res.text().catch(() => '')
@@ -528,21 +547,28 @@ async function generateViaMiniMax(
   const format = MINIMAX_FORMATS.has(requestedFormat) ? requestedFormat : 'mp3'
   const voiceId = resolveMiniMaxVoiceId(input.voice)
 
-  const res = await fetch(`${p.baseURL.replace(/\/+$/, '')}/v1/t2a_v2`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${p.apiKey}`,
-      'Content-Type': 'application/json'
+  const res = await fetchUpstream(
+    `${p.baseURL.replace(/\/+$/, '')}/v1/t2a_v2`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${p.apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: input.modelId,
+        text: input.text.trim(),
+        stream: false,
+        voice_setting: { voice_id: voiceId, speed: 1, vol: 1, pitch: 0 },
+        audio_setting: { sample_rate: 32000, bitrate: 128000, format, channel: 1 },
+        ...(typeof input.aigcWatermark === 'boolean'
+          ? { aigc_watermark: input.aigcWatermark }
+          : {})
+      })
     },
-    body: JSON.stringify({
-      model: input.modelId,
-      text: input.text.trim(),
-      stream: false,
-      voice_setting: { voice_id: voiceId, speed: 1, vol: 1, pitch: 0 },
-      audio_setting: { sample_rate: 32000, bitrate: 128000, format, channel: 1 },
-      ...(typeof input.aigcWatermark === 'boolean' ? { aigc_watermark: input.aigcWatermark } : {})
-    })
-  })
+    SYNTHESIS_TIMEOUT_MS,
+    'MiniMax 同步语音合成'
+  )
 
   if (!res.ok) {
     const body = await res.text().catch(() => '')
@@ -569,19 +595,24 @@ async function generateViaOpenAICompatible(
   const format = input.format || 'mp3'
   const voice = input.voice || 'alloy'
 
-  const res = await fetch(`${p.baseURL.replace(/\/+$/, '')}/audio/speech`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${p.apiKey}`,
-      'Content-Type': 'application/json'
+  const res = await fetchUpstream(
+    `${p.baseURL.replace(/\/+$/, '')}/audio/speech`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${p.apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: input.modelId,
+        input: input.text.trim(),
+        voice,
+        response_format: format
+      })
     },
-    body: JSON.stringify({
-      model: input.modelId,
-      input: input.text.trim(),
-      voice,
-      response_format: format
-    })
-  })
+    SYNTHESIS_TIMEOUT_MS,
+    'OpenAI 兼容配音'
+  )
 
   if (!res.ok) {
     const body = await res.text().catch(() => '')

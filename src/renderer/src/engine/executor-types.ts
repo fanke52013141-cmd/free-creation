@@ -12,7 +12,12 @@ import type { CanvasNode, ProviderSummary } from '@shared/types'
 import type { NodeCardShape } from '../canvas/NodeCardShape'
 import type { ContractInputMap, ContractOutputs } from './contracts'
 import type { GatewayClient } from '@shared/engine/gateway-client'
-import type { ProducedArtifact, NodeMetaPatch } from '@shared/engine/executor-types'
+import type {
+  NodeExecutionPhase,
+  NodeExecutionTarget,
+  ProducedArtifact,
+  NodeMetaPatch
+} from '@shared/engine/executor-types'
 
 /** 运行控制信号。暂停在当前原子任务结束后生效；停止会解除暂停等待。 */
 export interface CancelSignal {
@@ -74,6 +79,10 @@ export interface NodeExecutionContext {
   providers: ProviderSummary[]
   /** 取消信号。 */
   signal: CancelSignal
+  /** Best-effort, redacted stage logging persisted with this run and relayed to main.log. */
+  trace?: (phase: NodeExecutionPhase, level: 'info' | 'error', message: string) => void
+  /** Provider/model identifiers only; secrets and request bodies must never be included. */
+  setDiagnosticTarget?: (target: NodeExecutionTarget) => void
   /**
    * 模型网关客户端（P3）：替代执行器中对 window.api.gateway / window.api.* 的直接调用。
    * 共享层执行器通过此字段获得模型调用能力；renderer 运行器注入 rendererGateway。
@@ -122,6 +131,8 @@ export interface NodeExecutionResult {
   status: 'done' | 'skipped' | 'failed'
   /** skipped / failed 时给用户的简短原因。 */
   reason?: string
+  /** Detailed diagnostic stage persisted to the node run record. */
+  diagnosticPhase?: NodeExecutionPhase
 }
 
 /**

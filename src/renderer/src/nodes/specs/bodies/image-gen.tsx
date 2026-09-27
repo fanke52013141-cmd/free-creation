@@ -17,6 +17,7 @@ import { toast } from '../../../stores/toast'
 import { gatherUpstreamMediaList } from '../../../canvas/graph'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { runNodeManually } from '../../../engine/executor'
+import { useEngineStore } from '../../../engine/store'
 import { useAppStore } from '../../../stores/app'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { Icon } from '../../../components/Icon'
@@ -67,6 +68,10 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
   const providerModels = options.filter((option) => option.provider.id === selectedProviderId)
   const selected =
     providerModels.find((option) => option.key === data.modelKey) ?? providerModels[0]
+  const providerLabels = providerIds.map((providerId) => {
+    return options.find((option) => option.provider.id === providerId)?.provider.name ?? providerId
+  })
+  const modelLabels = providerModels.map((option) => option.label)
   const capabilities = selected
     ? imageCapabilitiesFor(selected.provider.specId, selected.model.id)
     : imageCapabilitiesFor('relay')
@@ -81,6 +86,9 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
   const [draft, setDraft] = useState(shape.props.text)
   const [busy, setBusy] = useState(false)
   const promptRef = useRef<HTMLTextAreaElement | null>(null)
+  // 画布引擎单任务串行：别的节点在跑时点击只会被 runNodeManually 静默跳过，
+  // 必须在按钮上直接呈现「被占用」，否则用户以为按钮坏了。
+  const engineBusy = useEngineStore((s) => s.phase !== 'idle')
 
   useEffect(() => {
     if (!loaded) void loadProviders()
@@ -158,43 +166,59 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
 
   return (
     <div className="gen-panel">
-      <div className="gen-row">
-        <AppSelect
-          className="gen-select gen-provider"
-          value={selectedProviderId ?? ''}
-          onPointerDown={(e) => e.stopPropagation()}
-          onChange={(e) => changeProvider(e.target.value)}
-          aria-label="选择供应商"
-        >
-          {!providerIds.includes(selectedProviderId ?? '') && <option value="">选择供应商…</option>}
-          {providerIds.map((providerId) => {
-            const option = options.find((item) => item.provider.id === providerId)
-            return (
-              <option key={providerId} value={providerId}>
-                {option?.provider.name ?? providerId}
-              </option>
-            )
-          })}
-        </AppSelect>
-        <ModelSelect
-          value={data.modelKey || selected?.key || ''}
-          options={providerModels}
-          onChange={(key) => {
-            const next = options.find((option) => option.key === key)
-            const nextCapabilities = next
-              ? imageCapabilitiesFor(next.provider.specId, next.model.id)
-              : imageCapabilitiesFor('relay')
-            const nextConfig = normalizeImageGenerationConfig(
-              { ...config, modelKey: key, providerKey: next?.provider.id ?? selectedProviderId },
-              nextCapabilities
-            )
-            editor.updateShape({
-              id: shape.id,
-              type: 'node-card',
-              props: { config: JSON.stringify(nextConfig) }
-            })
-          }}
-        />
+      <div className="gen-row gen-image-model-row">
+        <div className="gen-select-fit">
+          <span className="gen-select-fit-probe" aria-hidden="true">
+            {(providerLabels.length ? providerLabels : ['选择供应商…']).map((label, index) => (
+              <span key={`${label}-${index}`}>{label}</span>
+            ))}
+          </span>
+          <AppSelect
+            className="gen-select gen-provider"
+            value={selectedProviderId ?? ''}
+            onPointerDown={(e) => e.stopPropagation()}
+            onChange={(e) => changeProvider(e.target.value)}
+            aria-label="选择供应商"
+          >
+            {!providerIds.includes(selectedProviderId ?? '') && (
+              <option value="">选择供应商…</option>
+            )}
+            {providerIds.map((providerId) => {
+              const option = options.find((item) => item.provider.id === providerId)
+              return (
+                <option key={providerId} value={providerId}>
+                  {option?.provider.name ?? providerId}
+                </option>
+              )
+            })}
+          </AppSelect>
+        </div>
+        <div className="gen-select-fit">
+          <span className="gen-select-fit-probe" aria-hidden="true">
+            {(modelLabels.length ? modelLabels : ['选择模型…']).map((label, index) => (
+              <span key={`${label}-${index}`}>{label}</span>
+            ))}
+          </span>
+          <ModelSelect
+            value={data.modelKey || selected?.key || ''}
+            options={providerModels}
+            onChange={(key) => {
+              const next = options.find((option) => option.key === key)
+              const nextCapabilities = next
+                ? imageCapabilitiesFor(next.provider.specId, next.model.id)
+                : imageCapabilitiesFor('relay')
+              const nextConfig = normalizeImageGenerationConfig(
+                { ...config, modelKey: key, providerKey: next?.provider.id ?? selectedProviderId },
+                nextCapabilities
+              )
+              editor.updateShape({
+                id: shape.id,
+                type: 'node-card',
+                props: { config: JSON.stringify(nextConfig) }
+              })
+            }}
+          />
+        </div>
       </div>
       <div className="gen-row gen-options-row">
         <AppSelect
@@ -293,7 +317,8 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
       )}
       <button
         className="btn-primary small gen-go"
-        disabled={busy}
+        disabled={busy || engineBusy}
+        title={engineBusy && !busy ? '画布同一时间只执行一个节点，等待当前节点运行结束' : undefined}
         onPointerDown={(e) => stopEventPropagation(e)}
         onClick={(e) => {
           e.stopPropagation()
@@ -302,6 +327,8 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
       >
         {busy ? (
           '生成中…'
+        ) : engineBusy ? (
+          '节点执行中，稍候…'
         ) : (
           <>
             <span>生成图片</span>

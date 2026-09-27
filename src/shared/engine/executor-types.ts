@@ -67,6 +67,23 @@ export interface SubflowRequest {
 
 export type SubflowOutput = Record<string, ContractOutputs>
 
+export type NodeExecutionPhase =
+  | 'input'
+  | 'capability'
+  | 'execution'
+  | 'request'
+  | 'result'
+  | 'output'
+
+export interface NodeExecutionTarget {
+  operation: string
+  featureKey?: string
+  providerId?: string
+  providerName?: string
+  modelId?: string
+  modelName?: string
+}
+
 /**
  * 执行器拿到的上下文：运行器为每个节点组装一次，包含执行所需的全部只读输入与受控写入入口。
  *
@@ -82,6 +99,10 @@ export interface NodeExecutionContext {
   runId?: string
   providers: ProviderSummary[]
   signal: CancelSignal
+  /** Best-effort, redacted stage logging persisted with this run and relayed to main.log. */
+  trace?: (phase: NodeExecutionPhase, level: 'info' | 'error', message: string) => void
+  /** Provider/model identifiers only; secrets and request bodies must never be included. */
+  setDiagnosticTarget?: (target: NodeExecutionTarget) => void
   /** 模型网关客户端（P3）：替代执行器中对 window.api.gateway 的直接调用。 */
   gateway: GatewayClient
   /**
@@ -127,6 +148,7 @@ export interface ProducedArtifact {
 export interface NodeExecutionResult {
   status: 'done' | 'skipped' | 'failed'
   reason?: string
+  diagnosticPhase?: NodeExecutionPhase
 }
 
 export type NodeExecutor = (

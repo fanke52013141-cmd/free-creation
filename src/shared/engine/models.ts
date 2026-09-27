@@ -112,6 +112,94 @@ export async function resolveFeatureOption(
   return provider && model ? { provider, model, key: target.key, label: `${provider.name} · ${model.name || model.id}` } : null
 }
 
+export interface FeatureOptionResolution {
+  option: ModelOption | null
+  /** A safe, actionable reason when the selected or bound model cannot be executed. */
+  reason?: string
+}
+
+/** Detailed counterpart used by diagnostics-sensitive executors that need to explain resolution failures. */
+export async function resolveFeatureOptionDetailed(
+  gateway: GatewayClient,
+  providers: ProviderSummary[],
+  featureKey: string,
+  operation: ModelOperation,
+  selectedModelKey?: string
+): Promise<FeatureOptionResolution> {
+  const selected = selectedModelKey
+    ? providers
+        .flatMap((provider) =>
+          provider.models.map((model) => ({
+            provider,
+            model,
+            key: `${provider.id}::${model.id}`,
+            label: `${provider.name} · ${model.name || model.id}`
+          }))
+        )
+        .find((option) => option.key === selectedModelKey)
+    : undefined
+  if (selected && (!selected.model.operations || selected.model.operations.includes(operation))) {
+    return { option: selected }
+  }
+
+  const selectedIssue = selected
+    ? `所选模型 ${selected.provider.name} / ${selected.model.name || selected.model.id} 未声明 ${operation} 能力`
+    : selectedModelKey
+      ? '节点中指定的模型不在当前供应商列表中'
+      : undefined
+
+  if (!gateway.resolveModelFeature) {
+    const modality: ModelModality | null = operation.startsWith('text.')
+      ? 'text'
+      : operation.startsWith('image.')
+        ? 'image'
+        : operation === 'video.generate'
+          ? 'video'
+          : operation.startsWith('speech.') || operation.startsWith('voice.')
+            ? 'audio'
+            : null
+    const option = modality ? modelsByModality(providers, modality)[0] ?? null : null
+    return option
+      ? { option }
+      : { option: null, reason: selectedIssue ?? `当前运行环境未提供 ${featureKey} 的模型能力绑定` }
+  }
+
+  const result = await gateway.resolveModelFeature({ featureKey, operation })
+  if (!result.ok) {
+    const detail = `${result.error.code}: ${result.error.message}`
+    return { option: null, reason: selectedIssue ? `${selectedIssue}；能力绑定解析失败：${detail}` : `能力绑定解析失败：${detail}` }
+  }
+  const target = result.data
+  const provider = providers.find((item) => item.id === target.providerId)
+  if (!provider) {
+    return {
+      option: null,
+      reason: `能力绑定指向的供应商 ${target.providerId} 未加载${selectedIssue ? `；${selectedIssue}` : ''}`
+    }
+  }
+  const model = provider.models.find((item) => item.id === target.modelId)
+  if (!model) {
+    return {
+      option: null,
+      reason: `供应商 ${provider.name} 当前没有模型 ${target.modelId}${selectedIssue ? `；${selectedIssue}` : ''}`
+    }
+  }
+  if (model.operations && !model.operations.includes(operation)) {
+    return {
+      option: null,
+      reason: `模型 ${provider.name} / ${model.name || model.id} 未声明 ${operation} 能力`
+    }
+  }
+  return {
+    option: {
+      provider,
+      model,
+      key: `${provider.id}::${model.id}`,
+      label: `${provider.name} · ${model.name || model.id}`
+    }
+  }
+}
+
 /**
  * 生图节点共享的模型解析（renderer Body 与执行器使用同一套默认值逻辑）：
  * modelKey 显式命中 > providerKey 供应商的首个图片模型 > 默认供应商（ToAPIS 优先）。

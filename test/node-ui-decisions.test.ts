@@ -19,6 +19,7 @@ const foundation = read('src/renderer/src/assets/ui-foundation.css')
 const surfaces = read('src/renderer/src/assets/ui-surfaces.css')
 const app = read('src/renderer/src/assets/app.css')
 const nodeCardView = read('src/renderer/src/canvas/NodeCardView.tsx')
+const nodePortLayout = read('src/renderer/src/canvas/node-port-layout.ts')
 const inputPreview = read('src/renderer/src/canvas/ConnectedInputPreview.tsx')
 const dataEdgeLayer = read('src/renderer/src/canvas/DataEdgeLayer.tsx')
 const specs = read('src/renderer/src/nodes/specs/index.tsx')
@@ -36,19 +37,15 @@ const imageBody = read('src/renderer/src/nodes/specs/bodies/image.tsx')
 const audioBody = read('src/renderer/src/nodes/specs/bodies/audio.tsx')
 const videoBody = read('src/renderer/src/nodes/specs/bodies/video.tsx')
 const fileBody = read('src/renderer/src/nodes/specs/bodies/file.tsx')
+const nodeUiTokens = read('src/renderer/src/canvas/node-ui-tokens.ts')
+const imageGenAdaptive = read('src/renderer/src/canvas/image-gen-adaptive.css')
 
 describe('节点与画布滚轮路由', () => {
-  it('选中节点时无论指针位置都滚动节点正文；没有选中节点时滚动画布', () => {
+  it('画布捕获滚轮并交给统一路由，节点正文不自行注册竞争监听器', () => {
     expect(canvasEditor).toContain(
       "el.addEventListener('wheel', onWheel, { capture: true, passive: false })"
     )
-    expect(canvasEditor).toContain('.getSelectedShapes()')
-    expect(canvasEditor).toContain(
-      "container.querySelectorAll<HTMLElement>('.node-card-wrap[data-node-id]')"
-    )
-    expect(canvasEditor).toContain("card.querySelector<HTMLElement>('.node-body')")
-    expect(canvasEditor).toContain('body.scrollTop += delta')
-    expect(canvasEditor).toContain("targetElement?.closest('.node-card-wrap')) e.preventDefault()")
+    expect(canvasEditor).toContain('routeCanvasWheel(e, editor)')
     expect(nodeCardView).not.toContain("addEventListener('wheel'")
     expect(sharedBodies).not.toContain('useWheelScroll')
   })
@@ -69,17 +66,26 @@ describe('v1.3 §16.1 端口圆点统一使用节点色、类型色环与柔光'
     expect(foundation).not.toContain('.conn-cursor-glass')
   })
 
-  it('端口的节点色与类型色分别由卡片契约渲染，端口 ID/schema 不参与视觉猜测', () => {
+  it('连接点跟随节点/来源颜色，正式连线也沿用来源节点颜色', () => {
     expect(nodeCardView).toContain("const nodePortColor = spec?.color ?? '#42b9f5'")
-    expect(nodeCardView).toContain("['--node-port-color' as string]: nodePortColor")
-    expect(nodeCardView).toContain("['--pc' as string]: PORT_COLORS[p.type]")
+    expect(nodeCardView).toContain("['--pc' as string]: inputColor")
+    expect(nodeCardView).toContain("['--node-port-color' as string]: inputColor")
+    expect(nodeCardView).toContain("['--pc' as string]: nodePortColor")
+    expect(dataEdgeLayer).toContain('color: getNodeType(source.props.nodeType)?.color')
   })
 
-  it('节点未连线时仍显示所有契约端口，避免多路输入无法发现', () => {
-    expect(nodeCardView).toContain('const visibleInPorts = inPorts')
-    expect(nodeCardView).toContain('const visibleOutPorts = outPorts')
-    expect(nodeCardView).not.toContain('inPorts.slice(0, 1)')
-    expect(nodeCardView).not.toContain('outPorts.slice(0, 1)')
+  it('默认每个方向显示一个点，同类型合并而不同类型分别均分节点高度', () => {
+    expect(nodeCardView).toContain('const visibleInPorts = inLayout.ports')
+    expect(nodeCardView).toContain('const visibleOutPorts = outLayout.ports')
+    expect(nodePortLayout).toContain(
+      'const groupTypes = [...new Set(ports.map((port) => port.type))]'
+    )
+    expect(nodePortLayout).toContain('if (activeTypes.size === 0) activeTypes.add(groupTypes[0])')
+    expect(nodePortLayout).toContain(
+      'const visibleTypes = groupTypes.filter((type) => activeTypes.has(type))'
+    )
+    expect(nodePortLayout).toContain('portOffsets(visibleTypes.length, cardHeight)')
+    expect(nodePortLayout).toContain('const sameType = ports.filter((port) => port.type === type)')
     expect(nodeCardView).toContain('!isSource && canAttachPort(draft.from, p)')
     expect(nodeCardView).toContain("canAttachPort(draftIn, p, 'in')")
   })
@@ -87,8 +93,8 @@ describe('v1.3 §16.1 端口圆点统一使用节点色、类型色环与柔光'
   it('可见圆点和透明命中区都扩大，锚点元素尺寸仍由 edge-geometry 统一', () => {
     expect(foundation).toMatch(/\.port-dot::after\s*\{[^}]*width:\s*12px;[^}]*height:\s*12px;/)
     expect(foundation).toMatch(/\.port-dot::before\s*\{[^}]*inset:\s*-14px;/)
-    expect(nodeCardView).toContain('top: inY[i] - NODE_PORT_SIZE / 2')
-    expect(nodeCardView).toContain('top: outY[i] - NODE_PORT_SIZE / 2')
+    expect(nodeCardView).toContain('visibleInY.get(p.id)')
+    expect(nodeCardView).toContain('visibleOutY.get(p.id)')
   })
 })
 
@@ -1211,5 +1217,22 @@ describe('模型目录：已有连接可直接管理模型', () => {
     expect(modelHost).toContain('DELETE FROM model_definitions WHERE id = ?')
     expect(catalog).toContain('删除所选（{selected.size}）')
     expect(catalog).toContain('window.api.models.deleteDefinitions')
+  })
+})
+
+describe('v1.0 §22 生图主操作按钮距卡片底边 8px 留白', () => {
+  it('token、变量注入与 CSS 消费三层齐全，中间容器不得再叠加内边距', () => {
+    expect(nodeUiTokens).toContain('bottomInset: 8')
+    expect(nodeCardView).toContain(
+      "['--node-action-bottom-inset' as string]: `${NODE_UI.actionBar.bottomInset}px`"
+    )
+    expect(imageGenAdaptive).toMatch(
+      /\.gen-panel\s*\{[^}]*padding-bottom:\s*var\(--node-action-bottom-inset, 8px\)/
+    )
+    // 按钮自身不再外扩，从按钮到卡片底边只剩 gen-panel 的 8px 留白。
+    expect(app).toMatch(/\.gen-go\s*\{[^}]*margin-bottom:\s*0/)
+    // 这两层容器一旦出现 padding-bottom，实际留白就不再是 8px，规格即被破坏。
+    expect(foundation).not.toMatch(/\.node-body\s*\{[^}]*padding-bottom/)
+    expect(foundation).not.toMatch(/\.node-body-content\s*\{[^}]*padding-bottom/)
   })
 })

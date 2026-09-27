@@ -1,5 +1,5 @@
 import type { Editor } from 'tldraw'
-import type { PortDecl, PortType } from '@shared/types'
+import type { PortDecl } from '@shared/types'
 import { portOffsets } from '../nodes/registry'
 
 export interface NodePortConnections {
@@ -58,8 +58,10 @@ export function collectNodePortConnections(editor: Editor): Map<string, NodePort
 
 /**
  * Build the visual connector layout for one side of a node.
- * Connected and temporary compatible candidate ports are grouped by PortType;
- * duplicate edges therefore share one anchor, while different types divide height.
+ * Ports are grouped by PortType; duplicate same-type ports share one anchor. In the idle
+ * state only the first declared type is shown. Connecting another distinct type (or
+ * temporarily highlighting a compatible candidate) reveals that type's connector too.
+ * All visible type groups divide the node height evenly.
  */
 export function createNodePortLayout(
   ports: PortDecl[],
@@ -67,23 +69,21 @@ export function createNodePortLayout(
   cardHeight: number,
   candidatePortIds: ReadonlySet<string> = new Set()
 ): NodePortLayout {
+  const groupTypes = [...new Set(ports.map((port) => port.type))]
+  if (groupTypes.length === 0) return { ports: [], offsets: new Map() }
+
   const activeIds = new Set([...connectedPortIds, ...candidatePortIds])
-  if (activeIds.size === 0 && ports[0]) activeIds.add(ports[0].id)
-
-  const activeTypes = new Set<PortType>()
-  for (const port of ports) {
-    if (activeIds.has(port.id)) activeTypes.add(port.type)
-  }
-
-  // Preserve the contract order, but collapse each active type into one visual point.
-  const groupTypes = [
-    ...new Set(ports.filter((port) => activeTypes.has(port.type)).map((port) => port.type))
-  ]
-  const positions = portOffsets(groupTypes.length, cardHeight)
+  const activeTypes = new Set(
+    ports.filter((port) => activeIds.has(port.id)).map((port) => port.type)
+  )
+  // Every side has a usable default connector, including nodes with several optional types.
+  if (activeTypes.size === 0) activeTypes.add(groupTypes[0])
+  const visibleTypes = groupTypes.filter((type) => activeTypes.has(type))
+  const positions = portOffsets(visibleTypes.length, cardHeight)
   const visiblePorts: PortDecl[] = []
   const offsets = new Map<string, number>()
 
-  groupTypes.forEach((type, index) => {
+  visibleTypes.forEach((type, index) => {
     const sameType = ports.filter((port) => port.type === type)
     const representative =
       sameType.find((port) => candidatePortIds.has(port.id)) ??

@@ -72,6 +72,8 @@ import type {
   VideoSubmitInput,
   VideoSubmitResult,
   AudioGenerateInput,
+  ExportNodeRunDiagnosticsInput,
+  NodeRunLogEventInput,
   VideoConversionInput,
   VideoEngineStatus
 } from '../shared/contracts'
@@ -96,6 +98,11 @@ import type {
 } from '../shared/types'
 
 const api = {
+  reportNodeRunEvent: (input: NodeRunLogEventInput): Promise<IpcEnvelope<boolean>> =>
+    ipcRenderer.invoke(IPC.diagnostics.nodeRunEvent, input),
+  exportNodeRunDiagnostics: (
+    input: ExportNodeRunDiagnosticsInput
+  ): Promise<IpcEnvelope<{ path: string }>> => ipcRenderer.invoke(IPC.diagnostics.exportNodeRun, input),
   bootstrap: (): Promise<IpcEnvelope<BootstrapInfo>> => ipcRenderer.invoke(IPC.app.bootstrap),
   listProjects: (): Promise<IpcEnvelope<ProjectMeta[]>> => ipcRenderer.invoke(IPC.project.list),
   createProject: (input: CreateProjectInput): Promise<IpcEnvelope<ProjectMeta>> =>
