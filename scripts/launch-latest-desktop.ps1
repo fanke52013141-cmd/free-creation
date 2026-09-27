@@ -8,6 +8,10 @@ $LocationPushed = $false
 $LaunchFailed = $false
 
 try {
+  # Some desktop launchers inherit this flag from a Node-based host. It causes
+  # Electron build commands to run in Node mode instead of as Electron.
+  Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+
   if (-not $PnpmCommand) {
     throw '找不到 pnpm.cmd。请先安装 pnpm，并确认它已加入 PATH。'
   }
@@ -20,7 +24,8 @@ try {
   Push-Location -LiteralPath $ProjectRoot
   $LocationPushed = $true
 
-  Write-Host '正在构建当前源码并更新桌面版本，请稍候……' -ForegroundColor Cyan
+  Write-Host "源码目录：$ProjectRoot" -ForegroundColor DarkGray
+  Write-Host '正在构建当前保存的源码并更新桌面版本，请稍候……' -ForegroundColor Cyan
   & $PnpmCommand.Source run build:desktop-latest
   $BuildExitCode = $LASTEXITCODE
   if ($BuildExitCode -ne 0) {

@@ -101,15 +101,13 @@ export function AppSelect({
   const [uncontrolledValue, setUncontrolledValue] = useState(initialValue)
   const [open, setOpen] = useState(false)
   const owner = useRef(Symbol('app-select'))
-  const closeRef = useRef<() => void>(() => {})
-  closeRef.current = () => setOpen(false)
   const selectedValue = value === undefined ? uncontrolledValue : value
   const selectedOption = options.find((option) => option.value === selectedValue)
 
   const handleOpenChange = (nextOpen: boolean): void => {
     if (nextOpen) {
       activeAppSelect?.close()
-      activeAppSelect = { owner: owner.current, close: () => closeRef.current() }
+      activeAppSelect = { owner: owner.current, close: () => setOpen(false) }
     } else if (activeAppSelect?.owner === owner.current) {
       activeAppSelect = null
     }

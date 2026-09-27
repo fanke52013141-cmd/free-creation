@@ -54,17 +54,17 @@ describe('节点与画布滚轮路由', () => {
   })
 })
 
-describe('v1.3 §16.1 端口圆点是安静的节点色（覆盖多色玻璃珠）', () => {
-  it('空闲态使用节点主色；类型色只在连线或可落点时出现，且无磨砂/内阴影', () => {
+describe('v1.3 §16.1 端口圆点统一使用节点色、类型色环与柔光', () => {
+  it('空闲态使用节点色；类型色通过描边和柔光表达，不使用磨砂材质', () => {
     expect(foundation).toMatch(
       /\.port-dot::after\s*\{[^}]*background:\s*var\(--node-port-color, var\(--pc/
     )
     expect(foundation).toMatch(/\.port-dot\.connected::after\s*\{[^}]*background:\s*var\(--pc/)
     expect(foundation).toMatch(/\.port-dot\.ok::after\s*\{[^}]*background:\s*var\(--pc/)
     expect(foundation).not.toMatch(/\.port-dot::after\s*\{[^}]*backdrop-filter/)
-    expect(foundation).toMatch(/\.port-dot::after\s*\{[^}]*box-shadow:\s*none;/)
-    expect(foundation).not.toMatch(/\.port-dot::after\s*\{[^}]*color-mix/)
-    // 5px 色芯与拖线玻璃珠整体删除，避免出现第二种圆点材质。
+    expect(foundation).toMatch(/\.port-dot::after\s*\{[^}]*border:\s*2px solid color-mix/)
+    expect(foundation).toMatch(/\.port-dot::after\s*\{[^}]*box-shadow:[^}]*color-mix/)
+    // 端口继续使用一套圆点结构，不另外叠加拖线玻璃珠。
     expect(foundation).not.toContain('.port-dot-inner')
     expect(foundation).not.toContain('.conn-cursor-glass')
   })
@@ -85,10 +85,23 @@ describe('v1.3 §16.1 端口圆点是安静的节点色（覆盖多色玻璃珠�
   })
 
   it('可见圆点和透明命中区都扩大，锚点元素尺寸仍由 edge-geometry 统一', () => {
-    expect(foundation).toMatch(/\.port-dot::after\s*\{[^}]*width:\s*14px;[^}]*height:\s*14px;/)
+    expect(foundation).toMatch(/\.port-dot::after\s*\{[^}]*width:\s*12px;[^}]*height:\s*12px;/)
     expect(foundation).toMatch(/\.port-dot::before\s*\{[^}]*inset:\s*-14px;/)
     expect(nodeCardView).toContain('top: inY[i] - NODE_PORT_SIZE / 2')
     expect(nodeCardView).toContain('top: outY[i] - NODE_PORT_SIZE / 2')
+  })
+})
+
+describe('画布连线宽度与流动段比例', () => {
+  it('正式连线和拖线预览都按 1/6 路径长度显示流动段', () => {
+    expect(surfaces).toMatch(
+      /\.data-edge-visible\s*\{[^}]*stroke-width:\s*3;[\s\S]*?\.data-edge-flow\s*\{[^}]*stroke-width:\s*4\.5;[^}]*stroke-dasharray:\s*166\.667 833\.333;/
+    )
+    expect(foundation).toMatch(
+      /\.conn-water-path\s*\{[^}]*stroke-dasharray:\s*166\.667 833\.333;/
+    )
+    expect(dataEdgeLayer).toContain('strokeWidth: 3 * zoom')
+    expect(dataEdgeLayer).toContain('strokeWidth: 4.5 * zoom')
   })
 })
 
@@ -305,7 +318,7 @@ describe('v1.2 §16.12 处理/结构数据节点：只留真会改变行为的�
     expect(structured).toContain('countIncomingConnections')
     expect(structured).toContain('<PlaceholderTokens')
     expect(structured).toContain('{{input[${index}]}}')
-    expect(structured).toContain("'暂无结构数据'")
+    expect(structured).toContain('等待结构数据')
     // 解析失败必须回显用户原文，而不是 JSON.stringify(null)
     expect(structured).toContain('parseError ? raw : JSON.stringify(parsed, null, 2)')
     expect(structured).not.toContain('双击输入 JSON')
@@ -359,17 +372,18 @@ describe('v1.2 §16.13 AI 处理 / 对话：把执行器分支映射成端口与
     expect(aiProcess).toContain("portId: 'out-markdown'")
     expect(aiProcess).toContain("portId: 'out-json'")
     expect(aiProcess).toContain('{mode.downstream}')
-    expect(aiProcess).toContain('输出 {mode.label}')
+    expect(aiProcess).toContain('<code>{mode.portId}</code>')
     expect(stripComments(aiProcess)).not.toContain('· {data.mode}')
     // 模型与 Schema 是固定配置，只能由右侧设置页编辑，不能继续留在卡片正文。
     expect(aiProcess).toContain('export function AiProcessSettings')
-    expect(aiProcess).not.toContain('ai-process-config')
+    const card = aiProcess.slice(0, aiProcess.indexOf('export function AiProcessSettings'))
+    expect(card).not.toContain('<select')
+    expect(card).not.toContain('<textarea')
   })
 
-  it('in-text / in-json 连线数直接呈现，空输入不会把卡片伪装为结果节点', () => {
-    expect(aiProcess).toContain("countIncomingConnections(editor, shape.id, 'in-text')")
-    expect(aiProcess).toContain("countIncomingConnections(editor, shape.id, 'in-json')")
-    expect(aiProcess).toContain('等待文本或 JSON 输入')
+  it('输入/输出状态由端口与契约呈现，卡片不重复打印计数或等待提示', () => {
+    expect(aiProcess).not.toContain('countIncomingConnections')
+    expect(aiProcess).not.toContain('等待文本或 JSON 输入')
     expect(aiProcess).not.toContain('ai-process-result')
     expect(aiProcess).not.toContain('parseStoredAiResult')
   })
@@ -661,7 +675,7 @@ describe('v1.2 §16.22 文本节点空态可发现，分镜保留取数来源', 
     for (const removed of ['node-hint', 'node-wiring', 'slash-cmd', '批量视角']) {
       expect(body).not.toContain(removed)
     }
-    expect(body).toContain('双击输入文本')
+    expect(body).toContain('输入文本')
     expect(body).toContain('shape.props.text ? (')
     expect(stripComments(app)).not.toContain('.slash-cmd-')
   })
@@ -1013,7 +1027,7 @@ describe('v1.2 §16.28 3D 预演台：读文档真值、连线数上按钮、只
     expect(guidesGroup.indexOf("viewportMode === '3d' ? (")).toBeLessThan(
       guidesGroup.indexOf('director-guide-toggles')
     )
-    expect(studio).toMatch(/viewportMode === '2d' && \(\s*<select[\s\S]{0,200}姿态/)
+    expect(studio).toMatch(/viewportMode === '2d' && \(\s*<AppSelect[\s\S]{0,200}姿态/)
     // 3D 视口压根不消费这些字段——上面所有门控的事实来源。
     expect(viewport3d).not.toMatch(/\.pose\b/)
     expect(viewport3d).not.toContain('referenceOpacity')
@@ -1057,7 +1071,7 @@ describe('v1.2 §16.28 3D 预演台：读文档真值、连线数上按钮、只
       expect(source).not.toContain('导演台')
     }
     expect(read('src/shared/structured-data.ts')).not.toContain('导演台')
-    expect(studio).toContain('title="关闭 3D 预演台"')
+    expect(studio).toContain('aria-label="关闭 3D 预演台"')
     expect(studio).toContain("toast('3D 预演台至少保留一个镜头')")
   })
 })
@@ -1110,7 +1124,7 @@ describe('v1.2 §16.30 文档真值节点：跳过运行不得静音输出，卡
     const body = stripComments(textBody)
     expect(body).not.toContain('countIncomingConnections')
     expect(body).not.toContain('node-wiring')
-    expect(body).toContain('双击输入文本')
+    expect(body).toContain('输入文本')
     expect(specs).toContain('上游文本在运行时并入正文，再经 out-text 输出。')
   })
 

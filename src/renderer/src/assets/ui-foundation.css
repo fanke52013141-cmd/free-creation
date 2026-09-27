@@ -867,7 +867,7 @@ body {
   fill: none;
   stroke-width: 1.7px;
   stroke-linecap: round;
-  stroke-dasharray: 256 744;
+  stroke-dasharray: 166.667 833.333;
   stroke-dashoffset: 1000;
   opacity: 0.7;
   filter: drop-shadow(0 0 5px rgba(104, 236, 210, 0.58));

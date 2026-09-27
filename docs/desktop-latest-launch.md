@@ -1,12 +1,22 @@
 # 桌面快捷方式始终启动最新本地代码
 
-桌面上的“启动 Canvas Studio”快捷方式会运行 `scripts/launch-latest-desktop.ps1`。每次点击时，它会：
+首次在仓库根目录执行以下命令，或在移动仓库目录后再次执行：
 
-1. 从当前源码运行 `pnpm run build:desktop-latest`，其中包含 Node/Web 类型检查、Electron Vite 构建和 Windows 目录打包。
-2. 成功后启动 `dist/current-source-release/win-unpacked/canvas-studio.exe`。
-3. 如果 Canvas Studio 尚未完全退出，先停下来提示关闭旧窗口，避免旧进程占用发布目录。
-4. 如果构建失败，停在错误提示，不会回退启动旧包。
+```powershell
+pnpm run desktop:install-latest-shortcut
+```
 
-因此，本地工作树中已保存的源码改动会在下次点快捷方式时进入应用；重复改代码后无需手动打包或改快捷方式。远端仓库中新提交若尚未同步到本机，仍需先执行 `git pull`；启动器不会自动拉取远端代码，也不会覆盖本地改动。
+该命令会创建或更新桌面上的 `自由画布.lnk`，目标是本仓库的 `scripts/launch-latest-desktop.ps1`。它可以重复执行，并会覆盖同名的旧快捷方式配置。需要使用其他名称时，直接运行：
 
-桌面快捷方式调用脚本时使用 `-NoProfile`，脚本只依赖系统 PATH 中的 `pnpm.cmd` 和项目现有依赖。构建窗口会显示进度；成功启动应用后窗口关闭。失败时窗口会停留，便于查看错误。
+```powershell
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File scripts/install-latest-desktop-shortcut.ps1 -Name 'Canvas Studio 最新版'
+```
+
+以后点击 `自由画布` 时，会显示一个 PowerShell 构建窗口，并按以下顺序执行：
+
+1. 确认 `canvas-studio.exe` 没有运行，避免占用发布目录。
+2. 从当前仓库中已保存的源码运行 `pnpm run build:desktop-latest`，其中包含 Node/Web 类型检查、Electron Vite 构建和 Windows 目录打包。
+3. 只在构建成功后启动 `dist/current-source-release/win-unpacked/canvas-studio.exe`。
+4. 构建失败时保留错误窗口，不会启动旧的打包产物。
+
+因此，保存本地代码后再次点击快捷方式即可进入本地最新版本。远端仓库的新提交仍需先同步到本机；启动器不会自动拉取远端代码，也不会覆盖本地改动。

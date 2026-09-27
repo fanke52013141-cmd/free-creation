@@ -168,7 +168,9 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
   const options = modelsByModality(providers, 'text')
   const [, force] = useState(0)
   const [draft, setDraft] = useState('')
-  const [showSettings, setShowSettings] = useState(false)
+  const [settingsPreference, setSettingsPreference] = useState<'automatic' | 'open' | 'closed'>(
+    'automatic'
+  )
   const [running, setRunning] = useState(false)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editingText, setEditingText] = useState('')
@@ -180,15 +182,11 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
   const fileInputRef = useRef<HTMLInputElement>(null)
   const systemComposingRef = useRef(false)
   const previousFocusRef = useRef<HTMLElement | null>(null)
-  const dialogStateRef = useRef({ pendingEdit, showSettings, onClose })
 
   useEffect(
     () => editor.store.listen(() => force((value) => value + 1), { scope: 'document' }),
     [editor]
   )
-  useEffect(() => {
-    dialogStateRef.current = { pendingEdit, showSettings, onClose }
-  }, [pendingEdit, showSettings, onClose])
   useEffect(() => {
     if (!loaded) void loadProviders()
   }, [loaded, loadProviders])
@@ -199,15 +197,17 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
   const conversations = chatConversations(data)
   const messages = activeConversation.messages
   const selectedModel = options.find((option) => option.key === data.modelKey)
+  const showSettings =
+    settingsPreference === 'open' ||
+    (settingsPreference === 'automatic' && loaded && !selectedModel)
+  const dialogStateRef = useRef({ pendingEdit, showSettings, onClose })
   const selectedModelSupportsReasoning = Boolean(
     selectedModel && isReasoningModelId(selectedModel.model.id)
   )
 
-  // Opening a chat without a chosen model takes the user straight to the model controls.
-  // If no text models exist yet, those controls offer the provider setup action.
   useEffect(() => {
-    if (loaded && !selectedModel) setShowSettings(true)
-  }, [loaded, selectedModel])
+    dialogStateRef.current = { pendingEdit, showSettings, onClose }
+  }, [pendingEdit, showSettings, onClose])
 
   useEffect(() => {
     const el = scrollRef.current
@@ -234,7 +234,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
       if (event.key === 'Escape') {
         event.preventDefault()
         if (current.pendingEdit) setPendingEdit(null)
-        else if (current.showSettings) setShowSettings(false)
+        else if (current.showSettings) setSettingsPreference('closed')
         else current.onClose()
         return
       }
@@ -518,7 +518,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
               type="button"
               aria-label="对话设置"
               aria-pressed={showSettings}
-              onClick={() => setShowSettings((value) => !value)}
+              onClick={() => setSettingsPreference(showSettings ? 'closed' : 'open')}
             >
               <Icon name="settings" size={16} />
             </button>
