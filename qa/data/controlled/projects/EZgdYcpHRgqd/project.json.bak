@@ -1,0 +1,266 @@
+{
+  "version": 1,
+  "meta": {
+    "id": "EZgdYcpHRgqd",
+    "name": "B2持久化测试项目",
+    "createdAt": 1790131230286,
+    "updatedAt": 1790131403035,
+    "graphVersion": 6
+  },
+  "nodes": [
+    {
+      "id": "shape:ewm0z3rWKJorUlCbQjdI0",
+      "type": "text",
+      "contractVersion": 3,
+      "title": "文本",
+      "x": 543.5,
+      "y": 269.5,
+      "w": 340,
+      "h": 260,
+      "ports": [
+        {
+          "id": "in-text",
+          "name": "文本",
+          "dir": "in",
+          "type": "text",
+          "description": "一个或多个上游文本，执行时与节点内文本合并。",
+          "required": false,
+          "cardinality": "many"
+        },
+        {
+          "id": "out-text",
+          "name": "文本",
+          "dir": "out",
+          "type": "text",
+          "description": "节点最终保存的纯文本内容。",
+          "required": true,
+          "cardinality": "one"
+        }
+      ],
+      "params": {},
+      "content": {
+        "kind": "text",
+        "text": "来源B：BETA-B2\n"
+      },
+      "exec": {
+        "status": "idle"
+      },
+      "meta": {
+        "source": "input",
+        "createdAt": 1790131403036
+      }
+    },
+    {
+      "id": "shape:-lhWPsuZrbrx3iSA2utrZ",
+      "type": "text",
+      "contractVersion": 3,
+      "title": "文本",
+      "x": 155.5,
+      "y": 46,
+      "w": 340,
+      "h": 260,
+      "ports": [
+        {
+          "id": "in-text",
+          "name": "文本",
+          "dir": "in",
+          "type": "text",
+          "description": "一个或多个上游文本，执行时与节点内文本合并。",
+          "required": false,
+          "cardinality": "many"
+        },
+        {
+          "id": "out-text",
+          "name": "文本",
+          "dir": "out",
+          "type": "text",
+          "description": "节点最终保存的纯文本内容。",
+          "required": true,
+          "cardinality": "one"
+        }
+      ],
+      "params": {},
+      "content": {
+        "kind": "text",
+        "text": "来源A：ALPHA-B2\n"
+      },
+      "exec": {
+        "status": "idle"
+      },
+      "meta": {
+        "source": "input",
+        "createdAt": 1790131403036
+      }
+    },
+    {
+      "id": "shape:qTDV21U6LwUIlIH77JB8r",
+      "type": "text",
+      "contractVersion": 3,
+      "title": "文本",
+      "x": 155.5,
+      "y": 577.5,
+      "w": 340,
+      "h": 260,
+      "ports": [
+        {
+          "id": "in-text",
+          "name": "文本",
+          "dir": "in",
+          "type": "text",
+          "description": "一个或多个上游文本，执行时与节点内文本合并。",
+          "required": false,
+          "cardinality": "many"
+        },
+        {
+          "id": "out-text",
+          "name": "文本",
+          "dir": "out",
+          "type": "text",
+          "description": "节点最终保存的纯文本内容。",
+          "required": true,
+          "cardinality": "one"
+        }
+      ],
+      "params": {},
+      "content": {
+        "kind": "text",
+        "text": "来源C：GAMMA-B2\n"
+      },
+      "exec": {
+        "status": "idle"
+      },
+      "meta": {
+        "source": "input",
+        "createdAt": 1790131403036
+      }
+    }
+  ],
+  "edges": [],
+  "groups": [],
+  "tldrawSnapshot": {
+    "store": {
+      "shape:ewm0z3rWKJorUlCbQjdI0": {
+        "x": 543.5,
+        "y": 269.5,
+        "rotation": 0,
+        "isLocked": false,
+        "opacity": 1,
+        "meta": {},
+        "id": "shape:ewm0z3rWKJorUlCbQjdI0",
+        "type": "node-card",
+        "props": {
+          "w": 340,
+          "h": 260,
+          "nodeType": "text",
+          "title": "文本",
+          "config": "",
+          "text": "来源B：BETA-B2\n",
+          "mediaId": "",
+          "mediaPath": "",
+          "mediaMime": "",
+          "exec": "idle"
+        },
+        "parentId": "page:page",
+        "index": "a1l7vDoV",
+        "typeName": "shape"
+      },
+      "shape:-lhWPsuZrbrx3iSA2utrZ": {
+        "x": 155.5,
+        "y": 46,
+        "rotation": 0,
+        "isLocked": false,
+        "opacity": 1,
+        "meta": {},
+        "id": "shape:-lhWPsuZrbrx3iSA2utrZ",
+        "type": "node-card",
+        "props": {
+          "w": 340,
+          "h": 260,
+          "nodeType": "text",
+          "title": "文本",
+          "config": "",
+          "text": "来源A：ALPHA-B2\n",
+          "mediaId": "",
+          "mediaPath": "",
+          "mediaMime": "",
+          "exec": "idle"
+        },
+        "parentId": "page:page",
+        "index": "a2uxHftV",
+        "typeName": "shape"
+      },
+      "shape:qTDV21U6LwUIlIH77JB8r": {
+        "x": 155.5,
+        "y": 577.5,
+        "rotation": 0,
+        "isLocked": false,
+        "opacity": 1,
+        "meta": {},
+        "id": "shape:qTDV21U6LwUIlIH77JB8r",
+        "type": "node-card",
+        "props": {
+          "w": 340,
+          "h": 260,
+          "nodeType": "text",
+          "title": "文本",
+          "config": "",
+          "text": "来源C：GAMMA-B2\n",
+          "mediaId": "",
+          "mediaPath": "",
+          "mediaMime": "",
+          "exec": "idle"
+        },
+        "parentId": "page:page",
+        "index": "a3P1QhbV",
+        "typeName": "shape"
+      },
+      "page:page": {
+        "meta": {},
+        "id": "page:page",
+        "name": "Page 1",
+        "index": "a1",
+        "typeName": "page"
+      },
+      "document:document": {
+        "gridSize": 10,
+        "name": "",
+        "meta": {},
+        "id": "document:document",
+        "typeName": "document"
+      }
+    },
+    "schema": {
+      "schemaVersion": 2,
+      "sequences": {
+        "com.tldraw.store": 5,
+        "com.tldraw.asset": 1,
+        "com.tldraw.camera": 1,
+        "com.tldraw.document": 2,
+        "com.tldraw.instance": 26,
+        "com.tldraw.instance_page_state": 5,
+        "com.tldraw.page": 1,
+        "com.tldraw.instance_presence": 6,
+        "com.tldraw.pointer": 1,
+        "com.tldraw.shape": 4,
+        "com.tldraw.asset.bookmark": 2,
+        "com.tldraw.asset.image": 6,
+        "com.tldraw.asset.video": 5,
+        "com.tldraw.shape.group": 0,
+        "com.tldraw.shape.text": 4,
+        "com.tldraw.shape.bookmark": 2,
+        "com.tldraw.shape.draw": 4,
+        "com.tldraw.shape.geo": 11,
+        "com.tldraw.shape.note": 10,
+        "com.tldraw.shape.line": 5,
+        "com.tldraw.shape.frame": 1,
+        "com.tldraw.shape.highlight": 3,
+        "com.tldraw.shape.embed": 4,
+        "com.tldraw.shape.image": 5,
+        "com.tldraw.shape.video": 4,
+        "com.tldraw.shape.node-card": 1,
+        "com.tldraw.shape.arrow": 8,
+        "com.tldraw.binding.arrow": 1
+      }
+    }
+  }
+}

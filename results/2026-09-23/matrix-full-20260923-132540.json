@@ -1,0 +1,884 @@
+{
+  "passed": 169,
+  "failed": 6,
+  "total": 175,
+  "results": [
+    {
+      "name": "全新数据目录进入项目列表页",
+      "ok": true,
+      "detail": "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\canvas-matrix-full-20260923-132540"
+    },
+    {
+      "name": "矩阵-text：全新项目可创建并进入画布",
+      "ok": true,
+      "detail": "jAXnSk06WyG6"
+    },
+    {
+      "name": "新项目的画布是空的",
+      "ok": true,
+      "detail": "0 张卡片"
+    },
+    {
+      "name": "文本：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开文本与 AI节点"
+    },
+    {
+      "name": "文本：端口渲染与契约矩阵一致",
+      "ok": true,
+      "detail": "实际 in=in-text out=out-text｜期望 in=in-text out=out-text"
+    },
+    {
+      "name": "文本：空卡片给出可发现的输入提示",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "文本：空正文运行不产生假成功",
+      "ok": true,
+      "detail": "{\"exec\":\"idle\",\"run\":\"skipped\"}"
+    },
+    {
+      "name": "文本：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开文本与 AI节点"
+    },
+    {
+      "name": "文本：out-text → in-text 拖线成功建连",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "文本：连上后状态灯不再报缺少输入",
+      "ok": true,
+      "detail": "未运行 · 可运行"
+    },
+    {
+      "name": "文本：运行后真的并入上游正文",
+      "ok": true,
+      "detail": "{\"run\":\"success\",\"a\":\"上游甲：一句话\",\"b\":\"上游甲：一句话\\n$$$\\n下游乙：另一句话\",\"edges\":[{\"from\":\"text:Xsia.out-text\",\"to\":\"text:E7Dw.in-text\"}]}"
+    },
+    {
+      "name": "文本：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开文本与 AI节点"
+    },
+    {
+      "name": "文本：同一输入端口可接第二个上游",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "文本：多上游全部被消费",
+      "ok": true,
+      "detail": "\"上游甲：一句话\\n$$$\\n上游丙：第三条\\n$$$\\n上游甲：一句话\\n$$$\\n下游乙：另一句话\""
+    },
+    {
+      "name": "文本：重载后卡片数不丢",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "文本：重载后正文里的上游内容仍在",
+      "ok": true,
+      "detail": "\"上游甲：一句话\\n$$$\\n上游丙：第三条\\n$$$\\n上游甲：一句话\\n$$$\\n下游乙：另一句话\""
+    },
+    {
+      "name": "矩阵-json：全新项目可创建并进入画布",
+      "ok": true,
+      "detail": "LnYHFaGuf7_D"
+    },
+    {
+      "name": "新项目的画布是空的",
+      "ok": true,
+      "detail": "0 张卡片"
+    },
+    {
+      "name": "JSON：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开流程与高级节点"
+    },
+    {
+      "name": "JSON：端口渲染与契约矩阵一致",
+      "ok": true,
+      "detail": "实际 in=in-json/in-text out=out-json｜期望 in=in-json/in-text out=out-json"
+    },
+    {
+      "name": "JSON：合法正文渲染结构化卡片",
+      "ok": true,
+      "detail": "2 张"
+    },
+    {
+      "name": "JSON：合法正文运行成功",
+      "ok": true,
+      "detail": "{\"runId\":\"ba464533-1e0a-4e66-a287-6517cbc61a28\",\"status\":\"success\",\"startedAt\":1790141167501,\"inputs\":{},\"trace\":[{\"at\":1790141167501,\"phase\":\"input\",\"level\":\"info\",\"message\":\"开始收集并校验输入端口\"},{\"at\":1790141167502,\"phase\":\"input\",\"level\":\"info\",\"message\":\"已收集 0 个输入端口\"},{\"at\":1790141167502,\"phase\":\"execution\",\"level\":\"info\",\"message\":\"开始调用节点执行器\"},{\"at\":1790141167508,\"phase\":\"output\",\"level\":\"info\",\"message\":\"输出契约校验通过\"}],\"finishedAt\":1790141167508,\"durationMs\":7,\"outputPorts\":[\"out-json\"]}"
+    },
+    {
+      "name": "JSON：输出被格式化回正文（两位缩进）",
+      "ok": true,
+      "detail": "\"{\\n  \\\"title\\\": \\\"开场\\\",\\n  \\\"shots\\\": [\\n    {\\n  \""
+    },
+    {
+      "name": "JSON：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开流程与高级节点"
+    },
+    {
+      "name": "JSON：非法正文在界面即时标红",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "JSON：非法正文运行失败且给出原因",
+      "ok": true,
+      "detail": "{\"phase\":\"execution\",\"reason\":\"JSON 输入格式无效\"}"
+    },
+    {
+      "name": "JSON：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开流程与高级节点"
+    },
+    {
+      "name": "JSON：out-json → in-json 建连",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "JSON：消费上游结构化值而不是自身空正文",
+      "ok": true,
+      "detail": "\"{\\n  \\\"title\\\": \\\"开场\\\",\\n  \\\"shots\\\": [\\n    {\\n  \""
+    },
+    {
+      "name": "JSON：重载后格式化结果仍在",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "矩阵-processor：全新项目可创建并进入画布",
+      "ok": true,
+      "detail": "j2ABYaW1snOm"
+    },
+    {
+      "name": "新项目的画布是空的",
+      "ok": true,
+      "detail": "0 张卡片"
+    },
+    {
+      "name": "处理：两级分类展开并显示创建入口",
+      "ok": false,
+      "detail": "未找到对应二级节点按钮"
+    },
+    {
+      "name": "处理：配方执行未中断",
+      "ok": false,
+      "detail": "一级分类均已检查，但没有展开出「添加处理节点」"
+    },
+    {
+      "name": "矩阵-storyboard：全新项目可创建并进入画布",
+      "ok": true,
+      "detail": "m9Ubp4mTyHYn"
+    },
+    {
+      "name": "新项目的画布是空的",
+      "ok": true,
+      "detail": "0 张卡片"
+    },
+    {
+      "name": "分镜板：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开流程与高级节点"
+    },
+    {
+      "name": "分镜板：端口渲染与契约矩阵一致",
+      "ok": true,
+      "detail": "实际 in=in-json/in-text out=out-json/out-text｜期望 in=in-json/in-text out=out-json/out-text"
+    },
+    {
+      "name": "分镜板：粘贴后渲染两张镜头卡",
+      "ok": true,
+      "detail": "2 张"
+    },
+    {
+      "name": "分镜板：运行成功",
+      "ok": true,
+      "detail": "{\"runId\":\"3cef2be8-d92c-4815-8564-616a62671ff8\",\"status\":\"success\",\"startedAt\":1790141194207,\"inputs\":{},\"trace\":[{\"at\":1790141194207,\"phase\":\"input\",\"level\":\"info\",\"message\":\"开始收集并校验输入端口\"},{\"at\":1790141194208,\"phase\":\"input\",\"level\":\"info\",\"message\":\"已收集 0 个输入端口\"},{\"at\":1790141194208,\"phase\":\"execution\",\"level\":\"info\",\"message\":\"开始调用节点执行器\"},{\"at\":1790141194213,\"phase\":\"output\",\"level\":\"info\",\"message\":\"输出契约校验通过\"}],\"finishedAt\":1790141194213,\"durationMs\":6,\"outputPorts\":[\"out-json\",\"out-text\"]}"
+    },
+    {
+      "name": "分镜板：画面描述没有被静默丢掉",
+      "ok": true,
+      "detail": "{\"config\":{},\"text\":\"{\\\"shots\\\":[{\\\"scene\\\":\\\"雨夜街景\\\",\\\"dialogue\\\":\\\"走吧。\\\",\\\"duration\\\":\\\"3s\\\",\\\"\"}"
+    },
+    {
+      "name": "文本：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开文本与 AI节点"
+    },
+    {
+      "name": "分镜板：out-text 可供文本节点消费",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "分镜板：合成文本真的流入下游",
+      "ok": true,
+      "detail": "\"1. 雨夜街景｜走吧。｜3s\\n2. 天台｜5s\\n$$$\\n下游占位\""
+    },
+    {
+      "name": "分镜板：重载后镜头卡仍渲染",
+      "ok": true,
+      "detail": "2 张"
+    },
+    {
+      "name": "矩阵-structured：全新项目可创建并进入画布",
+      "ok": true,
+      "detail": "EGHFA7ME22En"
+    },
+    {
+      "name": "新项目的画布是空的",
+      "ok": true,
+      "detail": "0 张卡片"
+    },
+    {
+      "name": "结构数据：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开流程与高级节点"
+    },
+    {
+      "name": "结构数据：端口渲染与契约矩阵一致",
+      "ok": true,
+      "detail": "实际 in=in-context/in-text out=out-json｜期望 in=in-context/in-text out=out-json"
+    },
+    {
+      "name": "结构数据：符合对象列表 Schema 时给出可用提示",
+      "ok": true,
+      "detail": "符合对象列表，可连线使用"
+    },
+    {
+      "name": "结构数据：合法结构运行成功",
+      "ok": true,
+      "detail": "{\"runId\":\"fe4dd083-b215-464d-b9a7-88e6b9612080\",\"status\":\"success\",\"startedAt\":1790141209223,\"inputs\":{},\"trace\":[{\"at\":1790141209223,\"phase\":\"input\",\"level\":\"info\",\"message\":\"开始收集并校验输入端口\"},{\"at\":1790141209223,\"phase\":\"input\",\"level\":\"info\",\"message\":\"已收集 0 个输入端口\"},{\"at\":1790141209223,\"phase\":\"execution\",\"level\":\"info\",\"message\":\"开始调用节点执行器\"},{\"at\":1790141209229,\"phase\":\"output\",\"level\":\"info\",\"message\":\"输出契约校验通过\"}],\"finishedAt\":1790141209229,\"durationMs\":6,\"outputPorts\":[\"out-json\"]}"
+    },
+    {
+      "name": "结构数据：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开流程与高级节点"
+    },
+    {
+      "name": "结构数据：不符合 Schema 即时标红而不是静默通过",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "结构数据：不符合 Schema 的运行不记为成功",
+      "ok": true,
+      "detail": "\"failed\""
+    },
+    {
+      "name": "结构数据：重载后 Schema 与正文仍在",
+      "ok": true,
+      "detail": "{\"config\":{\"schema\":{\"id\":\"list.items\",\"version\":1}},\"text\":\"[{\\\"id\\\":\\\"s1\\\"},{\\\"id\\\":\\\"s2\\\"},{\\\"id\\\":\\\"s3\\\"}]\"}"
+    },
+    {
+      "name": "矩阵-iterate：全新项目可创建并进入画布",
+      "ok": true,
+      "detail": "JwBOON8dA-cf"
+    },
+    {
+      "name": "新项目的画布是空的",
+      "ok": true,
+      "detail": "0 张卡片"
+    },
+    {
+      "name": "循环：两级分类展开并显示创建入口",
+      "ok": false,
+      "detail": "未找到对应二级节点按钮"
+    },
+    {
+      "name": "循环：配方执行未中断",
+      "ok": false,
+      "detail": "一级分类均已检查，但没有展开出「添加循环节点」"
+    },
+    {
+      "name": "矩阵-code：全新项目可创建并进入画布",
+      "ok": true,
+      "detail": "Fe7aEMpd5vXD"
+    },
+    {
+      "name": "新项目的画布是空的",
+      "ok": true,
+      "detail": "0 张卡片"
+    },
+    {
+      "name": "代码：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开流程与高级节点"
+    },
+    {
+      "name": "代码：默认契约端口渲染（命名输入 + 单个命名输出）",
+      "ok": true,
+      "detail": "in=in-text/in-json out=out-output"
+    },
+    {
+      "name": "代码：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开流程与高级节点"
+    },
+    {
+      "name": "代码：语法错误运行失败且原因可见",
+      "ok": true,
+      "detail": "{\"phase\":\"execution\",\"reason\":\"Unexpected token ';'\"}"
+    },
+    {
+      "name": "代码：卡片上能看到失败标记",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "文本：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开文本与 AI节点"
+    },
+    {
+      "name": "代码：out-text → in-text 建连",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "代码：合法代码运行成功",
+      "ok": true,
+      "detail": "{\"runId\":\"9bc5f767-242e-4d57-b1d3-66c74ea78cda\",\"status\":\"success\",\"startedAt\":1790141238723,\"inputs\":{\"in-text\":[{\"nodeId\":\"shape:2hytBQxLUj3j4IeOA-QDq\",\"portId\":\"out-text\"}]},\"trace\":[{\"at\":1790141238723,\"phase\":\"input\",\"level\":\"info\",\"message\":\"开始收集并校验输入端口\"},{\"at\":1790141238724,\"phase\":\"input\",\"level\":\"info\",\"message\":\"已收集 1 个输入端口\"},{\"at\":1790141238724,\"phase\":\"execution\",\"level\":\"info\",\"message\":\"开始调用节点执行器\"},{\"at\":1790141238749,\"phase\":\"output\",\"level\":\"info\",\"message\":\"输出契约校验通过\"}],\"finishedAt\":1790141238749,\"durationMs\":26,\"outputPorts\":[\"out-output\"]}"
+    },
+    {
+      "name": "代码：运行时真的读到上游文本（长度 6、前两个字）",
+      "ok": true,
+      "detail": "\"{\\\"kind\\\":\\\"json\\\",\\\"data\\\":{\\\"len\\\":6,\\\"head\\\":\\\"代码\\\"},\\\"variableName\\\":\\\"output\\\"}\""
+    },
+    {
+      "name": "代码：卡片显示成功结果条",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "代码：声明参数后浮出对应输入端口",
+      "ok": true,
+      "detail": "in=in-text/in-json/in-param-prefix"
+    },
+    {
+      "name": "JSON：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开流程与高级节点"
+    },
+    {
+      "name": "代码：自定义参数端口可被连线接入",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "代码：重载后自定义参数与端口仍在",
+      "ok": true,
+      "detail": "{\"source\":\"async function main(args) {\\n  const text = String(args.text || \\\"\\\")\\n  return { len: text.length, head: text.slice(0, 2) }\\n}\","
+    },
+    {
+      "name": "矩阵-image：全新项目可创建并进入画布",
+      "ok": true,
+      "detail": "26vpA0RtI2Sc"
+    },
+    {
+      "name": "新项目的画布是空的",
+      "ok": true,
+      "detail": "0 张卡片"
+    },
+    {
+      "name": "图片：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开图片创作节点"
+    },
+    {
+      "name": "图片：空卡片给出可发现的导入入口",
+      "ok": true,
+      "detail": "1 / 图片 / 图片资产 / 导入后下游即可取用这张图片，不需要运行本节点 / 导入图片"
+    },
+    {
+      "name": "图片：空卡片没有 mediaPath",
+      "ok": true,
+      "detail": "\"\""
+    },
+    {
+      "name": "图片：拖入 PNG 建出的是图片资产节点",
+      "ok": true,
+      "detail": "[{\"id\":\"shape:tKfcu0bJElMvH0aevzu6y\",\"type\":\"image\"}]"
+    },
+    {
+      "name": "图片：端口渲染与契约矩阵一致",
+      "ok": true,
+      "detail": "实际 in=无 out=out-image｜期望 in= out=out-image"
+    },
+    {
+      "name": "图片：卡片里的缩略图真的解码成 640×480",
+      "ok": true,
+      "detail": "{\"w\":640,\"h\":480,\"complete\":true}"
+    },
+    {
+      "name": "图片：导入落盘后 mediaPath 已写进节点",
+      "ok": true,
+      "detail": "\"projects/26vpA0RtI2Sc/media/H2tKI2y03G.png\""
+    },
+    {
+      "name": "图片：项目资产表里能查到这张图",
+      "ok": true,
+      "detail": "{\"kind\":\"image\",\"size\":9094}"
+    },
+    {
+      "name": "裁剪：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开图片创作节点"
+    },
+    {
+      "name": "图片：out-image → 裁剪 in-image 建连",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "裁剪：接上原图后不再报缺少输入",
+      "ok": true,
+      "detail": "未运行 · 可运行"
+    },
+    {
+      "name": "裁剪：按默认参数运行成功",
+      "ok": true,
+      "detail": "\"success\""
+    },
+    {
+      "name": "裁剪：产物是一张新的图片资产",
+      "ok": true,
+      "detail": "{\"id\":\"sRzrFb1VY8\",\"size\":1737}"
+    },
+    {
+      "name": "裁剪：源卡与产物卡各自渲染出图片",
+      "ok": true,
+      "detail": "2/2 张解码成功"
+    },
+    {
+      "name": "图片：重载后 mediaPath 仍在",
+      "ok": true,
+      "detail": "projects/26vpA0RtI2Sc/media/H2tKI2y03G.png"
+    },
+    {
+      "name": "图片：重载后缩略图仍解码",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "矩阵-split：全新项目可创建并进入画布",
+      "ok": true,
+      "detail": "4EJJS3SDv9rJ"
+    },
+    {
+      "name": "新项目的画布是空的",
+      "ok": true,
+      "detail": "0 张卡片"
+    },
+    {
+      "name": "拆分：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开图片创作节点"
+    },
+    {
+      "name": "图片拆分：端口渲染与契约矩阵一致",
+      "ok": true,
+      "detail": "实际 in=in-image out=out-image/out-images｜期望 in=in-image out=out-image/out-images"
+    },
+    {
+      "name": "图片拆分：未接原图时按钮置灰并写明缺少输入",
+      "ok": true,
+      "detail": "未运行 · 缺少输入：原图"
+    },
+    {
+      "name": "图片拆分：out-image → in-image 建连",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "图片拆分：按默认宫格运行成功",
+      "ok": true,
+      "detail": "\"success\""
+    },
+    {
+      "name": "图片拆分：结果集合里每一格都落盘了",
+      "ok": true,
+      "detail": "9 格"
+    },
+    {
+      "name": "图片拆分：默认选中第一格作为当前输出",
+      "ok": true,
+      "detail": "\"9i3UGlltji\""
+    },
+    {
+      "name": "图片拆分：重载后每格仍可取用",
+      "ok": true,
+      "detail": "9 格"
+    },
+    {
+      "name": "矩阵-file：全新项目可创建并进入画布",
+      "ok": true,
+      "detail": "uvhTMalMbVhs"
+    },
+    {
+      "name": "新项目的画布是空的",
+      "ok": true,
+      "detail": "0 张卡片"
+    },
+    {
+      "name": "文件：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开文本与 AI节点"
+    },
+    {
+      "name": "文件：端口渲染与契约矩阵一致",
+      "ok": true,
+      "detail": "实际 in=无 out=out-file/out-text｜期望 in= out=out-file/out-text"
+    },
+    {
+      "name": "文件：空卡片说清要导入什么",
+      "ok": true,
+      "detail": "1 / 文件 / 文件资产 / 导入后下游即可取用这个文件，不需要运行本节点 / 导入文件"
+    },
+    {
+      "name": "文件：没导入时不假成功",
+      "ok": true,
+      "detail": "{\"blocked\":false,\"run\":\"skipped\"}"
+    },
+    {
+      "name": "文件：拖入 txt 没有静默失败（要么建卡，要么给原因）",
+      "ok": true,
+      "detail": "{\"created\":[],\"note\":\"导入失败：notes.txt（仅支持图片或视频缓冲数据）\"}"
+    },
+    {
+      "name": "文件：缓冲导入只收图片/视频时，提示条把原因说清楚",
+      "ok": true,
+      "detail": "\"导入失败：notes.txt（仅支持图片或视频缓冲数据）\""
+    },
+    {
+      "name": "矩阵-video-asset：全新项目可创建并进入画布",
+      "ok": true,
+      "detail": "g_ta4ZJwTF59"
+    },
+    {
+      "name": "新项目的画布是空的",
+      "ok": true,
+      "detail": "0 张卡片"
+    },
+    {
+      "name": "视频资产：拖入 MP4 建出的是视频资产节点",
+      "ok": true,
+      "detail": "[{\"id\":\"shape:VAIa2a4PDZ1ftYBPVRnzk\",\"type\":\"video-asset\"}]"
+    },
+    {
+      "name": "视频资产：端口渲染与契约矩阵一致",
+      "ok": true,
+      "detail": "实际 in=无 out=out-video｜期望 in= out=out-video"
+    },
+    {
+      "name": "视频资产：mediaPath 已落盘且文件存在",
+      "ok": true,
+      "detail": "projects/g_ta4ZJwTF59/media/SjkCZFPyNm.mp4"
+    },
+    {
+      "name": "视频资产：卡片渲染出可播放的视频元素",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "视频资产：重载后 mediaPath 仍在",
+      "ok": true,
+      "detail": "projects/g_ta4ZJwTF59/media/SjkCZFPyNm.mp4"
+    },
+    {
+      "name": "矩阵-video-frame：全新项目可创建并进入画布",
+      "ok": true,
+      "detail": "ig379TfO3b1i"
+    },
+    {
+      "name": "新项目的画布是空的",
+      "ok": true,
+      "detail": "0 张卡片"
+    },
+    {
+      "name": "抽帧：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开视频创作节点"
+    },
+    {
+      "name": "视频取帧：端口渲染与契约矩阵一致",
+      "ok": true,
+      "detail": "实际 in=in-video out=out-image｜期望 in=in-video out=out-image"
+    },
+    {
+      "name": "视频取帧：未接源视频时按钮置灰",
+      "ok": true,
+      "detail": "未运行 · 缺少输入：源视频"
+    },
+    {
+      "name": "视频取帧：out-video → in-video 建连",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "视频取帧：默认首帧运行成功",
+      "ok": true,
+      "detail": "\"success\""
+    },
+    {
+      "name": "视频取帧：产物是一张真实存在的图片",
+      "ok": true,
+      "detail": "\"projects/ig379TfO3b1i/media/8oI47XC5OU.png\""
+    },
+    {
+      "name": "视频取帧：取到的帧建成独立图片卡",
+      "ok": true,
+      "detail": "[\"zBIz\"]"
+    },
+    {
+      "name": "视频取帧：那张帧卡真的解码出一张图",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "视频取帧：重载后运行记录与产物仍在",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "矩阵-video-clip：全新项目可创建并进入画布",
+      "ok": true,
+      "detail": "sI3De3ig71jx"
+    },
+    {
+      "name": "新项目的画布是空的",
+      "ok": true,
+      "detail": "0 张卡片"
+    },
+    {
+      "name": "视频截取：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开视频创作节点"
+    },
+    {
+      "name": "视频截取：端口渲染与契约矩阵一致",
+      "ok": true,
+      "detail": "实际 in=in-video out=out-video/out-audio｜期望 in=in-video out=out-video/out-audio"
+    },
+    {
+      "name": "视频截取：按默认区间运行成功",
+      "ok": true,
+      "detail": "\"success\""
+    },
+    {
+      "name": "视频截取：产物视频已落盘",
+      "ok": true,
+      "detail": "\"projects/sI3De3ig71jx/media/7OuOOn7G3n.mp4\""
+    },
+    {
+      "name": "视频截取：产物时长不超过 4 秒的源片",
+      "ok": true,
+      "detail": "1s"
+    },
+    {
+      "name": "视频截取：截出来的视频落成独立资产卡",
+      "ok": true,
+      "detail": "2 张视频资产卡"
+    },
+    {
+      "name": "矩阵-audio：全新项目可创建并进入画布",
+      "ok": true,
+      "detail": "tCi2sK9jCPKM"
+    },
+    {
+      "name": "新项目的画布是空的",
+      "ok": true,
+      "detail": "0 张卡片"
+    },
+    {
+      "name": "视频截取：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开视频创作节点"
+    },
+    {
+      "name": "视频截取：端口渲染与契约矩阵一致",
+      "ok": true,
+      "detail": "实际 in=in-video out=out-video/out-audio｜期望 in=in-video out=out-video/out-audio"
+    },
+    {
+      "name": "音频：视频截取的音频产物建成独立音频资产卡",
+      "ok": true,
+      "detail": "{\"types\":[\"video-clip\",\"video-asset\",\"audio\",\"video-asset\"]}"
+    },
+    {
+      "name": "音频：端口渲染与契约矩阵一致",
+      "ok": true,
+      "detail": "实际 in=无 out=out-audio｜期望 in= out=out-audio"
+    },
+    {
+      "name": "音频：卡片渲染出播放器",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "音频：产物文件真的在磁盘上",
+      "ok": true,
+      "detail": "projects/tCi2sK9jCPKM/media/QLsMbG87mH.wav"
+    },
+    {
+      "name": "音频：运行后把自身音频交给下游",
+      "ok": true,
+      "detail": "\"success\""
+    },
+    {
+      "name": "人声分离：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开声音创作节点"
+    },
+    {
+      "name": "人声分离：端口渲染与契约矩阵一致",
+      "ok": true,
+      "detail": "实际 in=in-audio out=out-audio｜期望 in=in-audio out=out-audio"
+    },
+    {
+      "name": "人声分离：out-audio → in-audio 建连",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "人声分离：快速模式运行成功",
+      "ok": true,
+      "detail": "\"success\""
+    },
+    {
+      "name": "人声分离：人声轨是真实存在的音频文件",
+      "ok": true,
+      "detail": "\"projects/tCi2sK9jCPKM/media/nNEPDYF2l9.wav\""
+    },
+    {
+      "name": "人声分离：人声轨时长与源音频同量级",
+      "ok": true,
+      "detail": "1s"
+    },
+    {
+      "name": "人声分离：重载后运行结果仍在",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "音频：源卡与产物卡重载后都还在",
+      "ok": true,
+      "detail": "[\"video-clip\",\"audio\",\"video-asset\",\"vocal-separate\",\"audio\",\"video-asset\"]"
+    },
+    {
+      "name": "矩阵-director：全新项目可创建并进入画布",
+      "ok": true,
+      "detail": "eqToSTXLVW72"
+    },
+    {
+      "name": "新项目的画布是空的",
+      "ok": true,
+      "detail": "0 张卡片"
+    },
+    {
+      "name": "3D 预演台：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开流程与高级节点"
+    },
+    {
+      "name": "导演台：端口渲染与契约矩阵一致",
+      "ok": true,
+      "detail": "实际 in=in-storyboard/in-reference-images/in-camera-preset out=out-frame/out-preview-video/out-camera/out-project｜期望 in=in-storyboard/in-reference-images/in-camera-preset out=out-frame/out-preview-video/out-camera/out-project"
+    },
+    {
+      "name": "导演台：卡片未发布时说清当前状态",
+      "ok": true,
+      "detail": "1 / 3D 预演台 / 16:9 / 镜头 01 / 1 个镜头 · 35 mm / 尚未发布输出 / 打开 3D 预演台"
+    },
+    {
+      "name": "导演台：没发布输出时状态灯说「等待发布」而不是「可运行」",
+      "ok": true,
+      "detail": "未运行 · 等待发布"
+    },
+    {
+      "name": "导演台：预演台以对话框打开",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "导演台：发布当前帧给出明确结果",
+      "ok": true,
+      "detail": "3D 白模帧已发布，可连接给下游节点"
+    },
+    {
+      "name": "导演台：发布记录写进 meta.nodeResult",
+      "ok": true,
+      "detail": "\"{\\\"kind\\\":\\\"director-publish\\\",\\\"version\\\":1,\\\"publishedAt\\\":1790141521834,\\\"projectRevision\\\":1,\\\"shotId\\\":\\\"shot-defa"
+    },
+    {
+      "name": "裁剪：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开图片创作节点"
+    },
+    {
+      "name": "导演台：out-frame → 裁剪 in-image 建连",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "导演台：发布的帧能被下游节点当真实图片消费",
+      "ok": true,
+      "detail": "\"success\""
+    },
+    {
+      "name": "导演台：帧与裁剪产物都进了项目图片资产",
+      "ok": true,
+      "detail": "2 张"
+    },
+    {
+      "name": "导演台：重载后发布记录仍在",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "导演台：重载后卡片说「当前镜头已发布」，不谎报成另一个镜头",
+      "ok": true,
+      "detail": "1 / 3D 预演台 / 16:9 / 镜头 01 / 1 个镜头 · 35 mm / 当前镜头已发布，可供下游使用 / 打开 3D 预演台"
+    },
+    {
+      "name": "矩阵-p3：全新项目可创建并进入画布",
+      "ok": true,
+      "detail": "I7XobWdFie00"
+    },
+    {
+      "name": "新项目的画布是空的",
+      "ok": true,
+      "detail": "0 张卡片"
+    },
+    {
+      "name": "结构数据：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开流程与高级节点"
+    },
+    {
+      "name": "循环：两级分类展开并显示创建入口",
+      "ok": false,
+      "detail": "未找到对应二级节点按钮"
+    },
+    {
+      "name": "停止续跑与重启恢复：配方执行未中断",
+      "ok": false,
+      "detail": "一级分类均已检查，但没有展开出「添加循环节点」"
+    },
+    {
+      "name": "整轮没有未预期的前端异常",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "dataDir": "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\canvas-matrix-full-20260923-132540",
+  "shotDir": "D:\\software\\free-creation\\artifacts\\node-matrix-2026-09-23T05-25-40-387Z"
+}

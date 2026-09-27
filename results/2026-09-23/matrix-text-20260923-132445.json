@@ -1,0 +1,94 @@
+{
+  "passed": 17,
+  "failed": 0,
+  "total": 17,
+  "results": [
+    {
+      "name": "全新数据目录进入项目列表页",
+      "ok": true,
+      "detail": "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\canvas-matrix-r1-20260923-132445"
+    },
+    {
+      "name": "矩阵-text：全新项目可创建并进入画布",
+      "ok": true,
+      "detail": "3Cdi29WLDqfm"
+    },
+    {
+      "name": "新项目的画布是空的",
+      "ok": true,
+      "detail": "0 张卡片"
+    },
+    {
+      "name": "文本：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开文本与 AI节点"
+    },
+    {
+      "name": "文本：端口渲染与契约矩阵一致",
+      "ok": true,
+      "detail": "实际 in=in-text out=out-text｜期望 in=in-text out=out-text"
+    },
+    {
+      "name": "文本：空卡片给出可发现的输入提示",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "文本：空正文运行不产生假成功",
+      "ok": true,
+      "detail": "{\"exec\":\"idle\",\"run\":\"skipped\"}"
+    },
+    {
+      "name": "文本：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开文本与 AI节点"
+    },
+    {
+      "name": "文本：out-text → in-text 拖线成功建连",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "文本：连上后状态灯不再报缺少输入",
+      "ok": true,
+      "detail": "未运行 · 可运行"
+    },
+    {
+      "name": "文本：运行后真的并入上游正文",
+      "ok": true,
+      "detail": "{\"run\":\"success\",\"a\":\"上游甲：一句话\",\"b\":\"上游甲：一句话\\n$$$\\n下游乙：另一句话\",\"edges\":[{\"from\":\"text:_XTx.out-text\",\"to\":\"text:Bd_K.in-text\"}]}"
+    },
+    {
+      "name": "文本：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开文本与 AI节点"
+    },
+    {
+      "name": "文本：同一输入端口可接第二个上游",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "文本：多上游全部被消费",
+      "ok": true,
+      "detail": "\"上游甲：一句话\\n$$$\\n上游丙：第三条\\n$$$\\n上游甲：一句话\\n$$$\\n下游乙：另一句话\""
+    },
+    {
+      "name": "文本：重载后卡片数不丢",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "文本：重载后正文里的上游内容仍在",
+      "ok": true,
+      "detail": "\"上游甲：一句话\\n$$$\\n上游丙：第三条\\n$$$\\n上游甲：一句话\\n$$$\\n下游乙：另一句话\""
+    },
+    {
+      "name": "整轮没有未预期的前端异常",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "dataDir": "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\canvas-matrix-r1-20260923-132445",
+  "shotDir": "D:\\software\\free-creation\\artifacts\\node-matrix-2026-09-23T05-24-45-901Z"
+}

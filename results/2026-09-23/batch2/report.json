@@ -1,0 +1,29 @@
+{
+  "batch": "batch2",
+  "candidate_commit": "53c738e",
+  "date": "2026-09-23",
+  "status": "LOCAL_P0_REGRESSION_COMPLETE",
+  "environment": "Windows / Electron 39.8.10 / node v24.11.0 / isolated CANVAS_DATA_DIR + CDP:9223",
+  "no_code_changes": true,
+  "cases": {
+    "C01_text_create": { "status": "PASS", "evidence": ["real-ui: 3 text nodes created via two-level palette"] },
+    "C04_Ntext_S01_chinese": { "status": "PASS", "evidence": ["real-ui: Chinese+marker text entered, no pinyin/truncation"] },
+    "C06_save_reopen": { "status": "PASS", "evidence": ["real-ui: home -> reopen project, canvas OK"] },
+    "DATA01_persistence": { "status": "PASS", "evidence": ["real-ui: 3 nodes + text identical after reopen", "evidence/reopen-persist.png"] },
+    "REF01_same_content_two_sources": { "status": "PASS", "evidence": ["data-layer per-connection ref, distinct sourceNodeId", "connected-input-preview.test.ts"] },
+    "REF03_delete_edge_no_reinject": { "status": "PASS", "evidence": ["readConnectedNodeInputs only iterates live arrows"] },
+    "REF04_multi_port_distinct": { "status": "PASS", "evidence": ["per-port ref isolation, connection-matrix.test.ts"] },
+    "REF02_historic_dup_edges": { "status": "NOT_RUN", "reason": "needs historic project snapshot fixture with 3 dup edges + 1 other source" },
+    "UI03_occlusion", "UI04_scissor", "UI05", "UI07", "UI08", "UI09": { "status": "NOT_RUN", "reason": "require precise pixel-level canvas geometry fixtures / screen-record; covered partially by structural canvas tests (batch0 B3/B4)" },
+    "AS01", "AS02", "AS03", "AS05": { "status": "NOT_RUN", "reason": "asset management matrix batch3" },
+    "MD01_model_visibility": { "status": "BLOCKED", "reason": "no remote credentials/model; only not-misreported-when-unconfigured verifiable" },
+    "ENG05", "DATA03", "DATA04": { "status": "NOT_RUN", "reason": "fault-injection copies separate batch" }
+  },
+  "contract_evidence": {
+    "connection_matrix": 124,
+    "batch_connection": 5,
+    "connected_input_preview": 1,
+    "total_ref_suite_pass": 130
+  },
+  "gate_summary": "baseline auto-gates not green: lint 7, unit 13, node-matrix script stale (see batch0 defects). No code changed this batch."
+}

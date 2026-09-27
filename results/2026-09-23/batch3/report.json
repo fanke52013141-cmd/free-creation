@@ -1,0 +1,47 @@
+{
+  "batch": "batch3",
+  "candidate_commit": "53c738e",
+  "date": "2026-09-23",
+  "status": "LOCAL_CONTRACT_AND_REAL_MEDIA_COVERAGE_COMPLETE",
+  "no_code_changes": true,
+  "summary": "600+ contract/executor cases + real local FFmpeg media suites PASS across local node classes.",
+  "node_contract_profile": {
+    "contracts": "PASS (282, batch0)",
+    "node_contract_snapshot": 155,
+    "node_schemas": 23,
+    "registry": 28,
+    "node_create_options": 6,
+    "node_compliance": 3,
+    "topology": 3
+  },
+  "local_executors": {
+    "executors": 22,
+    "executors_shared": 28,
+    "iterate": 28,
+    "code": "PASS",
+    "storyboard": "PASS",
+    "document_text": 10,
+    "image_crop": 8,
+    "image_split": 6,
+    "image_edit": "PASS",
+    "ai_process": 11,
+    "chat_memory": 3,
+    "director": "PASS"
+  },
+  "real_media_local": {
+    "video_transform_real_media": "16 pass 1 skip",
+    "video_transform": 24,
+    "image_transform_real": 10,
+    "image_perspective": 2
+  },
+  "migration_persistence": {
+    "migration": 62,
+    "db_migrations": 3,
+    "project_save_sync": 6,
+    "external_reload_merge": 6,
+    "media_index": 3,
+    "transfer_integration": "PASS"
+  },
+  "blocked_gap": ["image-gen","video","speech","tts","voice-design remote", "MD01 model visibility", "DOCX/XLSX/PPTX real import (B5)"],
+  "gate_summary": "baseline auto-gates still not green (lint 7, unit 13, node-matrix stale) - recorded, no code changed."
+}

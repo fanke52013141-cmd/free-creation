@@ -1,0 +1,209 @@
+{
+  "generated": "2026-09-23T02:28:13.439Z",
+  "files": [
+    {
+      "path": "_tmp_gen_long.cjs",
+      "size": 767,
+      "sha256": "89a7c9def3b9db4f251e97c5aa38fee0e6ac698dce045e570ed7fa9dd122316f"
+    },
+    {
+      "path": "_tmp_gen_manifest.cjs",
+      "size": 2943,
+      "sha256": "db9753fa519f5cdd674bf305d82cd32bd82597a614885f24e1db06c196bfc5f7"
+    },
+    {
+      "path": "_tmp_gen_pdf.cjs",
+      "size": 1535,
+      "sha256": "f83d656f20452e6f2e8e6c83d5450a6e25bbf82c6be2b05fe41d57c22b70cea7"
+    },
+    {
+      "path": "json/J-LIST.json",
+      "size": 73,
+      "sha256": "a2cc83900fbf0d6ffa69e040632523fad856499959a04040ba2dc0b681c792c6",
+      "encoding": "utf8"
+    },
+    {
+      "path": "json/J-OBJ.json",
+      "size": 52,
+      "sha256": "91c586660257094da93448795c21474f7e0b6b3c0a3751ade2b25caf4bb22d1f",
+      "encoding": "utf8"
+    },
+    {
+      "path": "json/J-SHOTS.json",
+      "size": 157,
+      "sha256": "1bb79cbc9663fd6377b0351a174167695af284082c490c68a82cc01d6bae7133",
+      "encoding": "utf8"
+    },
+    {
+      "path": "media/audio/A-MIX.wav",
+      "size": 882078,
+      "sha256": "4f5307c15a2828431e24eef88debbae85c194f3adec0099dc43aa94430d12d3e",
+      "audio": "pcm_s16le",
+      "duration": "10.000"
+    },
+    {
+      "path": "media/audio/A-SPEECH.wav",
+      "size": 882078,
+      "sha256": "92830e1f9fa4d134edf1e203b7eab0b3ace363198487f5c48a6ca9777f0b3ebf",
+      "audio": "pcm_s16le",
+      "duration": "10.000"
+    },
+    {
+      "path": "media/bad/I-BAD-corrupt.png",
+      "size": 100,
+      "sha256": "5e498f40183fa6673a92397f6a8ff071fb0ee8175c8e326727668aa02ff43838",
+      "width": 0,
+      "height": 0,
+      "format": "png"
+    },
+    {
+      "path": "media/bad/I-BAD-empty.png",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "media/bad/I-BAD-jpeg-as-png.png",
+      "size": 2024,
+      "sha256": "30e09144362fb84f462ad20862e58170632cf0059c3c0732a27c2aa215c58240",
+      "width": 640,
+      "height": 480,
+      "format": "mjpeg"
+    },
+    {
+      "path": "media/doc/DOC-gb18030.txt",
+      "size": 99,
+      "sha256": "c82887aaa0b202cf07d91ff37d2c26c7609dfc1db890b207345f4d37b061dbb6",
+      "encoding": "gb18030"
+    },
+    {
+      "path": "media/doc/DOC-utf8.txt",
+      "size": 132,
+      "sha256": "ff78380c04de6b7015bb1e3c797f4d0aae0a24caec780bb77bc6700fc4a9cfd2"
+    },
+    {
+      "path": "media/doc/DOC.csv",
+      "size": 80,
+      "sha256": "64a0949cafb2f9a872b2a952e33042105af72e55986ae4d45f9e02351b816b84"
+    },
+    {
+      "path": "media/doc/DOC.md",
+      "size": 79,
+      "sha256": "21a368175a90ecbc8333d1e3addb1c294e6c7206f0b3777455af6d072ff23d81"
+    },
+    {
+      "path": "media/doc/DOC.pdf",
+      "size": 657,
+      "sha256": "8d1b82def838a2b8466bf2fc332d9d254764cc9f9d6f5f2ac6bbc85721c0482d",
+      "format": "pdf"
+    },
+    {
+      "path": "media/images/I-A.png",
+      "size": 2007,
+      "sha256": "9664200fea8fa5b11408bcef2d266cf76551f664ef532ff1a5483476c94cb9c1",
+      "width": 600,
+      "height": 400,
+      "format": "png"
+    },
+    {
+      "path": "media/images/I-GRID.png",
+      "size": 31028,
+      "sha256": "0a8311cdb34051e2e17999bbbe77233e67fa656901878d5b9f04cb32caea5ad5",
+      "width": 1800,
+      "height": 1200,
+      "format": "png"
+    },
+    {
+      "path": "media/images/I-GRID2.png",
+      "size": 7577,
+      "sha256": "cddc69ef440784b50ae631048c73e070e4ff820017b074673433ddcdd3700eb5",
+      "width": 1601,
+      "height": 901,
+      "format": "png"
+    },
+    {
+      "path": "media/images/I-P.png",
+      "size": 8136,
+      "sha256": "7c8ee0cf98eda47a028902c05bae5f7d4f5685ffc5d06be9eb9ef9ac1aabe459",
+      "width": 900,
+      "height": 1600,
+      "format": "png"
+    },
+    {
+      "path": "media/images/I-W.png",
+      "size": 9600,
+      "sha256": "fb5e1da347e7aabb72151f1585c3bdc907471e21e90928507a878c7e9ba0f55b",
+      "width": 1600,
+      "height": 900,
+      "format": "png"
+    },
+    {
+      "path": "media/video/V-AV.mp4",
+      "size": 4033749,
+      "sha256": "03cffa167bd21412090a5cb8b80a313c70b1f7ec0bf654778b9a6950ffeb4cf9",
+      "width": 1280,
+      "height": 720,
+      "video": "h264",
+      "fps": "30/1",
+      "duration": "10.000",
+      "audio": "aac",
+      "container_duration": "10.000"
+    },
+    {
+      "path": "media/video/V-PORTRAIT.mp4",
+      "size": 2057285,
+      "sha256": "edae05001b54cc5f29cbc44dff3b625eb0a05a4575309206a4c7b19f2f426a8e",
+      "width": 720,
+      "height": 1280,
+      "video": "h264",
+      "fps": "30/1",
+      "duration": "5.000",
+      "container_duration": "5.000"
+    },
+    {
+      "path": "media/video/V-SILENT.mp4",
+      "size": 3953758,
+      "sha256": "e17432f1b822fd5c63aee894fd111edd0fdfd392764eff6ba5eb7da4385789e9",
+      "width": 1280,
+      "height": 720,
+      "video": "h264",
+      "fps": "30/1",
+      "duration": "10.000",
+      "container_duration": "10.000"
+    },
+    {
+      "path": "media/video/V-WEBM.webm",
+      "size": 284430,
+      "sha256": "d6a21bb1f9c4a3b032aa486f7926213223ef2dbc861d7c073e4148df9e3bea70",
+      "width": 640,
+      "height": 360,
+      "video": "vp9",
+      "fps": "24/1",
+      "container_duration": "6.000"
+    },
+    {
+      "path": "text/T-A.txt",
+      "size": 18,
+      "sha256": "4ca59eedadc87997d08606d7dfb2916e482f06bfaffc7f7f6f4443b45d4faeaf",
+      "encoding": "utf8"
+    },
+    {
+      "path": "text/T-B.txt",
+      "size": 17,
+      "sha256": "0f2ce3e2a428aafd6f2d1fedc0490c4592ce96163f94fdd515c80db834af0233",
+      "encoding": "utf8"
+    },
+    {
+      "path": "text/T-LONG.txt",
+      "size": 15844,
+      "sha256": "90234d74cba765f9e385fce9b754000f074262362379ec934f05cbe4367f8903",
+      "encoding": "utf8",
+      "chars": 15844
+    },
+    {
+      "path": "text/T-SAME.txt",
+      "size": 4,
+      "sha256": "d1ed0d26ea9bd962c0f13e5ffe5bfea928bb8c9ca808dbcaa565e02a3ae1e1db",
+      "encoding": "utf8"
+    }
+  ]
+}

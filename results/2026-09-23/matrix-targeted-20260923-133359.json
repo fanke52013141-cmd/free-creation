@@ -1,0 +1,269 @@
+{
+  "passed": 52,
+  "failed": 0,
+  "total": 52,
+  "results": [
+    {
+      "name": "全新数据目录进入项目列表页",
+      "ok": true,
+      "detail": "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\canvas-matrix-targeted-20260923-133359"
+    },
+    {
+      "name": "矩阵-processor：全新项目可创建并进入画布",
+      "ok": true,
+      "detail": "JgIeJvO59rqc"
+    },
+    {
+      "name": "新项目的画布是空的",
+      "ok": true,
+      "detail": "0 张卡片"
+    },
+    {
+      "name": "数据处理：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开流程与高级节点"
+    },
+    {
+      "name": "数据处理：端口渲染与契约矩阵一致",
+      "ok": true,
+      "detail": "实际 in=in-value out=out-value｜期望 in=in-value out=out-value"
+    },
+    {
+      "name": "处理：无连线且无固定值时不假成功",
+      "ok": true,
+      "detail": "\"skipped\""
+    },
+    {
+      "name": "处理：填固定值后界面说明「未连线，用固定值」",
+      "ok": true,
+      "detail": "未连线，用固定值"
+    },
+    {
+      "name": "处理：固定值原样传递成功",
+      "ok": true,
+      "detail": "\"success\""
+    },
+    {
+      "name": "处理：结果里能看到输出值",
+      "ok": true,
+      "detail": "\"{\\\"kind\\\":\\\"text\\\",\\\"text\\\":\\\"直接传递的固定文本\\\"}\""
+    },
+    {
+      "name": "JSON：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开流程与高级节点"
+    },
+    {
+      "name": "数据处理：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开流程与高级节点"
+    },
+    {
+      "name": "处理：JSON 输出可接入 any 输入端口",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "处理：字段路径不存在时报出具体路径",
+      "ok": true,
+      "detail": "{\"phase\":\"execution\",\"reason\":\"字段路径不存在：不存在的字段\"}"
+    },
+    {
+      "name": "处理：路径修正后取到字段",
+      "ok": true,
+      "detail": "\"{\\\"kind\\\":\\\"text\\\",\\\"text\\\":\\\"雨夜街道\\\"}\""
+    },
+    {
+      "name": "处理：重载后运行记录仍在",
+      "ok": true,
+      "detail": "\"success\""
+    },
+    {
+      "name": "矩阵-iterate：全新项目可创建并进入画布",
+      "ok": true,
+      "detail": "07auVnURjTVn"
+    },
+    {
+      "name": "新项目的画布是空的",
+      "ok": true,
+      "detail": "0 张卡片"
+    },
+    {
+      "name": "批量处理：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开流程与高级节点"
+    },
+    {
+      "name": "批量处理：端口渲染与契约矩阵一致",
+      "ok": true,
+      "detail": "实际 in=in-list out=out-item/out-items｜期望 in=in-list out=out-item/out-items"
+    },
+    {
+      "name": "循环：未接列表时运行按钮置灰并写明缺少输入",
+      "ok": true,
+      "detail": "未运行 · 缺少输入：列表"
+    },
+    {
+      "name": "结构数据：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开流程与高级节点"
+    },
+    {
+      "name": "循环：符合 list.items 的结构数据可接入 in-list",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "循环：接上列表后按钮解除置灰",
+      "ok": true,
+      "detail": "未运行 · 可运行"
+    },
+    {
+      "name": "循环：未接循环体时给出可执行的提示而不是假成功",
+      "ok": true,
+      "detail": "{\"phase\":\"execution\",\"reason\":\"未配置循环体（请从“当前项”端口连接要批量执行的第一个节点）\"}"
+    },
+    {
+      "name": "JSON：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开流程与高级节点"
+    },
+    {
+      "name": "循环：out-item 可标记循环体（连到 JSON 节点的数据输入）",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "循环：批量执行成功",
+      "ok": true,
+      "detail": "{\"runId\":\"80799b37-9f25-45e0-b128-034e1314502b\",\"status\":\"success\",\"startedAt\":1790141686330,\"inputs\":{\"in-list\":[{\"nodeId\":\"shape:xIQ7SUuaQacoS8u2nTajH\",\"portId\":\"out-json\"}]},\"trace\":[{\"at\":1790141686330,\"phase\":\"input\",\"level\":\"info\",\"message\":\"开始收集并校验输入端口\"},{\"at\":1790141686331,\"phase\":\"input\",\"level\":\"info\",\"message\":\"已收集 1 个输入端口\"},{\"at\":1790141686331,\"phase\":\"execution\",\"level\":\"info\",\"message\":\"开始调用节点执行器\"},{\"at\":1790141686364,\"phase\":\"output\",\"level\":\"info\",\"message\":\"输出契约校验通过\"}],\"finishedAt\":1790141686364,\"durationMs\":34,\"outputPorts\":[\"out-items\"]}"
+    },
+    {
+      "name": "循环：三项列表逐项产出且进度一致",
+      "ok": true,
+      "detail": "{\"total\":3,\"completed\":3,\"pending\":0,\"done\":3,\"reused\":0,\"failed\":0,\"skipped\":0,\"mode\":\"all\"}"
+    },
+    {
+      "name": "循环：每项结果带来源序号可追溯",
+      "ok": true,
+      "detail": "[0,1,2]"
+    },
+    {
+      "name": "循环：重载后逐项结果不丢",
+      "ok": true,
+      "detail": "3"
+    },
+    {
+      "name": "矩阵-p3：全新项目可创建并进入画布",
+      "ok": true,
+      "detail": "WJdv0RxIWQN5"
+    },
+    {
+      "name": "新项目的画布是空的",
+      "ok": true,
+      "detail": "0 张卡片"
+    },
+    {
+      "name": "结构数据：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开流程与高级节点"
+    },
+    {
+      "name": "批量处理：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开流程与高级节点"
+    },
+    {
+      "name": "停止续跑：结构数据可接入 in-list",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "代码：两级分类展开并显示创建入口",
+      "ok": true,
+      "detail": "展开流程与高级节点"
+    },
+    {
+      "name": "停止续跑：out-item 接进循环体",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "停止续跑：点「运行」后顶栏真的进入运行态",
+      "ok": true,
+      "detail": "顶栏文案：1/2 · 批量处理\nv1.0\n暂停\n停止｜循环运行记录：{}"
+    },
+    {
+      "name": "停止续跑：运行中顶栏出现可点的停止按钮",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "停止续跑：工作流能回到空闲（不是停不下来）",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "停止续跑：停止后循环节点落定，不留在执行中",
+      "ok": true,
+      "detail": "{\"status\":\"cancelled\"}"
+    },
+    {
+      "name": "停止续跑：停止时确实有项没跑完（不是跑完才返回）",
+      "ok": true,
+      "detail": "{\"total\":4,\"completed\":4,\"pending\":0,\"done\":2,\"reused\":0,\"failed\":0,\"skipped\":2,\"mode\":\"all\"}"
+    },
+    {
+      "name": "停止续跑：被中止的这一轮不记成成功",
+      "ok": true,
+      "detail": "{\"status\":\"cancelled\"}"
+    },
+    {
+      "name": "停止续跑：运行策略下拉能切到「续跑未完成」",
+      "ok": true,
+      "detail": "resume"
+    },
+    {
+      "name": "停止续跑：续跑能跑到收尾",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "停止续跑：续跑把每一项都补完",
+      "ok": true,
+      "detail": "{\"statuses\":[\"reused\",\"reused\",\"done\",\"done\"],\"progress\":{\"total\":4,\"completed\":4,\"pending\":0,\"done\":2,\"reused\":2,\"failed\":0,\"skipped\":0,\"mode\":\"resume\"}}"
+    },
+    {
+      "name": "停止续跑：上一轮已成功的项被复用而不是重跑",
+      "ok": true,
+      "detail": "{\"total\":4,\"completed\":4,\"pending\":0,\"done\":2,\"reused\":2,\"failed\":0,\"skipped\":0,\"mode\":\"resume\"}"
+    },
+    {
+      "name": "关掉应用重开后回到同一个项目",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "重启恢复：逐项结果全部回来",
+      "ok": true,
+      "detail": "4 / 4 条"
+    },
+    {
+      "name": "重启恢复：卡片仍显示满进度",
+      "ok": true,
+      "detail": "2 / 批量处理 / 列表 / [{\"id\":\"s1\"},{\"id\":\"s2\"},{\"id\":\"s3\"},{\"id\":\"s4\"}] / 结构数据 / in-list / 逐项交给 / out-item / 循环体，汇总到 / out-items / 上限 / 运行 / 全部运行 / 续跑未完成 / 只重跑失败 / 失败时 / 失败项跳过 / 一出错就中止 /"
+    },
+    {
+      "name": "重启恢复：循环体节点的运行结果仍在磁盘上",
+      "ok": true,
+      "detail": "\"{\\\"kind\\\":\\\"json\\\",\\\"data\\\":{\\\"ok\\\":true},\\\"variableName\\\":\\\"output\\\"}\""
+    },
+    {
+      "name": "整轮没有未预期的前端异常",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "dataDir": "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\canvas-matrix-targeted-20260923-133359",
+  "shotDir": "D:\\software\\free-creation\\artifacts\\node-matrix-2026-09-23T05-33-59-970Z"
+}

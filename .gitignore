@@ -17,3 +17,7 @@ backend/data/
 *.tsbuildinfo
 # 验收截图与脚本进仓库（artifacts/ 的历史约定），但成片体积不进。
 artifacts/*.mp4
+
+# SQLite 运行时临时文件：由打开数据库的进程现场生成，提交它们只会让工作树常脏。
+*.db-shm
+*.db-wal
