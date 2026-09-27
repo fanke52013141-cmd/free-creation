@@ -1,0 +1,69 @@
+{
+  "passed": 12,
+  "failed": 0,
+  "total": 12,
+  "results": [
+    {
+      "name": "全新数据目录进入项目列表页",
+      "ok": true,
+      "detail": "C:\\Users\\Administrator\\AppData\\Local\\canvas-node-matrix-1790047594113"
+    },
+    {
+      "name": "矩阵-video-frame：全新项目可创建并进入画布",
+      "ok": true,
+      "detail": "a7KH-DcrAiPd"
+    },
+    {
+      "name": "新项目的画布是空的",
+      "ok": true,
+      "detail": "0 张卡片"
+    },
+    {
+      "name": "视频取帧：端口渲染与契约矩阵一致",
+      "ok": true,
+      "detail": "实际 in=in-video out=out-image｜期望 in=in-video out=out-image"
+    },
+    {
+      "name": "视频取帧：未接源视频时按钮置灰",
+      "ok": true,
+      "detail": "未运行 · 缺少输入：源视频"
+    },
+    {
+      "name": "视频取帧：out-video → in-video 建连",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "视频取帧：默认首帧运行成功",
+      "ok": true,
+      "detail": "\"success\""
+    },
+    {
+      "name": "视频取帧：产物是一张真实存在的图片",
+      "ok": true,
+      "detail": "\"projects/a7KH-DcrAiPd/media/xyrgYACy0D.png\""
+    },
+    {
+      "name": "视频取帧：取到的帧建成独立图片卡",
+      "ok": true,
+      "detail": "[\"APP5\"]"
+    },
+    {
+      "name": "视频取帧：那张帧卡真的解码出一张图",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "视频取帧：重载后运行记录与产物仍在",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "整轮没有未预期的前端异常",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "dataDir": "C:\\Users\\Administrator\\AppData\\Local\\canvas-node-matrix-1790047594113",
+  "shotDir": "D:\\software\\free-creation\\artifacts\\node-matrix-2026-09-19"
+}

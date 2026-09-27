@@ -1,0 +1,99 @@
+{
+  "passed": 18,
+  "failed": 0,
+  "total": 18,
+  "results": [
+    {
+      "name": "全新数据目录进入项目列表页",
+      "ok": true,
+      "detail": "C:\\Users\\Administrator\\AppData\\Local\\canvas-node-matrix-1790047266711"
+    },
+    {
+      "name": "矩阵-image：全新项目可创建并进入画布",
+      "ok": true,
+      "detail": "lsFsDSXnOb7x"
+    },
+    {
+      "name": "新项目的画布是空的",
+      "ok": true,
+      "detail": "0 张卡片"
+    },
+    {
+      "name": "图片：空卡片给出可发现的导入入口",
+      "ok": true,
+      "detail": "1 / 图片 / 图片资产 / 导入后下游即可取用这张图片，不需要运行本节点 / 导入图片"
+    },
+    {
+      "name": "图片：空卡片没有 mediaPath",
+      "ok": true,
+      "detail": "\"\""
+    },
+    {
+      "name": "图片：拖入 PNG 建出的是图片资产节点",
+      "ok": true,
+      "detail": "[{\"id\":\"shape:V8kSy_RWQSQ4_4tTVlfft\",\"type\":\"image\"}]"
+    },
+    {
+      "name": "图片：端口渲染与契约矩阵一致",
+      "ok": true,
+      "detail": "实际 in=无 out=out-image｜期望 in= out=out-image"
+    },
+    {
+      "name": "图片：卡片里的缩略图真的解码成 640×480",
+      "ok": true,
+      "detail": "{\"w\":640,\"h\":480,\"complete\":true}"
+    },
+    {
+      "name": "图片：导入落盘后 mediaPath 已写进节点",
+      "ok": true,
+      "detail": "\"projects/lsFsDSXnOb7x/media/8WOQAb7Fnc.png\""
+    },
+    {
+      "name": "图片：项目资产表里能查到这张图",
+      "ok": true,
+      "detail": "{\"kind\":\"image\",\"size\":9094}"
+    },
+    {
+      "name": "图片：out-image → 裁剪 in-image 建连",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "裁剪：接上原图后不再报缺少输入",
+      "ok": true,
+      "detail": "未运行 · 可运行"
+    },
+    {
+      "name": "裁剪：按默认参数运行成功",
+      "ok": true,
+      "detail": "\"success\""
+    },
+    {
+      "name": "裁剪：产物是一张新的图片资产",
+      "ok": true,
+      "detail": "{\"id\":\"BCR5AqZ0GB\",\"size\":1737}"
+    },
+    {
+      "name": "裁剪：源卡与产物卡各自渲染出图片",
+      "ok": true,
+      "detail": "2/2 张解码成功"
+    },
+    {
+      "name": "图片：重载后 mediaPath 仍在",
+      "ok": true,
+      "detail": "projects/lsFsDSXnOb7x/media/8WOQAb7Fnc.png"
+    },
+    {
+      "name": "图片：重载后缩略图仍解码",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "整轮没有未预期的前端异常",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "dataDir": "C:\\Users\\Administrator\\AppData\\Local\\canvas-node-matrix-1790047266711",
+  "shotDir": "D:\\software\\free-creation\\artifacts\\node-matrix-2026-09-19"
+}

@@ -1,0 +1,109 @@
+{
+  "passed": 20,
+  "failed": 0,
+  "total": 20,
+  "results": [
+    {
+      "name": "全新数据目录进入项目列表页",
+      "ok": true,
+      "detail": "C:\\Users\\Administrator\\AppData\\Local\\canvas-node-matrix-1790047768287"
+    },
+    {
+      "name": "矩阵-p3：全新项目可创建并进入画布",
+      "ok": true,
+      "detail": "bMEmJWNsh9oN"
+    },
+    {
+      "name": "新项目的画布是空的",
+      "ok": true,
+      "detail": "0 张卡片"
+    },
+    {
+      "name": "停止续跑：结构数据可接入 in-list",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "停止续跑：out-item 接进循环体",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "停止续跑：点「运行」后顶栏真的进入运行态",
+      "ok": true,
+      "detail": "顶栏文案：1/2 · 循环\nv1.0\n暂停\n停止｜循环运行记录：{}"
+    },
+    {
+      "name": "停止续跑：运行中顶栏出现可点的停止按钮",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "停止续跑：工作流能回到空闲（不是停不下来）",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "停止续跑：停止后循环节点落定，不留在执行中",
+      "ok": true,
+      "detail": "{\"status\":\"cancelled\"}"
+    },
+    {
+      "name": "停止续跑：停止时确实有项没跑完（不是跑完才返回）",
+      "ok": true,
+      "detail": "{\"total\":4,\"completed\":4,\"pending\":0,\"done\":2,\"reused\":0,\"failed\":0,\"skipped\":2,\"mode\":\"all\"}"
+    },
+    {
+      "name": "停止续跑：被中止的这一轮不记成成功",
+      "ok": true,
+      "detail": "{\"status\":\"cancelled\"}"
+    },
+    {
+      "name": "停止续跑：运行策略下拉能切到「续跑未完成」",
+      "ok": true,
+      "detail": "resume"
+    },
+    {
+      "name": "停止续跑：续跑能跑到收尾",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "停止续跑：续跑把每一项都补完",
+      "ok": true,
+      "detail": "{\"statuses\":[\"reused\",\"reused\",\"done\",\"done\"],\"progress\":{\"total\":4,\"completed\":4,\"pending\":0,\"done\":2,\"reused\":2,\"failed\":0,\"skipped\":0,\"mode\":\"resume\"}}"
+    },
+    {
+      "name": "停止续跑：上一轮已成功的项被复用而不是重跑",
+      "ok": true,
+      "detail": "{\"total\":4,\"completed\":4,\"pending\":0,\"done\":2,\"reused\":2,\"failed\":0,\"skipped\":0,\"mode\":\"resume\"}"
+    },
+    {
+      "name": "关掉应用重开后回到同一个项目",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "重启恢复：逐项结果全部回来",
+      "ok": true,
+      "detail": "4 / 4 条"
+    },
+    {
+      "name": "重启恢复：卡片仍显示满进度",
+      "ok": true,
+      "detail": "2 / 循环 / 列表 / [{\"id\":\"s1\"},{\"id\":\"s2\"},{\"id\":\"s3\"},{\"id\":\"s4\"}] / 结构数据 / in-list / 逐项交给 / out-item / 循环体，汇总到 / out-items / 上限 / 运行 / 全部运行 / 续跑未完成 / 只重跑失败 / 失败时 / 失败项跳过 / 一出错就中止 / 重"
+    },
+    {
+      "name": "重启恢复：循环体节点的运行结果仍在磁盘上",
+      "ok": true,
+      "detail": "\"{\\\"kind\\\":\\\"json\\\",\\\"data\\\":{\\\"ok\\\":true},\\\"variableName\\\":\\\"output\\\"}\""
+    },
+    {
+      "name": "整轮没有未预期的前端异常",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "dataDir": "C:\\Users\\Administrator\\AppData\\Local\\canvas-node-matrix-1790047768287",
+  "shotDir": "D:\\software\\free-creation\\artifacts\\node-matrix-2026-09-19"
+}

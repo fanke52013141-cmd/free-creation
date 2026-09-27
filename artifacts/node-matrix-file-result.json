@@ -1,0 +1,54 @@
+{
+  "passed": 9,
+  "failed": 0,
+  "total": 9,
+  "results": [
+    {
+      "name": "全新数据目录进入项目列表页",
+      "ok": true,
+      "detail": "C:\\Users\\Administrator\\AppData\\Local\\canvas-node-matrix-1790047407253"
+    },
+    {
+      "name": "矩阵-file：全新项目可创建并进入画布",
+      "ok": true,
+      "detail": "acOgd4haKA5d"
+    },
+    {
+      "name": "新项目的画布是空的",
+      "ok": true,
+      "detail": "0 张卡片"
+    },
+    {
+      "name": "文件：端口渲染与契约矩阵一致",
+      "ok": true,
+      "detail": "实际 in=无 out=out-file/out-text｜期望 in= out=out-file/out-text"
+    },
+    {
+      "name": "文件：空卡片说清要导入什么",
+      "ok": true,
+      "detail": "1 / 文件 / 文件资产 / 导入后下游即可取用这个文件，不需要运行本节点 / 导入文件"
+    },
+    {
+      "name": "文件：没导入时不假成功",
+      "ok": true,
+      "detail": "{\"blocked\":false,\"run\":\"skipped\"}"
+    },
+    {
+      "name": "文件：拖入 txt 没有静默失败（要么建卡，要么给原因）",
+      "ok": true,
+      "detail": "{\"created\":[],\"note\":\"导入失败：notes.txt（仅支持图片或视频缓冲数据）\"}"
+    },
+    {
+      "name": "文件：缓冲导入只收图片/视频时，提示条把原因说清楚",
+      "ok": true,
+      "detail": "\"导入失败：notes.txt（仅支持图片或视频缓冲数据）\""
+    },
+    {
+      "name": "整轮没有未预期的前端异常",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "dataDir": "C:\\Users\\Administrator\\AppData\\Local\\canvas-node-matrix-1790047407253",
+  "shotDir": "D:\\software\\free-creation\\artifacts\\node-matrix-2026-09-19"
+}

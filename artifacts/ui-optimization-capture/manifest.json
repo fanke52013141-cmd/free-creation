@@ -1,0 +1,451 @@
+{
+  "date": "2026-09-23T08:59:43.954Z",
+  "viewport": {
+    "width": 2854,
+    "height": 1730
+  },
+  "nodes": [
+    {
+      "type": "text",
+      "label": "文本",
+      "status": "captured",
+      "cardScroll": false,
+      "ioScroll": false,
+      "files": [
+        "01-default.png",
+        "04-io-top.png",
+        "05-run-details.png",
+        "06-run-success.png"
+      ]
+    },
+    {
+      "type": "image",
+      "label": "图片",
+      "status": "captured",
+      "cardScroll": false,
+      "ioScroll": false,
+      "files": [
+        "01-default.png",
+        "04-io-top.png",
+        "05-run-details.png"
+      ]
+    },
+    {
+      "type": "image-crop",
+      "label": "裁剪",
+      "status": "captured",
+      "cardScroll": false,
+      "ioScroll": false,
+      "files": [
+        "01-default.png",
+        "04-io-top.png",
+        "05-run-details.png"
+      ]
+    },
+    {
+      "type": "image-split",
+      "label": "拆分",
+      "status": "captured",
+      "cardScroll": false,
+      "ioScroll": true,
+      "files": [
+        "01-default.png",
+        "04-io-scroll-01.png",
+        "04-io-scroll-02.png",
+        "04-io-top.png",
+        "05-run-details.png"
+      ]
+    },
+    {
+      "type": "image-gen",
+      "label": "生图",
+      "status": "captured",
+      "cardScroll": false,
+      "ioScroll": true,
+      "files": [
+        "01-default.png",
+        "04-io-scroll-01.png",
+        "04-io-scroll-02.png",
+        "04-io-top.png",
+        "05-run-details.png"
+      ]
+    },
+    {
+      "type": "image-edit",
+      "label": "P图",
+      "status": "captured",
+      "cardScroll": false,
+      "ioScroll": true,
+      "files": [
+        "01-default.png",
+        "04-io-scroll-01.png",
+        "04-io-scroll-02.png",
+        "04-io-top.png",
+        "05-run-details.png",
+        "07-workbench.png",
+        "08-brush-tool.png"
+      ]
+    },
+    {
+      "type": "video-asset",
+      "label": "视频素材",
+      "status": "captured",
+      "cardScroll": false,
+      "ioScroll": false,
+      "files": [
+        "01-default.png",
+        "04-io-top.png",
+        "05-run-details.png"
+      ]
+    },
+    {
+      "type": "video-frame",
+      "label": "抽帧",
+      "status": "captured",
+      "cardScroll": false,
+      "ioScroll": false,
+      "files": [
+        "01-default.png",
+        "04-io-top.png",
+        "05-run-details.png",
+        "07-workbench.png",
+        "09-run-result.png"
+      ]
+    },
+    {
+      "type": "video-clip",
+      "label": "视频截取",
+      "status": "captured",
+      "cardScroll": false,
+      "ioScroll": true,
+      "files": [
+        "01-default.png",
+        "04-io-scroll-01.png",
+        "04-io-scroll-02.png",
+        "04-io-top.png",
+        "05-run-details.png",
+        "07-workbench.png",
+        "08-audio-only-settings.png",
+        "09-run-result.png"
+      ]
+    },
+    {
+      "type": "video-audio",
+      "label": "截音频",
+      "status": "not-in-palette",
+      "reason": "Retired node type (creatable: false); its function is merged into 视频截取."
+    },
+    {
+      "type": "vocal-separate",
+      "label": "人声分离",
+      "status": "captured",
+      "cardScroll": false,
+      "ioScroll": false,
+      "files": [
+        "01-default.png",
+        "04-io-top.png",
+        "05-run-details.png"
+      ]
+    },
+    {
+      "type": "audio",
+      "label": "音频",
+      "status": "captured",
+      "cardScroll": false,
+      "ioScroll": false,
+      "files": [
+        "01-default.png",
+        "04-io-top.png",
+        "05-run-details.png"
+      ]
+    },
+    {
+      "type": "file",
+      "label": "文件",
+      "status": "captured",
+      "cardScroll": false,
+      "ioScroll": true,
+      "files": [
+        "01-default.png",
+        "04-io-scroll-01.png",
+        "04-io-scroll-02.png",
+        "04-io-top.png",
+        "05-run-details.png"
+      ]
+    },
+    {
+      "type": "speech",
+      "label": "配音",
+      "status": "captured",
+      "cardScroll": true,
+      "ioScroll": true,
+      "files": [
+        "01-default.png",
+        "02-card-scroll-top.png",
+        "03-card-scroll-bottom.png",
+        "04-io-scroll-01.png",
+        "04-io-scroll-02.png",
+        "04-io-top.png",
+        "05-run-details.png"
+      ]
+    },
+    {
+      "type": "tts",
+      "label": "语音克隆",
+      "status": "captured",
+      "cardScroll": true,
+      "ioScroll": true,
+      "files": [
+        "01-default.png",
+        "02-card-scroll-top.png",
+        "03-card-scroll-bottom.png",
+        "04-io-scroll-01.png",
+        "04-io-scroll-02.png",
+        "04-io-top.png",
+        "05-run-details.png"
+      ]
+    },
+    {
+      "type": "voice-design",
+      "label": "音色设计",
+      "status": "captured",
+      "cardScroll": false,
+      "ioScroll": true,
+      "files": [
+        "01-default.png",
+        "04-io-scroll-01.png",
+        "04-io-scroll-02.png",
+        "04-io-top.png",
+        "05-run-details.png"
+      ]
+    },
+    {
+      "type": "chat",
+      "label": "AI 对话",
+      "status": "captured",
+      "panel": "chat dialog (specialized)",
+      "files": [
+        "01-default.png",
+        "04-chat-panel.png"
+      ]
+    },
+    {
+      "type": "script",
+      "label": "脚本",
+      "status": "not-in-palette",
+      "reason": "NodeTypeSpec exists but the type is absent from the current palette."
+    },
+    {
+      "type": "processor",
+      "label": "数据处理",
+      "status": "captured",
+      "cardScroll": false,
+      "ioScroll": true,
+      "files": [
+        "01-default.png",
+        "04-io-scroll-01.png",
+        "04-io-scroll-02.png",
+        "04-io-top.png",
+        "05-run-details.png"
+      ]
+    },
+    {
+      "type": "json",
+      "label": "JSON",
+      "status": "captured",
+      "cardScroll": false,
+      "ioScroll": true,
+      "files": [
+        "01-default.png",
+        "04-io-scroll-01.png",
+        "04-io-scroll-02.png",
+        "04-io-top.png",
+        "05-run-details.png",
+        "06-run-failed.png"
+      ]
+    },
+    {
+      "type": "structured",
+      "label": "结构数据",
+      "status": "captured",
+      "cardScroll": false,
+      "ioScroll": true,
+      "files": [
+        "01-default.png",
+        "04-io-scroll-01.png",
+        "04-io-scroll-02.png",
+        "04-io-top.png",
+        "05-run-details.png"
+      ]
+    },
+    {
+      "type": "code",
+      "label": "代码",
+      "status": "captured",
+      "cardScroll": false,
+      "ioScroll": true,
+      "files": [
+        "01-default.png",
+        "04-io-scroll-01.png",
+        "04-io-scroll-02.png",
+        "04-io-top.png",
+        "05-run-details.png",
+        "06-run-success.png",
+        "07-run-failed.png"
+      ]
+    },
+    {
+      "type": "storyboard",
+      "label": "分镜板",
+      "status": "captured",
+      "cardScroll": false,
+      "ioScroll": true,
+      "files": [
+        "01-default.png",
+        "04-io-scroll-01.png",
+        "04-io-scroll-02.png",
+        "04-io-top.png",
+        "05-run-details.png"
+      ]
+    },
+    {
+      "type": "ai-process",
+      "label": "AI 处理",
+      "status": "captured",
+      "cardScroll": false,
+      "ioScroll": true,
+      "files": [
+        "01-default.png",
+        "04-io-scroll-01.png",
+        "04-io-scroll-02.png",
+        "04-io-top.png",
+        "05-run-details.png"
+      ]
+    },
+    {
+      "type": "iterate",
+      "label": "批量处理",
+      "status": "captured",
+      "cardScroll": false,
+      "ioScroll": true,
+      "files": [
+        "01-default.png",
+        "04-io-scroll-01.png",
+        "04-io-scroll-02.png",
+        "04-io-top.png",
+        "05-run-details.png"
+      ]
+    },
+    {
+      "type": "director",
+      "label": "3D 预演台",
+      "status": "captured",
+      "cardScroll": false,
+      "ioScroll": true,
+      "files": [
+        "01-default.png",
+        "04-io-scroll-01.png",
+        "04-io-scroll-02.png",
+        "04-io-scroll-03.png",
+        "04-io-top.png",
+        "05-run-details.png"
+      ]
+    },
+    {
+      "type": "video",
+      "label": "视频生成",
+      "status": "skipped-by-request"
+    }
+  ],
+  "interactions": [
+    "connected-nodes",
+    "multi-select",
+    "align-left",
+    "group",
+    "workflow-run"
+  ],
+  "captureNotes": [
+    "视频生成按用户要求跳过。",
+    "25 个当前 Palette 节点中，跳过视频生成后，其余 24 个都有独立节点文件夹。",
+    "运行状态截图是真实 UI 操作结果：文本/代码成功，JSON/代码失败，视频截取/抽帧本地成功。",
+    "截图未调用图片生成、视频生成、语音或聊天模型 API。",
+    "video-audio 已退役且不可创建；script 未列入当前 Palette。"
+  ],
+  "dialogs": [
+    {
+      "type": "video-clip",
+      "label": "视频截取",
+      "status": "captured",
+      "screenshots": [
+        {
+          "file": "07-workbench.png",
+          "state": "initial workbench"
+        },
+        {
+          "file": "08-audio-only-settings.png",
+          "state": "audio-only settings"
+        },
+        {
+          "file": "09-run-result.png",
+          "state": "success"
+        }
+      ]
+    },
+    {
+      "type": "video-frame",
+      "label": "抽帧",
+      "status": "captured",
+      "screenshots": [
+        {
+          "file": "07-workbench.png",
+          "state": "initial workbench"
+        },
+        {
+          "file": "09-run-result.png",
+          "state": "success"
+        }
+      ]
+    },
+    {
+      "type": "image-edit",
+      "label": "P图",
+      "status": "captured",
+      "screenshots": [
+        {
+          "file": "07-workbench.png",
+          "state": "initial workbench"
+        },
+        {
+          "file": "08-brush-tool.png",
+          "state": "brush tool selected"
+        }
+      ]
+    }
+  ],
+  "executionStates": [
+    {
+      "type": "text",
+      "state": "success",
+      "screenshot": "06-run-success.png"
+    },
+    {
+      "type": "json",
+      "state": "failed",
+      "screenshot": "06-run-failed.png"
+    },
+    {
+      "type": "code",
+      "state": "success",
+      "screenshot": "06-run-success.png"
+    },
+    {
+      "type": "code",
+      "state": "failed",
+      "screenshot": "07-run-failed.png"
+    }
+  ],
+  "workflowStates": [
+    "running",
+    "completed"
+  ]
+}

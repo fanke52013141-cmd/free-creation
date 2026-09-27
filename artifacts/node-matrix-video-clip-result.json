@@ -1,0 +1,54 @@
+{
+  "passed": 9,
+  "failed": 0,
+  "total": 9,
+  "results": [
+    {
+      "name": "全新数据目录进入项目列表页",
+      "ok": true,
+      "detail": "C:\\Users\\Administrator\\AppData\\Local\\canvas-node-matrix-1790047671756"
+    },
+    {
+      "name": "矩阵-video-clip：全新项目可创建并进入画布",
+      "ok": true,
+      "detail": "sTluHIk6ZKXq"
+    },
+    {
+      "name": "新项目的画布是空的",
+      "ok": true,
+      "detail": "0 张卡片"
+    },
+    {
+      "name": "视频截取：端口渲染与契约矩阵一致",
+      "ok": true,
+      "detail": "实际 in=in-video out=out-video/out-audio｜期望 in=in-video out=out-video/out-audio"
+    },
+    {
+      "name": "视频截取：按默认区间运行成功",
+      "ok": true,
+      "detail": "\"success\""
+    },
+    {
+      "name": "视频截取：产物视频已落盘",
+      "ok": true,
+      "detail": "\"projects/sTluHIk6ZKXq/media/ImIMrTkMYi.mp4\""
+    },
+    {
+      "name": "视频截取：产物时长不超过 4 秒的源片",
+      "ok": true,
+      "detail": "1s"
+    },
+    {
+      "name": "视频截取：截出来的视频落成独立资产卡",
+      "ok": true,
+      "detail": "2 张视频资产卡"
+    },
+    {
+      "name": "整轮没有未预期的前端异常",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "dataDir": "C:\\Users\\Administrator\\AppData\\Local\\canvas-node-matrix-1790047671756",
+  "shotDir": "D:\\software\\free-creation\\artifacts\\node-matrix-2026-09-19"
+}

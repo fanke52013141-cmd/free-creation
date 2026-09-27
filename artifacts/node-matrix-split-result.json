@@ -1,0 +1,64 @@
+{
+  "passed": 11,
+  "failed": 0,
+  "total": 11,
+  "results": [
+    {
+      "name": "全新数据目录进入项目列表页",
+      "ok": true,
+      "detail": "C:\\Users\\Administrator\\AppData\\Local\\canvas-node-matrix-1790047342484"
+    },
+    {
+      "name": "矩阵-split：全新项目可创建并进入画布",
+      "ok": true,
+      "detail": "XsywvgN8noVr"
+    },
+    {
+      "name": "新项目的画布是空的",
+      "ok": true,
+      "detail": "0 张卡片"
+    },
+    {
+      "name": "图片拆分：端口渲染与契约矩阵一致",
+      "ok": true,
+      "detail": "实际 in=in-image out=out-image/out-images｜期望 in=in-image out=out-image/out-images"
+    },
+    {
+      "name": "图片拆分：未接原图时按钮置灰并写明缺少输入",
+      "ok": true,
+      "detail": "未运行 · 缺少输入：原图"
+    },
+    {
+      "name": "图片拆分：out-image → in-image 建连",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "图片拆分：按默认宫格运行成功",
+      "ok": true,
+      "detail": "\"success\""
+    },
+    {
+      "name": "图片拆分：结果集合里每一格都落盘了",
+      "ok": true,
+      "detail": "9 格"
+    },
+    {
+      "name": "图片拆分：默认选中第一格作为当前输出",
+      "ok": true,
+      "detail": "\"h9hI1J-e8J\""
+    },
+    {
+      "name": "图片拆分：重载后每格仍可取用",
+      "ok": true,
+      "detail": "9 格"
+    },
+    {
+      "name": "整轮没有未预期的前端异常",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "dataDir": "C:\\Users\\Administrator\\AppData\\Local\\canvas-node-matrix-1790047342484",
+  "shotDir": "D:\\software\\free-creation\\artifacts\\node-matrix-2026-09-19"
+}

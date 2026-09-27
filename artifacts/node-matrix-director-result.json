@@ -1,0 +1,84 @@
+{
+  "passed": 15,
+  "failed": 0,
+  "total": 15,
+  "results": [
+    {
+      "name": "全新数据目录进入项目列表页",
+      "ok": true,
+      "detail": "C:\\Users\\Administrator\\AppData\\Local\\canvas-node-matrix-1790047748015"
+    },
+    {
+      "name": "矩阵-director：全新项目可创建并进入画布",
+      "ok": true,
+      "detail": "-Y8jM2-s2FpH"
+    },
+    {
+      "name": "新项目的画布是空的",
+      "ok": true,
+      "detail": "0 张卡片"
+    },
+    {
+      "name": "导演台：端口渲染与契约矩阵一致",
+      "ok": true,
+      "detail": "实际 in=in-storyboard/in-reference-images/in-camera-preset out=out-frame/out-preview-video/out-camera/out-project｜期望 in=in-storyboard/in-reference-images/in-camera-preset out=out-frame/out-preview-video/out-camera/out-project"
+    },
+    {
+      "name": "导演台：卡片未发布时说清当前状态",
+      "ok": true,
+      "detail": "1 / 3D 预演台 / 16:9 / 镜头 01 / 1 个镜头 · 35 mm / 尚未发布输出 / 打开 3D 预演台"
+    },
+    {
+      "name": "导演台：没发布输出时状态灯说「等待发布」而不是「可运行」",
+      "ok": true,
+      "detail": "未运行 · 等待发布"
+    },
+    {
+      "name": "导演台：预演台以对话框打开",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "导演台：发布当前帧给出明确结果",
+      "ok": true,
+      "detail": "3D 白模帧已发布，可连接给下游节点"
+    },
+    {
+      "name": "导演台：发布记录写进 meta.nodeResult",
+      "ok": true,
+      "detail": "\"{\\\"kind\\\":\\\"director-publish\\\",\\\"version\\\":1,\\\"publishedAt\\\":1790047753283,\\\"projectRevision\\\":1,\\\"shotId\\\":\\\"shot-defa"
+    },
+    {
+      "name": "导演台：out-frame → 裁剪 in-image 建连",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "导演台：发布的帧能被下游节点当真实图片消费",
+      "ok": true,
+      "detail": "\"success\""
+    },
+    {
+      "name": "导演台：帧与裁剪产物都进了项目图片资产",
+      "ok": true,
+      "detail": "2 张"
+    },
+    {
+      "name": "导演台：重载后发布记录仍在",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "导演台：重载后卡片说「当前镜头已发布」，不谎报成另一个镜头",
+      "ok": true,
+      "detail": "1 / 3D 预演台 / 16:9 / 镜头 01 / 1 个镜头 · 35 mm / 当前镜头已发布，可供下游使用 / 打开 3D 预演台"
+    },
+    {
+      "name": "整轮没有未预期的前端异常",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "dataDir": "C:\\Users\\Administrator\\AppData\\Local\\canvas-node-matrix-1790047748015",
+  "shotDir": "D:\\software\\free-creation\\artifacts\\node-matrix-2026-09-19"
+}

@@ -1,0 +1,94 @@
+{
+  "passed": 17,
+  "failed": 0,
+  "total": 17,
+  "results": [
+    {
+      "name": "全新数据目录进入项目列表页",
+      "ok": true,
+      "detail": "C:\\Users\\Administrator\\AppData\\Local\\canvas-node-matrix-1790047440971"
+    },
+    {
+      "name": "矩阵-audio：全新项目可创建并进入画布",
+      "ok": true,
+      "detail": "AnLbW2EhYCda"
+    },
+    {
+      "name": "新项目的画布是空的",
+      "ok": true,
+      "detail": "0 张卡片"
+    },
+    {
+      "name": "视频截取：端口渲染与契约矩阵一致",
+      "ok": true,
+      "detail": "实际 in=in-video out=out-video/out-audio｜期望 in=in-video out=out-video/out-audio"
+    },
+    {
+      "name": "音频：视频截取的音频产物建成独立音频资产卡",
+      "ok": true,
+      "detail": "{\"types\":[\"video-asset\",\"audio\",\"video-asset\",\"video-clip\"]}"
+    },
+    {
+      "name": "音频：端口渲染与契约矩阵一致",
+      "ok": true,
+      "detail": "实际 in=无 out=out-audio｜期望 in= out=out-audio"
+    },
+    {
+      "name": "音频：卡片渲染出播放器",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "音频：产物文件真的在磁盘上",
+      "ok": true,
+      "detail": "projects/AnLbW2EhYCda/media/KYECIBVSlQ.wav"
+    },
+    {
+      "name": "音频：运行后把自身音频交给下游",
+      "ok": true,
+      "detail": "\"success\""
+    },
+    {
+      "name": "人声分离：端口渲染与契约矩阵一致",
+      "ok": true,
+      "detail": "实际 in=in-audio out=out-audio｜期望 in=in-audio out=out-audio"
+    },
+    {
+      "name": "人声分离：out-audio → in-audio 建连",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "人声分离：快速模式运行成功",
+      "ok": true,
+      "detail": "\"success\""
+    },
+    {
+      "name": "人声分离：人声轨是真实存在的音频文件",
+      "ok": true,
+      "detail": "\"projects/AnLbW2EhYCda/media/z_XRhErp7E.wav\""
+    },
+    {
+      "name": "人声分离：人声轨时长与源音频同量级",
+      "ok": true,
+      "detail": "1s"
+    },
+    {
+      "name": "人声分离：重载后运行结果仍在",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "音频：源卡与产物卡重载后都还在",
+      "ok": true,
+      "detail": "[\"audio\",\"video-asset\",\"audio\",\"vocal-separate\",\"video-asset\",\"video-clip\"]"
+    },
+    {
+      "name": "整轮没有未预期的前端异常",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "dataDir": "C:\\Users\\Administrator\\AppData\\Local\\canvas-node-matrix-1790047440971",
+  "shotDir": "D:\\software\\free-creation\\artifacts\\node-matrix-2026-09-19"
+}

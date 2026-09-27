@@ -1,0 +1,54 @@
+{
+  "passed": 9,
+  "failed": 0,
+  "total": 9,
+  "results": [
+    {
+      "name": "全新数据目录进入项目列表页",
+      "ok": true,
+      "detail": "C:\\Users\\Administrator\\AppData\\Local\\canvas-node-matrix-1790047519033"
+    },
+    {
+      "name": "矩阵-video-asset：全新项目可创建并进入画布",
+      "ok": true,
+      "detail": "vK8zMT8gbJwI"
+    },
+    {
+      "name": "新项目的画布是空的",
+      "ok": true,
+      "detail": "0 张卡片"
+    },
+    {
+      "name": "视频资产：拖入 MP4 建出的是视频资产节点",
+      "ok": true,
+      "detail": "[{\"id\":\"shape:nVU_Y4L5DZ_xI8FR6VopD\",\"type\":\"video-asset\"}]"
+    },
+    {
+      "name": "视频资产：端口渲染与契约矩阵一致",
+      "ok": true,
+      "detail": "实际 in=无 out=out-video｜期望 in= out=out-video"
+    },
+    {
+      "name": "视频资产：mediaPath 已落盘且文件存在",
+      "ok": true,
+      "detail": "projects/vK8zMT8gbJwI/media/f82hCOq-0X.mp4"
+    },
+    {
+      "name": "视频资产：卡片渲染出可播放的视频元素",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "视频资产：重载后 mediaPath 仍在",
+      "ok": true,
+      "detail": "projects/vK8zMT8gbJwI/media/f82hCOq-0X.mp4"
+    },
+    {
+      "name": "整轮没有未预期的前端异常",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "dataDir": "C:\\Users\\Administrator\\AppData\\Local\\canvas-node-matrix-1790047519033",
+  "shotDir": "D:\\software\\free-creation\\artifacts\\node-matrix-2026-09-19"
+}
