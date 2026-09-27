@@ -15,7 +15,7 @@ powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File scripts/install-
 以后点击 `自由画布` 时，会显示一个 PowerShell 构建窗口，并按以下顺序执行：
 
 1. 确认 `canvas-studio.exe` 没有运行，避免占用发布目录。
-2. 从当前仓库中已保存的源码运行 `pnpm run build:desktop-latest`，其中包含 Node/Web 类型检查、Electron Vite 构建和 Windows 目录打包。
+2. 从 PATH 或 Windows 用户级 pnpm 安装目录定位 `pnpm.cmd`，再从当前仓库中已保存的源码运行 `pnpm run build:desktop-latest`，其中包含 Node/Web 类型检查、Electron Vite 构建和 Windows 目录打包。
 3. 只在构建成功后启动 `dist/current-source-release/win-unpacked/canvas-studio.exe`。
 4. 构建失败时保留错误窗口，不会启动旧的打包产物。
 
