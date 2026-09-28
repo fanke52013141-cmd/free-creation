@@ -3,7 +3,7 @@ import { readNodeConfig } from '../node-config'
 import { inputJson, inputText } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
 import {
-  interpolateStructuredValue,
+  interpolateStructuredValueWithMissing,
   parseStructuredDataConfig,
   schemaOption
 } from '../../structured-data'
@@ -20,11 +20,16 @@ export const structuredExecutor = (ctx: NodeExecutionContext): NodeExecutionResu
   } catch {
     return { status: 'failed', reason: '结构数据正文不是有效 JSON' }
   }
-  const value = interpolateStructuredValue(
+  const { value, missing } = interpolateStructuredValueWithMissing(
     parsed,
     inputJson(ctx.inputs, 'in-context'),
     inputText(ctx.inputs, 'in-text')
   )
+  // 缺失占位符必须显式失败：静默成功会让对象键被 JSON.stringify 丢弃、字符串内插
+  // 空串，下游拿到缺字段的数据还显示 success（R-15）。非占位符字段不受影响。
+  if (missing.length > 0) {
+    return { status: 'failed', reason: `占位符无法从已连接输入解析：${missing.join('、')}` }
+  }
   const validation = validateNodeSchema(config.schema, value)
   if (!validation.ok) {
     return {

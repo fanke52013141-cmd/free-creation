@@ -740,3 +740,90 @@ describe('projectNodeOutputs · 导演台节点', () => {
     expect(out['out-camera']).toBeUndefined()
   })
 })
+
+describe('projectNodeOutputs · 视频截取跨运行 runId 圈定（R-06）', () => {
+  const runRecord = (runId: string): Record<string, unknown> => ({
+    runId,
+    status: 'success',
+    startedAt: 1,
+    inputs: {}
+  })
+
+  it('先跑「画面+音频」再改「仅画面」重跑后，out-audio 不得继续投影上一轮音频', () => {
+    let collection = appendMediaResult(
+      '',
+      { mediaId: 'v1', mediaPath: '/v1.mp4', mime: 'video/mp4' },
+      { nodeId: 'clip', runId: 'run-1' }
+    )
+    collection = appendMediaResult(
+      serializeMediaResultCollection(collection),
+      { mediaId: 'a1', mediaPath: '/a1.m4a', mime: 'audio/mp4' },
+      { nodeId: 'clip', runId: 'run-1' }
+    )
+    collection = appendMediaResult(
+      serializeMediaResultCollection(collection),
+      { mediaId: 'v2', mediaPath: '/v2.mp4', mime: 'video/mp4' },
+      { nodeId: 'clip', runId: 'run-2' }
+    )
+    const out = projectNodeOutputs(
+      shape(
+        'video-clip',
+        {},
+        {
+          nodeResult: serializeMediaResultCollection(collection),
+          nodeRun: runRecord('run-2')
+        }
+      )
+    )
+    expect(out['out-video']).toMatchObject({ mediaId: 'v2' })
+    expect(out['out-audio']).toBeUndefined()
+  })
+
+  it('本次运行同时产出画面与音频时两者都投影', () => {
+    let collection = appendMediaResult(
+      '',
+      { mediaId: 'v2', mediaPath: '/v2.mp4', mime: 'video/mp4' },
+      { nodeId: 'clip', runId: 'run-2' }
+    )
+    collection = appendMediaResult(
+      serializeMediaResultCollection(collection),
+      { mediaId: 'a2', mediaPath: '/a2.m4a', mime: 'audio/mp4' },
+      { nodeId: 'clip', runId: 'run-2' }
+    )
+    const out = projectNodeOutputs(
+      shape(
+        'video-clip',
+        {},
+        {
+          nodeResult: serializeMediaResultCollection(collection),
+          nodeRun: runRecord('run-2')
+        }
+      )
+    )
+    expect(out['out-video']).toMatchObject({ mediaId: 'v2' })
+    expect(out['out-audio']).toMatchObject({ mediaId: 'a2' })
+  })
+
+  it('旧数据没有可匹配的 runId 时回退原行为（按 MIME 各取最近一条）', () => {
+    const legacy = {
+      kind: 'media-source',
+      version: 1,
+      results: [
+        { mediaId: 'v1', mediaPath: '/v1.mp4', mime: 'video/mp4', createdAt: 1 },
+        { mediaId: 'a1', mediaPath: '/a1.m4a', mime: 'audio/mp4', createdAt: 2 }
+      ]
+    }
+    const out = projectNodeOutputs(
+      shape(
+        'video-clip',
+        {},
+        {
+          nodeResult: JSON.stringify(legacy),
+          nodeRun: runRecord('run-9')
+        }
+      )
+    )
+    expect(out['out-video']).toMatchObject({ mediaId: 'v1' })
+    expect(out['out-audio']).toMatchObject({ mediaId: 'a1' })
+  })
+})

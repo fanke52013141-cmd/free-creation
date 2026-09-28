@@ -1,4 +1,5 @@
-// 生图节点执行器：已有成片优先复用；否则按提示词与可选参考图调用图片模型。
+// 生图节点执行器：每次运行都按提示词与可选参考图逐张发起请求。实现中没有
+// 「已有成片优先复用」，跨运行不存在复用机制；同轮内仅由拓扑单遍保证同节点只执行一次。
 import { inputJson, inputMedia, inputText } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
 import { featureKeyOf, modelKeyOf, resolveFeatureOption } from '../models'

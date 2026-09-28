@@ -93,8 +93,14 @@ interface ImportedMediaRef {
   newPath: string
 }
 
-/** 导出项目为 zip 到 destPath；返回目标路径。 */
-export function exportProject(id: string, destPath: string): string {
+export interface ProjectExportResult {
+  path: string
+  /** 导出时在磁盘上已缺失、未能打入包内的媒体文件数量；>0 表示导出包不完整（R-33）。 */
+  missingMediaCount: number
+}
+
+/** 导出项目为 zip 到 destPath；返回目标路径与缺失媒体计数。 */
+export function exportProject(id: string, destPath: string): ProjectExportResult {
   const file = readProjectJson(id)
   if (!file) throw new Error('项目数据文件缺失或已损坏')
   const path = destPath.endsWith(BUNDLE_EXT) ? destPath : `${destPath}${BUNDLE_EXT}`
@@ -114,14 +120,17 @@ export function exportProject(id: string, destPath: string): string {
   )
 
   // zip 内 media/<原文件名>。原文件名形如 <mediaId>.<ext>，用 mediaId + ext 也可还原。
+  // 磁盘上缺失的媒体只计数不阻断导出：主文件仍可备份，但计数必须透传给用户告警。
+  let missingMediaCount = 0
   for (const media of listProjectMedia(id)) {
     const rel = media.path.replace(`projects/${id}/`, '') // media/<id>.<ext>
     const abs = join(getProjectsDir(), id, rel)
     if (existsSync(abs)) zip.addLocalFile(abs, 'media')
+    else missingMediaCount += 1
   }
 
   zip.writeZip(path)
-  return path
+  return { path, missingMediaCount }
 }
 
 /** 导入项目 bundle，返回新项目元信息；版本不兼容或包损坏时抛错。 */
@@ -176,7 +185,7 @@ export function importProject(srcPath: string): ProjectMetaInfo {
 
   mkdirSync(stagingMediaDir, { recursive: true })
   const mediaRefs: ImportedMediaRef[] = []
-  let databaseInserted = false
+  const finalMediaDir = join(newProjectDir, 'media')
   try {
     // 先完整写入临时目录；遇到任何损坏条目时不会留下可见项目或数据库记录。
     for (const entry of zip.getEntries()) {
@@ -214,6 +223,12 @@ export function importProject(srcPath: string): ProjectMetaInfo {
     }
     writeFileSync(join(stagingDir, 'project.json'), JSON.stringify(newFile, null, 2), 'utf-8')
 
+    // 目录先就位、数据库后提交（R-34）：中间崩溃的残留只可能是
+    // ① rename 前的 `<id>.importing` staging（workspace-health 搬入 .recovery），或
+    // ② rename 后的「目录存在但无 DB 记录」——列表不可见，reconcile 以
+    // orphanedProjectIds 上报。绝不会出现「列表可见但目录缺失」的幽灵项目。
+    renameSync(stagingDir, newProjectDir)
+
     const database = getDb()
     const insertProject = database.prepare(
       'INSERT INTO projects (id, name, created_at, updated_at, graph_version) VALUES (?, ?, ?, ?, 0)'
@@ -225,34 +240,24 @@ export function importProject(srcPath: string): ProjectMetaInfo {
       insertProject.run(newId, name, now, now)
       for (const ref of mediaRefs) {
         const ext = extName(ref.newPath)
-        const stagedPath = join(stagingMediaDir, `${ref.newId}${ext}`)
+        const finalPath = join(finalMediaDir, `${ref.newId}${ext}`)
         const mime = mimeForExtension(ext)
         insertMedia.run(
           ref.newId,
           kindFor(mime),
           mime,
           ref.newPath,
-          readFileSync(stagedPath).byteLength,
+          readFileSync(finalPath).byteLength,
           now,
           `${kindFor(mime) === 'image' ? '图片' : kindFor(mime) === 'video' ? '视频' : kindFor(mime) === 'audio' ? '音频' : '文件'}素材-${ref.newId.slice(0, 6)}`
         )
       }
     })()
-    databaseInserted = true
-
-    // 数据库提交成功后，目录的单次 rename 才让项目对列表可见。
-    renameSync(stagingDir, newProjectDir)
   } catch (error) {
-    if (existsSync(stagingDir)) rmSync(stagingDir, { recursive: true, force: true })
-    // rename 前的 DB 写入失败路径需要补偿，避免项目列表出现指向不存在目录的幽灵记录。
-    if (databaseInserted && !existsSync(newProjectDir)) {
-      const database = getDb()
-      database.transaction(() => {
-        database.prepare('DELETE FROM media WHERE path LIKE ?').run(`projects/${newId}/media/%`)
-        database.prepare('DELETE FROM projects WHERE id = ?').run(newId)
-      })()
-    }
-    // rename 成功后的异常保留正式目录，避免删除可恢复的用户项目。
+    // 回滚与提交顺序相反：目录已 rename 则删正式目录（此刻项目从未对用户可见，
+    // 且 DB 事务原子回滚，不存在指向该目录的记录）；仍在 staging 则按既有约定删 staging。
+    if (existsSync(newProjectDir)) rmSync(newProjectDir, { recursive: true, force: true })
+    else if (existsSync(stagingDir)) rmSync(stagingDir, { recursive: true, force: true })
     throw error
   }
 

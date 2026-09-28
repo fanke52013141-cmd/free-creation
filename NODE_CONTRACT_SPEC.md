@@ -166,15 +166,20 @@ interface NodeTypeSpec {
 某个节点的业务逻辑新增 `nodeType` 分支。图片裁剪是参考实现：`image-crop` 的
 `in-image(required, one) -> out-image(required, one)` 不随矩形/四角模式改变，模式与
 归一化坐标仅写入 `props.config`，执行器通过 M0 本地媒体服务产生新的 PNG 资产。视频
-节点同样遵循这一边界：`video-frame`、`video-clip`、`video-audio` 分别固定为
-`in-video -> out-image/out-video/out-audio`；时间轴是右侧面板的附加预览 UI，确认的
-`timeMs` 或 `startMs/endMs` 才写入配置。当前本地视频适配器调用用户机器已安装的
+节点同样遵循这一边界：`video-frame` 固定为 `in-video -> out-image`；`video-clip`
+（契约 v5）是双输出节点 `in-video -> out-video（可选）+ out-audio（可选）`，画面与音频
+由同一份起止时间驱动，本次运行产出哪条由结果集合的实际产物决定，另一端口不产出；
+时间轴是右侧面板的附加预览 UI，确认的
+`timeMs` 或 `startMs/endMs` 才写入配置。历史 `video-audio`（`in-video -> out-audio`）
+自 2026-09-18 起退役（`creatable=false`）：截音频已并入「视频截取」单节点，旧画布中的
+本类型仍注册以读取和执行历史项目，但不得再新建。当前本地视频适配器调用用户机器已安装的
 FFmpeg（优先读取 `CANVAS_STUDIO_FFMPEG_PATH`，否则使用 PATH 中的 `ffmpeg`），不随
 应用打包 GPL 二进制；找不到时必须给出可操作的安装/配置错误。
 
 音频相关节点的标准边界为：`audio` 使用 `audio -> audio` 承接或导入素材；`speech`
-使用 `text many -> audio` 生成通用配音；`tts` 使用 `audio one + text many -> audio` 做参考
-音色复刻。人声提取是视频操作中的可选输出处理，不再创建独立画布节点；历史 `vocal-separate`
+使用 `text many -> audio` 生成通用配音；`tts` 使用 `in-audio`（audio，单值，可选）登记
+参考语音，经 `out-json`（json，`voice.profile@1`）输出可复用的音色档案，交给 `speech`
+节点的 `in-voice` 消费——它不直接产出音频。人声提取是视频操作中的可选输出处理，不再创建独立画布节点；历史 `vocal-separate`
 节点仍注册以读取旧项目。任何快捷入口只能创建这些
 普通节点和真实边，不能在音频资产节点中暗藏一次语音模型调用。
 
@@ -186,8 +191,10 @@ FFmpeg（优先读取 `CANVAS_STUDIO_FFMPEG_PATH`，否则使用 PATH 中的 `ff
 
 **输出数量改变时必须创建独立节点。**例如 `image-split` 不属于 `image-crop` 的模式：
 裁剪固定为 `1 张图片 -> 1 张图片`，而拆分固定为 `1 张图片 -> 1 张当前图片 + 1 个图片
-集合`。拆分节点的 `out-images` 为 `list.items@1`，列表每项只保存真实落盘资产的
-`mediaId/mediaPath/mime`，可连接给循环节点；`out-image` 始终是用户从该集合中选中的
+集合`。拆分节点的 `out-images` 为 `list.items@1`，列表每项是
+`{ id, index, kind: "image", mediaId, mediaPath, mime }`：稳定 `id` 与序号 `index`
+供循环恢复和溯源使用，`kind` 加完整资产引用使每项可直接注入同类型媒体输入端口，
+可连接给循环节点；`out-image` 始终是用户从该集合中选中的
 一张，供生图、裁剪、视频等单图节点直接使用。行、列和 `scalePercent` 仅存于配置，
 其中 `scalePercent` 是**面积比例**，每个格子以自身中心缩放，线性缩放系数为
 `sqrt(scalePercent / 100)`。单次拆分最多 64 格；任一格生成失败时必须清理本次已写入
@@ -300,19 +307,18 @@ schema: {
 - 列表批处理使用 `list.items@1`：根值必须是数组，每个元素必须是对象（建议带稳定 id）。迭代/批处理节点的输入输出用它，使批量结果仍是可连接的结构化列表，而不是把几十个生成资产藏进一个不可连接的节点内部。
 - P2 已注册 `character.profile@1`、`scene.definition@1`、`shot.definition@1`、`prompt.bundle@1`；字段定义、校验错误和模板用法见 [docs/STRUCTURED_CREATIVE_DATA.md](./docs/STRUCTURED_CREATIVE_DATA.md)。
 - Batch C 新增语音相关 Schema：
-  - `voice.profile@1`：音色档案。`voice_id` 必填（非空字符串）；`provider`、`source`、`label`、`preview_media_id` 可选。它只携带标识与来源，**不含音频二进制**。生产者是音色设计节点（`voice_design`）与语音克隆节点（`voice_clone`），消费者是配音节点的 `in-voice`。
-  - `voice.subtitle@1`：字幕时间轴。`text` 必填；`sentences` 必须是数组，每项含有限的 `start_time` / `end_time` 数字与字符串 `text`，`words` 可选。只有豆包语音合成在 `enable_subtitle` 打开时才产出该输出，其他协议不产生空字幕。
+  - `voice.profile@1`：音色档案。`voice_id` 必填（非空字符串）；`provider`、`source`、`label`、`preview_media_id` 可选。它只携带标识与来源，**不含音频二进制**。生产者是音色设计节点（`voice_design`）与语音克隆节点（`tts`），消费者是配音节点的 `in-voice`。
+  - `voice.subtitle@1`：字幕时间轴。`text` 必填；`sentences` 必须是数组，每项含有限的 `start_time` / `end_time` 数字与字符串 `text`，`words` 可选。只有火山引擎语音合成 1.0 在 `enable_subtitle` 打开时才产出该输出，其他协议不产生空字幕。
 - Schema 的字段定义必须集中到共享目录，并在运行前后执行实际校验。
 
 #### 模型驱动端口的声明原则（配音节点）
 
-配音（`speech`）节点的端口结构由 `props.config.backend` 决定，而不是由上游节点类型推断：
+配音（`speech`）节点的端口结构由 `props.config.backend` 决定，而不是由上游节点类型推断。`SpeechBackend = 'minimax' | 'volc'`（`src/shared/speech.ts`）；早期方案中的 `doubao`/`openai` 通道已移除，不再作为端口结构存在：
 
-- 静态 `ports` 声明三套结构的并集，只用于注册校验与契约快照；运行时以 `resolvePorts(shape)` 为准。
-- `minimax`（默认）：`in-text` + `in-voice` → `out-audio`。
-- `doubao`：`in-text` + `in-voice` + `in-audio` → `out-audio` + `out-subtitle`。
-- `openai`：`in-text` → `out-audio`。
-- 同一协议下，执行器只读取该协议声明过的输入；未接入的通道（如豆包 `references` 参考音频）必须在执行时**明确失败**，不能静默忽略上游连线。
+- 静态 `ports` 声明两套结构的并集，只用于注册校验与契约快照；运行时以 `resolvePorts(shape)` 为准。
+- `minimax`（默认）：`in-text` + `in-voice` → `out-audio`。音色来自上游 `voice.profile@1` 或节点内填写的 MiniMax voice ID。
+- `volc`：`in-text` + `in-audio` → `out-audio`；`enable_subtitle` 打开时另产出可选 `out-subtitle`（`voice.subtitle@1`）。火山 speaker ID 在节点参数（`voiceId`）中填写，不走 `in-voice` 音色档案端口。
+- 同一协议下，执行器只读取该协议声明过的输入；未接入的通道必须在执行时**明确失败**，不能静默忽略上游连线（例如把火山 speaker 档案接到 MiniMax 的 `in-voice` 会被拒绝并明确报错）。
 - 非媒体端口值（字幕、音色档案）由执行器经 `updateMeta` 写入 `meta.nodeExtra`（按端口 ID 存放的 JSON），再由 `projectOutputs` 投影；不塞进 `meta.nodeResult` 的媒体结果集合，避免破坏「一个媒体输出」的既有语义。
 
 #### 动态输出的 Schema 声明原则

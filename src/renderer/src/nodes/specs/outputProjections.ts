@@ -172,8 +172,9 @@ export const projectVideoAiOutputs = (shape: NodeCardShape): RawNodeOutputs =>
 
 /**
  * 视频截取（合并节点，契约 v5）一次运行可物化两条产物：画面写入 out-video、
- * 音频写入 out-audio。结果集合是扁平列表，因此按 MIME 主类型各取最近一条，
- * 而不是共用 latestResultMediaOutput 的「最后一条」。
+ * 音频写入 out-audio。结果集合是扁平列表且跨运行累积，因此先按本次运行 runId
+ * 圈定产物，再按 MIME 主类型各取最近一条，而不是共用 latestResultMediaOutput
+ * 的「最后一条」。
  */
 export const projectVideoClipOutputs = (shape: NodeCardShape): RawNodeOutputs => {
   const collection = parseMediaResultCollection(
@@ -181,10 +182,16 @@ export const projectVideoClipOutputs = (shape: NodeCardShape): RawNodeOutputs =>
   )
   const results = collection?.results
   if (!results?.length) return latestResultMediaOutput(shape, 'video', 'out-video')
-  const runFailed = readNodeRunRecord(shape.meta?.nodeRun)?.status === 'failed'
-  if (runFailed) return {}
+  const lastRun = readNodeRunRecord(shape.meta?.nodeRun)
+  if (lastRun?.status === 'failed') return {}
+  // 结果集合跨运行累积（appendMediaResult 追加旧集合）。先跑「画面+音频」再改
+  // 「仅画面」重跑后，若不过滤 runId，out-audio 会继续投影上一轮旧音频。按本次
+  // 运行 runId 圈定产物；旧数据没有可匹配的 runId 时回退原有「按 MIME 各取最近
+  // 一条」行为（R-06）。
+  const currentRunResults = lastRun ? results.filter((item) => item.runId === lastRun.runId) : []
+  const effective = currentRunResults.length > 0 ? currentRunResults : results
   const byKind = (kind: 'video' | 'audio'): (typeof results)[number] | undefined =>
-    results.filter((item) => (item.mime ?? '').startsWith(`${kind}/`)).at(-1)
+    effective.filter((item) => (item.mime ?? '').startsWith(`${kind}/`)).at(-1)
   const output: RawNodeOutputs = {}
   const name = shape.props.title ? { name: shape.props.title } : {}
   for (const [kind, portId] of [

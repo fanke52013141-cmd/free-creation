@@ -31,7 +31,8 @@ const ITERATE_RUN_MODE_OPTIONS: Array<{ value: IterateConfig['runMode']; label: 
 function enforceConfig(c: IterateConfig): IterateConfig {
   return {
     onFailure: c.onFailure,
-    maxRetries: c.maxRetries < 0 ? 0 : c.maxRetries,
+    // 上限必须与执行器 parseIterate 的 0..10 钳制一致：配置手误放大成海量付费重试（R-21）。
+    maxRetries: Math.min(10, Math.max(0, c.maxRetries)),
     limit: c.limit < 0 ? 0 : c.limit,
     runMode: c.runMode
   }
@@ -176,6 +177,7 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
             <input
               type="number"
               min="0"
+              max="10"
               value={data.maxRetries}
               onPointerDown={(e) => stopEventPropagation(e)}
               onChange={(e) => updateConfig({ ...data, maxRetries: Number(e.target.value) || 0 })}

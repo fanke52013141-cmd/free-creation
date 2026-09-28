@@ -75,16 +75,28 @@ export const scriptExecutor = async (ctx: NodeExecutionContext): Promise<NodeExe
   }
   const option = await resolveFeatureOption(ctx.gateway, ctx.providers, featureKeyOf(data, 'script.breakdown'), 'text.generate', modelKeyOf(data))
   if (!option) return { status: 'skipped', reason: '功能 script.breakdown 尚未绑定已验证文本模型' }
-  const reply = await waitForChat(
-    ctx.gateway,
-    {
-      providerId: option.provider.id,
-      modelId: option.model.id,
-      system: scriptSystemPrompt(data.outputFields),
-      messages: [{ role: 'user', content: source }]
-    },
-    ctx.signal
-  )
+  let reply: string
+  try {
+    reply = await waitForChat(
+      ctx.gateway,
+      {
+        providerId: option.provider.id,
+        modelId: option.model.id,
+        system: scriptSystemPrompt(data.outputFields),
+        messages: [{ role: 'user', content: source }]
+      },
+      ctx.signal
+    )
+  } catch (error) {
+    // 取消不是失败：对齐 aiProcess 的语义，取消（含取消竞态抛出的「已取消」）标 skipped，
+    // 半途结果不得写进正文；其余错误原样上抛由运行器记 failed（R-20）。
+    const message = error instanceof Error ? error.message : String(error)
+    if (ctx.signal.cancelled || message === '已取消') {
+      return { status: 'skipped', reason: '已取消' }
+    }
+    throw error
+  }
+  if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
   const shots = extractShots(reply)
   if (!shots?.length) return { status: 'failed', reason: '模型未返回可解析的分镜 JSON' }
   ctx.updateProps({

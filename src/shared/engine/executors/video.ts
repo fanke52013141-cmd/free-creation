@@ -1,4 +1,5 @@
-// 视频节点执行器：已有成片优先；否则提交文本/首帧任务并轮询至完成。
+// 视频节点执行器：每次运行都提交新的生成任务并轮询至完成。实现中没有
+// 「已有成片优先复用」，跨运行不存在复用机制，重跑同一节点必然重新计费提交。
 import { inputJson, inputMedia, inputText } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
 import { featureKeyOf, modelKeyOf, resolveFeatureOption } from '../models'
@@ -82,8 +83,13 @@ export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
         ? { referenceAudioMediaIds: audioReferences.map((media) => media.mediaId) }
         : {})
     })
-    if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
     if (!submitted.ok) return { status: 'failed', reason: submitted.error.message }
+    if (ctx.signal.cancelled) {
+      // 提交已成功而取消先到：远端任务必须补偿取消，否则主进程轮询独立继续，
+      // 任务会完成入库并计费，而节点已被标为 skipped（R-01）。
+      void ctx.gateway.videoCancel(submitted.data.taskId)
+      return { status: 'skipped', reason: '已取消' }
+    }
     const result = await waitForVideo(ctx.gateway, submitted.data.taskId, ctx.signal)
     if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
     ctx.updateResult(

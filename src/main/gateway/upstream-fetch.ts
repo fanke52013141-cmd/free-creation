@@ -10,6 +10,20 @@ export const CONTROL_TIMEOUT_MS = 60 * 1000
 export const SYNTHESIS_TIMEOUT_MS = 120 * 1000
 /** 参考音频上传：受用户上行带宽影响最大（上限 20MB），给最宽的窗口。 */
 export const UPLOAD_TIMEOUT_MS = 180 * 1000
+/** 成片/产物下载：体积可达数百 MB 且受服务端出网带宽主导，不能套用控制面窗口，独立给更宽上界。 */
+export const DOWNLOAD_TIMEOUT_MS = 15 * 60 * 1000
+
+/**
+ * 带原始 HTTP 状态的网关错误：错误码与文案仍由 describeUpstreamHttpError 归一化，
+ * 只是额外保留 status，供调用方区分「瞬时 5xx」与「确定性 4xx」（如轮询容错）。
+ */
+export class UpstreamStatusError extends GatewayError {
+  readonly status: number
+  constructor(code: string, message: string, status: number) {
+    super(code, message)
+    this.status = status
+  }
+}
 
 /**
  * 带超时的上游 fetch。超时（TimeoutError）与外部中止（AbortError）都归一为

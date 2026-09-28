@@ -240,6 +240,26 @@ describe('aiProcess 执行器 · 输出模式分支', () => {
     expect(r.status).toBe('failed')
     expect(r.reason).toContain('storyboard.shots')
   })
+
+  it('text 模式模型返回为空 → failed，不标成功零输出（R-19）', async () => {
+    installFakeGateway('   ')
+    const config = JSON.stringify({ modelKey: 'p1::m1', mode: 'text' })
+    const { ctx, result } = makeCtx(config, textInput('输入'))
+    const r = await aiProcessExecutor(ctx)
+    expect(r.status).toBe('failed')
+    expect(r.reason).toContain('模型返回为空')
+    // 失败不写运行结果，下游不得把空输出当成功消费。
+    expect(result.value).toBeNull()
+  })
+
+  it('markdown 模式模型返回为空 → failed（R-19）', async () => {
+    installFakeGateway('')
+    const config = JSON.stringify({ modelKey: 'p1::m1', mode: 'markdown' })
+    const { ctx } = makeCtx(config, textInput('输入'))
+    const r = await aiProcessExecutor(ctx)
+    expect(r.status).toBe('failed')
+    expect(r.reason).toContain('模型返回为空')
+  })
 })
 
 describe('aiProcess 执行器 · 跳过条件', () => {

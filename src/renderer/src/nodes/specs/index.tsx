@@ -179,7 +179,7 @@ const VOICE_SUBTITLE: PortSchemaRef = { id: 'voice.subtitle', version: 1 }
  * 语音合成节点端口声明。返回两套互斥结构，由 config.backend 决定：
  *   minimax → 朗读文本 + MiniMax 音色档案 → 音频
  *   volc    → 朗读文本 + 可选参考音频 → 音频 + 可选字幕（speaker 在节点参数中填写）
- * 静态 ports 是这两套的并集，只用于注册校验与契约快照；运行时以本函数为准。
+ * 只作为 resolvePorts 的按 backend 取值来源；静态 ports 必须经 speechStaticPorts 取并集。
  */
 function speechPorts(backend: SpeechBackend): {
   in: PortDecl[]
@@ -230,6 +230,28 @@ function speechPorts(backend: SpeechBackend): {
     return { in: [inText, inAudio], out: [outAudio, outSubtitle] }
   }
   return { in: [inText, inVoice], out: [outAudio] }
+}
+
+/**
+ * 静态 ports 必须是各 backend 端口的按 ID 去重并集：拖线新建菜单与连线类型校验
+ * 按静态集判兼容，缺一个端口对应 backend 的候选就会从菜单消失，单列某个 backend
+ * 则会把该 backend 独有端口虚报给其他 backend 的新建节点。运行时端口仍以
+ * resolvePorts（即 speechPorts）为准，并集只用于注册校验、契约快照与新建候选。
+ */
+function speechStaticPorts(): {
+  in: PortDecl[]
+  out: PortDecl[]
+} {
+  const mergeById = (primary: PortDecl[], extra: PortDecl[]): PortDecl[] => [
+    ...primary,
+    ...extra.filter((port) => !primary.some((existing) => existing.id === port.id))
+  ]
+  const minimax = speechPorts('minimax')
+  const volc = speechPorts('volc')
+  return {
+    in: mergeById(minimax.in, volc.in),
+    out: mergeById(minimax.out, volc.out)
+  }
 }
 
 export function registerBaseNodeTypes(): void {
@@ -688,10 +710,7 @@ export function registerBaseNodeTypes(): void {
     defaultSize: { w: 340, h: 260 },
     description: '按所选供应商和语音参数，把文本合成为音频。供应商相关输入输出规则见“输入输出”。',
     category: 'audio',
-    ports: {
-      in: speechPorts('volc').in,
-      out: speechPorts('volc').out
-    },
+    ports: speechStaticPorts(),
     resolvePorts: (shape) => speechPorts(parseSpeechConfig(readNodeConfig(shape)).backend),
     projectOutputs: projectSpeechOutputs,
     executor: speechExecutor,

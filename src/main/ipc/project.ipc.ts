@@ -120,7 +120,10 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
   // 导出项目到用户选择的 .canvasbundle 文件
   ipcMain.handle(
     IPC.project.export,
-    async (_e, input: { id: string; name?: string }): Promise<IpcEnvelope<{ path: string }>> => {
+    async (
+      _e,
+      input: { id: string; name?: string }
+    ): Promise<IpcEnvelope<{ path: string; missingMediaCount: number }>> => {
       if (!input?.id) return err('INVALID_INPUT', '参数不完整')
       const result = await dialog.showSaveDialog({
         title: '导出项目',
@@ -129,8 +132,8 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
       })
       if (result.canceled || !result.filePath) return err('CANCELLED', '已取消导出')
       try {
-        const path = exportProject(input.id, result.filePath)
-        return ok({ path })
+        const exported = exportProject(input.id, result.filePath)
+        return ok({ path: exported.path, missingMediaCount: exported.missingMediaCount })
       } catch (e) {
         return err('EXPORT_FAILED', e instanceof Error ? e.message : String(e))
       }

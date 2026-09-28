@@ -1,6 +1,6 @@
 # 持续集成门禁（路线图 R2）
 #
-# 在每个推送和 PR 上运行：依赖安装 → 类型检查 → 代码规范 → 节点契约测试 → 生产构建。
+# 在每个推送和 PR 上运行：依赖安装 → 类型检查（含模型子包）→ 代码规范 → 节点契约测试 → 模型运行时测试 → 生产构建。
 # 任意一步失败即阻断合并，确保节点端口、Schema 与契约规范的破坏性变化在合并前暴露。
 #
 # 测试覆盖契约层（端口 ID/类型/Schema/契约版本、连线矩阵、输入输出校验、执行器纯函数），
@@ -45,11 +45,17 @@ jobs:
       - name: 类型检查
         run: pnpm typecheck
 
+      - name: 模型子包类型检查
+        run: pnpm typecheck:model
+
       - name: 代码规范
         run: pnpm lint
 
       - name: 节点契约与执行器测试
         run: pnpm test
+
+      - name: 模型运行时测试
+        run: pnpm test:model
 
       - name: 生产构建（Windows）
         run: pnpm build

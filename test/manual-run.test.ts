@@ -320,7 +320,10 @@ describe('runNodeManually · 卡片内统一执行入口', () => {
   })
 
   it('不会把最近失败节点遗留的输出当作有效上游输入', async () => {
-    const source = node('shape:failed-source', 'text', '旧的遗留文本')
+    // 运行型（非 document）节点的输出只来自成功运行：失败后即使正文里留着
+    // 可投影的旧值，也绝不能被下游当作有效上游输入。fixture 用 json 节点
+    // （run 型、投影只读正文），保证若闸门失效该测试必然转红。
+    const source = node('shape:failed-source', 'json', '{"stale":"旧遗留输出"}')
     source.meta.nodeRun = {
       runId: 'old-run',
       status: 'failed',
@@ -334,7 +337,7 @@ describe('runNodeManually · 卡片内统一执行入口', () => {
     const arrow = {
       id: 'shape:failed-arrow',
       type: 'arrow',
-      meta: { fromPort: 'out-text', toPort: 'in-value' }
+      meta: { fromPort: 'out-json', toPort: 'in-value' }
     }
     const shapes = new Map<string, typeof source | typeof target | typeof arrow>([
       [source.id, source],
@@ -477,6 +480,63 @@ describe('runNodeManually · 卡片内统一执行入口', () => {
     expect(JSON.parse(String(target.meta.nodeResult))).toMatchObject({
       kind: 'text',
       text: '空正文那次运行之后补上的正文'
+    })
+  })
+
+  it('正文类上游上次运行失败后，当前正文仍能喂给下游（与投影层同闸）', async () => {
+    // document 型节点的投影只读卡片当前内容，与最近一次运行状态无关；
+    // seeding 必须同样放行 failed，否则“改完即真值”的正文在失败记录存在期间
+    // 永远连不进下游。run 型节点的失败闸门由上一条用例单独守住。
+    const source = node('shape:failed-doc-source', 'text', '失败记录之后重写的正文')
+    source.meta.nodeRun = {
+      runId: 'old-run',
+      status: 'failed',
+      startedAt: 1,
+      finishedAt: 2,
+      durationMs: 1,
+      inputs: {},
+      error: { phase: 'execution', reason: '上次失败' }
+    }
+    const target = node('shape:failed-doc-target', 'processor', '')
+    const arrow = {
+      id: 'shape:failed-doc-arrow',
+      type: 'arrow',
+      meta: { fromPort: 'out-text', toPort: 'in-value' }
+    }
+    const shapes = new Map<string, typeof source | typeof target | typeof arrow>([
+      [source.id, source],
+      [target.id, target],
+      [arrow.id, arrow]
+    ])
+    const editor = {
+      getCurrentPageShapes: () => Array.from(shapes.values()),
+      getShape: (id: string) => shapes.get(id),
+      getBindingsFromShape: (id: string) =>
+        id === arrow.id
+          ? [
+              { props: { terminal: 'start' }, toId: source.id },
+              { props: { terminal: 'end' }, toId: target.id }
+            ]
+          : [],
+      updateShape: (patch: {
+        id: string
+        props?: Record<string, unknown>
+        meta?: Record<string, unknown>
+      }) => {
+        const current = shapes.get(patch.id)
+        if (!current || current.type !== 'node-card') return
+        if (patch.props) Object.assign(current.props, patch.props)
+        if (patch.meta) Object.assign(current.meta, patch.meta)
+      },
+      markHistoryStoppingPoint: () => undefined
+    } as unknown as Editor
+
+    const result = await runNodeManually(editor, 'project-1', [], target.id)
+
+    expect(result.status).toBe('done')
+    expect(JSON.parse(String(target.meta.nodeResult))).toMatchObject({
+      kind: 'text',
+      text: '失败记录之后重写的正文'
     })
   })
 })

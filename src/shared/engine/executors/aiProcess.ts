@@ -126,6 +126,10 @@ export const aiProcessExecutor = async (
     ctx.signal
   )
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
+  // text/markdown 模式空回复不得标成功：零输出会把错误推迟到下游 skipped，难以定位（R-19）。
+  if (config.mode !== 'json' && !reply.trim()) {
+    return { status: 'failed', reason: '模型返回为空' }
+  }
 
   let result: AiProcessConfig['result']
   try {

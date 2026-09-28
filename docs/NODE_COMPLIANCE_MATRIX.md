@@ -2,7 +2,7 @@
 
 > 审计基线：`f519ac3` · 2026-08-31。详细审计、连线关系和参考项目差异见 [NODE_PROTOCOL_AUDIT_2026_08_31.md](./NODE_PROTOCOL_AUDIT_2026_08_31.md)。
 
-本表是当前 **28 个可创建节点** 的发布前协议索引。新增或修改节点前必须同步更新本表、`NODE_CONTRACT_SPEC.md`、契约快照与连线测试；历史节点仅为兼容读取，不进入创建菜单。表中「版本 / 端口 id」以及明确写出的端口类型、基数和 Schema 由 `test/compliance-matrix-doc.test.ts` 与注册契约逐行比对，写错或漏行会直接让测试变红。
+本表是当前 **28 个可创建节点** 的发布前协议索引；下表共 30 行 = 28 个可创建节点 + 2 个历史节点行（`video-audio`、`vocal-separate`，结论「退役」）。新增或修改节点前必须同步更新本表、`NODE_CONTRACT_SPEC.md`、契约快照与连线测试；历史节点仅为兼容读取，不进入创建菜单。表中「版本 / 端口 id」以及明确写出的端口类型、基数和 Schema 由 `test/compliance-matrix-doc.test.ts` 与注册契约逐行比对；「28 个可创建节点」计数、退役行结论与「历史节点」表也由该测试校验，写错、漏行或计数漂移会直接让测试变红。
 
 | 节点                      | 版本 | 输入端口（类型 / 基数）                                         | 输出端口（类型 / Schema）                                       | 执行与投影                               | 结论 |
 | ------------------------- | ---- | --------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------- | ---- |
@@ -19,7 +19,7 @@
 | 白模视频 `video-clay`     | 1    | `in-video` video / one / 必填                                   | `out-video` video                                               | executor + projectOutputs                | 通过 |
 | 视频取帧 `video-frame`    | 4    | `in-video` video / one / 必填                                   | `out-image` image                                               | executor + projectOutputs                | 通过 |
 | 视频截取 `video-clip`     | 5    | `in-video` video / one / 必填                                   | `out-video` video（可选）；`out-audio` audio（可选）            | executor + projectOutputs                | 通过 |
-| 视频提音 `video-audio`    | 4    | `in-video` video / one / 必填                                   | `out-audio` audio                                               | executor + projectOutputs                | 通过 |
+| 视频提音 `video-audio`    | 4    | `in-video` video / one / 必填                                   | `out-audio` audio                                               | 历史兼容，不新建                         | 退役 |
 | 人声分离 `vocal-separate` | 4    | `in-audio` audio / one / 必填                                   | `out-audio` audio（人声；伴奏另建独立音频资产节点）             | 历史兼容，不新建                         | 退役 |
 | 音频资产 `audio`          | 3    | 无                                                              | `out-audio` audio                                               | executor + projectOutputs                | 通过 |
 | 声音调整 `sound-adjust`   | 1    | `in-audio` audio / one；`in-video` video / one（二选一）        | `out-audio` audio（可选）；`out-video` video（可选）            | executor + projectOutputs                | 通过 |
@@ -44,9 +44,9 @@
 ## 自动门禁
 
 - `test/node-compliance.test.ts`：Active/Legacy 类型、executor、投影、版本、说明与创建菜单分类。
-- `test/node-contract-snapshot.test.ts`：节点注册、端口命名、Schema 与关键契约快照；历史 `vocal-separate` 继续保留读取兼容。
+- `test/node-contract-snapshot.test.ts`：节点注册、端口命名、Schema 与关键契约快照；历史 `vocal-separate`、`video-audio` 继续保留读取兼容。
 - `test/connection-matrix.test.ts`：端口类型兼容/拒绝矩阵和代表性工作流。
-- `test/compliance-matrix-doc.test.ts`：本表每一行的「版本 / 端口 id」与注册契约逐行比对，并检查每个可创建节点都有一行。
+- `test/compliance-matrix-doc.test.ts`：本表每一行的「版本 / 端口 id」与注册契约逐行比对，并检查每个可创建节点都有一行；同时校验「28 个可创建节点」计数、`creatable=false` 节点与「历史节点」表互相对应。
 - `npm run verify`：本项目发布前的统一自动验证命令。
 
 ## 历史节点
@@ -54,5 +54,6 @@
 | 类型               | 状态    | 约束                                             |
 | ------------------ | ------- | ------------------------------------------------ |
 | `script`           | Legacy  | 可读取历史数据但 `creatable=false`。             |
+| `video-audio`      | Legacy  | 提音已并入「视频截取」；保留历史读取与运行兼容。 |
 | `vocal-separate`   | Legacy  | 人声提取已并入视频操作；保留历史读取与运行兼容。 |
 | `group`、`compose` | Retired | 不注册、不创建、不参与连线。                     |

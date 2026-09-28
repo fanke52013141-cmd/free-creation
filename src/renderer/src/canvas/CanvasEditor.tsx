@@ -244,6 +244,9 @@ function paletteSafeScreenX(editor: Editor): number {
   return palette.getBoundingClientRect().right + 16
 }
 
+// SAVE_FAILED toast 的重复提示最小间隔：防抖保存失败时避免按 800ms 节奏刷屏。
+const SAVE_FAILED_TOAST_THROTTLE_MS = 30_000
+
 export function CanvasEditor({
   project,
   initialSnapshot,
@@ -261,6 +264,9 @@ export function CanvasEditor({
   const suppressNodePickRef = useRef(false)
   // 快照恢复失败后置位：跳过一切自动保存，避免把空画布写回覆盖原数据
   const restoreFailedRef = useRef(false)
+  // SAVE_FAILED 提示节流：防抖保存持续失败（磁盘满/写锁）时 30 秒内只弹一次 toast，
+  // 避免 800ms 防抖节奏的重复失败刷屏；保存成功后复位，新一轮失败立即可见。
+  const saveFailedToastAtRef = useRef(0)
   // 拉线到空白处松手：暂存连线来源，待菜单选定节点类型后自动连线（LibTV 交互）
   const pendingConnectRef = useRef<ConnectionFrom | null>(null)
   // 画布挂载前（tldraw 初始化完成前）的建节点请求：先排队，编辑器就绪后补建。
@@ -579,6 +585,16 @@ export function CanvasEditor({
     }
   }
 
+  // SAVE_FAILED（磁盘满/写锁/IO 错误）对用户必须可见：toast 节流提示 + console 留痕。
+  // REVISION_CONFLICT 走重载恢复，不在此列。
+  const reportSaveFailure = (reason: string): void => {
+    console.error('项目保存失败', reason)
+    const now = Date.now()
+    if (now - saveFailedToastAtRef.current < SAVE_FAILED_TOAST_THROTTLE_MS) return
+    saveFailedToastAtRef.current = now
+    toast(`项目保存失败：${reason}，请检查磁盘空间后重试`, 6000)
+  }
+
   const flushSave = (): void => {
     if (restoreFailedRef.current) return
     if (saveTimerRef.current) {
@@ -590,8 +606,11 @@ export function CanvasEditor({
     void window.api.saveProject(input).then((res) => {
       if (res.ok && res.data) {
         graphVersionRef.current = res.data.graphVersion
+        saveFailedToastAtRef.current = 0
       } else if (!res.ok && res.error.code === 'REVISION_CONFLICT') {
         void reloadFromDisk()
+      } else if (!res.ok) {
+        reportSaveFailure(res.error.message)
       }
     })
   }
@@ -601,7 +620,8 @@ export function CanvasEditor({
     // F02 修复：关窗保存同样携带 expectedGraphVersion 乐观锁。冲突时（Agent 刚
     // 写入而本地未刷新）降级为一次无锁强制保存 —— 关窗场景无法重载冲突数据，
     // 用户当前视图的最后写入胜出，但这一决策显式落在渲染层而非主进程静默剥离。
-    // 保存失败（磁盘/写锁等）记录 console 错误，不再静默吞掉。
+    // 保存失败（磁盘/写锁等）记录 console 错误，不再静默吞掉。beforeunload 阶段
+    // 无法可靠弹出 UI（页面即将销毁），toast 仅覆盖自动保存路径（见 reportSaveFailure）。
     const onBeforeUnload = (): void => {
       if (restoreFailedRef.current) return
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)

@@ -106,9 +106,13 @@ function makeContext(options: CtxOptions): { ctx: NodeExecutionContext; state: R
   return { ctx, state }
 }
 
-function lastResult(state: RunState): { items: Array<{ status: string; error?: string }> } {
+function lastResult(state: RunState): {
+  items: Array<{ status: string; error?: string }>
+  progress?: Record<string, unknown>
+} {
   return JSON.parse(state.results[state.results.length - 1]) as {
     items: Array<{ status: string; error?: string }>
+    progress?: Record<string, unknown>
   }
 }
 
@@ -153,5 +157,62 @@ describe('循环节点：中途取消语义（F08）', () => {
     expect(result).toEqual({ status: 'skipped', reason: '已取消' })
     expect(state.subflowRuns).toBe(1)
     expect(lastResult(state).items[0].status).toBe('skipped')
+  })
+})
+
+describe('循环节点：取消后保留上轮已完成记录（R-07）', () => {
+  it('取消后未到达项保留上轮 done 记录（标 reused），不被抹成 skipped', async () => {
+    // 第一轮：三项全部完成
+    const first = makeContext({ items: ITEMS })
+    await iterateExecutor(first.ctx)
+    // 第二轮：第 2 项中途取消，第 3 项从未到达
+    const second = makeContext({
+      items: ITEMS,
+      cancelAtRun: 2,
+      previousResult: first.state.results[first.state.results.length - 1]
+    })
+    await iterateExecutor(second.ctx)
+    expect(lastResult(second.state).items.map((item) => item.status)).toEqual([
+      'done',
+      'skipped',
+      'reused'
+    ])
+    expect(lastResult(second.state).items[2].error).toBeUndefined()
+  })
+
+  it('第二轮续跑必须能复用被保留的记录：未到达项不再重新付费执行', async () => {
+    const first = makeContext({ items: ITEMS })
+    await iterateExecutor(first.ctx)
+    const second = makeContext({
+      items: ITEMS,
+      cancelAtRun: 2,
+      previousResult: first.state.results[first.state.results.length - 1]
+    })
+    await iterateExecutor(second.ctx)
+    const resumed = makeContext({
+      items: ITEMS,
+      runMode: 'resume',
+      previousResult: second.state.results[second.state.results.length - 1]
+    })
+    const result = await iterateExecutor(resumed.ctx)
+    expect(result).toEqual({ status: 'done' })
+    // 只有第 2 项（上轮被取消）需要重跑；第 1、3 项直接复用。
+    expect(resumed.state.subflowRuns).toBe(1)
+    expect(lastResult(resumed.state).items.map((item) => item.status)).toEqual([
+      'reused',
+      'done',
+      'reused'
+    ])
+  })
+
+  it('没有上轮记录时（首轮取消）未到达项仍是 skipped，统计保持一致', async () => {
+    const { ctx, state } = makeContext({ items: ITEMS, cancelAtRun: 2 })
+    await iterateExecutor(ctx)
+    expect(lastResult(state).items.map((item) => item.status)).toEqual([
+      'done',
+      'skipped',
+      'skipped'
+    ])
+    expect(lastResult(state).progress).toMatchObject({ total: 3, done: 1, skipped: 2, reused: 0 })
   })
 })

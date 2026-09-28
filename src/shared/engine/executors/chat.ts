@@ -113,7 +113,13 @@ export const chatExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecu
         ctx.signal
       )
       persistedMessages = compression.recent
-    } catch {
+    } catch (error) {
+      // 取消落在摘要阶段不能被吞掉（否则本轮取消被记成 done）；先于「不丢历史」
+      // 兜底处理：确属取消则本节点标 skipped（R-14）。
+      const message = error instanceof Error ? error.message : String(error)
+      if (ctx.signal.cancelled || message === '已取消') {
+        return { status: 'skipped', reason: '已取消' }
+      }
       // 主回复已经成功；摘要失败时绝不丢历史，下一轮可重试压缩。
     }
   }

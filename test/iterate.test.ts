@@ -22,6 +22,8 @@ function makeCtx(over: {
   signal?: { cancelled: boolean; paused?: boolean }
   waitForResume?: () => Promise<void>
   previousResult?: string
+  /** renderer 运行器注入的循环体指纹（R-08）；不传视为 headless / 旧路径。 */
+  bodyFingerprint?: string
 }): {
   ctx: NodeExecutionContext
   props: Partial<NodeCardShape['props']>
@@ -91,6 +93,7 @@ function makeCtx(over: {
     signal: over.signal ?? { cancelled: false, paused: false },
     gateway: {} as GatewayClient,
     waitForResume: over.waitForResume,
+    ...(over.bodyFingerprint ? { bodyFingerprint: over.bodyFingerprint } : {}),
     outgoing: over.outgoing ?? [
       { nodeId: 'node-body', fromPortId: 'out-item', toPortId: 'in-json' }
     ],
@@ -702,6 +705,80 @@ describe('iterate 执行器 · P3.3 批量规模回归', () => {
     expect(active.max).toBe(1)
     expect(seen).toEqual(Array.from({ length: count }, (_, index) => index))
     expect(data.progress).toMatchObject({ total: count, completed: count, done: count, failed: 0 })
+  })
+})
+
+describe('iterate 执行器 · 循环体指纹与重试上限（R-08 / R-21）', () => {
+  const outputFor = (index: number): SubflowOutput => ({
+    body: {
+      out: {
+        value: { index },
+        type: 'json',
+        source: { nodeId: 'body', portId: 'out', runId: 'run' },
+        createdAt: 0
+      }
+    }
+  })
+
+  it('maxRetries 钳制在 0..10，配置手误不得放大为海量付费重试', () => {
+    expect(parseIterate(JSON.stringify({ maxRetries: 99 })).maxRetries).toBe(10)
+    expect(parseIterate(JSON.stringify({ maxRetries: 3 })).maxRetries).toBe(3)
+    expect(parseIterate(JSON.stringify({ maxRetries: -2 })).maxRetries).toBe(0)
+  })
+
+  it('结果头部写入本轮 bodyFingerprint，供下一次 resume 比对', async () => {
+    const { ctx, result } = makeCtx({
+      list: [{ id: 'a' }],
+      bodyFingerprint: 'f00dbeef',
+      runSubflow: async (req) => outputFor(req.index)
+    })
+    await iterateExecutor(ctx)
+    expect(JSON.parse(result.value as string).bodyFingerprint).toBe('f00dbeef')
+  })
+
+  it('resume 时循环体指纹与上轮不一致 → failed，不执行任何循环体', async () => {
+    const first = makeCtx({
+      list: [{ id: 'a' }],
+      bodyFingerprint: 'f00dbeef',
+      runSubflow: async (req) => outputFor(req.index)
+    })
+    await iterateExecutor(first.ctx)
+    const seen: number[] = []
+    const { ctx } = makeCtx({
+      text: JSON.stringify({ runMode: 'resume' }),
+      list: [{ id: 'a' }],
+      previousResult: first.result.value ?? undefined,
+      bodyFingerprint: 'deadbeef',
+      runSubflow: async (req) => {
+        seen.push(req.index)
+        return outputFor(req.index)
+      }
+    })
+    const r = await iterateExecutor(ctx)
+    expect(r).toEqual({ status: 'failed', reason: '循环体已修改，不能续跑，请完整重跑' })
+    expect(seen).toEqual([])
+  })
+
+  it('旧记录没有 bodyFingerprint 时行为不变（可续跑）', async () => {
+    const first = makeCtx({
+      list: [{ id: 'a' }],
+      runSubflow: async (req) => outputFor(req.index)
+    })
+    await iterateExecutor(first.ctx)
+    const seen: number[] = []
+    const resumed = makeCtx({
+      text: JSON.stringify({ runMode: 'resume' }),
+      list: [{ id: 'a' }],
+      previousResult: first.result.value ?? undefined,
+      bodyFingerprint: 'deadbeef',
+      runSubflow: async (req) => {
+        seen.push(req.index)
+        return outputFor(req.index)
+      }
+    })
+    await iterateExecutor(resumed.ctx)
+    expect(seen).toEqual([])
+    expect(JSON.parse(resumed.result.value as string).items[0].status).toBe('reused')
   })
 })
 

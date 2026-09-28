@@ -2287,6 +2287,22 @@ button {
   pointer-events: none;
 }
 
+/* 失效边：端口已不存在的存量边（backend 切换、参数删除等）仍必须画出来，
+   红色虚线 + 降透明度示警，不给流光；选中/悬浮仍可交互以便手动删除。 */
+.data-edge.is-invalid .data-edge-visible {
+  stroke: #f87171;
+  filter: none;
+  opacity: 0.7;
+}
+
+.data-edge.is-invalid.is-hovered .data-edge-visible {
+  opacity: 0.85;
+}
+
+.data-edge.is-invalid.is-selected .data-edge-visible {
+  opacity: 0.92;
+}
+
 /* 裁剪空状态按参考图排列：绿色工具图标、说明和居中的完整操作按钮。 */
 .node-card.type-image-crop .crop-empty {
   box-sizing: border-box;

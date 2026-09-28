@@ -109,6 +109,13 @@ export function ProjectListPage(): React.JSX.Element {
         useToastStore.getState().show(`导出失败：${res.error.message}`)
       return
     }
+    // 导出包不完整必须告警：缺失媒体在导入端会成为悬挂引用（R-33）。
+    if (res.data.missingMediaCount > 0) {
+      useToastStore
+        .getState()
+        .show(`导出完成，但有 ${res.data.missingMediaCount} 个媒体文件缺失`, 5000)
+      return
+    }
     useToastStore.getState().show(`已导出到 ${res.data.path}`)
   }
 
