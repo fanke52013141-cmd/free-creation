@@ -38,7 +38,8 @@ export function MultiSelectToolbar({
     return unsub
   }, [editor])
 
-  if (selectedIds.length === 0) return null
+  // 单选时工具栏没有任何可用操作，不能留下空的灰色圆角岛。
+  if (selectedIds.length < 2) return null
 
   const getBounds = (): ShapeBounds[] =>
     selectedIds.map((id) => {
