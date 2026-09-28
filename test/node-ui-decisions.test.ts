@@ -71,7 +71,8 @@ describe('v1.3 §16.1 端口圆点统一使用节点色、类型色环与柔光'
     expect(nodeCardView).toContain("['--pc' as string]: inputColor")
     expect(nodeCardView).toContain("['--node-port-color' as string]: inputColor")
     expect(nodeCardView).toContain("['--pc' as string]: nodePortColor")
-    expect(dataEdgeLayer).toContain('color: getNodeType(source.props.nodeType)?.color')
+    // 连线颜色链的第一优先级仍是来源节点色；断言跟随实现换行后的表达式片段。
+    expect(dataEdgeLayer).toContain('getNodeType(source.props.nodeType)?.color ??')
   })
 
   it('默认每个方向显示一个点，同类型合并而不同类型分别均分节点高度', () => {

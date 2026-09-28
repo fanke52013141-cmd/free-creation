@@ -18,6 +18,12 @@ interface ScreenEdge {
   sourceId: TLShapeId
   targetId: TLShapeId
   provenance?: boolean
+  /**
+   * 端口已不存在（backend 切换、参数删除等）的存量边。必须继续画出警示样式：
+   * 此前直接跳过会让它在画布上不可见、不可选中，运行期才报「连线指向不存在的
+   * 输入端口」。仅可视化与可删除，不做自动清理。
+   */
+  invalid?: boolean
 }
 
 interface ScreenNodeRect {
@@ -121,26 +127,37 @@ function collectEdges(
     if (source?.type !== 'node-card' || target?.type !== 'node-card') continue
     const sourcePorts = getNodePortsForShape(source)
     const targetPorts = getNodePortsForShape(target)
+    // 端口有效性判定与 deriveGraph / collectContractInputs 同源：都经 getNodeType +
+    // getNodePorts 动态解析，不在本层另立一套判定。
     const fromIndex = sourcePorts.out.findIndex((port) => port.id === arrow.meta.fromPort)
     const toIndex = targetPorts.in.findIndex((port) => port.id === arrow.meta.toPort)
-    if (fromIndex < 0 || toIndex < 0) continue
-    const fromY = getOffsets(source, 'out', sourcePorts.out).get(arrow.meta.fromPort)
-    const toY = getOffsets(target, 'in', targetPorts.in).get(arrow.meta.toPort)
-    if (fromY === undefined || toY === undefined) continue
+    const portMissing = fromIndex < 0 || toIndex < 0
+    const fromY = portMissing
+      ? undefined
+      : getOffsets(source, 'out', sourcePorts.out).get(arrow.meta.fromPort)
+    const toY = portMissing
+      ? undefined
+      : getOffsets(target, 'in', targetPorts.in).get(arrow.meta.toPort)
+    if (!portMissing && (fromY === undefined || toY === undefined)) continue
     // 分组后 shape.x/y 是相对父 group 的局部坐标，直接相加会让连线“飘走”。
     // getShapePageBounds 返回页面绝对边界（含父级 group 的平移），端口纵向偏移
     // 再按高度比例映射到页面 bounds，保证任何嵌套层级下锚点都贴住节点边缘。
     const sourceBounds = editor.getShapePageBounds(source.id)
     const targetBounds = editor.getShapePageBounds(target.id)
     if (!sourceBounds || !targetBounds) continue
+    // 失效边没有可用端口锚点，退化为两端节点的竖直中线，仍按节点边缘收口。
     const sourceAnchorY =
-      source.props.h > 0
-        ? sourceBounds.y + (sourceBounds.height * fromY) / source.props.h
-        : sourceBounds.y
+      fromY === undefined
+        ? sourceBounds.y + sourceBounds.height / 2
+        : source.props.h > 0
+          ? sourceBounds.y + (sourceBounds.height * fromY) / source.props.h
+          : sourceBounds.y
     const targetAnchorY =
-      target.props.h > 0
-        ? targetBounds.y + (targetBounds.height * toY) / target.props.h
-        : targetBounds.y
+      toY === undefined
+        ? targetBounds.y + targetBounds.height / 2
+        : target.props.h > 0
+          ? targetBounds.y + (targetBounds.height * toY) / target.props.h
+          : targetBounds.y
     // 端口圆心位于卡片外侧，正式数据线也以圆心为锚点，不能留一段“线没接上”的空隙。
     const startScreen = editor.pageToScreen({
       x: sourceBounds.maxX + NODE_PORT_OUTSET,
@@ -154,9 +171,13 @@ function collectEdges(
     result.push({
       id: arrow.id,
       // A connection inherits the source node accent, matching its output port.
-      color: getNodeType(source.props.nodeType)?.color ?? PORT_COLORS[fromPort.type] ?? '#8f73ff',
+      color:
+        getNodeType(source.props.nodeType)?.color ??
+        PORT_COLORS[fromPort?.type ?? 'any'] ??
+        '#8f73ff',
       sourceId: source.id,
       targetId: target.id,
+      invalid: portMissing,
       path: buildDataEdgePath(
         { x: startScreen.x - hostRect.left, y: startScreen.y - hostRect.top },
         { x: endScreen.x - hostRect.left, y: endScreen.y - hostRect.top }
@@ -482,6 +503,29 @@ export function DataEdgeLayer({
           }
           const active = edge.id === selectedEdgeId
           const hovered = edge.id === hoveredEdgeId
+          if (edge.invalid) {
+            // 失效边：红色虚线并降透明度，不画流光；命中路径照常注册，
+            // 用户仍可选中 / 悬浮出剪刀手动删除（不做自动清理）。
+            return (
+              <g
+                className={`data-edge is-invalid${active ? ' is-selected' : ''}${
+                  hovered ? ' is-hovered' : ''
+                }`}
+                key={edge.id}
+              >
+                <path
+                  className="data-edge-visible"
+                  d={edge.path}
+                  mask={`url(#${overlapMaskId})`}
+                  style={{
+                    strokeWidth: (active ? 3.4 : hovered ? 3 : 2.4) * zoom,
+                    strokeDasharray: `${10 * zoom} ${7 * zoom}`
+                  }}
+                />
+                <path className="data-edge-hit" d={edge.path} data-edge-id={edge.id} />
+              </g>
+            )
+          }
           return (
             <g
               className={`data-edge${active ? ' is-selected' : ''}${hovered ? ' is-hovered' : ''}`}
