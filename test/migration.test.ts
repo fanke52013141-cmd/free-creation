@@ -123,9 +123,9 @@ describe('契约版本稳定性（防破坏性变化漏升版本）', () => {
     const v7Types: NodeTypeId[] = ['video']
     // video-clip 5：截视频与截音频合并为「视频截取」，新增 out-audio 与 keep* 配置。
     const v5Types: NodeTypeId[] = ['video-clip']
-    const v4Types: NodeTypeId[] = ['vocal-separate', 'video-frame', 'video-audio', 'speech']
+    const v4Types: NodeTypeId[] = ['vocal-separate', 'video-frame', 'video-audio', 'speech', 'tts']
     // speech 4：供应商决定参考输入端口（MiniMax 音色档案或火山参考音频）；
-    // tts 3：语音克隆新增 out-json 音色档案输出；
+    // tts 4：语音克隆只登记音色档案，不再合成音频；
     // image-split 3：label 由「拆图」统一为「拆分」，与调色板可见文字同源。
     const v3Types: NodeTypeId[] = [
       'code',
@@ -134,7 +134,6 @@ describe('契约版本稳定性（防破坏性变化漏升版本）', () => {
       'image-gen',
       'director',
       'text',
-      'tts',
       'image-split'
     ]
     // file 2：out-text 从"只有纯文本"扩到 Word / Excel / PPT 正文（导入时由主进程抽取）。

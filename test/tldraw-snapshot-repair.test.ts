@@ -59,4 +59,23 @@ describe('repairTldrawSnapshot', () => {
     expect(repairTldrawSnapshot(complete)).toBe(complete)
     expect(repairTldrawSnapshot(null)).toBeNull()
   })
+
+  it('重新打开项目时将上次未完成的运行标为中断，并保留运行历史', () => {
+    const running = {
+      store: {
+        'shape:speech': {
+          id: 'shape:speech', typeName: 'shape', type: 'node-card',
+          props: { w: 340, h: 260, nodeType: 'speech', title: '语音合成', config: '', text: '', mediaId: '', mediaPath: '', mediaMime: '', exec: 'running' },
+          meta: { nodeRun: { runId: 'run-1', status: 'running', startedAt: 1000, inputs: {} }, nodeRunHistory: [] }
+        }
+      }
+    }
+    expect(repairTldrawSnapshot(running)).toBe(running)
+    const repaired = repairTldrawSnapshot(running, { interruptRunning: true }) as typeof running
+    expect(repaired.store['shape:speech'].props.exec).toBe('cancelled')
+    expect(repaired.store['shape:speech'].meta.nodeRun.status).toBe('cancelled')
+    expect(repaired.store['shape:speech'].meta.nodeRun.error?.reason).toContain('重启')
+    expect(repaired.store['shape:speech'].meta.nodeRunHistory).toHaveLength(1)
+    expect(running.store['shape:speech'].props.exec).toBe('running')
+  })
 })

@@ -14,6 +14,7 @@ import type {
   VideoProbeInput,
   VideoProbeResult,
   VideoAudioTransformInput,
+  SoundAdjustTransformInput,
   VideoThumbnailsInput,
   VideoThumbnailsResult,
   VocalSeparateInput,
@@ -26,6 +27,7 @@ import {
   parseVocalSeparationConfig
 } from '../../shared/video-transform'
 import type { MediaAsset } from '../../shared/types'
+import { parseSoundAdjustConfig, soundAdjustRate, soundAtempoFilters } from '../../shared/sound-adjust'
 
 interface VideoSource {
   path: string
@@ -211,6 +213,42 @@ export async function transformVideoAudio(input: VideoAudioTransformInput): Prom
     '-ar',
     sr,
     ...(wav ? ['-c:a', 'pcm_s16le'] : ['-c:a', 'aac', '-b:a', '192k'])
+  ])
+}
+
+/** 将一段音频或视频按倍率/目标时长变速，同时调整音轨音量；始终生成独立资产。 */
+export async function transformSoundAdjust(input: SoundAdjustTransformInput): Promise<MediaAsset> {
+  const source = input.kind === 'audio'
+    ? await resolveAudioSource(input.projectId, input.sourceMediaId)
+    : await resolveVideoSource(input.projectId, input.sourceMediaId)
+  const config = parseSoundAdjustConfig(JSON.stringify(input.config))
+  const durationMs = config.mode === 'duration' ? await probeMediaDurationMs(source.path) : undefined
+  const rate = soundAdjustRate(config, durationMs)
+  const audioFilter = [...soundAtempoFilters(rate), `volume=${(config.volumePercent / 100).toFixed(3)}`].join(',')
+  const target = config.mode === 'duration' ? ['-t', seconds(config.targetDurationMs)] : []
+
+  if (input.kind === 'audio') {
+    return runToAsset(input.projectId, 'adjusted.m4a', '.m4a', '调整后音频', [
+      '-i', source.path, '-map', '0:a:0', '-vn', '-af', audioFilter,
+      '-c:a', 'aac', '-b:a', '192k', ...target
+    ])
+  }
+
+  const audioStreams = await runFfprobe([
+    '-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=index',
+    '-of', 'csv=p=0', source.path
+  ])
+  const hasAudio = Boolean(audioStreams.trim())
+  if (!hasAudio && config.volumePercent !== 100) {
+    throw new Error('源视频没有音轨，无法调整声量；可将声量设为 100% 后只调整播放速度')
+  }
+  return runToAsset(input.projectId, 'adjusted.mp4', '.mp4', '调整后视频', [
+    '-i', source.path,
+    '-map', '0:v:0', ...(hasAudio ? ['-map', '0:a:0'] : []),
+    '-vf', `setpts=(PTS-STARTPTS)/${rate.toFixed(6)}`,
+    '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p',
+    ...(hasAudio ? ['-af', audioFilter, '-c:a', 'aac', '-b:a', '192k'] : ['-an']),
+    '-movflags', '+faststart', ...target
   ])
 }
 

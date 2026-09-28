@@ -408,16 +408,7 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   // 音频资产节点只有「导入」一种职责；配音与语音克隆各自有独立节点。
   return (
     <div className="node-audio-empty audio-empty-state">
-      <button
-        type="button"
-        className="audio-empty-trigger"
-        title="选择本地音频文件"
-        onPointerDown={(e) => stopEventPropagation(e)}
-        onClick={(e) => {
-          e.stopPropagation()
-          void uploadAudio()
-        }}
-      >
+      <div className="audio-empty-content">
         <span className="audio-empty-icon-wrap" aria-hidden="true">
           <span className="audio-empty-icon-glow" />
           <span className="audio-empty-icon">
@@ -428,10 +419,19 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           <span className="audio-empty-title">音频载入</span>
           <span className="audio-empty-hint">支持 mp3 / wav / aac / flac 等</span>
         </span>
-        <span className="audio-empty-select">
-          <Icon name="add" size={14} />
-          <span>选择音频文件</span>
-        </span>
+      </div>
+      <button
+        type="button"
+        className="audio-empty-select"
+        title="选择本地音频文件"
+        onPointerDown={(e) => stopEventPropagation(e)}
+        onClick={(e) => {
+          e.stopPropagation()
+          void uploadAudio()
+        }}
+      >
+        <Icon name="add" size={14} />
+        <span>选择音频文件</span>
       </button>
     </div>
   )

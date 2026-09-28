@@ -1,4 +1,4 @@
-// 工作流模板存储（LibTV 工作流 Tab）：经主进程 SQLite 保存为本机全局模板。
+// 节点库条目存储：经主进程 SQLite 保存为本机可复用节点/组合。
 import { create } from 'zustand'
 import type { WorkflowTemplateRecord } from '@shared/contracts'
 import type { NodeCardShape } from '../canvas/NodeCardShape'

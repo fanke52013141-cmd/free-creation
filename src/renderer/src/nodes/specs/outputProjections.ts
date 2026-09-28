@@ -3,6 +3,7 @@
 // 这些函数由各自 NodeTypeSpec 直接注册。运行器和手动触发都只调用
 // projectNodeOutputs(shape)，不再维护按 nodeType 分支的中央投影器。
 import type { NodeCardShape } from '../../canvas/NodeCardShape'
+import { readWebsiteLink } from '@shared/website-link'
 import { validateNodeSchema } from '@shared/node-schemas'
 import { readNodeConfig } from '../../canvas/node-persistence'
 import type { RawNodeOutputs } from '../nodeValues'
@@ -86,6 +87,11 @@ function extraJsonOutput(shape: NodeCardShape, portId: string): RawNodeOutputs {
 export const projectTextOutputs = (shape: NodeCardShape): RawNodeOutputs =>
   shape.props.text.trim() ? { 'out-text': { kind: 'text', text: shape.props.text.trim() } } : {}
 
+export const projectWebsiteOutputs = (shape: NodeCardShape): RawNodeOutputs => {
+  const link = readWebsiteLink(shape.props.config)
+  return link ? { 'out-website': { kind: 'json', data: link } } : {}
+}
+
 export const projectImageOutputs = (shape: NodeCardShape): RawNodeOutputs =>
   mediaOutput(shape, 'image', 'out-image')
 
@@ -150,7 +156,7 @@ export const projectImageSplitOutputs = (shape: NodeCardShape): RawNodeOutputs =
             }))
           }
         }
-      : {}),
+      : {})
   }
 }
 
@@ -213,6 +219,26 @@ export const projectAudioOutputs = (shape: NodeCardShape): RawNodeOutputs =>
   shape.props.nodeType === 'audio'
     ? mediaOutput(shape, 'audio', 'out-audio')
     : latestResultMediaOutput(shape, 'audio', 'out-audio')
+
+/** 一次只处理一种源媒体；仅投影本次最新产物对应的端口。 */
+export const projectSoundAdjustOutputs = (shape: NodeCardShape): RawNodeOutputs => {
+  const result = parseMediaResultCollection(
+    typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
+  )?.results.at(-1)
+  if (!result) return {}
+  const kind = result.mime.startsWith('video/') ? 'video' : result.mime.startsWith('audio/') ? 'audio' : null
+  if (!kind) return {}
+  const portId = kind === 'audio' ? 'out-audio' : 'out-video'
+  return {
+    [portId]: {
+      kind,
+      mediaId: result.mediaId,
+      mediaPath: result.mediaPath,
+      mime: result.mime,
+      ...(shape.props.title ? { name: shape.props.title } : {})
+    }
+  }
+}
 
 export const projectVideoAssetOutputs = (shape: NodeCardShape): RawNodeOutputs =>
   mediaOutput(shape, 'video', 'out-video')

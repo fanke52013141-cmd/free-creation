@@ -80,6 +80,28 @@ describe('projectNodeOutputs · 文本节点', () => {
   })
 })
 
+describe('projectNodeOutputs · 网址节点', () => {
+  it('从 config 持久化并投影网址名称与标准化链接', () => {
+    const out = projectNodeOutputs(
+      shape('website', { config: JSON.stringify({ name: 'Studio', url: 'example.com/work' }) })
+    )
+    expect(out['out-website']).toEqual({
+      kind: 'json',
+      data: { name: 'Studio', url: 'https://example.com/work' }
+    })
+  })
+
+  it('未配置、坏 JSON 与危险协议都不产生输出', () => {
+    expect(projectNodeOutputs(shape('website'))).toEqual({})
+    expect(projectNodeOutputs(shape('website', { config: '{' }))).toEqual({})
+    expect(
+      projectNodeOutputs(
+        shape('website', { config: JSON.stringify({ name: '坏链接', url: 'javascript:alert(1)' }) })
+      )
+    ).toEqual({})
+  })
+})
+
 describe('projectNodeOutputs · 文档真值节点不被运行状态静音（§16.30）', () => {
   const skipped = { nodeRun: { runId: 'r1', status: 'skipped', startedAt: 1, inputs: {} } }
   const failed = { nodeRun: { runId: 'r2', status: 'failed', startedAt: 2, inputs: {} } }

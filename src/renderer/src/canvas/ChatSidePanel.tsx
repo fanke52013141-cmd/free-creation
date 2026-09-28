@@ -27,6 +27,8 @@ import { toast } from '../stores/toast'
 import { Icon } from '../components/Icon'
 import { AppSelect } from '../components/AppSelect'
 import { isReasoningModelId } from '@shared/model-reasoning'
+import userAvatar from '../assets/chat-user-avatar.jpg'
+import aiAvatar from '../assets/chat-ai-avatar.jpg'
 import './chat-dialog.css'
 
 interface ChatSidePanelProps {
@@ -556,7 +558,13 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
                     key={`${index}-${message.content.slice(0, 24)}`}
                   >
                     <div className="chat-dialog-message-meta">
-                      {message.role === 'user' ? '你' : 'AI'}
+                      <img
+                        className="chat-dialog-avatar"
+                        src={message.role === 'user' ? userAvatar : aiAvatar}
+                        alt=""
+                        aria-hidden="true"
+                      />
+                      <span>{message.role === 'user' ? '你' : 'AI'}</span>
                     </div>
                     <div className="chat-dialog-bubble">
                       {editingIndex === index ? (
@@ -627,8 +635,13 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
               })}
               {running && messages.at(-1)?.role !== 'assistant' && (
                 <article className="chat-dialog-message assistant" aria-label="正在生成">
-                  <div className="chat-dialog-message-meta">AI</div>
-                  <div className="chat-dialog-thinking"><GenerationLoadingOverlay title="AI 回复中" /></div>
+                  <div className="chat-dialog-message-meta">
+                    <img className="chat-dialog-avatar" src={aiAvatar} alt="" aria-hidden="true" />
+                    <span>AI</span>
+                  </div>
+                  <div className="chat-dialog-thinking">
+                    <GenerationLoadingOverlay title="AI 回复中" />
+                  </div>
                 </article>
               )}
               {!messages.length && !running && (

@@ -350,6 +350,41 @@ describe.skipIf(!toolsReady)('真实 FFmpeg 媒体处理器', () => {
     expect(message).not.toMatch(/Invalid argument|Temp|canvas-studio-video-/)
   })
 
+  it('声音调整：音频倍速与声量真正写入新文件', async () => {
+    const { transformSoundAdjust } = await import('../src/main/media/video-transform')
+    const source = h.byId.get('center-audio')?.abs as string
+    const before = h.saved.length
+    await transformSoundAdjust({
+      projectId: 'p1', sourceMediaId: 'center-audio', kind: 'audio',
+      config: { version: 1, mode: 'rate', rate: 2, targetDurationMs: 1000, volumePercent: 50 }
+    })
+    const output = h.saved[before]
+    expect(output.path).not.toBe(source)
+    expect(output.ext).toBe('.m4a')
+    expect(durationMs(output.path)).toBeGreaterThan(450)
+    expect(durationMs(output.path)).toBeLessThan(650)
+    expect(meanVolumeDb(output.path)).toBeLessThan(meanVolumeDb(source) - 3)
+  })
+
+  it('声音调整：目标秒数同时调整视频画面和音轨；无音轨视频明确拒绝调声量', async () => {
+    const { transformSoundAdjust } = await import('../src/main/media/video-transform')
+    const before = h.saved.length
+    await transformSoundAdjust({
+      projectId: 'p1', sourceMediaId: 'source-video', kind: 'video',
+      config: { version: 1, mode: 'duration', rate: 1, targetDurationMs: 1000, volumePercent: 150 }
+    })
+    const output = h.saved[before]
+    expect(output.ext).toBe('.mp4')
+    expect(durationMs(output.path)).toBeGreaterThanOrEqual(850)
+    expect(durationMs(output.path)).toBeLessThanOrEqual(1250)
+    expect(streamFields(output.path)).toContain('h264')
+    expect(streamFields(output.path)).toContain('aac')
+    await expect(transformSoundAdjust({
+      projectId: 'p1', sourceMediaId: 'silent-video', kind: 'video',
+      config: { version: 1, mode: 'rate', rate: 2, targetDurationMs: 1000, volumePercent: 150 }
+    })).rejects.toThrow('没有音轨')
+  })
+
   it('源视频不存在时在执行前就报错，不去调用 FFmpeg', async () => {
     const { transformVideoFrame } = await import('../src/main/media/video-transform')
     await expect(

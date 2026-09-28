@@ -40,6 +40,7 @@ export const rendererGateway: GatewayClient = {
   extractVideoFrame: (input) => window.api.extractVideoFrame(input),
   clipVideo: (input) => window.api.clipVideo(input),
   extractVideoAudio: (input) => window.api.extractVideoAudio(input),
+  soundAdjust: (input) => window.api.soundAdjust(input),
   separateVocals: (input) => window.api.separateVocals(input),
   deleteMedia: (mediaId) => window.api.deleteMedia(mediaId),
   ttsGenerate: (input) => window.api.ttsGenerate(input)

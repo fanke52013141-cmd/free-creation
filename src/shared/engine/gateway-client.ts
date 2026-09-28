@@ -26,6 +26,7 @@ import type {
   VideoFrameTransformInput,
   VideoClipTransformInput,
   VideoAudioTransformInput,
+  SoundAdjustTransformInput,
   VocalSeparateInput,
   VocalSeparationResult,
   TtsGenerateInput,
@@ -84,6 +85,7 @@ export interface GatewayClient {
   extractVideoFrame(input: VideoFrameTransformInput): Promise<IpcEnvelope<MediaAsset>>
   clipVideo(input: VideoClipTransformInput): Promise<IpcEnvelope<MediaAsset>>
   extractVideoAudio(input: VideoAudioTransformInput): Promise<IpcEnvelope<MediaAsset>>
+  soundAdjust(input: SoundAdjustTransformInput): Promise<IpcEnvelope<MediaAsset>>
   separateVocals(input: VocalSeparateInput): Promise<IpcEnvelope<VocalSeparationResult>>
   /** Best-effort cleanup for intermediate assets created inside a composite media operation. */
   deleteMedia?(mediaId: string): Promise<IpcEnvelope<boolean>>

@@ -209,7 +209,7 @@ export function NodeCreateMenu({
         {!source && (
           <>
             <div className="node-menu-divider" />
-            <div className="node-menu-title">工作流模板</div>
+            <div className="node-menu-title">节点库</div>
             <button className="node-menu-action" onClick={onTemplate}>
               剧本 → 分镜
             </button>
@@ -218,7 +218,12 @@ export function NodeCreateMenu({
             <button className="node-menu-action" onClick={onUpload}>
               上传本地文件
             </button>
-            <button className="node-menu-action" disabled aria-label="后续版本开放" onClick={onGallery}>
+            <button
+              className="node-menu-action"
+              disabled
+              aria-label="后续版本开放"
+              onClick={onGallery}
+            >
               从图库选择
             </button>
           </>

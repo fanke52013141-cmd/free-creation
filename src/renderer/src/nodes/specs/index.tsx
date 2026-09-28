@@ -35,6 +35,8 @@ import {
   TtsBody,
   SpeechBody,
   SpeechSettings,
+  SoundAdjustBody,
+  SoundAdjustSettings,
   VoiceDesignBody,
   VideoBody,
   VideoAudioBody,
@@ -45,6 +47,8 @@ import {
   VideoFrameSettings,
   VideoAiBody,
   VideoAiSettings,
+  WebsiteBody,
+  WebsiteSettings,
   VocalSeparateBody,
   VocalSeparateSettings
 } from './bodies'
@@ -52,6 +56,7 @@ import { AiProcessSettings } from './bodies/aiProcess'
 import { ChatSettings } from './bodies/chat'
 import { aiProcessExecutor } from '../../engine/executors/aiProcess'
 import { speechExecutor } from '../../engine/executors/speech'
+import { soundAdjustExecutor } from '../../engine/executors/soundAdjust'
 import { voiceDesignExecutor } from '../../engine/executors/voiceDesign'
 import { ttsExecutor } from '../../engine/executors/tts'
 import { chatExecutor } from '../../engine/executors/chat'
@@ -75,6 +80,7 @@ import { processorExecutor } from '../../engine/executors/processor'
 import { scriptExecutor } from '../../engine/executors/script'
 import { storyboardExecutor } from '../../engine/executors/storyboard'
 import { textExecutor } from '../../engine/executors/text'
+import { websiteExecutor } from '../../engine/executors/website'
 import { videoExecutor } from '../../engine/executors/video'
 import {
   videoAudioExecutor,
@@ -103,8 +109,10 @@ import {
   projectStoryboardOutputs,
   projectStructuredOutputs,
   projectTextOutputs,
+  projectWebsiteOutputs,
   projectTtsOutputs,
   projectSpeechOutputs,
+  projectSoundAdjustOutputs,
   projectVoiceDesignOutputs,
   projectVideoOutputs,
   projectVideoAssetOutputs,
@@ -246,6 +254,29 @@ export function registerBaseNodeTypes(): void {
     outputSource: 'document',
     executor: textExecutor,
     Body: TextBody
+  })
+  registerNodeType({
+    type: 'website',
+    contractVersion: 1,
+    label: '网址节点',
+    icon: 'external',
+    color: NODE_ACCENTS.website,
+    defaultSize: { w: 340, h: 260 },
+    description: '保存网页名称与链接；点击打开，也可连接输出。',
+    category: 'input',
+    ports: {
+      in: [],
+      out: [
+        output('out-website', '网址', 'json', '已配置的网页名称和标准化 HTTP(S) 链接。', {
+          schema: { id: 'website.link', version: 1 }
+        })
+      ]
+    },
+    projectOutputs: projectWebsiteOutputs,
+    outputSource: 'document',
+    executor: websiteExecutor,
+    SettingsPanel: WebsiteSettings,
+    Body: WebsiteBody
   })
   registerNodeType({
     type: 'image',
@@ -599,6 +630,30 @@ export function registerBaseNodeTypes(): void {
     Body: AudioBody
   })
   registerNodeType({
+    type: 'sound-adjust',
+    contractVersion: 1,
+    label: '声音调整',
+    icon: 'audio',
+    color: NODE_ACCENTS['sound-adjust'],
+    defaultSize: { w: 340, h: 260 },
+    description: '按倍率或目标时长调整音频/视频速度与声量。',
+    category: 'audio',
+    ports: {
+      in: [
+        input('in-audio', '源音频', 'audio', '连接一段音频，与源视频二选一。'),
+        input('in-video', '源视频', 'video', '连接一段视频，与源音频二选一。')
+      ],
+      out: [
+        output('out-audio', '调整后音频', 'audio', '源为音频时生成的新音频资产。', { required: false }),
+        output('out-video', '调整后视频', 'video', '源为视频时生成的新视频资产。', { required: false })
+      ]
+    },
+    projectOutputs: projectSoundAdjustOutputs,
+    executor: soundAdjustExecutor,
+    SettingsPanel: SoundAdjustSettings,
+    Body: SoundAdjustBody
+  })
+  registerNodeType({
     type: 'file',
     contractVersion: 2,
     label: '文件',
@@ -653,17 +708,12 @@ export function registerBaseNodeTypes(): void {
     description: '根据参考语音登记可复用音色 ID，连接语音合成节点使用。',
     category: 'audio',
     ports: {
-      in: [
-        input('in-audio', '参考语音', 'audio', '上游参考音频；也可在节点内上传。')
-      ],
+      in: [input('in-audio', '参考语音', 'audio', '上游参考音频；也可在节点内上传。')],
       out: [
-        output(
-          'out-json',
-          '音色档案',
-          'json',
-          'MiniMax 复刻登记出的可复用 voice_id。',
-          { required: true, schema: VOICE_PROFILE }
-        )
+        output('out-json', '音色档案', 'json', 'MiniMax 复刻登记出的可复用 voice_id。', {
+          required: true,
+          schema: VOICE_PROFILE
+        })
       ]
     },
     projectOutputs: projectTtsOutputs,

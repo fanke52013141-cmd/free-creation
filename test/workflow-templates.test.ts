@@ -90,6 +90,23 @@ describe('P2/P3 内置创作模板', () => {
 })
 
 describe('工作流模板配置保存', () => {
+  it('单个节点也可以保存到节点库并恢复固定配置', () => {
+    const node = shapeFor({
+      type: 'website',
+      title: '网址节点',
+      config: JSON.stringify({ name: '官方主页', url: 'https://example.com' }),
+      dx: 0,
+      dy: 0
+    })
+    const payload = extractTemplateFromSelection([node], [])
+    expect(payload.nodes).toHaveLength(1)
+    expect(templateNodeProps(payload.nodes[0]!)).toMatchObject({
+      nodeType: 'website',
+      config: JSON.stringify({ name: '官方主页', url: 'https://example.com' })
+    })
+    expect(payload.edges).toEqual([])
+  })
+
   it('保存选中节点时保留 config，套用后可恢复动态端口和 Schema', () => {
     const node = shapeFor({
       type: 'code',
@@ -97,15 +114,23 @@ describe('工作流模板配置保存', () => {
       config: JSON.stringify({
         source: 'return input',
         outputName: 'result',
-        outputType: 'json',
+        outputType: 'object',
         params: [{ name: 'scene', type: 'string' }]
       }),
       dx: 0,
       dy: 0
     })
     const payload = extractTemplateFromSelection([node], [])
-    expect(payload.nodes[0]?.config).toContain('result')
-    expect(payload.nodes[0]?.config).toContain('scene')
+    const savedNode = payload.nodes[0]!
+    expect(savedNode.config).toContain('result')
+    expect(savedNode.config).toContain('scene')
+    const restored = {
+      ...node,
+      props: { ...node.props, ...templateNodeProps(savedNode) }
+    }
+    expect(
+      getNodePorts(getNodeType('code')!, restored).out.some((port) => port.name === 'result')
+    ).toBe(true)
   })
 
   it('模板不会保存或重放项目媒体，即使旧记录含有媒体字段', () => {

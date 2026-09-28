@@ -18,6 +18,7 @@ import { aiProcessExecutor } from './aiProcess'
 import { imageGenExecutor } from './imageGen'
 import { imageEditExecutor } from './imageEdit'
 import { audioExecutor } from './audio'
+import { soundAdjustExecutor } from './soundAdjust'
 import { speechExecutor } from './speech'
 import { voiceDesignExecutor } from './voiceDesign'
 import { ttsExecutor } from './tts'
@@ -43,6 +44,7 @@ export const EXECUTOR_REGISTRY: Record<string, NodeExecutor> = {
   image: imageExecutor,
   'image-gen': imageGenExecutor,
   audio: audioExecutor,
+  'sound-adjust': soundAdjustExecutor,
   video: videoExecutor,
   // ── 图像处理 ──
   'image-crop': imageCropExecutor,
@@ -92,6 +94,7 @@ export { aiProcessExecutor, parseAiProcess } from './aiProcess'
 export { imageGenExecutor, parseImageGen } from './imageGen'
 export { imageEditExecutor } from './imageEdit'
 export { audioExecutor } from './audio'
+export { soundAdjustExecutor } from './soundAdjust'
 export { speechExecutor } from './speech'
 export { voiceDesignExecutor } from './voiceDesign'
 export { ttsExecutor } from './tts'

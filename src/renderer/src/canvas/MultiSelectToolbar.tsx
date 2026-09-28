@@ -38,8 +38,7 @@ export function MultiSelectToolbar({
     return unsub
   }, [editor])
 
-  // 单节点运行入口位于节点右上角；浮动工具栏只服务多选操作。
-  if (selectedIds.length < 2) return null
+  if (selectedIds.length === 0) return null
 
   const getBounds = (): ShapeBounds[] =>
     selectedIds.map((id) => {
@@ -115,81 +114,87 @@ export function MultiSelectToolbar({
     <div className="multiselect-toolbar">
       <div className="multiselect-toolbar__entrance">
         <div className="multiselect-toolbar__island">
-          <button
-            className="ms-btn"
-            data-tool="align-left"
-            aria-label="左对齐"
-            onClick={() => applyAlign('left')}
-          >
-            <Icon name="align-left" size={18} />
-          </button>
-          <button
-            className="ms-btn"
-            data-tool="align-right"
-            aria-label="右对齐"
-            onClick={() => applyAlign('right')}
-          >
-            <Icon name="align-right" size={18} />
-          </button>
-          <button
-            className="ms-btn"
-            data-tool="align-center"
-            aria-label="水平居中"
-            onClick={() => applyAlign('center-h')}
-          >
-            <Icon name="align-horizontal" size={18} />
-          </button>
-          <button
-            className="ms-btn"
-            data-tool="align-middle"
-            aria-label="垂直居中"
-            onClick={() => applyAlign('center-v')}
-          >
-            <Icon name="align-vertical" size={18} />
-          </button>
-          <span className="ms-divider" />
-          <button
-            className="ms-btn"
-            data-tool="distribute-h"
-            aria-label="横向均分"
-            onClick={() => applyAlign('distribute-h')}
-          >
-            <Icon name="distribute-horizontal" size={18} />
-          </button>
-          <button
-            className="ms-btn"
-            data-tool="distribute-v"
-            aria-label="纵向均分"
-            onClick={() => applyAlign('distribute-v')}
-          >
-            <Icon name="distribute-vertical" size={18} />
-          </button>
-          <span className="ms-divider" />
-          <button
-            className="ms-btn ms-group"
-            data-tool="group"
-            aria-label="打组"
-            onClick={handleGroup}
-          >
-            <Icon name="group" size={18} />
-          </button>
-          <span className="ms-divider" />
-          <button
-            className="ms-btn ms-run"
-            data-tool="run"
-            aria-label="运行所选流程"
-            onClick={() => onRunFlow(selectedIds)}
-          >
-            <Icon name="play" size={18} />
-          </button>
-          <button
-            className="ms-btn ms-template"
-            data-tool="workflow"
-            aria-label="保存为工作流"
-            onClick={() => onSaveWorkflow(selectedIds)}
-          >
-            <Icon name="workflow" size={18} />
-          </button>
+          {selectedIds.length > 1 && (
+            <>
+              <button
+                className="ms-btn"
+                data-tool="align-left"
+                aria-label="左对齐"
+                onClick={() => applyAlign('left')}
+              >
+                <Icon name="align-left" size={18} />
+              </button>
+              <button
+                className="ms-btn"
+                data-tool="align-right"
+                aria-label="右对齐"
+                onClick={() => applyAlign('right')}
+              >
+                <Icon name="align-right" size={18} />
+              </button>
+              <button
+                className="ms-btn"
+                data-tool="align-center"
+                aria-label="水平居中"
+                onClick={() => applyAlign('center-h')}
+              >
+                <Icon name="align-horizontal" size={18} />
+              </button>
+              <button
+                className="ms-btn"
+                data-tool="align-middle"
+                aria-label="垂直居中"
+                onClick={() => applyAlign('center-v')}
+              >
+                <Icon name="align-vertical" size={18} />
+              </button>
+              <span className="ms-divider" />
+              <button
+                className="ms-btn"
+                data-tool="distribute-h"
+                aria-label="横向均分"
+                onClick={() => applyAlign('distribute-h')}
+              >
+                <Icon name="distribute-horizontal" size={18} />
+              </button>
+              <button
+                className="ms-btn"
+                data-tool="distribute-v"
+                aria-label="纵向均分"
+                onClick={() => applyAlign('distribute-v')}
+              >
+                <Icon name="distribute-vertical" size={18} />
+              </button>
+              <span className="ms-divider" />
+              <button
+                className="ms-btn ms-group"
+                data-tool="group"
+                aria-label="打组"
+                onClick={handleGroup}
+              >
+                <Icon name="group" size={18} />
+              </button>
+              <span className="ms-divider" />
+              <button
+                className="ms-btn ms-run"
+                data-tool="run"
+                aria-label="运行所选节点及依赖"
+                onClick={() => onRunFlow(selectedIds)}
+              >
+                <Icon name="play" size={18} />
+              </button>
+            </>
+          )}
+          {selectedIds.length > 1 && (
+            <button
+              className="ms-btn ms-template"
+              data-tool="node-library"
+              aria-label="保存到节点库"
+              onClick={() => onSaveWorkflow(selectedIds)}
+            >
+              <Icon name="workflow" size={18} />
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -16,6 +16,7 @@ import type {
   TtsGenerateInput,
   VoiceCloneResult,
   VideoAudioTransformInput,
+  SoundAdjustTransformInput,
   VideoClipTransformInput,
   VideoFrameTransformInput,
   VideoProbeInput,
@@ -36,6 +37,7 @@ import { transformImageCrop, transformImageSplit } from '../media/image-transfor
 import { transformTts } from '../media/tts-transform'
 import {
   transformVideoAudio,
+  transformSoundAdjust,
   transformVideoClip,
   transformVideoFrame,
   probeVideo,
@@ -275,6 +277,18 @@ export function registerMediaIpc(): void {
         return ok(await transformVideoAudio(input))
       } catch (error) {
         return err('VIDEO_AUDIO_FAILED', error instanceof Error ? error.message : String(error))
+      }
+    }
+  )
+  ipcMain.handle(
+    IPC.media.soundAdjust,
+    async (_e, input: SoundAdjustTransformInput): Promise<IpcEnvelope<MediaAsset>> => {
+      if (!input?.projectId || !input.sourceMediaId || !input.config || !['audio', 'video'].includes(input.kind))
+        return err('INVALID_INPUT', '缺少声音调整参数')
+      try {
+        return ok(await transformSoundAdjust(input))
+      } catch (error) {
+        return err('SOUND_ADJUST_FAILED', error instanceof Error ? error.message : String(error))
       }
     }
   )

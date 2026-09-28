@@ -23,6 +23,7 @@ describe('nodeSchemaRegistered', () => {
     expect(nodeSchemaRegistered({ id: 'previs.project', version: 2 })).toBe(true)
     expect(nodeSchemaRegistered({ id: 'voice.profile', version: 1 })).toBe(true)
     expect(nodeSchemaRegistered({ id: 'voice.subtitle', version: 1 })).toBe(true)
+    expect(nodeSchemaRegistered({ id: 'website.link', version: 1 })).toBe(true)
   })
 
   it('拒绝未注册的 Schema ID 或错误版本', () => {
@@ -31,6 +32,7 @@ describe('nodeSchemaRegistered', () => {
     expect(nodeSchemaRegistered({ id: 'list.items', version: 2 })).toBe(false)
     expect(nodeSchemaRegistered({ id: 'unknown.schema', version: 1 })).toBe(false)
     expect(nodeSchemaRegistered({ id: 'character.profile', version: 2 })).toBe(false)
+    expect(nodeSchemaRegistered({ id: 'website.link', version: 2 })).toBe(false)
   })
 })
 
@@ -186,6 +188,31 @@ describe('validateNodeSchema · storyboard.shots@1', () => {
       { shots: [{ scene: '街道' }] }
     )
     expect(r.ok).toBe(true)
+  })
+})
+
+describe('validateNodeSchema · website.link@1', () => {
+  it('接受包含名称和 HTTP(S) 网址的结构', () => {
+    expect(
+      validateNodeSchema(
+        { id: 'website.link', version: 1 },
+        {
+          name: 'Canvas Studio',
+          url: 'https://example.com/'
+        }
+      ).ok
+    ).toBe(true)
+  })
+
+  it('拒绝缺少名称、非 HTTP(S) 协议和带凭据的网址', () => {
+    const schema = { id: 'website.link', version: 1 }
+    expect(validateNodeSchema(schema, { name: '', url: 'https://example.com' }).ok).toBe(false)
+    expect(validateNodeSchema(schema, { name: '坏链接', url: 'javascript:alert(1)' }).ok).toBe(
+      false
+    )
+    expect(
+      validateNodeSchema(schema, { name: '凭据', url: 'https://user:pass@example.com' }).ok
+    ).toBe(false)
   })
 })
 

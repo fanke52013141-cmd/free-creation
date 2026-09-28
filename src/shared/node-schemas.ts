@@ -18,7 +18,8 @@ export function nodeSchemaRegistered(schema: PortSchemaRef): boolean {
     `${schema.id}@${schema.version}` === 'previs.project@1' ||
     `${schema.id}@${schema.version}` === 'previs.project@2' ||
     `${schema.id}@${schema.version}` === 'voice.profile@1' ||
-    `${schema.id}@${schema.version}` === 'voice.subtitle@1'
+    `${schema.id}@${schema.version}` === 'voice.subtitle@1' ||
+    `${schema.id}@${schema.version}` === 'website.link@1'
   )
 }
 
@@ -246,6 +247,27 @@ function validateVoiceSubtitle(value: unknown): string[] {
   return errors
 }
 
+/** 可点击网址节点：同时持久化可读名称与受限的 HTTP(S) 目标。 */
+function validateWebsiteLink(value: unknown): string[] {
+  const data = objectValue(value)
+  if (!data) return ['根值必须是对象']
+  const errors: string[] = []
+  requiredString(data, 'name', errors)
+  requiredString(data, 'url', errors)
+  if (typeof data.url === 'string' && data.url.trim()) {
+    try {
+      const parsed = new URL(data.url)
+      if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname) {
+        errors.push('url 必须是有效的 HTTP 或 HTTPS 网址')
+      }
+      if (parsed.username || parsed.password) errors.push('url 不得包含用户名或密码')
+    } catch {
+      errors.push('url 必须是有效的 HTTP 或 HTTPS 网址')
+    }
+  }
+  return errors
+}
+
 /**
  * JSON Schema 的轻量版本化仓库。这里返回可直接展示给用户的字段级错误；
  * 新增业务 Schema 时必须同时补充 NODE_CONTRACT_SPEC.md 中的结构说明。
@@ -288,6 +310,9 @@ export function validateNodeSchema(schema: PortSchemaRef, value: unknown): Schem
       break
     case 'voice.subtitle@1':
       errors = [...jsonSerializable(value), ...validateVoiceSubtitle(value)]
+      break
+    case 'website.link@1':
+      errors = [...jsonSerializable(value), ...validateWebsiteLink(value)]
       break
     default:
       errors = [`未注册的 Schema：${schema.id}@${schema.version}`]

@@ -1,10 +1,9 @@
-// 画布右侧抽屉面板：资产中心 / 工作流 / 历史记录（LibTV 侧栏入口落地）
+// 画布右侧抽屉面板：资产中心 / 节点库 / 历史记录（LibTV 侧栏入口落地）
 // 资产中心：项目级媒体库——导入/搜索/筛选/缩略图预览/点击拖到画布/删除
-// 工作流：列出用户从画布选区保存的节点组合，并允许搜索、添加和删除。
+// 节点库：列出用户保存的单节点或多节点组合，并允许搜索、添加和删除。
 import { useEffect, useRef, useState } from 'react'
-import { createShapeId, type Editor, type TLShapeId } from 'tldraw'
+import type { Editor, TLShapeId } from 'tldraw'
 import type { MediaAsset } from '@shared/types'
-import { getNodeType } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
 import {
   buildRunIndex,
@@ -14,12 +13,8 @@ import {
 } from '../engine/run-index'
 import { runNodeManually } from '../engine/executor'
 import { useGatewayStore } from '../stores/gateway'
-import {
-  templateNodeProps,
-  useWorkflowStore,
-  type WorkflowTemplate
-} from '../stores/workflow'
-import { createEdge, portPairCompatible } from './graph'
+import { useWorkflowStore, type WorkflowTemplate } from '../stores/workflow'
+import { addNodeLibraryEntry } from './node-library'
 import { markUndoPoint } from './history'
 import { toast } from '../stores/toast'
 import { useConfirmStore } from '../stores/confirm'
@@ -42,7 +37,7 @@ interface CanvasSidePanelProps {
 
 const TAB_META: Record<SidePanelTab, { title: string; icon: IconName }> = {
   assets: { title: '资产中心', icon: 'assets' },
-  workflow: { title: '工作流', icon: 'workflow' },
+  workflow: { title: '节点库', icon: 'workflow' },
   history: { title: '历史记录', icon: 'history' },
   runs: { title: '运行中心', icon: 'play' }
 }
@@ -61,105 +56,65 @@ function formatTime(ts: number): string {
   return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
 }
 
-// ── 工作流面板 ──
+// ── 节点库面板 ──
 function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element {
   const templates = useWorkflowStore((s) => s.templates)
   const wfLoad = useWorkflowStore((s) => s.load)
   const wfRemove = useWorkflowStore((s) => s.remove)
   const [query, setQuery] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
-  const visibleTemplates = templates.filter((template) => template.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
+  const needle = query.trim().toLocaleLowerCase()
+  const visibleTemplates = templates.filter((template) =>
+    [template.name, ...template.nodes.flatMap((node) => [node.title, node.nodeType])].some(
+      (value) => value.toLocaleLowerCase().includes(needle)
+    )
+  )
 
   useEffect(() => {
-    void wfLoad().catch((error) => toast(`加载工作流失败：${String(error)}`))
+    void wfLoad().catch((error) => toast(`加载节点库失败：${String(error)}`))
   }, [wfLoad])
 
-  // 将工作流复制到画布视角中心
+  // 将节点库条目添加到画布视角中心
   const handleApply = (tmpl: WorkflowTemplate): void => {
     if (!editor) return
-    const center = editor.getViewportPageBounds().center
-    const ids: TLShapeId[] = []
-    let skippedEdges = 0
-    editor.run(() => {
-      for (const node of tmpl.nodes) {
-        const id = createShapeId()
-        ids.push(id)
-        editor.createShape({
-          id,
-          type: 'node-card',
-          x: center.x + node.dx,
-          y: center.y + node.dy,
-          props: {
-            // 模板只保存节点结构、正文、配置和真实连线。即使历史模板中残留媒体字段，
-            // 套用时也必须创建空入口，不能跨项目复制或引用旧媒体资产。
-            ...templateNodeProps(node)
-          }
-        })
-      }
-      for (const edge of tmpl.edges) {
-        const fromId = ids[edge.fromIdx]
-        const toId = ids[edge.toIdx]
-        if (!fromId || !toId) continue
-        const fromSpec = getNodeType(tmpl.nodes[edge.fromIdx]?.nodeType ?? '')
-        const toSpec = getNodeType(tmpl.nodes[edge.toIdx]?.nodeType ?? '')
-        const fromPort = edge.fromPort
-          ? fromSpec?.ports.out.find((port) => port.id === edge.fromPort)
-          : fromSpec?.ports.out.length === 1
-            ? fromSpec.ports.out[0]
-            : undefined
-        const compatibleTargets = fromPort
-          ? (toSpec?.ports.in.filter((port) => portPairCompatible(fromPort, port)) ?? [])
-          : []
-        const toPort = edge.toPort
-          ? compatibleTargets.find((port) => port.id === edge.toPort)
-          : compatibleTargets.length === 1
-            ? compatibleTargets[0]
-            : undefined
-        if (!fromPort || !toPort) {
-          skippedEdges += 1
-          continue
-        }
-        if (
-          !createEdge(
-            editor,
-            { shapeId: fromId, portId: fromPort.id },
-            { shapeId: toId, portId: toPort.id }
-          )
-        )
-          skippedEdges += 1
-      }
-    })
-    markUndoPoint(editor, 'apply-template')
+    const { skippedEdges } = addNodeLibraryEntry(editor, tmpl)
     toast(
       skippedEdges > 0
-        ? `已添加「${tmpl.name}」，${skippedEdges} 条旧连线因端口不明确未恢复`
-        : `已添加「${tmpl.name}」（${tmpl.nodes.length} 节点）`
+        ? `已从节点库添加「${tmpl.name}」，${skippedEdges} 条旧连线因端口不明确未恢复`
+        : `已从节点库添加「${tmpl.name}」（${tmpl.nodes.length} 个节点）`
     )
   }
 
   const handleRemoveTemplate = async (tmpl: WorkflowTemplate): Promise<void> => {
     if (
       !(await useConfirmStore.getState().confirm({
-        title: `删除工作流「${tmpl.name}」`,
-        message: '删除后工作流不可恢复，画布上已创建的节点不受影响。',
+        title: `删除节点库条目「${tmpl.name}」`,
+        message: '删除后该节点库条目不可恢复，画布上已创建的节点不受影响。',
         confirmText: '删除',
         danger: true
       }))
     )
       return
-    await wfRemove(tmpl.id).catch((error) => toast(`删除工作流失败：${String(error)}`))
+    await wfRemove(tmpl.id).catch((error) => toast(`删除节点库条目失败：${String(error)}`))
   }
 
   return (
     <div className="side-panel-body workflow-panel" ref={scrollRef}>
       <label className="wf-search">
         <Icon name="search" size={16} />
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索工作流" aria-label="搜索工作流" />
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="搜索节点库"
+          aria-label="搜索节点库"
+        />
       </label>
       {templates.length === 0 ? (
-        <div className="side-panel-empty">暂无工作流。框选画布上的节点后，点击浮动工具栏中的「保存为工作流」。</div>
+        <div className="side-panel-empty">
+          节点库还是空的。右键点击画布节点，选择「保存到节点库」；也可以多选节点后使用浮动工具栏保存。
+        </div>
       ) : visibleTemplates.length === 0 ? (
-        <div className="side-panel-empty">没有找到匹配的工作流。</div>
+        <div className="side-panel-empty">没有找到匹配的节点库条目。</div>
       ) : (
         <div className="wf-template-list">
           {visibleTemplates.map((tmpl) => (
@@ -167,20 +122,21 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
               <div className="wf-template-info">
                 <strong className="wf-template-name">{tmpl.name}</strong>
                 <span className="wf-template-meta">
-                  {tmpl.nodeCount} 节点 · {tmpl.edges.length} 连线 · {formatTime(tmpl.createdAt)}
+                  {tmpl.nodeCount} 个节点 · {tmpl.edges.length} 条连线 ·{' '}
+                  {formatTime(tmpl.createdAt)}
                 </span>
               </div>
               <div className="wf-template-actions">
                 <button
                   className="wf-action-btn apply"
-                  aria-label={`添加工作流 ${tmpl.name} 到画布`}
+                  aria-label={`从节点库添加 ${tmpl.name} 到画布`}
                   onClick={() => handleApply(tmpl)}
                 >
                   <Icon name="add" size={13} /> 添加
                 </button>
                 <button
                   className="wf-action-btn delete"
-                  aria-label={`删除工作流 ${tmpl.name}`}
+                  aria-label={`删除节点库条目 ${tmpl.name}`}
                   onClick={() => void handleRemoveTemplate(tmpl)}
                 >
                   <Icon name="close" size={13} />

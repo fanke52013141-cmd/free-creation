@@ -455,7 +455,8 @@ describe('v1.2 §16.15 语音节点：控件只在所选后端真会发送该字
     expect(tts).not.toMatch(/backend === 'comfyui' && \(\s*<>\s*<label className="opt-label">语言/)
     expect(tts).not.toMatch(/backend === 'comfyui' && \(\s*<div className="tts-sliders">/)
     expect(tts).not.toContain("config.backend === 'comfyui'")
-    expect(tts).toContain('TTS_FORMATS_BY_BACKEND.minimax.map')
+    expect(tts).toContain('MINIMAX_VOICE_CLONE_MODELS')
+    expect(tts).not.toContain('TTS_FORMATS_BY_BACKEND.minimax.map')
     expect(tts).toContain('MiniMax 音色克隆')
   })
 
@@ -762,10 +763,9 @@ describe('v1.2 §16.23 图片族：遮罩与画幅按网关真实发送字段呈
     }
   })
 
-  it('续跑与模板的下游节点标题统一为「视频生成」', () => {
+  it('续跑的下游节点标题统一为「视频生成」', () => {
     expect(stripComments(sharedBodies)).not.toContain('图片生成视频')
     expect(stripComments(sidePanel)).not.toContain('图片生成视频')
-    expect(sidePanel).toContain("{ type: 'video', title: '视频生成'")
     expect(sharedBodies).toContain("{ type: 'video', label: '视频生成'")
   })
 })
@@ -898,8 +898,11 @@ describe('v1.2 §16.26 导入落空要有去向说明，输入上限等于引擎
       // .find() 会静默丢掉多选的其余文件，正是本轮修掉的缺陷形状。
       expect(source, file).not.toMatch(/assets\.find\(/)
     }
-    // tts 有两个上传口（参考语音 + 克隆提示音），都必须走同一个出口。
-    expect(read(`${bodies}/tts.tsx`).match(/pickImportedAsset\(\{/g)).toHaveLength(2)
+    // 两个上传口共用 uploadAudio，文件导入只经过同一个筛选出口。
+    const tts = read(`${bodies}/tts.tsx`)
+    expect(tts.match(/pickImportedAsset\(\{/g)).toHaveLength(1)
+    expect(tts).toContain('uploadAudio(false)')
+    expect(tts).toContain('uploadAudio(true)')
   })
 
   it('多出的文件说明去向并真的刷进素材库，取消选择保持静默', () => {
@@ -1140,7 +1143,8 @@ describe('v1.2 §16.30 文档真值节点：跳过运行不得静音输出，卡
       expect(source).not.toContain('不需要运行本节点')
     }
     expect(stripComments(nodeCardView)).not.toContain('正在处理输入和生成输出')
-    expect(nodeCardView).toContain('正在运行本节点，完成后自动更新。')
+    expect(nodeCardView).toContain('<GenerationLoadingOverlay')
+    expect(nodeCardView).toContain('title={executionTitle}')
   })
 })
 

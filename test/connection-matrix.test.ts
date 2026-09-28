@@ -30,6 +30,14 @@ function canConnect(
 }
 
 describe('标准连线 · 允许的组合', () => {
+  it('声音调整只接受对应媒体端口，并把同类产物继续接给下游', () => {
+    expect(canConnect('audio', 'out-audio', 'sound-adjust', 'in-audio')).toBe(true)
+    expect(canConnect('video-asset', 'out-video', 'sound-adjust', 'in-video')).toBe(true)
+    expect(canConnect('audio', 'out-audio', 'sound-adjust', 'in-video')).toBe(false)
+    expect(canConnect('video-asset', 'out-video', 'sound-adjust', 'in-audio')).toBe(false)
+    expect(canConnect('sound-adjust', 'out-audio', 'speech', 'in-audio')).toBe(true)
+    expect(canConnect('sound-adjust', 'out-video', 'video-frame', 'in-video')).toBe(true)
+  })
   it('导演台发布机位只连接到 camera 输入，不混入工程 JSON', () => {
     expect(canConnect('director', 'out-camera', 'director', 'in-camera-preset')).toBe(true)
     expect(canConnect('director', 'out-project', 'director', 'in-camera-preset')).toBe(false)
@@ -91,20 +99,24 @@ describe('标准连线 · 允许的组合', () => {
     expect(canConnect('chat', 'out-markdown', 'image-edit', 'in-text')).toBe(true)
   })
 
-  it('音频 / TTS → TTS 参考语音（audio 端口互连）', () => {
+  it('音频与语音合成 → 语音克隆参考语音（audio 端口互连）', () => {
     expect(canConnect('audio', 'out-audio', 'tts', 'in-audio')).toBe(true)
     expect(canConnect('video-audio', 'out-audio', 'tts', 'in-audio')).toBe(true)
-    expect(canConnect('tts', 'out-audio', 'tts', 'in-audio')).toBe(true)
+    expect(canConnect('speech', 'out-audio', 'tts', 'in-audio')).toBe(true)
   })
 
-  it('文本 → TTS 合成文字（text 端口连接）', () => {
-    expect(canConnect('text', 'out-text', 'tts', 'in-text')).toBe(true)
+  it('文本 → 语音合成朗读文字；语音克隆只接参考音频', () => {
+    expect(canConnect('text', 'out-text', 'tts', 'in-text')).toBe(false)
     expect(canConnect('text', 'out-text', 'speech', 'in-text')).toBe(true)
   })
 
   it('JSON → JSON（json.any 通用互通）', () => {
     expect(canConnect('json', 'out-json', 'json', 'in-json')).toBe(true)
     expect(canConnect('json', 'out-json', 'code', 'in-json')).toBe(true)
+  })
+
+  it('网址信息作为明确 website.link@1 JSON 输出进入通用 JSON 输入', () => {
+    expect(canConnect('website', 'out-website', 'json', 'in-json')).toBe(true)
   })
 
   it('结构数据的提示词包 → 图片/视频的明确提示词包端口', () => {
@@ -192,7 +204,12 @@ describe('端口类型兼容矩阵完整性', () => {
     if (a === 'any' || b === 'any') return true
     if (
       a === 'iteration' &&
-      (b === 'json' || b === 'camera' || b === 'image' || b === 'video' || b === 'audio' || b === 'file')
+      (b === 'json' ||
+        b === 'camera' ||
+        b === 'image' ||
+        b === 'video' ||
+        b === 'audio' ||
+        b === 'file')
     )
       return true
     const textual = (t: PortType): boolean => t === 'text' || t === 'markdown'

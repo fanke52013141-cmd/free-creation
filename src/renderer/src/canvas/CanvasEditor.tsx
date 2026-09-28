@@ -1,5 +1,4 @@
 import { ResourceInsertRequest } from '../library/ResourceInsertRequest'
-import { SaveCanvasNodesDialog } from '../library/SaveCanvasNodesDialog'
 import { WorkflowSaveDialog } from './WorkflowSaveDialog'
 import { Tldraw, createShapeId, type Editor, type TLShapeId } from 'tldraw'
 import 'tldraw/tldraw.css'
@@ -245,7 +244,11 @@ function paletteSafeScreenX(editor: Editor): number {
   return palette.getBoundingClientRect().right + 16
 }
 
-export function CanvasEditor({ project, initialSnapshot, workspaceProfile }: CanvasEditorProps): React.JSX.Element {
+export function CanvasEditor({
+  project,
+  initialSnapshot,
+  workspaceProfile
+}: CanvasEditorProps): React.JSX.Element {
   const editorRef = useRef<Editor | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -270,7 +273,6 @@ export function CanvasEditor({ project, initialSnapshot, workspaceProfile }: Can
   // 剪贴板节点数进入 React 状态，让「新建节点」菜单能响应式显示「粘贴」入口
   const [clipboardCount, setClipboardCount] = useState(0)
   const [menu, setMenu] = useState<MenuState | null>(null)
-  const [librarySaveSelection, setLibrarySaveSelection] = useState<TLShapeId[] | null>(null)
   const [workflowSaveSelection, setWorkflowSaveSelection] = useState<TLShapeId[] | null>(null)
   // 拉线到空白后的菜单锚点由实际 DOM 尺寸测得；不能再把鼠标松手点误当菜单左上角。
   const [menuAnchor, setMenuAnchor] = useState<{ x: number; y: number } | null>(null)
@@ -376,9 +378,7 @@ export function CanvasEditor({ project, initialSnapshot, workspaceProfile }: Can
 
   // 左侧节点面板：点击在视口中心创建；拖拽到画布在落点创建
   const SIDEBAR_W = 72
-  const visibleNodeTypeIds = workspaceProfile
-    ? new Set(workspaceProfile.visibleNodeTypeIds)
-    : null
+  const visibleNodeTypeIds = workspaceProfile ? new Set(workspaceProfile.visibleNodeTypeIds) : null
   const nodeTypes = allNodeTypes().filter(
     (node) => !visibleNodeTypeIds || visibleNodeTypeIds.has(node.type)
   )
@@ -1360,7 +1360,7 @@ export function CanvasEditor({ project, initialSnapshot, workspaceProfile }: Can
     editor.user.updateUserPreferences({ colorScheme: 'dark' })
     if (initialSnapshot) {
       try {
-        const repairedSnapshot = repairTldrawSnapshot(initialSnapshot)
+        const repairedSnapshot = repairTldrawSnapshot(initialSnapshot, { interruptRunning: true })
         editor.store.loadStoreSnapshot(editor.store.migrateSnapshot(repairedSnapshot as never))
       } catch (e) {
         console.error('快照恢复失败', e)
@@ -1844,16 +1844,16 @@ export function CanvasEditor({ project, initialSnapshot, workspaceProfile }: Can
               <span className="palette-label">资产</span>
             </button>
           </Tooltip>
-          <Tooltip label="打开工作流面板">
+          <Tooltip label="打开节点库">
             <button
               className="palette-item"
-              aria-label="打开工作流面板"
+              aria-label="打开节点库"
               onClick={() => setPanelTab('workflow')}
             >
               <span className="palette-icon">
                 <Icon name="workflow" size={20} />
               </span>
-              <span className="palette-label">工作流</span>
+              <span className="palette-label">节点库</span>
             </button>
           </Tooltip>
           <Tooltip label="打开历史记录">
@@ -1894,21 +1894,15 @@ export function CanvasEditor({ project, initialSnapshot, workspaceProfile }: Can
       {/* 搜索覆盖层（顶栏按钮触发，在 Tldraw 同级渲染） */}
       {editorInstance && <SearchPalette editor={editorInstance} />}
       {editorInstance && <ResourceInsertRequest editor={editorInstance} projectId={project.id} />}
-      {editorInstance && librarySaveSelection && (
-        <SaveCanvasNodesDialog
-          editor={editorInstance}
-          projectId={project.id}
-          nodeIds={librarySaveSelection}
-          onClose={() => setLibrarySaveSelection(null)}
-          onSaved={() => setLibrarySaveSelection(null)}
-        />
-      )}
       {editorInstance && workflowSaveSelection && (
         <WorkflowSaveDialog
           editor={editorInstance}
           nodeIds={workflowSaveSelection}
           onClose={() => setWorkflowSaveSelection(null)}
-          onSaved={() => { setWorkflowSaveSelection(null); setPanelTab('workflow') }}
+          onSaved={() => {
+            setWorkflowSaveSelection(null)
+            setPanelTab('workflow')
+          }}
         />
       )}
       <CanvasSidePanel
@@ -2027,7 +2021,7 @@ export function CanvasEditor({ project, initialSnapshot, workspaceProfile }: Can
           x={menu.x}
           y={menu.y}
           onCopy={() => copySelectionToClipboard(editorInstance)}
-          onSaveToLibrary={(ids) => setLibrarySaveSelection(ids)}
+          onSaveWorkflow={(ids) => setWorkflowSaveSelection(ids)}
           onClose={closeMenu}
         />
       )}

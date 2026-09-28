@@ -69,8 +69,8 @@ describe('portOffsets · 端口纵向落点', () => {
     expect(portOffsets(1, 260)).toEqual([130])
   })
 
-  it('2 个端口落在 1/4 与 3/4', () => {
-    expect(portOffsets(2, 260)).toEqual([65, 195])
+  it('2 个端口落在 1/3 与 2/3', () => {
+    expect(portOffsets(2, 260)).toEqual([260 / 3, (260 * 2) / 3])
   })
 
   it('3 个及以上按 n+1 等分', () => {

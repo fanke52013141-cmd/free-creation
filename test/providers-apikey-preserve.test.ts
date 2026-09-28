@@ -59,6 +59,16 @@ vi.mock('../src/main/store/db', () => ({
   })
 }))
 
+// 此测试只验证旧供应商表的密文保存。模型目录的同步有独立测试，
+// 这里隔离目录存储，避免用仅实现 providers 表的假数据库执行目录 SQL。
+vi.mock('../src/main/model-host/sqlite-model-host', () => ({
+  SqliteModelHost: class {
+    listModels(): [] { return [] }
+    saveConnection(): void { return undefined }
+    saveModel(): void { return undefined }
+  }
+}))
+
 import { saveProvider, getProvider, listProviders } from '../src/main/gateway/providers.repo'
 import { encryptSecret, decryptSecret } from '../src/main/gateway/keycrypto'
 

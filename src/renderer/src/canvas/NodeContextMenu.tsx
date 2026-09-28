@@ -9,7 +9,7 @@ interface NodeContextMenuProps {
   x: number
   y: number
   onClose: () => void
-  onSaveToLibrary?: (ids: TLShapeId[]) => void
+  onSaveWorkflow?: (ids: TLShapeId[]) => void
   /** 复制按钮写入节点剪贴板（由 CanvasEditor 提供），之后可在空白处 Ctrl+V 或右键粘贴；不可用时回退为原地复制。 */
   onCopy?: () => number
 }
@@ -20,7 +20,7 @@ export function NodeContextMenu({
   x,
   y,
   onCopy,
-  onSaveToLibrary,
+  onSaveWorkflow,
   onClose
 }: NodeContextMenuProps): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
@@ -80,9 +80,9 @@ export function NodeContextMenu({
         <Icon name="copy" size={16} />
         复制
       </button>
-      <button className="node-menu-item" onClick={() => run(() => onSaveToLibrary?.(ids))}>
-        <Icon name="assets" size={16} />
-        保存所选节点到资源库…
+      <button className="node-menu-item" onClick={() => run(() => onSaveWorkflow?.(ids))}>
+        <Icon name="workflow" size={16} />
+        保存到节点库
       </button>
       <button
         className="node-menu-item"

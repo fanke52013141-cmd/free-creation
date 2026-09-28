@@ -106,7 +106,9 @@ export function TtsBody({ shape }: NodeBodyProps): React.JSX.Element {
         <input className="gen-input" aria-label="辅助提示音原文" placeholder="填写辅助提示音原文" value={config.promptText} onPointerDown={(event) => event.stopPropagation()} onChange={(event) => updateConfig({ promptText: event.target.value })} />
         <button className="btn-ghost small" onPointerDown={stopEventPropagation} onClick={(event) => { event.stopPropagation(); updateConfig({ promptMediaId: '', promptMediaPath: '', promptMediaMime: '', promptMediaName: '', promptText: '' }) }}>移除辅助提示音</button></>}
     </div>
-    <button className="btn-generate" disabled={busy || !selected || (incomingRef === 0 && !config.refMediaId) || invalidId || (Boolean(config.promptMediaId) && !config.promptText.trim())} onPointerDown={stopEventPropagation} onClick={(event) => { event.stopPropagation(); void clone() }}>{busy ? '克隆中…' : '克隆音色'}</button>
+    <button className="btn-generate" disabled={busy || !selected || (incomingRef === 0 && !config.refMediaId) || invalidId || (Boolean(config.promptMediaId) && !config.promptText.trim())} onPointerDown={stopEventPropagation} onClick={(event) => { event.stopPropagation(); void clone() }}>
+      <Icon name="audio" size={14} /> {busy ? '克隆中…' : '克隆音色'}
+    </button>
     {voiceId && <div className="tts-section voice-id-card"><div className="tts-section-label"><Icon name="check" size={13} /><span>已生成音色 ID</span></div>
       <div className="voice-id-row"><code className="voice-id-value">{voiceId}</code><button className="btn-ghost small" onPointerDown={stopEventPropagation} onClick={(event) => { event.stopPropagation(); void navigator.clipboard.writeText(voiceId).then(() => toast('已复制音色 ID')) }}>复制</button></div>
       <small>将右侧音色档案端口连接到“语音合成”节点，再输入要朗读的文字。</small></div>}

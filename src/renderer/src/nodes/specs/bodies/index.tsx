@@ -4,6 +4,7 @@
 // `specs/index.tsx` 中 `from './bodies'` 的导入路径不变。
 // 行为与原超大 bodies.tsx 完全等价。
 export { TextBody } from './text'
+export { WebsiteBody, WebsiteSettings } from './website'
 export { ImageBody } from './image'
 export { ImageCropBody, ImageCropSettings } from './image-crop'
 export { ImageSplitBody, ImageSplitSettings } from './image-split'
@@ -21,6 +22,7 @@ export {
 } from './video-transforms'
 export { VocalSeparateBody, VocalSeparateSettings } from './vocal-separate'
 export { AudioBody } from './audio'
+export { SoundAdjustBody, SoundAdjustSettings } from './sound-adjust'
 export { FileBody } from './file'
 export { TtsBody } from './tts'
 export { SpeechBody, SpeechSettings } from './speech'

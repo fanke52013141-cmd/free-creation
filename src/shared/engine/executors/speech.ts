@@ -83,6 +83,8 @@ export const speechExecutor = async (ctx: NodeExecutionContext): Promise<NodeExe
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
 
   try {
+    const requestStartedAt = Date.now()
+    ctx.trace?.('request', 'info', `开始请求${effectiveConfig.backend === 'minimax' ? 'MiniMax 异步' : '火山'}语音合成`)
     const result = await ctx.gateway.speechGenerate({
       projectId: ctx.projectId,
       providerId: option?.provider.id ?? config.providerId,
@@ -92,6 +94,10 @@ export const speechExecutor = async (ctx: NodeExecutionContext): Promise<NodeExe
       ...(referenceAudioIds.length ? { referenceAudioIds } : {}),
       config: effectiveConfig
     })
+    ctx.trace?.('request', result.ok ? 'info' : 'error',
+      result.ok
+        ? `语音合成请求完成，耗时 ${Date.now() - requestStartedAt} ms`
+        : `语音合成请求失败：${result.error.message}`)
     if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
     if (!result.ok) return { status: 'failed', reason: result.error.message }
 
@@ -129,6 +135,7 @@ export const speechExecutor = async (ctx: NodeExecutionContext): Promise<NodeExe
     return { status: 'done' }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
+    ctx.trace?.('request', 'error', `语音合成请求异常：${message}`)
     if (message === '已取消') return { status: 'skipped', reason: '已取消' }
     return { status: 'failed', reason: `配音异常：${message}` }
   }

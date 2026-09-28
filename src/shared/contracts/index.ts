@@ -13,6 +13,7 @@ import type { ImageEditConfig } from '../image-edit'
 import type { TtsConfig } from '../tts'
 import type { SpeechConfig } from '../speech'
 import type { VoiceDesignConfig } from '../voice-design'
+import type { SoundAdjustConfig } from '../sound-adjust'
 import type {
   VideoFrameConfig,
   VideoClipConfig,
@@ -76,6 +77,7 @@ export const IPC = {
     videoFrame: 'media:video-frame',
     videoClip: 'media:video-clip',
     videoAudio: 'media:video-audio',
+    soundAdjust: 'media:sound-adjust',
     videoProbe: 'media:video-probe',
     videoThumbnails: 'media:video-thumbnails',
     audioWaveform: 'media:audio-waveform',
@@ -445,6 +447,11 @@ export interface VideoClipTransformInput extends VideoTransformSourceInput {
 
 export interface VideoAudioTransformInput extends VideoTransformSourceInput {
   config: VideoAudioConfig
+}
+
+export interface SoundAdjustTransformInput extends VideoTransformSourceInput {
+  kind: 'audio' | 'video'
+  config: SoundAdjustConfig
 }
 
 /** 只读取当前项目内视频的元信息，供时间轴精确显示；不产生媒体资产。 */

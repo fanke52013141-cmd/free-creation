@@ -244,6 +244,8 @@ export function installBrowserMock(): void {
       Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持视频截取' } }),
     extractVideoAudio: () =>
       Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持音频提取' } }),
+    soundAdjust: () =>
+      Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持声音调整' } }),
     probeVideo: () =>
       Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持视频探测' } }),
     generateVideoThumbnails: () =>

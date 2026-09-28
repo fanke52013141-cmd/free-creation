@@ -40,8 +40,8 @@ export function ChatBody({ shape }: NodeBodyProps): React.JSX.Element {
           }}
         >
           <span className="chat-open-content">
-            打开对话
             <Icon name="chat" size={15} />
+            <span>打开对话</span>
           </span>
         </button>
       </div>

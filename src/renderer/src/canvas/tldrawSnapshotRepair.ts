@@ -1,4 +1,5 @@
 import type { NodeCardProps } from './NodeCardShape'
+import { appendNodeRunHistory, readNodeRunRecord } from '../engine/runRecord'
 
 type UnknownRecord = Record<string, unknown>
 
@@ -34,7 +35,10 @@ function numberOr(value: unknown, fallback: number): number {
  * tldraw 成功加载后才会进入既有的自动保存路径。未知形状与其他 tldraw 记录
  * 原样保留，避免把正常的未来扩展误判为损坏数据。
  */
-export function repairTldrawSnapshot(snapshot: unknown): unknown {
+export function repairTldrawSnapshot(
+  snapshot: unknown,
+  options: { interruptRunning?: boolean } = {}
+): unknown {
   if (!isRecord(snapshot) || !isRecord(snapshot.store)) return snapshot
 
   let changed = false
@@ -62,8 +66,40 @@ export function repairTldrawSnapshot(snapshot: unknown): unknown {
     const isChanged = Object.entries(repairedProps).some(
       ([key, repaired]) => props[key] !== repaired
     )
-    repairedStore[id] = isChanged ? { ...value, props: { ...props, ...repairedProps } } : value
-    changed ||= isChanged
+    const run = options.interruptRunning && isRecord(value.meta)
+      ? readNodeRunRecord(value.meta.nodeRun)
+      : null
+    const wasRunning = options.interruptRunning &&
+      (['pending', 'queued', 'running'].includes(repairedProps.exec) || run?.status === 'running')
+    if (wasRunning) {
+      const finishedAt = Date.now()
+      const finalRun = run?.status === 'running'
+        ? {
+            ...run,
+            status: 'cancelled' as const,
+            finishedAt,
+            durationMs: Math.max(0, finishedAt - run.startedAt),
+            error: { phase: 'execution' as const, reason: '应用关闭或重启中断了上次运行，请重新运行' }
+          }
+        : null
+      repairedStore[id] = {
+        ...value,
+        props: { ...props, ...repairedProps, exec: 'cancelled' },
+        ...(finalRun && isRecord(value.meta)
+          ? {
+              meta: {
+                ...value.meta,
+                nodeRun: finalRun,
+                nodeRunHistory: appendNodeRunHistory(value.meta.nodeRunHistory, finalRun)
+              }
+            }
+          : {})
+      }
+      changed = true
+    } else {
+      repairedStore[id] = isChanged ? { ...value, props: { ...props, ...repairedProps } } : value
+      changed ||= isChanged
+    }
   }
 
   return changed ? { ...snapshot, store: repairedStore } : snapshot

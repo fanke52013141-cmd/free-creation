@@ -7,10 +7,10 @@ import type { NodeTypeSpec } from '../nodes/registry'
  * 的技术分类（例如生视频曾被放在 input），不应该决定用户看到的创作任务分类。
  */
 export const PALETTE_NODE_GROUPS = {
-  input: ['text', 'file', 'chat', 'ai-process'],
+  input: ['text', 'file', 'website', 'chat', 'ai-process'],
   image: ['image', 'image-gen', 'image-edit', 'image-crop', 'image-split'],
   video: ['video-asset', 'video', 'video-frame', 'video-clip', 'video-depth', 'video-clay'],
-  audio: ['audio', 'speech', 'tts', 'voice-design'],
+  audio: ['audio', 'sound-adjust', 'speech', 'tts', 'voice-design'],
   logic: ['storyboard', 'structured', 'json', 'processor', 'iterate', 'code', 'director']
 } as const
 
@@ -19,10 +19,10 @@ export const PALETTE_CATEGORY_META: Record<
   { label: string; shortLabel: string; icon: IconName; description: string }
 > = {
   input: {
-    label: '文本与 AI',
-    shortLabel: '文本',
+    label: '输入与 AI',
+    shortLabel: '输入',
     icon: 'text',
-    description: '写作、对话与文本处理'
+    description: '文本、文件、网址和对话'
   },
   image: {
     label: '图片创作',

@@ -107,6 +107,24 @@ describe('关键端口契约快照（防回归）', () => {
     ])
   })
 
+  it('网址节点：固定配置 → website.link@1 JSON 输出，并提供右侧设置', () => {
+    const spec = getNodeType('website')!
+    expect(spec.contractVersion).toBe(1)
+    expect(spec.ports.in).toEqual([])
+    expect(snapshotPorts(spec.ports.out)).toEqual([
+      {
+        id: 'out-website',
+        dir: 'out',
+        type: 'json',
+        required: true,
+        cardinality: 'one',
+        schema: 'website.link@1'
+      }
+    ])
+    expect(spec.outputSource).toBe('document')
+    expect(spec.SettingsPanel).toBeTypeOf('function')
+  })
+
   it('生图节点：in-images(many) + in-text(many) → out-image', () => {
     const spec = getNodeType('image-gen')!
     const ins = snapshotPorts(spec.ports.in)
@@ -271,20 +289,18 @@ describe('关键端口契约快照（防回归）', () => {
     })
   })
 
-  it('语音克隆节点：参考语音(one) + 文本(many) → 音频 + 音色档案', () => {
+  it('语音克隆节点：参考语音(one) → 音色档案', () => {
     const spec = getNodeType('tts')!
-    expect(spec.contractVersion).toBe(3)
+    expect(spec.contractVersion).toBe(4)
     expect(snapshotPorts(spec.ports.in)).toEqual([
-      { id: 'in-audio', dir: 'in', type: 'audio', required: false, cardinality: 'one' },
-      { id: 'in-text', dir: 'in', type: 'text', required: false, cardinality: 'many' }
+      { id: 'in-audio', dir: 'in', type: 'audio', required: false, cardinality: 'one' }
     ])
     expect(snapshotPorts(spec.ports.out)).toEqual([
-      { id: 'out-audio', dir: 'out', type: 'audio', required: true, cardinality: 'one' },
       {
         id: 'out-json',
         dir: 'out',
         type: 'json',
-        required: false,
+        required: true,
         cardinality: 'one',
         schema: 'voice.profile@1'
       }
@@ -369,8 +385,7 @@ describe('关键端口契约快照（防回归）', () => {
     ])
     expect(getNodeType('speech')!.contractVersion).toBe(4)
     expect(snapshotPorts(getNodeType('tts')!.ports.in)).toEqual([
-      { id: 'in-audio', dir: 'in', type: 'audio', required: false, cardinality: 'one' },
-      { id: 'in-text', dir: 'in', type: 'text', required: false, cardinality: 'many' }
+      { id: 'in-audio', dir: 'in', type: 'audio', required: false, cardinality: 'one' }
     ])
   })
 

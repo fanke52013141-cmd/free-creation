@@ -112,18 +112,22 @@ sourceNode.outputs[sourcePortId]
 
 ## 2. 标准数据类型
 
-| `PortType`  | 传递内容         | 说明                                           |
-| ----------- | ---------------- | ---------------------------------------------- |
-| `text`      | 普通字符串       | 提示词、台词、纯文本                           |
-| `markdown`  | Markdown 字符串  | AI 回复、带标题/列表/代码块的文档              |
-| `json`      | 结构化值         | 对象、数组、分镜数据、参数                     |
-| `iteration` | 循环临时作用域   | 普通项注入 JSON；明确标记的媒体资产项可注入同类媒体输入，不是项目级输出 |
+| `PortType`  | 传递内容         | 说明                                                                                          |
+| ----------- | ---------------- | --------------------------------------------------------------------------------------------- |
+| `text`      | 普通字符串       | 提示词、台词、纯文本                                                                          |
+| `markdown`  | Markdown 字符串  | AI 回复、带标题/列表/代码块的文档                                                             |
+| `json`      | 结构化值         | 对象、数组、分镜数据、参数                                                                    |
+| `iteration` | 循环临时作用域   | 普通项注入 JSON；明确标记的媒体资产项可注入同类媒体输入，不是项目级输出                       |
 | `camera`    | 机位参数对象     | `NodeValue` 为 `{ kind: 'camera', data: Partial<DirectorCamera> }`；按 `previs.camera@1` 校验 |
-| `image`     | 图片资产引用     | 传 `mediaId/path/mime`，不传二进制             |
-| `video`     | 视频资产引用     | 同上                                           |
-| `audio`     | 音频资产引用     | 同上                                           |
-| `file`      | 通用文件资产引用 | 无法归入具体媒体类型的文件                     |
-| `any`       | 显式声明的动态值 | 仅通用处理/代码类节点使用，业务节点禁止滥用    |
+| `image`     | 图片资产引用     | 传 `mediaId/path/mime`，不传二进制                                                            |
+| `video`     | 视频资产引用     | 同上                                                                                          |
+| `audio`     | 音频资产引用     | 同上                                                                                          |
+| `file`      | 通用文件资产引用 | 无法归入具体媒体类型的文件                                                                    |
+| `any`       | 显式声明的动态值 | 仅通用处理/代码类节点使用，业务节点禁止滥用                                                   |
+
+业务 JSON Schema 按结构和版本注册。`website.link@1` 表示可点击网址，结构为
+`{ name: string, url: string }`；`url` 必须是无凭据的有效 HTTP 或 HTTPS 地址。网址节点
+将该对象从 `out-website` 输出，节点卡片点击时在系统浏览器中打开同一地址。
 
 兼容矩阵：
 
@@ -173,6 +177,12 @@ FFmpeg（优先读取 `CANVAS_STUDIO_FFMPEG_PATH`，否则使用 PATH 中的 `ff
 音色复刻。人声提取是视频操作中的可选输出处理，不再创建独立画布节点；历史 `vocal-separate`
 节点仍注册以读取旧项目。任何快捷入口只能创建这些
 普通节点和真实边，不能在音频资产节点中暗藏一次语音模型调用。
+
+声音调整 `sound-adjust@1` 是独立本地操作节点：`in-audio` 与 `in-video` 均为可选单值端口，
+运行时必须恰好连接其中一种；对应的 `out-audio` 或 `out-video` 为可选单值输出，
+另一端口本次不产出。配置保存在 `props.config`，包含 `mode=rate|duration`、播放倍率、
+目标时长毫秒数和声量百分比。目标时长按源时长换算为 0.25–4 倍变速；无音轨视频不能
+调整声量。FFmpeg 处理会生成新媒体资产，不覆盖源文件，并通过正式输出端口和独立资产节点发布。
 
 **输出数量改变时必须创建独立节点。**例如 `image-split` 不属于 `image-crop` 的模式：
 裁剪固定为 `1 张图片 -> 1 张图片`，而拆分固定为 `1 张图片 -> 1 张当前图片 + 1 个图片
@@ -452,10 +462,10 @@ interface NodeValuePacket {
 | ---- | --------------------- | --------------------------- | ---- | ----------------------------------------- |
 | 输入 | `in-storyboard`       | `json / storyboard.shots@1` | one  | 分镜同步为镜头列表                        |
 | 输入 | `in-reference-images` | `image`                     | many | 场景/人物参考图；建立空间时建议取 1～3 张 |
-| 输入 | `in-camera-preset`    | `camera / previs.camera@1` | one  | 初始机位参数                              |
+| 输入 | `in-camera-preset`    | `camera / previs.camera@1`  | one  | 初始机位参数                              |
 | 输出 | `out-frame`           | `image`                     | one  | 明确发布的当前预演帧                      |
 | 输出 | `out-preview-video`   | `video`                     | one  | 明确导出的白模运动参考 WebM               |
-| 输出 | `out-camera`          | `camera / previs.camera@1` | one  | 已发布镜头机位参数                        |
+| 输出 | `out-camera`          | `camera / previs.camera@1`  | one  | 已发布镜头机位参数                        |
 | 输出 | `out-project`         | `json / previs.project@2`   | one  | 空间、镜头序列与机位摘要；不含媒体二进制  |
 
 导演工程改动后，在未重新发布帧/视频之前，节点必须标示“尚未发布”；下游仅可消费
@@ -525,7 +535,7 @@ interface NodeValuePacket {
 ### P1：Schema 仓库与真实校验（基础能力已完成）
 
 - 已建立 `src/shared/node-schemas.ts` 版本化注册表。
-- 已注册 `json.any@1` 与 `storyboard.shots@1`；字幕、角色、镜头参数在对应节点进入开发时再注册，禁止预埋空 Schema。
+- 已注册 `json.any@1`、`storyboard.shots@1` 与 `website.link@1`；字幕、角色、镜头参数在对应节点进入开发时再注册，禁止预埋空 Schema。
 - 已在连线时校验 Schema ID/版本兼容。
 - 已在节点运行前验证输入、运行后验证输出。
 

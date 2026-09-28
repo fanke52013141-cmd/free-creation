@@ -136,17 +136,12 @@ describe.skipIf(!toolsReady)('MiniMax 复刻的参考音频时长门禁', () => 
     expect(h.synthCalls).toBe(0)
   })
 
-  it('时长达标时照常复刻并合成一次', async () => {
+  it('时长达标时登记音色，不隐式合成音频', async () => {
     const result = await runClone('m-long')
     expect(result.voiceId).toBe('canvas-voice-mock')
-    expect(result.asset.id).toBe('asset-1')
+    expect(result).not.toHaveProperty('asset')
     expect(h.cloneCalls).toBe(1)
-    expect(h.synthCalls).toBe(1)
-    expect(h.synthInputs[0]).toMatchObject({
-      modelId: 'speech-2.8-turbo',
-      voiceId: 'canvas-voice-mock',
-      config: { backend: 'minimax', modelId: 'speech-2.8-turbo', format: 'mp3' }
-    })
+    expect(h.synthCalls).toBe(0)
   })
 
   it('参考音频记录缺失时报的是「不存在或已删除」，不是探测超时的误导提示', async () => {

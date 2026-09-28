@@ -35,6 +35,7 @@ import type {
   VideoProbeResult,
   VideoClipTransformInput,
   VideoAudioTransformInput,
+  SoundAdjustTransformInput,
   VideoThumbnailsInput,
   VideoThumbnailsResult,
   AudioWaveformInput,
@@ -207,6 +208,8 @@ const api = {
     ipcRenderer.invoke(IPC.media.videoClip, input),
   extractVideoAudio: (input: VideoAudioTransformInput): Promise<IpcEnvelope<MediaAsset>> =>
     ipcRenderer.invoke(IPC.media.videoAudio, input),
+  soundAdjust: (input: SoundAdjustTransformInput): Promise<IpcEnvelope<MediaAsset>> =>
+    ipcRenderer.invoke(IPC.media.soundAdjust, input),
   probeVideo: (input: VideoProbeInput): Promise<IpcEnvelope<VideoProbeResult>> =>
     ipcRenderer.invoke(IPC.media.videoProbe, input),
   generateVideoThumbnails: (

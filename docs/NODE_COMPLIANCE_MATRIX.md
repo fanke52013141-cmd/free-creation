@@ -2,7 +2,7 @@
 
 > 审计基线：`f519ac3` · 2026-08-31。详细审计、连线关系和参考项目差异见 [NODE_PROTOCOL_AUDIT_2026_08_31.md](./NODE_PROTOCOL_AUDIT_2026_08_31.md)。
 
-本表是当前 **27 个可创建节点** 的发布前协议索引。新增或修改节点前必须同步更新本表、`NODE_CONTRACT_SPEC.md`、契约快照与连线测试；历史节点仅为兼容读取，不进入创建菜单。表中「版本 / 端口 id」以及明确写出的端口类型、基数和 Schema 由 `test/compliance-matrix-doc.test.ts` 与注册契约逐行比对，写错或漏行会直接让测试变红。
+本表是当前 **28 个可创建节点** 的发布前协议索引。新增或修改节点前必须同步更新本表、`NODE_CONTRACT_SPEC.md`、契约快照与连线测试；历史节点仅为兼容读取，不进入创建菜单。表中「版本 / 端口 id」以及明确写出的端口类型、基数和 Schema 由 `test/compliance-matrix-doc.test.ts` 与注册契约逐行比对，写错或漏行会直接让测试变红。
 
 | 节点                      | 版本 | 输入端口（类型 / 基数）                                         | 输出端口（类型 / Schema）                                       | 执行与投影                               | 结论 |
 | ------------------------- | ---- | --------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------- | ---- |
@@ -12,6 +12,7 @@
 | 图片拆分 `image-split`    | 3    | `in-image` image / one / 必填                                   | `out-image` image；`out-images` json `list.items@1`             | executor + projectOutputs                | 通过 |
 | 图片生成 `image-gen`      | 3    | 图片单张/多参考图、提示词包 JSON、文本多输入                    | `out-image` image                                               | executor + projectOutputs                | 通过 |
 | 图片编辑 `image-edit`     | 2    | `in-image` image / one / 必填；`in-text` text / many            | `out-image` image                                               | executor + projectOutputs                | 通过 |
+| 网址节点 `website`        | 1    | 无                                                              | `out-website` json `website.link@1`                             | executor + projectOutputs（document）    | 通过 |
 | 视频生成 `video`          | 7    | 首帧、尾帧、参考图/视频/音频、提示词包、文本                    | `out-video` video                                               | executor + projectOutputs                | 通过 |
 | 视频资产 `video-asset`    | 2    | 无                                                              | `out-video` video                                               | executor + projectOutputs                | 通过 |
 | 深度视频 `video-depth`    | 1    | `in-video` video / one / 必填                                   | `out-video` video                                               | executor + projectOutputs                | 通过 |
@@ -21,9 +22,10 @@
 | 视频提音 `video-audio`    | 4    | `in-video` video / one / 必填                                   | `out-audio` audio                                               | executor + projectOutputs                | 通过 |
 | 人声分离 `vocal-separate` | 4    | `in-audio` audio / one / 必填                                   | `out-audio` audio（人声；伴奏另建独立音频资产节点）             | 历史兼容，不新建                         | 退役 |
 | 音频资产 `audio`          | 3    | 无                                                              | `out-audio` audio                                               | executor + projectOutputs                | 通过 |
+| 声音调整 `sound-adjust`   | 1    | `in-audio` audio / one；`in-video` video / one（二选一）        | `out-audio` audio（可选）；`out-video` video（可选）            | executor + projectOutputs                | 通过 |
 | 文件 `file`               | 2    | 无                                                              | `out-file` file；`out-text` text（可选）                        | executor + projectOutputs                | 通过 |
 | 语音合成 `speech`         | 4    | 文本 many；参考输入随供应商动态生成                             | 语音 audio；火山可选字幕时间轴                                  | executor + projectOutputs + resolvePorts | 通过 |
-| 声音克隆 `tts`            | 3    | `in-audio` audio / one；`in-text` text / many                   | `out-audio` audio；`out-json` json `voice.profile@1`            | executor + projectOutputs                | 通过 |
+| 声音克隆 `tts`            | 4    | `in-audio` audio / one                                          | `out-json` json `voice.profile@1`                                | executor + projectOutputs                | 通过 |
 | 音色设计 `voice-design`   | 1    | `in-text` text / many                                           | `out-audio` audio；`out-json` json `voice.profile@1`            | executor + projectOutputs                | 通过 |
 | 对话 `chat`               | 1    | `in-text` text / many                                           | `out-markdown` markdown                                         | executor + projectOutputs                | 通过 |
 | 处理 `processor`          | 1    | `in-value` any                                                  | `out-value` any                                                 | executor + projectOutputs                | 通过 |

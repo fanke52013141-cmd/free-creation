@@ -39,6 +39,7 @@ export const NODE_ACCENTS = {
   'image-split': '#a3e635',
   'image-gen': '#22c55e',
   'image-edit': '#86efac',
+  website: '#38bdf8',
   video: '#06b6d4',
   'video-asset': '#22d3ee',
   'video-frame': '#67e8f9',
@@ -47,6 +48,7 @@ export const NODE_ACCENTS = {
   'video-depth': '#7c3aed',
   'video-clay': '#64748b',
   audio: '#60a5fa',
+  'sound-adjust': '#38bdf8',
   'vocal-separate': '#3b82f6',
   speech: '#93c5fd',
   tts: '#818cf8',
@@ -176,7 +178,12 @@ export function portCompatible(a: PortType, b: PortType): boolean {
   // 当前项不是普通项目级输出；运行时按列表项形态注入 JSON 或媒体资产引用。
   const iterationTarget =
     a === 'iteration' &&
-    (b === 'json' || b === 'camera' || b === 'image' || b === 'video' || b === 'audio' || b === 'file')
+    (b === 'json' ||
+      b === 'camera' ||
+      b === 'image' ||
+      b === 'video' ||
+      b === 'audio' ||
+      b === 'file')
   return a === b || bothTextual || iterationTarget || a === 'any' || b === 'any'
 }
 
