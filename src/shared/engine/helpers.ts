@@ -200,10 +200,19 @@ export function waitForChat(
     void gateway
       .chatStart(input)
       .then((result) => {
-        if (result.ok) taskId = result.data.taskId
-        else {
+        if (!result.ok) {
           finish()
           reject(new Error(result.error.message))
+          return
+        }
+        taskId = result.data.taskId
+        // 取消早于 chatStart 返回时 cancelTimer 已被 finish 清掉，这次迟到的赋值
+        // 无人再监听：必须在此补偿取消，否则远端任务照常执行并计费（R-02）。
+        // finish 幂等，先到先拒绝，不会双 reject。
+        if (signal.cancelled) {
+          void gateway.chatCancel(taskId)
+          finish()
+          reject(new Error('已取消'))
         }
       })
       .catch((error) => {
@@ -258,6 +267,8 @@ export function waitForVideo(
     const timeout = setTimeout(() => {
       if (!stopped) {
         stop()
+        // 超时只是放弃等待，远端任务仍在计费执行：放弃前必须补偿取消（R-01）。
+        void gateway.videoCancel(taskId)
         reject(new Error('视频生成超时（10 分钟）'))
       }
     }, 600_000)

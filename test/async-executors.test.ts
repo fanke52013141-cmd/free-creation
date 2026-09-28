@@ -9,6 +9,7 @@ import { mergeShapeMeta } from '@renderer/engine/executor'
 import { speechExecutor } from '@renderer/engine/executors/speech'
 import { voiceDesignExecutor } from '@renderer/engine/executors/voiceDesign'
 import { chatExecutor } from '@renderer/engine/executors/chat'
+import { scriptExecutor } from '@renderer/engine/executors/script'
 import { imageGenExecutor } from '@renderer/engine/executors/imageGen'
 import { ttsExecutor } from '@renderer/engine/executors/tts'
 import { waitForChat, waitForVideo } from '@renderer/engine/executors/shared'
@@ -218,6 +219,16 @@ describe('异步网关等待器', () => {
     await rejected
     expect(videoCancel).toHaveBeenCalledWith('task-cancel')
   })
+
+  it('waitForVideo 10 分钟超时放弃等待前先补偿取消远端任务（R-01）', async () => {
+    const videoCancel = vi.fn().mockResolvedValue({ ok: true })
+    installGateway({ videoTask: vi.fn().mockResolvedValue({ ok: false }), videoCancel })
+    const pending = waitForVideo('task-timeout', { cancelled: false })
+    const rejected = expect(pending).rejects.toThrow('视频生成超时（10 分钟）')
+    await vi.advanceTimersByTimeAsync(600_000)
+    await rejected
+    expect(videoCancel).toHaveBeenCalledWith('task-timeout')
+  })
 })
 
 describe('chat / audio / video executors with a mocked gateway', () => {
@@ -282,6 +293,79 @@ describe('chat / audio / video executors with a mocked gateway', () => {
       role: 'assistant',
       content: '回答'
     })
+  })
+
+  it('chat 执行器：取消落在摘要压缩阶段 → skipped，不再吞掉取消记成 done（R-14）', async () => {
+    let eventListener: ((event: Record<string, string>) => void) | undefined
+    const chatStart = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, data: { taskId: 'chat-1' } })
+      .mockResolvedValueOnce({ ok: true, data: { taskId: 'chat-2' } })
+    installGateway({
+      chatStart,
+      chatCancel: vi.fn(),
+      onEvent: vi.fn((listener) => {
+        eventListener = listener
+        return () => undefined
+      })
+    })
+    // 第 21 轮完成后才触发摘要压缩：40 条历史 + 本轮问答 = 42 条。
+    const history = Array.from({ length: 20 }, (_, round) => [
+      { role: 'user', content: `问题 ${round + 1}` },
+      { role: 'assistant', content: `回答 ${round + 1}` }
+    ]).flat()
+    const config = JSON.stringify({
+      modelKey: 'provider-1::text-model',
+      messages: [...history, { role: 'user', content: '当前问题' }],
+      autoCompress: true
+    })
+    const { ctx } = makeContext('chat', config, [provider('text')])
+    const pending = chatExecutor(ctx)
+    await vi.runAllTicks()
+    eventListener?.({ kind: 'chat-delta', taskId: 'chat-1', text: '回答' })
+    eventListener?.({ kind: 'chat-done', taskId: 'chat-1' })
+    await vi.runAllTicks()
+    expect(chatStart).toHaveBeenCalledTimes(2)
+    // 取消落在摘要阶段：摘要任务永不完成，取消信号先到。
+    ctx.signal.cancelled = true
+    await vi.advanceTimersByTimeAsync(500)
+    await expect(pending).resolves.toEqual({ status: 'skipped', reason: '已取消' })
+  })
+
+  it('script 执行器：取消转 skipped，不把取消记成 failed（R-20）', async () => {
+    installGateway({
+      chatStart: vi.fn().mockImplementation(() => new Promise(() => {})),
+      chatCancel: vi.fn(),
+      onEvent: vi.fn(() => () => undefined)
+    })
+    const { ctx } = makeContext('script', '', [provider('text')], '夜色中的码头，两人对峙。')
+    const pending = scriptExecutor(ctx)
+    await vi.runAllTicks()
+    ctx.signal.cancelled = true
+    await vi.advanceTimersByTimeAsync(500)
+    await expect(pending).resolves.toEqual({ status: 'skipped', reason: '已取消' })
+  })
+
+  it('script 执行器：取消早于 chatStart 返回时补偿取消远端任务（R-02）', async () => {
+    const chatCancel = vi.fn().mockResolvedValue({ ok: true, data: true })
+    let resolveStart: (value: { ok: boolean; data: { taskId: string } }) => void = () => {}
+    installGateway({
+      chatStart: vi
+        .fn()
+        .mockImplementation(() => new Promise((resolve) => void (resolveStart = resolve))),
+      chatCancel,
+      onEvent: vi.fn(() => () => undefined)
+    })
+    const { ctx } = makeContext('script', '', [provider('text')], '夜色中的码头，两人对峙。')
+    const pending = scriptExecutor(ctx)
+    await vi.runAllTicks()
+    ctx.signal.cancelled = true
+    await vi.advanceTimersByTimeAsync(500)
+    // 迟到的 chatStart 返回：必须有人补偿取消，否则远端任务照常计费。
+    resolveStart({ ok: true, data: { taskId: 'chat-late' } })
+    await vi.runAllTicks()
+    await expect(pending).resolves.toEqual({ status: 'skipped', reason: '已取消' })
+    expect(chatCancel).toHaveBeenCalledWith('chat-late')
   })
 
   it('配音执行器按 config.backend 走模型驱动网关，并记录精确运行来源', async () => {
@@ -507,6 +591,28 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     expect(props.mediaId).toBeUndefined()
     expect(artifacts).toContainEqual(expect.objectContaining({ kind: 'video', mediaId: 'video-1' }))
     expect(JSON.parse(result.value ?? '{}').results[0].runId).toBe('run-1')
+  })
+
+  it('video executor：提交成功后取消 → 补偿取消远端任务再 skipped（R-01）', async () => {
+    const videoCancel = vi.fn().mockResolvedValue({ ok: true, data: true })
+    const videoSubmit = vi.fn().mockResolvedValue({ ok: true, data: { taskId: 'video-cancel-me' } })
+    installGateway({
+      videoSubmit,
+      videoTask: vi.fn(),
+      videoCancel
+    })
+    const { ctx } = makeContext(
+      'video',
+      JSON.stringify({ modelKey: 'provider-1::video-model', params: {} }),
+      [provider('video')],
+      '猫咪挥爪'
+    )
+    const pending = videoExecutor(ctx)
+    await vi.runAllTicks()
+    // 取消恰好在 videoSubmit 返回之后、轮询开始之前抵达。
+    ctx.signal.cancelled = true
+    await expect(pending).resolves.toEqual({ status: 'skipped', reason: '已取消' })
+    expect(videoCancel).toHaveBeenCalledWith('video-cancel-me')
   })
 
   it('video executor forwards a connected motion reference to the gateway', async () => {
