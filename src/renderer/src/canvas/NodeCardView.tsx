@@ -1,6 +1,6 @@
 // NodeCard 卡片视图：头部（序号/图标/标题/状态灯）+ 类型化内容体 + 端口圆点 + 媒体预览浮层
 import { HTMLContainer, stopEventPropagation, useEditor, useValue } from 'tldraw'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   getNodePorts,
@@ -254,14 +254,34 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     if (!editor.getSelectedShapeIds().includes(shape.id)) editor.select(shape.id)
   }
 
-  const handleTitleBlur = (e: React.FocusEvent<HTMLDivElement>): void => {
-    const next = e.currentTarget.textContent ?? ''
-    if (next !== shape.props.title) {
+  const finishTitleEditing = useCallback((title: HTMLDivElement): void => {
+    const next = title.textContent ?? ''
+    const current = editor.getShape<NodeCardShape>(shape.id)
+    if (current && next !== current.props.title) {
       editor.updateShape({ id: shape.id, type: 'node-card', props: { title: next } })
       markUndoPoint(editor, 'title-edit')
     }
     setEditing(false)
+  }, [editor, shape.id])
+
+  const handleTitleBlur = (e: React.FocusEvent<HTMLDivElement>): void => {
+    finishTitleEditing(e.currentTarget)
   }
+
+  // 画布会捕获指针事件，点击空白或不可聚焦控件时浏览器可能不会自动让
+  // contentEditable 失焦。主动结束编辑，避免标题一直保留可编辑态。
+  useEffect(() => {
+    if (!editing) return
+    const title = titleRef.current
+    if (!title) return
+    const finishOnOutsidePointerDown = (event: PointerEvent): void => {
+      if (event.target instanceof Node && title.contains(event.target)) return
+      if (document.activeElement === title) title.blur()
+      else finishTitleEditing(title)
+    }
+    document.addEventListener('pointerdown', finishOnOutsidePointerDown, true)
+    return () => document.removeEventListener('pointerdown', finishOnOutsidePointerDown, true)
+  }, [editing, finishTitleEditing])
 
   const resolvedPorts = spec
     ? getNodePorts(spec, shape)

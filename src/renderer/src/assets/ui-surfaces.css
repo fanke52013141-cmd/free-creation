@@ -3674,7 +3674,7 @@ button {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--node-accent, #42b9f5) 19%, transparent);
 }
 
-.node-card :is(button, a, [role='button'], [contenteditable='true']):focus-visible {
+.node-card :is(button, a, [role='button'], [contenteditable='true']:not(.node-title)):focus-visible {
   outline: 2px solid color-mix(in srgb, var(--node-accent, #42b9f5) 72%, white);
   outline-offset: 2px;
 }

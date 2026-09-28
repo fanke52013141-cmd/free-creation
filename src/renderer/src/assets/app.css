@@ -144,7 +144,7 @@ button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible,
-[contenteditable='true']:focus-visible,
+[contenteditable='true']:not(.node-title):focus-visible,
 [tabindex]:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
@@ -1355,8 +1355,11 @@ select:focus-visible,
 
 .node-title.editing {
   cursor: text;
-  background: rgba(9, 202, 245, 0.08);
-  border-radius: 4px;
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  outline: none;
   padding: 0 4px;
   margin: 0 -4px;
 }
