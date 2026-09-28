@@ -7,6 +7,7 @@ import { activeNodeTypes, getNodeType } from '@renderer/nodes/registry'
 import { LIBRARY_NODE_ADAPTERS } from '@shared/library/blueprint'
 import {
   ACTIVE_NODE_TYPE_IDS,
+  INTERNAL_NODE_TYPE_IDS,
   LEGACY_NODE_TYPE_IDS,
   type ActiveNodeTypeId,
   type LegacyNodeTypeId
@@ -57,9 +58,39 @@ describe('节点合规门禁', () => {
   })
 
   it('历史节点的兼容状态必须显式而非悄然可创建', () => {
+    // 先显式点名已知退役节点：防止共享清单被静默清空后，下面的遍历断言空转。
     expect(getNodeType('script')?.creatable).toBe(false)
+    expect(getNodeType('video-audio')?.creatable).toBe(false)
     expect(getNodeType('vocal-separate')?.creatable).toBe(false)
     expect(getNodeType('group')).toBeUndefined()
     expect(getNodeType('compose')).toBeUndefined()
+
+    // 注册表全集遍历：可创建集合（=新建菜单集合）之外的每个注册节点都必须
+    // 显式 creatable=false 且登记在 LEGACY 清单；LEGACY 清单成员要么已不注册、
+    // 要么 creatable=false。以后新增退役节点只改共享清单与 spec，这里自动覆盖。
+    const creatableTypes = new Set(activeNodeTypes().map((spec) => spec.type))
+    const registeredTypes = [
+      ...ACTIVE_NODE_TYPE_IDS,
+      ...INTERNAL_NODE_TYPE_IDS,
+      ...LEGACY_NODE_TYPE_IDS
+    ]
+    for (const type of registeredTypes) {
+      const spec = getNodeType(type)
+      if (!spec) continue // 已退役到不再注册的类型（如 group/compose）
+      if (creatableTypes.has(spec.type)) {
+        expect(spec.creatable, `${spec.type} 在可创建集合中却 creatable=false`).not.toBe(false)
+      } else {
+        expect(spec.creatable, `${spec.type} 不在可创建集合却未显式 creatable=false`).toBe(false)
+        expect(
+          legacy as readonly string[],
+          `${spec.type} 不可创建却未登记进 LEGACY_NODE_TYPE_IDS`
+        ).toContain(spec.type)
+      }
+    }
+    for (const type of legacy) {
+      const spec = getNodeType(type)
+      if (!spec) continue
+      expect(spec.creatable, `LEGACY 节点 ${type} 却可创建`).toBe(false)
+    }
   })
 })

@@ -4,6 +4,11 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { getNodeType, allNodeTypes } from '@renderer/nodes/registry'
+import {
+  ACTIVE_NODE_TYPE_IDS,
+  INTERNAL_NODE_TYPE_IDS,
+  LEGACY_NODE_TYPE_IDS
+} from '@shared/types'
 import { registerAllNodeTypes } from './helpers/registerNodes'
 
 // 表格要在 describe 阶段就能解析，所以节点类型在模块加载时注册，而不是 beforeAll。
@@ -11,10 +16,10 @@ registerAllNodeTypes()
 
 const DOC = readFileSync(path.resolve(process.cwd(), 'docs/NODE_COMPLIANCE_MATRIX.md'), 'utf8')
 
-/** 从一行 Markdown 表格里取出 [类型, 契约版本, 输入单元格, 输出单元格]；不是节点行返回 null。 */
+/** 从一行 Markdown 表格里取出 [类型, 契约版本, 输入单元格, 输出单元格, 结论]；不是节点行返回 null。 */
 function parseRow(
   line: string
-): { type: string; version: string; inCell: string; outCell: string } | null {
+): { type: string; version: string; inCell: string; outCell: string; verdict: string } | null {
   if (!line.startsWith('|')) return null
   const cells = line
     .split('|')
@@ -23,7 +28,14 @@ function parseRow(
   if (cells.length < 5) return null
   const type = /`([a-z][a-z-]*)`/.exec(cells[0])?.[1]
   if (!type || !getNodeType(type as never)) return null
-  return { type, version: cells[1], inCell: cells[2], outCell: cells[3] }
+  return {
+    type,
+    version: cells[1],
+    inCell: cells[2],
+    outCell: cells[3],
+    // 主表 6 列，最后一列是结论；不足 6 列的结构按无结论处理，由断言报错暴露。
+    verdict: cells.length >= 6 ? cells[cells.length - 1] : ''
+  }
 }
 
 const portIds = (cell: string): string[] =>
@@ -61,6 +73,31 @@ function explicitPortContracts(
 const rows = DOC.split('\n')
   .map(parseRow)
   .filter((r): r is NonNullable<typeof r> => Boolean(r))
+
+// 注册表全集 = Active + Internal + Legacy 三份共享清单里实际注册的子集。
+// registry 没有导出「含 creatable=false」的全量遍历，派生时以共享清单为唯一事实源。
+const allRegisteredSpecs = [
+  ...ACTIVE_NODE_TYPE_IDS,
+  ...INTERNAL_NODE_TYPE_IDS,
+  ...LEGACY_NODE_TYPE_IDS
+]
+  .map((type) => getNodeType(type as never))
+  .filter((spec): spec is NonNullable<typeof spec> => Boolean(spec))
+
+/** 「## 历史节点」小节表格第一列里的类型 id（`group`、`compose` 同处一格也能全部取出）。 */
+function historyTableTypes(doc: string): string[] {
+  const start = doc.indexOf('## 历史节点')
+  if (start < 0) return []
+  const types = new Set<string>()
+  for (const line of doc.slice(start).split('\n')) {
+    if (!line.startsWith('|')) continue
+    const firstCell = line.split('|')[1] ?? ''
+    for (const match of firstCell.matchAll(/`([a-z][a-z-]+)`/g)) types.add(match[1])
+  }
+  return Array.from(types)
+}
+
+const historyTypes = historyTableTypes(DOC)
 
 describe('NODE_COMPLIANCE_MATRIX · 文档端口与注册契约一致', () => {
   it('至少解析出 15 个节点行（解析本身失效也要被发现）', () => {
@@ -114,5 +151,39 @@ describe('NODE_COMPLIANCE_MATRIX · 文档端口与注册契约一致', () => {
       .filter((spec) => spec.creatable !== false)
       .map((spec) => spec.type)
     expect(creatable.filter((t) => !documented.has(t))).toEqual([])
+  })
+
+  it('文档声明的「N 个可创建节点」计数与注册表实际数量一致', () => {
+    const creatableCount = allNodeTypes().length
+    const declared = /(\d+)\s*个可创建节点/.exec(DOC)
+    expect(declared, '文档必须以「N 个可创建节点」的形式声明当前计数').not.toBeNull()
+    expect(
+      Number(declared![1]),
+      `文档声明 ${declared![1]} 个可创建节点，注册表实际 ${creatableCount} 个`
+    ).toBe(creatableCount)
+  })
+
+  it('每个 creatable=false 的注册节点都列入历史节点表，主表结论为退役', () => {
+    const retired = allRegisteredSpecs.filter((spec) => spec.creatable === false)
+    expect(retired.length, '退役节点派生结果为空：注册表或共享清单结构已变，断言在空转').toBeGreaterThan(0)
+    for (const spec of retired) {
+      expect(
+        historyTypes,
+        `${spec.type} creatable=false 却没有列入「历史节点」表`
+      ).toContain(spec.type)
+      const row = rows.find((item) => item.type === spec.type)
+      if (row) {
+        expect(row.verdict, `${spec.type} 在主表的结论必须是「退役」`).toBe('退役')
+      }
+    }
+  })
+
+  it('历史节点表列出的类型确实全部不可创建（或已不再注册）', () => {
+    expect(historyTypes.length, '「历史节点」表解析为空：文档结构可能被改坏').toBeGreaterThan(0)
+    for (const type of historyTypes) {
+      const spec = getNodeType(type as never)
+      if (!spec) continue // `group`/`compose` 等已不注册的 Retired 类型
+      expect(spec.creatable, `历史节点表中的 ${type} 实际仍可创建`).toBe(false)
+    }
   })
 })
