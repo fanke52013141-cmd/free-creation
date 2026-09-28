@@ -9,12 +9,19 @@ import { nanoid } from 'nanoid'
 import { Readable } from 'stream'
 import { pipeline } from 'stream/promises'
 import { createWriteStream } from 'fs'
+import { unlink } from 'fs/promises'
 import { join } from 'path'
 import type { GatewayEvent, VideoSubmitInput, VideoSubmitResult } from '../../shared/contracts'
 import type { ProviderConfig, VideoGenerationMode, VideoTaskInfo } from '../../shared/types'
 import { getDb, getDataDir } from '../store/db'
 import { readMediaBuffer, saveFileAsset } from '../store/media.repo'
 import { GatewayError } from './factory'
+import {
+  CONTROL_TIMEOUT_MS,
+  DOWNLOAD_TIMEOUT_MS,
+  fetchUpstream,
+  UpstreamStatusError
+} from './upstream-fetch'
 import { getProvider } from './providers.repo'
 import { describeUpstreamHttpError } from '../../shared/upstream-error'
 import {
@@ -254,11 +261,13 @@ async function fetchJson(
   init: RequestInit,
   context = ''
 ): Promise<Record<string, unknown> & { status?: number }> {
-  const res = await fetch(url, init)
+  // 提交/轮询是控制面请求，正常秒级回包；不设上界就会复现 MiniMax 无回包挂死拖死
+  // 整个执行入口的事故（见 upstream-fetch.ts 头注）。
+  const res = await fetchUpstream(url, init, CONTROL_TIMEOUT_MS, context)
   if (!res.ok) {
     const body = await res.text().catch(() => '')
     const error = describeUpstreamHttpError(res.status, body, context)
-    throw new GatewayError(error.code, error.message)
+    throw new UpstreamStatusError(error.code, error.message, res.status)
   }
   return (await res.json()) as Record<string, unknown>
 }
@@ -284,7 +293,9 @@ async function mediaToDataUrl(mediaId: string): Promise<string | undefined> {
  * 内存占用恒定。调用方负责把返回的临时文件交给 saveFileAsset（登记后即被移走）。
  */
 export async function downloadToTempFile(url: string): Promise<string> {
-  const res = await fetch(url)
+  // 下载是长传输（数百 MB 级、受服务端出网带宽主导），不能套用控制面的 60s 窗口；
+  // 上界独立且更宽（DOWNLOAD_TIMEOUT_MS），但同样必须有界。
+  const res = await fetchUpstream(url, {}, DOWNLOAD_TIMEOUT_MS, '下载成片失败')
   if (!res.ok || !res.body) {
     throw new GatewayError('DOWNLOAD_FAILED', `下载成片失败：HTTP ${res.status}`)
   }
@@ -295,7 +306,13 @@ export async function downloadToTempFile(url: string): Promise<string> {
   // fetch 的 body 是 DOM ReadableStream；Readable.fromWeb 需要 stream/web 类型。
   // 运行时两者兼容，这里用双重断言绕过 TS 的不透明类型不匹配。
   const nodeStream = Readable.fromWeb(res.body as unknown as import('stream/web').ReadableStream)
-  await pipeline(nodeStream, createWriteStream(tmpAbs))
+  try {
+    await pipeline(nodeStream, createWriteStream(tmpAbs))
+  } catch (error) {
+    // 中途断流/超时留下的半截 tmp-video-* 必须就地清掉：反复失败不能蚕食数据盘
+    await unlink(tmpAbs).catch(() => undefined)
+    throw error
+  }
   return tmpAbs
 }
 
@@ -308,25 +325,63 @@ function clearCancelled(taskId: string): void {
   cancelled.delete(taskId)
 }
 
-/** 成片下载 → 入库 → 发送 video-done 事件，并清理 cancelled 标记。返回入库的资产。 */
-async function finalizeVideo(
+/** 成片下载重试的指数退避；只重试下载，绝不重投任务。 */
+const DOWNLOAD_RETRY_DELAYS_MS = [2_000, 8_000, 32_000]
+
+/** 下载至多重试 retryDelays 轮；全部失败时错误信息带上成片 URL 与 taskId 供人工取回。 */
+async function downloadWithRetry(
+  url: string,
+  taskId: string,
+  retryDelays: readonly number[]
+): Promise<string> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await downloadToTempFile(url)
+    } catch (error) {
+      const delay = retryDelays[attempt]
+      if (delay === undefined) {
+        // 成片 URL 是已付费的成果，静默丢弃等于逼用户重投再扣一次费
+        const reason = error instanceof Error ? error.message : String(error)
+        throw new GatewayError(
+          'DOWNLOAD_FAILED',
+          `成片下载失败（已重试 ${retryDelays.length} 次），任务未入库，可用该地址人工取回 ` +
+            `taskId=${taskId} 成片地址=${url}；原因：${reason}`
+        )
+      }
+      await sleep(delay)
+    }
+  }
+}
+
+/**
+ * 成片下载 → 入库 → 发送 video-done 事件，并清理 cancelled 标记。返回入库的资产。
+ * 下载失败只重试下载；入库失败时 best-effort 删除临时文件，避免 tmp-video-* 泄漏。
+ */
+export async function finalizeVideo(
   send: Send,
   taskId: string,
   projectId: string,
-  url: string
+  url: string,
+  retryDelays: readonly number[] = DOWNLOAD_RETRY_DELAYS_MS
 ): Promise<void> {
-  const tmp = await downloadToTempFile(url)
   try {
-    const asset = await saveFileAsset(projectId, tmp, '.mp4', 'video')
-    updateTask(taskId, { status: 'success', output: JSON.stringify({ mediaId: asset.id }) })
-    send({
-      kind: 'video-done',
-      taskId,
-      mediaId: asset.id,
-      mediaPath: asset.path,
-      name: asset.name ?? asset.id,
-      mime: asset.mime
-    })
+    const tmp = await downloadWithRetry(url, taskId, retryDelays)
+    try {
+      const asset = await saveFileAsset(projectId, tmp, '.mp4', 'video')
+      updateTask(taskId, { status: 'success', output: JSON.stringify({ mediaId: asset.id }) })
+      send({
+        kind: 'video-done',
+        taskId,
+        mediaId: asset.id,
+        mediaPath: asset.path,
+        name: asset.name ?? asset.id,
+        mime: asset.mime
+      })
+    } catch (error) {
+      // saveFileAsset 失败时临时文件不会被登记移走，这里必须补一刀清理
+      await unlink(tmp).catch(() => undefined)
+      throw error
+    }
   } finally {
     clearCancelled(taskId)
   }
@@ -670,24 +725,47 @@ async function submitWithBackoff(
   }
 }
 
+/** 连续瞬时错误容错阈值：任务可能仍在上游运行，一次抖动就判死会诱导重投再扣费。 */
+const POLL_TRANSIENT_TOLERANCE = 5
+
+/**
+ * 轮询容错只认「任务可能仍在运行」的失败：网络断开、查询超时、上游 5xx。
+ * 401/403/404 等 4xx 是确定性错误（Key/地址/参数问题），重试同样的请求不会变好，
+ * 必须立即抛出；多等只会把「配置错了」拖成「半小时后失败」。
+ */
+function isTransientPollError(error: unknown): boolean {
+  // fetch 层的网络断开（DNS/连接被拒/TLS）不带 GatewayError 包装，任务可能仍在运行
+  if (!(error instanceof GatewayError)) return true
+  if (error.code === 'TIMEOUT') return true
+  return error instanceof UpstreamStatusError && error.status >= 500
+}
+
 /**
  * 单次续查：先确认连接没有漂移，再查询上游。轮询被限流不算任务失败——
  * 任务已经在付费运行，误判成失败会让用户重新提交并再扣一次费。
+ * 瞬时错误（断网/超时/5xx）连续 POLL_TRANSIENT_TOLERANCE 次以内同样只继续轮询，
+ * 计数在任何成功响应后清零；达到阈值或上游明确返回终态才判失败。
  */
-async function pollUpstream(
+export async function pollUpstream(
   poll: (p: ProviderConfig, upstreamId: string) => Promise<UpstreamState>,
   provider: ProviderConfig,
   connection: ProviderConnectionSnapshot | undefined,
-  upstreamId: string
+  upstreamId: string,
+  failures: { count: number }
 ): Promise<UpstreamState> {
   const drift = providerDriftMessage(connection, provider, upstreamId)
   if (drift) throw new GatewayError('PROVIDER_DRIFTED', drift)
   try {
-    return await poll(provider, upstreamId)
+    const state = await poll(provider, upstreamId)
+    failures.count = 0 // 成功响应清零
+    return state
   } catch (error) {
     if (error instanceof GatewayError && error.code === 'UPSTREAM_RATE_LIMIT')
       return { status: 'running' }
-    throw error
+    if (!isTransientPollError(error)) throw error
+    failures.count += 1
+    if (failures.count >= POLL_TRANSIENT_TOLERANCE) throw error
+    return { status: 'running' }
   }
 }
 
@@ -697,6 +775,22 @@ export function submitVideoTask(send: Send, input: VideoSubmitInput): VideoSubmi
   if (!p) throw new GatewayError('PROVIDER_NOT_FOUND', '供应商不存在')
   if (p.specId !== 'minimax' && p.specId !== 'seedance') {
     throw new GatewayError('WRONG_SPEC', '该供应商不支持视频生成')
+  }
+  // 同节点在途去重：双击/重放会让同一条视频在上游建两个计费任务。
+  // 只拦 submitted/running；failed/success/cancelled 都允许重投。
+  if (input.nodeId) {
+    const inflight = getDb()
+      .prepare(
+        "SELECT id FROM tasks WHERE kind = 'video' AND project_id = ? AND node_id = ? " +
+          "AND status IN ('submitted', 'running') ORDER BY created_at DESC LIMIT 1"
+      )
+      .get(input.projectId, input.nodeId) as { id: string } | undefined
+    if (inflight) {
+      throw new GatewayError(
+        'TASK_IN_FLIGHT',
+        `该节点已有在途视频任务（taskId: ${inflight.id}），等待其完成或先取消，避免同一条视频重复计费`
+      )
+    }
   }
   validateReferenceLimits(p, input)
   validateVideoCapabilities(p, input)
@@ -752,6 +846,8 @@ async function pollLoop(send: Send, taskId: string, input: VideoSubmitInput): Pr
     send({ kind: 'video-status', taskId, status: 'running' })
 
     const deadline = Date.now() + VIDEO_TIMEOUT_MS
+    // 连续瞬时失败计数跨轮询轮次维持，成功清零（见 pollUpstream）
+    const pollFailures = { count: 0 }
     for (;;) {
       if (cancelled.has(taskId)) {
         updateTask(taskId, { status: 'cancelled' })
@@ -769,7 +865,8 @@ async function pollLoop(send: Send, taskId: string, input: VideoSubmitInput): Pr
         poll,
         requireLiveProvider(input.providerId),
         state.connection,
-        upstreamId
+        upstreamId,
+        pollFailures
       )
       if (st.status === 'succeeded' && st.url) {
         await finalizeVideo(send, taskId, input.projectId, st.url)
@@ -845,6 +942,10 @@ async function resumeLoop(
   connection?: ProviderConnectionSnapshot
 ): Promise<void> {
   const { poll } = adaptersFor(p)
+  // 超时基准必须从恢复时刻重新起算：库里的 updated_at 是停机前的旧值，长停机后
+  // 拿它当基准会一进循环就误报 TIMEOUT，诱导用户重投已计费的任务。
+  const deadline = Date.now() + VIDEO_TIMEOUT_MS
+  const pollFailures = { count: 0 }
   try {
     for (;;) {
       if (cancelled.has(row.id)) {
@@ -856,7 +957,7 @@ async function resumeLoop(
 
       // 恢复时先 poll 一次：上游任务可能在我们离线期间已经成功（或失败），
       // 此时即便已超过 deadline，也应取回已成片的 URL 而不是立即判超时失败。
-      const st = await pollUpstream(poll, p, connection, upstreamId)
+      const st = await pollUpstream(poll, p, connection, upstreamId, pollFailures)
       if (st.status === 'succeeded' && st.url) {
         await finalizeVideo(send, row.id, row.project_id, st.url)
         return
@@ -870,7 +971,7 @@ async function resumeLoop(
       }
 
       // 只有在「上游仍在 running」时才判超时；否则进入下一轮 poll
-      if (Date.now() > row.updated_at + VIDEO_TIMEOUT_MS) {
+      if (Date.now() > deadline) {
         throw new GatewayError('TIMEOUT', '视频生成超时（30 分钟）')
       }
       await sleep(POLL_INTERVAL_MS)

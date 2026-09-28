@@ -16,8 +16,8 @@ import { registerDiagnosticsIpc } from './ipc/diagnostics.ipc'
 import { registerLibraryIpc } from './ipc/library.ipc'
 import { SqliteModelHost } from './model-host/sqlite-model-host'
 import { createDesktopModelRuntime } from './model-host/runtime'
-import { closeDb, getDb, getProjectsDir } from './store/db'
-import { reconcileWorkspace } from './store/workspace-health'
+import { closeDb, getDataDir, getDb, getProjectsDir } from './store/db'
+import { reconcileWorkspace, sweepStaleVideoTempFiles } from './store/workspace-health'
 import { bootstrapLegacyProvidersToCatalog, upgradeLegacyApiKeys } from './gateway/providers.repo'
 import { getMediaAbsPath } from './store/media.repo'
 import { mimeForExtension } from '../shared/mime'
@@ -181,6 +181,12 @@ app.whenReady().then(async () => {
     health.temporaryFiles.length
   ) {
     log.warn('workspace health check found recoverable items', health)
+  }
+  // 数据根目录残留超过 24 小时的成片临时文件（tmp-video-*）在启动时兜底清扫；
+  // 时限内不动，避免误删并行实例正在写的文件。
+  const sweptVideoTemps = sweepStaleVideoTempFiles(getDataDir())
+  if (sweptVideoTemps.length) {
+    log.info(`workspace health: 已清扫 ${sweptVideoTemps.length} 个过期的成片临时文件`)
   }
   registerMediaProtocol()
 

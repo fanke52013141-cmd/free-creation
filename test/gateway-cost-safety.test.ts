@@ -2,7 +2,7 @@
 // 这三条都是「花了钱不能重复花、报错了看得懂」的守卫，全部可离线断言。
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   describeUpstreamHttpError,
   extractUpstreamMessage,
@@ -14,6 +14,15 @@ import {
   providerDriftMessage,
   snapshotProviderConnection
 } from '../src/shared/provider-connection'
+import { GatewayError } from '../src/main/gateway/factory'
+import { UpstreamStatusError } from '../src/main/gateway/upstream-fetch'
+import type { UpstreamState } from '../src/main/gateway/video'
+
+// pollUpstream 的行为测试只需要注入 poll；video.ts 顶层的 store 依赖一律 mock 掉
+vi.mock('../src/main/store/db', () => ({
+  getDataDir: () => '',
+  getDb: () => ({ prepare: () => ({ get: () => undefined, run: () => undefined }) })
+}))
 
 const read = (relative: string) =>
   readFileSync(join(__dirname, '..', relative), 'utf8').replace(/\r\n/g, '\n')
@@ -115,7 +124,7 @@ describe('视频任务链路的接线', () => {
   it('提交时把连接快照写进任务，重启续跑才不会查错服务商', () => {
     expect(video).toContain('connection: snapshotProviderConnection(p)')
     expect(video).toMatch(
-      /const st = await pollUpstream\(\s*poll,\s*requireLiveProvider\(input\.providerId\),\s*state\.connection,\s*upstreamId\s*\)/
+      /const st = await pollUpstream\(\s*poll,\s*requireLiveProvider\(input\.providerId\),\s*state\.connection,\s*upstreamId,\s*pollFailures\s*\)/
     )
   })
 
@@ -123,7 +132,9 @@ describe('视频任务链路的接线', () => {
     expect(video).toMatch(
       /void resumeLoop\(send, row, p, state\.upstreamTaskId, state\.connection\)/
     )
-    expect(video).toMatch(/const st = await pollUpstream\(poll, p, connection, upstreamId\)/)
+    expect(video).toMatch(
+      /const st = await pollUpstream\(poll, p, connection, upstreamId, pollFailures\)/
+    )
   })
 
   it('重发只认 UPSTREAM_RATE_LIMIT，其它错误原样抛出', () => {
@@ -148,6 +159,151 @@ describe('视频任务链路的接线', () => {
     )
     expect(guard).toContain("return { status: 'running' }")
     expect(guard).toContain('PROVIDER_DRIFTED')
+  })
+
+  it('提交/轮询/下载全部走有界 fetch，不再有裸 fetch', () => {
+    expect(video).toContain('fetchUpstream(url, init, CONTROL_TIMEOUT_MS, context)')
+    expect(video).toContain('fetchUpstream(url, {}, DOWNLOAD_TIMEOUT_MS')
+    // 唯一允许的 'await fetch(' 字样只出现在历史注释里，不能出现在代码行上
+    const codeLines = video
+      .split('\n')
+      .filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line))
+      .join('\n')
+    expect(codeLines).not.toContain('await fetch(')
+  })
+
+  it('提交前拒绝同节点在途任务，错误里带在途 taskId', () => {
+    expect(video).toContain("status IN ('submitted', 'running')")
+    expect(video).toContain('TASK_IN_FLIGHT')
+    expect(video).toContain('等待其完成或先取消')
+  })
+
+  it('恢复轮询的超时基准从恢复时刻起算，不再用库中旧 updated_at', () => {
+    const resume = video.slice(video.indexOf('async function resumeLoop'))
+    expect(resume).toContain('const deadline = Date.now() + VIDEO_TIMEOUT_MS')
+    expect(resume).not.toContain('row.updated_at + VIDEO_TIMEOUT_MS')
+  })
+
+  it('成片下载失败要重试且错误信息保留 URL 与 taskId', () => {
+    expect(video).toContain('DOWNLOAD_RETRY_DELAYS_MS')
+    expect(video).toContain('可用该地址人工取回')
+    expect(video).toMatch(/taskId=\$\{taskId\} 成片地址=\$\{url\}/)
+  })
+})
+
+describe('轮询连续瞬时错误容错', () => {
+  const provider = {
+    id: 'provider-a',
+    name: 'MiniMax',
+    specId: 'minimax',
+    baseURL: 'https://api.minimaxi.com/v1',
+    apiKey: 'k',
+    createdAt: 0,
+    models: []
+  }
+
+  const httpError = (status: number): GatewayError => {
+    const e = describeUpstreamHttpError(status, '', '查询失败')
+    return new UpstreamStatusError(e.code, e.message, status)
+  }
+
+  it('断网连续 4 次只继续轮询，第 5 次才把已计费任务判死', async () => {
+    const { pollUpstream } = await import('../src/main/gateway/video')
+    const failures = { count: 0 }
+    let calls = 0
+    const poll = async (): Promise<UpstreamState> => {
+      calls += 1
+      throw new TypeError('fetch failed')
+    }
+    for (let i = 1; i <= 4; i++) {
+      await expect(pollUpstream(poll, provider, undefined, 'up-1', failures)).resolves.toEqual({
+        status: 'running'
+      })
+      expect(failures.count).toBe(i)
+    }
+    await expect(pollUpstream(poll, provider, undefined, 'up-1', failures)).rejects.toThrow(
+      'fetch failed'
+    )
+    expect(calls).toBe(5)
+  })
+
+  it('任何成功响应都会把连续失败计数清零', async () => {
+    const { pollUpstream } = await import('../src/main/gateway/video')
+    const failures = { count: 0 }
+    let broken = true
+    const poll = async (): Promise<UpstreamState> => {
+      if (broken) throw new TypeError('fetch failed')
+      return { status: 'running' }
+    }
+    for (let i = 0; i < 4; i++) {
+      await pollUpstream(poll, provider, undefined, 'up-1', failures)
+    }
+    broken = false
+    await pollUpstream(poll, provider, undefined, 'up-1', failures)
+    expect(failures.count).toBe(0)
+    broken = true
+    // 清零后又可以再容忍整一轮连续瞬时错误
+    for (let i = 0; i < 4; i++) {
+      await expect(pollUpstream(poll, provider, undefined, 'up-1', failures)).resolves.toEqual({
+        status: 'running'
+      })
+    }
+    await expect(pollUpstream(poll, provider, undefined, 'up-1', failures)).rejects.toThrow(
+      'fetch failed'
+    )
+  })
+
+  it('查询超时按瞬时处理，不把仍在运行的任务判死', async () => {
+    const { pollUpstream } = await import('../src/main/gateway/video')
+    const failures = { count: 0 }
+    const poll = async (): Promise<UpstreamState> => {
+      throw new GatewayError('TIMEOUT', '上游 60 秒内没有响应')
+    }
+    for (let i = 0; i < 4; i++) {
+      await expect(pollUpstream(poll, provider, undefined, 'up-1', failures)).resolves.toEqual({
+        status: 'running'
+      })
+    }
+    await expect(pollUpstream(poll, provider, undefined, 'up-1', failures)).rejects.toBeInstanceOf(
+      GatewayError
+    )
+  })
+
+  it('401/403/404 是确定性错误，第一次就立即失败', async () => {
+    const { pollUpstream } = await import('../src/main/gateway/video')
+    for (const status of [401, 403, 404]) {
+      const failures = { count: 0 }
+      const poll = async (): Promise<UpstreamState> => {
+        throw httpError(status)
+      }
+      await expect(pollUpstream(poll, provider, undefined, 'up-1', failures)).rejects.toThrow(
+        new RegExp(`HTTP ${status}`)
+      )
+      expect(failures.count).toBe(0)
+    }
+  })
+
+  it('5xx 计入容错，429 仍是无条件容忍且不占容错计数', async () => {
+    const { pollUpstream } = await import('../src/main/gateway/video')
+    const failures = { count: 0 }
+    let mode: 'rate' | 'server' = 'rate'
+    const poll = async (): Promise<UpstreamState> => {
+      throw httpError(mode === 'rate' ? 429 : 500)
+    }
+    for (let i = 0; i < 10; i++) {
+      await expect(pollUpstream(poll, provider, undefined, 'up-1', failures)).resolves.toEqual({
+        status: 'running'
+      })
+    }
+    expect(failures.count).toBe(0)
+    mode = 'server'
+    for (let i = 1; i <= 4; i++) {
+      await pollUpstream(poll, provider, undefined, 'up-1', failures)
+      expect(failures.count).toBe(i)
+    }
+    await expect(pollUpstream(poll, provider, undefined, 'up-1', failures)).rejects.toThrow(
+      'HTTP 500'
+    )
   })
 })
 
