@@ -30,6 +30,7 @@ import { runCodeTransform } from './codeRuntime'
 import { getNodeType } from '../nodes/registry'
 import { projectNodeOutputs, type NodeValue } from '../nodes/nodeValues'
 import { toast } from '../stores/toast'
+import { useConfirmStore } from '../stores/confirm'
 import { useEngineStore } from './store'
 import {
   appendNodeRunHistory,
@@ -336,6 +337,37 @@ function iterationBodyNodeIds(graph: { nodes: CanvasNode[]; edges: CanvasEdge[] 
   return body
 }
 
+/**
+ * 循环体指纹（R-08）：对循环体内每个节点的 type / 固定配置 / 正文做稳定序列化
+ * 哈希。循环体可达性只有 renderer 的图数据算得出来（shared 侧 ctx 不携带循环体
+ * 节点），因此只能在这里计算并经 NodeExecutionContext 注入 iterate 执行器，
+ * 供 resume 前检测「循环体已修改」；仅用于变更检测，不参与数据拓扑。
+ */
+function iterationBodyFingerprint(
+  graph: { nodes: CanvasNode[]; edges: CanvasEdge[] },
+  iterationNodeId: string
+): string {
+  const byId = new Map(graph.nodes.map((node) => [node.id, node]))
+  const roots = graph.edges
+    .filter((edge) => edge.from.nodeId === iterationNodeId && edge.from.portId === 'out-item')
+    .map((edge) => edge.to.nodeId)
+  const descriptions = expandIterationBody(graph, roots, iterationNodeId).map((nodeId) => {
+    const node = byId.get(nodeId)
+    return {
+      type: node?.type ?? '',
+      config: typeof node?.params.config === 'string' ? node.params.config : '',
+      text: node?.content.kind === 'text' ? node.content.text : ''
+    }
+  })
+  // descriptions 的键序固定、节点序来自确定性拓扑排序，JSON.stringify 即稳定。
+  let hash = 0x811c9dc5
+  for (const char of JSON.stringify(descriptions)) {
+    hash ^= char.charCodeAt(0)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0')
+}
+
 function setExec(editor: Editor, id: TLShapeId, status: ExecStatus): void {
   editor.updateShape({ id, type: 'node-card', props: { exec: status } })
 }
@@ -542,6 +574,12 @@ async function invokeExecutor(
     },
     runSubflow,
     restoreSubflowInputs: (request) => restoreSubflowStaticInputs(ctx, request)
+  }
+  // 只为循环节点附加循环体指纹：shared 执行器据此在 resume 前拒绝「改了循环体的
+  // 续跑」。这里是指纹进入 shared 侧的唯一通道，不做其他逻辑（R-08）。
+  if (node.type === 'iterate') {
+    const ctxWithFingerprint = nodeCtx as NodeExecutionContext & { bodyFingerprint?: string }
+    ctxWithFingerprint.bodyFingerprint = iterationBodyFingerprint(ctx.graph, node.id)
   }
   return spec.executor(nodeCtx)
 }
@@ -922,6 +960,15 @@ async function runSubflowForIterate(
 }
 
 /**
+ * 正文/资产类节点（outputSource: 'document'）的统一判定：输出即卡片当前内容，
+ * 与运行状态无关，重跑也不会产生费用。seed 放行判定（与 nodeValues.projectNodeOutputs
+ * 对齐）与子图运行的付费上游计数共用这一谓词，不得各写一套。
+ */
+function isDocumentOutputNode(nodeType: string): boolean {
+  return getNodeType(nodeType)?.outputSource === 'document'
+}
+
+/**
  * 以当前卡片的已持久化内容预填输出缓存，供单节点执行读取其真实上游输入。
  * 这不会运行上游节点，也不会猜测节点类型；只使用统一输出投影与端口契约校验。
  */
@@ -930,14 +977,14 @@ function seedPersistedOutputs(ctx: WorkflowContext): void {
     const shape = ctx.editor.getShape<NodeCardShape>(node.id as TLShapeId)
     if (!shape) continue
     // 有运行记录时，仅成功结果可作为手动运行的上游输入，避免失败节点遗留旧值。
-    // 例外：正文/资产类节点（outputSource: 'document'）的输出就是卡片当前内容，
-    // 而「跳过」代表那次运行什么都没产出（正文为空、没有固定值…）。两者都不存在
-    // 可泄露的遗留值。不加这条例外的后果：用户在一个空文本节点上误点一次运行，
-    // 之后它写好的正文就再也连不进下游，报「上游未产生 out-text 输出」。
+    // 例外：正文/资产类节点（outputSource: 'document'）的投影只读卡片当前内容，
+    // 与运行状态无关（同一谓词见 nodeValues.projectNodeOutputs），skipped / failed
+    // 都不代表卡片内容失效，seeding 必须与投影层同样放行。不加这条例外的后果：
+    // 用户在一个空文本节点上误点一次运行，之后它写好的正文就再也连不进下游，
+    // 报「上游未产生 out-text 输出」。run 型节点的闸门行为不变。
     const lastRun = readNodeRunRecord(shape.meta?.nodeRun)
-    const fromDocument = getNodeType(node.type)?.outputSource === 'document'
-    if (lastRun && lastRun.status !== 'success' && !(fromDocument && lastRun.status === 'skipped'))
-      continue
+    const fromDocument = isDocumentOutputNode(node.type)
+    if (lastRun && lastRun.status !== 'success' && !fromDocument) continue
     const projected = buildOutputPackets(node, projectNodeOutputs(shape), ctx.runId)
     if (projected.errors.length === 0 && Object.keys(projected.value).length > 0) {
       ctx.outputs.set(node.id, projected.value)
@@ -1098,9 +1145,32 @@ export async function runWorkflowForNodes(
   const order = topoSort(graph)
   if (!order) return toast('所选子图存在循环连线，无法执行')
 
+  const iterationBodies = iterationBodyNodeIds(graph)
+  // R-03：子图运行对整条依赖闭包全量重跑，`outputs` 从空 Map 开始，没有任何
+  // 「已成功则复用」闸门，跨轮必然重复执行付费生成类上游。这里在 beginRun 之前
+  // 把 targets 之外将被重新执行的「运行型」上游节点（非 document/asset 类，
+  // 复用 isDocumentOutputNode 判定）数出来；N>0 必须经用户确认，取消则直接
+  // 返回，不进入 beginRun。全图 runWorkflow 保持原行为不加闸。
+  const targetIds = new Set<string>(targets)
+  const nodeById = new Map(fullGraph.nodes.map((node) => [node.id, node]))
+  const rerunPaidUpstream = [...required].filter((nodeId) => {
+    if (targetIds.has(nodeId)) return false
+    // 循环体成员由循环节点逐项驱动，不单独计入，避免与循环节点双重计数。
+    if (iterationBodies.has(nodeId)) return false
+    const node = nodeById.get(nodeId)
+    return node !== undefined && !isDocumentOutputNode(node.type)
+  })
+  if (rerunPaidUpstream.length > 0) {
+    const proceed = await useConfirmStore.getState().confirm({
+      title: '将重新执行上游节点',
+      message: `所选流程将一并重新执行 ${rerunPaidUpstream.length} 个上游节点（生成类节点可能产生费用）。是否继续？`,
+      confirmText: '继续运行'
+    })
+    if (!proceed) return
+  }
+
   const token = createRunControl()
   registerRunControls(token)
-  const iterationBodies = iterationBodyNodeIds(graph)
   const executableOrder = order.filter((node) => !iterationBodies.has(node.id))
   store.beginRun(executableOrder.length)
   const ctx: WorkflowContext = {
