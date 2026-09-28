@@ -183,7 +183,10 @@ const api = {
       ipcRenderer.off(IPC.project.externalChange, listener)
     }
   },
-  exportProject: (input: { id: string; name?: string }): Promise<IpcEnvelope<{ path: string }>> =>
+  exportProject: (input: {
+    id: string
+    name?: string
+  }): Promise<IpcEnvelope<{ path: string; missingMediaCount: number }>> =>
     ipcRenderer.invoke(IPC.project.export, input),
   importProject: (): Promise<IpcEnvelope<ProjectMeta>> => ipcRenderer.invoke(IPC.project.import),
   exportCanvasStructure: (

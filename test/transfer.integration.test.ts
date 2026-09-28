@@ -1,20 +1,37 @@
 import AdmZip from 'adm-zip'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 
 const state = vi.hoisted(() => ({
   projectsDir: '',
   projects: [] as unknown[][],
-  media: [] as unknown[][]
+  media: [] as unknown[][],
+  mediaSelect: [] as Array<{
+    id: string
+    kind: 'image' | 'video' | 'audio' | 'file'
+    mime: string
+    path: string
+    size_bytes: number
+    created_at: number
+  }>,
+  failTransaction: false
 }))
 
 vi.mock('../src/main/store/db', (): { getProjectsDir: () => string; getDb: () => unknown } => {
   const statement = (
     sql: string
   ): { all: () => unknown[]; run: (...values: unknown[]) => void } => ({
-    all: () => [],
+    all: () => state.mediaSelect,
     run: (...values: unknown[]) => {
       if (sql.startsWith('INSERT INTO projects')) state.projects.push(values)
       else if (sql.startsWith('INSERT INTO media')) state.media.push(values)
@@ -24,11 +41,18 @@ vi.mock('../src/main/store/db', (): { getProjectsDir: () => string; getDb: () =>
   })
   return {
     getProjectsDir: () => state.projectsDir,
-    getDb: () => ({ prepare: statement, transaction: (fn: () => void) => () => fn() })
+    getDb: () => ({
+      prepare: statement,
+      transaction: (fn: () => void) => () => {
+        // 事务体抛错即整体回滚：模拟磁盘满/写锁导致的 DB 提交失败（R-34 故障注入）。
+        if (state.failTransaction) throw new Error('注入数据库故障')
+        fn()
+      }
+    })
   }
 })
 
-import { importProject } from '../src/main/store/transfer'
+import { importProject, exportProject } from '../src/main/store/transfer'
 
 let root = ''
 
@@ -37,6 +61,8 @@ beforeEach(() => {
   state.projectsDir = join(root, 'projects')
   state.projects = []
   state.media = []
+  state.mediaSelect = []
+  state.failTransaction = false
 })
 
 afterEach(() => rmSync(root, { recursive: true, force: true }))
@@ -138,5 +164,101 @@ describe('importProject · 本地导入集成', () => {
     expect(() => importProject(zipPath)).toThrow(/版本不兼容/)
     expect(state.projects).toHaveLength(0)
     expect(state.media).toHaveLength(0)
+  })
+
+  it('数据库提交失败时回滚目录：不留正式项目目录、不留 .importing 残留、无幽灵 DB 记录（R-34）', () => {
+    const zipPath = join(root, 'source.canvasbundle')
+    const zip = new AdmZip()
+    zip.addFile(
+      'project.json',
+      Buffer.from(
+        JSON.stringify({
+          version: 1,
+          meta: { id: 'src', name: '来源', createdAt: 1, updatedAt: 1, graphVersion: 0 },
+          nodes: [],
+          edges: [],
+          groups: []
+        })
+      )
+    )
+    zip.addFile('media/a.png', Buffer.from([137, 80, 78, 71]))
+    zip.writeZip(zipPath)
+    state.failTransaction = true
+
+    expect(() => importProject(zipPath)).toThrow('注入数据库故障')
+    // projects 目录已整体回滚：无正式项目目录、无 staging 残留（reconcile 无需介入）。
+    expect(readdirSync(state.projectsDir)).toHaveLength(0)
+    expect(state.projects).toHaveLength(0)
+    expect(state.media).toHaveLength(0)
+  })
+})
+
+describe('exportProject · 缺失媒体计数（R-33）', () => {
+  it('缺失媒体不打断导出，并按数量返回 missingMediaCount', () => {
+    const projectId = 'export-project'
+    mkdirSync(join(state.projectsDir, projectId, 'media'), { recursive: true })
+    writeFileSync(join(state.projectsDir, projectId, 'media', 'exists.png'), Buffer.from([1]))
+    writeFileSync(
+      join(state.projectsDir, projectId, 'project.json'),
+      JSON.stringify({
+        version: 1,
+        meta: { id: projectId, name: '导出', createdAt: 1, updatedAt: 1, graphVersion: 0 },
+        nodes: [],
+        edges: [],
+        groups: []
+      })
+    )
+    state.mediaSelect = [
+      {
+        id: 'exists',
+        kind: 'image',
+        mime: 'image/png',
+        path: `projects/${projectId}/media/exists.png`,
+        size_bytes: 1,
+        created_at: 1
+      },
+      {
+        id: 'gone',
+        kind: 'image',
+        mime: 'image/png',
+        path: `projects/${projectId}/media/gone.png`,
+        size_bytes: 1,
+        created_at: 1
+      }
+    ]
+
+    const dest = join(root, 'out.canvasbundle')
+    const result = exportProject(projectId, dest)
+    expect(result.path).toBe(dest)
+    expect(result.missingMediaCount).toBe(1)
+    expect(existsSync(dest)).toBe(true)
+  })
+
+  it('媒体齐全时 missingMediaCount 为 0', () => {
+    const projectId = 'export-complete'
+    mkdirSync(join(state.projectsDir, projectId, 'media'), { recursive: true })
+    writeFileSync(join(state.projectsDir, projectId, 'media', 'full.png'), Buffer.from([1]))
+    writeFileSync(
+      join(state.projectsDir, projectId, 'project.json'),
+      JSON.stringify({
+        version: 1,
+        meta: { id: projectId, name: '导出', createdAt: 1, updatedAt: 1, graphVersion: 0 },
+        nodes: [],
+        edges: [],
+        groups: []
+      })
+    )
+    state.mediaSelect = [
+      {
+        id: 'full',
+        kind: 'image',
+        mime: 'image/png',
+        path: `projects/${projectId}/media/full.png`,
+        size_bytes: 1,
+        created_at: 1
+      }
+    ]
+
+    expect(exportProject(projectId, join(root, 'ok.canvasbundle')).missingMediaCount).toBe(0)
   })
 })

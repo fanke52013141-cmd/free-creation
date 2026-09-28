@@ -253,32 +253,34 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
     `)
   },
   // M8: versioned user-defined categories; resource revisions pin a complete blueprint.
+  // IF NOT EXISTS 仅是双保险：重放保护由事务化的 user_version 保证。
   (database) => {
     database.exec(`
-      CREATE TABLE library_category_versions (
+      CREATE TABLE IF NOT EXISTS library_category_versions (
         category_id TEXT NOT NULL, version INTEGER NOT NULL, body_json TEXT NOT NULL,
         PRIMARY KEY(category_id, version)
       );
-      CREATE TABLE library_revision_blueprints (
+      CREATE TABLE IF NOT EXISTS library_revision_blueprints (
         revision_id TEXT PRIMARY KEY, category_id TEXT NOT NULL, category_json TEXT NOT NULL
       );
-      CREATE INDEX idx_library_revision_category ON library_revision_blueprints(category_id);
+      CREATE INDEX IF NOT EXISTS idx_library_revision_category ON library_revision_blueprints(category_id);
     `)
   },
   // M9: hierarchical folders replace the library's implicit collection taxonomy.
   // Existing collections and memberships are copied so migration never loses user organization.
+  // IF NOT EXISTS 仅是双保险：重放保护由事务化的 user_version 保证。
   (database) => {
     database.exec(`
-      CREATE TABLE library_folders (
+      CREATE TABLE IF NOT EXISTS library_folders (
         id TEXT PRIMARY KEY, name TEXT NOT NULL, parent_id TEXT,
         created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
       );
-      CREATE INDEX idx_library_folders_parent ON library_folders(parent_id, name COLLATE NOCASE);
-      CREATE TABLE library_resource_folders (
+      CREATE INDEX IF NOT EXISTS idx_library_folders_parent ON library_folders(parent_id, name COLLATE NOCASE);
+      CREATE TABLE IF NOT EXISTS library_resource_folders (
         folder_id TEXT NOT NULL, resource_id TEXT NOT NULL, added_at INTEGER NOT NULL,
         PRIMARY KEY(folder_id, resource_id)
       );
-      CREATE INDEX idx_library_resource_folders_resource ON library_resource_folders(resource_id);
+      CREATE INDEX IF NOT EXISTS idx_library_resource_folders_resource ON library_resource_folders(resource_id);
       INSERT INTO library_folders (id, name, parent_id, created_at, updated_at)
         SELECT id, name, NULL, created_at, updated_at FROM library_collections;
       INSERT OR IGNORE INTO library_resource_folders (folder_id, resource_id, added_at)
@@ -288,7 +290,13 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
 
 ]
 
-/** Applies each missing version exactly once and never downgrades a newer database. */
+/**
+ * Applies each missing version exactly once and never downgrades a newer database.
+ *
+ * 每个迁移与其 user_version 推进同处一个事务（SQLite 的 user_version 写入是事务性的）：
+ * 中途失败整体回滚，绝不留下「建表成功但版本号未推进」的半迁移状态导致下次启动重跑崩库。
+ * 通过 exec('BEGIN'/'COMMIT') 而非 database.transaction()，保证 fake/适配实现无需暴露事务 API。
+ */
 export function migrateDatabase(database: MigrationDatabase): number {
   const currentVersion = Number(database.pragma('user_version', { simple: true }) ?? 0)
   if (!Number.isInteger(currentVersion) || currentVersion < 0) {
@@ -298,8 +306,20 @@ export function migrateDatabase(database: MigrationDatabase): number {
     throw new Error(`数据库版本 v${currentVersion} 高于当前应用支持的 v${DB_SCHEMA_VERSION}`)
   }
   for (let version = currentVersion + 1; version <= DB_SCHEMA_VERSION; version += 1) {
-    migrations[version - 1]?.(database)
-    database.pragma(`user_version = ${version}`)
+    database.exec('BEGIN')
+    try {
+      migrations[version - 1]?.(database)
+      database.pragma(`user_version = ${version}`)
+      database.exec('COMMIT')
+    } catch (error) {
+      // 磁盘 IO 类故障可能已令 SQLite 自动回滚，此时再 ROLLBACK 会报错并掩盖原始异常。
+      try {
+        database.exec('ROLLBACK')
+      } catch {
+        // 事务已不存在：忽略，让原始错误向外抛出。
+      }
+      throw error
+    }
   }
   return currentVersion
 }
