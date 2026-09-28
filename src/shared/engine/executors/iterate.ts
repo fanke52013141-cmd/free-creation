@@ -9,7 +9,8 @@
 //
 // 完成标准：20 个镜头可受控批量执行、单项失败不丢其它成功结果、中止后可恢复未完成项。
 // 每项结果带 source（index / itemId）与 status，失败的项保留原因；中止后续跑时，
-// 已成功的项可作为已完成项跳过（由下游节点「已生成则复用」兜底）。
+// 已成功项的复用只发生在本节点的 nodeResult 记录内（resume 模式按 identity 跳过），
+// 不存在下游节点「已生成则复用」机制，跨运行复用不被假设。
 import { inputJson } from '../inputs'
 import { readNodeConfig } from '../node-config'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
@@ -63,6 +64,12 @@ export interface IterateProgress {
 export interface IterateResult {
   items: IterateItemResult[]
   progress?: IterateProgress
+  /**
+   * 循环体指纹：renderer 运行器对循环体节点 type+config+text 的稳定哈希，经
+   * NodeExecutionContext 注入（shared 侧拿不到循环体节点，headless / 单测路径可能缺省）。
+   * 每轮写入结果头部；resume 时与上轮记录比对，不一致即拒绝续跑。旧记录无此字段时行为不变。
+   */
+  bodyFingerprint?: string
 }
 
 export function parseIterate(text: string): IterateConfig {
@@ -74,7 +81,8 @@ export function parseIterate(text: string): IterateConfig {
     return {
       onFailure:
         value.onFailure === 'fail' || value.onFailure === 'retry' ? value.onFailure : 'skip',
-      maxRetries: typeof value.maxRetries === 'number' ? Math.max(0, value.maxRetries) : 0,
+      maxRetries:
+        typeof value.maxRetries === 'number' ? Math.min(10, Math.max(0, value.maxRetries)) : 0,
       limit: typeof value.limit === 'number' ? Math.max(0, value.limit) : 0,
       runMode: value.runMode === 'resume' || value.runMode === 'failed' ? value.runMode : 'all'
     }
@@ -161,7 +169,11 @@ function resultIdentity(entry: unknown): string | null {
 export function parseIterateResult(text: string): IterateResult | null {
   if (!text) return null
   try {
-    const value = JSON.parse(text) as { items?: unknown; progress?: unknown }
+    const value = JSON.parse(text) as {
+      items?: unknown
+      progress?: unknown
+      bodyFingerprint?: unknown
+    }
     if (Array.isArray(value.items))
       return {
         items: value.items as IterateItemResult[],
@@ -169,6 +181,9 @@ export function parseIterateResult(text: string): IterateResult | null {
         // 以前只回填 items，进度条因此永远渲染不出来。
         ...(value.progress && typeof value.progress === 'object'
           ? { progress: value.progress as IterateProgress }
+          : {}),
+        ...(typeof value.bodyFingerprint === 'string'
+          ? { bodyFingerprint: value.bodyFingerprint }
           : {})
       }
   } catch {
@@ -286,6 +301,10 @@ function itemRunIdFor(ctx: NodeExecutionContext, source: IterateItemSource): str
 
 export const iterateExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
   const config = parseIterate(readNodeConfig(ctx.shape))
+  // 循环体指纹由 renderer 运行器算好注入；shared 侧拿不到循环体节点数据，
+  // headless / 单测路径未注入时为 undefined，恢复校验退化为旧行为（R-08）。
+  const bodyFingerprint = (ctx as NodeExecutionContext & { bodyFingerprint?: string })
+    .bodyFingerprint
   const list = inputJson(ctx.inputs, 'in-list')[0]
   if (!Array.isArray(list)) return { status: 'skipped', reason: '没有可循环的列表输入' }
   const bodyTargets = (ctx.outgoing ?? []).filter((edge) => edge.fromPortId === 'out-item')
@@ -301,6 +320,16 @@ export const iterateExecutor = async (ctx: NodeExecutionContext): Promise<NodeEx
   const previous = parseIterateResult(
     typeof ctx.shape.meta?.nodeResult === 'string' ? ctx.shape.meta.nodeResult : ''
   )
+  // resume 前置校验：上轮记录了循环体指纹而本轮指纹不同，说明循环体已被修改，
+  // 续跑会把旧产物静默标成 reused——必须拒绝并要求完整重跑（R-08）。
+  if (
+    config.runMode === 'resume' &&
+    previous?.bodyFingerprint &&
+    bodyFingerprint &&
+    previous.bodyFingerprint !== bodyFingerprint
+  ) {
+    return { status: 'failed', reason: '循环体已修改，不能续跑，请完整重跑' }
+  }
   const previousById = new Map<string, IterateItemResult | null>()
   for (const entry of previous?.items ?? []) {
     const identity = resultIdentity(entry)
@@ -329,7 +358,9 @@ export const iterateExecutor = async (ctx: NodeExecutionContext): Promise<NodeEx
             source: sourceFor(items[index] as Record<string, unknown>, index)
           }
       ),
-      progress: progressFor(results, config)
+      progress: progressFor(results, config),
+      // 头部带上本轮循环体指纹：即使中途取消，resume 也有比对基准（R-08）。
+      ...(bodyFingerprint ? { bodyFingerprint } : {})
     }
     ctx.updateResult(JSON.stringify(data))
   }
@@ -387,17 +418,40 @@ export const iterateExecutor = async (ctx: NodeExecutionContext): Promise<NodeEx
     }
   }
 
+  // 循环因取消 / 失败提前结束后：未到达项若在上轮已有 done/reused 记录则保留
+  // （刷新 item/source、状态标为 reused），仅当无 prior 时才写 skipped。否则取消
+  // 会把上轮已完成记录抹成 skipped，resume 时 previousById 查不到，全部重新付费
+  // 执行（R-07）。in-flight 项不在本列：它已被 runItem 明确标为 skipped，不得把
+  // 半途产物当完整结果复用（F08）。
   for (let i = 0; i < results.length; i += 1) {
-    if (!results[i]) {
+    if (results[i]) continue
+    const item = items[i] as Record<string, unknown>
+    const source = sourceFor(item, i)
+    const identity =
+      source.itemId && source.fingerprint ? `${source.itemId}:${source.fingerprint}` : ''
+    const prior =
+      (identity && !duplicateCurrentIdentities.has(identity)
+        ? previousById.get(identity)
+        : undefined) ?? undefined
+    if (
+      prior &&
+      (prior.status === 'done' || prior.status === 'reused') &&
+      isSameItem(prior, item, source)
+    ) {
+      results[i] = { ...prior, item, status: 'reused', source }
+    } else {
       results[i] = {
-        item: items[i] as Record<string, unknown>,
+        item,
         status: 'skipped',
         error: ctx.signal.cancelled ? '已取消' : '未执行',
-        source: sourceFor(items[i] as Record<string, unknown>, i)
+        source
       }
     }
   }
-  const data: IterateResult = { items: results as IterateItemResult[] }
+  const data: IterateResult = {
+    items: results as IterateItemResult[],
+    ...(bodyFingerprint ? { bodyFingerprint } : {})
+  }
   ctx.restoreSubflowInputs?.({
     nodeIds: bodyTargets.map((edge) => edge.nodeId),
     iterationNodeId: ctx.node.id

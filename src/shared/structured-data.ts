@@ -84,36 +84,60 @@ function stringifyInterpolation(value: unknown): string {
   return typeof value === 'string' ? value : JSON.stringify(value)
 }
 
+/** 插值结果：value 为替换后的数据；missing 是解析为 undefined 的占位符路径。 */
+export interface StructuredInterpolationResult {
+  value: unknown
+  /** 按出现顺序去重后的缺失占位符（如 input[0].scene）；空数组表示全部命中。 */
+  missing: string[]
+}
+
 /**
  * 仅从本节点已声明的 in-context / in-text 输入解析模板变量，绝不扫描上游节点。
  * 完整占位符会保留对象或数组本身；嵌入字符串则序列化为可读文本。
+ * 解析为 undefined 的占位符（路径不存在、下标越界）会被收集进 missing，不得静默
+ * 变成空串或被丢弃——那是「假成功」的来源（R-15）。
  */
+export function interpolateStructuredValueWithMissing(
+  value: unknown,
+  contexts: unknown[],
+  text: string
+): StructuredInterpolationResult {
+  const missing: string[] = []
+  const walk = (node: unknown): unknown => {
+    if (Array.isArray(node)) return node.map(walk)
+    if (!node || typeof node !== 'object') {
+      if (typeof node !== 'string') return node
+      const whole = node.match(/^\{\{\s*(text|input\[(\d+)\]((?:\.[A-Za-z0-9_-]+)*)?)\s*\}\}$/)
+      const resolve = (token: string): unknown => {
+        if (token === 'text') return text
+        const match = token.match(/^input\[(\d+)\]((?:\.[A-Za-z0-9_-]+)*)?$/)
+        if (!match) return undefined
+        const context = contexts[Number(match[1])]
+        return valueAtPath(context, match[2]?.slice(1) ?? '')
+      }
+      if (whole) {
+        const resolved = resolve(whole[1]!)
+        if (resolved === undefined) missing.push(whole[1]!)
+        return resolved
+      }
+      return node.replace(/\{\{\s*(text|input\[\d+\](?:\.[A-Za-z0-9_-]+)*)\s*\}\}/g, (_, token) => {
+        const resolved = resolve(token as string)
+        if (resolved === undefined) missing.push(token as string)
+        return stringifyInterpolation(resolved)
+      })
+    }
+    return Object.fromEntries(
+      Object.entries(node as Record<string, unknown>).map(([key, item]) => [key, walk(item)])
+    )
+  }
+  return { value: walk(value), missing: [...new Set(missing)] }
+}
+
+/** 兼容旧签名的插值入口；需要缺失占位符检测的执行器用 WithMissing 版本。 */
 export function interpolateStructuredValue(
   value: unknown,
   contexts: unknown[],
   text: string
 ): unknown {
-  if (Array.isArray(value))
-    return value.map((item) => interpolateStructuredValue(item, contexts, text))
-  if (!value || typeof value !== 'object') {
-    if (typeof value !== 'string') return value
-    const whole = value.match(/^\{\{\s*(text|input\[(\d+)\]((?:\.[A-Za-z0-9_-]+)*)?)\s*\}\}$/)
-    const resolve = (token: string): unknown => {
-      if (token === 'text') return text
-      const match = token.match(/^input\[(\d+)\]((?:\.[A-Za-z0-9_-]+)*)?$/)
-      if (!match) return undefined
-      const context = contexts[Number(match[1])]
-      return valueAtPath(context, match[2]?.slice(1) ?? '')
-    }
-    if (whole) return resolve(whole[1]!)
-    return value.replace(/\{\{\s*(text|input\[\d+\](?:\.[A-Za-z0-9_-]+)*)\s*\}\}/g, (_, token) =>
-      stringifyInterpolation(resolve(token))
-    )
-  }
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>).map(([key, item]) => [
-      key,
-      interpolateStructuredValue(item, contexts, text)
-    ])
-  )
+  return interpolateStructuredValueWithMissing(value, contexts, text).value
 }

@@ -174,6 +174,24 @@ describe('jsonExecutor · 运行时分支', () => {
     expect(r.status).toBe('failed')
     expect(r.reason).toContain('JSON')
   })
+
+  it('数字字面量解析后与原文不一致（1e3 → 1000）→ failed，提示加引号保留（R-17）', () => {
+    const { ctx } = makeCtx({
+      nodeType: 'json',
+      inputs: textPacket('in-text', '1e3')
+    })
+    const r = jsonExecutor(ctx)
+    expect(r.status).toBe('failed')
+    expect(r.reason).toContain('1e3')
+    expect(r.reason).toContain('引号')
+  })
+
+  it('可精确往返的数字 / 布尔 / null 不受影响', () => {
+    for (const text of ['12', '-3', '1.5', '0', 'true', 'null']) {
+      const { ctx } = makeCtx({ nodeType: 'json', inputs: textPacket('in-text', text) })
+      expect(jsonExecutor(ctx).status).toBe('done')
+    }
+  })
 })
 
 describe('structuredExecutor · 字段映射与 Schema 校验', () => {
@@ -219,6 +237,64 @@ describe('structuredExecutor · 字段映射与 Schema 校验', () => {
     })
     expect(structuredExecutor(ctx)).toMatchObject({ status: 'failed' })
     expect(props.text).toBeUndefined()
+  })
+
+  it('占位符路径缺失 → failed 并列出缺失路径，不得静默假成功（R-15）', () => {
+    const inputs: NodeExecutionContext['inputs'] = new Map([
+      [
+        'in-context',
+        [
+          {
+            type: 'json',
+            value: { kind: 'json', data: { name: '主角' } },
+            source: { nodeId: 'character', portId: 'out-json', runId: 'r1' },
+            createdAt: 0
+          }
+        ]
+      ]
+    ])
+    const { ctx, result } = makeCtx({
+      nodeType: 'structured',
+      config: JSON.stringify({ schema: { id: 'json.any', version: 1 } }),
+      text: JSON.stringify({
+        whole: '{{input[0].missing}}',
+        embedded: '前缀 {{input[1].name}} 后缀'
+      }),
+      inputs
+    })
+    const r = structuredExecutor(ctx)
+    expect(r.status).toBe('failed')
+    expect(r.reason).toContain('input[0].missing')
+    expect(r.reason).toContain('input[1].name')
+    // 失败路径不写运行结果，下游不得消费半成品。
+    expect(result.value).toBeNull()
+  })
+
+  it('非占位符字段与命中占位符不受缺失检测影响', () => {
+    const inputs: NodeExecutionContext['inputs'] = new Map([
+      [
+        'in-context',
+        [
+          {
+            type: 'json',
+            value: { kind: 'json', data: { name: '主角' } },
+            source: { nodeId: 'character', portId: 'out-json', runId: 'r1' },
+            createdAt: 0
+          }
+        ]
+      ]
+    ])
+    const { ctx, result } = makeCtx({
+      nodeType: 'structured',
+      config: JSON.stringify({ schema: { id: 'json.any', version: 1 } }),
+      text: JSON.stringify({ literal: '{{不是占位符}}', name: '{{input[0].name}}' }),
+      inputs
+    })
+    expect(structuredExecutor(ctx).status).toBe('done')
+    expect(JSON.parse(result.value ?? '{}').data).toEqual({
+      literal: '{{不是占位符}}',
+      name: '主角'
+    })
   })
 })
 
