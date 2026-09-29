@@ -11,6 +11,16 @@ type JsonRecord = Record<string, unknown>
 
 const trimUrl = (value: string): string => value.replace(/\/+$/, '')
 
+// Small, opaque, solid-red PNG. A successful HTTP status alone cannot prove image understanding.
+const VISION_PROBE_PNG = 'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAAAvSURBVFiF7c4xAQAwDIAwNv+eWxl9ggHypqbD/uUcAAAAAAAAAAAAAAAAAACgagEw4wI+0ujnJgAAAABJRU5ErkJggg=='
+const VISION_PROBE_QUESTION = 'What is the main color of this image? Reply with only the English color name.'
+
+function wantsImageInput(model: ModelDefinition, operation: ModelOperation): boolean {
+  return operation === 'text.generate' && model.capabilities.some((capability) =>
+    capability.operation === operation && capability.acceptedAssetKinds.includes('image')
+  )
+}
+
 function authHeaders(request: ProviderValidationRequest): Record<string, string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json', ...request.connection.headers }
   // Native Volcengine TTS uses a different scheme; all other supported providers accept Bearer.
@@ -69,6 +79,10 @@ function pathFor(operation: ModelOperation, protocol: string): string | null {
 }
 
 function requestFor(request: ProviderValidationRequest): { url: string; body: JsonRecord } | null {
+  const vision = wantsImageInput(request.model, request.operation)
+  // The desktop chat gateway currently sends OpenAI-compatible messages. Do not certify a
+  // native protocol's vision route until its normal execution route accepts the same payload.
+  if (vision && !['openai', 'openai-compatible', 'openrouter', 'custom'].includes(request.connection.protocol)) return null
   if (request.connection.protocol === 'minimax' && request.operation === 'speech.synthesize') {
     const config = { ...DEFAULT_SPEECH_CONFIG, modelId: request.model.modelId }
     return {
@@ -85,14 +99,34 @@ function requestFor(request: ProviderValidationRequest): { url: string; body: Js
     if (request.operation !== 'text.generate') return null
     return {
       url: `${trimUrl(request.connection.baseUrl)}/models/${encodeURIComponent(request.model.modelId)}:generateContent?key=${encodeURIComponent(request.secret)}`,
-      body: { contents: [{ parts: [{ text: 'Reply with OK.' }] }] }
+      body: { contents: [{ parts: vision ? [{ text: VISION_PROBE_QUESTION }, { inlineData: { mimeType: 'image/png', data: VISION_PROBE_PNG } }] : [{ text: 'Reply with OK.' }] }] }
     }
   }
   if (request.connection.protocol === 'anthropic' && request.operation === 'text.generate') {
-    return { url: `${trimUrl(request.connection.baseUrl)}/v1/messages`, body: { model: request.model.modelId, max_tokens: 1, messages: [{ role: 'user', content: 'Reply with OK.' }] } }
+    return { url: `${trimUrl(request.connection.baseUrl)}/v1/messages`, body: { model: request.model.modelId, max_tokens: vision ? 32 : 1, messages: [{ role: 'user', content: vision ? [{ type: 'text', text: VISION_PROBE_QUESTION }, { type: 'image', source: { type: 'base64', media_type: 'image/png', data: VISION_PROBE_PNG } }] : 'Reply with OK.' }] } }
   }
   const path = pathFor(request.operation, request.connection.protocol)
+  if (vision && path) {
+    return { url: `${trimUrl(request.connection.baseUrl)}${path}`, body: { model: request.model.modelId, messages: [{ role: 'user', content: [{ type: 'text', text: VISION_PROBE_QUESTION }, { type: 'image_url', image_url: { url: `data:image/png;base64,${VISION_PROBE_PNG}` } }] }], max_tokens: 32 } }
+  }
   return path ? { url: `${trimUrl(request.connection.baseUrl)}${path}`, body } : null
+}
+
+function responseText(body: string, protocol: string): string {
+  let payload: JsonRecord
+  try { payload = JSON.parse(body) as JsonRecord } catch { return '' }
+  if (protocol === 'google') {
+    const candidate = (payload.candidates as JsonRecord[] | undefined)?.[0]
+    const content = candidate?.content as JsonRecord | undefined
+    return ((content?.parts as JsonRecord[] | undefined) ?? []).map((part) => part.text).filter((part): part is string => typeof part === 'string').join(' ')
+  }
+  if (protocol === 'anthropic') {
+    return ((payload.content as JsonRecord[] | undefined) ?? []).map((part) => part.text).filter((part): part is string => typeof part === 'string').join(' ')
+  }
+  const choice = (payload.choices as JsonRecord[] | undefined)?.[0]
+  const content = (choice?.message as JsonRecord | undefined)?.content
+  if (typeof content === 'string') return content
+  return Array.isArray(content) ? content.map((part: JsonRecord) => part.text).filter((part: unknown): part is string => typeof part === 'string').join(' ') : ''
 }
 
 function responseMessage(status: number, body: string): ProviderValidationFinding {
@@ -135,12 +169,21 @@ export class HttpValidationAdapter implements ProviderAdapter {
 
   async validate(request: ProviderValidationRequest): Promise<ProviderValidationFinding> {
     if (request.operation === 'voice.clone') return validateMiniMaxVoiceClone(request)
+    if (wantsImageInput(request.model, request.operation) && !['openai', 'openai-compatible', 'openrouter', 'custom'].includes(request.connection.protocol)) {
+      return { status: 'unsupported', message: '当前桌面调用链尚未支持此连接协议的识图请求', action: '使用已验证的 OpenAI 兼容连接，或先实现该协议的正式调用适配' }
+    }
     const outgoing = requestFor(request)
     if (!outgoing) return { status: 'unsupported', message: '此能力必须携带用户素材或自定义验证请求，不能用空请求证明可调用', action: '在对应功能中上传素材后执行验证' }
     const response = await fetch(outgoing.url, {
       method: 'POST', headers: authHeaders(request), body: JSON.stringify(outgoing.body), signal: request.signal ?? AbortSignal.timeout(90_000)
     })
-    return responseMessage(response.status, await response.text().catch(() => ''))
+    const body = await response.text().catch(() => '')
+    const finding = responseMessage(response.status, body)
+    if (finding.status !== 'verified' || !wantsImageInput(request.model, request.operation)) return finding
+    const answer = responseText(body, request.connection.protocol)
+    return /\bred\b|红/iu.test(answer)
+      ? { status: 'verified', message: '模型已正确识别测试图片，并返回文本' }
+      : { status: 'failed', message: '图片请求已返回，但模型未正确识别测试图片', action: '检查模型是否支持图片输入及当前连接的多模态请求格式' }
   }
 }
 

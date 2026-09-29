@@ -126,17 +126,27 @@ export class SqliteModelHost
 
   saveConnection(input: ModelCatalogConnectionInput): Connection {
     const now = new Date().toISOString()
-    const existing = this.db.prepare('SELECT secret_ref, created_at FROM model_connections WHERE id = ?').get(input.id) as { secret_ref: string | null; created_at: string } | undefined
+    const existing = this.db.prepare('SELECT secret_ref, created_at, protocol, base_url, headers_json FROM model_connections WHERE id = ?').get(input.id) as { secret_ref: string | null; created_at: string; protocol: string; base_url: string; headers_json: string } | undefined
     const secret = input.apiKey?.trim() ? encryptSecret(input.apiKey.trim()) : (existing?.secret_ref ?? null)
+    const nextUrl = input.baseUrl.replace(/\/+$/, '')
+    const nextHeaders = JSON.stringify(input.headers ?? {})
+    const connectionChanged = Boolean(existing && (
+      existing.protocol !== input.protocol || existing.base_url !== nextUrl ||
+      existing.headers_json !== nextHeaders || Boolean(input.apiKey?.trim())
+    ))
     this.db.prepare(`INSERT INTO model_connections (id, name, protocol, base_url, secret_ref, headers_json, metadata_json, enabled, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET name=excluded.name, protocol=excluded.protocol, base_url=excluded.base_url,
         secret_ref=excluded.secret_ref, headers_json=excluded.headers_json, metadata_json=excluded.metadata_json,
         enabled=excluded.enabled, updated_at=excluded.updated_at`).run(
-      input.id, input.name.trim(), input.protocol, input.baseUrl.replace(/\/+$/, ''), secret,
-      JSON.stringify(input.headers ?? {}), JSON.stringify(input.metadata ?? {}), input.enabled === false ? 0 : 1,
+      input.id, input.name.trim(), input.protocol, nextUrl, secret,
+      nextHeaders, JSON.stringify(input.metadata ?? {}), input.enabled === false ? 0 : 1,
       existing?.created_at ?? now, now
     )
+    if (connectionChanged) {
+      this.db.prepare('DELETE FROM model_validations WHERE connection_id = ?').run(input.id)
+      this.db.prepare('DELETE FROM model_feature_bindings WHERE connection_id = ?').run(input.id)
+    }
     return this.connectionFromRow(this.db.prepare('SELECT * FROM model_connections WHERE id = ?').get(input.id) as ConnectionRow)
   }
 
@@ -147,13 +157,24 @@ export class SqliteModelHost
     const now = new Date().toISOString()
     // A model is one configured target that may implement several operations. The UI adds
     // capabilities incrementally, so locate by the stable connection+upstream-model key first.
-    const existing = this.db.prepare('SELECT id, created_at, capabilities_json FROM model_definitions WHERE connection_id = ? AND model_id = ?').get(input.connectionId, input.modelId.trim()) as { id: string; created_at: string; capabilities_json: string } | undefined
-    const mergedCapabilities = existing
-      ? [...json<Capability[]>(existing.capabilities_json, []), ...input.capabilities].filter(
-          (capability, index, items) => items.findIndex((item) => item.operation === capability.operation) === index
-        )
-      : input.capabilities
+    const existing = this.db.prepare('SELECT id, connection_id, model_id, created_at, capabilities_json FROM model_definitions WHERE id = ? OR (connection_id = ? AND model_id = ?)').get(input.id, input.connectionId, input.modelId.trim()) as { id: string; connection_id: string; model_id: string; created_at: string; capabilities_json: string } | undefined
+    const previousCapabilities = existing ? json<Capability[]>(existing.capabilities_json, []) : []
+    // Editing an existing definition replaces its declared capabilities. Adding an already
+    // configured upstream model merges operations, with the incoming declaration taking precedence.
+    const mergedCapabilities = existing?.id === input.id
+      ? input.capabilities
+      : [...previousCapabilities.filter((old) => !input.capabilities.some((next) => next.operation === old.operation)), ...input.capabilities]
     const definitionId = existing?.id ?? input.id
+    const changedOperations = new Set<ModelOperation>()
+    if (existing) {
+      for (const old of previousCapabilities) {
+        const next = mergedCapabilities.find((item) => item.operation === old.operation)
+        if (!next || JSON.stringify(next) !== JSON.stringify(old) || existing.connection_id !== input.connectionId || existing.model_id !== input.modelId.trim()) changedOperations.add(old.operation)
+      }
+      for (const next of mergedCapabilities) {
+        if (!previousCapabilities.some((old) => old.operation === next.operation)) changedOperations.add(next.operation)
+      }
+    }
     this.db.prepare(`INSERT INTO model_definitions (id, connection_id, model_id, name, capabilities_json, metadata_json, enabled, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET connection_id=excluded.connection_id, model_id=excluded.model_id, name=excluded.name,
@@ -161,6 +182,10 @@ export class SqliteModelHost
       definitionId, input.connectionId, input.modelId.trim(), input.name.trim(), JSON.stringify(mergedCapabilities),
       JSON.stringify(input.metadata ?? {}), input.enabled === false ? 0 : 1, existing?.created_at ?? now, now
     )
+    for (const operation of changedOperations) {
+      this.db.prepare('DELETE FROM model_validations WHERE model_definition_id = ? AND operation = ?').run(definitionId, operation)
+      this.db.prepare('DELETE FROM model_feature_bindings WHERE model_definition_id = ? AND operation = ?').run(definitionId, operation)
+    }
     return this.modelFromRow(this.db.prepare('SELECT * FROM model_definitions WHERE id = ?').get(definitionId) as ModelRow)
   }
 
@@ -239,13 +264,23 @@ export class SqliteModelHost
   }
 
   private modelFromRow(row: ModelRow): ModelDefinition {
+    const validationRows = this.db.prepare('SELECT operation, status, checked_at, verified_at, message FROM model_validations WHERE model_definition_id = ? AND connection_id = ?').all(row.id, row.connection_id) as Array<{ operation: ModelOperation; status: 'unverified' | 'validating' | 'verified' | 'failed' | 'unsupported'; checked_at: string | null; verified_at: string | null; message: string | null }>
+    const validation: ModelDefinition['validation'] = {}
+    for (const item of validationRows) {
+      validation[item.operation] = {
+        status: item.status,
+        ...(item.checked_at ? { checkedAt: item.checked_at } : {}),
+        ...(item.verified_at ? { verifiedAt: item.verified_at } : {}),
+        ...(item.message ? { message: item.message } : {})
+      }
+    }
     return {
       id: row.id,
       connectionId: row.connection_id,
       modelId: row.model_id,
       name: row.name,
       capabilities: json<Capability[]>(row.capabilities_json, []),
-      validation: {},
+      validation,
       metadata: json(row.metadata_json, {}),
       enabled: Boolean(row.enabled)
     }
