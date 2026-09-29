@@ -53,7 +53,10 @@ let shotSeq = 0
 async function launchApp() {
   app = await _electron.launch({
     executablePath: path.join(ROOT, 'node_modules/electron/dist/electron.exe'),
-    args: [path.join(ROOT, 'out/main/index.js')],
+    // 必须以项目目录（package.json main）启动，与 dev/packaged 的解析一致：
+    // 直启 out/main/index.js 会让 app.getAppPath() 变成 out/main，
+    // 主进程 video-conversion 就找不到 resources/video-conversion/runner.py。
+    args: [ROOT],
     env: { ...process.env, CANVAS_DATA_DIR: DATA_DIR, NODE_ENV: 'production' }
   })
   win = await app.firstWindow()
@@ -472,8 +475,12 @@ async function checkPorts(id, nodeType, expectedIn, expectedOut) {
   )
 }
 
-/** 点击运行并等待「这一次」的运行落库；返回磁盘上的节点真值。 */
-async function runNode(id) {
+/**
+ * 点击运行并等待「这一次」的运行落库；返回磁盘上的节点真值。
+ * minutes > 0 时用于本地推理这类分钟级长任务：栅栏逻辑不变（新 runId + 执行落定），
+ * 只是轮询拉长并每 30 秒报一次进度，其余配方不传参、行为与原来完全一致。
+ */
+async function runNode(id, minutes = 0) {
   const st = await statusOf(id)
   if (st.disabled !== false) return { blocked: true, aria: st.aria }
   const btn = card(id).locator('.node-run-btn')
@@ -481,15 +488,28 @@ async function runNode(id) {
   // 自动保存有防抖：只等「状态已落定」会读到上一次运行留下的旧记录。runId 每次运行都换，
   // 用它当栅栏才是真的等到了这一次。
   const previous = await disk(id)
+  const settled = (s) =>
+    s.exec !== 'running' &&
+    s.exec !== 'queued' &&
+    Boolean(s.run && s.run.status) &&
+    s.run.runId !== (previous?.run ?? {}).runId
   await btn.click()
-  const shape = await disk(
-    id,
-    (s) =>
-      s.exec !== 'running' &&
-      s.exec !== 'queued' &&
-      Boolean(s.run && s.run.status) &&
-      s.run.runId !== (previous?.run ?? {}).runId
-  )
+  if (minutes > 0) {
+    const deadline = Date.now() + minutes * 60_000
+    const startedAt = Date.now()
+    let lastLog = 0
+    for (;;) {
+      const shape = (await readShapes()).get(id)
+      if (shape && settled(shape)) return { blocked: false, shape }
+      if (Date.now() > deadline) return { blocked: false, shape: shape ?? (await disk(id)) }
+      if (Date.now() - lastLog > 30_000) {
+        lastLog = Date.now()
+        log(`节点 ${String(id).slice(-4)} 仍在执行，已等待 ${Math.round((Date.now() - startedAt) / 1000)}s（上限 ${minutes} 分钟）`)
+      }
+      await win.waitForTimeout(2_000)
+    }
+  }
+  const shape = await disk(id, settled)
   return { blocked: false, shape: shape ?? (await disk(id)) }
 }
 
@@ -1301,6 +1321,293 @@ async function recipeVideoClip() {
   await shot('video-clip-output')
 }
 
+// ── 深度/白模视频（本地 CUDA 推理，VID-06/VID-07）──────────────────────────
+// 引擎只装在用户真实数据目录（ready.json + 5.8GB python-env + 116MB 权重），
+// 隔离数据目录不可能重装（要下载约 3.4GB CUDA 依赖）。这里用 NTFS junction 把
+// python-env 与 models 链进隔离目录、只复制轻量的 ready.json：主进程 runtimeReady()
+// 的每一项检查（ready.json 哈希、venv、权重字节数）照常生效，推理路径一字不改。
+const ENGINE_SOURCE = path.join(
+  process.env.APPDATA || '',
+  'canvas-studio',
+  'data',
+  'video-conversion'
+)
+
+/** 把已装好的推理引擎接进隔离数据目录；引擎缺失时返回 false（配方向上标 BLOCKED）。 */
+function linkVideoEngine() {
+  if (!fs.existsSync(path.join(ENGINE_SOURCE, 'ready.json'))) return false
+  const target = path.join(DATA_DIR, 'video-conversion')
+  fs.mkdirSync(target, { recursive: true })
+  for (const name of ['python-env', 'models']) {
+    const link = path.join(target, name)
+    if (!fs.existsSync(link)) fs.symlinkSync(path.join(ENGINE_SOURCE, name), link, 'junction')
+  }
+  fs.copyFileSync(path.join(ENGINE_SOURCE, 'ready.json'), path.join(target, 'ready.json'))
+  return true
+}
+
+/**
+ * ffprobe 产物体检：时长/编码/尺寸/体积一次量完，摘要原文进 check detail 当证据。
+ * 与 probeDuration 的区别：这里还核编码与分辨率上限，深度/白模的产物字节必须可解码。
+ */
+function probeVideoSummary(absFile) {
+  try {
+    const out = execFileSync('ffprobe', [
+      '-v', 'error', '-select_streams', 'v:0',
+      '-show_entries', 'stream=codec_name,width,height:format=duration,size',
+      '-of', 'default=noprint_wrappers=1', absFile
+    ]).toString()
+    const pick = (key) => new RegExp(`^${key}=(.*)$`, 'm').exec(out)?.[1] ?? ''
+    return {
+      codec: pick('codec_name'),
+      width: Number(pick('width')),
+      height: Number(pick('height')),
+      duration: Number(pick('duration')),
+      bytes: Number(pick('size')),
+      raw: out.trim().replace(/\n/g, ' ')
+    }
+  } catch (error) {
+    return {
+      codec: '', width: 0, height: 0, duration: -1, bytes: 0,
+      raw: `ffprobe 失败：${error.message}`
+    }
+  }
+}
+
+/**
+ * 深度/白模视频：同一源片的 out-video 分别独立接两个转换节点（FLOW-07 连法），
+ * 各跑一次真实 CUDA 本地推理；白模改浮雕强度后重跑，验证参数改变对应新产物（VID-07）。
+ */
+async function recipeVideoAi() {
+  // 引擎健康先行：健康检查不过就原样报 BLOCKED，不为过而放宽断言。
+  const linked = linkVideoEngine()
+  const health = await win.evaluate(async () => {
+    const response = await window.api.getVideoEngineStatus()
+    return response.ok ? response.data : { ready: false, message: response.error?.message }
+  })
+  check(
+    '深度/白模：本地推理引擎健康检查（ready.json 校验 + venv + 权重）',
+    linked && health.ready === true,
+    health.ready
+      ? `GPU=${health.gpuName || '未知'}｜引擎源=${ENGINE_SOURCE}`
+      : `BLOCKED：linked=${linked}｜${JSON.stringify(health)}`
+  )
+  if (!linked || !health.ready) {
+    throw new Error(`本地推理引擎未就绪，BLOCKED：${JSON.stringify(health)}`)
+  }
+
+  // 2 秒 50 帧的短样本：把本地推理墙钟压到最低，同时保留「解码 → 推理 → 编码」全链路。
+  const short = path.join(FIX_DIR, 'clip-2s.mp4')
+  if (!fs.existsSync(short)) {
+    execFileSync('ffmpeg', [
+      '-hide_banner', '-loglevel', 'error', '-y',
+      '-f', 'lavfi', '-i', 'testsrc2=size=320x240:rate=25:duration=2',
+      '-c:v', 'libx264', '-pix_fmt', 'yuv420p', short
+    ])
+  }
+  // 源片拖到网格行下方的空白处：端口被更上层卡片盖住（±12px 容差）时会整颗剔除，
+  // 源片卡若挤在两个转换节点中间，out-video 会被 slot 1 的白模卡遮挡而无法连线。
+  const { created } = await dropAsset(short, 'clip-2s.mp4', 'video/mp4', 470, 640)
+  check(
+    '深度/白模：拖入 2 秒 MP4 建出视频资产节点',
+    created.length === 1 && created[0].type === 'video-asset',
+    JSON.stringify(created)
+  )
+  const src = created[0]?.id
+  if (!src) throw new Error('视频资产卡未建立，后续连线无法进行')
+
+  const depth = await addNode('深度视频')
+  await checkPorts(depth, '深度视频', ['in-video'], ['out-video'])
+  const clay = await addNode('白模视频')
+  await checkPorts(clay, '白模视频', ['in-video'], ['out-video'])
+  const emptyDepth = await statusOf(depth)
+  const emptyClay = await statusOf(clay)
+  check(
+    '深度：未接源视频时按钮置灰并写明缺少输入',
+    emptyDepth.disabled === true && /缺少输入/.test(emptyDepth.aria),
+    emptyDepth.aria
+  )
+  check(
+    '白模：未接源视频时按钮置灰并写明缺少输入',
+    emptyClay.disabled === true && /缺少输入/.test(emptyClay.aria),
+    emptyClay.aria
+  )
+
+  // 两路转换各自独立接原片的 out-video，不是深度串白模。
+  check('深度：源视频 out-video → in-video 建连', await connect(src, 'out-video', depth, 'in-video'))
+  check('白模：同一 out-video → 白模 in-video 建连', await connect(src, 'out-video', clay, 'in-video'))
+
+  const knownVideoIds = await win.evaluate(
+    async ({ pid }) =>
+      (await window.api.listMedia(pid)).data.filter((x) => x.kind === 'video').map((x) => x.id),
+    { pid: projectId }
+  )
+
+  // 本地推理含模型加载，单次可能要几分钟：超时给足 12 分钟。
+  const depthStart = Date.now()
+  const rd = await runNode(depth, 12)
+  const depthSeconds = ((Date.now() - depthStart) / 1000).toFixed(1)
+  check(
+    '深度：本地推理运行成功',
+    rd.shape?.run?.status === 'success',
+    `耗时=${depthSeconds}s｜${JSON.stringify(rd.shape?.run ?? rd)}`
+  )
+  const depthResults = obj(rd.shape?.resultRaw).results || []
+  const depthItem = depthResults[0]
+  check(
+    '深度：产物视频已落库且文件在磁盘上',
+    Boolean(depthItem) && assetOnDisk(depthItem.mediaPath),
+    JSON.stringify(depthItem && depthItem.mediaPath)
+  )
+  if (depthItem && assetOnDisk(depthItem.mediaPath)) {
+    const probe = probeVideoSummary(path.join(DATA_DIR, depthItem.mediaPath))
+    check(
+      '深度：ffprobe 产物体检（可解码时长>0、h264、尺寸≤512 上限）',
+      probe.duration > 0.2 && probe.duration <= 3.5 && probe.codec === 'h264' &&
+        probe.width > 0 && probe.width <= 512 && probe.height > 0 && probe.height <= 512,
+      `耗时=${depthSeconds}s｜${probe.raw}｜体积=${probe.bytes}B`
+    )
+  }
+  const newAfterDepth = await win.evaluate(
+    async ({ pid, seen }) =>
+      (await window.api.listMedia(pid)).data.filter(
+        (x) => x.kind === 'video' && !seen.includes(x.id)
+      ),
+    { pid: projectId, seen: knownVideoIds }
+  )
+  check(
+    '深度：项目媒体表新增一份视频资产',
+    newAfterDepth.length === 1,
+    JSON.stringify(newAfterDepth.map((x) => ({ id: x.id, size: x.sizeBytes })))
+  )
+  check(
+    '深度：产物落成独立视频资产卡',
+    (await allCards()).filter((c) => c.type === 'video-asset').length >= 2,
+    `${(await allCards()).filter((c) => c.type === 'video-asset').length} 张视频资产卡`
+  )
+  await shot('video-ai-depth-output')
+
+  const clayStart = Date.now()
+  const rc = await runNode(clay, 12)
+  const claySeconds = ((Date.now() - clayStart) / 1000).toFixed(1)
+  check(
+    '白模：本地推理运行成功',
+    rc.shape?.run?.status === 'success',
+    `耗时=${claySeconds}s｜${JSON.stringify(rc.shape?.run ?? rc)}`
+  )
+  const clayResults = obj(rc.shape?.resultRaw).results || []
+  const clayItem = clayResults[0]
+  check(
+    '白模：产物视频已落库且文件在磁盘上',
+    Boolean(clayItem) && assetOnDisk(clayItem.mediaPath),
+    JSON.stringify(clayItem && clayItem.mediaPath)
+  )
+  if (clayItem && assetOnDisk(clayItem.mediaPath)) {
+    const probe = probeVideoSummary(path.join(DATA_DIR, clayItem.mediaPath))
+    check(
+      '白模：ffprobe 产物体检（可解码时长>0、h264、尺寸≤512 上限）',
+      probe.duration > 0.2 && probe.duration <= 3.5 && probe.codec === 'h264' &&
+        probe.width > 0 && probe.width <= 512 && probe.height > 0 && probe.height <= 512,
+      `耗时=${claySeconds}s｜${probe.raw}｜体积=${probe.bytes}B`
+    )
+  }
+  await shot('video-ai-clay-output')
+
+  // VID-07：改白模参数再跑一次，产物数量必须跟着变（像素差异不做强断言）。
+  // 参数在契约面板「设置」页的滑杆里：卡片说明按钮 → 设置页签 → 浮雕强度拉到上限。
+  const info = card(clay).locator('.node-info-btn')
+  await ensureClickable(info, '白模卡片说明按钮')
+  await info.click()
+  const panel = win.locator('.node-contract-panel')
+  await panel.waitFor({ timeout: 10_000 })
+  await panel.getByRole('tab', { name: '设置' }).click()
+  // 引擎状态条是异步读的，首轮渲染停在「正在读取本机推理环境…」，等它落到就绪态。
+  let engineReady = false
+  let engineText = ''
+  for (let i = 0; i < 20; i += 1) {
+    engineText = await win
+      .locator('.video-ai-engine-state')
+      .innerText()
+      .catch(() => '（无引擎状态条）')
+    if ((await win.locator('.video-ai-engine-state.is-ready').count()) === 1) {
+      engineReady = true
+      break
+    }
+    await win.waitForTimeout(500)
+  }
+  check('白模：设置页显示本地推理环境已就绪', engineReady, engineText)
+  const relief = win
+    .locator('label.video-ai-range', { hasText: '浮雕强度' })
+    .locator('input[type=range]')
+  await relief.waitFor({ timeout: 5_000 })
+  await relief.click()
+  await win.keyboard.press('End')
+  await win.waitForTimeout(600)
+  const clayConfigShape = await disk(clay, (s) => obj(s.config).reliefStrength === 5)
+  check(
+    '白模：浮雕强度改为 5 并已持久化到节点配置',
+    obj(clayConfigShape.config).reliefStrength === 5,
+    JSON.stringify(clayConfigShape.config)
+  )
+  const closePanel = win.getByRole('button', { name: '关闭节点说明面板' })
+  if (await closePanel.count()) await closePanel.click()
+  await win.waitForTimeout(400)
+
+  const clayStart2 = Date.now()
+  const rc2 = await runNode(clay, 12)
+  const claySeconds2 = ((Date.now() - clayStart2) / 1000).toFixed(1)
+  check(
+    '白模：改参数后再次运行成功',
+    rc2.shape?.run?.status === 'success',
+    `耗时=${claySeconds2}s｜${JSON.stringify(rc2.shape?.run ?? rc2)}`
+  )
+  const clayResults2 = obj(rc2.shape?.resultRaw).results || []
+  check(
+    '白模：参数改变产生了第二份独立产物',
+    clayResults2.length === 2 &&
+      clayResults2[0].mediaId !== clayResults2[1].mediaId &&
+      clayResults2.every((x) => assetOnDisk(x.mediaPath)),
+    JSON.stringify(clayResults2.map((x) => x.mediaPath))
+  )
+  if (clayResults2[1] && assetOnDisk(clayResults2[1].mediaPath)) {
+    const probe = probeVideoSummary(path.join(DATA_DIR, clayResults2[1].mediaPath))
+    check(
+      '白模：第二份产物 ffprobe 体检仍可通过',
+      probe.duration > 0.2 && probe.duration <= 3.5 && probe.codec === 'h264',
+      `耗时=${claySeconds2}s｜${probe.raw}`
+    )
+  }
+  check(
+    '白模：两次产物各落成独立资产卡',
+    (await allCards()).filter((c) => c.type === 'video-asset').length >= 4,
+    `${(await allCards()).filter((c) => c.type === 'video-asset').length} 张视频资产卡`
+  )
+  await shot('video-ai-clay-reconfigured')
+
+  await reload()
+  check(
+    '深度/白模：重载后两张转换节点卡片仍在',
+    (await win.locator('.type-video-depth').count()) >= 1 &&
+      (await win.locator('.type-video-clay').count()) >= 1,
+    `depth=${await win.locator('.type-video-depth').count()} clay=${await win.locator('.type-video-clay').count()}`
+  )
+  const depthAfter = await disk(depth)
+  check(
+    '深度：重载后运行记录与产物引用仍在',
+    depthAfter.run?.status === 'success' &&
+      assetOnDisk(obj(depthAfter.resultRaw).results?.[0]?.mediaPath),
+    JSON.stringify(obj(depthAfter.resultRaw).results?.[0]?.mediaPath)
+  )
+  const clayAfter = await disk(clay)
+  check(
+    '白模：重载后两份产物引用与改过的参数仍在',
+    (obj(clayAfter.resultRaw).results || []).length === 2 &&
+      obj(clayAfter.config).reliefStrength === 5,
+    JSON.stringify({ results: obj(clayAfter.resultRaw).results?.length, config: clayAfter.config })
+  )
+  await shot('video-ai-reload')
+}
+
 /** 音频资产 + 人声分离：音频卡由截取节点的 out-audio 产物建立。 */
 async function recipeAudio() {
   const { run } = await runClipOnFixtureVideo()
@@ -1575,6 +1882,7 @@ const RECIPES = [
   ['video-asset', '视频资产', recipeVideoAsset],
   ['video-frame', '视频取帧', recipeVideoFrame],
   ['video-clip', '视频截取', recipeVideoClip],
+  ['video-ai', '深度/白模', recipeVideoAi],
   ['audio', '音频 + 人声分离', recipeAudio],
   ['director', '导演台', recipeDirector],
   ['p3', '停止续跑与重启恢复', recipeCancelResume]
