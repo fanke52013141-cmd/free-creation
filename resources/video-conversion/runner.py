@@ -138,14 +138,18 @@ def main() -> int:
     if args.mode == "both" and not args.output_raw_clay:
         raise RuntimeError("同时导出模式需要指定 --output-raw-clay")
     with open(args.output_raw, "wb") as raw:
-        clay_raw = open(args.output_raw_clay, "wb") if args.mode in ("clay", "both") else None
+        # --output-raw-clay 只在同时导出深度与白模（both）时存在；单白模模式的调用方
+        # （video-conversion.ts）只传 --output-raw，clay 帧就是本进程唯一产物，必须写进它。
+        # 之前对 clay 模式也去 open(output_raw_clay=None)，所有白模转换都会在 render 阶段
+        # 抛 TypeError: expected str, bytes or os.PathLike object, not NoneType。
+        clay_raw = open(args.output_raw_clay, "wb") if args.mode == "both" else None
         try:
             for index, depth in enumerate(depths):
                 if gray is not None:
                     depth_rgb = np.repeat(gray[index, :, :, None], 3, axis=2)
                     raw.write(np.ascontiguousarray(depth_rgb).tobytes())
                 else:
-                    clay_raw.write(np.ascontiguousarray(clay_frame(depth, low, high, config)).tobytes())
+                    raw.write(np.ascontiguousarray(clay_frame(depth, low, high, config)).tobytes())
                 if clay_raw is not None and args.mode == "both":
                     clay_raw.write(np.ascontiguousarray(clay_frame(depth, low, high, config)).tobytes())
                 if index and index % 60 == 0:
