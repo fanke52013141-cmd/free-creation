@@ -9,6 +9,7 @@ import {
   runWorkflowForNodes,
   runWorkflowToNode
 } from '@renderer/engine/executor'
+import { useConfirmStore } from '@renderer/stores/confirm'
 import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
 import { createDirectorProject, createDirectorPublishRecord } from '@renderer/nodes/director-data'
 import { registerAllNodeTypes } from './helpers/registerNodes'
@@ -629,5 +630,98 @@ describe('runWorkflow · 迭代体输入隔离', () => {
     expect(promptRuns).toHaveLength(2)
     expect(new Set(promptRuns.map((run) => run.runId)).size).toBe(2)
     expect(promptRuns.every((run) => run.runId.includes(':item:'))).toBe(true)
+  })
+})
+
+describe('runWorkflowForNodes · 重跑付费上游前必须确认（R-03）', () => {
+  // json 未声明 outputSource: 'document'，属运行型节点——用它代替「重跑会产生费用」的上游。
+  function buildPaidUpstreamGraph(): { editor: Editor; source: NodeCardShape; target: NodeCardShape } {
+    const source = node('shape:paid-source', 'json', '{"prompt":"蓝色立方体"}')
+    const target = node('shape:paid-target', 'processor', '')
+    const arrow = {
+      id: 'shape:paid-arrow',
+      type: 'arrow',
+      meta: { fromPort: 'out-json', toPort: 'in-value' }
+    }
+    const shapes = new Map<string, typeof source | typeof target | typeof arrow>([
+      [source.id, source],
+      [target.id, target],
+      [arrow.id, arrow]
+    ])
+    const editor = {
+      getCurrentPageShapes: () => Array.from(shapes.values()),
+      getShape: (id: string) => shapes.get(id),
+      getBindingsFromShape: (id: string) =>
+        id === arrow.id
+          ? [
+              { props: { terminal: 'start' }, toId: source.id },
+              { props: { terminal: 'end' }, toId: target.id }
+            ]
+          : [],
+      updateShape: (patch: {
+        id: string
+        props?: Record<string, unknown>
+        meta?: Record<string, unknown>
+      }) => {
+        const current = shapes.get(patch.id)
+        if (!current || current.type !== 'node-card') return
+        if (patch.props) Object.assign(current.props, patch.props)
+        if (patch.meta) Object.assign(current.meta, patch.meta)
+      },
+      markHistoryStoppingPoint: () => undefined
+    } as unknown as Editor
+    return { editor, source, target }
+  }
+
+  function stubConfirm(answer: boolean): { calls: Array<{ title: string; message?: string }> } {
+    const calls: Array<{ title: string; message?: string }> = []
+    useConfirmStore.setState({
+      confirm: async (options) => {
+        calls.push(options)
+        return answer
+      }
+    })
+    return { calls }
+  }
+
+  it('上游闭包含运行型节点时弹出确认并写明数量与费用提示；取消则完全不执行', async () => {
+    const { editor, source, target } = buildPaidUpstreamGraph()
+    const originalConfirm = useConfirmStore.getState().confirm
+    const { calls } = stubConfirm(false)
+    try {
+      await runWorkflowForNodes(editor, 'project-1', [], [target.id])
+    } finally {
+      useConfirmStore.setState({ confirm: originalConfirm })
+    }
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0].title).toBe('将重新执行上游节点')
+    expect(calls[0].message).toContain('1 个上游节点')
+    expect(calls[0].message).toContain('费用')
+    // 取消后不进入运行：目标与上游都不执行、不留运行记录。
+    expect(source.props.exec).toBe('idle')
+    expect(target.props.exec).toBe('idle')
+    expect(target.meta.nodeRun).toBeUndefined()
+    expect(target.meta.nodeResult).toBeUndefined()
+  })
+
+  it('确认后照常运行上游与目标', async () => {
+    const { editor, source, target } = buildPaidUpstreamGraph()
+    const originalConfirm = useConfirmStore.getState().confirm
+    const { calls } = stubConfirm(true)
+    try {
+      await runWorkflowForNodes(editor, 'project-1', [], [target.id])
+    } finally {
+      useConfirmStore.setState({ confirm: originalConfirm })
+    }
+
+    expect(calls).toHaveLength(1)
+    expect(source.props.exec).toBe('success')
+    expect(target.props.exec).toBe('success')
+    // pass 模式透传上游 json 值：证明确认后上游结果真实流入了目标。
+    expect(JSON.parse(String(target.meta.nodeResult))).toMatchObject({
+      kind: 'json',
+      data: { prompt: '蓝色立方体' }
+    })
   })
 })

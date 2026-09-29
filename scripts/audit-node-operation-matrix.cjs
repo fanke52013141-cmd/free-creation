@@ -275,8 +275,10 @@ async function freshProject(key) {
   await create.click()
   const name = `矩阵-${key}`
   currentProject = name
-  await win.locator('input[placeholder="项目名称"]').fill(name)
-  await win.getByRole('button', { name: '创建', exact: true }).click()
+  // 2026-09-26 项目创建对话框重构（bdddbff）：输入框 placeholder 与提交按钮文案
+  // 分别改为「给这个项目起个名字」「创建项目」，脚本选择器必须随之更新。
+  await win.locator('input[placeholder="给这个项目起个名字"]').fill(name)
+  await win.getByRole('button', { name: '创建项目', exact: true }).click()
   await win.locator('.node-palette').waitFor({ timeout: 30000 })
   projectId = await win.evaluate(
     async (projectName) =>
