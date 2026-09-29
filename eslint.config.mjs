@@ -6,7 +6,8 @@ import eslintPluginReactHooks from 'eslint-plugin-react-hooks'
 import eslintPluginReactRefresh from 'eslint-plugin-react-refresh'
 
 export default defineConfig(
-  { ignores: ['**/node_modules', '**/dist', '**/out', 'qa/test-data/**'] },
+  // qa/ 是验证证据暂存区：一次性走查/验证脚本与截图，不承担生产质量约束。
+  { ignores: ['**/node_modules', '**/dist', '**/out', 'qa/**'] },
   tseslint.configs.recommended,
   eslintPluginReact.configs.flat.recommended,
   eslintPluginReact.configs.flat['jsx-runtime'],

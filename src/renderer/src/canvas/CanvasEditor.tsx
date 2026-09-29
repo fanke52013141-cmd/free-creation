@@ -864,6 +864,20 @@ export function CanvasEditor({
         (active instanceof HTMLElement &&
           (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable))
       if (typing) return
+      // 焦点落在交互控件（按钮/下拉/弹层选项/对话框）上时，删除键属于该控件的
+      // 上下文：必须在窗口捕获阶段吞掉 Delete/Backspace。仅本处理器提前 return
+      // 不够——事件会继续传播到 tldraw 容器级处理，借「有选中形状」把选中节点
+      // 删掉（R-47 实测：AppSelect 触发器、运行按钮、Radix portal 选项均误删）。
+      const controlFocus =
+        active instanceof HTMLElement &&
+        active.closest('button, select, [role="listbox"], [role="option"], [role="dialog"]') !==
+          null
+      if (controlFocus && (e.key === 'Delete' || e.key === 'Backspace')) {
+        e.preventDefault()
+        e.stopPropagation()
+        return
+      }
+      if (typing) return
       // 焦点不在画布且画布上无选中时不接管，避免误伤侧栏/顶栏的快捷键语义
       const container = editor.getContainer()
       const inCanvas =
