@@ -344,4 +344,20 @@
 主按钮计算样式一致（28px / r7 / `var(--card)` / 12px / 600），卡体 12px；nodes/ 目录原生
 select 归零。`prefers-reduced-motion` 的禁过渡块保留。
 
+### 17.1 Stitch 设计参考存档（2026-10-04）
+
+Stitch MCP 已接入并完成一轮设计生成（首轮因 `stitch.googleapis.com` 网络不可达记录为阻塞，
+线路恢复后补用）：
+
+- 项目：`projects/17318046877390220792`（「Canvas Studio 节点 UI 统一设计」，PRIVATE）
+- 设计系统：自动生成「Syntactic Graph」，令牌与本规范一致（画布 #111419、卡面 #20242a、
+  描边 rgba(231,238,247,0.1)、主色 #42b9f5、卡角 12px、控件 28px/7px、Inter + 苹方/雅黑、
+  JetBrains Mono 数值）；端口按数据类型配色仅作设计参考，**不改动现有端口连线实现**
+- 设计稿：`screens/22478a6f100f4dd983d2b50052bac5fc`「本地 AI 创作画布 - 桌面端主界面」
+  （3840×2160 + HTML 原型，状态 COMPLETE）
+- 本地存档：`qa/ui-unify-2026-09-29/stitch-design-main.png`（预览）、
+  `stitch-design-thumbnail.png`
+- 用途约定：Stitch 产出仅作后续视觉迭代参考；任何落地改动仍以本规范为准、走 §7 交付检查，
+  且节点间连线与节点外围样式保持不变（目标方约束）。
+
 保持不变（目标方指定）：节点间连线（DataEdgeLayer/箭头/端口命中）、节点外围样式（卡片外壳、阴影、选中态、节点类型身份色）。遗留未动（按需后续）：头部元件在 app.css/foundation 的两层被覆盖死代码、library 页原生 select、`.media-result-grid`/`.chat-messages` 魔法数入令牌、video-depth/clay 旁路 NODE_ACCENTS 的色值（属节点身份色，按"外围不动"豁免）。
