@@ -3947,34 +3947,8 @@ button {
   padding: 0 2px;
 }
 
-.node-card.type-tts .btn-generate {
-  min-height: 42px;
-  padding: 10px 14px;
-  border: 1px solid rgba(56, 189, 248, 0.28);
-  border-radius: 12px;
-  background: linear-gradient(105deg, #1e6f98, #2482ab 58%, #258da8);
-  box-shadow: 0 8px 20px rgba(20, 110, 150, 0.28);
-  letter-spacing: 0.025em;
-  transition:
-    transform 160ms ease,
-    box-shadow 180ms ease,
-    filter 180ms ease;
-}
-
-.node-card.type-tts .btn-generate:hover:not(:disabled) {
-  opacity: 1;
-  filter: brightness(1.08);
-  box-shadow: 0 10px 24px rgba(36, 130, 171, 0.36);
-  transform: translateY(-1px);
-}
-
-.node-card.type-tts .btn-generate:active:not(:disabled) {
-  transform: scale(0.99);
-}
-
-.node-card.type-tts .btn-generate:disabled {
-  box-shadow: none;
-}
+/* 2026-09-29 UI 统一：删除 tts 对 .btn-generate 的私改（42px/渐变/r12/位移），
+   与 voice-design 一并回归 .btn-generate 标准材质（app.css），节点内不再各写一套主按钮。 */
 
 .canvas-theme-light .node-card.type-tts {
   --tts-card-surface: #fffdfa;
@@ -5012,22 +4986,20 @@ button {
 .node-card.type-storyboard .storyboard-empty-actions button,
 .node-card.type-tts .tts-upload-btn,
 .node-card.type-speech .tts-upload-btn,
-.node-card.type-audio .audio-empty-select,
-.node-card.type-tts .btn-generate,
-.node-card.type-speech .btn-generate,
-.node-card.type-voice-design .btn-generate {
+.node-card.type-audio .audio-empty-select {
   display: inline-flex;
-  min-height: 36px;
+  /* 空态/导入大按钮统一在规范区间上限（§5 常规控件 28–32px）；
+     .btn-generate 主按钮已回归 app.css 基础材质（28px），不再在此按节点覆盖。 */
+  min-height: 32px;
   flex-direction: row;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 8px 12px;
-  border: 1px solid rgba(170, 187, 194, 0.16);
-  border-radius: 8px;
-  background: #2b3039;
-  box-shadow: inset 0 0 0 1px rgba(170, 187, 194, 0.16), 0 2px 8px rgba(0, 0, 0, 0.22);
-  color: #cbd3dc;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--card);
+  color: var(--txt);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: normal;
@@ -5043,7 +5015,7 @@ button {
 
 .node-card.type-tts .tts-upload-btn,
 .node-card.type-speech .tts-upload-btn {
-  min-height: 40px;
+  min-height: 32px;
   text-align: left;
 }
 
@@ -5078,10 +5050,7 @@ button {
 .node-card.type-storyboard .storyboard-empty-actions button:hover:not(:disabled),
 .node-card.type-tts .tts-upload-btn:hover:not(:disabled),
 .node-card.type-speech .tts-upload-btn:hover:not(:disabled),
-.node-card.type-audio .audio-empty-select:hover:not(:disabled),
-.node-card.type-tts .btn-generate:hover:not(:disabled),
-.node-card.type-speech .btn-generate:hover:not(:disabled),
-.node-card.type-voice-design .btn-generate:hover:not(:disabled) {
+.node-card.type-audio .audio-empty-select:hover:not(:disabled) {
   border-color: rgba(103, 190, 215, 0.38);
   background: #343a43;
   box-shadow: inset 0 0 0 1px rgba(103, 190, 215, 0.2), 0 2px 8px rgba(0, 0, 0, 0.22);

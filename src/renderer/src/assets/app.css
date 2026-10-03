@@ -13,7 +13,10 @@
   --surface-2: #242424;
   --panel: #1b222b;
   --border-soft: rgba(255, 255, 255, 0.1);
-  /* --node-radius / --node-header-h 的唯一定义在 ui-foundation.css（呈现规范 §8.1 token 边界） */
+  /* --node-radius / --node-header-h 的唯一定义在 ui-foundation.css（呈现规范 §8.1 token 边界）
+     注意：--bg/--card/--line/--txt/--muted/--brand/--txt-dim 在 ui-foundation.css :root 有
+     第二份定义且值不同，因加载顺序（app → foundation → surfaces）以后者为准；
+     本块的值仅在 foundation 未覆盖处兜底，勿在此新增与 foundation 冲突的令牌。 */
   --elevation-1: 0 5px 18px rgba(0, 0, 0, 0.24);
   /* C1: --txt-dim 原被多处引用却从未定义，始终退回 #9aa4b5，此处显式补齐 */
   --txt-dim: #9aa4b5;
@@ -2151,11 +2154,12 @@ select:focus-visible,
   text-align: left;
 }
 
-/* 图片工具节点的关键动作要能一眼看到，避免和说明文字混在一起。 */
+/* 图片工具节点的关键动作要能一眼看到，避免和说明文字混在一起。
+   2026-09-29 统一：空态大按钮收敛到规范区间上限 32px（与 ui-surfaces 空态组一致）。 */
 .image-edit-empty .btn-ghost.small,
 .crop-empty .btn-ghost.small,
 .image-split-body .btn-ghost.small {
-  min-height: 34px;
+  min-height: 32px;
   padding: 6px 12px;
   font-size: 12px;
 }
@@ -10649,16 +10653,16 @@ select:focus-visible,
 .btn-generate {
   display: inline-flex;
   width: 100%;
-  min-height: 36px;
+  min-height: 28px;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 8px 12px;
-  border: 1px solid rgba(170, 187, 194, 0.16);
-  border-radius: 8px;
-  background: #2b3039;
-  color: #cbd3dc;
-  font-size: 13px;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--card);
+  color: var(--txt);
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
@@ -12162,37 +12166,8 @@ canvas.tl-canvas-indicators {
   color: #f1f5f9;
 }
 
-.node-card.type-voice-design .btn-generate {
-  min-height: 42px;
-  padding: 10px 14px;
-  border: 1px solid rgba(103, 232, 249, 0.44);
-  border-radius: 10px;
-  background: linear-gradient(105deg, #06b6d4, #22d3ee);
-  box-shadow: 0 8px 20px rgba(8, 145, 178, 0.24);
-  color: #082f49;
-  font-size: 13px;
-  font-weight: 650;
-  letter-spacing: 0.025em;
-  transition:
-    transform 150ms ease,
-    box-shadow 150ms ease,
-    filter 150ms ease;
-}
-
-.node-card.type-voice-design .btn-generate:hover:not(:disabled) {
-  filter: brightness(1.08);
-  opacity: 1;
-  box-shadow: 0 10px 24px rgba(8, 145, 178, 0.32);
-  transform: translateY(-1px);
-}
-
-.node-card.type-voice-design .btn-generate:active:not(:disabled) {
-  transform: scale(0.99);
-}
-
-.node-card.type-voice-design .btn-generate:disabled {
-  box-shadow: none;
-}
+/* 2026-09-29 UI 统一：删除 voice-design 对 .btn-generate 的私改（42px/渐变/r10/位移），
+   主操作按钮在所有节点内共用 .btn-generate 标准材质（28px/r7/令牌），不再按节点各写一套。 */
 
 .node-card.type-voice-design .voice-id-card {
   padding: 9px 10px;

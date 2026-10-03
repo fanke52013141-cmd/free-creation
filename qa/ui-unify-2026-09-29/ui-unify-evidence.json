@@ -1,0 +1,52 @@
+{
+  "origin": "http://127.0.0.1:5333",
+  "nodes": {
+    "speech": {
+      "nodeType": null,
+      "cardRadius": "12px",
+      "generateButton": {
+        "height": 28,
+        "borderRadius": "7px",
+        "fontSize": "12.16px",
+        "fontWeight": "600",
+        "background": "rgb(32, 36, 42)"
+      }
+    },
+    "tts": {
+      "nodeType": null,
+      "cardRadius": "12px",
+      "generateButton": {
+        "height": 28,
+        "borderRadius": "7px",
+        "fontSize": "12.16px",
+        "fontWeight": "600",
+        "background": "rgb(32, 36, 42)"
+      }
+    },
+    "voice-design": {
+      "nodeType": null,
+      "cardRadius": "12px",
+      "generateButton": {
+        "height": 28,
+        "borderRadius": "7px",
+        "fontSize": "12.16px",
+        "fontWeight": "600",
+        "background": "rgb(32, 36, 42)"
+      }
+    },
+    "video-depth": {
+      "nodeType": null,
+      "cardRadius": "12px",
+      "generateButton": {
+        "height": 28,
+        "borderRadius": "7px",
+        "fontSize": "12.16px",
+        "fontWeight": "600",
+        "background": "rgb(32, 36, 42)"
+      }
+    }
+  },
+  "videoAiSettings": {
+    "present": false
+  }
+}

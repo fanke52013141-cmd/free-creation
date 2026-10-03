@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { NodeBodyProps, NodeSettingsProps } from '../../registry'
 import type { VideoEngineStatus } from '@shared/contracts'
+import { AppSelect } from '../../../components/AppSelect'
 import { Icon } from '../../../components/Icon'
 import {
   DEFAULT_VIDEO_CLAY_CONFIG,
@@ -141,8 +142,9 @@ export function VideoAiSettings({ shape, editor }: NodeSettingsProps): React.JSX
       <EngineSetup />
       <label className="settings-field">
         最大输出分辨率
-        <select
-          value={mode === 'depth' ? depth.maxResolution : clay.maxResolution}
+        <AppSelect
+          className="gen-select"
+          value={String(mode === 'depth' ? depth.maxResolution : clay.maxResolution)}
           onChange={(event) => {
             const maxResolution = Number(event.currentTarget.value) as 512 | 768 | 1024
             if (mode === 'depth') saveDepth({ maxResolution })
@@ -152,19 +154,20 @@ export function VideoAiSettings({ shape, editor }: NodeSettingsProps): React.JSX
           <option value={512}>512 px · 默认</option>
           <option value={768}>768 px · 高质量</option>
           <option value={1024}>1024 px · 文件体积较大</option>
-        </select>
+        </AppSelect>
       </label>
       {mode === 'depth' ? (
         <>
           <label className="settings-field">
             近景灰度
-            <select
+            <AppSelect
+              className="gen-select"
               value={depth.nearColor}
               onChange={(event) => saveDepth({ nearColor: event.currentTarget.value as 'white' | 'black' })}
             >
               <option value="white">白色</option>
               <option value="black">黑色</option>
-            </select>
+            </AppSelect>
           </label>
           <label className="video-ai-checkbox">
             <input

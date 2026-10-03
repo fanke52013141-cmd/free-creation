@@ -1,8 +1,11 @@
+/* 深度/白模视频的本地推理环境界面。2026-09-29 对齐节点 UI 规范：
+   色彩/边框走全局令牌，按钮对齐 .btn-generate 家族材质，下拉统一 AppSelect
+   （原生 select 规则随替换删除）。状态色保留语义色，与 EXEC_COLORS 同族。 */
 .video-ai-body {
   display: grid;
   gap: 9px;
   padding: 14px 16px;
-  color: var(--text-primary, #e5e7eb);
+  color: var(--txt);
   font-size: 12px;
 }
 
@@ -16,7 +19,7 @@
 .video-ai-body p,
 .video-ai-engine p {
   margin: 0;
-  color: var(--text-secondary, #9ca3af);
+  color: var(--muted);
   line-height: 1.55;
 }
 
@@ -29,7 +32,7 @@
 .video-ai-body-meta span {
   padding: 3px 7px;
   border-radius: 5px;
-  color: var(--text-secondary, #a1a1aa);
+  color: var(--muted);
   background: rgb(255 255 255 / 5%);
   font-size: 10px;
 }
@@ -43,7 +46,7 @@
   display: grid;
   gap: 8px;
   padding: 12px;
-  border: 1px solid rgb(255 255 255 / 9%);
+  border: 1px solid var(--line);
   border-radius: 8px;
   background: rgb(255 255 255 / 3%);
 }
@@ -56,7 +59,7 @@
   font-size: 12px;
 }
 
-.video-ai-engine-state.is-ready { color: #4ade80; }
+.video-ai-engine-state.is-ready { color: #34d399; }
 
 .video-ai-state-dot {
   width: 7px;
@@ -70,32 +73,38 @@
 .video-ai-engine small,
 .contract-settings-hint { font-size: 11px; }
 
-.video-ai-engine small { color: var(--text-secondary, #9ca3af); }
-.video-ai-engine .video-ai-error { color: #f87171; }
+.video-ai-engine small { color: var(--muted); }
+.video-ai-engine .video-ai-error { color: var(--red, #ff6b6b); }
 
+/* 与 .btn-generate 同族的小按钮材质：28px 高、r7、中性底、令牌描边。 */
 .video-ai-install-button {
+  display: inline-flex;
   width: fit-content;
-  padding: 7px 11px;
-  border: 0;
-  border-radius: 6px;
-  color: white;
-  background: #7c3aed;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--txt);
+  background: var(--card);
   cursor: pointer;
   font: inherit;
   font-size: 12px;
+  font-weight: 600;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
 }
 
-.video-ai-install-button:disabled { cursor: not-allowed; opacity: .5; }
-
-.video-ai-settings select {
-  width: 100%;
-  padding: 7px 8px;
-  border: 1px solid rgb(255 255 255 / 12%);
-  border-radius: 6px;
-  color: inherit;
-  background: #20202a;
-  font: inherit;
+.video-ai-install-button:hover:not(:disabled) {
+  border-color: rgb(103 190 215 / 38%);
+  background: #343a43;
+  color: #f1faf5;
 }
+
+.video-ai-install-button:disabled { cursor: not-allowed; opacity: 0.5; }
 
 .video-ai-checkbox {
   display: flex;
@@ -106,5 +115,5 @@
 
 .video-ai-range { display: grid; gap: 6px; font-size: 12px; }
 .video-ai-range span { display: flex; justify-content: space-between; }
-.video-ai-range b { color: var(--text-secondary, #a1a1aa); font-weight: 500; }
-.video-ai-range input { width: 100%; accent-color: #8b5cf6; }
+.video-ai-range b { color: var(--muted); font-weight: 500; }
+.video-ai-range input { width: 100%; accent-color: var(--brand); }

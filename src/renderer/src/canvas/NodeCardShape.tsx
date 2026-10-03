@@ -103,7 +103,7 @@ export class NodeCardUtil extends BaseBoxShapeUtil<NodeCardShape> {
   /**
    * 分组缩放时（tldraw 会以 mode='scale_shape' 通知组内子节点）返回 undefined，
    * 让编辑器走“仅平移”分支：卡片 w/h 保持不变，只随缩放比例重新定位。
-   * 卡片头部与正文是固定像素 CSS（header 悬浮在 top:-29px、字号不随 w/h 变化），
+   * 卡片头部与正文是固定像素 CSS（header 悬浮在 top:-34px、字号不随 w/h 变化），
    * w/h 被缩放后与它们错位——这正是“打组后缩放、节点相对位置和文字大小漂移”的根因。
    * 直接拖单个节点自己的缩放手柄时（mode='resize_bounds'）仍正常缩放 w/h。
    */

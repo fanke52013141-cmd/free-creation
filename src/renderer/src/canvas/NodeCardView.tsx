@@ -813,7 +813,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             {seq}
           </span>
           <span className="node-icon" style={{ color: spec?.color, opacity: 0.82 }}>
-            {spec ? <Icon name={spec.icon} size={15} /> : <Icon name="help" size={15} />}
+            {/* JSX 尺寸与 ui-surfaces 对 .node-icon svg 的强制 17px 保持一致 */}
+            {spec ? <Icon name={spec.icon} size={17} /> : <Icon name="help" size={17} />}
           </span>
           <div
             ref={titleRef}
@@ -878,7 +879,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                     }
                   }}
                 >
-                  <Icon name="play" size={14} />
+                  {/* 与 ui-surfaces 对 .node-run-btn svg 的强制 16px 保持一致 */}
+                  <Icon name="play" size={16} />
                 </button>
               </Tooltip>
             </span>

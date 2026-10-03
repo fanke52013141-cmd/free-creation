@@ -1,8 +1,10 @@
 # 节点 UI 统一规范
 
-> 版本：v0.1 讨论稿（2026-09-23）  
+> 版本：**v1.0 正式规范**（2026-09-29；实测基线 `main@c838131` 之后的节点 UI 统一提交）  
+> v0.1 讨论稿（2026-09-23）的全部布局裁决经实测核对后升级为正式规范；**§13–§17 为本轮新增的实施细则**：样式令牌与权威层、滑动样式、按钮实现规格、引用关系与高度变化、统一记录。  
 > 范围：画布中的全部可创建节点；历史节点继续使用同一外壳。  
-> 目的：规定信息放置、卡片层级、尺寸、状态与例外。本文是布局与呈现规范；端口、数据来源、执行与持久化仍以 [`NODE_CONTRACT_SPEC.md`](../NODE_CONTRACT_SPEC.md) 为准。
+> 目的：规定信息放置、卡片层级、尺寸、状态与例外。本文是布局与呈现规范；端口、数据来源、执行与持久化仍以 [`NODE_CONTRACT_SPEC.md`](../NODE_CONTRACT_SPEC.md) 为准。  
+> 参考样式：以现有节点 UI 实现为唯一参考基准；任何外部设计工具（含 Stitch）的产出必须先满足本文方可落地。
 
 ## 1. 现状与本规范要解决的问题
 
@@ -236,5 +238,110 @@
 ## 12. 与既有文档的关系
 
 - [`NODE_CONTRACT_SPEC.md`](../NODE_CONTRACT_SPEC.md)：数据端口、输入输出、执行与持久化，优先级高于任何视觉表达。
-- [`NODE_UI_SPEC.md`](./NODE_UI_SPEC.md)：保存前序各轮的决定、实施记录与逐项 UI 行为；布局冲突以本讨论稿为准，未冲突的用户已确认决定继续有效。
+- [`NODE_UI_SPEC.md`](./NODE_UI_SPEC.md)：保存前序各轮的决定、实施记录与逐项 UI 行为；布局冲突以本规范为准，未冲突的用户已确认决定继续有效。
 - [`NODE_COMPLIANCE_MATRIX.md`](./NODE_COMPLIANCE_MATRIX.md)：当前可创建节点的协议索引；更新节点集时同步逐节点呈现表。
+
+## 13. 样式令牌与权威层（实施细则）
+
+### 13.1 CSS 加载顺序与覆盖规则
+
+`main.tsx` 依次引入三层全局样式，**同特异性下后者覆盖前者**，改动样式前必须先确认目标规则落在哪一层：
+
+| 层 | 文件 | 职责 |
+| --- | --- | --- |
+| ① legacy 全量 | `assets/app.css` | 历史规则；其 `:root` 令牌值仅作兜底 |
+| ② 基础 | `assets/ui-foundation.css` | **令牌权威**（`:root` 实际生效值）+ `.node-*` 外壳唯一权威 |
+| ③ 表面 | `assets/ui-surfaces.css` | 面板/菜单/表单/浅色主题；头部元件的最终生效值 |
+
+节点专属局部 CSS 与组件同目录（如 `bodies/video-ai.css`），只允许补充布局与内容样式，不得重定义全局令牌或卡片外壳。
+
+### 13.2 令牌（实际生效值，ui-foundation.css `:root`）
+
+| 令牌 | 值 | 用途 |
+| --- | --- | --- |
+| `--bg` | `#111419` | 画布背景 |
+| `--card` | `#20242a` | 卡片/控件底 |
+| `--line` | `rgba(231,238,247,0.1)` | 描边 |
+| `--txt` / `--muted` / `--txt-dim` | `#f1f4f7` / `#9aa4b2` / `#737f8e` | 文字三级 |
+| `--brand` | `#42b9f5` | 品牌/进度/焦点 |
+| `--red`（app.css） | `#e74c3c` | 危险 |
+| `--node-radius` | `12px` | 卡片圆角，唯一圆角令牌 |
+| `--node-header-h` | `28px` | 头部行高 |
+
+圆角层级约定（无独立令牌，全站统一手写值）：卡体 12px（`--node-radius`）；卡内嵌套面板 8px；按钮 7px；紧凑控件 6px。**禁止节点私有圆角、渐变与描边**（2026-09-29 已清理 tts 16px 圆角与 voice-design 渐变按钮两处违例）。
+
+状态色语义沿用 `NodeCardView.tsx` 的 EXEC_COLORS：pending 黄 `#fbbf24`、success 绿 `#34d399`、failed 红 `#ff6b6b`；节点内自绘状态点必须复用同族值。浅色主题 `.canvas-theme-light`（ui-surfaces.css）整套覆盖令牌，新增样式不得写死深色值。
+
+### 13.3 卡片解剖实现值
+
+```text
+[头部 .node-header]  绝对悬浮 top:-34px，高 28px（--node-header-h）
+[卡体 .node-card]    340×260 起，radius var(--node-radius)，overflow:hidden
+[卡体内容 .node-body] flex column，min-height:0，overflow-y:auto
+[执行遮罩 .node-execution-overlay] absolute inset:0，rgba(7,11,16,0.76)
+```
+
+## 14. 滑动样式（实施细则）
+
+| 容器 | 行为 | 依据 |
+| --- | --- | --- |
+| `.node-body` | `overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain` | ui-foundation.css |
+| 卡内滚动容器（`.node-text`、`.media-result-grid`、`.json-body`、`.code-body`、textarea、`[contenteditable]` 等约 25 个选择器） | **滚动能力保留、滚动条视觉隐藏**（`scrollbar-width:none` + webkit `width/height:0`） | `canvas/node-scrollbars.css` |
+| 卡外面板（`.side-panel-body`、`.assets-grid`、`.contract-scroll`、`.search-results` 等） | 细滚动条可见：8px、thumb `var(--line)` 圆角 4px、track 透明 | app.css「深色面板滚动条统一」段 |
+| 卡片本体 | `overflow:hidden`，内容不得溢出卡外 | ui-foundation.css |
+
+明确内滚上限（超过即滚动，不再撑卡）：`.media-result-grid` 860px、`.chat-messages` 360px、`.gen-textarea` 60–140px（`resize:vertical`）、`.chat-input` 96px。新增长内容区域优先交给档位机制；确需内滚必须给出 `max-height` 并把选择器加入 `node-scrollbars.css` 隐藏清单，保持"卡内看不见滚动条"的一致体验。
+
+## 15. 按钮实现规格（实施细则）
+
+### 15.1 头部（悬浮行，高 28px；最终值见 ui-surfaces.css）
+
+序号（19px/800 无底框）→ 节点图标 20×20（svg 17px）→ 标题 flex:1 省略号（15px/700）→ info 按钮 22×22 → 状态灯 8×8（margin-left 5px）→ `action-float`（高 24px）内运行按钮 22×22（svg 16px，透明底 opacity .72，disabled `rgba(158,173,189,0.42)`）。JSX `Icon size` 必须与 CSS 强制值一致（node-icon 17、run 16、info 16）。
+
+### 15.2 卡体内按钮（2026-09-29 统一后）
+
+| 角色 | 实现 | 规格 |
+| --- | --- | --- |
+| 主操作（生成/合成/安装等 busy 钮） | `.btn-generate`（唯一类） | 宽 100%、min-height **28px**、padding 5px 10px、r7、12px/600、底 `var(--card)` 描边 `var(--line)`；hover 青描边；disabled opacity .5 |
+| 次操作/工具空态 | `.btn-ghost.small` | min-height 28px、padding 4px 10px、r7、11px/600 |
+| 生图主钮布局 | `.gen-go` | image-gen 内 `margin-top:0; flex:0 0 auto`，其余 `margin-top:auto` 贴底 |
+| 结果续接动作条 | `.node-media-next-actions` | 底部追加行 |
+
+规则：一个节点内只允许一种主操作按钮材质（`.btn-generate`）；禁止节点私有覆盖（voice-design 的 42px/渐变/位移覆盖已删）；busy 态只做"文字替换 + disabled"，不加旋转动画。新按钮先查本表，没有就扩展本表，不得另起类名。
+
+### 15.3 下拉与输入控件
+
+唯一下拉实现为 `AppSelect`（Radix）：卡片内紧凑 **28px**，面板内标准 **36px**。调用保留 `<option>` 子元素 API；option value 会被字符串化，受控 `value` 必须同步 `String()`。**禁止新增原生 `<select`**（遗留仅 library 管理页，非节点 UI，迁移时一并替换）。文本输入/textarea 用 ui-foundation 的统一暗底与聚焦环。
+
+## 16. 存在引用关系时，高度如何变化（实施细则）
+
+引用关系 = 上游连线进入本节点。视觉与高度按以下顺序自动变化，节点代码不介入：
+
+1. **连线瞬间**：除 `image-crop`、`image-split`、`video`（专用输入面）外的节点，在 body 顶部插入 `ConnectedInputPreview`：每条连线一行 **28px** 输入条（gap 5px）；图片引用渲染 **48×36 白底缩略图**（与 §5 尺寸表一致）。
+2. **端口变色**：已连接输入端口继承上游节点色，空闲端口用本节点色；产物溯源点继承生产者色。
+3. **高度跳档**：新增输入行使 body 溢出 → fitHeight（`NodeCardView.tsx`）提升到最低可容纳档（260→320→380→440）。**只增不减**：断线后卡片保持当前档位，不回落（防输入抖动）。
+4. **运行产生结果后**：单结果渲染 `.node-media` 预览（`object-fit:contain`，随档位撑高）；多结果渲染 `.media-result-grid`——自然高度参与跳档，超过 440 档容量后网格转内滚（860px 兜底）；底部追加续接动作条。
+5. **循环节点**：进度条固定 6px 高，计入 fitHeight。
+6. **手动尺寸优先**：`nodeHeightMode:'manual'`（仅 image-gen 经 resize 记录）时自动量高完全退出，溢出转内滚；历史尺寸迁移不得覆盖用户手动调整。
+
+实现要求：节点 Body 不做任何自身高度管理（不设固定 height、不自行撑卡）；提供语义容器与内容，高度一律由 §5 档位机制裁决。
+
+## 17. 2026-09-29 统一实施记录
+
+| 项 | 处理 |
+| --- | --- |
+| video-ai（深度/白模）设置面板 2 个原生 select | 换 `AppSelect`；删除 `.video-ai-settings select` 死规则 |
+| video-ai 私有色板（紫色安装钮、非令牌文字色） | 对齐令牌 `--card/--line/--txt/--muted/--brand/--red`；安装钮并入 `.btn-generate` 家族材质 |
+| `.btn-generate` 36px 非标高 | 降为 28px/r7/12px，与 `.btn-ghost.small`、卡内 AppSelect 同高 |
+| voice-design / tts 主钮私改（42px/渐变/r10、r12/位移） | 整块删除，回归标准材质 |
+| ui-surfaces 空态按钮组把 speech/tts/voice-design 主钮压回 36px | 从选择器组移除 `.btn-generate` 三行，基础样式统一生效；组内空态大按钮统一 32px（app.css 图片工具空态 34px 同步） |
+| tts/speech 上传按钮 40px | 收敛到 32px |
+| tts 卡片圆角 16px | 改 `var(--node-radius)` |
+| 头部图标 JSX 与 CSS 尺寸不一致 | JSX 对齐强制值（17/16） |
+| 过期注释（header -29px）、app.css `:root` 权威说明 | 已修正/补注释 |
+
+浏览器运行时证据（qa/ui-unify-2026-09-29/）：speech/tts/voice-design/video-depth 四节点
+主按钮计算样式一致（28px / r7 / `var(--card)` / 12px / 600），卡体 12px；nodes/ 目录原生
+select 归零。`prefers-reduced-motion` 的禁过渡块保留。
+
+保持不变（目标方指定）：节点间连线（DataEdgeLayer/箭头/端口命中）、节点外围样式（卡片外壳、阴影、选中态、节点类型身份色）。遗留未动（按需后续）：头部元件在 app.css/foundation 的两层被覆盖死代码、library 页原生 select、`.media-result-grid`/`.chat-messages` 魔法数入令牌、video-depth/clay 旁路 NODE_ACCENTS 的色值（属节点身份色，按"外围不动"豁免）。
