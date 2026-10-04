@@ -1,0 +1,54 @@
+{
+  "text": {
+    "cardRadius": "12px",
+    "nativeSelects": 0,
+    "buttons": [
+      {
+        "label": "打开节点说明",
+        "h": 22,
+        "radius": "6px",
+        "gradient": false
+      },
+      {
+        "label": "运行节点",
+        "h": 22,
+        "radius": "6px",
+        "gradient": false
+      },
+      {
+        "label": "输入文本",
+        "h": 32,
+        "radius": "7px",
+        "gradient": false
+      }
+    ]
+  },
+  "chat": {
+    "skipped": true
+  },
+  "image": {
+    "cardRadius": "12px",
+    "nativeSelects": 0,
+    "buttons": [
+      {
+        "label": "打开节点说明",
+        "h": 22,
+        "radius": "6px",
+        "gradient": false
+      },
+      {
+        "label": "运行节点",
+        "h": 22,
+        "radius": "6px",
+        "gradient": false
+      },
+      {
+        "label": "输入文本",
+        "h": 32,
+        "radius": "7px",
+        "gradient": false
+      }
+    ]
+  },
+  "__problems": []
+}

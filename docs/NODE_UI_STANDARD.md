@@ -339,6 +339,17 @@
 | tts 卡片圆角 16px | 改 `var(--node-radius)` |
 | 头部图标 JSX 与 CSS 尺寸不一致 | JSX 对齐强制值（17/16） |
 | 过期注释（header -29px）、app.css `:root` 权威说明 | 已修正/补注释 |
+| 2026-10-04 复审：image 节点空态导入钮 40px/r10/14px | 收敛 32px/r7/12px（空态大按钮规格） |
+| 2026-10-04 复审：chat 卡「打开对话」CTA 40px/r10/私有渐变/位移 | 回归 32px/r7/令牌材质，去除渐变与 hover 位移 |
+| 2026-10-04 复审：契约面板「测试运行」深浅主题 36/42px 不一致、私有渐变、r9 | 统一 36px/r7/扁平 `--brand`；浅色主题删 42px 覆盖 |
+
+复审方法与覆盖：静态全量扫描（按钮覆盖链/非规范高度/原生 select/圆角/渐变）+ 浏览器
+运行时实测 text、chat、storyboard、audio、image、speech、tts、voice-design、video-depth
+九节点（卡角 12px、卡内按钮 22px 头部级/32px CTA 级、零渐变、零原生 select），
+证据存 `qa/ui-unify-2026-09-29/`（audit-evidence.json、audit-*.png、audit-round2.cjs、
+audit-chat-text.cjs）。合规保留项：`chat-compact-model`（模型徽章非控件）、
+`.video-reference-chip`/`.gen-capability-note`（内容容器）、`.media-preview-title`
+（全屏预览浮层）、`.logo-btn`/`.palette-node-item`/`.multiselect-toolbar`（节点卡外）。
 
 浏览器运行时证据（qa/ui-unify-2026-09-29/）：speech/tts/voice-design/video-depth 四节点
 主按钮计算样式一致（28px / r7 / `var(--card)` / 12px / 600），卡体 12px；nodes/ 目录原生

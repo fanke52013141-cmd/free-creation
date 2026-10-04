@@ -1878,13 +1878,15 @@ button {
   max-width: 270px;
 }
 
+/* 2026-10-04 UI 审查统一：导入 CTA 收敛到空态大按钮规格（32px/r7/12px，与 ui-surfaces
+   空态组一致），不再私用 40px/r10/14px。 */
 .image-asset-empty .image-import-button {
   min-width: 120px;
-  min-height: 40px;
-  padding: 8px 20px;
-  font-size: 14px;
+  min-height: 32px;
+  padding: 6px 12px;
+  font-size: 12px;
   font-weight: 600;
-  border-radius: 10px;
+  border-radius: 7px;
 }
 
 .node-icon {
@@ -2557,11 +2559,13 @@ button {
   font-size: 11px;
 }
 
+/* 2026-10-04 UI 审查统一：面板主按钮对齐家族材质——36px 高（面板标准）、r7、
+   扁平品牌色（与顶栏「运行」一致），去除私有渐变；深浅主题同一高度。 */
 .contract-test-run {
   min-height: 36px;
   border: 1px solid rgba(97, 205, 250, 0.46);
-  border-radius: 9px;
-  background: linear-gradient(180deg, #4bc2f4, #29aae4);
+  border-radius: 7px;
+  background: var(--brand);
   color: #06131a;
   font-size: 13px;
   font-weight: 700;
@@ -2681,7 +2685,6 @@ button {
 }
 
 .canvas-theme-light .node-contract-panel .contract-test-run {
-  min-height: 42px;
   background: #246fc9;
   color: #fff;
   border: 0;
@@ -4853,23 +4856,24 @@ button {
   box-shadow: 0 0 8px rgba(6, 182, 212, 0.56);
 }
 
+/* 2026-10-04 UI 审查统一：chat 卡主 CTA 回归标准材质（32px/r7/令牌），
+   去除私有渐变与位移（与 voice-design/tts 主按钮同一处理）。 */
 .node-card.type-chat .chat-open-button {
   display: inline-flex;
   width: min(220px, 100%);
-  min-height: 40px;
+  min-height: 32px;
   justify-self: center;
   align-items: center;
   justify-content: center;
   margin-top: 8px;
-  border: 1px solid rgba(34, 211, 238, 0.28);
-  border-radius: 10px;
-  color: #dffaff;
-  background: linear-gradient(135deg, rgba(8, 145, 178, 0.24), rgba(14, 116, 144, 0.16));
-  box-shadow: inset 0 1px rgba(255, 255, 255, 0.04), 0 4px 16px rgba(6, 182, 212, 0.1);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--txt);
+  background: var(--card);
   font-size: 12px;
-  font-weight: 620;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 140ms ease, transform 140ms ease;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
 }
 
 .node-card.type-chat .chat-open-content {
@@ -4890,13 +4894,10 @@ button {
   flex: 0 0 auto;
 }
 
-.node-card.type-chat .chat-open-button:hover {
-  color: #f1feff;
-  background: linear-gradient(135deg, rgba(8, 145, 178, 0.34), rgba(14, 116, 144, 0.24));
-  box-shadow:
-    inset 0 1px rgba(255, 255, 255, 0.08),
-    0 0 18px rgba(6, 182, 212, 0.18);
-  transform: translateY(-1px);
+.node-card.type-chat .chat-open-button:hover:not(:disabled) {
+  border-color: rgba(103, 190, 215, 0.38);
+  background: #343a43;
+  color: #f1faf5;
 }
 
 /* AI processing keeps the same centered identity and action hierarchy as other processing nodes. */
