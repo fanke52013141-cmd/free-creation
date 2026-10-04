@@ -1,0 +1,72 @@
+[
+  {
+    "area": "代码/空态",
+    "observation": "空代码时运行按钮置灰=false；卡片提示=1｜代码｜固定当前输出｜输入｜任意｜input.input｜输出｜任意｜return → 端口｜读取 input.input，return 的值写入端口 out-output｜输入参数｜添加｜添加字段后，会在画布上出现同",
+    "severity": "warn"
+  },
+  {
+    "area": "代码/运行错误",
+    "observation": "TypeError 反馈=\"Cannot read properties of null (reading 'deep')（第 5 行附近）\"",
+    "severity": "info"
+  },
+  {
+    "area": "代码/运行错误",
+    "observation": "卡片错误条内容=\"✗ Cannot read properties of null (reading 'deep')（第 5 行附近）\"（用户能否知道去哪改？）",
+    "severity": "info"
+  },
+  {
+    "area": "代码/调试",
+    "observation": "console.log 运行结果=success；logs 块=1 个，内容=\"调试信息XYZ\"",
+    "severity": "info"
+  },
+  {
+    "area": "代码/禁用API",
+    "observation": "fetch 代码反馈=\"代码节点不支持网络访问；请通过声明的输入端口传入数据\"",
+    "severity": "info"
+  },
+  {
+    "area": "代码/类型不符",
+    "observation": "声明文本但返回对象的反馈=\"应返回字符串\"",
+    "severity": "info"
+  },
+  {
+    "area": "代码/确定性",
+    "observation": "dayjs() 输出={\"kind\":\"json\",\"data\":{\"now\":\"1970-01-01 08:00:00\"}}（固定 1970 纪元，界面上有没有任何说明？）",
+    "severity": "warn"
+  },
+  {
+    "area": "代码/超时",
+    "observation": "死循环 11s 后反馈=\"代码执行超时（10 秒）\"；运行中卡片是否有进度提示=false",
+    "severity": "info"
+  },
+  {
+    "area": "代码/参数稳定性",
+    "observation": "重命名后 params=[{\"name\":\"renamed\",\"type\":\"any\",\"cardinality\":\"one\",\"portId\":\"in-param-param1\"}]（portId 是否不变）",
+    "severity": "info"
+  },
+  {
+    "area": "JSON/错误定位",
+    "observation": "非法 JSON 状态徽标=\"无法解析 JSON\"；tooltip=\"Unexpected token '}', ...\"\"b\": [1,2,}\" is not valid JSON\"",
+    "severity": "info"
+  },
+  {
+    "area": "JSON/大列表",
+    "observation": "60 项列表渲染截断提示=\"还有 20 项未显示\"",
+    "severity": "info"
+  },
+  {
+    "area": "结构数据/复制反馈",
+    "observation": "点击 {{text}} 后剪贴板=\"{{text}}\"；toast 反馈=已复制 {{text}}",
+    "severity": "info"
+  },
+  {
+    "area": "结构数据/切换Schema",
+    "observation": "对象列表→角色设定后状态徽标=\"不符合角色设定\"（应即时转红）",
+    "severity": "info"
+  },
+  {
+    "area": "处理/固定值类型",
+    "observation": "固定值 [1,2,3] 按数组解释 → {\"kind\":\"json\",\"data\":[1,2,3]}",
+    "severity": "info"
+  }
+]
