@@ -19,6 +19,7 @@
 - [现状、改造任务与验收计划](docs/LOGGING_IMPLEMENTATION_PLAN.md)
 - [日志覆盖清单](docs/LOGGING_COVERAGE.md)
 - [新增功能日志检查模板](docs/templates/LOGGING_CHANGE_TEMPLATE.md)
+- [开发 Agent 任务说明](docs/LOGGING_AGENT_HANDOFF.md)
 
 ## 2. 日志应回答的问题
 
