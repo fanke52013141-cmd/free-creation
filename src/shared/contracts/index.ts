@@ -62,6 +62,12 @@ export const IPC = {
     open: 'project:open',
     save: 'project:save',
     saveSync: 'project:save-sync',
+    // T04（F01）：关窗冲突时不再无锁覆盖外部修改，本地最后视图写入恢复副本；
+    // 下次打开由用户选择「用恢复副本 / 保留磁盘版」。
+    saveRecoveryCopySync: 'project:save-recovery-copy-sync',
+    hasRecoveryCopy: 'project:has-recovery-copy',
+    readRecoveryCopy: 'project:read-recovery-copy',
+    discardRecoveryCopy: 'project:discard-recovery-copy',
     close: 'project:close',
     export: 'project:export',
     import: 'project:import',

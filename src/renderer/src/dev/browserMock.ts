@@ -112,7 +112,9 @@ export function installBrowserMock(): void {
 
   // F16：演示模式未实现能力的统一信封。调用方拿到的是正常错误分支，
   // 不再是强转时代「调用即 undefined 崩溃」。
-  const notImplementedInDemo = (action: string): {
+  const notImplementedInDemo = (
+    action: string
+  ): {
     ok: false
     error: { code: string; message: string }
   } => ({
@@ -264,6 +266,16 @@ export function installBrowserMock(): void {
       writeSession(snapshotKey, snapshot)
       return { ok: true, data: { graphVersion } }
     },
+    // T04：浏览器演示无磁盘副本概念——保存永远成功（sessionStorage），恢复副本
+    // 语义退化为「已写副本」true，has/read 走同一 snapshot，discard 为无操作。
+    saveRecoveryCopySync: (input: { tldrawSnapshot?: unknown }) => {
+      snapshot = input.tldrawSnapshot
+      writeSession(snapshotKey, snapshot)
+      return { ok: true, data: true }
+    },
+    hasRecoveryCopy: () => Promise.resolve({ ok: true, data: false }),
+    readRecoveryCopy: () => Promise.resolve({ ok: true, data: null }),
+    discardRecoveryCopy: () => Promise.resolve({ ok: true, data: true }),
     closeProject: () => Promise.resolve({ ok: true, data: true }),
     onExternalProjectChange: () => () => undefined,
     exportProject: () =>

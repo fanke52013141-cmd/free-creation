@@ -579,6 +579,93 @@ function saveProjectUnlocked(input: {
   return { graphVersion: nextVersion }
 }
 
+// ── T04（F01）：关窗冲突恢复副本 ────────────────────────────────────────────
+// 关窗时乐观锁冲突，此前渲染层会剥离乐观锁无锁覆盖外部修改（静默抢占）。
+// 现在改为把本地最后视图写入独立恢复副本 project.json.local-recovery：
+// 不动 project.json 与 .bak；下次打开时由用户选择「用恢复副本 / 保留磁盘版」。
+
+/** 恢复副本文件路径；不存在项目目录时返回 null（openProject 会先返回 null，理论不可达）。 */
+function recoveryCopyPath(id: string): string | null {
+  try {
+    return join(projectDir(id), 'project.json.local-recovery')
+  } catch {
+    return null
+  }
+}
+
+export function hasRecoveryCopy(id: string): boolean {
+  const p = recoveryCopyPath(id)
+  return p !== null && existsSync(p)
+}
+
+export function saveRecoveryCopySync(input: {
+  id: string
+  tldrawSnapshot?: unknown
+  graph?: { nodes: unknown[]; edges: unknown[]; groups: unknown[] }
+}): boolean {
+  const meta = getProject(input.id)
+  const p = recoveryCopyPath(input.id)
+  if (!meta || !p) return false
+  const base = readProjectFile(input.id) ?? {
+    version: 1 as const,
+    meta: { ...meta, graphVersion: 0 },
+    nodes: [],
+    edges: [],
+    groups: []
+  }
+  const file: ProjectFile = {
+    ...base,
+    ...(input.tldrawSnapshot !== undefined ? { tldrawSnapshot: input.tldrawSnapshot } : {}),
+    ...(input.graph
+      ? {
+          nodes: input.graph.nodes as ProjectFile['nodes'],
+          edges: input.graph.edges as ProjectFile['edges'],
+          groups: input.graph.groups as ProjectFile['groups']
+        }
+      : {}),
+    meta: {
+      ...base.meta,
+      // 恢复副本不推进 graphVersion：它不是一次正式落盘，只是用户最后视图的快照。
+      graphVersion: base.meta.graphVersion,
+      updatedAt: Date.now()
+    }
+  }
+  const tmp = p + '.tmp'
+  try {
+    writeFileSync(tmp, JSON.stringify(file, null, 2), 'utf-8')
+    renameSync(tmp, p)
+    return true
+  } catch {
+    try {
+      if (existsSync(tmp)) rmSync(tmp, { force: true })
+    } catch {
+      // 清理失败保留 tmp 现场供诊断
+    }
+    return false
+  }
+}
+
+export function readRecoveryCopy(id: string): ProjectFile | null {
+  const p = recoveryCopyPath(id)
+  if (!p || !existsSync(p)) return null
+  try {
+    return JSON.parse(readFileSync(p, 'utf-8')) as ProjectFile
+  } catch {
+    return null
+  }
+}
+
+export function discardRecoveryCopy(id: string): boolean {
+  const p = recoveryCopyPath(id)
+  if (!p || !existsSync(p)) return false
+  try {
+    rmSync(p, { force: true })
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function purgeProjectFiles(id: string): void {
   const dir = projectDir(id)
   if (existsSync(dir)) rmSync(dir, { recursive: true, force: true })

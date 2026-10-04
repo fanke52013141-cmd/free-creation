@@ -49,6 +49,7 @@ import {
   registerExtendedNodeTypes
 } from '../nodes/specs'
 import { toast } from '../stores/toast'
+import { useSaveCoordinator } from '../stores/save-coordinator'
 import type { ConnectionFrom } from '../stores/connection'
 import { useGatewayStore } from '../stores/gateway'
 import { useEngineStore } from '../engine/store'
@@ -634,27 +635,17 @@ export function CanvasEditor({
       clearTimeout(saveTimerRef.current)
       saveTimerRef.current = null
     }
-    const input = collectSaveInput()
-    if (!input) return
-    void window.api.saveProject(input).then((res) => {
-      if (res.ok && res.data) {
-        graphVersionRef.current = res.data.graphVersion
-        saveFailedToastAtRef.current = 0
-      } else if (!res.ok && res.error.code === 'REVISION_CONFLICT') {
-        void reloadFromDisk()
-      } else if (!res.ok) {
-        reportSaveFailure(res.error.message)
-      }
-    })
+    // T04：快照收集仍在本组件（需要 editorRef），保存事务与状态迁移全在协调器。
+    useSaveCoordinator.getState().markDirty()
+    void useSaveCoordinator.getState().flush()
   }
 
   useEffect(() => {
-    // 关窗时异步 invoke 可能赶不上页面销毁，用同步 IPC 确保落盘后才销毁页面。
-    // F02 修复：关窗保存同样携带 expectedGraphVersion 乐观锁。冲突时（Agent 刚
-    // 写入而本地未刷新）降级为一次无锁强制保存 —— 关窗场景无法重载冲突数据，
-    // 用户当前视图的最后写入胜出，但这一决策显式落在渲染层而非主进程静默剥离。
-    // 保存失败（磁盘/写锁等）记录 console 错误，不再静默吞掉。beforeunload 阶段
-    // 无法可靠弹出 UI（页面即将销毁），toast 仅覆盖自动保存路径（见 reportSaveFailure）。
+    // T04（F01）：关窗保存语义重写。此前冲突时剥离乐观锁无锁覆盖外部修改（静默
+    // 抢占）；现在改为把本地最后视图写入恢复副本 project.json.local-recovery，
+    // project.json 与 .bak 保持外部版本不动，下次打开由用户裁决。
+    // beforeunload 阶段无法可靠弹出 UI，因此「告诉用户」的方式是：下次打开项目时
+    // 检测恢复副本并弹出选择（见 openProject 后的 hasRecoveryCopy 流程）。
     const onBeforeUnload = (): void => {
       if (restoreFailedRef.current) return
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
@@ -663,8 +654,9 @@ export function CanvasEditor({
       if (!input) return
       const res = window.api.saveProjectSync(input)
       if (res && !res.ok && res.error.code === 'REVISION_CONFLICT') {
-        // 乐观锁冲突：外部版本已推进。关窗前以最后视图数据无锁覆盖一次。
-        window.api.saveProjectSync({ ...input, expectedGraphVersion: undefined })
+        // F01：不再无锁覆盖。本地最后视图进恢复副本，磁盘版保持外部修改。
+        const copy = window.api.saveRecoveryCopySync(input)
+        if (!copy?.ok || !copy.data) console.error('关窗冲突且恢复副本写入失败', res.error)
       } else if (res && !res.ok) {
         console.error('关窗保存失败', res.error)
       }
@@ -674,6 +666,37 @@ export function CanvasEditor({
       window.removeEventListener('beforeunload', onBeforeUnload)
       flushSave()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project.id])
+
+  // T04（F01）：保存状态机绑定。编辑序号、在途合并、状态呈现全部由协调器承载；
+  // 本组件只负责收集快照（collectSaveInput）与呈现（顶栏徽标 SaveStatusBadge）。
+  // 置于函数声明之后以满足 react-hooks 的声明序检查。
+  useEffect(() => {
+    useSaveCoordinator.getState().bind({
+      save: () => {
+        const input = collectSaveInput()
+        if (!input) return Promise.resolve({ graphVersion: graphVersionRef.current })
+        return window.api.saveProject(input).then((res) => {
+          if (res.ok && res.data) {
+            graphVersionRef.current = res.data.graphVersion
+            return { graphVersion: res.data.graphVersion }
+          }
+          if (!res.ok) {
+            throw Object.assign(new Error(res.error.message), { code: res.error.code })
+          }
+          return { graphVersion: graphVersionRef.current }
+        })
+      },
+      onConflict: () => {
+        void reloadFromDisk()
+      },
+      onFailure: (err) => reportSaveFailure(err?.message ?? '未知原因'),
+      onSuccess: () => {
+        saveFailedToastAtRef.current = 0
+      }
+    })
+    useSaveCoordinator.getState().reset(project.graphVersion)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id])
 
@@ -1487,6 +1510,8 @@ export function CanvasEditor({
     editor.store.listen(
       () => {
         if (restoreFailedRef.current) return
+        // T04：编辑事件 → 协调器 markDirty（状态徽标即时变「未保存」），800ms 防抖后 flush。
+        useSaveCoordinator.getState().markDirty()
         if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
         saveTimerRef.current = setTimeout(flushSave, 800)
       },

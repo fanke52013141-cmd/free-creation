@@ -172,6 +172,15 @@ const api = {
   // 调用方，否则关窗保存的失败（冲突/写锁/磁盘错误）会被静默吞掉。
   saveProjectSync: (input: SaveProjectInput): IpcEnvelope<{ graphVersion: number } | null> =>
     ipcRenderer.sendSync(IPC.project.saveSync, input),
+  // T04（F01）：关窗冲突恢复副本。写入为同步（beforeunload 阶段），其余为异步。
+  saveRecoveryCopySync: (input: SaveProjectInput): IpcEnvelope<boolean> =>
+    ipcRenderer.sendSync(IPC.project.saveRecoveryCopySync, input),
+  hasRecoveryCopy: (input: { id: string }): Promise<IpcEnvelope<boolean>> =>
+    ipcRenderer.invoke(IPC.project.hasRecoveryCopy, input),
+  readRecoveryCopy: (input: { id: string }): Promise<IpcEnvelope<ProjectFile | null>> =>
+    ipcRenderer.invoke(IPC.project.readRecoveryCopy, input),
+  discardRecoveryCopy: (input: { id: string }): Promise<IpcEnvelope<boolean>> =>
+    ipcRenderer.invoke(IPC.project.discardRecoveryCopy, input),
   closeProject: (): Promise<IpcEnvelope<true>> => ipcRenderer.invoke(IPC.project.close),
   onExternalProjectChange: (
     cb: (payload: { projectId: string; graphVersion: number }) => void

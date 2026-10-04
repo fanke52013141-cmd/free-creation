@@ -218,4 +218,31 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
       }
     }
   })
+
+  // ── T04（F01）：恢复副本四入口 ──────────────────────────────────────────
+  // 关窗冲突时渲染层调用 saveRecoveryCopySync 写独立副本，不再剥离乐观锁覆盖
+  // 外部修改；下次 openProject 后渲染层查询 hasRecoveryCopy 并让用户裁决。
+  ipcMain.on(IPC.project.saveRecoveryCopySync, (e, input: SaveProjectInput) => {
+    try {
+      e.returnValue = ok(repo.saveRecoveryCopySync(input))
+    } catch (copyErr) {
+      console.error('恢复副本写入失败', copyErr)
+      e.returnValue = ok(false)
+    }
+  })
+
+  ipcMain.handle(IPC.project.hasRecoveryCopy, (_e, input: { id: string }): IpcEnvelope<boolean> => {
+    if (!input?.id) return err('INVALID_INPUT', '参数不完整')
+    return ok(repo.hasRecoveryCopy(input.id))
+  })
+
+  ipcMain.handle(IPC.project.readRecoveryCopy, (_e, input: { id: string }): IpcEnvelope<ProjectFile | null> => {
+    if (!input?.id) return err('INVALID_INPUT', '参数不完整')
+    return ok(repo.readRecoveryCopy(input.id))
+  })
+
+  ipcMain.handle(IPC.project.discardRecoveryCopy, (_e, input: { id: string }): IpcEnvelope<boolean> => {
+    if (!input?.id) return err('INVALID_INPUT', '参数不完整')
+    return ok(repo.discardRecoveryCopy(input.id))
+  })
 }

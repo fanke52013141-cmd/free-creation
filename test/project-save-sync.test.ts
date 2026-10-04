@@ -18,22 +18,22 @@
  *    无法重载，最后视图胜出），其他失败记录 console.error。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
 // ── 指示器与 electron mock ─────────────────────────────────
 
 const ipcState = vi.hoisted(() => ({
-  handler: null as ((e: unknown, input: unknown) => void) | null,
+  handlers: {} as Record<string, (e: unknown, input: unknown) => void>,
   sendSyncPayload: null as unknown,
   projectsDir: ''
 }))
 
 vi.mock('electron', () => ({
   ipcMain: {
-    on: (_channel: string, handler: (e: unknown, input: unknown) => void) => {
-      ipcState.handler = handler
+    on: (channel: string, handler: (e: unknown, input: unknown) => void) => {
+      ipcState.handlers[channel] = handler
     },
     handle: () => undefined
   },
@@ -83,6 +83,40 @@ vi.mock('../src/main/store/projects.repo', async () => {
       file.meta.graphVersion = next
       writeFileSync(path, JSON.stringify(file, null, 2), 'utf-8')
       return { graphVersion: next }
+    },
+    // T04：恢复副本四函数（容错语义对齐真 repo：主文件缺失时以最小基线建副本）
+    saveRecoveryCopySync: (input: { id: string; tldrawSnapshot?: unknown }) => {
+      const mainPath = join(ipcState.projectsDir, input.id, 'project.json')
+      const recPath = join(ipcState.projectsDir, input.id, 'project.json.local-recovery')
+      let base: Record<string, unknown>
+      try {
+        base = JSON.parse(readFileSync(mainPath, 'utf-8')) as Record<string, unknown>
+      } catch {
+        base = {
+          version: 1,
+          meta: { id: input.id, graphVersion: 0 },
+          nodes: [],
+          edges: [],
+          groups: []
+        }
+      }
+      base.tldrawSnapshot = input.tldrawSnapshot
+      writeFileSync(recPath, JSON.stringify(base, null, 2), 'utf-8')
+      return true
+    },
+    hasRecoveryCopy: (input: { id: string }) =>
+      existsSync(join(ipcState.projectsDir, input.id, 'project.json.local-recovery')),
+    readRecoveryCopy: (input: { id: string }) => {
+      const path = join(ipcState.projectsDir, input.id, 'project.json.local-recovery')
+      try {
+        return JSON.parse(readFileSync(path, 'utf-8'))
+      } catch {
+        return null
+      }
+    },
+    discardRecoveryCopy: (input: { id: string }) => {
+      rmSync(join(ipcState.projectsDir, input.id, 'project.json.local-recovery'), { force: true })
+      return true
     }
   }
 })
@@ -125,7 +159,7 @@ beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'canvas-save-sync-'))
   ipcState.projectsDir = join(root, 'projects')
   mkdirSync(ipcState.projectsDir, { recursive: true })
-  ipcState.handler = null
+  ipcState.handlers = {}
   ipcState.sendSyncPayload = null
   registerProjectIpc()
 })
@@ -140,28 +174,52 @@ describe('project.ipc saveSync 信封语义', () => {
   it('成功时返回 { ok:true, data:{ graphVersion } } 而非 data:null', () => {
     seedProject('p1', 1)
     const e = makeEvent()
-    ipcState.handler!(e, { id: 'p1', expectedGraphVersion: 1 })
+    ipcState.handlers['project:save-sync']!(e, { id: 'p1', expectedGraphVersion: 1 })
     expect(e.returnValue).toEqual({ ok: true, data: { graphVersion: 2 } })
   })
 
-  it('expectedGraphVersion 冲突时返回 REVISION_CONFLICT（原先统一为 FLUSH_FAILED）', () => {
+  it('expectedGraphVersion 冲突时返回 REVISION_CONFLICT（T04：不再提供无锁覆盖）', () => {
     seedProject('p1', 5)
     const e = makeEvent()
-    ipcState.handler!(e, { id: 'p1', expectedGraphVersion: 1 })
+    ipcState.handlers['project:save-sync']!(e, { id: 'p1', expectedGraphVersion: 1 })
     expect(e.returnValue).toMatchObject({ ok: false, error: { code: 'REVISION_CONFLICT' } })
+    // 磁盘 project.json 未被无锁覆盖（仍为 v5）
+    const file = JSON.parse(
+      readFileSync(join(ipcState.projectsDir, 'p1', 'project.json'), 'utf-8')
+    ) as { meta: { graphVersion: number } }
+    expect(file.meta.graphVersion).toBe(5)
+  })
+
+  it('T04：saveRecoveryCopySync 冲突路径写恢复副本，project.json 不动', () => {
+    seedProject('p1', 5)
+    const e = makeEvent()
+    ipcState.handlers['project:save-sync']!(e, { id: 'p1', expectedGraphVersion: 1 })
+    expect(e.returnValue).toMatchObject({ ok: false, error: { code: 'REVISION_CONFLICT' } })
+    // 渲染层随后写恢复副本（真实调用顺序）
+    const copyEvent = makeEvent()
+    ipcState.handlers['project:save-recovery-copy-sync']!(copyEvent, {
+      id: 'p1',
+      tldrawSnapshot: { store: { 'shape:local': { type: 'node-card' } } }
+    })
+    expect(copyEvent.returnValue).toEqual({ ok: true, data: true })
+    expect(existsSync(join(ipcState.projectsDir, 'p1', 'project.json.local-recovery'))).toBe(true)
+    const mainFile = JSON.parse(
+      readFileSync(join(ipcState.projectsDir, 'p1', 'project.json'), 'utf-8')
+    ) as { meta: { graphVersion: number } }
+    expect(mainFile.meta.graphVersion).toBe(5) // 外部版本未被抢占
   })
 
   it('expectedGraphVersion 为 undefined 时不做乐观锁校验（兼容降级保存）', () => {
     seedProject('p1', 5)
     const e = makeEvent()
-    ipcState.handler!(e, { id: 'p1', expectedGraphVersion: undefined })
+    ipcState.handlers['project:save-sync']!(e, { id: 'p1', expectedGraphVersion: undefined })
     expect(e.returnValue).toEqual({ ok: true, data: { graphVersion: 6 } })
   })
 
   it('通用错误返回 SAVE_FAILED 且消息可读', () => {
     // 项目文件不存在 → readFileSync 抛错 → SAVE_FAILED
     const e = makeEvent()
-    ipcState.handler!(e, { id: 'missing' })
+    ipcState.handlers['project:save-sync']!(e, { id: 'missing' })
     expect(e.returnValue).toMatchObject({ ok: false, error: { code: 'SAVE_FAILED' } })
     expect((e.returnValue as { error: { message: string } }).error.message).toBeTruthy()
   })
