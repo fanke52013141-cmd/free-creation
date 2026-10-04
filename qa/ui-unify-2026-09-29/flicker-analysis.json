@@ -1,0 +1,26 @@
+{
+  "base": {
+    "frames": 97,
+    "consec_p50": 0.05,
+    "consec_p95": 1.11,
+    "consec_max": 1.84,
+    "spikes_gt3": 0,
+    "flash_frames": []
+  },
+  "nobg": {
+    "frames": 136,
+    "consec_p50": 0.01,
+    "consec_p95": 1.08,
+    "consec_max": 1.12,
+    "spikes_gt3": 0,
+    "flash_frames": []
+  },
+  "noblur": {
+    "frames": 40,
+    "consec_p50": 0,
+    "consec_p95": 0.66,
+    "consec_max": 0.67,
+    "spikes_gt3": 0,
+    "flash_frames": []
+  }
+}
