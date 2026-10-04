@@ -7,7 +7,7 @@
 
 | 任务 | 里程碑 | 关联 | 状态 | 验收用例 | 证据目录 |
 |---|---|---|---|---|---|
-| T01 类型化演示接口 | M0 | F16 | 待确认 | 演示生图/AI处理/语音三卡反馈 | qa/optimization-T01/ |
+| T01 类型化演示接口 | M0 | F16 | **已交付**(2026-10-04) | 演示生图/AI处理/语音三卡反馈 | qa/optimization-T01/ |
 | T00 真实任务基线 | M0 | 不足A | 待确认 | REAL-TASKS.md | qa/optimization-baseline/ |
 | T04 保存协调器 | M1 | F01 | 待确认 | A07/A08 | qa/optimization-T04/ |
 | T05 恢复检查点 | M1 | F02 | 待确认 | A09 | qa/optimization-T05/ |
@@ -26,6 +26,13 @@
 | T16 性能证据 | M5 | F12/F18 | 待确认 | A14 | qa/optimization-T16/ |
 
 ## 已完成记录
+
+### T01 类型化浏览器演示接口（2026-10-04 交付）
+- 状态：验收通过 → 已交付。关联 F16；M0。
+- 改动：browserMock 删除整体强转，改用模块级 `type WindowApi = typeof window.api` 注解 mockApi 做逐成员赋值检查；补齐 12 个缺口（资源库目录/画布结构 8 桩、models 命名空间 fixture、gateway 3 成员）；抓出并修正错误方法名 `loadPalettePreferences→getPalettePreferences`（旧强转掩盖，浏览器演示调色板偏好此前静默失效）；5 处遗留形状分歧以 F16-legacy 局部 cast 标记。
+- 验证：typecheck/lint 通过；全量 vitest 1333 通过（含新增 `test/browser-mock-contract.test.ts` 9 例）；test:model 通过；浏览器实测（`qa/optimization-T01/verify-f16.cjs`）生图执行成功出图、AI 处理与语音给业务提示，三卡零裸异常，F16 复现场景（resolveBinding undefined 崩溃）消除。剩余页面错误为已知 tldraw CDN EncodingError（UX-14）与 2 次设计内的演示 fetch 降级。
+- 未验证边界：模型目录面板浏览/编辑流在演示模式的完整走查（变更类桩返回 DEMO_NOT_IMPLEMENTED，属设计行为）。
+- 附带发现：`as` 断言对缺失成员不报错（实测），必须赋值检查才能当类型守卫。
 
 ### F19 前置修复（2026-10-04）
 - 改动：CanvasEditor.tsx 相机交互 wheel 监听移除补 capture:true。
