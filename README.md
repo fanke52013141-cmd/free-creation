@@ -4,6 +4,7 @@ An Electron application with React and TypeScript
 
 ## Architecture Rules
 
+- [Logging and diagnostics specification](./LOGGING_SPEC.md) — required impact assessment for every feature change, with implementation plan and coverage checklist.
 - [Node input/output contract specification](./NODE_CONTRACT_SPEC.md) — required reading before adding or changing a node.
 - [Development roadmap](./ROADMAP.md) — recommended implementation order and acceptance criteria.
 - [Engineering handoff](./HANDOFF.md) — current architecture, known risks, and release checklist.

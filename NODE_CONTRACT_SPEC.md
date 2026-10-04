@@ -1,5 +1,7 @@
 # 节点输入输出契约规范
 
+> 新增或修改节点还必须遵守 [日志与运行诊断规范](./LOGGING_SPEC.md)：复用公共执行生命周期记录，补充功能专属失败阶段、关联和脱敏测试，并更新 [日志覆盖清单](./docs/LOGGING_COVERAGE.md)。日志底座的待实施能力不能当作已有接口。
+
 > 状态：强制规范 2.0（代码字段式多输入/多输出、端口基数语义与表格型分镜编辑；P0-P4 图片修改、M0-M4 本地媒体处理及音频职责拆分已落地）
 > 代码入口：`src/shared/types/index.ts`、`src/shared/node-schemas.ts`、`src/renderer/src/nodes/registry.tsx`  
 > 节点定义：`src/renderer/src/nodes/specs/index.tsx`
