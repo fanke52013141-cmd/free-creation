@@ -11,7 +11,7 @@
 | T00 真实任务基线 | M0 | 不足A | 待确认 | REAL-TASKS.md | qa/optimization-baseline/ |
 | T04 保存协调器 | M1 | F01 | **验收通过**(L4四场景,2026-10-04) | A07/A08(部分SKIP) | qa/optimization-T04/ |
 | T05 恢复检查点 | M1 | F02 | 待确认 | A09 | qa/optimization-T05/ |
-| T02 搜索与Esc | M2 | F04/F05 | 待确认 | A01/A02 | qa/optimization-T02/ |
+| T02 搜索与Esc | M2 | F04/F05 | **验收通过**(2026-10-04,A01/A02) | A01/A02 | qa/optimization-T02/ |
 | T03 新建分层 | M2 | F03 | 待确认 | A01 | — |
 | T06 统一预检 | M2 | F06 | 待确认 | A03 | — |
 | T07 运行计划 | M2 | F07 | 待确认 | A03/A04 | — |
@@ -26,6 +26,11 @@
 | T16 性能证据 | M5 | F12/F18 | 待确认 | A14 | qa/optimization-T16/ |
 
 ## 进行中
+
+### T02 搜索创建与 Esc（2026-10-04 验收通过）
+- 已落地：Esc 输入框内关闭+焦点回归（3b95dec）；「创建工具」分组（fa4fa5a，名称/描述/别名匹配 + onCreateNode 复用调色板创建路径 + 动作标签）。
+- 浏览器实测：空画布搜「生图」创建成功、别名「裁一下」命中裁剪、Esc 关闭、定位分组出现；A01/A02 通过。
+- 未验证边界：键盘上下选择/Enter 执行（当前 UI 仍需点击，属后续增强）；「已隐藏可本次添加」提示未实现（按需立项）。
 
 ### T04 保存协调器（2026-10-04，L4 验收通过）
 - 已落地：save-coordinator.ts 状态机（6 单测）+ CanvasEditor 接线 + beforeunload 冲突改写恢复副本（无锁覆盖已删）+ 主进程四函数四通道 + 恢复副本选择 UI（CanvasPage 三选一对话框）+ 顶栏 SaveStatusBadge 五态徽标 + preload 透传 + browserMock 对齐。
