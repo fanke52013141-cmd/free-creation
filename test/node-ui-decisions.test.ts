@@ -20,6 +20,7 @@ const surfaces = read('src/renderer/src/assets/ui-surfaces.css')
 const app = read('src/renderer/src/assets/app.css')
 const nodeCardView = read('src/renderer/src/canvas/NodeCardView.tsx')
 const nodePortLayout = read('src/renderer/src/canvas/node-port-layout.ts')
+const graph = read('src/renderer/src/canvas/graph.ts')
 const inputPreview = read('src/renderer/src/canvas/ConnectedInputPreview.tsx')
 const dataEdgeLayer = read('src/renderer/src/canvas/DataEdgeLayer.tsx')
 const specs = read('src/renderer/src/nodes/specs/index.tsx')
@@ -79,16 +80,34 @@ describe('v1.3 §16.1 端口圆点统一使用节点色、类型色环与柔光'
     expect(nodeCardView).toContain('const visibleInPorts = inLayout.ports')
     expect(nodeCardView).toContain('const visibleOutPorts = outLayout.ports')
     expect(nodePortLayout).toContain(
-      'const groupTypes = [...new Set(ports.map((port) => port.type))]'
+      'const groupTypes = [...new Set(grouped.map((port) => port.type))]'
     )
-    expect(nodePortLayout).toContain('if (activeTypes.size === 0) activeTypes.add(groupTypes[0])')
+    expect(nodePortLayout).toContain(
+      'if (activeTypes.size === 0 && groupTypes.length > 0) activeTypes.add(groupTypes[0])'
+    )
     expect(nodePortLayout).toContain(
       'const visibleTypes = groupTypes.filter((type) => activeTypes.has(type))'
     )
-    expect(nodePortLayout).toContain('portOffsets(visibleTypes.length, cardHeight)')
-    expect(nodePortLayout).toContain('const sameType = ports.filter((port) => port.type === type)')
+    expect(nodePortLayout).toContain(
+      'portOffsets(visibleTypes.length + forced.length, cardHeight)'
+    )
+    expect(nodePortLayout).toContain(
+      'const sameType = grouped.filter((port) => port.type === type)'
+    )
     expect(nodeCardView).toContain('!isSource && canAttachPort(draft.from, p)')
     expect(nodeCardView).toContain("canAttachPort(draftIn, p, 'in')")
+  })
+
+  it('用户声明的动态端口不并入同类型共享锚点，各自独立且始终渲染', () => {
+    // 代码参数/输出字段等 resolvePorts 动态端口必须始终可见并可单独落线，
+    // 否则同类型第二个端口会被代表端口挡住，用户无法连到它（2026-10 节点矩阵发现的缺陷）。
+    expect(nodePortLayout).toContain(
+      'const forced = ports.filter((port) => forcedPortIds.has(port.id))'
+    )
+    expect(nodePortLayout).toContain('forced.forEach((port, index) =>')
+    expect(graph).toContain('export function dynamicPortIdsForShape')
+    expect(nodeCardView).toContain('dynamicPortIdsForShape(shape)')
+    expect(dataEdgeLayer).toContain('dynamicPortIdsForShape(shape)[direction]')
   })
 
   it('可见圆点和透明命中区都扩大，锚点元素尺寸仍由 edge-geometry 统一', () => {

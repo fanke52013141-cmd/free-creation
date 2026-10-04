@@ -8,7 +8,7 @@ export interface NodePortConnections {
 }
 
 export interface NodePortLayout {
-  /** One representative contract port per visible type group. */
+  /** One representative contract port per visible type group, plus every forced port. */
   ports: PortDecl[]
   /** Every contract port in a visible type group shares its visual anchor. */
   offsets: Map<string, number>
@@ -61,36 +61,46 @@ export function collectNodePortConnections(editor: Editor): Map<string, NodePort
  * Ports are grouped by PortType; duplicate same-type ports share one anchor. In the idle
  * state only the first declared type is shown. Connecting another distinct type (or
  * temporarily highlighting a compatible candidate) reveals that type's connector too.
- * All visible type groups divide the node height evenly.
+ * Forced ports (user-declared dynamic ports such as code-node params and output fields)
+ * are exempt from grouping: they always render and each keeps an independent anchor, so
+ * every declared port stays individually droppable and reachable.
+ * All anchors divide the node height evenly.
  */
 export function createNodePortLayout(
   ports: PortDecl[],
   connectedPortIds: ReadonlySet<string>,
   cardHeight: number,
-  candidatePortIds: ReadonlySet<string> = new Set()
+  candidatePortIds: ReadonlySet<string> = new Set(),
+  forcedPortIds: ReadonlySet<string> = new Set()
 ): NodePortLayout {
-  const groupTypes = [...new Set(ports.map((port) => port.type))]
-  if (groupTypes.length === 0) return { ports: [], offsets: new Map() }
+  if (ports.length === 0) return { ports: [], offsets: new Map() }
+  const forced = ports.filter((port) => forcedPortIds.has(port.id))
+  const grouped = ports.filter((port) => !forcedPortIds.has(port.id))
 
+  const groupTypes = [...new Set(grouped.map((port) => port.type))]
   const activeIds = new Set([...connectedPortIds, ...candidatePortIds])
   const activeTypes = new Set(
-    ports.filter((port) => activeIds.has(port.id)).map((port) => port.type)
+    grouped.filter((port) => activeIds.has(port.id)).map((port) => port.type)
   )
   // Every side has a usable default connector, including nodes with several optional types.
-  if (activeTypes.size === 0) activeTypes.add(groupTypes[0])
+  if (activeTypes.size === 0 && groupTypes.length > 0) activeTypes.add(groupTypes[0])
   const visibleTypes = groupTypes.filter((type) => activeTypes.has(type))
-  const positions = portOffsets(visibleTypes.length, cardHeight)
+  const positions = portOffsets(visibleTypes.length + forced.length, cardHeight)
   const visiblePorts: PortDecl[] = []
   const offsets = new Map<string, number>()
 
   visibleTypes.forEach((type, index) => {
-    const sameType = ports.filter((port) => port.type === type)
+    const sameType = grouped.filter((port) => port.type === type)
     const representative =
       sameType.find((port) => candidatePortIds.has(port.id)) ??
       sameType.find((port) => connectedPortIds.has(port.id)) ??
       sameType[0]
     if (representative) visiblePorts.push(representative)
     for (const port of sameType) offsets.set(port.id, positions[index])
+  })
+  forced.forEach((port, index) => {
+    visiblePorts.push(port)
+    offsets.set(port.id, positions[visibleTypes.length + index])
   })
 
   return { ports: visiblePorts, offsets }

@@ -5,7 +5,7 @@ import type { NodeCardShape } from './NodeCardShape'
 import { useEdgeSelectionStore } from '../stores/edgeSelection'
 import { buildDataEdgePath, NODE_PORT_OUTSET } from './edge-geometry'
 import { useConnectionStore, type ConnectionFrom } from '../stores/connection'
-import { portPairCompatible } from './graph'
+import { dynamicPortIdsForShape, portPairCompatible } from './graph'
 import { collectNodePortConnections, createNodePortLayout } from './node-port-layout'
 import { markUndoPoint } from './history'
 import { toast } from '../stores/toast'
@@ -100,7 +100,8 @@ function collectEdges(
       ports,
       connections.get(shape.id)?.[direction] ?? new Set<string>(),
       shape.props.h,
-      candidates
+      candidates,
+      dynamicPortIdsForShape(shape)[direction]
     ).offsets
     layouts.set(key, visible)
     return visible

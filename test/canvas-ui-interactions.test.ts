@@ -48,10 +48,13 @@ describe('canvas interaction details', () => {
   it('shows one connector per distinct input/output type and merges repeated same-type ports', () => {
     expect(nodeCardSource).toContain('const visibleInPorts = inLayout.ports')
     expect(nodeCardSource).toContain('const visibleOutPorts = outLayout.ports')
+    // 动态端口（forced）先行剔除，其余按类型合并；forced 各自独立锚点（见 node-ui-decisions）。
     expect(nodePortLayoutSource).toContain(
-      'const groupTypes = [...new Set(ports.map((port) => port.type))]'
+      'const groupTypes = [...new Set(grouped.map((port) => port.type))]'
     )
-    expect(nodePortLayoutSource).toContain('const sameType = ports.filter((port) => port.type === type)')
+    expect(nodePortLayoutSource).toContain(
+      'const sameType = grouped.filter((port) => port.type === type)'
+    )
     expect(nodeCardSource).toContain("['--pc' as string]: inputColor")
     expect(nodeCardSource).toContain("['--node-port-color' as string]: inputColor")
     expect(foundationSource).toContain('.port-dot.unconnected {\n  opacity: 1;')

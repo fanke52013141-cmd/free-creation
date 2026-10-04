@@ -12,7 +12,7 @@ import { useConnectionStore } from '../stores/connection'
 import { useNodePanelStore } from '../stores/nodePanel'
 import { beginConnectionDrag } from './connection-drag'
 import { batchConnectionFromSelection } from './batch-connection'
-import { portPairCompatible } from './graph'
+import { dynamicPortIdsForShape, portPairCompatible } from './graph'
 import { markUndoPoint } from './history'
 import type { NodeCardShape } from './NodeCardShape'
 import { Icon } from '../components/Icon'
@@ -682,6 +682,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       : readiness
   // 每侧每种数据类型呈现一个连接点：同类型端口共用锚点，不同类型分别均分卡片高度。
   // 可见圆点始终绑定真实契约 portId，拖线候选只选择同类型组中的代表端口。
+  // 用户显式声明的动态端口（代码参数/输出字段）例外：始终渲染且各自独立锚点。
   const candidateInPortIds = new Set(
     draft && draft.from.direction !== 'in' && !isSource
       ? inPorts.filter((port) => canAttachPort(draft.from, port)).map((port) => port.id)
@@ -692,17 +693,20 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       ? outPorts.filter((port) => canAttachPort(draft.from, port, 'in')).map((port) => port.id)
       : []
   )
+  const dynamicPortIds = dynamicPortIdsForShape(shape)
   const inLayout = createNodePortLayout(
     inPorts,
     readinessState.incomingPortIds,
     shape.props.h,
-    candidateInPortIds
+    candidateInPortIds,
+    dynamicPortIds.in
   )
   const outLayout = createNodePortLayout(
     outPorts,
     readinessState.outgoingPortIds,
     shape.props.h,
-    candidateOutPortIds
+    candidateOutPortIds,
+    dynamicPortIds.out
   )
   const visibleInPorts = inLayout.ports
   const visibleOutPorts = outLayout.ports

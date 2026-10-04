@@ -16,6 +16,26 @@ import { projectNodeOutputs, type NodeValue } from '../nodes/nodeValues'
 import { TEXT_MERGE_SEPARATOR } from '@shared/engine/helpers'
 
 /**
+ * resolvePorts 动态生成的端口 ID（如代码节点自定义参数、多字段输出）。
+ * 这些端口由用户显式声明、每个都有独立稳定 ID（见 getNodePorts 的注册例外），
+ * 端口布局必须给它们独立锚点，不能并入同类型共享锚点——否则第二个同类型
+ * 参数/输出会被代表端口挡住，用户拖线永远落不到它上面。
+ */
+export function dynamicPortIdsForShape(shape: NodeCardShape): {
+  in: Set<string>
+  out: Set<string>
+} {
+  const spec = getNodeType(shape.props.nodeType)
+  if (!spec) return { in: new Set<string>(), out: new Set<string>() }
+  const resolved = getNodePorts(spec, shape)
+  const staticIds = new Set<string>([...spec.ports.in, ...spec.ports.out].map((p) => p.id))
+  return {
+    in: new Set(resolved.in.filter((p) => !staticIds.has(p.id)).map((p) => p.id)),
+    out: new Set(resolved.out.filter((p) => !staticIds.has(p.id)).map((p) => p.id))
+  }
+}
+
+/**
  * 源输出端口能否接入目标输入端口（类型 + 结构化 Schema 双重校验）。
  *
  * 参数方向固定为 (out, in)：`portCompatible` 对 iteration 输出是非对称规则
@@ -230,13 +250,15 @@ export function createEdge(
     fromPorts.out,
     connections.get(fromShape.id)?.out ?? new Set<string>(),
     fromShape.props.h,
-    new Set([fromPort.id])
+    new Set([fromPort.id]),
+    dynamicPortIdsForShape(fromShape).out
   ).offsets.get(fromPort.id) ?? fromShape.props.h / 2
   const toY = createNodePortLayout(
     toPorts.in,
     connections.get(toShape.id)?.in ?? new Set<string>(),
     toShape.props.h,
-    new Set([toPort.id])
+    new Set([toPort.id]),
+    dynamicPortIdsForShape(toShape).in
   ).offsets.get(toPort.id) ?? toShape.props.h / 2
 
   const startPage = pagePortPoint(editor, fromShape, 'out', fromY)
@@ -529,7 +551,8 @@ export function tryConnectBatch(
       targetPorts.in,
       collectNodePortConnections(editor).get(target.id)?.in ?? new Set<string>(),
       target.props.h,
-      new Set(compatible.map((port) => port.id))
+      new Set(compatible.map((port) => port.id)),
+      dynamicPortIdsForShape(target).in
     )
     targetPort = compatible.reduce((best, port) => {
       const bestY =
@@ -613,7 +636,8 @@ function resolveTargetInputPort(
     targetPorts.in,
     collectNodePortConnections(editor).get(target.id)?.in ?? new Set<string>(),
     target.props.h,
-    new Set(compatible.map((port) => port.id))
+    new Set(compatible.map((port) => port.id)),
+    dynamicPortIdsForShape(target).in
   )
   const targetBounds = dropPagePt ? editor.getShapePageBounds(target.id) : null
   if (dropPagePt && targetBounds) {
@@ -776,7 +800,8 @@ function resolveSourceOutputPort(
       sourcePorts.out,
       collectNodePortConnections(editor).get(source.id)?.out ?? new Set<string>(),
       source.props.h,
-      new Set(compatible.map((port) => port.id))
+      new Set(compatible.map((port) => port.id)),
+      dynamicPortIdsForShape(source).out
     )
     let bestDist = Infinity
     for (const candidate of compatible) {
