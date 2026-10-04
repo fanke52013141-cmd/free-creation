@@ -4,27 +4,28 @@
 
 状态：`基础`=有公共阶段或零散日志；`部分`=有专门诊断但缺全链路；`待接入`=目标结构化事件尚无充分证据；`已验收`=提供运行/测试证据后才可使用。源码审阅不等于行为测试通过。
 
-核查日期：2026-10-04，基线2e58e09。本轮未跑业务日志故障测试，以下不标“已验收”。
+核查日期：2026-10-04（L01–L06 实施轮，基于 5085dc8 工作区）。“已验收”仅覆盖有自动化测试证据的路径；
+未列出的失败场景与真机验收边界见每行“待补内容”，不得整行虚报完成。
 
 | 业务域 | 已有入口/证据 | 状态 | 待补内容 | 实施责任与任务 |
 | --- | --- | --- | --- | --- |
-| 公共节点执行 | renderer/engine/executor.ts、runRecord.ts；test/runRecord.test.ts存在 | 部分 | 独立记录、执行实例ID、稳定事件和唯一终态契约 | 执行器维护者，L01/L02 |
-| 流程/迭代 | executor.ts内runId、itemRunId；run-index.ts | 基础 | 根/子trace、item对应、取消/重跑关联 | 流程维护者，L03/L04 |
-| AI对话/AI处理 | shared/engine/executors/chat.ts、aiProcess.ts及公共执行器 | 基础 | 请求ID、首片/流中断、模型请求与节点关联 | 文本网关维护者，L03 |
-| 生图/图像编辑 | main/gateway/image.ts有部分提交/task日志；公共执行器 | 部分 | 所有适配器统一、下载/写盘分阶段、请求ID | 图像网关维护者，L03/L04 |
-| 长视频 | main/gateway/video.ts已有任务库/恢复/重试 | 部分 | 恢复父子关联、轮询摘要、远端成功与落盘分开 | 视频任务维护者，L04 |
-| 语音克隆 | shared/engine/executors/tts.ts、main/media/tts-transform.ts、media.ipc.ts | 部分 | 接统一schema、错误脱敏/重复归并、独立存储 | 音频维护者，L04 |
-| 通用配音/音色设计 | 公共执行器；相关gateway/media入口 | 基础 | 实际请求与产物落盘完整链 | 音频维护者，L04 |
-| 本地媒体与导演输出 | 公共执行器；main/media、media.repo.ts | 基础 | 外部进程/文件写入错误规范、媒体ID关联 | 媒体维护者，L04 |
-| 代码Worker | renderer/engine/codeRuntime.ts及公共执行器 | 基础 | 超时/退出/诊断桥接，禁止记录源码 | Worker维护者，L04 |
-| 项目保存/冲突/恢复 | CanvasEditor.tsx有console错误；项目仓库/IPC已有业务错误返回 | 待接入 | 独立操作ID、版本、检查点/回滚、linkedTraceIds | 持久化维护者，L04 |
-| 项目导入导出 | 项目IPC与仓库事务；启动workspace健康摘要 | 基础 | 导入阶段/事务/回滚完整事件，路径去标识 | 持久化维护者，L04 |
-| 素材库 | library.ipc.ts及library仓库有业务接口 | 待接入 | 修订、材料化、分类操作失败/回滚 | 素材库维护者，L04 |
-| 模型连接/能力验证 | model-contracts可选requestId；main/model-host、models.ipc.ts | 基础 | 配置变化安全摘要、验证关联与归一化错误 | 模型目录维护者，L04 |
-| 应用生命周期 | main/index.ts的electron-log启动/健康检查 | 部分 | 非正常退出标记、可用崩溃事件、flush/健康状态 | 桌面底座维护者，L02/L04 |
-| 日志文件/独立事件 | main.log存在，electron-log默认轮转 | 部分 | 项目级保留限额、JSONL、队列/故障、自诊断 | 诊断底座维护者，L02 |
-| 查询/导出 | run-index.ts、CanvasSidePanel.tsx、diagnostics.ipc.ts | 部分 | 全流程时间线、范围导出、manifest/不完整说明 | 诊断UI维护者，L05 |
-| 自动日志门禁 | CI已有通用测试，尚无新规范专门拦截器 | 待接入 | 字段/schema/旁路/变更影响检查 | 工程门禁维护者，L06 |
+| 公共节点执行 | shared/observability schema v1+注册表；executor.ts 注入 traceId/nodeExecutionId、node.started/唯一终态事件；test/observability/executor-events.test.ts（A01/A02/A15） | 已验收 | runNodeTest 仍不产生运行记录（有意，登记为不涉及） | 执行器维护者，L01 |
+| 流程/迭代 | workflow.started/completed/failed/cancelled 事件；迭代批次 batchId/itemId 随节点事件携带；run-index.ts | 已验收 | item 级部分失败聚合事件（A10 的 100 项基线未跑） | 流程维护者，L04 |
+| AI对话/AI处理 | main/gateway/chat.ts 发 model.request.started/first_chunk/completed/failed/cancelled；执行器传 requestId+capability 阶段；test/observability/gateway-chain.test.ts（A04/A05/A06） | 已验收 | 真机流式验收未跑（pnpm model:smoke:text 待记录） | 文本网关维护者，L03 |
+| 生图/图像编辑 | main/gateway/image.ts 入口 started/completed/failed + TOAPIS accepted/task.state_changed/poll_summary/download/persist 分阶段；gateway-chain.test.ts（A04/A07） | 已验收 | openai-images/openrouter 驱动只有入口级事件；真机未跑 | 图像网关维护者，L03/L04 |
+| 长视频 | main/gateway/video.ts 提交/accepted/state_changed/poll_summary/下载/入库/恢复全链事件；429 attempt_failed+retry_scheduled（同 requestId 递增 attempt）；video-diagnostics.test.ts（A03/A09） | 已验收 | MiniMax 适配真机验收未跑；恢复决策 drift 场景未专项测试 | 视频任务维护者，L04 |
+| 语音克隆 | main/media/tts-transform.ts report() 改走统一事件（node.stage+phase，私有值脱敏透传） | 已验收 | 独立失败注入测试未建（复用 gateway-events 脱敏测试） | 音频维护者，L04 |
+| 通用配音/音色设计 | AudioGenerateInput 已带 diagnostics 上下文字段；gateway 入口级事件未接入 | 基础 | speech/voice 网关入口事件 + 执行器阶段 | 音频维护者，L04 待办 |
+| 本地媒体与导演输出 | 公共执行器终态事件已覆盖失败；media.repo 写盘失败经 node.failed 传播 | 基础 | 外部进程退出码/信号专项事件 | 媒体维护者，L04 待办 |
+| 代码Worker | 执行器公共终态事件覆盖超时/异常；源码禁记由白名单序列化保证 | 基础 | worker 退出码专项事件 | Worker维护者，L04 待办 |
+| 项目保存/冲突/恢复 | main/ipc/project.ipc.ts save：project.save.started/completed/conflict/failed；test/db-migrations 侧无；导入导出 transfer.started/validated/committed/failed | 已验收 | restore 回滚专项事件（恢复副本功能并行开发中，待其落地后接事件） | 持久化维护者，L04 |
+| 项目导入导出 | 同上 transfer.* 事件（导出/导入） | 已验收 | 结构导出 exportStructure 未接 | 持久化维护者，L04 待办 |
+| 素材库 | main/ipc/library.ipc.ts：revision_published/materialization_completed/failed/mutation_failed | 已验收 | 分类操作失败事件未接 | 素材库维护者，L04 |
+| 模型连接/能力验证 | main/ipc/models.ipc.ts validate：configuration.validation_completed/failed（connectionId/modelId） | 已验收 | 迁移 migration_* 事件未接 | 模型目录维护者，L04 待办 |
+| 应用生命周期 | main/index.ts：session_started/ended/previous_session_unclean/process_exited（render-process-gone）；before-quit flush≤2s | 已验收 | 主进程自身崩溃（crash dump）事件未接 | 桌面底座维护者，L02/L04 |
+| 日志文件/独立事件 | src/main/diagnostics：有界队列(2048/8MiB+128关键预留)、session 分片 JSONL（按天/10MiB 轮转）、14d/200MiB/错误配额 20MiB/硬上限 256MiB 保留、健康计数+事件环；diagnostics-storage.test.ts（A12/A13/A14） | 已验收 | 慢盘时延专项未测（注入为拒写/满盘） | 诊断底座维护者，L02 |
+| 查询/导出 | diagnostics:query/health/export-bundle IPC；RunsPanel 流程时间线+导出诊断包；导出 manifest/events/summary/coverage、25MiB 截断、原子写、二次脱敏（diagnostics-storage.test.ts L05 用例） | 已验收 | 项目保存/恢复范围的导出入口未单列 | 诊断UI维护者，L05 |
+| 自动日志门禁 | scripts/check-logging-bypass.mjs（增量 console/electron-log 旁路 + 新文件网络调用缺诊断接入）；scripts/logging-allowlist.json；test/observability/logging-gate.test.ts（A17/A18）；npm run verify 与 CI 已接入 verify:logging | 已验收 | 变更影响声明（logging-impact 机器可读匹配）未建，靠门禁规则兜底 | 工程门禁维护者，L06 |
 
 路径缩写分别相对src/renderer/src、src/shared或src/main；正式修改记录应给出具体文件和函数。
 
