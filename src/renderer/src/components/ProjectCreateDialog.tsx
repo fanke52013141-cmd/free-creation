@@ -39,12 +39,22 @@ export function ProjectCreateDialog({
   const nameInputId = `${dialogId}-name`
   const searchInputId = `${dialogId}-search`
   const [name, setName] = useState(initialName)
-  const [preset, setPreset] = useState<WorkspaceProfile['presetId']>(
-    initialProfile?.presetId ?? 'all'
-  )
+  // T03（F03）：默认沿用最近一次成功创建的可见工具配置（localStorage）；
+  // initialProfile（工作台偏好入口）仍最优先。节点选择区默认折叠。
+  const lastProfile = (() => {
+    try {
+      const raw = window.localStorage.getItem('canvas-studio.last-create-profile')
+      return raw ? (JSON.parse(raw) as WorkspaceProfile) : null
+    } catch {
+      return null
+    }
+  })()
+  const baseProfile = initialProfile ?? lastProfile
+  const [preset, setPreset] = useState<WorkspaceProfile['presetId']>(baseProfile?.presetId ?? 'all')
   const [selected, setSelected] = useState<Set<string>>(
-    () => new Set(initialProfile?.visibleNodeTypeIds ?? allNodeTypes().map((node) => node.type))
+    () => new Set(baseProfile?.visibleNodeTypeIds ?? allNodeTypes().map((node) => node.type))
   )
+  const [showNodeConfig, setShowNodeConfig] = useState(false)
   const [highlightedSelected, setHighlightedSelected] = useState<Set<string>>(() => new Set())
   const [keyword, setKeyword] = useState('')
   const [busy, setBusy] = useState(false)
@@ -113,14 +123,21 @@ export function ProjectCreateDialog({
     setBusy(true)
     setError('')
     try {
-      await onSubmit(name.trim(), {
+      const profile: WorkspaceProfile = {
         schemaVersion: 1,
         presetId: preset,
         visibleNodeTypeIds: [
           ...nodeTypes.filter((node) => selected.has(node.type)).map((node) => node.type),
           ...Array.from(selected).filter((id) => !nodeTypes.some((node) => node.type === id))
         ]
-      })
+      }
+      // T03：记住本次配置，下次新建默认沿用（不覆盖工作台偏好入口的显式 profile）
+      try {
+        window.localStorage.setItem('canvas-studio.last-create-profile', JSON.stringify(profile))
+      } catch {
+        // 隐私模式/容量受限时跳过记忆，创建不受影响
+      }
+      await onSubmit(name.trim(), profile)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     } finally {
@@ -177,95 +194,128 @@ export function ProjectCreateDialog({
                 />
               </label>
             )}
-            <label className="project-create-search" htmlFor={searchInputId}>
-              <span>
-                <Icon name="search" size={15} />
-                <span>快速定位节点</span>
-              </span>
-              <span className="project-create-search-field">
-                <Icon name="search" size={16} />
-                <input
-                  id={searchInputId}
-                  value={keyword}
-                  placeholder="搜索节点名称"
-                  onChange={(event) => setKeyword(event.currentTarget.value)}
-                />
-                {keyword && (
-                  <button type="button" aria-label="清空搜索" onClick={() => setKeyword('')}>
-                    <Icon name="close" size={14} />
-                  </button>
-                )}
-              </span>
-            </label>
-          </div>
-
-          <div className="project-create-categories" aria-label="按分类选择节点">
-            {NODE_CATEGORY_IDS.map((category) => {
-              const nodes = nodesForPaletteCategory(filteredTypes, category)
-              if (!nodes.length) return null
-              const meta = PALETTE_CATEGORY_META[category]
-              const checked = nodes.filter((node) => selected.has(node.type)).length
-              return (
-                <section
-                  className="project-create-category"
-                  data-category={category}
-                  key={category}
-                >
-                  <header>
-                    <span className="project-create-category-icon" aria-hidden="true">
-                      <Icon name={meta.icon} size={16} />
-                    </span>
-                    <strong>{meta.label}</strong>
-                    <span
-                      className="project-create-category-count"
-                      aria-label={`${checked} 项已选，共 ${nodes.length} 项`}
-                    >
-                      {checked}/{nodes.length}
-                    </span>
-                    <button
-                      type="button"
-                      aria-label={`${checked === nodes.length ? '取消选择' : '选择'}${meta.label}全部节点`}
-                      onClick={() => toggleCategory(category)}
-                    >
-                      {checked === nodes.length ? '全不选' : '全选'}
-                    </button>
-                  </header>
-                  <div className="project-create-node-grid">
-                    {nodes.map((node) => (
-                      <label
-                        className={`project-create-node ${selected.has(node.type) ? 'is-selected' : ''} ${highlightedSelected.has(node.type) ? 'is-highlighted' : ''}`}
-                        key={node.type}
-                        style={{ '--node-color': node.color } as React.CSSProperties}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selected.has(node.type)}
-                          aria-label={node.label}
-                          onChange={() => toggleNode(node.type)}
-                        />
-                        <span className="project-create-node-icon" aria-hidden="true">
-                          <Icon name={node.icon} size={17} />
-                        </span>
-                        <span className="project-create-node-label">{node.label}</span>
-                        <span className="project-create-node-check" aria-hidden="true">
-                          <Icon name="check" size={13} />
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </section>
-              )
-            })}
-            {filteredTypes.length === 0 && (
-              <div className="project-create-no-results">
-                <span className="project-create-no-results-icon" aria-hidden="true">
-                  <Icon name="search" size={19} />
+            {showNodeConfig && (
+              <button
+                type="button"
+                className="project-create-config-toggle"
+                aria-expanded="true"
+                onClick={() => setShowNodeConfig(false)}
+              >
+                <Icon name="minimap" size={14} />
+                收起工具配置（当前 {selected.size} 项已选，创建后可随时调整）
+              </button>
+            )}
+            {showNodeConfig && (
+              <label className="project-create-search" htmlFor={searchInputId}>
+                <span>
+                  <Icon name="search" size={15} />
+                  <span>快速定位节点</span>
                 </span>
-                <strong>没有找到匹配的节点</strong>
-                <span>试试其他关键词，或清空搜索条件</span>
-              </div>
+                <span className="project-create-search-field">
+                  <Icon name="search" size={16} />
+                  <input
+                    id={searchInputId}
+                    value={keyword}
+                    placeholder="搜索节点名称"
+                    onChange={(event) => setKeyword(event.currentTarget.value)}
+                  />
+                  {keyword && (
+                    <button type="button" aria-label="清空搜索" onClick={() => setKeyword('')}>
+                      <Icon name="close" size={14} />
+                    </button>
+                  )}
+                </span>
+              </label>
             )}
           </div>
+          {showNodeConfig && (
+            <>
+              <div className="project-create-categories" aria-label="按分类选择节点">
+                {NODE_CATEGORY_IDS.map((category) => {
+                  const nodes = nodesForPaletteCategory(filteredTypes, category)
+                  if (!nodes.length) return null
+                  const meta = PALETTE_CATEGORY_META[category]
+                  const checked = nodes.filter((node) => selected.has(node.type)).length
+                  return (
+                    <section
+                      className="project-create-category"
+                      data-category={category}
+                      key={category}
+                    >
+                      <header>
+                        <span className="project-create-category-icon" aria-hidden="true">
+                          <Icon name={meta.icon} size={16} />
+                        </span>
+                        <strong>{meta.label}</strong>
+                        <span
+                          className="project-create-category-count"
+                          aria-label={`${checked} 项已选，共 ${nodes.length} 项`}
+                        >
+                          {checked}/{nodes.length}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label={`${checked === nodes.length ? '取消选择' : '选择'}${meta.label}全部节点`}
+                          onClick={() => toggleCategory(category)}
+                        >
+                          {checked === nodes.length ? '全不选' : '全选'}
+                        </button>
+                      </header>
+                      <div className="project-create-node-grid">
+                        {nodes.map((node) => (
+                          <label
+                            className={`project-create-node ${selected.has(node.type) ? 'is-selected' : ''} ${highlightedSelected.has(node.type) ? 'is-highlighted' : ''}`}
+                            key={node.type}
+                            style={{ '--node-color': node.color } as React.CSSProperties}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selected.has(node.type)}
+                              aria-label={node.label}
+                              onChange={() => toggleNode(node.type)}
+                            />
+                            <span className="project-create-node-icon" aria-hidden="true">
+                              <Icon name={node.icon} size={17} />
+                            </span>
+                            <span className="project-create-node-label">{node.label}</span>
+                            <span className="project-create-node-check" aria-hidden="true">
+                              <Icon name="check" size={13} />
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </section>
+                  )
+                })}
+                {filteredTypes.length === 0 && (
+                  <div className="project-create-no-results">
+                    <span className="project-create-no-results-icon" aria-hidden="true">
+                      <Icon name="search" size={19} />
+                    </span>
+                    <strong>没有找到匹配的节点</strong>
+                    <span>试试其他关键词，或清空搜索条件</span>
+                  </div>
+                )}
+              </div>
+              {showNodeConfig && (
+                <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--muted)' }}>
+                  未勾选的节点随时可在「项目菜单 → 工作台节点设置」重新开启。
+                </p>
+              )}
+            </>
+          )}
+          {showNodeConfig || (
+            <button
+              type="button"
+              className="project-create-config-toggle"
+              aria-expanded="false"
+              onClick={() => setShowNodeConfig(true)}
+              style={{ marginTop: 10 }}
+            >
+              <Icon name="settings" size={14} />
+              高级：自定义可见工具（默认沿用上次配置，当前 {selected.size} 项）
+            </button>
+          )}
         </div>
 
         <footer className="project-create-footer">
