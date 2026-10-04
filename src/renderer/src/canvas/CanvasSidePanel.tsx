@@ -18,6 +18,7 @@ import { addNodeLibraryEntry } from './node-library'
 import { markUndoPoint } from './history'
 import { toast } from '../stores/toast'
 import { useConfirmStore } from '../stores/confirm'
+import { checkSnapshotMedia } from './snapshot-restore'
 import { useHistorySnapshots, type HistorySnapshot } from '../stores/history-snapshots'
 import { Icon, type IconName } from '../components/Icon'
 import { AppSelect } from '../components/AppSelect'
@@ -444,15 +445,63 @@ function HistoryPanel({
     }
   }
 
-  // 回溯到指定版本：加载快照到编辑器，打撤销分段点
-  const handleRestore = (snap: HistorySnapshot): void => {
+  // T05（F02）：恢复五步——①保存恢复前检查点（失败即中止，不动画布）
+  // ②媒体存在性预检（缺失列出数量，用户可取消）③应用快照 ④打撤销分段点
+  // ⑤toast 告知「回到恢复前」入口（历史列表中的恢复前检查点）。
+  const handleRestore = async (snap: HistorySnapshot): Promise<void> => {
     if (!editor) return
+    // ① 恢复前检查点：当前状态先落一份自动快照，失败则中止
+    let checkpointLabel = ''
+    try {
+      const current = editor.store.getStoreSnapshot()
+      let nodeCount = 0
+      for (const s of editor.getCurrentPageShapes()) {
+        if (s.type === 'node-card') nodeCount++
+      }
+      checkpointLabel = `恢复前检查点 · ${new Date().toLocaleTimeString('zh-CN')}`
+      await add(projectId, current, nodeCount, checkpointLabel)
+    } catch (error) {
+      toast(`恢复前检查点保存失败，已取消恢复：${String(error).slice(0, 60)}`)
+      return
+    }
+    // ② 媒体存在性预检：快照引用的媒体缺失时列出数量，用户裁决
+    const available = await window.api.listMedia(projectId)
+    const availableIds = new Set(
+      available.ok ? available.data.map((asset) => asset.id) : []
+    )
+    const diff = checkSnapshotMedia(snap.snapshot, availableIds)
+    if (diff.missing.length > 0) {
+      const proceed = await useConfirmStore.getState().confirm({
+        title: `恢复「${snap.label}」`,
+        message: `该版本引用的 ${diff.missing.length} 个媒体文件已不在当前项目媒体库中，恢复后对应预览将无法显示。仍要恢复吗？`,
+        confirmText: '仍要恢复',
+        danger: true
+      })
+      if (!proceed) {
+        toast('已取消恢复')
+        return
+      }
+    }
+    // ③④ 应用快照 + 撤销分段点
     try {
       editor.store.loadStoreSnapshot(editor.store.migrateSnapshot(snap.snapshot as never))
       markUndoPoint(editor, 'restore-snapshot')
-      toast(`已回溯到「${snap.label}」`)
+      toast(`已回溯到「${snap.label}」；如需返回此前状态，可在历史版本中使用「${checkpointLabel}」`, 5000)
     } catch (e) {
+      // ⑤ 应用失败：尝试回到恢复前检查点，保住当前状态
       console.error('版本恢复失败', e)
+      try {
+        const checkpoint = useHistorySnapshots
+          .getState()
+          .snapshots.find((s) => s.label === checkpointLabel)
+        if (checkpoint) {
+          editor.store.loadStoreSnapshot(editor.store.migrateSnapshot(checkpoint.snapshot as never))
+          toast('版本恢复失败，已回到恢复前状态')
+          return
+        }
+      } catch {
+        // 回滚也失败时不再叠加动作，交由人工处理
+      }
       toast('版本恢复失败，数据可能已损坏')
     }
   }
