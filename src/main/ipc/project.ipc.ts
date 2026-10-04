@@ -1,7 +1,11 @@
 // 项目 IPC handlers（信封规范见《技术框架与规范》§10）
 import { ipcMain, dialog } from 'electron'
 import { IPC } from '../../shared/contracts'
-import type { ExportCanvasStructureInput, IpcEnvelope, SaveProjectInput } from '../../shared/contracts'
+import type {
+  ExportCanvasStructureInput,
+  IpcEnvelope,
+  SaveProjectInput
+} from '../../shared/contracts'
 import type { ProjectFile, ProjectMeta } from '../../shared/types'
 import {
   GraphVersionConflictError,
@@ -9,11 +13,9 @@ import {
 } from '../../shared/graph-snapshot-sync'
 import { getSetting, setSetting } from '../store/db'
 import * as repo from '../store/projects.repo'
+import { emitDomainEvent } from '../diagnostics/ipc-domain-events'
 import { exportProject, importProject } from '../store/transfer'
-import {
-  exportCanvasStructure,
-  importCanvasStructure
-} from '../store/canvas-structure-transfer'
+import { exportCanvasStructure, importCanvasStructure } from '../store/canvas-structure-transfer'
 import { ProjectFileWatcher } from './project-watcher'
 
 function ok<T>(data: T): IpcEnvelope<T> {
@@ -33,14 +35,17 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
     return ok(repo.listProjects())
   })
 
-  ipcMain.handle(IPC.project.create, (_e, input: import('../../shared/contracts').CreateProjectInput): IpcEnvelope<ProjectMeta> => {
-    if (!input?.name || !input.name.trim()) return err('INVALID_NAME', '项目名不能为空')
-    try {
-      return ok(repo.createProject(input.name.trim(), input.workspaceProfile))
-    } catch (error) {
-      return err('CREATE_FAILED', error instanceof Error ? error.message : String(error))
+  ipcMain.handle(
+    IPC.project.create,
+    (_e, input: import('../../shared/contracts').CreateProjectInput): IpcEnvelope<ProjectMeta> => {
+      if (!input?.name || !input.name.trim()) return err('INVALID_NAME', '项目名不能为空')
+      try {
+        return ok(repo.createProject(input.name.trim(), input.workspaceProfile))
+      } catch (error) {
+        return err('CREATE_FAILED', error instanceof Error ? error.message : String(error))
+      }
     }
-  })
+  )
 
   ipcMain.handle(
     IPC.project.clone,
@@ -56,8 +61,12 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
 
   ipcMain.handle(
     IPC.project.saveWorkspaceProfile,
-    (_e, input: import('../../shared/contracts').SaveWorkspaceProfileInput): IpcEnvelope<ProjectMeta | null> => {
-      if (!input?.projectId || !input.workspaceProfile) return err('INVALID_INPUT', '工作台配置不完整')
+    (
+      _e,
+      input: import('../../shared/contracts').SaveWorkspaceProfileInput
+    ): IpcEnvelope<ProjectMeta | null> => {
+      if (!input?.projectId || !input.workspaceProfile)
+        return err('INVALID_INPUT', '工作台配置不完整')
       try {
         return ok(repo.saveWorkspaceProfile(input.projectId, input.workspaceProfile))
       } catch (error) {
@@ -95,17 +104,36 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
     IPC.project.save,
     (_e, input: SaveProjectInput): IpcEnvelope<{ graphVersion: number } | null> => {
       if (!input?.id) return err('INVALID_INPUT', '参数不完整')
+      emitDomainEvent('project.save.started', '项目保存开始', {
+        attributes: { projectId: input.id }
+      })
       try {
         const result = repo.saveProject(input)
         if (result) watcher?.notifySelfSave(result.graphVersion)
+        emitDomainEvent('project.save.completed', '项目保存完成', {
+          status: 'success',
+          attributes: { projectId: input.id, graphVersion: result?.graphVersion }
+        })
         return ok(result)
       } catch (e) {
         if (e instanceof GraphVersionConflictError) {
+          emitDomainEvent('project.save.conflict', '项目保存版本冲突', {
+            error: e,
+            attributes: { projectId: input.id }
+          })
           return err('REVISION_CONFLICT', e.message)
         }
         if (e instanceof GraphWriteInProgressError) {
+          emitDomainEvent('project.save.conflict', '项目保存被并发写入阻塞', {
+            error: e,
+            attributes: { projectId: input.id }
+          })
           return err('REVISION_CONFLICT', '项目正在被另一项写入操作更新，请稍后重试')
         }
+        emitDomainEvent('project.save.failed', '项目保存失败', {
+          error: e,
+          attributes: { projectId: input.id }
+        })
         return err('SAVE_FAILED', e instanceof Error ? e.message : String(e))
       }
     }
@@ -131,10 +159,21 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
         filters: [{ name: 'Canvas Studio 项目备份', extensions: ['canvasbundle'] }]
       })
       if (result.canceled || !result.filePath) return err('CANCELLED', '已取消导出')
+      emitDomainEvent('project.transfer.started', '项目导出开始', {
+        attributes: { projectId: input.id }
+      })
       try {
         const exported = exportProject(input.id, result.filePath)
+        emitDomainEvent('project.transfer.committed', '项目导出完成', {
+          status: 'success',
+          attributes: { projectId: input.id, itemCount: exported.missingMediaCount }
+        })
         return ok({ path: exported.path, missingMediaCount: exported.missingMediaCount })
       } catch (e) {
+        emitDomainEvent('project.transfer.failed', '项目导出失败', {
+          error: e,
+          attributes: { projectId: input.id }
+        })
         return err('EXPORT_FAILED', e instanceof Error ? e.message : String(e))
       }
     }
@@ -148,17 +187,26 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
       filters: [{ name: 'Canvas Studio 项目备份', extensions: ['canvasbundle'] }]
     })
     if (result.canceled || result.filePaths.length === 0) return err('CANCELLED', '已取消导入')
+    emitDomainEvent('project.transfer.started', '项目导入开始', {})
     try {
       const meta = importProject(result.filePaths[0])
+      emitDomainEvent('project.transfer.validated', '项目导入校验通过', {
+        status: 'success',
+        attributes: { projectId: meta?.id }
+      })
       return ok(meta as ProjectMeta)
     } catch (e) {
+      emitDomainEvent('project.transfer.failed', '项目导入失败（事务未提交）', { error: e })
       return err('IMPORT_FAILED', e instanceof Error ? e.message : String(e))
     }
   })
 
   ipcMain.handle(
     IPC.project.exportStructure,
-    async (_e, input: ExportCanvasStructureInput): Promise<IpcEnvelope<{ path: string; nodeCount: number }>> => {
+    async (
+      _e,
+      input: ExportCanvasStructureInput
+    ): Promise<IpcEnvelope<{ path: string; nodeCount: number }>> => {
       if (!input?.id || !input.name || !input.snapshot || !input.graph) {
         return err('INVALID_INPUT', '画布结构参数不完整')
       }
@@ -236,13 +284,36 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
     return ok(repo.hasRecoveryCopy(input.id))
   })
 
-  ipcMain.handle(IPC.project.readRecoveryCopy, (_e, input: { id: string }): IpcEnvelope<ProjectFile | null> => {
-    if (!input?.id) return err('INVALID_INPUT', '参数不完整')
-    return ok(repo.readRecoveryCopy(input.id))
-  })
+  ipcMain.handle(
+    IPC.project.readRecoveryCopy,
+    (_e, input: { id: string }): IpcEnvelope<ProjectFile | null> => {
+      if (!input?.id) return err('INVALID_INPUT', '参数不完整')
+      return ok(repo.readRecoveryCopy(input.id))
+    }
+  )
 
-  ipcMain.handle(IPC.project.discardRecoveryCopy, (_e, input: { id: string }): IpcEnvelope<boolean> => {
-    if (!input?.id) return err('INVALID_INPUT', '参数不完整')
-    return ok(repo.discardRecoveryCopy(input.id))
-  })
+  ipcMain.handle(
+    IPC.project.discardRecoveryCopy,
+    (_e, input: { id: string }): IpcEnvelope<boolean> => {
+      if (!input?.id) return err('INVALID_INPUT', '参数不完整')
+      return ok(repo.discardRecoveryCopy(input.id))
+    }
+  )
+
+  // T04：用户选择「使用恢复副本」——副本内容经正式保存路径落盘（推进版本、
+  // 外部版本进 .bak），删除副本并返回重开后的项目文件。
+  ipcMain.handle(
+    IPC.project.restoreRecoveryCopy,
+    (_e, input: { id: string }): IpcEnvelope<ProjectFile | null> => {
+      if (!input?.id) return err('INVALID_INPUT', '参数不完整')
+      try {
+        return ok(repo.restoreRecoveryCopy(input.id))
+      } catch (restoreErr) {
+        return err(
+          'RECOVERY_RESTORE_FAILED',
+          restoreErr instanceof Error ? restoreErr.message : String(restoreErr)
+        )
+      }
+    }
+  )
 }

@@ -13,6 +13,7 @@ import type {
   PublishLibraryRevisionInput
 } from '../../shared/library/types'
 import * as library from '../store/library.repo'
+import { emitDomainEvent } from '../diagnostics/ipc-domain-events'
 
 function ok<T>(data: T): IpcEnvelope<T> {
   return { ok: true, data }
@@ -43,13 +44,36 @@ export function registerLibraryIpc(): void {
     try { return ok(library.createResource(input)) } catch (error) { return err('CREATE_FAILED', error) }
   })
   ipcMain.handle(IPC.library.captureProjectMedia, (_event, input: CaptureProjectMediaInput): IpcEnvelope<LibraryResourceDetail> => {
-    try { return ok(library.captureProjectMedia(input)) } catch (error) { return err('CAPTURE_FAILED', error) }
+    try {
+      const result = library.captureProjectMedia(input)
+      emitDomainEvent('library.materialization_completed', '项目媒体已采集入库', {
+        status: 'success',
+        resourceId: result?.id
+      })
+      return ok(result)
+    } catch (error) {
+      emitDomainEvent('library.materialization_failed', '项目媒体采集失败', { error })
+      return err('CAPTURE_FAILED', error)
+    }
   })
   ipcMain.handle(IPC.library.captureProjectNodes, (_event, input: CaptureProjectNodesInput): IpcEnvelope<LibraryResourceDetail> => {
     try { return ok(library.captureProjectNodes(input)) } catch (error) { return err('CAPTURE_FAILED', error) }
   })
   ipcMain.handle(IPC.library.publishRevision, (_event, input: PublishLibraryRevisionInput): IpcEnvelope<LibraryResourceDetail> => {
-    try { return ok(library.publishRevision(input)) } catch (error) { return err('REVISION_FAILED', error) }
+    try {
+      const result = library.publishRevision(input)
+      emitDomainEvent('library.revision_published', '素材修订已发布', {
+        status: 'success',
+        resourceId: input?.resourceId
+      })
+      return ok(result)
+    } catch (error) {
+      emitDomainEvent('library.mutation_failed', '素材修订发布失败', {
+        error,
+        resourceId: input?.resourceId
+      })
+      return err('REVISION_FAILED', error)
+    }
   })
   ipcMain.handle(IPC.library.archive, (_event, input: { resourceId: string; archived: boolean }) => {
     if (!input?.resourceId || typeof input.archived !== 'boolean') return err('INVALID_INPUT', '归档参数不完整')

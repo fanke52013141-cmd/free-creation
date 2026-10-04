@@ -1,6 +1,7 @@
 // IPC surface for the reusable model catalog. This is intentionally separate from gateway.ipc:
 // callers configure named connections and model definitions, then verify each exact capability.
 import { ipcMain } from 'electron'
+import { emitDomainEvent } from '../diagnostics/ipc-domain-events'
 import type { ModelRuntime } from '@free-creation/model-runtime'
 import { IPC, type DeleteModelConnectionInput, type DeleteModelDefinitionInput, type DeleteModelDefinitionsInput, type DiscoverModelDefinitionsInput, type DiscoveredModel, type IpcEnvelope, type ResolveModelFeatureInput, type ResolvedModelFeature, type SaveModelConnectionInput, type SaveModelDefinitionInput, type SaveModelFeatureBindingInput, type ValidateModelDefinitionInput } from '../../shared/contracts'
 import type { Connection, ModelDefinition } from '@free-creation/model-contracts'
@@ -82,8 +83,21 @@ export function registerModelIpc(host: SqliteModelHost, runtime: ModelRuntime): 
     try {
       if (input.allowCost !== true) throw new Error('模型真实验证可能产生供应商费用，必须显式确认')
       required(input.connectionId, '连接 ID'); required(input.modelDefinitionId, '模型定义 ID')
-      return ok(await runtime.validateModel(input.connectionId, input.modelDefinitionId, input.operation))
-    } catch (error) { return fail(error) }
+      const result = await runtime.validateModel(input.connectionId, input.modelDefinitionId, input.operation)
+      emitDomainEvent('configuration.validation_completed', '模型能力验证完成', {
+        status: 'success',
+        connectionId: input.connectionId,
+        attributes: { modelId: input.modelDefinitionId }
+      })
+      return ok(result)
+    } catch (error) {
+      emitDomainEvent('configuration.validation_failed', '模型能力验证失败', {
+        error,
+        connectionId: input?.connectionId,
+        attributes: { modelId: input?.modelDefinitionId }
+      })
+      return fail(error)
+    }
   })
   ipcMain.handle(IPC.models.saveBinding, (_event, input: SaveModelFeatureBindingInput) => {
     try {

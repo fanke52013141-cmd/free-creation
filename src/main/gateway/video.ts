@@ -16,6 +16,9 @@ import type { ProviderConfig, VideoGenerationMode, VideoTaskInfo } from '../../s
 import { getDb, getDataDir } from '../store/db'
 import { readMediaBuffer, saveFileAsset } from '../store/media.repo'
 import { GatewayError } from './factory'
+import { emitGatewayEvent, ensureRequestId } from '../diagnostics/gateway-events'
+import { newTraceId } from '@shared/observability'
+import type { GatewayDiagnosticsContext } from '../../shared/contracts'
 import {
   CONTROL_TIMEOUT_MS,
   DOWNLOAD_TIMEOUT_MS,
@@ -362,26 +365,53 @@ export async function finalizeVideo(
   taskId: string,
   projectId: string,
   url: string,
-  retryDelays: readonly number[] = DOWNLOAD_RETRY_DELAYS_MS
+  retryDelays: readonly number[] = DOWNLOAD_RETRY_DELAYS_MS,
+  diagnostics?: GatewayDiagnosticsContext
 ): Promise<void> {
+  const taskDiag = { ...diagnostics, taskId }
+  emitGatewayEvent('media.download_started', '开始下载成片', taskDiag, {
+    attributes: { operation: 'video.generate' }
+  })
+  let tmp: string
   try {
-    const tmp = await downloadWithRetry(url, taskId, retryDelays)
-    try {
-      const asset = await saveFileAsset(projectId, tmp, '.mp4', 'video')
-      updateTask(taskId, { status: 'success', output: JSON.stringify({ mediaId: asset.id }) })
-      send({
-        kind: 'video-done',
-        taskId,
-        mediaId: asset.id,
-        mediaPath: asset.path,
-        name: asset.name ?? asset.id,
-        mime: asset.mime
-      })
-    } catch (error) {
-      // saveFileAsset 失败时临时文件不会被登记移走，这里必须补一刀清理
-      await unlink(tmp).catch(() => undefined)
-      throw error
-    }
+    tmp = await downloadWithRetry(url, taskId, retryDelays)
+  } catch (error) {
+    // 下载失败不等于远端失败：远端任务可能已成功，事件必须区分这两个事实。
+    emitGatewayEvent('media.download_failed', '成片下载失败', taskDiag, {
+      error,
+      attributes: { operation: 'video.generate' }
+    })
+    throw error
+  }
+  emitGatewayEvent('media.download_completed', '成片下载完成', taskDiag, {
+    attributes: { operation: 'video.generate' }
+  })
+  emitGatewayEvent('media.persist_started', '成片开始入库', taskDiag, {
+    attributes: { operation: 'video.generate' }
+  })
+  try {
+    const asset = await saveFileAsset(projectId, tmp, '.mp4', 'video')
+    updateTask(taskId, { status: 'success', output: JSON.stringify({ mediaId: asset.id }) })
+    emitGatewayEvent('media.persist_completed', '成片已入库', taskDiag, {
+      status: 'success',
+      attributes: { operation: 'video.generate', mediaId: asset.id, mime: asset.mime }
+    })
+    send({
+      kind: 'video-done',
+      taskId,
+      mediaId: asset.id,
+      mediaPath: asset.path,
+      name: asset.name ?? asset.id,
+      mime: asset.mime
+    })
+  } catch (error) {
+    // saveFileAsset 失败时临时文件不会被登记移走，这里必须补一刀清理
+    await unlink(tmp).catch(() => undefined)
+    emitGatewayEvent('media.persist_failed', '成片入库失败', taskDiag, {
+      error,
+      attributes: { operation: 'video.generate' }
+    })
+    throw error
   } finally {
     clearCancelled(taskId)
   }
@@ -707,7 +737,9 @@ function requireLiveProvider(providerId: string): ProviderConfig {
 async function submitWithBackoff(
   submit: (p: ProviderConfig, input: VideoSubmitInput) => Promise<string>,
   p: ProviderConfig,
-  input: VideoSubmitInput
+  input: VideoSubmitInput,
+  diagnostics?: GatewayDiagnosticsContext,
+  requestId?: string
 ): Promise<string> {
   for (let attempt = 0; ; attempt++) {
     try {
@@ -720,6 +752,17 @@ async function submitWithBackoff(
         error.code !== 'UPSTREAM_RATE_LIMIT'
       )
         throw error
+      // L04：重试保持逻辑 requestId 不变、attempt 递增；日志不触发重试。
+      emitGatewayEvent('model.request.attempt_failed', '视频任务提交被限流', { ...diagnostics, requestId }, {
+        attempt: attempt + 1,
+        error,
+        attributes: { operation: 'video.generate', providerId: p.id, modelId: input.modelId }
+      })
+      emitGatewayEvent('model.request.retry_scheduled', '将按退避间隔重试提交', { ...diagnostics, requestId }, {
+        attempt: attempt + 2,
+        waitMs: delay,
+        attributes: { operation: 'video.generate', providerId: p.id, modelId: input.modelId }
+      })
       await sleep(delay)
     }
   }
@@ -829,29 +872,60 @@ export function submitVideoTask(send: Send, input: VideoSubmitInput): VideoSubmi
       now
     )
 
-  void pollLoop(send, taskId, input)
+  // L04：请求边界事件。本地 taskId 与（提交成功后的）upstreamTaskId 区分记录。
+  const requestDiagnostics: GatewayDiagnosticsContext = {
+    ...input.diagnostics,
+    requestId: ensureRequestId(input.diagnostics)
+  }
+  emitGatewayEvent('model.request.started', '视频任务开始提交', requestDiagnostics, {
+    attributes: { operation: 'video.generate', providerId: input.providerId, modelId: input.modelId }
+  })
+  void pollLoop(send, taskId, input, requestDiagnostics)
   return { taskId }
 }
 
-async function pollLoop(send: Send, taskId: string, input: VideoSubmitInput): Promise<void> {
+async function pollLoop(
+  send: Send,
+  taskId: string,
+  input: VideoSubmitInput,
+  requestDiagnostics?: GatewayDiagnosticsContext
+): Promise<void> {
+  const taskDiag = { ...requestDiagnostics, taskId }
   try {
     const p = requireLiveProvider(input.providerId)
     const { submit, poll } = adaptersFor(p)
-    const upstreamId = await submitWithBackoff(submit, p, input)
+    const upstreamId = await submitWithBackoff(submit, p, input, requestDiagnostics, requestDiagnostics?.requestId)
     const state = parseInput(taskId)
     updateTask(taskId, {
       input: JSON.stringify({ ...state, upstreamTaskId: upstreamId }),
       status: 'running'
+    })
+    // L04：远端任务已创建——与「提交请求成功」是两个事实。
+    emitGatewayEvent('model.request.accepted', '远端已接受视频任务', taskDiag, {
+      upstreamTaskId: upstreamId,
+      attributes: { operation: 'video.generate', providerId: input.providerId, modelId: input.modelId }
+    })
+    emitGatewayEvent('task.state_changed', '本地任务状态更新为运行中', taskDiag, {
+      upstreamTaskId: upstreamId,
+      status: 'success',
+      attributes: { state: 'running', operation: 'video.generate' }
     })
     send({ kind: 'video-status', taskId, status: 'running' })
 
     const deadline = Date.now() + VIDEO_TIMEOUT_MS
     // 连续瞬时失败计数跨轮询轮次维持，成功清零（见 pollUpstream）
     const pollFailures = { count: 0 }
+    let lastSummaryAt = Date.now()
     for (;;) {
       if (cancelled.has(taskId)) {
         updateTask(taskId, { status: 'cancelled' })
         clearCancelled(taskId)
+        // 用户取消：远端任务可能仍在运行，不声称已远端取消。
+        emitGatewayEvent('task.state_changed', '本地已取消，远端结果未知', taskDiag, {
+          upstreamTaskId: upstreamId,
+          status: 'cancelled',
+          attributes: { state: 'cancelled', operation: 'video.generate' }
+        })
         send({ kind: 'video-error', taskId, error: '已取消' })
         return
       }
@@ -868,14 +942,31 @@ async function pollLoop(send: Send, taskId: string, input: VideoSubmitInput): Pr
         upstreamId,
         pollFailures
       )
+      if (Date.now() - lastSummaryAt >= 30_000) {
+        lastSummaryAt = Date.now()
+        emitGatewayEvent('task.poll_summary', '远端任务轮询汇总', taskDiag, {
+          upstreamTaskId: upstreamId,
+          attributes: {
+            state: st.status,
+            pollCount: pollFailures.count,
+            transientErrors: pollFailures.count,
+            operation: 'video.generate'
+          }
+        })
+      }
       if (st.status === 'succeeded' && st.url) {
-        await finalizeVideo(send, taskId, input.projectId, st.url)
+        await finalizeVideo(send, taskId, input.projectId, st.url, DOWNLOAD_RETRY_DELAYS_MS, taskDiag)
         return
       }
       if (st.status === 'failed') throw new GatewayError('GEN_FAILED', st.error ?? '生成失败')
       if (st.status === 'cancelled') {
         updateTask(taskId, { status: 'cancelled' })
         clearCancelled(taskId)
+        emitGatewayEvent('task.state_changed', '上游任务已取消', taskDiag, {
+          upstreamTaskId: upstreamId,
+          status: 'cancelled',
+          attributes: { state: 'cancelled', operation: 'video.generate' }
+        })
         send({ kind: 'video-error', taskId, error: '上游任务被取消' })
         return
       }
@@ -884,6 +975,11 @@ async function pollLoop(send: Send, taskId: string, input: VideoSubmitInput): Pr
     const msg = e instanceof Error ? e.message : String(e)
     updateTask(taskId, { status: 'failed', error: msg })
     clearCancelled(taskId)
+    emitGatewayEvent('task.failed', '视频任务失败', taskDiag, {
+      error: e,
+      status: 'failed',
+      attributes: { state: 'failed', operation: 'video.generate' }
+    })
     send({ kind: 'video-error', taskId, error: msg })
   }
 }
@@ -922,11 +1018,31 @@ export function resumePendingVideoTasks(send: Send): void {
   const rows = getDb()
     .prepare("SELECT * FROM tasks WHERE kind = 'video' AND status IN ('submitted', 'running')")
     .all() as TaskRow[]
+  if (rows.length > 0) {
+    // L04：恢复是主进程开启的新 trace；旧记录没有 traceId，明确标记关联缺失。
+    emitGatewayEvent(
+      'task.resume_started',
+      '应用启动：恢复在途视频任务',
+      { traceId: newTraceId(), correlationMissing: true } as never,
+      { attributes: { pendingCount: rows.length, operation: 'video.generate' } }
+    )
+  }
   for (const row of rows) {
     const state = parseInput(row.id)
     const p = getProvider(row.provider_id)
     if (!state.upstreamTaskId || !p) {
       updateTask(row.id, { status: 'failed', error: '应用重启导致任务状态丢失' })
+      emitGatewayEvent(
+        'task.resume_blocked',
+        '恢复被阻断：缺少上游任务或供应商连接',
+        { traceId: newTraceId(), taskId: row.id, correlationMissing: true } as never,
+        {
+          attributes: {
+            reason: !state.upstreamTaskId ? 'missing_upstream_task' : 'provider_missing',
+            operation: 'video.generate'
+          }
+        }
+      )
       send({ kind: 'video-error', taskId: row.id, error: '应用重启导致任务状态丢失' })
       continue
     }
@@ -946,11 +1062,22 @@ async function resumeLoop(
   // 拿它当基准会一进循环就误报 TIMEOUT，诱导用户重投已计费的任务。
   const deadline = Date.now() + VIDEO_TIMEOUT_MS
   const pollFailures = { count: 0 }
+  // 恢复续跑的事件：稳定 taskId 关联旧任务；旧 trace 未知标记关联缺失。
+  const resumeDiag = { traceId: newTraceId(), taskId: row.id, correlationMissing: true }
+  emitGatewayEvent('task.state_changed', '恢复轮询开始', resumeDiag, {
+    upstreamTaskId: upstreamId,
+    attributes: { state: 'resumed', operation: 'video.generate' }
+  })
   try {
     for (;;) {
       if (cancelled.has(row.id)) {
         updateTask(row.id, { status: 'cancelled' })
         clearCancelled(row.id)
+        emitGatewayEvent('task.state_changed', '恢复任务被本地取消，远端结果未知', resumeDiag, {
+          upstreamTaskId: upstreamId,
+          status: 'cancelled',
+          attributes: { state: 'cancelled', operation: 'video.generate' }
+        })
         send({ kind: 'video-error', taskId: row.id, error: '已取消' })
         return
       }
@@ -959,7 +1086,7 @@ async function resumeLoop(
       // 此时即便已超过 deadline，也应取回已成片的 URL 而不是立即判超时失败。
       const st = await pollUpstream(poll, p, connection, upstreamId, pollFailures)
       if (st.status === 'succeeded' && st.url) {
-        await finalizeVideo(send, row.id, row.project_id, st.url)
+        await finalizeVideo(send, row.id, row.project_id, st.url, DOWNLOAD_RETRY_DELAYS_MS, resumeDiag)
         return
       }
       if (st.status === 'failed') throw new GatewayError('GEN_FAILED', st.error ?? '生成失败')
@@ -983,6 +1110,11 @@ async function resumeLoop(
     const msg = e instanceof Error ? e.message : String(e)
     updateTask(row.id, { status: 'failed', error: msg })
     clearCancelled(row.id)
+    emitGatewayEvent('task.failed', '恢复任务失败', resumeDiag, {
+      error: e,
+      status: 'failed',
+      attributes: { state: 'failed', operation: 'video.generate' }
+    })
     send({ kind: 'video-error', taskId: row.id, error: msg })
   }
 }

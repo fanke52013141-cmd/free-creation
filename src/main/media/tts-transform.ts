@@ -1,9 +1,7 @@
 // MiniMax 云端音色克隆：上传参考音频并登记可复用音色 ID。
 import { randomUUID } from 'crypto'
-import log from 'electron-log/main'
 import { readFile } from 'fs/promises'
 import { extname } from 'path'
-import { redactDiagnosticText } from '../../shared/diagnostics'
 import type { TtsGenerateInput, VoiceCloneResult } from '../../shared/contracts'
 import {
   MINIMAX_CLONE_MAX_BYTES,
@@ -14,6 +12,7 @@ import {
   MINIMAX_VOICE_CLONE_MODELS,
   isValidMiniMaxVoiceId
 } from '../../shared/tts'
+import { emitGatewayEvent } from '../diagnostics/gateway-events'
 import { getDb } from '../store/db'
 import { getMediaAbsPath } from '../store/media.repo'
 import { getProvider } from '../gateway/providers.repo'
@@ -36,19 +35,19 @@ async function transformMiniMaxTts(input: TtsGenerateInput): Promise<VoiceCloneR
     input.referenceAudioId,
     config.promptMediaId
   ]
+  // L04：语音克隆阶段事件走统一底座（含最后一道脱敏与字段白名单）；
+  // 旧 TTS 输入契约只有 runId/nodeId，trace 关联缺失会被显式标记而非补造。
   const report = (level: 'info' | 'error', message: string, fields: Record<string, unknown> = {}): void => {
-    const event = {
-      event: 'voice-clone',
-      at: new Date().toISOString(),
-      runId: input.runId ?? 'unavailable',
-      nodeId: input.nodeId ?? 'unavailable',
-      phase,
+    emitGatewayEvent('node.stage', message, {
+      runId: input.runId,
+      nodeId: input.nodeId,
+      correlationMissing: true
+    }, {
       level,
-      message: redactDiagnosticText(message, 500, privateValues),
-      ...fields
-    }
-    if (level === 'error') log.error(JSON.stringify(event))
-    else log.info(JSON.stringify(event))
+      phase,
+      privateValues,
+      attributes: { operation: 'voice.clone', ...fields }
+    })
   }
   report('info', '开始 MiniMax 语音克隆', {
     providerId: config.providerId,
