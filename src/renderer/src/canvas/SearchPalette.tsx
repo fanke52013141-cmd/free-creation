@@ -34,10 +34,17 @@ function SearchPaletteInner({ editor }: { editor: Editor }): React.JSX.Element {
   const loadLibrary = useWorkflowStore((s) => s.load)
   const [query, setQuery] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  // 记录打开搜索时的焦点元素：关闭后焦点回到触发入口（A02），而不是丢到 body。
+  const openerRef = useRef<HTMLElement | null>(
+    document.activeElement instanceof HTMLElement ? document.activeElement : null
+  )
 
   useEffect(() => {
     requestAnimationFrame(() => inputRef.current?.focus())
     void loadLibrary().catch((error) => toast(`加载节点库失败：${String(error)}`))
+    return () => {
+      openerRef.current?.focus()
+    }
   }, [loadLibrary])
 
   useEffect(() => {
@@ -134,7 +141,16 @@ function SearchPaletteInner({ editor }: { editor: Editor }): React.JSX.Element {
             placeholder="搜索画布节点或节点库…"
             onChange={(event) => setQuery(event.target.value)}
             onPointerDown={(event) => stopEventPropagation(event)}
-            onKeyDown={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              // F05：此前对所有键 stopPropagation，Esc 到不了 window 关闭监听。
+              // 现在输入框内直接处理 Esc（先于画布快捷键），其余键仍阻断画布。
+              if (event.key === 'Escape') {
+                event.stopPropagation()
+                close()
+                return
+              }
+              event.stopPropagation()
+            }}
           />
           <button className="search-close" aria-label="关闭搜索" onClick={close}>
             <Icon name="close" size={20} />
