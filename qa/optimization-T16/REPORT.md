@@ -28,3 +28,5 @@
 - 后续优先采集真实 1000 节点混合项目的性能 profile，再评估可见区域渲染、订阅粒度和 DOM 成本。
 
 原始证据：baseline.json、after.json、electron.json。复跑脚本 scripts/benchmark-optimization-ui.cjs，先启动 5191 浏览器开发服务；--electron 需要生产主进程 out 与 Electron 可用。
+
+范围更新：2026-10-04 用户确认通常用不到 1000 节点。该规模不作为本次交付验收或待开发要求，上述建议仅供将来出现真实需求时参考。
