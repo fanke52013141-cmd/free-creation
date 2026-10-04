@@ -905,7 +905,7 @@ export function deriveGraph(editor: Editor): {
   const edges: CanvasEdge[] = []
   const groups: GroupDecl[] = []
 
-  for (const shape of editor.getCurrentPageShapes()) {
+  for (const shape of editor.getCurrentPageShapes().sort((a, b) => String(a.index ?? '').localeCompare(String(b.index ?? '')))) {
     if (shape.type === 'node-card') {
       const s = shape as NodeCardShape
       const spec = getNodeType(s.props.nodeType)

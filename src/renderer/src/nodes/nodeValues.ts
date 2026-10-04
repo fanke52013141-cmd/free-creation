@@ -201,9 +201,29 @@ export function storyboardSummary(shots: unknown[]): string {
  */
 export function projectNodeOutputs(shape: NodeCardShape): RawNodeOutputs {
   const spec = getNodeType(shape.props.nodeType)
+  const pinned = readPinnedOutputs(shape.meta?.pinnedOutput)
+  if (pinned) return pinned
   if (spec?.outputSource !== 'document') {
     const lastRun = readNodeRunRecord(shape.meta?.nodeRun)
     if (lastRun && lastRun.status !== 'success') return {}
   }
   return spec?.projectOutputs?.(shape) ?? {}
+}
+
+/** A pinned snapshot is independent of later runs/candidate selection and survives reopening. */
+export function readPinnedOutputs(stored: unknown): RawNodeOutputs | null {
+  if (typeof stored !== 'string') return null
+  try {
+    const parsed = JSON.parse(stored)
+    if (parsed?.version !== 1 || !parsed.outputs || typeof parsed.outputs !== 'object') return null
+    const outputs: RawNodeOutputs = {}
+    for (const [portId, value] of Object.entries(parsed.outputs)) {
+      const validated = parseStoredNodeValue(JSON.stringify(value))
+      if (!validated) return null
+      outputs[portId] = validated
+    }
+    return Object.keys(outputs).length ? outputs : null
+  } catch {
+    return null
+  }
 }

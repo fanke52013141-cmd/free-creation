@@ -1,0 +1,6 @@
+diff --git a/src/renderer/src/canvas/Somewhere.tsx b/src/renderer/src/canvas/Somewhere.tsx
+--- a/src/renderer/src/canvas/Somewhere.tsx
++++ b/src/renderer/src/canvas/Somewhere.tsx
+@@ -10,3 +10,4 @@
+ /* 纯样式调整：改颜色与文案，无新增执行/网络/数据路径 */
++.target-card { color: #3355ff; }

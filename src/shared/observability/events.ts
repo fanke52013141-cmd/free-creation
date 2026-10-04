@@ -51,6 +51,8 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
     def('node.input_validated', 'info', 'renderer/engine/executor.ts', { portCount: 'int' }),
     def('node.capability_resolved', 'info', 'shared/engine/executors/*', MODEL_ATTRS),
     def('node.output_validated', 'info', 'renderer/engine/executor.ts', { portCount: 'int' }),
+    def('node.output_pinned', 'info', 'renderer/canvas/NodeCardView.tsx', { portCount: 'int' }),
+    def('node.output_unpinned', 'info', 'renderer/canvas/NodeCardView.tsx'),
     def('node.completed', 'info', 'renderer/engine/executor.ts', { portCount: 'int' }),
     def('node.failed', 'error', 'renderer/engine/executor.ts'),
     def('node.cancelled', 'info', 'renderer/engine/executor.ts'),

@@ -2,11 +2,7 @@
 import { HTMLContainer, stopEventPropagation, useEditor, useValue } from 'tldraw'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import {
-  getNodePorts,
-  getNodeType,
-  PORT_TYPE_LABELS
-} from '../nodes/registry'
+import { getNodePorts, getNodeType, PORT_TYPE_LABELS } from '../nodes/registry'
 import type { PortDecl, PortSchemaRef, PortType } from '@shared/types'
 import { useConnectionStore } from '../stores/connection'
 import { useNodePanelStore } from '../stores/nodePanel'
@@ -18,6 +14,11 @@ import type { NodeCardShape } from './NodeCardShape'
 import { Icon } from '../components/Icon'
 import { NODE_UI, resolveNodeHeight } from './node-ui-tokens'
 import { nodeExecLabel } from './node-status'
+import { currentNodeFingerprint, successfulInputFingerprint } from '../engine/resultFreshness'
+import { projectNodeOutputs, readPinnedOutputs } from '../nodes/nodeValues'
+import { useConfirmStore } from '../stores/confirm'
+import { DiagnosticsProducer, newTraceId } from '@shared/observability'
+import { emitDiagnosticsEvent } from '../engine/diagnosticsReporter'
 import { deriveNodeReadiness } from './node-readiness'
 import { runNodeManually } from '../engine/executor'
 import { useAppStore } from '../stores/app'
@@ -53,6 +54,10 @@ const EXEC_COLORS: Record<string, string> = {
   cancelled: '#6b7280',
   cached: '#60a5fa'
 }
+const outputDiagnostics = new DiagnosticsProducer({
+  process: 'renderer',
+  producerId: 'output-selection'
+})
 
 function portHint(port: PortDecl): string {
   return `${port.name} · ${PORT_TYPE_LABELS[port.type]}`
@@ -254,15 +259,18 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     if (!editor.getSelectedShapeIds().includes(shape.id)) editor.select(shape.id)
   }
 
-  const finishTitleEditing = useCallback((title: HTMLDivElement): void => {
-    const next = title.textContent ?? ''
-    const current = editor.getShape<NodeCardShape>(shape.id)
-    if (current && next !== current.props.title) {
-      editor.updateShape({ id: shape.id, type: 'node-card', props: { title: next } })
-      markUndoPoint(editor, 'title-edit')
-    }
-    setEditing(false)
-  }, [editor, shape.id])
+  const finishTitleEditing = useCallback(
+    (title: HTMLDivElement): void => {
+      const next = title.textContent ?? ''
+      const current = editor.getShape<NodeCardShape>(shape.id)
+      if (current && next !== current.props.title) {
+        editor.updateShape({ id: shape.id, type: 'node-card', props: { title: next } })
+        markUndoPoint(editor, 'title-edit')
+      }
+      setEditing(false)
+    },
+    [editor, shape.id]
+  )
 
   const handleTitleBlur = (e: React.FocusEvent<HTMLDivElement>): void => {
     finishTitleEditing(e.currentTarget)
@@ -350,14 +358,15 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     DEFAULT_IMAGE_GENERATION_ESTIMATE_MS
   )
   const [executionElapsedMs, setExecutionElapsedMs] = useState(0)
-  const [generationTimingSamples, setGenerationTimingSamples] = useState<GenerationTimingSample[]>([])
+  const [generationTimingSamples, setGenerationTimingSamples] = useState<GenerationTimingSample[]>(
+    []
+  )
   const timingRecordedRunRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!activeExecution || nodeRun?.status !== 'running') return
     const startedAt = nodeRun.startedAt
-    const refreshElapsed = (): void =>
-      setExecutionElapsedMs(Math.max(0, Date.now() - startedAt))
+    const refreshElapsed = (): void => setExecutionElapsedMs(Math.max(0, Date.now() - startedAt))
     const frame = window.requestAnimationFrame(refreshElapsed)
     const timer = window.setInterval(refreshElapsed, 500)
     let current = true
@@ -377,9 +386,12 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         })
         .catch(() => undefined)
     } else {
-      void window.api.workspace.getGenerationTimings().then((response) => {
-        if (current && response.ok) setGenerationTimingSamples(response.data)
-      }).catch(() => undefined)
+      void window.api.workspace
+        .getGenerationTimings()
+        .then((response) => {
+          if (current && response.ok) setGenerationTimingSamples(response.data)
+        })
+        .catch(() => undefined)
     }
     return () => {
       current = false
@@ -486,11 +498,12 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         generationTimingSamples,
         nodeRunDurationEstimateMs
       )
-  const executionProgress = activeExecution && nodeRun?.status === 'running'
-    ? shape.props.nodeType === 'image-gen'
-      ? imageGenerationProgressPercent(executionElapsedMs, executionEstimateMs)
-      : nodeExecutionProgressPercent(executionElapsedMs, executionEstimateMs)
-    : 0
+  const executionProgress =
+    activeExecution && nodeRun?.status === 'running'
+      ? shape.props.nodeType === 'image-gen'
+        ? imageGenerationProgressPercent(executionElapsedMs, executionEstimateMs)
+        : nodeExecutionProgressPercent(executionElapsedMs, executionEstimateMs)
+      : 0
   const remainingEstimateMs = executionEstimateMs - executionElapsedMs
   const executionLabel: Record<string, string> = {
     audio: '音频处理中',
@@ -588,12 +601,28 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         outgoingCounts,
         incomingNodeColors,
         incomingPortIds,
-        outgoingPortIds
+        outgoingPortIds,
+        // T09（F08）：当前输入指纹与上次成功运行不一致 = 输入已修改。
+        // 使用与执行器相同的正文、配置、真实端口与输入产物口径。
+        inputStale: (() => {
+          const fingerprint = successfulInputFingerprint(shape)
+          return Boolean(fingerprint && currentNodeFingerprint(editor, shape) !== fingerprint)
+        })()
       }
     },
     [editor, shape, spec, inPorts]
   )
   const readiness = readinessState.readiness
+  // T09：输入已修改时在状态文案后追加标注——只标注不阻断：旧结果保留且仍可
+  // 作为下游输入，是否重新生成由用户决定。
+  const readinessWithFreshness =
+    readinessState.inputStale && (readiness.kind === 'ready' || readiness.kind === 'manual-publish')
+      ? {
+          ...readiness,
+          label: `${readiness.label} · 输入已修改`,
+          detail: `${readiness.detail} 输入在上次成功运行后有修改，当前结果可能不再对应最新输入。`
+        }
+      : readiness
   // 每侧每种数据类型呈现一个连接点：同类型端口共用锚点，不同类型分别均分卡片高度。
   // 可见圆点始终绑定真实契约 portId，拖线候选只选择同类型组中的代表端口。
   const candidateInPortIds = new Set(
@@ -684,7 +713,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     : runBusy
       ? '节点正在运行'
       : readiness.kind === 'blocked'
-        ? readiness.label
+        ? readinessWithFreshness.label
         : null
 
   // 生图节点按正文自然高度双向匹配固定档位；其他节点保留溢出时逐档增长。
@@ -863,8 +892,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           <span
             className={`node-status node-status-${shape.props.exec}`}
             style={{ background: EXEC_COLORS[shape.props.exec] ?? EXEC_COLORS.idle }}
-            title={`${statusLabel} · ${readiness.label}`}
-            aria-label={`${statusLabel} · ${readiness.label}`}
+            title={`${statusLabel} · ${readinessWithFreshness.label}`}
+            aria-label={`${statusLabel} · ${readinessWithFreshness.label}`}
           />
           {spec?.executor && (
             <span className="node-action-float" aria-label="节点动作">
@@ -902,6 +931,66 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             style={{ ['--node-accent' as string]: spec?.color ?? '#42b9f5' }}
           />
           <div ref={bodyRef} className="node-body">
+            {spec?.executor && spec.outputSource !== 'document' && (
+              <div className="node-output-selection" onPointerDown={stopEventPropagation}>
+                <span>
+                  {readPinnedOutputs(shape.meta.pinnedOutput)
+                    ? '已固定输出'
+                    : readinessState.inputStale
+                      ? '输入已修改 · 保留旧结果'
+                      : ''}
+                </span>
+                <button
+                  type="button"
+                  disabled={
+                    runBusy ||
+                    (!readPinnedOutputs(shape.meta.pinnedOutput) &&
+                      !Object.keys(projectNodeOutputs(shape)).length)
+                  }
+                  onClick={async (event) => {
+                    stopEventPropagation(event)
+                    const latest = editor.getShape<NodeCardShape>(shape.id)
+                    if (!latest) return
+                    const pinned = readPinnedOutputs(latest.meta.pinnedOutput)
+                    if (
+                      pinned &&
+                      !(await useConfirmStore.getState().confirm({
+                        title: '解除固定输出',
+                        message: '下游将改用当前候选结果，来源可能变化。是否解除固定？',
+                        confirmText: '解除固定'
+                      }))
+                    )
+                      return
+                    const active = editor.getShape<NodeCardShape>(shape.id)
+                    if (!active || active.meta.pinnedOutput !== latest.meta.pinnedOutput) return
+                    const outputs = pinned ? null : projectNodeOutputs(active)
+                    if (!pinned && !Object.keys(outputs ?? {}).length) return
+                    editor.updateShape({
+                      id: shape.id,
+                      type: 'node-card',
+                      meta: {
+                        ...active.meta,
+                        pinnedOutput: pinned ? null : JSON.stringify({ version: 1, outputs })
+                      }
+                    })
+                    markUndoPoint(editor, 'pin-output')
+                    emitDiagnosticsEvent(
+                      outputDiagnostics.build(
+                        pinned ? 'node.output_unpinned' : 'node.output_pinned',
+                        undefined,
+                        pinned ? '已解除输出固定' : '已固定当前输出',
+                        { projectId: project?.id, nodeId: shape.id, traceId: newTraceId() },
+                        {
+                          attributes: pinned ? {} : { portCount: Object.keys(outputs ?? {}).length }
+                        }
+                      )
+                    )
+                  }}
+                >
+                  {readPinnedOutputs(shape.meta.pinnedOutput) ? '解除固定' : '固定当前输出'}
+                </button>
+              </div>
+            )}
             {!hasDedicatedInputSurface && (
               <ConnectedInputPreview editor={editor} shape={shape} openPreview={openMediaPreview} />
             )}

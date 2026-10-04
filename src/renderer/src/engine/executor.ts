@@ -26,6 +26,7 @@ import type { NodeMetaPatch } from '@shared/engine/executor-types'
 import { iterationItemValue } from '@shared/engine/inputs'
 import { rendererGateway } from './rendererGateway'
 import { operationPatchViolation } from '@shared/engine/node-invariants'
+import { fingerprintNodeInputs } from './resultFreshness'
 import { runCodeTransform } from './codeRuntime'
 import { getNodeType } from '../nodes/registry'
 import { projectNodeOutputs, type NodeValue } from '../nodes/nodeValues'
@@ -836,6 +837,7 @@ async function executeNodeOnce(
   try {
     const collected = collectNodeInputs(ctx, node, injection)
     record.inputs = inputSources(collected.value)
+    record.inputFingerprint = fingerprintNodeInputs(shape, collected.value)
     recordRunTrace(ctx, node, record, 'input', 'info', `已收集 ${Object.keys(record.inputs).length} 个输入端口`, {
       name: 'node.input_validated',
       attributes: { portCount: Object.keys(record.inputs).length }

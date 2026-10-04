@@ -20,6 +20,7 @@ export interface CanvasStructureExportInput {
 }
 
 const OMIT_KEYS = new Set([
+  'pinnedoutput',
   'nodeResult',
   'nodeRun',
   'nodeRunHistory',
