@@ -11,6 +11,8 @@ import { imageCapabilitiesFor, type ImageCapabilities } from '../../shared/image
 import type { MediaAsset, ProviderConfig } from '../../shared/types'
 import { describeUpstreamHttpError } from '../../shared/upstream-error'
 import { readMediaBuffer, saveBufferAsset } from '../store/media.repo'
+import { emitGatewayEvent, ensureRequestId } from '../diagnostics/gateway-events'
+import type { GatewayDiagnosticsContext } from '../../shared/contracts'
 import { createImageModel, GatewayError, requireProvider } from './factory'
 
 const EXT_BY_MIME: Record<string, string> = {
@@ -53,13 +55,44 @@ export async function generateImageToAsset(input: ImageGenerateInput): Promise<M
       `该模型提示词上限为 ${capabilities.maxPromptChars} 个字符，当前 ${promptChars} 个`
     )
   }
-  switch (capabilities.driver) {
-    case 'toapis-task':
-      return generateWithToapisTask(provider, input, capabilities)
-    case 'openrouter-chat':
-      return generateWithOpenRouterChat(provider, input, capabilities)
-    default:
-      return generateWithOpenAiImages(input, capabilities)
+  // L03：请求边界事件由入口统一发射；远端接受/下载/入库等详细阶段由各驱动补充。
+  const requestId = ensureRequestId(input.diagnostics)
+  const diagnostics: GatewayDiagnosticsContext = { ...input.diagnostics, requestId }
+  const startedAt = Date.now()
+  const modelAttributes = {
+    operation: 'image.generate',
+    providerId: input.providerId,
+    modelId: input.modelId
+  }
+  emitGatewayEvent('model.request.started', '生图请求开始', diagnostics, {
+    attributes: modelAttributes
+  })
+  try {
+    let asset: MediaAsset
+    switch (capabilities.driver) {
+      case 'toapis-task':
+        asset = await generateWithToapisTask(provider, input, capabilities, diagnostics)
+        break
+      case 'openrouter-chat':
+        asset = await generateWithOpenRouterChat(provider, input, capabilities)
+        break
+      default:
+        asset = await generateWithOpenAiImages(input, capabilities)
+    }
+    emitGatewayEvent('model.request.completed', '生图请求完成', diagnostics, {
+      status: 'success',
+      durationMs: Date.now() - startedAt,
+      attributes: { ...modelAttributes, mediaId: asset.id }
+    })
+    return asset
+  } catch (error) {
+    emitGatewayEvent('model.request.failed', '生图请求失败', diagnostics, {
+      status: 'failed',
+      durationMs: Date.now() - startedAt,
+      error,
+      attributes: modelAttributes
+    })
+    throw error
   }
 }
 
@@ -232,13 +265,19 @@ function toapisTaskErrorMessage(task: Record<string, unknown>): string {
 
 async function pollToapisTask(
   provider: ProviderConfig,
-  taskId: string
+  taskId: string,
+  diag?: MediaDiag
 ): Promise<Record<string, unknown>> {
   const deadline = Date.now() + TOAPIS_TIMEOUT_MS
   const base = provider.baseURL.replace(/\/+$/, '')
   const knownPath = toapisTaskQueryPathByProvider.get(provider.id) ?? null
   let pathResolved = knownPath !== null
   let lastNetworkError = ''
+  // L03：轮询只记状态变化与周期汇总，不逐次记录相同结果。
+  let lastEmittedState = ''
+  let pollCount = 0
+  let lastSummaryAt = Date.now()
+  let transientErrors = 0
   while (Date.now() < deadline) {
     await delay(TOAPIS_POLL_INTERVAL_MS)
     const candidates = knownPath ? [knownPath] : TOAPIS_TASK_QUERY_PATHS
@@ -251,12 +290,19 @@ async function pollToapisTask(
         lastNetworkError = toapisNetworkError('任务查询', error).message
         return null
       })
-      if (!res) continue
+      if (!res) {
+        transientErrors += 1
+        continue
+      }
       if (res.status === 404) {
         notFoundCount += 1
         continue
       }
       if (!res.ok) {
+        emitGatewayEvent('model.request.attempt_failed', '任务查询失败', diag?.diagnostics, {
+          error: { code: 'UPSTREAM_ERROR', status: res.status },
+          attributes: { operation: 'image.generate' }
+        })
         throw new GatewayError('UPSTREAM_ERROR', await errorTail(res, 'TOAPIS 任务查询失败'))
       }
       const json: unknown = await res.json().catch(() => null)
@@ -275,6 +321,27 @@ async function pollToapisTask(
           : '')
       ).toLowerCase()
 
+      pollCount += 1
+      if (rawStatus && rawStatus !== lastEmittedState) {
+        lastEmittedState = rawStatus
+        emitGatewayEvent('task.state_changed', '远端任务状态变化', diag?.diagnostics, {
+          upstreamTaskId: taskId,
+          attributes: { state: rawStatus, operation: 'image.generate' }
+        })
+      }
+      if (Date.now() - lastSummaryAt >= 30_000) {
+        lastSummaryAt = Date.now()
+        emitGatewayEvent('task.poll_summary', '远端任务轮询汇总', diag?.diagnostics, {
+          upstreamTaskId: taskId,
+          attributes: {
+            state: rawStatus || 'unknown',
+            pollCount,
+            transientErrors,
+            operation: 'image.generate'
+          }
+        })
+      }
+
       const isCompleted =
         rawStatus === 'completed' ||
         rawStatus === 'success' ||
@@ -289,8 +356,21 @@ async function pollToapisTask(
           rawStatus !== 'processing' &&
           rawStatus !== 'pending')
 
-      if (isCompleted) return task
+      if (isCompleted) {
+        emitGatewayEvent('task.completed', '远端任务完成', diag?.diagnostics, {
+          upstreamTaskId: taskId,
+          status: 'success',
+          attributes: { state: rawStatus || 'completed', pollCount, operation: 'image.generate' }
+        })
+        return task
+      }
       if (rawStatus === 'failed' || rawStatus === 'error') {
+        emitGatewayEvent('task.failed', '远端任务失败', diag?.diagnostics, {
+          upstreamTaskId: taskId,
+          status: 'failed',
+          error: new GatewayError('UPSTREAM_FAILED', '远端生图任务失败'),
+          attributes: { state: rawStatus, pollCount, operation: 'image.generate' }
+        })
         throw new GatewayError('TOAPIS_TASK_FAILED', toapisTaskErrorMessage(task))
       }
       break
@@ -302,6 +382,13 @@ async function pollToapisTask(
       )
     }
   }
+  // 超时：远端任务是否最终完成未知，必须保留 taskId 线索，不得断言失败即未计费。
+  emitGatewayEvent('task.failed', '远端任务轮询超时，远端结果未知', diag?.diagnostics, {
+    upstreamTaskId: taskId,
+    status: 'unknown',
+    error: new GatewayError('TIMEOUT', 'TOAPIS 生图任务超时'),
+    attributes: { state: 'unknown', pollCount, operation: 'image.generate' }
+  })
   throw new GatewayError('TIMEOUT', `TOAPIS 生图任务超时（20 分钟）${lastNetworkError ? `；最近一次请求：${lastNetworkError}` : ''}`)
 }
 
@@ -312,27 +399,88 @@ function decodeDataUrl(url: string): { buf: Buffer; ext: string } {
   return { buf: Buffer.from(match[2], 'base64'), ext }
 }
 
+interface MediaDiag {
+  diagnostics?: GatewayDiagnosticsContext
+  taskId?: string
+}
+
 async function downloadImageAsAsset(
   projectId: string,
   url: string,
-  name: string
+  name: string,
+  diag?: MediaDiag
 ): Promise<MediaAsset> {
+  const mediaAttributes = { operation: 'image.generate' }
+  emitGatewayEvent('media.download_started', '开始下载生成结果', diag?.diagnostics, {
+    attributes: mediaAttributes
+  })
   if (/^data:image\//i.test(url)) {
-    const { buf, ext } = decodeDataUrl(url)
-    return saveBufferAsset(projectId, buf, ext, name)
+    let asset: MediaAsset
+    try {
+      const { buf, ext } = decodeDataUrl(url)
+      asset = await saveBufferAsset(projectId, buf, ext, name)
+    } catch (error) {
+      emitGatewayEvent('media.persist_failed', '生成结果入库失败', diag?.diagnostics, {
+        ...(diag?.taskId ? { upstreamTaskId: diag.taskId } : {}),
+        error,
+        attributes: mediaAttributes
+      })
+      throw error
+    }
+    emitGatewayEvent('media.persist_completed', '生成结果已入库', diag?.diagnostics, {
+      ...(diag?.taskId ? { upstreamTaskId: diag.taskId } : {}),
+      attributes: { ...mediaAttributes, mediaId: asset.id, mime: asset.mime }
+    })
+    return asset
   }
-  const res = await fetch(url, { signal: AbortSignal.timeout(IMAGE_DOWNLOAD_TIMEOUT_MS) })
-    .catch((error: unknown) => { throw toapisNetworkError('图片下载', error) })
-  if (!res.ok) throw new GatewayError('DOWNLOAD_FAILED', `生成图片下载失败：HTTP ${res.status}`)
-  const buf = Buffer.from(await res.arrayBuffer())
-  const mime = res.headers.get('content-type')?.split(';')[0]?.trim() ?? 'image/png'
-  return saveBufferAsset(projectId, buf, EXT_BY_MIME[mime] ?? '.png', name)
+  let buf: Buffer
+  let mime = 'image/png'
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(IMAGE_DOWNLOAD_TIMEOUT_MS) })
+      .catch((error: unknown) => { throw toapisNetworkError('图片下载', error) })
+    if (!res.ok) {
+      throw new GatewayError('DOWNLOAD_FAILED', `生成图片下载失败：HTTP ${res.status}`)
+    }
+    buf = Buffer.from(await res.arrayBuffer())
+    mime = res.headers.get('content-type')?.split(';')[0]?.trim() ?? 'image/png'
+  } catch (error) {
+    emitGatewayEvent('media.download_failed', '生成结果下载失败', diag?.diagnostics, {
+      ...(diag?.taskId ? { upstreamTaskId: diag.taskId } : {}),
+      error,
+      attributes: mediaAttributes
+    })
+    throw error
+  }
+  emitGatewayEvent('media.download_completed', '生成结果下载完成', diag?.diagnostics, {
+    ...(diag?.taskId ? { upstreamTaskId: diag.taskId } : {}),
+    attributes: { ...mediaAttributes, byteSize: buf.length, mime }
+  })
+  emitGatewayEvent('media.persist_started', '开始写入媒体库', diag?.diagnostics, {
+    ...(diag?.taskId ? { upstreamTaskId: diag.taskId } : {}),
+    attributes: { ...mediaAttributes, mime }
+  })
+  try {
+    const asset = await saveBufferAsset(projectId, buf, EXT_BY_MIME[mime] ?? '.png', name)
+    emitGatewayEvent('media.persist_completed', '生成结果已入库', diag?.diagnostics, {
+      ...(diag?.taskId ? { upstreamTaskId: diag.taskId } : {}),
+      attributes: { ...mediaAttributes, mediaId: asset.id, mime: asset.mime }
+    })
+    return asset
+  } catch (error) {
+    emitGatewayEvent('media.persist_failed', '生成结果入库失败', diag?.diagnostics, {
+      ...(diag?.taskId ? { upstreamTaskId: diag.taskId } : {}),
+      error,
+      attributes: mediaAttributes
+    })
+    throw error
+  }
 }
 
 async function generateWithToapisTask(
   provider: ProviderConfig,
   input: ImageGenerateInput,
-  capabilities: ImageCapabilities
+  capabilities: ImageCapabilities,
+  diagnostics?: GatewayDiagnosticsContext
 ): Promise<MediaAsset> {
   const prompt = input.prompt.trim()
   const referenceIds = uniqueReferenceIds(input).slice(0, capabilities.maxReferenceImages)
@@ -368,6 +516,11 @@ async function generateWithToapisTask(
     signal: AbortSignal.timeout(60_000)
   }).catch((error: unknown) => { throw toapisNetworkError('生图提交', error) })
   if (!res.ok) {
+    // 401/429/5xx 在此区分：带上状态码供归一化映射稳定错误码。
+    emitGatewayEvent('model.request.attempt_failed', '生图提交失败', diagnostics, {
+      error: { code: 'UPSTREAM_ERROR', status: res.status },
+      attributes: { operation: 'image.generate' }
+    })
     throw new GatewayError('UPSTREAM_ERROR', await errorTail(res, 'TOAPIS 生图提交失败'))
   }
   const task = (await res.json().catch(() => null)) as Record<string, unknown> | null
@@ -377,7 +530,7 @@ async function generateWithToapisTask(
 
   const immediateUrl = extractFirstImageValue(task, new Set(referenceUrls))
   if (immediateUrl) {
-    return downloadImageAsAsset(input.projectId, immediateUrl, prompt.slice(0, 24))
+    return downloadImageAsAsset(input.projectId, immediateUrl, prompt.slice(0, 24), { diagnostics })
   }
 
   const rawTaskId =
@@ -394,12 +547,15 @@ async function generateWithToapisTask(
     )
   }
 
-  log.info('toapis image task accepted', { taskId })
-  const finished = await pollToapisTask(provider, taskId)
-  log.info('toapis image task completed', { taskId })
+  // 远端已接受任务：与「本地下载/入库成功」是不同事实，事件分开记录。
+  emitGatewayEvent('model.request.accepted', '远端已接受生图任务', diagnostics, {
+    upstreamTaskId: taskId,
+    attributes: { operation: 'image.generate', providerId: input.providerId, modelId: input.modelId }
+  })
+  const finished = await pollToapisTask(provider, taskId, { diagnostics, taskId })
   const imageUrl = extractFirstImageValue(finished, new Set(referenceUrls))
   if (!imageUrl) throw new GatewayError('EMPTY_RESULT', 'TOAPIS 任务完成但未返回图片')
-  return downloadImageAsAsset(input.projectId, imageUrl, prompt.slice(0, 24))
+  return downloadImageAsAsset(input.projectId, imageUrl, prompt.slice(0, 24), { diagnostics, taskId })
 }
 
 // ── 驱动三：OpenRouter chat 生图（modalities: ['image', 'text']） ──────────

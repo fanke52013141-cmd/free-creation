@@ -1,6 +1,7 @@
 // 对话节点执行器：把显式输入端口或已持久化的待发送消息作为本轮用户消息。
 import { inputText } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
+import { gatewayDiagnostics } from '../executor-diagnostics'
 import { activeChatConversation, parseChat, serializeChat, updateActiveChatConversation } from '../chat-data'
 import { featureKeyOf, findTextModel, modelKeyOf, resolveFeatureOption } from '../models'
 import { waitForChat } from '../helpers'
@@ -41,6 +42,17 @@ export const chatExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecu
       )
     : findTextModel(ctx.providers, data.modelKey)
   if (!option) return { status: 'skipped', reason: '功能 chat.generate 尚未绑定已验证文本模型' }
+  // L03：能力解析阶段与目标身份；只记 provider/model 标识，不读对话正文。
+  ctx.trace?.('capability', 'info', '已解析对话模型能力')
+  ctx.setDiagnosticTarget?.({
+    operation: 'chat.generate',
+    featureKey: featureKeyOf(data, 'chat.generate'),
+    providerId: option.provider.id,
+    providerName: option.provider.name,
+    modelId: option.model.id,
+    modelName: option.model.name
+  })
+  const requestDiagnostics = gatewayDiagnostics(ctx)
   const textInput = inputText(ctx.inputs, 'in-text').trim()
   const hasPendingUserMessage = data.messages.at(-1)?.role === 'user'
   const messages = hasPendingUserMessage
@@ -74,7 +86,8 @@ export const chatExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecu
       temperature: data.temperature,
       maxTokens: data.maxTokens,
       reasoningEffort:
-        data.reasoningEffort !== 'off' && isReasoningModelId(option.model.id) ? 'high' : undefined
+        data.reasoningEffort !== 'off' && isReasoningModelId(option.model.id) ? 'high' : undefined,
+      diagnostics: requestDiagnostics
     },
     ctx.signal,
     (progress) => {
@@ -108,7 +121,9 @@ export const chatExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecu
             { role: 'user', content: buildChatCompressionPrompt(summary, compression.earlier) }
           ],
           temperature: 0,
-          maxTokens: Math.min(data.maxTokens, 2048)
+          maxTokens: Math.min(data.maxTokens, 2048),
+          // 摘要是第二次独立逻辑请求：requestId 由帮手重新生成。
+          diagnostics: gatewayDiagnostics(ctx)
         },
         ctx.signal
       )

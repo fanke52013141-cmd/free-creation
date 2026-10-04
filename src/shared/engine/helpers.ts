@@ -143,6 +143,8 @@ export interface ChatInput {
   temperature?: number
   maxTokens?: number
   reasoningEffort?: 'high'
+  /** 诊断关联（L03）：renderer 生成 requestId，一次逻辑对话一个；不含正文。 */
+  diagnostics?: import('../contracts').GatewayDiagnosticsContext
 }
 
 /** 仅在本地运行期使用的流式回调，不会经过 IPC 序列化。 */

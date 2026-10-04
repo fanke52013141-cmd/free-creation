@@ -2,6 +2,7 @@
 // 「已有成片优先复用」，跨运行不存在复用机制；同轮内仅由拓扑单遍保证同节点只执行一次。
 import { inputJson, inputMedia, inputText } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
+import { gatewayDiagnostics } from '../executor-diagnostics'
 import { featureKeyOf, modelKeyOf, resolveFeatureOption } from '../models'
 import { mergedPrompt, parseJsonObj, promptBundleText } from '../helpers'
 import { readNodeConfig } from '../node-config'
@@ -33,6 +34,17 @@ export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeE
     modelKeyOf(data)
   )
   if (!option) return { status: 'skipped', reason: '功能 image.generate 尚未绑定已验证图片模型' }
+  // L03：能力解析阶段与目标身份；多张图共享 batchId，逐张独立 requestId/itemId。
+  ctx.trace?.('capability', 'info', '已解析生图模型能力')
+  ctx.setDiagnosticTarget?.({
+    operation: 'image.generate',
+    featureKey: featureKeyOf(data, 'image.generate'),
+    providerId: option.provider.id,
+    providerName: option.provider.name,
+    modelId: option.model.id,
+    modelName: option.model.name
+  })
+  const batchId = `img-${ctx.node.id}-${ctx.runId ?? ''}`
   const capabilities = imageCapabilitiesFor(option.provider.specId, option.model.id)
   const config = normalizeImageGenerationConfig(data, capabilities)
   const bundlePrompt = promptBundleText(inputJson(ctx.inputs, 'in-prompt')[0])
@@ -55,6 +67,7 @@ export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeE
     const layoutColumns = config.count <= 4 ? 2 : 3
     for (let index = 0; index < config.count; index += 1) {
       if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
+      ctx.trace?.('request', 'info', `提交生图请求（第 ${index + 1}/${config.count} 张）`)
       const result = await ctx.gateway.imageGenerate({
         projectId: ctx.projectId,
         providerId: option.provider.id,
@@ -71,10 +84,15 @@ export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeE
         ...(capabilities.supportsTransparentBackground && config.background
           ? { background: config.background }
           : {}),
-        ...(referenceMediaIds.length > 0 ? { referenceMediaIds } : {})
+        ...(referenceMediaIds.length > 0 ? { referenceMediaIds } : {}),
+        diagnostics: gatewayDiagnostics(ctx, {
+          batchId,
+          itemId: `${batchId}#${index + 1}`
+        })
       })
       if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
       if (!result.ok) return { status: 'failed', reason: result.error.message }
+      ctx.trace?.('result', 'info', `第 ${index + 1} 张已生成并通过校验`)
       // 每一张成功后立即持久化；后续失败不会抹掉已完成的真实结果。
       nodeResult = serializeMediaResultCollection(
         appendMediaResult(
