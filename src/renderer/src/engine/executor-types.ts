@@ -16,7 +16,8 @@ import type {
   NodeExecutionPhase,
   NodeExecutionTarget,
   ProducedArtifact,
-  NodeMetaPatch
+  NodeMetaPatch,
+  NodeDiagnosticsContext
 } from '@shared/engine/executor-types'
 
 /** 运行控制信号。暂停在当前原子任务结束后生效；停止会解除暂停等待。 */
@@ -83,6 +84,8 @@ export interface NodeExecutionContext {
   trace?: (phase: NodeExecutionPhase, level: 'info' | 'error', message: string) => void
   /** Provider/model identifiers only; secrets and request bodies must never be included. */
   setDiagnosticTarget?: (target: NodeExecutionTarget) => void
+  /** 结构化诊断上下文（L01）：traceId/nodeExecutionId 由运行器注入，执行器只读。 */
+  diagnostics?: NodeDiagnosticsContext
   /**
    * 模型网关客户端（P3）：替代执行器中对 window.api.gateway / window.api.* 的直接调用。
    * 共享层执行器通过此字段获得模型调用能力；renderer 运行器注入 rendererGateway。

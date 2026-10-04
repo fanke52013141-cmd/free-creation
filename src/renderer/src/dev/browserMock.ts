@@ -133,6 +133,24 @@ export function installBrowserMock(): void {
 
   const mockApi: WindowApi = {
     reportNodeRunEvent: () => Promise.resolve({ ok: true, data: true }),
+    // 浏览器演示模式没有 main 诊断存储：接受即丢弃，语义与降级一致。
+    reportDiagnosticsEvents: (input) =>
+      Promise.resolve({ ok: true, data: { accepted: input.events.length } }),
+    queryDiagnostics: () =>
+      Promise.resolve({
+        ok: false,
+        error: { code: 'UNAVAILABLE', message: '事件查询仅支持桌面端' }
+      }),
+    diagnosticsHealth: () =>
+      Promise.resolve({
+        ok: false,
+        error: { code: 'UNAVAILABLE', message: '诊断健康状态仅支持桌面端' }
+      }),
+    exportDiagnosticsBundle: () =>
+      Promise.resolve({
+        ok: false,
+        error: { code: 'UNAVAILABLE', message: '诊断包导出仅支持桌面端' }
+      }),
     exportNodeRunDiagnostics: () =>
       Promise.resolve({
         ok: false,
@@ -276,6 +294,11 @@ export function installBrowserMock(): void {
     hasRecoveryCopy: () => Promise.resolve({ ok: true, data: false }),
     readRecoveryCopy: () => Promise.resolve({ ok: true, data: null }),
     discardRecoveryCopy: () => Promise.resolve({ ok: true, data: true }),
+    restoreRecoveryCopy: () =>
+      Promise.resolve({
+        ok: false as const,
+        error: { code: 'DEMO_NOT_IMPLEMENTED', message: '浏览器演示无恢复副本可还原' }
+      }),
     closeProject: () => Promise.resolve({ ok: true, data: true }),
     onExternalProjectChange: () => () => undefined,
     exportProject: () =>

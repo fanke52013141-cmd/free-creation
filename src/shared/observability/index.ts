@@ -1,0 +1,10 @@
+// 统一事件底座 barrel：schema v1 / 注册表 / 上下文 / 安全序列化 / 错误归一化。
+export * from './limits'
+export * from './ids'
+export * from './context'
+export * from './events'
+export * from './errors'
+export * from './safe'
+export * from './schema'
+export * from './producer'
+export * from './legacy-adapter'

@@ -68,6 +68,7 @@ export const IPC = {
     hasRecoveryCopy: 'project:has-recovery-copy',
     readRecoveryCopy: 'project:read-recovery-copy',
     discardRecoveryCopy: 'project:discard-recovery-copy',
+    restoreRecoveryCopy: 'project:restore-recovery-copy',
     close: 'project:close',
     export: 'project:export',
     import: 'project:import',
@@ -181,7 +182,13 @@ export const IPC = {
   },
   diagnostics: {
     nodeRunEvent: 'diagnostics:node-run:event',
-    exportNodeRun: 'diagnostics:node-run:export'
+    exportNodeRun: 'diagnostics:node-run:export',
+    // L01/L02 统一事件底座：renderer→main 结构化事件、只读查询与健康状态。
+    event: 'diagnostics:event',
+    query: 'diagnostics:query',
+    health: 'diagnostics:health',
+    // L05：整流程诊断包导出（manifest/events/summary/coverage）。
+    exportBundle: 'diagnostics:export-bundle'
   }
 } as const
 
@@ -222,6 +229,30 @@ export interface NodeRunLogEventInput {
   message: string
 }
 
+// ── 网关调用的诊断上下文（L03）──────────────────────────────────────────────
+// renderer 执行器 → preload → IPC → main gateway 逐层透传；main 侧会重新校验
+// 并覆盖自身会话/时间信息。只携带关联 ID 与模型身份，绝不携带请求正文。
+
+export interface GatewayDiagnosticsContext {
+  traceId?: string
+  spanId?: string
+  parentSpanId?: string
+  runId?: string
+  nodeId?: string
+  nodeType?: string
+  nodeExecutionId?: string
+  /** 一次逻辑网关调用的本地 ID；自动重试期间由调用方保持不变。 */
+  requestId?: string
+  projectId?: string
+  /** 批次/子项（多张生图等）。 */
+  batchId?: string
+  itemId?: string
+  /** 本地异步任务 ID（视频任务恢复等），与 requestId 区分。 */
+  taskId?: string
+  /** 恢复/旧路径场景：旧 trace 未知，显式标记关联缺失（不补造时间线）。 */
+  correlationMissing?: boolean
+}
+
 export interface ExportNodeRunDiagnosticsInput {
   projectId: string
   nodeId: string
@@ -230,6 +261,70 @@ export interface ExportNodeRunDiagnosticsInput {
   runs: NodeRunDiagnosticRecord[]
   /** Values used only to redact older error messages; never written to the report. */
   redactValues?: string[]
+}
+
+// ── 统一诊断事件底座（L01/L02）──────────────────────────────────────────────
+
+/** renderer→main 批量上报；事件体由 main 用 zod 校验，未知/非法内容拒绝并计数。 */
+export interface ReportDiagnosticsEventsInput {
+  events: unknown[]
+}
+
+export interface DiagnosticsQueryInput {
+  traceId?: string
+  runId?: string
+  requestId?: string
+  nodeId?: string
+  level?: 'debug' | 'info' | 'warn' | 'error' | 'fatal'
+  /** epoch ms 时间窗（可只给一侧）。 */
+  since?: number
+  until?: number
+  limit?: number
+}
+
+export interface DiagnosticsQueryResult {
+  events: import('../observability').DiagnosticsEvent[]
+  /** 结果是否因达到 limit 被截断。 */
+  truncated: boolean
+  /** 读取时跳过的坏行（尾部残缺 JSON 等）。 */
+  badLines: number
+  scannedShards: number
+}
+
+export interface ExportDiagnosticsBundleInput {
+  /** 导出范围：一次流程（traceId）、一次节点运行（runId）或时间窗；可组合。 */
+  scope: {
+    traceId?: string
+    runId?: string
+    since?: number
+    until?: number
+  }
+  /** 可选的人类可读标注（写入 manifest；不含正文）。 */
+  label?: string
+}
+
+export interface ExportDiagnosticsBundleResult {
+  path: string
+  totalEvents: number
+  truncated: boolean
+  bytes: number
+  badLines: number
+}
+
+export interface DiagnosticsHealthSnapshot {
+  available: boolean
+  sessionId: string
+  degraded: boolean
+  received: number
+  written: number
+  queueDepth: number
+  queueBytes: number
+  droppedTotal: number
+  writeFailures: number
+  lastWriteErrorAt?: string
+  badLines: number
+  /** 有界内存环保存的关键丢失/故障摘要。 */
+  incidentLog: Array<{ at: string; kind: string; detail: string }>
 }
 
 // ── 新模型模块（与 legacy gateway providers 完全独立）──────────────────────
@@ -533,7 +628,8 @@ export interface VideoConversionInput {
   sourceMediaId: string
   /** Stable for one run so the UI can cancel its active child process. */
   jobId: string
-  config: import('../video-conversion').VideoDepthConfig | import('../video-conversion').VideoClayConfig
+  config:
+    import('../video-conversion').VideoDepthConfig | import('../video-conversion').VideoClayConfig
 }
 
 // ── MiniMax 云端语音复刻 ──
@@ -687,6 +783,8 @@ export interface ChatStartInput {
   temperature?: number
   maxTokens?: number
   reasoningEffort?: 'high'
+  /** 诊断关联（L03）；main 侧只取 ID/模型身份，不读正文。 */
+  diagnostics?: GatewayDiagnosticsContext
 }
 
 export interface ImageGenerateInput {
@@ -708,6 +806,8 @@ export interface ImageGenerateInput {
   resolution?: string
   /** 透明背景；仅能力表声明 supportsTransparentBackground 的供应商会携带该字段 */
   background?: 'transparent'
+  /** 诊断关联（L03）；main 侧只取 ID/模型身份，不读提示词。 */
+  diagnostics?: GatewayDiagnosticsContext
 }
 
 export interface ImageEditInput {
@@ -726,6 +826,8 @@ export interface VideoSubmitInput {
   providerId: string
   modelId: string
   prompt: string
+  /** 诊断关联（L04）；main 侧只取 ID/模型身份，不读提示词。 */
+  diagnostics?: GatewayDiagnosticsContext
   /** 协议模式由节点配置明确选择，不能再根据“第几根线”猜测。 */
   mode?: VideoGenerationMode
   params?: VideoGenParams
@@ -767,6 +869,8 @@ export interface AudioGenerateInput {
   format?: string
   /** MiniMax 非流式合成可选的 AIGC 音频水印。 */
   aigcWatermark?: boolean
+  /** 诊断关联（L03/L04）。 */
+  diagnostics?: GatewayDiagnosticsContext
 }
 
 // ── 配音节点：模型驱动的语音合成 ──

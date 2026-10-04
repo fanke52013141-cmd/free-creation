@@ -42,6 +42,15 @@ import {
   type NodeRunStatus
 } from './runRecord'
 import { redactDiagnosticText } from '@shared/diagnostics'
+import {
+  DiagnosticsProducer,
+  newNodeExecutionId,
+  newProducerId,
+  newSpanId,
+  newTraceId,
+  type DiagnosticsStatus
+} from '@shared/observability'
+import { emitDiagnosticsEvent } from './diagnosticsReporter'
 import { captureRunWorkload } from './run-workload'
 
 interface RunControl {
@@ -64,11 +73,24 @@ interface WorkflowContext {
    */
   subflowBaseInputs: Map<string, Pick<NodeCardProps, 'text' | 'config'>>
   runId: string
+  /** L01 根 trace：一次用户操作/工作流的关联根（runWorkflow 等入口生成）。 */
+  traceId: string
+  /** 工作流级 span；节点事件的 parentSpanId 指向它。 */
+  workflowSpanId: string
+  /** 迭代子流程当前批次（runSubflowForIterate 填写），随节点事件携带 batchId/itemId。 */
+  batch?: { batchId: string; itemId?: string }
   /** 独立生图任务不写入前台视频工作流的进度和错误汇总。 */
   isolated?: boolean
 }
 
 const isolatedImageRuns = new Set<TLShapeId>()
+
+// L01：renderer 进程唯一的诊断事件生产者。sequence 按生产者递增；
+// sessionId/receivedAt/eventId 由 main 入口补齐，这里不伪造会话信息。
+const diagnosticsProducer = new DiagnosticsProducer({
+  process: 'renderer',
+  producerId: newProducerId('renderer')
+})
 
 export function canRunImageWhileVideo(editor: Editor): boolean {
   const { phase, currentNodeId } = useEngineStore.getState()
@@ -85,6 +107,32 @@ function reportRunError(
   detail: { nodeId?: string; phase?: 'input' | 'execution' | 'output' }
 ): void {
   if (!ctx.isolated) useEngineStore.getState().addError(label, reason, detail)
+}
+
+/** L01：工作流级结构化事件（开始/唯一终态由调度入口拥有，节点级由执行器拥有）。 */
+function emitWorkflowEvent(
+  event: string,
+  message: string,
+  scope: Pick<WorkflowContext, 'traceId' | 'workflowSpanId' | 'runId' | 'projectId'>,
+  options: {
+    status?: 'success' | 'failed' | 'cancelled'
+    attributes?: Record<string, unknown>
+  } = {}
+): void {
+  emitDiagnosticsEvent(
+    diagnosticsProducer.build(
+      event,
+      undefined,
+      message,
+      {
+        traceId: scope.traceId,
+        spanId: scope.workflowSpanId,
+        runId: scope.runId,
+        projectId: scope.projectId
+      },
+      options
+    )
+  )
 }
 
 function createRunControl(): RunControl {
@@ -421,14 +469,31 @@ function nodeDiagnosticRedactions(shape: NodeCardShape | undefined): string[] {
   ].filter((value): value is string => typeof value === 'string' && value.length >= 3)
 }
 
+/** 节点终态的稳定错误分类：契约类失败归 INPUT_INVALID，能力缺失归 CAPABILITY_UNAVAILABLE，其余不猜语义留给网关边界。 */
+function nodeTerminalError(
+  phase: NodeRunPhase | undefined
+):
+  | { code: 'INPUT_INVALID'; category: 'input'; retryable: false }
+  | { code: 'CAPABILITY_UNAVAILABLE'; category: 'capability'; retryable: false }
+  | { code: 'UNKNOWN'; category: 'unknown'; retryable: false } {
+  if (phase === 'input' || phase === 'output') {
+    return { code: 'INPUT_INVALID', category: 'input', retryable: false }
+  }
+  if (phase === 'capability') {
+    return { code: 'CAPABILITY_UNAVAILABLE', category: 'capability', retryable: false }
+  }
+  return { code: 'UNKNOWN', category: 'unknown', retryable: false }
+}
+
 function finishRunRecord(
-  editor: Editor,
+  ctx: WorkflowContext,
+  node: CanvasNode,
   id: TLShapeId,
   record: NodeRunRecord,
   status: Exclude<NodeRunStatus, 'running'>,
   detail: Pick<NodeRunRecord, 'outputPorts' | 'error'> = {}
 ): void {
-  const current = editor.getShape<NodeCardShape>(id)
+  const current = ctx.editor.getShape<NodeCardShape>(id)
   const privateValues = nodeDiagnosticRedactions(current)
   const finishedAt = Date.now()
   const finalRecord: NodeRunRecord = {
@@ -446,7 +511,7 @@ function finishRunRecord(
         }
       : {})
   }
-  editor.updateShape({
+  ctx.editor.updateShape({
     id,
     type: 'node-card',
     meta: {
@@ -457,6 +522,51 @@ function finishRunRecord(
       )
     }
   })
+  // L01：唯一终态结构化事件由公共执行器拥有；各功能执行器不重复发终态。
+  const terminalEvent =
+    status === 'success'
+      ? 'node.completed'
+      : status === 'failed'
+        ? 'node.failed'
+        : status === 'cancelled'
+          ? 'node.cancelled'
+          : 'node.skipped'
+  emitDiagnosticsEvent(
+    diagnosticsProducer.build(
+      terminalEvent,
+      undefined,
+      status === 'success'
+        ? '节点执行完成'
+        : status === 'failed'
+          ? '节点执行失败'
+          : status === 'cancelled'
+            ? '节点执行已取消'
+            : '节点执行已跳过',
+      {
+        traceId: ctx.traceId,
+        spanId: record.nodeExecutionId,
+        parentSpanId: ctx.workflowSpanId,
+        runId: record.runId,
+        nodeExecutionId: record.nodeExecutionId,
+        projectId: ctx.projectId,
+        nodeId: node.id,
+        nodeType: node.type,
+        batchId: ctx.batch?.batchId,
+        itemId: ctx.batch?.itemId
+      },
+      {
+        status,
+        durationMs: finalRecord.durationMs,
+        ...(detail.error
+          ? { normalizedError: nodeTerminalError(detail.error.phase) }
+          : {}),
+        ...(status === 'skipped' && detail.error?.reason
+          ? { attributes: { reason: detail.error.reason } }
+          : {}),
+        privateValues
+      }
+    )
+  )
   if (status === 'success' && current && current.props.nodeType !== 'image-gen' && record.estimateFeatures) {
     try {
       void window.api.workspace.recordGenerationTiming({
@@ -474,28 +584,75 @@ function finishRunRecord(
   }
 }
 
+/** recordRunTrace 附带的结构化生命周期事件（注册表内事件名）。 */
+interface TraceLifecycle {
+  name: string
+  status?: DiagnosticsStatus
+  attributes?: Record<string, unknown>
+}
+
+/** 节点级诊断上下文：node span 复用 nodeExecutionId，父 span 为工作流级。 */
+function nodeTraceContext(
+  ctx: WorkflowContext,
+  node: CanvasNode,
+  record: NodeRunRecord
+): {
+  traceId?: string
+  spanId?: string
+  parentSpanId?: string
+  runId?: string
+  nodeExecutionId?: string
+  projectId?: string
+  nodeId?: string
+  nodeType?: string
+  batchId?: string
+  itemId?: string
+} {
+  return {
+    traceId: ctx.traceId,
+    spanId: record.nodeExecutionId,
+    parentSpanId: ctx.workflowSpanId,
+    runId: record.runId,
+    nodeExecutionId: record.nodeExecutionId,
+    projectId: ctx.projectId,
+    nodeId: node.id,
+    nodeType: node.type,
+    batchId: ctx.batch?.batchId,
+    itemId: ctx.batch?.itemId
+  }
+}
+
 /** Persist every diagnostic event locally and mirror it to electron-log without blocking execution. */
 function recordRunTrace(
-  editor: Editor,
+  ctx: WorkflowContext,
   node: CanvasNode,
-  projectId: string,
   record: NodeRunRecord,
   phase: NodeRunPhase,
   level: 'info' | 'error',
-  message: string
+  message: string,
+  lifecycle?: TraceLifecycle
 ): void {
   const safeMessage = redactDiagnosticText(
     message,
     500,
-    nodeDiagnosticRedactions(editor.getShape<NodeCardShape>(node.id as TLShapeId))
+    nodeDiagnosticRedactions(ctx.editor.getShape<NodeCardShape>(node.id as TLShapeId))
   )
   record.trace = appendNodeRunTrace(record, phase, level, safeMessage).trace
-  writeRunRecord(editor, node.id as TLShapeId, record)
+  writeRunRecord(ctx.editor, node.id as TLShapeId, record)
+  emitDiagnosticsEvent(
+    diagnosticsProducer.build(
+      lifecycle?.name ?? 'node.stage',
+      level,
+      safeMessage,
+      nodeTraceContext(ctx, node, record),
+      { ...(lifecycle?.status ? { status: lifecycle.status } : {}), ...(lifecycle?.attributes ? { attributes: lifecycle.attributes } : {}) }
+    )
+  )
   try {
     const report = typeof window !== 'undefined' ? window.api?.reportNodeRunEvent : undefined
     if (typeof report !== 'function') return
     void report({
-      projectId,
+      projectId: ctx.projectId,
       nodeId: node.id,
       nodeType: node.type,
       runId: record.runId,
@@ -536,8 +693,16 @@ async function invokeExecutor(
     runId: ctx.runId,
     providers: ctx.providers,
     signal: ctx.token,
+    diagnostics: {
+      traceId: ctx.traceId,
+      nodeExecutionId: record.nodeExecutionId ?? '',
+      spanId: record.nodeExecutionId ?? '',
+      parentSpanId: ctx.workflowSpanId,
+      batchId: ctx.batch?.batchId,
+      itemId: ctx.batch?.itemId
+    },
     trace: (phase, level, message) =>
-      recordRunTrace(ctx.editor, node, ctx.projectId, record, phase, level, message),
+      recordRunTrace(ctx, node, record, phase, level, message),
     setDiagnosticTarget: (target) => {
       record.target = target
       writeRunRecord(ctx.editor, id, record)
@@ -651,28 +816,29 @@ async function executeNodeOnce(
   const shape = editor.getShape<NodeCardShape>(shapeId)
   if (!shape) return { status: 'skipped', reason: '节点已不存在' }
 
+  // L01：每次节点调用生成独立执行实例，与根 trace 一起写入运行记录；
+  // 同节点重跑与不同迭代项因此不会混淆。
   const record: NodeRunRecord = {
     runId: ctx.runId,
     status: 'running',
     startedAt: Date.now(),
     inputs: {},
-    trace: []
+    trace: [],
+    traceId: ctx.traceId,
+    nodeExecutionId: newNodeExecutionId()
   }
   setExec(editor, shapeId, 'running')
   writeRunRecord(editor, shapeId, record)
-  recordRunTrace(editor, node, ctx.projectId, record, 'input', 'info', '开始收集并校验输入端口')
+  recordRunTrace(ctx, node, record, 'input', 'info', '开始收集并校验输入端口', {
+    name: 'node.started'
+  })
   try {
     const collected = collectNodeInputs(ctx, node, injection)
     record.inputs = inputSources(collected.value)
-    recordRunTrace(
-      editor,
-      node,
-      ctx.projectId,
-      record,
-      'input',
-      'info',
-      `已收集 ${Object.keys(record.inputs).length} 个输入端口`
-    )
+    recordRunTrace(ctx, node, record, 'input', 'info', `已收集 ${Object.keys(record.inputs).length} 个输入端口`, {
+      name: 'node.input_validated',
+      attributes: { portCount: Object.keys(record.inputs).length }
+    })
     if (collected.errors.length > 0) {
       throw new Error(`输入契约校验失败：${collected.errors.join('；')}`)
     }
@@ -687,14 +853,15 @@ async function executeNodeOnce(
     }
     // 本次执行接管该节点的输出；失败或跳过时不能让本轮继续消费上一次结果。
     ctx.outputs.delete(node.id)
-    recordRunTrace(editor, node, ctx.projectId, record, 'execution', 'info', '开始调用节点执行器')
+    recordRunTrace(ctx, node, record, 'execution', 'info', '开始调用节点执行器')
     const result = await invokeExecutor(ctx, node, shape, collected.value, runSubflow, record)
     const latest = editor.getShape<NodeCardShape>(shapeId)
     if (ctx.token.cancelled) {
       setExec(editor, shapeId, 'cancelled')
-      recordRunTrace(editor, node, ctx.projectId, record, 'execution', 'info', '运行已取消')
+      recordRunTrace(ctx, node, record, 'execution', 'info', '运行已取消')
       finishRunRecord(
-        editor,
+        ctx,
+        node,
         shapeId,
         record,
         'cancelled'
@@ -719,9 +886,10 @@ async function executeNodeOnce(
             phase: 'output'
           })
         const reason = `输出契约校验失败：${projected.errors.join('；')}`
-        recordRunTrace(editor, node, ctx.projectId, record, 'output', 'error', reason)
+        recordRunTrace(ctx, node, record, 'output', 'error', reason)
         finishRunRecord(
-          editor,
+          ctx,
+          node,
           shapeId,
           record,
           'failed',
@@ -733,9 +901,12 @@ async function executeNodeOnce(
       }
       ctx.outputs.set(node.id, projected.value)
       setExec(editor, shapeId, 'success')
-      recordRunTrace(editor, node, ctx.projectId, record, 'output', 'info', '输出契约校验通过')
+      recordRunTrace(ctx, node, record, 'output', 'info', '输出契约校验通过', {
+        name: 'node.output_validated'
+      })
       finishRunRecord(
-        editor,
+        ctx,
+        node,
         shapeId,
         record,
         'success',
@@ -753,16 +924,16 @@ async function executeNodeOnce(
         phase: 'execution'
       })
       recordRunTrace(
-        editor,
+        ctx,
         node,
-        ctx.projectId,
         record,
         diagnosticPhase,
         'error',
         result.reason ?? '执行失败'
       )
       finishRunRecord(
-        editor,
+        ctx,
+        node,
         shapeId,
         record,
         'failed',
@@ -774,9 +945,8 @@ async function executeNodeOnce(
       setExec(editor, shapeId, 'idle')
       if (result.reason) {
         recordRunTrace(
-          editor,
+          ctx,
           node,
-          ctx.projectId,
           record,
           result.diagnosticPhase ?? 'execution',
           result.diagnosticPhase ? 'error' : 'info',
@@ -784,7 +954,8 @@ async function executeNodeOnce(
         )
       }
       finishRunRecord(
-        editor,
+        ctx,
+        node,
         shapeId,
         record,
         'skipped',
@@ -799,9 +970,10 @@ async function executeNodeOnce(
   } catch (error) {
     if (ctx.token.cancelled) {
       setExec(editor, shapeId, 'cancelled')
-      recordRunTrace(editor, node, ctx.projectId, record, 'execution', 'info', '运行已取消')
+      recordRunTrace(ctx, node, record, 'execution', 'info', '运行已取消')
       finishRunRecord(
-        editor,
+        ctx,
+        node,
         shapeId,
         record,
         'cancelled'
@@ -814,9 +986,10 @@ async function executeNodeOnce(
         nodeId: node.id,
         phase
       })
-      recordRunTrace(editor, node, ctx.projectId, record, phase, 'error', reason)
+      recordRunTrace(ctx, node, record, phase, 'error', reason)
       finishRunRecord(
-        editor,
+        ctx,
+        node,
         shapeId,
         record,
         'failed',
@@ -911,7 +1084,15 @@ async function runSubflowForIterate(
 ): Promise<Record<string, ContractOutputs>> {
   // 每一项切换到独立 runId。循环体卡片虽然复用，但运行记录和媒体结果不能复用
   // 工作流级 runId，否则 nodeRunHistory 会按相同 runId 去重，资产也无法精确定位。
-  const itemCtx: WorkflowContext = request.itemRunId ? { ...ctx, runId: request.itemRunId } : ctx
+  // L01：批次关联用稳定 batchId + itemId（有则用），不用数组位置冒充身份。
+  const itemCtx: WorkflowContext = {
+    ...ctx,
+    ...(request.itemRunId ? { runId: request.itemRunId } : {}),
+    batch: {
+      batchId: `iter-${request.iterationNodeId ?? 'iterate'}-${ctx.runId}`,
+      itemId: request.itemId
+    }
+  }
   const nodeIds = expandIterationBody(ctx.graph, request.nodeIds, request.iterationNodeId)
   // 每个 item 执行迭代体前重置迭代体节点的上次运行产物，强制每项独立产出
   resetSubflowRunState(itemCtx, nodeIds)
@@ -1031,8 +1212,11 @@ export async function runNodeManually(
     outputs: new Map<string, ContractOutputs>(),
     subflowBaseInputs: new Map(),
     runId: crypto.randomUUID(),
+    traceId: newTraceId(),
+    workflowSpanId: newSpanId(),
     isolated
   }
+  emitWorkflowEvent('workflow.started', '手动运行单个节点', ctx)
   seedPersistedOutputs(ctx)
   const runSubflow = (request: SubflowRequest): Promise<Record<string, ContractOutputs>> =>
     runSubflowForIterate(ctx, runSubflow, request)
@@ -1056,6 +1240,26 @@ export async function runNodeManually(
     const detail = result.reason?.trim() ?? ''
     toast(`${node.title || node.type} 执行失败${detail ? `：${detail}` : ''}`)
   } else if (result.reason) toast(result.reason)
+  emitWorkflowEvent(
+    token.cancelled
+      ? 'workflow.cancelled'
+      : result.status === 'failed'
+        ? 'workflow.failed'
+        : result.status === 'done'
+          ? 'workflow.completed'
+          : 'workflow.cancelled',
+    result.reason ? `单节点运行结束：${result.status}` : '单节点运行结束',
+    ctx,
+    {
+      status: token.cancelled
+        ? 'cancelled'
+        : result.status === 'failed'
+          ? 'failed'
+          : result.status === 'done'
+            ? 'success'
+            : 'cancelled'
+    }
+  )
   return result
 }
 
@@ -1084,8 +1288,13 @@ export async function runWorkflow(
     graph,
     outputs: new Map<string, ContractOutputs>(),
     subflowBaseInputs: new Map(),
-    runId: crypto.randomUUID()
+    runId: crypto.randomUUID(),
+    traceId: newTraceId(),
+    workflowSpanId: newSpanId()
   }
+  emitWorkflowEvent('workflow.started', '工作流开始执行', ctx, {
+    attributes: { itemCount: executableOrder.length }
+  })
 
   const runSubflow = (request: SubflowRequest): Promise<Record<string, ContractOutputs>> =>
     runSubflowForIterate(ctx, runSubflow, request)
@@ -1101,9 +1310,19 @@ export async function runWorkflow(
   const after = useEngineStore.getState()
   after.endRun()
   clearRunControls()
-  if (token.cancelled) toast('工作流已停止')
-  else if (after.errors.length > 0) toast(`工作流完成，${after.errors.length} 个节点失败`)
-  else toast('工作流执行完成')
+  if (token.cancelled) {
+    toast('工作流已停止')
+    emitWorkflowEvent('workflow.cancelled', '工作流已停止', ctx, { status: 'cancelled' })
+  } else if (after.errors.length > 0) {
+    toast(`工作流完成，${after.errors.length} 个节点失败`)
+    emitWorkflowEvent('workflow.failed', '工作流完成，部分节点失败', ctx, {
+      status: 'failed',
+      attributes: { failedCount: after.errors.length }
+    })
+  } else {
+    toast('工作流执行完成')
+    emitWorkflowEvent('workflow.completed', '工作流执行完成', ctx, { status: 'success' })
+  }
   markUndoPoint(editor, 'workflow-run')
 }
 
@@ -1181,8 +1400,13 @@ export async function runWorkflowForNodes(
     graph,
     outputs: new Map<string, ContractOutputs>(),
     subflowBaseInputs: new Map(),
-    runId: crypto.randomUUID()
+    runId: crypto.randomUUID(),
+    traceId: newTraceId(),
+    workflowSpanId: newSpanId()
   }
+  emitWorkflowEvent('workflow.started', '子图开始执行', ctx, {
+    attributes: { itemCount: executableOrder.length }
+  })
   const runSubflow = (request: SubflowRequest): Promise<Record<string, ContractOutputs>> =>
     runSubflowForIterate(ctx, runSubflow, request)
 
@@ -1197,9 +1421,22 @@ export async function runWorkflowForNodes(
   const after = useEngineStore.getState()
   after.endRun()
   clearRunControls()
-  if (token.cancelled) toast('子图运行已停止')
-  else if (after.errors.length > 0) toast(`子图完成，${after.errors.length} 个节点失败`)
-  else toast(`已运行所选流程（${executableOrder.length} 个节点）`)
+  if (token.cancelled) {
+    toast('子图运行已停止')
+    emitWorkflowEvent('workflow.cancelled', '子图运行已停止', ctx, { status: 'cancelled' })
+  } else if (after.errors.length > 0) {
+    toast(`子图完成，${after.errors.length} 个节点失败`)
+    emitWorkflowEvent('workflow.failed', '子图完成，部分节点失败', ctx, {
+      status: 'failed',
+      attributes: { failedCount: after.errors.length }
+    })
+  } else {
+    toast(`已运行所选流程（${executableOrder.length} 个节点）`)
+    emitWorkflowEvent('workflow.completed', '子图执行完成', ctx, {
+      status: 'success',
+      attributes: { itemCount: executableOrder.length }
+    })
+  }
   markUndoPoint(editor, 'workflow-run-subgraph')
 }
 

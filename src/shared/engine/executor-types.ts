@@ -85,6 +85,21 @@ export interface NodeExecutionTarget {
 }
 
 /**
+ * 诊断上下文（日志规范 L01）：由运行器统一注入，执行器只读。
+ * 节点 span 复用 nodeExecutionId 作为 spanId，parentSpanId 指向工作流级 span；
+ * 迭代项执行时附带 batchId/itemId（稳定子项身份，不用数组位置）。
+ * 不携带任何请求正文或密钥；gateway 侧透传见 contracts 的 GatewayDiagnosticsContext。
+ */
+export interface NodeDiagnosticsContext {
+  traceId: string
+  nodeExecutionId: string
+  spanId: string
+  parentSpanId?: string
+  batchId?: string
+  itemId?: string
+}
+
+/**
  * 执行器拿到的上下文：运行器为每个节点组装一次，包含执行所需的全部只读输入与受控写入入口。
  *
  * gateway 字段是 P3 新增：执行器通过此接口调用模型网关（聊天/生图/视频/音频），
@@ -103,6 +118,8 @@ export interface NodeExecutionContext {
   trace?: (phase: NodeExecutionPhase, level: 'info' | 'error', message: string) => void
   /** Provider/model identifiers only; secrets and request bodies must never be included. */
   setDiagnosticTarget?: (target: NodeExecutionTarget) => void
+  /** 结构化诊断上下文（L01）；最小 mock 可不注入。 */
+  diagnostics?: NodeDiagnosticsContext
   /** 模型网关客户端（P3）：替代执行器中对 window.api.gateway 的直接调用。 */
   gateway: GatewayClient
   /**

@@ -37,6 +37,9 @@ export interface NodeRunRecord {
   estimateFeatures?: GenerationTimingFeatures
   estimateProviderKey?: string
   estimateModelKey?: string
+  /** L01 结构化诊断关联：根 trace 与本次节点执行实例（持久化到 meta 便于运行中心跳转）。 */
+  traceId?: string
+  nodeExecutionId?: string
   /** 分阶段、脱敏的运行轨迹；不记录完整提示词、文件内容、媒体二进制或密钥。 */
   trace?: NodeRunTraceEntry[]
 }

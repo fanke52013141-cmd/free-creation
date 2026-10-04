@@ -12,7 +12,15 @@ import { registerMediaIpc } from './ipc/media.ipc'
 import { registerGatewayIpc } from './ipc/gateway.ipc'
 import { registerWorkspaceStateIpc } from './ipc/workspace-state.ipc'
 import { registerModelIpc } from './ipc/models.ipc'
-import { registerDiagnosticsIpc } from './ipc/diagnostics.ipc'
+import { registerDiagnosticsIpc, setDiagnosticsService } from './ipc/diagnostics.ipc'
+import {
+  initDiagnosticsService,
+  checkPreviousSession,
+  type DiagnosticsService
+} from './diagnostics/service'
+import { nodeFsStore } from './diagnostics/fs-types'
+import { setGatewayEventSink } from './diagnostics/gateway-events'
+import { DiagnosticsProducer, newProducerId } from '../shared/observability'
 import { registerLibraryIpc } from './ipc/library.ipc'
 import { SqliteModelHost } from './model-host/sqlite-model-host'
 import { createDesktopModelRuntime } from './model-host/runtime'
@@ -33,6 +41,52 @@ log.info('main process starting', {
   chromium: process.versions.chrome,
   node: process.versions.node
 })
+
+// ── 统一诊断事件底座（L01/L02）──────────────────────────────────────────────
+// main 侧生产者：app.* 生命周期与网关边界事件的唯一来源；sessionId 由服务分配，
+// 环境/版本信息随服务写入 session 状态文件，诊断包据此携带。
+let diagnostics: DiagnosticsService | null = null
+const mainProducer = new DiagnosticsProducer({
+  process: 'main',
+  producerId: newProducerId('main')
+})
+
+async function initDiagnostics(): Promise<DiagnosticsService | null> {
+  try {
+    const service = await initDiagnosticsService({
+      dataDir: getDataDir(),
+      producer: mainProducer,
+      env: {
+        appVersion: app.getVersion(),
+        packaged: app.isPackaged,
+        platform: process.platform,
+        arch: process.arch,
+        electron: process.versions.electron ?? '',
+        chromium: process.versions.chrome ?? '',
+        node: process.versions.node ?? ''
+      }
+    })
+    setDiagnosticsService(service)
+    setGatewayEventSink(service)
+    diagnostics = service
+    service.emit(mainProducer.build('app.session_started', undefined, '主进程会话开始', {}))
+    const sessionsDir = join(getDataDir(), 'diagnostics', 'sessions')
+    if (await checkPreviousSession(nodeFsStore(), sessionsDir)) {
+      service.emit(
+        mainProducer.build('app.previous_session_unclean', undefined, '上次会话未正常结束', {})
+      )
+      log.warn('[diagnostics] previous session did not end cleanly')
+    }
+    return service
+  } catch (error) {
+    // 日志底座失败不阻断启动：降级为 electron-log 摘要。
+    log.warn(
+      '[diagnostics] structured event storage unavailable:',
+      error instanceof Error ? error.message : String(error)
+    )
+    return null
+  }
+}
 
 // media:// 协议：渲染进程加载本地媒体（stream 支持 <video> 播放）
 protocol.registerSchemesAsPrivileged([
@@ -140,6 +194,17 @@ function createWindow(): BrowserWindow {
     mainWindow.show()
   })
 
+  // 渲染进程崩溃/被杀：记录可用退出码，异常后仍执行原有窗口策略（不吞异常继续）。
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    diagnostics?.emit(
+      mainProducer.build('app.process_exited', undefined, '渲染进程异常退出', {}, {
+        error: { code: 'PROCESS_EXITED', category: 'process', retryable: false },
+        attributes: { reason: details.reason, exitCode: details.exitCode ?? 0 }
+      })
+    )
+    log.error('[diagnostics] renderer process gone', details.reason, details.exitCode ?? '')
+  })
+
   mainWindow.webContents.setWindowOpenHandler((details) => {
     const url = new URL(details.url)
     if (url.protocol === 'http:' || url.protocol === 'https:') {
@@ -164,6 +229,9 @@ app.whenReady().then(async () => {
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
+
+  // 诊断底座先于业务库初始化：app.session_started / 上次非正常结束检查。
+  await initDiagnostics()
 
   const database = getDb()
   // safeStorage 上线前保存的 Key 至今是裸明文；启动时补一次收口，日志只记数量。
@@ -250,6 +318,18 @@ app.on('window-all-closed', () => {
   }
 })
 
-app.on('before-quit', () => {
-  closeDb()
+// 正常退出：等待日志 flush（≤2s，超时留非完整状态），写 session_ended，再关库退出。
+let quitting = false
+app.on('before-quit', (event) => {
+  if (quitting) return
+  quitting = true
+  event.preventDefault()
+  void (async () => {
+    if (diagnostics) {
+      diagnostics.emit(mainProducer.build('app.session_ended', undefined, '主进程会话结束', {}))
+      await diagnostics.flushOnQuit()
+    }
+    closeDb()
+    app.quit()
+  })()
 })

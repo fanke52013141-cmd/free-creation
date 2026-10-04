@@ -74,6 +74,12 @@ import type {
   AudioGenerateInput,
   ExportNodeRunDiagnosticsInput,
   NodeRunLogEventInput,
+  DiagnosticsQueryInput,
+  DiagnosticsQueryResult,
+  DiagnosticsHealthSnapshot,
+  ReportDiagnosticsEventsInput,
+  ExportDiagnosticsBundleInput,
+  ExportDiagnosticsBundleResult,
   VideoConversionInput,
   VideoEngineStatus
 } from '../shared/contracts'
@@ -100,9 +106,22 @@ import type {
 const api = {
   reportNodeRunEvent: (input: NodeRunLogEventInput): Promise<IpcEnvelope<boolean>> =>
     ipcRenderer.invoke(IPC.diagnostics.nodeRunEvent, input),
+  // L01/L02：统一结构化诊断事件（批量、fire-and-forget 语义；回执=已接收）。
+  reportDiagnosticsEvents: (
+    input: ReportDiagnosticsEventsInput
+  ): Promise<IpcEnvelope<{ accepted: number }>> => ipcRenderer.invoke(IPC.diagnostics.event, input),
+  queryDiagnostics: (input: DiagnosticsQueryInput): Promise<IpcEnvelope<DiagnosticsQueryResult>> =>
+    ipcRenderer.invoke(IPC.diagnostics.query, input),
+  diagnosticsHealth: (): Promise<IpcEnvelope<DiagnosticsHealthSnapshot>> =>
+    ipcRenderer.invoke(IPC.diagnostics.health),
+  exportDiagnosticsBundle: (
+    input: ExportDiagnosticsBundleInput
+  ): Promise<IpcEnvelope<ExportDiagnosticsBundleResult>> =>
+    ipcRenderer.invoke(IPC.diagnostics.exportBundle, input),
   exportNodeRunDiagnostics: (
     input: ExportNodeRunDiagnosticsInput
-  ): Promise<IpcEnvelope<{ path: string }>> => ipcRenderer.invoke(IPC.diagnostics.exportNodeRun, input),
+  ): Promise<IpcEnvelope<{ path: string }>> =>
+    ipcRenderer.invoke(IPC.diagnostics.exportNodeRun, input),
   bootstrap: (): Promise<IpcEnvelope<BootstrapInfo>> => ipcRenderer.invoke(IPC.app.bootstrap),
   listProjects: (): Promise<IpcEnvelope<ProjectMeta[]>> => ipcRenderer.invoke(IPC.project.list),
   createProject: (input: CreateProjectInput): Promise<IpcEnvelope<ProjectMeta>> =>
@@ -113,26 +132,43 @@ const api = {
     input: SaveWorkspaceProfileInput
   ): Promise<IpcEnvelope<ProjectMeta | null>> =>
     ipcRenderer.invoke(IPC.project.saveWorkspaceProfile, input),
-  listLibraryCategories: (): Promise<IpcEnvelope<LibraryCategory[]>> => ipcRenderer.invoke(IPC.library.listCategories),
-  saveLibraryCategory: (input: SaveLibraryCategoryInput): Promise<IpcEnvelope<LibraryCategory>> => ipcRenderer.invoke(IPC.library.saveCategory, input),
-  discardLibraryMaterialization: (input: { usageId: string; projectId: string }): Promise<IpcEnvelope<boolean>> => ipcRenderer.invoke(IPC.library.discardMaterialization, input),
+  listLibraryCategories: (): Promise<IpcEnvelope<LibraryCategory[]>> =>
+    ipcRenderer.invoke(IPC.library.listCategories),
+  saveLibraryCategory: (input: SaveLibraryCategoryInput): Promise<IpcEnvelope<LibraryCategory>> =>
+    ipcRenderer.invoke(IPC.library.saveCategory, input),
+  discardLibraryMaterialization: (input: {
+    usageId: string
+    projectId: string
+  }): Promise<IpcEnvelope<boolean>> =>
+    ipcRenderer.invoke(IPC.library.discardMaterialization, input),
   searchLibrary: (input: LibrarySearchInput): Promise<IpcEnvelope<LibrarySearchResult>> =>
     ipcRenderer.invoke(IPC.library.search, input),
-  getLibraryResource: (input: LibraryDetailInput): Promise<IpcEnvelope<LibraryResourceDetail | null>> =>
+  getLibraryResource: (
+    input: LibraryDetailInput
+  ): Promise<IpcEnvelope<LibraryResourceDetail | null>> =>
     ipcRenderer.invoke(IPC.library.detail, input),
-  createLibraryResource: (input: CreateLibraryResourceInput): Promise<IpcEnvelope<LibraryResourceDetail>> =>
-    ipcRenderer.invoke(IPC.library.create, input),
-  captureLibraryMedia: (input: CaptureProjectMediaInput): Promise<IpcEnvelope<LibraryResourceDetail>> =>
+  createLibraryResource: (
+    input: CreateLibraryResourceInput
+  ): Promise<IpcEnvelope<LibraryResourceDetail>> => ipcRenderer.invoke(IPC.library.create, input),
+  captureLibraryMedia: (
+    input: CaptureProjectMediaInput
+  ): Promise<IpcEnvelope<LibraryResourceDetail>> =>
     ipcRenderer.invoke(IPC.library.captureProjectMedia, input),
-  captureLibraryNodes: (input: CaptureProjectNodesInput): Promise<IpcEnvelope<LibraryResourceDetail>> =>
+  captureLibraryNodes: (
+    input: CaptureProjectNodesInput
+  ): Promise<IpcEnvelope<LibraryResourceDetail>> =>
     ipcRenderer.invoke(IPC.library.captureProjectNodes, input),
-  publishLibraryRevision: (input: PublishLibraryRevisionInput): Promise<IpcEnvelope<LibraryResourceDetail>> =>
+  publishLibraryRevision: (
+    input: PublishLibraryRevisionInput
+  ): Promise<IpcEnvelope<LibraryResourceDetail>> =>
     ipcRenderer.invoke(IPC.library.publishRevision, input),
   archiveLibraryResource: (input: LibraryArchiveInput): Promise<IpcEnvelope<boolean>> =>
     ipcRenderer.invoke(IPC.library.archive, input),
   listLibraryCollections: (): Promise<IpcEnvelope<LibraryCollection[]>> =>
     ipcRenderer.invoke(IPC.library.listCollections),
-  createLibraryCollection: (input: CreateLibraryCollectionInput): Promise<IpcEnvelope<LibraryCollection>> =>
+  createLibraryCollection: (
+    input: CreateLibraryCollectionInput
+  ): Promise<IpcEnvelope<LibraryCollection>> =>
     ipcRenderer.invoke(IPC.library.createCollection, input),
   setLibraryCollections: (input: SetLibraryCollectionsInput): Promise<IpcEnvelope<boolean>> =>
     ipcRenderer.invoke(IPC.library.setCollections, input),
@@ -144,17 +180,23 @@ const api = {
     ipcRenderer.invoke(IPC.library.renameFolder, input),
   deleteLibraryFolder: (folderId: string): Promise<IpcEnvelope<boolean>> =>
     ipcRenderer.invoke(IPC.library.deleteFolder, folderId),
-  setLibraryResourceFolder: (input: { resourceId: string; folderId?: string | null }): Promise<IpcEnvelope<boolean>> =>
-    ipcRenderer.invoke(IPC.library.setResourceFolder, input),
+  setLibraryResourceFolder: (input: {
+    resourceId: string
+    folderId?: string | null
+  }): Promise<IpcEnvelope<boolean>> => ipcRenderer.invoke(IPC.library.setResourceFolder, input),
   listLibraryBoards: (): Promise<IpcEnvelope<LibraryBoard[]>> =>
     ipcRenderer.invoke(IPC.library.listBoards),
-  createLibraryBoard: (input: { title: string; description?: string }): Promise<IpcEnvelope<LibraryBoard>> =>
-    ipcRenderer.invoke(IPC.library.createBoard, input),
+  createLibraryBoard: (input: {
+    title: string
+    description?: string
+  }): Promise<IpcEnvelope<LibraryBoard>> => ipcRenderer.invoke(IPC.library.createBoard, input),
   getLibraryBoardItems: (boardId: string): Promise<IpcEnvelope<LibraryBoardItem[]>> =>
     ipcRenderer.invoke(IPC.library.getBoardItems, boardId),
   saveLibraryBoard: (input: SaveLibraryBoardInput): Promise<IpcEnvelope<boolean>> =>
     ipcRenderer.invoke(IPC.library.saveBoard, input),
-  materializeLibraryResource: (input: LibraryMaterializeInput): Promise<IpcEnvelope<LibraryMaterializeResult>> =>
+  materializeLibraryResource: (
+    input: LibraryMaterializeInput
+  ): Promise<IpcEnvelope<LibraryMaterializeResult>> =>
     ipcRenderer.invoke(IPC.library.materialize, input),
   exportLibrary: (input: LibraryExportInput = {}): Promise<IpcEnvelope<{ path: string }>> =>
     ipcRenderer.invoke(IPC.library.export, input),
@@ -181,6 +223,8 @@ const api = {
     ipcRenderer.invoke(IPC.project.readRecoveryCopy, input),
   discardRecoveryCopy: (input: { id: string }): Promise<IpcEnvelope<boolean>> =>
     ipcRenderer.invoke(IPC.project.discardRecoveryCopy, input),
+  restoreRecoveryCopy: (input: { id: string }): Promise<IpcEnvelope<ProjectFile | null>> =>
+    ipcRenderer.invoke(IPC.project.restoreRecoveryCopy, input),
   closeProject: (): Promise<IpcEnvelope<true>> => ipcRenderer.invoke(IPC.project.close),
   onExternalProjectChange: (
     cb: (payload: { projectId: string; graphVersion: number }) => void
@@ -306,9 +350,13 @@ const api = {
       ipcRenderer.invoke(IPC.gateway.executableProviders),
     saveProvider: (input: SaveProviderInput): Promise<IpcEnvelope<ProviderSummary>> =>
       ipcRenderer.invoke(IPC.gateway.saveProvider, input),
-    exportProviders: (input: { password: string }): Promise<IpcEnvelope<{ path: string; count: number }>> =>
+    exportProviders: (input: {
+      password: string
+    }): Promise<IpcEnvelope<{ path: string; count: number }>> =>
       ipcRenderer.invoke(IPC.gateway.exportProviders, input),
-    importProviders: (input: { password: string }): Promise<IpcEnvelope<{ added: number; updated: number; count: number }>> =>
+    importProviders: (input: {
+      password: string
+    }): Promise<IpcEnvelope<{ added: number; updated: number; count: number }>> =>
       ipcRenderer.invoke(IPC.gateway.importProviders, input),
     deleteProvider: (id: string): Promise<IpcEnvelope<boolean>> =>
       ipcRenderer.invoke(IPC.gateway.deleteProvider, id),
@@ -344,29 +392,36 @@ const api = {
         ipcRenderer.off(IPC.gateway.event, listener)
       }
     }
-  }
-  ,
+  },
   models: {
-    listConnections: (): Promise<IpcEnvelope<Connection[]>> => ipcRenderer.invoke(IPC.models.connections),
+    listConnections: (): Promise<IpcEnvelope<Connection[]>> =>
+      ipcRenderer.invoke(IPC.models.connections),
     listDefinitions: (connectionId?: string): Promise<IpcEnvelope<ModelDefinition[]>> =>
       ipcRenderer.invoke(IPC.models.definitions, connectionId),
-    listBindings: (): Promise<IpcEnvelope<import('@free-creation/model-contracts').FeatureBinding[]>> =>
-      ipcRenderer.invoke(IPC.models.bindings),
+    listBindings: (): Promise<
+      IpcEnvelope<import('@free-creation/model-contracts').FeatureBinding[]>
+    > => ipcRenderer.invoke(IPC.models.bindings),
     saveConnection: (input: SaveModelConnectionInput): Promise<IpcEnvelope<Connection>> =>
       ipcRenderer.invoke(IPC.models.saveConnection, input),
     saveDefinition: (input: SaveModelDefinitionInput): Promise<IpcEnvelope<ModelDefinition>> =>
       ipcRenderer.invoke(IPC.models.saveDefinition, input),
     deleteDefinition: (input: DeleteModelDefinitionInput): Promise<IpcEnvelope<boolean>> =>
       ipcRenderer.invoke(IPC.models.deleteDefinition, input),
-    deleteDefinitions: (input: import('../shared/contracts').DeleteModelDefinitionsInput): Promise<IpcEnvelope<number>> =>
-      ipcRenderer.invoke(IPC.models.deleteDefinitions, input),
-    deleteConnection: (input: import('../shared/contracts').DeleteModelConnectionInput): Promise<IpcEnvelope<boolean>> =>
-      ipcRenderer.invoke(IPC.models.deleteConnection, input),
-    discover: (input: import('../shared/contracts').DiscoverModelDefinitionsInput): Promise<IpcEnvelope<import('../shared/contracts').DiscoveredModel[]>> =>
+    deleteDefinitions: (
+      input: import('../shared/contracts').DeleteModelDefinitionsInput
+    ): Promise<IpcEnvelope<number>> => ipcRenderer.invoke(IPC.models.deleteDefinitions, input),
+    deleteConnection: (
+      input: import('../shared/contracts').DeleteModelConnectionInput
+    ): Promise<IpcEnvelope<boolean>> => ipcRenderer.invoke(IPC.models.deleteConnection, input),
+    discover: (
+      input: import('../shared/contracts').DiscoverModelDefinitionsInput
+    ): Promise<IpcEnvelope<import('../shared/contracts').DiscoveredModel[]>> =>
       ipcRenderer.invoke(IPC.models.discover, input),
     validate: (input: ValidateModelDefinitionInput): Promise<IpcEnvelope<ModelValidationResult>> =>
       ipcRenderer.invoke(IPC.models.validate, input),
-    saveBinding: (input: SaveModelFeatureBindingInput): Promise<IpcEnvelope<import('@free-creation/model-contracts').FeatureBinding>> =>
+    saveBinding: (
+      input: SaveModelFeatureBindingInput
+    ): Promise<IpcEnvelope<import('@free-creation/model-contracts').FeatureBinding>> =>
       ipcRenderer.invoke(IPC.models.saveBinding, input),
     resolveBinding: (input: ResolveModelFeatureInput): Promise<IpcEnvelope<ResolvedModelFeature>> =>
       ipcRenderer.invoke(IPC.models.resolveBinding, input)

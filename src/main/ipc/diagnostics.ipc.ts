@@ -5,11 +5,25 @@ import { join } from 'path'
 import { redactDiagnosticText } from '../../shared/diagnostics'
 import { IPC } from '../../shared/contracts'
 import type {
+  DiagnosticsQueryInput,
+  DiagnosticsHealthSnapshot,
+  DiagnosticsQueryResult,
+  ExportDiagnosticsBundleInput,
+  ExportDiagnosticsBundleResult,
   ExportNodeRunDiagnosticsInput,
   IpcEnvelope,
   NodeRunDiagnosticRecord,
-  NodeRunLogEventInput
+  NodeRunLogEventInput,
+  ReportDiagnosticsEventsInput
 } from '../../shared/contracts'
+import type { DiagnosticsService } from '../diagnostics/service'
+
+let diagnosticsService: DiagnosticsService | null = null
+
+/** main/diagnostics 服务注入（L02）；测试或降级路径可为 null。 */
+export function setDiagnosticsService(service: DiagnosticsService | null): void {
+  diagnosticsService = service
+}
 
 function ok<T>(data: T): IpcEnvelope<T> {
   return { ok: true, data }
@@ -118,6 +132,83 @@ function sanitizeRun(
 export function registerDiagnosticsIpc(): void {
   ipcMain.handle(IPC.diagnostics.nodeRunEvent, (_event, input: NodeRunLogEventInput) =>
     reportRendererEvent(input)
+  )
+
+  // L01/L02：统一结构化诊断事件。回执=已接收/已入队，不代表已落盘；
+  // 持久化状态经 diagnostics:health 查询。服务未就绪时明确返回 unavailable。
+  ipcMain.handle(
+    IPC.diagnostics.event,
+    async (_event, input: ReportDiagnosticsEventsInput): Promise<IpcEnvelope<{ accepted: number }>> => {
+      if (!input || !Array.isArray(input.events)) {
+        return err('INVALID_INPUT', '诊断事件批次不完整')
+      }
+      if (!diagnosticsService) return err('DIAGNOSTICS_UNAVAILABLE', '诊断存储未就绪')
+      try {
+        const result = await diagnosticsService.ingest(input.events)
+        return ok({ accepted: result.accepted })
+      } catch (error) {
+        // 日志失败不改变业务：吞掉异常，给受控错误码。
+        const message = redactDiagnosticText(error instanceof Error ? error.message : String(error), 160)
+        log.warn('[diagnostics] ingest failed', message)
+        return err('DIAGNOSTICS_UNAVAILABLE', '诊断存储暂不可用')
+      }
+    }
+  )
+
+  ipcMain.handle(
+    IPC.diagnostics.query,
+    async (_event, input: DiagnosticsQueryInput): Promise<IpcEnvelope<DiagnosticsQueryResult>> => {
+      if (!diagnosticsService) return err('DIAGNOSTICS_UNAVAILABLE', '诊断存储未就绪')
+      try {
+        return ok(await diagnosticsService.query(input ?? {}))
+      } catch (error) {
+        return err('QUERY_FAILED', redactDiagnosticText(error instanceof Error ? error.message : String(error), 200))
+      }
+    }
+  )
+
+  ipcMain.handle(IPC.diagnostics.health, (): IpcEnvelope<DiagnosticsHealthSnapshot> => {
+    if (!diagnosticsService) return err('DIAGNOSTICS_UNAVAILABLE', '诊断存储未就绪')
+    return ok(diagnosticsService.health())
+  })
+
+  // L05：诊断包导出。zip 内含 manifest.json / events.jsonl / summary.txt / coverage.json；
+  // 25MiB 上限、原子落盘、二次脱敏；不打包数据库/项目/媒体/main.log 全文。
+  ipcMain.handle(
+    IPC.diagnostics.exportBundle,
+    async (
+      event,
+      input: ExportDiagnosticsBundleInput
+    ): Promise<IpcEnvelope<ExportDiagnosticsBundleResult>> => {
+      if (!diagnosticsService) return err('DIAGNOSTICS_UNAVAILABLE', '诊断存储未就绪')
+      if (!input?.scope || typeof input.scope !== 'object') {
+        return err('INVALID_INPUT', '导出范围不完整')
+      }
+      const window = BrowserWindow.fromWebContents(event.sender)
+      const stamp = new Date().toISOString().replaceAll(':', '-').slice(0, 19)
+      const options = {
+        title: '导出诊断包',
+        defaultPath: join(app.getPath('downloads'), `canvas-studio-diagnostics-${stamp}.zip`),
+        filters: [{ name: 'Canvas Studio 诊断包', extensions: ['zip'] }]
+      }
+      const selection = window
+        ? await dialog.showSaveDialog(window, options)
+        : await dialog.showSaveDialog(options)
+      if (selection.canceled || !selection.filePath) return err('CANCELLED', '已取消导出')
+      try {
+        const result = await diagnosticsService.exportBundle(input, selection.filePath)
+        log.info('[diagnostics] bundle exported', {
+          events: result.totalEvents,
+          truncated: result.truncated,
+          bytes: result.bytes
+        })
+        return ok({ ...result, path: selection.filePath })
+      } catch (error) {
+        const message = redactDiagnosticText(error instanceof Error ? error.message : String(error), 200)
+        log.error('[diagnostics] bundle export failed', message)
+        return err('EXPORT_FAILED', message)
+      }
+    }
   )
 
   ipcMain.handle(
