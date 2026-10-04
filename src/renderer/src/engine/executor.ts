@@ -31,6 +31,7 @@ import { getNodeType } from '../nodes/registry'
 import { projectNodeOutputs, type NodeValue } from '../nodes/nodeValues'
 import { toast } from '../stores/toast'
 import { useConfirmStore } from '../stores/confirm'
+import { deriveRunPlan, formatRunPlan } from './run-plan'
 import { useEngineStore } from './store'
 import {
   appendNodeRunHistory,
@@ -1275,6 +1276,22 @@ export async function runWorkflow(
   const order = topoSort(graph)
   if (!order) return toast('工作流存在循环连线，无法执行')
 
+  // T07（F07）：全图运行前明确范围与规模——这是与「选区运行」并列的唯一全图入口，
+  // 摘要文案与选区确认共用 formatRunPlan，取消则零请求。
+  const planBodies = iterationBodyNodeIds(graph)
+  const plan = deriveRunPlan(
+    graph.nodes.filter((node) => !planBodies.has(node.id)),
+    undefined
+  )
+  if (plan.willRun.length > 0) {
+    const proceed = await useConfirmStore.getState().confirm({
+      title: '运行整个画布',
+      message: formatRunPlan(plan),
+      confirmText: '开始运行'
+    })
+    if (!proceed) return
+  }
+
   const token = createRunControl()
   registerRunControls(token)
   const iterationBodies = iterationBodyNodeIds(graph)
@@ -1380,9 +1397,15 @@ export async function runWorkflowForNodes(
     return node !== undefined && !isDocumentOutputNode(node.type)
   })
   if (rerunPaidUpstream.length > 0) {
+    // T07（F07）：确认清单带节点名（最多列 6 个，余量计数），不再只给笼统计数。
+    const names = rerunPaidUpstream
+      .map((nodeId) => nodeById.get(nodeId)?.title || nodeId.slice(-4))
+      .slice(0, 6)
+      .map((title) => `「${title}」`)
+    const more = rerunPaidUpstream.length > names.length ? ` 等 ${rerunPaidUpstream.length} 个节点` : ''
     const proceed = await useConfirmStore.getState().confirm({
       title: '将重新执行上游节点',
-      message: `所选流程将一并重新执行 ${rerunPaidUpstream.length} 个上游节点（生成类节点可能产生费用）。是否继续？`,
+      message: `所选流程将一并重新执行 ${names.join('、')}${more}（生成类节点可能产生费用）。是否继续？`,
       confirmText: '继续运行'
     })
     if (!proceed) return
