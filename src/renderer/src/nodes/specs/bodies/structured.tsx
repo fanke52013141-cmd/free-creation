@@ -8,6 +8,7 @@ import { validateNodeSchema } from '@shared/node-schemas'
 import { markUndoPoint } from '../../../canvas/history'
 import { countIncomingConnections } from '../../../canvas/graph'
 import { readNodeConfig } from '../../../canvas/node-persistence'
+import { toast } from '../../../stores/toast'
 import { jsonErrorLocation } from './shared'
 import {
   parseStructuredDataConfig,
@@ -38,7 +39,7 @@ function PlaceholderTokens({
 }): React.JSX.Element {
   const indexes = Array.from({ length: Math.max(contextCount, 1) }, (_, index) => index).slice(0, 4)
   const copy = (token: string): void => {
-    void navigator.clipboard.writeText(token)
+    void navigator.clipboard.writeText(token).then(() => toast(`已复制 ${token}`))
   }
   return (
     <div className="structured-tokens" aria-label="占位符">
@@ -216,7 +217,7 @@ export function StructuredBody({ shape }: NodeBodyProps): React.JSX.Element {
               onPointerDown={(event) => stopEventPropagation(event)}
               onClick={(event) => {
                 event.stopPropagation()
-                void navigator.clipboard.writeText(field.path)
+                void navigator.clipboard.writeText(field.path).then(() => toast(`已复制 ${field.path}`))
               }}
             >
               <code>{field.path}</code>

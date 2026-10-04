@@ -547,16 +547,27 @@ export const codeExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecu
           throw new Error(`输出字段 ${field.name}：${reason}`)
         }
       }
-      ctx.updateResult(JSON.stringify({ kind: 'code-outputs', values }))
+      ctx.updateResult(
+        JSON.stringify({ kind: 'code-outputs', values, ...(output.logs?.length ? { logs: output.logs } : {}) })
+      )
     } else {
       const rawValue = output.kind === 'text' ? output.text : output.data
-      ctx.updateResult(JSON.stringify(outputNodeValue(rawValue, data.outputType, allowedMedia)))
+      ctx.updateResult(
+        JSON.stringify({
+          ...outputNodeValue(rawValue, data.outputType, allowedMedia),
+          ...(output.logs?.length ? { logs: output.logs } : {})
+        })
+      )
     }
     return { status: 'done' }
   } catch (error) {
-    // 把错误信息写入 meta，让 Body 可以显示给用户
+    // 把错误信息写入 meta，让 Body 可以显示给用户；失败前的 console 输出一并带回，
+    // 桌面端没有开发者工具，这是用户调试代码的唯一窗口。
     const message = error instanceof Error ? error.message : String(error)
-    ctx.updateResult(JSON.stringify({ kind: 'error', message }))
+    const logs = (error as { logs?: string[] }).logs
+    ctx.updateResult(
+      JSON.stringify({ kind: 'error', message, ...(Array.isArray(logs) && logs.length ? { logs } : {}) })
+    )
     return { status: 'failed', reason: message }
   }
 }

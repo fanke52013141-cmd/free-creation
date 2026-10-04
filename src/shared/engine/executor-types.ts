@@ -129,7 +129,9 @@ export interface NodeExecutionContext {
   runCode?: (
     source: string,
     args: Record<string, unknown>
-  ) => Promise<{ kind: 'text'; text: string } | { kind: 'json'; data: unknown }>
+  ) => Promise<
+    { kind: 'text'; text: string; logs?: string[] } | { kind: 'json'; data: unknown; logs?: string[] }
+  >
   waitForResume?: () => Promise<void>
   updateProps: (patch: Partial<NodeShape['props']>) => void
   updateResult: (result: string | null) => void

@@ -98,7 +98,9 @@ export interface NodeExecutionContext {
   runCode?: (
     source: string,
     args: Record<string, unknown>
-  ) => Promise<{ kind: 'text'; text: string } | { kind: 'json'; data: unknown }>
+  ) => Promise<
+    { kind: 'text'; text: string; logs?: string[] } | { kind: 'json'; data: unknown; logs?: string[] }
+  >
   /**
    * 在下一个安全检查点等待继续。长任务本身不可被强行挂起，循环节点在每个 item
    * 之间调用它，因此暂停不会让同一份节点运行态发生并发覆盖。

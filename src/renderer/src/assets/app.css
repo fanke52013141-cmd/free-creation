@@ -9873,6 +9873,30 @@ select:focus-visible,
   min-width: 0;
 }
 
+/* 代码节点 console 调试输出：桌面端没有开发者工具，这是用户查看 log 的唯一窗口 */
+.code-result-logs {
+  margin: 2px 0 0;
+  padding: 4px 6px;
+  border-radius: 5px;
+  background: var(--panel, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--line);
+  font-family:
+    'Cascadia Code', 'JetBrains Mono', Consolas, 'Courier New', monospace;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text-secondary, #9ca3af);
+  max-height: 88px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex-shrink: 0;
+  user-select: text;
+  cursor: text;
+}
+.code-result-logs-line {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
 /* 代码/JSON 节点底部操作按钮栏 */
 .code-toolbar {
   display: flex;

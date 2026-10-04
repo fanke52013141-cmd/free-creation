@@ -19,7 +19,6 @@ import {
   deterministicCodeSeed,
   validateCodeOutput
 } from '@shared/engine/code-runtime'
-import type { CodeOutput } from '@shared/engine/code-runtime'
 
 const DEFAULT_TIMEOUT_MS = 10_000
 
@@ -98,6 +97,27 @@ self.EventSource = undefined;
 self.Function = blockedRuntimeApi;
 self.eval = blockedRuntimeApi;
 
+// console 输出捕获：桌面端没有可打开的开发者工具，用户在代码里 console.log 的内容
+// 必须带回界面，否则唯一的调试手段就断了。上限防止死循环日志撑爆结构化克隆。
+const capturedLogs = [];
+const formatLogArg = (value) => {
+  if (typeof value === 'string') return value;
+  try { const text = JSON.stringify(value); return text === undefined ? String(value) : text; }
+  catch { return String(value); }
+};
+const captureConsole = (level) => (...args) => {
+  if (capturedLogs.length >= 50) return;
+  const line = args.map(formatLogArg).join(' ').slice(0, 500);
+  capturedLogs.push(level === 'log' ? line : '[' + level + '] ' + line);
+};
+self.console = {
+  log: captureConsole('log'),
+  info: captureConsole('info'),
+  warn: captureConsole('warn'),
+  error: captureConsole('error'),
+  debug: captureConsole('log')
+};
+
 self.onmessage = async ({ data }) => {
   try {
     let value;
@@ -120,22 +140,48 @@ self.onmessage = async ({ data }) => {
     }
 
     if (value === undefined) throw new Error('代码必须 return 一个文本或 JSON 值');
-    self.postMessage({ ok: true, value });
+    self.postMessage({ ok: true, value, logs: capturedLogs });
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    // 用户函数体第 1 行是 "use strict"; 前缀，堆栈行号比源码大 1。
+    // 折算出行号让用户直接定位出错代码；解析失败就不加，不误导。
+    let lineHint = '';
+    if (error instanceof Error && error.stack) {
+      const match = /<anonymous>:(\\d+):\\d+/.exec(error.stack);
+      if (match) {
+        const line = Number(match[1]) - 1;
+        if (line >= 1) lineHint = '（第 ' + line + ' 行附近）';
+      }
+    }
     self.postMessage({
       ok: false,
-      error: error instanceof Error ? error.message : String(error)
+      error: message + lineHint,
+      logs: capturedLogs
     });
   }
 }
 `
 
+/** 一次代码运行的完整结果：返回值归类 + 捕获的 console 输出（供界面显示调试信息）。 */
+export type CodeRunResult =
+  | { kind: 'text'; text: string; logs: string[] }
+  | { kind: 'json'; data: unknown; logs: string[] }
+
+/** 错误也带上已捕获的 console 输出：失败代码的调试信息同样有价值。 */
+export class CodeRunError extends Error {
+  logs: string[]
+  constructor(message: string, logs: string[] = []) {
+    super(message)
+    this.logs = logs
+  }
+}
+
 export function runCodeTransform(
   source: string,
   input: Record<string, unknown>,
   timeoutMs = DEFAULT_TIMEOUT_MS
-): Promise<CodeOutput> {
-  if (!source.trim()) return Promise.reject(new Error('请输入要执行的代码'))
+): Promise<CodeRunResult> {
+  if (!source.trim()) return Promise.reject(new CodeRunError('请输入要执行的代码'))
   try {
     assertCodeSourcePolicy(source)
   } catch (error) {
@@ -152,27 +198,38 @@ export function runCodeTransform(
       worker.terminate()
       URL.revokeObjectURL(url)
     }
-    const fail = (message: string): void => {
+    const fail = (message: string, logs: string[] = []): void => {
       if (settled) return
       settled = true
       cleanup()
-      reject(new Error(message))
+      reject(new CodeRunError(message, logs))
     }
     const timer = window.setTimeout(() => fail(`代码执行超时（${timeoutMs / 1000} 秒）`), timeoutMs)
 
-    worker.onmessage = (event: MessageEvent<{ ok: boolean; value?: unknown; error?: string }>) => {
+    worker.onmessage = (event: MessageEvent<{
+      ok: boolean
+      value?: unknown
+      error?: string
+      logs?: string[]
+    }>) => {
       if (settled) return
       settled = true
       window.clearTimeout(timer)
       cleanup()
+      const logs = Array.isArray(event.data.logs) ? event.data.logs : []
       if (!event.data.ok) {
-        reject(new Error(event.data.error || '代码执行失败'))
+        reject(new CodeRunError(event.data.error || '代码执行失败', logs))
         return
       }
       try {
-        resolve(validateCodeOutput(event.data.value))
+        const output = validateCodeOutput(event.data.value)
+        resolve(
+          output.kind === 'text'
+            ? { kind: 'text', text: output.text, logs }
+            : { kind: 'json', data: output.data, logs }
+        )
       } catch (error) {
-        reject(error)
+        reject(new CodeRunError(error instanceof Error ? error.message : String(error), logs))
       }
     }
     worker.onerror = (event) => fail(event.message || '代码 Worker 运行失败')

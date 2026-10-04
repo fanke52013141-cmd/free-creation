@@ -30,6 +30,8 @@ interface CodeConfig extends SharedCodeConfig {
 interface CodeResultDisplay {
   kind: 'text' | 'json' | 'error'
   summary: string
+  /** 用户代码里 console.log/info/warn/error 的捕获输出（调试窗口）。 */
+  logs: string[]
 }
 
 function parseCodeConfig(text: string): CodeConfig {
@@ -43,16 +45,19 @@ function parseCodeConfig(text: string): CodeConfig {
   return { ...parseCodeConfigs(text), prompt }
 }
 
-/** 从 shape.meta.nodeResult 解析上次执行结果（成功摘要或错误信息）。 */
+/** 从 shape.meta.nodeResult 解析上次执行结果（成功摘要、错误信息与 console 调试输出）。 */
 function parseCodeResult(metaResult: string | undefined): CodeResultDisplay | null {
   if (!metaResult) return null
   try {
     const value = JSON.parse(metaResult) as Record<string, unknown>
+    const logs = Array.isArray(value.logs)
+      ? value.logs.filter((line): line is string => typeof line === 'string').slice(0, 50)
+      : []
     if (value.kind === 'error' && typeof value.message === 'string') {
-      return { kind: 'error', summary: value.message }
+      return { kind: 'error', summary: value.message, logs }
     }
     if (value.kind === 'text' && typeof value.text === 'string') {
-      return { kind: 'text', summary: value.text.slice(0, 80) }
+      return { kind: 'text', summary: value.text.slice(0, 80), logs }
     }
     if (value.kind === 'json') {
       const keys =
@@ -61,7 +66,7 @@ function parseCodeResult(metaResult: string | undefined): CodeResultDisplay | nu
           : Array.isArray(value.data)
             ? `Array[${(value.data as unknown[]).length}]`
             : ''
-      return { kind: 'json', summary: keys ? `JSON { ${keys} }` : 'JSON' }
+      return { kind: 'json', summary: keys ? `JSON { ${keys} }` : 'JSON', logs }
     }
     if (value.kind === 'camera') {
       const data =
@@ -69,12 +74,13 @@ function parseCodeResult(metaResult: string | undefined): CodeResultDisplay | nu
           ? (value.data as Record<string, unknown>)
           : {}
       const label = typeof data.name === 'string' ? data.name : String(data.id ?? '已输出')
-      return { kind: 'json', summary: `机位参数 · ${label}` }
+      return { kind: 'json', summary: `机位参数 · ${label}`, logs }
     }
     if (value.kind === 'code-outputs' && value.values && typeof value.values === 'object') {
       return {
         kind: 'json',
-        summary: `已输出 ${Object.keys(value.values as object).length} 个字段`
+        summary: `已输出 ${Object.keys(value.values as object).length} 个字段`,
+        logs
       }
     }
     if (
@@ -83,7 +89,7 @@ function parseCodeResult(metaResult: string | undefined): CodeResultDisplay | nu
       value.kind === 'audio' ||
       value.kind === 'file'
     ) {
-      return { kind: 'json', summary: `已输出 ${value.kind} 资产引用` }
+      return { kind: 'json', summary: `已输出 ${value.kind} 资产引用`, logs }
     }
   } catch {
     // 忽略
@@ -237,6 +243,8 @@ const CODE_TEMPLATE = `async function main(args) {
   //   args.images / videos / audios / files — 媒体资产引用数组
   //   args.{自定义参数名} — 在上方"输入参数"表格中声明的端口
   // 本地帮助：_.get / pick / omit / map / filter / groupBy / uniq / chunk / cloneDeep，dayjs
+  // 注意：为保证同输入同结果，运行环境是确定性的 —— dayjs()/new Date() 固定为
+  // 1970-01-01，Math.random 由代码+输入派生；console.log 输出会显示在结果下方。
 
   const data = args.json || []
   return {
@@ -666,10 +674,21 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
         </div>
       )}
       {resultDisplay && (
-        <div className={`code-result ${resultDisplay.kind === 'error' ? 'error' : 'success'}`}>
-          <span className="code-result-badge">{resultDisplay.kind === 'error' ? '✗' : '✓'}</span>
-          <span className="code-result-text">{resultDisplay.summary}</span>
-        </div>
+        <>
+          <div className={`code-result ${resultDisplay.kind === 'error' ? 'error' : 'success'}`}>
+            <span className="code-result-badge">{resultDisplay.kind === 'error' ? '✗' : '✓'}</span>
+            <span className="code-result-text">{resultDisplay.summary}</span>
+          </div>
+          {resultDisplay.logs.length > 0 && (
+            <div className="code-result-logs" aria-label="代码 console 输出">
+              {resultDisplay.logs.map((line, i) => (
+                <div className="code-result-logs-line" key={i}>
+                  {line}
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
       <div className="code-toolbar">
         <button
