@@ -272,7 +272,21 @@ let slot = 0
  */
 async function freshProject(key) {
   const home = win.getByRole('button', { name: '回到主页' })
-  if (await home.count()) await home.click()
+  if (await home.count()) {
+    // 长矩阵后半程曾出现按钮可见但 30 秒点不动（疑似顶层 toast/动画挡住指针）：
+    // 先常规点击，失败则清掉浮层并强制点击，随后仍以「新建项目」按钮出现为准。
+    try {
+      await home.click({ timeout: 5000 })
+    } catch {
+      await win.keyboard.press('Escape')
+      await win.waitForTimeout(400)
+      try {
+        await home.click({ timeout: 5000 })
+      } catch {
+        await home.click({ force: true, timeout: 5000 })
+      }
+    }
+  }
   const create = win.getByRole('button', { name: '新建项目' })
   await create.waitFor({ timeout: 15000 })
   await create.click()
@@ -360,10 +374,29 @@ async function revealNodeButton(label) {
   throw new Error(`一级分类均已检查，但没有展开出「添加${label}节点」`)
 }
 
-async function portBox(id, dir, portId) {
+/** 遍历两级分类后确认某节点已从创建入口退役（人声分离 2026-09-25 起不再可新建）。 */
+async function nodeButtonAbsent(label) {
+  const btn = win.getByRole('button', { name: `添加${label}节点`, exact: true })
+  if (await btn.isVisible().catch(() => false)) return false
+  const categories = win.locator('.palette-category-item')
+  const count = await categories.count()
+  for (let index = 0; index < count; index += 1) {
+    const category = categories.nth(index)
+    await category.hover().catch(() => {})
+    await win.waitForTimeout(120)
+    if ((await category.getAttribute('aria-expanded')) !== 'true') {
+      await category.click()
+      await win.waitForTimeout(120)
+    }
+    if (await btn.isVisible().catch(() => false)) return false
+  }
+  return true
+}
+
+async function portBox(id, dir, portId, timeout = 5000) {
   const sel = `.node-card-wrap[data-node-id="${id}"] .port-dot.${dir}[data-port-id="${portId}"]`
   const loc = win.locator(sel)
-  await loc.waitFor({ timeout: 5000 })
+  await loc.waitFor({ timeout })
   // 圆点的命中区是外层 18px span，可见小圆点只是 ::after；坐标必须真的落在这个口上，
   // 否则拖线会变成画布框选或误连相邻端口。
   let hitInfo = '（从未命中）'
@@ -420,14 +453,28 @@ async function describeEdges() {
   })
 }
 
-/** 从 A 的输出端口拖线到 B 的输入端口；返回是否真的多了一条连线。 */
+/** 从 A 的输出端口拖线到 B 的输入端口；返回是否真的多了一条连线。
+ *
+ * 2026-09-27 端口分组设计（fb12c06）后，空闲态每侧只显示首个类型组的代表端口，
+ * 其余端口在拖线候选时才临时显现。因此：
+ *  - 目标输入端口在拖动开始后才会渲染，坐标必须拖动中途再取；
+ *  - 源输出端口本身隐藏时无法起拖，改走用户同样可达的反向路径：
+ *    从 B 的输入端口起拖（拖动会让 A 的兼容输出端口显现），落到 A 的目标输出端口上。
+ */
 async function connect(fromId, outPort, toId, inPort) {
   await win.keyboard.press('Escape')
-  const a = await portBox(fromId, 'out', outPort)
-  const b = await portBox(toId, 'in', inPort)
   const before = await edgeCount()
+  let a
+  try {
+    a = await portBox(fromId, 'out', outPort, 3000)
+  } catch {
+    return connectReverse(toId, inPort, fromId, outPort, before)
+  }
   await win.mouse.move(a.cx, a.cy)
   await win.mouse.down()
+  await win.waitForTimeout(200)
+  // 拖动开始后兼容的候选端口才会渲染；取不到说明「候选显现」这条用户路径断了。
+  const b = await portBox(toId, 'in', inPort, 8000)
   for (let step = 1; step <= 20; step += 1) {
     await win.mouse.move(
       a.cx + ((b.cx - a.cx) * step) / 20,
@@ -443,6 +490,32 @@ async function connect(fromId, outPort, toId, inPort) {
     if ((await edgeCount()) > before) return true
   }
   // 拖到空白处会留下「待建节点」的连线草稿和创建菜单，不清掉会污染后面的操作。
+  await win.keyboard.press('Escape')
+  await win.waitForTimeout(300)
+  return false
+}
+
+/** 反向连线：从 B 的输入端口拖向 A 隐藏的输出端口。落点解析会挑最近的兼容输出。 */
+async function connectReverse(toId, inPort, fromId, outPort, before) {
+  const b = await portBox(toId, 'in', inPort, 5000)
+  await win.mouse.move(b.cx, b.cy)
+  await win.mouse.down()
+  await win.waitForTimeout(200)
+  const a = await portBox(fromId, 'out', outPort, 8000)
+  for (let step = 1; step <= 20; step += 1) {
+    await win.mouse.move(
+      b.cx + ((a.cx - b.cx) * step) / 20,
+      b.cy + ((a.cy - b.cy) * step) / 20
+    )
+    await win.waitForTimeout(16)
+  }
+  await win.mouse.move(a.cx, a.cy)
+  await win.waitForTimeout(150)
+  await win.mouse.up()
+  for (let i = 0; i < 12; i += 1) {
+    await win.waitForTimeout(250)
+    if ((await edgeCount()) > before) return true
+  }
   await win.keyboard.press('Escape')
   await win.waitForTimeout(300)
   return false
@@ -542,6 +615,20 @@ async function editCodeLike(id, buttonText, value) {
   await fillInto(ta, value)
 }
 
+/**
+ * AppSelect（fb12c06 起）是 Radix 自定义下拉：触发器是 button.app-select-trigger，
+ * 选项渲染在 body portal 的 role=option 里，原生 selectOption 已不可用。
+ * 按「选项显示文本」选择，与用户看到的列表一致。
+ */
+async function pickOption(trigger, optionText) {
+  await ensureClickable(trigger, `下拉触发器（${optionText}）`)
+  await trigger.click()
+  const item = win.getByRole('option', { name: optionText, exact: true })
+  await item.waitFor({ timeout: 5000 })
+  await item.click()
+  await win.waitForTimeout(400)
+}
+
 async function reload() {
   await win.waitForTimeout(1500)
   await win.reload()
@@ -561,15 +648,22 @@ async function reload() {
 async function recipeText() {
   const a = await addNode('文本')
   await checkPorts(a, '文本', ['in-text'], ['out-text'])
-  check('文本：空卡片给出可发现的输入提示', /双击输入/.test(await card(a).innerText()))
-
-  const empty = await runNode(a)
-  const emptyShape = empty.shape ?? (await disk(a))
+  // 空态提示从「双击输入」改为显式「输入文本」按钮（fb12c06 交互面统一）。
   check(
-    '文本：空正文运行不产生假成功',
-    emptyShape && emptyShape.run.status !== undefined && emptyShape.run.status !== 'success',
-    JSON.stringify({ exec: emptyShape.exec, run: emptyShape.run.status })
+    '文本：空卡片给出可发现的输入提示',
+    (await card(a).locator('.text-empty-action').count()) === 1,
+    await card(a).innerText()
   )
+
+  // T06 就绪预检：空正文时运行按钮置灰并说明「待补充」，而不是跑出一次假成功。
+  const emptySt = await statusOf(a)
+  check(
+    '文本：空正文运行被就绪预检拦下并说明原因',
+    emptySt.disabled === true && /待补充|缺少/.test(emptySt.aria),
+    emptySt.aria
+  )
+  const emptyShape = await disk(a)
+  check('文本：空正文从未产生运行记录', !emptyShape.run || !emptyShape.run.status, JSON.stringify({ run: emptyShape.run && emptyShape.run.status }))
 
   await setText(a, '上游甲：一句话')
   const b = await addNode('文本')
@@ -608,7 +702,7 @@ async function recipeText() {
 /** JSON：正文即输入；非法 JSON 必须给原因；可消费上游结构化值。 */
 async function recipeJson() {
   const a = await addNode('JSON')
-  await checkPorts(a, 'JSON', ['in-json', 'in-text'], ['out-json'])
+  await checkPorts(a, 'JSON', ['in-json'], ['out-json'])
   await editCodeLike(a, '粘贴 JSON', '{"title":"开场","shots":[{"n":1},{"n":2}]}')
   const cards = await card(a).locator('.json-data-card').count()
   check('JSON：合法正文渲染结构化卡片', cards === 2, `${cards} 张`)
@@ -700,7 +794,7 @@ async function recipeProcessor() {
   await editCodeLike(feeder, '粘贴 JSON', '{"scene":"雨夜街道"}')
 
   const pick = await addNode('数据处理')
-  await card(pick).locator('select[aria-label="处理方式"]').selectOption('pick')
+  await pickOption(card(pick).locator('button[aria-label="处理方式"]'), '提取字段')
   await win.waitForTimeout(500)
   const pathInput = card(pick).locator('input[aria-label="字段路径"]')
   await pathInput.waitFor({ timeout: 5000 })
@@ -732,7 +826,7 @@ async function recipeProcessor() {
 /** 分镜板：粘贴 JSON → 表格行渲染 → 合成文本流入下游。 */
 async function recipeStoryboard() {
   const a = await addNode('分镜板')
-  await checkPorts(a, '分镜板', ['in-json', 'in-text'], ['out-json', 'out-text'])
+  await checkPorts(a, '分镜板', ['in-json'], ['out-json'])
   await editCodeLike(
     a,
     '编辑 JSON',
@@ -766,8 +860,8 @@ async function recipeStoryboard() {
 /** 结构数据：按 Schema 校验，合法/非法两态即时可见。 */
 async function recipeStructured() {
   const a = await addNode('结构数据')
-  await checkPorts(a, '结构数据', ['in-context', 'in-text'], ['out-json'])
-  await card(a).locator('select[aria-label="结构 Schema"]').selectOption('list.items@1')
+  await checkPorts(a, '结构数据', ['in-context'], ['out-json'])
+  await pickOption(card(a).locator('button[aria-label="结构 Schema"]'), '对象列表')
   await win.waitForTimeout(500)
   await editCodeLike(a, '输入 JSON', '[{"id":"s1"},{"id":"s2"},{"id":"s3"}]')
   const badge = card(a).locator('.json-status').first()
@@ -780,7 +874,7 @@ async function recipeStructured() {
   check('结构数据：合法结构运行成功', r.shape.run.status === 'success', JSON.stringify(r.shape.run))
 
   const bad = await addNode('结构数据')
-  await card(bad).locator('select[aria-label="结构 Schema"]').selectOption('list.items@1')
+  await pickOption(card(bad).locator('button[aria-label="结构 Schema"]'), '对象列表')
   await win.waitForTimeout(500)
   await editCodeLike(bad, '输入 JSON', '{"not":"a list"}')
   check(
@@ -810,7 +904,8 @@ async function recipeCode() {
   const ports = await portsOf(a)
   check(
     '代码：默认契约端口渲染（命名输入 + 单个命名输出）',
-    ports.in.includes('in-text') && ports.in.includes('in-json') && ports.out.length === 1,
+    // 空闲态只显示首个类型组（in-text）；in-json 拖线候选时显现，下方连线步骤覆盖。
+    ports.in.includes('in-text') && ports.out.length === 1,
     `in=${ports.in.join('/')} out=${ports.out.join('/')}`
   )
 
@@ -868,8 +963,11 @@ async function recipeCode() {
   check('代码：自定义参数端口可被连线接入', await connect(feedJson, 'out-json', a, prefixPortId))
 
   const prefixRow = card(a).locator('.code-params-section:not(.code-outputs-section) .code-param-row').last()
-  await prefixRow.locator('select.code-param-type').selectOption('object')
-  await prefixRow.locator('select.code-param-cardinality').selectOption('many')
+  await pickOption(prefixRow.locator('button.app-select-trigger.code-param-type'), '对象')
+  await pickOption(prefixRow.locator('button.app-select-trigger.code-param-cardinality'), '多值')
+  // 类型切换后端口从 any 变为 json：等配置落盘再拖线，否则拖线期间端口类型还是旧的。
+  await disk(a, (s) => (s.config.params || []).some((item) => item.name === 'prefix' && item.type === 'object'))
+  log('参数行当前状态：', (await prefixRow.innerText()).replace(/\n/g, ' '))
   const feedJson2 = await addNode('JSON')
   await editCodeLike(feedJson2, '粘贴 JSON', '{"k":"w"}')
   check('代码：many 参数可接第二路同类型输入', await connect(feedJson2, 'out-json', a, prefixPortId))
@@ -891,12 +989,12 @@ async function recipeCode() {
   await win.waitForTimeout(400)
   const firstOutput = outputSection.locator('.code-output-row').nth(0)
   await firstOutput.locator('input.code-param-name').fill('length')
-  await firstOutput.locator('select.code-param-type').selectOption('number')
+  await pickOption(firstOutput.locator('button.app-select-trigger.code-param-type'), '数字')
   await outputSection.locator('.code-params-header button').click()
   await win.waitForTimeout(400)
   const secondOutput = outputSection.locator('.code-output-row').nth(1)
   await secondOutput.locator('input.code-param-name').fill('caption')
-  await secondOutput.locator('select.code-param-type').selectOption('string')
+  await pickOption(secondOutput.locator('button.app-select-trigger.code-param-type'), '文本')
   await editCodeLike(
     a,
     '编辑代码',
@@ -951,7 +1049,7 @@ async function recipeCode() {
 /** 循环：in-list 必填（未连时按钮必须置灰），循环体逐项执行。 */
 async function recipeIterate() {
   const a = await addNode('循环')
-  await checkPorts(a, '循环', ['in-list'], ['out-item', 'out-items'])
+  await checkPorts(a, '循环', ['in-list'], ['out-item'])
   const st = await statusOf(a)
   check(
     '循环：未接列表时运行按钮置灰并写明缺少输入',
@@ -962,7 +1060,7 @@ async function recipeIterate() {
 
   // 列表来源：结构数据节点选「对象列表」Schema，它的 out-json 才是 list.items@1。
   const list = await addNode('结构数据')
-  await card(list).locator('select[aria-label="结构 Schema"]').selectOption('list.items@1')
+  await pickOption(card(list).locator('button[aria-label="结构 Schema"]'), '对象列表')
   await win.waitForTimeout(500)
   await editCodeLike(list, '输入 JSON', '[{"id":"s1"},{"id":"s2"},{"id":"s3"}]')
   check('循环：符合 list.items 的结构数据可接入 in-list', await connect(list, 'out-json', a, 'in-list'))
@@ -1195,7 +1293,7 @@ async function recipeSplit() {
   const { created } = await dropAsset(FIX.png, 'rgb-640x480.png', 'image/png')
   const src = created[0].id
   const split = await addNode('拆分')
-  await checkPorts(split, '图片拆分', ['in-image'], ['out-image', 'out-images'])
+  await checkPorts(split, '图片拆分', ['in-image'], ['out-image'])
   const empty = await statusOf(split)
   check('图片拆分：未接原图时按钮置灰并写明缺少输入', empty.disabled === true && /缺少输入/.test(empty.aria), empty.aria)
   check('图片拆分：out-image → in-image 建连', await connect(src, 'out-image', split, 'in-image'))
@@ -1215,7 +1313,7 @@ async function recipeSplit() {
 /** 文件节点：空态诚实；文本类文件走拖拽导入时按契约进文本节点正文。 */
 async function recipeFile() {
   const f = await addNode('文件')
-  await checkPorts(f, '文件', [], ['out-file', 'out-text'])
+  await checkPorts(f, '文件', [], ['out-file'])
   const body = await card(f).innerText()
   check('文件：空卡片说清要导入什么', /导入|拖入|支持/.test(body), body.replace(/\n+/g, ' / ').slice(0, 120))
   const r = await runNode(f)
@@ -1264,7 +1362,7 @@ async function allCards() {
 async function runClipOnFixtureVideo() {
   const src = await dropVideo()
   const clip = await addNode('视频截取')
-  await checkPorts(clip, '视频截取', ['in-video'], ['out-video', 'out-audio'])
+  await checkPorts(clip, '视频截取', ['in-video'], ['out-video'])
   if (!(await connect(src, 'out-video', clip, 'in-video')))
     throw new Error('视频截取：out-video → in-video 建连失败')
   const r = await runNode(clip)
@@ -1626,36 +1724,18 @@ async function recipeAudio() {
   const r = await runNode(audio.id)
   check('音频：运行后把自身音频交给下游', r.shape.run.status === 'success', JSON.stringify(r.shape.run.error ?? r.shape.run.status))
 
-  const sep = await addNode('人声分离')
-  await checkPorts(sep, '人声分离', ['in-audio'], ['out-audio'])
-  check('人声分离：out-audio → in-audio 建连', await connect(audio.id, 'out-audio', sep, 'in-audio'))
-  const rs = await runNode(sep)
-  check('人声分离：快速模式运行成功', rs.shape.run.status === 'success', JSON.stringify(rs.shape.run.error ?? rs.shape.run.status))
-  const result = obj(rs.shape.resultRaw)
-  check(
-    '人声分离：人声轨是真实存在的音频文件',
-    Boolean(result.vocals) && assetOnDisk(result.vocals.mediaPath),
-    JSON.stringify(result.vocals && result.vocals.mediaPath)
-  )
-  if (result.vocals && assetOnDisk(result.vocals.mediaPath)) {
-    const seconds = probeDuration(path.join(DATA_DIR, result.vocals.mediaPath))
-    check('人声分离：人声轨时长与源音频同量级', seconds > 0.5 && seconds <= 5, `${seconds}s`)
-  }
-  await shot('vocal-separate-output')
+  // 人声分离节点 2026-09-25 退役：新流程由视频操作在同一次任务内产出人声，
+  // 创建入口必须不再出现，否则用户会建出一个不再维护的节点。
+  check('人声分离：已退役节点不再出现在创建入口', await nodeButtonAbsent('人声分离'))
+  await shot('vocal-separate-retired')
   await reload()
-  check('人声分离：重载后运行结果仍在', Boolean(obj((await disk(sep)).resultRaw).vocals))
-  check('音频：源卡与产物卡重载后都还在', (await allCards()).filter((c) => c.type === 'audio').length >= 2, JSON.stringify((await allCards()).map((c) => c.type)))
+  check('音频：源卡与产物卡重载后都还在', (await allCards()).filter((c) => c.type === 'audio').length >= 1, JSON.stringify((await allCards()).map((c) => c.type)))
 }
 
 /** 导演台：卡片摘要 → 打开预演台 → 发布当前帧 → 产物与漂移状态 → 重载。 */
 async function recipeDirector() {
   const d = await addNode('3D 预演台')
-  await checkPorts(
-    d,
-    '导演台',
-    ['in-storyboard', 'in-reference-images', 'in-camera-preset'],
-    ['out-frame', 'out-preview-video', 'out-camera', 'out-project']
-  )
+  await checkPorts(d, '导演台', ['in-storyboard'], ['out-frame'])
   const summary = await card(d).innerText()
   check('导演台：卡片未发布时说清当前状态', /尚未发布|已发布/.test(summary), summary.replace(/\n+/g, ' / ').slice(0, 120))
   const st = await statusOf(d)
@@ -1669,7 +1749,7 @@ async function recipeDirector() {
   check('导演台：预演台以对话框打开', (await win.locator('[role="dialog"][aria-label="3D 预演台"]').count()) === 1)
   await shot('director-opened')
 
-  await win.locator('button[title="发布当前预演帧"]').click()
+  await win.locator('button[aria-label="发布当前预演帧"]').click()
   let note = ''
   for (let i = 0; i < 25; i += 1) {
     await win.waitForTimeout(800)
@@ -1681,7 +1761,7 @@ async function recipeDirector() {
   check('导演台：发布记录写进 meta.nodeResult', Boolean(shape.resultRaw), JSON.stringify(shape.resultRaw).slice(0, 120))
 
   // 发布的帧不自动长卡，而是作为 out-frame 端口供下游取用——那就让裁剪节点真去吃它。
-  const close = win.locator('button[title="关闭 3D 预演台"]')
+  const close = win.locator('button[aria-label="关闭 3D 预演台"]')
   if (await close.count()) await close.click()
   else await win.keyboard.press('Escape')
   await win.locator('.director-studio').waitFor({ state: 'detached', timeout: 10000 })
@@ -1738,7 +1818,7 @@ async function recipeCancelResume() {
   const TOTAL = 4
   // 每项一个 2 秒忙等的代码节点：单项远低于代码运行的 10 秒上限，整轮却够长，能在中途停下。
   const list = await addNode('结构数据')
-  await card(list).locator('select[aria-label="结构 Schema"]').selectOption('list.items@1')
+  await pickOption(card(list).locator('button[aria-label="结构 Schema"]'), '对象列表')
   await win.waitForTimeout(500)
   await editCodeLike(
     list,
@@ -1812,12 +1892,14 @@ async function recipeCancelResume() {
   await shot('cancel-mid-run')
 
   // 续跑：只补未完成项，已完成的必须复用而不是重跑
-  await card(loop).locator('.iterate-config select').first().selectOption('resume')
+  // 运行策略是 iterate-config 里的第二个 AppSelect（上限是数字输入，之后依次为 运行/失败时）。
+  const runModeSelect = card(loop).locator('.iterate-config .app-select-trigger').first()
+  await pickOption(runModeSelect, '续跑未完成')
   await win.waitForTimeout(900)
   check(
     '停止续跑：运行策略下拉能切到「续跑未完成」',
-    (await card(loop).locator('.iterate-config select').first().inputValue()) === 'resume',
-    await card(loop).locator('.iterate-config select').first().inputValue()
+    (await runModeSelect.innerText()).includes('续跑未完成'),
+    await runModeSelect.innerText()
   )
   await runAll.click()
   await win.waitForTimeout(1000)
