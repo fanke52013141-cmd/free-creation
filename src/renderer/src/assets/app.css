@@ -12263,3 +12263,36 @@ canvas.tl-canvas-indicators {
   width: 100%;
   min-width: 0;
 }
+
+/* ── L05 运行中心流程时间线 ── */
+.run-timeline {
+  margin: 6px 0 2px;
+  border-left: 2px solid var(--border, #d5d5d5);
+  padding-left: 10px;
+}
+.run-timeline ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.run-timeline-item {
+  display: flex;
+  flex-direction: column;
+}
+.run-timeline-item small {
+  color: var(--text-secondary, #888);
+  font-family: var(--font-mono, monospace);
+}
+.run-timeline-item.level-error span,
+.run-timeline-item.level-fatal span {
+  color: var(--danger, #c0392b);
+}
+.run-timeline-item.level-warn span {
+  color: var(--warning, #b7791f);
+}
+.run-timeline-incomplete {
+  color: var(--warning, #b7791f);
+}

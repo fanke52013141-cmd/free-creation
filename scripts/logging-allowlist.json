@@ -1,0 +1,5 @@
+{
+  "excludedPaths": ["src/renderer/src/dev/", "src/main/model-smoke.ts", "qa/", "artifacts/", "results/"],
+  "files": [],
+  "_说明": "excludedPaths 内的文件跳过旁路检查：dev/browserMock 是浏览器演示 mock（无 main 诊断存储，接受即丢弃）；model-smoke.ts 的 console 是 --model-smoke-test 的 stdout 报告通道（无界面验收输出）；qa/ 与 artifacts/、results/ 是一次性 QA 探测脚本与验收产物，不属于应用业务代码。新条目必须带理由登记；密钥/正文禁止项不可通过本清单豁免。"
+}

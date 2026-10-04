@@ -57,5 +57,8 @@ jobs:
       - name: 模型运行时测试
         run: pnpm test:model
 
+      - name: 日志门禁（旁路/缺诊断接入）
+        run: pnpm verify:logging
+
       - name: 生产构建（Windows）
         run: pnpm build
