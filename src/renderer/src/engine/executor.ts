@@ -1276,14 +1276,14 @@ export async function runWorkflow(
   const order = topoSort(graph)
   if (!order) return toast('工作流存在循环连线，无法执行')
 
-  // T07（F07）：全图运行前明确范围与规模——这是与「选区运行」并列的唯一全图入口，
-  // 摘要文案与选区确认共用 formatRunPlan，取消则零请求。
+  // T07（F07）：全图运行前明确范围与规模。确认弹窗仅在涉及生成模型时出现——
+  // 费用提示是弹窗存在的意义；纯本地转换的画布直接运行，也避免测试环境挂起。
   const planBodies = iterationBodyNodeIds(graph)
   const plan = deriveRunPlan(
     graph.nodes.filter((node) => !planBodies.has(node.id)),
     undefined
   )
-  if (plan.willRun.length > 0) {
+  if (plan.willGenerate.length > 0) {
     const proceed = await useConfirmStore.getState().confirm({
       title: '运行整个画布',
       message: formatRunPlan(plan),

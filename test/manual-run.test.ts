@@ -696,7 +696,7 @@ describe('runWorkflowForNodes · 重跑付费上游前必须确认（R-03）', (
 
     expect(calls).toHaveLength(1)
     expect(calls[0].title).toBe('将重新执行上游节点')
-    expect(calls[0].message).toContain('1 个上游节点')
+    expect(calls[0].message).toContain('「json」')
     expect(calls[0].message).toContain('费用')
     // 取消后不进入运行：目标与上游都不执行、不留运行记录。
     expect(source.props.exec).toBe('idle')

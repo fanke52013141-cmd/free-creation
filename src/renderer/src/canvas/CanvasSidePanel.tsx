@@ -18,6 +18,7 @@ import { addNodeLibraryEntry } from './node-library'
 import { markUndoPoint } from './history'
 import { toast } from '../stores/toast'
 import { useConfirmStore } from '../stores/confirm'
+import { mapRunError, statusText } from '../engine/error-mapping'
 import { checkSnapshotMedia } from './snapshot-restore'
 import { useHistorySnapshots, type HistorySnapshot } from '../stores/history-snapshots'
 import { Icon, type IconName } from '../components/Icon'
@@ -358,18 +359,22 @@ function RunsPanel({
                     {run.isLatest ? ' · 最近' : ''}
                   </small>
                 </div>
-                <span className={`run-status ${run.status}`}>{run.status}</span>
+                <span className={`run-status ${run.status}`}>{statusText(run.status)}</span>
               </div>
               <small className="run-id">{run.runId}</small>
               <p className="run-inputs">输入：{runInputSummary(run)}</p>
               {run.outputPorts && (
                 <p className="run-outputs">输出：{run.outputPorts.join('、') || '无'}</p>
               )}
-              {run.error && (
-                <p className="run-error">
-                  {run.error.phase}：{run.error.reason}
-                </p>
-              )}
+              {(() => {
+                const guidance = mapRunError(run.status, run.error)
+                return guidance ? (
+                  <div className="run-error">
+                    <p>{guidance.stage}：{guidance.reason}</p>
+                    <p className="run-error-action">{guidance.action}</p>
+                  </div>
+                ) : null
+              })()}
               {run.traceId && (
                 <div className="run-card-actions">
                   <button
