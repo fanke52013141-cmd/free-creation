@@ -53,7 +53,8 @@ async function main() {
       (n) =>
         Array.from(document.querySelectorAll('.node-card-wrap')).filter(
           (w) => w.getBoundingClientRect().height > 0
-        ).length === n + 1,
+        ).length ===
+        n + 1,
       before
     )
     if (!ok) return null
@@ -77,7 +78,9 @@ async function main() {
       return {
         aria: status?.getAttribute('aria-label') ?? '',
         toastText: toasts.join(' | ').slice(0, 200),
-        hasRawException: toasts.some((t) => /Cannot read properties|is not a function|undefined/i.test(t))
+        hasRawException: toasts.some((t) =>
+          /Cannot read properties|is not a function|undefined/i.test(t)
+        )
       }
     }, id)
   }
@@ -87,7 +90,9 @@ async function main() {
   // 1) 生图：填提示词后运行（演示模型绑定 ok 场景）
   const gen = await addNode('展开图片创作', '添加生图节点')
   if (gen) {
-    await page.locator(`.node-card-wrap[data-node-id="${gen}"] textarea.gen-prompt`).fill('蓝色立方体')
+    await page
+      .locator(`.node-card-wrap[data-node-id="${gen}"] textarea.gen-prompt`)
+      .fill('蓝色立方体')
     results.imageGen = await runAndGetState(gen)
     await page.locator(`.node-card-wrap[data-node-id="${gen}"]`).screenshot({
       path: `${__dirname}/t01-imagegen-run.png`
@@ -97,12 +102,10 @@ async function main() {
   // 2) AI 处理：启用后建卡运行
   await page.getByRole('button', { name: '项目菜单', exact: true }).click()
   await page.waitForSelector('.node-menu-item', { timeout: 5000 })
-  await page
-    .getByRole('button', { name: '工作台节点设置', exact: true })
-    .evaluate((el) => {
-      el.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }))
-      el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    })
+  await page.getByRole('button', { name: '工作台节点设置', exact: true }).evaluate((el) => {
+    el.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }))
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  })
   await page.waitForSelector('.project-create-dialog', { timeout: 5000 })
   const box = page.getByRole('checkbox', { name: 'AI 处理', exact: true })
   if ((await box.count()) > 0 && !(await box.isChecked())) await box.click()

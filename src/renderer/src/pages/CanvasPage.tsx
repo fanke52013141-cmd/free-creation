@@ -13,6 +13,7 @@ import { CanvasTopHistory } from '../canvas/CanvasHistoryDock'
 import { CanvasTransferMenu } from '../canvas/CanvasTransferMenu'
 import { ProjectCreateDialog } from '../components/ProjectCreateDialog'
 import { SaveStatusBadge } from '../components/SaveStatusBadge'
+import { toast } from '../stores/toast'
 
 interface CanvasPageProps {
   projectId: string
@@ -21,6 +22,8 @@ interface CanvasPageProps {
 export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
   const [file, setFile] = useState<ProjectFile | null>(null)
   const [loading, setLoading] = useState(true)
+  const [recoveryPrompt, setRecoveryPrompt] = useState(false)
+  const [recoveryBusy, setRecoveryBusy] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const setHome = useAppStore((s) => s.setHome)
@@ -70,6 +73,13 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
       if (res.ok && res.data) {
         setFile(res.data)
         openProject(res.data.meta)
+        // T04（F01）：上次关窗冲突写入的恢复副本 → 请用户裁决后才进入画布
+        try {
+          const rec = await window.api.hasRecoveryCopy({ id: projectId })
+          if (!cancelled && rec.ok && rec.data) setRecoveryPrompt(true)
+        } catch {
+          // 检测失败不阻断打开
+        }
       } else {
         setHome()
       }
@@ -80,6 +90,29 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
+
+  // T04：恢复副本裁决。「使用副本」经主进程正式落盘（推进版本、磁盘旧版进 .bak）；
+  // 「丢弃副本」保留磁盘版本，两者都会移除副本文件。
+  const resolveRecovery = async (useRecovery: boolean): Promise<void> => {
+    setRecoveryBusy(true)
+    try {
+      if (useRecovery) {
+        const restored = await window.api.restoreRecoveryCopy({ id: projectId })
+        if (restored.ok && restored.data) {
+          setFile(restored.data)
+          openProject(restored.data.meta)
+        } else {
+          toast('恢复副本读取失败，已保留磁盘版本')
+          await window.api.discardRecoveryCopy({ id: projectId }).catch(() => undefined)
+        }
+      } else {
+        await window.api.discardRecoveryCopy({ id: projectId }).catch(() => undefined)
+      }
+      setRecoveryPrompt(false)
+    } finally {
+      setRecoveryBusy(false)
+    }
+  }
 
   const commitRename = async (): Promise<void> => {
     setRenaming(false)
@@ -92,10 +125,7 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
     }
   }
 
-  const createProject = async (
-    name: string,
-    workspaceProfile: WorkspaceProfile
-  ): Promise<void> => {
+  const createProject = async (name: string, workspaceProfile: WorkspaceProfile): Promise<void> => {
     const result = await window.api.createProject({ name, workspaceProfile })
     if (!result.ok) throw new Error(result.error.message)
     setShowCreateDialog(false)
@@ -109,17 +139,88 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
     const result = await window.api.saveWorkspaceProfile({ projectId, workspaceProfile })
     if (!result.ok) throw new Error(result.error.message)
     if (!result.data) throw new Error('项目不存在，工作台设置未保存')
-    setFile((current) => current ? {
-      ...current,
-      meta: result.data!,
-      workspaceProfile
-    } : current)
+    setFile((current) =>
+      current
+        ? {
+            ...current,
+            meta: result.data!,
+            workspaceProfile
+          }
+        : current
+    )
     openProject(result.data)
     setShowWorkspaceDialog(false)
   }
 
   if (loading) {
     return <div className="canvas-loading">打开项目中…</div>
+  }
+  // T04（F01）：上次关窗冲突留下的恢复副本——进入画布前请用户裁决。
+  if (recoveryPrompt && file) {
+    return (
+      <div className="canvas-loading">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="检测到未保存副本"
+          style={{
+            maxWidth: 460,
+            padding: '20px 22px',
+            border: '1px solid var(--line)',
+            borderRadius: 12,
+            background: 'var(--card)'
+          }}
+        >
+          <h2 style={{ margin: '0 0 10px', fontSize: 16 }}>检测到上次关闭时的未保存副本</h2>
+          <p style={{ margin: '0 0 8px', fontSize: 13, lineHeight: 1.6 }}>
+            上次关闭时，本项目的保存与外部修改发生冲突。你关闭前的最后视图已保存为
+            <strong> 恢复副本</strong>；当前磁盘上是另一份版本（未受影响）。
+          </p>
+          <p style={{ margin: '0 0 16px', fontSize: 12, color: 'var(--muted)' }}>
+            选择「使用恢复副本」会把副本内容正式保存为新版本（当前磁盘版本会备份为 .bak
+            可回退）；选择「保留磁盘版本」将丢弃副本，此操作不可撤销。
+          </p>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              disabled={recoveryBusy}
+              onClick={() => void resolveRecovery(false)}
+              style={{
+                minHeight: 32,
+                padding: '6px 14px',
+                borderRadius: 7,
+                border: '1px solid var(--line)',
+                background: 'var(--card)',
+                color: 'var(--txt)',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: recoveryBusy ? 'wait' : 'pointer'
+              }}
+            >
+              保留磁盘版本
+            </button>
+            <button
+              type="button"
+              disabled={recoveryBusy}
+              onClick={() => void resolveRecovery(true)}
+              style={{
+                minHeight: 32,
+                padding: '6px 14px',
+                borderRadius: 7,
+                border: '1px solid rgba(103, 190, 215, 0.38)',
+                background: 'var(--brand)',
+                color: '#0b1726',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: recoveryBusy ? 'wait' : 'pointer'
+              }}
+            >
+              {recoveryBusy ? '恢复中…' : '使用恢复副本'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
   if (!file) {
     return <div className="canvas-loading">项目不存在</div>

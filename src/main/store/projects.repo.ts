@@ -17,10 +17,7 @@ import {
 import { basename, join } from 'path'
 import type { ProjectFile, ProjectMeta } from '../../shared/types'
 import type { WorkspaceProfile } from '../../shared/workspace-profile'
-import {
-  defaultWorkspaceProfile,
-  normalizeWorkspaceProfile
-} from '../../shared/workspace-profile'
+import { defaultWorkspaceProfile, normalizeWorkspaceProfile } from '../../shared/workspace-profile'
 import { remapMediaReferences } from '../../shared/media-reference-remap'
 import {
   GraphVersionConflictError,
@@ -132,10 +129,7 @@ export function createProject(name: string, workspaceProfile?: WorkspaceProfile)
 }
 
 /** Update only workspace visibility without advancing the graph's optimistic-lock version. */
-export function saveWorkspaceProfile(
-  id: string,
-  value: WorkspaceProfile
-): ProjectMeta | null {
+export function saveWorkspaceProfile(id: string, value: WorkspaceProfile): ProjectMeta | null {
   const profile = normalizeWorkspaceProfile(value)
   if (!profile) throw new Error('工作台节点配置无效')
   if (!getProject(id)) return null
@@ -217,14 +211,15 @@ function stopRunningClonedJobs(value: unknown, now: number): unknown {
   for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
     if (key === 'nodeRun' && child && typeof child === 'object') {
       const record = child as Record<string, unknown>
-      output[key] = record.status === 'running'
-        ? {
-            ...record,
-            status: 'cancelled',
-            finishedAt: now,
-            error: { phase: 'execution', reason: '项目副本不会继续源项目中的运行任务' }
-          }
-        : child
+      output[key] =
+        record.status === 'running'
+          ? {
+              ...record,
+              status: 'cancelled',
+              finishedAt: now,
+              error: { phase: 'execution', reason: '项目副本不会继续源项目中的运行任务' }
+            }
+          : child
     } else {
       output[key] = stopRunningClonedJobs(child, now)
     }
@@ -234,15 +229,14 @@ function stopRunningClonedJobs(value: unknown, now: number): unknown {
 
 function freshCloneEntityId(value: string): string {
   const separator = value.indexOf(':')
-  return separator > 0
-    ? `${value.slice(0, separator)}:${nanoid(12)}`
-    : nanoid(12)
+  return separator > 0 ? `${value.slice(0, separator)}:${nanoid(12)}` : nanoid(12)
 }
 
 function cloneEntityIdMap(file: ProjectFile, newProjectId: string): Map<string, string> {
   const ids = new Map<string, string>([[file.meta.id, newProjectId]])
   const add = (value: unknown): void => {
-    if (typeof value === 'string' && value && !ids.has(value)) ids.set(value, freshCloneEntityId(value))
+    if (typeof value === 'string' && value && !ids.has(value))
+      ids.set(value, freshCloneEntityId(value))
   }
   file.nodes.forEach((node) => add(node.id))
   file.edges.forEach((edge) => add(edge.id))
@@ -255,15 +249,20 @@ function cloneEntityIdMap(file: ProjectFile, newProjectId: string): Map<string, 
   for (const [key, raw] of Object.entries(store as Record<string, unknown>)) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue
     const record = raw as { typeName?: unknown; id?: unknown }
-    if (record.typeName === 'shape' || record.typeName === 'binding' ||
-      record.typeName === 'page' || record.typeName === 'asset' ||
-      record.typeName === 'instance_page_state') {
+    if (
+      record.typeName === 'shape' ||
+      record.typeName === 'binding' ||
+      record.typeName === 'page' ||
+      record.typeName === 'asset' ||
+      record.typeName === 'instance_page_state'
+    ) {
       add(typeof record.id === 'string' ? record.id : key)
     }
   }
   // tldraw camera records are keyed by their page ID rather than owning a standalone ID.
   for (const [key, raw] of Object.entries(store as Record<string, unknown>)) {
-    if (!key.startsWith('camera:') || !raw || typeof raw !== 'object' || Array.isArray(raw)) continue
+    if (!key.startsWith('camera:') || !raw || typeof raw !== 'object' || Array.isArray(raw))
+      continue
     const pageId = key.slice('camera:'.length)
     const clonedPageId = ids.get(pageId)
     if (clonedPageId) ids.set(key, `camera:${clonedPageId}`)
@@ -310,7 +309,8 @@ export function cloneProject(sourceId: string, requestedName: string): ProjectMe
       const sourcePath = join(dataRoot, 'projects', sourceId, 'media', fileName)
       if (!existsSync(sourcePath)) throw new Error(`项目媒体文件缺失：${fileName}`)
       const sourceStats = lstatSync(sourcePath)
-      if (!sourceStats.isFile() || sourceStats.isSymbolicLink()) throw new Error(`项目媒体文件类型无效：${fileName}`)
+      if (!sourceStats.isFile() || sourceStats.isSymbolicLink())
+        throw new Error(`项目媒体文件类型无效：${fileName}`)
       const actualBytes = sourceStats.size
       if (actualBytes !== row.size_bytes) throw new Error(`项目媒体文件大小异常：${fileName}`)
       const newId = nanoid(10)
@@ -351,11 +351,13 @@ export function cloneProject(sourceId: string, requestedName: string): ProjectMe
     writeFileSync(join(stagingDir, 'project.json'), JSON.stringify(clonedFile, null, 2), 'utf-8')
 
     const database = getDb()
-    const usageRows = database.prepare(
-      `SELECT resource_id, revision_id, component_ids_json, project_media_ids_json,
+    const usageRows = database
+      .prepare(
+        `SELECT resource_id, revision_id, component_ids_json, project_media_ids_json,
         materialized_node_ids_json, created_at, last_used_at
        FROM library_usages WHERE project_id = ?`
-    ).all(sourceId) as Array<{
+      )
+      .all(sourceId) as Array<{
       resource_id: string
       revision_id: string
       component_ids_json: string
@@ -388,7 +390,7 @@ export function cloneProject(sourceId: string, requestedName: string): ProjectMe
         name,
         now,
         now,
-        sourceMeta.coverMediaId ? ids.get(sourceMeta.coverMediaId) ?? null : null
+        sourceMeta.coverMediaId ? (ids.get(sourceMeta.coverMediaId) ?? null) : null
       )
       for (const row of clonedRows) {
         insertMedia.run(
@@ -408,17 +410,27 @@ export function cloneProject(sourceId: string, requestedName: string): ProjectMe
         const remapJsonIds = (value: string): string => {
           try {
             const parsed = JSON.parse(value) as unknown
-            return JSON.stringify(Array.isArray(parsed)
-              ? parsed.map((item) => typeof item === 'string' ? entityIds.get(item) ?? item : item)
-              : parsed)
+            return JSON.stringify(
+              Array.isArray(parsed)
+                ? parsed.map((item) =>
+                    typeof item === 'string' ? (entityIds.get(item) ?? item) : item
+                  )
+                : parsed
+            )
           } catch {
             return value
           }
         }
         insertUsage.run(
-          nanoid(12), id, row.resource_id, row.revision_id, row.component_ids_json,
-          remapJsonIds(row.project_media_ids_json), remapJsonIds(row.materialized_node_ids_json),
-          now, now
+          nanoid(12),
+          id,
+          row.resource_id,
+          row.revision_id,
+          row.component_ids_json,
+          remapJsonIds(row.project_media_ids_json),
+          remapJsonIds(row.materialized_node_ids_json),
+          now,
+          now
         )
       }
     })()
@@ -664,6 +676,30 @@ export function discardRecoveryCopy(id: string): boolean {
   } catch {
     return false
   }
+}
+
+/**
+ * T04：把恢复副本正式落盘（用户在打开项目时选择「使用恢复副本」）。
+ * 走 saveProject 正式写路径（写锁 + .bak 轮转 + DB 版本推进），expectedGraphVersion
+ * 省略是有意为之——副本语义就是「以此内容为准」；外部版本进入 .bak 可回退。
+ * 成功后删除副本并返回重开后的项目文件；副本缺失/项目缺失返回 null。
+ */
+export function restoreRecoveryCopy(id: string): ProjectFile | null {
+  const copy = readRecoveryCopy(id)
+  if (!copy) return null
+  const restored = saveProject({
+    id,
+    tldrawSnapshot: copy.tldrawSnapshot,
+    graph: {
+      nodes: copy.nodes,
+      edges: copy.edges,
+      groups: copy.groups
+    },
+    expectedGraphVersion: undefined
+  })
+  if (!restored) return null
+  discardRecoveryCopy(id)
+  return openProject(id)
 }
 
 export function purgeProjectFiles(id: string): void {

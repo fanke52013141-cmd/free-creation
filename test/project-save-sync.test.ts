@@ -117,6 +117,23 @@ vi.mock('../src/main/store/projects.repo', async () => {
     discardRecoveryCopy: (input: { id: string }) => {
       rmSync(join(ipcState.projectsDir, input.id, 'project.json.local-recovery'), { force: true })
       return true
+    },
+    // T04：副本正式落盘 = 经 saveProject 走完整写路径（推进版本），随后删副本
+    restoreRecoveryCopy: (input: { id: string }) => {
+      const recPath = join(ipcState.projectsDir, input.id, 'project.json.local-recovery')
+      const copy = JSON.parse(readFileSync(recPath, 'utf-8')) as {
+        tldrawSnapshot?: unknown
+      }
+      const mainPath = join(ipcState.projectsDir, input.id, 'project.json')
+      const file = JSON.parse(readFileSync(mainPath, 'utf-8')) as {
+        meta: { graphVersion: number }
+      }
+      const next = file.meta.graphVersion + 1
+      file.tldrawSnapshot = copy.tldrawSnapshot
+      file.meta.graphVersion = next
+      writeFileSync(mainPath, JSON.stringify(file, null, 2), 'utf-8')
+      rmSync(recPath, { force: true })
+      return file
     }
   }
 })
