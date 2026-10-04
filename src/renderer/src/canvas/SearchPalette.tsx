@@ -1,13 +1,16 @@
 // Search the current canvas and reusable entries saved in the node library.
+// T02：新增「创建工具」分组——搜索即可创建节点（F04：搜索承担创建入口）。
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { stopEventPropagation, type TLShapeId, type Editor } from 'tldraw'
 import type { NodeCardShape } from './NodeCardShape'
-import { getNodeType } from '../nodes/registry'
+import { getNodeType, allNodeTypes } from '../nodes/registry'
 import { useSearchStore } from '../stores/search'
 import { useWorkflowStore, type WorkflowTemplate } from '../stores/workflow'
 import { addNodeLibraryEntry } from './node-library'
+import { aliasMatches } from './node-aliases'
 import { Icon } from '../components/Icon'
 import { toast } from '../stores/toast'
+import type { NodeTypeId } from '@shared/types'
 
 interface CanvasSearchHit {
   id: TLShapeId
@@ -22,13 +25,25 @@ interface LibrarySearchHit {
   snippet: string
 }
 
-export function SearchPalette({ editor }: { editor: Editor }): React.JSX.Element | null {
+export function SearchPalette({
+  editor,
+  onCreateNode
+}: {
+  editor: Editor
+  onCreateNode?: (type: NodeTypeId) => void
+}): React.JSX.Element | null {
   const open = useSearchStore((s) => s.open)
   if (!open) return null
-  return <SearchPaletteInner editor={editor} />
+  return <SearchPaletteInner editor={editor} onCreateNode={onCreateNode} />
 }
 
-function SearchPaletteInner({ editor }: { editor: Editor }): React.JSX.Element {
+function SearchPaletteInner({
+  editor,
+  onCreateNode
+}: {
+  editor: Editor
+  onCreateNode?: (type: NodeTypeId) => void
+}): React.JSX.Element | null {
   const close = useSearchStore((s) => s.close)
   const templates = useWorkflowStore((s) => s.templates)
   const loadLibrary = useWorkflowStore((s) => s.load)
@@ -54,6 +69,22 @@ function SearchPaletteInner({ editor }: { editor: Editor }): React.JSX.Element {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [close])
+
+  // T02（F04）：创建工具分组——按名称/描述/别名匹配全部可创建节点。
+  const creatableSpecs = useMemo(() => allNodeTypes(), [])
+  const createHits = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase()
+    if (!needle) return []
+    const out: Array<{ type: NodeTypeId; title: string; snippet: string }> = []
+    for (const spec of creatableSpecs) {
+      const label = spec.label.toLocaleLowerCase()
+      const desc = (spec.description ?? '').toLocaleLowerCase()
+      if (label.includes(needle) || desc.includes(needle) || aliasMatches(needle, spec.type)) {
+        out.push({ type: spec.type, title: spec.label, snippet: spec.description ?? '' })
+      }
+    }
+    return out.slice(0, 30)
+  }, [creatableSpecs, query])
 
   const matches = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase()
@@ -158,10 +189,40 @@ function SearchPaletteInner({ editor }: { editor: Editor }): React.JSX.Element {
         </div>
         {query.trim() && (
           <div className="search-results" aria-live="polite">
-            {matches.canvas.length === 0 && matches.library.length === 0 ? (
-              <div className="search-empty">未找到匹配的画布节点或节点库条目</div>
+            {createHits.length === 0 &&
+            matches.canvas.length === 0 &&
+            matches.library.length === 0 ? (
+              <div className="search-empty">未找到匹配的创建工具、画布节点或节点库条目</div>
             ) : (
               <>
+                {createHits.length > 0 && (
+                  <section className="search-result-group" aria-label="创建工具">
+                    <h3>创建工具</h3>
+                    {createHits.map((hit) => (
+                      <button
+                        key={hit.type}
+                        className="search-hit"
+                        aria-label={`创建节点：${hit.title}`}
+                        onClick={() => {
+                          onCreateNode?.(hit.type)
+                          close()
+                        }}
+                        onPointerDown={(event) => stopEventPropagation(event)}
+                      >
+                        <span className="search-hit-icon">
+                          <Icon name={getNodeType(hit.type)?.icon ?? 'help'} size={18} />
+                        </span>
+                        <div className="search-hit-info">
+                          <span className="search-hit-title">
+                            创建：{hit.title}
+                            <span className="search-hit-action">创建</span>
+                          </span>
+                          {hit.snippet && <span className="search-hit-snippet">{hit.snippet}</span>}
+                        </div>
+                      </button>
+                    ))}
+                  </section>
+                )}
                 {matches.canvas.length > 0 && (
                   <section className="search-result-group" aria-label="画布节点">
                     <h3>画布节点</h3>

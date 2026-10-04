@@ -1984,7 +1984,7 @@ export function CanvasEditor({
         />
       )}
       {/* 搜索覆盖层（顶栏按钮触发，在 Tldraw 同级渲染） */}
-      {editorInstance && <SearchPalette editor={editorInstance} />}
+      {editorInstance && <SearchPalette editor={editorInstance} onCreateNode={handleNodePick} />}
       {editorInstance && <ResourceInsertRequest editor={editorInstance} projectId={project.id} />}
       {editorInstance && workflowSaveSelection && (
         <WorkflowSaveDialog
