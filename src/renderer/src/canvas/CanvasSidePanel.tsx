@@ -124,7 +124,7 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
       </label>
       {templates.length === 0 ? (
         <div className="side-panel-empty">
-          节点库还是空的。右键点击画布节点，选择「保存到节点库」；也可以多选节点后使用浮动工具栏保存。
+          节点库还是空的。右键点击画布节点，选择「保存为可复用内容」中的流程模板；也可以多选节点后使用浮动工具栏保存。
         </div>
       ) : visibleTemplates.length === 0 ? (
         <div className="side-panel-empty">没有找到匹配的节点库条目。</div>

@@ -38,7 +38,7 @@ describe('SQLite user_version migrations', () => {
     expect(state.pragmas).toEqual(
       Array.from({ length: DB_SCHEMA_VERSION }, (_value, index) => `user_version = ${index + 1}`)
     )
-    expect(schemaExecs(state.execs).at(-1)).toContain('CREATE TABLE IF NOT EXISTS library_folders')
+    expect(schemaExecs(state.execs).at(-1)).toContain('CREATE TABLE IF NOT EXISTS artifact_recipes')
   })
 
   it('每个迁移整体包在单个事务里：迁移语句与 user_version 推进同提交', () => {
@@ -109,6 +109,7 @@ describe('SQLite user_version migrations', () => {
       .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'library_folders'`)
       .get()
     expect(folders).toBeDefined()
+    expect(sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'artifact_recipes'").get()).toBeDefined()
     sqlite.close()
   })
 

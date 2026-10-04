@@ -8,7 +8,7 @@ export interface MigrationDatabase {
   pragma(statement: string, options?: { simple?: boolean }): unknown
 }
 
-export const DB_SCHEMA_VERSION = 9
+export const DB_SCHEMA_VERSION = 10
 
 const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
@@ -111,8 +111,7 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
       CREATE INDEX IF NOT EXISTS idx_agent_idempotency_pending
         ON agent_idempotency(status, updated_at);
     `)
-  }
-  ,
+  },
   // M5 模型模块：全新数据域。这里不转换或读取旧 providers 表；旧设置不会被新模块继承。
   (database) => {
     database.exec(`
@@ -286,8 +285,12 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
       INSERT OR IGNORE INTO library_resource_folders (folder_id, resource_id, added_at)
         SELECT collection_id, resource_id, added_at FROM library_collection_items;
     `)
+  },
+  (database) => {
+    database.exec(`CREATE TABLE IF NOT EXISTS artifact_recipes (
+      media_id TEXT PRIMARY KEY, project_id TEXT NOT NULL, recipe_json TEXT NOT NULL
+    ); CREATE INDEX IF NOT EXISTS idx_artifact_recipes_project ON artifact_recipes(project_id);`)
   }
-
 ]
 
 /**

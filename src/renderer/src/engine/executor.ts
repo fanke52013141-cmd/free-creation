@@ -27,6 +27,8 @@ import { iterationItemValue } from '@shared/engine/inputs'
 import { rendererGateway } from './rendererGateway'
 import { operationPatchViolation } from '@shared/engine/node-invariants'
 import { fingerprintNodeInputs } from './resultFreshness'
+import { recipeParams } from '@shared/artifact-recipe'
+import { recipeGateway } from './recipeGateway'
 import { runCodeTransform } from './codeRuntime'
 import { getNodeType } from '../nodes/registry'
 import { projectNodeOutputs, type NodeValue } from '../nodes/nodeValues'
@@ -98,8 +100,10 @@ export function canRunImageWhileVideo(editor: Editor): boolean {
   const { phase, currentNodeId } = useEngineStore.getState()
   if (phase !== 'running' || !currentNodeId) return false
   const current = editor.getShape<NodeCardShape>(currentNodeId as TLShapeId)
-  return current?.type === 'node-card' &&
+  return (
+    current?.type === 'node-card' &&
     (current.props.nodeType === 'video-depth' || current.props.nodeType === 'video-clay')
+  )
 }
 
 function reportRunError(
@@ -559,9 +563,7 @@ function finishRunRecord(
       {
         status,
         durationMs: finalRecord.durationMs,
-        ...(detail.error
-          ? { normalizedError: nodeTerminalError(detail.error.phase) }
-          : {}),
+        ...(detail.error ? { normalizedError: nodeTerminalError(detail.error.phase) } : {}),
         ...(status === 'skipped' && detail.error?.reason
           ? { attributes: { reason: detail.error.reason } }
           : {}),
@@ -569,17 +571,24 @@ function finishRunRecord(
       }
     )
   )
-  if (status === 'success' && current && current.props.nodeType !== 'image-gen' && record.estimateFeatures) {
+  if (
+    status === 'success' &&
+    current &&
+    current.props.nodeType !== 'image-gen' &&
+    record.estimateFeatures
+  ) {
     try {
-      void window.api.workspace.recordGenerationTiming({
-        sampleId: `${record.runId}:${id}`,
-        operation: current.props.nodeType,
-        providerKey: record.estimateProviderKey ?? 'default',
-        modelKey: record.estimateModelKey ?? current.props.nodeType,
-        ...record.estimateFeatures,
-        durationMs: finalRecord.durationMs ?? 0,
-        recordedAt: finishedAt
-      }).catch(() => undefined)
+      void window.api.workspace
+        .recordGenerationTiming({
+          sampleId: `${record.runId}:${id}`,
+          operation: current.props.nodeType,
+          providerKey: record.estimateProviderKey ?? 'default',
+          modelKey: record.estimateModelKey ?? current.props.nodeType,
+          ...record.estimateFeatures,
+          durationMs: finalRecord.durationMs ?? 0,
+          recordedAt: finishedAt
+        })
+        .catch(() => undefined)
     } catch {
       // Timing telemetry cannot affect a completed node run.
     }
@@ -647,7 +656,10 @@ function recordRunTrace(
       level,
       safeMessage,
       nodeTraceContext(ctx, node, record),
-      { ...(lifecycle?.status ? { status: lifecycle.status } : {}), ...(lifecycle?.attributes ? { attributes: lifecycle.attributes } : {}) }
+      {
+        ...(lifecycle?.status ? { status: lifecycle.status } : {}),
+        ...(lifecycle?.attributes ? { attributes: lifecycle.attributes } : {})
+      }
     )
   )
   try {
@@ -684,6 +696,8 @@ async function invokeExecutor(
   if (!spec?.executor) return { status: 'failed', reason: `未实现节点类型：${node.type}` }
 
   const id = shape.id
+  const recipeWrites: Array<Promise<boolean>> = []
+  let submittedRecipe: { prompt: string; paramsJson: string } | undefined
   const outgoing = ctx.graph.edges
     .filter((e) => e.from.nodeId === node.id)
     .map((e) => ({ nodeId: e.to.nodeId, fromPortId: e.from.portId, toPortId: e.to.portId }))
@@ -703,13 +717,14 @@ async function invokeExecutor(
       batchId: ctx.batch?.batchId,
       itemId: ctx.batch?.itemId
     },
-    trace: (phase, level, message) =>
-      recordRunTrace(ctx, node, record, phase, level, message),
+    trace: (phase, level, message) => recordRunTrace(ctx, node, record, phase, level, message),
     setDiagnosticTarget: (target) => {
       record.target = target
       writeRunRecord(ctx.editor, id, record)
     },
-    gateway: rendererGateway,
+    gateway: recipeGateway(rendererGateway, (request) => {
+      submittedRecipe = request
+    }),
     runCode: (source, args) => runCodeTransform(source, args),
     waitForResume: () => waitForResume(ctx.token),
     outgoing,
@@ -735,6 +750,39 @@ async function invokeExecutor(
       })
     },
     emitArtifact: (artifact) => {
+      if (typeof window.api?.saveArtifactRecipe === 'function') {
+        recipeWrites.push(
+          window.api
+            .saveArtifactRecipe({
+              projectId: ctx.projectId,
+              mediaId: artifact.mediaId,
+              runId: record.runId,
+              producerNodeId: node.id,
+              nodeType: node.type,
+              contractVersion: node.contractVersion,
+              fullPrompt:
+                submittedRecipe?.prompt ??
+                (node.content.kind === 'text' ? node.content.text : shape.props.text),
+              paramsJson: submittedRecipe?.paramsJson ?? recipeParams(shape.props.config),
+              modelKey: record.target?.modelId,
+              providerId: record.target?.providerId,
+              inputMediaIds: [
+                ...new Set(
+                  Array.from(inputs.values()).flatMap((packets) =>
+                    packets.flatMap((packet) =>
+                      'mediaId' in packet.value ? [packet.value.mediaId] : []
+                    )
+                  )
+                )
+              ],
+              createdAt: Date.now()
+            })
+            .then(
+              (saved) => saved.ok,
+              () => false
+            )
+        )
+      }
       const current = ctx.editor.getShape<NodeCardShape>(id) ?? shape
       // 同一次执行中的多个产物需要作为同一个撤销单元落到画布，保持操作可逆。
       ctx.editor.run(() => materializeArtifact(ctx.editor, current, artifact, ctx.runId))
@@ -748,7 +796,16 @@ async function invokeExecutor(
     const ctxWithFingerprint = nodeCtx as NodeExecutionContext & { bodyFingerprint?: string }
     ctxWithFingerprint.bodyFingerprint = iterationBodyFingerprint(ctx.graph, node.id)
   }
-  return spec.executor(nodeCtx)
+  let outcome: NodeExecutionResult
+  try {
+    outcome = await spec.executor(nodeCtx)
+  } catch (error) {
+    await Promise.all(recipeWrites)
+    throw error
+  }
+  if ((await Promise.all(recipeWrites)).some((saved) => !saved))
+    throw new Error('生成来源保存失败；素材已保留，请勿重复生成')
+  return outcome
 }
 
 /**
@@ -838,10 +895,18 @@ async function executeNodeOnce(
     const collected = collectNodeInputs(ctx, node, injection)
     record.inputs = inputSources(collected.value)
     record.inputFingerprint = fingerprintNodeInputs(shape, collected.value)
-    recordRunTrace(ctx, node, record, 'input', 'info', `已收集 ${Object.keys(record.inputs).length} 个输入端口`, {
-      name: 'node.input_validated',
-      attributes: { portCount: Object.keys(record.inputs).length }
-    })
+    recordRunTrace(
+      ctx,
+      node,
+      record,
+      'input',
+      'info',
+      `已收集 ${Object.keys(record.inputs).length} 个输入端口`,
+      {
+        name: 'node.input_validated',
+        attributes: { portCount: Object.keys(record.inputs).length }
+      }
+    )
     if (collected.errors.length > 0) {
       throw new Error(`输入契约校验失败：${collected.errors.join('；')}`)
     }
@@ -862,13 +927,7 @@ async function executeNodeOnce(
     if (ctx.token.cancelled) {
       setExec(editor, shapeId, 'cancelled')
       recordRunTrace(ctx, node, record, 'execution', 'info', '运行已取消')
-      finishRunRecord(
-        ctx,
-        node,
-        shapeId,
-        record,
-        'cancelled'
-      )
+      finishRunRecord(ctx, node, shapeId, record, 'cancelled')
       return { status: 'skipped', reason: '已取消' }
     }
     if (result.status === 'done') {
@@ -884,22 +943,20 @@ async function executeNodeOnce(
       const projected = buildOutputPackets(node, projectNodeOutputs(outputShape), ctx.runId)
       if (projected.errors.length > 0) {
         setExec(editor, shapeId, 'failed')
-        reportRunError(ctx, node.title || node.type, `输出契约校验失败：${projected.errors.join('；')}`, {
+        reportRunError(
+          ctx,
+          node.title || node.type,
+          `输出契约校验失败：${projected.errors.join('；')}`,
+          {
             nodeId: node.id,
             phase: 'output'
-          })
-        const reason = `输出契约校验失败：${projected.errors.join('；')}`
-        recordRunTrace(ctx, node, record, 'output', 'error', reason)
-        finishRunRecord(
-          ctx,
-          node,
-          shapeId,
-          record,
-          'failed',
-          {
-            error: { phase: 'output', reason }
           }
         )
+        const reason = `输出契约校验失败：${projected.errors.join('；')}`
+        recordRunTrace(ctx, node, record, 'output', 'error', reason)
+        finishRunRecord(ctx, node, shapeId, record, 'failed', {
+          error: { phase: 'output', reason }
+        })
         return { status: 'failed', reason: '输出契约校验失败' }
       }
       ctx.outputs.set(node.id, projected.value)
@@ -907,16 +964,9 @@ async function executeNodeOnce(
       recordRunTrace(ctx, node, record, 'output', 'info', '输出契约校验通过', {
         name: 'node.output_validated'
       })
-      finishRunRecord(
-        ctx,
-        node,
-        shapeId,
-        record,
-        'success',
-        {
-          outputPorts: Object.keys(projected.value)
-        }
-      )
+      finishRunRecord(ctx, node, shapeId, record, 'success', {
+        outputPorts: Object.keys(projected.value)
+      })
       return { status: 'done' }
     }
     if (result.status === 'failed') {
@@ -926,24 +976,10 @@ async function executeNodeOnce(
         nodeId: node.id,
         phase: 'execution'
       })
-      recordRunTrace(
-        ctx,
-        node,
-        record,
-        diagnosticPhase,
-        'error',
-        result.reason ?? '执行失败'
-      )
-      finishRunRecord(
-        ctx,
-        node,
-        shapeId,
-        record,
-        'failed',
-        {
-          error: { phase: diagnosticPhase, reason: result.reason ?? '执行失败' }
-        }
-      )
+      recordRunTrace(ctx, node, record, diagnosticPhase, 'error', result.reason ?? '执行失败')
+      finishRunRecord(ctx, node, shapeId, record, 'failed', {
+        error: { phase: diagnosticPhase, reason: result.reason ?? '执行失败' }
+      })
     } else {
       setExec(editor, shapeId, 'idle')
       if (result.reason) {
@@ -956,31 +992,18 @@ async function executeNodeOnce(
           result.reason
         )
       }
-      finishRunRecord(
-        ctx,
-        node,
-        shapeId,
-        record,
-        'skipped',
-        {
-          error: result.reason
-            ? { phase: result.diagnosticPhase ?? 'execution', reason: result.reason }
-            : undefined
-        }
-      )
+      finishRunRecord(ctx, node, shapeId, record, 'skipped', {
+        error: result.reason
+          ? { phase: result.diagnosticPhase ?? 'execution', reason: result.reason }
+          : undefined
+      })
     }
     return result
   } catch (error) {
     if (ctx.token.cancelled) {
       setExec(editor, shapeId, 'cancelled')
       recordRunTrace(ctx, node, record, 'execution', 'info', '运行已取消')
-      finishRunRecord(
-        ctx,
-        node,
-        shapeId,
-        record,
-        'cancelled'
-      )
+      finishRunRecord(ctx, node, shapeId, record, 'cancelled')
     } else {
       const reason = error instanceof Error ? error.message : String(error)
       const phase: 'input' | 'execution' = reason.includes('输入契约') ? 'input' : 'execution'
@@ -990,14 +1013,7 @@ async function executeNodeOnce(
         phase
       })
       recordRunTrace(ctx, node, record, phase, 'error', reason)
-      finishRunRecord(
-        ctx,
-        node,
-        shapeId,
-        record,
-        'failed',
-        { error: { phase, reason } }
-      )
+      finishRunRecord(ctx, node, shapeId, record, 'failed', { error: { phase, reason } })
     }
     return { status: 'failed', reason: error instanceof Error ? error.message : String(error) }
   }
@@ -1189,12 +1205,12 @@ export async function runNodeManually(
   nodeId: TLShapeId
 ): Promise<NodeExecutionResult> {
   const store = useEngineStore.getState()
-  const isolated = store.phase !== 'idle' && canRunImageWhileVideo(editor) &&
+  const isolated =
+    store.phase !== 'idle' &&
+    canRunImageWhileVideo(editor) &&
     editor.getShape<NodeCardShape>(nodeId)?.props.nodeType === 'image-gen'
-  if (store.phase !== 'idle' && !isolated)
-    return { status: 'skipped', reason: '已有任务正在运行' }
-  if (isolatedImageRuns.has(nodeId))
-    return { status: 'skipped', reason: '当前生图节点正在运行' }
+  if (store.phase !== 'idle' && !isolated) return { status: 'skipped', reason: '已有任务正在运行' }
+  if (isolatedImageRuns.has(nodeId)) return { status: 'skipped', reason: '当前生图节点正在运行' }
 
   const graph = deriveGraph(editor)
   const node = graph.nodes.find((item) => item.id === nodeId)
@@ -1404,7 +1420,8 @@ export async function runWorkflowForNodes(
       .map((nodeId) => nodeById.get(nodeId)?.title || nodeId.slice(-4))
       .slice(0, 6)
       .map((title) => `「${title}」`)
-    const more = rerunPaidUpstream.length > names.length ? ` 等 ${rerunPaidUpstream.length} 个节点` : ''
+    const more =
+      rerunPaidUpstream.length > names.length ? ` 等 ${rerunPaidUpstream.length} 个节点` : ''
     const proceed = await useConfirmStore.getState().confirm({
       title: '将重新执行上游节点',
       message: `所选流程将一并重新执行 ${names.join('、')}${more}（生成类节点可能产生费用）。是否继续？`,

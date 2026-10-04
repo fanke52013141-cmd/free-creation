@@ -1,6 +1,8 @@
 // 浏览器直连 vite dev 时的 window.api 模拟：Electron 内 preload 已提供真实 api，
 // 此 mock 仅在开发期用浏览器验证画布交互；媒体仅保存在当前浏览器会话。
 import type { MediaAsset, ProjectMeta, ProjectFile, ProviderSummary } from '@shared/types'
+import type { ArtifactRecipe } from '@shared/artifact-recipe'
+const demoRecipes = new Map<string, ArtifactRecipe>()
 import type {
   ImportMediaBufferInput,
   IpcEnvelope,
@@ -407,6 +409,15 @@ export function installBrowserMock(): void {
       }),
     cancelVideoConversion: () => Promise.resolve({ ok: true, data: false }),
     pickMedia: async (projectId: string) => ({ ok: true, data: await media.pick(projectId) }),
+    previewLibraryFiles: async () => ({ ok: true, data: { missingComponentIds: [] } }),
+    saveArtifactRecipe: async (input) => {
+      demoRecipes.set(`${input.projectId}:${input.mediaId}`, structuredClone(input))
+      return { ok: true, data: true }
+    },
+    getArtifactRecipe: async (input) => ({
+      ok: true,
+      data: demoRecipes.get(`${input.projectId}:${input.mediaId}`) ?? null
+    }),
     listMedia: (projectId: string) => Promise.resolve({ ok: true, data: media.list(projectId) }),
     deleteMedia: (id: string) => Promise.resolve({ ok: true, data: media.remove(id) }),
     revealMedia: () => Promise.resolve({ ok: true, data: true }),

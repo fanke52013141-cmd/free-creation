@@ -1,9 +1,10 @@
 import { createShapeId, type Editor, type TLShapeId } from 'tldraw'
-import { legacyCategory, planResourceNodes } from '@shared/library/blueprint'
+import { legacyCategory } from '@shared/library/blueprint'
 import type { LibraryResourceDetail } from '@shared/library/types'
 import { getNodeType } from '../nodes/registry'
 import { markUndoPoint } from '../canvas/history'
 import { useMediaStore } from '../stores/media'
+import { resourceReusePreview } from './reusePreview'
 
 /** Preflight before copying files, then commit all shapes in one undo segment. */
 export async function insertResource(
@@ -14,13 +15,7 @@ export async function insertResource(
   variables: Record<string, Record<string, string>> = {}
 ): Promise<void> {
   const category = detail.category ?? legacyCategory(detail.formPreset, detail.components)
-  const plans = planResourceNodes(
-    category,
-    detail.components,
-    detail.selectedTitle,
-    componentIds,
-    variables
-  )
+  const plans = resourceReusePreview(detail, componentIds, variables).nodes
   const nodes = plans.map((plan) => {
     const spec = getNodeType(plan.nodeType)
     if (!spec || spec.contractVersion !== plan.contractVersion)

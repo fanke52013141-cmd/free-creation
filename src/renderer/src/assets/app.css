@@ -31,6 +31,7 @@
   --z-floating: 900;
   --z-conn: 950;
   --z-modal: 1100;
+  --z-confirm: 13000;
   --z-context-menu: 1200;
   --z-toast: 2000;
 }
@@ -6763,6 +6764,26 @@ select:focus-visible,
   background: var(--card);
 }
 
+.asset-card.recipe-open {
+  grid-column: 1 / -1;
+}
+.asset-recipe {
+  width: 100%;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+.asset-recipe label {
+  display: block;
+  margin: 8px 0;
+}
+.asset-recipe textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 80px;
+  resize: vertical;
+  font: inherit;
+}
 .asset-card:hover {
   border-color: var(--brand);
   transform: translateY(-1px);
@@ -11270,7 +11291,7 @@ select:focus-visible,
 .confirm-overlay {
   position: fixed;
   inset: 0;
-  z-index: var(--z-modal);
+  z-index: var(--z-confirm);
   background: rgba(0, 0, 0, 0.6);
   display: flex;
   align-items: center;

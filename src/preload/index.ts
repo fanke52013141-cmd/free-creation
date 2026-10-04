@@ -2,6 +2,7 @@ import type { LibraryCategory, SaveLibraryCategoryInput } from '../shared/librar
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import { IPC } from '../shared/contracts'
+import type { ArtifactRecipe } from '../shared/artifact-recipe'
 import type {
   BootstrapInfo,
   ChatStartInput,
@@ -292,6 +293,18 @@ const api = {
     ipcRenderer.invoke(IPC.media.ttsGenerate, input),
   pickMedia: (projectId: string): Promise<IpcEnvelope<MediaImportResult>> =>
     ipcRenderer.invoke(IPC.media.pick, projectId),
+  previewLibraryFiles: (input: {
+    resourceId: string
+    revisionId: string
+    componentIds: string[]
+  }): Promise<IpcEnvelope<{ missingComponentIds: string[] }>> =>
+    ipcRenderer.invoke(IPC.library.previewFiles, input),
+  saveArtifactRecipe: (input: ArtifactRecipe): Promise<IpcEnvelope<boolean>> =>
+    ipcRenderer.invoke(IPC.media.saveRecipe, input),
+  getArtifactRecipe: (input: {
+    projectId: string
+    mediaId: string
+  }): Promise<IpcEnvelope<ArtifactRecipe | null>> => ipcRenderer.invoke(IPC.media.getRecipe, input),
   listMedia: (projectId: string): Promise<IpcEnvelope<MediaAsset[]>> =>
     ipcRenderer.invoke(IPC.media.list, projectId),
   deleteMedia: (mediaId: string): Promise<IpcEnvelope<boolean>> =>

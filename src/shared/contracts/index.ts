@@ -77,6 +77,8 @@ export const IPC = {
     externalChange: 'project:external-change'
   },
   media: {
+    saveRecipe: 'artifact-recipe:save',
+    getRecipe: 'artifact-recipe:get',
     import: 'media:import',
     importBuffer: 'media:import-buffer',
     imageCrop: 'media:image-crop',
@@ -119,6 +121,7 @@ export const IPC = {
     getGenerationTimings: 'workspace:generation-timings:get'
   },
   library: {
+    previewFiles: 'library:preview-files',
     listCategories: 'library:categories:list',
     saveCategory: 'library:categories:save',
     discardMaterialization: 'library:materialize:discard',

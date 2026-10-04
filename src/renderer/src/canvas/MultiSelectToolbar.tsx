@@ -190,7 +190,7 @@ export function MultiSelectToolbar({
             <button
               className="ms-btn ms-template"
               data-tool="node-library"
-              aria-label="保存到节点库"
+              aria-label="保存为可复用内容"
               onClick={() => onSaveWorkflow(selectedIds)}
             >
               <Icon name="workflow" size={18} />

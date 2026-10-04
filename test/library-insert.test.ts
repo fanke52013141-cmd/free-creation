@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Editor } from 'tldraw'
 import type { LibraryResourceDetail } from '../src/shared/library/types'
 import { insertResource } from '../src/renderer/src/library/insertResource'
+import { resourceReusePreview } from '../src/renderer/src/library/reusePreview'
 
 const state = vi.hoisted(() => ({ contractVersion: 3, refresh: vi.fn() }))
 vi.mock('../src/renderer/src/nodes/registry', () => ({
@@ -116,6 +117,37 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 describe('whole resource insertion', () => {
+  it('previews the exact selected node count and immutable revision before copying', () => {
+    const preview = resourceReusePreview(detail, ['a'], {})
+    expect(preview).toMatchObject({ revision: 1, fileCount: 0 })
+    expect(preview.nodes).toHaveLength(1)
+  })
+  it('unfilled declared recipe variables stop before file materialization or any nodes', async () => {
+    const { editor, fake, api } = setup()
+    const recipeDetail = {
+      ...detail,
+      components: [
+        {
+          ...detail.components[0],
+          valueType: 'recipe' as const,
+          text: '{{subject}}',
+          metadata: { librarySlotId: 'text', variables: ['subject'] }
+        }
+      ]
+    }
+    await expect(insertResource(editor, 'project', recipeDetail, ['a'])).rejects.toThrow('subject')
+    expect(api.materializeLibraryResource).not.toHaveBeenCalled()
+    expect(fake.createShapes).not.toHaveBeenCalled()
+  })
+  it('materialization failure never creates a partial group of nodes', async () => {
+    const { editor, fake, api } = setup()
+    api.materializeLibraryResource.mockResolvedValue({
+      ok: false,
+      error: { message: '资源文件缺失' }
+    })
+    await expect(insertResource(editor, 'project', detail, ['a', 'b'])).rejects.toThrow('缺失')
+    expect(fake.createShapes).not.toHaveBeenCalled()
+  })
   it('creates all selected nodes in one history segment and records per-slot provenance', async () => {
     const { editor, fake, api } = setup()
     await insertResource(editor, 'project', detail, ['a', 'b'])

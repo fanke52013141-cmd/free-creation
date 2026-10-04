@@ -82,7 +82,7 @@ export function NodeContextMenu({
       </button>
       <button className="node-menu-item" onClick={() => run(() => onSaveWorkflow?.(ids))}>
         <Icon name="workflow" size={16} />
-        保存到节点库
+        保存为可复用内容
       </button>
       <button
         className="node-menu-item"

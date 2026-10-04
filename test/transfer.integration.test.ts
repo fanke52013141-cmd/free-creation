@@ -24,14 +24,21 @@ const state = vi.hoisted(() => ({
     size_bytes: number
     created_at: number
   }>,
-  failTransaction: false
+  failTransaction: false,
+  recipes: [] as import('../src/shared/artifact-recipe').ArtifactRecipe[],
+  importedRecipes: [] as import('../src/shared/artifact-recipe').ArtifactRecipe[]
+}))
+vi.mock('../src/main/store/artifact-recipes.repo', () => ({
+  listArtifactRecipes: () => state.recipes,
+  saveArtifactRecipe: (input: import('../src/shared/artifact-recipe').ArtifactRecipe) =>
+    state.importedRecipes.push(input)
 }))
 
 vi.mock('../src/main/store/db', (): { getProjectsDir: () => string; getDb: () => unknown } => {
   const statement = (
     sql: string
   ): { all: () => unknown[]; run: (...values: unknown[]) => void } => ({
-    all: () => state.mediaSelect,
+    all: () => (sql.includes('artifact_recipes') ? [] : state.mediaSelect),
     run: (...values: unknown[]) => {
       if (sql.startsWith('INSERT INTO projects')) state.projects.push(values)
       else if (sql.startsWith('INSERT INTO media')) state.media.push(values)
@@ -63,11 +70,45 @@ beforeEach(() => {
   state.media = []
   state.mediaSelect = []
   state.failTransaction = false
+  state.recipes = []
+  state.importedRecipes = []
 })
 
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
 describe('importProject · 本地导入集成', () => {
+  it('remaps exported recipe media/parameters while preserving original prompt text', () => {
+    const zip = new AdmZip(resolve(process.cwd(), 'resources/demo/canvas-studio-demo.canvasbundle'))
+    const entry = zip
+      .getEntries()
+      .find((item) => item.entryName.startsWith('media/') && !item.isDirectory)!
+    const file = JSON.parse(zip.getEntry('project.json')!.getData().toString('utf-8'))
+    const oldId = entry.entryName.slice(6).split('.')[0]
+    const record = {
+      projectId: file.meta.id,
+      mediaId: oldId,
+      runId: 'run:old',
+      producerNodeId: 'shape:deleted',
+      nodeType: 'image-gen',
+      contractVersion: 3,
+      fullPrompt: oldId,
+      paramsJson: JSON.stringify({ referenceMediaIds: [oldId] }),
+      inputMediaIds: [oldId, 'missing-media'],
+      createdAt: 1
+    }
+    zip.addFile('recipes.json', Buffer.from(JSON.stringify([record])))
+    const bundle = join(root, 'recipe.canvasbundle')
+    zip.writeZip(bundle)
+    const imported = importProject(bundle)
+    expect(state.importedRecipes).toHaveLength(1)
+    const recipe = state.importedRecipes[0]
+    expect(recipe.projectId).toBe(imported.id)
+    expect(recipe.mediaId).not.toBe(oldId)
+    expect(recipe.inputMediaIds).toEqual([recipe.mediaId])
+    expect(recipe.missingInputMediaIds).toEqual(['missing-media'])
+    expect(JSON.parse(recipe.paramsJson).referenceMediaIds).toEqual([recipe.mediaId])
+    expect(recipe.fullPrompt).toBe(oldId)
+  })
   it('固定演示包可作为独立新项目导入，且其中媒体引用会完整重映射', () => {
     const result = importProject(
       resolve(process.cwd(), 'resources/demo/canvas-studio-demo.canvasbundle')

@@ -1,0 +1,10 @@
+{
+  "passed": true,
+  "mode": "browser in-memory recipe store",
+  "checks": [
+    "实际生成写入来源",
+    "完整提交提示词",
+    "模型身份",
+    "素材面板查看来源"
+  ]
+}

@@ -14,6 +14,8 @@ import type { MediaAsset, ProjectFile } from '../../shared/types'
 import { mimeForExtension } from '../../shared/mime'
 import { remapMediaReferences } from '../../shared/media-reference-remap'
 import { getDb, getProjectsDir } from './db'
+import { listArtifactRecipes, saveArtifactRecipe } from './artifact-recipes.repo'
+import { artifactRecipeSchema } from '../../shared/artifact-recipe'
 
 const BUNDLE_EXT = '.canvasbundle'
 /** 当前支持的 ProjectFile version；导入时其它版本拒绝。 */
@@ -106,6 +108,7 @@ export function exportProject(id: string, destPath: string): ProjectExportResult
   const path = destPath.endsWith(BUNDLE_EXT) ? destPath : `${destPath}${BUNDLE_EXT}`
 
   const zip = new AdmZip()
+  zip.addFile('recipes.json', Buffer.from(JSON.stringify(listArtifactRecipes(id)), 'utf-8'))
   zip.addFile('project.json', Buffer.from(JSON.stringify(file, null, 2), 'utf-8'))
   zip.addFile(
     'bundle.json',
@@ -213,6 +216,12 @@ export function importProject(srcPath: string): ProjectMetaInfo {
       })
     }
 
+    const recipesEntry = zip.getEntry('recipes.json')
+    const recipes: unknown = recipesEntry
+      ? JSON.parse(recipesEntry.getData().toString('utf-8'))
+      : []
+    if (!Array.isArray(recipes) || recipes.length > 100000) throw new Error('生成来源记录无效')
+    const importedRecipes = recipes.map((recipe) => artifactRecipeSchema.parse(recipe))
     const remapped = remapMediaReferences(file, {
       ids: new Map(mediaRefs.map((ref) => [ref.oldId, ref.newId])),
       paths: new Map(mediaRefs.map((ref) => [ref.oldPath, ref.newPath]))
@@ -251,6 +260,29 @@ export function importProject(srcPath: string): ProjectMetaInfo {
           now,
           `${kindFor(mime) === 'image' ? '图片' : kindFor(mime) === 'video' ? '视频' : kindFor(mime) === 'audio' ? '音频' : '文件'}素材-${ref.newId.slice(0, 6)}`
         )
+      }
+      const mediaIds = new Map(mediaRefs.map((ref) => [ref.oldId, ref.newId]))
+      for (const recipe of importedRecipes) {
+        const mediaId = mediaIds.get(recipe.mediaId)
+        if (!mediaId) continue
+        saveArtifactRecipe({
+          ...recipe,
+          projectId: newId,
+          mediaId,
+          paramsJson: remapMediaReferences(recipe.paramsJson, {
+            ids: mediaIds,
+            paths: new Map(mediaRefs.map((ref) => [ref.oldPath, ref.newPath]))
+          }),
+          inputMediaIds: recipe.inputMediaIds.flatMap((id) =>
+            mediaIds.has(id) ? [mediaIds.get(id)!] : []
+          ),
+          missingInputMediaIds: [
+            ...new Set([
+              ...(recipe.missingInputMediaIds ?? []),
+              ...recipe.inputMediaIds.filter((id) => !mediaIds.has(id))
+            ])
+          ]
+        })
       }
     })()
   } catch (error) {

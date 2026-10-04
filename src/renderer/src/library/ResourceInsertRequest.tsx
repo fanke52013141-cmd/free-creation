@@ -4,6 +4,8 @@ import type { Editor } from 'tldraw'
 import type { LibraryResourceDetail } from '@shared/library/types'
 import { legacyCategory, planResourceNodes } from '@shared/library/blueprint'
 import { insertResource } from './insertResource'
+import { resourceReusePreview } from './reusePreview'
+import { useConfirmStore } from '../stores/confirm'
 
 export function ResourceInsertRequest({
   editor,
@@ -58,7 +60,24 @@ export function ResourceInsertRequest({
   const insert = async (): Promise<void> => {
     if (!current) return
     setBusy(true)
+    setError('')
     try {
+      const preview = resourceReusePreview(current, request.componentIds, values)
+      const files = await window.api.previewLibraryFiles({
+        resourceId: current.id,
+        revisionId: current.selectedRevisionId,
+        componentIds: request.componentIds
+      })
+      if (!files.ok || files.data.missingComponentIds.length)
+        throw new Error('资源文件缺失或预检失败，尚未创建节点')
+      if (
+        !(await useConfirmStore.getState().confirm({
+          title: '预览复用内容',
+          message: `资源 v${preview.revision}：将创建 ${preview.nodes.length} 个节点，复制 ${preview.fileCount} 个文件，不新增连线或自动运行。配方生成提示词文本，模型参数仅供参考。`,
+          confirmText: '确认加入画布'
+        }))
+      )
+        return
       await insertResource(editor, projectId, current, request.componentIds, values)
       clear()
     } catch (cause) {
@@ -94,6 +113,11 @@ export function ResourceInsertRequest({
                 {[
                   ...new Set(
                     [
+                      ...(Array.isArray(component.metadata.variables)
+                        ? component.metadata.variables
+                            .filter((value): value is string => typeof value === 'string')
+                            .map((name) => [name, name])
+                        : []),
                       ...(component.text ?? '').matchAll(
                         /\{\{\s*([A-Za-z_][A-Za-z0-9_-]{0,63})\s*\}\}/g
                       )
@@ -103,6 +127,7 @@ export function ResourceInsertRequest({
                   <label className="library-form-field" key={name}>
                     <span>{name}</span>
                     <input
+                      disabled={busy}
                       value={values[component.id]?.[name] ?? ''}
                       onChange={(event) =>
                         setValues((all) => ({
@@ -136,7 +161,7 @@ export function ResourceInsertRequest({
             className="library-form-primary"
             onClick={() => void insert()}
           >
-            {busy ? '加入中…' : '创建节点'}
+            {busy ? '加入中…' : '预览并创建节点'}
           </button>
         </footer>
       </section>

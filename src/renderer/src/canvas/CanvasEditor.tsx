@@ -1991,9 +1991,9 @@ export function CanvasEditor({
           editor={editorInstance}
           nodeIds={workflowSaveSelection}
           onClose={() => setWorkflowSaveSelection(null)}
-          onSaved={() => {
+          onSaved={(kind) => {
             setWorkflowSaveSelection(null)
-            setPanelTab('workflow')
+            setPanelTab(kind === 'resource' ? 'assets' : 'workflow')
           }}
         />
       )}

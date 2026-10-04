@@ -16,6 +16,7 @@ import { useConfirmStore } from '../../stores/confirm'
 import { Icon, type IconName } from '../../components/Icon'
 import { AppSelect } from '../../components/AppSelect'
 import { LibraryResourcePicker } from '../../library/LibraryResourcePicker'
+import type { ArtifactRecipe } from '@shared/artifact-recipe'
 
 const FILTER_TABS: { key: MediaKind | 'all'; label: string }[] = [
   { key: 'all', label: '全部' },
@@ -62,6 +63,7 @@ function formatTime(ts: number): string {
 
 function AssetCard({
   asset,
+  projectId,
   onAdd,
   onDelete,
   onLocate,
@@ -70,6 +72,7 @@ function AssetCard({
   savingToLibrary
 }: {
   asset: IndexedMediaAsset
+  projectId: string
   onAdd: () => void
   onDelete: () => void
   onLocate: () => void
@@ -78,10 +81,15 @@ function AssetCard({
   savingToLibrary: boolean
 }): React.JSX.Element {
   const [imageFailed, setImageFailed] = useState(false)
-  const name = asset.name ?? `${asset.kind === 'image' ? '图片' : asset.kind === 'video' ? '视频' : asset.kind === 'audio' ? '音频' : '文件'}素材-${asset.id.slice(0, 6)}`
+  const [recipe, setRecipe] = useState<ArtifactRecipe | null>(null)
+  const [recipeOpen, setRecipeOpen] = useState(false)
+  const [recipeMessage, setRecipeMessage] = useState('读取中…')
+  const name =
+    asset.name ??
+    `${asset.kind === 'image' ? '图片' : asset.kind === 'video' ? '视频' : asset.kind === 'audio' ? '音频' : '文件'}素材-${asset.id.slice(0, 6)}`
   return (
     <div
-      className="asset-card"
+      className={`asset-card${recipeOpen ? ' recipe-open' : ''}`}
       role="button"
       tabIndex={0}
       title={`${name} · ${formatSize(asset.sizeBytes)}`}
@@ -111,6 +119,63 @@ function AssetCard({
         )}
       </div>
       <div className="asset-info">
+        <button
+          type="button"
+          onKeyDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation()
+            if (recipeOpen) {
+              setRecipeOpen(false)
+              return
+            }
+            setRecipeOpen(true)
+            setRecipe(null)
+            setRecipeMessage('读取中…')
+            void window.api
+              .getArtifactRecipe({ projectId, mediaId: asset.id })
+              .then((result) => {
+                if (result.ok) {
+                  setRecipe(result.data)
+                  setRecipeMessage(result.data ? '' : '历史记录不完整：此素材没有独立生成来源记录')
+                } else setRecipeMessage('生成来源读取失败，请重试')
+              })
+              .catch(() => setRecipeMessage('生成来源读取失败，请重试'))
+          }}
+        >
+          查看生成来源
+        </button>
+        {recipeOpen && (
+          <div
+            className="asset-recipe"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
+            {recipeMessage && <p>{recipeMessage}</p>}
+            {recipe && (
+              <>
+                <p>
+                  {recipe.nodeType} · 契约 v{recipe.contractVersion} ·{' '}
+                  {recipe.modelKey ?? '未记录模型'} · {formatTime(recipe.createdAt)}
+                </p>
+                <p>
+                  运行：{recipe.runId} · 输入媒体：{recipe.inputMediaIds.length} 项
+                  {recipe.missingInputMediaIds?.length
+                    ? ` · ${recipe.missingInputMediaIds.length} 项来源媒体未随项目导入`
+                    : ''}
+                </p>
+                <label>
+                  提交提示词或朗读正文
+                  <textarea readOnly value={recipe.fullPrompt} />
+                </label>
+                <label>
+                  运行参数
+                  <textarea readOnly value={recipe.paramsJson} />
+                </label>
+                <small>记录用于追溯，不会自动重新生成；本地处理无提示词时仅记录处理参数。</small>
+              </>
+            )}
+          </div>
+        )}
         <span className="asset-name">{name}</span>
         <span className="asset-meta">
           {formatSize(asset.sizeBytes)} · {formatTime(asset.createdAt)}
@@ -301,118 +366,123 @@ export function AssetsPanel({
       ref={scrollRef}
     >
       <div className="assets-source-switch">
-        <button className={!libraryMode ? 'active' : ''} onClick={() => setLibraryMode(false)}>项目素材</button>
-        <button className={libraryMode ? 'active' : ''} onClick={() => setLibraryMode(true)}>资源库</button>
+        <button className={!libraryMode ? 'active' : ''} onClick={() => setLibraryMode(false)}>
+          项目素材
+        </button>
+        <button className={libraryMode ? 'active' : ''} onClick={() => setLibraryMode(true)}>
+          资源库
+        </button>
       </div>
       {libraryMode ? (
         <LibraryResourcePicker projectId={projectId} editor={editor} />
       ) : (
-      <>
-      <div className="assets-toolbar">
-        <button className="side-panel-primary" onClick={onImport}>
-          <Icon name="upload" size={15} /> 导入素材
-        </button>
-        <button
-          className="side-panel-secondary"
-          title="将当前筛选结果导出到指定目录；同名文件不会被覆盖"
-          disabled={visible.length === 0}
-          onClick={() => void handleBatchExport()}
-        >
-          <Icon name="download" size={15} /> 导出筛选
-        </button>
-        <input
-          className="assets-search"
-          placeholder="搜索素材、来源或模型…"
-          aria-label="搜索素材"
-          value={keyword}
-          onChange={(event) => setKeyword(event.target.value)}
-          onPointerDown={(event) => event.stopPropagation()}
-          onKeyDown={(event) => event.stopPropagation()}
-        />
-      </div>
-      <div className="assets-filters">
-        {FILTER_TABS.map((item) => (
-          <button
-            key={item.key}
-            className={`asset-filter-tab ${filter === item.key ? 'active' : ''}`}
-            onClick={() => setFilter(item.key)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-      <div className="assets-advanced-filters" aria-label="资产高级筛选">
-        <AppSelect
-          className="asset-filter-select"
-          value={sourceNodeId}
-          title="按来源节点筛选"
-          onChange={(event) => setSourceNodeId(event.target.value)}
-          onPointerDown={(event) => event.stopPropagation()}
-        >
-          <option value="all">全部来源</option>
-          {sourceOptions.map((source) => (
-            <option key={source.nodeId} value={source.nodeId}>
-              {source.nodeTitle} · {source.nodeType}
-            </option>
-          ))}
-        </AppSelect>
-        <AppSelect
-          className="asset-filter-select"
-          value={runStatus}
-          title="按最近运行状态筛选"
-          onChange={(event) => setRunStatus(event.target.value as MediaRunFilter)}
-          onPointerDown={(event) => event.stopPropagation()}
-        >
-          {RUN_FILTERS.map((status) => (
-            <option key={status.key} value={status.key}>
-              {status.label}
-            </option>
-          ))}
-        </AppSelect>
-        <AppSelect
-          className="asset-filter-select"
-          value={timeRange}
-          title="按生成时间筛选"
-          onChange={(event) => setTimeRange(event.target.value as MediaTimeFilter)}
-          onPointerDown={(event) => event.stopPropagation()}
-        >
-          {TIME_FILTERS.map((range) => (
-            <option key={range.key} value={range.key}>
-              {range.label}
-            </option>
-          ))}
-        </AppSelect>
-      </div>
-      {visible.length === 0 ? (
-        <div className="side-panel-empty">
-          {assets.length === 0
-            ? '暂无素材，点击「导入素材」或拖拽文件到画布开始创作。'
-            : '没有匹配的素材。'}
-        </div>
-      ) : (
-        <div className="assets-grid">
-          {visible.map((asset) => (
-            <AssetCard
-              key={asset.id}
-              asset={asset}
-              onAdd={() => onAddToCanvas(asset)}
-              onDelete={() => void handleDelete(asset)}
-              onLocate={() => locateSource(asset)}
-              onOpenRun={() => {
-                if (asset.source?.runId) onOpenRun(asset.source.nodeId, asset.source.runId)
-              }}
-              onSaveToLibrary={() => void handleSaveToLibrary(asset)}
-              savingToLibrary={savingMediaId === asset.id}
+        <>
+          <div className="assets-toolbar">
+            <button className="side-panel-primary" onClick={onImport}>
+              <Icon name="upload" size={15} /> 导入素材
+            </button>
+            <button
+              className="side-panel-secondary"
+              title="将当前筛选结果导出到指定目录；同名文件不会被覆盖"
+              disabled={visible.length === 0}
+              onClick={() => void handleBatchExport()}
+            >
+              <Icon name="download" size={15} /> 导出筛选
+            </button>
+            <input
+              className="assets-search"
+              placeholder="搜索素材、来源或模型…"
+              aria-label="搜索素材"
+              value={keyword}
+              onChange={(event) => setKeyword(event.target.value)}
+              onPointerDown={(event) => event.stopPropagation()}
+              onKeyDown={(event) => event.stopPropagation()}
             />
-          ))}
-        </div>
-      )}
-      {assets.length > 0 && (
-        <div className="assets-footer">
-          显示 {visible.length} / {assets.length} 个素材
-        </div>
-      )}
-      </>
+          </div>
+          <div className="assets-filters">
+            {FILTER_TABS.map((item) => (
+              <button
+                key={item.key}
+                className={`asset-filter-tab ${filter === item.key ? 'active' : ''}`}
+                onClick={() => setFilter(item.key)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <div className="assets-advanced-filters" aria-label="资产高级筛选">
+            <AppSelect
+              className="asset-filter-select"
+              value={sourceNodeId}
+              title="按来源节点筛选"
+              onChange={(event) => setSourceNodeId(event.target.value)}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <option value="all">全部来源</option>
+              {sourceOptions.map((source) => (
+                <option key={source.nodeId} value={source.nodeId}>
+                  {source.nodeTitle} · {source.nodeType}
+                </option>
+              ))}
+            </AppSelect>
+            <AppSelect
+              className="asset-filter-select"
+              value={runStatus}
+              title="按最近运行状态筛选"
+              onChange={(event) => setRunStatus(event.target.value as MediaRunFilter)}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              {RUN_FILTERS.map((status) => (
+                <option key={status.key} value={status.key}>
+                  {status.label}
+                </option>
+              ))}
+            </AppSelect>
+            <AppSelect
+              className="asset-filter-select"
+              value={timeRange}
+              title="按生成时间筛选"
+              onChange={(event) => setTimeRange(event.target.value as MediaTimeFilter)}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              {TIME_FILTERS.map((range) => (
+                <option key={range.key} value={range.key}>
+                  {range.label}
+                </option>
+              ))}
+            </AppSelect>
+          </div>
+          {visible.length === 0 ? (
+            <div className="side-panel-empty">
+              {assets.length === 0
+                ? '暂无素材，点击「导入素材」或拖拽文件到画布开始创作。'
+                : '没有匹配的素材。'}
+            </div>
+          ) : (
+            <div className="assets-grid">
+              {visible.map((asset) => (
+                <AssetCard
+                  projectId={projectId}
+                  key={asset.id}
+                  asset={asset}
+                  onAdd={() => onAddToCanvas(asset)}
+                  onDelete={() => void handleDelete(asset)}
+                  onLocate={() => locateSource(asset)}
+                  onOpenRun={() => {
+                    if (asset.source?.runId) onOpenRun(asset.source.nodeId, asset.source.runId)
+                  }}
+                  onSaveToLibrary={() => void handleSaveToLibrary(asset)}
+                  savingToLibrary={savingMediaId === asset.id}
+                />
+              ))}
+            </div>
+          )}
+          {assets.length > 0 && (
+            <div className="assets-footer">
+              显示 {visible.length} / {assets.length} 个素材
+            </div>
+          )}
+        </>
       )}
     </div>
   )

@@ -1,0 +1,10 @@
+{
+  "passed": true,
+  "mode": "browser with IPC fixtures",
+  "checks": [
+    "变量未填禁止创建",
+    "预览取消零节点变化",
+    "缺文件零节点变化",
+    "确认一次加入"
+  ]
+}
