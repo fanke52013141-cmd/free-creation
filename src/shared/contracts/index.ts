@@ -54,6 +54,8 @@ export const IPC = {
   },
   project: {
     list: 'project:list',
+    listDeleted: 'project:list-deleted',
+    restoreDeleted: 'project:restore-deleted',
     create: 'project:create',
     clone: 'project:clone',
     saveWorkspaceProfile: 'project:workspace-profile:save',
@@ -77,6 +79,7 @@ export const IPC = {
     externalChange: 'project:external-change'
   },
   media: {
+    checkProjectFiles: 'media:check-project-files',
     saveRecipe: 'artifact-recipe:save',
     getRecipe: 'artifact-recipe:get',
     import: 'media:import',

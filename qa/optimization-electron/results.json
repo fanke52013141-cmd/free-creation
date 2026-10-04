@@ -1,0 +1,12 @@
+{
+  "passed": true,
+  "checks": [
+    "真实主进程拒写保留原文件并返回失败",
+    "真实历史恢复 UI 取消保留画布；确认先写检查点再恢复",
+    "物理媒体丢失预检命中；索引记录保留",
+    "真实项目复制和资源库物化传播独立来源",
+    "真实 Electron 重启后最近删除和媒体来源仍在，恢复引用与版本保留，凭据过滤"
+  ],
+  "dataDir": "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\canvas-opt-electron-3ojHsr",
+  "boundary": "合成媒体来源验证本地落盘；未调用付费模型"
+}

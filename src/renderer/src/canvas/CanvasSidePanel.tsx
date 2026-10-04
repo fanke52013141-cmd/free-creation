@@ -493,7 +493,12 @@ function HistoryPanel({
         listAvailableMedia: async () => {
           const available = await window.api.listMedia(projectId)
           if (!available.ok) throw new Error('无法读取媒体列表')
-          return new Set(available.data.map((asset) => asset.id))
+          const files = await window.api.checkProjectMediaFiles(projectId)
+          if (!files.ok) throw new Error('无法检查媒体文件')
+          const missing = new Set(files.data.missingMediaIds)
+          return new Set(
+            available.data.filter((asset) => !missing.has(asset.id)).map((asset) => asset.id)
+          )
         },
         confirm: ({ currentNodes, targetNodes, media }) =>
           useConfirmStore.getState().confirm({

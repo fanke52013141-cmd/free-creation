@@ -1,0 +1,155 @@
+{
+  "at": "2026-10-04T13:26:50.122Z",
+  "runtime": "Chrome browser demo",
+  "hardware": {
+    "cpu": "Intel(R) Core(TM) i7-14700KF",
+    "ramBytes": 34200453120
+  },
+  "limitation": "API-driven input and movement frame latency; demo save is sessionStorage, not Electron disk. deviceScaleFactor is raster density, not Windows desktop scaling. sampled heap is not process peak RSS.",
+  "results": [
+    {
+      "count": 50,
+      "scale": 1,
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "interactiveMs": 122.5,
+      "inputFrameP50": 16.900000005960464,
+      "inputFrameP95": 35,
+      "moveFrameP50": 16.799999997019768,
+      "moveFrameP95": 17,
+      "demoSaveMs": 0.5,
+      "snapshotBytes": 18349,
+      "sampledHeapBytes": 104642411
+    },
+    {
+      "count": 200,
+      "scale": 1,
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "interactiveMs": 268.29999999701977,
+      "inputFrameP50": 66.19999998807907,
+      "inputFrameP95": 102.70000000298023,
+      "moveFrameP50": 65.59999999403954,
+      "moveFrameP95": 68.70000000298023,
+      "demoSaveMs": 0.8999999910593033,
+      "snapshotBytes": 71078,
+      "sampledHeapBytes": 108224020
+    },
+    {
+      "count": 1000,
+      "scale": 1,
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "interactiveMs": 1630.7000000029802,
+      "inputFrameP50": 1069.2000000029802,
+      "inputFrameP95": 1101.4000000059605,
+      "moveFrameP50": 1042.5,
+      "moveFrameP95": 1069.7999999970198,
+      "demoSaveMs": 3.2999999970197678,
+      "snapshotBytes": 353858,
+      "sampledHeapBytes": 692832025
+    },
+    {
+      "count": 50,
+      "scale": 1.25,
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "interactiveMs": 121.3999999910593,
+      "inputFrameP50": 16.799999997019768,
+      "inputFrameP95": 34.29999999701977,
+      "moveFrameP50": 16.5,
+      "moveFrameP95": 30.400000005960464,
+      "demoSaveMs": 0.5,
+      "snapshotBytes": 18349,
+      "sampledHeapBytes": 114463171
+    },
+    {
+      "count": 200,
+      "scale": 1.25,
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "interactiveMs": 268.6000000089407,
+      "inputFrameP50": 67.90000000596046,
+      "inputFrameP95": 124.70000000298023,
+      "moveFrameP50": 65.20000000298023,
+      "moveFrameP95": 75.09999999403954,
+      "demoSaveMs": 0.5999999940395355,
+      "snapshotBytes": 71078,
+      "sampledHeapBytes": 96250850
+    },
+    {
+      "count": 1000,
+      "scale": 1.25,
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "interactiveMs": 1618.5,
+      "inputFrameP50": 1062.7000000029802,
+      "inputFrameP95": 1080.6000000089407,
+      "moveFrameP50": 1032.5,
+      "moveFrameP95": 1385.300000011921,
+      "demoSaveMs": 3.5,
+      "snapshotBytes": 353858,
+      "sampledHeapBytes": 263038386
+    },
+    {
+      "count": 50,
+      "scale": 1.5,
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "interactiveMs": 127.70000000298023,
+      "inputFrameP50": 16.80000001192093,
+      "inputFrameP95": 34.599999994039536,
+      "moveFrameP50": 16.5,
+      "moveFrameP95": 30.799999997019768,
+      "demoSaveMs": 0.5,
+      "snapshotBytes": 18349,
+      "sampledHeapBytes": 125433256
+    },
+    {
+      "count": 200,
+      "scale": 1.5,
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "interactiveMs": 274.40000000596046,
+      "inputFrameP50": 66.40000000596046,
+      "inputFrameP95": 103.59999999403954,
+      "moveFrameP50": 65.8999999910593,
+      "moveFrameP95": 73.09999999403954,
+      "demoSaveMs": 0.800000011920929,
+      "snapshotBytes": 71078,
+      "sampledHeapBytes": 89898635
+    },
+    {
+      "count": 1000,
+      "scale": 1.5,
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "interactiveMs": 1643.800000011921,
+      "inputFrameP50": 1065.2999999970198,
+      "inputFrameP95": 1082.4000000059605,
+      "moveFrameP50": 1078.0999999940395,
+      "moveFrameP95": 1098.3999999910593,
+      "demoSaveMs": 3.4000000059604645,
+      "snapshotBytes": 353858,
+      "sampledHeapBytes": 680675780
+    }
+  ]
+}

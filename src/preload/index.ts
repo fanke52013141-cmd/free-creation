@@ -124,6 +124,10 @@ const api = {
   ): Promise<IpcEnvelope<{ path: string }>> =>
     ipcRenderer.invoke(IPC.diagnostics.exportNodeRun, input),
   bootstrap: (): Promise<IpcEnvelope<BootstrapInfo>> => ipcRenderer.invoke(IPC.app.bootstrap),
+  listDeletedProjects: (): Promise<IpcEnvelope<ProjectMeta[]>> =>
+    ipcRenderer.invoke(IPC.project.listDeleted),
+  restoreDeletedProject: (id: string): Promise<IpcEnvelope<ProjectMeta | null>> =>
+    ipcRenderer.invoke(IPC.project.restoreDeleted, id),
   listProjects: (): Promise<IpcEnvelope<ProjectMeta[]>> => ipcRenderer.invoke(IPC.project.list),
   createProject: (input: CreateProjectInput): Promise<IpcEnvelope<ProjectMeta>> =>
     ipcRenderer.invoke(IPC.project.create, input),
@@ -305,6 +309,10 @@ const api = {
     projectId: string
     mediaId: string
   }): Promise<IpcEnvelope<ArtifactRecipe | null>> => ipcRenderer.invoke(IPC.media.getRecipe, input),
+  checkProjectMediaFiles: (
+    projectId: string
+  ): Promise<IpcEnvelope<{ missingMediaIds: string[] }>> =>
+    ipcRenderer.invoke(IPC.media.checkProjectFiles, projectId),
   listMedia: (projectId: string): Promise<IpcEnvelope<MediaAsset[]>> =>
     ipcRenderer.invoke(IPC.media.list, projectId),
   deleteMedia: (mediaId: string): Promise<IpcEnvelope<boolean>> =>

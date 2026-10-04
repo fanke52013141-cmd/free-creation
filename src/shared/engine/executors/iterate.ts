@@ -23,7 +23,7 @@ export interface IterateConfig {
   /** 最大处理条数；0 表示不限。 */
   limit: number
   /** 全部重跑 / 复用已成功项继续 / 只重跑上轮失败项。 */
-  runMode: 'all' | 'resume' | 'failed'
+  runMode: 'all' | 'resume' | 'failed' | 'changed'
 }
 
 export type IterateItemStatus = 'pending' | 'done' | 'reused' | 'failed' | 'skipped'
@@ -84,7 +84,10 @@ export function parseIterate(text: string): IterateConfig {
       maxRetries:
         typeof value.maxRetries === 'number' ? Math.min(10, Math.max(0, value.maxRetries)) : 0,
       limit: typeof value.limit === 'number' ? Math.max(0, value.limit) : 0,
-      runMode: value.runMode === 'resume' || value.runMode === 'failed' ? value.runMode : 'all'
+      runMode:
+        value.runMode === 'resume' || value.runMode === 'failed' || value.runMode === 'changed'
+          ? value.runMode
+          : 'all'
     }
   } catch {
     return { onFailure: 'skip', maxRetries: 0, limit: 0, runMode: 'all' }
@@ -323,7 +326,7 @@ export const iterateExecutor = async (ctx: NodeExecutionContext): Promise<NodeEx
   // resume 前置校验：上轮记录了循环体指纹而本轮指纹不同，说明循环体已被修改，
   // 续跑会把旧产物静默标成 reused——必须拒绝并要求完整重跑（R-08）。
   if (
-    config.runMode === 'resume' &&
+    (config.runMode === 'resume' || config.runMode === 'changed') &&
     previous?.bodyFingerprint &&
     bodyFingerprint &&
     previous.bodyFingerprint !== bodyFingerprint
@@ -379,7 +382,7 @@ export const iterateExecutor = async (ctx: NodeExecutionContext): Promise<NodeEx
         ? previousById.get(identity)
         : undefined) ?? undefined
     if (
-      config.runMode === 'resume' &&
+      (config.runMode === 'resume' || config.runMode === 'changed') &&
       isSameItem(prior, item, source) &&
       (prior.status === 'done' || prior.status === 'reused')
     ) {

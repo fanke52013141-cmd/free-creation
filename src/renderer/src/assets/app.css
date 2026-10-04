@@ -12317,3 +12317,9 @@ canvas.tl-canvas-indicators {
 .run-timeline-incomplete {
   color: var(--warning, #b7791f);
 }
+
+/* Per-run results are visual groups; data edges remain in the document. */
+.artifact-groups { position:absolute; inset:0; pointer-events:none; z-index:35; overflow:hidden; }
+.artifact-group { position:absolute; border:1px dashed #6b728066; border-radius:12px; pointer-events:none; }
+.artifact-group button { pointer-events:auto; border-radius:8px; padding:5px 12px; background:var(--panel-bg, #222); color:var(--text-primary, #eee); border:1px solid #7776; white-space:nowrap; }
+.search-hit-active { outline:2px solid #769cff; outline-offset:-2px; }

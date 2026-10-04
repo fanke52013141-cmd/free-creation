@@ -812,3 +812,38 @@ describe('iterate 执行器 · P3.4 逐项运行追溯', () => {
     ).toEqual(itemRunIds)
   })
 })
+
+describe('T13 分镜局部续跑', () => {
+  it('20 镜修改 3 项与失败 2 项，重排后只执行这 5 项且保留稳定 ID', async () => {
+    const shots = Array.from({ length: 20 }, (_, i) => ({ id: `shot-${i}`, scene: `scene-${i}` }))
+    const first = makeCtx({
+      text: JSON.stringify({ runMode: 'all' }),
+      list: shots,
+      runSubflow: async ({ item }) => {
+        if (item.id === 'shot-18' || item.id === 'shot-19') throw new Error('temporary')
+        return { body: { 'out-text': { kind: 'text', text: item.scene } } } as SubflowOutput
+      }
+    })
+    await iterateExecutor(first.ctx)
+    const reordered = [...shots]
+      .reverse()
+      .map((item) =>
+        ['shot-0', 'shot-1', 'shot-2'].includes(item.id) ? { ...item, scene: 'changed' } : item
+      )
+    const run = vi.fn(
+      async ({ item }: { item: Record<string, unknown> }) =>
+        ({ body: { 'out-text': { kind: 'text', text: item.scene } } }) as SubflowOutput
+    )
+    const next = makeCtx({
+      text: JSON.stringify({ runMode: 'changed' }),
+      list: reordered,
+      previousResult: first.result.value!,
+      runSubflow: run
+    })
+    await iterateExecutor(next.ctx)
+    expect(run).toHaveBeenCalledTimes(5)
+    const result = parseIterateResult(next.result.value!)!
+    expect(result.items.map((item) => item.source.itemId)).toEqual(reordered.map((item) => item.id))
+    expect(result.items.filter((item) => item.status === 'reused')).toHaveLength(15)
+  })
+})

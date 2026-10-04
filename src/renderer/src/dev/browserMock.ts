@@ -1,3 +1,4 @@
+const deletedProjects: import('@shared/types').ProjectMeta[] = []
 // 浏览器直连 vite dev 时的 window.api 模拟：Electron 内 preload 已提供真实 api，
 // 此 mock 仅在开发期用浏览器验证画布交互；媒体仅保存在当前浏览器会话。
 import type { MediaAsset, ProjectMeta, ProjectFile, ProviderSummary } from '@shared/types'
@@ -159,6 +160,17 @@ export function installBrowserMock(): void {
         error: { code: 'UNAVAILABLE', message: '诊断导出仅支持桌面端' }
       }),
     bootstrap: () => Promise.resolve({ ok: true, data: { lastProjectId: 'demo' } }),
+    listDeletedProjects: () => Promise.resolve({ ok: true, data: deletedProjects }),
+    restoreDeletedProject: (id) => {
+      const index = deletedProjects.findIndex((p) => p.id === id)
+      if (index < 0) return Promise.resolve({ ok: true, data: null })
+      const p = deletedProjects.splice(index, 1)[0]
+      const originalName = p.name
+      for (let suffix = 1; projects.some((other) => other.name === p.name); suffix += 1)
+        p.name = `${originalName} · 恢复${suffix}`
+      projects.push(p)
+      return Promise.resolve({ ok: true, data: p })
+    },
     listProjects: () => Promise.resolve({ ok: true, data: projects }),
     createProject: ({
       name,
@@ -260,7 +272,12 @@ export function installBrowserMock(): void {
       p.name = name
       return Promise.resolve({ ok: true, data: p })
     },
-    deleteProject: () => Promise.resolve({ ok: true, data: true }),
+    deleteProject: (id) => {
+      const index = projects.findIndex((p) => p.id === id)
+      if (index < 0) return Promise.resolve({ ok: true, data: false })
+      deletedProjects.push(projects.splice(index, 1)[0])
+      return Promise.resolve({ ok: true, data: true })
+    },
     openProject: (id: string) => {
       const meta = projects.find((x) => x.id === id)
       if (!meta) return Promise.resolve({ ok: true, data: null })
@@ -418,6 +435,7 @@ export function installBrowserMock(): void {
       ok: true,
       data: demoRecipes.get(`${input.projectId}:${input.mediaId}`) ?? null
     }),
+    checkProjectMediaFiles: () => Promise.resolve({ ok: true, data: { missingMediaIds: [] } }),
     listMedia: (projectId: string) => Promise.resolve({ ok: true, data: media.list(projectId) }),
     deleteMedia: (id: string) => Promise.resolve({ ok: true, data: media.remove(id) }),
     revealMedia: () => Promise.resolve({ ok: true, data: true }),

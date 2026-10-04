@@ -8,12 +8,14 @@ import { templateNodeProps, type WorkflowTemplate } from '../stores/workflow'
 /** Add a saved node or connected node set to the current canvas view. */
 export function addNodeLibraryEntry(
   editor: Editor,
-  entry: WorkflowTemplate
+  entry: WorkflowTemplate,
+  markHistory = true
 ): { nodeIds: TLShapeId[]; skippedEdges: number } {
   const center = editor.getViewportPageBounds().center
   const nodeIds: TLShapeId[] = []
   let skippedEdges = 0
 
+  if (markHistory) markUndoPoint(editor, 'before-apply-template')
   editor.run(() => {
     for (const node of entry.nodes) {
       const id = createShapeId()
@@ -59,7 +61,8 @@ export function addNodeLibraryEntry(
         !createEdge(
           editor,
           { shapeId: fromId, portId: fromPort.id },
-          { shapeId: toId, portId: toPort.id }
+          { shapeId: toId, portId: toPort.id },
+          false
         )
       ) {
         skippedEdges += 1
@@ -67,6 +70,6 @@ export function addNodeLibraryEntry(
     }
   })
 
-  markUndoPoint(editor, 'apply-template')
+  if (markHistory) markUndoPoint(editor, 'apply-template')
   return { nodeIds, skippedEdges }
 }

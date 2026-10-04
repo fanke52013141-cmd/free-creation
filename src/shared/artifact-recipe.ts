@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { remapMediaReferences } from './media-reference-remap'
 
 /** Private project data, never a diagnostic payload. */
 export const artifactRecipeSchema = z
@@ -19,6 +20,32 @@ export const artifactRecipeSchema = z
   })
   .strict()
 export type ArtifactRecipe = z.infer<typeof artifactRecipeSchema>
+
+/** Copy private provenance while distinguishing omitted upstream files from local references. */
+export function copyArtifactRecipe(
+  recipe: ArtifactRecipe,
+  projectId: string,
+  mediaId: string,
+  ids: Map<string, string>,
+  paths: Map<string, string> = new Map()
+): ArtifactRecipe {
+  return {
+    ...recipe,
+    projectId,
+    mediaId,
+    producerNodeId: ids.get(recipe.producerNodeId) ?? recipe.producerNodeId,
+    paramsJson: JSON.stringify(
+      remapMediaReferences(JSON.parse(recipeParams(recipe.paramsJson)), { ids, paths })
+    ),
+    inputMediaIds: recipe.inputMediaIds.flatMap((id) => (ids.has(id) ? [ids.get(id)!] : [])),
+    missingInputMediaIds: [
+      ...new Set([
+        ...(recipe.missingInputMediaIds ?? []),
+        ...recipe.inputMediaIds.filter((id) => !ids.has(id))
+      ])
+    ]
+  }
+}
 
 export function recipeParams(config: string): string {
   try {

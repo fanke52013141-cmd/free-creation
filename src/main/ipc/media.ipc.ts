@@ -1,7 +1,9 @@
+import { getDataDir } from '../store/db'
+import { emitDomainEvent } from '../diagnostics/ipc-domain-events'
 // 媒体 IPC：拖拽导入 + 系统对话框选择导入（见《技术框架与规范》§10）
 import { ipcMain, dialog, clipboard, shell } from 'electron'
 import log from 'electron-log/main'
-import { constants as fsConstants } from 'fs'
+import { constants as fsConstants, existsSync, lstatSync } from 'fs'
 import { copyFile } from 'fs/promises'
 import { basename, extname, join } from 'path'
 import { IPC } from '../../shared/contracts'
@@ -514,6 +516,31 @@ export function registerMediaIpc(): void {
     }
   )
 
+  ipcMain.handle(
+    IPC.media.checkProjectFiles,
+    (_e, projectId: string): IpcEnvelope<{ missingMediaIds: string[] }> => {
+      if (typeof projectId !== 'string' || !projectId) return err('INVALID_INPUT', '项目身份无效')
+      try {
+        const missingMediaIds = listMedia(projectId)
+          .filter((asset) => {
+            const absolute = join(getDataDir(), asset.path)
+            return !existsSync(absolute) || !lstatSync(absolute).isFile()
+          })
+          .map((asset) => asset.id)
+        emitDomainEvent('media.files_preflight', '项目媒体文件预检完成', {
+          status: 'success',
+          attributes: { projectId, missingCount: missingMediaIds.length }
+        })
+        return ok({ missingMediaIds })
+      } catch (error) {
+        emitDomainEvent('media.files_preflight_failed', '项目媒体文件预检失败', {
+          error,
+          attributes: { projectId }
+        })
+        return err('READ_FAILED', '无法检查媒体文件，请稍后重试')
+      }
+    }
+  )
   ipcMain.handle(IPC.media.list, (_e, projectId: string): IpcEnvelope<MediaAsset[]> => {
     if (!projectId) return err('INVALID_INPUT', '参数不完整')
     return ok(listMedia(projectId))

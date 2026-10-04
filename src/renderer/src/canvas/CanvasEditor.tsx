@@ -20,6 +20,8 @@ import { ChatSidePanel } from './ChatSidePanel'
 import { NodeContractPanel } from './NodeContractPanel'
 import { DirectorStudioPanel } from './DirectorStudioPanel'
 import { useNodePanelStore } from '../stores/nodePanel'
+import { ArtifactGroupLayer } from './ArtifactGroupLayer'
+import { artifactShapeVisibility } from './artifact-grouping'
 import { SearchPalette } from './SearchPalette'
 import { CanvasSelectionBackground, GroupOutlineLayer } from './GroupOutlineLayer'
 import { DataEdgeLayer } from './DataEdgeLayer'
@@ -1819,6 +1821,7 @@ export function CanvasEditor({
     >
       <Tldraw
         onMount={handleMount}
+        getShapeVisibility={artifactShapeVisibility}
         shapeUtils={[NodeCardUtil, CarrierArrowUtil]}
         cameraOptions={{
           // 统一滚轮路由使用这些 Ctrl / Cmd 缩放档位。
@@ -1826,6 +1829,7 @@ export function CanvasEditor({
         }}
         components={TL_COMPONENTS}
       />
+      {editorInstance && <ArtifactGroupLayer editor={editorInstance} hostRef={wrapRef} />}
       {editorInstance && <GroupOutlineLayer editor={editorInstance} hostRef={wrapRef} />}
       {editorInstance && <DataEdgeLayer editor={editorInstance} hostRef={wrapRef} />}
       {/* 左侧节点面板：一级分类保持鱼眼 Dock，二级节点在右侧抽屉中展开。 */}
@@ -1984,7 +1988,13 @@ export function CanvasEditor({
         />
       )}
       {/* 搜索覆盖层（顶栏按钮触发，在 Tldraw 同级渲染） */}
-      {editorInstance && <SearchPalette editor={editorInstance} onCreateNode={handleNodePick} />}
+      {editorInstance && (
+        <SearchPalette
+          editor={editorInstance}
+          onCreateNode={handleNodePick}
+          visibleNodeTypeIds={workspaceProfile?.visibleNodeTypeIds}
+        />
+      )}
       {editorInstance && <ResourceInsertRequest editor={editorInstance} projectId={project.id} />}
       {editorInstance && workflowSaveSelection && (
         <WorkflowSaveDialog

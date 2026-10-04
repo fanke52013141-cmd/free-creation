@@ -45,7 +45,10 @@
     "desktop:install-latest-shortcut": "powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File scripts/install-latest-desktop-shortcut.ps1",
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "electron-vite build && electron-builder --mac",
-    "build:linux": "electron-vite build && electron-builder --linux"
+    "build:linux": "electron-vite build && electron-builder --linux",
+    "test:optimization-ui": "node scripts/run-optimization-ui-gate.cjs",
+    "test:optimization-electron": "node scripts/verify-optimization-electron.cjs",
+    "benchmark:optimization": "node scripts/benchmark-optimization-ui.cjs"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.34",

@@ -1,3 +1,6 @@
+import { readShotSelections, shotInputRevision } from '../../storyboard-selections'
+import type { NodeCardShape } from '../../../canvas/NodeCardShape'
+import { createStoryboardBatchFlow } from '../../../canvas/storyboard-batch-flow'
 // 分镜板节点 Body（路线图 R6：bodies.tsx 拆分）
 //
 // 解析只走共享出口 readStoryboardText / parseStoryboardData：卡片与执行器必须同一口径，
@@ -41,6 +44,7 @@ export function StoryboardBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
   const scrollRef = useRef<HTMLDivElement>(null)
   const board = useMemo(() => readStoryboardText(shape.props.text), [shape.props.text])
+  const selections = readShotSelections(shape.meta.storyboardSelections)
   const data = board.kind === 'ok' ? board.data : EMPTY_BOARD
   const shotCount = data.shots.length
   // 执行器按 in-json → in-text → 本卡片正文 的优先级取数并写回正文，所以连线状态必须
@@ -256,6 +260,13 @@ export function StoryboardBody({ shape }: NodeBodyProps): React.JSX.Element {
       <div className="storyboard-toolbar">
         <span>输出：out-json 分镜数据 · out-text 文字摘要</span>
         <div className="storyboard-toolbar-actions">
+          <button
+            type="button"
+            onPointerDown={stopEventPropagation}
+            onClick={() => createStoryboardBatchFlow(editor, shape)}
+          >
+            创建批处理流程
+          </button>
           <button type="button" onPointerDown={stopEventPropagation} onClick={addShot}>
             <Icon name="add" size={12} /> 新增镜头
           </button>
@@ -341,6 +352,64 @@ export function StoryboardBody({ shape }: NodeBodyProps): React.JSX.Element {
                 })}
                 <td className="storyboard-row-actions" onPointerDown={stopEventPropagation}>
                   <div className="storyboard-row-action-buttons">
+                    <button
+                      type="button"
+                      aria-label={`选用镜头 ${i + 1} 的结果`}
+                      title="先选择一个媒体资产，再将其选用为该镜头的结果"
+                      onClick={() => {
+                        const asset = editor
+                          .getSelectedShapes()
+                          .find(
+                            (item) =>
+                              item.type === 'node-card' && (item as NodeCardShape).props.mediaId
+                          ) as NodeCardShape | undefined
+                        if (!asset) return toast('请先在画布上选择一个媒体资产')
+                        markUndoPoint(editor, 'shot-result-selection')
+                        editor.updateShape({
+                          id: shape.id,
+                          type: 'node-card',
+                          meta: {
+                            storyboardSelections: JSON.stringify({
+                              ...selections,
+                              [shot.id]: {
+                                shotId: shot.id,
+                                inputRevision: shotInputRevision(shot),
+                                selectedAssetId: asset.id,
+                                mediaId: asset.props.mediaId
+                              }
+                            })
+                          }
+                        })
+                      }}
+                    >
+                      {selections[shot.id]
+                        ? selections[shot.id].inputRevision === shotInputRevision(shot)
+                          ? '已选用'
+                          : '选用已过期'
+                        : '选用结果'}
+                    </button>
+                    {selections[shot.id] && (
+                      <button
+                        type="button"
+                        aria-label={`定位镜头 ${i + 1} 的结果`}
+                        onClick={() => {
+                          const asset = editor.getShape(
+                            selections[shot.id].selectedAssetId as NodeCardShape['id']
+                          )
+                          if (!asset)
+                            return toast('选用资产节点已删除，媒体来源记录仍可在素材面板查询')
+                          editor.updateShape({
+                            id: asset.id,
+                            type: asset.type,
+                            meta: { resultGroupCollapsed: false }
+                          })
+                          editor.setSelectedShapes([asset.id])
+                          editor.zoomToSelection()
+                        }}
+                      >
+                        定位
+                      </button>
+                    )}
                     <button
                       type="button"
                       title="上移"

@@ -82,10 +82,7 @@ function collectEdges(
         : direction === 'in' && draftFrom.direction !== 'in'
           ? ports
               .filter((port) =>
-                portPairCompatible(
-                  { type: draftFrom.portType, schema: draftFrom.schema },
-                  port
-                )
+                portPairCompatible({ type: draftFrom.portType, schema: draftFrom.schema }, port)
               )
               .map((port) => port.id)
           : direction === 'out' && draftFrom.direction === 'in'
@@ -203,10 +200,7 @@ function collectEdges(
         : -1
     const outIdx = fromIndex >= 0 ? fromIndex : producerPorts.out.length > 0 ? 0 : -1
     const producerOutOffsets = getOffsets(producer, 'out', producerPorts.out)
-    const fromY =
-      outIdx >= 0
-        ? producerOutOffsets.get(producerPorts.out[outIdx].id)
-        : undefined
+    const fromY = outIdx >= 0 ? producerOutOffsets.get(producerPorts.out[outIdx].id) : undefined
     const sourceAnchorY =
       fromY !== undefined && producer.props.h > 0
         ? producerBounds.y + (producerBounds.height * fromY) / producer.props.h
@@ -329,7 +323,11 @@ export function DataEdgeLayer({
   }, [hostRef])
 
   // store/视口监听会触发本组件重绘，确保拖动、缩放和连线后重新换算屏幕坐标。
-  const edges = host ? collectEdges(editor, host, draftFrom) : []
+  const edges = host
+    ? collectEdges(editor, host, draftFrom).filter(
+        (edge) => !editor.isShapeHidden(edge.sourceId) && !editor.isShapeHidden(edge.targetId)
+      )
+    : []
   const nodeRects = host ? collectNodeRects(editor, host) : []
   const nodeRectsRef = useRef<ScreenNodeRect[]>([])
   useEffect(() => {

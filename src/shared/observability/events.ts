@@ -36,6 +36,15 @@ const MODEL_ATTRS = {
 
 export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Object.fromEntries(
   [
+    def('project.undelete.started', 'info', 'main/ipc/project.ipc.ts'),
+    def('project.undelete.completed', 'info', 'main/ipc/project.ipc.ts'),
+    def('project.undelete.failed', 'error', 'main/ipc/project.ipc.ts'),
+    def('canvas.batch_flow.created', 'info', 'renderer/canvas/storyboard-batch-flow.ts', {
+      itemCount: 'int'
+    }),
+    def('canvas.batch_flow.failed', 'error', 'renderer/canvas/storyboard-batch-flow.ts'),
+    def('media.files_preflight', 'info', 'main/ipc/media.ipc.ts', { missingCount: 'int' }),
+    def('media.files_preflight_failed', 'error', 'main/ipc/media.ipc.ts'),
     // app.*：main 生命周期
     def('app.session_started', 'info', 'main/index.ts'),
     def('app.session_ended', 'info', 'main/index.ts'),
@@ -57,7 +66,7 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
     def('artifact.recipe_started', 'info', 'main/ipc/media.ipc.ts'),
     def('artifact.recipe_read_failed', 'error', 'main/ipc/media.ipc.ts'),
     def('artifact.recipe_failed', 'error', 'main/ipc/media.ipc.ts'),
-    def('library.reuse_preview', 'info', 'main/ipc/library.ipc.ts', {missingCount: 'int'}),
+    def('library.reuse_preview', 'info', 'main/ipc/library.ipc.ts', { missingCount: 'int' }),
     def('node.completed', 'info', 'renderer/engine/executor.ts', { portCount: 'int' }),
     def('node.failed', 'error', 'renderer/engine/executor.ts'),
     def('node.cancelled', 'info', 'renderer/engine/executor.ts'),

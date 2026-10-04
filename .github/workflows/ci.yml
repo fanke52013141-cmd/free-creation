@@ -60,5 +60,8 @@ jobs:
       - name: 日志门禁（旁路/缺诊断接入）
         run: pnpm verify:logging
 
+      - name: 浏览器实际行为门禁（搜索、分组、撤销、最近删除、监听清理）
+        run: pnpm test:optimization-ui
+
       - name: 生产构建（Windows）
         run: pnpm build

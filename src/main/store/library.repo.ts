@@ -1,3 +1,4 @@
+import { getArtifactRecipe } from './artifact-recipes.repo'
 import { validateCategoryContent } from '../../shared/library/blueprint'
 import { revisionCategory, pinCategory, importRevisionCategory, exportCategoryVersions, importCategoryDefinition } from './library-categories.repo'
 import { createHash } from 'crypto'
@@ -575,7 +576,7 @@ export function captureProjectMedia(input: CaptureProjectMediaInput): LibraryRes
       data: new Uint8Array(bytes),
       mime: row.mime,
       fileName: basename(absolutePath),
-      metadata: { sourceProjectId: input.projectId, sourceMediaId: row.id }
+      metadata: { sourceProjectId: input.projectId, sourceMediaId: row.id, artifactRecipe: getArtifactRecipe(input.projectId, row.id) }
     }]
   })
 }
@@ -641,7 +642,7 @@ export function captureProjectNodes(input: CaptureProjectNodesInput): LibraryRes
       data: new Uint8Array(bytes),
       mime,
       fileName: filename,
-      metadata: { ...metadata, sourceMediaId: row.id }
+      metadata: { ...metadata, sourceMediaId: row.id, artifactRecipe: getArtifactRecipe(input.projectId, row.id) }
     }
   })
   const preset: LibraryPreset = components.every((component) => component.valueType === 'image') ? 'image' : 'custom'

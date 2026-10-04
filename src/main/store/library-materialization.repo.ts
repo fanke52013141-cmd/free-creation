@@ -1,3 +1,5 @@
+import { artifactRecipeSchema, copyArtifactRecipe } from '../../shared/artifact-recipe'
+import { saveArtifactRecipe } from './artifact-recipes.repo'
 import { createHash } from 'crypto'
 import { existsSync, readFileSync } from 'fs'
 import { extname, join } from 'path'
@@ -79,6 +81,19 @@ export async function materializeResource(input: {
       )
       assets.push(asset)
       componentAssets.push({ componentId: component.id, asset })
+    }
+    const recipeIds = new Map<string, string>()
+    for (const pair of componentAssets) {
+      const component = components.find((c) => c.id === pair.componentId)!
+      if (typeof component.metadata.sourceMediaId === 'string')
+        recipeIds.set(component.metadata.sourceMediaId, pair.asset.id)
+    }
+    for (const pair of componentAssets) {
+      const component = components.find((c) => c.id === pair.componentId)!
+      const raw = component.metadata.artifactRecipe
+      if (raw == null) continue
+      const recipe = artifactRecipeSchema.parse(raw)
+      saveArtifactRecipe(copyArtifactRecipe(recipe, input.projectId, pair.asset.id, recipeIds))
     }
     const now = Date.now()
     getDb()

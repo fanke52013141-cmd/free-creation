@@ -57,6 +57,7 @@ export function materializeArtifact(
       artifactProducerId: producer.id,
       artifactProducerPortId: artifact.portId,
       artifactRunId: runId,
+      runGroupId: runId,
       artifactCreatedAt: Date.now()
     }
   })

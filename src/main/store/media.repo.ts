@@ -232,6 +232,7 @@ export async function deleteMedia(mediaId: string): Promise<boolean> {
     { path: string } | undefined
   if (!row) return false
   const abs = getMediaAbsPath(row.path)
+  getDb().prepare('DELETE FROM artifact_recipes WHERE media_id = ?').run(mediaId)
   getDb().prepare('DELETE FROM media WHERE id = ?').run(mediaId)
   if (abs) {
     try {

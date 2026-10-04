@@ -8,7 +8,7 @@ export interface NodeReadiness {
   label: string
   detail: string
   /** T06：blocked 的结构化原因，供运行计划（T07）复用；ready 时缺省。 */
-  reason?: 'not-connected' | 'config-missing'
+  reason?: 'not-connected' | 'config-missing' | 'upstream-empty' | 'model-unavailable'
 }
 
 /** 正文即输入的节点：正文为空时执行器必然 skipped（与执行器分支同步维护）。 */
@@ -63,6 +63,8 @@ export function deriveNodeReadiness(input: {
   inputs: PortDecl[]
   incomingCounts: ReadonlyMap<string, number>
   outputs: RawNodeOutputs
+  availableInputCounts?: ReadonlyMap<string, number>
+  modelAvailable?: boolean
 }): NodeReadiness {
   if (input.exec === 'running' || input.exec === 'queued' || input.exec === 'pending') {
     return {
@@ -87,10 +89,37 @@ export function deriveNodeReadiness(input: {
     }
   }
 
+  const emptyUpstream = input.inputs.filter(
+    (port) =>
+      port.required &&
+      (input.incomingCounts.get(port.id) ?? 0) > 0 &&
+      input.availableInputCounts &&
+      !(input.availableInputCounts.get(port.id) ?? 0)
+  )
+  if (emptyUpstream.length)
+    return {
+      kind: 'blocked',
+      reason: 'upstream-empty',
+      label: '等待上游结果',
+      detail: `已连接但暂无有效输出：${emptyUpstream.map((port) => port.name).join('、')}。先运行上游或运行完整流程。`
+    }
+  if (input.modelAvailable === false)
+    return {
+      kind: 'blocked',
+      reason: 'model-unavailable',
+      label: '模型尚未配置',
+      detail: '在模型设置中选择支持此功能的模型或配置功能绑定。'
+    }
+
   // T06：正文必需节点的配置预检——正文为空时执行器必然 skipped，提前呈现待补充，
   // 避免用户点了运行才发现「无提示词」。
   const textRequirement = input.nodeType ? TEXT_REQUIRED_NODES[input.nodeType] : undefined
-  if (textRequirement && !(input.text ?? '').trim()) {
+  if (
+    textRequirement &&
+    !(input.text ?? '').trim() &&
+    !(input.availableInputCounts?.get('in-text') ?? 0) &&
+    !(input.availableInputCounts?.get('in-prompt') ?? 0)
+  ) {
     return {
       kind: 'blocked',
       reason: 'config-missing',

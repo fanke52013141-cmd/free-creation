@@ -125,35 +125,30 @@ try {
     throw "依赖同步失败，退出代码：$LASTEXITCODE。"
   }
 
-  # A partial build must never leave an older renderer bundle available for launch.
+  # Build beside the working package. Only promote after executable and renderer validation.
+  $StageRoot = [System.IO.Path]::GetFullPath((Join-Path $DistRoot ('staged-release-' + [Guid]::NewGuid().ToString('N'))))
   $DistPrefix = $DistRoot.TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
-  if (-not $ReleaseRoot.StartsWith($DistPrefix, [System.StringComparison]::OrdinalIgnoreCase) -or
-      [System.IO.Path]::GetFileName($ReleaseRoot) -ne 'current-source-release') {
-    throw "发布目录不在预期位置：$ReleaseRoot"
+  if (-not $StageRoot.StartsWith($DistPrefix, [System.StringComparison]::OrdinalIgnoreCase) -or
+      -not $ReleaseRoot.StartsWith($DistPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw '发布目录不在预期 dist 目录内'
   }
   foreach ($Path in @($DistRoot, $ReleaseRoot)) {
-    if (Test-Path -LiteralPath $Path) {
-      $Item = Get-Item -LiteralPath $Path
-      if ($Item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
-        throw "发布目录包含重解析点，已停止清理：$Path"
-      }
+    if ((Test-Path -LiteralPath $Path) -and ((Get-Item -LiteralPath $Path).Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+      throw '发布目录含重解析点，无法切换'
     }
   }
-  if (Test-Path -LiteralPath $ReleaseRoot) {
-    $ReleaseLinks = @(Get-ChildItem -LiteralPath $ReleaseRoot -Recurse -Force -Attributes ReparsePoint)
-    if ($ReleaseLinks.Count -gt 0) {
-      throw "旧发布目录包含链接，已停止清理：$($ReleaseLinks[0].FullName)"
-    }
-    Remove-Item -LiteralPath $ReleaseRoot -Recurse -Force
-  }
-
   Write-Host '正在从当前源码构建全新桌面版本……' -ForegroundColor Cyan
-  & $PnpmCommandPath run build:desktop-latest
+  & $PnpmCommandPath run build
+  if ($LASTEXITCODE -ne 0) { throw '源码构建失败，保留原桌面版本' }
+  & $PnpmCommandPath exec electron-builder --dir "--config.directories.output=$StageRoot" --config.electronDist=node_modules/electron/dist
   if ($LASTEXITCODE -ne 0) {
     throw "构建失败，退出代码：$LASTEXITCODE。"
   }
-  if (-not (Test-Path -LiteralPath $AppExecutable -PathType Leaf) -or
-      -not (Test-Path -LiteralPath $RendererIndex -PathType Leaf)) {
+  $StageApp = Join-Path $StageRoot 'win-unpacked'
+  $StageExecutable = Join-Path $StageApp 'canvas-studio.exe'
+  $StageRenderer = Join-Path $StageApp 'resources\app\out\renderer\index.html'
+  if (-not (Test-Path -LiteralPath $StageExecutable -PathType Leaf) -or
+      -not (Test-Path -LiteralPath $StageRenderer -PathType Leaf)) {
     throw '构建结束，但新应用或渲染页面缺失。'
   }
 
@@ -161,15 +156,29 @@ try {
     sourceCommit = $SourceCommit
     builtAtUtc = [DateTime]::UtcNow.ToString('o')
     includesUncommittedChanges = ($TrackedChanges.Count -gt 0)
-  } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $AppDirectory 'build-source.json') -Encoding UTF8
+  } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $StageApp 'build-source.json') -Encoding UTF8
 
+  $PreviousRoot = Join-Path $DistRoot ('previous-release-' + [Guid]::NewGuid().ToString('N'))
+  $MovedPrevious = $false
+  try {
+    if (Test-Path -LiteralPath $ReleaseRoot) {
+      [System.IO.Directory]::Move($ReleaseRoot, $PreviousRoot)
+      $MovedPrevious = $true
+    }
+    [System.IO.Directory]::Move($StageRoot, $ReleaseRoot)
+  } catch {
+    if ($MovedPrevious -and -not (Test-Path -LiteralPath $ReleaseRoot)) {
+      [System.IO.Directory]::Move($PreviousRoot, $ReleaseRoot)
+    }
+    throw
+  }
   Write-Host "构建完成，正在启动版本 $($SourceCommit.Substring(0, 7))……" -ForegroundColor Green
-  Start-Process -FilePath $AppExecutable -WorkingDirectory $AppDirectory | Out-Null
+  Start-Process -FilePath $AppExecutable -WorkingDirectory $AppDirectory -WindowStyle Hidden | Out-Null
 }
 catch {
   $LaunchFailed = $true
   Write-Host "更新或启动失败：$($_.Exception.Message)" -ForegroundColor Red
-  Write-Host '本次没有启动旧版本。' -ForegroundColor Yellow
+  Write-Host '原工作包已保留，可用 launch-verified-desktop.ps1 启动。' -ForegroundColor Yellow
 }
 finally {
   if ($LocationPushed) {

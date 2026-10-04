@@ -109,3 +109,24 @@ describe('deriveNodeReadiness · 配置预检（T06）', () => {
     expect(deriveNodeReadiness(legacy).kind).toBe('ready')
   })
 })
+
+it('distinguishes connected empty upstream and absent model, and accepts connected prompt text', () => {
+  const base = {
+    executionMode: 'auto' as const,
+    exec: 'idle',
+    nodeType: 'image-gen',
+    text: '',
+    inputs: [requiredText],
+    incomingCounts: new Map([['in-text', 1]]),
+    outputs: {}
+  }
+  expect(deriveNodeReadiness({ ...base, availableInputCounts: new Map() })).toMatchObject({
+    reason: 'upstream-empty'
+  })
+  expect(
+    deriveNodeReadiness({ ...base, availableInputCounts: new Map([['in-text', 1]]) })
+  ).toMatchObject({ kind: 'ready' })
+  expect(deriveNodeReadiness({ ...base, modelAvailable: false })).toMatchObject({
+    reason: 'model-unavailable'
+  })
+})

@@ -25,7 +25,8 @@ const ITERATE_FAILURE_OPTIONS: Array<{ value: IterateConfig['onFailure']; label:
 const ITERATE_RUN_MODE_OPTIONS: Array<{ value: IterateConfig['runMode']; label: string }> = [
   { value: 'all', label: '全部运行' },
   { value: 'resume', label: '续跑未完成' },
-  { value: 'failed', label: '只重跑失败' }
+  { value: 'failed', label: '只重跑失败' },
+  { value: 'changed', label: '修改项与失败项' }
 ]
 
 function enforceConfig(c: IterateConfig): IterateConfig {
@@ -60,7 +61,13 @@ function summaryFromResults(results: (IterateItemResult | null)[] | undefined): 
 
 function progressLabel(progress: IterateProgress): string {
   const mode =
-    progress.mode === 'resume' ? '续跑' : progress.mode === 'failed' ? '重跑失败' : '全部运行'
+    progress.mode === 'changed'
+      ? '修改项与失败项'
+      : progress.mode === 'resume'
+        ? '续跑'
+        : progress.mode === 'failed'
+          ? '重跑失败'
+          : '全部运行'
   return `${mode} · ${progress.completed}/${progress.total} · 成功 ${progress.done} · 失败 ${progress.failed}`
 }
 

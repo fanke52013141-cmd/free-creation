@@ -31,6 +31,33 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
     return ok({ lastProjectId: getSetting('lastProjectId') })
   })
 
+  ipcMain.handle(IPC.project.listDeleted, (): IpcEnvelope<ProjectMeta[]> => {
+    try {
+      return ok(repo.listDeletedProjects())
+    } catch {
+      return err('READ_FAILED', '读取最近删除失败')
+    }
+  })
+  ipcMain.handle(IPC.project.restoreDeleted, (_e, id: string): IpcEnvelope<ProjectMeta | null> => {
+    if (typeof id !== 'string' || !id) return err('INVALID_INPUT', '项目身份无效')
+    emitDomainEvent('project.undelete.started', '项目恢复开始', { attributes: { projectId: id } })
+    try {
+      const project = repo.restoreDeletedProject(id)
+      if (!project) throw new Error('项目不在最近删除中')
+      emitDomainEvent('project.undelete.completed', '项目恢复完成', {
+        status: 'success',
+        attributes: { projectId: id }
+      })
+      return ok(project)
+    } catch (error) {
+      emitDomainEvent('project.undelete.failed', '项目恢复失败', {
+        error,
+        attributes: { projectId: id }
+      })
+      return err('RESTORE_FAILED', error instanceof Error ? error.message : '恢复失败')
+    }
+  })
+
   ipcMain.handle(IPC.project.list, (): IpcEnvelope<ProjectMeta[]> => {
     return ok(repo.listProjects())
   })

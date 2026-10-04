@@ -1,3 +1,5 @@
+import { listArtifactRecipes, saveArtifactRecipe } from './artifact-recipes.repo'
+import { copyArtifactRecipe } from '../../shared/artifact-recipe'
 // 项目仓库：SQLite 索引 + project.json 图数据（见《技术框架与规范》§9）
 import { nanoid } from 'nanoid'
 import {
@@ -98,6 +100,34 @@ export function listProjects(): ProjectMeta[] {
     .prepare('SELECT * FROM projects WHERE deleted = 0 ORDER BY updated_at DESC')
     .all() as ProjectRow[]
   return rows.map(rowToMeta)
+}
+
+export function listDeletedProjects(): ProjectMeta[] {
+  return (
+    getDb()
+      .prepare('SELECT * FROM projects WHERE deleted = 1 ORDER BY updated_at DESC')
+      .all() as ProjectRow[]
+  ).map(rowToMeta)
+}
+
+/** Soft deletion preserves all files and references. Restoration changes only the index. */
+export function restoreDeletedProject(id: string): ProjectMeta | null {
+  const database = getDb()
+  return database.transaction(() => {
+    const row = database.prepare('SELECT * FROM projects WHERE id = ? AND deleted = 1').get(id) as
+      ProjectRow | undefined
+    if (!row) return null
+    if (!readProjectFile(id)) throw new Error('项目文件缺失或损坏，无法恢复')
+    const names = new Set(listProjects().map((project) => project.name))
+    let name = row.name
+    for (let suffix = 1; names.has(name); suffix += 1) name = `${row.name} · 恢复${suffix}`
+    database
+      .prepare(
+        'UPDATE projects SET deleted = 0, name = ?, updated_at = ? WHERE id = ? AND deleted = 1'
+      )
+      .run(name, Date.now(), id)
+    return getProject(id)
+  })()
 }
 
 export function createProject(name: string, workspaceProfile?: WorkspaceProfile): ProjectMeta {
@@ -405,6 +435,11 @@ export function cloneProject(sourceId: string, requestedName: string): ProjectMe
           now,
           row.name ?? basename(row.newPath)
         )
+      }
+      for (const recipe of listArtifactRecipes(sourceId)) {
+        const targetMediaId = ids.get(recipe.mediaId)
+        if (targetMediaId)
+          saveArtifactRecipe(copyArtifactRecipe(recipe, id, targetMediaId, entityIds, paths))
       }
       for (const row of usageRows) {
         const remapJsonIds = (value: string): string => {

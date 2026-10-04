@@ -1,0 +1,461 @@
+{
+  "at": "2026-10-04T13:54:09.953Z",
+  "runtime": "Electron native IPC + development renderer",
+  "hardware": {
+    "cpu": "Intel(R) Core(TM) i7-14700KF",
+    "ramBytes": 34200453120
+  },
+  "limitation": "API-driven input/movement; native disk save; Electron webContents zoom, not Windows desktop scaling. sampled heap is not process peak RSS.",
+  "results": [
+    {
+      "count": 50,
+      "scale": 1,
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "interactiveMs": 166.1000000089407,
+      "inputFrameP50": 17.099999994039536,
+      "inputFrameP95": 36.6000000089407,
+      "moveFrameP50": 16.799999997019768,
+      "moveFrameP95": 17.100000008940697,
+      "demoSaveMs": 5.399999991059303,
+      "snapshotBytes": 18349,
+      "sampledHeapBytes": 110904555,
+      "processMemory": [
+        {
+          "type": "Browser",
+          "memory": {
+            "workingSetSize": 165020,
+            "peakWorkingSetSize": 165020,
+            "privateBytes": 150884
+          }
+        },
+        {
+          "type": "GPU",
+          "memory": {
+            "workingSetSize": 125832,
+            "peakWorkingSetSize": 134544,
+            "privateBytes": 194864
+          }
+        },
+        {
+          "type": "Utility",
+          "memory": {
+            "workingSetSize": 55888,
+            "peakWorkingSetSize": 59864,
+            "privateBytes": 16300
+          }
+        },
+        {
+          "type": "Tab",
+          "memory": {
+            "workingSetSize": 303504,
+            "peakWorkingSetSize": 303504,
+            "privateBytes": 241068
+          }
+        }
+      ]
+    },
+    {
+      "count": 200,
+      "scale": 1,
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "interactiveMs": 238.6000000089407,
+      "inputFrameP50": 39.599999994039536,
+      "inputFrameP95": 82.79999999701977,
+      "moveFrameP50": 37.599999994039536,
+      "moveFrameP95": 74.70000000298023,
+      "demoSaveMs": 6.700000002980232,
+      "snapshotBytes": 71078,
+      "sampledHeapBytes": 187468493,
+      "processMemory": [
+        {
+          "type": "Browser",
+          "memory": {
+            "workingSetSize": 166772,
+            "peakWorkingSetSize": 167368,
+            "privateBytes": 153148
+          }
+        },
+        {
+          "type": "GPU",
+          "memory": {
+            "workingSetSize": 132936,
+            "peakWorkingSetSize": 138508,
+            "privateBytes": 259388
+          }
+        },
+        {
+          "type": "Utility",
+          "memory": {
+            "workingSetSize": 56076,
+            "peakWorkingSetSize": 60728,
+            "privateBytes": 16884
+          }
+        },
+        {
+          "type": "Tab",
+          "memory": {
+            "workingSetSize": 399280,
+            "peakWorkingSetSize": 399300,
+            "privateBytes": 334264
+          }
+        }
+      ]
+    },
+    {
+      "count": 1000,
+      "scale": 1,
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "interactiveMs": 1764.7999999970198,
+      "inputFrameP50": 714.2999999970198,
+      "inputFrameP95": 834.7999999970198,
+      "moveFrameP50": 663.5,
+      "moveFrameP95": 1293.7999999970198,
+      "demoSaveMs": 16,
+      "snapshotBytes": 353858,
+      "sampledHeapBytes": 754611215,
+      "processMemory": [
+        {
+          "type": "Browser",
+          "memory": {
+            "workingSetSize": 178608,
+            "peakWorkingSetSize": 179356,
+            "privateBytes": 161892
+          }
+        },
+        {
+          "type": "GPU",
+          "memory": {
+            "workingSetSize": 143636,
+            "peakWorkingSetSize": 145136,
+            "privateBytes": 273232
+          }
+        },
+        {
+          "type": "Utility",
+          "memory": {
+            "workingSetSize": 55368,
+            "peakWorkingSetSize": 59412,
+            "privateBytes": 16152
+          }
+        },
+        {
+          "type": "Tab",
+          "memory": {
+            "workingSetSize": 1185632,
+            "peakWorkingSetSize": 1187168,
+            "privateBytes": 1123312
+          }
+        }
+      ]
+    },
+    {
+      "count": 50,
+      "scale": 1.25,
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "interactiveMs": 53.099999994039536,
+      "inputFrameP50": 16.799999997019768,
+      "inputFrameP95": 17.599999994039536,
+      "moveFrameP50": 17,
+      "moveFrameP95": 27.899999991059303,
+      "demoSaveMs": 5.700000002980232,
+      "snapshotBytes": 18349,
+      "sampledHeapBytes": 158825925,
+      "processMemory": [
+        {
+          "type": "Browser",
+          "memory": {
+            "workingSetSize": 169388,
+            "peakWorkingSetSize": 169388,
+            "privateBytes": 155244
+          }
+        },
+        {
+          "type": "GPU",
+          "memory": {
+            "workingSetSize": 128712,
+            "peakWorkingSetSize": 135700,
+            "privateBytes": 291968
+          }
+        },
+        {
+          "type": "Utility",
+          "memory": {
+            "workingSetSize": 55616,
+            "peakWorkingSetSize": 60544,
+            "privateBytes": 16384
+          }
+        },
+        {
+          "type": "Tab",
+          "memory": {
+            "workingSetSize": 380412,
+            "peakWorkingSetSize": 380412,
+            "privateBytes": 317756
+          }
+        }
+      ]
+    },
+    {
+      "count": 200,
+      "scale": 1.25,
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "interactiveMs": 318.30000001192093,
+      "inputFrameP50": 39,
+      "inputFrameP95": 78.59999999403954,
+      "moveFrameP50": 37,
+      "moveFrameP95": 48.70000000298023,
+      "demoSaveMs": 9.099999994039536,
+      "snapshotBytes": 71078,
+      "sampledHeapBytes": 215203053,
+      "processMemory": [
+        {
+          "type": "Browser",
+          "memory": {
+            "workingSetSize": 168536,
+            "peakWorkingSetSize": 168536,
+            "privateBytes": 152188
+          }
+        },
+        {
+          "type": "GPU",
+          "memory": {
+            "workingSetSize": 130244,
+            "peakWorkingSetSize": 138140,
+            "privateBytes": 277324
+          }
+        },
+        {
+          "type": "Utility",
+          "memory": {
+            "workingSetSize": 56556,
+            "peakWorkingSetSize": 60260,
+            "privateBytes": 17180
+          }
+        },
+        {
+          "type": "Tab",
+          "memory": {
+            "workingSetSize": 439436,
+            "peakWorkingSetSize": 439436,
+            "privateBytes": 376316
+          }
+        }
+      ]
+    },
+    {
+      "count": 1000,
+      "scale": 1.25,
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "interactiveMs": 1686,
+      "inputFrameP50": 681.6000000089407,
+      "inputFrameP95": 712.2000000029802,
+      "moveFrameP50": 637,
+      "moveFrameP95": 676.3999999910593,
+      "demoSaveMs": 20.600000008940697,
+      "snapshotBytes": 353858,
+      "sampledHeapBytes": 570560022,
+      "processMemory": [
+        {
+          "type": "Browser",
+          "memory": {
+            "workingSetSize": 173916,
+            "peakWorkingSetSize": 174712,
+            "privateBytes": 158664
+          }
+        },
+        {
+          "type": "GPU",
+          "memory": {
+            "workingSetSize": 123028,
+            "peakWorkingSetSize": 134348,
+            "privateBytes": 228472
+          }
+        },
+        {
+          "type": "Utility",
+          "memory": {
+            "workingSetSize": 55236,
+            "peakWorkingSetSize": 59528,
+            "privateBytes": 15976
+          }
+        },
+        {
+          "type": "Tab",
+          "memory": {
+            "workingSetSize": 1153508,
+            "peakWorkingSetSize": 1161368,
+            "privateBytes": 1090972
+          }
+        }
+      ]
+    },
+    {
+      "count": 50,
+      "scale": 1.5,
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "interactiveMs": 195,
+      "inputFrameP50": 16.900000005960464,
+      "inputFrameP95": 35.6000000089407,
+      "moveFrameP50": 16.799999997019768,
+      "moveFrameP95": 17.100000008940697,
+      "demoSaveMs": 5.899999991059303,
+      "snapshotBytes": 18349,
+      "sampledHeapBytes": 326035339,
+      "processMemory": [
+        {
+          "type": "Browser",
+          "memory": {
+            "workingSetSize": 169636,
+            "peakWorkingSetSize": 175848,
+            "privateBytes": 152948
+          }
+        },
+        {
+          "type": "GPU",
+          "memory": {
+            "workingSetSize": 127948,
+            "peakWorkingSetSize": 135600,
+            "privateBytes": 246400
+          }
+        },
+        {
+          "type": "Utility",
+          "memory": {
+            "workingSetSize": 55932,
+            "peakWorkingSetSize": 58488,
+            "privateBytes": 16288
+          }
+        },
+        {
+          "type": "Tab",
+          "memory": {
+            "workingSetSize": 670412,
+            "peakWorkingSetSize": 670480,
+            "privateBytes": 608012
+          }
+        }
+      ]
+    },
+    {
+      "count": 200,
+      "scale": 1.5,
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "interactiveMs": 309.1000000089407,
+      "inputFrameP50": 38.400000005960464,
+      "inputFrameP95": 82.20000000298023,
+      "moveFrameP50": 36.70000000298023,
+      "moveFrameP95": 45.79999999701977,
+      "demoSaveMs": 7.0999999940395355,
+      "snapshotBytes": 71078,
+      "sampledHeapBytes": 228227003,
+      "processMemory": [
+        {
+          "type": "Browser",
+          "memory": {
+            "workingSetSize": 170416,
+            "peakWorkingSetSize": 171020,
+            "privateBytes": 154928
+          }
+        },
+        {
+          "type": "GPU",
+          "memory": {
+            "workingSetSize": 127592,
+            "peakWorkingSetSize": 135348,
+            "privateBytes": 229968
+          }
+        },
+        {
+          "type": "Utility",
+          "memory": {
+            "workingSetSize": 56112,
+            "peakWorkingSetSize": 60012,
+            "privateBytes": 16452
+          }
+        },
+        {
+          "type": "Tab",
+          "memory": {
+            "workingSetSize": 435568,
+            "peakWorkingSetSize": 435568,
+            "privateBytes": 372580
+          }
+        }
+      ]
+    },
+    {
+      "count": 1000,
+      "scale": 1.5,
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "interactiveMs": 1715,
+      "inputFrameP50": 665.8999999910593,
+      "inputFrameP95": 709.7000000029802,
+      "moveFrameP50": 567.9000000059605,
+      "moveFrameP95": 665.4000000059605,
+      "demoSaveMs": 21.799999997019768,
+      "snapshotBytes": 353858,
+      "sampledHeapBytes": 582276606,
+      "processMemory": [
+        {
+          "type": "Browser",
+          "memory": {
+            "workingSetSize": 173536,
+            "peakWorkingSetSize": 174324,
+            "privateBytes": 159296
+          }
+        },
+        {
+          "type": "GPU",
+          "memory": {
+            "workingSetSize": 122952,
+            "peakWorkingSetSize": 137476,
+            "privateBytes": 167952
+          }
+        },
+        {
+          "type": "Utility",
+          "memory": {
+            "workingSetSize": 55484,
+            "peakWorkingSetSize": 59080,
+            "privateBytes": 16288
+          }
+        },
+        {
+          "type": "Tab",
+          "memory": {
+            "workingSetSize": 1148912,
+            "peakWorkingSetSize": 1155436,
+            "privateBytes": 1085748
+          }
+        }
+      ]
+    }
+  ]
+}

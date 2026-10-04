@@ -27,27 +27,39 @@ interface LibrarySearchHit {
 
 export function SearchPalette({
   editor,
-  onCreateNode
+  onCreateNode,
+  visibleNodeTypeIds
 }: {
   editor: Editor
   onCreateNode?: (type: NodeTypeId) => void
+  visibleNodeTypeIds?: string[]
 }): React.JSX.Element | null {
   const open = useSearchStore((s) => s.open)
   if (!open) return null
-  return <SearchPaletteInner editor={editor} onCreateNode={onCreateNode} />
+  return (
+    <SearchPaletteInner
+      editor={editor}
+      onCreateNode={onCreateNode}
+      visibleNodeTypeIds={visibleNodeTypeIds}
+    />
+  )
 }
 
 function SearchPaletteInner({
   editor,
-  onCreateNode
+  onCreateNode,
+  visibleNodeTypeIds
 }: {
   editor: Editor
   onCreateNode?: (type: NodeTypeId) => void
+  visibleNodeTypeIds?: string[]
 }): React.JSX.Element | null {
   const close = useSearchStore((s) => s.close)
   const templates = useWorkflowStore((s) => s.templates)
   const loadLibrary = useWorkflowStore((s) => s.load)
   const [query, setQuery] = useState('')
+  const [activeIndex, setActiveIndex] = useState(0)
+  const resultsRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   // 记录打开搜索时的焦点元素：关闭后焦点回到触发入口（A02），而不是丢到 body。
   const openerRef = useRef<HTMLElement | null>(
@@ -170,7 +182,10 @@ function SearchPaletteInner({
             aria-label="搜索画布节点或节点库"
             value={query}
             placeholder="搜索画布节点或节点库…"
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setQuery(event.target.value)
+              setActiveIndex(0)
+            }}
             onPointerDown={(event) => stopEventPropagation(event)}
             onKeyDown={(event) => {
               // F05：此前对所有键 stopPropagation，Esc 到不了 window 关闭监听。
@@ -181,6 +196,25 @@ function SearchPaletteInner({
                 return
               }
               event.stopPropagation()
+              if (event.nativeEvent.isComposing) return
+              const buttons = Array.from(
+                resultsRef.current?.querySelectorAll<HTMLButtonElement>('.search-hit') ?? []
+              )
+              if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault()
+                const next = buttons.length
+                  ? (activeIndex + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) %
+                    buttons.length
+                  : 0
+                setActiveIndex(next)
+                buttons.forEach((button, index) =>
+                  button.classList.toggle('search-hit-active', index === next)
+                )
+                buttons[next]?.scrollIntoView({ block: 'nearest' })
+              } else if (event.key === 'Enter') {
+                event.preventDefault()
+                buttons[Math.min(activeIndex, buttons.length - 1)]?.click()
+              }
             }}
           />
           <button className="search-close" aria-label="关闭搜索" onClick={close}>
@@ -188,7 +222,7 @@ function SearchPaletteInner({
           </button>
         </div>
         {query.trim() && (
-          <div className="search-results" aria-live="polite">
+          <div ref={resultsRef} className="search-results" aria-live="polite">
             {createHits.length === 0 &&
             matches.canvas.length === 0 &&
             matches.library.length === 0 ? (
@@ -215,7 +249,11 @@ function SearchPaletteInner({
                         <div className="search-hit-info">
                           <span className="search-hit-title">
                             创建：{hit.title}
-                            <span className="search-hit-action">创建</span>
+                            <span className="search-hit-action">
+                              {visibleNodeTypeIds && !visibleNodeTypeIds.includes(hit.type)
+                                ? '已隐藏，可本次添加'
+                                : '创建'}
+                            </span>
                           </span>
                           {hit.snippet && <span className="search-hit-snippet">{hit.snippet}</span>}
                         </div>

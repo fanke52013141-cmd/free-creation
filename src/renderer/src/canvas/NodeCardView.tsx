@@ -1,3 +1,7 @@
+import { resolveFeatureOption } from '@shared/engine/models'
+import { rendererGateway } from '../engine/rendererGateway'
+import type { ModelOperation } from '@free-creation/model-contracts'
+import { nodePageIndex } from './node-page-index'
 // NodeCard 卡片视图：头部（序号/图标/标题/状态灯）+ 类型化内容体 + 端口圆点 + 媒体预览浮层
 import { HTMLContainer, stopEventPropagation, useEditor, useValue } from 'tldraw'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -103,6 +107,52 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   const editor = useEditor()
   const project = useAppStore((s) => s.currentProject)
   const providers = useGatewayStore((s) => s.providers)
+  const modelCheckKey = `${shape.props.nodeType}:${shape.props.config}`
+  const [modelCheck, setModelCheck] = useState<{
+    key: string
+    providers: typeof providers
+    available: boolean
+  } | null>(null)
+  const modelAvailable =
+    modelCheck?.key === modelCheckKey && modelCheck.providers === providers
+      ? modelCheck.available
+      : undefined
+  useEffect(() => {
+    const features: Record<string, { feature: string; operation: ModelOperation }> = {
+      'image-gen': { feature: 'image.generate', operation: 'image.generate' },
+      'image-edit': { feature: 'image.edit', operation: 'image.edit' },
+      video: { feature: 'video.generate', operation: 'video.generate' },
+      'ai-process': { feature: 'text.process', operation: 'text.generate' },
+      chat: { feature: 'text.chat', operation: 'text.generate' }
+    }
+    const target = features[shape.props.nodeType]
+    let cancelled = false
+    if (target) {
+      let config: { featureKey?: string; modelKey?: string } = {}
+      try {
+        config = JSON.parse(shape.props.config || '{}')
+      } catch {
+        /* executor owns invalid config errors */
+      }
+      void resolveFeatureOption(
+        rendererGateway,
+        providers,
+        config.featureKey || target.feature,
+        target.operation,
+        config.modelKey
+      )
+        .then((option) => {
+          if (!cancelled)
+            setModelCheck({ key: modelCheckKey, providers, available: Boolean(option) })
+        })
+        .catch(() => {
+          if (!cancelled) setModelCheck({ key: modelCheckKey, providers, available: false })
+        })
+    }
+    return () => {
+      cancelled = true
+    }
+  }, [shape.props.nodeType, shape.props.config, providers, modelCheckKey])
   const spec = getNodeType(shape.props.nodeType)
   const displayTitle =
     shape.props.nodeType === 'speech' && shape.props.title === '配音'
@@ -200,12 +250,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   const seq = useValue(
     'node sequence',
     () => {
-      const shapes = editor
-        .getCurrentPageShapes()
-        .filter((item) => item.type === 'node-card')
-        .sort((a, b) => a.index.localeCompare(b.index))
-      const idx = shapes.findIndex((item) => item.id === shape.id)
-      return idx >= 0 ? idx + 1 : 0
+      return nodePageIndex(editor).sequence.get(shape.id) ?? 0
     },
     [editor, shape.id]
   )
@@ -541,11 +586,12 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     'node readiness',
     () => {
       const incomingCounts = new Map<string, number>()
+      const availableInputCounts = new Map<string, number>()
       const outgoingCounts = new Map<string, number>()
       const incomingNodeColors = new Map<string, string>()
       const incomingPortIds = new Set<string>()
       const outgoingPortIds = new Set<string>()
-      for (const arrow of editor.getCurrentPageShapes()) {
+      for (const arrow of nodePageIndex(editor).arrows.get(shape.id) ?? []) {
         if (arrow.type !== 'arrow') continue
         const bindings = editor.getBindingsFromShape(arrow.id, 'arrow')
         if (typeof arrow.meta?.toPort === 'string') {
@@ -555,6 +601,15 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             incomingPortIds.add(arrow.meta.toPort)
             const start = bindings.find((binding) => binding.props.terminal === 'start')
             const source = start ? editor.getShape<NodeCardShape>(start.toId) : undefined
+            const sourceOutput =
+              source?.type === 'node-card' && typeof arrow.meta.fromPort === 'string'
+                ? projectNodeOutputs(source)[arrow.meta.fromPort]
+                : undefined
+            if (sourceOutput)
+              availableInputCounts.set(
+                arrow.meta.toPort,
+                (availableInputCounts.get(arrow.meta.toPort) ?? 0) + 1
+              )
             const sourceColor =
               source?.type === 'node-card' ? getNodeType(source.props.nodeType)?.color : undefined
             // 同类型的多值输入共用一个连接点，按第一条真实来源取色。
@@ -574,7 +629,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           }
         }
       }
-      for (const card of editor.getCurrentPageShapes()) {
+      for (const card of nodePageIndex(editor).artifacts.get(shape.id) ?? []) {
         if (card.type !== 'node-card') continue
         const meta = card.meta as Record<string, unknown> | undefined
         if (
@@ -595,6 +650,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           text: shape.props.text,
           inputs: inPorts,
           incomingCounts,
+          availableInputCounts,
+          modelAvailable,
           outputs: spec?.projectOutputs?.(shape) ?? {}
         }),
         incomingCounts,
@@ -610,7 +667,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         })()
       }
     },
-    [editor, shape, spec, inPorts]
+    [editor, shape, spec, inPorts, modelAvailable]
   )
   const readiness = readinessState.readiness
   // T09：输入已修改时在状态文案后追加标注——只标注不阻断：旧结果保留且仍可
@@ -754,12 +811,16 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           const requiredHeight = Math.ceil(shellHeight + contentHeight)
           const tier = resolveNodeHeight(requiredHeight)
           if (tier !== shape.props.h) {
-            editor.updateShape({
-              id: shape.id,
-              type: 'node-card',
-              props: { h: tier },
-              meta: { ...shape.meta, nodeHeightMode: 'auto' }
-            })
+            editor.run(
+              () =>
+                editor.updateShape({
+                  id: shape.id,
+                  type: 'node-card',
+                  props: { h: tier },
+                  meta: { ...shape.meta, nodeHeightMode: 'auto' }
+                }),
+              { history: 'ignore' }
+            )
           }
           return
         }
@@ -779,7 +840,10 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         if (overflow <= 2) return
         const tier = resolveNodeHeight(shape.props.h + overflow)
         if (tier > shape.props.h + 2) {
-          editor.updateShape({ id: shape.id, type: 'node-card', props: { h: tier } })
+          editor.run(
+            () => editor.updateShape({ id: shape.id, type: 'node-card', props: { h: tier } }),
+            { history: 'ignore' }
+          )
         }
       })
     }

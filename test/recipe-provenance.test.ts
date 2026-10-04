@@ -6,6 +6,7 @@ import type { GatewayClient } from '../src/shared/engine/gateway-client'
 import {
   artifactRecipeSchema,
   recipeParams,
+  copyArtifactRecipe,
   type ArtifactRecipe
 } from '../src/shared/artifact-recipe'
 const state = vi.hoisted(() => ({ database: null as unknown }))
@@ -91,4 +92,22 @@ describe('T10 独立生成来源', () => {
     expect(recipeParams('broken')).toBe('{}')
     expect(artifactRecipeSchema.safeParse({ ...record, createdAt: -1 }).success).toBe(false)
   })
+})
+
+it('resource copy remaps included media and marks omitted references while preserving prompt', () => {
+  const original = recipe('original')
+  original.fullPrompt = 'original upstream 正文'
+  original.paramsJson = JSON.stringify({ mediaId: 'upstream', token: 'secret' })
+  const copied = copyArtifactRecipe(
+    original,
+    'target',
+    'copy',
+    new Map([['upstream', 'new-input']])
+  )
+  expect(copied.inputMediaIds).toEqual(['new-input'])
+  expect(copied.fullPrompt).toBe(original.fullPrompt)
+  expect(JSON.parse(copied.paramsJson)).toEqual({ mediaId: 'new-input' })
+  expect(copyArtifactRecipe(original, 'target', 'copy', new Map()).missingInputMediaIds).toEqual([
+    'upstream'
+  ])
 })
