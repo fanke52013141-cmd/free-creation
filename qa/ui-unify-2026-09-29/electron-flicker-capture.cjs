@@ -73,15 +73,6 @@ async function main() {
   await page.waitForTimeout(500)
   const n1 = await capture('base', 14)
 
-  await page.addStyleTag({ content: '.canvas-theme-dark .tl-background { background-image: none !important; }' })
-  await page.waitForTimeout(400)
-  const n2 = await capture('nobg', 14)
-
-  await page.addStyleTag({
-    content: '.canvas-topbar, .multiselect-toolbar, .dock-minimap { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }'
-  })
-  await page.waitForTimeout(400)
-  const n3 = await capture('nobg-noblur', 14)
 
   console.log(JSON.stringify({ n1, n2, n3 }))
   await cdp.send('Page.stopScreencast').catch(() => undefined)

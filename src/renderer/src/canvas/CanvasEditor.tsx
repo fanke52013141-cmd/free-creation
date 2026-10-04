@@ -405,7 +405,9 @@ export function CanvasEditor({
     window.addEventListener('pointerdown', onPointerDown, true)
     window.addEventListener('pointerup', onPointerUp, true)
     return () => {
-      window.removeEventListener('wheel', onWheel)
+      // removeEventListener 的 capture 标志必须与注册一致，否则捕获监听不会被移除
+      // （F19：反复进出画布会累积监听，非画布页面滚轮也会误改 body 状态）。
+      window.removeEventListener('wheel', onWheel, { capture: true } as EventListenerOptions)
       window.removeEventListener('pointerdown', onPointerDown, true)
       window.removeEventListener('pointerup', onPointerUp, true)
       if (timer !== undefined) window.clearTimeout(timer)

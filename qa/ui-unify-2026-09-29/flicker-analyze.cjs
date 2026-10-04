@@ -22,7 +22,7 @@ async function launch() {
 async function main() {
   const browser = await launch()
   const page = await browser.newPage()
-  const passes = { base: 'flick-base-', nobg: 'flick-nobg-', noblur: 'flick-nobg-noblur-' }
+  const passes = { old: 'flick-a-old-', dots: 'flick-b-dots-', dots_noblur: 'flick-c-noblur-' }
   const lum = async (file) => {
     const b64 = fs.readFileSync(path.join(DIR, file)).toString('base64')
     return page.evaluate(
