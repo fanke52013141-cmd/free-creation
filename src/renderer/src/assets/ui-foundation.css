@@ -45,20 +45,28 @@ body {
   backdrop-filter: blur(14px) saturate(115%);
 }
 
+/* 2026-10-04 缩放闪烁修复：点阵背景从相机变换层（.tl-background）搬到屏幕空间的
+   .canvas-page 上。变换层内的大面积渐变在缩放的每个离散步都会整层重光栅化（闪烁主因）；
+   屏幕空间背景不参与相机变换，缩放/平移期间零重绘，点阵密度也恒定。
+   .tl-background 只做透明让屏幕空间背景透出（.tl-container/.tl-canvas 本身透明）。 */
 .canvas-theme-dark .tl-background {
-  background-color: #15191f !important;
+  background: transparent !important;
+}
+
+.canvas-theme-dark.canvas-page {
+  background-color: var(--bg);
   background-image:
     radial-gradient(circle at 1px 1px, rgba(202, 216, 235, 0.12) 0.72px, transparent 0.85px),
     radial-gradient(circle at 1px 1px, rgba(202, 216, 235, 0.055) 0.72px, transparent 0.85px),
-    radial-gradient(ellipse at 50% 42%, rgba(66, 185, 245, 0.035), transparent 48%) !important;
+    radial-gradient(ellipse at 50% 42%, rgba(66, 185, 245, 0.035), transparent 48%);
   background-position:
     0 0,
     48px 48px,
-    0 0 !important;
+    0 0;
   background-size:
     24px 24px,
     96px 96px,
-    100% 100% !important;
+    100% 100%;
 }
 
 .canvas-theme-light .tl-background {
@@ -224,6 +232,19 @@ body {
   background: rgba(27, 32, 39, 0.9);
   box-shadow: var(--elevation-float);
   backdrop-filter: blur(14px);
+}
+
+/* 2026-10-04 缩放闪烁修复：相机交互（滚轮缩放/平移、中键拖拽）期间，悬浮在画布上的
+   底座小部件退化为不透明底并停用 backdrop-filter——毛玻璃必须逐帧重新合成身后的
+   动态画布，是缩放闪烁的次要来源。由 CanvasEditor 给 body 挂 camera-interacting
+   类，交互停止 250ms 后恢复毛玻璃。顶栏不在画布之上（flex 布局的兄弟节点），
+   其 backdrop-filter 无效也无闪烁，不在降级范围。 */
+body.camera-interacting .dock-minimap,
+body.camera-interacting .multiselect-toolbar {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  /* rgba(27,32,39,.9) 在 --bg #111419 上的不透明合成值 */
+  background: #1a1f26;
 }
 
 /* ── Node shell：唯一权威定义（呈现规范 §14）──────────────────────────────

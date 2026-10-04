@@ -382,6 +382,37 @@ export function CanvasEditor({
     return () => el.removeEventListener('wheel', onWheel, { capture: true })
   }, [editorInstance])
 
+  // 相机交互期间给 body 挂 camera-interacting：底座/小地图/多选工具条退化为不透明底
+  // （见 ui-foundation 同名规则），消除毛玻璃在画布逐帧重绘时的合成闪烁（2026-10-04）。
+  useEffect(() => {
+    let timer: number | undefined
+    const activate = (): void => {
+      document.body.classList.add('camera-interacting')
+      if (timer !== undefined) window.clearTimeout(timer)
+      timer = window.setTimeout(() => document.body.classList.remove('camera-interacting'), 250)
+    }
+    const onWheel = (): void => activate()
+    const onPointerDown = (e: PointerEvent): void => {
+      // 仅中键拖拽（画布平移）；普通左键点击不得触发降级
+      if (e.button === 1) activate()
+    }
+    const onPointerUp = (): void => {
+      // 只续期已经在交互中的状态，普通点击的 pointerup 不激活
+      if (document.body.classList.contains('camera-interacting')) activate()
+    }
+    // 捕获阶段：tldraw/滚轮路由会在目标层处理事件，冒泡到不了 window
+    window.addEventListener('wheel', onWheel, { capture: true, passive: true })
+    window.addEventListener('pointerdown', onPointerDown, true)
+    window.addEventListener('pointerup', onPointerUp, true)
+    return () => {
+      window.removeEventListener('wheel', onWheel)
+      window.removeEventListener('pointerdown', onPointerDown, true)
+      window.removeEventListener('pointerup', onPointerUp, true)
+      if (timer !== undefined) window.clearTimeout(timer)
+      document.body.classList.remove('camera-interacting')
+    }
+  }, [])
+
   // 左侧节点面板：点击在视口中心创建；拖拽到画布在落点创建
   const SIDEBAR_W = 72
   const visibleNodeTypeIds = workspaceProfile ? new Set(workspaceProfile.visibleNodeTypeIds) : null
