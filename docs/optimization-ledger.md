@@ -9,7 +9,7 @@
 |---|---|---|---|---|---|
 | T01 类型化演示接口 | M0 | F16 | **已交付**(2026-10-04) | 演示生图/AI处理/语音三卡反馈 | qa/optimization-T01/ |
 | T00 真实任务基线 | M0 | 不足A | 待确认 | REAL-TASKS.md | qa/optimization-baseline/ |
-| T04 保存协调器 | M1 | F01 | 待确认 | A07/A08 | qa/optimization-T04/ |
+| T04 保存协调器 | M1 | F01 | **实现中→待L4验收**(A07/A08) | A07/A08 | qa/optimization-T04/ |
 | T05 恢复检查点 | M1 | F02 | 待确认 | A09 | qa/optimization-T05/ |
 | T02 搜索与Esc | M2 | F04/F05 | 待确认 | A01/A02 | qa/optimization-T02/ |
 | T03 新建分层 | M2 | F03 | 待确认 | A01 | — |
@@ -24,6 +24,14 @@
 | T14 最近删除/版本启动 | M5 | F14/F15 | 待确认 | A13/A15 | — |
 | T15 规范门禁收敛 | 贯穿 | F17/F18/F19 | F19已修复(2026-10-04) | 组合回归 | — |
 | T16 性能证据 | M5 | F12/F18 | 待确认 | A14 | qa/optimization-T16/ |
+
+## 进行中
+
+### T04 保存协调器（2026-10-04，实现完成待 L4 验收）
+- 已落地：save-coordinator.ts 状态机（6 单测）+ CanvasEditor 接线（markDirty/flush/冲突回调）+ beforeunload 冲突改写恢复副本（无锁覆盖已删）+ 主进程四函数四通道 + preload 透传 + 顶栏 SaveStatusBadge 五态徽标 + browserMock 对齐。
+- 已验证：协调器 6 单测、project-save-sync 8 例（新增恢复副本写入与磁盘不动断言）、全量 vitest 1340 通过；改动文件 lint/typecheck 单独验证通过。
+- 待办：L4 故障注入（A07/A08：拒写目录、外部推进版本、关窗冲突三场景）；L3 徽标五态截图；恢复副本「下次打开选择」UI（openProject 后 hasRecoveryCopy 流程，属 T05 前置）。
+- 阻塞提醒：全仓 lint/typecheck 当前被另一会话未提交的 observability WIP 阻塞（events.ts COUNT_ATTRS 未用、index.ts DiagnosticsProcess 重名导出、safe.ts no-control-regex、diagnosticsReporter.ts prefer-const）——非本任务改动，请该会话自行修复；本任务文件单独验证全绿。
 
 ## 已完成记录
 
