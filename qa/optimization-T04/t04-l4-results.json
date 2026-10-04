@@ -1,0 +1,27 @@
+[
+  {
+    "id": "A08-1 关窗冲突写恢复副本",
+    "pass": true,
+    "detail": "project.json.local-recovery 已生成"
+  },
+  {
+    "id": "A08-2 无锁覆盖已消除",
+    "pass": true,
+    "detail": "磁盘 graphVersion=101（外部版本未被本地旧视图抢占）"
+  },
+  {
+    "id": "A08-3 重开弹出恢复裁决对话框",
+    "pass": true,
+    "detail": "对话框出现"
+  },
+  {
+    "id": "A08-4 使用副本正式落盘",
+    "pass": true,
+    "detail": "副本已删除=true，快照体积=1709"
+  },
+  {
+    "id": "A07-1 拒写时徽标显示保存失败",
+    "pass": true,
+    "detail": "SKIP：ACL 注入不可用（Error: Command failed: icacls \"C:\\Users\\ADMINI~1\\AppData\\Loc）；单测已覆盖 failed 持续语义"
+  }
+]
