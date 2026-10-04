@@ -67,3 +67,45 @@ describe('节点就绪状态', () => {
     ).toMatchObject({ kind: 'ready', label: '已发布' })
   })
 })
+
+// T06（F06）：正文必需节点的配置预检——空正文不再显示「可运行」。
+describe('deriveNodeReadiness · 配置预检（T06）', () => {
+  const base = (nodeType: string, text: string) => ({
+    executionMode: 'auto' as const,
+    exec: 'idle',
+    nodeType,
+    text,
+    inputs: [],
+    incomingCounts: new Map(),
+    outputs: {}
+  })
+
+  it('生图无提示词时显示待补充而非可运行，并给出结构化原因', () => {
+    const r = deriveNodeReadiness(base('image-gen', ''))
+    expect(r.kind).toBe('blocked')
+    expect(r).toMatchObject({
+      label: '待补充：提示词',
+      reason: 'config-missing'
+    })
+  })
+
+  it('生图提示词填写后回到可运行', () => {
+    expect(deriveNodeReadiness(base('image-gen', '蓝色立方体')).kind).toBe('ready')
+  })
+
+  it('正文必需清单：speech/ai-process/text 与 image-gen 行为一致', () => {
+    for (const nodeType of ['speech', 'ai-process', 'text']) {
+      expect(deriveNodeReadiness(base(nodeType, '  ')).label).toContain('待补充')
+      expect(deriveNodeReadiness(base(nodeType, '内容')).kind).toBe('ready')
+    }
+  })
+
+  it('非正文必需节点（chat）空正文仍是可运行', () => {
+    expect(deriveNodeReadiness(base('chat', '')).kind).toBe('ready')
+  })
+
+  it('未传 nodeType 时保持旧行为（可运行），兼容既有调用方', () => {
+    const { nodeType: _nodeType, text: _text, ...legacy } = base('image-gen', '')
+    expect(deriveNodeReadiness(legacy).kind).toBe('ready')
+  })
+})

@@ -7,6 +7,16 @@ export interface NodeReadiness {
   kind: NodeReadinessKind
   label: string
   detail: string
+  /** T06：blocked 的结构化原因，供运行计划（T07）复用；ready 时缺省。 */
+  reason?: 'not-connected' | 'config-missing'
+}
+
+/** 正文即输入的节点：正文为空时执行器必然 skipped（与执行器分支同步维护）。 */
+const TEXT_REQUIRED_NODES: Readonly<Record<string, string>> = {
+  'image-gen': '提示词',
+  text: '文本内容',
+  speech: '朗读文本',
+  'ai-process': '任务说明'
 }
 
 export interface InputPortReadiness {
@@ -42,10 +52,14 @@ export function deriveInputPortReadiness(
 /**
  * 将节点规范、现有连线和正式输出转换为用户可理解的“下一步”。这不是另一套执行规则：
  * required/cardinality 与 output projection 都直接复用节点契约的单一真值。
+ * T06：新增可选 nodeType/text，用于把“正文为空则运行必被跳过”提前呈现为待补充，
+ * 判定清单须与执行器的 skipped 分支同步（imageGen/aiProcess/speech 等）。
  */
 export function deriveNodeReadiness(input: {
   executionMode: NodeExecutionMode
   exec: string
+  nodeType?: string
+  text?: string
   inputs: PortDecl[]
   incomingCounts: ReadonlyMap<string, number>
   outputs: RawNodeOutputs
@@ -67,8 +81,21 @@ export function deriveNodeReadiness(input: {
   if (missing.length > 0) {
     return {
       kind: 'blocked',
+      reason: 'not-connected',
       label: `缺少输入：${missing.map((port) => port.name).join('、')}`,
       detail: '连接对应端口后即可运行。'
+    }
+  }
+
+  // T06：正文必需节点的配置预检——正文为空时执行器必然 skipped，提前呈现待补充，
+  // 避免用户点了运行才发现「无提示词」。
+  const textRequirement = input.nodeType ? TEXT_REQUIRED_NODES[input.nodeType] : undefined
+  if (textRequirement && !(input.text ?? '').trim()) {
+    return {
+      kind: 'blocked',
+      reason: 'config-missing',
+      label: `待补充：${textRequirement}`,
+      detail: `填写${textRequirement}后即可运行。`
     }
   }
 

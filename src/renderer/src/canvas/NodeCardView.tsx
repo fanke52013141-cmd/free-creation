@@ -578,6 +578,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         readiness: deriveNodeReadiness({
           executionMode: spec?.executionMode ?? 'auto',
           exec: shape.props.exec,
+          nodeType: shape.props.nodeType,
+          text: shape.props.text,
           inputs: inPorts,
           incomingCounts,
           outputs: spec?.projectOutputs?.(shape) ?? {}
