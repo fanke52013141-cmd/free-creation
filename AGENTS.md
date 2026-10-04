@@ -12,8 +12,10 @@
 使用 [日志检查模板](./docs/templates/LOGGING_CHANGE_TEMPLATE.md) 完成自查；复用公共执行器已记录的阶段，
 不得重复记同一终态，不得用业务 `console.log/error` 代替正式诊断，不得记录密钥、提示词、回复或原始请求/响应。
 日志写入失败不能改变业务结果。当前接入使用现有 `ctx.trace`、`ctx.setDiagnosticTarget` 及诊断 IPC；
-统一事件 SDK、独立事件存储与自动门禁属于 [实施计划](./docs/LOGGING_IMPLEMENTATION_PLAN.md) 中的待办，
-不得调用假接口或宣称已完成。已有盲区按受影响路径迁移并登记，新增关键路径不能长期以“以后接入”跳过。
+统一事件 SDK、独立事件存储、查询导出与自动门禁已有实现；优先使用 `src/shared/observability`、
+renderer 的 `emitDiagnosticsEvent` 和 main 的诊断入口。实际验收范围及剩余盲区以
+[日志覆盖清单](./docs/LOGGING_COVERAGE.md) 为准，不得把局部验收宣称为全链路完成。
+已有盲区按受影响路径迁移并登记，新增关键路径不能长期以“以后接入”跳过。
 交付说明必须列出日志覆盖、验证证据及未覆盖边界。
 
 ## 节点是强制协议

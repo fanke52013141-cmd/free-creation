@@ -1,7 +1,7 @@
 // 画布右侧抽屉面板：资产中心 / 节点库 / 历史记录（LibTV 侧栏入口落地）
 // 资产中心：项目级媒体库——导入/搜索/筛选/缩略图预览/点击拖到画布/删除
 // 节点库：列出用户保存的单节点或多节点组合，并允许搜索、添加和删除。
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Editor, TLShapeId } from 'tldraw'
 import type { MediaAsset } from '@shared/types'
 import type { NodeCardShape } from './NodeCardShape'
@@ -19,7 +19,13 @@ import { markUndoPoint } from './history'
 import { toast } from '../stores/toast'
 import { useConfirmStore } from '../stores/confirm'
 import { mapRunError, statusText } from '../engine/error-mapping'
-import { checkSnapshotMedia } from './snapshot-restore'
+import {
+  restoreSnapshotSafely,
+  snapshotNodeCount,
+  verifyRestoredSnapshot
+} from './snapshot-restore'
+import { DiagnosticsProducer, newProducerId, newSpanId, newTraceId } from '@shared/observability'
+import { emitDiagnosticsEvent } from '../engine/diagnosticsReporter'
 import { useHistorySnapshots, type HistorySnapshot } from '../stores/history-snapshots'
 import { Icon, type IconName } from '../components/Icon'
 import { AppSelect } from '../components/AppSelect'
@@ -52,6 +58,11 @@ const RUN_CENTER_FILTERS: { key: RunStatusFilter; label: string }[] = [
   { key: 'skipped', label: '跳过' },
   { key: 'cancelled', label: '已取消' }
 ]
+
+const restoreDiagnostics = new DiagnosticsProducer({
+  process: 'renderer',
+  producerId: newProducerId('renderer')
+})
 
 function formatTime(ts: number): string {
   const d = new Date(ts)
@@ -199,7 +210,11 @@ function RunTimeline({ traceId }: { traceId: string }): React.JSX.Element {
   const incomplete = current?.incomplete ?? null
   const entries: TimelineEntry[] = current?.entries ?? []
   if (current === null) {
-    return <div className="run-timeline"><small>读取诊断事件…</small></div>
+    return (
+      <div className="run-timeline">
+        <small>读取诊断事件…</small>
+      </div>
+    )
   }
   if (incomplete) {
     return (
@@ -370,7 +385,9 @@ function RunsPanel({
                 const guidance = mapRunError(run.status, run.error)
                 return guidance ? (
                   <div className="run-error">
-                    <p>{guidance.stage}：{guidance.reason}</p>
+                    <p>
+                      {guidance.stage}：{guidance.reason}
+                    </p>
                     <p className="run-error-action">{guidance.action}</p>
                   </div>
                 ) : null
@@ -428,6 +445,15 @@ function HistoryPanel({
   const add = useHistorySnapshots((s) => s.add)
   const remove = useHistorySnapshots((s) => s.remove)
   const [label, setLabel] = useState('')
+  const [restoring, setRestoring] = useState(false)
+  const restoreBusy = useRef(false)
+  const restoreContext = useRef({ projectId, editor, mounted: true })
+  useLayoutEffect(() => {
+    restoreContext.current = { projectId, editor, mounted: true }
+    return () => {
+      restoreContext.current.mounted = false
+    }
+  }, [projectId, editor])
 
   useEffect(() => {
     void load(projectId).catch((error) => toast(`加载历史版本失败：${String(error)}`))
@@ -435,7 +461,7 @@ function HistoryPanel({
 
   // 保存当前画布状态为版本快照
   const handleSave = async (): Promise<void> => {
-    if (!editor) return
+    if (!editor || restoreBusy.current) return
     const snapshot = editor.store.getStoreSnapshot()
     let nodeCount = 0
     for (const s of editor.getCurrentPageShapes()) {
@@ -450,68 +476,101 @@ function HistoryPanel({
     }
   }
 
-  // T05（F02）：恢复五步——①保存恢复前检查点（失败即中止，不动画布）
-  // ②媒体存在性预检（缺失列出数量，用户可取消）③应用快照 ④打撤销分段点
-  // ⑤toast 告知「回到恢复前」入口（历史列表中的恢复前检查点）。
+  // T05: validate and preview before mutation; protect edits made during any await.
   const handleRestore = async (snap: HistorySnapshot): Promise<void> => {
-    if (!editor) return
-    // ① 恢复前检查点：当前状态先落一份自动快照，失败则中止
-    let checkpointLabel = ''
+    if (!editor || restoreBusy.current) return
+    restoreBusy.current = true
+    setRestoring(true)
+    const context = { projectId, traceId: newTraceId(), spanId: newSpanId() }
+    const checkpointLabel = `恢复前检查点 · ${new Date().toLocaleTimeString('zh-CN')}`
     try {
       const current = editor.store.getStoreSnapshot()
-      let nodeCount = 0
-      for (const s of editor.getCurrentPageShapes()) {
-        if (s.type === 'node-card') nodeCount++
-      }
-      checkpointLabel = `恢复前检查点 · ${new Date().toLocaleTimeString('zh-CN')}`
-      await add(projectId, current, nodeCount, checkpointLabel)
-    } catch (error) {
-      toast(`恢复前检查点保存失败，已取消恢复：${String(error).slice(0, 60)}`)
-      return
-    }
-    // ② 媒体存在性预检：快照引用的媒体缺失时列出数量，用户裁决
-    const available = await window.api.listMedia(projectId)
-    const availableIds = new Set(
-      available.ok ? available.data.map((asset) => asset.id) : []
-    )
-    const diff = checkSnapshotMedia(snap.snapshot, availableIds)
-    if (diff.missing.length > 0) {
-      const proceed = await useConfirmStore.getState().confirm({
-        title: `恢复「${snap.label}」`,
-        message: `该版本引用的 ${diff.missing.length} 个媒体文件已不在当前项目媒体库中，恢复后对应预览将无法显示。仍要恢复吗？`,
-        confirmText: '仍要恢复',
-        danger: true
-      })
-      if (!proceed) {
-        toast('已取消恢复')
-        return
-      }
-    }
-    // ③④ 应用快照 + 撤销分段点
-    try {
-      editor.store.loadStoreSnapshot(editor.store.migrateSnapshot(snap.snapshot as never))
-      markUndoPoint(editor, 'restore-snapshot')
-      toast(`已回溯到「${snap.label}」；如需返回此前状态，可在历史版本中使用「${checkpointLabel}」`, 5000)
-    } catch (e) {
-      // ⑤ 应用失败：尝试回到恢复前检查点，保住当前状态
-      console.error('版本恢复失败', e)
-      try {
-        const checkpoint = useHistorySnapshots
-          .getState()
-          .snapshots.find((s) => s.label === checkpointLabel)
-        if (checkpoint) {
-          editor.store.loadStoreSnapshot(editor.store.migrateSnapshot(checkpoint.snapshot as never))
-          toast('版本恢复失败，已回到恢复前状态')
-          return
+      const originalContent = JSON.stringify(current)
+      const result = await restoreSnapshotSafely({
+        target: snap.snapshot,
+        current,
+        prepare: (snapshot) => editor.store.migrateSnapshot(snapshot as never),
+        listAvailableMedia: async () => {
+          const available = await window.api.listMedia(projectId)
+          if (!available.ok) throw new Error('无法读取媒体列表')
+          return new Set(available.data.map((asset) => asset.id))
+        },
+        confirm: ({ currentNodes, targetNodes, media }) =>
+          useConfirmStore.getState().confirm({
+            title: `恢复「${snap.label}」`,
+            message: `当前 ${currentNodes} 个节点 → 此版本 ${targetNodes} 个节点。该版本引用 ${media.available.length + media.missing.length} 个媒体，其中 ${media.missing.length} 个不在当前媒体库中。${media.missing.length ? '恢复后缺失媒体无法显示。' : ''}确认后先保存恢复前检查点；恢复不会重新执行节点或重新生成素材。`,
+            confirmText: media.missing.length ? '仍要恢复' : '备份并恢复',
+            danger: true
+          }),
+        saveCheckpoint: async () => {
+          await add(projectId, current, snapshotNodeCount(current), checkpointLabel)
+        },
+        isCurrent: () =>
+          restoreContext.current.mounted &&
+          restoreContext.current.projectId === projectId &&
+          restoreContext.current.editor === editor,
+        isUnchanged: () => JSON.stringify(editor.store.getStoreSnapshot()) === originalContent,
+        apply: (snapshot) => editor.store.loadStoreSnapshot(snapshot as never),
+        verify: (snapshot) => verifyRestoredSnapshot(snapshot, editor.store.getStoreSnapshot()),
+        observe: (event, stage) => {
+          const failure = event === 'failed' || event === 'rollback_failed'
+          const record = restoreDiagnostics.build(
+            `project.restore.${event}`,
+            undefined,
+            `历史版本恢复阶段：${stage}`,
+            context,
+            {
+              ...(failure
+                ? {
+                    status: 'failed' as const,
+                    normalizedError: {
+                      code: 'RESTORE_FAILED',
+                      category: 'storage',
+                      retryable: false
+                    }
+                  }
+                : event === 'completed'
+                  ? { status: 'success' as const }
+                  : event === 'cancelled'
+                    ? { status: 'cancelled' as const }
+                    : {})
+            }
+          )
+          emitDiagnosticsEvent(record ? { ...record, phase: stage } : null)
         }
-      } catch {
-        // 回滚也失败时不再叠加动作，交由人工处理
+      })
+      if (!restoreContext.current.mounted || restoreContext.current.projectId !== projectId) return
+      if (result.kind === 'restored') {
+        markUndoPoint(editor, 'restore-snapshot')
+        toast(`已回溯到「${snap.label}」；如需返回，可恢复「${checkpointLabel}」`, 5000)
+      } else if (result.kind === 'cancelled') {
+        toast(
+          result.reason === 'content-changed'
+            ? '等待恢复期间画布已有新修改，已停止恢复；请重新预览后操作'
+            : '已取消恢复'
+        )
+      } else if (result.rollback === 'succeeded') {
+        toast('版本恢复失败，已回到恢复前状态')
+      } else if (result.rollback === 'failed') {
+        toast(`恢复与回滚均失败；已保留「${checkpointLabel}」，请勿关闭项目`, 8000)
+      } else {
+        const reasons = {
+          validation: '版本内容无法加载',
+          'media-precheck': '无法读取媒体列表',
+          confirmation: '恢复确认失败',
+          checkpoint: '恢复前检查点保存失败',
+          apply: '版本恢复失败'
+        }
+        toast(`${reasons[result.stage]}，已停止恢复，当前画布未改变`)
       }
-      toast('版本恢复失败，数据可能已损坏')
+    } finally {
+      restoreBusy.current = false
+      if (restoreContext.current.mounted) setRestoring(false)
     }
   }
 
   const handleRemove = async (snap: HistorySnapshot): Promise<void> => {
+    if (restoreBusy.current) return
     if (
       !(await useConfirmStore.getState().confirm({
         title: `删除历史版本「${snap.label}」`,
@@ -521,6 +580,7 @@ function HistoryPanel({
       }))
     )
       return
+    if (restoreBusy.current) return
     try {
       await remove(projectId, snap.id)
     } catch (error) {
@@ -543,7 +603,11 @@ function HistoryPanel({
             if (e.key === 'Enter') void handleSave()
           }}
         />
-        <button className="side-panel-primary" onClick={() => void handleSave()} disabled={!editor}>
+        <button
+          className="side-panel-primary"
+          onClick={() => void handleSave()}
+          disabled={!editor || restoring}
+        >
           <Icon name="history" size={14} /> 保存版本
         </button>
       </div>
@@ -569,13 +633,15 @@ function HistoryPanel({
                 <button
                   className="history-action-btn restore"
                   aria-label="回溯到此版本"
-                  onClick={() => handleRestore(snap)}
+                  disabled={restoring || !editor}
+                  onClick={() => void handleRestore(snap)}
                 >
                   ↩ 回溯
                 </button>
                 <button
                   className="history-action-btn delete"
                   aria-label={`删除历史版本 ${snap.label}`}
+                  disabled={restoring}
                   onClick={() => void handleRemove(snap)}
                 >
                   <Icon name="close" size={13} />

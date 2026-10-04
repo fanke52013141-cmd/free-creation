@@ -31,6 +31,12 @@
 
 ## 每次变更如何更新
 
+### 2026-10-04 恢复安全补强
+
+历史版本恢复由 renderer/canvas/snapshot-restore.ts 编排，CanvasSidePanel.tsx 接入统一 producer/reporter。
+注册 project.restore.cancelled，并复用 started/checkpoint_created/completed/failed/rollback_completed/rollback_failed；同一操作携带 projectId、traceId、spanId、phase，失败仅记录标准错误码，不写版本正文或原始异常。
+snapshot-restore-guard.test.ts 20 例覆盖预检失败、确认取消、内容/项目变化、检查点失败、应用及回滚失败和日志失败不影响业务。该证据不等于真机日志落盘验收；恢复范围导出入口及真实桌面复验仍待补。
+
 1. 修改已有业务域时更新该行，新增业务域新增行；不能仅更新本文件日期。
 2. 记录新事件/当前阶段日志、上下文传播、失败场景、测试命令与结果。
 3. 所有者用实际实现者或模块角色，不虚构人员；关闭“待补”必须附证据。
