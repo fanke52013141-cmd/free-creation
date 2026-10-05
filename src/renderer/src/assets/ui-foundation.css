@@ -229,22 +229,11 @@ body {
 
 .dock-minimap {
   border-color: rgba(231, 238, 247, 0.11);
-  background: rgba(27, 32, 39, 0.9);
+  /* 固定材质，避免每个滚轮事件切换背景和合成层造成明暗闪动。 */
+  background: #1a1f26;
   box-shadow: var(--elevation-float);
-  backdrop-filter: blur(14px);
-}
-
-/* 2026-10-04 缩放闪烁修复：相机交互（滚轮缩放/平移、中键拖拽）期间，悬浮在画布上的
-   底座小部件退化为不透明底并停用 backdrop-filter——毛玻璃必须逐帧重新合成身后的
-   动态画布，是缩放闪烁的次要来源。由 CanvasEditor 给 body 挂 camera-interacting
-   类，交互停止 250ms 后恢复毛玻璃。顶栏不在画布之上（flex 布局的兄弟节点），
-   其 backdrop-filter 无效也无闪烁，不在降级范围。 */
-body.camera-interacting .dock-minimap,
-body.camera-interacting .multiselect-toolbar {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  /* rgba(27,32,39,.9) 在 --bg #111419 上的不透明合成值 */
-  background: #1a1f26;
 }
 
 /* ── Node shell：唯一权威定义（呈现规范 §14）──────────────────────────────
