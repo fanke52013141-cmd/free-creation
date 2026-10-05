@@ -12,6 +12,8 @@ import { resolve } from 'node:path'
 export default defineConfig({
   resolve: {
     alias: {
+      '@free-creation/model-contracts': resolve(__dirname, 'packages/model-contracts/src/index.ts'),
+      '@free-creation/model-runtime': resolve(__dirname, 'packages/model-runtime/src/index.ts'),
       '@shared': resolve(__dirname, 'src/shared'),
       '@renderer': resolve(__dirname, 'src/renderer/src')
     }

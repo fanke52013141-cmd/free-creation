@@ -4,7 +4,7 @@
 # 任意一步失败即阻断合并，确保节点端口、Schema 与契约规范的破坏性变化在合并前暴露。
 #
 # 测试覆盖契约层（端口 ID/类型/Schema/契约版本、连线矩阵、输入输出校验、执行器纯函数），
-# 不依赖 Electron 运行时或 tldraw Editor 渲染，可在任意 OS 的 Node 环境运行。
+# 包含 Chromium/tldraw 浏览器行为门禁；原生 Electron 专项另行运行。
 name: CI
 
 on:
@@ -42,26 +42,5 @@ jobs:
       - name: 安装依赖
         run: pnpm install --frozen-lockfile
 
-      - name: 类型检查
-        run: pnpm typecheck
-
-      - name: 模型子包类型检查
-        run: pnpm typecheck:model
-
-      - name: 代码规范
-        run: pnpm lint
-
-      - name: 节点契约与执行器测试
-        run: pnpm test
-
-      - name: 模型运行时测试
-        run: pnpm test:model
-
-      - name: 日志门禁（旁路/缺诊断接入）
-        run: pnpm verify:logging
-
-      - name: 浏览器实际行为门禁（搜索、分组、撤销、最近删除、监听清理）
-        run: pnpm test:optimization-ui
-
-      - name: 生产构建（Windows）
-        run: pnpm build
+      - name: 统一验证门禁（类型、日志、单测、浏览器行为、构建）
+        run: pnpm verify

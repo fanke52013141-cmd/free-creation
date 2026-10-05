@@ -1,4 +1,4 @@
-appId: com.electron.app
+appId: com.canvas-studio.app
 productName: canvas-studio
 # 当前 Electron Builder / Windows 环境下，包含大量本机依赖的 asar 会生成错位索引，
 # 导致桌面程序在加载主入口前退出。asar 不是安全边界；本地单机版改为目录打包，
@@ -7,6 +7,12 @@ asar: false
 directories:
   buildResources: build
 files:
+  # 运行时白名单；生产依赖由 electron-builder 收集。
+  - 'out/**'
+  - 'resources/**'
+  - 'package.json'
+  - '!{test,tests,qa,qa-fixtures,artifacts,docs,results,outputs,scripts,packages,canvas-studio}/**'
+  - '!*.md'
   # 构建产物可能位于项目根目录的 dist；绝不能把旧安装包再次收进新的 asar。
   - '!dist/**'
   - '!**/.vscode/*'
@@ -19,11 +25,6 @@ files:
   # electron-builder 依赖收集器可能不会自动复制；显式映射到运行时解析路径。
   - from: node_modules/.pnpm/@napi-rs+canvas-win32-x64-msvc@1.0.8/node_modules/@napi-rs/canvas-win32-x64-msvc
     to: node_modules/@napi-rs/canvas-win32-x64-msvc
-asarUnpack:
-  - resources/**
-  - node_modules/better-sqlite3/**
-  # M0 本地媒体变换引擎：NAPI 二进制不能置于 asar 内。
-  - node_modules/@napi-rs/**
 win:
   executableName: canvas-studio
 nsis:
@@ -51,6 +52,4 @@ linux:
 appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
-publish:
-  provider: generic
-  url: https://example.com/auto-updates
+# 未配置自动更新服务；发布由明确的构建/上传流程完成。

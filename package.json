@@ -28,7 +28,7 @@
     "benchmark:graph": "node scripts/benchmark-graph.mjs",
     "build:demo": "node scripts/build-demo-bundle.mjs",
     "benchmark:canvas": "node scripts/benchmark-canvas.mjs",
-    "verify": "npm run lint && npm run typecheck && npm run typecheck:model && npm run test && npm run test:model && npm run verify:logging && electron-vite build",
+    "verify": "npm run lint && npm run typecheck && npm run typecheck:model && npm run test && npm run test:model && npm run verify:logging && npm run test:optimization-ui && electron-vite build",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "dev:browser": "vite --config vite.browser.config.ts",
@@ -58,7 +58,6 @@
     "@radix-ui/react-select": "2.3.7",
     "@react-three/drei": "^10.7.8",
     "@react-three/fiber": "^9.7.0",
-    "@types/three": "^0.185.4",
     "adm-zip": "0.5.16",
     "ai": "^7.0.73",
     "better-sqlite3": "^12.4.1",
@@ -71,7 +70,8 @@
     "tldraw": "4.5.12",
     "unpdf": "^1.8.1",
     "zod": "^4.4.3",
-    "zustand": "^5.0.8"
+    "zustand": "^5.0.8",
+    "@types/three": "^0.185.4"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config-prettier": "^3.0.0",

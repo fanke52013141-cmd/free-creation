@@ -21,3 +21,11 @@ artifacts/*.mp4
 # SQLite 运行时临时文件：由打开数据库的进程现场生成，提交它们只会让工作树常脏。
 *.db-shm
 *.db-wal
+
+# 运行时用户数据和可再生 QA 产物不自动入库；现有审查基线保留。
+canvas-studio/data/
+artifacts/
+qa/
+qa-fixtures/
+results/
+outputs/
