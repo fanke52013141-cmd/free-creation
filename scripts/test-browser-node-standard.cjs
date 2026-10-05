@@ -53,7 +53,7 @@ function contrast(first, second) {
     }))
     assert.deepEqual(clipped,[],'身份名称和说明不能被私有容器裁掉')
     for (const node of geometry) {
-      assert.ok(node.height >= 260 && node.height <= 440, `${node.type} height ${node.height}`)
+      assert.ok(node.height >= 260 && (node.type === 'storyboard' || node.height <= 440), `${node.type} height ${node.height}`)
       assert.ok(node.buttons.length <= 1, `${node.type} explicit primary actions`)
       for (const button of node.buttons) {
       assert.equal(button.width, 200, `${node.type} width`)

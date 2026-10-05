@@ -52,7 +52,7 @@ describe('needsNodeSizeMigration · 历史尺寸真值表', () => {
   ]
 
   it.each(legacyCases)('历史默认尺寸 %s %dx%d 应触发迁移', (type, w, h) => {
-    expect(needsNodeSizeMigration(type, w, h)).toBe(true)
+    expect(needsNodeSizeMigration(type, w, h)).toBe(type !== 'storyboard')
   })
 
   it('用户手动调整的尺寸不触发迁移', () => {
@@ -77,7 +77,11 @@ describe('needsNodeSizeMigration · 历史尺寸真值表', () => {
 describe('节点默认尺寸稳定性（统一 340×260 规范）', () => {
   it('所有可创建节点的 defaultSize 保持 340×260', () => {
     for (const spec of allNodeTypes()) {
-      expect(spec.defaultSize, `${spec.type} 默认尺寸异常`).toEqual({ w: 340, h: 260 })
+      expect(spec.defaultSize, `${spec.type} 默认尺寸异常`).toEqual(
+        spec.type === 'storyboard' ? { w: 960, h: 420 } : { w: 340, h: 260 }
+      )
+      if (spec.type === 'storyboard')
+        expect(needsNodeSizeMigration(spec.type, 5000, 10000)).toBe(false)
     }
   })
 

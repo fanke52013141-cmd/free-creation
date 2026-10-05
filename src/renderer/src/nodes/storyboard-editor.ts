@@ -12,6 +12,26 @@ import type { ShotShape, StoryboardData } from '@shared/engine/helpers'
 export type StoryboardShot = ShotShape
 export type { StoryboardData }
 
+export function storyboardFields(data: StoryboardData): string[] {
+  return Array.from(
+    new Set([...Object.keys(data.titles ?? {}), ...data.shots.flatMap((shot) => Object.keys(shot))])
+  ).filter((field) => field !== 'id')
+}
+
+const FIELD_TITLES: Record<string, string> = {
+  scene: '画面描述',
+  dialogue: '台词',
+  duration: '时长',
+  sound: '声音',
+  camera: '镜头'
+}
+export function storyboardFieldTitle(data: StoryboardData, field: string): string {
+  return (
+    (data.titles && Object.hasOwn(data.titles, field) ? data.titles[field] : '') ||
+    (Object.hasOwn(FIELD_TITLES, field) ? FIELD_TITLES[field] : field)
+  )
+}
+
 export type StoryboardShotDraft = Pick<StoryboardShot, 'scene' | 'dialogue' | 'duration'>
 
 export function createStoryboardShot(id: string): StoryboardShot {

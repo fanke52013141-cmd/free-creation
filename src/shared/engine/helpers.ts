@@ -62,6 +62,8 @@ export function extractShots(raw: string): ShotShape[] | null {
 export interface StoryboardData {
   shots: ShotShape[]
   imageModelKey?: string
+  /** JSON 字段键 → 表格列标题；不改变镜头字段或下游取值。 */
+  titles?: Record<string, string>
 }
 
 /**
@@ -80,7 +82,14 @@ export function parseStoryboardData(value: unknown): StoryboardData | null {
   if (!raw || !Array.isArray(raw.shots)) return null
   return {
     shots: raw.shots.map(normalizeShot),
-    imageModelKey: typeof raw.imageModelKey === 'string' ? raw.imageModelKey : undefined
+    imageModelKey: typeof raw.imageModelKey === 'string' ? raw.imageModelKey : undefined,
+    ...(raw.titles && typeof raw.titles === 'object' && !Array.isArray(raw.titles)
+      ? {
+          titles: Object.fromEntries(
+            Object.entries(raw.titles).filter(([, label]) => typeof label === 'string')
+          ) as Record<string, string>
+        }
+      : {})
   }
 }
 

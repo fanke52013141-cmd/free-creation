@@ -13,7 +13,7 @@ import { nodeSchemaRegistered } from '@shared/node-schemas'
 import { NODE_CATEGORY_IDS, type NodeCategoryId } from '@shared/palette-preferences'
 import type { NodeExecutor } from '../engine/executor-types'
 import type { NodeCardShape } from '../canvas/NodeCardShape'
-import { NODE_UI } from '../canvas/node-ui-tokens'
+import { NODE_UI, STORYBOARD_UI } from '../canvas/node-ui-tokens'
 import type { IconName } from '../components/Icon'
 import type { RawNodeOutputs } from './nodeValues'
 
@@ -242,6 +242,7 @@ const PRIOR_UNIFIED_SIZES: Partial<Record<NodeTypeId, { w: number; h: number }>>
 export const MAX_AUTO_NODE_HEIGHT = NODE_UI.height.legacyGuard
 
 export function needsNodeSizeMigration(type: string, w: number, h: number): boolean {
+  if (type === 'storyboard') return false
   const legacy = LEGACY_DEFAULT_SIZES[type as NodeTypeId]
   if (legacy && w === legacy.w && h === legacy.h) return true
   const preStandard = PRE_STANDARD_DEFAULT_SIZES[type as NodeTypeId]
@@ -372,7 +373,10 @@ function validateNodeTypeSpec(spec: NodeTypeSpec): void {
   }
   if (
     spec.creatable !== false &&
-    (spec.defaultSize.w !== STANDARD_NODE_SIZE.w || spec.defaultSize.h !== STANDARD_NODE_SIZE.h)
+    (spec.defaultSize.w !==
+      (spec.type === 'storyboard' ? STORYBOARD_UI.width : STANDARD_NODE_SIZE.w) ||
+      spec.defaultSize.h !==
+        (spec.type === 'storyboard' ? STORYBOARD_UI.height : STANDARD_NODE_SIZE.h))
   ) {
     errors.push(`可创建节点的 defaultSize 必须为 ${STANDARD_NODE_SIZE.w} × ${STANDARD_NODE_SIZE.h}`)
   }

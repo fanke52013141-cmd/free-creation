@@ -10191,8 +10191,7 @@ select:focus-visible,
 /* Storyboard 分镜板 */
 .storyboard-body {
   flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: visible;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -10200,9 +10199,9 @@ select:focus-visible,
   padding: 8px;
 }
 .storyboard-table-scroll {
-  flex: 1;
+  flex: 0 0 auto;
   min-width: 0;
-  overflow: auto;
+  overflow: visible;
   border: 1px solid var(--line);
   border-radius: 6px;
 }
@@ -10212,13 +10211,14 @@ select:focus-visible,
   border-collapse: separate;
   border-spacing: 0;
   color: var(--txt);
-  font-size: 9px;
+  font-size: 13px;
 }
 .storyboard-table th,
 .storyboard-table td {
-  min-width: 100px;
-  max-width: 220px;
-  padding: 4px 6px;
+  min-width: 220px;
+  width: 220px;
+  max-width: none;
+  padding: 10px 12px;
   border-right: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
   vertical-align: top;
@@ -10250,22 +10250,24 @@ select:focus-visible,
   position: sticky;
   right: 0;
   z-index: 2;
-  min-width: 74px;
-  width: 74px;
-  max-width: 74px;
+  min-width: 164px;
+  width: 164px;
+  max-width: none;
   background: var(--bg-panel, #171923);
 }
 .storyboard-row-action-buttons {
   display: flex;
-  gap: 3px;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 .storyboard-row-action-buttons button {
   display: inline-flex;
-  width: 20px;
-  height: 20px;
+  min-width: 26px;
+  width: auto;
+  height: 26px;
   align-items: center;
   justify-content: center;
-  padding: 0;
+  padding: 0 6px;
   border: 1px solid var(--line);
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.04);
@@ -10283,8 +10285,8 @@ select:focus-visible,
   display: block;
   width: 100%;
   min-height: 22px;
-  max-height: 56px;
-  overflow: hidden;
+  max-height: none;
+  overflow: visible;
   padding: 3px 2px;
   border: 0;
   background: transparent;
@@ -10293,7 +10295,7 @@ select:focus-visible,
   line-height: 1.4;
   text-align: left;
   text-overflow: ellipsis;
-  white-space: normal;
+  white-space: pre-wrap;
   word-break: break-word;
   cursor: text;
 }

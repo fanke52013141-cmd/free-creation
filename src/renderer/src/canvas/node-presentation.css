@@ -1,4 +1,65 @@
 /* NODE_UI_STANDARD §19: 公共组件拥有几何，Body 只拥有业务内容。 */
+.node-io-example {
+  padding: 16px;
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.node-io-example h5 {
+  margin: 0 0 16px;
+  font-size: 15px;
+}
+.node-io-example-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.node-io-example pre {
+  margin: 8px 0 16px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--bg);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.7;
+  user-select: text;
+}
+.node-io-example p {
+  margin: 8px 0 16px;
+  line-height: 1.7;
+}
+.node-card.type-storyboard .node-standard-scroll {
+  overflow-x: auto;
+}
+.node-card.type-storyboard .storyboard-table {
+  table-layout: fixed;
+}
+.node-card.type-storyboard .storyboard-table :is(th, td) {
+  box-sizing: border-box;
+}
+.node-card.type-storyboard .storyboard-toolbar > span {
+  font-size: 13px;
+}
+.node-card.type-storyboard .storyboard-toolbar-actions button {
+  font-size: 12px;
+  min-height: 30px;
+  padding: 5px 10px;
+}
+.node-card.type-storyboard .storyboard-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-height: 36px;
+}
+.node-card.type-storyboard .storyboard-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .node-card > .node-standard-shell {
   display: flex;
   flex-direction: column;
@@ -446,8 +507,27 @@
   pointer-events: none;
 }
 
-.node-standard-scroll .connected-input-item { pointer-events: auto; white-space: nowrap; }
-.node-standard-scroll .sound-adjust-inline { display: flex; flex-direction: column; padding: 0; gap: 8px; }
-.sound-adjust-inline .settings-field { display: flex; flex-direction: column; gap: 6px; margin: 0; }
+.node-standard-scroll .connected-input-item {
+  pointer-events: auto;
+  white-space: nowrap;
+}
+.node-standard-scroll .sound-adjust-inline {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  gap: 8px;
+}
+.sound-adjust-inline .settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
 
-.node-card .voice-id-value { display:block; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.node-card .voice-id-value {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}

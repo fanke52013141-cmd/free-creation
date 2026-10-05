@@ -24,6 +24,7 @@ import {
   type NodeTestInputs
 } from '../engine/executor'
 import { useMediaStore } from '../stores/media'
+import { NodeIoExamples } from './NodeIoExamples'
 
 interface NodeContractPanelProps {
   editor: Editor
@@ -682,6 +683,7 @@ export function NodeContractPanel({
                 connections={outgoing}
                 previews={outputPreviews}
               />
+              <NodeIoExamples nodeType={shape.props.nodeType} />
             </div>
           )}
           {tab === 'settings' && (

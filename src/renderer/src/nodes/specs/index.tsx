@@ -3,6 +3,7 @@
 import type { PortCardinality, PortDecl, PortSchemaRef } from '@shared/types'
 import { NODE_ACCENTS, registerNodeType, unregisterNodeType } from '../registry'
 import { readNodeConfig } from '../../canvas/node-persistence'
+import { STORYBOARD_UI } from '../../canvas/node-ui-tokens'
 import {
   parseSpeechConfig,
   VOLC_REFERENCE_AUDIO_MAX_BYTES,
@@ -1048,7 +1049,7 @@ export function registerExtendedNodeTypes(): void {
     label: '分镜板',
     icon: 'storyboard',
     color: NODE_ACCENTS.storyboard,
-    defaultSize: { w: 340, h: 260 },
+    defaultSize: { w: STORYBOARD_UI.width, h: STORYBOARD_UI.height },
     description: '按镜头 JSON 字段生成可编辑表格，并输出完整分镜数据与文字摘要。',
     category: 'logic',
     ports: {

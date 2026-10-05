@@ -21,6 +21,8 @@ import {
   moveStoryboardShot,
   removeStoryboardShot,
   updateStoryboardField,
+  storyboardFields,
+  storyboardFieldTitle,
   type StoryboardData,
   type StoryboardShot
 } from '../../storyboard-editor'
@@ -87,10 +89,7 @@ export function StoryboardBody({ shape }: NodeBodyProps): React.JSX.Element {
   const [draftInput, setDraftInput] = useState(shape.props.text)
   const [editingCell, setEditingCell] = useState<{ shotId: string; field: string } | null>(null)
   const [cellDraft, setCellDraft] = useState('')
-  const fields = useMemo(
-    () => Array.from(new Set(data.shots.flatMap((shot) => Object.keys(shot)))),
-    [data.shots]
-  )
+  const fields = useMemo(() => storyboardFields(data), [data])
 
   const update = (next: StoryboardData): void => {
     editor.updateShape({
@@ -259,7 +258,9 @@ export function StoryboardBody({ shape }: NodeBodyProps): React.JSX.Element {
   return (
     <div className="storyboard-body" ref={scrollRef}>
       <div className="storyboard-toolbar">
-        <span>输出：out-json 分镜数据 · out-text 文字摘要</span>
+        <span>
+          {shotCount} 个镜头 · {fields.length} 列
+        </span>
         <div className="storyboard-toolbar-actions">
           <button
             type="button"
@@ -281,7 +282,7 @@ export function StoryboardBody({ shape }: NodeBodyProps): React.JSX.Element {
           </button>
         </div>
       </div>
-      <span className={`node-wiring ${wiring.warn ? 'warn' : 'ok'}`}>{wiring.text}</span>
+      {wired && <span className={`node-wiring ${wiring.warn ? 'warn' : 'ok'}`}>{wiring.text}</span>}
       <div className="storyboard-table-scroll">
         <table className="storyboard-table">
           <thead>
@@ -289,7 +290,7 @@ export function StoryboardBody({ shape }: NodeBodyProps): React.JSX.Element {
               <th className="storyboard-row-number">#</th>
               {fields.map((field) => (
                 <th key={field} title={field}>
-                  {field}
+                  {storyboardFieldTitle(data, field)}
                 </th>
               ))}
               <th className="storyboard-row-actions">操作</th>

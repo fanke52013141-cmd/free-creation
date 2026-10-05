@@ -15,7 +15,7 @@ import { dynamicPortIdsForShape, portPairCompatible } from './graph'
 import { markUndoPoint } from './history'
 import type { NodeCardShape } from './NodeCardShape'
 import { Icon } from '../components/Icon'
-import { NODE_UI, resolveNodeHeight } from './node-ui-tokens'
+import { NODE_UI, STORYBOARD_UI, resolveNodeHeight } from './node-ui-tokens'
 import { nodeExecLabel } from './node-status'
 import { currentNodeFingerprint, successfulInputFingerprint } from '../engine/resultFreshness'
 import { projectNodeOutputs } from '../nodes/nodeValues'
@@ -830,6 +830,35 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         if (!latest) return
         const metadata = latest.meta
         const current = latest.props.h
+        if (latest.props.nodeType === 'storyboard') {
+          if (metadata.nodeHeightMode === 'manual') return
+          const table = body.querySelector<HTMLTableElement>('.storyboard-table')
+          const columns = table?.querySelectorAll('thead th').length ?? 2
+          const width = Math.max(
+            STORYBOARD_UI.width,
+            Math.max(0, columns - 2) * STORYBOARD_UI.columnWidth + STORYBOARD_UI.tableChromeWidth
+          )
+          const content = body.querySelector<HTMLElement>('.storyboard-body')
+          const height = Math.max(
+            STORYBOARD_UI.height,
+            (content?.scrollHeight ?? 0) +
+              80 +
+              (body.querySelector<HTMLElement>('.connected-inputs')?.offsetHeight ?? 0)
+          )
+          if (width !== latest.props.w || height !== current) {
+            editor.run(
+              () =>
+                editor.updateShape({
+                  id: latest.id,
+                  type: 'node-card',
+                  props: { w: width, h: height },
+                  meta: { ...metadata, nodeHeightMode: 'auto' }
+                }),
+              { history: 'ignore' }
+            )
+          }
+          return
+        }
         const clamped = Math.max(NODE_UI.height.min, Math.min(NODE_UI.height.manualMax, current))
         if (clamped !== current) {
           editor.run(
@@ -909,7 +938,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             8
           : formMinimum
         let next = fittedPreview
-          ? resolveNodeHeight(NODE_UI.height.default + (references ? references + NODE_UI.reference.bottomGap : 0))
+          ? resolveNodeHeight(
+              NODE_UI.height.default + (references ? references + NODE_UI.reference.bottomGap : 0)
+            )
           : resolveNodeHeight(referencedMinimum)
         const focused = document.activeElement
         const editingInput =
@@ -1052,8 +1083,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           {shape.meta.nodeHeightMode === 'manual' && (
             <button
               className="node-info-btn"
-              aria-label="恢复自动高度"
-              title="恢复自动高度"
+              aria-label={shape.props.nodeType === 'storyboard' ? '恢复内容自适应' : '恢复自动高度'}
+              title={shape.props.nodeType === 'storyboard' ? '恢复内容自适应' : '恢复自动高度'}
               onPointerDown={stopEventPropagation}
               onClick={(event) => {
                 event.stopPropagation()

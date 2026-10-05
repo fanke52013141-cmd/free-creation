@@ -1,6 +1,13 @@
 // 节点 UI 契约 Token（呈现规范 v1.0 §22）：
 // CSS、NodeCardView、Registry、NodeCardShape 与测试引用的唯一尺寸真值来源。
 // 节点内禁止散落硬编码高度/宽度；Shell 契约全局统一，节点只能声明业务 Body。
+export const STORYBOARD_UI = {
+  width: 960,
+  height: 420,
+  columnWidth: 220,
+  tableChromeWidth: 224
+} as const
+
 export const NODE_UI = {
   width: 340,
   height: {

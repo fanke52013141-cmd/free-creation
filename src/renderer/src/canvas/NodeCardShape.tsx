@@ -132,6 +132,15 @@ export class NodeCardUtil extends BaseBoxShapeUtil<NodeCardShape> {
     const resized = super.onResize(shape, info)
     if (info.mode !== 'resize_bounds') return resized
     const height = resized?.props?.h ?? shape.props.h
+    if (shape.props.nodeType === 'storyboard') {
+      return {
+        ...resized,
+        meta: {
+          ...(this.editor.getShape<NodeCardShape>(shape.id)?.meta ?? shape.meta),
+          nodeHeightMode: 'manual'
+        }
+      }
+    }
     const clamped = Math.max(NODE_UI.height.min, Math.min(NODE_UI.height.manualMax, height))
     const anchor = info.handle.startsWith('top')
       ? 1

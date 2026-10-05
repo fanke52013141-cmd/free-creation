@@ -6,6 +6,8 @@ import {
   removeStoryboardShot,
   updateStoryboardShot,
   updateStoryboardField,
+  storyboardFields,
+  storyboardFieldTitle,
   type StoryboardData
 } from '@renderer/nodes/storyboard-editor'
 
@@ -18,6 +20,24 @@ const original: StoryboardData = {
 }
 
 describe('storyboard-editor · 逐镜编辑数据模型', () => {
+  it('保留自定义标题并合并不同记录字段，内部 ID 不作为列显示', () => {
+    const data = parseStoryboardData({
+      titles: { scene: '画面', lens: '焦距' },
+      shots: [
+        { id: 'a', scene: '书房', lens: 35 },
+        { id: 'b', extra: true }
+      ]
+    })!
+    expect(storyboardFields(data)).toContain('extra')
+    expect(storyboardFields(data)).not.toContain('id')
+    expect(storyboardFieldTitle(data, 'lens')).toBe('焦距')
+    expect(
+      readStoryboardText(JSON.stringify(updateStoryboardField(data, 'a', 'lens', 50)))
+    ).toMatchObject({
+      kind: 'ok',
+      data: { titles: { scene: '画面', lens: '焦距' }, shots: [{ lens: 50 }, {}] }
+    })
+  })
   it('创建镜头有可编辑的安全默认值', () => {
     expect(createStoryboardShot('new-shot')).toEqual({
       id: 'new-shot',
