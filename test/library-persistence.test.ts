@@ -1,9 +1,10 @@
+import { listMedia } from '../src/main/store/media.repo'
 import {
   materializeResource,
   discardMaterialization
 } from '../src/main/store/library-materialization.repo'
 import { DatabaseSync } from 'node:sqlite'
-import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, rmSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -160,15 +161,18 @@ describe('library category persistence and transfer', () => {
       name: '人物设定',
       blueprint: {
         ...category.blueprint,
-        slots: [...category.blueprint.slots, {
-          id: 'description',
-          label: '人物描述',
-          nodeType: 'text',
-          contractVersion: 3,
-          required: false,
-          multiple: false,
-          titleTemplate: '{resource} · {slot}'
-        }]
+        slots: [
+          ...category.blueprint.slots,
+          {
+            id: 'description',
+            label: '人物描述',
+            nodeType: 'text',
+            contractVersion: 3,
+            required: false,
+            multiple: false,
+            titleTemplate: '{resource} · {slot}'
+          }
+        ]
       }
     }
     saveCategory({ category: multiTextCategory, baseVersion: 0 })
@@ -176,14 +180,19 @@ describe('library category persistence and transfer', () => {
     const resource = createResource({
       ...input,
       category: { id: multiTextCategory.id, version: 1 },
-      components: [...input.components, {
-        role: '人物描述',
-        valueType: 'text',
-        text: '修长的红眼树蛙格斗角色',
-        metadata: { librarySlotId: 'description' }
-      }]
+      components: [
+        ...input.components,
+        {
+          role: '人物描述',
+          valueType: 'text',
+          text: '修长的红眼树蛙格斗角色',
+          metadata: { librarySlotId: 'description' }
+        }
+      ]
     })
-    expect(resource.components.filter((component) => component.valueType === 'text')).toHaveLength(2)
+    expect(resource.components.filter((component) => component.valueType === 'text')).toHaveLength(
+      2
+    )
     expect(searchResources({ categoryId: multiTextCategory.id }).items).toHaveLength(1)
   })
   it('captures multiple canvas text nodes with explicit category-slot mappings', () => {
@@ -213,13 +222,31 @@ describe('library category persistence and transfer', () => {
       title: '角色资料',
       category: { id: textCategory.id, version: 1 },
       nodes: [
-        { nodeId: 'shape:summary', title: '人物描述', nodeType: 'text', text: '一个年轻的探险家', slotId: 'summary' },
-        { nodeId: 'shape:prompt', title: '形象提示词', nodeType: 'text', text: '暖色电影光线', slotId: 'prompt' }
+        {
+          nodeId: 'shape:summary',
+          title: '人物描述',
+          nodeType: 'text',
+          text: '一个年轻的探险家',
+          slotId: 'summary'
+        },
+        {
+          nodeId: 'shape:prompt',
+          title: '形象提示词',
+          nodeType: 'text',
+          text: '暖色电影光线',
+          slotId: 'prompt'
+        }
       ]
     })
     expect(resource.category?.id).toBe(textCategory.id)
-    expect(resource.components.map((component) => component.metadata.librarySlotId)).toEqual(['summary', 'prompt'])
-    expect(resource.components.map((component) => component.text)).toEqual(['一个年轻的探险家', '暖色电影光线'])
+    expect(resource.components.map((component) => component.metadata.librarySlotId)).toEqual([
+      'summary',
+      'prompt'
+    ])
+    expect(resource.components.map((component) => component.text)).toEqual([
+      '一个年轻的探险家',
+      '暖色电影光线'
+    ])
   })
   it('renames folders while keeping their children and rejects sibling name collisions', () => {
     const parent = createFolder({ name: '角色资产' })
@@ -297,4 +324,75 @@ describe('library category persistence and transfer', () => {
     expect(importResourcePackage(path)).toBe(0)
     expect(listCategories().filter((item) => item.name === category.name)).toHaveLength(2)
   })
+})
+
+describe('审查回归：媒体归属与清理失败', () => {
+  it('含下划线/百分号的项目 ID 不匹配邻居项目媒体', () => {
+    const insert = db.prepare(
+      'INSERT INTO media (id, kind, mime, path, size_bytes, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+    )
+    insert.run('owned', 'image', 'image/png', 'projects/ab_cd/media/one.png', 1, 1)
+    insert.run('neighbor', 'image', 'image/png', 'projects/abXcd/media/two.png', 1, 2)
+    insert.run('percent', 'image', 'image/png', 'projects/a%b/media/three.png', 1, 3)
+    expect(listMedia('ab_cd').map((media) => media.id)).toEqual(['owned'])
+    expect(listMedia('a%b').map((media) => media.id)).toEqual(['percent'])
+    expect(listMedia('ab').length).toBe(0)
+  })
+  it('脏媒体列表在删除前拒绝，保留可诊断 usage', async () => {
+    const resource = createResource(resourceInput())
+    const materialized = await materializeResource({
+      projectId: 'project',
+      resourceId: resource.id,
+      revisionId: resource.latestRevisionId,
+      componentIds: [resource.components[0].id]
+    })
+    db.prepare('UPDATE library_usages SET project_media_ids_json = ? WHERE id = ?').run(
+      '[42]',
+      materialized.usageId
+    )
+    await expect(
+      discardMaterialization({ projectId: 'project', usageId: materialized.usageId })
+    ).rejects.toThrow('损坏')
+    expect(listMedia('project')).toHaveLength(1)
+    expect(db.prepare('SELECT id FROM library_usages').all()).toHaveLength(1)
+  })
+  it('单文件清理失败仍清理其他文件，剩余 ID 可重试', async () => {
+    const resource = createResource({
+      ...resourceInput(),
+      components: [
+        ...resourceInput().components,
+        { ...resourceInput().components[0], role: '另一图' }
+      ]
+    })
+    const materialized = await materializeResource({
+      projectId: 'project',
+      resourceId: resource.id,
+      revisionId: resource.latestRevisionId,
+      componentIds: resource.components.filter((c) => c.blobPath).map((c) => c.id)
+    })
+    const blocked = join(state.root, materialized.assets[0].path)
+    const bytes = readFileSync(blocked)
+    rmSync(blocked)
+    mkdirSync(blocked)
+    await expect(
+      discardMaterialization({ projectId: 'project', usageId: materialized.usageId })
+    ).rejects.toThrow('可重试')
+    expect(listMedia('project').map((m) => m.id)).toEqual([materialized.assets[0].id])
+    rmSync(blocked, { recursive: true })
+    writeFileSync(blocked, bytes)
+    expect(
+      await discardMaterialization({ projectId: 'project', usageId: materialized.usageId })
+    ).toBe(true)
+    expect(listMedia('project')).toHaveLength(0)
+  })
+})
+
+
+it('版本 CAS 更新零行时回滚新 revision，不返回成功', () => {
+  const resource=createResource(resourceInput())
+  const before=db.prepare('SELECT id FROM library_revisions').all()
+  db.exec(`CREATE TRIGGER block_revision BEFORE UPDATE OF latest_revision_id ON library_resources BEGIN SELECT RAISE(IGNORE); END;`)
+  expect(()=>publishRevision({...resourceInput(),resourceId:resource.id,baseRevisionId:resource.latestRevisionId})).toThrow('新版本')
+  expect(db.prepare('SELECT id FROM library_revisions').all()).toEqual(before)
+  expect(getResourceDetail(resource.id)?.latestRevisionId).toBe(resource.latestRevisionId)
 })

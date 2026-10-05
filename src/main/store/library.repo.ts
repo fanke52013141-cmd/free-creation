@@ -3,7 +3,7 @@ import { validateCategoryContent } from '../../shared/library/blueprint'
 import { revisionCategory, pinCategory, importRevisionCategory, exportCategoryVersions, importCategoryDefinition } from './library-categories.repo'
 import { createHash } from 'crypto'
 import AdmZip from 'adm-zip'
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, renameSync, statSync, writeFileSync } from 'fs'
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync } from 'fs'
 import { basename, extname, join } from 'path'
 import { nanoid } from 'nanoid'
 import type {
@@ -233,8 +233,10 @@ function storeBlob(data: Uint8Array, mimeValue: unknown, fileNameValue: unknown)
         const current = getDb().prepare('SELECT id, path FROM library_blobs WHERE sha256 = ?').get(hash) as
           | { id: string; path: string }
           | undefined
-        if (!current) throw error
+        if (!current || !existsSync(join(getDataDir(), current.path))) throw error
       }
+    } finally {
+      rmSync(temporary, { force: true })
     }
   }
   const id = nanoid(12)
@@ -245,6 +247,7 @@ function storeBlob(data: Uint8Array, mimeValue: unknown, fileNameValue: unknown)
   ).run(id, hash, relativePath, mime, safeName, bytes.byteLength, now)
   const row = getDb().prepare('SELECT id, path FROM library_blobs WHERE sha256 = ?').get(hash) as
     { id: string; path: string }
+  if (!row) throw new Error('资源文件索引写入失败')
   return row
 }
 
@@ -546,8 +549,8 @@ export function captureProjectMedia(input: CaptureProjectMediaInput): LibraryRes
   const row = getDb().prepare(
     `SELECT m.id, m.kind, m.mime, m.path, m.size_bytes, m.name
      FROM media m JOIN projects p ON p.id = ? AND p.deleted = 0
-     WHERE m.id = ? AND m.path LIKE ?`
-  ).get(input.projectId, input.mediaId, `${prefix}%`) as
+     WHERE m.id = ? AND substr(m.path, 1, length(?)) = ?`
+  ).get(input.projectId, input.mediaId, prefix, prefix) as
     | { id: string; kind: string; mime: string; path: string; size_bytes: number; name: string | null }
     | undefined
   if (!row || !row.path.replace(/\\/g, '/').startsWith(prefix)) {
@@ -618,8 +621,8 @@ export function captureProjectNodes(input: CaptureProjectNodesInput): LibraryRes
     const prefix = `projects/${input.projectId}/media/`
     const row = getDb().prepare(
       `SELECT m.id, m.kind, m.mime, m.path, m.size_bytes, m.name FROM media m
-       WHERE m.id = ? AND m.path LIKE ?`
-    ).get(node.mediaId, `${prefix}%`) as
+       WHERE m.id = ? AND substr(m.path, 1, length(?)) = ?`
+    ).get(node.mediaId, prefix, prefix) as
       | { id: string; kind: string; mime: string; path: string; size_bytes: number; name: string | null }
       | undefined
     if (!row || row.kind !== expectedKind || !row.path.replace(/\\/g, '/').startsWith(prefix)) {
@@ -707,10 +710,11 @@ export function publishRevision(input: PublishLibraryRevisionInput): LibraryReso
     )
     pinCategory(revisionId, input.category, input.components)
     insertComponents(revisionId, input.components, input.baseRevisionId)
-    database.prepare(
+    const updated = database.prepare(
       `UPDATE library_resources SET form_preset = ?, title = ?, description = ?,
         latest_revision_id = ?, updated_at = ? WHERE id = ? AND latest_revision_id = ?`
     ).run(input.formPreset, title, cleanText(input.description, 20_000), revisionId, now, input.resourceId, input.baseRevisionId)
+    if (updated.changes !== 1) throw new Error('资源已有新版本，请刷新后再保存')
     database.prepare('DELETE FROM library_tags WHERE resource_id = ?').run(input.resourceId)
     insertTags(input.resourceId, input.tags)
     setCollectionsInternal(input.resourceId, input.collectionIds ?? [])

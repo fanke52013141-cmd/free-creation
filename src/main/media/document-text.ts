@@ -1,3 +1,4 @@
+import { emitDomainEvent } from '../diagnostics/ipc-domain-events'
 // 文档正文抽取：
 //   .docx / .xlsx / .pptx —— 本质是 zip + XML，用工程已有的 adm-zip 解包，不额外依赖。
 //   .pdf —— 交给 `unpdf`（打包好的 pdf.js）逐页取文字。
@@ -172,8 +173,8 @@ export async function extractDocumentText(ext: string, buf: Buffer): Promise<str
   if (ext === '.pdf') {
     try {
       return clampChars(await pdfText(buf))
-    } catch (error) {
-      console.warn('extractDocumentText failed:', ext, error)
+    } catch {
+      emitDomainEvent('media.document_extract_failed', '文档正文提取失败，保留原文件', { status: 'failed' })
       return ''
     }
   }
@@ -187,8 +188,8 @@ export async function extractDocumentText(ext: string, buf: Buffer): Promise<str
           ? pptxText(zip)
           : xlsxText(zip)
     return clampChars(text)
-  } catch (error) {
-    console.warn('extractDocumentText failed:', ext, error)
+  } catch {
+    emitDomainEvent('media.document_extract_failed', '文档正文提取失败，保留原文件', { status: 'failed' })
     return ''
   }
 }

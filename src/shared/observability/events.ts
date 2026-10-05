@@ -106,6 +106,11 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
     def('media.persist_started', 'info', 'main/gateway/*', { mediaId: 'id', mime: 'short' }),
     def('media.persist_completed', 'info', 'main/gateway/*', { mediaId: 'id', mime: 'short' }),
     def('media.persist_failed', 'error', 'main/gateway/*', { mediaId: 'id' }),
+    def('project.canvas_failed', 'error', 'renderer/canvas/CanvasEditor.tsx'),
+    def('application.preload_failed', 'error', 'preload/index.ts'),
+    def('application.render_failed', 'error', 'renderer/App.tsx'),
+    def('media.document_extract_failed', 'warn', 'main/media/document-text.ts'),
+    def('media.read_failed', 'warn', 'main/store/media.repo.ts'),
     // project.save / restore / transfer
     def('project.save.started', 'info', 'main/ipc/project.ipc.ts'),
     def('project.save.completed', 'info', 'main/ipc/project.ipc.ts'),

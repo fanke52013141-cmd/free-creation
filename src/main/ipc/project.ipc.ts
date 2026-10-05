@@ -300,8 +300,8 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
   ipcMain.on(IPC.project.saveRecoveryCopySync, (e, input: SaveProjectInput) => {
     try {
       e.returnValue = ok(repo.saveRecoveryCopySync(input))
-    } catch (copyErr) {
-      console.error('恢复副本写入失败', copyErr)
+    } catch {
+      emitDomainEvent('project.save.failed', '恢复副本写入失败', { status: 'failed', attributes: { projectId: input.id } })
       e.returnValue = ok(false)
     }
   })

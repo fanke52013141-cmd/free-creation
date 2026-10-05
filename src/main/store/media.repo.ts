@@ -1,3 +1,4 @@
+import { emitDomainEvent } from '../diagnostics/ipc-domain-events'
 // 媒体仓库：文件落项目媒体目录 + SQLite 索引（见《技术框架与规范》§9）
 // 异步复制：大文件导入不阻塞主进程
 import { nanoid } from 'nanoid'
@@ -87,7 +88,7 @@ export async function importMedia(projectId: string, srcAbsPath: string): Promis
     }
     return { ok: true, asset }
   } catch (e) {
-    console.error('importMedia failed:', srcAbsPath, e)
+    emitDomainEvent('media.read_failed', '媒体导入读取失败', { status: 'failed', attributes: { projectId } })
     return { ok: false, reason: e instanceof Error ? e.message : String(e) }
   }
 }
@@ -203,9 +204,9 @@ export function listMedia(projectId: string): MediaAsset[] {
   const rows = getDb()
     .prepare(
       `SELECT id, kind, mime, path, size_bytes, created_at, name FROM media
-       WHERE path LIKE ? ORDER BY created_at DESC`
+       WHERE substr(path, 1, length(?)) = ? ORDER BY created_at DESC`
     )
-    .all(`projects/${projectId}/media/%`) as {
+    .all(`projects/${projectId}/media/`, `projects/${projectId}/media/`) as {
     id: string
     kind: MediaKind
     mime: string
@@ -232,15 +233,16 @@ export async function deleteMedia(mediaId: string): Promise<boolean> {
     { path: string } | undefined
   if (!row) return false
   const abs = getMediaAbsPath(row.path)
-  getDb().prepare('DELETE FROM artifact_recipes WHERE media_id = ?').run(mediaId)
-  getDb().prepare('DELETE FROM media WHERE id = ?').run(mediaId)
-  if (abs) {
-    try {
-      await unlink(abs)
-    } catch {
-      // 文件可能已不存在，忽略
-    }
+  if (!abs) throw new Error('媒体文件路径无效')
+  try {
+    await unlink(abs)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
   }
+  getDb().transaction(() => {
+    getDb().prepare('DELETE FROM artifact_recipes WHERE media_id = ?').run(mediaId)
+    getDb().prepare('DELETE FROM media WHERE id = ?').run(mediaId)
+  })()
   return true
 }
 

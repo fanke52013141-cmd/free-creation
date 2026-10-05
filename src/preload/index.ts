@@ -1,3 +1,4 @@
+import { DiagnosticsProducer, newProducerId, newTraceId, newSpanId } from '../shared/observability'
 import type { LibraryCategory, SaveLibraryCategoryInput } from '../shared/library/blueprint'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
@@ -460,8 +461,10 @@ if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('api', api)
     if (isDev) contextBridge.exposeInMainWorld('electron', electronAPI)
-  } catch (error) {
-    console.error(error)
+  } catch {
+    const producer = new DiagnosticsProducer({ process: 'renderer', producerId: newProducerId('renderer') })
+    const event = producer.build('application.preload_failed', undefined, 'preload API 初始化失败', { traceId: newTraceId(), spanId: newSpanId() }, { status: 'failed' })
+    if (event) void ipcRenderer.invoke(IPC.diagnostics.event, event).catch(() => undefined)
   }
 } else {
   // @ts-ignore (define in dts)

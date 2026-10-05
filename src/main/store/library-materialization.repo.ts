@@ -132,8 +132,37 @@ export async function discardMaterialization(input: {
     .prepare('SELECT project_media_ids_json FROM library_usages WHERE id = ? AND project_id = ?')
     .get(input.usageId, input.projectId) as { project_media_ids_json: string } | undefined
   if (!row) return false
-  for (const mediaId of JSON.parse(row.project_media_ids_json) as string[])
-    await deleteMedia(mediaId)
+  let ids: unknown
+  try {
+    ids = JSON.parse(row.project_media_ids_json)
+  } catch {
+    throw new Error('资源使用记录的媒体列表损坏，未执行删除')
+  }
+  if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string' || !id))
+    throw new Error('资源使用记录的媒体列表损坏，未执行删除')
+  const remaining: string[] = []
+  for (const mediaId of new Set<string>(ids)) {
+    try {
+      const media = getDb().prepare('SELECT path FROM media WHERE id = ?').get(mediaId) as
+        { path: string } | undefined
+      if (media && !media.path.startsWith(`projects/${input.projectId}/media/`)) {
+        remaining.push(mediaId)
+        continue
+      }
+      // Already removed is idempotent success; actual IO/DB failures remain retryable.
+      await deleteMedia(mediaId)
+    } catch {
+      remaining.push(mediaId)
+    }
+  }
+  if (remaining.length) {
+    getDb()
+      .prepare(
+        'UPDATE library_usages SET project_media_ids_json = ? WHERE id = ? AND project_id = ?'
+      )
+      .run(JSON.stringify(remaining), input.usageId, input.projectId)
+    throw new Error('部分资源文件清理失败，可重试')
+  }
   getDb()
     .prepare('DELETE FROM library_usages WHERE id = ? AND project_id = ?')
     .run(input.usageId, input.projectId)

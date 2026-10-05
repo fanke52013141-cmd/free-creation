@@ -43,8 +43,8 @@ export interface ProjectMetaInfo {
 /** 收集指定项目的媒体资产（从 SQLite 按路径前缀）。 */
 function listProjectMedia(projectId: string): MediaAsset[] {
   const rows = getDb()
-    .prepare(`SELECT id, kind, mime, path, size_bytes, created_at FROM media WHERE path LIKE ?`)
-    .all(`projects/${projectId}/media/%`) as Array<{
+    .prepare(`SELECT id, kind, mime, path, size_bytes, created_at FROM media WHERE substr(path, 1, length(?)) = ?`)
+    .all(`projects/${projectId}/media/`, `projects/${projectId}/media/`) as Array<{
     id: string
     kind: MediaAsset['kind']
     mime: string

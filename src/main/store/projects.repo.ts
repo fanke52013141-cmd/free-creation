@@ -318,9 +318,9 @@ export function cloneProject(sourceId: string, requestedName: string): ProjectMe
   const rows = getDb()
     .prepare(
       `SELECT id, kind, mime, path, size_bytes, width, height, duration_sec, name
-       FROM media WHERE path LIKE ? ORDER BY created_at ASC`
+       FROM media WHERE substr(path, 1, length(?)) = ? ORDER BY created_at ASC`
     )
-    .all(`projects/${sourceId}/media/%`) as CloneMediaRow[]
+    .all(`projects/${sourceId}/media/`, `projects/${sourceId}/media/`) as CloneMediaRow[]
   const ids = new Map<string, string>()
   const paths = new Map<string, string>()
   const clonedRows: Array<CloneMediaRow & { newId: string; newPath: string }> = []
@@ -444,16 +444,12 @@ export function cloneProject(sourceId: string, requestedName: string): ProjectMe
       for (const row of usageRows) {
         const remapJsonIds = (value: string): string => {
           try {
-            const parsed = JSON.parse(value) as unknown
-            return JSON.stringify(
-              Array.isArray(parsed)
-                ? parsed.map((item) =>
-                    typeof item === 'string' ? (entityIds.get(item) ?? item) : item
-                  )
-                : parsed
-            )
+            const parsed: unknown = JSON.parse(value)
+            if (!Array.isArray(parsed) || parsed.some((item) => typeof item !== 'string'))
+              throw new Error('资源使用记录必须是标识数组')
+            return JSON.stringify(parsed.map((item) => entityIds.get(item) ?? item))
           } catch {
-            return value
+            throw new Error('资源使用记录损坏，无法复制项目')
           }
         }
         insertUsage.run(
