@@ -3,7 +3,7 @@
 // 顶部工具栏通过此 store 触发执行，无需直接访问 editor（editor 生命周期由 CanvasEditor 管）。
 import { create } from 'zustand'
 
-export type EnginePhase = 'idle' | 'running' | 'paused' | 'stopping'
+export type EnginePhase = 'idle' | 'starting' | 'running' | 'paused' | 'stopping'
 
 /** 错误发生的阶段 */
 export type ErrorPhase = 'input' | 'execution' | 'output'

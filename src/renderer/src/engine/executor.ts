@@ -88,6 +88,7 @@ interface WorkflowContext {
 }
 
 const isolatedImageRuns = new Set<TLShapeId>()
+const nodeTests = new Set<TLShapeId>()
 
 // L01：renderer 进程唯一的诊断事件生产者。sequence 按生产者递增；
 // sessionId/receivedAt/eventId 由 main 入口补齐，这里不伪造会话信息。
@@ -210,103 +211,110 @@ export async function runNodeTest(
   nodeId: TLShapeId,
   testInputs: NodeTestInputs
 ): Promise<NodeTestResult> {
-  const graph = deriveGraph(editor)
-  const node = graph.nodes.find((item) => item.id === nodeId)
-  const shape = editor.getShape<NodeCardShape>(nodeId)
-  const spec = node ? getNodeType(node.type) : null
-  if (!node || !shape || !spec?.executor) {
-    return { status: 'skipped', reason: '节点不存在或未实现执行器', outputs: {} }
-  }
-  if (node.type === 'iterate') {
-    return { status: 'skipped', reason: '循环节点需要真实下游流程，请在画布中运行', outputs: {} }
-  }
-
-  const runId = `test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-  const injections: ContractInputInjection[] = Object.entries(testInputs).flatMap(
-    ([portId, values]) =>
-      values.map((value, index) => ({
-        portId,
-        packet: {
-          type: value.kind,
-          value,
-          source: { nodeId: '__node_test__', portId: `${portId}.${index + 1}`, runId },
-          createdAt: Date.now()
-        }
-      }))
-  )
-  const collected = collectContractInputs(node, [], new Map(), { injections })
-  if (collected.errors.length > 0) {
-    return {
-      status: 'failed',
-      reason: `输入契约校验失败：${collected.errors.join('；')}`,
-      outputs: {}
-    }
-  }
-
-  let testShape: NodeCardShape = {
-    ...shape,
-    props: { ...shape.props },
-    meta: { ...(shape.meta ?? {}) }
-  }
-  const token: RunControl = createRunControl()
-  const context: NodeExecutionContext = {
-    node,
-    shape: testShape,
-    inputs: collected.value,
-    projectId,
-    runId,
-    providers,
-    signal: token,
-    gateway: rendererGateway,
-    runCode: (source, args) => runCodeTransform(source, args),
-    outgoing: graph.edges
-      .filter((edge) => edge.from.nodeId === node.id)
-      .map((edge) => ({
-        nodeId: edge.to.nodeId,
-        fromPortId: edge.from.portId,
-        toPortId: edge.to.portId
-      })),
-    updateProps: (patch) => {
-      testShape = { ...testShape, props: { ...testShape.props, ...patch } }
-    },
-    updateResult: (result) => {
-      testShape = {
-        ...testShape,
-        meta: mergeShapeMeta(testShape.meta, { nodeResult: result })
-      }
-    },
-    updateMeta: (patch) => {
-      testShape = { ...testShape, meta: mergeShapeMeta(testShape.meta, patch) }
-    },
-    runSubflow: async () => {
-      throw new Error('节点测试不执行下游子流程')
-    }
-  }
+  if (useEngineStore.getState().phase !== 'idle' || isolatedImageRuns.size || nodeTests.size)
+    return { status: 'skipped', reason: '已有任务正在运行', outputs: {} }
+  nodeTests.add(nodeId)
   try {
-    const result = await spec.executor(context)
-    if (result.status !== 'done') return { ...result, outputs: {} }
-    const outputShape: NodeCardShape = {
-      ...testShape,
-      meta: {
-        ...(testShape.meta ?? {}),
-        nodeRun: { runId, status: 'success', startedAt: Date.now() }
-      }
+    const graph = deriveGraph(editor)
+    const node = graph.nodes.find((item) => item.id === nodeId)
+    const shape = editor.getShape<NodeCardShape>(nodeId)
+    const spec = node ? getNodeType(node.type) : null
+    if (!node || !shape || !spec?.executor) {
+      return { status: 'skipped', reason: '节点不存在或未实现执行器', outputs: {} }
     }
-    const output = buildOutputPackets(node, projectNodeOutputs(outputShape), runId)
-    if (output.errors.length > 0) {
+    if (node.type === 'iterate') {
+      return { status: 'skipped', reason: '循环节点需要真实下游流程，请在画布中运行', outputs: {} }
+    }
+
+    const runId = `test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const injections: ContractInputInjection[] = Object.entries(testInputs).flatMap(
+      ([portId, values]) =>
+        values.map((value, index) => ({
+          portId,
+          packet: {
+            type: value.kind,
+            value,
+            source: { nodeId: '__node_test__', portId: `${portId}.${index + 1}`, runId },
+            createdAt: Date.now()
+          }
+        }))
+    )
+    const collected = collectContractInputs(node, [], new Map(), { injections })
+    if (collected.errors.length > 0) {
       return {
         status: 'failed',
-        reason: `输出契约校验失败：${output.errors.join('；')}`,
+        reason: `输入契约校验失败：${collected.errors.join('；')}`,
         outputs: {}
       }
     }
-    return { status: 'done', outputs: output.value }
-  } catch (error) {
-    return {
-      status: 'failed',
-      reason: error instanceof Error ? error.message : String(error),
-      outputs: {}
+
+    let testShape: NodeCardShape = {
+      ...shape,
+      props: { ...shape.props },
+      meta: { ...(shape.meta ?? {}) }
     }
+    const token: RunControl = createRunControl()
+    const context: NodeExecutionContext = {
+      node,
+      shape: testShape,
+      inputs: collected.value,
+      projectId,
+      runId,
+      providers,
+      signal: token,
+      gateway: rendererGateway,
+      runCode: (source, args) => runCodeTransform(source, args),
+      outgoing: graph.edges
+        .filter((edge) => edge.from.nodeId === node.id)
+        .map((edge) => ({
+          nodeId: edge.to.nodeId,
+          fromPortId: edge.from.portId,
+          toPortId: edge.to.portId
+        })),
+      updateProps: (patch) => {
+        testShape = { ...testShape, props: { ...testShape.props, ...patch } }
+      },
+      updateResult: (result) => {
+        testShape = {
+          ...testShape,
+          meta: mergeShapeMeta(testShape.meta, { nodeResult: result })
+        }
+      },
+      updateMeta: (patch) => {
+        testShape = { ...testShape, meta: mergeShapeMeta(testShape.meta, patch) }
+      },
+      runSubflow: async () => {
+        throw new Error('节点测试不执行下游子流程')
+      }
+    }
+    try {
+      const result = await spec.executor(context)
+      if (result.status !== 'done') return { ...result, outputs: {} }
+      const outputShape: NodeCardShape = {
+        ...testShape,
+        meta: {
+          ...(testShape.meta ?? {}),
+          nodeRun: { runId, status: 'success', startedAt: Date.now() }
+        }
+      }
+      const output = buildOutputPackets(node, projectNodeOutputs(outputShape), runId)
+      if (output.errors.length > 0) {
+        return {
+          status: 'failed',
+          reason: `输出契约校验失败：${output.errors.join('；')}`,
+          outputs: {}
+        }
+      }
+      return { status: 'done', outputs: output.value }
+    } catch (error) {
+      return {
+        status: 'failed',
+        reason: error instanceof Error ? error.message : String(error),
+        outputs: {}
+      }
+    }
+  } finally {
+    nodeTests.delete(nodeId)
   }
 }
 
@@ -1210,6 +1218,8 @@ export async function runNodeManually(
     canRunImageWhileVideo(editor) &&
     editor.getShape<NodeCardShape>(nodeId)?.props.nodeType === 'image-gen'
   if (store.phase !== 'idle' && !isolated) return { status: 'skipped', reason: '已有任务正在运行' }
+  if (nodeTests.size || (store.phase === 'idle' && isolatedImageRuns.size))
+    return { status: 'skipped', reason: '已有任务正在运行' }
   if (isolatedImageRuns.has(nodeId)) return { status: 'skipped', reason: '当前生图节点正在运行' }
 
   const graph = deriveGraph(editor)
@@ -1288,77 +1298,83 @@ export async function runWorkflow(
   providers: ProviderSummary[]
 ): Promise<void> {
   const store = useEngineStore.getState()
-  if (store.phase !== 'idle') return
-  const graph = deriveGraph(editor)
-  if (graph.nodes.length === 0) return toast('画布上没有节点')
-  const order = topoSort(graph)
-  if (!order) return toast('工作流存在循环连线，无法执行')
+  if (store.phase !== 'idle' || isolatedImageRuns.size > 0 || nodeTests.size > 0) return
+  useEngineStore.setState({ phase: 'starting' })
+  try {
+    const graph = deriveGraph(editor)
+    if (graph.nodes.length === 0) return toast('画布上没有节点')
+    const order = topoSort(graph)
+    if (!order) return toast('工作流存在循环连线，无法执行')
 
-  // T07（F07）：全图运行前明确范围与规模。确认弹窗仅在涉及生成模型时出现——
-  // 费用提示是弹窗存在的意义；纯本地转换的画布直接运行，也避免测试环境挂起。
-  const planBodies = iterationBodyNodeIds(graph)
-  const plan = deriveRunPlan(
-    graph.nodes.filter((node) => !planBodies.has(node.id)),
-    undefined
-  )
-  if (plan.willGenerate.length > 0) {
-    const proceed = await useConfirmStore.getState().confirm({
-      title: '运行整个画布',
-      message: formatRunPlan(plan),
-      confirmText: '开始运行'
+    // T07（F07）：全图运行前明确范围与规模。确认弹窗仅在涉及生成模型时出现——
+    // 费用提示是弹窗存在的意义；纯本地转换的画布直接运行，也避免测试环境挂起。
+    const planBodies = iterationBodyNodeIds(graph)
+    const plan = deriveRunPlan(
+      graph.nodes.filter((node) => !planBodies.has(node.id)),
+      undefined
+    )
+    if (plan.willGenerate.length > 0) {
+      const proceed = await useConfirmStore.getState().confirm({
+        title: '运行整个画布',
+        message: formatRunPlan(plan),
+        confirmText: '开始运行'
+      })
+      if (!proceed) return
+    }
+
+    const token = createRunControl()
+    registerRunControls(token)
+    const iterationBodies = iterationBodyNodeIds(graph)
+    const executableOrder = order.filter((node) => !iterationBodies.has(node.id))
+    store.beginRun(executableOrder.length)
+    const ctx: WorkflowContext = {
+      editor,
+      projectId,
+      providers,
+      token,
+      graph,
+      outputs: new Map<string, ContractOutputs>(),
+      subflowBaseInputs: new Map(),
+      runId: crypto.randomUUID(),
+      traceId: newTraceId(),
+      workflowSpanId: newSpanId()
+    }
+    emitWorkflowEvent('workflow.started', '工作流开始执行', ctx, {
+      attributes: { itemCount: executableOrder.length }
     })
-    if (!proceed) return
-  }
 
-  const token = createRunControl()
-  registerRunControls(token)
-  const iterationBodies = iterationBodyNodeIds(graph)
-  const executableOrder = order.filter((node) => !iterationBodies.has(node.id))
-  store.beginRun(executableOrder.length)
-  const ctx: WorkflowContext = {
-    editor,
-    projectId,
-    providers,
-    token,
-    graph,
-    outputs: new Map<string, ContractOutputs>(),
-    subflowBaseInputs: new Map(),
-    runId: crypto.randomUUID(),
-    traceId: newTraceId(),
-    workflowSpanId: newSpanId()
-  }
-  emitWorkflowEvent('workflow.started', '工作流开始执行', ctx, {
-    attributes: { itemCount: executableOrder.length }
-  })
+    const runSubflow = (request: SubflowRequest): Promise<Record<string, ContractOutputs>> =>
+      runSubflowForIterate(ctx, runSubflow, request)
 
-  const runSubflow = (request: SubflowRequest): Promise<Record<string, ContractOutputs>> =>
-    runSubflowForIterate(ctx, runSubflow, request)
+    for (const node of executableOrder) {
+      await waitForResume(token)
+      if (token.cancelled) break
+      store.setCurrent(node.title || node.type, node.id)
+      await executeNodeOnce(ctx, node, runSubflow)
+      store.nodeDone()
+    }
 
-  for (const node of executableOrder) {
-    await waitForResume(token)
-    if (token.cancelled) break
-    store.setCurrent(node.title || node.type, node.id)
-    await executeNodeOnce(ctx, node, runSubflow)
-    store.nodeDone()
+    const after = useEngineStore.getState()
+    after.endRun()
+    clearRunControls()
+    if (token.cancelled) {
+      toast('工作流已停止')
+      emitWorkflowEvent('workflow.cancelled', '工作流已停止', ctx, { status: 'cancelled' })
+    } else if (after.errors.length > 0) {
+      toast(`工作流完成，${after.errors.length} 个节点失败`)
+      emitWorkflowEvent('workflow.failed', '工作流完成，部分节点失败', ctx, {
+        status: 'failed',
+        attributes: { failedCount: after.errors.length }
+      })
+    } else {
+      toast('工作流执行完成')
+      emitWorkflowEvent('workflow.completed', '工作流执行完成', ctx, { status: 'success' })
+    }
+    markUndoPoint(editor, 'workflow-run')
+  } finally {
+    useEngineStore.getState().endRun()
+    clearRunControls()
   }
-
-  const after = useEngineStore.getState()
-  after.endRun()
-  clearRunControls()
-  if (token.cancelled) {
-    toast('工作流已停止')
-    emitWorkflowEvent('workflow.cancelled', '工作流已停止', ctx, { status: 'cancelled' })
-  } else if (after.errors.length > 0) {
-    toast(`工作流完成，${after.errors.length} 个节点失败`)
-    emitWorkflowEvent('workflow.failed', '工作流完成，部分节点失败', ctx, {
-      status: 'failed',
-      attributes: { failedCount: after.errors.length }
-    })
-  } else {
-    toast('工作流执行完成')
-    emitWorkflowEvent('workflow.completed', '工作流执行完成', ctx, { status: 'success' })
-  }
-  markUndoPoint(editor, 'workflow-run')
 }
 
 /**
@@ -1372,114 +1388,120 @@ export async function runWorkflowForNodes(
   targetNodeIds: TLShapeId[]
 ): Promise<void> {
   const store = useEngineStore.getState()
-  if (store.phase !== 'idle') return
-  const fullGraph = deriveGraph(editor)
-  const targets = [...new Set(targetNodeIds)].filter((id) =>
-    fullGraph.nodes.some((node) => node.id === id)
-  )
-  if (targets.length === 0) return toast('所选节点不存在或尚未保存到画布')
+  if (store.phase !== 'idle' || isolatedImageRuns.size > 0 || nodeTests.size > 0) return
+  useEngineStore.setState({ phase: 'starting' })
+  try {
+    const fullGraph = deriveGraph(editor)
+    const targets = [...new Set(targetNodeIds)].filter((id) =>
+      fullGraph.nodes.some((node) => node.id === id)
+    )
+    if (targets.length === 0) return toast('所选节点不存在或尚未保存到画布')
 
-  const required = new Set<string>(targets)
-  const pending: string[] = [...targets]
-  while (pending.length > 0) {
-    const nodeId = pending.pop()!
-    for (const edge of fullGraph.edges) {
-      if (edge.to.nodeId === nodeId && !required.has(edge.from.nodeId)) {
-        required.add(edge.from.nodeId)
-        pending.push(edge.from.nodeId)
+    const required = new Set<string>(targets)
+    const pending: string[] = [...targets]
+    while (pending.length > 0) {
+      const nodeId = pending.pop()!
+      for (const edge of fullGraph.edges) {
+        if (edge.to.nodeId === nodeId && !required.has(edge.from.nodeId)) {
+          required.add(edge.from.nodeId)
+          pending.push(edge.from.nodeId)
+        }
       }
     }
-  }
-  const graph = {
-    nodes: fullGraph.nodes.filter((node) => required.has(node.id)),
-    edges: fullGraph.edges.filter(
-      (edge) => required.has(edge.from.nodeId) && required.has(edge.to.nodeId)
-    )
-  }
-  const order = topoSort(graph)
-  if (!order) return toast('所选子图存在循环连线，无法执行')
+    const graph = {
+      nodes: fullGraph.nodes.filter((node) => required.has(node.id)),
+      edges: fullGraph.edges.filter(
+        (edge) => required.has(edge.from.nodeId) && required.has(edge.to.nodeId)
+      )
+    }
+    const order = topoSort(graph)
+    if (!order) return toast('所选子图存在循环连线，无法执行')
 
-  const iterationBodies = iterationBodyNodeIds(graph)
-  // R-03：子图运行对整条依赖闭包全量重跑，`outputs` 从空 Map 开始，没有任何
-  // 「已成功则复用」闸门，跨轮必然重复执行付费生成类上游。这里在 beginRun 之前
-  // 把 targets 之外将被重新执行的「运行型」上游节点（非 document/asset 类，
-  // 复用 isDocumentOutputNode 判定）数出来；N>0 必须经用户确认，取消则直接
-  // 返回，不进入 beginRun。全图 runWorkflow 保持原行为不加闸。
-  const targetIds = new Set<string>(targets)
-  const nodeById = new Map(fullGraph.nodes.map((node) => [node.id, node]))
-  const rerunPaidUpstream = [...required].filter((nodeId) => {
-    if (targetIds.has(nodeId)) return false
-    // 循环体成员由循环节点逐项驱动，不单独计入，避免与循环节点双重计数。
-    if (iterationBodies.has(nodeId)) return false
-    const node = nodeById.get(nodeId)
-    return node !== undefined && !isDocumentOutputNode(node.type)
-  })
-  if (rerunPaidUpstream.length > 0) {
-    // T07（F07）：确认清单带节点名（最多列 6 个，余量计数），不再只给笼统计数。
-    const names = rerunPaidUpstream
-      .map((nodeId) => nodeById.get(nodeId)?.title || nodeId.slice(-4))
-      .slice(0, 6)
-      .map((title) => `「${title}」`)
-    const more =
-      rerunPaidUpstream.length > names.length ? ` 等 ${rerunPaidUpstream.length} 个节点` : ''
-    const proceed = await useConfirmStore.getState().confirm({
-      title: '将重新执行上游节点',
-      message: `所选流程将一并重新执行 ${names.join('、')}${more}（生成类节点可能产生费用）。是否继续？`,
-      confirmText: '继续运行'
+    const iterationBodies = iterationBodyNodeIds(graph)
+    // R-03：子图运行对整条依赖闭包全量重跑，`outputs` 从空 Map 开始，没有任何
+    // 「已成功则复用」闸门，跨轮必然重复执行付费生成类上游。这里在 beginRun 之前
+    // 把 targets 之外将被重新执行的「运行型」上游节点（非 document/asset 类，
+    // 复用 isDocumentOutputNode 判定）数出来；N>0 必须经用户确认，取消则直接
+    // 返回，不进入 beginRun。全图 runWorkflow 保持原行为不加闸。
+    const targetIds = new Set<string>(targets)
+    const nodeById = new Map(fullGraph.nodes.map((node) => [node.id, node]))
+    const rerunPaidUpstream = [...required].filter((nodeId) => {
+      if (targetIds.has(nodeId)) return false
+      // 循环体成员由循环节点逐项驱动，不单独计入，避免与循环节点双重计数。
+      if (iterationBodies.has(nodeId)) return false
+      const node = nodeById.get(nodeId)
+      return node !== undefined && !isDocumentOutputNode(node.type)
     })
-    if (!proceed) return
-  }
+    if (rerunPaidUpstream.length > 0) {
+      // T07（F07）：确认清单带节点名（最多列 6 个，余量计数），不再只给笼统计数。
+      const names = rerunPaidUpstream
+        .map((nodeId) => nodeById.get(nodeId)?.title || nodeId.slice(-4))
+        .slice(0, 6)
+        .map((title) => `「${title}」`)
+      const more =
+        rerunPaidUpstream.length > names.length ? ` 等 ${rerunPaidUpstream.length} 个节点` : ''
+      const proceed = await useConfirmStore.getState().confirm({
+        title: '将重新执行上游节点',
+        message: `所选流程将一并重新执行 ${names.join('、')}${more}（生成类节点可能产生费用）。是否继续？`,
+        confirmText: '继续运行'
+      })
+      if (!proceed) return
+    }
 
-  const token = createRunControl()
-  registerRunControls(token)
-  const executableOrder = order.filter((node) => !iterationBodies.has(node.id))
-  store.beginRun(executableOrder.length)
-  const ctx: WorkflowContext = {
-    editor,
-    projectId,
-    providers,
-    token,
-    graph,
-    outputs: new Map<string, ContractOutputs>(),
-    subflowBaseInputs: new Map(),
-    runId: crypto.randomUUID(),
-    traceId: newTraceId(),
-    workflowSpanId: newSpanId()
-  }
-  emitWorkflowEvent('workflow.started', '子图开始执行', ctx, {
-    attributes: { itemCount: executableOrder.length }
-  })
-  const runSubflow = (request: SubflowRequest): Promise<Record<string, ContractOutputs>> =>
-    runSubflowForIterate(ctx, runSubflow, request)
-
-  for (const node of executableOrder) {
-    await waitForResume(token)
-    if (token.cancelled) break
-    store.setCurrent(node.title || node.type, node.id)
-    await executeNodeOnce(ctx, node, runSubflow)
-    store.nodeDone()
-  }
-
-  const after = useEngineStore.getState()
-  after.endRun()
-  clearRunControls()
-  if (token.cancelled) {
-    toast('子图运行已停止')
-    emitWorkflowEvent('workflow.cancelled', '子图运行已停止', ctx, { status: 'cancelled' })
-  } else if (after.errors.length > 0) {
-    toast(`子图完成，${after.errors.length} 个节点失败`)
-    emitWorkflowEvent('workflow.failed', '子图完成，部分节点失败', ctx, {
-      status: 'failed',
-      attributes: { failedCount: after.errors.length }
-    })
-  } else {
-    toast(`已运行所选流程（${executableOrder.length} 个节点）`)
-    emitWorkflowEvent('workflow.completed', '子图执行完成', ctx, {
-      status: 'success',
+    const token = createRunControl()
+    registerRunControls(token)
+    const executableOrder = order.filter((node) => !iterationBodies.has(node.id))
+    store.beginRun(executableOrder.length)
+    const ctx: WorkflowContext = {
+      editor,
+      projectId,
+      providers,
+      token,
+      graph,
+      outputs: new Map<string, ContractOutputs>(),
+      subflowBaseInputs: new Map(),
+      runId: crypto.randomUUID(),
+      traceId: newTraceId(),
+      workflowSpanId: newSpanId()
+    }
+    emitWorkflowEvent('workflow.started', '子图开始执行', ctx, {
       attributes: { itemCount: executableOrder.length }
     })
+    const runSubflow = (request: SubflowRequest): Promise<Record<string, ContractOutputs>> =>
+      runSubflowForIterate(ctx, runSubflow, request)
+
+    for (const node of executableOrder) {
+      await waitForResume(token)
+      if (token.cancelled) break
+      store.setCurrent(node.title || node.type, node.id)
+      await executeNodeOnce(ctx, node, runSubflow)
+      store.nodeDone()
+    }
+
+    const after = useEngineStore.getState()
+    after.endRun()
+    clearRunControls()
+    if (token.cancelled) {
+      toast('子图运行已停止')
+      emitWorkflowEvent('workflow.cancelled', '子图运行已停止', ctx, { status: 'cancelled' })
+    } else if (after.errors.length > 0) {
+      toast(`子图完成，${after.errors.length} 个节点失败`)
+      emitWorkflowEvent('workflow.failed', '子图完成，部分节点失败', ctx, {
+        status: 'failed',
+        attributes: { failedCount: after.errors.length }
+      })
+    } else {
+      toast(`已运行所选流程（${executableOrder.length} 个节点）`)
+      emitWorkflowEvent('workflow.completed', '子图执行完成', ctx, {
+        status: 'success',
+        attributes: { itemCount: executableOrder.length }
+      })
+    }
+    markUndoPoint(editor, 'workflow-run-subgraph')
+  } finally {
+    useEngineStore.getState().endRun()
+    clearRunControls()
   }
-  markUndoPoint(editor, 'workflow-run-subgraph')
 }
 
 /** 向后兼容右侧详情面板的“运行至此节点”动作。 */

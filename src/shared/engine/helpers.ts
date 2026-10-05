@@ -239,41 +239,58 @@ export function waitForVideo(
 ): Promise<VideoMedia> {
   return new Promise((resolve, reject) => {
     let stopped = false
+    let polling = false
+    let failures = 0
     const stop = (): void => {
       stopped = true
       clearInterval(timer)
       clearTimeout(timeout)
     }
-    const timer = setInterval(async () => {
-      if (signal.cancelled) {
-        stop()
-        void gateway.videoCancel(taskId)
-        reject(new Error('已取消'))
-        return
-      }
-      const result = await gateway.videoTask(taskId)
-      if (!result.ok || !result.data) return
-      if (result.data.status === 'success' && result.data.mediaPath) {
-        stop()
-        resolve({
-          mediaId: result.data.mediaId ?? '',
-          mediaPath: result.data.mediaPath,
-          name: 'video',
-          mime: 'video/mp4'
-        })
-      } else if (result.data.status === 'failed' || result.data.status === 'cancelled') {
-        stop()
-        reject(new Error(result.data.error ?? '视频生成失败'))
-      }
+    const cancelRemote = (): void => {
+      void Promise.resolve()
+        .then(() => gateway.videoCancel(taskId))
+        .catch(() => undefined)
+    }
+    const fail = (error: Error, cancel = true): void => {
+      if (stopped) return
+      stop()
+      if (cancel) cancelRemote()
+      reject(error)
+    }
+    const timer = setInterval(() => {
+      if (stopped) return
+      if (signal.cancelled) return fail(new Error('已取消'))
+      if (polling) return
+      polling = true
+      void (async () => {
+        try {
+          const result = await gateway.videoTask(taskId)
+          if (stopped) return
+          if (signal.cancelled) return fail(new Error('已取消'))
+          if (!result.ok || !result.data) {
+            if (++failures >= 3) fail(new Error('视频任务状态连续查询失败'))
+            return
+          }
+          failures = 0
+          if (result.data.status === 'success' && result.data.mediaPath) {
+            stop()
+            resolve({
+              mediaId: result.data.mediaId ?? '',
+              mediaPath: result.data.mediaPath,
+              name: 'video',
+              mime: 'video/mp4'
+            })
+          } else if (result.data.status === 'failed' || result.data.status === 'cancelled') {
+            fail(new Error(result.data.error ?? '视频生成失败'), false)
+          }
+        } catch {
+          if (!stopped && ++failures >= 3) fail(new Error('视频任务状态连续查询失败'))
+        } finally {
+          polling = false
+        }
+      })()
     }, 3_000)
-    const timeout = setTimeout(() => {
-      if (!stopped) {
-        stop()
-        // 超时只是放弃等待，远端任务仍在计费执行：放弃前必须补偿取消（R-01）。
-        void gateway.videoCancel(taskId)
-        reject(new Error('视频生成超时（10 分钟）'))
-      }
-    }, 600_000)
+    const timeout = setTimeout(() => fail(new Error('视频生成超时（10 分钟）')), 600_000)
   })
 }
 

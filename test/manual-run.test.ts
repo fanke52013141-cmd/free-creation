@@ -1,3 +1,4 @@
+import { useEngineStore } from '@renderer/engine/store'
 // @vitest-environment jsdom
 // 卡片内手动执行必须与工作流共用同一套「连线 → 输入收集 → 执行 → 输出投影」路径。
 import { beforeAll, describe, expect, it } from 'vitest'
@@ -635,7 +636,11 @@ describe('runWorkflow · 迭代体输入隔离', () => {
 
 describe('runWorkflowForNodes · 重跑付费上游前必须确认（R-03）', () => {
   // json 未声明 outputSource: 'document'，属运行型节点——用它代替「重跑会产生费用」的上游。
-  function buildPaidUpstreamGraph(): { editor: Editor; source: NodeCardShape; target: NodeCardShape } {
+  function buildPaidUpstreamGraph(): {
+    editor: Editor
+    source: NodeCardShape
+    target: NodeCardShape
+  } {
     const source = node('shape:paid-source', 'json', '{"prompt":"蓝色立方体"}')
     const target = node('shape:paid-target', 'processor', '')
     const arrow = {
@@ -724,4 +729,37 @@ describe('runWorkflowForNodes · 重跑付费上游前必须确认（R-03）', (
       data: { prompt: '蓝色立方体' }
     })
   })
+})
+
+it('生成确认占用 starting，阻止第二次流程/单节点/测试，取消后释放', async () => {
+  const target = node('shape:confirm-race', 'image-gen', '提示词')
+  const editor = {
+    getCurrentPageShapes: () => [target],
+    getShape: () => target,
+    getBindingsFromShape: () => []
+  } as unknown as Editor
+  const original = useConfirmStore.getState().confirm
+  let finish!: (value: boolean) => void
+  let calls = 0
+  useConfirmStore.setState({
+    confirm: () => {
+      calls++
+      return new Promise((resolve) => {
+        finish = resolve
+      })
+    }
+  })
+  try {
+    const pending = runWorkflow(editor, 'project', [])
+    expect(useEngineStore.getState().phase).toBe('starting')
+    await runWorkflow(editor, 'project', [])
+    expect(calls).toBe(1)
+    expect((await runNodeManually(editor, 'project', [], target.id)).status).toBe('skipped')
+    expect((await runNodeTest(editor, 'project', [], target.id, {})).status).toBe('skipped')
+    finish(false)
+    await pending
+    expect(useEngineStore.getState().phase).toBe('idle')
+  } finally {
+    useConfirmStore.setState({ confirm: original })
+  }
 })

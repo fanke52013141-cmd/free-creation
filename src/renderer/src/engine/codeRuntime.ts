@@ -4,7 +4,7 @@
 // async function main(args) 写法。
 //
 // 公共逻辑（策略检查、确定性种子、输出验证）已提取到 @shared/engine/code-runtime。
-// headless 运行时在 src/main/headless/run-code.ts（Node.js vm 沙箱）。
+// 当前仅提供 renderer Worker 实现；headless 对接已下线。
 
 export type { CodeOutput } from '@shared/engine/code-runtime'
 export {
@@ -78,13 +78,28 @@ const dayjs = (input) => {
     toDate: () => new Date(date.getTime()),
     toISOString: () => date.toISOString(),
     format: (pattern = 'YYYY-MM-DD HH:mm:ss') => pattern
-      .replace('YYYY', String(date.getFullYear()))
-      .replace('MM', pad(date.getMonth() + 1))
-      .replace('DD', pad(date.getDate()))
-      .replace('HH', pad(date.getHours()))
-      .replace('mm', pad(date.getMinutes()))
-      .replace('ss', pad(date.getSeconds())),
-    add: (amount, unit = 'millisecond') => { const next = new Date(date.getTime()); const ms = { millisecond: 1, second: 1000, minute: 60000, hour: 3600000, day: 86400000 }[unit] || 1; next.setTime(next.getTime() + amount * ms); return dayjs(next); },
+      .replace('YYYY', String(date.getUTCFullYear()))
+      .replace('MM', pad(date.getUTCMonth() + 1))
+      .replace('DD', pad(date.getUTCDate()))
+      .replace('HH', pad(date.getUTCHours()))
+      .replace('mm', pad(date.getUTCMinutes()))
+      .replace('ss', pad(date.getUTCSeconds())),
+    add: (amount, unit = 'millisecond') => {
+      if (!Number.isFinite(amount)) throw new Error('日期增量必须是有限数字');
+      const next = new Date(date.getTime());
+      const aliases = { ms: 'millisecond', s: 'second', m: 'minute', h: 'hour', d: 'day', w: 'week', M: 'month', Q: 'quarter', y: 'year' };
+      const normalized = aliases[unit] || String(unit).toLowerCase().replace(/s$/, '');
+      const units = { millisecond: 1, second: 1000, minute: 60000, hour: 3600000, day: 86400000, week: 604800000 };
+      if (Object.prototype.hasOwnProperty.call(units, normalized)) next.setTime(next.getTime() + amount * units[normalized]);
+      else if (['month', 'quarter', 'year'].includes(normalized)) {
+        const originalDay = next.getUTCDate();
+        next.setUTCDate(1);
+        next.setUTCMonth(next.getUTCMonth() + amount * (normalized === 'year' ? 12 : normalized === 'quarter' ? 3 : 1));
+        const last = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
+        next.setUTCDate(Math.min(originalDay, last));
+      } else throw new Error('不支持的日期单位：' + unit);
+      return dayjs(next);
+    },
     subtract: (amount, unit) => api.add(-amount, unit)
   };
   return Object.freeze(api);

@@ -1,3 +1,4 @@
+import { runInNewContext } from 'node:vm'
 import { describe, expect, it } from 'vitest'
 import {
   assertCodeSourcePolicy,
@@ -42,4 +43,31 @@ describe('代码节点离线运行时', () => {
       deterministicCodeSeed('return Math.random()', { a: 2 })
     )
   })
+})
+
+it('Worker 日期格式使用 UTC，月末加月夹取且拒绝未知单位', async () => {
+  const messages: Array<{ ok: boolean; value?: unknown; error?: string }> = []
+  const host: Record<string, unknown> = {
+    postMessage: (value: { ok: boolean; value?: unknown }) => messages.push(value)
+  }
+  host.self = host
+  const context = host
+  runInNewContext(WORKER_SOURCE, context)
+  const execute = host.onmessage as (message: unknown) => Promise<void>
+  await execute({
+    data: {
+      source:
+        "return {date: dayjs().format(), month: dayjs('2024-01-31T00:00:00Z').add(1, 'month').toISOString(), week: dayjs().add(1,'week').valueOf()}",
+      input: {},
+      seed: 1
+    }
+  })
+  expect(messages[0]).toMatchObject({
+    ok: true,
+    value: { date: '1970-01-01 00:00:00', month: '2024-02-29T00:00:00.000Z', week: 604800000 }
+  })
+  await execute({
+    data: { source: "return dayjs().add(1,'nonsense').valueOf()", input: {}, seed: 1 }
+  })
+  expect(messages[1].ok).toBe(false)
 })
