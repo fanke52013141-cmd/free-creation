@@ -15,6 +15,16 @@ import { emitGatewayEvent, ensureRequestId } from '../diagnostics/gateway-events
 import type { GatewayDiagnosticsContext } from '../../shared/contracts'
 import { createImageModel, GatewayError, requireProvider } from './factory'
 
+// 桌面启动后注入 Chromium 网络栈，图片上传/轮询/下载跟随系统代理。
+// 单测未启动 Electron 时保留可模拟的标准 fetch。
+// emitGatewayEvent 继续记录请求开始/终态、任务轮询与下载落盘，不在适配器重复记录。
+let desktopFetch: typeof globalThis.fetch | undefined
+export function setImageNetworkFetch(fetcher: typeof globalThis.fetch | undefined): void {
+  desktopFetch = fetcher
+}
+const imageFetch: typeof globalThis.fetch = (input, init) =>
+  (desktopFetch ?? globalThis.fetch)(input, init)
+
 const EXT_BY_MIME: Record<string, string> = {
   'image/png': '.png',
   'image/jpeg': '.jpg',
@@ -163,9 +173,12 @@ const toapisTaskQueryPathByProvider = new Map<string, string>()
 
 function toapisNetworkError(phase: string, error: unknown): GatewayError {
   const cause = error instanceof Error ? (error as Error & { cause?: unknown }).cause : undefined
-  const detail = cause instanceof Error
-    ? `${cause.message}${'code' in cause ? ` (${String(cause.code)})` : ''}`
-    : error instanceof Error ? error.message : String(error)
+  const detail =
+    cause instanceof Error
+      ? `${cause.message}${'code' in cause ? ` (${String(cause.code)})` : ''}`
+      : error instanceof Error
+        ? error.message
+        : String(error)
   log.error('toapis image network error', { phase, detail })
   return new GatewayError('UPSTREAM_ERROR', `TOAPIS ${phase}网络失败：${detail}`)
 }
@@ -226,12 +239,14 @@ async function toapisUploadReference(
     `reference-${Date.now()}`
   )
   const base = provider.baseURL.replace(/\/+$/, '')
-  const res = await fetch(`${base}/uploads/images`, {
+  const res = await imageFetch(`${base}/uploads/images`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${provider.apiKey}` },
     body: form,
     signal: AbortSignal.timeout(60_000)
-  }).catch((error: unknown) => { throw toapisNetworkError('参考图上传', error) })
+  }).catch((error: unknown) => {
+    throw toapisNetworkError('参考图上传', error)
+  })
   if (!res.ok) {
     throw new GatewayError('TOAPIS_UPLOAD_FAILED', await errorTail(res, '参考图上传失败'))
   }
@@ -283,7 +298,7 @@ async function pollToapisTask(
     const candidates = knownPath ? [knownPath] : TOAPIS_TASK_QUERY_PATHS
     let notFoundCount = 0
     for (const path of candidates) {
-      const res = await fetch(`${base}${path}${taskId}`, {
+      const res = await imageFetch(`${base}${path}${taskId}`, {
         headers: { Authorization: `Bearer ${provider.apiKey}` },
         signal: AbortSignal.timeout(30_000)
       }).catch((error: unknown) => {
@@ -389,7 +404,10 @@ async function pollToapisTask(
     error: new GatewayError('TIMEOUT', 'TOAPIS 生图任务超时'),
     attributes: { state: 'unknown', pollCount, operation: 'image.generate' }
   })
-  throw new GatewayError('TIMEOUT', `TOAPIS 生图任务超时（20 分钟）${lastNetworkError ? `；最近一次请求：${lastNetworkError}` : ''}`)
+  throw new GatewayError(
+    'TIMEOUT',
+    `TOAPIS 生图任务超时（20 分钟）${lastNetworkError ? `；最近一次请求：${lastNetworkError}` : ''}`
+  )
 }
 
 function decodeDataUrl(url: string): { buf: Buffer; ext: string } {
@@ -436,8 +454,11 @@ async function downloadImageAsAsset(
   let buf: Buffer
   let mime = 'image/png'
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(IMAGE_DOWNLOAD_TIMEOUT_MS) })
-      .catch((error: unknown) => { throw toapisNetworkError('图片下载', error) })
+    const res = await imageFetch(url, {
+      signal: AbortSignal.timeout(IMAGE_DOWNLOAD_TIMEOUT_MS)
+    }).catch((error: unknown) => {
+      throw toapisNetworkError('图片下载', error)
+    })
     if (!res.ok) {
       throw new GatewayError('DOWNLOAD_FAILED', `生成图片下载失败：HTTP ${res.status}`)
     }
@@ -508,13 +529,20 @@ async function generateWithToapisTask(
   if (referenceUrls.length > 0) body.reference_images = referenceUrls
 
   const base = provider.baseURL.replace(/\/+$/, '')
-  log.info('toapis image submit', { model: input.modelId, resolution: body.resolution, quality: body.quality, referenceCount: referenceUrls.length })
-  const res = await fetch(`${base}/images/generations`, {
+  log.info('toapis image submit', {
+    model: input.modelId,
+    resolution: body.resolution,
+    quality: body.quality,
+    referenceCount: referenceUrls.length
+  })
+  const res = await imageFetch(`${base}/images/generations`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${provider.apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(60_000)
-  }).catch((error: unknown) => { throw toapisNetworkError('生图提交', error) })
+  }).catch((error: unknown) => {
+    throw toapisNetworkError('生图提交', error)
+  })
   if (!res.ok) {
     // 401/429/5xx 在此区分：带上状态码供归一化映射稳定错误码。
     emitGatewayEvent('model.request.attempt_failed', '生图提交失败', diagnostics, {
@@ -550,12 +578,19 @@ async function generateWithToapisTask(
   // 远端已接受任务：与「本地下载/入库成功」是不同事实，事件分开记录。
   emitGatewayEvent('model.request.accepted', '远端已接受生图任务', diagnostics, {
     upstreamTaskId: taskId,
-    attributes: { operation: 'image.generate', providerId: input.providerId, modelId: input.modelId }
+    attributes: {
+      operation: 'image.generate',
+      providerId: input.providerId,
+      modelId: input.modelId
+    }
   })
   const finished = await pollToapisTask(provider, taskId, { diagnostics, taskId })
   const imageUrl = extractFirstImageValue(finished, new Set(referenceUrls))
   if (!imageUrl) throw new GatewayError('EMPTY_RESULT', 'TOAPIS 任务完成但未返回图片')
-  return downloadImageAsAsset(input.projectId, imageUrl, prompt.slice(0, 24), { diagnostics, taskId })
+  return downloadImageAsAsset(input.projectId, imageUrl, prompt.slice(0, 24), {
+    diagnostics,
+    taskId
+  })
 }
 
 // ── 驱动三：OpenRouter chat 生图（modalities: ['image', 'text']） ──────────
@@ -582,7 +617,7 @@ async function generateWithOpenRouterChat(
     })
   }
 
-  const res = await fetch(`${provider.baseURL}/chat/completions`, {
+  const res = await imageFetch(`${provider.baseURL}/chat/completions`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${provider.apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -649,7 +684,7 @@ export async function generateImageEditToAsset(
     if (referenceUrls.length > 0) body.reference_images = referenceUrls
 
     const base = provider.baseURL.replace(/\/+$/, '')
-    const res = await fetch(`${base}/images/generations`, {
+    const res = await imageFetch(`${base}/images/generations`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${provider.apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),

@@ -1,4 +1,5 @@
-import { app, shell, BrowserWindow, protocol, Menu } from 'electron'
+import { app, shell, BrowserWindow, protocol, Menu, net } from 'electron'
+import { setImageNetworkFetch } from './gateway/image'
 import { join, extname } from 'path'
 import { createReadStream } from 'fs'
 import { stat } from 'fs/promises'
@@ -233,6 +234,8 @@ function createWindow(): BrowserWindow {
 const isModelSmokeTest = process.argv.includes('--model-smoke-test')
 
 app.whenReady().then(async () => {
+  // 仅安装传输适配器；请求阶段仍由 gateway/image.ts 的 emitGatewayEvent 统一记录。
+  setImageNetworkFetch((input, init) => net.fetch(input instanceof URL ? input.href : input, init))
   electronApp.setAppUserModelId('com.canvas-studio.app')
 
   app.on('browser-window-created', (_, window) => {

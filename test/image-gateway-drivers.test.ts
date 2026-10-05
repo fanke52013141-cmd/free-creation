@@ -27,7 +27,7 @@ vi.mock('ai', () => ({
 }))
 
 import { generateImage } from 'ai'
-import { generateImageToAsset } from '../src/main/gateway/image'
+import { generateImageToAsset, setImageNetworkFetch } from '../src/main/gateway/image'
 import { readMediaBuffer, saveBufferAsset } from '../src/main/store/media.repo'
 import { requireProvider } from '../src/main/gateway/factory'
 
@@ -93,6 +93,7 @@ describe('image gateway drivers', () => {
   })
 
   afterEach(() => {
+    setImageNetworkFetch(undefined)
     vi.useRealTimers()
     vi.unstubAllGlobals()
   })
@@ -168,7 +169,7 @@ describe('image gateway drivers', () => {
       )
     })
 
-    it('图生图：本地图先上传换 URL；任务回显参考图不会被误当结果', async () => {
+    it('图生图全程使用桌面网络：本地图先上传换 URL；任务回显参考图不会被误当结果', async () => {
       const REF_URL = 'https://cdn.example.com/ref-1.png'
       const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
         const url = String(input)
@@ -195,13 +196,18 @@ describe('image gateway drivers', () => {
         }
         return new Response(`unexpected ${url}`, { status: 500 })
       })
-      vi.stubGlobal('fetch', fetchMock)
+      const directFetch = vi.fn(() => {
+        throw new Error('不得绕过桌面代理走 Node 直连')
+      })
+      vi.stubGlobal('fetch', directFetch)
+      setImageNetworkFetch(fetchMock)
       requireProviderMock.mockReturnValue(makeProvider('toapis'))
       readMediaBufferMock.mockResolvedValue({ buf: Buffer.from('local-ref'), mime: 'image/png' })
 
       const pending = generateImageToAsset(makeInput({ referenceMediaIds: ['media-1'] }))
       await advancePolling()
       await pending
+      expect(directFetch).not.toHaveBeenCalled()
 
       const submitCall = fetchMock.mock.calls.find(
         ([url, init]) => String(url).endsWith('/images/generations') && init?.method === 'POST'
