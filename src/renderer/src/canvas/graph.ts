@@ -86,20 +86,8 @@ type ArrowColor =
   | 'light-green'
   | 'light-violet'
 
-export const EDGE_COLORS: Record<string, ArrowColor> = {
-  text: 'grey',
-  markdown: 'grey',
-  json: 'grey',
-  image: 'grey',
-  video: 'grey',
-  audio: 'grey',
-  file: 'grey',
-  any: 'grey'
-}
-
-export function edgeColorFor(portType: string): ArrowColor {
-  return EDGE_COLORS[portType] ?? 'grey'
-}
+// 连线颜色统一；端口类型以节点端口图标/说明呈现。
+export function edgeColorFor(): ArrowColor { return 'grey' }
 
 export interface EdgeEndpoint {
   shapeId: TLShapeId
@@ -279,7 +267,7 @@ export function createEdge(
       y: startPage.y,
       props: {
         kind: 'arc',
-        color: edgeColorFor(fromPort.type),
+        color: edgeColorFor(),
         fill: 'none',
         dash: 'dashed',
         size: 'm',

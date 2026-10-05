@@ -1,4 +1,6 @@
-import { Component, useEffect, useState, type ErrorInfo, type ReactNode } from 'react'
+import { DiagnosticsProducer, newProducerId, newTraceId, newSpanId } from '@shared/observability'
+import { emitDiagnosticsEvent } from './engine/diagnosticsReporter'
+import { Component, useEffect, useState, type ReactNode } from 'react'
 import { useAppStore } from './stores/app'
 import { ProjectListPage } from './pages/ProjectListPage'
 import { CanvasPage } from './pages/CanvasPage'
@@ -16,8 +18,9 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error
     return { error }
   }
 
-  componentDidCatch(error: Error, info: ErrorInfo): void {
-    console.error('渲染界面初始化失败', error, info)
+  componentDidCatch(): void {
+    const producer = new DiagnosticsProducer({process: 'renderer', producerId: newProducerId('renderer')})
+    emitDiagnosticsEvent(producer.build('application.render_failed', undefined, '渲染界面初始化失败', { traceId: newTraceId(), spanId: newSpanId() }, { status: 'failed' }))
   }
 
   render(): ReactNode {

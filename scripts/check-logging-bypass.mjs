@@ -3,7 +3,7 @@
 // 规则（LOGGING_SPEC.md §11 / 实施计划 L06）：
 //   1) 新业务代码不得新增裸 console.*（底座/启动降级/脚本等走允许清单）；
 //   2) 新业务代码不得直接 import electron-log（必须经统一诊断底座）；
-//   3) 新增网络调用（fetch/axios/XMLHttpRequest）所在的「新文件」必须有诊断事件接入
+//   3) 新增网络调用（fetch/axios/XMLHttpRequest）所在文件必须有诊断事件接入
 //      （出现 observability 或 emitGatewayEvent 引用），否则视为 A18 违规。
 // 纯样式/文档变更不产生新增违规行，自然通过（A17）；不靠 grep "log" 统计覆盖。
 // 用法：
@@ -33,7 +33,7 @@ const isExcluded = (path) =>
 
 const CONSOLE_RULE = /\bconsole\.(log|error|warn|info|debug)\s*\(/
 const ELECTRON_LOG_IMPORT_RULE = /from\s+['"]electron-log(\/[a-z]+)?['"]/
-const NETWORK_RULE = /\b(fetch\(|axios|XMLHttpRequest|http\.request|https\.request)\b/
+const NETWORK_RULE = /\b(?:fetch|axios|XMLHttpRequest)\b|\bhttps?\.request\b/
 const DIAGNOSTICS_RULE = /(shared\/observability|diagnostics\/gateway-events|emitGatewayEvent|emitDomainEvent)/
 
 /** 把 unified diff 拆成 { path, addedLines }。 */
@@ -101,8 +101,6 @@ for (const file of parseDiff(diffText)) {
   const hasConsole = added.some((line) => CONSOLE_RULE.test(line))
   const hasElectronLog = added.some((line) => ELECTRON_LOG_IMPORT_RULE.test(line))
   const hasNetwork = added.some((line) => NETWORK_RULE.test(line))
-  const fileIsNew = /^diff --git a\/(.+?) b\/(.+)$/.test('') || false
-  void fileIsNew
   const fileContent = added.join('\n')
   const hasDiagnostics = DIAGNOSTICS_RULE.test(fileContent)
   if (hasConsole || hasElectronLog) {
@@ -112,7 +110,7 @@ for (const file of parseDiff(diffText)) {
       sample: added.find((line) => CONSOLE_RULE.test(line) || ELECTRON_LOG_IMPORT_RULE.test(line))?.trim().slice(0, 120)
     })
   }
-  // A18：新文件里出现网络调用但没有诊断事件接入 → 门禁失败。
+  // A18：新增行里出现网络调用但没有诊断事件接入 → 门禁失败。
   if (hasNetwork && !hasDiagnostics) {
     a18Candidates.push({ path: file.path, sample: added.find((line) => NETWORK_RULE.test(line))?.trim().slice(0, 120) })
   }

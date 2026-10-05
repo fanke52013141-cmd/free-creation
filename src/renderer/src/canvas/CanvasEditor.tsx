@@ -1,3 +1,4 @@
+import { reportCanvasFailure } from './canvas-diagnostics'
 import { ResourceInsertRequest } from '../library/ResourceInsertRequest'
 import { WorkflowSaveDialog } from './WorkflowSaveDialog'
 import { Tldraw, createShapeId, type Editor, type TLShapeId } from 'tldraw'
@@ -587,7 +588,7 @@ export function CanvasEditor({
     const camera = editor.getCamera()
     const selectedIds = editor.getSelectedShapeIds()
     const res = await window.api.openProject(project.id)
-    if (!res.ok || !res.data) return
+    if (editorRef.current !== editor || !res.ok || !res.data) return
     try {
       const repaired = repairTldrawSnapshot(res.data.tldrawSnapshot) as never as {
         store: Record<string, unknown>
@@ -614,17 +615,17 @@ export function CanvasEditor({
       } else {
         toast('画布外有新的修改，已重新加载最新内容', 4000)
       }
-    } catch (e) {
-      console.error('冲突重载失败', e)
+    } catch {
+      reportCanvasFailure(project.id, 'conflict-reload')
       restoreFailedRef.current = true
       toast('外部修改加载失败，已暂停自动保存，以防覆盖原有数据', 6000)
     }
   }
 
-  // SAVE_FAILED（磁盘满/写锁/IO 错误）对用户必须可见：toast 节流提示 + console 留痕。
+  // SAVE_FAILED（磁盘满/写锁/IO 错误）对用户必须可见：toast 节流提示 + 脱敏诊断事件。
   // REVISION_CONFLICT 走重载恢复，不在此列。
   const reportSaveFailure = (reason: string): void => {
-    console.error('项目保存失败', reason)
+    reportCanvasFailure(project.id, 'save-feedback')
     const now = Date.now()
     if (now - saveFailedToastAtRef.current < SAVE_FAILED_TOAST_THROTTLE_MS) return
     saveFailedToastAtRef.current = now
@@ -658,9 +659,9 @@ export function CanvasEditor({
       if (res && !res.ok && res.error.code === 'REVISION_CONFLICT') {
         // F01：不再无锁覆盖。本地最后视图进恢复副本，磁盘版保持外部修改。
         const copy = window.api.saveRecoveryCopySync(input)
-        if (!copy?.ok || !copy.data) console.error('关窗冲突且恢复副本写入失败', res.error)
+        if (!copy?.ok || !copy.data) reportCanvasFailure(project.id, 'close-recovery-copy')
       } else if (res && !res.ok) {
-        console.error('关窗保存失败', res.error)
+        reportCanvasFailure(project.id, 'close-save')
       }
     }
     window.addEventListener('beforeunload', onBeforeUnload)
@@ -1434,7 +1435,8 @@ export function CanvasEditor({
     }
   }
 
-  const handleMount = (editor: Editor): void => {
+  const handleMount = (editor: Editor): (() => void) => {
+    const disposers: Array<() => void> = []
     editorRef.current = editor
     setEditorInstance(editor)
     useEditorStore.getState().setEditor(editor)
@@ -1454,11 +1456,14 @@ export function CanvasEditor({
       try {
         const repairedSnapshot = repairTldrawSnapshot(initialSnapshot, { interruptRunning: true })
         editor.store.loadStoreSnapshot(editor.store.migrateSnapshot(repairedSnapshot as never))
-      } catch (e) {
-        console.error('快照恢复失败', e)
+      } catch {
+        reportCanvasFailure(project.id, 'mount-restore')
         restoreFailedRef.current = true
         toast('画布数据恢复失败，已暂停自动保存，以防覆盖原有数据', 6000)
-        return
+        return () => {
+          if (editorRef.current === editor) editorRef.current = null
+          if (useEditorStore.getState().editor === editor) useEditorStore.getState().setEditor(null)
+        }
       }
     }
 
@@ -1509,62 +1514,66 @@ export function CanvasEditor({
     }
     const removedUnsupported = removeUnsupportedCanvasShapes(editor)
     if (removedUnsupported > 0) toast(`已移除 ${removedUnsupported} 个不属于工作流的白板元素`)
-    editor.store.listen(
-      () => {
-        if (restoreFailedRef.current) return
-        // T04：编辑事件 → 协调器 markDirty（状态徽标即时变「未保存」），800ms 防抖后 flush。
-        useSaveCoordinator.getState().markDirty()
-        if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-        saveTimerRef.current = setTimeout(flushSave, 800)
-      },
-      { scope: 'document' }
+    disposers.push(
+      editor.store.listen(
+        () => {
+          if (restoreFailedRef.current) return
+          // T04：编辑事件 → 协调器 markDirty（状态徽标即时变「未保存」），800ms 防抖后 flush。
+          useSaveCoordinator.getState().markDirty()
+          if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+          saveTimerRef.current = setTimeout(flushSave, 800)
+        },
+        { scope: 'document' }
+      )
     )
     // 双节点自动连接只关注“两个节点相对位置发生变化”。两个节点作为一个整体拖动时
     // 相对关系不变，不会产生意外连线；这里使用页面坐标，分组或嵌套分组也能正确判断。
     let selectedPairKey = ''
     let previousPairDelta: { x: number; y: number } | null = null
     let autoConnectFrame: number | null = null
-    editor.store.listen(
-      () => {
-        const selected = editor
-          .getSelectedShapeIds()
-          .map((id) => editor.getShape<NodeCardShape>(id))
-          .filter((shape): shape is NodeCardShape => shape?.type === 'node-card')
-        if (selected.length !== 2) {
-          selectedPairKey = ''
-          previousPairDelta = null
-          return
-        }
-        const [first, second] = selected
-        const firstBounds = editor.getShapePageBounds(first.id)
-        const secondBounds = editor.getShapePageBounds(second.id)
-        if (!firstBounds || !secondBounds) return
-        const pairKey = [first.id, second.id].sort().join(':')
-        const delta = {
-          x: secondBounds.center.x - firstBounds.center.x,
-          y: secondBounds.center.y - firstBounds.center.y
-        }
-        const relativeMove =
-          pairKey === selectedPairKey &&
-          previousPairDelta !== null &&
-          Math.hypot(delta.x - previousPairDelta.x, delta.y - previousPairDelta.y) > 0.5
-        selectedPairKey = pairKey
-        previousPairDelta = delta
-        if (!relativeMove) return
-        if (autoConnectFrame !== null) cancelAnimationFrame(autoConnectFrame)
-        autoConnectFrame = requestAnimationFrame(() => {
-          autoConnectFrame = null
-          const latestSelected = editor
+    disposers.push(
+      editor.store.listen(
+        () => {
+          const selected = editor
             .getSelectedShapeIds()
             .map((id) => editor.getShape<NodeCardShape>(id))
             .filter((shape): shape is NodeCardShape => shape?.type === 'node-card')
-          if (latestSelected.length !== 2) return
-          if (tryAutoConnectNearby(editor, latestSelected[0].id, latestSelected[1].id)) {
-            toast('已按兼容端口自动连接两个节点')
+          if (selected.length !== 2) {
+            selectedPairKey = ''
+            previousPairDelta = null
+            return
           }
-        })
-      },
-      { scope: 'document' }
+          const [first, second] = selected
+          const firstBounds = editor.getShapePageBounds(first.id)
+          const secondBounds = editor.getShapePageBounds(second.id)
+          if (!firstBounds || !secondBounds) return
+          const pairKey = [first.id, second.id].sort().join(':')
+          const delta = {
+            x: secondBounds.center.x - firstBounds.center.x,
+            y: secondBounds.center.y - firstBounds.center.y
+          }
+          const relativeMove =
+            pairKey === selectedPairKey &&
+            previousPairDelta !== null &&
+            Math.hypot(delta.x - previousPairDelta.x, delta.y - previousPairDelta.y) > 0.5
+          selectedPairKey = pairKey
+          previousPairDelta = delta
+          if (!relativeMove) return
+          if (autoConnectFrame !== null) cancelAnimationFrame(autoConnectFrame)
+          autoConnectFrame = requestAnimationFrame(() => {
+            autoConnectFrame = null
+            const latestSelected = editor
+              .getSelectedShapeIds()
+              .map((id) => editor.getShape<NodeCardShape>(id))
+              .filter((shape): shape is NodeCardShape => shape?.type === 'node-card')
+            if (latestSelected.length !== 2) return
+            if (tryAutoConnectNearby(editor, latestSelected[0].id, latestSelected[1].id)) {
+              toast('已按兼容端口自动连接两个节点')
+            }
+          })
+        },
+        { scope: 'document' }
+      )
     )
     // 一次性兼容旧快照：只修正旧版本默认尺寸或明显异常的超大节点。
     const resizedNodes = migrateLegacyNodeSizes(editor)
@@ -1574,18 +1583,21 @@ export function CanvasEditor({
     // 有时 arrow 仍保留两条 binding，但其中一条已经指向不存在的 node-card。不能只按
     // binding 数量判断，否则默认 Delete 会删掉节点却留下可见的孤儿数据线。
     // 用 afterDelete 同步清理，使快捷键、菜单和 tldraw 原生删除都具有相同的一次性语义。
-    editor.sideEffects.registerAfterDeleteHandler('shape', (deleted) => {
-      if (deleted.type !== 'node-card') return
-      const orphaned: TLShapeId[] = []
-      for (const shape of editor.getCurrentPageShapes()) {
-        if (shape.type !== 'arrow') continue
-        const bindings = editor.getBindingsFromShape(shape.id, 'arrow')
-        const hasDeletedEndpoint = bindings.some((binding) => binding.toId === deleted.id)
-        const hasMissingEndpoint = bindings.some((binding) => !editor.getShape(binding.toId))
-        if (bindings.length < 2 || hasDeletedEndpoint || hasMissingEndpoint) orphaned.push(shape.id)
-      }
-      if (orphaned.length > 0) editor.deleteShapes(orphaned)
-    })
+    disposers.push(
+      editor.sideEffects.registerAfterDeleteHandler('shape', (deleted) => {
+        if (deleted.type !== 'node-card') return
+        const orphaned: TLShapeId[] = []
+        for (const shape of editor.getCurrentPageShapes()) {
+          if (shape.type !== 'arrow') continue
+          const bindings = editor.getBindingsFromShape(shape.id, 'arrow')
+          const hasDeletedEndpoint = bindings.some((binding) => binding.toId === deleted.id)
+          const hasMissingEndpoint = bindings.some((binding) => !editor.getShape(binding.toId))
+          if (bindings.length < 2 || hasDeletedEndpoint || hasMissingEndpoint)
+            orphaned.push(shape.id)
+        }
+        if (orphaned.length > 0) editor.deleteShapes(orphaned)
+      })
+    )
     // 某些 tldraw 原生快捷键路径会在 binding 清理之前提交 shape 删除，导致上面的
     // side effect 看见的还是旧 binding。再以 document store 的节点集合为真源兜底：
     // 一旦节点从当前页消失，所有绑定到它的 carrier arrow 都立即移除。这里不依赖
@@ -1597,39 +1609,52 @@ export function CanvasEditor({
         .map((shape) => shape.id)
     )
     let cleaningOrphanArrows = false
-    editor.store.listen(
-      () => {
-        if (cleaningOrphanArrows) return
-        const currentNodeIds = new Set(
-          editor
+    disposers.push(
+      editor.store.listen(
+        () => {
+          if (cleaningOrphanArrows) return
+          const currentNodeIds = new Set(
+            editor
+              .getCurrentPageShapes()
+              .filter((shape) => shape.type === 'node-card')
+              .map((shape) => shape.id)
+          )
+          const deletedNodeIds = new Set([...knownNodeIds].filter((id) => !currentNodeIds.has(id)))
+          knownNodeIds = currentNodeIds
+          if (deletedNodeIds.size === 0) return
+          const arrows = editor
             .getCurrentPageShapes()
-            .filter((shape) => shape.type === 'node-card')
+            .filter((shape) => {
+              if (shape.type !== 'arrow') return false
+              return editor
+                .getBindingsFromShape(shape.id, 'arrow')
+                .some((binding) => deletedNodeIds.has(binding.toId))
+            })
             .map((shape) => shape.id)
-        )
-        const deletedNodeIds = new Set([...knownNodeIds].filter((id) => !currentNodeIds.has(id)))
-        knownNodeIds = currentNodeIds
-        if (deletedNodeIds.size === 0) return
-        const arrows = editor
-          .getCurrentPageShapes()
-          .filter((shape) => {
-            if (shape.type !== 'arrow') return false
-            return editor
-              .getBindingsFromShape(shape.id, 'arrow')
-              .some((binding) => deletedNodeIds.has(binding.toId))
-          })
-          .map((shape) => shape.id)
-        if (arrows.length === 0) return
-        cleaningOrphanArrows = true
-        editor.run(() => editor.deleteShapes(arrows))
-        cleaningOrphanArrows = false
-      },
-      { scope: 'document' }
+          if (arrows.length === 0) return
+          cleaningOrphanArrows = true
+          editor.run(() => editor.deleteShapes(arrows))
+          cleaningOrphanArrows = false
+        },
+        { scope: 'document' }
+      )
     )
     // 即使 tldraw 的隐藏快捷键或外部拖放尝试创建默认图形，也在创建后立刻移除，
     // 形成第二道约束，确保画布只保留可参与真实数据依赖的节点/连线/分组。
-    editor.sideEffects.registerAfterCreateHandler('shape', (created) => {
-      if (!isWorkflowCanvasShape(created)) editor.deleteShapes([created.id])
-    })
+    disposers.push(
+      editor.sideEffects.registerAfterCreateHandler('shape', (created) => {
+        if (!isWorkflowCanvasShape(created)) editor.deleteShapes([created.id])
+      })
+    )
+    return () => {
+      for (const dispose of disposers) dispose()
+      flushSave()
+      if (autoConnectFrame !== null) cancelAnimationFrame(autoConnectFrame)
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = null
+      if (editorRef.current === editor) editorRef.current = null
+      if (useEditorStore.getState().editor === editor) useEditorStore.getState().setEditor(null)
+    }
   }
 
   // 连线松手：命中节点则校验连线；落在空白则暂存来源并弹创建菜单（新节点自动连线）。

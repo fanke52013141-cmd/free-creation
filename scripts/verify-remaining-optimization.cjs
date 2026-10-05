@@ -123,20 +123,57 @@ const path = require('node:path')
     const project = await page.evaluate(
       async () => (await import('/src/stores/app.ts')).useAppStore.getState().currentProject
     )
+    // Track only CanvasEditor mount registrations, not tldraw's internal listeners.
+    await page.evaluate(async () => {
+      const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
+      const active = new Set()
+      for (const [target, names] of [
+        [Object.getPrototypeOf(editor.store), ['listen']],
+        [
+          Object.getPrototypeOf(editor.sideEffects),
+          ['registerAfterDeleteHandler', 'registerAfterCreateHandler']
+        ]
+      ]) {
+        for (const name of names) {
+          const original = target[name]
+          target[name] = function (...args) {
+            const owned = new Error().stack?.includes('CanvasEditor')
+            const dispose = original.apply(this, args)
+            if (!owned) return dispose
+            const token = {}
+            active.add(token)
+            return () => {
+              active.delete(token)
+              dispose()
+            }
+          }
+        }
+      }
+      window.__canvasMountListeners = () => active.size
+    })
     for (let i = 0; i < 5; i++) {
       await page.evaluate(async () =>
         (await import('/src/stores/app.ts')).useAppStore.getState().setHome()
       )
       await page.getByRole('button', { name: '最近删除', exact: true }).waitFor()
       assert.equal(await page.evaluate(() => window.__wheelCaptures()), 0)
+      assert.equal(await page.evaluate(() => window.__canvasMountListeners()), 0)
+      assert.equal(
+        await page.evaluate(
+          async () =>
+            (await import('/src/stores/editor.ts')).useEditorStore.getState().editor === null
+        ),
+        true
+      )
       await page.evaluate(
         async (project) =>
           (await import('/src/stores/app.ts')).useAppStore.getState().openProject(project),
         project
       )
       await page.waitForSelector('.palette-category-item')
+      assert.equal(await page.evaluate(() => window.__canvasMountListeners()), 5)
     }
-    checks.push('五次画布卸载无残留 wheel 捕获监听')
+    checks.push('五次画布卸载无残留 wheel 或五项挂载监听')
     await page.evaluate(async () =>
       (await import('/src/stores/app.ts')).useAppStore.getState().setHome()
     )

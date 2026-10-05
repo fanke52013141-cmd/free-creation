@@ -1,3 +1,5 @@
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 // L06 自动门禁测试（A17/A18）：门禁脚本对真实 fixture diff 的行为。
 // A18：新增网络功能缺日志 → 门禁必须失败，不能以「功能成功」交付。
 // A17：纯样式变更 no-impact → 门禁不要求人为添加日志。
@@ -70,3 +72,22 @@ function runGateWithoutDiff(): { status: number; output: string } {
     return { status: err.status ?? 1, output: `${err.stdout ?? ''}${err.stderr ?? ''}` }
   }
 }
+
+it.each(['fetch()', 'await fetch( )', 'fetch(`${base}/x`)', 'https.request(options)'])(
+  'A18 不漏掉网络写法 %s',
+  (call) => {
+    const dir = mkdtempSync(join(tmpdir(), 'canvas-log-gate-'))
+    try {
+      const diff = join(dir, 'change.diff')
+      writeFileSync(diff, `diff --git a/src/new-path.ts b/src/new-path.ts\n+${call}\n`)
+      expect(runGate(diff).status).toBe(1)
+      writeFileSync(
+        diff,
+        `diff --git a/src/new-path.ts b/src/new-path.ts\n+import { emitDomainEvent } from './diagnostics/ipc-domain-events'\n+${call}\n`
+      )
+      expect(runGate(diff).status).toBe(0)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }
+)

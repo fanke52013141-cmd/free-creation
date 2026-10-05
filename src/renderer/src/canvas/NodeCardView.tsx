@@ -1,10 +1,9 @@
-import { resolveFeatureOption } from '@shared/engine/models'
-import { rendererGateway } from '../engine/rendererGateway'
+import { checkModelAvailability, providerAvailabilityKey } from './model-availability'
 import type { ModelOperation } from '@free-creation/model-contracts'
 import { nodePageIndex } from './node-page-index'
 // NodeCard 卡片视图：头部（序号/图标/标题/状态灯）+ 类型化内容体 + 端口圆点 + 媒体预览浮层
 import { HTMLContainer, stopEventPropagation, useEditor, useValue } from 'tldraw'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { getNodePorts, getNodeType, PORT_TYPE_LABELS } from '../nodes/registry'
 import type { PortDecl, PortSchemaRef, PortType } from '@shared/types'
@@ -107,16 +106,17 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   const editor = useEditor()
   const project = useAppStore((s) => s.currentProject)
   const providers = useGatewayStore((s) => s.providers)
-  const modelCheckKey = `${shape.props.nodeType}:${shape.props.config}`
+  const providersKey = providerAvailabilityKey(providers)
+  const stableProviders = useMemo(
+    () => JSON.parse(providersKey) as typeof providers,
+    [providersKey]
+  )
+  const modelCheckKey = `${shape.props.nodeType}:${shape.props.config}:${providersKey}`
   const [modelCheck, setModelCheck] = useState<{
     key: string
-    providers: typeof providers
     available: boolean
   } | null>(null)
-  const modelAvailable =
-    modelCheck?.key === modelCheckKey && modelCheck.providers === providers
-      ? modelCheck.available
-      : undefined
+  const modelAvailable = modelCheck?.key === modelCheckKey ? modelCheck.available : undefined
   useEffect(() => {
     const features: Record<string, { feature: string; operation: ModelOperation }> = {
       'image-gen': { feature: 'image.generate', operation: 'image.generate' },
@@ -134,25 +134,23 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       } catch {
         /* executor owns invalid config errors */
       }
-      void resolveFeatureOption(
-        rendererGateway,
-        providers,
+      void checkModelAvailability(
+        stableProviders,
         config.featureKey || target.feature,
         target.operation,
         config.modelKey
       )
         .then((option) => {
-          if (!cancelled)
-            setModelCheck({ key: modelCheckKey, providers, available: Boolean(option) })
+          if (!cancelled) setModelCheck({ key: modelCheckKey, available: option })
         })
         .catch(() => {
-          if (!cancelled) setModelCheck({ key: modelCheckKey, providers, available: false })
+          if (!cancelled) setModelCheck({ key: modelCheckKey, available: false })
         })
     }
     return () => {
       cancelled = true
     }
-  }, [shape.props.nodeType, shape.props.config, providers, modelCheckKey])
+  }, [shape.props.nodeType, shape.props.config, stableProviders, modelCheckKey])
   const spec = getNodeType(shape.props.nodeType)
   const displayTitle =
     shape.props.nodeType === 'speech' && shape.props.title === '配音'
@@ -336,9 +334,13 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     return () => document.removeEventListener('pointerdown', finishOnOutsidePointerDown, true)
   }, [editing, finishTitleEditing])
 
-  const resolvedPorts = spec
-    ? getNodePorts(spec, shape)
-    : { in: [] as PortDecl[], out: [] as PortDecl[] }
+  const portsKey = JSON.stringify(spec ? getNodePorts(spec, shape) : { in: [], out: [] })
+  // JSON key is an immutable value snapshot; cloned port data is never mutated.
+  const resolvedPorts = useMemo(
+    () => JSON.parse(portsKey) as { in: PortDecl[]; out: PortDecl[] },
+    // eslint-disable-next-line react-hooks/preserve-manual-memoization -- immutable serialized contract snapshot
+    [portsKey]
+  )
   const inPorts = resolvedPorts.in
   const outPorts = resolvedPorts.out
   // 空闲端口使用节点色；输入端口连接后继承上游节点色。端口 ID、类型与布局仍来自契约。
@@ -694,20 +696,56 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       : []
   )
   const dynamicPortIds = dynamicPortIdsForShape(shape)
-  const inLayout = createNodePortLayout(
+  const layoutKey = JSON.stringify([
     inPorts,
-    readinessState.incomingPortIds,
-    shape.props.h,
-    candidateInPortIds,
-    dynamicPortIds.in
-  )
-  const outLayout = createNodePortLayout(
     outPorts,
-    readinessState.outgoingPortIds,
+    [...readinessState.incomingPortIds],
+    [...readinessState.outgoingPortIds],
     shape.props.h,
-    candidateOutPortIds,
-    dynamicPortIds.out
-  )
+    [...candidateInPortIds],
+    [...candidateOutPortIds],
+    [...dynamicPortIds.in],
+    [...dynamicPortIds.out]
+  ])
+  const [inLayout, outLayout] = useMemo(() => {
+    const [
+      inputs,
+      outputs,
+      incoming,
+      outgoing,
+      height,
+      candidatesIn,
+      candidatesOut,
+      dynamicIn,
+      dynamicOut
+    ] = JSON.parse(layoutKey) as [
+      PortDecl[],
+      PortDecl[],
+      string[],
+      string[],
+      number,
+      string[],
+      string[],
+      string[],
+      string[]
+    ]
+    return [
+      createNodePortLayout(
+        inputs,
+        new Set(incoming),
+        height,
+        new Set(candidatesIn),
+        new Set(dynamicIn)
+      ),
+      createNodePortLayout(
+        outputs,
+        new Set(outgoing),
+        height,
+        new Set(candidatesOut),
+        new Set(dynamicOut)
+      )
+    ]
+  }, [layoutKey])
   const visibleInPorts = inLayout.ports
   const visibleOutPorts = outLayout.ports
   const visibleInY = inLayout.offsets
