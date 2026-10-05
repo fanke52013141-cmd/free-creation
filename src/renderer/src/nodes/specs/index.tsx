@@ -795,7 +795,20 @@ export function registerBaseNodeTypes(): void {
           cardinality: 'many'
         })
       ],
-      out: [output('out-markdown', '回复', 'markdown', '模型最后一条回复，保留 Markdown 语义。')]
+      out: [
+        output(
+          'out-text',
+          '最后回复（TXT）',
+          'text',
+          '当前会话最后一条 AI 回复的原始文本，不包含用户消息或思考过程。'
+        ),
+        output(
+          'out-markdown',
+          '回复（Markdown）',
+          'markdown',
+          '模型最后一条回复，保留 Markdown 语义以兼容已有连线。'
+        )
+      ]
     },
     projectOutputs: projectChatOutputs,
     executor: chatExecutor,

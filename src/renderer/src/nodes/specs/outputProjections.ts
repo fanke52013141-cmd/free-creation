@@ -4,6 +4,7 @@
 // projectNodeOutputs(shape)，不再维护按 nodeType 分支的中央投影器。
 import type { NodeCardShape } from '../../canvas/NodeCardShape'
 import { readWebsiteLink } from '@shared/website-link'
+import { parseChat, activeChatConversation } from '@shared/engine/chat-data'
 import { validateNodeSchema } from '@shared/node-schemas'
 import { readNodeConfig } from '../../canvas/node-persistence'
 import type { RawNodeOutputs } from '../nodeValues'
@@ -233,7 +234,11 @@ export const projectSoundAdjustOutputs = (shape: NodeCardShape): RawNodeOutputs 
     typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
   )?.results.at(-1)
   if (!result) return {}
-  const kind = result.mime.startsWith('video/') ? 'video' : result.mime.startsWith('audio/') ? 'audio' : null
+  const kind = result.mime.startsWith('video/')
+    ? 'video'
+    : result.mime.startsWith('audio/')
+      ? 'audio'
+      : null
   if (!kind) return {}
   const portId = kind === 'audio' ? 'out-audio' : 'out-video'
   return {
@@ -277,15 +282,15 @@ export const projectVoiceDesignOutputs = (shape: NodeCardShape): RawNodeOutputs 
 })
 
 export const projectChatOutputs = (shape: NodeCardShape): RawNodeOutputs => {
-  const data = parseNodeRecord(shape.props.text)
-  const messages = Array.isArray(data?.messages)
-    ? (data.messages as { role?: unknown; content?: unknown }[])
-    : []
+  const messages = activeChatConversation(parseChat(shape.props.text)).messages
   const reply = [...messages]
     .reverse()
     .find((message) => message.role === 'assistant' && typeof message.content === 'string')
   return typeof reply?.content === 'string' && reply.content.trim()
-    ? { 'out-markdown': { kind: 'markdown', text: reply.content } }
+    ? {
+        'out-text': { kind: 'text', text: reply.content },
+        'out-markdown': { kind: 'markdown', text: reply.content }
+      }
     : {}
 }
 

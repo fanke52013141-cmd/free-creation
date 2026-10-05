@@ -450,6 +450,32 @@ describe('媒体结果集合', () => {
 })
 
 describe('projectNodeOutputs · 对话节点（取最后一条助手回复）', () => {
+  it('按当前会话输出原始 TXT，不包含思考或最后的用户消息，持久化后保持一致', () => {
+    const data = {
+      messages: [{ role: 'assistant', content: '旧会话' }],
+      activeConversationId: 'current',
+      conversations: [
+        {
+          id: 'current',
+          title: '当前',
+          messages: [
+            { role: 'assistant', content: '# 最后回复\n正文', reasoning: '思考' },
+            { role: 'user', content: '新问题' }
+          ],
+          createdAt: 1,
+          updatedAt: 2
+        }
+      ]
+    }
+    const saved = JSON.stringify(data)
+    expect(projectNodeOutputs(shape('chat', { text: saved }))['out-text']).toEqual({
+      kind: 'text',
+      text: '# 最后回复\n正文'
+    })
+    expect(
+      projectNodeOutputs(shape('chat', { text: JSON.stringify(JSON.parse(saved)) }))['out-text']
+    ).toEqual({ kind: 'text', text: '# 最后回复\n正文' })
+  })
   it('输出最后一条 assistant 消息为 markdown', () => {
     const data = {
       messages: [
@@ -461,6 +487,7 @@ describe('projectNodeOutputs · 对话节点（取最后一条助手回复）', 
     }
     const out = projectNodeOutputs(shape('chat', { text: JSON.stringify(data) }))
     expect(out['out-markdown']).toEqual({ kind: 'markdown', text: '最新回复' })
+    expect(out['out-text']).toEqual({ kind: 'text', text: '最新回复' })
   })
 
   it('无助手消息时不产出输出', () => {

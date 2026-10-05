@@ -389,10 +389,11 @@ describe('关键端口契约快照（防回归）', () => {
     ])
   })
 
-  it('对话节点输出为 markdown 类型', () => {
+  it('对话节点优先输出 TXT 并兼容 Markdown', () => {
     const spec = getNodeType('chat')!
-    expect(spec.ports.out[0].type).toBe('markdown')
-    expect(spec.ports.out[0].id).toBe('out-markdown')
+    expect(spec.ports.out[1].type).toBe('markdown')
+    expect(spec.ports.out[0].id).toBe('out-text')
+    expect(spec.ports.out[0].type).toBe('text')
   })
 
   it('代码节点以默认 out-output 作为静态契约，实例可解析为命名输出端口', () => {

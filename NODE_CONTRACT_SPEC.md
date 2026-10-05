@@ -686,3 +686,5 @@ registerNodeType({
 2026-10-05 契约补充：`PortDecl.exclusiveGroup` 声明同组输入合计必须恰好一个，声音调整的音频/视频共用 source-media 组，输入收集与 UI 预检均检查该规则。多个同类型动态端口（例如代码节点）是受控例外，布局可合并锚点，但逻辑端口 ID 和契约仍独立。
 
 分镜板支持可选 titles 对象（字段键到列标题的字符串映射），执行与编辑必须保留；该字段不改变 shots 的字段名和现有端口契约。
+
+AI 对话新增 out-text（text，最后回复 TXT）：取当前活动会话最后一条 assistant.content，原样输出文本，不含用户消息、系统提示或 reasoning；无回复/空回复不输出。已有 out-markdown 保留兼容，不修改已有连线。

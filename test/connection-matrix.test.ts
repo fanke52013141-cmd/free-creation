@@ -95,6 +95,8 @@ describe('标准连线 · 允许的组合', () => {
 
   it('对话 markdown 输出 → 文本输入（text 与 markdown 互连）', () => {
     expect(canConnect('chat', 'out-markdown', 'text', 'in-text')).toBe(true)
+    expect(canConnect('chat', 'out-text', 'text', 'in-text')).toBe(true)
+    expect(canConnect('chat', 'out-text', 'image-gen', 'in-text')).toBe(true)
     expect(canConnect('chat', 'out-markdown', 'image-gen', 'in-text')).toBe(true)
     expect(canConnect('chat', 'out-markdown', 'image-edit', 'in-text')).toBe(true)
   })

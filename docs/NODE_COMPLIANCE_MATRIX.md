@@ -27,7 +27,7 @@
 | 语音合成 `speech`         | 4    | 文本 many；参考输入随供应商动态生成                             | 语音 audio；火山可选字幕时间轴                                  | executor + projectOutputs + resolvePorts | 通过 |
 | 声音克隆 `tts`            | 4    | `in-audio` audio / one                                          | `out-json` json `voice.profile@1`                                | executor + projectOutputs                | 通过 |
 | 音色设计 `voice-design`   | 1    | `in-text` text / many                                           | `out-audio` audio；`out-json` json `voice.profile@1`            | executor + projectOutputs                | 通过 |
-| 对话 `chat`               | 1    | `in-text` text / many                                           | `out-markdown` markdown                                         | executor + projectOutputs                | 通过 |
+| 对话 `chat`               | 1    | `in-text` text / many                                           | `out-text` text、`out-markdown` markdown                         | executor + projectOutputs                | 通过 |
 | 处理 `processor`          | 1    | `in-value` any                                                  | `out-value` any                                                 | executor + projectOutputs                | 通过 |
 | JSON `json`               | 1    | `in-json` json `json.any@1` / many；`in-text` text / one        | `out-json` json `json.any@1`                                    | executor + projectOutputs                | 通过 |
 | 结构数据 `structured`     | 1    | `in-context` json `json.any@1` / many；`in-text` text / many    | 动态 `out-json`（实例 Schema）                                  | executor + projectOutputs + resolvePorts | 通过 |
