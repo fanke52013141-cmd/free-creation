@@ -61,6 +61,10 @@ export function startChat(send: Send, input: ChatStartInput): string {
           send({ kind: 'chat-delta', taskId, text: part.text })
         } else if (part.type === 'reasoning-delta') {
           send({ kind: 'chat-reasoning', taskId, text: part.text })
+        } else if (part.type === 'error') {
+          // 上游/网络错误以 error 分片出现在流中。此前直接忽略，真实原因被吞掉，
+          // 兜底的 result.text 只会抛出笼统的「No output generated」（2026-10-05 排查）。
+          throw part.error instanceof Error ? part.error : new Error(String(part.error))
         }
       }
       // 部分 OpenAI 兼容中转站只在最终聚合结果中给出正文，不发送 text-delta。
@@ -82,6 +86,13 @@ export function startChat(send: Send, input: ChatStartInput): string {
       })
       send({ kind: 'chat-done', taskId })
     } catch (e) {
+      // SDK 在「流以错误收场且零正文输出」时抛 AI_NoOutputGeneratedError，真实原因挂在
+      // cause（HTTP 状态/响应体/网络错误）。必须解包，否则节点只看到笼统的
+      // No output generated。按错误名识别而非 instanceof：ai 包在测试里可能被整体 mock。
+      const realError =
+        e instanceof Error && e.name === 'AI_NoOutputGeneratedError' && e.cause instanceof Error
+          ? e.cause
+          : e
       if (ctrl.signal.aborted) {
         // 用户取消：远端是否真正停止未知，不得声称已远端取消。
         emitGatewayEvent('model.request.cancelled', '对话请求已取消，远端结果未知', { ...diagnostics, requestId }, {
@@ -93,14 +104,14 @@ export function startChat(send: Send, input: ChatStartInput): string {
         emitGatewayEvent('model.request.failed', '对话请求失败', { ...diagnostics, requestId }, {
           status: 'failed',
           durationMs: Date.now() - startedAt,
-          error: e,
+          error: realError,
           attributes: { operation: 'chat.generate', providerId: input.providerId, modelId: input.modelId }
         })
       }
       send({
         kind: 'chat-error',
         taskId,
-        error: e instanceof Error ? e.message : String(e)
+        error: realError instanceof Error ? realError.message : String(realError)
       })
     } finally {
       active.delete(taskId)

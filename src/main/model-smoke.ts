@@ -188,6 +188,11 @@ async function runText(target: SmokeTarget): Promise<Omit<SmokeResult, 'id'>> {
     let text = ''
     for await (const part of result.fullStream) {
       if (part.type === 'text-delta') text += part.text
+      else if (part.type === 'error') {
+        // 与 gateway/chat 同因：忽略 error 分片会让真实上游错误被
+        // 「No output generated」掩盖，冒烟报告必须给出真实原因。
+        throw part.error instanceof Error ? part.error : new Error(String(part.error))
+      }
     }
     // AI SDK 会在流消费完后汇总最终文本。少数兼容服务只填最终值、不发 text-delta，
     // 两个来源合并后才判断为空，避免把协议差异误报成模型不可用。
