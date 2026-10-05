@@ -1,8 +1,8 @@
+import { NodeIdentity } from '../../../canvas/NodePresentation'
 import { useCallback, useEffect, useState } from 'react'
 import type { NodeBodyProps, NodeSettingsProps } from '../../registry'
 import type { VideoEngineStatus } from '@shared/contracts'
 import { AppSelect } from '../../../components/AppSelect'
-import { Icon } from '../../../components/Icon'
 import {
   DEFAULT_VIDEO_CLAY_CONFIG,
   DEFAULT_VIDEO_DEPTH_CONFIG,
@@ -30,11 +30,8 @@ export function VideoAiBody({ shape }: NodeBodyProps): React.JSX.Element {
     : parseVideoClayConfig(shape.props.config || DEFAULT_VIDEO_CLAY_CONFIG)
   return (
     <div className="video-ai-body">
-      <div className="video-ai-body-title">
-        <Icon name="video" size={15} />
-        {mode === 'depth' ? '视频 → 深度视频' : '视频 → 白模视频'}
-      </div>
-      <p>连接源视频后运行，转换结果会作为独立视频资产添加到画布。</p>
+      <NodeIdentity />
+
       <div className="video-ai-body-meta">
         <span>上限 {config.maxResolution}px</span>
         <span>Video Depth Anything Small · 本地 CUDA</span>

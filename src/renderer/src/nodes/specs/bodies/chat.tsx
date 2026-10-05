@@ -1,3 +1,4 @@
+import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
 import { useEffect } from 'react'
 import { stopEventPropagation } from 'tldraw'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
@@ -10,12 +11,8 @@ import { useNodePanelStore } from '../../../stores/nodePanel'
 export function ChatBody({ shape }: NodeBodyProps): React.JSX.Element {
   return (
     <div className="chat-body-compact">
-      <div className="node-empty-state chat-body-hero">
-        <span className="node-empty-icon">
-          <Icon name="chat" size={48} strokeWidth={2} />
-        </span>
-        <strong>AI 对话</strong>
-        <button
+      <NodeIdentity>
+        <NodePrimaryButton
           type="button"
           className="chat-open-button"
           onPointerDown={stopEventPropagation}
@@ -26,8 +23,8 @@ export function ChatBody({ shape }: NodeBodyProps): React.JSX.Element {
         >
           <Icon name="chat" size={14} />
           打开对话
-        </button>
-      </div>
+        </NodePrimaryButton>
+      </NodeIdentity>
     </div>
   )
 }

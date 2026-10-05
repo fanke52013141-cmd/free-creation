@@ -1,3 +1,4 @@
+import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { stopEventPropagation, useEditor, type Editor, type TLShapeId } from 'tldraw'
@@ -1424,10 +1425,8 @@ export function VideoTransformBody({
   ) : null
   if (!shape.props.mediaPath) {
     return (
-      <div className="asset-empty crop-empty">
-        <Icon name={mode === 'frame' ? 'frame' : mode === 'clip' ? 'clip' : 'audio'} size={24} />
-        <span>{label}</span>
-        <button
+      <NodeIdentity>
+        <NodePrimaryButton
           className="btn-ghost small"
           onPointerDown={stopEventPropagation}
           onClick={(event) => {
@@ -1436,11 +1435,11 @@ export function VideoTransformBody({
           }}
         >
           配置{label}
-        </button>
+        </NodePrimaryButton>
         {sourceWiring}
         {workbenchEl}
         {operationsEl}
-      </div>
+      </NodeIdentity>
     )
   }
   const previewKind = mode === 'frame' ? 'image' : mode === 'clip' ? 'video' : 'audio'

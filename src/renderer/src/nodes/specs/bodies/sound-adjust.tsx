@@ -1,3 +1,4 @@
+import { NodeIdentity } from '../../../canvas/NodePresentation'
 import { useState } from 'react'
 import type { NodeBodyProps, NodeSettingsProps } from '../../registry'
 import { Icon } from '../../../components/Icon'
@@ -25,7 +26,7 @@ export function SoundAdjustBody({ shape }: NodeBodyProps): React.JSX.Element {
   const config = parseSoundAdjustConfig(shape.props.config)
   return (
     <div className="sound-adjust-body">
-      <span className="sound-adjust-body-icon"><Icon name="audio" size={27} /></span>
+      <NodeIdentity />
       <strong>{config.mode === 'rate' ? `${config.rate} 倍速` : `目标 ${config.targetDurationMs / 1000} 秒`}</strong>
       <span>声量 {config.volumePercent}% · 音频或视频</span>
       <small>连接素材，在右侧设置后运行</small>

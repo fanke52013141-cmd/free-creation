@@ -32,8 +32,8 @@ const fs = require('node:fs')
       const centers = ['chat', 'process'].map((id) => {
         const node = card(id), rect = node.getBoundingClientRect(), wrap = node.closest('.node-card-wrap')
         const ports = [...wrap.querySelectorAll('.port-dot')].map((port) => { const p = port.getBoundingClientRect(); return Math.abs(p.y + p.height / 2 - rect.y - rect.height / 2) })
-        const icon = node.querySelector('.node-empty-icon').getBoundingClientRect()
-        const button = node.querySelector(id === 'chat' ? '.chat-open-button' : '.ai-process-config-button').getBoundingClientRect()
+        const icon = node.querySelector('.node-standard-identity-icon').getBoundingClientRect()
+        const button = node.querySelector('.node-standard-action-bar button').getBoundingClientRect()
         return { ports, iconY: icon.y - rect.y, buttonY: button.y - rect.y, buttonHeight: button.height }
       })
       return { countBeforeInfo: count.right <= info.left, count: text.querySelector('.node-text-count').textContent, centers, modelBadge: Boolean(card('chat').querySelector('.chat-compact-model')) }

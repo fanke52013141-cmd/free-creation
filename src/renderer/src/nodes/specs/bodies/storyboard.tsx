@@ -1,3 +1,4 @@
+import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
 import { readShotSelections, shotInputRevision } from '../../storyboard-selections'
 import type { NodeCardShape } from '../../../canvas/NodeCardShape'
 import { createStoryboardBatchFlow } from '../../../canvas/storyboard-batch-flow'
@@ -221,11 +222,12 @@ export function StoryboardBody({ shape }: NodeBodyProps): React.JSX.Element {
           openJsonEditor()
         }}
       >
+        <NodeIdentity />
         {wiring.text}
         <br />
         可逐镜填写，也可直接粘贴分镜 JSON
         <div className="storyboard-empty-actions">
-          <button
+          <NodePrimaryButton
             type="button"
             className="btn-ghost small"
             onPointerDown={(e) => stopEventPropagation(e)}
@@ -236,7 +238,7 @@ export function StoryboardBody({ shape }: NodeBodyProps): React.JSX.Element {
           >
             <Icon name="add" size={14} />
             新增镜头
-          </button>
+          </NodePrimaryButton>
           <button
             type="button"
             className="btn-ghost small"
@@ -266,9 +268,9 @@ export function StoryboardBody({ shape }: NodeBodyProps): React.JSX.Element {
           >
             创建批处理流程
           </button>
-          <button type="button" onPointerDown={stopEventPropagation} onClick={addShot}>
+          <NodePrimaryButton type="button" onPointerDown={stopEventPropagation} onClick={addShot}>
             <Icon name="add" size={12} /> 新增镜头
-          </button>
+          </NodePrimaryButton>
           <button
             type="button"
             title="编辑原始分镜 JSON"
@@ -336,7 +338,11 @@ export function StoryboardBody({ shape }: NodeBodyProps): React.JSX.Element {
                         <button
                           type="button"
                           className="storyboard-cell-value"
-                          title={field === 'id' ? '内部稳定 ID，不可编辑' : '单击选中节点 · 双击编辑该字段'}
+                          title={
+                            field === 'id'
+                              ? '内部稳定 ID，不可编辑'
+                              : '单击选中节点 · 双击编辑该字段'
+                          }
                           onDoubleClick={(event) => {
                             stopEventPropagation(event)
                             startCellEdit(shot, field)

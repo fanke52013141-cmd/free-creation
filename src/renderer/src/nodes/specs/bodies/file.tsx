@@ -1,3 +1,4 @@
+import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
 // 文件资产节点 Body（用户 2026-09-18 拍板新增）：
 // 与图片 / 音频 / 视频资产节点同构——导入本地文档，只负责保存、展示和向下游输出。
 // 纯文本、Office（Word/Excel/PPT）与 PDF 在导入时由主进程抽出正文写入 props.text，供文本类
@@ -76,13 +77,8 @@ export function FileBody({ shape }: NodeBodyProps): React.JSX.Element {
 
   if (!shape.props.mediaPath) {
     return (
-      <div className="asset-empty file-asset-empty">
-        <Icon name="document" size={40} />
-        <span>文件资产</span>
-        <small className="file-supported-formats">
-          可抽取文字：PDF、DOCX、XLSX、PPTX、TXT、Markdown
-        </small>
-        <button
+      <NodeIdentity>
+        <NodePrimaryButton
           className="btn-ghost file-import-button"
           disabled={busy}
           onPointerDown={(e) => stopEventPropagation(e)}
@@ -93,8 +89,8 @@ export function FileBody({ shape }: NodeBodyProps): React.JSX.Element {
         >
           {busy ? '导入中…' : '导入文件'}
           {!busy && <Icon name="upload" size={14} />}
-        </button>
-      </div>
+        </NodePrimaryButton>
+      </NodeIdentity>
     )
   }
 

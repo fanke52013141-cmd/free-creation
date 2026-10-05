@@ -43,6 +43,7 @@ import { readNodeRunHistory, readNodeRunRecord } from '../engine/runRecord'
 import type { GenerationTimingSample } from '@shared/contracts'
 import { estimateGenerationDuration } from './generation-time-estimate'
 import './image-gen-adaptive.css'
+import { NodeCardShell } from './NodePresentation'
 
 const EXEC_COLORS: Record<string, string> = {
   idle: '#6b7280',
@@ -809,89 +810,99 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         ? readinessWithFreshness.label
         : null
 
-  // 生图节点按正文自然高度双向匹配固定档位；其他节点保留溢出时逐档增长。
-  // 手动 resize 会在 shape.meta.nodeHeightMode 留下标记，自动布局不再覆盖用户尺寸。
+  // 全节点统一高度边界；旧尺寸仅迁移几何，不改业务内容。
   useEffect(() => {
     const body = bodyRef.current
-    if (!body) return
+    const scroll = body?.closest<HTMLElement>('.node-standard-scroll')
+    if (!body || !scroll) return
     let frame = 0
+    let composing = false
     const fitHeight = (): void => {
       cancelAnimationFrame(frame)
       frame = requestAnimationFrame(() => {
-        if (shape.props.nodeType === 'image-gen') {
-          const heightMode = shape.meta.nodeHeightMode
-          const standardTiers = [
-            NODE_UI.height.default,
-            NODE_UI.height.expanded,
-            NODE_UI.height.rich,
-            NODE_UI.height.autoMax
-          ]
-          // 老项目没有 mode 标记：标准自动档位视为自动管理，非标准尺寸按手动高度保留。
-          const isAutoManaged =
-            heightMode === 'auto' ||
-            (heightMode !== 'manual' && standardTiers.some((tier) => tier === shape.props.h))
-          if (!isAutoManaged) return
-
-          const children = Array.from(body.children).filter(
-            (child): child is HTMLElement => child instanceof HTMLElement
-          )
-          const rowGap = Number.parseFloat(getComputedStyle(body).rowGap) || 0
-          const contentHeight =
-            children.reduce((total, child) => {
-              const content = child.querySelector<HTMLElement>('.gen-panel') ?? child
-              return total + Math.max(content.offsetHeight, content.scrollHeight)
-            }, 0) +
-            Math.max(0, children.length - 1) * rowGap
-          const shellHeight = shape.props.h - body.clientHeight
-          const requiredHeight = Math.ceil(shellHeight + contentHeight)
-          const tier = Math.min(NODE_UI.height.autoMax, Math.max(NODE_UI.height.default, requiredHeight))
-          if (tier !== shape.props.h) {
-            editor.run(
-              () =>
-                editor.updateShape({
-                  id: shape.id,
-                  type: 'node-card',
-                  props: { h: tier },
-                  meta: { ...shape.meta, nodeHeightMode: 'auto' }
-                }),
-              { history: 'ignore' }
-            )
-          }
-          return
-        }
-
-        let overflow = Math.ceil(body.scrollHeight - body.clientHeight)
-        // 媒体结果网格等嵌套滚动容器（flex min-height:0 链 + overflow-y:auto）会把溢出
-        // 吸收在自己的滚动条里，body.scrollHeight 因此恒等于 clientHeight。此时扫描
-        // body 内所有纵向滚动容器，把它们的隐藏溢出计入，拆分 9/16 格等大结果才能
-        // 撑高档位，而不是挤在小窗口里滚动、视觉上“叠在一起”。
-        if (overflow <= 2) {
-          for (const el of body.querySelectorAll<HTMLElement>('*')) {
-            const oy = getComputedStyle(el).overflowY
-            if (oy !== 'auto' && oy !== 'scroll') continue
-            overflow = Math.max(overflow, Math.ceil(el.scrollHeight - el.clientHeight))
-          }
-        }
-        if (overflow <= 2) return
-        const tier = resolveNodeHeight(shape.props.h + overflow)
-        if (tier > shape.props.h + 2) {
+        const latest = editor.getShape<NodeCardShape>(shape.id)
+        if (!latest) return
+        const metadata = latest.meta
+        const current = latest.props.h
+        const clamped = Math.max(NODE_UI.height.min, Math.min(NODE_UI.height.manualMax, current))
+        if (clamped !== current) {
           editor.run(
-            () => editor.updateShape({ id: shape.id, type: 'node-card', props: { h: tier } }),
+            () =>
+              editor.updateShape({
+                id: shape.id,
+                type: 'node-card',
+                props: { h: clamped },
+                meta: {
+                  ...metadata,
+                  nodeOriginalHeight: metadata.nodeOriginalHeight ?? current,
+                  nodeHeightMode: metadata.nodeHeightMode ?? 'manual'
+                }
+              }),
             { history: 'ignore' }
           )
+          return
         }
+        if (metadata.nodeHeightMode === 'manual') return
+        if (!metadata.nodeHeightMode && resolveNodeHeight(current) !== current) {
+          editor.run(
+            () =>
+              editor.updateShape({
+                id: shape.id,
+                type: 'node-card',
+                meta: { ...metadata, nodeHeightMode: 'manual' }
+              }),
+            { history: 'ignore' }
+          )
+          return
+        }
+        const identity = scroll.querySelector<HTMLElement>('.node-standard-identity')
+        // 正文实际子项与顶部说明量高；不把 flex 填充的空白反算成内容。
+        const content = body.querySelector<HTMLElement>('.node-body-content')
+        const natural = content
+          ? Array.from(content.children).reduce((sum, child) => {
+              if (!(child instanceof HTMLElement)) return sum
+              const style = getComputedStyle(child)
+              return (
+                sum +
+                Math.max(child.offsetHeight, child.scrollHeight) +
+                (Number.parseFloat(style.marginTop) || 0) +
+                (Number.parseFloat(style.marginBottom) || 0)
+              )
+            }, 0)
+          : body.scrollHeight
+        const references = body.querySelector<HTMLElement>('.connected-inputs')?.offsetHeight ?? 0
+        const required =
+          NODE_UI.actionBar.height +
+          NODE_UI.content.padding +
+          (identity ? 0 : NODE_UI.description.height) +
+          natural -
+          (identity ? Math.max(0, identity.offsetHeight - NODE_UI.identity.minHeight) : 0) +
+          references
+        let next = resolveNodeHeight(required)
+        if (next < current && (composing || scroll.contains(document.activeElement))) next = current
+        if (next === current) return
+        editor.run(
+          () =>
+            editor.updateShape({
+              id: shape.id,
+              type: 'node-card',
+              props: { h: next },
+              meta: { ...metadata, nodeHeightMode: 'auto' }
+            }),
+          { history: 'ignore' }
+        )
       })
+    }
+    const compositionStart = (): void => {
+      composing = true
+    }
+    const compositionEnd = (): void => {
+      composing = false
+      fitHeight()
     }
     fitHeight()
     const observer = new ResizeObserver(fitHeight)
-    observer.observe(body)
-    // 一些编辑器会在内容变化时维持自身盒子尺寸，ResizeObserver 不会触发；通过
-    // 冒泡 input 事件重新量高，确保引用文字和正文跨过档位后立即更新卡片高度。
-    body.addEventListener('input', fitHeight)
-    // 图片等异步媒体在 onLoad 后才会改写子树的真实内容高度（如拆分九宫格按原图
-    // 宽高比重设 aspect-ratio）。这只改变 body 内部的布局，body 自身盒子尺寸
-    // 不变，ResizeObserver 不会触发；必须监听子树结构 / style / src 变化后重新
-    // 量高，否则新的网格高度只会被卡片 overflow:hidden 静默裁掉（底部格子缺半格）。
+    observer.observe(scroll)
     const mutations = new MutationObserver(fitHeight)
     mutations.observe(body, {
       childList: true,
@@ -900,11 +911,18 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       attributes: true,
       attributeFilter: ['style', 'src', 'class']
     })
+    scroll.addEventListener('input', fitHeight)
+    scroll.addEventListener('focusout', fitHeight)
+    scroll.addEventListener('compositionstart', compositionStart)
+    scroll.addEventListener('compositionend', compositionEnd)
     return () => {
       cancelAnimationFrame(frame)
       observer.disconnect()
-      body.removeEventListener('input', fitHeight)
       mutations.disconnect()
+      scroll.removeEventListener('input', fitHeight)
+      scroll.removeEventListener('focusout', fitHeight)
+      scroll.removeEventListener('compositionstart', compositionStart)
+      scroll.removeEventListener('compositionend', compositionEnd)
     }
   }, [
     editor,
@@ -913,7 +931,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     shape.props.nodeType,
     shape.props.text,
     shape.props.config,
-    shape.meta.nodeHeightMode
+    shape.meta
   ])
 
   // 端口 tooltip 只保留身份信息（呈现规范 v1.0 §11：名称 · 类型，类型给中文名），
@@ -988,6 +1006,24 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           </button>
           {/* 弹性占位：运行与状态都固定在标题行的右侧。 */}
           <span className="node-header-spacer" />
+          {shape.meta.nodeHeightMode === 'manual' && (
+            <button
+              className="node-info-btn"
+              aria-label="恢复自动高度"
+              title="恢复自动高度"
+              onPointerDown={stopEventPropagation}
+              onClick={(event) => {
+                event.stopPropagation()
+                editor.updateShape({
+                  id: shape.id,
+                  type: 'node-card',
+                  meta: { ...shape.meta, nodeHeightMode: 'auto' }
+                })
+              }}
+            >
+              <Icon name="arrow" size={16} />
+            </button>
+          )}
           <span
             className={`node-status node-status-${shape.props.exec}`}
             style={{ background: EXEC_COLORS[shape.props.exec] ?? EXEC_COLORS.idle }}
@@ -1021,7 +1057,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           data-node-type={shape.props.nodeType}
           style={{
             ['--node-accent' as string]: spec?.color ?? '#42b9f5',
-            ['--node-action-bottom-inset' as string]: `${NODE_UI.actionBar.bottomInset}px`
+            ['--node-action-bottom-inset' as string]: `${NODE_UI.actionBar.bottomInset}px`,
+            ['--node-standard-action-height' as string]: `${NODE_UI.actionBar.height}px`
           }}
         >
           {/* 保留 DOM 锚点以兼容旧快照；视觉改由 card 左上角的 45° 类型切角承担。 */}
@@ -1029,18 +1066,51 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             className="node-color-bar"
             style={{ ['--node-accent' as string]: spec?.color ?? '#42b9f5' }}
           />
-          <div ref={bodyRef} className="node-body">
-            {!hasDedicatedInputSurface && (
-              <ConnectedInputPreview editor={editor} shape={shape} openPreview={openMediaPreview} />
-            )}
-            <div className="node-body-content">
-              {spec ? (
-                <spec.Body shape={shape} openPreview={openMediaPreview} />
-              ) : (
-                <div className="node-empty">未知节点类型：{shape.props.nodeType}</div>
-              )}
+          {spec && (
+            <NodeCardShell
+              spec={spec}
+              busy={activeExecution}
+              openDescription={() =>
+                useNodePanelStore.getState().open('contract', shape.id, 'overview')
+              }
+              fallbackAction={
+                <button
+                  type="button"
+                  className="node-standard-primary"
+                  disabled={activeExecution}
+                  title={activeExecution ? '节点正在运行或排队，请稍候' : undefined}
+                  onPointerDown={stopEventPropagation}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    useNodePanelStore.getState().open('contract', shape.id, 'settings')
+                  }}
+                >
+                  <span className="node-standard-primary-icon">
+                    <Icon name="settings" size={16} />
+                  </span>
+                  <span className="node-standard-primary-label">配置{spec.label}</span>
+                </button>
+              }
+            >
+              <div ref={bodyRef} className="node-body">
+                {!hasDedicatedInputSurface && (
+                  <ConnectedInputPreview
+                    editor={editor}
+                    shape={shape}
+                    openPreview={openMediaPreview}
+                  />
+                )}
+                <div className="node-body-content">
+                  <spec.Body shape={shape} openPreview={openMediaPreview} />
+                </div>
+              </div>
+            </NodeCardShell>
+          )}
+          {!spec && (
+            <div className="node-body">
+              <div className="node-empty">未知节点类型：{shape.props.nodeType}</div>
             </div>
-          </div>
+          )}
           {activeExecution && spec?.executor && (
             <div className="node-execution-overlay">
               <GenerationLoadingOverlay

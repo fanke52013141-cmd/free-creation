@@ -1,12 +1,9 @@
+import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
 // 图片资产节点 Body（路线图 R6：bodies.tsx 拆分）
 import { useEditor } from 'tldraw'
 import { stopEventPropagation } from 'tldraw'
 import { mediaUrl, type NodeBodyProps } from '../../registry'
-import {
-  ImageContinuationActions,
-  pickImportedAsset,
-  useClickGuard
-} from './shared'
+import { ImageContinuationActions, pickImportedAsset, useClickGuard } from './shared'
 import { useAppStore } from '../../../stores/app'
 import { toast } from '../../../stores/toast'
 import { markUndoPoint } from '../../../canvas/history'
@@ -50,10 +47,8 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
 
   if (!shape.props.mediaPath) {
     return (
-      <div className="asset-empty image-asset-empty">
-        <Icon name="image" size={40} />
-        <span>图片资产</span>
-        <button
+      <NodeIdentity>
+        <NodePrimaryButton
           className="btn-ghost image-import-button"
           onPointerDown={(e) => stopEventPropagation(e)}
           onClick={(e) => {
@@ -63,8 +58,8 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
         >
           导入图片
           <Icon name="upload" size={14} />
-        </button>
-      </div>
+        </NodePrimaryButton>
+      </NodeIdentity>
     )
   }
 

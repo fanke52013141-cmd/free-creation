@@ -1,3 +1,4 @@
+import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
 // 结构数据节点 Body：Schema 选择 + JSON 模板编辑 + 占位符可用性。
 //
 // 占位符（{{text}} / {{input[n].field}}）由执行器按 in-context / in-text 端口的连接顺序
@@ -183,7 +184,7 @@ export function StructuredBody({ shape }: NodeBodyProps): React.JSX.Element {
           spellCheck={false}
         />
       ) : (
-        <button
+        <div
           className={`structured-preview ${hasText ? '' : 'is-empty'}`}
           onPointerDown={(event) => stopEventPropagation(event)}
           onDoubleClick={(event) => {
@@ -194,15 +195,17 @@ export function StructuredBody({ shape }: NodeBodyProps): React.JSX.Element {
           onClick={(event) => event.stopPropagation()}
         >
           {hasText ? (
-            parseError ? raw : JSON.stringify(parsed, null, 2)
+            parseError ? (
+              raw
+            ) : (
+              JSON.stringify(parsed, null, 2)
+            )
           ) : (
-            <span className="node-empty-state structured-empty-state">
-              <span className="node-empty-icon"><Icon name="structured" size={22} /></span>
-              <strong>等待结构数据</strong>
+            <NodeIdentity>
               <small>按当前 Schema 校验后供下游节点使用</small>
-            </span>
+            </NodeIdentity>
           )}
-        </button>
+        </div>
       )}
       <PlaceholderTokens textCount={textCount} contextCount={contextCount} />
       {fields.length > 0 && (
@@ -217,7 +220,9 @@ export function StructuredBody({ shape }: NodeBodyProps): React.JSX.Element {
               onPointerDown={(event) => stopEventPropagation(event)}
               onClick={(event) => {
                 event.stopPropagation()
-                void navigator.clipboard.writeText(field.path).then(() => toast(`已复制 ${field.path}`))
+                void navigator.clipboard
+                  .writeText(field.path)
+                  .then(() => toast(`已复制 ${field.path}`))
               }}
             >
               <code>{field.path}</code>
@@ -230,7 +235,7 @@ export function StructuredBody({ shape }: NodeBodyProps): React.JSX.Element {
       )}
       <div className="structured-footer">
         <span>{option.hint}</span>
-        <button
+        <NodePrimaryButton
           className="btn-ghost small"
           onPointerDown={(event) => stopEventPropagation(event)}
           onClick={(event) => {
@@ -241,7 +246,7 @@ export function StructuredBody({ shape }: NodeBodyProps): React.JSX.Element {
         >
           {hasText ? '编辑' : '输入 JSON'}
           <Icon name={hasText ? 'edit' : 'json'} size={13} />
-        </button>
+        </NodePrimaryButton>
       </div>
     </div>
   )

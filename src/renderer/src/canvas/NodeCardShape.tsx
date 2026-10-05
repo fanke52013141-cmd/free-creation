@@ -113,13 +113,30 @@ export class NodeCardUtil extends BaseBoxShapeUtil<NodeCardShape> {
   ): Omit<TLShapePartial<NodeCardShape>, 'id' | 'type'> | undefined {
     if (info.mode === 'scale_shape') return undefined
     const resized = super.onResize(shape, info)
-    if (shape.props.nodeType !== 'image-gen' || info.mode !== 'resize_bounds') return resized
+    if (info.mode !== 'resize_bounds') return resized
+    const height = resized?.props?.h ?? shape.props.h
+    const clamped = Math.max(NODE_UI.height.min, Math.min(NODE_UI.height.manualMax, height))
+    const anchor = info.handle.startsWith('top')
+      ? 1
+      : info.handle === 'left' || info.handle === 'right'
+        ? 0.5
+        : 0
+    const offset = info.scaleY >= 0 ? (height - clamped) * anchor : 0
 
-    // 生图节点按内容自动调整高度；用户一旦手动拖动尺寸，就将高度切换为用户所有。
+    // 所有节点共用高度边界；手动拖动后由用户控制高度，标题可恢复自动模式。
     // 该标记放在 shape meta，不参与节点业务配置或运行契约。
     return {
       ...(resized ?? {}),
-      meta: { ...shape.meta, nodeHeightMode: 'manual' }
+      x: (resized?.x ?? shape.x) - Math.sin(shape.rotation) * offset,
+      y: (resized?.y ?? shape.y) + Math.cos(shape.rotation) * offset,
+      props: {
+        ...resized?.props,
+        h: clamped
+      },
+      meta: {
+        ...(this.editor.getShape<NodeCardShape>(shape.id)?.meta ?? shape.meta),
+        nodeHeightMode: 'manual'
+      }
     }
   }
 

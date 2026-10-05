@@ -29,16 +29,18 @@ const url = 'http://127.0.0.1:5194'
       if (Date.now() > deadline) throw new Error('浏览器验收服务启动超时')
       await new Promise((resolve) => setTimeout(resolve, 250))
     }
+    for (const script of ['verify-remaining-optimization.cjs', 'test-browser-node-standard.cjs', 'test-browser-node-colors.cjs']) {
     const code = await new Promise((resolve, reject) => {
       const test = spawn(
         process.execPath,
-        [path.join(__dirname, 'verify-remaining-optimization.cjs')],
+        [path.join(__dirname, script)],
         { env: { ...process.env, CANVAS_QA_URL: url }, stdio: 'inherit', windowsHide: true }
       )
       test.on('error', reject)
       test.on('exit', resolve)
     })
-    if (code !== 0) throw new Error(`浏览器行为门禁失败：${code}`)
+    if (code !== 0) throw new Error(`浏览器行为门禁失败（${script}）：${code}`)
+    }
   } finally {
     server.kill()
   }

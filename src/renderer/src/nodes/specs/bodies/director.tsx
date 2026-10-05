@@ -1,3 +1,4 @@
+import { NodePrimaryButton } from '../../../canvas/NodePresentation'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import type { NodeBodyProps } from '../../registry'
 import {
@@ -52,7 +53,7 @@ export function DirectorBody({ shape }: NodeBodyProps): React.JSX.Element {
         <span className="node-status-dot" />
         {directorPublishStateText(project, publish, active.id)}
       </div>
-      <button
+      <NodePrimaryButton
         className="director-open-btn"
         onPointerDown={(event) => stopEventPropagation(event)}
         onClick={(event) => {
@@ -62,7 +63,7 @@ export function DirectorBody({ shape }: NodeBodyProps): React.JSX.Element {
         }}
       >
         <Icon name="director" size={15} /> 打开 3D 预演台
-      </button>
+      </NodePrimaryButton>
       {publishUsable && publish?.video && (
         <button
           className="director-open-btn"

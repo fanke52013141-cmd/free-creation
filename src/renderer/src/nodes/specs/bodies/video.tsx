@@ -1,3 +1,4 @@
+import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
 // 视频节点 Body（路线图 R6：bodies.tsx 拆分）
 import { useEffect, useState } from 'react'
 import { stopEventPropagation, useEditor, type TLShapeId } from 'tldraw'
@@ -326,10 +327,8 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   if (isAssetNode && !shape.props.mediaPath) {
     // 视频资产空态：所有 Hook 已在上方无条件调用，这里早退是安全的。
     return (
-      <div className="asset-empty video-asset-empty">
-        <Icon name="video" size={40} />
-        <span>视频资产</span>
-        <button
+      <NodeIdentity>
+        <NodePrimaryButton
           className="btn-ghost video-import-button"
           onPointerDown={(e) => stopEventPropagation(e)}
           onClick={(e) => {
@@ -338,8 +337,8 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           }}
         >
           导入视频
-        </button>
-      </div>
+        </NodePrimaryButton>
+      </NodeIdentity>
     )
   }
 
@@ -741,7 +740,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           )}
         </section>
       )}
-      <button
+      <NodePrimaryButton
         className="btn-primary small gen-go video-gen-submit"
         disabled={submitting || capabilityIssues.length > 0}
         onPointerDown={(e) => stopEventPropagation(e)}
@@ -758,7 +757,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
             生成视频
           </>
         )}
-      </button>
+      </NodePrimaryButton>
     </div>
   )
 }

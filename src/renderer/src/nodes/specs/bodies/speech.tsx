@@ -1,3 +1,4 @@
+import { NodePrimaryButton } from '../../../canvas/NodePresentation'
 // 语音合成节点 Body（MiniMax 异步 / 火山引擎语音合成 1.0）。
 //
 // 这里不绕过 executor 调用模型：按钮只把当前配置与正文写回节点，然后交给统一的
@@ -607,7 +608,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
         </div>
       )}
 
-      <button
+      <NodePrimaryButton
         className="btn-generate"
         disabled={busy || !canGenerate}
         onPointerDown={(e) => stopEventPropagation(e)}
@@ -624,7 +625,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
             合成语音
           </>
         )}
-      </button>
+      </NodePrimaryButton>
 
       {hasOutput && (
         <>

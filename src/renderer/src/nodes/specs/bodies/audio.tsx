@@ -1,3 +1,4 @@
+import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
 // 音频资产节点 Body：导入本地音频、预览、输出资产。
 //
 // 通用配音（speech）已拆到 bodies/speech.tsx——它是模型驱动节点，参数分组与端口
@@ -44,15 +45,22 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const audioRef = useRef<HTMLAudioElement>(null)
   const waveformTrackRef = useRef<HTMLDivElement>(null)
   const seekingRef = useRef(false)
-  const [waveformData, setWaveformData] = useState<{ projectId: string; mediaId: string; peaks: number[] } | null>(null)
+  const [waveformData, setWaveformData] = useState<{
+    projectId: string
+    mediaId: string
+    peaks: number[]
+  } | null>(null)
   const [duration, setDuration] = useState(0)
   const [currentTime, setCurrentTime] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [volume, setVolume] = useState(0.75)
   const [muted, setMuted] = useState(false)
-  const waveform = waveformData !== null && waveformData.projectId === project?.id && waveformData.mediaId === shape.props.mediaId
-    ? waveformData.peaks
-    : []
+  const waveform =
+    waveformData !== null &&
+    waveformData.projectId === project?.id &&
+    waveformData.mediaId === shape.props.mediaId
+      ? waveformData.peaks
+      : []
 
   useEffect(() => {
     const projectId = project?.id
@@ -408,19 +416,8 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   // 音频资产节点只有「导入」一种职责；配音与语音克隆各自有独立节点。
   return (
     <div className="node-audio-empty audio-empty-state">
-      <div className="audio-empty-content">
-        <span className="audio-empty-icon-wrap" aria-hidden="true">
-          <span className="audio-empty-icon-glow" />
-          <span className="audio-empty-icon">
-            <Icon name="audio" size={34} />
-          </span>
-        </span>
-        <span className="audio-empty-copy">
-          <span className="audio-empty-title">音频载入</span>
-          <span className="audio-empty-hint">支持 mp3 / wav / aac / flac 等</span>
-        </span>
-      </div>
-      <button
+      <NodeIdentity />
+      <NodePrimaryButton
         type="button"
         className="audio-empty-select"
         title="选择本地音频文件"
@@ -432,7 +429,7 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
       >
         <Icon name="add" size={14} />
         <span>选择音频文件</span>
-      </button>
+      </NodePrimaryButton>
     </div>
   )
 }

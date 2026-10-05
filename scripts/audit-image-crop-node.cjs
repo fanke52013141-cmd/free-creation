@@ -182,7 +182,7 @@ async function main() {
     )
 
     // ── 2. 空跑：缺必填输入不得伪装成功 ───────────────────────
-    await runNode(page, crop.card, '.asset-empty')
+    await runNode(page, crop.card, '.node-standard-identity-icon')
     await page
       .waitForFunction(() => (document.querySelector('.global-toast')?.textContent ?? '').length > 0, { timeout: 4000 })
       .catch(() => {})

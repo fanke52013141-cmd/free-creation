@@ -15,6 +15,8 @@
     "test": "vitest run --maxWorkers=1 --minWorkers=1",
     "test:model": "pnpm --filter @free-creation/model-runtime test",
     "test:browser-ui": "node scripts/test-browser-node-ui.cjs",
+    "test:browser-node-standard": "node scripts/test-browser-node-standard.cjs",
+    "test:browser-node-colors": "node scripts/test-browser-node-colors.cjs",
     "test:library-electron": "node scripts/test-library-electron.cjs",
     "test:browser-panel-sync": "node scripts/test-browser-panel-sync.cjs",
     "test:browser-media-import": "node scripts/test-browser-media-import.cjs",

@@ -1,3 +1,4 @@
+import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
 // 文本节点 Body（路线图 R6：bodies.tsx 拆分）
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
@@ -65,27 +66,33 @@ export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
 
   if (editing) {
     return (
-      <textarea
-        ref={textareaRef}
-        className="node-textarea"
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') {
-            setDraft(textRef.current)
-            exitEditing()
-          }
-          if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') commit()
-        }}
-        /* 仅阻止冒泡到 tldraw 画布层，不调用 preventDefault ——
+      <>
+        <textarea
+          ref={textareaRef}
+          className="node-textarea"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              setDraft(textRef.current)
+              exitEditing()
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') commit()
+          }}
+          /* 仅阻止冒泡到 tldraw 画布层，不调用 preventDefault ——
            否则浏览器无法执行 pointerdown 默认行为（聚焦文本框），导致无法输入。 */
-        onPointerDown={(e) => e.stopPropagation()}
-        onMouseDown={(e) => e.stopPropagation()}
-        onDoubleClick={(e) => e.stopPropagation()}
-        onContextMenu={(e) => e.stopPropagation()}
-        data-node-interactive="text-editor"
-      />
+          onPointerDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.stopPropagation()}
+          data-node-interactive="text-editor"
+        />
+        <NodePrimaryButton onPointerDown={(event) => event.preventDefault()} onClick={commit}>
+          <Icon name="check" size={16} />
+          保存文本
+        </NodePrimaryButton>
+      </>
     )
   }
 
@@ -99,25 +106,18 @@ export function TextBody({ shape }: NodeBodyProps): React.JSX.Element {
         enterEditing()
       }}
     >
+      <NodePrimaryButton
+        className="text-empty-action"
+        onPointerDown={stopEventPropagation}
+        onClick={enterEditing}
+      >
+        <Icon name="edit" size={16} />
+        {shape.props.text ? '编辑文本' : '输入文本'}
+      </NodePrimaryButton>
       {shape.props.text ? (
         <span className="node-text-body">{shape.props.text}</span>
       ) : (
-        <div className="node-empty-state text-empty-state">
-          <span className="node-empty-icon"><Icon name="text" size={48} strokeWidth={2} /></span>
-          <strong>文本输入</strong>
-          <button
-            type="button"
-            className="text-empty-action"
-            onPointerDown={stopEventPropagation}
-            onClick={(event) => {
-              event.stopPropagation()
-              enterEditing()
-            }}
-          >
-            <Icon name="edit" size={14} />
-            输入文本
-          </button>
-        </div>
+        <NodeIdentity />
       )}
     </div>
   )

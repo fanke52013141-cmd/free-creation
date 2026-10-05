@@ -1,3 +1,4 @@
+import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
 // AI 处理是一个纯处理节点：卡片保留清晰的操作入口，模型和生成参数统一放在右侧「设置」页。
 import { useEffect, useState } from 'react'
 import { stopEventPropagation } from 'tldraw'
@@ -79,7 +80,7 @@ export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
           style={{ width: '100%', flex: 1, minHeight: 0, resize: 'none' }}
           onPointerDown={stopEventPropagation}
         />
-        <button
+        <NodePrimaryButton
           className="btn-ghost small"
           onPointerDown={stopEventPropagation}
           onClick={(event) => {
@@ -88,18 +89,13 @@ export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
           }}
         >
           返回处理设置
-        </button>
+        </NodePrimaryButton>
       </div>
     )
   return (
     <div className="ai-process-body">
-      <div className="ai-process-hero">
-        <span className="node-empty-icon">
-          <Icon name="spark" size={48} />
-        </span>
-        <strong>AI 处理</strong>
-      </div>
-      <button
+      <NodeIdentity></NodeIdentity>
+      <NodePrimaryButton
         type="button"
         className="ai-process-config-button"
         onPointerDown={stopEventPropagation}
@@ -110,7 +106,7 @@ export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
       >
         配置处理
         <Icon name="arrow" size={13} />
-      </button>
+      </NodePrimaryButton>
       {readNodeRunRecord(shape.meta.nodeRun)?.status === 'success' && (
         <button
           type="button"

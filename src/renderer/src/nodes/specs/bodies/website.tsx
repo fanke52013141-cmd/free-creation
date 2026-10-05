@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
 import type { NodeBodyProps, NodeSettingsProps } from '../../registry'
 import { Icon } from '../../../components/Icon'
 import { markUndoPoint } from '../../../canvas/history'
@@ -36,11 +37,13 @@ export function WebsiteBody({ shape }: NodeBodyProps): React.JSX.Element {
           useNodePanelStore.getState().open('contract', shape.id, 'settings')
         }}
       >
-        <span className="website-node-icon">
-          <Icon name="external" size={24} />
-        </span>
-        <strong>配置网址</strong>
-        <span>双击打开设置</span>
+        <NodeIdentity />
+        <NodePrimaryButton
+          onClick={() => useNodePanelStore.getState().open('contract', shape.id, 'settings')}
+        >
+          <Icon name="settings" size={16} />
+          配置网址
+        </NodePrimaryButton>
       </div>
     )
   }
@@ -63,10 +66,14 @@ export function WebsiteBody({ shape }: NodeBodyProps): React.JSX.Element {
       <span className="website-node-url">{link.url}</span>
       {/* 与文件节点「导入文件」同一套按钮材质：btn-ghost 白字描边，图标在左。
           单击穿透给画布（选中节点），双击沿卡片逻辑打开网址，不在此处拦截事件。 */}
-      <button type="button" className="btn-ghost website-node-open" title="双击打开网址">
+      <NodePrimaryButton
+        className="btn-ghost website-node-open"
+        title="打开网址"
+        onClick={() => window.open(link.url, '_blank', 'noreferrer')}
+      >
         <Icon name="external" size={14} />
-        双击打开
-      </button>
+        打开网址
+      </NodePrimaryButton>
     </div>
   )
 }

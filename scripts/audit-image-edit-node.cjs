@@ -197,7 +197,7 @@ async function main() {
     )
 
     // ── 2. 空跑：缺必填输入不得伪装成功 ───────────────────────
-    await edit.card.locator('.asset-empty').click()
+    await edit.card.locator('.node-standard-identity-icon').click()
     await page.waitForTimeout(150)
     await edit.card.getByRole('button', { name: '运行此节点' }).click()
     await page

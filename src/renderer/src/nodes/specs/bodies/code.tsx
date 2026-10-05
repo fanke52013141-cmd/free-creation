@@ -1,3 +1,4 @@
+import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
 // 代码节点 Body（路线图 R6：bodies.tsx 拆分）
 // 支持 Coze 风格 async function main(args) 写法，可用本地工具 `_` 和 `dayjs`
 // 支持自定义参数端口：用户在 UI 表格中声明额外输入参数
@@ -666,11 +667,9 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
             setEditing(true)
           }}
         >
-          <span className="node-empty-state code-empty-state">
-            <span className="node-empty-icon"><Icon name="code" size={24} /></span>
-            <strong>代码工作区</strong>
+          <NodeIdentity>
             <small>编写处理逻辑，输入参数可在上方管理</small>
-          </span>
+          </NodeIdentity>
         </div>
       )}
       {resultDisplay && (
@@ -691,7 +690,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
         </>
       )}
       <div className="code-toolbar">
-        <button
+        <NodePrimaryButton
           className="btn-ghost small"
           onPointerDown={(e) => stopEventPropagation(e)}
           onClick={(e) => {
@@ -704,7 +703,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
             <Icon name="edit" size={14} />
             {text ? '编辑代码' : '编写代码'}
           </>
-        </button>
+        </NodePrimaryButton>
       </div>
     </div>
   )

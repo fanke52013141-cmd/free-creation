@@ -1,3 +1,4 @@
+import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { stopEventPropagation, useEditor, type Editor } from 'tldraw'
@@ -116,11 +117,9 @@ export function ImageEditBody({ shape, openPreview }: NodeBodyProps): React.JSX.
 
   if (!shape.props.mediaPath)
     return (
-      <div className="asset-empty image-edit-empty">
-        <Icon name="image" size={40} />
-        <span>P图</span>
+      <NodeIdentity>
         <span className="node-wiring warn">{noSourceLine}</span>
-        <button
+        <NodePrimaryButton
           className="btn-ghost small"
           onPointerDown={stopEventPropagation}
           onClick={(e) => {
@@ -130,9 +129,9 @@ export function ImageEditBody({ shape, openPreview }: NodeBodyProps): React.JSX.
         >
           打开工作台
           <Icon name="edit" size={13} />
-        </button>
+        </NodePrimaryButton>
         {workbench}
-      </div>
+      </NodeIdentity>
     )
   const chooseResult = (item: Parameters<typeof selectMediaResult>[1]): void => {
     const selected = selectMediaResult(shape, item)

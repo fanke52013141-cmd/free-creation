@@ -651,7 +651,7 @@ async function recipeText() {
   // 空态提示从「双击输入」改为显式「输入文本」按钮（fb12c06 交互面统一）。
   check(
     '文本：空卡片给出可发现的输入提示',
-    (await card(a).locator('.text-empty-action').count()) === 1,
+    (await card(a).locator('.node-standard-action-bar [data-original-action="text-empty-action"]').count()) === 1,
     await card(a).innerText()
   )
 

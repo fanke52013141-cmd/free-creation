@@ -88,9 +88,7 @@ describe('v1.3 §16.1 端口圆点统一使用节点色、类型色环与柔光'
     expect(nodePortLayout).toContain(
       'const visibleTypes = groupTypes.filter((type) => activeTypes.has(type))'
     )
-    expect(nodePortLayout).toContain(
-      'portOffsets(anchorTypes.length + forced.length, cardHeight)'
-    )
+    expect(nodePortLayout).toContain('portOffsets(anchorTypes.length + forced.length, cardHeight)')
     expect(nodePortLayout).toContain(
       'const sameType = grouped.filter((port) => port.type === type)'
     )
@@ -123,9 +121,7 @@ describe('画布连线宽度与流动段比例', () => {
     expect(surfaces).toMatch(
       /\.data-edge-visible\s*\{[^}]*stroke-width:\s*3;[\s\S]*?\.data-edge-flow\s*\{[^}]*stroke-width:\s*4\.5;[^}]*stroke-dasharray:\s*166\.667 833\.333;/
     )
-    expect(foundation).toMatch(
-      /\.conn-water-path\s*\{[^}]*stroke-dasharray:\s*166\.667 833\.333;/
-    )
+    expect(foundation).toMatch(/\.conn-water-path\s*\{[^}]*stroke-dasharray:\s*166\.667 833\.333;/)
     expect(dataEdgeLayer).toContain('strokeWidth: 3 * zoom')
     expect(dataEdgeLayer).toContain('strokeWidth: 4.5 * zoom')
   })
@@ -344,9 +340,11 @@ describe('v1.2 §16.12 处理/结构数据节点：只留真会改变行为的�
     expect(structured).toContain('countIncomingConnections')
     expect(structured).toContain('<PlaceholderTokens')
     expect(structured).toContain('{{input[${index}]}}')
-    expect(structured).toContain('等待结构数据')
+    expect(structured).toContain('<NodeIdentity>')
     // 解析失败必须回显用户原文，而不是 JSON.stringify(null)
-    expect(structured).toContain('parseError ? raw : JSON.stringify(parsed, null, 2)')
+    expect(structured).toMatch(
+      /parseError\s*\?\s*\(\s*raw\s*\)\s*:\s*\(\s*JSON\.stringify\(parsed, null, 2\)/
+    )
     expect(structured).not.toContain('双击输入 JSON')
     expect(structured).not.toContain('等待映射')
     expect(app).toMatch(/\.structured-token\.ready\s*\{/)
@@ -391,8 +389,8 @@ describe('v1.2 文本拼接分隔符是 $$$ 且不插入空行', () => {
     expect(contracts).toContain("from '@shared/engine/inputs'")
     expect(contracts).not.toContain('---')
     expect(read('src/shared/engine/inputs.ts')).not.toContain('---')
-    expect(read('src/shared/engine/executors/chat.ts')).not.toContain("\\n\\n---\\n\\n")
-    expect(read('src/renderer/src/canvas/ChatSidePanel.tsx')).not.toContain("\\n\\n---\\n\\n")
+    expect(read('src/shared/engine/executors/chat.ts')).not.toContain('\\n\\n---\\n\\n')
+    expect(read('src/renderer/src/canvas/ChatSidePanel.tsx')).not.toContain('\\n\\n---\\n\\n')
     expect(read('src/renderer/src/canvas/graph.ts')).not.toContain("join('\\n\\n---\\n\\n')")
   })
 })
@@ -409,7 +407,10 @@ describe('v1.2 §16.13 AI 处理 / 对话：把执行器分支映射成端口与
     expect(aiProcess).toContain('export function AiProcessSettings')
     const card = aiProcess.slice(0, aiProcess.indexOf('export function AiProcessSettings'))
     expect(card).not.toContain('<select')
-    expect(card).not.toContain('<textarea')
+    // 已有结果通过只读控件完整呈现；不能把历史结果阅读误认成配置输入。
+    expect(card).toContain('aria-label="完整处理结果"')
+    expect(card).toContain('readOnly')
+    expect(card).toContain('value={resultText}')
   })
 
   it('输入/输出状态由端口与契约呈现，卡片不重复打印计数或等待提示', () => {

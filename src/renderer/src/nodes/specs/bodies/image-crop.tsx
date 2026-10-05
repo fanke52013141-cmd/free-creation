@@ -1,3 +1,4 @@
+import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import type { ImageCropAspectRatio, ImageCropConfig, NormalizedPoint } from '@shared/image-crop'
@@ -239,11 +240,9 @@ export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.
 
   if (!shape.props.mediaPath && !source) {
     return (
-      <div className="asset-empty crop-empty">
-        <Icon name="crop" size={40} />
-        <span>图片裁剪</span>
+      <NodeIdentity>
         <span className="node-wiring warn">{noSourceLine}</span>
-        <button
+        <NodePrimaryButton
           className="btn-ghost small"
           onPointerDown={stopEventPropagation}
           onClick={(event) => {
@@ -253,8 +252,8 @@ export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.
         >
           配置裁剪
           <Icon name="arrow" size={13} />
-        </button>
-      </div>
+        </NodePrimaryButton>
+      </NodeIdentity>
     )
   }
   if (!shape.props.mediaPath && source) {

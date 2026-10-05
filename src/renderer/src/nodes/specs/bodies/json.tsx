@@ -1,3 +1,4 @@
+import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
 // JSON 节点 Body（路线图 R6：bodies.tsx 拆分）
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
@@ -192,11 +193,9 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
             enterEditing()
           }}
         >
-          <span className="node-empty-state data-empty-state">
-            <span className="node-empty-icon"><Icon name="json" size={24} /></span>
-            <strong>等待 JSON 数据</strong>
+          <NodeIdentity>
             <small>粘贴数据，或连接上游结构化内容</small>
-          </span>
+          </NodeIdentity>
         </div>
       )}
       <div className="code-toolbar">
@@ -208,7 +207,7 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
             {isValid ? structSummary : jsonErrorLocation(text, parseError ?? '')}
           </span>
         )}
-        <button
+        <NodePrimaryButton
           className="btn-ghost small"
           onPointerDown={(e) => stopEventPropagation(e)}
           onClick={(e) => {
@@ -220,7 +219,7 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
             <Icon name="edit" size={14} />
             {text ? '编辑数据' : '粘贴 JSON'}
           </>
-        </button>
+        </NodePrimaryButton>
         {text && (
           <button
             className="btn-ghost small"

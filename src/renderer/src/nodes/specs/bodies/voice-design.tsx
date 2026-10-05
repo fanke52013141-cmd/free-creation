@@ -1,3 +1,4 @@
+import { NodePrimaryButton } from '../../../canvas/NodePresentation'
 // 音色设计节点 Body（MiniMax voice_design）。
 //
 // 节点定位：输入音色描述 → 输出试听音频与可复用的音色 ID。
@@ -59,8 +60,7 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
     if (provider.specId !== 'minimax') return []
     const model = provider.models.find(
       (item) =>
-        item.modality === 'audio' &&
-        (!item.operations || item.operations.includes('voice.design'))
+        item.modality === 'audio' && (!item.operations || item.operations.includes('voice.design'))
     )
     return model ? [{ provider, model }] : []
   })
@@ -241,7 +241,7 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
         />
       </div>
 
-      <button
+      <NodePrimaryButton
         className="btn-generate"
         disabled={busy || !canGenerate}
         onPointerDown={(e) => stopEventPropagation(e)}
@@ -258,7 +258,7 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
             <Icon name="spark" size={14} />
           </>
         )}
-      </button>
+      </NodePrimaryButton>
 
       {voiceId && (
         <div className="tts-section voice-id-card">

@@ -1,3 +1,4 @@
+import { NodePrimaryButton } from '../../../canvas/NodePresentation'
 // 生图节点 Body（路线图 R6：bodies.tsx 拆分）
 // 多供应商级联：选中哪个供应商，就按其能力表呈现参数页（画幅/分辨率），默认 ToAPIS 优先。
 import { useEffect, useRef, useState } from 'react'
@@ -318,7 +319,7 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
           ))}
         </div>
       )}
-      <button
+      <NodePrimaryButton
         className="btn-primary small gen-go"
         disabled={busy || engineBusy}
         title={engineBusy && !busy ? '当前节点已在运行或排队' : undefined}
@@ -338,7 +339,7 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
             <Icon name="spark" size={14} />
           </>
         )}
-      </button>
+      </NodePrimaryButton>
     </div>
   )
 }

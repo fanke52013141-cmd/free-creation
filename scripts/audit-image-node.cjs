@@ -348,7 +348,7 @@ async function main() {
     const emptyNode = await createNode(page, '图片')
     await page.getByRole('button', { name: '适配画布（缩放到所有节点）', exact: true }).click()
     await page.waitForTimeout(300)
-    await runNode(page, emptyNode.card, '.asset-empty')
+    await runNode(page, emptyNode.card, '.node-standard-identity-icon')
     await page.waitForTimeout(500)
     state = await cardState(page, emptyNode.card)
     report.states.emptyRun = state
