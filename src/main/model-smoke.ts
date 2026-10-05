@@ -181,13 +181,15 @@ async function runText(target: SmokeTarget): Promise<Omit<SmokeResult, 'id'>> {
     const result = streamText({
       model: createChatModel(provider.id, target.model.id),
       prompt: '这是连通性验收。请只回复 OK。',
-      // 推理型模型可能先耗掉一小段输出预算再给正文；16 会造成“请求成功但正文为空”的假失败。
-      maxOutputTokens: 96,
+      // 推理型模型先消耗输出预算；真实 Flash 验收在 96 token 内只有推理，512 才返回正文。
+      maxOutputTokens: 512,
       temperature: 0
     })
     let text = ''
+    let reasoningChars = 0
     for await (const part of result.fullStream) {
       if (part.type === 'text-delta') text += part.text
+      else if (part.type === 'reasoning-delta') reasoningChars += part.text.length
       else if (part.type === 'error') {
         // 与 gateway/chat 同因：忽略 error 分片会让真实上游错误被
         // 「No output generated」掩盖，冒烟报告必须给出真实原因。
@@ -198,14 +200,14 @@ async function runText(target: SmokeTarget): Promise<Omit<SmokeResult, 'id'>> {
     // 两个来源合并后才判断为空，避免把协议差异误报成模型不可用。
     text ||= await result.text
     if (!text.trim())
-      throw new Error('模型未返回可用正文（可能只返回推理内容或该模型不支持当前流式协议）')
+      throw new Error(`模型未返回可用正文；finishReason=${await result.finishReason}，reasoningChars=${reasoningChars}`)
     return {
       kind: 'text',
       status: 'pass',
       provider: publicProvider(provider),
       modelId: target.model.id,
       durationMs: Date.now() - started,
-      detail: `真实对话成功，收到 ${text.trim().slice(0, 80)}`
+      detail: `真实文本请求成功，正文 ${text.trim().length} 字符，推理 ${reasoningChars} 字符，finishReason=${await result.finishReason}`
     }
   } catch (error) {
     return {
@@ -253,12 +255,12 @@ async function runChatNodeTransport(target: SmokeTarget): Promise<Omit<SmokeResu
           // 与文本模型验收使用同一条最小指令，排除具体措辞触发上游内容策略的干扰。
           messages: [{ role: 'user', content: '这是连通性验收。请只回复 OK。' }],
           temperature: 0,
-          maxTokens: 96
+          maxTokens: 512
         }
       )
     })
     if (!response.trim()) throw new Error('对话流式通道完成但未收到正文分片')
-    return { kind: 'chat', status: 'pass', provider: publicProvider(provider), modelId: target.model.id, durationMs: Date.now() - started, detail: `对话节点流式通道成功，收到 ${response.trim().slice(0, 80)}` }
+    return { kind: 'chat', status: 'pass', provider: publicProvider(provider), modelId: target.model.id, durationMs: Date.now() - started, detail: `对话节点流式通道成功，正文 ${response.trim().length} 字符` }
   } catch (error) {
     return { kind: 'chat', status: 'fail', provider: publicProvider(provider), modelId: target.model.id, durationMs: Date.now() - started, detail: errorDetail(error, provider) }
   }

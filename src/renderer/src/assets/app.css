@@ -30,6 +30,7 @@
   --z-dock: 800;
   --z-floating: 900;
   --z-conn: 950;
+  --z-topbar: 1000;
   --z-modal: 1100;
   --z-confirm: 13000;
   --z-context-menu: 1200;

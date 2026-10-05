@@ -2189,6 +2189,18 @@ button {
   stroke-dasharray: none !important;
 }
 
+/* The floating header must stay clickable even when zoom enlarges resize hit targets. */
+.canvas-host .tl-selection__fg :is(
+  [data-testid='selection.target.top-left'],
+  [data-testid='selection.target.top-right'],
+  [data-testid='selection.resize.top-left'],
+  [data-testid='selection.resize.top-right'],
+  [data-testid='selection.resize.top']
+) {
+  display: none;
+  pointer-events: none;
+}
+
 /* 不让运行 / 保存工作流抢走多选工具栏的统一节奏。 */
 .ms-run,
 .ms-template,

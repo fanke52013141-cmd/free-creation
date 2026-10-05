@@ -66,12 +66,21 @@ export function deriveNodeReadiness(input: {
   outputs: RawNodeOutputs
   availableInputCounts?: ReadonlyMap<string, number>
   modelAvailable?: boolean
+  configIssue?: string | null
 }): NodeReadiness {
   if (input.exec === 'running' || input.exec === 'queued' || input.exec === 'pending') {
     return {
       kind: 'running',
       label: '处理中',
       detail: '节点正在等待或执行，结果完成后会自动更新。'
+    }
+  }
+  if (input.configIssue) {
+    return {
+      kind: 'blocked',
+      reason: 'config-missing',
+      label: input.configIssue,
+      detail: input.configIssue
     }
   }
   if (input.exec === 'failed') {

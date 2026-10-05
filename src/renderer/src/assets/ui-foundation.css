@@ -922,7 +922,7 @@ body {
 /* ── R2：让工具栏与内容表面成为同一种“精密工作台” ─────────────────── */
 .canvas-topbar {
   isolation: isolate;
-  z-index: var(--z-toast);
+  z-index: var(--z-topbar);
   min-height: 62px;
   padding: 10px 14px;
   border-bottom: 0 !important;

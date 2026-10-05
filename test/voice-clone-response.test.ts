@@ -83,4 +83,24 @@ describe('cloneMiniMaxVoice 对回执的判定', () => {
     reply({ base_resp: { status_code: 2013, status_msg: 'invalid params' } })
     await expect(clone()).rejects.toThrow(/invalid params/)
   })
+
+  it.each([null, {}, { base_resp: {} }, { base_resp: { status_code: '0' } }])(
+    '没有明确登记成功回执时不能返回自造的 voice_id：%j',
+    async (payload) => {
+      reply({ file: { file_id: 1 }, base_resp: { status_code: 0 } })
+      reply(payload)
+      await expect(clone()).rejects.toThrow(/未返回成功登记回执/)
+    }
+  )
+
+  it('登记超时保留 TIMEOUT，但不建议直接重试且不重复创建', async () => {
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ file: { file_id: 1 }, base_resp: { status_code: 0 } })))
+    fetchMock.mockRejectedValueOnce(new DOMException('timed out', 'TimeoutError'))
+    await expect(clone()).rejects.toMatchObject({
+      code: 'TIMEOUT',
+      message: expect.stringMatching(/远端是否已登记尚未确认.*避免重复创建/)
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
 })

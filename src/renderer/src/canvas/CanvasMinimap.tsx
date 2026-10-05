@@ -1,7 +1,7 @@
 // 左下角停靠簇：小地图（弹出） + 缩放控制
 // 小地图完全重写：即时拖拽响应（无动画延迟）、实时视口跟随、连线可视化、点击节点聚焦
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Editor, TLShapeId } from 'tldraw'
+import { Box, type Editor, type TLShapeId } from 'tldraw'
 import type { NodeCardShape } from './NodeCardShape'
 import { getNodeType } from '../nodes/registry'
 import { markUndoPoint } from './history'
@@ -100,7 +100,19 @@ function organizeCanvas(editor: Editor): void {
     }))
   )
   markUndoPoint(editor, 'organize-canvas')
-  editor.zoomToFit({ animation: { duration: 300 } })
+  // 自动取景需给固定菜单与卡片外围端口留空间；默认 64px 会把左侧端口放到菜单下。
+  const viewport = editor.getViewportScreenBounds()
+  const palette = editor.getContainer().ownerDocument.querySelector('.node-palette')
+  const paletteWidth = palette ? palette.getBoundingClientRect().right - viewport.x : 0
+  // tldraw 的 inset 是两侧合计，不能直接当成单侧边距。
+  const inset = Math.max(120, paletteWidth + 48) * 2
+  const bounds = shapes.flatMap((shape) => {
+    const bounds = editor.getShapePageBounds(shape.id)
+    return bounds ? [bounds] : []
+  })
+  if (bounds.length) {
+    editor.zoomToBounds(Box.Common(bounds), { inset, animation: { duration: 300 } })
+  }
 }
 
 export function CanvasBottomDock({ editor }: DockProps): React.JSX.Element {

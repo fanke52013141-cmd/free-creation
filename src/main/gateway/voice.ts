@@ -186,16 +186,27 @@ export async function cloneMiniMaxVoice(request: CloneVoiceRequest): Promise<str
   const requested = config.voiceId.trim()
   const voiceId = normalizeMiniMaxVoiceId(requested) || `canvas-voice-${randomSuffix()}`
 
-  const res = await fetchUpstream(
-    `${base}/v1/voice_clone`,
-    {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${provider.apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(buildVoiceCloneBody(fileId, voiceId, config, promptPayload))
-    },
-    CONTROL_TIMEOUT_MS,
-    'MiniMax 创建克隆音色'
-  )
+  let res: Response
+  try {
+    res = await fetchUpstream(
+      `${base}/v1/voice_clone`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${provider.apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildVoiceCloneBody(fileId, voiceId, config, promptPayload))
+      },
+      CONTROL_TIMEOUT_MS,
+      'MiniMax 创建克隆音色'
+    )
+  } catch (error) {
+    if (error instanceof GatewayError && error.code === 'TIMEOUT') {
+      throw new GatewayError(
+        'TIMEOUT',
+        'MiniMax 创建克隆音色超时：远端是否已登记尚未确认；请先在供应商音色管理中确认，避免重复创建'
+      )
+    }
+    throw error
+  }
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
     throw upstreamError(res.status, detail, 'MiniMax 创建克隆音色失败')
@@ -208,6 +219,9 @@ export async function cloneMiniMaxVoice(request: CloneVoiceRequest): Promise<str
     input_sensitive?: boolean
   }
   assertMiniMaxOk(payload, 'MiniMax 创建克隆音色失败')
+  if (payload?.base_resp?.status_code !== 0) {
+    throw new GatewayError('UPSTREAM_ERROR', 'MiniMax 创建克隆音色失败：服务端未返回成功登记回执')
+  }
   if (payload?.input_sensitive === true) {
     throw new GatewayError(
       'UPSTREAM_ERROR',

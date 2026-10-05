@@ -42,7 +42,8 @@ describe('canvas interaction details', () => {
   it('removes the canvas focus rule and the default multi-selection handles', () => {
     expect(foundationSource).toContain('border-bottom: 0 !important;')
     expect(foundationSource).toContain('.canvas-host .tl-container,')
-    expect(canvasEditorSource).toContain('SelectionForeground: () => null')
+    // Single-node manual sizing is required; the custom foreground keeps multi-select controls off.
+    expect(canvasEditorSource).toContain('SelectionForeground: NodeSelectionForeground')
   })
 
   it('shows one connector per distinct input/output type and merges repeated same-type ports', () => {

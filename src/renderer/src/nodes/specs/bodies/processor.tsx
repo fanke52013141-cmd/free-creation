@@ -5,7 +5,11 @@ import { readConnectedNodeInputs } from '../../../canvas/graph'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { VARIABLE_TYPES, type VariableValueType } from './shared'
 import { AppSelect } from '../../../components/AppSelect'
-import { parseProcessor } from '@shared/engine/executors/processor'
+import {
+  parseProcessor,
+  processorInputIssue,
+  resolveProcessorInput
+} from '@shared/engine/executors/processor'
 
 export function ProcessorBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
@@ -13,9 +17,11 @@ export function ProcessorBody({ shape }: NodeBodyProps): React.JSX.Element {
   const input = readConnectedNodeInputs(editor, shape.id).find(
     (item) => item.targetPortId === 'in-value'
   )
-  const supportsPick = input
-    ? input.value?.kind === 'json'
+  const effectiveInput = resolveProcessorInput(data, input?.value ?? null)
+  const supportsPick = effectiveInput
+    ? effectiveInput.kind === 'json'
     : ['any', 'object', 'array'].includes(data.valueType)
+  const issue = processorInputIssue(data, effectiveInput)
   const result = projectNodeOutputs(shape)['out-value']
   const resultText =
     result?.kind === 'text' || result?.kind === 'markdown'
@@ -92,9 +98,6 @@ export function ProcessorBody({ shape }: NodeBodyProps): React.JSX.Element {
             onChange={(event) => update({ ...data, path: event.target.value })}
           />
         )}
-        {data.operation === 'pick' && !supportsPick && (
-          <div className="processor-mode-hint">提取字段需要 JSON 输入，请改用字符串模板。</div>
-        )}
         {data.operation === 'template' && (
           <input
             value={data.template}
@@ -104,6 +107,11 @@ export function ProcessorBody({ shape }: NodeBodyProps): React.JSX.Element {
           />
         )}
       </div>
+      {issue && (
+        <div className="processor-mode-hint" role="status">
+          {issue}
+        </div>
+      )}
       <div className="processor-output">
         <span>输出结果</span>
         {resultText ? (

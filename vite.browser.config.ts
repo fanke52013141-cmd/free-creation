@@ -9,7 +9,15 @@ import react from '@vitejs/plugin-react'
  */
 export default defineConfig({
   root: resolve(__dirname, 'src/renderer'),
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: 'browser-session-media-csp',
+      // 浏览器适配器将小型音视频保存为 data URL；只放宽验收入口的媒体源，桌面 CSP 不变。
+      transformIndexHtml: (html): string =>
+        html.replace("media-src 'self' blob: media:", "media-src 'self' data: blob: media:")
+    }
+  ],
   resolve: {
     alias: {
       '@renderer': resolve(__dirname, 'src/renderer/src'),

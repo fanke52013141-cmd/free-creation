@@ -10,7 +10,7 @@
 // 节点间有依赖（循环吃结构数据的列表输出），因此按 RECIPES 顺序整跑；
 // MATRIX=text,json 可只跑前几项做定位。
 const { _electron } = require('playwright')
-const { execFileSync } = require('child_process')
+const { execFileSync, spawnSync } = require('child_process')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
@@ -258,13 +258,18 @@ async function zoomAtMost(percent) {
   return shrinkTo(percent)
 }
 
-// 拖拽创建用固定网格：让每张卡都落在视口内且互不重叠，端口坐标才是确定的。
-// 60% 缩放下一张卡是 204×156（内容多时最长 264），3 列 × 2 行正好铺满视口安全区。
+// 固定网格只用于拖拽落点，不作为无重叠的证据：分镜板和第三行会超出这些固定格子。
+// 新建后通过用户可用的“整理画布”快捷键，按真实卡片尺寸排列并自动取景。
 const GRID = { cols: 3, cellW: 320, cellH: 300, originX: 240, originY: 150 }
 const NODE_W = 340
 const NODE_H = 260
 let zoom = 1
 let slot = 0
+
+async function organizeForInteraction() {
+  await win.keyboard.press('Shift+Alt+f')
+  await win.waitForTimeout(450)
+}
 
 /**
  * 每条配方开一个全新项目：画布天生空白、相机天生归位，
@@ -340,6 +345,7 @@ async function addNode(label) {
     const fresh = after.filter((x) => !before.includes(x))
     if (fresh.length) {
       await card(fresh[0]).waitFor({ timeout: 5000 })
+      await organizeForInteraction()
       return fresh[0]
     }
   }
@@ -463,6 +469,7 @@ async function describeEdges() {
  */
 async function connect(fromId, outPort, toId, inPort) {
   await win.keyboard.press('Escape')
+  await organizeForInteraction()
   const before = await edgeCount()
   let a
   try {
@@ -554,6 +561,8 @@ async function checkPorts(id, nodeType, expectedIn, expectedOut) {
  * 只是轮询拉长并每 30 秒报一次进度，其余配方不传参、行为与原来完全一致。
  */
 async function runNode(id, minutes = 0) {
+  // 上一次执行可能在视口外新建资产卡；正常用户先整理/取景再点击，不用离屏坐标假装可操作。
+  await organizeForInteraction()
   const st = await statusOf(id)
   if (st.disabled !== false) return { blocked: true, aria: st.aria }
   const btn = card(id).locator('.node-run-btn')
@@ -780,10 +789,13 @@ async function recipeProcessor() {
   await ensureClickable(fix, '固定值输入框')
   await fix.fill('直接传递的固定文本')
   await win.waitForTimeout(600)
-  const portState = await card(a).locator('.processor-port-state').first().innerText()
-  check('处理：填固定值后界面说明「未连线，用固定值」', /固定值/.test(portState), portState)
+  const invalidMode = await statusOf(a)
+  check('处理：纯文本字段提取在运行前拦截并指明改用模板', invalidMode.disabled && /JSON.*字符串模板/.test(invalidMode.aria), invalidMode.aria)
+  await pickOption(card(a).locator('button[aria-label="处理方式"]'), '字符串模板')
+  await card(a).locator('input[aria-label="字符串模板"]').fill('镜头：{{value}}')
+  await win.waitForTimeout(600)
   const r1 = await runNode(a)
-  check('处理：固定值原样传递成功', r1.shape.run.status === 'success', JSON.stringify(r1.shape.run.status))
+  check('处理：固定值字符串模板运行成功', r1.shape.run.status === 'success', JSON.stringify(r1.shape.run.status))
   check(
     '处理：结果里能看到输出值',
     String(r1.shape.resultRaw).includes('直接传递的固定文本'),
@@ -801,11 +813,11 @@ async function recipeProcessor() {
   await pathInput.fill('不存在的字段')
   await win.waitForTimeout(600)
   check('处理：JSON 输出可接入 any 输入端口', await connect(feeder, 'out-json', pick, 'in-value'))
-  const r2 = await runNode(pick)
+  const invalidPath = await statusOf(pick)
   check(
-    '处理：字段路径不存在时报出具体路径',
-    r2.shape.run.status === 'failed' && /不存在的字段/.test(JSON.stringify(r2.shape.run.error ?? '')),
-    JSON.stringify(r2.shape.run.error ?? r2.shape.run.status)
+    '处理：字段路径不存在时在运行前报出具体路径',
+    invalidPath.disabled && /不存在的字段/.test(invalidPath.aria),
+    invalidPath.aria
   )
   await shot('processor-pick-missing-path')
 
@@ -1133,6 +1145,70 @@ function makeFixtures() {
 
 let FIX
 
+function documentFixtures() {
+  // 与解析器测试复用同一批真实 OOXML/PDF 字节，避免另写一套不一致的样张。
+  const ts = require('typescript')
+  const Module = require('node:module')
+  const filename = path.join(ROOT, 'test/helpers/document-fixtures.ts')
+  const module = new Module(filename)
+  module.paths = Module._nodeModulePaths(path.dirname(filename))
+  module._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true }
+  }).outputText, filename)
+  const fixtures = module.exports
+  const examples = [
+    ['sample.docx', fixtures.DOCX, fixtures.DOCX_TEXT],
+    ['sample.xlsx', fixtures.XLSX, fixtures.XLSX_TEXT],
+    ['sample.pptx', fixtures.PPTX, fixtures.PPTX_TEXT],
+    ['sample.pdf', fixtures.cjkPdf('中文分镜描述'), '中文分镜描述'],
+    ['sample.md', Buffer.from('# 分镜\n雨夜街道', 'utf8'), '# 分镜\n雨夜街道'],
+    ['scan.pdf', fixtures.imageOnlyPdf(), '']
+  ]
+  return examples.map(([name, bytes, expected]) => {
+    const file = path.join(FIX_DIR, name)
+    fs.writeFileSync(file, bytes)
+    return { file, name, expected }
+  })
+}
+
+async function recipeDocuments() {
+  const document = await addNode('文件')
+  const text = await addNode('文本')
+  await app.evaluate(({ dialog }) => {
+    globalThis.__matrixOpenDialog = dialog.showOpenDialog
+  })
+  try {
+    let imported = false
+    let previousMediaId = ''
+    for (const fixture of documentFixtures()) {
+      await app.evaluate(({ dialog }, filePath) => {
+        dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filePath] })
+      }, fixture.file)
+      await organizeForInteraction()
+      await card(document).getByRole('button', { name: imported ? '替换' : '导入文件', exact: true }).click()
+      const saved = await disk(document, (shape) => Boolean(shape.mediaId) && shape.mediaId !== previousMediaId)
+      imported = true
+      previousMediaId = saved.mediaId
+      check(`文件抽取 ${fixture.name}：真实导入、正文与落盘`, assetOnDisk(saved.mediaPath) && (fixture.expected ? saved.text.includes(fixture.expected) : saved.text === ''), saved.text)
+      if (fixture.expected) {
+        if (await edgeCount() === 0) check('文档抽取：文本输出可连接', await connect(document, 'out-text', text, 'in-text'))
+        const run = await runNode(text)
+        check(`文件抽取 ${fixture.name}：下游消费正文`, run.shape.run.status === 'success' && run.shape.text.includes(fixture.expected))
+      } else {
+        check('扫描 PDF：不虚构正文且明确说明未抽出文字', /未抽出文字/.test(await card(document).innerText()))
+      }
+      await shot(`document-${fixture.name}`)
+    }
+    await reload()
+    check('文件抽取：重载保持最后文档真实资源', assetOnDisk((await disk(document)).mediaPath))
+  } finally {
+    await app.evaluate(({ dialog }) => {
+      dialog.showOpenDialog = globalThis.__matrixOpenDialog
+      delete globalThis.__matrixOpenDialog
+    })
+  }
+}
+
 /**
  * 把文件拖进画布：Chromium 里合成的 File 拿不到本机路径，
  * 于是走 handleDrop 的 importMediaBuffer 分支——字节进主进程、探测真实类型、落盘、建卡，
@@ -1327,6 +1403,29 @@ async function recipeFile() {
     JSON.stringify(dropped.note)
   )
   await shot('file-txt-drop-feedback')
+  // 只替换系统选择器返回路径；真正的按钮、IPC、文档抽取、媒体落盘与卡片更新仍走产品链路。
+  await app.evaluate(({ dialog }, filePath) => {
+    globalThis.__matrixOpenDialog = dialog.showOpenDialog
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filePath] })
+  }, FIX.txt)
+  try {
+    await organizeForInteraction()
+    await card(f).getByRole('button', { name: '导入文件', exact: true }).click()
+    const imported = await disk(f, (shape) => Boolean(shape.mediaId) && shape.text.includes('第一行'))
+    check('文件：系统选择路径导入真实 TXT 并提取正文', assetOnDisk(imported.mediaPath) && imported.text === '第一行\n第二行\n', imported.text)
+    const target = await addNode('文本')
+    check('文件：抽取文本能连接下游文本', await connect(f, 'out-text', target, 'in-text'))
+    await runNode(target)
+    check('文件：抽取正文真实流入下游', (await disk(target)).text.includes('第二行'))
+    await reload()
+    check('文件：文档路径与正文重载保留', (await disk(f)).text.includes('第二行') && assetOnDisk((await disk(f)).mediaPath))
+    await shot('file-txt-import-reload')
+  } finally {
+    await app.evaluate(({ dialog }) => {
+      dialog.showOpenDialog = globalThis.__matrixOpenDialog
+      delete globalThis.__matrixOpenDialog
+    })
+  }
 }
 
 /** 视频资产：拖入真实 MP4 建出来的必须是视频资产节点，且带可播放的媒体引用。 */
@@ -1732,6 +1831,62 @@ async function recipeAudio() {
   check('音频：源卡与产物卡重载后都还在', (await allCards()).filter((c) => c.type === 'audio').length >= 1, JSON.stringify((await allCards()).map((c) => c.type)))
 }
 
+/** 真音频 → 节点内参数 → FFmpeg 产物：同时验证倍率、目标秒数与静音。 */
+async function recipeSoundAdjust() {
+  await runClipOnFixtureVideo()
+  const audio = (await allCards()).find((item) => item.type === 'audio')
+  if (!audio) throw new Error('声音调整夹具未产出音频')
+  const source = await disk(audio.id)
+  const duration = probeDuration(path.join(DATA_DIR, source.mediaPath))
+  const adjust = await addNode('声音调整')
+  check('声音调整：未连线不显示假引用', !(await card(adjust).innerText()).includes('源音频'))
+  check('声音调整：真实音频可以连接', await connect(audio.id, 'out-audio', adjust, 'in-audio'))
+  await card(adjust).getByLabel('播放倍率', { exact: true }).fill('2')
+  await card(adjust).getByLabel('声量（%）', { exact: true }).fill('0')
+  await card(adjust).getByRole('button', { name: '保存调整参数' }).click()
+  const first = await runNode(adjust)
+  check('声音调整：2倍速静音运行成功', first.shape.run.status === 'success', first.shape.run.error)
+  const result = obj(first.shape.resultRaw)
+  const asset = result.results?.find((item) => item.mediaId === result.selectedMediaId)?.mediaPath
+  check('声音调整：2倍速产物真实落盘且时长减半', assetOnDisk(asset) && Math.abs(probeDuration(path.join(DATA_DIR, asset)) - duration / 2) < 0.15, asset)
+  // volumedetect 将数字零也量成 -91dB；检查解码 PCM 的实际样本，而非错误期望 -Infinity。
+  const samples = execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', path.join(DATA_DIR, asset), '-f', 's16le', '-acodec', 'pcm_s16le', '-'])
+  check('声音调整：0% 产物实际静音', samples.length > 0 && samples.every(byte => byte === 0))
+  await card(adjust).getByRole('button', { name: '按目标秒数', exact: true }).click()
+  await card(adjust).getByLabel('目标时长（秒）', { exact: true }).fill(String(duration))
+  await card(adjust).getByLabel('声量（%）', { exact: true }).fill('100')
+  await card(adjust).getByRole('button', { name: '保存调整参数' }).click()
+  const second = await runNode(adjust)
+  check('声音调整：目标秒数运行成功', second.shape.run.status === 'success', second.shape.run.error)
+  const secondResult = obj(second.shape.resultRaw)
+  const secondAsset = secondResult.results?.find((item) => item.mediaId === secondResult.selectedMediaId)?.mediaPath
+  check('声音调整：目标时长产物可探测', assetOnDisk(secondAsset) && Math.abs(probeDuration(path.join(DATA_DIR, secondAsset)) - duration) < 0.15, secondAsset)
+  check('声音调整：100% 产物恢复原声量', Math.abs(probePeakDb(path.join(DATA_DIR, secondAsset)) - probePeakDb(path.join(DATA_DIR, source.mediaPath))) < 2)
+  await reload()
+  check('声音调整：参数与产物重载恢复', (await disk(adjust)).config.mode === 'duration' && assetOnDisk(secondAsset))
+  await shot('sound-adjust-reload')
+}
+
+/** 网址配置通过正常设置侧栏验证；不把系统浏览器行为当作网络成功。 */
+async function recipeWebsite() {
+  const website = await addNode('网址节点')
+  await card(website).getByRole('button', { name: '配置网址', exact: true }).click()
+  const panel = win.locator('.website-settings')
+  await panel.getByLabel('名称', { exact: true }).fill('验收网址')
+  for (const invalid of ['javascript:alert(1)', 'https://user:password@example.com']) {
+    await panel.getByLabel('网址', { exact: true }).fill(invalid)
+    await panel.getByRole('button', { name: '保存网址' }).click()
+    check('网址：非法协议或凭据在保存前拦截', /有效的 HTTP/.test(await panel.getByRole('alert').innerText()))
+  }
+  await panel.getByLabel('网址', { exact: true }).fill('example.com')
+  await panel.getByRole('button', { name: '保存网址' }).click()
+  await win.keyboard.press('Escape')
+  check('网址：保存时自动补齐 HTTPS', (await disk(website)).config.url === 'https://example.com/')
+  await reload()
+  check('网址：名称和网址重载后可辨认', /验收网址/.test(await card(website).innerText()) && (await card(website).getByRole('button', { name: '打开网址', exact: true }).count()) === 1)
+  await shot('website-reload')
+}
+
 /** 导演台：卡片摘要 → 打开预演台 → 发布当前帧 → 产物与漂移状态 → 重载。 */
 async function recipeDirector() {
   const d = await addNode('3D 预演台')
@@ -1791,6 +1946,14 @@ async function recipeDirector() {
 }
 
 /** ffprobe 量真实时长（只用于产物字节，不用于任何界面断言）。 */
+function probePeakDb(absFile) {
+  const result = spawnSync('ffmpeg', ['-hide_banner', '-i', absFile, '-af', 'volumedetect', '-f', 'null', '-'], { encoding: 'utf8' })
+  if (result.status !== 0) throw new Error('声量探测失败')
+  const match = /max_volume:\s*(-inf|[-\d.]+) dB/.exec(result.stderr)
+  if (!match) throw new Error('声量探测没有峰值')
+  return match[1] === '-inf' ? -Infinity : Number(match[1])
+}
+
 function probeDuration(absFile) {
   try {
     const out = execFileSync('ffprobe', [
@@ -1961,11 +2124,14 @@ const RECIPES = [
   ['image', '图片', recipeImage],
   ['split', '图片拆分', recipeSplit],
   ['file', '文件', recipeFile],
+  ['documents', '文档逐格式抽取', recipeDocuments],
   ['video-asset', '视频资产', recipeVideoAsset],
   ['video-frame', '视频取帧', recipeVideoFrame],
   ['video-clip', '视频截取', recipeVideoClip],
   ['video-ai', '深度/白模', recipeVideoAi],
   ['audio', '音频 + 人声分离', recipeAudio],
+  ['sound-adjust', '声音调整', recipeSoundAdjust],
+  ['website', '网址', recipeWebsite],
   ['director', '导演台', recipeDirector],
   ['p3', '停止续跑与重启恢复', recipeCancelResume]
 ]

@@ -12,6 +12,7 @@ import { useNodePanelStore } from '../stores/nodePanel'
 import { beginConnectionDrag } from './connection-drag'
 import { batchConnectionFromSelection } from './batch-connection'
 import { dynamicPortIdsForShape, portPairCompatible } from './graph'
+import { processorConfigurationIssue } from './processor-readiness'
 import { markUndoPoint } from './history'
 import type { NodeCardShape } from './NodeCardShape'
 import { Icon } from '../components/Icon'
@@ -655,6 +656,10 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           incomingCounts,
           availableInputCounts,
           modelAvailable,
+          configIssue:
+            shape.props.nodeType === 'processor'
+              ? processorConfigurationIssue(editor, shape)
+              : undefined,
           outputs: spec?.projectOutputs?.(shape) ?? {}
         }),
         incomingCounts,

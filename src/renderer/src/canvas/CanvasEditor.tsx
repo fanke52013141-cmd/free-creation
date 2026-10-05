@@ -23,6 +23,7 @@ import { useNodePanelStore } from '../stores/nodePanel'
 import { artifactShapeVisibility } from './artifact-grouping'
 import { SearchPalette } from './SearchPalette'
 import { CanvasSelectionBackground, GroupOutlineLayer } from './GroupOutlineLayer'
+import { NodeSelectionForeground } from './NodeSelectionForeground'
 import { DataEdgeLayer } from './DataEdgeLayer'
 import { useDockMagnify } from './useDockMagnify'
 import {
@@ -78,8 +79,7 @@ const TL_COMPONENTS = {
   SharePanel: null,
   ContextMenu: null,
   SelectionBackground: CanvasSelectionBackground,
-  // 画布节点只允许移动、连接与分组；null 会回退默认组件，因此必须用空组件关闭控制点。
-  SelectionForeground: () => null
+  SelectionForeground: NodeSelectionForeground
 } as const
 
 registerBaseNodeTypes()
@@ -1856,6 +1856,15 @@ export function CanvasEditor({
       ref={wrapRef}
       onPointerDownCapture={(event) => {
         const target = event.target as HTMLElement
+        // Capture before tldraw's canvas so a run-button click stays on that button.
+        if (event.button === 0 && target.closest('.node-run-btn')) {
+          const nodeId = target.closest<HTMLElement>('[data-node-id]')?.dataset.nodeId
+          if (nodeId && editorRef.current && !editorRef.current.getSelectedShapeIds().includes(nodeId as TLShapeId)) {
+            editorRef.current.select(nodeId as TLShapeId)
+          }
+          event.stopPropagation()
+          return
+        }
         // Selection overlays sit above HTML nodes. Reserve the port's screen-space
         // hit area before tldraw can interpret the same press as an edge resize.
         if (event.button === 0 && target.closest('.tl-container') && !target.closest('.port-dot')) {
