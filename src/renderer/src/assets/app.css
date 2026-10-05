@@ -1410,180 +1410,34 @@ select:focus-visible,
 
 /* 统一的已连接输入（呈现规范 v1.0 §11–§17）：由真实 arrow + port + projectOutputs 驱动，
    所有节点共用。仅存在实际边时渲染；图片用缩略图，文本正文换行展开，其余保持紧凑摘要。 */
-.connected-inputs {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  min-width: 0;
-  gap: 5px;
-  padding: 0 0 8px;
-  box-sizing: border-box;
-}
-
-.connected-input-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.connected-input-item {
-  display: inline-flex;
-  align-items: center;
-  min-width: 0;
-  max-width: 100%;
-  height: 28px;
-  gap: 5px;
-  padding: 3px 6px 3px 5px;
-  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--bg) 62%, transparent);
-  color: var(--txt-dim, #aeb8c8);
-  font-size: 10px;
-  line-height: 1;
-  pointer-events: auto;
-}
-
-/* 图片引用缩略图（§11）：48×36 无名称文字，序号叠加在角落；
-   来源与端口信息在 tooltip 与 hover 全貌浮层中，不占用正文行宽。 */
-.reference-thumb {
-  position: relative;
-  display: block;
-  width: 48px;
-  height: 36px;
-  flex: 0 0 auto;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--line) 90%, transparent);
-  border-radius: 6px;
-  /* 图片预览一律白底（用户 2026-09-18 拍板：白底才能看清图片边界）。 */
-  background: #ffffff;
-  pointer-events: auto;
-  cursor: pointer;
-}
-
-.reference-thumb :is(img, video) {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.reference-thumb:hover {
-  border-color: color-mix(in srgb, var(--brand) 45%, transparent);
-}
-
-.reference-thumb .connected-input-order {
-  position: absolute;
-  right: 2px;
-  bottom: 2px;
-  border: 1px solid color-mix(in srgb, var(--bg) 70%, transparent);
-}
-
-/* 引用超过约两行（§17）时折叠为 +N，点击展开后由 node-body 内部滚动承载。 */
-.reference-more {
-  display: inline-flex;
-  align-items: center;
-  height: 28px;
-  padding: 0 9px;
-  border: 1px dashed color-mix(in srgb, var(--line) 90%, transparent);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--txt-dim, #9aa4b5);
-  font-size: 10px;
-  line-height: 1;
-  pointer-events: auto;
-  cursor: pointer;
-}
-
-.reference-more:hover {
-  color: var(--txt);
-  border-color: color-mix(in srgb, var(--brand) 45%, transparent);
-}
-
-/* hover 300ms 后的全貌浮层：portal 到 document.body、fixed 定位，纯预览不拦截指针。
-   图片一律白底（用户 2026-09-18 拍板：白底才能看清图片边界）。 */
-.reference-fullview {
-  position: fixed;
-  z-index: 960;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px;
-  border: 1px solid color-mix(in srgb, var(--line) 90%, transparent);
-  border-radius: 10px;
-  background: #ffffff;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
-  pointer-events: none;
-}
-
-.reference-fullview :is(img, video) {
-  max-width: min(56vw, 460px);
-  max-height: 300px;
-  border-radius: 6px;
-  object-fit: contain;
-  background: #ffffff;
-}
-
-.connected-input-target {
-  flex: 0 0 auto;
-  color: var(--brand);
-}
-
-.connected-input-order {
-  display: grid;
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-  place-items: center;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--brand) 24%, transparent);
-  color: var(--txt);
-  font-size: 9px;
-  font-variant-numeric: tabular-nums;
-}
-
-.connected-input-source {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* 文本引用（2026-10-05 用户定稿）：只留正文，固定单行，超长省略号，
-   不再多行展开占用卡片高度。 */
-.connected-input-item.connected-input-textual {
-  flex: 0 1 100%;
-  max-width: 100%;
-  height: auto;
-  min-height: 28px;
-  line-height: 1.4;
-}
-
-.connected-input-item.connected-input-textual .connected-input-value {
-  min-width: 0;
-  max-width: 160px;
-  color: var(--txt);
-  display: block;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.connected-input-value {
-  max-width: 84px;
-  color: var(--txt);
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-  word-break: break-all;
-}
-
-.connected-input-source {
-  max-width: 105px;
-  color: var(--muted);
-}
-
-/* 「等待上游输出」占位已删除（用户 2026-09-18：无必要提示语不要），
-   对应的 .connected-input-empty 规则一并移除，不留无人引用的死 CSS。 */
-
+/* NODE_REFERENCE_SPEC: one row, all details in an interactive opaque portal. */
+.connected-inputs { width: 100%; min-width: 0; flex: 0 0 auto; padding: 0; margin-bottom: var(--reference-bottom-gap, 8px); box-sizing: border-box; }
+.connected-input-list { display: flex; flex-wrap: nowrap; gap: var(--reference-gap, 6px); height: var(--reference-height, 36px); overflow: hidden; min-width: 0; }
+.connected-input-item, .reference-thumb, .reference-more { box-sizing: border-box; height: var(--reference-height, 36px); flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: flex-start; gap: 6px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--txt); font: inherit; font-size: 11px; pointer-events: auto; cursor: pointer; }
+.connected-input-item { min-width: 0; }
+.connected-input-item > svg, .connected-input-target { flex: 0 0 auto; }
+.connected-input-target { flex: 0 1 auto; max-width: 35%; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+.connected-input-value { display: block; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.reference-thumb { position: relative; width: 48px; padding: 0; justify-content: center; overflow: hidden; background: #ffffff; }
+.reference-thumb :is(img, video) { width: 100%; height: 100%; object-fit: contain; }
+.reference-video-mark { position: absolute; right: 2px; bottom: 2px; color: #fff; background: #19212c; border-radius: 3px; }
+.reference-more { min-width: 36px; justify-content: center; }
+:is(.connected-input-item, .reference-thumb, .reference-more):hover { border-color: var(--brand); }
+:is(.connected-input-item, .reference-thumb, .reference-more):focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+.reference-fullview { position: fixed; z-index: calc(var(--z-modal) - 1); width: min(480px, calc(100vw - 16px)); max-height: min(420px, calc(100vh - 16px)); overflow: auto; overscroll-behavior: contain; box-sizing: border-box; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--txt); box-shadow: 0 16px 40px #0006; pointer-events: auto; font-size: 13px; line-height: 1.5; user-select: text; }
+.reference-detail { position: relative; min-width: 0; }
+.reference-detail + .reference-detail { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px; }
+.reference-detail header { display: flex; flex-direction: column; gap: 4px; padding-right: 32px; margin-bottom: 10px; overflow-wrap: anywhere; }
+.reference-detail header span, .reference-detail small { color: var(--muted); }
+.reference-copy { position: absolute; top: 0; right: 0; width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--txt); cursor: pointer; }
+.reference-detail pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; font-family: inherit; }
+.reference-detail-media { display: block; width: 100%; max-height: 300px; object-fit: contain; cursor: pointer; }
+.reference-detail audio { width: 100%; }
+.reference-markdown { overflow-wrap: anywhere; }
+.reference-markdown pre { overflow-x: auto; white-space: pre; font-family: monospace; }
+.reference-markdown table { border-collapse: collapse; display: block; overflow-x: auto; }
+.reference-markdown :is(td, th) { border: 1px solid var(--line); padding: 4px 8px; }
+.reference-list-title { display: block; margin-bottom: 12px; }
 /* 所有节点生成任务共用同一套轨道行星加载态；百分比由任务耗时估算驱动。 */
 .node-execution-overlay {
   position: absolute;
@@ -12349,3 +12203,8 @@ canvas.tl-canvas-indicators {
 .processor-type-label .processor-fixed-type, .processor-type-label .gen-select { width:140px; flex:0 0 140px; min-width:0; }
 .processor-output { display:flex; flex-direction:column; gap:8px; font-size:12px; }
 .processor-output pre { margin:0; padding:10px; white-space:pre-wrap; overflow-wrap:anywhere; border-radius:6px; background:var(--bg); }
+
+.reference-overflow-item { display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: center; gap: 4px 8px; width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--txt); text-align: left; cursor: pointer; }
+.reference-overflow-item + .reference-overflow-item { margin-top: 6px; }
+.reference-overflow-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reference-overflow-item small { grid-column: 2; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

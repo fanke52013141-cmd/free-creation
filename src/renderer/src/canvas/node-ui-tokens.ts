@@ -27,7 +27,13 @@ export const NODE_UI = {
   accent: { height: 4 },
   reference: {
     /** 引用区最多展示行数，超出折叠为 +N */
-    maxRows: 2,
+    maxRows: 1,
+    height: 36,
+    gap: 6,
+    bottomGap: 8,
+    textMinWidth: 80,
+    textMaxWidth: 200,
+    moreMinWidth: 36,
     /** 图片引用缩略图尺寸（呈现规范 §11） */
     imageWidth: 48,
     imageHeight: 36

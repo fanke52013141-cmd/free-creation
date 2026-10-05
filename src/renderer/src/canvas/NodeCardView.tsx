@@ -908,7 +908,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             references +
             8
           : formMinimum
-        let next = fittedPreview ? NODE_UI.height.default : resolveNodeHeight(referencedMinimum)
+        let next = fittedPreview
+          ? resolveNodeHeight(NODE_UI.height.default + (references ? references + NODE_UI.reference.bottomGap : 0))
+          : resolveNodeHeight(referencedMinimum)
         const focused = document.activeElement
         const editingInput =
           scroll.contains(focused) &&
@@ -975,9 +977,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   // 拖线过程中，兼容端口额外浮出端口名标签：圆点本身无法回答“这个口收的是什么”，
   // 而用户正是在这里最容易松错手；不兼容的端口保持淡出，校验不因可发现性而放宽。
 
-  // 裁剪、拆图和视频各自已经在正文内呈现可操作的素材区；继续显示通用输入条会
-  // 重复“原图 / 图片名称”，并挤占预览高度。其他节点仍保留统一的关系可见性。
-  const hasDedicatedInputSurface = ['image-crop', 'image-split', 'video', 'ai-process'].includes(
+  // 裁剪和拆图以主预览承载素材，AI 处理只显示输出；这些节点不重复呈现输入。
+  // 视频生成及其他节点统一使用顶部引用区。
+  const hasDedicatedInputSurface = ['image-crop', 'image-split', 'ai-process'].includes(
     shape.props.nodeType
   )
 

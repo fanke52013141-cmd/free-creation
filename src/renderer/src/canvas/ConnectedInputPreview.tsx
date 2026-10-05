@@ -1,157 +1,197 @@
-// 已连接输入的统一画布呈现（呈现规范 v1.0 §11–§17）。数据只来自真实边与节点输出投影，
-// 不按标题或节点类型猜测。图片引用为 48×36 缩略图卡（无名称文字），
-// hover 300ms 显示全貌浮层，点击打开媒体预览；其余类型保持单行 chip。
 import { useValue, type Editor } from 'tldraw'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
-import { Icon } from '../components/Icon'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { Icon, type IconName } from '../components/Icon'
 import { mediaUrl } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
 import { readConnectedNodeInputs, type ConnectedNodeInput } from './graph'
-
-function compactJson(value: unknown): string {
-  if (
-    value &&
-    typeof value === 'object' &&
-    'voice_id' in value &&
-    typeof value.voice_id === 'string'
-  )
-    return value.voice_id
-  try {
-    const serialized = JSON.stringify(value)
-    return serialized.length > 68 ? `${serialized.slice(0, 67)}…` : serialized
-  } catch {
-    return '结构化数据'
-  }
-}
-
-/** 非图片引用的正文：媒体类型只留类型图标，文本/JSON 留摘要；
- *  来源名称由统一的 connected-input-source 呈现，不再重复。 */
-function previewBody(input: ConnectedNodeInput): React.JSX.Element | null {
-  switch (input.value?.kind) {
-    case 'image':
-      return null // 图片走缩略图卡（ReferenceThumb）
-    case 'video':
-      return <Icon name="video" size={13} />
-    case 'audio':
-      return <Icon name="audio" size={13} />
-    case 'file':
-      return <Icon name="document" size={13} />
-    case 'json':
-      return <span className="connected-input-value">{compactJson(input.value.data)}</span>
-    case 'markdown':
-    case 'text':
-      return <span className="connected-input-value">{input.value.text || '空文本'}</span>
-    default:
-      return null
-  }
-}
-
-function isTextualInput(input: ConnectedNodeInput): boolean {
-  return input.value?.kind === 'text' || input.value?.kind === 'markdown'
-}
+import { referenceLayout } from './reference-layout'
+import { NODE_UI } from './node-ui-tokens'
 
 type OpenPreview = (next: { url: string; kind: 'image' | 'video' | 'audio'; title: string }) => void
-
-/** 图片引用缩略图：hover 延时 300ms 显示全貌浮层（portal 到 body、不拦截指针），
- *  点击进入媒体预览。缩略图本身参与节点拖拽会破坏点击语义，因此停止冒泡。 */
-function ReferenceThumb({
+const keyOf = (input: ConnectedNodeInput): string =>
+  `${input.targetPortId}:${input.sourceNodeId}:${input.sourcePortId}:${input.order}`
+const isMediaThumb = (input: ConnectedNodeInput): boolean =>
+  input.value?.kind === 'image' || input.value?.kind === 'video'
+function voiceId(input: ConnectedNodeInput): string | null {
+  const value = input.value
+  if (input.sourcePortSchema?.id !== 'voice.profile' || value?.kind !== 'json') return null
+  return value.data &&
+    typeof value.data === 'object' &&
+    'voice_id' in value.data &&
+    typeof value.data.voice_id === 'string'
+    ? value.data.voice_id
+    : null
+}
+function summary(input: ConnectedNodeInput): string {
+  const value = input.value
+  if (!value) return ''
+  if (value.kind === 'text' || value.kind === 'markdown')
+    return value.text.replace(/\s+/g, ' ') || '空文本'
+  if (value.kind === 'json' || value.kind === 'camera')
+    return voiceId(input) ?? JSON.stringify(value.data)
+  return value.name || input.sourceNodeName || value.kind
+}
+function iconOf(input: ConnectedNodeInput): IconName {
+  if (voiceId(input) !== null) return 'mic'
+  switch (input.value?.kind) {
+    case 'audio':
+      return 'audio'
+    case 'file':
+      return 'document'
+    case 'json':
+      return 'json'
+    case 'camera':
+      return 'director'
+    default:
+      return 'text'
+  }
+}
+function ReferenceVisual({ input }: { input: ConnectedNodeInput }): React.JSX.Element {
+  const [failed, setFailed] = useState(false)
+  const value = input.value
+  if (value?.kind === 'image' || value?.kind === 'video')
+    return (
+      <>
+        {failed ? (
+          <Icon name="warning" size={16} />
+        ) : value.kind === 'image' ? (
+          <img
+            src={mediaUrl(value.mediaPath)}
+            alt=""
+            draggable={false}
+            onError={() => setFailed(true)}
+          />
+        ) : (
+          <video
+            src={mediaUrl(value.mediaPath)}
+            preload="metadata"
+            muted
+            playsInline
+            onError={() => setFailed(true)}
+          />
+        )}
+        {value.kind === 'video' && <Icon name="play" size={12} className="reference-video-mark" />}
+      </>
+    )
+  return (
+    <>
+      <Icon name={iconOf(input)} size={16} />
+      <span className="connected-input-target">{input.targetPortName}</span>
+      <span className="connected-input-value">{summary(input)}</span>
+    </>
+  )
+}
+function ReferenceDetail({
   input,
   openPreview
 }: {
   input: ConnectedNodeInput
   openPreview: OpenPreview
 }): React.JSX.Element {
-  const thumbRef = useRef<HTMLDivElement | null>(null)
-  const timerRef = useRef<number | null>(null)
-  const [fullRect, setFullRect] = useState<DOMRect | null>(null)
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current !== null) window.clearTimeout(timerRef.current)
-    }
-  }, [])
-
-  if (input.value?.kind !== 'image' && input.value?.kind !== 'video') return <></>
-  const mediaPath = input.value.mediaPath
-  const kind = input.value.kind
-
-  const showFullView = (): void => {
-    const el = thumbRef.current
-    if (el) setFullRect(el.getBoundingClientRect())
-  }
-  const hideFullView = (): void => {
-    if (timerRef.current !== null) window.clearTimeout(timerRef.current)
-    timerRef.current = null
-    setFullRect(null)
-  }
-
-  // 全貌浮层统一落在缩略图上方（用户 2026-09-18 拍板：下方会遮挡节点内容）；
-  // 上方空间不足时才翻到下方。
-  let overlayStyle: React.CSSProperties | undefined
-  if (fullRect) {
-    const estimatedHeight = 340
-    const placeBelow = fullRect.top - 8 - estimatedHeight < 0
-    overlayStyle = {
-      left: Math.max(8, Math.min(fullRect.left, window.innerWidth - 480)),
-      top: placeBelow ? fullRect.bottom + 8 : undefined,
-      bottom: placeBelow ? undefined : window.innerHeight - fullRect.top + 8
-    }
-  }
-
+  const [info, setInfo] = useState('')
+  const value = input.value
+  const text =
+    value?.kind === 'text' || value?.kind === 'markdown'
+      ? value.text
+      : value?.kind === 'json' || value?.kind === 'camera'
+        ? JSON.stringify(value.data, null, 2)
+        : null
   return (
-    <>
-      <div
-        ref={thumbRef}
-        className="reference-thumb"
-        role="button"
-        tabIndex={0}
-        aria-label={`预览 ${input.sourceNodeName}`}
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => {
-          e.stopPropagation()
-          openPreview({ url: mediaUrl(mediaPath), kind, title: input.sourceNodeName })
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            e.stopPropagation()
-            openPreview({ url: mediaUrl(mediaPath), kind, title: input.sourceNodeName })
+    <article className="reference-detail">
+      <header>
+        <strong>{input.targetPortName}</strong>
+        <span>
+          {input.sourceNodeName} · {input.sourcePortName}
+        </span>
+      </header>
+      {text !== null && (
+        <button
+          type="button"
+          className="reference-copy"
+          onClick={() => {
+            void navigator.clipboard.writeText(voiceId(input) ?? text)
+          }}
+          aria-label={voiceId(input) !== null ? '复制音色 ID' : '复制完整内容'}
+        >
+          <Icon name="copy" size={16} />
+        </button>
+      )}
+      {value?.kind === 'markdown' ? (
+        <div className="reference-markdown">
+          <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>
+            {value.text}
+          </ReactMarkdown>
+        </div>
+      ) : text !== null ? (
+        <pre>{text || '空文本'}</pre>
+      ) : value?.kind === 'image' ? (
+        <img
+          className="reference-detail-media"
+          src={mediaUrl(value.mediaPath)}
+          alt={summary(input)}
+          onLoad={(event) =>
+            setInfo(`${event.currentTarget.naturalWidth} × ${event.currentTarget.naturalHeight}`)
           }
-        }}
-        onMouseEnter={() => {
-          if (timerRef.current !== null) window.clearTimeout(timerRef.current)
-          timerRef.current = window.setTimeout(showFullView, 300)
-        }}
-        onMouseLeave={hideFullView}
-      >
-        {kind === 'video' ? (
-          <video src={mediaUrl(mediaPath)} preload="auto" muted playsInline />
-        ) : (
-          <img src={mediaUrl(mediaPath)} alt="" draggable={false} />
-        )}
-        {input.targetPortCardinality === 'many' && (
-          <span className="connected-input-order">{input.order}</span>
-        )}
-      </div>
-      {fullRect &&
-        createPortal(
-          <div className="reference-fullview" style={overlayStyle}>
-            {kind === 'video' ? (
-              <video src={mediaUrl(mediaPath)} preload="auto" muted playsInline />
-            ) : (
-              <img src={mediaUrl(mediaPath)} alt="" draggable={false} />
-            )}
-          </div>,
-          document.body
-        )}
-    </>
+          onError={() => setInfo('图片无法读取')}
+          onClick={() =>
+            openPreview({
+              url: mediaUrl(value.mediaPath),
+              kind: 'image',
+              title: input.sourceNodeName
+            })
+          }
+        />
+      ) : value?.kind === 'video' ? (
+        <video
+          className="reference-detail-media"
+          src={mediaUrl(value.mediaPath)}
+          preload="metadata"
+          muted
+          playsInline
+          onLoadedMetadata={(event) => {
+            const media = event.currentTarget
+            setInfo(
+              `${media.videoWidth} × ${media.videoHeight}${Number.isFinite(media.duration) ? ` · ${media.duration.toFixed(1)} 秒` : ''}`
+            )
+          }}
+          onError={() => setInfo('视频无法读取')}
+          onClick={() =>
+            openPreview({
+              url: mediaUrl(value.mediaPath),
+              kind: 'video',
+              title: input.sourceNodeName
+            })
+          }
+        />
+      ) : value?.kind === 'audio' ? (
+        <>
+          <p>{summary(input)}</p>
+          <audio
+            controls
+            preload="metadata"
+            src={mediaUrl(value.mediaPath)}
+            onLoadedMetadata={(event) => {
+              if (Number.isFinite(event.currentTarget.duration))
+                setInfo(`${event.currentTarget.duration.toFixed(1)} 秒`)
+            }}
+            onError={() => setInfo('音频无法读取')}
+          />
+        </>
+      ) : value?.kind === 'file' ? (
+        <>
+          <p>{summary(input)}</p>
+          <small>{value.mime}</small>
+        </>
+      ) : null}
+      {info && <small>{info}</small>}
+    </article>
   )
 }
 
-/** 引用区可见项上限：约两行（呈现规范 §17），超出折叠为 +N，点击展开。 */
-const REFERENCE_VISIBLE_LIMIT = 12
-
+type DetailState = { key: string | null; anchor: HTMLElement; rect: DOMRect }
 export function ConnectedInputPreview({
   editor,
   shape,
@@ -166,81 +206,217 @@ export function ConnectedInputPreview({
     () => readConnectedNodeInputs(editor, shape.id),
     [editor, shape.id]
   )
-  const [expanded, setExpanded] = useState(false)
-  // 连线变化后重新折叠：渲染期比较上一次 inputs（官方“随 props 重置 state”模式），
-  // 避免 effect 内同步 setState 触发级联渲染；不同节点状态间不残留展开态。
-  const [seenInputs, setSeenInputs] = useState(inputs)
-  if (seenInputs !== inputs) {
-    setSeenInputs(inputs)
-    setExpanded(false)
-  }
-
-  // 只呈现真正有值的上游输入：已连线但尚未产出结果的输入不再显示“等待上游输出”
-  // 这类操作提示（用户 2026-09-18 拍板：没有必要的提示语都不需要）。
   const resolved = inputs.filter((input) => input.value !== null)
-  if (resolved.length === 0) return null
-  const visible = expanded ? resolved : resolved.slice(0, REFERENCE_VISIBLE_LIMIT)
-  const hiddenCount = resolved.length - visible.length
+  const row = useRef<HTMLDivElement>(null)
+  const panel = useRef<HTMLDivElement>(null)
+  const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [width, setWidth] = useState(NODE_UI.width - NODE_UI.content.padding * 2)
+  const [detail, setDetail] = useState<DetailState | null>(null)
+  const [position, setPosition] = useState<CSSProperties>({ left: 8, top: 8 })
+  const layout = referenceLayout(resolved.map(isMediaThumb), width)
+  const visible = resolved.slice(0, layout.widths.length)
+  const active = detail?.key ? resolved.find((input) => keyOf(input) === detail.key) : undefined
+  const showing = Boolean(detail && (detail.key === null ? layout.hidden > 0 : active))
 
+  useEffect(() => {
+    const element = row.current
+    if (!element) return
+    const observer = new ResizeObserver(() => setWidth(element.clientWidth))
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [resolved.length > 0])
+  useEffect(
+    () => () => {
+      if (openTimer.current) clearTimeout(openTimer.current)
+      if (closeTimer.current) clearTimeout(closeTimer.current)
+    },
+    []
+  )
+  useEffect(() => {
+    if (!showing || !detail) return
+    const place = (): void => {
+      const anchor = detail.anchor.isConnected ? detail.anchor.getBoundingClientRect() : detail.rect
+      const box = panel.current?.getBoundingClientRect()
+      const panelWidth = box?.width ?? 480
+      const panelHeight = box?.height ?? 340
+      const above = anchor.top - panelHeight - 8
+      const theme = getComputedStyle(row.current ?? detail.anchor)
+      const colors = Object.fromEntries(
+        ['--bg', '--line', '--txt', '--muted', '--brand'].map((name) => [
+          name,
+          theme.getPropertyValue(name)
+        ])
+      )
+      setPosition({
+        ...colors,
+        left: Math.max(8, Math.min(anchor.left, window.innerWidth - panelWidth - 8)),
+        top: Math.max(
+          8,
+          Math.min(above >= 8 ? above : anchor.bottom + 8, window.innerHeight - panelHeight - 8)
+        )
+      })
+    }
+    const observer = new ResizeObserver(place)
+    if (panel.current) observer.observe(panel.current)
+    place()
+    const dismiss = (event: PointerEvent): void => {
+      if (
+        !panel.current?.contains(event.target as Node) &&
+        !detail.anchor.contains(event.target as Node)
+      )
+        setDetail(null)
+    }
+    const key = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        setDetail(null)
+        detail.anchor.focus()
+        if (openTimer.current) clearTimeout(openTimer.current)
+      }
+    }
+    document.addEventListener('pointerdown', dismiss, true)
+    document.addEventListener('keydown', key)
+    window.addEventListener('resize', place)
+    window.addEventListener('scroll', place, true)
+    return () => {
+      observer.disconnect()
+      document.removeEventListener('pointerdown', dismiss, true)
+      document.removeEventListener('keydown', key)
+      window.removeEventListener('resize', place)
+      window.removeEventListener('scroll', place, true)
+    }
+  }, [showing, detail])
+  const keep = (): void => {
+    if (closeTimer.current) clearTimeout(closeTimer.current)
+  }
+  const hide = (): void => {
+    if (openTimer.current) clearTimeout(openTimer.current)
+    keep()
+    closeTimer.current = setTimeout(() => setDetail(null), 150)
+  }
+  const show = (anchor: HTMLElement, key: string | null, delay = 0): void => {
+    keep()
+    if (openTimer.current) clearTimeout(openTimer.current)
+    const rect = anchor.getBoundingClientRect()
+    openTimer.current = setTimeout(() => setDetail({ anchor, key, rect }), delay)
+  }
+  if (!resolved.length) return null
+  const variables = {
+    '--reference-height': `${NODE_UI.reference.height}px`,
+    '--reference-gap': `${NODE_UI.reference.gap}px`,
+    '--reference-bottom-gap': `${NODE_UI.reference.bottomGap}px`
+  } as CSSProperties
   return (
-    <section className="connected-inputs" aria-label="已连接输入">
-      <div className="connected-input-list">
-        {visible.map((input) => {
-          const textual = isTextualInput(input)
-          return input.value?.kind === 'image' || input.value?.kind === 'video' ? (
-            <ReferenceThumb
-              key={`${input.targetPortId}:${input.sourceNodeId}:${input.sourcePortId}:${input.order}`}
-              input={input}
-              openPreview={openPreview}
-            />
-          ) : (
-            <div
-              title={
-                input.value?.kind === 'json'
-                  ? JSON.stringify(input.value.data, null, 2)
-                  : textual
-                    ? input.value && 'text' in input.value
-                      ? input.value.text
-                      : ''
-                    : input.sourceNodeName
-              }
-              className={`connected-input-item connected-input-${input.value?.kind ?? 'pending'}${textual ? ' connected-input-textual' : ''}`}
-              key={`${input.targetPortId}:${input.sourceNodeId}:${input.sourcePortId}:${input.order}`}
-            >
-              {/* 文本引用只留正文（用户 2026-10-05）：端口名和来源节点名（常同为「文本」）
-                  是重复标识，全部去掉；图片/JSON 等其他类型保留端口与来源说明。 */}
-              {!textual && <span className="connected-input-target">{input.targetPortName}</span>}
-              {/* 序号只留给顺序有语义的 JSON 多值端口；视频、音频引用的 1/2/3
-                  只是噪音，不显示（用户 2026-10-05）。图片引用走缩略图卡，不经过此分支。 */}
-              {input.value?.kind === 'json' && input.targetPortCardinality === 'many' && (
-                <span className="connected-input-order">{input.order}</span>
-              )}
-              {previewBody(input)}
-              {!textual && (
-                <span
-                  className="connected-input-source"
-                  title={`${input.sourceNodeName} · ${input.sourcePortName}`}
-                >
-                  {input.sourceNodeName}
-                </span>
-              )}
-            </div>
-          )
-        })}
-        {hiddenCount > 0 && (
+    <section className="connected-inputs" aria-label="已连接输入" style={variables}>
+      <div ref={row} className="connected-input-list">
+        {visible.map((input, index) => (
+          <button
+            type="button"
+            key={keyOf(input)}
+            className={
+              isMediaThumb(input)
+                ? 'reference-thumb'
+                : `connected-input-item connected-input-${input.value?.kind}`
+            }
+            style={{ width: layout.widths[index] }}
+            aria-label={`${input.targetPortName}：${summary(input)}，来源 ${input.sourceNodeName}`}
+            aria-haspopup="dialog"
+            aria-expanded={showing && detail?.key === keyOf(input)}
+            onPointerDown={(event) => event.stopPropagation()}
+            onMouseEnter={(event) => show(event.currentTarget, keyOf(input), 300)}
+            onMouseLeave={hide}
+            onFocus={(event) => show(event.currentTarget, keyOf(input))}
+            onBlur={hide}
+            onClick={(event) => {
+              event.stopPropagation()
+              const value = input.value
+              if (value?.kind === 'image' || value?.kind === 'video') {
+                setDetail(null)
+                if (openTimer.current) clearTimeout(openTimer.current)
+                openPreview({
+                  url: mediaUrl(value.mediaPath),
+                  kind: value.kind,
+                  title: input.sourceNodeName
+                })
+              } else show(event.currentTarget, keyOf(input))
+            }}
+          >
+            <ReferenceVisual key={`${keyOf(input)}:${summary(input)}`} input={input} />
+          </button>
+        ))}
+        {layout.hidden > 0 && (
           <button
             type="button"
             className="reference-more"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation()
-              setExpanded(true)
+            aria-label={`查看另外 ${layout.hidden} 项引用`}
+            aria-haspopup="dialog"
+            onPointerDown={(event) => event.stopPropagation()}
+            onMouseEnter={(event) => show(event.currentTarget, null, 300)}
+            onMouseLeave={hide}
+            onFocus={(event) => show(event.currentTarget, null)}
+            onBlur={hide}
+            onClick={(event) => {
+              event.stopPropagation()
+              show(event.currentTarget, null)
             }}
           >
-            +{hiddenCount}
+            +{layout.hidden}
           </button>
         )}
       </div>
+      {showing &&
+        createPortal(
+          <div
+            ref={panel}
+            className="reference-fullview"
+            role="dialog"
+            aria-label="引用详情"
+            style={position}
+            onMouseEnter={keep}
+            onMouseLeave={hide}
+            onFocusCapture={keep}
+            onBlurCapture={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node)) hide()
+            }}
+            onPointerDown={(event) => event.stopPropagation()}
+            onWheel={(event) => event.stopPropagation()}
+          >
+            {active ? (
+              <ReferenceDetail key={keyOf(active)} input={active} openPreview={openPreview} />
+            ) : (
+              <>
+                <strong className="reference-list-title">更多引用 · {layout.hidden}</strong>
+                {resolved.slice(visible.length).map((input) => (
+                  <button
+                    type="button"
+                    className="reference-overflow-item"
+                    key={keyOf(input)}
+                    onMouseEnter={(event) => show(event.currentTarget, keyOf(input), 300)}
+                    onClick={(event) => show(event.currentTarget, keyOf(input))}
+                  >
+                    <Icon
+                      name={
+                        isMediaThumb(input)
+                          ? input.value?.kind === 'video'
+                            ? 'video'
+                            : 'image'
+                          : iconOf(input)
+                      }
+                      size={16}
+                    />
+                    <span>
+                      {input.targetPortName} · {summary(input)}
+                    </span>
+                    <small>
+                      {input.sourceNodeName} · {input.sourcePortName}
+                    </small>
+                  </button>
+                ))}
+              </>
+            )}
+          </div>,
+          document.body
+        )}
     </section>
   )
 }

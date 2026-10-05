@@ -152,7 +152,7 @@ describe('v1.2 §16.2 媒体预览一律白底 + 可见边框', () => {
     expect(app).toMatch(/\.image-split-quick-grid\s*\{[^}]*background:\s*#ffffff;/)
     expect(app).toMatch(/\.image-split-preview\s*\{[^}]*background:\s*#ffffff;/)
     expect(app).toMatch(/\.reference-thumb\s*\{[^}]*background:\s*#ffffff;/)
-    expect(app).toMatch(/\.reference-fullview\s*\{[^}]*background:\s*#ffffff;/)
+    expect(app).toMatch(/\.reference-fullview\s*\{[^}]*background:\s*var\(--bg\);/)
   })
 })
 
@@ -211,9 +211,9 @@ describe('v1.2 §16.5 媒体后续动作按钮只放文字', () => {
 })
 
 describe('v1.2 §16.6 悬浮全貌统一在上方', () => {
-  it('浮层优先落在缩略图上方，且不再显示来源名称', () => {
-    expect(inputPreview).toContain('placeBelow')
-    expect(inputPreview).toContain('window.innerHeight - fullRect.top + 8')
+  it('浮层优先落在引用上方，完整来源信息只进入详情', () => {
+    expect(inputPreview).toContain('const above = anchor.top - panelHeight - 8')
+    expect(inputPreview).toContain('above >= 8 ? above : anchor.bottom + 8')
     expect(inputPreview).not.toContain('reference-fullview-caption')
     expect(app).not.toContain('.reference-fullview-caption')
   })

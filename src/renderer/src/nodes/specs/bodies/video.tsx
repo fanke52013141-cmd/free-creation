@@ -14,7 +14,7 @@ import {
 import { getNodeType, mediaUrl, type NodeBodyProps } from '../../registry'
 import { toast } from '../../../stores/toast'
 import { markUndoPoint } from '../../../canvas/history'
-import { createEdge, gatherUpstreamMediaList, readConnectedNodeInputs } from '../../../canvas/graph'
+import { createEdge, gatherUpstreamMediaList } from '../../../canvas/graph'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import type { NodeCardShape } from '../../../canvas/NodeCardShape'
 import { projectNodeOutputs } from '../../nodeValues'
@@ -47,12 +47,6 @@ const MODE_LABELS: Record<VideoGenerationMode, string> = {
   'first-frame': '首帧生视频',
   'first-last-frame': '首尾帧生视频',
   reference: '多参模式'
-}
-
-function imageRole(mode: VideoGenerationMode | undefined, index: number): string {
-  if (mode === 'first-frame') return '首帧'
-  if (mode === 'first-last-frame') return index === 0 ? '首帧' : '尾帧'
-  return `参考图 ${index + 1}`
 }
 
 function parseVideoGen(text: string): VideoGenData {
@@ -172,13 +166,6 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const images = gatherUpstreamMediaList(editor, shape.id, 'in-images', 'image')
   const motionReferences = gatherUpstreamMediaList(editor, shape.id, 'in-reference-video', 'video')
   const audioReferences = gatherUpstreamMediaList(editor, shape.id, 'in-reference-audio', 'audio')
-  const connectedImageNames = new Map(
-    readConnectedNodeInputs(editor, shape.id).flatMap((input) =>
-      input.targetPortId === 'in-images' && input.value?.kind === 'image'
-        ? [[input.value.mediaPath, input.sourceNodeName] as const]
-        : []
-    )
-  )
   const availableMentions = imageMentions(editor, shape.id)
   const opt = options.find((o) => o.key === data.modelKey)
   // 兼容网关代理属于供应商接入事实，统一收在能力层；UI 只读取结构化能力。
@@ -499,43 +486,6 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           <Icon name="info" size={13} />
           <span>
             当前模型经兼容网关提交；画幅、时长与清晰度会按网关兼容格式传递，以任务回执为准。
-          </span>
-        </div>
-      )}
-      {motionReferences.length > 0 && (
-        <div className="ref-image-bar">
-          <Icon name="director" size={15} />
-          <span className="ref-image-label">
-            已连接 {motionReferences.length} 段运动参考；模型是否接受以实际运行结果为准。
-          </span>
-        </div>
-      )}
-      {images.length > 0 && (
-        <div className="video-reference-strip" aria-label="已连接图片">
-          <div className="video-reference-chips reference-flow">
-            {images.map((image, index) => (
-              <span
-                className="video-reference-chip"
-                key={`${image.mediaPath}-${index}`}
-                title={connectedImageNames.get(image.mediaPath) ?? '图片'}
-              >
-                <img src={mediaUrl(image.mediaPath)} alt="" draggable={false} />
-                <span className="video-reference-copy">
-                  <span className="video-reference-name">
-                    {connectedImageNames.get(image.mediaPath) ?? '未命名图片'}
-                  </span>
-                  <span className="video-reference-role">{imageRole(mode, index)}</span>
-                </span>
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-      {audioReferences.length > 0 && (
-        <div className="ref-image-bar">
-          <Icon name="audio" size={15} />
-          <span className="ref-image-label">
-            已连接 {audioReferences.length} 段参考音频；模型是否采用以实际结果为准。
           </span>
         </div>
       )}

@@ -165,7 +165,7 @@ describe('统一画布视觉基础', () => {
     expect(NODE_UI.reference.imageWidth).toBe(48)
     expect(NODE_UI.reference.imageHeight).toBe(36)
     expect(legacy).toMatch(/\.reference-thumb\s*\{[^}]*width:\s*48px;/)
-    expect(legacy).toMatch(/\.reference-thumb\s*\{[^}]*height:\s*36px;/)
+    expect(legacy).toContain('height: var(--reference-height, 36px)')
     expect(legacy).toContain('.reference-fullview')
     expect(legacy).not.toContain('.connected-inputs-title')
     const preview = readFileSync(
@@ -173,10 +173,11 @@ describe('统一画布视觉基础', () => {
       'utf8'
     )
     expect(preview).toContain('createPortal')
-    expect(preview).toContain('setTimeout(showFullView, 300)')
-    expect(preview).toContain('openPreview({ url: mediaUrl(mediaPath), kind,')
-    // 引用超过约两行时折叠为 +N。
-    expect(preview).toContain('REFERENCE_VISIBLE_LIMIT')
+    expect(preview).toContain('show(event.currentTarget, keyOf(input), 300)')
+    expect(preview).toContain('openPreview({')
+    // 引用按实际宽度保持单排，超出折叠为 +N。
+    expect(NODE_UI.reference.maxRows).toBe(1)
+    expect(preview).toContain('referenceLayout')
     expect(preview).toContain('reference-more')
   })
 })

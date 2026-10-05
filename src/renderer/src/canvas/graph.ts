@@ -3,12 +3,7 @@
 import { createShapeId, type Editor, type TLShapeId } from 'tldraw'
 import type { CanvasEdge, CanvasNode, ExecStatus, GroupDecl, PortDecl } from '@shared/types'
 import { nodeSchemasCompatible } from '@shared/node-schemas'
-import {
-  getNodePorts,
-  getNodeType,
-  portCompatible,
-  type NodeTypeSpec
-} from '../nodes/registry'
+import { getNodePorts, getNodeType, portCompatible, type NodeTypeSpec } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
 import { collectNodePortConnections, createNodePortLayout } from './node-port-layout'
 import type { BatchConnectionMember, ConnectionFrom } from '../stores/connection'
@@ -51,9 +46,9 @@ export function portPairCompatible(
     out.type === 'camera'
       ? Boolean(
           out.schema &&
-            input.schema &&
-            out.schema.id === input.schema.id &&
-            out.schema.version === input.schema.version
+          input.schema &&
+          out.schema.id === input.schema.id &&
+          out.schema.version === input.schema.version
         )
       : out.type === 'json'
         ? nodeSchemasCompatible(out.schema, input.schema)
@@ -87,7 +82,9 @@ type ArrowColor =
   | 'light-violet'
 
 // 连线颜色统一；端口类型以节点端口图标/说明呈现。
-export function edgeColorFor(): ArrowColor { return 'grey' }
+export function edgeColorFor(): ArrowColor {
+  return 'grey'
+}
 
 export interface EdgeEndpoint {
   shapeId: TLShapeId
@@ -234,20 +231,22 @@ export function createEdge(
   // Include the edge being created before calculating positions, so the new type
   // immediately joins the shared equal-spacing layout on both nodes.
   const connections = collectNodePortConnections(editor)
-  const fromY = createNodePortLayout(
-    fromPorts.out,
-    connections.get(fromShape.id)?.out ?? new Set<string>(),
-    fromShape.props.h,
-    new Set([fromPort.id]),
-    dynamicPortIdsForShape(fromShape).out
-  ).offsets.get(fromPort.id) ?? fromShape.props.h / 2
-  const toY = createNodePortLayout(
-    toPorts.in,
-    connections.get(toShape.id)?.in ?? new Set<string>(),
-    toShape.props.h,
-    new Set([toPort.id]),
-    dynamicPortIdsForShape(toShape).in
-  ).offsets.get(toPort.id) ?? toShape.props.h / 2
+  const fromY =
+    createNodePortLayout(
+      fromPorts.out,
+      connections.get(fromShape.id)?.out ?? new Set<string>(),
+      fromShape.props.h,
+      new Set([fromPort.id]),
+      dynamicPortIdsForShape(fromShape).out
+    ).offsets.get(fromPort.id) ?? fromShape.props.h / 2
+  const toY =
+    createNodePortLayout(
+      toPorts.in,
+      connections.get(toShape.id)?.in ?? new Set<string>(),
+      toShape.props.h,
+      new Set([toPort.id]),
+      dynamicPortIdsForShape(toShape).in
+    ).offsets.get(toPort.id) ?? toShape.props.h / 2
 
   const startPage = pagePortPoint(editor, fromShape, 'out', fromY)
   const endPage = pagePortPoint(editor, toShape, 'in', toY)
@@ -545,12 +544,10 @@ export function tryConnectBatch(
     targetPort = compatible.reduce((best, port) => {
       const bestY =
         targetBounds.y +
-        (targetBounds.height * (layout.offsets.get(best.id) ?? target.props.h / 2)) /
-          target.props.h
+        (targetBounds.height * (layout.offsets.get(best.id) ?? target.props.h / 2)) / target.props.h
       const y =
         targetBounds.y +
-        (targetBounds.height * (layout.offsets.get(port.id) ?? target.props.h / 2)) /
-          target.props.h
+        (targetBounds.height * (layout.offsets.get(port.id) ?? target.props.h / 2)) / target.props.h
       return Math.abs(dropPagePt.y - y) < Math.abs(dropPagePt.y - bestY) ? port : best
     })
   }
@@ -918,7 +915,9 @@ export function deriveGraph(editor: Editor): {
   const edges: CanvasEdge[] = []
   const groups: GroupDecl[] = []
 
-  for (const shape of editor.getCurrentPageShapes().sort((a, b) => String(a.index ?? '').localeCompare(String(b.index ?? '')))) {
+  for (const shape of editor
+    .getCurrentPageShapes()
+    .sort((a, b) => String(a.index ?? '').localeCompare(String(b.index ?? '')))) {
     if (shape.type === 'node-card') {
       const s = shape as NodeCardShape
       const spec = getNodeType(s.props.nodeType)
@@ -992,6 +991,7 @@ export interface ConnectedNodeInput {
   sourcePortId: string
   sourcePortName: string
   sourcePortType: PortDecl['type']
+  sourcePortSchema?: PortDecl['schema']
   /** 同一目标输入端口内的真实边顺序，从 1 开始。 */
   order: number
   value: NodeValue | null
@@ -1040,11 +1040,16 @@ export function readConnectedNodeInputs(
       sourcePortId: sourcePort.id,
       sourcePortName: sourcePort.name,
       sourcePortType: sourcePort.type,
+      sourcePortSchema: sourcePort.schema,
       order,
       value: projectNodeOutputs(source)[sourcePort.id] ?? null
     })
   }
-  return connected
+  return connected.sort(
+    (left, right) =>
+      targetPorts.findIndex((port) => port.id === left.targetPortId) -
+        targetPorts.findIndex((port) => port.id === right.targetPortId) || left.order - right.order
+  )
 }
 
 /**
