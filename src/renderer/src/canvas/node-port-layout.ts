@@ -78,7 +78,20 @@ export function createNodePortLayout(
   const grouped = ports.filter((port) => !forcedPortIds.has(port.id))
 
   const groupTypes = [...new Set(grouped.map((port) => port.type))]
-  const activeIds = new Set([...connectedPortIds, ...candidatePortIds])
+  const candidateTypes = groupTypes.filter((type) =>
+    grouped.some((port) => port.type === type && candidatePortIds.has(port.id))
+  )
+  // 任意类型可匹配多个输入：沿用已有/默认连接点，不能因此展开全部类型。
+  const candidateType =
+    candidateTypes.find((type) =>
+      grouped.some((port) => port.type === type && connectedPortIds.has(port.id))
+    ) ?? candidateTypes[0]
+  const activeIds = new Set([
+    ...connectedPortIds,
+    ...grouped
+      .filter((port) => port.type === candidateType && candidatePortIds.has(port.id))
+      .map((port) => port.id)
+  ])
   const activeTypes = new Set(
     grouped.filter((port) => activeIds.has(port.id)).map((port) => port.type)
   )
