@@ -1,4 +1,4 @@
-import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
+import { NodeFooterActions, NodeIdentity } from '../../../canvas/NodePresentation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { stopEventPropagation, useEditor } from 'tldraw'
 import type { ImageCropAspectRatio, ImageCropConfig, NormalizedPoint } from '@shared/image-crop'
@@ -191,7 +191,6 @@ export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.
   const project = useAppStore((state) => state.currentProject)
   const providers = useGatewayStore((state) => state.providers)
   const source = gatherUpstreamMedia(editor, shape.id, 'in-image', 'image')
-  const noSourceLine = useSourceWiringNotice(editor, shape.id, 'in-image', '原图')
   const config = parseImageCropConfig(readNodeConfig(shape))
   const [previewAspect, setPreviewAspect] = useState(1)
   const previewContainerRef = useRef<HTMLDivElement>(null)
@@ -202,9 +201,9 @@ export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.
     const el = previewContainerRef.current
     if (!el) return
     const updateSize = (): void => {
-      const rect = el.getBoundingClientRect()
-      if (rect.width > 0 && rect.height > 0) {
-        setContainerSize({ w: rect.width, h: rect.height })
+      // CSS 布局尺寸不包含画布缩放，避免预览在缩放时被二次放大。
+      if (el.clientWidth > 0 && el.clientHeight > 0) {
+        setContainerSize({ w: el.clientWidth, h: el.clientHeight })
       }
     }
     updateSize()
@@ -239,22 +238,7 @@ export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.
   )
 
   if (!shape.props.mediaPath && !source) {
-    return (
-      <NodeIdentity>
-        <span className="node-wiring warn">{noSourceLine}</span>
-        <NodePrimaryButton
-          className="btn-ghost small"
-          onPointerDown={stopEventPropagation}
-          onClick={(event) => {
-            stopEventPropagation(event)
-            openSettings()
-          }}
-        >
-          配置裁剪
-          <Icon name="arrow" size={13} />
-        </NodePrimaryButton>
-      </NodeIdentity>
-    )
+    return <NodeIdentity></NodeIdentity>
   }
   if (!shape.props.mediaPath && source) {
     const pointForInlineEvent = (event: React.PointerEvent<HTMLDivElement>): NormalizedPoint => {
@@ -404,28 +388,30 @@ export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.
             </span>
           </div>
         </div>
-        <div className="crop-inline-actions">
-          <button
-            className="btn-ghost small"
-            onPointerDown={stopEventPropagation}
-            onClick={(event) => {
-              stopEventPropagation(event)
-              openSettings()
-            }}
-          >
-            <Icon name="edit" size={13} /> 精细框选
-          </button>
-          <button
-            className="btn-primary small"
-            onPointerDown={stopEventPropagation}
-            onClick={(event) => {
-              stopEventPropagation(event)
-              void runCrop()
-            }}
-          >
-            <Icon name="crop" size={13} /> 裁剪图片
-          </button>
-        </div>
+        <NodeFooterActions>
+          <div className="crop-inline-actions">
+            <button
+              className="btn-ghost small"
+              onPointerDown={stopEventPropagation}
+              onClick={(event) => {
+                stopEventPropagation(event)
+                openSettings()
+              }}
+            >
+              <Icon name="edit" size={13} /> 精细框选
+            </button>
+            <button
+              className="btn-primary small"
+              onPointerDown={stopEventPropagation}
+              onClick={(event) => {
+                stopEventPropagation(event)
+                void runCrop()
+              }}
+            >
+              <Icon name="crop" size={13} /> 裁剪图片
+            </button>
+          </div>
+        </NodeFooterActions>
       </div>
     )
   }

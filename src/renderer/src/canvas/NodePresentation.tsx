@@ -46,7 +46,7 @@ export function NodeDescription(): React.JSX.Element | null {
   )
 }
 
-/** 所有空态共用同一图标、名称和两行说明槽。业务操作可通过 children 接入。 */
+/** 空态共用图标和名称；必要提示与业务操作按需通过 children 接入。 */
 export function NodeIdentity({ children }: { children?: ReactNode }): React.JSX.Element | null {
   const context = useContext(Context)
   const register = context?.registerIdentity
@@ -61,7 +61,6 @@ export function NodeIdentity({ children }: { children?: ReactNode }): React.JSX.
         <Icon name={context.spec.icon} size={NODE_UI.identity.iconSize} strokeWidth={2} />
       </span>
       <strong title={context.spec.label}>{context.spec.label}</strong>
-      <NodeDescription />
       {children}
     </div>
   )
@@ -123,6 +122,29 @@ export function NodePrimaryButton({
   return context?.footer ? createPortal(button, context.footer) : button
 }
 
+/** 业务按状态声明零个、一个或多个动作；外壳不补造操作。 */
+export function NodeFooterActions({ children }: { children: ReactNode }): React.JSX.Element | null {
+  const context = useContext(Context)
+  const register = context?.registerAction
+  useEffect(() => {
+    register?.(1)
+    return () => register?.(-1)
+  }, [register])
+  if (!context) return <>{children}</>
+  return context.footer
+    ? createPortal(
+        <fieldset
+          className="node-standard-footer-group"
+          disabled={context.busy}
+          aria-label="节点操作"
+        >
+          {children}
+        </fieldset>,
+        context.footer
+      )
+    : null
+}
+
 export function NodeActionBar({
   footerRef,
   children
@@ -141,13 +163,11 @@ export function NodeCardShell({
   spec,
   busy,
   children,
-  fallbackAction,
   openDescription
 }: {
   spec: NodeTypeSpec
   busy: boolean
   children: ReactNode
-  fallbackAction: ReactNode
   openDescription: () => void
 }): React.JSX.Element {
   const [footer, setFooter] = useState<HTMLDivElement | null>(null)
@@ -188,12 +208,10 @@ export function NodeCardShell({
           } as React.CSSProperties
         }
         data-has-identity={identities > 0}
+        data-has-actions={actions > 0}
       >
-        <div className="node-standard-scroll">
-          {identities === 0 && <NodeDescription />}
-          {children}
-        </div>
-        <NodeActionBar footerRef={setFooter}>{actions === 0 && fallbackAction}</NodeActionBar>
+        <div className="node-standard-scroll">{children}</div>
+        <NodeActionBar footerRef={setFooter}>{null}</NodeActionBar>
       </div>
     </Context.Provider>
   )

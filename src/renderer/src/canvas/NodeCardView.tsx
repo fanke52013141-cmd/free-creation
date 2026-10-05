@@ -872,13 +872,29 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           : body.scrollHeight
         const references = body.querySelector<HTMLElement>('.connected-inputs')?.offsetHeight ?? 0
         const required =
-          NODE_UI.actionBar.height +
+          (scroll.parentElement?.querySelector<HTMLElement>('.node-standard-action-bar')
+            ?.offsetHeight || NODE_UI.actionBar.bottomInset) +
           NODE_UI.content.padding +
-          (identity ? 0 : NODE_UI.description.height) +
           natural -
           (identity ? Math.max(0, identity.offsetHeight - NODE_UI.identity.minHeight) : 0) +
           references
-        let next = resolveNodeHeight(required)
+        const fittedPreview = ['image', 'image-split', 'image-crop'].includes(latest.props.nodeType)
+        const prompt = body.querySelector<HTMLElement>('.gen-prompt')
+        const formMinimum =
+          latest.props.nodeType === 'image-gen' && prompt
+            ? required -
+              natural +
+              Array.from(prompt.parentElement?.children ?? []).reduce(
+                (height, child) =>
+                  child instanceof HTMLElement && child !== prompt
+                    ? height + child.offsetHeight + 8
+                    : height,
+                0
+              ) +
+              Math.max(72, Number.parseFloat(prompt.style.height) || 72) +
+              (references ? 8 : 0)
+            : required
+        let next = fittedPreview ? NODE_UI.height.default : resolveNodeHeight(formMinimum)
         if (next < current && (composing || scroll.contains(document.activeElement))) next = current
         if (next === current) return
         editor.run(
@@ -1072,24 +1088,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               busy={activeExecution}
               openDescription={() =>
                 useNodePanelStore.getState().open('contract', shape.id, 'overview')
-              }
-              fallbackAction={
-                <button
-                  type="button"
-                  className="node-standard-primary"
-                  disabled={activeExecution}
-                  title={activeExecution ? '节点正在运行或排队，请稍候' : undefined}
-                  onPointerDown={stopEventPropagation}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    useNodePanelStore.getState().open('contract', shape.id, 'settings')
-                  }}
-                >
-                  <span className="node-standard-primary-icon">
-                    <Icon name="settings" size={16} />
-                  </span>
-                  <span className="node-standard-primary-label">配置{spec.label}</span>
-                </button>
               }
             >
               <div ref={bodyRef} className="node-body">

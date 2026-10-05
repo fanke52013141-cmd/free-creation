@@ -89,9 +89,12 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
   useEffect(() => {
     const prompt = promptRef.current
     if (!prompt) return
+    const previousFlex = prompt.style.flex
+    prompt.style.flex = 'none'
     prompt.style.height = '72px'
     prompt.style.height = `${Math.max(72, Math.min(360, prompt.scrollHeight + 2))}px`
-  }, [draft, shape.props.w])
+    prompt.style.flex = previousFlex
+  }, [draft, shape.props.w, options.length])
   const engineBusy = ['queued', 'running', 'pending'].includes(shape.props.exec)
 
   useEffect(() => {

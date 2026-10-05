@@ -1244,16 +1244,17 @@ describe('模型目录：已有连接可直接管理模型', () => {
   })
 })
 
-describe('v1.0 §22 生图主操作按钮距卡片底边 8px 留白', () => {
+describe('v1.3 底部操作区持有 8px 留白', () => {
   it('token、变量注入与 CSS 消费三层齐全，中间容器不得再叠加内边距', () => {
     expect(nodeUiTokens).toContain('bottomInset: 8')
     expect(nodeCardView).toContain(
       "['--node-action-bottom-inset' as string]: `${NODE_UI.actionBar.bottomInset}px`"
     )
-    expect(imageGenAdaptive).toMatch(
-      /\.gen-panel\s*\{[^}]*padding-bottom:\s*var\(--node-action-bottom-inset, 8px\)/
+    expect(imageGenAdaptive).toMatch(/\.gen-panel\s*\{[^}]*padding:\s*0/)
+    expect(read('src/renderer/src/canvas/node-presentation.css')).toContain(
+      'padding: 8px var(--node-standard-padding) var(--node-standard-bottom-inset)'
     )
-    // 按钮自身不再外扩，从按钮到卡片底边只剩 gen-panel 的 8px 留白。
+    // 操作经 portal 进入独立底栏，表单不再重复留底边距。
     expect(app).toMatch(/\.gen-go\s*\{[^}]*margin-bottom:\s*0/)
     // 这两层容器一旦出现 padding-bottom，实际留白就不再是 8px，规格即被破坏。
     expect(foundation).not.toMatch(/\.node-body\s*\{[^}]*padding-bottom/)

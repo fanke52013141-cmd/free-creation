@@ -1,4 +1,4 @@
-/* NODE_UI_STANDARD §18: 公共组件拥有几何，Body 只拥有业务内容。 */
+/* NODE_UI_STANDARD §19: 公共组件拥有几何，Body 只拥有业务内容。 */
 .node-card > .node-standard-shell {
   display: flex;
   flex-direction: column;
@@ -203,4 +203,99 @@
 .node-standard-description:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
+}
+
+/* 空操作区不占位；说明只在节点明确需要时显示。 */
+.node-standard-shell[data-has-actions='false'] .node-standard-action-bar {
+  height: 0;
+  flex-basis: 0;
+  padding: 0;
+  overflow: hidden;
+}
+.node-standard-shell[data-has-actions='false'] .node-standard-scroll {
+  padding-bottom: 8px;
+}
+/* 预览/编辑正文分配剩余空间，媒体固有尺寸不能撑高节点。 */
+.node-card:is(.type-image, .type-image-split, .type-image-crop, .type-image-gen)
+  .node-standard-scroll,
+.node-card:is(.type-image, .type-image-split, .type-image-crop, .type-image-gen)
+  .node-standard-scroll
+  > .node-body,
+.node-card:is(.type-image, .type-image-split, .type-image-crop, .type-image-gen)
+  .node-standard-scroll
+  > .node-body
+  > .node-body-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+}
+.node-card:is(.type-image, .type-image-split, .type-image-crop) .node-standard-scroll {
+  overflow: hidden;
+}
+.node-card:is(.type-image, .type-image-crop)
+  .node-standard-shell
+  .node-body-content
+  > .node-media-wrap,
+.node-card.type-image-crop .node-standard-shell .node-body-content > .crop-inline-workbench,
+.node-card.type-image-split .node-standard-shell .node-body-content > .image-split-quick {
+  flex: 1 1 0;
+  min-height: 0;
+  height: 100%;
+  gap: 8px;
+  padding: 0;
+}
+.node-card.type-image .node-media {
+  overflow: hidden;
+}
+.node-card.type-image .node-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.node-card.type-image-crop .crop-inline-workbench,
+.node-card.type-image-split .image-split-quick {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.node-standard-action-bar .image-node-action-toolbar,
+.node-standard-action-bar .crop-inline-actions {
+  position: static;
+  transform: none;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.node-standard-action-bar .image-node-primary-actions {
+  display: flex;
+  flex: 1;
+  gap: 4px;
+  min-width: 0;
+}
+.node-standard-action-bar .image-node-action-button {
+  flex: 1;
+  min-width: 0;
+  padding: 0 3px;
+  height: 32px;
+}
+.node-standard-action-bar .crop-inline-actions button {
+  height: 32px;
+  flex: 1;
+}
+
+.node-standard-footer-group {
+  display: contents;
+}
+.node-standard-footer-group:disabled button {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.node-card:has(.node-standard-shell[data-has-actions='false']) > .node-execution-overlay {
+  bottom: 0;
 }

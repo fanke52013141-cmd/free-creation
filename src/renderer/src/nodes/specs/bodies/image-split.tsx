@@ -25,7 +25,6 @@ export function ImageSplitBody({ shape, openPreview }: NodeBodyProps): React.JSX
   const editor = useEditor()
   const guard = useClickGuard()
   const source = gatherUpstreamMedia(editor, shape.id, 'in-image', 'image')
-  const noSourceLine = useSourceWiringNotice(editor, shape.id, 'in-image', '原图')
   const config = parseImageSplitConfig(readNodeConfig(shape))
   const tiles = buildImageSplitTiles(config)
   const [previewAspect, setPreviewAspect] = useState<number | null>(null)
@@ -36,9 +35,9 @@ export function ImageSplitBody({ shape, openPreview }: NodeBodyProps): React.JSX
     const el = previewContainerRef.current
     if (!el) return
     const updateSize = (): void => {
-      const rect = el.getBoundingClientRect()
-      if (rect.width > 0 && rect.height > 0) {
-        setContainerSize({ w: rect.width, h: rect.height })
+      // CSS 布局尺寸不包含画布缩放，避免预览在缩放时被二次放大。
+      if (el.clientWidth > 0 && el.clientHeight > 0) {
+        setContainerSize({ w: el.clientWidth, h: el.clientHeight })
       }
     }
     updateSize()
@@ -203,7 +202,6 @@ export function ImageSplitBody({ shape, openPreview }: NodeBodyProps): React.JSX
         ) : (
           <span className="image-split-quick-empty">
             <Icon name="image" size={19} />
-            {noSourceLine}
           </span>
         )}
       </div>

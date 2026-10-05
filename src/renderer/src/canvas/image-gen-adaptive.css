@@ -1,23 +1,23 @@
-/* 内容决定表单高度，避免填满卡片的高度反馈把空输入框越撑越高。 */
-.node-card.type-image-gen.type-image-gen .node-body-content {
+/* 表单填充可用空间；输入内容需要的最小高度由 Body 量测。 */
+.node-card.type-image-gen.type-image-gen .node-standard-shell .node-body-content > .gen-panel {
+  display: flex;
+  flex-direction: column;
   flex: 1 1 auto;
-  min-height: 0;
-}
-
-.node-card.type-image-gen.type-image-gen .gen-panel {
   height: auto;
   min-height: 0;
-  flex: 0 0 auto;
-  padding-bottom: var(--node-action-bottom-inset, 8px);
+  padding: 0;
+  gap: 8px;
 }
-
 .node-card.type-image-gen.type-image-gen .gen-prompt {
-  flex: 0 0 auto;
-  height: 72px;
+  box-sizing: border-box;
+  width: 100%;
+  flex: 1 0 auto;
   min-height: 72px;
+  height: 72px;
+  margin: 0;
 }
-
-.node-card.type-image-gen.type-image-gen .gen-go {
-  margin-top: 0;
+.node-card.type-image-gen .connected-inputs {
   flex: 0 0 auto;
+  padding: 0;
+  margin: 0 0 8px;
 }

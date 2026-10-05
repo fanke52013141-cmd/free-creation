@@ -4573,22 +4573,15 @@ button {
 .node-card.type-image .node-media-next-actions.image-node-action-toolbar {
   box-sizing: border-box;
   display: flex;
-  width: calc(100% - 12px);
-  max-width: 100%;
+  width: 100%;
   min-width: 0;
   align-items: center;
-  justify-content: space-between;
-  gap: 5px;
-  margin: 6px auto 5px;
-  padding: 5px 6px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  border: 1px solid rgba(71, 85, 105, 0.72);
-  border-radius: 12px;
-  background: rgba(21, 25, 36, 0.92);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
-  backdrop-filter: blur(8px);
-  scrollbar-width: none;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
 }
 
 .node-card.type-image .image-node-primary-actions {
@@ -4662,11 +4655,7 @@ button {
   margin-left: 0;
 }
 
-.canvas-theme-light .node-card.type-image .node-media-next-actions.image-node-action-toolbar {
-  border-color: rgba(42, 55, 67, 0.2);
-  background: rgba(247, 243, 236, 0.94);
-  box-shadow: 0 8px 20px rgba(35, 45, 53, 0.14);
-}
+
 
 .canvas-theme-light .node-card.type-image .image-node-action-toolbar .image-node-action-button {
   border-color: rgba(42, 55, 67, 0.18);

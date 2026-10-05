@@ -93,6 +93,7 @@ const fs = require('node:fs')
     const expanded = await page.evaluate(async () => (await import('/src/stores/editor.ts')).useEditorStore.getState().editor.getShape('shape:gen-qa').props.h)
     assert.ok(expanded > layout.height)
     await prompt.fill('画一只猫')
+    await prompt.blur() // 编辑中不回缩；提交失焦后恢复自动高度。
     await page.waitForTimeout(400)
     const collapsed = await page.evaluate(async () => (await import('/src/stores/editor.ts')).useEditorStore.getState().editor.getShape('shape:gen-qa').props.h)
     assert.equal(collapsed, 260)

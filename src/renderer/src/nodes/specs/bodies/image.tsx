@@ -1,4 +1,8 @@
-import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
+import {
+  NodeFooterActions,
+  NodeIdentity,
+  NodePrimaryButton
+} from '../../../canvas/NodePresentation'
 // 图片资产节点 Body（路线图 R6：bodies.tsx 拆分）
 import { useEditor } from 'tldraw'
 import { stopEventPropagation } from 'tldraw'
@@ -81,25 +85,27 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
       >
         <img src={mediaUrl(shape.props.mediaPath)} alt={shape.props.title} draggable={false} />
       </div>
-      <ImageContinuationActions
-        editor={editor}
-        shape={shape}
-        variant="image-node"
-        extra={
-          <button
-            className="btn-ghost small image-node-action-button"
-            aria-label="替换图片"
-            type="button"
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onClick={(e) => {
-              e.stopPropagation()
-              void chooseAsset()
-            }}
-          >
-            替换
-          </button>
-        }
-      />
+      <NodeFooterActions>
+        <ImageContinuationActions
+          editor={editor}
+          shape={shape}
+          variant="image-node"
+          extra={
+            <button
+              className="btn-ghost small image-node-action-button"
+              aria-label="替换图片"
+              type="button"
+              onPointerDown={(e) => stopEventPropagation(e)}
+              onClick={(e) => {
+                e.stopPropagation()
+                void chooseAsset()
+              }}
+            >
+              替换
+            </button>
+          }
+        />
+      </NodeFooterActions>
     </div>
   )
 }

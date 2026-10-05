@@ -44,7 +44,7 @@ function contrast(first, second) {
     assert.equal(geometry.length, 28)
     const clipped=await page.locator('.node-standard-identity').evaluateAll(identities=>identities.flatMap(identity=>{
       const scroll=identity.closest('.node-standard-scroll'),card=identity.closest('.node-card')
-      const bottom=identity.querySelector('.node-standard-description').getBoundingClientRect().bottom
+      const bottom=identity.querySelector('strong').getBoundingClientRect().bottom
       const failures=[]
       for(let parent=identity.parentElement;parent&&parent!==scroll;parent=parent.parentElement) {
         if(['hidden','clip'].includes(getComputedStyle(parent).overflowY)&&bottom>parent.getBoundingClientRect().bottom+1) failures.push({type:card.dataset.nodeType,container:parent.className})
@@ -54,12 +54,13 @@ function contrast(first, second) {
     assert.deepEqual(clipped,[],'身份名称和说明不能被私有容器裁掉')
     for (const node of geometry) {
       assert.ok(node.height >= 260 && node.height <= 440, `${node.type} height ${node.height}`)
-      assert.equal(node.buttons.length, 1, `${node.type} main buttons`)
-      const button = node.buttons[0]
+      assert.ok(node.buttons.length <= 1, `${node.type} explicit primary actions`)
+      for (const button of node.buttons) {
       assert.equal(button.width, 200, `${node.type} width`)
       assert.equal(button.height, 32, `${node.type} height`)
       assert.ok(Math.abs(button.bottom - 8) < 1.1, `${node.type} inset ${button.bottom}`)
-      assert.equal(node.descriptions, 1, `${node.type} description`)
+      }
+      assert.equal(node.descriptions, 0, `${node.type} no automatic description`)
       if (node.icon) { assert.equal(node.icon.box, 72); assert.equal(node.icon.svg, 32) }
     }
     for (const [type,label] of [['website','配置网址'],['chat','打开对话'],['ai-process','配置处理']]) {
@@ -144,7 +145,7 @@ function contrast(first, second) {
       },{theme,zoom})
       await page.waitForTimeout(100)
       const buttons=await page.locator('.node-standard-action-bar > button').evaluateAll(buttons=>buttons.map(button=>{const b=button.getBoundingClientRect(),c=button.closest('.node-card').getBoundingClientRect();return {width:b.width,height:b.height,inset:c.bottom-b.bottom}}))
-      assert.equal(buttons.length,28)
+      assert.ok(buttons.length > 0 && buttons.length < 28)
       for (const b of buttons) {assert.ok(Math.abs(b.width-200*zoom)<1);assert.ok(Math.abs(b.height-32*zoom)<1);assert.ok(Math.abs(b.inset-8*zoom)<1,`${theme}/${zoom}: ${JSON.stringify(b)}`)}
       const descriptions=await page.locator('.node-standard-description').evaluateAll(els=>els.map(el=>({height:getComputedStyle(el).height,color:getComputedStyle(el).color,background:getComputedStyle(el.closest('.node-card')).backgroundColor})))
       for (const d of descriptions) {assert.equal(d.height,'36px');assert.ok(contrast(d.color,d.background)>=4.5,`${theme} description contrast ${contrast(d.color,d.background)}`)}
