@@ -9,11 +9,33 @@ import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "resources/video-conversion"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "resources/video-conversion/vendor"))
-from clay_renderer import TemporalDepth, normalize_depth, render_clay, scene_cut, surface_normals, ambient_occlusion
+from clay_renderer import TemporalDepth, normalize_depth, render_clay, scene_cut, surface_normals, ambient_occlusion, smooth_surface_normals
 from video_depth_anything.dinov2_layers.attention import Attention
 
 
 class ClayRendererTests(unittest.TestCase):
+    def test_normal_noise_reduced_without_flattening_broad_curvature(self):
+        y, x = np.mgrid[-1:1:100j, -1:1:120j]
+        depth = (0.3 + 0.1 * (x*x + y*y)).astype(np.float32)
+        original = surface_normals(depth, 1.5, 50)
+        rng = np.random.default_rng(42)
+        noisy = original + rng.normal(0, 0.12, original.shape).astype(np.float32)
+        noisy /= np.linalg.norm(noisy, axis=-1, keepdims=True)
+        filtered = smooth_surface_normals(noisy, depth)
+        region = np.s_[10:-10, 10:-10]
+        self.assertLess(float(np.mean((filtered[region] - original[region]) ** 2)),
+                        float(np.mean((noisy[region] - original[region]) ** 2)) * 0.4)
+        np.testing.assert_allclose(np.linalg.norm(filtered, axis=-1), 1, atol=1e-6)
+        self.assertGreater(abs(float(filtered[50, 25, 0] - filtered[50, 95, 0])), 0.3)
+
+    def test_normal_filter_never_blends_across_depth_break(self):
+        depth = np.full((60, 100), 0.2, np.float32)
+        depth[:, 50:] = 0.8
+        normals = np.zeros((60, 100, 3), np.float32)
+        normals[:, :50] = (0, 0, 1)
+        normals[:, 50:] = (0.6, 0, 0.8)
+        np.testing.assert_allclose(smooth_surface_normals(normals, depth), normals, atol=1e-6)
+
     def test_flat_surface_has_no_fake_texture_or_shadows(self):
         depth = np.full((80, 120), 0.5, np.float32)
         np.testing.assert_allclose(surface_normals(depth, 1.5, 50)[4:-4, 4:-4],

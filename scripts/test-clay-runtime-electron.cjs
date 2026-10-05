@@ -6,7 +6,7 @@ const os = require('node:os')
 const path = require('node:path')
 const assert = require('node:assert/strict')
 const root = path.resolve(__dirname, '..')
-const output = path.join(root, 'artifacts/clay-optimization-2026-10-06')
+const output = path.resolve(root, process.env.CLAY_RUNTIME_OUTPUT || 'artifacts/clay-optimization-2026-10-06')
 const data = path.join(process.env.LOCALAPPDATA || os.tmpdir(), `canvas-clay-cancel-${Date.now()}`)
 const installed = path.join(process.env.APPDATA, 'canvas-studio/data/video-conversion')
 

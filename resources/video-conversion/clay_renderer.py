@@ -55,10 +55,35 @@ def ambient_occlusion(depth: np.ndarray) -> np.ndarray:
     return obscured / np.maximum(count, 1)
 
 
+def smooth_surface_normals(normals: np.ndarray, depth: np.ndarray) -> np.ndarray:
+    """Suppress single-pixel normal spikes without blending separate surfaces.
+
+    Depth inference has staircase edges; differentiating them magnifies noise into
+    dark ink-like outlines. Filter orientations, not source RGB or material color.
+    """
+    height, width = depth.shape
+    accumulated = normals.copy()
+    weights = np.ones_like(depth)
+    for radius in (2, 5):
+        step = max(1, round(radius * max(height, width) / 512))
+        padded_depth = np.pad(depth, step, mode="edge")
+        padded_normals = np.pad(normals, ((step, step), (step, step), (0, 0)), mode="edge")
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            rows = slice(step + dy * step, step + dy * step + height)
+            columns = slice(step + dx * step, step + dx * step + width)
+            delta = padded_depth[rows, columns] - depth
+            weight = np.exp(-np.square(delta / 0.025)) * (np.abs(delta) < 0.06)
+            accumulated += padded_normals[rows, columns] * weight[..., None]
+            weights += weight
+    averaged = accumulated / weights[..., None]
+    return averaged / np.maximum(np.linalg.norm(averaged, axis=-1, keepdims=True), 1e-8)
+
+
 def render_clay(normalized: np.ndarray, config: dict[str, object]) -> np.ndarray:
     smooth = cv2.bilateralFilter(normalized, 7, 0.045, 2.5)
     normals = surface_normals(smooth, float(config.get("reliefStrength", 1.5)),
                               float(config.get("fieldOfView", 50)))
+    normals = smooth_surface_normals(normals, smooth)
     azimuth = np.deg2rad(float(config.get("lightAzimuth", 315)))
     elevation = np.deg2rad(float(config.get("lightElevation", 45)))
     # Azimuth is image-plane direction; elevation lifts the light toward the viewer.
