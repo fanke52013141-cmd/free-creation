@@ -321,19 +321,17 @@ describe('v1.2 §16.12 处理/结构数据节点：只留真会改变行为的�
     expect(body).not.toContain('输入变量名')
     expect(body).not.toContain('输出变量名')
     expect(body).not.toContain('aria-label="变量类型"')
-    expect(body).toContain('aria-label="固定值类型"')
+    expect(body).toContain('aria-label="数据类型"')
     // 执行器同步删除死字段，界面上不会再长出名字框
     expect(stripComments(processorExecutor)).not.toContain('variableName')
     expect(processorExecutor).not.toContain('inputName')
   })
 
-  it('处理节点写出真实端口 ID，箭头与提示随处理方式变化', () => {
-    expect(processor).toContain('<code className="variable-expr">in-value</code>')
-    expect(processor).toContain('<code className="variable-expr">out-value</code>')
-    // 「原样传递」不能永远是屏幕上的文案：必须由 operation 推导
-    expect(processor).toMatch(/data\.operation === 'pass'\s*\?\s*'原样传递'/)
-    expect(processor).toContain('MODE_HINTS[data.operation]')
-    expect(processor).toContain("tone: 'warn'")
+  it('处理节点按输入类型约束字段提取，并呈现真实输出', () => {
+    expect(processor).toContain('disabled={!supportsPick}')
+    expect(processor).toContain('projectNodeOutputs(shape)')
+    expect(processor).not.toContain('未连线')
+    expect(processor).toContain('输出结果')
   })
 
   it('结构数据节点：占位符连同可引用数量呈现，坏 JSON 不再显示成 null', () => {

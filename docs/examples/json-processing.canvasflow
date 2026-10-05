@@ -1,0 +1,968 @@
+{
+  "format": "canvas-studio-canvas-structure",
+  "version": 1,
+  "projectName": "JSON与数据处理用法示例",
+  "exportedAt": 1791207197860,
+  "graph": {
+    "nodes": [
+      {
+        "id": "shape:example-0",
+        "type": "json",
+        "contractVersion": 1,
+        "title": "1 保存原始JSON",
+        "x": 170,
+        "y": 160,
+        "w": 340,
+        "h": 260,
+        "ports": [
+          {
+            "id": "in-json",
+            "name": "数据",
+            "dir": "in",
+            "type": "json",
+            "description": "优先输入：一条保留原值；多条按连线顺序汇总为 JSON 数组。",
+            "required": false,
+            "cardinality": "many",
+            "schema": {
+              "id": "json.any",
+              "version": 1
+            }
+          },
+          {
+            "id": "in-text",
+            "name": "文本",
+            "dir": "in",
+            "type": "text",
+            "description": "仅在没有 JSON 数据输入时解析；两类同时连接时使用 JSON 数据。",
+            "required": false,
+            "cardinality": "one"
+          },
+          {
+            "id": "out-json",
+            "name": "数据",
+            "dir": "out",
+            "type": "json",
+            "description": "校验并格式化后的结构化值。",
+            "required": true,
+            "cardinality": "one",
+            "schema": {
+              "id": "json.any",
+              "version": 1
+            }
+          }
+        ],
+        "params": {},
+        "content": {
+          "kind": "text",
+          "text": "{\n  \"description\": \"人物走进书房，打开一卷古书\",\n  \"duration\": 5\n}"
+        },
+        "exec": {
+          "status": "idle"
+        },
+        "meta": {
+          "source": "input",
+          "createdAt": 1791207197860
+        }
+      },
+      {
+        "id": "shape:example-1",
+        "type": "processor",
+        "contractVersion": 1,
+        "title": "2 提取description",
+        "x": 530,
+        "y": 160,
+        "w": 340,
+        "h": 260,
+        "ports": [
+          {
+            "id": "in-value",
+            "name": "输入变量",
+            "dir": "in",
+            "type": "any",
+            "description": "一个文本、JSON 或媒体资产值；此端口不接收多条连线。",
+            "required": false,
+            "cardinality": "one"
+          },
+          {
+            "id": "out-value",
+            "name": "输出变量",
+            "dir": "out",
+            "type": "any",
+            "description": "透传时保留原值类型；取字段保留其文本或 JSON 类型；模板模式输出文本。",
+            "required": true,
+            "cardinality": "one"
+          }
+        ],
+        "params": {
+          "config": "{\"operation\":\"pick\",\"path\":\"description\",\"valueType\":\"any\"}"
+        },
+        "content": {
+          "kind": "empty"
+        },
+        "exec": {
+          "status": "success"
+        },
+        "meta": {
+          "source": "input",
+          "createdAt": 1791207197860
+        }
+      },
+      {
+        "id": "shape:example-2",
+        "type": "processor",
+        "contractVersion": 1,
+        "title": "3 套入提示词模板",
+        "x": 890,
+        "y": 160,
+        "w": 340,
+        "h": 260,
+        "ports": [
+          {
+            "id": "in-value",
+            "name": "输入变量",
+            "dir": "in",
+            "type": "any",
+            "description": "一个文本、JSON 或媒体资产值；此端口不接收多条连线。",
+            "required": false,
+            "cardinality": "one"
+          },
+          {
+            "id": "out-value",
+            "name": "输出变量",
+            "dir": "out",
+            "type": "any",
+            "description": "透传时保留原值类型；取字段保留其文本或 JSON 类型；模板模式输出文本。",
+            "required": true,
+            "cardinality": "one"
+          }
+        ],
+        "params": {
+          "config": "{\"operation\":\"template\",\"template\":\"电影镜头：{{value}}\",\"valueType\":\"any\"}"
+        },
+        "content": {
+          "kind": "empty"
+        },
+        "exec": {
+          "status": "success"
+        },
+        "meta": {
+          "source": "input",
+          "createdAt": 1791207197860
+        }
+      },
+      {
+        "id": "shape:example-3",
+        "type": "structured",
+        "contractVersion": 1,
+        "title": "4 组织为场景数据",
+        "x": 1250,
+        "y": 160,
+        "w": 340,
+        "h": 260,
+        "ports": [
+          {
+            "id": "in-context",
+            "name": "结构上下文",
+            "dir": "in",
+            "type": "json",
+            "description": "一个或多个已连接的结构化输入，可在正文中用 {{input[0].field}} 显式引用。",
+            "required": false,
+            "cardinality": "many",
+            "schema": {
+              "id": "json.any",
+              "version": 1
+            }
+          },
+          {
+            "id": "in-text",
+            "name": "文本上下文",
+            "dir": "in",
+            "type": "text",
+            "description": "可在正文中用 {{text}} 显式引用的上游文本。",
+            "required": false,
+            "cardinality": "many"
+          },
+          {
+            "id": "out-json",
+            "name": "结构数据",
+            "dir": "out",
+            "type": "json",
+            "description": "经所选 Schema 校验后的结构化数据。",
+            "required": true,
+            "cardinality": "one",
+            "schema": {
+              "id": "scene.definition",
+              "version": 1
+            }
+          }
+        ],
+        "params": {
+          "config": "{\"schema\":{\"id\":\"scene.definition\",\"version\":1}}"
+        },
+        "content": {
+          "kind": "text",
+          "text": "{\n  \"id\": \"scene01\",\n  \"name\": \"古书房\",\n  \"description\": \"{{text}}\"\n}"
+        },
+        "exec": {
+          "status": "success"
+        },
+        "meta": {
+          "source": "input",
+          "createdAt": 1791207197860
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "shape:nX0Vl1FzZenjTvMKgD_xg",
+        "from": {
+          "nodeId": "shape:example-0",
+          "portId": "out-json"
+        },
+        "to": {
+          "nodeId": "shape:example-1",
+          "portId": "in-value"
+        }
+      },
+      {
+        "id": "shape:wcKxDP3MycjlBUlzGkJLw",
+        "from": {
+          "nodeId": "shape:example-1",
+          "portId": "out-value"
+        },
+        "to": {
+          "nodeId": "shape:example-2",
+          "portId": "in-value"
+        }
+      },
+      {
+        "id": "shape:PAJmJtFL1GdwDoi4L0i4B",
+        "from": {
+          "nodeId": "shape:example-2",
+          "portId": "out-value"
+        },
+        "to": {
+          "nodeId": "shape:example-3",
+          "portId": "in-text"
+        }
+      }
+    ],
+    "groups": []
+  },
+  "tldrawSnapshot": {
+    "store": {
+      "binding:_CNEZA6nVb93sCuHuOPRy": {
+        "meta": {},
+        "id": "binding:_CNEZA6nVb93sCuHuOPRy",
+        "type": "arrow",
+        "fromId": "shape:nX0Vl1FzZenjTvMKgD_xg",
+        "toId": "shape:example-1",
+        "props": {
+          "isPrecise": true,
+          "isExact": false,
+          "normalizedAnchor": {
+            "x": 0.02,
+            "y": 0.5
+          },
+          "snap": "none",
+          "terminal": "end"
+        },
+        "typeName": "binding"
+      },
+      "binding:NFA6gXW9yz0Y-ZTJ8oxPw": {
+        "meta": {},
+        "id": "binding:NFA6gXW9yz0Y-ZTJ8oxPw",
+        "type": "arrow",
+        "fromId": "shape:wcKxDP3MycjlBUlzGkJLw",
+        "toId": "shape:example-2",
+        "props": {
+          "isPrecise": true,
+          "isExact": false,
+          "normalizedAnchor": {
+            "x": 0.02,
+            "y": 0.5
+          },
+          "snap": "none",
+          "terminal": "end"
+        },
+        "typeName": "binding"
+      },
+      "binding:-CuGD5a4GJJ7f5yvQnqfU": {
+        "meta": {},
+        "id": "binding:-CuGD5a4GJJ7f5yvQnqfU",
+        "type": "arrow",
+        "fromId": "shape:nX0Vl1FzZenjTvMKgD_xg",
+        "toId": "shape:example-0",
+        "props": {
+          "isPrecise": true,
+          "isExact": false,
+          "normalizedAnchor": {
+            "x": 0.98,
+            "y": 0.5
+          },
+          "snap": "none",
+          "terminal": "start"
+        },
+        "typeName": "binding"
+      },
+      "binding:_xV4JPHcRierHhUO2LdPx": {
+        "meta": {},
+        "id": "binding:_xV4JPHcRierHhUO2LdPx",
+        "type": "arrow",
+        "fromId": "shape:PAJmJtFL1GdwDoi4L0i4B",
+        "toId": "shape:example-3",
+        "props": {
+          "isPrecise": true,
+          "isExact": false,
+          "normalizedAnchor": {
+            "x": 0.02,
+            "y": 0.25
+          },
+          "snap": "none",
+          "terminal": "end"
+        },
+        "typeName": "binding"
+      },
+      "shape:nX0Vl1FzZenjTvMKgD_xg": {
+        "x": 510,
+        "y": 290,
+        "rotation": 0,
+        "isLocked": false,
+        "opacity": 1,
+        "meta": {
+          "fromPort": "out-json",
+          "toPort": "in-value"
+        },
+        "id": "shape:nX0Vl1FzZenjTvMKgD_xg",
+        "type": "arrow",
+        "props": {
+          "kind": "arc",
+          "elbowMidPoint": 0.5,
+          "dash": "dashed",
+          "size": "m",
+          "fill": "none",
+          "color": "grey",
+          "labelColor": "black",
+          "bend": 20,
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 20,
+            "y": 0
+          },
+          "arrowheadStart": "none",
+          "arrowheadEnd": "arrow",
+          "richText": {
+            "type": "doc",
+            "content": [
+              {
+                "type": "paragraph"
+              }
+            ]
+          },
+          "labelPosition": 0.5,
+          "font": "sans",
+          "scale": 1
+        },
+        "parentId": "page:page",
+        "index": "a2yWYGfl",
+        "typeName": "shape"
+      },
+      "shape:wcKxDP3MycjlBUlzGkJLw": {
+        "x": 870,
+        "y": 290,
+        "rotation": 0,
+        "isLocked": false,
+        "opacity": 1,
+        "meta": {
+          "fromPort": "out-value",
+          "toPort": "in-value"
+        },
+        "id": "shape:wcKxDP3MycjlBUlzGkJLw",
+        "type": "arrow",
+        "props": {
+          "kind": "arc",
+          "elbowMidPoint": 0.5,
+          "dash": "dashed",
+          "size": "m",
+          "fill": "none",
+          "color": "grey",
+          "labelColor": "black",
+          "bend": 20,
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 20,
+            "y": 0
+          },
+          "arrowheadStart": "none",
+          "arrowheadEnd": "arrow",
+          "richText": {
+            "type": "doc",
+            "content": [
+              {
+                "type": "paragraph"
+              }
+            ]
+          },
+          "labelPosition": 0.5,
+          "font": "sans",
+          "scale": 1
+        },
+        "parentId": "page:page",
+        "index": "a3te8zCO",
+        "typeName": "shape"
+      },
+      "binding:rQLZNLGhA9HNI8RxhV-8_": {
+        "meta": {},
+        "id": "binding:rQLZNLGhA9HNI8RxhV-8_",
+        "type": "arrow",
+        "fromId": "shape:wcKxDP3MycjlBUlzGkJLw",
+        "toId": "shape:example-1",
+        "props": {
+          "isPrecise": true,
+          "isExact": false,
+          "normalizedAnchor": {
+            "x": 0.98,
+            "y": 0.5
+          },
+          "snap": "none",
+          "terminal": "start"
+        },
+        "typeName": "binding"
+      },
+      "shape:example-0": {
+        "x": 170,
+        "y": 160,
+        "rotation": 0,
+        "isLocked": false,
+        "opacity": 1,
+        "meta": {},
+        "id": "shape:example-0",
+        "type": "node-card",
+        "props": {
+          "w": 340,
+          "h": 260,
+          "nodeType": "json",
+          "title": "1 保存原始JSON",
+          "config": "",
+          "text": "{\n  \"description\": \"人物走进书房，打开一卷古书\",\n  \"duration\": 5\n}",
+          "mediaId": "",
+          "mediaPath": "",
+          "mediaMime": "",
+          "exec": "idle"
+        },
+        "parentId": "page:page",
+        "index": "a1x60zCG",
+        "typeName": "shape"
+      },
+      "shape:example-1": {
+        "x": 530,
+        "y": 160,
+        "rotation": 0,
+        "isLocked": false,
+        "opacity": 1,
+        "meta": {
+          "nodeRun": {
+            "runId": "55900205-999f-4a57-b936-e8927219f3fb",
+            "status": "success",
+            "startedAt": 1791207197717,
+            "inputs": {
+              "in-value": [
+                {
+                  "nodeId": "shape:example-0",
+                  "portId": "out-json"
+                }
+              ]
+            },
+            "trace": [
+              {
+                "at": 1791207197719,
+                "phase": "input",
+                "level": "info",
+                "message": "开始收集并校验输入端口"
+              },
+              {
+                "at": 1791207197720,
+                "phase": "input",
+                "level": "info",
+                "message": "已收集 1 个输入端口"
+              },
+              {
+                "at": 1791207197739,
+                "phase": "execution",
+                "level": "info",
+                "message": "开始调用节点执行器"
+              },
+              {
+                "at": 1791207197757,
+                "phase": "output",
+                "level": "info",
+                "message": "输出契约校验通过"
+              }
+            ],
+            "traceId": "trace-cb3452a8-6dbf-43f1-a0b5-9089cc1b0c3b",
+            "nodeExecutionId": "nexec-8d617e15-2f67-46ac-ba1e-9374efd3f3b0",
+            "inputFingerprint": "v1:d10fcd1292f1ad46",
+            "estimateFeatures": {},
+            "estimateProviderKey": "default",
+            "estimateModelKey": "processor",
+            "finishedAt": 1791207197758,
+            "durationMs": 41,
+            "outputPorts": [
+              "out-value"
+            ]
+          },
+          "nodeResult": "{\"kind\":\"text\",\"text\":\"人物走进书房，打开一卷古书\"}",
+          "nodeRunHistory": [
+            {
+              "runId": "55900205-999f-4a57-b936-e8927219f3fb",
+              "status": "success",
+              "startedAt": 1791207197717,
+              "inputs": {
+                "in-value": [
+                  {
+                    "nodeId": "shape:example-0",
+                    "portId": "out-json"
+                  }
+                ]
+              },
+              "trace": [
+                {
+                  "at": 1791207197719,
+                  "phase": "input",
+                  "level": "info",
+                  "message": "开始收集并校验输入端口"
+                },
+                {
+                  "at": 1791207197720,
+                  "phase": "input",
+                  "level": "info",
+                  "message": "已收集 1 个输入端口"
+                },
+                {
+                  "at": 1791207197739,
+                  "phase": "execution",
+                  "level": "info",
+                  "message": "开始调用节点执行器"
+                },
+                {
+                  "at": 1791207197757,
+                  "phase": "output",
+                  "level": "info",
+                  "message": "输出契约校验通过"
+                }
+              ],
+              "traceId": "trace-cb3452a8-6dbf-43f1-a0b5-9089cc1b0c3b",
+              "nodeExecutionId": "nexec-8d617e15-2f67-46ac-ba1e-9374efd3f3b0",
+              "inputFingerprint": "v1:d10fcd1292f1ad46",
+              "estimateFeatures": {},
+              "estimateProviderKey": "default",
+              "estimateModelKey": "processor",
+              "finishedAt": 1791207197758,
+              "durationMs": 41,
+              "outputPorts": [
+                "out-value"
+              ]
+            }
+          ]
+        },
+        "id": "shape:example-1",
+        "type": "node-card",
+        "props": {
+          "w": 340,
+          "h": 260,
+          "nodeType": "processor",
+          "title": "2 提取description",
+          "config": "{\"operation\":\"pick\",\"path\":\"description\",\"valueType\":\"any\"}",
+          "text": "",
+          "mediaId": "",
+          "mediaPath": "",
+          "mediaMime": "",
+          "exec": "success"
+        },
+        "parentId": "page:page",
+        "index": "a26e4Uzt",
+        "typeName": "shape"
+      },
+      "shape:example-2": {
+        "x": 890,
+        "y": 160,
+        "rotation": 0,
+        "isLocked": false,
+        "opacity": 1,
+        "meta": {
+          "nodeRun": {
+            "runId": "4259709d-4c56-4641-96b5-ff37e5a2a8f3",
+            "status": "success",
+            "startedAt": 1791207197794,
+            "inputs": {
+              "in-value": [
+                {
+                  "nodeId": "shape:example-1",
+                  "portId": "out-value"
+                }
+              ]
+            },
+            "trace": [
+              {
+                "at": 1791207197795,
+                "phase": "input",
+                "level": "info",
+                "message": "开始收集并校验输入端口"
+              },
+              {
+                "at": 1791207197795,
+                "phase": "input",
+                "level": "info",
+                "message": "已收集 1 个输入端口"
+              },
+              {
+                "at": 1791207197813,
+                "phase": "execution",
+                "level": "info",
+                "message": "开始调用节点执行器"
+              },
+              {
+                "at": 1791207197821,
+                "phase": "output",
+                "level": "info",
+                "message": "输出契约校验通过"
+              }
+            ],
+            "traceId": "trace-97242bf2-5fae-4a70-a254-f2be38e70f1d",
+            "nodeExecutionId": "nexec-c4508e26-82ba-4aa9-a043-b68bb15630c5",
+            "inputFingerprint": "v1:bee1e3586b07e604",
+            "estimateFeatures": {},
+            "estimateProviderKey": "default",
+            "estimateModelKey": "processor",
+            "finishedAt": 1791207197822,
+            "durationMs": 28,
+            "outputPorts": [
+              "out-value"
+            ]
+          },
+          "nodeResult": "{\"kind\":\"text\",\"text\":\"电影镜头：人物走进书房，打开一卷古书\"}",
+          "nodeRunHistory": [
+            {
+              "runId": "4259709d-4c56-4641-96b5-ff37e5a2a8f3",
+              "status": "success",
+              "startedAt": 1791207197794,
+              "inputs": {
+                "in-value": [
+                  {
+                    "nodeId": "shape:example-1",
+                    "portId": "out-value"
+                  }
+                ]
+              },
+              "trace": [
+                {
+                  "at": 1791207197795,
+                  "phase": "input",
+                  "level": "info",
+                  "message": "开始收集并校验输入端口"
+                },
+                {
+                  "at": 1791207197795,
+                  "phase": "input",
+                  "level": "info",
+                  "message": "已收集 1 个输入端口"
+                },
+                {
+                  "at": 1791207197813,
+                  "phase": "execution",
+                  "level": "info",
+                  "message": "开始调用节点执行器"
+                },
+                {
+                  "at": 1791207197821,
+                  "phase": "output",
+                  "level": "info",
+                  "message": "输出契约校验通过"
+                }
+              ],
+              "traceId": "trace-97242bf2-5fae-4a70-a254-f2be38e70f1d",
+              "nodeExecutionId": "nexec-c4508e26-82ba-4aa9-a043-b68bb15630c5",
+              "inputFingerprint": "v1:bee1e3586b07e604",
+              "estimateFeatures": {},
+              "estimateProviderKey": "default",
+              "estimateModelKey": "processor",
+              "finishedAt": 1791207197822,
+              "durationMs": 28,
+              "outputPorts": [
+                "out-value"
+              ]
+            }
+          ]
+        },
+        "id": "shape:example-2",
+        "type": "node-card",
+        "props": {
+          "w": 340,
+          "h": 260,
+          "nodeType": "processor",
+          "title": "3 套入提示词模板",
+          "config": "{\"operation\":\"template\",\"template\":\"电影镜头：{{value}}\",\"valueType\":\"any\"}",
+          "text": "",
+          "mediaId": "",
+          "mediaPath": "",
+          "mediaMime": "",
+          "exec": "success"
+        },
+        "parentId": "page:page",
+        "index": "a3I9bAFV",
+        "typeName": "shape"
+      },
+      "shape:PAJmJtFL1GdwDoi4L0i4B": {
+        "x": 1230,
+        "y": 290,
+        "rotation": 0,
+        "isLocked": false,
+        "opacity": 1,
+        "meta": {
+          "fromPort": "out-value",
+          "toPort": "in-text"
+        },
+        "id": "shape:PAJmJtFL1GdwDoi4L0i4B",
+        "type": "arrow",
+        "props": {
+          "kind": "arc",
+          "elbowMidPoint": 0.5,
+          "dash": "dashed",
+          "size": "m",
+          "fill": "none",
+          "color": "grey",
+          "labelColor": "black",
+          "bend": 20,
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 20,
+            "y": -65
+          },
+          "arrowheadStart": "none",
+          "arrowheadEnd": "arrow",
+          "richText": {
+            "type": "doc",
+            "content": [
+              {
+                "type": "paragraph"
+              }
+            ]
+          },
+          "labelPosition": 0.5,
+          "font": "sans",
+          "scale": 1
+        },
+        "parentId": "page:page",
+        "index": "a56vtD6V",
+        "typeName": "shape"
+      },
+      "shape:example-3": {
+        "x": 1250,
+        "y": 160,
+        "rotation": 0,
+        "isLocked": false,
+        "opacity": 1,
+        "meta": {
+          "nodeRun": {
+            "runId": "50ba37af-9620-4cfd-8c71-5fd51d4e522c",
+            "status": "success",
+            "startedAt": 1791207197836,
+            "inputs": {
+              "in-text": [
+                {
+                  "nodeId": "shape:example-2",
+                  "portId": "out-value"
+                }
+              ]
+            },
+            "trace": [
+              {
+                "at": 1791207197837,
+                "phase": "input",
+                "level": "info",
+                "message": "开始收集并校验输入端口"
+              },
+              {
+                "at": 1791207197837,
+                "phase": "input",
+                "level": "info",
+                "message": "已收集 1 个输入端口"
+              },
+              {
+                "at": 1791207197845,
+                "phase": "execution",
+                "level": "info",
+                "message": "开始调用节点执行器"
+              },
+              {
+                "at": 1791207197853,
+                "phase": "output",
+                "level": "info",
+                "message": "输出契约校验通过"
+              }
+            ],
+            "traceId": "trace-3889c0e2-6fe5-4e6b-8c61-f3aee7189ce9",
+            "nodeExecutionId": "nexec-5fd8a2c4-10ff-4b35-9f98-c2c60de86813",
+            "inputFingerprint": "v1:b99bbe4ff06c86eb",
+            "estimateFeatures": {
+              "textUnits": 72
+            },
+            "estimateProviderKey": "default",
+            "estimateModelKey": "structured",
+            "finishedAt": 1791207197853,
+            "durationMs": 17,
+            "outputPorts": [
+              "out-json"
+            ]
+          },
+          "nodeResult": "{\"kind\":\"structured-result\",\"schema\":{\"id\":\"scene.definition\",\"version\":1},\"data\":{\"id\":\"scene01\",\"name\":\"古书房\",\"description\":\"电影镜头：人物走进书房，打开一卷古书\"}}",
+          "nodeRunHistory": [
+            {
+              "runId": "50ba37af-9620-4cfd-8c71-5fd51d4e522c",
+              "status": "success",
+              "startedAt": 1791207197836,
+              "inputs": {
+                "in-text": [
+                  {
+                    "nodeId": "shape:example-2",
+                    "portId": "out-value"
+                  }
+                ]
+              },
+              "trace": [
+                {
+                  "at": 1791207197837,
+                  "phase": "input",
+                  "level": "info",
+                  "message": "开始收集并校验输入端口"
+                },
+                {
+                  "at": 1791207197837,
+                  "phase": "input",
+                  "level": "info",
+                  "message": "已收集 1 个输入端口"
+                },
+                {
+                  "at": 1791207197845,
+                  "phase": "execution",
+                  "level": "info",
+                  "message": "开始调用节点执行器"
+                },
+                {
+                  "at": 1791207197853,
+                  "phase": "output",
+                  "level": "info",
+                  "message": "输出契约校验通过"
+                }
+              ],
+              "traceId": "trace-3889c0e2-6fe5-4e6b-8c61-f3aee7189ce9",
+              "nodeExecutionId": "nexec-5fd8a2c4-10ff-4b35-9f98-c2c60de86813",
+              "inputFingerprint": "v1:b99bbe4ff06c86eb",
+              "estimateFeatures": {
+                "textUnits": 72
+              },
+              "estimateProviderKey": "default",
+              "estimateModelKey": "structured",
+              "finishedAt": 1791207197853,
+              "durationMs": 17,
+              "outputPorts": [
+                "out-json"
+              ]
+            }
+          ]
+        },
+        "id": "shape:example-3",
+        "type": "node-card",
+        "props": {
+          "w": 340,
+          "h": 260,
+          "nodeType": "structured",
+          "title": "4 组织为场景数据",
+          "config": "{\"schema\":{\"id\":\"scene.definition\",\"version\":1}}",
+          "text": "{\n  \"id\": \"scene01\",\n  \"name\": \"古书房\",\n  \"description\": \"{{text}}\"\n}",
+          "mediaId": "",
+          "mediaPath": "",
+          "mediaMime": "",
+          "exec": "success"
+        },
+        "parentId": "page:page",
+        "index": "a4F05xJV",
+        "typeName": "shape"
+      },
+      "page:page": {
+        "meta": {},
+        "id": "page:page",
+        "name": "Page 1",
+        "index": "a1",
+        "typeName": "page"
+      },
+      "document:document": {
+        "gridSize": 10,
+        "name": "",
+        "meta": {},
+        "id": "document:document",
+        "typeName": "document"
+      },
+      "binding:iYdluuTxlqysXEZbUR6eM": {
+        "meta": {},
+        "id": "binding:iYdluuTxlqysXEZbUR6eM",
+        "type": "arrow",
+        "fromId": "shape:PAJmJtFL1GdwDoi4L0i4B",
+        "toId": "shape:example-2",
+        "props": {
+          "isPrecise": true,
+          "isExact": false,
+          "normalizedAnchor": {
+            "x": 0.98,
+            "y": 0.5
+          },
+          "snap": "none",
+          "terminal": "start"
+        },
+        "typeName": "binding"
+      }
+    },
+    "schema": {
+      "schemaVersion": 2,
+      "sequences": {
+        "com.tldraw.store": 5,
+        "com.tldraw.asset": 1,
+        "com.tldraw.camera": 1,
+        "com.tldraw.document": 2,
+        "com.tldraw.instance": 26,
+        "com.tldraw.instance_page_state": 5,
+        "com.tldraw.page": 1,
+        "com.tldraw.instance_presence": 6,
+        "com.tldraw.pointer": 1,
+        "com.tldraw.shape": 4,
+        "com.tldraw.asset.bookmark": 2,
+        "com.tldraw.asset.image": 6,
+        "com.tldraw.asset.video": 5,
+        "com.tldraw.shape.group": 0,
+        "com.tldraw.shape.text": 4,
+        "com.tldraw.shape.bookmark": 2,
+        "com.tldraw.shape.draw": 4,
+        "com.tldraw.shape.geo": 11,
+        "com.tldraw.shape.note": 10,
+        "com.tldraw.shape.line": 5,
+        "com.tldraw.shape.frame": 1,
+        "com.tldraw.shape.highlight": 3,
+        "com.tldraw.shape.embed": 4,
+        "com.tldraw.shape.image": 5,
+        "com.tldraw.shape.video": 4,
+        "com.tldraw.shape.node-card": 1,
+        "com.tldraw.shape.arrow": 8,
+        "com.tldraw.binding.arrow": 1
+      }
+    }
+  }
+}

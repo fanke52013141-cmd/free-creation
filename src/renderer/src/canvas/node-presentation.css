@@ -481,3 +481,9 @@
   place-items: center;
   pointer-events: none;
 }
+
+.node-standard-scroll .connected-input-item { pointer-events: auto; white-space: nowrap; }
+.node-standard-scroll .sound-adjust-inline { display: flex; flex-direction: column; padding: 0; gap: 8px; }
+.sound-adjust-inline .settings-field { display: flex; flex-direction: column; gap: 6px; margin: 0; }
+
+.node-card .voice-id-value { display:block; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }

@@ -299,6 +299,27 @@ describe('structuredExecutor · 字段映射与 Schema 校验', () => {
 })
 
 describe('processorExecutor · 固定值兜底与透传', () => {
+  it('字段提取支持数组下标，空路径明确失败', () => {
+    const picked = makeCtx({
+      nodeType: 'processor',
+      config: JSON.stringify({
+        operation: 'pick',
+        valueType: 'array',
+        fallback: '[{"description":"书房"}]',
+        path: '0.description'
+      })
+    })
+    expect(processorExecutor(picked.ctx).status).toBe('done')
+    expect(JSON.parse(picked.result.value as string)).toEqual({ kind: 'text', text: '书房' })
+    const missing = makeCtx({
+      nodeType: 'processor',
+      config: JSON.stringify({ operation: 'pick', fallback: '{"description":"书房"}', path: '' })
+    })
+    expect(processorExecutor(missing.ctx)).toMatchObject({
+      status: 'failed',
+      reason: '请填写字段路径'
+    })
+  })
   it('有上游值时原样透传到 meta.nodeResult', () => {
     const inputs = new Map([
       [
@@ -313,7 +334,11 @@ describe('processorExecutor · 固定值兜底与透传', () => {
         ]
       ]
     ])
-    const { ctx, result } = makeCtx({ nodeType: 'processor', inputs })
+    const { ctx, result } = makeCtx({
+      nodeType: 'processor',
+      inputs,
+      config: JSON.stringify({ operation: 'pass' })
+    })
     expect(processorExecutor(ctx).status).toBe('done')
     expect(result.value).not.toBeNull()
     const parsed = JSON.parse(result.value as string)
@@ -365,7 +390,7 @@ describe('processorExecutor · 固定值兜底与透传', () => {
   })
 
   it('无上游但有 string 类型固定值兜底', () => {
-    const config = JSON.stringify({ valueType: 'string', fallback: '默认值' })
+    const config = JSON.stringify({ operation: 'pass', valueType: 'string', fallback: '默认值' })
     const { ctx, result } = makeCtx({ nodeType: 'processor', config })
     expect(processorExecutor(ctx).status).toBe('done')
     expect(JSON.parse(result.value as string).kind).toBe('text')
@@ -373,7 +398,7 @@ describe('processorExecutor · 固定值兜底与透传', () => {
   })
 
   it('无上游但有 JSON 固定值兜底（按 valueType 推断）', () => {
-    const config = JSON.stringify({ valueType: 'object', fallback: '{"a":1}' })
+    const config = JSON.stringify({ operation: 'pass', valueType: 'object', fallback: '{"a":1}' })
     const { ctx, result } = makeCtx({ nodeType: 'processor', config })
     expect(processorExecutor(ctx).status).toBe('done')
     expect(JSON.parse(result.value as string).kind).toBe('json')

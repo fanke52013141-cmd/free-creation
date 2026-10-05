@@ -765,14 +765,14 @@ export function registerBaseNodeTypes(): void {
         })
       ],
       out: [
-        output('out-audio', '试听音频', 'audio', '服务端返回的 hex 试听音频解码落盘后的资产。'),
         output(
           'out-json',
           '音色档案',
           'json',
           '设计出的 voice_id 与来源，可直接连接语音合成节点的音色档案输入。',
           { schema: VOICE_PROFILE }
-        )
+        ),
+        output('out-audio', '试听音频', 'audio', '服务端返回的 hex 试听音频解码落盘后的资产。')
       ]
     },
     projectOutputs: projectVoiceDesignOutputs,

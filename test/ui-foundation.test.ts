@@ -174,7 +174,7 @@ describe('统一画布视觉基础', () => {
     )
     expect(preview).toContain('createPortal')
     expect(preview).toContain('setTimeout(showFullView, 300)')
-    expect(preview).toContain("openPreview({ url: mediaUrl(mediaPath), kind: 'image'")
+    expect(preview).toContain('openPreview({ url: mediaUrl(mediaPath), kind,')
     // 引用超过约两行时折叠为 +N。
     expect(preview).toContain('REFERENCE_VISIBLE_LIMIT')
     expect(preview).toContain('reference-more')

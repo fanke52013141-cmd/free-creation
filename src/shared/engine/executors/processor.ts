@@ -35,7 +35,7 @@ function valueAtPath(value: unknown, path: string): unknown {
     .map((part) => part.trim())
     .filter(Boolean)
     .reduce<unknown>((current, key) => {
-      if (!current || typeof current !== 'object' || Array.isArray(current)) return undefined
+      if (!current || typeof current !== 'object') return undefined
       return (current as Record<string, unknown>)[key]
     }, value)
 }
@@ -63,6 +63,7 @@ export const processorExecutor = (ctx: NodeExecutionContext): NodeExecutionResul
   if (!output) return { status: 'skipped', reason: '处理节点没有输入变量或固定值' }
   if (data.operation === 'pick') {
     if (output.kind !== 'json') return { status: 'failed', reason: '提取字段模式只支持 JSON 输入' }
+    if (!data.path.trim()) return { status: 'failed', reason: '请填写字段路径' }
     const picked = valueAtPath(output.data, data.path)
     if (picked === undefined) return { status: 'failed', reason: `字段路径不存在：${data.path}` }
     output =

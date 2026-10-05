@@ -267,7 +267,9 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
             <span>音色 ID</span>
           </div>
           <div className="voice-id-row">
-            <code className="voice-id-value">{voiceId}</code>
+            <code className="voice-id-value" title={voiceId}>
+              {voiceId}
+            </code>
             <button
               className="btn-ghost small"
               title="复制音色 ID"

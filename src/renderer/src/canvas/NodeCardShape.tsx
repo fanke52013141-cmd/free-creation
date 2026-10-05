@@ -90,6 +90,23 @@ export class NodeCardUtil extends BaseBoxShapeUtil<NodeCardShape> {
     return <NodeCardView shape={shape} />
   }
 
+  override onBeforeCreate(shape: NodeCardShape): NodeCardShape {
+    if (shape.props.nodeType !== 'processor' || shape.props.config.trim()) return shape
+    return {
+      ...shape,
+      props: {
+        ...shape.props,
+        config: JSON.stringify({
+          operation: 'pick',
+          valueType: 'any',
+          fallback: '',
+          path: '',
+          template: ''
+        })
+      }
+    }
+  }
+
   /** 禁止旋转：调整节点只需缩放，旋转没有实际意义。 */
   override hideRotateHandle(): boolean {
     return true

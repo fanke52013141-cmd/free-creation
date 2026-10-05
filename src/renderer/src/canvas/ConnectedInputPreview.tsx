@@ -10,6 +10,13 @@ import type { NodeCardShape } from './NodeCardShape'
 import { readConnectedNodeInputs, type ConnectedNodeInput } from './graph'
 
 function compactJson(value: unknown): string {
+  if (
+    value &&
+    typeof value === 'object' &&
+    'voice_id' in value &&
+    typeof value.voice_id === 'string'
+  )
+    return value.voice_id
   try {
     const serialized = JSON.stringify(value)
     return serialized.length > 68 ? `${serialized.slice(0, 67)}…` : serialized
@@ -65,8 +72,9 @@ function ReferenceThumb({
     }
   }, [])
 
-  if (input.value?.kind !== 'image') return <></>
+  if (input.value?.kind !== 'image' && input.value?.kind !== 'video') return <></>
   const mediaPath = input.value.mediaPath
+  const kind = input.value.kind
 
   const showFullView = (): void => {
     const el = thumbRef.current
@@ -102,13 +110,13 @@ function ReferenceThumb({
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation()
-          openPreview({ url: mediaUrl(mediaPath), kind: 'image', title: input.sourceNodeName })
+          openPreview({ url: mediaUrl(mediaPath), kind, title: input.sourceNodeName })
         }}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault()
             e.stopPropagation()
-            openPreview({ url: mediaUrl(mediaPath), kind: 'image', title: input.sourceNodeName })
+            openPreview({ url: mediaUrl(mediaPath), kind, title: input.sourceNodeName })
           }
         }}
         onMouseEnter={() => {
@@ -117,7 +125,11 @@ function ReferenceThumb({
         }}
         onMouseLeave={hideFullView}
       >
-        <img src={mediaUrl(mediaPath)} alt="" draggable={false} />
+        {kind === 'video' ? (
+          <video src={mediaUrl(mediaPath)} preload="auto" muted playsInline />
+        ) : (
+          <img src={mediaUrl(mediaPath)} alt="" draggable={false} />
+        )}
         {input.targetPortCardinality === 'many' && (
           <span className="connected-input-order">{input.order}</span>
         )}
@@ -125,7 +137,11 @@ function ReferenceThumb({
       {fullRect &&
         createPortal(
           <div className="reference-fullview" style={overlayStyle}>
-            <img src={mediaUrl(mediaPath)} alt="" draggable={false} />
+            {kind === 'video' ? (
+              <video src={mediaUrl(mediaPath)} preload="auto" muted playsInline />
+            ) : (
+              <img src={mediaUrl(mediaPath)} alt="" draggable={false} />
+            )}
           </div>,
           document.body
         )}
@@ -171,7 +187,7 @@ export function ConnectedInputPreview({
       <div className="connected-input-list">
         {visible.map((input) => {
           const textual = isTextualInput(input)
-          return input.value?.kind === 'image' ? (
+          return input.value?.kind === 'image' || input.value?.kind === 'video' ? (
             <ReferenceThumb
               key={`${input.targetPortId}:${input.sourceNodeId}:${input.sourcePortId}:${input.order}`}
               input={input}
@@ -179,14 +195,21 @@ export function ConnectedInputPreview({
             />
           ) : (
             <div
+              title={
+                input.value?.kind === 'json'
+                  ? JSON.stringify(input.value.data, null, 2)
+                  : textual
+                    ? input.value && 'text' in input.value
+                      ? input.value.text
+                      : ''
+                    : input.sourceNodeName
+              }
               className={`connected-input-item connected-input-${input.value?.kind ?? 'pending'}${textual ? ' connected-input-textual' : ''}`}
               key={`${input.targetPortId}:${input.sourceNodeId}:${input.sourcePortId}:${input.order}`}
             >
               {/* 文本引用只留正文（用户 2026-10-05）：端口名和来源节点名（常同为「文本」）
                   是重复标识，全部去掉；图片/JSON 等其他类型保留端口与来源说明。 */}
-              {!textual && (
-                <span className="connected-input-target">{input.targetPortName}</span>
-              )}
+              {!textual && <span className="connected-input-target">{input.targetPortName}</span>}
               {/* 序号只留给顺序有语义的 JSON 多值端口；视频、音频引用的 1/2/3
                   只是噪音，不显示（用户 2026-10-05）。图片引用走缩略图卡，不经过此分支。 */}
               {input.value?.kind === 'json' && input.targetPortCardinality === 'many' && (

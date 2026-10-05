@@ -989,6 +989,11 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         data-node-id={shape.id}
         style={{ width: shape.props.w, height: shape.props.h }}
         onPointerDown={handleCardPointerDown}
+        onPointerDownCapture={(event) => {
+          // 子组件可拦截冒泡以编辑输入，但首次单击仍必须选中所属节点。
+          if (event.button !== 0 || event.shiftKey || event.ctrlKey || event.metaKey) return
+          if (!editor.getSelectedShapeIds().includes(shape.id)) editor.select(shape.id)
+        }}
       >
         <div className="node-header">
           {/* 标题行布局：左侧依次为 序号 → 图标 → 名称 → 可选字数 → 查看输入输出说明；
