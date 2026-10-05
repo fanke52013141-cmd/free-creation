@@ -13,7 +13,6 @@ import { Tooltip } from '../components/Tooltip'
 import { CanvasTopHistory } from '../canvas/CanvasHistoryDock'
 import { CanvasTransferMenu } from '../canvas/CanvasTransferMenu'
 import { ProjectCreateDialog } from '../components/ProjectCreateDialog'
-import { SaveStatusBadge } from '../components/SaveStatusBadge'
 import { toast } from '../stores/toast'
 
 interface CanvasPageProps {
@@ -278,11 +277,8 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
           )}
         </div>
 
-        {/* 右侧：保存状态 + 进度 + 搜索 + 运行 + 个人中心 */}
+        {/* 右侧：进度 + 搜索 + 运行 + 个人中心 */}
         <span className="topbar-spacer" />
-
-        {/* T04（F01）：保存状态常驻徽标（五态，失败持续显示） */}
-        <SaveStatusBadge />
 
         {/* 运行/停止工作流 + 进度（执行引擎核心控件） */}
         <div className="engine-controls">

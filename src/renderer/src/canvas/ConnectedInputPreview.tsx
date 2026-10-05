@@ -169,8 +169,9 @@ export function ConnectedInputPreview({
   return (
     <section className="connected-inputs" aria-label="已连接输入">
       <div className="connected-input-list">
-        {visible.map((input) =>
-          input.value?.kind === 'image' ? (
+        {visible.map((input) => {
+          const textual = isTextualInput(input)
+          return input.value?.kind === 'image' ? (
             <ReferenceThumb
               key={`${input.targetPortId}:${input.sourceNodeId}:${input.sourcePortId}:${input.order}`}
               input={input}
@@ -178,23 +179,31 @@ export function ConnectedInputPreview({
             />
           ) : (
             <div
-              className={`connected-input-item connected-input-${input.value?.kind ?? 'pending'}${isTextualInput(input) ? ' connected-input-textual' : ''}`}
+              className={`connected-input-item connected-input-${input.value?.kind ?? 'pending'}${textual ? ' connected-input-textual' : ''}`}
               key={`${input.targetPortId}:${input.sourceNodeId}:${input.sourcePortId}:${input.order}`}
             >
-              <span className="connected-input-target">{input.targetPortName}</span>
-              {input.targetPortCardinality === 'many' && (
+              {/* 文本引用只留正文（用户 2026-10-05）：端口名和来源节点名（常同为「文本」）
+                  是重复标识，全部去掉；图片/JSON 等其他类型保留端口与来源说明。 */}
+              {!textual && (
+                <span className="connected-input-target">{input.targetPortName}</span>
+              )}
+              {/* 序号只留给顺序有语义的 JSON 多值端口；视频、音频引用的 1/2/3
+                  只是噪音，不显示（用户 2026-10-05）。图片引用走缩略图卡，不经过此分支。 */}
+              {input.value?.kind === 'json' && input.targetPortCardinality === 'many' && (
                 <span className="connected-input-order">{input.order}</span>
               )}
               {previewBody(input)}
-              <span
-                className="connected-input-source"
-                title={`${input.sourceNodeName} · ${input.sourcePortName}`}
-              >
-                {input.sourceNodeName}
-              </span>
+              {!textual && (
+                <span
+                  className="connected-input-source"
+                  title={`${input.sourceNodeName} · ${input.sourcePortName}`}
+                >
+                  {input.sourceNodeName}
+                </span>
+              )}
             </div>
           )
-        )}
+        })}
         {hiddenCount > 0 && (
           <button
             type="button"

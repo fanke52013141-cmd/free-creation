@@ -2,6 +2,7 @@
 import { describe, expect, it, beforeAll } from 'vitest'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { readFileSync } from 'node:fs'
 import { registerAllNodeTypes } from './helpers/registerNodes'
 import { getNodeType } from '@renderer/nodes/registry'
 import { projectNodeOutputs } from '@renderer/nodes/nodeValues'
@@ -76,11 +77,15 @@ describe('网址节点配置和执行', () => {
     expect(readWebsiteLink('{')).toBeNull()
   })
 
-  it('卡片展示网址名称和链接，并将点击指向系统浏览器可处理的 HTTP(S) 地址', () => {
+  it('卡片展示网址名称和链接；单击选中、双击打开（不再渲染可点击跳转的 <a>）', () => {
     const shape = websiteShape(JSON.stringify({ name: '主页', url: 'example.com' }))
     const html = renderToStaticMarkup(createElement(WebsiteBody, { shape, openPreview: () => {} }))
     expect(html).toContain('主页')
-    expect(html).toContain('href="https://example.com/"')
-    expect(html).toContain('target="_blank"')
+    // 交互统一：卡片体不拦截 pointerdown（单击=选中），打开动作只在双击触发。
+    expect(html).toContain('双击打开')
+    expect(html).not.toContain('href=')
+    // renderToStaticMarkup 不序列化事件处理器；对源码断言双击入口存在。
+    const source = readFileSync('src/renderer/src/nodes/specs/bodies/website.tsx', 'utf8')
+    expect(source).toContain('onDoubleClick')
   })
 })

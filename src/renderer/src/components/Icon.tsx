@@ -42,6 +42,8 @@ export type IconName =
   | 'distribute-horizontal'
   | 'distribute-vertical'
   | 'group'
+  | 'ungroup'
+  | 'refresh'
   | 'undo'
   | 'redo'
   | 'close'
@@ -276,6 +278,12 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M12 8v4l3 2" />
     </>
   ),
+  refresh: (
+    <>
+      <path d="M20 12a8 8 0 1 1-2.34-5.66" />
+      <path d="M20 4v4h-4" />
+    </>
+  ),
   'align-left': (
     <>
       <path d="M4 6v12M8 7h10M8 12h7M8 17h9" />
@@ -313,6 +321,13 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <rect x="3.5" y="3.5" width="7.5" height="7.5" rx="1.5" />
       <rect x="13" y="13" width="7.5" height="7.5" rx="1.5" />
       <path d="M7.25 11v1.2A2.8 2.8 0 0 0 10 15h1M16.75 13v-1.2A2.8 2.8 0 0 0 14 9h-1" />
+    </>
+  ),
+  ungroup: (
+    <>
+      <rect x="3.5" y="3.5" width="7.5" height="7.5" rx="1.5" />
+      <rect x="13" y="13" width="7.5" height="7.5" rx="1.5" />
+      <path d="M4 20 20 4" />
     </>
   ),
   undo: (

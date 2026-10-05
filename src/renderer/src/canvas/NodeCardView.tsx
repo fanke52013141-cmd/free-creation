@@ -18,10 +18,7 @@ import { Icon } from '../components/Icon'
 import { NODE_UI, resolveNodeHeight } from './node-ui-tokens'
 import { nodeExecLabel } from './node-status'
 import { currentNodeFingerprint, successfulInputFingerprint } from '../engine/resultFreshness'
-import { projectNodeOutputs, readPinnedOutputs } from '../nodes/nodeValues'
-import { useConfirmStore } from '../stores/confirm'
-import { DiagnosticsProducer, newTraceId } from '@shared/observability'
-import { emitDiagnosticsEvent } from '../engine/diagnosticsReporter'
+import { projectNodeOutputs } from '../nodes/nodeValues'
 import { deriveNodeReadiness } from './node-readiness'
 import { runNodeManually } from '../engine/executor'
 import { useAppStore } from '../stores/app'
@@ -57,10 +54,6 @@ const EXEC_COLORS: Record<string, string> = {
   cancelled: '#6b7280',
   cached: '#60a5fa'
 }
-const outputDiagnostics = new DiagnosticsProducer({
-  process: 'renderer',
-  producerId: 'output-selection'
-})
 
 function portHint(port: PortDecl): string {
   return `${port.name} · ${PORT_TYPE_LABELS[port.type]}`
@@ -265,10 +258,10 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     stopEventPropagation(e)
   }
 
-  // 图标只做一件事：说明这个节点的契约。导演台有自己的全屏工作区，但它从卡片按钮
-  // 进入；若 info 图标也跳去工作区，这个节点 7 个端口的契约就没有任何入口了。
+  // 图标只做一件事：说明这个节点的契约。默认落在「设置」页——参数配置是高频操作，
+  // 概览/输入输出说明看一眼即可（2026-10-05 用户反馈）。
   const openNodePanel = (): void => {
-    useNodePanelStore.getState().open('contract', shape.id, 'overview')
+    useNodePanelStore.getState().open('contract', shape.id, 'settings')
   }
 
   const beginTitleEditing = (): void => {
@@ -1038,66 +1031,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             style={{ ['--node-accent' as string]: spec?.color ?? '#42b9f5' }}
           />
           <div ref={bodyRef} className="node-body">
-            {spec?.executor && spec.outputSource !== 'document' && (
-              <div className="node-output-selection" onPointerDown={stopEventPropagation}>
-                <span>
-                  {readPinnedOutputs(shape.meta.pinnedOutput)
-                    ? '已固定输出'
-                    : readinessState.inputStale
-                      ? '输入已修改 · 保留旧结果'
-                      : ''}
-                </span>
-                <button
-                  type="button"
-                  disabled={
-                    runBusy ||
-                    (!readPinnedOutputs(shape.meta.pinnedOutput) &&
-                      !Object.keys(projectNodeOutputs(shape)).length)
-                  }
-                  onClick={async (event) => {
-                    stopEventPropagation(event)
-                    const latest = editor.getShape<NodeCardShape>(shape.id)
-                    if (!latest) return
-                    const pinned = readPinnedOutputs(latest.meta.pinnedOutput)
-                    if (
-                      pinned &&
-                      !(await useConfirmStore.getState().confirm({
-                        title: '解除固定输出',
-                        message: '下游将改用当前候选结果，来源可能变化。是否解除固定？',
-                        confirmText: '解除固定'
-                      }))
-                    )
-                      return
-                    const active = editor.getShape<NodeCardShape>(shape.id)
-                    if (!active || active.meta.pinnedOutput !== latest.meta.pinnedOutput) return
-                    const outputs = pinned ? null : projectNodeOutputs(active)
-                    if (!pinned && !Object.keys(outputs ?? {}).length) return
-                    editor.updateShape({
-                      id: shape.id,
-                      type: 'node-card',
-                      meta: {
-                        ...active.meta,
-                        pinnedOutput: pinned ? null : JSON.stringify({ version: 1, outputs })
-                      }
-                    })
-                    markUndoPoint(editor, 'pin-output')
-                    emitDiagnosticsEvent(
-                      outputDiagnostics.build(
-                        pinned ? 'node.output_unpinned' : 'node.output_pinned',
-                        undefined,
-                        pinned ? '已解除输出固定' : '已固定当前输出',
-                        { projectId: project?.id, nodeId: shape.id, traceId: newTraceId() },
-                        {
-                          attributes: pinned ? {} : { portCount: Object.keys(outputs ?? {}).length }
-                        }
-                      )
-                    )
-                  }}
-                >
-                  {readPinnedOutputs(shape.meta.pinnedOutput) ? '解除固定' : '固定当前输出'}
-                </button>
-              </div>
-            )}
             {!hasDedicatedInputSurface && (
               <ConnectedInputPreview editor={editor} shape={shape} openPreview={openMediaPreview} />
             )}

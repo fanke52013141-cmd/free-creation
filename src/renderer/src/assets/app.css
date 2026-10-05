@@ -1546,13 +1546,13 @@ select:focus-visible,
   white-space: nowrap;
 }
 
-/* 文本引用展开完整正文并自然换行，内容变长时交给节点高度档位承载。 */
+/* 文本引用（2026-10-05 用户定稿）：只留正文，固定单行，超长省略号，
+   不再多行展开占用卡片高度。 */
 .connected-input-item.connected-input-textual {
   flex: 0 1 100%;
   max-width: 100%;
   height: auto;
   min-height: 28px;
-  align-items: flex-start;
   line-height: 1.4;
 }
 
@@ -1561,19 +1561,12 @@ select:focus-visible,
   max-width: none;
   flex: 1 1 auto;
   display: block;
-  overflow: visible;
-  text-overflow: clip;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow-wrap: normal;
   word-break: normal;
   -webkit-line-clamp: unset;
-}
-
-.connected-input-item.connected-input-textual .connected-input-source {
-  max-width: 88px;
-  flex: 0 1 auto;
-  align-self: flex-start;
-  white-space: nowrap;
 }
 
 .connected-input-value {
@@ -4307,10 +4300,10 @@ select:focus-visible,
   font-weight: 600;
 }
 .contract-settings-hint {
-  margin: 0 0 8px;
+  margin: 0;
   color: var(--muted);
-  font-size: 10px;
-  line-height: 1.5;
+  font-size: 11px;
+  line-height: 1.55;
 }
 .contract-settings-code {
   max-height: 430px;
@@ -4381,6 +4374,10 @@ select:focus-visible,
 }
 
 .crop-mode-row button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   min-height: 28px;
   padding: 4px 7px;
   border: 1px solid var(--line);
@@ -4444,12 +4441,16 @@ select:focus-visible,
 .crop-aspect-more {
   grid-column: 1 / -1;
   display: flex;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  /* 「更多比例」标签不换行（此前被挤成两行）；下拉占满剩余宽度。 */
+  white-space: nowrap;
 }
 
 .crop-aspect-more select {
+  flex: 1 1 auto;
   min-width: 104px;
   min-height: 25px;
 }
@@ -4936,9 +4937,10 @@ select:focus-visible,
 }
 
 .frame-preset-btn {
-  flex: 1;
+  flex: 0 0 auto;
   justify-content: center;
   font-size: 11px;
+  white-space: nowrap;
 }
 
 .frame-preset-btn:disabled {
@@ -7828,8 +7830,8 @@ select:focus-visible,
 }
 
 .gen-row > .gen-select:first-child {
-  flex: 1 1 170px;
-  min-width: 150px;
+  flex: 1 1 150px;
+  min-width: 130px;
 }
 
 /* 生图节点级联选择：供应商是父级，固定窄列；模型占满剩余宽度 */
@@ -7888,8 +7890,12 @@ select:focus-visible,
   border-color: var(--brand);
 }
 
+/* P 图参数行的比例下拉（唯一使用者）：按内容定宽不换行，「默认比例」必须完整可见；
+   剩余宽度让给模型下拉。 */
 .gen-select.w92 {
-  flex: 0 0 92px;
+  flex: 0 0 auto;
+  min-width: 92px;
+  white-space: nowrap;
 }
 .gen-select.w86 {
   flex: 0 0 86px;
@@ -10684,7 +10690,7 @@ select:focus-visible,
   gap: 4px;
 }
 .opt-label {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   white-space: nowrap;
   flex-shrink: 0;
@@ -11090,21 +11096,27 @@ select:focus-visible,
   transform: translateY(-1px);
 }
 .website-node-url {
+  display: -webkit-box;
+  overflow: hidden;
   max-width: 100%;
   color: #8abce8;
   font-size: 12px;
-  overflow-wrap: anywhere;
+  line-height: 1.5;
+  word-break: break-all;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
+/* 「双击打开」与文件节点「导入文件」同一套材质：btn-ghost 白字描边，图标在左。 */
 .website-node-open {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--node-accent, #38bdf8);
-  font-size: 11px;
+  width: min(200px, 100%);
+  min-height: 34px;
+  margin-top: 2px;
+  padding: 6px 14px;
+  font-size: 13px;
 }
+/* display/gap 由 .settings-field 全局基线提供（见「节点设置面板规范」），此处只保留材质差异。 */
 .website-settings .settings-field {
-  display: grid;
-  gap: 6px;
   color: var(--txt);
   font-size: 12px;
 }
@@ -11188,7 +11200,7 @@ select:focus-visible,
   background: color-mix(in srgb, var(--brand) 14%, transparent);
   color: var(--txt);
 }
-.sound-adjust-settings .settings-field { display: grid; gap: 6px; color: var(--txt); font-size: 12px; }
+.sound-adjust-settings .settings-field { color: var(--txt); font-size: 12px; }
 .sound-adjust-settings .settings-field input {
   box-sizing: border-box;
   width: 100%;
@@ -12065,7 +12077,12 @@ canvas.tl-canvas-indicators {
   white-space: nowrap;
 }
 
-/* 右侧设置面板的通用行布局 */
+/* ── 节点设置面板规范（2026-10-05，唯一权威；规范全文见 docs/NODE_CANVAS_PRESENTATION_SPEC.md §10）────
+   .node-settings 内只允许两种字段结构 + 一种说明文字，禁止节点再造第三种结构或私有间距：
+   · 行内字段 .settings-row：短控件（下拉/数字/开关/按钮组）。标签左、控件右，grid auto 1fr 垂直居中。
+   · 堆叠字段 .settings-field：长控件（多行文本/代码）。标签上、控件下，统一 6px 标签-控件间距。
+   · 说明文字 .contract-settings-hint：muted 11px，margin 0（间距由 .node-settings 的 gap 提供）。
+   标签统一 .opt-label（11px / muted）。 */
 .node-settings {
   display: flex;
   flex-direction: column;
@@ -12078,6 +12095,19 @@ canvas.tl-canvas-indicators {
   grid-template-columns: auto 1fr;
   align-items: center;
   gap: 6px 8px;
+}
+
+.settings-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.settings-field > input,
+.settings-field > textarea,
+.settings-field > select {
+  width: 100%;
 }
 
 /* 音色设计节点内部：沿用参考稿的分组、深色输入区与青色主操作，不改节点外壳和端口。 */
@@ -12342,8 +12372,5 @@ canvas.tl-canvas-indicators {
   color: var(--warning, #b7791f);
 }
 
-/* Per-run results are visual groups; data edges remain in the document. */
-.artifact-groups { position:absolute; inset:0; pointer-events:none; z-index:35; overflow:hidden; }
-.artifact-group { position:absolute; border:1px dashed #6b728066; border-radius:12px; pointer-events:none; }
-.artifact-group button { pointer-events:auto; border-radius:8px; padding:5px 12px; background:var(--panel-bg, #222); color:var(--text-primary, #eee); border:1px solid #7776; white-space:nowrap; }
+/* 结果折叠功能已移除（2026-10-05 用户要求）：本轮产物始终全部可见。 */
 .search-hit-active { outline:2px solid #769cff; outline-offset:-2px; }

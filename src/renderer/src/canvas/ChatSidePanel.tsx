@@ -326,23 +326,45 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
 
   const saveEdit = (): void => {
     if (editingIndex === null || !editingText.trim()) return
+    const editedRole = messages[editingIndex]?.role
     const suffix = messages.length - editingIndex - 1
-    if (suffix > 0) {
+    // 用户消息后面还有回复：先确认截断，确认后用编辑后的上下文重新生成。
+    if (editedRole === 'user' && suffix > 0) {
       setPendingEdit({ index: editingIndex, content: editingText })
       return
     }
     const next = editChatMessage(data, editingIndex, editingText)
-    if (next) update(next)
+    if (!next) return
+    update(next)
     setEditingIndex(null)
+    // 编辑用户消息即重新生成：把编辑后的这条及之前的对话发给模型。
+    if (editedRole === 'user') void runModel()
   }
 
-  const confirmEdit = (): void => {
+  const confirmEdit = async (): Promise<void> => {
     if (!pendingEdit) return
+    const editedRole = messages[pendingEdit.index]?.role
     const next = editChatMessage(data, pendingEdit.index, pendingEdit.content)
     if (next) update(next)
     setEditingIndex(null)
     setPendingEdit(null)
-    toast('已保存修改，并从这里重新建立后续上下文')
+    if (editedRole === 'user') {
+      toast('已更新对话，正在用新上下文重新生成…')
+      await runModel()
+    } else {
+      toast('已保存修改')
+    }
+  }
+
+  const runModel = async (): Promise<void> => {
+    if (!project) return toast('项目未就绪')
+    if (!selectedModel) return toast('请先在设置中选择对话模型')
+    setRunning(true)
+    try {
+      await runNodeManually(editor, project.id, providers, shapeId)
+    } finally {
+      setRunning(false)
+    }
   }
 
   const regenerate = async (index: number): Promise<void> => {
@@ -359,6 +381,52 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
       setRunning(false)
     }
   }
+
+  // 从某条用户消息重新生成：删除它之后的全部回复，用这条及之前的上下文重新提问。
+  const regenerateFromUser = async (index: number): Promise<void> => {
+    if (running) return
+    update(updateActiveChatConversation(data, messages.slice(0, index + 1), ''))
+    await runModel()
+  }
+
+  // 复制 / 编辑 / 重新生成：三枚图标按钮，助手消息竖排在「AI」署名下，用户消息横排在气泡下。
+  const renderMessageActions = (index: number, role: 'user' | 'assistant'): React.JSX.Element => (
+    <>
+      <button
+        type="button"
+        className="chat-dialog-icon-btn"
+        aria-label="复制"
+        title="复制"
+        onClick={() => copyText(messages[index].content)}
+      >
+        <Icon name="copy" size={13} />
+      </button>
+      <button
+        type="button"
+        className="chat-dialog-icon-btn"
+        aria-label="编辑"
+        title="编辑"
+        onClick={() => {
+          setEditingIndex(index)
+          setEditingText(messages[index].content)
+        }}
+      >
+        <Icon name="edit" size={13} />
+      </button>
+      <button
+        type="button"
+        className="chat-dialog-icon-btn"
+        aria-label="重新生成"
+        title="重新生成"
+        disabled={running}
+        onClick={() =>
+          void (role === 'assistant' ? regenerate(index) : regenerateFromUser(index))
+        }
+      >
+        <Icon name="refresh" size={13} />
+      </button>
+    </>
+  )
 
   const settings = showSettings ? (
     <section className="chat-dialog-settings" aria-label="对话设置">
@@ -566,6 +634,12 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
                         aria-hidden="true"
                       />
                       <span>{message.role === 'user' ? '你' : 'AI'}</span>
+                      {/* 助手消息：复制/编辑/重新生成竖排在「AI」署名正下方。 */}
+                      {message.role === 'assistant' && editingIndex !== index && (
+                        <div className="chat-dialog-gutter-actions">
+                          {renderMessageActions(index, 'assistant')}
+                        </div>
+                      )}
                     </div>
                     <div className="chat-dialog-bubble">
                       {editingIndex === index ? (
@@ -600,35 +674,10 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
                         </>
                       )}
                     </div>
-                    {editingIndex !== index && (
+                    {/* 用户消息：复制/编辑/重新生成横排在气泡正下方。 */}
+                    {message.role === 'user' && editingIndex !== index && (
                       <div className="chat-dialog-message-actions">
-                        <button
-                          type="button"
-                          aria-label="复制消息"
-                          onClick={() => copyText(message.content)}
-                        >
-                          <Icon name="copy" size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          aria-label="修改消息"
-                          onClick={() => {
-                            setEditingIndex(index)
-                            setEditingText(message.content)
-                          }}
-                        >
-                          <Icon name="edit" size={14} />
-                        </button>
-                        {message.role === 'assistant' && (
-                          <button
-                            type="button"
-                            aria-label="重新生成"
-                            disabled={running}
-                            onClick={() => void regenerate(index)}
-                          >
-                            <Icon name="reset" size={14} />
-                          </button>
-                        )}
+                        {renderMessageActions(index, 'user')}
                       </div>
                     )}
                   </article>
@@ -705,14 +754,14 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
               <strong>
                 保存这条修改会删除之后 {messages.length - pendingEdit.index - 1} 条对话
               </strong>
-              <p>这是为了让下一次生成只使用修改后的上下文。此操作不能撤销。</p>
+              <p>保存后会用「这条修改及之前的对话」重新生成回复。此操作不能撤销。</p>
             </div>
             <div>
               <button type="button" onClick={() => setPendingEdit(null)}>
                 返回修改
               </button>
-              <button type="button" onClick={confirmEdit}>
-                确认保存并截断
+              <button type="button" onClick={() => void confirmEdit()}>
+                确认保存并重新生成
               </button>
             </div>
           </div>

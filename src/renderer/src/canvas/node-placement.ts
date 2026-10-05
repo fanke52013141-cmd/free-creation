@@ -12,6 +12,8 @@ export interface ContinuationPlacementOptions {
   targetH: number
   gapX?: number
   gapY?: number
+  /** 已有同源下游兄弟时的对齐列 x：提供后不再按 source 重推，保证新节点在同一纵线。 */
+  preferredX?: number
 }
 
 const HEADER_OVERHANG = 34
@@ -32,9 +34,10 @@ export function findNodeContinuationPlacement({
   targetW,
   targetH,
   gapX = 96,
-  gapY = 24
+  gapY = 24,
+  preferredX
 }: ContinuationPlacementOptions): { x: number; y: number } {
-  const x = source.x + source.w + gapX
+  const x = preferredX ?? source.x + source.w + gapX
   const rowStep = targetH + gapY + HEADER_OVERHANG + CARD_GAP
   const columnNodes = existing.filter(
     (shape) => x < shape.x + shape.w && x + targetW > shape.x

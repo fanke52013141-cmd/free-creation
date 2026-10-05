@@ -173,6 +173,8 @@ export function NoModelHint({
 /**
  * 计算下游衍生节点的放置坐标：
  * 新节点优先放在来源节点右侧并与其顶边对齐；被占用时从该行开始逐行向下找最近空位。
+ * 来源已有下游兄弟节点时（如同一张图先后建了拆分/裁剪/P图），对齐到兄弟的最左 x，
+ * 保证全部衍生节点在一条纵线上（用户 2026-10-05），不随来源节点此后被移动而错位。
  */
 export function findContinuationPlacement(
   editor: Editor,
@@ -185,6 +187,17 @@ export function findContinuationPlacement(
   const existingInColumn = editor
     .getCurrentPageShapes()
     .filter((shape): shape is NodeCardShape => shape.type === 'node-card' && shape.id !== source.id)
+  let preferredX: number | undefined
+  for (const arrow of editor.getCurrentPageShapes()) {
+    if (arrow.type !== 'arrow') continue
+    const bindings = editor.getBindingsFromShape(arrow.id, 'arrow')
+    const start = bindings.find((binding) => binding.props.terminal === 'start')
+    const end = bindings.find((binding) => binding.props.terminal === 'end')
+    if (!start || start.toId !== source.id || !end || end.toId === source.id) continue
+    const child = editor.getShape<NodeCardShape>(end.toId)
+    if (!child || child.type !== 'node-card') continue
+    preferredX = Math.min(preferredX ?? Number.POSITIVE_INFINITY, child.x)
+  }
   return findNodeContinuationPlacement({
     source: { x: source.x, y: source.y, w: source.props.w, h: source.props.h },
     existing: existingInColumn.map((shape) => ({
@@ -196,7 +209,8 @@ export function findContinuationPlacement(
     targetW,
     targetH,
     gapX,
-    gapY
+    gapY,
+    preferredX
   })
 }
 

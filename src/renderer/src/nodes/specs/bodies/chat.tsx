@@ -21,8 +21,8 @@ export function ChatBody({ shape }: NodeBodyProps): React.JSX.Element {
 
   return (
     <div className="chat-body-compact">
-      <div className="chat-body-hero">
-        <span className="node-empty-icon chat-body-icon"><Icon name="chat" size={40} /></span>
+      <div className="node-empty-state chat-body-hero">
+        <span className="node-empty-icon"><Icon name="chat" size={48} strokeWidth={2} /></span>
         <strong>AI 对话</strong>
         {selectedModel && (
           <span className="chat-compact-model is-ready">
@@ -39,10 +39,8 @@ export function ChatBody({ shape }: NodeBodyProps): React.JSX.Element {
             useNodePanelStore.getState().open('chat', shape.id, 'settings')
           }}
         >
-          <span className="chat-open-content">
-            <Icon name="chat" size={15} />
-            <span>打开对话</span>
-          </span>
+          <Icon name="chat" size={14} />
+          打开对话
         </button>
       </div>
     </div>

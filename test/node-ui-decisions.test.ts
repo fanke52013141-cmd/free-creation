@@ -1093,7 +1093,8 @@ describe('v1.2 §16.28 3D 预演台：读文档真值、连线数上按钮、只
 
   it('图标进契约、工作区进按钮，名字只有一个来源', () => {
     // info 图标曾把导演台跳去工作区，7 个端口的契约就没有任何入口了。
-    expect(nodeCardView).toContain(".open('contract', shape.id, 'overview')")
+    // 2026-10-05：面板默认页从「概览」改为「设置」——参数配置是高频操作。
+    expect(nodeCardView).toContain(".open('contract', shape.id, 'settings')")
     expect(nodeCardView).not.toMatch(/nodeType === 'director'/)
     // 标题与 openNodePanel 的去向必须一致，否则 tooltip 是假提示。
     expect(nodeCardView).toContain('title="查看输入输出说明"')

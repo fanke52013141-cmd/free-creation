@@ -496,25 +496,6 @@ body {
   overscroll-behavior: contain;
 }
 
-.node-output-selection {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 4px 8px;
-  font-size: 11px;
-  flex-shrink: 0;
-}
-
-.node-output-selection button {
-  color: inherit;
-  font: inherit;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: transparent;
-  cursor: pointer;
-}
-
 .node-body-content {
   display: flex;
   flex: 1;

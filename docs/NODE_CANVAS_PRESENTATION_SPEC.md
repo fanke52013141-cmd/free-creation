@@ -321,3 +321,27 @@ type SelectionGeometry = {
 - [ ] 是否避免把组、选框、连接柄或缩略图状态写成隐藏业务数据？
 - [ ] 50%–200% 缩放、分组嵌套、深浅主题、键盘操作和撤销是否都通过？
 - [ ] 若端口 / Schema / configSchema / contractVersion 改动，是否同时更新 agent contracts 和相应测试？
+
+## 10. 节点设置面板规范（2026-10-05，强制）
+
+右侧面板「设置」页所有节点共用同一套字段结构。此前 `.settings-row` 是全局类而 `.settings-field` 只有零散的节点私有定义，导致「有的左右、有的上下、标签贴着输入框」。自本节起全项目统一：
+
+### 10.1 只允许两种字段结构 + 一种说明文字
+
+| 结构 | 类名 | 适用控件 | 结构定义 |
+| --- | --- | --- | --- |
+| 行内字段 | `.settings-row` | 短控件：下拉、数字输入、开关、按钮组 | 标签左、控件右；`grid: auto 1fr` 垂直居中 |
+| 堆叠字段 | `.settings-field` | 长控件：多行文本、代码、文件选择 | 标签上、控件下；标签-控件间距统一 6px（容器 gap 提供） |
+| 说明文字 | `.contract-settings-hint` | 解释连线语义、约束的辅助文案 | muted 11px，margin 0，间距由 `.node-settings` 的 gap 提供 |
+
+- 容器 `.node-settings`：flex column，gap 10px，padding 8px 2px。
+- 标签统一 `.opt-label`：11px / `var(--muted)`。行内字段写 `<label class="opt-label" for=…>`；堆叠字段写 `<label class="settings-field">` 包裹（裸文本即标签）。
+- 长控件宽度 100%（`.settings-field > input/textarea/select` 全局基线），节点内不得再写宽度。
+- 禁止：节点再造第三种字段结构、私有 field 间距、用无类名的裸 `<label>` 承载设置字段、给 hint 加私有 margin。
+
+### 10.2 实现边界与门禁
+
+- 全局基线唯一权威：`app.css` 中「节点设置面板规范」注释块（`.node-settings` / `.settings-row` / `.settings-field` / `.contract-settings-hint`）。
+- 节点私有样式只允许材质差异（颜色、字体、圆角），不得重定义 display / gap / margin 结构属性。
+- 每个节点的 `SettingsPanel` 新增字段时先套用上表结构；评审清单（§9）增答一项：设置字段是否只用 `.settings-row` / `.settings-field` / `.contract-settings-hint` 三种类？
+- 守门测试：`test/settings-panel-spec.test.ts`。

@@ -123,42 +123,108 @@
   border: 0;
   background: transparent;
 }
+/* 2026-10-05 卡片重构：名称区（两行省略 + 元信息徽标）在上，三个操作收成图标固定在右，
+   替换原先「左文右三枚文字按钮」的横向结构。 */
 .gw-model-card {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
+  align-items: flex-start;
+  gap: 10px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--bg);
   padding: 12px 14px;
+  transition: border-color 140ms ease, background-color 140ms ease;
 }
-.gw-model-card > div {
+.gw-model-card:hover {
+  border-color: color-mix(in srgb, #42b9f5 40%, var(--line));
+}
+.gw-model-card > input[type='checkbox'] {
+  flex: none;
+  margin-top: 3px;
+  accent-color: #42b9f5;
+}
+.gw-model-card-main {
   display: grid;
-  gap: 4px;
+  gap: 5px;
   min-width: 0;
+  flex: 1;
 }
-.gw-model-card strong {
+.gw-model-card-main strong {
+  display: -webkit-box;
   overflow: hidden;
   color: var(--txt);
   font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-weight: 600;
+  line-height: 1.45;
+  word-break: break-all;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
-.gw-model-card span:not(.gw-status) {
+.gw-model-card-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
   color: var(--muted);
   font-size: 11px;
+}
+.gw-model-card-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.gw-icon-action {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    color 140ms ease,
+    border-color 140ms ease,
+    background-color 140ms ease;
+}
+.gw-icon-action:hover:not(:disabled) {
+  color: var(--txt);
+  border-color: color-mix(in srgb, #42b9f5 55%, var(--line));
+  background: color-mix(in srgb, #42b9f5 10%, transparent);
+}
+.gw-icon-action.is-danger:hover:not(:disabled) {
+  color: #ff8585;
+  border-color: color-mix(in srgb, #ff6b6b 55%, var(--line));
+  background: color-mix(in srgb, #ff6b6b 10%, transparent);
+}
+.gw-icon-action:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 .gw-status {
   flex: none;
   border-radius: 999px;
-  padding: 4px 8px;
-  font-size: 11px;
+  padding: 2px 8px;
+  font-size: 10px;
   font-weight: 600;
+  font-style: normal;
 }
-.gw-status.ok {
+.gw-status-verified {
   background: color-mix(in srgb, #42c98d 16%, transparent);
   color: #54d39b;
+}
+.gw-status-failed {
+  background: color-mix(in srgb, #ff6b6b 16%, transparent);
+  color: #ff8585;
+}
+.gw-status-pending {
+  background: color-mix(in srgb, #8a93a6 16%, transparent);
+  color: #aab3c5;
 }
 @media (max-width: 720px) {
   .gw-catalog {

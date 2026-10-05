@@ -342,6 +342,45 @@
   font-size: 10px;
 }
 
+/* 助手署名固定为「AI」；42px 窄栏内不需要省略处理。 */
+
+/* 复制/编辑/重新生成：三枚图标按钮（悬停有文字提示）。 */
+.chat-dialog-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 8px;
+  color: #8fa3bd;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0.8;
+  transition:
+    color 140ms ease,
+    border-color 140ms ease,
+    background-color 140ms ease,
+    opacity 140ms ease;
+}
+.chat-dialog-icon-btn:hover:not(:disabled) {
+  color: #7dd8ff;
+  border-color: rgba(125, 216, 255, 0.4);
+  background: rgba(125, 216, 255, 0.08);
+  opacity: 1;
+}
+.chat-dialog-icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* 助手消息：三枚图标竖排在左侧「AI」署名正下方。 */
+.chat-dialog-gutter-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 2px;
+}
+
 .chat-dialog-message-meta {
   padding-top: 5px;
   font-size: 12px;
@@ -406,27 +445,18 @@
   flex-basis: 36px;
 }
 
+/* 用户消息：三枚图标横排在自己气泡正下方（右对齐），助手消息的操作在左侧栏。 */
 .chat-dialog-message.user .chat-dialog-message-actions {
-  grid-column: 1;
-  grid-row: 1;
-  justify-self: start;
+  grid-column: 2;
+  grid-row: 2;
+  display: flex;
+  gap: 6px;
+  justify-self: end;
+  padding-top: 7px;
 }
 
 .chat-dialog-message-actions {
   padding-top: 7px;
-  opacity: 0;
-  transition: opacity 140ms ease;
-}
-
-.chat-dialog-message:hover .chat-dialog-message-actions,
-.chat-dialog-message:focus-within .chat-dialog-message-actions {
-  opacity: 1;
-}
-
-.chat-dialog-message-actions button {
-  width: 30px;
-  min-height: 30px;
-  padding: 0;
 }
 
 .chat-dialog-bubble textarea {

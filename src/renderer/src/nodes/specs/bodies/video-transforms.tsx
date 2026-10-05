@@ -1398,13 +1398,12 @@ export function VideoTransformBody({
   // 执行器（videoFrameExecutor / videoClipExecutor / videoAudioExecutor）只看 in-video 连线；
   // 卡片历史结果 mediaPath 不是运行条件，所以判据按连线给出。
   const sourceCount = countIncomingConnections(editor, shape.id, 'in-video')
-  const sourceWiring = (
-    <span className={`node-wiring ${sourceCount === 0 ? 'warn' : 'ok'}`}>
-      {sourceCount === 0
-        ? '源视频（in-video）未连线，运行会跳过'
-        : `源视频（in-video）：${sourceCount} 个`}
-    </span>
-  )
+  // 已连线时不再显示「源视频（in-video）：N 个」——来源 chip 已在卡片上方呈现，
+  // 重复信息没有价值（用户 2026-10-05）；只在未连线时保留运行会跳过的警告。
+  const sourceWiring =
+    sourceCount === 0 ? (
+      <span className="node-wiring warn">源视频（in-video）未连线，运行会跳过</span>
+    ) : null
   // 空态文案与节点 label / 视频节点底部按钮保持同一套命名（用户 2026-09-18 拍板）。
   const label = mode === 'frame' ? '抽帧' : mode === 'clip' ? '视频截取' : '截音频'
   const workbenchEl = workbenchOpen ? (

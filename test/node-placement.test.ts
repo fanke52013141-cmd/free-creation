@@ -56,4 +56,18 @@ describe('continuation node placement', () => {
       })
     ).toEqual({ x: 436, y: 100 })
   })
+
+  it('preferredX overrides the derived column so new siblings align to the existing column', () => {
+    // 来源节点后来被移动过：已有下游在 x=396，新节点必须对齐同一条纵线，而不是按
+    // source 重推出 x=436 造成阶梯错位（用户 2026-10-05）。
+    expect(
+      findNodeContinuationPlacement({
+        source: { x: 40, y: 100, w: 340, h: 260 },
+        existing: [{ x: 396, y: 100, w: 340, h: 260 }],
+        targetW: 340,
+        targetH: 260,
+        preferredX: 396
+      })
+    ).toEqual({ x: 396, y: 426 })
+  })
 })

@@ -67,6 +67,15 @@
   background: #ffffff;
 }
 
+/* 图片边缘警戒线（2026-10-05 用户要求）：白底图在画布上边界不清，看不出比例和范围。
+   内圈黑色实线贴住图片边缘（白底上醒目），外圈半透明浅线保证深色画布上同样可辨；
+   随 border-radius 自动贴合圆角。覆盖 P 图 / 九宫格拆分 / 图片 / 生图等所有卡片内图片。 */
+.node-card img {
+  box-shadow:
+    0 0 0 1px #05070b,
+    0 0 0 2px rgba(165, 185, 210, 0.4);
+}
+
 /* 浅色主题沿用相同的端口环与柔光，端口颜色仍来自输入输出契约类型。 */
 .canvas-theme-light .port-dot::after {
   background: var(--node-port-color, var(--pc, #42b9f5));
@@ -1655,8 +1664,8 @@ button {
   padding: 10px;
 }
 
+/* contract-settings-hint 的唯一权威在 app.css（2026-10-05 规范归一），此处不再覆写。 */
 .contract-overview-grid small,
-.contract-settings-hint,
 .contract-empty {
   color: #afbdc9;
   font-size: 12px;
@@ -4122,7 +4131,8 @@ button {
   background: linear-gradient(145deg, color-mix(in srgb, var(--node-accent) 4%, #20242d), #20242d 64%);
 }
 
-.node-card.type-text .text-empty-state {
+.node-card.type-text .text-empty-state,
+.node-card.type-chat .chat-body-hero {
   min-height: 100%;
   align-content: center;
 }
@@ -4727,7 +4737,8 @@ button {
   background: transparent;
 }
 
-.node-card.type-text .text-empty-state {
+.node-card.type-text .text-empty-state,
+.node-card.type-chat .chat-body-hero {
   box-sizing: border-box;
   width: 100%;
   min-height: 100%;
@@ -4736,14 +4747,16 @@ button {
   gap: 6px;
 }
 
-.node-card.type-text .text-empty-state .node-empty-icon {
+.node-card.type-text .text-empty-state .node-empty-icon,
+.node-card.type-chat .chat-body-hero .node-empty-icon {
   width: 88px;
   height: 88px;
   margin-bottom: 7px;
   border-radius: 20px;
 }
 
-.node-card.type-text .text-empty-state > strong {
+.node-card.type-text .text-empty-state > strong,
+.node-card.type-chat .chat-body-hero > strong {
   font-size: 18px;
 }
 
@@ -4751,7 +4764,8 @@ button {
   font-size: 11px;
 }
 
-.node-card.type-text .text-empty-action {
+.node-card.type-text .text-empty-action,
+.node-card.type-chat .chat-open-button {
   display: inline-flex;
   width: min(200px, 100%);
   min-height: 36px;
@@ -4778,38 +4792,10 @@ button {
     0 0 14px color-mix(in srgb, var(--node-accent) 17%, transparent);
 }
 
-/* The conversation body gives the chat action its own clear entry point. */
 .node-card.type-chat .chat-body-compact {
   box-sizing: border-box;
   min-height: 100%;
-  padding: 10px;
-}
-
-.node-card.type-chat .chat-body-hero {
-  display: grid;
-  justify-items: center;
-  align-content: center;
-  gap: 6px;
-  width: 100%;
-  min-width: 0;
-}
-
-.node-card.type-chat .chat-body-icon {
-  width: 54px;
-  height: 54px;
-  margin-bottom: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 15px;
-  color: #f0fdff;
-  background: linear-gradient(135deg, #0891b2, #4f46e5);
-  box-shadow: 0 8px 22px rgba(8, 145, 178, 0.24), inset 0 1px rgba(255, 255, 255, 0.12);
-}
-
-.node-card.type-chat .chat-body-hero > strong {
-  color: #e8eaf3;
-  font-size: 17px;
-  font-weight: 650;
-  line-height: 1.3;
+  padding: 11px;
 }
 
 .node-card.type-chat .chat-compact-model {
@@ -4854,34 +4840,6 @@ button {
 .node-card.type-chat .chat-compact-model.is-ready .chat-model-dot {
   background: #06b6d4;
   box-shadow: 0 0 8px rgba(6, 182, 212, 0.56);
-}
-
-/* 2026-10-04 UI 审查统一：chat 卡主 CTA 回归标准材质（32px/r7/令牌），
-   去除私有渐变与位移（与 voice-design/tts 主按钮同一处理）。 */
-.node-card.type-chat .chat-open-button {
-  display: inline-flex;
-  width: min(220px, 100%);
-  min-height: 32px;
-  justify-self: center;
-  align-items: center;
-  justify-content: center;
-  margin-top: 8px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  color: var(--txt);
-  background: var(--card);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
-}
-
-.node-card.type-chat .chat-open-content {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  line-height: 1;
 }
 
 /* Keep a button's single icon before its label throughout node and media workspaces. */

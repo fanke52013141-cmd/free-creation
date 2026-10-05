@@ -216,7 +216,6 @@ export function StoryboardBody({ shape }: NodeBodyProps): React.JSX.Element {
     return (
       <div
         className="node-hint center"
-        onPointerDown={(e) => stopEventPropagation(e)}
         onDoubleClick={(e) => {
           e.stopPropagation()
           openJsonEditor()
@@ -337,8 +336,7 @@ export function StoryboardBody({ shape }: NodeBodyProps): React.JSX.Element {
                         <button
                           type="button"
                           className="storyboard-cell-value"
-                          title={field === 'id' ? '内部稳定 ID，不可编辑' : '双击编辑该字段'}
-                          onPointerDown={stopEventPropagation}
+                          title={field === 'id' ? '内部稳定 ID，不可编辑' : '单击选中节点 · 双击编辑该字段'}
                           onDoubleClick={(event) => {
                             stopEventPropagation(event)
                             startCellEdit(shot, field)
@@ -401,7 +399,7 @@ export function StoryboardBody({ shape }: NodeBodyProps): React.JSX.Element {
                           editor.updateShape({
                             id: asset.id,
                             type: asset.type,
-                            meta: { resultGroupCollapsed: false }
+                            meta: {}
                           })
                           editor.setSelectedShapes([asset.id])
                           editor.zoomToSelection()

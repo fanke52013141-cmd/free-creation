@@ -16,7 +16,7 @@ import { useConfirmStore } from '../../stores/confirm'
 import { Icon, type IconName } from '../../components/Icon'
 import { AppSelect } from '../../components/AppSelect'
 import { LibraryResourcePicker } from '../../library/LibraryResourcePicker'
-import { showArtifactGroups } from '../artifact-grouping'
+
 import type { ArtifactRecipe } from '@shared/artifact-recipe'
 
 const FILTER_TABS: { key: MediaKind | 'all'; label: string }[] = [
@@ -379,27 +379,6 @@ export function AssetsPanel({
       ) : (
         <>
           <div className="assets-toolbar">
-            <button
-              className="side-panel-secondary"
-              onClick={() => {
-                if (!editor) return
-                const selected = editor
-                  .getSelectedShapes()
-                  .find((shape) => typeof shape.meta.runGroupId === 'string')
-                if (!selected) return toast('先选择本轮的一个产物')
-                showArtifactGroups(editor, selected.meta.runGroupId as string)
-              }}
-            >
-              显示本轮
-            </button>
-            <button
-              className="side-panel-secondary"
-              onClick={() => {
-                if (editor) showArtifactGroups(editor)
-              }}
-            >
-              显示全部
-            </button>
             <button
               className="side-panel-secondary"
               onClick={() => {

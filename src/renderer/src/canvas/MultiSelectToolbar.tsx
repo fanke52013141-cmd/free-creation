@@ -24,14 +24,24 @@ export function MultiSelectToolbar({
   onSaveWorkflow
 }: MultiSelectToolbarProps): React.JSX.Element | null {
   const [selectedIds, setSelectedIds] = useState<TLShapeId[]>([])
+  const [selectedGroupIds, setSelectedGroupIds] = useState<TLShapeId[]>([])
 
   useEffect((): (() => void) => {
     const update = (): void => {
-      const ids = editor
-        .getSelectedShapes()
-        .filter((s) => s.type === 'node-card')
-        .map((s) => s.id)
-      setSelectedIds(ids)
+      const selected = editor.getSelectedShapes()
+      setSelectedIds(selected.filter((s) => s.type === 'node-card').map((s) => s.id))
+      // 选中的 tldraw group：包含节点子项时提供「拆分」入口。
+      setSelectedGroupIds(
+        selected
+          .filter(
+            (s) =>
+              s.type === 'group' &&
+              editor
+                .getSortedChildIdsForParent(s.id)
+                .some((id) => editor.getShape(id)?.type === 'node-card')
+          )
+          .map((s) => s.id)
+      )
     }
     update()
     const unsub = editor.store.listen(update, { scope: 'session' })
@@ -39,7 +49,7 @@ export function MultiSelectToolbar({
   }, [editor])
 
   // 单选时工具栏没有任何可用操作，不能留下空的灰色圆角岛。
-  if (selectedIds.length < 2) return null
+  if (selectedIds.length < 2 && selectedGroupIds.length === 0) return null
 
   const getBounds = (): ShapeBounds[] =>
     selectedIds.map((id) => {
@@ -109,6 +119,12 @@ export function MultiSelectToolbar({
   const handleGroup = (): void => {
     editor.markHistoryStoppingPoint('group-nodes')
     editor.groupShapes(selectedIds)
+  }
+
+  const handleUngroup = (): void => {
+    if (!selectedGroupIds.length) return
+    editor.markHistoryStoppingPoint('ungroup-nodes')
+    editor.ungroupShapes(selectedGroupIds)
   }
 
   return (
@@ -194,6 +210,17 @@ export function MultiSelectToolbar({
               onClick={() => onSaveWorkflow(selectedIds)}
             >
               <Icon name="workflow" size={18} />
+            </button>
+          )}
+          {selectedGroupIds.length > 0 && (
+            <button
+              className="ms-btn ms-ungroup"
+              data-tool="ungroup"
+              aria-label="拆分分组"
+              title="拆分分组"
+              onClick={handleUngroup}
+            >
+              <Icon name="ungroup" size={18} />
             </button>
           )}
         </div>

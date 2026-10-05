@@ -21,7 +21,6 @@ import { ChatSidePanel } from './ChatSidePanel'
 import { NodeContractPanel } from './NodeContractPanel'
 import { DirectorStudioPanel } from './DirectorStudioPanel'
 import { useNodePanelStore } from '../stores/nodePanel'
-import { ArtifactGroupLayer } from './ArtifactGroupLayer'
 import { artifactShapeVisibility } from './artifact-grouping'
 import { SearchPalette } from './SearchPalette'
 import { CanvasSelectionBackground, GroupOutlineLayer } from './GroupOutlineLayer'
@@ -386,6 +385,127 @@ export function CanvasEditor({
     return () => el.removeEventListener('wheel', onWheel, { capture: true })
   }, [editorInstance])
 
+  // 分组空白区拖动：tldraw 只有按中具体 shape 才能拖动，分组内部的空白区域会被当成
+  // 空画布开始框选。这里在捕获阶段接管落在分组范围（与 GroupOutlineLayer 视觉框一致，
+  // 含标题带留白）内的空白按下：单击选中分组，按住拖动即整组移动。
+  useEffect(() => {
+    if (!editorInstance) return
+    const GROUP_SIDE_PAD = 12
+    const GROUP_HEADER_OVERHANG = 34
+    const GROUP_TOP_PAD = 12
+    const DRAG_THRESHOLD_PX = 3
+
+    let drag: {
+      childIds: TLShapeId[]
+      lastPage: { x: number; y: number }
+      startX: number
+      startY: number
+      moved: boolean
+    } | null = null
+
+    const hitGroupAtPoint = (clientX: number, clientY: number): TLShapeId | null => {
+      const editor = editorRef.current
+      if (!editor) return null
+      const page = editor.screenToPage({ x: clientX, y: clientY })
+      // 点中具体形状（节点、连线等）时不接管，保持 tldraw 原生交互。
+      if (editor.getShapeAtPoint(page)) return null
+      const zoom = editor.getCamera().z || 1
+      const sidePad = GROUP_SIDE_PAD / zoom
+      const topPad = (GROUP_HEADER_OVERHANG + GROUP_TOP_PAD) / zoom
+      let topmost: TLShapeId | null = null
+      // getCurrentPageShapes 按 z 序返回；取命中的最上层分组。
+      for (const shape of editor.getCurrentPageShapes()) {
+        if (shape.type !== 'group') continue
+        const childCount = editor
+          .getSortedChildIdsForParent(shape.id)
+          .filter((id) => editor.getShape(id)?.type === 'node-card').length
+        if (childCount < 2) continue
+        const bounds = editor.getShapePageBounds(shape.id)
+        if (!bounds) continue
+        if (
+          page.x >= bounds.x - sidePad &&
+          page.x <= bounds.maxX + sidePad &&
+          page.y >= bounds.y - topPad &&
+          page.y <= bounds.maxY + sidePad
+        ) {
+          topmost = shape.id
+        }
+      }
+      return topmost
+    }
+
+    const onPointerDown = (event: PointerEvent): void => {
+      if (event.button !== 0 || drag) return
+      const target = event.target
+      if (!(target instanceof Element)) return
+      // 只接管画布表面（含分组外框层）的按下；HTML 节点内容有自己的 target。
+      if (!target.closest('.tl-canvas') && !target.closest('.canvas-group-outline-layer')) return
+      if (target.closest('.tl-html-layer')) return
+      const editor = editorRef.current
+      if (!editor) return
+      const groupId = hitGroupAtPoint(event.clientX, event.clientY)
+      if (!groupId) return
+      event.preventDefault()
+      event.stopPropagation()
+      editor.select(groupId)
+      drag = {
+        childIds: editor
+          .getSortedChildIdsForParent(groupId)
+          .filter((id) => editor.getShape(id)?.type === 'node-card'),
+        lastPage: editor.screenToPage({ x: event.clientX, y: event.clientY }),
+        startX: event.clientX,
+        startY: event.clientY,
+        moved: false
+      }
+    }
+
+    const onPointerMove = (event: PointerEvent): void => {
+      if (!drag) return
+      const editor = editorRef.current
+      if (!editor) return
+      if (!drag.moved) {
+        if (
+          Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) <
+          DRAG_THRESHOLD_PX
+        )
+          return
+        drag.moved = true
+        editor.markHistoryStoppingPoint('move-group')
+      }
+      const page = editor.screenToPage({ x: event.clientX, y: event.clientY })
+      const dx = page.x - drag.lastPage.x
+      const dy = page.y - drag.lastPage.y
+      if (dx === 0 && dy === 0) return
+      drag.lastPage = page
+      const moving = drag.childIds
+        .map((id) => editor.getShape(id))
+        .filter((shape): shape is NonNullable<typeof shape> => Boolean(shape))
+      if (!moving.length) return
+      editor.updateShapes(
+        moving.map((shape) => ({
+          id: shape.id,
+          type: shape.type,
+          x: shape.x + dx,
+          y: shape.y + dy
+        }))
+      )
+    }
+
+    const onPointerUp = (): void => {
+      drag = null
+    }
+
+    window.addEventListener('pointerdown', onPointerDown, true)
+    window.addEventListener('pointermove', onPointerMove, true)
+    window.addEventListener('pointerup', onPointerUp, true)
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown, true)
+      window.removeEventListener('pointermove', onPointerMove, true)
+      window.removeEventListener('pointerup', onPointerUp, true)
+      drag = null
+    }
+  }, [editorInstance])
+
   // 左侧节点面板：点击在视口中心创建；拖拽到画布在落点创建
   const SIDEBAR_W = 72
   const visibleNodeTypeIds = workspaceProfile ? new Set(workspaceProfile.visibleNodeTypeIds) : null
@@ -639,8 +759,8 @@ export function CanvasEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id])
 
-  // T04（F01）：保存状态机绑定。编辑序号、在途合并、状态呈现全部由协调器承载；
-  // 本组件只负责收集快照（collectSaveInput）与呈现（顶栏徽标 SaveStatusBadge）。
+  // T04（F01）：保存状态机绑定。编辑序号与在途合并由协调器承载；
+  // 本组件负责收集快照（collectSaveInput），顶栏不再展示保存状态。
   // 置于函数声明之后以满足 react-hooks 的声明序检查。
   useEffect(() => {
     useSaveCoordinator.getState().bind({
@@ -1821,7 +1941,6 @@ export function CanvasEditor({
         }}
         components={TL_COMPONENTS}
       />
-      {editorInstance && <ArtifactGroupLayer editor={editorInstance} hostRef={wrapRef} />}
       {editorInstance && <GroupOutlineLayer editor={editorInstance} hostRef={wrapRef} />}
       {editorInstance && <DataEdgeLayer editor={editorInstance} hostRef={wrapRef} />}
       {/* 左侧节点面板：一级分类保持鱼眼 Dock，二级节点在右侧抽屉中展开。 */}

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { NodeBodyProps, NodeSettingsProps } from '../../registry'
 import { Icon } from '../../../components/Icon'
 import { markUndoPoint } from '../../../canvas/history'
+import { useNodePanelStore } from '../../../stores/nodePanel'
 import { readWebsiteLink } from '@shared/website-link'
 
 interface WebsiteDraft {
@@ -26,36 +27,47 @@ export function WebsiteBody({ shape }: NodeBodyProps): React.JSX.Element {
 
   if (!link) {
     return (
-      <div className="website-node-empty" data-node-interactive="website-empty">
+      <div
+        className="website-node-empty"
+        data-node-interactive="website-empty"
+        title="单击选中 · 双击打开设置"
+        onDoubleClick={(event) => {
+          event.stopPropagation()
+          useNodePanelStore.getState().open('contract', shape.id, 'settings')
+        }}
+      >
         <span className="website-node-icon">
           <Icon name="external" size={24} />
         </span>
         <strong>配置网址</strong>
-        <span>在右侧设置名称和链接</span>
+        <span>双击打开设置</span>
       </div>
     )
   }
 
   return (
-    <a
+    <div
       className="website-node-link"
-      href={link.url}
-      target="_blank"
-      rel="noreferrer"
-      aria-label={`打开 ${link.name}：${link.url}`}
+      aria-label={`${link.name}：${link.url}（双击打开）`}
       data-node-interactive="website-link"
-      onPointerDown={(event) => event.stopPropagation()}
-      onClick={(event) => event.stopPropagation()}
+      title="单击选中节点 · 双击打开网址"
+      onDoubleClick={(event) => {
+        event.stopPropagation()
+        window.open(link.url, '_blank', 'noreferrer')
+      }}
     >
       <span className="website-node-icon">
         <Icon name="external" size={24} />
       </span>
       <strong>{link.name}</strong>
       <span className="website-node-url">{link.url}</span>
-      <span className="website-node-open">
-        点击打开 <Icon name="external" size={13} />
-      </span>
-    </a>
+      {/* 与文件节点「导入文件」同一套按钮材质：btn-ghost 白字描边，图标在左。
+          单击穿透给画布（选中节点），双击沿卡片逻辑打开网址，不在此处拦截事件。 */}
+      <button type="button" className="btn-ghost website-node-open" title="双击打开网址">
+        <Icon name="external" size={14} />
+        双击打开
+      </button>
+    </div>
   )
 }
 
