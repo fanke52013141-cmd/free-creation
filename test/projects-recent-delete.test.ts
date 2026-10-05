@@ -1,7 +1,7 @@
 import AdmZip from 'adm-zip'
 import { exportProject } from '../src/main/store/transfer'
 import { DatabaseSync } from 'node:sqlite'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, afterEach, it, expect, vi } from 'vitest'
@@ -12,18 +12,10 @@ vi.mock('../src/main/store/db', () => ({
   getProjectsDir: () => join(state.root, 'projects'),
   getDb: () => state.database
 }))
-import {
-  cloneProject,
-  createProject,
-  deleteProject,
-  listDeletedProjects,
-  listProjects,
-  restoreDeletedProject,
-  openProject
-} from '../src/main/store/projects.repo'
+import { cloneProject, createProject, deleteProject, listProjects, openProject } from '../src/main/store/projects.repo'
 let db: DatabaseSync
 beforeEach(() => {
-  state.root = mkdtempSync(join(tmpdir(), 'canvas-undelete-'))
+  state.root = mkdtempSync(join(tmpdir(), 'canvas-hard-delete-'))
   db = new DatabaseSync(':memory:')
   state.database = {
     prepare: (sql: string) => db.prepare(sql),
@@ -51,29 +43,15 @@ afterEach(() => {
   db.close()
   rmSync(state.root, { recursive: true, force: true })
 })
-it('delete and restore preserve the exact project file and graph version', () => {
+it('彻底删除同时移除项目行与项目目录，无法再打开', () => {
   const p = createProject('原项目')
-  const file = join(state.root, 'projects', p.id, 'project.json')
-  const original = readFileSync(file, 'utf8')
+  const dir = join(state.root, 'projects', p.id)
+  expect(existsSync(join(dir, 'project.json'))).toBe(true)
   expect(deleteProject(p.id)).toBe(true)
   expect(listProjects()).toHaveLength(0)
-  expect(listDeletedProjects()[0].id).toBe(p.id)
   expect(openProject(p.id)).toBeNull()
-  expect(restoreDeletedProject(p.id)?.graphVersion).toBe(0)
-  expect(readFileSync(file, 'utf8')).toBe(original)
-  expect(openProject(p.id)?.meta.id).toBe(p.id)
-  expect(listDeletedProjects()).toHaveLength(0)
-})
-it('resolves live name collisions and refuses a missing file without changing deletion', () => {
-  const p = createProject('same')
-  deleteProject(p.id)
-  createProject('same')
-  expect(restoreDeletedProject(p.id)?.name).toBe('same · 恢复1')
-  deleteProject(p.id)
-  rmSync(join(state.root, 'projects', p.id, 'project.json'))
-  expect(() => restoreDeletedProject(p.id)).toThrow()
-  expect(listDeletedProjects()).toHaveLength(1)
-  expect(restoreDeletedProject('absent')).toBeNull()
+  expect(existsSync(dir)).toBe(false)
+  expect(deleteProject('absent')).toBe(false)
 })
 
 it('含下划线的项目克隆/导出只复制本项目文件，不计入邻居素材', () => {

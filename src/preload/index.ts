@@ -125,10 +125,6 @@ const api = {
   ): Promise<IpcEnvelope<{ path: string }>> =>
     ipcRenderer.invoke(IPC.diagnostics.exportNodeRun, input),
   bootstrap: (): Promise<IpcEnvelope<BootstrapInfo>> => ipcRenderer.invoke(IPC.app.bootstrap),
-  listDeletedProjects: (): Promise<IpcEnvelope<ProjectMeta[]>> =>
-    ipcRenderer.invoke(IPC.project.listDeleted),
-  restoreDeletedProject: (id: string): Promise<IpcEnvelope<ProjectMeta | null>> =>
-    ipcRenderer.invoke(IPC.project.restoreDeleted, id),
   listProjects: (): Promise<IpcEnvelope<ProjectMeta[]>> => ipcRenderer.invoke(IPC.project.list),
   createProject: (input: CreateProjectInput): Promise<IpcEnvelope<ProjectMeta>> =>
     ipcRenderer.invoke(IPC.project.create, input),

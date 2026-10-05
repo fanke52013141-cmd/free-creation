@@ -17,7 +17,6 @@ function formatDate(ts: number): string {
 
 export function ProjectListPage(): React.JSX.Element {
   const [projects, setProjects] = useState<ProjectMeta[]>([])
-  const [deletedView, setDeletedView] = useState(false)
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [showLibrary, setShowLibrary] = useState(false)
@@ -30,14 +29,14 @@ export function ProjectListPage(): React.JSX.Element {
   const openProject = useAppStore((s) => s.openProject)
 
   const refresh = useCallback(async (): Promise<void> => {
-    const res = await (deletedView ? window.api.listDeletedProjects() : window.api.listProjects())
+    const res = await window.api.listProjects()
     if (res.ok) setProjects(res.data)
-  }, [deletedView])
+  }, [])
 
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const res = await (deletedView ? window.api.listDeletedProjects() : window.api.listProjects())
+      const res = await window.api.listProjects()
       if (!cancelled) {
         if (res.ok) setProjects(res.data)
         setLoading(false)
@@ -46,7 +45,7 @@ export function ProjectListPage(): React.JSX.Element {
     return () => {
       cancelled = true
     }
-  }, [deletedView])
+  }, [])
 
   const handleCreate = async (
     name: string,
@@ -83,8 +82,8 @@ export function ProjectListPage(): React.JSX.Element {
     if (
       !(await useConfirmStore.getState().confirm({
         title: `删除项目「${projectName}」`,
-        message: '项目将移入最近删除，可以恢复。素材和画布会保留。',
-        confirmText: '删除',
+        message: '项目、画布和全部项目素材将被彻底删除，此操作不可恢复。',
+        confirmText: '彻底删除',
         danger: true
       }))
     )
@@ -218,22 +217,6 @@ export function ProjectListPage(): React.JSX.Element {
           </div>
         )}
 
-        <nav aria-label="项目列表">
-          <button
-            className="project-home-button"
-            aria-pressed={!deletedView}
-            onClick={() => setDeletedView(false)}
-          >
-            我的项目
-          </button>
-          <button
-            className="project-home-button"
-            aria-pressed={deletedView}
-            onClick={() => setDeletedView(true)}
-          >
-            最近删除
-          </button>
-        </nav>
         <main className="project-home-workspace">
           <div className="project-home-grid">
             {loading && <div className="project-home-empty">加载中…</div>}
@@ -257,80 +240,59 @@ export function ProjectListPage(): React.JSX.Element {
                   <button
                     className="project-home-card-open"
                     aria-label={`打开项目 ${p.name}`}
-                    onClick={() => {
-                      if (!deletedView) handleOpen(p)
-                    }}
+                    onClick={() => handleOpen(p)}
                   >
                     <span className="project-home-name">{p.name}</span>
                     <span className="project-home-time">{formatDate(p.updatedAt)}</span>
                   </button>
                 )}
                 <div className="project-home-card-actions">
-                  {deletedView ? (
-                    <button
-                      className="project-home-button"
-                      onClick={async () => {
-                        const res = await window.api.restoreDeletedProject(p.id)
-                        if (!res.ok || !res.data) {
-                          useToastStore.getState().show(res.ok ? '项目不存在' : res.error.message)
-                          return
-                        }
-                        useToastStore.getState().show(`已恢复「${res.data.name}」`)
-                        void refresh()
-                      }}
-                    >
-                      恢复项目
-                    </button>
-                  ) : (
-                    <>
-                      <button
-                        className="project-home-icon-button"
-                        title="导出"
-                        aria-label={`导出项目 ${p.name}`}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          void handleExport(p)
-                        }}
-                      >
-                        <Icon name="download" size={15} />
-                      </button>
-                      <button
-                        className="project-home-icon-button"
-                        title="复制项目"
-                        aria-label={`复制项目 ${p.name}`}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setCloning(p)
-                          setCloneName(`${p.name} · 副本`)
-                        }}
-                      >
-                        <Icon name="copy" size={15} />
-                      </button>
-                      <button
-                        className="project-home-icon-button"
-                        title="重命名"
-                        aria-label={`重命名项目 ${p.name}`}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setRenamingId(p.id)
-                          setRenameValue(p.name)
-                        }}
-                      >
-                        <Icon name="edit" size={15} />
-                      </button>
-                      <button
-                        className="project-home-icon-button project-home-icon-button-danger"
-                        title="删除"
-                        aria-label={`删除项目 ${p.name}`}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          void handleDelete(p.id, p.name)
-                        }}
-                      >
-                        <Icon name="trash" size={15} />
-                      </button>
-                    </>
-                  )}
+                  <button
+                    className="project-home-icon-button"
+                    title="导出"
+                    aria-label={`导出项目 ${p.name}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void handleExport(p)
+                    }}
+                  >
+                    <Icon name="download" size={15} />
+                  </button>
+                  <button
+                    className="project-home-icon-button"
+                    title="复制项目"
+                    aria-label={`复制项目 ${p.name}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setCloning(p)
+                      setCloneName(`${p.name} · 副本`)
+                    }}
+                  >
+                    <Icon name="copy" size={15} />
+                  </button>
+                  <button
+                    className="project-home-icon-button"
+                    title="重命名"
+                    aria-label={`重命名项目 ${p.name}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setRenamingId(p.id)
+                      setRenameValue(p.name)
+                    }}
+                  >
+                    <Icon name="edit" size={15} />
+                  </button>
+                  <button
+                    className="project-home-icon-button project-home-icon-button-danger"
+                    title="删除"
+                    aria-label={`删除项目 ${p.name}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void handleDelete(p.id, p.name)
+                    }}
+                  >
+                    <Icon name="trash" size={15} />
+                  </button>
                 </div>
               </article>
             ))}

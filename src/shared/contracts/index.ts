@@ -54,8 +54,6 @@ export const IPC = {
   },
   project: {
     list: 'project:list',
-    listDeleted: 'project:list-deleted',
-    restoreDeleted: 'project:restore-deleted',
     create: 'project:create',
     clone: 'project:clone',
     saveWorkspaceProfile: 'project:workspace-profile:save',

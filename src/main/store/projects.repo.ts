@@ -102,34 +102,6 @@ export function listProjects(): ProjectMeta[] {
   return rows.map(rowToMeta)
 }
 
-export function listDeletedProjects(): ProjectMeta[] {
-  return (
-    getDb()
-      .prepare('SELECT * FROM projects WHERE deleted = 1 ORDER BY updated_at DESC')
-      .all() as ProjectRow[]
-  ).map(rowToMeta)
-}
-
-/** Soft deletion preserves all files and references. Restoration changes only the index. */
-export function restoreDeletedProject(id: string): ProjectMeta | null {
-  const database = getDb()
-  return database.transaction(() => {
-    const row = database.prepare('SELECT * FROM projects WHERE id = ? AND deleted = 1').get(id) as
-      ProjectRow | undefined
-    if (!row) return null
-    if (!readProjectFile(id)) throw new Error('项目文件缺失或损坏，无法恢复')
-    const names = new Set(listProjects().map((project) => project.name))
-    let name = row.name
-    for (let suffix = 1; names.has(name); suffix += 1) name = `${row.name} · 恢复${suffix}`
-    database
-      .prepare(
-        'UPDATE projects SET deleted = 0, name = ?, updated_at = ? WHERE id = ? AND deleted = 1'
-      )
-      .run(name, Date.now(), id)
-    return getProject(id)
-  })()
-}
-
 export function createProject(name: string, workspaceProfile?: WorkspaceProfile): ProjectMeta {
   const id = nanoid(12)
   const now = Date.now()
@@ -483,10 +455,9 @@ export function renameProject(id: string, name: string): ProjectMeta | null {
 }
 
 export function deleteProject(id: string): boolean {
-  // 软删除：标记后物理移入回收目录（M1 先直接软删，回收站目录 M7 补）
-  const result = getDb()
-    .prepare('UPDATE projects SET deleted = 1 WHERE id = ? AND deleted = 0')
-    .run(id)
+  // 彻底删除：项目行与 projects/<id> 目录（project.json + media）一并移除，不保留最近删除。
+  const result = getDb().prepare('DELETE FROM projects WHERE id = ?').run(id)
+  if (result.changes > 0) purgeProjectFiles(id)
   return result.changes > 0
 }
 
