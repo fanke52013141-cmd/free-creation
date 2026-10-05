@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { WorkspaceProfile } from '@shared/workspace-profile'
 import { NODE_CATEGORY_IDS, type PaletteCategoryId } from '@shared/palette-preferences'
-import { allNodeTypes } from '../nodes/registry'
+import { allNodeTypes, nodeIconColor } from '../nodes/registry'
 import {
   registerBaseNodeTypes,
   registerExtendedNodeTypes,
@@ -243,7 +243,11 @@ export function ProjectCreateDialog({
                       key={category}
                     >
                       <header>
-                        <span className="project-create-category-icon" aria-hidden="true">
+                        <span
+                          className="project-create-category-icon"
+                          aria-hidden="true"
+                          style={{ color: nodeIconColor(meta.color) }}
+                        >
                           <Icon name={meta.icon} size={16} />
                         </span>
                         <strong>{meta.label}</strong>
@@ -274,7 +278,11 @@ export function ProjectCreateDialog({
                               aria-label={node.label}
                               onChange={() => toggleNode(node.type)}
                             />
-                            <span className="project-create-node-icon" aria-hidden="true">
+                            <span
+                              className="project-create-node-icon"
+                              aria-hidden="true"
+                              style={{ color: nodeIconColor(node.color) }}
+                            >
                               <Icon name={node.icon} size={17} />
                             </span>
                             <span className="project-create-node-label">{node.label}</span>

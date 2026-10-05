@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useValue, type Editor } from 'tldraw'
 import type { MediaAsset, PortDecl, PortType, ProviderSummary } from '@shared/types'
-import { getNodePorts, getNodeType, PORT_TYPE_LABELS } from '../nodes/registry'
+import { getNodePorts, getNodeType, nodeIconColor, PORT_TYPE_LABELS } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
 import { Icon } from '../components/Icon'
 import { AppSelect } from '../components/AppSelect'
@@ -284,7 +284,8 @@ function TestHarness({
         ports.map((port) => {
           const draft = readDraft(port)
           const type = port.type === 'any' ? draft.type : port.type
-          const isText = type === 'text' || type === 'markdown' || type === 'json' || type === 'camera'
+          const isText =
+            type === 'text' || type === 'markdown' || type === 'json' || type === 'camera'
           return (
             <label className="contract-test-input" key={port.id}>
               <span>
@@ -302,7 +303,16 @@ function TestHarness({
                   }
                 >
                   {(
-                    ['text', 'markdown', 'json', 'camera', 'image', 'video', 'audio', 'file'] as PortType[]
+                    [
+                      'text',
+                      'markdown',
+                      'json',
+                      'camera',
+                      'image',
+                      'video',
+                      'audio',
+                      'file'
+                    ] as PortType[]
                   ).map((item) => (
                     <option key={item} value={item}>
                       {item}
@@ -413,7 +423,11 @@ export function NodeContractPanel({
     return () => window.removeEventListener('pointerdown', onPointerDown, true)
   }, [onClose])
 
-  const shape = useValue('node contract panel shape', () => shapeId ? editor.getShape<NodeCardShape>(shapeId) : undefined, [editor, shapeId])
+  const shape = useValue(
+    'node contract panel shape',
+    () => (shapeId ? editor.getShape<NodeCardShape>(shapeId) : undefined),
+    [editor, shapeId]
+  )
   if (!shapeId) return null
   // 对话也有真实的 text → markdown 契约；不能因为它另有聊天工作区就隐藏 I/O 说明。
   if (!shape) return null
@@ -488,7 +502,10 @@ export function NodeContractPanel({
   const exportDiagnostics = async (): Promise<void> => {
     if (!runRecord) return toast('该节点还没有运行记录')
     try {
-      const records = [runRecord, ...runHistory.filter((record) => record.runId !== runRecord.runId)].slice(0, 13)
+      const records = [
+        runRecord,
+        ...runHistory.filter((record) => record.runId !== runRecord.runId)
+      ].slice(0, 13)
       let nodeConfig: Record<string, unknown> = {}
       try {
         const parsed: unknown = JSON.parse(shape.props.config || '{}')
@@ -507,7 +524,9 @@ export function NodeContractPanel({
         redactValues: [
           shape.props.text,
           ...Object.entries(nodeConfig)
-            .filter(([key, value]) => /text|prompt|voice.?id/i.test(key) && typeof value === 'string')
+            .filter(
+              ([key, value]) => /text|prompt|voice.?id/i.test(key) && typeof value === 'string'
+            )
             .map(([, value]) => value as string)
         ]
       })
@@ -562,17 +581,13 @@ export function NodeContractPanel({
   return (
     <aside ref={panelRef} className="node-contract-panel" aria-label="节点输入输出说明">
       <header className="contract-head">
-        <span style={{ color: spec.color }}>
+        <span style={{ color: nodeIconColor(spec.color) }}>
           <Icon name={spec.icon} size={17} />
         </span>
         <div>
           <strong>{contractPanelTitle(shape.props.nodeType, shape.props.title)}</strong>
         </div>
-        <button
-          className="side-panel-close"
-          aria-label="关闭节点说明面板"
-          onClick={onClose}
-        >
+        <button className="side-panel-close" aria-label="关闭节点说明面板" onClick={onClose}>
           <Icon name="close" size={15} />
         </button>
       </header>
@@ -646,7 +661,9 @@ export function NodeContractPanel({
           {tab === 'io' && (
             <div role="tabpanel" id="contract-tabpanel-io">
               <PortRows
-                title={ports.in.some(port => port.exclusiveGroup) ? "输入（同组恰好选一种）" : "输入"}
+                title={
+                  ports.in.some((port) => port.exclusiveGroup) ? '输入（同组恰好选一种）' : '输入'
+                }
                 ports={ports.in}
                 connections={incoming}
                 previews={inputPreviews}
@@ -716,7 +733,10 @@ export function NodeContractPanel({
                     )}
                     {runRecord.target && (
                       <small>
-                        执行目标：{runRecord.target.providerName || runRecord.target.providerId || '未知服务商'}
+                        执行目标：
+                        {runRecord.target.providerName ||
+                          runRecord.target.providerId ||
+                          '未知服务商'}
                         {' · '}
                         {runRecord.target.modelName || runRecord.target.modelId || '未知模型'}
                         {' · '}

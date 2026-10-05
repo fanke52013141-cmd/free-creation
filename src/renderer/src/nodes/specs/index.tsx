@@ -553,7 +553,7 @@ export function registerBaseNodeTypes(): void {
     contractVersion: 1,
     label: '深度视频',
     icon: 'video',
-    color: '#7c3aed',
+    color: NODE_ACCENTS['video-depth'],
     defaultSize: { w: 340, h: 260 },
     description: '使用本地 CUDA 推理将视频转换为灰度深度视频；源音频可选保留。',
     category: 'video',
@@ -571,7 +571,7 @@ export function registerBaseNodeTypes(): void {
     contractVersion: 1,
     label: '白模视频',
     icon: 'video',
-    color: '#64748b',
+    color: NODE_ACCENTS['video-clay'],
     defaultSize: { w: 340, h: 260 },
     description: '使用视频深度估计生成白色浮雕光照视频，可调整浮雕强度与光源。',
     category: 'video',
@@ -664,12 +664,20 @@ export function registerBaseNodeTypes(): void {
     category: 'audio',
     ports: {
       in: [
-        input('in-audio', '源音频', 'audio', '连接一段音频，与源视频二选一。', { exclusiveGroup: 'source-media' }),
-        input('in-video', '源视频', 'video', '连接一段视频，与源音频二选一。', { exclusiveGroup: 'source-media' })
+        input('in-audio', '源音频', 'audio', '连接一段音频，与源视频二选一。', {
+          exclusiveGroup: 'source-media'
+        }),
+        input('in-video', '源视频', 'video', '连接一段视频，与源音频二选一。', {
+          exclusiveGroup: 'source-media'
+        })
       ],
       out: [
-        output('out-audio', '调整后音频', 'audio', '源为音频时生成的新音频资产。', { required: false }),
-        output('out-video', '调整后视频', 'video', '源为视频时生成的新视频资产。', { required: false })
+        output('out-audio', '调整后音频', 'audio', '源为音频时生成的新音频资产。', {
+          required: false
+        }),
+        output('out-video', '调整后视频', 'video', '源为视频时生成的新视频资产。', {
+          required: false
+        })
       ]
     },
     projectOutputs: projectSoundAdjustOutputs,

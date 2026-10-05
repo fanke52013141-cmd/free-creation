@@ -5,7 +5,7 @@ import { nodePageIndex } from './node-page-index'
 import { HTMLContainer, stopEventPropagation, useEditor, useValue } from 'tldraw'
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { getNodePorts, getNodeType, PORT_TYPE_LABELS } from '../nodes/registry'
+import { getNodePorts, getNodeType, nodeIconColor, PORT_TYPE_LABELS } from '../nodes/registry'
 import type { PortDecl, PortSchemaRef, PortType } from '@shared/types'
 import { useConnectionStore } from '../stores/connection'
 import { useNodePanelStore } from '../stores/nodePanel'
@@ -942,7 +942,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           <span className="node-seq" title={`节点序号 ${seq}`}>
             {seq}
           </span>
-          <span className="node-icon" style={{ color: spec?.color, opacity: 0.82 }}>
+          <span className="node-icon" style={{ color: nodeIconColor(nodePortColor) }}>
             {/* JSX 尺寸与 ui-surfaces 对 .node-icon svg 的强制 17px 保持一致 */}
             {spec ? <Icon name={spec.icon} size={17} /> : <Icon name="help" size={17} />}
           </span>

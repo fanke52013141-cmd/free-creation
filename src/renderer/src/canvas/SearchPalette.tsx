@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { stopEventPropagation, type TLShapeId, type Editor } from 'tldraw'
 import type { NodeCardShape } from './NodeCardShape'
-import { getNodeType, allNodeTypes } from '../nodes/registry'
+import { getNodeType, allNodeTypes, nodeIconColor } from '../nodes/registry'
 import { useSearchStore } from '../stores/search'
 import { useWorkflowStore, type WorkflowTemplate } from '../stores/workflow'
 import { addNodeLibraryEntry } from './node-library'
@@ -243,7 +243,12 @@ function SearchPaletteInner({
                         }}
                         onPointerDown={(event) => stopEventPropagation(event)}
                       >
-                        <span className="search-hit-icon">
+                        <span
+                          className="search-hit-icon"
+                          style={{
+                            color: nodeIconColor(getNodeType(hit.type)?.color ?? '#94a3b8')
+                          }}
+                        >
                           <Icon name={getNodeType(hit.type)?.icon ?? 'help'} size={18} />
                         </span>
                         <div className="search-hit-info">
@@ -272,7 +277,12 @@ function SearchPaletteInner({
                         onClick={() => jumpToCanvasNode(hit)}
                         onPointerDown={(event) => stopEventPropagation(event)}
                       >
-                        <span className="search-hit-icon">
+                        <span
+                          className="search-hit-icon"
+                          style={{
+                            color: nodeIconColor(getNodeType(hit.nodeType)?.color ?? '#94a3b8')
+                          }}
+                        >
                           <Icon name={getNodeType(hit.nodeType)?.icon ?? 'help'} size={18} />
                         </span>
                         <div className="search-hit-info">

@@ -29,44 +29,49 @@ export const NODE_CATEGORIES = [
 export { NODE_CATEGORY_IDS, type NodeCategoryId }
 
 /**
- * 单一节点强调色板。相关节点共享色相家族：图片为绿、视频为青、音频为蓝、
- * 对话/模型为紫、数据与流程为琥珀；明度保持在标题图标可辨识的范围。
+ * 节点身份色唯一来源，分配表见 docs/NODE_COLOR_SPEC.md。
+ * 输入玫红、图片绿、视频蓝、声音紫、流程橙；颜色绑定稳定节点 ID。
  */
 export const NODE_ACCENTS = {
-  text: '#38bdf8',
-  image: '#4ade80',
-  'image-crop': '#34d399',
-  'image-split': '#a3e635',
-  'image-gen': '#22c55e',
-  'image-edit': '#86efac',
-  website: '#38bdf8',
-  video: '#06b6d4',
-  'video-asset': '#22d3ee',
-  'video-frame': '#67e8f9',
-  'video-clip': '#14b8a6',
-  'video-audio': '#2dd4bf',
-  'video-depth': '#7c3aed',
-  'video-clay': '#64748b',
-  audio: '#60a5fa',
-  'sound-adjust': '#38bdf8',
-  'vocal-separate': '#3b82f6',
-  speech: '#93c5fd',
-  tts: '#818cf8',
-  'voice-design': '#a5b4fc',
-  file: '#94a3b8',
-  chat: '#a855f7',
-  'ai-process': '#c084fc',
-  processor: '#f59e0b',
-  json: '#fbbf24',
-  structured: '#d97706',
-  code: '#fb923c',
-  storyboard: '#f97316',
-  iterate: '#ea580c',
-  director: '#f59e0b',
-  script: '#f97316',
-  group: '#f59e0b',
-  compose: '#f97316'
+  text: '#F9A8D4',
+  image: '#4ADE80',
+  'image-crop': '#6EE7B7',
+  'image-split': '#A3E635',
+  'image-gen': '#22C55E',
+  'image-edit': '#2DBD9A',
+  website: '#FB718F',
+  video: '#60A5FA',
+  'video-asset': '#93C5FD',
+  'video-frame': '#38BDF8',
+  'video-clip': '#3B82F6',
+  'video-audio': '#75B5ED',
+  'video-depth': '#537AE0',
+  'video-clay': '#8BAAE8',
+  audio: '#D8B4FE',
+  'sound-adjust': '#B18AE8',
+  'vocal-separate': '#B595D9',
+  speech: '#C084FC',
+  tts: '#A366E0',
+  'voice-design': '#C4A7E7',
+  file: '#E8A0BF',
+  chat: '#F472B6',
+  'ai-process': '#DB5B99',
+  processor: '#D99048',
+  json: '#F6B44C',
+  structured: '#FDBA74',
+  code: '#F78C62',
+  storyboard: '#FB923C',
+  iterate: '#E87932',
+  director: '#E8AD85',
+  script: '#EAA05C',
+  group: '#DDA66C',
+  compose: '#ED9950'
 } satisfies Record<NodeTypeId, string>
+
+/** 图标前景按主题统一加深；卡片强调色、端口和数据类型色仍使用原身份色。 */
+export function nodeIconColor(color: string): string {
+  return `color-mix(in srgb, ${color} var(--node-identity-strength, 100%), #17232d)`
+}
 
 export interface PreviewPayload {
   kind: 'image' | 'video' | 'audio'

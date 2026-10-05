@@ -1,6 +1,6 @@
 // LibTV 式节点创建菜单：双击空白画布弹出（指南 1.2.1）
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { allNodeTypes, getNodeType } from '../nodes/registry'
+import { allNodeTypes, getNodeType, nodeIconColor } from '../nodes/registry'
 import type { ConnectionFrom } from '../stores/connection'
 import { Icon } from '../components/Icon'
 import { PALETTE_CATEGORY_META, paletteCategoryForNode } from './palette-categories'
@@ -162,7 +162,7 @@ export function NodeCreateMenu({
             className="node-menu-item"
             onClick={() => onPick(choice)}
           >
-            <span className="item-icon" style={{ color: spec.color }}>
+            <span className="item-icon" style={{ color: nodeIconColor(spec.color) }}>
               <Icon name={spec.icon} size={18} strokeWidth={2} />
             </span>
             <span className="node-menu-label">{spec.label}</span>
@@ -200,6 +200,12 @@ export function NodeCreateMenu({
                 onBlur={hideCategoryMenu}
                 onClick={() => showCategoryMenu(category.id)}
               >
+                <span
+                  className="item-icon"
+                  style={{ color: nodeIconColor(PALETTE_CATEGORY_META[category.id].color) }}
+                >
+                  <Icon name={PALETTE_CATEGORY_META[category.id].icon} size={18} />
+                </span>
                 <span>{category.label}</span>
               </button>
             ))}

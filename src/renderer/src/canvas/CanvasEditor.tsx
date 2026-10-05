@@ -44,7 +44,7 @@ import { NODE_PORT_OUTSET } from './edge-geometry'
 import { assetNodeTypeFor } from './asset-node-type'
 import type { AiProcessConfig } from '../engine/executors/aiProcess'
 import { markUndoPoint } from './history'
-import { getNodeType, allNodeTypes, needsNodeSizeMigration } from '../nodes/registry'
+import { getNodeType, allNodeTypes, needsNodeSizeMigration, nodeIconColor } from '../nodes/registry'
 import {
   registerBaseNodeTypes,
   registerScriptNodeType,
@@ -465,8 +465,7 @@ export function CanvasEditor({
       if (!editor) return
       if (!drag.moved) {
         if (
-          Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) <
-          DRAG_THRESHOLD_PX
+          Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < DRAG_THRESHOLD_PX
         )
           return
         drag.moved = true
@@ -1976,7 +1975,7 @@ export function CanvasEditor({
                   onFocus={(event) => openPaletteCategory(category, event.currentTarget)}
                   onClick={(event) => openPaletteCategory(category, event.currentTarget)}
                 >
-                  <span className="palette-icon">
+                  <span className="palette-icon" style={{ color: nodeIconColor(meta.color) }}>
                     <Icon name={meta.icon} size={20} strokeWidth={2} />
                   </span>
                   <span className="palette-label">{meta.label}</span>
@@ -2011,7 +2010,7 @@ export function CanvasEditor({
               >
                 <span
                   className="palette-icon"
-                  style={{ color: t.color, ['--palette-accent' as string]: t.color }}
+                  style={{ color: nodeIconColor(t.color), ['--palette-accent' as string]: t.color }}
                 >
                   <Icon name={t.icon} size={20} strokeWidth={2} />
                 </span>

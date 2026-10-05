@@ -8,6 +8,7 @@
 
 /* ── P0: theme boundary ────────────────────────────────────────────────── */
 .canvas-theme-light {
+  --node-identity-strength: 55%;
   --bg: #f4f0e9;
   --card: #fffdfa;
   --card-hover: #f5f1ea;
@@ -847,7 +848,9 @@
   border: 1px solid rgba(148, 163, 184, 0.17);
   border-radius: 12px;
   background: rgba(17, 22, 33, 0.84);
-  box-shadow: inset 0 1px rgba(255, 255, 255, 0.035), 0 5px 14px rgba(0, 0, 0, 0.12);
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.035),
+    0 5px 14px rgba(0, 0, 0, 0.12);
   backdrop-filter: blur(16px);
 }
 
@@ -881,7 +884,9 @@
   padding: 0 16px;
   border-radius: 9px;
   background: linear-gradient(120deg, #39bdf8, #50a9e8);
-  box-shadow: 0 7px 20px rgba(37, 163, 232, 0.22), inset 0 1px rgba(255, 255, 255, 0.22);
+  box-shadow:
+    0 7px 20px rgba(37, 163, 232, 0.22),
+    inset 0 1px rgba(255, 255, 255, 0.22);
   font-size: 13px;
 }
 
@@ -930,7 +935,10 @@
   font-size: 13px;
   font-weight: 560;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .canvas-transfer-button:hover:not(:disabled) {
@@ -961,7 +969,9 @@
   border-radius: 20px;
   color: #e7edf5;
   background: linear-gradient(155deg, #151b28, #0e121c 72%);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.48), inset 0 1px rgba(255, 255, 255, 0.045);
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.48),
+    inset 0 1px rgba(255, 255, 255, 0.045);
 }
 
 .canvas-import-heading {
@@ -2248,7 +2258,9 @@ button {
   stroke-linecap: round;
   opacity: 0.78;
   pointer-events: none;
-  transition: opacity 140ms ease, filter 140ms ease;
+  transition:
+    opacity 140ms ease,
+    filter 140ms ease;
 }
 
 /* 已连接的数据边始终显示一段沿真实数据方向移动的彩色流光。 */
@@ -2334,7 +2346,9 @@ button {
   border-radius: 20px;
   color: #4edea3;
   background: linear-gradient(180deg, #2b3039, #22262f);
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.08), 0 12px 24px rgba(0, 0, 0, 0.28);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.08),
+    0 12px 24px rgba(0, 0, 0, 0.28);
 }
 
 .node-card.type-image-crop .crop-empty > span:first-of-type {
@@ -2360,7 +2374,9 @@ button {
   border-radius: 8px;
   color: #cbd3dc;
   background: #2b3039;
-  box-shadow: inset 0 0 0 1px rgba(170, 187, 194, 0.16), 0 2px 8px rgba(0, 0, 0, 0.22);
+  box-shadow:
+    inset 0 0 0 1px rgba(170, 187, 194, 0.16),
+    0 2px 8px rgba(0, 0, 0, 0.22);
   font-size: 12px;
   font-weight: 580;
 }
@@ -2368,7 +2384,9 @@ button {
 .node-card.type-image-crop .crop-empty > button:hover {
   color: #f1faf5;
   background: #343a43;
-  box-shadow: inset 0 0 0 1px rgba(78, 222, 163, 0.42), 0 0 16px rgba(78, 222, 163, 0.18);
+  box-shadow:
+    inset 0 0 0 1px rgba(78, 222, 163, 0.42),
+    0 0 16px rgba(78, 222, 163, 0.18);
 }
 
 .node-card.type-image-crop .crop-empty-chevron {
@@ -2414,7 +2432,9 @@ button {
 
 .node-card.type-image-crop .crop-inline-selection {
   border-color: #86efac;
-  box-shadow: 0 0 0 999px rgba(3, 9, 6, 0.48), 0 0 12px rgba(74, 222, 128, 0.34);
+  box-shadow:
+    0 0 0 999px rgba(3, 9, 6, 0.48),
+    0 0 12px rgba(74, 222, 128, 0.34);
 }
 
 .node-card.type-image-crop .crop-inline-handle {
@@ -3628,7 +3648,9 @@ button {
   border-radius: 17px;
   color: color-mix(in srgb, var(--node-accent, #42b9f5) 64%, white);
   background: linear-gradient(180deg, #2b3039, #22262f);
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.08), 0 10px 20px rgba(0, 0, 0, 0.2);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.08),
+    0 10px 20px rgba(0, 0, 0, 0.2);
 }
 
 .node-card .gen-empty > span:first-of-type {
@@ -3653,7 +3675,9 @@ button {
   border-radius: 8px;
   color: #cbd3dc;
   background: #2b3039;
-  box-shadow: inset 0 0 0 1px rgba(170, 187, 194, 0.16), 0 2px 8px rgba(0, 0, 0, 0.22);
+  box-shadow:
+    inset 0 0 0 1px rgba(170, 187, 194, 0.16),
+    0 2px 8px rgba(0, 0, 0, 0.22);
 }
 
 .node-card .gen-empty > button:hover:not(:disabled) {
@@ -3683,7 +3707,9 @@ button {
   border-radius: 17px;
   color: color-mix(in srgb, var(--node-accent, #42b9f5) 64%, white);
   background: linear-gradient(180deg, #2b3039, #22262f);
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.08), 0 10px 20px rgba(0, 0, 0, 0.2);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.08),
+    0 10px 20px rgba(0, 0, 0, 0.2);
 }
 
 .node-card .audio-upload-btn:hover {
@@ -3702,7 +3728,8 @@ button {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--node-accent, #42b9f5) 19%, transparent);
 }
 
-.node-card :is(button, a, [role='button'], [contenteditable='true']:not(.node-title)):focus-visible {
+.node-card
+  :is(button, a, [role='button'], [contenteditable='true']:not(.node-title)):focus-visible {
   outline: 2px solid color-mix(in srgb, var(--node-accent, #42b9f5) 72%, white);
   outline-offset: 2px;
 }
@@ -4115,9 +4142,15 @@ button {
   place-items: center;
   border: 1px solid rgba(170, 187, 194, 0.16);
   border-radius: 15px;
-  color: color-mix(in srgb, var(--node-accent, #42b9f5) 75%, white);
+  color: color-mix(
+    in srgb,
+    var(--node-accent, #42b9f5) var(--node-identity-strength, 100%),
+    #17232d
+  );
   background: linear-gradient(180deg, #2b3039, #22262f);
-  box-shadow: inset 0 1px rgba(255, 255, 255, 0.08), 0 12px 24px rgba(0, 0, 0, 0.22);
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.08),
+    0 12px 24px rgba(0, 0, 0, 0.22);
 }
 
 .node-card.type-text .node-text {
@@ -4128,7 +4161,11 @@ button {
   padding: 11px;
   border: 1px solid color-mix(in srgb, var(--node-accent) 16%, transparent);
   border-radius: 10px;
-  background: linear-gradient(145deg, color-mix(in srgb, var(--node-accent) 4%, #20242d), #20242d 64%);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--node-accent) 4%, #20242d),
+    #20242d 64%
+  );
 }
 
 .node-card.type-text .text-empty-state,
@@ -4150,7 +4187,11 @@ button {
   padding: 12px;
   border: 1px solid color-mix(in srgb, var(--node-accent) 17%, transparent);
   border-radius: 10px;
-  background: linear-gradient(155deg, color-mix(in srgb, var(--node-accent) 5%, #222630), #20242d 70%);
+  background: linear-gradient(
+    155deg,
+    color-mix(in srgb, var(--node-accent) 5%, #222630),
+    #20242d 70%
+  );
 }
 
 .node-card:is(.type-json, .type-code) .node-empty-state {
@@ -4161,7 +4202,11 @@ button {
   display: grid;
   place-items: center;
   border-color: color-mix(in srgb, var(--node-accent) 24%, var(--line));
-  background: linear-gradient(155deg, color-mix(in srgb, var(--node-accent) 6%, var(--card)), var(--card) 72%);
+  background: linear-gradient(
+    155deg,
+    color-mix(in srgb, var(--node-accent) 6%, var(--card)),
+    var(--card) 72%
+  );
   font-family: inherit;
   text-align: center;
 }
@@ -4187,7 +4232,11 @@ button {
   padding: 10px;
   border: 1px solid color-mix(in srgb, var(--node-accent) 17%, transparent);
   border-radius: 10px;
-  background: linear-gradient(155deg, color-mix(in srgb, var(--node-accent) 5%, #222630), #20242d 72%);
+  background: linear-gradient(
+    155deg,
+    color-mix(in srgb, var(--node-accent) 5%, #222630),
+    #20242d 72%
+  );
 }
 
 .node-card.type-storyboard .storyboard-empty-state {
@@ -4242,9 +4291,20 @@ button {
   background-color: #171c24;
   background-image:
     linear-gradient(color-mix(in srgb, var(--node-accent) 8%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in srgb, var(--node-accent) 8%, transparent) 1px, transparent 1px),
-    radial-gradient(ellipse at center, color-mix(in srgb, var(--node-accent) 6%, #212630), #151a22 76%);
-  background-size: 24px 24px, 24px 24px, auto;
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--node-accent) 8%, transparent) 1px,
+      transparent 1px
+    ),
+    radial-gradient(
+      ellipse at center,
+      color-mix(in srgb, var(--node-accent) 6%, #212630),
+      #151a22 76%
+    );
+  background-size:
+    24px 24px,
+    24px 24px,
+    auto;
 }
 
 .node-card.type-image-split .image-split-quick-empty {
@@ -4262,7 +4322,11 @@ button {
   padding: 10px;
   border: 1px solid color-mix(in srgb, var(--node-accent) 16%, transparent);
   border-radius: 10px;
-  background: linear-gradient(145deg, color-mix(in srgb, var(--node-accent) 3%, #222630), #20242d 72%);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--node-accent) 3%, #222630),
+    #20242d 72%
+  );
 }
 
 /* 生图表单填满卡片，其提示词区域随卡片高度伸缩。 */
@@ -4310,7 +4374,11 @@ button {
   padding: 9px;
   border: 1px solid color-mix(in srgb, var(--node-accent) 17%, transparent);
   border-radius: 9px;
-  background: linear-gradient(145deg, color-mix(in srgb, var(--node-accent) 4%, #242832), #20242d 78%);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--node-accent) 4%, #242832),
+    #20242d 78%
+  );
 }
 
 .node-card:is(.type-speech, .type-voice-design) .tts-section-label {
@@ -4360,7 +4428,11 @@ button {
   padding: 8px;
   border: 1px solid color-mix(in srgb, var(--node-accent) 17%, transparent);
   border-radius: 8px;
-  background: linear-gradient(145deg, color-mix(in srgb, var(--node-accent) 4%, #242832), #20242d 78%);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--node-accent) 4%, #242832),
+    #20242d 78%
+  );
 }
 
 .node-card.type-processor .processor-mode-hint,
@@ -4402,7 +4474,11 @@ button {
 .node-card.type-director .director-node-preview {
   border: 1px solid color-mix(in srgb, var(--node-accent) 29%, transparent);
   border-radius: 10px;
-  background: linear-gradient(150deg, color-mix(in srgb, var(--node-accent) 8%, #232832), #171b23 78%);
+  background: linear-gradient(
+    150deg,
+    color-mix(in srgb, var(--node-accent) 8%, #232832),
+    #171b23 78%
+  );
 }
 
 .node-card.type-director .director-node-frame {
@@ -4418,7 +4494,11 @@ button {
 .node-card :is(.node-audio-player, .vocal-result-card, .file-asset, .video-asset-card) {
   border-color: color-mix(in srgb, var(--node-accent) 22%, var(--line));
   border-radius: 9px;
-  background: linear-gradient(145deg, color-mix(in srgb, var(--node-accent) 4%, var(--card)), var(--card) 75%);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--node-accent) 4%, var(--card)),
+    var(--card) 75%
+  );
 }
 
 .node-card :is(.node-media-actions, .node-media-next-actions) {
@@ -4594,7 +4674,10 @@ button {
   color: #3b5161;
 }
 
-.canvas-theme-light .node-card.type-image .image-node-action-toolbar .image-node-action-button:hover:not(:disabled) {
+.canvas-theme-light
+  .node-card.type-image
+  .image-node-action-toolbar
+  .image-node-action-button:hover:not(:disabled) {
   border-color: rgba(24, 143, 202, 0.45);
   background: rgba(66, 185, 245, 0.12);
   color: #11658e;
@@ -4623,7 +4706,11 @@ button {
   padding: 0 10px;
   border: 1px solid color-mix(in srgb, var(--node-accent) 26%, transparent);
   border-radius: 9px;
-  background: linear-gradient(105deg, color-mix(in srgb, var(--node-accent) 9%, #252a34), #20242d 76%);
+  background: linear-gradient(
+    105deg,
+    color-mix(in srgb, var(--node-accent) 9%, #252a34),
+    #20242d 76%
+  );
   color: #e5ebf2;
 }
 
@@ -4643,7 +4730,11 @@ button {
 
 .node-card.type-tts .tts-upload-btn {
   border-color: color-mix(in srgb, var(--node-accent) 34%, transparent);
-  background: linear-gradient(145deg, color-mix(in srgb, var(--node-accent) 5%, #242832), #1e232c 75%);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--node-accent) 5%, #242832),
+    #1e232c 75%
+  );
 }
 
 .node-card.type-tts .tts-text-section,
@@ -4651,7 +4742,11 @@ button {
   padding: 9px;
   border: 1px solid color-mix(in srgb, var(--node-accent) 17%, transparent);
   border-radius: 9px;
-  background: linear-gradient(145deg, color-mix(in srgb, var(--node-accent) 4%, #242832), #20242d 78%);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--node-accent) 4%, #242832),
+    #20242d 78%
+  );
 }
 
 .node-card.type-tts .tts-text-section .gen-textarea.tts {
@@ -4713,7 +4808,11 @@ button {
   background-color: #161b23;
   background-image:
     linear-gradient(color-mix(in srgb, var(--node-accent) 7%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in srgb, var(--node-accent) 7%, transparent) 1px, transparent 1px);
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--node-accent) 7%, transparent) 1px,
+      transparent 1px
+    );
   background-size: 24px 24px;
 }
 
@@ -4776,12 +4875,16 @@ button {
   border-radius: 8px;
   color: #cbd3dc;
   background: #2b3039;
-  box-shadow: inset 0 0 0 1px rgba(170, 187, 194, 0.16), 0 2px 8px rgba(0, 0, 0, 0.22);
+  box-shadow:
+    inset 0 0 0 1px rgba(170, 187, 194, 0.16),
+    0 2px 8px rgba(0, 0, 0, 0.22);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   pointer-events: auto;
-  transition: background 140ms ease, color 140ms ease;
+  transition:
+    background 140ms ease,
+    color 140ms ease;
 }
 
 .node-card.type-text .text-empty-action:hover {
@@ -4904,11 +5007,15 @@ button {
   border-radius: 8px;
   color: #cbd3dc;
   background: #2b3039;
-  box-shadow: inset 0 0 0 1px rgba(170, 187, 194, 0.16), 0 2px 8px rgba(0, 0, 0, 0.22);
+  box-shadow:
+    inset 0 0 0 1px rgba(170, 187, 194, 0.16),
+    0 2px 8px rgba(0, 0, 0, 0.22);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 140ms ease, transform 140ms ease;
+  transition:
+    background 140ms ease,
+    transform 140ms ease;
 }
 
 .node-card.type-ai-process .ai-process-config-button svg:last-child {
@@ -5013,7 +5120,9 @@ button {
 .node-card.type-audio .audio-empty-select:hover:not(:disabled) {
   border-color: rgba(103, 190, 215, 0.38);
   background: #343a43;
-  box-shadow: inset 0 0 0 1px rgba(103, 190, 215, 0.2), 0 2px 8px rgba(0, 0, 0, 0.22);
+  box-shadow:
+    inset 0 0 0 1px rgba(103, 190, 215, 0.2),
+    0 2px 8px rgba(0, 0, 0, 0.22);
   color: #f1faf5;
   transform: none;
 }
@@ -5216,4 +5325,70 @@ button {
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* 节点身份色（NODE_COLOR_SPEC.md）：正文功能图标与标题图标同源。
+   保留操作、状态图标的独立语义；声音的光效不能再引用品牌蓝。 */
+.node-card .asset-empty > svg,
+.node-card:not(.type-image-crop) :is(.asset-empty, .crop-empty) > svg,
+.node-card.type-file .file-asset-empty > svg,
+.node-card.type-file .file-asset-icon,
+.node-card .file-asset-binary > svg,
+.node-card .gen-empty > svg,
+.node-card.type-image-crop .crop-empty > svg,
+.node-card .website-node-icon,
+.node-card .sound-adjust-body-icon,
+.node-card .audio-empty-icon,
+.node-card .audio-asset-icon-wrap,
+.node-card .node-audio-thumb {
+  color: color-mix(in srgb, var(--node-accent) var(--node-identity-strength, 100%), #17232d);
+}
+
+.node-card :is(.audio-empty-icon, .audio-asset-icon-wrap) {
+  border-color: color-mix(in srgb, var(--node-accent) 24%, var(--line));
+  background: color-mix(in srgb, var(--node-accent) 12%, var(--card));
+}
+
+.node-card :is(.audio-empty-icon-glow, .audio-asset-icon-glow) {
+  background: color-mix(in srgb, var(--node-accent) 22%, transparent);
+}
+
+.node-card .audio-asset-icon-wrap::after {
+  background: color-mix(in srgb, var(--node-accent) 50%, transparent);
+}
+
+.node-card .audio-player-wave.playing span {
+  background: var(--node-accent);
+}
+
+.node-menu-category-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.canvas-theme-light .node-card :is(.node-empty-icon, .asset-empty > svg, .website-node-icon, .sound-adjust-body-icon),
+.canvas-theme-light .node-card.type-image-crop .crop-empty > svg,
+.canvas-theme-light .node-card.type-file .file-asset-empty > svg {
+  background: color-mix(in srgb, var(--node-accent) 12%, var(--card));
+  border-color: color-mix(in srgb, var(--node-accent) 30%, var(--line));
+}
+
+.canvas-theme-light .node-card :is(.node-empty-state, .text-empty-state, .chat-body-hero, .ai-process-hero, .asset-empty) > :is(strong, span:not(.node-wiring):not(.node-empty-icon)) {
+  color: var(--txt);
+}
+
+.node-card.type-voice-design .node-voice-design,
+.canvas-theme-light .node-card.type-voice-design .node-voice-design {
+  --voice-design-accent: var(--node-accent);
+}
+
+.node-card.type-tts,
+.canvas-theme-light .node-card.type-tts {
+  --tts-accent: var(--node-accent);
+}
+
+.node-card:is(.type-speech, .type-voice-design, .type-tts) .tts-section-label svg,
+.node-card.type-voice-design :is(.voice-design-provider-section, .voice-design-description-section, .voice-design-parameters-section) .tts-section-label svg {
+  color: color-mix(in srgb, var(--node-accent) var(--node-identity-strength, 100%), #17232d);
 }

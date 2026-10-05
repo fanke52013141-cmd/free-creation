@@ -16,36 +16,41 @@ export const PALETTE_NODE_GROUPS = {
 
 export const PALETTE_CATEGORY_META: Record<
   PaletteCategoryId,
-  { label: string; shortLabel: string; icon: IconName; description: string }
+  { label: string; shortLabel: string; icon: IconName; color: string; description: string }
 > = {
   input: {
     label: '输入与 AI',
     shortLabel: '输入',
     icon: 'text',
+    color: '#F472B6',
     description: '文本、文件、网址和对话'
   },
   image: {
     label: '图片创作',
     shortLabel: '图片',
     icon: 'image',
+    color: '#4ADE80',
     description: '生成、修改和整理图片'
   },
   video: {
     label: '视频创作',
     shortLabel: '视频',
     icon: 'video',
+    color: '#60A5FA',
     description: '生成、截取和转换视频'
   },
   audio: {
     label: '声音创作',
     shortLabel: '声音',
     icon: 'audio',
+    color: '#C084FC',
     description: '语音合成、音色与声音处理'
   },
   logic: {
     label: '流程与高级',
     shortLabel: '流程',
     icon: 'workflow',
+    color: '#FB923C',
     description: '组织数据、批量任务和高级工作流'
   }
 }
