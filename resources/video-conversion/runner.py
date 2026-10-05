@@ -14,6 +14,7 @@ import numpy as np
 import torch
 
 from video_depth_anything.video_depth import VideoDepthAnything
+from clay_renderer import TemporalDepth, normalize_depth, render_clay, scene_cut
 
 
 MODEL_CONFIG = {"encoder": "vits", "features": 64, "out_channels": [48, 96, 192, 384]}
@@ -117,13 +118,37 @@ def main() -> int:
     emit("decode")
     frames, fps = read_frames(args.input, int(config.get("maxResolution", 512)))
     height, width = frames.shape[1:3]
+    modern_clay = args.mode in ("clay", "both") and config.get("version", 1) == 2
+    # Motion/cut guides stay small and never become material texture.
+    guide_scale = min(1, 256 / max(width, height))
+    guide_size = (max(2, round(width * guide_scale)), max(2, round(height * guide_scale)))
+    guides = [cv2.cvtColor(cv2.resize(frame, guide_size), cv2.COLOR_RGB2GRAY)
+              for frame in frames] if modern_clay else []
+    starts = [0] + [index for index in range(1, len(guides))
+                    if scene_cut(guides[index - 1], guides[index])]
+    ends = starts[1:] + [len(frames)]
+    inference_size = {"fast": 518, "standard": 644, "fine": 770}.get(
+        str(config.get("quality", "standard")), 644) if modern_clay else 518
     emit("inference", frames=len(frames), width=width, height=height, fps=fps)
 
     model = VideoDepthAnything(**MODEL_CONFIG)
     weights = torch.load(args.checkpoint, map_location="cpu", weights_only=True)
     model.load_state_dict(weights, strict=True)
     model = model.to("cuda").eval()
-    depths, _ = model.infer_video_depth(frames, fps, input_size=518, device="cuda")
+    if modern_clay:
+        for module in model.modules():
+            if hasattr(module, "use_sdpa"):
+                module.use_sdpa = True
+    depths = None
+    for start, end in zip(starts, ends):
+        segment, _ = model.infer_video_depth(frames[start:end], fps, input_size=inference_size, device="cuda")
+        if len(starts) == 1:
+            depths = segment
+        else:
+            if depths is None:
+                depths = np.empty((len(frames), *segment.shape[1:]), dtype=segment.dtype)
+            depths[start:end] = segment
+        del segment
     del frames
     del model
     torch.cuda.empty_cache()
@@ -131,6 +156,9 @@ def main() -> int:
 
     emit("render", frames=len(depths))
     low, high = depth_bounds(depths)
+    shot_bounds = [depth_bounds(depths[start:end]) for start, end in zip(starts, ends)]
+    temporal = TemporalDepth(float(config.get("temporalStability", 0.6)))
+    shot_index = 0
     if args.mode in ("depth", "both"):
         gray = depth_gray(depths, low, high, str(config.get("nearColor", "white")))
     else:
@@ -145,13 +173,20 @@ def main() -> int:
         clay_raw = open(args.output_raw_clay, "wb") if args.mode == "both" else None
         try:
             for index, depth in enumerate(depths):
+                clay = None
+                if modern_clay:
+                    if shot_index + 1 < len(starts) and index >= starts[shot_index + 1]:
+                        shot_index += 1
+                    normalized = normalize_depth(depth, *shot_bounds[shot_index])
+                    stable = temporal.apply(normalized, guides[index], index == starts[shot_index])
+                    clay = render_clay(stable, config)
                 if gray is not None:
                     depth_rgb = np.repeat(gray[index, :, :, None], 3, axis=2)
                     raw.write(np.ascontiguousarray(depth_rgb).tobytes())
                 else:
-                    raw.write(np.ascontiguousarray(clay_frame(depth, low, high, config)).tobytes())
+                    raw.write(np.ascontiguousarray(clay if clay is not None else clay_frame(depth, low, high, config)).tobytes())
                 if clay_raw is not None and args.mode == "both":
-                    clay_raw.write(np.ascontiguousarray(clay_frame(depth, low, high, config)).tobytes())
+                    clay_raw.write(np.ascontiguousarray(clay if clay is not None else clay_frame(depth, low, high, config)).tobytes())
                 if index and index % 60 == 0:
                     emit("render", done=index, total=len(depths))
         finally:
@@ -159,7 +194,9 @@ def main() -> int:
                 clay_raw.close()
 
     with open(args.output_meta, "w", encoding="utf-8") as metadata:
-        json.dump({"width": width, "height": height, "fps": fps, "frames": len(depths)}, metadata)
+        json.dump({"width": width, "height": height, "fps": fps, "frames": len(depths),
+                   "inferenceSize": inference_size, "shots": len(starts),
+                   "clayRenderer": 2 if modern_clay else 1}, metadata)
     emit("done", frames=len(depths))
     return 0
 

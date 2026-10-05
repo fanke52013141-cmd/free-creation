@@ -12,7 +12,10 @@ import {
 
 type Mode = 'depth' | 'clay'
 
-async function executeVideoAiNode(ctx: NodeExecutionContext, mode: Mode): Promise<NodeExecutionResult> {
+async function executeVideoAiNode(
+  ctx: NodeExecutionContext,
+  mode: Mode
+): Promise<NodeExecutionResult> {
   const source = inputMedia(ctx.inputs, 'in-video', 'video')[0]
   if (!source) return { status: 'skipped', reason: '请连接一段视频到“源视频”输入' }
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
@@ -34,6 +37,15 @@ async function executeVideoAiNode(ctx: NodeExecutionContext, mode: Mode): Promis
     mode === 'depth'
       ? parseVideoDepthConfig(readNodeConfig(ctx.shape))
       : parseVideoClayConfig(readNodeConfig(ctx.shape))
+  ctx.setDiagnosticTarget?.({
+    operation: mode === 'depth' ? 'video-depth' : 'video-clay',
+    modelId: 'local:video-depth-anything-small'
+  })
+  ctx.trace?.(
+    'execution',
+    'info',
+    mode === 'clay' ? `开始本地白模转换（渲染版本 ${config.version}）` : '开始本地深度转换'
+  )
   const jobId = `${ctx.node.id}:${ctx.runId ?? Date.now()}`
   const convert = mode === 'depth' ? ctx.gateway.convertVideoDepth : ctx.gateway.convertVideoClay
   if (!convert) return { status: 'failed', reason: '当前运行环境缺少本地视频转换能力' }
@@ -59,6 +71,7 @@ async function executeVideoAiNode(ctx: NodeExecutionContext, mode: Mode): Promis
       return { status: 'skipped', reason: '已取消' }
     }
     if (!result.ok) return { status: 'failed', reason: result.error.message }
+    ctx.trace?.('result', 'info', '本地视频已编码并保存为独立媒体资产')
 
     const videoName = mediaDisplayName(source, '视频')
     const outputName = mode === 'depth' ? '深度视频' : '白模视频'
@@ -69,7 +82,12 @@ async function executeVideoAiNode(ctx: NodeExecutionContext, mode: Mode): Promis
         appendMediaResult(
           previous,
           { mediaId: result.data.id, mediaPath: result.data.path, mime: result.data.mime },
-          { nodeId: ctx.node.id, modelKey: 'local:video-depth-anything-small', prompt, runId: ctx.runId }
+          {
+            nodeId: ctx.node.id,
+            modelKey: 'local:video-depth-anything-small',
+            prompt,
+            runId: ctx.runId
+          }
         )
       )
     )

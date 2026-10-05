@@ -395,7 +395,8 @@ function runTracked(
     })
     child.once('close', (code, signal) => {
       activeJobs.delete(jobId)
-      if (code === 0) resolve(output)
+      if (jobStates.get(jobId)?.cancelled) reject(new Error('已取消'))
+      else if (code === 0) resolve(output)
       else reject(new Error(signal ? '已取消' : output.trim().slice(-2500) || `子进程退出码 ${code}`))
     })
   })
@@ -519,7 +520,17 @@ export function cancelVideoConversion(jobId: string): boolean {
   if (!state) return false
   state.cancelled = true
   const child = activeJobs.get(jobId)
-  child?.kill()
+  // Windows venv Python launches the actual interpreter as a child process.
+  // Killing only the launcher leaves CUDA inference running after cancellation.
+  if (child?.pid && process.platform === 'win32') {
+    const killer = spawn('taskkill', ['/PID', String(child.pid), '/T', '/F'], {
+      windowsHide: true,
+      stdio: 'ignore'
+    })
+    killer.on('error', () => { child.kill() })
+  } else {
+    child?.kill()
+  }
   if (activeConversionId !== jobId) {
     const index = pendingConversions.findIndex((pending) => pending.jobId === jobId)
     if (index >= 0) pendingConversions.splice(index, 1)[0].reject(new Error('已取消'))
