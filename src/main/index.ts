@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, protocol } from 'electron'
+import { app, shell, BrowserWindow, protocol, Menu } from 'electron'
 import { join, extname } from 'path'
 import { createReadStream } from 'fs'
 import { stat } from 'fs/promises'
@@ -176,6 +176,7 @@ function registerMediaProtocol(): void {
 }
 
 function createWindow(): BrowserWindow {
+  Menu.setApplicationMenu(null)
   const mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -190,6 +191,8 @@ function createWindow(): BrowserWindow {
     }
   })
 
+  mainWindow.setMenu(null)
+
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
   })
@@ -197,10 +200,16 @@ function createWindow(): BrowserWindow {
   // 渲染进程崩溃/被杀：记录可用退出码，异常后仍执行原有窗口策略（不吞异常继续）。
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
     diagnostics?.emit(
-      mainProducer.build('app.process_exited', undefined, '渲染进程异常退出', {}, {
-        error: { code: 'PROCESS_EXITED', category: 'process', retryable: false },
-        attributes: { reason: details.reason, exitCode: details.exitCode ?? 0 }
-      })
+      mainProducer.build(
+        'app.process_exited',
+        undefined,
+        '渲染进程异常退出',
+        {},
+        {
+          error: { code: 'PROCESS_EXITED', category: 'process', retryable: false },
+          attributes: { reason: details.reason, exitCode: details.exitCode ?? 0 }
+        }
+      )
     )
     log.error('[diagnostics] renderer process gone', details.reason, details.exitCode ?? '')
   })

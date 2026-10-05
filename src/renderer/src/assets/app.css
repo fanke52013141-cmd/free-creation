@@ -11050,50 +11050,10 @@ select:focus-visible,
 }
 .website-node-empty,
 .website-node-link {
-  box-sizing: border-box;
-  display: flex;
-  height: 100%;
-  min-height: 150px;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 18px;
-  text-align: center;
-}
-.website-node-empty {
-  color: var(--muted);
-}
-.website-node-empty strong,
-.website-node-link strong {
-  color: var(--txt);
-  font-size: 16px;
-}
-.website-node-empty > span:last-child {
-  font-size: 12px;
-}
-.website-node-icon {
-  display: grid;
-  width: 48px;
-  height: 48px;
-  place-items: center;
-  border: 1px solid color-mix(in srgb, var(--node-accent, #38bdf8) 38%, transparent);
-  border-radius: 15px;
-  background: color-mix(in srgb, var(--node-accent, #38bdf8) 12%, transparent);
-  color: var(--node-accent, #38bdf8);
-}
-.website-node-link {
   color: inherit;
   text-decoration: none;
   cursor: pointer;
-  border-radius: 10px;
-  transition:
-    background 140ms ease,
-    transform 140ms ease;
-}
-.website-node-link:hover {
-  background: color-mix(in srgb, var(--node-accent, #38bdf8) 8%, transparent);
-  transform: translateY(-1px);
+  background: transparent;
 }
 .website-node-url {
   display: -webkit-box;
@@ -12374,3 +12334,16 @@ canvas.tl-canvas-indicators {
 
 /* 结果折叠功能已移除（2026-10-05 用户要求）：本轮产物始终全部可见。 */
 .search-hit-active { outline:2px solid #769cff; outline-offset:-2px; }
+
+/* 节点库：搜索与列表对齐，动作采用同尺寸图标按钮。 */
+.workflow-panel .wf-search { display: flex; align-items: center; gap: 8px; height: 40px; margin: 16px 16px 12px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--muted); }
+.workflow-panel .wf-search input { flex: 1; width: 100%; min-width: 0; height: 38px; margin: 0; padding: 0; border: 0; outline: 0; background: transparent; color: var(--txt); font: inherit; font-size: 13px; }
+.workflow-panel .wf-search:focus-within { border-color: var(--brand); }
+.workflow-panel .wf-template-list { padding: 0 16px 16px; gap: 8px; }
+.workflow-panel .wf-template-card { min-height: 64px; padding: 12px; gap: 12px; }
+.workflow-panel .wf-template-info { gap: 4px; }
+.workflow-panel .wf-template-name { font-size: 13px; }
+.workflow-panel .wf-template-meta { font-size: 11px; }
+.workflow-panel .wf-template-actions { align-items: center; gap: 4px; }
+.workflow-panel .wf-action-btn { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 6px; }
+.workflow-panel .wf-action-btn:hover { background: var(--card-hover); }

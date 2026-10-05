@@ -421,3 +421,5 @@
 .node-reading-scroll-thumb:focus-visible {
   opacity: 1;
 }
+
+.node-card.type-website .website-node-link:hover { background: transparent; transform: none; }

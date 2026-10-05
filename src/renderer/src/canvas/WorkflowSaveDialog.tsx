@@ -101,7 +101,6 @@ export function WorkflowSaveDialog({
       >
         <header className="library-form-header">
           <div>
-            <span className="library-eyebrow">NODE LIBRARY</span>
             <h2>保存为可复用内容</h2>
           </div>
           <button
@@ -115,8 +114,30 @@ export function WorkflowSaveDialog({
           </button>
         </header>
         <div className="library-form-scroll">
-          <fieldset disabled={busy}>
+          <label className="library-form-field">
+            <span>内容名称</span>
+            <input
+              autoFocus
+              maxLength={100}
+              value={name}
+              onChange={(event) => {
+                setName(event.target.value)
+                setError('')
+              }}
+              placeholder="例如：角色设定到分镜"
+            />
+          </label>
+          <fieldset className="workflow-save-options" disabled={busy}>
             <legend>选择保存方式</legend>
+            <label>
+              <input
+                type="radio"
+                name="reuse-kind"
+                checked={saveKind === 'template'}
+                onChange={() => setSaveKind('template')}
+              />
+              流程模板
+            </label>
             <label>
               <input
                 type="radio"
@@ -132,36 +153,9 @@ export function WorkflowSaveDialog({
                 }
                 onChange={() => setSaveKind('resource')}
               />
-              素材资源：保存文本与媒体资产，供以后引用
-            </label>
-            <label>
-              <input
-                type="radio"
-                name="reuse-kind"
-                checked={saveKind === 'template'}
-                onChange={() => setSaveKind('template')}
-              />
-              流程模板：保存节点配置与连线，不复制媒体
+              素材资源
             </label>
           </fieldset>
-          <label className="library-form-field">
-            <span>内容名称</span>
-            <input
-              autoFocus
-              maxLength={100}
-              value={name}
-              onChange={(event) => {
-                setName(event.target.value)
-                setError('')
-              }}
-              placeholder="例如：角色设定到分镜"
-            />
-          </label>
-          <p className="side-panel-hint">
-            {saveKind === 'template'
-              ? `将保存 ${nodes.length} 个节点及它们之间的连线，不复制媒体。`
-              : `将保存 ${nodes.length} 个节点的可复用正文与媒体，不保存执行连线。`}
-          </p>
           {error && (
             <div className="library-form-error" role="alert">
               {error}

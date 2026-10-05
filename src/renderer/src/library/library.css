@@ -450,3 +450,20 @@
   .library-filter-row .library-view-switch button { width: 29px; justify-content: center; padding: 0; font-size: 0; }
   .library-view-switch svg { flex: 0 0 auto; }
 }
+
+/* 可复用内容弹窗：单一表面，两个同级字段。 */
+.library-form-dialog.workflow-save-dialog { width: min(480px, calc(100vw - 32px)); }
+.workflow-save-dialog .library-form-header { padding: 20px 24px; }
+.workflow-save-dialog .library-form-header h2 { margin: 0; font-size: 18px; }
+.workflow-save-dialog .library-form-close { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px; color: #aeb9cc; background: transparent; cursor: pointer; }
+.workflow-save-dialog .library-form-close:hover { background: #252c3b; color: #fff; }
+.workflow-save-dialog .library-form-scroll { padding: 20px 24px 24px; }
+.workflow-save-dialog .library-form-field { margin: 0; font-size: 13px; gap: 8px; }
+.workflow-save-dialog .library-form-field input { height: 40px; font-size: 13px; padding: 0 12px; }
+.workflow-save-options { border: 0; margin: 20px 0 0; padding: 0; display: flex; gap: 12px; }
+.workflow-save-options legend { padding: 0; margin-bottom: 8px; font-size: 13px; color: #aeb9cc; }
+.workflow-save-options label { display: flex; flex: 1; align-items: center; gap: 8px; padding: 12px; border: 1px solid #303b50; border-radius: 8px; font-size: 13px; cursor: pointer; }
+.workflow-save-options label:has(input:checked) { border-color: #22c6da; background: rgb(34 198 218 / 8%); }
+.workflow-save-options label:has(input:disabled) { opacity: .45; cursor: not-allowed; }
+.workflow-save-options input { margin: 0; accent-color: #22c6da; }
+.workflow-save-dialog .library-form-footer button { height: 36px; font-size: 13px; }

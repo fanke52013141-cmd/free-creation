@@ -145,14 +145,14 @@ function WorkflowPanel({ editor }: { editor: Editor | null }): React.JSX.Element
                   aria-label={`从节点库添加 ${tmpl.name} 到画布`}
                   onClick={() => handleApply(tmpl)}
                 >
-                  <Icon name="add" size={13} /> 添加
+                  <Icon name="add" size={16} />
                 </button>
                 <button
                   className="wf-action-btn delete"
                   aria-label={`删除节点库条目 ${tmpl.name}`}
                   onClick={() => void handleRemoveTemplate(tmpl)}
                 >
-                  <Icon name="close" size={13} />
+                  <Icon name="trash" size={16} />
                 </button>
               </div>
             </div>
@@ -649,7 +649,7 @@ function HistoryPanel({
                   disabled={restoring}
                   onClick={() => void handleRemove(snap)}
                 >
-                  <Icon name="close" size={13} />
+                  <Icon name="trash" size={16} />
                 </button>
               </div>
             </div>

@@ -130,7 +130,10 @@
 .node-contract-panel,
 .chat-side-panel {
   border-left-color: rgba(231, 238, 247, 0.12);
-  background: linear-gradient(145deg, rgba(43, 49, 58, 0.95), rgba(23, 27, 33, 0.98));
+  background: linear-gradient(145deg, #2b313a, #171b21);
+  opacity: 1;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   box-shadow: -18px 0 44px rgba(0, 0, 0, 0.26);
 }
 
@@ -1720,7 +1723,7 @@ button {
 /* 浅色模式必须完整切换右侧三个抽屉，不能残留深色底 + 深色字。 */
 .canvas-theme-light :is(.side-panel, .node-contract-panel, .chat-side-panel) {
   border-left-color: rgba(54, 69, 82, 0.15);
-  background: linear-gradient(145deg, rgba(255, 254, 251, 0.98), rgba(244, 239, 231, 0.98));
+  background: linear-gradient(145deg, #fffefb, #f4efe7);
   box-shadow: -18px 0 44px rgba(73, 61, 45, 0.14);
 }
 

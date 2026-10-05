@@ -669,6 +669,15 @@ function ImageEditEditorCore({
       toast(validationError)
       return
     }
+    if (!selectedOption) return toast('请选择可用的图片编辑模型')
+    if (
+      selectedOption.model.operations &&
+      !selectedOption.model.operations.includes('image.edit')
+    ) {
+      return toast('所选模型不支持图片编辑，请选择支持 P 图的模型')
+    }
+    // 默认模型也必须落入配置，执行器才能使用工作台实际显示的选择。
+    save({ ...config, modelKey: selectedOption.key })
     setBusy(true)
     // 工作台只是配置界面；提交后立即回到画布查看真实节点运行状态和产物。
     if (workbench) onRunSubmitted?.()
