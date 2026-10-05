@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   DEFAULT_IMAGE_CROP_CONFIG,
+  imageCropContainMapping,
   parseImageCropConfig,
   validateImageCropConfig
 } from '@shared/image-crop'
@@ -14,6 +15,22 @@ import type { GatewayClient } from '@shared/engine/gateway-client'
 afterEach(() => vi.restoreAllMocks())
 
 describe('图片裁剪配置', () => {
+  it.each([
+    [9 / 16, 2],
+    [3, 1],
+    [1, 1]
+  ])('完整显示宽高比 %s 的原图且坐标可逆', (image, viewport) => {
+    const map = imageCropContainMapping(image, viewport)
+    expect(map.offsetX).toBeGreaterThanOrEqual(0)
+    expect(map.offsetY).toBeGreaterThanOrEqual(0)
+    expect(map.offsetX + map.scaleX).toBeLessThanOrEqual(1)
+    expect(map.offsetY + map.scaleY).toBeLessThanOrEqual(1)
+    expect((map.scaleX * viewport) / map.scaleY).toBeCloseTo(image)
+    for (const value of [0, 0.1, 0.9, 1]) {
+      expect((map.offsetX + value * map.scaleX - map.offsetX) / map.scaleX).toBeCloseTo(value)
+      expect((map.offsetY + value * map.scaleY - map.offsetY) / map.scaleY).toBeCloseTo(value)
+    }
+  })
   it('把损坏或越界配置收敛为安全的归一化数据', () => {
     expect(parseImageCropConfig('not-json')).toEqual(DEFAULT_IMAGE_CROP_CONFIG)
     const config = parseImageCropConfig(

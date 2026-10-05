@@ -9,6 +9,7 @@ import { readNodeConfig } from '../../../canvas/node-persistence'
 import { AppSelect } from '../../../components/AppSelect'
 import { Icon } from '../../../components/Icon'
 import { useNodePanelStore } from '../../../stores/nodePanel'
+import { readNodeRunRecord } from '../../../engine/runRecord'
 
 const AI_SCHEMA_OPTIONS = [
   { id: 'json.any', version: 1, label: '通用 JSON（json.any@1）' },
@@ -77,6 +78,19 @@ export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
         配置处理
         <Icon name="arrow" size={13} />
       </button>
+      {readNodeRunRecord(shape.meta.nodeRun)?.status === 'success' && (
+        <button
+          type="button"
+          className="btn-ghost small"
+          onPointerDown={stopEventPropagation}
+          onClick={(event) => {
+            event.stopPropagation()
+            useNodePanelStore.getState().open('contract', shape.id, 'overview')
+          }}
+        >
+          查看已有结果
+        </button>
+      )}
     </div>
   )
 }

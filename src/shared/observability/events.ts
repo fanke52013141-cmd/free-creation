@@ -60,6 +60,7 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
     def('workflow.cancelled', 'info', 'renderer/engine/executor.ts'),
     // node.*：公共执行器（node.stage 是旧 ctx.trace 的通用适配事件）
     def('node.started', 'info', 'renderer/engine/executor.ts', { portCount: 'int' }),
+    def('node.document_materialized', 'info', 'renderer/engine/executor.ts'),
     def('node.input_validated', 'info', 'renderer/engine/executor.ts', { portCount: 'int' }),
     def('node.capability_resolved', 'info', 'shared/engine/executors/*', MODEL_ATTRS),
     def('node.output_validated', 'info', 'renderer/engine/executor.ts', { portCount: 'int' }),

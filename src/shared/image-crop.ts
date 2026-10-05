@@ -33,6 +33,23 @@ export interface NormalizedPoint {
   y: number
 }
 
+/** Full-image preview bounds in normalized viewport coordinates. */
+export function imageCropContainMapping(
+  imageAspect: number,
+  viewportAspect: number
+): {
+  scaleX: number
+  scaleY: number
+  offsetX: number
+  offsetY: number
+} {
+  const image = Math.max(imageAspect, 0.0001)
+  const viewport = Math.max(viewportAspect, 0.0001)
+  const scaleX = Math.min(1, image / viewport)
+  const scaleY = Math.min(1, viewport / image)
+  return { scaleX, scaleY, offsetX: (1 - scaleX) / 2, offsetY: (1 - scaleY) / 2 }
+}
+
 export interface NormalizedRect {
   x: number
   y: number

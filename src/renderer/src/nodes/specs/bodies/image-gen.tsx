@@ -85,6 +85,12 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
   const [draft, setDraft] = useState(shape.props.text)
   const [busy, setBusy] = useState(false)
   const promptRef = useRef<HTMLTextAreaElement | null>(null)
+  useEffect(() => {
+    const prompt = promptRef.current
+    if (!prompt) return
+    prompt.style.height = '72px'
+    prompt.style.height = `${Math.max(72, Math.min(360, prompt.scrollHeight + 2))}px`
+  }, [draft, shape.props.w])
   const engineBusy = ['queued', 'running', 'pending'].includes(shape.props.exec)
 
   useEffect(() => {

@@ -179,6 +179,7 @@ describe('aiProcess 执行器 · 输出模式分支', () => {
     expect(r.status).toBe('done')
     const written = JSON.parse(result.value as string)
     expect(written).toEqual({ kind: 'text', text: '转换后的文本' })
+    expect(r.artifactOutputPorts).toEqual(['out-text'])
     // 配置/结果分离：执行器只写运行结果（meta），不改动 props.text 配置
     expect(Object.keys(props)).toHaveLength(0)
   })
@@ -190,6 +191,7 @@ describe('aiProcess 执行器 · 输出模式分支', () => {
     const r = await aiProcessExecutor(ctx)
     expect(r.status).toBe('done')
     expect(JSON.parse(result.value as string)).toEqual({ kind: 'markdown', text: '# 标题' })
+    expect(r.artifactOutputPorts).toEqual(['out-markdown'])
   })
 
   it('json 模式：合法 JSON 且通过 Schema 校验 → 输出 json 结果', async () => {
@@ -204,6 +206,7 @@ describe('aiProcess 执行器 · 输出模式分支', () => {
     expect(r.status).toBe('done')
     expect(JSON.parse(result.value as string).kind).toBe('json')
     expect(JSON.parse(result.value as string).data.shots).toHaveLength(1)
+    expect(r.artifactOutputPorts).toEqual(['out-json'])
   })
 
   it('json 模式但未选 Schema → 失败（不伪装 JSON）', async () => {
@@ -212,6 +215,7 @@ describe('aiProcess 执行器 · 输出模式分支', () => {
     const { ctx } = makeCtx(config, textInput('输入'))
     const r = await aiProcessExecutor(ctx)
     expect(r.status).toBe('failed')
+    expect(r.artifactOutputPorts).toBeUndefined()
     expect(r.reason).toContain('Schema')
   })
 
@@ -225,6 +229,7 @@ describe('aiProcess 执行器 · 输出模式分支', () => {
     const { ctx } = makeCtx(config, textInput('输入'))
     const r = await aiProcessExecutor(ctx)
     expect(r.status).toBe('failed')
+    expect(r.artifactOutputPorts).toBeUndefined()
     expect(r.reason).toContain('JSON')
   })
 
@@ -238,6 +243,7 @@ describe('aiProcess 执行器 · 输出模式分支', () => {
     const { ctx } = makeCtx(config, textInput('剧本'))
     const r = await aiProcessExecutor(ctx)
     expect(r.status).toBe('failed')
+    expect(r.artifactOutputPorts).toBeUndefined()
     expect(r.reason).toContain('storyboard.shots')
   })
 
@@ -247,6 +253,7 @@ describe('aiProcess 执行器 · 输出模式分支', () => {
     const { ctx, result } = makeCtx(config, textInput('输入'))
     const r = await aiProcessExecutor(ctx)
     expect(r.status).toBe('failed')
+    expect(r.artifactOutputPorts).toBeUndefined()
     expect(r.reason).toContain('模型返回为空')
     // 失败不写运行结果，下游不得把空输出当成功消费。
     expect(result.value).toBeNull()
@@ -258,6 +265,7 @@ describe('aiProcess 执行器 · 输出模式分支', () => {
     const { ctx } = makeCtx(config, textInput('输入'))
     const r = await aiProcessExecutor(ctx)
     expect(r.status).toBe('failed')
+    expect(r.artifactOutputPorts).toBeUndefined()
     expect(r.reason).toContain('模型返回为空')
   })
 })

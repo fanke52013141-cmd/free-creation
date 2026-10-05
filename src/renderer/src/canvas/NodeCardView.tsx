@@ -837,15 +837,14 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           )
           const rowGap = Number.parseFloat(getComputedStyle(body).rowGap) || 0
           const contentHeight =
-            children.reduce(
-              (total, child) =>
-                total + Math.max(child.getBoundingClientRect().height, child.scrollHeight),
-              0
-            ) +
+            children.reduce((total, child) => {
+              const content = child.querySelector<HTMLElement>('.gen-panel') ?? child
+              return total + Math.max(content.offsetHeight, content.scrollHeight)
+            }, 0) +
             Math.max(0, children.length - 1) * rowGap
           const shellHeight = shape.props.h - body.clientHeight
           const requiredHeight = Math.ceil(shellHeight + contentHeight)
-          const tier = resolveNodeHeight(requiredHeight)
+          const tier = Math.min(NODE_UI.height.autoMax, Math.max(NODE_UI.height.default, requiredHeight))
           if (tier !== shape.props.h) {
             editor.run(
               () =>

@@ -13,7 +13,7 @@ import type { Editor, TLShapeId } from 'tldraw'
 import type { CanvasEdge, CanvasNode, ExecStatus, ProviderSummary } from '@shared/types'
 import { deriveGraph } from '../canvas/graph'
 import { markUndoPoint } from '../canvas/history'
-import { materializeArtifact } from '../canvas/artifact-materializer'
+import { materializeArtifact, materializeDocumentArtifact } from '../canvas/artifact-materializer'
 import type { NodeCardShape, NodeCardProps } from '../canvas/NodeCardShape'
 import {
   buildOutputPackets,
@@ -1043,6 +1043,25 @@ async function executeNodeUnscheduled(
           error: { phase: 'output', reason }
         })
         return { status: 'failed', reason: '输出契约校验失败' }
+      }
+      try {
+        for (const portId of new Set(result.artifactOutputPorts ?? [])) {
+          const packet = projected.value[portId]
+          if (!packet) throw new Error('文档产物必须来自本次已校验的输出端口')
+          materializeDocumentArtifact(editor, latest, portId, packet.value, ctx.runId)
+          recordRunTrace(ctx, node, record, 'output', 'info', '已创建独立文档结果节点', {
+            name: 'node.document_materialized'
+          })
+        }
+      } catch {
+        const reason = '文档结果节点创建失败；已生成的内容可在节点运行记录中查看'
+        setExec(editor, shapeId, 'failed')
+        reportRunError(ctx, node.title || node.type, reason, { nodeId: node.id, phase: 'output' })
+        recordRunTrace(ctx, node, record, 'output', 'error', reason)
+        finishRunRecord(ctx, node, shapeId, record, 'failed', {
+          error: { phase: 'output', reason }
+        })
+        return { status: 'failed', reason }
       }
       ctx.outputs.set(node.id, projected.value)
       setExec(editor, shapeId, 'success')

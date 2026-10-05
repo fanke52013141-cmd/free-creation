@@ -1,0 +1,21 @@
+.image-edit-model-row.gen-row {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+.image-edit-model-row.gen-row > .gen-select:first-child {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.image-edit-model-row.gen-row > .gen-select.w92 {
+  flex: 0 0 72px;
+  min-width: 72px;
+}
+.image-edit-model-row.gen-row > .gen-select.w86 {
+  flex: 0 0 64px;
+  min-width: 64px;
+}
+.image-edit-model-row.gen-row > .gen-select:is(.w92, .w86) {
+  padding-inline: 8px;
+  white-space: nowrap;
+}

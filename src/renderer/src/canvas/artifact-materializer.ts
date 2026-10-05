@@ -6,6 +6,50 @@ import type { NodeCardProps, NodeCardShape } from './NodeCardShape'
 import { parseImageSplitConfig } from '@shared/image-split'
 import { readNodeConfig } from '@shared/engine/node-config'
 import { assetNodeTypeFor } from './asset-node-type'
+import type { NodeValue } from '@shared/engine/values'
+
+/** Document results use the same provenance relation as media; no implicit DAG edges. */
+export function materializeDocumentArtifact(
+  editor: Editor,
+  producer: NodeCardShape,
+  portId: string,
+  value: NodeValue,
+  runId: string
+): void {
+  if (value.kind !== 'text' && value.kind !== 'markdown' && value.kind !== 'json') {
+    throw new Error('该输出类型不支持文档产物')
+  }
+  const nodeType = value.kind === 'json' ? 'json' : 'text'
+  const spec = getNodeType(nodeType)
+  if (!spec) throw new Error('文档产物节点尚未注册')
+  const text = value.kind === 'json' ? JSON.stringify(value.data, null, 2) : value.text
+  const siblings = editor
+    .getCurrentPageShapes()
+    .filter(
+      (shape) => shape.type === 'node-card' && shape.meta.artifactProducerId === producer.id
+    ).length
+  editor.createShape({
+    id: createShapeId(),
+    type: 'node-card',
+    x: producer.x + producer.props.w + 100 + (siblings % 3) * (spec.defaultSize.w + 80),
+    y: producer.y + Math.floor(siblings / 3) * (spec.defaultSize.h + 80),
+    props: {
+      nodeType,
+      title: `${producer.props.title || 'AI 处理'} · ${value.kind === 'json' ? 'JSON' : '文本'}结果`,
+      text,
+      w: spec.defaultSize.w,
+      h: spec.defaultSize.h
+    },
+    meta: {
+      artifactProducerId: producer.id,
+      artifactProducerPortId: portId,
+      artifactRunId: runId,
+      runGroupId: runId,
+      artifactCreatedAt: Date.now(),
+      artifactDocumentKind: value.kind
+    }
+  })
+}
 
 /**
  * 运行产物的唯一落点：创建独立、不可变的资产节点，并在 meta 中保存生产关系。

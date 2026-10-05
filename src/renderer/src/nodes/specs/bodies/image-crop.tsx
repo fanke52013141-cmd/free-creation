@@ -4,6 +4,7 @@ import type { ImageCropAspectRatio, ImageCropConfig, NormalizedPoint } from '@sh
 import {
   DEFAULT_IMAGE_CROP_CONFIG,
   IMAGE_CROP_ASPECT_RATIOS,
+  imageCropContainMapping,
   parseImageCropConfig,
   serializeImageCropConfig,
   validateImageCropConfig
@@ -230,17 +231,11 @@ export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.
     await runNodeManually(editor, project.id, providers, shape.id)
   }
 
-  // 预览采用 cover 而非把竖图缩到中间。映射始终保持在原图归一化坐标中，
-  // 因而视觉填满后拖拽、四角和最终执行仍然操作同一份裁剪配置。
-  const cropPreviewMapping = (() => {
-    const viewportAspect = containerSize ? containerSize.w / containerSize.h : previewAspect
-    if (previewAspect >= viewportAspect) {
-      const scaleX = previewAspect / Math.max(viewportAspect, 0.0001)
-      return { scaleX, scaleY: 1, offsetX: (1 - scaleX) / 2, offsetY: 0 }
-    }
-    const scaleY = viewportAspect / Math.max(previewAspect, 0.0001)
-    return { scaleX: 1, scaleY, offsetX: 0, offsetY: (1 - scaleY) / 2 }
-  })()
+  // 完整显示原图；图片、选区与指针共享映射，留白不属于原图坐标。
+  const cropPreviewMapping = imageCropContainMapping(
+    previewAspect,
+    containerSize ? containerSize.w / containerSize.h : previewAspect
+  )
 
   if (!shape.props.mediaPath && !source) {
     return (
@@ -278,6 +273,17 @@ export function ImageCropBody({ shape, openPreview }: NodeBodyProps): React.JSX.
     }
     const beginInlineDrag = (event: React.PointerEvent<HTMLDivElement>): void => {
       stopEventPropagation(event)
+      const bounds = event.currentTarget.getBoundingClientRect()
+      const viewportX = (event.clientX - bounds.left) / bounds.width
+      const viewportY = (event.clientY - bounds.top) / bounds.height
+      const { offsetX, offsetY, scaleX, scaleY } = cropPreviewMapping
+      if (
+        viewportX < offsetX ||
+        viewportX > offsetX + scaleX ||
+        viewportY < offsetY ||
+        viewportY > offsetY + scaleY
+      )
+        return
       const point = pointForInlineEvent(event)
       const corners = rectCorners(config)
       const cornerIndex = corners.findIndex(

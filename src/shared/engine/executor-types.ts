@@ -165,6 +165,8 @@ export interface NodeExecutionResult {
   status: 'done' | 'skipped' | 'failed'
   reason?: string
   diagnosticPhase?: NodeExecutionPhase
+  /** Materialize these validated document outputs as independent canvas result nodes. */
+  artifactOutputPorts?: readonly string[]
 }
 
 export type NodeExecutor = (

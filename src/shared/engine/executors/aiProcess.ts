@@ -110,7 +110,13 @@ export const aiProcessExecutor = async (
   if (!ctx.gateway.resolveModelFeature && !config.modelKey) {
     return { status: 'skipped', reason: '未选择可用文本模型' }
   }
-  const option = await resolveFeatureOption(ctx.gateway, ctx.providers, featureKeyOf(config, 'text.process'), 'text.generate', modelKeyOf(config))
+  const option = await resolveFeatureOption(
+    ctx.gateway,
+    ctx.providers,
+    featureKeyOf(config, 'text.process'),
+    'text.generate',
+    modelKeyOf(config)
+  )
   if (!option) return { status: 'skipped', reason: '功能 text.process 尚未绑定已验证文本模型' }
 
   const reply = await waitForChat(
@@ -141,5 +147,5 @@ export const aiProcessExecutor = async (
   // 写回运行结果到 meta（配置/结果分离）；props.config 不再混入 result。
   // 输出投影（nodeValues.ts）据此产出对应端口输出。
   ctx.updateResult(JSON.stringify(result))
-  return { status: 'done' }
+  return { status: 'done', artifactOutputPorts: [`out-${config.mode}`] }
 }

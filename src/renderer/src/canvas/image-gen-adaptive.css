@@ -1,22 +1,23 @@
-/* 生图表单填满卡片：按钮固定贴近底边，剩余空间交给提示词。 */
-.node-card.type-image-gen .node-body-content {
+/* 内容决定表单高度，避免填满卡片的高度反馈把空输入框越撑越高。 */
+.node-card.type-image-gen.type-image-gen .node-body-content {
   flex: 1 1 auto;
   min-height: 0;
 }
 
-.node-card.type-image-gen .gen-panel {
-  height: 100%;
-  min-height: 250px;
-  flex: 1 1 auto;
+.node-card.type-image-gen.type-image-gen .gen-panel {
+  height: auto;
+  min-height: 0;
+  flex: 0 0 auto;
   padding-bottom: var(--node-action-bottom-inset, 8px);
 }
 
-.node-card.type-image-gen .gen-prompt {
-  flex: 1 1 auto;
+.node-card.type-image-gen.type-image-gen .gen-prompt {
+  flex: 0 0 auto;
+  height: 72px;
   min-height: 72px;
 }
 
-.node-card.type-image-gen .gen-go {
+.node-card.type-image-gen.type-image-gen .gen-go {
   margin-top: 0;
   flex: 0 0 auto;
 }

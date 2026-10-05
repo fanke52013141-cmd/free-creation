@@ -28,6 +28,7 @@ import { useAppStore } from '../../../stores/app'
 import { toast } from '../../../stores/toast'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
+import './image-edit-model-row.css'
 import { mediaUrl, type NodeBodyProps, type NodeSettingsProps } from '../../registry'
 import {
   clearSelectedMediaHistory,
@@ -952,7 +953,7 @@ function ImageEditEditorCore({
           ) : null}
         </>
       )}
-      <div className="gen-row">
+      <div className="gen-row image-edit-model-row">
         <ModelSelect
           // 未显式选择模型时下拉直接落在解析出的默认模型上（ToAPIS 优先），
           // 用户 2026-09-18 拍板：图片节点默认就是 TOAPIS。
@@ -973,7 +974,7 @@ function ImageEditEditorCore({
           >
             {ratioOptions.map((ratio) => (
               <option key={ratio} value={ratio}>
-                {ratio === 'auto' ? '默认比例' : ratio}
+                {ratio === 'auto' ? '比例' : ratio}
               </option>
             ))}
           </AppSelect>
