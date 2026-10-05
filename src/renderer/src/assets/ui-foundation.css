@@ -874,11 +874,6 @@ body {
   display: none;
 }
 
-.conn-overlay .conn-start {
-  stroke: rgba(13, 17, 23, 0.85);
-  stroke-width: 1.5px;
-}
-
 /* 拖线光标：端口色实心圆 + 白描边（用户拍板：不做渐变/玻璃质感）。 */
 .conn-overlay .conn-cursor {
   fill-opacity: 0.92;

@@ -60,7 +60,8 @@ import { useEditorStore } from '../stores/editor'
 import { Icon } from '../components/Icon'
 import { useEdgeSelectionStore } from '../stores/edgeSelection'
 import { PALETTE_CATEGORY_META, nodesForPaletteCategory } from './palette-categories'
-import { PALETTE_CATEGORY_IDS, type PaletteCategoryId } from '@shared/palette-preferences'
+import type { PaletteCategoryId } from '@shared/palette-preferences'
+import { DEFAULT_PALETTE_CATEGORY_ORDER } from '@shared/palette-menu-order'
 import { routeCanvasWheel } from './canvas-wheel-routing'
 
 // Stable by design: tldraw requires component overrides to keep their identity across renders.
@@ -510,7 +511,7 @@ export function CanvasEditor({
   const nodeTypes = allNodeTypes().filter(
     (node) => !visibleNodeTypeIds || visibleNodeTypeIds.has(node.type)
   )
-  const paletteCategories = PALETTE_CATEGORY_IDS.filter(
+  const paletteCategories = DEFAULT_PALETTE_CATEGORY_ORDER.filter(
     (category) => nodesForPaletteCategory(nodeTypes, category).length > 0
   )
   const activePaletteNodes = activePaletteCategory

@@ -47,7 +47,6 @@ export function ConnectionLayer(): React.JSX.Element | null {
         pathLength="1000"
         style={{ stroke: color, filter: `drop-shadow(0 0 5px ${color})` }}
       />
-      <circle className="conn-start" cx={startPt.x} cy={startPt.y} r={5} fill={color} />
       <circle className="conn-cursor" cx={pointer.x} cy={pointer.y} r={6.5} fill={color} />
     </svg>,
     document.body
@@ -95,7 +94,6 @@ export function PendingConnectionLayer({
     <svg className="conn-overlay conn-menu-link" aria-hidden="true">
       <path className="conn-glow-path" d={path} style={{ stroke: color }} />
       <path className="conn-main-path" d={path} style={{ stroke: color }} />
-      <circle className="conn-start" cx={startPt.x} cy={startPt.y} r={5} fill={color} />
       <circle className="conn-menu-anchor" cx={endPt.x} cy={endPt.y} r={5} fill={color} />
     </svg>,
     document.body

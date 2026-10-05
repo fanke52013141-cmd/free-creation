@@ -1,18 +1,13 @@
 import type { PaletteCategoryId } from '@shared/palette-preferences'
 import type { IconName } from '../components/Icon'
 import type { NodeTypeSpec } from '../nodes/registry'
+import { PALETTE_NODE_GROUPS, sortPaletteNodes } from '@shared/palette-menu-order'
+export { PALETTE_NODE_GROUPS } from '@shared/palette-menu-order'
 
 /**
  * 节点在画布入口的展示分类。它刻意不复用 NodeTypeSpec.category：后者是早期创建菜单
  * 的技术分类（例如生视频曾被放在 input），不应该决定用户看到的创作任务分类。
  */
-export const PALETTE_NODE_GROUPS = {
-  input: ['text', 'file', 'website', 'chat', 'ai-process'],
-  image: ['image', 'image-gen', 'image-edit', 'image-crop', 'image-split'],
-  video: ['video-asset', 'video', 'video-frame', 'video-clip', 'video-depth', 'video-clay'],
-  audio: ['audio', 'sound-adjust', 'speech', 'tts', 'voice-design'],
-  logic: ['storyboard', 'structured', 'json', 'processor', 'iterate', 'code', 'director']
-} as const
 
 export const PALETTE_CATEGORY_META: Record<
   PaletteCategoryId,
@@ -59,7 +54,9 @@ export function nodesForPaletteCategory(
   nodeTypes: readonly NodeTypeSpec[],
   category: PaletteCategoryId
 ): NodeTypeSpec[] {
-  return nodeTypes.filter((node) => PALETTE_NODE_GROUPS[category].includes(node.type as never))
+  return sortPaletteNodes(
+    nodeTypes.filter((node) => PALETTE_NODE_GROUPS[category].includes(node.type as never))
+  )
 }
 
 export function paletteCategoryForNode(type: string): PaletteCategoryId | null {

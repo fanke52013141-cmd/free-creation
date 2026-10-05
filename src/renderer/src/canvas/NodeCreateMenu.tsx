@@ -5,6 +5,7 @@ import type { ConnectionFrom } from '../stores/connection'
 import { Icon } from '../components/Icon'
 import { PALETTE_CATEGORY_META, paletteCategoryForNode } from './palette-categories'
 import type { PaletteCategoryId } from '@shared/palette-preferences'
+import { DEFAULT_PALETTE_CATEGORY_ORDER, sortPaletteNodes } from '@shared/palette-menu-order'
 import {
   compatibleNodeCreateChoices,
   compatibleUpstreamCreateChoices,
@@ -101,12 +102,12 @@ export function NodeCreateMenu({
       : compatibleNodeCreateChoices(source)
     : allNodeTypes().map((spec) => ({ type: spec.type }))
   const visibleTypes = visibleNodeTypeIds ? new Set(visibleNodeTypeIds) : null
-  const allChoices = visibleTypes
-    ? choices.filter((choice) => visibleTypes.has(choice.type))
-    : choices
+  const allChoices = sortPaletteNodes(
+    visibleTypes ? choices.filter((choice) => visibleTypes.has(choice.type)) : choices
+  )
 
-  const availableCategories = (['input', 'image', 'video', 'audio', 'logic'] as const).filter(
-    (category) => allChoices.some((choice) => paletteCategoryForNode(choice.type) === category)
+  const availableCategories = DEFAULT_PALETTE_CATEGORY_ORDER.filter((category) =>
+    allChoices.some((choice) => paletteCategoryForNode(choice.type) === category)
   )
   const showTabs = availableCategories.length > 1
   const categoryOptions: Array<{ id: PaletteCategoryId; label: string }> = availableCategories.map(

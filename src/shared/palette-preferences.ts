@@ -4,6 +4,8 @@
  * 这些 ID 是稳定的 UI 分类键，不是节点协议的一部分；用户只能调整顺序和显示名，
  * 不会改变 NodeTypeSpec.category、节点类型或已有画布连线。
  */
+import { DEFAULT_PALETTE_CATEGORY_ORDER } from './palette-menu-order'
+
 export const NODE_CATEGORY_IDS = ['input', 'image', 'video', 'audio', 'logic'] as const
 
 export type NodeCategoryId = (typeof NODE_CATEGORY_IDS)[number]
@@ -21,7 +23,7 @@ export interface PalettePreferences {
 }
 
 export function defaultPalettePreferences(): PalettePreferences {
-  return { order: [...PALETTE_CATEGORY_IDS], labels: {} }
+  return { order: [...DEFAULT_PALETTE_CATEGORY_ORDER], labels: {} }
 }
 
 function isPaletteCategoryId(value: unknown): value is PaletteCategoryId {
@@ -44,7 +46,7 @@ export function normalizePalettePreferences(value: unknown): PalettePreferences 
         return true
       })
     : []
-  for (const id of PALETTE_CATEGORY_IDS) {
+  for (const id of DEFAULT_PALETTE_CATEGORY_ORDER) {
     if (!seen.has(id)) order.push(id)
   }
 
