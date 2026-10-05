@@ -1,4 +1,6 @@
 import { useEngineStore } from '@renderer/engine/store'
+import { getNodeType } from '@renderer/nodes/registry'
+import { setResourceLimit, useResourceQueue } from '@renderer/engine/resource-queue'
 // @vitest-environment jsdom
 // 卡片内手动执行必须与工作流共用同一套「连线 → 输入收集 → 执行 → 输出投影」路径。
 import { beforeAll, describe, expect, it } from 'vitest'
@@ -731,12 +733,14 @@ describe('runWorkflowForNodes · 重跑付费上游前必须确认（R-03）', (
   })
 })
 
-it('生成确认占用 starting，阻止第二次流程/单节点/测试，取消后释放', async () => {
+it('生成确认占用 starting，阻止第二次流程但允许独立节点，取消后释放', async () => {
   const target = node('shape:confirm-race', 'image-gen', '提示词')
   const editor = {
     getCurrentPageShapes: () => [target],
     getShape: () => target,
-    getBindingsFromShape: () => []
+    getBindingsFromShape: () => [],
+    updateShape: () => {},
+    markHistoryStoppingPoint: () => {}
   } as unknown as Editor
   const original = useConfirmStore.getState().confirm
   let finish!: (value: boolean) => void
@@ -754,12 +758,86 @@ it('生成确认占用 starting，阻止第二次流程/单节点/测试，取�
     expect(useEngineStore.getState().phase).toBe('starting')
     await runWorkflow(editor, 'project', [])
     expect(calls).toBe(1)
-    expect((await runNodeManually(editor, 'project', [], target.id)).status).toBe('skipped')
-    expect((await runNodeTest(editor, 'project', [], target.id, {})).status).toBe('skipped')
+    expect((await runNodeManually(editor, 'project', [], target.id)).reason).not.toBe(
+      '已有任务正在运行'
+    )
+    expect((await runNodeTest(editor, 'project', [], target.id, {})).reason).not.toBe(
+      '已有任务正在运行'
+    )
     finish(false)
     await pending
     expect(useEngineStore.getState().phase).toBe('idle')
   } finally {
     useConfirmStore.setState({ confirm: original })
+  }
+})
+
+it('independent manual runs queue by resource, reject duplicates, and do not overwrite workflow state', async () => {
+  const first = node('shape:parallel-a', 'text', 'A')
+  const second = node('shape:parallel-b', 'text', 'B')
+  const shapes = new Map([
+    [first.id, first],
+    [second.id, second]
+  ])
+  const editor = {
+    getCurrentPageShapes: () => Array.from(shapes.values()),
+    getShape: (id: string) => shapes.get(id as never),
+    getBindingsFromShape: () => [],
+    updateShape: (patch: {
+      id: string
+      props?: Record<string, unknown>
+      meta?: Record<string, unknown>
+    }) => {
+      const shape = shapes.get(patch.id as never)!
+      Object.assign(shape.props, patch.props)
+      Object.assign(shape.meta, patch.meta)
+    },
+    markHistoryStoppingPoint: () => undefined
+  } as unknown as Editor
+  const spec = getNodeType('text')!
+  const original = spec.executor!
+  let finish!: () => void
+  let entered!: () => void
+  const started = new Promise<void>((resolve) => {
+    entered = resolve
+  })
+  spec.executor = async (ctx) => {
+    if (ctx.node.id === first.id) {
+      entered()
+      await new Promise<void>((resolve) => {
+        finish = resolve
+      })
+    }
+    return original(ctx)
+  }
+  setResourceLimit('local', 1)
+  useEngineStore.setState({
+    phase: 'running',
+    currentNodeId: 'shape:other-workflow',
+    currentLabel: 'other'
+  })
+  try {
+    const a = runNodeManually(editor, 'parallel-project', [], first.id)
+    await started
+    const b = runNodeManually(editor, 'parallel-project', [], second.id)
+    expect(second.props.exec).toBe('queued')
+    expect((await runNodeManually(editor, 'parallel-project', [], second.id)).reason).toBe(
+      '当前节点已在运行或排队'
+    )
+    useResourceQueue
+      .getState()
+      .tasks.find((task) => task.label === 'text' && task.status === 'queued')!
+      .cancel()
+    expect((await b).status).toBe('skipped')
+    expect(second.props.exec).toBe('cancelled')
+    finish()
+    expect((await a).status).toBe('done')
+    expect(useEngineStore.getState().currentNodeId).toBe('shape:other-workflow')
+    expect(useEngineStore.getState().phase).toBe('running')
+  } finally {
+    finish?.()
+    spec.executor = original
+    setResourceLimit('local', 4)
+    useEngineStore.getState().endRun()
   }
 })

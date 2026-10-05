@@ -4,6 +4,7 @@ import type { WorkspaceProfile } from '@shared/workspace-profile'
 import { useAppStore } from '../stores/app'
 import { useGatewayStore } from '../stores/gateway'
 import { useEngineStore } from '../engine/store'
+import { ResourceQueuePanel } from '../engine/ResourceQueuePanel'
 import { CanvasEditor } from '../canvas/CanvasEditor'
 import { ProjectMenu } from '../canvas/ProjectMenu'
 import { useSearchStore } from '../stores/search'
@@ -285,6 +286,7 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
 
         {/* 运行/停止工作流 + 进度（执行引擎核心控件） */}
         <div className="engine-controls">
+          <ResourceQueuePanel projectId={projectId} />
           {isRunning && (
             <div className="engine-progress" title={engineCurrent || '执行中…'}>
               <div className="engine-progress-bar">

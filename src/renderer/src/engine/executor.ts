@@ -36,6 +36,7 @@ import { toast } from '../stores/toast'
 import { useConfirmStore } from '../stores/confirm'
 import { deriveRunPlan, formatRunPlan } from './run-plan'
 import { useEngineStore } from './store'
+import { acquireNodeResource, hasNodeTask, useResourceQueue } from './resource-queue'
 import {
   appendNodeRunHistory,
   appendNodeRunTrace,
@@ -83,12 +84,12 @@ interface WorkflowContext {
   workflowSpanId: string
   /** 迭代子流程当前批次（runSubflowForIterate 填写），随节点事件携带 batchId/itemId。 */
   batch?: { batchId: string; itemId?: string }
-  /** 独立生图任务不写入前台视频工作流的进度和错误汇总。 */
+  /** 独立节点任务不写入前台工作流的进度和错误汇总。 */
   isolated?: boolean
 }
 
-const isolatedImageRuns = new Set<TLShapeId>()
 const nodeTests = new Set<TLShapeId>()
+const queuedControls = new Map<string, RunControl>()
 
 // L01：renderer 进程唯一的诊断事件生产者。sequence 按生产者递增；
 // sessionId/receivedAt/eventId 由 main 入口补齐，这里不伪造会话信息。
@@ -96,16 +97,6 @@ const diagnosticsProducer = new DiagnosticsProducer({
   process: 'renderer',
   producerId: newProducerId('renderer')
 })
-
-export function canRunImageWhileVideo(editor: Editor): boolean {
-  const { phase, currentNodeId } = useEngineStore.getState()
-  if (phase !== 'running' || !currentNodeId) return false
-  const current = editor.getShape<NodeCardShape>(currentNodeId as TLShapeId)
-  return (
-    current?.type === 'node-card' &&
-    (current.props.nodeType === 'video-depth' || current.props.nodeType === 'video-clay')
-  )
-}
 
 function reportRunError(
   ctx: WorkflowContext,
@@ -161,6 +152,9 @@ function registerRunControls(control: RunControl): void {
   const store = useEngineStore.getState()
   store.setStop(() => {
     control.cancelled = true
+    for (const task of useResourceQueue.getState().tasks) {
+      if (task.status === 'queued' && queuedControls.get(task.key) === control) task.cancel()
+    }
     control.paused = false
     releasePause(control)
     useEngineStore.getState().setStopping()
@@ -211,7 +205,7 @@ export async function runNodeTest(
   nodeId: TLShapeId,
   testInputs: NodeTestInputs
 ): Promise<NodeTestResult> {
-  if (useEngineStore.getState().phase !== 'idle' || isolatedImageRuns.size || nodeTests.size)
+  if (hasNodeTask(projectId, nodeId) || nodeTests.has(nodeId))
     return { status: 'skipped', reason: '已有任务正在运行', outputs: {} }
   nodeTests.add(nodeId)
   try {
@@ -288,7 +282,25 @@ export async function runNodeTest(
       }
     }
     try {
-      const result = await spec.executor(context)
+      const pending = acquireNodeResource({
+        projectId,
+        nodeId,
+        label: `${node.title || node.type}（测试）`,
+        resource: nodeResource(node),
+        cancel: () => {
+          token.cancelled = true
+        }
+      })
+      if (!pending) return { status: 'skipped', reason: '当前节点已在运行或排队', outputs: {} }
+      const release = await pending
+      if (!release) return { status: 'skipped', reason: '排队测试已取消', outputs: {} }
+      let result: NodeExecutionResult
+      try {
+        result = await spec.executor(context)
+      } finally {
+        release()
+      }
+      if (token.cancelled) return { status: 'skipped', reason: '测试已取消', outputs: {} }
       if (result.status !== 'done') return { ...result, outputs: {} }
       const outputShape: NodeCardShape = {
         ...testShape,
@@ -872,7 +884,72 @@ function collectNodeInputs(
  * 对单个节点执行一次并登记输出。返回执行状态；失败时不抛错，错误写入 store.errors。
  * 供主工作流循环和循环体子流程共用。
  */
+const remoteNodeTypes = new Set([
+  'image-gen',
+  'image-edit',
+  'video',
+  'chat',
+  'ai-process',
+  'speech',
+  'tts',
+  'voice-design',
+  'script'
+])
+function nodeResource(node: CanvasNode): string {
+  if (node.type === 'iterate') return `iterate:${node.id}`
+  if (node.type === 'video-depth' || node.type === 'video-clay') return 'gpu'
+  if (remoteNodeTypes.has(node.type)) {
+    return 'provider'
+  }
+  if (/image|video|audio|sound|vocal/.test(node.type)) return 'media'
+  return 'local'
+}
+
 async function executeNodeOnce(
+  ctx: WorkflowContext,
+  node: CanvasNode,
+  runSubflow: (request: SubflowRequest) => Promise<Record<string, ContractOutputs>>,
+  injection?: IterationItemInjection
+): Promise<NodeExecutionResult> {
+  if (ctx.token.cancelled) return { status: 'skipped', reason: '任务已取消' }
+  if (nodeTests.has(node.id as TLShapeId)) return { status: 'skipped', reason: '当前节点正在测试' }
+  const pending = acquireNodeResource({
+    projectId: ctx.projectId,
+    nodeId: node.id,
+    label: node.title || node.type,
+    resource: nodeResource(node),
+    cancel: () => {
+      ctx.token.cancelled = true
+      ctx.token.paused = false
+      releasePause(ctx.token)
+    }
+  })
+  if (!pending) return { status: 'skipped', reason: '当前节点已在运行或排队' }
+  const taskKey = `${ctx.projectId}/${node.id}`
+  queuedControls.set(taskKey, ctx.token)
+  emitWorkflowEvent('workflow.task_queued', '节点进入资源调度', ctx)
+  setExec(ctx.editor, node.id as TLShapeId, 'queued')
+  const release = await pending
+  queuedControls.delete(taskKey)
+  if (!release) {
+    emitWorkflowEvent('workflow.task_cancelled', '排队节点已取消', ctx)
+    setExec(ctx.editor, node.id as TLShapeId, 'cancelled')
+    return { status: 'skipped', reason: '排队任务已取消' }
+  }
+  try {
+    await waitForResume(ctx.token)
+    if (ctx.token.cancelled) {
+      setExec(ctx.editor, node.id as TLShapeId, 'cancelled')
+      return { status: 'skipped', reason: '任务已取消' }
+    }
+    emitWorkflowEvent('workflow.task_admitted', '节点取得资源额度', ctx)
+    return await executeNodeUnscheduled(ctx, node, runSubflow, injection)
+  } finally {
+    release()
+  }
+}
+
+async function executeNodeUnscheduled(
   ctx: WorkflowContext,
   node: CanvasNode,
   runSubflow: (request: SubflowRequest) => Promise<Record<string, ContractOutputs>>,
@@ -1121,6 +1198,9 @@ async function runSubflowForIterate(
     }
   }
   const nodeIds = expandIterationBody(ctx.graph, request.nodeIds, request.iterationNodeId)
+  if (nodeIds.some((id) => hasNodeTask(ctx.projectId, id) || nodeTests.has(id as TLShapeId))) {
+    throw new Error('循环体节点已在运行或排队，不能重置其结果')
+  }
   // 每个 item 执行迭代体前重置迭代体节点的上次运行产物，强制每项独立产出
   resetSubflowRunState(itemCtx, nodeIds)
 
@@ -1212,26 +1292,14 @@ export async function runNodeManually(
   providers: ProviderSummary[],
   nodeId: TLShapeId
 ): Promise<NodeExecutionResult> {
-  const store = useEngineStore.getState()
-  const isolated =
-    store.phase !== 'idle' &&
-    canRunImageWhileVideo(editor) &&
-    editor.getShape<NodeCardShape>(nodeId)?.props.nodeType === 'image-gen'
-  if (store.phase !== 'idle' && !isolated) return { status: 'skipped', reason: '已有任务正在运行' }
-  if (nodeTests.size || (store.phase === 'idle' && isolatedImageRuns.size))
-    return { status: 'skipped', reason: '已有任务正在运行' }
-  if (isolatedImageRuns.has(nodeId)) return { status: 'skipped', reason: '当前生图节点正在运行' }
+  if (hasNodeTask(projectId, nodeId) || nodeTests.has(nodeId))
+    return { status: 'skipped', reason: '当前节点已在运行或排队' }
 
   const graph = deriveGraph(editor)
   const node = graph.nodes.find((item) => item.id === nodeId)
   if (!node) return { status: 'skipped', reason: '节点不存在或尚未保存到画布' }
 
   const token = createRunControl()
-  if (isolated) isolatedImageRuns.add(nodeId)
-  else {
-    registerRunControls(token)
-    store.beginRun(1)
-  }
   const ctx: WorkflowContext = {
     editor,
     projectId,
@@ -1243,24 +1311,17 @@ export async function runNodeManually(
     runId: crypto.randomUUID(),
     traceId: newTraceId(),
     workflowSpanId: newSpanId(),
-    isolated
+    isolated: true
   }
   emitWorkflowEvent('workflow.started', '手动运行单个节点', ctx)
   seedPersistedOutputs(ctx)
   const runSubflow = (request: SubflowRequest): Promise<Record<string, ContractOutputs>> =>
     runSubflowForIterate(ctx, runSubflow, request)
 
-  if (!isolated) store.setCurrent(node.title || node.type, node.id)
   let result: NodeExecutionResult
   try {
     result = await executeNodeOnce(ctx, node, runSubflow)
   } finally {
-    if (isolated) isolatedImageRuns.delete(nodeId)
-    else {
-      store.nodeDone()
-      useEngineStore.getState().endRun()
-      clearRunControls()
-    }
     markUndoPoint(editor, 'node-manual-run')
   }
 
@@ -1298,7 +1359,7 @@ export async function runWorkflow(
   providers: ProviderSummary[]
 ): Promise<void> {
   const store = useEngineStore.getState()
-  if (store.phase !== 'idle' || isolatedImageRuns.size > 0 || nodeTests.size > 0) return
+  if (store.phase !== 'idle') return
   useEngineStore.setState({ phase: 'starting' })
   try {
     const graph = deriveGraph(editor)
@@ -1388,7 +1449,7 @@ export async function runWorkflowForNodes(
   targetNodeIds: TLShapeId[]
 ): Promise<void> {
   const store = useEngineStore.getState()
-  if (store.phase !== 'idle' || isolatedImageRuns.size > 0 || nodeTests.size > 0) return
+  if (store.phase !== 'idle') return
   useEngineStore.setState({ phase: 'starting' })
   try {
     const fullGraph = deriveGraph(editor)

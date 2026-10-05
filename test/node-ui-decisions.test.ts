@@ -89,7 +89,7 @@ describe('v1.3 §16.1 端口圆点统一使用节点色、类型色环与柔光'
       'const visibleTypes = groupTypes.filter((type) => activeTypes.has(type))'
     )
     expect(nodePortLayout).toContain(
-      'portOffsets(visibleTypes.length + forced.length, cardHeight)'
+      'portOffsets(groupTypes.length + forced.length, cardHeight)'
     )
     expect(nodePortLayout).toContain(
       'const sameType = grouped.filter((port) => port.type === type)'

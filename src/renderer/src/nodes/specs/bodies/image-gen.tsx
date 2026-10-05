@@ -16,8 +16,7 @@ import { mediaUrl, type NodeBodyProps } from '../../registry'
 import { toast } from '../../../stores/toast'
 import { gatherUpstreamMediaList } from '../../../canvas/graph'
 import { readNodeConfig } from '../../../canvas/node-persistence'
-import { canRunImageWhileVideo, runNodeManually } from '../../../engine/executor'
-import { useEngineStore } from '../../../engine/store'
+import { runNodeManually } from '../../../engine/executor'
 import { useAppStore } from '../../../stores/app'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { Icon } from '../../../components/Icon'
@@ -86,10 +85,7 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
   const [draft, setDraft] = useState(shape.props.text)
   const [busy, setBusy] = useState(false)
   const promptRef = useRef<HTMLTextAreaElement | null>(null)
-  const enginePhase = useEngineStore((s) => s.phase)
-  const currentNodeId = useEngineStore((s) => s.currentNodeId)
-  const engineBusy = enginePhase !== 'idle' &&
-    !(currentNodeId && canRunImageWhileVideo(editor))
+  const engineBusy = ['queued', 'running', 'pending'].includes(shape.props.exec)
 
   useEffect(() => {
     if (!loaded) void loadProviders()
@@ -319,7 +315,7 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
       <button
         className="btn-primary small gen-go"
         disabled={busy || engineBusy}
-        title={engineBusy && !busy ? '等待当前节点运行结束' : undefined}
+        title={engineBusy && !busy ? '当前节点已在运行或排队' : undefined}
         onPointerDown={(e) => stopEventPropagation(e)}
         onClick={(e) => {
           e.stopPropagation()

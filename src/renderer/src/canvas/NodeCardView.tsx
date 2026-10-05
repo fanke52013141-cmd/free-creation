@@ -638,6 +638,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           meta?.artifactProducerId === shape.id &&
           typeof meta.artifactProducerPortId === 'string'
         ) {
+          outgoingPortIds.add(meta.artifactProducerPortId)
           outgoingCounts.set(
             meta.artifactProducerPortId,
             (outgoingCounts.get(meta.artifactProducerPortId) ?? 0) + 1

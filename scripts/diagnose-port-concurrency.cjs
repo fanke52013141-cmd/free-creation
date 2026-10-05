@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type */
-// 诊断已知缺陷：断言当前问题可复现，不是修复后的通过门禁。
+// 回归门禁：候选端口不改变已连接锚点；全局工作流状态不阻塞独立节点。
 // 启动 vite.browser.config.ts 对应服务后运行；仅使用浏览器 mock，不发起付费调用。
 const { chromium } = require('playwright')
 const fs = require('node:fs')
@@ -27,7 +27,7 @@ const assert = require('node:assert/strict')
     await page.waitForTimeout(500)
     const read = () => page.evaluate(() => {
       const card = document.querySelector('[data-node-id="shape:clip"]')
-      const port = card.querySelector('.port-dot.out')
+      const port = card.querySelector('.port-dot.out[data-port-id="out-audio"]')
       const r = port.getBoundingClientRect()
       const edge = document.querySelector('.artifact-provenance-edge')
       const point = new DOMPoint(...edge.getAttribute('d').match(/^M\s+([\d.-]+)\s+([\d.-]+)/).slice(1).map(Number)).matrixTransform(edge.getScreenCTM())
@@ -46,7 +46,7 @@ const assert = require('node:assert/strict')
     await page.mouse.down()
     await page.waitForTimeout(150)
     const during = await read()
-    assert.ok(during.separation > 30, '应复现绿色溯源线与实际端口的明显分离')
+    assert.ok(during.separation < 2, '连接候选出现时溯源线必须保持贴合端口')
     await page.screenshot({ path: path.resolve('qa/port-concurrency/port-reflow.png') })
     await page.mouse.up()
     await page.waitForTimeout(100)
@@ -54,20 +54,18 @@ const assert = require('node:assert/strict')
     const concurrency = await page.evaluate(async () => {
       const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
       const { useEngineStore } = await import('/src/engine/store.ts')
-      const { runNodeManually, runNodeTest, canRunImageWhileVideo } = await import('/src/engine/executor.ts')
+      const { runNodeManually, runNodeTest } = await import('/src/engine/executor.ts')
       const store = useEngineStore.getState()
       useEngineStore.setState({ phase: 'running', currentNodeId: 'shape:video-running' })
-      const exceptionForNormalVideo = canRunImageWhileVideo(editor)
       const imageDuringVideo = await runNodeManually(editor, 'demo', [], 'shape:image')
       const clipDuringVideo = await runNodeManually(editor, 'demo', [], 'shape:target')
       const testDuringVideo = await runNodeTest(editor, 'demo', [], 'shape:target', {})
       editor.updateShape({ id: 'shape:video-running', type: 'node-card', props: { nodeType: 'video-depth' } })
-      const exceptionForDepthVideo = canRunImageWhileVideo(editor)
       store.endRun()
-      return { exceptionForNormalVideo, imageDuringVideo, clipDuringVideo, testDuringVideo, exceptionForDepthVideo }
+      return { imageDuringVideo, clipDuringVideo, testDuringVideo }
     })
-    assert.equal(concurrency.imageDuringVideo.reason, '已有任务正在运行')
-    assert.equal(concurrency.clipDuringVideo.reason, '已有任务正在运行')
+    assert.notEqual(concurrency.imageDuringVideo.reason, '已有任务正在运行')
+    assert.notEqual(concurrency.clipDuringVideo.reason, '已有任务正在运行')
     const evidence = { before, during, after, concurrency }
     fs.writeFileSync(path.resolve('qa/port-concurrency/evidence.json'), JSON.stringify(evidence, null, 2))
     console.log(JSON.stringify(evidence, null, 2))

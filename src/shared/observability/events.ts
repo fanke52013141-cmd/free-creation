@@ -51,6 +51,9 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
     def('app.previous_session_unclean', 'warn', 'main/index.ts'),
     def('app.process_exited', 'error', 'main/index.ts', { reason: 'short', exitCode: 'int' }),
     // workflow.*：流程调度器（公共执行器入口拥有，唯一终态）
+    def('workflow.task_queued', 'info', 'renderer/engine/executor.ts'),
+    def('workflow.task_admitted', 'info', 'renderer/engine/executor.ts'),
+    def('workflow.task_cancelled', 'info', 'renderer/engine/executor.ts'),
     def('workflow.started', 'info', 'renderer/engine/executor.ts', { itemCount: 'int' }),
     def('workflow.completed', 'info', 'renderer/engine/executor.ts', { itemCount: 'int' }),
     def('workflow.failed', 'error', 'renderer/engine/executor.ts', { failedCount: 'int' }),
