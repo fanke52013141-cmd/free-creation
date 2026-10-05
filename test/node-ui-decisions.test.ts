@@ -417,7 +417,7 @@ describe('v1.2 §16.13 AI 处理 / 对话：把执行器分支映射成端口与
     expect(aiProcess).not.toContain('countIncomingConnections')
     expect(aiProcess).not.toContain('等待文本或 JSON 输入')
     expect(aiProcess).toContain('ai-process-result-frame')
-    expect(aiProcess).not.toContain('配置处理')
+    expect(aiProcess).toContain('配置处理设置')
     expect(aiProcess).not.toContain('查看已有结果')
     expect(aiProcess).not.toContain('parseStoredAiResult')
   })

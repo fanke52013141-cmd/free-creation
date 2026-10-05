@@ -294,6 +294,12 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
   const handleCardPointerDown = (event: React.PointerEvent<HTMLDivElement>): void => {
     if (event.button !== 0 || event.shiftKey || event.ctrlKey || event.metaKey) return
     if (!editor.getSelectedShapeIds().includes(shape.id)) editor.select(shape.id)
+    if (
+      shape.props.nodeType === 'ai-process' &&
+      event.target instanceof Element &&
+      event.target.closest('.node-standard-scroll')
+    )
+      stopEventPropagation(event)
   }
 
   const finishTitleEditing = useCallback(
@@ -894,8 +900,20 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               Math.max(72, Number.parseFloat(prompt.style.height) || 72) +
               (references ? 8 : 0)
             : required
-        let next = fittedPreview ? NODE_UI.height.default : resolveNodeHeight(formMinimum)
-        if (next < current && (composing || scroll.contains(document.activeElement))) next = current
+        // 引用是新增内容：从至少默认正文高度开始增加，不消耗原正文的空白。
+        const referencedMinimum = references
+          ? Math.max(NODE_UI.height.default, formMinimum - references - (prompt ? 8 : 0)) +
+            references +
+            8
+          : formMinimum
+        let next = fittedPreview ? NODE_UI.height.default : resolveNodeHeight(referencedMinimum)
+        const focused = document.activeElement
+        const editingInput =
+          scroll.contains(focused) &&
+          ((focused instanceof HTMLTextAreaElement && !focused.readOnly) ||
+            (focused instanceof HTMLInputElement && !focused.readOnly) ||
+            (focused instanceof HTMLElement && focused.isContentEditable))
+        if (next < current && (composing || editingInput)) next = current
         if (next === current) return
         editor.run(
           () =>
@@ -957,7 +975,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
 
   // 裁剪、拆图和视频各自已经在正文内呈现可操作的素材区；继续显示通用输入条会
   // 重复“原图 / 图片名称”，并挤占预览高度。其他节点仍保留统一的关系可见性。
-  const hasDedicatedInputSurface = ['image-crop', 'image-split', 'video'].includes(
+  const hasDedicatedInputSurface = ['image-crop', 'image-split', 'video', 'ai-process'].includes(
     shape.props.nodeType
   )
 

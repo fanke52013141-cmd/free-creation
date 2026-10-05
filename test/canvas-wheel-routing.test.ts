@@ -148,6 +148,20 @@ describe('画布滚轮的实际事件分流', () => {
     expect(view.camera().y).toBe(-40)
   })
 
+  it('公共正文外壳包在 Body 外侧时，选中后的滚轮推动外壳而非画布', () => {
+    const view = harness(['shape:first'])
+    const scroll = document.createElement('div')
+    scroll.className = 'node-standard-scroll'
+    view.body.before(scroll)
+    scroll.append(view.body)
+    setScrollRange(scroll, 900, 300)
+    wheel(view.body, 120)
+    expect(scroll.scrollTop).toBe(120)
+    expect(view.camera().y).toBe(0)
+    wheel(view.header, 60)
+    expect(scroll.scrollTop).toBe(180)
+  })
+
   it('保留 Ctrl 缩放，并且不抢画布外面板的滚轮', () => {
     const view = harness()
 

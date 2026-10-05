@@ -54,7 +54,7 @@ function selectedScrollTargets(editor: Editor, target: Element): HTMLElement[] {
       : Array.from(
           editor.getContainer().querySelectorAll<HTMLElement>('.node-card-wrap[data-node-id]')
         ).find((element) => element.dataset.nodeId === selectedId)
-  const body = card?.querySelector<HTMLElement>('.node-body')
+  const body = card?.querySelector<HTMLElement>('.node-standard-scroll, .node-body')
   return body ? scrollTargets(body, target) : []
 }
 

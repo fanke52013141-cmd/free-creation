@@ -81,6 +81,7 @@ const fs = require('node:fs')
       if (node.bottom !== null) assert.ok(Math.abs(node.bottom - 8) < 1.1, JSON.stringify(node))
     }
     const gen = layout.find((n) => n.type === 'image-gen')
+    assert.equal(gen.h,320,'实际引用在默认高度上增加空间')
     assert.ok(gen.prompt.w >= 314)
     assert.ok(gen.prompt.h > 72)
     assert.ok(Math.abs(gen.prompt.gap - 8) < 1.1, JSON.stringify(gen))
@@ -132,6 +133,7 @@ const fs = require('node:fs')
     assert.ok(layout.find((n) => n.type === 'image-gen').prompt.h > gen.prompt.h + 100)
     await page.evaluate(async () => {
       const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
+      editor.updateShape({id:'shape:flex-image-gen',type:'node-card',meta:{nodeHeightMode:'auto'}})
       editor.deleteShape('shape:flex-image')
       document.querySelectorAll('.canvas-host,.canvas-page').forEach((el) => {
         el.classList.remove('canvas-theme-dark')
@@ -140,6 +142,7 @@ const fs = require('node:fs')
     })
     await page.waitForTimeout(300)
     assert.equal(await page.locator('[data-node-type="image-gen"] .connected-inputs').count(), 0)
+    assert.equal((await inspect()).find(n=>n.type==='image-gen').h,260,'移除引用后恢复默认高度')
     await page.screenshot({ path: `${output}/light-no-reference.png` })
     console.log(
       `按需说明、零/多动作、260px 预览无滚动、真实后续连线、输入框填满与 8px 间距通过：${output}`

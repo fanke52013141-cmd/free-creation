@@ -5,6 +5,7 @@ import {
   isValidElement,
   useContext,
   useEffect,
+  useId,
   useMemo,
   useState,
   type ButtonHTMLAttributes,
@@ -15,6 +16,7 @@ import { Icon } from '../components/Icon'
 import type { NodeTypeSpec } from '../nodes/registry'
 import { NODE_UI } from './node-ui-tokens'
 import './node-presentation.css'
+import { NodeReadingScrollbar } from './NodeReadingScrollbar'
 
 interface PresentationContext {
   spec: NodeTypeSpec
@@ -170,6 +172,8 @@ export function NodeCardShell({
   children: ReactNode
   openDescription: () => void
 }): React.JSX.Element {
+  const scrollId = useId()
+  const [scroll, setScroll] = useState<HTMLDivElement | null>(null)
   const [footer, setFooter] = useState<HTMLDivElement | null>(null)
   const [actions, setActions] = useState(0)
   const [identities, setIdentities] = useState(0)
@@ -210,7 +214,10 @@ export function NodeCardShell({
         data-has-identity={identities > 0}
         data-has-actions={actions > 0}
       >
-        <div className="node-standard-scroll">{children}</div>
+        <div id={scrollId} ref={setScroll} className="node-standard-scroll">
+          {children}
+        </div>
+        {spec.type === 'ai-process' && <NodeReadingScrollbar scroll={scroll} />}
         <NodeActionBar footerRef={setFooter}>{null}</NodeActionBar>
       </div>
     </Context.Provider>
