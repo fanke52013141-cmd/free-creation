@@ -1,5 +1,5 @@
 // AI 处理是一个纯处理节点：卡片保留清晰的操作入口，模型和生成参数统一放在右侧「设置」页。
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { stopEventPropagation } from 'tldraw'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { parseAiProcess, type AiProcessConfig } from '../../../engine/executors/aiProcess'
@@ -10,6 +10,7 @@ import { AppSelect } from '../../../components/AppSelect'
 import { Icon } from '../../../components/Icon'
 import { useNodePanelStore } from '../../../stores/nodePanel'
 import { readNodeRunRecord } from '../../../engine/runRecord'
+import { projectNodeOutputs } from '../../nodeValues'
 
 const AI_SCHEMA_OPTIONS = [
   { id: 'json.any', version: 1, label: '通用 JSON（json.any@1）' },
@@ -58,6 +59,38 @@ function schemaFromKey(key: string): AiProcessConfig['jsonSchema'] {
 
 /** 卡片只保留节点身份和设置入口；端口契约与配置在右侧详情中查看。 */
 export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
+  const [showResult, setShowResult] = useState(false)
+  const result = Object.values(projectNodeOutputs(shape)).find(
+    (value) => value?.kind === 'text' || value?.kind === 'markdown' || value?.kind === 'json'
+  )
+  const resultText =
+    result?.kind === 'json'
+      ? JSON.stringify(result.data, null, 2)
+      : result?.kind === 'text' || result?.kind === 'markdown'
+        ? result.text
+        : ''
+  if (showResult && resultText)
+    return (
+      <div className="ai-process-body" style={{ height: '100%', minHeight: 0 }}>
+        <textarea
+          aria-label="完整处理结果"
+          readOnly
+          value={resultText}
+          style={{ width: '100%', flex: 1, minHeight: 0, resize: 'none' }}
+          onPointerDown={stopEventPropagation}
+        />
+        <button
+          className="btn-ghost small"
+          onPointerDown={stopEventPropagation}
+          onClick={(event) => {
+            event.stopPropagation()
+            setShowResult(false)
+          }}
+        >
+          返回处理设置
+        </button>
+      </div>
+    )
   return (
     <div className="ai-process-body">
       <div className="ai-process-hero">
@@ -85,7 +118,7 @@ export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
           onPointerDown={stopEventPropagation}
           onClick={(event) => {
             event.stopPropagation()
-            useNodePanelStore.getState().open('contract', shape.id, 'overview')
+            setShowResult(true)
           }}
         >
           查看已有结果
