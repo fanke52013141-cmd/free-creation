@@ -5,6 +5,7 @@ import { useAppStore } from '../stores/app'
 import { useConfirmStore } from '../stores/confirm'
 import { useGatewayStore } from '../stores/gateway'
 import { Icon } from '../components/Icon'
+import freeCreationLogo from '../assets/free-creation-logo.png'
 
 interface ProjectMenuProps {
   project: ProjectMeta
@@ -72,7 +73,7 @@ export function ProjectMenu({ project, onCreateProject, onConfigureWorkspace }: 
           setOpen((v) => !v)
         }}
       >
-        <span className="logo-text">项目</span>
+        <img className="canvas-brand-icon" src={freeCreationLogo} alt="" draggable={false} />
       </button>
       {open && (
         <div className="project-menu-panel">

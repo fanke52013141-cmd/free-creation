@@ -138,12 +138,12 @@ function contrast(first, second) {
     const beforeDrag=await page.evaluate(async()=>{const e=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;const s=e.getShape('shape:standard-ai-process');return {x:s.x,y:s.y,camera:{...e.getCamera()}}})
     await processCard.locator('.node-standard-scroll').evaluate(el=>{el.scrollTop=0})
     await page.waitForTimeout(100)
-    const thumbBounds=await processCard.getByRole('scrollbar',{name:'处理结果滚动'}).boundingBox()
-    await page.mouse.move(thumbBounds.x+4,thumbBounds.y+thumbBounds.height/2)
-    await page.mouse.down()
-    await page.mouse.move(thumbBounds.x+4,thumbBounds.y+thumbBounds.height/2+90,{steps:8})
-    await page.mouse.up()
-    assert.ok(await processCard.locator('.node-standard-scroll').evaluate(el=>el.scrollTop)>0,'阅读滚动条可以直接拖动')
+    assert.equal(await processCard.getByRole('scrollbar').count(),0,'不创建自绘阅读滑块')
+    assert.equal(await processCard.locator('.node-standard-scroll').evaluate(el=>getComputedStyle(el).scrollbarWidth),'none')
+    await processCard.getByRole('textbox',{name:'完整处理结果'}).hover()
+    await page.mouse.wheel(0,180)
+    await page.waitForTimeout(120)
+    assert.ok(await processCard.locator('.node-standard-scroll').evaluate(el=>el.scrollTop)>0,'隐藏滚动条后仍能滚动')
     assert.deepEqual(await page.evaluate(async()=>{const e=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;const s=e.getShape('shape:standard-ai-process');return {x:s.x,y:s.y,camera:{...e.getCamera()}}}),beforeDrag)
 
 

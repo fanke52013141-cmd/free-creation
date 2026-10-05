@@ -291,11 +291,10 @@
 | 容器 | 行为 | 依据 |
 | --- | --- | --- |
 | `.node-body` | `overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain` | ui-foundation.css |
-| 卡内滚动容器（`.node-text`、`.media-result-grid`、`.json-body`、`.code-body`、textarea、`[contenteditable]` 等约 25 个选择器） | **滚动能力保留、滚动条视觉隐藏**（`scrollbar-width:none` + webkit `width/height:0`） | `canvas/node-scrollbars.css` |
-| 卡外面板（`.side-panel-body`、`.assets-grid`、`.contract-scroll`、`.search-results` 等） | 细滚动条可见：8px、thumb `var(--line)` 圆角 4px、track 透明 | app.css「深色面板滚动条统一」段 |
+| 所有滚动区域：文档、画布、卡内、卡外面板、弹窗、编辑器及 Portal 详情 | **保留滚动，始终隐藏横向和纵向滚动条**；悬停和聚焦也不得显示 | `assets/scrollbars.css`，§19 全局规则 |
 | 卡片本体 | `overflow:hidden`，内容不得溢出卡外 | ui-foundation.css |
 
-明确内滚上限（超过即滚动，不再撑卡）：`.media-result-grid` 860px、`.chat-messages` 360px、`.gen-textarea` 60–140px（`resize:vertical`）、`.chat-input` 96px。新增长内容区域优先交给档位机制；确需内滚必须给出 `max-height` 并把选择器加入 `node-scrollbars.css` 隐藏清单，保持"卡内看不见滚动条"的一致体验。
+本节历史局部上限以 §19 的现行高度规则为准。新增滚动区域自动继承全局隐藏规则，不再维护节点选择器清单；不得通过改变 overflow 来实现视觉隐藏。
 
 ## 15. 按钮实现规格（实施细则）
 
@@ -513,6 +512,14 @@ Stitch MCP 已接入并完成一轮设计生成（首轮因 `stitch.googleapis.c
 
 ## 19. v1.3 按内容布局协议（2026-10-05，当前权威）
 
+### 全局滚动条与画布品牌入口（2026-10-05）
+
+所有应用内需要滚动的区域必须保留滚动能力，但始终隐藏滚动条轨道、滑块和箭头，横向、纵向及普通/悬停/聚焦状态均适用。范围包含文档根节点、画布、所有节点正文、文本框、代码/JSON 编辑器、侧栏、资产/节点库、弹窗、下拉列表、悬浮详情和未来新增区域。鼠标滚轮、触控板、键盘和触摸滚动沿用原路由；不能使用 `overflow:hidden` 或禁用指针来代替隐藏，不保留滚动条专属 gutter，也不创建自绘可见滑块。
+
+公共实现唯一入口为 `assets/scrollbars.css`，在应用入口全局加载。旧版细滚动条、悬停显示及 AI 阅读滑块规则已废止；新区域无需登记专用选择器。验收同时确认计算样式隐藏和真实 scrollTop/scrollLeft 可变化，检查长内容末尾可达，不能只看截图。
+
+所有画布左上角使用首页 Free Creation 的现有品牌图标，取消可见“项目”文字；保留“项目菜单”无障碍名称及项目管理操作，图标不得自行改色或另画一版。
+
 本节取代 §18 中“每个节点必须有说明、单一按钮及固定说明槽”的要求。统一尺寸和间距，不强行统一业务结构。§18 的相关验收为历史记录，不再作为新增节点要求。
 
 ### 内容与操作
@@ -556,7 +563,7 @@ Stitch MCP 已接入并完成一轮设计生成（首轮因 `stitch.googleapis.c
 
 ### AI 结果阅读与格式（2026-10-05）
 
-AI 处理卡片只显示输出，取消通用输入预览。点击正文选中节点并允许选文，阅读滑块拖动不启动节点拖动；选中后的滚轮使用公共正文外壳，边界不传递到画布。Markdown 输出用已有 ReactMarkdown/GFM 渲染，禁用原始 HTML；纯文本保持换行和字面符号。仅改呈现与滚轮路由，不变更执行、持久化和请求路径，无新增日志事件。
+AI 处理卡片只显示输出，取消通用输入预览。点击正文选中节点并允许选文，选中后的滚轮使用公共正文外壳，边界不传递到画布；遵守全局滚动条隐藏规则，不呈现原生或自绘阅读滑块。Markdown 输出用已有 ReactMarkdown/GFM 渲染，禁用原始 HTML；纯文本保持换行和字面符号。仅改呈现与滚轮路由，不变更执行、持久化和请求路径，无新增日志事件。
 
 
 ### 初始设置入口与引用增长（2026-10-05 补充）

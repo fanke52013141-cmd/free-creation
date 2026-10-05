@@ -29,7 +29,7 @@ const url = 'http://127.0.0.1:5194'
       if (Date.now() > deadline) throw new Error('浏览器验收服务启动超时')
       await new Promise((resolve) => setTimeout(resolve, 250))
     }
-    for (const script of ['verify-remaining-optimization.cjs', 'test-browser-node-standard.cjs', 'test-browser-node-colors.cjs', 'test-browser-node-flexible.cjs', 'test-browser-node-selection.cjs', 'test-browser-node-references.cjs']) {
+    for (const script of ['verify-remaining-optimization.cjs', 'test-browser-node-standard.cjs', 'test-browser-node-colors.cjs', 'test-browser-node-flexible.cjs', 'test-browser-node-selection.cjs', 'test-browser-node-references.cjs', 'test-browser-hidden-scrollbars.cjs']) {
     const code = await new Promise((resolve, reject) => {
       const test = spawn(
         process.execPath,
