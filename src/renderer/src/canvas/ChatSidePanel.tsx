@@ -389,7 +389,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
     await runModel()
   }
 
-  // 复制 / 编辑 / 重新生成：三枚图标按钮，助手消息竖排在「AI」署名下，用户消息横排在气泡下。
+  // 消息操作统一位于正文结束后；AI 回复只提供复制和重新生成。
   const renderMessageActions = (index: number, role: 'user' | 'assistant'): React.JSX.Element => (
     <>
       <button
@@ -401,27 +401,27 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
       >
         <Icon name="copy" size={13} />
       </button>
-      <button
-        type="button"
-        className="chat-dialog-icon-btn"
-        aria-label="编辑"
-        title="编辑"
-        onClick={() => {
-          setEditingIndex(index)
-          setEditingText(messages[index].content)
-        }}
-      >
-        <Icon name="edit" size={13} />
-      </button>
+      {role === 'user' && (
+        <button
+          type="button"
+          className="chat-dialog-icon-btn"
+          aria-label="编辑"
+          title="编辑"
+          onClick={() => {
+            setEditingIndex(index)
+            setEditingText(messages[index].content)
+          }}
+        >
+          <Icon name="edit" size={13} />
+        </button>
+      )}
       <button
         type="button"
         className="chat-dialog-icon-btn"
         aria-label="重新生成"
         title="重新生成"
         disabled={running}
-        onClick={() =>
-          void (role === 'assistant' ? regenerate(index) : regenerateFromUser(index))
-        }
+        onClick={() => void (role === 'assistant' ? regenerate(index) : regenerateFromUser(index))}
       >
         <Icon name="refresh" size={13} />
       </button>
@@ -634,12 +634,6 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
                         aria-hidden="true"
                       />
                       <span>{message.role === 'user' ? '你' : 'AI'}</span>
-                      {/* 助手消息：复制/编辑/重新生成竖排在「AI」署名正下方。 */}
-                      {message.role === 'assistant' && editingIndex !== index && (
-                        <div className="chat-dialog-gutter-actions">
-                          {renderMessageActions(index, 'assistant')}
-                        </div>
-                      )}
                     </div>
                     <div className="chat-dialog-bubble">
                       {editingIndex === index ? (
@@ -674,10 +668,10 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
                         </>
                       )}
                     </div>
-                    {/* 用户消息：复制/编辑/重新生成横排在气泡正下方。 */}
-                    {message.role === 'user' && editingIndex !== index && (
+                    {/* 所有消息操作位于正文下方。 */}
+                    {message.role !== 'system' && editingIndex !== index && !isStreaming && (
                       <div className="chat-dialog-message-actions">
-                        {renderMessageActions(index, 'user')}
+                        {renderMessageActions(index, message.role)}
                       </div>
                     )}
                   </article>

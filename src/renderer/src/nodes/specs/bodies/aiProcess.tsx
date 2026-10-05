@@ -60,7 +60,9 @@ export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
   return (
     <div className="ai-process-body">
       <div className="ai-process-hero">
-        <span className="node-empty-icon"><Icon name="spark" size={40} /></span>
+        <span className="node-empty-icon">
+          <Icon name="spark" size={48} />
+        </span>
         <strong>AI 处理</strong>
       </div>
       <button

@@ -831,13 +831,13 @@ export function CanvasEditor({
       event.stopPropagation()
       title.dispatchEvent(new CustomEvent('canvas:edit-node-title'))
     }
-    const dispatchMediaPreview = (mediaBody: HTMLElement, event: MouseEvent): void => {
+    const dispatchNodeDoubleClick = (body: HTMLElement, event: MouseEvent): void => {
       event.preventDefault()
       event.stopPropagation()
       // tldraw 会在第一击时捕获指针，第二击随后的 dblclick target 会变成 .tl-canvas。
-      // 在尚未被重定向的第二次 mousedown 上向实际媒体元素补发 dblclick，交给每个
-      // 节点的预览处理器。这样单击仍只选中节点，所有图片预览都稳定为双击。
-      mediaBody.dispatchEvent(
+      // 在尚未被重定向的第二次 mousedown 上向实际节点正文补发 dblclick，交给每个
+      // 节点的双击处理器。单击仍只选中，媒体预览与网址打开保持双击语义。
+      body.dispatchEvent(
         new MouseEvent('dblclick', {
           bubbles: true,
           cancelable: true,
@@ -851,6 +851,13 @@ export function CanvasEditor({
     const onDoubleMouseDown = (event: MouseEvent): void => {
       if (event.detail !== 2) return // 只处理双击的第二击
       const target = event.target as HTMLElement
+      const websiteBody = target.closest<HTMLElement>(
+        '[data-node-interactive="website-empty"], [data-node-interactive="website-link"]'
+      )
+      if (websiteBody) {
+        dispatchNodeDoubleClick(websiteBody, event)
+        return
+      }
       const chatCard = target.closest<HTMLElement>('.node-card[data-node-type="chat"]')
       if (chatCard) {
         // tldraw 会在首次选中后捕获指针；在第二次 mousedown 尚未被重定向时打开聊天。
@@ -876,7 +883,7 @@ export function CanvasEditor({
           'button, input, textarea, select, a, [contenteditable="true"]'
         )
         if (nestedControl && mediaBody.contains(nestedControl)) return
-        dispatchMediaPreview(mediaBody, event)
+        dispatchNodeDoubleClick(mediaBody, event)
         return
       }
       const nodeTitle = target.closest<HTMLElement>('[data-node-interactive="node-title"]')

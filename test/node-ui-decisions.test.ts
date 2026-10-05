@@ -89,7 +89,7 @@ describe('v1.3 §16.1 端口圆点统一使用节点色、类型色环与柔光'
       'const visibleTypes = groupTypes.filter((type) => activeTypes.has(type))'
     )
     expect(nodePortLayout).toContain(
-      'portOffsets(groupTypes.length + forced.length, cardHeight)'
+      'portOffsets(anchorTypes.length + forced.length, cardHeight)'
     )
     expect(nodePortLayout).toContain(
       'const sameType = grouped.filter((port) => port.type === type)'
@@ -420,7 +420,7 @@ describe('v1.2 §16.13 AI 处理 / 对话：把执行器分支映射成端口与
   })
 
   it('对话节点卡片不展示底部统计说明、端口提示或跳过条件', () => {
-    expect(chat).toContain('chat-compact-model')
+    expect(chat).not.toContain('chat-compact-model')
     expect(chat).not.toContain('chat-compact-stats')
     expect(chat).not.toContain('chat-compact-hint')
     expect(chat).not.toContain('chat-compact-run')

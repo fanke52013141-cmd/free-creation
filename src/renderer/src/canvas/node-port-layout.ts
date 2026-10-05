@@ -64,7 +64,7 @@ export function collectNodePortConnections(editor: Editor): Map<string, NodePort
  * Forced ports (user-declared dynamic ports such as code-node params and output fields)
  * are exempt from grouping: they always render and each keeps an independent anchor, so
  * every declared port stays individually droppable and reachable.
- * Slots are allocated from the complete declaration; revealing a candidate never moves an anchor.
+ * Connected/default groups own primary slots; candidates use spare slots without moving anchors.
  */
 export function createNodePortLayout(
   ports: PortDecl[],
@@ -85,22 +85,32 @@ export function createNodePortLayout(
   // Every side has a usable default connector, including nodes with several optional types.
   if (activeTypes.size === 0 && groupTypes.length > 0) activeTypes.add(groupTypes[0])
   const visibleTypes = groupTypes.filter((type) => activeTypes.has(type))
-  const positions = portOffsets(groupTypes.length + forced.length, cardHeight)
+  const connectedTypes = groupTypes.filter((type) =>
+    grouped.some((port) => port.type === type && connectedPortIds.has(port.id))
+  )
+  const anchorTypes = connectedTypes.length ? connectedTypes : groupTypes.slice(0, 1)
+  const positions = portOffsets(anchorTypes.length + forced.length, cardHeight)
+  const sparePositions = portOffsets(groupTypes.length + forced.length + 1, cardHeight).filter(
+    (position) => !positions.some((anchor) => Math.abs(anchor - position) < 0.01)
+  )
+  let spareIndex = 0
   const visiblePorts: PortDecl[] = []
   const offsets = new Map<string, number>()
 
-  groupTypes.forEach((type, index) => {
+  groupTypes.forEach((type) => {
     const sameType = grouped.filter((port) => port.type === type)
     const representative =
       sameType.find((port) => candidatePortIds.has(port.id)) ??
       sameType.find((port) => connectedPortIds.has(port.id)) ??
       sameType[0]
     if (representative && visibleTypes.includes(type)) visiblePorts.push(representative)
-    for (const port of sameType) offsets.set(port.id, positions[index])
+    const anchorIndex = anchorTypes.indexOf(type)
+    const position = anchorIndex >= 0 ? positions[anchorIndex] : sparePositions[spareIndex++]
+    for (const port of sameType) offsets.set(port.id, position)
   })
   forced.forEach((port, index) => {
     visiblePorts.push(port)
-    offsets.set(port.id, positions[groupTypes.length + index])
+    offsets.set(port.id, positions[anchorTypes.length + index])
   })
 
   return { ports: visiblePorts, offsets }

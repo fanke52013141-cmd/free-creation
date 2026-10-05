@@ -938,7 +938,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         onPointerDown={handleCardPointerDown}
       >
         <div className="node-header">
-          {/* 标题行布局：左侧依次为 序号 → 图标 → 名称 → 查看输入输出说明；
+          {/* 标题行布局：左侧依次为 序号 → 图标 → 名称 → 可选字数 → 查看输入输出说明；
                 状态灯保留在标题行，运行动作独立浮在卡片右上角，避免挤压标题。 */}
           <span className="node-seq" title={`节点序号 ${seq}`}>
             {seq}
@@ -967,6 +967,11 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           >
             {displayTitle}
           </div>
+          {/* 文本节点字数徽标：位于“查看输入输出说明”左侧。
+                格式见 formatCharCount（N 字 / N 多字 / X.XK）。 */}
+          {shape.props.nodeType === 'text' && shape.props.text && (
+            <span className="node-text-count">{formatCharCount(shape.props.text.length)}</span>
+          )}
           {/* info 按钮（查看输入输出说明）：紧跟节点名称，点击显式打开右侧契约面板。
                 对话节点也必须能查看与其他节点相同的输入输出契约。标题必须和 openNodePanel 的
                 去向一致——预演台从卡片按钮进，这里写「打开 3D 预演台」会是假提示。 */}
@@ -982,11 +987,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           >
             <Icon name="document" size={16} />
           </button>
-          {/* 文本节点字数徽标：位于“查看输入输出说明”右侧。
-                格式见 formatCharCount（N 字 / N 多字 / X.XK）。 */}
-          {shape.props.nodeType === 'text' && shape.props.text && (
-            <span className="node-text-count">{formatCharCount(shape.props.text.length)}</span>
-          )}
           {/* 弹性占位：运行与状态都固定在标题行的右侧。 */}
           <span className="node-header-spacer" />
           <span

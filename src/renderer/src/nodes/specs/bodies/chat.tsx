@@ -8,28 +8,13 @@ import type { NodeBodyProps, NodeSettingsProps } from '../../registry'
 import { useNodePanelStore } from '../../../stores/nodePanel'
 
 export function ChatBody({ shape }: NodeBodyProps): React.JSX.Element {
-  const providers = useGatewayStore((s) => s.providers)
-  const loaded = useGatewayStore((s) => s.loaded)
-  const loadProviders = useGatewayStore((s) => s.load)
-  const options = modelsByModality(providers, 'text')
-  const data = parseChat(shape.props.text)
-  useEffect(() => {
-    if (!loaded) void loadProviders()
-  }, [loaded, loadProviders])
-
-  const selectedModel = options.find((o) => o.key === data.modelKey)
-
   return (
     <div className="chat-body-compact">
       <div className="node-empty-state chat-body-hero">
-        <span className="node-empty-icon"><Icon name="chat" size={48} strokeWidth={2} /></span>
+        <span className="node-empty-icon">
+          <Icon name="chat" size={48} strokeWidth={2} />
+        </span>
         <strong>AI 对话</strong>
-        {selectedModel && (
-          <span className="chat-compact-model is-ready">
-            <span className="chat-model-dot" />
-            <span className="chat-model-name">{selectedModel.model.name || selectedModel.model.id}</span>
-          </span>
-        )}
         <button
           type="button"
           className="chat-open-button"

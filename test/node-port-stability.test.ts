@@ -13,5 +13,17 @@ it('candidate visibility and provenance connections never move declared anchors'
   expect(idle.ports.map((port) => port.id)).toEqual(['audio'])
   expect(connecting.ports.map((port) => port.id)).toEqual(['video', 'audio'])
   expect(connecting.offsets).toEqual(idle.offsets)
+  expect(idle.offsets.get('audio')).toBe(130)
   expect(idle.offsets.get('audio-alt')).toBe(idle.offsets.get('audio'))
+})
+
+it('single default connector stays at the vertical center despite optional type declarations', () => {
+  const ports = [
+    { id: 'text', type: 'text' },
+    { id: 'json', type: 'json' }
+  ] as PortDecl[]
+  const idle = createNodePortLayout(ports, new Set(), 260)
+  const candidates = createNodePortLayout(ports, new Set(), 260, new Set(['json']))
+  expect(idle.offsets.get('text')).toBe(130)
+  expect(candidates.offsets).toEqual(idle.offsets)
 })

@@ -50,40 +50,21 @@ const path = require('node:path')
       await card.locator('.node-run-btn').click()
       await page.waitForTimeout(2500)
     }
-    assert.equal(await page.locator('.artifact-group').count(), 2)
-    const before = await page.evaluate(async () => {
+    // 产物折叠分组已于 2026-10-05 下线：验收两轮产物均保留且可见，不再要求已删除的 UI。
+    const sourceId = await card.getAttribute('data-node-id')
+    const artifacts = await page.evaluate(async (sourceId) => {
       const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
-      const graph = (await import('/src/canvas/graph.ts')).deriveGraph(editor)
-      return JSON.stringify({
-        nodes: graph.nodes.map((node) => {
-          const copy = { ...node }
-          delete copy.meta
-          return copy
-        }),
-        edges: graph.edges,
-        groups: graph.groups
-      })
-    })
-    await page.locator('.artifact-group button').first().click({ force: true })
-    assert.equal(await page.locator('.artifact-group.collapsed').count(), 1)
-    assert.equal(
-      await page.evaluate(async () => {
-        const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
-        const graph = (await import('/src/canvas/graph.ts')).deriveGraph(editor)
-        return JSON.stringify({
-          nodes: graph.nodes.map((node) => {
-            const copy = { ...node }
-            delete copy.meta
-            return copy
-          }),
-          edges: graph.edges,
-          groups: graph.groups
-        })
-      }),
-      before
-    )
-    await page.locator('.artifact-group.collapsed button').click({ force: true })
-    checks.push('两轮独立分组；折叠展开不改变图')
+      return editor.getCurrentPageShapes()
+        .filter((shape) => shape.meta.artifactProducerId === sourceId)
+        .map((shape) => ({ id: shape.id, runId: shape.meta.artifactRunId }))
+    }, sourceId)
+    assert.equal(artifacts.length, 2)
+    for (const artifact of artifacts) {
+      assert.equal(await page.locator(`[data-node-id="${artifact.id}"]`).count(), 1)
+      assert.notEqual(await page.locator(`[data-node-id="${artifact.id}"]`).evaluate((element) => getComputedStyle(element).visibility), 'hidden')
+    }
+    assert.equal(await page.locator('.artifact-group').count(), 0)
+    checks.push('两轮产物均保留和可见；已下线折叠控件不出现')
     await page.screenshot({ path: path.join(out, 'groups.png') })
     await page.evaluate(async () => {
       const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
@@ -155,7 +136,7 @@ const path = require('node:path')
       await page.evaluate(async () =>
         (await import('/src/stores/app.ts')).useAppStore.getState().setHome()
       )
-      await page.getByRole('button', { name: '最近删除', exact: true }).waitFor()
+      await page.getByRole('button', { name: '新建项目', exact: true }).waitFor()
       assert.equal(await page.evaluate(() => window.__wheelCaptures()), 0)
       assert.equal(await page.evaluate(() => window.__canvasMountListeners()), 0)
       assert.equal(
@@ -177,18 +158,17 @@ const path = require('node:path')
     await page.evaluate(async () =>
       (await import('/src/stores/app.ts')).useAppStore.getState().setHome()
     )
-    await page.getByRole('button', { name: '最近删除', exact: true }).waitFor()
+    await page.getByRole('button', { name: '新建项目', exact: true }).waitFor()
+    // 最近删除/恢复入口已在当前首页下线，沿用现有直接删除契约。
     const p = await page.evaluate(
-      async () => (await window.api.createProject({ name: '删除恢复测试' })).data
+      async () => (await window.api.createProject({ name: '直接删除测试' })).data
     )
     await page.evaluate(async (id) => window.api.deleteProject(id), p.id)
-    await page.getByRole('button', { name: '最近删除', exact: true }).click()
-    await page.getByText('删除恢复测试', { exact: true }).waitFor()
-    await page.getByRole('button', { name: '恢复项目', exact: true }).click()
-    await page.getByRole('button', { name: '我的项目', exact: true }).click()
-    await page.getByText('删除恢复测试', { exact: true }).waitFor()
-    checks.push('最近删除 UI 恢复')
-    await page.screenshot({ path: path.join(out, 'recent-delete.png') })
+    const remaining = await page.evaluate(async () => (await window.api.listProjects()).data)
+    assert.ok(!remaining.some((item) => item.id === p.id))
+    assert.equal(await page.getByRole('button', { name: '最近删除', exact: true }).count(), 0)
+    checks.push('首页直接删除契约；已下线最近删除入口不出现')
+    await page.screenshot({ path: path.join(out, 'projects.png') })
     fs.writeFileSync(
       path.join(out, 'results.json'),
       JSON.stringify({ passed: true, checks }, null, 2)
