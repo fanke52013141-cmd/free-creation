@@ -299,3 +299,26 @@
 .node-card:has(.node-standard-shell[data-has-actions='false']) > .node-execution-overlay {
   bottom: 0;
 }
+
+/* AI 结果采用正文内容框，外壳负责高度上限及唯一滚动区。 */
+.node-card.type-ai-process .node-standard-shell .node-body-content > .ai-process-result-frame {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 216px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--txt);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 22px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+  cursor: text;
+}
+.ai-process-result-frame:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}

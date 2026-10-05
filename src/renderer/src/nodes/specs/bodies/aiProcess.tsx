@@ -1,6 +1,6 @@
-import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
+import { NodeIdentity } from '../../../canvas/NodePresentation'
 // AI 处理是一个纯处理节点：卡片保留清晰的操作入口，模型和生成参数统一放在右侧「设置」页。
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { stopEventPropagation } from 'tldraw'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { parseAiProcess, type AiProcessConfig } from '../../../engine/executors/aiProcess'
@@ -8,9 +8,6 @@ import { ModelSelect, NoModelHint } from './shared'
 import type { NodeBodyProps, NodeSettingsProps } from '../../registry'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { AppSelect } from '../../../components/AppSelect'
-import { Icon } from '../../../components/Icon'
-import { useNodePanelStore } from '../../../stores/nodePanel'
-import { readNodeRunRecord } from '../../../engine/runRecord'
 import { projectNodeOutputs } from '../../nodeValues'
 
 const AI_SCHEMA_OPTIONS = [
@@ -58,68 +55,29 @@ function schemaFromKey(key: string): AiProcessConfig['jsonSchema'] {
   return found ? { id: found.id, version: found.version } : undefined
 }
 
-/** 卡片只保留节点身份和设置入口；端口契约与配置在右侧详情中查看。 */
+/** 成功结果直接呈现；配置沿用标题/右侧面板入口。 */
 export function AiProcessBody({ shape }: NodeBodyProps): React.JSX.Element {
-  const [showResult, setShowResult] = useState(false)
   const result = Object.values(projectNodeOutputs(shape)).find(
     (value) => value?.kind === 'text' || value?.kind === 'markdown' || value?.kind === 'json'
   )
+  if (!result) return <NodeIdentity />
   const resultText =
-    result?.kind === 'json'
+    result.kind === 'json'
       ? JSON.stringify(result.data, null, 2)
-      : result?.kind === 'text' || result?.kind === 'markdown'
+      : result.kind === 'text' || result.kind === 'markdown'
         ? result.text
         : ''
-  if (showResult && resultText)
-    return (
-      <div className="ai-process-body" style={{ height: '100%', minHeight: 0 }}>
-        <textarea
-          aria-label="完整处理结果"
-          readOnly
-          value={resultText}
-          style={{ width: '100%', flex: 1, minHeight: 0, resize: 'none' }}
-          onPointerDown={stopEventPropagation}
-        />
-        <NodePrimaryButton
-          className="btn-ghost small"
-          onPointerDown={stopEventPropagation}
-          onClick={(event) => {
-            event.stopPropagation()
-            setShowResult(false)
-          }}
-        >
-          返回处理设置
-        </NodePrimaryButton>
-      </div>
-    )
   return (
-    <div className="ai-process-body">
-      <NodeIdentity></NodeIdentity>
-      <NodePrimaryButton
-        type="button"
-        className="ai-process-config-button"
-        onPointerDown={stopEventPropagation}
-        onClick={(event) => {
-          event.stopPropagation()
-          useNodePanelStore.getState().open('contract', shape.id, 'settings')
-        }}
-      >
-        配置处理
-        <Icon name="arrow" size={13} />
-      </NodePrimaryButton>
-      {readNodeRunRecord(shape.meta.nodeRun)?.status === 'success' && (
-        <button
-          type="button"
-          className="btn-ghost small"
-          onPointerDown={stopEventPropagation}
-          onClick={(event) => {
-            event.stopPropagation()
-            setShowResult(true)
-          }}
-        >
-          查看已有结果
-        </button>
-      )}
+    <div
+      className="ai-process-result-frame"
+      role="textbox"
+      aria-label="完整处理结果"
+      aria-readonly="true"
+      aria-multiline="true"
+      tabIndex={0}
+      onPointerDown={stopEventPropagation}
+    >
+      {resultText}
     </div>
   )
 }

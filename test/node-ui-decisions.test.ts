@@ -409,14 +409,16 @@ describe('v1.2 §16.13 AI 处理 / 对话：把执行器分支映射成端口与
     expect(card).not.toContain('<select')
     // 已有结果通过只读控件完整呈现；不能把历史结果阅读误认成配置输入。
     expect(card).toContain('aria-label="完整处理结果"')
-    expect(card).toContain('readOnly')
-    expect(card).toContain('value={resultText}')
+    expect(card).toContain('aria-readonly="true"')
+    expect(card).toContain('{resultText}')
   })
 
   it('输入/输出状态由端口与契约呈现，卡片不重复打印计数或等待提示', () => {
     expect(aiProcess).not.toContain('countIncomingConnections')
     expect(aiProcess).not.toContain('等待文本或 JSON 输入')
-    expect(aiProcess).not.toContain('ai-process-result')
+    expect(aiProcess).toContain('ai-process-result-frame')
+    expect(aiProcess).not.toContain('配置处理')
+    expect(aiProcess).not.toContain('查看已有结果')
     expect(aiProcess).not.toContain('parseStoredAiResult')
   })
 

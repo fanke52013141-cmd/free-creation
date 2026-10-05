@@ -63,7 +63,7 @@ function contrast(first, second) {
       assert.equal(node.descriptions, 0, `${node.type} no automatic description`)
       if (node.icon) { assert.equal(node.icon.box, 72); assert.equal(node.icon.svg, 32) }
     }
-    for (const [type,label] of [['website','配置网址'],['chat','打开对话'],['ai-process','配置处理']]) {
+    for (const [type,label] of [['website','配置网址'],['chat','打开对话']]) {
       await page.locator(`[data-node-type="${type}"] .node-standard-action-bar`).getByRole('button', { name: label, exact: true }).click()
       await page.waitForTimeout(150)
       const opened = await page.evaluate(async () => (await import('/src/stores/nodePanel.ts')).useNodePanelStore.getState().shapeId)
@@ -122,20 +122,26 @@ function contrast(first, second) {
       editor.updateShape({id:'shape:standard-ai-process',type:'node-card',meta:{nodeRun:{runId:'qa-saved-result',status:'success',startedAt:1,inputs:{}},nodeResult:JSON.stringify({kind:'text',text:'完整历史结果\n'.repeat(200)+'结束标记'})}})
     })
     const processCard=page.locator('[data-node-type="ai-process"]')
-    await processCard.getByRole('button',{name:'查看已有结果',exact:true}).click()
-    assert.equal(await processCard.getByRole('textbox',{name:'完整处理结果'}).inputValue(),'完整历史结果\n'.repeat(200)+'结束标记')
-    assert.equal(await processCard.locator('.node-standard-action-bar > button').count(),1)
-    await processCard.getByRole('button',{name:'返回处理设置',exact:true}).click()
-    assert.equal(await processCard.locator('.node-standard-action-bar > button').textContent().then(text=>text.trim()),'配置处理')
+    assert.equal(await processCard.getByRole('textbox',{name:'完整处理结果'}).textContent(),'完整历史结果\n'.repeat(200)+'结束标记')
+    await page.waitForTimeout(350)
+    assert.equal(await processCard.evaluate(el=>el.getBoundingClientRect().height),440)
+    await processCard.screenshot({path:`${output}/ai-result-long.png`})
+    assert.equal(await processCard.locator('.node-standard-action-bar button').count(),0)
+    assert.ok(await processCard.locator('.node-standard-scroll').evaluate(el=>{el.scrollTop=el.scrollHeight;return el.scrollTop>1000}))
     await page.evaluate(async () => {
       const editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor
       editor.updateShape({id:'shape:standard-ai-process',type:'node-card',props:{exec:'running'},meta:{nodeRun:{runId:'qa-running',status:'running',startedAt:Date.now(),inputs:{}}}})
     })
     await page.waitForTimeout(100)
-    assert.equal(await processCard.locator('.node-standard-action-bar button').isDisabled(),true)
-    const running=await processCard.evaluate(card=>({overlay:card.querySelector('.node-execution-overlay').getBoundingClientRect().bottom,button:card.querySelector('.node-standard-action-bar button').getBoundingClientRect().top}))
-    assert.ok(running.overlay<=running.button)
+    assert.equal(await processCard.locator('.node-standard-action-bar button').count(),0)
     await page.evaluate(async ()=>{(await import('/src/stores/editor.ts')).useEditorStore.getState().editor.updateShape({id:'shape:standard-ai-process',type:'node-card',props:{exec:'idle'}})})
+    await page.evaluate(async () => {
+      const editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor
+      editor.updateShape({id:'shape:standard-ai-process',type:'node-card',meta:{nodeRun:{runId:'qa-short',status:'success',startedAt:1,inputs:{}},nodeResult:JSON.stringify({kind:'text',text:'短结果直接显示'})}})
+    })
+    await page.waitForTimeout(300)
+    assert.equal(await processCard.evaluate(el=>el.getBoundingClientRect().height),260)
+    assert.equal(await processCard.getByRole('textbox',{name:'完整处理结果'}).textContent(),'短结果直接显示')
     await page.setViewportSize({width:4300,height:4200})
     for (const theme of ['dark','light']) for (const zoom of [.75,1,1.5]) {
       await page.evaluate(async ({theme,zoom})=>{
