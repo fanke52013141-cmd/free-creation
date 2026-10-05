@@ -144,6 +144,40 @@ const fs = require('node:fs')
     assert.equal(await page.locator('[data-node-type="image-gen"] .connected-inputs').count(), 0)
     assert.equal((await inspect()).find(n=>n.type==='image-gen').h,260,'移除引用后恢复默认高度')
     await page.screenshot({ path: `${output}/light-no-reference.png` })
+    // 已有视频只能提供缩略预览，竖屏固有比例不得触发自动高度或滚动。
+    await page.evaluate(async () => {
+      const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
+      editor.deleteShapes([...editor.getCurrentPageShapeIds()])
+      for (const [i, type] of ['video-asset', 'video'].entries())
+        editor.createShape({
+          id: `shape:flex-${type}`,
+          type: 'node-card',
+          x: 220 + i * 390,
+          y: 80,
+          props: { nodeType: type, mediaPath: 'portrait-preview.mp4' }
+        })
+      editor.setCamera({ x: 0, y: 0, z: 1 }, { immediate: true })
+    })
+    await page.waitForTimeout(500)
+    // React 挂载后设置真实竖屏 poster，触发媒体尺寸测量。
+    await page.locator('.video-thumbnail-wrap video').evaluateAll((videos) => {
+      for (const video of videos)
+        video.poster = 'data:image/svg+xml,' + encodeURIComponent(
+          '<svg xmlns="http://www.w3.org/2000/svg" width="720" height="1280"><rect width="720" height="1280" fill="#345069"/></svg>'
+        )
+    })
+    await page.waitForTimeout(300)
+    const videos = await page.locator('.node-card:is(.type-video-asset,.type-video)').evaluateAll((nodes) =>
+      nodes.map((node) => {
+        const scroll = node.querySelector('.node-standard-scroll')
+        return { height: node.getBoundingClientRect().height, scroll: scroll.scrollHeight, client: scroll.clientHeight }
+      })
+    )
+    assert.equal(videos.length, 2)
+    for (const video of videos) {
+      assert.equal(video.height, 260)
+      assert.ok(video.scroll <= video.client + 1, JSON.stringify(video))
+    }
     console.log(
       `按需说明、零/多动作、260px 预览无滚动、真实后续连线、输入框填满与 8px 间距通过：${output}`
     )

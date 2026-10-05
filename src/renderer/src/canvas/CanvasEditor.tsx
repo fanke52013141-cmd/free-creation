@@ -2064,7 +2064,7 @@ export function CanvasEditor({
               onClick={() => setPanelTab('workflow')}
             >
               <span className="palette-icon">
-                <Icon name="workflow" size={20} />
+                <Icon name="node-library" size={20} />
               </span>
               <span className="palette-label">节点库</span>
             </button>

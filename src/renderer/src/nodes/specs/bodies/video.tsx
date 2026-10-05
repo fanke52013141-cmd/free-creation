@@ -354,7 +354,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
       markUndoPoint(editor, 'video-select-result')
     }
     return (
-      <div className="node-media-wrap">
+      <div className="node-media-wrap video-thumbnail-wrap">
         <div
           className="node-media"
           data-node-interactive="media-preview"
@@ -370,7 +370,9 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           }
         >
           <video src={mediaUrl(shape.props.mediaPath)} preload="metadata" muted playsInline />
-          <span className="play-badge">▶</span>
+          <span className="play-badge">
+            <Icon name="play" size={24} />
+          </span>
         </div>
         <MediaResultGrid
           shape={shape}

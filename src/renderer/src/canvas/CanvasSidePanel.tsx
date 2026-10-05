@@ -45,7 +45,7 @@ interface CanvasSidePanelProps {
 
 const TAB_META: Record<SidePanelTab, { title: string; icon: IconName }> = {
   assets: { title: '资产中心', icon: 'assets' },
-  workflow: { title: '节点库', icon: 'workflow' },
+  workflow: { title: '节点库', icon: 'node-library' },
   history: { title: '历史记录', icon: 'history' },
   runs: { title: '运行中心', icon: 'play' }
 }

@@ -884,7 +884,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           natural -
           (identity ? Math.max(0, identity.offsetHeight - NODE_UI.identity.minHeight) : 0) +
           references
-        const fittedPreview = ['image', 'image-split', 'image-crop'].includes(latest.props.nodeType)
+        const fittedPreview =
+          ['image', 'image-split', 'image-crop', 'video-asset'].includes(latest.props.nodeType) ||
+          (latest.props.nodeType === 'video' && Boolean(latest.props.mediaPath))
         const prompt = body.querySelector<HTMLElement>('.gen-prompt')
         const formMinimum =
           latest.props.nodeType === 'image-gen' && prompt

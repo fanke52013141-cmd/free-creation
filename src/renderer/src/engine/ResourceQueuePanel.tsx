@@ -1,14 +1,24 @@
 import { setResourceLimit, useResourceQueue } from './resource-queue'
+import { Icon } from '../components/Icon'
 
 export function ResourceQueuePanel({ projectId }: { projectId: string }): React.JSX.Element {
   const tasks = useResourceQueue((state) => state.tasks)
   const limits = useResourceQueue((state) => state.limits)
   const visible = tasks.filter((task) => task.projectId === projectId)
+  const running = visible.filter((task) => task.status === 'running').length
+  const queued = visible.filter((task) => task.status === 'queued').length
+  const statusLabel = `${running} 个任务运行中，${queued} 个任务排队中`
   return (
-    <details style={{ position: 'relative', marginLeft: 8 }}>
-      <summary style={{ cursor: 'pointer' }}>
-        任务 {visible.filter((task) => task.status === 'running').length} 运行 /{' '}
-        {visible.filter((task) => task.status === 'queued').length} 排队
+    <details className="resource-queue-control" style={{ position: 'relative', marginLeft: 8 }}>
+      <summary className="resource-queue-summary" title={statusLabel} aria-label={statusLabel}>
+        <span className="resource-queue-count">
+          <Icon name="play" size={14} />
+          <span>{running}</span>
+        </span>
+        <span className="resource-queue-count">
+          <Icon name="history" size={14} />
+          <span>{queued}</span>
+        </span>
       </summary>
       <div
         style={{

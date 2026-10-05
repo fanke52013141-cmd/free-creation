@@ -25,6 +25,7 @@ export type IconName =
   | 'upload'
   | 'assets'
   | 'workflow'
+  | 'node-library'
   | 'history'
   | 'theme'
   | 'search'
@@ -213,10 +214,15 @@ const PATHS: Record<IconName, React.ReactNode> = {
   ),
   workflow: (
     <>
-      <circle cx="12" cy="5.5" r="2.5" />
-      <circle cx="5.5" cy="18" r="2.5" />
-      <circle cx="18.5" cy="18" r="2.5" />
-      <path d="M12 8v3.5M12 11.5H5.5V15M12 11.5h6.5V15" />
+      <rect x="3" y="4" width="6" height="6" rx="1.5" />
+      <rect x="15" y="14" width="6" height="6" rx="1.5" />
+      <path d="M9 7h6a3 3 0 0 1 3 3v4m-3-3 3 3 3-3" />
+    </>
+  ),
+  'node-library': (
+    <>
+      <rect x="3" y="8" width="14" height="13" rx="2" />
+      <path d="M7 8V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-2M7 12h6M7 16h4" />
     </>
   ),
   history: (
@@ -306,28 +312,30 @@ const PATHS: Record<IconName, React.ReactNode> = {
   ),
   'distribute-horizontal': (
     <>
-      <path d="M4 5v14M20 5v14M8 12h8" />
-      <path d="m10 9-3 3 3 3M14 9l3 3-3 3" />
+      <rect x="3" y="7" width="4" height="10" rx="1" />
+      <rect x="10" y="7" width="4" height="10" rx="1" />
+      <rect x="17" y="7" width="4" height="10" rx="1" />
     </>
   ),
   'distribute-vertical': (
     <>
-      <path d="M5 4h14M5 20h14M12 8v8" />
-      <path d="m9 10 3-3 3 3M9 14l3 3 3-3" />
+      <rect x="7" y="3" width="10" height="4" rx="1" />
+      <rect x="7" y="10" width="10" height="4" rx="1" />
+      <rect x="7" y="17" width="10" height="4" rx="1" />
     </>
   ),
   group: (
     <>
-      <rect x="3.5" y="3.5" width="7.5" height="7.5" rx="1.5" />
-      <rect x="13" y="13" width="7.5" height="7.5" rx="1.5" />
-      <path d="M7.25 11v1.2A2.8 2.8 0 0 0 10 15h1M16.75 13v-1.2A2.8 2.8 0 0 0 14 9h-1" />
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <rect x="7" y="7" width="6" height="6" rx="1" />
+      <rect x="11" y="11" width="6" height="6" rx="1" />
     </>
   ),
   ungroup: (
     <>
-      <rect x="3.5" y="3.5" width="7.5" height="7.5" rx="1.5" />
-      <rect x="13" y="13" width="7.5" height="7.5" rx="1.5" />
-      <path d="M4 20 20 4" />
+      <path d="M7 3H3v4M17 3h4v4M3 17v4h4M21 17v4h-4" strokeDasharray="2 2" />
+      <rect x="6" y="6" width="5" height="5" rx="1" />
+      <rect x="13" y="13" width="5" height="5" rx="1" />
     </>
   ),
   undo: (

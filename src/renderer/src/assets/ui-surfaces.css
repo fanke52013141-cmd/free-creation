@@ -5384,3 +5384,9 @@ button {
 .node-card.type-voice-design :is(.voice-design-provider-section, .voice-design-description-section, .voice-design-parameters-section) .tts-section-label svg {
   color: color-mix(in srgb, var(--node-accent) var(--node-identity-strength, 100%), #17232d);
 }
+
+.resource-queue-summary { display: flex; align-items: center; gap: 12px; height: 28px; padding: 0 10px; list-style: none; cursor: pointer; color: var(--muted); border-radius: 6px; font-size: 12px; }
+.resource-queue-summary::-webkit-details-marker { display: none; }
+.resource-queue-summary:hover, .resource-queue-control[open] > summary { background: var(--card-hover); color: var(--txt); }
+.resource-queue-count { display: inline-flex; align-items: center; gap: 5px; font-variant-numeric: tabular-nums; }
+.resource-queue-summary:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
