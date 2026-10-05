@@ -4,6 +4,7 @@
 export const NODE_UI = {
   width: 340,
   height: {
+    min: 260,
     /** H0 默认档：所有可创建节点的初始尺寸 */
     default: 260,
     /** H1 扩展档：增加引用区、结果工具栏或较多配置 */
@@ -12,13 +13,17 @@ export const NODE_UI = {
     rich: 380,
     /** H3 自动上限：多媒体集合等密集内容；超过后内容内部滚动 */
     autoMax: 440,
-    /** 用户手动拖拽放大的推荐上限（不强制裁切） */
-    manualMax: 720,
+    /** v1.2：手动与自动高度共用上限 */
+    manualMax: 440,
     /** 历史兼容保护值：仅用于旧项目异常尺寸迁移判断，不属于 UI 规范 */
     legacyGuard: 1200
   },
   header: { height: 28 },
   radius: 12,
+  identity: { boxSize: 72, iconSize: 32, radius: 16, minHeight: 178 },
+  description: { height: 36, maxLines: 2 },
+  content: { padding: 12 },
+  primaryButton: { width: 200, height: 32, radius: 8 },
   accent: { height: 4 },
   reference: {
     /** 引用区最多展示行数，超出折叠为 +N */
@@ -28,7 +33,7 @@ export const NODE_UI = {
     imageHeight: 36
   },
   actionBar: {
-    height: 40,
+    height: 48,
     /** 主操作按钮与节点卡片底边的统一留白 */
     bottomInset: 8,
     maxVisibleActions: 3

@@ -1,0 +1,202 @@
+/* NODE_UI_STANDARD §18: 公共组件拥有几何，Body 只拥有业务内容。 */
+.node-card > .node-standard-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.node-card > .node-execution-overlay {
+  bottom: var(--node-standard-action-height);
+}
+.node-standard-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overflow-x: hidden;
+  padding: var(--node-standard-padding) var(--node-standard-padding) 0;
+  scrollbar-width: thin;
+}
+.node-standard-scroll > .node-body {
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  overflow: visible;
+}
+.node-standard-scroll > .node-body > .node-body-content {
+  flex: initial;
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+}
+.node-card .node-standard-shell .node-body-content > div {
+  padding: 0;
+}
+.node-card
+  .node-standard-shell
+  .node-standard-scroll
+  :is(
+    .node-text,
+    .node-text-body,
+    .json-body,
+    .json-preview,
+    .code-body,
+    .code-preview,
+    .node-tts,
+    .node-speech,
+    .node-voice-design
+  ) {
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  overflow-y: visible;
+}
+.node-standard-scroll .node-standard-identity-icon svg {
+  color: inherit;
+  stroke: currentColor;
+  width: 32px;
+  height: 32px;
+}
+.node-standard-identity > small {
+  display: none;
+}
+.node-card .node-standard-scroll :is(.node-hint.center, .structured-preview.is-empty) {
+  display: flex;
+  flex-direction: column;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+}
+.node-card .node-standard-shell .node-standard-identity-icon {
+  color: color-mix(in srgb, var(--node-accent) var(--node-identity-strength, 100%), #17232d);
+}
+.node-standard-shell[data-has-identity='true'] .node-standard-scroll,
+.node-standard-shell[data-has-identity='true'] .node-body-content {
+  display: flex;
+  flex-direction: column;
+}
+.node-standard-shell[data-has-identity='true'] .node-body {
+  flex: 1;
+  min-height: 0;
+}
+.node-standard-identity {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--node-standard-identity-height);
+  width: 100%;
+  gap: 0;
+}
+.node-standard-identity-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: var(--node-standard-icon-box);
+  height: var(--node-standard-icon-box);
+  border-radius: var(--node-standard-icon-radius);
+  border: 1px solid var(--line);
+  background: var(--card-hover);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%);
+  color: color-mix(in srgb, var(--node-accent) var(--node-identity-strength, 100%), #17232d);
+}
+.node-card .node-standard-identity > strong {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  margin: 12px 0 6px;
+  color: var(--txt);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 22px;
+}
+.node-standard-description {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  width: 100%;
+  height: var(--node-standard-description-height);
+  min-height: var(--node-standard-description-height);
+  max-height: var(--node-standard-description-height);
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  text-align: left;
+  cursor: help;
+}
+.node-standard-identity > .node-standard-description {
+  text-align: center;
+}
+.node-standard-action-bar {
+  display: flex;
+  flex: 0 0 var(--node-standard-action-height);
+  align-items: flex-end;
+  justify-content: center;
+  box-sizing: border-box;
+  height: var(--node-standard-action-height);
+  padding: 8px var(--node-standard-padding) var(--node-standard-bottom-inset);
+  gap: 8px;
+}
+/* 浅色卡片有 1px 实体边框，底边距按卡片外沿计量。 */
+.canvas-theme-light .node-standard-action-bar {
+  padding-bottom: calc(var(--node-standard-bottom-inset) - 1px);
+}
+.node-standard-action-bar .node-standard-primary {
+  display: flex;
+  flex: 0 1 var(--node-standard-button-width);
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-sizing: border-box;
+  width: var(--node-standard-button-width);
+  min-width: 0;
+  height: var(--node-standard-button-height);
+  min-height: var(--node-standard-button-height);
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--node-standard-button-radius);
+  background: var(--card-hover);
+  color: var(--txt);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  cursor: pointer;
+}
+.node-standard-primary-icon {
+  display: flex;
+  flex: 0 0 16px;
+}
+.node-standard-primary-icon svg {
+  width: 16px;
+  height: 16px;
+}
+.node-standard-primary-label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.node-standard-primary:hover:not(:disabled) {
+  border-color: var(--brand);
+}
+.node-standard-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.node-standard-primary:focus-visible,
+.node-standard-description:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
