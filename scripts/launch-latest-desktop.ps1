@@ -173,7 +173,9 @@ try {
     throw
   }
   Write-Host "构建完成，正在启动版本 $($SourceCommit.Substring(0, 7))……" -ForegroundColor Green
-  Start-Process -FilePath $AppExecutable -WorkingDirectory $AppDirectory -WindowStyle Hidden | Out-Null
+  # 不能用 -WindowStyle Hidden：Electron 会继承 STARTUPINFO 的隐藏标记，
+  # 导致主窗口一直不可见（应用在运行却看不到窗口）。
+  Start-Process -FilePath $AppExecutable -WorkingDirectory $AppDirectory | Out-Null
 }
 catch {
   $LaunchFailed = $true

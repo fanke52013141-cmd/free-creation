@@ -15,5 +15,7 @@ Write-Host "源码提交：$($Build.sourceCommit)；构建时间：$($Build.buil
 if ($Build.includesUncommittedChanges) { Write-Host '该包包含构建时的本地修改。' }
 if (-not $CheckOnly) {
   Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
-  Start-Process -FilePath $Executable -WorkingDirectory $AppDirectory -WindowStyle Hidden | Out-Null
+  # 不能用 -WindowStyle Hidden：Electron 会继承 STARTUPINFO 的隐藏标记，
+  # 导致主窗口一直不可见（应用在运行却看不到窗口）。
+  Start-Process -FilePath $Executable -WorkingDirectory $AppDirectory | Out-Null
 }
