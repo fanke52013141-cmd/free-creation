@@ -1,3 +1,5 @@
+> 2026-10-05 更新：legacy-adapter 已因零调用删除；renderer 上下文与输入类型直接 re-export 共享层。下面为实施过程历史记录，现状以 LOGGING_SPEC.md 和 LOGGING_COVERAGE.md 为准。
+
 # 日志系统开发方案（L01–L06 实施细化）
 
 日期：2026-10-04。基线：`5085dc8`（docs(logging) 提交），工作区另有他人未提交改动（见 §8）。

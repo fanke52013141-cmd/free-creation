@@ -1,3 +1,5 @@
+> 历史文档：本文已过期，仅供历史参考。当前状态以 AGENTS.md、NODE_CONTRACT_SPEC.md、docs/optimization-ledger.md 及源码为准（2026-10-05 标注）。
+
 # Canvas Studio 开发交接文档
 
 > 最后更新：2026-09-18

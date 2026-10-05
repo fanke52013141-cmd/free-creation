@@ -1,0 +1,16 @@
+{
+  "date": "2026-10-05",
+  "passed": true,
+  "packagingWhitelist": true,
+  "currentBuildMatched": true,
+  "productionStartup": true,
+  "requiredRunnerRetained": true,
+  "fullSuite": {
+    "passed": 1474,
+    "skipped": 1,
+    "files": 127,
+    "modelRuntimePassed": 2
+  },
+  "browserLifecyclePassed": true,
+  "boundary": "隔离数据目录，不替换当前安装包；未验证安装器升级或付费供应商"
+}

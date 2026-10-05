@@ -1,3 +1,5 @@
+> 历史文档：本文已过期，仅供历史参考。当前状态以 AGENTS.md、NODE_CONTRACT_SPEC.md、docs/optimization-ledger.md 及源码为准（2026-10-05 标注）。
+
 # Canvas Studio UI 整体优化方案
 
 > 基于 2026-08-31 完整代码排查编写，所有问题均有 file:line 证据。
