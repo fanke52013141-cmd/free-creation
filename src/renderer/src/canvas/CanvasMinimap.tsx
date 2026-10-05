@@ -100,18 +100,27 @@ function organizeCanvas(editor: Editor): void {
     }))
   )
   markUndoPoint(editor, 'organize-canvas')
-  // 自动取景需给固定菜单与卡片外围端口留空间；默认 64px 会把左侧端口放到菜单下。
+  // Only reserve the surfaces actually covering each side. Symmetric inset also
+  // consumes vertical space and makes even one card tiny on a short viewport.
   const viewport = editor.getViewportScreenBounds()
   const palette = editor.getContainer().ownerDocument.querySelector('.node-palette')
   const paletteWidth = palette ? palette.getBoundingClientRect().right - viewport.x : 0
-  // tldraw 的 inset 是两侧合计，不能直接当成单侧边距。
-  const inset = Math.max(120, paletteWidth + 48) * 2
   const bounds = shapes.flatMap((shape) => {
     const bounds = editor.getShapePageBounds(shape.id)
     return bounds ? [bounds] : []
   })
   if (bounds.length) {
-    editor.zoomToBounds(Box.Common(bounds), { inset, animation: { duration: 300 } })
+    const box = Box.Common(bounds)
+    const left = Math.max(32, paletteWidth + 32)
+    const top = 48
+    const width = Math.max(1, viewport.w - left - 32)
+    const height = Math.max(1, viewport.h - top - 88)
+    const zoom = Math.min(1, width / Math.max(1, box.w), height / Math.max(1, box.h))
+    editor.setCamera({
+      x: (left + width / 2) / zoom - box.center.x,
+      y: (top + height / 2) / zoom - box.center.y,
+      z: zoom
+    }, { animation: { duration: 300 } })
   }
 }
 

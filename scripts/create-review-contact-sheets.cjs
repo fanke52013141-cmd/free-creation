@@ -29,7 +29,8 @@ function runtimeEvidence(type) {
   const paid = {
     chat: 'paid-text-nodes.png', 'ai-process': 'paid-text-nodes.png',
     speech: 'paid-voice-nodes.png', 'voice-design': 'paid-voice-nodes.png',
-    'image-edit': 'paid-image-node.png'
+    'image-edit': 'paid-image-node.png', 'image-gen': 'paid-image-generation-retry.png',
+    tts: 'paid-clone-retry.png'
   }[type]
   if (paid && fs.existsSync(path.resolve(dir, '../node-remediation-2026-10-06', paid))) {
     links.push(`<a href="../node-remediation-2026-10-06/${paid}">真实供应商节点链路：${paid}</a>`)
