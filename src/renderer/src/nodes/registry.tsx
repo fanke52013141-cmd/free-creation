@@ -99,6 +99,8 @@ export interface NodeTypeSpec {
   icon: IconName
   color: string
   defaultSize: { w: number; h: number }
+  /** Only for creation; loading/importing existing nodes must retain their saved config. */
+  initialConfig?: string
   /** 节点的业务职责；在选中节点的右侧 I/O 面板中常驻呈现。 */
   description: string
   /** 创建菜单二级筛选分类。 */

@@ -1,4 +1,6 @@
-import { NodeIdentity } from '../../../canvas/NodePresentation'
+import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
+import { Icon } from '../../../components/Icon'
+import { useEditor } from 'tldraw'
 import { useCallback, useEffect, useState } from 'react'
 import type { NodeBodyProps, NodeSettingsProps } from '../../registry'
 import type { VideoEngineStatus } from '@shared/contracts'
@@ -6,6 +8,7 @@ import { AppSelect } from '../../../components/AppSelect'
 import {
   DEFAULT_VIDEO_CLAY_CONFIG,
   DEFAULT_VIDEO_DEPTH_CONFIG,
+  VIDEO_CLAY_PRESETS,
   parseVideoClayConfig,
   parseVideoDepthConfig,
   serializeVideoClayConfig,
@@ -24,20 +27,61 @@ function statusText(status: VideoEngineStatus | null): string {
 }
 
 export function VideoAiBody({ shape }: NodeBodyProps): React.JSX.Element {
+  const editor = useEditor()
   const mode: Mode = shape.props.nodeType === 'video-depth' ? 'depth' : 'clay'
   const config = mode === 'depth'
     ? parseVideoDepthConfig(shape.props.config || DEFAULT_VIDEO_DEPTH_CONFIG)
-    : parseVideoClayConfig(shape.props.config || DEFAULT_VIDEO_CLAY_CONFIG)
+    : parseVideoClayConfig(shape.props.config)
   return (
     <div className="video-ai-body">
       <NodeIdentity />
 
-      <div className="video-ai-body-meta">
+      {mode === 'clay' ? (
+        <ClayOptions config={parseVideoClayConfig(shape.props.config)} onChange={(patch) => {
+          editor.updateShape({ id: shape.id, type: 'node-card', props: {
+            config: serializeVideoClayConfig({ ...parseVideoClayConfig(shape.props.config), ...patch })
+          } })
+        }} />
+      ) : <div className="video-ai-body-meta">
         <span>上限 {config.maxResolution}px</span>
         <span>Video Depth Anything Small · 本地 CUDA</span>
-      </div>
+      </div>}
     </div>
   )
+}
+
+function ClayOptions({ config, onChange }: {
+  config: VideoClayConfig
+  onChange: (patch: Partial<VideoClayConfig>) => void
+}): React.JSX.Element {
+  if (config.version === 1) return (
+    <NodePrimaryButton onClick={() => onChange({ version: 2 })}>
+      <Icon name="spark" size={16} />
+      升级白模效果
+    </NodePrimaryButton>
+  )
+  return <div className="video-clay-options">
+    <label className="settings-field">白模效果
+      <AppSelect className="gen-select" value={config.preset} onChange={(event) => {
+        const preset = event.currentTarget.value as VideoClayConfig['preset']
+        onChange({ preset, ...VIDEO_CLAY_PRESETS[preset] })
+      }}>
+        <option value="soft">柔和白模</option>
+        <option value="studio">立体白模</option>
+        <option value="structure">结构白模</option>
+      </AppSelect>
+    </label>
+    <label className="settings-field">质量
+      <AppSelect className="gen-select" value={config.quality} onChange={(event) => {
+        const quality = event.currentTarget.value as VideoClayConfig['quality']
+        onChange({ quality, maxResolution: quality === 'fast' ? 512 : quality === 'fine' ? 1024 : 768 })
+      }}>
+        <option value="fast">快速</option>
+        <option value="standard">标准</option>
+        <option value="fine">精细</option>
+      </AppSelect>
+    </label>
+  </div>
 }
 
 function EngineSetup(): React.JSX.Element {
@@ -117,7 +161,7 @@ function EngineSetup(): React.JSX.Element {
 export function VideoAiSettings({ shape, editor }: NodeSettingsProps): React.JSX.Element {
   const mode: Mode = shape.props.nodeType === 'video-depth' ? 'depth' : 'clay'
   const depth = parseVideoDepthConfig(shape.props.config || DEFAULT_VIDEO_DEPTH_CONFIG)
-  const clay = parseVideoClayConfig(shape.props.config || DEFAULT_VIDEO_CLAY_CONFIG)
+  const clay = parseVideoClayConfig(shape.props.config)
 
   const saveDepth = (patch: Partial<VideoDepthConfig>): void => {
     editor.updateShape({
@@ -137,6 +181,7 @@ export function VideoAiSettings({ shape, editor }: NodeSettingsProps): React.JSX
   return (
     <section className="node-settings video-ai-settings">
       <EngineSetup />
+      {mode === 'clay' && <ClayOptions config={clay} onChange={saveClay} />}
       <label className="settings-field">
         最大输出分辨率
         <AppSelect
@@ -177,10 +222,16 @@ export function VideoAiSettings({ shape, editor }: NodeSettingsProps): React.JSX
         </>
       ) : (
         <>
-          <RangeField label="浮雕强度" min={0.25} max={5} step={0.05} value={clay.reliefStrength} onChange={(reliefStrength) => saveClay({ reliefStrength })} />
+          <RangeField label={clay.version === 1 ? '浮雕强度' : '立体程度'} min={0.25} max={5} step={0.05} value={clay.reliefStrength} onChange={(reliefStrength) => saveClay({ reliefStrength })} />
           <RangeField label="光线方向" min={0} max={359} step={1} value={clay.lightAzimuth} onChange={(lightAzimuth) => saveClay({ lightAzimuth })} suffix="°" />
           <RangeField label="光线高度" min={5} max={85} step={1} value={clay.lightElevation} onChange={(lightElevation) => saveClay({ lightElevation })} suffix="°" />
           <RangeField label="环境光" min={0} max={0.9} step={0.01} value={clay.ambientLight} onChange={(ambientLight) => saveClay({ ambientLight })} />
+          {clay.version === 2 && <>
+            <RangeField label="阴影强度" min={0} max={1} step={0.05} value={clay.shadowStrength} onChange={(shadowStrength) => saveClay({ shadowStrength })} />
+            <RangeField label="时间稳定程度" min={0} max={1} step={0.05} value={clay.temporalStability} onChange={(temporalStability) => saveClay({ temporalStability })} />
+            <RangeField label="视角估计" min={25} max={90} step={1} value={clay.fieldOfView} onChange={(fieldOfView) => saveClay({ fieldOfView })} suffix="°" />
+          </>}
+          <button type="button" className="btn-ghost small" onClick={() => saveClay(DEFAULT_VIDEO_CLAY_CONFIG)}>恢复默认设置</button>
           <label className="video-ai-checkbox">
             <input
               type="checkbox"
@@ -192,7 +243,7 @@ export function VideoAiSettings({ shape, editor }: NodeSettingsProps): React.JSX
         </>
       )}
       <p className="contract-settings-hint">
-        两种转换都直接接收视频。首版最多处理 1800 帧；白模由深度估计生成灰度材质与可调光照，不生成可编辑三维网格。
+        最多处理 1800 帧。白模基于可见表面深度和估计视角渲染；输出为视频。精细档提高推理尺寸，需要更多显存。
       </p>
     </section>
   )

@@ -1734,7 +1734,7 @@ async function recipeVideoAi() {
   }
   check('白模：设置页显示本地推理环境已就绪', engineReady, engineText)
   const relief = win
-    .locator('label.video-ai-range', { hasText: '浮雕强度' })
+    .locator('label.video-ai-range', { hasText: /浮雕强度|立体程度/ })
     .locator('input[type=range]')
   await relief.waitFor({ timeout: 5_000 })
   await relief.click()

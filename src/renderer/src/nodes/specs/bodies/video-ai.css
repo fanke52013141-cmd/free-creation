@@ -3,11 +3,19 @@
    （原生 select 规则随替换删除）。状态色保留语义色，与 EXEC_COLORS 同族。 */
 .video-ai-body {
   display: grid;
-  gap: 9px;
-  padding: 14px 16px;
+  gap: 8px;
+  padding: 0;
   color: var(--txt);
   font-size: 12px;
 }
+
+.video-clay-options {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px;
+}
+
+.video-clay-options .settings-field { min-width: 0; }
 
 .video-ai-body-title {
   display: flex;

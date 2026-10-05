@@ -1,6 +1,7 @@
 // 节点 Spec 注册（见《技术框架与规范》§5.1）
 // 端口声明对齐路线图的节点类型表；any 万能口，其余类型需一致才可连
 import type { PortCardinality, PortDecl, PortSchemaRef } from '@shared/types'
+import { DEFAULT_VIDEO_CLAY_CONFIG, serializeVideoClayConfig } from '@shared/video-conversion'
 import { NODE_ACCENTS, registerNodeType, unregisterNodeType } from '../registry'
 import { readNodeConfig } from '../../canvas/node-persistence'
 import { STORYBOARD_UI } from '../../canvas/node-ui-tokens'
@@ -439,6 +440,7 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'video',
+    initialConfig: JSON.stringify({ modelKey: '', mode: 'reference', params: {} }),
     contractVersion: 7,
     label: '视频生成',
     icon: 'video',
@@ -569,12 +571,13 @@ export function registerBaseNodeTypes(): void {
   })
   registerNodeType({
     type: 'video-clay',
+    initialConfig: serializeVideoClayConfig(DEFAULT_VIDEO_CLAY_CONFIG),
     contractVersion: 1,
     label: '白模视频',
     icon: 'video',
     color: NODE_ACCENTS['video-clay'],
     defaultSize: { w: 340, h: 260 },
-    description: '使用视频深度估计生成白色浮雕光照视频，可调整浮雕强度与光源。',
+    description: '以连续深度生成哑光白模视频，支持光照预设、质量选择和时间稳定处理。',
     category: 'video',
     ports: {
       in: [input('in-video', '源视频', 'video', '需要转换的输入视频。', { required: true })],
