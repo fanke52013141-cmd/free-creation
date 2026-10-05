@@ -646,7 +646,7 @@ export function NodeContractPanel({
           {tab === 'io' && (
             <div role="tabpanel" id="contract-tabpanel-io">
               <PortRows
-                title="输入"
+                title={ports.in.some(port => port.exclusiveGroup) ? "输入（同组恰好选一种）" : "输入"}
                 ports={ports.in}
                 connections={incoming}
                 previews={inputPreviews}

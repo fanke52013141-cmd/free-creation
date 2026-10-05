@@ -108,6 +108,8 @@ export interface PortSchemaRef {
 export type MediaKind = 'image' | 'video' | 'audio' | 'file'
 
 export interface PortDecl {
+  /** 同组输入端口合计必须恰好收到一个值。 */
+  exclusiveGroup?: string
   /** 稳定机器 ID；发布后不可改名或复用，必须以 in- / out- 开头。 */
   id: string
   /** 用户可见名称，可以调整，不参与历史连线寻址。 */

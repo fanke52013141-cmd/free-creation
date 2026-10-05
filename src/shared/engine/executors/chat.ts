@@ -1,3 +1,4 @@
+import { TEXT_MERGE_SEPARATOR } from '../helpers'
 // 对话节点执行器：把显式输入端口或已持久化的待发送消息作为本轮用户消息。
 import { inputText } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
@@ -14,7 +15,7 @@ function effectiveSystem(data: ReturnType<typeof parseChat>): string {
     sections.push(
       `以下是用户提供的参考文档：\n\n${data.documents
         .map((document) => `【文档：${document.name}】\n${document.content}`)
-        .join('\n\n---\n\n')}`
+        .join(TEXT_MERGE_SEPARATOR)}`
     )
   }
   if (data.summary?.trim()) sections.push(`[对话历史摘要]\n${data.summary.trim()}`)

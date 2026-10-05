@@ -46,7 +46,8 @@ export interface NodeMetaPatch {
   nodeExtra?: string
 }
 
-/** 运行控制信号。暂停在当前原子任务结束后生效；停止会解除暂停等待。 */ export interface CancelSignal {
+/** 运行控制信号。暂停在当前原子任务结束后生效；停止会解除暂停等待。 */
+export interface CancelSignal {
   readonly cancelled: boolean
   readonly paused?: boolean
 }
@@ -68,12 +69,7 @@ export interface SubflowRequest {
 export type SubflowOutput = Record<string, ContractOutputs>
 
 export type NodeExecutionPhase =
-  | 'input'
-  | 'capability'
-  | 'execution'
-  | 'request'
-  | 'result'
-  | 'output'
+  'input' | 'capability' | 'execution' | 'request' | 'result' | 'output'
 
 export interface NodeExecutionTarget {
   operation: string
@@ -130,7 +126,8 @@ export interface NodeExecutionContext {
     source: string,
     args: Record<string, unknown>
   ) => Promise<
-    { kind: 'text'; text: string; logs?: string[] } | { kind: 'json'; data: unknown; logs?: string[] }
+    | { kind: 'text'; text: string; logs?: string[] }
+    | { kind: 'json'; data: unknown; logs?: string[] }
   >
   waitForResume?: () => Promise<void>
   updateProps: (patch: Partial<NodeShape['props']>) => void

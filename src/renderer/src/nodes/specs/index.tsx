@@ -125,6 +125,7 @@ import {
 import { parseStructuredDataConfig } from '../structured-data'
 
 interface PortOptions {
+  exclusiveGroup?: string
   required?: boolean
   cardinality?: PortCardinality
   schema?: PortSchemaRef
@@ -140,6 +141,7 @@ const input = (
   id,
   name,
   dir: 'in',
+  ...(options.exclusiveGroup ? { exclusiveGroup: options.exclusiveGroup } : {}),
   type,
   description,
   required: options.required ?? false,
@@ -662,8 +664,8 @@ export function registerBaseNodeTypes(): void {
     category: 'audio',
     ports: {
       in: [
-        input('in-audio', '源音频', 'audio', '连接一段音频，与源视频二选一。'),
-        input('in-video', '源视频', 'video', '连接一段视频，与源音频二选一。')
+        input('in-audio', '源音频', 'audio', '连接一段音频，与源视频二选一。', { exclusiveGroup: 'source-media' }),
+        input('in-video', '源视频', 'video', '连接一段视频，与源音频二选一。', { exclusiveGroup: 'source-media' })
       ],
       out: [
         output('out-audio', '调整后音频', 'audio', '源为音频时生成的新音频资产。', { required: false }),

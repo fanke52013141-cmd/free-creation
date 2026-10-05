@@ -1,29 +1,26 @@
-import type { CanvasEdge, CanvasNode, PortDecl, PortSchemaRef, PortType } from '@shared/types'
+import { exclusiveInputErrors } from '@shared/engine/input-constraints'
+import type { CanvasEdge, CanvasNode, PortDecl, PortType } from '@shared/types'
 import { nodeSchemasCompatible, validateNodeSchema } from '@shared/node-schemas'
 import { getNodeType, portCompatible } from '../nodes/registry'
 import type { NodeValue, RawNodeOutputs } from '../nodes/nodeValues'
-import { inputText as sharedInputText } from '@shared/engine/inputs'
 
-export interface NodeValuePacket {
-  type: PortType
-  value: NodeValue
-  schema?: PortSchemaRef
-  source: { nodeId: string; portId: string; runId: string }
-  createdAt: number
-}
-
-export type ContractOutputs = Partial<Record<string, NodeValuePacket>>
-export type ContractInputMap = ReadonlyMap<string, readonly NodeValuePacket[]>
+import type {
+  NodeValuePacket,
+  ContractOutputs,
+  ContractInputMap,
+  ContractInputInjection
+} from '@shared/engine/inputs'
+export type {
+  NodeValuePacket,
+  ContractOutputs,
+  ContractInputMap,
+  ContractInputInjection
+} from '@shared/engine/inputs'
+export { inputPackets, inputText, inputJson, inputMedia, inputValue } from '@shared/engine/inputs'
 
 export interface ContractResult<T> {
   value: T
   errors: string[]
-}
-
-/** 运行器在动态作用域内注入的输入包（目前由 iterate.out-item 使用）。 */
-export interface ContractInputInjection {
-  portId: string
-  packet: NodeValuePacket
 }
 
 function valueType(value: NodeValue): PortType {
@@ -82,11 +79,7 @@ export function buildOutputPackets(
       errors.push(`${describePort(port)} 声明为 ${port.type}，实际输出为 ${valueType(raw)}`)
       continue
     }
-    if (
-      (port.type === 'json' || port.type === 'camera') &&
-      port.schema &&
-      raw.kind === port.type
-    ) {
+    if ((port.type === 'json' || port.type === 'camera') && port.schema && raw.kind === port.type) {
       const result = validateNodeSchema(port.schema, structuredValueData(raw))
       if (!result.ok) {
         errors.push(
@@ -204,35 +197,11 @@ export function collectContractInputs(
     }
   }
 
+  errors.push(
+    ...exclusiveInputErrors(
+      resolved.in,
+      new Map([...mutable].map(([id, packets]) => [id, packets.length]))
+    )
+  )
   return { value: mutable, errors }
-}
-
-export function inputPackets(inputs: ContractInputMap, portId: string): readonly NodeValuePacket[] {
-  return inputs.get(portId) ?? []
-}
-
-export function inputText(inputs: ContractInputMap, portId: string): string {
-  // 分隔符是共享层的单一真值（$$$，见 shared/engine/helpers）；渲染层不再自带一份，
-  // 否则同一次运行里画布预览与执行器会拼出不同的文本。
-  return sharedInputText(inputs, portId)
-}
-
-export function inputJson(inputs: ContractInputMap, portId: string): unknown[] {
-  return inputPackets(inputs, portId)
-    .filter((packet) => packet.value.kind === 'json')
-    .map((packet) => (packet.value.kind === 'json' ? packet.value.data : null))
-}
-
-export function inputMedia<K extends 'image' | 'video' | 'audio' | 'file'>(
-  inputs: ContractInputMap,
-  portId: string,
-  kind: K
-): Extract<NodeValue, { kind: K }>[] {
-  return inputPackets(inputs, portId)
-    .map((packet) => packet.value)
-    .filter((value): value is Extract<NodeValue, { kind: K }> => value.kind === kind)
-}
-
-export function inputValue(inputs: ContractInputMap, portId: string): NodeValue | null {
-  return inputPackets(inputs, portId)[0]?.value ?? null
 }

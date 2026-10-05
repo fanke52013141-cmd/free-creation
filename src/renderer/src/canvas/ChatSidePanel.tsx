@@ -1,3 +1,4 @@
+import { TEXT_MERGE_SEPARATOR } from '@shared/engine/helpers'
 // AI 对话节点的沉浸式工作区。模型调用仍只通过 registered executor 进行。
 import { isValidElement, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
@@ -301,7 +302,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
     if (!selectedModel) return toast('请先在设置中选择对话模型')
     if (!draft.trim() || running) return
     const upstream = gatherUpstreamText(editor, shapeId)
-    const content = upstream ? `${upstream}\n\n---\n\n${draft.trim()}` : draft.trim()
+    const content = upstream ? `${upstream}${TEXT_MERGE_SEPARATOR}${draft.trim()}` : draft.trim()
     const titled =
       messages.length === 0 && activeConversation.title.startsWith('新会话')
         ? {

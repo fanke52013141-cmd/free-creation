@@ -1,6 +1,4 @@
 import type { NodeCardShape } from '../canvas/NodeCardShape'
-import type { DirectorCamera } from '@shared/director-data'
-import { validateNodeSchema } from '@shared/node-schemas'
 import { getNodeType } from './registry'
 import { readNodeRunRecord } from '../engine/runRecord'
 import type {
@@ -16,26 +14,16 @@ import {
   serializeMediaResultCollection
 } from '@shared/engine/values'
 
-export type NodeValue =
-  | { kind: 'text'; text: string }
-  | { kind: 'markdown'; text: string }
-  | { kind: 'json'; data: unknown }
-  | { kind: 'camera'; data: Partial<DirectorCamera> }
-  | MediaNodeValue<'image'>
-  | MediaNodeValue<'video'>
-  | MediaNodeValue<'audio'>
-  | MediaNodeValue<'file'>
-
-/** 媒体值统一携带可选的显示名（来源节点标题）；只用于产物命名与来源展示。 */
-export interface MediaNodeValue<K extends 'image' | 'video' | 'audio' | 'file'> {
-  kind: K
-  mediaId: string
-  mediaPath: string
-  mime: string
-  name?: string
-}
-
-export type RawNodeOutputs = Partial<Record<string, NodeValue>>
+import type { RawNodeOutputs } from '@shared/engine/values'
+export type { NodeValue, RawNodeOutputs, MediaNodeValue } from '@shared/engine/values'
+import { parseStoredNodeValue } from '@shared/engine/values'
+export {
+  parseStoredNodeValue,
+  parseNodeRecord,
+  parseStoredAiResult,
+  parseStoredIterateResult,
+  storyboardSummary
+} from '@shared/engine/values'
 
 /**
  * 媒体结果集合的类型与「解析 / 追加」口径只保留一份实现。执行器
@@ -82,54 +70,6 @@ export function clearMediaResultHistory(previous: string): MediaResultCollection
   }
 }
 
-export function parseStoredNodeValue(text: string): NodeValue | null {
-  if (!text) return null
-  try {
-    const value = JSON.parse(text) as Record<string, unknown>
-    if ((value.kind === 'text' || value.kind === 'markdown') && typeof value.text === 'string') {
-      return { kind: value.kind, text: value.text }
-    }
-    if (value.kind === 'json' && 'data' in value) return { kind: 'json', data: value.data }
-    if (
-      value.kind === 'camera' &&
-      'data' in value &&
-      validateNodeSchema({ id: 'previs.camera', version: 1 }, value.data).ok
-    ) {
-      return { kind: 'camera', data: value.data as Partial<DirectorCamera> }
-    }
-    if (
-      (value.kind === 'image' ||
-        value.kind === 'video' ||
-        value.kind === 'audio' ||
-        value.kind === 'file') &&
-      typeof value.mediaId === 'string' &&
-      typeof value.mediaPath === 'string' &&
-      typeof value.mime === 'string'
-    ) {
-      return {
-        kind: value.kind,
-        mediaId: value.mediaId,
-        mediaPath: value.mediaPath,
-        mime: value.mime
-      }
-    }
-  } catch {
-    // 未产生过有效运行结果。
-  }
-  return null
-}
-
-export function parseNodeRecord(text: string): Record<string, unknown> | null {
-  try {
-    const value = JSON.parse(text)
-    return typeof value === 'object' && value !== null && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : null
-  } catch {
-    return null
-  }
-}
-
 /**
  * 解析 meta.nodeExtra：一次运行产生的非媒体端口值，按端口 ID 存放。
  * 配音节点的字幕、音色设计/复刻节点的音色档案都走这里，避免污染媒体结果集合。
@@ -144,51 +84,6 @@ export function parseNodeExtra(stored: unknown): Record<string, unknown> {
   } catch {
     return {}
   }
-}
-
-/** 解析 AI 处理节点存在 meta.nodeResult 的运行结果。 */ export function parseStoredAiResult(
-  stored: string
-): { kind: 'text' | 'markdown' | 'json'; text?: string; data?: unknown } | null {
-  if (!stored) return null
-  try {
-    const value = JSON.parse(stored) as Record<string, unknown>
-    if (value.kind === 'text' || value.kind === 'markdown' || value.kind === 'json') {
-      return {
-        kind: value.kind,
-        ...(typeof value.text === 'string' ? { text: value.text } : {}),
-        ...('data' in value ? { data: value.data } : {})
-      }
-    }
-  } catch {
-    // 未产生过有效运行结果。
-  }
-  return null
-}
-
-/** 解析迭代节点存在 meta.nodeResult 的运行结果 { items: [...] }。 */
-export function parseStoredIterateResult(stored: string): { items: unknown[] } | null {
-  if (!stored) return null
-  try {
-    const value = JSON.parse(stored) as { items?: unknown }
-    if (Array.isArray(value.items)) return { items: value.items }
-  } catch {
-    // 未产生过有效运行结果。
-  }
-  return null
-}
-
-export function storyboardSummary(shots: unknown[]): string {
-  return shots
-    .map((shot, index) => {
-      if (typeof shot !== 'object' || shot === null) return ''
-      const item = shot as Record<string, unknown>
-      const detail = [item.scene, item.dialogue, item.duration]
-        .filter((value): value is string => typeof value === 'string' && Boolean(value.trim()))
-        .join('｜')
-      return detail ? `${index + 1}. ${detail}` : ''
-    })
-    .filter(Boolean)
-    .join('\n')
 }
 
 /**

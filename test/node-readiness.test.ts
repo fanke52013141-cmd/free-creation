@@ -130,3 +130,51 @@ it('distinguishes connected empty upstream and absent model, and accepts connect
     reason: 'model-unavailable'
   })
 })
+
+it('AI 处理只有 JSON 输入也可运行；声音调整恰好一种媒体', () => {
+  const base = {
+    executionMode: 'auto' as const,
+    exec: 'idle',
+    text: '',
+    outputs: {},
+    inputs: [] as PortDecl[],
+    incomingCounts: new Map<string, number>()
+  }
+  expect(
+    deriveNodeReadiness({
+      ...base,
+      nodeType: 'ai-process',
+      availableInputCounts: new Map([['in-json', 1]])
+    }).kind
+  ).toBe('ready')
+  const ports: PortDecl[] = ['audio', 'video'].map((type) => ({
+    id: `in-${type}`,
+    name: type,
+    type: type as 'audio' | 'video',
+    dir: 'in',
+    cardinality: 'one',
+    required: false,
+    exclusiveGroup: 'media'
+  }))
+  expect(deriveNodeReadiness({ ...base, nodeType: 'sound-adjust', inputs: ports }).kind).toBe(
+    'blocked'
+  )
+  expect(
+    deriveNodeReadiness({
+      ...base,
+      inputs: ports,
+      incomingCounts: new Map([
+        ['in-audio', 1],
+        ['in-video', 1]
+      ])
+    }).kind
+  ).toBe('blocked')
+  expect(
+    deriveNodeReadiness({
+      ...base,
+      inputs: ports,
+      incomingCounts: new Map([['in-audio', 1]]),
+      availableInputCounts: new Map([['in-audio', 1]])
+    }).kind
+  ).toBe('ready')
+})

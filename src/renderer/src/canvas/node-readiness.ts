@@ -1,3 +1,4 @@
+import { exclusiveInputErrors } from '@shared/engine/input-constraints'
 import type { NodeExecutionMode, PortDecl } from '@shared/types'
 import type { RawNodeOutputs } from '../nodes/nodeValues'
 
@@ -77,6 +78,28 @@ export function deriveNodeReadiness(input: {
     return { kind: 'failed', label: '运行失败', detail: '打开节点详情查看错误原因并重试。' }
   }
 
+  const exclusiveErrors = exclusiveInputErrors(input.inputs, input.incomingCounts)
+  if (exclusiveErrors.length)
+    return {
+      kind: 'blocked',
+      reason: 'not-connected',
+      label: '需要一种媒体输入',
+      detail: exclusiveErrors.join('；')
+    }
+  const emptyExclusive = input.inputs.some(
+    (port) =>
+      port.exclusiveGroup &&
+      (input.incomingCounts.get(port.id) ?? 0) > 0 &&
+      input.availableInputCounts &&
+      !(input.availableInputCounts.get(port.id) ?? 0)
+  )
+  if (emptyExclusive)
+    return {
+      kind: 'blocked',
+      reason: 'upstream-empty',
+      label: '等待上游结果',
+      detail: '先运行已连接的媒体来源。'
+    }
   const missing = input.inputs.filter(
     (port) => port.required && (input.incomingCounts.get(port.id) ?? 0) === 0
   )
@@ -118,7 +141,8 @@ export function deriveNodeReadiness(input: {
     textRequirement &&
     !(input.text ?? '').trim() &&
     !(input.availableInputCounts?.get('in-text') ?? 0) &&
-    !(input.availableInputCounts?.get('in-prompt') ?? 0)
+    !(input.availableInputCounts?.get('in-prompt') ?? 0) &&
+    !(input.nodeType === 'ai-process' && (input.availableInputCounts?.get('in-json') ?? 0))
   ) {
     return {
       kind: 'blocked',
@@ -129,7 +153,9 @@ export function deriveNodeReadiness(input: {
   }
 
   if (input.executionMode === 'manual-publish') {
-    const hasPublishedOutput = Object.keys(input.outputs).some((portId) => portId !== 'out-project')
+    const hasPublishedOutput = Object.values(input.outputs).some(
+      (value) => value && ['image', 'video', 'audio', 'file'].includes(value.kind)
+    )
     return hasPublishedOutput
       ? { kind: 'ready', label: '已发布', detail: '当前正式输出可供下游节点使用。' }
       : { kind: 'manual-publish', label: '等待发布', detail: '打开工作区，手动发布画面或媒体。' }

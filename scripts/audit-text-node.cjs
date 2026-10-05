@@ -229,7 +229,7 @@ async function main() {
     state = await cardState(page, target.card)
     report.states.runMerged = state
     await shot(page, '05-run-merged-success')
-    const expectedText = '上游文本甲\n\n---\n\n上游文本乙\n\n---\n\n主角站在雨中的十字路口'
+    const expectedText = '上游文本甲\n$$$\n上游文本乙\n$$$\n主角站在雨中的十字路口'
     assert(
       'run-merges-upstream-then-own-text',
       (state.bodyText ?? '').includes('上游文本甲') &&
