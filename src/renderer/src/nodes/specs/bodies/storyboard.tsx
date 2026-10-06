@@ -216,6 +216,7 @@ export function StoryboardBody({ shape }: NodeBodyProps): React.JSX.Element {
     return (
       <div
         className="node-hint center"
+        data-node-interactive="double-click-content"
         onDoubleClick={(e) => {
           e.stopPropagation()
           openJsonEditor()
@@ -339,6 +340,8 @@ export function StoryboardBody({ shape }: NodeBodyProps): React.JSX.Element {
                         <button
                           type="button"
                           className="storyboard-cell-value"
+                          data-node-pointer="surface"
+                          data-node-interactive="double-click-content"
                           title={
                             field === 'id'
                               ? '内部稳定 ID，不可编辑'

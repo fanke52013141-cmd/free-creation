@@ -172,6 +172,7 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
       {text ? (
         <div
           className="json-preview"
+          data-node-interactive="json-content"
           onPointerDown={(e) => stopEventPropagation(e)}
           onDoubleClick={(e) => {
             e.stopPropagation()
@@ -187,6 +188,7 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
       ) : (
         <div
           className="node-hint center"
+          data-node-interactive="json-content"
           onPointerDown={(e) => stopEventPropagation(e)}
           onDoubleClick={(e) => {
             e.stopPropagation()

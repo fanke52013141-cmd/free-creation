@@ -2,7 +2,8 @@ import { checkModelAvailability, providerAvailabilityKey } from './model-availab
 import type { ModelOperation } from '@free-creation/model-contracts'
 import { nodePageIndex } from './node-page-index'
 // NodeCard 卡片视图：头部（序号/图标/标题/状态灯）+ 类型化内容体 + 端口圆点 + 媒体预览浮层
-import { HTMLContainer, stopEventPropagation, useEditor, useValue } from 'tldraw'
+import { HTMLContainer, stopEventPropagation, useEditor, useValue, getPointerInfo } from 'tldraw'
+import { nodeOwnsPointer, nodeTextField } from './node-pointer-policy'
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { getNodePorts, getNodeType, nodeIconColor, PORT_TYPE_LABELS } from '../nodes/registry'
@@ -1028,9 +1029,69 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         style={{ width: shape.props.w, height: shape.props.h }}
         onPointerDown={handleCardPointerDown}
         onPointerDownCapture={(event) => {
-          // 子组件可拦截冒泡以编辑输入，但首次单击仍必须选中所属节点。
-          if (event.button !== 0 || event.shiftKey || event.ctrlKey || event.metaKey) return
-          if (!editor.getSelectedShapeIds().includes(shape.id)) editor.select(shape.id)
+          if (
+            event.button !== 0 ||
+            !(event.target instanceof Element) ||
+            !event.currentTarget.contains(event.target)
+          )
+            return
+          const field = nodeTextField(event.target)
+          if (nodeOwnsPointer(event.target) || (field && document.activeElement === field)) {
+            if (
+              !event.shiftKey &&
+              !event.ctrlKey &&
+              !event.metaKey &&
+              !editor.getSelectedShapeIds().includes(shape.id)
+            )
+              editor.select(shape.id)
+            return
+          }
+          if (field) event.preventDefault()
+          // Descendant blanket stopPropagation must not swallow selection or movement.
+          // Use tldraw's public pointer API once, with its normal modifier/group/undo semantics.
+          event.stopPropagation()
+          const canvas = editor.getContainer().querySelector<HTMLElement>('.tl-canvas')
+          canvas?.setPointerCapture(event.pointerId)
+          editor.dispatch({
+            type: 'pointer',
+            name: 'pointer_down',
+            target: 'shape',
+            shape,
+            ...getPointerInfo(editor, event)
+          })
+        }}
+        onFocusCapture={(event) => {
+          if (!event.currentTarget.contains(event.target)) return
+          const field = event.target instanceof Element ? nodeTextField(event.target) : null
+          if (!field || editor.getEditingShapeId() === shape.id) return
+          field.dataset.nodeInlineEditing = 'true'
+          editor.setEditingShape(shape.id)
+        }}
+        onBlurCapture={(event) => {
+          if (!event.currentTarget.contains(event.target)) return
+          if (
+            !(event.target instanceof HTMLElement) ||
+            event.target.dataset.nodeInlineEditing !== 'true'
+          )
+            return
+          delete event.target.dataset.nodeInlineEditing
+          if (editor.getEditingShapeId() === shape.id) editor.setEditingShape(null)
+        }}
+        onKeyDownCapture={(event) => {
+          if (!event.currentTarget.contains(event.target as Node)) return
+          if (
+            event.key === 'Escape' &&
+            event.target instanceof HTMLElement &&
+            event.target.dataset.nodeInlineEditing === 'true'
+          ) {
+            // Let node-specific Escape handlers keep their save/cancel semantics first.
+            const field = event.target
+            requestAnimationFrame(() => {
+              if (document.activeElement === field) field.blur()
+              if (!field.isConnected && editor.getEditingShapeId() === shape.id)
+                editor.setEditingShape(null)
+            })
+          }
         }}
       >
         <div className="node-header">

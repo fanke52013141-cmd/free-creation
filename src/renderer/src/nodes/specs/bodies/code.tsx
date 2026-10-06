@@ -648,6 +648,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
       {text ? (
         <pre
           className="code-pre highlighted"
+          data-node-interactive="double-click-content"
           onPointerDown={(e) => stopEventPropagation(e)}
           onDoubleClick={(e) => {
             e.stopPropagation()
@@ -660,6 +661,7 @@ export function CodeBody({ shape }: NodeBodyProps): React.JSX.Element {
       ) : (
         <div
           className="node-hint center"
+          data-node-interactive="double-click-content"
           onPointerDown={(e) => stopEventPropagation(e)}
           onDoubleClick={(e) => {
             e.stopPropagation()

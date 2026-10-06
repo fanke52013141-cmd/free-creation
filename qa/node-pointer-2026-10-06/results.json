@@ -1,0 +1,173 @@
+{
+  "passed": true,
+  "findings": [
+    {
+      "type": "text",
+      "regions": 4,
+      "passed": true,
+      "inputFields": 0
+    },
+    {
+      "type": "ai-process",
+      "regions": 4,
+      "passed": true,
+      "inputFields": 0
+    },
+    {
+      "type": "chat",
+      "regions": 4,
+      "passed": true,
+      "inputFields": 0
+    },
+    {
+      "type": "file",
+      "regions": 4,
+      "passed": true,
+      "inputFields": 0
+    },
+    {
+      "type": "website",
+      "regions": 4,
+      "passed": true,
+      "inputFields": 0
+    },
+    {
+      "type": "image-gen",
+      "regions": 1,
+      "passed": true,
+      "inputFields": 1
+    },
+    {
+      "type": "image",
+      "regions": 4,
+      "passed": true,
+      "inputFields": 0
+    },
+    {
+      "type": "image-edit",
+      "regions": 4,
+      "passed": true,
+      "inputFields": 0
+    },
+    {
+      "type": "image-crop",
+      "regions": 4,
+      "passed": true,
+      "inputFields": 0
+    },
+    {
+      "type": "image-split",
+      "regions": 1,
+      "passed": true,
+      "inputFields": 3
+    },
+    {
+      "type": "video",
+      "regions": 3,
+      "passed": true,
+      "inputFields": 1
+    },
+    {
+      "type": "video-asset",
+      "regions": 4,
+      "passed": true,
+      "inputFields": 0
+    },
+    {
+      "type": "video-clip",
+      "regions": 4,
+      "passed": true,
+      "inputFields": 0
+    },
+    {
+      "type": "video-frame",
+      "regions": 4,
+      "passed": true,
+      "inputFields": 0
+    },
+    {
+      "type": "video-depth",
+      "regions": 4,
+      "passed": true,
+      "inputFields": 0
+    },
+    {
+      "type": "video-clay",
+      "regions": 4,
+      "passed": true,
+      "inputFields": 0
+    },
+    {
+      "type": "speech",
+      "regions": 6,
+      "passed": true,
+      "inputFields": 3
+    },
+    {
+      "type": "audio",
+      "regions": 4,
+      "passed": true,
+      "inputFields": 0
+    },
+    {
+      "type": "tts",
+      "regions": 3,
+      "passed": true,
+      "inputFields": 2
+    },
+    {
+      "type": "voice-design",
+      "regions": 5,
+      "passed": true,
+      "inputFields": 3
+    },
+    {
+      "type": "sound-adjust",
+      "regions": 1,
+      "passed": true,
+      "inputFields": 2
+    },
+    {
+      "type": "storyboard",
+      "regions": 4,
+      "passed": true,
+      "inputFields": 0
+    },
+    {
+      "type": "processor",
+      "regions": 5,
+      "passed": true,
+      "inputFields": 2
+    },
+    {
+      "type": "json",
+      "regions": 4,
+      "passed": true,
+      "inputFields": 0
+    },
+    {
+      "type": "structured",
+      "regions": 4,
+      "passed": true,
+      "inputFields": 0
+    },
+    {
+      "type": "iterate",
+      "regions": 4,
+      "passed": true,
+      "inputFields": 1
+    },
+    {
+      "type": "director",
+      "regions": 1,
+      "passed": true,
+      "inputFields": 0
+    },
+    {
+      "type": "code",
+      "regions": 3,
+      "passed": true,
+      "inputFields": 2
+    }
+  ]
+}

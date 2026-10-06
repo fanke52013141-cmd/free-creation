@@ -215,6 +215,8 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           <button
             type="button"
             className="audio-asset-icon-wrap"
+            data-node-pointer="surface"
+            data-node-interactive="media-preview"
             title="双击打开大窗播放器"
             aria-label="打开音频预览"
             onPointerDown={(event) => stopEventPropagation(event)}
@@ -229,6 +231,8 @@ export function AudioBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
               <button
                 type="button"
                 className="audio-asset-name"
+                data-node-pointer="surface"
+                data-node-interactive="media-preview"
                 title="双击打开音频预览"
                 onPointerDown={(event) => stopEventPropagation(event)}
                 onDoubleClick={(event) => guard.onDoubleClick(event, openAudioPreview)}

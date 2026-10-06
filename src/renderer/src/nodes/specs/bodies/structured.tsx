@@ -186,6 +186,7 @@ export function StructuredBody({ shape }: NodeBodyProps): React.JSX.Element {
       ) : (
         <div
           className={`structured-preview ${hasText ? '' : 'is-empty'}`}
+          data-node-interactive="json-content"
           onPointerDown={(event) => stopEventPropagation(event)}
           onDoubleClick={(event) => {
             event.stopPropagation()

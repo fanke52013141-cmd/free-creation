@@ -1,4 +1,5 @@
 import { reportCanvasFailure } from './canvas-diagnostics'
+import { nodeTextField } from './node-pointer-policy'
 import { ResourceInsertRequest } from '../library/ResourceInsertRequest'
 import { WorkflowSaveDialog } from './WorkflowSaveDialog'
 import { Tldraw, createShapeId, type Editor, type TLShapeId } from 'tldraw'
@@ -805,18 +806,9 @@ export function CanvasEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id])
 
-  // 画布禁用 tldraw 的默认"双击插入白板文本"行为：节点正文使用自己的编辑器。
-  // 文本正文在捕获阶段被拦下后，转发一个专用事件给 TextBody，避免同时出现一张
-  // 独立 text shape（截图中的小文本框）和节点内 textarea。
-  //
-  // 关键：tldraw 的 useCanvasEvents 会在 pointerdown 时 setPointerCapture(tl-canvas)，
-  // 导致 pointerup 及合成 click/dblclick 的 target 被重定向到 .tl-canvas——
-  // dblclick 捕获层的 target.closest 永远匹配不到节点正文（tldraw 4.5.12 实测事件序列：
-  // mousedown target=node-text，mouseup/click/dblclick target=tl-canvas）。
-  // 因此双击转发必须在 mousedown(detail===2) 捕获阶段完成：mousedown 的 target
-  // 是浏览器 hit-test 的原生结果，不受 pointer capture 影响，始终命中正文 div。
-  // dblclick 捕获层保留（阻止 tldraw 在空白画布双击插入独立文本框），并对
-  // text-content 匹配增加坐标兜底（elementFromPoint）。
+  // 双击必须等第二次点击完成，避免单击后拖动被提前当成双击。
+  // tldraw 的指针捕获会重定向事件目标，用实际坐标恢复节点内命中区域。
+  // 节点使用自己的编辑器，空白画布不通过双击创建独立文本框。
   useEffect(() => {
     const el = wrapRef.current
     if (!el) return
@@ -833,9 +825,7 @@ export function CanvasEditor({
     const dispatchNodeDoubleClick = (body: HTMLElement, event: MouseEvent): void => {
       event.preventDefault()
       event.stopPropagation()
-      // tldraw 会在第一击时捕获指针，第二击随后的 dblclick target 会变成 .tl-canvas。
-      // 在尚未被重定向的第二次 mousedown 上向实际节点正文补发 dblclick，交给每个
-      // 节点的双击处理器。单击仍只选中，媒体预览与网址打开保持双击语义。
+      // 转发给节点自己的双击处理器；非可信的转发事件不再次桥接。
       body.dispatchEvent(
         new MouseEvent('dblclick', {
           bubbles: true,
@@ -846,10 +836,32 @@ export function CanvasEditor({
         })
       )
     }
-    // 双击第二击的 mousedown：此时 target 仍是正文 div（未被 pointer capture 重定向）。
-    const onDoubleMouseDown = (event: MouseEvent): void => {
-      if (event.detail !== 2) return // 只处理双击的第二击
-      const target = event.target as HTMLElement
+    const onNodeDoubleClick = (event: MouseEvent): void => {
+      const target = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null
+      if (!target) return
+      const field = nodeTextField(target)
+      const fieldShapeId = field?.closest<HTMLElement>('.node-card-wrap')?.dataset.nodeId
+      if (field && fieldShapeId) {
+        if (document.activeElement !== field) {
+          const editor = editorRef.current
+          editor?.cancel()
+          field.dataset.nodeInlineEditing = 'true'
+          editor?.setEditingShape(fieldShapeId as TLShapeId)
+          field.focus()
+        }
+        return
+      }
+      const jsonBody = target.closest<HTMLElement>(
+        '[data-node-interactive="json-content"], [data-node-interactive="double-click-content"]'
+      )
+      const jsonControl = target.closest('button, input, textarea, select, [role="combobox"]')
+      if (
+        jsonBody &&
+        (!jsonControl || (jsonControl === jsonBody && jsonBody.dataset.nodePointer === 'surface'))
+      ) {
+        dispatchNodeDoubleClick(jsonBody, event)
+        return
+      }
       const websiteBody = target.closest<HTMLElement>(
         '[data-node-interactive="website-empty"], [data-node-interactive="website-link"]'
       )
@@ -859,8 +871,7 @@ export function CanvasEditor({
       }
       const chatCard = target.closest<HTMLElement>('.node-card[data-node-type="chat"]')
       if (chatCard) {
-        // tldraw 会在首次选中后捕获指针；在第二次 mousedown 尚未被重定向时打开聊天。
-        // 不拦截 mousedown 本身，因此两次点击仍照常完成节点选择。
+        // 完成双击后再打开聊天，单击和拖动继续由画布处理。
         const nestedControl = target.closest<HTMLElement>(
           'button, input, textarea, select, a, [contenteditable="true"]'
         )
@@ -881,7 +892,11 @@ export function CanvasEditor({
         const nestedControl = target.closest<HTMLElement>(
           'button, input, textarea, select, a, [contenteditable="true"]'
         )
-        if (nestedControl && mediaBody.contains(nestedControl)) return
+        if (
+          nestedControl &&
+          mediaBody.contains(nestedControl) &&
+          nestedControl.dataset.nodePointer !== 'surface'
+        ) return
         dispatchNodeDoubleClick(mediaBody, event)
         return
       }
@@ -894,42 +909,13 @@ export function CanvasEditor({
       if (textBody) dispatchEditText(textBody, event)
     }
     const onDblClickCapture = (event: MouseEvent): void => {
-      const target = event.target as HTMLElement
-      const chatCard =
-        target.closest<HTMLElement>('.node-card[data-node-type="chat"]') ??
-        document
-          .elementFromPoint(event.clientX, event.clientY)
-          ?.closest<HTMLElement>('.node-card[data-node-type="chat"]') ??
-        null
-      if (chatCard) {
-        // 聊天窗口只由第二次 mousedown 的桥接打开；拦住画布自身的双击动作。
-        event.preventDefault()
-        event.stopPropagation()
-        return
-      }
-      const textBody =
-        target.closest<HTMLElement>('[data-node-interactive="text-content"]') ??
-        // pointer capture 重定向后 target 是 .tl-canvas，用双击坐标兜底重新命中。
-        document
-          .elementFromPoint(event.clientX, event.clientY)
-          ?.closest<HTMLElement>('[data-node-interactive="text-content"]') ??
-        null
-      if (textBody) {
-        // mousedown 捕获层已转发过一次；这里再转发是幂等的（enterEditing 对已编辑态无副作用），
-        // 并继续拦下 tldraw 的默认双击行为。
-        dispatchEditText(textBody, event)
-        return
-      }
-      // 空白画布不再有双击创建入口，也不能被 tldraw 自动插入独立文本框。
-      if (!target.closest('.node-card-wrap')) {
-        event.preventDefault()
-        event.stopPropagation()
-      }
+      if (!event.isTrusted) return
+      onNodeDoubleClick(event)
+      event.preventDefault()
+      event.stopPropagation()
     }
-    el.addEventListener('mousedown', onDoubleMouseDown, { capture: true })
     el.addEventListener('dblclick', onDblClickCapture, { capture: true })
     return () => {
-      el.removeEventListener('mousedown', onDoubleMouseDown, { capture: true })
       el.removeEventListener('dblclick', onDblClickCapture, { capture: true })
     }
   }, [])
