@@ -1,4 +1,100 @@
 /* Scoped only to the chat node's modal workspace; it does not alter canvas or node scrolling. */
+.chat-dialog-image-settings {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--chat-obsidian-700);
+  border-radius: 10px;
+}
+.chat-dialog-image-quality {
+  color: #94a3b8;
+  font-size: 12px;
+}
+.chat-dialog-skill-controls {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+  grid-column: 1 / -1;
+}
+.chat-dialog-skill-controls .app-select-trigger {
+  min-width: 66px;
+  width: auto;
+  white-space: nowrap;
+}
+.chat-dialog-image-gallery {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+.chat-dialog-image {
+  margin: 0;
+  max-width: 480px;
+}
+.chat-dialog-image-open {
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+  background: var(--chat-obsidian-950);
+}
+.chat-dialog-image-open img {
+  display: block;
+  width: 100%;
+  max-height: 400px;
+  object-fit: contain;
+}
+.chat-dialog-image figcaption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.chat-dialog-image figcaption > span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+}
+.chat-dialog-image figcaption > div {
+  display: flex;
+  gap: 6px;
+}
+.chat-dialog-image-preview {
+  position: absolute;
+  z-index: 10;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  background: var(--chat-obsidian-950);
+}
+.chat-dialog-image-preview header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.chat-dialog-image-preview header > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.chat-dialog-image-preview > img {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  object-fit: contain;
+}
+@media (max-width: 640px) {
+  .chat-dialog-skill-controls {
+    width: 100%;
+  }
+}
+
 .chat-dialog-overlay {
   position: fixed;
   z-index: var(--z-modal);

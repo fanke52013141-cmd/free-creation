@@ -3,11 +3,18 @@ import { TEXT_MERGE_SEPARATOR } from '../helpers'
 import { inputText } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
 import { gatewayDiagnostics } from '../executor-diagnostics'
-import { activeChatConversation, parseChat, serializeChat, updateActiveChatConversation } from '../chat-data'
+import {
+  activeChatConversation,
+  parseChat,
+  serializeChat,
+  updateActiveChatConversation
+} from '../chat-data'
 import { featureKeyOf, findTextModel, modelKeyOf, resolveFeatureOption } from '../models'
 import { waitForChat } from '../helpers'
 import { buildChatCompressionPrompt, splitChatForCompression } from '../chat-memory'
 import { isReasoningModelId } from '../../model-reasoning'
+import type { ChatImageAttachment } from '../../types'
+import { chatImageInput, resolveChatImageTarget } from '../chat-image'
 
 function effectiveSystem(data: ReturnType<typeof parseChat>): string {
   const sections = [data.system.trim()]
@@ -32,6 +39,50 @@ export const chatExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecu
     ...savedData,
     messages: activeConversation.messages,
     summary: activeConversation.summary ?? savedData.summary ?? ''
+  }
+  const pendingImage =
+    data.messages.at(-1)?.role === 'user' && data.messages.at(-1)?.intent === 'image'
+  // Explicit skill entry works even when the text provider lacks tool calling.
+  if (pendingImage) {
+    const resolved = await resolveChatImageTarget(ctx, data)
+    if (!resolved) return { status: 'skipped', reason: '请启用生图技能并选择已验证图片模型' }
+    const { target, option: imageOption } = resolved
+    const input = chatImageInput(target, imageOption, data.messages.at(-1)!.content)
+    if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
+    ctx.setDiagnosticTarget?.({
+      operation: 'image.generate',
+      featureKey: 'image.generate',
+      providerId: target.providerId,
+      modelId: target.modelId
+    })
+    ctx.trace?.('capability', 'info', '已解析对话生图技能与图片模型')
+    const result = await ctx.gateway.imageGenerate({
+      ...input,
+      diagnostics: gatewayDiagnostics(ctx)
+    })
+    if (!result.ok) return { status: 'failed', reason: result.error.message }
+    const image = result.data
+    // Persist an accepted result before checking local cancellation; paid output must not disappear.
+    const next = updateActiveChatConversation(savedData, [
+      ...data.messages,
+      {
+        role: 'assistant',
+        content: '已生成图片。',
+        images: [
+          {
+            mediaId: image.id,
+            mediaPath: image.path,
+            mime: image.mime,
+            name: image.name || '生成图片'
+          }
+        ]
+      }
+    ])
+    ctx.updateProps({ text: serializeChat(next) })
+    ctx.trace?.('result', 'info', '对话图片已保存为独立项目资产')
+    return ctx.signal.cancelled
+      ? { status: 'skipped', reason: '已取消；已完成的图片已保留' }
+      : { status: 'done' }
   }
   const option = ctx.gateway.resolveModelFeature
     ? await resolveFeatureOption(
@@ -64,12 +115,14 @@ export const chatExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecu
   if (!messages.length) return { status: 'skipped', reason: '请输入消息或连接“文本输入”端口' }
   let streamedText = ''
   let streamedReasoning = ''
+  let streamedImages: ChatImageAttachment[] = []
   const persistStreamingReply = (): void => {
     const next = updateActiveChatConversation(savedData, [
       ...messages,
       {
         role: 'assistant' as const,
         content: streamedText,
+        ...(streamedImages.length ? { images: streamedImages } : {}),
         ...(streamedReasoning ? { reasoning: streamedReasoning } : {})
       }
     ])
@@ -77,23 +130,33 @@ export const chatExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecu
       text: serializeChat({ ...next, modelKey: option.key })
     })
   }
+  const imageSkill = ctx.providers.some((provider) =>
+    provider.models.some((model) => model.modality === 'image')
+  )
+    ? await resolveChatImageTarget(ctx, data)
+    : null
   const reply = await waitForChat(
     ctx.gateway,
     {
       providerId: option.provider.id,
       modelId: option.model.id,
       system: effectiveSystem(data),
-      messages,
+      messages:
+        data.autoCompress && data.summary && messages.some((message) => message.images?.length)
+          ? messages.slice(-40)
+          : messages,
       temperature: data.temperature,
       maxTokens: data.maxTokens,
       reasoningEffort:
         data.reasoningEffort !== 'off' && isReasoningModelId(option.model.id) ? 'high' : undefined,
-      diagnostics: requestDiagnostics
+      diagnostics: requestDiagnostics,
+      ...(imageSkill ? { imageSkill: imageSkill.target } : {})
     },
     ctx.signal,
     (progress) => {
       streamedText = progress.text
       streamedReasoning = progress.reasoning
+      streamedImages = progress.images ?? streamedImages
       // 每个已抵达的分片立即写入节点，右侧对话面板订阅节点数据后逐字呈现。
       persistStreamingReply()
     }
@@ -104,6 +167,7 @@ export const chatExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecu
     {
       role: 'assistant' as const,
       content: reply,
+      ...(streamedImages.length ? { images: streamedImages } : {}),
       ...(streamedReasoning ? { reasoning: streamedReasoning } : {})
     }
   ]
@@ -128,7 +192,11 @@ export const chatExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecu
         },
         ctx.signal
       )
-      persistedMessages = compression.recent
+      // Keep generated images visible even when older text history is summarized.
+      persistedMessages = [
+        ...compression.earlier.filter((message) => message.images?.length),
+        ...compression.recent
+      ]
     } catch (error) {
       // 取消落在摘要阶段不能被吞掉（否则本轮取消被记成 done）；先于「不丢历史」
       // 兜底处理：确属取消则本节点标 skipped（R-14）。

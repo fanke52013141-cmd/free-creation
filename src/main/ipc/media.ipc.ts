@@ -603,53 +603,73 @@ export function registerMediaIpc(): void {
       input: { projectId: string; mediaIds?: string[] }
     ): Promise<IpcEnvelope<{ exported: number; failed: number; targetDir: string }>> => {
       if (!input?.projectId) return err('INVALID_INPUT', '参数不完整')
-      const result = await dialog.showOpenDialog({
-        title: '选择导出目录',
-        properties: ['openDirectory', 'createDirectory']
+      emitDomainEvent('media.export_started', '媒体导出开始', {
+        attributes: { projectId: input.projectId, count: input.mediaIds?.length ?? 0 }
       })
-      if (result.canceled || result.filePaths.length === 0) {
-        return ok({ exported: 0, failed: 0, targetDir: '' })
-      }
-      const targetDir = result.filePaths[0]
-      const projectAssets = listMedia(input.projectId)
-      const requestedIds = Array.isArray(input.mediaIds)
-        ? new Set(
-            input.mediaIds.filter((id): id is string => typeof id === 'string' && id.length > 0)
-          )
-        : null
-      const assets = requestedIds
-        ? projectAssets.filter((asset) => requestedIds.has(asset.id))
-        : projectAssets
-      let exported = 0
-      let failed = 0
-      for (const asset of assets) {
-        const src = getMediaAbsPath(asset.path)
-        if (!src) {
-          failed++
-          continue
+      try {
+        const result = await dialog.showOpenDialog({
+          title: '选择导出目录',
+          properties: ['openDirectory', 'createDirectory']
+        })
+        if (result.canceled || result.filePaths.length === 0) {
+          emitDomainEvent('media.export_cancelled', '媒体导出已取消', {
+            status: 'cancelled',
+            attributes: { projectId: input.projectId }
+          })
+          return ok({ exported: 0, failed: 0, targetDir: '' })
         }
-        const ext = extname(asset.path)
-        const rawName = asset.name ? `${asset.name}${ext}` : basename(asset.path)
-        const baseName = rawName.replace(/[\\/:*?"<>|]+/g, '-').trim() || `${asset.id}${ext}`
-        const extIndex = baseName.lastIndexOf('.')
-        const stem = extIndex > 0 ? baseName.slice(0, extIndex) : baseName
-        const suffix = extIndex > 0 ? baseName.slice(extIndex) : ''
-        let copied = false
-        for (let attempt = 0; attempt < 1000; attempt += 1) {
-          const destName = attempt === 0 ? `${stem}${suffix}` : `${stem} (${attempt})${suffix}`
-          try {
-            await copyFile(src, join(targetDir, destName), fsConstants.COPYFILE_EXCL)
-            exported++
-            copied = true
-            break
-          } catch (error) {
-            const code = (error as NodeJS.ErrnoException).code
-            if (code !== 'EEXIST') break
+        const targetDir = result.filePaths[0]
+        const projectAssets = listMedia(input.projectId)
+        const requestedIds = Array.isArray(input.mediaIds)
+          ? new Set(
+              input.mediaIds.filter((id): id is string => typeof id === 'string' && id.length > 0)
+            )
+          : null
+        const assets = requestedIds
+          ? projectAssets.filter((asset) => requestedIds.has(asset.id))
+          : projectAssets
+        let exported = 0
+        let failed = 0
+        for (const asset of assets) {
+          const src = getMediaAbsPath(asset.path)
+          if (!src) {
+            failed++
+            continue
           }
+          const ext = extname(asset.path)
+          const rawName = asset.name ? `${asset.name}${ext}` : basename(asset.path)
+          const baseName = rawName.replace(/[\\/:*?"<>|]+/g, '-').trim() || `${asset.id}${ext}`
+          const extIndex = baseName.lastIndexOf('.')
+          const stem = extIndex > 0 ? baseName.slice(0, extIndex) : baseName
+          const suffix = extIndex > 0 ? baseName.slice(extIndex) : ''
+          let copied = false
+          for (let attempt = 0; attempt < 1000; attempt += 1) {
+            const destName = attempt === 0 ? `${stem}${suffix}` : `${stem} (${attempt})${suffix}`
+            try {
+              await copyFile(src, join(targetDir, destName), fsConstants.COPYFILE_EXCL)
+              exported++
+              copied = true
+              break
+            } catch (error) {
+              const code = (error as NodeJS.ErrnoException).code
+              if (code !== 'EEXIST') break
+            }
+          }
+          if (!copied) failed++
         }
-        if (!copied) failed++
+        emitDomainEvent('media.export_completed', '媒体导出完成', {
+          status: failed ? 'failed' : 'success',
+          attributes: { projectId: input.projectId, exported, failed }
+        })
+        return ok({ exported, failed, targetDir })
+      } catch (error) {
+        emitDomainEvent('media.export_failed', '媒体导出失败', {
+          status: 'failed',
+          error,
+          attributes: { projectId: input.projectId }
+        })
+        return err('EXPORT_FAILED', '媒体导出失败，请检查目标目录')
       }
-      return ok({ exported, failed, targetDir })
     }
   )
 }

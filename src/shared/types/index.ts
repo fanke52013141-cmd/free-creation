@@ -21,7 +21,7 @@ export const ACTIVE_NODE_TYPE_IDS = [
   'video-depth',
   'video-clay',
   'audio',
-    'sound-adjust',
+  'sound-adjust',
   'file',
   'speech',
   'tts',
@@ -251,6 +251,16 @@ export interface ChatMessage {
   content: string
   /** 模型明确返回的推理文本；不生成、不推测，仅用于折叠展示。 */
   reasoning?: string
+  /** 显式生图入口；保持正文为可编辑文本，重生成仍走同一种能力。 */
+  intent?: 'image'
+  images?: ChatImageAttachment[]
+}
+
+export interface ChatImageAttachment {
+  mediaId: string
+  mediaPath: string
+  name: string
+  mime: string
 }
 
 export interface GatewayModelInfo {

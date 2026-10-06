@@ -76,6 +76,27 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
     def('node.cancelled', 'info', 'renderer/engine/executor.ts'),
     def('node.skipped', 'warn', 'renderer/engine/executor.ts', { reason: 'short' }),
     def('node.stage', 'info', 'shared/engine/executors/*', MODEL_ATTRS),
+    def('skill.execution.started', 'info', 'main/gateway/chat-image-skill.ts', {
+      ...MODEL_ATTRS,
+      skillId: 'id'
+    }),
+    def('skill.execution.completed', 'info', 'main/gateway/chat-image-skill.ts', {
+      ...MODEL_ATTRS,
+      skillId: 'id',
+      mediaId: 'id'
+    }),
+    def('skill.execution.failed', 'error', 'main/gateway/chat-image-skill.ts', {
+      ...MODEL_ATTRS,
+      skillId: 'id'
+    }),
+    def('media.export_started', 'info', 'main/ipc/media.ipc.ts', { projectId: 'id', count: 'int' }),
+    def('media.export_completed', 'info', 'main/ipc/media.ipc.ts', {
+      projectId: 'id',
+      exported: 'int',
+      failed: 'int'
+    }),
+    def('media.export_failed', 'error', 'main/ipc/media.ipc.ts', { projectId: 'id' }),
+    def('media.export_cancelled', 'info', 'main/ipc/media.ipc.ts', { projectId: 'id' }),
     // model.request.*：网关调用边界（main 拥有 attempt/终态）
     def('model.request.started', 'info', 'main/gateway/*', MODEL_ATTRS),
     def('model.request.attempt_started', 'info', 'main/gateway/*', MODEL_ATTRS),

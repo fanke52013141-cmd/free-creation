@@ -152,6 +152,7 @@ export interface ChatInput {
   temperature?: number
   maxTokens?: number
   reasoningEffort?: 'high'
+  imageSkill?: import('../chat-image-skill').ChatImageSkillTarget
   /** 诊断关联（L03）：renderer 生成 requestId，一次逻辑对话一个；不含正文。 */
   diagnostics?: import('../contracts').GatewayDiagnosticsContext
 }
@@ -160,6 +161,7 @@ export interface ChatInput {
 export interface ChatStreamProgress {
   text: string
   reasoning: string
+  images?: import('../types').ChatImageAttachment[]
 }
 
 /**
@@ -176,6 +178,7 @@ export function waitForChat(
     let taskId = ''
     let text = ''
     let reasoning = ''
+    const images: import('../types').ChatImageAttachment[] = []
     let done = false
     const finish = (): void => {
       if (done) return
@@ -187,11 +190,15 @@ export function waitForChat(
       if (!taskId || event.taskId !== taskId) return
       if (event.kind === 'chat-delta') {
         text += event.text
-        onProgress?.({ text, reasoning })
+        onProgress?.({ text, reasoning, ...(images.length ? { images: [...images] } : {}) })
       }
       if (event.kind === 'chat-reasoning') {
         reasoning += event.text
-        onProgress?.({ text, reasoning })
+        onProgress?.({ text, reasoning, ...(images.length ? { images: [...images] } : {}) })
+      }
+      if (event.kind === 'chat-image') {
+        if (!images.some((image) => image.mediaId === event.image.mediaId)) images.push(event.image)
+        onProgress?.({ text, reasoning, images: [...images] })
       }
       if (event.kind === 'chat-done') {
         finish()

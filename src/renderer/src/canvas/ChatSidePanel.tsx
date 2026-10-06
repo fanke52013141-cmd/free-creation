@@ -28,6 +28,12 @@ import { toast } from '../stores/toast'
 import { Icon } from '../components/Icon'
 import { AppSelect } from '../components/AppSelect'
 import { isReasoningModelId } from '@shared/model-reasoning'
+import { parseChatImageSkill } from '@shared/chat-image-skill'
+import type { ChatImageAttachment } from '@shared/types'
+import { ChatImageGallery } from './ChatImageGallery'
+import { downloadChatImage } from './chat-image-download'
+import { mediaUrl } from '../nodes/registry'
+import { readNodeRunRecord } from '../engine/runRecord'
 import userAvatar from '../assets/chat-user-avatar.jpg'
 import aiAvatar from '../assets/chat-ai-avatar.jpg'
 import './chat-dialog.css'
@@ -163,12 +169,20 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
   const loadProviders = useGatewayStore((state) => state.load)
   const openSettings = useGatewayStore((state) => state.openSettings)
   const options = modelsByModality(providers, 'text')
+  const imageOptions = modelsByModality(providers, 'image').filter(
+    (option) => !option.model.operations || option.model.operations.includes('image.generate')
+  )
   const [, force] = useState(0)
   const [draft, setDraft] = useState('')
+  const [sendMode, setSendMode] = useState<'chat' | 'image'>('chat')
+  const [previewImage, setPreviewImage] = useState<ChatImageAttachment | null>(null)
+  const [previewError, setPreviewError] = useState(false)
+  const previewRef = useRef<HTMLDivElement>(null)
+  const imageFocusRef = useRef<HTMLElement | null>(null)
   const [settingsPreference, setSettingsPreference] = useState<'automatic' | 'open' | 'closed'>(
     'automatic'
   )
-  const [running, setRunning] = useState(false)
+  const [localRunning, setRunning] = useState(false)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editingText, setEditingText] = useState('')
   const [pendingEdit, setPendingEdit] = useState<{ index: number; content: string } | null>(null)
@@ -189,22 +203,40 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
   }, [loaded, loadProviders])
 
   const shape = editor.getShape(shapeId) as NodeCardShape | undefined
+  const running = localRunning || readNodeRunRecord(shape?.meta?.nodeRun)?.status === 'running'
   const data = shape?.props.text ? parseChat(shape.props.text) : emptyChatData()
+  const imageSkill = parseChatImageSkill(data.imageSkill)
   const activeConversation = activeChatConversation(data)
   const conversations = chatConversations(data)
   const messages = activeConversation.messages
   const selectedModel = options.find((option) => option.key === data.modelKey)
   const showSettings =
     settingsPreference === 'open' ||
-    (settingsPreference === 'automatic' && loaded && !selectedModel)
-  const dialogStateRef = useRef({ pendingEdit, showSettings, onClose })
+    (settingsPreference === 'automatic' &&
+      loaded &&
+      !selectedModel &&
+      !messages.some((message) => message.images?.length))
+  const dialogStateRef = useRef({ pendingEdit, showSettings, onClose, previewImage })
   const selectedModelSupportsReasoning = Boolean(
     selectedModel && isReasoningModelId(selectedModel.model.id)
   )
 
   useEffect(() => {
-    dialogStateRef.current = { pendingEdit, showSettings, onClose }
-  }, [pendingEdit, showSettings, onClose])
+    dialogStateRef.current = { pendingEdit, showSettings, onClose, previewImage }
+  }, [pendingEdit, showSettings, onClose, previewImage])
+
+  useEffect(() => {
+    if (!previewImage) return
+    previewRef.current?.querySelector<HTMLButtonElement>('button')?.focus()
+    return () => imageFocusRef.current?.focus()
+  }, [previewImage])
+
+  const openImagePreview = (image: ChatImageAttachment): void => {
+    imageFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null
+    setPreviewError(false)
+    setPreviewImage(image)
+  }
 
   useEffect(() => {
     const el = scrollRef.current
@@ -230,13 +262,18 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
       const current = dialogStateRef.current
       if (event.key === 'Escape') {
         event.preventDefault()
-        if (current.pendingEdit) setPendingEdit(null)
+        if (current.previewImage) setPreviewImage(null)
+        else if (current.pendingEdit) setPendingEdit(null)
         else if (current.showSettings) setSettingsPreference('closed')
         else current.onClose()
         return
       }
       if (event.key !== 'Tab') return
-      const scope = current.pendingEdit ? confirmRef.current : dialogRef.current
+      const scope = current.previewImage
+        ? previewRef.current
+        : current.pendingEdit
+          ? confirmRef.current
+          : dialogRef.current
       const targets = scope?.querySelectorAll<HTMLElement>(
         'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled])'
       )
@@ -299,7 +336,9 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
 
   const send = async (): Promise<void> => {
     if (!project) return toast('项目未就绪')
-    if (!selectedModel) return toast('请先在设置中选择对话模型')
+    if (sendMode === 'chat' && !selectedModel) return toast('请先在设置中选择对话模型')
+    if (sendMode === 'image' && (!imageSkill.enabled || !imageOptions.length))
+      return toast('请启用生图技能并配置图片模型')
     if (!draft.trim() || running) return
     const upstream = gatherUpstreamText(editor, shapeId)
     const content = upstream ? `${upstream}${TEXT_MERGE_SEPARATOR}${draft.trim()}` : draft.trim()
@@ -314,7 +353,12 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
             )
           }
         : data
-    update(updateActiveChatConversation(titled, [...messages, { role: 'user', content }]))
+    update(
+      updateActiveChatConversation(titled, [
+        ...messages,
+        { role: 'user', content, ...(sendMode === 'image' ? { intent: 'image' as const } : {}) }
+      ])
+    )
     setDraft('')
     setRunning(true)
     try {
@@ -338,7 +382,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
     update(next)
     setEditingIndex(null)
     // 编辑用户消息即重新生成：把编辑后的这条及之前的对话发给模型。
-    if (editedRole === 'user') void runModel()
+    if (editedRole === 'user') void runModel(next)
   }
 
   const confirmEdit = async (): Promise<void> => {
@@ -350,15 +394,16 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
     setPendingEdit(null)
     if (editedRole === 'user') {
       toast('已更新对话，正在用新上下文重新生成…')
-      await runModel()
+      if (next) await runModel(next)
     } else {
       toast('已保存修改')
     }
   }
 
-  const runModel = async (): Promise<void> => {
+  const runModel = async (context: ChatData = data): Promise<void> => {
     if (!project) return toast('项目未就绪')
-    if (!selectedModel) return toast('请先在设置中选择对话模型')
+    if (!selectedModel && activeChatConversation(context).messages.at(-1)?.intent !== 'image')
+      return toast('请先在设置中选择对话模型')
     setRunning(true)
     try {
       await runNodeManually(editor, project.id, providers, shapeId)
@@ -369,10 +414,11 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
 
   const regenerate = async (index: number): Promise<void> => {
     if (!project) return toast('项目未就绪')
-    if (!selectedModel) return toast('请先在设置中选择对话模型')
     if (running) return
     const next = prepareChatRegeneration(data, index)
     if (!next) return toast('未找到可用于重新生成的上一条用户消息')
+    if (!selectedModel && activeChatConversation(next).messages.at(-1)?.intent !== 'image')
+      return toast('请先在设置中选择对话模型')
     update(next)
     setRunning(true)
     try {
@@ -385,8 +431,9 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
   // 从某条用户消息重新生成：删除它之后的全部回复，用这条及之前的上下文重新提问。
   const regenerateFromUser = async (index: number): Promise<void> => {
     if (running) return
-    update(updateActiveChatConversation(data, messages.slice(0, index + 1), ''))
-    await runModel()
+    const next = updateActiveChatConversation(data, messages.slice(0, index + 1), '')
+    update(next)
+    await runModel(next)
   }
 
   // 消息操作统一位于正文结束后；AI 回复只提供复制和重新生成。
@@ -451,6 +498,41 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
           </button>
         )}
       </label>
+      <fieldset className="chat-dialog-image-settings" disabled={running}>
+        <legend>生图技能</legend>
+        <label className="chat-dialog-toggle">
+          <input
+            type="checkbox"
+            checked={imageSkill.enabled}
+            onChange={(event) =>
+              update({ ...data, imageSkill: { ...imageSkill, enabled: event.target.checked } })
+            }
+          />
+          允许对话生成图片
+        </label>
+        {imageSkill.enabled && (
+          <>
+            <label>
+              图片模型
+              <AppSelect
+                aria-label="生图模型"
+                value={imageSkill.modelKey}
+                onChange={(event) =>
+                  update({ ...data, imageSkill: { ...imageSkill, modelKey: event.target.value } })
+                }
+              >
+                <option value="">使用生图功能默认模型</option>
+                {imageOptions.map((option) => (
+                  <option key={option.key} value={option.key}>
+                    {option.label}
+                  </option>
+                ))}
+              </AppSelect>
+            </label>
+            <span className="chat-dialog-image-quality">质量：最低档（low）</span>
+          </>
+        )}
+      </fieldset>
       <label>
         系统提示词
         <textarea
@@ -554,6 +636,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
           <div className="chat-dialog-session-picker">
             <AppSelect
               aria-label="历史对话"
+              disabled={running}
               value={activeConversation.id}
               onChange={(event) => update(selectChatConversation(data, event.target.value))}
             >
@@ -567,6 +650,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
               type="button"
               className="chat-dialog-new"
               aria-label="新建对话"
+              disabled={running}
               onClick={() => update(createChatConversation(data))}
             >
               <Icon name="add" size={16} />
@@ -586,6 +670,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
             <button
               type="button"
               aria-label="对话设置"
+              disabled={running}
               aria-pressed={showSettings}
               onClick={() => setSettingsPreference(showSettings ? 'closed' : 'open')}
             >
@@ -664,7 +749,20 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
                               />
                             )}
                           <MarkdownMessage content={message.content} />
-                          {isStreaming && <GenerationLoadingOverlay title="AI 回复中" />}
+                          {Boolean(message.images?.length) && project && (
+                            <ChatImageGallery
+                              images={message.images!}
+                              projectId={project.id}
+                              onPreview={openImagePreview}
+                            />
+                          )}
+                          {isStreaming && (
+                            <GenerationLoadingOverlay
+                              title={
+                                messages.at(-2)?.intent === 'image' ? '图片生成中' : 'AI 回复中'
+                              }
+                            />
+                          )}
                         </>
                       )}
                     </div>
@@ -684,7 +782,9 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
                     <span>AI</span>
                   </div>
                   <div className="chat-dialog-thinking">
-                    <GenerationLoadingOverlay title="AI 回复中" />
+                    <GenerationLoadingOverlay
+                      title={messages.at(-1)?.intent === 'image' ? '图片生成中' : 'AI 回复中'}
+                    />
                   </div>
                 </article>
               )}
@@ -693,6 +793,40 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
               )}
             </main>
             <footer className="chat-dialog-composer">
+              <div className="chat-dialog-skill-controls">
+                <AppSelect
+                  aria-label="发送方式"
+                  value={sendMode}
+                  disabled={running}
+                  onChange={(event) =>
+                    setSendMode(event.target.value === 'image' ? 'image' : 'chat')
+                  }
+                >
+                  <option value="chat">对话</option>
+                  <option value="image" disabled={!imageSkill.enabled}>
+                    生图
+                  </option>
+                </AppSelect>
+                {imageSkill.enabled && (
+                  <AppSelect
+                    aria-label="生图分辨率"
+                    value={imageSkill.resolution}
+                    disabled={running}
+                    onChange={(event) =>
+                      update({
+                        ...data,
+                        imageSkill: {
+                          ...imageSkill,
+                          resolution: event.target.value === '4k' ? '4k' : '1k'
+                        }
+                      })
+                    }
+                  >
+                    <option value="1k">1K</option>
+                    <option value="4k">4K</option>
+                  </AppSelect>
+                )}
+              </div>
               <button
                 type="button"
                 aria-label="添加参考文档"
@@ -705,10 +839,17 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
                 aria-label="输入消息"
                 value={draft}
                 rows={1}
-                placeholder={project ? '输入消息，Enter 发送，Shift + Enter 换行' : '项目未就绪'}
+                placeholder={
+                  project
+                    ? sendMode === 'image'
+                      ? '描述想生成的图片，Enter 生图'
+                      : '输入消息，Enter 发送，Shift + Enter 换行'
+                    : '项目未就绪'
+                }
                 onChange={(event) => setDraft(event.target.value)}
                 onKeyDown={(event) => {
                   event.stopPropagation()
+                  if (event.nativeEvent.isComposing) return
                   if (event.key === 'Enter' && !event.shiftKey) {
                     event.preventDefault()
                     void send()
@@ -758,6 +899,43 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
                 确认保存并重新生成
               </button>
             </div>
+          </div>
+        )}
+        {previewImage && (
+          <div
+            className="chat-dialog-image-preview"
+            ref={previewRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="图片预览"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) setPreviewImage(null)
+            }}
+          >
+            <header>
+              <span title={previewImage.name}>{previewImage.name}</span>
+              {project && (
+                <button
+                  type="button"
+                  onClick={() => void downloadChatImage(project.id, previewImage)}
+                >
+                  <Icon name="download" size={16} />
+                  下载
+                </button>
+              )}
+              <button type="button" aria-label="关闭图片预览" onClick={() => setPreviewImage(null)}>
+                <Icon name="close" size={18} />
+              </button>
+            </header>
+            {previewError ? (
+              <p role="alert">图片无法读取，请检查项目文件</p>
+            ) : (
+              <img
+                src={mediaUrl(previewImage.mediaPath)}
+                alt={previewImage.name}
+                onError={() => setPreviewError(true)}
+              />
+            )}
           </div>
         )}
       </div>

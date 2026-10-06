@@ -787,6 +787,7 @@ export interface ChatStartInput {
   temperature?: number
   maxTokens?: number
   reasoningEffort?: 'high'
+  imageSkill?: import('../chat-image-skill').ChatImageSkillTarget
   /** 诊断关联（L03）；main 侧只取 ID/模型身份，不读正文。 */
   diagnostics?: GatewayDiagnosticsContext
 }
@@ -942,6 +943,7 @@ export interface VoiceDesignResult {
 export type GatewayEvent =
   | { kind: 'chat-delta'; taskId: string; text: string }
   | { kind: 'chat-reasoning'; taskId: string; text: string }
+  | { kind: 'chat-image'; taskId: string; image: import('../types').ChatImageAttachment }
   | { kind: 'chat-done'; taskId: string }
   | { kind: 'chat-error'; taskId: string; error: string }
   | { kind: 'video-status'; taskId: string; status: string; message?: string }

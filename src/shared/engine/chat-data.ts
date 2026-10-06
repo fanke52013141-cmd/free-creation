@@ -1,5 +1,6 @@
 // 聊天数据解析（从 renderer/nodes/chatData.ts 移入共享层，纯函数无环境依赖）
 import type { ChatMessage } from '../types'
+import { parseChatImageSkill, type ChatImageSkillSettings } from '../chat-image-skill'
 
 export interface ChatDocument {
   name: string
@@ -34,6 +35,7 @@ export interface ChatData {
   /** Optional because pre-session chat nodes stored only `messages`. */
   conversations?: ChatConversation[]
   activeConversationId?: string
+  imageSkill?: ChatImageSkillSettings
 }
 
 const EMPTY_CHAT: ChatData = {
@@ -53,7 +55,17 @@ const LEGACY_CONVERSATION_ID = 'legacy-current'
 function messagesFrom(value: unknown): ChatMessage[] {
   if (!Array.isArray(value)) return []
   return value
-    .map((message) => message as { role?: unknown; content?: unknown; reasoning?: unknown })
+    .filter((message) => message !== null && typeof message === 'object')
+    .map(
+      (message) =>
+        message as {
+          role?: unknown
+          content?: unknown
+          reasoning?: unknown
+          intent?: unknown
+          images?: unknown
+        }
+    )
     .filter(
       (
         message
@@ -61,6 +73,8 @@ function messagesFrom(value: unknown): ChatMessage[] {
         role: 'user' | 'assistant'
         content: string
         reasoning?: unknown
+        intent?: unknown
+        images?: unknown
       } =>
         (message.role === 'user' || message.role === 'assistant') &&
         typeof message.content === 'string'
@@ -68,6 +82,40 @@ function messagesFrom(value: unknown): ChatMessage[] {
     .map((message) => ({
       role: message.role,
       content: message.content,
+      ...(message.role === 'user' && message.intent === 'image'
+        ? { intent: 'image' as const }
+        : {}),
+      ...(message.role === 'assistant' && Array.isArray(message.images)
+        ? {
+            images: message.images.flatMap((item: unknown) => {
+              if (!item || typeof item !== 'object') return []
+              const image = item as Record<string, unknown>
+              if (
+                typeof image.mediaId !== 'string' ||
+                !image.mediaId ||
+                typeof image.mediaPath !== 'string' ||
+                !(
+                  /^projects\/[^/]+\/media\/[^/]+$/.test(image.mediaPath) ||
+                  (image.mediaPath.length <= 2 * 1024 * 1024 &&
+                    /^data:image\/(png|jpeg|webp|gif);base64,[a-zA-Z0-9+/=]+$/.test(
+                      image.mediaPath
+                    ))
+                ) ||
+                typeof image.mime !== 'string' ||
+                !image.mime.startsWith('image/')
+              )
+                return []
+              return [
+                {
+                  mediaId: image.mediaId,
+                  mediaPath: image.mediaPath,
+                  name: typeof image.name === 'string' ? image.name : '生成图片',
+                  mime: image.mime
+                }
+              ]
+            })
+          }
+        : {}),
       ...(typeof message.reasoning === 'string' && message.reasoning.trim()
         ? { reasoning: message.reasoning }
         : {})
@@ -78,6 +126,7 @@ function conversationsFrom(value: unknown): ChatConversation[] {
   if (!Array.isArray(value)) return []
   const ids = new Set<string>()
   return value.flatMap((item) => {
+    if (!item || typeof item !== 'object') return []
     const conversation = item as Record<string, unknown>
     if (
       typeof conversation.id !== 'string' ||
@@ -137,8 +186,10 @@ export function parseChat(text: string): ChatData {
       maxTokens: typeof value.maxTokens === 'number' ? value.maxTokens : 4096,
       reasoningEffort: value.reasoningEffort === 'off' ? 'off' : 'high',
       documents,
-      summary: activeConversation?.summary ?? (typeof value.summary === 'string' ? value.summary : ''),
+      summary:
+        activeConversation?.summary ?? (typeof value.summary === 'string' ? value.summary : ''),
       autoCompress: typeof value.autoCompress === 'boolean' ? value.autoCompress : true,
+      imageSkill: parseChatImageSkill(value.imageSkill),
       ...(conversations.length ? { conversations, activeConversationId } : {})
     }
   } catch {
