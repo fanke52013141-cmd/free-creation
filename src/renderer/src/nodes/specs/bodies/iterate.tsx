@@ -35,8 +35,43 @@ function enforceConfig(c: IterateConfig): IterateConfig {
     // 上限必须与执行器 parseIterate 的 0..10 钳制一致：配置手误放大成海量付费重试（R-21）。
     maxRetries: Math.min(10, Math.max(0, c.maxRetries)),
     limit: c.limit < 0 ? 0 : c.limit,
-    runMode: c.runMode
+    runMode: c.runMode,
+    // W2：与执行器 parseIterate 的 1..4 钳制一致；renderer 未启用并行循环项时
+    // 执行器会自动降级为顺序执行（见 IterateConfig.concurrency 注释）。
+    concurrency: Math.min(4, Math.max(1, Math.round(c.concurrency) || 1))
   }
+}
+
+/**
+ * W5：计算循环体节点集合（与 renderer executor 的 expandIterationBody 同口径）：
+ * 从 out-item 的目标沿真实连线扩展；out-items 的目标是循环结束后的汇总消费者，
+ * 不属于循环体。
+ */
+function loopBodyNodeIds(
+  graph: { nodes: unknown[]; edges: Array<{ from: { nodeId: string; portId: string }; to: { nodeId: string } }> },
+  iterateId: string
+): Set<string> {
+  const finalConsumers = new Set(
+    graph.edges
+      .filter((e) => e.from.nodeId === iterateId && e.from.portId === 'out-items')
+      .map((e) => e.to.nodeId)
+  )
+  const roots = graph.edges
+    .filter((e) => e.from.nodeId === iterateId && e.from.portId === 'out-item')
+    .map((e) => e.to.nodeId)
+  const body = new Set(roots)
+  const pending = [...roots]
+  while (pending.length > 0) {
+    const id = pending.pop()!
+    for (const e of graph.edges) {
+      if (e.from.nodeId !== id || finalConsumers.has(e.to.nodeId)) continue
+      if (!body.has(e.to.nodeId)) {
+        body.add(e.to.nodeId)
+        pending.push(e.to.nodeId)
+      }
+    }
+  }
+  return body
 }
 
 function summaryFromResults(results: (IterateItemResult | null)[] | undefined): string {
@@ -112,6 +147,22 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
   )
   const effectiveCount =
     listCount === null ? null : data.limit > 0 ? Math.min(data.limit, listCount) : listCount
+  // W5：循环体内来自循环体外部的连线数量——子流程读取不到这些值，运行时要么
+  // 报 undefined 要么整项失败，必须在卡片上直接提示改法（把内容并入列表项）。
+  const externalEdgeCount = useValue(
+    'iterate body external edges',
+    () => {
+      const graph = deriveGraph(editor)
+      const body = loopBodyNodeIds(graph, shape.id)
+      return graph.edges.filter(
+        (edge) =>
+          body.has(edge.to.nodeId) &&
+          !body.has(edge.from.nodeId) &&
+          edge.from.nodeId !== shape.id
+      ).length
+    },
+    [editor, shape.id]
+  )
 
   return (
     <div className="iterate-body" ref={scrollRef}>
@@ -191,11 +242,33 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
             />
           </label>
         )}
+        <label className="ai-row">
+          <span
+            className="ai-row-label"
+            title="同时处理的列表项数量（1–4）。循环体节点在各项之间复用，画布上会自动按顺序执行；宿主支持并行循环项后此配置生效"
+          >
+            并行
+          </span>
+          <input
+            type="number"
+            min="1"
+            max="4"
+            value={data.concurrency}
+            onPointerDown={(e) => stopEventPropagation(e)}
+            onChange={(e) =>
+              updateConfig({ ...data, concurrency: Number(e.target.value) || 1 })
+            }
+          />
+        </label>
       </div>
       <div className="iterate-meta">
-        <span className={`iterate-wiring ${listCount === null ? 'warn' : 'ok'}`}>
-          列表：{listCount === null ? '未接入或不是数组，运行会跳过' : `${listCount} 项`}
-          {effectiveCount !== null && listCount !== null && effectiveCount < listCount
+        <span className={`iterate-wiring ${listCount === null || listCount === 0 ? 'warn' : 'ok'}`}>
+          {listCount === null
+            ? '未接入或不是数组，运行会跳过'
+            : listCount === 0
+              ? '列表为空（0 项），循环体不会执行——请检查上游数据'
+              : `${listCount} 项`}
+          {effectiveCount !== null && listCount !== null && listCount > 0 && effectiveCount < listCount
             ? ` · 本次处理 ${effectiveCount} 项`
             : ''}
         </span>
@@ -204,6 +277,12 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
             ? '循环体：未从「当前项」连线，运行会跳过'
             : `循环体入口：${downstreamCount} 个`}
         </span>
+        {externalEdgeCount > 0 && (
+          <span className="iterate-wiring warn">
+            循环体：{externalEdgeCount} 条来自循环体外部的连线在子流程中读取不到（运行会报
+            undefined 或整项失败）——请让上游把这些内容写进每个列表项
+          </span>
+        )}
         {result?.progress && (
           <div className="iterate-progress-wrap" role="status">
             <div className="iterate-progress-bar">

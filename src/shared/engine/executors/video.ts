@@ -3,8 +3,9 @@
 import { inputJson, inputMedia, inputText } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
 import { featureKeyOf, modelKeyOf, resolveFeatureOption } from '../models'
-import { mergedPrompt, parseVideoGen, promptBundleText, waitForVideo } from '../helpers'
+import { mergedPrompt, parseJsonObj, parseVideoGen, promptBundleText, waitForVideo } from '../helpers'
 import { readNodeConfig } from '../node-config'
+import { parseRetryConfig, withRetry } from '../retry'
 import { appendMediaResult, serializeMediaResultCollection } from '../values'
 import {
   isSeedanceGatewayProxy,
@@ -63,27 +64,40 @@ export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
   })
   if (inputIssues.length > 0) return { status: 'skipped', reason: inputIssues.join('；') }
   try {
-    const submitted = await ctx.gateway.videoSubmit({
-      projectId: ctx.projectId,
-      nodeId: ctx.node.id,
-      providerId: option.provider.id,
-      modelId: option.model.id,
-      prompt,
-      mode,
-      params,
-      ...(firstFrame ? { firstFrameMediaId: firstFrame.mediaId } : {}),
-      ...(lastFrame ? { lastFrameMediaId: lastFrame.mediaId } : {}),
-      ...(referenceImages.length
-        ? { referenceImageMediaIds: referenceImages.map((media) => media.mediaId) }
-        : {}),
-      ...(motionReferences.length
-        ? { referenceVideoMediaIds: motionReferences.map((media) => media.mediaId) }
-        : {}),
-      ...(audioReferences.length
-        ? { referenceAudioMediaIds: audioReferences.map((media) => media.mediaId) }
-        : {})
-    })
-    if (!submitted.ok) return { status: 'failed', reason: submitted.error.message }
+    // W1：只对「提交」做自动重试——提交成功后的轮询阶段失败不可重试（远端任务
+    // 可能已计费，重复提交会双重扣费）；提交阶段的网络 / 5xx 才是瞬时的。
+    const submitted = await withRetry(
+      () =>
+        ctx.gateway.videoSubmit({
+          projectId: ctx.projectId,
+          nodeId: ctx.node.id,
+          providerId: option.provider.id,
+          modelId: option.model.id,
+          prompt,
+          mode,
+          params,
+          ...(firstFrame ? { firstFrameMediaId: firstFrame.mediaId } : {}),
+          ...(lastFrame ? { lastFrameMediaId: lastFrame.mediaId } : {}),
+          ...(referenceImages.length
+            ? { referenceImageMediaIds: referenceImages.map((media) => media.mediaId) }
+            : {}),
+          ...(motionReferences.length
+            ? { referenceVideoMediaIds: motionReferences.map((media) => media.mediaId) }
+            : {}),
+          ...(audioReferences.length
+            ? { referenceAudioMediaIds: audioReferences.map((media) => media.mediaId) }
+            : {})
+        }).then((res) => {
+          if (!res.ok) throw new Error(res.error.message)
+          return res
+        }),
+      {
+        retry: parseRetryConfig(parseJsonObj(readNodeConfig(ctx.shape))),
+        signal: ctx.signal,
+        onRetry: (attempt, reason, delayMs) =>
+          ctx.trace?.('request', 'info', `视频提交第 ${attempt} 次尝试失败（${reason}），${delayMs}ms 后自动重试`)
+      }
+    )
     if (ctx.signal.cancelled) {
       // 提交已成功而取消先到：远端任务必须补偿取消，否则主进程轮询独立继续，
       // 任务会完成入库并计费，而节点已被标为 skipped（R-01）。

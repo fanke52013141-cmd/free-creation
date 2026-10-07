@@ -674,6 +674,46 @@ select:focus-visible,
 }
 
 /*
+ * W8：自动保存暂停的常驻横幅。出现即意味着「此刻的编辑不会落盘」，
+ * 必须持续可见直到用户重试加载成功（toast 消失后用户对此毫无感知是实测事故根因）。
+ */
+.save-paused-banner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-topbar);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(720px, calc(100% - 48px));
+  padding: 10px 16px;
+  border: 1px solid rgba(255, 176, 32, 0.45);
+  border-radius: 10px;
+  background: rgba(48, 38, 16, 0.94);
+  color: #ffd98a;
+  font-size: 13px;
+  line-height: 1.5;
+  box-shadow: var(--elevation-1);
+  pointer-events: auto;
+}
+
+.save-paused-banner .save-paused-retry {
+  flex: none;
+  padding: 6px 14px;
+  border: 1px solid rgba(255, 176, 32, 0.55);
+  border-radius: 8px;
+  background: rgba(255, 176, 32, 0.14);
+  color: #ffd98a;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.save-paused-banner .save-paused-retry:hover {
+  background: rgba(255, 176, 32, 0.26);
+}
+
+/*
  * 深色工作台：用低对比度密点阵给空间感，但绝不与端口、选择框竞争。
  * 点阵单位是屏幕像素，缩放时由 tldraw 画布本身承载，不会被节点 transform 拉伸。
  */

@@ -6,6 +6,7 @@ import { gatewayDiagnostics } from '../executor-diagnostics'
 import { featureKeyOf, modelKeyOf, resolveFeatureOption } from '../models'
 import { mergedPrompt, parseJsonObj, promptBundleText } from '../helpers'
 import { readNodeConfig } from '../node-config'
+import { parseRetryConfig, withRetry } from '../retry'
 import { appendMediaResult, serializeMediaResultCollection } from '../values'
 import {
   imageCapabilitiesFor,
@@ -25,6 +26,8 @@ export function parseImageGen(text: string): ImageGenData {
 
 export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
   const data = parseImageGen(readNodeConfig(ctx.shape))
+  // W1：retry 配置与生图参数同源（props.config），缺省为关闭（maxRetries=0）。
+  const retryConfig = parseRetryConfig(parseJsonObj(readNodeConfig(ctx.shape)))
   // 供应商/模型解析与 Body 共用同一套逻辑；未明确指定时回退到默认可用模型（如 ToAPIS）。
   const option = await resolveFeatureOption(
     ctx.gateway,
@@ -68,30 +71,42 @@ export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeE
     for (let index = 0; index < config.count; index += 1) {
       if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
       ctx.trace?.('request', 'info', `提交生图请求（第 ${index + 1}/${config.count} 张）`)
-      const result = await ctx.gateway.imageGenerate({
-        projectId: ctx.projectId,
-        providerId: option.provider.id,
-        modelId: option.model.id,
-        prompt,
-        size: config.size,
-        ...(capabilities.forwardsAspectRatio && config.aspectRatio !== 'auto'
-          ? { aspectRatio: config.aspectRatio }
-          : {}),
-        // 分辨率与透明背景都是用户意图；能力表不支持时既不发送也不出现在提交入参里。
-        ...(capabilities.resolutions.length > 0 && config.resolution
-          ? { resolution: config.resolution }
-          : {}),
-        ...(capabilities.supportsTransparentBackground && config.background
-          ? { background: config.background }
-          : {}),
-        ...(referenceMediaIds.length > 0 ? { referenceMediaIds } : {}),
-        diagnostics: gatewayDiagnostics(ctx, {
-          batchId,
-          itemId: `${batchId}#${index + 1}`
-        })
-      })
+      // W1：单张请求纳入自动重试；已持久化的前几张不受后续重试影响。
+      const result = await withRetry(
+        (attempt) =>
+          ctx.gateway.imageGenerate({
+            projectId: ctx.projectId,
+            providerId: option.provider.id,
+            modelId: option.model.id,
+            prompt,
+            size: config.size,
+            ...(capabilities.forwardsAspectRatio && config.aspectRatio !== 'auto'
+              ? { aspectRatio: config.aspectRatio }
+              : {}),
+            // 分辨率与透明背景都是用户意图；能力表不支持时既不发送也不出现在提交入参里。
+            ...(capabilities.resolutions.length > 0 && config.resolution
+              ? { resolution: config.resolution }
+              : {}),
+            ...(capabilities.supportsTransparentBackground && config.background
+              ? { background: config.background }
+              : {}),
+            ...(referenceMediaIds.length > 0 ? { referenceMediaIds } : {}),
+            diagnostics: gatewayDiagnostics(ctx, {
+              batchId,
+              itemId: `${batchId}#${index + 1}${attempt > 1 ? `#retry${attempt - 1}` : ''}`
+            })
+          }).then((submitted) => {
+            if (!submitted.ok) throw new Error(submitted.error.message)
+            return submitted
+          }),
+        {
+          retry: retryConfig,
+          signal: ctx.signal,
+          onRetry: (attempt, reason, delayMs) =>
+            ctx.trace?.('request', 'info', `第 ${index + 1} 张第 ${attempt} 次尝试失败（${reason}），${delayMs}ms 后自动重试`)
+        }
+      )
       if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
-      if (!result.ok) return { status: 'failed', reason: result.error.message }
       ctx.trace?.('result', 'info', `第 ${index + 1} 张已生成并通过校验`)
       // 每一张成功后立即持久化；后续失败不会抹掉已完成的真实结果。
       nodeResult = serializeMediaResultCollection(

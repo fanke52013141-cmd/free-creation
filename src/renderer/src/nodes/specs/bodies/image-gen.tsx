@@ -242,6 +242,28 @@ export function ImageGenerateBody({ shape }: NodeBodyProps): React.JSX.Element {
             </option>
           ))}
         </AppSelect>
+        <AppSelect
+          className="gen-select gen-retry"
+          value={String(config.retry?.maxRetries ?? 0)}
+          onPointerDown={(e) => e.stopPropagation()}
+          onChange={(e) =>
+            update({
+              ...config,
+              retry: {
+                maxRetries: Number(e.target.value) || 0,
+                backoffMs: config.retry?.backoffMs ?? 2000
+              }
+            })
+          }
+          aria-label="失败自动重试"
+          title="供应商瞬时失败（网络 / 5xx / 任务失败）时每张图片自动重试的次数；重试可能产生额外请求费用"
+        >
+          {[0, 1, 2, 3].map((n) => (
+            <option key={n} value={n}>
+              {n === 0 ? '不重试' : `重试 ${n} 次`}
+            </option>
+          ))}
+        </AppSelect>
         {orderedRatios.length > 0 && (
           <AppSelect
             className="gen-select gen-aspect"

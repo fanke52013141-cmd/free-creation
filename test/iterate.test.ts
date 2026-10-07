@@ -139,7 +139,8 @@ describe('parseIterate · 配置解析', () => {
       onFailure: 'retry',
       maxRetries: 3,
       limit: 10,
-      runMode: 'all'
+      runMode: 'all',
+      concurrency: 1
     })
   })
 
@@ -148,13 +149,15 @@ describe('parseIterate · 配置解析', () => {
       onFailure: 'skip',
       maxRetries: 0,
       limit: 0,
-      runMode: 'all'
+      runMode: 'all',
+      concurrency: 1
     })
     expect(parseIterate('{bad')).toEqual({
       onFailure: 'skip',
       maxRetries: 0,
       limit: 0,
-      runMode: 'all'
+      runMode: 'all',
+      concurrency: 1
     })
   })
 })
@@ -846,4 +849,128 @@ describe('T13 分镜局部续跑', () => {
     expect(result.items.map((item) => item.source.itemId)).toEqual(reordered.map((item) => item.id))
     expect(result.items.filter((item) => item.status === 'reused')).toHaveLength(15)
   })
+})
+
+describe('parseIterate · W2 并发数解析', () => {
+  it('concurrency 钳制 1–4，缺省 1', () => {
+    expect(parseIterate(JSON.stringify({ concurrency: 99 })).concurrency).toBe(4)
+    expect(parseIterate(JSON.stringify({ concurrency: 0 })).concurrency).toBe(1)
+    expect(parseIterate(JSON.stringify({ concurrency: 2.7 })).concurrency).toBe(3)
+    expect(parseIterate(JSON.stringify({})).concurrency).toBe(1)
+  })
+})
+
+describe('iterate 执行器 · W2 并发', () => {
+  function makeParallelCtx(over: Parameters<typeof makeCtx>[0] & { parallelItems?: boolean }) {
+    const { ctx, ...rest } = makeCtx(over)
+    if (over.parallelItems !== undefined) {
+      ;(ctx as NodeExecutionContext & { parallelItems?: boolean }).parallelItems =
+        over.parallelItems
+    }
+    return { ctx, ...rest }
+  }
+
+  it('宿主未声明 parallelItems → 并发配置自动降级为顺序执行', async () => {
+    let inflight = 0
+    let maxInflight = 0
+    const run = vi.fn(async ({ item }: { item: Record<string, unknown> }) => {
+      inflight += 1
+      maxInflight = Math.max(maxInflight, inflight)
+      await new Promise((r) => setTimeout(r, 30))
+      inflight -= 1
+      return { body: { 'out-text': { value: String(item.id), type: 'text', source: { nodeId: 'b', portId: 'p', runId: 'r' }, createdAt: 0 } } } as SubflowOutput
+    })
+    const { result } = await runParallelCase({ concurrency: 3, parallelItems: false, run })
+    expect(maxInflight).toBe(1)
+    expect(doneIds(result.value)).toEqual(['a', 'b', 'c'])
+  }, 20000)
+
+  it('parallelItems=true 且 concurrency=3 → 真并发，out-items 仍按原始下标有序', async () => {
+    let inflight = 0
+    let maxInflight = 0
+    // 故意让第一项最慢：完成顺序与下标顺序相反，聚合顺序必须不受影响
+    const delayFor = (id: string) => (id === 'a' ? 240 : 40)
+    const run = vi.fn(async ({ item }: { item: Record<string, unknown> }) => {
+      inflight += 1
+      maxInflight = Math.max(maxInflight, inflight)
+      await new Promise((r) => setTimeout(r, delayFor(String(item.id))))
+      inflight -= 1
+      return { body: { 'out-text': { value: String(item.id), type: 'text', source: { nodeId: 'b', portId: 'p', runId: 'r' }, createdAt: 0 } } } as SubflowOutput
+    })
+    const { result } = await runParallelCase({ concurrency: 3, parallelItems: true, run })
+    expect(maxInflight).toBeGreaterThanOrEqual(2)
+    expect(doneIds(result.value)).toEqual(['a', 'b', 'c'])
+  }, 20000)
+
+  it('并行 + fail 策略：失败后停止认领新项，在途项正常完成', async () => {
+    const run = vi.fn(async ({ item }: { item: Record<string, unknown> }) => {
+      if (item.id === 'a') {
+        await new Promise((r) => setTimeout(r, 30))
+        return {} as SubflowOutput // 空输出 → 该项失败
+      }
+      await new Promise((r) => setTimeout(r, 40))
+      return { body: { 'out-text': { value: String(item.id), type: 'text', source: { nodeId: 'b', portId: 'p', runId: 'r' }, createdAt: 0 } } } as SubflowOutput
+    })
+    const { result } = await runParallelCase(
+      { concurrency: 3, parallelItems: true, run, onFailure: 'fail' }
+    )
+    const parsed = JSON.parse(result.value as string)
+    expect(parsed.items[0].status).toBe('failed')
+    // b / c 与 a 同时在途，结果不受 fail 策略影响；关键是不出现未定义项
+    expect(parsed.items.every((entry: { status: string }) => entry.status)).toBe(true)
+  }, 20000)
+
+  it('并行 + 中途取消 → 在途项作废为 skipped，不再有新的 done', async () => {
+    const signal = { cancelled: false, paused: false }
+    const run = vi.fn(async ({ item }: { item: Record<string, unknown> }) => {
+      if (item.id === 'a') {
+        await new Promise((r) => setTimeout(r, 20))
+        return { body: { 'out-text': { value: 'a', type: 'text', source: { nodeId: 'b', portId: 'p', runId: 'r' }, createdAt: 0 } } } as SubflowOutput
+      }
+      signal.cancelled = true
+      throw new Error('aborted by test')
+    })
+    const { result } = await runParallelCase(
+      { concurrency: 3, parallelItems: true, run, signal }
+    )
+    const parsed = JSON.parse(result.value as string)
+    expect(parsed.items[0].status).toBe('done')
+    const rest = parsed.items.slice(1).map((entry: { status: string }) => entry.status)
+    expect(rest.every((s: string) => s === 'skipped' || s === 'pending')).toBe(true)
+  }, 20000)
+
+  // —— 上面四个用例共享的驱动 ——
+  async function runParallelCase(over: {
+    concurrency: number
+    parallelItems: boolean
+    run: (req: { item: Record<string, unknown>; index: number }) => Promise<SubflowOutput>
+    onFailure?: 'skip' | 'fail' | 'retry'
+    signal?: { cancelled: boolean; paused?: boolean }
+  }): Promise<{ result: { value: string | null } }> {
+    const { ctx, result } = makeParallelCtx({
+      text: JSON.stringify({
+        concurrency: over.concurrency,
+        ...(over.onFailure ? { onFailure: over.onFailure } : {})
+      }),
+      list: [{ id: 'a' }, { id: 'b' }, { id: 'c' }],
+      runSubflow: over.run,
+      signal: over.signal,
+      parallelItems: over.parallelItems
+    })
+    // 执行器返回即代表最后一次 publishProgress 已落盘，result.value 就是终态。
+    await iterateExecutor(ctx)
+    return { result }
+  }
+
+  function doneIds(json: string | null): string[] {
+    const parsed = JSON.parse(json as string)
+    return parsed.items
+      .filter((entry: { status: string }) => entry.status === 'done')
+      .map((entry: { outputs: Record<string, Record<string, unknown>> }) => {
+        const ports = Object.values(entry.outputs ?? {})[0] as
+          | Record<string, unknown>
+          | undefined
+        return ports?.['out-text']
+      })
+  }
 })

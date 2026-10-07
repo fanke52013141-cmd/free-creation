@@ -32,6 +32,31 @@ function installFakeGateway(reply: string): void {
   }
 }
 
+// W1：可编程的「前 N 次失败」假网关——重试语义需要观察到多次 chatStart。
+let chatStartCalls = 0
+function installFlakyGateway(failTimes: number, failError: string, reply: string): void {
+  chatStartCalls = 0
+  currentGateway = {
+    chatStart: vi.fn().mockImplementation(async () => {
+      chatStartCalls += 1
+      return { ok: true, data: { taskId: 'task-1' } }
+    }),
+    chatCancel: vi.fn().mockResolvedValue({ ok: true, data: true }),
+    onEvent: vi.fn((cb) => {
+      setTimeout(() => {
+        // chatStart 的微任务先于 setTimeout(0) 完成，此时计数已含本次调用
+        if (chatStartCalls <= failTimes) {
+          cb({ kind: 'chat-error', taskId: 'task-1', error: failError })
+        } else {
+          cb({ kind: 'chat-delta', taskId: 'task-1', text: reply })
+          cb({ kind: 'chat-done', taskId: 'task-1' })
+        }
+      }, 0)
+      return () => {}
+    })
+  }
+}
+
 const provider: ProviderConfig = {
   id: 'p1',
   name: '测试供应商',
@@ -136,7 +161,8 @@ describe('parseAiProcess · 配置解析', () => {
         mode: 'json',
         jsonSchema: { id: 'storyboard.shots', version: 1 },
         temperature: 0.5,
-        maxTokens: 2048
+        maxTokens: 2048,
+        retry: { maxRetries: 2, backoffMs: 1000 }
       })
     )
     expect(cfg).toEqual({
@@ -146,6 +172,7 @@ describe('parseAiProcess · 配置解析', () => {
       jsonSchema: { id: 'storyboard.shots', version: 1 },
       temperature: 0.5,
       maxTokens: 2048,
+      retry: { maxRetries: 2, backoffMs: 1000 },
       result: undefined
     })
   })
@@ -209,14 +236,49 @@ describe('aiProcess 执行器 · 输出模式分支', () => {
     expect(r.artifactOutputPorts).toEqual(['out-json'])
   })
 
-  it('json 模式但未选 Schema → 失败（不伪装 JSON）', async () => {
+  it('json 模式：模型带 ```json 围栏 → 剥离后正常解析（宽容提取）', async () => {
+    installFakeGateway('```json\n{"shots":[{"id":"s1","scene":"a"}]}\n```')
+    const config = JSON.stringify({
+      modelKey: 'p1::m1',
+      mode: 'json',
+      jsonSchema: { id: 'storyboard.shots', version: 1 }
+    })
+    const { ctx, result } = makeCtx(config, textInput('剧本'))
+    const r = await aiProcessExecutor(ctx)
+    expect(r.status).toBe('done')
+    expect(JSON.parse(result.value as string).data.shots).toHaveLength(1)
+  })
+
+  it('json 模式：JSON 前后有说明文字 → 提取首个平衡 JSON 解析', async () => {
+    installFakeGateway('好的，以下是分镜：\n{"shots":[{"id":"s1","scene":"a"}]}\n请查收。')
+    const config = JSON.stringify({
+      modelKey: 'p1::m1',
+      mode: 'json',
+      jsonSchema: { id: 'storyboard.shots', version: 1 }
+    })
+    const { ctx, result } = makeCtx(config, textInput('剧本'))
+    const r = await aiProcessExecutor(ctx)
+    expect(r.status).toBe('done')
+    expect(JSON.parse(result.value as string).data.shots).toHaveLength(1)
+  })
+
+  it('json 模式但未选 Schema → 默认 json.any 宽容校验（W9）', async () => {
     installFakeGateway('{"a":1}')
+    const config = JSON.stringify({ modelKey: 'p1::m1', mode: 'json' })
+    const { ctx, result } = makeCtx(config, textInput('输入'))
+    const r = await aiProcessExecutor(ctx)
+    expect(r.status).toBe('done')
+    expect(JSON.parse(result.value as string).data).toEqual({ a: 1 })
+  })
+
+  it('json 模式未选 Schema 且模型返回非 JSON → 仍失败（默认 Schema 不降低失败语义）', async () => {
+    installFakeGateway('这不是 JSON')
     const config = JSON.stringify({ modelKey: 'p1::m1', mode: 'json' })
     const { ctx } = makeCtx(config, textInput('输入'))
     const r = await aiProcessExecutor(ctx)
     expect(r.status).toBe('failed')
     expect(r.artifactOutputPorts).toBeUndefined()
-    expect(r.reason).toContain('Schema')
+    expect(r.reason).toContain('JSON')
   })
 
   it('json 模式但模型返回的不是合法 JSON → 失败', async () => {
@@ -267,6 +329,59 @@ describe('aiProcess 执行器 · 输出模式分支', () => {
     expect(r.status).toBe('failed')
     expect(r.artifactOutputPorts).toBeUndefined()
     expect(r.reason).toContain('模型返回为空')
+  })
+})
+
+describe('aiProcess 执行器 · W1 自动重试', () => {
+  it('瞬时失败（模型返回为空）后重试成功 → done，chatStart 共调用 3 次', async () => {
+    installFlakyGateway(2, '模型返回为空', '{"shots":[{"id":"s1"}]}')
+    const config = JSON.stringify({
+      modelKey: 'p1::m1',
+      mode: 'json',
+      jsonSchema: { id: 'json.any', version: 1 },
+      retry: { maxRetries: 3, backoffMs: 500 }
+    })
+    const { ctx, result } = makeCtx(config, textInput('输入'))
+    const r = await aiProcessExecutor(ctx)
+    expect(r.status).toBe('done')
+    expect(JSON.parse(result.value as string).data).toEqual({ shots: [{ id: 's1' }] })
+    expect(chatStartCalls).toBe(3)
+  }, 15000)
+
+  it('重试次数用尽仍失败 → failed，原因聚合此前尝试', async () => {
+    installFlakyGateway(99, '模型返回为空', 'irrelevant')
+    const config = JSON.stringify({
+      modelKey: 'p1::m1',
+      mode: 'text',
+      retry: { maxRetries: 1, backoffMs: 500 }
+    })
+    const { ctx } = makeCtx(config, textInput('输入'))
+    const r = await aiProcessExecutor(ctx)
+    expect(r.status).toBe('failed')
+    expect(r.reason).toContain('模型返回为空')
+    expect(chatStartCalls).toBe(2)
+  }, 15000)
+
+  it('未配置重试（默认 maxRetries=0）→ 行为与历史一致，只调用一次', async () => {
+    installFlakyGateway(1, '模型返回为空', 'irrelevant')
+    const config = JSON.stringify({ modelKey: 'p1::m1', mode: 'text' })
+    const { ctx } = makeCtx(config, textInput('输入'))
+    const r = await aiProcessExecutor(ctx)
+    expect(r.status).toBe('failed')
+    expect(chatStartCalls).toBe(1)
+  })
+
+  it('不可重试错误（chat-error 报配置类失败）→ 立即失败，不重试', async () => {
+    installFlakyGateway(99, '当前供应商返回 401 Key error', 'irrelevant')
+    const config = JSON.stringify({
+      modelKey: 'p1::m1',
+      mode: 'text',
+      retry: { maxRetries: 3, backoffMs: 500 }
+    })
+    const { ctx } = makeCtx(config, textInput('输入'))
+    const r = await aiProcessExecutor(ctx)
+    expect(r.status).toBe('failed')
+    expect(chatStartCalls).toBe(1)
   })
 })
 

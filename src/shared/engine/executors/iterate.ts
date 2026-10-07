@@ -24,6 +24,12 @@ export interface IterateConfig {
   limit: number
   /** 全部重跑 / 复用已成功项继续 / 只重跑上轮失败项。 */
   runMode: 'all' | 'resume' | 'failed' | 'changed'
+  /**
+   * 并行处理条数 1–4（W2）。只有宿主声明支持并行循环项（ctx.parallelItems）时才
+   * 真正并行；否则自动降级为 1（顺序执行）——renderer 的循环体卡片是逐项复用的
+   * 共享状态，并行会互相覆盖，必须先做循环体虚拟化才能放开。
+   */
+  concurrency: number
 }
 
 export type IterateItemStatus = 'pending' | 'done' | 'reused' | 'failed' | 'skipped'
@@ -74,7 +80,7 @@ export interface IterateResult {
 
 export function parseIterate(text: string): IterateConfig {
   if (!text) {
-    return { onFailure: 'skip', maxRetries: 0, limit: 0, runMode: 'all' }
+    return { onFailure: 'skip', maxRetries: 0, limit: 0, runMode: 'all', concurrency: 1 }
   }
   try {
     const value = JSON.parse(text) as Record<string, unknown>
@@ -87,10 +93,15 @@ export function parseIterate(text: string): IterateConfig {
       runMode:
         value.runMode === 'resume' || value.runMode === 'failed' || value.runMode === 'changed'
           ? value.runMode
-          : 'all'
+          : 'all',
+      // W2：并行数钳制 1–4；缺省 / 非法值回退 1（与历史行为一致）。
+      concurrency:
+        typeof value.concurrency === 'number' && Number.isFinite(value.concurrency)
+          ? Math.min(4, Math.max(1, Math.round(value.concurrency)))
+          : 1
     }
   } catch {
-    return { onFailure: 'skip', maxRetries: 0, limit: 0, runMode: 'all' }
+    return { onFailure: 'skip', maxRetries: 0, limit: 0, runMode: 'all', concurrency: 1 }
   }
 }
 
@@ -369,12 +380,24 @@ export const iterateExecutor = async (ctx: NodeExecutionContext): Promise<NodeEx
   }
   publishProgress()
 
-  for (let idx = 0; idx < items.length; idx += 1) {
-    await ctx.waitForResume?.()
-    if (ctx.signal.cancelled) break
+  // W2：并行数只在宿主声明 parallelItems 时生效；renderer 循环体卡片是逐项复用
+  // 的共享状态，未虚拟化前必须降级为顺序执行，并留痕说明。
+  const effectiveConcurrency =
+    config.concurrency > 1 && ctx.parallelItems === true ? config.concurrency : 1
+  if (config.concurrency > 1 && effectiveConcurrency === 1) {
+    ctx.trace?.(
+      'execution',
+      'info',
+      `并行数 ${config.concurrency} 需要宿主支持并行循环项（parallelItems），当前按顺序执行`
+    )
+  }
+
+  /** 单个下标的预处理：resume / failed 模式可能直接产出 entry 而无需执行。 */
+  const prepareItem = (
+    idx: number
+  ): { action: 'run' } | { action: 'entry'; entry: IterateItemResult } => {
     const item = items[idx] as Record<string, unknown>
     const source = sourceFor(item, idx)
-    const itemRunId = itemRunIdFor(ctx, source)
     const identity =
       source.itemId && source.fingerprint ? `${source.itemId}:${source.fingerprint}` : ''
     const prior =
@@ -386,28 +409,47 @@ export const iterateExecutor = async (ctx: NodeExecutionContext): Promise<NodeEx
       isSameItem(prior, item, source) &&
       (prior.status === 'done' || prior.status === 'reused')
     ) {
-      results[idx] = { ...prior, item, status: 'reused', source }
-      publishProgress()
-      continue
+      return { action: 'entry', entry: { ...prior, item, status: 'reused', source } }
     }
     if (config.runMode === 'failed') {
       if (!isSameItem(prior, item, source) || prior.status !== 'failed') {
-        results[idx] = {
-          item,
-          status: 'skipped',
-          error: prior ? '不属于上轮失败项' : '没有可重跑的失败项',
-          source
+        return {
+          action: 'entry',
+          entry: {
+            item,
+            status: 'skipped',
+            error: prior ? '不属于上轮失败项' : '没有可重跑的失败项',
+            source
+          }
         }
-        publishProgress()
-        continue
       }
     }
+    return { action: 'run' }
+  }
+
+  const executeItem = async (idx: number): Promise<void> => {
+    const item = items[idx] as Record<string, unknown>
+    const source = sourceFor(item, idx)
+    const itemRunId = itemRunIdFor(ctx, source)
     const result = await runItem(ctx, config, item, idx, itemRunId)
     results[idx] = result
     publishProgress()
-    if (result.status === 'failed') {
-      failedAny = true
-      if (config.onFailure === 'fail') {
+    if (result.status === 'failed') failedAny = true
+  }
+
+  if (effectiveConcurrency <= 1) {
+    // 顺序路径（默认）：与历史行为逐字对齐——含 fail 策略的「就地标记剩余项」。
+    for (let idx = 0; idx < items.length; idx += 1) {
+      await ctx.waitForResume?.()
+      if (ctx.signal.cancelled) break
+      const plan = prepareItem(idx)
+      if (plan.action === 'entry') {
+        results[idx] = plan.entry
+        publishProgress()
+        continue
+      }
+      await executeItem(idx)
+      if (failedAny && config.onFailure === 'fail') {
         for (let i = idx + 1; i < items.length; i += 1) {
           results[i] = {
             item: items[i] as Record<string, unknown>,
@@ -419,6 +461,34 @@ export const iterateExecutor = async (ctx: NodeExecutionContext): Promise<NodeEx
         break
       }
     }
+  } else {
+    // 并行池：有界并发 claim；out-items 始终按原始下标聚合，与完成顺序无关。
+    // fail 策略下停止认领新项，在途项自然完成（结果仍写入各自下标）。
+    let cursor = 0
+    const claimNext = (): number | null => {
+      if (ctx.signal.cancelled) return null
+      if (config.onFailure === 'fail' && failedAny) return null
+      if (cursor >= items.length) return null
+      const idx = cursor
+      cursor += 1
+      return idx
+    }
+    const worker = async (): Promise<void> => {
+      for (;;) {
+        const idx = claimNext()
+        if (idx === null) return
+        await ctx.waitForResume?.()
+        if (ctx.signal.cancelled) return
+        const plan = prepareItem(idx)
+        if (plan.action === 'entry') {
+          results[idx] = plan.entry
+          publishProgress()
+          continue
+        }
+        await executeItem(idx)
+      }
+    }
+    await Promise.all(Array.from({ length: effectiveConcurrency }, () => worker()))
   }
 
   // 循环因取消 / 失败提前结束后：未到达项若在上轮已有 done/reused 记录则保留

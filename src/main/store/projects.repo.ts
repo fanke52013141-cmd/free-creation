@@ -472,6 +472,29 @@ export function openProject(id: string): ProjectFile | null {
   if (!meta) return null
   const file = readProjectFile(id)
   if (!file) return null
+  // graphVersion 以 project.json 为准：json 是图数据的唯一事实源。外部写入
+  // （CLI / 脚本 / 手工迁移）只改 json 不动 SQLite；若用 DB 的旧版本号打开，
+  // 渲染进程的乐观锁（expectedGraphVersion）会与磁盘永久错位，每次保存都
+  // REVISION_CONFLICT → 重载 → 再冲突，编辑永远无法落盘。这里检测到错位就
+  // 以 json 校准 DB 行（只推进版本与时间，不动名称等用户字段）。
+  if (file.meta.graphVersion !== meta.graphVersion) {
+    try {
+      getDb()
+        .prepare(
+          'UPDATE projects SET graph_version = ?, updated_at = ? WHERE id = ?'
+        )
+        .run(file.meta.graphVersion, Math.max(meta.updatedAt, file.meta.updatedAt), id)
+    } catch {
+      // DB 校准失败不阻塞打开：最坏情况是外部写入方再次出现版本错位，由
+      // 乐观锁兜底（文件不会被覆盖）。
+    }
+    file.meta = {
+      ...meta,
+      graphVersion: file.meta.graphVersion,
+      updatedAt: Math.max(meta.updatedAt, file.meta.updatedAt)
+    }
+    return file
+  }
   file.meta = meta
   return file
 }

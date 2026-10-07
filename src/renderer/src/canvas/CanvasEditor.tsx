@@ -289,6 +289,9 @@ export function CanvasEditor({
   const [dragOver, setDragOver] = useState(false)
   // 外部文件拖入时只在指针落点提供反馈，不能用整张画布的高亮边框抢走视觉焦点。
   const [dropPoint, setDropPoint] = useState<{ x: number; y: number } | null>(null)
+  // W8：自动保存被暂停（快照恢复失败）必须常驻可见——一次性 toast 消失后用户
+  // 对「编辑不会落盘」毫无感知，实测会静默丢掉整轮工作。
+  const [savePaused, setSavePaused] = useState(false)
 
   // 外部文件的 drop/dragend 可能先被 tldraw 内层元素消费。无论导入是否成功，
   // 只要松手或拖拽源结束，投放浮标都必须立即撤掉，绝不能滞留在画布上。
@@ -680,6 +683,16 @@ export function CanvasEditor({
       const repaired = repairTldrawSnapshot(res.data.tldrawSnapshot) as never as {
         store: Record<string, unknown>
       }
+      if (!repaired || !repaired.store) {
+        // 磁盘版本没有 tldraw 快照（外部创建或旧格式项目）：没有可合并的磁盘画布
+        // 内容，保留本地编辑并只对齐版本号，让下一次保存恢复正常落盘，而不是把
+        // 「无可合并快照」当成损坏进入永久暂停。
+        graphVersionRef.current = res.data.meta.graphVersion
+        restoreFailedRef.current = false
+        setSavePaused(false)
+        toast('磁盘版本未携带画布快照，已对齐版本号并恢复自动保存', 4000)
+        return
+      }
       const merged = mergeUnsavedLocalRecords(
         repaired,
         localDocument as {
@@ -692,6 +705,10 @@ export function CanvasEditor({
       )
       editor.store.loadStoreSnapshot(editor.store.migrateSnapshot(merged as never))
       graphVersionRef.current = res.data.meta.graphVersion
+      // W8：重载成功即恢复自动保存。此前 restoreFailedRef 一旦置位整会话不清除，
+      // 用户在「重载成功」后依然处于静默不落盘状态（实测丢过整轮节点）。
+      restoreFailedRef.current = false
+      setSavePaused(false)
       // 相机与选中在 loadStoreSnapshot 中被重置，这里恢复重载前的视角
       editor.setCamera(camera)
       if (selectedIds.length > 0 && selectedIds.every((id) => editor.getShape(id))) {
@@ -705,6 +722,7 @@ export function CanvasEditor({
     } catch {
       reportCanvasFailure(project.id, 'conflict-reload')
       restoreFailedRef.current = true
+      setSavePaused(true)
       toast('外部修改加载失败，已暂停自动保存，以防覆盖原有数据', 6000)
     }
   }
@@ -1352,7 +1370,8 @@ export function CanvasEditor({
       mode: 'json',
       jsonSchema: { id: 'storyboard.shots', version: 1 },
       temperature: 0.7,
-      maxTokens: 4096
+      maxTokens: 4096,
+      retry: { maxRetries: 0, backoffMs: 2000 }
     }
     const pick = (type: NodeTypeId): { id: TLShapeId; w: number; h: number } => {
       const spec = getNodeType(type)!
@@ -1536,6 +1555,7 @@ export function CanvasEditor({
       } catch {
         reportCanvasFailure(project.id, 'mount-restore')
         restoreFailedRef.current = true
+        setSavePaused(true)
         toast('画布数据恢复失败，已暂停自动保存，以防覆盖原有数据', 6000)
         return () => {
           if (editorRef.current === editor) editorRef.current = null
@@ -1930,6 +1950,22 @@ export function CanvasEditor({
       onDropCapture={(e) => void handleDrop(e)}
       onPasteCapture={(e) => void handlePaste(e)}
     >
+      {savePaused && (
+        <div className="save-paused-banner" role="alert">
+          <span>
+            自动保存已暂停：画布数据恢复失败，此时的编辑不会落盘。可重试从磁盘重新加载（本地未
+            保存的新增内容会被保留合并）。
+          </span>
+          <button
+            type="button"
+            className="save-paused-retry"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => void reloadFromDisk()}
+          >
+            重试加载
+          </button>
+        </div>
+      )}
       <Tldraw
         onMount={handleMount}
         getShapeVisibility={artifactShapeVisibility}

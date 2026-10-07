@@ -1,4 +1,5 @@
 import type { ProviderSpecId } from './types'
+import { parseRetryConfig } from './engine/retry'
 
 /** 图片生成的稳定配置；比例是用户意图，尺寸是当前模型的实际落点。 */
 export type ImageResolution = '1k' | '2k' | '4k'
@@ -84,6 +85,8 @@ export interface ImageGenerationConfig {
   seed?: number
   /** 本次生成的独立图片数量。执行器逐张产出，避免假定所有供应商都支持 n 参数。 */
   count: number
+  /** 供应商波动自动重试（W1）；执行器读取，归一化时原样保留。 */
+  retry?: { maxRetries: number; backoffMs: number }
 }
 
 const IMAGE_RESOLUTIONS: ImageResolution[] = ['1k', '2k', '4k']
@@ -308,6 +311,8 @@ export function normalizeImageGenerationConfig(
     // 与分辨率同理：配置层保留用户意图，发送与否由能力表在网关决定（parseImageGen 用保守表归一化）。
     ...(input.background === 'transparent' ? { background: 'transparent' as const } : {}),
     ...(typeof input.seed === 'number' && Number.isFinite(input.seed) ? { seed: input.seed } : {}),
+    // W1：retry 是节点配置的一部分，随归一化原样保留（钳制交给 parseRetryConfig）。
+    ...(input.retry ? { retry: parseRetryConfig(input) } : {}),
     count
   }
 }

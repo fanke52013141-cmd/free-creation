@@ -234,6 +234,28 @@ export function AiProcessSettings({ shape, editor }: NodeSettingsProps): React.J
           value={config.maxTokens}
           onChange={(event) => save({ maxTokens: Number(event.target.value) || 4096 })}
         />
+        <label
+          className="opt-label"
+          htmlFor={`ai-process-retry-${shape.id}`}
+          title="失败后自动重试次数（仅限空返回 / 坏 JSON / 网络与 5xx 等瞬时错误）；重试可能产生额外请求费用"
+        >
+          自动重试
+        </label>
+        <input
+          id={`ai-process-retry-${shape.id}`}
+          type="number"
+          min="0"
+          max="5"
+          value={config.retry.maxRetries}
+          onChange={(event) =>
+            save({
+              retry: {
+                maxRetries: Math.min(5, Math.max(0, Number(event.target.value) || 0)),
+                backoffMs: config.retry.backoffMs
+              }
+            })
+          }
+        />
       </div>
     </section>
   )

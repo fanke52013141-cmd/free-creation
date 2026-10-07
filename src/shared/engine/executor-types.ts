@@ -147,6 +147,12 @@ export interface NodeExecutionContext {
   outgoing?: Array<{ nodeId: string; fromPortId: string; toPortId: string }>
   runSubflow?: (request: SubflowRequest) => Promise<SubflowOutput>
   restoreSubflowInputs?: (request: Pick<SubflowRequest, 'nodeIds' | 'iterationNodeId'>) => void
+  /**
+   * 宿主是否支持并行执行循环项（W2）。renderer 的循环体卡片是逐项复用的共享
+   * 状态，未做循环体虚拟化前不能并行——未声明时 iterate 并发配置自动降级为 1。
+   * headless / 未来虚拟化宿主可显式置 true。
+   */
+  parallelItems?: boolean
 }
 
 export interface ProducedArtifact {
