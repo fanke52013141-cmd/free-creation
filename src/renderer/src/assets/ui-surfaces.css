@@ -1324,7 +1324,8 @@ button {
 }
 
 .palette-item {
-  will-change: transform;
+  /* 由菜单容器持有合成层，避免每个图标常驻一张 GPU 纹理。 */
+  will-change: auto;
 }
 
 /* 一级分类与二级节点采用透明级联菜单。 */
@@ -5476,3 +5477,22 @@ button {
 .resource-queue-summary:hover, .resource-queue-control[open] > summary { background: var(--card-hover); color: var(--txt); }
 .resource-queue-count { display: inline-flex; align-items: center; gap: 5px; font-variant-numeric: tabular-nums; }
 .resource-queue-summary:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+/* 固定操作界面独立合成：相机缩放只重绘画布，不反复重光栅化菜单文字。
+   不使用 paint containment（会裁掉鱼眼、提示框和二级菜单），不覆盖定位 transform。 */
+.canvas-topbar,
+.node-palette,
+.palette-node-flyout,
+.palette-utility,
+.canvas-dock,
+.multiselect-toolbar {
+  isolation: isolate;
+  will-change: transform;
+}
+
+.canvas-topbar,
+.dock-minimap-popup,
+.multiselect-toolbar__island {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}

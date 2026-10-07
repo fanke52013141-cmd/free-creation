@@ -116,11 +116,14 @@ function organizeCanvas(editor: Editor): void {
     const width = Math.max(1, viewport.w - left - 32)
     const height = Math.max(1, viewport.h - top - 88)
     const zoom = Math.min(1, width / Math.max(1, box.w), height / Math.max(1, box.h))
-    editor.setCamera({
-      x: (left + width / 2) / zoom - box.center.x,
-      y: (top + height / 2) / zoom - box.center.y,
-      z: zoom
-    }, { animation: { duration: 300 } })
+    editor.setCamera(
+      {
+        x: (left + width / 2) / zoom - box.center.x,
+        y: (top + height / 2) / zoom - box.center.y,
+        z: zoom
+      },
+      { animation: { duration: 300 } }
+    )
   }
 }
 
@@ -204,28 +207,55 @@ export function CanvasBottomDock({ editor }: DockProps): React.JSX.Element {
     }
   }, [])
 
-  // 监听 store 变化 + 相机变化：用微任务批处理而非 rAF，减少延迟
+  // 相机变化只更新视口；地图关闭时不扫描图，打开时再读取最新文档。
+  // 同一帧的多次 store 通知合并，避免缩放挤占固定工具栏的绘制时间。
   useEffect(() => {
     if (!editor) return
-    let pending = false
+    let frame: number | null = null
+    let graphDirty = true
+    let selection = ''
     const flush = (): void => {
-      pending = false
-      setData(readData(editor))
+      frame = null
+      const nextSelection = editor.getSelectedShapeIds().join(',')
+      if (showMap && (graphDirty || selection !== nextSelection)) {
+        setData(readData(editor))
+        graphDirty = false
+        selection = nextSelection
+        return
+      }
+      const vp = editor.getViewportPageBounds()
+      const zoom = editor.getCamera().z
+      setData((previous) => {
+        const viewport = { x: vp.minX, y: vp.minY, w: vp.w, h: vp.h }
+        if (
+          previous.zoom === zoom &&
+          previous.viewport?.x === viewport.x &&
+          previous.viewport?.y === viewport.y &&
+          previous.viewport?.w === viewport.w &&
+          previous.viewport?.h === viewport.h
+        )
+          return previous
+        return { ...previous, zoom, viewport }
+      })
     }
     const schedule = (): void => {
-      if (pending) return
-      pending = true
-      // 微任务：比 rAF 更快响应，解决拖拽时"不跟手"
-      Promise.resolve().then(flush)
+      if (frame === null) frame = requestAnimationFrame(flush)
     }
-    const unsub1 = editor.store.listen(schedule, { scope: 'document' })
+    const unsub1 = editor.store.listen(
+      () => {
+        graphDirty = true
+        schedule()
+      },
+      { scope: 'document' }
+    )
     const unsub2 = editor.store.listen(schedule, { scope: 'session' })
     schedule()
     return () => {
       unsub1?.()
       unsub2?.()
+      if (frame !== null) cancelAnimationFrame(frame)
     }
-  }, [editor, readData])
+  }, [editor, readData, showMap])
 
   // 画布整理快捷键 Shift + Alt + F
   useEffect(() => {
