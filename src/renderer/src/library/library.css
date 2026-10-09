@@ -104,9 +104,10 @@
 .library-detail-archive { padding: 7px 9px; color: #aab5c9; background: transparent; border: 0; font-size: 10px; cursor: pointer; }
 .library-detail-loading { flex: 1; display: grid; place-items: center; color: #8692a8; font-size: 11px; }
 
-.assets-source-switch { display: flex; gap: 4px; padding: 8px 10px; border-bottom: 1px solid rgb(162 176 205 / 12%); }
-.assets-source-switch button { flex: 1; height: 29px; color: #8e9ab0; background: transparent; border: 0; border-radius: 6px; font-size: 10px; cursor: pointer; }
-.assets-source-switch button.active { color: #e1e7f4; background: #252e46; }
+.assets-source-switch { display: flex; gap: 3px; padding: 3px; border: 1px solid var(--border-soft); border-radius: 9px; background: var(--sunk); }
+.assets-source-switch button { flex: 1; height: 26px; color: var(--muted); background: transparent; border: 0; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; transition: color 140ms ease, background-color 140ms ease; }
+.assets-source-switch button:hover { color: var(--txt); }
+.assets-source-switch button.active { color: #c1edff; background: rgba(66, 185, 245, 0.14); box-shadow: inset 0 0 0 1px rgba(98, 199, 246, 0.22); }
 .library-picker { min-height: 200px; padding: 11px; }
 .library-picker-intro strong { color: #dce4f3; font-size: 11px; }
 .library-picker-intro p { margin: 5px 0 10px; color: #7f8ca2; font-size: 9px; line-height: 1.55; }

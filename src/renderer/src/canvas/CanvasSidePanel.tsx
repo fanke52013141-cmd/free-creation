@@ -671,7 +671,7 @@ export function CanvasSidePanel({
 }: CanvasSidePanelProps): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   const [runFocus, setRunFocus] = useState<RunFocus>(null)
-  const [assetSelectionMode, setAssetSelectionMode] = useState(true)
+  const [assetSelectionMode, setAssetSelectionMode] = useState(false)
 
   useEffect(() => {
     if (!tab) return
