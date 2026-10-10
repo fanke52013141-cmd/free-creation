@@ -193,9 +193,9 @@
 .project-home-name {
   display: block;
   overflow: hidden;
-  padding-right: 78px;
   color: #f1f5f9;
   font-size: 13px;
+  line-height: 22px;
   font-weight: 500;
   letter-spacing: 0.025em;
   text-overflow: ellipsis;
@@ -209,8 +209,8 @@
 
 .project-home-card-actions {
   position: absolute;
-  top: 12px;
   right: 12px;
+  bottom: 44px;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -284,6 +284,7 @@
   color: rgba(148, 163, 184, 0.8);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 11px;
+  line-height: 14px;
   font-variant-numeric: tabular-nums;
 }
 
