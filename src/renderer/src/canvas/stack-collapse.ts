@@ -69,7 +69,13 @@ export function collapseGroup(editor: Editor, groupId: TLShapeId, label?: string
         type: 'node-card' as const,
         x: base.x + index * STACK_STEP,
         y: base.y + index * STACK_STEP,
-        meta: { ...card.meta, stackRole: index === 0 ? 'top' : 'member' }
+        meta: {
+          ...card.meta,
+          stackRole: index === 0 ? 'top' : 'member',
+          // meta 必须是纯 JSON：undefined 会让 tldraw 校验拒绝整次更新。
+          // 成员卡不消费该值，占位 0 即可。
+          stackCount: index === 0 ? cards.length : (card.meta.stackCount ?? 0)
+        }
       }))
     )
     editor.updateShape({
@@ -146,8 +152,57 @@ export function collapseSelection(
   return groupId
 }
 
-/** 展开/收拢切换：分组标签条上的图标按钮使用。 */
+/** 展开/收拢切换：折叠节点右上角的展开图标使用。 */
 export function toggleGroupCollapse(editor: Editor, groupId: TLShapeId): void {
   if (isGroupCollapsed(editor, groupId)) expandGroup(editor, groupId)
   else collapseGroup(editor, groupId)
+}
+
+/** 折叠组合内仍在堆叠位置之外（被单独拖离）的成员卡恢复标题与端口。
+ *  成员呈现（隐藏标题/端口）跟随的是卡片自身 meta 标记；用户把某张卡从堆叠里
+ *  拖走后，标记不会自己消失，必须按实时位置校正，否则那张卡永远没有标题。 */
+const FREE_DISTANCE = 48
+
+export function reconcileCollapsedStacks(editor: Editor): void {
+  const updates: {
+    id: TLShapeId
+    type: 'node-card'
+    meta: Record<string, string | number | boolean | null>
+  }[] = []
+  for (const shape of editor.getCurrentPageShapes()) {
+    if (shape.type !== 'group' || !isGroupCollapsed(editor, shape.id)) continue
+    const cards = nodeCardsInGroup(editor, shape.id)
+    const top = cards.find(
+      (card) => (card.meta as Record<string, unknown> | undefined)?.stackRole === 'top'
+    )
+    if (!top) continue
+    cards.forEach((card, index) => {
+      if ((card.meta as Record<string, unknown> | undefined)?.stackRole !== 'member') return
+      const expectedX = top.x + index * STACK_STEP
+      const expectedY = top.y + index * STACK_STEP
+      if (Math.abs(card.x - expectedX) > FREE_DISTANCE || Math.abs(card.y - expectedY) > FREE_DISTANCE) {
+        updates.push({
+          id: card.id,
+          type: 'node-card',
+          meta: { ...card.meta, stackRole: '' }
+        })
+      }
+    })
+  }
+  if (updates.length > 0) editor.updateShapes(updates)
+}
+
+/** 折叠组合当前包含的节点（运行入口使用；被拖离的成员不计入）。 */
+export function collapsedGroupNodeIds(editor: Editor, groupId: TLShapeId): TLShapeId[] {
+  const cards = nodeCardsInGroup(editor, groupId)
+  const top = cards.find(
+    (card) => (card.meta as Record<string, unknown> | undefined)?.stackRole === 'top'
+  )
+  if (!top) return cards.map((card) => card.id)
+  return cards
+    .filter((card) => {
+      const role = (card.meta as Record<string, unknown> | undefined)?.stackRole
+      return role === 'top' || role === 'member'
+    })
+    .map((card) => card.id)
 }

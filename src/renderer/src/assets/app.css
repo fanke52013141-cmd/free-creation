@@ -1036,7 +1036,7 @@ select:focus-visible,
   pointer-events: auto;
 }
 
-/* 分组折叠/展开按钮：与分组名同一行，靠右对齐。
+/* 分组折叠按钮：展开态分组的标签条右侧，点击重新收拢成堆叠。
    图层容器 pointer-events: none，按钮必须显式恢复 auto。 */
 .canvas-group-collapse-btn {
   position: absolute;
@@ -1066,9 +1066,80 @@ select:focus-visible,
   color: #9cc2ec;
 }
 
-.canvas-group-collapse-btn.is-collapsed {
-  border-color: rgba(93, 156, 236, 0.5);
+/* 折叠组合：右上角的【展开】【运行】浮动图标（运行在右，展开在左）。
+   容器本身不占交互，定位锚定堆叠的整体范围。 */
+.canvas-combo-actions {
+  position: absolute;
+  pointer-events: none;
+}
+
+.canvas-combo-actions .canvas-combo-btn {
+  position: absolute;
+  top: calc(-26px * var(--combo-zoom, 1));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(24px * var(--combo-zoom, 1));
+  height: calc(20px * var(--combo-zoom, 1));
+  padding: 0;
+  border: 1px solid rgba(231, 238, 247, 0.22);
+  border-radius: 6px;
+  background: rgba(16, 21, 29, 0.85);
+  color: rgba(218, 227, 237, 0.75);
+  cursor: pointer;
+  pointer-events: auto;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.canvas-combo-actions .canvas-combo-btn:hover {
+  border-color: rgba(93, 156, 236, 0.65);
+  background: rgba(26, 34, 46, 0.95);
   color: #9cc2ec;
+}
+
+/* 展开在左、运行在右：以容器右缘为基准反推两个按钮的位置。 */
+.canvas-combo-actions .canvas-combo-btn:first-of-type {
+  right: calc(30px * var(--combo-zoom, 1));
+}
+
+.canvas-combo-actions .canvas-combo-btn.canvas-combo-run {
+  right: 0;
+  border-color: rgba(103, 208, 146, 0.4);
+  color: rgba(150, 222, 188, 0.9);
+}
+
+.canvas-combo-actions .canvas-combo-btn.canvas-combo-run:hover {
+  border-color: rgba(103, 208, 146, 0.7);
+  background: rgba(22, 38, 31, 0.95);
+  color: #a5e8c8;
+}
+
+/* 折叠组合首位卡的摘要正文：组合内单个节点的信息不再呈现。 */
+.node-combo-summary {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 18px 14px;
+  user-select: none;
+}
+
+.node-combo-count {
+  color: #dfe7f2;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+}
+
+.node-combo-hint {
+  color: rgba(148, 163, 184, 0.75);
+  font-size: 11px;
+  letter-spacing: 0.02em;
 }
 
 /* 折叠堆叠的成员卡片：隐藏悬浮在卡片上方的标题行，堆叠只露卡片层级边缘。 */

@@ -754,8 +754,12 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     ]
   }, [layoutKey])
   // 折叠堆叠的成员卡片不呈现端口：只露层级边缘，端口圆点会戳出堆叠轮廓。
-  const stackMember =
-    (shape.meta as Record<string, unknown> | undefined)?.stackRole === 'member'
+  // 首位卡（stackRole=top）承担"折叠节点"呈现：隐藏正文与属性入口，
+  // 由卡片右上角的展开/运行图标提供组合级操作。
+  const stackMeta = shape.meta as Record<string, unknown> | undefined
+  const stackMember = stackMeta?.stackRole === 'member'
+  const comboTop = stackMeta?.stackRole === 'top'
+  const stackCount = typeof stackMeta?.stackCount === 'number' ? stackMeta.stackCount : 0
   const visibleInPorts = stackMember ? [] : inLayout.ports
   const visibleOutPorts = stackMember ? [] : outLayout.ports
   const visibleInY = inLayout.offsets
@@ -1137,66 +1141,74 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             <span className="node-text-count">{formatCharCount(shape.props.text.length)}</span>
           )}
           {/* info 按钮（查看输入输出说明）：紧跟节点名称，点击显式打开右侧契约面板。
-                对话节点也必须能查看与其他节点相同的输入输出契约。标题必须和 openNodePanel 的
-                去向一致——预演台从卡片按钮进，这里写「打开 3D 预演台」会是假提示。 */}
-          <button
-            className="node-info-btn"
-            title="查看输入输出说明"
-            aria-label="打开节点说明"
-            onPointerDown={handleInfoOpen}
-            onClick={(e) => {
-              e.stopPropagation()
-              openNodePanel()
-            }}
-          >
-            <Icon name="document" size={16} />
-          </button>
-          {/* 弹性占位：运行与状态都固定在标题行的右侧。 */}
-          <span className="node-header-spacer" />
-          {shape.meta.nodeHeightMode === 'manual' && (
+              对话节点也必须能查看与其他节点相同的输入输出契约。标题必须和 openNodePanel 的
+              去向一致——预演台从卡片按钮进，这里写「打开 3D 预演台」会是假提示。
+              折叠组合的首位卡不提供单节点属性入口，组合级操作在右上角图标。 */}
+          {!comboTop && (
             <button
               className="node-info-btn"
-              aria-label={shape.props.nodeType === 'storyboard' ? '恢复内容自适应' : '恢复自动高度'}
-              title={shape.props.nodeType === 'storyboard' ? '恢复内容自适应' : '恢复自动高度'}
-              onPointerDown={stopEventPropagation}
-              onClick={(event) => {
-                event.stopPropagation()
-                editor.updateShape({
-                  id: shape.id,
-                  type: 'node-card',
-                  meta: { ...shape.meta, nodeHeightMode: 'auto' }
-                })
+              title="查看输入输出说明"
+              aria-label="打开节点说明"
+              onPointerDown={handleInfoOpen}
+              onClick={(e) => {
+                e.stopPropagation()
+                openNodePanel()
               }}
             >
-              <Icon name="arrow" size={16} />
+              <Icon name="document" size={16} />
             </button>
           )}
-          <span
-            className={`node-status node-status-${shape.props.exec}`}
-            style={{ background: EXEC_COLORS[shape.props.exec] ?? EXEC_COLORS.idle }}
-            title={`${statusLabel} · ${readinessWithFreshness.label}`}
-            aria-label={`${statusLabel} · ${readinessWithFreshness.label}`}
-          />
-          {spec?.executor && (
-            <span className="node-action-float" aria-label="节点动作">
-              <Tooltip label={runBlockedReason ?? '运行节点'}>
+          {/* 弹性占位：运行与状态都固定在标题行的右侧。
+              折叠组合的首位卡隐藏单节点状态与运行入口，组合级运行在右上角图标。 */}
+          <span className="node-header-spacer" />
+          {!comboTop && (
+            <>
+              {shape.meta.nodeHeightMode === 'manual' && (
                 <button
-                  className="node-run-btn"
-                  aria-label="运行节点"
-                  disabled={Boolean(runBlockedReason)}
-                  onPointerDown={(event) => stopEventPropagation(event)}
+                  className="node-info-btn"
+                  aria-label={shape.props.nodeType === 'storyboard' ? '恢复内容自适应' : '恢复自动高度'}
+                  title={shape.props.nodeType === 'storyboard' ? '恢复内容自适应' : '恢复自动高度'}
+                  onPointerDown={stopEventPropagation}
                   onClick={(event) => {
-                    stopEventPropagation(event)
-                    if (project && !runBlockedReason) {
-                      void runNodeManually(editor, project.id, providers, shape.id)
-                    }
+                    event.stopPropagation()
+                    editor.updateShape({
+                      id: shape.id,
+                      type: 'node-card',
+                      meta: { ...shape.meta, nodeHeightMode: 'auto' }
+                    })
                   }}
                 >
-                  {/* 与 ui-surfaces 对 .node-run-btn svg 的强制 16px 保持一致 */}
-                  <Icon name="play" size={16} />
+                  <Icon name="arrow" size={16} />
                 </button>
-              </Tooltip>
-            </span>
+              )}
+              <span
+                className={`node-status node-status-${shape.props.exec}`}
+                style={{ background: EXEC_COLORS[shape.props.exec] ?? EXEC_COLORS.idle }}
+                title={`${statusLabel} · ${readinessWithFreshness.label}`}
+                aria-label={`${statusLabel} · ${readinessWithFreshness.label}`}
+              />
+              {spec?.executor && (
+                <span className="node-action-float" aria-label="节点动作">
+                  <Tooltip label={runBlockedReason ?? '运行节点'}>
+                    <button
+                      className="node-run-btn"
+                      aria-label="运行节点"
+                      disabled={Boolean(runBlockedReason)}
+                      onPointerDown={(event) => stopEventPropagation(event)}
+                      onClick={(event) => {
+                        stopEventPropagation(event)
+                        if (project && !runBlockedReason) {
+                          void runNodeManually(editor, project.id, providers, shape.id)
+                        }
+                      }}
+                    >
+                      {/* 与 ui-surfaces 对 .node-run-btn svg 的强制 16px 保持一致 */}
+                      <Icon name="play" size={16} />
+                    </button>
+                  </Tooltip>
+                </span>
+              )}
+            </>
           )}
         </div>
         <div
@@ -1222,16 +1234,27 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               }
             >
               <div ref={bodyRef} className="node-body">
-                {!hasDedicatedInputSurface && (
-                  <ConnectedInputPreview
-                    editor={editor}
-                    shape={shape}
-                    openPreview={openMediaPreview}
-                  />
+                {comboTop ? (
+                  /* 折叠组合的首位卡：组合内单个节点的正文失去意义，
+                     只呈现组合规模与操作提示，具体内容展开后查看。 */
+                  <div className="node-combo-summary">
+                    <span className="node-combo-count">组合 · {stackCount} 个节点</span>
+                    <span className="node-combo-hint">右上角图标可展开或运行整个组合</span>
+                  </div>
+                ) : (
+                  <>
+                    {!hasDedicatedInputSurface && (
+                      <ConnectedInputPreview
+                        editor={editor}
+                        shape={shape}
+                        openPreview={openMediaPreview}
+                      />
+                    )}
+                    <div className="node-body-content">
+                      <spec.Body shape={shape} openPreview={openMediaPreview} />
+                    </div>
+                  </>
                 )}
-                <div className="node-body-content">
-                  <spec.Body shape={shape} openPreview={openMediaPreview} />
-                </div>
               </div>
             </NodeCardShell>
           )}

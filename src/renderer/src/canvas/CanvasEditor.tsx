@@ -1977,7 +1977,13 @@ export function CanvasEditor({
         }}
         components={TL_COMPONENTS}
       />
-      {editorInstance && <GroupOutlineLayer editor={editorInstance} hostRef={wrapRef} />}
+      {editorInstance && (
+        <GroupOutlineLayer
+          editor={editorInstance}
+          hostRef={wrapRef}
+          onRunFlow={(ids) => void runWorkflowForNodes(editorInstance, project.id, providers, ids)}
+        />
+      )}
       {editorInstance && <DataEdgeLayer editor={editorInstance} hostRef={wrapRef} />}
       {/* 左侧节点面板：一级分类保持鱼眼 Dock，二级节点在右侧抽屉中展开。 */}
       <div className="node-palette">

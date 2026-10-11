@@ -10,7 +10,11 @@ import {
 import { markUndoPoint } from './history'
 import { beginConnectionDrag } from './connection-drag'
 import { batchConnectionFromSelection } from './batch-connection'
-import { toggleGroupCollapse } from './stack-collapse'
+import {
+  collapsedGroupNodeIds,
+  reconcileCollapsedStacks,
+  toggleGroupCollapse
+} from './stack-collapse'
 import { Icon } from '../components/Icon'
 import {
   SELECTION_FRAME_OUTSET_PX,
@@ -23,6 +27,8 @@ import type { ConnectionFrom } from '../stores/connection'
 interface GroupOutlineLayerProps {
   editor: Editor
   hostRef: RefObject<HTMLDivElement | null>
+  /** 折叠组合右上角"运行"图标：运行组合内全部节点（含依赖）。 */
+  onRunFlow: (ids: TLShapeId[]) => void
 }
 
 interface GroupOutline {
@@ -33,7 +39,17 @@ interface GroupOutline {
   height: number
   count: number
   label: string
-  collapsed: boolean
+  zoom: number
+}
+
+/** 折叠组合：不画分组框，只在堆叠右上角浮【展开】【运行】两个图标。 */
+interface CollapsedCombo {
+  id: TLShapeId
+  left: number
+  top: number
+  width: number
+  height: number
+  nodeCount: number
   zoom: number
 }
 
@@ -117,20 +133,37 @@ function selectionBoundsForNodes(
 function outlinesEqual(left: GroupOutline[], right: GroupOutline[]): boolean {
   return (
     left.length === right.length &&
-      left.every((item, index) => {
-        const other = right[index]
-        return (
-          item.id === other.id &&
-          item.left === other.left &&
-          item.top === other.top &&
-          item.width === other.width &&
-          item.height === other.height &&
-          item.count === other.count &&
-          item.label === other.label &&
-          item.collapsed === other.collapsed &&
-          item.zoom === other.zoom
-        )
-      })
+    left.every((item, index) => {
+      const other = right[index]
+      return (
+        item.id === other.id &&
+        item.left === other.left &&
+        item.top === other.top &&
+        item.width === other.width &&
+        item.height === other.height &&
+        item.count === other.count &&
+        item.label === other.label &&
+        item.zoom === other.zoom
+      )
+    })
+  )
+}
+
+function combosEqual(left: CollapsedCombo[], right: CollapsedCombo[]): boolean {
+  return (
+    left.length === right.length &&
+    left.every((item, index) => {
+      const other = right[index]
+      return (
+        item.id === other.id &&
+        item.left === other.left &&
+        item.top === other.top &&
+        item.width === other.width &&
+        item.height === other.height &&
+        item.nodeCount === other.nodeCount &&
+        item.zoom === other.zoom
+      )
+    })
   )
 }
 
@@ -147,8 +180,13 @@ const LABEL_BAND_HEIGHT = 20
  * 实际选择、移动、撤销和嵌套仍全部由 tldraw 的 groupShapes 管理。
  * 分组名保存在 group 形状的 meta.label（与 meta.nodeRun 等运行数据同层互不干扰）。
  */
-export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): React.JSX.Element {
+export function GroupOutlineLayer({
+  editor,
+  hostRef,
+  onRunFlow
+}: GroupOutlineLayerProps): React.JSX.Element {
   const [outlines, setOutlines] = useState<GroupOutline[]>([])
+  const [combos, setCombos] = useState<CollapsedCombo[]>([])
   const [selection, setSelection] = useState<SelectionOutline | null>(null)
   const [editingId, setEditingId] = useState<TLShapeId | null>(null)
 
@@ -157,6 +195,8 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
     const updateNow = (): void => {
       const host = hostRef.current
       if (!host) return
+      // 先校正被拖离堆叠的成员卡（恢复标题/端口），再计算本帧的视觉层。
+      reconcileCollapsedStacks(editor)
       const hostBounds = host.getBoundingClientRect()
       const zoom = editor.getCamera().z || 1
       // 线框定位在屏幕覆盖层中，节点 page bounds 先转成屏幕坐标；留白使用固定屏幕像素，
@@ -164,6 +204,7 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
       const sidePad = OUTLINE_SIDE_PAD
       const topPad = OUTLINE_HEADER_OVERHANG * zoom + OUTLINE_TOP_PAD
       const next: GroupOutline[] = []
+      const nextCombos: CollapsedCombo[] = []
 
       for (const shape of editor.getCurrentPageShapes()) {
         if (shape.type !== 'group') continue
@@ -171,26 +212,40 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
         if (!bounds) continue
         const topLeft = editor.pageToScreen({ x: bounds.x, y: bounds.y })
         const bottomRight = editor.pageToScreen({ x: bounds.maxX, y: bounds.maxY })
-        const count = editor
-          .getSortedChildIdsForParent(shape.id)
-          .filter((id) => editor.getShape(id)?.type === 'node-card').length
-        if (count < 2) continue
         const meta = shape.meta as Record<string, unknown> | undefined
         const label = typeof meta?.label === 'string' ? meta.label : ''
         const collapsed = meta?.collapsed === true
+        const nodeIds = editor
+          .getSortedChildIdsForParent(shape.id)
+          .filter((id) => editor.getShape(id)?.type === 'node-card')
+        if (nodeIds.length < 2) continue
+        // 折叠组合是"节点状态"而非分组：不画框、不出标签，
+        // 只在堆叠右上角浮【展开】【运行】两个图标。
+        if (collapsed) {
+          nextCombos.push({
+            id: shape.id,
+            left: topLeft.x - hostBounds.left - sidePad,
+            top: topLeft.y - hostBounds.top - topPad,
+            width: bottomRight.x - topLeft.x + sidePad * 2,
+            height: bottomRight.y - topLeft.y + topPad + sidePad,
+            nodeCount: collapsedGroupNodeIds(editor, shape.id).length,
+            zoom
+          })
+          continue
+        }
         next.push({
           id: shape.id,
           left: topLeft.x - hostBounds.left - sidePad,
           top: topLeft.y - hostBounds.top - topPad,
           width: bottomRight.x - topLeft.x + sidePad * 2,
           height: bottomRight.y - topLeft.y + topPad + sidePad,
-          count,
+          count: nodeIds.length,
           label,
-          collapsed,
           zoom
         })
       }
       setOutlines((current) => (outlinesEqual(current, next) ? current : next))
+      setCombos((current) => (combosEqual(current, nextCombos) ? current : nextCombos))
 
       // 多选不是分组：只在 2 个以上节点被同时选中时绘制细虚线范围框，
       // 让它和常驻的分组容器维持完全不同的视觉语义。
@@ -355,15 +410,53 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
           )}
           <button
             type="button"
-            className={`canvas-group-collapse-btn ${outline.collapsed ? 'is-collapsed' : ''}`}
-            aria-label={outline.collapsed ? '展开组合' : '折叠组合'}
-            title={outline.collapsed ? '展开组合' : '折叠组合'}
+            className="canvas-group-collapse-btn"
+            aria-label="折叠组合"
+            title="折叠组合"
             onClick={(event) => {
               event.stopPropagation()
               toggleGroupCollapse(editor, outline.id)
             }}
           >
-            <Icon name={outline.collapsed ? 'unfold' : 'fold'} size={14} />
+            <Icon name="fold" size={14} />
+          </button>
+        </div>
+      ))}
+      {combos.map((combo) => (
+        <div
+          key={combo.id}
+          className="canvas-combo-actions"
+          style={{
+            left: combo.left,
+            top: combo.top,
+            width: combo.width,
+            height: combo.height,
+            ['--combo-zoom' as string]: combo.zoom
+          }}
+        >
+          <button
+            type="button"
+            className="canvas-combo-btn"
+            aria-label="展开组合"
+            title={`展开组合（${combo.nodeCount} 个节点）`}
+            onClick={(event) => {
+              event.stopPropagation()
+              toggleGroupCollapse(editor, combo.id)
+            }}
+          >
+            <Icon name="unfold" size={14} />
+          </button>
+          <button
+            type="button"
+            className="canvas-combo-btn canvas-combo-run"
+            aria-label="运行组合"
+            title={`运行组合内 ${combo.nodeCount} 个节点及依赖`}
+            onClick={(event) => {
+              event.stopPropagation()
+              onRunFlow(collapsedGroupNodeIds(editor, combo.id))
+            }}
+          >
+            <Icon name="play" size={14} />
           </button>
         </div>
       ))}
