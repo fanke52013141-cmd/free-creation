@@ -11,7 +11,7 @@ interface Props {
   editor: Editor
   nodeIds: TLShapeId[]
   onClose: () => void
-  onSaved: (kind: 'template' | 'resource') => void
+  onSaved: (kind: 'template' | 'resource', name?: string) => void
 }
 
 export function WorkflowSaveDialog({
@@ -75,7 +75,7 @@ export function WorkflowSaveDialog({
         if (!result.ok) throw new Error(result.error.message)
       } else await saveWorkflow(title, extractTemplateFromSelection(nodes, edges))
       toast(`已保存${saveKind === 'resource' ? '素材资源' : '流程模板'}「${title}」`)
-      onSaved(saveKind)
+      onSaved(saveKind, title)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     } finally {

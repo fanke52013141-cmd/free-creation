@@ -80,6 +80,8 @@ export type IconName =
   | 'loader'
   | 'external'
   | 'download'
+  | 'fold'
+  | 'unfold'
 
 interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {
   name: IconName
@@ -542,6 +544,20 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M12 3v12" />
       <path d="m7 10 5 5 5-5" />
       <path d="M5 19h14" />
+    </>
+  ),
+  fold: (
+    <>
+      <rect x="5" y="13" width="14" height="6" rx="1.5" />
+      <path d="m7 10 10-4.5" />
+      <path d="m7 6.5 10-4.5" />
+    </>
+  ),
+  unfold: (
+    <>
+      <rect x="5" y="13" width="14" height="6" rx="1.5" />
+      <path d="m17 8.5-10 4.5" />
+      <path d="m17 3-10 4.5" />
     </>
   )
 }

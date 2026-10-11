@@ -45,6 +45,7 @@ import { NODE_PORT_OUTSET } from './edge-geometry'
 import { assetNodeTypeFor } from './asset-node-type'
 import type { AiProcessConfig } from '../engine/executors/aiProcess'
 import { markUndoPoint } from './history'
+import { collapseSelection } from './stack-collapse'
 import { getNodeType, allNodeTypes, needsNodeSizeMigration, nodeIconColor } from '../nodes/registry'
 import {
   registerBaseNodeTypes,
@@ -2147,7 +2148,13 @@ export function CanvasEditor({
           editor={editorInstance}
           nodeIds={workflowSaveSelection}
           onClose={() => setWorkflowSaveSelection(null)}
-          onSaved={(kind) => {
+          onSaved={(kind, name) => {
+            // 保存为流程模板后，把所选节点收拢成折叠堆叠，画布保持简洁；
+            // 分组名沿用模板名，标签条上的展开图标可随时还原布局。
+            if (kind === 'template' && workflowSaveSelection.length > 1) {
+              const editor = editorRef.current
+              if (editor) collapseSelection(editor, workflowSaveSelection, name)
+            }
             setWorkflowSaveSelection(null)
             setPanelTab(kind === 'resource' ? 'assets' : 'workflow')
           }}

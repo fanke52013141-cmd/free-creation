@@ -753,8 +753,11 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
       )
     ]
   }, [layoutKey])
-  const visibleInPorts = inLayout.ports
-  const visibleOutPorts = outLayout.ports
+  // 折叠堆叠的成员卡片不呈现端口：只露层级边缘，端口圆点会戳出堆叠轮廓。
+  const stackMember =
+    (shape.meta as Record<string, unknown> | undefined)?.stackRole === 'member'
+  const visibleInPorts = stackMember ? [] : inLayout.ports
+  const visibleOutPorts = stackMember ? [] : outLayout.ports
   const visibleInY = inLayout.offsets
   const visibleOutY = outLayout.offsets
 
@@ -1024,7 +1027,11 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
     <HTMLContainer style={{ pointerEvents: 'all' }}>
       {/* 外层包一层无裁切的容器：端口圆点要压在卡片边缘外侧，不能被卡片 overflow:hidden 裁掉 */}
       <div
-        className={`node-card-wrap ${selected ? 'is-selected' : ''}`}
+        className={`node-card-wrap ${selected ? 'is-selected' : ''} ${
+          (shape.meta as Record<string, unknown> | undefined)?.stackRole === 'member'
+            ? 'stack-member'
+            : ''
+        }`}
         data-node-id={shape.id}
         style={{ width: shape.props.w, height: shape.props.h }}
         onPointerDown={handleCardPointerDown}

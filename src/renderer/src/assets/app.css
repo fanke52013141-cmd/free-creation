@@ -1036,6 +1036,46 @@ select:focus-visible,
   pointer-events: auto;
 }
 
+/* 分组折叠/展开按钮：与分组名同一行，靠右对齐。
+   图层容器 pointer-events: none，按钮必须显式恢复 auto。 */
+.canvas-group-collapse-btn {
+  position: absolute;
+  top: calc(-26px * var(--group-zoom, 1));
+  right: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(24px * var(--group-zoom, 1));
+  height: calc(20px * var(--group-zoom, 1));
+  padding: 0;
+  border: 1px solid rgba(231, 238, 247, 0.22);
+  border-radius: 6px;
+  background: rgba(16, 21, 29, 0.85);
+  color: rgba(218, 227, 237, 0.75);
+  cursor: pointer;
+  pointer-events: auto;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.canvas-group-collapse-btn:hover {
+  border-color: rgba(93, 156, 236, 0.65);
+  background: rgba(26, 34, 46, 0.95);
+  color: #9cc2ec;
+}
+
+.canvas-group-collapse-btn.is-collapsed {
+  border-color: rgba(93, 156, 236, 0.5);
+  color: #9cc2ec;
+}
+
+/* 折叠堆叠的成员卡片：隐藏悬浮在卡片上方的标题行，堆叠只露卡片层级边缘。 */
+.node-card-wrap.stack-member .node-header {
+  display: none;
+}
+
 .canvas-selection-underlay {
   position: absolute;
   box-sizing: border-box;

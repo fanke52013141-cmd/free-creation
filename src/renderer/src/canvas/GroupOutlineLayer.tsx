@@ -10,6 +10,8 @@ import {
 import { markUndoPoint } from './history'
 import { beginConnectionDrag } from './connection-drag'
 import { batchConnectionFromSelection } from './batch-connection'
+import { toggleGroupCollapse } from './stack-collapse'
+import { Icon } from '../components/Icon'
 import {
   SELECTION_FRAME_OUTSET_PX,
   selectionBoundsUnion,
@@ -31,6 +33,7 @@ interface GroupOutline {
   height: number
   count: number
   label: string
+  collapsed: boolean
   zoom: number
 }
 
@@ -114,19 +117,20 @@ function selectionBoundsForNodes(
 function outlinesEqual(left: GroupOutline[], right: GroupOutline[]): boolean {
   return (
     left.length === right.length &&
-    left.every((item, index) => {
-      const other = right[index]
-      return (
-        item.id === other.id &&
-        item.left === other.left &&
-        item.top === other.top &&
-        item.width === other.width &&
-        item.height === other.height &&
-        item.count === other.count &&
-        item.label === other.label &&
-        item.zoom === other.zoom
-      )
-    })
+      left.every((item, index) => {
+        const other = right[index]
+        return (
+          item.id === other.id &&
+          item.left === other.left &&
+          item.top === other.top &&
+          item.width === other.width &&
+          item.height === other.height &&
+          item.count === other.count &&
+          item.label === other.label &&
+          item.collapsed === other.collapsed &&
+          item.zoom === other.zoom
+        )
+      })
   )
 }
 
@@ -173,6 +177,7 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
         if (count < 2) continue
         const meta = shape.meta as Record<string, unknown> | undefined
         const label = typeof meta?.label === 'string' ? meta.label : ''
+        const collapsed = meta?.collapsed === true
         next.push({
           id: shape.id,
           left: topLeft.x - hostBounds.left - sidePad,
@@ -181,6 +186,7 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
           height: bottomRight.y - topLeft.y + topPad + sidePad,
           count,
           label,
+          collapsed,
           zoom
         })
       }
@@ -248,10 +254,11 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
   }, [editor, hostRef])
 
   // 双击分组名进入重命名：捕获阶段在 tldraw / 画布双击逻辑之前命中标签条带。
-  // 常规单击/拖拽完全不受影响（本层 pointer-events: none，双击检测不占用任何交互）。
+  // 折叠/展开按钮上的双击不属于重命名意图，先排除。
   useEffect(() => {
     const onDblClick = (e: MouseEvent): void => {
       if (editingId !== null) return
+      if (e.target instanceof Element && e.target.closest('button')) return
       const host = hostRef.current
       if (!host) return
       const hostBounds = host.getBoundingClientRect()
@@ -346,6 +353,18 @@ export function GroupOutlineLayer({ editor, hostRef }: GroupOutlineLayerProps): 
                 : `分组 · ${outline.count} 个节点`}
             </span>
           )}
+          <button
+            type="button"
+            className={`canvas-group-collapse-btn ${outline.collapsed ? 'is-collapsed' : ''}`}
+            aria-label={outline.collapsed ? '展开组合' : '折叠组合'}
+            title={outline.collapsed ? '展开组合' : '折叠组合'}
+            onClick={(event) => {
+              event.stopPropagation()
+              toggleGroupCollapse(editor, outline.id)
+            }}
+          >
+            <Icon name={outline.collapsed ? 'unfold' : 'fold'} size={14} />
+          </button>
         </div>
       ))}
       {batchPort}
