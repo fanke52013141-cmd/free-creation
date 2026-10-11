@@ -4,7 +4,7 @@ An Electron application with React and TypeScript
 
 ## Architecture Rules
 
-- [画布原生 Agent Flow 方案](./docs/canvas-agent-flow/README.md) — 当前唯一 Agent Flow 设计：主 Agent 是画布节点，节点完成执行、状态交互和成果承载；尚未实现。
+- [画布原生 Agent Flow 方案](./docs/canvas-agent-flow/README.md) — 当前唯一 Agent Flow 设计：上帝 Agent 构建，主 Agent 协调，专业 Agent 执行；状态机和成果均由画布节点承载。包含节点协同规范，尚未实现。
 - [Logging and diagnostics specification](./LOGGING_SPEC.md) — required impact assessment for every feature change, with implementation plan and coverage checklist.
 - [Node input/output contract specification](./NODE_CONTRACT_SPEC.md) — required reading before adding or changing a node.
 - [Development roadmap](./ROADMAP.md) — recommended implementation order and acceptance criteria.

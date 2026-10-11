@@ -1,5 +1,7 @@
 # 节点全量审查报告 · ①文本节点（text）
 
+> 历史审计记录：旧 Agent/CLI/MCP/headless 已下线，相关修复建议不再是开发任务。本文保留缺陷证据；当前 Agent Flow 仅遵循[画布原生方案](canvas-agent-flow/README.md)。
+
 > 审查日期：2026-09-12。依据 [NODE_FULL_AUDIT_TEST_PLAN_2026_09_12.md](./NODE_FULL_AUDIT_TEST_PLAN_2026_09_12.md) 执行。
 > 环境：`main@7719701`，浏览器演示（`npm run dev:browser`，1708×879，Playwright 驱动）+ 代码层静态审查。
 > 证据：`artifacts/text-node-audit-2026-09-12/`（修复前）与 `artifacts/text-node-audit-2026-09-12-fixed/`（修复后 20/20 全过）；
