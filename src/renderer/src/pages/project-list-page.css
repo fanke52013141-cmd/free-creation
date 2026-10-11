@@ -191,15 +191,16 @@
 }
 
 .project-home-name {
-  display: block;
+  display: -webkit-box;
   overflow: hidden;
   color: #f1f5f9;
   font-size: 13px;
   line-height: 22px;
   font-weight: 500;
   letter-spacing: 0.025em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow-wrap: anywhere;
   transition: color 0.2s ease;
 }
 
