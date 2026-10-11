@@ -1035,6 +1035,10 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           (shape.meta as Record<string, unknown> | undefined)?.stackRole === 'member'
             ? 'stack-member'
             : ''
+        } ${
+          (shape.meta as Record<string, unknown> | undefined)?.stackRole === 'top'
+            ? 'stack-top'
+            : ''
         }`}
         data-node-id={shape.id}
         style={{ width: shape.props.w, height: shape.props.h }}

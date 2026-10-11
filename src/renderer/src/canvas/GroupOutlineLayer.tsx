@@ -219,15 +219,15 @@ export function GroupOutlineLayer({
           .getSortedChildIdsForParent(shape.id)
           .filter((id) => editor.getShape(id)?.type === 'node-card')
         if (nodeIds.length < 2) continue
-        // 折叠组合是"节点状态"而非分组：不画框、不出标签，
-        // 只在堆叠右上角浮【展开】【运行】两个图标。
+        // 折叠组合是"节点状态"而非分组：外框按 Stitch 规格渲染（细边框+可复用徽标），
+        // 右上角浮【展开】【运行】两个图标。首位卡标题隐藏后不需要 34px 头部缓冲。
         if (collapsed) {
           nextCombos.push({
             id: shape.id,
             left: topLeft.x - hostBounds.left - sidePad,
-            top: topLeft.y - hostBounds.top - topPad,
+            top: topLeft.y - hostBounds.top - sidePad,
             width: bottomRight.x - topLeft.x + sidePad * 2,
-            height: bottomRight.y - topLeft.y + topPad + sidePad,
+            height: bottomRight.y - topLeft.y + sidePad * 2,
             nodeCount: collapsedGroupNodeIds(editor, shape.id).length,
             zoom
           })
@@ -425,7 +425,7 @@ export function GroupOutlineLayer({
       {combos.map((combo) => (
         <div
           key={combo.id}
-          className="canvas-combo-actions"
+          className="canvas-combo-frame"
           style={{
             left: combo.left,
             top: combo.top,
@@ -434,6 +434,10 @@ export function GroupOutlineLayer({
             ['--combo-zoom' as string]: combo.zoom
           }}
         >
+          <span className="canvas-combo-badge" title={`可复用组合 · ${combo.nodeCount} 个节点`}>
+            <Icon name="layers" size={12} />
+            可复用
+          </span>
           <button
             type="button"
             className="canvas-combo-btn"

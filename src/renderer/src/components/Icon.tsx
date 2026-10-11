@@ -82,6 +82,7 @@ export type IconName =
   | 'download'
   | 'fold'
   | 'unfold'
+  | 'layers'
 
 interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {
   name: IconName
@@ -548,16 +549,25 @@ const PATHS: Record<IconName, React.ReactNode> = {
   ),
   fold: (
     <>
-      <rect x="5" y="13" width="14" height="6" rx="1.5" />
-      <path d="m7 10 10-4.5" />
-      <path d="m7 6.5 10-4.5" />
+      <path d="M4 14h6v6" />
+      <path d="M20 10h-6V4" />
+      <path d="m14 10 7-7" />
+      <path d="M3 21l7-7" />
     </>
   ),
   unfold: (
     <>
-      <rect x="5" y="13" width="14" height="6" rx="1.5" />
-      <path d="m17 8.5-10 4.5" />
-      <path d="m17 3-10 4.5" />
+      <path d="M15 3h6v6" />
+      <path d="M9 21H3v-6" />
+      <path d="m21 3-7 7" />
+      <path d="m3 21 7-7" />
+    </>
+  ),
+  layers: (
+    <>
+      <path d="m12 2 10 5-10 5L2 7Z" />
+      <path d="m2 12 10 5 10-5" />
+      <path d="m2 17 10 5 10-5" />
     </>
   )
 }

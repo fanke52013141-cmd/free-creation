@@ -62,22 +62,34 @@ export function collapseGroup(editor: Editor, groupId: TLShapeId, label?: string
   markUndoPoint(editor, 'before-collapse-group')
   editor.run(() => {
     const layout: StackLayoutEntry[] = cards.map((card) => ({ id: card.id, x: card.x, y: card.y }))
+    // getSortedChildIdsForParent 按 index 升序返回（画布从底到顶）。
+    // 首位卡必须是视觉最上层（数组末位，z 序天然最高），否则它会被
+    // 成员卡盖住，"折叠节点"的摘要永远看不见。
+    const topCard = cards[cards.length - 1]
     const base = cards[0]
-    editor.updateShapes(
-      cards.map((card, index) => ({
+    const members = cards.filter((card) => card.id !== topCard.id)
+    editor.updateShapes([
+      ...members.map((card, index) => ({
         id: card.id,
         type: 'node-card' as const,
-        x: base.x + index * STACK_STEP,
-        y: base.y + index * STACK_STEP,
+        x: base.x + (index + 1) * STACK_STEP,
+        y: base.y + (index + 1) * STACK_STEP,
         meta: {
           ...card.meta,
-          stackRole: index === 0 ? 'top' : 'member',
+          stackRole: 'member',
           // meta 必须是纯 JSON：undefined 会让 tldraw 校验拒绝整次更新。
           // 成员卡不消费该值，占位 0 即可。
-          stackCount: index === 0 ? cards.length : (card.meta.stackCount ?? 0)
+          stackCount: card.meta.stackCount ?? 0
         }
-      }))
-    )
+      })),
+      {
+        id: topCard.id,
+        type: 'node-card' as const,
+        x: base.x,
+        y: base.y,
+        meta: { ...topCard.meta, stackRole: 'top', stackCount: cards.length }
+      }
+    ])
     editor.updateShape({
       id: groupId,
       type: 'group',
@@ -176,11 +188,17 @@ export function reconcileCollapsedStacks(editor: Editor): void {
       (card) => (card.meta as Record<string, unknown> | undefined)?.stackRole === 'top'
     )
     if (!top) continue
-    cards.forEach((card, index) => {
-      if ((card.meta as Record<string, unknown> | undefined)?.stackRole !== 'member') return
-      const expectedX = top.x + index * STACK_STEP
-      const expectedY = top.y + index * STACK_STEP
-      if (Math.abs(card.x - expectedX) > FREE_DISTANCE || Math.abs(card.y - expectedY) > FREE_DISTANCE) {
+    // 成员按 index 升序（底→顶）依次向右下偏移，从 1 开始计数。
+    const members = cards.filter(
+      (card) => (card.meta as Record<string, unknown> | undefined)?.stackRole === 'member'
+    )
+    members.forEach((card, index) => {
+      const expectedX = top.x + (index + 1) * STACK_STEP
+      const expectedY = top.y + (index + 1) * STACK_STEP
+      if (
+        Math.abs(card.x - expectedX) > FREE_DISTANCE ||
+        Math.abs(card.y - expectedY) > FREE_DISTANCE
+      ) {
         updates.push({
           id: card.id,
           type: 'node-card',

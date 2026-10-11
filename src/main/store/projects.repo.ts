@@ -97,7 +97,7 @@ function readProjectFile(id: string): ProjectFile | null {
 
 export function listProjects(): ProjectMeta[] {
   const rows = getDb()
-    .prepare('SELECT * FROM projects WHERE deleted = 0 ORDER BY updated_at DESC')
+    .prepare('SELECT * FROM projects WHERE deleted = 0 ORDER BY created_at DESC')
     .all() as ProjectRow[]
   return rows.map(rowToMeta)
 }

@@ -290,21 +290,25 @@
 }
 
 /* 重命名输入框：就地替换标题位，时间戳照常显示在分隔线下。
-   8px 控件圆角；聚焦描边 + 内阴影，与画布强调色一致。 */
+   描边保持克制：1px 细边，聚焦时换强调色，不加外发光。 */
 .project-home-name-input {
   width: 100%;
   height: 30px;
-  border: 1px solid rgba(34, 211, 238, 0.45);
+  border: 1px solid rgba(148, 163, 184, 0.35);
   border-radius: 8px;
   padding: 0 10px;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.04);
   color: #f1f5f9;
   font-family: inherit;
   font-size: 13px;
   font-weight: 500;
   letter-spacing: 0.025em;
   outline: none;
-  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.1);
+  transition: border-color 0.15s ease;
+}
+
+.project-home-name-input:focus {
+  border-color: rgba(34, 211, 238, 0.55);
 }
 
 .project-home-name-input::selection {
