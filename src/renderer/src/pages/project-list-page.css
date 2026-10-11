@@ -289,12 +289,27 @@
   font-variant-numeric: tabular-nums;
 }
 
-.project-home-card > input {
+/* 重命名输入框：就地替换标题位，时间戳照常显示在分隔线下。
+   8px 控件圆角；聚焦描边 + 内阴影，与画布强调色一致。 */
+.project-home-name-input {
   width: 100%;
-  margin-top: 24px;
-  background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 255, 255, 0.12);
-  color: #e2e8f0;
+  height: 30px;
+  border: 1px solid rgba(34, 211, 238, 0.45);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #f1f5f9;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.025em;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.1);
+}
+
+.project-home-name-input::selection {
+  background: rgba(6, 182, 212, 0.25);
+  color: #a5f3fc;
 }
 
 .project-home-empty {

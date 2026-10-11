@@ -93,12 +93,19 @@ export function ProjectListPage(): React.JSX.Element {
   }
 
   const handleRename = async (): Promise<void> => {
-    if (!renamingId || !renameValue.trim()) return
+    if (!renamingId) return
+    // 失焦提交是默认路径；空名视为取消，不报错。
+    if (!renameValue.trim()) {
+      setRenamingId(null)
+      return
+    }
     const res = await window.api.renameProject({ id: renamingId, name: renameValue.trim() })
     if (res.ok) {
       setRenamingId(null)
       void refresh()
+      return
     }
+    useToastStore.getState().show(`重命名失败：${res.error.message}`)
   }
 
   const handleOpen = (p: ProjectMeta): void => {
@@ -226,16 +233,21 @@ export function ProjectListPage(): React.JSX.Element {
             {projects.map((p) => (
               <article key={p.id} className="project-home-card">
                 {renamingId === p.id ? (
-                  <input
-                    autoFocus
-                    aria-label={`重命名项目 ${renameValue}`}
-                    value={renameValue}
-                    onChange={(e) => setRenameValue(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') void handleRename()
-                      if (e.key === 'Escape') setRenamingId(null)
-                    }}
-                  />
+                  <div className="project-home-card-open">
+                    <input
+                      autoFocus
+                      className="project-home-name-input"
+                      aria-label={`重命名项目 ${p.name}`}
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onBlur={() => void handleRename()}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') e.currentTarget.blur()
+                        if (e.key === 'Escape') setRenamingId(null)
+                      }}
+                    />
+                    <span className="project-home-time">{formatDate(p.updatedAt)}</span>
+                  </div>
                 ) : (
                   <button
                     className="project-home-card-open"
