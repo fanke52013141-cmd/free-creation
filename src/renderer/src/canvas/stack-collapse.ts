@@ -5,14 +5,23 @@ import type { Editor, TLShapeId } from 'tldraw'
 import type { NodeCardShape } from './NodeCardShape'
 import { markUndoPoint } from './history'
 
-/** 堆叠时相邻卡片的错位步长（页单位），向右下角逐层递进，露出层级边缘。 */
-const STACK_STEP = 18
+/** 堆叠时相邻卡片的错位步长（屏幕像素恒定，按 zoom 换算为页单位）。 */
+const STACK_STEP_PX = 20
+
+/** 成员卡被拖离堆叠的判定容差（屏幕像素）。 */
+const FREE_PX = 48
 
 /** group.meta 里保存的展开布局条目。type 别名（非 interface）才能赋给 JsonValue。 */
 type StackLayoutEntry = {
   id: string
   x: number
   y: number
+}
+
+/** 折叠时被隐藏的组内连线（展开时恢复）。 */
+type StackArrowEntry = {
+  id: string
+  opacity: number
 }
 
 function nodeCardsInGroup(editor: Editor, groupId: TLShapeId): NodeCardShape[] {
@@ -33,6 +42,19 @@ function readLayout(editor: Editor, groupId: TLShapeId): StackLayoutEntry[] {
       typeof (item as StackLayoutEntry).id === 'string' &&
       typeof (item as StackLayoutEntry).x === 'number' &&
       typeof (item as StackLayoutEntry).y === 'number'
+  )
+}
+
+function readHiddenArrows(editor: Editor, groupId: TLShapeId): StackArrowEntry[] {
+  const meta = editor.getShape(groupId)?.meta as Record<string, unknown> | undefined
+  const arrows = meta?.stackArrows
+  if (!Array.isArray(arrows)) return []
+  return arrows.filter(
+    (item): item is StackArrowEntry =>
+      typeof item === 'object' &&
+      item !== null &&
+      typeof (item as StackArrowEntry).id === 'string' &&
+      typeof (item as StackArrowEntry).opacity === 'number'
   )
 }
 
@@ -60,6 +82,8 @@ export function collapseGroup(editor: Editor, groupId: TLShapeId, label?: string
   if (!group) return
 
   markUndoPoint(editor, 'before-collapse-group')
+  const zoom = editor.getCamera().z || 1
+  const step = STACK_STEP_PX / zoom
   editor.run(() => {
     const layout: StackLayoutEntry[] = cards.map((card) => ({ id: card.id, x: card.x, y: card.y }))
     // getSortedChildIdsForParent 按 index 升序返回（画布从底到顶）。
@@ -72,8 +96,8 @@ export function collapseGroup(editor: Editor, groupId: TLShapeId, label?: string
       ...members.map((card, index) => ({
         id: card.id,
         type: 'node-card' as const,
-        x: base.x + (index + 1) * STACK_STEP,
-        y: base.y + (index + 1) * STACK_STEP,
+        x: base.x + (index + 1) * step,
+        y: base.y + (index + 1) * step,
         meta: {
           ...card.meta,
           stackRole: 'member',
@@ -90,6 +114,22 @@ export function collapseGroup(editor: Editor, groupId: TLShapeId, label?: string
         meta: { ...topCard.meta, stackRole: 'top', stackCount: cards.length }
       }
     ])
+    // 组内连线整体隐形：折叠态是节点状态，连线两端只剩线头露出，很难看。
+    // 原 opacity 记录在 group.meta.stackArrows，展开时恢复。
+    const memberIds = new Set(cards.map((card) => card.id))
+    const hiddenArrows: StackArrowEntry[] = arrowsTouchingMembers(editor, memberIds).map((id) => ({
+      id,
+      opacity: editor.getShape(id)?.opacity ?? 1
+    }))
+    if (hiddenArrows.length > 0) {
+      editor.updateShapes(
+        hiddenArrows.map((arrow) => ({
+          id: arrow.id as TLShapeId,
+          type: 'arrow' as const,
+          opacity: 0
+        }))
+      )
+    }
     editor.updateShape({
       id: groupId,
       type: 'group',
@@ -97,11 +137,11 @@ export function collapseGroup(editor: Editor, groupId: TLShapeId, label?: string
         ...group.meta,
         collapsed: true,
         stackLayout: layout,
+        stackArrows: hiddenArrows,
+        stackZoom: zoom,
         ...(label ? { label } : {})
       }
     })
-    const arrows = arrowsTouchingMembers(editor, new Set(cards.map((card) => card.id)))
-    if (arrows.length > 0) editor.sendToBack(arrows)
   })
   markUndoPoint(editor, 'collapse-group')
 }
@@ -135,6 +175,16 @@ export function expandGroup(editor: Editor, groupId: TLShapeId): void {
       type: 'group',
       meta: { ...group.meta, collapsed: false }
     })
+    const hiddenArrows = readHiddenArrows(editor, groupId)
+    if (hiddenArrows.length > 0) {
+      editor.updateShapes(
+        hiddenArrows.map((arrow) => ({
+          id: arrow.id as TLShapeId,
+          type: 'arrow' as const,
+          opacity: arrow.opacity
+        }))
+      )
+    }
   })
   markUndoPoint(editor, 'expand-group')
 }
@@ -170,17 +220,13 @@ export function toggleGroupCollapse(editor: Editor, groupId: TLShapeId): void {
   else collapseGroup(editor, groupId)
 }
 
-/** 折叠组合内仍在堆叠位置之外（被单独拖离）的成员卡恢复标题与端口。
- *  成员呈现（隐藏标题/端口）跟随的是卡片自身 meta 标记；用户把某张卡从堆叠里
- *  拖走后，标记不会自己消失，必须按实时位置校正，否则那张卡永远没有标题。 */
-const FREE_DISTANCE = 48
-
+/** 折叠组合内成员卡的呈现与位置校正：
+ *  - zoom 变化：堆叠偏移按屏幕像素恒定换算，把仍在堆叠位的成员重排
+ *    （不入撤销历史，缩放不算用户操作）；
+ *  - zoom 未变：按相对位置判定成员是否被单独拖离堆叠，拖离则清除
+ *    呈现标记恢复标题/端口。相对判定保证拖动整个组合不会误判。 */
 export function reconcileCollapsedStacks(editor: Editor): void {
-  const updates: {
-    id: TLShapeId
-    type: 'node-card'
-    meta: Record<string, string | number | boolean | null>
-  }[] = []
+  const zoom = editor.getCamera().z || 1
   for (const shape of editor.getCurrentPageShapes()) {
     if (shape.type !== 'group' || !isGroupCollapsed(editor, shape.id)) continue
     const cards = nodeCardsInGroup(editor, shape.id)
@@ -188,26 +234,71 @@ export function reconcileCollapsedStacks(editor: Editor): void {
       (card) => (card.meta as Record<string, unknown> | undefined)?.stackRole === 'top'
     )
     if (!top) continue
-    // 成员按 index 升序（底→顶）依次向右下偏移，从 1 开始计数。
     const members = cards.filter(
       (card) => (card.meta as Record<string, unknown> | undefined)?.stackRole === 'member'
     )
-    members.forEach((card, index) => {
-      const expectedX = top.x + (index + 1) * STACK_STEP
-      const expectedY = top.y + (index + 1) * STACK_STEP
+    const groupMeta = shape.meta as Record<string, unknown> | undefined
+    const lastZoom = typeof groupMeta?.stackZoom === 'number' ? groupMeta.stackZoom : zoom
+
+    if (Math.abs(lastZoom - zoom) > 0.001) {
+      // zoom 变化：把仍贴在堆叠期望位的成员搬新期望位；被拖离的不动。
+      const oldStep = STACK_STEP_PX / lastZoom
+      const newStep = STACK_STEP_PX / zoom
+      const tol = 4 / lastZoom
+      const moves = members
+        .map((card, index) => ({ card, index }))
+        .filter(({ card, index }) => {
+          const dx = card.x - top.x
+          const dy = card.y - top.y
+          return (
+            Math.abs(dx - (index + 1) * oldStep) <= tol &&
+            Math.abs(dy - (index + 1) * oldStep) <= tol
+          )
+        })
+        .map(({ card, index }) => ({
+          id: card.id,
+          type: 'node-card' as const,
+          x: top.x + (index + 1) * newStep,
+          y: top.y + (index + 1) * newStep
+        }))
+      editor.run(
+        () => {
+          if (moves.length > 0) editor.updateShapes(moves)
+          editor.updateShape({
+            id: shape.id,
+            type: 'group',
+            meta: { ...shape.meta, stackZoom: zoom }
+          })
+        },
+        { history: 'ignore' }
+      )
+      continue
+    }
+
+    // zoom 未变：拖离判定（相对 top 的偏移，容差按屏幕像素换算）。
+    const tol = FREE_PX / zoom
+    const step = STACK_STEP_PX / zoom
+    const metaUpdatesForGroup: {
+      id: TLShapeId
+      type: 'node-card'
+      meta: Record<string, string | number | boolean | null>
+    }[] = []
+    for (const [index, card] of members.entries()) {
+      const dx = card.x - top.x
+      const dy = card.y - top.y
       if (
-        Math.abs(card.x - expectedX) > FREE_DISTANCE ||
-        Math.abs(card.y - expectedY) > FREE_DISTANCE
+        Math.abs(dx - (index + 1) * step) > tol ||
+        Math.abs(dy - (index + 1) * step) > tol
       ) {
-        updates.push({
+        metaUpdatesForGroup.push({
           id: card.id,
           type: 'node-card',
           meta: { ...card.meta, stackRole: '' }
         })
       }
-    })
+    }
+    if (metaUpdatesForGroup.length > 0) editor.updateShapes(metaUpdatesForGroup)
   }
-  if (updates.length > 0) editor.updateShapes(updates)
 }
 
 /** 折叠组合当前包含的节点（运行入口使用；被拖离的成员不计入）。 */

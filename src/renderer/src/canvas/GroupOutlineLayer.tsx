@@ -288,10 +288,19 @@ export function GroupOutlineLayer({
     // 避免额外的 pageToScreen 与 React state 更新拖慢节点拖拽。
     const update = (): void => {
       if (frame) return
-      frame = requestAnimationFrame(() => {
+      const run = (): void => {
         frame = 0
         updateNow()
-      })
+      }
+      frame = requestAnimationFrame(run)
+      // 后台/被遮挡的 tab 会冻结 rAF，折叠状态会永远等不到计算帧；
+      // 用短定时器兜底：前台 rAF 先跑（frame 归零）则定时器直接跳过。
+      window.setTimeout(() => {
+        if (frame) {
+          cancelAnimationFrame(frame)
+          run()
+        }
+      }, 90)
     }
 
     updateNow()
