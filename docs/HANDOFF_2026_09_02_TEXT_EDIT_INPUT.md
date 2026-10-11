@@ -52,8 +52,8 @@ pointerdown 默认聚焦行为，导致无法输入）。
 
 ## 备注
 
-- 该提交 `c214d45` 同时包含 Agent 生产执行硬化等其他改动，文本输入修复是其子集；
-  完整上下文见 [docs/HANDOFF_2026_09_01_AGENT_PRODUCTION.md](./HANDOFF_2026_09_01_AGENT_PRODUCTION.md)。
+- 该历史提交 `c214d45` 同时包含当时的 Agent 执行改动，本文只保留文本输入修复记录。
+  旧 Agent 方案和专用交接已退出当前工作区；现行设计见 [画布原生方案](canvas-agent-flow/README.md)。
 - 根 `HANDOFF.md` 顶部已新增本条交付入口。
 
 ## 根因更正（2026-09-03，Playwright 实测定位）

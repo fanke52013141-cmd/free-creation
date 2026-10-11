@@ -1,5 +1,7 @@
 > 历史文档：本文已过期，仅供历史参考。当前状态以 AGENTS.md、NODE_CONTRACT_SPEC.md、docs/optimization-ledger.md 及源码为准（2026-10-05 标注）。
 
+> Agent Flow 当前唯一设计：[画布原生 Agent Flow](./docs/canvas-agent-flow/README.md)。主 Agent、状态、执行与成果均落在画布节点；该方案尚未实现。
+
 # Canvas Studio 开发交接文档
 
 > 最后更新：2026-09-18
@@ -75,19 +77,12 @@
 
 > **最新交付（2026-09-03 文本节点双击输入根因修复，Playwright 实测定位）**：桌面验收发现 `c214d45` 的修复无效。真实根因是 tldraw `useCanvasEvents` 在 pointerdown 时 `setPointerCapture(tl-canvas)`，把 dblclick 的 target 重定向到 `.tl-canvas`，导致双击转发永不命中正文。修复：转发改在 `mousedown(detail===2)` 捕获阶段（target 是 hit-test 原生结果，不受 capture 影响）。Playwright 驱动打包版验证双击/输入/提交/重复进入全链路 ✅，`dist/win-unpacked` 已重新打包。根因链、事件序列证据与遗留缺陷见 [docs/HANDOFF_2026_09_02_TEXT_EDIT_INPUT.md](./docs/HANDOFF_2026_09_02_TEXT_EDIT_INPUT.md)（根因更正节）。
 
-> **最新交付（2026-09-03 Sprint 2 + Agent 契约同步机制，均已推送至 `origin/main`）**：开发任务清零，仅剩桌面人工验收。今日两批交付：
+> **历史交付（2026-09-03 Sprint 2 媒体体验）**：以下仅保留媒体功能记录；旧 Agent 方案及其专用交接已退出当前工作区。
 > ① **Sprint 2 媒体体验**——视频节点"重新生成"与来源摘要、供应商能力驱动的配置 UI（`3f8d986`、`8d4039b`）；
-> ② **Agent 契约同步机制**——双门禁测试拦截契约漂移与漏 bump（`3e2995a`），完整触发矩阵、门禁对照表和开发者工作流见 [docs/AGENT_SYNC_MECHANISM.md](./docs/AGENT_SYNC_MECHANISM.md)；工程约束已同步至 `AGENTS.md`。
 > 全量 `npm run verify` 通过（**847 项用例**），性能基线健康（100/500/1000 节点线性扩展），`dist/win-unpacked` 打包完成。
 > **当前仅剩桌面人工验收**：视频节点功能链路、文本节点双击输入修复冒烟（根因修复见顶部最新条目）、[docs/DESKTOP_ACCEPTANCE_CHECKLIST.md](./docs/DESKTOP_ACCEPTANCE_CHECKLIST.md) 全量门禁。
 
-> **最新交付（2026-09-02 Agent P1–P3）**：Agent 的真实端到端 Headless 验收、运行查询/取消/重试及安全产物读取工具已完成；节点运行时契约已收口到 Capability Registry，JSON Schema 与 Agent 创建节点尺寸也已纳入硬校验。交接、验证命令和继续验收步骤见 [docs/HANDOFF_2026_09_02_AGENT_P1_P3.md](./docs/HANDOFF_2026_09_02_AGENT_P1_P3.md)。
-
 > **最新修复（2026-09-02 文本节点输入）**：修复文本节点双击进入编辑态后 textarea 无法输入的问题——`textRef` 改为在 `useEffect` 中同步、`enterEditing` 用 `useCallback` 稳定监听器引用、移除会覆盖 draft 的旧副作用；textarea 事件处理仅 `stopPropagation` 不做 `preventDefault`，保证输入可正常聚焦。涉及文件与验证路径见 [docs/HANDOFF_2026_09_02_TEXT_EDIT_INPUT.md](./docs/HANDOFF_2026_09_02_TEXT_EDIT_INPUT.md)。
-
-> **最新交付（2026-09-01 Agent 生产链路）**：MCP 的真实 Electron stdio 启动烟测、持久化 revision/idempotency 写入保护、Headless Run 消费器、真实工具/节点配置契约产物以及零警告 lint 已完成。使用方式、开关和后续硬门槛见 [docs/HANDOFF_2026_09_01_AGENT_PRODUCTION.md](./docs/HANDOFF_2026_09_01_AGENT_PRODUCTION.md)。
-
-> **最新交付（2026-09-01 Agent 对接安全基线）**：CLI/MCP 已改为读取桌面端同一份项目/媒体数据，默认只读；写入与无界面执行在画布快照事务和真实执行器完成前被主动关闭。新增 Electron ABI 构建、Zod 边界校验、稳定契约生成文件、权限/乐观版本/幂等基础设施。此前“P0–P3 已完整实现、能力表为唯一事实来源”的表述不准确，现已撤回。完整状态、验证和后续硬门槛见 [docs/HANDOFF_2026_09_01_AGENT_SAFETY_BASELINE.md](./docs/HANDOFF_2026_09_01_AGENT_SAFETY_BASELINE.md)。
 
 > **当前交接入口（2026-08-31 P0–P3 优化）**：Sprint 0、Sprint 2、Sprint 3 和导演台安排已完成；P0–P3 协议、交互、生图比例和视频能力优化也已完成，详见 [docs/P0_P3_NODE_CAPABILITY_OPTIMIZATION_2026_08_31.md](./docs/P0_P3_NODE_CAPABILITY_OPTIMIZATION_2026_08_31.md)、[docs/NODE_PROTOCOL_AUDIT_2026_08_31.md](./docs/NODE_PROTOCOL_AUDIT_2026_08_31.md) 与 [docs/NODE_COMPLIANCE_MATRIX.md](./docs/NODE_COMPLIANCE_MATRIX.md)。左侧节点菜单保持未分类版本：单一无框鱼眼图标栏，节点列表沿用原有交互。右键画布的新建节点菜单采用一级分类悬浮二级筛选，分类项带右向箭头，二级节点可直接创建或用于真实连线。UI 整体优化六阶段已由 `f519ac3` 提交并推送。
 
