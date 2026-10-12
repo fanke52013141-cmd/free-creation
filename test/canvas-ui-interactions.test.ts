@@ -47,8 +47,9 @@ describe('canvas interaction details', () => {
   })
 
   it('shows one connector per distinct input/output type and merges repeated same-type ports', () => {
-    expect(nodeCardSource).toContain('const visibleInPorts = inLayout.ports')
-    expect(nodeCardSource).toContain('const visibleOutPorts = outLayout.ports')
+    // Existing folded stacks hide member connectors; unfolded nodes retain typed ports.
+    expect(nodeCardSource).toContain('const visibleInPorts = stackMember ? [] : inLayout.ports')
+    expect(nodeCardSource).toContain('const visibleOutPorts = stackMember ? [] : outLayout.ports')
     // 动态端口（forced）先行剔除，其余按类型合并；forced 各自独立锚点（见 node-ui-decisions）。
     expect(nodePortLayoutSource).toContain(
       'const groupTypes = [...new Set(grouped.map((port) => port.type))]'

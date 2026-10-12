@@ -77,8 +77,9 @@ describe('v1.3 §16.1 端口圆点统一使用节点色、类型色环与柔光'
   })
 
   it('默认每个方向显示一个点，同类型合并而不同类型分别均分节点高度', () => {
-    expect(nodeCardView).toContain('const visibleInPorts = inLayout.ports')
-    expect(nodeCardView).toContain('const visibleOutPorts = outLayout.ports')
+    // Folded stack members hide their ports; ordinary cards retain the shared layout.
+    expect(nodeCardView).toContain('const visibleInPorts = stackMember ? [] : inLayout.ports')
+    expect(nodeCardView).toContain('const visibleOutPorts = stackMember ? [] : outLayout.ports')
     expect(nodePortLayout).toContain(
       'const groupTypes = [...new Set(grouped.map((port) => port.type))]'
     )
