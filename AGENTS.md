@@ -59,6 +59,8 @@ Agent/CLI/MCP/headless 的全部实现代码已从本仓库移除（`src/capabil
 ## 画布原生 Agent Flow（2026-10-11）
 
 当前唯一方案入口：[画布原生 Agent Flow](docs/canvas-agent-flow/README.md)。
+
+2026-10-12 用户已确认[完整方案](docs/canvas-agent-flow/00-approved-plan.md)并授权按 C0–C4 开发；状态以[开发台账](docs/canvas-agent-flow/08-development-ledger.md)的真实证据为准。首版新增 Agent、状态机、AI 审核三种类型。Agent 职责与人机协作/纯 AI 参与方式独立配置；资产固定版本，审核返工走显式控制关系和有界预算，不形成反向数据环。
 这是待实施设计，不能引用已撤回 S0/P0/P1 的完成状态作为当前实现证据。
 
 1. 上帝 Agent 构建画布中的 Flow；主 Agent 节点协调流程、任务、最小输入和产物；专业 Agent 节点承担复杂执行任务。主 Agent 与专业 Agent 复用 Agent 节点类型，以角色及工具权限区分。

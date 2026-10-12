@@ -2,6 +2,10 @@
 
 本页区分已存在代码与拟新增能力；接口名称为设计草案，不表示已经提供。
 
+2026-10-12 框架与数据细化见 [详细实施方案](06-implementation-plan.md)。建议 LangGraph JS/TS 在 main 承载单个 Agent 的有限循环、持久等待与 checkpoint；LangChain 提供消息、模型/工具组件。画布仍是唯一可编辑流程，框架内部状态图不作为第二张业务图。
+
+先做 C0 验证版本、Electron 打包、模型单步工具调用、SQLite 适配与 main-renderer 回执桥。现有 LangChain 依赖和消息类型使用不代表 Agent Flow 已实现。业务执行先经桥复用现有 renderer 唯一入口；宿主断开停止新派发，不能靠超时重发副作用。Skill 加载不扩大工具权限；任务固定资产输入版本、Skill/工具版本；checkpoint 不能代替真实命令回执。
+
 节点间统一协议以[节点协同规范](05-node-coordination-standard.md)为准。上帝 Agent 使用能力发现和图构建命令；主 Agent 使用任务派发、输入选择、产物交接和控制命令；专业 Agent 使用获准的能力工具。角色权限由宿主校验，不能只用提示词区分。
 
 ## 1. 从已有画布演进
