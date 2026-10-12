@@ -1,0 +1,26 @@
+.agent-flow-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+.agent-flow-summary,
+.agent-flow-pending {
+  font-size: 12px;
+  margin: 0;
+}
+.agent-flow-text {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+}
+.agent-flow-text textarea {
+  width: 100%;
+  min-height: 72px;
+  resize: none;
+}
+.agent-flow-settings textarea {
+  min-height: 72px;
+  resize: vertical;
+}

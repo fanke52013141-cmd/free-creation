@@ -1,6 +1,7 @@
 // 节点 Spec 注册（见《技术框架与规范》§5.1）
 // 端口声明对齐路线图的节点类型表；any 万能口，其余类型需一致才可连
 import type { PortCardinality, PortDecl, PortSchemaRef } from '@shared/types'
+import { registerAgentFlowNodeTypes } from './agentFlow'
 import { DEFAULT_VIDEO_CLAY_CONFIG, serializeVideoClayConfig } from '@shared/video-conversion'
 import { NODE_ACCENTS, registerNodeType, unregisterNodeType } from '../registry'
 import { readNodeConfig } from '../../canvas/node-persistence'
@@ -259,6 +260,7 @@ function speechStaticPorts(): {
 }
 
 export function registerBaseNodeTypes(): void {
+  registerAgentFlowNodeTypes()
   registerNodeType({
     type: 'text',
     contractVersion: 3,

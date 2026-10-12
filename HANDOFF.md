@@ -1,8 +1,8 @@
 > 历史文档：本文已过期，仅供历史参考。当前状态以 AGENTS.md、NODE_CONTRACT_SPEC.md、docs/optimization-ledger.md 及源码为准（2026-10-05 标注）。
 
-> Agent Flow 当前唯一设计：[画布原生 Agent Flow](./docs/canvas-agent-flow/README.md)。上帝 Agent 构建 Flow，主 Agent 协调任务和最小输入，专业 Agent 执行；状态机和成果均落在画布节点。节点协同标准见 [节点协同规范](./docs/canvas-agent-flow/05-node-coordination-standard.md)，该方案尚未实现。历史记录中的已下线 Agent/CLI/MCP/headless 路径仅用于追溯，不是待恢复任务。
+> Agent Flow 当前唯一设计：[画布原生 Agent Flow](./docs/canvas-agent-flow/README.md)。上帝 Agent 构建 Flow，主 Agent 协调任务和最小输入，专业 Agent 执行；状态机和成果均落在画布节点。节点协同标准见 [节点协同规范](./docs/canvas-agent-flow/05-node-coordination-standard.md)，C0 实验与 C1 配置基础已实现；正式执行尚未接入。历史记录中的已下线 Agent/CLI/MCP/headless 路径仅用于追溯，不是待恢复任务。
 
-> 2026-10-12 实施细化：[详细实施方案](./docs/canvas-agent-flow/06-implementation-plan.md)。区分人机协作/纯 AI Agent、纯人工和单次处理；内容统一称资产；明确 Skill/工具、版本化输入输出及 LangGraph + LangChain 分工。先验证 C0，再进入 C1–C4；本次是文档交付，功能未开始。
+> 2026-10-12 实施细化：[详细实施方案](./docs/canvas-agent-flow/06-implementation-plan.md)。区分人机协作/纯 AI Agent、纯人工和单次处理；内容统一称资产；明确 Skill/工具、版本化输入输出及 LangGraph + LangChain 分工。先验证 C0，再进入 C1–C4；最初为文档交付；最新模型探测、生产桥审阅与 C1 配置基础见 [交付台账](./docs/canvas-agent-flow/08-development-ledger.md) 和 [审阅记录](./docs/canvas-agent-flow/09-model-probe-and-production-bridge-review.md)。
 
 > 用户已确认并授权开发：[完整确认方案](./docs/canvas-agent-flow/00-approved-plan.md)。首版新增 Agent、状态机、AI 审核；画布承载完整协作与资产，审核按人工/AI/人机协作返工。发布备注与下一步 C0 证据统一记录在[开发台账](./docs/canvas-agent-flow/08-development-ledger.md)，不得以方案确认代替实现验收。
 

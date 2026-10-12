@@ -2,6 +2,9 @@
 import type { NodeShape } from './executor-types'
 
 export const CONFIG_NODE_TYPES = new Set([
+  'agent',
+  'state-machine',
+  'ai-review',
   'image-gen',
   'image-crop',
   'image-split',

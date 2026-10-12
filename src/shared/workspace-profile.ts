@@ -21,7 +21,10 @@ export const GENERAL_WORKSPACE_NODE_TYPES = [
   'sound-adjust',
   'speech',
   'tts',
-  'storyboard'
+  'storyboard',
+  'agent',
+  'ai-review',
+  'state-machine'
 ] as const
 
 export function defaultWorkspaceProfile(): WorkspaceProfile {
@@ -37,9 +40,13 @@ export function normalizeWorkspaceProfile(value: unknown): WorkspaceProfile | nu
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const raw = value as Partial<WorkspaceProfile>
   if (raw.schemaVersion !== 1 || !Array.isArray(raw.visibleNodeTypeIds)) return null
-  const ids = [...new Set(raw.visibleNodeTypeIds.filter((id): id is string =>
-    typeof id === 'string' && /^[a-z0-9][a-z0-9-]{0,63}$/i.test(id)
-  ))]
+  const ids = [
+    ...new Set(
+      raw.visibleNodeTypeIds.filter(
+        (id): id is string => typeof id === 'string' && /^[a-z0-9][a-z0-9-]{0,63}$/i.test(id)
+      )
+    )
+  ]
   const presetId = ['general', 'image', 'video', 'audio', 'all', 'custom'].includes(
     String(raw.presetId)
   )
@@ -48,7 +55,8 @@ export function normalizeWorkspaceProfile(value: unknown): WorkspaceProfile | nu
   // 旧项目保存预设时，新发布的节点尚不存在；预设需随版本补入新成员。
   // 用户逐项选择的 custom 配置保持原样。
   if (presetId === 'general' || presetId === 'all') {
-    for (const type of ['website', 'sound-adjust']) if (!ids.includes(type)) ids.push(type)
+    for (const type of ['website', 'sound-adjust', 'agent', 'ai-review', 'state-machine'])
+      if (!ids.includes(type)) ids.push(type)
   } else if (presetId === 'audio' || presetId === 'video') {
     if (!ids.includes('sound-adjust')) ids.push('sound-adjust')
   }

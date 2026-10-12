@@ -65,7 +65,10 @@ export const NODE_ACCENTS = {
   director: '#E8AD85',
   script: '#EAA05C',
   group: '#DDA66C',
-  compose: '#ED9950'
+  compose: '#ED9950',
+  agent: '#F7A35C',
+  'state-machine': '#D99647',
+  'ai-review': '#E6B26A'
 } satisfies Record<NodeTypeId, string>
 
 /** 图标前景按主题统一加深；卡片强调色、端口和数据类型色仍使用原身份色。 */
@@ -125,6 +128,8 @@ export interface NodeTypeSpec {
   outputSource?: 'run' | 'document'
   /** 节点运行方式；默认 auto。 */
   executionMode?: NodeExecutionMode
+  /** Staged capabilities must expose an honest blocked state before production execution is available. */
+  executionDisabledReason?: string
   /**
    * 可选：根据节点实例配置动态解析端口。如果提供，优先于静态 ports 使用。
    * 用于代码节点等需要用户自定义输入端口的场景。

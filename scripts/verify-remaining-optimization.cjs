@@ -25,7 +25,8 @@ const path = require('node:path')
       window.__wheelCaptures = () => active.size
     })
     await page.goto(process.env.CANVAS_QA_URL || 'http://127.0.0.1:5191')
-    await page.waitForSelector('.palette-category-item')
+    // Cold Vite compilation on Electron-as-Node can outlast the default 30s on this host.
+    await page.waitForSelector('.palette-category-item', { timeout: 60000 })
     await page.evaluate(async () =>
       (await import('/src/stores/search.ts')).useSearchStore.getState().toggle()
     )

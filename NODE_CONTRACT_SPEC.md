@@ -13,6 +13,8 @@ AI 对话生图补充：消息可保存图片附件（媒体 ID、项目相对�
 
 ## 1. 设计原则
 
+2026-10-12 C1：新增配置阶段的 `agent`、`state-machine`、`ai-review`（contractVersion=1）。配置与正文分别保存到 props.config/props.text；配置可保存恢复。执行器当前明确 skipped，投影为空，禁止从任务目标、阶段配置或旧 meta 捏造运行结果。`review.decision@1` 校验固定资产版本、规则版本、审核修订、结论与反馈；`flow.state@1` 校验 task/stateNode/revision/state。定义见 src/shared/agent-flow/node-contracts.ts。后续 C2/C3 接入真实执行与输出投影，并完成对等验收后才能开放运行。控制关系保存在 config，不能当作普通数据边形成反向 DAG。
+
 画布上的节点不是彼此直接调用的功能孤岛。节点只负责一件事：按照已声明的输入契约接收数据，执行自己的能力，再按照输出契约产生数据。
 
 连线的准确含义是：

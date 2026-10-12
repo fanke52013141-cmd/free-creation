@@ -15,7 +15,18 @@ export const PALETTE_NODE_GROUPS = {
   image: ['image-gen', 'image', 'image-edit', 'image-crop', 'image-split'],
   video: ['video', 'video-asset', 'video-clip', 'video-frame', 'video-depth', 'video-clay'],
   audio: ['speech', 'audio', 'tts', 'voice-design', 'sound-adjust'],
-  logic: ['storyboard', 'processor', 'json', 'structured', 'iterate', 'director', 'code']
+  logic: [
+    'agent',
+    'ai-review',
+    'state-machine',
+    'storyboard',
+    'processor',
+    'json',
+    'structured',
+    'iterate',
+    'director',
+    'code'
+  ]
 } as const satisfies Record<PaletteCategoryId, readonly string[]>
 
 /** 保留同类型不同端口的候选项，以及未来尚未配置排序的节点。 */

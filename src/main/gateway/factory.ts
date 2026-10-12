@@ -37,6 +37,22 @@ function createCompatible(p: ProviderConfig): ReturnType<typeof createOpenAIComp
   })
 }
 
+/** Main-only catalog adapter; caller resolves credentials without opening/migrating the app DB. */
+export function createCatalogChatModel(input: {
+  connectionId: string
+  baseURL: string
+  apiKey?: string
+  headers?: Record<string, string>
+  modelId: string
+}): LanguageModel {
+  return createOpenAICompatible({
+    name: input.connectionId,
+    baseURL: input.baseURL,
+    apiKey: input.apiKey,
+    headers: input.headers
+  }).chatModel(input.modelId)
+}
+
 export function createChatModel(providerId: string, modelId: string): LanguageModel {
   const p = requireProvider(providerId)
   return createCompatible(p).chatModel(modelId)

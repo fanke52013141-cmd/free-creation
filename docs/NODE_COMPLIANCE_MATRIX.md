@@ -2,7 +2,7 @@
 
 > 审计基线：`f519ac3` · 2026-08-31。详细审计、连线关系和参考项目差异见 [NODE_PROTOCOL_AUDIT_2026_08_31.md](./NODE_PROTOCOL_AUDIT_2026_08_31.md)。
 
-本表是当前 **28 个可创建节点** 的发布前协议索引；下表共 30 行 = 28 个可创建节点 + 2 个历史节点行（`video-audio`、`vocal-separate`，结论「退役」）。新增或修改节点前必须同步更新本表、`NODE_CONTRACT_SPEC.md`、契约快照与连线测试；历史节点仅为兼容读取，不进入创建菜单。表中「版本 / 端口 id」以及明确写出的端口类型、基数和 Schema 由 `test/compliance-matrix-doc.test.ts` 与注册契约逐行比对；「28 个可创建节点」计数、退役行结论与「历史节点」表也由该测试校验，写错、漏行或计数漂移会直接让测试变红。
+本表是当前 **31 个可创建节点** 的发布前协议索引；下表共 33 行 = 31 个可创建节点 + 2 个历史节点行（`video-audio`、`vocal-separate`，结论「退役」）。新增或修改节点前必须同步更新本表、`NODE_CONTRACT_SPEC.md`、契约快照与连线测试；历史节点仅为兼容读取，不进入创建菜单。表中「版本 / 端口 id」以及明确写出的端口类型、基数和 Schema 由 `test/compliance-matrix-doc.test.ts` 与注册契约逐行比对；「31 个可创建节点」计数、退役行结论与「历史节点」表也由该测试校验，写错、漏行或计数漂移会直接让测试变红。
 
 | 节点                      | 版本 | 输入端口（类型 / 基数）                                         | 输出端口（类型 / Schema）                                       | 执行与投影                               | 结论 |
 | ------------------------- | ---- | --------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------- | ---- |
@@ -25,9 +25,9 @@
 | 声音调整 `sound-adjust`   | 1    | `in-audio` audio / one；`in-video` video / one（二选一）        | `out-audio` audio（可选）；`out-video` video（可选）            | executor + projectOutputs                | 通过 |
 | 文件 `file`               | 2    | 无                                                              | `out-file` file；`out-text` text（可选）                        | executor + projectOutputs                | 通过 |
 | 语音合成 `speech`         | 4    | 文本 many；参考输入随供应商动态生成                             | 语音 audio；火山可选字幕时间轴                                  | executor + projectOutputs + resolvePorts | 通过 |
-| 声音克隆 `tts`            | 4    | `in-audio` audio / one                                          | `out-json` json `voice.profile@1`                                | executor + projectOutputs                | 通过 |
+| 声音克隆 `tts`            | 4    | `in-audio` audio / one                                          | `out-json` json `voice.profile@1`                               | executor + projectOutputs                | 通过 |
 | 音色设计 `voice-design`   | 1    | `in-text` text / many                                           | `out-audio` audio；`out-json` json `voice.profile@1`            | executor + projectOutputs                | 通过 |
-| 对话 `chat`               | 1    | `in-text` text / many                                           | `out-text` text、`out-markdown` markdown                         | executor + projectOutputs                | 通过 |
+| 对话 `chat`               | 1    | `in-text` text / many                                           | `out-text` text、`out-markdown` markdown                        | executor + projectOutputs                | 通过 |
 | 处理 `processor`          | 1    | `in-value` any                                                  | `out-value` any                                                 | executor + projectOutputs                | 通过 |
 | JSON `json`               | 1    | `in-json` json `json.any@1` / many；`in-text` text / one        | `out-json` json `json.any@1`                                    | executor + projectOutputs                | 通过 |
 | 结构数据 `structured`     | 1    | `in-context` json `json.any@1` / many；`in-text` text / many    | 动态 `out-json`（实例 Schema）                                  | executor + projectOutputs + resolvePorts | 通过 |
@@ -46,8 +46,18 @@
 - `test/node-compliance.test.ts`：Active/Legacy 类型、executor、投影、版本、说明与创建菜单分类。
 - `test/node-contract-snapshot.test.ts`：节点注册、端口命名、Schema 与关键契约快照；历史 `vocal-separate`、`video-audio` 继续保留读取兼容。
 - `test/connection-matrix.test.ts`：端口类型兼容/拒绝矩阵和代表性工作流。
-- `test/compliance-matrix-doc.test.ts`：本表每一行的「版本 / 端口 id」与注册契约逐行比对，并检查每个可创建节点都有一行；同时校验「28 个可创建节点」计数、`creatable=false` 节点与「历史节点」表互相对应。
+- `test/compliance-matrix-doc.test.ts`：本表每一行的「版本 / 端口 id」与注册契约逐行比对，并检查每个可创建节点都有一行；同时校验「31 个可创建节点」计数、`creatable=false` 节点与「历史节点」表互相对应。
 - `npm run verify`：本项目发布前的统一自动验证命令。
+
+## C1 配置节点
+
+C1 新增配置节点（契约 v1，自动执行尚未接入，未产生业务结果）：
+
+| 节点                   | 版本 | 输入端口（类型 / 基数）                                                                                                                                     | 输出端口（类型 / Schema）                                  | 执行与投影                                | 结论                |
+| ---------------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ----------------------------------------- | ------------------- |
+| Agent `agent`          | 1    | `in-text` text / many；`in-json` json `json.any@1` / many；`in-image` image / many；`in-video` video / many；`in-audio` audio / many；`in-file` file / many | `out-text` text；`out-json` json `json.any@1`              | executor 明确 skipped + 空 projectOutputs | C1 配置；执行待接入 |
+| 状态机 `state-machine` | 1    | `in-json` json `json.any@1` / many                                                                                                                          | `out-state` json `flow.state@1`                            | executor 明确 skipped + 空 projectOutputs | C1 配置；执行待接入 |
+| AI 审核 `ai-review`    | 1    | `in-text` text / many；`in-json` json `json.any@1` / many；`in-image` image / many；`in-video` video / many；`in-audio` audio / many；`in-file` file / many | `out-review` json `review.decision@1`；`out-feedback` text | executor 明确 skipped + 空 projectOutputs | C1 配置；执行待接入 |
 
 ## 历史节点
 

@@ -27,6 +27,8 @@ function contrast(a, b) {
     const page = await browser.newPage({ viewport: { width: 2700, height: 1850 } })
     await page.goto(process.env.CANVAS_QA_URL || 'http://127.0.0.1:5196')
     await page.waitForSelector('.tl-canvas')
+    const columns = await page.evaluate(async () => Math.max(...Object.values((await import('/src/canvas/palette-categories.ts')).PALETTE_NODE_GROUPS).map(ids => ids.length)))
+    await page.setViewportSize({ width: 210 + columns * 355 + 60, height: 1850 })
     const nodes = await page.evaluate(async () => {
       const { PALETTE_NODE_GROUPS } = await import('/src/canvas/palette-categories.ts')
       const { getNodeType } = await import('/src/nodes/registry.tsx')

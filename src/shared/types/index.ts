@@ -34,7 +34,10 @@ export const ACTIVE_NODE_TYPE_IDS = [
   'storyboard',
   'ai-process',
   'iterate',
-  'director'
+  'director',
+  'agent',
+  'state-machine',
+  'ai-review'
 ] as const
 
 export type ActiveNodeTypeId = (typeof ACTIVE_NODE_TYPE_IDS)[number]

@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { PALETTE_NODE_GROUPS, sortPaletteNodes } from '../src/shared/palette-menu-order'
+import { ACTIVE_NODE_TYPE_IDS } from '../src/shared/types'
 import {
   defaultPalettePreferences,
   normalizePalettePreferences
 } from '../src/shared/palette-preferences'
 
 describe('统一菜单排序', () => {
-  it('完整覆盖 28 个节点且没有重复', () => {
+  it('完整覆盖可创建节点且没有重复', () => {
     const types = Object.values(PALETTE_NODE_GROUPS).flat()
-    expect(types).toHaveLength(28)
-    expect(new Set(types).size).toBe(28)
+    expect(types).toHaveLength(ACTIVE_NODE_TYPE_IDS.length)
+    expect(new Set(types)).toEqual(new Set(ACTIVE_NODE_TYPE_IDS))
   })
   it('排序保留同类型不同端口及未知节点，不修改原数组', () => {
     const nodes = [

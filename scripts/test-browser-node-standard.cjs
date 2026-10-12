@@ -19,6 +19,8 @@ function contrast(first, second) {
     const page = await browser.newPage({ viewport: { width: 2700, height: 2750 } })
     await page.goto(process.env.CANVAS_QA_URL || 'http://127.0.0.1:5196')
     await page.waitForSelector('.tl-canvas')
+    const columns = await page.evaluate(async () => Math.max(...Object.values((await import('/src/canvas/palette-categories.ts')).PALETTE_NODE_GROUPS).map(ids => ids.length)))
+    await page.setViewportSize({ width: 210 + columns * 355 + 60, height: 2750 })
     await page.evaluate(async () => {
       const { PALETTE_NODE_GROUPS } = await import('/src/canvas/palette-categories.ts')
       const { getNodeType } = await import('/src/nodes/registry.tsx')
@@ -40,8 +42,9 @@ function contrast(first, second) {
     }))
     fs.writeFileSync(`${output}/geometry.json`, JSON.stringify(geometry,null,2))
     await page.screenshot({ path: `${output}/all-nodes-dark.png` })
-    console.log(`28 节点尺寸证据：${output}`)
-    assert.equal(geometry.length, 28)
+    const expectedCount = await page.evaluate(async () => (await import('/src/nodes/registry.tsx')).allNodeTypes().length)
+    console.log(`${expectedCount} 节点尺寸证据：${output}`)
+    assert.equal(geometry.length, expectedCount)
     const clipped=await page.locator('.node-standard-identity').evaluateAll(identities=>identities.flatMap(identity=>{
       const scroll=identity.closest('.node-standard-scroll'),card=identity.closest('.node-card')
       const bottom=identity.querySelector('strong').getBoundingClientRect().bottom
@@ -181,7 +184,8 @@ function contrast(first, second) {
     await page.waitForTimeout(150)
     assert.equal(await processCard.locator('h2').count(),0)
     assert.equal(await processCard.getByRole('textbox',{name:'完整处理结果'}).textContent(),'## 原样\n**保留星号**')
-    await page.setViewportSize({width:4300,height:4200})
+    // All cards must remain inside the viewport at the largest tested zoom.
+    await page.setViewportSize({width:Math.ceil((210 + columns * 355 + 60) * 1.5),height:4200})
     for (const theme of ['dark','light']) for (const zoom of [.75,1,1.5]) {
       await page.evaluate(async ({theme,zoom})=>{
         document.querySelectorAll('.canvas-host,.canvas-page').forEach(el=>{el.classList.toggle('canvas-theme-dark',theme==='dark');el.classList.toggle('canvas-theme-light',theme==='light')})
@@ -189,12 +193,16 @@ function contrast(first, second) {
         editor.setCamera({x:0,y:0,z:zoom},{immediate:true})
       },{theme,zoom})
       await page.waitForTimeout(100)
-      const buttons=await page.locator('.node-standard-action-bar > button').evaluateAll(buttons=>buttons.map(button=>{const b=button.getBoundingClientRect(),c=button.closest('.node-card').getBoundingClientRect();return {width:b.width,height:b.height,inset:c.bottom-b.bottom}}))
-      assert.ok(buttons.length > 0 && buttons.length < 28)
-      for (const b of buttons) {assert.ok(Math.abs(b.width-200*zoom)<1);assert.ok(Math.abs(b.height-32*zoom)<1);assert.ok(Math.abs(b.inset-8*zoom)<1,`${theme}/${zoom}: ${JSON.stringify(b)}`)}
+      const cameraProbe = await page.evaluate(async () => {
+        const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
+        return { camera: editor.getCamera(), viewport: editor.getViewportPageBounds(), screen: editor.getViewportScreenBounds(), code: editor.getShape('shape:standard-code') && { x: editor.getShape('shape:standard-code').x, y: editor.getShape('shape:standard-code').y } }
+      })
+      const buttons=await page.locator('.node-standard-action-bar > button').evaluateAll(buttons=>buttons.map(button=>{const b=button.getBoundingClientRect(),c=button.closest('.node-card').getBoundingClientRect();return {type:button.closest('.node-card').dataset.nodeType,x:c.x,y:c.y,width:b.width,height:b.height,inset:c.bottom-b.bottom}}))
+      assert.ok(buttons.length > 0 && buttons.length < expectedCount)
+      for (const b of buttons) {assert.ok(Math.abs(b.width-200*zoom)<1,`${theme}/${zoom}: ${JSON.stringify({button:b,...cameraProbe})}`);assert.ok(Math.abs(b.height-32*zoom)<1);assert.ok(Math.abs(b.inset-8*zoom)<1,`${theme}/${zoom}: ${JSON.stringify(b)}`)}
       const descriptions=await page.locator('.node-standard-description').evaluateAll(els=>els.map(el=>({height:getComputedStyle(el).height,color:getComputedStyle(el).color,background:getComputedStyle(el.closest('.node-card')).backgroundColor})))
       for (const d of descriptions) {assert.equal(d.height,'36px');assert.ok(contrast(d.color,d.background)>=4.5,`${theme} description contrast ${contrast(d.color,d.background)}`)}
     }
-    console.log('28 节点几何、主动作、文本增长/回落、手动边界、恢复自动、旧尺寸/快照恢复、深浅主题与三档缩放通过')
+    console.log('全部节点几何、主动作、文本增长/回落、手动边界、恢复自动、旧尺寸/快照恢复、深浅主题与三档缩放通过')
   } finally { await browser.close() }
 })().catch((error) => { console.error(error); process.exitCode = 1 })

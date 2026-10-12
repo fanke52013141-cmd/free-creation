@@ -36,6 +36,11 @@ const MODEL_ATTRS = {
 
 export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Object.fromEntries(
   [
+    def('agent.probe.started', 'info', 'main/agent-flow/model-probe-electron', { phase: 'short' }),
+    def('agent.probe.completed', 'info', 'main/agent-flow/model-probe-electron', {
+      phase: 'short'
+    }),
+    def('agent.probe.failed', 'error', 'main/agent-flow/model-probe-electron', { phase: 'short' }),
     ...[
       'started',
       'resumed',

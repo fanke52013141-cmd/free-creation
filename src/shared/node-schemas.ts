@@ -1,4 +1,5 @@
 import type { PortSchemaRef } from './types'
+import { ReviewDecisionSchema, FlowStateSchema } from './agent-flow/node-contracts'
 
 export interface SchemaValidationResult {
   ok: boolean
@@ -8,6 +9,8 @@ export interface SchemaValidationResult {
 export function nodeSchemaRegistered(schema: PortSchemaRef): boolean {
   return (
     `${schema.id}@${schema.version}` === 'json.any@1' ||
+    `${schema.id}@${schema.version}` === 'review.decision@1' ||
+    `${schema.id}@${schema.version}` === 'flow.state@1' ||
     `${schema.id}@${schema.version}` === 'storyboard.shots@1' ||
     `${schema.id}@${schema.version}` === 'list.items@1' ||
     `${schema.id}@${schema.version}` === 'character.profile@1' ||
@@ -275,6 +278,13 @@ function validateWebsiteLink(value: unknown): string[] {
 export function validateNodeSchema(schema: PortSchemaRef, value: unknown): SchemaValidationResult {
   let errors: string[]
   switch (`${schema.id}@${schema.version}`) {
+    case 'review.decision@1':
+    case 'flow.state@1': {
+      const validator = schema.id === 'review.decision' ? ReviewDecisionSchema : FlowStateSchema
+      const parsed = validator.safeParse(value)
+      errors = parsed.success ? [] : ['结果不符合版本化 Agent Flow 契约']
+      break
+    }
     case 'json.any@1':
       errors = jsonSerializable(value)
       break

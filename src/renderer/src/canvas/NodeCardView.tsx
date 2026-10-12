@@ -658,9 +658,10 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           availableInputCounts,
           modelAvailable,
           configIssue:
-            shape.props.nodeType === 'processor'
+            spec?.executionDisabledReason ??
+            (shape.props.nodeType === 'processor'
               ? processorConfigurationIssue(editor, shape)
-              : undefined,
+              : undefined),
           outputs: spec?.projectOutputs?.(shape) ?? {}
         }),
         incomingCounts,
@@ -1170,7 +1171,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               {shape.meta.nodeHeightMode === 'manual' && (
                 <button
                   className="node-info-btn"
-                  aria-label={shape.props.nodeType === 'storyboard' ? '恢复内容自适应' : '恢复自动高度'}
+                  aria-label={
+                    shape.props.nodeType === 'storyboard' ? '恢复内容自适应' : '恢复自动高度'
+                  }
                   title={shape.props.nodeType === 'storyboard' ? '恢复内容自适应' : '恢复自动高度'}
                   onPointerDown={stopEventPropagation}
                   onClick={(event) => {
