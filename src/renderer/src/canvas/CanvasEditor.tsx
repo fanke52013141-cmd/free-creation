@@ -59,6 +59,7 @@ import type { ConnectionFrom } from '../stores/connection'
 import { useGatewayStore } from '../stores/gateway'
 import { useEngineStore } from '../engine/store'
 import { runWorkflow, runWorkflowForNodes } from '../engine/executor'
+import { runPreparedFlowNodeCommand, reportFlowBridgeFailure, reportFlowCanvasBindingFailure } from '../engine/flow-command-bridge'
 import { useMediaStore } from '../stores/media'
 import { useEditorStore } from '../stores/editor'
 import { Icon } from '../components/Icon'
@@ -364,6 +365,14 @@ export function CanvasEditor({
 
   // 执行引擎：注册 run 闭包到全局 store，顶部栏通过 store 触发（捕获 editor + projectId + providers）
   const providers = useGatewayStore((s) => s.providers)
+  useEffect(() => {
+    if (!editorInstance) return
+    const unsubscribe = window.api.onFlowCommandGrant((grant) => {
+      void runPreparedFlowNodeCommand(editorInstance, project.id, useGatewayStore.getState().providers, grant).catch(() => reportFlowBridgeFailure(grant))
+    })
+    void window.api.activateFlowCanvas({ projectId: project.id }).catch(() => reportFlowCanvasBindingFailure(project.id, 'attach'))
+    return () => { unsubscribe(); void window.api.deactivateFlowCanvas({ projectId: project.id }).catch(() => reportFlowCanvasBindingFailure(project.id, 'detach')) }
+  }, [editorInstance, project.id])
   useEffect(() => {
     const run = (): void => {
       const editor = editorRef.current

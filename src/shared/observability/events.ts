@@ -46,6 +46,17 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
       phase: 'short',
       submissionId: 'id'
     }),
+    def('command.operation.started', 'info', 'main/ipc/flow-commands.ipc', { commandId: 'id', phase: 'short' }),
+    def('command.operation.completed', 'info', 'main/ipc/flow-commands.ipc', {
+      commandId: 'id', phase: 'short', state: 'short', versionId: 'id'
+    }),
+    def('command.operation.failed', 'error', 'main/ipc/flow-commands.ipc', { commandId: 'id', phase: 'short', code: 'short' }),
+    def('command.recovered', 'warn', 'main/ipc/flow-commands.ipc', { commandId: 'id', phase: 'short', state: 'short', resumesTraceId: 'id' }),
+    def('command.recovery.started', 'info', 'main/ipc/flow-commands.ipc', { phase: 'short' }),
+    def('command.recovery.completed', 'info', 'main/ipc/flow-commands.ipc', { phase: 'short', commandCount: 'int' }),
+    def('command.bridge.failed', 'error', 'renderer/engine/flow-command-bridge', { commandId: 'id', phase: 'short' }),
+    def('command.canvas_binding_failed', 'error', 'renderer/engine/flow-command-bridge', { phase: 'short' }),
+    def('command.recovery_failed', 'error', 'main/ipc/flow-commands.ipc', { commandId: 'id', phase: 'short', code: 'short' }),
     def('asset.placement.started', 'info', 'renderer/canvas/flow-asset-actions', {
       phase: 'short'
     }),

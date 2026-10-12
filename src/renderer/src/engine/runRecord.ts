@@ -19,6 +19,8 @@ export interface NodeRunTraceEntry {
 export interface NodeRunSource {
   nodeId: string
   portId: string
+  assetId?: string
+  versionId?: string
 }
 
 /**
@@ -27,6 +29,9 @@ export interface NodeRunSource {
  */
 export interface NodeRunRecord {
   runId: string
+  commandId?: string
+  commandLeaseId?: string
+  fixedInputs?: import('@shared/agent-flow/commands').NodeExecuteCommand['inputs']
   status: NodeRunStatus
   startedAt: number
   finishedAt?: number
@@ -72,7 +77,9 @@ export function inputSources(inputs: ContractInputMap): Record<string, NodeRunSo
       portId,
       packets.map((packet) => ({
         nodeId: packet.source.nodeId,
-        portId: packet.source.portId
+        portId: packet.source.portId,
+        ...(packet.source.assetId ? { assetId: packet.source.assetId } : {}),
+        ...(packet.source.versionId ? { versionId: packet.source.versionId } : {})
       }))
     ])
   )

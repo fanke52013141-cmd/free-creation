@@ -1,3 +1,4 @@
+import { PROCESSOR_PORTS, PROCESSOR_CONTRACT_VERSION } from '@shared/agent-flow/processor-contract'
 // 节点 Spec 注册（见《技术框架与规范》§5.1）
 // 端口声明对齐路线图的节点类型表；any 万能口，其余类型需一致才可连
 import type { PortCardinality, PortDecl, PortSchemaRef } from '@shared/types'
@@ -864,26 +865,14 @@ export function registerExtendedNodeTypes(): void {
 
   registerNodeType({
     type: 'processor',
-    contractVersion: 1,
+    contractVersion: PROCESSOR_CONTRACT_VERSION,
     label: '数据处理',
     icon: 'processor',
     color: NODE_ACCENTS.processor,
     defaultSize: { w: 340, h: 260 },
     description: '单值透传并保持原类型；也可从 JSON 取字段或转成文本模板。',
     category: 'logic',
-    ports: {
-      in: [
-        input('in-value', '输入变量', 'any', '一个文本、JSON 或媒体资产值；此端口不接收多条连线。')
-      ],
-      out: [
-        output(
-          'out-value',
-          '输出变量',
-          'any',
-          '透传时保留原值类型；取字段保留其文本或 JSON 类型；模板模式输出文本。'
-        )
-      ]
-    },
+    ports: PROCESSOR_PORTS,
     projectOutputs: projectProcessorOutputs,
     executor: processorExecutor,
     Body: ProcessorBody

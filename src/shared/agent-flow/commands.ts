@@ -48,3 +48,47 @@ export const NodeExecuteCommandSchema = z
     }
   })
 export type NodeExecuteCommand = z.infer<typeof NodeExecuteCommandSchema>
+
+export const CommandLookupSchema = z.object({ projectId: id, commandId: id }).strict()
+export const NodeAvailabilitySchema = z.object({ projectId: id, nodeId: id }).strict()
+export const FlowCanvasSchema = z.object({ projectId: id }).strict()
+export const CommandLeaseSchema = CommandLookupSchema.extend({ leaseId: id }).strict()
+export type CommandLookup = z.infer<typeof CommandLookupSchema>
+export type CommandLease = z.infer<typeof CommandLeaseSchema>
+export type FlowCommandState =
+  'pending' | 'unknown' | 'committed' | 'failed' | 'cancelled' | 'skipped'
+export interface FlowCommandReceipt {
+  commandId: string
+  projectId: string
+  taskId: string
+  targetNodeId: string
+  state: FlowCommandState
+  runId: string
+  nodeExecutionId?: string
+  inputFingerprint?: string
+  inputs: NodeExecuteCommand['inputs']
+  outputRefs: z.infer<typeof AgentFlowAssetRefSchema>[]
+  graphVersion?: number
+  code?: string
+}
+export interface FlowCommandGrant {
+  command: NodeExecuteCommand
+  leaseId: string
+  runId: string
+  inputs: Array<{
+    targetPortId: string
+    versions: import('./assets').FlowAssetVersion[]
+    sources?: Array<{ nodeId: string; portId: string }>
+  }>
+}
+export type FlowCommandPrepareResult =
+  | { state: 'ready'; grant: FlowCommandGrant }
+  | { state: FlowCommandState; receipt: FlowCommandReceipt }
+export class FlowCommandError extends Error {
+  constructor(
+    public readonly code: string,
+    public readonly phase: string
+  ) {
+    super(code)
+  }
+}

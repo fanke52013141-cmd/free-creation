@@ -15,6 +15,7 @@ import { openProject } from '../store/projects.repo'
 
 const messages: Record<string, string> = {
   ASSET_PROJECT_MISSING: '找不到原项目，请重新打开项目。',
+  ASSET_SOURCE_OCCUPIED: '节点有未确认的命令，请先核对运行记录。',
   ASSET_NODE_MISSING: '节点已删除，请重新选择来源。',
   ASSET_REVISION_CONFLICT: '画布已发生变化，请保存后重新提交。',
   ASSET_SUBMISSION_CONFLICT: '上次提交的范围发生变化，请核对历史版本后重新提交。',

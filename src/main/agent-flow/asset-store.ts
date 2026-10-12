@@ -58,7 +58,10 @@ export class FlowAssetStore {
     private readonly project: (id: string) => ProjectFile | null
   ) {}
 
-  submit(raw: AssetSubmit): FlowAssetVersion {
+  submit(
+    raw: AssetSubmit,
+    commandPermit?: { commandId: string; leaseId: string }
+  ): FlowAssetVersion {
     const input = AssetSubmitSchema.parse(raw)
     const signature = hash(JSON.stringify([input.nodeId, input.portId, input.expectedGraphVersion]))
     let phase = 'project-read'
@@ -82,6 +85,19 @@ export class FlowAssetStore {
         phase = 'revision'
         if (project.meta.graphVersion !== input.expectedGraphVersion)
           fail('ASSET_REVISION_CONFLICT')
+        phase = 'occupancy'
+        const occupied = this.db
+          .prepare(
+            "SELECT command_id, lease_id FROM flow_commands WHERE project_id = ? AND target_node_id = ? AND state IN ('pending', 'unknown')"
+          )
+          .get(input.projectId, input.nodeId) as
+          { command_id: string; lease_id: string } | undefined
+        if (
+          occupied &&
+          (occupied.command_id !== commandPermit?.commandId ||
+            occupied.lease_id !== commandPermit?.leaseId)
+        )
+          fail('ASSET_SOURCE_OCCUPIED')
         phase = 'source-projection'
         const snapshot = project.tldrawSnapshot as { store?: Record<string, unknown> } | undefined
         const record = snapshot?.store?.[input.nodeId] as

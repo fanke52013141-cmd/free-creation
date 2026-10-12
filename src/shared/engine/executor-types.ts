@@ -88,6 +88,7 @@ export interface NodeExecutionTarget {
  */
 export interface NodeDiagnosticsContext {
   traceId: string
+  taskId?: string
   nodeExecutionId: string
   spanId: string
   parentSpanId?: string

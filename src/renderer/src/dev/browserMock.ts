@@ -135,6 +135,17 @@ export function installBrowserMock(): void {
 
   const mockApi: WindowApi = {
     submitFlowAsset: async () => notImplementedInDemo('资产版本提交'),
+    prepareFlowCommand: async () => notImplementedInDemo('生产命令'),
+    activateFlowCanvas: async () => ({ ok: true, data: null }),
+    deactivateFlowCanvas: async () => ({ ok: true, data: null }),
+    checkFlowNodeAvailability: async () => ({ ok: true, data: null }),
+    dispatchFlowCommand: async () => notImplementedInDemo('生产命令'),
+    onFlowCommandGrant: () => () => {},
+    abortUnstartedFlowCommand: async () => notImplementedInDemo('生产命令'),
+    checkFlowCommand: async () => notImplementedInDemo('生产命令'),
+    commitFlowCommand: async () => notImplementedInDemo('生产命令'),
+    lookupFlowCommand: async () => notImplementedInDemo('生产命令'),
+    markFlowCommandUnknown: async () => notImplementedInDemo('生产命令'),
     listFlowAssets: async () => notImplementedInDemo('资产版本列表'),
     readFlowAsset: async () => notImplementedInDemo('资产版本读取'),
     reportNodeRunEvent: () => Promise.resolve({ ok: true, data: true }),

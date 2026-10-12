@@ -12,7 +12,7 @@ export interface NodeValuePacket {
   type: PortType
   value: NodeValue
   schema?: import('../types').PortSchemaRef
-  source: { nodeId: string; portId: string; runId: string }
+  source: { nodeId: string; portId: string; runId: string; assetId?: string; versionId?: string }
   createdAt: number
 }
 

@@ -57,6 +57,14 @@ import {
 } from '@shared/observability'
 import { emitDiagnosticsEvent } from './diagnosticsReporter'
 import { captureRunWorkload } from './run-workload'
+import type { FlowCommandGrant } from '@shared/agent-flow/commands'
+import { AgentFlowAssetRefSchema } from '@shared/agent-flow/node-contracts'
+import { readPinnedOutputs } from '@shared/engine/deterministic-projections'
+
+export interface NodeCommandRunOptions {
+  grant: FlowCommandGrant
+  beforeExecutor: () => Promise<void>
+}
 
 interface RunControl {
   cancelled: boolean
@@ -65,6 +73,8 @@ interface RunControl {
 }
 
 interface WorkflowContext {
+  command?: NodeCommandRunOptions
+  taskId?: string
   editor: Editor
   projectId: string
   providers: ProviderSummary[]
@@ -111,7 +121,7 @@ function reportRunError(
 function emitWorkflowEvent(
   event: string,
   message: string,
-  scope: Pick<WorkflowContext, 'traceId' | 'workflowSpanId' | 'runId' | 'projectId'>,
+  scope: Pick<WorkflowContext, 'traceId' | 'workflowSpanId' | 'runId' | 'projectId' | 'taskId'>,
   options: {
     status?: 'success' | 'failed' | 'cancelled'
     attributes?: Record<string, unknown>
@@ -636,6 +646,7 @@ function nodeTraceContext(
   projectId?: string
   nodeId?: string
   nodeType?: string
+  taskId?: string
   batchId?: string
   itemId?: string
 } {
@@ -648,6 +659,7 @@ function nodeTraceContext(
     projectId: ctx.projectId,
     nodeId: node.id,
     nodeType: node.type,
+    taskId: ctx.taskId,
     batchId: ctx.batch?.batchId,
     itemId: ctx.batch?.itemId
   }
@@ -732,6 +744,7 @@ async function invokeExecutor(
     diagnostics: {
       traceId: ctx.traceId,
       nodeExecutionId: record.nodeExecutionId ?? '',
+      taskId: ctx.command?.grant.command.taskId,
       spanId: record.nodeExecutionId ?? '',
       parentSpanId: ctx.workflowSpanId,
       batchId: ctx.batch?.batchId,
@@ -846,6 +859,19 @@ function collectNodeInputs(
 ): { value: ReturnType<typeof collectContractInputs>['value']; errors: string[] } {
   const spec = getNodeType(node.type)
   if (!spec) return { value: new Map(), errors: [`未知节点类型：${node.type}`] }
+  if (ctx.command) {
+    return collectContractInputs(node, [], new Map(), {
+      injections: ctx.command.grant.inputs.flatMap((input) => input.versions.map((version, index) => ({
+        portId: input.targetPortId,
+        packet: { type: version.value.kind, value: version.value,
+          ...(version.value.kind === 'json' ? { schema: { id: 'json.any', version: 1 } } : {}),
+          source: { nodeId: input.sources?.[index]?.nodeId ?? version.ref.sourceNodeId,
+            portId: input.sources?.[index]?.portId ?? version.ref.sourcePortId,
+            runId: ctx.runId, assetId: version.ref.assetId, versionId: version.ref.versionId },
+          createdAt: version.createdAt }
+      })))
+    })
+  }
   if (!injection) return collectContractInputs(node, ctx.graph.edges, ctx.outputs)
   const controlEdges = ctx.graph.edges.filter(
     (edge) =>
@@ -943,6 +969,15 @@ async function executeNodeOnce(
       return { status: 'skipped', reason: '任务已取消' }
     }
     emitWorkflowEvent('workflow.task_admitted', '节点取得资源额度', ctx)
+    if (!ctx.command && window.api?.checkFlowNodeAvailability) {
+      const available = await window.api.checkFlowNodeAvailability({ projectId: ctx.projectId, nodeId: node.id }).catch(() => ({ ok: false as const }))
+      if (!available.ok) {
+        ctx.outputs.delete(node.id)
+        setExec(ctx.editor, node.id as TLShapeId, node.exec.status)
+        return { status: 'skipped', reason: 'error' in available && available.error.code === 'FLOW_REVIEW_NOT_READY'
+          ? '审核节点尚未接入执行，本次运行已跳过' : '节点有未确认的命令，请先核对运行记录' }
+      }
+    }
     return await executeNodeUnscheduled(ctx, node, runSubflow, injection)
   } finally {
     release()
@@ -964,6 +999,8 @@ async function executeNodeUnscheduled(
   // 同节点重跑与不同迭代项因此不会混淆。
   const record: NodeRunRecord = {
     runId: ctx.runId,
+    ...(ctx.command ? { commandId: ctx.command.grant.command.commandId,
+      commandLeaseId: ctx.command.grant.leaseId, fixedInputs: ctx.command.grant.command.inputs } : {}),
     status: 'running',
     startedAt: Date.now(),
     inputs: {},
@@ -1006,6 +1043,7 @@ async function executeNodeUnscheduled(
     }
     // 本次执行接管该节点的输出；失败或跳过时不能让本轮继续消费上一次结果。
     ctx.outputs.delete(node.id)
+    if (ctx.command) await ctx.command.beforeExecutor()
     recordRunTrace(ctx, node, record, 'execution', 'info', '开始调用节点执行器')
     const result = await invokeExecutor(ctx, node, shape, collected.value, runSubflow, record)
     const latest = editor.getShape<NodeCardShape>(shapeId)
@@ -1294,6 +1332,14 @@ function seedPersistedOutputs(ctx: WorkflowContext): void {
     if (lastRun && lastRun.status !== 'success' && !fromDocument) continue
     const projected = buildOutputPackets(node, projectNodeOutputs(shape), ctx.runId)
     if (projected.errors.length === 0 && Object.keys(projected.value).length > 0) {
+      if (shape.meta?.flowAssetRef && readPinnedOutputs(shape.meta.pinnedOutput)) {
+        let raw: unknown
+        try { raw = JSON.parse(String(shape.meta.flowAssetRef)) } catch { raw = null }
+        const ref = AgentFlowAssetRefSchema.safeParse(raw)
+        if (ref.success) for (const packet of Object.values(projected.value)) {
+          if (packet) Object.assign(packet.source, { assetId: ref.data.assetId, versionId: ref.data.versionId })
+        }
+      }
       ctx.outputs.set(node.id, projected.value)
     }
   }
@@ -1309,7 +1355,8 @@ export async function runNodeManually(
   editor: Editor,
   projectId: string,
   providers: ProviderSummary[],
-  nodeId: TLShapeId
+  nodeId: TLShapeId,
+  command?: NodeCommandRunOptions
 ): Promise<NodeExecutionResult> {
   if (hasNodeTask(projectId, nodeId) || nodeTests.has(nodeId))
     return { status: 'skipped', reason: '当前节点已在运行或排队' }
@@ -1327,9 +1374,11 @@ export async function runNodeManually(
     graph,
     outputs: new Map<string, ContractOutputs>(),
     subflowBaseInputs: new Map(),
-    runId: crypto.randomUUID(),
-    traceId: newTraceId(),
-    workflowSpanId: newSpanId(),
+    runId: command?.grant.runId ?? crypto.randomUUID(),
+    traceId: command?.grant.command.traceId ?? newTraceId(),
+    workflowSpanId: command?.grant.command.spanId ?? newSpanId(),
+    command,
+    taskId: command?.grant.command.taskId,
     isolated: true
   }
   emitWorkflowEvent('workflow.started', '手动运行单个节点', ctx)

@@ -4,6 +4,7 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import { IPC } from '../shared/contracts'
 import type { AssetSubmit, FlowAssetVersion, FlowAssetSummary } from '../shared/agent-flow/assets'
+import type { NodeExecuteCommand, CommandLookup, CommandLease, FlowCommandPrepareResult, FlowCommandReceipt } from '../shared/agent-flow/commands'
 import type { ArtifactRecipe } from '../shared/artifact-recipe'
 import type {
   BootstrapInfo,
@@ -107,6 +108,21 @@ import type {
 } from '../shared/types'
 
 const api = {
+  activateFlowCanvas: (input: { projectId: string }): Promise<IpcEnvelope<null>> => ipcRenderer.invoke(IPC.flowCommands.attach, input),
+  deactivateFlowCanvas: (input: { projectId: string }): Promise<IpcEnvelope<null>> => ipcRenderer.invoke(IPC.flowCommands.detach, input),
+  checkFlowNodeAvailability: (input: { projectId: string; nodeId: string }): Promise<IpcEnvelope<null>> => ipcRenderer.invoke(IPC.flowCommands.availability, input),
+  dispatchFlowCommand: (input: NodeExecuteCommand): Promise<IpcEnvelope<FlowCommandPrepareResult>> => ipcRenderer.invoke(IPC.flowCommands.dispatch, input),
+  onFlowCommandGrant: (callback: (grant: import('../shared/agent-flow/commands').FlowCommandGrant) => void): (() => void) => {
+    const listener = (_event: unknown, grant: import('../shared/agent-flow/commands').FlowCommandGrant): void => callback(grant)
+    ipcRenderer.on(IPC.flowCommands.grant, listener)
+    return () => ipcRenderer.removeListener(IPC.flowCommands.grant, listener)
+  },
+  abortUnstartedFlowCommand: (input: CommandLease): Promise<IpcEnvelope<FlowCommandReceipt>> => ipcRenderer.invoke(IPC.flowCommands.abort, input),
+  prepareFlowCommand: (input: NodeExecuteCommand): Promise<IpcEnvelope<FlowCommandPrepareResult>> => ipcRenderer.invoke(IPC.flowCommands.prepare, input),
+  checkFlowCommand: (input: CommandLease): Promise<IpcEnvelope<null>> => ipcRenderer.invoke(IPC.flowCommands.check, input),
+  commitFlowCommand: (input: CommandLookup): Promise<IpcEnvelope<FlowCommandReceipt>> => ipcRenderer.invoke(IPC.flowCommands.commit, input),
+  lookupFlowCommand: (input: CommandLookup): Promise<IpcEnvelope<FlowCommandReceipt>> => ipcRenderer.invoke(IPC.flowCommands.lookup, input),
+  markFlowCommandUnknown: (input: CommandLease): Promise<IpcEnvelope<FlowCommandReceipt>> => ipcRenderer.invoke(IPC.flowCommands.unknown, input),
   submitFlowAsset: (input: AssetSubmit): Promise<IpcEnvelope<FlowAssetVersion>> =>
     ipcRenderer.invoke(IPC.flowAssets.submit, input),
   listFlowAssets: (input: {

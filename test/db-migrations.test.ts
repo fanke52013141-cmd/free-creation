@@ -38,7 +38,7 @@ describe('SQLite user_version migrations', () => {
     expect(state.pragmas).toEqual(
       Array.from({ length: DB_SCHEMA_VERSION }, (_value, index) => `user_version = ${index + 1}`)
     )
-    expect(schemaExecs(state.execs).at(-1)).toContain('CREATE TABLE flow_asset_versions')
+    expect(schemaExecs(state.execs).at(-1)).toContain('CREATE TABLE flow_commands')
   })
 
   it('每个迁移整体包在单个事务里：迁移语句与 user_version 推进同提交', () => {

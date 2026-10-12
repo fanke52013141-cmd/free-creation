@@ -9,6 +9,7 @@ import log from 'electron-log/main'
 import icon from '../../resources/icon.png?asset'
 import { registerProjectIpc } from './ipc/project.ipc'
 import { registerFlowAssetsIpc } from './ipc/flow-assets.ipc'
+import { registerFlowCommandsIpc } from './ipc/flow-commands.ipc'
 import { ProjectFileWatcher } from './ipc/project-watcher'
 import { registerMediaIpc } from './ipc/media.ipc'
 import { registerGatewayIpc } from './ipc/gateway.ipc'
@@ -319,6 +320,7 @@ app.whenReady().then(async () => {
   mainWindow = createWindow()
   registerGatewayIpc(mainWindow)
   registerFlowAssetsIpc(() => mainWindow)
+  registerFlowCommandsIpc(() => mainWindow)
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

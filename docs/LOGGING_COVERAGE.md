@@ -222,8 +222,19 @@ commands.ts/command-intent.ts 仅定义严格意图清单、语义指纹和去�
 
 增量最终证据：全量单元回归 150 文件、1634 通过、1 既有跳过，日志门禁通过，记录 qa/canvas-agent-flow/C2/command-intent-unit-suite.log；实际 IPC 诊断落盘仍以 C2.1 双进程验收为准，纯函数不作为新增运行日志验收。
 
+### 2026-10-12 C2.2 确定性生产命令桥
+
+后续已接入生产路径，前节为基础阶段历史记录。command.operation.started/completed/failed 覆盖授权、pending、派发、admission、普通入口占用、保存回执、lookup/unknown/未执行释放；独立操作 span 共享可信原 trace、command/task/project/node/run，回执附输出版本。command.recovery.started/completed/recovery_failed 与 command.recovered 区分 startup/renderer-lost/timeout 并关联原 trace；桥结果未确认由 renderer command.bridge.failed 记录，画布绑定 transport 未确认用 command.canvas_binding_failed。公共执行/投影/保存复用原日志，不重复节点终态。
+
+main 重新校验保存的运行/输入来源/固定版本并计算指纹；资产与命令回执 SQLite 同事务，unknown 占用保护普通执行和资产提交。白名单仅 ID、阶段、状态、静态原因、数量与耗时；正文/config/canonical/Zod 原始错误/密钥/原始异常不入诊断。日志失败不改变结果，恢复不以日志为权威。
+
+证据：13 账本、8 公共执行、5 IPC 定向测试（另 7 意图基础），包括唯一终态、超时、恢复拒写、logger 故障、foreign window/child frame；隐藏 Electron 真实 preload/IPC/画布/公共执行器/保存/SQLite 双进程对等与恢复，实际诊断扫描无私有测试正文/假密钥。最终结果登记开发台账及 qa/canvas-agent-flow/C2/commands。本包未验收媒体/模型副作用恢复、Agent 循环/审核/返工、未知人工裁决 UI 或跨项目迁移，不外推为全链路完成。
+
 ### 2026-10-12 C1 控制声明与目标/转换编辑
 
 配置保存新增 canvas.flow_config.started/applied/failed，复用统一 renderer 事件入口与 main 白名单；同 trace/node/project，阶段 validation/apply，失败码 FLOW_CONFIG_INVALID/FLOW_CONFIG_APPLY_FAILED，一次编辑只有一个终态。applied 只代表文档内更新，磁盘保存/撤销/快照恢复沿用公共路径，不重复文件终态。仅允许阶段/原因/标识，不记录目标名称、正文、事件内容或 config；logger/transport 故障不改变编辑。观察/控制 SVG 只派生视图，无逐帧日志或额外持久化图。
 
 定向测试覆盖校验/应用事件、唯一终态与 transport 故障，字段构造无业务内容；完整日志门禁通过。新事件单独桌面落盘人工验收未新增，不宣称全链路完成。生产执行、资产版本、审核 gate、返工/状态推进仍归 C2/C3。具体用户路径与未覆盖边界见 docs/canvas-agent-flow/10-c1-control-declarations.md。
+
+
+C2.2 最终验收补记：最新源码 npm run verify 完整通过（153 文件、1660 通过、1 既有跳过，模型另 2 通过、17 浏览器门禁及构建后资产/命令双进程）。实际命令诊断开始/唯一终态、恢复关联及正文/假密钥扫描通过；记录 qa/canvas-agent-flow/C2/bridge-final-verify.log 和 commands/results.json。覆盖仍限本轮确定性路径，不扩大媒体/模型/审核/返工/长期恢复验收范围。

@@ -8,7 +8,7 @@ export interface MigrationDatabase {
   pragma(statement: string, options?: { simple?: boolean }): unknown
 }
 
-export const DB_SCHEMA_VERSION = 11
+export const DB_SCHEMA_VERSION = 12
 
 const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
@@ -308,6 +308,27 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
         version_id TEXT NOT NULL REFERENCES flow_asset_versions(version_id),
         PRIMARY KEY(project_id, submission_id)
       );
+    `)
+  },
+  (database) => {
+    database.exec(`
+      CREATE TABLE flow_command_tasks (
+        task_id TEXT NOT NULL, project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        agent_node_id TEXT NOT NULL, max_steps INTEGER NOT NULL,
+        PRIMARY KEY(project_id, task_id)
+      );
+      CREATE TABLE flow_commands (
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        command_id TEXT NOT NULL, signature TEXT NOT NULL, command_json TEXT NOT NULL,
+        target_node_id TEXT NOT NULL, task_id TEXT NOT NULL,
+        lease_id TEXT NOT NULL, owner_session TEXT NOT NULL, run_id TEXT NOT NULL,
+        state TEXT NOT NULL, receipt_json TEXT NOT NULL, created_at INTEGER NOT NULL,
+        admitted INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY(project_id, command_id),
+        FOREIGN KEY(project_id, task_id) REFERENCES flow_command_tasks(project_id, task_id) ON DELETE CASCADE
+      );
+      CREATE UNIQUE INDEX idx_flow_command_occupancy ON flow_commands(project_id, target_node_id)
+        WHERE state IN ('pending', 'unknown');
     `)
   }
 ]

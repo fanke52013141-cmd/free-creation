@@ -1,6 +1,6 @@
 # C2.1 首包：文本/JSON 资产版本
 
-日期：2026-10-12。本包进入 C2，交付资产版本及普通端口消费；**C2.2 生产 Agent 命令桥尚未接入**。不能把手动处理固定资产的验收称为手动/Agent 执行对等。
+日期：2026-10-12。本包进入 C2，交付资产版本及普通端口消费；后续 **C2.2 确定性生产命令桥已接入**（见 [生产命令桥](12-c2-production-command-bridge.md)）。本包的手动处理验收不等于命令对等；确定性对等的独立证据见 C2.2。
 
 ## 画布操作路径
 
@@ -16,7 +16,7 @@
 - main 从已保存 tldrawSnapshot 节点按正式端口投影取值，IPC 不接受正文或结果。文本/JSON/处理投影抽到 shared，仍由原 NodeTypeSpec 注册，没有第二套业务执行器。支持 text/markdown/JSON，单版本 UTF-8 上限 1 MiB；媒体及其他节点提交暂不支持。
 - 新提交须匹配 expectedGraphVersion。相同 submissionId/意图返回原版本，即使图后来改变；修改来源/端口/预期版本则拒绝冲突。版本和回执同一事务提交，回执失败不留半个版本。无图改动也可显式再提交新版本。
 - UI 丢失回执时，在当前面板保留同一个请求，再点击核对原提交。重开面板可查看历史，未确认请求的跨进程恢复归 C4。
-- 读取校验 digest；resolveInputs 按顺序验证完整 assetId/versionId/sourceNodeId/sourcePortId，拒绝跨项目和伪造引用，最多 128 项。目前没有 Agent 调度消费该接口。
+- 读取校验 digest；resolveInputs 按顺序验证完整 assetId/versionId/sourceNodeId/sourcePortId，拒绝跨项目和伪造引用，最多 128 项。后续 C2.2 确定性命令桥消费此接口，不代表 C3 自主任务循环。
 - 固定节点保存版本引用和 pinnedOutput 内容快照。SQLite 是版本历史权威来源，画布快照是固定版本可独立读取的投影；源节点编辑不回写历史，无 API 更新已提交版本。
 - IPC 只接受受控桌面窗口主 frame。项目删除级联清理版本/回执；源节点删除保留同项目历史。不引入登录或团队权限。
 
@@ -36,6 +36,6 @@
 
 复跑：构建后 `npm run test:agent-flow-assets`；浏览器与构建后的 Electron 验收均纳入 `npm run verify`。当前 native SQLite 为 Electron ABI 140，门禁沿用匹配的 Electron-as-Node。证据在忽略目录 qa/canvas-agent-flow/C2：electron-assets-results.json、diagnostics、browser-assets-results.json、fixed-asset-canvas.png、final-verify.log；全量结果以开发台账为准。没有新增付费模型调用。
 
-剩余：媒体/更多输出投影、固定输入目标端口清单、语义修订、命令占用/回执/未知核对、手动/Agent 对等、真实审核 gate 与自动返工。版本历史及引用的复制/导入导出、模板重映射及恢复归 C4。固定内容快照可随画布保存，但版本历史尚不随项目导出完整迁移。
+后续 C2.2 已接固定输入目标端口、语义修订、命令占用/回执/未知核对及确定性手动/命令对等；剩余媒体/更多输出投影、全节点对等、真实审核 gate 与自动返工。版本历史及引用的复制/导入导出、模板重映射及恢复归 C4。固定内容快照可随画布保存，但版本历史尚不随项目导出完整迁移。
 
-唯一下一步：C2.2 确定性 node.execute；main 授权/保存 pending，renderer 复用公共执行器消费固定输入，保存正式输出及版本后确认回执，验证冲突/去重/未知不重放。
+后续交付：C2.2 确定性 node.execute 已接入上述路径，独立验收见生产命令桥文档；下一步 C3 有界任务循环与审核/返工。

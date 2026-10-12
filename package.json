@@ -8,6 +8,7 @@
   "scripts": {
     "test:agent-flow-c0": "node scripts/test-agent-flow-c0.cjs",
     "test:agent-flow-assets": "node scripts/test-agent-flow-assets-electron.cjs",
+    "test:agent-flow-commands": "node scripts/test-agent-flow-commands-electron.cjs",
     "test:agent-flow-c0-unit": "node scripts/test-agent-flow-c0-unit.cjs",
     "format": "prettier --write .",
     "lint": "eslint . --quiet",
@@ -33,7 +34,7 @@
     "benchmark:graph": "node scripts/benchmark-graph.mjs",
     "build:demo": "node scripts/build-demo-bundle.mjs",
     "benchmark:canvas": "node scripts/benchmark-canvas.mjs",
-    "verify": "npm run lint && npm run typecheck && npm run typecheck:model && npm run test && npm run test:model && npm run verify:logging && npm run test:optimization-ui && electron-vite build && npm run test:agent-flow-assets",
+    "verify": "npm run lint && npm run typecheck && npm run typecheck:model && npm run test && npm run test:model && npm run verify:logging && npm run test:optimization-ui && electron-vite build && npm run test:agent-flow-assets && npm run test:agent-flow-commands",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "dev:browser": "vite --config vite.browser.config.ts",
