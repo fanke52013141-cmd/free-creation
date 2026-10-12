@@ -26,6 +26,7 @@ import { SearchPalette } from './SearchPalette'
 import { CanvasSelectionBackground, GroupOutlineLayer } from './GroupOutlineLayer'
 import { NodeSelectionForeground } from './NodeSelectionForeground'
 import { DataEdgeLayer } from './DataEdgeLayer'
+import { AgentFlowRelationLayer } from './AgentFlowRelationLayer'
 import { useDockMagnify } from './useDockMagnify'
 import {
   setConnectionFinishHandler,
@@ -1985,6 +1986,7 @@ export function CanvasEditor({
         />
       )}
       {editorInstance && <DataEdgeLayer editor={editorInstance} hostRef={wrapRef} />}
+      {editorInstance && <AgentFlowRelationLayer editor={editorInstance} hostRef={wrapRef} />}
       {/* 左侧节点面板：一级分类保持鱼眼 Dock，二级节点在右侧抽屉中展开。 */}
       <div className="node-palette">
         <div

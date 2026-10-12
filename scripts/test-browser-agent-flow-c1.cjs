@@ -25,7 +25,10 @@ const fs = require('node:fs')
       await settings.waitFor()
       const field = type === 'agent' ? '最多处理步数' : type === 'ai-review' ? '最多返工次数' : '初始阶段'
       const value = type === 'agent' ? '17' : type === 'ai-review' ? '2' : 'working'
-      await settings.getByLabel(field, { exact: true }).fill(value)
+      if (type === 'state-machine') {
+        await settings.getByLabel(field, { exact: true }).click()
+        await page.getByRole('option', { name: value, exact: true }).click()
+      } else await settings.getByLabel(field, { exact: true }).fill(value)
       await settings.getByRole('button', { name: '保存配置', exact: true }).click()
       assert.equal(await settings.locator('[role="alert"]').count(), 0)
       const saved = await page.evaluate(async (type) => {

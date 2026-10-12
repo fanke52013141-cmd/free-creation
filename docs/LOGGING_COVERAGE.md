@@ -203,3 +203,9 @@ AI 对话 TXT 输出：仅修改已保存对话的端口投影，不新增模型
 探测准备复用正式诊断入口，新增 agent.probe.started/completed/failed；模型请求复用 model.request.* 的开始、实际首片、唯一完成/失败/取消，共享 trace、独立 requestId。固定 phase/code，无原始异常、请求/回复、密钥或 URL；关闭 SDK 默认 onError 输出。应用模型目录只读，临时凭据仅本次进程，报告和诊断拷贝不含 DB。fixture 测试覆盖单步失败即停止、错误脱敏、无重试、坏回传和日志故障；豆包文本工具协议两次真实请求通过。真实取消、媒体、并行工具未验收，不外推为全链路。
 
 C1 三种新节点仅保存配置/正文/关系声明；公共 executor 明确 skipped、不调用模型、不物化资产，projectOutputs 空。配置保存沿用项目持久化诊断，跳过沿用公共执行终态，不重复写。卡片布局/颜色/文档不涉及新增业务日志。正式工具调度、版本资产、审核 gate、返工与恢复尚未接入；C2/C3 按生产桥审阅记录补齐适用路径。
+
+### 2026-10-12 C1 控制声明与目标/转换编辑
+
+配置保存新增 canvas.flow_config.started/applied/failed，复用统一 renderer 事件入口与 main 白名单；同 trace/node/project，阶段 validation/apply，失败码 FLOW_CONFIG_INVALID/FLOW_CONFIG_APPLY_FAILED，一次编辑只有一个终态。applied 只代表文档内更新，磁盘保存/撤销/快照恢复沿用公共路径，不重复文件终态。仅允许阶段/原因/标识，不记录目标名称、正文、事件内容或 config；logger/transport 故障不改变编辑。观察/控制 SVG 只派生视图，无逐帧日志或额外持久化图。
+
+定向测试覆盖校验/应用事件、唯一终态与 transport 故障，字段构造无业务内容；完整日志门禁通过。新事件单独桌面落盘人工验收未新增，不宣称全链路完成。生产执行、资产版本、审核 gate、返工/状态推进仍归 C2/C3。具体用户路径与未覆盖边界见 docs/canvas-agent-flow/10-c1-control-declarations.md。

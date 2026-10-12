@@ -44,3 +44,5 @@
 ## 日志自查
 
 准备用 agent.probe.started/completed/failed，请求复用 model.request.*，共享 trace、独立 requestId，错误只留固定 phase/code。关闭 SDK 原始异常默认输出。仅拷贝安全报告和诊断，不含 DB。测试覆盖坏回传、0 重试、唯一终态、原始异常脱敏、logger 故障；真实取消/媒体/并行未测。C1 保存/skipped 沿用公共持久化与执行日志，纯呈现/颜色/文档不新增业务事件。验证结果登记开发台账。
+
+2026-10-12 后续更新：上述剩余 C1 控制关系、目标选择和转换编辑已交付，见 [C1 声明交付](10-c1-control-declarations.md)。生产执行边界仍按本文 C2 门槛验收。

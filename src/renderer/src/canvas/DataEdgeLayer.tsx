@@ -382,6 +382,7 @@ export function DataEdgeLayer({
       // 预览弹层通过 portal 挂到 body；弹层上方即使覆盖着一条画布连线，也不能
       // 被连线的 window 捕获监听抢走 pointerdown，否则关闭按钮会收不到 click。
       if (event.target instanceof Element && event.target.closest('.media-preview-mask')) return
+      if (event.target instanceof Element && event.target.closest('.agent-flow-control-label')) return
       // 端口与节点卡片在连接层之上（呈现规范 §8）。连线的 14px 命中描边端点
       // 恰好覆盖端口圆心，若不在这里放行，输出端口一旦接过一条连线就永远
       // 无法再从该端口拖出新连线，所有"一输出扇出多输入"的流程都会被阻断。
@@ -397,6 +398,7 @@ export function DataEdgeLayer({
       select(hit)
     }
     const onContextMenu = (event: MouseEvent): void => {
+      if (event.target instanceof Element && event.target.closest('.agent-flow-control-label')) return
       if (event.target instanceof Element && event.target.closest('.media-preview-mask')) return
       // 与 pointerdown 同理：落在节点/端口上的右键属于节点，交给节点侧处理。
       if (event.target instanceof Element && event.target.closest('.node-card-wrap')) return
@@ -410,6 +412,12 @@ export function DataEdgeLayer({
     }
     let moveFrame = 0
     const onPointerMove = (event: PointerEvent): void => {
+      if (event.target instanceof Element && event.target.closest('.agent-flow-control-label')) {
+        if (moveFrame) cancelAnimationFrame(moveFrame)
+        moveFrame = 0
+        setHoveredEdge(null)
+        return
+      }
       if (moveFrame) return
       const { clientX, clientY } = event
       moveFrame = requestAnimationFrame(() => {

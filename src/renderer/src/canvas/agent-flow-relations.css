@@ -1,0 +1,30 @@
+.agent-flow-relation-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 3;
+  overflow: visible;
+}
+.agent-flow-control-path {
+  fill: none;
+  stroke-width: 1.5;
+  stroke-dasharray: 6 5;
+  opacity: 0.8;
+}
+.agent-flow-control-label {
+  pointer-events: auto;
+  cursor: pointer;
+}
+.agent-flow-control-label rect {
+  fill: var(--panel-bg, var(--bg));
+  stroke: var(--border);
+}
+.agent-flow-control-label text {
+  fill: var(--txt);
+  font-size: 11px;
+}
+.agent-flow-control-label:focus {
+  outline: 2px solid var(--txt);
+}

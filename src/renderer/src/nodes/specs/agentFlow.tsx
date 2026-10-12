@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- Node spec registration, like specs/index.tsx. */
 import { useState } from 'react'
-import { useEditor } from 'tldraw'
+import { useEditor, useValue } from 'tldraw'
 import type { PortDecl, PortType } from '@shared/types'
 import {
   AgentNodeConfigSchema,
@@ -16,6 +16,8 @@ import {
 } from '@shared/engine/executors/agentFlow'
 import {
   NODE_ACCENTS,
+  getNodeType,
+  getNodePorts,
   registerNodeType,
   type NodeBodyProps,
   type NodeSettingsProps
@@ -24,6 +26,10 @@ import { NodeIdentity, NodePrimaryButton } from '../../canvas/NodePresentation'
 import { useNodePanelStore } from '../../stores/nodePanel'
 import { markUndoPoint } from '../../canvas/history'
 import { AppSelect } from '../../components/AppSelect'
+import { FlowNodeSelect, FlowNodeTargets, FlowTransitions } from './agentFlowEditors'
+import { canvasFlowDeclarations } from '../../canvas/agent-flow-declarations'
+import { resolveFlowDeclaration } from '@shared/agent-flow/declarations'
+import { beginFlowConfigEdit } from './agentFlowDiagnostics'
 import './agentFlow.css'
 
 const schemas = {
@@ -49,12 +55,31 @@ function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
   const config = configOf(shape)
   const agent = shape.props.nodeType === 'agent'
   const review = shape.props.nodeType === 'ai-review'
+  const issue = useValue(
+    'agent-flow-declaration-issue',
+    () => {
+      const graph = canvasFlowDeclarations(editor)
+      return resolveFlowDeclaration(
+        { id: shape.id, type: shape.props.nodeType, config: shape.props.config, outputPortIds: [] },
+        graph.nodes,
+        graph.edges
+      ).issues[0]
+    },
+    [editor, shape]
+  )
   if (!agent && !review)
     return (
       <div className="agent-flow-body">
         <NodeIdentity>
-          <small>初始阶段：{String(config.initialState ?? '未配置')}</small>
-          <small>{AGENT_FLOW_EXECUTION_PENDING}</small>
+          <div className="agent-flow-summary">
+            初始阶段：{String(config.initialState ?? '未配置')}
+          </div>
+          <p className="agent-flow-pending">{AGENT_FLOW_EXECUTION_PENDING}</p>
+          {issue && (
+            <p className="agent-flow-pending" role="status">
+              {issue}
+            </p>
+          )}
         </NodeIdentity>
         <NodePrimaryButton
           onClick={() => useNodePanelStore.getState().open('contract', shape.id, 'settings')}
@@ -69,7 +94,9 @@ function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
         {agent
           ? `${config.role === 'builder' ? '搭建' : config.role === 'coordinator' ? '主控' : '专业'} Agent · ${config.interactionMode === 'autonomous' ? '自主处理' : '人机协作'}`
           : review
-            ? `不通过时${config.rejectPolicy === 'stop' ? '停止' : '返工'} · 最多 ${config.maxReworks ?? 3} 次返工`
+            ? config.rejectPolicy === 'stop'
+              ? '不通过时停止受控分支'
+              : `不通过时返工 · 最多 ${config.maxReworks ?? 3} 次返工`
             : `初始阶段：${String(config.initialState ?? '未配置')}`}
       </div>
       {shape.props.nodeType !== 'state-machine' && (
@@ -92,6 +119,11 @@ function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
         </label>
       )}
       <p className="agent-flow-pending">{AGENT_FLOW_EXECUTION_PENDING}</p>
+      {issue && (
+        <p className="agent-flow-pending" role="status">
+          {issue}
+        </p>
+      )}
       <NodePrimaryButton
         onClick={() => useNodePanelStore.getState().open('contract', shape.id, 'settings')}
       >
@@ -101,11 +133,28 @@ function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
   )
 }
 
-function AgentFlowSettings({ shape, editor }: NodeSettingsProps): React.JSX.Element {
+function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): React.JSX.Element {
   const type = shape.props.nodeType as FlowType
   const [saved, setSaved] = useState(shape.props.config)
   const [draft, setDraft] = useState<Record<string, unknown>>(() => configOf(shape))
   const [error, setError] = useState('')
+  const graph = useValue('agent-flow-targets', () => canvasFlowDeclarations(editor), [editor])
+  const options = graph.shapes
+    .filter((node) => node.id !== shape.id)
+    .map((node) => ({
+      id: node.id,
+      label: `${node.props.title || '未命名'} · ${getNodeType(node.props.nodeType)?.label ?? '节点'}`
+    }))
+  const list = (key: string): string[] =>
+    Array.isArray(draft[key]) ? (draft[key] as string[]) : []
+  const targetList = (label: string, key: string): React.JSX.Element => (
+    <FlowNodeTargets
+      label={label}
+      values={list(key)}
+      options={options}
+      onChange={(value) => update(key, value)}
+    />
+  )
   if (saved !== shape.props.config) {
     setSaved(shape.props.config)
     setDraft(configOf(shape))
@@ -143,7 +192,7 @@ function AgentFlowSettings({ shape, editor }: NodeSettingsProps): React.JSX.Elem
       <textarea
         aria-label={label}
         value={Array.isArray(draft[key]) ? (draft[key] as string[]).join('\n') : ''}
-        placeholder="每行一个节点 ID"
+        placeholder="每行一个阶段，例如 draft、working、completed"
         onChange={(event) =>
           update(
             key,
@@ -188,18 +237,36 @@ function AgentFlowSettings({ shape, editor }: NodeSettingsProps): React.JSX.Elem
     </label>
   )
   const save = (): void => {
+    const terminal = beginFlowConfigEdit(projectId, shape.id, type)
     const result = schemas[type].safeParse(draft)
     if (!result.success) {
       setError('配置格式无效，请检查节点 ID、版本、预算和状态转换。')
+      terminal('failed', 'validation')
       return
     }
-    markUndoPoint(editor, 'agent-flow-config')
-    editor.updateShape({
-      id: shape.id,
-      type: 'node-card',
-      props: { config: JSON.stringify(result.data) }
-    })
-    setError('')
+    const declaration = resolveFlowDeclaration(
+      { id: shape.id, type, config: JSON.stringify(result.data), outputPortIds: [] },
+      graph.nodes,
+      graph.edges
+    )
+    if (declaration.issues.length) {
+      setError(declaration.issues.join('；'))
+      terminal('failed', 'validation')
+      return
+    }
+    try {
+      markUndoPoint(editor, 'agent-flow-config')
+      editor.updateShape({
+        id: shape.id,
+        type: 'node-card',
+        props: { config: JSON.stringify(result.data) }
+      })
+      setError('')
+      terminal('applied', 'apply')
+    } catch {
+      setError('配置未保存，请重试。')
+      terminal('failed', 'apply')
+    }
   }
   return (
     <section className="node-settings agent-flow-settings">
@@ -208,6 +275,7 @@ function AgentFlowSettings({ shape, editor }: NodeSettingsProps): React.JSX.Elem
           <label className="settings-field">
             职责
             <AppSelect
+              aria-label="职责"
               value={String(draft.role)}
               onChange={(event) => update('role', event.target.value)}
             >
@@ -219,6 +287,7 @@ function AgentFlowSettings({ shape, editor }: NodeSettingsProps): React.JSX.Elem
           <label className="settings-field">
             参与方式
             <AppSelect
+              aria-label="参与方式"
               value={String(draft.interactionMode)}
               onChange={(event) => update('interactionMode', event.target.value)}
             >
@@ -229,7 +298,7 @@ function AgentFlowSettings({ shape, editor }: NodeSettingsProps): React.JSX.Elem
           {numberField('最多处理步数', 'maxSteps', 1, 64)}
           {bindingField('Skills 及版本', 'skills')}
           {bindingField('工具及版本', 'tools')}
-          {listField('允许处理的节点', 'allowedNodeIds')}
+          {targetList('允许处理的节点', 'allowedNodeIds')}
         </>
       )}
       {type === 'ai-review' && (
@@ -246,20 +315,136 @@ function AgentFlowSettings({ shape, editor }: NodeSettingsProps): React.JSX.Elem
             </AppSelect>
           </label>
           {numberField('最多返工次数', 'maxReworks', 0, 10)}
-          {textField('负责修订的节点', 'responsibleNodeId')}
-          {listField('等待审核通过的节点', 'gatedNodeIds')}
+          <FlowNodeSelect
+            label="负责修订的节点"
+            value={String(draft.responsibleNodeId ?? '')}
+            options={options}
+            onChange={(value) => update('responsibleNodeId', value || undefined)}
+          />
+          {targetList('等待审核通过的节点', 'gatedNodeIds')}
+          <FlowNodeTargets
+            label="审核对象来源"
+            options={graph.edges
+              .filter((edge) => edge.to.nodeId === shape.id)
+              .map((edge) => ({
+                id: JSON.stringify([edge.from.nodeId, edge.from.portId]),
+                label: `${options.find((option) => option.id === edge.from.nodeId)?.label ?? '来源节点'} · ${(() => {
+                  const source = graph.shapes.find((node) => node.id === edge.from.nodeId)
+                  const spec = source && getNodeType(source.props.nodeType)
+                  return source && spec
+                    ? (getNodePorts(spec, source).out.find((port) => port.id === edge.from.portId)
+                        ?.name ?? '失效输出')
+                    : '失效输出'
+                })()}`
+              }))
+              .filter(
+                (option, index, all) => all.findIndex((item) => item.id === option.id) === index
+              )}
+            values={
+              Array.isArray(draft.subjectSources)
+                ? (draft.subjectSources as { nodeId: string; portId: string }[]).map((source) =>
+                    JSON.stringify([source.nodeId, source.portId])
+                  )
+                : []
+            }
+            onChange={(values) =>
+              update(
+                'subjectSources',
+                values.map((value) => {
+                  const [nodeId, portId] = JSON.parse(value) as string[]
+                  return { nodeId, portId }
+                })
+              )
+            }
+          />
         </>
       )}
       {type === 'state-machine' && (
         <>
-          {textField('初始阶段', 'initialState')}
+          <FlowNodeSelect
+            label="初始阶段"
+            missingLabel="已移除的阶段"
+            value={String(draft.initialState ?? '')}
+            options={list('states').map((state) => ({ id: state, label: state }))}
+            onChange={(value) => update('initialState', value)}
+          />
           {listField('阶段列表', 'states')}
+          <FlowTransitions
+            states={[...new Set(list('states'))]}
+            transitions={
+              Array.isArray(draft.transitions)
+                ? (draft.transitions as { from: string; event: string; to: string }[])
+                : []
+            }
+            onChange={(value) => update('transitions', value)}
+          />
           <p className="contract-settings-hint">阶段转换与控制关系暂不执行，后续接入统一调度。</p>
         </>
       )}
+      <FlowNodeTargets
+        label="观察的节点"
+        options={options}
+        values={
+          Array.isArray(draft.relations)
+            ? (draft.relations as { kind: string; targetNodeId: string }[])
+                .filter((item) => item.kind === 'observes')
+                .map((item) => item.targetNodeId)
+            : []
+        }
+        onChange={(values) =>
+          update('relations', [
+            ...(Array.isArray(draft.relations)
+              ? (draft.relations as { kind: string }[]).filter((item) => item.kind !== 'observes')
+              : []),
+            ...values.map((targetNodeId) => ({
+              relationId: `observe-${crypto.randomUUID()}`,
+              kind: 'observes',
+              sourceNodeId: shape.id,
+              targetNodeId
+            }))
+          ])
+        }
+      />
+      {Array.isArray(draft.relations) &&
+        (draft.relations as { relationId: string; kind: string; targetNodeId: string }[])
+          .filter((relation) => relation.kind !== 'observes')
+          .map((relation) => (
+            <div key={relation.relationId} className="agent-flow-target-option">
+              <span>
+                额外关系 ·{' '}
+                {options.find((option) => option.id === relation.targetNodeId)?.label ??
+                  '已删除的节点'}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  update(
+                    'relations',
+                    (draft.relations as { relationId: string }[]).filter(
+                      (item) => item.relationId !== relation.relationId
+                    )
+                  )
+                }
+              >
+                移除关系记录
+              </button>
+            </div>
+          ))}
       {type !== 'state-machine' && textField('模型定义 ID', 'modelDefinitionId')}
       <p className="contract-settings-hint">当前仅保存配置；配置工具不会授予额外执行能力。</p>
       {error && <p role="alert">{error}</p>}
+      {(() => {
+        const declaration = resolveFlowDeclaration(
+          { id: shape.id, type, config: shape.props.config, outputPortIds: [] },
+          graph.nodes,
+          graph.edges
+        )
+        return declaration.issues.length ? (
+          <p className="contract-settings-hint" role="status">
+            已保存的声明需要修正：{declaration.issues.join('；')}
+          </p>
+        ) : null
+      })()}
       <button type="button" className="website-settings-save" onClick={save}>
         保存配置
       </button>

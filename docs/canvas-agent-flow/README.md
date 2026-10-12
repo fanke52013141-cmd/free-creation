@@ -65,3 +65,5 @@ flowchart LR
 后续每次实现先描述一个可在画布中演示的行为，再确定最小代码范围。文档存在、接口存在或测试通过，均不能替代该行为验收。
 
 模型能力与生产桥结论见 [审阅记录](09-model-probe-and-production-bridge-review.md)。
+
+最新 C1 用户路径、验证与边界见 [控制声明交付](10-c1-control-declarations.md)。

@@ -36,6 +36,9 @@ const MODEL_ATTRS = {
 
 export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Object.fromEntries(
   [
+    def('canvas.flow_config.started', 'info', 'renderer/nodes/specs/agentFlow', { phase: 'short' }),
+    def('canvas.flow_config.applied', 'info', 'renderer/nodes/specs/agentFlow', { phase: 'short' }),
+    def('canvas.flow_config.failed', 'error', 'renderer/nodes/specs/agentFlow', { phase: 'short', code: 'short' }),
     def('agent.probe.started', 'info', 'main/agent-flow/model-probe-electron', { phase: 'short' }),
     def('agent.probe.completed', 'info', 'main/agent-flow/model-probe-electron', {
       phase: 'short'
