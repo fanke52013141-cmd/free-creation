@@ -6,6 +6,8 @@
 
 C2 首包实现与边界见 [资产版本](11-c2-asset-versions.md)：文本/JSON/处理结果可提交版本、查看历史、放到画布并由普通端口消费；生产 Agent 命令桥仍待 C2.2。
 
+C2.2 已进入 [生产命令桥](12-c2-production-command-bridge.md)：命令意图、固定输入目标端口清单、语义指纹和去重签名基础已实现；尚未接入持久命令账本/IPC/renderer 派发，Agent 执行继续保持待接入。
+
 最新细化见 [详细实施方案](06-implementation-plan.md)：明确人机协作 Agent、纯 AI Agent、纯人工节点与单次处理节点；可交付内容统一称资产；Agent 可绑定版本化 Skill 和受控工具。建议 LangGraph 管理任务循环与恢复，LangChain 提供组件；先做 C0 兼容验证，再按 C1–C4 实施。LangGraph 已接入隔离 C0 实验，产品执行仍待 C2/C3。
 
 新增 [AI 审核与受控返工方案](07-ai-review-node.md)：首版新增类型为 Agent、状态机、AI 审核。审核输出“是/否”及反馈；返工按人工/AI/人机协作主体处理，控制反馈不混入数据 DAG。审核报告也是可查看、保存和连接的资产。

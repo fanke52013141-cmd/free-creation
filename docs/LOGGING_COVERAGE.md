@@ -214,6 +214,14 @@ main 的资产提交/读取/列表记录 asset.operation.started → completed/f
 
 边界：媒体适配、生产命令派发/语义修订/占用、Agent 对等、真实审核 gate、返工、跨项目迁移与未知恢复未完成。资产放置未宣称磁盘提交成功，局部验收不代表全链路日志覆盖。
 
+### 2026-10-12 C2.2 命令意图基础
+
+commands.ts/command-intent.ts 仅定义严格意图清单、语义指纹和去重签名；纯函数未接 IPC/任务执行/数据库路径，不改变运行副作用或现有诊断，无需重复补开始/终态。7 项定向测试覆盖意图边界、固定版本/端口顺序、修订和诊断字段分离，新增文件 lint/两端类型检查通过。不得记录 canonical 业务载荷或 Zod 原始错误；未来运行调用点仅记录静态原因与指纹/标识。
+
+持久 pending/占用、派发、公共执行、保存、回执、超时 unknown 与恢复核对尚未接入，阶段事件与实际脱敏按 docs/canvas-agent-flow/12-c2-production-command-bridge.md 随接入验收；本轮不宣称生产桥或全链路日志完成。
+
+增量最终证据：全量单元回归 150 文件、1634 通过、1 既有跳过，日志门禁通过，记录 qa/canvas-agent-flow/C2/command-intent-unit-suite.log；实际 IPC 诊断落盘仍以 C2.1 双进程验收为准，纯函数不作为新增运行日志验收。
+
 ### 2026-10-12 C1 控制声明与目标/转换编辑
 
 配置保存新增 canvas.flow_config.started/applied/failed，复用统一 renderer 事件入口与 main 白名单；同 trace/node/project，阶段 validation/apply，失败码 FLOW_CONFIG_INVALID/FLOW_CONFIG_APPLY_FAILED，一次编辑只有一个终态。applied 只代表文档内更新，磁盘保存/撤销/快照恢复沿用公共路径，不重复文件终态。仅允许阶段/原因/标识，不记录目标名称、正文、事件内容或 config；logger/transport 故障不改变编辑。观察/控制 SVG 只派生视图，无逐帧日志或额外持久化图。
