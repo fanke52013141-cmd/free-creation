@@ -28,6 +28,14 @@ const forceReloadCanvasShapes = (): Plugin => ({
 
 export default defineConfig({
   main: {
+    build: {
+      rollupOptions: {
+        input: {
+          index: resolve('src/main/index.ts'),
+          'agent-flow-c0': resolve('src/main/agent-flow/c0-electron.ts')
+        }
+      }
+    },
     resolve: {
       alias: {
         '@shared': resolve('src/shared'),

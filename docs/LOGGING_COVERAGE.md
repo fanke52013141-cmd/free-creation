@@ -1,5 +1,13 @@
 # 日志覆盖清单
 
+## 2026-10-12 Agent Flow C0 隔离实验
+
+- 范围：`src/main/agent-flow/c0/` 的 checkpoint、命令回执、LangGraph 循环和单步 SDK 模型适配；`c0-electron.ts` 是独立 opt-in 实验入口，不启动产品数据库或注册生产节点。
+- 事件：`agent.c0.started/resumed/waiting/completed/failed`、`bridge_dispatch/command_completed/command_unknown/command_blocked/command_replayed`、`checkpoint_saved/storage_failed`；恢复用新 trace 关联 resumesTraceId。模型复用 `model.request.started/first_chunk/completed/failed/cancelled`，SDK 不内置执行工具或重复记录业务节点终态。
+- 关联：projectId/nodeId/taskId/traceId，命令事件显式 commandId/targetNodeId；phase 与稳定 code。只记录阶段、ID 和状态，不输出 checkpoint、命令输入、工具输出、模型正文或原始异常。
+- 已验证：`test/agent-flow-c0.test.ts` 16 例覆盖持久等待/重开、命令重复/超时/结果未知、checkpoint 拒写及批写事务、完成回执拒写、范围/版本冲突、日志失败不改结果，以及私有输入/输出不进诊断。隐藏 Electron 双进程实验实测 phase=pause/resume、副作用次数 1，事件落盘到隔离目录并复制本地 `qa/canvas-agent-flow/C0/diagnostics/`。
+- 状态：实验范围已验证，产品链路未接入。未覆盖：真实模型工具能力与取消、生产 renderer executor 对等、正式任务恢复、Skill/资产/审核节点、项目导入导出。不能据此宣称 Agent Flow 全链路日志完成；后续分别在 C1–C4 随功能登记。
+
 2026-10-06 节点指针审查：公共卡片路由只修改选中、拖动及输入编辑焦点，复用 tldraw 原有分组/修饰键/撤销与项目保存链路。不新增模型、文件或数据库请求，不记录点击位置、输入值或逐次指针业务日志。实际按钮、端口、裁剪及滑块继续使用已有业务回调；日志路径保持原样。按节点内部区域和输入框实测选中、坐标变化、双击及退出编辑，修复旧验收只点击卡片角落的盲区。
 
 2026-10-06 对话生图技能：自动工具调用增加 `skill.execution.started/completed/failed`，沿用 trace/run/node 关联并建立子 span；提示词作为私有值脱敏，工具异常向上传递前也脱敏。显式生图复用公共节点生命周期、capability/result 阶段及已有 image 网关请求与媒体落盘事件，不重复节点终态。下载复用 batchExport，增加 `media.export_started/completed/failed/cancelled`，仅记录项目、数量和状态，旧 UI 调用没有完整 trace 时沿用关联缺失标记。附件保存在既有节点快照，保存与导入导出复用现有项目/媒体诊断。界面预览和静态分辨率切换不新增业务日志。验收范围与取消边界见 [对话生图规范](./CHAT_IMAGE_SKILL_SPEC.md)。

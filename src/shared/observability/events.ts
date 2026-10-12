@@ -36,6 +36,27 @@ const MODEL_ATTRS = {
 
 export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Object.fromEntries(
   [
+    ...[
+      'started',
+      'resumed',
+      'waiting',
+      'completed',
+      'failed',
+      'command_replayed',
+      'command_blocked',
+      'command_completed',
+      'command_unknown',
+      'bridge_dispatch',
+      'checkpoint_saved',
+      'storage_failed'
+    ].map((stage) =>
+      def(
+        `agent.c0.${stage}`,
+        stage === 'failed' || stage === 'storage_failed' ? 'error' : 'info',
+        'main/agent-flow/c0',
+        { phase: 'short', code: 'short', commandId: 'id', targetNodeId: 'id' }
+      )
+    ),
     def('project.undelete.started', 'info', 'main/ipc/project.ipc.ts'),
     def('project.undelete.completed', 'info', 'main/ipc/project.ipc.ts'),
     def('project.undelete.failed', 'error', 'main/ipc/project.ipc.ts'),

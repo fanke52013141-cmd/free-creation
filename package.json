@@ -6,6 +6,8 @@
   "author": "canvas-studio",
   "private": true,
   "scripts": {
+    "test:agent-flow-c0": "node scripts/test-agent-flow-c0.cjs",
+    "test:agent-flow-c0-unit": "node scripts/test-agent-flow-c0-unit.cjs",
     "format": "prettier --write .",
     "lint": "eslint . --quiet",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
@@ -56,10 +58,14 @@
     "@ai-sdk/openai-compatible": "^3.0.34",
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
+    "@langchain/core": "1.2.9",
+    "@langchain/langgraph": "1.4.14",
+    "@langchain/langgraph-checkpoint": "1.1.5",
     "@napi-rs/canvas": "1.0.8",
     "@radix-ui/react-select": "2.3.7",
     "@react-three/drei": "^10.7.8",
     "@react-three/fiber": "^9.7.0",
+    "@types/three": "^0.185.4",
     "adm-zip": "0.5.16",
     "ai": "^7.0.73",
     "better-sqlite3": "^12.4.1",
@@ -72,8 +78,7 @@
     "tldraw": "4.5.12",
     "unpdf": "^1.8.1",
     "zod": "^4.4.3",
-    "zustand": "^5.0.8",
-    "@types/three": "^0.185.4"
+    "zustand": "^5.0.8"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config-prettier": "^3.0.0",
