@@ -204,6 +204,16 @@ AI 对话 TXT 输出：仅修改已保存对话的端口投影，不新增模型
 
 C1 三种新节点仅保存配置/正文/关系声明；公共 executor 明确 skipped、不调用模型、不物化资产，projectOutputs 空。配置保存沿用项目持久化诊断，跳过沿用公共执行终态，不重复写。卡片布局/颜色/文档不涉及新增业务日志。正式工具调度、版本资产、审核 gate、返工与恢复尚未接入；C2/C3 按生产桥审阅记录补齐适用路径。
 
+### 2026-10-12 C2.1 文本/JSON 资产版本
+
+main 的资产提交/读取/列表记录 asset.operation.started → completed/failed，同 trace/span/project；提交关联源节点、submissionId，完成附 assetId/versionId，记录操作 phase、稳定原因与耗时。值来自已保存正式端口，不记录正文/JSON/标题/原始异常。版本与回执同一业务事务，诊断不是恢复真值。
+
+固定资产画布放置记录 asset.placement.started → applied/failed；applied 只表示编辑应用，落盘沿原项目保存链路。消费固定端口沿 runNodeManually/公共 executor，不重复节点终态。
+
+证据：19 定向测试覆盖保存在途合并/失败/冲突、去重/版本/事务回滚、诊断唯一终态及 transport 故障；生产 preload/IPC、project.json、SQLite 隐藏 Electron 双进程读回/回执重放，9 次操作均有开始与唯一终态及 trace/span 关联，诊断文件检查测试正文/假密钥无泄漏。全量 verify 通过（149 文件、1627 通过、1 跳过、17 浏览器门禁及构建后 Electron 测试），记录 qa/canvas-agent-flow/C2/final-verify.log。UI fixture 与生产存储证据分开，见 docs/canvas-agent-flow/11-c2-asset-versions.md 和 qa/canvas-agent-flow/C2。
+
+边界：媒体适配、生产命令派发/语义修订/占用、Agent 对等、真实审核 gate、返工、跨项目迁移与未知恢复未完成。资产放置未宣称磁盘提交成功，局部验收不代表全链路日志覆盖。
+
 ### 2026-10-12 C1 控制声明与目标/转换编辑
 
 配置保存新增 canvas.flow_config.started/applied/failed，复用统一 renderer 事件入口与 main 白名单；同 trace/node/project，阶段 validation/apply，失败码 FLOW_CONFIG_INVALID/FLOW_CONFIG_APPLY_FAILED，一次编辑只有一个终态。applied 只代表文档内更新，磁盘保存/撤销/快照恢复沿用公共路径，不重复文件终态。仅允许阶段/原因/标识，不记录目标名称、正文、事件内容或 config；logger/transport 故障不改变编辑。观察/控制 SVG 只派生视图，无逐帧日志或额外持久化图。

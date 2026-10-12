@@ -8,7 +8,7 @@ export interface MigrationDatabase {
   pragma(statement: string, options?: { simple?: boolean }): unknown
 }
 
-export const DB_SCHEMA_VERSION = 10
+export const DB_SCHEMA_VERSION = 11
 
 const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
@@ -290,6 +290,25 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
     database.exec(`CREATE TABLE IF NOT EXISTS artifact_recipes (
       media_id TEXT PRIMARY KEY, project_id TEXT NOT NULL, recipe_json TEXT NOT NULL
     ); CREATE INDEX IF NOT EXISTS idx_artifact_recipes_project ON artifact_recipes(project_id);`)
+  },
+  (database) => {
+    database.exec(`
+      CREATE TABLE flow_asset_versions (
+        version_id TEXT PRIMARY KEY, asset_id TEXT NOT NULL,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        node_id TEXT NOT NULL, port_id TEXT NOT NULL, ordinal INTEGER NOT NULL,
+        graph_version INTEGER NOT NULL, created_at INTEGER NOT NULL,
+        digest TEXT NOT NULL, value_json TEXT NOT NULL,
+        UNIQUE(project_id, node_id, port_id, ordinal)
+      );
+      CREATE INDEX idx_flow_assets_source ON flow_asset_versions(project_id, node_id, port_id);
+      CREATE TABLE flow_asset_submissions (
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        submission_id TEXT NOT NULL, signature TEXT NOT NULL,
+        version_id TEXT NOT NULL REFERENCES flow_asset_versions(version_id),
+        PRIMARY KEY(project_id, submission_id)
+      );
+    `)
   }
 ]
 

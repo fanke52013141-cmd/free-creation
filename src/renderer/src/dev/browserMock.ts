@@ -134,6 +134,9 @@ export function installBrowserMock(): void {
   }
 
   const mockApi: WindowApi = {
+    submitFlowAsset: async () => notImplementedInDemo('资产版本提交'),
+    listFlowAssets: async () => notImplementedInDemo('资产版本列表'),
+    readFlowAsset: async () => notImplementedInDemo('资产版本读取'),
     reportNodeRunEvent: () => Promise.resolve({ ok: true, data: true }),
     // 浏览器演示模式没有 main 诊断存储：接受即丢弃，语义与降级一致。
     reportDiagnosticsEvents: (input) =>

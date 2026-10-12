@@ -3,6 +3,7 @@ import type { LibraryCategory, SaveLibraryCategoryInput } from '../shared/librar
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import { IPC } from '../shared/contracts'
+import type { AssetSubmit, FlowAssetVersion, FlowAssetSummary } from '../shared/agent-flow/assets'
 import type { ArtifactRecipe } from '../shared/artifact-recipe'
 import type {
   BootstrapInfo,
@@ -106,6 +107,17 @@ import type {
 } from '../shared/types'
 
 const api = {
+  submitFlowAsset: (input: AssetSubmit): Promise<IpcEnvelope<FlowAssetVersion>> =>
+    ipcRenderer.invoke(IPC.flowAssets.submit, input),
+  listFlowAssets: (input: {
+    projectId: string
+    nodeId: string
+    portId: string
+  }): Promise<IpcEnvelope<FlowAssetSummary[]>> => ipcRenderer.invoke(IPC.flowAssets.list, input),
+  readFlowAsset: (input: {
+    projectId: string
+    versionId: string
+  }): Promise<IpcEnvelope<FlowAssetVersion>> => ipcRenderer.invoke(IPC.flowAssets.read, input),
   reportNodeRunEvent: (input: NodeRunLogEventInput): Promise<IpcEnvelope<boolean>> =>
     ipcRenderer.invoke(IPC.diagnostics.nodeRunEvent, input),
   // L01/L02：统一结构化诊断事件（批量、fire-and-forget 语义；回执=已接收）。
@@ -458,8 +470,17 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('api', api)
     if (isDev) contextBridge.exposeInMainWorld('electron', electronAPI)
   } catch {
-    const producer = new DiagnosticsProducer({ process: 'renderer', producerId: newProducerId('renderer') })
-    const event = producer.build('application.preload_failed', undefined, 'preload API 初始化失败', { traceId: newTraceId(), spanId: newSpanId() }, { status: 'failed' })
+    const producer = new DiagnosticsProducer({
+      process: 'renderer',
+      producerId: newProducerId('renderer')
+    })
+    const event = producer.build(
+      'application.preload_failed',
+      undefined,
+      'preload API 初始化失败',
+      { traceId: newTraceId(), spanId: newSpanId() },
+      { status: 'failed' }
+    )
     if (event) void ipcRenderer.invoke(IPC.diagnostics.event, event).catch(() => undefined)
   }
 } else {

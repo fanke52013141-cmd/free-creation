@@ -30,6 +30,8 @@ import { NODE_PORT_OUTSET, NODE_PORT_SIZE } from './edge-geometry'
 import { createNodePortLayout } from './node-port-layout'
 import { ConnectedInputPreview } from './ConnectedInputPreview'
 import { GenerationLoadingOverlay } from './GenerationLoadingOverlay'
+import { FixedFlowAssetBody } from './FixedFlowAssetBody'
+import { readFlowAssetSnapshot } from './flow-asset-snapshot'
 import {
   averageNodeExecutionDuration,
   DEFAULT_NODE_EXECUTION_ESTIMATE_MS,
@@ -1258,7 +1260,11 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                       />
                     )}
                     <div className="node-body-content">
-                      <spec.Body shape={shape} openPreview={openMediaPreview} />
+                      {readFlowAssetSnapshot(shape) ? (
+                        <FixedFlowAssetBody shape={shape} />
+                      ) : (
+                        <spec.Body shape={shape} openPreview={openMediaPreview} />
+                      )}
                     </div>
                   </>
                 )}

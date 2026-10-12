@@ -3,6 +3,7 @@ import type { ContractInputMap } from './contracts'
 import type { NodeExecutionPhase, NodeExecutionTarget } from '@shared/engine/executor-types'
 import { redactDiagnosticText } from '@shared/diagnostics'
 import type { GenerationTimingFeatures } from '@shared/contracts'
+import { readStoredNodeRunStatus } from '@shared/engine/run-status'
 
 export type NodeRunStatus = 'running' | 'success' | 'failed' | 'skipped' | 'cancelled'
 
@@ -78,17 +79,7 @@ export function inputSources(inputs: ContractInputMap): Record<string, NodeRunSo
 }
 
 export function readNodeRunRecord(value: unknown): NodeRunRecord | null {
-  if (!value || typeof value !== 'object') return null
-  const record = value as Partial<NodeRunRecord>
-  if (
-    typeof record.runId !== 'string' ||
-    !['running', 'success', 'failed', 'skipped', 'cancelled'].includes(record.status ?? '') ||
-    typeof record.startedAt !== 'number' ||
-    !record.inputs ||
-    typeof record.inputs !== 'object'
-  )
-    return null
-  return record as NodeRunRecord
+  return readStoredNodeRunStatus(value) ? (value as NodeRunRecord) : null
 }
 
 export function readNodeRunHistory(value: unknown): NodeRunRecord[] {

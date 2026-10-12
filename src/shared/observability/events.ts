@@ -38,7 +38,34 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
   [
     def('canvas.flow_config.started', 'info', 'renderer/nodes/specs/agentFlow', { phase: 'short' }),
     def('canvas.flow_config.applied', 'info', 'renderer/nodes/specs/agentFlow', { phase: 'short' }),
-    def('canvas.flow_config.failed', 'error', 'renderer/nodes/specs/agentFlow', { phase: 'short', code: 'short' }),
+    def('canvas.flow_config.failed', 'error', 'renderer/nodes/specs/agentFlow', {
+      phase: 'short',
+      code: 'short'
+    }),
+    def('asset.operation.started', 'info', 'main/ipc/flow-assets.ipc', {
+      phase: 'short',
+      submissionId: 'id'
+    }),
+    def('asset.placement.started', 'info', 'renderer/canvas/flow-asset-actions', {
+      phase: 'short'
+    }),
+    def('asset.placement.applied', 'info', 'renderer/canvas/flow-asset-actions', {
+      phase: 'short'
+    }),
+    def('asset.placement.failed', 'error', 'renderer/canvas/flow-asset-actions', {
+      phase: 'short'
+    }),
+    def('asset.operation.completed', 'info', 'main/ipc/flow-assets.ipc', {
+      phase: 'short',
+      submissionId: 'id',
+      assetId: 'id',
+      versionId: 'id'
+    }),
+    def('asset.operation.failed', 'error', 'main/ipc/flow-assets.ipc', {
+      phase: 'short',
+      code: 'short',
+      submissionId: 'id'
+    }),
     def('agent.probe.started', 'info', 'main/agent-flow/model-probe-electron', { phase: 'short' }),
     def('agent.probe.completed', 'info', 'main/agent-flow/model-probe-electron', {
       phase: 'short'

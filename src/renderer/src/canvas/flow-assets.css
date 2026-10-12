@@ -1,0 +1,11 @@
+.flow-asset-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.flow-asset-panel pre {
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

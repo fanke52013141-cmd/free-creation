@@ -85,8 +85,7 @@ function extraJsonOutput(shape: NodeCardShape, portId: string): RawNodeOutputs {
   return value === undefined ? {} : { [portId]: { kind: 'json' as const, data: value } }
 }
 
-export const projectTextOutputs = (shape: NodeCardShape): RawNodeOutputs =>
-  shape.props.text.trim() ? { 'out-text': { kind: 'text', text: shape.props.text.trim() } } : {}
+export { projectTextOutputs, projectJsonOutputs, projectProcessorOutputs } from '@shared/engine/deterministic-projections'
 
 export const projectWebsiteOutputs = (shape: NodeCardShape): RawNodeOutputs => {
   const link = readWebsiteLink(shape.props.config)
@@ -304,16 +303,6 @@ export const projectScriptOutputs = (shape: NodeCardShape): RawNodeOutputs => {
   }
 }
 
-export const projectJsonOutputs = (shape: NodeCardShape): RawNodeOutputs => {
-  try {
-    return shape.props.text.trim()
-      ? { 'out-json': { kind: 'json', data: JSON.parse(shape.props.text) } }
-      : {}
-  } catch {
-    return {}
-  }
-}
-
 export const projectStructuredOutputs = (shape: NodeCardShape): RawNodeOutputs => {
   const schema = parseStructuredDataConfig(readNodeConfig(shape)).schema
   const latestRun = readNodeRunRecord(shape.meta?.nodeRun)
@@ -367,13 +356,6 @@ export const projectCodeOutputs = (shape: NodeCardShape): RawNodeOutputs => {
   const single = parseStoredNodeValue(raw)
   if (single) return { [outputPortId(config.outputName)]: single }
   return {}
-}
-
-export const projectProcessorOutputs = (shape: NodeCardShape): RawNodeOutputs => {
-  const result = parseStoredNodeValue(
-    typeof shape.meta?.nodeResult === 'string' ? shape.meta.nodeResult : ''
-  )
-  return result ? { 'out-value': result } : {}
 }
 
 export const projectStoryboardOutputs = (shape: NodeCardShape): RawNodeOutputs => {

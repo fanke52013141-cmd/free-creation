@@ -25,6 +25,7 @@ import {
 } from '../engine/executor'
 import { useMediaStore } from '../stores/media'
 import { NodeIoExamples } from './NodeIoExamples'
+import { FlowAssetPanel } from './FlowAssetPanel'
 
 interface NodeContractPanelProps {
   editor: Editor
@@ -684,6 +685,7 @@ export function NodeContractPanel({
                 previews={outputPreviews}
               />
               <NodeIoExamples nodeType={shape.props.nodeType} />
+              <FlowAssetPanel key={JSON.stringify([projectId, shape.id, shape.props.nodeType])} editor={editor} shape={shape} projectId={projectId} />
             </div>
           )}
           {tab === 'settings' && (

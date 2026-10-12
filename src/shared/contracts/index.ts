@@ -49,6 +49,11 @@ import type {
 } from '@free-creation/model-contracts'
 
 export const IPC = {
+  flowAssets: {
+    submit: 'flow-assets:submit',
+    list: 'flow-assets:list',
+    read: 'flow-assets:read'
+  },
   app: {
     bootstrap: 'app:bootstrap'
   },

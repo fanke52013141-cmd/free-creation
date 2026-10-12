@@ -16,7 +16,8 @@ import {
 
 import type { RawNodeOutputs } from '@shared/engine/values'
 export type { NodeValue, RawNodeOutputs, MediaNodeValue } from '@shared/engine/values'
-import { parseStoredNodeValue } from '@shared/engine/values'
+import { readPinnedOutputs } from '@shared/engine/deterministic-projections'
+export { readPinnedOutputs } from '@shared/engine/deterministic-projections'
 export {
   parseStoredNodeValue,
   parseNodeRecord,
@@ -106,19 +107,3 @@ export function projectNodeOutputs(shape: NodeCardShape): RawNodeOutputs {
 }
 
 /** A pinned snapshot is independent of later runs/candidate selection and survives reopening. */
-export function readPinnedOutputs(stored: unknown): RawNodeOutputs | null {
-  if (typeof stored !== 'string') return null
-  try {
-    const parsed = JSON.parse(stored)
-    if (parsed?.version !== 1 || !parsed.outputs || typeof parsed.outputs !== 'object') return null
-    const outputs: RawNodeOutputs = {}
-    for (const [portId, value] of Object.entries(parsed.outputs)) {
-      const validated = parseStoredNodeValue(JSON.stringify(value))
-      if (!validated) return null
-      outputs[portId] = validated
-    }
-    return Object.keys(outputs).length ? outputs : null
-  } catch {
-    return null
-  }
-}
