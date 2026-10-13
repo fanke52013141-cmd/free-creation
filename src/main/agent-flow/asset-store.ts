@@ -8,6 +8,7 @@ import {
 } from '../../shared/engine/deterministic-projections'
 import { AgentFlowAssetRefSchema } from '../../shared/agent-flow/node-contracts'
 import { readStoredNodeRunStatus } from '../../shared/engine/run-status'
+import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
 import {
   AssetSubmitSchema,
   FlowAssetError,
@@ -117,7 +118,7 @@ export class FlowAssetStore {
         const runStatus = readStoredNodeRunStatus(record.meta?.nodeRun)
         if (
           !pinned &&
-          record.props.nodeType === 'processor' &&
+          ['processor', 'agent'].includes(record.props.nodeType) &&
           runStatus &&
           runStatus !== 'success'
         )
@@ -128,7 +129,33 @@ export class FlowAssetStore {
             : record.props.nodeType === 'json'
               ? 'out-json'
               : 'out-value'
-        if (input.portId !== declaredPort) fail('ASSET_PORT_INVALID')
+        if (record.props.nodeType === 'agent') {
+          if (!['out-text', 'out-json'].includes(input.portId)) fail('ASSET_PORT_INVALID')
+          if (runStatus !== 'success') fail('ASSET_OUTPUT_UNAVAILABLE')
+          const result = JSON.parse(record.meta?.nodeResult ?? '{}')
+          if (typeof result.taskId !== 'string') fail('ASSET_OUTPUT_UNAVAILABLE')
+          const task = this.db
+            .prepare(
+              "SELECT output_refs_json FROM flow_agent_tasks WHERE project_id=? AND agent_node_id=? AND task_id=? AND state='completed'"
+            )
+            .get(input.projectId, input.nodeId, result.taskId) as
+            { output_refs_json: string } | undefined
+          if (!task || pinned) fail('ASSET_OUTPUT_UNAVAILABLE')
+          const expected = this.resolveInputs(
+            input.projectId,
+            JSON.parse(task.output_refs_json)
+          ).map((version) =>
+            version.value.kind === 'markdown'
+              ? { kind: 'text', text: version.value.text }
+              : version.value
+          )
+          const actual = projection(record)[input.portId]
+          if (
+            !actual ||
+            !expected.some((value) => canonicalFlowJson(value) === canonicalFlowJson(actual))
+          )
+            fail('ASSET_OUTPUT_INVALID')
+        } else if (input.portId !== declaredPort) fail('ASSET_PORT_INVALID')
         if (pinned && Object.keys(pinned).some((key) => key !== declaredPort))
           fail('ASSET_OUTPUT_INVALID')
         const value = (pinned ?? projection(record))[input.portId]

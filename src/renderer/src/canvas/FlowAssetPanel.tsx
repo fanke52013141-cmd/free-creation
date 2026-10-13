@@ -17,13 +17,16 @@ export function FlowAssetPanel({
   shape: NodeCardShape
   projectId: string
 }): React.JSX.Element | null {
-  const supported = ['text', 'json', 'processor'].includes(shape.props.nodeType)
+  const supported = ['text', 'json', 'processor', 'agent'].includes(shape.props.nodeType)
+  const [agentPort, setAgentPort] = useState('out-text')
   const portId =
-    shape.props.nodeType === 'text'
-      ? 'out-text'
-      : shape.props.nodeType === 'json'
-        ? 'out-json'
-        : 'out-value'
+    shape.props.nodeType === 'agent'
+      ? agentPort
+      : shape.props.nodeType === 'text'
+        ? 'out-text'
+        : shape.props.nodeType === 'json'
+          ? 'out-json'
+          : 'out-value'
   const [versions, setVersions] = useState<FlowAssetSummary[]>([])
   const [selected, setSelected] = useState('')
   const [version, setVersion] = useState<FlowAssetVersion | null>(null)
@@ -119,6 +122,22 @@ export function FlowAssetPanel({
   return (
     <section className="contract-section flow-asset-panel">
       <h4>资产版本</h4>
+      {shape.props.nodeType === 'agent' && (
+        <AppSelect
+          aria-label="Agent 资产输出端口"
+          value={agentPort}
+          onChange={(event) => {
+            setAgentPort(event.target.value)
+            setSelected('')
+            setVersion(null)
+            setVersions([])
+            pending.current = null
+          }}
+        >
+          <option value="out-text">文本资产</option>
+          <option value="out-json">JSON 资产</option>
+        </AppSelect>
+      )}
       <p>提交已保存的输出。版本保持不变；放到画布后，可以从固定资产节点连接下游。</p>
       <div className="contract-run-actions">
         <button type="button" disabled={busy} onClick={() => void submit()}>

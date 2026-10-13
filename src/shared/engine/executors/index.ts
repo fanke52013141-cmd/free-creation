@@ -7,7 +7,7 @@
 //   1. EXECUTOR_REGISTRY / getExecutor — 运行器接口
 //   2. 逐文件 re-export — renderer adapter 从此处 re-export 到旧路径，保持向后兼容
 import type { NodeExecutor } from '../executor-types'
-import { agentFlowPendingExecutor } from './agentFlow'
+import { agentFlowPendingExecutor, agentExecutor } from './agentFlow'
 
 import { textExecutor } from './text'
 import { jsonExecutor } from './json'
@@ -40,7 +40,7 @@ import { videoDepthExecutor, videoClayExecutor } from './videoAi'
  * 运行器通过 getExecutor(nodeType) 获取执行器，找不到时返回 undefined。
  */
 export const EXECUTOR_REGISTRY: Record<string, NodeExecutor> = {
-  agent: agentFlowPendingExecutor,
+  agent: agentExecutor,
   'state-machine': agentFlowPendingExecutor,
   'ai-review': agentFlowPendingExecutor,
   // ── 素材输入 ──

@@ -100,8 +100,10 @@ describe('production immutable text/JSON asset versions', () => {
     const { store, shape, input } = fixture()
     expect(() => store.submit({ ...input, portId: 'invented' })).toThrow('ASSET_PORT_INVALID')
     expect(() => store.submit({ ...input, nodeId: 'shape:missing' })).toThrow('ASSET_NODE_MISSING')
-    shape.props.nodeType = 'agent'
+    shape.props.nodeType = 'image'
     expect(() => store.submit(input)).toThrow('ASSET_TYPE_UNSUPPORTED')
+    shape.props.nodeType = 'agent'
+    expect(() => store.submit(input)).toThrow('ASSET_OUTPUT_UNAVAILABLE')
   })
   it('keeps valid JSON false/zero/null, and rejects malformed document JSON', () => {
     const { store, shape, input } = fixture()

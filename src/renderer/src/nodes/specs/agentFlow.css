@@ -24,6 +24,12 @@
   min-height: 72px;
   resize: vertical;
 }
+.agent-flow-output {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  margin: 0;
+}
 .agent-flow-targets,
 .agent-flow-transitions {
   display: flex;

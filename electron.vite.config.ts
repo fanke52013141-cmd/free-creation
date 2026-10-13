@@ -35,7 +35,8 @@ export default defineConfig({
           'agent-flow-c0': resolve('src/main/agent-flow/c0-electron.ts'),
           'agent-flow-model-probe': resolve('src/main/agent-flow/model-probe-electron.ts'),
           'agent-flow-assets': resolve('src/main/agent-flow/assets-electron.ts'),
-          'agent-flow-commands': resolve('src/main/agent-flow/commands-electron.ts')
+          'agent-flow-commands': resolve('src/main/agent-flow/commands-electron.ts'),
+          'agent-flow-desktop': resolve('src/main/agent-flow/desktop-electron.ts')
         }
       }
     },

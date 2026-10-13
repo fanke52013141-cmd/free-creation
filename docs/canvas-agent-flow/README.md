@@ -1,14 +1,14 @@
 # 画布原生 Agent Flow
 
-日期：2026-10-12。状态：**确认方案已发布；C0/C1 已验收，C2.1 资产版本与 C2.2 确定性生产桥首包已验收**。本目录是当前 Agent Flow 的唯一方案入口；不沿用已撤回方案的完成状态、工单编号或数据模型。
+日期：2026-10-13。状态：**C0/C1/C2 已验收；C3.1a 底座与 C3.1b 专业 Agent 画布任务已接通，真实模型路径已验证，最终门禁见台账**。本目录是当前 Agent Flow 的唯一方案入口；不沿用已撤回方案的完成状态、工单编号或数据模型。
 
 用户已确认完整方向并授权开发。优先阅读 [完整确认方案](00-approved-plan.md)；进度和交付备注见 [开发台账](08-development-ledger.md)。首版新增 Agent、状态机、AI 审核三种类型，细节按最新方案统一。
 
 C2 首包实现与边界见 [资产版本](11-c2-asset-versions.md)：文本/JSON/处理结果可提交版本、查看历史、放到画布并由普通端口消费；生产命令桥的确定性首条路径见 C2.2。
 
-C2.2 的 [生产命令桥](12-c2-production-command-bridge.md) 已接入确定性数据处理首条路径：持久 pending/占用、桌面派发、公共执行、保存与资产回执、unknown 跨进程核对；最终全量门禁已通过。Agent 自主循环与真实 AI 审核仍待 C3。
+C2.2 的 [生产命令桥](12-c2-production-command-bridge.md) 已接入确定性数据处理首条路径：持久 pending/占用、桌面派发、公共执行、保存与资产回执、unknown 跨进程核对；最终全量门禁已通过。专业 Agent 自主循环已接入 C3.1b；真实 AI 审核仍待后续。
 
-最新细化见 [详细实施方案](06-implementation-plan.md)：明确人机协作 Agent、纯 AI Agent、纯人工节点与单次处理节点；可交付内容统一称资产；Agent 可绑定版本化 Skill 和受控工具。建议 LangGraph 管理任务循环与恢复，LangChain 提供组件；先做 C0 兼容验证，再按 C1–C4 实施。LangGraph 已接入隔离 C0 实验，产品执行仍待 C2/C3。
+最新细化见 [详细实施方案](06-implementation-plan.md)：明确人机协作 Agent、纯 AI Agent、纯人工节点与单次处理节点；可交付内容统一称资产；Agent 可绑定版本化 Skill 和受控工具。建议 LangGraph 管理任务循环与恢复，LangChain 提供组件；先做 C0 兼容验证，再按 C1–C4 实施。LangGraph 已进入 C3 专业 Agent 的生产循环，业务执行复用 C2。
 
 新增 [AI 审核与受控返工方案](07-ai-review-node.md)：首版新增类型为 Agent、状态机、AI 审核。审核输出“是/否”及反馈；返工按人工/AI/人机协作主体处理，控制反馈不混入数据 DAG。审核报告也是可查看、保存和连接的资产。
 
@@ -70,6 +70,8 @@ flowchart LR
 
 模型能力与生产桥结论见 [审阅记录](09-model-probe-and-production-bridge-review.md)。
 
-C3 已开工：[C3.1a 有界运行底座](13-c3-runtime-foundation.md)实现版本化内容 Skill、任务预算、C2 工具适配和持久 interrupt/checkpoint。画布入口及真实模型循环待 C3.1b，不标记 C3 完成。
+C3 已开工：[C3.1a 有界运行底座](13-c3-runtime-foundation.md)实现版本化内容 Skill、任务预算、C2 工具适配和持久 interrupt/checkpoint。画布入口及真实模型循环见 C3.1b，不标记全部 C3 完成。
+
+C3.1b [画布 Agent 任务入口](14-c3-canvas-agent.md)已接通专业 Agent 的启动/停止/继续、内置 Skill/工具选择、正式输出和固定资产；真实豆包连续执行及跨进程人工继续已验证。最终门禁见台账。主控/搭建、审核返工、多 Agent、Skill 导入和 C4 恢复矩阵仍待开发。
 
 最新 C1 用户路径、验证与边界见 [控制声明交付](10-c1-control-declarations.md)。

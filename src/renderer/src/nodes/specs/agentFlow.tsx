@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components -- Node spec registration, like specs/index.tsx. */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useEditor, useValue } from 'tldraw'
 import type { PortDecl, PortType } from '@shared/types'
 import {
@@ -14,6 +14,10 @@ import {
   agentFlowPendingExecutor,
   AGENT_FLOW_EXECUTION_PENDING
 } from '@shared/engine/executors/agentFlow'
+import { agentExecutor } from '@shared/engine/executors/agentFlow'
+import { projectAgentOutputs } from '@shared/agent-flow/agent-outputs'
+import { AgentTaskControls } from './AgentTaskControls'
+import type { FlowAgentCatalog } from '@shared/agent-flow/desktop-tasks'
 import {
   NODE_ACCENTS,
   getNodeType,
@@ -118,17 +122,23 @@ function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
           />
         </label>
       )}
-      <p className="agent-flow-pending">{AGENT_FLOW_EXECUTION_PENDING}</p>
+      {agent ? (
+        <AgentTaskControls shape={shape} />
+      ) : (
+        <p className="agent-flow-pending">{AGENT_FLOW_EXECUTION_PENDING}</p>
+      )}
       {issue && (
         <p className="agent-flow-pending" role="status">
           {issue}
         </p>
       )}
-      <NodePrimaryButton
-        onClick={() => useNodePanelStore.getState().open('contract', shape.id, 'settings')}
-      >
-        配置节点
-      </NodePrimaryButton>
+      {!agent && (
+        <NodePrimaryButton
+          onClick={() => useNodePanelStore.getState().open('contract', shape.id, 'settings')}
+        >
+          配置节点
+        </NodePrimaryButton>
+      )}
     </div>
   )
 }
@@ -138,6 +148,22 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
   const [saved, setSaved] = useState(shape.props.config)
   const [draft, setDraft] = useState<Record<string, unknown>>(() => configOf(shape))
   const [error, setError] = useState('')
+  const [catalog, setCatalog] = useState<FlowAgentCatalog | null>(null)
+  useEffect(() => {
+    if (type !== 'agent' || !window.api.flowAgentCatalog) return
+    let disposed = false
+    void window.api
+      .flowAgentCatalog({ projectId, nodeId: shape.id })
+      .then((reply) => {
+        if (!disposed && reply.ok) setCatalog(reply.data)
+      })
+      .catch(() => {
+        /* Saving/running reports unavailable configuration. */
+      })
+    return () => {
+      disposed = true
+    }
+  }, [projectId, shape.id, type])
   const graph = useValue('agent-flow-targets', () => canvasFlowDeclarations(editor), [editor])
   const options = graph.shapes
     .filter((node) => node.id !== shape.id)
@@ -296,6 +322,73 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
             </AppSelect>
           </label>
           {numberField('最多处理步数', 'maxSteps', 1, 64)}
+          {catalog && (
+            <>
+              <label className="settings-field">
+                决策模型
+                <AppSelect
+                  aria-label="决策模型"
+                  value={String(draft.modelDefinitionId ?? '')}
+                  onChange={(event) => update('modelDefinitionId', event.target.value)}
+                >
+                  <option value="">选择文本模型</option>
+                  {catalog.models.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name}
+                    </option>
+                  ))}
+                </AppSelect>
+              </label>
+              <fieldset className="agent-flow-targets">
+                <legend>选择 Skills</legend>
+                {catalog.skills.map((skill) => (
+                  <label className="agent-flow-target-option" key={skill.id}>
+                    <input
+                      type="checkbox"
+                      aria-label={`Skill：${skill.name}`}
+                      checked={(draft.skills as Array<{ id: string }>).some(
+                        (item) => item.id === skill.id
+                      )}
+                      onChange={(event) =>
+                        update(
+                          'skills',
+                          event.target.checked
+                            ? [
+                                ...(draft.skills as Array<{ id: string; version: string }>).filter(
+                                  (item) => item.id !== skill.id
+                                ),
+                                { id: skill.id, version: skill.version }
+                              ]
+                            : (draft.skills as Array<{ id: string }>).filter(
+                                (item) => item.id !== skill.id
+                              )
+                        )
+                      }
+                    />
+                    <span>
+                      {skill.name} · v{skill.version}
+                    </span>
+                  </label>
+                ))}
+              </fieldset>
+              <label className="agent-flow-target-option">
+                <input
+                  type="checkbox"
+                  aria-label="启用画布节点工具"
+                  checked={(draft.tools as Array<{ id: string }>).some(
+                    (item) => item.id === 'node.execute'
+                  )}
+                  onChange={(event) =>
+                    update(
+                      'tools',
+                      event.target.checked ? [{ id: 'node.execute', version: '1' }] : []
+                    )
+                  }
+                />
+                执行画布数据处理节点
+              </label>
+            </>
+          )}
           {bindingField('Skills 及版本', 'skills')}
           {bindingField('工具及版本', 'tools')}
           {targetList('允许处理的节点', 'allowedNodeIds')}
@@ -470,7 +563,7 @@ function port(id: string, type: PortType, direction: 'in' | 'out', schema?: stri
     description:
       direction === 'in'
         ? '按明确来源接收已提交的资产；未适配的类型禁止自动执行。'
-        : '仅在正式执行成功后输出；当前配置阶段不产生结果。',
+        : '仅在正式执行成功后输出已验证的结果；未启用的节点不产生输出。',
     type,
     required: direction === 'out',
     cardinality: direction === 'in' ? 'many' : 'one',
@@ -495,7 +588,7 @@ export function registerAgentFlowNodeTypes(): void {
         : state
           ? '声明任务阶段和合法转换，展示任务状态。'
           : '按职责和协作方式处理任务，可绑定版本化 Skills 与工具。',
-      executionDisabledReason: AGENT_FLOW_EXECUTION_PENDING,
+      ...(type === 'agent' ? {} : { executionDisabledReason: AGENT_FLOW_EXECUTION_PENDING }),
       ports: {
         in: state
           ? [port('in-json', 'json', 'in', 'json.any')]
@@ -513,8 +606,8 @@ export function registerAgentFlowNodeTypes(): void {
                 (item) => ({ ...item, required: false })
               )
       },
-      executor: agentFlowPendingExecutor,
-      projectOutputs: () => ({}),
+      executor: type === 'agent' ? agentExecutor : agentFlowPendingExecutor,
+      projectOutputs: type === 'agent' ? projectAgentOutputs : () => ({}),
       Body: AgentFlowBody,
       SettingsPanel: AgentFlowSettings
     })

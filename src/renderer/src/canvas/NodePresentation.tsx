@@ -68,12 +68,13 @@ export function NodeIdentity({ children }: { children?: ReactNode }): React.JSX.
 
 /** 通过 React portal 保留 Body 原有回调/状态，将主按钮呈现在卡片固定底部。 */
 export function NodePrimaryButton({
+  allowWhileBusy = false,
   children,
   className,
   onPointerDown,
   onClick,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement>): React.JSX.Element | null {
+}: ButtonHTMLAttributes<HTMLButtonElement> & { allowWhileBusy?: boolean }): React.JSX.Element | null {
   const context = useContext(Context)
   const register = context?.registerAction
   useEffect(() => {
@@ -93,9 +94,9 @@ export function NodePrimaryButton({
   const button = (
     <button
       {...props}
-      disabled={props.disabled || context?.busy}
+      disabled={props.disabled || (context?.busy && !allowWhileBusy)}
       title={
-        context?.busy
+        context?.busy && !allowWhileBusy
           ? '节点正在运行或排队，请稍候'
           : (props.title ??
             (props.disabled ? '当前不可用，请检查输入、模型配置或运行状态' : undefined))

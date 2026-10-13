@@ -25,6 +25,7 @@ import type { NodeExecutionContext, NodeExecutionResult, SubflowRequest } from '
 import type { NodeMetaPatch } from '@shared/engine/executor-types'
 import { iterationItemValue } from '@shared/engine/inputs'
 import { rendererGateway } from './rendererGateway'
+import { placeFlowAsset } from '../canvas/flow-asset-actions'
 import { operationPatchViolation } from '@shared/engine/node-invariants'
 import { fingerprintNodeInputs } from './resultFreshness'
 import { recipeParams } from '@shared/artifact-recipe'
@@ -861,15 +862,24 @@ function collectNodeInputs(
   if (!spec) return { value: new Map(), errors: [`未知节点类型：${node.type}`] }
   if (ctx.command) {
     return collectContractInputs(node, [], new Map(), {
-      injections: ctx.command.grant.inputs.flatMap((input) => input.versions.map((version, index) => ({
-        portId: input.targetPortId,
-        packet: { type: version.value.kind, value: version.value,
-          ...(version.value.kind === 'json' ? { schema: { id: 'json.any', version: 1 } } : {}),
-          source: { nodeId: input.sources?.[index]?.nodeId ?? version.ref.sourceNodeId,
-            portId: input.sources?.[index]?.portId ?? version.ref.sourcePortId,
-            runId: ctx.runId, assetId: version.ref.assetId, versionId: version.ref.versionId },
-          createdAt: version.createdAt }
-      })))
+      injections: ctx.command.grant.inputs.flatMap((input) =>
+        input.versions.map((version, index) => ({
+          portId: input.targetPortId,
+          packet: {
+            type: version.value.kind,
+            value: version.value,
+            ...(version.value.kind === 'json' ? { schema: { id: 'json.any', version: 1 } } : {}),
+            source: {
+              nodeId: input.sources?.[index]?.nodeId ?? version.ref.sourceNodeId,
+              portId: input.sources?.[index]?.portId ?? version.ref.sourcePortId,
+              runId: ctx.runId,
+              assetId: version.ref.assetId,
+              versionId: version.ref.versionId
+            },
+            createdAt: version.createdAt
+          }
+        }))
+      )
     })
   }
   if (!injection) return collectContractInputs(node, ctx.graph.edges, ctx.outputs)
@@ -922,6 +932,7 @@ const remoteNodeTypes = new Set([
   'script'
 ])
 function nodeResource(node: CanvasNode): string {
+  if (node.type === 'agent') return `agent:${node.id}`
   if (node.type === 'iterate') return `iterate:${node.id}`
   if (node.type === 'video-depth' || node.type === 'video-clay') return 'gpu'
   if (remoteNodeTypes.has(node.type)) {
@@ -970,12 +981,19 @@ async function executeNodeOnce(
     }
     emitWorkflowEvent('workflow.task_admitted', '节点取得资源额度', ctx)
     if (!ctx.command && window.api?.checkFlowNodeAvailability) {
-      const available = await window.api.checkFlowNodeAvailability({ projectId: ctx.projectId, nodeId: node.id }).catch(() => ({ ok: false as const }))
+      const available = await window.api
+        .checkFlowNodeAvailability({ projectId: ctx.projectId, nodeId: node.id })
+        .catch(() => ({ ok: false as const }))
       if (!available.ok) {
         ctx.outputs.delete(node.id)
         setExec(ctx.editor, node.id as TLShapeId, node.exec.status)
-        return { status: 'skipped', reason: 'error' in available && available.error.code === 'FLOW_REVIEW_NOT_READY'
-          ? '审核节点尚未接入执行，本次运行已跳过' : '节点有未确认的命令，请先核对运行记录' }
+        return {
+          status: 'skipped',
+          reason:
+            'error' in available && available.error.code === 'FLOW_REVIEW_NOT_READY'
+              ? '审核节点尚未接入执行，本次运行已跳过'
+              : '节点有未确认的命令，请先核对运行记录'
+        }
       }
     }
     return await executeNodeUnscheduled(ctx, node, runSubflow, injection)
@@ -999,8 +1017,13 @@ async function executeNodeUnscheduled(
   // 同节点重跑与不同迭代项因此不会混淆。
   const record: NodeRunRecord = {
     runId: ctx.runId,
-    ...(ctx.command ? { commandId: ctx.command.grant.command.commandId,
-      commandLeaseId: ctx.command.grant.leaseId, fixedInputs: ctx.command.grant.command.inputs } : {}),
+    ...(ctx.command
+      ? {
+          commandId: ctx.command.grant.command.commandId,
+          commandLeaseId: ctx.command.grant.leaseId,
+          fixedInputs: ctx.command.grant.command.inputs
+        }
+      : {}),
     status: 'running',
     startedAt: Date.now(),
     inputs: {},
@@ -1086,7 +1109,49 @@ async function executeNodeUnscheduled(
         for (const portId of new Set(result.artifactOutputPorts ?? [])) {
           const packet = projected.value[portId]
           if (!packet) throw new Error('文档产物必须来自本次已校验的输出端口')
-          materializeDocumentArtifact(editor, latest, portId, packet.value, ctx.runId)
+          if (node.type === 'agent') {
+            const result = JSON.parse(latest.meta.nodeResult as string)
+            let found = false
+            for (const ref of result.refs as Array<{ versionId: string }>) {
+              const version = await window.api.readFlowAsset({
+                projectId: ctx.projectId,
+                versionId: ref.versionId
+              })
+              if (!version.ok) throw new Error('Agent 固定资产读取失败')
+              const value =
+                version.data.value.kind === 'markdown'
+                  ? { kind: 'text', text: version.data.value.text }
+                  : version.data.value
+              if (JSON.stringify(value) === JSON.stringify(packet.value)) {
+                const present = editor
+                  .getCurrentPageShapes()
+                  .some(
+                    (shape) =>
+                      shape.meta.agentTaskId === result.taskId &&
+                      shape.meta.agentAssetVersionId === ref.versionId
+                  )
+                if (!present) {
+                  const placed = placeFlowAsset(editor, version.data, latest.id)
+                  const materialized = editor.getShape(placed)
+                  editor.updateShape({
+                    id: placed,
+                    type: 'node-card',
+                    meta: {
+                      ...materialized?.meta,
+                      agentTaskId: result.taskId,
+                      agentAssetVersionId: ref.versionId,
+                      artifactProducerId: latest.id,
+                      artifactProducerPortId: portId,
+                      artifactRunId: ctx.runId
+                    }
+                  })
+                }
+                found = true
+                break
+              }
+            }
+            if (!found) throw new Error('Agent 固定资产引用缺失')
+          } else materializeDocumentArtifact(editor, latest, portId, packet.value, ctx.runId)
           recordRunTrace(ctx, node, record, 'output', 'info', '已创建独立文档结果节点', {
             name: 'node.document_materialized'
           })
@@ -1334,11 +1399,20 @@ function seedPersistedOutputs(ctx: WorkflowContext): void {
     if (projected.errors.length === 0 && Object.keys(projected.value).length > 0) {
       if (shape.meta?.flowAssetRef && readPinnedOutputs(shape.meta.pinnedOutput)) {
         let raw: unknown
-        try { raw = JSON.parse(String(shape.meta.flowAssetRef)) } catch { raw = null }
-        const ref = AgentFlowAssetRefSchema.safeParse(raw)
-        if (ref.success) for (const packet of Object.values(projected.value)) {
-          if (packet) Object.assign(packet.source, { assetId: ref.data.assetId, versionId: ref.data.versionId })
+        try {
+          raw = JSON.parse(String(shape.meta.flowAssetRef))
+        } catch {
+          raw = null
         }
+        const ref = AgentFlowAssetRefSchema.safeParse(raw)
+        if (ref.success)
+          for (const packet of Object.values(projected.value)) {
+            if (packet)
+              Object.assign(packet.source, {
+                assetId: ref.data.assetId,
+                versionId: ref.data.versionId
+              })
+          }
       }
       ctx.outputs.set(node.id, projected.value)
     }

@@ -22,7 +22,12 @@ export interface AgentModelContext {
   goal: string
   mode: AgentTaskSnapshot['config']['interactionMode']
   targets: AgentTaskSnapshot['targets']
-  skills: Array<Pick<FixedSkill, 'id' | 'version' | 'name' | 'description' | 'contentHash'>>
+  directInputs?: AgentTaskSnapshot['directInputs']
+  skills: Array<
+    Pick<FixedSkill, 'id' | 'version' | 'name' | 'description' | 'contentHash'> & {
+      resources?: string[]
+    }
+  >
   loaded: Record<string, string>
   receipts: FlowCommandReceipt[]
   humanAccepted: boolean
@@ -129,13 +134,17 @@ export function createAgentRuntime(options: {
               goal: record.snapshot.goal,
               mode: record.snapshot.config.interactionMode,
               targets: record.snapshot.targets,
-              skills: record.skills.map(({ id, version, name, description, contentHash }) => ({
-                id,
-                version,
-                name,
-                description,
-                contentHash
-              })),
+              directInputs: record.snapshot.directInputs,
+              skills: record.skills.map(
+                ({ id, version, name, description, contentHash, resources }) => ({
+                  id,
+                  version,
+                  name,
+                  description,
+                  contentHash,
+                  resources: ['SKILL.md', ...Object.keys(resources)]
+                })
+              ),
               loaded: state.loaded,
               receipts: state.receipts,
               humanAccepted: state.humanAccepted
@@ -159,11 +168,14 @@ export function createAgentRuntime(options: {
       if (!fixed) throw new AgentRuntimeError('SKILL_NOT_BOUND', 'skill-load')
       if (
         decision.resource !== undefined &&
+        decision.resource !== 'SKILL.md' &&
         !Object.prototype.hasOwnProperty.call(fixed.resources, decision.resource)
       )
         throw new AgentRuntimeError('SKILL_RESOURCE_DENIED', 'skill-load')
       const content =
-        decision.resource === undefined ? fixed.instructions : fixed.resources[decision.resource]
+        decision.resource === undefined || decision.resource === 'SKILL.md'
+          ? fixed.instructions
+          : fixed.resources[decision.resource]
       if (content === undefined) throw new AgentRuntimeError('SKILL_RESOURCE_DENIED', 'skill-load')
       const loaded = {
         ...state.loaded,

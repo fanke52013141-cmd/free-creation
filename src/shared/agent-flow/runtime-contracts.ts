@@ -46,6 +46,7 @@ export const AgentTaskSnapshotSchema = z
     semanticRevision: z.string().regex(/^sha256:[a-f0-9]{64}$/),
     config: AgentNodeConfigSchema,
     goal: z.string().min(1).max(32768),
+    directInputs: z.array(AgentFlowAssetRefSchema).max(128).default([]),
     targets: z
       .array(
         z
@@ -66,11 +67,13 @@ export const AgentTaskSnapshotSchema = z
   })
   .strict()
   .superRefine((value, context) => {
-    const references = value.targets.reduce(
-      (total, target) =>
-        total + target.inputs.reduce((count, port) => count + port.assets.length, 0),
-      0
-    )
+    const references =
+      value.directInputs.length +
+      value.targets.reduce(
+        (total, target) =>
+          total + target.inputs.reduce((count, port) => count + port.assets.length, 0),
+        0
+      )
     if (
       references > 128 ||
       new Set(value.targets.map((item) => item.nodeId)).size !== value.targets.length ||

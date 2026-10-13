@@ -12,6 +12,7 @@ import { createAgentRuntime } from '../src/main/agent-flow/runtime'
 import { createLedgerToolPort } from '../src/main/agent-flow/ledger-tool'
 import { FlowTaskStore } from '../src/main/agent-flow/task-store'
 import { FlowSkillStore } from '../src/main/agent-flow/skill-store'
+import { FlowAgentDesktopHost } from '../src/main/agent-flow/desktop-host'
 import {
   AgentTaskSnapshotSchema,
   AgentRuntimeError
@@ -178,6 +179,111 @@ function fixture() {
 const lookup = { projectId: 'project-a', commandId: 'command-a' }
 
 describe('production durable command ledger', () => {
+  it('trusted desktop admission derives scope, resumes observed steps and publishes only verified assets', async () => {
+    const f = fixture()
+    f.agent.props.config = JSON.stringify({
+      ...f.agentConfig,
+      maxSteps: 12,
+      interactionMode: 'collaborative',
+      modelDefinitionId: 'fixture-model',
+      tools: [{ id: 'node.execute', version: '1' }],
+      skills: [{ id: 'result-check', version: '1' }]
+    })
+    f.file.nodes.find((node) => node.id === f.agent.id)!.params.config = f.agent.props.config
+    let executions = 0
+    const host = new FlowAgentDesktopHost(
+      f.db,
+      f.project,
+      {
+        ledger: f.ledger,
+        isActive: () => true,
+        deliver: async (grant) => {
+          executions++
+          f.savedRun(grant)
+          const version = grant.inputs[0].versions[0]
+          f.target.meta.nodeRun = {
+            ...(f.target.meta.nodeRun as object),
+            fixedInputs: grant.command.inputs,
+            inputs: {
+              'in-value': [
+                {
+                  nodeId: f.source.id,
+                  portId: 'out-text',
+                  assetId: version.ref.assetId,
+                  versionId: version.ref.versionId
+                }
+              ]
+            }
+          }
+        }
+      },
+      async () => ({
+        decide: async (state) =>
+          !Object.keys(state.loaded).length
+            ? { kind: 'load-skill', skillId: 'result-check' }
+            : state.receipts.length < 2
+              ? { kind: 'execute', targetNodeId: f.target.id }
+              : !state.humanAccepted
+                ? { kind: 'wait' }
+                : { kind: 'finish', outputs: state.receipts.at(-1)!.outputRefs }
+      })
+    )
+    const input = {
+      projectId: f.file.meta.id,
+      nodeId: f.agent.id,
+      requestId: 'desktop-task',
+      action: 'start',
+      traceId: 'desktop-trace',
+      spanId: 'desktop-span'
+    }
+    f.source.meta.flowAssetRef = JSON.stringify(f.version.ref)
+    f.source.meta.pinnedOutput = JSON.stringify({
+      version: 1,
+      outputs: { 'out-text': { kind: 'text', text: 'tampered' } }
+    })
+    await expect(host.run({ ...input, requestId: 'bad-fixed-input' })).rejects.toThrow(
+      'AGENT_INPUT_NOT_FIXED'
+    )
+    expect(executions).toBe(0)
+    delete f.source.meta.flowAssetRef
+    delete f.source.meta.pinnedOutput
+    expect((await host.run(input)).task.state).toBe('waiting')
+    expect(executions).toBe(2)
+    const result = await host.run({
+      ...input,
+      requestId: 'continue-run',
+      action: 'continue',
+      eventId: 'continue-event'
+    })
+    expect(result.task.state).toBe('completed')
+    expect(result.outputs['out-text']).toEqual({ kind: 'text', text: 'private-result' })
+    expect(executions).toBe(2)
+    expect((await host.run(input)).task.state).toBe('completed')
+    await expect(host.run({ ...input, allowedNodeIds: ['unauthorized'] })).rejects.toThrow()
+    f.agent.meta.nodeRun = { runId: 'agent-run', startedAt: 0, inputs: {}, status: 'success' }
+    f.agent.meta.nodeResult = JSON.stringify({
+      schemaVersion: 1,
+      taskId: result.task.taskId,
+      outputs: result.outputs
+    })
+    const submit = (submissionId: string) =>
+      f.assets.submit({
+        projectId: f.file.meta.id,
+        nodeId: f.agent.id,
+        portId: 'out-text',
+        submissionId,
+        expectedGraphVersion: f.file.meta.graphVersion,
+        traceId: 'trace',
+        spanId: 'span'
+      })
+    expect(submit('agent-result').value).toEqual(result.outputs['out-text'])
+    f.agent.meta.nodeResult = JSON.stringify({
+      schemaVersion: 1,
+      taskId: result.task.taskId,
+      outputs: { 'out-text': { kind: 'text', text: 'forged' } }
+    })
+    expect(() => submit('forged-agent-result')).toThrow('ASSET_OUTPUT_INVALID')
+  })
   it('C3 loop consumes two real C2 saved-run receipts and immutable output versions', async () => {
     const f = fixture()
     const command = f.command()

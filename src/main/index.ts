@@ -10,6 +10,7 @@ import icon from '../../resources/icon.png?asset'
 import { registerProjectIpc } from './ipc/project.ipc'
 import { registerFlowAssetsIpc } from './ipc/flow-assets.ipc'
 import { registerFlowCommandsIpc } from './ipc/flow-commands.ipc'
+import { registerFlowAgentsIpc } from './ipc/flow-agents.ipc'
 import { ProjectFileWatcher } from './ipc/project-watcher'
 import { registerMediaIpc } from './ipc/media.ipc'
 import { registerGatewayIpc } from './ipc/gateway.ipc'
@@ -320,7 +321,7 @@ app.whenReady().then(async () => {
   mainWindow = createWindow()
   registerGatewayIpc(mainWindow)
   registerFlowAssetsIpc(() => mainWindow)
-  registerFlowCommandsIpc(() => mainWindow)
+  registerFlowCommandsIpc(() => mainWindow, (desktop) => registerFlowAgentsIpc(() => mainWindow, desktop))
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

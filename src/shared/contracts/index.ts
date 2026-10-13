@@ -49,6 +49,7 @@ import type {
 } from '@free-creation/model-contracts'
 
 export const IPC = {
+  flowAgents: { run: 'flow-agents:run', inspect: 'flow-agents:inspect', stop: 'flow-agents:stop', catalog: 'flow-agents:catalog' },
   flowCommands: {
     attach: 'flow-commands:attach', detach: 'flow-commands:detach',
     availability: 'flow-commands:availability',

@@ -16,9 +16,17 @@ import { FlowCommandLedger } from '../agent-flow/command-ledger'
 import { getDb } from '../store/db'
 import { openProject } from '../store/projects.repo'
 import type { FlowCommandGrant } from '../../shared/agent-flow/commands'
+export interface FlowCommandDesktop {
+  ledger: FlowCommandLedger
+  isActive(projectId: string): boolean
+  deliver(grant: FlowCommandGrant, signal: AbortSignal): Promise<void>
+}
 
 /** Desktop-only request/grant bridge; no CLI/headless interface. */
-export function registerFlowCommandsIpc(window: () => BrowserWindow | null): FlowCommandLedger {
+export function registerFlowCommandsIpc(
+  window: () => BrowserWindow | null,
+  connect?: (desktop: FlowCommandDesktop) => void
+): FlowCommandLedger {
   const ledger = new FlowCommandLedger(getDb(), openProject)
   let activeProjectId: string | null = null
   function recover(
@@ -223,5 +231,36 @@ export function registerFlowCommandsIpc(window: () => BrowserWindow | null): Flo
   handle(IPC.flowCommands.abort, 'not-started', CommandLeaseSchema, (input) =>
     ledger.abortUnstarted(input)
   )
+  connect?.({
+    ledger,
+    isActive: (projectId) => activeProjectId === projectId,
+    deliver: async (grant, signal) => {
+      if (activeProjectId !== grant.command.projectId || !window() || window()!.isDestroyed())
+        throw new FlowCommandError('FLOW_PROJECT_INACTIVE', 'dispatch')
+      arm(grant)
+      window()!.webContents.send(IPC.flowCommands.grant, grant)
+      const deadline = Date.now() + 60000
+      while (true) {
+        const receipt = ledger.lookup({
+          projectId: grant.command.projectId,
+          commandId: grant.command.commandId
+        })
+        if (receipt.state !== 'pending') return
+        if (
+          signal.aborted ||
+          Date.now() >= deadline ||
+          activeProjectId !== grant.command.projectId
+        ) {
+          ledger.unknown({
+            projectId: grant.command.projectId,
+            commandId: grant.command.commandId,
+            leaseId: grant.leaseId
+          })
+          return
+        }
+        await new Promise((done) => setTimeout(done, 100))
+      }
+    }
+  })
   return ledger
 }

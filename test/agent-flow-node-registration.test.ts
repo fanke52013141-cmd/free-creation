@@ -58,8 +58,8 @@ it('C1 configuration is retained in the graph and control relations never become
     expect(node.content).toEqual({ kind: 'text', text: source.props.text })
   }
 })
-it('configuration-only nodes cannot call gateways or mutate state and show blocked readiness', async () => {
-  for (const type of ['agent', 'state-machine', 'ai-review'] as const) {
+it('state/review configuration-only nodes cannot call gateways or mutate state and show blocked readiness', async () => {
+  for (const type of ['state-machine', 'ai-review'] as const) {
     const spec = getNodeType(type)!
     const context = new Proxy(
       {},
@@ -87,6 +87,17 @@ it('configuration-only nodes cannot call gateways or mutate state and show block
       }).kind
     ).toBe('blocked')
   }
+})
+it('Agent uses the same public/shared executor and cannot fabricate outputs without its desktop host', async () => {
+  const spec = getNodeType('agent')!
+  expect(getExecutor('agent')).toBe(spec.executor)
+  expect(spec.executionDisabledReason).toBeUndefined()
+  expect(await getExecutor('agent')!({ gateway: {} } as NodeExecutionContext)).toMatchObject({
+    status: 'failed'
+  })
+  expect(
+    spec.projectOutputs!({ meta: { nodeResult: 'old result' } } as unknown as NodeCardShape)
+  ).toEqual({})
 })
 it('review JSON and feedback connect through declared compatible ports', () => {
   const review = getNodeType('ai-review')!

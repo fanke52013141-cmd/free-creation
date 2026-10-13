@@ -41,7 +41,7 @@ function contrast(first, second) {
       return { type: card.dataset.nodeType, height: bounds.height, buttons, descriptions: card.querySelectorAll('.node-standard-description').length, icon: icon && { box: icon.getBoundingClientRect().width, svg: icon.querySelector('svg').getBoundingClientRect().width }, scroll: card.querySelector('.node-standard-scroll').scrollHeight, probe: ['.node-body-content','.node-body-content > *','.node-standard-identity'].map(selector => { const el=card.querySelector(selector); if(!el) return null; const s=getComputedStyle(el); return { selector, offset:el.offsetHeight, scroll:el.scrollHeight, height:s.height, min:s.minHeight, margin:s.margin, padding:s.padding, flex:s.flex } }) }
     }))
     fs.writeFileSync(`${output}/geometry.json`, JSON.stringify(geometry,null,2))
-    await page.screenshot({ path: `${output}/all-nodes-dark.png` })
+    await page.screenshot({ path: `${output}/all-nodes-dark.png`, timeout: 60000 })
     const expectedCount = await page.evaluate(async () => (await import('/src/nodes/registry.tsx')).allNodeTypes().length)
     console.log(`${expectedCount} 节点尺寸证据：${output}`)
     assert.equal(geometry.length, expectedCount)

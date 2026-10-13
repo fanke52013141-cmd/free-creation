@@ -108,6 +108,10 @@ import type {
 } from '../shared/types'
 
 const api = {
+  runFlowAgent: (input: import('../shared/agent-flow/desktop-tasks').FlowAgentRun): Promise<IpcEnvelope<import('../shared/agent-flow/desktop-tasks').FlowAgentReply>> => ipcRenderer.invoke(IPC.flowAgents.run, input),
+  inspectFlowAgent: (input: { projectId: string; nodeId: string }): Promise<IpcEnvelope<import('../shared/agent-flow/desktop-tasks').FlowAgentView | null>> => ipcRenderer.invoke(IPC.flowAgents.inspect, input),
+  stopFlowAgent: (input: { projectId: string; nodeId: string }): Promise<IpcEnvelope<import('../shared/agent-flow/desktop-tasks').FlowAgentView | null>> => ipcRenderer.invoke(IPC.flowAgents.stop, input),
+  flowAgentCatalog: (input: { projectId: string; nodeId: string }): Promise<IpcEnvelope<import('../shared/agent-flow/desktop-tasks').FlowAgentCatalog>> => ipcRenderer.invoke(IPC.flowAgents.catalog, input),
   activateFlowCanvas: (input: { projectId: string }): Promise<IpcEnvelope<null>> => ipcRenderer.invoke(IPC.flowCommands.attach, input),
   deactivateFlowCanvas: (input: { projectId: string }): Promise<IpcEnvelope<null>> => ipcRenderer.invoke(IPC.flowCommands.detach, input),
   checkFlowNodeAvailability: (input: { projectId: string; nodeId: string }): Promise<IpcEnvelope<null>> => ipcRenderer.invoke(IPC.flowCommands.availability, input),

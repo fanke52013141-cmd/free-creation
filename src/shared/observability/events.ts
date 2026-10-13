@@ -36,6 +36,18 @@ const MODEL_ATTRS = {
 
 export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Object.fromEntries(
   [
+    def('agent.desktop.inspect_failed', 'error', 'main/ipc/flow-agents.ipc', {
+      phase: 'short',
+      code: 'short'
+    }),
+    ...['started', 'completed', 'failed'].map((stage) =>
+      def(
+        `agent.desktop.${stage}`,
+        stage === 'failed' ? 'error' : 'info',
+        'main/ipc/flow-agents.ipc',
+        { phase: 'short', code: 'short' }
+      )
+    ),
     ...['started', 'completed', 'failed'].map((stage) =>
       def(
         `skill.library.${stage}`,

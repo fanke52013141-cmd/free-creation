@@ -76,7 +76,7 @@ function contrast(a, b) {
         node.sectionIcons.forEach((color) => rgb(color).forEach((channel, i) => assert.ok(Math.abs(channel - actual[i]) < 1, `${theme} ${node.id} 配置区图标`)))
       }
       evidence.themes[theme] = colors
-      await page.screenshot({ path: `${output}/all-nodes-${theme}.png` })
+      await page.screenshot({ path: `${output}/all-nodes-${theme}.png`, timeout: 60000 })
     }
     await page.evaluate(() => document.querySelectorAll('.canvas-host, .canvas-page').forEach((el) => { el.classList.remove('canvas-theme-light'); el.classList.add('canvas-theme-dark') }))
     for (const label of ['输入与 AI', '图片创作', '视频创作', '声音创作', '流程与高级']) {

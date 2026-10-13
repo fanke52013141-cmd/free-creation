@@ -43,6 +43,7 @@ export interface NodeShape {
  * 运行器据此更新 shape.meta，执行器不直接改 shape.meta（保持单一写入入口）。
  */
 export interface NodeMetaPatch {
+  agentTask?: string
   nodeExtra?: string
 }
 

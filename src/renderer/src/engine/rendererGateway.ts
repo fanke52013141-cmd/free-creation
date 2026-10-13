@@ -4,6 +4,7 @@
 // window.api.gateway.*（模型网关）和 window.api.*（本地媒体处理）的直接调用。
 // 方法签名与 preload 完全一致，不添加额外逻辑。
 import type { GatewayClient } from '@shared/engine/gateway-client'
+import { ensureCanvasSaved } from '../canvas/flow-asset-actions'
 
 /**
  * 渲染进程全局唯一的 GatewayClient 实例。
@@ -13,6 +14,8 @@ import type { GatewayClient } from '@shared/engine/gateway-client'
  * 等价于之前的 window.api.cropImage(...)。
  */
 export const rendererGateway: GatewayClient = {
+  stopFlowAgent: (input) => window.api.stopFlowAgent(input),
+  runFlowAgent: async (input) => { await ensureCanvasSaved(); return window.api.runFlowAgent(input) },
   // ── 模型网关 ──
   listProviders: () => window.api.gateway.listProviders(),
   resolveModelFeature: (input) => window.api.models.resolveBinding(input),

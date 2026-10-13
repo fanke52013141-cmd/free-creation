@@ -248,3 +248,13 @@ C2.2 最终验收补记：最新源码 npm run verify 完整通过（153 文件�
 侧栏控制标签点击修复只改变 UI 指针/布局时机，不改变执行、模型、文件或数据库路径，不新增业务日志。原控制声明浏览器门禁加强不同侧栏间切换并连续三轮通过。最终全量门禁结果和证据见开发台账，首轮界面超时及控制标签点击失败保留在隔离 QA 记录，未掩盖为通过。
 
 C3.1a 最终结果补记：npm run verify 全部通过，154 文件/1679 通过/1 既有跳过，模型另 2，通过全部 17 浏览器门禁、构建及既有资产/命令 Electron 双进程诊断验证。记录 qa/canvas-agent-flow/C3/core-release-verify.log。C3 运行事件的桌面端到端落盘、真实模型和画布任务入口仍待后续，未扩大覆盖结论。
+
+### 2026-10-13 C3.1b 画布 Agent 任务与正式输出
+
+新增 agent.desktop.started/completed/failed 覆盖 run/stop/catalog 入口，按 project/node/trace/span 关联并仅记录 phase/code；inspect 正常轮询不记录，意外读取失败按来源最多每 30 秒记录一次 inspect_failed（有界 128 项）。任务/Skill/checkpoint 沿 agent.runtime/skill.library，模型单步和工具能力探测沿 model.request，业务调用、保存、资产提交沿公共节点/C2 账本日志，未重复节点终态。LangSmith/LangChain 外部 tracing 明确关闭。
+
+隐藏 Electron 双进程使用真实画布按钮/设置、preload/IPC、模型目录、AI SDK、公共处理器、保存/SQLite 和固定资产，检查操作入口开始/唯一终态、恢复原 trace 关联和实际文件脱敏。合成供应商覆盖 Skill/工具选择、直接输入、启动、两步工具、人工等待/重开继续、输出发布和停止迟到保护。真实豆包同一连续路径已通过，最新成功路径记录 9 次模型请求（含两进程的能力探测）；诊断文件扫描正文及实际密钥无泄漏。所有测试使用隔离数据，未复制密钥/数据库到证据目录。
+
+本包真实验收只证明文本/JSON 编排、工具协议和固定回执，不证明领域分析质量、真实供应商远端取消或完整崩溃矩阵。新任务 IPC 拒绝非当前主窗口主 frame，参数不能扩展保存图 scope；既有 C2 占用/sender/child-frame 门禁继续保留。未覆盖：主控/搭建、审核返工/状态机、多 Agent、Skill 导入编辑、模型/媒体未知副作用、模板迁移及恢复模型/命令父子关联的完整审阅。最终门禁与证据见开发台账和 14-c3-canvas-agent.md，不外推全链路完成。
+
+C3.1b 最终结果：desktop-final-accepted.log 完整 verify 通过（155 文件/1685 项/1 既有跳过，模型另 2；17 浏览器、构建、资产/命令/Agent 隐藏桌面验收）；模型进度提示另 18 项复验通过。最新真实 desktop-real-progress.log 与报告记录 9 次模型请求及实际脱敏通过，合成路径验证停止迟到保护。提前等待、预算耗尽及旧 UI 门禁失败保留在 QA；明确失败不外推成功。当前覆盖限于上述专业 Agent 文本/JSON 路径。
