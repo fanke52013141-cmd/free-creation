@@ -36,6 +36,38 @@ const MODEL_ATTRS = {
 
 export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Object.fromEntries(
   [
+    ...['started', 'completed', 'failed'].map((stage) =>
+      def(
+        `skill.library.${stage}`,
+        stage === 'failed' ? 'error' : 'info',
+        'main/agent-flow/skill-store',
+        { phase: 'short', code: 'short' }
+      )
+    ),
+    ...[
+      'started',
+      'resumed',
+      'waiting',
+      'completed',
+      'failed',
+      'cancelled',
+      'blocked',
+      'checkpoint_saved',
+      'skill_loaded',
+      'admission_started',
+      'admission_completed',
+      'admission_failed',
+      'resume_check_started',
+      'resume_check_completed',
+      'resume_check_failed'
+    ].map((stage) =>
+      def(
+        `agent.runtime.${stage}`,
+        stage === 'failed' || stage === 'blocked' || stage.endsWith('_failed') ? 'error' : 'info',
+        'main/agent-flow/runtime',
+        { phase: 'short', code: 'short', resumesTraceId: 'id' }
+      )
+    ),
     def('canvas.flow_config.started', 'info', 'renderer/nodes/specs/agentFlow', { phase: 'short' }),
     def('canvas.flow_config.applied', 'info', 'renderer/nodes/specs/agentFlow', { phase: 'short' }),
     def('canvas.flow_config.failed', 'error', 'renderer/nodes/specs/agentFlow', {
@@ -46,17 +78,44 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
       phase: 'short',
       submissionId: 'id'
     }),
-    def('command.operation.started', 'info', 'main/ipc/flow-commands.ipc', { commandId: 'id', phase: 'short' }),
-    def('command.operation.completed', 'info', 'main/ipc/flow-commands.ipc', {
-      commandId: 'id', phase: 'short', state: 'short', versionId: 'id'
+    def('command.operation.started', 'info', 'main/ipc/flow-commands.ipc', {
+      commandId: 'id',
+      phase: 'short'
     }),
-    def('command.operation.failed', 'error', 'main/ipc/flow-commands.ipc', { commandId: 'id', phase: 'short', code: 'short' }),
-    def('command.recovered', 'warn', 'main/ipc/flow-commands.ipc', { commandId: 'id', phase: 'short', state: 'short', resumesTraceId: 'id' }),
+    def('command.operation.completed', 'info', 'main/ipc/flow-commands.ipc', {
+      commandId: 'id',
+      phase: 'short',
+      state: 'short',
+      versionId: 'id'
+    }),
+    def('command.operation.failed', 'error', 'main/ipc/flow-commands.ipc', {
+      commandId: 'id',
+      phase: 'short',
+      code: 'short'
+    }),
+    def('command.recovered', 'warn', 'main/ipc/flow-commands.ipc', {
+      commandId: 'id',
+      phase: 'short',
+      state: 'short',
+      resumesTraceId: 'id'
+    }),
     def('command.recovery.started', 'info', 'main/ipc/flow-commands.ipc', { phase: 'short' }),
-    def('command.recovery.completed', 'info', 'main/ipc/flow-commands.ipc', { phase: 'short', commandCount: 'int' }),
-    def('command.bridge.failed', 'error', 'renderer/engine/flow-command-bridge', { commandId: 'id', phase: 'short' }),
-    def('command.canvas_binding_failed', 'error', 'renderer/engine/flow-command-bridge', { phase: 'short' }),
-    def('command.recovery_failed', 'error', 'main/ipc/flow-commands.ipc', { commandId: 'id', phase: 'short', code: 'short' }),
+    def('command.recovery.completed', 'info', 'main/ipc/flow-commands.ipc', {
+      phase: 'short',
+      commandCount: 'int'
+    }),
+    def('command.bridge.failed', 'error', 'renderer/engine/flow-command-bridge', {
+      commandId: 'id',
+      phase: 'short'
+    }),
+    def('command.canvas_binding_failed', 'error', 'renderer/engine/flow-command-bridge', {
+      phase: 'short'
+    }),
+    def('command.recovery_failed', 'error', 'main/ipc/flow-commands.ipc', {
+      commandId: 'id',
+      phase: 'short',
+      code: 'short'
+    }),
     def('asset.placement.started', 'info', 'renderer/canvas/flow-asset-actions', {
       phase: 'short'
     }),

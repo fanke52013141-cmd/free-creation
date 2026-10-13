@@ -238,3 +238,13 @@ main 重新校验保存的运行/输入来源/固定版本并计算指纹；资�
 
 
 C2.2 最终验收补记：最新源码 npm run verify 完整通过（153 文件、1660 通过、1 既有跳过，模型另 2 通过、17 浏览器门禁及构建后资产/命令双进程）。实际命令诊断开始/唯一终态、恢复关联及正文/假密钥扫描通过；记录 qa/canvas-agent-flow/C2/bridge-final-verify.log 和 commands/results.json。覆盖仍限本轮确定性路径，不扩大媒体/模型/审核/返工/长期恢复验收范围。
+
+### 2026-10-13 C3.1a 有界运行底座（产品路径待验收）
+
+新增 agent.runtime 的 admission started/completed/failed、运行 started/resumed/waiting/completed/blocked/cancelled、resume_check started/completed/failed 及 Skill/checkpoint 阶段。以固定 project/node/task/trace/span 关联，恢复新开 trace 并记录 resumesTraceId；phase/code 允许列表化。Skill 库 import/enablement/bind 独立 trace，skill.library.started → completed/failed。模型单步复用 model.request 生命周期，AI SDK 只提出动作，不执行第二重循环；C2 工具业务及保存沿原公共路径，不重复终态。
+
+定向 39 项（18 运行/Skill/SDK、14 账本、7 迁移）通过，覆盖预算、持久等待重开、同响应去重/冲突、过期语义、未知副作用只核对、取消迟到、忽略取消信号的超时、项目级联、SDK 合成协议、正文/假密钥不进事件及 logger 故障不改变结果。C3 新事件的证据是测试内统一诊断入口；没有新增 C3 桌面日志落盘验收。模型/库与恢复 trace 的宿主级父子关联、真实供应商、画布任务入口、审核返工、running/blocked 崩溃裁决仍待 C3.1b/C4，不能据此声称全链路完成。
+
+侧栏控制标签点击修复只改变 UI 指针/布局时机，不改变执行、模型、文件或数据库路径，不新增业务日志。原控制声明浏览器门禁加强不同侧栏间切换并连续三轮通过。最终全量门禁结果和证据见开发台账，首轮界面超时及控制标签点击失败保留在隔离 QA 记录，未掩盖为通过。
+
+C3.1a 最终结果补记：npm run verify 全部通过，154 文件/1679 通过/1 既有跳过，模型另 2，通过全部 17 浏览器门禁、构建及既有资产/命令 Electron 双进程诊断验证。记录 qa/canvas-agent-flow/C3/core-release-verify.log。C3 运行事件的桌面端到端落盘、真实模型和画布任务入口仍待后续，未扩大覆盖结论。

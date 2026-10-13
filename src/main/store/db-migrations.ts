@@ -8,7 +8,7 @@ export interface MigrationDatabase {
   pragma(statement: string, options?: { simple?: boolean }): unknown
 }
 
-export const DB_SCHEMA_VERSION = 12
+export const DB_SCHEMA_VERSION = 13
 
 const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
@@ -329,6 +329,46 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
       );
       CREATE UNIQUE INDEX idx_flow_command_occupancy ON flow_commands(project_id, target_node_id)
         WHERE state IN ('pending', 'unknown');
+    `)
+  },
+  (database) => {
+    database.exec(`
+      CREATE TABLE flow_skill_versions (
+        skill_id TEXT NOT NULL, version TEXT NOT NULL, content_hash TEXT NOT NULL,
+        body_json TEXT NOT NULL, enabled INTEGER NOT NULL, PRIMARY KEY(skill_id, version)
+      );
+      CREATE TABLE flow_agent_tasks (
+        thread TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        task_id TEXT NOT NULL, agent_node_id TEXT NOT NULL, snapshot_json TEXT NOT NULL,
+        skills_json TEXT NOT NULL, state TEXT NOT NULL, decisions INTEGER NOT NULL DEFAULT 0,
+        tools INTEGER NOT NULL DEFAULT 0, active_ms INTEGER NOT NULL DEFAULT 0,
+        wait_revision INTEGER NOT NULL DEFAULT 0, wait_kind TEXT, code TEXT,
+        output_refs_json TEXT NOT NULL DEFAULT '[]', UNIQUE(project_id, task_id)
+      );
+      CREATE UNIQUE INDEX idx_flow_agent_active ON flow_agent_tasks(project_id, agent_node_id)
+        WHERE state IN ('ready', 'running', 'waiting', 'blocked');
+      CREATE TABLE flow_agent_responses (
+        thread TEXT NOT NULL REFERENCES flow_agent_tasks(thread) ON DELETE CASCADE,
+        event_id TEXT NOT NULL, signature TEXT NOT NULL, wait_revision INTEGER NOT NULL,
+        PRIMARY KEY(thread, event_id), UNIQUE(thread, wait_revision)
+      );
+      CREATE TABLE flow_agent_tool_calls (
+        thread TEXT NOT NULL REFERENCES flow_agent_tasks(thread) ON DELETE CASCADE,
+        command_id TEXT NOT NULL, PRIMARY KEY(thread, command_id)
+      );
+      CREATE TABLE flow_agent_checkpoints (
+        thread TEXT NOT NULL REFERENCES flow_agent_tasks(thread) ON DELETE CASCADE,
+        namespace TEXT NOT NULL, id TEXT NOT NULL, parent TEXT, type TEXT NOT NULL,
+        data BLOB NOT NULL, metadata_type TEXT NOT NULL, metadata BLOB NOT NULL,
+        PRIMARY KEY(thread, namespace, id)
+      );
+      CREATE TABLE flow_agent_checkpoint_writes (
+        thread TEXT NOT NULL, namespace TEXT NOT NULL, checkpoint TEXT NOT NULL,
+        task TEXT NOT NULL, idx INTEGER NOT NULL, channel TEXT NOT NULL, type TEXT NOT NULL,
+        data BLOB NOT NULL, PRIMARY KEY(thread, namespace, checkpoint, task, idx),
+        FOREIGN KEY(thread, namespace, checkpoint)
+          REFERENCES flow_agent_checkpoints(thread, namespace, id) ON DELETE CASCADE
+      );
     `)
   }
 ]

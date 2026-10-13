@@ -70,4 +70,6 @@ flowchart LR
 
 模型能力与生产桥结论见 [审阅记录](09-model-probe-and-production-bridge-review.md)。
 
+C3 已开工：[C3.1a 有界运行底座](13-c3-runtime-foundation.md)实现版本化内容 Skill、任务预算、C2 工具适配和持久 interrupt/checkpoint。画布入口及真实模型循环待 C3.1b，不标记 C3 完成。
+
 最新 C1 用户路径、验证与边界见 [控制声明交付](10-c1-control-declarations.md)。

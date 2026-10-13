@@ -109,6 +109,13 @@ const fs = require('node:fs')
     await page.getByRole('button', { name: '配置控制关系：审核放行', exact: true }).click()
     assert.equal(await page.evaluate(async () => (await import('/src/stores/edgeSelection.ts')).useEdgeSelectionStore.getState().selectedEdgeId), null)
     assert.equal(await page.evaluate(async () => (await import('/src/stores/nodePanel.ts')).useNodePanelStore.getState().shapeId), 'shape:flow-review')
+    // Switching settings through a canvas control label must preserve the click
+    // even when a different owner's panel is already open.
+    for (const owner of ['agent', 'state', 'review']) {
+      await open(owner)
+      await page.getByRole('button', { name: '配置控制关系：审核放行', exact: true }).click()
+      assert.equal(await page.evaluate(async () => (await import('/src/stores/nodePanel.ts')).useNodePanelStore.getState().shapeId), 'shape:flow-review')
+    }
     await page.evaluate(async () => { (await import('/src/stores/editor.ts')).useEditorStore.getState().editor.deleteShapes(['shape:flow-next']) })
     await page.waitForFunction(() => document.querySelectorAll('.agent-flow-control-path').length === 7)
     assert.ok((await settings.locator('[role="status"]').textContent()).includes('已删除'))

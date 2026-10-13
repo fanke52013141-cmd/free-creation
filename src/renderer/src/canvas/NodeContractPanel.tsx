@@ -419,6 +419,9 @@ export function NodeContractPanel({
       // AppSelect renders its options in a body portal, outside panelRef. Treat that
       // portal as part of the panel so selecting a model does not unmount settings.
       if (event.target instanceof Element && event.target.closest('.app-select-content')) return
+      // A control label opens its owner's settings on click. Closing this panel
+      // on pointerdown resizes the canvas and can move that label before pointerup.
+      if (event.target instanceof Element && event.target.closest('.agent-flow-control-label')) return
       onClose()
     }
     window.addEventListener('pointerdown', onPointerDown, true)

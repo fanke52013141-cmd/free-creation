@@ -8,6 +8,14 @@ import { PROCESSOR_PORTS } from '../src/shared/agent-flow/processor-contract'
 import { migrateDatabase } from '../src/main/store/db-migrations'
 import { computeInputFingerprint } from '../src/shared/engine/input-fingerprint'
 import type { NodeExecuteCommand, FlowCommandGrant } from '../src/shared/agent-flow/commands'
+import { createAgentRuntime } from '../src/main/agent-flow/runtime'
+import { createLedgerToolPort } from '../src/main/agent-flow/ledger-tool'
+import { FlowTaskStore } from '../src/main/agent-flow/task-store'
+import { FlowSkillStore } from '../src/main/agent-flow/skill-store'
+import {
+  AgentTaskSnapshotSchema,
+  AgentRuntimeError
+} from '../src/shared/agent-flow/runtime-contracts'
 
 const dbs: Database.Database[] = []
 afterEach(() => {
@@ -170,6 +178,57 @@ function fixture() {
 const lookup = { projectId: 'project-a', commandId: 'command-a' }
 
 describe('production durable command ledger', () => {
+  it('C3 loop consumes two real C2 saved-run receipts and immutable output versions', async () => {
+    const f = fixture()
+    const command = f.command()
+    const task = AgentTaskSnapshotSchema.parse({
+      runtimeVersion: 1,
+      projectId: command.projectId,
+      agentNodeId: command.agentNodeId,
+      taskId: command.taskId,
+      semanticRevision: command.expectedSemanticRevision,
+      config: { ...f.agentConfig, tools: [{ id: 'node.execute', version: '1' }] },
+      goal: 'Process fixed fixture through the declared processor',
+      targets: [{ nodeId: command.targetNodeId, contractVersion: 1, inputs: command.inputs }],
+      traceId: command.traceId,
+      spanId: command.spanId
+    })
+    let executions = 0
+    const tools = createLedgerToolPort(f.ledger, async (grant) => {
+      executions++
+      f.savedRun(grant)
+    })
+    const runtime = createAgentRuntime({
+      snapshot: task,
+      store: new FlowTaskStore(f.db),
+      skills: new FlowSkillStore(f.db),
+      tools,
+      model: {
+        decide: async (state) =>
+          state.receipts.length < 2
+            ? { kind: 'execute', targetNodeId: command.targetNodeId }
+            : { kind: 'finish', outputs: state.receipts.at(-1)!.outputRefs }
+      },
+      assertRevision: (snapshot) => {
+        if (snapshot.semanticRevision !== projectSemanticRevision(f.file))
+          throw new AgentRuntimeError('FLOW_REVISION_CONFLICT', 'revision')
+      },
+      telemetry: () => {}
+    })
+    const result = await runtime.start()
+    expect(result.state).toBe('completed')
+    expect(executions).toBe(2)
+    expect(result.outputRefs).toHaveLength(1)
+    expect(f.assets.read(task.projectId, result.outputRefs[0].versionId).value).toEqual({
+      kind: 'text',
+      text: 'private-result'
+    })
+    await runtime.start()
+    expect(executions).toBe(2)
+    expect(
+      f.db.prepare("SELECT COUNT(*) AS n FROM flow_commands WHERE state='committed'").get()
+    ).toEqual({ n: 2 })
+  })
   it('keeps declared review gates blocked in both command and manual entrances until their runtime is ready', () => {
     const f = fixture()
     const config = JSON.stringify({
