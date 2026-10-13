@@ -17,6 +17,10 @@ import { FlowTaskStore, agentThread, type AgentTaskRecord } from './task-store'
 import type { FlowSkillStore } from './skill-store'
 import type { AgentTelemetry } from './runtime-diagnostics'
 import type { AgentToolPort } from './ledger-tool'
+import type {
+  CoordinationContext,
+  CoordinationDecision
+} from '../../shared/agent-flow/coordination'
 
 export interface AgentModelContext {
   goal: string
@@ -35,6 +39,15 @@ export interface AgentModelContext {
   selectedOutputs?: AgentTaskRecord['outputRefs']
 }
 export interface AgentModelPort {
+  review?(
+    input: import('../../shared/agent-flow/review').ReviewContext,
+    signal: AbortSignal
+  ): Promise<import('../../shared/agent-flow/review').ReviewModelVerdict>
+  build?(
+    input: import('../../shared/agent-flow/builder').BuildContext,
+    signal: AbortSignal
+  ): Promise<import('../../shared/agent-flow/builder').BuildPlan>
+  coordinate?(input: CoordinationContext, signal: AbortSignal): Promise<CoordinationDecision>
   decide(input: AgentModelContext, signal: AbortSignal): Promise<AgentDecision>
   discuss?(
     goal: string,

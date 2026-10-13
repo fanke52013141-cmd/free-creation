@@ -13,12 +13,27 @@ export const agentExecutor: NodeExecutor = async (ctx) => {
       }
     })()
   )
-  if (!config.success || config.data.role !== 'specialist')
+  if (!config.success)
     return {
       status: 'failed',
-      reason: '当前仅专业 Agent 已接入任务执行，请检查配置',
+      reason: '当前支持主控与专业 Agent 执行，请检查配置',
       diagnosticPhase: 'input'
     }
+  if (config.data.role === 'builder') {
+    if (!ctx.gateway.buildFlowAgent) return { status: 'failed', reason: '当前宿主未启用建图' }
+    const reply = await ctx.gateway.buildFlowAgent({
+      projectId: ctx.projectId,
+      nodeId: ctx.node.id,
+      action: 'propose',
+      requestId: ctx.runId ?? crypto.randomUUID(),
+      traceId: ctx.diagnostics?.traceId ?? newTraceId(),
+      spanId: ctx.diagnostics?.spanId ?? newSpanId()
+    })
+    if (!reply.ok)
+      return { status: 'failed', reason: reply.error.message, diagnosticPhase: 'execution' }
+    ctx.updateResult(null)
+    return { status: 'skipped', reason: '建图预览已保存，请在本节点明确提交图变更' }
+  }
   const task = (() => {
     try {
       return JSON.parse((ctx.shape.meta as Record<string, unknown>)?.agentTask as string)
@@ -32,7 +47,10 @@ export const agentExecutor: NodeExecutor = async (ctx) => {
     requestId: ctx.runId ?? crypto.randomUUID(),
     traceId: ctx.diagnostics?.traceId ?? newTraceId(),
     spanId: ctx.diagnostics?.spanId ?? newSpanId(),
-    action: task?.state === 'waiting' ? ('continue' as const) : ('start' as const),
+    action:
+      task?.state === 'waiting' && ctx.runId !== task.taskId
+        ? ('continue' as const)
+        : ('start' as const),
     ...(task ? { expectedTaskId: task.taskId } : {}),
     ...(task?.state === 'waiting'
       ? { eventId: ctx.runId ?? crypto.randomUUID(), expectedWaitRevision: task.waitRevision }
@@ -85,6 +103,20 @@ export const agentExecutor: NodeExecutor = async (ctx) => {
 }
 
 export const AGENT_FLOW_EXECUTION_PENDING = '配置已开放，执行能力待接入'
+export const reviewExecutor: NodeExecutor = async (ctx) => {
+  if (!ctx.gateway.reviewFlowAssets) return { status: 'failed', reason: '当前宿主未启用 AI 审核' }
+  const reply = await ctx.gateway.reviewFlowAssets({
+    projectId: ctx.projectId,
+    nodeId: ctx.node.id,
+    requestId: ctx.runId ?? crypto.randomUUID(),
+    traceId: ctx.diagnostics?.traceId ?? newTraceId(),
+    spanId: ctx.diagnostics?.spanId ?? newSpanId()
+  })
+  if (!reply.ok)
+    return { status: 'failed', reason: reply.error.message, diagnosticPhase: 'execution' }
+  ctx.updateResult(JSON.stringify(reply.data))
+  return { status: 'done' }
+}
 /** C1 is configuration-only: no gateway call, state mutation or fabricated output. */
 export const agentFlowPendingExecutor: NodeExecutor = () => ({
   status: 'skipped',

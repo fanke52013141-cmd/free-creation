@@ -14,9 +14,12 @@ import {
   agentFlowPendingExecutor,
   AGENT_FLOW_EXECUTION_PENDING
 } from '@shared/engine/executors/agentFlow'
-import { agentExecutor } from '@shared/engine/executors/agentFlow'
+import { agentExecutor, reviewExecutor } from '@shared/engine/executors/agentFlow'
+import { projectReviewOutputs } from '@shared/agent-flow/review'
+import { ReviewTaskControls } from './ReviewTaskControls'
 import { projectAgentOutputs } from '@shared/agent-flow/agent-outputs'
 import { AgentTaskControls } from './AgentTaskControls'
+import { FlowBuilderControls } from './FlowBuilderControls'
 import type { FlowAgentCatalog } from '@shared/agent-flow/desktop-tasks'
 import {
   NODE_ACCENTS,
@@ -59,6 +62,29 @@ function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
   const config = configOf(shape)
   const agent = shape.props.nodeType === 'agent'
   const review = shape.props.nodeType === 'ai-review'
+  const [flowState, setFlowState] = useState<
+    import('@shared/agent-flow/desktop-tasks').FlowAgentView | null
+  >(null)
+  useEffect(() => {
+    if (shape.props.nodeType !== 'state-machine') return
+    let disposed = false
+    const timer = setInterval(() => {
+      void import('../../stores/app')
+        .then(({ useAppStore }) => {
+          const projectId = useAppStore.getState().currentProject?.id
+          if (projectId)
+            return window.api.inspectFlowAgent({ projectId, nodeId: shape.id }).then((reply) => {
+              if (!disposed && reply.ok) setFlowState(reply.data)
+            })
+          return undefined
+        })
+        .catch(() => {})
+    }, 750)
+    return () => {
+      disposed = true
+      clearInterval(timer)
+    }
+  }, [shape.id, shape.props.nodeType])
   const issue = useValue(
     'agent-flow-declaration-issue',
     () => {
@@ -76,9 +102,24 @@ function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
       <div className="agent-flow-body">
         <NodeIdentity>
           <div className="agent-flow-summary">
-            初始阶段：{String(config.initialState ?? '未配置')}
+            {flowState ? '当前阶段' : '初始阶段'}：
+            {flowState?.phase ?? String(config.initialState ?? '未配置')}
           </div>
-          <p className="agent-flow-pending">{AGENT_FLOW_EXECUTION_PENDING}</p>
+          <p className="agent-flow-pending">
+            {flowState
+              ? flowState.state === 'completed'
+                ? '流程已完成'
+                : flowState.state === 'waiting'
+                  ? '等待继续'
+                  : flowState.state === 'cancelled'
+                    ? '流程已停止'
+                    : flowState.state === 'blocked'
+                      ? '流程已阻断，请核对主 Agent'
+                      : flowState.state === 'failed'
+                        ? '流程失败，请核对主 Agent'
+                        : '流程执行中'
+              : '等待主 Agent 启动'}
+          </p>
           {issue && (
             <p className="agent-flow-pending" role="status">
               {issue}
@@ -123,9 +164,13 @@ function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
         </label>
       )}
       {agent ? (
-        <AgentTaskControls shape={shape} />
+        config.role === 'builder' ? (
+          <FlowBuilderControls shape={shape} />
+        ) : (
+          <AgentTaskControls shape={shape} />
+        )
       ) : (
-        <p className="agent-flow-pending">{AGENT_FLOW_EXECUTION_PENDING}</p>
+        <ReviewTaskControls shape={shape} />
       )}
       {issue && (
         <p className="agent-flow-pending" role="status">
@@ -150,7 +195,7 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
   const [error, setError] = useState('')
   const [catalog, setCatalog] = useState<FlowAgentCatalog | null>(null)
   useEffect(() => {
-    if (type !== 'agent' || !window.api.flowAgentCatalog) return
+    if (type === 'state-machine' || !window.api.flowAgentCatalog) return
     let disposed = false
     void window.api
       .flowAgentCatalog({ projectId, nodeId: shape.id })
@@ -374,28 +419,76 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
               <label className="agent-flow-target-option">
                 <input
                   type="checkbox"
-                  aria-label="启用画布节点工具"
+                  aria-label={
+                    draft.role === 'builder'
+                      ? '启用建图预览'
+                      : draft.role === 'coordinator'
+                        ? '启用专业 Agent 分派'
+                        : '启用画布节点工具'
+                  }
                   checked={(draft.tools as Array<{ id: string }>).some(
-                    (item) => item.id === 'node.execute'
+                    (item) =>
+                      item.id ===
+                      (draft.role === 'builder'
+                        ? 'graph.preview'
+                        : draft.role === 'coordinator'
+                          ? 'agent.dispatch'
+                          : 'node.execute')
                   )}
                   onChange={(event) =>
                     update(
                       'tools',
-                      event.target.checked ? [{ id: 'node.execute', version: '1' }] : []
+                      event.target.checked
+                        ? [
+                            {
+                              id:
+                                draft.role === 'builder'
+                                  ? 'graph.preview'
+                                  : draft.role === 'coordinator'
+                                    ? 'agent.dispatch'
+                                    : 'node.execute',
+                              version: '1'
+                            }
+                          ]
+                        : []
                     )
                   }
                 />
-                执行画布数据处理节点
+                {draft.role === 'builder'
+                  ? '生成文本流程预览'
+                  : draft.role === 'coordinator'
+                    ? '分派专业 Agent 任务'
+                    : '执行画布数据处理节点'}
               </label>
             </>
           )}
           {bindingField('Skills 及版本', 'skills')}
           {bindingField('工具及版本', 'tools')}
-          {targetList('允许处理的节点', 'allowedNodeIds')}
+          {targetList(
+            draft.role === 'builder' ? '材料来源（一个文本节点）' : '允许处理的节点',
+            'allowedNodeIds'
+          )}
         </>
       )}
       {type === 'ai-review' && (
         <>
+          {catalog && (
+            <label className="settings-field">
+              审核模型
+              <AppSelect
+                aria-label="审核模型"
+                value={String(draft.modelDefinitionId ?? '')}
+                onChange={(event) => update('modelDefinitionId', event.target.value)}
+              >
+                <option value="">选择文本模型</option>
+                {catalog.models.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.name}
+                  </option>
+                ))}
+              </AppSelect>
+            </label>
+          )}
           {textField('标准版本', 'rulesVersion')}
           <label className="settings-field">
             不通过时
@@ -471,7 +564,9 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
             }
             onChange={(value) => update('transitions', value)}
           />
-          <p className="contract-settings-hint">阶段转换与控制关系暂不执行，后续接入统一调度。</p>
+          <p className="contract-settings-hint">
+            主 Agent 按声明事件推进阶段，未声明的转换会阻断流程。
+          </p>
         </>
       )}
       <FlowNodeTargets
@@ -588,7 +683,7 @@ export function registerAgentFlowNodeTypes(): void {
         : state
           ? '声明任务阶段和合法转换，展示任务状态。'
           : '按职责和协作方式处理任务，可绑定版本化 Skills 与工具。',
-      ...(type === 'agent' ? {} : { executionDisabledReason: AGENT_FLOW_EXECUTION_PENDING }),
+      ...(state ? { executionDisabledReason: AGENT_FLOW_EXECUTION_PENDING } : {}),
       ports: {
         in: state
           ? [port('in-json', 'json', 'in', 'json.any')]
@@ -606,8 +701,10 @@ export function registerAgentFlowNodeTypes(): void {
                 (item) => ({ ...item, required: false })
               )
       },
-      executor: type === 'agent' ? agentExecutor : agentFlowPendingExecutor,
-      projectOutputs: type === 'agent' ? projectAgentOutputs : () => ({}),
+      executor:
+        type === 'agent' ? agentExecutor : review ? reviewExecutor : agentFlowPendingExecutor,
+      projectOutputs:
+        type === 'agent' ? projectAgentOutputs : review ? projectReviewOutputs : () => ({}),
       Body: AgentFlowBody,
       SettingsPanel: AgentFlowSettings
     })

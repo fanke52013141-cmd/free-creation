@@ -26,6 +26,9 @@ const directory = arg('agent-directory'),
   phase = arg('agent-phase')
 const real = process.argv.includes('--real-model')
 const collaboration = process.argv.includes('--collaboration')
+const coordination = process.argv.includes('--coordination')
+const builder = process.argv.includes('--builder')
+const review = process.argv.includes('--review')
 if (
   !directory ||
   resolve(directory, '..') !== resolve(tmpdir()) ||
@@ -122,7 +125,103 @@ if (
         const wait=async(state)=>{for(let i=0;i<1800;i++){const task=await inspect();if(task?.state===state)return task;if(task&&['blocked','failed'].includes(task.state))throw new Error(task.code||'AGENT_TASK_FAILED');await new Promise(r=>setTimeout(r,100));}throw new Error('AGENT_TASK_TIMEOUT')};
         const click=()=>{const button=document.querySelector('[data-node-id="shape:c3-agent"] .node-standard-primary');if(!button||button.disabled)throw new Error('AGENT_BUTTON_UNAVAILABLE');button.click()};
       `
-      if (phase === 'execute') {
+      if (review) {
+        report = await active.webContents.executeJavaScript(`(async()=>{${common}
+          const delay=()=>new Promise(r=>setTimeout(r,100));
+          const waitReview=async(passed)=>{for(let i=0;i<900;i++){const node=editor.getShape('shape:c3-review');if(node.props.exec==='failed')throw new Error('REVIEW_EXECUTION_FAILED');try{const report=JSON.parse(node.meta.nodeResult);if(node.props.exec==='success'&&report.passed===passed)return report;}catch{}await delay();}throw new Error('REVIEW_TIMEOUT')};
+          const runReview=()=>{const b=[...document.querySelectorAll('[data-node-id="shape:c3-review"] .node-standard-primary')].find(b=>b.textContent.includes('审核')||b.textContent.includes('复审'));if(!b||b.disabled)throw new Error('REVIEW_BUTTON_UNAVAILABLE');b.click()};
+          const blocked=async()=>{const r=await window.api.checkFlowNodeAvailability({projectId,nodeId:'shape:c3-target'});if(r.ok||r.error.code!=='FLOW_REVIEW_NOT_READY')throw new Error('REVIEW_GATE_BYPASSED')};
+          if(${JSON.stringify(phase)}==='execute'){
+            editor.createShape({id:'shape:c3-source',type:'node-card',x:100,y:100,props:{nodeType:'text',title:'人工材料',text:'private-c3-material'}});
+            editor.createShape({id:'shape:c3-target',type:'node-card',x:1000,y:100,props:{nodeType:'processor',title:'受控下游',config:JSON.stringify({operation:'pass'})}});
+            editor.createShape({id:'shape:c3-review',type:'node-card',x:530,y:100,props:{nodeType:'ai-review',title:'AI 审核',text:'检查输入文本是否以交付：开头。以此开头则通过，否则不通过。',config:JSON.stringify({schemaVersion:1,modelDefinitionId:'agent-test-model',rulesVersion:'rules-1',rejectPolicy:'rework',maxReworks:1,responsibleNodeId:'shape:c3-source',subjectSources:[{nodeId:'shape:c3-source',portId:'out-text'}],gatedNodeIds:['shape:c3-target'],relations:[]})}});
+            const {createEdge}=await import('/src/canvas/graph.ts');createEdge(editor,{shapeId:'shape:c3-source',portId:'out-text'},{shapeId:'shape:c3-review',portId:'in-text'});createEdge(editor,{shapeId:'shape:c3-source',portId:'out-text'},{shapeId:'shape:c3-target',portId:'in-value'});
+            await ensureCanvasSaved();await blocked();runReview();const decision=await waitReview(false);await ensureCanvasSaved();await blocked();
+            if(editor.getShape('shape:c3-source').props.text!=='private-c3-material')throw new Error('REVIEW_MUTATED_INPUT');
+            return {projectId,reviewId:decision.reviewId,versionId:decision.subjects[0].versionId,checks:['public executor real negative review','negative quality is successful node execution','downstream gated before and after rejection','original asset preserved']};
+          }
+          await blocked();const old=JSON.parse(editor.getShape('shape:c3-review').meta.nodeResult);
+          editor.updateShape({id:'shape:c3-source',type:'node-card',props:{text:'交付：private-c3-material'}});await ensureCanvasSaved();runReview();const decision=await waitReview(true);await ensureCanvasSaved();
+          if(decision.subjects[0].versionId===old.subjects[0].versionId||decision.reviewRevision!==1)throw new Error('REVIEW_VERSION_OR_BUDGET_INVALID');
+          value(await window.api.checkFlowNodeAvailability({projectId,nodeId:'shape:c3-target'}));
+          const {runNodeManually}=await import('/src/engine/executor.ts');const executed=await runNodeManually(editor,projectId,[],'shape:c3-target');if(executed.status!=='done')throw new Error('REVIEW_GATE_DID_NOT_RELEASE');await ensureCanvasSaved();
+          const outputs=(await import('/src/nodes/nodeValues.ts')).projectNodeOutputs(editor.getShape('shape:c3-review'));if(outputs['out-review']?.data.reviewId!==decision.reviewId||outputs['out-feedback']?.text!==decision.feedback)throw new Error('REVIEW_OUTPUT_FORK');
+          editor.updateShape({id:'shape:c3-source',type:'node-card',props:{text:'v3 private-c3-material'}});await ensureCanvasSaved();await blocked();
+          return {projectId,checks:['negative report survives new process','explicit manual rework produces new fixed version','second round passes','common manual gate releases same source','report and feedback share authority','new v3 invalidates v2 approval']};
+        })()`)
+        if (phase === 'execute') writeFileSync(statePath, JSON.stringify(report))
+      } else if (builder) {
+        report = await active.webContents.executeJavaScript(`(async()=>{${common}
+          let builderStage='opening';const build=async(action,extra={})=>value(await window.api.buildFlowAgent({projectId,nodeId:'shape:c3-builder',action,...extra}));
+          const delay=()=>new Promise(r=>setTimeout(r,100));
+          const button=(label)=>[...document.querySelectorAll('[data-node-id="shape:c3-builder"] .node-standard-primary')].find(b=>b.textContent.includes(label));
+          const until=async(fn)=>{for(let i=0;i<800;i++){if(await fn())return;await delay();}throw new Error('BUILDER_TIMEOUT_'+builderStage.toUpperCase().replaceAll('-','_'))};
+          if(${JSON.stringify(phase)}==='execute'){
+            editor.createShape({id:'shape:c3-source',type:'node-card',x:100,y:100,props:{nodeType:'text',title:'材料',text:'private-c3-material'}});
+            editor.createShape({id:'shape:c3-builder',type:'node-card',x:100,y:450,props:{nodeType:'agent',title:'搭建 Agent',text:'建一个两个自主步骤的文本模板流程。第一步 template 必须是 整理：{{value}}，第二步必须是 交付：{{value}}。每步用其数据处理节点执行一次并交付真实输出。只需文本模板能力。',config:JSON.stringify({schemaVersion:1,role:'builder',interactionMode:'collaborative',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'graph.preview',version:'1'}],allowedNodeIds:['shape:c3-source'],maxSteps:12,relations:[]})}});
+            await ensureCanvasSaved();builderStage='propose-button';await until(()=>button('生成建图预览'));button('生成建图预览').click();builderStage='proposal';await until(async()=>!!(await build('inspect')));
+            const preview=await build('inspect');if(preview.state!=='preview'||editor.getCurrentPageShapes().filter(s=>s.type==='node-card').length!==2)throw new Error('BUILDER_PREMATURE_MUTATION');
+            return {projectId,buildId:preview.buildId,checks:['public node button proposes bounded flow','preview saved without graph mutation','explicit commit required']};
+          }
+          const preview=await build('inspect');if(!preview||preview.state!=='preview')throw new Error('BUILDER_REOPEN_PREVIEW_MISSING');
+          builderStage='commit-button';editor.select('shape:c3-builder');editor.zoomToSelection();await until(()=>button('提交图变更'));button('提交图变更').click();builderStage='commit';await until(async()=>(await build('inspect'))?.state==='committed');await ensureCanvasSaved();
+          const committed=await build('inspect');const {commitFlowBuild}=await import('/src/canvas/flow-build-actions.ts');await commitFlowBuild(editor,committed);
+          if(editor.getCurrentPageShapes().filter(s=>s.type==='node-card').length!==committed.nodes.length+2)throw new Error('BUILDER_DUPLICATE_COMMIT');
+          const main=committed.nodes.find(n=>n.type==='agent'&&JSON.parse(n.config).role==='coordinator');
+          const mainButton=document.querySelector('[data-node-id="'+main.id+'"] .node-standard-primary');if(!mainButton)throw new Error('BUILDER_MAIN_BUTTON');mainButton.click();builderStage='execution';
+          await until(async()=>{const task=value(await window.api.inspectFlowAgent({projectId,nodeId:main.id}));if(task&&['failed','blocked'].includes(task.state))throw new Error(task.code||'BUILDER_RUN_FAILED');return task?.state==='completed'});
+          await until(()=>editor.getShape(main.id).props.exec!=='running');await ensureCanvasSaved();
+          const output=(await import('/src/nodes/nodeValues.ts')).projectNodeOutputs(editor.getShape(main.id))['out-text'];
+          if(output?.text!=='交付：整理：private-c3-material')throw new Error('BUILDER_WRONG_REAL_OUTPUT');
+          return {projectId,checks:['preview survives fresh process','public commit button saves complete graph','repeated commit creates no duplicates','built flow runs through public executors','two independent specialists','real transformed text output']};
+        })()`)
+        if (phase === 'execute') writeFileSync(statePath, JSON.stringify(report))
+      } else if (coordination) {
+        report = await active.webContents.executeJavaScript(`(async()=>{${common}
+          const delay=()=>new Promise(r=>setTimeout(r,150));
+          const inspectNode=async(nodeId)=>value(await window.api.inspectFlowAgent({projectId,nodeId}));
+          const until=async(nodeId,state)=>{for(let i=0;i<1800;i++){const task=await inspectNode(nodeId);if(task?.state===state)return task;if(task&&['blocked','failed'].includes(task.state))throw new Error(task.code||'C33_TASK_FAILED');await delay();}throw new Error('C33_TASK_TIMEOUT');};
+          const clickNode=(id)=>{const button=document.querySelector('[data-node-id="'+id+'"] .node-standard-primary');if(!button||button.disabled)throw new Error('C33_BUTTON_UNAVAILABLE');button.click();};
+          if(${JSON.stringify(phase)}==='execute'){
+            const specialist=(id,target,mode)=>({schemaVersion:1,role:'specialist',interactionMode:mode,modelDefinitionId:'agent-test-model',skills:[{id:'result-check',version:'1'}],tools:[{id:'node.execute',version:'1'}],allowedNodeIds:[target],maxSteps:12,relations:[]});
+            const nodes=[
+              {id:'shape:c3-source',nodeType:'text',title:'人工材料',text:'private-c3-material',x:50,y:80},
+              {id:'shape:c3-first',nodeType:'agent',title:'分析 Agent',text:'加载 result-check Skill。执行 shape:c3-p1 两次，每次观察真实回执；两次后用第二次 committed 回执的 outputRefs 完成。不要等待人或额外执行。',config:JSON.stringify(specialist('shape:c3-first','shape:c3-p1','autonomous')),x:450,y:80},
+              {id:'shape:c3-second',nodeType:'agent',title:'整理 Agent',text:'加载 result-check Skill。执行 shape:c3-p2 两次，每次观察真实回执；两次后 wait_for_human。humanAccepted=true 后提交人工 selectedOutputs 或第二次回执的 outputRefs，不再执行。',config:JSON.stringify(specialist('shape:c3-second','shape:c3-p2','collaborative')),x:850,y:80},
+              {id:'shape:c3-p1',nodeType:'processor',title:'分析处理',config:JSON.stringify({operation:'pass'}),x:450,y:650},
+              {id:'shape:c3-p2',nodeType:'processor',title:'整理处理',config:JSON.stringify({operation:'pass'}),x:850,y:650},
+              {id:'shape:c3-agent',nodeType:'agent',title:'主 Agent',text:'先把材料交给分析 Agent，再把分析的真实成果交给整理 Agent。分派目标与完成条件保持专业节点原要求，不添加更多步骤。两者都真实完成后，仅提交整理 Agent 成果。',config:JSON.stringify({schemaVersion:1,role:'coordinator',interactionMode:'autonomous',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'agent.dispatch',version:'1'}],allowedNodeIds:['shape:c3-first','shape:c3-second'],maxSteps:8,relations:[{relationId:'state',kind:'observes',sourceNodeId:'shape:c3-agent',targetNodeId:'shape:c3-state'}]}),x:50,y:400},
+              {id:'shape:c3-state',nodeType:'state-machine',title:'Flow 阶段',config:JSON.stringify({schemaVersion:1,initialState:'draft',states:['draft','working','waiting','completed'],transitions:[{from:'draft',event:'flow.started',to:'working'},...['agent.dispatched','agent.completed','human.wait','flow.paused','flow.completed'].map(event=>({from:'working',event,to:event==='flow.completed'?'completed':['human.wait','flow.paused'].includes(event)?'waiting':'working'})),{from:'waiting',event:'human.continue',to:'working'}],relations:[]}),x:1250,y:80}
+            ];
+            nodes.forEach(({id,x,y,...props})=>editor.createShape({id,type:'node-card',x,y,props}));
+            const {createEdge}=await import('/src/canvas/graph.ts');
+            for(const [from,port,to,target] of [['shape:c3-source','out-text','shape:c3-first','in-text'],['shape:c3-source','out-text','shape:c3-p1','in-value'],['shape:c3-first','out-text','shape:c3-second','in-text'],['shape:c3-first','out-text','shape:c3-p2','in-value']])createEdge(editor,{shapeId:from,portId:port},{shapeId:to,portId:target});
+            await ensureCanvasSaved();await delay();clickNode('shape:c3-agent');
+            const root=await until('shape:c3-agent','waiting');
+            if(root.children?.length!==2||root.children[0].state!=='completed'||root.children[1].state!=='waiting')throw new Error('C33_CHILD_FACTS_INVALID');
+            for(const id of ['shape:c3-p1','shape:c3-p2'])if(editor.getShape(id).meta.nodeRunHistory?.length!==2)throw new Error('C33_TWO_TOOL_PATH_MISSING');
+            if((await inspectNode('shape:c3-state')).phase!=='waiting')throw new Error('C33_STATE_NOT_WAITING');
+            const blocked=await window.api.checkFlowNodeAvailability({projectId,nodeId:'shape:c3-p2'});if(blocked.ok||blocked.error.code!=='FLOW_CONTROL_OCCUPIED')throw new Error('C33_MANUAL_SCOPE_BYPASS');
+            await ensureCanvasSaved();return {projectId,taskId:root.taskId,checks:['main canvas start','two independent specialist tasks','fixed first-to-second asset handoff','two tools per specialist','node-local human wait','authoritative state waiting','manual scope occupancy']};
+          }
+          const root=await until('shape:c3-agent','waiting');
+          const child=await until('shape:c3-second','waiting');
+          const {useNodePanelStore}=await import('/src/stores/nodePanel.ts');useNodePanelStore.getState().open('contract','shape:c3-second','collaboration');
+          for(let i=0;!document.querySelector('[aria-label="选择交付版本"]');i++){if(i>100)throw new Error('C33_SELECTION_PANEL');await delay();}
+          const get=async()=>value(await window.api.flowAgentCollaboration({projectId,nodeId:'shape:c3-second'}));const candidates=(await get()).candidates;
+          const select=document.querySelector('[aria-label="选择交付版本"]');select.dispatchEvent(new KeyboardEvent("keydown",{key:"ArrowDown",bubbles:true}));for(let i=0;!document.querySelector('[role="option"]');i++){if(i>100)throw new Error("C33_SELECT_OPEN");await delay();}const option=[...document.querySelectorAll('[role="option"]')].find(el=>el.textContent.includes("候选 "+candidates.length));if(!option)throw new Error('C33_VERSION_OPTION');option.click();await delay();
+          [...document.querySelectorAll('.agent-collaboration button')].find(b=>b.textContent.trim()==='提交意见与选择').click();
+          for(let i=0;(await get()).revision<1;i++){if(i>100)throw new Error('C33_SELECTION_SAVE');await delay();}useNodePanelStore.getState().close();await ensureCanvasSaved();
+          clickNode('shape:c3-second');await until('shape:c3-second','completed');for(let i=0;editor.getShape('shape:c3-second').props.exec==='running';i++){if(i>100)throw new Error('C33_CHILD_SAVE');await delay();}await ensureCanvasSaved();
+          clickNode('shape:c3-agent');const done=await until('shape:c3-agent','completed');for(let i=0;editor.getShape('shape:c3-agent').props.exec==='running';i++){if(i>100)throw new Error('C33_ROOT_SAVE');await delay();}await ensureCanvasSaved();
+          for(const id of ['shape:c3-p1','shape:c3-p2'])if(editor.getShape(id).meta.nodeRunHistory?.length!==2)throw new Error('C33_REPLAY');
+          if((await inspectNode('shape:c3-state')).phase!=='completed')throw new Error('C33_STATE_NOT_COMPLETED');
+          const outputs=(await import('/src/nodes/nodeValues.ts')).projectNodeOutputs(editor.getShape('shape:c3-agent'));if(outputs['out-text']?.text!=='private-c3-material')throw new Error('C33_FORMAL_OUTPUT');
+          const saved=value(await window.api.openProject(projectId));const version=value(await window.api.submitFlowAsset({projectId,nodeId:'shape:c3-agent',portId:'out-text',submissionId:'c33-final-publish',expectedGraphVersion:saved.meta.graphVersion,traceId:'c33-publish',spanId:'c33-span'}));if(version.value.text!=='private-c3-material')throw new Error('C33_OUTPUT_INVALID');
+          return {taskId:done.taskId,checks:['new process specialist selection and explicit continue','main observes child completion','no tool or specialist replay','authoritative state completed','formal main output','verified final asset publication']};
+        })()`)
+        if (phase === 'execute') writeFileSync(statePath, JSON.stringify(report))
+      } else if (phase === 'execute') {
         report = await active.webContents.executeJavaScript(`(async()=>{${common}
           editor.createShape({id:'shape:c3-source',type:'node-card',x:100,y:100,props:{nodeType:'text',title:'人工材料',text:'private-c3-material'}});
           editor.createShape({id:'shape:c3-processor',type:'node-card',x:900,y:100,props:{nodeType:'processor',title:'明确处理',config:JSON.stringify({operation:'pass'})}});

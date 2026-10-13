@@ -31,7 +31,9 @@ const MODEL_ATTRS = {
   operation: 'short',
   providerId: 'id',
   modelId: 'id',
-  featureKey: 'short'
+  featureKey: 'short',
+  toolCallCount: 'int',
+  finishReason: 'short'
 } as const
 
 export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Object.fromEntries(
@@ -39,6 +41,17 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
     def('agent.desktop.inspect_failed', 'error', 'main/ipc/flow-agents.ipc', {
       phase: 'short',
       code: 'short'
+    }),
+    ...['started', 'completed', 'failed'].map((stage) =>
+      def(
+        `agent.coordination.${stage}`,
+        stage === 'failed' ? 'error' : 'info',
+        'main/agent-flow/coordinator-host',
+        { phase: 'short', code: 'short' }
+      )
+    ),
+    def('agent.publication.failed', 'error', 'renderer/engine/flow-command-bridge', {
+      phase: 'short'
     }),
     ...['started', 'completed', 'failed'].map((stage) =>
       def(

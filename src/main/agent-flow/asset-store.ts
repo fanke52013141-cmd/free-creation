@@ -2,6 +2,7 @@ import type Database from 'better-sqlite3'
 import { createHash, randomUUID } from 'node:crypto'
 import type { ProjectFile } from '../../shared/types'
 import type { NodeShape } from '../../shared/engine/executor-types'
+import { FlowReviewStore } from './review-store'
 import {
   DETERMINISTIC_PROJECTIONS,
   readPinnedOutputs
@@ -134,12 +135,19 @@ export class FlowAssetStore {
           if (runStatus !== 'success') fail('ASSET_OUTPUT_UNAVAILABLE')
           const result = JSON.parse(record.meta?.nodeResult ?? '{}')
           if (typeof result.taskId !== 'string') fail('ASSET_OUTPUT_UNAVAILABLE')
-          const task = this.db
-            .prepare(
-              "SELECT output_refs_json FROM flow_agent_tasks WHERE project_id=? AND agent_node_id=? AND task_id=? AND state='completed'"
-            )
-            .get(input.projectId, input.nodeId, result.taskId) as
-            { output_refs_json: string } | undefined
+          const task =
+            (this.db
+              .prepare(
+                "SELECT output_refs_json FROM flow_agent_tasks WHERE project_id=? AND agent_node_id=? AND task_id=? AND state='completed'"
+              )
+              .get(input.projectId, input.nodeId, result.taskId) as
+              { output_refs_json: string } | undefined) ??
+            (this.db
+              .prepare(
+                "SELECT json_extract(body_json,'$.outputs') AS output_refs_json FROM flow_coordination_runs WHERE project_id=? AND node_id=? AND task_id=? AND json_extract(body_json,'$.state')='completed'"
+              )
+              .get(input.projectId, input.nodeId, result.taskId) as
+              { output_refs_json: string } | undefined)
           if (!task || pinned) fail('ASSET_OUTPUT_UNAVAILABLE')
           const expected = this.resolveInputs(
             input.projectId,
@@ -153,6 +161,20 @@ export class FlowAssetStore {
           if (
             !actual ||
             !expected.some((value) => canonicalFlowJson(value) === canonicalFlowJson(actual))
+          )
+            fail('ASSET_OUTPUT_INVALID')
+        } else if (record.props.nodeType === 'ai-review') {
+          const review = new FlowReviewStore(this.db).latest(input.projectId, input.nodeId)
+          if (
+            !review ||
+            pinned ||
+            runStatus !== 'success' ||
+            !['out-review', 'out-feedback'].includes(input.portId)
+          )
+            fail('ASSET_OUTPUT_UNAVAILABLE')
+          if (
+            canonicalFlowJson(JSON.parse(record.meta?.nodeResult ?? '{}')) !==
+            canonicalFlowJson(review.decision)
           )
             fail('ASSET_OUTPUT_INVALID')
         } else if (input.portId !== declaredPort) fail('ASSET_PORT_INVALID')

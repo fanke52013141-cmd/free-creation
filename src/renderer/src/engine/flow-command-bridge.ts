@@ -16,6 +16,7 @@ import { useEditorStore } from '../stores/editor'
 import { useAppStore } from '../stores/app'
 import { DiagnosticsProducer, newProducerId, newTraceId, newSpanId } from '@shared/observability'
 import { emitDiagnosticsEvent } from './diagnosticsReporter'
+import type { AgentPublication } from '@shared/agent-flow/coordination'
 
 const producer = new DiagnosticsProducer({
   process: 'renderer',
@@ -75,6 +76,48 @@ const active = new Map<string, { intent: string; promise: Promise<FlowCommandRec
 function data<T>(result: IpcEnvelope<T>): T {
   if (!result.ok) throw new Error(result.error.code)
   return result.data
+}
+
+/** Replays an authoritative child task through its public executor to publish saved outputs. */
+export async function publishFlowAgent(editor: Editor, grant: AgentPublication): Promise<void> {
+  try {
+    assertActiveProject(editor, grant.projectId)
+    const file = data(await window.api.openProject(grant.projectId))
+    if (!file || (await canvasSemanticRevision(editor, file)) !== grant.semanticRevision)
+      throw new Error('FLOW_REVISION_CONFLICT')
+    const task = data(
+      await window.api.inspectFlowAgent({ projectId: grant.projectId, nodeId: grant.nodeId })
+    )
+    if (!task || task.taskId !== grant.taskId || !['completed', 'waiting'].includes(task.state))
+      throw new Error('FLOW_TASK_CONFLICT')
+    assertActiveProject(editor, grant.projectId)
+    const shape = editor.getShape<NodeCardShape>(grant.nodeId as TLShapeId)
+    if (!shape || shape.props.nodeType !== 'agent') throw new Error('FLOW_NODE_MISSING')
+    editor.updateShape({
+      id: shape.id,
+      type: 'node-card',
+      meta: { ...shape.meta, agentTask: JSON.stringify(task) }
+    })
+    await runNodeManually(editor, grant.projectId, [], shape.id, undefined, grant)
+    assertActiveProject(editor, grant.projectId)
+    await ensureCanvasSaved()
+  } catch {
+    emitDiagnosticsEvent(
+      producer.build(
+        'agent.publication.failed',
+        undefined,
+        '专业 Agent 成果呈现未确认',
+        {
+          projectId: grant.projectId,
+          nodeId: grant.nodeId,
+          taskId: grant.taskId,
+          traceId: grant.traceId,
+          spanId: grant.spanId
+        },
+        { status: 'failed', attributes: { phase: 'publication' } }
+      )
+    )
+  }
 }
 function currentIntent(editor: Editor, file: ProjectFile): string {
   return canonicalFlowJson(

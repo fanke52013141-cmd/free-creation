@@ -51,7 +51,7 @@ const fs = require('node:fs')
         type === 'state-machine' ? value : Number(value))
       assert.equal(saved.edges, 0)
       assert.deepEqual(saved.outputs, {})
-      assert.equal(saved.disabled, type !== 'agent')
+      assert.equal(saved.disabled, type === 'state-machine')
       evidence.push({ type, settingsSaved: true, snapshotRestored: true, executionDisabled: type !== 'agent' })
     }
     fs.mkdirSync('qa/canvas-agent-flow/C1', { recursive: true })

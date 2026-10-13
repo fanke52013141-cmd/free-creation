@@ -52,13 +52,14 @@ export function AgentTaskControls({ shape }: Pick<NodeBodyProps, 'shape'>): Reac
     (task?.state === 'ready' && !task.prepared) ||
     pending ||
     engineBusy
-  const specialist = (() => {
+  const role = (() => {
     try {
-      return JSON.parse(shape.props.config).role === 'specialist'
+      return JSON.parse(shape.props.config).role as string
     } catch {
-      return false
+      return ''
     }
   })()
+  const specialist = role === 'specialist' || role === 'coordinator'
   const stop = async (): Promise<void> => {
     if (!projectId) return
     try {
@@ -119,6 +120,21 @@ export function AgentTaskControls({ shape }: Pick<NodeBodyProps, 'shape'>): Reac
           · {task.decisions} 次决策
         </p>
       )}
+      {role === 'coordinator' && task?.phase && (
+        <p className="agent-flow-pending">阶段：{task.phase}</p>
+      )}
+      {task?.children?.map((child) => (
+        <p className="agent-flow-pending" key={child.nodeId}>
+          {editor.getShape<NodeBodyProps['shape']>(child.nodeId as NodeBodyProps['shape']['id'])
+            ?.props.title || '专业 Agent'}{' '}
+          ·{' '}
+          {child.state === 'completed'
+            ? '已完成'
+            : child.state === 'waiting'
+              ? '等待人工处理'
+              : '处理中'}
+        </p>
+      ))}
       {Object.values(outputs).map((value, index) => (
         <pre className="agent-flow-output" key={index}>
           {value?.kind === 'json'
@@ -149,11 +165,29 @@ export function AgentTaskControls({ shape }: Pick<NodeBodyProps, 'shape'>): Reac
       {task?.state === 'waiting' && !running && (
         <NodePrimaryButton onClick={() => void stop()}>停止任务</NodePrimaryButton>
       )}
-      <NodePrimaryButton
-        onClick={() => useNodePanelStore.getState().open('contract', shape.id, 'collaboration')}
-      >
-        查看协作
-      </NodePrimaryButton>
+      {role === 'coordinator' && running && (
+        <NodePrimaryButton
+          allowWhileBusy
+          onClick={() => {
+            if (projectId)
+              void window.api
+                .pauseFlowAgent({ projectId, nodeId: shape.id })
+                .then((reply) => {
+                  if (!reply.ok) setError(reply.error.message)
+                })
+                .catch(() => setError('暂停未确认，请核对流程状态。'))
+          }}
+        >
+          暂停派发
+        </NodePrimaryButton>
+      )}
+      {role === 'specialist' && (
+        <NodePrimaryButton
+          onClick={() => useNodePanelStore.getState().open('contract', shape.id, 'collaboration')}
+        >
+          查看协作
+        </NodePrimaryButton>
+      )}
     </>
   )
 }

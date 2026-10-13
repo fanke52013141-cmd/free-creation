@@ -13,6 +13,10 @@ AI 对话生图补充：消息可保存图片附件（媒体 ID、项目相对�
 
 ## 1. 设计原则
 
+2026-10-13 C3.3 接续：builder@agent 通过公共 executor 生成有限文本模板图提案，main 固定预览/语义修订，人明确提交后复用正式节点注册和 createEdge 保存同一画布图；提案不是业务成功或输出。ai-review@1 接入公共 executor 与 main 固定版本审核，out-review/out-feedback 由同一权威 ReviewDecision 投影；否是业务结论、执行仍 success，技术失败没有有效结论。下游手动/Agent 共用门禁，要求同规则、来源、运行身份、资产版本与报告；人工新版本复审按 maxReworks 有界。主控自动审核、纯 AI/人机协作返工任务未支持，详见 docs/canvas-agent-flow/17-c33-builder-review.md；下段首包说明为历史基线。
+
+2026-10-13 C3.3 首包：agent@1 的 coordinator 接入顺序派发专业任务；专业任务固定最小输入、完成条件、独立预算/上下文/checkpoint，成果仍经公共 Agent executor/投影/固定资产。状态机绑定主控运行并呈现持久阶段，只接受声明事件的合法迁移；独立 state-machine executor/out-state 投影仍未开放。控制范围独占、人工等待、暂停派发、停止和重开继续见 docs/canvas-agent-flow/16-c33-sequential-coordination.md；builder 建图和 ai-review 返工仍待后续，不能宣称整个 C3.3 完成。
+
 2026-10-13 C3.2：agent@1 增加节点协作分页和显式目标修订，不增加数据端口或自动业务输出。讨论存任务关联事件，不投影成资产；人工继续绑定 task/wait revision 与固定选择，完成必须匹配真实回执及人工选择。新目标采用准备新的不可变任务实例，旧 snapshot/nodeResult/资产不改写；范围变更拒绝。详见 docs/canvas-agent-flow/15-c32-collaboration.md，验收以开发台账为准。
 
 2026-10-13 C3.1b：agent@1 的专业角色接入公共 executor → main 可信任务宿主 → C2 命令桥。out-text/out-json 输出已确认任务资产，公共执行器落固定资产节点；main 发布版本核对 completed 任务及真实固定引用。文本/JSON 直接输入按保存画布的真实端口固定版本，媒体输入拒绝自动运行。人工等待保留 main 任务及 checkpoint，公共原子运行不伪造成功。state-machine/ai-review 及 builder/coordinator 自主执行仍待接入。详见 docs/canvas-agent-flow/14-c3-canvas-agent.md；下段 C1 说明为历史基线。

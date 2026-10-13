@@ -19,6 +19,12 @@ import { FlowAssetStore } from '../agent-flow/asset-store'
 import { probeAgentModel } from '../agent-flow/model-probe'
 import { emitGatewayEvent } from '../diagnostics/gateway-events'
 import { newTraceId, newSpanId } from '../../shared/observability'
+import { FlowCoordinatorHost } from '../agent-flow/coordinator-host'
+import type { ModelIdentity } from '../../shared/agent-flow/coordination'
+import type { AgentModelPort } from '../agent-flow/runtime'
+import { FlowBuilderHost } from '../agent-flow/builder-host'
+import { BuildRequestSchema } from '../../shared/agent-flow/builder'
+import { FlowReviewHost } from '../agent-flow/review-host'
 
 export function registerFlowAgentsIpc(
   window: () => BrowserWindow | null,
@@ -30,7 +36,10 @@ export function registerFlowAgentsIpc(
   const assets = new FlowAssetStore(getDb(), openProject)
   const verified = new Set<string>()
   const inspectFailures = new Map<string, number>()
-  const host = new FlowAgentDesktopHost(getDb(), openProject, desktop, async (snapshot, signal) => {
+  const resolveModel = async (
+    snapshot: ModelIdentity,
+    signal: AbortSignal
+  ): Promise<AgentModelPort> => {
     const definition = await catalog.getModel(snapshot.config.modelDefinitionId ?? '')
     if (
       !definition?.enabled ||
@@ -70,12 +79,63 @@ export function registerFlowAgentsIpc(
         throw new AgentRuntimeError('AGENT_MODEL_TOOL_UNVERIFIED', 'model-capability')
       verified.add(signature)
     }
-    return new AgentSdkModel(model, snapshot.projectId, assets, context)
-  })
+    // Seed 2.1 thinking can consume the entire bounded discussion timeout.
+    // Discussion and single-result builder/review opt out; task decisions retain their defaults.
+    const discussionProviderOptions =
+      new URL(connection.baseUrl).hostname === 'ark.cn-beijing.volces.com' &&
+      /^doubao-seed-2-1-(turbo|pro)-\d{6}$/.test(definition.modelId)
+        ? { [connection.id]: { thinking: { type: 'disabled' } } }
+        : undefined
+    return new AgentSdkModel(model, snapshot.projectId, assets, context, discussionProviderOptions)
+  }
+  const host = new FlowAgentDesktopHost(getDb(), openProject, desktop, resolveModel)
+  const builder = new FlowBuilderHost(getDb(), openProject, desktop.isActive, resolveModel)
+  const review = new FlowReviewHost(getDb(), openProject, desktop.isActive, resolveModel)
+  host.setCoordinator(
+    new FlowCoordinatorHost(
+      getDb(),
+      openProject,
+      desktop.isActive,
+      host,
+      resolveModel,
+      async (grant, signal) => {
+        const active = window()
+        if (!active || active.isDestroyed() || !desktop.isActive(grant.projectId))
+          throw new AgentRuntimeError('FLOW_PROJECT_INACTIVE', 'publication')
+        active.webContents.send(IPC.flowAgents.publication, grant)
+        const deadline = Date.now() + 30000
+        while (!signal.aborted && Date.now() < deadline && desktop.isActive(grant.projectId)) {
+          const file = openProject(grant.projectId)
+          const shape = (
+            file?.tldrawSnapshot as {
+              store?: Record<string, { meta?: { agentTask?: string; nodeResult?: string } }>
+            }
+          )?.store?.[grant.nodeId]
+          try {
+            const task = JSON.parse(shape?.meta?.agentTask ?? '{}')
+            const result = JSON.parse(shape?.meta?.nodeResult ?? '{}')
+            if (
+              task.taskId === grant.taskId &&
+              (task.state === 'waiting' ||
+                (task.state === 'completed' && result.taskId === grant.taskId))
+            )
+              return
+          } catch {
+            /* Wait only for the saved public projection. */
+          }
+          await new Promise((done) => setTimeout(done, 100))
+        }
+        throw new AgentRuntimeError('FLOW_PUBLICATION_UNCONFIRMED', 'publication')
+      }
+    )
+  )
   for (const phase of [
     'run',
+    'build',
+    'review',
     'inspect',
     'stop',
+    'pause',
     'catalog',
     'collaboration',
     'cooperate'
@@ -83,7 +143,7 @@ export function registerFlowAgentsIpc(
     ipcMain.handle(IPC.flowAgents[phase], async (event, raw): Promise<IpcEnvelope<unknown>> => {
       const context = { traceId: newTraceId(), spanId: newSpanId() }
       const query = FlowAgentQuerySchema.safeParse(
-        ['run', 'cooperate'].includes(phase) && raw && typeof raw === 'object'
+        ['run', 'cooperate', 'build', 'review'].includes(phase) && raw && typeof raw === 'object'
           ? { projectId: raw.projectId, nodeId: raw.nodeId }
           : raw
       )
@@ -91,9 +151,14 @@ export function registerFlowAgentsIpc(
         Object.assign(context, { projectId: query.data.projectId, nodeId: query.data.nodeId })
       const collaboration =
         phase === 'cooperate' ? FlowAgentCollaborationSchema.safeParse(raw) : null
-      const action = collaboration?.success ? collaboration.data.action : undefined
+      const build = phase === 'build' ? BuildRequestSchema.safeParse(raw) : null
+      const action = build?.success
+        ? build.data.action
+        : collaboration?.success
+          ? collaboration.data.action
+          : undefined
       if (collaboration?.success) Object.assign(context, { taskId: collaboration.data.taskId })
-      const log = phase !== 'inspect'
+      const log = phase !== 'inspect' && !(phase === 'build' && action === 'inspect')
       if (log)
         emitGatewayEvent('agent.desktop.started', '画布 Agent 操作开始', context, {
           attributes: { phase, action }
@@ -109,29 +174,35 @@ export function registerFlowAgentsIpc(
           throw new AgentRuntimeError('FLOW_SENDER_REJECTED', 'authorize')
         if (!query.success) throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'validation')
         const data =
-          phase === 'run'
-            ? await host.run(raw)
-            : phase === 'cooperate'
-              ? await host.cooperate(raw)
-              : phase === 'collaboration'
-                ? host.collaboration(query.data)
-                : phase === 'stop'
-                  ? host.stop(query.data)
-                  : phase === 'inspect'
-                    ? host.inspect(query.data)
-                    : host.catalog(
-                        query.data,
-                        catalog
-                          .listModels()
-                          .filter(
-                            (model) =>
-                              model.enabled &&
-                              model.capabilities.some(
-                                (capability) => capability.operation === 'text.generate'
-                              )
-                          )
-                          .map(({ id, name }) => ({ id, name }))
-                      )
+          phase === 'review'
+            ? await review.run(raw)
+            : phase === 'build'
+              ? await builder.handle(raw)
+              : phase === 'run'
+                ? await host.run(raw)
+                : phase === 'cooperate'
+                  ? await host.cooperate(raw)
+                  : phase === 'collaboration'
+                    ? host.collaboration(query.data)
+                    : phase === 'stop'
+                      ? host.stop(query.data)
+                      : phase === 'pause'
+                        ? host.pause(query.data)
+                        : phase === 'inspect'
+                          ? host.inspect(query.data)
+                          : host.catalog(
+                              query.data,
+                              catalog
+                                .listModels()
+                                .filter(
+                                  (model) =>
+                                    model.enabled &&
+                                    model.capabilities.some(
+                                      (capability) => capability.operation === 'text.generate'
+                                    )
+                                )
+                                .map(({ id, name }) => ({ id, name }))
+                            )
         if (log)
           emitGatewayEvent('agent.desktop.completed', '画布 Agent 操作完成', context, {
             status: 'success',

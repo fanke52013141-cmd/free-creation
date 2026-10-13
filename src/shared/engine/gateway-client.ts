@@ -49,8 +49,19 @@ import type { MediaAsset, ProviderSummary, VideoTaskInfo } from '../types'
  * main（直调）下行为等价。renderer 注入 IPC 包装；headless 注入直调实现。
  */
 export interface GatewayClient {
-  stopFlowAgent?(input: { projectId: string; nodeId: string }): Promise<IpcEnvelope<import('../agent-flow/desktop-tasks').FlowAgentView | null>>
-  runFlowAgent?(input: import('../agent-flow/desktop-tasks').FlowAgentRun): Promise<IpcEnvelope<import('../agent-flow/desktop-tasks').FlowAgentReply>>
+  reviewFlowAssets?(
+    input: import('../agent-flow/review').ReviewRequest
+  ): Promise<IpcEnvelope<import('../agent-flow/node-contracts').ReviewDecision>>
+  buildFlowAgent?(
+    input: import('../agent-flow/builder').BuildRequest
+  ): Promise<IpcEnvelope<import('../agent-flow/builder').BuildPreview | null>>
+  stopFlowAgent?(input: {
+    projectId: string
+    nodeId: string
+  }): Promise<IpcEnvelope<import('../agent-flow/desktop-tasks').FlowAgentView | null>>
+  runFlowAgent?(
+    input: import('../agent-flow/desktop-tasks').FlowAgentRun
+  ): Promise<IpcEnvelope<import('../agent-flow/desktop-tasks').FlowAgentReply>>
   // ── 模型网关 ──
   listProviders(): Promise<IpcEnvelope<ProviderSummary[]>>
   /** Resolves a product-owned feature key to an exact, verified model target. */

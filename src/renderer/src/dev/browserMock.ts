@@ -134,8 +134,12 @@ export function installBrowserMock(): void {
   }
 
   const mockApi: WindowApi = {
+    buildFlowAgent: async () => notImplementedInDemo('画布建图'),
+    reviewFlowAssets: async () => notImplementedInDemo('资产审核'),
     runFlowAgent: async () => notImplementedInDemo('画布 Agent 执行'),
     inspectFlowAgent: async () => ({ ok: true, data: null }),
+    pauseFlowAgent: async () => ({ ok: true, data: null }),
+    onFlowAgentPublication: () => () => undefined,
     flowAgentCollaboration: async () => ({ ok: true, data: null }),
     cooperateFlowAgent: async () => notImplementedInDemo('Agent 人机协作'),
     stopFlowAgent: async () => ({ ok: true, data: null }),

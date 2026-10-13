@@ -261,6 +261,29 @@ C3.1b 最终结果：desktop-final-accepted.log 完整 verify 通过（155 文�
 
 ### 2026-10-13 C3.2 协作目标修订与人工过渡
 
+收尾验收完成：修复后的全量 `npm run verify` 通过（155 文件/1692 项通过/1 既有跳过，模型另 2；17 浏览器、构建与四组隐藏 Electron 验收）。真实 Seed 2.1 turbo 协作两进程通过，14 次模型请求；`agent.desktop` 开始/唯一终态配对、恢复关联和实际正文/密钥脱敏扫描通过。47 项定向通过，新增 SDK 推理/正文分离、空正文拒绝、无工具讨论和正文脱敏回归；讨论参数不进入任务决策。
+
+修复仅为官方 Ark 的 Seed 2.1 turbo/pro 无工具讨论传入关闭思考参数；复用 `model.request` 和 `agent.desktop`，没有新增正文、推理、权限或重复终态日志。失败验收先执行原有脱敏扫描后保留诊断，不复制密钥或数据库。此前讨论超时及首次修复后新任务模型动作无效仍保留证据，不以重试伪造成功。证据：`qa/canvas-agent-flow/c32-acceptance-20261013/verify-fixed-final.log`、`discussion-unit.log`、`real-collaboration-fixed-second.log` 与 `C3/desktop-collaboration-real/results.json`。仍未覆盖远端取消、完整崩溃裁决、模板迁移、长会话清理、主控/状态机/审核返工。
+
+下列为初次交接记录，待办以以上收尾结果为准。
+
 复用 agent.desktop.started/completed/failed，增加允许列表 action（note/discuss/submit/revise），绑定 project/node/task/trace/span；不记录讨论、反馈、目标、选中资产正文或 AI 回复。显式 AI 讨论复用 model.request 开始/唯一终态，无业务工具、有界上下文/输出和超时，无自动重试。任务修订/人工继续、checkpoint、模型决策、公共节点、保存和资产回执沿既有入口，拒绝旧事件不能污染新 ready 任务。普通卡片刷新不记日志。
 
 定向已覆盖消息/回复脱敏、工具禁用讨论、去重/冲突、过期/范围/外国版本拒绝、修订事务回滚、人工反馈与选择不一致阻断；实际隔离画布两进程讨论/修订/启动/重开/选择路径已通过，15 次合成模型请求的诊断脱敏通过。真实豆包讨论已得到允许列表失败终态 `AGENT_MODEL_ACTION_INVALID`，没有工具执行、任务推进或资产提交；文本兼容与成功终态仍待复验。最后一次完整门禁的单元、模型和日志门禁通过；浏览器双按钮缩放断言修正后，31 种节点的深浅主题与三档缩放定向门禁通过，最终全量串行复跑待接续。未覆盖模板导入导出、长会话清理、真实远端讨论取消和完整崩溃裁决；主控/状态机/审核返工仍待后续。不把局部路径称为全链路完成。
+
+### 2026-10-13 C3.3 主控顺序协调首包
+
+新增 `agent.coordination.started/completed/failed`，按 project/node/task/trace/span 关联一次主控启动/继续；失败仅记录固定 phase/code。主模型复用 `model.request`，专业根任务隔离父 LangGraph runnable 上下文，专业循环、C2 业务命令、保存/资产仍沿公共阶段。renderer 专业成果呈现未确认记 `agent.publication.failed`；不重复节点终态。模型动作无效时增加允许列表的 `toolCallCount` 和规范化 `finishReason`，没有保留工具参数或输出。目标、完成条件、材料、会话、反馈、模型回复/推理和凭据全部排除。
+
+53 项定向与 SDK 合成协议/实际事件脱敏通过；新增主控测试覆盖真实固定交接、自动保存、暂停、不重放、非法迁移、越权/假成果和发布失败。合成桌面与真实 Seed 2.1 turbo 主控双进程完整通过，真实 16 次请求；实际诊断正文/密钥扫描、操作开始/唯一终态和跨进程专业恢复关联通过。失败记录先扫描脱敏再保存，不复制数据库/凭据。最新完整 verify 通过（156 文件/1698 项/1 既有跳过，模型另 2；17 浏览器、生产构建、五组 Electron），证据 `qa/canvas-agent-flow/C33/verify-final.log` 和 `C3/desktop-coordination-real/results.json`。
+
+状态卡片的阻断/失败文案调整不涉及业务或日志行为，另过 web 类型、文件 lint、构建与主控桌面复验。主控工作流父子 trace 仍沿现有节点/task 标识关联，完整故障恢复/迟到矩阵与全部恢复 trace 层级不在本包。未覆盖自动建图事务、真实审核/返工/质量预算、并行专业任务、媒体协调、主控目标修订、独立状态机端口执行与 C4 恢复/模板迁移；不能宣称完整 C3.3 或全链路完成。
+
+
+### 2026-10-13 C3.3 建图/审核接续
+
+- graph.preview、authorize、confirm/discard 与审核 run 复用 agent.desktop 开始/唯一终态；build inspect 轮询不逐次记录。IPC 仍验证主窗口/main frame 和实际打开项目。
+- builder/review 单结论请求复用 model.request，记录操作、请求身份、数量、规范化结束原因；工具提案/材料/审核回复/推理/Key 不进入诊断。公共 executor、图保存与资产提交继续复用原阶段。
+- 图语义冲突、来源/Schema/越权、不完整提交、空工具响应、技术失败、版本不适用、轮次耗尽均保持失败或阻断；日志失败不改变提交事实。开始/唯一终态和密钥/材料排除已由建图/审核合成及真实双进程实际诊断扫描验证。
+- 定向测试：agent-flow-builder、review、builder-review-sdk；证据 C33/directed-builder-review.log、sdk-final.log；真实诊断 C3/desktop-builder-real、desktop-review-real/results.json。没有存原始模型响应排查问题。
+- 未覆盖：跨存储崩溃原子性、未知远端取消、主控自动审核和 AI/协作返工、负责节点反馈投影、完整 C4 恢复矩阵。新包只实现有界人工新版本复审，不外推完整三类主体返工。

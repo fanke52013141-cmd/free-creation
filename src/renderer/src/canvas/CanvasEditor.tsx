@@ -59,7 +59,12 @@ import type { ConnectionFrom } from '../stores/connection'
 import { useGatewayStore } from '../stores/gateway'
 import { useEngineStore } from '../engine/store'
 import { runWorkflow, runWorkflowForNodes } from '../engine/executor'
-import { runPreparedFlowNodeCommand, reportFlowBridgeFailure, reportFlowCanvasBindingFailure } from '../engine/flow-command-bridge'
+import {
+  runPreparedFlowNodeCommand,
+  reportFlowBridgeFailure,
+  reportFlowCanvasBindingFailure,
+  publishFlowAgent
+} from '../engine/flow-command-bridge'
 import { useMediaStore } from '../stores/media'
 import { useEditorStore } from '../stores/editor'
 import { Icon } from '../components/Icon'
@@ -367,11 +372,27 @@ export function CanvasEditor({
   const providers = useGatewayStore((s) => s.providers)
   useEffect(() => {
     if (!editorInstance) return
-    const unsubscribe = window.api.onFlowCommandGrant((grant) => {
-      void runPreparedFlowNodeCommand(editorInstance, project.id, useGatewayStore.getState().providers, grant).catch(() => reportFlowBridgeFailure(grant))
+    const unsubscribeAgent = window.api.onFlowAgentPublication?.((grant) => {
+      void publishFlowAgent(editorInstance, grant)
     })
-    void window.api.activateFlowCanvas({ projectId: project.id }).catch(() => reportFlowCanvasBindingFailure(project.id, 'attach'))
-    return () => { unsubscribe(); void window.api.deactivateFlowCanvas({ projectId: project.id }).catch(() => reportFlowCanvasBindingFailure(project.id, 'detach')) }
+    const unsubscribe = window.api.onFlowCommandGrant((grant) => {
+      void runPreparedFlowNodeCommand(
+        editorInstance,
+        project.id,
+        useGatewayStore.getState().providers,
+        grant
+      ).catch(() => reportFlowBridgeFailure(grant))
+    })
+    void window.api
+      .activateFlowCanvas({ projectId: project.id })
+      .catch(() => reportFlowCanvasBindingFailure(project.id, 'attach'))
+    return () => {
+      unsubscribeAgent?.()
+      unsubscribe()
+      void window.api
+        .deactivateFlowCanvas({ projectId: project.id })
+        .catch(() => reportFlowCanvasBindingFailure(project.id, 'detach'))
+    }
   }, [editorInstance, project.id])
   useEffect(() => {
     const run = (): void => {
@@ -925,7 +946,8 @@ export function CanvasEditor({
           nestedControl &&
           mediaBody.contains(nestedControl) &&
           nestedControl.dataset.nodePointer !== 'surface'
-        ) return
+        )
+          return
         dispatchNodeDoubleClick(mediaBody, event)
         return
       }
@@ -1874,7 +1896,11 @@ export function CanvasEditor({
         // Capture before tldraw's canvas so a run-button click stays on that button.
         if (event.button === 0 && target.closest('.node-run-btn')) {
           const nodeId = target.closest<HTMLElement>('[data-node-id]')?.dataset.nodeId
-          if (nodeId && editorRef.current && !editorRef.current.getSelectedShapeIds().includes(nodeId as TLShapeId)) {
+          if (
+            nodeId &&
+            editorRef.current &&
+            !editorRef.current.getSelectedShapeIds().includes(nodeId as TLShapeId)
+          ) {
             editorRef.current.select(nodeId as TLShapeId)
           }
           event.stopPropagation()

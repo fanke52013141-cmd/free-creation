@@ -508,6 +508,60 @@ describe('C3 tool adapter preserves the C2 ledger authority', () => {
 })
 
 describe('C3 single-step SDK adapter', () => {
+  it('uses one coordinator tool proposal with fixed references, no specialist transcript or execution', async () => {
+    const events: DiagnosticsEventInput[] = [],
+      requests: Array<Record<string, unknown>> = []
+    setGatewayEventSink({
+      emit: (event) => {
+        if (event) events.push(event)
+      }
+    })
+    const ref = { assetId: 'a', versionId: 'v', sourceNodeId: 'source', sourcePortId: 'out-text' }
+    const model = createOpenAICompatible({
+      name: 'fixture',
+      baseURL: 'https://example.invalid/v1',
+      fetch: async (_, init) => {
+        requests.push(JSON.parse(String(init?.body)))
+        return new Response(
+          `data: ${JSON.stringify({ id: 'c', object: 'chat.completion.chunk', created: 1, model: 'c', choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: 'call', type: 'function', function: { name: 'dispatch_agent', arguments: JSON.stringify({ nodeId: 'specialist', goal: 'private-goal', completion: 'private-completion', inputs: [ref] }) } }] }, finish_reason: null }] })}\n\ndata: ${JSON.stringify({ id: 'c', object: 'chat.completion.chunk', created: 1, model: 'c', choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }] })}\n\ndata: [DONE]\n\n`,
+          { headers: { 'content-type': 'text/event-stream' } }
+        )
+      }
+    }).chatModel('fixture')
+    const port = new AgentSdkModel(
+      model,
+      'p',
+      {
+        resolveInputs: () => {
+          throw new Error('Coordinator must not load arbitrary material bodies')
+        }
+      },
+      { traceId: 'trace', spanId: 'span' }
+    )
+    expect(
+      await port.coordinate(
+        {
+          goal: 'private-goal',
+          mode: 'autonomous',
+          available: [{ nodeId: 'specialist', goal: 'private-goal', inputs: [ref] }],
+          completed: []
+        },
+        new AbortController().signal
+      )
+    ).toEqual({
+      kind: 'dispatch',
+      nodeId: 'specialist',
+      goal: 'private-goal',
+      completion: 'private-completion',
+      inputs: [ref]
+    })
+    expect(requests).toHaveLength(1)
+    expect(
+      (requests[0].tools as Array<{ function: { name: string } }>).map((t) => t.function.name)
+    ).toEqual(['dispatch_agent', 'finish_flow'])
+    expect(events.map((e) => e.event)).toEqual(['model.request.started', 'model.request.completed'])
+    expect(JSON.stringify(events)).not.toMatch(/private-(goal|completion)/)
+  })
   it('uses a bounded tool-free discussion request and excludes message/reply bodies from diagnostics', async () => {
     const events: DiagnosticsEventInput[] = [],
       requests: Array<Record<string, unknown>> = []
@@ -554,6 +608,7 @@ describe('C3 single-step SDK adapter', () => {
     ).toBe('private-reply')
     expect(requests).toHaveLength(1)
     expect(requests[0].tools).toBeUndefined()
+    expect(requests[0].thinking).toBeUndefined()
     expect(events.map((event) => event.event)).toEqual([
       'model.request.started',
       'model.request.completed'
@@ -564,6 +619,62 @@ describe('C3 single-step SDK adapter', () => {
     ).rejects.toThrow('COLLABORATION_LIMIT')
     expect(requests).toHaveLength(1)
   })
+  it.each(['private-final-answer', ''])(
+    'keeps reasoning separate from a discussion reply (%s)',
+    async (content) => {
+      const events: DiagnosticsEventInput[] = []
+      const requests: Array<Record<string, unknown>> = []
+      setGatewayEventSink({
+        emit: (event) => {
+          if (event) events.push(event)
+        }
+      })
+      const model = createOpenAICompatible({
+        name: 'ark',
+        baseURL: 'https://example.invalid/v1',
+        fetch: async (_, init) => {
+          requests.push(JSON.parse(String(init?.body)))
+          const chunks = [
+            { delta: { reasoning_content: 'private-reasoning' }, finish_reason: null },
+            { delta: { content }, finish_reason: null },
+            { delta: {}, finish_reason: 'stop' }
+          ]
+          return new Response(
+            chunks
+              .map(
+                (choice) =>
+                  `data: ${JSON.stringify({ id: 'd', object: 'chat.completion.chunk', created: 1, model: 'd', choices: [{ index: 0, ...choice }] })}\n\n`
+              )
+              .join('') + 'data: [DONE]\n\n',
+            { headers: { 'content-type': 'text/event-stream' } }
+          )
+        }
+      }).chatModel('doubao-seed-2-1-turbo-260628')
+      const port = new AgentSdkModel(
+        model,
+        'p',
+        { resolveInputs: () => [] },
+        { traceId: 'trace', spanId: 'span' },
+        { ark: { thinking: { type: 'disabled' } } }
+      )
+      const reply = port.discuss(
+        'private-goal',
+        [],
+        'private-message',
+        new AbortController().signal
+      )
+      if (content) await expect(reply).resolves.toBe(content)
+      else await expect(reply).rejects.toThrow('AGENT_MODEL_ACTION_INVALID')
+      expect(requests).toHaveLength(1)
+      expect(requests[0]).toMatchObject({ thinking: { type: 'disabled' }, max_tokens: 2048 })
+      expect(requests[0].tools).toBeUndefined()
+      expect(events.map((event) => event.event)).toEqual([
+        'model.request.started',
+        content ? 'model.request.completed' : 'model.request.failed'
+      ])
+      expect(JSON.stringify(events)).not.toMatch(/private-(reasoning|final-answer|goal|message)/)
+    }
+  )
   function sdk(name = 'execute_node') {
     const requests: unknown[] = []
     const model = createOpenAICompatible({
@@ -609,13 +720,19 @@ describe('C3 single-step SDK adapter', () => {
     return {
       requests,
       inputs,
-      port: new AgentSdkModel(model, 'p', inputs, {
-        projectId: 'p',
-        nodeId: 'agent',
-        taskId: 'task',
-        traceId: 'trace',
-        spanId: 'span'
-      })
+      port: new AgentSdkModel(
+        model,
+        'p',
+        inputs,
+        {
+          projectId: 'p',
+          nodeId: 'agent',
+          taskId: 'task',
+          traceId: 'trace',
+          spanId: 'span'
+        },
+        { fixture: { thinking: { type: 'disabled' } } }
+      )
     }
   }
   const input = (): AgentModelContext => ({
@@ -640,6 +757,7 @@ describe('C3 single-step SDK adapter', () => {
       targetNodeId: 'processor'
     })
     expect(fixture.requests).toHaveLength(1)
+    expect(fixture.requests[0]).not.toHaveProperty('thinking')
     expect(fixture.inputs.resolveInputs).toHaveBeenCalledWith('p', [])
     expect(events.map((event) => event.event)).toEqual([
       'model.request.started',

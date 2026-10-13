@@ -990,9 +990,11 @@ async function executeNodeOnce(
         return {
           status: 'skipped',
           reason:
-            'error' in available && available.error.code === 'FLOW_REVIEW_NOT_READY'
-              ? '审核节点尚未接入执行，本次运行已跳过'
-              : '节点有未确认的命令，请先核对运行记录'
+            'error' in available && available.error.code === 'FLOW_CONTROL_OCCUPIED'
+              ? '该节点由主 Agent 协调，请先停止对应流程'
+              : 'error' in available && available.error.code === 'FLOW_REVIEW_NOT_READY'
+                ? '审核节点尚未接入执行，本次运行已跳过'
+                : '节点有未确认的命令，请先核对运行记录'
         }
       }
     }
@@ -1430,7 +1432,8 @@ export async function runNodeManually(
   projectId: string,
   providers: ProviderSummary[],
   nodeId: TLShapeId,
-  command?: NodeCommandRunOptions
+  command?: NodeCommandRunOptions,
+  publication?: import('@shared/agent-flow/coordination').AgentPublication
 ): Promise<NodeExecutionResult> {
   if (hasNodeTask(projectId, nodeId) || nodeTests.has(nodeId))
     return { status: 'skipped', reason: '当前节点已在运行或排队' }
@@ -1448,9 +1451,9 @@ export async function runNodeManually(
     graph,
     outputs: new Map<string, ContractOutputs>(),
     subflowBaseInputs: new Map(),
-    runId: command?.grant.runId ?? crypto.randomUUID(),
-    traceId: command?.grant.command.traceId ?? newTraceId(),
-    workflowSpanId: command?.grant.command.spanId ?? newSpanId(),
+    runId: command?.grant.runId ?? publication?.taskId ?? crypto.randomUUID(),
+    traceId: command?.grant.command.traceId ?? publication?.traceId ?? newTraceId(),
+    workflowSpanId: command?.grant.command.spanId ?? publication?.spanId ?? newSpanId(),
     command,
     taskId: command?.grant.command.taskId,
     isolated: true

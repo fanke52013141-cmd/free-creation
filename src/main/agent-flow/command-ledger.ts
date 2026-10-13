@@ -30,6 +30,7 @@ import {
 import { nodeCommandIntentSignature, projectSemanticRevision } from './command-intent'
 import { FlowAssetStore } from './asset-store'
 import { FlowAssetError } from '../../shared/agent-flow/assets'
+import { FlowReviewStore } from './review-store'
 
 interface Row {
   project_id: string
@@ -134,6 +135,13 @@ export class FlowCommandLedger {
     return JSON.parse(row.receipt_json)
   }
   assertNodeAvailable(input: { projectId: string; nodeId: string }): void {
+    if (
+      this.file(input.projectId).nodes.find((n) => n.id === input.nodeId)?.type !== 'agent' &&
+      this.db
+        .prepare('SELECT 1 FROM flow_coordination_scope WHERE project_id=? AND node_id=?')
+        .get(input.projectId, input.nodeId)
+    )
+      fail('FLOW_CONTROL_OCCUPIED', 'occupancy')
     this.assertReviewReady(this.file(input.projectId), input.nodeId)
     if (
       this.db
@@ -156,7 +164,11 @@ export class FlowCommandLedger {
     }
   }
 
-  private assertReviewReady(project: ProjectFile, targetNodeId: string): void {
+  private assertReviewReady(
+    project: ProjectFile,
+    targetNodeId: string,
+    manifest?: NodeExecuteCommand['inputs']
+  ): void {
     // First slice never bypasses a declared review gate. Its runtime is a later package.
     for (const review of project.nodes.filter((item) => item.type === 'ai-review')) {
       let raw: unknown
@@ -166,8 +178,31 @@ export class FlowCommandLedger {
         fail('FLOW_REVIEW_NOT_READY', 'review')
       }
       const rule = ReviewNodeConfigSchema.safeParse(raw)
-      if (!rule.success || rule.data.gatedNodeIds.includes(targetNodeId))
-        fail('FLOW_REVIEW_NOT_READY', 'review')
+      if (!rule.success) fail('FLOW_REVIEW_NOT_READY', 'review')
+      if (rule.data.gatedNodeIds.includes(targetNodeId)) {
+        const approval = new FlowReviewStore(this.db).approval(project, review.id)
+        if (!approval) fail('FLOW_REVIEW_NOT_READY', 'review')
+        if (manifest) {
+          for (const [index, ref] of approval.decision.subjects.entries()) {
+            const source = rule.data.subjectSources[index]
+            const edge = project.edges.find(
+              (e) =>
+                e.to.nodeId === targetNodeId &&
+                e.from.nodeId === source.nodeId &&
+                e.from.portId === source.portId
+            )
+            if (
+              edge &&
+              !manifest.some(
+                (entry) =>
+                  entry.targetPortId === edge.to.portId &&
+                  entry.assets.some((asset) => canonicalFlowJson(asset) === canonicalFlowJson(ref))
+              )
+            )
+              fail('FLOW_REVIEW_NOT_READY', 'review')
+          }
+        }
+      }
     }
   }
   private authorize(command: NodeExecuteCommand, project: ProjectFile): void {
@@ -185,6 +220,17 @@ export class FlowCommandLedger {
       fail('FLOW_AGENT_CONFIG_INVALID', 'scope')
     if (!parsed.data.allowedNodeIds.includes(command.targetNodeId))
       fail('FLOW_SCOPE_REJECTED', 'scope')
+    const scopeOwner = (nodeId: string): string | undefined =>
+      (
+        this.db
+          .prepare('SELECT task_id FROM flow_coordination_scope WHERE project_id=? AND node_id=?')
+          .get(command.projectId, nodeId) as { task_id: string } | undefined
+      )?.task_id
+    if (
+      scopeOwner(command.targetNodeId) &&
+      scopeOwner(command.targetNodeId) !== scopeOwner(command.agentNodeId)
+    )
+      fail('FLOW_CONTROL_OCCUPIED', 'scope')
     const target = savedShape(project, command.targetNodeId)
     const node = project.nodes.find((item) => item.id === command.targetNodeId)
     if (target.props.nodeType !== 'processor' || node?.type !== 'processor')
@@ -196,7 +242,7 @@ export class FlowCommandLedger {
       target.meta?.pinnedOutput !== undefined
     )
       fail('FLOW_CONTRACT_MISMATCH', 'contract')
-    this.assertReviewReady(project, command.targetNodeId)
+    this.assertReviewReady(project, command.targetNodeId, command.inputs)
     const incoming = project.edges.filter((edge) => edge.to.nodeId === command.targetNodeId)
     if (
       incoming.length > 1 ||

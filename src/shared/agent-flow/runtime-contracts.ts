@@ -51,6 +51,7 @@ export const AgentTaskSnapshotSchema = z
       .regex(/^sha256:[a-f0-9]{64}$/)
       .optional(),
     parentTaskId: id.optional(),
+    coordinatorTaskId: id.optional(),
     humanFeedback: z.string().max(4096).optional(),
     directInputs: z.array(AgentFlowAssetRefSchema).max(128).default([]),
     targets: z

@@ -30,6 +30,9 @@ import { readPinnedOutputs } from '../../shared/engine/deterministic-projections
 import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
 import type { z } from 'zod'
 import { AgentFlowAssetRefSchema } from '../../shared/agent-flow/node-contracts'
+import type { CoordinatorPort, ModelIdentity } from '../../shared/agent-flow/coordination'
+import { CoordinationStore } from './coordination-store'
+import { FlowReviewStore, reviewBinding } from './review-store'
 
 type Identity = { projectId: string; nodeId: string }
 const view = (record: AgentTaskRecord): FlowAgentView => ({
@@ -45,6 +48,10 @@ const view = (record: AgentTaskRecord): FlowAgentView => ({
 
 /** Trusted desktop admission derives all execution scope from the saved canvas. */
 export class FlowAgentDesktopHost {
+  private coordinator?: CoordinatorPort
+  setCoordinator(port: CoordinatorPort): void {
+    this.coordinator = port
+  }
   private readonly store: FlowTaskStore
   private readonly skills: FlowSkillStore
   private readonly assets: FlowAssetStore
@@ -56,7 +63,7 @@ export class FlowAgentDesktopHost {
     private readonly open: (projectId: string) => ProjectFile | null,
     private readonly desktop: FlowCommandDesktop,
     private readonly model: (
-      snapshot: AgentTaskSnapshot,
+      snapshot: ModelIdentity,
       signal: AbortSignal
     ) => Promise<AgentModelPort>
   ) {
@@ -97,6 +104,18 @@ export class FlowAgentDesktopHost {
     return row ? this.store.read(row.thread) : null
   }
   inspect(input: Identity): FlowAgentView | null {
+    const file = this.open(input.projectId)
+    const type = (
+      file?.tldrawSnapshot as {
+        store?: Record<string, { props: { nodeType: string; config: string } }>
+      }
+    )?.store?.[input.nodeId]?.props
+    if (
+      this.coordinator &&
+      (type?.nodeType === 'state-machine' ||
+        (type?.nodeType === 'agent' && JSON.parse(type.config).role === 'coordinator'))
+    )
+      return this.coordinator.inspect(input)
     this.saved(input)
     const record = this.latest(input)
     if (!record) return null
@@ -112,6 +131,8 @@ export class FlowAgentDesktopHost {
     return view(record)
   }
   stop(input: Identity): FlowAgentView | null {
+    if (this.coordinator && JSON.parse(this.saved(input).shape.props.config).role === 'coordinator')
+      return this.coordinator.stop(input)
     this.saved(input)
     this.controllers.get(this.key(input))?.abort()
     const runtime = this.active.get(this.key(input))
@@ -131,7 +152,11 @@ export class FlowAgentDesktopHost {
       throw new AgentRuntimeError('FLOW_PROJECT_INACTIVE', 'catalog')
     return {
       models,
-      tools: [{ id: 'node.execute', version: '1', name: '执行画布数据处理节点' }],
+      tools: [
+        { id: 'node.execute', version: '1', name: '执行画布数据处理节点' },
+        { id: 'graph.preview', version: '1', name: '文本模板流程预览' },
+        { id: 'agent.dispatch', version: '1', name: '分派专业 Agent 任务' }
+      ],
       skills: BUILTIN_FLOW_SKILLS.map(({ id, version, name, description }) => ({
         id,
         version,
@@ -160,6 +185,25 @@ export class FlowAgentDesktopHost {
       const key = JSON.stringify(from)
       const prior = versions.get(key)
       if (prior) return prior
+      for (const review of file.nodes.filter((node) => node.type === 'ai-review')) {
+        const approval = new FlowReviewStore(this.db).approval(file, review.id)
+        if (!approval) continue
+        const binding = reviewBinding(file, review.id)
+        if (
+          !binding.config.gatedNodeIds.some(
+            (id) => config.allowedNodeIds.includes(id) || id === raw.nodeId
+          )
+        )
+          continue
+        const index = binding.config.subjectSources.findIndex(
+          (source) => source.nodeId === from.nodeId && source.portId === from.portId
+        )
+        if (index >= 0) {
+          const ref = approval.decision.subjects[index]
+          versions.set(key, ref)
+          return ref
+        }
+      }
       const source = (
         file.tldrawSnapshot as { store: Record<string, { meta?: Record<string, unknown> }> }
       ).store[from.nodeId]
@@ -231,6 +275,47 @@ export class FlowAgentDesktopHost {
     })
   }
 
+  pause(input: Identity): FlowAgentView | null {
+    if (
+      !this.coordinator ||
+      JSON.parse(this.saved(input).shape.props.config).role !== 'coordinator'
+    )
+      throw new AgentRuntimeError('FLOW_COORDINATOR_CONFIG_INVALID', 'pause')
+    return this.coordinator.pause(input)
+  }
+  describeAssignment(input: FlowAgentRun): AgentTaskSnapshot {
+    return this.bind(input)
+  }
+  async runAssignment(
+    input: FlowAgentRun,
+    assignment: { goal: string; completion: string; inputs: FlowAgentReply['refs'] },
+    coordinatorTaskId: string,
+    prepared?: AgentTaskSnapshot
+  ): Promise<FlowAgentReply> {
+    if (new CoordinationStore(this.db).owner(input.projectId, input.nodeId) !== coordinatorTaskId)
+      throw new AgentRuntimeError('FLOW_SCOPE_REJECTED', 'assignment')
+    const snapshot = prepared ? AgentTaskSnapshotSchema.parse(prepared) : this.bind(input)
+    if (
+      snapshot.projectId !== input.projectId ||
+      snapshot.agentNodeId !== input.nodeId ||
+      snapshot.taskId !== input.requestId ||
+      snapshot.semanticRevision !== projectSemanticRevision(this.saved(input).file)
+    )
+      throw new AgentRuntimeError('FLOW_REVISION_CONFLICT', 'assignment')
+    if (
+      assignment.inputs.some(
+        (ref) =>
+          !snapshot.directInputs.some(
+            (allowed) => canonicalFlowJson(allowed) === canonicalFlowJson(ref)
+          )
+      )
+    )
+      throw new AgentRuntimeError('FLOW_HANDOFF_INPUT_REJECTED', 'assignment')
+    snapshot.goal = `${snapshot.goal}\n本次主控分派要求：${assignment.goal}\n完成条件：${assignment.completion}`
+    snapshot.directInputs = assignment.inputs
+    snapshot.coordinatorTaskId = coordinatorTaskId
+    return this.run(input, AgentTaskSnapshotSchema.parse(snapshot))
+  }
   private reply(record: AgentTaskRecord): FlowAgentReply {
     const outputs: FlowAgentReply['outputs'] = {}
     if (record.state === 'completed') {
@@ -405,7 +490,11 @@ export class FlowAgentDesktopHost {
         const directEdges = file.edges.filter((edge) => edge.to.nodeId === input.nodeId)
         child.directInputs.forEach((ref, index) => {
           const value = this.assets.resolveInputs(input.projectId, [ref])[0].value
-          if ((directEdges[index].to.portId === 'in-json' && value.kind !== 'json') || (directEdges[index].to.portId === 'in-text' && !['text', 'markdown'].includes(value.kind)))
+          if (
+            (directEdges[index].to.portId === 'in-json' && value.kind !== 'json') ||
+            (directEdges[index].to.portId === 'in-text' &&
+              !['text', 'markdown'].includes(value.kind))
+          )
             throw new AgentRuntimeError('AGENT_INPUT_TYPE_INVALID', 'revision')
         })
         this.db.transaction(() => {
@@ -461,8 +550,21 @@ export class FlowAgentDesktopHost {
     }
   }
 
-  async run(raw: unknown): Promise<FlowAgentReply> {
+  async run(raw: unknown, assigned?: AgentTaskSnapshot): Promise<FlowAgentReply> {
     const input = FlowAgentRunSchema.parse(raw)
+    if (this.coordinator && JSON.parse(this.saved(input).shape.props.config).role === 'coordinator')
+      return this.coordinator.run(raw)
+    const owner = new CoordinationStore(this.db).owner(input.projectId, input.nodeId)
+    const prior = this.latest(input)
+    if (
+      owner &&
+      !assigned &&
+      !(
+        prior?.snapshot.coordinatorTaskId === owner &&
+        (input.action === 'continue' || input.requestId === prior.snapshot.taskId)
+      )
+    )
+      throw new AgentRuntimeError('FLOW_CONTROL_OCCUPIED', 'admission')
     const key = this.key(input)
     if (this.admission.has(key)) throw new AgentRuntimeError('AGENT_TASK_BUSY', 'admission')
     this.admission.add(key)
@@ -509,7 +611,8 @@ export class FlowAgentDesktopHost {
         old?.state === 'ready' &&
         !!old.snapshot.parentTaskId &&
         input.expectedTaskId === old.snapshot.taskId
-      const snapshot = input.action === 'continue' || prepared ? old!.snapshot : this.bind(input)
+      const snapshot =
+        input.action === 'continue' || prepared ? old!.snapshot : (assigned ?? this.bind(input))
       const telemetry = createAgentTelemetry(snapshot)
       if (input.action === 'start' && !prepared)
         this.store.create(snapshot, this.skills.bind(snapshot.config.skills, snapshot.config.tools))

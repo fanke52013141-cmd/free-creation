@@ -1,6 +1,7 @@
 import type { NodeShape } from './executor-types'
 import { parseStoredNodeValue, type RawNodeOutputs } from './values'
 import { projectAgentOutputs } from '../agent-flow/agent-outputs'
+import { projectReviewOutputs } from '../agent-flow/review'
 
 // These exact functions are registered by the desktop NodeTypeSpecs.
 export const projectTextOutputs = (shape: NodeShape): RawNodeOutputs =>
@@ -22,6 +23,7 @@ export const projectProcessorOutputs = (shape: NodeShape): RawNodeOutputs => {
 }
 
 export const DETERMINISTIC_PROJECTIONS = {
+  'ai-review': projectReviewOutputs,
   agent: projectAgentOutputs,
   text: projectTextOutputs,
   json: projectJsonOutputs,

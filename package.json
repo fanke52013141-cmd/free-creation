@@ -36,7 +36,7 @@
     "benchmark:graph": "node scripts/benchmark-graph.mjs",
     "build:demo": "node scripts/build-demo-bundle.mjs",
     "benchmark:canvas": "node scripts/benchmark-canvas.mjs",
-    "verify": "npm run lint && npm run typecheck && npm run typecheck:model && npm run test && npm run test:model && npm run verify:logging && npm run test:optimization-ui && electron-vite build && npm run test:agent-flow-assets && npm run test:agent-flow-commands && npm run test:agent-flow-desktop && npm run test:agent-flow-collaboration",
+    "verify": "npm run lint && npm run typecheck && npm run typecheck:model && npm run test && npm run test:model && npm run verify:logging && npm run test:optimization-ui && electron-vite build && npm run test:agent-flow-assets && npm run test:agent-flow-commands && npm run test:agent-flow-desktop && npm run test:agent-flow-collaboration && npm run test:agent-flow-coordination && npm run test:agent-flow-builder && npm run test:agent-flow-review",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "dev:browser": "vite --config vite.browser.config.ts",
@@ -56,7 +56,10 @@
     "build:linux": "electron-vite build && electron-builder --linux",
     "test:optimization-ui": "node scripts/run-optimization-ui-gate.cjs",
     "test:optimization-electron": "node scripts/verify-optimization-electron.cjs",
-    "benchmark:optimization": "node scripts/benchmark-optimization-ui.cjs"
+    "benchmark:optimization": "node scripts/benchmark-optimization-ui.cjs",
+    "test:agent-flow-coordination": "node scripts/test-agent-flow-desktop.cjs --coordination",
+    "test:agent-flow-builder": "node scripts/test-agent-flow-desktop.cjs --builder",
+    "test:agent-flow-review": "node scripts/test-agent-flow-desktop.cjs --review"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.34",

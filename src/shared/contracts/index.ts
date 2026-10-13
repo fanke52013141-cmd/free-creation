@@ -50,6 +50,10 @@ import type {
 
 export const IPC = {
   flowAgents: {
+    review: 'flow-agents:review',
+    build: 'flow-agents:build',
+    pause: 'flowAgents:pause',
+    publication: 'flowAgents:publication',
     run: 'flow-agents:run',
     inspect: 'flow-agents:inspect',
     stop: 'flow-agents:stop',

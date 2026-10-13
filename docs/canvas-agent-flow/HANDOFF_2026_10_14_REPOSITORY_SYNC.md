@@ -1,0 +1,89 @@
+# Canvas Studio 开发接续与仓库同步交接
+
+日期：2026-10-14（Asia/Shanghai）。本文件是当前进度与下一步工作的接续入口；历史分包记录保留，但以本文件和开发台账的最新条目为准。
+
+## 交接结论
+
+画布原生 Agent Flow 已推进到 **C3.3 部分交付**。专业 Agent、协作修订、主控顺序协调、文本模板建图，以及固定版本 AI 审核和人工复审已有验收。**主控自动审核及 AI／人机协作返工任务接续尚未实现，C3.3 和 C4 不能标为完成。**
+
+本次整理并提交原开发对话留下的 C3.2 收尾与 C3.3 改动，不新开发自动返工，不更改个人项目、模型配置或桌面安装包。提交前已 fetch，线上 `origin/main` 与本地已提交基线一致：`d65ca081afaa6492e2ebc4d0dc8ab0e52d6fed39`。本交接随接续代码一同提交到 `main`；最终提交身份以包含本文件的 Git 提交为准。
+
+仓库：<https://github.com/fanke52013141-cmd/free-creation>。源码目录：`D:\Program Files (x86)\canvas-studio\source`。
+
+## 已实现与已验证
+
+| 范围 | 当前能力 | 验收边界 |
+| --- | --- | --- |
+| C0／C1 | 有界任务底座、三类节点配置、显式控制关系、状态转换编辑 | 实验底座与配置验收不能单独证明自主执行 |
+| C2 | 文本／JSON 固定资产版本、命令回执、公共执行／保存、unknown 核对 | 确定性数据处理首条路径；不是全部节点或媒体适配 |
+| C3.1 | 专业 Agent 启动／停止／继续、Skill／工具选择、固定成果发布 | 真实模型文本／JSON 路径及跨进程人工继续通过 |
+| C3.2 | 节点内讨论、人工意见／版本选择、明确创建任务修订 | 讨论不隐式执行，旧任务与回执不改写 |
+| C3.3 顺序协调 | 主 Agent 在授权范围派发独立专业任务、固定输入交接、状态迁移、暂停／等待／继续 | 已验收顺序路径；并行与修改子任务后自动接续未支持 |
+| C3.3 建图 | 模型提出预览，人明确提交，公共注册表创建节点与端口连线，重复提交不复制节点 | 仅 `sequential-text-template@1`，1–4 步文本模板；预览在搭建节点内 |
+| C3.3 审核 | 文本／JSON 固定版本审核、可信报告／反馈、下游门禁、有界人工新版本复审 | 来源／规则变化使旧批准失效；技术失败无质量结论；不代表自动返工 |
+
+实现细节见 [顺序协调](16-c33-sequential-coordination.md)、[建图与人工复审](17-c33-builder-review.md)、[C3.3 历史交接的接续更新](HANDOFF_2026_10_13_C33.md)及[开发台账](08-development-ledger.md)。
+
+## 本次纳入仓库的代码
+
+- 主控：`src/main/agent-flow/coordinator-host.ts`、`coordination-store.ts` 与共享 `coordination.ts`；专业任务保持独立身份、预算和 checkpoint。
+- 建图：`builder-host.ts`、共享 `builder.ts`、`FlowBuilderControls.tsx`、`flow-build-actions.ts`；提案先持久化，再明确授权提交，保存事实确认后才显示已提交。
+- 审核：`review-host.ts`、`review-store.ts`、共享 `review.ts`、`ReviewTaskControls.tsx`；门禁同时校验持久报告、当前输入身份、运行状态与画布投影。
+- 公共接入：preload／IPC／renderer gateway／executor、命令账本、固定资产、输出投影、节点注册、状态显示及浏览器历史断言更新。
+- SQLite 迁移至 **v16**：新增主控运行／阶段事件／范围占用、建图提案及审核事实表；不建立第二张可编辑流程图。
+- 回归覆盖主控、建图、审核、SDK 工具结论、任务身份与输入隔离、固定资产物化端口、门禁、轮次／停止策略及数据库迁移。
+
+## 验证证据与复跑
+
+2026-10-13 最近一轮完整 `npm run verify` 已通过：158 个测试文件、1707 项通过、1 项既有跳过，模型模块另 2 项；lint、两端／模型类型检查、日志门禁、17 组浏览器检查、生产构建及七组隐藏 Electron 验收均通过。完整门禁之后新增 SDK／固定资产端口回归，另完成 41 项定向测试、两端类型检查、受影响源码 lint、生产构建和审核桌面复验。不能把这 41 项的新增覆盖算作此前全量执行。
+
+真实 Seed 2.1 turbo 已验证：主控顺序协调 16 次请求；建图 12 次请求，包含重开提交和真实执行；审核 6 次请求，包含拒绝 → 重开 → 人工 v2 → 通过 → 下游放行 → v3 使旧批准失效。仅证明明确文本／JSON 示例的执行和门禁事实，不证明任意业务质量判断可靠。
+
+本机证据路径（`qa/` 被忽略，**不会随源码推送**）：
+
+- `qa/canvas-agent-flow/C33/verify-builder-review-complete.log`
+- `qa/canvas-agent-flow/C33/directed-final.log`、`typecheck-final.log`、`lint-final.log`、`build-final.log`、`desktop-review-final.log`
+- `qa/canvas-agent-flow/C3/desktop-coordination-real/results.json`
+- `qa/canvas-agent-flow/C3/desktop-builder-real/results.json`
+- `qa/canvas-agent-flow/C3/desktop-review-real/results.json`
+
+接续环境应使用仓库声明的 pnpm 10.33.0，并先确认 Node／Electron 与 better-sqlite3 的 native ABI。本机验收使用 Electron-as-Node 22.22.1（ABI 140），避免默认 Node 24（ABI 137）加载现存模块失败；本机无 Chrome，浏览器门禁使用仅对 QA 进程生效的已安装 Playwright Chromium 启动适配。适配在忽略的 `qa/canvas-agent-flow/c32-acceptance-20261013/runtime/`，不是跨机器通用依赖，不应提交本机绝对路径或替换个人 native 安装。
+
+常规复跑入口：`npm run verify`；定向桌面入口：`npm run test:agent-flow-coordination`、`npm run test:agent-flow-builder`、`npm run test:agent-flow-review`。它们默认使用隔离 fixture；真实模型入口需要单独配置临时凭据与预算，不能将 fixture 通过称为真实模型通过。此前失败记录保留，成功的新隔离验收不会重放原任务。
+
+本次提交前复核结果见下文“仓库同步复核”，与上述历史验收分开登记。
+
+## 停滞判断与桌面版本
+
+原开发对话「同步线上代码到本地」最后一轮已结束，最后消息明确留下 C3.3 剩余项；2026-10-14 检查时没有该项目的 Electron／开发进程正在运行。不能据此证明 Codex 客户端是否存在 UI 故障。
+
+桌面 `启动 Canvas Studio.lnk` 指向 `source/dist/node-pointer-release/win-unpacked/canvas-studio.exe`，其打包 main 构建时间为 **2026-10-12 00:39:48**；当前 `source/out/main/index.js` 为 **2026-10-13 23:51:42**。从该快捷方式打开看不到最新开发能力。**推送源码不会更新这份安装包或快捷方式**，桌面发布需要另行构建和验证。
+
+## 唯一下一步：完成 C3.3 自动审核与返工接续
+
+先定义并验收一条可演示的画布路径：专业任务交付固定资产 → 主控触发审核 → 不通过时将反馈和拒绝版本绑定到负责节点 → 创建新的有界返工任务 → 提交新资产版本 → 再次审核 → 通过后释放下游。
+
+1. 固定原始输入、被拒资产引用、审核规则／报告与反馈身份；新返工有独立任务身份，保留旧任务和回执。
+2. 分别实现纯 AI 自动返工、人机协作人工等待／明确继续、纯人工明确提交新版本的路径；不能把现有人工复审等同于自动返工。
+3. 接通负责节点反馈呈现、主控审核控制与人工修改后子任务接续；预算和停止策略持久化，耗尽／技术失败继续阻断下游。
+4. 验收跨进程人工等待、旧批准失效、同请求去重、停止／取消、版本冲突、未知结果不重放和新的任务接续。
+5. 完成 C3.3 剩余项后进入 C4：故障恢复矩阵、资产补投影、模板／引用迁移。任意节点建图、空间预览、媒体／并行协调、主控 Skill 和独立状态机输出仍需分别适配验收。
+
+约束：画布语义图仍是唯一可编辑定义；UI 和 Agent 复用公共图操作与 executor；控制／状态关系不混入数据 DAG；模型文字不能伪造执行成功；不恢复已撤回的 CLI／MCP／headless 对接。
+
+## 日志覆盖与审查边界
+
+本批代码复用 `agent.desktop`、`model.request`、公共节点／保存／命令／资产事件，新增 `agent.coordination` 与发布失败诊断。实际开始／唯一终态、旧 trace 恢复关联及真实诊断脱敏已有局部验收；提示、材料、回复、推理和密钥不入诊断。完整远端取消、崩溃恢复与父子 trace 矩阵仍待 C4，详见 [日志覆盖清单](../LOGGING_COVERAGE.md)。
+
+本次新改动为交接与入口文档，不改变执行／存储路径，不新增诊断事件。提交前按正确性、可读性、架构、安全、性能五轴复核既有待提交实现和测试；本机绝对路径 QA 适配、模型凭据、运行数据库、截图和构建产物不纳入提交。
+
+## 仓库同步复核
+
+2026-10-14 提交前复核：
+
+- 使用匹配 native ABI 的 Electron-as-Node 重跑 9 个测试文件，**78 项全部通过**，覆盖运行底座、主控、建图、审核、SDK、命令账本、节点注册、数据库迁移与日志门禁。证据：`qa/canvas-agent-flow/C33/sync-20261014-directed.log`。
+- `npm run typecheck`、`npm run lint`、`node scripts/check-logging-bypass.mjs` 通过。证据分别为同目录 `sync-20261014-typecheck.log`、`sync-20261014-lint.log`、`sync-20261014-logging.log`。本次未重复付费模型请求，真实模型结果仍为上节历史验收。
+- 五轴复核未发现本批已声明路径的新增阻塞问题：版本冲突／去重／预算／假报告拒绝有测试；独立主进程宿主复用公共 executor；IPC 校验主窗口／项目，SQL 参数化；请求与循环有界，日志排除正文和密钥。任意能力建图和自动返工继续作为未支持范围。
+- 构建及完整浏览器／Electron 门禁沿用 2026-10-13 已通过证据；本轮只补文档，未修改经过验收的执行源码。
+
+最终暂存范围、差异格式、文档链接与常见凭据格式在提交前检查；推送后以 `git ls-remote origin refs/heads/main` 对照本地 `HEAD` 核对同步。

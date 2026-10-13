@@ -38,6 +38,8 @@ export interface FlowAgentView {
   tools: number
   code?: string
   prepared?: boolean
+  phase?: string
+  children?: Array<{ nodeId: string; taskId: string; state: string }>
 }
 export const FlowAgentCollaborationSchema = FlowAgentQuerySchema.extend({
   taskId: id,

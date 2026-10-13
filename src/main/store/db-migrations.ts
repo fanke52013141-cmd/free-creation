@@ -8,7 +8,7 @@ export interface MigrationDatabase {
   pragma(statement: string, options?: { simple?: boolean }): unknown
 }
 
-export const DB_SCHEMA_VERSION = 14
+export const DB_SCHEMA_VERSION = 16
 
 const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
@@ -380,6 +380,38 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
         PRIMARY KEY(thread,event_id), UNIQUE(thread,revision)
       );
     `)
+  },
+  (database) => {
+    database.exec(`
+      CREATE TABLE flow_coordination_runs (
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        node_id TEXT NOT NULL, task_id TEXT NOT NULL, body_json TEXT NOT NULL,
+        PRIMARY KEY(project_id,task_id)
+      );
+      CREATE TABLE flow_coordination_events (
+        project_id TEXT NOT NULL, task_id TEXT NOT NULL, event_id TEXT NOT NULL,
+        revision INTEGER NOT NULL, signature TEXT NOT NULL, state TEXT NOT NULL,
+        PRIMARY KEY(project_id,task_id,event_id), UNIQUE(project_id,task_id,revision),
+        FOREIGN KEY(project_id,task_id) REFERENCES flow_coordination_runs(project_id,task_id) ON DELETE CASCADE
+      );
+      CREATE TABLE flow_coordination_scope (
+        project_id TEXT NOT NULL, node_id TEXT NOT NULL, task_id TEXT NOT NULL,
+        PRIMARY KEY(project_id,node_id),
+        FOREIGN KEY(project_id,task_id) REFERENCES flow_coordination_runs(project_id,task_id) ON DELETE CASCADE
+      );
+    `)
+  },
+  (database) => {
+    database.exec(`CREATE TABLE flow_builds (
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      node_id TEXT NOT NULL, build_id TEXT NOT NULL, body_json TEXT NOT NULL,
+      PRIMARY KEY(project_id,build_id)
+    );
+    CREATE TABLE flow_reviews (
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      node_id TEXT NOT NULL, request_id TEXT NOT NULL, body_json TEXT NOT NULL,
+      PRIMARY KEY(project_id,request_id)
+    );`)
   }
 ]
 

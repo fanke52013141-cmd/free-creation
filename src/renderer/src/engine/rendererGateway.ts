@@ -14,8 +14,19 @@ import { ensureCanvasSaved } from '../canvas/flow-asset-actions'
  * 等价于之前的 window.api.cropImage(...)。
  */
 export const rendererGateway: GatewayClient = {
+  reviewFlowAssets: async (input) => {
+    await ensureCanvasSaved()
+    return window.api.reviewFlowAssets(input)
+  },
+  buildFlowAgent: async (input) => {
+    await ensureCanvasSaved()
+    return window.api.buildFlowAgent(input)
+  },
   stopFlowAgent: (input) => window.api.stopFlowAgent(input),
-  runFlowAgent: async (input) => { await ensureCanvasSaved(); return window.api.runFlowAgent(input) },
+  runFlowAgent: async (input) => {
+    await ensureCanvasSaved()
+    return window.api.runFlowAgent(input)
+  },
   // ── 模型网关 ──
   listProviders: () => window.api.gateway.listProviders(),
   resolveModelFeature: (input) => window.api.models.resolveBinding(input),

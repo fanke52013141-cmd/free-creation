@@ -1,5 +1,11 @@
 import { streamText, tool, stepCountIs, type LanguageModel } from 'ai'
 import { z } from 'zod'
+import { BuildPlanSchema, type BuildContext, type BuildPlan } from '../../shared/agent-flow/builder'
+import {
+  ReviewModelVerdictSchema,
+  type ReviewContext,
+  type ReviewModelVerdict
+} from '../../shared/agent-flow/review'
 import type { GatewayDiagnosticsContext } from '../../shared/contracts'
 import { AgentFlowAssetRefSchema } from '../../shared/agent-flow/node-contracts'
 import { FlowAssetError } from '../../shared/agent-flow/assets'
@@ -11,6 +17,11 @@ import {
 import { emitGatewayEvent, ensureRequestId } from '../diagnostics/gateway-events'
 import type { AgentModelContext, AgentModelPort } from './runtime'
 import type { FlowAssetStore } from './asset-store'
+import {
+  CoordinationDecisionSchema,
+  type CoordinationContext,
+  type CoordinationDecision
+} from '../../shared/agent-flow/coordination'
 
 /** One SDK request proposes one action. LangGraph alone owns the outer loop. */
 export class AgentSdkModel implements AgentModelPort {
@@ -18,8 +29,130 @@ export class AgentSdkModel implements AgentModelPort {
     private readonly model: LanguageModel,
     private readonly projectId: string,
     private readonly assets: Pick<FlowAssetStore, 'resolveInputs'>,
-    private readonly diagnostics: GatewayDiagnosticsContext
+    private readonly diagnostics: GatewayDiagnosticsContext,
+    private readonly discussionProviderOptions?: Parameters<typeof streamText>[0]['providerOptions']
   ) {}
+
+  async review(input: ReviewContext, signal: AbortSignal): Promise<ReviewModelVerdict> {
+    const context = { ...this.diagnostics, requestId: ensureRequestId(undefined) }
+    const attributes: { operation: string; toolCallCount?: number; finishReason?: string } = {
+      operation: 'agent.review'
+    }
+    emitGatewayEvent('model.request.started', '资产审核开始', context, { attributes })
+    try {
+      const result = streamText({
+        model: this.model,
+        providerOptions: this.discussionProviderOptions,
+        maxRetries: 0,
+        timeout: 30000,
+        abortSignal: signal,
+        onError: () => {},
+        experimental_telemetry: { isEnabled: false },
+        stopWhen: stepCountIs(1),
+        toolChoice: { type: 'tool', toolName: 'review_assets' },
+        maxOutputTokens: 4096,
+        tools: {
+          review_assets: tool({
+            description: '对当前固定版本给出是或否及反馈，不执行任何业务动作',
+            inputSchema: ReviewModelVerdictSchema
+          })
+        },
+        system: `恰好调用一次 review_assets，判断输入是否满足审核标准。\n${input.criteria}\n多个对象以对象编号标识；单个对象编号为0。`,
+        messages: [
+          {
+            role: 'user',
+            content: input.subjects
+              .map(
+                (value, index) =>
+                  `${input.subjects.length > 1 ? `对象 ${index}（${value.kind}）：\n` : ''}${value.kind === 'json' ? JSON.stringify(value.data) : value.text}`
+              )
+              .join('\n\n')
+          }
+        ]
+      })
+      const calls: Array<{ toolName: string; input: unknown }> = []
+      for await (const part of result.fullStream) {
+        if (part.type === 'error') throw new AgentRuntimeError('AGENT_MODEL_FAILED', 'review')
+        if (part.type === 'tool-call') calls.push({ toolName: part.toolName, input: part.input })
+      }
+      attributes.toolCallCount = calls.length
+      attributes.finishReason = await result.finishReason
+      if (calls.length !== 1 || calls[0]?.toolName !== 'review_assets')
+        throw new AgentRuntimeError('AGENT_MODEL_ACTION_INVALID', 'review')
+      const verdict = ReviewModelVerdictSchema.parse(calls[0].input)
+      emitGatewayEvent('model.request.completed', '资产审核完成', context, {
+        attributes,
+        status: 'success'
+      })
+      return verdict
+    } catch (error) {
+      const code = error instanceof AgentRuntimeError ? error.code : 'AGENT_MODEL_ACTION_INVALID'
+      emitGatewayEvent(
+        signal.aborted ? 'model.request.cancelled' : 'model.request.failed',
+        '资产审核结束',
+        context,
+        { attributes, status: signal.aborted ? 'cancelled' : 'failed', error: new Error(code) }
+      )
+      throw new AgentRuntimeError(code, 'review')
+    }
+  }
+
+  async build(input: BuildContext, signal: AbortSignal): Promise<BuildPlan> {
+    const context = { ...this.diagnostics, requestId: ensureRequestId(undefined) }
+    const attributes: { operation: string; toolCallCount?: number; finishReason?: string } = {
+      operation: 'agent.builder.propose'
+    }
+    emitGatewayEvent('model.request.started', '建图提案开始', context, { attributes })
+    try {
+      if (input.goal.length > 16384)
+        throw new AgentRuntimeError('AGENT_CONTEXT_TOO_LARGE', 'builder')
+      const result = streamText({
+        model: this.model,
+        providerOptions: this.discussionProviderOptions,
+        maxRetries: 0,
+        timeout: 30000,
+        abortSignal: signal,
+        onError: () => {},
+        experimental_telemetry: { isEnabled: false },
+        stopWhen: stepCountIs(1),
+        toolChoice: { type: 'tool', toolName: 'propose_flow' },
+        maxOutputTokens: 4096,
+        tools: {
+          propose_flow: tool({
+            description: '提出一个待人工提交的文本顺序流程',
+            inputSchema: BuildPlanSchema
+          })
+        },
+        system:
+          '你是画布建图规划员。调用 propose_flow 提交一个预览提案。当前能力 sequential-text-template@1 支持 1 至 4 个专业 Agent 顺序做确定性文本模板加工。template 中 {{value}} 表示真实上游文本，必须保留；mode 表示自主处理或需要人工确认。按目标给出每步的职责、完成要求与模板。宿主将创建主 Agent、状态机、专业 Agent、数据处理节点与显式关系，并等待人确认提交。提案仅使用该文本模板能力。',
+        messages: [{ role: 'user', content: JSON.stringify(input) }]
+      })
+      const calls: Array<{ toolName: string; input: unknown }> = []
+      for await (const part of result.fullStream) {
+        if (part.type === 'error') throw new AgentRuntimeError('AGENT_MODEL_FAILED', 'builder')
+        if (part.type === 'tool-call') calls.push({ toolName: part.toolName, input: part.input })
+      }
+      attributes.toolCallCount = calls.length
+      attributes.finishReason = await result.finishReason
+      if (calls.length !== 1 || calls[0]?.toolName !== 'propose_flow')
+        throw new AgentRuntimeError('AGENT_MODEL_ACTION_INVALID', 'builder')
+      const plan = BuildPlanSchema.parse(calls[0].input)
+      emitGatewayEvent('model.request.completed', '建图提案完成', context, {
+        attributes,
+        status: 'success'
+      })
+      return plan
+    } catch (error) {
+      const code = error instanceof AgentRuntimeError ? error.code : 'AGENT_MODEL_ACTION_INVALID'
+      emitGatewayEvent(
+        signal.aborted ? 'model.request.cancelled' : 'model.request.failed',
+        '建图提案结束',
+        context,
+        { attributes, status: signal.aborted ? 'cancelled' : 'failed', error: new Error(code) }
+      )
+      throw new AgentRuntimeError(code, 'builder')
+    }
+  }
 
   async discuss(
     goal: string,
@@ -35,6 +168,7 @@ export class AgentSdkModel implements AgentModelPort {
         throw new AgentRuntimeError('COLLABORATION_LIMIT', 'discussion-context')
       const result = streamText({
         model: this.model,
+        providerOptions: this.discussionProviderOptions,
         maxRetries: 0,
         timeout: 30000,
         abortSignal: signal,
@@ -69,10 +203,85 @@ export class AgentSdkModel implements AgentModelPort {
     }
   }
 
+  async coordinate(input: CoordinationContext, signal: AbortSignal): Promise<CoordinationDecision> {
+    const context = { ...this.diagnostics, requestId: ensureRequestId(undefined) }
+    const attributes = { operation: 'agent.coordination.decide' }
+    emitGatewayEvent('model.request.started', '主 Agent 决策开始', context, { attributes })
+    try {
+      const content = JSON.stringify(input)
+      if (Buffer.byteLength(content) > 131072)
+        throw new AgentRuntimeError('AGENT_CONTEXT_TOO_LARGE', 'coordination')
+      const result = streamText({
+        model: this.model,
+        maxRetries: 0,
+        timeout: 30000,
+        abortSignal: signal,
+        onError: () => {},
+        experimental_telemetry: { isEnabled: false },
+        stopWhen: stepCountIs(1),
+        toolChoice: 'required',
+        tools: {
+          dispatch_agent: tool({
+            description:
+              '给一个就绪专业 Agent 分派独立任务；从其允许的固定输入中选择最小清单，填写目标和完成条件。',
+            inputSchema: CoordinationDecisionSchema.options[0].omit({ kind: true })
+          }),
+          finish_flow: tool({
+            description: '所有专业任务真实完成后，选择其真实固定成果作为 Flow 输出。',
+            inputSchema: CoordinationDecisionSchema.options[1].omit({ kind: true })
+          }),
+          ...(input.mode === 'collaborative'
+            ? {
+                wait_for_human: tool({
+                  description: '等待人明确继续；不修改成果或任务。',
+                  inputSchema: z.object({}).strict()
+                })
+              }
+            : {})
+        },
+        system:
+          '你是当前画布的主 Agent，仅协调已授权专业 Agent。每轮必须选择恰好一个工具。available 是目前可派发的真实节点和固定输入，completed 是真实完成记录；不能伪造完成或读取其他会话。按 goal 的要求分派，不要重复已完成任务。dispatch_agent 的 inputs 必须逐字复制所选节点的固定引用，goal 与 completion 明确且符合该节点原职责。available 为空且任务未完成时不能捏造结果。所有任务完成后 finish_flow 仅复制已完成记录的输出引用，不再派发。专业任务内部自主工具循环由专业 Agent 执行。',
+        messages: [{ role: 'user', content }]
+      })
+      for await (const part of result.fullStream)
+        if (part.type === 'error') throw new AgentRuntimeError('AGENT_MODEL_FAILED', 'coordination')
+      const calls = await result.toolCalls
+      if (calls.length !== 1 || !calls[0])
+        throw new AgentRuntimeError('AGENT_MODEL_ACTION_INVALID', 'coordination')
+      const call = calls[0]
+      const args = z.record(z.string(), z.unknown()).parse(call.input)
+      const decision = CoordinationDecisionSchema.parse({
+        ...args,
+        kind:
+          call.toolName === 'dispatch_agent'
+            ? 'dispatch'
+            : call.toolName === 'finish_flow'
+              ? 'finish'
+              : call.toolName === 'wait_for_human' && input.mode === 'collaborative'
+                ? 'wait'
+                : 'invalid'
+      })
+      emitGatewayEvent('model.request.completed', '主 Agent 决策完成', context, {
+        attributes,
+        status: 'success'
+      })
+      return decision
+    } catch (error) {
+      const code = error instanceof AgentRuntimeError ? error.code : 'AGENT_MODEL_FAILED'
+      emitGatewayEvent(
+        signal.aborted ? 'model.request.cancelled' : 'model.request.failed',
+        '主 Agent 决策结束',
+        context,
+        { attributes, status: signal.aborted ? 'cancelled' : 'failed', error: new Error(code) }
+      )
+      throw new AgentRuntimeError(code, 'coordination')
+    }
+  }
   async decide(input: AgentModelContext, signal: AbortSignal): Promise<AgentDecision> {
     const context = { ...this.diagnostics, requestId: ensureRequestId(undefined) }
     const attributes = { operation: 'agent.runtime.decide' }
     const started = performance.now()
+    let toolCallCount: number | undefined, finishReason: string | undefined
     emitGatewayEvent('model.request.started', 'Agent 单步决策请求开始', context, { attributes })
     try {
       const refs = [
@@ -155,6 +364,8 @@ export class AgentSdkModel implements AgentModelPort {
         }
       }
       const calls = await result.toolCalls
+      toolCallCount = calls.length
+      finishReason = await result.finishReason
       if (calls.length !== 1 || !calls[0])
         throw new AgentRuntimeError('AGENT_MODEL_ACTION_INVALID', 'model-output')
       const call = calls[0]
@@ -189,7 +400,7 @@ export class AgentSdkModel implements AgentModelPort {
         'Agent 单步决策请求结束',
         context,
         {
-          attributes,
+          attributes: { ...attributes, toolCallCount, finishReason },
           status: signal.aborted ? 'cancelled' : 'failed',
           error: new Error(code),
           durationMs: Math.round(performance.now() - started)

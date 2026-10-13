@@ -114,6 +114,14 @@ import type {
 } from '../shared/types'
 
 const api = {
+  reviewFlowAssets: (
+    input: import('../shared/agent-flow/review').ReviewRequest
+  ): Promise<IpcEnvelope<import('../shared/agent-flow/node-contracts').ReviewDecision>> =>
+    ipcRenderer.invoke(IPC.flowAgents.review, input),
+  buildFlowAgent: (
+    input: import('../shared/agent-flow/builder').BuildRequest
+  ): Promise<IpcEnvelope<import('../shared/agent-flow/builder').BuildPreview | null>> =>
+    ipcRenderer.invoke(IPC.flowAgents.build, input),
   runFlowAgent: (
     input: import('../shared/agent-flow/desktop-tasks').FlowAgentRun
   ): Promise<IpcEnvelope<import('../shared/agent-flow/desktop-tasks').FlowAgentReply>> =>
@@ -128,6 +136,23 @@ const api = {
     nodeId: string
   }): Promise<IpcEnvelope<import('../shared/agent-flow/desktop-tasks').FlowAgentView | null>> =>
     ipcRenderer.invoke(IPC.flowAgents.stop, input),
+  pauseFlowAgent: (input: {
+    projectId: string
+    nodeId: string
+  }): Promise<IpcEnvelope<import('../shared/agent-flow/desktop-tasks').FlowAgentView | null>> =>
+    ipcRenderer.invoke(IPC.flowAgents.pause, input),
+  onFlowAgentPublication: (
+    listener: (grant: import('../shared/agent-flow/coordination').AgentPublication) => void
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      grant: import('../shared/agent-flow/coordination').AgentPublication
+    ): void => listener(grant)
+    ipcRenderer.on(IPC.flowAgents.publication, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC.flowAgents.publication, handler)
+    }
+  },
   flowAgentCatalog: (input: {
     projectId: string
     nodeId: string
