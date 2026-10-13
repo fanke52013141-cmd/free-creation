@@ -46,6 +46,12 @@ export const AgentTaskSnapshotSchema = z
     semanticRevision: z.string().regex(/^sha256:[a-f0-9]{64}$/),
     config: AgentNodeConfigSchema,
     goal: z.string().min(1).max(32768),
+    scopeRevision: z
+      .string()
+      .regex(/^sha256:[a-f0-9]{64}$/)
+      .optional(),
+    parentTaskId: id.optional(),
+    humanFeedback: z.string().max(4096).optional(),
     directInputs: z.array(AgentFlowAssetRefSchema).max(128).default([]),
     targets: z
       .array(
@@ -113,7 +119,9 @@ export const AgentResumeSchema = z
     waitRevision: z.number().int().positive(),
     eventId: id,
     kind: z.enum(['human', 'reconcile']),
-    accepted: z.boolean().optional()
+    accepted: z.boolean().optional(),
+    feedback: z.string().max(4096).optional(),
+    selectedOutputs: z.array(AgentFlowAssetRefSchema).max(2).optional()
   })
   .strict()
 export type AgentResume = z.infer<typeof AgentResumeSchema>

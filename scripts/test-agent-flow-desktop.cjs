@@ -5,15 +5,16 @@ const { mkdtemp, mkdir, readFile, writeFile, cp, rm, readdir } = require('node:f
 const { tmpdir } = require('node:os')
 const { join, resolve, basename, dirname } = require('node:path')
 const real = process.argv.includes('--real-model')
+const collaboration = process.argv.includes('--collaboration')
 async function cleanDirectory(directory) {
   if (resolve(directory, '..') !== resolve(tmpdir()) || !basename(directory).startsWith('canvas-flow-agent-')) throw new Error('AGENT_CLEANUP_REJECTED')
   await rm(directory, { recursive: true, force: true })
 }
-if (process.argv.slice(2).some(arg => arg !== '--real-model')) throw new Error('AGENT_TEST_ARGUMENT_INVALID')
+if (process.argv.slice(2).some(arg => !['--real-model','--collaboration'].includes(arg))) throw new Error('AGENT_TEST_ARGUMENT_INVALID')
 if (real && (!process.env.CANVAS_AGENT_PROBE_KEY || !process.env.CANVAS_AGENT_PROBE_MODEL)) throw new Error('AGENT_REAL_CREDENTIAL_REQUIRED')
 ;(async () => {
   const directory = await mkdtemp(join(tmpdir(), 'canvas-flow-agent-'))
-  const evidence = resolve(`qa/canvas-agent-flow/C3/desktop-${real ? 'real' : 'fixture'}`)
+  const evidence = resolve(`qa/canvas-agent-flow/C3/desktop-${collaboration ? 'collaboration-' : ''}${real ? 'real' : 'fixture'}`)
   await mkdir(evidence, { recursive: true })
   let requests = 0
   const provider = createServer(async (request, response) => {
@@ -22,6 +23,11 @@ if (real && (!process.env.CANVAS_AGENT_PROBE_KEY || !process.env.CANVAS_AGENT_PR
       for await (const chunk of request) body += chunk
       if (++requests > 40 || body.length > 300000) throw new Error('FIXTURE_BUDGET')
       const json = JSON.parse(body)
+      if (!json.tools?.length) {
+        response.writeHead(200, { 'Content-Type': 'text/event-stream' })
+        response.end('data: '+JSON.stringify({ id:'discussion',object:'chat.completion.chunk',created:1,model:'fixture',choices:[{index:0,delta:{content:'private-c3-discussion-reply'},finish_reason:null}] })+'\n\ndata: '+JSON.stringify({id:'discussion',object:'chat.completion.chunk',created:1,model:'fixture',choices:[{index:0,delta:{},finish_reason:'stop'}]})+'\n\ndata: [DONE]\n\n')
+        return
+      }
       let name, args
       const names = json.tools.map(tool => tool.function.name)
       if (names.includes('probe_echo') || names.includes('probe_done')) {
@@ -35,7 +41,7 @@ if (real && (!process.env.CANVAS_AGENT_PROBE_KEY || !process.env.CANVAS_AGENT_PR
         if (!Object.keys(input.loaded).length) { name = 'load_skill'; args = { skillId: 'result-check' } }
         else if (input.receipts.length < 2) { name = 'execute_node'; args = { targetNodeId: input.targets[0].nodeId } }
         else if (input.mode === 'collaborative' && !input.humanAccepted) { name = 'wait_for_human'; args = {} }
-        else { name = 'finish_task'; args = { outputs: input.receipts.at(-1).outputRefs } }
+        else { name = 'finish_task'; args = { outputs: input.selectedOutputs?.length ? input.selectedOutputs : input.receipts.at(-1).outputRefs } }
       }
       const chunks = [{ id: 'fixture', object: 'chat.completion.chunk', created: 1, model: 'fixture',
         choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: `call-${requests}`, type: 'function',
@@ -59,7 +65,7 @@ if (real && (!process.env.CANVAS_AGENT_PROBE_KEY || !process.env.CANVAS_AGENT_PR
     for (const phase of ['execute', 'reopen']) {
       const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE
       const code = await new Promise((done, reject) => {
-        const child = spawn(require('electron'), [resolve('out/main/agent-flow-desktop.js'), `--agent-directory=${directory}`, `--agent-phase=${phase}`, ...(real ? ['--real-model'] : [])],
+        const child = spawn(require('electron'), [resolve('out/main/agent-flow-desktop.js'), `--agent-directory=${directory}`, `--agent-phase=${phase}`, ...(real ? ['--real-model'] : []), ...(collaboration ? ['--collaboration'] : [])],
           { env, stdio: 'ignore', windowsHide: true })
         const timer = setTimeout(() => { child.kill(); reject(new Error('AGENT_ELECTRON_TIMEOUT')) }, 240000)
         child.on('error', error => { clearTimeout(timer); reject(error) })
@@ -68,7 +74,11 @@ if (real && (!process.env.CANVAS_AGENT_PROBE_KEY || !process.env.CANVAS_AGENT_PR
       const report = JSON.parse(await readFile(join(directory, `${phase}-report.json`), 'utf8'))
       await writeFile(join(evidence, `${phase}-report.json`), JSON.stringify(report, null, 2))
       reports.push(report)
-      if (code !== 0 || report.status !== 'pass') throw new Error(`AGENT_${phase.toUpperCase()}_${report.report?.code || 'FAILED'}`)
+      if (code !== 0 || report.status !== 'pass') {
+        await scan(join(directory, 'diagnostics'))
+        await writeFile(join(evidence, 'failure-reasons.json'), JSON.stringify(events.filter(event => event.event.endsWith('.failed')).map(event => ({ event: event.event, phase: event.attributes?.phase, action: event.attributes?.action, code: event.attributes?.code || event.error?.code })), null, 2))
+        throw new Error(`AGENT_${phase.toUpperCase()}_${report.report?.code || 'FAILED'}`)
+      }
     }
     async function scan(path) {
       for (const file of await readdir(path, { withFileTypes: true })) {

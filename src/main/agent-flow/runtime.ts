@@ -31,9 +31,17 @@ export interface AgentModelContext {
   loaded: Record<string, string>
   receipts: FlowCommandReceipt[]
   humanAccepted: boolean
+  humanFeedback?: string
+  selectedOutputs?: AgentTaskRecord['outputRefs']
 }
 export interface AgentModelPort {
   decide(input: AgentModelContext, signal: AbortSignal): Promise<AgentDecision>
+  discuss?(
+    goal: string,
+    history: Array<{ text: string; reply?: string }>,
+    message: string,
+    signal: AbortSignal
+  ): Promise<string>
 }
 export interface AgentRuntime {
   start(): Promise<AgentTaskRecord>
@@ -46,6 +54,11 @@ const State = Annotation.Root({
   receipts: Annotation<FlowCommandReceipt[]>({ default: () => [], reducer: (_, next) => next }),
   loaded: Annotation<Record<string, string>>({ default: () => ({}), reducer: (_, next) => next }),
   humanAccepted: Annotation<boolean>({ default: () => false, reducer: (_, next) => next }),
+  humanFeedback: Annotation<string>({ default: () => '', reducer: (_, next) => next }),
+  selectedOutputs: Annotation<AgentTaskRecord['outputRefs']>({
+    default: () => [],
+    reducer: (_, next) => next
+  }),
   retryTool: Annotation<boolean>({ default: () => false, reducer: (_, next) => next })
 })
 const busy = new WeakMap<object, Set<string>>()
@@ -147,7 +160,9 @@ export function createAgentRuntime(options: {
               ),
               loaded: state.loaded,
               receipts: state.receipts,
-              humanAccepted: state.humanAccepted
+              humanAccepted: state.humanAccepted,
+              humanFeedback: state.humanFeedback || record.snapshot.humanFeedback,
+              selectedOutputs: state.selectedOutputs
             },
             signal
           )
@@ -236,9 +251,23 @@ export function createAgentRuntime(options: {
       store.setState(thread, 'running')
       return { receipts: [...state.receipts, receipt], retryTool: false }
     })
-    .addNode('human', () => {
-      if (!wait('human').accepted) throw new AgentRuntimeError('HUMAN_REJECTED', 'human')
-      return { humanAccepted: true }
+    .addNode('human', (state) => {
+      const response = wait('human')
+      if (!response.accepted) throw new AgentRuntimeError('HUMAN_REJECTED', 'human')
+      const available = state.receipts
+        .filter((item) => item.state === 'committed')
+        .flatMap((item) => item.outputRefs)
+      if (
+        response.selectedOutputs?.some(
+          (ref) => !available.some((item) => canonicalFlowJson(item) === canonicalFlowJson(ref))
+        )
+      )
+        throw new AgentRuntimeError('AGENT_OUTPUT_UNVERIFIED', 'human-selection')
+      return {
+        humanAccepted: true,
+        humanFeedback: response.feedback ?? '',
+        selectedOutputs: response.selectedOutputs ?? []
+      }
     })
     .addNode('finish', (state) => {
       valid()
@@ -253,6 +282,11 @@ export function createAgentRuntime(options: {
         )
       )
         throw new AgentRuntimeError('AGENT_OUTPUT_UNVERIFIED', 'finish')
+      if (
+        state.selectedOutputs.length &&
+        canonicalFlowJson(state.decision.outputs) !== canonicalFlowJson(state.selectedOutputs)
+      )
+        throw new AgentRuntimeError('AGENT_SELECTION_CONFLICT', 'finish')
       return {}
     })
     .addEdge(START, 'decide')

@@ -29,16 +29,29 @@ export function AgentTaskControls({ shape }: Pick<NodeBodyProps, 'shape'>): Reac
       }
       if (!disposed) timer = setTimeout(() => void inspect(), 750)
     }
+    const onTaskUpdate = (event: Event): void => {
+      const detail = (
+        event as CustomEvent<{ projectId: string; nodeId: string; task: FlowAgentView }>
+      ).detail
+      if (!disposed && detail?.projectId === projectId && detail.nodeId === shape.id)
+        setTask(detail.task)
+    }
+    window.addEventListener('canvas-agent-task-updated', onTaskUpdate)
     void inspect()
     return () => {
       disposed = true
       clearTimeout(timer)
+      window.removeEventListener('canvas-agent-task-updated', onTaskUpdate)
     }
   }, [projectId, shape.id])
   const engineBusy = useResourceQueue((state) =>
     state.tasks.some((entry) => entry.key === `${projectId}/${shape.id}`)
   )
-  const running = task?.state === 'running' || task?.state === 'ready' || pending || engineBusy
+  const running =
+    task?.state === 'running' ||
+    (task?.state === 'ready' && !task.prepared) ||
+    pending ||
+    engineBusy
   const specialist = (() => {
     try {
       return JSON.parse(shape.props.config).role === 'specialist'
@@ -94,7 +107,7 @@ export function AgentTaskControls({ shape }: Pick<NodeBodyProps, 'shape'>): Reac
         <p className="agent-flow-pending" role="status">
           {
             {
-              ready: '准备中',
+              ready: task.prepared ? '新修订待启动' : '准备中',
               running: '处理中',
               waiting: task.waitKind === 'human' ? '等待人工确认' : '等待执行核对',
               blocked: '任务已阻断，请核对或停止',
@@ -136,6 +149,11 @@ export function AgentTaskControls({ shape }: Pick<NodeBodyProps, 'shape'>): Reac
       {task?.state === 'waiting' && !running && (
         <NodePrimaryButton onClick={() => void stop()}>停止任务</NodePrimaryButton>
       )}
+      <NodePrimaryButton
+        onClick={() => useNodePanelStore.getState().open('contract', shape.id, 'collaboration')}
+      >
+        查看协作
+      </NodePrimaryButton>
     </>
   )
 }

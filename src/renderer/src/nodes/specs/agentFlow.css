@@ -58,3 +58,14 @@
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border);
 }
+.agent-collaboration,
+.agent-collaboration label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.agent-collaboration pre,
+.agent-collaboration p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

@@ -166,6 +166,77 @@ describe('C3 immutable content Skills', () => {
 })
 
 describe('C3 bounded LangGraph task loop', () => {
+  it('passes accepted human feedback and fixed selection to the next decision without replaying prior tools', async () => {
+    const f = fixture()
+    const seen: AgentModelContext[] = []
+    const r = runtime(f, snapshot('collaborative'), {
+      model: {
+        decide: async (context) => {
+          seen.push(context)
+          if (!context.receipts.length) return { kind: 'execute', targetNodeId: 'processor' }
+          if (!context.humanAccepted) return { kind: 'wait' }
+          return { kind: 'finish', outputs: context.selectedOutputs! }
+        }
+      }
+    })
+    expect((await r.start()).state).toBe('waiting')
+    expect(
+      (
+        await r.resume({
+          taskId: 'task',
+          semanticRevision: snapshot().semanticRevision,
+          waitRevision: 1,
+          eventId: 'chosen',
+          kind: 'human',
+          accepted: true,
+          feedback: 'private-feedback',
+          selectedOutputs: [output]
+        })
+      ).state
+    ).toBe('completed')
+    expect(seen.at(-1)).toMatchObject({
+      humanAccepted: true,
+      humanFeedback: 'private-feedback',
+      selectedOutputs: [output]
+    })
+    expect(f.db.prepare('SELECT COUNT(*) n FROM flow_agent_tool_calls').get()).toEqual({ n: 1 })
+  })
+  it('persists rejected human responses and blocks an output that differs from a valid human choice', async () => {
+    for (const accepted of [false, true]) {
+      const f = fixture()
+      const other = { ...output, versionId: 'v-other' }
+      const r = runtime(f, snapshot('collaborative'), {
+        model: {
+          decide: async (context) =>
+            !context.receipts.length
+              ? { kind: 'execute', targetNodeId: 'processor' }
+              : !context.humanAccepted
+                ? { kind: 'wait' }
+                : { kind: 'finish', outputs: [other] }
+        },
+        tools: {
+          execute: async (command) => ({ ...receipt(command), outputRefs: [output, other] })
+        }
+      })
+      await r.start()
+      expect(
+        await r.resume({
+          taskId: 'task',
+          semanticRevision: snapshot().semanticRevision,
+          waitRevision: 1,
+          eventId: 'response',
+          kind: 'human',
+          accepted,
+          feedback: 'private-rejection',
+          selectedOutputs: [output]
+        })
+      ).toMatchObject({
+        state: 'blocked',
+        code: accepted ? 'AGENT_SELECTION_CONFLICT' : 'HUMAN_REJECTED'
+      })
+      expect(f.db.prepare('SELECT COUNT(*) n FROM flow_agent_responses').get()).toEqual({ n: 1 })
+    }
+  })
   it('loads a Skill, invokes two stable commands, checks receipts and finishes only with fixed assets', async () => {
     const f = fixture()
     const execute = vi.fn(async (command: NodeExecuteCommand) => receipt(command))
@@ -437,6 +508,62 @@ describe('C3 tool adapter preserves the C2 ledger authority', () => {
 })
 
 describe('C3 single-step SDK adapter', () => {
+  it('uses a bounded tool-free discussion request and excludes message/reply bodies from diagnostics', async () => {
+    const events: DiagnosticsEventInput[] = [],
+      requests: Array<Record<string, unknown>> = []
+    setGatewayEventSink({
+      emit: (event) => {
+        if (event) events.push(event)
+      }
+    })
+    const model = createOpenAICompatible({
+      name: 'discussion',
+      baseURL: 'https://example.invalid/v1',
+      fetch: async (_, init) => {
+        requests.push(JSON.parse(String(init?.body)))
+        const chunks = [
+          {
+            id: 'd',
+            object: 'chat.completion.chunk',
+            created: 1,
+            model: 'd',
+            choices: [{ index: 0, delta: { content: 'private-reply' }, finish_reason: null }]
+          },
+          {
+            id: 'd',
+            object: 'chat.completion.chunk',
+            created: 1,
+            model: 'd',
+            choices: [{ index: 0, delta: {}, finish_reason: 'stop' }]
+          }
+        ]
+        return new Response(
+          chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join('') + 'data: [DONE]\n\n',
+          { headers: { 'content-type': 'text/event-stream' } }
+        )
+      }
+    }).chatModel('fixture')
+    const port = new AgentSdkModel(
+      model,
+      'p',
+      { resolveInputs: () => [] },
+      { traceId: 'trace', spanId: 'span', taskId: 'task' }
+    )
+    expect(
+      await port.discuss('private-goal', [], 'private-message', new AbortController().signal)
+    ).toBe('private-reply')
+    expect(requests).toHaveLength(1)
+    expect(requests[0].tools).toBeUndefined()
+    expect(events.map((event) => event.event)).toEqual([
+      'model.request.started',
+      'model.request.completed'
+    ])
+    expect(JSON.stringify(events)).not.toMatch(/private-(goal|message|reply)/)
+    await expect(
+      port.discuss('a'.repeat(140000), [], 'message', new AbortController().signal)
+    ).rejects.toThrow('COLLABORATION_LIMIT')
+    expect(requests).toHaveLength(1)
+  })
   function sdk(name = 'execute_node') {
     const requests: unknown[] = []
     const model = createOpenAICompatible({

@@ -33,7 +33,10 @@ export const agentExecutor: NodeExecutor = async (ctx) => {
     traceId: ctx.diagnostics?.traceId ?? newTraceId(),
     spanId: ctx.diagnostics?.spanId ?? newSpanId(),
     action: task?.state === 'waiting' ? ('continue' as const) : ('start' as const),
-    ...(task?.state === 'waiting' ? { eventId: ctx.runId ?? crypto.randomUUID() } : {})
+    ...(task ? { expectedTaskId: task.taskId } : {}),
+    ...(task?.state === 'waiting'
+      ? { eventId: ctx.runId ?? crypto.randomUUID(), expectedWaitRevision: task.waitRevision }
+      : {})
   }
   let stopRequested = false
   const timer = setInterval(() => {

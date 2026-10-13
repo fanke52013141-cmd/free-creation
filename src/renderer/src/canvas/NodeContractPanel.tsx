@@ -26,6 +26,7 @@ import {
 import { useMediaStore } from '../stores/media'
 import { NodeIoExamples } from './NodeIoExamples'
 import { FlowAssetPanel } from './FlowAssetPanel'
+import { AgentCollaborationPanel } from '../nodes/specs/AgentCollaborationPanel'
 
 interface NodeContractPanelProps {
   editor: Editor
@@ -136,7 +137,7 @@ function valuePreview(value: NodeValue | undefined): string | null {
   return `${value.mime || value.kind} · ${value.mediaId || '本地资产'}`
 }
 
-type InspectorTab = 'overview' | 'io' | 'settings' | 'run'
+type InspectorTab = 'overview' | 'io' | 'settings' | 'run' | 'collaboration'
 
 function safeConfigPreview(text: string): string {
   if (!text.trim()) return '此节点没有固定配置；全部值来自连线或媒体资产。'
@@ -385,7 +386,7 @@ export function NodeContractPanel({
 }: NodeContractPanelProps): React.JSX.Element | null {
   const shapeId = useNodePanelStore((s) => s.shapeId)
   const initialTab = useNodePanelStore((s) => s.initialTab)
-  const [tab, setTab] = useState<InspectorTab>(initialTab === 'settings' ? 'settings' : 'overview')
+  const [tab, setTab] = useState<InspectorTab>(initialTab)
   const [runningAction, setRunningAction] = useState<'node' | 'subgraph' | null>(null)
   const panelRef = useRef<HTMLElement>(null)
   // 打开/切换节点（或配置类入口改变 initialTab）时，渲染期同步重置 tab，
@@ -421,7 +422,8 @@ export function NodeContractPanel({
       if (event.target instanceof Element && event.target.closest('.app-select-content')) return
       // A control label opens its owner's settings on click. Closing this panel
       // on pointerdown resizes the canvas and can move that label before pointerup.
-      if (event.target instanceof Element && event.target.closest('.agent-flow-control-label')) return
+      if (event.target instanceof Element && event.target.closest('.agent-flow-control-label'))
+        return
       onClose()
     }
     window.addEventListener('pointerdown', onPointerDown, true)
@@ -603,7 +605,8 @@ export function NodeContractPanel({
               ['overview', '概览'],
               ['io', '输入输出'],
               ['settings', '设置'],
-              ['run', '运行']
+              ['run', '运行'],
+              ...(shape.props.nodeType === 'agent' ? [['collaboration', '协作'] as const] : [])
             ] as const
           ).map(([id, label]) => (
             <button
@@ -620,6 +623,16 @@ export function NodeContractPanel({
           ))}
         </nav>
         <div className="contract-scroll">
+          {tab === 'collaboration' && shape.props.nodeType === 'agent' && (
+            <div role="tabpanel" id="contract-tabpanel-collaboration">
+              <AgentCollaborationPanel
+                key={`${projectId}/${shape.id}`}
+                shape={shape}
+                editor={editor}
+                projectId={projectId}
+              />
+            </div>
+          )}
           {tab === 'overview' && (
             <div role="tabpanel" id="contract-tabpanel-overview" className="contract-overview">
               <p className="contract-description">{spec.description}</p>
@@ -688,7 +701,12 @@ export function NodeContractPanel({
                 previews={outputPreviews}
               />
               <NodeIoExamples nodeType={shape.props.nodeType} />
-              <FlowAssetPanel key={JSON.stringify([projectId, shape.id, shape.props.nodeType])} editor={editor} shape={shape} projectId={projectId} />
+              <FlowAssetPanel
+                key={JSON.stringify([projectId, shape.id, shape.props.nodeType])}
+                editor={editor}
+                shape={shape}
+                projectId={projectId}
+              />
             </div>
           )}
           {tab === 'settings' && (

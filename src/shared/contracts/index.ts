@@ -49,13 +49,26 @@ import type {
 } from '@free-creation/model-contracts'
 
 export const IPC = {
-  flowAgents: { run: 'flow-agents:run', inspect: 'flow-agents:inspect', stop: 'flow-agents:stop', catalog: 'flow-agents:catalog' },
+  flowAgents: {
+    run: 'flow-agents:run',
+    inspect: 'flow-agents:inspect',
+    stop: 'flow-agents:stop',
+    catalog: 'flow-agents:catalog',
+    collaboration: 'flow-agents:collaboration',
+    cooperate: 'flow-agents:cooperate'
+  },
   flowCommands: {
-    attach: 'flow-commands:attach', detach: 'flow-commands:detach',
+    attach: 'flow-commands:attach',
+    detach: 'flow-commands:detach',
     availability: 'flow-commands:availability',
-    dispatch: 'flow-commands:dispatch', grant: 'flow-commands:grant',
-    prepare: 'flow-commands:prepare', check: 'flow-commands:check',
-    commit: 'flow-commands:commit', lookup: 'flow-commands:lookup', unknown: 'flow-commands:unknown', abort: 'flow-commands:abort'
+    dispatch: 'flow-commands:dispatch',
+    grant: 'flow-commands:grant',
+    prepare: 'flow-commands:prepare',
+    check: 'flow-commands:check',
+    commit: 'flow-commands:commit',
+    lookup: 'flow-commands:lookup',
+    unknown: 'flow-commands:unknown',
+    abort: 'flow-commands:abort'
   },
   flowAssets: {
     submit: 'flow-assets:submit',

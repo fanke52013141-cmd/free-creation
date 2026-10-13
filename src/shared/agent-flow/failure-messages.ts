@@ -1,4 +1,11 @@
 const messages: Record<string, string> = {
+  COLLABORATION_REVISION_CONFLICT: '协作记录已更新，请重新打开本节点后提交。',
+  COLLABORATION_INTENT_CONFLICT: '这次提交与原记录不一致，请核对协作记录。',
+  COLLABORATION_SCOPE_CONFLICT: '新要求未保存或工具范围、连线已改变，请核对后重新启动任务。',
+  COLLABORATION_LIMIT: '本次协作记录已达到上限，请停止后整理目标并启动新任务。',
+  RESUME_CONFLICT: '任务或等待版本已改变，请重新打开本节点核对。',
+  HUMAN_REJECTED: '人工已拒绝，任务保留意见和回执。请核对后修订新任务。',
+  AGENT_SELECTION_CONFLICT: '交付结果与人工选择不一致，任务已阻断，请核对版本。',
   AGENT_ROLE_NOT_READY: '当前仅专业 Agent 可运行，请在设置中切换职责。',
   AGENT_MODEL_REQUIRED: '请在节点设置中选择决策模型。',
   AGENT_MODEL_UNAVAILABLE: '所选文本模型不可用，请检查模型设置。',

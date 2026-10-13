@@ -13,6 +13,8 @@ AI 对话生图补充：消息可保存图片附件（媒体 ID、项目相对�
 
 ## 1. 设计原则
 
+2026-10-13 C3.2：agent@1 增加节点协作分页和显式目标修订，不增加数据端口或自动业务输出。讨论存任务关联事件，不投影成资产；人工继续绑定 task/wait revision 与固定选择，完成必须匹配真实回执及人工选择。新目标采用准备新的不可变任务实例，旧 snapshot/nodeResult/资产不改写；范围变更拒绝。详见 docs/canvas-agent-flow/15-c32-collaboration.md，验收以开发台账为准。
+
 2026-10-13 C3.1b：agent@1 的专业角色接入公共 executor → main 可信任务宿主 → C2 命令桥。out-text/out-json 输出已确认任务资产，公共执行器落固定资产节点；main 发布版本核对 completed 任务及真实固定引用。文本/JSON 直接输入按保存画布的真实端口固定版本，媒体输入拒绝自动运行。人工等待保留 main 任务及 checkpoint，公共原子运行不伪造成功。state-machine/ai-review 及 builder/coordinator 自主执行仍待接入。详见 docs/canvas-agent-flow/14-c3-canvas-agent.md；下段 C1 说明为历史基线。
 
 2026-10-12 C1：新增配置阶段的 `agent`、`state-machine`、`ai-review`（contractVersion=1）。配置与正文分别保存到 props.config/props.text；配置可保存恢复。执行器当前明确 skipped，投影为空，禁止从任务目标、阶段配置或旧 meta 捏造运行结果。`review.decision@1` 校验固定资产版本、规则版本、审核修订、结论与反馈；`flow.state@1` 校验 task/stateNode/revision/state。定义见 src/shared/agent-flow/node-contracts.ts。后续 C2/C3 接入真实执行与输出投影，并完成对等验收后才能开放运行。控制关系保存在 config，不能当作普通数据边形成反向 DAG。

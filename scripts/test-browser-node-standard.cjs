@@ -38,7 +38,7 @@ function contrast(first, second) {
         return { label: button.textContent.trim(), width: rect.width, height: rect.height, bottom: bounds.bottom - rect.bottom, disabled: button.disabled }
       })
       const icon = card.querySelector('.node-standard-identity-icon')
-      return { type: card.dataset.nodeType, height: bounds.height, buttons, descriptions: card.querySelectorAll('.node-standard-description').length, icon: icon && { box: icon.getBoundingClientRect().width, svg: icon.querySelector('svg').getBoundingClientRect().width }, scroll: card.querySelector('.node-standard-scroll').scrollHeight, probe: ['.node-body-content','.node-body-content > *','.node-standard-identity'].map(selector => { const el=card.querySelector(selector); if(!el) return null; const s=getComputedStyle(el); return { selector, offset:el.offsetHeight, scroll:el.scrollHeight, height:s.height, min:s.minHeight, margin:s.margin, padding:s.padding, flex:s.flex } }) }
+      return { type: card.dataset.nodeType, width: bounds.width, height: bounds.height, buttons, descriptions: card.querySelectorAll('.node-standard-description').length, icon: icon && { box: icon.getBoundingClientRect().width, svg: icon.querySelector('svg').getBoundingClientRect().width }, scroll: card.querySelector('.node-standard-scroll').scrollHeight, probe: ['.node-body-content','.node-body-content > *','.node-standard-identity'].map(selector => { const el=card.querySelector(selector); if(!el) return null; const s=getComputedStyle(el); return { selector, offset:el.offsetHeight, scroll:el.scrollHeight, height:s.height, min:s.minHeight, margin:s.margin, padding:s.padding, flex:s.flex } }) }
     }))
     fs.writeFileSync(`${output}/geometry.json`, JSON.stringify(geometry,null,2))
     await page.screenshot({ path: `${output}/all-nodes-dark.png`, timeout: 60000 })
@@ -57,9 +57,9 @@ function contrast(first, second) {
     assert.deepEqual(clipped,[],'身份名称和说明不能被私有容器裁掉')
     for (const node of geometry) {
       assert.ok(node.height >= 260 && (node.type === 'storyboard' || node.height <= 440), `${node.type} height ${node.height}`)
-      assert.ok(node.buttons.length <= 1, `${node.type} explicit primary actions`)
+      assert.ok(node.buttons.length <= (node.type === 'agent' ? 2 : 1), `${node.type} explicit primary actions`)
       for (const button of node.buttons) {
-      assert.equal(button.width, 200, `${node.type} width`)
+      assert.equal(button.width, node.buttons.length === 1 ? 200 : (node.width - 24 - 8) / 2, `${node.type} width`)
       assert.equal(button.height, 32, `${node.type} height`)
       assert.ok(Math.abs(button.bottom - 8) < 1.1, `${node.type} inset ${button.bottom}`)
       }
@@ -197,9 +197,9 @@ function contrast(first, second) {
         const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
         return { camera: editor.getCamera(), viewport: editor.getViewportPageBounds(), screen: editor.getViewportScreenBounds(), code: editor.getShape('shape:standard-code') && { x: editor.getShape('shape:standard-code').x, y: editor.getShape('shape:standard-code').y } }
       })
-      const buttons=await page.locator('.node-standard-action-bar > button').evaluateAll(buttons=>buttons.map(button=>{const b=button.getBoundingClientRect(),c=button.closest('.node-card').getBoundingClientRect();return {type:button.closest('.node-card').dataset.nodeType,x:c.x,y:c.y,width:b.width,height:b.height,inset:c.bottom-b.bottom}}))
+      const buttons=await page.locator('.node-standard-action-bar > button').evaluateAll(buttons=>buttons.map(button=>{const b=button.getBoundingClientRect(),c=button.closest('.node-card').getBoundingClientRect(),bar=button.parentElement,barBounds=bar.getBoundingClientRect(),style=getComputedStyle(bar);return {type:button.closest('.node-card').dataset.nodeType,x:c.x,y:c.y,width:b.width,height:b.height,inset:c.bottom-b.bottom,count:bar.children.length,barWidth:barBounds.width,paddingLeft:parseFloat(style.paddingLeft),paddingRight:parseFloat(style.paddingRight),gap:parseFloat(style.gap)}}))
       assert.ok(buttons.length > 0 && buttons.length < expectedCount)
-      for (const b of buttons) {assert.ok(Math.abs(b.width-200*zoom)<1,`${theme}/${zoom}: ${JSON.stringify({button:b,...cameraProbe})}`);assert.ok(Math.abs(b.height-32*zoom)<1);assert.ok(Math.abs(b.inset-8*zoom)<1,`${theme}/${zoom}: ${JSON.stringify(b)}`)}
+      for (const b of buttons) {const available=(b.barWidth-(b.paddingLeft+b.paddingRight+b.gap*(b.count-1))*zoom)/b.count,expectedWidth=Math.min(200*zoom,available);assert.ok(Math.abs(b.width-expectedWidth)<1,`${theme}/${zoom}: ${JSON.stringify({button:b,...cameraProbe})}`);assert.ok(Math.abs(b.height-32*zoom)<1);assert.ok(Math.abs(b.inset-8*zoom)<1,`${theme}/${zoom}: ${JSON.stringify(b)}`)}
       const descriptions=await page.locator('.node-standard-description').evaluateAll(els=>els.map(el=>({height:getComputedStyle(el).height,color:getComputedStyle(el).color,background:getComputedStyle(el.closest('.node-card')).backgroundColor})))
       for (const d of descriptions) {assert.equal(d.height,'36px');assert.ok(contrast(d.color,d.background)>=4.5,`${theme} description contrast ${contrast(d.color,d.background)}`)}
     }

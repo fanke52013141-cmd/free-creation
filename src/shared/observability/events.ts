@@ -45,7 +45,7 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
         `agent.desktop.${stage}`,
         stage === 'failed' ? 'error' : 'info',
         'main/ipc/flow-agents.ipc',
-        { phase: 'short', code: 'short' }
+        { phase: 'short', code: 'short', action: 'short' }
       )
     ),
     ...['started', 'completed', 'failed'].map((stage) =>

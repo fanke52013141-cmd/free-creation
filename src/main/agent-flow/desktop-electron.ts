@@ -25,6 +25,7 @@ const arg = (name: string): string | undefined =>
 const directory = arg('agent-directory'),
   phase = arg('agent-phase')
 const real = process.argv.includes('--real-model')
+const collaboration = process.argv.includes('--collaboration')
 if (
   !directory ||
   resolve(directory, '..') !== resolve(tmpdir()) ||
@@ -90,6 +91,7 @@ if (
           preload: resolve(__dirname, '../preload/index.js'),
           contextIsolation: true,
           sandbox: false,
+          backgroundThrottling: false,
           nodeIntegration: false
         }
       })
@@ -147,6 +149,65 @@ if (
           if(history!==2)throw new Error('AGENT_TWO_STEP_FAILED_COUNT_'+history);
           return {projectId,taskId:task.taskId,history,checks:['Skill/tool settings selection','direct declared Agent input','canvas start','Skill progressive load','two public processor receipts','persistent human wait']};
         })()`)
+        if (collaboration) {
+          const progress = setInterval(() => {
+            void active.webContents
+              .executeJavaScript(
+                `(async()=>{const editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;const shape=editor.getShape('shape:c3-agent');const task=await window.api.inspectFlowAgent({projectId:${JSON.stringify(projectId)},nodeId:'shape:c3-agent'});const label=document.querySelector('[data-node-id="shape:c3-agent"] .node-standard-primary')?.textContent;return {stage:window.__c32stage||'opening',exec:shape.props.exec,state:task.ok?task.data?.state:'error',prepared:task.ok?task.data?.prepared:false,button:label?.includes('停止')?'stop':label?.includes('继续')?'continue':'start'};})()`
+              )
+              .then((value) => {
+                if (value && typeof value === 'object')
+                  writeFileSync(
+                    join(directory, 'collaboration-progress.json'),
+                    JSON.stringify(value)
+                  )
+              })
+              .catch(() => {})
+          }, 1000)
+          try {
+            report = await active.webContents.executeJavaScript(`(async()=>{${common}
+            window.__c32stage='opening';
+            const panel=(await import('/src/stores/nodePanel.ts')).useNodePanelStore;
+            panel.getState().open('contract','shape:c3-agent','collaboration');
+            const delay=()=>new Promise(r=>setTimeout(r,150));
+            const until=async(test,code)=>{for(let i=0;!test();i++){if(i>30)throw new Error(code);await delay();}};
+            await until(()=>document.querySelector('.agent-collaboration textarea'),'COLLABORATION_INITIAL_PANEL_TIMEOUT');
+            const fill=async(label,text)=>{const element=document.querySelector('[aria-label="'+label+'"]');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(element,text);element.dispatchEvent(new Event('input',{bubbles:true}));await delay();};
+            const button=async(label)=>{const element=[...document.querySelectorAll('.agent-collaboration button')].find(el=>el.textContent.trim()===label);if(!element||element.disabled)throw new Error('COLLABORATION_BUTTON_UNAVAILABLE');element.click();await delay();};
+            const get=()=>window.api.flowAgentCollaboration({projectId,nodeId:'shape:c3-agent'}).then(value);
+            window.__c32stage='note';await fill('讨论或反馈','private-c3-discussion');await button('保存讨论');
+            for(let i=0;(await get()).revision<1;i++){if(i>100)throw new Error('COLLABORATION_NOTE_TIMEOUT');await delay();}
+            let before=await get();if(before.revision!==1)throw new Error('COLLABORATION_NOTE_MISSING');
+            window.__c32stage='discussion';await fill('讨论或反馈','private-c3-discuss-with-ai');await button('与 Agent 讨论');
+            for(let i=0;(await get()).revision<2;i++){if(i>300)throw new Error('COLLABORATION_REPLY_TIMEOUT');await delay();}
+            if((editor.getShape('shape:c3-processor').meta.nodeRunHistory?.length||0)!==2)throw new Error('COLLABORATION_IMPLICIT_EXECUTION');
+            window.__c32stage='feedback';await fill('讨论或反馈','private-c3-human-feedback');await button('提交意见与选择');
+            for(let i=0;(await get()).revision<3;i++){if(i>100)throw new Error('COLLABORATION_SUBMIT_TIMEOUT');await delay();}
+            const original=await get();
+            window.__c32stage='revision';await fill('新目标',editor.getShape('shape:c3-agent').props.text+' 新修订：保持同样两步处理与人工等待。');
+            await button('采用为新要求');
+            let revised;for(let i=0;(revised=await get()).task.taskId===original.task.taskId;i++){if(i>100)throw new Error('COLLABORATION_REVISION_TIMEOUT');await delay();}
+            if(!revised.task.prepared||revised.task.state!=='ready')throw new Error('COLLABORATION_NOT_PREPARED');
+            if((editor.getShape('shape:c3-processor').meta.nodeRunHistory?.length||0)!==2)throw new Error('COLLABORATION_REVISION_EXECUTED');
+            const stale=await window.api.cooperateFlowAgent({projectId,nodeId:'shape:c3-agent',taskId:original.task.taskId,waitRevision:original.task.waitRevision,revision:original.revision,eventId:'late-response',action:'submit',text:'private-c3-stale',accepted:true});
+            if(stale.ok)throw new Error('COLLABORATION_STALE_ACCEPTED');
+              window.__c32stage='launch';panel.getState().close();await until(()=>document.querySelector('[data-node-id="shape:c3-agent"] .node-standard-primary')?.textContent.includes('启动任务'),'COLLABORATION_START_BUTTON_TIMEOUT');click();await wait('waiting');
+            while(editor.getShape('shape:c3-agent').props.exec==='running')await delay();
+            await ensureCanvasSaved();
+            const history=editor.getShape('shape:c3-processor').meta.nodeRunHistory?.length||0;if(history!==4)throw new Error('COLLABORATION_REVISION_TOOLS');
+            window.__c32stage='selection';panel.getState().open('contract','shape:c3-agent','collaboration');await until(()=>document.querySelector('.agent-collaboration textarea'),'COLLABORATION_REVISED_PANEL_TIMEOUT');
+            const select=document.querySelector('[aria-label="选择交付版本"]');select.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}));await until(()=>document.querySelector('[role="option"]'),'COLLABORATION_SELECT_TIMEOUT');
+            const candidate=[...document.querySelectorAll('[role="option"]')].find(el=>el.textContent.includes('候选 1'));if(!candidate)throw new Error('COLLABORATION_CANDIDATE_MISSING');candidate.click();await delay();
+            await fill('讨论或反馈','private-c3-revised-choice');await button('提交意见与选择');
+            for(let i=0;(await get()).revision<1;i++){if(i>100)throw new Error('COLLABORATION_FINAL_FEEDBACK');await delay();}
+            const selected=(await get()).messages.at(-1);if(selected?.kind!=='submit')throw new Error('COLLABORATION_SELECTION_NOT_SAVED');
+            panel.getState().close();await ensureCanvasSaved();
+            return {projectId,taskId:(await inspect()).taskId,history,checks:['node-local saved discussion','explicit AI discussion without tool execution','persistent human feedback','new immutable task revision prepared without execution','stale response rejected','explicit revised task launch','two more public tools']};
+          })()`)
+          } finally {
+            clearInterval(progress)
+          }
+        }
         writeFileSync(statePath, JSON.stringify(report))
         foreign = new BrowserWindow({
           show: false,
@@ -164,6 +225,18 @@ if (
         if (foreignResult.ok || foreignResult.error?.code !== 'FLOW_SENDER_REJECTED')
           throw new Error('AGENT_FOREIGN_WINDOW_ACCEPTED')
         report = { ...(report as object), foreignWindowRejected: true }
+        if (collaboration) {
+          const rows = getDb()
+            .prepare('SELECT body_json FROM flow_agent_collaboration ORDER BY rowid')
+            .all() as Array<{ body_json: string }>
+          const selected = rows
+            .map((row) => JSON.parse(row.body_json))
+            .filter((event) => event.action === 'submit')
+            .at(-1)
+          if (selected?.selectedOutputs?.length !== 1)
+            throw new Error('COLLABORATION_SELECTION_NOT_FIXED')
+          report = { ...(report as object), selectedVersionCount: 1 }
+        }
       } else {
         report = await active.webContents.executeJavaScript(`(async()=>{${common}
           const task=await wait('waiting'); await new Promise(r=>setTimeout(r,800)); click();
@@ -172,7 +245,7 @@ if (
           await ensureCanvasSaved();
           const history=editor.getShape('shape:c3-processor').meta.nodeRunHistory?.length||0;
           const agent=editor.getShape('shape:c3-agent');
-          if(history!==2||agent.props.exec!=='success')throw new Error('AGENT_RESUME_REPLAYED');
+          if(history!==${collaboration ? 4 : 2}||agent.props.exec!=='success')throw new Error('AGENT_RESUME_REPLAYED');
           const outputs=(await import('/src/nodes/nodeValues.ts')).projectNodeOutputs(agent);
           if(outputs['out-text']?.text!=='private-c3-material')throw new Error('AGENT_FORMAL_OUTPUT_FAILED');
           const assets=editor.getCurrentPageShapes().filter(s=>s.meta.agentTaskId===done.taskId);
@@ -182,6 +255,23 @@ if (
           if(version.value.text!=='private-c3-material')throw new Error('AGENT_PUBLISH_FAILED');
           return {taskId:done.taskId,checks:['new process human continue','observed tools not replayed','declared Agent output','fixed connected asset','verified Agent publication']};
         })()`)
+        if (collaboration) {
+          const chosen = getDb()
+            .prepare(
+              "SELECT body_json FROM flow_agent_collaboration WHERE json_extract(body_json,'$.action')='submit' ORDER BY rowid DESC LIMIT 1"
+            )
+            .get() as { body_json: string }
+          const actual = getDb()
+            .prepare(
+              "SELECT output_refs_json FROM flow_agent_tasks WHERE state='completed' ORDER BY rowid DESC LIMIT 1"
+            )
+            .get() as { output_refs_json: string }
+          if (
+            JSON.stringify(JSON.parse(chosen.body_json).selectedOutputs) !== actual.output_refs_json
+          )
+            throw new Error('COLLABORATION_SELECTION_NOT_HONORED')
+          report = { ...(report as object), selectionHonored: true }
+        }
         if (!real) {
           stage = 'stop'
           const stop = await active.webContents.executeJavaScript(`(async()=>{${common}
@@ -189,7 +279,7 @@ if (
             await ensureCanvasSaved(); await new Promise(r=>setTimeout(r,800)); click();
             await wait('running'); await new Promise(r=>setTimeout(r,800)); click();
             await wait('cancelled'); await new Promise(r=>setTimeout(r,1000)); await ensureCanvasSaved();
-            if((editor.getShape('shape:c3-processor').meta.nodeRunHistory?.length||0)!==2)throw new Error('AGENT_CANCEL_LATE_EFFECT');
+            if((editor.getShape('shape:c3-processor').meta.nodeRunHistory?.length||0)!==${collaboration ? 4 : 2})throw new Error('AGENT_CANCEL_LATE_EFFECT');
             return 'canvas stop cancels in-flight decision without late tool';
           })()`)
           report = { ...(report as object), stop }

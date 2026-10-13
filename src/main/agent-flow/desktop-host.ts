@@ -12,7 +12,9 @@ import {
   type FlowAgentRun,
   type FlowAgentReply,
   type FlowAgentView,
-  type FlowAgentCatalog
+  type FlowAgentCatalog,
+  FlowAgentCollaborationSchema,
+  type FlowAgentCollaborationView
 } from '../../shared/agent-flow/desktop-tasks'
 import { FlowSkillStore, BUILTIN_FLOW_SKILLS } from './skill-store'
 import { FlowTaskStore, agentThread, type AgentTaskRecord } from './task-store'
@@ -21,7 +23,9 @@ import { createAgentRuntime, type AgentRuntime, type AgentModelPort } from './ru
 import { createAgentTelemetry } from './runtime-diagnostics'
 import { createLedgerToolPort } from './ledger-tool'
 import type { FlowCommandDesktop } from '../ipc/flow-commands.ipc'
-import { projectSemanticRevision } from './command-intent'
+import { projectSemanticRevision, collaborationScopeRevision } from './command-intent'
+import { FlowCollaborationStore } from './collaboration-store'
+import type { FlowCommandReceipt } from '../../shared/agent-flow/commands'
 import { readPinnedOutputs } from '../../shared/engine/deterministic-projections'
 import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
 import type { z } from 'zod'
@@ -35,7 +39,8 @@ const view = (record: AgentTaskRecord): FlowAgentView => ({
   waitRevision: record.waitRevision,
   decisions: record.decisions,
   tools: record.tools,
-  code: record.code
+  code: record.code,
+  prepared: record.state === 'ready' && !!record.snapshot.parentTaskId
 })
 
 /** Trusted desktop admission derives all execution scope from the saved canvas. */
@@ -96,7 +101,7 @@ export class FlowAgentDesktopHost {
     const record = this.latest(input)
     if (!record) return null
     if (
-      ['ready', 'running'].includes(record.state) &&
+      (record.state === 'running' || (record.state === 'ready' && !record.snapshot.parentTaskId)) &&
       !this.active.has(this.key(input)) &&
       !this.admission.has(this.key(input))
     ) {
@@ -217,6 +222,7 @@ export class FlowAgentDesktopHost {
       semanticRevision: projectSemanticRevision(file),
       config,
       goal: shape.props.text,
+      scopeRevision: collaborationScopeRevision(file, raw.nodeId),
       directInputs,
       maxDecisions: config.maxSteps,
       targets,
@@ -243,6 +249,218 @@ export class FlowAgentDesktopHost {
     }
   }
 
+  collaboration(input: Identity): FlowAgentCollaborationView | null {
+    this.saved(input)
+    const record = this.latest(input)
+    if (!record) return null
+    const events = new FlowCollaborationStore(this.db).read(agentThread(record.snapshot))
+    return {
+      task: view(record),
+      goal: record.snapshot.goal,
+      revision: events.length,
+      messages: [
+        ...(record.snapshot.parentTaskId
+          ? (() => {
+              const parent = this.db
+                .prepare(
+                  'SELECT thread FROM flow_agent_tasks WHERE project_id=? AND task_id=? AND agent_node_id=?'
+                )
+                .get(input.projectId, record.snapshot.parentTaskId, input.nodeId) as
+                { thread: string } | undefined
+              return parent ? new FlowCollaborationStore(this.db).read(parent.thread) : []
+            })()
+          : []),
+        ...events
+      ].map(({ eventId, action, text, reply }) => ({
+        eventId,
+        kind: action,
+        text,
+        reply
+      })),
+      inputs: [
+        ...record.snapshot.directInputs,
+        ...record.snapshot.targets.flatMap((target) => target.inputs.flatMap((port) => port.assets))
+      ],
+      candidates: this.receipts(record)
+        .filter((item) => item.state === 'committed')
+        .flatMap((item) => item.outputRefs)
+    }
+  }
+  private receipts(record: AgentTaskRecord): FlowCommandReceipt[] {
+    return (
+      this.db
+        .prepare(
+          'SELECT receipt_json FROM flow_commands WHERE project_id=? AND task_id=? ORDER BY created_at,command_id'
+        )
+        .all(record.snapshot.projectId, record.snapshot.taskId) as Array<{ receipt_json: string }>
+    ).map((row) => JSON.parse(row.receipt_json))
+  }
+  async cooperate(raw: unknown): Promise<FlowAgentCollaborationView> {
+    const input = FlowAgentCollaborationSchema.parse(raw)
+    this.saved(input)
+    // A saved note is inert and can coexist with an active task. It never changes
+    // the model's fixed goal/inputs or supplies consent to an interrupt.
+    if (input.action === 'note') {
+      const record = this.latest(input)
+      if (
+        !record ||
+        record.snapshot.taskId !== input.taskId ||
+        record.waitRevision !== input.waitRevision
+      )
+        throw new AgentRuntimeError('RESUME_CONFLICT', 'discussion')
+      if (record.snapshot.config.interactionMode !== 'collaborative')
+        throw new AgentRuntimeError('HUMAN_WAIT_DENIED', 'discussion')
+      if (!input.text.trim()) throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'discussion')
+      new FlowCollaborationStore(this.db).append(agentThread(record.snapshot), input)
+      return this.collaboration(input)!
+    }
+    const key = this.key(input)
+    if (this.admission.has(key) || this.active.has(key))
+      throw new AgentRuntimeError('AGENT_TASK_BUSY', 'collaboration')
+    this.admission.add(key)
+    try {
+      const rows = this.db
+        .prepare(
+          'SELECT thread FROM flow_agent_tasks WHERE project_id=? AND agent_node_id=? AND task_id=?'
+        )
+        .get(input.projectId, input.nodeId, input.taskId) as { thread: string } | undefined
+      if (!rows) throw new AgentRuntimeError('AGENT_TASK_MISSING', 'collaboration')
+      const store = new FlowCollaborationStore(this.db)
+      if (store.check(rows.thread, input)) return this.collaboration(input)!
+      const record = this.latest(input)!
+      if (record.snapshot.taskId !== input.taskId || record.waitRevision !== input.waitRevision)
+        throw new AgentRuntimeError('RESUME_CONFLICT', 'collaboration')
+      if (record.snapshot.config.interactionMode !== 'collaborative')
+        throw new AgentRuntimeError('HUMAN_WAIT_DENIED', 'collaboration')
+      if (
+        !(record.state === 'waiting' && record.waitKind === 'human') &&
+        !(
+          input.action === 'revise' &&
+          record.state === 'blocked' &&
+          record.code === 'HUMAN_REJECTED'
+        )
+      )
+        throw new AgentRuntimeError('AGENT_NOT_WAITING', 'collaboration')
+      const { file, shape } = this.saved(input)
+      if (
+        input.action !== 'revise' &&
+        projectSemanticRevision(file) !== record.snapshot.semanticRevision
+      )
+        throw new AgentRuntimeError('FLOW_REVISION_CONFLICT', 'collaboration')
+      if (input.action === 'revise') {
+        if (
+          !input.text.trim() ||
+          shape.props.text !== input.text ||
+          !record.snapshot.scopeRevision ||
+          collaborationScopeRevision(file, input.nodeId) !== record.snapshot.scopeRevision
+        )
+          throw new AgentRuntimeError('COLLABORATION_SCOPE_CONFLICT', 'revision')
+        if (this.receipts(record).some((receipt) => ['pending', 'unknown'].includes(receipt.state)))
+          throw new AgentRuntimeError('AGENT_NOT_WAITING', 'revision')
+        const child = this.bind({
+          ...input,
+          action: 'start',
+          requestId: input.eventId,
+          traceId: randomUUID(),
+          spanId: randomUUID()
+        })
+        child.parentTaskId = record.snapshot.taskId
+        const submitted = store
+          .read(rows.thread)
+          .filter((event) => event.action === 'submit')
+          .at(-1)
+        child.humanFeedback = submitted?.text
+        const choices = input.selectedInputs ?? []
+        const originals = [
+          ...child.directInputs,
+          ...child.targets.flatMap((target) => target.inputs.flatMap((port) => port.assets))
+        ]
+        for (const choice of choices) {
+          this.assets.resolveInputs(input.projectId, [choice])
+          if (
+            !originals.some(
+              (ref) =>
+                ref.sourceNodeId === choice.sourceNodeId && ref.sourcePortId === choice.sourcePortId
+            )
+          )
+            throw new AgentRuntimeError('AGENT_INPUT_NOT_FIXED', 'revision')
+        }
+        if (
+          new Set(choices.map((ref) => JSON.stringify([ref.sourceNodeId, ref.sourcePortId])))
+            .size !== choices.length
+        )
+          throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'revision')
+        const select = (
+          ref: AgentTaskRecord['outputRefs'][number]
+        ): AgentTaskRecord['outputRefs'][number] =>
+          choices.find(
+            (choice) =>
+              choice.sourceNodeId === ref.sourceNodeId && choice.sourcePortId === ref.sourcePortId
+          ) ?? ref
+        child.directInputs = child.directInputs.map(select)
+        child.targets = child.targets.map((target) => ({
+          ...target,
+          inputs: target.inputs.map((port) => ({ ...port, assets: port.assets.map(select) }))
+        }))
+        const directEdges = file.edges.filter((edge) => edge.to.nodeId === input.nodeId)
+        child.directInputs.forEach((ref, index) => {
+          const value = this.assets.resolveInputs(input.projectId, [ref])[0].value
+          if ((directEdges[index].to.portId === 'in-json' && value.kind !== 'json') || (directEdges[index].to.portId === 'in-text' && !['text', 'markdown'].includes(value.kind)))
+            throw new AgentRuntimeError('AGENT_INPUT_TYPE_INVALID', 'revision')
+        })
+        this.db.transaction(() => {
+          this.store.setState(rows.thread, 'cancelled', 'AGENT_SUPERSEDED')
+          this.store.create(child, record.skills)
+          store.append(rows.thread, input, { childTaskId: child.taskId })
+        })()
+      } else if (input.action === 'submit') {
+        if (typeof input.accepted !== 'boolean')
+          throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'human')
+        const candidates = this.collaboration(input)!.candidates
+        const chosen = this.assets.resolveInputs(input.projectId, input.selectedOutputs ?? [])
+        if (
+          new Set(chosen.map((version) => (version.value.kind === 'json' ? 'json' : 'text')))
+            .size !== chosen.length
+        )
+          throw new AgentRuntimeError('AGENT_OUTPUT_CARDINALITY', 'human-selection')
+        if (
+          input.selectedOutputs?.some(
+            (ref) =>
+              !candidates.some(
+                (candidate) => canonicalFlowJson(candidate) === canonicalFlowJson(ref)
+              )
+          )
+        )
+          throw new AgentRuntimeError('AGENT_OUTPUT_UNVERIFIED', 'human')
+        store.append(rows.thread, input)
+      } else {
+        if (!input.text.trim()) throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'discussion')
+        let reply: string | undefined
+        if (input.action === 'discuss') {
+          const model = await this.model(record.snapshot, AbortSignal.timeout(30000))
+          if (!model.discuss)
+            throw new AgentRuntimeError('AGENT_DISCUSSION_UNAVAILABLE', 'discussion')
+          reply = await model.discuss(
+            record.snapshot.goal,
+            store.read(rows.thread).map(({ text, reply }) => ({ text, reply })),
+            input.text,
+            AbortSignal.timeout(30000)
+          )
+          this.saved(input)
+          if (
+            this.latest(input)?.state !== 'waiting' ||
+            projectSemanticRevision(this.saved(input).file) !== record.snapshot.semanticRevision
+          )
+            throw new AgentRuntimeError('RESUME_CONFLICT', 'discussion')
+        }
+        store.append(rows.thread, input, { reply })
+      }
+      return this.collaboration(input)!
+    } finally {
+      this.admission.delete(key)
+    }
+  }
+
   async run(raw: unknown): Promise<FlowAgentReply> {
     const input = FlowAgentRunSchema.parse(raw)
     const key = this.key(input)
@@ -251,9 +469,17 @@ export class FlowAgentDesktopHost {
     const controller = new AbortController()
     this.controllers.set(key, controller)
     let runtime: AgentRuntime | undefined
+    let admittingTaskId: string | undefined
     try {
       this.saved(input)
       const old = this.latest(input)
+      if (
+        input.expectedTaskId &&
+        (old?.snapshot.taskId !== input.expectedTaskId ||
+          (input.expectedWaitRevision !== undefined &&
+            old.waitRevision !== input.expectedWaitRevision))
+      )
+        throw new AgentRuntimeError('RESUME_CONFLICT', 'resume')
       if (input.action === 'start' && old && old.snapshot.taskId === input.requestId)
         return this.reply(old)
       if (
@@ -268,15 +494,26 @@ export class FlowAgentDesktopHost {
       if (
         input.action === 'start' &&
         old &&
-        !['completed', 'cancelled', 'failed'].includes(old.state)
+        !['completed', 'cancelled', 'failed'].includes(old.state) &&
+        !(
+          old.state === 'ready' &&
+          old.snapshot.parentTaskId &&
+          input.expectedTaskId === old.snapshot.taskId
+        )
       )
         throw new AgentRuntimeError('AGENT_TASK_OCCUPIED', 'admission')
       if (input.action === 'continue' && (!old || old.state !== 'waiting' || !input.eventId))
         throw new AgentRuntimeError('AGENT_NOT_WAITING', 'resume')
-      const snapshot = input.action === 'continue' ? old!.snapshot : this.bind(input)
+      const prepared =
+        input.action === 'start' &&
+        old?.state === 'ready' &&
+        !!old.snapshot.parentTaskId &&
+        input.expectedTaskId === old.snapshot.taskId
+      const snapshot = input.action === 'continue' || prepared ? old!.snapshot : this.bind(input)
       const telemetry = createAgentTelemetry(snapshot)
-      if (input.action === 'start')
+      if (input.action === 'start' && !prepared)
         this.store.create(snapshot, this.skills.bind(snapshot.config.skills, snapshot.config.tools))
+      admittingTaskId = snapshot.taskId
       const model = await this.model(snapshot, controller.signal)
       if (controller.signal.aborted) throw new AgentRuntimeError('AGENT_CANCELLED', 'admission')
       runtime = createAgentRuntime({
@@ -310,6 +547,12 @@ export class FlowAgentDesktopHost {
           }
         }
       }
+      const human = old
+        ? new FlowCollaborationStore(this.db)
+            .read(agentThread(old.snapshot))
+            .filter((event) => event.action === 'submit' && event.waitRevision === old.waitRevision)
+            .at(-1)
+        : undefined
       const record =
         input.action === 'start'
           ? await runtime.start()
@@ -319,13 +562,19 @@ export class FlowAgentDesktopHost {
               waitRevision: old!.waitRevision,
               eventId: input.eventId ?? randomUUID(),
               kind: old!.waitKind,
-              ...(old!.waitKind === 'human' ? { accepted: true } : {})
+              ...(old!.waitKind === 'human'
+                ? {
+                    accepted: human?.accepted ?? true,
+                    feedback: human?.text,
+                    selectedOutputs: human?.selectedOutputs
+                  }
+                : {})
             })
       return this.reply(record)
     } catch (error) {
       const record = this.latest(input)
       if (record?.state === 'cancelled') return this.reply(record)
-      if (record && record.state === 'ready') {
+      if (record && record.state === 'ready' && record.snapshot.taskId === admittingTaskId) {
         const code = error instanceof AgentRuntimeError ? error.code : 'AGENT_ADMISSION_FAILED'
         this.store.setState(
           agentThread(record.snapshot),

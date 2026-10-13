@@ -8,7 +8,7 @@ export interface MigrationDatabase {
   pragma(statement: string, options?: { simple?: boolean }): unknown
 }
 
-export const DB_SCHEMA_VERSION = 13
+export const DB_SCHEMA_VERSION = 14
 
 const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
@@ -368,6 +368,16 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
         data BLOB NOT NULL, PRIMARY KEY(thread, namespace, checkpoint, task, idx),
         FOREIGN KEY(thread, namespace, checkpoint)
           REFERENCES flow_agent_checkpoints(thread, namespace, id) ON DELETE CASCADE
+      );
+    `)
+  },
+  (database) => {
+    database.exec(`
+      CREATE TABLE flow_agent_collaboration (
+        thread TEXT NOT NULL REFERENCES flow_agent_tasks(thread) ON DELETE CASCADE,
+        event_id TEXT NOT NULL, revision INTEGER NOT NULL,
+        signature TEXT NOT NULL, body_json TEXT NOT NULL,
+        PRIMARY KEY(thread,event_id), UNIQUE(thread,revision)
       );
     `)
   }

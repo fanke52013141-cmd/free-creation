@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { FlowAssetValue } from './assets'
 import { SkillBindingSchema } from './runtime-contracts'
+import { AgentFlowAssetRefSchema as importedAssetRef } from './node-contracts'
 const id = z
   .string()
   .min(1)
@@ -12,8 +13,21 @@ export const FlowAgentRunSchema = FlowAgentQuerySchema.extend({
   traceId: id,
   spanId: id,
   action: z.enum(['start', 'continue']),
-  eventId: id.optional()
-}).strict()
+  eventId: id.optional(),
+  expectedTaskId: id.optional(),
+  expectedWaitRevision: z.number().int().positive().optional()
+})
+  .strict()
+  .superRefine((input, context) => {
+    if (
+      input.action === 'continue' &&
+      (!input.expectedTaskId || !input.expectedWaitRevision || !input.eventId)
+    )
+      context.addIssue({
+        code: 'custom',
+        message: 'Continue requires the observed task and wait revision'
+      })
+  })
 export type FlowAgentRun = z.infer<typeof FlowAgentRunSchema>
 export interface FlowAgentView {
   taskId: string
@@ -23,6 +37,27 @@ export interface FlowAgentView {
   decisions: number
   tools: number
   code?: string
+  prepared?: boolean
+}
+export const FlowAgentCollaborationSchema = FlowAgentQuerySchema.extend({
+  taskId: id,
+  waitRevision: z.number().int().nonnegative(),
+  revision: z.number().int().nonnegative(),
+  eventId: id,
+  action: z.enum(['note', 'discuss', 'submit', 'revise']),
+  text: z.string().max(4096),
+  accepted: z.boolean().optional(),
+  selectedOutputs: z.array(importedAssetRef).max(2).optional(),
+  selectedInputs: z.array(importedAssetRef).max(128).optional()
+}).strict()
+export type FlowAgentCollaboration = z.infer<typeof FlowAgentCollaborationSchema>
+export interface FlowAgentCollaborationView {
+  task: FlowAgentView
+  goal: string
+  revision: number
+  messages: Array<{ eventId: string; kind: string; text: string; reply?: string }>
+  inputs: Array<{ sourceNodeId: string; sourcePortId: string; versionId: string }>
+  candidates: import('zod').infer<typeof importedAssetRef>[]
 }
 export interface FlowAgentReply {
   refs: import('zod').infer<typeof import('./node-contracts').AgentFlowAssetRefSchema>[]

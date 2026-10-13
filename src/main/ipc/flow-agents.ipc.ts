@@ -1,6 +1,9 @@
 import { ipcMain, type BrowserWindow } from 'electron'
 import { IPC, type IpcEnvelope } from '../../shared/contracts'
-import { FlowAgentQuerySchema } from '../../shared/agent-flow/desktop-tasks'
+import {
+  FlowAgentQuerySchema,
+  FlowAgentCollaborationSchema
+} from '../../shared/agent-flow/desktop-tasks'
 import { AgentRuntimeError } from '../../shared/agent-flow/runtime-contracts'
 import { flowAgentFailureMessage } from '../../shared/agent-flow/failure-messages'
 import { FlowCommandError } from '../../shared/agent-flow/commands'
@@ -69,20 +72,31 @@ export function registerFlowAgentsIpc(
     }
     return new AgentSdkModel(model, snapshot.projectId, assets, context)
   })
-  for (const phase of ['run', 'inspect', 'stop', 'catalog'] as const) {
+  for (const phase of [
+    'run',
+    'inspect',
+    'stop',
+    'catalog',
+    'collaboration',
+    'cooperate'
+  ] as const) {
     ipcMain.handle(IPC.flowAgents[phase], async (event, raw): Promise<IpcEnvelope<unknown>> => {
       const context = { traceId: newTraceId(), spanId: newSpanId() }
       const query = FlowAgentQuerySchema.safeParse(
-        phase === 'run' && raw && typeof raw === 'object'
+        ['run', 'cooperate'].includes(phase) && raw && typeof raw === 'object'
           ? { projectId: raw.projectId, nodeId: raw.nodeId }
           : raw
       )
       if (query.success)
         Object.assign(context, { projectId: query.data.projectId, nodeId: query.data.nodeId })
+      const collaboration =
+        phase === 'cooperate' ? FlowAgentCollaborationSchema.safeParse(raw) : null
+      const action = collaboration?.success ? collaboration.data.action : undefined
+      if (collaboration?.success) Object.assign(context, { taskId: collaboration.data.taskId })
       const log = phase !== 'inspect'
       if (log)
         emitGatewayEvent('agent.desktop.started', '画布 Agent 操作开始', context, {
-          attributes: { phase }
+          attributes: { phase, action }
         })
       try {
         const active = window()
@@ -97,27 +111,31 @@ export function registerFlowAgentsIpc(
         const data =
           phase === 'run'
             ? await host.run(raw)
-            : phase === 'stop'
-              ? host.stop(query.data)
-              : phase === 'inspect'
-                ? host.inspect(query.data)
-                : host.catalog(
-                    query.data,
-                    catalog
-                      .listModels()
-                      .filter(
-                        (model) =>
-                          model.enabled &&
-                          model.capabilities.some(
-                            (capability) => capability.operation === 'text.generate'
+            : phase === 'cooperate'
+              ? await host.cooperate(raw)
+              : phase === 'collaboration'
+                ? host.collaboration(query.data)
+                : phase === 'stop'
+                  ? host.stop(query.data)
+                  : phase === 'inspect'
+                    ? host.inspect(query.data)
+                    : host.catalog(
+                        query.data,
+                        catalog
+                          .listModels()
+                          .filter(
+                            (model) =>
+                              model.enabled &&
+                              model.capabilities.some(
+                                (capability) => capability.operation === 'text.generate'
+                              )
                           )
+                          .map(({ id, name }) => ({ id, name }))
                       )
-                      .map(({ id, name }) => ({ id, name }))
-                  )
         if (log)
           emitGatewayEvent('agent.desktop.completed', '画布 Agent 操作完成', context, {
             status: 'success',
-            attributes: { phase }
+            attributes: { phase, action }
           })
         return { ok: true, data }
       } catch (error) {
@@ -140,7 +158,7 @@ export function registerFlowAgentsIpc(
         if (log)
           emitGatewayEvent('agent.desktop.failed', '画布 Agent 操作失败', context, {
             status: 'failed',
-            attributes: { phase, code }
+            attributes: { phase, code, action }
           })
         return {
           ok: false,

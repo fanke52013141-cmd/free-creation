@@ -136,8 +136,17 @@ export function installBrowserMock(): void {
   const mockApi: WindowApi = {
     runFlowAgent: async () => notImplementedInDemo('画布 Agent 执行'),
     inspectFlowAgent: async () => ({ ok: true, data: null }),
+    flowAgentCollaboration: async () => ({ ok: true, data: null }),
+    cooperateFlowAgent: async () => notImplementedInDemo('Agent 人机协作'),
     stopFlowAgent: async () => ({ ok: true, data: null }),
-    flowAgentCatalog: async () => ({ ok: true, data: { models: [], tools: [{ id: 'node.execute', version: '1', name: '数据处理节点' }], skills: [] } }),
+    flowAgentCatalog: async () => ({
+      ok: true,
+      data: {
+        models: [],
+        tools: [{ id: 'node.execute', version: '1', name: '数据处理节点' }],
+        skills: []
+      }
+    }),
     submitFlowAsset: async () => notImplementedInDemo('资产版本提交'),
     prepareFlowCommand: async () => notImplementedInDemo('生产命令'),
     activateFlowCanvas: async () => ({ ok: true, data: null }),

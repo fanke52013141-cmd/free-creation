@@ -179,6 +179,185 @@ function fixture() {
 const lookup = { projectId: 'project-a', commandId: 'command-a' }
 
 describe('production durable command ledger', () => {
+  it('persists bounded discussion without execution, rejects stale events, and prepares an immutable task revision without running it', async () => {
+    const f = fixture()
+    f.agent.props.config = JSON.stringify({
+      ...f.agentConfig,
+      interactionMode: 'collaborative',
+      tools: [{ id: 'node.execute', version: '1' }],
+      modelDefinitionId: 'fixture'
+    })
+    f.file.nodes[1].params.config = f.agent.props.config
+    let decisions = 0,
+      discussions = 0
+    const createHost = (): FlowAgentDesktopHost =>
+      new FlowAgentDesktopHost(
+        f.db,
+        f.project,
+        {
+          ledger: f.ledger,
+          isActive: () => true,
+          deliver: async () => {
+            throw new Error('unexpected execution')
+          }
+        },
+        async () => ({
+          decide: async () => {
+            decisions++
+            return { kind: 'wait' }
+          },
+          discuss: async () => {
+            discussions++
+            return 'private-discussion-reply'
+          }
+        })
+      )
+    const host = createHost()
+    await host.run({
+      projectId: 'project-a',
+      nodeId: f.agent.id,
+      requestId: 'initial',
+      traceId: 'trace',
+      spanId: 'span',
+      action: 'start'
+    })
+    const original = host.collaboration({ projectId: 'project-a', nodeId: f.agent.id })!
+    const input = {
+      projectId: 'project-a',
+      nodeId: f.agent.id,
+      taskId: original.task.taskId,
+      waitRevision: original.task.waitRevision,
+      revision: 0,
+      eventId: 'note',
+      action: 'note',
+      text: 'private-feedback'
+    }
+    expect((await host.cooperate(input)).messages).toHaveLength(1)
+    expect(decisions).toBe(1)
+    await host.cooperate(input)
+    expect(
+      (
+        await host.cooperate({ ...input, revision: 1, eventId: 'discuss', action: 'discuss' })
+      ).messages.at(-1)?.reply
+    ).toBe('private-discussion-reply')
+    await host.cooperate({ ...input, revision: 1, eventId: 'discuss', action: 'discuss' })
+    expect(discussions).toBe(1)
+    await expect(host.cooperate({ ...input, eventId: 'stale' })).rejects.toThrow(
+      'COLLABORATION_REVISION_CONFLICT'
+    )
+    await expect(host.cooperate({ ...input, text: 'changed' })).rejects.toThrow(
+      'COLLABORATION_INTENT_CONFLICT'
+    )
+    await expect(
+      host.cooperate({ ...input, eventId: 'foreign', revision: 2, taskId: 'other' })
+    ).rejects.toThrow('RESUME_CONFLICT')
+    f.agent.props.text = 'private-new-goal'
+    f.file.nodes[1].content = { kind: 'text', text: f.agent.props.text }
+    f.source.props.text = 'private-new-material'
+    f.file.nodes[0].content = { kind: 'text', text: f.source.props.text }
+    const revised = await host.cooperate({
+      ...input,
+      eventId: 'new-task',
+      revision: 2,
+      action: 'revise',
+      text: f.agent.props.text,
+      selectedInputs: [f.version.ref]
+    })
+    expect(revised.task).toMatchObject({ state: 'ready', prepared: true, taskId: 'new-task' })
+    expect(decisions).toBe(1)
+    const rows = f.db
+      .prepare('SELECT snapshot_json,state FROM flow_agent_tasks ORDER BY rowid')
+      .all() as Array<{ snapshot_json: string; state: string }>
+    expect(JSON.parse(rows[0].snapshot_json).goal).toBe('private-goal')
+    expect(rows[0].state).toBe('cancelled')
+    expect(JSON.parse(rows[1].snapshot_json)).toMatchObject({
+      goal: 'private-new-goal',
+      parentTaskId: 'initial'
+    })
+    expect(JSON.parse(rows[1].snapshot_json).targets[0].inputs[0].assets).toEqual([f.version.ref])
+    expect(f.assets.read('project-a', f.version.ref.versionId).value).toEqual({
+      kind: 'text',
+      text: 'private-v1'
+    })
+    expect(createHost().inspect({ projectId: 'project-a', nodeId: f.agent.id })).toMatchObject({
+      state: 'ready',
+      prepared: true
+    })
+    await expect(
+      host.run({
+        projectId: 'project-a',
+        nodeId: f.agent.id,
+        requestId: 'late',
+        eventId: 'late-response',
+        traceId: 'trace',
+        spanId: 'span',
+        action: 'continue',
+        expectedTaskId: 'initial',
+        expectedWaitRevision: 1
+      })
+    ).rejects.toThrow('RESUME_CONFLICT')
+    await host.run({
+      projectId: 'project-a',
+      nodeId: f.agent.id,
+      requestId: 'launch-child',
+      traceId: 'trace',
+      spanId: 'span',
+      action: 'start',
+      expectedTaskId: 'new-task'
+    })
+    expect(decisions).toBe(2)
+  })
+  it('rejects scope expansion, foreign material and rolls back revision admission together with the old task state', async () => {
+    const f = fixture()
+    f.agent.props.config = JSON.stringify({
+      ...f.agentConfig,
+      interactionMode: 'collaborative',
+      tools: [{ id: 'node.execute', version: '1' }],
+      modelDefinitionId: 'fixture'
+    })
+    f.file.nodes[1].params.config = f.agent.props.config
+    const host = new FlowAgentDesktopHost(
+      f.db,
+      f.project,
+      { ledger: f.ledger, isActive: () => true, deliver: async () => {} },
+      async () => ({ decide: async () => ({ kind: 'wait' }) })
+    )
+    await host.run({
+      projectId: 'project-a',
+      nodeId: f.agent.id,
+      requestId: 'initial',
+      traceId: 'trace',
+      spanId: 'span',
+      action: 'start'
+    })
+    const input = {
+      projectId: 'project-a',
+      nodeId: f.agent.id,
+      taskId: 'initial',
+      waitRevision: 1,
+      revision: 0,
+      eventId: 'revision',
+      action: 'revise',
+      text: 'new-goal'
+    }
+    f.agent.props.text = input.text
+    f.file.nodes[1].content = { kind: 'text', text: input.text }
+    f.target.props.config = '{"operation":"template"}'
+    await expect(host.cooperate(input)).rejects.toThrow('COLLABORATION_SCOPE_CONFLICT')
+    f.target.props.config = '{"operation":"pass"}'
+    await expect(
+      host.cooperate({
+        ...input,
+        selectedInputs: [{ ...f.version.ref, versionId: 'foreign-version' }]
+      })
+    ).rejects.toThrow('ASSET_VERSION_MISSING')
+    f.db.exec(
+      "CREATE TRIGGER fail_revision BEFORE INSERT ON flow_agent_collaboration BEGIN SELECT RAISE(ABORT,'private-storage'); END"
+    )
+    await expect(host.cooperate(input)).rejects.toThrow()
+    expect(host.inspect({ projectId: 'project-a', nodeId: f.agent.id })?.state).toBe('waiting')
+    expect(f.db.prepare('SELECT COUNT(*) n FROM flow_agent_tasks').get()).toEqual({ n: 1 })
+  })
   it('trusted desktop admission derives scope, resumes observed steps and publishes only verified assets', async () => {
     const f = fixture()
     f.agent.props.config = JSON.stringify({
@@ -247,12 +426,15 @@ describe('production durable command ledger', () => {
     expect(executions).toBe(0)
     delete f.source.meta.flowAssetRef
     delete f.source.meta.pinnedOutput
-    expect((await host.run(input)).task.state).toBe('waiting')
+    const waiting = await host.run(input)
+    expect(waiting.task.state).toBe('waiting')
     expect(executions).toBe(2)
     const result = await host.run({
       ...input,
       requestId: 'continue-run',
       action: 'continue',
+      expectedTaskId: waiting.task.taskId,
+      expectedWaitRevision: waiting.task.waitRevision,
       eventId: 'continue-event'
     })
     expect(result.task.state).toBe('completed')
