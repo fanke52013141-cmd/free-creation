@@ -471,7 +471,7 @@ export interface VideoTaskInfo {
   nodeId: string
   providerId: string
   modelId: string
-  status: 'submitted' | 'running' | 'success' | 'failed' | 'cancelled'
+  status: 'submitted' | 'running' | 'unknown' | 'success' | 'failed' | 'cancelled'
   mediaId?: string
   mediaPath?: string
   error?: string

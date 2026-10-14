@@ -1,5 +1,17 @@
 # 日志覆盖清单
 
+## 2026-10-14 视频成果强杀恢复
+
+finalizeVideo 复用下载及 media.persist 开始/唯一终态；可信本地回执离线核对新增复用 media.persist 生命周期，同 task/新核对 trace，仅稳定 operation/ID/MIME。SHA-256、字节、路径/源 URL/Key 不进入诊断。强杀 worker 验证恢复终态配对和私有字节排除；原 logger 故障不改变结果测试继续通过。新增 14 真实强杀/冲突，最终七文件 85 定向通过，证据及完整门禁见 [接续记录](canvas-agent-flow/25-c4-video-materialization-recovery.md)。不补造强杀终态，不把日志作为恢复事实；跨进程并发、掉电/长期故障与真实供应商仍未覆盖。
+
+完整 verify 最终串行通过（167 文件/1812 项/1 既有跳过，模型另 2，日志门禁、17 浏览器、构建与 11 组隐藏桌面）；后增引用/输入绑定和核对 span 另通过 85 定向，完整运行与增量边界分开见该记录。
+
+## 2026-10-14 供应商核对本地接续
+
+video.ts/controlVideoTask 新增 task.control.started/completed，同 trace/task，固定 operation/state，无正文/Key/URL。video-task-control.ts 仅有界协议 GET，生命周期由调用者负责；allowlist 登记理由，不豁免日志敏感信息。47 定向（新增 27）含真实本地 HTTP + SQLite 的唯一配对、脱敏、logger 故障不改变结果通过。unknown 只完成核对操作，不代表业务成功。停止持久/迟到保护、连接/凭据/ID 拒绝及占用保持见 [接续记录](canvas-agent-flow/24-c4-supplier-reconciliation.md)。真实远端撤回/计费、跨进程物化幂等、掉电/长期故障仍未覆盖，不能宣称全部 C4 完成。完整/增量门禁证据以接续记录为准。
+
+本包分段 verify 全阶段通过：首轮 166 文件/1795 项/1 既有跳过及模型另 2，日志职责登记后日志门禁、17 浏览器、生产构建及 11 组隐藏桌面通过；最终后增边界/恢复诊断修正另复验 47 定向及两端类型。首轮日志门禁失败记录保留，不能宣称该轮完整串行通过。
+
 ## 2026-10-14 源码同步最终门禁
 
 GLM/C3.3/C4 本批完整 verify 最终串行通过（164 文件、1763 通过、1 既有跳过，模型另 2；日志门禁、17 浏览器、构建与 11 组隐藏桌面），renderer 保存崩溃四组另过独立门禁。证据 qa/c4-import-renderer-20261014/release-verify.log 与 desktop-fixed.log。此项更新先前“分段通过/本轮未重跑全量”的历史状态；未覆盖的 main 保存轮转、物理掉电、供应商查询及媒体/并行保持，不外推全链路。发布交接见 [本次 handoff](canvas-agent-flow/HANDOFF_2026_10_14_C4_RELEASE.md)。
@@ -328,3 +340,13 @@ C3.1b 最终结果：desktop-final-accepted.log 完整 verify 通过（155 文�
 受影响项目/模板迁移 IPC 增补同 trace 的 transfer started/committed/failed，稳定 operation/phase/code 允许列表，拒绝原始异常、配置、素材路径、正文、API Key 和包内容。导入排除旧执行/审批权威，固定版本完整性/身份和嵌套引用校验，数据库/目录事务失败不显示项目。项目切换按新快照重建编辑器，旧保存迟到不修改新项目状态；加载/保存复用公共入口，不新增重复终态。
 
 82 定向及 8 保存回归通过；verify 各阶段分段通过（162 文件/1743 通过/1 既有跳过，模型另 2；17 浏览器、构建、十组既有 Electron；最后增量类型/lint/日志/构建/C4 Electron）。实际桌面核对零模型增量、真实迁移 IPC 与重新保存通过，desktop 12/12、coordination 3/3、transfer 2/2、model 16/16 开始/终态及实际脱敏通过，前三类逐 trace/span 唯一终态验收。证据见 [C4 接续](canvas-agent-flow/20-c4-recovery-transfer.md) 与 qa/c4-acceptance-20261014/lifecycle-audit.json。失败记录保留，不宣称单次全量串行通过。仍未覆盖远端查询/撤回、媒体/并行恢复和长期跨存储故障注入及全部 trace 层级。
+
+### 2026-10-14 C4 main 保存轮转与遗留锁
+
+新写锁记录 PID，30 秒后仍存活或探测不确定的持有者保持阻断，仅已退出进程允许接管；历史空锁沿用原保护期。复用正式 IPC 的 project.save 开始/唯一终态及冲突/失败事件，不在内部锁函数重复记终态。锁文件只存 PID，不包含正文/配置/凭据；失败通过现有异常传播。
+
+五个文件/数据库同步边界真实进程强杀、两次独立恢复、遗留锁后的版本冲突和明确新编辑通过；9 项新增定向见 `qa/c4-main-save-20261014/directed.log`。强杀不补造不可观察终态，测试不证明完整恢复 trace 或新的桌面日志配对。范围及后续门禁结果见 [保存轮转交接](canvas-agent-flow/23-c4-main-save-crash-recovery.md)。物理掉电、磁盘损坏、多个恢复进程同时争抢遗留锁、远端查询/撤回、长期故障组合仍未覆盖。
+
+构建后另复验四类真实 renderer 保存中断：存活 main 的公共保存诊断 11 开始/11 终态，正文脱敏及无模型请求断言通过，见本包 `renderer.log` 与 `renderer-results.json`。该证据不代替被强杀 main 的不可观察终态或完整恢复 trace 树。
+
+最终完整 verify 串行通过（165 文件、1772 通过、1 既有跳过，模型另 2，17 浏览器、生产构建、11 组隐藏桌面）；后续测试清理保证调整另复验 9 项定向及受影响文件 lint。日志门禁通过，证据 `qa/c4-main-save-20261014/verify.log`。

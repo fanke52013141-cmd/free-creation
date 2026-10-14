@@ -187,34 +187,34 @@ describe('MiniMax v2 端点与任务状态', () => {
       classifyMiniMaxTask({ task: { status: 'failed', error: { message: '内容审核未通过' } } })
     ).toEqual({ status: 'failed', error: '内容审核未通过' })
     // 成功态没带给片地址是协议不符，不能当运行中继续等。
-    expect(classifyMiniMaxTask({ task: { status: 'succeeded' } }).status).toBe('failed')
+    expect(classifyMiniMaxTask({ task: { status: 'succeeded' } }).status).toBe('unknown')
   })
 
-  it('HTTP 200 里的 base_resp 错误按失败收，不再白等到超时', () => {
+  it('HTTP 200 里的查询认证错误不裁决为业务失败', () => {
     expect(
       classifyMiniMaxTask({
         task: { status: 'running' },
         base_resp: { status_code: 1002, status_msg: 'invalid api key' }
       })
-    ).toEqual({ status: 'failed', error: 'invalid api key（status_code 1002）' })
+    ).toEqual({ status: 'unknown', error: '供应商查询未能确认任务结果' })
     // status_code 为 0 是成功哨兵，不能因为字段存在就判失败。
     expect(
       classifyMiniMaxTask({ task: { status: 'running' }, base_resp: { status_code: 0 } })
     ).toEqual({ status: 'running' })
   })
 
-  it('响应结构根本不是 v2 时立即失败，没见过但存在的状态继续等', () => {
+  it('错误结构与新状态保持未知，不释放生成占用', () => {
     // v1/中转风格：状态在顶层、没有 task 包装——等下去也永远不会有 task。
     expect(classifyMiniMaxTask({ status: 'Preparing', file_id: 'f-1' })).toMatchObject({
-      status: 'failed',
+      status: 'unknown',
       error: expect.stringContaining('没有 task 字段')
     })
     expect(classifyMiniMaxTask({ task: {} })).toMatchObject({
-      status: 'failed',
+      status: 'unknown',
       error: expect.stringContaining('缺少 status')
     })
     expect(classifyMiniMaxTask({ task: { status: 'inspecting' } })).toEqual({
-      status: 'running'
+      status: 'unknown'
     })
   })
 })

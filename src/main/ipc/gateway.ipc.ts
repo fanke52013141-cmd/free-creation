@@ -17,11 +17,17 @@ import { GatewayError, testProvider } from '../gateway/factory'
 import { draftToConfig, freeConnectionMessage, probeProvider } from '../gateway/provider-check'
 import { generateImageToAsset } from '../gateway/image'
 import { transformImageEdit } from '../media/image-edit'
-import { deleteProvider, listProviders, listVerifiedProviders, saveProvider } from '../gateway/providers.repo'
+import {
+  deleteProvider,
+  listProviders,
+  listVerifiedProviders,
+  saveProvider
+} from '../gateway/providers.repo'
 import { exportProviders, importProviders } from '../gateway/provider-transfer'
 import {
   cancelVideoTask,
   getVideoTask,
+  controlVideoTask,
   resumePendingVideoTasks,
   submitVideoTask
 } from '../gateway/video'
@@ -60,11 +66,16 @@ export function registerGatewayIpc(win: BrowserWindow): void {
   }
 
   ipcMain.handle(IPC.gateway.providers, (): IpcEnvelope<ProviderSummary[]> => ok(listProviders()))
-  ipcMain.handle(IPC.gateway.executableProviders, (): IpcEnvelope<ProviderSummary[]> => ok(listVerifiedProviders()))
+  ipcMain.handle(IPC.gateway.executableProviders, (): IpcEnvelope<ProviderSummary[]> =>
+    ok(listVerifiedProviders())
+  )
 
   ipcMain.handle(
     IPC.gateway.exportProviders,
-    async (_e, input: { password: string }): Promise<IpcEnvelope<{ path: string; count: number }>> => {
+    async (
+      _e,
+      input: { password: string }
+    ): Promise<IpcEnvelope<{ path: string; count: number }>> => {
       if (typeof input?.password !== 'string' || input.password.length < 8) {
         return err('INVALID_INPUT', '加密密码至少需要 8 个字符')
       }
@@ -83,7 +94,10 @@ export function registerGatewayIpc(win: BrowserWindow): void {
 
   ipcMain.handle(
     IPC.gateway.importProviders,
-    async (_e, input: { password: string }): Promise<IpcEnvelope<{ added: number; updated: number; count: number }>> => {
+    async (
+      _e,
+      input: { password: string }
+    ): Promise<IpcEnvelope<{ added: number; updated: number; count: number }>> => {
       if (typeof input?.password !== 'string' || input.password.length < 8) {
         return err('INVALID_INPUT', '密码至少需要 8 个字符')
       }
@@ -149,11 +163,15 @@ export function registerGatewayIpc(win: BrowserWindow): void {
   )
 
   ipcMain.handle(IPC.gateway.videoCancel, (_e, { taskId }: { taskId: string }) =>
-    wrap(() => cancelVideoTask(taskId ?? ''))
+    wrapAsync(() => cancelVideoTask(taskId ?? ''))
   )
 
   ipcMain.handle(IPC.gateway.videoTask, (_e, { taskId }: { taskId: string }) =>
-    wrap<VideoTaskInfo | null>(() => getVideoTask(taskId ?? ''))
+    wrapAsync<VideoTaskInfo | null>(() =>
+      getVideoTask(taskId ?? '')?.status === 'unknown'
+        ? controlVideoTask(taskId ?? '')
+        : Promise.resolve(getVideoTask(taskId ?? ''))
+    )
   )
 
   ipcMain.handle(

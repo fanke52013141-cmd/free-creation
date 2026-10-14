@@ -58,16 +58,38 @@ function projectJsonPath(id: string): string {
 const PROJECT_WRITE_LOCK_STALE_MS = 30_000
 
 function acquireProjectWriteLock(lockPath: string): number {
-  // 图快照事务只做本地同步 I/O；超过 30 秒仍存在的锁说明持锁进程已经异常终止。
-  // 接管前仅按 mtime 判定，避免把不可探测的旧 Electron PID 当作活进程。
+  // Age alone cannot prove that a paused writer has exited. New locks record their
+  // owner; legacy empty locks retain the conservative 30-second grace period.
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      return openSync(lockPath, 'wx')
+      const fd = openSync(lockPath, 'wx')
+      try {
+        writeFileSync(fd, JSON.stringify({ pid: process.pid }), 'utf-8')
+        return fd
+      } catch (error) {
+        closeSync(fd)
+        unlinkSync(lockPath)
+        throw error
+      }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
       try {
         const ageMs = Date.now() - statSync(lockPath).mtimeMs
         if (ageMs >= PROJECT_WRITE_LOCK_STALE_MS && attempt === 0) {
+          const contents = readFileSync(lockPath, 'utf-8')
+          if (contents.trim()) {
+            const owner = JSON.parse(contents) as { pid?: unknown }
+            if (!Number.isSafeInteger(owner.pid) || (owner.pid as number) <= 0)
+              throw new GraphWriteInProgressError()
+            try {
+              process.kill(owner.pid as number, 0)
+              throw new GraphWriteInProgressError()
+            } catch (error) {
+              // EPERM and all indeterminate probes keep the lock. PID reuse may
+              // delay recovery, but must never cause a live writer to be evicted.
+              if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
+            }
+          }
           unlinkSync(lockPath)
           continue
         }
@@ -480,9 +502,7 @@ export function openProject(id: string): ProjectFile | null {
   if (file.meta.graphVersion !== meta.graphVersion) {
     try {
       getDb()
-        .prepare(
-          'UPDATE projects SET graph_version = ?, updated_at = ? WHERE id = ?'
-        )
+        .prepare('UPDATE projects SET graph_version = ?, updated_at = ? WHERE id = ?')
         .run(file.meta.graphVersion, Math.max(meta.updatedAt, file.meta.updatedAt), id)
     } catch {
       // DB 校准失败不阻塞打开：最坏情况是外部写入方再次出现版本错位，由

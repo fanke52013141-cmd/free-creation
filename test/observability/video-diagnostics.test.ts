@@ -21,6 +21,21 @@ vi.mock('../../src/main/store/media.repo', () => ({
     name: 'v'
   }))
 }))
+// This suite isolates lifecycle emission with its existing DB/media doubles.
+// Real persistent materialization is covered by video-materialization-crash.test.ts.
+vi.mock('../../src/main/gateway/video-materialization', () => ({
+  recoverVideoAsset: async () => null,
+  materializeVideoAsset: async (
+    taskId: string,
+    projectId: string,
+    download: (target: string) => Promise<void>
+  ) => {
+    const target = join(process.env.CANVAS_DATA_DIR ?? tmpdir(), `tmp-video-${taskId}.mp4`)
+    await download(target)
+    const { saveFileAsset } = await import('../../src/main/store/media.repo')
+    return saveFileAsset(projectId, target, '.mp4', 'video')
+  }
+}))
 vi.mock('../../src/main/gateway/factory', () => {
   class GatewayError extends Error {
     code: string
@@ -62,7 +77,11 @@ const TASK_ROW = {
 let runningRows: Array<Record<string, unknown>> = []
 
 function fakeDb(): {
-  prepare: (sql: string) => { get: (...args: unknown[]) => unknown; all: () => unknown[]; run: (...args: unknown[]) => unknown }
+  prepare: (sql: string) => {
+    get: (...args: unknown[]) => unknown
+    all: () => unknown[]
+    run: (...args: unknown[]) => unknown
+  }
 } {
   return {
     prepare: (sql: string) => ({
@@ -79,7 +98,10 @@ function fakeDb(): {
       },
       all: () => (sql.includes("status IN ('submitted', 'running')") ? [...runningRows] : []),
       run: (...args: unknown[]) => {
-        if (sql.includes("UPDATE tasks SET status = 'failed'") || sql.includes("status = 'success'")) {
+        if (
+          sql.includes("UPDATE tasks SET status = 'failed'") ||
+          sql.includes("status = 'success'")
+        ) {
           const id = args[args.length - 1] as string
           const row = runningRows.find((item) => item.id === id)
           if (row) row.status = sql.includes('failed') ? 'failed' : 'success'
@@ -133,7 +155,10 @@ describe('L04 视频链路结构化事件', () => {
           status: 200,
           headers: new Headers(),
           text: async () => '',
-          json: async () => ({ status: 'succeeded', content: { video_url: 'https://cdn.example/v.mp4' } })
+          json: async () => ({
+            status: 'succeeded',
+            content: { video_url: 'https://cdn.example/v.mp4' }
+          })
         } as unknown as Response
       }
       if (href.startsWith('https://cdn.example/')) {
@@ -159,7 +184,9 @@ describe('L04 视频链路结构化事件', () => {
     expect(names).toContain('media.persist_completed')
 
     // A09 关键断言：恢复过程中没有向下游供应商提交任何新任务（无 POST）。
-    const postCalls = fetchMock.mock.calls.filter((call) => (call[1] as RequestInit | undefined)?.method === 'POST')
+    const postCalls = fetchMock.mock.calls.filter(
+      (call) => (call[1] as RequestInit | undefined)?.method === 'POST'
+    )
     expect(postCalls).toHaveLength(0)
     // 恢复事件携带稳定本地 taskId；旧 trace 未知 → 显式 correlationMissing。
     const resumed = events.find((event) => event.event === 'task.state_changed')
@@ -169,7 +196,9 @@ describe('L04 视频链路结构化事件', () => {
     expect(resumed?.traceId).toBeTruthy()
     // 业务回执照常发出（日志不改变恢复行为）。
     expect(
-      sendEvents.some((event) => (event as { kind?: string; mediaId?: string }).kind === 'video-done')
+      sendEvents.some(
+        (event) => (event as { kind?: string; mediaId?: string }).kind === 'video-done'
+      )
     ).toBe(true)
   })
 

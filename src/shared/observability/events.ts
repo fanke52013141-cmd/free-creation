@@ -290,6 +290,8 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
     def('model.request.cancelled', 'info', 'main/gateway/*', MODEL_ATTRS),
     // task.*：持久任务调度器（视频任务库等）
     def('task.state_changed', 'info', 'main/gateway/video.ts', { state: 'short' }),
+    def('task.control.started', 'info', 'main/gateway/video.ts', {}),
+    def('task.control.completed', 'info', 'main/gateway/video.ts', { state: 'short' }),
     def('task.poll_summary', 'info', 'main/gateway/video.ts', {
       state: 'short',
       pollCount: 'int',

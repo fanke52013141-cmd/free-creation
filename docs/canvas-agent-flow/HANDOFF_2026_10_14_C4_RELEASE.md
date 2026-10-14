@@ -1,5 +1,11 @@
 # Canvas Studio：GLM、C3.3 返工与 C4 恢复交接
 
+最新本地包：[视频成果入库强杀恢复](25-c4-video-materialization-recovery.md)。已补可信下载回执与固定媒体物化，串行重开恢复已定向验收，下一包多进程恢复竞争；具体门禁与未覆盖范围以接续记录为准。
+
+最新本地接续为 [供应商事实核对与 unknown 裁决](24-c4-supplier-reconciliation.md)，支持矩阵与未支持自动远端撤回的原因见该文档。
+
+本发布后的本地接续见 [main 保存轮转强杀与遗留锁恢复](23-c4-main-save-crash-recovery.md)：五个保存强杀切点与持有者保护已定向验收，完整门禁结果以接续记录为准；本地改动尚未提交/推送。下方“接手后的下一步”为本发布时的历史待办。
+
 日期：2026-10-14（Asia/Shanghai）。仓库：<https://github.com/fanke52013141-cmd/free-creation>，分支 `main`。本包在 `6b6606586720dea2f3b0acd1125733be4d46f36d` 上整合此前本地开发，源码与本文件一起提交。最终提交号用包含本文件的 Git commit 确认；提交不包含个人凭据、运行数据库、构建产物或 QA 私有证据。
 
 ## 已交付行为

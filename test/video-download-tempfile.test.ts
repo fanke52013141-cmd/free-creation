@@ -25,6 +25,25 @@ vi.mock('../src/main/store/db', () => ({
 // finalizeVideo 的入库路径只验证交接行为；真实落库/搬移由 media.repo 自己的测试负责
 const h2 = vi.hoisted(() => ({ saveFileAsset: vi.fn(), readMediaBuffer: vi.fn() }))
 vi.mock('../src/main/store/media.repo', () => h2)
+// This suite isolates transport and gateway events. Durable task receipts and
+// SQLite/file recovery are exercised with the real module in the crash suite.
+vi.mock('../src/main/gateway/video-materialization', () => ({
+  recoverVideoAsset: async () => null,
+  materializeVideoAsset: async (
+    taskId: string,
+    projectId: string,
+    download: (target: string) => Promise<void>
+  ) => {
+    const target = join(h.dataDir, `tmp-video-${taskId}.mp4`)
+    try {
+      await download(target)
+      return await h2.saveFileAsset(projectId, target, '.mp4', 'video')
+    } catch (error) {
+      await rm(target, { force: true })
+      throw error
+    }
+  }
+}))
 
 const tmpVideoResidue = (): string[] =>
   readdirSync(h.dataDir).filter((name) => name.startsWith('tmp-video-'))

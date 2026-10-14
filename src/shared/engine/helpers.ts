@@ -296,7 +296,11 @@ export function waitForVideo(
               name: 'video',
               mime: 'video/mp4'
             })
-          } else if (result.data.status === 'failed' || result.data.status === 'cancelled') {
+          } else if (
+            result.data.status === 'unknown' ||
+            result.data.status === 'failed' ||
+            result.data.status === 'cancelled'
+          ) {
             fail(new Error(result.data.error ?? '视频生成失败'), false)
           }
         } catch {
