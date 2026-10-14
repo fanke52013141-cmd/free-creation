@@ -116,6 +116,43 @@ export class FlowAgentDesktopHost {
         (type?.nodeType === 'agent' && JSON.parse(type.config).role === 'coordinator'))
     )
       return this.coordinator.inspect(input)
+    const owner = new CoordinationStore(this.db).owner(input.projectId, input.nodeId)
+    const controlled = owner
+      ? (this.db
+          .prepare('SELECT body_json FROM flow_coordination_runs WHERE project_id=? AND task_id=?')
+          .get(input.projectId, owner) as { body_json: string } | undefined)
+      : undefined
+    const run = controlled
+      ? (JSON.parse(controlled.body_json) as import('./coordination-store').CoordinationRun)
+      : undefined
+    const review = run?.reviews?.find(
+      (cycle) => cycle.responsibleNodeId === input.nodeId && cycle.decision
+    )
+    const reviewFeedback = review?.decision
+      ? {
+          reviewNodeId: review.nodeId,
+          reviewId: review.decision.reviewId,
+          feedback: review.decision.feedback,
+          round: review.round,
+          state: review.state,
+          subjects: review.decision.subjects
+        }
+      : undefined
+    if (['text', 'json'].includes(type?.nodeType ?? '')) {
+      if (!this.desktop.isActive(input.projectId))
+        throw new AgentRuntimeError('FLOW_PROJECT_INACTIVE', 'inspect')
+      return run && reviewFeedback
+        ? {
+            taskId: run.taskId,
+            state: run.state,
+            waitKind: 'human',
+            waitRevision: run.waitRevision,
+            decisions: run.decisions,
+            tools: 0,
+            reviewFeedback
+          }
+        : null
+    }
     this.saved(input)
     const record = this.latest(input)
     if (!record) return null
@@ -128,7 +165,7 @@ export class FlowAgentDesktopHost {
       createAgentTelemetry(record.snapshot)('blocked', 'session-recovery', 'AGENT_SESSION_LOST')
       return view(this.store.read(agentThread(record.snapshot)))
     }
-    return view(record)
+    return { ...view(record), reviewFeedback }
   }
   stop(input: Identity): FlowAgentView | null {
     if (this.coordinator && JSON.parse(this.saved(input).shape.props.config).role === 'coordinator')
@@ -155,7 +192,8 @@ export class FlowAgentDesktopHost {
       tools: [
         { id: 'node.execute', version: '1', name: '执行画布数据处理节点' },
         { id: 'graph.preview', version: '1', name: '文本模板流程预览' },
-        { id: 'agent.dispatch', version: '1', name: '分派专业 Agent 任务' }
+        { id: 'agent.dispatch', version: '1', name: '分派专业 Agent 任务' },
+        { id: 'review.execute', version: '1', name: '执行范围内的固定版本审核' }
       ],
       skills: BUILTIN_FLOW_SKILLS.map(({ id, version, name, description }) => ({
         id,
@@ -285,6 +323,38 @@ export class FlowAgentDesktopHost {
   }
   describeAssignment(input: FlowAgentRun): AgentTaskSnapshot {
     return this.bind(input)
+  }
+  assignment(input: Identity, coordinatorTaskId: string): AgentTaskRecord | null {
+    this.saved(input)
+    if (new CoordinationStore(this.db).owner(input.projectId, input.nodeId) !== coordinatorTaskId)
+      throw new AgentRuntimeError('FLOW_SCOPE_REJECTED', 'assignment')
+    const record = this.latest(input)
+    if (record && record.snapshot.coordinatorTaskId !== coordinatorTaskId)
+      throw new AgentRuntimeError('FLOW_SCOPE_REJECTED', 'assignment')
+    return record
+  }
+  prepareRework(
+    input: Identity,
+    coordinatorTaskId: string,
+    parentTaskId: string,
+    taskId: string,
+    rework: NonNullable<AgentTaskSnapshot['rework']>
+  ): AgentTaskRecord {
+    const record = this.assignment(input, coordinatorTaskId)
+    if (record?.snapshot.taskId === taskId) return record
+    if (!record || record.state !== 'completed' || record.snapshot.taskId !== parentTaskId)
+      throw new AgentRuntimeError('RESUME_CONFLICT', 'rework')
+    if (this.receipts(record).some((receipt) => ['pending', 'unknown'].includes(receipt.state)))
+      throw new AgentRuntimeError('AGENT_NOT_WAITING', 'rework')
+    this.assets.resolveInputs(input.projectId, rework.rejectedOutputs)
+    const snapshot = AgentTaskSnapshotSchema.parse({
+      ...record.snapshot,
+      taskId,
+      parentTaskId,
+      semanticRevision: projectSemanticRevision(this.saved(input).file),
+      rework
+    })
+    return this.store.create(snapshot, record.skills)
   }
   async runAssignment(
     input: FlowAgentRun,
@@ -450,6 +520,14 @@ export class FlowAgentDesktopHost {
           spanId: randomUUID()
         })
         child.parentTaskId = record.snapshot.taskId
+        child.coordinatorTaskId = record.snapshot.coordinatorTaskId
+        child.rework = record.snapshot.rework
+        if (record.snapshot.rework) {
+          if (input.selectedInputs?.length)
+            throw new AgentRuntimeError('AGENT_INPUT_NOT_FIXED', 'rework-revision')
+          child.directInputs = record.snapshot.directInputs
+          child.targets = record.snapshot.targets
+        }
         const submitted = store
           .read(rows.thread)
           .filter((event) => event.action === 'submit')
@@ -554,6 +632,52 @@ export class FlowAgentDesktopHost {
     const input = FlowAgentRunSchema.parse(raw)
     if (this.coordinator && JSON.parse(this.saved(input).shape.props.config).role === 'coordinator')
       return this.coordinator.run(raw)
+    if (input.action === 'reconcile' || input.action === 'restore') {
+      const record = this.latest(input)
+      if (
+        !record ||
+        record.snapshot.taskId !== input.expectedTaskId ||
+        record.waitRevision !== input.expectedWaitRevision
+      )
+        throw new AgentRuntimeError('RESUME_CONFLICT', 'recovery')
+      if (this.active.has(this.key(input)) || this.admission.has(this.key(input)))
+        throw new AgentRuntimeError('AGENT_TASK_BUSY', 'recovery')
+      if (projectSemanticRevision(this.saved(input).file) !== record.snapshot.semanticRevision)
+        throw new AgentRuntimeError('FLOW_REVISION_CONFLICT', 'recovery')
+      for (const receipt of this.receipts(record).filter((receipt) =>
+        ['pending', 'unknown'].includes(receipt.state)
+      )) {
+        try {
+          this.desktop.ledger.commit({ projectId: input.projectId, commandId: receipt.commandId })
+        } catch {
+          /* Missing saved facts remain uncertain. */
+        }
+      }
+      const uncertain = this.receipts(record).some((receipt) =>
+        ['pending', 'unknown'].includes(receipt.state)
+      )
+      if (record.state === 'waiting' && record.waitKind === 'reconcile' && !uncertain) {
+        this.store.setState(
+          agentThread(record.snapshot),
+          'waiting',
+          'FLOW_COMMAND_FACTS_VERIFIED',
+          record.outputRefs
+        )
+        record.code = 'FLOW_COMMAND_FACTS_VERIFIED'
+      }
+      const reply = this.reply(record)
+      reply.task.recovery = {
+        reasons: this.receipts(record).some((receipt) =>
+          ['pending', 'unknown'].includes(receipt.state)
+        )
+          ? ['FLOW_COMMAND_OUTCOME_UNKNOWN']
+          : record.state === 'completed'
+            ? []
+            : ['FLOW_TASK_CHECKPOINT_UNCONFIRMED'],
+        canRestore: false
+      }
+      return reply
+    }
     const owner = new CoordinationStore(this.db).owner(input.projectId, input.nodeId)
     const prior = this.latest(input)
     if (
@@ -561,7 +685,11 @@ export class FlowAgentDesktopHost {
       !assigned &&
       !(
         prior?.snapshot.coordinatorTaskId === owner &&
-        (input.action === 'continue' || input.requestId === prior.snapshot.taskId)
+        (input.action === 'continue' ||
+          input.requestId === prior.snapshot.taskId ||
+          (prior.state === 'ready' &&
+            !!prior.snapshot.parentTaskId &&
+            input.expectedTaskId === prior.snapshot.taskId))
       )
     )
       throw new AgentRuntimeError('FLOW_CONTROL_OCCUPIED', 'admission')
@@ -582,7 +710,16 @@ export class FlowAgentDesktopHost {
             old.waitRevision !== input.expectedWaitRevision))
       )
         throw new AgentRuntimeError('RESUME_CONFLICT', 'resume')
-      if (input.action === 'start' && old && old.snapshot.taskId === input.requestId)
+      if (
+        input.action === 'start' &&
+        old &&
+        old.snapshot.taskId === input.requestId &&
+        !(
+          old.state === 'ready' &&
+          old.snapshot.parentTaskId &&
+          input.expectedTaskId === old.snapshot.taskId
+        )
+      )
         return this.reply(old)
       if (
         input.action === 'continue' &&
@@ -613,11 +750,17 @@ export class FlowAgentDesktopHost {
         input.expectedTaskId === old.snapshot.taskId
       const snapshot =
         input.action === 'continue' || prepared ? old!.snapshot : (assigned ?? this.bind(input))
-      const telemetry = createAgentTelemetry(snapshot)
+      const telemetry = createAgentTelemetry(snapshot, {
+        traceId: input.traceId,
+        spanId: input.spanId
+      })
       if (input.action === 'start' && !prepared)
         this.store.create(snapshot, this.skills.bind(snapshot.config.skills, snapshot.config.tools))
       admittingTaskId = snapshot.taskId
-      const model = await this.model(snapshot, controller.signal)
+      const model = await this.model(
+        { ...snapshot, traceId: input.traceId, spanId: input.spanId },
+        controller.signal
+      )
       if (controller.signal.aborted) throw new AgentRuntimeError('AGENT_CANCELLED', 'admission')
       runtime = createAgentRuntime({
         snapshot,
@@ -626,6 +769,7 @@ export class FlowAgentDesktopHost {
         model,
         tools: createLedgerToolPort(this.desktop.ledger, this.desktop.deliver),
         telemetry,
+        diagnostics: { traceId: input.traceId, spanId: input.spanId },
         assertRevision: (fixed) => {
           const { file } = this.saved({ projectId: fixed.projectId, nodeId: fixed.agentNodeId })
           if (projectSemanticRevision(file) !== fixed.semanticRevision)

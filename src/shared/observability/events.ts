@@ -38,6 +38,30 @@ const MODEL_ATTRS = {
 
 export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Object.fromEntries(
   [
+    ...['started', 'completed', 'failed'].map((stage) =>
+      def(
+        `workspace.recovery.${stage}`,
+        stage === 'failed' ? 'error' : 'info',
+        'main/store/workspace-health',
+        {
+          recoveredImportCount: 'int',
+          unlistedProjectCount: 'int',
+          missingProjectCount: 'int',
+          temporaryFileCount: 'int',
+          phase: 'short',
+          code: 'short'
+        }
+      )
+    ),
+    def('agent.coordination.stage', 'info', 'main/agent-flow/coordinator-reviews', {
+      phase: 'short',
+      code: 'short',
+      reviewId: 'id',
+      reworkTaskId: 'id',
+      versionId: 'id',
+      round: 'int',
+      subjectCount: 'int'
+    }),
     def('agent.desktop.inspect_failed', 'error', 'main/ipc/flow-agents.ipc', {
       phase: 'short',
       code: 'short'
@@ -47,7 +71,7 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
         `agent.coordination.${stage}`,
         stage === 'failed' ? 'error' : 'info',
         'main/agent-flow/coordinator-host',
-        { phase: 'short', code: 'short' }
+        { phase: 'short', code: 'short', resumesTraceId: 'id' }
       )
     ),
     def('agent.publication.failed', 'error', 'renderer/engine/flow-command-bridge', {
@@ -303,7 +327,11 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
     def('project.transfer.validated', 'info', 'main/ipc/project.ipc.ts', { itemCount: 'int' }),
     def('project.transfer.committed', 'info', 'main/ipc/project.ipc.ts', { itemCount: 'int' }),
     def('project.transfer.rolled_back', 'warn', 'main/ipc/project.ipc.ts'),
-    def('project.transfer.failed', 'error', 'main/ipc/project.ipc.ts'),
+    def('project.transfer.failed', 'error', 'main/ipc/project.ipc.ts', {
+      operation: 'short',
+      phase: 'short',
+      code: 'short'
+    }),
     // library.*
     def('library.revision_published', 'info', 'main/ipc/library.ipc.ts'),
     def('library.materialization_completed', 'info', 'main/ipc/library.ipc.ts'),

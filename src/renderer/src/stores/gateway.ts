@@ -2,6 +2,7 @@
 import { create } from 'zustand'
 import type { GatewayModelInfo, ModelModality, ProviderSummary } from '@shared/types'
 import { guessModelModality } from '@shared/provider-driver'
+import type { FeatureBinding } from '@free-creation/model-contracts'
 
 export interface ModelOption {
   provider: ProviderSummary
@@ -13,6 +14,7 @@ export interface ModelOption {
 
 interface GatewayState {
   providers: ProviderSummary[]
+  modelBindings: FeatureBinding[]
   loaded: boolean
   settingsOpen: boolean
   catalogOpen: boolean
@@ -25,6 +27,7 @@ interface GatewayState {
 
 export const useGatewayStore = create<GatewayState>((set) => ({
   providers: [],
+  modelBindings: [],
   loaded: false,
   settingsOpen: false,
   catalogOpen: false,
@@ -33,7 +36,12 @@ export const useGatewayStore = create<GatewayState>((set) => ({
     // those saved models so users can select one; a selected model is still checked by the
     // real provider request rather than being silently treated as absent.
     const res = await window.api.gateway.listProviders()
-    if (res.ok) set({ providers: res.data, loaded: true })
+    let modelBindings: FeatureBinding[] = []
+    if (window.api.models?.listBindings) {
+      const bindings = await window.api.models.listBindings()
+      if (bindings.ok) modelBindings = bindings.data
+    }
+    if (res.ok) set({ providers: res.data, modelBindings, loaded: true })
   },
   // The compatibility panel keeps the original provider setup flow available.
   openSettings: () => set({ settingsOpen: true, catalogOpen: false }),

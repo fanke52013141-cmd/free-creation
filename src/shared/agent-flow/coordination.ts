@@ -36,6 +36,7 @@ export interface CoordinatorPort {
   pause(input: { projectId: string; nodeId: string }): FlowAgentView | null
 }
 export interface AgentPublication {
+  kind?: 'review'
   projectId: string
   nodeId: string
   taskId: string

@@ -24,6 +24,7 @@ function fixture(
     maxReworks?: number
     stop?: boolean
     error?: boolean
+    review?: AgentModelPort['review']
   } = {}
 ) {
   const db = new Database(':memory:')
@@ -90,13 +91,15 @@ function fixture(
     during = () => {}
   const model: AgentModelPort = {
     decide: async () => ({ kind: 'wait' }),
-    review: async (context) => {
-      calls++
-      expect(context.subjects).toEqual([{ kind: 'text', text: store.text.props.text }])
-      during()
-      if (options.error) throw new Error('private-review-model-failure')
-      return options.verdict ?? { passed: true, feedback: '标准完整，允许交付', issues: [] }
-    }
+    review:
+      options.review ??
+      (async (context) => {
+        calls++
+        expect(context.subjects).toEqual([{ kind: 'text', text: store.text.props.text }])
+        during()
+        if (options.error) throw new Error('private-review-model-failure')
+        return options.verdict ?? { passed: true, feedback: '标准完整，允许交付', issues: [] }
+      })
   }
   const host = new FlowReviewHost(
       db,
@@ -122,6 +125,32 @@ function fixture(
   }
 }
 describe('fixed-version AI review and bounded manual rework', () => {
+  it('cancels even a model that ignores its signal and never commits a late verdict', async () => {
+    let resolve!: (value: ReviewModelVerdict) => void
+    let started!: () => void
+    const ready = new Promise<void>((done) => {
+      started = done
+    })
+    const f = fixture({
+      review: async () => {
+        started()
+        return new Promise<ReviewModelVerdict>((done) => {
+          resolve = done
+        })
+      }
+    })
+    const running = f.host.run(request)
+    const rejected = expect(running).rejects.toMatchObject({ code: 'AGENT_CANCELLED_OR_TIMED_OUT' })
+    await ready
+    f.host.cancel('p', 'review')
+    await rejected
+    resolve({ passed: true, feedback: 'late', issues: [] })
+    await Promise.resolve()
+    expect(new FlowReviewStore(f.db).latest('p', 'review')).toBeNull()
+    expect(() => f.ledger.assertNodeAvailable({ projectId: 'p', nodeId: 'target' })).toThrow(
+      'FLOW_REVIEW_NOT_READY'
+    )
+  })
   it('reviews materialized fixed assets through their actual canvas port while retaining original provenance', async () => {
     const f = fixture()
     f.store.target.meta.nodeResult = JSON.stringify({

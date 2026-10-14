@@ -57,6 +57,7 @@ import { toast } from '../stores/toast'
 import { useSaveCoordinator } from '../stores/save-coordinator'
 import type { ConnectionFrom } from '../stores/connection'
 import { useGatewayStore } from '../stores/gateway'
+import { flowInitialConfig } from '@shared/agent-flow/model-defaults'
 import { useEngineStore } from '../engine/store'
 import { runWorkflow, runWorkflowForNodes } from '../engine/executor'
 import {
@@ -370,6 +371,12 @@ export function CanvasEditor({
 
   // 执行引擎：注册 run 闭包到全局 store，顶部栏通过 store 触发（捕获 editor + projectId + providers）
   const providers = useGatewayStore((s) => s.providers)
+  useEffect(() => {
+    void useGatewayStore
+      .getState()
+      .load()
+      .catch(() => reportCanvasFailure(project.id, 'model-defaults'))
+  }, [project.id])
   useEffect(() => {
     if (!editorInstance) return
     const unsubscribeAgent = window.api.onFlowAgentPublication?.((grant) => {
@@ -1337,7 +1344,15 @@ export function CanvasEditor({
         title: spec.label,
         w: spec.defaultSize.w,
         h: spec.defaultSize.h,
-        ...(spec.initialConfig ? { config: spec.initialConfig } : {})
+        ...(spec.initialConfig
+          ? {
+              config: flowInitialConfig(
+                type,
+                spec.initialConfig,
+                useGatewayStore.getState().modelBindings
+              )
+            }
+          : {})
       } satisfies Partial<NodeCardProps>
     })
     // 有待连线且成功建线时由 createEdge 统一打点（节点+连线并为一步）；

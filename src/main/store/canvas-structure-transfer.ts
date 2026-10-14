@@ -1,7 +1,9 @@
 import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { basename } from 'path'
-import { ACTIVE_NODE_TYPE_IDS, type ProjectMeta } from '../../shared/types'
+import { ACTIVE_NODE_TYPE_IDS, type ProjectMeta, type ProjectFile } from '../../shared/types'
 import * as projects from './projects.repo'
+import { getDb } from './db'
+import { prepareFlowImport } from './flow-transfer'
 
 const FORMAT = 'canvas-studio-canvas-structure'
 const VERSION = 1
@@ -113,7 +115,9 @@ function cleanGraph(graph: CanvasStructureExportInput['graph']): {
       content: { kind: 'empty' },
       exec: { status: 'idle' },
       meta: {
-        source: ['upload', 'generate', 'derive', 'input'].includes(String((node.meta as Record<string, unknown> | undefined)?.source))
+        source: ['upload', 'generate', 'derive', 'input'].includes(
+          String((node.meta as Record<string, unknown> | undefined)?.source)
+        )
           ? (node.meta as Record<string, unknown>).source
           : 'input',
         createdAt: 0
@@ -121,7 +125,12 @@ function cleanGraph(graph: CanvasStructureExportInput['graph']): {
     }
   })
   const edges = graph.edges.map((edge) => {
-    if (!isRecord(edge) || typeof edge.id !== 'string' || !isRecord(edge.from) || !isRecord(edge.to)) {
+    if (
+      !isRecord(edge) ||
+      typeof edge.id !== 'string' ||
+      !isRecord(edge.from) ||
+      !isRecord(edge.to)
+    ) {
       throw new Error('画布结构包含无效连线')
     }
     return cleanValue(edge)
@@ -165,7 +174,8 @@ function cleanSnapshot(snapshot: unknown): unknown {
       raw.typeName === 'binding' &&
       (removedShapeIds.has(String(raw.fromId ?? bindingProps.fromId ?? '')) ||
         removedShapeIds.has(String(raw.toId ?? bindingProps.toId ?? '')))
-    ) continue
+    )
+      continue
 
     const record = cleanValue(raw) as Record<string, unknown>
     if (record.typeName === 'shape' && record.type === 'node-card') {
@@ -182,7 +192,7 @@ function cleanSnapshot(snapshot: unknown): unknown {
     }
     store[id] = record
   }
-  return { ...cleanValue(snapshot) as Record<string, unknown>, store }
+  return { ...(cleanValue(snapshot) as Record<string, unknown>), store }
 }
 
 function sanitizedBundle(input: CanvasStructureExportInput): {
@@ -205,7 +215,10 @@ function sanitizedBundle(input: CanvasStructureExportInput): {
 }
 
 /** Export the live canvas layout and workflow setup, excluding media files and runtime outputs. */
-export function exportCanvasStructure(filePath: string, input: CanvasStructureExportInput): {
+export function exportCanvasStructure(
+  filePath: string,
+  input: CanvasStructureExportInput
+): {
   path: string
   nodeCount: number
 } {
@@ -251,22 +264,37 @@ export function importCanvasStructure(filePath: string): ProjectMeta {
   const projectName = `${basename(bundle.projectName).slice(0, 112)}（导入）`
   // An imported structure can contain advanced nodes that the focused default hides.
   // Keep every supported creation type visible so the imported graph remains easy to extend.
-  const meta = projects.createProject(projectName, {
-    schemaVersion: 1,
-    presetId: 'all',
-    visibleNodeTypeIds: [...ACTIVE_NODE_TYPE_IDS]
-  })
+  let meta: ProjectMeta | undefined
   try {
-    const saved = projects.saveProject({
-      id: meta.id,
-      graph: bundle.graph,
-      tldrawSnapshot: bundle.tldrawSnapshot
-    })
-    if (!saved) throw new Error('无法保存导入的画布结构')
-    return projects.getProject(meta.id) ?? meta
+    return getDb().transaction(() => {
+      meta = projects.createProject(projectName, {
+        schemaVersion: 1,
+        presetId: 'all',
+        visibleNodeTypeIds: [...ACTIVE_NODE_TYPE_IDS]
+      })
+      const imported = prepareFlowImport(
+        {
+          version: 1,
+          meta: { ...meta, id: 'structure-source' },
+          ...bundle.graph,
+          tldrawSnapshot: bundle.tldrawSnapshot
+        } as ProjectFile,
+        [],
+        meta.id
+      ).file
+      const saved = projects.saveProject({
+        id: meta.id,
+        graph: { nodes: imported.nodes, edges: imported.edges, groups: imported.groups },
+        tldrawSnapshot: imported.tldrawSnapshot
+      })
+      if (!saved) throw new Error('无法保存导入的画布结构')
+      return projects.getProject(meta.id) ?? meta
+    })()
   } catch (error) {
-    projects.deleteProject(meta.id)
-    projects.purgeProjectFiles(meta.id)
+    if (meta) {
+      projects.deleteProject(meta.id)
+      projects.purgeProjectFiles(meta.id)
+    }
     throw error
   }
 }

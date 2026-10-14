@@ -6,18 +6,25 @@ const { tmpdir } = require('node:os')
 const { join, resolve, basename, dirname } = require('node:path')
 const real = process.argv.includes('--real-model')
 const collaboration = process.argv.includes('--collaboration')
-const coordination = process.argv.includes('--coordination')
+const recovery = process.argv.includes('--recovery')
+const coordination = process.argv.includes('--coordination') || recovery
+if (recovery && !process.env.CANVAS_AGENT_EVIDENCE_DIR) process.env.CANVAS_AGENT_EVIDENCE_DIR = 'qa/canvas-agent-flow/C4/desktop-recovery-fixture'
 const builder = process.argv.includes('--builder')
 const review = process.argv.includes('--review')
+const rework = process.argv.includes('--rework')
+const reworkModeArgument = process.argv.find(arg => arg.startsWith('--rework-mode='))
+if (reworkModeArgument) process.env.CANVAS_AGENT_REWORK_MODE = reworkModeArgument.split('=')[1]
+if (rework && !['autonomous', 'collaborative', 'manual'].includes(process.env.CANVAS_AGENT_REWORK_MODE || 'autonomous')) throw new Error('AGENT_REWORK_MODE_INVALID')
 async function cleanDirectory(directory) {
   if (resolve(directory, '..') !== resolve(tmpdir()) || !basename(directory).startsWith('canvas-flow-agent-')) throw new Error('AGENT_CLEANUP_REJECTED')
   await rm(directory, { recursive: true, force: true })
 }
-if (process.argv.slice(2).some(arg => !['--real-model','--collaboration','--coordination','--builder','--review'].includes(arg))) throw new Error('AGENT_TEST_ARGUMENT_INVALID')
+if (process.argv.slice(2).some(arg => !['--real-model','--collaboration','--coordination','--builder','--review','--rework','--recovery'].includes(arg) && arg !== reworkModeArgument)) throw new Error('AGENT_TEST_ARGUMENT_INVALID')
 if (real && (!process.env.CANVAS_AGENT_PROBE_KEY || !process.env.CANVAS_AGENT_PROBE_MODEL)) throw new Error('AGENT_REAL_CREDENTIAL_REQUIRED')
 ;(async () => {
   const directory = await mkdtemp(join(tmpdir(), 'canvas-flow-agent-'))
-  const evidence = resolve(`qa/canvas-agent-flow/C3/desktop-${review ? 'review-' : builder ? 'builder-' : coordination ? 'coordination-' : collaboration ? 'collaboration-' : ''}${real ? 'real' : 'fixture'}`)
+  const evidence = resolve(process.env.CANVAS_AGENT_EVIDENCE_DIR || `qa/canvas-agent-flow/C3/desktop-${rework ? 'rework-' + (process.env.CANVAS_AGENT_REWORK_MODE || 'autonomous') + '-' : review ? 'review-' : builder ? 'builder-' : coordination ? 'coordination-' : collaboration ? 'collaboration-' : ''}${real ? 'real' : 'fixture'}`)
+  if (!evidence.startsWith(resolve('qa') + require('node:path').sep)) throw new Error('AGENT_EVIDENCE_PATH_INVALID')
   await mkdir(evidence, { recursive: true })
   let requests = 0
   const provider = createServer(async (request, response) => {
@@ -48,7 +55,7 @@ if (real && (!process.env.CANVAS_AGENT_PROBE_KEY || !process.env.CANVAS_AGENT_PR
         if (!input.directInputs?.length || !input.fixedInputs?.length) throw new Error('FIXTURE_DECLARED_INPUT_MISSING')
         if (input.goal === 'cancel-fixture') await new Promise(done => setTimeout(done, 10000))
         if (input.skills.length && !Object.keys(input.loaded).length) { name = 'load_skill'; args = { skillId: 'result-check' } }
-        else if (input.receipts.length < 2) { name = 'execute_node'; args = { targetNodeId: input.targets[0].nodeId } }
+        else if (input.receipts.length < 2) { name = 'execute_node'; args = { targetNodeId: input.rework ? input.targets.find(target => target.nodeId === 'shape:rw-repair').nodeId : input.targets[0].nodeId } }
         else if (input.mode === 'collaborative' && !input.humanAccepted) { name = 'wait_for_human'; args = {} }
         else { name = 'finish_task'; args = { outputs: input.selectedOutputs?.length ? input.selectedOutputs : input.receipts.at(-1).outputRefs } }
         }
@@ -75,7 +82,7 @@ if (real && (!process.env.CANVAS_AGENT_PROBE_KEY || !process.env.CANVAS_AGENT_PR
     for (const phase of ['execute', 'reopen']) {
       const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE
       const code = await new Promise((done, reject) => {
-        const child = spawn(require('electron'), [resolve('out/main/agent-flow-desktop.js'), `--agent-directory=${directory}`, `--agent-phase=${phase}`, ...(real ? ['--real-model'] : []), ...(collaboration ? ['--collaboration'] : []), ...(coordination ? ['--coordination'] : []), ...(builder ? ['--builder'] : []), ...(review ? ['--review'] : [])],
+        const child = spawn(require('electron'), [resolve('out/main/agent-flow-desktop.js'), `--agent-directory=${directory}`, `--agent-phase=${phase}`, ...(real ? ['--real-model'] : []), ...(collaboration ? ['--collaboration'] : []), ...(coordination ? ['--coordination'] : []), ...(builder ? ['--builder'] : []), ...(review ? ['--review'] : []), ...(rework ? ['--rework'] : []), ...(recovery ? ['--recovery'] : [])],
           { env, stdio: 'ignore', windowsHide: true })
         const timer = setTimeout(() => { child.kill(); reject(new Error('AGENT_ELECTRON_TIMEOUT')) }, 240000)
         child.on('error', error => { clearTimeout(timer); reject(error) })
@@ -107,14 +114,31 @@ if (real && (!process.env.CANVAS_AGENT_PROBE_KEY || !process.env.CANVAS_AGENT_PR
     const ended = events.filter(event => ['agent.desktop.completed', 'agent.desktop.failed'].includes(event.event))
     if (!started.length || started.length !== ended.length) throw new Error('AGENT_DESKTOP_LIFECYCLE_FAILED')
     for (const event of started) if (ended.filter(end => end.traceId === event.traceId && end.spanId === event.spanId).length !== 1) throw new Error('AGENT_DESKTOP_TERMINAL_DUPLICATED')
-    if (!builder && !review && !events.some(event => event.event === 'agent.runtime.resumed' && event.attributes?.resumesTraceId)) throw new Error('AGENT_RESUME_TRACE_MISSING')
+    if (!builder && !review && !rework && !events.some(event => event.event === 'agent.runtime.resumed' && event.attributes?.resumesTraceId)) throw new Error('AGENT_RESUME_TRACE_MISSING')
+    if (recovery) {
+      const transfers = events.filter(event => event.event === 'project.transfer.started')
+      if (transfers.length !== 2) throw new Error('C4_TRANSFER_LIFECYCLE_MISSING')
+      for (const event of transfers) if (events.filter(end => ['project.transfer.committed', 'project.transfer.failed'].includes(end.event) && end.traceId === event.traceId && end.spanId === event.spanId).length !== 1) throw new Error('C4_TRANSFER_TERMINAL_INVALID')
+      const reconciled = events.filter(event => event.event === 'agent.coordination.started' && event.attributes?.phase === 'reconcile')
+      if (reconciled.length !== 1 || !reconciled[0].attributes?.resumesTraceId) throw new Error('C4_RECONCILE_TRACE_MISSING')
+      for (const event of reconciled) if (events.filter(end => ['agent.coordination.completed', 'agent.coordination.failed'].includes(end.event) && end.traceId === event.traceId && end.spanId === event.spanId).length !== 1) throw new Error('C4_RECONCILE_TERMINAL_INVALID')
+    }
     await cp(join(directory, 'diagnostics'), join(evidence, 'diagnostics'), { recursive: true })
     const modelRequests = events.filter(event => event.event === 'model.request.started').length
     await writeFile(join(evidence, 'results.json'), JSON.stringify({ reports, modelRequests, diagnosticRedaction: true,
       boundary: 'real desktop canvas/executor/IPC/model catalog/SDK/two process checkpoint/fixed assets', model: real ? process.env.CANVAS_AGENT_PROBE_MODEL : 'synthetic fixture' }, null, 2))
     process.stdout.write(`Agent desktop ${real ? 'real model' : 'fixture'}: start, two tools, human wait/reopen/continue, declared fixed assets and diagnostics passed.\n`)
   } finally {
-    server.kill(); provider.closeAllConnections(); provider.close()
-    await cleanDirectory(directory)
+    try {
+      server.kill()
+      await new Promise((done, reject) => {
+        if (server.exitCode !== null || server.signalCode !== null) return done()
+        const timer = setTimeout(() => reject(new Error('AGENT_VITE_CLEANUP_FAILED')), 5000)
+        server.once('exit', () => { clearTimeout(timer); done() })
+      })
+    } finally {
+      provider.closeAllConnections(); provider.close()
+      await cleanDirectory(directory)
+    }
   }
 })().catch(error => { process.stderr.write(`${error.message}\n`); process.exitCode = 1 })

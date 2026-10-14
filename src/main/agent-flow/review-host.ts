@@ -14,14 +14,35 @@ import {
 import { AgentRuntimeError } from '../../shared/agent-flow/runtime-contracts'
 import { FlowReviewStore, reviewBinding, reviewDigest } from './review-store'
 import { FlowAssetStore } from './asset-store'
-import { readPinnedOutputs } from '../../shared/engine/deterministic-projections'
+import {
+  DETERMINISTIC_PROJECTIONS,
+  readPinnedOutputs
+} from '../../shared/engine/deterministic-projections'
 import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
 import type { NodeShape } from '../../shared/engine/executor-types'
 import type { AgentModelPort } from './runtime'
 import type { ModelIdentity } from '../../shared/agent-flow/coordination'
+import { controlledReview } from './coordination-store'
+
+async function abortable<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+  let abort!: () => void
+  const cancelled = new Promise<never>((_, reject) => {
+    abort = () => reject(new AgentRuntimeError('AGENT_CANCELLED_OR_TIMED_OUT', 'review'))
+    if (signal.aborted) abort()
+    else signal.addEventListener('abort', abort, { once: true })
+  })
+  try {
+    return await Promise.race([work, cancelled])
+  } finally {
+    signal.removeEventListener('abort', abort)
+  }
+}
 
 export class FlowReviewHost {
-  private readonly active = new Set<string>()
+  private readonly active = new Map<string, AbortController>()
+  cancel(projectId: string, nodeId: string): void {
+    this.active.get(JSON.stringify([projectId, nodeId]))?.abort()
+  }
   private readonly store: FlowReviewStore
   private readonly assets: FlowAssetStore
   constructor(
@@ -53,6 +74,11 @@ export class FlowReviewHost {
     const rejected = this.store.rejectedRounds(input.projectId, input.nodeId, binding.cycleId)
     if (rejected > binding.config.maxReworks)
       throw new AgentRuntimeError('FLOW_REVIEW_BUDGET_EXHAUSTED', 'review')
+    const occupied = !!this.db
+      .prepare('SELECT 1 FROM flow_coordination_scope WHERE project_id=? AND node_id=?')
+      .get(input.projectId, input.nodeId)
+    if (occupied && !controlledReview(this.db, input.projectId, input.nodeId, input.requestId))
+      throw new AgentRuntimeError('FLOW_CONTROL_OCCUPIED', 'review')
     if (
       previous?.cycleId === binding.cycleId &&
       !previous.decision.passed &&
@@ -61,15 +87,9 @@ export class FlowReviewHost {
       throw new AgentRuntimeError('FLOW_REVIEW_STOPPED', 'review')
     const key = JSON.stringify([input.projectId, input.nodeId])
     if (this.active.has(key)) throw new AgentRuntimeError('AGENT_TASK_OCCUPIED', 'review')
-    if (
-      this.db
-        .prepare('SELECT 1 FROM flow_coordination_scope WHERE project_id=? AND node_id=?')
-        .get(input.projectId, input.nodeId)
-    )
-      throw new AgentRuntimeError('FLOW_CONTROL_OCCUPIED', 'review')
-    this.active.add(key)
     const controller = new AbortController(),
       timer = setTimeout(() => controller.abort(), 30000)
+    this.active.set(key, controller)
     try {
       const snapshot = (
         file.tldrawSnapshot as {
@@ -88,6 +108,21 @@ export class FlowReviewHost {
           )
             throw new AgentRuntimeError('AGENT_INPUT_NOT_FIXED', 'review')
           return ref
+        }
+        const sourceShape = snapshot[source.nodeId]
+        if (['text', 'json'].includes(sourceShape.props.nodeType)) {
+          const latest = this.assets.list(input.projectId, source.nodeId, source.portId)[0]
+          const value =
+            DETERMINISTIC_PROJECTIONS[sourceShape.props.nodeType as 'text' | 'json'](sourceShape)[
+              source.portId
+            ]
+          if (
+            latest &&
+            value &&
+            canonicalFlowJson(this.assets.read(input.projectId, latest.ref.versionId).value) ===
+              canonicalFlowJson(value)
+          )
+            return latest.ref
         }
         return this.assets.submit({
           projectId: input.projectId,
@@ -115,23 +150,31 @@ export class FlowReviewHost {
         maxSteps: 1,
         relations: []
       })
-      const model = await this.model(
-        {
-          projectId: input.projectId,
-          agentNodeId: input.nodeId,
-          taskId: input.requestId,
-          config,
-          traceId: input.traceId,
-          spanId: input.spanId
-        },
+      const model = await abortable(
+        this.model(
+          {
+            projectId: input.projectId,
+            agentNodeId: input.nodeId,
+            taskId: input.requestId,
+            config,
+            traceId: input.traceId,
+            spanId: input.spanId
+          },
+          controller.signal
+        ),
         controller.signal
       )
       if (!model.review) throw new AgentRuntimeError('AGENT_MODEL_TOOL_UNVERIFIED', 'review')
       const verdict = ReviewModelVerdictSchema.parse(
-        await model.review({ criteria: binding.shape.props.text, subjects }, controller.signal)
+        await abortable(
+          model.review({ criteria: binding.shape.props.text, subjects }, controller.signal),
+          controller.signal
+        )
       )
       if (controller.signal.aborted)
         throw new AgentRuntimeError('AGENT_CANCELLED_OR_TIMED_OUT', 'review')
+      if (occupied && !controlledReview(this.db, input.projectId, input.nodeId, input.requestId))
+        throw new AgentRuntimeError('AGENT_CANCELLED', 'review')
       const current = this.open(input.projectId)
       if (
         !current ||

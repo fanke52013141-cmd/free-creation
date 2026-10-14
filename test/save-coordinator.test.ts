@@ -83,6 +83,50 @@ describe('SaveCoordinator · 不变量①（在途合并，最多一个事务）
 describe('SaveCoordinator · 不变量②（旧响应不误标已保存）', () => {
   beforeEach(resetStore)
 
+  it.each(['success', 'failure'])(
+    'ignores a previous project %s while the new project is saving',
+    async (outcome) => {
+      const old = deferred(),
+        current = deferred(),
+        oldFailure = vi.fn()
+      useSaveCoordinator
+        .getState()
+        .bind({ save: () => old.promise, onConflict: oldFailure, onFailure: oldFailure })
+      useSaveCoordinator.getState().reset(100)
+      useSaveCoordinator.getState().markDirty()
+      const oldSave = useSaveCoordinator.getState().flush()
+      useSaveCoordinator
+        .getState()
+        .bind({
+          save: () => current.promise,
+          onConflict: () => undefined,
+          onFailure: () => undefined
+        })
+      useSaveCoordinator.getState().reset(0)
+      useSaveCoordinator.getState().markDirty()
+      const newSave = useSaveCoordinator.getState().flush()
+      if (outcome === 'success') old.resolve({ graphVersion: 101 })
+      else old.reject({ code: 'REVISION_CONFLICT' })
+      await oldSave
+      expect(useSaveCoordinator.getState()).toMatchObject({
+        phase: 'saving',
+        inFlight: true,
+        dirtyVersion: 1,
+        persistedVersion: 0,
+        lastError: null
+      })
+      expect(oldFailure).not.toHaveBeenCalled()
+      current.resolve({ graphVersion: 1 })
+      await newSave
+      expect(useSaveCoordinator.getState()).toMatchObject({
+        phase: 'saved',
+        inFlight: false,
+        dirtyVersion: 1,
+        persistedVersion: 1
+      })
+    }
+  )
+
   it('磁盘版本号回退的旧确认不得把较新的 dirty 标成 saved', async () => {
     // 场景：保存 A(v1) 在途 → reset（重载，persisted=5）+ 新修改 v6 → A 响应迟到 →
     // 补发保存 v6（挂起中）。此刻不得显示已保存。

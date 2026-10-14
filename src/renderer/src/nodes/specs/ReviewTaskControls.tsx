@@ -51,7 +51,7 @@ export function ReviewTaskControls({ shape }: Pick<NodeBodyProps, 'shape'>): Rea
           </>
         )}
         <p className="agent-flow-pending">
-          完整文本 / JSON 审核；当前先由人明确提交新版本。自动 Agent 返工尚未启用。
+          完整文本 / JSON 审核；自动审核与返工须由主 Agent 明确配置控制范围。
         </p>
         {error && (
           <p role="alert" className="agent-flow-pending">

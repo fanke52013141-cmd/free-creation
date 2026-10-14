@@ -36,6 +36,7 @@ export interface AgentModelContext {
   receipts: FlowCommandReceipt[]
   humanAccepted: boolean
   humanFeedback?: string
+  rework?: AgentTaskSnapshot['rework']
   selectedOutputs?: AgentTaskRecord['outputRefs']
 }
 export interface AgentModelPort {
@@ -86,6 +87,7 @@ export function createAgentRuntime(options: {
   tools: AgentToolPort
   assertRevision: (snapshot: AgentTaskSnapshot) => void
   telemetry: AgentTelemetry
+  diagnostics?: { traceId: string; spanId: string }
 }): AgentRuntime {
   const { store, model, tools, assertRevision } = options
   const thread = agentThread(options.snapshot)
@@ -175,6 +177,7 @@ export function createAgentRuntime(options: {
               receipts: state.receipts,
               humanAccepted: state.humanAccepted,
               humanFeedback: state.humanFeedback || record.snapshot.humanFeedback,
+              rework: record.snapshot.rework,
               selectedOutputs: state.selectedOutputs
             },
             signal
@@ -242,8 +245,8 @@ export function createAgentRuntime(options: {
             contractVersion: target.contractVersion,
             inputs: target.inputs,
             expectedSemanticRevision: record.snapshot.semanticRevision,
-            traceId: record.snapshot.traceId,
-            spanId: record.snapshot.spanId
+            traceId: options.diagnostics?.traceId ?? record.snapshot.traceId,
+            spanId: options.diagnostics?.spanId ?? record.snapshot.spanId
           },
           signal
         )

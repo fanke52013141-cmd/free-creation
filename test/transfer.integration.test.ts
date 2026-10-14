@@ -38,7 +38,10 @@ vi.mock('../src/main/store/db', (): { getProjectsDir: () => string; getDb: () =>
   const statement = (
     sql: string
   ): { all: () => unknown[]; run: (...values: unknown[]) => void } => ({
-    all: () => (sql.includes('artifact_recipes') ? [] : state.mediaSelect),
+    all: () =>
+      sql.includes('artifact_recipes') || sql.includes('flow_asset_versions')
+        ? []
+        : state.mediaSelect,
     run: (...values: unknown[]) => {
       if (sql.startsWith('INSERT INTO projects')) state.projects.push(values)
       else if (sql.startsWith('INSERT INTO media')) state.media.push(values)
@@ -105,7 +108,8 @@ describe('importProject · 本地导入集成', () => {
     expect(recipe.projectId).toBe(imported.id)
     expect(recipe.mediaId).not.toBe(oldId)
     expect(recipe.inputMediaIds).toEqual([recipe.mediaId])
-    expect(recipe.missingInputMediaIds).toEqual(['missing-media'])
+    expect(recipe.missingInputMediaIds).toHaveLength(1)
+    expect(recipe.missingInputMediaIds).not.toContain('missing-media')
     expect(JSON.parse(recipe.paramsJson).referenceMediaIds).toEqual([recipe.mediaId])
     expect(recipe.fullPrompt).toBe(oldId)
   })
@@ -115,17 +119,24 @@ describe('importProject · 本地导入集成', () => {
     )
     const projectPath = join(state.projectsDir, result.id, 'project.json')
     const imported = JSON.parse(readFileSync(projectPath, 'utf-8'))
-    const reference = imported.tldrawSnapshot.store['shape:demo-reference']
-    const director = imported.tldrawSnapshot.store['shape:demo-director']
+    const shapes = Object.values(imported.tldrawSnapshot.store) as Array<{
+      props?: { nodeType?: string; mediaId: string; mediaPath: string; config: string }
+    }>
+    const reference = shapes.find(
+      (shape) => shape.props?.mediaId && shape.props.nodeType === 'image'
+    )!
+    const director = shapes.find((shape) => shape.props?.nodeType === 'director')!
+    expect(imported.tldrawSnapshot.store['shape:demo-reference']).toBeUndefined()
+    expect(imported.tldrawSnapshot.store['shape:demo-director']).toBeUndefined()
 
     expect(imported.nodes).toHaveLength(8)
     expect(imported.edges).toHaveLength(7)
-    expect(reference.props.mediaId).not.toBe('demo-reference-image')
-    expect(reference.props.mediaPath).toMatch(
+    expect(reference.props!.mediaId).not.toBe('demo-reference-image')
+    expect(reference.props!.mediaPath).toMatch(
       new RegExp(`^projects/${result.id}/media/[A-Za-z0-9_-]+\\.png$`)
     )
-    expect(JSON.parse(director.props.config).shots[0].referenceMediaIds).toEqual([
-      reference.props.mediaId
+    expect(JSON.parse(director.props!.config).shots[0].referenceMediaIds).toEqual([
+      reference.props!.mediaId
     ])
     expect(state.projects).toHaveLength(1)
     expect(state.media).toHaveLength(1)

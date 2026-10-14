@@ -1,5 +1,9 @@
 {
   "excludedPaths": ["src/renderer/src/dev/", "src/main/model-smoke.ts", "qa/", "artifacts/", "results/"],
-  "files": [],
+  "files": ["src/main/gateway/factory.ts", "src/main/gateway/glm-request.ts"],
+  "reasons": {
+    "src/main/gateway/factory.ts": "SDK 模型工厂仅注入参数适配 fetch；请求开始/唯一终态由 gateway/chat.ts、agent-flow/runtime-model.ts 和 model-probe.ts 的 emitGatewayEvent 负责。工厂不发起独立业务请求，重复事件会产生双终态；现有 testProvider 诊断继续由调用入口负责。",
+    "src/main/gateway/glm-request.ts": "官方 GLM fetch 装饰器只规范化请求参数并调用原 transport，保留 AbortSignal 和失败传播，不增加重试、任务或响应处理。调用者已有 model.request 生命周期；真实 SDK 探测的 4 开始/4 终态和脱敏验证见 docs/canvas-agent-flow/18-glm-model-switch.md。不得借此添加裸 console 或记录密钥/正文。"
+  },
   "_说明": "excludedPaths 内的文件跳过旁路检查：dev/browserMock 是浏览器演示 mock（无 main 诊断存储，接受即丢弃）；model-smoke.ts 的 console 是 --model-smoke-test 的 stdout 报告通道（无界面验收输出）；qa/ 与 artifacts/、results/ 是一次性 QA 探测脚本与验收产物，不属于应用业务代码。新条目必须带理由登记；密钥/正文禁止项不可通过本清单豁免。"
 }

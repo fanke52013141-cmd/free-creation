@@ -16,6 +16,14 @@ import { remapMediaReferences } from '../../shared/media-reference-remap'
 import { getDb, getProjectsDir } from './db'
 import { listArtifactRecipes, saveArtifactRecipe } from './artifact-recipes.repo'
 import { artifactRecipeSchema } from '../../shared/artifact-recipe'
+import {
+  exportFlowVersions,
+  insertFlowVersions,
+  parseFlowVersions,
+  prepareFlowImport,
+  stripTransferCredentials,
+  completeTransferMediaMap
+} from './flow-transfer'
 
 const BUNDLE_EXT = '.canvasbundle'
 /** 当前支持的 ProjectFile version；导入时其它版本拒绝。 */
@@ -43,7 +51,9 @@ export interface ProjectMetaInfo {
 /** 收集指定项目的媒体资产（从 SQLite 按路径前缀）。 */
 function listProjectMedia(projectId: string): MediaAsset[] {
   const rows = getDb()
-    .prepare(`SELECT id, kind, mime, path, size_bytes, created_at FROM media WHERE substr(path, 1, length(?)) = ?`)
+    .prepare(
+      `SELECT id, kind, mime, path, size_bytes, created_at FROM media WHERE substr(path, 1, length(?)) = ?`
+    )
     .all(`projects/${projectId}/media/`, `projects/${projectId}/media/`) as Array<{
     id: string
     kind: MediaAsset['kind']
@@ -108,8 +118,18 @@ export function exportProject(id: string, destPath: string): ProjectExportResult
   const path = destPath.endsWith(BUNDLE_EXT) ? destPath : `${destPath}${BUNDLE_EXT}`
 
   const zip = new AdmZip()
-  zip.addFile('recipes.json', Buffer.from(JSON.stringify(listArtifactRecipes(id)), 'utf-8'))
-  zip.addFile('project.json', Buffer.from(JSON.stringify(file, null, 2), 'utf-8'))
+  zip.addFile(
+    'recipes.json',
+    Buffer.from(JSON.stringify(stripTransferCredentials(listArtifactRecipes(id))), 'utf-8')
+  )
+  zip.addFile(
+    'project.json',
+    Buffer.from(JSON.stringify(stripTransferCredentials(file), null, 2), 'utf-8')
+  )
+  zip.addFile(
+    'flow-assets.json',
+    Buffer.from(JSON.stringify(exportFlowVersions(getDb(), id)), 'utf-8')
+  )
   zip.addFile(
     'bundle.json',
     Buffer.from(
@@ -222,12 +242,24 @@ export function importProject(srcPath: string): ProjectMetaInfo {
       : []
     if (!Array.isArray(recipes) || recipes.length > 100000) throw new Error('生成来源记录无效')
     const importedRecipes = recipes.map((recipe) => artifactRecipeSchema.parse(recipe))
-    const remapped = remapMediaReferences(file, {
-      ids: new Map(mediaRefs.map((ref) => [ref.oldId, ref.newId])),
-      paths: new Map(mediaRefs.map((ref) => [ref.oldPath, ref.newPath]))
-    })
+    const assetsEntry = zip.getEntry('flow-assets.json')
+    const flowRows = parseFlowVersions(
+      assetsEntry ? JSON.parse(assetsEntry.getData().toString('utf-8')) : [],
+      file.meta.id
+    )
+    const mediaMap = completeTransferMediaMap(
+      file,
+      {
+        ids: new Map(mediaRefs.map((ref) => [ref.oldId, ref.newId])),
+        paths: new Map(mediaRefs.map((ref) => [ref.oldPath, ref.newPath]))
+      },
+      newId,
+      [flowRows.map((row) => row.value_json), importedRecipes]
+    )
+    const remapped = remapMediaReferences(file, mediaMap)
+    const portable = prepareFlowImport(remapped, flowRows, newId, mediaMap)
     const newFile: ProjectFile = {
-      ...remapped,
+      ...portable.file,
       meta: { id: newId, name, createdAt: now, updatedAt: now, graphVersion: 0 }
     }
     writeFileSync(join(stagingDir, 'project.json'), JSON.stringify(newFile, null, 2), 'utf-8')
@@ -235,7 +267,7 @@ export function importProject(srcPath: string): ProjectMetaInfo {
     // 目录先就位、数据库后提交（R-34）：中间崩溃的残留只可能是
     // ① rename 前的 `<id>.importing` staging（workspace-health 搬入 .recovery），或
     // ② rename 后的「目录存在但无 DB 记录」——列表不可见，reconcile 以
-    // orphanedProjectIds 上报。绝不会出现「列表可见但目录缺失」的幽灵项目。
+    // unlistedProjectIds 上报。绝不会出现「列表可见但目录缺失」的幽灵项目。
     renameSync(stagingDir, newProjectDir)
 
     const database = getDb()
@@ -247,6 +279,7 @@ export function importProject(srcPath: string): ProjectMetaInfo {
     )
     database.transaction(() => {
       insertProject.run(newId, name, now, now)
+      insertFlowVersions(database, portable.rows)
       for (const ref of mediaRefs) {
         const ext = extName(ref.newPath)
         const finalPath = join(finalMediaDir, `${ref.newId}${ext}`)
@@ -269,10 +302,7 @@ export function importProject(srcPath: string): ProjectMetaInfo {
           ...recipe,
           projectId: newId,
           mediaId,
-          paramsJson: remapMediaReferences(recipe.paramsJson, {
-            ids: mediaIds,
-            paths: new Map(mediaRefs.map((ref) => [ref.oldPath, ref.newPath]))
-          }),
+          paramsJson: remapMediaReferences(stripTransferCredentials(recipe.paramsJson), mediaMap),
           inputMediaIds: recipe.inputMediaIds.flatMap((id) =>
             mediaIds.has(id) ? [mediaIds.get(id)!] : []
           ),
@@ -281,7 +311,7 @@ export function importProject(srcPath: string): ProjectMetaInfo {
               ...(recipe.missingInputMediaIds ?? []),
               ...recipe.inputMediaIds.filter((id) => !mediaIds.has(id))
             ])
-          ]
+          ].map((id) => mediaMap.ids.get(id) ?? id)
         })
       }
     })()

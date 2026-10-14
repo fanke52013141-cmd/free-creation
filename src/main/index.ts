@@ -29,7 +29,7 @@ import { registerLibraryIpc } from './ipc/library.ipc'
 import { SqliteModelHost } from './model-host/sqlite-model-host'
 import { createDesktopModelRuntime } from './model-host/runtime'
 import { closeDb, getDataDir, getDb, getProjectsDir } from './store/db'
-import { reconcileWorkspace, sweepStaleVideoTempFiles } from './store/workspace-health'
+import { checkWorkspaceHealth, sweepStaleVideoTempFiles } from './store/workspace-health'
 import { bootstrapLegacyProvidersToCatalog, upgradeLegacyApiKeys } from './gateway/providers.repo'
 import { getMediaAbsPath } from './store/media.repo'
 import { mimeForExtension } from '../shared/mime'
@@ -252,19 +252,15 @@ app.whenReady().then(async () => {
   // safeStorage 上线前保存的 Key 至今是裸明文；启动时补一次收口，日志只记数量。
   const reEncrypted = upgradeLegacyApiKeys()
   if (reEncrypted) log.info(`providers: ${reEncrypted} 个历史明文 API Key 已重新加密`)
-  const health = reconcileWorkspace({
+  checkWorkspaceHealth({
     projectsDir: getProjectsDir(),
     projectIds: (
       database.prepare('SELECT id FROM projects WHERE deleted = 0').all() as Array<{ id: string }>
+    ).map((row) => row.id),
+    knownProjectIds: (
+      database.prepare('SELECT id FROM projects').all() as Array<{ id: string }>
     ).map((row) => row.id)
   })
-  if (
-    health.recoveredImports.length ||
-    health.orphanedProjectIds.length ||
-    health.temporaryFiles.length
-  ) {
-    log.warn('workspace health check found recoverable items', health)
-  }
   // 数据根目录残留超过 24 小时的成片临时文件（tmp-video-*）在启动时兜底清扫；
   // 时限内不动，避免误删并行实例正在写的文件。
   const sweptVideoTemps = sweepStaleVideoTempFiles(getDataDir())
@@ -321,7 +317,10 @@ app.whenReady().then(async () => {
   mainWindow = createWindow()
   registerGatewayIpc(mainWindow)
   registerFlowAssetsIpc(() => mainWindow)
-  registerFlowCommandsIpc(() => mainWindow, (desktop) => registerFlowAgentsIpc(() => mainWindow, desktop))
+  registerFlowCommandsIpc(
+    () => mainWindow,
+    (desktop) => registerFlowAgentsIpc(() => mainWindow, desktop)
+  )
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

@@ -23,6 +23,20 @@ import {
   type CoordinationDecision
 } from '../../shared/agent-flow/coordination'
 
+function exactRefs(refs: Array<z.infer<typeof AgentFlowAssetRefSchema>>): z.ZodType {
+  if (!refs.length) return AgentFlowAssetRefSchema
+  const values = (key: keyof (typeof refs)[number]): [string, ...string[]] =>
+    [...new Set(refs.map((ref) => ref[key]))] as [string, ...string[]]
+  return z
+    .object({
+      assetId: z.enum(values('assetId')),
+      versionId: z.enum(values('versionId')),
+      sourceNodeId: z.enum(values('sourceNodeId')),
+      sourcePortId: z.enum(values('sourcePortId'))
+    })
+    .strict()
+}
+
 /** One SDK request proposes one action. LangGraph alone owns the outer loop. */
 export class AgentSdkModel implements AgentModelPort {
   constructor(
@@ -208,9 +222,34 @@ export class AgentSdkModel implements AgentModelPort {
     const attributes = { operation: 'agent.coordination.decide' }
     emitGatewayEvent('model.request.started', '主 Agent 决策开始', context, { attributes })
     try {
-      const content = JSON.stringify(input)
+      const completedRefs = input.completed.flatMap((child) => child.outputs)
+      const completedAssets = completedRefs.length
+        ? this.assets.resolveInputs(this.projectId, completedRefs)
+        : []
+      const maxOutputs = Math.max(
+        1,
+        new Set(completedAssets.map((asset) => (asset.value.kind === 'json' ? 'json' : 'text')))
+          .size
+      )
+      const completedOutputTypes = completedAssets.map((asset) => ({
+        ref: asset.ref,
+        kind: asset.value.kind
+      }))
+      const content = JSON.stringify({ ...input, completedOutputTypes })
       if (Buffer.byteLength(content) > 131072)
         throw new AgentRuntimeError('AGENT_CONTEXT_TOO_LARGE', 'coordination')
+      const dispatchSchema =
+        input.available.length === 0
+          ? CoordinationDecisionSchema.options[0].omit({ kind: true })
+          : CoordinationDecisionSchema.options[0].omit({ kind: true }).extend({
+              nodeId: z.enum(
+                input.available.map((candidate) => candidate.nodeId) as [string, ...string[]]
+              ),
+              inputs: z
+                .array(exactRefs(input.available.flatMap((candidate) => candidate.inputs)))
+                .min(1)
+                .max(32)
+            })
       const result = streamText({
         model: this.model,
         maxRetries: 0,
@@ -224,11 +263,16 @@ export class AgentSdkModel implements AgentModelPort {
           dispatch_agent: tool({
             description:
               '给一个就绪专业 Agent 分派独立任务；从其允许的固定输入中选择最小清单，填写目标和完成条件。',
-            inputSchema: CoordinationDecisionSchema.options[0].omit({ kind: true })
+            inputSchema: dispatchSchema
           }),
           finish_flow: tool({
             description: '所有专业任务真实完成后，选择其真实固定成果作为 Flow 输出。',
-            inputSchema: CoordinationDecisionSchema.options[1].omit({ kind: true })
+            inputSchema: CoordinationDecisionSchema.options[1].omit({ kind: true }).extend({
+              outputs: z
+                .array(exactRefs(input.completed.flatMap((child) => child.outputs)))
+                .min(1)
+                .max(maxOutputs)
+            })
           }),
           ...(input.mode === 'collaborative'
             ? {
@@ -289,6 +333,10 @@ export class AgentSdkModel implements AgentModelPort {
         ...input.targets.flatMap((target) => target.inputs.flatMap((port) => port.assets))
       ]
       const fixedInputs = this.assets.resolveInputs(this.projectId, refs)
+      const rejectedOutputs = this.assets.resolveInputs(
+        this.projectId,
+        input.rework?.rejectedOutputs ?? []
+      )
       const observedOutputs = this.assets.resolveInputs(
         this.projectId,
         input.receipts
@@ -301,7 +349,13 @@ export class AgentSdkModel implements AgentModelPort {
         loadedResources: Object.keys(input.loaded),
         humanAccepted: input.humanAccepted
       }
-      const content = JSON.stringify({ ...input, progress, fixedInputs, observedOutputs })
+      const content = JSON.stringify({
+        ...input,
+        progress,
+        fixedInputs,
+        observedOutputs,
+        rejectedOutputs
+      })
       if (Buffer.byteLength(content) > 262144)
         throw new AgentRuntimeError('AGENT_CONTEXT_TOO_LARGE', 'model-context')
       const tools = {

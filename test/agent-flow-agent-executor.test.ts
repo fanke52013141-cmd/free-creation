@@ -54,6 +54,22 @@ function context() {
   return { ctx, signal, shape, updateResult, updateMeta, runFlowAgent, stopFlowAgent, task }
 }
 describe('Agent shares the registered node executor', () => {
+  it('uses a fact-only reconcile for blocked and uncertain waits, with restoration only on an explicit action', async () => {
+    for (const [state, waitKind, recoveryAction, expected] of [
+      ['blocked', null, undefined, 'reconcile'],
+      ['blocked', null, 'restore', 'restore'],
+      ['waiting', 'reconcile', undefined, 'reconcile']
+    ]) {
+      const f = context()
+      f.shape.meta = { agentTask: JSON.stringify({ ...f.task, state, waitKind, recoveryAction }) }
+      await agentExecutor(f.ctx)
+      expect(f.runFlowAgent.mock.calls[0][0]).toMatchObject({
+        action: expected,
+        expectedTaskId: f.task.taskId,
+        expectedWaitRevision: f.task.waitRevision
+      })
+    }
+  })
   it('persists human wait as task metadata without projecting a success or a business result', async () => {
     const f = context()
     expect((await agentExecutor(f.ctx)).status).toBe('skipped')

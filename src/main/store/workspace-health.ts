@@ -1,16 +1,46 @@
 import { existsSync, mkdirSync, readdirSync, renameSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
+import { emitGatewayEvent } from '../diagnostics/gateway-events'
+import { newTraceId, newSpanId } from '../../shared/observability'
 
 export interface WorkspaceHealthReport {
   recoveredImports: string[]
   orphanedProjectIds: string[]
+  /** Complete directories absent from the project index; preserve, never auto-import. */
+  unlistedProjectIds: string[]
   temporaryFiles: string[]
 }
 
 export interface WorkspaceHealthInput {
   projectsDir: string
   projectIds: readonly string[]
+  knownProjectIds?: readonly string[]
   now?: number
+}
+
+/** Startup scan lifecycle; never log paths or names from the recovery report. */
+export function checkWorkspaceHealth(input: WorkspaceHealthInput): WorkspaceHealthReport {
+  const context = { traceId: newTraceId(), spanId: newSpanId() }
+  emitGatewayEvent('workspace.recovery.started', '工作区恢复检查开始', context)
+  try {
+    const report = reconcileWorkspace(input)
+    emitGatewayEvent('workspace.recovery.completed', '工作区恢复检查完成', context, {
+      status: 'success',
+      attributes: {
+        recoveredImportCount: report.recoveredImports.length,
+        unlistedProjectCount: report.unlistedProjectIds.length,
+        missingProjectCount: report.orphanedProjectIds.length,
+        temporaryFileCount: report.temporaryFiles.length
+      }
+    })
+    return report
+  } catch (error) {
+    emitGatewayEvent('workspace.recovery.failed', '工作区恢复检查失败', context, {
+      status: 'failed',
+      attributes: { phase: 'reconcile', code: 'WORKSPACE_RECOVERY_FAILED' }
+    })
+    throw error
+  }
 }
 
 /** downloadToTempFile 的临时文件前缀；任务失败路径漏删的残骸靠启动清扫兜底。 */
@@ -53,6 +83,7 @@ export function reconcileWorkspace(input: WorkspaceHealthInput): WorkspaceHealth
   const report: WorkspaceHealthReport = {
     recoveredImports: [],
     orphanedProjectIds: [],
+    unlistedProjectIds: [],
     temporaryFiles: []
   }
   if (!existsSync(input.projectsDir)) return report
@@ -64,6 +95,7 @@ export function reconcileWorkspace(input: WorkspaceHealthInput): WorkspaceHealth
     return report
   }
   const recoveryDir = join(input.projectsDir, '.recovery')
+  const indexedIds = new Set(input.knownProjectIds ?? input.projectIds)
   const timestamp = input.now ?? Date.now()
   for (const name of entries) {
     const path = join(input.projectsDir, name)
@@ -74,12 +106,12 @@ export function reconcileWorkspace(input: WorkspaceHealthInput): WorkspaceHealth
       continue
     }
     if (name.endsWith('.importing') && isDirectory) {
-      mkdirSync(recoveryDir, { recursive: true })
       let sequence = 0
       let destination = join(recoveryDir, `${name}-${timestamp}`)
       while (existsSync(destination))
         destination = join(recoveryDir, `${name}-${timestamp}-${++sequence}`)
       try {
+        mkdirSync(recoveryDir, { recursive: true })
         renameSync(path, destination)
         report.recoveredImports.push(destination)
       } catch {
@@ -90,6 +122,8 @@ export function reconcileWorkspace(input: WorkspaceHealthInput): WorkspaceHealth
       continue
     }
     if (name === '.recovery' || !isDirectory) continue
+    if (!indexedIds.has(name) && existsSync(join(path, 'project.json')))
+      report.unlistedProjectIds.push(name)
     let children: string[]
     try {
       children = readdirSync(path)

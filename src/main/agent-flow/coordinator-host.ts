@@ -20,29 +20,30 @@ import {
   type AgentPublication,
   type ModelIdentity
 } from '../../shared/agent-flow/coordination'
-import {
-  canonicalFlowJson,
-  semanticProjectPayload
-} from '../../shared/agent-flow/semantic-revision'
+import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
 import type { AgentModelPort } from './runtime'
 import type { FlowAgentDesktopHost } from './desktop-host'
 import { CoordinationStore, type CoordinationRun } from './coordination-store'
 import { FlowAssetStore } from './asset-store'
 import { emitGatewayEvent } from '../diagnostics/gateway-events'
 import { projectSemanticRevision } from './command-intent'
+import { FlowReviewStore, reviewBinding } from './review-store'
+import { readStoredNodeRunStatus } from '../../shared/engine/run-status'
+import {
+  CoordinatorReviews,
+  bindCoordinatorReviews,
+  coordinationScopePayload
+} from './coordinator-reviews'
 
 type Identity = { projectId: string; nodeId: string }
 const hash = (value: unknown): string =>
   createHash('sha256').update(canonicalFlowJson(value)).digest('hex')
-function scopeRevision(file: ProjectFile, ids: string[]): string {
-  const payload = semanticProjectPayload(file) as {
-    nodes: Array<{ id: string }>
-    edges: Array<{ from: { nodeId: string }; to: { nodeId: string } }>
-  }
-  return hash({
-    nodes: payload.nodes.filter((n) => ids.includes(n.id)),
-    edges: payload.edges.filter((e) => ids.includes(e.to.nodeId))
-  })
+function scopeRevision(
+  file: ProjectFile,
+  ids: string[],
+  reviews: CoordinationRun['reviews'] = []
+): string {
+  return hash(coordinationScopePayload(file, ids, reviews))
 }
 function shape(
   file: ProjectFile,
@@ -62,6 +63,8 @@ export class FlowCoordinatorHost {
   readonly store: CoordinationStore
   private readonly assets: FlowAssetStore
   private readonly active = new Map<string, AbortController>()
+  private readonly reviews: CoordinatorReviews
+  private readonly reports: FlowReviewStore
   constructor(
     db: Database.Database,
     private readonly open: (id: string) => ProjectFile | null,
@@ -71,10 +74,13 @@ export class FlowCoordinatorHost {
       identity: ModelIdentity,
       signal: AbortSignal
     ) => Promise<AgentModelPort>,
-    private readonly publish: (input: AgentPublication, signal: AbortSignal) => Promise<void>
+    private readonly publish: (input: AgentPublication, signal: AbortSignal) => Promise<void>,
+    private readonly cancelReview?: (projectId: string, nodeId: string) => void
   ) {
     this.store = new CoordinationStore(db)
+    this.reports = new FlowReviewStore(db)
     this.assets = new FlowAssetStore(db, open)
+    this.reviews = new CoordinatorReviews(db, open, specialists, publish, (run) => this.check(run))
   }
   private file(input: Identity): ProjectFile {
     const file = this.open(input.projectId)
@@ -84,7 +90,7 @@ export class FlowCoordinatorHost {
   }
   private check(run: CoordinationRun): ProjectFile {
     const file = this.file(run)
-    if (scopeRevision(file, run.scopeIds) !== run.scopeRevision)
+    if (scopeRevision(file, run.scopeIds, run.reviews) !== run.scopeRevision)
       throw new AgentRuntimeError('FLOW_REVISION_CONFLICT', 'coordination')
     return file
   }
@@ -97,6 +103,7 @@ export class FlowCoordinatorHost {
       decisions: run.decisions,
       tools: run.children.length,
       code: run.code,
+      recovery: run.recovery,
       phase: run.phase,
       children: run.children.map(({ nodeId, taskId, state }) => ({ nodeId, taskId, state }))
     }
@@ -125,6 +132,7 @@ export class FlowCoordinatorHost {
     const run = this.store.latest(input.projectId, input.nodeId)
     if (!run || terminal(run)) return run ? this.view(run) : null
     this.active.get(run.taskId)?.abort()
+    for (const review of run.reviews ?? []) this.cancelReview?.(run.projectId, review.nodeId)
     for (const child of run.children.filter(
       (c) => !['completed', 'cancelled', 'failed'].includes(c.state)
     ))
@@ -148,7 +156,9 @@ export class FlowCoordinatorHost {
       throw new AgentRuntimeError('FLOW_COORDINATOR_CONFIG_INVALID', 'admission')
     if (
       !config.tools.some((t) => t.id === 'agent.dispatch' && t.version === '1') ||
-      config.tools.some((t) => t.id !== 'agent.dispatch' || t.version !== '1') ||
+      config.tools.some(
+        (t) => !['agent.dispatch', 'review.execute'].includes(t.id) || t.version !== '1'
+      ) ||
       config.skills.length
     )
       throw new AgentRuntimeError('AGENT_TOOL_UNSUPPORTED', 'admission')
@@ -158,7 +168,18 @@ export class FlowCoordinatorHost {
     )
       throw new AgentRuntimeError('FLOW_COORDINATOR_SCOPE_INVALID', 'scope')
     const controls = new Set([input.nodeId])
-    for (const id of config.allowedNodeIds) {
+    const reviewIds = config.allowedNodeIds.filter(
+      (id) => shape(file, id).props.nodeType === 'ai-review'
+    )
+    const childIds = config.allowedNodeIds.filter((id) => !reviewIds.includes(id))
+    if (
+      !childIds.length ||
+      (reviewIds.length &&
+        !config.tools.some((tool) => tool.id === 'review.execute' && tool.version === '1'))
+    )
+      throw new AgentRuntimeError('FLOW_COORDINATOR_SCOPE_INVALID', 'scope')
+    for (const id of reviewIds) controls.add(id)
+    for (const id of childIds) {
       const child = shape(file, id),
         cfg = AgentNodeConfigSchema.parse(JSON.parse(child.props.config))
       if (child.props.nodeType !== 'agent' || cfg.role !== 'specialist' || id === input.nodeId)
@@ -183,6 +204,7 @@ export class FlowCoordinatorHost {
       JSON.parse(shape(file, stateNodeId).props.config)
     )
     controls.add(stateNodeId)
+    const reviews = bindCoordinatorReviews(file, reviewIds, childIds, controls, input.requestId)
     const scopeIds = [
       ...new Set([
         ...controls,
@@ -199,7 +221,9 @@ export class FlowCoordinatorHost {
       stateConfig,
       scopeIds,
       scopeRevision: scopeRevision(file, scopeIds),
-      childIds: config.allowedNodeIds,
+      childIds,
+      reviews,
+      controlSteps: 0,
       state: 'running',
       phase: stateConfig.initialState,
       revision: 0,
@@ -229,6 +253,7 @@ export class FlowCoordinatorHost {
     const input = FlowAgentRunSchema.parse(raw)
     this.file(input)
     let run = this.store.latest(input.projectId, input.nodeId)
+    if (input.action === 'reconcile' || input.action === 'restore') return this.recover(input)
     if (run && input.action === 'start' && run.taskId === input.requestId) return this.reply(run)
     if (run && !terminal(run) && input.action === 'start')
       throw new AgentRuntimeError('AGENT_TASK_OCCUPIED', 'admission')
@@ -254,12 +279,16 @@ export class FlowCoordinatorHost {
       traceId: input.traceId,
       spanId: input.spanId
     }
-    emitGatewayEvent('agent.coordination.started', '主 Agent 协调开始', context)
+    emitGatewayEvent('agent.coordination.started', '主 Agent 协调开始', context, {
+      attributes: input.action === 'continue' ? { resumesTraceId: fixed.traceId } : {}
+    })
     try {
       const event = input.action === 'start' ? 'flow.started' : 'human.continue'
       this.store.event(fixed, input.eventId ?? `${fixed.taskId}:start`, event, fixed.revision)
       fixed.state = 'running'
       fixed.paused = false
+      fixed.traceId = input.traceId
+      fixed.spanId = input.spanId
       this.store.save(fixed, false)
       const model = await this.model({ ...fixed, agentNodeId: fixed.nodeId }, controller.signal)
       if (!model.coordinate) throw new AgentRuntimeError('AGENT_TOOL_UNSUPPORTED', 'coordination')
@@ -306,11 +335,31 @@ export class FlowCoordinatorHost {
     const stored = this.store.latest(run.projectId, run.nodeId)!
     if (signal.aborted || stored.state === 'cancelled') return false
     this.check(run)
-    const pending = run.children.find((c) => c.state === 'waiting')
+    if (stored.paused) return this.wait(run, 'flow.paused')
+    const control = await this.reviews.step(run, signal)
+    if (control === 'again') return true
+    if (control === 'wait') return this.wait(run, 'human.wait')
+    const pending = run.children.find(
+      (c) =>
+        c.state === 'waiting' &&
+        !run.reviews?.some(
+          (review) => review.responsibleNodeId === c.nodeId && review.state === 'human-wait'
+        )
+    )
     if (pending) {
       const state = this.specialists.inspect({ projectId: run.projectId, nodeId: pending.nodeId })
-      if (state?.taskId !== pending.taskId)
-        throw new AgentRuntimeError('RESUME_CONFLICT', 'handoff')
+      if (state?.taskId !== pending.taskId) {
+        const revised = this.specialists.assignment(
+          { projectId: run.projectId, nodeId: pending.nodeId },
+          run.taskId
+        )
+        if (!revised || revised.snapshot.parentTaskId !== pending.taskId)
+          throw new AgentRuntimeError('RESUME_CONFLICT', 'handoff')
+        pending.taskId = revised.snapshot.taskId
+        this.store.save(run)
+      }
+      if (!state) throw new AgentRuntimeError('RESUME_CONFLICT', 'handoff')
+      if (state.state === 'ready') return this.wait(run, 'human.wait')
       if (state.state === 'waiting') return this.wait(run, 'human.wait')
       if (state.state !== 'completed')
         throw new AgentRuntimeError(state.code ?? 'FLOW_CHILD_BLOCKED', 'handoff')
@@ -328,13 +377,22 @@ export class FlowCoordinatorHost {
       pending.outputs = reply.refs
       this.store.save(run)
       this.store.event(run, `${pending.taskId}:completed`, 'agent.completed', run.revision)
+      return true
     }
     if (stored.paused) return this.wait(run, 'flow.paused')
-    if (run.decisions >= run.config.maxSteps)
+    if (run.decisions + (run.controlSteps ?? 0) >= run.config.maxSteps)
       throw new AgentRuntimeError('AGENT_BUDGET_EXHAUSTED', 'coordination')
     const available = [] as Array<{ nodeId: string; goal: string; inputs: FlowAgentReply['refs'] }>
     const candidates = new Map<string, AgentTaskSnapshot>()
     for (const id of run.childIds.filter((id) => !run.children.some((c) => c.nodeId === id))) {
+      if (
+        run.reviews?.some(
+          (review) =>
+            review.state !== 'passed' &&
+            JSON.parse(shape(this.check(run), review.nodeId).props.config).gatedNodeIds.includes(id)
+        )
+      )
+        continue
       try {
         const child = this.specialists.describeAssignment({
           ...input,
@@ -349,6 +407,7 @@ export class FlowCoordinatorHost {
       }
     }
     run.decisions++
+    run.decisionPending = true
     this.store.save(run)
     let timeout: ReturnType<typeof setTimeout> | undefined
     const decision = CoordinationDecisionSchema.parse(
@@ -378,10 +437,14 @@ export class FlowCoordinatorHost {
     this.check(run)
     if (signal.aborted || this.store.latest(run.projectId, run.nodeId)!.state === 'cancelled')
       return false
-    if (this.store.latest(run.projectId, run.nodeId)!.paused) return this.wait(run, 'flow.paused')
+    if (this.store.latest(run.projectId, run.nodeId)!.paused) {
+      run.decisionPending = false
+      return this.wait(run, 'flow.paused')
+    }
     if (decision.kind === 'wait') {
       if (run.config.interactionMode !== 'collaborative')
         throw new AgentRuntimeError('HUMAN_WAIT_DENIED', 'coordination')
+      run.decisionPending = false
       return this.wait(run, 'human.wait')
     }
     if (decision.kind === 'finish') {
@@ -393,12 +456,20 @@ export class FlowCoordinatorHost {
       )
       if (
         run.children.length !== run.childIds.length ||
+        run.reviews?.some((review) => review.state !== 'passed') ||
         run.children.some((c) => c.state !== 'completed') ||
         decision.outputs.some((r) => !allowed.has(canonicalFlowJson(r))) ||
         new Set(decision.outputs.map(canonicalFlowJson)).size !== decision.outputs.length
       )
         throw new AgentRuntimeError('AGENT_OUTPUT_UNVERIFIED', 'coordination')
+      const values = this.assets.resolveInputs(run.projectId, decision.outputs)
+      if (
+        new Set(values.map((value) => (value.value.kind === 'json' ? 'json' : 'text'))).size !==
+        values.length
+      )
+        throw new AgentRuntimeError('AGENT_OUTPUT_CARDINALITY', 'output')
       run.outputs = decision.outputs
+      run.decisionPending = false
       this.store.event(run, `${run.taskId}:completed`, 'flow.completed', run.revision)
       run.state = 'completed'
       this.store.save(run)
@@ -424,6 +495,7 @@ export class FlowCoordinatorHost {
       outputs: [] as FlowAgentReply['refs']
     }
     run.children.push(child)
+    run.decisionPending = false
     this.store.event(run, `${taskId}:dispatch`, 'agent.dispatched', run.revision)
     // A specialist owns a root task/checkpointer, not a LangGraph subgraph of this controller.
     const reply = await AsyncLocalStorageProviderSingleton.runWithConfig(
@@ -455,6 +527,244 @@ export class FlowCoordinatorHost {
       throw new AgentRuntimeError(reply.task.code ?? 'FLOW_CHILD_BLOCKED', 'handoff')
     this.store.event(run, `${taskId}:completed`, 'agent.completed', run.revision)
     return true
+  }
+  /** Read saved execution facts first; restoration republishes only already committed results. */
+  private async recover(input: FlowAgentRun): Promise<FlowAgentReply> {
+    const run = this.store.latest(input.projectId, input.nodeId)
+    if (
+      !run ||
+      run.taskId !== input.expectedTaskId ||
+      run.waitRevision !== input.expectedWaitRevision
+    )
+      throw new AgentRuntimeError('RESUME_CONFLICT', 'recovery')
+    if (this.active.has(run.taskId)) throw new AgentRuntimeError('AGENT_TASK_BUSY', 'recovery')
+    const context = {
+      projectId: run.projectId,
+      nodeId: run.nodeId,
+      taskId: run.taskId,
+      traceId: input.traceId,
+      spanId: input.spanId
+    }
+    let failed = false
+    const controller = new AbortController()
+    this.active.set(run.taskId, controller)
+    emitGatewayEvent('agent.coordination.started', '主控执行事实核对开始', context, {
+      attributes: { phase: input.action, resumesTraceId: run.traceId }
+    })
+    try {
+      this.check(run)
+      if (terminal(run) || run.state === 'waiting') return this.reply(run)
+      const reasons: string[] = []
+      let canRestore = false
+      let observed = false
+      if (run.decisionPending) reasons.push('FLOW_MODEL_OUTCOME_UNKNOWN')
+      const savedResult = (id: string): Record<string, unknown> | null => {
+        try {
+          return JSON.parse(String(shape(this.check(run), id).meta?.nodeResult ?? 'null'))
+        } catch {
+          return null
+        }
+      }
+      for (const cycle of run.reviews ?? []) {
+        if (cycle.state === 'passed' && !this.reports.approval(this.check(run), cycle.nodeId))
+          reasons.push('FLOW_REVIEW_NOT_READY')
+        if (cycle.state !== 'pending') continue
+        const file = this.check(run),
+          record = this.reports.forRequest(run.projectId, cycle.requestId)
+        if (!record || record.signature !== reviewBinding(file, cycle.nodeId).signature) {
+          reasons.push('FLOW_REVIEW_OUTCOME_UNKNOWN')
+          continue
+        }
+        observed = true
+        const projected = (): boolean => {
+          const meta = shape(this.check(run), cycle.nodeId).meta
+          return (
+            readStoredNodeRunStatus(meta?.nodeRun) === 'success' &&
+            (meta?.nodeRun as { runId?: string })?.runId === cycle.requestId &&
+            canonicalFlowJson(savedResult(cycle.nodeId)) === canonicalFlowJson(record.decision)
+          )
+        }
+        if (!projected() && input.action === 'restore') {
+          const existing = savedResult(cycle.nodeId)
+          if (
+            existing &&
+            canonicalFlowJson(existing) !== canonicalFlowJson(record.decision) &&
+            canonicalFlowJson(existing) !== canonicalFlowJson(cycle.decision)
+          )
+            throw new AgentRuntimeError('FLOW_PROJECTION_CONFLICT', 'recovery')
+          run.state = 'running'
+          this.store.save(run)
+          await this.publish(
+            {
+              kind: 'review',
+              projectId: run.projectId,
+              nodeId: cycle.nodeId,
+              taskId: cycle.requestId,
+              semanticRevision: projectSemanticRevision(file),
+              traceId: input.traceId,
+              spanId: input.spanId
+            },
+            controller.signal
+          )
+        }
+        if (!projected()) {
+          reasons.push('FLOW_ASSET_PROJECTION_MISSING')
+          canRestore = true
+          continue
+        }
+        cycle.decision = record.decision
+        cycle.originalInputs ??= record.decision.subjects
+        cycle.state = record.decision.passed ? 'passed' : 'rejected'
+        this.store.event(
+          run,
+          `${cycle.requestId}:${record.decision.passed ? 'review.passed' : 'review.rejected'}`,
+          record.decision.passed ? 'review.passed' : 'review.rejected',
+          run.revision
+        )
+      }
+      for (const child of run.children) {
+        const record = this.specialists.assignment(
+          { projectId: run.projectId, nodeId: child.nodeId },
+          run.taskId
+        )
+        if (!record || record.snapshot.taskId !== child.taskId) {
+          reasons.push('FLOW_TASK_CHECKPOINT_UNCONFIRMED')
+          continue
+        }
+        if (
+          record.state === 'waiting' ||
+          (record.state === 'ready' && record.snapshot.parentTaskId)
+        ) {
+          observed = true
+          child.state = 'waiting'
+          continue
+        }
+        if (record.state !== 'completed') {
+          reasons.push('FLOW_TASK_CHECKPOINT_UNCONFIRMED')
+          continue
+        }
+        observed = true
+        const values = this.assets.resolveInputs(run.projectId, record.outputRefs)
+        const expectedOutputs = Object.fromEntries(
+          values.map((asset) => [
+            asset.value.kind === 'json' ? 'out-json' : 'out-text',
+            asset.value.kind === 'markdown' ? { kind: 'text', text: asset.value.text } : asset.value
+          ])
+        )
+        const projected = (): boolean => {
+          const meta = shape(this.check(run), child.nodeId).meta,
+            result = savedResult(child.nodeId)
+          return (
+            readStoredNodeRunStatus(meta?.nodeRun) === 'success' &&
+            (meta?.nodeRun as { runId?: string })?.runId === child.taskId &&
+            result?.taskId === child.taskId &&
+            canonicalFlowJson(result.refs) === canonicalFlowJson(record.outputRefs) &&
+            canonicalFlowJson(result.outputs) === canonicalFlowJson(expectedOutputs)
+          )
+        }
+        if (!projected() && input.action === 'restore') {
+          const existing = savedResult(child.nodeId)
+          if (
+            existing &&
+            (existing.taskId !== child.taskId ||
+              canonicalFlowJson(existing.refs) !== canonicalFlowJson(record.outputRefs) ||
+              canonicalFlowJson(existing.outputs) !== canonicalFlowJson(expectedOutputs))
+          )
+            throw new AgentRuntimeError('FLOW_PROJECTION_CONFLICT', 'recovery')
+          await this.publish(
+            {
+              projectId: run.projectId,
+              nodeId: child.nodeId,
+              taskId: child.taskId,
+              semanticRevision: projectSemanticRevision(this.check(run)),
+              traceId: input.traceId,
+              spanId: input.spanId
+            },
+            controller.signal
+          )
+        }
+        if (!projected()) {
+          reasons.push('FLOW_ASSET_PROJECTION_MISSING')
+          canRestore = true
+          continue
+        }
+        if (child.state !== 'completed') {
+          child.state = 'completed'
+          child.outputs = record.outputRefs
+          this.store.event(run, `${child.taskId}:completed`, 'agent.completed', run.revision)
+        }
+      }
+      if (!observed) reasons.push('FLOW_TASK_CHECKPOINT_UNCONFIRMED')
+      if (controller.signal.aborted) throw new AgentRuntimeError('AGENT_CANCELLED', 'recovery')
+      run.recovery = { reasons: [...new Set(reasons)], canRestore }
+      if (!reasons.length) {
+        if (this.store.hasEvent(run, `${run.taskId}:completed`, 'flow.completed')) {
+          const allowed = new Set(
+            run.children.flatMap((child) => child.outputs).map(canonicalFlowJson)
+          )
+          if (
+            !run.outputs.length ||
+            run.children.length !== run.childIds.length ||
+            run.children.some((child) => child.state !== 'completed') ||
+            run.reviews?.some((review) => review.state !== 'passed') ||
+            run.outputs.some((ref) => !allowed.has(canonicalFlowJson(ref)))
+          )
+            throw new AgentRuntimeError('AGENT_OUTPUT_UNVERIFIED', 'recovery')
+          this.assets.resolveInputs(run.projectId, run.outputs)
+          run.state = 'completed'
+          run.code = undefined
+          this.store.save(run)
+          this.store.release(run)
+          return this.reply(run)
+        }
+        if (
+          run.phase !==
+          run.stateConfig.transitions.find(
+            (t) => t.from === run.phase && t.event === 'human.continue'
+          )?.from
+        )
+          this.store.event(run, `${input.eventId}:recovery-wait`, 'human.wait', run.revision)
+        run.state = 'waiting'
+        run.waitRevision++
+        run.code = undefined
+      } else {
+        run.state = 'blocked'
+        run.code = reasons[0]
+      }
+      this.store.save(run)
+      return this.reply(run)
+    } catch (error) {
+      failed = true
+      const current = this.store.latest(run.projectId, run.nodeId)
+      if (current?.state === 'cancelled') {
+        emitGatewayEvent('agent.coordination.completed', '主控核对已取消', context, {
+          status: 'cancelled',
+          attributes: { phase: input.action, code: 'AGENT_CANCELLED' }
+        })
+        return this.reply(current)
+      }
+      if (!current || !terminal(current)) {
+        run.state = 'blocked'
+        run.code = error instanceof AgentRuntimeError ? error.code : 'FLOW_RECOVERY_FAILED'
+        run.recovery = { reasons: [run.code], canRestore: false }
+        this.store.save(run)
+      }
+      emitGatewayEvent('agent.coordination.failed', '主控执行事实核对失败', context, {
+        status: 'failed',
+        attributes: {
+          phase: input.action,
+          code: error instanceof AgentRuntimeError ? error.code : 'FLOW_RECOVERY_FAILED'
+        }
+      })
+      throw error
+    } finally {
+      this.active.delete(run.taskId)
+      if (!failed)
+        emitGatewayEvent('agent.coordination.completed', '主控执行事实核对结束', context, {
+          status: 'success',
+          attributes: { phase: input.action, code: run.code }
+        })
+    }
   }
   private wait(run: CoordinationRun, event: string): false {
     this.store.event(run, `${run.taskId}:wait:${run.waitRevision + 1}`, event, run.revision)

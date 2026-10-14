@@ -80,6 +80,8 @@ export const useSaveCoordinator = create<CoordinatorInternal>((set, get) => {
     try {
       // graphVersion 由 save 返回但仅作诊断；序号确认以 savingFrom 为准（见头注）。
       await deps.save(savingFrom)
+      // A project switch can bind a new saver while the previous project is still committing.
+      if (get().deps !== deps) return
       // 不变量②：旧响应只做 max 合并；磁盘版本回退不拉低已确认序号。
       set((s) => ({
         persistedVersion: Math.max(s.persistedVersion, savingFrom),
@@ -96,6 +98,7 @@ export const useSaveCoordinator = create<CoordinatorInternal>((set, get) => {
       set({ inFlight: false, phase: 'saved' })
       deps.onSuccess?.()
     } catch (error) {
+      if (get().deps !== deps) return
       set({ inFlight: false })
       const err = error as { code?: string; message?: string }
       if (err?.code === 'REVISION_CONFLICT') {
@@ -118,7 +121,7 @@ export const useSaveCoordinator = create<CoordinatorInternal>((set, get) => {
     savingFrom: -1,
     deps: null,
 
-    bind: (deps) => set({ deps }),
+    bind: (deps) => set({ deps, inFlight: false, savingFrom: -1 }),
     markDirty: () =>
       set((s) => ({
         dirtyVersion: s.dirtyVersion + 1,

@@ -16,6 +16,9 @@ import type {
 import type { FlowAgentReply } from '../src/shared/agent-flow/desktop-tasks'
 import { setGatewayEventSink } from '../src/main/diagnostics/gateway-events'
 import type { DiagnosticsEventInput } from '../src/shared/observability'
+import { FlowReviewHost } from '../src/main/agent-flow/review-host'
+import { FlowReviewStore } from '../src/main/agent-flow/review-store'
+import { projectSemanticRevision } from '../src/main/agent-flow/command-intent'
 
 const dbs: Database.Database[] = []
 afterEach(() => {
@@ -36,6 +39,17 @@ function fixture(
     human?: boolean
     brokenState?: boolean
     publicationFails?: boolean
+    publicationDuring?: () => Promise<void>
+    review?: {
+      manual?: boolean
+      collaborative?: boolean
+      stop?: boolean
+      maxReworks?: number
+      alwaysReject?: boolean
+      technicalFailure?: boolean
+      during?: () => Promise<void>
+      reportOnly?: boolean
+    }
   } = {}
 ) {
   const db = new Database(':memory:')
@@ -119,6 +133,46 @@ function fixture(
     shape('process-second', 'processor', '', { operation: 'pass' }),
     shape('state', 'state-machine', '', stateConfig)
   ]
+  if (options.review) {
+    mainConfig.allowedNodeIds.push('review')
+    mainConfig.tools.push({ id: 'review.execute', version: '1' })
+    mainConfig.maxSteps = 24
+    shapes.find((s) => s.id === 'main')!.props.config = JSON.stringify(mainConfig)
+    if (!options.review.manual) {
+      const first = shapes.find((s) => s.id === 'first')!
+      const config = cfg('specialist', ['process-first', 'process-repair'])
+      if (options.review.collaborative) config.interactionMode = 'collaborative'
+      first.props.config = JSON.stringify(config)
+      shapes.push(
+        shape('process-repair', 'processor', '', {
+          operation: 'template',
+          template: '交付：{{value}}'
+        })
+      )
+    }
+    const owner = options.review.manual ? 'material' : 'first'
+    shapes.push(
+      shape('review', 'ai-review', '必须以交付：开头', {
+        schemaVersion: 1,
+        modelDefinitionId: 'fixture',
+        rulesVersion: 'rules-1',
+        rejectPolicy: options.review.stop ? 'stop' : 'rework',
+        maxReworks: options.review.maxReworks ?? 1,
+        responsibleNodeId: owner,
+        subjectSources: [{ nodeId: owner, portId: 'out-text' }],
+        gatedNodeIds: [options.review.manual ? 'first' : 'second'],
+        relations: []
+      })
+    )
+    stateConfig.transitions.push(
+      ...['review.started', 'review.passed', 'review.rejected', 'rework.created'].map((event) => ({
+        from: 'working',
+        event,
+        to: 'working'
+      }))
+    )
+    shapes.find((s) => s.id === 'state')!.props.config = JSON.stringify(stateConfig)
+  }
   const byId = Object.fromEntries(shapes.map((s) => [s.id, s]))
   const node = (s: (typeof shapes)[number]): CanvasNode => ({
     id: s.id,
@@ -129,7 +183,21 @@ function fixture(
     y: 0,
     w: 340,
     h: 260,
-    ports: s.props.nodeType === 'processor' ? [...PROCESSOR_PORTS.in, ...PROCESSOR_PORTS.out] : [],
+    ports:
+      s.props.nodeType === 'processor'
+        ? [...PROCESSOR_PORTS.in, ...PROCESSOR_PORTS.out]
+        : s.props.nodeType === 'agent' || s.props.nodeType === 'text'
+          ? [
+              {
+                id: 'out-text',
+                name: 'text',
+                dir: 'out',
+                type: 'text',
+                cardinality: 'one',
+                required: true
+              }
+            ]
+          : [],
     params: { config: s.props.config },
     content: s.props.text ? { kind: 'text', text: s.props.text } : { kind: 'empty' },
     exec: { status: 'idle' },
@@ -152,6 +220,13 @@ function fixture(
     ],
     groups: [],
     tldrawSnapshot: { store: byId }
+  }
+  if (options.review) {
+    file.edges.push(
+      edge(options.review.manual ? 'material' : 'first', 'out-text', 'review', 'in-text')
+    )
+    if (!options.review.manual)
+      file.edges.push(edge('material', 'out-text', 'process-repair', 'in-value'))
   }
   const open = (id: string): ProjectFile | null => (id === 'p' ? file : null)
   const assets = new FlowAssetStore(db, open),
@@ -207,7 +282,12 @@ function fixture(
             }),
             outputPorts: ['out-value']
           }
-          target.meta.nodeResult = JSON.stringify(fixed[0].versions[0].value)
+          const source = fixed[0].versions[0].value
+          target.meta.nodeResult = JSON.stringify(
+            c.targetNodeId === 'process-repair' && 'text' in source
+              ? { kind: 'text', text: `交付：${source.text}` }
+              : source
+          )
           file.meta.graphVersion++
           ledger.commit({ projectId: c.projectId, commandId: c.commandId })
         } catch (error) {
@@ -223,7 +303,12 @@ function fixture(
     async () => ({
       decide: async (ctx) =>
         ctx.receipts.length < 2
-          ? { kind: 'execute', targetNodeId: ctx.targets[0].nodeId }
+          ? {
+              kind: 'execute',
+              targetNodeId: ctx.rework
+                ? ctx.targets.find((target) => target.nodeId === 'process-repair')!.nodeId
+                : ctx.targets[0].nodeId
+            }
           : ctx.mode === 'collaborative' && !ctx.humanAccepted
             ? { kind: 'wait' }
             : { kind: 'finish', outputs: ctx.receipts.at(-1)!.outputRefs }
@@ -277,6 +362,31 @@ function fixture(
     async () => model,
     async (grant) => {
       if (options.publicationFails) throw new Error('unconfirmed')
+      await options.publicationDuring?.()
+      if (grant.kind === 'review') {
+        ledger.assertNodeAvailable({
+          projectId: grant.projectId,
+          nodeId: grant.nodeId,
+          controlledRequestId: grant.taskId
+        })
+        const decision = await reviews.run({
+          projectId: grant.projectId,
+          nodeId: grant.nodeId,
+          requestId: grant.taskId,
+          traceId: grant.traceId,
+          spanId: grant.spanId
+        })
+        if (options.review?.reportOnly) throw new Error('saved report, no public projection')
+        byId[grant.nodeId].meta.nodeRun = {
+          status: 'success',
+          runId: grant.taskId,
+          startedAt: 0,
+          finishedAt: 1,
+          inputs: {}
+        }
+        byId[grant.nodeId].meta.nodeResult = JSON.stringify(decision)
+        return
+      }
       await publish(
         grant.nodeId,
         await host.run({
@@ -286,7 +396,30 @@ function fixture(
           expectedTaskId: grant.taskId
         })
       )
-    }
+    },
+    (projectId, nodeId) => reviews.cancel(projectId, nodeId)
+  )
+  const reviews = new FlowReviewHost(
+    db,
+    open,
+    () => true,
+    async () => ({
+      decide: async () => {
+        throw new Error('not used')
+      },
+      review: async (ctx) => {
+        await options.review?.during?.()
+        if (options.review?.technicalFailure) throw new Error('technical failure')
+        const passed =
+          !options.review?.alwaysReject &&
+          ctx.subjects.every((value) => 'text' in value && value.text.startsWith('交付：'))
+        return {
+          passed,
+          feedback: passed ? '满足标准' : '请补交付前缀',
+          issues: passed ? [] : [{ subjectIndex: 0, feedback: '补交付前缀' }]
+        }
+      }
+    })
   )
   host.setCoordinator(coordinator)
   return {
@@ -297,6 +430,7 @@ function fixture(
     ledger,
     host,
     coordinator,
+    reviews,
     publish,
     deliveryErrors,
     count: () => ({ executions, modelCalls })
@@ -304,6 +438,441 @@ function fixture(
 }
 
 describe('C3.3 coordinator sequential handoff', () => {
+  it('does not advance a restored projection after a concurrent stop', async () => {
+    let entered!: () => void, release!: () => void
+    const ready = new Promise<void>((done) => {
+      entered = done
+    })
+    const options: { publicationFails: boolean; publicationDuring?: () => Promise<void> } = {
+      publicationFails: true
+    }
+    const f = fixture(options)
+    await expect(f.host.run(input)).rejects.toThrow()
+    const run = f.coordinator.store.latest('p', 'main')!
+    options.publicationFails = false
+    options.publicationDuring = async () => {
+      entered()
+      await new Promise<void>((done) => {
+        release = done
+      })
+    }
+    const restoring = f.host.run({
+      ...input,
+      action: 'restore',
+      requestId: 'restore',
+      eventId: 'restore',
+      expectedTaskId: run.taskId,
+      expectedWaitRevision: run.waitRevision
+    })
+    await ready
+    f.host.stop({ projectId: 'p', nodeId: 'main' })
+    release()
+    expect((await restoring).task.state).toBe('cancelled')
+    expect(f.count().executions).toBe(2)
+  })
+  it('restores a verified completion interrupted after its authoritative state event without a new model decision', async () => {
+    const f = fixture()
+    await f.host.run(input)
+    const run = f.coordinator.store.latest('p', 'main')!
+    // Simulate the durable final event preceding the final task state/projection write.
+    run.state = 'running'
+    f.coordinator.store.save(run)
+    f.db.prepare('INSERT INTO flow_coordination_scope VALUES (?,?,?)').run('p', 'first', run.taskId)
+    f.db
+      .prepare('INSERT INTO flow_coordination_scope VALUES (?,?,?)')
+      .run('p', 'second', run.taskId)
+    f.coordinator.inspect({ projectId: 'p', nodeId: 'main' })
+    const count = f.count()
+    const completed = await f.host.run({
+      ...input,
+      action: 'reconcile',
+      requestId: 'recover-complete',
+      eventId: 'recover-complete',
+      expectedTaskId: run.taskId,
+      expectedWaitRevision: run.waitRevision
+    })
+    expect(completed.task.state).toBe('completed')
+    expect(f.count()).toEqual(count)
+    expect(f.db.prepare('SELECT count(*) AS count FROM flow_coordination_scope').get()).toEqual({
+      count: 0
+    })
+  })
+  it('recovers a saved review verdict and missing public projection without issuing another review', async () => {
+    let calls = 0
+    const options = {
+      review: {
+        reportOnly: true,
+        during: async () => {
+          calls++
+        }
+      }
+    }
+    const f = fixture(options)
+    await expect(f.host.run(input)).rejects.toThrow()
+    const run = f.coordinator.store.latest('p', 'main')!
+    const query = {
+      ...input,
+      action: 'reconcile' as const,
+      requestId: 'r',
+      eventId: 'r',
+      expectedTaskId: run.taskId,
+      expectedWaitRevision: run.waitRevision
+    }
+    expect((await f.host.run(query)).task.recovery?.canRestore).toBe(true)
+    expect(calls).toBe(1)
+    options.review.reportOnly = false
+    const restored = await f.host.run({ ...query, action: 'restore' })
+    expect(restored.task.state).toBe('waiting')
+    expect(calls).toBe(1)
+    expect(f.coordinator.store.latest('p', 'main')!.reviews![0].state).toBe('rejected')
+    expect(f.count().executions).toBe(2)
+  })
+  it('rejects a forged public output even when its task and asset identities match', async () => {
+    const options = { publicationFails: true },
+      f = fixture(options)
+    await expect(f.host.run(input)).rejects.toThrow()
+    const run = f.coordinator.store.latest('p', 'main')!,
+      child = run.children[0]
+    const completed = await f.host.run({
+      ...input,
+      nodeId: child.nodeId,
+      requestId: child.taskId,
+      expectedTaskId: child.taskId
+    })
+    await f.publish(child.nodeId, completed)
+    const projected = JSON.parse(String(f.byId[child.nodeId].meta.nodeResult))
+    projected.outputs['out-text'].text = 'forged'
+    f.byId[child.nodeId].meta.nodeResult = JSON.stringify(projected)
+    options.publicationFails = false
+    await expect(
+      f.host.run({
+        ...input,
+        action: 'restore',
+        requestId: 'r',
+        eventId: 'r',
+        expectedTaskId: run.taskId,
+        expectedWaitRevision: run.waitRevision
+      })
+    ).rejects.toMatchObject({ code: 'FLOW_PROJECTION_CONFLICT' })
+    expect(f.count().executions).toBe(2)
+  })
+  it('restores only committed child projection, then waits for an explicit continue without extra tool/model decisions', async () => {
+    const options = { publicationFails: true }
+    const f = fixture(options)
+    await expect(f.host.run(input)).rejects.toThrow()
+    const run = f.coordinator.store.latest('p', 'main')!,
+      count = f.count()
+    options.publicationFails = false
+    const recovered = await f.host.run({
+      ...input,
+      action: 'restore',
+      requestId: 'restore',
+      eventId: 'restore',
+      expectedTaskId: run.taskId,
+      expectedWaitRevision: run.waitRevision
+    })
+    expect(recovered.task.state).toBe('waiting')
+    expect(f.count()).toEqual(count)
+    const done = await f.host.run({
+      ...input,
+      action: 'continue',
+      requestId: 'continue-restored',
+      eventId: 'continue-restored',
+      expectedTaskId: run.taskId,
+      expectedWaitRevision: recovered.task.waitRevision
+    })
+    expect(done.task.state).toBe('completed')
+    expect(f.count().executions).toBe(4)
+  })
+  it('reconciles a saved child publication after restart without another model or execution', async () => {
+    const f = fixture({ publicationFails: true })
+    await expect(f.host.run(input)).rejects.toThrow()
+    const run = f.coordinator.store.latest('p', 'main')!
+    const child = run.children[0]
+    const reply = await f.host.run({
+      ...input,
+      nodeId: child.nodeId,
+      requestId: child.taskId,
+      expectedTaskId: child.taskId
+    })
+    await f.publish(child.nodeId, reply)
+    const count = f.count()
+    const recovered = await f.host.run({
+      ...input,
+      action: 'reconcile',
+      requestId: 'recovery',
+      eventId: 'recovery',
+      expectedTaskId: run.taskId,
+      expectedWaitRevision: run.waitRevision
+    })
+    expect(recovered.task.state).toBe('waiting')
+    expect(recovered.task.children![0].state).toBe('completed')
+    expect(f.count()).toEqual(count)
+    expect(recovered.task.recovery?.reasons).toEqual([])
+  })
+  it('never repeats an interrupted model decision or calls models while facts are unknown', async () => {
+    const f = fixture({
+      coordinate: async () => {
+        throw new Error('interrupted')
+      }
+    })
+    await expect(f.host.run(input)).rejects.toThrow()
+    const run = f.coordinator.store.latest('p', 'main')!,
+      count = f.count()
+    const recovered = await f.host.run({
+      ...input,
+      action: 'reconcile',
+      requestId: 'recovery',
+      eventId: 'recovery',
+      expectedTaskId: run.taskId,
+      expectedWaitRevision: run.waitRevision
+    })
+    expect(recovered.task.state).toBe('blocked')
+    expect(recovered.task.recovery?.reasons).toContain('FLOW_MODEL_OUTCOME_UNKNOWN')
+    expect(f.count()).toEqual(count)
+    expect(() =>
+      f.ledger.assertNodeAvailable({ projectId: 'p', nodeId: 'process-first' })
+    ).toThrow()
+  })
+  it('distinguishes committed assets missing projection from unknown execution facts', async () => {
+    const f = fixture({ publicationFails: true })
+    await expect(f.host.run(input)).rejects.toThrow()
+    const run = f.coordinator.store.latest('p', 'main')!,
+      count = f.count()
+    const result = await f.host.run({
+      ...input,
+      action: 'reconcile',
+      requestId: 'r',
+      eventId: 'r',
+      expectedTaskId: run.taskId,
+      expectedWaitRevision: run.waitRevision
+    })
+    expect(result.task.recovery).toEqual({
+      reasons: ['FLOW_ASSET_PROJECTION_MISSING'],
+      canRestore: true
+    })
+    expect(result.task.state).toBe('blocked')
+    expect(f.count()).toEqual(count)
+  })
+  it('keeps review and rework results when diagnostics cannot be written', async () => {
+    const f = fixture({ review: {} })
+    setGatewayEventSink({
+      emit: () => {
+        throw new Error('diagnostics unavailable')
+      }
+    })
+    const done = await f.host.run(input)
+    expect(done.task.state).toBe('completed')
+    expect(f.count().executions).toBe(6)
+  })
+  it('counts automatic reviews and rework against the total control budget', async () => {
+    const f = fixture({ review: {} })
+    const config = JSON.parse(f.byId.main.props.config)
+    config.maxSteps = 2
+    f.byId.main.props.config = JSON.stringify(config)
+    await expect(f.host.run(input)).rejects.toMatchObject({ code: 'AGENT_BUDGET_EXHAUSTED' })
+    expect(f.count().executions).toBe(2)
+    expect(f.coordinator.inspect({ projectId: 'p', nodeId: 'main' })?.state).toBe('blocked')
+  })
+  it('stops an in-flight review without persisting its late verdict or dispatching downstream', async () => {
+    let release!: () => void
+    let entered!: () => void
+    const ready = new Promise<void>((done) => {
+      entered = done
+    })
+    const f = fixture({
+      review: {
+        during: async () => {
+          entered()
+          await new Promise<void>((done) => {
+            release = done
+          })
+        }
+      }
+    })
+    const running = f.host.run(input)
+    await ready
+    f.host.stop({ projectId: 'p', nodeId: 'main' })
+    expect((await running).task.state).toBe('cancelled')
+    release()
+    await Promise.resolve()
+    expect(new FlowReviewStore(f.db).latest('p', 'review')).toBeNull()
+    expect(f.count().executions).toBe(2)
+    expect((await f.host.run(input)).task.state).toBe('cancelled')
+    expect(f.count().executions).toBe(2)
+  })
+  it('automatically reviews, creates an immutable bounded AI rework task and only then releases downstream', async () => {
+    const f = fixture({ review: {} })
+    const done = await f.host.run(input)
+    expect(done.task.state).toBe('completed')
+    expect(done.outputs['out-text']).toEqual({ kind: 'text', text: '交付：private-source' })
+    const tasks = f.db
+      .prepare(
+        "SELECT snapshot_json FROM flow_agent_tasks WHERE agent_node_id='first' ORDER BY rowid"
+      )
+      .all() as Array<{ snapshot_json: string }>
+    expect(tasks).toHaveLength(2)
+    const [original, rework] = tasks.map((row) => JSON.parse(row.snapshot_json))
+    expect(rework.parentTaskId).toBe(original.taskId)
+    expect(rework.directInputs).toEqual(original.directInputs)
+    expect(rework.targets).toEqual(original.targets)
+    expect(rework.rework.feedback).toBe('请补交付前缀')
+    expect(original.rework).toBeUndefined()
+    expect(f.db.prepare('SELECT * FROM flow_reviews').all()).toHaveLength(2)
+    expect(f.count().executions).toBe(6)
+    await f.host.run(input)
+    expect(f.count().executions).toBe(6)
+  })
+  it.each([
+    { stop: true, code: 'FLOW_REVIEW_STOPPED' },
+    { maxReworks: 0, code: 'FLOW_REVIEW_BUDGET_EXHAUSTED' },
+    { alwaysReject: true, code: 'FLOW_REVIEW_BUDGET_EXHAUSTED' }
+  ])(
+    'blocks downstream for rejection strategy or exhausted rounds: %s',
+    async ({ code, ...review }) => {
+      const f = fixture({ review })
+      await expect(f.host.run(input)).rejects.toMatchObject({ code })
+      expect(f.coordinator.inspect(input)?.state).toBe('blocked')
+      expect(f.byId['process-second'].meta.nodeRun).toBeUndefined()
+    }
+  )
+  it('does not turn technical review failures into a quality verdict or dispatch downstream', async () => {
+    const f = fixture({ review: { technicalFailure: true } })
+    await expect(f.host.run(input)).rejects.toThrow()
+    expect(f.db.prepare('SELECT * FROM flow_reviews').all()).toHaveLength(0)
+    expect(f.byId['process-second'].meta.nodeRun).toBeUndefined()
+    const cycle = f.coordinator.store.latest('p', 'main')!.reviews![0]
+    expect(cycle.state).toBe('pending')
+    expect(() =>
+      f.ledger.assertNodeAvailable({
+        projectId: 'p',
+        nodeId: 'review',
+        controlledRequestId: 'forged'
+      })
+    ).toThrow('FLOW_CONTROL_OCCUPIED')
+  })
+  it('requires an explicitly published manual version and rejects permission changes during a wait', async () => {
+    const f = fixture({ review: { manual: true } })
+    const waiting = await f.host.run(input)
+    expect(waiting.task.state).toBe('waiting')
+    expect(f.host.inspect({ projectId: 'p', nodeId: 'material' })?.reviewFeedback?.feedback).toBe(
+      '请补交付前缀'
+    )
+    f.byId.material.props.text = '交付：private-source'
+    const node = f.file.nodes.find((node) => node.id === 'material')!
+    node.content = { kind: 'text', text: f.byId.material.props.text }
+    const next = {
+      ...input,
+      action: 'continue' as const,
+      requestId: 'manual-continue',
+      expectedTaskId: waiting.task.taskId,
+      expectedWaitRevision: waiting.task.waitRevision,
+      eventId: 'manual-continue'
+    }
+    const stillWaiting = await f.host.run(next)
+    expect(stillWaiting.task.state).toBe('waiting')
+    const submitted = f.assets.submit({
+      projectId: 'p',
+      nodeId: 'material',
+      portId: 'out-text',
+      submissionId: 'explicit-manual',
+      expectedGraphVersion: f.file.meta.graphVersion,
+      traceId: 't',
+      spanId: 's'
+    })
+    const done = await f.host.run({
+      ...next,
+      requestId: 'manual-published',
+      eventId: 'manual-published',
+      expectedWaitRevision: stillWaiting.task.waitRevision
+    })
+    expect(done.task.state).toBe('completed')
+    expect(f.count().executions).toBe(4)
+    expect(new FlowReviewStore(f.db).latest('p', 'review')!.decision.subjects).toEqual([
+      submitted.ref
+    ])
+    expect(projectSemanticRevision(f.file)).toMatch(/^sha256:/)
+  })
+  it('restores a collaborative rework wait without dispatching until the responsible node explicitly starts', async () => {
+    const f = fixture({ review: { collaborative: true } })
+    // Initial collaborative task must complete its existing confirmation before quality review.
+    let root = await f.host.run(input)
+    const firstWait = f.host.inspect({ projectId: 'p', nodeId: 'first' })!
+    await f.host.run({
+      ...input,
+      nodeId: 'first',
+      action: 'continue',
+      requestId: 'first-confirm',
+      expectedTaskId: firstWait.taskId,
+      expectedWaitRevision: firstWait.waitRevision,
+      eventId: 'first-confirm'
+    })
+    root = await f.host.run({
+      ...input,
+      action: 'continue',
+      requestId: 'root-resume',
+      expectedTaskId: root.task.taskId,
+      expectedWaitRevision: root.task.waitRevision,
+      eventId: 'root-resume'
+    })
+    const prepared = f.host.inspect({ projectId: 'p', nodeId: 'first' })!
+    expect(prepared.state).toBe('ready')
+    expect(prepared.prepared).toBe(true)
+    expect(prepared.reviewFeedback?.feedback).toBe('请补交付前缀')
+    const before = f.count().executions
+    const waitingAgain = await f.host.run({
+      ...input,
+      action: 'continue',
+      requestId: 'still-wait',
+      expectedTaskId: root.task.taskId,
+      expectedWaitRevision: root.task.waitRevision,
+      eventId: 'still-wait'
+    })
+    expect(waitingAgain.task.state).toBe('waiting')
+    expect(f.count().executions).toBe(before)
+    const revised = await f.host.run({
+      ...input,
+      nodeId: 'first',
+      requestId: 'explicit-rework-start',
+      expectedTaskId: prepared.taskId
+    })
+    expect(revised.task.state).toBe('waiting')
+    await f.host.run({
+      ...input,
+      nodeId: 'first',
+      action: 'continue',
+      requestId: 'explicit-rework-confirm',
+      expectedTaskId: revised.task.taskId,
+      expectedWaitRevision: revised.task.waitRevision,
+      eventId: 'explicit-rework-confirm'
+    })
+    const done = await f.host.run({
+      ...input,
+      action: 'continue',
+      requestId: 'finish-reviewed',
+      expectedTaskId: root.task.taskId,
+      expectedWaitRevision: waitingAgain.task.waitRevision,
+      eventId: 'finish-reviewed'
+    })
+    expect(done.task.state).toBe('completed')
+    expect(f.count().executions).toBe(6)
+  })
+  it('rejects configuration changes while allowing only explicit manual body revision', async () => {
+    const f = fixture({ review: { manual: true } })
+    const waiting = await f.host.run(input)
+    f.byId.material.props.config = '{"unauthorized":true}'
+    await expect(
+      f.host.run({
+        ...input,
+        action: 'continue',
+        requestId: 'bad-edit',
+        eventId: 'bad-edit',
+        expectedTaskId: waiting.task.taskId,
+        expectedWaitRevision: waiting.task.waitRevision
+      })
+    ).rejects.toMatchObject({ code: 'FLOW_REVISION_CONFLICT' })
+    expect(f.count().executions).toBe(0)
+  })
   it('gives two isolated specialists minimum fixed inputs across autosave, publishes real handoff and completes only with receipts', async () => {
     const f = fixture({
         coordinate: async (ctx) => {

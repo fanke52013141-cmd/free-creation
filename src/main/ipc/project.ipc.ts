@@ -17,6 +17,7 @@ import { emitDomainEvent } from '../diagnostics/ipc-domain-events'
 import { exportProject, importProject } from '../store/transfer'
 import { exportCanvasStructure, importCanvasStructure } from '../store/canvas-structure-transfer'
 import { ProjectFileWatcher } from './project-watcher'
+import { newTraceId, newSpanId } from '../../shared/observability'
 
 function ok<T>(data: T): IpcEnvelope<T> {
   return { ok: true, data }
@@ -24,6 +25,35 @@ function ok<T>(data: T): IpcEnvelope<T> {
 
 function err(code: string, message: string): IpcEnvelope<never> {
   return { ok: false, error: { code, message } }
+}
+function transferFailure(
+  context: { traceId: string; spanId: string; projectId?: string },
+  error: unknown,
+  operation: string
+): void {
+  const known = new Set([
+    'FLOW_TRANSFER_DEPTH_INVALID',
+    'FLOW_TRANSFER_ASSET_INVALID',
+    'FLOW_TRANSFER_VALUE_INVALID',
+    'FLOW_TRANSFER_SOURCE_MISSING',
+    'FLOW_TRANSFER_REFERENCE_MISSING'
+  ])
+  const io = error && typeof error === 'object' ? (error as { code?: unknown }).code : undefined
+  const code =
+    error instanceof Error && known.has(error.message)
+      ? error.message
+      : typeof io === 'string' && ['ENOENT', 'EACCES', 'ENOSPC', 'EBUSY', 'EIO'].includes(io)
+        ? io
+        : 'FLOW_TRANSFER_FAILED'
+  emitDomainEvent('project.transfer.failed', '项目迁移未提交', {
+    context,
+    status: 'failed',
+    attributes: {
+      operation,
+      phase: code.startsWith('FLOW_TRANSFER_') ? 'validation-or-transaction' : 'storage',
+      code
+    }
+  })
 }
 
 export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
@@ -159,21 +189,18 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
         filters: [{ name: 'Canvas Studio 项目备份', extensions: ['canvasbundle'] }]
       })
       if (result.canceled || !result.filePath) return err('CANCELLED', '已取消导出')
-      emitDomainEvent('project.transfer.started', '项目导出开始', {
-        attributes: { projectId: input.id }
-      })
+      const context = { traceId: newTraceId(), spanId: newSpanId(), projectId: input.id }
+      emitDomainEvent('project.transfer.started', '项目导出开始', { context })
       try {
         const exported = exportProject(input.id, result.filePath)
         emitDomainEvent('project.transfer.committed', '项目导出完成', {
+          context,
           status: 'success',
           attributes: { projectId: input.id, itemCount: exported.missingMediaCount }
         })
         return ok({ path: exported.path, missingMediaCount: exported.missingMediaCount })
       } catch (e) {
-        emitDomainEvent('project.transfer.failed', '项目导出失败', {
-          error: e,
-          attributes: { projectId: input.id }
-        })
+        transferFailure(context, e, 'project-export')
         return err('EXPORT_FAILED', e instanceof Error ? e.message : String(e))
       }
     }
@@ -187,16 +214,18 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
       filters: [{ name: 'Canvas Studio 项目备份', extensions: ['canvasbundle'] }]
     })
     if (result.canceled || result.filePaths.length === 0) return err('CANCELLED', '已取消导入')
-    emitDomainEvent('project.transfer.started', '项目导入开始', {})
+    const context = { traceId: newTraceId(), spanId: newSpanId() }
+    emitDomainEvent('project.transfer.started', '项目导入开始', { context })
     try {
       const meta = importProject(result.filePaths[0])
-      emitDomainEvent('project.transfer.validated', '项目导入校验通过', {
+      emitDomainEvent('project.transfer.committed', '项目导入事务提交', {
+        context: { ...context, projectId: meta.id },
         status: 'success',
         attributes: { projectId: meta?.id }
       })
       return ok(meta as ProjectMeta)
     } catch (e) {
-      emitDomainEvent('project.transfer.failed', '项目导入失败（事务未提交）', { error: e })
+      transferFailure(context, e, 'project-import')
       return err('IMPORT_FAILED', e instanceof Error ? e.message : String(e))
     }
   })
@@ -222,9 +251,18 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
         filters: [{ name: 'Canvas Studio 画布结构', extensions: ['canvasflow'] }]
       })
       if (result.canceled || !result.filePath) return err('CANCELLED', '已取消导出')
+      const context = { traceId: newTraceId(), spanId: newSpanId(), projectId: input.id }
+      emitDomainEvent('project.transfer.started', '画布结构导出开始', { context })
       try {
-        return ok(exportCanvasStructure(result.filePath, input))
+        const exported = exportCanvasStructure(result.filePath, input)
+        emitDomainEvent('project.transfer.committed', '画布结构导出完成', {
+          context,
+          status: 'success',
+          attributes: { itemCount: exported.nodeCount }
+        })
+        return ok(exported)
       } catch (error) {
+        transferFailure(context, error, 'structure-export')
         return err('EXPORT_FAILED', error instanceof Error ? error.message : String(error))
       }
     }
@@ -237,9 +275,17 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
       filters: [{ name: 'Canvas Studio 画布结构', extensions: ['canvasflow'] }]
     })
     if (result.canceled || result.filePaths.length === 0) return err('CANCELLED', '已取消导入')
+    const context = { traceId: newTraceId(), spanId: newSpanId() }
+    emitDomainEvent('project.transfer.started', '画布结构导入开始', { context })
     try {
-      return ok(importCanvasStructure(result.filePaths[0]))
+      const meta = importCanvasStructure(result.filePaths[0])
+      emitDomainEvent('project.transfer.committed', '画布结构导入事务提交', {
+        context: { ...context, projectId: meta.id },
+        status: 'success'
+      })
+      return ok(meta)
     } catch (error) {
+      transferFailure(context, error, 'structure-import')
       return err('IMPORT_FAILED', error instanceof Error ? error.message : String(error))
     }
   })
@@ -274,7 +320,10 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
     try {
       e.returnValue = ok(repo.saveRecoveryCopySync(input))
     } catch {
-      emitDomainEvent('project.save.failed', '恢复副本写入失败', { status: 'failed', attributes: { projectId: input.id } })
+      emitDomainEvent('project.save.failed', '恢复副本写入失败', {
+        status: 'failed',
+        attributes: { projectId: input.id }
+      })
       e.returnValue = ok(false)
     }
   })

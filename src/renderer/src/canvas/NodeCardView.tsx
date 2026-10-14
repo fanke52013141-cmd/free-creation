@@ -29,6 +29,7 @@ import { Tooltip } from '../components/Tooltip'
 import { NODE_PORT_OUTSET, NODE_PORT_SIZE } from './edge-geometry'
 import { createNodePortLayout } from './node-port-layout'
 import { ConnectedInputPreview } from './ConnectedInputPreview'
+import { FlowReviewFeedback } from './FlowReviewFeedback'
 import { GenerationLoadingOverlay } from './GenerationLoadingOverlay'
 import { FixedFlowAssetBody } from './FixedFlowAssetBody'
 import { readFlowAssetSnapshot } from './flow-asset-snapshot'
@@ -1260,6 +1261,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                       />
                     )}
                     <div className="node-body-content">
+                      <FlowReviewFeedback shape={shape} />
                       {readFlowAssetSnapshot(shape) ? (
                         <FixedFlowAssetBody shape={shape} />
                       ) : (

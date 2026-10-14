@@ -12,16 +12,19 @@ export const FlowAgentRunSchema = FlowAgentQuerySchema.extend({
   requestId: id,
   traceId: id,
   spanId: id,
-  action: z.enum(['start', 'continue']),
+  action: z.enum(['start', 'continue', 'reconcile', 'restore']),
   eventId: id.optional(),
   expectedTaskId: id.optional(),
-  expectedWaitRevision: z.number().int().positive().optional()
+  expectedWaitRevision: z.number().int().nonnegative().optional()
 })
   .strict()
   .superRefine((input, context) => {
     if (
-      input.action === 'continue' &&
-      (!input.expectedTaskId || !input.expectedWaitRevision || !input.eventId)
+      ['continue', 'reconcile', 'restore'].includes(input.action) &&
+      (!input.expectedTaskId ||
+        input.expectedWaitRevision === undefined ||
+        !input.eventId ||
+        (input.action === 'continue' && input.expectedWaitRevision < 1))
     )
       context.addIssue({
         code: 'custom',
@@ -37,9 +40,18 @@ export interface FlowAgentView {
   decisions: number
   tools: number
   code?: string
+  recovery?: { reasons: string[]; canRestore: boolean }
   prepared?: boolean
   phase?: string
   children?: Array<{ nodeId: string; taskId: string; state: string }>
+  reviewFeedback?: {
+    reviewNodeId: string
+    reviewId: string
+    feedback: string
+    round: number
+    state: string
+    subjects: import('zod').infer<typeof importedAssetRef>[]
+  }
 }
 export const FlowAgentCollaborationSchema = FlowAgentQuerySchema.extend({
   taskId: id,

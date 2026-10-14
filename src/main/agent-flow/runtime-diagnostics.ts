@@ -22,11 +22,17 @@ export type AgentTelemetry = (
   phase: string,
   code?: string
 ) => void
-export function createAgentTelemetry(snapshot: AgentTaskSnapshot): AgentTelemetry {
-  let traceId = snapshot.traceId
-  let spanId = snapshot.spanId
+export function createAgentTelemetry(
+  snapshot: AgentTaskSnapshot,
+  operation?: { traceId: string; spanId: string }
+): AgentTelemetry {
+  let traceId = operation?.traceId ?? snapshot.traceId
+  let spanId = operation?.spanId ?? snapshot.spanId
   return (event, phase, code) => {
-    if (event === 'resume_check_started' || (event === 'resumed' && traceId === snapshot.traceId)) {
+    if (
+      !operation &&
+      (event === 'resume_check_started' || (event === 'resumed' && traceId === snapshot.traceId))
+    ) {
       traceId = newTraceId()
       spanId = newSpanId()
     }

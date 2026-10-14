@@ -70,7 +70,7 @@ const fs = require('node:fs')
 
     let layout = await inspect()
     fs.writeFileSync(`${output}/geometry.json`, JSON.stringify(layout, null, 2))
-    await page.screenshot({ path: `${output}/dark.png` })
+    await page.screenshot({ path: `${output}/dark.png`, timeout: 60000 })
     for (const node of layout) {
       assert.equal(node.description, 0)
       assert.ok(!node.buttons.some((t) => /^配置(图片|裁剪|拆分)$/.test(t)))

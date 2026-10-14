@@ -50,7 +50,9 @@ export const NodeExecuteCommandSchema = z
 export type NodeExecuteCommand = z.infer<typeof NodeExecuteCommandSchema>
 
 export const CommandLookupSchema = z.object({ projectId: id, commandId: id }).strict()
-export const NodeAvailabilitySchema = z.object({ projectId: id, nodeId: id }).strict()
+export const NodeAvailabilitySchema = z
+  .object({ projectId: id, nodeId: id, controlledRequestId: id.optional() })
+  .strict()
 export const FlowCanvasSchema = z.object({ projectId: id }).strict()
 export const CommandLeaseSchema = CommandLookupSchema.extend({ leaseId: id }).strict()
 export type CommandLookup = z.infer<typeof CommandLookupSchema>

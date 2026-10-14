@@ -6,6 +6,7 @@ import type { ImageModel, LanguageModel } from 'ai'
 import type { ProviderConfig } from '../../shared/types'
 import type { SaveProviderInput } from '../../shared/contracts'
 import { getProvider } from './providers.repo'
+import { glmCompatibleFetch } from './glm-request'
 
 export class GatewayError extends Error {
   code: string
@@ -33,7 +34,8 @@ function createCompatible(p: ProviderConfig): ReturnType<typeof createOpenAIComp
   return createOpenAICompatible({
     name: p.id,
     baseURL: p.baseURL,
-    apiKey: p.apiKey || undefined
+    apiKey: p.apiKey || undefined,
+    fetch: glmCompatibleFetch
   })
 }
 
@@ -49,7 +51,8 @@ export function createCatalogChatModel(input: {
     name: input.connectionId,
     baseURL: input.baseURL,
     apiKey: input.apiKey,
-    headers: input.headers
+    headers: input.headers,
+    fetch: glmCompatibleFetch
   }).chatModel(input.modelId)
 }
 

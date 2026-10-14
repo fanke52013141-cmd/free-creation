@@ -85,6 +85,15 @@ export async function publishFlowAgent(editor: Editor, grant: AgentPublication):
     const file = data(await window.api.openProject(grant.projectId))
     if (!file || (await canvasSemanticRevision(editor, file)) !== grant.semanticRevision)
       throw new Error('FLOW_REVISION_CONFLICT')
+    if (grant.kind === 'review') {
+      const shape = editor.getShape<NodeCardShape>(grant.nodeId as TLShapeId)
+      if (!shape || shape.props.nodeType !== 'ai-review') throw new Error('FLOW_NODE_MISSING')
+      const result = await runNodeManually(editor, grant.projectId, [], shape.id, undefined, grant)
+      if (result.status !== 'done') throw new Error('FLOW_REVIEW_EXECUTION_FAILED')
+      assertActiveProject(editor, grant.projectId)
+      await ensureCanvasSaved()
+      return
+    }
     const task = data(
       await window.api.inspectFlowAgent({ projectId: grant.projectId, nodeId: grant.nodeId })
     )

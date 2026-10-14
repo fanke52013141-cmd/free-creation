@@ -464,6 +464,33 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
           )}
           {bindingField('Skills 及版本', 'skills')}
           {bindingField('工具及版本', 'tools')}
+          {draft.role === 'coordinator' && (
+            <label className="agent-flow-target-option">
+              <input
+                type="checkbox"
+                aria-label="启用自动审核与返工"
+                checked={(draft.tools as Array<{ id: string }>).some(
+                  (tool) => tool.id === 'review.execute'
+                )}
+                onChange={(event) =>
+                  update(
+                    'tools',
+                    event.target.checked
+                      ? [
+                          ...(draft.tools as Array<{ id: string; version: string }>).filter(
+                            (tool) => tool.id !== 'review.execute'
+                          ),
+                          { id: 'review.execute', version: '1' }
+                        ]
+                      : (draft.tools as Array<{ id: string }>).filter(
+                          (tool) => tool.id !== 'review.execute'
+                        )
+                  )
+                }
+              />
+              执行范围内的审核与有界返工
+            </label>
+          )}
           {targetList(
             draft.role === 'builder' ? '材料来源（一个文本节点）' : '允许处理的节点',
             'allowedNodeIds'

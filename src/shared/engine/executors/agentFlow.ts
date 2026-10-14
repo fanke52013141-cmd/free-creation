@@ -48,11 +48,19 @@ export const agentExecutor: NodeExecutor = async (ctx) => {
     traceId: ctx.diagnostics?.traceId ?? newTraceId(),
     spanId: ctx.diagnostics?.spanId ?? newSpanId(),
     action:
-      task?.state === 'waiting' && ctx.runId !== task.taskId
-        ? ('continue' as const)
-        : ('start' as const),
+      task?.state === 'blocked' ||
+      (task?.state === 'waiting' &&
+        task.waitKind === 'reconcile' &&
+        config.data.role === 'specialist' &&
+        task.code !== 'FLOW_COMMAND_FACTS_VERIFIED')
+        ? task?.recoveryAction === 'restore'
+          ? ('restore' as const)
+          : ('reconcile' as const)
+        : task?.state === 'waiting' && ctx.runId !== task.taskId
+          ? ('continue' as const)
+          : ('start' as const),
     ...(task ? { expectedTaskId: task.taskId } : {}),
-    ...(task?.state === 'waiting'
+    ...(['waiting', 'blocked'].includes(task?.state)
       ? { eventId: ctx.runId ?? crypto.randomUUID(), expectedWaitRevision: task.waitRevision }
       : {})
   }

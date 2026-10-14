@@ -25,6 +25,8 @@ import type { AgentModelPort } from '../agent-flow/runtime'
 import { FlowBuilderHost } from '../agent-flow/builder-host'
 import { BuildRequestSchema } from '../../shared/agent-flow/builder'
 import { FlowReviewHost } from '../agent-flow/review-host'
+import { FlowReviewStore, reviewBinding } from '../agent-flow/review-store'
+import { readStoredNodeRunStatus } from '../../shared/engine/run-status'
 
 export function registerFlowAgentsIpc(
   window: () => BrowserWindow | null,
@@ -114,8 +116,28 @@ export function registerFlowAgentsIpc(
           try {
             const task = JSON.parse(shape?.meta?.agentTask ?? '{}')
             const result = JSON.parse(shape?.meta?.nodeResult ?? '{}')
+            if (grant.kind === 'review') {
+              const record =
+                new FlowReviewStore(getDb()).forRequest(grant.projectId, grant.taskId) ??
+                new FlowReviewStore(getDb()).latest(grant.projectId, grant.nodeId)
+              const nodeRun = (shape?.meta as Record<string, unknown>)?.nodeRun
+              if (
+                file &&
+                record &&
+                record.signature === reviewBinding(file, grant.nodeId).signature &&
+                record.decision.reviewId === result.reviewId &&
+                readStoredNodeRunStatus(nodeRun) === 'success' &&
+                (nodeRun as { runId: string }).runId === grant.taskId
+              )
+                return
+            }
             if (
               task.taskId === grant.taskId &&
+              ['success', 'skipped'].includes(
+                readStoredNodeRunStatus((shape?.meta as Record<string, unknown>)?.nodeRun) ?? ''
+              ) &&
+              ((shape?.meta as Record<string, unknown>)?.nodeRun as { runId?: string } | undefined)
+                ?.runId === grant.taskId &&
               (task.state === 'waiting' ||
                 (task.state === 'completed' && result.taskId === grant.taskId))
             )
@@ -126,7 +148,8 @@ export function registerFlowAgentsIpc(
           await new Promise((done) => setTimeout(done, 100))
         }
         throw new AgentRuntimeError('FLOW_PUBLICATION_UNCONFIRMED', 'publication')
-      }
+      },
+      (projectId, nodeId) => review.cancel(projectId, nodeId)
     )
   )
   for (const phase of [

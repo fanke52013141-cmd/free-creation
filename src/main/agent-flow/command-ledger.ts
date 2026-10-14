@@ -31,6 +31,7 @@ import { nodeCommandIntentSignature, projectSemanticRevision } from './command-i
 import { FlowAssetStore } from './asset-store'
 import { FlowAssetError } from '../../shared/agent-flow/assets'
 import { FlowReviewStore } from './review-store'
+import { controlledReview } from './coordination-store'
 
 interface Row {
   project_id: string
@@ -134,9 +135,17 @@ export class FlowCommandLedger {
     const row = this.row(CommandLookupSchema.parse(raw))
     return JSON.parse(row.receipt_json)
   }
-  assertNodeAvailable(input: { projectId: string; nodeId: string }): void {
+  assertNodeAvailable(input: {
+    projectId: string
+    nodeId: string
+    controlledRequestId?: string
+  }): void {
     if (
       this.file(input.projectId).nodes.find((n) => n.id === input.nodeId)?.type !== 'agent' &&
+      !(
+        input.controlledRequestId &&
+        controlledReview(this.db, input.projectId, input.nodeId, input.controlledRequestId)
+      ) &&
       this.db
         .prepare('SELECT 1 FROM flow_coordination_scope WHERE project_id=? AND node_id=?')
         .get(input.projectId, input.nodeId)

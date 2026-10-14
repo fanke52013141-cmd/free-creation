@@ -406,7 +406,8 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
         </div>
       )}
       <CanvasEditor
-        project={currentProject ?? file.meta}
+        key={file.meta.id}
+        project={currentProject?.id === file.meta.id ? currentProject : file.meta}
         initialSnapshot={file.tldrawSnapshot}
         workspaceProfile={file.workspaceProfile}
       />

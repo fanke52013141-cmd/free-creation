@@ -3,8 +3,10 @@
 // renderer 尚未传入 trace 时显式标记 correlationMissing，不补造关联。
 import { emitGatewayEvent } from './gateway-events'
 import { redactDiagnosticText } from '../../shared/diagnostics'
+import type { GatewayDiagnosticsContext } from '../../shared/contracts'
 
 export interface DomainEventOptions {
+  context?: GatewayDiagnosticsContext
   status?: 'success' | 'failed' | 'cancelled' | 'skipped'
   error?: unknown
   attributes?: Record<string, unknown>
@@ -18,8 +20,9 @@ export function emitDomainEvent(
   message: string,
   options: DomainEventOptions = {}
 ): void {
-  emitGatewayEvent(event, message, { correlationMissing: true }, {
-    ...options,
+  const { context, ...safeOptions } = options
+  emitGatewayEvent(event, message, context ?? { correlationMissing: true }, {
+    ...safeOptions,
     attributes: options.attributes
   })
 }

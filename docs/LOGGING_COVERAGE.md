@@ -1,5 +1,30 @@
 # 日志覆盖清单
 
+## 2026-10-14 源码同步最终门禁
+
+GLM/C3.3/C4 本批完整 verify 最终串行通过（164 文件、1763 通过、1 既有跳过，模型另 2；日志门禁、17 浏览器、构建与 11 组隐藏桌面），renderer 保存崩溃四组另过独立门禁。证据 qa/c4-import-renderer-20261014/release-verify.log 与 desktop-fixed.log。此项更新先前“分段通过/本轮未重跑全量”的历史状态；未覆盖的 main 保存轮转、物理掉电、供应商查询及媒体/并行保持，不外推全链路。发布交接见 [本次 handoff](canvas-agent-flow/HANDOFF_2026_10_14_C4_RELEASE.md)。
+
+## 2026-10-14 C4 导入强杀与 renderer 保存中断
+
+启动检查新增 workspace.recovery started/completed/failed，同 trace/span，只记恢复导入/未入库目录/缺文件项目/未处理临时项数量及固定失败 code/phase。替换含绝对路径的旧 health 对象日志。未入库目录保留不自动导入；恢复目录受阻不阻断启动。health 单元验证唯一终态、私有路径排除与 logger 抛错不改变结果。
+
+导入与保存继续复用公共 IPC/仓库事件。29 定向、两端类型、文件 lint、日志门禁和构建通过；四组真实 renderer 崩溃/重开/继续保存通过，实际保存开始/终态分别 2/2、3/3、3/3、3/3，正文排除且零模型请求。证据及日志模板自查见 [C4 导入与 renderer](canvas-agent-flow/22-c4-import-renderer-recovery.md)。本轮未重跑全量 verify，不外推物理掉电、main 轮转强杀、供应商查询或完整崩溃日志时间线。
+
+## 2026-10-14 C4 强杀与断网故障矩阵
+
+本批仅新增测试与交接文档，不修改生产执行/请求/保存/诊断路径。真实强杀和本地接受后断网复用 FlowCommandLedger、FlowAssetStore 与 createLedgerToolPort；公共 command.operation、command.recovered、agent.desktop/coordination 的日志职责及首批真实桌面脱敏证据保持。测试 worker 不伪造业务日志或崩溃终态，不把日志当恢复权威。
+
+12 项新增故障案例及相关 61 定向两轮通过，最终证据 qa/c4-fault-matrix-20261014/verified.log；文件 lint、日志旁路门禁通过。输出仅含固定边界、状态、原因、计数与引用，私有材料/Key/原始错误不输出；临时数据、服务与子进程清理。实际物理掉电、完整 renderer 故障/崩溃日志时间线、供应商查询/撤回、导入目录强杀及媒体/并行仍未验证，不能称全链路完成。日志模板自查见 [故障矩阵](canvas-agent-flow/21-c4-crash-network-matrix.md#验证与日志自查)。
+
+## 2026-10-14 GLM 模型接入
+
+- 范围：官方 GLM-5.3/Flash SDK 请求参数策略、目录能力验证预算和新建 Flow 的本地默认模型绑定；交付与证据见 `docs/canvas-agent-flow/18-glm-model-switch.md`。
+- 复用：`model.request` 开始/唯一终态，能力验证 `configuration.validation_completed/failed`；新建配置仍沿公共画布保存。默认绑定读取异常经 `project.canvas_failed / model-defaults` 记录，不记录绑定全文或个人配置。
+- 实证：两个模型的生产 SDK 强制工具与回执往返通过，4 次请求开始/终态配对；诊断扫描无密钥及合成正文。目录文本/Flash 识图验证通过，个人密钥加密落盘；QA 证据没有数据库或凭据。
+- 补验：GLM-5.3 讨论/建图/审核三个实际 SDK 操作通过，另 3 次开始/终态配对且敏感正文/密钥扫描为零；1716 单元、模型另 2 项、日志门禁、17 浏览器、构建及七组隐藏 Electron 按交接记录分段通过。参数装饰器的公共生命周期委托登记在日志允许清单，不新增重复请求终态。
+- 定向覆盖：其他供应商/模型不受影响、显式推理强度和原 token/AbortSignal 保留、transport 失败不重试、空正文不能通过 GLM 能力验证、新建默认与已有显式模型隔离。
+- 边界：没有完整 GLM 任务/建图/协调/审核返工 E2E、真实远端取消、视频/文件或媒体调度验收；公共 logger 故障隔离沿既有门禁，不将局部接入称为全链路完成。
+
 ## 2026-10-12 Agent Flow C0 隔离实验
 
 - 范围：`src/main/agent-flow/c0/` 的 checkpoint、命令回执、LangGraph 循环和单步 SDK 模型适配；`c0-electron.ts` 是独立 opt-in 实验入口，不启动产品数据库或注册生产节点。
@@ -287,3 +312,19 @@ C3.1b 最终结果：desktop-final-accepted.log 完整 verify 通过（155 文�
 - 图语义冲突、来源/Schema/越权、不完整提交、空工具响应、技术失败、版本不适用、轮次耗尽均保持失败或阻断；日志失败不改变提交事实。开始/唯一终态和密钥/材料排除已由建图/审核合成及真实双进程实际诊断扫描验证。
 - 定向测试：agent-flow-builder、review、builder-review-sdk；证据 C33/directed-builder-review.log、sdk-final.log；真实诊断 C3/desktop-builder-real、desktop-review-real/results.json。没有存原始模型响应排查问题。
 - 未覆盖：跨存储崩溃原子性、未知远端取消、主控自动审核和 AI/协作返工、负责节点反馈投影、完整 C4 恢复矩阵。新包只实现有界人工新版本复审，不外推完整三类主体返工。
+
+### 2026-10-14 C3.3 自动审核与有界返工（文本/JSON 首批已验收）
+
+上条未覆盖中的主控审核、AI/协作返工及负责节点反馈已接入。新增 `agent.coordination.stage` 只记录固定阶段/原因、当前 request/review/reworkTask/固定版本身份、轮次和数量；开始/唯一终态继续由公共 agent.desktop、agent.coordination、model.request、node/workflow、command/save/asset 负责，不重复终态。人工提交失败复用 project.canvas_failed 的 review-rework-submit 阶段；反馈轮询不逐次记日志。目标、审核标准、反馈、讨论、输入/产物正文、推理、原始模型响应/错误和凭据均排除。
+
+日志模板自查见 [C3.3 返工记录](canvas-agent-flow/19-c33-review-rework.md#实施与日志自查)。47 项定向通过，验证 logger 抛错不改变返工结果、总预算、取消不配合 signal 的模型、迟到无结论、技术失败留 pending 且不自动重发。GLM 建图/审核/三类返工共 69 次真实模型请求、desktop/coordination 开始与唯一终态配对无缺项，实际正文/Key 排除通过；model.request 以 requestId 区分同 span 内请求。最终完整 verify（161 文件/1729 项/1 既有跳过，模型另 2）、17 浏览器脚本、构建、十组 Electron 及协作/人工反馈内部选中/拖动通过。证据 `qa/c33-acceptance-20261014/verify-accepted.log` 与 lifecycle-audit.json；失败记录保留。没有新增重复终态，也不将本地取消称为远端撤回。
+
+未覆盖：真实远端取消、完整崩溃/断网/未知副作用恢复矩阵、模板/引用迁移、媒体/并行任务和所有恢复 trace 层级。当前仅覆盖已适配文本/JSON/确定性处理路径，不宣称全链路完成。
+
+### 2026-10-14 C4 文本/JSON 首批已验收
+
+主控/专业任务的 reconcile 为只读权威事实核对，不调用模型或派发业务；restore 仅补已提交任务或已保存审核报告的公共呈现。复用 agent.desktop/coordination 开始与唯一终态及公共 command/node/save/asset 入口，保留新操作 trace 与旧 trace 关联；continue 的模型/运行/新命令使用本次操作 trace，任务固定快照不改写。模型在途未知、command pending/unknown、未完整 checkpoint 保持阻断；不能把缺日志当作可重放依据。
+
+受影响项目/模板迁移 IPC 增补同 trace 的 transfer started/committed/failed，稳定 operation/phase/code 允许列表，拒绝原始异常、配置、素材路径、正文、API Key 和包内容。导入排除旧执行/审批权威，固定版本完整性/身份和嵌套引用校验，数据库/目录事务失败不显示项目。项目切换按新快照重建编辑器，旧保存迟到不修改新项目状态；加载/保存复用公共入口，不新增重复终态。
+
+82 定向及 8 保存回归通过；verify 各阶段分段通过（162 文件/1743 通过/1 既有跳过，模型另 2；17 浏览器、构建、十组既有 Electron；最后增量类型/lint/日志/构建/C4 Electron）。实际桌面核对零模型增量、真实迁移 IPC 与重新保存通过，desktop 12/12、coordination 3/3、transfer 2/2、model 16/16 开始/终态及实际脱敏通过，前三类逐 trace/span 唯一终态验收。证据见 [C4 接续](canvas-agent-flow/20-c4-recovery-transfer.md) 与 qa/c4-acceptance-20261014/lifecycle-audit.json。失败记录保留，不宣称单次全量串行通过。仍未覆盖远端查询/撤回、媒体/并行恢复和长期跨存储故障注入及全部 trace 层级。

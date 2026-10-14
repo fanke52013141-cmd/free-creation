@@ -9,6 +9,7 @@ import type { FlowAgentView } from '@shared/agent-flow/desktop-tasks'
 import { projectAgentOutputs } from '@shared/agent-flow/agent-outputs'
 import { useNodePanelStore } from '../../stores/nodePanel'
 import { useResourceQueue } from '../../engine/resource-queue'
+import { flowAgentFailureMessage } from '@shared/agent-flow/failure-messages'
 
 export function AgentTaskControls({ shape }: Pick<NodeBodyProps, 'shape'>): React.JSX.Element {
   const editor = useEditor()
@@ -70,14 +71,14 @@ export function AgentTaskControls({ shape }: Pick<NodeBodyProps, 'shape'>): Reac
       setError('停止未确认，请核对任务状态。')
     }
   }
-  const act = async (): Promise<void> => {
+  const act = async (restore = false): Promise<void> => {
     if (!projectId) return
     setError('')
     if (!specialist && !running && task?.state !== 'waiting' && task?.state !== 'blocked') {
       useNodePanelStore.getState().open('contract', shape.id, 'settings')
       return
     }
-    if (running || task?.state === 'blocked') {
+    if (running) {
       await stop()
       return
     }
@@ -89,7 +90,10 @@ export function AgentTaskControls({ shape }: Pick<NodeBodyProps, 'shape'>): Reac
         editor.updateShape({
           id: shape.id,
           type: 'node-card',
-          meta: { ...shape.meta, agentTask: JSON.stringify(task) }
+          meta: {
+            ...shape.meta,
+            agentTask: JSON.stringify({ ...task, recoveryAction: restore ? 'restore' : undefined })
+          }
         })
       }
       const result = await runNodeManually(editor, projectId, [], shape.id)
@@ -108,7 +112,11 @@ export function AgentTaskControls({ shape }: Pick<NodeBodyProps, 'shape'>): Reac
         <p className="agent-flow-pending" role="status">
           {
             {
-              ready: task.prepared ? '新修订待启动' : '准备中',
+              ready: task.prepared
+                ? task.reviewFeedback
+                  ? '返工待明确启动'
+                  : '新修订待启动'
+                : '准备中',
               running: '处理中',
               waiting: task.waitKind === 'human' ? '等待人工确认' : '等待执行核对',
               blocked: '任务已阻断，请核对或停止',
@@ -149,21 +157,31 @@ export function AgentTaskControls({ shape }: Pick<NodeBodyProps, 'shape'>): Reac
           {error}
         </p>
       )}
+      {task?.recovery?.reasons.map((reason) => (
+        <p className="agent-flow-pending" key={reason}>
+          {flowAgentFailureMessage(reason)}
+        </p>
+      ))}
       <NodePrimaryButton allowWhileBusy disabled={!projectId} onClick={() => void act()}>
         {running
           ? '停止任务'
           : task?.state === 'waiting'
             ? task.waitKind === 'human'
               ? '确认并继续'
-              : '核对并继续'
+              : role === 'specialist' && task.code !== 'FLOW_COMMAND_FACTS_VERIFIED'
+                ? '核对执行事实'
+                : '明确继续执行'
             : task?.state === 'blocked'
-              ? '停止任务'
+              ? '核对执行事实'
               : specialist
                 ? '启动任务'
                 : '配置专业 Agent'}
       </NodePrimaryButton>
-      {task?.state === 'waiting' && !running && (
+      {['waiting', 'blocked'].includes(task?.state ?? '') && !running && (
         <NodePrimaryButton onClick={() => void stop()}>停止任务</NodePrimaryButton>
+      )}
+      {task?.state === 'blocked' && task.recovery?.canRestore && !running && (
+        <NodePrimaryButton onClick={() => void act(true)}>补呈现已提交成果</NodePrimaryButton>
       )}
       {role === 'coordinator' && running && (
         <NodePrimaryButton

@@ -7,6 +7,19 @@ import type { z } from 'zod'
 import type { FlowAgentReply, FlowAgentView } from '../../shared/agent-flow/desktop-tasks'
 import { AgentRuntimeError } from '../../shared/agent-flow/runtime-contracts'
 import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
+import type { ReviewDecision } from '../../shared/agent-flow/node-contracts'
+
+export interface CoordinationReview {
+  nodeId: string
+  requestId: string
+  state: 'ready' | 'pending' | 'passed' | 'rejected' | 'human-wait' | 'manual-wait'
+  round: number
+  decision?: ReviewDecision
+  originalInputs?: FlowAgentReply['refs']
+  reworkTaskId?: string
+  responsibleNodeId?: string
+  manualDefinition?: { text: unknown; content: unknown }
+}
 
 export interface CoordinationRun {
   projectId: string
@@ -38,6 +51,33 @@ export interface CoordinationRun {
     outputs: FlowAgentReply['refs']
   }>
   outputs: FlowAgentReply['refs']
+  reviews?: CoordinationReview[]
+  controlSteps?: number
+  decisionPending?: boolean
+  recovery?: { reasons: string[]; canRestore: boolean }
+}
+
+/** A public review executor may join an occupied scope only for the persisted pending request. */
+export function controlledReview(
+  db: Database.Database,
+  projectId: string,
+  nodeId: string,
+  requestId: string
+): boolean {
+  const owner = new CoordinationStore(db).owner(projectId, nodeId)
+  if (!owner) return false
+  const row = db
+    .prepare('SELECT body_json FROM flow_coordination_runs WHERE project_id=? AND task_id=?')
+    .get(projectId, owner) as { body_json: string } | undefined
+  if (!row) return false
+  const run = JSON.parse(row.body_json) as CoordinationRun
+  return (
+    run.state === 'running' &&
+    !!run.reviews?.some(
+      (review) =>
+        review.nodeId === nodeId && review.requestId === requestId && review.state === 'pending'
+    )
+  )
 }
 
 /** The canvas remains the editable definition; this store contains execution facts only. */
@@ -93,6 +133,14 @@ export class CoordinationStore {
     this.db
       .prepare('DELETE FROM flow_coordination_scope WHERE project_id=? AND task_id=?')
       .run(run.projectId, run.taskId)
+  }
+  hasEvent(run: CoordinationRun, eventId: string, event: string): boolean {
+    const row = this.db
+      .prepare(
+        'SELECT signature FROM flow_coordination_events WHERE project_id=? AND task_id=? AND event_id=?'
+      )
+      .get(run.projectId, run.taskId, eventId) as { signature: string } | undefined
+    return !!row && JSON.parse(row.signature).event === event
   }
   event(run: CoordinationRun, eventId: string, event: string, expectedRevision: number): void {
     const signature = canonicalFlowJson({ event, expectedRevision })

@@ -66,7 +66,7 @@ const path = require('node:path')
     }
     assert.equal(await page.locator('.artifact-group').count(), 0)
     checks.push('两轮产物均保留和可见；已下线折叠控件不出现')
-    await page.screenshot({ path: path.join(out, 'groups.png') })
+    await page.screenshot({ path: path.join(out, 'groups.png'), timeout: 60000 })
     await page.evaluate(async () => {
       const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
       const sourceId = 'shape:qa-storyboard'
@@ -169,13 +169,13 @@ const path = require('node:path')
     assert.ok(!remaining.some((item) => item.id === p.id))
     assert.equal(await page.getByRole('button', { name: '最近删除', exact: true }).count(), 0)
     checks.push('首页直接删除契约；已下线最近删除入口不出现')
-    await page.screenshot({ path: path.join(out, 'projects.png') })
+    await page.screenshot({ path: path.join(out, 'projects.png'), timeout: 60000 })
     fs.writeFileSync(
       path.join(out, 'results.json'),
       JSON.stringify({ passed: true, checks }, null, 2)
     )
   } catch (error) {
-    await page.screenshot({ path: path.join(out, 'failure.png') })
+    await page.screenshot({ path: path.join(out, 'failure.png'), timeout: 60000 })
     throw error
   } finally {
     await browser.close()

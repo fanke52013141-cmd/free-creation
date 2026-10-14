@@ -1,4 +1,14 @@
 const messages: Record<string, string> = {
+  FLOW_MODEL_OUTCOME_UNKNOWN:
+    '模型决策结果未知，核对不会再次请求模型；可停止旧任务后明确创建新任务。',
+  FLOW_COMMAND_OUTCOME_UNKNOWN: '命令尚无可确认的保存事实，保留未知状态，不重复执行。',
+  FLOW_TASK_CHECKPOINT_UNCONFIRMED:
+    '任务检查点不足，已保留旧任务及回执，请核对后停止或另建新任务。',
+  FLOW_ASSET_PROJECTION_MISSING: '固定成果已提交，但画布呈现尚未确认，可明确补呈现。',
+  FLOW_PROJECTION_CONFLICT: '当前成果呈现与已提交版本不同，禁止覆盖；请先保存当前内容并核对版本。',
+  FLOW_REWORK_SCOPE_INVALID: '审核必须指定一个范围内的返工负责人，并绑定真实对象与受控下游。',
+  FLOW_REWORK_TARGET_UNSUPPORTED: '当前返工支持专业 Agent 与人工文本/JSON；其他类型尚未适配。',
+  FLOW_REVIEW_OUTCOME_UNKNOWN: '审核结果尚未确认，请核对原请求，不要重复提交。',
   FLOW_REVIEW_CONFIG_INVALID: '审核需要标准正文、模型和明确的审核对象来源，请检查设置。',
   FLOW_REVIEW_SUBJECT_INVALID: '审核对象需通过文本或 JSON 数据端口接入；媒体审核尚未支持。',
   FLOW_REVIEW_BUDGET_EXHAUSTED: '审核返工次数已耗尽，请核对最新反馈并停止分支。',

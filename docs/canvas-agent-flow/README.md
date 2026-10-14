@@ -1,12 +1,14 @@
 # 画布原生 Agent Flow
 
-日期：2026-10-14。状态：**C3.2 已验收；C3.3 顺序协调、文本模板建图、固定版本审核与人工复审已接通；主控自动审核和 AI／人机协作返工接续仍待开发**。本目录是当前 Agent Flow 的唯一方案入口；不沿用已撤回方案的完成状态、工单编号或数据模型。
+日期：2026-10-14。状态：**C3.3 文本/JSON 首批及 C4 核对、补呈现、迁移和首批故障矩阵已验收；main 文件轮转强杀等边界待补**。本目录是当前 Agent Flow 的唯一方案入口；不沿用已撤回方案的完成状态、工单编号或数据模型。
 
-接续开发先读 [2026-10-14 仓库同步 handoff](HANDOFF_2026_10_14_REPOSITORY_SYNC.md)，其中汇总当前实现、验收环境、桌面版本差异和下一条交付路径。
+接续开发先读 [GLM / C3.3 / C4 发布 handoff](HANDOFF_2026_10_14_C4_RELEASE.md)，其中汇总当前实现、验证、同步备注和下一条交付路径；[历史分包交接](HANDOFF_2026_10_14_REPOSITORY_SYNC.md)保留。
+
+2026-10-14 本地模型调整：新建 Agent/审核默认 GLM-5.3，对话与识图模型选择 GLM-5.3-Flash。请求策略与个人配置边界见 [模型切换记录](18-glm-model-switch.md)。GLM 建图、固定版本审核和三类返工真实桌面路径已通过，最新门禁与边界见 [C3.3 返工验收](19-c33-review-rework.md)；个人模型配置不随源码分发。
 
 用户已确认完整方向并授权开发。优先阅读 [完整确认方案](00-approved-plan.md)；进度和交付备注见 [开发台账](08-development-ledger.md)。首版新增 Agent、状态机、AI 审核三种类型，细节按最新方案统一。
 
-C3.2 已完成收尾验收。C3.3 已接通 [主 Agent 顺序协调与固定成果交接](16-c33-sequential-coordination.md)，以及 [文本模板建图、固定版本审核与人工复审](17-c33-builder-review.md)。主控自动审核和自动返工仍未接通，完整 C3.3 未完成。最新证据与接续顺序见 [当前 handoff](HANDOFF_2026_10_14_REPOSITORY_SYNC.md)和台账。
+C3.2 已完成收尾验收。C3.3 已接通 [主 Agent 顺序协调与固定成果交接](16-c33-sequential-coordination.md)、[文本模板建图与审核](17-c33-builder-review.md)，并完成 [主控自动审核与三类有界返工](19-c33-review-rework.md) 的文本/JSON 首批验收。媒体、并行及任意节点建图仍需独立适配；C4 尚未实现。
 
 C3.2 交付路径见 [协作目标修订与人工过渡](15-c32-collaboration.md)：讨论不隐式执行；人工意见/固定选择与明确继续分开；采用新目标准备新任务，旧任务、输入及回执不改写。验收状态见台账。
 
@@ -80,8 +82,8 @@ flowchart LR
 
 C3 已开工：[C3.1a 有界运行底座](13-c3-runtime-foundation.md)实现版本化内容 Skill、任务预算、C2 工具适配和持久 interrupt/checkpoint。画布入口及真实模型循环见 C3.1b，不标记全部 C3 完成。
 
-C3.1b [画布 Agent 任务入口](14-c3-canvas-agent.md)已接通专业 Agent 的启动/停止/继续、内置 Skill/工具选择、正式输出和固定资产；真实豆包连续执行及跨进程人工继续已验证。后续主控顺序协调、搭建与人工审核复审见 C3.3。自动返工、并行、Skill 导入及 C4 恢复矩阵仍待开发。
+C3.1b [画布 Agent 任务入口](14-c3-canvas-agent.md)已接通专业 Agent 的启动/停止/继续、内置 Skill/工具选择、正式输出和固定资产。主控、搭建、审核及三类返工验收见 C3.3；C4 首批见下方。并行、Skill 导入及完整恢复矩阵继续按能力适配验收。
 
 最新 C1 用户路径、验证与边界见 [控制声明交付](10-c1-control-declarations.md)。
 
-当前 C3.3 接续：[建图、固定版本审核与人工复审](17-c33-builder-review.md)及[最新交接](HANDOFF_2026_10_13_C33.md)。建图与审核真实模型双进程已验证，主控自动审核和 AI/人机协作新返工任务仍待开发。
+当前交付：[C4 故障核对与迁移](20-c4-recovery-transfer.md)、[强杀/断网矩阵](21-c4-crash-network-matrix.md)及[导入/renderer 中断](22-c4-import-renderer-recovery.md)。文本/JSON、命令存储、导入事务强杀及四类 renderer 保存崩溃已验收；main 文件轮转、物理掉电、供应商查询和媒体/并行仍未覆盖。进度以最新台账条目为准。

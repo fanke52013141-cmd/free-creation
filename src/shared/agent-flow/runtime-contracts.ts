@@ -53,6 +53,19 @@ export const AgentTaskSnapshotSchema = z
     parentTaskId: id.optional(),
     coordinatorTaskId: id.optional(),
     humanFeedback: z.string().max(4096).optional(),
+    rework: z
+      .object({
+        originalTaskId: id,
+        reviewId: id,
+        reviewNodeId: id,
+        rulesVersion: id,
+        rejectedOutputs: z.array(AgentFlowAssetRefSchema).min(1).max(128),
+        criteria: z.string().min(1).max(32768),
+        feedback: z.string().min(1).max(16384),
+        round: z.number().int().min(1).max(10)
+      })
+      .strict()
+      .optional(),
     directInputs: z.array(AgentFlowAssetRefSchema).max(128).default([]),
     targets: z
       .array(

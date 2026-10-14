@@ -74,6 +74,7 @@ interface RunControl {
 }
 
 interface WorkflowContext {
+  controlledRequestId?: string
   command?: NodeCommandRunOptions
   taskId?: string
   editor: Editor
@@ -982,7 +983,11 @@ async function executeNodeOnce(
     emitWorkflowEvent('workflow.task_admitted', '节点取得资源额度', ctx)
     if (!ctx.command && window.api?.checkFlowNodeAvailability) {
       const available = await window.api
-        .checkFlowNodeAvailability({ projectId: ctx.projectId, nodeId: node.id })
+        .checkFlowNodeAvailability({
+          projectId: ctx.projectId,
+          nodeId: node.id,
+          ...(ctx.controlledRequestId ? { controlledRequestId: ctx.controlledRequestId } : {})
+        })
         .catch(() => ({ ok: false as const }))
       if (!available.ok) {
         ctx.outputs.delete(node.id)
@@ -1455,6 +1460,7 @@ export async function runNodeManually(
     traceId: command?.grant.command.traceId ?? publication?.traceId ?? newTraceId(),
     workflowSpanId: command?.grant.command.spanId ?? publication?.spanId ?? newSpanId(),
     command,
+    controlledRequestId: publication?.kind === 'review' ? publication.taskId : undefined,
     taskId: command?.grant.command.taskId,
     isolated: true
   }

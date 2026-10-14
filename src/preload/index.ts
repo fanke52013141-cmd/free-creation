@@ -176,6 +176,7 @@ const api = {
   checkFlowNodeAvailability: (input: {
     projectId: string
     nodeId: string
+    controlledRequestId?: string
   }): Promise<IpcEnvelope<null>> => ipcRenderer.invoke(IPC.flowCommands.availability, input),
   dispatchFlowCommand: (
     input: NodeExecuteCommand
