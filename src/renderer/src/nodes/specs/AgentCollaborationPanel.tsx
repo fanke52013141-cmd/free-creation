@@ -105,7 +105,11 @@ export function AgentCollaborationPanel({
       }
       setView(result.data)
       const current = editor.getShape(shape.id)
-      window.dispatchEvent(new CustomEvent('canvas-agent-task-updated', { detail: { projectId, nodeId: shape.id, task: result.data.task } }))
+      window.dispatchEvent(
+        new CustomEvent('canvas-agent-task-updated', {
+          detail: { projectId, nodeId: shape.id, task: result.data.task }
+        })
+      )
       editor.updateShape({
         id: shape.id,
         type: 'node-card',
@@ -194,9 +198,11 @@ export function AgentCollaborationPanel({
                 .then((reply) => {
                   if (reply.ok)
                     setPreview(
-                      reply.data.value.kind === 'json'
-                        ? JSON.stringify(reply.data.value.data, null, 2)
-                        : reply.data.value.text
+                      reply.data.value.kind === 'video' || reply.data.value.kind === 'image'
+                        ? '媒体成果已保存，可通过成果节点预览'
+                        : reply.data.value.kind === 'json'
+                          ? JSON.stringify(reply.data.value.data, null, 2)
+                          : reply.data.value.text
                     )
                   else setError(reply.error.message)
                 })

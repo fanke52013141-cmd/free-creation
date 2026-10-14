@@ -1,4 +1,8 @@
 const messages: Record<string, string> = {
+  FLOW_VIDEO_OUTCOME_UNKNOWN: '原视频任务结果待核对，不会重新提交生成。',
+  FLOW_VIDEO_RESULT_NOT_PROJECTED: '视频成果已确认，请接回原任务并呈现成果。',
+  FLOW_VIDEO_RECONCILE_READY: '已找到原视频任务，可明确继续接回。',
+  ASSET_REVIEW_MEDIA_UNSUPPORTED: '当前 AI 审核只适配文本和 JSON，图片和视频成果请先人工查看。',
   FLOW_MODEL_OUTCOME_UNKNOWN:
     '模型决策结果未知，核对不会再次请求模型；可停止旧任务后明确创建新任务。',
   FLOW_COMMAND_OUTCOME_UNKNOWN: '命令尚无可确认的保存事实，保留未知状态，不重复执行。',
@@ -42,7 +46,7 @@ const messages: Record<string, string> = {
   AGENT_GOAL_REQUIRED: '请先填写任务目标和交付条件。',
   AGENT_TOOL_REQUIRED: '请在节点设置中启用画布节点工具。',
   AGENT_TOOL_UNSUPPORTED: '所选工具尚未接入，请使用画布节点工具。',
-  AGENT_TARGET_UNSUPPORTED: '当前工具只支持数据处理节点，请调整允许处理的节点。',
+  AGENT_TARGET_UNSUPPORTED: '当前工具支持数据处理与文本生成视频，请调整允许处理的节点。',
   AGENT_INPUT_TYPE_UNSUPPORTED: '当前任务只支持文本和 JSON 输入，请调整连线。',
   AGENT_INPUT_NOT_FIXED: '输入引用与固定资产不一致，请重新选择有效的资产版本。',
   AGENT_BUDGET_EXHAUSTED: '已达到任务预算，请核对成果并停止旧任务，再调整目标或步数。',
@@ -55,6 +59,7 @@ const messages: Record<string, string> = {
   SKILL_RESOURCE_DENIED: 'Skill 请求了未声明的资源，任务已阻断，请检查版本和资源说明。',
   FLOW_REVISION_CONFLICT: '画布已发生变更，请停止旧任务后重新启动。',
   FLOW_PROJECT_INACTIVE: '请返回任务所属画布，再核对或继续。',
+  ASSET_IMAGE_CHANGED: '固定首帧图片丢失或内容发生变化，请检查原资产后创建新任务。',
   ASSET_OUTPUT_UNAVAILABLE: '输入尚无可提交的结果，请检查来源节点并保存。',
   ASSET_SOURCE_OCCUPIED: '输入节点有未确认执行，请先核对原运行记录。'
 }

@@ -1,5 +1,25 @@
 # 日志覆盖清单
 
+## 2026-10-15 最终源码同步验收
+
+26–29 包随 [总 handoff](canvas-agent-flow/HANDOFF_2026_10_15_VIDEO_AGENT_SYNC.md) 同步。最终完整 verify 退出码 0：1857 项通过、1 项既有跳过，模型另 2；日志门禁与全部桌面生命周期/脱敏扫描通过。首帧报告 1 POST/1 下载/1 视频任务、固定图片与视频原生交互通过；测试排除 Data URL/PNG Base64/假 Key/提示词。供应商和 SDK 决策仍为隔离夹具，无付费媒体；下方分包是当时记录，不扩大为真实计费或全媒体日志验收。
+
+## 2026-10-15 Agent 首帧图片适配
+
+复用 Agent/协调/命令/公共节点、模型请求、task.control、媒体/固定版本/保存生命周期；图片摘要辅助函数不重复记终态，固定输入/版本读取失败沿既有 input、saved-input 与资产 IPC 诊断。新增图片项目边界、索引/内容摘要与发出字节校验，失败稳定代码不带路径/正文；桌面脱敏扫描额外排除 Data URL 与 PNG Base64。实际 unknown/跨进程接回、原生图片/视频预览和完整门禁见 [29 包交接](canvas-agent-flow/29-video-first-frame-adapter.md)。供应商及 SDK 决策为隔离夹具，无付费媒体；不宣称视觉审核或全部媒体调度完成。
+
+## 2026-10-15 Agent 文生视频适配
+
+复用命令/Agent/协调/模型/公共节点、视频 task.control、下载/媒体、固定版本与保存生命周期；绑定的 command/run/task/版本 ID 用于事实核对，未知结果不依据日志释放。双进程实际诊断扫描开始/唯一终态、恢复关联及假 Key/材料排除，SDK 与供应商为隔离协议夹具，真实视频字节不入诊断。停止传播沿公共 cancel/control，测试本地 media:// 传输职责已登记 allowlist；不豁免秘密/裸 console 或生产独立网络路径。定向 83 项、固定预览实际指针验收、完整门禁及支持/未支持范围见 [视频 Agent 交接](canvas-agent-flow/28-video-agent-adapter.md)。未宣称真实计费、视频内容审核、同步 Agent 远端取消或全媒体调度完成。
+
+## 2026-10-14 C4 组合故障验收
+
+复用 task.control、media.download/media.persist；恢复停止失败保留稳定 VIDEO_MATERIALIZATION_STOPPED 原因，不记录私有异常。六条组合场景验证逐 trace/span control 唯一终态、强杀只留下预期的 control/persist 未完成开始、下载配对及假 Key/正文/签名/字节/路径排除；logger 失败仍能提交原成果。项目仓库测试不伪造保存事件，四类真实 renderer 复验负责公共保存生命周期和脱敏。六文件 74 项定向及完整门禁见 [27 包验收](canvas-agent-flow/27-c4-combined-failure-acceptance.md)，失败复现保留。边界：非真实供应商、非视频 UI 全链路、非完整竞争 trace 树或物理掉电验收。
+
+## 2026-10-14 多进程恢复竞争
+
+项目保存与视频物化/核对复用公共 project.save、task.control、下载及 media.persist；process-lock 只负责 SQLite 所有权，不重复终态、不记录 resource/令牌/PID/路径。占用核对保留任务事实，强杀不补造终态。15 项独立进程竞争检查及六文件 73 项回归通过，覆盖旧锁双竞争、死亡/存活/不确定身份、迟到令牌、停止与迁移。原诊断/脱敏与 logger 故障复验、完整门禁见 [26 包接续](canvas-agent-flow/26-c4-recovery-contention.md)。不证明完整竞争 trace 树、掉电或真实供应商取消；历史条目中的跨进程未覆盖为当时状态。
+
 ## 2026-10-14 视频成果强杀恢复
 
 finalizeVideo 复用下载及 media.persist 开始/唯一终态；可信本地回执离线核对新增复用 media.persist 生命周期，同 task/新核对 trace，仅稳定 operation/ID/MIME。SHA-256、字节、路径/源 URL/Key 不进入诊断。强杀 worker 验证恢复终态配对和私有字节排除；原 logger 故障不改变结果测试继续通过。新增 14 真实强杀/冲突，最终七文件 85 定向通过，证据及完整门禁见 [接续记录](canvas-agent-flow/25-c4-video-materialization-recovery.md)。不补造强杀终态，不把日志作为恢复事实；跨进程并发、掉电/长期故障与真实供应商仍未覆盖。

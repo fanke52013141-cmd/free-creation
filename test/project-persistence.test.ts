@@ -23,6 +23,14 @@ const state = vi.hoisted(() => ({
   projectsDir: '',
   rows: new Map<string, StoredProjectRow>()
 }))
+// This test isolates graph serialization; real process ownership is covered by
+// the independent-process contention and hard-kill suites.
+vi.mock('../src/main/store/process-lock', () => ({
+  acquireProcessLock: () => ({
+    assertOwned: () => {},
+    release: (cleanup?: () => void) => cleanup?.()
+  })
+}))
 
 vi.mock('../src/main/store/db', (): { getProjectsDir: () => string; getDb: () => unknown } => {
   const statement = (sql: string): MockStatement => ({

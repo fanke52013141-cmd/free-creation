@@ -1,3 +1,4 @@
+import { fixedFlowImage, type FlowImageRef } from '../agent-flow/image-assets'
 // 视频生成任务管理：MiniMax H3 与 Seedance 的统一任务式适配
 // 两家 API 均为 content[] 多模态 + 异步任务 + 轮询（见调研报告 §3.3）：
 //   MiniMax  POST {base}/v2/video_generation            → task_id
@@ -19,6 +20,8 @@ import type { ProviderConfig, VideoGenerationMode, VideoTaskInfo } from '../../s
 import { getDb, getDataDir } from '../store/db'
 import { readMediaBuffer } from '../store/media.repo'
 import { materializeVideoAsset, recoverVideoAsset } from './video-materialization'
+import { GraphWriteInProgressError } from '../../shared/graph-snapshot-sync'
+import { CommandLeaseSchema, NodeExecuteCommandSchema } from '../../shared/agent-flow/commands'
 import { GatewayError } from './factory'
 import { emitGatewayEvent, ensureRequestId } from '../diagnostics/gateway-events'
 import { newTraceId, newSpanId } from '@shared/observability'
@@ -70,6 +73,7 @@ interface TaskRow {
 }
 
 interface VideoInputState {
+  flowCommandId?: string
   prompt: string
   mode?: VideoGenerationMode
   params?: VideoSubmitInput['params']
@@ -297,9 +301,22 @@ function authHeaders(p: ProviderConfig): Record<string, string> {
   }
 }
 
-async function mediaToDataUrl(mediaId: string): Promise<string | undefined> {
+async function mediaToDataUrl(
+  mediaId: string,
+  input?: VideoSubmitInput
+): Promise<string | undefined> {
   const m = await readMediaBuffer(mediaId)
   if (!m) throw new GatewayError('MEDIA_NOT_FOUND', `参考媒体不存在：${mediaId}`)
+  if (input?.flowCommand) {
+    const image = commandFirstFrame(input)
+    if (
+      !image ||
+      image.mediaId !== mediaId ||
+      image.mime !== m.mime ||
+      createHash('sha256').update(m.buf).digest('hex') !== image.contentSha256
+    )
+      throw new GatewayError('FLOW_INPUT_CONTRACT_INVALID', '固定首帧内容已变化')
+  }
   return `data:${m.mime};base64,${m.buf.toString('base64')}`
 }
 
@@ -456,7 +473,7 @@ export function minimaxApiUrl(p: ProviderConfig, path: string): string {
 /** H3/H3-Max 官方 v2 payload；媒体解析可注入，以便逐字段 wire fixture 测试。 */
 export async function buildMiniMaxH3RequestBody(
   input: VideoSubmitInput,
-  resolveMedia: (mediaId: string) => Promise<string | undefined> = mediaToDataUrl
+  resolveMedia: (mediaId: string) => Promise<string | undefined> = (id) => mediaToDataUrl(id, input)
 ): Promise<Record<string, unknown>> {
   const content: Array<Record<string, unknown>> = [{ type: 'text', text: input.prompt }]
   if (input.firstFrameMediaId) {
@@ -616,7 +633,7 @@ function isSeedanceProxy(p: ProviderConfig): boolean {
 export async function buildSeedanceRequestBody(
   p: ProviderConfig,
   input: VideoSubmitInput,
-  resolveMedia: (mediaId: string) => Promise<string | undefined> = mediaToDataUrl
+  resolveMedia: (mediaId: string) => Promise<string | undefined> = (id) => mediaToDataUrl(id, input)
 ): Promise<Record<string, unknown>> {
   const isProxy = isSeedanceProxy(p)
   const mode = submittedMode(input)
@@ -849,7 +866,123 @@ export async function pollUpstream(
   }
 }
 
+/** Resolve only the declared fixed asset version, never renderer supplied media metadata. */
+function commandFirstFrame(
+  input: VideoSubmitInput,
+  fixed?: ReturnType<typeof NodeExecuteCommandSchema.parse>
+): (FlowImageRef & { contentSha256: string }) | null {
+  if (!input.flowCommand) return null
+  if (!fixed) {
+    const row = getDb()
+      .prepare('SELECT command_json FROM flow_commands WHERE project_id=? AND command_id=?')
+      .get(input.projectId, input.flowCommand.commandId) as { command_json: string } | undefined
+    if (!row) throw new GatewayError('FLOW_LEASE_REJECTED', '视频命令未获准执行')
+    fixed = NodeExecuteCommandSchema.parse(JSON.parse(row.command_json))
+  }
+  const images = fixed.inputs
+    .filter((item) => item.targetPortId === 'in-images')
+    .flatMap((item) => item.assets)
+  if (input.mode === 'text' && images.length === 0) return null
+  if (input.mode !== 'first-frame' || images.length !== 1)
+    throw new GatewayError('FLOW_INPUT_CONTRACT_INVALID', '首帧输入必须为一个固定图片版本')
+  const ref = images[0]
+  const row = getDb()
+    .prepare(
+      'SELECT asset_id,node_id,port_id,value_json,digest FROM flow_asset_versions WHERE project_id=? AND version_id=?'
+    )
+    .get(input.projectId, ref.versionId) as
+    | { asset_id: string; node_id: string; port_id: string; value_json: string; digest: string }
+    | undefined
+  if (
+    !row ||
+    row.asset_id !== ref.assetId ||
+    row.node_id !== ref.sourceNodeId ||
+    row.port_id !== ref.sourcePortId ||
+    createHash('sha256').update(row.value_json).digest('hex') !== row.digest
+  )
+    throw new GatewayError('FLOW_INPUT_CONTRACT_INVALID', '固定首帧版本不可用')
+  const value = JSON.parse(row.value_json)
+  if (
+    value.kind !== 'image' ||
+    value.mediaId !== input.firstFrameMediaId ||
+    !/^[a-f0-9]{64}$/.test(value.contentSha256 ?? '')
+  )
+    throw new GatewayError('FLOW_INPUT_CONTRACT_INVALID', '首帧不匹配固定图片版本')
+  return fixedFlowImage(getDb(), input.projectId, value)
+}
+
 export function submitVideoTask(send: Send, input: VideoSubmitInput): VideoSubmitResult {
+  if (input.flowCommand) {
+    const binding = CommandLeaseSchema.parse(input.flowCommand)
+    const command = getDb()
+      .prepare(
+        'SELECT lease_id,admitted,state,command_json,target_node_id FROM flow_commands WHERE project_id=? AND command_id=?'
+      )
+      .get(binding.projectId, binding.commandId) as
+      | {
+          lease_id: string
+          admitted: number
+          state: string
+          command_json: string
+          target_node_id: string
+        }
+      | undefined
+    if (
+      !command ||
+      binding.projectId !== input.projectId ||
+      command.target_node_id !== input.nodeId ||
+      command.lease_id !== binding.leaseId ||
+      command.admitted !== 1 ||
+      !['pending', 'unknown'].includes(command.state)
+    )
+      throw new GatewayError('FLOW_LEASE_REJECTED', '视频命令未获准执行')
+    let fixed: ReturnType<typeof NodeExecuteCommandSchema.parse>
+    try {
+      fixed = NodeExecuteCommandSchema.parse(JSON.parse(command.command_json))
+    } catch {
+      throw new GatewayError('FLOW_LEASE_REJECTED', '视频命令未获准执行')
+    }
+    if (
+      fixed.contractVersion !== 7 ||
+      fixed.projectId !== input.projectId ||
+      fixed.targetNodeId !== input.nodeId ||
+      fixed.commandId !== binding.commandId
+    )
+      throw new GatewayError('FLOW_LEASE_REJECTED', '视频命令未获准执行')
+    if (
+      !['text', 'first-frame'].includes(input.mode ?? '') ||
+      (input.mode === 'text' && Boolean(input.firstFrameMediaId)) ||
+      (input.mode === 'first-frame' && !input.firstFrameMediaId) ||
+      input.lastFrameMediaId ||
+      input.referenceImageMediaIds?.length ||
+      input.referenceVideoMediaIds?.length ||
+      input.referenceVideoMediaId ||
+      input.referenceAudioMediaIds?.length
+    )
+      throw new GatewayError('FLOW_TYPE_UNSUPPORTED', 'Agent 视频仅支持文本生成或单张固定首帧')
+    commandFirstFrame(input, fixed)
+    const prior = getDb()
+      .prepare(
+        "SELECT * FROM tasks WHERE project_id=? AND node_id=? AND kind='video' AND json_extract(input,'$.flowCommandId')=? ORDER BY created_at LIMIT 1"
+      )
+      .get(input.projectId, input.nodeId, binding.commandId) as TaskRow | undefined
+    if (prior) {
+      const saved = parseInput(prior.id)
+      if (
+        prior.provider_id !== input.providerId ||
+        prior.model_id !== input.modelId ||
+        saved.prompt !== input.prompt.trim() ||
+        saved.mode !== input.mode ||
+        saved.firstFrameMediaId !== input.firstFrameMediaId ||
+        canonicalFlowJson(saved.params ?? null) !== canonicalFlowJson(input.params ?? null)
+      )
+        throw new GatewayError('TASK_OUTCOME_UNKNOWN', '原视频命令输入发生变化，请核对原任务')
+      cancelled.delete(prior.id)
+      if (saved.cancelRequested)
+        updateTask(prior.id, { input: JSON.stringify({ ...saved, cancelRequested: false }) })
+      return { taskId: prior.id }
+    }
+  }
   if (!input.prompt?.trim()) throw new GatewayError('INVALID_INPUT', '提示词不能为空')
   const p = getProvider(input.providerId)
   if (!p) throw new GatewayError('PROVIDER_NOT_FOUND', '供应商不存在')
@@ -866,6 +999,11 @@ export function submitVideoTask(send: Send, input: VideoSubmitInput): VideoSubmi
       )
       .get(input.projectId, input.nodeId) as { id: string } | undefined
     if (inflight) {
+      if (input.flowCommand)
+        throw new GatewayError(
+          'TASK_OUTCOME_UNKNOWN',
+          '该节点已有未绑定本命令的任务，请先核对原任务'
+        )
       const previous = getDb()
         .prepare('SELECT * FROM tasks WHERE id = ?')
         .get(inflight.id) as TaskRow
@@ -919,9 +1057,17 @@ export function submitVideoTask(send: Send, input: VideoSubmitInput): VideoSubmi
   validateVideoCapabilities(p, input)
   validateReferenceAssets(p, input)
 
-  const taskId = nanoid(10)
+  // The existing tasks primary key is the final cross-process submission fence.
+  // A concurrent loser fails before POST; it must inspect this original task.
+  const taskId = input.flowCommand
+    ? `fv-${createHash('sha256')
+        .update(JSON.stringify([input.projectId, input.flowCommand.commandId]))
+        .digest('hex')
+        .slice(0, 40)}`
+    : nanoid(10)
   const now = Date.now()
   const state: VideoInputState = {
+    ...(input.flowCommand ? { flowCommandId: input.flowCommand.commandId } : {}),
     prompt: input.prompt.trim(),
     mode: submittedMode(input),
     params: input.params,
@@ -1074,7 +1220,7 @@ async function pollLoop(
     const msg = e instanceof Error ? e.message : String(e)
     const definitive = e instanceof GatewayError && e.code === 'GEN_FAILED'
     if (definitive) updateTask(taskId, { status: 'failed', error: msg })
-    else markUnknown(taskId)
+    else if (!(e instanceof GraphWriteInProgressError)) markUnknown(taskId)
     clearCancelled(taskId)
     emitGatewayEvent('task.failed', '视频任务失败', taskDiag, {
       error: e,
@@ -1196,9 +1342,11 @@ export function controlVideoTask(taskId: string, cancel = false): Promise<VideoT
       }
       // queued/running only establish liveness, not permission to submit another task.
       return getVideoTask(taskId)
-    } catch {
+    } catch (error) {
       outcome = 'unknown'
-      markUnknown(taskId)
+      // Another live materializer owns the files. Inspection must not overwrite
+      // that owner's task state or release its occupancy.
+      if (!(error instanceof GraphWriteInProgressError)) markUnknown(taskId)
       return getVideoTask(taskId)
     } finally {
       emitGatewayEvent('task.control.completed', '远端视频事实核对结束', diag, {
@@ -1336,7 +1484,7 @@ async function resumeLoop(
     const msg = e instanceof Error ? e.message : String(e)
     const definitive = e instanceof GatewayError && e.code === 'GEN_FAILED'
     if (definitive) updateTask(row.id, { status: 'failed', error: msg })
-    else markUnknown(row.id)
+    else if (!(e instanceof GraphWriteInProgressError)) markUnknown(row.id)
     clearCancelled(row.id)
     emitGatewayEvent('task.failed', '恢复任务失败', resumeDiag, {
       error: e,

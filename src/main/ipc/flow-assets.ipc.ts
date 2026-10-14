@@ -20,6 +20,7 @@ const messages: Record<string, string> = {
   ASSET_REVISION_CONFLICT: '画布已发生变化，请保存后重新提交。',
   ASSET_SUBMISSION_CONFLICT: '上次提交的范围发生变化，请核对历史版本后重新提交。',
   ASSET_OUTPUT_UNAVAILABLE: '当前节点没有有效输出，请先填写内容或成功运行。',
+  ASSET_IMAGE_CHANGED: '图片不可用、内容已变化或超过 20 MiB，请检查原素材后重新提交。',
   ASSET_OUTPUT_INVALID: '输出与端口类型不一致，请检查节点结果。',
   ASSET_PORT_INVALID: '当前输出端口不可用，请重新打开节点详情。',
   ASSET_TYPE_UNSUPPORTED: '此节点暂不支持资产版本提交。',

@@ -6,7 +6,7 @@ import {
   type MigrationDatabase
 } from '../src/main/store/db-migrations'
 
-const TRANSACTION_CONTROL = new Set(['BEGIN', 'COMMIT', 'ROLLBACK'])
+const TRANSACTION_CONTROL = new Set(['BEGIN IMMEDIATE', 'COMMIT', 'ROLLBACK'])
 
 /** 事务控制语句不参与迁移内容断言，只单独验证其存在与顺序。 */
 function schemaExecs(execs: string[]): string[] {
@@ -38,23 +38,24 @@ describe('SQLite user_version migrations', () => {
     expect(state.pragmas).toEqual(
       Array.from({ length: DB_SCHEMA_VERSION }, (_value, index) => `user_version = ${index + 1}`)
     )
-    expect(schemaExecs(state.execs).at(-5)).toContain('CREATE TABLE flow_commands')
-    expect(schemaExecs(state.execs).at(-4)).toContain('CREATE TABLE flow_agent_tasks')
-    expect(schemaExecs(state.execs).at(-3)).toContain('CREATE TABLE flow_agent_collaboration')
-    expect(schemaExecs(state.execs).at(-2)).toContain('CREATE TABLE flow_coordination_runs')
-    expect(schemaExecs(state.execs).at(-1)).toContain('CREATE TABLE flow_builds')
+    expect(schemaExecs(state.execs).at(-6)).toContain('CREATE TABLE flow_commands')
+    expect(schemaExecs(state.execs).at(-5)).toContain('CREATE TABLE flow_agent_tasks')
+    expect(schemaExecs(state.execs).at(-4)).toContain('CREATE TABLE flow_agent_collaboration')
+    expect(schemaExecs(state.execs).at(-3)).toContain('CREATE TABLE flow_coordination_runs')
+    expect(schemaExecs(state.execs).at(-2)).toContain('CREATE TABLE flow_builds')
+    expect(schemaExecs(state.execs).at(-1)).toContain('CREATE TABLE process_locks')
   })
 
   it('每个迁移整体包在单个事务里：迁移语句与 user_version 推进同提交', () => {
     const state = fakeDatabase(0)
     migrateDatabase(state.db)
     // 每个迁移一个 BEGIN...COMMIT 对；COMMIT 紧跟对应 user_version 推进之后。
-    expect(state.execs.filter((sql) => sql === 'BEGIN')).toHaveLength(DB_SCHEMA_VERSION)
+    expect(state.execs.filter((sql) => sql === 'BEGIN IMMEDIATE')).toHaveLength(DB_SCHEMA_VERSION)
     expect(state.execs.filter((sql) => sql === 'COMMIT')).toHaveLength(DB_SCHEMA_VERSION)
     expect(state.execs).not.toContain('ROLLBACK')
     const firstCommit = state.execs.indexOf('COMMIT')
     expect(state.pragmas[0]).toBe('user_version = 1')
-    expect(firstCommit).toBeGreaterThan(state.execs.indexOf('BEGIN'))
+    expect(firstCommit).toBeGreaterThan(state.execs.indexOf('BEGIN IMMEDIATE'))
   })
 
   it('runs only the missing migration for an existing v1 database', () => {

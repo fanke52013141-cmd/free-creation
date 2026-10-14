@@ -26,6 +26,7 @@ export interface MediaNodeValue<K extends 'image' | 'video' | 'audio' | 'file'> 
   mediaPath: string
   mime: string
   name?: string
+  contentSha256?: string
 }
 
 /**
@@ -202,7 +203,10 @@ export function parseStoredNodeValue(text: string): NodeValue | null {
         kind: value.kind,
         mediaId: value.mediaId,
         mediaPath: value.mediaPath,
-        mime: value.mime
+        mime: value.mime,
+        ...(value.kind === 'image' && typeof value.contentSha256 === 'string'
+          ? { contentSha256: value.contentSha256 }
+          : {})
       }
     }
   } catch {

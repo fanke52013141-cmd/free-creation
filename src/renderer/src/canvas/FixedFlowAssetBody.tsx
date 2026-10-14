@@ -6,13 +6,57 @@ import { createEditableAssetDraft } from './flow-asset-actions'
 import { beginAssetPlacement } from './flow-asset-diagnostics'
 import { useAppStore } from '../stores/app'
 import { toast } from '../stores/toast'
+import { mediaUrl, type NodeBodyProps } from '../nodes/registry'
+import { useClickGuard } from '../nodes/specs/bodies/shared'
+import { Icon } from '../components/Icon'
 
 /** Committed result preview, rather than an editable document input. */
-export function FixedFlowAssetBody({ shape }: { shape: NodeCardShape }): React.JSX.Element | null {
+export function FixedFlowAssetBody({
+  shape,
+  openPreview
+}: {
+  shape: NodeCardShape
+  openPreview?: NodeBodyProps['openPreview']
+}): React.JSX.Element | null {
   const editor = useEditor()
   const projectId = useAppStore((state) => state.currentProject?.id)
   const value = readFlowAssetSnapshot(shape)
+  const guard = useClickGuard()
   if (!value) return null
+  if (value.kind === 'video' || value.kind === 'image')
+    return (
+      <div
+        className={
+          value.kind === 'video' ? 'node-media-wrap video-thumbnail-wrap' : 'node-media-wrap'
+        }
+      >
+        <div
+          className="node-media"
+          data-node-interactive="media-preview"
+          onPointerDown={guard.onPointerDown}
+          onDoubleClick={(event) =>
+            guard.onDoubleClick(event, () =>
+              openPreview?.({
+                kind: value.kind,
+                url: mediaUrl(value.mediaPath),
+                title: shape.props.title
+              })
+            )
+          }
+        >
+          {value.kind === 'image' ? (
+            <img src={mediaUrl(value.mediaPath)} alt={shape.props.title} draggable={false} />
+          ) : (
+            <video src={mediaUrl(value.mediaPath)} preload="metadata" muted playsInline />
+          )}
+          {value.kind === 'video' && (
+            <span className="play-badge">
+              <Icon name="play" size={24} />
+            </span>
+          )}
+        </div>
+      </div>
+    )
   return (
     <div className="node-text fixed-flow-asset-body">
       <span className="node-text-body">

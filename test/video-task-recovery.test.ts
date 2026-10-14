@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Database from 'better-sqlite3'
 import { createHash } from 'node:crypto'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join, resolve, basename } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createServer } from 'node:http'
@@ -13,6 +13,7 @@ import {
   getVideoTask,
   submitVideoTask
 } from '../src/main/gateway/video'
+import { readMediaBuffer } from '../src/main/store/media.repo'
 import { queryArkTask } from '../src/main/gateway/video-task-control'
 
 const fixture = vi.hoisted(() => ({
@@ -40,7 +41,11 @@ beforeEach(() => {
   fixture.db = new Database(':memory:')
   fixture.db.exec(`CREATE TABLE tasks (id TEXT, provider_id TEXT, model_id TEXT, node_id TEXT,
     project_id TEXT, kind TEXT, status TEXT, input TEXT, output TEXT, error TEXT, created_at INTEGER, updated_at INTEGER, attempts INTEGER DEFAULT 0);
-    CREATE TABLE media (id TEXT PRIMARY KEY, path TEXT, kind TEXT, mime TEXT, size_bytes INTEGER, created_at INTEGER, name TEXT);`)
+    CREATE TABLE media (id TEXT PRIMARY KEY, path TEXT, kind TEXT, mime TEXT, size_bytes INTEGER, created_at INTEGER, name TEXT);
+    CREATE TABLE process_locks (resource TEXT PRIMARY KEY, token TEXT NOT NULL, pid INTEGER NOT NULL);`)
+  fixture.db.exec(
+    `CREATE TABLE flow_commands (project_id TEXT, command_id TEXT, lease_id TEXT, admitted INTEGER, state TEXT, command_json TEXT, target_node_id TEXT);`
+  )
   fixture.provider = {
     id: 'provider',
     name: 'test',
@@ -103,6 +108,25 @@ function seed(patch: Record<string, unknown> = {}) {
       0
     )
 }
+function bindFlowCommand(admitted = 1) {
+  const command = {
+    schemaVersion: 1,
+    kind: 'node.execute',
+    projectId: 'project',
+    commandId: 'command',
+    taskId: 'agent-task',
+    agentNodeId: 'agent',
+    targetNodeId: 'node',
+    contractVersion: 7,
+    expectedSemanticRevision: `sha256:${'a'.repeat(64)}`,
+    inputs: [],
+    traceId: 'trace',
+    spanId: 'span'
+  }
+  fixture.db
+    .prepare("INSERT INTO flow_commands VALUES ('project','command','lease',?,'pending',?,'node')")
+    .run(admitted, JSON.stringify(command))
+}
 function response(state: string, id = 'remote-1') {
   return new Response(
     JSON.stringify({
@@ -114,6 +138,158 @@ function response(state: string, id = 'remote-1') {
   )
 }
 describe('C4 supplier facts and conditional cancellation', () => {
+  it.each(['unknown', 'success', 'failed', 'cancelled'])(
+    'an admitted Agent command reuses its %s video task without POST',
+    (status) => {
+      seed({ flowCommandId: 'command', cancelRequested: true })
+      fixture.db.prepare("UPDATE tasks SET status=? WHERE id='local'").run(status)
+      bindFlowCommand()
+      const fetcher = vi.fn(() => {
+        throw new Error('POST_FORBIDDEN')
+      })
+      vi.stubGlobal('fetch', fetcher)
+      const result = submitVideoTask(() => {}, {
+        projectId: 'project',
+        nodeId: 'node',
+        providerId: 'provider',
+        modelId: 'model',
+        prompt: 'private-material',
+        mode: 'text',
+        flowCommand: { projectId: 'project', commandId: 'command', leaseId: 'lease' }
+      })
+      expect(result).toEqual({ taskId: 'local' })
+      expect(fetcher).not.toHaveBeenCalled()
+      expect(fixture.db.prepare('SELECT count(*) AS n FROM tasks').get()).toEqual({ n: 1 })
+    }
+  )
+  it('rejects an unadmitted/forged Agent lease and changed fixed request before side effects', () => {
+    seed({ flowCommandId: 'command' })
+    bindFlowCommand(0)
+    const input = {
+      projectId: 'project',
+      nodeId: 'node',
+      providerId: 'provider',
+      modelId: 'model',
+      prompt: 'private-material',
+      mode: 'text' as const,
+      flowCommand: { projectId: 'project', commandId: 'command', leaseId: 'lease' }
+    }
+    expect(() => submitVideoTask(() => {}, input)).toThrow('视频命令未获准执行')
+    fixture.db.prepare('UPDATE flow_commands SET admitted=1').run()
+    expect(() => submitVideoTask(() => {}, { ...input, prompt: 'changed' })).toThrow(
+      '原视频命令输入发生变化'
+    )
+    expect(() =>
+      submitVideoTask(() => {}, { ...input, referenceImageMediaIds: ['foreign'] })
+    ).toThrow('仅支持文本生成或单张固定首帧')
+    const stored = fixture.db.prepare('SELECT command_json FROM flow_commands').get() as {
+      command_json: string
+    }
+    fixture.db
+      .prepare('UPDATE flow_commands SET command_json=?')
+      .run(JSON.stringify({ ...JSON.parse(stored.command_json), contractVersion: 1 }))
+    expect(() => submitVideoTask(() => {}, input)).toThrow('视频命令未获准执行')
+  })
+  function firstFrameInput() {
+    bindFlowCommand()
+    const bytes = Buffer.from('fixed-frame'),
+      path = 'projects/project/media/frame.png'
+    mkdirSync(join(fixture.directory, 'projects/project/media'), { recursive: true })
+    writeFileSync(join(fixture.directory, path), bytes)
+    fixture.db
+      .prepare('INSERT INTO media(id,path,kind,mime,size_bytes,created_at) VALUES (?,?,?,?,?,0)')
+      .run('frame', path, 'image', 'image/png', bytes.length)
+    fixture.db.exec(
+      'CREATE TABLE flow_asset_versions (project_id TEXT,version_id TEXT,asset_id TEXT,node_id TEXT,port_id TEXT,value_json TEXT,digest TEXT)'
+    )
+    const value = JSON.stringify({
+      kind: 'image',
+      mediaId: 'frame',
+      mediaPath: path,
+      mime: 'image/png',
+      contentSha256: createHash('sha256').update(bytes).digest('hex')
+    })
+    fixture.db
+      .prepare('INSERT INTO flow_asset_versions VALUES (?,?,?,?,?,?,?)')
+      .run(
+        'project',
+        'version',
+        'asset',
+        'source',
+        'out-image',
+        value,
+        createHash('sha256').update(value).digest('hex')
+      )
+    const row = fixture.db.prepare('SELECT command_json FROM flow_commands').get() as {
+      command_json: string
+    }
+    fixture.db
+      .prepare('UPDATE flow_commands SET command_json=?')
+      .run(
+        JSON.stringify({
+          ...JSON.parse(row.command_json),
+          inputs: [
+            {
+              targetPortId: 'in-images',
+              assets: [
+                {
+                  assetId: 'asset',
+                  versionId: 'version',
+                  sourceNodeId: 'source',
+                  sourcePortId: 'out-image'
+                }
+              ]
+            }
+          ]
+        })
+      )
+    return {
+      projectId: 'project',
+      nodeId: 'node',
+      providerId: 'provider',
+      modelId: 'model',
+      prompt: 'private-material',
+      mode: 'first-frame' as const,
+      firstFrameMediaId: 'frame',
+      flowCommand: { projectId: 'project', commandId: 'command', leaseId: 'lease' }
+    }
+  }
+  it('recovers the fixed first-frame task without POST and rejects replacement bytes or media IDs', () => {
+    seed({ flowCommandId: 'command', mode: 'first-frame', firstFrameMediaId: 'frame' })
+    const input = firstFrameInput(),
+      fetcher = vi.fn()
+    vi.stubGlobal('fetch', fetcher)
+    expect(submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
+    expect(() => submitVideoTask(() => {}, { ...input, firstFrameMediaId: 'foreign' })).toThrow(
+      '首帧不匹配'
+    )
+    writeFileSync(join(fixture.directory, 'projects/project/media/frame.png'), 'other-frame')
+    expect(() => submitVideoTask(() => {}, input)).toThrow('ASSET_IMAGE_CHANGED')
+    expect(fetcher).not.toHaveBeenCalled()
+    expect(fixture.db.prepare('SELECT count(*) AS n FROM tasks').get()).toEqual({ n: 1 })
+  })
+  it('checks the exact bytes returned by the asynchronous media read before POST', async () => {
+    const input = { ...firstFrameInput(), modelId: 'doubao-seedance-2-0' }
+    vi.mocked(readMediaBuffer).mockResolvedValueOnce({
+      buf: Buffer.from('other-frame'),
+      mime: 'image/png'
+    })
+    const fetcher = vi.fn()
+    vi.stubGlobal('fetch', fetcher)
+    const result = submitVideoTask(() => {}, input)
+    for (let i = 0; i < 100; i++) {
+      const row = fixture.db.prepare('SELECT status FROM tasks WHERE id=?').get(result.taskId) as {
+        status: string
+      }
+      if (row.status === 'unknown') break
+      await new Promise((done) => setTimeout(done, 5))
+    }
+    const row = fixture.db
+      .prepare('SELECT status,error FROM tasks WHERE id=?')
+      .get(result.taskId) as { status: string; error: string }
+    expect(row.status).toBe('unknown')
+    expect(fetcher).not.toHaveBeenCalled()
+  })
   it('stopping before the submit reply preserves the later task ID without publishing success', async () => {
     let release!: (value: Response) => void
     const fetcher = vi

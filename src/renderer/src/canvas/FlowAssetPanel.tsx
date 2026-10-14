@@ -17,16 +17,18 @@ export function FlowAssetPanel({
   shape: NodeCardShape
   projectId: string
 }): React.JSX.Element | null {
-  const supported = ['text', 'json', 'processor', 'agent'].includes(shape.props.nodeType)
+  const supported = ['text', 'json', 'image', 'processor', 'agent'].includes(shape.props.nodeType)
   const [agentPort, setAgentPort] = useState('out-text')
   const portId =
     shape.props.nodeType === 'agent'
       ? agentPort
-      : shape.props.nodeType === 'text'
-        ? 'out-text'
-        : shape.props.nodeType === 'json'
-          ? 'out-json'
-          : 'out-value'
+      : shape.props.nodeType === 'image'
+        ? 'out-image'
+        : shape.props.nodeType === 'text'
+          ? 'out-text'
+          : shape.props.nodeType === 'json'
+            ? 'out-json'
+            : 'out-value'
   const [versions, setVersions] = useState<FlowAssetSummary[]>([])
   const [selected, setSelected] = useState('')
   const [version, setVersion] = useState<FlowAssetVersion | null>(null)
@@ -140,7 +142,11 @@ export function FlowAssetPanel({
       )}
       <p>提交已保存的输出。版本保持不变；放到画布后，可以从固定资产节点连接下游。</p>
       <div className="contract-run-actions">
-        <button type="button" disabled={busy} onClick={() => void submit()}>
+        <button
+          type="button"
+          disabled={busy || (shape.props.nodeType === 'image' && Boolean(shape.meta.flowAssetRef))}
+          onClick={() => void submit()}
+        >
           提交当前输出为新版本
         </button>
       </div>
@@ -163,9 +169,11 @@ export function FlowAssetPanel({
         <>
           <p>当前查看 v{version.ordinal} · 已固定输出。修改节点正文不会更新这份版本。</p>
           <pre>
-            {version.value.kind === 'json'
-              ? JSON.stringify(version.value.data, null, 2)
-              : version.value.text}
+            {version.value.kind === 'video' || version.value.kind === 'image'
+              ? `${version.value.kind === 'image' ? '图片' : '视频'}成果已保存，可放到画布预览`
+              : version.value.kind === 'json'
+                ? JSON.stringify(version.value.data, null, 2)
+                : version.value.text}
           </pre>
           <div className="contract-run-actions">
             <button

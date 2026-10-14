@@ -110,6 +110,8 @@ export interface NodeExecutionContext {
   inputs: ContractInputMap
   projectId: string
   runId?: string
+  /** Admitted command identity; media submissions bind to this persisted lease. */
+  flowCommand?: import('../agent-flow/commands').CommandLease
   providers: ProviderSummary[]
   signal: CancelSignal
   /** Best-effort, redacted stage logging persisted with this run and relayed to main.log. */

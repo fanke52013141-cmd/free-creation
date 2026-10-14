@@ -21,6 +21,7 @@ import {
   type ModelIdentity
 } from '../../shared/agent-flow/coordination'
 import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
+import { agentOutputValue } from '../../shared/agent-flow/video-adapter'
 import type { AgentModelPort } from './runtime'
 import type { FlowAgentDesktopHost } from './desktop-host'
 import { CoordinationStore, type CoordinationRun } from './coordination-store'
@@ -242,7 +243,7 @@ export class FlowCoordinatorHost {
     const outputs: FlowAgentReply['outputs'] = {}
     if (run.state === 'completed')
       for (const ref of run.outputs) {
-        const value = this.assets.resolveInputs(run.projectId, [ref])[0].value
+        const value = agentOutputValue(this.assets.resolveInputs(run.projectId, [ref])[0].value)
         const key = value.kind === 'json' ? 'out-json' : 'out-text'
         if (outputs[key]) throw new AgentRuntimeError('AGENT_OUTPUT_CARDINALITY', 'output')
         outputs[key] = value.kind === 'markdown' ? { kind: 'text', text: value.text } : value
@@ -464,8 +465,9 @@ export class FlowCoordinatorHost {
         throw new AgentRuntimeError('AGENT_OUTPUT_UNVERIFIED', 'coordination')
       const values = this.assets.resolveInputs(run.projectId, decision.outputs)
       if (
-        new Set(values.map((value) => (value.value.kind === 'json' ? 'json' : 'text'))).size !==
-        values.length
+        new Set(
+          values.map((value) => (agentOutputValue(value.value).kind === 'json' ? 'json' : 'text'))
+        ).size !== values.length
       )
         throw new AgentRuntimeError('AGENT_OUTPUT_CARDINALITY', 'output')
       run.outputs = decision.outputs
@@ -647,8 +649,8 @@ export class FlowCoordinatorHost {
         const values = this.assets.resolveInputs(run.projectId, record.outputRefs)
         const expectedOutputs = Object.fromEntries(
           values.map((asset) => [
-            asset.value.kind === 'json' ? 'out-json' : 'out-text',
-            asset.value.kind === 'markdown' ? { kind: 'text', text: asset.value.text } : asset.value
+            agentOutputValue(asset.value).kind === 'json' ? 'out-json' : 'out-text',
+            agentOutputValue(asset.value)
           ])
         )
         const projected = (): boolean => {

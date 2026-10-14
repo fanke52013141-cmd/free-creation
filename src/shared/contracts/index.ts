@@ -856,6 +856,7 @@ export interface ImageEditInput {
 }
 
 export interface VideoSubmitInput {
+  flowCommand?: import('../agent-flow/commands').CommandLease
   projectId: string
   nodeId: string
   providerId: string

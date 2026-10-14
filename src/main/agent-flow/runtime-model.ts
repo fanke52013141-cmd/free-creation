@@ -9,6 +9,7 @@ import {
 import type { GatewayDiagnosticsContext } from '../../shared/contracts'
 import { AgentFlowAssetRefSchema } from '../../shared/agent-flow/node-contracts'
 import { FlowAssetError } from '../../shared/agent-flow/assets'
+import { agentOutputValue } from '../../shared/agent-flow/video-adapter'
 import {
   AgentDecisionSchema,
   AgentRuntimeError,
@@ -48,6 +49,8 @@ export class AgentSdkModel implements AgentModelPort {
   ) {}
 
   async review(input: ReviewContext, signal: AbortSignal): Promise<ReviewModelVerdict> {
+    if (input.subjects.some((value) => value.kind === 'video' || value.kind === 'image'))
+      throw new FlowAssetError('ASSET_REVIEW_MEDIA_UNSUPPORTED')
     const context = { ...this.diagnostics, requestId: ensureRequestId(undefined) }
     const attributes: { operation: string; toolCallCount?: number; finishReason?: string } = {
       operation: 'agent.review'
@@ -78,7 +81,7 @@ export class AgentSdkModel implements AgentModelPort {
             content: input.subjects
               .map(
                 (value, index) =>
-                  `${input.subjects.length > 1 ? `对象 ${index}（${value.kind}）：\n` : ''}${value.kind === 'json' ? JSON.stringify(value.data) : value.text}`
+                  `${input.subjects.length > 1 ? `对象 ${index}（${value.kind}）：\n` : ''}${value.kind === 'video' || value.kind === 'image' ? '' : value.kind === 'json' ? JSON.stringify(value.data) : value.text}`
               )
               .join('\n\n')
           }
@@ -228,8 +231,11 @@ export class AgentSdkModel implements AgentModelPort {
         : []
       const maxOutputs = Math.max(
         1,
-        new Set(completedAssets.map((asset) => (asset.value.kind === 'json' ? 'json' : 'text')))
-          .size
+        new Set(
+          completedAssets.map((asset) =>
+            agentOutputValue(asset.value).kind === 'json' ? 'json' : 'text'
+          )
+        ).size
       )
       const completedOutputTypes = completedAssets.map((asset) => ({
         ref: asset.ref,

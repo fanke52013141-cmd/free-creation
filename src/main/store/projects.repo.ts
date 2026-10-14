@@ -26,6 +26,7 @@ import {
   GraphWriteInProgressError
 } from '../../shared/graph-snapshot-sync'
 import { getDataDir, getDb, getProjectsDir } from './db'
+import { acquireProcessLock } from './process-lock'
 
 interface ProjectRow {
   id: string
@@ -57,7 +58,7 @@ function projectJsonPath(id: string): string {
 
 const PROJECT_WRITE_LOCK_STALE_MS = 30_000
 
-function acquireProjectWriteLock(lockPath: string): number {
+function acquireProjectFileLock(lockPath: string): number {
   // Age alone cannot prove that a paused writer has exited. New locks record their
   // owner; legacy empty locks retain the conservative 30-second grace period.
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -101,6 +102,27 @@ function acquireProjectWriteLock(lockPath: string): number {
     }
   }
   throw new GraphWriteInProgressError()
+}
+
+function acquireProjectWriteLock(lockPath: string): () => void {
+  const ownership = acquireProcessLock(`project:${lockPath}`)
+  let fd: number
+  try {
+    fd = acquireProjectFileLock(lockPath)
+  } catch (error) {
+    ownership.release()
+    throw error
+  }
+  return () => {
+    closeSync(fd)
+    ownership.release(() => {
+      try {
+        if (existsSync(lockPath)) unlinkSync(lockPath)
+      } catch {
+        // Preserve the legacy file and report occupancy on the next attempt.
+      }
+    })
+  }
 }
 
 // 主文件损坏时回退 .bak（保存时每次轮转一份）
@@ -158,7 +180,7 @@ export function saveWorkspaceProfile(id: string, value: WorkspaceProfile): Proje
   if (!profile) throw new Error('工作台节点配置无效')
   if (!getProject(id)) return null
   const path = projectJsonPath(id)
-  const lockFd = acquireProjectWriteLock(path + '.write-lock')
+  const releaseLock = acquireProjectWriteLock(path + '.write-lock')
   try {
     const meta = getProject(id)
     const file = readProjectFile(id)
@@ -196,12 +218,7 @@ export function saveWorkspaceProfile(id: string, value: WorkspaceProfile): Proje
     }
     return getProject(id)
   } finally {
-    closeSync(lockFd)
-    try {
-      if (existsSync(path + '.write-lock')) unlinkSync(path + '.write-lock')
-    } catch {
-      // Keep the lock if it cannot be safely removed; the next write reports it.
-    }
+    releaseLock()
   }
 }
 
@@ -539,17 +556,12 @@ export function saveProject(input: {
   // CLI/MCP 可能各自运行在独立 Electron 进程，所以用同目录的排他锁把整个临界区
   // 包起来。锁文件只在写入期间存在；异常路径也必须释放，避免永久阻塞。
   const lockPath = projectJsonPath(input.id) + '.write-lock'
-  const lockFd = acquireProjectWriteLock(lockPath)
+  const releaseLock = acquireProjectWriteLock(lockPath)
 
   try {
     return saveProjectUnlocked(input)
   } finally {
-    closeSync(lockFd)
-    try {
-      if (existsSync(lockPath)) unlinkSync(lockPath)
-    } catch {
-      // 锁文件清理失败时保留现场，下一次调用会明确报告占用而不会悄悄覆盖数据。
-    }
+    releaseLock()
   }
 }
 

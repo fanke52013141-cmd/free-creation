@@ -52,7 +52,7 @@ export const agentExecutor: NodeExecutor = async (ctx) => {
       (task?.state === 'waiting' &&
         task.waitKind === 'reconcile' &&
         config.data.role === 'specialist' &&
-        task.code !== 'FLOW_COMMAND_FACTS_VERIFIED')
+        !['FLOW_COMMAND_FACTS_VERIFIED', 'FLOW_VIDEO_RECONCILE_READY'].includes(task.code))
         ? task?.recoveryAction === 'restore'
           ? ('restore' as const)
           : ('reconcile' as const)

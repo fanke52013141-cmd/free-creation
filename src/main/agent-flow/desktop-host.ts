@@ -22,6 +22,13 @@ import { FlowAssetStore } from './asset-store'
 import { createAgentRuntime, type AgentRuntime, type AgentModelPort } from './runtime'
 import { createAgentTelemetry } from './runtime-diagnostics'
 import { createLedgerToolPort } from './ledger-tool'
+import { stopAgentVideos } from './video-tasks'
+import { controlVideoTask } from '../gateway/video'
+import {
+  videoFlowInputsValid,
+  flowTargetContract,
+  agentOutputValue
+} from '../../shared/agent-flow/video-adapter'
 import type { FlowCommandDesktop } from '../ipc/flow-commands.ipc'
 import { projectSemanticRevision, collaborationScopeRevision } from './command-intent'
 import { FlowCollaborationStore } from './collaboration-store'
@@ -172,6 +179,8 @@ export class FlowAgentDesktopHost {
       return this.coordinator.stop(input)
     this.saved(input)
     this.controllers.get(this.key(input))?.abort()
+    const videoOwner = this.latest(input)
+    if (videoOwner) stopAgentVideos(this.db, input.projectId, videoOwner.snapshot.taskId)
     const runtime = this.active.get(this.key(input))
     if (runtime) return view(runtime.cancel())
     const record = this.latest(input)
@@ -190,7 +199,7 @@ export class FlowAgentDesktopHost {
     return {
       models,
       tools: [
-        { id: 'node.execute', version: '1', name: '执行画布数据处理节点' },
+        { id: 'node.execute', version: '1', name: '执行画布数据处理或视频节点' },
         { id: 'graph.preview', version: '1', name: '文本模板流程预览' },
         { id: 'agent.dispatch', version: '1', name: '分派专业 Agent 任务' },
         { id: 'review.execute', version: '1', name: '执行范围内的固定版本审核' }
@@ -269,16 +278,39 @@ export class FlowAgentDesktopHost {
     }
     const targets = config.allowedNodeIds.map((nodeId) => {
       const node = file.nodes.find((item) => item.id === nodeId)
-      if (!node || node.type !== 'processor' || node.contractVersion !== 1)
-        throw new AgentRuntimeError('AGENT_TARGET_UNSUPPORTED', 'admission')
+      const adapter = node && flowTargetContract(node)
+      if (!node || !adapter) throw new AgentRuntimeError('AGENT_TARGET_UNSUPPORTED', 'admission')
       const edges = file.edges.filter((edge) => edge.to.nodeId === nodeId)
-      if (edges.some((edge) => edge.to.portId !== 'in-value') || edges.length > 1)
+      if (
+        edges.some((edge) => !adapter.inputs.includes(edge.to.portId)) ||
+        new Set(edges.map((edge) => edge.to.portId)).size !== edges.length
+      )
         throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'admission')
-      const inputs = edges.map((edge) => ({
-        targetPortId: edge.to.portId,
-        assets: [freeze(edge.from, `task:${raw.requestId}:${versions.size}`)]
+      const inputs = [...new Set(edges.map((edge) => edge.to.portId))].map((targetPortId) => ({
+        targetPortId,
+        assets: edges
+          .filter((edge) => edge.to.portId === targetPortId)
+          .map((edge) => freeze(edge.from, `task:${raw.requestId}:${versions.size}`))
       }))
-      return { nodeId, contractVersion: 1 as const, inputs }
+      if (
+        node.type === 'video' &&
+        !videoFlowInputsValid(
+          JSON.parse(
+            String(
+              (file.tldrawSnapshot as { store: Record<string, { props: { config: string } }> })
+                .store[nodeId].props.config || '{}'
+            )
+          ).mode,
+          inputs.map((input) => ({
+            targetPortId: input.targetPortId,
+            kinds: this.assets
+              .resolveInputs(raw.projectId, input.assets)
+              .map((version) => version.value.kind)
+          }))
+        )
+      )
+        throw new AgentRuntimeError('AGENT_INPUT_TYPE_UNSUPPORTED', 'admission')
+      return { nodeId, contractVersion: node.contractVersion as 1 | 7, inputs }
     })
     const directInputs = file.edges
       .filter((edge) => edge.to.nodeId === raw.nodeId)
@@ -390,7 +422,9 @@ export class FlowAgentDesktopHost {
     const outputs: FlowAgentReply['outputs'] = {}
     if (record.state === 'completed') {
       for (const ref of record.outputRefs) {
-        const value = this.assets.resolveInputs(record.snapshot.projectId, [ref])[0].value
+        const value = agentOutputValue(
+          this.assets.resolveInputs(record.snapshot.projectId, [ref])[0].value
+        )
         const port = value.kind === 'json' ? 'out-json' : 'out-text'
         if (outputs[port] && canonicalFlowJson(outputs[port]) !== canonicalFlowJson(value))
           throw new AgentRuntimeError('AGENT_OUTPUT_CARDINALITY', 'output')
@@ -586,8 +620,11 @@ export class FlowAgentDesktopHost {
         const candidates = this.collaboration(input)!.candidates
         const chosen = this.assets.resolveInputs(input.projectId, input.selectedOutputs ?? [])
         if (
-          new Set(chosen.map((version) => (version.value.kind === 'json' ? 'json' : 'text')))
-            .size !== chosen.length
+          new Set(
+            chosen.map((version) =>
+              agentOutputValue(version.value).kind === 'json' ? 'json' : 'text'
+            )
+          ).size !== chosen.length
         )
           throw new AgentRuntimeError('AGENT_OUTPUT_CARDINALITY', 'human-selection')
         if (
@@ -648,6 +685,13 @@ export class FlowAgentDesktopHost {
         ['pending', 'unknown'].includes(receipt.state)
       )) {
         try {
+          const video = this.db
+            .prepare(
+              "SELECT id FROM tasks WHERE project_id=? AND node_id=? AND kind='video' AND json_extract(input,'$.flowCommandId')=?"
+            )
+            .get(input.projectId, receipt.targetNodeId, receipt.commandId) as
+            { id: string } | undefined
+          if (video) await controlVideoTask(video.id)
           this.desktop.ledger.commit({ projectId: input.projectId, commandId: receipt.commandId })
         } catch {
           /* Missing saved facts remain uncertain. */
@@ -656,6 +700,30 @@ export class FlowAgentDesktopHost {
       const uncertain = this.receipts(record).some((receipt) =>
         ['pending', 'unknown'].includes(receipt.state)
       )
+      const unresolved = this.receipts(record).filter((receipt) =>
+        ['pending', 'unknown'].includes(receipt.state)
+      )
+      if (
+        record.state === 'waiting' &&
+        record.waitKind === 'reconcile' &&
+        unresolved.length &&
+        unresolved.every(
+          (receipt) =>
+            !!this.db
+              .prepare(
+                "SELECT 1 FROM tasks WHERE project_id=? AND node_id=? AND kind='video' AND json_extract(input,'$.flowCommandId')=? AND status NOT IN ('submitted','running')"
+              )
+              .get(input.projectId, receipt.targetNodeId, receipt.commandId)
+        )
+      ) {
+        this.store.setState(
+          agentThread(record.snapshot),
+          'waiting',
+          'FLOW_VIDEO_RECONCILE_READY',
+          record.outputRefs
+        )
+        record.code = 'FLOW_VIDEO_RECONCILE_READY'
+      }
       if (record.state === 'waiting' && record.waitKind === 'reconcile' && !uncertain) {
         this.store.setState(
           agentThread(record.snapshot),

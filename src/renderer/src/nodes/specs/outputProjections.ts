@@ -85,15 +85,17 @@ function extraJsonOutput(shape: NodeCardShape, portId: string): RawNodeOutputs {
   return value === undefined ? {} : { [portId]: { kind: 'json' as const, data: value } }
 }
 
-export { projectTextOutputs, projectJsonOutputs, projectProcessorOutputs } from '@shared/engine/deterministic-projections'
+export {
+  projectImageOutputs,
+  projectTextOutputs,
+  projectJsonOutputs,
+  projectProcessorOutputs
+} from '@shared/engine/deterministic-projections'
 
 export const projectWebsiteOutputs = (shape: NodeCardShape): RawNodeOutputs => {
   const link = readWebsiteLink(shape.props.config)
   return link ? { 'out-website': { kind: 'json', data: link } } : {}
 }
-
-export const projectImageOutputs = (shape: NodeCardShape): RawNodeOutputs =>
-  mediaOutput(shape, 'image', 'out-image')
 
 export const projectImageGenOutputs = (shape: NodeCardShape): RawNodeOutputs =>
   latestResultMediaOutput(shape, 'image', 'out-image')
@@ -160,8 +162,7 @@ export const projectImageSplitOutputs = (shape: NodeCardShape): RawNodeOutputs =
   }
 }
 
-export const projectVideoOutputs = (shape: NodeCardShape): RawNodeOutputs =>
-  latestResultMediaOutput(shape, 'video', 'out-video')
+export { projectVideoOutputs } from '@shared/engine/deterministic-projections'
 
 export const projectVideoFrameOutputs = (shape: NodeCardShape): RawNodeOutputs =>
   latestResultMediaOutput(shape, 'image', 'out-image')

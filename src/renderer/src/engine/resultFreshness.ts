@@ -26,10 +26,7 @@ export function fingerprintNodeInputs(
           portId,
           nodeId: packet.source.nodeId,
           sourcePortId: packet.source.portId,
-          value:
-            packet.value && 'mediaId' in packet.value
-              ? { kind: packet.value.kind, mediaId: packet.value.mediaId, mime: packet.value.mime }
-              : packet.value
+          value: packet.value
         }))
       )
   })

@@ -1,7 +1,8 @@
 {
   "excludedPaths": ["src/renderer/src/dev/", "src/main/model-smoke.ts", "qa/", "artifacts/", "results/"],
-  "files": ["src/main/gateway/factory.ts", "src/main/gateway/glm-request.ts", "src/main/gateway/video-task-control.ts"],
+  "files": ["src/main/gateway/factory.ts", "src/main/gateway/glm-request.ts", "src/main/gateway/video-task-control.ts", "src/main/agent-flow/desktop-electron.ts"],
   "reasons": {
+    "src/main/agent-flow/desktop-electron.ts": "独立隐藏桌面验收入口，不被应用入口导入。--video 的 fetch 仅返回隔离供应商夹具，net.fetch 仅在受 getMediaAbsPath 限制的 media:// 测试协议中读取隔离本地文件；不发真实生成/外网计费。业务请求、核对、下载、版本和命令日志仍由正式 executor/gateway/asset-store 发射，scripts/test-agent-flow-desktop.cjs --video 扫描实际诊断配对与假 Key/正文排除。测试传输不重复业务终态；不豁免秘密正文、裸 console 或新的生产调用路径。",
     "src/main/gateway/video-task-control.ts": "可信任务 GET 传输子模块，不发起生成/业务重试。唯一生产调用者 video.ts/controlVideoTask 负责 task.control.started/completed 同 trace 生命周期、固定 operation/state 和身份漂移裁决；在子模块重复记业务终态会重复配对。test/video-task-recovery.test.ts 已验证真实本地 HTTP、开始/唯一终态与正文/Key/URL 排除及 logger 故障不改变结果。该条不豁免正文/密钥日志或新增独立调用路径。",
     "src/main/gateway/factory.ts": "SDK 模型工厂仅注入参数适配 fetch；请求开始/唯一终态由 gateway/chat.ts、agent-flow/runtime-model.ts 和 model-probe.ts 的 emitGatewayEvent 负责。工厂不发起独立业务请求，重复事件会产生双终态；现有 testProvider 诊断继续由调用入口负责。",
     "src/main/gateway/glm-request.ts": "官方 GLM fetch 装饰器只规范化请求参数并调用原 transport，保留 AbortSignal 和失败传播，不增加重试、任务或响应处理。调用者已有 model.request 生命周期；真实 SDK 探测的 4 开始/4 终态和脱敏验证见 docs/canvas-agent-flow/18-glm-model-switch.md。不得借此添加裸 console 或记录密钥/正文。"

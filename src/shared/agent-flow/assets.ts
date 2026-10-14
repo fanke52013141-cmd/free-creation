@@ -21,7 +21,10 @@ export type AssetSubmit = z.infer<typeof AssetSubmitSchema>
 export const AssetQuerySchema = z.object({ projectId: id, nodeId: id, portId: id }).strict()
 export const AssetReadSchema = z.object({ projectId: id, versionId: id }).strict()
 export type FlowAssetValue =
-  { kind: 'text' | 'markdown'; text: string } | { kind: 'json'; data: unknown }
+  | { kind: 'text' | 'markdown'; text: string }
+  | { kind: 'json'; data: unknown }
+  | { kind: 'image'; mediaId: string; mediaPath: string; mime: string; contentSha256: string }
+  | { kind: 'video'; mediaId: string; mediaPath: string; mime: string }
 export interface FlowAssetVersion {
   ref: z.infer<typeof AgentFlowAssetRefSchema>
   projectId: string

@@ -458,7 +458,7 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
                   ? '生成文本流程预览'
                   : draft.role === 'coordinator'
                     ? '分派专业 Agent 任务'
-                    : '执行画布数据处理节点'}
+                    : '执行画布数据处理或视频节点'}
               </label>
             </>
           )}

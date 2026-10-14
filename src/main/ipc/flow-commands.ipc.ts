@@ -15,6 +15,7 @@ import { emitGatewayEvent } from '../diagnostics/gateway-events'
 import { FlowCommandLedger } from '../agent-flow/command-ledger'
 import { getDb } from '../store/db'
 import { openProject } from '../store/projects.repo'
+import { stopAgentVideos } from '../agent-flow/video-tasks'
 import type { FlowCommandGrant } from '../../shared/agent-flow/commands'
 export interface FlowCommandDesktop {
   ledger: FlowCommandLedger
@@ -251,6 +252,8 @@ export function registerFlowCommandsIpc(
           Date.now() >= deadline ||
           activeProjectId !== grant.command.projectId
         ) {
+          if (signal.aborted)
+            stopAgentVideos(getDb(), grant.command.projectId, grant.command.taskId)
           ledger.unknown({
             projectId: grant.command.projectId,
             commandId: grant.command.commandId,

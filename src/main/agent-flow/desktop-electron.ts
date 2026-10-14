@@ -1,5 +1,7 @@
 // Isolated, hidden desktop acceptance; never imported by the application.
-import { app, BrowserWindow, dialog } from 'electron'
+import { app, BrowserWindow, dialog, protocol, net } from 'electron'
+import { pathToFileURL } from 'node:url'
+import { getMediaAbsPath, importMedia } from '../store/media.repo'
 import { basename, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { readFileSync, writeFileSync } from 'node:fs'
@@ -25,6 +27,21 @@ const arg = (name: string): string | undefined =>
 const directory = arg('agent-directory'),
   phase = arg('agent-phase')
 const real = process.argv.includes('--real-model')
+const firstFrame = process.argv.includes('--video-first-frame')
+const video = process.argv.includes('--video')
+if (video)
+  protocol.registerSchemesAsPrivileged([
+    {
+      scheme: 'media',
+      privileges: {
+        standard: true,
+        secure: true,
+        stream: true,
+        supportFetchAPI: true,
+        corsEnabled: true
+      }
+    }
+  ])
 const collaboration = process.argv.includes('--collaboration')
 const coordination = process.argv.includes('--coordination')
 const recovery = process.argv.includes('--recovery')
@@ -60,6 +77,83 @@ if (
           : JSON.parse(readFileSync(statePath, 'utf8')).projectId
       setSetting('lastProjectId', projectId)
       const host = new SqliteModelHost(getDb())
+      if (video) {
+        protocol.handle('media', (request) => {
+          const url = new URL(request.url),
+            path = getMediaAbsPath(decodeURIComponent(url.host + url.pathname).replace(/^\/+/, ''))
+          return path
+            ? net.fetch(pathToFileURL(path).href)
+            : Promise.resolve(new Response(null, { status: 403 }))
+        })
+        if (phase === 'execute') {
+          getDb()
+            .prepare('INSERT INTO providers VALUES (?,?,?,?,?,?,?)')
+            .run(
+              'video-test',
+              '隔离视频夹具',
+              'seedance',
+              'https://ark.cn-beijing.volces.com/api/v3',
+              'private-c3-video-key',
+              JSON.stringify([
+                {
+                  id: 'doubao-seedance-2-0',
+                  name: '隔离视频',
+                  modality: 'video',
+                  operations: ['video.generate']
+                }
+              ]),
+              0
+            )
+          for (const key of ['video-posts', 'video-downloads']) setSetting(key, '0')
+        }
+        const nativeFetch = globalThis.fetch
+        globalThis.fetch = async (url, options) => {
+          const address = String(url)
+          if (
+            address.startsWith(
+              'https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks'
+            )
+          ) {
+            if (options?.method === 'POST') {
+              const content = JSON.parse(String(options.body)).content
+              const images = content.filter((part: { type: string }) => part.type === 'image_url')
+              if (
+                firstFrame &&
+                (images.length !== 1 ||
+                  images[0].role !== 'first_frame' ||
+                  !images[0].image_url.url.startsWith('data:image/png;base64,'))
+              )
+                throw new Error('FIRST_FRAME_WIRE_INVALID')
+              if (!firstFrame && images.length) throw new Error('TEXT_VIDEO_HAS_IMAGE')
+              getDb()
+                .prepare(
+                  "UPDATE settings SET value=CAST(value AS INTEGER)+1 WHERE key='video-posts'"
+                )
+                .run()
+              return new Response(JSON.stringify({ id: 'remote-video' }), {
+                headers: { 'Content-Type': 'application/json' }
+              })
+            }
+            return new Response(
+              JSON.stringify({
+                id: 'remote-video',
+                status: phase === 'execute' ? 'unknown' : 'succeeded',
+                content: { video_url: 'https://fixture.example/video' }
+              }),
+              { headers: { 'Content-Type': 'application/json' } }
+            )
+          }
+          if (address === 'https://fixture.example/video') {
+            getDb()
+              .prepare(
+                "UPDATE settings SET value=CAST(value AS INTEGER)+1 WHERE key='video-downloads'"
+              )
+              .run()
+            return new Response(readFileSync(join(directory, 'fixture.mp4')))
+          }
+          return nativeFetch(url, options)
+        }
+      }
       host.saveConnection({
         id: 'agent-test-connection',
         name: '隔离验收模型',
@@ -130,7 +224,165 @@ if (
         const wait=async(state)=>{for(let i=0;i<1800;i++){const task=await inspect();if(task?.state===state)return task;if(task&&['blocked','failed'].includes(task.state))throw new Error(task.code||'AGENT_TASK_FAILED');await new Promise(r=>setTimeout(r,100));}throw new Error('AGENT_TASK_TIMEOUT')};
         const click=()=>{const button=document.querySelector('[data-node-id="shape:c3-agent"] .node-standard-primary');if(!button||button.disabled)throw new Error('AGENT_BUTTON_UNAVAILABLE');button.click()};
       `
-      if (rework) {
+      if (video) {
+        const frame =
+          firstFrame && phase === 'execute'
+            ? await importMedia(projectId, join(directory, 'first-frame.png'))
+            : null
+        if (frame && !frame.ok) throw new Error('FRAME_IMPORT_FAILED')
+        report = await active.webContents.executeJavaScript(`(async()=>{${common}
+          const read=(id)=>window.api.inspectFlowAgent({projectId,nodeId:id}).then(value);
+          const run=async(id)=>{await ensureCanvasSaved();const task=await read(id);if(task)editor.updateShape({id,type:'node-card',meta:{...editor.getShape(id).meta,agentTask:JSON.stringify(task)}});const result=await(await import('/src/engine/executor.ts')).runNodeManually(editor,projectId,(await import('/src/stores/gateway.ts')).useGatewayStore.getState().providers,id);await ensureCanvasSaved();const after=await read(id);if(after?.state==='completed'&&result.status!=='done')throw new Error('VIDEO_PUBLIC_PROJECTION_FAILED');return after};
+          if(${phase === 'execute'}) {
+            const config=(role,allowedNodeIds)=>JSON.stringify({schemaVersion:1,role,interactionMode:'autonomous',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:role==='coordinator'?'agent.dispatch':'node.execute',version:'1'}],allowedNodeIds,maxSteps:12,relations:role==='coordinator'?[{relationId:'video-state',kind:'observes',sourceNodeId:'shape:c3-agent',targetNodeId:'shape:video-state'}]:[]});
+            const nodes=[{id:'shape:c3-agent',nodeType:'agent',title:'主 Agent',text:'调度视频专业 Agent 并交付视频',config:config('coordinator',['shape:video-agent'])},{id:'shape:video-agent',nodeType:'agent',title:'视频 Agent',text:'使用视频节点生成一次视频，交付固定成果',config:config('specialist',['shape:video-target'])},{id:'shape:video-target',nodeType:'video',title:'视频生成',text:'',config:JSON.stringify({mode:${JSON.stringify(firstFrame ? 'first-frame' : 'text')},modelKey:'video-test::doubao-seedance-2-0',params:{}})},{id:'shape:video-prompt',nodeType:'text',title:'材料',text:'private-c3-video-prompt'}];
+            nodes.forEach(({id,...props},i)=>editor.createShape({id,type:'node-card',x:100+i*430,y:100,props}));
+            editor.createShape({id:'shape:video-state',type:'node-card',x:100,y:700,props:{nodeType:'state-machine',title:'流程状态',config:JSON.stringify({schemaVersion:1,initialState:'draft',states:['draft','working','waiting','completed'],transitions:[{from:'draft',event:'flow.started',to:'working'},...['agent.dispatched','agent.completed','human.wait','flow.paused','flow.completed'].map(event=>({from:'working',event,to:event==='flow.completed'?'completed':['human.wait','flow.paused'].includes(event)?'waiting':'working'})),{from:'waiting',event:'human.continue',to:'working'}],relations:[]})}});
+            const {createEdge}=await import('/src/canvas/graph.ts');
+            const frame=${JSON.stringify(frame && frame.ok ? frame.asset : null)};
+            if(frame){editor.createShape({id:'shape:first-frame',type:'node-card',x:100,y:950,props:{nodeType:'image',title:'首帧输入',mediaId:frame.id,mediaPath:frame.path,mediaMime:frame.mime}});createEdge(editor,{shapeId:'shape:first-frame',portId:'out-image'},{shapeId:'shape:video-target',portId:'in-images'});}
+            for(const to of ['shape:video-agent','shape:video-target'])createEdge(editor,{shapeId:'shape:video-prompt',portId:'out-text'},{shapeId:to,portId:'in-text'});
+            if(frame){await new Promise(done=>setTimeout(done,300));const target=editor.getShape('shape:video-target');editor.updateShape({id:target.id,type:'node-card',props:{config:JSON.stringify({...JSON.parse(target.props.config),mode:'first-frame'})}});}
+            const root=await run('shape:c3-agent'),child=await read('shape:video-agent');
+            if(root.state!=='waiting'||child?.state!=='waiting'||child?.waitKind!=='reconcile'){window.__reviewAcceptanceStage=JSON.stringify({mode:JSON.parse(editor.getShape('shape:video-target').props.config).mode,rootCode:root.code,childCode:child?.code});throw new Error('VIDEO_UNKNOWN_NOT_HELD');}
+            if(editor.getCurrentPageShapes().some(s=>s.props?.nodeType==='video-asset'))throw new Error('VIDEO_UNKNOWN_PUBLISHED');
+            return {projectId,taskId:root.taskId,checks:['main dispatches video specialist through public executor','supplier unknown holds original command','no unverified artifact']};
+          }
+          let child=await read('shape:video-agent');
+          const reconciled=value(await window.api.runFlowAgent({projectId,nodeId:'shape:video-agent',action:'reconcile',eventId:crypto.randomUUID(),requestId:crypto.randomUUID(),expectedTaskId:child.taskId,expectedWaitRevision:child.waitRevision,traceId:crypto.randomUUID(),spanId:crypto.randomUUID()}));
+          if(reconciled.task.code!=='FLOW_VIDEO_RECONCILE_READY')throw new Error('VIDEO_RECOVERY_NOT_READY');
+          child=await run('shape:video-agent');if(child.state!=='completed')throw new Error('VIDEO_SPECIALIST_NOT_COMPLETED');
+          const root=await run('shape:c3-agent');if(root.state!=='completed')throw new Error('VIDEO_MAIN_NOT_COMPLETED');
+          const assets=editor.getCurrentPageShapes().filter(s=>s.props?.nodeType==='video-asset'&&s.meta.agentAssetVersionId);
+          if(assets.length!==1||!assets[0].props.mediaId)throw new Error('VIDEO_FIXED_ASSET_MISSING');
+          const output=(await import('/src/nodes/nodeValues.ts')).projectNodeOutputs(assets[0])['out-video'];if(output?.kind!=='video')throw new Error('VIDEO_ASSET_PORT_INVALID');
+          const el=document.querySelector('[data-node-id="'+assets[0].id+'"] video');
+          if(!el)throw new Error('VIDEO_PREVIEW_MISSING');
+          for(let i=0;i<100&&!el.videoWidth;i++)await new Promise(r=>setTimeout(r,50));
+          if(!el.videoWidth)throw new Error('VIDEO_METADATA_NOT_LOADED');
+          let frameAssetShapeId;
+          if(${firstFrame}){const versions=value(await window.api.listFlowAssets({projectId,nodeId:'shape:first-frame',portId:'out-image'}));const version=value(await window.api.readFlowAsset({projectId,versionId:versions[0].ref.versionId}));frameAssetShapeId=(await import('/src/canvas/flow-asset-actions.ts')).placeFlowAsset(editor,version,'shape:first-frame');let image;for(let i=0;i<100;i++){image=document.querySelector('[data-node-id="'+frameAssetShapeId+'"] img');if(image?.naturalWidth)break;await new Promise(done=>setTimeout(done,20));}if(!image?.naturalWidth)throw new Error('FRAME_PREVIEW_MISSING');}
+          await ensureCanvasSaved();return {projectId,frameAssetShapeId,taskId:root.taskId,mediaId:assets[0].props.mediaId,assetShapeId:assets[0].id,checks:['same supplier task after process reopen','explicit continue restores fixed video version','main collects committed specialist result','one playable video asset with ordinary out-video','saved project retains media and version reference']};
+        })()`)
+        if (phase === 'reopen') {
+          const identities = report as { assetShapeId: string; frameAssetShapeId?: string }
+          for (const [assetId, kind] of [
+            [identities.assetShapeId, 'video'],
+            ...(identities.frameAssetShapeId ? [[identities.frameAssetShapeId, 'img']] : [])
+          ]) {
+            await active.webContents.executeJavaScript(
+              `(async()=>{const e=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;e.selectNone();e.centerOnPoint(e.getShapePageBounds(${JSON.stringify(assetId)}).center)})()`
+            )
+            await active.webContents.executeJavaScript(
+              'new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)))'
+            )
+            active.webContents.invalidate()
+            await new Promise((done) => setTimeout(done, 300))
+            const point = (await active.webContents.executeJavaScript(
+              `(()=>{const box=document.querySelector('[data-node-id="'+${JSON.stringify(assetId)}+'"] [data-node-interactive="media-preview"]').getBoundingClientRect();return {x:Math.round(box.x+box.width/2),y:Math.round(box.y+box.height/2)}})()`
+            )) as { x: number; y: number }
+            const mouse = (
+              type: 'mouseDown' | 'mouseUp' | 'mouseMove',
+              x: number,
+              y: number,
+              clickCount = 1
+            ): void => active.webContents.sendInputEvent({ type, x, y, button: 'left', clickCount })
+            mouse('mouseMove', point.x, point.y)
+            mouse('mouseDown', point.x, point.y)
+            mouse('mouseUp', point.x, point.y)
+            const selected = await active.webContents.executeJavaScript(
+              `import('/src/stores/editor.ts').then(m=>m.useEditorStore.getState().editor.getSelectedShapeIds().includes(${JSON.stringify(assetId)}))`
+            )
+            if (!selected) throw new Error('VIDEO_FIXED_CLICK_FAILED')
+            const before = await active.webContents.executeJavaScript(
+              `import('/src/stores/editor.ts').then(m=>{const s=m.useEditorStore.getState().editor.getShape(${JSON.stringify(assetId)});return {x:s.x,y:s.y}})`
+            )
+            mouse('mouseDown', point.x, point.y)
+            mouse('mouseMove', point.x + 45, point.y + 25)
+            mouse('mouseUp', point.x + 45, point.y + 25)
+            await new Promise((done) => setTimeout(done, 100))
+            const moved = await active.webContents.executeJavaScript(
+              `import('/src/stores/editor.ts').then(m=>{const s=m.useEditorStore.getState().editor.getShape(${JSON.stringify(assetId)});return s.x!==${before.x}||s.y!==${before.y}})`
+            )
+            if (!moved) throw new Error('VIDEO_FIXED_DRAG_FAILED')
+            const afterPoint = await active.webContents.executeJavaScript(
+              `(()=>{const box=document.querySelector('[data-node-id="'+${JSON.stringify(assetId)}+'"] [data-node-interactive="media-preview"]').getBoundingClientRect();return {x:Math.round(box.x+box.width/2),y:Math.round(box.y+box.height/2)}})()`
+            )
+            mouse('mouseMove', afterPoint.x, afterPoint.y)
+            mouse('mouseDown', afterPoint.x, afterPoint.y)
+            mouse('mouseUp', afterPoint.x, afterPoint.y)
+            mouse('mouseDown', afterPoint.x, afterPoint.y, 2)
+            mouse('mouseUp', afterPoint.x, afterPoint.y, 2)
+            await new Promise((done) => setTimeout(done, 150))
+            if (
+              !(await active.webContents.executeJavaScript(
+                `!!document.querySelector('.media-preview-mask ${kind}')`
+              ))
+            ) {
+              writeFileSync(
+                join(directory, 'pointer-failure.png'),
+                (await active.webContents.capturePage()).toPNG()
+              )
+              throw new Error(`${kind.toUpperCase()}_FIXED_PREVIEW_FAILED`)
+            }
+            active.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' })
+            active.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' })
+            await active.webContents.executeJavaScript(
+              "import('/src/canvas/flow-asset-actions.ts').then(m=>m.ensureCanvasSaved())"
+            )
+            await active.webContents.executeJavaScript(
+              'new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)))'
+            )
+            await new Promise((done) => setTimeout(done, 300))
+            writeFileSync(
+              join(directory, kind === 'video' ? 'video-fixed.png' : 'image-fixed.png'),
+              (await active.webContents.capturePage()).toPNG()
+            )
+          }
+          report = {
+            ...(report as object),
+            fixedVideoPointerAndPreview: true,
+            ...(firstFrame ? { fixedImagePointerAndPreview: true } : {})
+          }
+        }
+        const db = getDb()
+        const posts = Number(
+          (
+            db.prepare("SELECT value FROM settings WHERE key='video-posts'").get() as {
+              value: string
+            }
+          ).value
+        )
+        const downloads = Number(
+          (
+            db.prepare("SELECT value FROM settings WHERE key='video-downloads'").get() as {
+              value: string
+            }
+          ).value
+        )
+        const tasks = (
+          db.prepare("SELECT count(*) AS n FROM tasks WHERE kind='video'").get() as { n: number }
+        ).n
+        if (posts !== 1 || tasks !== 1 || downloads !== (phase === 'execute' ? 0 : 1))
+          throw new Error('VIDEO_REPLAY_DETECTED')
+        if (firstFrame) {
+          const fixed = db
+            .prepare(
+              "SELECT value_json FROM flow_asset_versions WHERE json_extract(value_json,'$.kind')='image'"
+            )
+            .all() as { value_json: string }[]
+          if (fixed.length !== 1 || !JSON.parse(fixed[0].value_json).contentSha256)
+            throw new Error('FRAME_NOT_FIXED')
+        }
+        report = {
+          ...(report as object),
+          posts,
+          downloads,
+          videoTasks: tasks,
+          firstFrameFixed: firstFrame
+        }
+        writeFileSync(statePath, JSON.stringify({ projectId }))
+      } else if (rework) {
         report = await active.webContents.executeJavaScript(`(async()=>{${common}
           const mode=${JSON.stringify(reworkMode)};
           const delay=()=>new Promise(r=>setTimeout(r,100));
@@ -348,7 +600,7 @@ if (
             originalOpen = dialog.showOpenDialog
           let imported!: ReturnType<typeof createProject>
           try {
-            stage = 'c4-export';
+            stage = 'c4-export'
             dialog.showSaveDialog = async () => ({
               canceled: false,
               filePath: join(directory, 'portable-project.canvasbundle')
@@ -357,7 +609,7 @@ if (
               `(async()=>{const reply=await window.api.exportProject({id:${JSON.stringify(projectId)},name:'isolated'});if(!reply.ok)throw new Error('C4_EXPORT_IPC_FAILED');return reply.data.path;})()`
             )
             dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [bundle] })
-            stage = 'c4-import';
+            stage = 'c4-import'
             imported = await active.webContents.executeJavaScript(
               "(async()=>{const reply=await window.api.importProject();if(!reply.ok)throw new Error('C4_IMPORT_IPC_FAILED');return reply.data;})()"
             )
@@ -366,13 +618,13 @@ if (
             dialog.showOpenDialog = originalOpen
           }
           const file = openProject(imported.id)!
-          stage = 'c4-open-imported-file';
+          stage = 'c4-open-imported-file'
           const main = file.nodes.find(
             (node) =>
               node.type === 'agent' && JSON.parse(String(node.params.config)).role === 'coordinator'
           )!
           if (main.id === 'shape:c3-agent') throw new Error('C4_IMPORT_ID_NOT_REMAPPED')
-          stage = 'c4-open-imported-canvas';
+          stage = 'c4-open-imported-canvas'
           await active.webContents.executeJavaScript(
             `(async()=>{
             const meta=${JSON.stringify(imported)},id=${JSON.stringify(main.id)};

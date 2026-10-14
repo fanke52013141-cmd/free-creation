@@ -1263,7 +1263,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
                     <div className="node-body-content">
                       <FlowReviewFeedback shape={shape} />
                       {readFlowAssetSnapshot(shape) ? (
-                        <FixedFlowAssetBody shape={shape} />
+                        <FixedFlowAssetBody shape={shape} openPreview={openMediaPreview} />
                       ) : (
                         <spec.Body shape={shape} openPreview={openMediaPreview} />
                       )}

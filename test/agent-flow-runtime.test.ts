@@ -465,7 +465,11 @@ describe('C3 tool adapter preserves the C2 ledger authority', () => {
     const command = {} as NodeExecuteCommand
     const prepare = vi.fn(() => ({ state: 'unknown', receipt: { state: 'unknown' } }))
     const deliver = vi.fn()
-    const ledger = { lookup: () => ({ state: 'unknown' }), prepare } as unknown as FlowCommandLedger
+    const ledger = {
+      lookup: () => ({ state: 'unknown' }),
+      prepare,
+      resumeVideo: vi.fn(() => null)
+    } as unknown as FlowCommandLedger
     expect(
       (await createLedgerToolPort(ledger, deliver).execute(command, new AbortController().signal))
         .state

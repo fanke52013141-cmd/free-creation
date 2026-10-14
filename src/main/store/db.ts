@@ -29,9 +29,15 @@ export function getProjectsDir(): string {
 
 export function getDb(): Database.Database {
   if (db) return db
-  db = new Database(join(getDataDir(), 'app.db'))
-  db.pragma('journal_mode = WAL')
-  migrateDatabase(db)
+  const opened = new Database(join(getDataDir(), 'app.db'))
+  try {
+    opened.pragma('journal_mode = WAL')
+    migrateDatabase(opened)
+    db = opened
+  } catch (error) {
+    opened.close()
+    throw error
+  }
   return db
 }
 

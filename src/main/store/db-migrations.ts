@@ -8,7 +8,7 @@ export interface MigrationDatabase {
   pragma(statement: string, options?: { simple?: boolean }): unknown
 }
 
-export const DB_SCHEMA_VERSION = 16
+export const DB_SCHEMA_VERSION = 17
 
 const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
@@ -412,6 +412,11 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
       node_id TEXT NOT NULL, request_id TEXT NOT NULL, body_json TEXT NOT NULL,
       PRIMARY KEY(project_id,request_id)
     );`)
+  },
+  (database) => {
+    database.exec(`CREATE TABLE process_locks (
+      resource TEXT PRIMARY KEY, token TEXT NOT NULL, pid INTEGER NOT NULL
+    );`)
   }
 ]
 
@@ -420,7 +425,7 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
  *
  * 每个迁移与其 user_version 推进同处一个事务（SQLite 的 user_version 写入是事务性的）：
  * 中途失败整体回滚，绝不留下「建表成功但版本号未推进」的半迁移状态导致下次启动重跑崩库。
- * 通过 exec('BEGIN'/'COMMIT') 而非 database.transaction()，保证 fake/适配实现无需暴露事务 API。
+ * BEGIN IMMEDIATE 后重读版本，避免两个启动进程同时执行同一迁移。
  */
 export function migrateDatabase(database: MigrationDatabase): number {
   const currentVersion = Number(database.pragma('user_version', { simple: true }) ?? 0)
@@ -431,8 +436,15 @@ export function migrateDatabase(database: MigrationDatabase): number {
     throw new Error(`数据库版本 v${currentVersion} 高于当前应用支持的 v${DB_SCHEMA_VERSION}`)
   }
   for (let version = currentVersion + 1; version <= DB_SCHEMA_VERSION; version += 1) {
-    database.exec('BEGIN')
+    database.exec('BEGIN IMMEDIATE')
     try {
+      const installed = Number(database.pragma('user_version', { simple: true }) ?? 0)
+      if (!Number.isInteger(installed) || installed < 0 || installed > DB_SCHEMA_VERSION)
+        throw new Error('SQLite migration version changed unexpectedly')
+      if (installed >= version) {
+        database.exec('COMMIT')
+        continue
+      }
       migrations[version - 1]?.(database)
       database.pragma(`user_version = ${version}`)
       database.exec('COMMIT')

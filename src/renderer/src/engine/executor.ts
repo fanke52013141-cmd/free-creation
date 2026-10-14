@@ -15,6 +15,7 @@ import { deriveGraph } from '../canvas/graph'
 import { markUndoPoint } from '../canvas/history'
 import { materializeArtifact, materializeDocumentArtifact } from '../canvas/artifact-materializer'
 import type { NodeCardShape, NodeCardProps } from '../canvas/NodeCardShape'
+import { agentOutputValue } from '@shared/agent-flow/video-adapter'
 import {
   buildOutputPackets,
   collectContractInputs,
@@ -741,6 +742,15 @@ async function invokeExecutor(
     inputs,
     projectId: ctx.projectId,
     runId: ctx.runId,
+    ...(ctx.command
+      ? {
+          flowCommand: {
+            projectId: ctx.projectId,
+            commandId: ctx.command.grant.command.commandId,
+            leaseId: ctx.command.grant.leaseId
+          }
+        }
+      : {}),
     providers: ctx.providers,
     signal: ctx.token,
     diagnostics: {
@@ -819,6 +829,9 @@ async function invokeExecutor(
         )
       }
       const current = ctx.editor.getShape<NodeCardShape>(id) ?? shape
+      // Agent commands publish from their committed fixed version. Adding an
+      // artifact before receipt commit would change the admitted semantic graph.
+      if (ctx.command) return
       // 同一次执行中的多个产物需要作为同一个撤销单元落到画布，保持操作可逆。
       ctx.editor.run(() => materializeArtifact(ctx.editor, current, artifact, ctx.runId))
     },
@@ -1125,16 +1138,14 @@ async function executeNodeUnscheduled(
                 versionId: ref.versionId
               })
               if (!version.ok) throw new Error('Agent 固定资产读取失败')
-              const value =
-                version.data.value.kind === 'markdown'
-                  ? { kind: 'text', text: version.data.value.text }
-                  : version.data.value
+              const value = agentOutputValue(version.data.value)
               if (JSON.stringify(value) === JSON.stringify(packet.value)) {
                 const present = editor
                   .getCurrentPageShapes()
                   .some(
                     (shape) =>
-                      shape.meta.agentTaskId === result.taskId &&
+                      (shape.meta.agentTaskId === result.taskId ||
+                        version.data.value.kind === 'video') &&
                       shape.meta.agentAssetVersionId === ref.versionId
                   )
                 if (!present) {

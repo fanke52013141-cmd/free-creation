@@ -7,6 +7,7 @@ import { getDataDir, getDb } from '../store/db'
 import { emitGatewayEvent } from '../diagnostics/gateway-events'
 import type { GatewayDiagnosticsContext } from '../../shared/contracts'
 import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
+import { acquireProcessLock, type ProcessLock } from '../store/process-lock'
 
 interface Receipt {
   version: 1
@@ -107,18 +108,31 @@ function paths(
     staging: join(getDataDir(), 'video-recovery', `${value.identity}.part`)
   }
 }
-async function commit(taskId: string, projectId: string, value: Receipt): Promise<MediaAsset> {
+async function commit(
+  taskId: string,
+  projectId: string,
+  value: Receipt,
+  lock: ProcessLock
+): Promise<MediaAsset> {
   const locations = paths(projectId, value)
   const source = (await exists(locations.target)) ? locations.target : locations.staging
   const found = await fingerprint(source)
   if (found.digest !== value.digest || found.size !== value.size) return fail()
   if (source !== locations.target) {
     await mkdir(join(getDataDir(), `projects/${projectId}/media`), { recursive: true })
+    lock.assertOwned()
+    if (JSON.parse(task(taskId, projectId).input ?? '{}').cancelRequested)
+      throw new Error('VIDEO_MATERIALIZATION_STOPPED')
     await rename(source, locations.target)
   }
   const db = getDb()
   return db.transaction((): MediaAsset => {
+    lock.assertOwned()
     const row = task(taskId, projectId)
+    // Stop can arrive while hashing, creating directories or promoting the file.
+    // Keep verified bytes, but do not publish a media receipt after that intent.
+    if (JSON.parse(row.input ?? '{}').cancelRequested)
+      throw new Error('VIDEO_MATERIALIZATION_STOPPED')
     const current = receipt(row)
     if (!current || current.identity !== value.identity || current.digest !== value.digest)
       return fail()
@@ -160,9 +174,10 @@ async function commit(taskId: string, projectId: string, value: Receipt): Promis
   })()
 }
 /** Complete receipts can be recovered entirely offline; partial bytes are never promoted. */
-export async function recoverVideoAsset(
+async function recoverUnlocked(
   taskId: string,
   projectId: string,
+  lock: ProcessLock,
   diagnostics?: GatewayDiagnosticsContext
 ): Promise<MediaAsset | null> {
   const value = receipt(task(taskId, projectId))
@@ -175,7 +190,7 @@ export async function recoverVideoAsset(
       { attributes: { operation: 'video.recover' } }
     )
   try {
-    const asset = await commit(taskId, projectId, value)
+    const asset = await commit(taskId, projectId, value, lock)
     if (diagnostics)
       emitGatewayEvent(
         'media.persist_completed',
@@ -194,11 +209,29 @@ export async function recoverVideoAsset(
         '已下载视频成果恢复失败',
         { ...diagnostics, taskId },
         {
-          error: new Error('VIDEO_MATERIALIZATION_CONFLICT'),
+          error: new Error(
+            error instanceof Error && error.message === 'VIDEO_MATERIALIZATION_STOPPED'
+              ? 'VIDEO_MATERIALIZATION_STOPPED'
+              : 'VIDEO_MATERIALIZATION_CONFLICT'
+          ),
           attributes: { operation: 'video.recover' }
         }
       )
     throw error
+  }
+}
+const resource = (taskId: string, projectId: string): string =>
+  `video:${JSON.stringify([projectId, taskId])}`
+export async function recoverVideoAsset(
+  taskId: string,
+  projectId: string,
+  diagnostics?: GatewayDiagnosticsContext
+): Promise<MediaAsset | null> {
+  const lock = acquireProcessLock(resource(taskId, projectId))
+  try {
+    return await recoverUnlocked(taskId, projectId, lock, diagnostics)
+  } finally {
+    lock.release()
   }
 }
 /** One stable file and media identity per task. Download retries never submit generation. */
@@ -212,32 +245,44 @@ export function materializeVideoAsset(
   const pending = active.get(key)
   if (pending) return pending
   const work = (async () => {
-    const restored = await recoverVideoAsset(taskId, projectId)
-    if (restored) return restored
-    const row = task(taskId, projectId)
-    const value: Receipt = receipt(row) ?? {
-      version: 1,
-      identity: identity(row),
-      phase: 'reserved'
+    const lock = acquireProcessLock(resource(taskId, projectId))
+    try {
+      const restored = await recoverUnlocked(taskId, projectId, lock)
+      if (restored) return restored
+      const row = task(taskId, projectId)
+      const value: Receipt = receipt(row) ?? {
+        version: 1,
+        identity: identity(row),
+        phase: 'reserved'
+      }
+      // Never retrofit an unbound legacy output into a new recovery identity.
+      if (output(row).mediaId && !receipt(row)) return fail()
+      lock.assertOwned()
+      getDb()
+        .prepare('UPDATE tasks SET output=? WHERE id=? AND project_id=?')
+        .run(JSON.stringify({ ...output(row), videoMaterialization: value }), taskId, projectId)
+      const locations = paths(projectId, value)
+      if (await exists(locations.target)) return fail()
+      await mkdir(join(getDataDir(), 'video-recovery'), { recursive: true })
+      lock.assertOwned()
+      await download(locations.staging)
+      const found = await fingerprint(locations.staging)
+      const latest = task(taskId, projectId)
+      lock.assertOwned()
+      if (identity(latest) !== value.identity) return fail()
+      const prepared: Receipt = { ...value, phase: 'prepared', ...found }
+      getDb()
+        .prepare('UPDATE tasks SET output=? WHERE id=? AND project_id=?')
+        .run(
+          JSON.stringify({ ...output(latest), videoMaterialization: prepared }),
+          taskId,
+          projectId
+        )
+      if (shouldStop()) throw new Error('VIDEO_MATERIALIZATION_STOPPED')
+      return await commit(taskId, projectId, prepared, lock)
+    } finally {
+      lock.release()
     }
-    // Never retrofit an unbound legacy output into a new recovery identity.
-    if (output(row).mediaId && !receipt(row)) return fail()
-    getDb()
-      .prepare('UPDATE tasks SET output=? WHERE id=? AND project_id=?')
-      .run(JSON.stringify({ ...output(row), videoMaterialization: value }), taskId, projectId)
-    const locations = paths(projectId, value)
-    if (await exists(locations.target)) return fail()
-    await mkdir(join(getDataDir(), 'video-recovery'), { recursive: true })
-    await download(locations.staging)
-    const found = await fingerprint(locations.staging)
-    const latest = task(taskId, projectId)
-    if (identity(latest) !== value.identity) return fail()
-    const prepared: Receipt = { ...value, phase: 'prepared', ...found }
-    getDb()
-      .prepare('UPDATE tasks SET output=? WHERE id=? AND project_id=?')
-      .run(JSON.stringify({ ...output(latest), videoMaterialization: prepared }), taskId, projectId)
-    if (shouldStop()) throw new Error('VIDEO_MATERIALIZATION_STOPPED')
-    return commit(taskId, projectId, prepared)
   })()
   active.set(key, work)
   void work

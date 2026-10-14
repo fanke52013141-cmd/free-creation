@@ -1,9 +1,15 @@
-// 视频节点执行器：每次运行都提交新的生成任务并轮询至完成。实现中没有
-// 「已有成片优先复用」，跨运行不存在复用机制，重跑同一节点必然重新计费提交。
+// Public video executor. Agent commands carry a durable binding and recover only
+// their original supplier task; ordinary manual runs retain their own semantics.
 import { inputJson, inputMedia, inputText } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
 import { featureKeyOf, modelKeyOf, resolveFeatureOption } from '../models'
-import { mergedPrompt, parseJsonObj, parseVideoGen, promptBundleText, waitForVideo } from '../helpers'
+import {
+  mergedPrompt,
+  parseJsonObj,
+  parseVideoGen,
+  promptBundleText,
+  waitForVideo
+} from '../helpers'
 import { readNodeConfig } from '../node-config'
 import { parseRetryConfig, withRetry } from '../retry'
 import { appendMediaResult, serializeMediaResultCollection } from '../values'
@@ -18,7 +24,13 @@ import {
 
 export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
   const data = parseVideoGen(readNodeConfig(ctx.shape))
-  const option = await resolveFeatureOption(ctx.gateway, ctx.providers, featureKeyOf(data, 'video.generate'), 'video.generate', modelKeyOf(data))
+  const option = await resolveFeatureOption(
+    ctx.gateway,
+    ctx.providers,
+    featureKeyOf(data, 'video.generate'),
+    'video.generate',
+    modelKeyOf(data)
+  )
   if (!option) return { status: 'skipped', reason: '功能 video.generate 尚未绑定已验证视频模型' }
   const bundlePrompt = promptBundleText(inputJson(ctx.inputs, 'in-prompt')[0])
   const prompt = mergedPrompt(
@@ -68,34 +80,43 @@ export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
     // 可能已计费，重复提交会双重扣费）；提交阶段的网络 / 5xx 才是瞬时的。
     const submitted = await withRetry(
       () =>
-        ctx.gateway.videoSubmit({
-          projectId: ctx.projectId,
-          nodeId: ctx.node.id,
-          providerId: option.provider.id,
-          modelId: option.model.id,
-          prompt,
-          mode,
-          params,
-          ...(firstFrame ? { firstFrameMediaId: firstFrame.mediaId } : {}),
-          ...(lastFrame ? { lastFrameMediaId: lastFrame.mediaId } : {}),
-          ...(referenceImages.length
-            ? { referenceImageMediaIds: referenceImages.map((media) => media.mediaId) }
-            : {}),
-          ...(motionReferences.length
-            ? { referenceVideoMediaIds: motionReferences.map((media) => media.mediaId) }
-            : {}),
-          ...(audioReferences.length
-            ? { referenceAudioMediaIds: audioReferences.map((media) => media.mediaId) }
-            : {})
-        }).then((res) => {
-          if (!res.ok) throw new Error(res.error.message)
-          return res
-        }),
+        ctx.gateway
+          .videoSubmit({
+            projectId: ctx.projectId,
+            ...(ctx.flowCommand ? { flowCommand: ctx.flowCommand } : {}),
+            nodeId: ctx.node.id,
+            providerId: option.provider.id,
+            modelId: option.model.id,
+            prompt,
+            mode,
+            params,
+            ...(firstFrame ? { firstFrameMediaId: firstFrame.mediaId } : {}),
+            ...(lastFrame ? { lastFrameMediaId: lastFrame.mediaId } : {}),
+            ...(referenceImages.length
+              ? { referenceImageMediaIds: referenceImages.map((media) => media.mediaId) }
+              : {}),
+            ...(motionReferences.length
+              ? { referenceVideoMediaIds: motionReferences.map((media) => media.mediaId) }
+              : {}),
+            ...(audioReferences.length
+              ? { referenceAudioMediaIds: audioReferences.map((media) => media.mediaId) }
+              : {})
+          })
+          .then((res) => {
+            if (!res.ok) throw new Error(res.error.message)
+            return res
+          }),
       {
-        retry: parseRetryConfig(parseJsonObj(readNodeConfig(ctx.shape))),
+        retry: ctx.flowCommand
+          ? { maxRetries: 0, backoffMs: 0 }
+          : parseRetryConfig(parseJsonObj(readNodeConfig(ctx.shape))),
         signal: ctx.signal,
         onRetry: (attempt, reason, delayMs) =>
-          ctx.trace?.('request', 'info', `视频提交第 ${attempt} 次尝试失败（${reason}），${delayMs}ms 后自动重试`)
+          ctx.trace?.(
+            'request',
+            'info',
+            `视频提交第 ${attempt} 次尝试失败（${reason}），${delayMs}ms 后自动重试`
+          )
       }
     )
     if (ctx.signal.cancelled) {

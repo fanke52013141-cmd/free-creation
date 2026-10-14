@@ -1,3 +1,4 @@
+import { fixedFlowImage } from './image-assets'
 import type Database from 'better-sqlite3'
 import { createHash, randomUUID } from 'node:crypto'
 import type { ProjectFile } from '../../shared/types'
@@ -10,6 +11,7 @@ import {
 import { AgentFlowAssetRefSchema } from '../../shared/agent-flow/node-contracts'
 import { readStoredNodeRunStatus } from '../../shared/engine/run-status'
 import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
+import { agentOutputValue } from '../../shared/agent-flow/video-adapter'
 import {
   AssetSubmitSchema,
   FlowAssetError,
@@ -119,7 +121,7 @@ export class FlowAssetStore {
         const runStatus = readStoredNodeRunStatus(record.meta?.nodeRun)
         if (
           !pinned &&
-          ['processor', 'agent'].includes(record.props.nodeType) &&
+          ['processor', 'agent', 'video'].includes(record.props.nodeType) &&
           runStatus &&
           runStatus !== 'success'
         )
@@ -129,7 +131,11 @@ export class FlowAssetStore {
             ? 'out-text'
             : record.props.nodeType === 'json'
               ? 'out-json'
-              : 'out-value'
+              : ['video', 'image'].includes(record.props.nodeType)
+                ? record.props.nodeType === 'image'
+                  ? 'out-image'
+                  : 'out-video'
+                : 'out-value'
         if (record.props.nodeType === 'agent') {
           if (!['out-text', 'out-json'].includes(input.portId)) fail('ASSET_PORT_INVALID')
           if (runStatus !== 'success') fail('ASSET_OUTPUT_UNAVAILABLE')
@@ -152,11 +158,7 @@ export class FlowAssetStore {
           const expected = this.resolveInputs(
             input.projectId,
             JSON.parse(task.output_refs_json)
-          ).map((version) =>
-            version.value.kind === 'markdown'
-              ? { kind: 'text', text: version.value.text }
-              : version.value
-          )
+          ).map((version) => agentOutputValue(version.value))
           const actual = projection(record)[input.portId]
           if (
             !actual ||
@@ -180,15 +182,54 @@ export class FlowAssetStore {
         } else if (input.portId !== declaredPort) fail('ASSET_PORT_INVALID')
         if (pinned && Object.keys(pinned).some((key) => key !== declaredPort))
           fail('ASSET_OUTPUT_INVALID')
-        const value = (pinned ?? projection(record))[input.portId]
+        let value = (pinned ?? projection(record))[input.portId]
         if (!value) fail('ASSET_OUTPUT_UNAVAILABLE')
         if (
           (record.props.nodeType === 'json' && value.kind !== 'json') ||
           (record.props.nodeType === 'text' && value.kind !== 'text' && value.kind !== 'markdown')
         )
           fail('ASSET_OUTPUT_INVALID')
-        if (value.kind !== 'text' && value.kind !== 'markdown' && value.kind !== 'json')
+        if (
+          value.kind !== 'text' &&
+          value.kind !== 'markdown' &&
+          value.kind !== 'json' &&
+          value.kind !== 'video' &&
+          value.kind !== 'image'
+        )
           fail('ASSET_VALUE_UNSUPPORTED')
+        if (value.kind === 'image') {
+          if (record.props.nodeType !== 'image' || pinned) fail('ASSET_OUTPUT_INVALID')
+          value = fixedFlowImage(this.db, input.projectId, value)
+        }
+        if (value.kind === 'video') {
+          if (
+            record.props.nodeType !== 'video' ||
+            !commandPermit ||
+            pinned ||
+            runStatus !== 'success'
+          )
+            fail('ASSET_OUTPUT_INVALID')
+          const task = this.db
+            .prepare(
+              "SELECT output FROM tasks WHERE project_id=? AND node_id=? AND kind='video' AND status='success' AND json_extract(input,'$.flowCommandId')=?"
+            )
+            .get(input.projectId, input.nodeId, commandPermit.commandId) as
+            { output: string } | undefined
+          const saved = task ? JSON.parse(task.output) : null
+          const media = this.db
+            .prepare('SELECT path,mime,kind FROM media WHERE id=?')
+            .get(value.mediaId) as { path: string; mime: string; kind: string } | undefined
+          if (
+            !saved ||
+            saved.mediaId !== value.mediaId ||
+            saved.videoMaterialization?.phase !== 'committed' ||
+            !media ||
+            media.kind !== 'video' ||
+            media.path !== value.mediaPath ||
+            media.mime !== value.mime
+          )
+            fail('ASSET_OUTPUT_INVALID')
+        }
         const body = JSON.stringify(value)
         if (Buffer.byteLength(body, 'utf8') > 1024 * 1024) fail('ASSET_VALUE_TOO_LARGE')
         const last = this.db
@@ -236,7 +277,12 @@ export class FlowAssetStore {
       .get(projectId, versionId) as AssetRow | undefined
     if (!row) fail('ASSET_VERSION_MISSING')
     if (hash(row.value_json) !== row.digest) fail('ASSET_INTEGRITY_FAILED')
-    return decode(row)
+    const version = decode(row)
+    if (version.value.kind === 'image') {
+      if (!/^[a-f0-9]{64}$/.test(version.value.contentSha256)) fail('ASSET_INTEGRITY_FAILED')
+      fixedFlowImage(this.db, projectId, version.value)
+    }
+    return version
   }
 
   list(projectId: string, nodeId: string, portId: string): FlowAssetSummary[] {

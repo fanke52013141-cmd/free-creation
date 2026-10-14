@@ -24,7 +24,24 @@ export function computeInputFingerprint(input: InputFingerprintInput): string {
   } catch {
     /* Preserve incomplete configuration. */
   }
-  const serialized = stableInputJson({ ...input, config })
+  const serialized = stableInputJson({
+    ...input,
+    config,
+    sources: input.sources.map((source) => {
+      const value = source.value
+      if (!value || typeof value !== 'object' || !('mediaId' in value)) return source
+      const media = value as { kind: string; mediaId: string; mime: string; contentSha256?: string }
+      return {
+        ...source,
+        value: {
+          kind: media.kind,
+          mediaId: media.mediaId,
+          mime: media.mime,
+          ...(media.contentSha256 ? { contentSha256: media.contentSha256 } : {})
+        }
+      }
+    })
+  })
   let first = 0x811c9dc5
   let second = 0x9e3779b9
   for (let i = 0; i < serialized.length; i += 1) {

@@ -2,6 +2,11 @@ import type Database from 'better-sqlite3'
 import { randomUUID, createHash } from 'node:crypto'
 import type { ProjectFile, PortDecl } from '../../shared/types'
 import type { NodeShape } from '../../shared/engine/executor-types'
+import {
+  flowTargetContract,
+  videoFlowInputsValid,
+  VIDEO_FLOW_PORTS
+} from '../../shared/agent-flow/video-adapter'
 import { readStoredNodeRunStatus } from '../../shared/engine/run-status'
 import { computeInputFingerprint } from '../../shared/engine/input-fingerprint'
 import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
@@ -11,10 +16,7 @@ import {
   AgentNodeConfigSchema,
   ReviewNodeConfigSchema
 } from '../../shared/agent-flow/node-contracts'
-import {
-  PROCESSOR_PORTS,
-  PROCESSOR_CONTRACT_VERSION
-} from '../../shared/agent-flow/processor-contract'
+import { PROCESSOR_PORTS } from '../../shared/agent-flow/processor-contract'
 import {
   NodeExecuteCommandSchema,
   CommandLookupSchema,
@@ -242,26 +244,38 @@ export class FlowCommandLedger {
       fail('FLOW_CONTROL_OCCUPIED', 'scope')
     const target = savedShape(project, command.targetNodeId)
     const node = project.nodes.find((item) => item.id === command.targetNodeId)
-    if (target.props.nodeType !== 'processor' || node?.type !== 'processor')
+    const adapter = node && flowTargetContract(node)
+    if (!node || !adapter || target.props.nodeType !== node.type)
       fail('FLOW_TYPE_UNSUPPORTED', 'contract')
     if (
-      command.contractVersion !== PROCESSOR_CONTRACT_VERSION ||
-      node.contractVersion !== PROCESSOR_CONTRACT_VERSION ||
-      portIdentity(node.ports) !== portIdentity([...PROCESSOR_PORTS.in, ...PROCESSOR_PORTS.out]) ||
+      node.type === 'video' &&
+      !['text', 'first-frame'].includes(JSON.parse(target.props.config || '{}').mode)
+    )
+      fail('FLOW_TYPE_UNSUPPORTED', 'video-mode')
+    if (
+      command.contractVersion !== node.contractVersion ||
+      portIdentity(node.ports) !==
+        portIdentity(
+          node.type === 'video' ? VIDEO_FLOW_PORTS : [...PROCESSOR_PORTS.in, ...PROCESSOR_PORTS.out]
+        ) ||
       target.meta?.pinnedOutput !== undefined
     )
       fail('FLOW_CONTRACT_MISMATCH', 'contract')
     this.assertReviewReady(project, command.targetNodeId, command.inputs)
     const incoming = project.edges.filter((edge) => edge.to.nodeId === command.targetNodeId)
     if (
-      incoming.length > 1 ||
+      new Set(incoming.map((edge) => edge.to.portId)).size !== incoming.length ||
+      incoming.some((edge) => !adapter.inputs.includes(edge.to.portId)) ||
       incoming.some(
         (edge) => !command.inputs.some((input) => input.targetPortId === edge.to.portId)
       )
     )
       fail('FLOW_INPUT_MANIFEST_INCOMPLETE', 'input')
     for (const input of command.inputs) {
-      const port = PROCESSOR_PORTS.in.find((item) => item.id === input.targetPortId)
+      const port = (node.type === 'video' ? VIDEO_FLOW_PORTS : PROCESSOR_PORTS.in).find(
+        (item) =>
+          item.id === input.targetPortId && item.dir === 'in' && adapter.inputs.includes(item.id)
+      )
       if (!port || (port.cardinality === 'one' && input.assets.length > 1))
         fail('FLOW_INPUT_CONTRACT_INVALID', 'input')
     }
@@ -270,6 +284,19 @@ export class FlowCommandLedger {
     command: NodeExecuteCommand,
     project: ProjectFile
   ): FlowCommandGrant['inputs'] {
+    if (
+      savedShape(project, command.targetNodeId).props.nodeType === 'video' &&
+      !videoFlowInputsValid(
+        JSON.parse(savedShape(project, command.targetNodeId).props.config || '{}').mode,
+        command.inputs.map((item) => ({
+          targetPortId: item.targetPortId,
+          kinds: this.assets
+            .resolveInputs(command.projectId, item.assets)
+            .map((version) => version.value.kind)
+        }))
+      )
+    )
+      fail('FLOW_INPUT_CONTRACT_INVALID', 'video-input')
     return command.inputs.map((input) => {
       const versions = this.assets.resolveInputs(command.projectId, input.assets)
       const edge = project.edges.find(
@@ -386,6 +413,38 @@ export class FlowCommandLedger {
     })()
   }
   /** Called after renderer resource admission, immediately before any executor invocation. */
+  resumeVideo(raw: NodeExecuteCommand): FlowCommandGrant | null {
+    const command = NodeExecuteCommandSchema.parse(raw)
+    return this.db.transaction(() => {
+      const row = this.row(command)
+      if (row.signature !== nodeCommandIntentSignature(command))
+        fail('FLOW_COMMAND_CONFLICT', 'dedupe')
+      if (!['pending', 'unknown'].includes(row.state)) return null
+      const project = this.file(command.projectId)
+      if (savedShape(project, command.targetNodeId).props.nodeType !== 'video') return null
+      this.authorize(command, project)
+      const task = this.db
+        .prepare(
+          "SELECT status FROM tasks WHERE project_id=? AND node_id=? AND kind='video' AND json_extract(input,'$.flowCommandId')=?"
+        )
+        .get(command.projectId, command.targetNodeId, command.commandId) as
+        { status: string } | undefined
+      // No bound supplier task means a lost pre-submit fact. Never manufacture a retry.
+      if (!task || ['submitted', 'running'].includes(task.status)) return null
+      this.db
+        .prepare(
+          "UPDATE flow_commands SET state='pending',admitted=0,owner_session=? WHERE project_id=? AND command_id=?"
+        )
+        .run(this.sessionId, command.projectId, command.commandId)
+      this.update(row, { ...JSON.parse(row.receipt_json), state: 'pending', code: undefined })
+      return {
+        command,
+        leaseId: row.lease_id,
+        runId: row.run_id,
+        inputs: this.resolveInputs(command, project)
+      }
+    })()
+  }
   check(raw: CommandLease): void {
     const input = CommandLeaseSchema.parse(raw),
       row = this.row(input)
@@ -443,6 +502,29 @@ export class FlowCommandLedger {
           fail('FLOW_REVISION_CONFLICT', 'saved-revision')
         phase = 'saved-run'
         const shape = savedShape(project, command.targetNodeId)
+        if (shape.props.nodeType === 'video') {
+          const video = this.db
+            .prepare(
+              "SELECT status FROM tasks WHERE project_id=? AND node_id=? AND kind='video' AND json_extract(input,'$.flowCommandId')=?"
+            )
+            .get(command.projectId, command.targetNodeId, command.commandId) as
+            { status: string } | undefined
+          if (video && !['success', 'failed', 'cancelled'].includes(video.status))
+            return this.update(row, {
+              ...previous,
+              state: 'unknown',
+              code: 'FLOW_VIDEO_OUTCOME_UNKNOWN'
+            })
+          if (
+            video?.status === 'success' &&
+            readStoredNodeRunStatus(shape.meta?.nodeRun) !== 'success'
+          )
+            return this.update(row, {
+              ...previous,
+              state: 'unknown',
+              code: 'FLOW_VIDEO_RESULT_NOT_PROJECTED'
+            })
+        }
         const record = shape.meta?.nodeRun as
           | {
               runId?: string
@@ -513,14 +595,15 @@ export class FlowCommandLedger {
           code: status === 'success' ? undefined : `FLOW_EXECUTION_${status.toUpperCase()}`
         }
         if (status === 'success') {
-          if (!record.outputPorts?.includes('out-value'))
+          const outputPort = shape.props.nodeType === 'video' ? 'out-video' : 'out-value'
+          if (!record.outputPorts?.includes(outputPort))
             fail('FLOW_SAVED_OUTPUT_MISMATCH', 'saved-output')
           phase = 'output-version'
           const version = this.assets.submit(
             {
               projectId: input.projectId,
               nodeId: command.targetNodeId,
-              portId: 'out-value',
+              portId: outputPort,
               submissionId: `command:${createHash('sha256')
                 .update(JSON.stringify([input.projectId, input.commandId]))
                 .digest('hex')}`,

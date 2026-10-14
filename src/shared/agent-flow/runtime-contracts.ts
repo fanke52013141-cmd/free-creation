@@ -72,7 +72,7 @@ export const AgentTaskSnapshotSchema = z
         z
           .object({
             nodeId: id,
-            contractVersion: z.literal(1),
+            contractVersion: z.union([z.literal(1), z.literal(7)]),
             inputs: z.array(FixedNodeInputSchema).max(128)
           })
           .strict()

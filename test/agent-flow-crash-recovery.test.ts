@@ -26,7 +26,7 @@ beforeAll(async () => {
     bundle: true,
     platform: 'node',
     format: 'cjs',
-    external: ['better-sqlite3'],
+    external: ['better-sqlite3', 'electron'],
     logLevel: 'silent'
   })
 })

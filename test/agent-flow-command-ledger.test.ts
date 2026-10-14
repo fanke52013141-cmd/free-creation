@@ -1,10 +1,14 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import Database from 'better-sqlite3'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, unlinkSync } from 'node:fs'
+import { join, resolve, basename } from 'node:path'
+import { tmpdir } from 'node:os'
 import type { ProjectFile, CanvasNode } from '../src/shared/types'
 import { FlowCommandLedger } from '../src/main/agent-flow/command-ledger'
 import { FlowAssetStore } from '../src/main/agent-flow/asset-store'
 import { projectSemanticRevision } from '../src/main/agent-flow/command-intent'
 import { PROCESSOR_PORTS } from '../src/shared/agent-flow/processor-contract'
+import { VIDEO_FLOW_PORTS, agentOutputValue } from '../src/shared/agent-flow/video-adapter'
 import { migrateDatabase } from '../src/main/store/db-migrations'
 import { computeInputFingerprint } from '../src/shared/engine/input-fingerprint'
 import type { NodeExecuteCommand, FlowCommandGrant } from '../src/shared/agent-flow/commands'
@@ -19,8 +23,17 @@ import {
 } from '../src/shared/agent-flow/runtime-contracts'
 
 const dbs: Database.Database[] = []
+const frameDirectories: string[] = []
 afterEach(() => {
   for (const db of dbs.splice(0)) db.close()
+  for (const root of frameDirectories.splice(0)) {
+    if (
+      resolve(root, '..') !== resolve(tmpdir()) ||
+      !basename(root).startsWith('canvas-flow-frame-')
+    )
+      throw new Error('FRAME_CLEANUP_REJECTED')
+    rmSync(root, { recursive: true, force: true })
+  }
 })
 function fixture() {
   const db = new Database(':memory:')
@@ -177,6 +190,240 @@ function fixture() {
   }
 }
 const lookup = { projectId: 'project-a', commandId: 'command-a' }
+
+function videoFixture() {
+  const f = fixture()
+  f.target.props.nodeType = 'video'
+  f.target.props.config = '{"mode":"text"}'
+  const node = f.file.nodes.find((node) => node.id === f.target.id)!
+  node.type = 'video'
+  node.contractVersion = 7
+  node.ports = VIDEO_FLOW_PORTS
+  f.file.edges[0].to.portId = 'in-text'
+  const command = (): NodeExecuteCommand => ({
+    ...f.command(),
+    contractVersion: 7,
+    inputs: [{ targetPortId: 'in-text', assets: [f.version.ref] }]
+  })
+  const task = (status: string) =>
+    f.db
+      .prepare(
+        "INSERT INTO tasks(id,provider_id,model_id,node_id,project_id,kind,status,input,output,created_at,updated_at) VALUES ('video-task','provider','model',?,'project-a','video',?,?,?,0,0)"
+      )
+      .run(
+        f.target.id,
+        status,
+        JSON.stringify({ flowCommandId: 'command-a' }),
+        JSON.stringify({ mediaId: 'video-media', videoMaterialization: { phase: 'committed' } })
+      )
+  const saved = (grant: FlowCommandGrant, status = 'success') => {
+    f.savedRun(grant, status)
+    const record = f.target.meta.nodeRun as Record<string, unknown>
+    record.inputs = {
+      'in-text': [
+        {
+          nodeId: f.source.id,
+          portId: 'out-text',
+          assetId: f.version.ref.assetId,
+          versionId: f.version.ref.versionId
+        }
+      ]
+    }
+    record.inputFingerprint = computeInputFingerprint({
+      contractVersion: 7,
+      config: f.target.props.config,
+      text: f.target.props.text,
+      sources: [
+        { portId: 'in-text', nodeId: f.source.id, sourcePortId: 'out-text', value: f.version.value }
+      ]
+    })
+    record.outputPorts = status === 'success' ? ['out-video'] : []
+    f.target.meta.nodeResult = JSON.stringify({
+      kind: 'media-source',
+      version: 1,
+      results: [
+        {
+          mediaId: 'video-media',
+          mediaPath: 'projects/project-a/media/video.mp4',
+          mime: 'video/mp4',
+          createdAt: 0
+        }
+      ]
+    })
+  }
+  return { ...f, command, task, saved }
+}
+describe('fixed first-frame Agent adapter', () => {
+  function withFrame(run: (f: ReturnType<typeof videoFixture>, path: string) => void) {
+    const root = mkdtempSync(join(tmpdir(), 'canvas-flow-frame-'))
+    frameDirectories.push(root)
+    const previous = process.env.CANVAS_DATA_DIR
+    process.env.CANVAS_DATA_DIR = root
+    try {
+      const f = videoFixture()
+      const path = join(root, 'projects/project-a/media/frame.png')
+      mkdirSync(join(root, 'projects/project-a/media'), { recursive: true })
+      writeFileSync(path, 'frame-bytes')
+      f.db
+        .prepare(
+          "INSERT INTO media(id,kind,mime,path,size_bytes,created_at) VALUES ('frame','image','image/png','projects/project-a/media/frame.png',11,0)"
+        )
+        .run()
+      f.source.props.nodeType = 'image'
+      f.source.props.mediaId = 'frame'
+      f.source.props.mediaPath = 'projects/project-a/media/frame.png'
+      f.source.props.mediaMime = 'image/png'
+      f.file.nodes[0].type = 'image'
+      f.file.edges[0].from.portId = 'out-image'
+      f.file.edges[0].to.portId = 'in-images'
+      f.target.props.config = '{"mode":"first-frame"}'
+      run(f, path)
+    } finally {
+      if (previous === undefined) delete process.env.CANVAS_DATA_DIR
+      else process.env.CANVAS_DATA_DIR = previous
+    }
+  }
+  function imageCommand(f: ReturnType<typeof videoFixture>) {
+    const version = f.assets.submit({
+      projectId: 'project-a',
+      nodeId: f.source.id,
+      portId: 'out-image',
+      submissionId: 'frame-version',
+      expectedGraphVersion: 1,
+      traceId: 'trace',
+      spanId: 'span'
+    })
+    return { ...f.command(), inputs: [{ targetPortId: 'in-images', assets: [version.ref] }] }
+  }
+  it('freezes image bytes and restores the same original command/task', () =>
+    withFrame((f) => {
+      const command = imageCommand(f)
+      const grant = f.prepare(command)
+      expect(grant.inputs[0].versions[0].value).toMatchObject({
+        kind: 'image',
+        mediaId: 'frame',
+        contentSha256: expect.stringMatching(/^[a-f0-9]{64}$/)
+      })
+      f.task('unknown')
+      f.ledger.unknown({ ...lookup, leaseId: grant.leaseId })
+      expect(f.ledger.resumeVideo(command)).toMatchObject({
+        runId: grant.runId,
+        leaseId: grant.leaseId,
+        command
+      })
+    }))
+  it('rejects same-size file replacement and missing files when resuming', () =>
+    withFrame((f, path) => {
+      const command = imageCommand(f),
+        grant = f.prepare(command)
+      f.task('unknown')
+      f.ledger.unknown({ ...lookup, leaseId: grant.leaseId })
+      writeFileSync(path, 'other-bytes')
+      expect(() => f.ledger.resumeVideo(command)).toThrow('ASSET_IMAGE_CHANGED')
+      unlinkSync(path)
+      expect(() => f.assets.resolveInputs('project-a', command.inputs[0].assets)).toThrow(
+        'ASSET_IMAGE_CHANGED'
+      )
+    }))
+  it('rejects missing first frame, wrong kind, duplicate versions, and extra image edges', () =>
+    withFrame((f) => {
+      expect(() => f.prepare({ ...f.command(), inputs: [] })).toThrow(
+        'FLOW_INPUT_MANIFEST_INCOMPLETE'
+      )
+      const command = imageCommand(f)
+      expect(() =>
+        f.prepare({ ...command, inputs: [{ targetPortId: 'in-images', assets: [f.version.ref] }] })
+      ).toThrow('FLOW_INPUT_CONTRACT_INVALID')
+      expect(() =>
+        f.prepare({
+          ...command,
+          inputs: [
+            {
+              ...command.inputs[0],
+              assets: [...command.inputs[0].assets, ...command.inputs[0].assets]
+            }
+          ]
+        })
+      ).toThrow('FLOW_INPUT_CONTRACT_INVALID')
+      f.file.edges.push({ ...f.file.edges[0], id: 'duplicate-frame' })
+      expect(() =>
+        f.prepare({ ...command, expectedSemanticRevision: projectSemanticRevision(f.file) })
+      ).toThrow('FLOW_INPUT_MANIFEST_INCOMPLETE')
+    }))
+  it('rejects foreign-project media and media-index drift before granting', () =>
+    withFrame((f) => {
+      f.source.props.mediaPath = 'projects/another/media/frame.png'
+      f.db
+        .prepare("UPDATE media SET path='projects/another/media/frame.png' WHERE id='frame'")
+        .run()
+      expect(() => imageCommand(f)).toThrow('ASSET_IMAGE_CHANGED')
+      f.source.props.mediaPath = 'projects/project-a/media/frame.png'
+      expect(() => imageCommand(f)).toThrow('ASSET_IMAGE_CHANGED')
+    }))
+})
+
+describe('text-to-video Agent command adapter', () => {
+  it('commits a trusted fixed video version once, retaining native media type and JSON agent reference', () => {
+    const f = videoFixture(),
+      grant = f.prepare(f.command())
+    f.task('success')
+    f.db
+      .prepare(
+        "INSERT INTO media(id,kind,mime,path,size_bytes,created_at) VALUES ('video-media','video','video/mp4','projects/project-a/media/video.mp4',1,0)"
+      )
+      .run()
+    f.saved(grant)
+    const receipt = f.ledger.commit(lookup)
+    expect(receipt.state).toBe('committed')
+    const version = f.assets.resolveInputs('project-a', receipt.outputRefs)[0]
+    expect(version.value).toMatchObject({ kind: 'video', mediaId: 'video-media' })
+    expect(agentOutputValue(version.value)).toMatchObject({ kind: 'json', data: { kind: 'video' } })
+    expect(f.ledger.commit(lookup)).toEqual(receipt)
+    expect(f.assets.list('project-a', f.target.id, 'out-video')).toHaveLength(1)
+  })
+  it.each(['failed', 'skipped'])('saved %s cannot release an unknown supplier task', (status) => {
+    const f = videoFixture(),
+      grant = f.prepare(f.command())
+    f.task('unknown')
+    f.saved(grant, status)
+    expect(f.ledger.commit(lookup)).toMatchObject({
+      state: 'unknown',
+      code: 'FLOW_VIDEO_OUTCOME_UNKNOWN',
+      outputRefs: []
+    })
+    expect(() => f.prepare({ ...f.command(), commandId: 'another' })).toThrow('FLOW_NODE_OCCUPIED')
+  })
+  it('rejects reference mode and undeclared media inputs before granting a command', () => {
+    const f = videoFixture()
+    f.target.props.config = '{"mode":"reference"}'
+    expect(() => f.prepare(f.command())).toThrow('FLOW_TYPE_UNSUPPORTED')
+    f.target.props.config = '{"mode":"text"}'
+    f.file.edges[0].to.portId = 'in-images'
+    expect(() => f.prepare(f.command())).toThrow('FLOW_INPUT_MANIFEST_INCOMPLETE')
+  })
+  it('rejects a saved media result without matching authoritative task and media rows', () => {
+    const f = videoFixture(),
+      grant = f.prepare(f.command())
+    f.saved(grant)
+    expect(() => f.ledger.commit(lookup)).toThrow('ASSET_OUTPUT_INVALID')
+  })
+  it('never recreates a grant with no bound task or a still-running bound task', () => {
+    const f = videoFixture(),
+      command = f.command(),
+      grant = f.prepare(command)
+    f.ledger.unknown({ ...lookup, leaseId: grant.leaseId })
+    expect(() => f.ledger.resumeVideo({ ...command, inputs: [] })).toThrow('FLOW_COMMAND_CONFLICT')
+    expect(f.ledger.resumeVideo(command)).toBeNull()
+    f.task('running')
+    expect(f.ledger.resumeVideo(command)).toBeNull()
+    f.db.prepare("UPDATE tasks SET status='unknown' WHERE id='video-task'").run()
+    expect(f.ledger.resumeVideo(command)).toMatchObject({
+      runId: grant.runId,
+      leaseId: grant.leaseId,
+      command
+    })
+  })
+})
 
 describe('production durable command ledger', () => {
   it('persists bounded discussion without execution, rejects stale events, and prepares an immutable task revision without running it', async () => {

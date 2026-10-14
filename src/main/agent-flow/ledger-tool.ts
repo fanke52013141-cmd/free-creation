@@ -24,6 +24,17 @@ export function createLedgerToolPort(
         const replay = ledger.prepare(command)
         if (replay.state === 'ready')
           throw new FlowCommandError('FLOW_RECEIPT_CONFLICT', 'receipt-read')
+        if (['pending', 'unknown'].includes(replay.state) && !signal.aborted) {
+          const recovery = ledger.resumeVideo(command)
+          if (recovery) {
+            try {
+              await deliver(recovery, signal)
+              return ledger.commit(lookup)
+            } catch {
+              return ledger.unknown({ ...lookup, leaseId: recovery.leaseId })
+            }
+          }
+        }
         return replay.receipt
       } catch (error) {
         if (!(error instanceof FlowCommandError) || error.code !== 'FLOW_COMMAND_MISSING')

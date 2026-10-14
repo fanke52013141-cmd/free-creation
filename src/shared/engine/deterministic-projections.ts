@@ -1,7 +1,8 @@
 import type { NodeShape } from './executor-types'
-import { parseStoredNodeValue, type RawNodeOutputs } from './values'
+import { parseStoredNodeValue, parseMediaResultCollection, type RawNodeOutputs } from './values'
 import { projectAgentOutputs } from '../agent-flow/agent-outputs'
 import { projectReviewOutputs } from '../agent-flow/review'
+import { readStoredNodeRunStatus } from './run-status'
 
 // These exact functions are registered by the desktop NodeTypeSpecs.
 export const projectTextOutputs = (shape: NodeShape): RawNodeOutputs =>
@@ -23,6 +24,8 @@ export const projectProcessorOutputs = (shape: NodeShape): RawNodeOutputs => {
 }
 
 export const DETERMINISTIC_PROJECTIONS = {
+  image: projectImageOutputs,
+  video: projectVideoOutputs,
   'ai-review': projectReviewOutputs,
   agent: projectAgentOutputs,
   text: projectTextOutputs,
@@ -51,4 +54,47 @@ export function readPinnedOutputs(stored: unknown): RawNodeOutputs | null {
   } catch {
     return null
   }
+}
+export function projectVideoOutputs(shape: NodeShape): RawNodeOutputs {
+  const item = parseMediaResultCollection(shape.meta?.nodeResult ?? '')?.results.at(-1)
+  if (
+    !item &&
+    !readStoredNodeRunStatus(shape.meta?.nodeRun) &&
+    shape.props.mediaId &&
+    shape.props.mediaPath
+  )
+    return {
+      'out-video': {
+        kind: 'video',
+        mediaId: shape.props.mediaId,
+        mediaPath: shape.props.mediaPath,
+        mime: shape.props.mediaMime || 'video/mp4',
+        ...(shape.props.title ? { name: shape.props.title } : {})
+      }
+    }
+  return item
+    ? {
+        'out-video': {
+          kind: 'video',
+          mediaId: item.mediaId,
+          mediaPath: item.mediaPath,
+          mime: item.mime,
+          ...(shape.props.title ? { name: shape.props.title } : {})
+        }
+      }
+    : {}
+}
+
+export function projectImageOutputs(shape: NodeShape): RawNodeOutputs {
+  return shape.props.mediaPath
+    ? {
+        'out-image': {
+          kind: 'image',
+          mediaId: shape.props.mediaId,
+          mediaPath: shape.props.mediaPath,
+          mime: shape.props.mediaMime,
+          ...(shape.props.title ? { name: shape.props.title } : {})
+        }
+      }
+    : {}
 }
