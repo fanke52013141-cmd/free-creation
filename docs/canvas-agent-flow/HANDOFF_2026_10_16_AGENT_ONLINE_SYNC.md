@@ -18,7 +18,10 @@
 
 旧完整门禁 `qa/agent-remaining-verify-final.log` 退出 0：175 文件、2001 通过、1 既有跳过，模型模块另 2；后续源码快照由 Electron-as-Node 同套件复验为 2003 通过、1 跳过。标准 Node 24.12 下，`npm run verify` 的 20 个 SQLite 测试文件受本机 better-sqlite3 ABI 140/137 不匹配影响；Electron-as-Node 全量套件、lint、node/web/model 类型检查、model-runtime 2 项、logging gate 和 build 均通过。优化 UI 首项行为检查报告为 passed，但组合 UI runner 执行中会覆盖 QA 固定路径，故未将它记作完整通过。首次同步验证因 QA loader 相对路径在 pnpm 子目录无法解析退出，改为绝对 QA 路径后重跑；未修改生产开关、依赖或测试断言。
 
-远端 `origin/main` 已 fetch 并确认仍指向基线 `fa00b94117b2e2c87b28927c23ec151fad799685`；本地没有分叉提交。提交与推送结果会在最终交付中记录；直接 Node 的 ABI 问题、未完整运行的 UI 组合门禁及 R09/R11 外部验收边界会随交付一并说明。
+2026-10-16 实际线上源码提交为 `70d59395e5b14175f633cc58ea47261c9d670579`（`feat(agent-flow): complete multimodal orchestration`），包含 71 个文件、5318 行新增/466 行删除。同工作区的并行同步操作完成该提交与推送后，本聊天再次执行 `git fetch origin` 和 `git ls-remote origin refs/heads/main`，均确认远端 main 与本地 HEAD 一致。此次备注补充单独提交，不重建或重复提交源码批次。
+
+本聊天当前快照复验：`qa/agent-online-sync-verify-final.log` 的 lint、双端/model 类型、175 文件/2003 通过/1 既有跳过、model-runtime 2 项与日志门禁通过；进程在浏览器阶段以 -1 中断，没有业务断言失败报告，不能写为本轮完整 verify 通过。之后分段构建通过，固定资产、命令回执、基础 Agent 与协作桌面通过；分段浏览器已通过尺寸、颜色、布局、引用等前置检查。发现并行操作已完成线上同步后，本聊天停止自己启动的补充 QA 进程，不继续改动共享验收产物。历史完整门禁和当前分项证据分别保留；本机 native ABI、组合 UI 未完整跑完及 R09/R11 边界如实保留。
+
 
 ## 已知边界
 
