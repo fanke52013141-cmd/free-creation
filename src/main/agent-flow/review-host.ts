@@ -1,4 +1,10 @@
-import { sampleReviewVideo, assertVideoReviewEvidence, reviewVideoValue } from './video-review'
+import {
+  sampleReviewAudioVideo,
+  sampleReviewVideo,
+  prepareAudioReview,
+  prepareImageReview,
+  reviewVideoValue
+} from './video-review'
 import type Database from 'better-sqlite3'
 import type { ProjectFile } from '../../shared/types'
 import {
@@ -13,7 +19,12 @@ import {
   type ReviewRequest
 } from '../../shared/agent-flow/review'
 import { AgentRuntimeError } from '../../shared/agent-flow/runtime-contracts'
-import { FlowReviewStore, reviewBinding, reviewDigest } from './review-store'
+import {
+  FlowReviewStore,
+  assertReviewEvidenceForMode,
+  reviewBinding,
+  reviewDigest
+} from './review-store'
 import { FlowAssetStore } from './asset-store'
 import {
   DETERMINISTIC_PROJECTIONS,
@@ -64,18 +75,19 @@ export class FlowReviewHost {
     if (!file || !this.isActive(input.projectId))
       throw new AgentRuntimeError('FLOW_PROJECT_INACTIVE', 'review')
     const binding = reviewBinding(file, input.nodeId)
+    const reviewMode = binding.config.reviewMode ?? 'text-json'
     const replay = this.store.forRequest(input.projectId, input.requestId)
     if (replay) {
       if (replay.nodeId !== input.nodeId || replay.signature !== binding.signature)
         throw new AgentRuntimeError('FLOW_REVISION_CONFLICT', 'review')
-      if (binding.config.reviewMode === 'sampled-video')
-        assertVideoReviewEvidence(this.db, input.projectId, replay.decision)
+      if (!assertReviewEvidenceForMode(this.db, input.projectId, reviewMode, replay.decision))
+        throw new AgentRuntimeError('FLOW_REVIEW_NOT_READY', 'review')
       return replay.decision
     }
     const previous = this.store.latest(input.projectId, input.nodeId)
     if (previous?.signature === binding.signature) {
-      if (binding.config.reviewMode === 'sampled-video')
-        assertVideoReviewEvidence(this.db, input.projectId, previous.decision)
+      if (!assertReviewEvidenceForMode(this.db, input.projectId, reviewMode, previous.decision))
+        throw new AgentRuntimeError('FLOW_REVIEW_NOT_READY', 'review')
       return previous.decision
     }
     const rejected = this.store.rejectedRounds(input.projectId, input.nodeId, binding.cycleId)
@@ -118,7 +130,7 @@ export class FlowReviewHost {
         }
         const sourceShape = snapshot[source.nodeId]
         if (
-          binding.config.reviewMode === 'sampled-video' &&
+          ['sampled-video', 'audio-video'].includes(reviewMode) &&
           sourceShape.props.nodeType === 'video'
         ) {
           const commandId = (sourceShape.meta?.nodeRun as { commandId?: string } | undefined)
@@ -172,7 +184,7 @@ export class FlowReviewHost {
       const subjects = this.assets
         .resolveInputs(input.projectId, refs)
         .map((v) =>
-          binding.config.reviewMode === 'sampled-video'
+          ['sampled-video', 'audio-video'].includes(reviewMode)
             ? reviewVideoValue(this.db, input.projectId, v.value, v.ref.sourceNodeId)
             : v.value
         )
@@ -181,8 +193,20 @@ export class FlowReviewHost {
       )
         throw new AgentRuntimeError('AGENT_CONTEXT_TOO_LARGE', 'review')
       const videoSamples =
-        binding.config.reviewMode === 'sampled-video'
+        reviewMode === 'sampled-video'
           ? await sampleReviewVideo(this.db, input.projectId, subjects[0], controller.signal)
+          : undefined
+      const imageInput =
+        reviewMode === 'image'
+          ? await prepareImageReview(this.db, input.projectId, subjects[0], controller.signal)
+          : undefined
+      const audioInput =
+        reviewMode === 'audio'
+          ? await prepareAudioReview(this.db, input.projectId, subjects[0], controller.signal)
+          : undefined
+      const audioVideoInput =
+        reviewMode === 'audio-video'
+          ? await sampleReviewAudioVideo(this.db, input.projectId, subjects[0], controller.signal)
           : undefined
       const config = AgentNodeConfigSchema.parse({
         schemaVersion: 1,
@@ -198,7 +222,8 @@ export class FlowReviewHost {
       const model = await abortable(
         this.model(
           {
-            requiresImageInput: !!videoSamples,
+            requiresImageInput: !!(videoSamples || imageInput || audioVideoInput),
+            requiresAudioInput: !!(audioInput || audioVideoInput),
             projectId: input.projectId,
             agentNodeId: input.nodeId,
             taskId: input.requestId,
@@ -217,7 +242,10 @@ export class FlowReviewHost {
             {
               criteria: binding.shape.props.text,
               subjects,
-              ...(videoSamples ? { videoSamples } : {})
+              ...(videoSamples ? { videoSamples } : {}),
+              ...(imageInput ? { imageInput } : {}),
+              ...(audioInput ? { audioInput } : {}),
+              ...(audioVideoInput ? { audioVideoInput } : {})
             },
             controller.signal
           ),
@@ -248,15 +276,28 @@ export class FlowReviewHost {
         subjects: refs,
         passed: verdict.passed,
         feedback: verdict.feedback,
-        evidenceScope: videoSamples ? 'sampled' : 'complete-text-json',
+        evidenceScope:
+          videoSamples
+            ? 'sampled'
+            : imageInput
+              ? 'complete-image'
+              : audioInput
+                ? 'complete-audio'
+                : audioVideoInput
+                  ? 'audio-video-timeline'
+                  : 'complete-text-json',
         ...(videoSamples ? { videoEvidence: videoSamples.evidence } : {}),
+        ...(imageInput ? { imageEvidence: imageInput.evidence } : {}),
+        ...(audioInput ? { audioEvidence: audioInput.evidence } : {}),
+        ...(audioVideoInput ? { audioVideoEvidence: audioVideoInput.evidence } : {}),
         issues: verdict.issues.map((issue) => ({
           assetId: refs[issue.subjectIndex].assetId,
           versionId: refs[issue.subjectIndex].versionId,
           feedback: issue.feedback
         }))
       })
-      if (videoSamples) assertVideoReviewEvidence(this.db, input.projectId, decision)
+      if (!assertReviewEvidenceForMode(this.db, input.projectId, reviewMode, decision))
+        throw new AgentRuntimeError('FLOW_REVIEW_NOT_READY', 'review')
       this.store.save({
         projectId: input.projectId,
         nodeId: input.nodeId,

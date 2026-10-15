@@ -59,11 +59,12 @@ export function bindCoordinatorReviews(
     const config = ReviewNodeConfigSchema.parse(JSON.parse(saved(file, nodeId).props.config))
     const video = config.reviewMode === 'sampled-video'
     const owner = config.responsibleNodeId
+    // A terminal review may have no downstream child to gate. The coordinator still
+    // requires every bound review to pass before it accepts finish outputs.
     if (
       !owner ||
       !config.modelDefinitionId ||
       !config.subjectSources.length ||
-      !config.gatedNodeIds.length ||
       (!video && config.subjectSources.some((source) => source.nodeId !== owner)) ||
       responsible.has(owner) ||
       config.gatedNodeIds.some((id) => !controls.has(id) || id === owner || id === nodeId)

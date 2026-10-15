@@ -6,12 +6,20 @@ import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
 import { readFlowAssetSnapshot } from '@renderer/canvas/flow-asset-snapshot'
 import {
   VIDEO_FLOW_PORTS,
+  IMAGE_EDIT_FLOW_PORTS,
+  TTS_FLOW_PORTS,
+  imageEditFlowConfigValid,
+  imageEditFlowInputsValid,
+  ttsFlowConfigValid,
+  ttsFlowInputsValid,
   videoFlowInputsValid,
   videoFlowAssetValid
 } from '@shared/agent-flow/video-adapter'
 import {
+  projectImageEditOutputs,
   projectVideoOutputs,
-  projectVideoAssetOutputs
+  projectVideoAssetOutputs,
+  projectTtsOutputs
 } from '@shared/engine/deterministic-projections'
 import { computeInputFingerprint } from '@shared/engine/input-fingerprint'
 import { fingerprintNodeInputs } from '@renderer/engine/resultFreshness'
@@ -20,6 +28,85 @@ import type { PortDecl } from '@shared/types'
 
 beforeAll(registerAllNodeTypes)
 describe('video scheduling contract and fixed preview', () => {
+  it('admits one fixed image-edit source and bounded immutable text, and matches image-edit ports', () => {
+    const image = {
+      kind: 'image' as const,
+      mediaId: 'source-image',
+      mediaPath: 'projects/p/media/source.png',
+      mime: 'image/png',
+      contentSha256: 'a'.repeat(64)
+    }
+    const mutableImage = {
+      kind: 'image',
+      mediaId: 'mutable',
+      mediaPath: 'x',
+      mime: 'image/png'
+    } as unknown as typeof image
+    const config = { version: 1, instruction: 'Replace the background with a forest.' }
+    expect(imageEditFlowConfigValid(config)).toBe(true)
+    expect(imageEditFlowInputsValid([{ targetPortId: 'in-image', values: [image] }])).toBe(true)
+    expect(
+      imageEditFlowInputsValid([
+        { targetPortId: 'in-image', values: [image] },
+        { targetPortId: 'in-text', values: [{ kind: 'text', text: 'Keep the subject unchanged.' }] }
+      ])
+    ).toBe(true)
+    expect(
+      imageEditFlowInputsValid([
+        { targetPortId: 'in-text', values: [{ kind: 'text', text: 'No source' }] }
+      ])
+    ).toBe(false)
+    expect(
+      imageEditFlowInputsValid([
+        {
+          targetPortId: 'in-image',
+          values: [mutableImage]
+        }
+      ])
+    ).toBe(false)
+    expect(IMAGE_EDIT_FLOW_PORTS.map(({ id }) => id)).toEqual(['in-image', 'in-text', 'out-image'])
+    const editShape = {
+      props: { nodeType: 'image-edit', title: 'Edited' },
+      meta: {
+        nodeRun: JSON.stringify({ status: 'success' }),
+        nodeResult: JSON.stringify({
+          version: 1,
+          results: [
+            { mediaId: 'edited', mediaPath: 'projects/p/media/edited.png', mime: 'image/png' }
+          ]
+        })
+      }
+    } as unknown as NodeCardShape
+    expect(getNodeType('image-edit')!.projectOutputs(editShape)).toEqual(
+      projectImageEditOutputs(editShape)
+    )
+  })
+
+  it('admits voice cloning only from one fixed audio input and rejects mutable config media', () => {
+    const audio = {
+      kind: 'audio' as const,
+      mediaId: 'voice-sample',
+      mediaPath: 'projects/p/media/voice.wav',
+      mime: 'audio/wav',
+      contentSha256: 'b'.repeat(64)
+    }
+    const config = { backend: 'minimax', providerId: '', modelId: 'speech-2.8-turbo' }
+    expect(ttsFlowConfigValid(config)).toBe(true)
+    expect(ttsFlowInputsValid(config, [{ targetPortId: 'in-audio', values: [audio] }])).toBe(true)
+    expect(ttsFlowInputsValid(config, [])).toBe(false)
+    expect(ttsFlowInputsValid(config, [{ targetPortId: 'in-audio', values: [audio, audio] }])).toBe(
+      false
+    )
+    expect(ttsFlowConfigValid({ ...config, refMediaId: 'mutable-upload' })).toBe(false)
+    expect(TTS_FLOW_PORTS.map(({ id }) => id)).toEqual(['in-audio', 'out-json'])
+    expect(TTS_FLOW_PORTS[0].required).toBe(getNodeType('tts')!.ports.in[0].required)
+    const ttsShape = {
+      props: { nodeType: 'tts' },
+      meta: { nodeExtra: JSON.stringify({ 'out-json': { voice_id: 'voice-sample-1' } }) }
+    } as unknown as NodeCardShape
+    expect(getNodeType('tts')!.projectOutputs(ttsShape)).toEqual(projectTtsOutputs(ttsShape))
+  })
+
   it('matches ordinary video asset projection even with unrelated execution history', () => {
     const shape = {
       props: {

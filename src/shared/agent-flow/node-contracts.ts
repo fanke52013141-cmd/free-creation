@@ -1,5 +1,10 @@
 import { z } from 'zod'
 import { VideoReviewEvidenceSchema } from './video-review'
+import {
+  AudioReviewEvidenceSchema,
+  AudioVideoTimelineEvidenceSchema,
+  ImageReviewEvidenceSchema
+} from './media-review'
 
 // C1 protocol foundation for configuration-only NodeTypeSpecs; not a production scheduler.
 const id = z
@@ -36,7 +41,7 @@ export const AgentNodeConfigSchema = z
     tools: z.array(versionedBinding).max(32),
     allowedNodeIds: z.array(id).max(128),
     maxSteps: z.number().int().min(1).max(64),
-    maxParallelTasks: z.union([z.literal(1), z.literal(2)]).optional(),
+    maxParallelTasks: z.number().int().min(1).max(4).optional(),
     relations: z.array(AgentFlowRelationSchema).max(256)
   })
   .strict()
@@ -44,7 +49,7 @@ export const ReviewNodeConfigSchema = z
   .object({
     schemaVersion: z.literal(1),
     rulesVersion: id,
-    reviewMode: z.enum(['text-json', 'sampled-video']).optional(),
+    reviewMode: z.enum(['text-json', 'sampled-video', 'image', 'audio', 'audio-video']).optional(),
     modelDefinitionId: id.optional(),
     rejectPolicy: z.enum(['rework', 'stop']),
     maxReworks: z.number().int().min(0).max(10),
@@ -94,8 +99,18 @@ export const ReviewDecisionSchema = z
     subjects: z.array(AgentFlowAssetRefSchema).min(1).max(128),
     passed: z.boolean(),
     feedback: z.string().min(1).max(16384),
-    evidenceScope: z.enum(['complete-text-json', 'sampled', 'partial']),
+    evidenceScope: z.enum([
+      'complete-text-json',
+      'complete-image',
+      'complete-audio',
+      'sampled',
+      'audio-video-timeline',
+      'partial'
+    ]),
     videoEvidence: VideoReviewEvidenceSchema.optional(),
+    imageEvidence: ImageReviewEvidenceSchema.optional(),
+    audioEvidence: AudioReviewEvidenceSchema.optional(),
+    audioVideoEvidence: AudioVideoTimelineEvidenceSchema.optional(),
     issues: z
       .array(
         z.object({ assetId: id, versionId: id, feedback: z.string().min(1).max(4096) }).strict()
@@ -110,6 +125,14 @@ export const ReviewDecisionSchema = z
     if (
       (report.videoEvidence &&
         (report.evidenceScope !== 'sampled' || report.subjects.length !== 1)) ||
+      (report.imageEvidence &&
+        (report.evidenceScope !== 'complete-image' || report.subjects.length !== 1)) ||
+      (report.audioEvidence &&
+        (report.evidenceScope !== 'complete-audio' || report.subjects.length !== 1)) ||
+      (report.audioVideoEvidence &&
+        (report.evidenceScope !== 'audio-video-timeline' || report.subjects.length !== 1)) ||
+      [report.videoEvidence, report.imageEvidence, report.audioEvidence, report.audioVideoEvidence]
+        .filter(Boolean).length > 1 ||
       refs.size !== report.subjects.length ||
       report.issues.some((issue) => !refs.has(JSON.stringify([issue.assetId, issue.versionId])))
     ) {

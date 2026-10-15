@@ -1,4 +1,9 @@
-import { assertVideoReviewEvidence } from './video-review'
+import {
+  assertAudioReviewEvidence,
+  assertAudioVideoReviewEvidence,
+  assertImageReviewEvidence,
+  assertVideoReviewEvidence
+} from './video-review'
 import type Database from 'better-sqlite3'
 import { createHash } from 'node:crypto'
 import type { ProjectFile } from '../../shared/types'
@@ -43,8 +48,12 @@ export function reviewBinding(
     throw new AgentRuntimeError('FLOW_REVIEW_CONFIG_INVALID', 'review')
   if (new Set(config.subjectSources.map(canonicalFlowJson)).size !== config.subjectSources.length)
     throw new AgentRuntimeError('FLOW_REVIEW_CONFIG_INVALID', 'review')
-  const videoReview = config.reviewMode === 'sampled-video'
-  if (videoReview && config.subjectSources.length !== 1)
+  const mode = config.reviewMode ?? 'text-json'
+  const expectedPortType =
+    mode === 'image' ? 'image' : mode === 'audio' ? 'audio' : ['sampled-video', 'audio-video'].includes(mode) ? 'video' : null
+  const expectedInputPort =
+    mode === 'image' ? 'in-image' : mode === 'audio' ? 'in-audio' : expectedPortType === 'video' ? 'in-video' : null
+  if (expectedPortType && config.subjectSources.length !== 1)
     throw new AgentRuntimeError('FLOW_REVIEW_SUBJECT_INVALID', 'review')
   const sources = config.subjectSources.map((source) => {
     const node = file.nodes.find((n) => n.id === source.nodeId),
@@ -57,18 +66,18 @@ export function reviewBinding(
     if (
       !saved ||
       !port ||
-      !(videoReview ? port.type === 'video' : ['text', 'json', 'any'].includes(port.type)) ||
+      !(expectedPortType ? port.type === expectedPortType : ['text', 'json', 'any'].includes(port.type)) ||
       !connections.length ||
       connections.some(
         (e) =>
-          !(videoReview ? e.to.portId === 'in-video' : ['in-text', 'in-json'].includes(e.to.portId))
+          !(expectedInputPort ? e.to.portId === expectedInputPort : ['in-text', 'in-json'].includes(e.to.portId))
       )
     )
       throw new AgentRuntimeError('FLOW_REVIEW_SUBJECT_INVALID', 'review')
     // Include result/run identity: a different attempt with identical text still needs a new review.
     return {
       source,
-      ...(videoReview
+      ...(expectedPortType
         ? { media: [saved.props.mediaId, saved.props.mediaPath, saved.props.mediaMime] }
         : {}),
       type: node!.type,
@@ -127,12 +136,7 @@ export class FlowReviewStore {
         readStoredNodeRunStatus(current.shape.meta?.nodeRun) !== 'success'
       )
         return null
-      if (current.config.reviewMode === 'sampled-video')
-        assertVideoReviewEvidence(this.db, file.meta.id, record.decision)
-      else if (
-        record.decision.evidenceScope !== 'complete-text-json' ||
-        record.decision.videoEvidence
-      )
+      if (!assertReviewEvidenceForMode(this.db, file.meta.id, current.config.reviewMode, record.decision))
         return null
       return canonicalFlowJson(JSON.parse(current.shape.meta?.nodeResult ?? '{}')) ===
         canonicalFlowJson(record.decision)
@@ -141,5 +145,35 @@ export class FlowReviewStore {
     } catch {
       return null
     }
+  }
+}
+
+export function assertReviewEvidenceForMode(
+  db: Database.Database,
+  projectId: string,
+  mode: string | undefined,
+  decision: ReviewDecision
+): boolean {
+  switch (mode ?? 'text-json') {
+    case 'sampled-video':
+      assertVideoReviewEvidence(db, projectId, decision)
+      return true
+    case 'image':
+      assertImageReviewEvidence(db, projectId, decision)
+      return true
+    case 'audio':
+      assertAudioReviewEvidence(db, projectId, decision)
+      return true
+    case 'audio-video':
+      assertAudioVideoReviewEvidence(db, projectId, decision)
+      return true
+    default:
+      return (
+        decision.evidenceScope === 'complete-text-json' &&
+        !decision.videoEvidence &&
+        !decision.imageEvidence &&
+        !decision.audioEvidence &&
+        !decision.audioVideoEvidence
+      )
   }
 }

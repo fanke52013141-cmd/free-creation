@@ -1,6 +1,65 @@
 import type { RawNodeOutputs } from '../engine/values'
 import type { NodeShape } from '../engine/executor-types'
 import { parseStoredNodeValue } from '../engine/values'
+import { z } from 'zod'
+import { AgentFlowAssetRefSchema } from './node-contracts'
+import type { FlowAssetValue } from './assets'
+
+export const AgentOutputSetSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    kind: z.literal('flow.agent-output-set'),
+    outputs: z
+      .array(
+        z
+          .object({
+            ref: AgentFlowAssetRefSchema,
+            assetKind: z.enum(['text', 'markdown', 'json', 'image', 'video', 'audio'])
+          })
+          .strict()
+      )
+      .min(2)
+      .max(128)
+  })
+  .strict()
+
+export function agentReplyOutputProjection(
+  refs: Array<z.infer<typeof AgentFlowAssetRefSchema>>,
+  values: FlowAssetValue[]
+): Partial<Record<'out-text' | 'out-json', FlowAssetValue>> {
+  if (
+    !refs.length ||
+    refs.length !== values.length ||
+    refs.length > 128 ||
+    new Set(refs.map((ref) => JSON.stringify(ref))).size !== refs.length
+  )
+    return {}
+
+  const normalized = values.map((value) =>
+    ['image', 'video', 'audio'].includes(value.kind)
+      ? { kind: 'json' as const, data: value }
+      : value.kind === 'markdown'
+        ? { kind: 'text' as const, text: value.text }
+        : value
+  )
+  const ports = normalized.map((value) => (value.kind === 'json' ? 'out-json' : 'out-text'))
+  if (normalized.length > 2 || new Set(ports).size !== ports.length) {
+    return {
+      'out-json': {
+        kind: 'json',
+        data: AgentOutputSetSchema.parse({
+          schemaVersion: 1,
+          kind: 'flow.agent-output-set',
+          outputs: refs.map((ref, index) => ({ ref, assetKind: values[index].kind }))
+        })
+      }
+    }
+  }
+
+  return Object.fromEntries(normalized.map((value, index) => [ports[index], value])) as Partial<
+    Record<'out-text' | 'out-json', FlowAssetValue>
+  >
+}
 
 export function projectAgentOutputs(shape: NodeShape): RawNodeOutputs {
   try {

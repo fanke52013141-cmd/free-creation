@@ -5,7 +5,9 @@ import { beforeAll, afterEach, describe, expect, it } from 'vitest'
 import type { Editor } from 'tldraw'
 import { runWorkflow, runNodeManually } from '@renderer/engine/executor'
 import {
-  flushDiagnosticsEvents,
+  drainDiagnosticsEvents,
+  diagnosticsTransportDropCount,
+  emitDiagnosticsEvent,
   resetDiagnosticsReporterForTest
 } from '@renderer/engine/diagnosticsReporter'
 import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
@@ -104,7 +106,6 @@ function setupEditor(
   return { editor, events }
 }
 
-const FLUSH_WAIT_MS = 80
 const SOURCE_MID_BINDINGS = {
   'shape:arrow-source-mid': [
     { props: { terminal: 'start' }, toId: 'shape:source' },
@@ -130,8 +131,7 @@ describe('A01 · 3 节点顺序运行共享根 trace', () => {
     }
     await runNodeManually(editor, 'project-1', [], source.id, undefined, publication)
     await runNodeManually(editor, 'project-1', [], source.id, undefined, publication)
-    flushDiagnosticsEvents()
-    await new Promise((resolve) => setTimeout(resolve, FLUSH_WAIT_MS))
+    await drainDiagnosticsEvents()
     const starts = events.filter((event) => event.event === 'workflow.started')
     const ends = events.filter((event) =>
       ['workflow.completed', 'workflow.failed', 'workflow.cancelled'].includes(event.event)
@@ -161,8 +161,7 @@ describe('A01 · 3 节点顺序运行共享根 trace', () => {
     )
 
     await runWorkflow(editor, 'project-1', [])
-    flushDiagnosticsEvents()
-    await new Promise((resolve) => setTimeout(resolve, FLUSH_WAIT_MS))
+    await drainDiagnosticsEvents()
 
     const names = events.map((event) => event.event)
     expect(names).toContain('workflow.started')
@@ -216,8 +215,7 @@ describe('A01 · 3 节点顺序运行共享根 trace', () => {
     )
 
     await runWorkflow(editor, 'project-1', [])
-    flushDiagnosticsEvents()
-    await new Promise((resolve) => setTimeout(resolve, FLUSH_WAIT_MS))
+    await drainDiagnosticsEvents()
 
     const skipped = events.filter((event) => event.event === 'node.skipped')
     expect(skipped).toHaveLength(1)
@@ -252,12 +250,55 @@ describe('A01 · 3 节点顺序运行共享根 trace', () => {
     )
 
     await runWorkflow(editor, 'project-1', [])
-    flushDiagnosticsEvents()
-    await new Promise((resolve) => setTimeout(resolve, FLUSH_WAIT_MS))
+    await drainDiagnosticsEvents()
 
     const dumped = JSON.stringify(events)
     expect(dumped).not.toContain('sk-fakekey12345678901234')
     expect(dumped).not.toContain('假提示词SECRET内容')
     expect(dumped).not.toContain('fake-value-123')
+  })
+
+  it('waits for in-flight IPC acknowledgements before the diagnostics queue is drained', async () => {
+    let acknowledge!: (value: unknown) => void
+    let markSent!: () => void
+    const sent = new Promise<void>((resolve) => {
+      markSent = resolve
+    })
+    let delivered = 0
+    ;(window as unknown as { api: unknown }).api = {
+      reportDiagnosticsEvents: (input: { events: DiagnosticsEventInput[] }) => {
+        delivered += input.events.length
+        markSent()
+        return new Promise((resolve) => {
+          acknowledge = resolve
+        })
+      }
+    }
+
+    emitDiagnosticsEvent({ event: 'node.completed' })
+    let drained = false
+    const draining = drainDiagnosticsEvents().then(() => {
+      drained = true
+    })
+    await sent
+
+    expect(delivered).toBe(1)
+    expect(drained).toBe(false)
+    acknowledge({ ok: true })
+    await draining
+
+    expect(drained).toBe(true)
+    expect(diagnosticsTransportDropCount()).toBe(0)
+  })
+
+  it('completes drain after a failed transport and records dropped events', async () => {
+    ;(window as unknown as { api: unknown }).api = {
+      reportDiagnosticsEvents: () => Promise.reject(new Error('transport unavailable'))
+    }
+
+    emitDiagnosticsEvent({ event: 'node.failed' })
+    await drainDiagnosticsEvents()
+
+    expect(diagnosticsTransportDropCount()).toBe(1)
   })
 })

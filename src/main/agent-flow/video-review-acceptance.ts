@@ -47,13 +47,6 @@ export async function acceptVideoReview(input: {
     if(!document.querySelector('[data-node-id="shape:visual-review"]')?.textContent.includes('抽样画面'))throw new Error('VISUAL_REVIEW_BOUNDARY_HIDDEN');
     return {projectId,reviewId:approved.reviewId,videoSha256:approved.videoEvidence.contentSha256,frameCount:4,checks:['negative verdict survives process reopening','unchanged input reuses report without model replay','manual video replacement creates a distinct fixed version','sampled scope and timestamps remain visible','approved fixed video releases actual frame extraction']};
   })()`)
-  // The fixture destroys its hidden renderer immediately; drain its normal 50ms diagnostic batch first.
-  await window.webContents.executeJavaScript(`(async()=>{
-    const diagnostics=await import('/src/engine/diagnosticsReporter.ts');
-    while(diagnostics.pendingDiagnosticsEventCount())diagnostics.flushDiagnosticsEvents();
-    await new Promise(done=>setTimeout(done,100));
-    if(diagnostics.diagnosticsTransportDropCount())throw new Error('VISUAL_REVIEW_DIAGNOSTICS_DROPPED');
-  })()`)
   if (phase === 'reopen') {
     await window.webContents.executeJavaScript(
       'new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)))'

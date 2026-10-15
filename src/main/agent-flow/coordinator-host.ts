@@ -21,12 +21,12 @@ import {
   type ModelIdentity
 } from '../../shared/agent-flow/coordination'
 import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
-import { agentOutputValue } from '../../shared/agent-flow/video-adapter'
 import type { AgentModelPort } from './runtime'
 import type { FlowAgentDesktopHost } from './desktop-host'
 import { CoordinationStore, type CoordinationRun } from './coordination-store'
-import { admitAssignments } from './parallel-admission'
+import { admitAssignments, assignmentWaves } from './parallel-admission'
 import { FlowAssetStore } from './asset-store'
+import { agentReplyOutputProjection } from '../../shared/agent-flow/agent-outputs'
 import { emitGatewayEvent } from '../diagnostics/gateway-events'
 import { projectSemanticRevision } from './command-intent'
 import { FlowReviewStore, reviewBinding } from './review-store'
@@ -198,15 +198,17 @@ export class FlowCoordinatorHost {
     )
       throw new AgentRuntimeError('FLOW_COORDINATOR_SCOPE_INVALID', 'scope')
     for (const id of reviewIds) controls.add(id)
+    const reservedControls = new Set([...controls, ...childIds])
     for (const id of childIds) {
       const child = shape(file, id),
         cfg = AgentNodeConfigSchema.parse(JSON.parse(child.props.config))
       if (child.props.nodeType !== 'agent' || cfg.role !== 'specialist' || id === input.nodeId)
         throw new AgentRuntimeError('FLOW_COORDINATOR_SCOPE_INVALID', 'scope')
-      for (const target of [id, ...cfg.allowedNodeIds]) {
-        if (controls.has(target)) throw new AgentRuntimeError('FLOW_CONTROL_OCCUPIED', 'scope')
+      for (const target of cfg.allowedNodeIds) {
+        if (reservedControls.has(target)) throw new AgentRuntimeError('FLOW_CONTROL_OCCUPIED', 'scope')
         controls.add(target)
       }
+      controls.add(id)
       const task = this.specialists.inspect({ projectId: input.projectId, nodeId: id })
       if (task && !['completed', 'cancelled', 'failed'].includes(task.state))
         throw new AgentRuntimeError('AGENT_TASK_OCCUPIED', 'scope')
@@ -258,14 +260,11 @@ export class FlowCoordinatorHost {
     return run
   }
   private reply(run: CoordinationRun): FlowAgentReply {
-    const outputs: FlowAgentReply['outputs'] = {}
-    if (run.state === 'completed')
-      for (const ref of run.outputs) {
-        const value = agentOutputValue(this.assets.resolveInputs(run.projectId, [ref])[0].value)
-        const key = value.kind === 'json' ? 'out-json' : 'out-text'
-        if (outputs[key]) throw new AgentRuntimeError('AGENT_OUTPUT_CARDINALITY', 'output')
-        outputs[key] = value.kind === 'markdown' ? { kind: 'text', text: value.text } : value
-      }
+    const versions = run.state === 'completed' ? this.assets.resolveInputs(run.projectId, run.outputs) : []
+    const outputs = agentReplyOutputProjection(
+      run.outputs,
+      versions.map((version) => version.value)
+    )
     return { task: this.view(run), refs: run.state === 'completed' ? run.outputs : [], outputs }
   }
   async run(raw: unknown): Promise<FlowAgentReply> {
@@ -412,6 +411,64 @@ export class FlowCoordinatorHost {
     if (pendingProgress) return true
     if (pendingWait || control === 'wait') return this.wait(run, 'human.wait')
     if (stored.paused) return this.wait(run, 'flow.paused')
+    const queuedChildren = run.children.filter((child) => ['ready', 'queued'].includes(child.state))
+    if (queuedChildren.length) {
+      const file = this.check(run)
+      const assignments = queuedChildren.map((child) => ({
+        nodeId: child.nodeId,
+        goal: child.goal,
+        completion: child.completion,
+        inputs: child.inputs
+      }))
+      const prepared = new Map<string, AgentTaskSnapshot>()
+      for (const child of queuedChildren) {
+        const identity = { projectId: run.projectId, nodeId: child.nodeId }
+        let task = this.specialists.assignment(identity, run.taskId)
+        if (!task || task.snapshot.taskId !== child.taskId) {
+          const candidate = this.specialists.describeAssignment({
+            ...input,
+            nodeId: child.nodeId,
+            action: 'start',
+            requestId: child.taskId
+          })
+          if (
+            child.inputs.some(
+              (ref) =>
+                !candidate.directInputs.some(
+                  (allowed) => canonicalFlowJson(ref) === canonicalFlowJson(allowed)
+                )
+            )
+          )
+            throw new AgentRuntimeError('FLOW_HANDOFF_INPUT_REJECTED', 'handoff')
+          const snapshot = this.specialists.prepareAssignment(
+            {
+              ...input,
+              nodeId: child.nodeId,
+              action: 'start',
+              requestId: child.taskId
+            },
+            child,
+            run.taskId,
+            candidate
+          )
+          task = this.specialists.assignment(identity, run.taskId)
+          if (!task || canonicalFlowJson(task.snapshot) !== canonicalFlowJson(snapshot))
+            throw new AgentRuntimeError('RESUME_CONFLICT', 'handoff')
+        }
+        prepared.set(child.nodeId, task.snapshot)
+      }
+      const waves = assignmentWaves(assignments, prepared, file)
+      const firstWaveIds = new Set(waves[0]?.map((assignment) => assignment.nodeId) ?? [])
+      for (const child of queuedChildren)
+        child.state = firstWaveIds.has(child.nodeId) ? 'ready' : 'queued'
+      this.store.save(run)
+      const firstWave = queuedChildren.filter((child) => firstWaveIds.has(child.nodeId))
+      const waiting = await this.executeAssignmentWave(run, firstWave, prepared, signal)
+      if (signal.aborted || this.store.latest(run.projectId, run.nodeId)!.state === 'cancelled')
+        return false
+      if (waiting) return this.wait(run, 'human.wait')
+      return true
+    }
     if (run.decisions + (run.controlSteps ?? 0) >= run.config.maxSteps)
       throw new AgentRuntimeError('AGENT_BUDGET_EXHAUSTED', 'coordination')
     const available = [] as Array<{ nodeId: string; goal: string; inputs: FlowAgentReply['refs'] }>
@@ -499,13 +556,7 @@ export class FlowCoordinatorHost {
         new Set(decision.outputs.map(canonicalFlowJson)).size !== decision.outputs.length
       )
         throw new AgentRuntimeError('AGENT_OUTPUT_UNVERIFIED', 'coordination')
-      const values = this.assets.resolveInputs(run.projectId, decision.outputs)
-      if (
-        new Set(
-          values.map((value) => (agentOutputValue(value.value).kind === 'json' ? 'json' : 'text'))
-        ).size !== values.length
-      )
-        throw new AgentRuntimeError('AGENT_OUTPUT_CARDINALITY', 'output')
+      this.assets.resolveInputs(run.projectId, decision.outputs)
       run.outputs = decision.outputs
       run.decisionPending = false
       this.store.event(run, `${run.taskId}:completed`, 'flow.completed', run.revision)
@@ -513,14 +564,17 @@ export class FlowCoordinatorHost {
       this.store.save(run)
       return false
     }
-    const assignments = admitAssignments(run, decision, candidates, this.check(run))
+    const file = this.check(run)
+    const assignments = admitAssignments(run, decision, candidates)
+    const waves = assignmentWaves(assignments, candidates, file)
+    const firstWaveIds = new Set(waves[0]?.map((assignment) => assignment.nodeId) ?? [])
     const children = assignments.map((assignment) => ({
       nodeId: assignment.nodeId,
       taskId: hash([run.taskId, assignment.nodeId]),
       goal: assignment.goal,
       completion: assignment.completion,
       inputs: assignment.inputs,
-      state: 'ready',
+      state: firstWaveIds.has(assignment.nodeId) ? 'ready' : 'queued',
       outputs: [] as FlowAgentReply['refs']
     }))
     run.children.push(...children)
@@ -530,9 +584,43 @@ export class FlowCoordinatorHost {
     this.store.save(run)
     for (const child of children)
       this.store.event(run, `${child.taskId}:dispatch`, 'agent.dispatched', run.revision)
+    const prepared = new Map<string, AgentTaskSnapshot>()
+    for (const child of children) {
+      const candidate = candidates.get(child.nodeId)
+      if (!candidate) throw new AgentRuntimeError('FLOW_HANDOFF_INPUT_REJECTED', 'handoff')
+      prepared.set(
+        child.nodeId,
+        this.specialists.prepareAssignment(
+          {
+            projectId: run.projectId,
+            action: 'start',
+            nodeId: child.nodeId,
+            requestId: child.taskId,
+            traceId: run.traceId,
+            spanId: run.spanId
+          },
+          child,
+          run.taskId,
+          candidate
+        )
+      )
+    }
+    const initialWave = children.filter((child) => firstWaveIds.has(child.nodeId))
+    const waiting = await this.executeAssignmentWave(run, initialWave, prepared, signal)
+    if (signal.aborted || this.store.latest(run.projectId, run.nodeId)!.state === 'cancelled')
+      return false
+    if (waiting) return this.wait(run, 'human.wait')
+    return true
+  }
+
+  private async executeAssignmentWave(
+    run: CoordinationRun,
+    children: CoordinationRun['children'],
+    prepared: Map<string, AgentTaskSnapshot>,
+    signal: AbortSignal
+  ): Promise<boolean> {
     const replies = await Promise.allSettled(
       children.map((child) =>
-        // Each specialist owns a root checkpointer, isolated from controller and siblings.
         AsyncLocalStorageProviderSingleton.runWithConfig(
           {},
           () => {
@@ -543,12 +631,13 @@ export class FlowCoordinatorHost {
                 action: 'start',
                 nodeId: child.nodeId,
                 requestId: child.taskId,
+                expectedTaskId: child.taskId,
                 traceId: run.traceId,
                 spanId: run.spanId
               },
               child,
               run.taskId,
-              candidates.get(child.nodeId)
+              prepared.get(child.nodeId)
             )
           },
           true
@@ -559,7 +648,7 @@ export class FlowCoordinatorHost {
       return false
     let failure: unknown
     for (const [index, result] of replies.entries()) {
-      const child = children[index]
+      const child = children[index]!
       if (result.status === 'rejected') {
         child.state = 'blocked'
         failure ??= result.reason
@@ -567,7 +656,6 @@ export class FlowCoordinatorHost {
         continue
       }
       const reply = result.value
-      // Keep completed facts even if public projection fails; recovery verifies them.
       child.state = reply.task.state
       child.outputs = reply.refs
       this.store.save(run)
@@ -584,8 +672,7 @@ export class FlowCoordinatorHost {
         return false
     }
     if (failure) throw failure
-    if (children.some((child) => child.state === 'waiting')) return this.wait(run, 'human.wait')
-    return true
+    return children.some((child) => child.state === 'waiting')
   }
 
   /** Read saved execution facts first; restoration republishes only already committed results. */
@@ -694,12 +781,30 @@ export class FlowCoordinatorHost {
         )
       }
       for (const child of run.children) {
-        const record = this.specialists.assignment(
-          { projectId: run.projectId, nodeId: child.nodeId },
-          run.taskId
-        )
+        let record: ReturnType<FlowAgentDesktopHost['assignment']> = null
+        try {
+          record = this.specialists.assignment(
+            { projectId: run.projectId, nodeId: child.nodeId },
+            run.taskId
+          )
+        } catch (error) {
+          if (!(error instanceof AgentRuntimeError) || error.code !== 'FLOW_SCOPE_REJECTED')
+            throw error
+        }
         if (!record || record.snapshot.taskId !== child.taskId) {
+          if (['ready', 'queued'].includes(child.state)) {
+            observed = true
+            continue
+          }
           reasons.push('FLOW_TASK_CHECKPOINT_UNCONFIRMED')
+          continue
+        }
+        if (
+          record.state === 'ready' &&
+          record.snapshot.coordinatorTaskId === run.taskId &&
+          ['ready', 'queued'].includes(child.state)
+        ) {
+          observed = true
           continue
         }
         if (
@@ -716,11 +821,9 @@ export class FlowCoordinatorHost {
         }
         observed = true
         const values = this.assets.resolveInputs(run.projectId, record.outputRefs)
-        const expectedOutputs = Object.fromEntries(
-          values.map((asset) => [
-            agentOutputValue(asset.value).kind === 'json' ? 'out-json' : 'out-text',
-            agentOutputValue(asset.value)
-          ])
+        const expectedOutputs = agentReplyOutputProjection(
+          record.outputRefs,
+          values.map((asset) => asset.value)
         )
         const projected = (): boolean => {
           const meta = shape(this.check(run), child.nodeId).meta,

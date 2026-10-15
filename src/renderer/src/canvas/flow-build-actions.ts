@@ -34,16 +34,14 @@ export async function commitFlowBuild(
     throw new Error('画布已修改，请重新生成预览')
   const specs = preview.nodes.map((node) => {
     const spec = getNodeType(node.type)
-    if (!spec || spec.contractVersion !== 1 || editor.getShape(node.id as TLShapeId))
+    if (
+      !spec ||
+      spec.contractVersion !== node.contractVersion ||
+      editor.getShape(node.id as TLShapeId)
+    )
       throw new Error('节点契约或身份冲突')
     return spec
   })
-  const anchor = editor.getShapePageBounds(preview.nodeId as TLShapeId) ?? {
-    x: 0,
-    y: 0,
-    w: 340,
-    h: 260
-  }
   markUndoPoint(editor, 'flow-build-commit')
   const beforeIds = new Set(editor.getCurrentPageShapeIds())
   try {
@@ -52,8 +50,8 @@ export async function commitFlowBuild(
         editor.createShape({
           id: node.id as TLShapeId,
           type: 'node-card',
-          x: anchor.x + anchor.w + 100 + Math.floor(index / 2) * 440,
-          y: anchor.y + (index % 2) * 360,
+          x: node.x,
+          y: node.y,
           props: {
             nodeType: node.type,
             title: node.title,

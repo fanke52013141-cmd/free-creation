@@ -3,6 +3,7 @@ import { ipcMain, dialog } from 'electron'
 import { IPC } from '../../shared/contracts'
 import type {
   ExportCanvasStructureInput,
+  GatewayDiagnosticsContext,
   IpcEnvelope,
   SaveProjectInput
 } from '../../shared/contracts'
@@ -25,6 +26,10 @@ function ok<T>(data: T): IpcEnvelope<T> {
 
 function err(code: string, message: string): IpcEnvelope<never> {
   return { ok: false, error: { code, message } }
+}
+
+function projectSaveContext(input: SaveProjectInput): GatewayDiagnosticsContext {
+  return { traceId: newTraceId(), spanId: newSpanId(), projectId: input.id }
 }
 function transferFailure(
   context: { traceId: string; spanId: string; projectId?: string },
@@ -137,35 +142,37 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
     IPC.project.save,
     (_e, input: SaveProjectInput): IpcEnvelope<{ graphVersion: number } | null> => {
       if (!input?.id) return err('INVALID_INPUT', '参数不完整')
+      const context = projectSaveContext(input)
       emitDomainEvent('project.save.started', '项目保存开始', {
-        attributes: { projectId: input.id }
+        context
       })
       try {
         const result = repo.saveProject(input)
         if (result) watcher?.notifySelfSave(result.graphVersion)
         emitDomainEvent('project.save.completed', '项目保存完成', {
+          context,
           status: 'success',
-          attributes: { projectId: input.id, graphVersion: result?.graphVersion }
+          attributes: { graphVersion: result?.graphVersion }
         })
         return ok(result)
       } catch (e) {
         if (e instanceof GraphVersionConflictError) {
           emitDomainEvent('project.save.conflict', '项目保存版本冲突', {
-            error: e,
-            attributes: { projectId: input.id }
+            context,
+            error: e
           })
           return err('REVISION_CONFLICT', e.message)
         }
         if (e instanceof GraphWriteInProgressError) {
           emitDomainEvent('project.save.conflict', '项目保存被并发写入阻塞', {
-            error: e,
-            attributes: { projectId: input.id }
+            context,
+            error: e
           })
           return err('REVISION_CONFLICT', '项目正在被另一项写入操作更新，请稍后重试')
         }
         emitDomainEvent('project.save.failed', '项目保存失败', {
-          error: e,
-          attributes: { projectId: input.id }
+          context,
+          error: e
         })
         return err('SAVE_FAILED', e instanceof Error ? e.message : String(e))
       }
@@ -298,16 +305,36 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
   // 返回 REVISION_CONFLICT 信封（含服务端最新版本），由渲染层决定是否接受覆盖。
   // 不再在主进程里剥离乐观锁，也不再把失败伪装成 ok:true。
   ipcMain.on(IPC.project.saveSync, (e, input: SaveProjectInput) => {
+    const context = projectSaveContext(input)
+    emitDomainEvent('project.save.started', '项目同步保存开始', { context })
     try {
       const result = repo.saveProject(input)
       if (result) watcher?.notifySelfSave(result.graphVersion)
+      emitDomainEvent('project.save.completed', '项目同步保存完成', {
+        context,
+        status: 'success',
+        attributes: { graphVersion: result?.graphVersion }
+      })
       e.returnValue = ok(result)
     } catch (saveErr) {
       if (saveErr instanceof GraphVersionConflictError) {
+        emitDomainEvent('project.save.conflict', '项目同步保存版本冲突', {
+          context,
+          error: saveErr
+        })
         e.returnValue = err('REVISION_CONFLICT', saveErr.message)
       } else if (saveErr instanceof GraphWriteInProgressError) {
+        emitDomainEvent('project.save.conflict', '项目同步保存被并发写入阻塞', {
+          context,
+          error: saveErr
+        })
         e.returnValue = err('REVISION_CONFLICT', '项目正在被另一项写入操作更新，请稍后重试')
       } else {
+        emitDomainEvent('project.save.failed', '项目同步保存失败', {
+          context,
+          status: 'failed',
+          error: saveErr
+        })
         e.returnValue = err(
           'SAVE_FAILED',
           saveErr instanceof Error ? saveErr.message : String(saveErr)
@@ -320,12 +347,20 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
   // 关窗冲突时渲染层调用 saveRecoveryCopySync 写独立副本，不再剥离乐观锁覆盖
   // 外部修改；下次 openProject 后渲染层查询 hasRecoveryCopy 并让用户裁决。
   ipcMain.on(IPC.project.saveRecoveryCopySync, (e, input: SaveProjectInput) => {
+    const context = projectSaveContext(input)
+    emitDomainEvent('project.save.started', '项目恢复副本保存开始', { context })
     try {
-      e.returnValue = ok(repo.saveRecoveryCopySync(input))
-    } catch {
+      const result = repo.saveRecoveryCopySync(input)
+      emitDomainEvent('project.save.completed', '项目恢复副本保存完成', {
+        context,
+        status: result ? 'success' : 'failed'
+      })
+      e.returnValue = ok(result)
+    } catch (error) {
       emitDomainEvent('project.save.failed', '恢复副本写入失败', {
+        context,
         status: 'failed',
-        attributes: { projectId: input.id }
+        error
       })
       e.returnValue = ok(false)
     }
@@ -358,9 +393,22 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
     IPC.project.restoreRecoveryCopy,
     (_e, input: { id: string }): IpcEnvelope<ProjectFile | null> => {
       if (!input?.id) return err('INVALID_INPUT', '参数不完整')
+      const context = { traceId: newTraceId(), spanId: newSpanId(), projectId: input.id }
+      emitDomainEvent('project.save.started', '项目恢复副本正式保存开始', { context })
       try {
-        return ok(repo.restoreRecoveryCopy(input.id))
+        const restored = repo.restoreRecoveryCopy(input.id)
+        emitDomainEvent('project.save.completed', '项目恢复副本正式保存完成', {
+          context,
+          status: restored ? 'success' : 'skipped',
+          ...(restored ? { attributes: { graphVersion: restored.meta.graphVersion } } : {})
+        })
+        return ok(restored)
       } catch (restoreErr) {
+        emitDomainEvent('project.save.failed', '项目恢复副本正式保存失败', {
+          context,
+          status: 'failed',
+          error: restoreErr
+        })
         return err(
           'RECOVERY_RESTORE_FAILED',
           restoreErr instanceof Error ? restoreErr.message : String(restoreErr)

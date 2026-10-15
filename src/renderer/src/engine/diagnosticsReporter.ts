@@ -8,6 +8,7 @@ const MAX_BATCH = 32
 let buffer: DiagnosticsEventInput[] = []
 let droppedByTransport = 0
 let timer: ReturnType<typeof setTimeout> | null = null
+const pendingTransports = new Set<Promise<void>>()
 
 type Transport = (input: { events: unknown[] }) => Promise<unknown>
 
@@ -36,14 +37,35 @@ export function flushDiagnosticsEvents(): void {
     if (buffer.length > 0) schedule()
     return
   }
-  try {
-    void send({ events: batch as unknown[] }).catch(() => {
-      droppedByTransport += batch.length
-    })
-  } catch {
-    droppedByTransport += batch.length
-  }
+  const pending = Promise.resolve()
+    .then(() => send({ events: batch as unknown[] }))
+    .then(
+      () => undefined,
+      () => {
+        droppedByTransport += batch.length
+      }
+    )
+    .finally(() => pendingTransports.delete(pending))
+  pendingTransports.add(pending)
   if (buffer.length > 0) schedule()
+}
+
+/** Flush buffered events and wait until every renderer-to-main IPC send settles. */
+export async function drainDiagnosticsEvents(): Promise<void> {
+  while (buffer.length > 0 || pendingTransports.size > 0) {
+    if (timer) {
+      clearTimeout(timer)
+      timer = null
+    }
+    while (buffer.length > 0) {
+      flushDiagnosticsEvents()
+      if (timer) {
+        clearTimeout(timer)
+        timer = null
+      }
+    }
+    if (pendingTransports.size > 0) await Promise.all([...pendingTransports])
+  }
 }
 
 /** 产出一条结构化事件（null 直接忽略）；不阻塞、不抛错。 */

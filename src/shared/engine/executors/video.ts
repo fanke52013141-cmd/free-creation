@@ -2,6 +2,7 @@
 // their original supplier task; ordinary manual runs retain their own semantics.
 import { inputJson, inputMedia, inputText } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
+import { gatewayDiagnostics } from '../executor-diagnostics'
 import { featureKeyOf, modelKeyOf, resolveFeatureOption } from '../models'
 import {
   mergedPrompt,
@@ -83,6 +84,7 @@ export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
         ctx.gateway
           .videoSubmit({
             projectId: ctx.projectId,
+            diagnostics: gatewayDiagnostics(ctx),
             ...(ctx.flowCommand ? { flowCommand: ctx.flowCommand } : {}),
             nodeId: ctx.node.id,
             providerId: option.provider.id,

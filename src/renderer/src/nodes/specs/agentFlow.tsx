@@ -218,6 +218,12 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
     }))
   const list = (key: string): string[] =>
     Array.isArray(draft[key]) ? (draft[key] as string[]) : []
+  const reviewMode = String(draft.reviewMode ?? 'text-json')
+  const reviewNeedsImage = ['image', 'sampled-video', 'audio-video'].includes(reviewMode)
+  const reviewNeedsAudio = ['audio', 'audio-video'].includes(reviewMode)
+  const supportsReviewModel = (model: FlowAgentCatalog['models'][number]): boolean =>
+    (!reviewNeedsImage || Boolean(model.imageInput)) &&
+    (!reviewNeedsAudio || Boolean(model.audioInput))
   const targetList = (label: string, key: string): React.JSX.Element => (
     <FlowNodeTargets
       label={label}
@@ -377,6 +383,8 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
               >
                 <option value="1">顺序执行</option>
                 <option value="2">独立任务并行（最多两路）</option>
+                <option value="3">独立任务并行（最多三路）</option>
+                <option value="4">独立任务并行（最多四路）</option>
               </AppSelect>
             </label>
           )}
@@ -516,11 +524,14 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
             审核范围
             <AppSelect
               aria-label="审核范围"
-              value={String(draft.reviewMode ?? 'text-json')}
+              value={reviewMode}
               onChange={(event) => update('reviewMode', event.target.value)}
             >
               <option value="text-json">完整文本 / JSON</option>
               <option value="sampled-video">视频抽帧画面（不含声音与完整时序）</option>
+              <option value="image">整张固定图片</option>
+              <option value="audio">完整固定音频</option>
+              <option value="audio-video">完整音轨与视频时间线（画面抽样）</option>
             </AppSelect>
           </label>
           {draft.reviewMode === 'sampled-video' && (
@@ -528,6 +539,21 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
               只接一路固定 MP4（0.1–60 秒、至少 4 帧、最多 20 MiB），审核 4
               张抽样画面。请选择声明支持图片、文本操作验证通过且支持工具调用的模型。自动返工时，负责人须为控制该视频生成节点的专业
               Agent；主 Agent 须启用审核工具并配置范围和预算。
+            </p>
+          )}
+          {draft.reviewMode === 'image' && (
+            <p className="contract-settings-hint">
+              只接一路固定 PNG、JPEG 或 WebP（最多 20 MiB），把完整图像字节提交给审核模型。所选文本模型必须声明图片输入，且图片识别探测与结构化工具验证均通过。
+            </p>
+          )}
+          {draft.reviewMode === 'audio' && (
+            <p className="contract-settings-hint">
+              只接一路固定音频（最多 20 MiB、60 秒），宿主完整解码为 16 kHz 单声道 WAV 后发送。所选文本模型必须声明音频输入，并通过测试音调探测和结构化工具验证。
+            </p>
+          )}
+          {draft.reviewMode === 'audio-video' && (
+            <p className="contract-settings-hint">
+              只接一路含一个视频流和一个音频流的固定 MP4（0.1–60 秒、最多 20 MiB）。审核完整音轨和全帧时间戳摘要，画面仅提交四张时间锚点，不代表逐帧视觉判断；所选模型须验证图片与音频输入。
             </p>
           )}
           {catalog && (
@@ -540,13 +566,32 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
               >
                 <option value="">选择审核模型</option>
                 {catalog.models.map((model) => (
-                  <option key={model.id} value={model.id}>
+                  <option
+                    key={model.id}
+                    value={model.id}
+                    disabled={!supportsReviewModel(model)}
+                  >
                     {model.name}
+                    {(draft.reviewMode === 'image' ||
+                      draft.reviewMode === 'sampled-video' ||
+                      draft.reviewMode === 'audio-video') &&
+                    !model.imageInput
+                      ? ' · 图片能力未验证'
+                      : ''}
+                    {(draft.reviewMode === 'audio' || draft.reviewMode === 'audio-video') &&
+                    !model.audioInput
+                      ? ' · 音频能力未验证'
+                      : ''}
                   </option>
                 ))}
               </AppSelect>
             </label>
           )}
+          {catalog &&
+            ['image', 'audio', 'audio-video', 'sampled-video'].includes(reviewMode) &&
+            !catalog.models.some(supportsReviewModel) && (
+              <p className="contract-settings-hint">当前没有完成相应媒体输入验证的模型。</p>
+            )}
           {textField('标准版本', 'rulesVersion')}
           <label className="settings-field">
             不通过时

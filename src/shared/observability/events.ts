@@ -315,7 +315,7 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
     def('media.read_failed', 'warn', 'main/store/media.repo.ts'),
     // project.save / restore / transfer
     def('project.save.started', 'info', 'main/ipc/project.ipc.ts'),
-    def('project.save.completed', 'info', 'main/ipc/project.ipc.ts'),
+    def('project.save.completed', 'info', 'main/ipc/project.ipc.ts', { graphVersion: 'int' }),
     def('project.save.conflict', 'warn', 'main/ipc/project.ipc.ts'),
     def('project.save.failed', 'error', 'main/ipc/project.ipc.ts'),
     def('project.restore.started', 'info', 'renderer/canvas/snapshot-restore.ts'),

@@ -104,6 +104,32 @@ interface WorkflowContext {
 
 const nodeTests = new Set<TLShapeId>()
 const queuedControls = new Map<string, RunControl>()
+const flowCommandControls = new Map<string, RunControl>()
+const cancelledFlowCommandIds = new Map<string, number>()
+
+function flowCommandControlKey(input: { projectId: string; commandId: string }): string {
+  return JSON.stringify([input.projectId, input.commandId])
+}
+
+/** Main Agent stop signal: cancel the matching renderer executor before it can publish output. */
+export function cancelFlowCommandExecution(input: { projectId: string; commandId: string }): void {
+  const key = flowCommandControlKey(input)
+  const control = flowCommandControls.get(key)
+  if (control) {
+    control.cancelled = true
+    control.paused = false
+    releasePause(control)
+    for (const task of useResourceQueue.getState().tasks) {
+      if (task.status === 'queued' && queuedControls.get(task.key) === control) task.cancel()
+    }
+    return
+  }
+  const expiresAt = Date.now() + 60_000
+  cancelledFlowCommandIds.set(key, expiresAt)
+  setTimeout(() => {
+    if (cancelledFlowCommandIds.get(key) === expiresAt) cancelledFlowCommandIds.delete(key)
+  }, 60_000)
+}
 
 // L01：renderer 进程唯一的诊断事件生产者。sequence 按生产者递增；
 // sessionId/receivedAt/eventId 由 main 入口补齐，这里不伪造会话信息。
@@ -1464,6 +1490,22 @@ export async function runNodeManually(
   if (!node) return { status: 'skipped', reason: '节点不存在或尚未保存到画布' }
 
   const token = createRunControl()
+  const commandKey = command
+    ? flowCommandControlKey({
+        projectId: command.grant.command.projectId,
+        commandId: command.grant.command.commandId
+      })
+    : undefined
+  if (commandKey) {
+    const expiresAt = cancelledFlowCommandIds.get(commandKey)
+    if (expiresAt && expiresAt > Date.now()) {
+      cancelledFlowCommandIds.delete(commandKey)
+      token.cancelled = true
+    } else {
+      cancelledFlowCommandIds.delete(commandKey)
+      flowCommandControls.set(commandKey, token)
+    }
+  }
   const ctx: WorkflowContext = {
     editor,
     projectId,
@@ -1490,6 +1532,8 @@ export async function runNodeManually(
   try {
     result = await executeNodeOnce(ctx, node, runSubflow)
   } finally {
+    if (commandKey && flowCommandControls.get(commandKey) === token)
+      flowCommandControls.delete(commandKey)
     markUndoPoint(editor, 'node-manual-run')
   }
 

@@ -1,5 +1,10 @@
 import { createHash } from 'node:crypto'
 import { VideoReviewEvidenceSchema } from '../../shared/agent-flow/video-review'
+import {
+  AudioReviewEvidenceSchema,
+  AudioVideoTimelineEvidenceSchema,
+  ImageReviewEvidenceSchema
+} from '../../shared/agent-flow/media-review'
 import { streamText, tool, stepCountIs, type LanguageModel, type UserContent } from 'ai'
 import { z } from 'zod'
 import { BuildPlanSchema, type BuildContext, type BuildPlan } from '../../shared/agent-flow/builder'
@@ -11,7 +16,6 @@ import {
 import type { GatewayDiagnosticsContext } from '../../shared/contracts'
 import { AgentFlowAssetRefSchema } from '../../shared/agent-flow/node-contracts'
 import { FlowAssetError } from '../../shared/agent-flow/assets'
-import { agentOutputValue } from '../../shared/agent-flow/video-adapter'
 import {
   AgentDecisionSchema,
   AgentRuntimeError,
@@ -53,6 +57,11 @@ export class AgentSdkModel implements AgentModelPort {
   async review(input: ReviewContext, signal: AbortSignal): Promise<ReviewModelVerdict> {
     const samples = input.videoSamples
     if (samples) VideoReviewEvidenceSchema.parse(samples.evidence)
+    const imageInput = input.imageInput
+    const audioInput = input.audioInput
+    const audioVideoInput = input.audioVideoInput
+    if ([!!samples, !!imageInput, !!audioInput, !!audioVideoInput].filter(Boolean).length > 1)
+      throw new FlowAssetError('FLOW_MEDIA_REVIEW_NOT_FIXED')
     if (
       samples &&
       (input.subjects.length !== 1 ||
@@ -70,7 +79,53 @@ export class AgentSdkModel implements AgentModelPort {
     )
       throw new FlowAssetError('FLOW_VIDEO_REVIEW_NOT_FIXED')
     if (
-      !samples &&
+      imageInput &&
+      (!ImageReviewEvidenceSchema.safeParse(imageInput.evidence).success ||
+        input.subjects.length !== 1 ||
+        input.subjects[0].kind !== 'image' ||
+        input.subjects[0].contentSha256 !== imageInput.evidence.contentSha256 ||
+        input.subjects[0].mime !== imageInput.evidence.mime ||
+        imageInput.bytes.length !== imageInput.evidence.byteLength ||
+        imageInput.bytes.length > 20 * 1024 * 1024 ||
+        createHash('sha256').update(imageInput.bytes).digest('hex') !==
+          imageInput.evidence.contentSha256)
+    )
+      throw new FlowAssetError('FLOW_MEDIA_REVIEW_NOT_FIXED')
+    if (
+      audioInput &&
+      (!AudioReviewEvidenceSchema.safeParse(audioInput.evidence).success ||
+        audioInput.mediaType !== 'audio/wav' ||
+        input.subjects.length !== 1 ||
+        input.subjects[0].kind !== 'audio' ||
+        input.subjects[0].contentSha256 !== audioInput.evidence.sourceSha256 ||
+        input.subjects[0].mime !== audioInput.evidence.sourceMime ||
+        audioInput.bytes.length !== audioInput.evidence.byteLength ||
+        createHash('sha256').update(audioInput.bytes).digest('hex') !==
+          audioInput.evidence.contentSha256)
+    )
+      throw new FlowAssetError('FLOW_MEDIA_REVIEW_NOT_FIXED')
+    if (
+      audioVideoInput &&
+      (!AudioVideoTimelineEvidenceSchema.safeParse(audioVideoInput.evidence).success ||
+        input.subjects.length !== 1 ||
+        input.subjects[0].kind !== 'video' ||
+        input.subjects[0].contentSha256 !== audioVideoInput.evidence.videoSha256 ||
+        audioVideoInput.frames.length !== 4 ||
+        audioVideoInput.frames.some(
+          (frame, index) =>
+            !(frame instanceof Uint8Array) ||
+            frame.length > 1024 * 1024 ||
+            !frame.length ||
+            createHash('sha256').update(frame).digest('hex') !==
+              audioVideoInput.evidence.frames[index].contentSha256
+        ) ||
+        audioVideoInput.audioBytes.length !== audioVideoInput.evidence.audioByteLength ||
+        createHash('sha256').update(audioVideoInput.audioBytes).digest('hex') !==
+          audioVideoInput.evidence.audioContentSha256)
+    )
+      throw new FlowAssetError('FLOW_MEDIA_REVIEW_NOT_FIXED')
+    if (
+      !samples && !imageInput && !audioInput && !audioVideoInput &&
       input.subjects.some(
         (value) => value.kind === 'video' || value.kind === 'image' || value.kind === 'audio'
       )
@@ -90,7 +145,39 @@ export class AgentSdkModel implements AgentModelPort {
             { type: 'file' as const, data: image, mediaType: 'image/jpeg' }
           ])
         ]
-      : input.subjects
+      : imageInput
+        ? [
+            {
+              type: 'text',
+              text: `图像对象 0，已核对完整固定图片字节 ${imageInput.evidence.contentSha256}，MIME ${imageInput.evidence.mime}，${imageInput.evidence.byteLength} 字节。按标准检查整张图像。`
+            },
+            { type: 'file', data: imageInput.bytes, mediaType: imageInput.evidence.mime }
+          ]
+        : audioInput
+          ? [
+              {
+                type: 'text',
+                text: `音频对象 0，已解码完整固定音轨 ${audioInput.evidence.contentSha256}，时长 ${audioInput.evidence.durationMs}ms，单声道 16000Hz。按标准检查完整音频；不得把摘要或时间点当作音频输入。`
+              },
+              { type: 'file', data: audioInput.bytes, mediaType: audioInput.mediaType }
+            ]
+          : audioVideoInput
+            ? [
+                {
+                  type: 'text',
+                  text: `音视频对象 0。完整视频帧时间线共 ${audioVideoInput.evidence.videoFrameCount} 帧，时间线摘要 ${audioVideoInput.evidence.frameTimelineSha256}；完整音轨时长 ${audioVideoInput.evidence.audioDurationMs}ms，音轨相对画面偏移 ${audioVideoInput.evidence.audioOffsetMs}ms、结尾差 ${audioVideoInput.evidence.audioEndDeltaMs}ms。画面内容只展示四张抽样静帧，不代表逐帧视觉判断。请结合完整音轨、全部帧时间戳摘要和这些画面样本评估标准。`
+                },
+                ...audioVideoInput.frames.flatMap((frame, index) => [
+                  {
+                    type: 'text' as const,
+                    text: `对象 0，画面样本 ${index + 1}，${audioVideoInput.evidence.frames[index].timeMs}ms`
+                  },
+                  { type: 'file' as const, data: frame, mediaType: 'image/jpeg' }
+                ]),
+                { type: 'text', text: '对象 0，完整音轨，解码为 16000Hz 单声道 WAV。' },
+                { type: 'file', data: audioVideoInput.audioBytes, mediaType: 'audio/wav' }
+              ]
+            : input.subjects
           .map(
             (value, index) =>
               `${input.subjects.length > 1 ? `对象 ${index}（${value.kind}）：\n` : ''}${value.kind === 'json' ? JSON.stringify(value.data) : 'text' in value ? value.text : ''}`
@@ -176,12 +263,12 @@ export class AgentSdkModel implements AgentModelPort {
         maxOutputTokens: 4096,
         tools: {
           propose_flow: tool({
-            description: '提出一个待人工提交的文本顺序流程',
+            description: '提出一个待人工提交的有限能力 Flow 预览',
             inputSchema: BuildPlanSchema
           })
         },
         system:
-          '你是画布建图规划员。调用 propose_flow 提交一个预览提案。当前能力 sequential-text-template@1 支持 1 至 4 个专业 Agent 顺序做确定性文本模板加工。template 中 {{value}} 表示真实上游文本，必须保留；mode 表示自主处理或需要人工确认。按目标给出每步的职责、完成要求与模板。宿主将创建主 Agent、状态机、专业 Agent、数据处理节点与显式关系，并等待人确认提交。提案仅使用该文本模板能力。',
+          '你是画布建图规划员。调用 propose_flow 提交一个预览提案，只能使用用户输入中的 capabilityCatalog 和 topologies。sequential 可创建 1 至 4 步有类型约束的流程，按 image/video/audio/json/text 的输出输入匹配；parallel-fork 可创建 2 至 4 个独立分支，均从同一文本材料开始，由主 Agent 同时执行并按目标选择成果交付，未选择的成果保留在分支节点。text-template@1 必须提供含 {{value}} 的 template；image-gen@3、image-edit@2 与 video@7 必须提供 instruction；speech@4 与 tts@4 由宿主使用已固定输入与默认安全参数。可在 text-template@1 或 video@7 步骤添加 review.criteria；宿主生成固定模型的文本/抽帧审核，按 maxReworks 与 rejectPolicy 约束返工，末步审核会阻止主 Agent 提前完成。mode 表示自主处理或需要人工确认。模型只决定拓扑、步骤职责和有限文本内容；不能创建任意节点、端口、配置、关系、模型 ID 或预算。宿主生成类型正确的 Agent、能力节点、审核、端口和关系，并等待人确认提交。',
         messages: [{ role: 'user', content: JSON.stringify(input) }]
       })
       const calls: Array<{ toolName: string; input: unknown }> = []
@@ -271,11 +358,7 @@ export class AgentSdkModel implements AgentModelPort {
         : []
       const maxOutputs = Math.max(
         1,
-        new Set(
-          completedAssets.map((asset) =>
-            agentOutputValue(asset.value).kind === 'json' ? 'json' : 'text'
-          )
-        ).size
+        Math.min(128, new Set(completedRefs.map((ref) => JSON.stringify(ref))).size)
       )
       const completedOutputTypes = completedAssets.map((asset) => ({
         ref: asset.ref,
@@ -311,12 +394,19 @@ export class AgentSdkModel implements AgentModelPort {
               '给一个就绪专业 Agent 分派独立任务；从其允许的固定输入中选择最小清单，填写目标和完成条件。',
             inputSchema: dispatchSchema
           }),
-          ...(input.maxParallelTasks === 2 && input.available.length >= 2
+          ...(input.maxParallelTasks !== undefined && input.maxParallelTasks > 1 && input.available.length >= 2
             ? {
                 dispatch_parallel: tool({
                   description:
-                    '同时分派两路无数据依赖的就绪专业任务，各自固定输入、目标与完成条件。',
-                  inputSchema: z.object({ assignments: z.array(dispatchSchema).length(2) }).strict()
+                    `同时分派 2 至 ${Math.min(input.maxParallelTasks, input.available.length)} 路无数据依赖的就绪专业任务，各自固定输入、目标与完成条件。`,
+                  inputSchema: z
+                    .object({
+                      assignments: z
+                        .array(dispatchSchema)
+                        .min(2)
+                        .max(Math.min(input.maxParallelTasks, input.available.length))
+                    })
+                    .strict()
                 })
               }
             : {}),
@@ -339,7 +429,7 @@ export class AgentSdkModel implements AgentModelPort {
             : {})
         },
         system:
-          '你是当前画布的主 Agent，仅协调已授权专业 Agent。每轮必须选择恰好一个工具。available 是目前可派发的真实节点和固定输入，completed 是真实完成记录；不能伪造完成或读取其他会话。按 goal 的要求分派，不要重复已完成任务。dispatch_agent 的 inputs 必须逐字复制所选节点的固定引用，goal 与 completion 明确且符合该节点原职责。available 为空且任务未完成时不能捏造结果。所有任务完成后 finish_flow 仅复制已完成记录的输出引用，不再派发。专业任务内部自主工具循环由专业 Agent 执行。',
+          '你是当前画布的主 Agent，仅协调已授权专业 Agent。每轮必须选择恰好一个工具。available 是目前可派发的真实节点和固定输入，completed 是真实完成记录；不能伪造完成或读取其他会话。按 goal 的要求分派，不要重复已完成任务。dispatch_agent 的 inputs 必须逐字复制所选节点的固定引用，goal 与 completion 明确且符合该节点原职责。只有显式允许且分支无数据依赖时，才用 dispatch_parallel 同时分派 2 至 4 个任务。available 为空且任务未完成时不能捏造结果。所有任务完成后 finish_flow 仅复制已完成记录的输出引用，不再派发。专业任务内部自主工具循环由专业 Agent 执行。',
         messages: [{ role: 'user', content }]
       })
       for await (const part of result.fullStream)
@@ -354,7 +444,7 @@ export class AgentSdkModel implements AgentModelPort {
         kind:
           call.toolName === 'dispatch_agent'
             ? 'dispatch'
-            : call.toolName === 'dispatch_parallel' && input.maxParallelTasks === 2
+            : call.toolName === 'dispatch_parallel' && (input.maxParallelTasks ?? 1) > 1
               ? 'dispatch-many'
               : call.toolName === 'finish_flow'
                 ? 'finish'

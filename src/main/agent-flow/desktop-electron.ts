@@ -43,11 +43,12 @@ const videoMode =
         ? 'first-frame'
         : 'text'
 const videoReview = process.argv.includes('--video-review')
+const mediaReview = process.argv.includes('--media-review')
 const videoRework = process.argv.includes('--video-rework')
 const parallelMedia = process.argv.includes('--parallel-media')
 const parallelReview = process.argv.includes('--parallel-review')
 const video = process.argv.includes('--video')
-if (video || videoReview || parallelMedia)
+if (video || videoReview || mediaReview || parallelMedia)
   protocol.registerSchemesAsPrivileged([
     {
       scheme: 'media',
@@ -63,7 +64,8 @@ if (video || videoReview || parallelMedia)
 const collaboration = process.argv.includes('--collaboration')
 const coordination = process.argv.includes('--coordination')
 const recovery = process.argv.includes('--recovery')
-const builder = process.argv.includes('--builder')
+const builderParallelMode = process.argv.includes('--builder-parallel')
+const builder = process.argv.includes('--builder') || builderParallelMode
 const review = process.argv.includes('--review')
 const rework = process.argv.includes('--rework')
 const reworkMode = process.env.CANVAS_AGENT_REWORK_MODE ?? 'autonomous'
@@ -97,7 +99,7 @@ if (
       setSetting('lastProjectId', projectId)
       stage = 'setup-protocol'
       const host = new SqliteModelHost(getDb())
-      if (video || videoReview || parallelMedia) {
+      if (video || videoReview || mediaReview || parallelMedia) {
         protocol.handle('media', (request) => {
           const url = new URL(request.url),
             path = getMediaAbsPath(decodeURIComponent(url.host + url.pathname).replace(/^\/+/, ''))
@@ -265,13 +267,13 @@ if (
             operation: 'text.generate',
             asynchronous: false,
             streaming: true,
-            acceptedAssetKinds: videoReview ? ['image'] : [],
+            acceptedAssetKinds: mediaReview ? ['image', 'audio'] : videoReview ? ['image'] : [],
             producedAssetKinds: [],
             controls: {}
           }
         ]
       })
-      if (videoReview)
+      if (videoReview || mediaReview)
         await host.saveValidation({
           connectionId: 'agent-test-connection',
           modelDefinitionId: 'agent-test-model',
@@ -366,7 +368,7 @@ if (
           throw new Error('MULTI_REFERENCE_IMPORT_FAILED')
         report = await active.webContents.executeJavaScript(`(async()=>{${common}
           const read=(id)=>window.api.inspectFlowAgent({projectId,nodeId:id}).then(value);
-          const run=async(id)=>{await ensureCanvasSaved();const task=await read(id);if(task)editor.updateShape({id,type:'node-card',meta:{...editor.getShape(id).meta,agentTask:JSON.stringify(task)}});const result=await(await import('/src/engine/executor.ts')).runNodeManually(editor,projectId,(await import('/src/stores/gateway.ts')).useGatewayStore.getState().providers,id);await ensureCanvasSaved();const after=await read(id);if(after?.state==='completed'&&result.status!=='done')throw new Error('VIDEO_PUBLIC_PROJECTION_FAILED');return after};
+          const run=async(id)=>{await ensureCanvasSaved();const task=await read(id);if(task)editor.updateShape({id,type:'node-card',meta:{...editor.getShape(id).meta,agentTask:JSON.stringify(task)}});const result=await(await import('/src/engine/executor.ts')).runNodeManually(editor,projectId,(await import('/src/stores/gateway.ts')).useGatewayStore.getState().providers,id);const shape=editor.getShape(id);(window.__agentRunResults??=[]).push({nodeId:id,result:result.status,nodeRun:shape?.meta.nodeRun?.status,history:shape?.meta.nodeRunHistory?.length});await ensureCanvasSaved();const after=await read(id);if(after?.state==='completed'&&result.status!=='done')throw new Error('VIDEO_PUBLIC_PROJECTION_FAILED');return after};
           if(${phase === 'execute'}) {
             const config=(role,allowedNodeIds)=>JSON.stringify({schemaVersion:1,role,interactionMode:'autonomous',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:role==='coordinator'?'agent.dispatch':'node.execute',version:'1'}],allowedNodeIds,maxSteps:12,relations:role==='coordinator'?[{relationId:'video-state',kind:'observes',sourceNodeId:'shape:c3-agent',targetNodeId:'shape:video-state'}]:[]});
             const nodes=[{id:'shape:c3-agent',nodeType:'agent',title:'主 Agent',text:'调度视频专业 Agent 并交付视频',config:config('coordinator',['shape:video-agent'])},{id:'shape:video-agent',nodeType:'agent',title:'视频 Agent',text:'使用视频节点生成一次视频，交付固定成果',config:config('specialist',['shape:video-target'])},{id:'shape:video-target',nodeType:'video',title:'视频生成',text:'',config:JSON.stringify({mode:${JSON.stringify(videoMode)},modelKey:'video-test::doubao-seedance-2-0',params:{}})},{id:'shape:video-prompt',nodeType:'text',title:'材料',text:'private-c3-video-prompt'}];
@@ -394,7 +396,7 @@ if (
             const root=await run('shape:c3-agent'),child=await read('shape:video-agent');
             if(root.state!=='waiting'||child?.state!=='waiting'||child?.waitKind!=='reconcile'){window.__reviewAcceptanceStage=JSON.stringify({mode:JSON.parse(editor.getShape('shape:video-target').props.config).mode,rootCode:root.code,childCode:child?.code});throw new Error('VIDEO_UNKNOWN_NOT_HELD');}
             if(editor.getCurrentPageShapes().some(s=>s.props?.nodeType==='video-asset'&&s.meta.agentAssetVersionId))throw new Error('VIDEO_UNKNOWN_PUBLISHED');
-            return {projectId,taskId:root.taskId,checks:['main dispatches video specialist through public executor','supplier unknown holds original command','no unverified artifact']};
+            return {projectId,taskId:root.taskId,executionResults:window.__agentRunResults||[],checks:['main dispatches video specialist through public executor','supplier unknown holds original command','no unverified artifact']};
           }
           let child=await read('shape:video-agent');
           const reconciled=value(await window.api.runFlowAgent({projectId,nodeId:'shape:video-agent',action:'reconcile',eventId:crypto.randomUUID(),requestId:crypto.randomUUID(),expectedTaskId:child.taskId,expectedWaitRevision:child.waitRevision,traceId:crypto.randomUUID(),spanId:crypto.randomUUID()}));
@@ -424,7 +426,7 @@ if (
             place.click();panels.getState().close();
             audioAssetShapeId=editor.getSelectedShapeIds()[0];if(editor.getShape(audioAssetShapeId)?.props.nodeType!=='audio'||!editor.getShape(audioAssetShapeId)?.meta.flowAssetRef)throw new Error('AUDIO_ASSET_UI_NOT_PLACED');
             editor.centerOnPoint(editor.getShapePageBounds(audioAssetShapeId).center);let audio;for(let i=0;i<200;i++){audio=document.querySelector('[data-node-id="'+audioAssetShapeId+'"] audio');if(audio?.duration>0)break;await new Promise(done=>setTimeout(done,25));}if(!(audio?.duration>0)||!audio.paused)throw new Error('AUDIO_FIXED_DECODE_FAILED');await audio.play();if(audio.paused)throw new Error('AUDIO_FIXED_PLAY_FAILED');audio.pause();}
-          await ensureCanvasSaved();return {projectId,frameAssetShapeId,audioAssetShapeId,taskId:root.taskId,mediaId:assets[0].props.mediaId,assetShapeId:assets[0].id,checks:['same supplier task after process reopen','explicit continue restores fixed video version','main collects committed specialist result','one playable video asset with ordinary out-video','saved project retains media and version reference']};
+          await ensureCanvasSaved();return {projectId,frameAssetShapeId,audioAssetShapeId,taskId:root.taskId,mediaId:assets[0].props.mediaId,assetShapeId:assets[0].id,executionResults:window.__agentRunResults||[],checks:['same supplier task after process reopen','explicit continue restores fixed video version','main collects committed specialist result','one playable video asset with ordinary out-video','saved project retains media and version reference']};
         })()`)
         if (phase === 'reopen') {
           const identities = report as {
@@ -832,6 +834,16 @@ if (
           common
         })
         if (phase === 'execute') writeFileSync(statePath, JSON.stringify(report))
+      } else if (mediaReview) {
+        const { acceptMediaReview } = await import('./media-review-acceptance')
+        report = await acceptMediaReview({
+          window: active,
+          directory,
+          projectId,
+          phase: phase!,
+          common
+        })
+        if (phase === 'execute') writeFileSync(statePath, JSON.stringify(report))
       } else if (review) {
         report = await active.webContents.executeJavaScript(`(async()=>{${common}
           const delay=()=>new Promise(r=>setTimeout(r,100));
@@ -867,20 +879,31 @@ if (
           const until=async(fn)=>{for(let i=0;i<800;i++){if(await fn())return;await delay();}throw new Error('BUILDER_TIMEOUT_'+builderStage.toUpperCase().replaceAll('-','_'))};
           if(${JSON.stringify(phase)}==='execute'){
             editor.createShape({id:'shape:c3-source',type:'node-card',x:100,y:100,props:{nodeType:'text',title:'材料',text:'private-c3-material'}});
-            editor.createShape({id:'shape:c3-builder',type:'node-card',x:100,y:450,props:{nodeType:'agent',title:'搭建 Agent',text:'建一个两个自主步骤的文本模板流程。第一步 template 必须是 整理：{{value}}，第二步必须是 交付：{{value}}。每步用其数据处理节点执行一次并交付真实输出。只需文本模板能力。',config:JSON.stringify({schemaVersion:1,role:'builder',interactionMode:'collaborative',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'graph.preview',version:'1'}],allowedNodeIds:['shape:c3-source'],maxSteps:12,relations:[]})}});
+            const builderGoal=${JSON.stringify(builderParallelMode ? '建三个独立并行的文本模板分支，分别输出摘要：{{value}}、要点：{{value}}、标签：{{value}}。三路都必须完成，主 Agent 选择一份成果交付。' : '建一个两个自主步骤的文本模板流程。第一步 template 必须是 整理：{{value}}，第二步必须是 交付：{{value}}。每步用其数据处理节点执行一次并交付真实输出。只需文本模板能力。')};
+            editor.createShape({id:'shape:c3-builder',type:'node-card',x:100,y:450,props:{nodeType:'agent',title:'搭建 Agent',text:builderGoal,config:JSON.stringify({schemaVersion:1,role:'builder',interactionMode:'collaborative',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'graph.preview',version:'1'}],allowedNodeIds:['shape:c3-source'],maxSteps:12,relations:[]})}});
             await ensureCanvasSaved();builderStage='propose-button';await until(()=>button('生成建图预览'));button('生成建图预览').click();builderStage='proposal';await until(async()=>!!(await build('inspect')));
-            const preview=await build('inspect');if(preview.state!=='preview'||editor.getCurrentPageShapes().filter(s=>s.type==='node-card').length!==2)throw new Error('BUILDER_PREMATURE_MUTATION');
-            return {projectId,buildId:preview.buildId,checks:['public node button proposes bounded flow','preview saved without graph mutation','explicit commit required']};
+            const preview=await build('inspect');const ghostLayer=document.querySelector('.flow-build-preview-layer');const reviewNode=preview.nodes.find(node=>node.type==='ai-review');const reviewConfig=reviewNode&&JSON.parse(reviewNode.config);if(preview.state!=='preview'||editor.getCurrentPageShapes().filter(s=>s.type==='node-card').length!==2||preview.plan.topology!==(${builderParallelMode ? "'parallel-fork'" : "'sequential'"})||ghostLayer?.querySelectorAll('[data-preview-node-id]').length!==preview.nodes.length||Number(ghostLayer?.firstElementChild?.getAttribute('data-preview-data-edges'))!==preview.edges.length||(!${builderParallelMode}&&(!reviewConfig||reviewConfig.gatedNodeIds.length!==1||Number(ghostLayer?.firstElementChild?.getAttribute('data-preview-gate-edges'))!==1||Number(ghostLayer?.firstElementChild?.getAttribute('data-preview-rework-edges'))!==1)))throw new Error('BUILDER_PREVIEW_SPATIAL_CONTRACT');
+            return {projectId,buildId:preview.buildId,checks:['public node button proposes bounded flow','spatial ghost nodes match host positions','typed data edges are visible','preview saved without graph mutation','explicit commit required']};
           }
           const preview=await build('inspect');if(!preview||preview.state!=='preview')throw new Error('BUILDER_REOPEN_PREVIEW_MISSING');
           builderStage='commit-button';editor.select('shape:c3-builder');editor.zoomToSelection();await until(()=>button('提交图变更'));button('提交图变更').click();builderStage='commit';await until(async()=>(await build('inspect'))?.state==='committed');await ensureCanvasSaved();
           const committed=await build('inspect');const {commitFlowBuild}=await import('/src/canvas/flow-build-actions.ts');await commitFlowBuild(editor,committed);
           if(editor.getCurrentPageShapes().filter(s=>s.type==='node-card').length!==committed.nodes.length+2)throw new Error('BUILDER_DUPLICATE_COMMIT');
+          if(committed.nodes.some(node=>{const shape=editor.getShape(node.id);return !shape||shape.x!==node.x||shape.y!==node.y||shape.props.nodeType!==node.type}))throw new Error('BUILDER_COMMIT_POSITION_MISMATCH');
+          if(!${builderParallelMode}){editor.undo();await ensureCanvasSaved();if(editor.getCurrentPageShapes().filter(s=>s.type==='node-card').length!==2||committed.nodes.some(node=>editor.getShape(node.id)))throw new Error('BUILDER_UNDO_ATOMICITY');editor.redo();await ensureCanvasSaved();if(committed.nodes.some(node=>!editor.getShape(node.id)||editor.getShape(node.id).x!==node.x||editor.getShape(node.id).y!==node.y))throw new Error('BUILDER_REDO_ATOMICITY');}
           const main=committed.nodes.find(n=>n.type==='agent'&&JSON.parse(n.config).role==='coordinator');
           const mainButton=document.querySelector('[data-node-id="'+main.id+'"] .node-standard-primary');if(!mainButton)throw new Error('BUILDER_MAIN_BUTTON');mainButton.click();builderStage='execution';
           await until(async()=>{const task=value(await window.api.inspectFlowAgent({projectId,nodeId:main.id}));if(task&&['failed','blocked'].includes(task.state))throw new Error(task.code||'BUILDER_RUN_FAILED');return task?.state==='completed'});
           await until(()=>editor.getShape(main.id).props.exec!=='running');await ensureCanvasSaved();
-          const output=(await import('/src/nodes/nodeValues.ts')).projectNodeOutputs(editor.getShape(main.id))['out-text'];
+          const projectOutputs=(await import('/src/nodes/nodeValues.ts')).projectNodeOutputs;const output=projectOutputs(editor.getShape(main.id))['out-text'];
+          if(!${builderParallelMode}){const reviewNode=committed.nodes.find(node=>node.type==='ai-review');const decision=reviewNode&&projectOutputs(editor.getShape(reviewNode.id))['out-review'];if(!reviewNode||decision?.kind!=='json'||decision.data.passed!==true)throw new Error('BUILDER_REVIEW_NOT_PASSED');}
+          if(${builderParallelMode}){
+            const task=value(await window.api.inspectFlowAgent({projectId,nodeId:main.id}));
+            const processors=committed.nodes.filter(n=>n.type==='processor');
+            const branchOutputs=processors.map(n=>projectOutputs(editor.getShape(n.id))['out-value']?.text).sort();
+            if(task.children.length!==3||task.children.some(child=>child.state!=='completed')||JSON.stringify(branchOutputs)!==JSON.stringify(['摘要：private-c3-material','要点：private-c3-material','标签：private-c3-material'].sort())||!branchOutputs.includes(output?.text))throw new Error('BUILDER_PARALLEL_BRANCH_OUTPUTS');
+            return {projectId,checks:['three-branch parallel-fork preview and contract validation','public commit survives fresh process','coordinator dispatches three independent branches together','all branches execute through public processors','main Agent selects one fixed result while every branch asset remains']};
+          }
           if(output?.text!=='交付：整理：private-c3-material')throw new Error('BUILDER_WRONG_REAL_OUTPUT');
           return {projectId,checks:['preview survives fresh process','public commit button saves complete graph','repeated commit creates no duplicates','built flow runs through public executors','two independent specialists','real transformed text output']};
         })()`)
@@ -1220,6 +1243,24 @@ if (
             : []
       }
     } finally {
+      // This fixture exits with app.exit(), which does not wait for renderer
+      // timers or IPC. Drain the renderer's normal diagnostic micro-batch
+      // before destroying its webContents so final node/workflow terminals
+      // reach the main-process writer and the session audit sees the full run.
+      try {
+        if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) {
+          await window.webContents.executeJavaScript(`(async()=>{
+            const diagnostics=await import('/src/engine/diagnosticsReporter.ts');
+            await diagnostics.drainDiagnosticsEvents();
+            if(diagnostics.pendingDiagnosticsEventCount()||diagnostics.diagnosticsTransportDropCount())throw new Error('AGENT_DIAGNOSTICS_FLUSH_FAILED');
+          })()`)
+        }
+      } catch {
+        if (!failed) {
+          failed = true
+          report = { code: 'AGENT_DIAGNOSTICS_FLUSH_FAILED', stage: 'diagnostics-flush' }
+        }
+      }
       foreign?.destroy()
       window?.destroy()
       await diagnostics.flushOnQuit()

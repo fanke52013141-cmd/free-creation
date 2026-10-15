@@ -60,8 +60,8 @@ async function clean(directory) {
     if (!terminals.some(event => event.attributes?.phase === 'saved-receipt' && event.attributes?.versionId)) throw new Error('bridge output receipt log absent')
     await cp(join(directory, 'diagnostics'), join(evidence, 'diagnostics'), { recursive: true })
     await writeFile(join(evidence, 'results.json'), JSON.stringify({ reports, operations: starts.length, diagnosticRedaction: true,
-      boundary: 'real desktop preload/IPC/canvas/shared executor/save/SQLite; two processes; deterministic processor only; no model calls' }, null, 2))
-    process.stdout.write('Command Electron: manual/Agent parity, durable receipts, replay, unknown reconciliation and diagnostic redaction passed.\n')
+      boundary: 'real desktop preload/IPC/canvas/shared executor/save/SQLite; two processes; deterministic processor execution plus fixed-media image-gen/image-edit/speech/TTS command probes and stop-signal bridge; no supplier calls or billed model requests' }, null, 2))
+    process.stdout.write('Command Electron: processor parity, image-gen/image-edit/speech/TTS command contracts, queued Agent-stop cancellation, durable receipts, replay, unknown reconciliation and diagnostic redaction passed; no supplier calls.\n')
   } finally {
     server.kill()
     await clean(directory)

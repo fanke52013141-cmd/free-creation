@@ -8,10 +8,13 @@ import {
   DETERMINISTIC_PROJECTIONS,
   readPinnedOutputs
 } from '../../shared/engine/deterministic-projections'
-import { AgentFlowAssetRefSchema } from '../../shared/agent-flow/node-contracts'
+import {
+  AgentFlowAssetRefSchema,
+  type AgentFlowAssetRef
+} from '../../shared/agent-flow/node-contracts'
 import { readStoredNodeRunStatus } from '../../shared/engine/run-status'
 import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
-import { agentOutputValue } from '../../shared/agent-flow/video-adapter'
+import { agentReplyOutputProjection } from '../../shared/agent-flow/agent-outputs'
 import {
   AssetSubmitSchema,
   FlowAssetError,
@@ -121,7 +124,9 @@ export class FlowAssetStore {
         const runStatus = readStoredNodeRunStatus(record.meta?.nodeRun)
         if (
           !pinned &&
-          ['processor', 'agent', 'video'].includes(record.props.nodeType) &&
+          ['processor', 'agent', 'video', 'image-gen', 'image-edit', 'speech', 'tts'].includes(
+            record.props.nodeType
+          ) &&
           runStatus &&
           runStatus !== 'success'
         )
@@ -133,11 +138,17 @@ export class FlowAssetStore {
               ? 'out-json'
               : record.props.nodeType === 'audio'
                 ? 'out-audio'
-                : ['video', 'video-asset', 'image'].includes(record.props.nodeType)
-                  ? record.props.nodeType === 'image'
-                    ? 'out-image'
-                    : 'out-video'
-                  : 'out-value'
+                : ['image-gen', 'image-edit'].includes(record.props.nodeType)
+                  ? 'out-image'
+                  : record.props.nodeType === 'speech'
+                    ? 'out-audio'
+                    : record.props.nodeType === 'tts'
+                      ? 'out-json'
+                      : ['video', 'video-asset', 'image'].includes(record.props.nodeType)
+                        ? record.props.nodeType === 'image'
+                          ? 'out-image'
+                          : 'out-video'
+                        : 'out-value'
         if (record.props.nodeType === 'agent') {
           if (!['out-text', 'out-json'].includes(input.portId)) fail('ASSET_PORT_INVALID')
           if (runStatus !== 'success') fail('ASSET_OUTPUT_UNAVAILABLE')
@@ -157,14 +168,18 @@ export class FlowAssetStore {
               .get(input.projectId, input.nodeId, result.taskId) as
               { output_refs_json: string } | undefined)
           if (!task || pinned) fail('ASSET_OUTPUT_UNAVAILABLE')
-          const expected = this.resolveInputs(
-            input.projectId,
-            JSON.parse(task.output_refs_json)
-          ).map((version) => agentOutputValue(version.value))
+          const outputRefs = JSON.parse(task.output_refs_json) as AgentFlowAssetRef[]
+          const versions = this.resolveInputs(input.projectId, outputRefs)
+          const expected = agentReplyOutputProjection(
+            outputRefs,
+            versions.map((version) => version.value)
+          )
           const actual = projection(record)[input.portId]
           if (
             !actual ||
-            !expected.some((value) => canonicalFlowJson(value) === canonicalFlowJson(actual))
+            !expected[input.portId as 'out-text' | 'out-json'] ||
+            canonicalFlowJson(expected[input.portId as 'out-text' | 'out-json']) !==
+              canonicalFlowJson(actual)
           )
             fail('ASSET_OUTPUT_INVALID')
         } else if (record.props.nodeType === 'ai-review') {
@@ -201,11 +216,13 @@ export class FlowAssetStore {
         )
           fail('ASSET_VALUE_UNSUPPORTED')
         if (value.kind === 'image') {
-          if (record.props.nodeType !== 'image' || pinned) fail('ASSET_OUTPUT_INVALID')
+          if (!['image', 'image-gen', 'image-edit'].includes(record.props.nodeType) || pinned)
+            fail('ASSET_OUTPUT_INVALID')
           value = fixedFlowImage(this.db, input.projectId, value)
         }
         if (value.kind === 'audio') {
-          if (record.props.nodeType !== 'audio' || pinned) fail('ASSET_OUTPUT_INVALID')
+          if (!['audio', 'speech'].includes(record.props.nodeType) || pinned)
+            fail('ASSET_OUTPUT_INVALID')
           value = fixedFlowMedia(this.db, input.projectId, value)
         }
         if (value.kind === 'video' && record.props.nodeType === 'video-asset' && !pinned) {

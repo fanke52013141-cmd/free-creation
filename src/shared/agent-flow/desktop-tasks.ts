@@ -61,9 +61,15 @@ export const FlowAgentCollaborationSchema = FlowAgentQuerySchema.extend({
   action: z.enum(['note', 'discuss', 'submit', 'revise']),
   text: z.string().max(4096),
   accepted: z.boolean().optional(),
-  selectedOutputs: z.array(importedAssetRef).max(2).optional(),
+  selectedOutputs: z.array(importedAssetRef).max(128).optional(),
   selectedInputs: z.array(importedAssetRef).max(128).optional()
-}).strict()
+})
+  .strict()
+  .superRefine((input, context) => {
+    const refs = input.selectedOutputs ?? []
+    if (new Set(refs.map((ref) => JSON.stringify(ref))).size !== refs.length)
+      context.addIssue({ code: 'custom', message: 'Selected outputs must be unique references' })
+  })
 export type FlowAgentCollaboration = z.infer<typeof FlowAgentCollaborationSchema>
 export interface FlowAgentCollaborationView {
   task: FlowAgentView
@@ -80,6 +86,6 @@ export interface FlowAgentReply {
 }
 export interface FlowAgentCatalog {
   skills: Array<z.infer<typeof SkillBindingSchema> & { name: string; description: string }>
-  models: Array<{ id: string; name: string }>
+  models: Array<{ id: string; name: string; imageInput?: boolean; audioInput?: boolean }>
   tools: Array<{ id: string; version: string; name: string }>
 }

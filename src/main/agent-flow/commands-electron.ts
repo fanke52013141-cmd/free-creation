@@ -4,6 +4,7 @@ import { basename, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { registerFlowCommandsIpc } from '../ipc/flow-commands.ipc'
+import type { FlowCommandDesktop } from '../ipc/flow-commands.ipc'
 import { registerFlowAssetsIpc } from '../ipc/flow-assets.ipc'
 import { registerProjectIpc } from '../ipc/project.ipc'
 import { registerLibraryIpc } from '../ipc/library.ipc'
@@ -15,6 +16,7 @@ import { registerDiagnosticsIpc, setDiagnosticsService } from '../ipc/diagnostic
 import { SqliteModelHost } from '../model-host/sqlite-model-host'
 import { createDesktopModelRuntime } from '../model-host/runtime'
 import { createProject } from '../store/projects.repo'
+import { importMedia } from '../store/media.repo'
 import { closeDb, getDb, setSetting } from '../store/db'
 import { initDiagnosticsService } from '../diagnostics/service'
 import { setGatewayEventSink } from '../diagnostics/gateway-events'
@@ -47,6 +49,7 @@ if (
     let failed = false
     let report: unknown = null
     let stage = 'initialize'
+    let deliverAgentCommand: FlowCommandDesktop['deliver'] | undefined
     try {
       const database = getDb()
       const statePath = join(directory, 'bridge-state.json')
@@ -54,6 +57,29 @@ if (
         phase === 'execute'
           ? createProject('测试：生产命令桥').id
           : JSON.parse(readFileSync(statePath, 'utf8')).projectId
+      let fixtureMedia: {
+        image: { id: string; path: string; mime: string }
+        audio: { id: string; path: string; mime: string }
+      }
+      if (phase === 'execute') {
+        const imagePath = join(directory, 'command-image.png')
+        writeFileSync(
+          imagePath,
+          Buffer.from(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aYawAAAAASUVORK5CYII=',
+            'base64'
+          )
+        )
+        const image = await importMedia(projectId, imagePath)
+        const audio = await importMedia(projectId, resolve(__dirname, '../../test/fixtures/agent-audio.wav'))
+        if (!image.ok || !audio.ok) throw new Error('FIXTURE_MEDIA_IMPORT_FAILED')
+        fixtureMedia = {
+          image: { id: image.asset.id, path: image.asset.path, mime: image.asset.mime },
+          audio: { id: audio.asset.id, path: audio.asset.path, mime: audio.asset.mime }
+        }
+      } else {
+        fixtureMedia = JSON.parse(readFileSync(statePath, 'utf8')).fixtureMedia
+      }
       setSetting('lastProjectId', projectId)
       registerProjectIpc()
       registerLibraryIpc()
@@ -76,7 +102,9 @@ if (
       const active = window
       registerGatewayIpc(active)
       registerFlowAssetsIpc(() => active)
-      registerFlowCommandsIpc(() => active)
+      registerFlowCommandsIpc(() => active, (desktop) => {
+        deliverAgentCommand = desktop.deliver
+      })
       await active.loadURL(url)
       stage = 'canvas-ready'
       const readyDeadline = Date.now() + 60000
@@ -90,8 +118,9 @@ if (
       }
       if (phase === 'execute') {
         stage = 'execute-fixture'
-        report = await active.webContents.executeJavaScript(`(async () => {
+        const fixtureSetup = await active.webContents.executeJavaScript(`(async () => {
           const projectId = ${JSON.stringify(projectId)}
+          const fixtureMedia = ${JSON.stringify(fixtureMedia)}
           window.__bridgePhase='create'
           const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
           const { ensureCanvasSaved, placeFlowAsset } = await import('/src/canvas/flow-asset-actions.ts')
@@ -110,13 +139,26 @@ if (
           editor.createShape({id:'shape:bridge-source',type:'node-card',x:100,y:100,props:{nodeType:'text',title:'人工材料',text:'private-fixture-body-v1'}})
           editor.createShape({id:'shape:bridge-target',type:'node-card',x:1050,y:100,props:{nodeType:'processor',title:'处理资产',config:JSON.stringify({operation:'template',template:'结果：{{value}}'})}})
           editor.createShape({id:'shape:bridge-orphan',type:'node-card',x:1050,y:450,props:{nodeType:'processor',title:'等待核对',config:JSON.stringify({operation:'pass',fallback:'private-fixture-fallback'})}})
-          editor.createShape({id:'shape:bridge-agent',type:'node-card',x:100,y:450,props:{nodeType:'agent',title:'执行 Agent',text:'private-fixture-goal',config:JSON.stringify({schemaVersion:1,role:'specialist',interactionMode:'autonomous',skills:[],tools:[],allowedNodeIds:['shape:bridge-target','shape:bridge-orphan'],maxSteps:8,relations:[]})}})
+          editor.createShape({id:'shape:bridge-image-gen',type:'node-card',x:1550,y:100,props:{nodeType:'image-gen',title:'隔离生图',config:JSON.stringify({count:1,providerKey:'missing',modelKey:'missing'})}})
+          editor.createShape({id:'shape:bridge-image-batch',type:'node-card',x:1550,y:400,props:{nodeType:'image-gen',title:'拒绝批量生图',config:JSON.stringify({count:2,providerKey:'missing',modelKey:'missing'})}})
+          editor.createShape({id:'shape:bridge-speech',type:'node-card',x:1550,y:700,props:{nodeType:'speech',title:'隔离语音',config:JSON.stringify({backend:'minimax',providerId:'',modelId:''})}})
+          editor.createShape({id:'shape:bridge-image-source',type:'node-card',x:100,y:900,props:{nodeType:'image',title:'固定原图',mediaId:fixtureMedia.image.id,mediaPath:fixtureMedia.image.path,mediaMime:fixtureMedia.image.mime}})
+          editor.createShape({id:'shape:bridge-image-edit',type:'node-card',x:1050,y:900,props:{nodeType:'image-edit',title:'隔离图片编辑',config:JSON.stringify({version:1,modelKey:'missing',size:'auto',instruction:'private-fixture-image-edit',annotations:[]})}})
+          editor.createShape({id:'shape:bridge-audio-source',type:'node-card',x:100,y:1250,props:{nodeType:'audio',title:'固定参考音频',mediaId:fixtureMedia.audio.id,mediaPath:fixtureMedia.audio.path,mediaMime:fixtureMedia.audio.mime}})
+          editor.createShape({id:'shape:bridge-tts',type:'node-card',x:1050,y:1250,props:{nodeType:'tts',title:'隔离音色复刻',config:JSON.stringify({version:1,backend:'minimax',modelId:'speech-2.8-turbo'})}})
+          editor.createShape({id:'shape:bridge-agent',type:'node-card',x:100,y:450,props:{nodeType:'agent',title:'执行 Agent',text:'private-fixture-goal',config:JSON.stringify({schemaVersion:1,role:'specialist',interactionMode:'autonomous',skills:[],tools:[],allowedNodeIds:['shape:bridge-target','shape:bridge-orphan','shape:bridge-image-gen','shape:bridge-image-batch','shape:bridge-speech','shape:bridge-image-edit','shape:bridge-tts'],maxSteps:8,relations:[]})}})
           await ensureCanvasSaved()
           window.__bridgePhase='submit-asset'
           let file=value(await window.api.openProject(projectId))
           const asset=value(await window.api.submitFlowAsset({projectId,nodeId:'shape:bridge-source',portId:'out-text',submissionId:'bridge-source-v1',expectedGraphVersion:file.meta.graphVersion,traceId:'trace-source',spanId:'span-source'}))
           const pinnedId=placeFlowAsset(editor,asset,'shape:bridge-source')
           if (!createEdge(editor,{shapeId:pinnedId,portId:'out-text'},{shapeId:'shape:bridge-target',portId:'in-value'})) throw new Error('FIXTURE_EDGE_FAILED')
+          if (!createEdge(editor,{shapeId:pinnedId,portId:'out-text'},{shapeId:'shape:bridge-image-gen',portId:'in-text'}) ||
+              !createEdge(editor,{shapeId:pinnedId,portId:'out-text'},{shapeId:'shape:bridge-image-batch',portId:'in-text'}) ||
+              !createEdge(editor,{shapeId:pinnedId,portId:'out-text'},{shapeId:'shape:bridge-speech',portId:'in-text'})) throw new Error('FIXTURE_GENERATOR_EDGE_FAILED')
+          if (!createEdge(editor,{shapeId:'shape:bridge-image-source',portId:'out-image'},{shapeId:'shape:bridge-image-edit',portId:'in-image'}) ||
+              !createEdge(editor,{shapeId:pinnedId,portId:'out-text'},{shapeId:'shape:bridge-image-edit',portId:'in-text'}) ||
+              !createEdge(editor,{shapeId:'shape:bridge-audio-source',portId:'out-audio'},{shapeId:'shape:bridge-tts',portId:'in-audio'})) throw new Error('FIXTURE_MEDIA_EDGE_FAILED')
           editor.updateShape({id:'shape:bridge-source',type:'node-card',props:{text:'private-fixture-body-v2'}})
           await ensureCanvasSaved()
           const manual=await runNodeManually(editor,projectId,[],'shape:bridge-target')
@@ -147,6 +189,41 @@ if (
           if(conflict.ok||conflict.error.code!=='FLOW_COMMAND_CONFLICT') throw new Error('FIXTURE_CONFLICT_FAILED')
           const invalid=await window.api.prepareFlowCommand({...first,body:'fake-secret-key'})
           if(invalid.ok) throw new Error('FIXTURE_BODY_ACCEPTED')
+          const generatorCommand=async(commandId,targetNodeId,contractVersion)=>{
+            await ensureCanvasSaved();const saved=value(await window.api.openProject(projectId))
+            return {schemaVersion:1,kind:'node.execute',commandId,projectId,taskId:'task-'+commandId,agentNodeId:'shape:bridge-agent',targetNodeId,contractVersion,
+              expectedSemanticRevision:await bridge.canvasSemanticRevision(editor,saved),inputs:[{targetPortId:'in-text',assets:[asset.ref]}],traceId:'trace-'+commandId,spanId:'span-'+commandId}
+          }
+          window.__bridgePhase='generator-batch-reject'
+          const batch=await window.api.prepareFlowCommand(await generatorCommand('bridge-image-batch','shape:bridge-image-batch',3))
+          if(batch.ok||batch.error.code!=='FLOW_INPUT_CONTRACT_INVALID')throw new Error('FIXTURE_IMAGE_BATCH_ADMITTED')
+          window.__bridgePhase='generator-image-command'
+          const imageCommand=await generatorCommand('bridge-image-gen','shape:bridge-image-gen',3)
+          value(await window.api.dispatchFlowCommand(imageCommand))
+          const imageReceipt=await waitReceipt(imageCommand.commandId)
+          window.__bridgePhase='generator-speech-command'
+          const speechCommand=await generatorCommand('bridge-speech','shape:bridge-speech',4)
+          value(await window.api.dispatchFlowCommand(speechCommand))
+          const speechReceipt=await waitReceipt(speechCommand.commandId)
+          if(imageReceipt.state!=='skipped'||imageReceipt.outputRefs.length||speechReceipt.state!=='skipped'||speechReceipt.outputRefs.length)throw new Error('FIXTURE_GENERATOR_BRIDGE_FAILED')
+          await ensureCanvasSaved()
+          const mediaFile=value(await window.api.openProject(projectId))
+          const imageRef=value(await window.api.submitFlowAsset({projectId,nodeId:'shape:bridge-image-source',portId:'out-image',submissionId:'bridge-image-source-v1',expectedGraphVersion:mediaFile.meta.graphVersion,traceId:'trace-image-source',spanId:'span-image-source'})).ref
+          const audioRef=value(await window.api.submitFlowAsset({projectId,nodeId:'shape:bridge-audio-source',portId:'out-audio',submissionId:'bridge-audio-source-v1',expectedGraphVersion:mediaFile.meta.graphVersion,traceId:'trace-audio-source',spanId:'span-audio-source'})).ref
+          const fixedMediaCommand=async(commandId,targetNodeId,contractVersion,inputs)=>{
+            await ensureCanvasSaved();const saved=value(await window.api.openProject(projectId))
+            return {schemaVersion:1,kind:'node.execute',commandId,projectId,taskId:'task-'+commandId,agentNodeId:'shape:bridge-agent',targetNodeId,contractVersion,
+              expectedSemanticRevision:await bridge.canvasSemanticRevision(editor,saved),inputs,traceId:'trace-'+commandId,spanId:'span-'+commandId}
+          }
+          window.__bridgePhase='generator-image-edit-command'
+          const imageEditCommand=await fixedMediaCommand('bridge-image-edit','shape:bridge-image-edit',2,[{targetPortId:'in-image',assets:[imageRef]},{targetPortId:'in-text',assets:[asset.ref]}])
+          value(await window.api.dispatchFlowCommand(imageEditCommand))
+          const imageEditReceipt=await waitReceipt(imageEditCommand.commandId)
+          window.__bridgePhase='generator-tts-command'
+          const ttsCommand=await fixedMediaCommand('bridge-tts','shape:bridge-tts',4,[{targetPortId:'in-audio',assets:[audioRef]}])
+          value(await window.api.dispatchFlowCommand(ttsCommand))
+          const ttsReceipt=await waitReceipt(ttsCommand.commandId)
+          if(imageEditReceipt.state!=='skipped'||imageEditReceipt.outputRefs.length||ttsReceipt.state!=='skipped'||ttsReceipt.outputRefs.length)throw new Error('FIXTURE_MEDIA_GENERATOR_BRIDGE_FAILED')
           editor.updateShape({id:'shape:bridge-target',type:'node-card',x:1100})
           window.__bridgePhase='position'
           await ensureCanvasSaved()
@@ -187,8 +264,53 @@ if (
           const orphan=await command('bridge-no-run','shape:bridge-orphan')
           value(await window.api.prepareFlowCommand(orphan))
           const snapshot=editor.store.getStoreSnapshot('document')
-          return {projectId,first,unknown,orphan,historyCount:editor.getShape('shape:bridge-target').meta.nodeRunHistory.length,
-            checks:['real desktop dispatch','manual/command value + fingerprint + asset source parity','saved immutable output receipt','same command replay has no effect','different intent rejected','body injection rejected','position allowed; semantic edit rejected','failed execution parity; no stale output','queued cancellation parity; no effect','saved-run pending; unsent pending'],nodeCount:deriveGraph(editor).nodes.length}
+          window.__bridgePhase='agent-stop-signal'
+          const stopCommand=await generatorCommand('bridge-stop-signal','shape:bridge-image-gen',3)
+          const stopPrepared=value(await window.api.prepareFlowCommand(stopCommand))
+          if(stopPrepared.state!=='ready')throw new Error('FIXTURE_STOP_GRANT_FAILED')
+          queue.setResourceLimit('provider',1)
+          window.__bridgeProviderBlockerRelease=await queue.acquireNodeResource({projectId,nodeId:'fixture-provider-blocker',label:'fixture',resource:'provider',cancel:()=>{}})
+          return {stopGrant:stopPrepared.grant,state:{projectId,first,unknown,orphan,historyCount:editor.getShape('shape:bridge-target').meta.nodeRunHistory.length,
+            checks:['real desktop dispatch','manual/command value + fingerprint + asset source parity','saved immutable output receipt','same command replay has no effect','different intent rejected','body injection rejected','image generation and speech use the public command bridge without supplier calls','image edit and TTS use fixed imported media through public command execution without supplier calls','Agent image batch limit rejected before execution','main Agent stop signal cancels queued renderer command and retains unknown receipt','position allowed; semantic edit rejected','failed execution parity; no stale output','queued cancellation parity; no effect','saved-run pending; unsent pending'],fixtureMedia,nodeCount:deriveGraph(editor).nodes.length}}
+        })().catch(error=>({fixtureErrorCode:String(error?.message??'').split(' ').find(value=>value.startsWith('FIXTURE_')||value.startsWith('FLOW_')||value.startsWith('ASSET_'))??'FIXTURE_RENDERER_ERROR',fixturePhase:window.__bridgePhase}))`)
+        if (fixtureSetup?.fixtureErrorCode) throw new Error(fixtureSetup.fixtureErrorCode)
+        if (!fixtureSetup?.stopGrant || !fixtureSetup?.state || !deliverAgentCommand)
+          throw new Error('FIXTURE_STOP_GRANT_NOT_DELIVERED')
+        const controller = new AbortController()
+        const delivery = deliverAgentCommand(
+          fixtureSetup.stopGrant as Parameters<FlowCommandDesktop['deliver']>[0],
+          controller.signal
+        )
+        const queuedDeadline = Date.now() + 10000
+        let queued = false
+        while (!queued && Date.now() < queuedDeadline) {
+          queued = await active.webContents.executeJavaScript(`(async()=>{
+            const queue=await import('/src/engine/resource-queue.ts')
+            return queue.useResourceQueue.getState().tasks.some(task=>task.key===${JSON.stringify(projectId + '/shape:bridge-image-gen')}&&task.status==='queued')
+          })()`)
+          if (!queued) await new Promise((done) => setTimeout(done, 20))
+        }
+        if (!queued) {
+          controller.abort()
+          await delivery
+          throw new Error('FIXTURE_STOP_COMMAND_NOT_QUEUED')
+        }
+        controller.abort()
+        await delivery
+        report = await active.webContents.executeJavaScript(`(async()=>{
+          const state=${JSON.stringify(fixtureSetup.state)}
+          const queue=await import('/src/engine/resource-queue.ts')
+          for(let i=0;i<300;i++){
+            const receipt=await window.api.lookupFlowCommand({projectId:state.projectId,commandId:'bridge-stop-signal'})
+            const queued=queue.useResourceQueue.getState().tasks.some(task=>task.key===state.projectId+'/shape:bridge-image-gen')
+            if(receipt.ok&&receipt.data.state==='unknown'&&!queued){
+              window.__bridgeProviderBlockerRelease?.();window.__bridgeProviderBlockerRelease=null
+              queue.setResourceLimit('provider',2)
+              return state
+            }
+            await new Promise(done=>setTimeout(done,20))
+          }
+          throw new Error('FIXTURE_STOP_SIGNAL_NOT_APPLIED')
         })()`)
         writeFileSync(statePath, JSON.stringify(report))
         foreign = new BrowserWindow({
@@ -234,10 +356,9 @@ if (
     } catch (error) {
       failed = true
       // Only static fixture codes; never print raw UI errors, model data or project snapshots.
+      const message = error instanceof Error ? error.message : ''
       const code =
-        error instanceof Error
-          ? error.message.match(/\b(?:FIXTURE|FLOW|ASSET)_[A-Z_]+\b/)?.[0]
-          : undefined
+        message.match(/\b(?:FIXTURE|FLOW|ASSET)_[A-Z_]+\b/)?.[0]
       let fixtureStage: unknown
       try {
         fixtureStage = await window?.webContents.executeJavaScript('window.__bridgePhase')

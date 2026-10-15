@@ -252,8 +252,15 @@ export function registerFlowCommandsIpc(
           Date.now() >= deadline ||
           activeProjectId !== grant.command.projectId
         ) {
-          if (signal.aborted)
+          if (signal.aborted) {
+            const active = window()
+            if (active && !active.isDestroyed())
+              active.webContents.send(IPC.flowCommands.cancel, {
+                projectId: grant.command.projectId,
+                commandId: grant.command.commandId
+              })
             stopAgentVideos(getDb(), grant.command.projectId, grant.command.taskId)
+          }
           ledger.unknown({
             projectId: grant.command.projectId,
             commandId: grant.command.commandId,

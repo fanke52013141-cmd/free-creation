@@ -19,6 +19,7 @@ import {
 import { FlowSkillStore, BUILTIN_FLOW_SKILLS } from './skill-store'
 import { FlowTaskStore, agentThread, type AgentTaskRecord } from './task-store'
 import { FlowAssetStore } from './asset-store'
+import { agentReplyOutputProjection } from '../../shared/agent-flow/agent-outputs'
 import { createAgentRuntime, type AgentRuntime, type AgentModelPort } from './runtime'
 import { createAgentTelemetry } from './runtime-diagnostics'
 import { createLedgerToolPort } from './ledger-tool'
@@ -27,8 +28,16 @@ import { controlVideoTask } from '../gateway/video'
 import {
   videoFlowInputsValid,
   videoFlowAssetValid,
+  imageGenFlowInputsValid,
+  imageGenFlowConfigValid,
+  imageEditFlowInputsValid,
+  imageEditFlowConfigValid,
+  speechFlowInputsValid,
+  speechFlowConfigValid,
+  ttsFlowInputsValid,
+  ttsFlowConfigValid,
   flowTargetContract,
-  agentOutputValue
+  flowTargetPorts
 } from '../../shared/agent-flow/video-adapter'
 import type { FlowCommandDesktop } from '../ipc/flow-commands.ipc'
 import { projectSemanticRevision, collaborationScopeRevision } from './command-intent'
@@ -59,7 +68,9 @@ const view = (record: AgentTaskRecord): FlowAgentView => ({
   decisions: record.decisions,
   tools: record.tools,
   code: record.code,
-  prepared: record.state === 'ready' && !!record.snapshot.parentTaskId
+  prepared:
+    record.state === 'ready' &&
+    !!(record.snapshot.parentTaskId || record.snapshot.coordinatorTaskId)
 })
 
 /** Trusted desktop admission derives all execution scope from the saved canvas. */
@@ -173,7 +184,10 @@ export class FlowAgentDesktopHost {
     const record = this.latest(input)
     if (!record) return null
     if (
-      (record.state === 'running' || (record.state === 'ready' && !record.snapshot.parentTaskId)) &&
+      (record.state === 'running' ||
+        (record.state === 'ready' &&
+          !record.snapshot.parentTaskId &&
+          !record.snapshot.coordinatorTaskId)) &&
       !this.active.has(this.key(input)) &&
       !this.admission.has(this.key(input))
     ) {
@@ -292,8 +306,14 @@ export class FlowAgentDesktopHost {
       const edges = file.edges.filter((edge) => edge.to.nodeId === nodeId)
       if (
         edges.some((edge) => !adapter.inputs.includes(edge.to.portId)) ||
-        (node.type !== 'video' &&
-          new Set(edges.map((edge) => edge.to.portId)).size !== edges.length)
+        edges.some((edge) => {
+          const port = flowTargetPorts(node).find((item) => item.id === edge.to.portId)
+          return (
+            !port ||
+            (port.cardinality === 'one' &&
+              edges.filter((item) => item.to.portId === edge.to.portId).length > 1)
+          )
+        })
       )
         throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'admission')
       const inputs = [...new Set(edges.map((edge) => edge.to.portId))].map((targetPortId) => ({
@@ -302,6 +322,18 @@ export class FlowAgentDesktopHost {
           .filter((edge) => edge.to.portId === targetPortId)
           .map((edge) => freeze(edge.from, `task:${raw.requestId}:${versions.size}`))
       }))
+      let targetConfig: unknown = {}
+      try {
+        targetConfig = JSON.parse(
+          String(
+            (file.tldrawSnapshot as { store: Record<string, { props: { config: string } }> }).store[
+              nodeId
+            ].props.config || '{}'
+          )
+        )
+      } catch {
+        throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'admission')
+      }
       if (
         node.type === 'video' &&
         !videoFlowInputsValid(
@@ -329,7 +361,61 @@ export class FlowAgentDesktopHost {
         )
       )
         throw new AgentRuntimeError('AGENT_INPUT_TYPE_UNSUPPORTED', 'admission')
-      return { nodeId, contractVersion: node.contractVersion as 1 | 7, inputs }
+      if (
+        node.type === 'image-gen' &&
+        (!imageGenFlowConfigValid(targetConfig) ||
+          !imageGenFlowInputsValid(
+            inputs.map((input) => ({
+              targetPortId: input.targetPortId,
+              values: this.assets
+                .resolveInputs(raw.projectId, input.assets)
+                .map((version) => version.value)
+            }))
+          ))
+      )
+        throw new AgentRuntimeError('AGENT_INPUT_TYPE_UNSUPPORTED', 'admission')
+      if (
+        node.type === 'image-edit' &&
+        (!imageEditFlowConfigValid(targetConfig) ||
+          !imageEditFlowInputsValid(
+            inputs.map((input) => ({
+              targetPortId: input.targetPortId,
+              values: this.assets
+                .resolveInputs(raw.projectId, input.assets)
+                .map((version) => version.value)
+            }))
+          ))
+      )
+        throw new AgentRuntimeError('AGENT_INPUT_TYPE_UNSUPPORTED', 'admission')
+      if (
+        node.type === 'speech' &&
+        (!speechFlowConfigValid(targetConfig) ||
+          !speechFlowInputsValid(
+            targetConfig,
+            inputs.map((input) => ({
+              targetPortId: input.targetPortId,
+              values: this.assets
+                .resolveInputs(raw.projectId, input.assets)
+                .map((version) => version.value)
+            }))
+          ))
+      )
+        throw new AgentRuntimeError('AGENT_INPUT_TYPE_UNSUPPORTED', 'admission')
+      if (
+        node.type === 'tts' &&
+        (!ttsFlowConfigValid(targetConfig) ||
+          !ttsFlowInputsValid(
+            targetConfig,
+            inputs.map((input) => ({
+              targetPortId: input.targetPortId,
+              values: this.assets
+                .resolveInputs(raw.projectId, input.assets)
+                .map((version) => version.value)
+            }))
+          ))
+      )
+        throw new AgentRuntimeError('AGENT_INPUT_TYPE_UNSUPPORTED', 'admission')
+      return { nodeId, contractVersion: node.contractVersion as 1 | 2 | 3 | 4 | 7, inputs }
     })
     const directInputs = file.edges
       .filter((edge) => edge.to.nodeId === raw.nodeId)
@@ -404,14 +490,25 @@ export class FlowAgentDesktopHost {
     })
     return this.store.create(snapshot, record.skills)
   }
-  async runAssignment(
+  private assignmentSnapshot(
     input: FlowAgentRun,
     assignment: { goal: string; completion: string; inputs: FlowAgentReply['refs'] },
     coordinatorTaskId: string,
     prepared?: AgentTaskSnapshot
-  ): Promise<FlowAgentReply> {
+  ): AgentTaskSnapshot {
     if (new CoordinationStore(this.db).owner(input.projectId, input.nodeId) !== coordinatorTaskId)
       throw new AgentRuntimeError('FLOW_SCOPE_REJECTED', 'assignment')
+    if (prepared?.coordinatorTaskId === coordinatorTaskId) {
+      const stored = this.assignment(input, coordinatorTaskId)
+      if (
+        !stored ||
+        canonicalFlowJson(stored.snapshot) !== canonicalFlowJson(prepared) ||
+        prepared.taskId !== input.requestId ||
+        canonicalFlowJson(prepared.directInputs) !== canonicalFlowJson(assignment.inputs)
+      )
+        throw new AgentRuntimeError('TASK_INTENT_CONFLICT', 'assignment')
+      return stored.snapshot
+    }
     const snapshot = prepared ? AgentTaskSnapshotSchema.parse(prepared) : this.bind(input)
     if (
       snapshot.projectId !== input.projectId ||
@@ -432,21 +529,36 @@ export class FlowAgentDesktopHost {
     snapshot.goal = `${snapshot.goal}\n本次主控分派要求：${assignment.goal}\n完成条件：${assignment.completion}`
     snapshot.directInputs = assignment.inputs
     snapshot.coordinatorTaskId = coordinatorTaskId
-    return this.run(input, AgentTaskSnapshotSchema.parse(snapshot))
+    return AgentTaskSnapshotSchema.parse(snapshot)
+  }
+  prepareAssignment(
+    input: FlowAgentRun,
+    assignment: { goal: string; completion: string; inputs: FlowAgentReply['refs'] },
+    coordinatorTaskId: string,
+    prepared?: AgentTaskSnapshot
+  ): AgentTaskSnapshot {
+    const snapshot = this.assignmentSnapshot(input, assignment, coordinatorTaskId, prepared)
+    return this.store.create(snapshot, this.skills.bind(snapshot.config.skills, snapshot.config.tools))
+      .snapshot
+  }
+  async runAssignment(
+    input: FlowAgentRun,
+    assignment: { goal: string; completion: string; inputs: FlowAgentReply['refs'] },
+    coordinatorTaskId: string,
+    prepared?: AgentTaskSnapshot
+  ): Promise<FlowAgentReply> {
+    const snapshot = this.assignmentSnapshot(input, assignment, coordinatorTaskId, prepared)
+    return this.run({ ...input, expectedTaskId: snapshot.taskId }, snapshot)
   }
   private reply(record: AgentTaskRecord): FlowAgentReply {
-    const outputs: FlowAgentReply['outputs'] = {}
-    if (record.state === 'completed') {
-      for (const ref of record.outputRefs) {
-        const value = agentOutputValue(
-          this.assets.resolveInputs(record.snapshot.projectId, [ref])[0].value
-        )
-        const port = value.kind === 'json' ? 'out-json' : 'out-text'
-        if (outputs[port] && canonicalFlowJson(outputs[port]) !== canonicalFlowJson(value))
-          throw new AgentRuntimeError('AGENT_OUTPUT_CARDINALITY', 'output')
-        outputs[port] = value.kind === 'markdown' ? { kind: 'text', text: value.text } : value
-      }
-    }
+    const versions =
+      record.state === 'completed'
+        ? this.assets.resolveInputs(record.snapshot.projectId, record.outputRefs)
+        : []
+    const outputs = agentReplyOutputProjection(
+      record.outputRefs,
+      versions.map((version) => version.value)
+    )
     return {
       task: view(record),
       outputs,
@@ -634,15 +746,12 @@ export class FlowAgentDesktopHost {
         if (typeof input.accepted !== 'boolean')
           throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'human')
         const candidates = this.collaboration(input)!.candidates
-        const chosen = this.assets.resolveInputs(input.projectId, input.selectedOutputs ?? [])
+        this.assets.resolveInputs(input.projectId, input.selectedOutputs ?? [])
         if (
-          new Set(
-            chosen.map((version) =>
-              agentOutputValue(version.value).kind === 'json' ? 'json' : 'text'
-            )
-          ).size !== chosen.length
+          new Set((input.selectedOutputs ?? []).map((ref) => canonicalFlowJson(ref))).size !==
+          (input.selectedOutputs ?? []).length
         )
-          throw new AgentRuntimeError('AGENT_OUTPUT_CARDINALITY', 'human-selection')
+          throw new AgentRuntimeError('AGENT_OUTPUT_UNVERIFIED', 'human-selection')
         if (
           input.selectedOutputs?.some(
             (ref) =>
@@ -796,7 +905,9 @@ export class FlowAgentDesktopHost {
         old.snapshot.taskId === input.requestId &&
         !(
           old.state === 'ready' &&
-          old.snapshot.parentTaskId &&
+          (old.snapshot.parentTaskId ||
+            (old.snapshot.coordinatorTaskId &&
+              assigned?.coordinatorTaskId === old.snapshot.coordinatorTaskId)) &&
           input.expectedTaskId === old.snapshot.taskId
         )
       )
@@ -816,7 +927,9 @@ export class FlowAgentDesktopHost {
         !['completed', 'cancelled', 'failed'].includes(old.state) &&
         !(
           old.state === 'ready' &&
-          old.snapshot.parentTaskId &&
+          (old.snapshot.parentTaskId ||
+            (old.snapshot.coordinatorTaskId &&
+              assigned?.coordinatorTaskId === old.snapshot.coordinatorTaskId)) &&
           input.expectedTaskId === old.snapshot.taskId
         )
       )
@@ -826,7 +939,9 @@ export class FlowAgentDesktopHost {
       const prepared =
         input.action === 'start' &&
         old?.state === 'ready' &&
-        !!old.snapshot.parentTaskId &&
+        (!!old.snapshot.parentTaskId ||
+          (!!old.snapshot.coordinatorTaskId &&
+            assigned?.coordinatorTaskId === old.snapshot.coordinatorTaskId)) &&
         input.expectedTaskId === old.snapshot.taskId
       const snapshot =
         input.action === 'continue' || prepared ? old!.snapshot : (assigned ?? this.bind(input))

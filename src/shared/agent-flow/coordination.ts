@@ -14,7 +14,7 @@ export const CoordinationDecisionSchema = z.discriminatedUnion('kind', [
     })
     .strict(),
   z
-    .object({ kind: z.literal('finish'), outputs: z.array(AgentFlowAssetRefSchema).min(1).max(2) })
+    .object({ kind: z.literal('finish'), outputs: z.array(AgentFlowAssetRefSchema).min(1).max(128) })
     .strict(),
   z.object({ kind: z.literal('wait') }).strict(),
   z
@@ -31,7 +31,8 @@ export const CoordinationDecisionSchema = z.discriminatedUnion('kind', [
             })
             .strict()
         )
-        .length(2)
+        .min(2)
+        .max(4)
     })
     .strict()
 ])
@@ -39,7 +40,7 @@ export type CoordinationDecision = z.infer<typeof CoordinationDecisionSchema>
 export interface CoordinationContext {
   goal: string
   mode: 'collaborative' | 'autonomous'
-  maxParallelTasks?: 1 | 2
+  maxParallelTasks?: number
   available: Array<{
     nodeId: string
     goal: string
@@ -62,7 +63,7 @@ export interface AgentPublication {
   traceId: string
   spanId: string
 }
-export type ModelIdentity = { requiresImageInput?: boolean } & Pick<
+export type ModelIdentity = { requiresImageInput?: boolean; requiresAudioInput?: boolean } & Pick<
   AgentTaskSnapshot,
   'config' | 'projectId' | 'agentNodeId' | 'taskId' | 'traceId' | 'spanId'
 >

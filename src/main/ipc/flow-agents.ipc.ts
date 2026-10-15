@@ -1,4 +1,5 @@
 import { supportsSampledVideoReview } from '../../shared/agent-flow/video-review'
+import { supportsReviewAudioInput } from '../../shared/agent-flow/media-review'
 import { ipcMain, type BrowserWindow } from 'electron'
 import { IPC, type IpcEnvelope } from '../../shared/contracts'
 import {
@@ -51,6 +52,8 @@ export function registerFlowAgentsIpc(
       throw new AgentRuntimeError('AGENT_MODEL_UNAVAILABLE', 'model-capability')
     if (snapshot.requiresImageInput && !supportsSampledVideoReview(definition))
       throw new AgentRuntimeError('FLOW_VIDEO_REVIEW_MODEL_UNVERIFIED', 'model-capability')
+    if (snapshot.requiresAudioInput && !supportsReviewAudioInput(definition))
+      throw new AgentRuntimeError('FLOW_AUDIO_REVIEW_MODEL_UNVERIFIED', 'model-capability')
     const connection = await catalog.getConnection(definition.connectionId)
     if (
       !connection?.enabled ||
@@ -233,7 +236,12 @@ export function registerFlowAgentsIpc(
                                       (capability) => capability.operation === 'text.generate'
                                     )
                                 )
-                                .map(({ id, name }) => ({ id, name }))
+                                .map((model) => ({
+                                  id: model.id,
+                                  name: model.name,
+                                  imageInput: supportsSampledVideoReview(model),
+                                  audioInput: supportsReviewAudioInput(model)
+                                }))
                             )
         if (log)
           emitGatewayEvent('agent.desktop.completed', '画布 Agent 操作完成', context, {

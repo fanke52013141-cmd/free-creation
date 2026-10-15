@@ -132,9 +132,6 @@ export async function acceptVideoRework(input: {
     count('video-rework-downloads') !== (phase === 'execute' ? 1 : 2)
   )
     throw new Error('VIDEO_REWORK_SUPPLIER_DUPLICATED')
-  await window.webContents.executeJavaScript(
-    `(async()=>{const d=await import('/src/engine/diagnosticsReporter.ts');while(d.pendingDiagnosticsEventCount())d.flushDiagnosticsEvents();await new Promise(done=>setTimeout(done,100));if(d.diagnosticsTransportDropCount())throw new Error('VIDEO_REWORK_DIAGNOSTICS_DROPPED');})()`
-  )
   if (phase === 'reopen') {
     const reviews = (
       db

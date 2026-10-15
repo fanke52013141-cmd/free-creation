@@ -4,9 +4,17 @@ import type { ProjectFile, PortDecl } from '../../shared/types'
 import type { NodeShape } from '../../shared/engine/executor-types'
 import {
   flowTargetContract,
+  flowTargetPorts,
   videoFlowInputsValid,
   videoFlowAssetValid,
-  VIDEO_FLOW_PORTS
+  imageGenFlowInputsValid,
+  imageGenFlowConfigValid,
+  imageEditFlowInputsValid,
+  imageEditFlowConfigValid,
+  speechFlowInputsValid,
+  speechFlowConfigValid,
+  ttsFlowInputsValid,
+  ttsFlowConfigValid
 } from '../../shared/agent-flow/video-adapter'
 import { readStoredNodeRunStatus } from '../../shared/engine/run-status'
 import { computeInputFingerprint } from '../../shared/engine/input-fingerprint'
@@ -17,7 +25,6 @@ import {
   AgentNodeConfigSchema,
   ReviewNodeConfigSchema
 } from '../../shared/agent-flow/node-contracts'
-import { PROCESSOR_PORTS } from '../../shared/agent-flow/processor-contract'
 import {
   NodeExecuteCommandSchema,
   CommandLookupSchema,
@@ -126,6 +133,22 @@ export class FlowCommandLedger {
         .get(input.projectId, input.commandId) as Row | undefined) ??
       fail('FLOW_COMMAND_MISSING', 'receipt-read')
     )
+  }
+  private taskStopped(projectId: string, taskId: string): boolean {
+    const agent = this.db
+      .prepare('SELECT state FROM flow_agent_tasks WHERE project_id=? AND task_id=?')
+      .get(projectId, taskId) as { state: string } | undefined
+    if (agent && ['cancelled', 'failed'].includes(agent.state)) return true
+    const coordination = this.db
+      .prepare('SELECT body_json FROM flow_coordination_runs WHERE project_id=? AND task_id=?')
+      .get(projectId, taskId) as { body_json: string } | undefined
+    if (!coordination) return false
+    try {
+      const state = (JSON.parse(coordination.body_json) as { state?: unknown }).state
+      return state === 'cancelled' || state === 'failed'
+    } catch {
+      return false
+    }
   }
   private update(row: Row, receipt: FlowCommandReceipt): FlowCommandReceipt {
     this.db
@@ -256,20 +279,37 @@ export class FlowCommandLedger {
       )
     )
       fail('FLOW_TYPE_UNSUPPORTED', 'video-mode')
+    let targetConfig: unknown = {}
+    try {
+      targetConfig = JSON.parse(String(target.props.config || '{}'))
+    } catch {
+      fail('FLOW_INPUT_CONTRACT_INVALID', 'input')
+    }
+    if (node.type === 'image-gen' && !imageGenFlowConfigValid(targetConfig))
+      fail('FLOW_INPUT_CONTRACT_INVALID', 'image-config')
+    if (node.type === 'image-edit' && !imageEditFlowConfigValid(targetConfig))
+      fail('FLOW_INPUT_CONTRACT_INVALID', 'image-edit-config')
+    if (node.type === 'speech' && !speechFlowConfigValid(targetConfig))
+      fail('FLOW_INPUT_CONTRACT_INVALID', 'speech-config')
+    if (node.type === 'tts' && !ttsFlowConfigValid(targetConfig))
+      fail('FLOW_INPUT_CONTRACT_INVALID', 'tts-config')
     if (
       command.contractVersion !== node.contractVersion ||
-      portIdentity(node.ports) !==
-        portIdentity(
-          node.type === 'video' ? VIDEO_FLOW_PORTS : [...PROCESSOR_PORTS.in, ...PROCESSOR_PORTS.out]
-        ) ||
+      portIdentity(node.ports) !== portIdentity(flowTargetPorts(node)) ||
       target.meta?.pinnedOutput !== undefined
     )
       fail('FLOW_CONTRACT_MISMATCH', 'contract')
     this.assertReviewReady(project, command.targetNodeId, command.inputs)
     const incoming = project.edges.filter((edge) => edge.to.nodeId === command.targetNodeId)
     if (
-      (node.type !== 'video' &&
-        new Set(incoming.map((edge) => edge.to.portId)).size !== incoming.length) ||
+      incoming.some((edge) => {
+        const port = flowTargetPorts(node).find((item) => item.id === edge.to.portId)
+        return (
+          !port ||
+          (port.cardinality === 'one' &&
+            incoming.filter((item) => item.to.portId === edge.to.portId).length > 1)
+        )
+      }) ||
       incoming.some((edge) => !adapter.inputs.includes(edge.to.portId)) ||
       incoming.some(
         (edge) => !command.inputs.some((input) => input.targetPortId === edge.to.portId)
@@ -281,7 +321,7 @@ export class FlowCommandLedger {
     )
       fail('FLOW_INPUT_MANIFEST_INCOMPLETE', 'input')
     for (const input of command.inputs) {
-      const port = (node.type === 'video' ? VIDEO_FLOW_PORTS : PROCESSOR_PORTS.in).find(
+      const port = flowTargetPorts(node).find(
         (item) =>
           item.id === input.targetPortId && item.dir === 'in' && adapter.inputs.includes(item.id)
       )
@@ -306,7 +346,8 @@ export class FlowCommandLedger {
       )
     )
       fail('FLOW_INPUT_CONTRACT_INVALID', 'video-input')
-    return command.inputs.map((input) => {
+    const shape = savedShape(project, command.targetNodeId)
+    const resolvedInputs = command.inputs.map((input) => {
       const versions = this.assets.resolveInputs(command.projectId, input.assets)
       if (
         savedShape(project, command.targetNodeId).props.nodeType === 'video' &&
@@ -363,6 +404,80 @@ export class FlowCommandLedger {
       })
       return { targetPortId: input.targetPortId, versions, sources }
     })
+    if (shape.props.nodeType === 'image-gen') {
+      let config: unknown
+      try {
+        config = JSON.parse(String(shape.props.config || '{}'))
+      } catch {
+        fail('FLOW_INPUT_CONTRACT_INVALID', 'image-config')
+      }
+      if (
+        !imageGenFlowConfigValid(config) ||
+        !imageGenFlowInputsValid(
+          resolvedInputs.map((input) => ({
+            targetPortId: input.targetPortId,
+            values: input.versions.map((version) => version.value)
+          }))
+        )
+      )
+        fail('FLOW_INPUT_CONTRACT_INVALID', 'image-input')
+    }
+    if (shape.props.nodeType === 'speech') {
+      let config: unknown
+      try {
+        config = JSON.parse(String(shape.props.config || '{}'))
+      } catch {
+        fail('FLOW_INPUT_CONTRACT_INVALID', 'speech-config')
+      }
+      if (
+        !speechFlowInputsValid(
+          config,
+          resolvedInputs.map((input) => ({
+            targetPortId: input.targetPortId,
+            values: input.versions.map((version) => version.value)
+          }))
+        )
+      )
+        fail('FLOW_INPUT_CONTRACT_INVALID', 'speech-input')
+    }
+    if (shape.props.nodeType === 'image-edit') {
+      let config: unknown
+      try {
+        config = JSON.parse(String(shape.props.config || '{}'))
+      } catch {
+        fail('FLOW_INPUT_CONTRACT_INVALID', 'image-edit-config')
+      }
+      if (
+        !imageEditFlowConfigValid(config) ||
+        !imageEditFlowInputsValid(
+          resolvedInputs.map((input) => ({
+            targetPortId: input.targetPortId,
+            values: input.versions.map((version) => version.value)
+          }))
+        )
+      )
+        fail('FLOW_INPUT_CONTRACT_INVALID', 'image-edit-input')
+    }
+    if (shape.props.nodeType === 'tts') {
+      let config: unknown
+      try {
+        config = JSON.parse(String(shape.props.config || '{}'))
+      } catch {
+        fail('FLOW_INPUT_CONTRACT_INVALID', 'tts-config')
+      }
+      if (
+        !ttsFlowConfigValid(config) ||
+        !ttsFlowInputsValid(
+          config,
+          resolvedInputs.map((input) => ({
+            targetPortId: input.targetPortId,
+            values: input.versions.map((version) => version.value)
+          }))
+        )
+      )
+        fail('FLOW_INPUT_CONTRACT_INVALID', 'tts-input')
+    }
+    return resolvedInputs
   }
   prepare(raw: NodeExecuteCommand): FlowCommandPrepareResult {
     const command = NodeExecuteCommandSchema.parse(raw)
@@ -558,6 +673,16 @@ export class FlowCommandLedger {
         const project = this.file(input.projectId)
         if (projectSemanticRevision(project) !== command.expectedSemanticRevision)
           fail('FLOW_REVISION_CONFLICT', 'saved-revision')
+        if (this.taskStopped(input.projectId, command.taskId))
+          return this.update(row, {
+            ...previous,
+            state: row.admitted === 1 ? 'unknown' : 'skipped',
+            code:
+              row.admitted === 1
+                ? 'FLOW_TASK_STOPPED_OUTCOME_UNKNOWN'
+                : 'FLOW_TASK_STOPPED_BEFORE_ADMISSION',
+            outputRefs: []
+          })
         phase = 'saved-run'
         const shape = savedShape(project, command.targetNodeId)
         if (shape.props.nodeType === 'video') {
@@ -653,7 +778,10 @@ export class FlowCommandLedger {
           code: status === 'success' ? undefined : `FLOW_EXECUTION_${status.toUpperCase()}`
         }
         if (status === 'success') {
-          const outputPort = shape.props.nodeType === 'video' ? 'out-video' : 'out-value'
+          const targetNode = project.nodes.find((item) => item.id === command.targetNodeId)
+          const targetAdapter = targetNode && flowTargetContract(targetNode)
+          if (!targetAdapter) fail('FLOW_TYPE_UNSUPPORTED', 'saved-output')
+          const outputPort = targetAdapter.output
           if (!record.outputPorts?.includes(outputPort))
             fail('FLOW_SAVED_OUTPUT_MISMATCH', 'saved-output')
           phase = 'output-version'

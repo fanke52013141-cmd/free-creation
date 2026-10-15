@@ -67,6 +67,7 @@ export const IPC = {
     availability: 'flow-commands:availability',
     dispatch: 'flow-commands:dispatch',
     grant: 'flow-commands:grant',
+    cancel: 'flow-commands:cancel',
     prepare: 'flow-commands:prepare',
     check: 'flow-commands:check',
     commit: 'flow-commands:commit',

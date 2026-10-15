@@ -9,22 +9,25 @@ vi.mock('../src/main/gateway/keycrypto', () => ({
   decryptSecret: (value: string) => value
 }))
 
-const capability = (imageInput: boolean) => ({
+const capability = (imageInput: boolean, audioInput = false) => ({
   operation: 'text.generate' as const,
   asynchronous: false,
   streaming: true,
-  acceptedAssetKinds: imageInput ? ['image' as const] : [],
+  acceptedAssetKinds: [
+    ...(imageInput ? ['image' as const] : []),
+    ...(audioInput ? ['audio' as const] : [])
+  ],
   producedAssetKinds: [],
   controls: {}
 })
 
-function model(imageInput: boolean): ModelDefinition {
+function model(imageInput: boolean, audioInput = false): ModelDefinition {
   return {
     id: 'model-1',
     name: 'test',
     connectionId: 'connection-1',
     modelId: 'test-model',
-    capabilities: [capability(imageInput)],
+    capabilities: [capability(imageInput, audioInput)],
     validation: {},
     enabled: true,
     metadata: {}
@@ -126,6 +129,74 @@ describe('text model with image input', () => {
     )
   })
 
+  it('sends a WAV tone and requires an audio-grounded answer before verification', async () => {
+    const requests: Record<string, unknown>[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, options: RequestInit) => {
+        requests.push(JSON.parse(String(options.body)) as Record<string, unknown>)
+        return new Response(
+          JSON.stringify({
+            choices: [{ message: { content: requests.length === 1 ? 'silence' : 'tone' } }]
+          }),
+          { status: 200 }
+        )
+      })
+    )
+    const adapter = new HttpValidationAdapter()
+    const request = {
+      connection: connection(),
+      model: model(false, true),
+      operation: 'text.generate' as const,
+      target: {
+        connectionId: 'connection-1',
+        modelId: 'test-model',
+        operation: 'text.generate' as const
+      },
+      secret: 'test-secret'
+    }
+    expect((await adapter.validate(request)).status).toBe('failed')
+    expect((await adapter.validate(request)).status).toBe('verified')
+    const content = (
+      requests[0].messages as Array<{
+        content: Array<{ type: string; input_audio?: { data: string; format: string } }>
+      }>
+    )[0].content
+    const audio = content.find((part) => part.type === 'input_audio')?.input_audio
+    expect(audio?.format).toBe('wav')
+    expect(Buffer.from(audio?.data ?? '', 'base64').toString('ascii', 0, 4)).toBe('RIFF')
+    expect(JSON.stringify(requests)).not.toContain('test-secret')
+  })
+
+  it('requires a single probe to correctly handle both declared image and audio inputs', async () => {
+    let request: Record<string, unknown> | undefined
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, options: RequestInit) => {
+        request = JSON.parse(String(options.body)) as Record<string, unknown>
+        return new Response(JSON.stringify({ choices: [{ message: { content: 'red tone' } }] }), {
+          status: 200
+        })
+      })
+    )
+    const result = await new HttpValidationAdapter().validate({
+      connection: connection(),
+      model: model(true, true),
+      operation: 'text.generate',
+      target: {
+        connectionId: 'connection-1',
+        modelId: 'test-model',
+        operation: 'text.generate'
+      },
+      secret: 'test-secret'
+    })
+    expect(result.status).toBe('verified')
+    const content = (
+      request!.messages as Array<{ content: Array<{ type: string }> }>
+    )[0].content
+    expect(content.map((part) => part.type)).toEqual(['text', 'image_url', 'input_audio'])
+  })
+
   it('invalidates old verification and binding when image input is enabled', () => {
     const db = new DatabaseSync(':memory:')
     try {
@@ -162,9 +233,9 @@ describe('text model with image input', () => {
         connectionId: 'connection-1',
         modelId: 'test-model',
         name: 'test',
-        capabilities: [capability(true)]
+        capabilities: [capability(true, true)]
       })
-      expect(updated.capabilities[0].acceptedAssetKinds).toEqual(['image'])
+      expect(updated.capabilities[0].acceptedAssetKinds).toEqual(['image', 'audio'])
       expect(db.prepare('SELECT * FROM model_validations').all()).toHaveLength(0)
       expect(db.prepare('SELECT * FROM model_feature_bindings').all()).toHaveLength(0)
       db.prepare(

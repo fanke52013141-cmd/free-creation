@@ -27,6 +27,7 @@ import { CanvasSelectionBackground, GroupOutlineLayer } from './GroupOutlineLaye
 import { NodeSelectionForeground } from './NodeSelectionForeground'
 import { DataEdgeLayer } from './DataEdgeLayer'
 import { AgentFlowRelationLayer } from './AgentFlowRelationLayer'
+import { FlowBuildPreviewLayer } from './FlowBuildPreviewLayer'
 import { useDockMagnify } from './useDockMagnify'
 import {
   setConnectionFinishHandler,
@@ -59,7 +60,7 @@ import type { ConnectionFrom } from '../stores/connection'
 import { useGatewayStore } from '../stores/gateway'
 import { flowInitialConfig } from '@shared/agent-flow/model-defaults'
 import { useEngineStore } from '../engine/store'
-import { runWorkflow, runWorkflowForNodes } from '../engine/executor'
+import { runWorkflow, runWorkflowForNodes, cancelFlowCommandExecution } from '../engine/executor'
 import {
   runPreparedFlowNodeCommand,
   reportFlowBridgeFailure,
@@ -390,12 +391,16 @@ export function CanvasEditor({
         grant
       ).catch(() => reportFlowBridgeFailure(grant))
     })
+    const unsubscribeCancel = window.api.onFlowCommandCancel((input) => {
+      if (input.projectId === project.id) cancelFlowCommandExecution(input)
+    })
     void window.api
       .activateFlowCanvas({ projectId: project.id })
       .catch(() => reportFlowCanvasBindingFailure(project.id, 'attach'))
     return () => {
       unsubscribeAgent?.()
       unsubscribe()
+      unsubscribeCancel()
       void window.api
         .deactivateFlowCanvas({ projectId: project.id })
         .catch(() => reportFlowCanvasBindingFailure(project.id, 'detach'))
@@ -2037,6 +2042,9 @@ export function CanvasEditor({
       )}
       {editorInstance && <DataEdgeLayer editor={editorInstance} hostRef={wrapRef} />}
       {editorInstance && <AgentFlowRelationLayer editor={editorInstance} hostRef={wrapRef} />}
+      {editorInstance && (
+        <FlowBuildPreviewLayer editor={editorInstance} hostRef={wrapRef} projectId={project.id} />
+      )}
       {/* 左侧节点面板：一级分类保持鱼眼 Dock，二级节点在右侧抽屉中展开。 */}
       <div className="node-palette">
         <div

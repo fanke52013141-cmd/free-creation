@@ -583,11 +583,25 @@ describe('chat / audio / video executors with a mocked gateway', () => {
       [provider('video')],
       '猫咪挥爪'
     )
+    ctx.diagnostics = {
+      traceId: 'trace-video-test',
+      nodeExecutionId: 'nexec-video-test',
+      spanId: 'span-video-test'
+    }
     const pending = videoExecutor(ctx)
     await vi.runAllTicks()
     await vi.advanceTimersByTimeAsync(3_000)
     await expect(pending).resolves.toEqual({ status: 'done' })
-    expect(videoSubmit).toHaveBeenCalledWith(expect.objectContaining({ prompt: '猫咪挥爪' }))
+    expect(videoSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: '猫咪挥爪',
+        diagnostics: expect.objectContaining({
+          traceId: 'trace-video-test',
+          parentSpanId: 'span-video-test',
+          requestId: expect.any(String)
+        })
+      })
+    )
     expect(props.mediaId).toBeUndefined()
     expect(artifacts).toContainEqual(expect.objectContaining({ kind: 'video', mediaId: 'video-1' }))
     expect(JSON.parse(result.value ?? '{}').results[0].runId).toBe('run-1')

@@ -192,6 +192,14 @@ const api = {
     ipcRenderer.on(IPC.flowCommands.grant, listener)
     return () => ipcRenderer.removeListener(IPC.flowCommands.grant, listener)
   },
+  onFlowCommandCancel: (
+    callback: (input: { projectId: string; commandId: string }) => void
+  ): (() => void) => {
+    const listener = (_event: unknown, input: { projectId: string; commandId: string }): void =>
+      callback(input)
+    ipcRenderer.on(IPC.flowCommands.cancel, listener)
+    return () => ipcRenderer.removeListener(IPC.flowCommands.cancel, listener)
+  },
   abortUnstartedFlowCommand: (input: CommandLease): Promise<IpcEnvelope<FlowCommandReceipt>> =>
     ipcRenderer.invoke(IPC.flowCommands.abort, input),
   prepareFlowCommand: (input: NodeExecuteCommand): Promise<IpcEnvelope<FlowCommandPrepareResult>> =>

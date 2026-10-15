@@ -204,8 +204,5 @@ export async function acceptParallelReview(input: {
       (await window.webContents.capturePage()).toPNG()
     )
   }
-  await window.webContents.executeJavaScript(
-    `(async()=>{const d=await import('/src/engine/diagnosticsReporter.ts');while(d.pendingDiagnosticsEventCount())d.flushDiagnosticsEvents();await new Promise(done=>setTimeout(done,100));if(d.diagnosticsTransportDropCount())throw new Error('PARALLEL_REVIEW_DIAGNOSTICS_DROPPED');})()`
-  )
   return { ...(report as object), supplierPosts: 4, downloads: count('parallel-review-downloads') }
 }

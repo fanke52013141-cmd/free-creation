@@ -8,7 +8,13 @@ import { FlowCommandLedger } from '../src/main/agent-flow/command-ledger'
 import { FlowAssetStore } from '../src/main/agent-flow/asset-store'
 import { projectSemanticRevision } from '../src/main/agent-flow/command-intent'
 import { PROCESSOR_PORTS } from '../src/shared/agent-flow/processor-contract'
-import { VIDEO_FLOW_PORTS, agentOutputValue } from '../src/shared/agent-flow/video-adapter'
+import {
+  VIDEO_FLOW_PORTS,
+  IMAGE_GEN_FLOW_PORTS,
+  IMAGE_EDIT_FLOW_PORTS,
+  flowTargetPorts,
+  agentOutputValue
+} from '../src/shared/agent-flow/video-adapter'
 import { migrateDatabase } from '../src/main/store/db-migrations'
 import { computeInputFingerprint } from '../src/shared/engine/input-fingerprint'
 import type { NodeExecuteCommand, FlowCommandGrant } from '../src/shared/agent-flow/commands'
@@ -253,6 +259,421 @@ function videoFixture() {
   }
   return { ...f, command, task, saved }
 }
+
+function generatorFixture(type: 'image-gen' | 'speech', config: string) {
+  const f = fixture()
+  f.target.props.nodeType = type
+  f.target.props.config = config
+  const node = f.file.nodes.find((item) => item.id === f.target.id)!
+  node.type = type
+  node.contractVersion = type === 'image-gen' ? 3 : 4
+  node.params.config = config
+  node.ports = type === 'image-gen' ? IMAGE_GEN_FLOW_PORTS : flowTargetPorts(node)
+  f.file.edges[0].to.portId = 'in-text'
+  const command = (): NodeExecuteCommand => ({
+    ...f.command(),
+    contractVersion: type === 'image-gen' ? 3 : 4,
+    inputs: [{ targetPortId: 'in-text', assets: [f.version.ref] }]
+  })
+  return { ...f, command }
+}
+
+async function withMediaInputFixture(
+  sourceKind: 'image' | 'audio',
+  targetType: 'image-edit' | 'tts',
+  config: string,
+  run: (
+    fixture: ReturnType<typeof fixture>,
+    command: () => NodeExecuteCommand
+  ) => void | Promise<void>
+): Promise<void> {
+  const root = mkdtempSync(join(tmpdir(), 'canvas-flow-frame-'))
+  frameDirectories.push(root)
+  const previous = process.env.CANVAS_DATA_DIR
+  process.env.CANVAS_DATA_DIR = root
+  try {
+    const directory = join(root, 'projects/project-a/media')
+    mkdirSync(directory, { recursive: true })
+    const extension = sourceKind === 'image' ? 'png' : 'wav'
+    const mime = sourceKind === 'image' ? 'image/png' : 'audio/wav'
+    const sourcePath = `projects/project-a/media/source.${extension}`
+    const generatedPath = 'projects/project-a/media/generated.png'
+    writeFileSync(join(root, sourcePath), 'fixed-source-bytes')
+    if (sourceKind === 'image') writeFileSync(join(root, generatedPath), 'generated-edit-bytes')
+    const f = fixture()
+    const sourceMediaId = `source-${sourceKind}`
+    f.db
+      .prepare(
+        'INSERT INTO media(id,kind,mime,path,size_bytes,created_at) VALUES (?, ?, ?, ?, ?, 0)'
+      )
+      .run(sourceMediaId, sourceKind, mime, sourcePath, Buffer.byteLength('fixed-source-bytes'))
+    if (sourceKind === 'image')
+      f.db
+        .prepare(
+          'INSERT INTO media(id,kind,mime,path,size_bytes,created_at) VALUES (?, ?, ?, ?, ?, 0)'
+        )
+        .run(
+          'generated-image',
+          'image',
+          'image/png',
+          generatedPath,
+          Buffer.byteLength('generated-edit-bytes')
+        )
+
+    const sourcePort = sourceKind === 'image' ? 'out-image' : 'out-audio'
+    const targetPort = sourceKind === 'image' ? 'in-image' : 'in-audio'
+    f.source.props.nodeType = sourceKind
+    f.source.props.text = ''
+    f.source.props.mediaId = sourceMediaId
+    f.source.props.mediaPath = sourcePath
+    f.source.props.mediaMime = mime
+    const sourceNode = f.file.nodes.find((node) => node.id === f.source.id)!
+    sourceNode.type = sourceKind
+    sourceNode.content = { kind: 'empty' }
+    sourceNode.ports = [
+      {
+        id: sourcePort,
+        name: sourcePort,
+        description: 'fixed source',
+        dir: 'out',
+        type: sourceKind,
+        required: true,
+        cardinality: 'one'
+      }
+    ]
+    f.file.edges[0].from.portId = sourcePort
+    f.file.edges[0].to.portId = targetPort
+    f.target.props.nodeType = targetType
+    f.target.props.config = config
+    const targetNode = f.file.nodes.find((node) => node.id === f.target.id)!
+    targetNode.type = targetType
+    targetNode.contractVersion = targetType === 'image-edit' ? 2 : 4
+    targetNode.params.config = config
+    targetNode.ports =
+      targetType === 'image-edit' ? IMAGE_EDIT_FLOW_PORTS : flowTargetPorts(targetNode)
+
+    const sourceAsset = f.assets.submit({
+      projectId: 'project-a',
+      nodeId: f.source.id,
+      portId: sourcePort,
+      submissionId: `source-${sourceKind}-v1`,
+      expectedGraphVersion: f.file.meta.graphVersion,
+      traceId: 'trace-source-media',
+      spanId: 'span-source-media'
+    })
+    const command = (): NodeExecuteCommand => ({
+      ...f.command(),
+      contractVersion: targetNode.contractVersion,
+      inputs: [{ targetPortId: targetPort, assets: [sourceAsset.ref] }]
+    })
+    await run(f, command)
+  } finally {
+    if (previous === undefined) delete process.env.CANVAS_DATA_DIR
+    else process.env.CANVAS_DATA_DIR = previous
+  }
+}
+
+async function withGeneratorMedia(
+  type: 'image-gen' | 'speech',
+  config: string,
+  run: (f: ReturnType<typeof generatorFixture>) => void | Promise<void>
+): Promise<void> {
+  const root = mkdtempSync(join(tmpdir(), 'canvas-flow-frame-'))
+  frameDirectories.push(root)
+  const previous = process.env.CANVAS_DATA_DIR
+  process.env.CANVAS_DATA_DIR = root
+  try {
+    const directory = join(root, 'projects/project-a/media')
+    mkdirSync(directory, { recursive: true })
+    const imagePath = join(directory, 'generated.png')
+    const audioPath = join(directory, 'generated.wav')
+    writeFileSync(imagePath, 'generated-image-bytes')
+    writeFileSync(audioPath, 'generated-audio-bytes')
+    const f = generatorFixture(type, config)
+    f.db
+      .prepare(
+        "INSERT INTO media(id,kind,mime,path,size_bytes,created_at) VALUES ('generated-image','image','image/png','projects/project-a/media/generated.png',21,0)"
+      )
+      .run()
+    f.db
+      .prepare(
+        "INSERT INTO media(id,kind,mime,path,size_bytes,created_at) VALUES ('generated-audio','audio','audio/wav','projects/project-a/media/generated.wav',21,0)"
+      )
+      .run()
+    await run(f)
+  } finally {
+    if (previous === undefined) delete process.env.CANVAS_DATA_DIR
+    else process.env.CANVAS_DATA_DIR = previous
+  }
+}
+
+function saveGeneratorRun(
+  f: Pick<ReturnType<typeof fixture>, 'ledger' | 'target' | 'file'>,
+  grant: FlowCommandGrant,
+  outputPort: string,
+  mediaId: string,
+  mediaPath: string,
+  mime: string
+): void {
+  f.ledger.check({
+    projectId: grant.command.projectId,
+    commandId: grant.command.commandId,
+    leaseId: grant.leaseId
+  })
+  const sources = grant.inputs.flatMap((input) =>
+    input.versions.map((version, index) => ({
+      portId: input.targetPortId,
+      nodeId: input.sources[index].nodeId,
+      sourcePortId: input.sources[index].portId,
+      value: version.value
+    }))
+  )
+  f.target.meta.nodeRun = {
+    runId: grant.runId,
+    status: 'success',
+    startedAt: 0,
+    finishedAt: 1,
+    commandId: grant.command.commandId,
+    commandLeaseId: grant.leaseId,
+    nodeExecutionId: 'generator-execution',
+    fixedInputs: grant.command.inputs,
+    inputs: Object.fromEntries(
+      grant.inputs.map((input) => [
+        input.targetPortId,
+        input.versions.map((version, index) => ({
+          ...input.sources[index],
+          assetId: version.ref.assetId,
+          versionId: version.ref.versionId
+        }))
+      ])
+    ),
+    inputFingerprint: computeInputFingerprint({
+      contractVersion: grant.command.contractVersion,
+      config: f.target.props.config,
+      text: f.target.props.text,
+      sources
+    }),
+    outputPorts: [outputPort]
+  }
+  f.target.meta.nodeResult = JSON.stringify({
+    kind: 'media-source',
+    version: 1,
+    results: [{ mediaId, mediaPath, mime, createdAt: 1 }]
+  })
+  f.file.meta.graphVersion++
+}
+
+describe('image generation and speech Agent targets', () => {
+  it('admits one fixed image generation request and rejects batch or retry billing', () => {
+    const f = generatorFixture('image-gen', '{"count":1,"retry":{"maxRetries":0}}')
+    expect(f.ledger.prepare(f.command()).state).toBe('ready')
+
+    const batch = generatorFixture('image-gen', '{"count":2,"retry":{"maxRetries":0}}')
+    expect(() => batch.ledger.prepare(batch.command())).toThrow('FLOW_INPUT_CONTRACT_INVALID')
+    const retry = generatorFixture('image-gen', '{"count":1,"retry":{"maxRetries":2}}')
+    expect(() => retry.ledger.prepare(retry.command())).toThrow('FLOW_INPUT_CONTRACT_INVALID')
+  })
+
+  it('rejects text assets wired as image references before command admission', () => {
+    const f = generatorFixture('image-gen', '{"count":1}')
+    f.file.edges[0].to.portId = 'in-images'
+    expect(() =>
+      f.ledger.prepare({
+        ...f.command(),
+        inputs: [{ targetPortId: 'in-images', assets: [f.version.ref] }]
+      })
+    ).toThrow('FLOW_INPUT_CONTRACT_INVALID')
+  })
+
+  it('admits speech through its saved backend and rejects cross-backend or mutable reference audio', () => {
+    const f = generatorFixture('speech', '{"backend":"minimax"}')
+    expect(f.ledger.prepare(f.command()).state).toBe('ready')
+
+    const mutable = generatorFixture(
+      'speech',
+      '{"backend":"volc","referenceAudioId":"mutable-upload"}'
+    )
+    expect(() => mutable.ledger.prepare(mutable.command())).toThrow('FLOW_INPUT_CONTRACT_INVALID')
+    const crossBackend = generatorFixture('speech', '{"backend":"volc"}')
+    crossBackend.file.edges[0].to.portId = 'in-audio'
+    expect(() =>
+      crossBackend.ledger.prepare({
+        ...crossBackend.command(),
+        inputs: [{ targetPortId: 'in-audio', assets: [crossBackend.version.ref] }]
+      })
+    ).toThrow('FLOW_INPUT_CONTRACT_INVALID')
+  })
+
+  it('admits image editing only with one fixed original and commits its fixed image output', () =>
+    withMediaInputFixture(
+      'image',
+      'image-edit',
+      JSON.stringify({ version: 1, modelKey: 'test-model', instruction: 'edit this fixed image' }),
+      (f, commandForRun) => {
+        const command = commandForRun()
+        const prepared = f.ledger.prepare(command)
+        if (prepared.state !== 'ready') throw new Error('expected grant')
+        saveGeneratorRun(
+          f,
+          prepared.grant,
+          'out-image',
+          'generated-image',
+          'projects/project-a/media/generated.png',
+          'image/png'
+        )
+        const receipt = f.ledger.commit({
+          projectId: command.projectId,
+          commandId: command.commandId
+        })
+        const version = f.assets.resolveInputs('project-a', receipt.outputRefs)[0]
+        expect(receipt.state).toBe('committed')
+        expect(version.value).toMatchObject({
+          kind: 'image',
+          mediaId: 'generated-image',
+          contentSha256: expect.stringMatching(/^[a-f0-9]{64}$/)
+        })
+      }
+    ))
+
+  it('admits voice cloning only with one fixed audio input and commits a validated voice profile', () =>
+    withMediaInputFixture('audio', 'tts', '{"backend":"minimax"}', (f, commandForRun) => {
+      const command = commandForRun()
+      const prepared = f.ledger.prepare(command)
+      if (prepared.state !== 'ready') throw new Error('expected grant')
+      saveGeneratorRun(f, prepared.grant, 'out-json', '', '', '')
+      f.target.meta.nodeExtra = JSON.stringify({
+        'out-json': { voice_id: 'voice_test_123', provider: 'minimax', source: 'voice_clone' }
+      })
+      const receipt = f.ledger.commit({
+        projectId: command.projectId,
+        commandId: command.commandId
+      })
+      const version = f.assets.resolveInputs('project-a', receipt.outputRefs)[0]
+      expect(receipt.state).toBe('committed')
+      expect(version.value).toEqual({
+        kind: 'json',
+        data: { voice_id: 'voice_test_123', provider: 'minimax', source: 'voice_clone' }
+      })
+    }))
+
+  it('rejects mutable TTS upload references and malformed projected voice profiles', async () => {
+    await withMediaInputFixture(
+      'audio',
+      'tts',
+      '{"backend":"minimax","refMediaId":"mutable-upload"}',
+      (f, commandForRun) => {
+        expect(() => f.ledger.prepare(commandForRun())).toThrow('FLOW_INPUT_CONTRACT_INVALID')
+      }
+    )
+    const invalid = fixture()
+    invalid.target.props.nodeType = 'tts'
+    invalid.target.meta.nodeExtra = JSON.stringify({ 'out-json': { provider: 'minimax' } })
+    invalid.file.nodes.find((node) => node.id === invalid.target.id)!.type = 'tts'
+    expect(() =>
+      invalid.assets.submit({
+        projectId: 'project-a',
+        nodeId: invalid.target.id,
+        portId: 'out-json',
+        submissionId: 'invalid-voice-profile',
+        expectedGraphVersion: invalid.file.meta.graphVersion,
+        traceId: 'trace-invalid-profile',
+        spanId: 'span-invalid-profile'
+      })
+    ).toThrow('ASSET_OUTPUT_UNAVAILABLE')
+  })
+
+  it.each([
+    ['image-gen', 'out-image', 'generated-image', 'image', 'image/png'],
+    ['speech', 'out-audio', 'generated-audio', 'audio', 'audio/wav']
+  ] as const)(
+    'commits the verified %s result as a fixed Agent output',
+    (type, outputPort, mediaId, kind, mime) =>
+      withGeneratorMedia(
+        type,
+        type === 'image-gen' ? '{"count":1}' : '{"backend":"minimax"}',
+        (f) => {
+          const command = f.command(),
+            prepared = f.ledger.prepare(command)
+          if (prepared.state !== 'ready') throw new Error('expected grant')
+          const relativePath = `projects/project-a/media/generated.${kind === 'image' ? 'png' : 'wav'}`
+          saveGeneratorRun(f, prepared.grant, outputPort, mediaId, relativePath, mime)
+          const receipt = f.ledger.commit({
+            projectId: command.projectId,
+            commandId: command.commandId
+          })
+          const version = f.assets.resolveInputs('project-a', receipt.outputRefs)[0]
+          expect(receipt.state).toBe('committed')
+          expect(version.value).toMatchObject({
+            kind,
+            mediaId,
+            contentSha256: expect.stringMatching(/^[a-f0-9]{64}$/)
+          })
+          expect(agentOutputValue(version.value)).toMatchObject({
+            kind: 'json',
+            data: { kind, mediaId }
+          })
+        }
+      )
+  )
+
+  it('keeps a late successful save unknown after Agent stop and publishes no output receipt', () =>
+    withGeneratorMedia('image-gen', '{"count":1}', (f) => {
+      const command = f.command(),
+        prepared = f.ledger.prepare(command)
+      if (prepared.state !== 'ready') throw new Error('expected grant')
+      saveGeneratorRun(
+        f,
+        prepared.grant,
+        'out-image',
+        'generated-image',
+        'projects/project-a/media/generated.png',
+        'image/png'
+      )
+      f.db
+        .prepare(
+          "INSERT INTO flow_agent_tasks(thread,project_id,task_id,agent_node_id,snapshot_json,skills_json,state) VALUES ('thread-stopped','project-a',?,'shape:agent','{}','[]','cancelled')"
+        )
+        .run(command.taskId)
+
+      expect(
+        f.ledger.commit({ projectId: command.projectId, commandId: command.commandId })
+      ).toMatchObject({
+        state: 'unknown',
+        code: 'FLOW_TASK_STOPPED_OUTCOME_UNKNOWN',
+        outputRefs: []
+      })
+      expect(f.assets.list('project-a', f.target.id, 'out-image')).toHaveLength(0)
+    }))
+
+  it('reconciles an unknown saved image result after restart without invoking the executor again', () =>
+    withGeneratorMedia('image-gen', '{"count":1}', async (f) => {
+      const command = f.command(),
+        prepared = f.ledger.prepare(command)
+      if (prepared.state !== 'ready') throw new Error('expected grant')
+      saveGeneratorRun(
+        f,
+        prepared.grant,
+        'out-image',
+        'generated-image',
+        'projects/project-a/media/generated.png',
+        'image/png'
+      )
+      f.ledger.unknown({
+        projectId: command.projectId,
+        commandId: command.commandId,
+        leaseId: prepared.grant.leaseId
+      })
+      let delivered = false
+      const tool = createLedgerToolPort(f.ledger, async () => {
+        delivered = true
+      })
+      const receipt = await tool.execute(command, new AbortController().signal)
+      expect(receipt.state).toBe('committed')
+      expect(receipt.outputRefs).toHaveLength(1)
+      expect(delivered).toBe(false)
+    }))
+})
+
 describe('video rework command admission', () => {
   function prepared() {
     const f = videoFixture(),

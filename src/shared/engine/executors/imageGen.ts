@@ -57,10 +57,12 @@ export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeE
   )
   // 所有参考图只有一个多值入口；按真实连线顺序提交，保证“图片 1/2/3”的提示词指代可复跑。
   const referenceImages = inputMedia(ctx.inputs, 'in-images', 'image')
-  const referenceMediaIds = [...new Set(referenceImages.map((image) => image.mediaId))].slice(
-    0,
-    capabilities.maxReferenceImages
-  )
+  const referenceMediaIds = [...new Set(referenceImages.map((image) => image.mediaId))]
+  if (referenceMediaIds.length > capabilities.maxReferenceImages)
+    return {
+      status: 'failed',
+      reason: `当前图片模型最多支持 ${capabilities.maxReferenceImages} 张参考图，已连接 ${referenceMediaIds.length} 张`
+    }
   if (!prompt.trim()) return { status: 'skipped', reason: '无提示词' }
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
   try {
@@ -74,36 +76,42 @@ export const imageGenExecutor = async (ctx: NodeExecutionContext): Promise<NodeE
       // W1：单张请求纳入自动重试；已持久化的前几张不受后续重试影响。
       const result = await withRetry(
         (attempt) =>
-          ctx.gateway.imageGenerate({
-            projectId: ctx.projectId,
-            providerId: option.provider.id,
-            modelId: option.model.id,
-            prompt,
-            size: config.size,
-            ...(capabilities.forwardsAspectRatio && config.aspectRatio !== 'auto'
-              ? { aspectRatio: config.aspectRatio }
-              : {}),
-            // 分辨率与透明背景都是用户意图；能力表不支持时既不发送也不出现在提交入参里。
-            ...(capabilities.resolutions.length > 0 && config.resolution
-              ? { resolution: config.resolution }
-              : {}),
-            ...(capabilities.supportsTransparentBackground && config.background
-              ? { background: config.background }
-              : {}),
-            ...(referenceMediaIds.length > 0 ? { referenceMediaIds } : {}),
-            diagnostics: gatewayDiagnostics(ctx, {
-              batchId,
-              itemId: `${batchId}#${index + 1}${attempt > 1 ? `#retry${attempt - 1}` : ''}`
+          ctx.gateway
+            .imageGenerate({
+              projectId: ctx.projectId,
+              providerId: option.provider.id,
+              modelId: option.model.id,
+              prompt,
+              size: config.size,
+              ...(capabilities.forwardsAspectRatio && config.aspectRatio !== 'auto'
+                ? { aspectRatio: config.aspectRatio }
+                : {}),
+              // 分辨率与透明背景都是用户意图；能力表不支持时既不发送也不出现在提交入参里。
+              ...(capabilities.resolutions.length > 0 && config.resolution
+                ? { resolution: config.resolution }
+                : {}),
+              ...(capabilities.supportsTransparentBackground && config.background
+                ? { background: config.background }
+                : {}),
+              ...(referenceMediaIds.length > 0 ? { referenceMediaIds } : {}),
+              diagnostics: gatewayDiagnostics(ctx, {
+                batchId,
+                itemId: `${batchId}#${index + 1}${attempt > 1 ? `#retry${attempt - 1}` : ''}`
+              })
             })
-          }).then((submitted) => {
-            if (!submitted.ok) throw new Error(submitted.error.message)
-            return submitted
-          }),
+            .then((submitted) => {
+              if (!submitted.ok) throw new Error(submitted.error.message)
+              return submitted
+            }),
         {
           retry: retryConfig,
           signal: ctx.signal,
           onRetry: (attempt, reason, delayMs) =>
-            ctx.trace?.('request', 'info', `第 ${index + 1} 张第 ${attempt} 次尝试失败（${reason}），${delayMs}ms 后自动重试`)
+            ctx.trace?.(
+              'request',
+              'info',
+              `第 ${index + 1} 张第 ${attempt} 次尝试失败（${reason}），${delayMs}ms 后自动重试`
+            )
         }
       )
       if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }

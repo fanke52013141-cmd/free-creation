@@ -1,6 +1,6 @@
 const messages: Record<string, string> = {
-  FLOW_PARALLEL_REJECTED: '并行派发需要显式开启，且必须选择两个不同的就绪专业任务。',
-  FLOW_PARALLEL_DEPENDENCY: '两路任务存在数据依赖，请按顺序执行。',
+  FLOW_PARALLEL_REJECTED: '并行派发需要显式开启，且必须选择 2 至 4 个不同的就绪专业任务。',
+  FLOW_PARALLEL_DEPENDENCY: '并行任务存在数据依赖或共享写入范围，请调整为独立分支后执行。',
   FLOW_VIDEO_REWORK_INVALID: '视频返工任务或固定审核依据不可用，请核对原任务、审核版本与预算。',
   FLOW_VIDEO_REWORK_BUDGET_EXHAUSTED:
     '本轮视频返工已提交过生成，请复用原回执；下一轮须由审核结论和预算明确批准。',
@@ -13,10 +13,17 @@ const messages: Record<string, string> = {
   FLOW_VIDEO_REVIEW_MODEL_UNVERIFIED:
     '请选择声明支持图片且文本操作验证通过的模型；同时需要工具调用验证。',
   FLOW_VIDEO_REVIEW_CLEANUP_FAILED: '视频审核临时文件清理失败，请检查本机磁盘与文件占用。',
+  FLOW_MEDIA_REVIEW_NOT_FIXED: '媒体审核需要不可变且可校验的图片、音频或音视频版本。',
+  FLOW_MEDIA_REVIEW_LIMIT:
+    '媒体审核输入超出上限：图片/媒体文件最多 20 MiB，音频最长 60 秒，视频最多 60 秒和 6000 帧。',
+  FLOW_MEDIA_REVIEW_DECODE_FAILED: '媒体解码失败，尚未生成审核结论；请检查文件及本机 FFmpeg。',
+  FLOW_MEDIA_REVIEW_TOOL_UNAVAILABLE: '完整音频审核需要本机 FFmpeg/FFprobe，请检查媒体工具配置。',
+  FLOW_MEDIA_REVIEW_CLEANUP_FAILED: '媒体审核临时文件清理失败，请检查本机磁盘与文件占用。',
   FLOW_VIDEO_OUTCOME_UNKNOWN: '原视频任务结果待核对，不会重新提交生成。',
   FLOW_VIDEO_RESULT_NOT_PROJECTED: '视频成果已确认，请接回原任务并呈现成果。',
   FLOW_VIDEO_RECONCILE_READY: '已找到原视频任务，可明确继续接回。',
-  ASSET_REVIEW_MEDIA_UNSUPPORTED: '媒体审核需明确选择视频抽帧模式；图片与音频审核尚未适配。',
+  ASSET_REVIEW_MEDIA_UNSUPPORTED:
+    '媒体审核需明确选择与输入类型匹配的图片、音频、视频抽帧或音视频时间线模式。',
   FLOW_MODEL_OUTCOME_UNKNOWN:
     '模型决策结果未知，核对不会再次请求模型；可停止旧任务后明确创建新任务。',
   FLOW_COMMAND_OUTCOME_UNKNOWN: '命令尚无可确认的保存事实，保留未知状态，不重复执行。',
@@ -29,11 +36,11 @@ const messages: Record<string, string> = {
   FLOW_REVIEW_OUTCOME_UNKNOWN: '审核结果尚未确认，请核对原请求，不要重复提交。',
   FLOW_REVIEW_CONFIG_INVALID: '审核需要标准正文、模型和明确的审核对象来源，请检查设置。',
   FLOW_REVIEW_SUBJECT_INVALID:
-    '请选择与审核范围匹配的真实来源端口；抽帧模式只接一路视频，文本模式只接文本或 JSON。',
+    '请选择与审核范围匹配的真实来源端口；媒体审核只接一路对应类型，文本审核接文本或 JSON。',
   FLOW_REVIEW_BUDGET_EXHAUSTED: '审核返工次数已耗尽，请核对最新反馈并停止分支。',
   FLOW_REVIEW_STOPPED: '该审核分支已按拒绝策略停止；修改规则作为新修订后再启动。',
   FLOW_BUILD_CONFIG_INVALID:
-    '建图需要目标、模型、graph.preview@1 工具，以及一个允许读取的文本节点；当前支持文本模板顺序流程。',
+    '建图需要目标、模型、graph.preview@1 工具，以及一个允许读取的文本节点；可创建有限媒体与文本流程。',
   FLOW_BUILD_SOURCE_INVALID: '请选择一个文本节点作为建图材料来源。',
   FLOW_BUILD_MISSING: '建图预览不存在，请重新生成预览。',
   FLOW_BUILD_CONFLICT: '拟创建节点已存在，请核对画布。',
@@ -74,7 +81,7 @@ const messages: Record<string, string> = {
   SKILL_RESOURCE_DENIED: 'Skill 请求了未声明的资源，任务已阻断，请检查版本和资源说明。',
   FLOW_REVISION_CONFLICT: '画布已发生变更，请停止旧任务后重新启动。',
   FLOW_PROJECT_INACTIVE: '请返回任务所属画布，再核对或继续。',
-  ASSET_IMAGE_CHANGED: '固定首帧图片丢失或内容发生变化，请检查原资产后创建新任务。',
+  ASSET_IMAGE_CHANGED: '固定图片丢失或内容发生变化，请检查原资产并创建新版本。',
   ASSET_AUDIO_CHANGED: '固定参考音频不可用、内容已变化或超过 20 MiB，请检查原素材并核对任务记录。',
   ASSET_VIDEO_CHANGED:
     '固定参考视频不可用或内容发生变化（上限 20 MiB），请检查原素材并核对任务记录。',

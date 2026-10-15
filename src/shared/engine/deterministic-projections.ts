@@ -3,6 +3,7 @@ import { parseStoredNodeValue, parseMediaResultCollection, type RawNodeOutputs }
 import { projectAgentOutputs } from '../agent-flow/agent-outputs'
 import { projectReviewOutputs } from '../agent-flow/review'
 import { readStoredNodeRunStatus } from './run-status'
+import { validateNodeSchema } from '../node-schemas'
 
 // These exact functions are registered by the desktop NodeTypeSpecs.
 export const projectTextOutputs = (shape: NodeShape): RawNodeOutputs =>
@@ -25,7 +26,11 @@ export const projectProcessorOutputs = (shape: NodeShape): RawNodeOutputs => {
 
 export const DETERMINISTIC_PROJECTIONS = {
   image: projectImageOutputs,
+  'image-gen': projectImageGenOutputs,
+  'image-edit': projectImageEditOutputs,
   audio: projectAudioAssetOutputs,
+  speech: projectSpeechOutputs,
+  tts: projectTtsOutputs,
   video: projectVideoOutputs,
   'video-asset': projectVideoAssetOutputs,
   'ai-review': projectReviewOutputs,
@@ -34,6 +39,76 @@ export const DETERMINISTIC_PROJECTIONS = {
   json: projectJsonOutputs,
   processor: projectProcessorOutputs
 } as const
+
+function latestResultMediaOutput(
+  shape: NodeShape,
+  kind: 'image' | 'audio',
+  portId: string
+): RawNodeOutputs {
+  const item = parseMediaResultCollection(shape.meta?.nodeResult ?? '')?.results.at(-1)
+  if (item)
+    return {
+      [portId]: {
+        kind,
+        mediaId: item.mediaId,
+        mediaPath: item.mediaPath,
+        mime: item.mime,
+        ...(shape.props.title ? { name: shape.props.title } : {})
+      }
+    }
+  if (!readStoredNodeRunStatus(shape.meta?.nodeRun) && shape.props.mediaId && shape.props.mediaPath)
+    return {
+      [portId]: {
+        kind,
+        mediaId: shape.props.mediaId,
+        mediaPath: shape.props.mediaPath,
+        mime: shape.props.mediaMime,
+        ...(shape.props.title ? { name: shape.props.title } : {})
+      }
+    }
+  return {}
+}
+
+export function projectImageGenOutputs(shape: NodeShape): RawNodeOutputs {
+  return latestResultMediaOutput(shape, 'image', 'out-image')
+}
+
+export function projectImageEditOutputs(shape: NodeShape): RawNodeOutputs {
+  return latestResultMediaOutput(shape, 'image', 'out-image')
+}
+
+export function projectTtsOutputs(shape: NodeShape): RawNodeOutputs {
+  try {
+    const extra = JSON.parse(shape.meta?.nodeExtra ?? '{}')
+    if (
+      extra &&
+      typeof extra === 'object' &&
+      !Array.isArray(extra) &&
+      validateNodeSchema({ id: 'voice.profile', version: 1 }, extra['out-json']).ok
+    )
+      return { 'out-json': { kind: 'json', data: extra['out-json'] } }
+  } catch {
+    // Malformed voice metadata does not create a usable Agent output.
+  }
+  return {}
+}
+
+export function projectSpeechOutputs(shape: NodeShape): RawNodeOutputs {
+  const outputs = latestResultMediaOutput(shape, 'audio', 'out-audio')
+  try {
+    const extra = JSON.parse(shape.meta?.nodeExtra ?? '{}')
+    if (
+      extra &&
+      typeof extra === 'object' &&
+      !Array.isArray(extra) &&
+      extra['out-subtitle'] !== undefined
+    )
+      outputs['out-subtitle'] = { kind: 'json', data: extra['out-subtitle'] }
+  } catch {
+    // Malformed optional subtitle metadata does not invalidate the audio result.
+  }
+  return outputs
+}
 
 export function readPinnedOutputs(stored: unknown): RawNodeOutputs | null {
   if (typeof stored !== 'string') return null

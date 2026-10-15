@@ -137,9 +137,6 @@ export async function acceptParallelMedia(input: {
     count('parallel-downloads') !== (phase === 'execute' ? 1 : 2)
   )
     throw new Error('PARALLEL_SUPPLIER_REPLAY')
-  await window.webContents.executeJavaScript(
-    `(async()=>{const d=await import('/src/engine/diagnosticsReporter.ts');while(d.pendingDiagnosticsEventCount())d.flushDiagnosticsEvents();await new Promise(done=>setTimeout(done,100));if(d.diagnosticsTransportDropCount())throw new Error('PARALLEL_DIAGNOSTICS_DROPPED');})()`
-  )
   if (phase === 'reopen') {
     await window.webContents.executeJavaScript(
       'new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)))'

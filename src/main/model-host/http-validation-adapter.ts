@@ -25,6 +25,28 @@ const VISION_PROBE_PNG =
   'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAAAvSURBVFiF7c4xAQAwDIAwNv+eWxl9ggHypqbD/uUcAAAAAAAAAAAAAAAAAACgagEw4wI+0ujnJgAAAABJRU5ErkJggg=='
 const VISION_PROBE_QUESTION =
   'What is the main color of this image? Reply with only the English color name.'
+const AUDIO_PROBE_QUESTION =
+  'Does the attached audio contain a steady audible tone or silence? Reply with exactly tone or silence.'
+const AUDIO_PROBE_WAV = (() => {
+  const sampleRate = 16000
+  const sampleCount = sampleRate / 2
+  const bytes = Buffer.alloc(44 + sampleCount * 2)
+  bytes.write('RIFF', 0, 'ascii')
+  bytes.writeUInt32LE(bytes.length - 8, 4)
+  bytes.write('WAVEfmt ', 8, 'ascii')
+  bytes.writeUInt32LE(16, 16)
+  bytes.writeUInt16LE(1, 20)
+  bytes.writeUInt16LE(1, 22)
+  bytes.writeUInt32LE(sampleRate, 24)
+  bytes.writeUInt32LE(sampleRate * 2, 28)
+  bytes.writeUInt16LE(2, 32)
+  bytes.writeUInt16LE(16, 34)
+  bytes.write('data', 36, 'ascii')
+  bytes.writeUInt32LE(sampleCount * 2, 40)
+  for (let index = 0; index < sampleCount; index++)
+    bytes.writeInt16LE(Math.round(Math.sin((2 * Math.PI * 440 * index) / sampleRate) * 10000), 44 + index * 2)
+  return bytes.toString('base64')
+})()
 
 function wantsImageInput(model: ModelDefinition, operation: ModelOperation): boolean {
   return (
@@ -32,6 +54,16 @@ function wantsImageInput(model: ModelDefinition, operation: ModelOperation): boo
     model.capabilities.some(
       (capability) =>
         capability.operation === operation && capability.acceptedAssetKinds.includes('image')
+    )
+  )
+}
+
+function wantsAudioInput(model: ModelDefinition, operation: ModelOperation): boolean {
+  return (
+    operation === 'text.generate' &&
+    model.capabilities.some(
+      (capability) =>
+        capability.operation === operation && capability.acceptedAssetKinds.includes('audio')
     )
   )
 }
@@ -113,10 +145,11 @@ function pathFor(operation: ModelOperation, protocol: string): string | null {
 
 function requestFor(request: ProviderValidationRequest): { url: string; body: JsonRecord } | null {
   const vision = wantsImageInput(request.model, request.operation)
+  const audio = wantsAudioInput(request.model, request.operation)
   // The desktop chat gateway currently sends OpenAI-compatible messages. Do not certify a
   // native protocol's vision route until its normal execution route accepts the same payload.
   if (
-    vision &&
+    (vision || audio) &&
     !['openai', 'openai-compatible', 'openrouter', 'custom'].includes(request.connection.protocol)
   )
     return null
@@ -134,6 +167,7 @@ function requestFor(request: ProviderValidationRequest): { url: string; body: Js
   if (!body) return null
   if (request.connection.protocol === 'google') {
     if (request.operation !== 'text.generate') return null
+    if (audio) return null
     return {
       url: `${trimUrl(request.connection.baseUrl)}/models/${encodeURIComponent(request.model.modelId)}:generateContent?key=${encodeURIComponent(request.secret)}`,
       body: {
@@ -151,6 +185,7 @@ function requestFor(request: ProviderValidationRequest): { url: string; body: Js
     }
   }
   if (request.connection.protocol === 'anthropic' && request.operation === 'text.generate') {
+    if (audio) return null
     return {
       url: `${trimUrl(request.connection.baseUrl)}/v1/messages`,
       body: {
@@ -174,21 +209,38 @@ function requestFor(request: ProviderValidationRequest): { url: string; body: Js
     }
   }
   const path = pathFor(request.operation, request.connection.protocol)
-  if (vision && path) {
+  if ((vision || audio) && path) {
+    const content: JsonRecord[] = [
+      {
+        type: 'text',
+        text: [
+          vision ? VISION_PROBE_QUESTION : '',
+          audio ? AUDIO_PROBE_QUESTION : ''
+        ].filter(Boolean).join(' ')
+      },
+      ...(vision
+        ? [
+            {
+              type: 'image_url',
+              image_url: { url: `data:image/png;base64,${VISION_PROBE_PNG}` }
+            }
+          ]
+        : []),
+      ...(audio
+        ? [
+            {
+              type: 'input_audio',
+              input_audio: { data: AUDIO_PROBE_WAV, format: 'wav' }
+            }
+          ]
+        : [])
+    ]
     return {
       url: `${trimUrl(request.connection.baseUrl)}${path}`,
       body: {
         model: request.model.modelId,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: VISION_PROBE_QUESTION },
-              { type: 'image_url', image_url: { url: `data:image/png;base64,${VISION_PROBE_PNG}` } }
-            ]
-          }
-        ],
-        max_tokens: 32
+        messages: [{ role: 'user', content }],
+        max_tokens: 64
       }
     }
   }
@@ -298,6 +350,16 @@ export class HttpValidationAdapter implements ProviderAdapter {
         action: '使用已验证的 OpenAI 兼容连接，或先实现该协议的正式调用适配'
       }
     }
+    if (
+      wantsAudioInput(request.model, request.operation) &&
+      !['openai', 'openai-compatible', 'openrouter', 'custom'].includes(request.connection.protocol)
+    ) {
+      return {
+        status: 'unsupported',
+        message: '当前桌面调用链尚未支持此连接协议的音频输入请求',
+        action: '使用已验证的 OpenAI 兼容连接，或先实现该协议的正式调用适配'
+      }
+    }
     const outgoing = requestFor(request)
     if (!outgoing)
       return {
@@ -327,16 +389,30 @@ export class HttpValidationAdapter implements ProviderAdapter {
         action: '检查推理预算、模型输出与连接参数后重试'
       }
     }
-    if (finding.status !== 'verified' || !wantsImageInput(request.model, request.operation))
+    if (finding.status !== 'verified')
       return finding
     const answer = responseText(body, request.connection.protocol)
-    return /\bred\b|红/iu.test(answer)
-      ? { status: 'verified', message: '模型已正确识别测试图片，并返回文本' }
-      : {
-          status: 'failed',
-          message: '图片请求已返回，但模型未正确识别测试图片',
-          action: '检查模型是否支持图片输入及当前连接的多模态请求格式'
-        }
+    const visionVerified =
+      !wantsImageInput(request.model, request.operation) || /\bred\b|红/iu.test(answer)
+    const audioVerified =
+      !wantsAudioInput(request.model, request.operation) || /\btone\b/iu.test(answer)
+    if (visionVerified && audioVerified)
+      return {
+        status: 'verified',
+        message:
+          visionVerified && audioVerified &&
+          wantsImageInput(request.model, request.operation) &&
+          wantsAudioInput(request.model, request.operation)
+            ? '模型已识别测试图片并听到测试音调'
+            : visionVerified && wantsImageInput(request.model, request.operation)
+              ? '模型已正确识别测试图片，并返回文本'
+              : '模型已正确识别测试音调，并返回文本'
+      }
+    return {
+      status: 'failed',
+      message: !visionVerified ? '图片请求已返回，但模型未正确识别测试图片' : '音频请求已返回，但模型未正确识别测试音调',
+      action: '检查模型是否支持对应媒体输入及当前连接的多模态请求格式'
+    }
   }
 }
 

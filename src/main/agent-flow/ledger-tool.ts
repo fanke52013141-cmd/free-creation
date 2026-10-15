@@ -25,6 +25,15 @@ export function createLedgerToolPort(
         if (replay.state === 'ready')
           throw new FlowCommandError('FLOW_RECEIPT_CONFLICT', 'receipt-read')
         if (['pending', 'unknown'].includes(replay.state) && !signal.aborted) {
+          // Reconcile persisted renderer facts for every supported target before considering
+          // recovery. A committed image/speech run is safe to publish from its immutable result;
+          // an unobserved run still remains unknown and is never submitted a second time.
+          try {
+            const reconciled = ledger.commit(lookup)
+            if (!['pending', 'unknown'].includes(reconciled.state)) return reconciled
+          } catch {
+            /* Missing saved facts remain uncertain; only video has a supplier task recovery path. */
+          }
           const recovery = ledger.resumeVideo(command)
           if (recovery) {
             try {

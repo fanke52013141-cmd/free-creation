@@ -4,6 +4,7 @@ import type { NodeShape } from '../engine/executor-types'
 import type { RawNodeOutputs } from '../engine/values'
 import type { FlowAssetValue } from './assets'
 import type { VideoReviewSamples } from './video-review'
+import type { AudioReviewInput, AudioVideoReviewInput, ImageReviewInput } from './media-review'
 const id = z
   .string()
   .min(1)
@@ -34,6 +35,9 @@ export interface ReviewContext {
   criteria: string
   subjects: FlowAssetValue[]
   videoSamples?: VideoReviewSamples
+  imageInput?: ImageReviewInput
+  audioInput?: AudioReviewInput
+  audioVideoInput?: AudioVideoReviewInput
 }
 export function projectReviewOutputs(shape: NodeShape): RawNodeOutputs {
   try {

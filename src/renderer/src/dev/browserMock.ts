@@ -158,6 +158,7 @@ export function installBrowserMock(): void {
     checkFlowNodeAvailability: async () => ({ ok: true, data: null }),
     dispatchFlowCommand: async () => notImplementedInDemo('生产命令'),
     onFlowCommandGrant: () => () => {},
+    onFlowCommandCancel: () => () => {},
     abortUnstartedFlowCommand: async () => notImplementedInDemo('生产命令'),
     checkFlowCommand: async () => notImplementedInDemo('生产命令'),
     commitFlowCommand: async () => notImplementedInDemo('生产命令'),

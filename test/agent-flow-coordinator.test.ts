@@ -39,7 +39,7 @@ function fixture(
   options: {
     coordinate?: (ctx: CoordinationContext) => Promise<CoordinationDecision>
     parallel?: boolean
-    deliveryDuring?: (nodeId: string) => Promise<void>
+    deliveryDuring?: (nodeId: string, taskId: string) => Promise<void>
     human?: boolean
     brokenState?: boolean
     publicationFails?: boolean
@@ -256,7 +256,7 @@ function fixture(
       isActive: () => true,
       deliver: async (grant) => {
         executions++
-        await options.deliveryDuring?.(grant.command.targetNodeId)
+        await options.deliveryDuring?.(grant.command.targetNodeId, grant.command.taskId)
         try {
           const c = grant.command,
             target = byId[c.targetNodeId],
@@ -1041,7 +1041,7 @@ describe('C3.3 coordinator sequential handoff', () => {
 
 function parallelDecision(ctx: CoordinationContext): Promise<CoordinationDecision> {
   return Promise.resolve(
-    ctx.available.length === 2
+    ctx.available.length >= 2 && ctx.available.length <= (ctx.maxParallelTasks ?? 1)
       ? {
           kind: 'dispatch-many',
           assignments: ctx.available.map((item) => ({
@@ -1053,6 +1053,65 @@ function parallelDecision(ctx: CoordinationContext): Promise<CoordinationDecisio
         }
       : { kind: 'finish', outputs: ctx.completed.at(-1)!.outputs }
   )
+}
+
+function extendParallelFixture(f: ReturnType<typeof fixture>, branchCount: 4): void {
+  const names = ['third', 'fourth'].slice(0, branchCount - 2)
+  for (const name of names) {
+    const targetId = `process-${name}`
+    const agentShape = {
+      ...structuredClone(f.byId.first),
+      id: name,
+      props: {
+        ...f.byId.first.props,
+        title: name,
+        config: JSON.stringify({
+          ...JSON.parse(f.byId.first.props.config),
+          allowedNodeIds: [targetId]
+        })
+      },
+      meta: {} as Record<string, unknown>
+    }
+    const targetShape = {
+      ...structuredClone(f.byId['process-first']),
+      id: targetId,
+      props: { ...f.byId['process-first'].props, title: targetId },
+      meta: {} as Record<string, unknown>
+    }
+    f.byId[name] = agentShape
+    f.byId[targetId] = targetShape
+    f.file.tldrawSnapshot.store[name] = agentShape
+    f.file.tldrawSnapshot.store[targetId] = targetShape
+    f.file.nodes.push(
+      {
+        ...structuredClone(f.file.nodes.find((node) => node.id === 'first')!),
+        id: name,
+        params: { config: agentShape.props.config }
+      },
+      {
+        ...structuredClone(f.file.nodes.find((node) => node.id === 'process-first')!),
+        id: targetId,
+        params: { config: targetShape.props.config }
+      }
+    )
+    f.file.edges.push(
+      {
+        id: `edge-material-${name}`,
+        from: { nodeId: 'material', portId: 'out-text' },
+        to: { nodeId: name, portId: 'in-text' }
+      },
+      {
+        id: `edge-material-${targetId}`,
+        from: { nodeId: 'material', portId: 'out-text' },
+        to: { nodeId: targetId, portId: 'in-value' }
+      }
+    )
+  }
+  const config = JSON.parse(f.byId.main.props.config)
+  config.allowedNodeIds = ['first', 'second', ...names]
+  config.maxParallelTasks = branchCount
+  f.byId.main.props.config = JSON.stringify(config)
+  f.file.nodes.find((node) => node.id === 'main')!.params.config = f.byId.main.props.config
 }
 function deferred() {
   let resolve!: () => void
@@ -1083,7 +1142,34 @@ describe('bounded parallel coordination', () => {
     expect(f.count()).toEqual({ executions: 4, modelCalls: 2 })
     expect(f.coordinator.store.latest('p', 'main')!.controlSteps).toBe(1)
   })
-  it.each(['disabled', 'duplicate', 'invalid-input', 'budget', 'dependency'] as const)(
+  it('runs four independent branches together under the bounded cap', async () => {
+    const both = deferred(),
+      entered = new Set<string>()
+    const f = fixture({
+      parallel: true,
+      coordinate: parallelDecision,
+      deliveryDuring: async (id) => {
+        const run = f.coordinator.store.latest('p', 'main')!
+        expect(run.children).toHaveLength(4)
+        entered.add(id)
+        if (entered.size === 4) both.resolve()
+        await both.promise
+      }
+    })
+    extendParallelFixture(f, 4)
+    const reply = await f.host.run(input)
+    expect(reply.task.state).toBe('completed')
+    expect(reply.task.children?.map((child) => child.state)).toEqual([
+      'completed',
+      'completed',
+      'completed',
+      'completed'
+    ])
+    expect(entered).toEqual(new Set(['process-first', 'process-second', 'process-third', 'process-fourth']))
+    expect(f.count()).toEqual({ executions: 8, modelCalls: 2 })
+    expect(f.coordinator.store.latest('p', 'main')!.controlSteps).toBe(3)
+  })
+  it.each(['disabled', 'duplicate', 'invalid-input', 'budget'] as const)(
     'rejects the entire %s batch without starting any child',
     async (kind) => {
       const f = fixture({
@@ -1104,17 +1190,93 @@ describe('bounded parallel coordination', () => {
       if (kind === 'budget') cfg.maxSteps = 1
       f.byId.main.props.config = JSON.stringify(cfg)
       f.file.nodes.find((node) => node.id === 'main')!.params.config = f.byId.main.props.config
-      if (kind === 'dependency')
-        f.file.edges.push({
-          id: 'cross',
-          from: { nodeId: 'process-first', portId: 'out-value' },
-          to: { nodeId: 'process-second', portId: 'in-value' }
-        })
       await expect(f.host.run(input)).rejects.toThrow()
       expect(f.count().executions).toBe(0)
       expect(f.coordinator.store.latest('p', 'main')!.children).toHaveLength(0)
     }
   )
+  it('queues shared target assignments in dispatch order and releases the next branch only at terminal', async () => {
+    const entered = deferred(),
+      release = deferred(),
+      order: string[] = []
+    const f = fixture({
+      parallel: true,
+      coordinate: parallelDecision,
+      deliveryDuring: async (_nodeId, taskId) => {
+        const run = f.coordinator.store.latest('p', 'main')!
+        if (taskId === run.children[0]?.taskId) {
+          order.push('first-start')
+          entered.resolve()
+          await release.promise
+          order.push('first-terminal')
+        } else if (taskId === run.children[1]?.taskId) order.push('second-start')
+      }
+    })
+    const secondConfig = JSON.parse(f.byId.second.props.config)
+    secondConfig.allowedNodeIds = ['process-first']
+    f.byId.second.props.config = JSON.stringify(secondConfig)
+    f.file.nodes.find((node) => node.id === 'second')!.params.config = f.byId.second.props.config
+
+    const pending = f.host.run(input)
+    await entered.promise
+    await new Promise((done) => setTimeout(done, 20))
+    expect(order).not.toContain('second-start')
+    release.resolve()
+
+    const reply = await pending
+    expect(reply.task.state).toBe('completed')
+    expect(reply.task.children?.map((child) => child.state)).toEqual(['completed', 'completed'])
+    expect(order.indexOf('first-terminal')).toBeLessThan(order.indexOf('second-start'))
+  })
+  it('restores a shared target queue after a waiting child and continues only after that child completes', async () => {
+    const f = fixture({ parallel: true, human: true, coordinate: parallelDecision })
+    const sharedTargetConfig = JSON.parse(f.byId.second.props.config)
+    sharedTargetConfig.allowedNodeIds = ['process-first']
+    sharedTargetConfig.interactionMode = 'autonomous'
+    f.byId.second.props.config = JSON.stringify(sharedTargetConfig)
+    f.file.nodes.find((node) => node.id === 'second')!.params.config = f.byId.second.props.config
+    const firstConfig = JSON.parse(f.byId.first.props.config)
+    firstConfig.interactionMode = 'collaborative'
+    f.byId.first.props.config = JSON.stringify(firstConfig)
+    f.file.nodes.find((node) => node.id === 'first')!.params.config = f.byId.first.props.config
+
+    const waiting = await f.host.run(input)
+    expect(waiting.task.state).toBe('waiting')
+    expect(waiting.task.children?.map((child) => child.state)).toEqual(['waiting', 'queued'])
+    expect(f.count().executions).toBe(2)
+    const reconciled = await f.coordinator.run({
+      ...input,
+      action: 'reconcile',
+      eventId: 'shared-queue-reconcile',
+      expectedTaskId: waiting.task.taskId,
+      expectedWaitRevision: waiting.task.waitRevision
+    })
+    expect(reconciled.task.state).toBe('waiting')
+    expect(reconciled.task.children?.map((child) => child.state)).toEqual(['waiting', 'queued'])
+
+    const child = f.host.inspect({ projectId: 'p', nodeId: 'first' })!
+    const completed = await f.host.run({
+      ...input,
+      nodeId: 'first',
+      action: 'continue',
+      requestId: 'shared-queue-child-continue',
+      eventId: 'shared-queue-child-continue',
+      expectedTaskId: child.taskId,
+      expectedWaitRevision: child.waitRevision
+    })
+    expect(completed.task.state).toBe('completed')
+    const resumed = await f.host.run({
+      ...input,
+      action: 'continue',
+      requestId: 'shared-queue-root-continue',
+      eventId: 'shared-queue-root-continue',
+      expectedTaskId: waiting.task.taskId,
+      expectedWaitRevision: reconciled.task.waitRevision
+    })
+    expect(resumed.task.state).toBe('completed')
+    expect(resumed.task.children?.map((item) => item.state)).toEqual(['completed', 'completed'])
+    expect(f.count().executions).toBe(4)
+  })
   it('preserves a successful sibling when the other branch fails', async () => {
     const f = fixture({ parallel: true, coordinate: parallelDecision })
     const original = f.host.runAssignment.bind(f.host)

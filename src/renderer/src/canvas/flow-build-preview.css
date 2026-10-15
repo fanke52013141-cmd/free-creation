@@ -1,0 +1,89 @@
+.flow-build-preview-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.flow-build-preview-edges {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.flow-build-preview-edge {
+  fill: none;
+  stroke-width: 1.5px;
+  stroke-dasharray: 6 5;
+  opacity: 0.78;
+}
+
+.flow-build-preview-edge.is-data {
+  stroke: var(--brand);
+}
+
+.flow-build-preview-edge.is-control {
+  stroke: var(--muted);
+}
+
+.flow-build-preview-edge.is-observe {
+  stroke: var(--muted);
+  stroke-dasharray: 2 4;
+  opacity: 0.58;
+}
+
+.flow-build-preview-edge.is-gate {
+  stroke: var(--brand);
+  stroke-dasharray: 3 4;
+}
+
+.flow-build-preview-edge.is-rework {
+  stroke: var(--red);
+  stroke-dasharray: 2 5;
+}
+
+.flow-build-preview-node {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  width: 340px;
+  height: 260px;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+  padding: 14px 12px;
+  border: 1px dashed var(--brand);
+  border-radius: var(--node-radius);
+  background: var(--card);
+  color: var(--txt);
+  opacity: 0.92;
+  transform-origin: top left;
+}
+
+.flow-build-preview-node strong {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flow-build-preview-node > span:last-child {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+}
+
+.flow-build-preview-kicker {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.3;
+}

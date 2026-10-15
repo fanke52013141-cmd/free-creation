@@ -121,7 +121,7 @@ GLM/C3.3/C4 本批完整 verify 最终串行通过（164 文件、1763 通过、
 | 通用配音/音色设计  | AudioGenerateInput 已带 diagnostics 上下文字段；gateway 入口级事件未接入                                                                                                                                                      | 基础   | speech/voice 网关入口事件 + 执行器阶段                           | 音频维护者，L04 待办     |
 | 本地媒体与导演输出 | 公共执行器终态事件已覆盖失败；media.repo 写盘失败经 node.failed 传播                                                                                                                                                          | 基础   | 外部进程退出码/信号专项事件                                      | 媒体维护者，L04 待办     |
 | 代码Worker         | 执行器公共终态事件覆盖超时/异常；源码禁记由白名单序列化保证                                                                                                                                                                   | 基础   | worker 退出码专项事件                                            | Worker维护者，L04 待办   |
-| 项目保存/冲突/恢复 | main/ipc/project.ipc.ts save：project.save.started/completed/conflict/failed；test/db-migrations 侧无；导入导出 transfer.started/validated/committed/failed                                                                   | 已验收 | restore 回滚专项事件（恢复副本功能并行开发中，待其落地后接事件） | 持久化维护者，L04        |
+| 项目保存/冲突/恢复 | main/ipc/project.ipc.ts 的异步保存、关窗同步保存、恢复副本保存/正式恢复均发 project.save.started 与同 trace/span 唯一 completed/conflict/failed；导入导出沿 transfer.started/validated/committed/failed | 已验收 | 完整磁盘/物理掉电仍需独立故障验收 | 持久化维护者，L04        |
 | 项目导入导出       | 同上 transfer.* 事件（导出/导入）                                                                                                                                                                                             | 已验收 | 结构导出 exportStructure 未接                                    | 持久化维护者，L04 待办   |
 | 素材库             | main/ipc/library.ipc.ts：revision_published/materialization_completed/failed/mutation_failed                                                                                                                                  | 已验收 | 分类操作失败事件未接                                             | 素材库维护者，L04        |
 | 模型连接/能力验证  | main/ipc/models.ipc.ts validate：configuration.validation_completed/failed（connectionId/modelId）                                                                                                                            | 已验收 | 迁移 migration_* 事件未接                                        | 模型目录维护者，L04 待办 |
@@ -409,4 +409,16 @@ C3.1b 最终结果：desktop-final-accepted.log 完整 verify 通过（155 文�
 审核循环跳过人工/协作等待后继续检查其他支路，主控先收集真实完成成果再等待；复用现有 agent.coordination.stage、agent.desktop/runtime、model.request、command、node/workflow、task/media/asset/save 生命周期，不为轮询或跳过等待新增日志。新增隔离 --parallel-review 夹具不进入应用入口，fetch 替身已登记理由，不豁免生产网络或正文/密钥禁令。
 
 6 文件 120 定向通过（qa/parallel-review-directed.log），含等待公平性、身份冲突、停止迟到及命令/强杀/真实抽帧回归；类型/lint/日志旁路门禁通过。真实桌面组合的唯一终态配对、恢复关联、脱敏和完整 verify 尚待运行；不能将本段当作全链路完成证据。既有异步媒体完整 trace、task/media correlationMissing 和保存关联盲区保持；详见 [39 接续](canvas-agent-flow/39-parallel-review-rework.md)。
+
+## 2026-10-16 Agent 多模态审核、队列与关联补齐
+
+图像、音频和音画审核复用现有 agent.desktop/coordination、model.request、公共 node/workflow、固定资产及保存生命周期，不增加重复业务终态。图像、转码后的完整音轨、4 张画面样本和完整帧时间戳摘要只作为模型输入，不进入日志；只记录固定 `media-review` / `video-review-samples` 阶段、稳定错误码、时长/帧数和受控身份。解码器 stderr、文件路径/名称、媒体字节、提示词、模型回复、诊断原始异常均排除。缓存复核会重新核对固定版本和字节摘要。
+
+Agent 2–4 路调度和多成果集合复用 agent.coordination.stage、agent.desktop、command、node/workflow、model.request、asset/save 生命周期；共享写范围分支按持久化派发顺序 FIFO 分波，互不冲突者仍并发。renderer 资源排队继续使用 workflow.task_queued/admitted/cancelled，不记录提示词或媒体内容。诊断 drain 仅在明确的关闭/验收边界等待缓冲与 IPC 确认；业务事件仍 fire-and-forget，日志传输失败计入丢弃并且不改变业务结果。
+
+video executor 现在通过 `gatewayDiagnostics(ctx)` 将运行 trace、节点父 span 和稳定 requestId 传到异步视频任务。隔离 Electron 双进程多参考验收逐项验证 model.request.started→accepted、task.state_changed、media.download 与 media.persist 共用 request/task/trace，并对媒体开始/唯一终态配对；进程恢复时无法证明的旧祖先 trace 仍标为 `correlationMissing`。项目保存 IPC 对异步保存、关窗同步保存、恢复副本写入和正式恢复统一生成独立 trace/span；异步、同步、冲突和恢复失败都沿同一 context 发唯一终态。
+
+验证：`npm run test:agent-flow-media-review` 覆盖正式审核按钮发送固定 PNG 全量字节、规范化 WAV 全音轨、A/V 时间线和四个视觉样本，并验证两进程重开不重放模型调用；Agent 命令桌面覆盖 image-edit/TTS 固定媒体路径。`test/agent-flow-coordinator.test.ts` 覆盖共享目标 FIFO、等待/恢复和四路独立并发；video adapter、media review、save IPC 与 async executor 定向回归通过。多参考视频双进程验收逐项关联异步 task/media 事件，project.save 生命周期逐 trace/span 配对；`verify:logging`、lint、node/web/model 类型、model-runtime 2 项与构建通过。Electron-as-Node 全量 Vitest 为 175 文件、2003 通过、1 跳过。宿主 Node 24.12 运行标准 `npm run verify` 时，20 个 better-sqlite3 测试文件受 ABI 140/137 不匹配影响（331 项）；相同套件通过仓库 Electron 运行器复验。优化 UI 首项通过，组合 UI runner 因会重写固定 QA 路径而停止，完整 UI 门禁没有记为通过。旧源码完整 verify（175 文件、2001 通过、1 既有跳过、model-runtime 2 项）不包含这些新修改。
+
+边界：A/V 模型只收到四个视觉样本，不宣称完整逐帧语义理解。旧任务重启后的祖先 trace 无法追溯时保留 `correlationMissing`；本地夹具不证明真实计费、远端撤回、实机掉电或完整跨操作 trace 树。
 

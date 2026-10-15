@@ -25,7 +25,7 @@ import { tmpdir } from 'node:os'
 // ── 指示器与 electron mock ─────────────────────────────────
 
 const ipcState = vi.hoisted(() => ({
-  handlers: {} as Record<string, (e: unknown, input: unknown) => void>,
+  handlers: {} as Record<string, (e: unknown, input: unknown) => unknown>,
   sendSyncPayload: null as unknown,
   projectsDir: ''
 }))
@@ -35,7 +35,9 @@ vi.mock('electron', () => ({
     on: (channel: string, handler: (e: unknown, input: unknown) => void) => {
       ipcState.handlers[channel] = handler
     },
-    handle: () => undefined
+    handle: (channel: string, handler: (e: unknown, input: unknown) => unknown) => {
+      ipcState.handlers[channel] = handler
+    }
   },
   dialog: { showSaveDialog: vi.fn(), showOpenDialog: vi.fn() }
 }))
@@ -119,12 +121,12 @@ vi.mock('../src/main/store/projects.repo', async () => {
       return true
     },
     // T04：副本正式落盘 = 经 saveProject 走完整写路径（推进版本），随后删副本
-    restoreRecoveryCopy: (input: { id: string }) => {
-      const recPath = join(ipcState.projectsDir, input.id, 'project.json.local-recovery')
+    restoreRecoveryCopy: (id: string) => {
+      const recPath = join(ipcState.projectsDir, id, 'project.json.local-recovery')
       const copy = JSON.parse(readFileSync(recPath, 'utf-8')) as {
         tldrawSnapshot?: unknown
       }
-      const mainPath = join(ipcState.projectsDir, input.id, 'project.json')
+      const mainPath = join(ipcState.projectsDir, id, 'project.json')
       const file = JSON.parse(readFileSync(mainPath, 'utf-8')) as {
         meta: { graphVersion: number }
       }
@@ -144,6 +146,7 @@ vi.mock('../src/main/store/transfer', () => ({
 }))
 
 import { registerProjectIpc } from '../src/main/ipc/project.ipc'
+import { setGatewayEventSink } from '../src/main/diagnostics/gateway-events'
 import { GraphVersionConflictError } from '../src/shared/graph-snapshot-sync'
 
 let root = ''
@@ -182,6 +185,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  setGatewayEventSink(null)
   rmSync(root, { recursive: true, force: true })
 })
 
@@ -239,6 +243,60 @@ describe('project.ipc saveSync 信封语义', () => {
     ipcState.handlers['project:save-sync']!(e, { id: 'missing' })
     expect(e.returnValue).toMatchObject({ ok: false, error: { code: 'SAVE_FAILED' } })
     expect((e.returnValue as { error: { message: string } }).error.message).toBeTruthy()
+  })
+
+  it('异步保存、同步保存和恢复副本都以各自 trace/span 配对唯一终态', () => {
+    seedProject('p1', 5)
+    const events: Array<{
+      event: string
+      traceId?: string
+      spanId?: string
+      projectId?: string
+      correlationMissing?: boolean
+    }> = []
+    setGatewayEventSink({ emit: (event) => { if (event) events.push(event) } })
+
+    expect(ipcState.handlers['project:save']!({}, { id: 'p1', expectedGraphVersion: 5 })).toEqual({
+      ok: true,
+      data: { graphVersion: 6 }
+    })
+
+    const saved = makeEvent()
+    ipcState.handlers['project:save-sync']!(saved, { id: 'p1', expectedGraphVersion: 6 })
+    expect(saved.returnValue).toEqual({ ok: true, data: { graphVersion: 7 } })
+
+    const conflict = makeEvent()
+    ipcState.handlers['project:save-sync']!(conflict, { id: 'p1', expectedGraphVersion: 6 })
+    expect(conflict.returnValue).toMatchObject({ ok: false, error: { code: 'REVISION_CONFLICT' } })
+
+    const recovery = makeEvent()
+    ipcState.handlers['project:save-recovery-copy-sync']!(recovery, { id: 'p1' })
+    expect(recovery.returnValue).toEqual({ ok: true, data: true })
+
+    expect(ipcState.handlers['project:restore-recovery-copy']!({}, { id: 'p1' })).toMatchObject({
+      ok: true,
+      data: { meta: { graphVersion: 8 } }
+    })
+
+    const starts = events.filter((event) => event.event === 'project.save.started')
+    const terminals = events.filter((event) =>
+      ['project.save.completed', 'project.save.failed', 'project.save.conflict'].includes(
+        event.event
+      )
+    )
+    expect(starts).toHaveLength(5)
+    expect(terminals).toHaveLength(5)
+    for (const start of starts) {
+      expect(start.traceId).toBeTruthy()
+      expect(start.spanId).toBeTruthy()
+      expect(start.projectId).toBe('p1')
+      expect(start.correlationMissing).not.toBe(true)
+      expect(
+        terminals.filter(
+          (terminal) => terminal.traceId === start.traceId && terminal.spanId === start.spanId
+        )
+      ).toHaveLength(1)
+    }
   })
 })
 

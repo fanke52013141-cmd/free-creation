@@ -73,7 +73,13 @@ export const AgentTaskSnapshotSchema = z
         z
           .object({
             nodeId: id,
-            contractVersion: z.union([z.literal(1), z.literal(7)]),
+            contractVersion: z.union([
+              z.literal(1),
+              z.literal(2),
+              z.literal(3),
+              z.literal(4),
+              z.literal(7)
+            ]),
             inputs: z.array(FixedNodeInputSchema).max(128)
           })
           .strict()
@@ -131,6 +137,10 @@ export const AgentDecisionSchema = z.discriminatedUnion('kind', [
       outputs: z.array(AgentFlowAssetRefSchema).min(1).max(128)
     })
     .strict()
+    .superRefine((decision, context) => {
+      if (new Set(decision.outputs.map((ref) => JSON.stringify(ref))).size !== decision.outputs.length)
+        context.addIssue({ code: 'custom', message: 'Task outputs must be unique fixed references' })
+    })
 ])
 export type AgentDecision = z.infer<typeof AgentDecisionSchema>
 export const AgentResumeSchema = z
@@ -142,9 +152,14 @@ export const AgentResumeSchema = z
     kind: z.enum(['human', 'reconcile']),
     accepted: z.boolean().optional(),
     feedback: z.string().max(4096).optional(),
-    selectedOutputs: z.array(AgentFlowAssetRefSchema).max(2).optional()
+    selectedOutputs: z.array(AgentFlowAssetRefSchema).max(128).optional()
   })
   .strict()
+  .superRefine((input, context) => {
+    const refs = input.selectedOutputs ?? []
+    if (new Set(refs.map((ref) => JSON.stringify(ref))).size !== refs.length)
+      context.addIssue({ code: 'custom', message: 'Selected outputs must be unique references' })
+  })
 export type AgentResume = z.infer<typeof AgentResumeSchema>
 export class AgentRuntimeError extends Error {
   constructor(

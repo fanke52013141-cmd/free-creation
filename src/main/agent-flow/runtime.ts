@@ -291,6 +291,12 @@ export function createAgentRuntime(options: {
         )
       )
         throw new AgentRuntimeError('AGENT_OUTPUT_UNVERIFIED', 'human-selection')
+      if (
+        response.selectedOutputs &&
+        new Set(response.selectedOutputs.map(canonicalFlowJson)).size !==
+          response.selectedOutputs.length
+      )
+        throw new AgentRuntimeError('AGENT_OUTPUT_UNVERIFIED', 'human-selection')
       return {
         humanAccepted: true,
         humanFeedback: response.feedback ?? '',
