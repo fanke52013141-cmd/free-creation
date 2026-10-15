@@ -249,7 +249,9 @@ export class FlowCommandLedger {
       fail('FLOW_TYPE_UNSUPPORTED', 'contract')
     if (
       node.type === 'video' &&
-      !['text', 'first-frame'].includes(JSON.parse(target.props.config || '{}').mode)
+      !['text', 'first-frame', 'first-last-frame', 'reference'].includes(
+        JSON.parse(target.props.config || '{}').mode
+      )
     )
       fail('FLOW_TYPE_UNSUPPORTED', 'video-mode')
     if (
@@ -264,11 +266,16 @@ export class FlowCommandLedger {
     this.assertReviewReady(project, command.targetNodeId, command.inputs)
     const incoming = project.edges.filter((edge) => edge.to.nodeId === command.targetNodeId)
     if (
-      new Set(incoming.map((edge) => edge.to.portId)).size !== incoming.length ||
+      (node.type !== 'video' &&
+        new Set(incoming.map((edge) => edge.to.portId)).size !== incoming.length) ||
       incoming.some((edge) => !adapter.inputs.includes(edge.to.portId)) ||
       incoming.some(
         (edge) => !command.inputs.some((input) => input.targetPortId === edge.to.portId)
-      )
+      ) ||
+      command.inputs.some((input) => {
+        const edges = incoming.filter((edge) => edge.to.portId === input.targetPortId)
+        return edges.length > 0 && edges.length !== input.assets.length
+      })
     )
       fail('FLOW_INPUT_MANIFEST_INCOMPLETE', 'input')
     for (const input of command.inputs) {
@@ -299,10 +306,23 @@ export class FlowCommandLedger {
       fail('FLOW_INPUT_CONTRACT_INVALID', 'video-input')
     return command.inputs.map((input) => {
       const versions = this.assets.resolveInputs(command.projectId, input.assets)
-      const edge = project.edges.find(
+      if (
+        input.targetPortId === 'in-reference-video' &&
+        versions.some((version) => version.value.kind !== 'video' || !version.value.contentSha256)
+      )
+        fail('FLOW_INPUT_CONTRACT_INVALID', 'video-input')
+      if (
+        input.targetPortId === 'in-images' &&
+        new Set(
+          versions.map((version) => (version.value.kind === 'image' ? version.value.mediaId : null))
+        ).size !== versions.length
+      )
+        fail('FLOW_INPUT_CONTRACT_INVALID', 'video-input')
+      const edges = project.edges.filter(
         (edge) => edge.to.nodeId === command.targetNodeId && edge.to.portId === input.targetPortId
       )
-      const sources = versions.map((version) => {
+      const sources = versions.map((version, index) => {
+        const edge = edges[index]
         if (!edge) return { nodeId: version.ref.sourceNodeId, portId: version.ref.sourcePortId }
         if (
           edge.from.nodeId === version.ref.sourceNodeId &&

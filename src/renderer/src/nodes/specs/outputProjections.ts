@@ -252,8 +252,7 @@ export const projectSoundAdjustOutputs = (shape: NodeCardShape): RawNodeOutputs 
   }
 }
 
-export const projectVideoAssetOutputs = (shape: NodeCardShape): RawNodeOutputs =>
-  mediaOutput(shape, 'video', 'out-video')
+export { projectVideoAssetOutputs } from '@shared/engine/deterministic-projections'
 
 /**
  * 文件资产节点：原始文件永远作为 out-file 暴露；导入时已抽出正文的文档

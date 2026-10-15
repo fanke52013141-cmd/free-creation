@@ -295,6 +295,207 @@ describe('fixed first-frame Agent adapter', () => {
     })
     return { ...f.command(), inputs: [{ targetPortId: 'in-images', assets: [version.ref] }] }
   }
+  function twoFrameCommand(f: ReturnType<typeof videoFixture>, path: string) {
+    const first = imageCommand(f).inputs[0].assets[0]
+    const tail = structuredClone(f.source)
+    tail.id = 'shape:tail'
+    tail.props.mediaId = 'tail'
+    tail.props.mediaPath = 'projects/project-a/media/tail.png'
+    writeFileSync(join(path, '..', 'tail.png'), 'tail--bytes')
+    f.db
+      .prepare(
+        "INSERT INTO media(id,kind,mime,path,size_bytes,created_at) VALUES ('tail','image','image/png','projects/project-a/media/tail.png',11,0)"
+      )
+      .run()
+    const store = (f.file.tldrawSnapshot as { store: Record<string, typeof tail> }).store
+    store[tail.id] = tail
+    f.file.nodes.push({ ...structuredClone(f.file.nodes[0]), id: tail.id })
+    f.file.edges.push({
+      ...structuredClone(f.file.edges[0]),
+      id: 'edge-tail',
+      from: { nodeId: tail.id, portId: 'out-image' }
+    })
+    f.target.props.config = '{"mode":"first-last-frame"}'
+    const last = f.assets.submit({
+      projectId: 'project-a',
+      nodeId: tail.id,
+      portId: 'out-image',
+      submissionId: 'tail-version',
+      expectedGraphVersion: 1,
+      traceId: 'trace',
+      spanId: 'span'
+    }).ref
+    return { ...f.command(), inputs: [{ targetPortId: 'in-images', assets: [first, last] }] }
+  }
+  function motionCommand(f: ReturnType<typeof videoFixture>, path: string) {
+    const relative = 'projects/project-a/media/motion.mp4'
+    writeFileSync(join(path, '..', 'motion.mp4'), 'video-bytes')
+    f.db
+      .prepare('UPDATE media SET kind=?,mime=?,path=? WHERE id=?')
+      .run('video', 'video/mp4', relative, 'frame')
+    Object.assign(f.source.props, {
+      nodeType: 'video-asset',
+      mediaPath: relative,
+      mediaMime: 'video/mp4'
+    })
+    f.file.nodes[0].type = 'video-asset'
+    f.file.edges[0].from.portId = 'out-video'
+    f.file.edges[0].to.portId = 'in-reference-video'
+    f.target.props.config = '{"mode":"reference"}'
+    const version = f.assets.submit({
+      projectId: 'project-a',
+      nodeId: f.source.id,
+      portId: 'out-video',
+      submissionId: 'motion-version',
+      expectedGraphVersion: 1,
+      traceId: 'trace',
+      spanId: 'span'
+    })
+    return {
+      ...f.command(),
+      inputs: [{ targetPortId: 'in-reference-video', assets: [version.ref] }]
+    }
+  }
+  it('freezes an ordinary video asset and resumes only its original reference command', () =>
+    withFrame((f, path) => {
+      const command = motionCommand(f, path),
+        grant = f.prepare(command)
+      expect(grant.inputs[0].versions[0].value).toMatchObject({
+        kind: 'video',
+        contentSha256: expect.stringMatching(/^[a-f0-9]{64}$/)
+      })
+      f.task('unknown')
+      f.ledger.unknown({ ...lookup, leaseId: grant.leaseId })
+      expect(new FlowCommandLedger(f.db, f.project).resumeVideo(command)).toMatchObject({
+        runId: grant.runId,
+        leaseId: grant.leaseId
+      })
+      writeFileSync(join(path, '..', 'motion.mp4'), 'other-bytes')
+      expect(() => f.ledger.resumeVideo(command)).toThrow('ASSET_VIDEO_CHANGED')
+      unlinkSync(join(path, '..', 'motion.mp4'))
+      expect(() => f.assets.resolveInputs('project-a', command.inputs[0].assets)).toThrow(
+        'ASSET_VIDEO_CHANGED'
+      )
+    }))
+  it('rejects duplicate motion references and video index, size and project drift before admission', () =>
+    withFrame((f, path) => {
+      const command = motionCommand(f, path)
+      expect(() =>
+        f.prepare({
+          ...command,
+          inputs: [
+            {
+              ...command.inputs[0],
+              assets: [...command.inputs[0].assets, ...command.inputs[0].assets]
+            }
+          ]
+        })
+      ).toThrow('FLOW_INPUT_MANIFEST_INCOMPLETE')
+      for (const patch of [
+        "kind='audio'",
+        'size_bytes=20971521',
+        "path='projects/foreign/media/motion.mp4'"
+      ]) {
+        f.db.prepare(`UPDATE media SET ${patch} WHERE id='frame'`).run()
+        expect(() => f.assets.resolveInputs('project-a', command.inputs[0].assets)).toThrow(
+          'ASSET_VIDEO_CHANGED'
+        )
+        f.db
+          .prepare(
+            "UPDATE media SET kind='video',size_bytes=11,path='projects/project-a/media/motion.mp4' WHERE id='frame'"
+          )
+          .run()
+      }
+    }))
+  it('matches both ordered source edges and resumes the original command after restart', () =>
+    withFrame((f, path) => {
+      const command = twoFrameCommand(f, path)
+      const grant = f.prepare(command)
+      expect(grant.inputs[0].sources?.map((source) => source.nodeId)).toEqual([
+        'shape:source',
+        'shape:tail'
+      ])
+      expect(grant.inputs[0].versions.map((version) => version.value)).toMatchObject([
+        { mediaId: 'frame' },
+        { mediaId: 'tail' }
+      ])
+      f.task('unknown')
+      f.ledger.unknown({ ...lookup, leaseId: grant.leaseId })
+      const reopened = new FlowCommandLedger(f.db, f.project)
+      expect(reopened.resumeVideo(command)).toMatchObject({
+        runId: grant.runId,
+        leaseId: grant.leaseId
+      })
+      writeFileSync(join(path, '..', 'tail.png'), 'other-bytes')
+      expect(() => reopened.resumeVideo(command)).toThrow('ASSET_IMAGE_CHANGED')
+    }))
+  it('rejects swapped, incomplete, duplicate or extra frame manifests', () =>
+    withFrame((f, path) => {
+      const command = twoFrameCommand(f, path)
+      const assets = command.inputs[0].assets
+      expect(() =>
+        f.prepare({
+          ...command,
+          inputs: [{ targetPortId: 'in-images', assets: [...assets].reverse() }]
+        })
+      ).toThrow('FLOW_INPUT_SOURCE_MISMATCH')
+      expect(() =>
+        f.prepare({
+          ...command,
+          inputs: [{ targetPortId: 'in-images', assets: assets.slice(0, 1) }]
+        })
+      ).toThrow('FLOW_INPUT_MANIFEST_INCOMPLETE')
+      expect(() =>
+        f.prepare({
+          ...command,
+          inputs: [{ targetPortId: 'in-images', assets: [assets[0], assets[0]] }]
+        })
+      ).toThrow('FLOW_INPUT_CONTRACT_INVALID')
+      expect(() =>
+        f.prepare({
+          ...command,
+          inputs: [{ targetPortId: 'in-images', assets: [...assets, assets[0]] }]
+        })
+      ).toThrow('FLOW_INPUT_MANIFEST_INCOMPLETE')
+      const grant = f.prepare(command)
+      f.file.edges.reverse()
+      expect(() => f.ledger.check({ ...lookup, leaseId: grant.leaseId })).toThrow(
+        'FLOW_REVISION_CONFLICT'
+      )
+    }))
+  it('keeps ordered image references on the same command after restart and rejects missing or swapped sources', () =>
+    withFrame((f, path) => {
+      const original = twoFrameCommand(f, path)
+      f.target.props.config = '{"mode":"reference"}'
+      f.file.nodes.find((n) => n.id === f.target.id)!.params.config = f.target.props.config
+      const command = { ...original, expectedSemanticRevision: projectSemanticRevision(f.file) }
+      for (const assets of [
+        [...command.inputs[0].assets].reverse(),
+        command.inputs[0].assets.slice(0, 1)
+      ])
+        expect(() =>
+          f.prepare({ ...command, inputs: [{ ...command.inputs[0], assets }] })
+        ).toThrow()
+      const grant = f.prepare(command)
+      expect(grant.inputs[0].sources?.map((source) => source.nodeId)).toEqual([
+        'shape:source',
+        'shape:tail'
+      ])
+      f.task('unknown')
+      f.ledger.unknown({ ...lookup, leaseId: grant.leaseId })
+      const reopened = new FlowCommandLedger(f.db, f.project)
+      expect(reopened.resumeVideo(command)).toMatchObject({ runId: grant.runId })
+      expect(f.db.prepare('SELECT count(*) AS n FROM flow_commands').get()).toEqual({ n: 1 })
+    }))
+  it('blocks a missing tail file on original-task recovery', () =>
+    withFrame((f, path) => {
+      const command = twoFrameCommand(f, path),
+        grant = f.prepare(command)
+      f.task('unknown')
+      f.ledger.unknown({ ...lookup, leaseId: grant.leaseId })
+      unlinkSync(join(path, '..', 'tail.png'))
+      expect(() => f.ledger.resumeVideo(command)).toThrow('ASSET_IMAGE_CHANGED')
+    }))
   it('freezes image bytes and restores the same original command/task', () =>
     withFrame((f) => {
       const command = imageCommand(f)
@@ -344,7 +545,7 @@ describe('fixed first-frame Agent adapter', () => {
             }
           ]
         })
-      ).toThrow('FLOW_INPUT_CONTRACT_INVALID')
+      ).toThrow('FLOW_INPUT_MANIFEST_INCOMPLETE')
       f.file.edges.push({ ...f.file.edges[0], id: 'duplicate-frame' })
       expect(() =>
         f.prepare({ ...command, expectedSemanticRevision: projectSemanticRevision(f.file) })
@@ -393,10 +594,10 @@ describe('text-to-video Agent command adapter', () => {
     })
     expect(() => f.prepare({ ...f.command(), commandId: 'another' })).toThrow('FLOW_NODE_OCCUPIED')
   })
-  it('rejects reference mode and undeclared media inputs before granting a command', () => {
+  it('rejects empty reference manifests and undeclared media inputs before granting a command', () => {
     const f = videoFixture()
     f.target.props.config = '{"mode":"reference"}'
-    expect(() => f.prepare(f.command())).toThrow('FLOW_TYPE_UNSUPPORTED')
+    expect(() => f.prepare(f.command())).toThrow('FLOW_INPUT_CONTRACT_INVALID')
     f.target.props.config = '{"mode":"text"}'
     f.file.edges[0].to.portId = 'in-images'
     expect(() => f.prepare(f.command())).toThrow('FLOW_INPUT_MANIFEST_INCOMPLETE')

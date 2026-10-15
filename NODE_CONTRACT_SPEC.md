@@ -1,5 +1,9 @@
 # 节点输入输出契约规范
 
+2026-10-15 Agent 视频运动参考：video@7 的 reference 模式新增一路固定视频 in-reference-video（普通 video-asset 自动固定摘要，首版最多 20 MiB），可加已有有序图片和一路文本；依所选模型能力校验，音频/多路视频/提示词包仍拒绝。普通端口、contractVersion 和手动能力不变。固定版本、实际发送字节与原任务视频列表均校验；历史未带摘要的生成成果仍可预览/连接，但不能直接当作可信运动参考。验收与边界见 docs/canvas-agent-flow/32-video-motion-reference-adapter.md。
+
+2026-10-15 Agent 视频图片参考适配：video@7 的 reference 模式仅接受有序固定图片 in-images（1–30 的公共硬界，实际依已选模型能力更低上限）和最多一路文本；混入其他媒体/提示词包拒绝。固定来源、版本与实际编码字节均校验，原命令恢复绑定有序媒体列表，不重发生成。既有端口/contractVersion 和手动行为保持。验收边界见 docs/canvas-agent-flow/31-video-reference-images-adapter.md。
+
 AI 对话生图补充：消息可保存图片附件（媒体 ID、项目相对路径、名称、MIME），用户消息可保存显式生图意图；旧项目没有这些字段仍可读取。图片在对话工作区展示并保存为项目媒体，既有 `out-text` 仍输出最后一条助手回复的 TXT，不输出图片二进制或隐含图片端口。默认 1K、可选 4K、固定最低质量，详见 [对话生图规范](./docs/CHAT_IMAGE_SKILL_SPEC.md)。
 
 > 输入引用的布局、类型摘要与悬浮详情必须遵守 [节点引用呈现规范](./docs/NODE_REFERENCE_SPEC.md)。引用只展示真实端口投影；单排折叠不得改变输入类型、基数、顺序或执行值。

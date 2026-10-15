@@ -1,5 +1,23 @@
 # 日志覆盖清单
 
+## 2026-10-15 固定媒体项目包
+
+固定图片/视频的导出验证、临时导入验证、身份与引用重映射及事务回滚复用项目 IPC 的 project.transfer.started/committed/failed 和公共打开/保存事件，不重复终态。新增三个媒体/预览受控错误码，保留 validation-or-transaction 阶段，不记录包内容、文件路径、媒体字节、提示词或凭据。28 定向（含真实 SQLite 写入失败回滚）及完整 verify 退出码 0（1895 通过/1 既有跳过，模型另 2，17 浏览器/构建/17 桌面）；正式 IPC 双进程导入 6 版本与预览通过。最终实际诊断 desktop 6/6、coordination 2/2、transfer 2/2 唯一终态配对及正文/Key/图片/视频内容排除通过，证据见 [33 包交接](canvas-agent-flow/33-fixed-media-project-transfer.md)。旧无摘要视频无法证明历史内容未变；导入中强杀、掉电、超大包流式化与完整媒体 trace 树未验证。
+
+## 2026-10-15 Agent 单路视频运动参考
+
+普通 video-asset 固定媒体摘要、一路视频参考授权、异步编码字节校验及原任务视频列表匹配复用既有 Agent/协调/命令/节点、任务控制、模型、媒体、资产和保存生命周期；不新增重复终态。视频完整性失败 ASSET_VIDEO_CHANGED/video-integrity，安全 IPC 不带文件内容/路径。92 定向及完整 verify 退出码 0（1883 通过/1 既有跳过，模型另 2，17 浏览器/构建/16 桌面）；真实隐藏 Electron 两进程 1 POST/1 下载/1 任务，实际脱敏/恢复关联与固定成果原生预览通过；完整门禁及独立日志扫描以 [32 包交接](canvas-agent-flow/32-video-motion-reference-adapter.md) 为准。供应商/SDK 为合成夹具，无付费媒体；未外推音频/多路视频/视觉审核、真实撤回或全媒体 trace 覆盖。
+
+## 2026-10-15 Agent 视频有序图片参考（首包已验收）
+
+reference 模式复用 video v7/公共 executor/command/task，逐张固定版本、来源与编码字节验证，恢复比较有序参考列表；模型能力不支持或超量拒绝。复用 agent.desktop/coordination、command.operation、node、model.request、task、media/asset/save 事件，不新增重复终态。阶段 input/video-input/saved-input/image-integrity 保留稳定原因；图片、Data URL/Base64、提示词、路径、Key 和原始响应不记录。
+
+83 定向通过；不同编码三图实际隐藏 Electron 双进程通过（1 POST/1 下载/1 视频任务/9 次合成 SDK 决策、固定预览/指针与诊断脱敏，开始/唯一终态和恢复关联通过）。完整 verify 串行退出码 0：171 文件/1874 通过/1 既有跳过，模型另 2，17 浏览器/构建/15 桌面通过。证据 qa/agent-reference-20261015/verify.log 和 qa/agent-video-reference-20261015/desktop/results.json。日志模板和边界见 [图片参考包](canvas-agent-flow/31-video-reference-images-adapter.md)。供应商/SDK 为隔离夹具，无付费媒体或真实计费/撤回验收；视频/音频参考、视频审核和并行不在本包。
+
+## 2026-10-15 Agent 首尾帧双图适配
+
+复用 Agent/协调/命令/公共节点、模型请求、任务控制、媒体/资产/保存生命周期；有序双来源校验和两张实际编码字节校验不重复记录终态。失败沿 input/video-input/revision、image-integrity 与原 gateway 诊断，稳定错误码不带图片、提示词、摘要全文或路径。真实隐藏 Electron 两进程 unknown/重开/明确继续通过，1 POST/1 下载/1 视频任务；实际生命周期配对、恢复关联及 private-c3/假 Key/Data URL/PNG Base64 排除通过。最终完整 verify 退出码 0：1867 项通过、1 既有跳过，模型另 2，日志门禁、17 浏览器、构建及 14 组桌面全部通过；证据与此前失败记录见 [30 包交接](canvas-agent-flow/30-video-first-last-frame-adapter.md)。供应商和 SDK 为合成夹具，不代表真实计费/撤回或所有媒体 trace 覆盖。
+
 ## 2026-10-15 最终源码同步验收
 
 26–29 包随 [总 handoff](canvas-agent-flow/HANDOFF_2026_10_15_VIDEO_AGENT_SYNC.md) 同步。最终完整 verify 退出码 0：1857 项通过、1 项既有跳过，模型另 2；日志门禁与全部桌面生命周期/脱敏扫描通过。首帧报告 1 POST/1 下载/1 视频任务、固定图片与视频原生交互通过；测试排除 Data URL/PNG Base64/假 Key/提示词。供应商和 SDK 决策仍为隔离夹具，无付费媒体；下方分包是当时记录，不扩大为真实计费或全媒体日志验收。

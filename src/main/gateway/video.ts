@@ -1,4 +1,4 @@
-import { fixedFlowImage, type FlowImageRef } from '../agent-flow/image-assets'
+import { fixedFlowMedia, type FlowMediaRef } from '../agent-flow/image-assets'
 // 视频生成任务管理：MiniMax H3 与 Seedance 的统一任务式适配
 // 两家 API 均为 content[] 多模态 + 异步任务 + 轮询（见调研报告 §3.3）：
 //   MiniMax  POST {base}/v2/video_generation            → task_id
@@ -308,14 +308,14 @@ async function mediaToDataUrl(
   const m = await readMediaBuffer(mediaId)
   if (!m) throw new GatewayError('MEDIA_NOT_FOUND', `参考媒体不存在：${mediaId}`)
   if (input?.flowCommand) {
-    const image = commandFirstFrame(input)
+    const image = commandFrames(input).find((frame) => frame.mediaId === mediaId)
     if (
       !image ||
       image.mediaId !== mediaId ||
       image.mime !== m.mime ||
       createHash('sha256').update(m.buf).digest('hex') !== image.contentSha256
     )
-      throw new GatewayError('FLOW_INPUT_CONTRACT_INVALID', '固定首帧内容已变化')
+      throw new GatewayError('FLOW_INPUT_CONTRACT_INVALID', '固定帧内容已变化')
   }
   return `data:${m.mime};base64,${m.buf.toString('base64')}`
 }
@@ -867,11 +867,11 @@ export async function pollUpstream(
 }
 
 /** Resolve only the declared fixed asset version, never renderer supplied media metadata. */
-function commandFirstFrame(
+function commandFrames(
   input: VideoSubmitInput,
   fixed?: ReturnType<typeof NodeExecuteCommandSchema.parse>
-): (FlowImageRef & { contentSha256: string }) | null {
-  if (!input.flowCommand) return null
+): (FlowMediaRef & { contentSha256: string })[] {
+  if (!input.flowCommand) return []
   if (!fixed) {
     const row = getDb()
       .prepare('SELECT command_json FROM flow_commands WHERE project_id=? AND command_id=?')
@@ -882,33 +882,68 @@ function commandFirstFrame(
   const images = fixed.inputs
     .filter((item) => item.targetPortId === 'in-images')
     .flatMap((item) => item.assets)
-  if (input.mode === 'text' && images.length === 0) return null
-  if (input.mode !== 'first-frame' || images.length !== 1)
-    throw new GatewayError('FLOW_INPUT_CONTRACT_INVALID', '首帧输入必须为一个固定图片版本')
-  const ref = images[0]
-  const row = getDb()
-    .prepare(
-      'SELECT asset_id,node_id,port_id,value_json,digest FROM flow_asset_versions WHERE project_id=? AND version_id=?'
+  const videos = fixed.inputs
+    .filter((item) => item.targetPortId === 'in-reference-video')
+    .flatMap((item) => item.assets)
+  if (input.mode === 'text' && images.length === 0 && videos.length === 0) return []
+  if (
+    !['first-frame', 'first-last-frame', 'reference'].includes(input.mode ?? '') ||
+    (input.mode === 'reference'
+      ? images.length + videos.length < 1 ||
+        images.length > 30 ||
+        videos.length > 1 ||
+        videos.length !== (input.referenceVideoMediaIds?.length ?? 0) ||
+        images.length !== (input.referenceImageMediaIds?.length ?? 0)
+      : videos.length !== 0 || images.length !== (input.mode === 'first-last-frame' ? 2 : 1)) ||
+    new Set([...images, ...videos].map((ref) => ref.versionId)).size !==
+      images.length + videos.length
+  )
+    throw new GatewayError('FLOW_INPUT_CONTRACT_INVALID', '首尾帧输入须匹配有序固定图片版本')
+  const entries = [
+    ...images.map((ref, index) => ({
+      ref,
+      kind: 'image' as const,
+      mediaId:
+        input.mode === 'reference'
+          ? input.referenceImageMediaIds?.[index]
+          : index === 0
+            ? input.firstFrameMediaId
+            : input.lastFrameMediaId
+    })),
+    ...videos.map((ref, index) => ({
+      ref,
+      kind: 'video' as const,
+      mediaId: input.referenceVideoMediaIds?.[index]
+    }))
+  ]
+  const frames = entries.map(({ ref, kind, mediaId }) => {
+    const row = getDb()
+      .prepare(
+        'SELECT asset_id,node_id,port_id,value_json,digest FROM flow_asset_versions WHERE project_id=? AND version_id=?'
+      )
+      .get(input.projectId, ref.versionId) as
+      | { asset_id: string; node_id: string; port_id: string; value_json: string; digest: string }
+      | undefined
+    if (
+      !row ||
+      row.asset_id !== ref.assetId ||
+      row.node_id !== ref.sourceNodeId ||
+      row.port_id !== ref.sourcePortId ||
+      createHash('sha256').update(row.value_json).digest('hex') !== row.digest
     )
-    .get(input.projectId, ref.versionId) as
-    | { asset_id: string; node_id: string; port_id: string; value_json: string; digest: string }
-    | undefined
-  if (
-    !row ||
-    row.asset_id !== ref.assetId ||
-    row.node_id !== ref.sourceNodeId ||
-    row.port_id !== ref.sourcePortId ||
-    createHash('sha256').update(row.value_json).digest('hex') !== row.digest
-  )
-    throw new GatewayError('FLOW_INPUT_CONTRACT_INVALID', '固定首帧版本不可用')
-  const value = JSON.parse(row.value_json)
-  if (
-    value.kind !== 'image' ||
-    value.mediaId !== input.firstFrameMediaId ||
-    !/^[a-f0-9]{64}$/.test(value.contentSha256 ?? '')
-  )
-    throw new GatewayError('FLOW_INPUT_CONTRACT_INVALID', '首帧不匹配固定图片版本')
-  return fixedFlowImage(getDb(), input.projectId, value)
+      throw new GatewayError('FLOW_INPUT_CONTRACT_INVALID', '固定首帧版本不可用')
+    const value = JSON.parse(row.value_json)
+    if (
+      value.kind !== kind ||
+      value.mediaId !== mediaId ||
+      !/^[a-f0-9]{64}$/.test(value.contentSha256 ?? '')
+    )
+      throw new GatewayError('FLOW_INPUT_CONTRACT_INVALID', '首帧或尾帧不匹配固定图片版本')
+    return fixedFlowMedia(getDb(), input.projectId, value)
+  })
+  if (new Set(frames.map((frame) => frame.mediaId)).size !== frames.length)
+    throw new GatewayError('FLOW_INPUT_CONTRACT_INVALID', '首尾帧须为不同图片')
+  return frames
 }
 
 export function submitVideoTask(send: Send, input: VideoSubmitInput): VideoSubmitResult {
@@ -950,17 +985,42 @@ export function submitVideoTask(send: Send, input: VideoSubmitInput): VideoSubmi
     )
       throw new GatewayError('FLOW_LEASE_REJECTED', '视频命令未获准执行')
     if (
-      !['text', 'first-frame'].includes(input.mode ?? '') ||
+      !['text', 'first-frame', 'first-last-frame', 'reference'].includes(input.mode ?? '') ||
       (input.mode === 'text' && Boolean(input.firstFrameMediaId)) ||
       (input.mode === 'first-frame' && !input.firstFrameMediaId) ||
-      input.lastFrameMediaId ||
-      input.referenceImageMediaIds?.length ||
-      input.referenceVideoMediaIds?.length ||
+      (input.mode !== 'first-last-frame' && Boolean(input.lastFrameMediaId)) ||
+      (input.mode === 'first-last-frame' &&
+        (!input.firstFrameMediaId || !input.lastFrameMediaId)) ||
+      (input.mode !== 'reference' && input.referenceImageMediaIds?.length) ||
+      (input.mode !== 'reference' && input.referenceVideoMediaIds?.length) ||
+      (input.mode === 'reference' &&
+        (input.firstFrameMediaId ||
+          input.lastFrameMediaId ||
+          !(input.referenceImageMediaIds?.length || input.referenceVideoMediaIds?.length))) ||
+      (input.referenceVideoMediaIds?.length ?? 0) > 1 ||
       input.referenceVideoMediaId ||
       input.referenceAudioMediaIds?.length
     )
-      throw new GatewayError('FLOW_TYPE_UNSUPPORTED', 'Agent 视频仅支持文本生成或单张固定首帧')
-    commandFirstFrame(input, fixed)
+      throw new GatewayError(
+        'FLOW_TYPE_UNSUPPORTED',
+        'Agent 视频仅支持文本、固定首尾帧或有序图片参考'
+      )
+    commandFrames(input, fixed)
+    if (input.mode === 'reference') {
+      const provider = getProvider(input.providerId)
+      if (!provider) throw new GatewayError('PROVIDER_NOT_FOUND', '供应商不存在')
+      const caps = videoCapabilitiesFor(provider.specId, input.modelId, {
+        gatewayProxy: isSeedanceGatewayProxy(provider.specId, provider.baseURL)
+      })
+      if (
+        !caps.modes.includes('reference') ||
+        ((input.referenceImageMediaIds?.length ?? 0) > 0 && !caps.supportsReferenceImages) ||
+        ((input.referenceVideoMediaIds?.length ?? 0) > 0 && !caps.supportsReferenceVideo) ||
+        (input.referenceVideoMediaIds?.length ?? 0) > caps.maxReferenceVideos ||
+        (input.referenceImageMediaIds?.length ?? 0) > caps.maxReferenceImages
+      )
+        throw new GatewayError('FLOW_INPUT_CONTRACT_INVALID', '当前模型不支持该参考图片数量')
+    }
     const prior = getDb()
       .prepare(
         "SELECT * FROM tasks WHERE project_id=? AND node_id=? AND kind='video' AND json_extract(input,'$.flowCommandId')=? ORDER BY created_at LIMIT 1"
@@ -974,6 +1034,11 @@ export function submitVideoTask(send: Send, input: VideoSubmitInput): VideoSubmi
         saved.prompt !== input.prompt.trim() ||
         saved.mode !== input.mode ||
         saved.firstFrameMediaId !== input.firstFrameMediaId ||
+        saved.lastFrameMediaId !== input.lastFrameMediaId ||
+        canonicalFlowJson(saved.referenceImageMediaIds ?? []) !==
+          canonicalFlowJson(input.referenceImageMediaIds ?? []) ||
+        canonicalFlowJson(saved.referenceVideoMediaIds ?? []) !==
+          canonicalFlowJson(input.referenceVideoMediaIds ?? []) ||
         canonicalFlowJson(saved.params ?? null) !== canonicalFlowJson(input.params ?? null)
       )
         throw new GatewayError('TASK_OUTCOME_UNKNOWN', '原视频命令输入发生变化，请核对原任务')

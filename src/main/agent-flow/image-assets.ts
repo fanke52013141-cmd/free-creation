@@ -5,13 +5,14 @@ import { resolve, relative, isAbsolute } from 'node:path'
 import { getDataDir } from '../store/db'
 import { FlowAssetError } from '../../shared/agent-flow/assets'
 
-export interface FlowImageRef {
-  kind: 'image'
+export interface FlowMediaRef<K extends 'image' | 'video' = 'image' | 'video'> {
+  kind: K
   mediaId: string
   mediaPath: string
   mime: string
   contentSha256?: string
 }
+export type FlowImageRef = FlowMediaRef<'image'>
 
 /** Freeze and recheck bytes as well as metadata. Synchronous asset transactions are bounded to 20 MiB. */
 export function fixedFlowImage(
@@ -19,6 +20,15 @@ export function fixedFlowImage(
   projectId: string,
   value: FlowImageRef
 ): FlowImageRef & { contentSha256: string } {
+  return fixedFlowMedia(db, projectId, value)
+}
+
+/** Conservative fixed input budget; generated video outputs retain their existing size support. */
+export function fixedFlowMedia<K extends 'image' | 'video'>(
+  db: Database.Database,
+  projectId: string,
+  value: FlowMediaRef<K>
+): FlowMediaRef<K> & { contentSha256: string } {
   try {
     const media = db
       .prepare('SELECT kind,path,mime,size_bytes FROM media WHERE id=?')
@@ -29,10 +39,10 @@ export function fixedFlowImage(
     const child = relative(root, path)
     if (
       !media ||
-      media.kind !== 'image' ||
+      media.kind !== value.kind ||
       media.path !== value.mediaPath ||
       media.mime !== value.mime ||
-      !value.mime.startsWith('image/') ||
+      !value.mime.startsWith(`${value.kind}/`) ||
       !child ||
       child.startsWith('..') ||
       isAbsolute(child) ||
@@ -50,13 +60,16 @@ export function fixedFlowImage(
     const contentSha256 = createHash('sha256').update(bytes).digest('hex')
     if (value.contentSha256 && value.contentSha256 !== contentSha256) throw new Error()
     return {
-      kind: 'image',
+      kind: value.kind,
       mediaId: value.mediaId,
       mediaPath: value.mediaPath,
       mime: value.mime,
       contentSha256
     }
   } catch {
-    throw new FlowAssetError('ASSET_IMAGE_CHANGED', 'image-integrity')
+    throw new FlowAssetError(
+      value.kind === 'image' ? 'ASSET_IMAGE_CHANGED' : 'ASSET_VIDEO_CHANGED',
+      `${value.kind}-integrity`
+    )
   }
 }

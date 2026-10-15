@@ -1,4 +1,4 @@
-import { fixedFlowImage } from './image-assets'
+import { fixedFlowImage, fixedFlowMedia } from './image-assets'
 import type Database from 'better-sqlite3'
 import { createHash, randomUUID } from 'node:crypto'
 import type { ProjectFile } from '../../shared/types'
@@ -131,7 +131,7 @@ export class FlowAssetStore {
             ? 'out-text'
             : record.props.nodeType === 'json'
               ? 'out-json'
-              : ['video', 'image'].includes(record.props.nodeType)
+              : ['video', 'video-asset', 'image'].includes(record.props.nodeType)
                 ? record.props.nodeType === 'image'
                   ? 'out-image'
                   : 'out-video'
@@ -201,7 +201,9 @@ export class FlowAssetStore {
           if (record.props.nodeType !== 'image' || pinned) fail('ASSET_OUTPUT_INVALID')
           value = fixedFlowImage(this.db, input.projectId, value)
         }
-        if (value.kind === 'video') {
+        if (value.kind === 'video' && record.props.nodeType === 'video-asset' && !pinned) {
+          value = fixedFlowMedia(this.db, input.projectId, value)
+        } else if (value.kind === 'video') {
           if (
             record.props.nodeType !== 'video' ||
             !commandPermit ||
@@ -281,6 +283,10 @@ export class FlowAssetStore {
     if (version.value.kind === 'image') {
       if (!/^[a-f0-9]{64}$/.test(version.value.contentSha256)) fail('ASSET_INTEGRITY_FAILED')
       fixedFlowImage(this.db, projectId, version.value)
+    }
+    if (version.value.kind === 'video' && version.value.contentSha256 !== undefined) {
+      if (!/^[a-f0-9]{64}$/.test(version.value.contentSha256)) fail('ASSET_INTEGRITY_FAILED')
+      fixedFlowMedia(this.db, projectId, version.value)
     }
     return version
   }

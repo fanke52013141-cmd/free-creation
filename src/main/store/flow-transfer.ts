@@ -4,6 +4,25 @@ import { nanoid } from 'nanoid'
 import { z } from 'zod'
 import type { ProjectFile } from '../../shared/types'
 import { remapMediaReferences, type MediaReferenceMap } from '../../shared/media-reference-remap'
+import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
+
+const portableMediaSchema = z
+  .object({
+    kind: z.enum(['image', 'video']),
+    mediaId: z
+      .string()
+      .min(1)
+      .max(128)
+      .regex(/^[a-zA-Z0-9_.:-]+$/),
+    mediaPath: z.string().min(1),
+    mime: z.string().min(1).max(128),
+    contentSha256: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
+    name: z.string().optional()
+  })
+  .strict()
 
 const id = z
   .string()
@@ -192,7 +211,21 @@ export function parseFlowVersions(value: unknown, projectId: string): Row[] {
     )
       throw new Error('FLOW_TRANSFER_ASSET_INVALID')
     const parsed = JSON.parse(row.value_json)
-    if (
+    if (parsed?.kind === 'image' || parsed?.kind === 'video') {
+      const media = portableMediaSchema.parse(parsed)
+      const prefix = `projects/${projectId}/media/`
+      const filename = media.mediaPath.slice(prefix.length)
+      if (
+        !media.mediaPath.startsWith(prefix) ||
+        !filename ||
+        /[\\/]/.test(filename) ||
+        filename.includes('..') ||
+        !filename.startsWith(media.mediaId + '.') ||
+        !media.mime.startsWith(media.kind + '/') ||
+        (media.kind === 'image' && !media.contentSha256)
+      )
+        throw new Error('FLOW_TRANSFER_MEDIA_INVALID')
+    } else if (
       !parsed ||
       !['text', 'markdown', 'json'].includes(parsed.kind) ||
       (parsed.kind === 'json' ? !Object.hasOwn(parsed, 'data') : typeof parsed.text !== 'string')
@@ -202,6 +235,30 @@ export function parseFlowVersions(value: unknown, projectId: string): Row[] {
     sources.add(key)
   }
   return rows
+}
+
+/** Verify the bundle's actual bytes, not only the JSON digest. No media content enters diagnostics. */
+export function validateFlowMedia(
+  rows: Row[],
+  resolve: (
+    value: z.infer<typeof portableMediaSchema>
+  ) => { bytes: Buffer; kind: string; mime: string } | null
+): void {
+  for (const row of rows) {
+    const raw = JSON.parse(row.value_json)
+    if (raw.kind !== 'image' && raw.kind !== 'video') continue
+    const value = portableMediaSchema.parse(raw)
+    const media = resolve(value)
+    if (
+      !media ||
+      !media.bytes.length ||
+      media.kind !== value.kind ||
+      media.mime !== value.mime ||
+      (value.contentSha256 &&
+        createHash('sha256').update(media.bytes).digest('hex') !== value.contentSha256)
+    )
+      throw new Error('FLOW_TRANSFER_MEDIA_INVALID')
+  }
 }
 
 /** New identities and immutable assets; execution permissions/approval records are never imported. */
@@ -289,6 +346,21 @@ export function prepareFlowImport(
   }
   checkRefs(clean)
   for (const row of rows) checkRefs(stripTransferCredentials(JSON.parse(row.value_json)))
+  for (const record of Object.values(snapshot?.store ?? {})) {
+    if (record.type !== 'node-card' || typeof record.meta?.flowAssetRef !== 'string') continue
+    const ref = JSON.parse(record.meta.flowAssetRef)
+    const row = byVersion.get(ref.versionId)
+    if (!row) throw new Error('FLOW_TRANSFER_REFERENCE_MISSING')
+    const pinned =
+      typeof record.meta.pinnedOutput === 'string' ? JSON.parse(record.meta.pinnedOutput) : null
+    const expected = remapMediaReferences(JSON.parse(row.value_json), media)
+    if (
+      pinned?.version !== 1 ||
+      Object.keys(pinned.outputs ?? {}).length !== 1 ||
+      canonicalFlowJson(Object.values(pinned.outputs)[0]) !== canonicalFlowJson(expected)
+    )
+      throw new Error('FLOW_TRANSFER_PINNED_INVALID')
+  }
   const remapped = remapFlowIdentities(clean, ids, relations)
   for (const node of remapped.nodes) node.exec = { status: 'idle' }
   const store = (remapped.tldrawSnapshot as typeof snapshot)?.store

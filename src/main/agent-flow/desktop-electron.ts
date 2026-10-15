@@ -27,7 +27,19 @@ const arg = (name: string): string | undefined =>
 const directory = arg('agent-directory'),
   phase = arg('agent-phase')
 const real = process.argv.includes('--real-model')
-const firstFrame = process.argv.includes('--video-first-frame')
+const mediaTransfer = process.argv.includes('--media-transfer')
+const motionReference = mediaTransfer || process.argv.includes('--video-motion-reference')
+const referenceImages = mediaTransfer || process.argv.includes('--video-reference-images')
+const lastFrame = referenceImages || process.argv.includes('--video-first-last-frame')
+const firstFrame = lastFrame || process.argv.includes('--video-first-frame')
+const videoMode =
+  referenceImages || motionReference
+    ? 'reference'
+    : lastFrame
+      ? 'first-last-frame'
+      : firstFrame
+        ? 'first-frame'
+        : 'text'
 const video = process.argv.includes('--video')
 if (video)
   protocol.registerSchemesAsPrivileged([
@@ -117,14 +129,43 @@ if (
             if (options?.method === 'POST') {
               const content = JSON.parse(String(options.body)).content
               const images = content.filter((part: { type: string }) => part.type === 'image_url')
+              await active.webContents.executeJavaScript(
+                `window.__reviewAcceptanceStage=${JSON.stringify(JSON.stringify({ count: images.length, roles: images.map((image: { role: string }) => image.role), matches: images.map((image: { image_url: { url: string } }) => ['first-frame.png', 'last-frame.png', 'reference-third.png'].findIndex((file) => image.image_url.url === `data:image/png;base64,${readFileSync(join(directory, file)).toString('base64')}`)) }))}`
+              )
               if (
                 firstFrame &&
-                (images.length !== 1 ||
-                  images[0].role !== 'first_frame' ||
+                (images.length !== (referenceImages ? 3 : lastFrame ? 2 : 1) ||
+                  images[0].role !== (referenceImages ? 'reference_image' : 'first_frame') ||
                   !images[0].image_url.url.startsWith('data:image/png;base64,'))
               )
                 throw new Error('FIRST_FRAME_WIRE_INVALID')
+              if (
+                lastFrame &&
+                (images[1].role !== (referenceImages ? 'reference_image' : 'last_frame') ||
+                  images[0].image_url.url !==
+                    `data:image/png;base64,${readFileSync(join(directory, 'first-frame.png')).toString('base64')}` ||
+                  images[1].image_url.url !==
+                    `data:image/png;base64,${readFileSync(join(directory, 'last-frame.png')).toString('base64')}`)
+              )
+                throw new Error('LAST_FRAME_WIRE_INVALID')
               if (!firstFrame && images.length) throw new Error('TEXT_VIDEO_HAS_IMAGE')
+              const videos = content.filter((part: { type: string }) => part.type === 'video_url')
+              if (
+                motionReference &&
+                (videos.length !== 1 ||
+                  videos[0].role !== 'reference_video' ||
+                  videos[0].video_url.url !==
+                    `data:video/mp4;base64,${readFileSync(join(directory, 'fixture.mp4')).toString('base64')}`)
+              )
+                throw new Error('MOTION_REFERENCE_WIRE_INVALID')
+              if (!motionReference && videos.length) throw new Error('UNEXPECTED_VIDEO_REFERENCE')
+              if (
+                referenceImages &&
+                (images.some((image: { role: string }) => image.role !== 'reference_image') ||
+                  images[2].image_url.url !==
+                    `data:image/png;base64,${readFileSync(join(directory, 'reference-third.png')).toString('base64')}`)
+              )
+                throw new Error('REFERENCE_IMAGES_WIRE_INVALID')
               getDb()
                 .prepare(
                   "UPDATE settings SET value=CAST(value AS INTEGER)+1 WHERE key='video-posts'"
@@ -230,22 +271,44 @@ if (
             ? await importMedia(projectId, join(directory, 'first-frame.png'))
             : null
         if (frame && !frame.ok) throw new Error('FRAME_IMPORT_FAILED')
+        const tail =
+          lastFrame && phase === 'execute'
+            ? await importMedia(projectId, join(directory, 'last-frame.png'))
+            : null
+        if (tail && !tail.ok) throw new Error('TAIL_IMPORT_FAILED')
+        const third =
+          referenceImages && phase === 'execute'
+            ? await importMedia(projectId, join(directory, 'reference-third.png'))
+            : null
+        if (third && !third.ok) throw new Error('REFERENCE_IMPORT_FAILED')
+        const motion =
+          motionReference && phase === 'execute'
+            ? await importMedia(projectId, join(directory, 'fixture.mp4'))
+            : null
+        if (motion && !motion.ok) throw new Error('MOTION_IMPORT_FAILED')
         report = await active.webContents.executeJavaScript(`(async()=>{${common}
           const read=(id)=>window.api.inspectFlowAgent({projectId,nodeId:id}).then(value);
           const run=async(id)=>{await ensureCanvasSaved();const task=await read(id);if(task)editor.updateShape({id,type:'node-card',meta:{...editor.getShape(id).meta,agentTask:JSON.stringify(task)}});const result=await(await import('/src/engine/executor.ts')).runNodeManually(editor,projectId,(await import('/src/stores/gateway.ts')).useGatewayStore.getState().providers,id);await ensureCanvasSaved();const after=await read(id);if(after?.state==='completed'&&result.status!=='done')throw new Error('VIDEO_PUBLIC_PROJECTION_FAILED');return after};
           if(${phase === 'execute'}) {
             const config=(role,allowedNodeIds)=>JSON.stringify({schemaVersion:1,role,interactionMode:'autonomous',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:role==='coordinator'?'agent.dispatch':'node.execute',version:'1'}],allowedNodeIds,maxSteps:12,relations:role==='coordinator'?[{relationId:'video-state',kind:'observes',sourceNodeId:'shape:c3-agent',targetNodeId:'shape:video-state'}]:[]});
-            const nodes=[{id:'shape:c3-agent',nodeType:'agent',title:'主 Agent',text:'调度视频专业 Agent 并交付视频',config:config('coordinator',['shape:video-agent'])},{id:'shape:video-agent',nodeType:'agent',title:'视频 Agent',text:'使用视频节点生成一次视频，交付固定成果',config:config('specialist',['shape:video-target'])},{id:'shape:video-target',nodeType:'video',title:'视频生成',text:'',config:JSON.stringify({mode:${JSON.stringify(firstFrame ? 'first-frame' : 'text')},modelKey:'video-test::doubao-seedance-2-0',params:{}})},{id:'shape:video-prompt',nodeType:'text',title:'材料',text:'private-c3-video-prompt'}];
+            const nodes=[{id:'shape:c3-agent',nodeType:'agent',title:'主 Agent',text:'调度视频专业 Agent 并交付视频',config:config('coordinator',['shape:video-agent'])},{id:'shape:video-agent',nodeType:'agent',title:'视频 Agent',text:'使用视频节点生成一次视频，交付固定成果',config:config('specialist',['shape:video-target'])},{id:'shape:video-target',nodeType:'video',title:'视频生成',text:'',config:JSON.stringify({mode:${JSON.stringify(videoMode)},modelKey:'video-test::doubao-seedance-2-0',params:{}})},{id:'shape:video-prompt',nodeType:'text',title:'材料',text:'private-c3-video-prompt'}];
             nodes.forEach(({id,...props},i)=>editor.createShape({id,type:'node-card',x:100+i*430,y:100,props}));
             editor.createShape({id:'shape:video-state',type:'node-card',x:100,y:700,props:{nodeType:'state-machine',title:'流程状态',config:JSON.stringify({schemaVersion:1,initialState:'draft',states:['draft','working','waiting','completed'],transitions:[{from:'draft',event:'flow.started',to:'working'},...['agent.dispatched','agent.completed','human.wait','flow.paused','flow.completed'].map(event=>({from:'working',event,to:event==='flow.completed'?'completed':['human.wait','flow.paused'].includes(event)?'waiting':'working'})),{from:'waiting',event:'human.continue',to:'working'}],relations:[]})}});
             const {createEdge}=await import('/src/canvas/graph.ts');
             const frame=${JSON.stringify(frame && frame.ok ? frame.asset : null)};
             if(frame){editor.createShape({id:'shape:first-frame',type:'node-card',x:100,y:950,props:{nodeType:'image',title:'首帧输入',mediaId:frame.id,mediaPath:frame.path,mediaMime:frame.mime}});createEdge(editor,{shapeId:'shape:first-frame',portId:'out-image'},{shapeId:'shape:video-target',portId:'in-images'});}
+            const tail=${JSON.stringify(tail && tail.ok ? tail.asset : null)};
+            const third=${JSON.stringify(third && third.ok ? third.asset : null)};
+            if(tail){editor.createShape({id:'shape:last-frame',type:'node-card',x:530,y:950,props:{nodeType:'image',title:'尾帧输入',mediaId:tail.id,mediaPath:tail.path,mediaMime:tail.mime}});createEdge(editor,{shapeId:'shape:last-frame',portId:'out-image'},{shapeId:'shape:video-target',portId:'in-images'});}
+            if(third){editor.createShape({id:'shape:third-reference',type:'node-card',x:960,y:950,props:{nodeType:'image',title:'参考三',mediaId:third.id,mediaPath:third.path,mediaMime:third.mime}});}
+            if(third)createEdge(editor,{shapeId:'shape:third-reference',portId:'out-image'},{shapeId:'shape:video-target',portId:'in-images'});
+            const motion=${JSON.stringify(motion && motion.ok ? motion.asset : null)};
+            if(motion){editor.createShape({id:'shape:motion-input',type:'node-card',x:100,y:950,props:{nodeType:'video-asset',title:'运动参考',mediaId:motion.id,mediaPath:motion.path,mediaMime:motion.mime}});createEdge(editor,{shapeId:'shape:motion-input',portId:'out-video'},{shapeId:'shape:video-target',portId:'in-reference-video'});}
             for(const to of ['shape:video-agent','shape:video-target'])createEdge(editor,{shapeId:'shape:video-prompt',portId:'out-text'},{shapeId:to,portId:'in-text'});
-            if(frame){await new Promise(done=>setTimeout(done,300));const target=editor.getShape('shape:video-target');editor.updateShape({id:target.id,type:'node-card',props:{config:JSON.stringify({...JSON.parse(target.props.config),mode:'first-frame'})}});}
+            if(frame||motion){await new Promise(done=>setTimeout(done,300));const target=editor.getShape('shape:video-target');editor.updateShape({id:target.id,type:'node-card',props:{config:JSON.stringify({...JSON.parse(target.props.config),mode:${JSON.stringify(videoMode)}})}});}
             const root=await run('shape:c3-agent'),child=await read('shape:video-agent');
             if(root.state!=='waiting'||child?.state!=='waiting'||child?.waitKind!=='reconcile'){window.__reviewAcceptanceStage=JSON.stringify({mode:JSON.parse(editor.getShape('shape:video-target').props.config).mode,rootCode:root.code,childCode:child?.code});throw new Error('VIDEO_UNKNOWN_NOT_HELD');}
-            if(editor.getCurrentPageShapes().some(s=>s.props?.nodeType==='video-asset'))throw new Error('VIDEO_UNKNOWN_PUBLISHED');
+            if(editor.getCurrentPageShapes().some(s=>s.props?.nodeType==='video-asset'&&s.meta.agentAssetVersionId))throw new Error('VIDEO_UNKNOWN_PUBLISHED');
             return {projectId,taskId:root.taskId,checks:['main dispatches video specialist through public executor','supplier unknown holds original command','no unverified artifact']};
           }
           let child=await read('shape:video-agent');
@@ -256,12 +319,15 @@ if (
           const assets=editor.getCurrentPageShapes().filter(s=>s.props?.nodeType==='video-asset'&&s.meta.agentAssetVersionId);
           if(assets.length!==1||!assets[0].props.mediaId)throw new Error('VIDEO_FIXED_ASSET_MISSING');
           const output=(await import('/src/nodes/nodeValues.ts')).projectNodeOutputs(assets[0])['out-video'];if(output?.kind!=='video')throw new Error('VIDEO_ASSET_PORT_INVALID');
-          const el=document.querySelector('[data-node-id="'+assets[0].id+'"] video');
+          editor.centerOnPoint(editor.getShapePageBounds(assets[0].id).center);
+          await new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)));
+          let el;
+          for(let i=0;i<100;i++){el=document.querySelector('[data-node-id="'+assets[0].id+'"] video');if(el)break;await new Promise(done=>setTimeout(done,50));}
           if(!el)throw new Error('VIDEO_PREVIEW_MISSING');
           for(let i=0;i<100&&!el.videoWidth;i++)await new Promise(r=>setTimeout(r,50));
           if(!el.videoWidth)throw new Error('VIDEO_METADATA_NOT_LOADED');
           let frameAssetShapeId;
-          if(${firstFrame}){const versions=value(await window.api.listFlowAssets({projectId,nodeId:'shape:first-frame',portId:'out-image'}));const version=value(await window.api.readFlowAsset({projectId,versionId:versions[0].ref.versionId}));frameAssetShapeId=(await import('/src/canvas/flow-asset-actions.ts')).placeFlowAsset(editor,version,'shape:first-frame');let image;for(let i=0;i<100;i++){image=document.querySelector('[data-node-id="'+frameAssetShapeId+'"] img');if(image?.naturalWidth)break;await new Promise(done=>setTimeout(done,20));}if(!image?.naturalWidth)throw new Error('FRAME_PREVIEW_MISSING');}
+          if(${firstFrame}){const versions=value(await window.api.listFlowAssets({projectId,nodeId:'shape:first-frame',portId:'out-image'}));const version=value(await window.api.readFlowAsset({projectId,versionId:versions[0].ref.versionId}));frameAssetShapeId=(await import('/src/canvas/flow-asset-actions.ts')).placeFlowAsset(editor,version,'shape:first-frame');editor.centerOnPoint(editor.getShapePageBounds(frameAssetShapeId).center);await new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)));let image;for(let i=0;i<100;i++){image=document.querySelector('[data-node-id="'+frameAssetShapeId+'"] img');if(image?.naturalWidth)break;await new Promise(done=>setTimeout(done,20));}if(!image?.naturalWidth)throw new Error('FRAME_PREVIEW_MISSING');}
           await ensureCanvasSaved();return {projectId,frameAssetShapeId,taskId:root.taskId,mediaId:assets[0].props.mediaId,assetShapeId:assets[0].id,checks:['same supplier task after process reopen','explicit continue restores fixed video version','main collects committed specialist result','one playable video asset with ordinary out-video','saved project retains media and version reference']};
         })()`)
         if (phase === 'reopen') {
@@ -290,10 +356,20 @@ if (
             mouse('mouseMove', point.x, point.y)
             mouse('mouseDown', point.x, point.y)
             mouse('mouseUp', point.x, point.y)
-            const selected = await active.webContents.executeJavaScript(
-              `import('/src/stores/editor.ts').then(m=>m.useEditorStore.getState().editor.getSelectedShapeIds().includes(${JSON.stringify(assetId)}))`
-            )
-            if (!selected) throw new Error('VIDEO_FIXED_CLICK_FAILED')
+            let selected = false
+            for (let attempt = 0; attempt < 20 && !selected; attempt++) {
+              selected = await active.webContents.executeJavaScript(
+                `import('/src/stores/editor.ts').then(m=>m.useEditorStore.getState().editor.getSelectedShapeIds().includes(${JSON.stringify(assetId)}))`
+              )
+              if (!selected) await new Promise((done) => setTimeout(done, 50))
+            }
+            if (!selected) {
+              writeFileSync(
+                join(directory, 'pointer-failure.png'),
+                (await active.webContents.capturePage()).toPNG()
+              )
+              throw new Error('VIDEO_FIXED_CLICK_FAILED')
+            }
             const before = await active.webContents.executeJavaScript(
               `import('/src/stores/editor.ts').then(m=>{const s=m.useEditorStore.getState().editor.getShape(${JSON.stringify(assetId)});return {x:s.x,y:s.y}})`
             )
@@ -365,13 +441,25 @@ if (
         ).n
         if (posts !== 1 || tasks !== 1 || downloads !== (phase === 'execute' ? 0 : 1))
           throw new Error('VIDEO_REPLAY_DETECTED')
+        if (motionReference) {
+          const rows = db
+            .prepare(
+              "SELECT value_json FROM flow_asset_versions WHERE node_id='shape:motion-input'"
+            )
+            .all() as { value_json: string }[]
+          if (rows.length !== 1 || !JSON.parse(rows[0].value_json).contentSha256)
+            throw new Error('MOTION_NOT_FIXED')
+        }
         if (firstFrame) {
           const fixed = db
             .prepare(
               "SELECT value_json FROM flow_asset_versions WHERE json_extract(value_json,'$.kind')='image'"
             )
             .all() as { value_json: string }[]
-          if (fixed.length !== 1 || !JSON.parse(fixed[0].value_json).contentSha256)
+          if (
+            fixed.length !== (referenceImages ? 3 : lastFrame ? 2 : 1) ||
+            fixed.some((row) => !JSON.parse(row.value_json).contentSha256)
+          )
             throw new Error('FRAME_NOT_FIXED')
         }
         report = {
@@ -379,7 +467,117 @@ if (
           posts,
           downloads,
           videoTasks: tasks,
-          firstFrameFixed: firstFrame
+          firstFrameFixed: firstFrame,
+          lastFrameFixed: lastFrame,
+          referenceImageCount: referenceImages ? 3 : 0,
+          motionReferenceFixed: motionReference
+        }
+        if (mediaTransfer && phase === 'reopen') {
+          const oldSave = dialog.showSaveDialog,
+            oldOpen = dialog.showOpenDialog
+          let imported: {
+            id: string
+            name: string
+            createdAt: number
+            updatedAt: number
+            graphVersion: number
+          }
+          try {
+            dialog.showSaveDialog = async () => ({
+              canceled: false,
+              filePath: join(directory, 'media-project.canvasbundle')
+            })
+            const bundle = await active.webContents.executeJavaScript(
+              `(async()=>{const reply=await window.api.exportProject({id:${JSON.stringify(projectId)},name:'isolated-media'});if(!reply.ok)throw new Error('MEDIA_EXPORT_IPC_FAILED');return reply.data.path})()`
+            )
+            dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [bundle] })
+            imported = await active.webContents.executeJavaScript(
+              "(async()=>{const reply=await window.api.importProject();if(!reply.ok)throw new Error('MEDIA_IMPORT_IPC_FAILED');return reply.data})()"
+            )
+          } finally {
+            dialog.showSaveDialog = oldSave
+            dialog.showOpenDialog = oldOpen
+          }
+          const file = openProject(imported.id)!
+          const original = (report as { assetShapeId: string }).assetShapeId
+          const store = (
+            file.tldrawSnapshot as {
+              store: Record<
+                string,
+                { id: string; props: { nodeType: string }; meta?: Record<string, unknown> }
+              >
+            }
+          ).store
+          const fixed = file.nodes.filter(
+            (node) => typeof store[node.id]?.meta?.flowAssetRef === 'string'
+          )
+          if (fixed.length < 2 || fixed.some((node) => node.id === original))
+            throw new Error('MEDIA_GRAPH_ID_NOT_REMAPPED')
+          for (const table of ['tasks', 'flow_commands', 'flow_agent_tasks', 'flow_review_runs']) {
+            const exists = db
+              .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?")
+              .get(table)
+            if (
+              exists &&
+              (
+                db
+                  .prepare(`SELECT count(*) AS n FROM ${table} WHERE project_id=?`)
+                  .get(imported.id) as { n: number }
+              ).n
+            )
+              throw new Error('MEDIA_IMPORT_OLD_AUTHORITY')
+          }
+          const { FlowAssetStore } = await import('./asset-store')
+          const assets = new FlowAssetStore(db, (id) => openProject(id))
+          const versions = db
+            .prepare(
+              'SELECT asset_id,version_id,node_id,port_id FROM flow_asset_versions WHERE project_id=?'
+            )
+            .all(imported.id) as {
+            asset_id: string
+            version_id: string
+            node_id: string
+            port_id: string
+          }[]
+          const originalCount = (
+            db
+              .prepare('SELECT count(*) AS n FROM flow_asset_versions WHERE project_id=?')
+              .get(projectId) as { n: number }
+          ).n
+          if (versions.length !== originalCount || versions.length < 5)
+            throw new Error('MEDIA_IMPORTED_VERSIONS_MISSING')
+          for (const row of versions)
+            assets.resolveInputs(imported.id, [
+              {
+                assetId: row.asset_id,
+                versionId: row.version_id,
+                sourceNodeId: row.node_id,
+                sourcePortId: row.port_id
+              }
+            ])
+          for (const node of fixed) {
+            const ref = JSON.parse(String(store[node.id].meta!.flowAssetRef))
+            assets.resolveInputs(imported.id, [ref])
+          }
+          await active.webContents.executeJavaScript(`(async()=>{
+            const meta=${JSON.stringify(imported)},ids=${JSON.stringify(fixed.map((node) => node.id))};
+            const saves=(await import('/src/stores/save-coordinator.ts')).useSaveCoordinator,oldDeps=saves.getState().deps;
+            (await import('/src/stores/app.ts')).useAppStore.getState().openProject(meta);
+            let editor;for(let i=0;i<300;i++){editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;if(editor?.getShape(ids[0])&&saves.getState().deps!==oldDeps)break;if(i===299)throw new Error('MEDIA_IMPORTED_CANVAS_MISSING');await new Promise(done=>setTimeout(done,50));}
+            const outputs=await import('/src/nodes/nodeValues.ts');
+            for(const id of ids){const shape=editor.getShape(id),values=Object.values(outputs.projectNodeOutputs(shape));if(values.length!==1)throw new Error('MEDIA_IMPORTED_OUTPUT_MISSING');const value=values[0];if(!['image','video'].includes(value.kind))continue;editor.centerOnPoint(editor.getShapePageBounds(id).center);let element;for(let i=0;i<200;i++){element=document.querySelector('[data-node-id="'+id+'"] '+(value.kind==='image'?'img':'video'));if(value.kind==='image'?element?.naturalWidth:element?.videoWidth)break;if(i===199)throw new Error('MEDIA_IMPORTED_DECODE_FAILED');await new Promise(done=>setTimeout(done,25));}}
+            await (await import('/src/canvas/flow-asset-actions.ts')).ensureCanvasSaved();
+          })()`)
+          writeFileSync(
+            join(directory, 'media-imported.png'),
+            (await active.webContents.capturePage()).toPNG()
+          )
+          report = {
+            ...(report as object),
+            mediaBundleImported: true,
+            importedFixedNodes: fixed.length,
+            importedVersions: versions.length
+          }
         }
         writeFileSync(statePath, JSON.stringify({ projectId }))
       } else if (rework) {

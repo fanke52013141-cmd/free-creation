@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Database from 'better-sqlite3'
 import { createHash } from 'node:crypto'
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, unlinkSync } from 'node:fs'
 import { join, resolve, basename } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createServer } from 'node:http'
@@ -181,7 +181,7 @@ describe('C4 supplier facts and conditional cancellation', () => {
     )
     expect(() =>
       submitVideoTask(() => {}, { ...input, referenceImageMediaIds: ['foreign'] })
-    ).toThrow('仅支持文本生成或单张固定首帧')
+    ).toThrow('仅支持文本、固定首尾帧或有序图片参考')
     const stored = fixture.db.prepare('SELECT command_json FROM flow_commands').get() as {
       command_json: string
     }
@@ -223,26 +223,24 @@ describe('C4 supplier facts and conditional cancellation', () => {
     const row = fixture.db.prepare('SELECT command_json FROM flow_commands').get() as {
       command_json: string
     }
-    fixture.db
-      .prepare('UPDATE flow_commands SET command_json=?')
-      .run(
-        JSON.stringify({
-          ...JSON.parse(row.command_json),
-          inputs: [
-            {
-              targetPortId: 'in-images',
-              assets: [
-                {
-                  assetId: 'asset',
-                  versionId: 'version',
-                  sourceNodeId: 'source',
-                  sourcePortId: 'out-image'
-                }
-              ]
-            }
-          ]
-        })
-      )
+    fixture.db.prepare('UPDATE flow_commands SET command_json=?').run(
+      JSON.stringify({
+        ...JSON.parse(row.command_json),
+        inputs: [
+          {
+            targetPortId: 'in-images',
+            assets: [
+              {
+                assetId: 'asset',
+                versionId: 'version',
+                sourceNodeId: 'source',
+                sourcePortId: 'out-image'
+              }
+            ]
+          }
+        ]
+      })
+    )
     return {
       projectId: 'project',
       nodeId: 'node',
@@ -261,13 +259,331 @@ describe('C4 supplier facts and conditional cancellation', () => {
     vi.stubGlobal('fetch', fetcher)
     expect(submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
     expect(() => submitVideoTask(() => {}, { ...input, firstFrameMediaId: 'foreign' })).toThrow(
-      '首帧不匹配'
+      '不匹配固定图片版本'
     )
     writeFileSync(join(fixture.directory, 'projects/project/media/frame.png'), 'other-frame')
     expect(() => submitVideoTask(() => {}, input)).toThrow('ASSET_IMAGE_CHANGED')
     expect(fetcher).not.toHaveBeenCalled()
     expect(fixture.db.prepare('SELECT count(*) AS n FROM tasks').get()).toEqual({ n: 1 })
   })
+  function twoFrameInput() {
+    const input = firstFrameInput()
+    const bytes = Buffer.from('fixed--tail'),
+      path = 'projects/project/media/tail.png'
+    writeFileSync(join(fixture.directory, path), bytes)
+    fixture.db
+      .prepare('INSERT INTO media(id,path,kind,mime,size_bytes,created_at) VALUES (?,?,?,?,?,0)')
+      .run('tail', path, 'image', 'image/png', bytes.length)
+    const value = JSON.stringify({
+      kind: 'image',
+      mediaId: 'tail',
+      mediaPath: path,
+      mime: 'image/png',
+      contentSha256: createHash('sha256').update(bytes).digest('hex')
+    })
+    fixture.db
+      .prepare('INSERT INTO flow_asset_versions VALUES (?,?,?,?,?,?,?)')
+      .run(
+        'project',
+        'tail-version',
+        'tail-asset',
+        'tail-source',
+        'out-image',
+        value,
+        createHash('sha256').update(value).digest('hex')
+      )
+    const row = fixture.db.prepare('SELECT command_json FROM flow_commands').get() as {
+      command_json: string
+    }
+    const command = JSON.parse(row.command_json)
+    command.inputs[0].assets.push({
+      assetId: 'tail-asset',
+      versionId: 'tail-version',
+      sourceNodeId: 'tail-source',
+      sourcePortId: 'out-image'
+    })
+    fixture.db.prepare('UPDATE flow_commands SET command_json=?').run(JSON.stringify(command))
+    return { ...input, mode: 'first-last-frame' as const, lastFrameMediaId: 'tail' }
+  }
+  it('recovers both ordered frames without POST; swap, tail replacement and missing tail remain blocked', () => {
+    seed({
+      flowCommandId: 'command',
+      mode: 'first-last-frame',
+      firstFrameMediaId: 'frame',
+      lastFrameMediaId: 'tail'
+    })
+    const input = twoFrameInput(),
+      fetcher = vi.fn()
+    vi.stubGlobal('fetch', fetcher)
+    expect(submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
+    expect(() =>
+      submitVideoTask(() => {}, { ...input, firstFrameMediaId: 'tail', lastFrameMediaId: 'frame' })
+    ).toThrow('不匹配固定图片版本')
+    expect(() => submitVideoTask(() => {}, { ...input, lastFrameMediaId: 'foreign' })).toThrow(
+      '不匹配固定图片版本'
+    )
+    writeFileSync(join(fixture.directory, 'projects/project/media/tail.png'), 'other--tail')
+    expect(() => submitVideoTask(() => {}, input)).toThrow('ASSET_IMAGE_CHANGED')
+    unlinkSync(join(fixture.directory, 'projects/project/media/tail.png'))
+    expect(() => submitVideoTask(() => {}, input)).toThrow('ASSET_IMAGE_CHANGED')
+    expect(fetcher).not.toHaveBeenCalled()
+    expect(fixture.db.prepare('SELECT count(*) AS n FROM tasks').get()).toEqual({ n: 1 })
+  })
+  function referenceInput() {
+    const { firstFrameMediaId: _first, lastFrameMediaId: _last, ...input } = twoFrameInput()
+    return {
+      ...input,
+      modelId: 'doubao-seedance-2-0',
+      mode: 'reference' as const,
+      referenceImageMediaIds: ['frame', 'tail']
+    }
+  }
+  function motionInput(withImage = false) {
+    const { firstFrameMediaId: _first, ...input } = firstFrameInput()
+    const bytes = Buffer.from('motion-bytes'),
+      path = 'projects/project/media/motion.mp4'
+    writeFileSync(join(fixture.directory, path), bytes)
+    fixture.db
+      .prepare('INSERT INTO media(id,path,kind,mime,size_bytes,created_at) VALUES (?,?,?,?,?,0)')
+      .run('motion', path, 'video', 'video/mp4', bytes.length)
+    const value = JSON.stringify({
+      kind: 'video',
+      mediaId: 'motion',
+      mediaPath: path,
+      mime: 'video/mp4',
+      contentSha256: createHash('sha256').update(bytes).digest('hex')
+    })
+    fixture.db
+      .prepare('INSERT INTO flow_asset_versions VALUES (?,?,?,?,?,?,?)')
+      .run(
+        'project',
+        'motion-version',
+        'motion-asset',
+        'motion-source',
+        'out-video',
+        value,
+        createHash('sha256').update(value).digest('hex')
+      )
+    const row = fixture.db.prepare('SELECT command_json FROM flow_commands').get() as {
+      command_json: string
+    }
+    const command = JSON.parse(row.command_json)
+    if (!withImage) command.inputs = []
+    command.inputs.push({
+      targetPortId: 'in-reference-video',
+      assets: [
+        {
+          assetId: 'motion-asset',
+          versionId: 'motion-version',
+          sourceNodeId: 'motion-source',
+          sourcePortId: 'out-video'
+        }
+      ]
+    })
+    fixture.db.prepare('UPDATE flow_commands SET command_json=?').run(JSON.stringify(command))
+    return {
+      ...input,
+      modelId: 'doubao-seedance-2-0',
+      mode: 'reference' as const,
+      referenceVideoMediaIds: ['motion'],
+      ...(withImage ? { referenceImageMediaIds: ['frame'] } : {})
+    }
+  }
+  it.each([false, true])(
+    'reattaches fixed video reference with image=%s and rejects identity/content drift without POST',
+    (withImage) => {
+      seed({
+        flowCommandId: 'command',
+        mode: 'reference',
+        referenceVideoMediaIds: ['motion'],
+        referenceImageMediaIds: withImage ? ['frame'] : []
+      })
+      const input = motionInput(withImage),
+        fetcher = vi.fn()
+      fixture.db.prepare('UPDATE tasks SET model_id=?').run(input.modelId)
+      vi.stubGlobal('fetch', fetcher)
+      expect(submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
+      expect(() =>
+        submitVideoTask(() => {}, { ...input, referenceVideoMediaIds: ['other'] })
+      ).toThrow('不匹配固定图片版本')
+      expect(() =>
+        submitVideoTask(() => {}, { ...input, referenceVideoMediaIds: ['motion', 'motion'] })
+      ).toThrow()
+      expect(() =>
+        submitVideoTask(() => {}, { ...input, referenceAudioMediaIds: ['audio'] })
+      ).toThrow()
+      writeFileSync(join(fixture.directory, 'projects/project/media/motion.mp4'), 'other--bytes')
+      expect(() => submitVideoTask(() => {}, input)).toThrow('ASSET_VIDEO_CHANGED')
+      unlinkSync(join(fixture.directory, 'projects/project/media/motion.mp4'))
+      expect(() => submitVideoTask(() => {}, input)).toThrow('ASSET_VIDEO_CHANGED')
+      expect(fetcher).not.toHaveBeenCalled()
+      expect(fixture.db.prepare('SELECT count(*) AS n FROM tasks').get()).toEqual({ n: 1 })
+    }
+  )
+  it('rejects original video reference list drift and unsupported provider capability', () => {
+    seed({ flowCommandId: 'command', mode: 'reference', referenceVideoMediaIds: ['other'] })
+    const input = motionInput()
+    fixture.db.prepare('UPDATE tasks SET model_id=?').run(input.modelId)
+    expect(() => submitVideoTask(() => {}, input)).toThrow('原视频命令输入发生变化')
+    expect(() =>
+      submitVideoTask(() => {}, { ...input, modelId: 'doubao-seedance-1-5-pro' })
+    ).toThrow('不支持该参考图片数量')
+  })
+  it('checks the actual asynchronously encoded video bytes before POST', async () => {
+    const input = motionInput()
+    vi.mocked(readMediaBuffer).mockResolvedValueOnce({
+      buf: Buffer.from('other--bytes'),
+      mime: 'video/mp4'
+    })
+    const fetcher = vi.fn()
+    vi.stubGlobal('fetch', fetcher)
+    const result = submitVideoTask(() => {}, input)
+    await vi.waitFor(() => expect(getVideoTask(result.taskId)?.status).toBe('unknown'))
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+  it('persists video reference stop and requires original task reattachment without POST', async () => {
+    seed({ flowCommandId: 'command', mode: 'reference', referenceVideoMediaIds: ['motion'] })
+    const input = motionInput(),
+      fetcher = vi.fn().mockResolvedValue(response('running'))
+    fixture.db.prepare('UPDATE tasks SET model_id=?').run(input.modelId)
+    vi.stubGlobal('fetch', fetcher)
+    await cancelVideoTask('local')
+    expect(submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
+    expect(fetcher.mock.calls.every((call) => (call[1]?.method ?? 'GET') === 'GET')).toBe(true)
+    expect(fixture.db.prepare('SELECT count(*) AS n FROM tasks').get()).toEqual({ n: 1 })
+  })
+  it('reattaches ordered image references without POST and rejects changed order, missing, duplicate and mixed inputs', () => {
+    seed({
+      flowCommandId: 'command',
+      modelId: 'doubao-seedance-2-0',
+      mode: 'reference',
+      referenceImageMediaIds: ['frame', 'tail']
+    })
+    // seed stores model identity in the task row separately.
+    fixture.db.prepare('UPDATE tasks SET model_id=?').run('doubao-seedance-2-0')
+    const input = referenceInput(),
+      fetcher = vi.fn()
+    vi.stubGlobal('fetch', fetcher)
+    expect(submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
+    for (const ids of [
+      ['tail', 'frame'],
+      ['frame'],
+      ['frame', 'frame'],
+      ['frame', 'tail', 'extra']
+    ])
+      expect(() => submitVideoTask(() => {}, { ...input, referenceImageMediaIds: ids })).toThrow()
+    expect(() => submitVideoTask(() => {}, { ...input, firstFrameMediaId: 'frame' })).toThrow()
+    expect(() =>
+      submitVideoTask(() => {}, { ...input, referenceVideoMediaIds: ['video'] })
+    ).toThrow()
+    writeFileSync(join(fixture.directory, 'projects/project/media/tail.png'), 'other--tail')
+    expect(() => submitVideoTask(() => {}, input)).toThrow('ASSET_IMAGE_CHANGED')
+    expect(fetcher).not.toHaveBeenCalled()
+    expect(fixture.db.prepare('SELECT count(*) AS n FROM tasks').get()).toEqual({ n: 1 })
+  })
+  it('rejects drift in an original reference task and unsupported model capability before POST', () => {
+    seed({ flowCommandId: 'command', mode: 'reference', referenceImageMediaIds: ['tail', 'frame'] })
+    const input = referenceInput()
+    fixture.db.prepare('UPDATE tasks SET model_id=?').run(input.modelId)
+    expect(() => submitVideoTask(() => {}, input)).toThrow('原视频命令输入发生变化')
+    expect(() =>
+      submitVideoTask(() => {}, { ...input, modelId: 'doubao-seedance-1-5-pro' })
+    ).toThrow('不支持该参考图片数量')
+  })
+  it.each(['frame', 'tail'])(
+    'checks actual encoded reference bytes for %s before POST',
+    async (slot) => {
+      const input = referenceInput()
+      vi.mocked(readMediaBuffer).mockImplementation(async (id) => ({
+        buf: Buffer.from(
+          id === slot ? 'wrong-bytes' : id === 'frame' ? 'fixed-frame' : 'fixed--tail'
+        ),
+        mime: 'image/png'
+      }))
+      const fetcher = vi.fn()
+      vi.stubGlobal('fetch', fetcher)
+      const result = submitVideoTask(() => {}, input)
+      await vi.waitFor(() => expect(getVideoTask(result.taskId)?.status).toBe('unknown'))
+      expect(fetcher).not.toHaveBeenCalled()
+    }
+  )
+  it('keeps reference-image stop persistent and reattaches one original task without POST', async () => {
+    seed({ flowCommandId: 'command', mode: 'reference', referenceImageMediaIds: ['frame', 'tail'] })
+    const input = referenceInput()
+    fixture.db.prepare('UPDATE tasks SET model_id=?').run(input.modelId)
+    const fetcher = vi.fn().mockResolvedValue(response('running'))
+    vi.stubGlobal('fetch', fetcher)
+    await cancelVideoTask('local')
+    expect(
+      JSON.parse(
+        (fixture.db.prepare('SELECT input FROM tasks WHERE id=?').get('local') as { input: string })
+          .input
+      ).cancelRequested
+    ).toBe(true)
+    expect(submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
+    expect(fetcher.mock.calls.every((call) => (call[1]?.method ?? 'GET') === 'GET')).toBe(true)
+    expect(fixture.db.prepare('SELECT count(*) AS n FROM tasks').get()).toEqual({ n: 1 })
+  })
+  it('rejects tail drift in an existing task even when the fixed command is valid', () => {
+    seed({
+      flowCommandId: 'command',
+      mode: 'first-last-frame',
+      firstFrameMediaId: 'frame',
+      lastFrameMediaId: 'different-tail'
+    })
+    const input = twoFrameInput()
+    expect(() => submitVideoTask(() => {}, input)).toThrow('原视频命令输入发生变化')
+  })
+  it('persists stop for both fixed frames and explicit reattachment keeps the original task', async () => {
+    seed({
+      flowCommandId: 'command',
+      mode: 'first-last-frame',
+      firstFrameMediaId: 'frame',
+      lastFrameMediaId: 'tail'
+    })
+    const input = twoFrameInput(),
+      fetcher = vi.fn().mockResolvedValue(response('running'))
+    vi.stubGlobal('fetch', fetcher)
+    await cancelVideoTask('local')
+    const row = fixture.db.prepare('SELECT input FROM tasks WHERE id=?').get('local') as {
+      input: string
+    }
+    expect(JSON.parse(row.input).cancelRequested).toBe(true)
+    expect(submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
+    expect(fixture.db.prepare('SELECT count(*) AS n FROM tasks').get()).toEqual({ n: 1 })
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    expect(fetcher.mock.calls[0][1]?.method ?? 'GET').toBe('GET')
+  })
+  it.each(['first', 'last'])(
+    'checks actual asynchronous %s frame bytes before any POST',
+    async (slot) => {
+      const input = { ...twoFrameInput(), modelId: 'doubao-seedance-2-0' }
+      vi.mocked(readMediaBuffer).mockImplementation(async (id) => ({
+        buf: Buffer.from(
+          id === (slot === 'first' ? 'frame' : 'tail')
+            ? 'wrong-bytes'
+            : id === 'frame'
+              ? 'fixed-frame'
+              : 'fixed--tail'
+        ),
+        mime: 'image/png'
+      }))
+      const fetcher = vi.fn()
+      vi.stubGlobal('fetch', fetcher)
+      const result = submitVideoTask(() => {}, input)
+      for (let i = 0; i < 100; i++) {
+        const row = fixture.db
+          .prepare('SELECT status FROM tasks WHERE id=?')
+          .get(result.taskId) as { status: string }
+        if (row.status === 'unknown') break
+        await new Promise((done) => setTimeout(done, 5))
+      }
+      expect(fixture.db.prepare('SELECT status FROM tasks WHERE id=?').get(result.taskId)).toEqual({
+        status: 'unknown'
+      })
+      expect(fetcher).not.toHaveBeenCalled()
+    }
+  )
   it('checks the exact bytes returned by the asynchronous media read before POST', async () => {
     const input = { ...firstFrameInput(), modelId: 'doubao-seedance-2-0' }
     vi.mocked(readMediaBuffer).mockResolvedValueOnce({

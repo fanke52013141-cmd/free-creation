@@ -91,6 +91,7 @@ if (boundary === 'recover') {
     spanId: 'span'
   })
   shape.meta.flowAssetRef = JSON.stringify(asset.ref)
+  shape.meta.pinnedOutput = JSON.stringify({ version: 1, outputs: { 'out-text': asset.value } })
   saveProject({
     id: meta.id,
     graph,

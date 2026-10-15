@@ -60,6 +60,7 @@ const messages: Record<string, string> = {
   FLOW_REVISION_CONFLICT: '画布已发生变更，请停止旧任务后重新启动。',
   FLOW_PROJECT_INACTIVE: '请返回任务所属画布，再核对或继续。',
   ASSET_IMAGE_CHANGED: '固定首帧图片丢失或内容发生变化，请检查原资产后创建新任务。',
+  ASSET_VIDEO_CHANGED: '固定参考视频不可用或内容发生变化（上限 20 MiB），请检查原素材并核对任务记录。',
   ASSET_OUTPUT_UNAVAILABLE: '输入尚无可提交的结果，请检查来源节点并保存。',
   ASSET_SOURCE_OCCUPIED: '输入节点有未确认执行，请先核对原运行记录。'
 }

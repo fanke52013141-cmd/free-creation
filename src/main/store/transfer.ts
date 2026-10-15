@@ -7,8 +7,16 @@
 // 安全：项目目录只含节点/连线/媒体，不含供应商 API Key（供应商配置存全局 app.db）；
 // 因此导出包不包含 API Key，满足「导出诊断包不包含 API Key」。
 import AdmZip from 'adm-zip'
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'fs'
-import { join } from 'path'
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  writeFileSync
+} from 'fs'
+import { join, relative, isAbsolute } from 'path'
 import { nanoid } from 'nanoid'
 import type { MediaAsset, ProjectFile } from '../../shared/types'
 import { mimeForExtension } from '../../shared/mime'
@@ -22,7 +30,8 @@ import {
   parseFlowVersions,
   prepareFlowImport,
   stripTransferCredentials,
-  completeTransferMediaMap
+  completeTransferMediaMap,
+  validateFlowMedia
 } from './flow-transfer'
 
 const BUNDLE_EXT = '.canvasbundle'
@@ -118,6 +127,22 @@ export function exportProject(id: string, destPath: string): ProjectExportResult
   const path = destPath.endsWith(BUNDLE_EXT) ? destPath : `${destPath}${BUNDLE_EXT}`
 
   const zip = new AdmZip()
+  const flowRows = exportFlowVersions(getDb(), id)
+  const projectMedia = listProjectMedia(id)
+  const fixedBytes = new Map<string, Buffer>()
+  validateFlowMedia(flowRows, (value) => {
+    const media = projectMedia.find(
+      (item) => item.id === value.mediaId && item.path === value.mediaPath
+    )
+    if (!media) return null
+    const abs = join(getProjectsDir(), id, value.mediaPath.replace(`projects/${id}/`, ''))
+    if (!existsSync(abs)) return null
+    const child = relative(realpathSync(join(getProjectsDir(), id, 'media')), realpathSync(abs))
+    if (!child || child.startsWith('..') || isAbsolute(child)) return null
+    const bytes = readFileSync(abs)
+    fixedBytes.set(value.mediaPath, bytes)
+    return { bytes, kind: media.kind, mime: media.mime }
+  })
   zip.addFile(
     'recipes.json',
     Buffer.from(JSON.stringify(stripTransferCredentials(listArtifactRecipes(id))), 'utf-8')
@@ -126,10 +151,7 @@ export function exportProject(id: string, destPath: string): ProjectExportResult
     'project.json',
     Buffer.from(JSON.stringify(stripTransferCredentials(file), null, 2), 'utf-8')
   )
-  zip.addFile(
-    'flow-assets.json',
-    Buffer.from(JSON.stringify(exportFlowVersions(getDb(), id)), 'utf-8')
-  )
+  zip.addFile('flow-assets.json', Buffer.from(JSON.stringify(flowRows), 'utf-8'))
   zip.addFile(
     'bundle.json',
     Buffer.from(
@@ -145,10 +167,12 @@ export function exportProject(id: string, destPath: string): ProjectExportResult
   // zip 内 media/<原文件名>。原文件名形如 <mediaId>.<ext>，用 mediaId + ext 也可还原。
   // 磁盘上缺失的媒体只计数不阻断导出：主文件仍可备份，但计数必须透传给用户告警。
   let missingMediaCount = 0
-  for (const media of listProjectMedia(id)) {
+  for (const media of projectMedia) {
     const rel = media.path.replace(`projects/${id}/`, '') // media/<id>.<ext>
     const abs = join(getProjectsDir(), id, rel)
-    if (existsSync(abs)) zip.addLocalFile(abs, 'media')
+    const verified = fixedBytes.get(media.path)
+    if (verified) zip.addFile(rel, verified)
+    else if (existsSync(abs)) zip.addLocalFile(abs, 'media')
     else missingMediaCount += 1
   }
 
@@ -224,6 +248,8 @@ export function importProject(srcPath: string): ProjectMetaInfo {
       }
       const dot = origName.lastIndexOf('.')
       const oldMediaId = dot > 0 ? origName.slice(0, dot) : origName
+      if (mediaRefs.some((ref) => ref.oldId === oldMediaId))
+        throw new Error('FLOW_TRANSFER_MEDIA_DUPLICATE')
       const ext = extName(origName)
       const newMediaId = nanoid(10)
       const stagedPath = join(stagingMediaDir, `${newMediaId}${ext}`)
@@ -247,6 +273,19 @@ export function importProject(srcPath: string): ProjectMetaInfo {
       assetsEntry ? JSON.parse(assetsEntry.getData().toString('utf-8')) : [],
       file.meta.id
     )
+    validateFlowMedia(flowRows, (value) => {
+      const ref = mediaRefs.find(
+        (item) => item.oldId === value.mediaId && item.oldPath === value.mediaPath
+      )
+      if (!ref) return null
+      const ext = extName(ref.newPath),
+        mime = mimeForExtension(ext)
+      return {
+        bytes: readFileSync(join(stagingMediaDir, `${ref.newId}${ext}`)),
+        kind: kindFor(mime),
+        mime
+      }
+    })
     const mediaMap = completeTransferMediaMap(
       file,
       {

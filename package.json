@@ -36,7 +36,7 @@
     "benchmark:graph": "node scripts/benchmark-graph.mjs",
     "build:demo": "node scripts/build-demo-bundle.mjs",
     "benchmark:canvas": "node scripts/benchmark-canvas.mjs",
-    "verify": "npm run lint && npm run typecheck && npm run typecheck:model && npm run test && npm run test:model && npm run verify:logging && npm run test:optimization-ui && electron-vite build && npm run test:agent-flow-assets && npm run test:agent-flow-commands && npm run test:agent-flow-desktop && npm run test:agent-flow-collaboration && npm run test:agent-flow-coordination && npm run test:agent-flow-builder && npm run test:agent-flow-review && npm run test:agent-flow-rework && npm run test:agent-flow-recovery && npm run test:agent-flow-video && npm run test:agent-flow-video-first-frame",
+    "verify": "npm run lint && npm run typecheck && npm run typecheck:model && npm run test && npm run test:model && npm run verify:logging && npm run test:optimization-ui && electron-vite build && npm run test:agent-flow-assets && npm run test:agent-flow-commands && npm run test:agent-flow-desktop && npm run test:agent-flow-collaboration && npm run test:agent-flow-coordination && npm run test:agent-flow-builder && npm run test:agent-flow-review && npm run test:agent-flow-rework && npm run test:agent-flow-recovery && npm run test:agent-flow-video && npm run test:agent-flow-video-first-frame && npm run test:agent-flow-video-first-last-frame && npm run test:agent-flow-video-reference && npm run test:agent-flow-video-motion-reference && npm run test:agent-flow-media-transfer",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "dev:browser": "vite --config vite.browser.config.ts",
@@ -64,7 +64,11 @@
     "test:agent-flow-recovery": "node scripts/test-agent-flow-desktop.cjs --recovery",
     "test:renderer-save-recovery": "node scripts/test-renderer-save-recovery.cjs",
     "test:agent-flow-video-first-frame": "node scripts/test-agent-flow-desktop.cjs --video-first-frame",
-    "test:agent-flow-video": "node scripts/test-agent-flow-desktop.cjs --video"
+    "test:agent-flow-video": "node scripts/test-agent-flow-desktop.cjs --video",
+    "test:agent-flow-video-first-last-frame": "node scripts/test-agent-flow-desktop.cjs --video-first-last-frame",
+    "test:agent-flow-video-reference": "node scripts/test-agent-flow-desktop.cjs --video-reference-images",
+    "test:agent-flow-video-motion-reference": "node scripts/test-agent-flow-desktop.cjs --video-motion-reference",
+    "test:agent-flow-media-transfer": "node scripts/test-agent-flow-desktop.cjs --media-transfer"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.34",

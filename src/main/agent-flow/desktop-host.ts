@@ -283,7 +283,8 @@ export class FlowAgentDesktopHost {
       const edges = file.edges.filter((edge) => edge.to.nodeId === nodeId)
       if (
         edges.some((edge) => !adapter.inputs.includes(edge.to.portId)) ||
-        new Set(edges.map((edge) => edge.to.portId)).size !== edges.length
+        (node.type !== 'video' &&
+          new Set(edges.map((edge) => edge.to.portId)).size !== edges.length)
       )
         throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'admission')
       const inputs = [...new Set(edges.map((edge) => edge.to.portId))].map((targetPortId) => ({
@@ -303,9 +304,14 @@ export class FlowAgentDesktopHost {
           ).mode,
           inputs.map((input) => ({
             targetPortId: input.targetPortId,
-            kinds: this.assets
-              .resolveInputs(raw.projectId, input.assets)
-              .map((version) => version.value.kind)
+            kinds: this.assets.resolveInputs(raw.projectId, input.assets).map((version) => {
+              if (
+                input.targetPortId === 'in-reference-video' &&
+                (version.value.kind !== 'video' || !version.value.contentSha256)
+              )
+                throw new AgentRuntimeError('AGENT_INPUT_NOT_FIXED', 'admission')
+              return version.value.kind
+            })
           }))
         )
       )
