@@ -1,8 +1,22 @@
 const messages: Record<string, string> = {
+  FLOW_PARALLEL_REJECTED: '并行派发需要显式开启，且必须选择两个不同的就绪专业任务。',
+  FLOW_PARALLEL_DEPENDENCY: '两路任务存在数据依赖，请按顺序执行。',
+  FLOW_VIDEO_REWORK_INVALID: '视频返工任务或固定审核依据不可用，请核对原任务、审核版本与预算。',
+  FLOW_VIDEO_REWORK_BUDGET_EXHAUSTED:
+    '本轮视频返工已提交过生成，请复用原回执；下一轮须由审核结论和预算明确批准。',
+  FLOW_VIDEO_REVIEW_NOT_FIXED:
+    '视频审核需要固定 MP4 版本及可信摘要；历史成果缺少下载回执时，请用普通视频素材节点重新固定。',
+  FLOW_VIDEO_REVIEW_LIMIT:
+    '抽帧审核仅支持 0.1–60 秒、至少 4 帧、最多 20 MiB 的 MP4，使用四张 640 像素画面样本。',
+  FLOW_VIDEO_REVIEW_DECODE_FAILED: '视频抽帧失败，尚未生成审核结论；请检查视频及本机 FFmpeg。',
+  FLOW_VIDEO_REVIEW_TOOL_UNAVAILABLE: '视频审核需要本机 FFmpeg/FFprobe，请检查媒体工具配置。',
+  FLOW_VIDEO_REVIEW_MODEL_UNVERIFIED:
+    '请选择声明支持图片且文本操作验证通过的模型；同时需要工具调用验证。',
+  FLOW_VIDEO_REVIEW_CLEANUP_FAILED: '视频审核临时文件清理失败，请检查本机磁盘与文件占用。',
   FLOW_VIDEO_OUTCOME_UNKNOWN: '原视频任务结果待核对，不会重新提交生成。',
   FLOW_VIDEO_RESULT_NOT_PROJECTED: '视频成果已确认，请接回原任务并呈现成果。',
   FLOW_VIDEO_RECONCILE_READY: '已找到原视频任务，可明确继续接回。',
-  ASSET_REVIEW_MEDIA_UNSUPPORTED: '当前 AI 审核只适配文本和 JSON，图片和视频成果请先人工查看。',
+  ASSET_REVIEW_MEDIA_UNSUPPORTED: '媒体审核需明确选择视频抽帧模式；图片与音频审核尚未适配。',
   FLOW_MODEL_OUTCOME_UNKNOWN:
     '模型决策结果未知，核对不会再次请求模型；可停止旧任务后明确创建新任务。',
   FLOW_COMMAND_OUTCOME_UNKNOWN: '命令尚无可确认的保存事实，保留未知状态，不重复执行。',
@@ -14,7 +28,8 @@ const messages: Record<string, string> = {
   FLOW_REWORK_TARGET_UNSUPPORTED: '当前返工支持专业 Agent 与人工文本/JSON；其他类型尚未适配。',
   FLOW_REVIEW_OUTCOME_UNKNOWN: '审核结果尚未确认，请核对原请求，不要重复提交。',
   FLOW_REVIEW_CONFIG_INVALID: '审核需要标准正文、模型和明确的审核对象来源，请检查设置。',
-  FLOW_REVIEW_SUBJECT_INVALID: '审核对象需通过文本或 JSON 数据端口接入；媒体审核尚未支持。',
+  FLOW_REVIEW_SUBJECT_INVALID:
+    '请选择与审核范围匹配的真实来源端口；抽帧模式只接一路视频，文本模式只接文本或 JSON。',
   FLOW_REVIEW_BUDGET_EXHAUSTED: '审核返工次数已耗尽，请核对最新反馈并停止分支。',
   FLOW_REVIEW_STOPPED: '该审核分支已按拒绝策略停止；修改规则作为新修订后再启动。',
   FLOW_BUILD_CONFIG_INVALID:
@@ -60,7 +75,9 @@ const messages: Record<string, string> = {
   FLOW_REVISION_CONFLICT: '画布已发生变更，请停止旧任务后重新启动。',
   FLOW_PROJECT_INACTIVE: '请返回任务所属画布，再核对或继续。',
   ASSET_IMAGE_CHANGED: '固定首帧图片丢失或内容发生变化，请检查原资产后创建新任务。',
-  ASSET_VIDEO_CHANGED: '固定参考视频不可用或内容发生变化（上限 20 MiB），请检查原素材并核对任务记录。',
+  ASSET_AUDIO_CHANGED: '固定参考音频不可用、内容已变化或超过 20 MiB，请检查原素材并核对任务记录。',
+  ASSET_VIDEO_CHANGED:
+    '固定参考视频不可用或内容发生变化（上限 20 MiB），请检查原素材并核对任务记录。',
   ASSET_OUTPUT_UNAVAILABLE: '输入尚无可提交的结果，请检查来源节点并保存。',
   ASSET_SOURCE_OCCUPIED: '输入节点有未确认执行，请先核对原运行记录。'
 }

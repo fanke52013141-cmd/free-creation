@@ -117,18 +117,20 @@ describe('portable immutable Flow assets and graph references', () => {
     expect(JSON.parse(imported.meta.pinnedOutput).outputs).toEqual({ 'out-text': f.asset.value })
     expect(JSON.parse(imported.meta.flowAssetRef).sourcePortId).toBe('out-value')
   })
-  function mediaFixture(kind: 'image' | 'video', fixed = true) {
+  function mediaFixture(kind: 'image' | 'video' | 'audio', fixed = true) {
     const f = fixture(),
       id = 'fixture-media',
-      ext = kind === 'image' ? '.png' : '.mp4',
-      mime = kind === 'image' ? 'image/png' : 'video/mp4'
+      ext = kind === 'image' ? '.png' : kind === 'audio' ? '.wav' : '.mp4',
+      mime = kind === 'image' ? 'image/png' : kind === 'audio' ? 'audio/wav' : 'video/mp4'
     const bytes =
-      kind === 'video'
-        ? readFileSync(join('test', 'fixtures', 'agent-video.mp4'))
-        : Buffer.from(
-            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aYawAAAAASUVORK5CYII=',
-            'base64'
-          )
+      kind === 'audio'
+        ? readFileSync(join('test', 'fixtures', 'agent-audio.wav'))
+        : kind === 'video'
+          ? readFileSync(join('test', 'fixtures', 'agent-video.mp4'))
+          : Buffer.from(
+              'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aYawAAAAASUVORK5CYII=',
+              'base64'
+            )
     const mediaPath = `projects/source/media/${id}${ext}`
     const value = {
       kind,
@@ -138,16 +140,16 @@ describe('portable immutable Flow assets and graph references', () => {
       ...(fixed ? { contentSha256: createHash('sha256').update(bytes).digest('hex') } : {})
     }
     const body = JSON.stringify(value),
-      port = kind === 'image' ? 'out-image' : 'out-video'
+      port = kind === 'image' ? 'out-image' : kind === 'audio' ? 'out-audio' : 'out-video'
     state
       .db!.prepare('UPDATE flow_asset_versions SET port_id=?,value_json=?,digest=?')
       .run(port, body, createHash('sha256').update(body).digest('hex'))
-    f.file.nodes[0].type = kind === 'image' ? 'image' : 'video-asset'
+    f.file.nodes[0].type = kind === 'image' ? 'image' : kind === 'audio' ? 'audio' : 'video-asset'
     f.file.nodes[0].ports = [
       { id: port, dir: 'out', type: kind, required: true, cardinality: 'one' }
     ]
     Object.assign(f.shape.props, {
-      nodeType: kind === 'image' ? 'image' : 'video-asset',
+      nodeType: kind === 'image' ? 'image' : kind === 'audio' ? 'audio' : 'video-asset',
       mediaId: id,
       mediaPath,
       mediaMime: mime
@@ -170,7 +172,7 @@ describe('portable immutable Flow assets and graph references', () => {
     writeFileSync(join(directory, 'project.json'), JSON.stringify(f.file))
     return { ...f, value, ref, bytes, port, ext }
   }
-  it.each(['image', 'video'] as const)(
+  it.each(['image', 'video', 'audio'] as const)(
     'round trips fixed %s bytes, ports, snapshot and result with fresh media/version identities',
     (kind) => {
       const f = mediaFixture(kind),
@@ -199,6 +201,35 @@ describe('portable immutable Flow assets and graph references', () => {
       expect(exportProject(meta.id, join(state.root, 'again')).missingMediaCount).toBe(0)
     }
   )
+  it('rejects a portable audio version missing its mandatory content digest', () => {
+    mediaFixture('audio', false)
+    expect(() => exportProject('source', join(state.root, 'invalid-audio'))).toThrow(
+      'FLOW_TRANSFER_MEDIA_INVALID'
+    )
+  })
+  it('rejects oversized fixed audio with a valid digest before the imported project becomes visible', () => {
+    const f = mediaFixture('audio'),
+      path = exportProject('source', join(state.root, 'large-audio')).path,
+      zip = new AdmZip(path),
+      bytes = Buffer.alloc(20 * 1024 * 1024 + 1),
+      value = { ...f.value, contentSha256: createHash('sha256').update(bytes).digest('hex') }
+    zip.updateFile('media/fixture-media.wav', bytes)
+    const rows = JSON.parse(zip.readAsText('flow-assets.json'))
+    rows[0].value_json = JSON.stringify(value)
+    rows[0].digest = createHash('sha256').update(rows[0].value_json).digest('hex')
+    zip.updateFile('flow-assets.json', Buffer.from(JSON.stringify(rows)))
+    const file = JSON.parse(zip.readAsText('project.json'))
+    file.tldrawSnapshot.store[f.shape.id].meta.pinnedOutput = JSON.stringify({
+      version: 1,
+      outputs: { [f.port]: value }
+    })
+    zip.updateFile('project.json', Buffer.from(JSON.stringify(file)))
+    zip.writeZip(path)
+    const before = readdirSync(state.root).sort()
+    expect(() => importProject(path)).toThrow('FLOW_TRANSFER_MEDIA_INVALID')
+    expect(readdirSync(state.root).sort()).toEqual(before)
+    expect(state.db!.prepare('SELECT count(*) AS count FROM projects').get()).toEqual({ count: 1 })
+  })
   it('preserves legacy generated video versions without inventing a content digest', () => {
     const f = mediaFixture('video', false),
       meta = importProject(exportProject('source', join(state.root, 'legacy')).path)
@@ -206,14 +237,22 @@ describe('portable immutable Flow assets and graph references', () => {
     expect(JSON.parse(rows[0].value_json).contentSha256).toBeUndefined()
     expect(f.value.kind).toBe('video')
   })
-  it.each(['missing', 'changed', 'path', 'mime', 'pinned', 'duplicate'] as const)(
-    'rejects %s fixed media bundles before project visibility and rolls back files',
-    (failure) => {
-      const f = mediaFixture('image'),
+  it.each(
+    (['image', 'audio'] as const).flatMap((kind) =>
+      (['missing', 'changed', 'path', 'mime', 'pinned', 'duplicate'] as const).map((failure) => ({
+        kind,
+        failure
+      }))
+    )
+  )(
+    'rejects $failure fixed $kind bundles before project visibility and rolls back files',
+    ({ kind, failure }) => {
+      const f = mediaFixture(kind),
         path = exportProject('source', join(state.root, 'bad-media')).path,
         zip = new AdmZip(path)
-      if (failure === 'missing') zip.deleteFile('media/fixture-media.png')
-      if (failure === 'changed') zip.updateFile('media/fixture-media.png', Buffer.from('different'))
+      if (failure === 'missing') zip.deleteFile('media/fixture-media' + f.ext)
+      if (failure === 'changed')
+        zip.updateFile('media/fixture-media' + f.ext, Buffer.from('different'))
       if (failure === 'duplicate') zip.addFile('media/fixture-media.mp4', f.bytes)
       if (failure === 'pinned') {
         const file = JSON.parse(zip.readAsText('project.json'))
@@ -226,7 +265,7 @@ describe('portable immutable Flow assets and graph references', () => {
       if (failure === 'path' || failure === 'mime') {
         const rows = JSON.parse(zip.readAsText('flow-assets.json')),
           value = JSON.parse(rows[0].value_json)
-        if (failure === 'path') value.mediaPath = 'projects/foreign/media/fixture-media.png'
+        if (failure === 'path') value.mediaPath = 'projects/foreign/media/fixture-media' + f.ext
         else value.mime = 'video/mp4'
         rows[0].value_json = JSON.stringify(value)
         rows[0].digest = createHash('sha256').update(rows[0].value_json).digest('hex')

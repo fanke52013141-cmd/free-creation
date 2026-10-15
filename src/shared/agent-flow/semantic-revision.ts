@@ -19,7 +19,31 @@ export function canonicalFlowJson(value: unknown): string {
 export function semanticProjectPayload(project: ProjectFile): unknown {
   const snapshot = project.tldrawSnapshot as { store?: Record<string, unknown> } | undefined
   if (!snapshot?.store) throw new Error('FLOW_SNAPSHOT_MISSING')
+  if (new Set(project.nodes.map((node) => node.id)).size !== project.nodes.length)
+    throw new Error('FLOW_NODE_ID_CONFLICT')
+  const wired = new Set(project.edges.flatMap((edge) => [edge.from.nodeId, edge.to.nodeId]))
   const nodes = [...project.nodes]
+    // Disconnected fixed-result cards are presentation copies, not executable inputs.
+    // Once wired into the graph their exact pinned value and identity become semantic.
+    .filter((node) => {
+      const shape = snapshot.store![node.id] as
+        | {
+            id?: string
+            type?: string
+            props?: Record<string, unknown>
+            meta?: Record<string, unknown>
+          }
+        | undefined
+      return !(
+        shape?.id === node.id &&
+        shape.type === 'node-card' &&
+        shape.props?.nodeType === node.type &&
+        shape.meta?.pinnedOutput &&
+        shape.meta.flowAssetRef &&
+        ['text', 'json', 'image', 'video-asset', 'audio'].includes(node.type) &&
+        !wired.has(node.id)
+      )
+    })
     .sort((a, b) => a.id.localeCompare(b.id))
     .map((node) => {
       const shape = snapshot.store![node.id] as
@@ -66,9 +90,6 @@ export function semanticProjectPayload(project: ProjectFile): unknown {
         flowAssetRef: shape.meta?.flowAssetRef
       }
     })
-  if (new Set(nodes.map((node) => node.id)).size !== nodes.length) {
-    throw new Error('FLOW_NODE_ID_CONFLICT')
-  }
   return {
     schemaVersion: 1,
     projectId: project.meta.id,

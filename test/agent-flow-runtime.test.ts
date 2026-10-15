@@ -166,6 +166,85 @@ describe('C3 immutable content Skills', () => {
 })
 
 describe('C3 bounded LangGraph task loop', () => {
+  it('pins a model-proposed video revision to the same command across unknown recovery', async () => {
+    const f = fixture(),
+      task = snapshot()
+    task.targets[0].contractVersion = 7
+    task.rework = {
+      originalTaskId: 'initial',
+      reviewId: 'rejected-review',
+      reviewNodeId: 'review',
+      rulesVersion: 'rules',
+      rejectedOutputs: [output],
+      criteria: 'red frame',
+      feedback: 'remove blue',
+      round: 1,
+      videoTargetNodeId: 'processor'
+    }
+    const execute = vi.fn(async (command: NodeExecuteCommand) =>
+      receipt(command, execute.mock.calls.length === 1 ? 'unknown' : 'committed')
+    )
+    const decide = vi.fn(async (context: AgentModelContext) =>
+      context.receipts.length
+        ? { kind: 'finish' as const, outputs: [output] }
+        : {
+            kind: 'execute' as const,
+            targetNodeId: 'processor',
+            prompt: 'private-model-revision: red scene'
+          }
+    )
+    const r = runtime(f, task, { model: { decide }, tools: { execute } })
+    expect((await r.start()).state).toBe('waiting')
+    expect(execute.mock.calls[0][0].videoRework).toEqual({
+      reviewId: 'rejected-review',
+      round: 1,
+      prompt: 'private-model-revision: red scene'
+    })
+    const completed = await runtime(f, task, { model: { decide }, tools: { execute } }).resume({
+      taskId: task.taskId,
+      semanticRevision: task.semanticRevision,
+      waitRevision: 1,
+      eventId: 'reconcile-revision',
+      kind: 'reconcile'
+    })
+    expect(completed.state).toBe('completed')
+    expect(execute).toHaveBeenCalledTimes(2)
+    expect(execute.mock.calls[1][0]).toEqual(execute.mock.calls[0][0])
+    expect(decide).toHaveBeenCalledTimes(2)
+    expect(completed.snapshot).toEqual(r.inspect().snapshot)
+  })
+  it.each(['ordinary', 'wrong-target', 'processor'] as const)(
+    'rejects prompt proposals for %s tasks before any command',
+    async (kind) => {
+      const task = snapshot()
+      if (kind !== 'ordinary')
+        task.rework = {
+          originalTaskId: 'initial',
+          reviewId: 'review',
+          reviewNodeId: 'review-node',
+          rulesVersion: '1',
+          rejectedOutputs: [output],
+          criteria: 'criteria',
+          feedback: 'feedback',
+          round: 1,
+          videoTargetNodeId: kind === 'wrong-target' ? 'other' : 'processor'
+        }
+      if (kind !== 'processor') task.targets[0].contractVersion = 7
+      const execute = vi.fn()
+      const result = await runtime(fixture(), task, {
+        tools: { execute },
+        model: {
+          decide: async () => ({
+            kind: 'execute',
+            targetNodeId: 'processor',
+            prompt: 'private-proposal'
+          })
+        }
+      }).start()
+      expect(result.code).toBe('AGENT_TOOL_DENIED')
+      expect(execute).not.toHaveBeenCalled()
+    }
+  )
   it('passes accepted human feedback and fixed selection to the next decision without replaying prior tools', async () => {
     const f = fixture()
     const seen: AgentModelContext[] = []

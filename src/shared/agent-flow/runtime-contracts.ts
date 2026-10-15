@@ -62,7 +62,8 @@ export const AgentTaskSnapshotSchema = z
         rejectedOutputs: z.array(AgentFlowAssetRefSchema).min(1).max(128),
         criteria: z.string().min(1).max(32768),
         feedback: z.string().min(1).max(16384),
-        round: z.number().int().min(1).max(10)
+        round: z.number().int().min(1).max(10),
+        videoTargetNodeId: id.optional()
       })
       .strict()
       .optional(),
@@ -109,7 +110,13 @@ export const AgentTaskSnapshotSchema = z
   })
 export type AgentTaskSnapshot = z.infer<typeof AgentTaskSnapshotSchema>
 export const AgentDecisionSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('execute'), targetNodeId: id }).strict(),
+  z
+    .object({
+      kind: z.literal('execute'),
+      targetNodeId: id,
+      prompt: z.string().trim().min(1).max(4096).optional()
+    })
+    .strict(),
   z
     .object({
       kind: z.literal('load-skill'),

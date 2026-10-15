@@ -6,7 +6,7 @@ import type { NodeCardShape } from './NodeCardShape'
 export function readFlowAssetSnapshot(shape: NodeCardShape): FlowAssetValue | null {
   const ref = shape.meta?.flowAssetRef
   if (
-    !['text', 'json', 'image', 'video-asset'].includes(shape.props.nodeType) ||
+    !['text', 'json', 'image', 'video-asset', 'audio'].includes(shape.props.nodeType) ||
     typeof ref !== 'string'
   )
     return null
@@ -17,9 +17,11 @@ export function readFlowAssetSnapshot(shape: NodeCardShape): FlowAssetValue | nu
         ? 'out-image'
         : shape.props.nodeType === 'video-asset'
           ? 'out-video'
-          : shape.props.nodeType === 'text'
-            ? 'out-text'
-            : 'out-json'
+          : shape.props.nodeType === 'audio'
+            ? 'out-audio'
+            : shape.props.nodeType === 'text'
+              ? 'out-text'
+              : 'out-json'
     ]
     if (!value) return null
     if (shape.props.nodeType === 'image')
@@ -27,6 +29,10 @@ export function readFlowAssetSnapshot(shape: NodeCardShape): FlowAssetValue | nu
         ? { ...value, contentSha256: value.contentSha256 }
         : null
     if (shape.props.nodeType === 'video-asset') return value.kind === 'video' ? value : null
+    if (shape.props.nodeType === 'audio')
+      return value.kind === 'audio' && value.contentSha256
+        ? { ...value, contentSha256: value.contentSha256 }
+        : null
     if (shape.props.nodeType === 'json') return value.kind === 'json' ? value : null
     return value.kind === 'text' || value.kind === 'markdown' ? value : null
   } catch {

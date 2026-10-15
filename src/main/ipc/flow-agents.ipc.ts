@@ -1,3 +1,4 @@
+import { supportsSampledVideoReview } from '../../shared/agent-flow/video-review'
 import { ipcMain, type BrowserWindow } from 'electron'
 import { IPC, type IpcEnvelope } from '../../shared/contracts'
 import {
@@ -48,14 +49,22 @@ export function registerFlowAgentsIpc(
       !definition.capabilities.some((capability) => capability.operation === 'text.generate')
     )
       throw new AgentRuntimeError('AGENT_MODEL_UNAVAILABLE', 'model-capability')
+    if (snapshot.requiresImageInput && !supportsSampledVideoReview(definition))
+      throw new AgentRuntimeError('FLOW_VIDEO_REVIEW_MODEL_UNVERIFIED', 'model-capability')
     const connection = await catalog.getConnection(definition.connectionId)
     if (
       !connection?.enabled ||
       !['openai', 'openai-compatible', 'openrouter', 'toapis'].includes(connection.protocol)
     )
       throw new AgentRuntimeError('AGENT_MODEL_PROTOCOL', 'model-capability')
+    let address: URL
+    try {
+      address = new URL(connection.baseUrl)
+    } catch {
+      throw new AgentRuntimeError('AGENT_MODEL_PROTOCOL', 'model-capability')
+    }
     const secret = await catalog.readSecret(connection.id)
-    const local = ['localhost', '127.0.0.1', '[::1]'].includes(new URL(connection.baseUrl).hostname)
+    const local = ['localhost', '127.0.0.1', '[::1]'].includes(address.hostname)
     if (!secret && !local) throw new AgentRuntimeError('AGENT_MODEL_KEY_UNAVAILABLE', 'credentials')
     const model = createCatalogChatModel({
       connectionId: connection.id,
@@ -84,7 +93,7 @@ export function registerFlowAgentsIpc(
     // Seed 2.1 thinking can consume the entire bounded discussion timeout.
     // Discussion and single-result builder/review opt out; task decisions retain their defaults.
     const discussionProviderOptions =
-      new URL(connection.baseUrl).hostname === 'ark.cn-beijing.volces.com' &&
+      address.hostname === 'ark.cn-beijing.volces.com' &&
       /^doubao-seed-2-1-(turbo|pro)-\d{6}$/.test(definition.modelId)
         ? { [connection.id]: { thinking: { type: 'disabled' } } }
         : undefined

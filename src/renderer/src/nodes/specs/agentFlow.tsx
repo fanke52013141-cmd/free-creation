@@ -367,6 +367,19 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
             </AppSelect>
           </label>
           {numberField('最多处理步数', 'maxSteps', 1, 64)}
+          {draft.role === 'coordinator' && (
+            <label className="settings-field">
+              任务调度
+              <AppSelect
+                aria-label="任务调度"
+                value={String(draft.maxParallelTasks ?? 1)}
+                onChange={(event) => update('maxParallelTasks', Number(event.target.value))}
+              >
+                <option value="1">顺序执行</option>
+                <option value="2">独立任务并行（最多两路）</option>
+              </AppSelect>
+            </label>
+          )}
           {catalog && (
             <>
               <label className="settings-field">
@@ -499,6 +512,24 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
       )}
       {type === 'ai-review' && (
         <>
+          <label className="settings-field">
+            审核范围
+            <AppSelect
+              aria-label="审核范围"
+              value={String(draft.reviewMode ?? 'text-json')}
+              onChange={(event) => update('reviewMode', event.target.value)}
+            >
+              <option value="text-json">完整文本 / JSON</option>
+              <option value="sampled-video">视频抽帧画面（不含声音与完整时序）</option>
+            </AppSelect>
+          </label>
+          {draft.reviewMode === 'sampled-video' && (
+            <p className="contract-settings-hint">
+              只接一路固定 MP4（0.1–60 秒、至少 4 帧、最多 20 MiB），审核 4
+              张抽样画面。请选择声明支持图片、文本操作验证通过且支持工具调用的模型。自动返工时，负责人须为控制该视频生成节点的专业
+              Agent；主 Agent 须启用审核工具并配置范围和预算。
+            </p>
+          )}
           {catalog && (
             <label className="settings-field">
               审核模型
@@ -507,7 +538,7 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
                 value={String(draft.modelDefinitionId ?? '')}
                 onChange={(event) => update('modelDefinitionId', event.target.value)}
               >
-                <option value="">选择文本模型</option>
+                <option value="">选择审核模型</option>
                 {catalog.models.map((model) => (
                   <option key={model.id} value={model.id}>
                     {model.name}

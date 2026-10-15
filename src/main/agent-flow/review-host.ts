@@ -1,3 +1,4 @@
+import { sampleReviewVideo, assertVideoReviewEvidence, reviewVideoValue } from './video-review'
 import type Database from 'better-sqlite3'
 import type { ProjectFile } from '../../shared/types'
 import {
@@ -67,10 +68,16 @@ export class FlowReviewHost {
     if (replay) {
       if (replay.nodeId !== input.nodeId || replay.signature !== binding.signature)
         throw new AgentRuntimeError('FLOW_REVISION_CONFLICT', 'review')
+      if (binding.config.reviewMode === 'sampled-video')
+        assertVideoReviewEvidence(this.db, input.projectId, replay.decision)
       return replay.decision
     }
     const previous = this.store.latest(input.projectId, input.nodeId)
-    if (previous?.signature === binding.signature) return previous.decision
+    if (previous?.signature === binding.signature) {
+      if (binding.config.reviewMode === 'sampled-video')
+        assertVideoReviewEvidence(this.db, input.projectId, previous.decision)
+      return previous.decision
+    }
     const rejected = this.store.rejectedRounds(input.projectId, input.nodeId, binding.cycleId)
     if (rejected > binding.config.maxReworks)
       throw new AgentRuntimeError('FLOW_REVIEW_BUDGET_EXHAUSTED', 'review')
@@ -110,6 +117,34 @@ export class FlowReviewHost {
           return ref
         }
         const sourceShape = snapshot[source.nodeId]
+        if (
+          binding.config.reviewMode === 'sampled-video' &&
+          sourceShape.props.nodeType === 'video'
+        ) {
+          const commandId = (sourceShape.meta?.nodeRun as { commandId?: string } | undefined)
+            ?.commandId
+          const receipt =
+            commandId &&
+            (this.db
+              .prepare(
+                "SELECT receipt_json FROM flow_commands WHERE project_id=? AND command_id=? AND target_node_id=? AND state='committed'"
+              )
+              .get(input.projectId, commandId, source.nodeId) as
+              { receipt_json: string } | undefined)
+          const outputs = receipt ? JSON.parse(receipt.receipt_json).outputRefs : []
+          if (!Array.isArray(outputs) || outputs.length !== 1)
+            throw new AgentRuntimeError('FLOW_VIDEO_REVIEW_NOT_FIXED', 'review')
+          const ref = AgentFlowAssetRefSchema.parse(outputs[0])
+          const value = this.assets.resolveInputs(input.projectId, [ref])[0].value
+          if (
+            ref.sourceNodeId !== source.nodeId ||
+            ref.sourcePortId !== source.portId ||
+            canonicalFlowJson(DETERMINISTIC_PROJECTIONS.video(sourceShape)[source.portId]) !==
+              canonicalFlowJson(value)
+          )
+            throw new AgentRuntimeError('FLOW_VIDEO_REVIEW_NOT_FIXED', 'review')
+          return ref
+        }
         if (['text', 'json'].includes(sourceShape.props.nodeType)) {
           const latest = this.assets.list(input.projectId, source.nodeId, source.portId)[0]
           const value =
@@ -134,11 +169,21 @@ export class FlowReviewHost {
           spanId: input.spanId
         }).ref
       })
-      const subjects = this.assets.resolveInputs(input.projectId, refs).map((v) => v.value)
+      const subjects = this.assets
+        .resolveInputs(input.projectId, refs)
+        .map((v) =>
+          binding.config.reviewMode === 'sampled-video'
+            ? reviewVideoValue(this.db, input.projectId, v.value, v.ref.sourceNodeId)
+            : v.value
+        )
       if (
         Buffer.byteLength(JSON.stringify({ criteria: binding.shape.props.text, subjects })) > 131072
       )
         throw new AgentRuntimeError('AGENT_CONTEXT_TOO_LARGE', 'review')
+      const videoSamples =
+        binding.config.reviewMode === 'sampled-video'
+          ? await sampleReviewVideo(this.db, input.projectId, subjects[0], controller.signal)
+          : undefined
       const config = AgentNodeConfigSchema.parse({
         schemaVersion: 1,
         role: 'specialist',
@@ -153,6 +198,7 @@ export class FlowReviewHost {
       const model = await abortable(
         this.model(
           {
+            requiresImageInput: !!videoSamples,
             projectId: input.projectId,
             agentNodeId: input.nodeId,
             taskId: input.requestId,
@@ -167,7 +213,14 @@ export class FlowReviewHost {
       if (!model.review) throw new AgentRuntimeError('AGENT_MODEL_TOOL_UNVERIFIED', 'review')
       const verdict = ReviewModelVerdictSchema.parse(
         await abortable(
-          model.review({ criteria: binding.shape.props.text, subjects }, controller.signal),
+          model.review(
+            {
+              criteria: binding.shape.props.text,
+              subjects,
+              ...(videoSamples ? { videoSamples } : {})
+            },
+            controller.signal
+          ),
           controller.signal
         )
       )
@@ -175,6 +228,7 @@ export class FlowReviewHost {
         throw new AgentRuntimeError('AGENT_CANCELLED_OR_TIMED_OUT', 'review')
       if (occupied && !controlledReview(this.db, input.projectId, input.nodeId, input.requestId))
         throw new AgentRuntimeError('AGENT_CANCELLED', 'review')
+      this.assets.resolveInputs(input.projectId, refs)
       const current = this.open(input.projectId)
       if (
         !current ||
@@ -194,13 +248,15 @@ export class FlowReviewHost {
         subjects: refs,
         passed: verdict.passed,
         feedback: verdict.feedback,
-        evidenceScope: 'complete-text-json',
+        evidenceScope: videoSamples ? 'sampled' : 'complete-text-json',
+        ...(videoSamples ? { videoEvidence: videoSamples.evidence } : {}),
         issues: verdict.issues.map((issue) => ({
           assetId: refs[issue.subjectIndex].assetId,
           versionId: refs[issue.subjectIndex].versionId,
           feedback: issue.feedback
         }))
       })
+      if (videoSamples) assertVideoReviewEvidence(this.db, input.projectId, decision)
       this.store.save({
         projectId: input.projectId,
         nodeId: input.nodeId,

@@ -1,4 +1,6 @@
 import { fixedFlowMedia, type FlowMediaRef } from '../agent-flow/image-assets'
+import { videoReworkPrompt } from '../agent-flow/video-rework'
+import { VIDEO_FLOW_MAX_REFERENCES } from '../../shared/agent-flow/video-adapter'
 // 视频生成任务管理：MiniMax H3 与 Seedance 的统一任务式适配
 // 两家 API 均为 content[] 多模态 + 异步任务 + 轮询（见调研报告 §3.3）：
 //   MiniMax  POST {base}/v2/video_generation            → task_id
@@ -315,7 +317,7 @@ async function mediaToDataUrl(
       image.mime !== m.mime ||
       createHash('sha256').update(m.buf).digest('hex') !== image.contentSha256
     )
-      throw new GatewayError('FLOW_INPUT_CONTRACT_INVALID', '固定帧内容已变化')
+      throw new GatewayError('FLOW_INPUT_CONTRACT_INVALID', '固定参考媒体内容已变化')
   }
   return `data:${m.mime};base64,${m.buf.toString('base64')}`
 }
@@ -885,20 +887,28 @@ function commandFrames(
   const videos = fixed.inputs
     .filter((item) => item.targetPortId === 'in-reference-video')
     .flatMap((item) => item.assets)
-  if (input.mode === 'text' && images.length === 0 && videos.length === 0) return []
+  const audios = fixed.inputs
+    .filter((item) => item.targetPortId === 'in-reference-audio')
+    .flatMap((item) => item.assets)
+  if (input.mode === 'text' && images.length === 0 && videos.length === 0 && audios.length === 0)
+    return []
   if (
     !['first-frame', 'first-last-frame', 'reference'].includes(input.mode ?? '') ||
     (input.mode === 'reference'
-      ? images.length + videos.length < 1 ||
+      ? images.length + videos.length + audios.length < 1 ||
         images.length > 30 ||
-        videos.length > 1 ||
+        videos.length > VIDEO_FLOW_MAX_REFERENCES ||
+        audios.length > VIDEO_FLOW_MAX_REFERENCES ||
+        audios.length !== (input.referenceAudioMediaIds?.length ?? 0) ||
         videos.length !== (input.referenceVideoMediaIds?.length ?? 0) ||
         images.length !== (input.referenceImageMediaIds?.length ?? 0)
-      : videos.length !== 0 || images.length !== (input.mode === 'first-last-frame' ? 2 : 1)) ||
-    new Set([...images, ...videos].map((ref) => ref.versionId)).size !==
-      images.length + videos.length
+      : videos.length !== 0 ||
+        audios.length !== 0 ||
+        images.length !== (input.mode === 'first-last-frame' ? 2 : 1)) ||
+    new Set([...images, ...videos, ...audios].map((ref) => ref.versionId)).size !==
+      images.length + videos.length + audios.length
   )
-    throw new GatewayError('FLOW_INPUT_CONTRACT_INVALID', '首尾帧输入须匹配有序固定图片版本')
+    throw new GatewayError('FLOW_INPUT_CONTRACT_INVALID', '视频输入须匹配有序固定媒体版本')
   const entries = [
     ...images.map((ref, index) => ({
       ref,
@@ -914,6 +924,11 @@ function commandFrames(
       ref,
       kind: 'video' as const,
       mediaId: input.referenceVideoMediaIds?.[index]
+    })),
+    ...audios.map((ref, index) => ({
+      ref,
+      kind: 'audio' as const,
+      mediaId: input.referenceAudioMediaIds?.[index]
     }))
   ]
   const frames = entries.map(({ ref, kind, mediaId }) => {
@@ -931,18 +946,18 @@ function commandFrames(
       row.port_id !== ref.sourcePortId ||
       createHash('sha256').update(row.value_json).digest('hex') !== row.digest
     )
-      throw new GatewayError('FLOW_INPUT_CONTRACT_INVALID', '固定首帧版本不可用')
+      throw new GatewayError('FLOW_INPUT_CONTRACT_INVALID', '固定参考媒体版本不可用')
     const value = JSON.parse(row.value_json)
     if (
       value.kind !== kind ||
       value.mediaId !== mediaId ||
       !/^[a-f0-9]{64}$/.test(value.contentSha256 ?? '')
     )
-      throw new GatewayError('FLOW_INPUT_CONTRACT_INVALID', '首帧或尾帧不匹配固定图片版本')
+      throw new GatewayError('FLOW_INPUT_CONTRACT_INVALID', '参考输入不匹配固定媒体版本')
     return fixedFlowMedia(getDb(), input.projectId, value)
   })
   if (new Set(frames.map((frame) => frame.mediaId)).size !== frames.length)
-    throw new GatewayError('FLOW_INPUT_CONTRACT_INVALID', '首尾帧须为不同图片')
+    throw new GatewayError('FLOW_INPUT_CONTRACT_INVALID', '固定参考媒体不得重复')
   return frames
 }
 
@@ -993,17 +1008,22 @@ export function submitVideoTask(send: Send, input: VideoSubmitInput): VideoSubmi
         (!input.firstFrameMediaId || !input.lastFrameMediaId)) ||
       (input.mode !== 'reference' && input.referenceImageMediaIds?.length) ||
       (input.mode !== 'reference' && input.referenceVideoMediaIds?.length) ||
+      (input.mode !== 'reference' && input.referenceAudioMediaIds?.length) ||
       (input.mode === 'reference' &&
         (input.firstFrameMediaId ||
           input.lastFrameMediaId ||
-          !(input.referenceImageMediaIds?.length || input.referenceVideoMediaIds?.length))) ||
-      (input.referenceVideoMediaIds?.length ?? 0) > 1 ||
+          !(
+            input.referenceImageMediaIds?.length ||
+            input.referenceVideoMediaIds?.length ||
+            input.referenceAudioMediaIds?.length
+          ))) ||
+      (input.referenceVideoMediaIds?.length ?? 0) > VIDEO_FLOW_MAX_REFERENCES ||
       input.referenceVideoMediaId ||
-      input.referenceAudioMediaIds?.length
+      (input.referenceAudioMediaIds?.length ?? 0) > VIDEO_FLOW_MAX_REFERENCES
     )
       throw new GatewayError(
         'FLOW_TYPE_UNSUPPORTED',
-        'Agent 视频仅支持文本、固定首尾帧或有序图片参考'
+        'Agent 视频支持文本、提示词包、固定首尾帧及有序图片、视频和音频参考'
       )
     commandFrames(input, fixed)
     if (input.mode === 'reference') {
@@ -1016,10 +1036,22 @@ export function submitVideoTask(send: Send, input: VideoSubmitInput): VideoSubmi
         !caps.modes.includes('reference') ||
         ((input.referenceImageMediaIds?.length ?? 0) > 0 && !caps.supportsReferenceImages) ||
         ((input.referenceVideoMediaIds?.length ?? 0) > 0 && !caps.supportsReferenceVideo) ||
+        ((input.referenceAudioMediaIds?.length ?? 0) > 0 && !caps.supportsReferenceAudio) ||
+        (input.referenceAudioMediaIds?.length ?? 0) > caps.maxReferenceAudios ||
         (input.referenceVideoMediaIds?.length ?? 0) > caps.maxReferenceVideos ||
         (input.referenceImageMediaIds?.length ?? 0) > caps.maxReferenceImages
       )
-        throw new GatewayError('FLOW_INPUT_CONTRACT_INVALID', '当前模型不支持该参考图片数量')
+        throw new GatewayError('FLOW_INPUT_CONTRACT_INVALID', '当前模型不支持该参考媒体或数量')
+    }
+    if (fixed.videoRework) {
+      try {
+        input = { ...input, prompt: videoReworkPrompt(getDb(), fixed, input.prompt) }
+      } catch {
+        throw new GatewayError(
+          'FLOW_VIDEO_REWORK_INVALID',
+          '视频返工任务或固定审核依据不可用，请核对原任务'
+        )
+      }
     }
     const prior = getDb()
       .prepare(
@@ -1039,6 +1071,8 @@ export function submitVideoTask(send: Send, input: VideoSubmitInput): VideoSubmi
           canonicalFlowJson(input.referenceImageMediaIds ?? []) ||
         canonicalFlowJson(saved.referenceVideoMediaIds ?? []) !==
           canonicalFlowJson(input.referenceVideoMediaIds ?? []) ||
+        canonicalFlowJson(saved.referenceAudioMediaIds ?? []) !==
+          canonicalFlowJson(input.referenceAudioMediaIds ?? []) ||
         canonicalFlowJson(saved.params ?? null) !== canonicalFlowJson(input.params ?? null)
       )
         throw new GatewayError('TASK_OUTCOME_UNKNOWN', '原视频命令输入发生变化，请核对原任务')

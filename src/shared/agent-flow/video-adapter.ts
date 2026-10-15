@@ -1,17 +1,35 @@
 import type { CanvasNode, PortDecl } from '../types'
 import type { FlowAssetValue } from './assets'
-/** Video adapter: fixed text/frames, ordered images, and one optional motion reference. */
+import { validateNodeSchema } from '../node-schemas'
+
+/** Structural ceiling; the selected provider's lower reference limits also apply. */
+export const VIDEO_FLOW_MAX_REFERENCES = 30
+
+/** Validate structured prompt content at both task and command admission. */
+export function videoFlowAssetValid(portId: string, value: FlowAssetValue): boolean {
+  return (
+    portId !== 'in-prompt' ||
+    (value.kind === 'json' &&
+      validateNodeSchema({ id: 'prompt.bundle', version: 1 }, value.data).ok)
+  )
+}
+
+/** Video adapter: fixed prompt bundles/frames and ordered media references. */
 export function flowTargetContract(node: CanvasNode): { inputs: string[]; output: string } | null {
   if (node.type === 'processor' && node.contractVersion === 1)
     return { inputs: ['in-value'], output: 'out-value' }
   if (node.type === 'video' && node.contractVersion === 7)
-    return { inputs: ['in-text', 'in-images', 'in-reference-video'], output: 'out-video' }
+    return {
+      inputs: ['in-text', 'in-prompt', 'in-images', 'in-reference-video', 'in-reference-audio'],
+      output: 'out-video'
+    }
   return null
 }
 export function agentOutputValue(
   value: FlowAssetValue
-): Exclude<FlowAssetValue, { kind: 'video' } | { kind: 'image' }> {
-  if (value.kind === 'video' || value.kind === 'image') return { kind: 'json', data: value }
+): Exclude<FlowAssetValue, { kind: 'video' } | { kind: 'image' } | { kind: 'audio' }> {
+  if (value.kind === 'video' || value.kind === 'image' || value.kind === 'audio')
+    return { kind: 'json', data: value }
   return value.kind === 'markdown' ? { kind: 'text', text: value.text } : value
 }
 export const VIDEO_FLOW_PORTS: PortDecl[] = [
@@ -72,7 +90,7 @@ export const VIDEO_FLOW_PORTS: PortDecl[] = [
   }
 ]
 
-/** One text source, mode-specific ordered images, and at most one video in reference mode. */
+/** One text/bundle source and bounded, ordered media lists in reference mode. */
 export function videoFlowInputsValid(
   mode: unknown,
   inputs: { targetPortId: string; kinds: string[] }[]
@@ -83,18 +101,25 @@ export function videoFlowInputsValid(
     inputs.some((input) =>
       input.targetPortId === 'in-text'
         ? input.kinds.length !== 1 || !['text', 'markdown'].includes(input.kinds[0])
-        : input.targetPortId === 'in-reference-video'
-          ? mode !== 'reference' || input.kinds.length !== 1 || input.kinds[0] !== 'video'
-          : input.targetPortId !== 'in-images' ||
-            (mode === 'reference'
-              ? input.kinds.length < 1 || input.kinds.length > 30
-              : input.kinds.length !== (mode === 'first-last-frame' ? 2 : 1)) ||
-            input.kinds.some((kind) => kind !== 'image')
+        : input.targetPortId === 'in-prompt'
+          ? input.kinds.length !== 1 || input.kinds[0] !== 'json'
+          : ['in-reference-video', 'in-reference-audio'].includes(input.targetPortId)
+            ? mode !== 'reference' ||
+              input.kinds.length < 1 ||
+              input.kinds.length > VIDEO_FLOW_MAX_REFERENCES ||
+              input.kinds.some(
+                (kind) => kind !== (input.targetPortId === 'in-reference-video' ? 'video' : 'audio')
+              )
+            : input.targetPortId !== 'in-images' ||
+              (mode === 'reference'
+                ? input.kinds.length < 1 || input.kinds.length > VIDEO_FLOW_MAX_REFERENCES
+                : input.kinds.length !== (mode === 'first-last-frame' ? 2 : 1)) ||
+              input.kinds.some((kind) => kind !== 'image')
     )
   )
     return false
   const hasMedia = inputs.some((input) =>
-    ['in-images', 'in-reference-video'].includes(input.targetPortId)
+    ['in-images', 'in-reference-video', 'in-reference-audio'].includes(input.targetPortId)
   )
   return mode === 'text' ? !hasMedia : hasMedia
 }

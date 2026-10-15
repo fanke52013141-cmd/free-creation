@@ -1,4 +1,6 @@
-import { streamText, tool, stepCountIs, type LanguageModel } from 'ai'
+import { createHash } from 'node:crypto'
+import { VideoReviewEvidenceSchema } from '../../shared/agent-flow/video-review'
+import { streamText, tool, stepCountIs, type LanguageModel, type UserContent } from 'ai'
 import { z } from 'zod'
 import { BuildPlanSchema, type BuildContext, type BuildPlan } from '../../shared/agent-flow/builder'
 import {
@@ -49,8 +51,51 @@ export class AgentSdkModel implements AgentModelPort {
   ) {}
 
   async review(input: ReviewContext, signal: AbortSignal): Promise<ReviewModelVerdict> {
-    if (input.subjects.some((value) => value.kind === 'video' || value.kind === 'image'))
+    const samples = input.videoSamples
+    if (samples) VideoReviewEvidenceSchema.parse(samples.evidence)
+    if (
+      samples &&
+      (input.subjects.length !== 1 ||
+        input.subjects[0].kind !== 'video' ||
+        input.subjects[0].contentSha256 !== samples.evidence.contentSha256 ||
+        samples.images.length !== 4 ||
+        samples.images.some(
+          (image, index) =>
+            !(image instanceof Uint8Array) ||
+            image.length > 1024 * 1024 ||
+            !image.length ||
+            createHash('sha256').update(image).digest('hex') !==
+              samples.evidence.frames[index].contentSha256
+        ))
+    )
+      throw new FlowAssetError('FLOW_VIDEO_REVIEW_NOT_FIXED')
+    if (
+      !samples &&
+      input.subjects.some(
+        (value) => value.kind === 'video' || value.kind === 'image' || value.kind === 'audio'
+      )
+    )
       throw new FlowAssetError('ASSET_REVIEW_MEDIA_UNSUPPORTED')
+    const content: UserContent = samples
+      ? [
+          {
+            type: 'text',
+            text: `视频对象 0，固定内容 ${samples.evidence.contentSha256}，时长 ${samples.evidence.durationMs}ms。仅展示四张抽样静帧，不含音轨，不代表完整画面或时序；仅在样本足以支持标准时通过，否则拒绝并说明局限。`
+          },
+          ...samples.images.flatMap((image, index) => [
+            {
+              type: 'text' as const,
+              text: `对象 0，样本 ${index + 1}，${samples.evidence.frames[index].timeMs}ms`
+            },
+            { type: 'file' as const, data: image, mediaType: 'image/jpeg' }
+          ])
+        ]
+      : input.subjects
+          .map(
+            (value, index) =>
+              `${input.subjects.length > 1 ? `对象 ${index}（${value.kind}）：\n` : ''}${value.kind === 'json' ? JSON.stringify(value.data) : 'text' in value ? value.text : ''}`
+          )
+          .join('\n\n')
     const context = { ...this.diagnostics, requestId: ensureRequestId(undefined) }
     const attributes: { operation: string; toolCallCount?: number; finishReason?: string } = {
       operation: 'agent.review'
@@ -78,12 +123,7 @@ export class AgentSdkModel implements AgentModelPort {
         messages: [
           {
             role: 'user',
-            content: input.subjects
-              .map(
-                (value, index) =>
-                  `${input.subjects.length > 1 ? `对象 ${index}（${value.kind}）：\n` : ''}${value.kind === 'video' || value.kind === 'image' ? '' : value.kind === 'json' ? JSON.stringify(value.data) : value.text}`
-              )
-              .join('\n\n')
+            content
           }
         ]
       })
@@ -271,6 +311,15 @@ export class AgentSdkModel implements AgentModelPort {
               '给一个就绪专业 Agent 分派独立任务；从其允许的固定输入中选择最小清单，填写目标和完成条件。',
             inputSchema: dispatchSchema
           }),
+          ...(input.maxParallelTasks === 2 && input.available.length >= 2
+            ? {
+                dispatch_parallel: tool({
+                  description:
+                    '同时分派两路无数据依赖的就绪专业任务，各自固定输入、目标与完成条件。',
+                  inputSchema: z.object({ assignments: z.array(dispatchSchema).length(2) }).strict()
+                })
+              }
+            : {}),
           finish_flow: tool({
             description: '所有专业任务真实完成后，选择其真实固定成果作为 Flow 输出。',
             inputSchema: CoordinationDecisionSchema.options[1].omit({ kind: true }).extend({
@@ -305,11 +354,13 @@ export class AgentSdkModel implements AgentModelPort {
         kind:
           call.toolName === 'dispatch_agent'
             ? 'dispatch'
-            : call.toolName === 'finish_flow'
-              ? 'finish'
-              : call.toolName === 'wait_for_human' && input.mode === 'collaborative'
-                ? 'wait'
-                : 'invalid'
+            : call.toolName === 'dispatch_parallel' && input.maxParallelTasks === 2
+              ? 'dispatch-many'
+              : call.toolName === 'finish_flow'
+                ? 'finish'
+                : call.toolName === 'wait_for_human' && input.mode === 'collaborative'
+                  ? 'wait'
+                  : 'invalid'
       })
       emitGatewayEvent('model.request.completed', '主 Agent 决策完成', context, {
         attributes,
@@ -366,8 +417,17 @@ export class AgentSdkModel implements AgentModelPort {
         throw new AgentRuntimeError('AGENT_CONTEXT_TOO_LARGE', 'model-context')
       const tools = {
         execute_node: tool({
-          description: '执行一个已授权画布节点，输入已固定；本次请求只提出动作。',
-          inputSchema: z.object({ targetNodeId: z.string().max(128) }).strict()
+          description: input.rework?.videoTargetNodeId
+            ? '执行已授权视频返工节点。可用 prompt 提出本次生成的修订指令；原目标、素材和审核反馈保持固定，不修改画布配置。'
+            : '执行一个已授权画布节点，输入已固定；本次请求只提出动作。',
+          inputSchema: z
+            .object({
+              targetNodeId: z.string().max(128),
+              ...(input.rework?.videoTargetNodeId
+                ? { prompt: z.string().trim().min(1).max(4096).optional() }
+                : {})
+            })
+            .strict()
         }),
         load_skill: tool({
           description:

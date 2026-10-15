@@ -5,7 +5,7 @@ import { resolve, relative, isAbsolute } from 'node:path'
 import { getDataDir } from '../store/db'
 import { FlowAssetError } from '../../shared/agent-flow/assets'
 
-export interface FlowMediaRef<K extends 'image' | 'video' = 'image' | 'video'> {
+export interface FlowMediaRef<K extends 'image' | 'video' | 'audio' = 'image' | 'video' | 'audio'> {
   kind: K
   mediaId: string
   mediaPath: string
@@ -24,7 +24,7 @@ export function fixedFlowImage(
 }
 
 /** Conservative fixed input budget; generated video outputs retain their existing size support. */
-export function fixedFlowMedia<K extends 'image' | 'video'>(
+export function fixedFlowMedia<K extends 'image' | 'video' | 'audio'>(
   db: Database.Database,
   projectId: string,
   value: FlowMediaRef<K>
@@ -68,7 +68,11 @@ export function fixedFlowMedia<K extends 'image' | 'video'>(
     }
   } catch {
     throw new FlowAssetError(
-      value.kind === 'image' ? 'ASSET_IMAGE_CHANGED' : 'ASSET_VIDEO_CHANGED',
+      value.kind === 'image'
+        ? 'ASSET_IMAGE_CHANGED'
+        : value.kind === 'audio'
+          ? 'ASSET_AUDIO_CHANGED'
+          : 'ASSET_VIDEO_CHANGED',
       `${value.kind}-integrity`
     )
   }

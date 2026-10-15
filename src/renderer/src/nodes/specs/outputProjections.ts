@@ -1,3 +1,4 @@
+import { projectAudioAssetOutputs } from '@shared/engine/deterministic-projections'
 // 节点输出投影：把节点已持久化的 props/meta 映射为其声明端口的真实值。
 //
 // 这些函数由各自 NodeTypeSpec 直接注册。运行器和手动触发都只调用
@@ -225,7 +226,7 @@ export const projectVocalSeparateOutputs = (shape: NodeCardShape): RawNodeOutput
 
 export const projectAudioOutputs = (shape: NodeCardShape): RawNodeOutputs =>
   shape.props.nodeType === 'audio'
-    ? mediaOutput(shape, 'audio', 'out-audio')
+    ? projectAudioAssetOutputs(shape)
     : latestResultMediaOutput(shape, 'audio', 'out-audio')
 
 /** 一次只处理一种源媒体；仅投影本次最新产物对应的端口。 */

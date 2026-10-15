@@ -3,6 +3,7 @@ import { ReviewDecisionSchema } from './node-contracts'
 import type { NodeShape } from '../engine/executor-types'
 import type { RawNodeOutputs } from '../engine/values'
 import type { FlowAssetValue } from './assets'
+import type { VideoReviewSamples } from './video-review'
 const id = z
   .string()
   .min(1)
@@ -32,6 +33,7 @@ export type ReviewModelVerdict = z.infer<typeof ReviewModelVerdictSchema>
 export interface ReviewContext {
   criteria: string
   subjects: FlowAssetValue[]
+  videoSamples?: VideoReviewSamples
 }
 export function projectReviewOutputs(shape: NodeShape): RawNodeOutputs {
   try {

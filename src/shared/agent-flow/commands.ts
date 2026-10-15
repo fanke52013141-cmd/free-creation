@@ -26,6 +26,14 @@ export const NodeExecuteCommandSchema = z
     expectedSemanticRevision: z.string().regex(/^sha256:[a-f0-9]{64}$/),
     contractVersion: z.number().int().positive(),
     inputs: z.array(FixedNodeInputSchema).max(128),
+    videoRework: z
+      .object({
+        reviewId: id,
+        round: z.number().int().min(1).max(10),
+        prompt: z.string().trim().min(1).max(4096).optional()
+      })
+      .strict()
+      .optional(),
     traceId: id,
     spanId: id
   })

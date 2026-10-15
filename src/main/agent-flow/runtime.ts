@@ -224,6 +224,9 @@ export function createAgentRuntime(options: {
       const target = record.snapshot.targets.find((item) => item.nodeId === decision.targetNodeId)
       if (
         !target ||
+        (decision.prompt !== undefined &&
+          (record.snapshot.rework?.videoTargetNodeId !== target.nodeId ||
+            target.contractVersion !== 7)) ||
         !record.snapshot.config.tools.some(
           (item) => item.id === 'node.execute' && item.version === '1'
         )
@@ -244,6 +247,15 @@ export function createAgentRuntime(options: {
             targetNodeId: target.nodeId,
             contractVersion: target.contractVersion,
             inputs: target.inputs,
+            ...(record.snapshot.rework?.videoTargetNodeId === target.nodeId
+              ? {
+                  videoRework: {
+                    reviewId: record.snapshot.rework.reviewId,
+                    round: record.snapshot.rework.round,
+                    ...(decision.prompt !== undefined ? { prompt: decision.prompt } : {})
+                  }
+                }
+              : {}),
             expectedSemanticRevision: record.snapshot.semanticRevision,
             traceId: options.diagnostics?.traceId ?? record.snapshot.traceId,
             spanId: options.diagnostics?.spanId ?? record.snapshot.spanId

@@ -17,18 +17,22 @@ export function FlowAssetPanel({
   shape: NodeCardShape
   projectId: string
 }): React.JSX.Element | null {
-  const supported = ['text', 'json', 'image', 'processor', 'agent'].includes(shape.props.nodeType)
+  const supported = ['text', 'json', 'image', 'audio', 'processor', 'agent'].includes(
+    shape.props.nodeType
+  )
   const [agentPort, setAgentPort] = useState('out-text')
   const portId =
     shape.props.nodeType === 'agent'
       ? agentPort
       : shape.props.nodeType === 'image'
         ? 'out-image'
-        : shape.props.nodeType === 'text'
-          ? 'out-text'
-          : shape.props.nodeType === 'json'
-            ? 'out-json'
-            : 'out-value'
+        : shape.props.nodeType === 'audio'
+          ? 'out-audio'
+          : shape.props.nodeType === 'text'
+            ? 'out-text'
+            : shape.props.nodeType === 'json'
+              ? 'out-json'
+              : 'out-value'
   const [versions, setVersions] = useState<FlowAssetSummary[]>([])
   const [selected, setSelected] = useState('')
   const [version, setVersion] = useState<FlowAssetVersion | null>(null)
@@ -144,7 +148,10 @@ export function FlowAssetPanel({
       <div className="contract-run-actions">
         <button
           type="button"
-          disabled={busy || (shape.props.nodeType === 'image' && Boolean(shape.meta.flowAssetRef))}
+          disabled={
+            busy ||
+            (['image', 'audio'].includes(shape.props.nodeType) && Boolean(shape.meta.flowAssetRef))
+          }
           onClick={() => void submit()}
         >
           提交当前输出为新版本
@@ -169,8 +176,10 @@ export function FlowAssetPanel({
         <>
           <p>当前查看 v{version.ordinal} · 已固定输出。修改节点正文不会更新这份版本。</p>
           <pre>
-            {version.value.kind === 'video' || version.value.kind === 'image'
-              ? `${version.value.kind === 'image' ? '图片' : '视频'}成果已保存，可放到画布预览`
+            {version.value.kind === 'video' ||
+            version.value.kind === 'image' ||
+            version.value.kind === 'audio'
+              ? `${version.value.kind === 'image' ? '图片' : version.value.kind === 'audio' ? '音频' : '视频'}成果已保存，可放到画布预览`
               : version.value.kind === 'json'
                 ? JSON.stringify(version.value.data, null, 2)
                 : version.value.text}

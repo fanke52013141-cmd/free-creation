@@ -5,6 +5,7 @@ import type { NodeShape } from '../../shared/engine/executor-types'
 import {
   flowTargetContract,
   videoFlowInputsValid,
+  videoFlowAssetValid,
   VIDEO_FLOW_PORTS
 } from '../../shared/agent-flow/video-adapter'
 import { readStoredNodeRunStatus } from '../../shared/engine/run-status'
@@ -34,6 +35,7 @@ import { FlowAssetStore } from './asset-store'
 import { FlowAssetError } from '../../shared/agent-flow/assets'
 import { FlowReviewStore } from './review-store'
 import { controlledReview } from './coordination-store'
+import { AgentTaskSnapshotSchema } from '../../shared/agent-flow/runtime-contracts'
 
 interface Row {
   project_id: string
@@ -307,8 +309,18 @@ export class FlowCommandLedger {
     return command.inputs.map((input) => {
       const versions = this.assets.resolveInputs(command.projectId, input.assets)
       if (
-        input.targetPortId === 'in-reference-video' &&
-        versions.some((version) => version.value.kind !== 'video' || !version.value.contentSha256)
+        savedShape(project, command.targetNodeId).props.nodeType === 'video' &&
+        versions.some((version) => !videoFlowAssetValid(input.targetPortId, version.value))
+      )
+        fail('FLOW_INPUT_CONTRACT_INVALID', 'video-input')
+      if (
+        ['in-reference-video', 'in-reference-audio'].includes(input.targetPortId) &&
+        versions.some(
+          (version) =>
+            !['video', 'audio'].includes(version.value.kind) ||
+            !('contentSha256' in version.value) ||
+            !version.value.contentSha256
+        )
       )
         fail('FLOW_INPUT_CONTRACT_INVALID', 'video-input')
       if (
@@ -368,6 +380,32 @@ export class FlowCommandLedger {
         } as FlowCommandPrepareResult
       }
       this.authorize(command, project)
+      const taskSnapshot = this.db
+        .prepare('SELECT snapshot_json FROM flow_agent_tasks WHERE project_id=? AND task_id=?')
+        .get(command.projectId, command.taskId) as { snapshot_json: string } | undefined
+      const rework =
+        taskSnapshot && AgentTaskSnapshotSchema.parse(JSON.parse(taskSnapshot.snapshot_json)).rework
+      const expectedRework =
+        rework?.videoTargetNodeId === command.targetNodeId
+          ? { reviewId: rework.reviewId, round: rework.round }
+          : undefined
+      if (
+        canonicalFlowJson(
+          command.videoRework
+            ? { reviewId: command.videoRework.reviewId, round: command.videoRework.round }
+            : null
+        ) !== canonicalFlowJson(expectedRework ?? null)
+      )
+        fail('FLOW_VIDEO_REWORK_INVALID', 'video-rework')
+      if (
+        expectedRework &&
+        this.db
+          .prepare(
+            'SELECT 1 FROM flow_commands WHERE project_id=? AND task_id=? AND target_node_id=?'
+          )
+          .get(command.projectId, command.taskId, command.targetNodeId)
+      )
+        fail('FLOW_VIDEO_REWORK_BUDGET_EXHAUSTED', 'video-rework')
       const inputs = this.resolveInputs(command, project)
       const agentConfig = AgentNodeConfigSchema.parse(
         JSON.parse(savedShape(project, command.agentNodeId).props.config)
@@ -475,9 +513,9 @@ export class FlowCommandLedger {
       row.admitted !== 0
     )
       fail('FLOW_LEASE_REJECTED', 'lease')
-    this.authorize(JSON.parse(row.command_json), this.file(input.projectId))
     const command = JSON.parse(row.command_json) as NodeExecuteCommand
-    for (const input of command.inputs) this.assets.resolveInputs(command.projectId, input.assets)
+    this.authorize(command, this.file(input.projectId))
+    for (const entry of command.inputs) this.assets.resolveInputs(command.projectId, entry.assets)
     this.db
       .prepare('UPDATE flow_commands SET admitted = 1 WHERE project_id = ? AND command_id = ?')
       .run(input.projectId, input.commandId)

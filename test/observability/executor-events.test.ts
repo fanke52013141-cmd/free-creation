@@ -3,7 +3,7 @@
 // 唯一终态；失败节点可定位阶段；敏感 fixture 不进入事件输出。
 import { beforeAll, afterEach, describe, expect, it } from 'vitest'
 import type { Editor } from 'tldraw'
-import { runWorkflow } from '@renderer/engine/executor'
+import { runWorkflow, runNodeManually } from '@renderer/engine/executor'
 import {
   flushDiagnosticsEvents,
   resetDiagnosticsReporterForTest
@@ -40,7 +40,11 @@ function node(id: string, nodeType: string, text: string): NodeCardShape {
   }
 }
 
-function arrow(id: string, fromPort: string, toPort: string): {
+function arrow(
+  id: string,
+  fromPort: string,
+  toPort: string
+): {
   id: string
   type: 'arrow'
   meta: { fromPort: string; toPort: string }
@@ -70,14 +74,22 @@ function setupEditor(
     getCurrentPageShapes: () => Array.from(map.values()),
     getShape: (id: string) => map.get(id),
     getBindingsFromShape: (id: string) => bindings[id] ?? [],
-    updateShape: (patch: { id: string; props?: Record<string, unknown>; meta?: Record<string, unknown> }) => {
+    updateShape: (patch: {
+      id: string
+      props?: Record<string, unknown>
+      meta?: Record<string, unknown>
+    }) => {
       const current = map.get(patch.id)
       if (!isCard(current)) return
       if (patch.props) Object.assign(current.props, patch.props)
       if (patch.meta) Object.assign(current.meta, patch.meta)
     },
     updateShapes: (
-      patches: Array<{ id: string; props?: Record<string, unknown>; meta?: Record<string, unknown> }>
+      patches: Array<{
+        id: string
+        props?: Record<string, unknown>
+        meta?: Record<string, unknown>
+      }>
     ) => {
       for (const patch of patches) {
         const current = map.get(patch.id)
@@ -105,6 +117,33 @@ const SOURCE_MID_BINDINGS = {
 }
 
 describe('A01 · 3 节点顺序运行共享根 trace', () => {
+  it('gives repeated publications distinct workflow spans linked to the same parent operation', async () => {
+    const source = node('shape:source', 'text', 'private-publication')
+    const { editor, events } = setupEditor([source])
+    const publication = {
+      projectId: 'project-1',
+      nodeId: source.id,
+      taskId: 'publication',
+      semanticRevision: `sha256:${'a'.repeat(64)}`,
+      traceId: 'trace-publication',
+      spanId: 'parent-publication'
+    }
+    await runNodeManually(editor, 'project-1', [], source.id, undefined, publication)
+    await runNodeManually(editor, 'project-1', [], source.id, undefined, publication)
+    flushDiagnosticsEvents()
+    await new Promise((resolve) => setTimeout(resolve, FLUSH_WAIT_MS))
+    const starts = events.filter((event) => event.event === 'workflow.started')
+    const ends = events.filter((event) =>
+      ['workflow.completed', 'workflow.failed', 'workflow.cancelled'].includes(event.event)
+    )
+    expect(starts).toHaveLength(2)
+    expect(new Set(starts.map((event) => event.spanId)).size).toBe(2)
+    for (const start of starts) {
+      expect(start.traceId).toBe(publication.traceId)
+      expect(start.parentSpanId).toBe(publication.spanId)
+      expect(ends.filter((end) => end.spanId === start.spanId)).toHaveLength(1)
+    }
+  })
   it('workflow.started/completed + 每节点 started/唯一终态，traceId 相同、nodeExecutionId 互不相同', async () => {
     const a = node('shape:source', 'text', '第一段')
     const b = node('shape:mid', 'processor', '')

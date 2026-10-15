@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import Database from 'better-sqlite3'
 import type { CanvasNode, ProjectFile } from '../src/shared/types'
 import { migrateDatabase } from '../src/main/store/db-migrations'
@@ -19,9 +19,11 @@ import type { DiagnosticsEventInput } from '../src/shared/observability'
 import { FlowReviewHost } from '../src/main/agent-flow/review-host'
 import { FlowReviewStore } from '../src/main/agent-flow/review-store'
 import { projectSemanticRevision } from '../src/main/agent-flow/command-intent'
+import { CoordinatorReviews } from '../src/main/agent-flow/coordinator-reviews'
 
 const dbs: Database.Database[] = []
 afterEach(() => {
+  vi.restoreAllMocks()
   dbs.splice(0).forEach((db) => db.close())
   setGatewayEventSink(null)
 })
@@ -36,6 +38,8 @@ const input = {
 function fixture(
   options: {
     coordinate?: (ctx: CoordinationContext) => Promise<CoordinationDecision>
+    parallel?: boolean
+    deliveryDuring?: (nodeId: string) => Promise<void>
     human?: boolean
     brokenState?: boolean
     publicationFails?: boolean
@@ -87,7 +91,10 @@ function fixture(
     maxSteps: 8,
     relations: [] as object[]
   })
-  const mainConfig = cfg('coordinator', ['first', 'second'])
+  const mainConfig = {
+    ...cfg('coordinator', ['first', 'second']),
+    ...(options.parallel ? { maxParallelTasks: 2 } : {})
+  }
   mainConfig.relations = [
     { relationId: 'state', kind: 'observes', sourceNodeId: 'main', targetNodeId: 'state' }
   ]
@@ -221,6 +228,13 @@ function fixture(
     groups: [],
     tldrawSnapshot: { store: byId }
   }
+  if (options.parallel) {
+    file.edges = file.edges.map((edge) =>
+      edge.from.nodeId === 'first'
+        ? { ...edge, from: { nodeId: 'material', portId: 'out-text' } }
+        : edge
+    )
+  }
   if (options.review) {
     file.edges.push(
       edge(options.review.manual ? 'material' : 'first', 'out-text', 'review', 'in-text')
@@ -242,6 +256,7 @@ function fixture(
       isActive: () => true,
       deliver: async (grant) => {
         executions++
+        await options.deliveryDuring?.(grant.command.targetNodeId)
         try {
           const c = grant.command,
             target = byId[c.targetNodeId],
@@ -1022,4 +1037,224 @@ describe('C3.3 coordinator sequential handoff', () => {
     expect(done.task.decisions).toBe(4)
     expect(f.count().executions).toBe(4)
   })
+})
+
+function parallelDecision(ctx: CoordinationContext): Promise<CoordinationDecision> {
+  return Promise.resolve(
+    ctx.available.length === 2
+      ? {
+          kind: 'dispatch-many',
+          assignments: ctx.available.map((item) => ({
+            nodeId: item.nodeId,
+            goal: item.goal,
+            inputs: item.inputs,
+            completion: '交付真实固定成果'
+          }))
+        }
+      : { kind: 'finish', outputs: ctx.completed.at(-1)!.outputs }
+  )
+}
+function deferred() {
+  let resolve!: () => void
+  const promise = new Promise<void>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
+describe('bounded parallel coordination', () => {
+  it('saves both intents before effects and actually overlaps independent tasks', async () => {
+    const both = deferred(),
+      entered = new Set<string>()
+    const f = fixture({
+      parallel: true,
+      coordinate: parallelDecision,
+      deliveryDuring: async (id) => {
+        const run = f.coordinator.store.latest('p', 'main')!
+        expect(run.children).toHaveLength(2)
+        expect(run.children.every((child) => child.inputs.length > 0 && child.taskId)).toBe(true)
+        entered.add(id)
+        if (entered.size === 2) both.resolve()
+        await both.promise
+      }
+    })
+    const reply = await f.host.run(input)
+    expect(reply.task.state).toBe('completed')
+    expect(reply.task.children?.map((child) => child.state)).toEqual(['completed', 'completed'])
+    expect(f.count()).toEqual({ executions: 4, modelCalls: 2 })
+    expect(f.coordinator.store.latest('p', 'main')!.controlSteps).toBe(1)
+  })
+  it.each(['disabled', 'duplicate', 'invalid-input', 'budget', 'dependency'] as const)(
+    'rejects the entire %s batch without starting any child',
+    async (kind) => {
+      const f = fixture({
+        parallel: true,
+        coordinate: async (ctx) => {
+          const decision = await parallelDecision(ctx)
+          if (decision.kind !== 'dispatch-many') throw new Error('missing batch')
+          if (kind === 'duplicate') decision.assignments[1] = decision.assignments[0]
+          if (kind === 'invalid-input')
+            decision.assignments[1].inputs = [
+              { ...decision.assignments[1].inputs[0], versionId: 'forged' }
+            ]
+          return decision
+        }
+      })
+      const cfg = JSON.parse(f.byId.main.props.config)
+      if (kind === 'disabled') delete cfg.maxParallelTasks
+      if (kind === 'budget') cfg.maxSteps = 1
+      f.byId.main.props.config = JSON.stringify(cfg)
+      f.file.nodes.find((node) => node.id === 'main')!.params.config = f.byId.main.props.config
+      if (kind === 'dependency')
+        f.file.edges.push({
+          id: 'cross',
+          from: { nodeId: 'process-first', portId: 'out-value' },
+          to: { nodeId: 'process-second', portId: 'in-value' }
+        })
+      await expect(f.host.run(input)).rejects.toThrow()
+      expect(f.count().executions).toBe(0)
+      expect(f.coordinator.store.latest('p', 'main')!.children).toHaveLength(0)
+    }
+  )
+  it('preserves a successful sibling when the other branch fails', async () => {
+    const f = fixture({ parallel: true, coordinate: parallelDecision })
+    const original = f.host.runAssignment.bind(f.host)
+    vi.spyOn(f.host, 'runAssignment').mockImplementation((request, ...args) =>
+      request.nodeId === 'second'
+        ? Promise.reject(new Error('isolated failure'))
+        : original(request, ...args)
+    )
+    await expect(f.host.run(input)).rejects.toThrow('isolated failure')
+    const run = f.coordinator.store.latest('p', 'main')!
+    expect(run.state).toBe('blocked')
+    expect(run.children.map((child) => child.state)).toEqual(['completed', 'blocked'])
+    expect(run.children[0].outputs).toHaveLength(1)
+    expect(f.byId.first.meta.nodeResult).toBeTruthy()
+  })
+  it('stops both in-flight branches and ignores late replies', async () => {
+    const both = deferred(),
+      release = deferred(),
+      entered = new Set<string>()
+    const f = fixture({
+      parallel: true,
+      coordinate: parallelDecision,
+      deliveryDuring: async (id) => {
+        entered.add(id)
+        if (entered.size === 2) both.resolve()
+        await release.promise
+      }
+    })
+    const running = f.host.run(input)
+    await both.promise
+    const stopped = f.host.stop({ projectId: 'p', nodeId: 'main' })!
+    expect(stopped.state).toBe('cancelled')
+    expect(stopped.children?.every((child) => child.state === 'cancelled')).toBe(true)
+    release.resolve()
+    expect((await running).task.state).toBe('cancelled')
+    expect(f.byId.first.meta.nodeResult).toBeUndefined()
+    expect(f.byId.second.meta.nodeResult).toBeUndefined()
+    expect(f.count().modelCalls).toBe(1)
+    const saved = f.coordinator.store.latest('p', 'main')!
+    const replay = await f.host.run({
+      ...input,
+      action: 'reconcile',
+      eventId: 'reconcile-stop',
+      expectedTaskId: saved.taskId,
+      expectedWaitRevision: saved.waitRevision
+    })
+    expect(replay.task.state).toBe('cancelled')
+    expect(f.count().modelCalls).toBe(1)
+  })
+  it.each([false, true])(
+    'collects a completed sibling while another child waits (review wait: %s)',
+    async (reviewWait) => {
+      const f = fixture({ parallel: true, human: true, coordinate: parallelDecision })
+      // Both branches deliberately wait so completion can arrive in reverse order.
+      const config = JSON.parse(f.byId.first.props.config)
+      config.interactionMode = 'collaborative'
+      f.byId.first.props.config = JSON.stringify(config)
+      f.file.nodes.find((node) => node.id === 'first')!.params.config = f.byId.first.props.config
+      const waiting = await f.host.run(input)
+      expect(waiting.task.state).toBe('waiting')
+      const child = f.host.inspect({ projectId: 'p', nodeId: 'second' })!
+      await f.host.run({
+        ...input,
+        nodeId: 'second',
+        action: 'continue',
+        requestId: 'second-continue',
+        eventId: 'second-continue',
+        expectedTaskId: child.taskId,
+        expectedWaitRevision: child.waitRevision
+      })
+      if (reviewWait) vi.spyOn(CoordinatorReviews.prototype, 'step').mockResolvedValue('wait')
+      const resumed = await f.host.run({
+        ...input,
+        action: 'continue',
+        requestId: 'main-continue',
+        eventId: 'main-continue',
+        expectedTaskId: waiting.task.taskId,
+        expectedWaitRevision: waiting.task.waitRevision
+      })
+      expect(resumed.task.state).toBe('waiting')
+      expect(resumed.task.children?.map((child) => child.state)).toEqual(['waiting', 'completed'])
+      expect(f.byId.second.meta.nodeResult).toBeTruthy()
+      expect(f.count()).toEqual({ executions: 4, modelCalls: 1 })
+    }
+  )
+})
+
+it('stopping a parallel join preserves a sibling that already completed authoritatively', async () => {
+  const firstDone = deferred(),
+    release = deferred(),
+    secondEntered = deferred()
+  const f = fixture({ parallel: true, coordinate: parallelDecision })
+  const original = f.host.runAssignment.bind(f.host)
+  vi.spyOn(f.host, 'runAssignment').mockImplementation(async (request, ...args) => {
+    if (request.nodeId === 'second') {
+      secondEntered.resolve()
+      await release.promise
+    }
+    const reply = await original(request, ...args)
+    if (request.nodeId === 'first') firstDone.resolve()
+    return reply
+  })
+  const pending = f.host.run(input)
+  await Promise.all([firstDone.promise, secondEntered.promise])
+  const stopped = f.host.stop({ projectId: 'p', nodeId: 'main' })!
+  expect(stopped.children?.map((child) => child.state)).toEqual(['completed', 'cancelled'])
+  expect(f.coordinator.store.latest('p', 'main')!.children[0].outputs).toHaveLength(1)
+  release.resolve()
+  expect((await pending).task.state).toBe('cancelled')
+  expect(f.count().executions).toBe(2)
+  expect(f.byId.first.meta.nodeResult).toBeUndefined()
+})
+it('restores both completed parallel projections without running another tool or decision', async () => {
+  const options = { parallel: true, coordinate: parallelDecision, publicationFails: true }
+  const f = fixture(options)
+  await expect(f.host.run(input)).rejects.toThrow()
+  const run = f.coordinator.store.latest('p', 'main')!
+  expect(run.children.map((child) => child.state)).toEqual(['completed', 'completed'])
+  const before = f.count()
+  options.publicationFails = false
+  const restored = await f.host.run({
+    ...input,
+    action: 'restore',
+    requestId: 'restore-both',
+    eventId: 'restore-both',
+    expectedTaskId: run.taskId,
+    expectedWaitRevision: run.waitRevision
+  })
+  expect(restored.task.state).toBe('waiting')
+  expect(f.byId.first.meta.nodeResult).toBeTruthy()
+  expect(f.byId.second.meta.nodeResult).toBeTruthy()
+  expect(f.count()).toEqual(before)
+  const completed = await f.host.run({
+    ...input,
+    action: 'continue',
+    requestId: 'join-restored',
+    eventId: 'join-restored',
+    expectedTaskId: run.taskId,
+    expectedWaitRevision: restored.task.waitRevision
+  })
+  expect(completed.task.state).toBe('completed')
+  expect(f.count().executions).toBe(4)
 })

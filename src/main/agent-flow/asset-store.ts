@@ -131,11 +131,13 @@ export class FlowAssetStore {
             ? 'out-text'
             : record.props.nodeType === 'json'
               ? 'out-json'
-              : ['video', 'video-asset', 'image'].includes(record.props.nodeType)
-                ? record.props.nodeType === 'image'
-                  ? 'out-image'
-                  : 'out-video'
-                : 'out-value'
+              : record.props.nodeType === 'audio'
+                ? 'out-audio'
+                : ['video', 'video-asset', 'image'].includes(record.props.nodeType)
+                  ? record.props.nodeType === 'image'
+                    ? 'out-image'
+                    : 'out-video'
+                  : 'out-value'
         if (record.props.nodeType === 'agent') {
           if (!['out-text', 'out-json'].includes(input.portId)) fail('ASSET_PORT_INVALID')
           if (runStatus !== 'success') fail('ASSET_OUTPUT_UNAVAILABLE')
@@ -194,12 +196,17 @@ export class FlowAssetStore {
           value.kind !== 'markdown' &&
           value.kind !== 'json' &&
           value.kind !== 'video' &&
-          value.kind !== 'image'
+          value.kind !== 'image' &&
+          value.kind !== 'audio'
         )
           fail('ASSET_VALUE_UNSUPPORTED')
         if (value.kind === 'image') {
           if (record.props.nodeType !== 'image' || pinned) fail('ASSET_OUTPUT_INVALID')
           value = fixedFlowImage(this.db, input.projectId, value)
+        }
+        if (value.kind === 'audio') {
+          if (record.props.nodeType !== 'audio' || pinned) fail('ASSET_OUTPUT_INVALID')
+          value = fixedFlowMedia(this.db, input.projectId, value)
         }
         if (value.kind === 'video' && record.props.nodeType === 'video-asset' && !pinned) {
           value = fixedFlowMedia(this.db, input.projectId, value)
@@ -286,6 +293,10 @@ export class FlowAssetStore {
     }
     if (version.value.kind === 'video' && version.value.contentSha256 !== undefined) {
       if (!/^[a-f0-9]{64}$/.test(version.value.contentSha256)) fail('ASSET_INTEGRITY_FAILED')
+      fixedFlowMedia(this.db, projectId, version.value)
+    }
+    if (version.value.kind === 'audio') {
+      if (!/^[a-f0-9]{64}$/.test(version.value.contentSha256 ?? '')) fail('ASSET_INTEGRITY_FAILED')
       fixedFlowMedia(this.db, projectId, version.value)
     }
     return version

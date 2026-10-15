@@ -25,6 +25,7 @@ export const projectProcessorOutputs = (shape: NodeShape): RawNodeOutputs => {
 
 export const DETERMINISTIC_PROJECTIONS = {
   image: projectImageOutputs,
+  audio: projectAudioAssetOutputs,
   video: projectVideoOutputs,
   'video-asset': projectVideoAssetOutputs,
   'ai-review': projectReviewOutputs,
@@ -105,6 +106,20 @@ export function projectVideoAssetOutputs(shape: NodeShape): RawNodeOutputs {
     ? {
         'out-video': {
           kind: 'video',
+          mediaId: shape.props.mediaId,
+          mediaPath: shape.props.mediaPath,
+          mime: shape.props.mediaMime,
+          ...(shape.props.title ? { name: shape.props.title } : {})
+        }
+      }
+    : {}
+}
+
+export function projectAudioAssetOutputs(shape: NodeShape): RawNodeOutputs {
+  return shape.props.mediaPath
+    ? {
+        'out-audio': {
+          kind: 'audio',
           mediaId: shape.props.mediaId,
           mediaPath: shape.props.mediaPath,
           mime: shape.props.mediaMime,

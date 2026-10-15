@@ -238,3 +238,31 @@ describe('C2.2 command intent foundation (not dispatch authorization)', () => {
     expect(nodeCommandIntentSignature(original)).not.toBe(ordered)
   })
 })
+
+it('keeps disconnected fixed result cards neutral, but validates their identity and bytes once connected', () => {
+  const file = project(),
+    baseline = projectSemanticRevision(file)
+  const copy = { ...file.nodes[0], id: 'copy', type: 'video-asset' as const }
+  file.nodes.push(copy)
+  const store = (file.tldrawSnapshot as { store: Record<string, unknown> }).store
+  const saved = {
+    id: 'copy',
+    type: 'node-card',
+    props: { nodeType: 'video-asset', title: '固定视频' },
+    meta: { pinnedOutput: 'version-one', flowAssetRef: 'ref-one' }
+  }
+  store.copy = saved
+  expect(projectSemanticRevision(file)).toBe(baseline)
+  file.edges.push({
+    id: 'wire',
+    from: { nodeId: 'copy', portId: 'out-video' },
+    to: { nodeId: 'shape:target', portId: 'in-value' }
+  })
+  const connected = projectSemanticRevision(file)
+  expect(connected).not.toBe(baseline)
+  saved.meta.pinnedOutput = 'version-two'
+  expect(projectSemanticRevision(file)).not.toBe(connected)
+  file.edges = []
+  delete (saved.meta as Record<string, unknown>).flowAssetRef
+  expect(projectSemanticRevision(file)).not.toBe(baseline)
+})

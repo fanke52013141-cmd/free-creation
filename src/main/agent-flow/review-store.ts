@@ -1,3 +1,4 @@
+import { assertVideoReviewEvidence } from './video-review'
 import type Database from 'better-sqlite3'
 import { createHash } from 'node:crypto'
 import type { ProjectFile } from '../../shared/types'
@@ -42,6 +43,9 @@ export function reviewBinding(
     throw new AgentRuntimeError('FLOW_REVIEW_CONFIG_INVALID', 'review')
   if (new Set(config.subjectSources.map(canonicalFlowJson)).size !== config.subjectSources.length)
     throw new AgentRuntimeError('FLOW_REVIEW_CONFIG_INVALID', 'review')
+  const videoReview = config.reviewMode === 'sampled-video'
+  if (videoReview && config.subjectSources.length !== 1)
+    throw new AgentRuntimeError('FLOW_REVIEW_SUBJECT_INVALID', 'review')
   const sources = config.subjectSources.map((source) => {
     const node = file.nodes.find((n) => n.id === source.nodeId),
       saved = store[source.nodeId]
@@ -53,14 +57,20 @@ export function reviewBinding(
     if (
       !saved ||
       !port ||
-      !['text', 'json', 'any'].includes(port.type) ||
+      !(videoReview ? port.type === 'video' : ['text', 'json', 'any'].includes(port.type)) ||
       !connections.length ||
-      connections.some((e) => !['in-text', 'in-json'].includes(e.to.portId))
+      connections.some(
+        (e) =>
+          !(videoReview ? e.to.portId === 'in-video' : ['in-text', 'in-json'].includes(e.to.portId))
+      )
     )
       throw new AgentRuntimeError('FLOW_REVIEW_SUBJECT_INVALID', 'review')
     // Include result/run identity: a different attempt with identical text still needs a new review.
     return {
       source,
+      ...(videoReview
+        ? { media: [saved.props.mediaId, saved.props.mediaPath, saved.props.mediaMime] }
+        : {}),
       type: node!.type,
       contractVersion: node!.contractVersion,
       config: saved.props.config,
@@ -115,6 +125,13 @@ export class FlowReviewStore {
         record.signature !== current.signature ||
         !record.decision.passed ||
         readStoredNodeRunStatus(current.shape.meta?.nodeRun) !== 'success'
+      )
+        return null
+      if (current.config.reviewMode === 'sampled-video')
+        assertVideoReviewEvidence(this.db, file.meta.id, record.decision)
+      else if (
+        record.decision.evidenceScope !== 'complete-text-json' ||
+        record.decision.videoEvidence
       )
         return null
       return canonicalFlowJson(JSON.parse(current.shape.meta?.nodeResult ?? '{}')) ===

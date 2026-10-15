@@ -95,6 +95,7 @@ interface WorkflowContext {
   traceId: string
   /** 工作流级 span；节点事件的 parentSpanId 指向它。 */
   workflowSpanId: string
+  workflowParentSpanId?: string
   /** 迭代子流程当前批次（runSubflowForIterate 填写），随节点事件携带 batchId/itemId。 */
   batch?: { batchId: string; itemId?: string }
   /** 独立节点任务不写入前台工作流的进度和错误汇总。 */
@@ -124,7 +125,10 @@ function reportRunError(
 function emitWorkflowEvent(
   event: string,
   message: string,
-  scope: Pick<WorkflowContext, 'traceId' | 'workflowSpanId' | 'runId' | 'projectId' | 'taskId'>,
+  scope: Pick<
+    WorkflowContext,
+    'traceId' | 'workflowSpanId' | 'workflowParentSpanId' | 'runId' | 'projectId' | 'taskId'
+  >,
   options: {
     status?: 'success' | 'failed' | 'cancelled'
     attributes?: Record<string, unknown>
@@ -138,6 +142,7 @@ function emitWorkflowEvent(
       {
         traceId: scope.traceId,
         spanId: scope.workflowSpanId,
+        ...(scope.workflowParentSpanId ? { parentSpanId: scope.workflowParentSpanId } : {}),
         runId: scope.runId,
         projectId: scope.projectId
       },
@@ -1469,7 +1474,8 @@ export async function runNodeManually(
     subflowBaseInputs: new Map(),
     runId: command?.grant.runId ?? publication?.taskId ?? crypto.randomUUID(),
     traceId: command?.grant.command.traceId ?? publication?.traceId ?? newTraceId(),
-    workflowSpanId: command?.grant.command.spanId ?? publication?.spanId ?? newSpanId(),
+    workflowSpanId: newSpanId(),
+    workflowParentSpanId: command?.grant.command.spanId ?? publication?.spanId,
     command,
     controlledRequestId: publication?.kind === 'review' ? publication.taskId : undefined,
     taskId: command?.grant.command.taskId,

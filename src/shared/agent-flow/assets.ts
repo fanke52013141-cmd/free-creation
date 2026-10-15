@@ -24,6 +24,7 @@ export type FlowAssetValue =
   | { kind: 'text' | 'markdown'; text: string }
   | { kind: 'json'; data: unknown }
   | { kind: 'image'; mediaId: string; mediaPath: string; mime: string; contentSha256: string }
+  | { kind: 'audio'; mediaId: string; mediaPath: string; mime: string; contentSha256: string }
   | { kind: 'video'; mediaId: string; mediaPath: string; mime: string; contentSha256?: string }
 export interface FlowAssetVersion {
   ref: z.infer<typeof AgentFlowAssetRefSchema>

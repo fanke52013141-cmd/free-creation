@@ -1,5 +1,15 @@
 # 节点输入输出契约规范
 
+2026-10-16 工作区接续：video@7 Agent 调度接入已有 in-prompt 的 prompt.bundle@1，专业任务和命令准入均验证正文结构；reference 模式支持有序多路视频/音频，结构上限 30，所选模型的实际较低上限继续强制校验。返工 execute_node 可提交有界 prompt 修订指令，只限原 video 返工目标；固定于 videoRework 命令并参与意图签名，原目标/输入/反馈不改写，unknown 沿原命令接回。同一控制范围的多个审核等待不遮挡其他已完成成果的收集。节点端口/版本不变；实际验证与未完成范围见 [39](docs/canvas-agent-flow/39-parallel-review-rework.md)、[40](docs/canvas-agent-flow/40-multi-reference-prompt-bundle.md) 和[总台账](docs/canvas-agent-flow/38-agent-completion-plan.md)，不能将仍在运行的完整门禁标为通过。
+
+2026-10-15 并行媒体：agent@1 主控可选 maxParallelTasks=1/2，默认顺序；SDK 显式两项派发，main 校验独立写范围、固定输入和额外预算。两路各自保留真实固定视频资产，主控输出端口/基数不变；未连线固定展示副本不改程序语义版本，连入数据边后严格校验。停止终止本地任务且保留未知命令占用，核对/继续只接原任务。验收与限制见 [37 包](docs/canvas-agent-flow/37-parallel-media-stop-recovery.md)。
+
+2026-10-15 视频有界自动返工：sampled-video 可绑定专业 Agent 所控制的唯一 video@7 out-video 来源；审核直接复用当前 committed 命令的固定输出，结论须属于该专业任务。rework 快照增加可选 videoTargetNodeId，node.execute 增加可选 videoRework（reviewId/round）并进入意图签名，main 核对冻结反馈并限定每轮一个视频命令，unknown 不开新轮。未改节点端口或 contractVersion；普通素材人工复审保持。验收与边界见 [36 包](docs/canvas-agent-flow/36-video-review-bounded-rework.md)。
+
+2026-10-15 视频抽帧审核：ai-review@1 可显式选择 sampled-video，唯一 out-video → in-video，冻结单路 MP4 并发送四张真实 JPEG；review.decision@1 增加可选 videoEvidence，严格限定 sampled 范围、时间和摘要。文本/JSON 默认与旧配置保持，门禁由 main 已保存报告和固定视频完整性共同裁决；主控自动视频返工暂拒绝。验收与限制见 [抽帧审核包](docs/canvas-agent-flow/35-sampled-video-review.md)。
+
+2026-10-15 单路参考音频：video@7 的 Agent reference 模式接受一路固定 audio/out-audio → in-reference-audio（最多 20 MiB），可组合已支持图片/视频/文本，继续校验模型能力、固定摘要、实际发送字节与原任务音频列表。固定音频项目包与预览同步扩展；验收状态和边界见 [音频参考包](docs/canvas-agent-flow/34-video-audio-reference-adapter.md)。
+
 2026-10-15 Agent 视频运动参考：video@7 的 reference 模式新增一路固定视频 in-reference-video（普通 video-asset 自动固定摘要，首版最多 20 MiB），可加已有有序图片和一路文本；依所选模型能力校验，音频/多路视频/提示词包仍拒绝。普通端口、contractVersion 和手动能力不变。固定版本、实际发送字节与原任务视频列表均校验；历史未带摘要的生成成果仍可预览/连接，但不能直接当作可信运动参考。验收与边界见 docs/canvas-agent-flow/32-video-motion-reference-adapter.md。
 
 2026-10-15 Agent 视频图片参考适配：video@7 的 reference 模式仅接受有序固定图片 in-images（1–30 的公共硬界，实际依已选模型能力更低上限）和最多一路文本；混入其他媒体/提示词包拒绝。固定来源、版本与实际编码字节均校验，原命令恢复绑定有序媒体列表，不重发生成。既有端口/contractVersion 和手动行为保持。验收边界见 docs/canvas-agent-flow/31-video-reference-images-adapter.md。

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { VideoReviewEvidenceSchema } from './video-review'
 
 // C1 protocol foundation for configuration-only NodeTypeSpecs; not a production scheduler.
 const id = z
@@ -35,6 +36,7 @@ export const AgentNodeConfigSchema = z
     tools: z.array(versionedBinding).max(32),
     allowedNodeIds: z.array(id).max(128),
     maxSteps: z.number().int().min(1).max(64),
+    maxParallelTasks: z.union([z.literal(1), z.literal(2)]).optional(),
     relations: z.array(AgentFlowRelationSchema).max(256)
   })
   .strict()
@@ -42,6 +44,7 @@ export const ReviewNodeConfigSchema = z
   .object({
     schemaVersion: z.literal(1),
     rulesVersion: id,
+    reviewMode: z.enum(['text-json', 'sampled-video']).optional(),
     modelDefinitionId: id.optional(),
     rejectPolicy: z.enum(['rework', 'stop']),
     maxReworks: z.number().int().min(0).max(10),
@@ -92,6 +95,7 @@ export const ReviewDecisionSchema = z
     passed: z.boolean(),
     feedback: z.string().min(1).max(16384),
     evidenceScope: z.enum(['complete-text-json', 'sampled', 'partial']),
+    videoEvidence: VideoReviewEvidenceSchema.optional(),
     issues: z
       .array(
         z.object({ assetId: id, versionId: id, feedback: z.string().min(1).max(4096) }).strict()
@@ -104,6 +108,8 @@ export const ReviewDecisionSchema = z
       report.subjects.map((item) => JSON.stringify([item.assetId, item.versionId]))
     )
     if (
+      (report.videoEvidence &&
+        (report.evidenceScope !== 'sampled' || report.subjects.length !== 1)) ||
       refs.size !== report.subjects.length ||
       report.issues.some((issue) => !refs.has(JSON.stringify([issue.assetId, issue.versionId])))
     ) {

@@ -1,5 +1,21 @@
 # 日志覆盖清单
 
+## 2026-10-15 并行媒体调度、停止与恢复（首包已验收）
+
+两路专业任务复用主控/专业/命令、公共 node/workflow、SDK model 与视频任务/媒体/资产/保存生命周期，各路 task/command 独立，主控收集串行。新增整批拒绝只记录安全码与 handoff 阶段，不记录分派目标、输入正文或完成标准。48 定向与两个流程的双进程桌面通过；4 POST started/accepted、2 下载和原任务接回，停止后的 unknown 占用保持。桌面扫描 desktop、同步 model、node/workflow 唯一终态及正文/Key/MP4 排除；异步视频完整终态/trace、既有 task/media 和 save correlationMissing 盲区保留。2026-10-16 最终完整 verify 退出码 0（1953 通过/1 既有跳过，模型另 2，17 浏览器/构建/21 桌面）。最新两 session：desktop 9/9、同步 model 13/13、command 20/20、node 11/11、workflow 11/11 唯一终态配对；save 39/39 仅总数。截图已人工查看，首次参考音频 setup 超时与原断言复核记录保留，详见 [37 包](canvas-agent-flow/37-parallel-media-stop-recovery.md)。
+
+## 2026-10-15 视频抽帧审核有界自动返工（首包已验收）
+
+复用 agent.desktop/coordination/runtime、review/rework 阶段、command、node/workflow、model/task/media/save/asset 生命周期；新增视频返工意图/每轮单命令拒绝仅用安全枚举和 video-rework 阶段。冻结标准/反馈只进任务与有效供应商提示词，不进诊断。公共手动/命令/成果呈现工作流新增独立 span 并保留 parentSpanId，避免自动审核多次呈现复用父 span。216 定向及最终完整 verify 退出码 0（1940 通过/1 既有跳过，模型另 2；17 浏览器/构建/20 桌面）。最新两 session desktop 9/9、同步 model 15/15、command 23/23、node 13/13、workflow 13/13 唯一终态配对、恢复 trace 与实际正文/Key/媒体字节排除通过；2 次视频异步 POST 仍只有 started/accepted，不计完整请求终态，project.save 35/35 只计总数且 correlationMissing 盲区保持。验收夹具 fetch 已逐文件登记理由，未豁免生产路径。失败修复、日志模板自查与边界见 [36 包](canvas-agent-flow/36-video-review-bounded-rework.md)。没有真实付费媒体/模型或完整媒体 trace 验收。
+
+## 2026-10-15 视频抽帧画面审核（首包已验收）
+
+复用正式审核 agent.desktop、SDK model.request、公共 node/workflow、固定资产与保存生命周期，不逐帧记重复事件。新增 FLOW_VIDEO_REVIEW_* 安全失败，正式 IPC 终态保持 phase=review，内部采样错误阶段为 video-review-samples；FFmpeg stderr、规则/反馈、路径、JPEG/Data URL、原始响应与凭据排除，桌面扫描新增 JPEG 与 MP4 前缀。18 定向及最终完整 verify 退出码 0（1923 通过/1 既有跳过，模型另 2；17 浏览器/构建/19 桌面）。最新两 session 的 desktop 3/3、model 6/6、command 11/11、node 4/4、workflow 4/4 唯一终态配对和实际脱敏通过；project.save 16/16 仅总数，其既有 correlationMissing 不宣称逐保存配对。首轮隐藏 renderer 退出丢缓冲的夹具问题及修复、日志模板自查和边界见 [35 包](canvas-agent-flow/35-sampled-video-review.md)。供应商视觉决策为隔离协议夹具，无付费模型请求；不外推全视频/音轨理解、远端取消或完整媒体 trace 树。
+
+## 2026-10-15 单路参考音频（首包已验收）
+
+复用 Agent/协调/命令/公共节点、模型、任务、媒体/资产/保存及 project.transfer 生命周期；新增 ASSET_AUDIO_CHANGED/audio-integrity 安全失败码。固定音频实际文件与编码字节、原任务列表和项目包摘要校验不新增重复终态。日志模板自查、验证证据及未覆盖边界见 [音频参考包](canvas-agent-flow/34-video-audio-reference-adapter.md)，141 定向及完整 verify 退出码 0（1914 通过/1 既有跳过，模型另 2，17 浏览器/构建/18 桌面）；最新两个 session 的 desktop 6/6、coordination 2/2、transfer 2/2、asset 7/7、command 13/13 配对与实际脱敏通过；8 个同步模型请求按 requestId 配对，既有视频异步 POST 仅 started/accepted，后续 task/media 承载结果，完整请求终态/trace 树盲区保持；不外推付费媒体、远端撤回、完整媒体 trace 树或音频导入强杀。
+
 ## 2026-10-15 固定媒体项目包
 
 固定图片/视频的导出验证、临时导入验证、身份与引用重映射及事务回滚复用项目 IPC 的 project.transfer.started/committed/failed 和公共打开/保存事件，不重复终态。新增三个媒体/预览受控错误码，保留 validation-or-transaction 阶段，不记录包内容、文件路径、媒体字节、提示词或凭据。28 定向（含真实 SQLite 写入失败回滚）及完整 verify 退出码 0（1895 通过/1 既有跳过，模型另 2，17 浏览器/构建/17 桌面）；正式 IPC 双进程导入 6 版本与预览通过。最终实际诊断 desktop 6/6、coordination 2/2、transfer 2/2 唯一终态配对及正文/Key/图片/视频内容排除通过，证据见 [33 包交接](canvas-agent-flow/33-fixed-media-project-transfer.md)。旧无摘要视频无法证明历史内容未变；导入中强杀、掉电、超大包流式化与完整媒体 trace 树未验证。
@@ -388,3 +404,9 @@ C3.1b 最终结果：desktop-final-accepted.log 完整 verify 通过（155 文�
 构建后另复验四类真实 renderer 保存中断：存活 main 的公共保存诊断 11 开始/11 终态，正文脱敏及无模型请求断言通过，见本包 `renderer.log` 与 `renderer-results.json`。该证据不代替被强杀 main 的不可观察终态或完整恢复 trace 树。
 
 最终完整 verify 串行通过（165 文件、1772 通过、1 既有跳过，模型另 2，17 浏览器、生产构建、11 组隐藏桌面）；后续测试清理保证调整另复验 9 项定向及受影响文件 lint。日志门禁通过，证据 `qa/c4-main-save-20261014/verify.log`。
+# 2026-10-16 并行审核返工接续（验收中）
+
+审核循环跳过人工/协作等待后继续检查其他支路，主控先收集真实完成成果再等待；复用现有 agent.coordination.stage、agent.desktop/runtime、model.request、command、node/workflow、task/media/asset/save 生命周期，不为轮询或跳过等待新增日志。新增隔离 --parallel-review 夹具不进入应用入口，fetch 替身已登记理由，不豁免生产网络或正文/密钥禁令。
+
+6 文件 120 定向通过（qa/parallel-review-directed.log），含等待公平性、身份冲突、停止迟到及命令/强杀/真实抽帧回归；类型/lint/日志旁路门禁通过。真实桌面组合的唯一终态配对、恢复关联、脱敏和完整 verify 尚待运行；不能将本段当作全链路完成证据。既有异步媒体完整 trace、task/media correlationMissing 和保存关联盲区保持；详见 [39 接续](canvas-agent-flow/39-parallel-review-rework.md)。
+

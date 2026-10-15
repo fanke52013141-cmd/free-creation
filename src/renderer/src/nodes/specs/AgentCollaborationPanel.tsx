@@ -198,7 +198,9 @@ export function AgentCollaborationPanel({
                 .then((reply) => {
                   if (reply.ok)
                     setPreview(
-                      reply.data.value.kind === 'video' || reply.data.value.kind === 'image'
+                      reply.data.value.kind === 'video' ||
+                        reply.data.value.kind === 'image' ||
+                        reply.data.value.kind === 'audio'
                         ? '媒体成果已保存，可通过成果节点预览'
                         : reply.data.value.kind === 'json'
                           ? JSON.stringify(reply.data.value.data, null, 2)

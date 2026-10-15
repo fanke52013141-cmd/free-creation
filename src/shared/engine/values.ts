@@ -204,7 +204,7 @@ export function parseStoredNodeValue(text: string): NodeValue | null {
         mediaId: value.mediaId,
         mediaPath: value.mediaPath,
         mime: value.mime,
-        ...((value.kind === 'image' || value.kind === 'video') &&
+        ...((value.kind === 'image' || value.kind === 'video' || value.kind === 'audio') &&
         typeof value.contentSha256 === 'string'
           ? { contentSha256: value.contentSha256 }
           : {})

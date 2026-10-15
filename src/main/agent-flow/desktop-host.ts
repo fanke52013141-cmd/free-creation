@@ -26,6 +26,7 @@ import { stopAgentVideos } from './video-tasks'
 import { controlVideoTask } from '../gateway/video'
 import {
   videoFlowInputsValid,
+  videoFlowAssetValid,
   flowTargetContract,
   agentOutputValue
 } from '../../shared/agent-flow/video-adapter'
@@ -42,6 +43,14 @@ import { CoordinationStore } from './coordination-store'
 import { FlowReviewStore, reviewBinding } from './review-store'
 
 type Identity = { projectId: string; nodeId: string }
+/** Raw shape configs may predate a save; a broken draft must not crash reads with a bare JSON.parse. */
+function agentRoleOf(config: string | undefined): string | undefined {
+  try {
+    return (JSON.parse(config ?? '{}') as { role?: string }).role
+  } catch {
+    return undefined
+  }
+}
 const view = (record: AgentTaskRecord): FlowAgentView => ({
   taskId: record.snapshot.taskId,
   state: record.state,
@@ -120,7 +129,7 @@ export class FlowAgentDesktopHost {
     if (
       this.coordinator &&
       (type?.nodeType === 'state-machine' ||
-        (type?.nodeType === 'agent' && JSON.parse(type.config).role === 'coordinator'))
+        (type?.nodeType === 'agent' && agentRoleOf(type.config) === 'coordinator'))
     )
       return this.coordinator.inspect(input)
     const owner = new CoordinationStore(this.db).owner(input.projectId, input.nodeId)
@@ -175,7 +184,7 @@ export class FlowAgentDesktopHost {
     return { ...view(record), reviewFeedback }
   }
   stop(input: Identity): FlowAgentView | null {
-    if (this.coordinator && JSON.parse(this.saved(input).shape.props.config).role === 'coordinator')
+    if (this.coordinator && agentRoleOf(this.saved(input).shape.props.config) === 'coordinator')
       return this.coordinator.stop(input)
     this.saved(input)
     this.controllers.get(this.key(input))?.abort()
@@ -305,9 +314,13 @@ export class FlowAgentDesktopHost {
           inputs.map((input) => ({
             targetPortId: input.targetPortId,
             kinds: this.assets.resolveInputs(raw.projectId, input.assets).map((version) => {
+              if (!videoFlowAssetValid(input.targetPortId, version.value))
+                throw new AgentRuntimeError('AGENT_INPUT_TYPE_INVALID', 'admission')
               if (
-                input.targetPortId === 'in-reference-video' &&
-                (version.value.kind !== 'video' || !version.value.contentSha256)
+                ['in-reference-video', 'in-reference-audio'].includes(input.targetPortId) &&
+                (!['video', 'audio'].includes(version.value.kind) ||
+                  !('contentSha256' in version.value) ||
+                  !version.value.contentSha256)
               )
                 throw new AgentRuntimeError('AGENT_INPUT_NOT_FIXED', 'admission')
               return version.value.kind
@@ -352,10 +365,7 @@ export class FlowAgentDesktopHost {
   }
 
   pause(input: Identity): FlowAgentView | null {
-    if (
-      !this.coordinator ||
-      JSON.parse(this.saved(input).shape.props.config).role !== 'coordinator'
-    )
+    if (!this.coordinator || agentRoleOf(this.saved(input).shape.props.config) !== 'coordinator')
       throw new AgentRuntimeError('FLOW_COORDINATOR_CONFIG_INVALID', 'pause')
     return this.coordinator.pause(input)
   }
@@ -673,7 +683,7 @@ export class FlowAgentDesktopHost {
 
   async run(raw: unknown, assigned?: AgentTaskSnapshot): Promise<FlowAgentReply> {
     const input = FlowAgentRunSchema.parse(raw)
-    if (this.coordinator && JSON.parse(this.saved(input).shape.props.config).role === 'coordinator')
+    if (this.coordinator && agentRoleOf(this.saved(input).shape.props.config) === 'coordinator')
       return this.coordinator.run(raw)
     if (input.action === 'reconcile' || input.action === 'restore') {
       const record = this.latest(input)
@@ -703,12 +713,10 @@ export class FlowAgentDesktopHost {
           /* Missing saved facts remain uncertain. */
         }
       }
-      const uncertain = this.receipts(record).some((receipt) =>
-        ['pending', 'unknown'].includes(receipt.state)
-      )
       const unresolved = this.receipts(record).filter((receipt) =>
         ['pending', 'unknown'].includes(receipt.state)
       )
+      const uncertain = unresolved.length > 0
       if (
         record.state === 'waiting' &&
         record.waitKind === 'reconcile' &&
@@ -741,9 +749,7 @@ export class FlowAgentDesktopHost {
       }
       const reply = this.reply(record)
       reply.task.recovery = {
-        reasons: this.receipts(record).some((receipt) =>
-          ['pending', 'unknown'].includes(receipt.state)
-        )
+        reasons: uncertain
           ? ['FLOW_COMMAND_OUTCOME_UNKNOWN']
           : record.state === 'completed'
             ? []

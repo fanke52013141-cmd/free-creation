@@ -59,23 +59,29 @@ export function placeFlowAsset(
       ? 'image'
       : version.value.kind === 'video'
         ? 'video-asset'
-        : version.value.kind === 'json'
-          ? 'json'
-          : 'text'
+        : version.value.kind === 'audio'
+          ? 'audio'
+          : version.value.kind === 'json'
+            ? 'json'
+            : 'text'
   const portId =
     nodeType === 'image'
       ? 'out-image'
       : nodeType === 'video-asset'
         ? 'out-video'
-        : nodeType === 'json'
-          ? 'out-json'
-          : 'out-text'
+        : nodeType === 'audio'
+          ? 'out-audio'
+          : nodeType === 'json'
+            ? 'out-json'
+            : 'out-text'
   const spec = getNodeType(nodeType)
   if (!spec) throw new Error('资产节点类型不可用')
   const position = nextAssetPosition(editor, sourceId, spec.defaultSize)
   const id = createShapeId()
   const text =
-    version.value.kind === 'video' || version.value.kind === 'image'
+    version.value.kind === 'video' ||
+    version.value.kind === 'image' ||
+    version.value.kind === 'audio'
       ? ''
       : version.value.kind === 'json'
         ? JSON.stringify(version.value.data, null, 2)
@@ -90,7 +96,9 @@ export function placeFlowAsset(
       title: `资产 v${version.ordinal}`,
       text,
       config: '',
-      ...(version.value.kind === 'video' || version.value.kind === 'image'
+      ...(version.value.kind === 'video' ||
+      version.value.kind === 'image' ||
+      version.value.kind === 'audio'
         ? {
             mediaId: version.value.mediaId,
             mediaPath: version.value.mediaPath,
@@ -114,7 +122,7 @@ export function createEditableAssetDraft(
   source: import('./NodeCardShape').NodeCardShape,
   value: FlowAssetValue
 ): void {
-  if (value.kind === 'video' || value.kind === 'image')
+  if (value.kind === 'video' || value.kind === 'image' || value.kind === 'audio')
     throw new Error('媒体资产为固定媒体引用，请创建新生成任务')
   const id = createShapeId()
   const nodeType = value.kind === 'json' ? 'json' : 'text'

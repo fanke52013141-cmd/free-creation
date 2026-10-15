@@ -4,7 +4,11 @@ import { registerAllNodeTypes } from './helpers/registerNodes'
 import { getNodeType } from '@renderer/nodes/registry'
 import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
 import { readFlowAssetSnapshot } from '@renderer/canvas/flow-asset-snapshot'
-import { VIDEO_FLOW_PORTS, videoFlowInputsValid } from '@shared/agent-flow/video-adapter'
+import {
+  VIDEO_FLOW_PORTS,
+  videoFlowInputsValid,
+  videoFlowAssetValid
+} from '@shared/agent-flow/video-adapter'
 import {
   projectVideoOutputs,
   projectVideoAssetOutputs
@@ -47,7 +51,7 @@ describe('video scheduling contract and fixed preview', () => {
     expect(readFlowAssetSnapshot(shape)).toEqual(value)
     expect(projectNodeOutputs(shape)['out-video']).toEqual(value)
   })
-  it('admits exactly one video reference with optional images/text and rejects audio or frame mixing', () => {
+  it('admits bounded video references with optional images/text and rejects frame mixing', () => {
     const motion = { targetPortId: 'in-reference-video', kinds: ['video'] }
     expect(videoFlowInputsValid('reference', [motion])).toBe(true)
     expect(
@@ -57,12 +61,78 @@ describe('video scheduling contract and fixed preview', () => {
         { targetPortId: 'in-text', kinds: ['text'] }
       ])
     ).toBe(true)
-    for (const kinds of [[], ['image'], ['video', 'video']])
+    for (const count of [2, 3, 30])
+      expect(
+        videoFlowInputsValid('reference', [{ ...motion, kinds: Array(count).fill('video') }])
+      ).toBe(true)
+    for (const kinds of [[], ['image'], Array(31).fill('video'), ['video', 'audio']])
       expect(videoFlowInputsValid('reference', [{ ...motion, kinds }])).toBe(false)
     expect(videoFlowInputsValid('first-frame', [motion])).toBe(false)
     expect(
       videoFlowInputsValid('reference', [{ targetPortId: 'in-reference-audio', kinds: ['audio'] }])
-    ).toBe(false)
+    ).toBe(true)
+  })
+  it('admits bounded fixed audio references with valid prompt bundles only in reference mode', () => {
+    const audio = { targetPortId: 'in-reference-audio', kinds: ['audio'] }
+    expect(videoFlowInputsValid('reference', [audio])).toBe(true)
+    expect(
+      videoFlowInputsValid('reference', [
+        audio,
+        { targetPortId: 'in-reference-video', kinds: ['video'] },
+        { targetPortId: 'in-images', kinds: ['image'] }
+      ])
+    ).toBe(true)
+    for (const count of [2, 3, 30])
+      expect(
+        videoFlowInputsValid('reference', [{ ...audio, kinds: Array(count).fill('audio') }])
+      ).toBe(true)
+    for (const kinds of [[], ['video'], Array(31).fill('audio'), ['audio', 'video']])
+      expect(videoFlowInputsValid('reference', [{ ...audio, kinds }])).toBe(false)
+    for (const mode of ['text', 'first-frame', 'first-last-frame'])
+      expect(videoFlowInputsValid(mode, [audio])).toBe(false)
+    expect(videoFlowInputsValid('reference', [audio, audio])).toBe(false)
+    expect(
+      videoFlowInputsValid('reference', [audio, { targetPortId: 'in-prompt', kinds: ['json'] }])
+    ).toBe(true)
+  })
+  it('validates prompt.bundle content before task or command admission', () => {
+    expect(videoFlowInputsValid('text', [{ targetPortId: 'in-prompt', kinds: ['json'] }])).toBe(
+      true
+    )
+    for (const kinds of [[], ['text'], ['json', 'json']])
+      expect(videoFlowInputsValid('text', [{ targetPortId: 'in-prompt', kinds }])).toBe(false)
+    expect(
+      videoFlowAssetValid('in-prompt', {
+        kind: 'json',
+        data: { prompt: '固定目标', style: '水墨' }
+      })
+    ).toBe(true)
+    for (const data of [null, [], {}, { prompt: '' }, { prompt: '目标', seed: 'wrong' }])
+      expect(videoFlowAssetValid('in-prompt', { kind: 'json', data })).toBe(false)
+    expect(videoFlowAssetValid('in-prompt', { kind: 'text', text: '目标' })).toBe(false)
+  })
+  it('keeps fixed audio preview and formal output on the pinned version despite mutable props', () => {
+    const value = {
+      kind: 'audio',
+      mediaId: 'sound',
+      mediaPath: 'projects/p/media/sound.wav',
+      mime: 'audio/wav',
+      contentSha256: 'a'.repeat(64)
+    }
+    const shape = {
+      props: { nodeType: 'audio', mediaId: 'other', mediaPath: 'other', mediaMime: 'audio/mpeg' },
+      meta: {
+        flowAssetRef: JSON.stringify({
+          assetId: 'asset',
+          versionId: 'version',
+          sourceNodeId: 'source',
+          sourcePortId: 'out-audio'
+        }),
+        pinnedOutput: JSON.stringify({ version: 1, outputs: { 'out-audio': value } })
+      }
+    } as unknown as NodeCardShape
+    expect(readFlowAssetSnapshot(shape)).toEqual(value)
+    expect(projectNodeOutputs(shape)).toEqual({ 'out-audio': value })
   })
   it('admits only image-only reference manifests within the hard bound, preserving text cardinality', () => {
     for (const count of [1, 3, 9, 30])

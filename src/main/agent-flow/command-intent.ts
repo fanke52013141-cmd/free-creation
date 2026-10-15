@@ -54,6 +54,7 @@ export function nodeCommandIntentSignature(raw: NodeExecuteCommand): string {
     targetNodeId: command.targetNodeId,
     expectedSemanticRevision: command.expectedSemanticRevision,
     contractVersion: command.contractVersion,
+    ...(command.videoRework ? { videoRework: command.videoRework } : {}),
     // Port map order is irrelevant; asset order within each port remains significant.
     inputs: [...command.inputs].sort((a, b) => a.targetPortId.localeCompare(b.targetPortId))
   })

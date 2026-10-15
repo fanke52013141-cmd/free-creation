@@ -181,7 +181,7 @@ describe('C4 supplier facts and conditional cancellation', () => {
     )
     expect(() =>
       submitVideoTask(() => {}, { ...input, referenceImageMediaIds: ['foreign'] })
-    ).toThrow('仅支持文本、固定首尾帧或有序图片参考')
+    ).toThrow('Agent 视频支持文本、提示词包、固定首尾帧及有序图片、视频和音频参考')
     const stored = fixture.db.prepare('SELECT command_json FROM flow_commands').get() as {
       command_json: string
     }
@@ -259,7 +259,7 @@ describe('C4 supplier facts and conditional cancellation', () => {
     vi.stubGlobal('fetch', fetcher)
     expect(submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
     expect(() => submitVideoTask(() => {}, { ...input, firstFrameMediaId: 'foreign' })).toThrow(
-      '不匹配固定图片版本'
+      '不匹配固定媒体版本'
     )
     writeFileSync(join(fixture.directory, 'projects/project/media/frame.png'), 'other-frame')
     expect(() => submitVideoTask(() => {}, input)).toThrow('ASSET_IMAGE_CHANGED')
@@ -318,9 +318,9 @@ describe('C4 supplier facts and conditional cancellation', () => {
     expect(submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
     expect(() =>
       submitVideoTask(() => {}, { ...input, firstFrameMediaId: 'tail', lastFrameMediaId: 'frame' })
-    ).toThrow('不匹配固定图片版本')
+    ).toThrow('不匹配固定媒体版本')
     expect(() => submitVideoTask(() => {}, { ...input, lastFrameMediaId: 'foreign' })).toThrow(
-      '不匹配固定图片版本'
+      '不匹配固定媒体版本'
     )
     writeFileSync(join(fixture.directory, 'projects/project/media/tail.png'), 'other--tail')
     expect(() => submitVideoTask(() => {}, input)).toThrow('ASSET_IMAGE_CHANGED')
@@ -389,6 +389,170 @@ describe('C4 supplier facts and conditional cancellation', () => {
       ...(withImage ? { referenceImageMediaIds: ['frame'] } : {})
     }
   }
+  function audioInput(withImage = false) {
+    const { referenceVideoMediaIds: _video, ...input } = motionInput(withImage)
+    const path = 'projects/project/media/motion.wav'
+    writeFileSync(join(fixture.directory, path), 'audio--bytes')
+    fixture.db
+      .prepare("UPDATE media SET kind='audio',mime='audio/wav',path=? WHERE id='motion'")
+      .run(path)
+    const value = JSON.stringify({
+      kind: 'audio',
+      mediaId: 'motion',
+      mediaPath: path,
+      mime: 'audio/wav',
+      contentSha256: createHash('sha256').update('audio--bytes').digest('hex')
+    })
+    fixture.db
+      .prepare(
+        "UPDATE flow_asset_versions SET port_id='out-audio',value_json=?,digest=? WHERE version_id='motion-version'"
+      )
+      .run(value, createHash('sha256').update(value).digest('hex'))
+    const row = fixture.db.prepare('SELECT command_json FROM flow_commands').get() as {
+      command_json: string
+    }
+    const command = JSON.parse(row.command_json)
+    const audio = command.inputs.find(
+      (item: { targetPortId: string }) => item.targetPortId === 'in-reference-video'
+    )
+    audio.targetPortId = 'in-reference-audio'
+    audio.assets[0].sourcePortId = 'out-audio'
+    fixture.db.prepare('UPDATE flow_commands SET command_json=?').run(JSON.stringify(command))
+    return { ...input, referenceAudioMediaIds: ['motion'] }
+  }
+  it.each(['video', 'audio'] as const)(
+    'resumes ordered distinct %s references and rejects swapping, duplication or changed bytes before POST',
+    (kind) => {
+      const input = kind === 'video' ? motionInput() : audioInput()
+      const extension = kind === 'video' ? 'mp4' : 'wav'
+      const mediaPath = `projects/project/media/second.${extension}`
+      const bytes = Buffer.from('second-fixed-reference')
+      writeFileSync(join(fixture.directory, mediaPath), bytes)
+      fixture.db
+        .prepare('INSERT INTO media(id,path,kind,mime,size_bytes,created_at) VALUES (?,?,?,?,?,0)')
+        .run(
+          'motion-second',
+          mediaPath,
+          kind,
+          kind === 'video' ? 'video/mp4' : 'audio/wav',
+          bytes.length
+        )
+      const value = JSON.stringify({
+        kind,
+        mediaId: 'motion-second',
+        mediaPath,
+        mime: kind === 'video' ? 'video/mp4' : 'audio/wav',
+        contentSha256: createHash('sha256').update(bytes).digest('hex')
+      })
+      fixture.db
+        .prepare('INSERT INTO flow_asset_versions VALUES (?,?,?,?,?,?,?)')
+        .run(
+          'project',
+          'motion-second-version',
+          'motion-second-asset',
+          'motion-second-source',
+          `out-${kind}`,
+          value,
+          createHash('sha256').update(value).digest('hex')
+        )
+      const row = fixture.db.prepare('SELECT command_json FROM flow_commands').get() as {
+        command_json: string
+      }
+      const command = JSON.parse(row.command_json)
+      command.inputs
+        .find((item: { targetPortId: string }) => item.targetPortId === `in-reference-${kind}`)
+        .assets.push({
+          assetId: 'motion-second-asset',
+          versionId: 'motion-second-version',
+          sourceNodeId: 'motion-second-source',
+          sourcePortId: `out-${kind}`
+        })
+      fixture.db.prepare('UPDATE flow_commands SET command_json=?').run(JSON.stringify(command))
+      const field = kind === 'video' ? 'referenceVideoMediaIds' : 'referenceAudioMediaIds'
+      const ordered = { ...input, [field]: ['motion', 'motion-second'] }
+      seed({ flowCommandId: 'command', mode: 'reference', [field]: ordered[field] })
+      fixture.db.prepare('UPDATE tasks SET model_id=?').run(input.modelId)
+      const fetcher = vi.fn()
+      vi.stubGlobal('fetch', fetcher)
+      expect(submitVideoTask(() => {}, ordered)).toEqual({ taskId: 'local' })
+      for (const ids of [['motion-second', 'motion'], ['motion', 'motion'], ['motion']])
+        expect(() => submitVideoTask(() => {}, { ...ordered, [field]: ids })).toThrow()
+      writeFileSync(join(fixture.directory, mediaPath), 'changed-second-reference')
+      expect(() => submitVideoTask(() => {}, ordered)).toThrow(
+        kind === 'video' ? 'ASSET_VIDEO_CHANGED' : 'ASSET_AUDIO_CHANGED'
+      )
+      expect(fetcher).not.toHaveBeenCalled()
+      expect(fixture.db.prepare('SELECT count(*) AS n FROM tasks').get()).toEqual({ n: 1 })
+    }
+  )
+  it.each([false, true])(
+    'reattaches one fixed audio with image=%s and rejects changed or missing bytes before POST',
+    (withImage) => {
+      seed({
+        flowCommandId: 'command',
+        mode: 'reference',
+        referenceAudioMediaIds: ['motion'],
+        referenceImageMediaIds: withImage ? ['frame'] : []
+      })
+      const input = audioInput(withImage),
+        fetcher = vi.fn()
+      fixture.db.prepare('UPDATE tasks SET model_id=?').run(input.modelId)
+      vi.stubGlobal('fetch', fetcher)
+      expect(submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
+      for (const ids of [[], ['other'], ['motion', 'motion']])
+        expect(() => submitVideoTask(() => {}, { ...input, referenceAudioMediaIds: ids })).toThrow()
+      expect(() =>
+        submitVideoTask(() => {}, { ...input, mode: 'first-frame', firstFrameMediaId: 'frame' })
+      ).toThrow()
+      writeFileSync(join(fixture.directory, 'projects/project/media/motion.wav'), 'other--bytes')
+      expect(() => submitVideoTask(() => {}, input)).toThrow('ASSET_AUDIO_CHANGED')
+      unlinkSync(join(fixture.directory, 'projects/project/media/motion.wav'))
+      expect(() => submitVideoTask(() => {}, input)).toThrow('ASSET_AUDIO_CHANGED')
+      expect(fetcher).not.toHaveBeenCalled()
+      expect(fixture.db.prepare('SELECT count(*) AS n FROM tasks').get()).toEqual({ n: 1 })
+    }
+  )
+  it('binds the original audio list and refuses unsupported model capability without POST', () => {
+    seed({ flowCommandId: 'command', mode: 'reference', referenceAudioMediaIds: ['other'] })
+    const input = audioInput()
+    fixture.db.prepare('UPDATE tasks SET model_id=?').run(input.modelId)
+    expect(() => submitVideoTask(() => {}, input)).toThrow('原视频命令输入发生变化')
+    expect(() =>
+      submitVideoTask(() => {}, { ...input, modelId: 'doubao-seedance-1-5-pro' })
+    ).toThrow('不支持该参考媒体或数量')
+  })
+  it.each(['bytes', 'mime'] as const)(
+    'checks actual asynchronously encoded audio %s before POST',
+    async (changed) => {
+      const input = audioInput()
+      vi.mocked(readMediaBuffer).mockResolvedValueOnce({
+        buf: Buffer.from(changed === 'bytes' ? 'other--bytes' : 'audio--bytes'),
+        mime: changed === 'mime' ? 'audio/mpeg' : 'audio/wav'
+      })
+      const fetcher = vi.fn()
+      vi.stubGlobal('fetch', fetcher)
+      const result = submitVideoTask(() => {}, input)
+      await vi.waitFor(() => expect(getVideoTask(result.taskId)?.status).toBe('unknown'))
+      expect(fetcher).not.toHaveBeenCalled()
+    }
+  )
+  it('persists audio reference stop, and explicit resume attaches only the original task', async () => {
+    seed({ flowCommandId: 'command', mode: 'reference', referenceAudioMediaIds: ['motion'] })
+    const input = audioInput(),
+      fetcher = vi.fn().mockResolvedValue(response('running'))
+    fixture.db.prepare('UPDATE tasks SET model_id=?').run(input.modelId)
+    vi.stubGlobal('fetch', fetcher)
+    await cancelVideoTask('local')
+    expect(
+      JSON.parse(
+        (fixture.db.prepare('SELECT input FROM tasks WHERE id=?').get('local') as { input: string })
+          .input
+      ).cancelRequested
+    ).toBe(true)
+    expect(submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
+    expect(fetcher.mock.calls.every((call) => (call[1]?.method ?? 'GET') === 'GET')).toBe(true)
+    expect(fixture.db.prepare('SELECT count(*) AS n FROM tasks').get()).toEqual({ n: 1 })
+  })
   it.each([false, true])(
     'reattaches fixed video reference with image=%s and rejects identity/content drift without POST',
     (withImage) => {
@@ -405,7 +569,7 @@ describe('C4 supplier facts and conditional cancellation', () => {
       expect(submitVideoTask(() => {}, input)).toEqual({ taskId: 'local' })
       expect(() =>
         submitVideoTask(() => {}, { ...input, referenceVideoMediaIds: ['other'] })
-      ).toThrow('不匹配固定图片版本')
+      ).toThrow('不匹配固定媒体版本')
       expect(() =>
         submitVideoTask(() => {}, { ...input, referenceVideoMediaIds: ['motion', 'motion'] })
       ).toThrow()
@@ -427,7 +591,7 @@ describe('C4 supplier facts and conditional cancellation', () => {
     expect(() => submitVideoTask(() => {}, input)).toThrow('原视频命令输入发生变化')
     expect(() =>
       submitVideoTask(() => {}, { ...input, modelId: 'doubao-seedance-1-5-pro' })
-    ).toThrow('不支持该参考图片数量')
+    ).toThrow('不支持该参考媒体或数量')
   })
   it('checks the actual asynchronously encoded video bytes before POST', async () => {
     const input = motionInput()
@@ -488,7 +652,7 @@ describe('C4 supplier facts and conditional cancellation', () => {
     expect(() => submitVideoTask(() => {}, input)).toThrow('原视频命令输入发生变化')
     expect(() =>
       submitVideoTask(() => {}, { ...input, modelId: 'doubao-seedance-1-5-pro' })
-    ).toThrow('不支持该参考图片数量')
+    ).toThrow('不支持该参考媒体或数量')
   })
   it.each(['frame', 'tail'])(
     'checks actual encoded reference bytes for %s before POST',

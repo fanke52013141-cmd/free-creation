@@ -23,6 +23,39 @@ export function FixedFlowAssetBody({
   const value = readFlowAssetSnapshot(shape)
   const guard = useClickGuard()
   if (!value) return null
+  if (value.kind === 'audio')
+    return (
+      <div className="node-media-wrap">
+        <div
+          className="node-media"
+          style={{ minHeight: 72, gap: 8, color: 'var(--muted)' }}
+          data-node-interactive="media-preview"
+          onPointerDown={guard.onPointerDown}
+          onDoubleClick={(event) =>
+            guard.onDoubleClick(event, () =>
+              openPreview?.({
+                kind: 'audio',
+                url: mediaUrl(value.mediaPath),
+                title: shape.props.title
+              })
+            )
+          }
+        >
+          <Icon name="audio" size={24} />
+          <span>{shape.props.title}</span>
+        </div>
+        <audio
+          src={mediaUrl(value.mediaPath)}
+          preload="metadata"
+          controls
+          data-node-pointer="control"
+          aria-label="固定音频播放"
+          style={{ width: '100%' }}
+          onPointerDown={(event) => event.stopPropagation()}
+          onDoubleClick={(event) => event.stopPropagation()}
+        />
+      </div>
+    )
   if (value.kind === 'video' || value.kind === 'image')
     return (
       <div

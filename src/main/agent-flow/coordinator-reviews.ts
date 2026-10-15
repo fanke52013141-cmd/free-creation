@@ -1,7 +1,12 @@
 import type Database from 'better-sqlite3'
+import { AsyncLocalStorageProviderSingleton } from '@langchain/core/singletons'
 import type { ProjectFile } from '../../shared/types'
 import type { NodeShape } from '../../shared/engine/executor-types'
-import { ReviewNodeConfigSchema } from '../../shared/agent-flow/node-contracts'
+import {
+  AgentNodeConfigSchema,
+  ReviewNodeConfigSchema,
+  type ReviewDecision
+} from '../../shared/agent-flow/node-contracts'
 import { AgentRuntimeError } from '../../shared/agent-flow/runtime-contracts'
 import {
   canonicalFlowJson,
@@ -26,6 +31,22 @@ function saved(file: ProjectFile, id: string): NodeShape {
   return node
 }
 
+/** Normal execution and read-only recovery must agree on the specialist's exact output version. */
+export function assertCoordinatorReviewOutput(
+  file: ProjectFile,
+  nodeId: string,
+  decision: ReviewDecision,
+  outputs: ReviewDecision['subjects']
+): void {
+  const config = ReviewNodeConfigSchema.parse(JSON.parse(saved(file, nodeId).props.config))
+  if (
+    config.reviewMode === 'sampled-video' &&
+    (decision.subjects.length !== 1 ||
+      !outputs.some((ref) => canonicalFlowJson(ref) === canonicalFlowJson(decision.subjects[0])))
+  )
+    throw new AgentRuntimeError('FLOW_REVIEW_NOT_READY', 'review-control')
+}
+
 export function bindCoordinatorReviews(
   file: ProjectFile,
   reviewIds: string[],
@@ -36,13 +57,14 @@ export function bindCoordinatorReviews(
   const responsible = new Set<string>()
   return reviewIds.map((nodeId) => {
     const config = ReviewNodeConfigSchema.parse(JSON.parse(saved(file, nodeId).props.config))
+    const video = config.reviewMode === 'sampled-video'
     const owner = config.responsibleNodeId
     if (
       !owner ||
       !config.modelDefinitionId ||
       !config.subjectSources.length ||
       !config.gatedNodeIds.length ||
-      config.subjectSources.some((source) => source.nodeId !== owner) ||
+      (!video && config.subjectSources.some((source) => source.nodeId !== owner)) ||
       responsible.has(owner) ||
       config.gatedNodeIds.some((id) => !controls.has(id) || id === owner || id === nodeId)
     )
@@ -50,6 +72,27 @@ export function bindCoordinatorReviews(
     const type = saved(file, owner).props.nodeType
     if (type === 'agent' ? !childIds.includes(owner) : !['text', 'json'].includes(type))
       throw new AgentRuntimeError('FLOW_REWORK_TARGET_UNSUPPORTED', 'review-scope')
+    if (video) {
+      const specialist =
+        type === 'agent'
+          ? AgentNodeConfigSchema.parse(JSON.parse(saved(file, owner).props.config))
+          : null
+      const source = config.subjectSources[0]
+      const target = file.nodes.find((node) => node.id === source.nodeId)
+      if (
+        !specialist ||
+        specialist.role !== 'specialist' ||
+        config.subjectSources.length !== 1 ||
+        source.portId !== 'out-video' ||
+        target?.type !== 'video' ||
+        target.contractVersion !== 7 ||
+        saved(file, source.nodeId).props.nodeType !== 'video' ||
+        !specialist.allowedNodeIds.includes(source.nodeId) ||
+        !controls.has(source.nodeId) ||
+        config.gatedNodeIds.includes(source.nodeId)
+      )
+        throw new AgentRuntimeError('FLOW_REWORK_TARGET_UNSUPPORTED', 'review-scope')
+    }
     responsible.add(owner)
     controls.add(owner)
     return {
@@ -139,6 +182,7 @@ export class CoordinatorReviews {
     this.check(run)
   }
   async step(run: CoordinationRun, signal: AbortSignal): Promise<'none' | 'again' | 'wait'> {
+    let waiting = false
     for (const cycle of run.reviews ?? []) {
       this.ensureLive(run, signal)
       const file = this.check(run)
@@ -150,6 +194,7 @@ export class CoordinatorReviews {
       if (cycle.state === 'passed') {
         if (!this.reports.approval(file, cycle.nodeId))
           throw new AgentRuntimeError('FLOW_REVIEW_NOT_READY', 'review-control')
+        assertCoordinatorReviewOutput(file, cycle.nodeId, cycle.decision!, child?.outputs ?? [])
         continue
       }
       if (cycle.state === 'human-wait') {
@@ -169,7 +214,10 @@ export class CoordinatorReviews {
           child.taskId = record.snapshot.taskId
           this.store.save(run)
         }
-        if (['ready', 'waiting'].includes(record.state)) return 'wait'
+        if (['ready', 'waiting'].includes(record.state)) {
+          waiting = true
+          continue
+        }
         if (record.state !== 'completed')
           throw new AgentRuntimeError(record.code ?? 'FLOW_CHILD_BLOCKED', 'rework')
         await this.publish(
@@ -202,8 +250,10 @@ export class CoordinatorReviews {
           cycle.decision?.subjects.some((ref) => ref.versionId === latest.ref.versionId) ||
           canonicalFlowJson(this.assets.read(run.projectId, latest.ref.versionId).value) !==
             canonicalFlowJson(current)
-        )
-          return 'wait'
+        ) {
+          waiting = true
+          continue
+        }
         cycle.state = 'ready'
         run.scopeRevision = reviewDigest(coordinationScopePayload(file, run.scopeIds, run.reviews))
         this.store.save(run)
@@ -230,7 +280,8 @@ export class CoordinatorReviews {
           cycle.state = 'manual-wait'
           this.event(run, cycle, 'rework.created')
           this.store.save(run)
-          return 'wait'
+          waiting = true
+          continue
         }
         if (!child || child.state !== 'completed')
           throw new AgentRuntimeError('FLOW_CHILD_BLOCKED', 'rework')
@@ -252,7 +303,10 @@ export class CoordinatorReviews {
             rejectedOutputs: cycle.decision.subjects,
             criteria: saved(file, cycle.nodeId).props.text,
             feedback: cycle.decision.feedback,
-            round: cycle.round
+            round: cycle.round,
+            ...(config.reviewMode === 'sampled-video'
+              ? { videoTargetNodeId: config.subjectSources[0].nodeId }
+              : {})
           }
         )
         cycle.reworkTaskId = taskId
@@ -262,23 +316,44 @@ export class CoordinatorReviews {
         child.outputs = []
         this.event(run, cycle, 'rework.created')
         this.store.save(run)
-        if (record.snapshot.config.interactionMode === 'collaborative') return 'wait'
-        const reply = await this.specialists.run({
-          projectId: run.projectId,
-          nodeId: owner,
-          action: 'start',
-          requestId: taskId,
-          expectedTaskId: taskId,
-          traceId: run.traceId,
-          spanId: run.spanId
-        })
+        if (record.snapshot.config.interactionMode === 'collaborative') {
+          waiting = true
+          continue
+        }
+        // Rework is a new specialist root, with its own interrupt/checkpoint namespace.
+        const reply = await AsyncLocalStorageProviderSingleton.runWithConfig(
+          {},
+          () =>
+            this.specialists.run({
+              projectId: run.projectId,
+              nodeId: owner,
+              action: 'start',
+              requestId: taskId,
+              expectedTaskId: taskId,
+              traceId: run.traceId,
+              spanId: run.spanId
+            }),
+          true
+        )
         this.ensureLive(run, signal)
-        if (reply.task.state !== 'completed') return 'wait'
+        if (reply.task.state !== 'completed') {
+          waiting = true
+          continue
+        }
         return 'again'
       }
       if (cycle.state === 'pending')
         throw new AgentRuntimeError('FLOW_REVIEW_OUTCOME_UNKNOWN', 'review-control')
       if (saved(file, owner).props.nodeType === 'agent' && child?.state !== 'completed') continue
+      if (config.reviewMode === 'sampled-video') {
+        const source = config.subjectSources[0]
+        if (
+          !child?.outputs.some(
+            (ref) => ref.sourceNodeId === source.nodeId && ref.sourcePortId === source.portId
+          )
+        )
+          throw new AgentRuntimeError('FLOW_REVIEW_NOT_READY', 'review-control')
+      }
       const binding = reviewBinding(file, cycle.nodeId)
       this.reserve(run)
       cycle.state = 'pending'
@@ -309,6 +384,7 @@ export class CoordinatorReviews {
           canonicalFlowJson(record.decision)
       )
         throw new AgentRuntimeError('FLOW_REVIEW_NOT_READY', 'review-control')
+      assertCoordinatorReviewOutput(current, cycle.nodeId, record.decision, child?.outputs ?? [])
       cycle.decision = record.decision
       cycle.originalInputs ??= record.decision.subjects
       cycle.state = record.decision.passed ? 'passed' : 'rejected'
@@ -316,6 +392,6 @@ export class CoordinatorReviews {
       this.store.save(run)
       return 'again'
     }
-    return 'none'
+    return waiting ? 'wait' : 'none'
   }
 }

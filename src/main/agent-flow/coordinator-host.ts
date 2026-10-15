@@ -25,6 +25,7 @@ import { agentOutputValue } from '../../shared/agent-flow/video-adapter'
 import type { AgentModelPort } from './runtime'
 import type { FlowAgentDesktopHost } from './desktop-host'
 import { CoordinationStore, type CoordinationRun } from './coordination-store'
+import { admitAssignments } from './parallel-admission'
 import { FlowAssetStore } from './asset-store'
 import { emitGatewayEvent } from '../diagnostics/gateway-events'
 import { projectSemanticRevision } from './command-intent'
@@ -33,7 +34,8 @@ import { readStoredNodeRunStatus } from '../../shared/engine/run-status'
 import {
   CoordinatorReviews,
   bindCoordinatorReviews,
-  coordinationScopePayload
+  coordinationScopePayload,
+  assertCoordinatorReviewOutput
 } from './coordinator-reviews'
 
 type Identity = { projectId: string; nodeId: string }
@@ -106,7 +108,11 @@ export class FlowCoordinatorHost {
       code: run.code,
       recovery: run.recovery,
       phase: run.phase,
-      children: run.children.map(({ nodeId, taskId, state }) => ({ nodeId, taskId, state }))
+      children: run.children.map(({ nodeId, taskId, state }) => {
+        const live =
+          state === 'ready' ? this.specialists.inspect({ projectId: run.projectId, nodeId }) : null
+        return { nodeId, taskId, state: live?.taskId === taskId ? live.state : state }
+      })
     }
   }
   inspect(input: Identity): FlowAgentView | null {
@@ -136,8 +142,20 @@ export class FlowCoordinatorHost {
     for (const review of run.reviews ?? []) this.cancelReview?.(run.projectId, review.nodeId)
     for (const child of run.children.filter(
       (c) => !['completed', 'cancelled', 'failed'].includes(c.state)
-    ))
-      this.specialists.stop({ projectId: run.projectId, nodeId: child.nodeId })
+    )) {
+      const saved = this.specialists.inspect({ projectId: run.projectId, nodeId: child.nodeId })
+      if (saved?.taskId === child.taskId && saved.state === 'completed') {
+        const assignment = this.specialists.assignment(
+          { projectId: run.projectId, nodeId: child.nodeId },
+          run.taskId
+        )
+        child.state = 'completed'
+        child.outputs = assignment?.outputRefs ?? []
+      } else {
+        this.specialists.stop({ projectId: run.projectId, nodeId: child.nodeId })
+        child.state = 'cancelled'
+      }
+    }
     run.state = 'cancelled'
     run.code = 'AGENT_CANCELLED'
     this.store.save(run)
@@ -339,61 +357,78 @@ export class FlowCoordinatorHost {
     if (stored.paused) return this.wait(run, 'flow.paused')
     const control = await this.reviews.step(run, signal)
     if (control === 'again') return true
-    if (control === 'wait') return this.wait(run, 'human.wait')
-    const pending = run.children.find(
+    const pendingChildren = run.children.filter(
       (c) =>
         c.state === 'waiting' &&
         !run.reviews?.some(
           (review) => review.responsibleNodeId === c.nodeId && review.state === 'human-wait'
         )
     )
-    if (pending) {
-      const state = this.specialists.inspect({ projectId: run.projectId, nodeId: pending.nodeId })
-      if (state?.taskId !== pending.taskId) {
-        const revised = this.specialists.assignment(
-          { projectId: run.projectId, nodeId: pending.nodeId },
-          run.taskId
-        )
-        if (!revised || revised.snapshot.parentTaskId !== pending.taskId)
-          throw new AgentRuntimeError('RESUME_CONFLICT', 'handoff')
-        pending.taskId = revised.snapshot.taskId
+    let pendingWait = false
+    let pendingProgress = false
+    let pendingFailure: unknown
+    for (const pending of pendingChildren) {
+      try {
+        const state = this.specialists.inspect({ projectId: run.projectId, nodeId: pending.nodeId })
+        if (state?.taskId !== pending.taskId) {
+          const revised = this.specialists.assignment(
+            { projectId: run.projectId, nodeId: pending.nodeId },
+            run.taskId
+          )
+          if (!revised || revised.snapshot.parentTaskId !== pending.taskId)
+            throw new AgentRuntimeError('RESUME_CONFLICT', 'handoff')
+          pending.taskId = revised.snapshot.taskId
+          this.store.save(run)
+        }
+        if (!state) throw new AgentRuntimeError('RESUME_CONFLICT', 'handoff')
+        if (state.state === 'ready' || state.state === 'waiting') {
+          pendingWait = true
+          continue
+        }
+        if (state.state !== 'completed')
+          throw new AgentRuntimeError(state.code ?? 'FLOW_CHILD_BLOCKED', 'handoff')
+        const reply = await this.specialists.run({
+          projectId: run.projectId,
+          traceId: run.traceId,
+          spanId: run.spanId,
+          nodeId: pending.nodeId,
+          action: 'start',
+          requestId: pending.taskId,
+          expectedTaskId: pending.taskId
+        })
+        pending.state = reply.task.state
+        pending.outputs = reply.refs
         this.store.save(run)
+        await this.publishChild(run, pending.nodeId, reply, signal)
+        this.store.event(run, `${pending.taskId}:completed`, 'agent.completed', run.revision)
+        pendingProgress = true
+      } catch (error) {
+        pendingFailure ??= error
       }
-      if (!state) throw new AgentRuntimeError('RESUME_CONFLICT', 'handoff')
-      if (state.state === 'ready') return this.wait(run, 'human.wait')
-      if (state.state === 'waiting') return this.wait(run, 'human.wait')
-      if (state.state !== 'completed')
-        throw new AgentRuntimeError(state.code ?? 'FLOW_CHILD_BLOCKED', 'handoff')
-      const reply = await this.specialists.run({
-        projectId: run.projectId,
-        traceId: run.traceId,
-        spanId: run.spanId,
-        nodeId: pending.nodeId,
-        action: 'start',
-        requestId: pending.taskId,
-        expectedTaskId: pending.taskId
-      })
-      await this.publishChild(run, pending.nodeId, reply, signal)
-      pending.state = reply.task.state
-      pending.outputs = reply.refs
-      this.store.save(run)
-      this.store.event(run, `${pending.taskId}:completed`, 'agent.completed', run.revision)
-      return true
+      if (signal.aborted || this.store.latest(run.projectId, run.nodeId)!.state === 'cancelled')
+        return false
     }
+    if (pendingFailure) throw pendingFailure
+    if (pendingProgress) return true
+    if (pendingWait || control === 'wait') return this.wait(run, 'human.wait')
     if (stored.paused) return this.wait(run, 'flow.paused')
     if (run.decisions + (run.controlSteps ?? 0) >= run.config.maxSteps)
       throw new AgentRuntimeError('AGENT_BUDGET_EXHAUSTED', 'coordination')
     const available = [] as Array<{ nodeId: string; goal: string; inputs: FlowAgentReply['refs'] }>
     const candidates = new Map<string, AgentTaskSnapshot>()
+    // Pending review gates are stable within this synchronous admission pass; parse each once.
+    const scopeFile = this.check(run)
+    const pendingGates =
+      run.reviews
+        ?.filter((review) => review.state !== 'passed')
+        .map((review) => {
+          const config = JSON.parse(shape(scopeFile, review.nodeId).props.config) as {
+            gatedNodeIds?: string[]
+          }
+          return new Set(config.gatedNodeIds ?? [])
+        }) ?? []
     for (const id of run.childIds.filter((id) => !run.children.some((c) => c.nodeId === id))) {
-      if (
-        run.reviews?.some(
-          (review) =>
-            review.state !== 'passed' &&
-            JSON.parse(shape(this.check(run), review.nodeId).props.config).gatedNodeIds.includes(id)
-        )
-      )
-        continue
+      if (pendingGates.some((gates) => gates.has(id))) continue
       try {
         const child = this.specialists.describeAssignment({
           ...input,
@@ -417,6 +452,7 @@ export class FlowCoordinatorHost {
           {
             goal: run.goal,
             mode: run.config.interactionMode,
+            maxParallelTasks: run.config.maxParallelTasks ?? 1,
             available,
             completed: run.children
               .filter((c) => c.state === 'completed')
@@ -477,59 +513,81 @@ export class FlowCoordinatorHost {
       this.store.save(run)
       return false
     }
-    const candidate = available.find((c) => c.nodeId === decision.nodeId)
-    if (
-      !candidate ||
-      decision.inputs.some(
-        (ref) => !candidate.inputs.some((r) => canonicalFlowJson(r) === canonicalFlowJson(ref))
-      ) ||
-      new Set(decision.inputs.map(canonicalFlowJson)).size !== decision.inputs.length
-    )
-      throw new AgentRuntimeError('FLOW_HANDOFF_INPUT_REJECTED', 'handoff')
-    const taskId = hash([run.taskId, decision.nodeId])
-    const child = {
-      nodeId: decision.nodeId,
-      taskId,
-      goal: decision.goal,
-      completion: decision.completion,
-      inputs: decision.inputs,
+    const assignments = admitAssignments(run, decision, candidates, this.check(run))
+    const children = assignments.map((assignment) => ({
+      nodeId: assignment.nodeId,
+      taskId: hash([run.taskId, assignment.nodeId]),
+      goal: assignment.goal,
+      completion: assignment.completion,
+      inputs: assignment.inputs,
       state: 'ready',
       outputs: [] as FlowAgentReply['refs']
-    }
-    run.children.push(child)
+    }))
+    run.children.push(...children)
+    run.controlSteps = (run.controlSteps ?? 0) + children.length - 1
     run.decisionPending = false
-    this.store.event(run, `${taskId}:dispatch`, 'agent.dispatched', run.revision)
-    // A specialist owns a root task/checkpointer, not a LangGraph subgraph of this controller.
-    const reply = await AsyncLocalStorageProviderSingleton.runWithConfig(
-      {},
-      () =>
-        this.specialists.runAssignment(
-          {
-            projectId: run.projectId,
-            action: 'start',
-            nodeId: child.nodeId,
-            requestId: taskId,
-            traceId: run.traceId,
-            spanId: run.spanId
+    // All task identities and fixed inputs survive interruption before the first effect.
+    this.store.save(run)
+    for (const child of children)
+      this.store.event(run, `${child.taskId}:dispatch`, 'agent.dispatched', run.revision)
+    const replies = await Promise.allSettled(
+      children.map((child) =>
+        // Each specialist owns a root checkpointer, isolated from controller and siblings.
+        AsyncLocalStorageProviderSingleton.runWithConfig(
+          {},
+          () => {
+            if (signal.aborted) throw new AgentRuntimeError('AGENT_CANCELLED', 'handoff')
+            return this.specialists.runAssignment(
+              {
+                projectId: run.projectId,
+                action: 'start',
+                nodeId: child.nodeId,
+                requestId: child.taskId,
+                traceId: run.traceId,
+                spanId: run.spanId
+              },
+              child,
+              run.taskId,
+              candidates.get(child.nodeId)
+            )
           },
-          child,
-          run.taskId,
-          candidates.get(child.nodeId)
-        ),
-      true
+          true
+        )
+      )
     )
     if (signal.aborted || this.store.latest(run.projectId, run.nodeId)!.state === 'cancelled')
       return false
-    await this.publishChild(run, child.nodeId, reply, signal)
-    child.state = reply.task.state
-    child.outputs = reply.refs
-    this.store.save(run)
-    if (child.state === 'waiting') return this.wait(run, 'human.wait')
-    if (child.state !== 'completed')
-      throw new AgentRuntimeError(reply.task.code ?? 'FLOW_CHILD_BLOCKED', 'handoff')
-    this.store.event(run, `${taskId}:completed`, 'agent.completed', run.revision)
+    let failure: unknown
+    for (const [index, result] of replies.entries()) {
+      const child = children[index]
+      if (result.status === 'rejected') {
+        child.state = 'blocked'
+        failure ??= result.reason
+        this.store.save(run)
+        continue
+      }
+      const reply = result.value
+      // Keep completed facts even if public projection fails; recovery verifies them.
+      child.state = reply.task.state
+      child.outputs = reply.refs
+      this.store.save(run)
+      try {
+        if (child.state === 'completed') {
+          await this.publishChild(run, child.nodeId, reply, signal)
+          this.store.event(run, `${child.taskId}:completed`, 'agent.completed', run.revision)
+        } else if (child.state !== 'waiting')
+          throw new AgentRuntimeError(reply.task.code ?? 'FLOW_CHILD_BLOCKED', 'handoff')
+      } catch (error) {
+        failure ??= error
+      }
+      if (signal.aborted || this.store.latest(run.projectId, run.nodeId)!.state === 'cancelled')
+        return false
+    }
+    if (failure) throw failure
+    if (children.some((child) => child.state === 'waiting')) return this.wait(run, 'human.wait')
     return true
   }
+
   /** Read saved execution facts first; restoration republishes only already committed results. */
   private async recover(input: FlowAgentRun): Promise<FlowAgentReply> {
     const run = this.store.latest(input.projectId, input.nodeId)
@@ -575,6 +633,17 @@ export class FlowCoordinatorHost {
           record = this.reports.forRequest(run.projectId, cycle.requestId)
         if (!record || record.signature !== reviewBinding(file, cycle.nodeId).signature) {
           reasons.push('FLOW_REVIEW_OUTCOME_UNKNOWN')
+          continue
+        }
+        try {
+          assertCoordinatorReviewOutput(
+            file,
+            cycle.nodeId,
+            record.decision,
+            run.children.find((child) => child.nodeId === cycle.responsibleNodeId)?.outputs ?? []
+          )
+        } catch {
+          reasons.push('FLOW_REVIEW_NOT_READY')
           continue
         }
         observed = true

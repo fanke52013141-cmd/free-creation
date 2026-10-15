@@ -1,11 +1,28 @@
 {
-  "excludedPaths": ["src/renderer/src/dev/", "src/main/model-smoke.ts", "qa/", "artifacts/", "results/"],
-  "files": ["src/main/gateway/factory.ts", "src/main/gateway/glm-request.ts", "src/main/gateway/video-task-control.ts", "src/main/agent-flow/desktop-electron.ts"],
+  "excludedPaths": [
+    "src/renderer/src/dev/",
+    "src/main/model-smoke.ts",
+    "qa/",
+    "artifacts/",
+    "results/"
+  ],
+  "files": [
+    "src/main/gateway/factory.ts",
+    "src/main/gateway/glm-request.ts",
+    "src/main/gateway/video-task-control.ts",
+    "src/main/agent-flow/desktop-electron.ts",
+    "src/main/agent-flow/video-rework-acceptance.ts",
+    "src/main/agent-flow/parallel-media-acceptance.ts",
+    "src/main/agent-flow/parallel-review-acceptance.ts"
+  ],
   "reasons": {
+    "src/main/agent-flow/video-rework-acceptance.ts": "只由独立 desktop-electron --video-rework 验收入口加载，不被应用入口导入。fetch 替身只拦隔离供应商的任务/下载并返回本地 MP4；其余调用沿原 transport，SDK 使用隔离 loopback 协议夹具，无真实生成/外网计费。正式 gateway/runtime/command/node/model/task/media/save 负责业务开始/终态；严格两进程门禁扫描唯一终态、恢复 trace、假 Key/正文/JPEG/MP4 排除，证据见 docs/canvas-agent-flow/36-video-review-bounded-rework.md。不豁免秘密正文、裸 console 或新的生产网络路径，不重复业务终态。",
     "src/main/agent-flow/desktop-electron.ts": "独立隐藏桌面验收入口，不被应用入口导入。--video 的 fetch 仅返回隔离供应商夹具，net.fetch 仅在受 getMediaAbsPath 限制的 media:// 测试协议中读取隔离本地文件；不发真实生成/外网计费。业务请求、核对、下载、版本和命令日志仍由正式 executor/gateway/asset-store 发射，scripts/test-agent-flow-desktop.cjs --video 扫描实际诊断配对与假 Key/正文排除。测试传输不重复业务终态；不豁免秘密正文、裸 console 或新的生产调用路径。",
     "src/main/gateway/video-task-control.ts": "可信任务 GET 传输子模块，不发起生成/业务重试。唯一生产调用者 video.ts/controlVideoTask 负责 task.control.started/completed 同 trace 生命周期、固定 operation/state 和身份漂移裁决；在子模块重复记业务终态会重复配对。test/video-task-recovery.test.ts 已验证真实本地 HTTP、开始/唯一终态与正文/Key/URL 排除及 logger 故障不改变结果。该条不豁免正文/密钥日志或新增独立调用路径。",
     "src/main/gateway/factory.ts": "SDK 模型工厂仅注入参数适配 fetch；请求开始/唯一终态由 gateway/chat.ts、agent-flow/runtime-model.ts 和 model-probe.ts 的 emitGatewayEvent 负责。工厂不发起独立业务请求，重复事件会产生双终态；现有 testProvider 诊断继续由调用入口负责。",
-    "src/main/gateway/glm-request.ts": "官方 GLM fetch 装饰器只规范化请求参数并调用原 transport，保留 AbortSignal 和失败传播，不增加重试、任务或响应处理。调用者已有 model.request 生命周期；真实 SDK 探测的 4 开始/4 终态和脱敏验证见 docs/canvas-agent-flow/18-glm-model-switch.md。不得借此添加裸 console 或记录密钥/正文。"
+    "src/main/gateway/glm-request.ts": "官方 GLM fetch 装饰器只规范化请求参数并调用原 transport，保留 AbortSignal 和失败传播，不增加重试、任务或响应处理。调用者已有 model.request 生命周期；真实 SDK 探测的 4 开始/4 终态和脱敏验证见 docs/canvas-agent-flow/18-glm-model-switch.md。不得借此添加裸 console 或记录密钥/正文。",
+    "src/main/agent-flow/parallel-media-acceptance.ts": "只由隔离 desktop-electron --parallel-media 加载，不进入应用。供应商 fetch 替身强制两个 POST 同时在途，复用公共 gateway/command/runtime 生命周期；本地 MP4 不产生真实计费。两进程验证停止、unknown 锁、原任务接回及唯一终态和脱敏，见 37 并行媒体包。",
+    "src/main/agent-flow/parallel-review-acceptance.ts": "仅由独立 desktop-electron --parallel-review 验收入口加载，不进入应用。fetch 替身校验首批双 POST 重叠、冻结返工反馈，并提供本地蓝/红 MP4；其余传输沿原 fetch，不发真实付费请求。公共 gateway/runtime/review/command/node/task/media/save 提供生命周期，runner 检查四次提交、四次审核、唯一终态、恢复关联及正文/Key/媒体排除。不豁免生产网络、裸日志或秘密内容；证据见 39 并行审核返工记录。"
   },
   "_说明": "excludedPaths 内的文件跳过旁路检查：dev/browserMock 是浏览器演示 mock（无 main 诊断存储，接受即丢弃）；model-smoke.ts 的 console 是 --model-smoke-test 的 stdout 报告通道（无界面验收输出）；qa/ 与 artifacts/、results/ 是一次性 QA 探测脚本与验收产物，不属于应用业务代码。新条目必须带理由登记；密钥/正文禁止项不可通过本清单豁免。"
 }

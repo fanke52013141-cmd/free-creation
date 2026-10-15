@@ -253,6 +253,77 @@ function videoFixture() {
   }
   return { ...f, command, task, saved }
 }
+describe('video rework command admission', () => {
+  function prepared() {
+    const f = videoFixture(),
+      command = f.command()
+    const config = JSON.parse(f.agent.props.config)
+    new FlowTaskStore(f.db).create(
+      {
+        runtimeVersion: 1,
+        projectId: command.projectId,
+        agentNodeId: command.agentNodeId,
+        taskId: command.taskId,
+        goal: 'goal',
+        config,
+        semanticRevision: command.expectedSemanticRevision,
+        targets: [{ nodeId: command.targetNodeId, contractVersion: 7, inputs: command.inputs }],
+        traceId: command.traceId,
+        spanId: command.spanId,
+        rework: {
+          originalTaskId: 'initial',
+          reviewId: 'review',
+          reviewNodeId: 'review-node',
+          rulesVersion: '1',
+          rejectedOutputs: [f.version.ref],
+          criteria: 'criteria',
+          feedback: 'feedback',
+          round: 1,
+          videoTargetNodeId: command.targetNodeId
+        }
+      },
+      []
+    )
+    return { f, command: { ...command, videoRework: { reviewId: 'review', round: 1 } } }
+  }
+  it('requires the exact immutable rework marker and prevents omission or forgery', () => {
+    const { f, command } = prepared()
+    expect(() => f.ledger.prepare({ ...command, videoRework: undefined })).toThrow(
+      'FLOW_VIDEO_REWORK_INVALID'
+    )
+    expect(() =>
+      f.ledger.prepare({ ...command, videoRework: { reviewId: 'foreign', round: 1 } })
+    ).toThrow('FLOW_VIDEO_REWORK_INVALID')
+    expect(() => videoFixture().ledger.prepare(command)).toThrow('FLOW_VIDEO_REWORK_INVALID')
+  })
+  it('admits one video command per round, replays its receipt, and blocks a second identity', () => {
+    const { f, command } = prepared()
+    expect(f.ledger.prepare(command).state).toBe('ready')
+    expect(f.ledger.prepare(command).state).toBe('pending')
+    expect(() => f.ledger.prepare({ ...command, commandId: 'another' })).toThrow(
+      'FLOW_VIDEO_REWORK_BUDGET_EXHAUSTED'
+    )
+    expect(f.db.prepare('SELECT * FROM flow_commands').all()).toHaveLength(1)
+  })
+  it('authorizes a bounded revision only within the original rework marker and binds it to command identity', () => {
+    const { f, command } = prepared()
+    const proposed = {
+      ...command,
+      videoRework: { ...command.videoRework!, prompt: 'private-revision: red' }
+    }
+    expect(f.ledger.prepare(proposed).state).toBe('ready')
+    expect(f.ledger.prepare(proposed).state).toBe('pending')
+    expect(() => f.ledger.prepare(command)).toThrow('FLOW_COMMAND_CONFLICT')
+    expect(() =>
+      f.ledger.prepare({
+        ...proposed,
+        videoRework: { ...proposed.videoRework, prompt: 'another revision' }
+      })
+    ).toThrow('FLOW_COMMAND_CONFLICT')
+    expect(f.db.prepare('SELECT * FROM flow_commands').all()).toHaveLength(1)
+  })
+})
+
 describe('fixed first-frame Agent adapter', () => {
   function withFrame(run: (f: ReturnType<typeof videoFixture>, path: string) => void) {
     const root = mkdtempSync(join(tmpdir(), 'canvas-flow-frame-'))
@@ -356,6 +427,87 @@ describe('fixed first-frame Agent adapter', () => {
       inputs: [{ targetPortId: 'in-reference-video', assets: [version.ref] }]
     }
   }
+  function audioCommand(f: ReturnType<typeof videoFixture>, path: string) {
+    const relative = 'projects/project-a/media/sound.wav'
+    writeFileSync(join(path, '..', 'sound.wav'), 'audio-bytes')
+    f.db
+      .prepare('UPDATE media SET kind=?,mime=?,path=? WHERE id=?')
+      .run('audio', 'audio/wav', relative, 'frame')
+    Object.assign(f.source.props, {
+      nodeType: 'audio',
+      mediaPath: relative,
+      mediaMime: 'audio/wav'
+    })
+    f.file.nodes[0].type = 'audio'
+    f.file.edges[0].from.portId = 'out-audio'
+    f.file.edges[0].to.portId = 'in-reference-audio'
+    f.target.props.config = '{"mode":"reference"}'
+    const version = f.assets.submit({
+      projectId: 'project-a',
+      nodeId: f.source.id,
+      portId: 'out-audio',
+      submissionId: 'audio-version',
+      expectedGraphVersion: 1,
+      traceId: 'trace',
+      spanId: 'span'
+    })
+    return {
+      ...f.command(),
+      inputs: [{ targetPortId: 'in-reference-audio', assets: [version.ref] }]
+    }
+  }
+  it('freezes ordinary audio and restores only its original reference command across restart', () =>
+    withFrame((f, path) => {
+      const command = audioCommand(f, path),
+        grant = f.prepare(command)
+      expect(grant.inputs[0].versions[0].value).toMatchObject({
+        kind: 'audio',
+        contentSha256: expect.stringMatching(/^[a-f0-9]{64}$/)
+      })
+      f.task('unknown')
+      f.ledger.unknown({ ...lookup, leaseId: grant.leaseId })
+      expect(new FlowCommandLedger(f.db, f.project).resumeVideo(command)).toMatchObject({
+        runId: grant.runId,
+        leaseId: grant.leaseId
+      })
+      writeFileSync(join(path, '..', 'sound.wav'), 'other-bytes')
+      expect(() => f.ledger.resumeVideo(command)).toThrow('ASSET_AUDIO_CHANGED')
+      unlinkSync(join(path, '..', 'sound.wav'))
+      expect(() => f.assets.resolveInputs('project-a', command.inputs[0].assets)).toThrow(
+        'ASSET_AUDIO_CHANGED'
+      )
+    }))
+  it('rejects duplicate audio and invalid kind, project, MIME or size before admission', () =>
+    withFrame((f, path) => {
+      const command = audioCommand(f, path)
+      expect(() =>
+        f.prepare({
+          ...command,
+          inputs: [
+            {
+              ...command.inputs[0],
+              assets: [...command.inputs[0].assets, ...command.inputs[0].assets]
+            }
+          ]
+        })
+      ).toThrow('FLOW_INPUT_MANIFEST_INCOMPLETE')
+      for (const patch of [
+        "kind='video'",
+        'size_bytes=20971521',
+        "path='projects/foreign/media/sound.wav'",
+        "mime='video/mp4'"
+      ]) {
+        f.db.prepare(`UPDATE media SET ${patch} WHERE id='frame'`).run()
+        expect(() => f.assets.resolveInputs('project-a', command.inputs[0].assets)).toThrow(
+          'ASSET_AUDIO_CHANGED'
+        )
+        f.db
+          .prepare(
+            "UPDATE media SET kind='audio',mime='audio/wav',size_bytes=11,path='projects/project-a/media/sound.wav' WHERE id='frame'"
+          )
+          .run()
+      }
+    }))
   it('freezes an ordinary video asset and resumes only its original reference command', () =>
     withFrame((f, path) => {
       const command = motionCommand(f, path),

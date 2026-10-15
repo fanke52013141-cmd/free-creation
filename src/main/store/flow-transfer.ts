@@ -8,7 +8,7 @@ import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
 
 const portableMediaSchema = z
   .object({
-    kind: z.enum(['image', 'video']),
+    kind: z.enum(['image', 'video', 'audio']),
     mediaId: z
       .string()
       .min(1)
@@ -211,7 +211,7 @@ export function parseFlowVersions(value: unknown, projectId: string): Row[] {
     )
       throw new Error('FLOW_TRANSFER_ASSET_INVALID')
     const parsed = JSON.parse(row.value_json)
-    if (parsed?.kind === 'image' || parsed?.kind === 'video') {
+    if (parsed?.kind === 'image' || parsed?.kind === 'video' || parsed?.kind === 'audio') {
       const media = portableMediaSchema.parse(parsed)
       const prefix = `projects/${projectId}/media/`
       const filename = media.mediaPath.slice(prefix.length)
@@ -222,7 +222,7 @@ export function parseFlowVersions(value: unknown, projectId: string): Row[] {
         filename.includes('..') ||
         !filename.startsWith(media.mediaId + '.') ||
         !media.mime.startsWith(media.kind + '/') ||
-        (media.kind === 'image' && !media.contentSha256)
+        (media.kind !== 'video' && !media.contentSha256)
       )
         throw new Error('FLOW_TRANSFER_MEDIA_INVALID')
     } else if (
@@ -246,12 +246,13 @@ export function validateFlowMedia(
 ): void {
   for (const row of rows) {
     const raw = JSON.parse(row.value_json)
-    if (raw.kind !== 'image' && raw.kind !== 'video') continue
+    if (raw.kind !== 'image' && raw.kind !== 'video' && raw.kind !== 'audio') continue
     const value = portableMediaSchema.parse(raw)
     const media = resolve(value)
     if (
       !media ||
       !media.bytes.length ||
+      (value.kind === 'audio' && media.bytes.length > 20 * 1024 * 1024) ||
       media.kind !== value.kind ||
       media.mime !== value.mime ||
       (value.contentSha256 &&

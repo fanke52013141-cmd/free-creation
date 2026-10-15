@@ -27,21 +27,27 @@ const arg = (name: string): string | undefined =>
 const directory = arg('agent-directory'),
   phase = arg('agent-phase')
 const real = process.argv.includes('--real-model')
-const mediaTransfer = process.argv.includes('--media-transfer')
+const multiReference = process.argv.includes('--video-multi-reference')
+const mediaTransfer = multiReference || process.argv.includes('--media-transfer')
+const audioReference = mediaTransfer || process.argv.includes('--video-audio-reference')
 const motionReference = mediaTransfer || process.argv.includes('--video-motion-reference')
 const referenceImages = mediaTransfer || process.argv.includes('--video-reference-images')
 const lastFrame = referenceImages || process.argv.includes('--video-first-last-frame')
 const firstFrame = lastFrame || process.argv.includes('--video-first-frame')
 const videoMode =
-  referenceImages || motionReference
+  referenceImages || motionReference || audioReference
     ? 'reference'
     : lastFrame
       ? 'first-last-frame'
       : firstFrame
         ? 'first-frame'
         : 'text'
+const videoReview = process.argv.includes('--video-review')
+const videoRework = process.argv.includes('--video-rework')
+const parallelMedia = process.argv.includes('--parallel-media')
+const parallelReview = process.argv.includes('--parallel-review')
 const video = process.argv.includes('--video')
-if (video)
+if (video || videoReview || parallelMedia)
   protocol.registerSchemesAsPrivileged([
     {
       scheme: 'media',
@@ -82,14 +88,16 @@ if (
       report: unknown,
       stage = 'setup'
     try {
+      stage = 'setup-project'
       const statePath = join(directory, 'agent-state.json')
       const projectId =
         phase === 'execute'
           ? createProject('测试：画布 Agent C3').id
           : JSON.parse(readFileSync(statePath, 'utf8')).projectId
       setSetting('lastProjectId', projectId)
+      stage = 'setup-protocol'
       const host = new SqliteModelHost(getDb())
-      if (video) {
+      if (video || videoReview || parallelMedia) {
         protocol.handle('media', (request) => {
           const url = new URL(request.url),
             path = getMediaAbsPath(decodeURIComponent(url.host + url.pathname).replace(/^\/+/, ''))
@@ -97,6 +105,8 @@ if (
             ? net.fetch(pathToFileURL(path).href)
             : Promise.resolve(new Response(null, { status: 403 }))
         })
+      }
+      if (video) {
         if (phase === 'execute') {
           getDb()
             .prepare('INSERT INTO providers VALUES (?,?,?,?,?,?,?)')
@@ -152,13 +162,41 @@ if (
               const videos = content.filter((part: { type: string }) => part.type === 'video_url')
               if (
                 motionReference &&
-                (videos.length !== 1 ||
+                (videos.length !== (multiReference ? 2 : 1) ||
                   videos[0].role !== 'reference_video' ||
                   videos[0].video_url.url !==
-                    `data:video/mp4;base64,${readFileSync(join(directory, 'fixture.mp4')).toString('base64')}`)
+                    `data:video/mp4;base64,${readFileSync(join(directory, 'fixture.mp4')).toString('base64')}` ||
+                  (multiReference &&
+                    (videos[1].role !== 'reference_video' ||
+                      videos[1].video_url.url !==
+                        `data:video/mp4;base64,${readFileSync(join(directory, 'motion-second.mp4')).toString('base64')}`)))
               )
                 throw new Error('MOTION_REFERENCE_WIRE_INVALID')
               if (!motionReference && videos.length) throw new Error('UNEXPECTED_VIDEO_REFERENCE')
+              const audios = content.filter((part: { type: string }) => part.type === 'audio_url')
+              if (
+                audioReference &&
+                (audios.length !== (multiReference ? 2 : 1) ||
+                  audios[0].role !== 'reference_audio' ||
+                  audios[0].audio_url.url !==
+                    `data:audio/wav;base64,${readFileSync(join(directory, 'reference.wav')).toString('base64')}` ||
+                  (multiReference &&
+                    (audios[1].role !== 'reference_audio' ||
+                      audios[1].audio_url.url !==
+                        `data:audio/wav;base64,${readFileSync(join(directory, 'reference-second.wav')).toString('base64')}`)))
+              )
+                throw new Error('AUDIO_REFERENCE_BYTES_INVALID')
+              if (!audioReference && audios.length) throw new Error('UNEXPECTED_AUDIO_REFERENCE')
+              if (
+                multiReference &&
+                !content.some(
+                  (part: { type: string; text?: string }) =>
+                    part.type === 'text' &&
+                    part.text?.includes('private-c3-bundle-prompt') &&
+                    part.text.includes('private-c3-bundle-style')
+                )
+              )
+                throw new Error('PROMPT_BUNDLE_WIRE_INVALID')
               if (
                 referenceImages &&
                 (images.some((image: { role: string }) => image.role !== 'reference_image') ||
@@ -195,6 +233,19 @@ if (
           return nativeFetch(url, options)
         }
       }
+      stage = 'setup-supplier'
+      if (parallelReview) {
+        const { installParallelReviewSupplier } = await import('./parallel-review-acceptance')
+        installParallelReviewSupplier(directory, phase!)
+      } else if (parallelMedia) {
+        const { installParallelMediaSupplier } = await import('./parallel-media-acceptance')
+        installParallelMediaSupplier(directory, phase!)
+      }
+      if (videoRework) {
+        const { installVideoReworkSupplier } = await import('./video-rework-acceptance')
+        installVideoReworkSupplier(directory, phase!)
+      }
+      stage = 'setup-model'
       host.saveConnection({
         id: 'agent-test-connection',
         name: '隔离验收模型',
@@ -214,12 +265,22 @@ if (
             operation: 'text.generate',
             asynchronous: false,
             streaming: true,
-            acceptedAssetKinds: [],
+            acceptedAssetKinds: videoReview ? ['image'] : [],
             producedAssetKinds: [],
             controls: {}
           }
         ]
       })
+      if (videoReview)
+        await host.saveValidation({
+          connectionId: 'agent-test-connection',
+          modelDefinitionId: 'agent-test-model',
+          operation: 'text.generate',
+          status: 'verified',
+          checkedAt: new Date().toISOString(),
+          verifiedAt: new Date().toISOString()
+        })
+      stage = 'setup-ipc'
       registerProjectIpc()
       registerLibraryIpc()
       registerMediaIpc()
@@ -245,7 +306,9 @@ if (
         () => active,
         (desktop) => registerFlowAgentsIpc(() => active, desktop)
       )
+      stage = 'setup-load'
       await active.loadURL('http://127.0.0.1:5199')
+      stage = 'setup-canvas'
       const deadline = Date.now() + 60000
       while (
         !(await active.webContents.executeJavaScript(
@@ -286,6 +349,21 @@ if (
             ? await importMedia(projectId, join(directory, 'fixture.mp4'))
             : null
         if (motion && !motion.ok) throw new Error('MOTION_IMPORT_FAILED')
+        const sound =
+          audioReference && phase === 'execute'
+            ? await importMedia(projectId, join(directory, 'reference.wav'))
+            : null
+        if (sound && !sound.ok) throw new Error('AUDIO_IMPORT_FAILED')
+        const motionSecond =
+          multiReference && phase === 'execute'
+            ? await importMedia(projectId, join(directory, 'motion-second.mp4'))
+            : null
+        const soundSecond =
+          multiReference && phase === 'execute'
+            ? await importMedia(projectId, join(directory, 'reference-second.wav'))
+            : null
+        if ((motionSecond && !motionSecond.ok) || (soundSecond && !soundSecond.ok))
+          throw new Error('MULTI_REFERENCE_IMPORT_FAILED')
         report = await active.webContents.executeJavaScript(`(async()=>{${common}
           const read=(id)=>window.api.inspectFlowAgent({projectId,nodeId:id}).then(value);
           const run=async(id)=>{await ensureCanvasSaved();const task=await read(id);if(task)editor.updateShape({id,type:'node-card',meta:{...editor.getShape(id).meta,agentTask:JSON.stringify(task)}});const result=await(await import('/src/engine/executor.ts')).runNodeManually(editor,projectId,(await import('/src/stores/gateway.ts')).useGatewayStore.getState().providers,id);await ensureCanvasSaved();const after=await read(id);if(after?.state==='completed'&&result.status!=='done')throw new Error('VIDEO_PUBLIC_PROJECTION_FAILED');return after};
@@ -305,7 +383,14 @@ if (
             const motion=${JSON.stringify(motion && motion.ok ? motion.asset : null)};
             if(motion){editor.createShape({id:'shape:motion-input',type:'node-card',x:100,y:950,props:{nodeType:'video-asset',title:'运动参考',mediaId:motion.id,mediaPath:motion.path,mediaMime:motion.mime}});createEdge(editor,{shapeId:'shape:motion-input',portId:'out-video'},{shapeId:'shape:video-target',portId:'in-reference-video'});}
             for(const to of ['shape:video-agent','shape:video-target'])createEdge(editor,{shapeId:'shape:video-prompt',portId:'out-text'},{shapeId:to,portId:'in-text'});
-            if(frame||motion){await new Promise(done=>setTimeout(done,300));const target=editor.getShape('shape:video-target');editor.updateShape({id:target.id,type:'node-card',props:{config:JSON.stringify({...JSON.parse(target.props.config),mode:${JSON.stringify(videoMode)}})}});}
+            const sound=${JSON.stringify(sound && sound.ok ? sound.asset : null)};
+            if(sound){editor.createShape({id:'shape:audio-input',type:'node-card',x:1400,y:950,props:{nodeType:'audio',title:'参考音频',mediaId:sound.id,mediaPath:sound.path,mediaMime:sound.mime}});createEdge(editor,{shapeId:'shape:audio-input',portId:'out-audio'},{shapeId:'shape:video-target',portId:'in-reference-audio'});}
+            if(${multiReference}){
+              const motion2=${JSON.stringify(motionSecond && motionSecond.ok ? motionSecond.asset : null)},sound2=${JSON.stringify(soundSecond && soundSecond.ok ? soundSecond.asset : null)};
+              for(const [name,media,type,port,target] of [['motion-second',motion2,'video-asset','out-video','in-reference-video'],['audio-second',sound2,'audio','out-audio','in-reference-audio']]){editor.createShape({id:'shape:'+name,type:'node-card',x:1800,y:name==='motion-second'?950:1400,props:{nodeType:type,title:name,mediaId:media.id,mediaPath:media.path,mediaMime:media.mime}});if(!createEdge(editor,{shapeId:'shape:'+name,portId:port},{shapeId:'shape:video-target',portId:target}))throw new Error('MULTI_REFERENCE_EDGE_MISSING');}
+              editor.createShape({id:'shape:prompt-bundle',type:'node-card',x:1800,y:100,props:{nodeType:'json',title:'固定提示词包',text:JSON.stringify({prompt:'private-c3-bundle-prompt',style:'private-c3-bundle-style'})}});if(!createEdge(editor,{shapeId:'shape:prompt-bundle',portId:'out-json'},{shapeId:'shape:video-target',portId:'in-prompt'}))throw new Error('PROMPT_BUNDLE_EDGE_MISSING');
+            }
+            if(frame||motion||sound){await new Promise(done=>setTimeout(done,300));const target=editor.getShape('shape:video-target');editor.updateShape({id:target.id,type:'node-card',props:{config:JSON.stringify({...JSON.parse(target.props.config),mode:${JSON.stringify(videoMode)}})}});}
             const root=await run('shape:c3-agent'),child=await read('shape:video-agent');
             if(root.state!=='waiting'||child?.state!=='waiting'||child?.waitKind!=='reconcile'){window.__reviewAcceptanceStage=JSON.stringify({mode:JSON.parse(editor.getShape('shape:video-target').props.config).mode,rootCode:root.code,childCode:child?.code});throw new Error('VIDEO_UNKNOWN_NOT_HELD');}
             if(editor.getCurrentPageShapes().some(s=>s.props?.nodeType==='video-asset'&&s.meta.agentAssetVersionId))throw new Error('VIDEO_UNKNOWN_PUBLISHED');
@@ -328,12 +413,28 @@ if (
           if(!el.videoWidth)throw new Error('VIDEO_METADATA_NOT_LOADED');
           let frameAssetShapeId;
           if(${firstFrame}){const versions=value(await window.api.listFlowAssets({projectId,nodeId:'shape:first-frame',portId:'out-image'}));const version=value(await window.api.readFlowAsset({projectId,versionId:versions[0].ref.versionId}));frameAssetShapeId=(await import('/src/canvas/flow-asset-actions.ts')).placeFlowAsset(editor,version,'shape:first-frame');editor.centerOnPoint(editor.getShapePageBounds(frameAssetShapeId).center);await new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)));let image;for(let i=0;i<100;i++){image=document.querySelector('[data-node-id="'+frameAssetShapeId+'"] img');if(image?.naturalWidth)break;await new Promise(done=>setTimeout(done,20));}if(!image?.naturalWidth)throw new Error('FRAME_PREVIEW_MISSING');}
-          await ensureCanvasSaved();return {projectId,frameAssetShapeId,taskId:root.taskId,mediaId:assets[0].props.mediaId,assetShapeId:assets[0].id,checks:['same supplier task after process reopen','explicit continue restores fixed video version','main collects committed specialist result','one playable video asset with ordinary out-video','saved project retains media and version reference']};
+          let audioAssetShapeId;
+          if(${audioReference}){
+            const panels=(await import('/src/stores/nodePanel.ts')).useNodePanelStore;
+            panels.getState().open('contract','shape:audio-input','overview');
+            for(let i=0;!document.querySelector('#contract-tab-io');i++){if(i===100)throw new Error('AUDIO_CONTRACT_PANEL_MISSING');await new Promise(done=>setTimeout(done,25));}
+            document.querySelector('#contract-tab-io').click();
+            let submit;for(let i=0;i<100;i++){submit=[...document.querySelectorAll('.flow-asset-panel button')].find(b=>b.textContent.includes('提交当前输出为新版本'));if(submit)break;await new Promise(done=>setTimeout(done,25));}if(!submit||submit.disabled)throw new Error('AUDIO_ASSET_SUBMIT_UNAVAILABLE');submit.click();
+            let place;for(let i=0;i<200;i++){place=[...document.querySelectorAll('.flow-asset-panel button')].find(b=>b.textContent.includes('将此版本放到画布'));if(place&&!place.disabled)break;await new Promise(done=>setTimeout(done,25));}if(!place||place.disabled||!document.querySelector('.flow-asset-panel pre')?.textContent.includes('音频成果'))throw new Error('AUDIO_ASSET_UI_NOT_COMMITTED');
+            place.click();panels.getState().close();
+            audioAssetShapeId=editor.getSelectedShapeIds()[0];if(editor.getShape(audioAssetShapeId)?.props.nodeType!=='audio'||!editor.getShape(audioAssetShapeId)?.meta.flowAssetRef)throw new Error('AUDIO_ASSET_UI_NOT_PLACED');
+            editor.centerOnPoint(editor.getShapePageBounds(audioAssetShapeId).center);let audio;for(let i=0;i<200;i++){audio=document.querySelector('[data-node-id="'+audioAssetShapeId+'"] audio');if(audio?.duration>0)break;await new Promise(done=>setTimeout(done,25));}if(!(audio?.duration>0)||!audio.paused)throw new Error('AUDIO_FIXED_DECODE_FAILED');await audio.play();if(audio.paused)throw new Error('AUDIO_FIXED_PLAY_FAILED');audio.pause();}
+          await ensureCanvasSaved();return {projectId,frameAssetShapeId,audioAssetShapeId,taskId:root.taskId,mediaId:assets[0].props.mediaId,assetShapeId:assets[0].id,checks:['same supplier task after process reopen','explicit continue restores fixed video version','main collects committed specialist result','one playable video asset with ordinary out-video','saved project retains media and version reference']};
         })()`)
         if (phase === 'reopen') {
-          const identities = report as { assetShapeId: string; frameAssetShapeId?: string }
+          const identities = report as {
+            assetShapeId: string
+            frameAssetShapeId?: string
+            audioAssetShapeId?: string
+          }
           for (const [assetId, kind] of [
             [identities.assetShapeId, 'video'],
+            ...(identities.audioAssetShapeId ? [[identities.audioAssetShapeId, 'audio']] : []),
             ...(identities.frameAssetShapeId ? [[identities.frameAssetShapeId, 'img']] : [])
           ]) {
             await active.webContents.executeJavaScript(
@@ -345,7 +446,7 @@ if (
             active.webContents.invalidate()
             await new Promise((done) => setTimeout(done, 300))
             const point = (await active.webContents.executeJavaScript(
-              `(()=>{const box=document.querySelector('[data-node-id="'+${JSON.stringify(assetId)}+'"] [data-node-interactive="media-preview"]').getBoundingClientRect();return {x:Math.round(box.x+box.width/2),y:Math.round(box.y+box.height/2)}})()`
+              `(()=>{const box=document.querySelector('[data-node-id="'+${JSON.stringify(assetId)}+'"] [data-node-interactive="media-preview"]').getBoundingClientRect();return {x:Math.round(box.x+box.width/2),y:Math.round(box.y+(${JSON.stringify(kind)}==='audio'?10:box.height/2))}})()`
             )) as { x: number; y: number }
             const mouse = (
               type: 'mouseDown' | 'mouseUp' | 'mouseMove',
@@ -374,15 +475,28 @@ if (
               `import('/src/stores/editor.ts').then(m=>{const s=m.useEditorStore.getState().editor.getShape(${JSON.stringify(assetId)});return {x:s.x,y:s.y}})`
             )
             mouse('mouseDown', point.x, point.y)
+            await new Promise((done) => setTimeout(done, 50))
+            mouse('mouseMove', point.x + 20, point.y + 10)
+            await new Promise((done) => setTimeout(done, 50))
             mouse('mouseMove', point.x + 45, point.y + 25)
             mouse('mouseUp', point.x + 45, point.y + 25)
             await new Promise((done) => setTimeout(done, 100))
             const moved = await active.webContents.executeJavaScript(
               `import('/src/stores/editor.ts').then(m=>{const s=m.useEditorStore.getState().editor.getShape(${JSON.stringify(assetId)});return s.x!==${before.x}||s.y!==${before.y}})`
             )
-            if (!moved) throw new Error('VIDEO_FIXED_DRAG_FAILED')
+            if (!moved) {
+              writeFileSync(
+                join(directory, 'pointer-failure.png'),
+                (await active.webContents.capturePage()).toPNG()
+              )
+              const debug = await active.webContents.executeJavaScript(
+                `import('/src/stores/editor.ts').then(m=>{const e=m.useEditorStore.getState().editor,t=document.elementFromPoint(${point.x},${point.y});return {kind:${JSON.stringify(kind)},point:${JSON.stringify(point)},before:${JSON.stringify(before)},after:{x:e.getShape(${JSON.stringify(assetId)}).x,y:e.getShape(${JSON.stringify(assetId)}).y},state:e.getPath(),target:t?.tagName,classes:t?.className,control:t?.closest('[data-node-pointer=control]')?.tagName}})`
+              )
+              writeFileSync(join(directory, 'pointer-debug.json'), JSON.stringify(debug))
+              throw new Error(`${kind.toUpperCase()}_FIXED_DRAG_FAILED`)
+            }
             const afterPoint = await active.webContents.executeJavaScript(
-              `(()=>{const box=document.querySelector('[data-node-id="'+${JSON.stringify(assetId)}+'"] [data-node-interactive="media-preview"]').getBoundingClientRect();return {x:Math.round(box.x+box.width/2),y:Math.round(box.y+box.height/2)}})()`
+              `(()=>{const box=document.querySelector('[data-node-id="'+${JSON.stringify(assetId)}+'"] [data-node-interactive="media-preview"]').getBoundingClientRect();return {x:Math.round(box.x+box.width/2),y:Math.round(box.y+(${JSON.stringify(kind)}==='audio'?10:box.height/2))}})()`
             )
             mouse('mouseMove', afterPoint.x, afterPoint.y)
             mouse('mouseDown', afterPoint.x, afterPoint.y)
@@ -411,7 +525,14 @@ if (
             )
             await new Promise((done) => setTimeout(done, 300))
             writeFileSync(
-              join(directory, kind === 'video' ? 'video-fixed.png' : 'image-fixed.png'),
+              join(
+                directory,
+                kind === 'video'
+                  ? 'video-fixed.png'
+                  : kind === 'audio'
+                    ? 'audio-fixed.png'
+                    : 'image-fixed.png'
+              ),
               (await active.webContents.capturePage()).toPNG()
             )
           }
@@ -470,7 +591,8 @@ if (
           firstFrameFixed: firstFrame,
           lastFrameFixed: lastFrame,
           referenceImageCount: referenceImages ? 3 : 0,
-          motionReferenceFixed: motionReference
+          motionReferenceFixed: motionReference,
+          audioReferenceFixed: audioReference
         }
         if (mediaTransfer && phase === 'reopen') {
           const oldSave = dialog.showSaveDialog,
@@ -565,7 +687,7 @@ if (
             (await import('/src/stores/app.ts')).useAppStore.getState().openProject(meta);
             let editor;for(let i=0;i<300;i++){editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;if(editor?.getShape(ids[0])&&saves.getState().deps!==oldDeps)break;if(i===299)throw new Error('MEDIA_IMPORTED_CANVAS_MISSING');await new Promise(done=>setTimeout(done,50));}
             const outputs=await import('/src/nodes/nodeValues.ts');
-            for(const id of ids){const shape=editor.getShape(id),values=Object.values(outputs.projectNodeOutputs(shape));if(values.length!==1)throw new Error('MEDIA_IMPORTED_OUTPUT_MISSING');const value=values[0];if(!['image','video'].includes(value.kind))continue;editor.centerOnPoint(editor.getShapePageBounds(id).center);let element;for(let i=0;i<200;i++){element=document.querySelector('[data-node-id="'+id+'"] '+(value.kind==='image'?'img':'video'));if(value.kind==='image'?element?.naturalWidth:element?.videoWidth)break;if(i===199)throw new Error('MEDIA_IMPORTED_DECODE_FAILED');await new Promise(done=>setTimeout(done,25));}}
+            for(const id of ids){const shape=editor.getShape(id),values=Object.values(outputs.projectNodeOutputs(shape));if(values.length!==1)throw new Error('MEDIA_IMPORTED_OUTPUT_MISSING');const value=values[0];if(!['image','video','audio'].includes(value.kind))continue;editor.centerOnPoint(editor.getShapePageBounds(id).center);let element;for(let i=0;i<200;i++){element=document.querySelector('[data-node-id="'+id+'"] '+(value.kind==='image'?'img':value.kind==='audio'?'audio':'video'));if(value.kind==='image'?element?.naturalWidth:value.kind==='audio'?element?.duration>0:element?.videoWidth)break;if(i===199)throw new Error('MEDIA_IMPORTED_DECODE_FAILED');await new Promise(done=>setTimeout(done,25));}}
             await (await import('/src/canvas/flow-asset-actions.ts')).ensureCanvasSaved();
           })()`)
           writeFileSync(
@@ -669,6 +791,46 @@ if (
           )
           ;(report as { checks: string[] }).checks.push('feedback label/body select and drag')
         }
+        if (phase === 'execute') writeFileSync(statePath, JSON.stringify(report))
+      } else if (parallelReview) {
+        const { acceptParallelReview } = await import('./parallel-review-acceptance')
+        report = await acceptParallelReview({
+          window: active,
+          directory,
+          projectId,
+          phase: phase!,
+          common
+        })
+        if (phase === 'execute') writeFileSync(statePath, JSON.stringify(report))
+      } else if (parallelMedia) {
+        const { acceptParallelMedia } = await import('./parallel-media-acceptance')
+        report = await acceptParallelMedia({
+          window: active,
+          directory,
+          projectId,
+          phase: phase!,
+          common
+        })
+        if (phase === 'execute') writeFileSync(statePath, JSON.stringify(report))
+      } else if (videoRework) {
+        const { acceptVideoRework } = await import('./video-rework-acceptance')
+        report = await acceptVideoRework({
+          window: active,
+          directory,
+          projectId,
+          phase: phase!,
+          common
+        })
+        if (phase === 'execute') writeFileSync(statePath, JSON.stringify(report))
+      } else if (videoReview) {
+        const { acceptVideoReview } = await import('./video-review-acceptance')
+        report = await acceptVideoReview({
+          window: active,
+          directory,
+          projectId,
+          phase: phase!,
+          common
+        })
         if (phase === 'execute') writeFileSync(statePath, JSON.stringify(report))
       } else if (review) {
         report = await active.webContents.executeJavaScript(`(async()=>{${common}
@@ -1035,7 +1197,27 @@ if (
         stage,
         ...(typeof acceptanceStage === 'string' ? { acceptanceStage } : {}),
         ...(Array.isArray(bindingChanges) ? { bindingChanges } : {}),
-        errorName: error instanceof Error ? error.name : 'unknown'
+        errorName: error instanceof Error ? error.name : 'unknown',
+        nativeCode:
+          typeof (error as { code?: unknown })?.code === 'string' &&
+          /^[A-Z0-9_]+$/.test((error as { code: string }).code)
+            ? (error as { code: string }).code
+            : undefined,
+        errorCategory:
+          error instanceof Error
+            ? ['protocol', 'database', 'module', 'workspace', 'permission'].find((word) =>
+                error.message.toLowerCase().includes(word)
+              )
+            : undefined,
+        stackLocations:
+          error instanceof Error
+            ? error.stack
+                ?.split('\n')
+                .slice(1)
+                .map((line) => line.match(/([A-Za-z0-9_.-]+\.js:\d+:\d+)/)?.[1])
+                .filter(Boolean)
+                .slice(0, 5)
+            : []
       }
     } finally {
       foreign?.destroy()

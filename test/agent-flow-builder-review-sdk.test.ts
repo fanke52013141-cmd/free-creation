@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { afterEach, expect, it, vi } from 'vitest'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { AgentSdkModel } from '../src/main/agent-flow/runtime-model'
@@ -104,4 +105,90 @@ it('empty tool terminal and forged schema cannot become a build or an approval',
       new AbortController().signal
     )
   ).rejects.toMatchObject({ code: 'AGENT_MODEL_ACTION_INVALID' })
+})
+
+it('sends exactly four ordered image parts with sample labels and keeps image bytes out of diagnostics', async () => {
+  const bytes = Uint8Array.from([255, 216, 255, 0, 255, 217]),
+    digest = createHash('sha256').update(bytes).digest('hex')
+  const input = {
+    criteria: 'private-sdk-video-rule',
+    subjects: [
+      {
+        kind: 'video' as const,
+        mediaId: 'video',
+        mediaPath: 'projects/p/media/video.mp4',
+        mime: 'video/mp4',
+        contentSha256: 'a'.repeat(64)
+      }
+    ],
+    videoSamples: {
+      images: [bytes, bytes, bytes, bytes],
+      evidence: {
+        method: 'four-frames-v1' as const,
+        durationMs: 1000,
+        contentSha256: 'a'.repeat(64),
+        frames: [0, 250, 500, 750].map((timeMs) => ({ timeMs, contentSha256: digest }))
+      }
+    }
+  }
+  const f = fixture('review_assets', {
+    passed: true,
+    feedback: 'private-sdk-video-feedback',
+    issues: []
+  })
+  await f.port.review(input, new AbortController().signal)
+  const body = JSON.stringify(f.requests)
+  expect(body.match(/data:image\/jpeg;base64,/g)).toHaveLength(4)
+  expect(body).toContain('750ms')
+  const diagnostics = JSON.stringify(f.events)
+  expect(diagnostics).not.toContain(Buffer.from(bytes).toString('base64'))
+  expect(diagnostics).not.toContain('private-sdk')
+  expect(f.events.map((event) => event.event)).toEqual([
+    'model.request.started',
+    'model.request.completed'
+  ])
+  const rejected = fixture('review_assets', { passed: true, feedback: 'wrong', issues: [] })
+  await expect(
+    rejected.port.review(
+      {
+        ...input,
+        videoSamples: { ...input.videoSamples, images: [Uint8Array.from([1]), bytes, bytes, bytes] }
+      },
+      new AbortController().signal
+    )
+  ).rejects.toMatchObject({ code: 'FLOW_VIDEO_REVIEW_NOT_FIXED' })
+  expect(rejected.requests).toHaveLength(0)
+})
+
+it('exposes a bounded parallel tool only when the coordinator explicitly enables two tasks', async () => {
+  const ref = {
+    assetId: 'asset',
+    versionId: 'version',
+    sourceNodeId: 'source',
+    sourcePortId: 'out-text'
+  }
+  const available = ['first', 'second'].map((nodeId) => ({
+    nodeId,
+    goal: 'private-sdk-goal',
+    inputs: [ref]
+  }))
+  const assignments = available.map((item) => ({ ...item, completion: 'private-sdk-completion' }))
+  const f = fixture('dispatch_parallel', { assignments })
+  const ctx = { goal: 'private-sdk-root', mode: 'autonomous' as const, available, completed: [] }
+  expect(
+    await f.port.coordinate({ ...ctx, maxParallelTasks: 2 }, new AbortController().signal)
+  ).toEqual({ kind: 'dispatch-many', assignments })
+  const tools = f.requests[0].tools as {
+    function: {
+      name: string
+      parameters: { properties: { assignments: { minItems: number; maxItems: number } } }
+    }
+  }[]
+  const batch = tools.find((tool) => tool.function.name === 'dispatch_parallel')!
+  expect(batch.function.parameters.properties.assignments.minItems).toBe(2)
+  expect(batch.function.parameters.properties.assignments.maxItems).toBe(2)
+  expect(JSON.stringify(f.events)).not.toContain('private-sdk')
+  const sequential = fixture('dispatch_agent', assignments[0])
+  await sequential.port.coordinate(ctx, new AbortController().signal)
+  expect(JSON.stringify(sequential.requests[0].tools)).not.toContain('dispatch_parallel')
 })
