@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type */
+const { qaOutputPath } = require('./qa-output.cjs')
 const { spawn } = require('node:child_process')
 const { createServer } = require('node:http')
 const { mkdtemp, mkdir, readFile, writeFile, cp, rm, readdir } = require('node:fs/promises')
@@ -57,7 +58,7 @@ if (process.argv.slice(2).some(arg => !['--real-model','--collaboration','--coor
 if (real && (!process.env.CANVAS_AGENT_PROBE_KEY || !process.env.CANVAS_AGENT_PROBE_MODEL)) throw new Error('AGENT_REAL_CREDENTIAL_REQUIRED')
 ;(async () => {
   const directory = await mkdtemp(join(tmpdir(), 'canvas-flow-agent-'))
-  const evidence = resolve(process.env.CANVAS_AGENT_EVIDENCE_DIR || `qa/canvas-agent-flow/C3/desktop-${rework ? 'rework-' + (process.env.CANVAS_AGENT_REWORK_MODE || 'autonomous') + '-' : review ? 'review-' : builder ? 'builder-' : coordination ? 'coordination-' : collaboration ? 'collaboration-' : ''}${real ? 'real' : 'fixture'}`)
+  const evidence = qaOutputPath(process.env.CANVAS_AGENT_EVIDENCE_DIR || `qa/canvas-agent-flow/C3/desktop-${rework ? 'rework-' + (process.env.CANVAS_AGENT_REWORK_MODE || 'autonomous') + '-' : review ? 'review-' : builder ? 'builder-' : coordination ? 'coordination-' : collaboration ? 'collaboration-' : ''}${real ? 'real' : 'fixture'}`)
   if (!evidence.startsWith(resolve('qa') + require('node:path').sep)) throw new Error('AGENT_EVIDENCE_PATH_INVALID')
   await mkdir(evidence, { recursive: true })
   let requests = 0

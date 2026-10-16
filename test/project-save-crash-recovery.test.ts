@@ -84,7 +84,7 @@ function ageLock(path: string) {
   utimesSync(path, old, old)
 }
 describe('C4 main project save hard termination', () => {
-  it.each(['tmp', 'bak', 'promoted', 'transaction', 'committed'])(
+  it.each(['tmp', 'flushed', 'bak', 'promoted', 'transaction', 'committed'])(
     'preserves the last promoted snapshot after termination at %s without replay',
     async (boundary) => {
       const directory = isolated()
@@ -98,7 +98,7 @@ describe('C4 main project save hard termination', () => {
       } finally {
         db.close()
       }
-      const version = ['tmp', 'bak'].includes(boundary) ? 1 : 2
+      const version = ['tmp', 'flushed', 'bak'].includes(boundary) ? 1 : 2
       const restored = JSON.parse(await run(directory, 'recover'))
       expect(restored).toMatchObject({
         version,

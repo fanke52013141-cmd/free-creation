@@ -1,9 +1,10 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type */
-const { chromium } = require('playwright')
+const { qaOutputPath } = require('./qa-output.cjs')
+const { launchQaBrowser } = require('./qa-browser.cjs')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 ;(async () => {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true })
+  const browser = await launchQaBrowser()
   try {
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
     await page.goto(process.env.CANVAS_QA_URL || 'http://127.0.0.1:5194')
@@ -57,8 +58,8 @@ const fs = require('node:fs')
       await page.waitForTimeout(100)
       assert.equal(await card.locator('.connected-input-list').evaluate(el=>el.offsetHeight),36)
     }
-    fs.mkdirSync('qa/reference-standard',{recursive:true})
-    await page.screenshot({path:'qa/reference-standard/single-row.png'})
+    fs.mkdirSync(qaOutputPath('qa/reference-standard'),{recursive:true})
+    await page.screenshot({path:qaOutputPath('qa/reference-standard/single-row.png')})
     await page.evaluate(async()=>{const e=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;e.deleteShape('shape:long-text')})
     await page.waitForFunction(() => !document.querySelector('[data-node-type="image-gen"] .connected-inputs') && document.querySelector('[data-node-type="image-gen"]')?.getBoundingClientRect().height === 260, null, { timeout: 10000 })
     assert.equal(await card.locator('.connected-inputs').count(),0)
@@ -107,7 +108,7 @@ const fs = require('node:fs')
     assert.ok(theme.inside)
     assert.ok(theme.z<theme.modal)
     assert.ok(!theme.background.startsWith('rgba('),'详情背景不透明')
-    await page.screenshot({path:'qa/reference-standard/voice-light-detail.png'})
+    await page.screenshot({path:qaOutputPath('qa/reference-standard/voice-light-detail.png')})
     await page.keyboard.press('Escape')
     await page.evaluate(async()=>{
       const e=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor

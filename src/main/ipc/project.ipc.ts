@@ -19,6 +19,7 @@ import { exportProject, importProject } from '../store/transfer'
 import { exportCanvasStructure, importCanvasStructure } from '../store/canvas-structure-transfer'
 import { ProjectFileWatcher } from './project-watcher'
 import { newTraceId, newSpanId } from '../../shared/observability'
+import { projectSaveFailureDiagnostics } from '../store/project-save-error'
 
 function ok<T>(data: T): IpcEnvelope<T> {
   return { ok: true, data }
@@ -105,9 +106,27 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
     ): IpcEnvelope<ProjectMeta | null> => {
       if (!input?.projectId || !input.workspaceProfile)
         return err('INVALID_INPUT', '工作台配置不完整')
+      const context = projectSaveContext({ id: input.projectId })
+      emitDomainEvent('project.save.started', '项目工作台配置保存开始', {
+        context,
+        attributes: { operation: 'workspace-profile' }
+      })
       try {
-        return ok(repo.saveWorkspaceProfile(input.projectId, input.workspaceProfile))
+        const result = repo.saveWorkspaceProfile(input.projectId, input.workspaceProfile)
+        emitDomainEvent('project.save.completed', '项目工作台配置保存完成', {
+          context,
+          status: 'success',
+          attributes: { operation: 'workspace-profile', graphVersion: result?.graphVersion }
+        })
+        return ok(result)
       } catch (error) {
+        const failure = projectSaveFailureDiagnostics(error)
+        emitDomainEvent('project.save.failed', '项目工作台配置保存失败', {
+          context,
+          status: 'failed',
+          ...failure,
+          attributes: { ...failure.attributes, operation: 'workspace-profile' }
+        })
         return err('SAVE_FAILED', error instanceof Error ? error.message : String(error))
       }
     }
@@ -172,7 +191,8 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
         }
         emitDomainEvent('project.save.failed', '项目保存失败', {
           context,
-          error: e
+          status: 'failed',
+          ...projectSaveFailureDiagnostics(e)
         })
         return err('SAVE_FAILED', e instanceof Error ? e.message : String(e))
       }
@@ -333,7 +353,7 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
         emitDomainEvent('project.save.failed', '项目同步保存失败', {
           context,
           status: 'failed',
-          error: saveErr
+          ...projectSaveFailureDiagnostics(saveErr)
         })
         e.returnValue = err(
           'SAVE_FAILED',

@@ -1,9 +1,10 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type */
-const { chromium } = require('playwright')
+const { qaOutputPath } = require('./qa-output.cjs')
+const { launchQaBrowser } = require('./qa-browser.cjs')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 ;(async () => {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true })
+  const browser = await launchQaBrowser()
   const evidence = []
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
@@ -54,9 +55,9 @@ const fs = require('node:fs')
       assert.equal(saved.disabled, type === 'state-machine')
       evidence.push({ type, settingsSaved: true, snapshotRestored: true, executionDisabled: type !== 'agent' })
     }
-    fs.mkdirSync('qa/canvas-agent-flow/C1', { recursive: true })
-    fs.writeFileSync('qa/canvas-agent-flow/C1/settings-results.json', JSON.stringify(evidence, null, 2))
-    await page.screenshot({ path: 'qa/canvas-agent-flow/C1/review-settings.png' })
+    fs.mkdirSync(qaOutputPath('qa/canvas-agent-flow/C1'), { recursive: true })
+    fs.writeFileSync(qaOutputPath('qa/canvas-agent-flow/C1/settings-results.json'), JSON.stringify(evidence, null, 2))
+    await page.screenshot({ path: qaOutputPath('qa/canvas-agent-flow/C1/review-settings.png') })
     console.log('C1 三种节点设置、快照/图一致性、无假输出与执行可用性通过')
   } finally { await browser.close() }
 })().catch((error) => { console.error(error); process.exitCode = 1 })

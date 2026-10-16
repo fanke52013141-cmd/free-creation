@@ -1,11 +1,12 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type */
-const { chromium } = require('playwright')
+const { qaOutputPath } = require('./qa-output.cjs')
+const { launchQaBrowser } = require('./qa-browser.cjs')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 ;(async () => {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true })
-  const out = path.resolve('artifacts/node-pointer-2026-10-06')
+  const browser = await launchQaBrowser()
+  const out = path.resolve(qaOutputPath('artifacts/node-pointer-2026-10-06'))
   fs.mkdirSync(out, { recursive: true })
   const findings = []
   try {

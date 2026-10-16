@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type */
-const { chromium } = require('playwright')
+const { launchQaBrowser } = require('./qa-browser.cjs')
 const assert = require('node:assert/strict')
 ;(async () => {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true })
+  const browser = await launchQaBrowser()
   try {
     const page = await browser.newPage({ viewport: { width: 2200, height: 1500 } })
     await page.goto(process.env.CANVAS_QA_URL || process.env.BROWSER_ORIGIN || 'http://127.0.0.1:5191')

@@ -21,6 +21,7 @@ import { createDesktopModelRuntime } from '../model-host/runtime'
 import { initDiagnosticsService } from '../diagnostics/service'
 import { setGatewayEventSink } from '../diagnostics/gateway-events'
 import { IPC } from '../../shared/contracts'
+import { verifyStorageRecovery } from './save-storage-acceptance'
 
 const argument = (key: string): string | undefined =>
   process.argv.find((value) => value.startsWith(`--${key}=`))?.slice(key.length + 3)
@@ -31,7 +32,7 @@ if (
   resolve(directory, '..') !== resolve(tmpdir()) ||
   !basename(directory).startsWith('canvas-save-crash-') ||
   !boundary ||
-  !['unsent', 'before-save', 'after-save', 'failed-save'].includes(boundary)
+  !['unsent', 'before-save', 'after-save', 'failed-save', 'storage-retry'].includes(boundary)
 )
   app.exit(2)
 else {
@@ -120,7 +121,28 @@ else {
       await active.webContents.executeJavaScript(
         "(async()=>{const editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;editor.createShape({id:'shape:save-source',type:'node-card',x:100,y:100,props:{nodeType:'text',title:'测试材料',text:'private-save-original'}});await(await import('/src/canvas/flow-asset-actions.ts')).ensureCanvasSaved()})()"
       )
+      if (boundary === 'storage-retry') {
+        await waitFor(
+          () =>
+            active.webContents.executeJavaScript(
+              "!!document.querySelector('.tl-canvas')&&!document.body.innerText.includes('正在打开本地创作空间')"
+            ) as Promise<boolean>
+        )
+        await waitFor(ready)
+      }
       const baseline = openProject(project.id)!.meta.graphVersion
+      if (boundary === 'storage-retry') {
+        stage = 'storage-retry'
+        result = await verifyStorageRecovery(
+          active,
+          directory,
+          project.id,
+          baseline,
+          ready,
+          waitFor
+        )
+        return
+      }
       stage = 'interrupt'
       armed = true
       mutableFs.writeFileSync = ((...args: Parameters<typeof fs.writeFileSync>) => {
@@ -146,7 +168,12 @@ else {
         await waitFor(async () => (boundary === 'before-save' ? accepted > 0 : settled))
         active.webContents.forcefullyCrashRenderer()
       }
-      const reason = await Promise.race([gone, new Promise<never>((_done, reject) => setTimeout(() => reject(new Error('SAVE_RENDERER_CRASH_TIMEOUT')), 15000))])
+      const reason = await Promise.race([
+        gone,
+        new Promise<never>((_done, reject) =>
+          setTimeout(() => reject(new Error('SAVE_RENDERER_CRASH_TIMEOUT')), 15000)
+        )
+      ])
       release()
       if (boundary !== 'unsent') await waitFor(async () => settled)
       armed = false

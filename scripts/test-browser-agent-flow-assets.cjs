@@ -1,9 +1,10 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type */
-const { chromium } = require('playwright')
+const { qaOutputPath } = require('./qa-output.cjs')
+const { launchQaBrowser } = require('./qa-browser.cjs')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 ;(async () => {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true })
+  const browser = await launchQaBrowser()
   try {
     const page = await browser.newPage({ viewport: { width: 1900, height: 1050 } })
     await page.goto(process.env.CANVAS_QA_URL || 'http://127.0.0.1:5196')
@@ -136,9 +137,9 @@ const fs = require('node:fs')
       return (await import('/src/nodes/nodeValues.ts')).projectNodeOutputs(editor.getShape(id))
     }, jsonId), { 'out-json': { kind: 'json', data: { zero: 0, flag: false } } })
     await page.evaluate(async () => { (await import('/src/stores/editor.ts')).useEditorStore.getState().editor.zoomToFit({ animation: { duration: 0 } }) })
-    fs.mkdirSync('qa/canvas-agent-flow/C2', { recursive: true })
-    fs.writeFileSync('qa/canvas-agent-flow/C2/browser-assets-results.json', JSON.stringify({ fixedOutputs: true, duplicateReceiptGapHandled: true, ordinaryPortConnection: true, manualExecutor: true, snapshotRestored: true, boundary: 'UI adapter only; production IPC/SQLite verified by separate Electron acceptance' }, null, 2))
-    await page.screenshot({ path: 'qa/canvas-agent-flow/C2/fixed-asset-canvas.png' })
+    fs.mkdirSync(qaOutputPath('qa/canvas-agent-flow/C2'), { recursive: true })
+    fs.writeFileSync(qaOutputPath('qa/canvas-agent-flow/C2/browser-assets-results.json'), JSON.stringify({ fixedOutputs: true, duplicateReceiptGapHandled: true, ordinaryPortConnection: true, manualExecutor: true, snapshotRestored: true, boundary: 'UI adapter only; production IPC/SQLite verified by separate Electron acceptance' }, null, 2))
+    await page.screenshot({ path: qaOutputPath('qa/canvas-agent-flow/C2/fixed-asset-canvas.png') })
     console.log('Asset UI: submit v1/v2, receipt-gap retry, fixed version, port connection, normal executor and snapshot reopening passed.')
   } finally { await browser.close() }
 })().catch((error) => { console.error(error); process.exitCode = 1 })

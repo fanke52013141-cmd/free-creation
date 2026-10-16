@@ -1,3 +1,13 @@
+# 2026-10-16 R09 时长压力验收（44 包）
+
+2026-10-16 最新交付与同步备注：[R09 本地可靠性交接](docs/canvas-agent-flow/HANDOFF_2026_10_16_R09_LOCAL_RELIABILITY_SYNC.md)。41–44 包代码、测试与文档一并交付到 origin/main；90 分钟目标已审计通过（3584 批/28672 轮，累计 6117.524 秒），恢复与三个新进程重开通过。最终完整 verify run-R6OhUK 退出 0：180 文件/2041 通过/1 既有跳过，模型另 2，17 浏览器/构建/26 桌面路径通过，保存诊断 10/10 与脱敏通过。原 7200 秒 runner 强制中断且临时数据未清理，不算两小时通过。真实磁盘/掉电/远端撤回及 R11 边界保持。下方未提交状态和下一步为历史记录，当前以此交接为准。
+
+当前交付 [43 包](docs/canvas-agent-flow/43-r09-project-flush-barrier.md)：图和工作台保存均在轮转前刷盘，失败阶段 `flush-tmp` 复用安全保存诊断；完整 `run-mEnwT0` 退出 0（2032 通过/1 既有跳过，模型另 2，17 浏览器/构建/26 桌面路径）。真实画布四次重开、10/10 保存诊断和脱敏通过，2579 个旧 QA 文件无变化。此前本地改动保留，未提交/推送；物理掉电、真实磁盘、多小时压力、远端撤回及 R11 仍为边界。
+
+2026-10-16 当前接续：[42 包 R09 本地可靠性](./docs/canvas-agent-flow/42-r09-local-reliability.md)。已修复有效备份被损坏主文件覆盖的保存路径，36 轮重复故障与真实画布重开已验收，完整 verify 退出 0（2027 通过/1 既有跳过，模型另 2，17 浏览器/构建/26 桌面路径）；未提交/推送，不标记整个 R09 完成。
+
+> 2026-10-16 当前交接入口：[Agent 线上同步 handoff](./docs/canvas-agent-flow/HANDOFF_2026_10_16_AGENT_ONLINE_SYNC.md)与[R01–R12 总台账](./docs/canvas-agent-flow/38-agent-completion-plan.md)。线上基线 `1bee5f7` 已同步本地，[验证闭环包](./docs/canvas-agent-flow/41-reproducible-verification.md)已完整验收，下一包继续 R09 本地可靠性；本轮改动尚未提交/推送。以下 C0/C1、未接执行、下一步等均为历史快照，不能作为当前 Agent 能力或待办依据。
+
 > 历史文档：本文已过期，仅供历史参考。当前状态以 AGENTS.md、NODE_CONTRACT_SPEC.md、docs/optimization-ledger.md 及源码为准（2026-10-05 标注）。
 
 > Agent Flow 当前唯一设计：[画布原生 Agent Flow](./docs/canvas-agent-flow/README.md)。上帝 Agent 构建 Flow，主 Agent 协调任务和最小输入，专业 Agent 执行；状态机和成果均落在画布节点。节点协同标准见 [节点协同规范](./docs/canvas-agent-flow/05-node-coordination-standard.md)，C0 实验与 C1 配置基础已实现；正式执行尚未接入。历史记录中的已下线 Agent/CLI/MCP/headless 路径仅用于追溯，不是待恢复任务。

@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
-const { chromium } = require('playwright')
+const { qaOutputPath } = require('./qa-output.cjs')
+const { launchQaBrowser } = require('./qa-browser.cjs')
 const assert = require('node:assert/strict')
 ;(async () => {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true })
+  const browser = await launchQaBrowser()
   try {
     const page = await browser.newPage()
     await page.goto(process.env.CANVAS_QA_URL || process.env.BROWSER_ORIGIN || 'http://127.0.0.1:5191')
@@ -44,6 +45,6 @@ const assert = require('node:assert/strict')
       await page.waitForTimeout(600)
       console.log(`PASS ${viewport.width}x${viewport.height}: single-row toolbar and readable card fit`)
     }
-    await page.screenshot({ path: 'artifacts/node-remediation-2026-10-06/canvas-proportions-final.png' })
+    await page.screenshot({ path: qaOutputPath('artifacts/node-remediation-2026-10-06/canvas-proportions-final.png') })
   } finally { await browser.close() }
 })().catch(error => { console.error(error); process.exitCode = 1 })

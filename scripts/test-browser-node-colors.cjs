@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type */
+const { qaOutputPath } = require('./qa-output.cjs')
 // 实际渲染验收：所有节点标题、分类、菜单和详情图标保持相同身份色。
-const { chromium } = require('playwright')
+const { launchQaBrowser } = require('./qa-browser.cjs')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 
@@ -19,9 +20,9 @@ function contrast(a, b) {
 }
 
 ;(async () => {
-  const output = `qa/node-colors-${Date.now()}`
+  const output = qaOutputPath(`qa/node-colors-${Date.now()}`)
   fs.mkdirSync(output, { recursive: true })
-  const browser = await chromium.launch({ channel: 'chrome', headless: true })
+  const browser = await launchQaBrowser()
   const evidence = { themes: {}, categories: {}, entries: {} }
   try {
     const page = await browser.newPage({ viewport: { width: 2700, height: 1850 } })

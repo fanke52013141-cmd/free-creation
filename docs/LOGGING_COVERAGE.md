@@ -1,5 +1,21 @@
 # 日志覆盖清单
 
+## 2026-10-16 R09 时长压力运行器（44 包）
+
+只改开发验收：复用原 task.control/media 事件，每批新进程校验配对与脱敏，八轮仓库故障由安全 phase 断言，真实保存 IPC 日志仍由独立 renderer 门禁负责。用户选定 90 分钟后，隔离运行检查点越过 5400 秒并继续到 6117.524 秒（3584 批/28672 轮）；检查点、任务/下载/锁数量、保留诊断与脱敏通过，最终离线恢复和三个新进程重开通过，证据见 `qa/r09-soak/run-JGSEXB/duration-policy-audit.json` 与 `manual-final-recovery.json`。原 7200 秒 runner 被强制中断，临时夹具清理未完成，不记作两小时通过。仅开发脚本默认时长和验收文档变化，正式业务事件 SDK/IPC 不变；真实保存 IPC 的逐项日志由独立 renderer 门禁负责。最终完整 run-R6OhUK 退出 0（2041 通过/1 既有跳过，模型另 2，17 浏览器/构建/26 桌面路径）；R09 四次 renderer 重开、10 对唯一保存终态及实际诊断脱敏通过。多小时/长驻 renderer/真实掉电/远端撤回边界保持，见 [44 包](canvas-agent-flow/44-r09-duration-soak-runner.md)。
+
+## 2026-10-16 R09 临时快照刷盘（43 包）
+
+复用项目图 async/sync 与工作台保存生命周期及 trace/span，仓库仅增加安全错误阶段 `flush-tmp`，不重复写终态。底层原因码允许列表不变，三种 IPC 刷盘故障断言安全 `EIO` 与正文/路径排除；两文件 23 项及强杀 10 项定向通过。实际画布四种故障、四次重开、10/10 保存诊断逐操作配对及 JSONL 脱敏通过。完整门禁 `run-mEnwT0` 退出 0（2032 通过/1 既有跳过，模型另 2，17 浏览器/构建/26 桌面路径），见 [43 包](canvas-agent-flow/43-r09-project-flush-barrier.md)。旧恢复关联缺失、设备掉电与目录元数据耐久边界保持。
+
+## 2026-10-16 R09 有效备份保护与重复存储故障
+
+图保存与工作台配置复用公共项目 IPC 的 `project.save` 生命周期；工作台原缺失的开始/终态已补齐。仓库存储失败携带安全 phase（read-snapshot/write-tmp/rotate-bak/promote-tmp/update-db）、backupUsed、rollbackFailed，IPC 发唯一终态；error=STORAGE_WRITE_FAILED，cause 只保留允许的系统码，排除原异常消息/路径/正文。实际画布最终 9/9 保存逐 trace/span 配对、三阶段失败、工作台失败与脱敏通过，日志 sink 故障不改变结果的 IPC 回归通过；36 轮/6 新进程公共视频核对夹具保持原任务和一次下载、最后离线恢复唯一媒体，强杀与丢记录不补造终态。完整 verify 退出 0（179 文件/2027 通过/1 既有跳过，模型另 2，17 浏览器/构建/26 桌面路径），1225 个旧 QA 文件无变化；最终证据与日志检查模板见 [42 包](canvas-agent-flow/42-r09-local-reliability.md)。物理掉电、真实磁盘损坏/多小时压力、远端撤回与旧恢复 trace 缺失边界保持。
+
+## 2026-10-16 验证运行器与证据隔离
+
+本轮只修改开发测试脚本和文档，不改变正式节点执行、模型调用、项目保存或诊断 IPC；业务日志影响为“不涉及”。完整门禁的进程输出及退出码写入每次独立的 QA 目录，属于开发验收证据，不替代正式诊断事件。`npm run verify` 完整退出 0（176 文件/2007 通过/1 既有跳过，模型另 2，17 浏览器/构建/25 桌面路径）；原生命周期配对、恢复关联与脱敏断言均通过，25 份桌面报告脱敏均为 true。982 个旧 QA 文件 SHA-256 无变化，证据见[验证闭环包](canvas-agent-flow/41-reproducible-verification.md)。R09/R11、四帧视频语义范围及旧恢复 trace 缺失边界保持。
+
 ## 2026-10-15 并行媒体调度、停止与恢复（首包已验收）
 
 两路专业任务复用主控/专业/命令、公共 node/workflow、SDK model 与视频任务/媒体/资产/保存生命周期，各路 task/command 独立，主控收集串行。新增整批拒绝只记录安全码与 handoff 阶段，不记录分派目标、输入正文或完成标准。48 定向与两个流程的双进程桌面通过；4 POST started/accepted、2 下载和原任务接回，停止后的 unknown 占用保持。桌面扫描 desktop、同步 model、node/workflow 唯一终态及正文/Key/MP4 排除；异步视频完整终态/trace、既有 task/media 和 save correlationMissing 盲区保留。2026-10-16 最终完整 verify 退出码 0（1953 通过/1 既有跳过，模型另 2，17 浏览器/构建/21 桌面）。最新两 session：desktop 9/9、同步 model 13/13、command 20/20、node 11/11、workflow 11/11 唯一终态配对；save 39/39 仅总数。截图已人工查看，首次参考音频 setup 超时与原断言复核记录保留，详见 [37 包](canvas-agent-flow/37-parallel-media-stop-recovery.md)。

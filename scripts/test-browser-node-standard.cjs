@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type */
-const { chromium } = require('playwright')
+const { qaOutputPath } = require('./qa-output.cjs')
+const { launchQaBrowser } = require('./qa-browser.cjs')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 function contrast(first, second) {
@@ -12,9 +13,9 @@ function contrast(first, second) {
   return (Math.max(a,b)+.05)/(Math.min(a,b)+.05)
 }
 ;(async () => {
-  const output = `qa/node-presentation-${Date.now()}`
+  const output = qaOutputPath(`qa/node-presentation-${Date.now()}`)
   fs.mkdirSync(output, { recursive: true })
-  const browser = await chromium.launch({ channel: 'chrome', headless: true })
+  const browser = await launchQaBrowser()
   try {
     const page = await browser.newPage({ viewport: { width: 2700, height: 2750 } })
     await page.goto(process.env.CANVAS_QA_URL || 'http://127.0.0.1:5196')

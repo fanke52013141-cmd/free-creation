@@ -314,10 +314,18 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
     def('media.document_extract_failed', 'warn', 'main/media/document-text.ts'),
     def('media.read_failed', 'warn', 'main/store/media.repo.ts'),
     // project.save / restore / transfer
-    def('project.save.started', 'info', 'main/ipc/project.ipc.ts'),
-    def('project.save.completed', 'info', 'main/ipc/project.ipc.ts', { graphVersion: 'int' }),
+    def('project.save.started', 'info', 'main/ipc/project.ipc.ts', { operation: 'short' }),
+    def('project.save.completed', 'info', 'main/ipc/project.ipc.ts', {
+      graphVersion: 'int',
+      operation: 'short'
+    }),
     def('project.save.conflict', 'warn', 'main/ipc/project.ipc.ts'),
-    def('project.save.failed', 'error', 'main/ipc/project.ipc.ts'),
+    def('project.save.failed', 'error', 'main/ipc/project.ipc.ts', {
+      phase: 'short',
+      backupUsed: 'flag',
+      rollbackFailed: 'flag',
+      operation: 'short'
+    }),
     def('project.restore.started', 'info', 'renderer/canvas/snapshot-restore.ts'),
     def('project.restore.checkpoint_created', 'info', 'renderer/canvas/snapshot-restore.ts'),
     def('project.restore.completed', 'info', 'renderer/canvas/snapshot-restore.ts'),

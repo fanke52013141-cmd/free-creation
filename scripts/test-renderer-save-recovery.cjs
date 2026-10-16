@@ -1,18 +1,20 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type */
 const {spawn}=require('node:child_process')
+const {qaOutputPath}=require('./qa-output.cjs')
+const r09=process.argv.includes('--r09')
 const {mkdtemp,mkdir,readFile,writeFile,cp,rm,readdir}=require('node:fs/promises')
 const {tmpdir}=require('node:os')
 const {join,resolve,basename,dirname}=require('node:path')
 async function clean(directory){if(resolve(directory,'..')!==resolve(tmpdir())||!basename(directory).startsWith('canvas-save-crash-'))throw new Error('SAVE_CLEANUP_REJECTED');await rm(directory,{recursive:true,force:true,maxRetries:10,retryDelay:250})}
 ;(async()=>{
-  const evidence=resolve('qa/c4-import-renderer-20261014/renderer')
+  const evidence=qaOutputPath(r09?'qa/r09-local-20261016/renderer':'qa/c4-import-renderer-20261014/renderer')
   await mkdir(evidence,{recursive:true})
   const server=spawn(process.execPath,[join(dirname(require.resolve('vite/package.json')),'bin/vite.js'),'--config','vite.browser.config.ts','--host','127.0.0.1','--port','5197','--strictPort'],{stdio:'ignore',windowsHide:true})
   const reports=[]
   try {
     const deadline=Date.now()+30000
     while(true){if(server.exitCode!==null)throw new Error('SAVE_VITE_UNAVAILABLE');try{if((await fetch('http://127.0.0.1:5197')).ok)break}catch{/* Bounded readiness. */}if(Date.now()>deadline)throw new Error('SAVE_VITE_TIMEOUT');await new Promise(done=>setTimeout(done,250))}
-    for(const boundary of ['unsent','before-save','after-save','failed-save']){
+    for(const boundary of r09?['storage-retry']:['unsent','before-save','after-save','failed-save']){
       const directory=await mkdtemp(join(tmpdir(),'canvas-save-crash-'))
       try {
         const env={...process.env};delete env.ELECTRON_RUN_AS_NODE
@@ -35,10 +37,20 @@ async function clean(directory){if(resolve(directory,'..')!==resolve(tmpdir())||
         if(!starts||starts!==terminals)throw new Error('SAVE_LIFECYCLE_UNPAIRED')
         if(events.some(event=>event.event==='model.request.started'))throw new Error('SAVE_UNEXPECTED_MODEL_REQUEST')
         if(boundary==='failed-save'&&!events.some(event=>event.event==='project.save.failed'))throw new Error('SAVE_FAILURE_LOG_MISSING')
+        if(r09){
+          for(const start of events.filter(e=>e.event==='project.save.started')){
+            const ends=events.filter(e=>['project.save.completed','project.save.failed','project.save.conflict'].includes(e.event)&&e.traceId===start.traceId&&e.spanId===start.spanId)
+            if(!start.traceId||!start.spanId||ends.length!==1)throw new Error('R09_SAVE_TRACE_UNPAIRED')
+          }
+          const failures=events.filter(e=>e.event==='project.save.failed')
+          for(const phase of ['write-tmp','flush-tmp','promote-tmp','update-db'])if(!failures.some(e=>e.attributes.phase===phase&&e.attributes.backupUsed===true&&e.error.code==='STORAGE_WRITE_FAILED'))throw new Error('R09_SAVE_FAILURE_PHASE_MISSING')
+          if(!failures.some(e=>e.attributes.operation==='workspace-profile'))throw new Error('R09_WORKSPACE_DIAGNOSTIC_MISSING')
+          for(const name of ['disk-failure.png','disk-recovered.png'])await cp(join(directory,name),join(evidence,boundary,name))
+        }
         reports.push({...report.result,starts,terminals,diagnosticRedaction:true})
       } finally {await clean(directory)}
     }
     await writeFile(join(evidence,'results.json'),JSON.stringify({reports,boundary:'real hidden renderer crash, public save IPC and project repository; isolated data; no model calls'},null,2))
-    process.stdout.write('Renderer save recovery: unsent, accepted before save, committed before reply, write failure, reload and continued editing passed.\n')
+    process.stdout.write(r09?'R09 renderer: repeated write/flush failures preserve backup, failed state, four renderer restarts, workspace save and explicit retry passed.\n':'Renderer save recovery: unsent, accepted before save, committed before reply, write failure, reload and continued editing passed.\n')
   }finally{server.kill()}
 })().catch(error=>{process.stderr.write(error.message+'\n');process.exitCode=1})

@@ -8,8 +8,10 @@ import { closeDb, getDb } from '../../src/main/store/db'
 import { createProject, openProject, saveProject } from '../../src/main/store/projects.repo'
 import { cancelVideoTask, controlVideoTask, submitVideoTask } from '../../src/main/gateway/video'
 import { setGatewayEventSink } from '../../src/main/diagnostics/gateway-events'
+import { ProjectSaveStorageError } from '../../src/main/store/project-save-error'
 
 const [directory, mode] = process.argv.slice(2)
+const longSoak = /^soak-long-(\d{1,5})$/.exec(mode)
 if (
   resolve(directory, '..') !== resolve(tmpdir()) ||
   !basename(directory).startsWith('canvas-combined-')
@@ -32,9 +34,18 @@ const cut = (): never => {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 15000)
   throw new Error('CUT_TIMEOUT')
 }
+let diagnosticDrops = 0
+const storageFailurePhases: string[] = []
 setGatewayEventSink({
   emit: (event) => {
-    if (mode === 'resume-logger-failure') throw new Error('LOGGER_FIXTURE_FAILURE')
+    if (
+      mode === 'resume-logger-failure' ||
+      mode === 'soak-2' ||
+      (longSoak && Number(longSoak[1]) % 6 === 2)
+    ) {
+      diagnosticDrops++
+      throw new Error('LOGGER_FIXTURE_FAILURE')
+    }
     if (event)
       fs.appendFileSync(
         join(directory, `diagnostics-${process.pid}.jsonl`),
@@ -133,7 +144,109 @@ async function main() {
       return statement
     }) as typeof db.prepare
   }
-  if (mode.startsWith('save-')) {
+  if (/^soak-[0-5]$/.test(mode) || longSoak) {
+    const path = join(directory, 'projects', projectId, 'project.json')
+    const mutable = createRequire(__filename)('fs') as typeof fs
+    const promises = createRequire(__filename)('fs/promises') as typeof import('node:fs/promises')
+    const write = mutable.writeFileSync,
+      rename = mutable.renameSync,
+      sync = mutable.fsyncSync,
+      promote = promises.rename,
+      prepare = db.prepare.bind(db)
+    db.prepare("INSERT OR IGNORE INTO settings VALUES ('r09Cycles','0')").run()
+    if (count('r09Cycles') === 0) fs.copyFileSync(path, path + '.bak')
+    const verifiedBackup = fs.readFileSync(path + '.bak', 'utf8')
+    for (let cycle = 0; cycle < (longSoak ? 8 : 6); cycle++) {
+      await cancelVideoTask('task')
+      const io = cycle % 2 ? 'EIO' : 'ENOSPC'
+      promises.rename = async () => {
+        throw Object.assign(new Error('private-media-write'), { code: io })
+      }
+      try {
+        if (
+          submitVideoTask(() => {}, {
+            projectId,
+            nodeId: 'node',
+            providerId: 'provider',
+            modelId: 'model',
+            prompt
+          }).taskId !== 'task'
+        )
+          throw new Error('SOAK_TASK_REPLACED')
+        await controlVideoTask('task')
+      } finally {
+        promises.rename = promote
+      }
+      const phases = longSoak
+        ? ['write-tmp', 'flush-tmp', 'promote-tmp', 'update-db']
+        : ['write-tmp', 'promote-tmp', 'update-db']
+      const phase = phases[cycle % phases.length]
+      write(path, '{private-corrupt-main')
+      const file = openProject(projectId)!
+      mutable.writeFileSync = ((...args: Parameters<typeof fs.writeFileSync>) => {
+        if (phase === 'write-tmp' && String(args[0]) === path + '.tmp') {
+          write(args[0], 'private-partial-snapshot')
+          throw Object.assign(new Error('private-save-write'), { code: io })
+        }
+        write(...args)
+      }) as typeof fs.writeFileSync
+      mutable.renameSync = ((from, to) => {
+        if (phase === 'promote-tmp' && String(from) === path + '.tmp')
+          throw Object.assign(new Error('private-save-promote'), { code: io })
+        rename(from, to)
+      }) as typeof fs.renameSync
+      mutable.fsyncSync = (fd) => {
+        if (phase === 'flush-tmp')
+          throw Object.assign(new Error('private-save-flush'), { code: io })
+        sync(fd)
+      }
+      db.prepare = ((sql: string) => {
+        if (phase === 'update-db' && sql.startsWith('UPDATE projects SET updated_at'))
+          throw Object.assign(new Error('private-sqlite-full'), { code: 'SQLITE_FULL' })
+        return prepare(sql)
+      }) as typeof db.prepare
+      let failed = false
+      try {
+        saveProject({
+          id: projectId,
+          expectedGraphVersion: file.meta.graphVersion,
+          tldrawSnapshot: { taskId: 'task', phase: 'must-not-commit' }
+        })
+      } catch (error) {
+        if (
+          !(error instanceof ProjectSaveStorageError) ||
+          error.phase !== phase ||
+          !error.backupUsed ||
+          error.rollbackFailed
+        )
+          throw new Error('SOAK_SAVE_FAILURE_INVALID')
+        storageFailurePhases.push(error.phase)
+        failed = true
+      } finally {
+        mutable.writeFileSync = write
+        mutable.renameSync = rename
+        mutable.fsyncSync = sync
+        db.prepare = prepare
+      }
+      if (!failed || fs.readFileSync(path + '.bak', 'utf8') !== verifiedBackup)
+        throw new Error('SOAK_BACKUP_CHANGED')
+      const reopened = openProject(projectId)!
+      const row = db.prepare("SELECT status,output FROM tasks WHERE id='task'").get() as {
+        status: string
+        output: string
+      }
+      if (
+        row.status !== 'unknown' ||
+        JSON.parse(row.output).videoMaterialization.phase !== 'prepared' ||
+        reopened.meta.graphVersion !== file.meta.graphVersion ||
+        JSON.stringify(reopened.tldrawSnapshot) !== JSON.stringify(file.tldrawSnapshot) ||
+        (db.prepare('SELECT count(*) AS n FROM media').get() as { n: number }).n !== 0
+      )
+        throw new Error('SOAK_AUTHORITY_CHANGED')
+      counter('r09Cycles')
+    }
+    await cancelVideoTask('task')
+  } else if (mode.startsWith('save-')) {
     const file = openProject(projectId)!
     const path = join(directory, 'projects', projectId, 'project.json')
     const mutable = createRequire(__filename)('fs') as typeof fs
@@ -209,6 +322,7 @@ async function main() {
     )
   const serialized = JSON.stringify(events)
   say({
+    workerRssBytes: process.memoryUsage().rss,
     status: row.status,
     stopped: Boolean(JSON.parse(row.input).cancelRequested),
     phase: JSON.parse(row.output ?? '{}').videoMaterialization?.phase ?? null,
@@ -228,6 +342,14 @@ async function main() {
     queries: count('queries'),
     downloads: count('downloads'),
     mutations: count('mutations'),
+    soakCycles: Number(
+      (
+        db.prepare("SELECT value FROM settings WHERE key='r09Cycles'").get() as
+          { value: string } | undefined
+      )?.value ?? 0
+    ),
+    diagnosticDrops,
+    storageFailurePhases,
     unexpected: count('unexpected'),
     redacted: ![
       secret,
@@ -284,7 +406,9 @@ void main()
         error instanceof Error && 'code' in error
           ? String(error.code)
           : error instanceof Error
-            ? error.name
+            ? /^[A-Z0-9_]+$/.test(error.message)
+              ? error.message
+              : error.name
             : 'unexpected'
     })
     process.exitCode = 1

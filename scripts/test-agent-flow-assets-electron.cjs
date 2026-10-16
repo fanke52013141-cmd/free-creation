@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type */
+const { qaOutputPath } = require('./qa-output.cjs')
 const { spawn } = require('node:child_process')
 const { mkdtemp, mkdir, readFile, writeFile, cp, rm, readdir } = require('node:fs/promises')
 const { tmpdir } = require('node:os')
@@ -11,7 +12,7 @@ async function clean(directory) {
   const directory = await mkdtemp(join(tmpdir(), 'canvas-flow-assets-'))
   const reports = []
   const events = []
-  const evidence = resolve('qa/canvas-agent-flow/C2')
+  const evidence = qaOutputPath('qa/canvas-agent-flow/C2')
   await mkdir(evidence, { recursive: true })
   try {
     for (const phase of ['submit', 'reopen']) {

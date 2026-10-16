@@ -1,12 +1,13 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type */
+const { qaOutputPath } = require('./qa-output.cjs')
 // Deterministic UI fixture, not a paid supplier acceptance.
-const { chromium } = require('playwright')
+const { launchQaBrowser } = require('./qa-browser.cjs')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 ;(async () => {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true })
-  const out = path.resolve('artifacts/chat-image-skill-2026-10-06/browser')
+  const browser = await launchQaBrowser()
+  const out = path.resolve(qaOutputPath('artifacts/chat-image-skill-2026-10-06/browser'))
   fs.mkdirSync(out, { recursive: true })
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })

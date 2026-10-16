@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type */
+const { qaOutputPath } = require('./qa-output.cjs')
 const { spawn } = require('node:child_process')
 const { mkdtemp, mkdir, readFile, writeFile, cp, rm, readdir } = require('node:fs/promises')
 const { tmpdir } = require('node:os')
@@ -10,7 +11,7 @@ async function clean(directory) {
 ;(async () => {
   const directory = await mkdtemp(join(tmpdir(), 'canvas-flow-commands-'))
   const url = 'http://127.0.0.1:5198'
-  const evidence = resolve('qa/canvas-agent-flow/C2/commands')
+  const evidence = qaOutputPath('qa/canvas-agent-flow/C2/commands')
   await mkdir(evidence, { recursive: true })
   const server = spawn(process.execPath, [join(dirname(require.resolve('vite/package.json')), 'bin/vite.js'), '--config', 'vite.browser.config.ts', '--host', '127.0.0.1', '--port', '5198', '--strictPort'], { stdio: 'ignore', windowsHide: true })
   const reports = [], events = []

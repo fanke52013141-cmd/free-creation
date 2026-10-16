@@ -1,12 +1,13 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type */
-const { chromium } = require('playwright')
+const { qaOutputPath } = require('./qa-output.cjs')
+const { launchQaBrowser } = require('./qa-browser.cjs')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 ;(async () => {
-  const out = path.resolve('qa/optimization-remaining')
+  const out = path.resolve(qaOutputPath('qa/optimization-remaining'))
   fs.mkdirSync(out, { recursive: true })
-  const browser = await chromium.launch({ channel: 'chrome', headless: true })
+  const browser = await launchQaBrowser()
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } })
   const checks = []
   try {

@@ -65,11 +65,25 @@ if (boundary === 'recover' || boundary === 'continue' || boundary === 'stale-edi
   const mutableFs = createRequire(__filename)('fs') as typeof fs
   const write = mutableFs.writeFileSync,
     rename = mutableFs.renameSync
-  const close = mutableFs.closeSync
+  const close = mutableFs.closeSync,
+    open = mutableFs.openSync,
+    sync = mutableFs.fsyncSync
+  let lockFd: number | undefined
+  mutableFs.openSync = ((...args: Parameters<typeof fs.openSync>) => {
+    const fd = open(...args)
+    if (String(args[0]) === path + '.write-lock') lockFd = fd
+    return fd
+  }) as typeof fs.openSync
   mutableFs.closeSync = ((fd) => {
-    if (boundary === 'committed') cut()
+    // The pending-file barrier also closes a descriptor before DB commit.
+    // Only releasing this project's write lock is the committed cut point.
+    if (boundary === 'committed' && fd === lockFd) cut()
     close(fd)
   }) as typeof fs.closeSync
+  mutableFs.fsyncSync = (fd) => {
+    sync(fd)
+    if (boundary === 'flushed') cut()
+  }
   mutableFs.writeFileSync = ((...args: Parameters<typeof fs.writeFileSync>) => {
     write(...args)
     if (boundary === 'tmp' && String(args[0]) === path + '.tmp') cut()

@@ -1,9 +1,10 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type */
-const { chromium } = require('playwright')
+const { qaOutputPath } = require('./qa-output.cjs')
+const { launchQaBrowser } = require('./qa-browser.cjs')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 ;(async () => {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true })
+  const browser = await launchQaBrowser()
   try {
     const page = await browser.newPage({ viewport: { width: 2000, height: 1600 } })
     await page.goto(process.env.CANVAS_QA_URL || 'http://127.0.0.1:5198')
@@ -121,9 +122,9 @@ const fs = require('node:fs')
     assert.ok((await settings.locator('[role="status"]').textContent()).includes('已删除'))
     await settings.getByRole('group', { name: '等待审核通过的节点', exact: true }).getByLabel('失效引用（可取消引用）', { exact: true }).click()
     await save()
-    fs.mkdirSync('qa/canvas-agent-flow/C1', { recursive: true })
-    await page.screenshot({ path: 'qa/canvas-agent-flow/C1/control-relations.png' })
-    fs.writeFileSync('qa/canvas-agent-flow/C1/declaration-results.json', JSON.stringify({
+    fs.mkdirSync(qaOutputPath('qa/canvas-agent-flow/C1'), { recursive: true })
+    await page.screenshot({ path: qaOutputPath('qa/canvas-agent-flow/C1/control-relations.png') })
+    fs.writeFileSync(qaOutputPath('qa/canvas-agent-flow/C1/declaration-results.json'), JSON.stringify({
       threeIndependentAgents: true, targetSelection: true, reviewSubjectsConnected: true, transitionsEdited: true, invalidTransitionBlocked: true,
       controlsSeparateFromData: true, dragAndZoom: true, snapshotRestored: true, missingTargetRepair: true,
       modelRequests: 0, runtimeExecution: false
