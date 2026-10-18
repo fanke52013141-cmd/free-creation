@@ -128,6 +128,7 @@ feat(agent-flow): close optimization acceptance for CFG-03, REL-02 and REL-03
 ```
 
 - 本轮不宣称发布完成：REL-08 未签字，剩余未执行/暂缓/阻塞项见第 4 节。
+- 本次交付提交：`f314f0f`（`main`，已推送 `origin/main`；amend 前为 `04230b1`），108 个文件、13,424 行新增、304 行删除。
 
 ## 7. 接手提示
 
