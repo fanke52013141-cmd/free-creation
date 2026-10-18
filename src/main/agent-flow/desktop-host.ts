@@ -180,7 +180,7 @@ export class FlowAgentDesktopHost {
           }
         : null
     }
-    this.saved(input)
+    const saved = this.saved(input)
     const record = this.latest(input)
     if (!record) return null
     if (
@@ -194,6 +194,20 @@ export class FlowAgentDesktopHost {
       this.store.setState(agentThread(record.snapshot), 'blocked', 'AGENT_SESSION_LOST')
       createAgentTelemetry(record.snapshot)('blocked', 'session-recovery', 'AGENT_SESSION_LOST')
       return view(this.store.read(agentThread(record.snapshot)))
+    }
+    if (record.state === 'blocked' && record.code === 'FLOW_ASSET_PROJECTION_MISSING') {
+      const canRestore =
+        projectSemanticRevision(saved.file) === record.snapshot.semanticRevision &&
+        !!this.restorableCommittedReceipt(record, this.receipts(record), saved.shape.meta)
+      return {
+        ...view(record),
+        recovery: {
+          reasons: [
+            canRestore ? 'FLOW_ASSET_PROJECTION_MISSING' : 'FLOW_TASK_CHECKPOINT_UNCONFIRMED'
+          ],
+          canRestore
+        }
+      }
     }
     return { ...view(record), reviewFeedback }
   }
@@ -236,7 +250,7 @@ export class FlowAgentDesktopHost {
     }
   }
 
-  private bind(raw: FlowAgentRun): AgentTaskSnapshot {
+  private bind(raw: FlowAgentRun, reusePriorSubmissions = false): AgentTaskSnapshot {
     const { file, shape } = this.saved(raw)
     const config = AgentNodeConfigSchema.parse(JSON.parse(shape.props.config))
     if (config.role !== 'specialist')
@@ -255,6 +269,17 @@ export class FlowAgentDesktopHost {
       const key = JSON.stringify(from)
       const prior = versions.get(key)
       if (prior) return prior
+      if (reusePriorSubmissions) {
+        const receipt = this.assets.readSubmission(raw.projectId, submissionId)
+        if (receipt) {
+          const ref = AgentFlowAssetRefSchema.parse(receipt.ref)
+          if (ref.sourceNodeId !== from.nodeId || ref.sourcePortId !== from.portId)
+            throw new AgentRuntimeError('ASSET_SUBMISSION_CONFLICT', 'admission')
+          this.assets.resolveInputs(raw.projectId, [ref])
+          versions.set(key, ref)
+          return ref
+        }
+      }
       for (const review of file.nodes.filter((node) => node.type === 'ai-review')) {
         const approval = new FlowReviewStore(this.db).approval(file, review.id)
         if (!approval) continue
@@ -455,8 +480,8 @@ export class FlowAgentDesktopHost {
       throw new AgentRuntimeError('FLOW_COORDINATOR_CONFIG_INVALID', 'pause')
     return this.coordinator.pause(input)
   }
-  describeAssignment(input: FlowAgentRun): AgentTaskSnapshot {
-    return this.bind(input)
+  describeAssignment(input: FlowAgentRun, reusePriorSubmissions = false): AgentTaskSnapshot {
+    return this.bind(input, reusePriorSubmissions)
   }
   assignment(input: Identity, coordinatorTaskId: string): AgentTaskRecord | null {
     this.saved(input)
@@ -611,6 +636,55 @@ export class FlowAgentDesktopHost {
         )
         .all(record.snapshot.projectId, record.snapshot.taskId) as Array<{ receipt_json: string }>
     ).map((row) => JSON.parse(row.receipt_json))
+  }
+  private restorableCommittedReceipt(
+    record: AgentTaskRecord,
+    receipts: FlowCommandReceipt[],
+    shapeMeta: Record<string, unknown> | undefined
+  ): FlowCommandReceipt | null {
+    if (
+      record.snapshot.parentTaskId ||
+      record.snapshot.coordinatorTaskId ||
+      receipts.length !== 1
+    )
+      return null
+    const [receipt] = receipts
+    if (
+      receipt.state !== 'committed' ||
+      receipt.projectId !== record.snapshot.projectId ||
+      receipt.taskId !== record.snapshot.taskId ||
+      !record.snapshot.targets.some((target) => target.nodeId === receipt.targetNodeId) ||
+      !receipt.outputRefs.length ||
+      receipt.outputRefs.some((ref) => ref.sourceNodeId !== receipt.targetNodeId) ||
+      (record.outputRefs.length > 0 &&
+        canonicalFlowJson(record.outputRefs) !== canonicalFlowJson(receipt.outputRefs))
+    )
+      return null
+    try {
+      const versions = this.assets.resolveInputs(record.snapshot.projectId, receipt.outputRefs)
+      const outputs = agentReplyOutputProjection(
+        receipt.outputRefs,
+        versions.map((version) => version.value)
+      )
+      const projected = shapeMeta?.nodeResult
+      if (projected !== undefined && projected !== null) {
+        const saved =
+          typeof projected === 'string' ? JSON.parse(projected) : (projected as object)
+        if (
+          canonicalFlowJson(saved) !==
+          canonicalFlowJson({
+            schemaVersion: 1,
+            taskId: record.snapshot.taskId,
+            outputs,
+            refs: receipt.outputRefs
+          })
+        )
+          return null
+      }
+      return receipt
+    } catch {
+      return null
+    }
   }
   async cooperate(raw: unknown): Promise<FlowAgentCollaborationView> {
     const input = FlowAgentCollaborationSchema.parse(raw)
@@ -795,7 +869,7 @@ export class FlowAgentDesktopHost {
     if (this.coordinator && agentRoleOf(this.saved(input).shape.props.config) === 'coordinator')
       return this.coordinator.run(raw)
     if (input.action === 'reconcile' || input.action === 'restore') {
-      const record = this.latest(input)
+      let record = this.latest(input)
       if (
         !record ||
         record.snapshot.taskId !== input.expectedTaskId ||
@@ -804,8 +878,14 @@ export class FlowAgentDesktopHost {
         throw new AgentRuntimeError('RESUME_CONFLICT', 'recovery')
       if (this.active.has(this.key(input)) || this.admission.has(this.key(input)))
         throw new AgentRuntimeError('AGENT_TASK_BUSY', 'recovery')
-      if (projectSemanticRevision(this.saved(input).file) !== record.snapshot.semanticRevision)
+      const saved = this.saved(input)
+      if (projectSemanticRevision(saved.file) !== record.snapshot.semanticRevision)
         throw new AgentRuntimeError('FLOW_REVISION_CONFLICT', 'recovery')
+      if (record.state === 'completed') {
+        const reply = this.reply(record)
+        reply.task.recovery = { reasons: [], canRestore: false }
+        return reply
+      }
       for (const receipt of this.receipts(record).filter((receipt) =>
         ['pending', 'unknown'].includes(receipt.state)
       )) {
@@ -826,6 +906,40 @@ export class FlowAgentDesktopHost {
         ['pending', 'unknown'].includes(receipt.state)
       )
       const uncertain = unresolved.length > 0
+      const restorable =
+        !uncertain &&
+        record.state === 'blocked' &&
+        ['AGENT_SESSION_LOST', 'FLOW_ASSET_PROJECTION_MISSING'].includes(record.code ?? '')
+          ? this.restorableCommittedReceipt(record, this.receipts(record), saved.shape.meta)
+          : null
+      if (input.action === 'restore') {
+        if (!restorable)
+          throw new AgentRuntimeError(
+            uncertain ? 'FLOW_COMMAND_OUTCOME_UNKNOWN' : 'FLOW_TASK_CHECKPOINT_UNCONFIRMED',
+            'recovery'
+          )
+        this.store.setState(
+          agentThread(record.snapshot),
+          'completed',
+          undefined,
+          restorable.outputRefs
+        )
+        record = this.store.read(agentThread(record.snapshot))
+        const telemetry = createAgentTelemetry(record.snapshot, {
+          traceId: input.traceId,
+          spanId: input.spanId
+        })
+        telemetry('resumed', 'session-recovery', 'FLOW_ASSET_PROJECTION_MISSING')
+        telemetry('completed', 'session-recovery')
+      } else if (restorable && record.code === 'AGENT_SESSION_LOST') {
+        this.store.setState(
+          agentThread(record.snapshot),
+          'blocked',
+          'FLOW_ASSET_PROJECTION_MISSING',
+          record.outputRefs
+        )
+        record = this.store.read(agentThread(record.snapshot))
+      }
       if (
         record.state === 'waiting' &&
         record.waitKind === 'reconcile' &&
@@ -860,10 +974,12 @@ export class FlowAgentDesktopHost {
       reply.task.recovery = {
         reasons: uncertain
           ? ['FLOW_COMMAND_OUTCOME_UNKNOWN']
-          : record.state === 'completed'
-            ? []
-            : ['FLOW_TASK_CHECKPOINT_UNCONFIRMED'],
-        canRestore: false
+          : restorable && record.state !== 'completed'
+            ? ['FLOW_ASSET_PROJECTION_MISSING']
+            : record.state === 'completed'
+              ? []
+              : ['FLOW_TASK_CHECKPOINT_UNCONFIRMED'],
+        canRestore: !!restorable && record.state !== 'completed'
       }
       return reply
     }

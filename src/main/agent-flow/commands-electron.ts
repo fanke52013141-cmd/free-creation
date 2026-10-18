@@ -71,7 +71,10 @@ if (
           )
         )
         const image = await importMedia(projectId, imagePath)
-        const audio = await importMedia(projectId, resolve(__dirname, '../../test/fixtures/agent-audio.wav'))
+        const audio = await importMedia(
+          projectId,
+          resolve(__dirname, '../../test/fixtures/agent-audio.wav')
+        )
         if (!image.ok || !audio.ok) throw new Error('FIXTURE_MEDIA_IMPORT_FAILED')
         fixtureMedia = {
           image: { id: image.asset.id, path: image.asset.path, mime: image.asset.mime },
@@ -102,9 +105,12 @@ if (
       const active = window
       registerGatewayIpc(active)
       registerFlowAssetsIpc(() => active)
-      registerFlowCommandsIpc(() => active, (desktop) => {
-        deliverAgentCommand = desktop.deliver
-      })
+      registerFlowCommandsIpc(
+        () => active,
+        (desktop) => {
+          deliverAgentCommand = desktop.deliver
+        }
+      )
       await active.loadURL(url)
       stage = 'canvas-ready'
       const readyDeadline = Date.now() + 60000
@@ -330,6 +336,47 @@ if (
         report = { checks: [...(report as { checks: string[] }).checks, 'foreign window rejected'] }
       } else {
         const state = JSON.parse(readFileSync(statePath, 'utf8'))
+        const occupancyFailureCount = async (nodeId: string): Promise<number> => {
+          await diagnostics.flushNow()
+          const result = await diagnostics.query({ limit: 5000 })
+          return result.events.filter(
+            (event) =>
+              event.event === 'command.operation.failed' &&
+              event.nodeId === nodeId &&
+              event.attributes?.code === 'FLOW_NODE_OCCUPIED'
+          ).length
+        }
+        const waitForOccupancyFailureCount = async (
+          nodeId: string,
+          expected: number
+        ): Promise<void> => {
+          for (let attempt = 0; attempt < 40; attempt++) {
+            if ((await occupancyFailureCount(nodeId)) === expected) return
+            await new Promise((done) => setTimeout(done, 50))
+          }
+          throw new Error('FIXTURE_UNKNOWN_UI_ADMISSION_NOT_RECORDED')
+        }
+        const beforeTitle = await occupancyFailureCount('shape:bridge-target')
+        await active.webContents.executeJavaScript(`(()=>{
+          const title=document.querySelector('[data-node-id="shape:bridge-target"] .node-run-btn');
+          if(!title||title.disabled)throw new Error('FIXTURE_UNKNOWN_TITLE_ENTRY_UNAVAILABLE');
+          title.click();
+        })()`)
+        await waitForOccupancyFailureCount('shape:bridge-target', beforeTitle + 1)
+        const beforeMultiSelect = await occupancyFailureCount('shape:bridge-target')
+        await active.webContents.executeJavaScript(`(async()=>{
+          const editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;
+          const delay=()=>new Promise(done=>setTimeout(done,50));
+          editor.select('shape:bridge-target','shape:bridge-image-gen');
+          editor.zoomToSelection();
+          for(let attempt=0;attempt<40;attempt++){
+            const button=document.querySelector('[data-tool="run"]');
+            if(button){button.click();return;}
+            await delay();
+          }
+          throw new Error('FIXTURE_UNKNOWN_MULTISELECT_ENTRY_UNAVAILABLE');
+        })()`)
+        await waitForOccupancyFailureCount('shape:bridge-target', beforeMultiSelect + 1)
         report = await active.webContents.executeJavaScript(`(async()=>{
           const state=${JSON.stringify(state)}
           const editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor
@@ -350,15 +397,14 @@ if (
           if(unresolved.state!=='unknown')throw new Error('FIXTURE_ORPHAN_REPLAYED')
           const replay=value(await window.api.dispatchFlowCommand(state.unknown))
           if(replay.state!=='committed')throw new Error('FIXTURE_REOPEN_REPLAY_FAILED')
-          return {checks:['new process pending -> unknown','manual execution and publication blocked by unknown occupancy','saved-run reconciliation without execution','absent saved run stays unknown','committed receipt replay after restart']}
+          return {checks:['new process pending -> unknown','title run blocked by unknown occupancy','multi-select run blocked by unknown occupancy','manual execution and publication blocked by unknown occupancy','saved-run reconciliation without execution','absent saved run stays unknown','committed receipt replay after restart']}
         })()`)
       }
     } catch (error) {
       failed = true
       // Only static fixture codes; never print raw UI errors, model data or project snapshots.
       const message = error instanceof Error ? error.message : ''
-      const code =
-        message.match(/\b(?:FIXTURE|FLOW|ASSET)_[A-Z_]+\b/)?.[0]
+      const code = message.match(/\b(?:FIXTURE|FLOW|ASSET)_[A-Z_]+\b/)?.[0]
       let fixtureStage: unknown
       try {
         fixtureStage = await window?.webContents.executeJavaScript('window.__bridgePhase')

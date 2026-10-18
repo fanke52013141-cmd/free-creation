@@ -4,6 +4,7 @@ import { parseStoredNodeValue } from '../engine/values'
 import { z } from 'zod'
 import { AgentFlowAssetRefSchema } from './node-contracts'
 import type { FlowAssetValue } from './assets'
+import { canonicalFlowJson } from './semantic-revision'
 
 export const AgentOutputSetSchema = z
   .object({
@@ -59,6 +60,22 @@ export function agentReplyOutputProjection(
   return Object.fromEntries(normalized.map((value, index) => [ports[index], value])) as Partial<
     Record<'out-text' | 'out-json', FlowAssetValue>
   >
+}
+
+/** Verify an aggregate output against the ordered, fixed asset facts that produced it. */
+export function agentOutputSetMatchesAssets(
+  output: unknown,
+  rawRefs: unknown,
+  values: readonly FlowAssetValue[]
+): boolean {
+  if (!output || typeof output !== 'object' || Array.isArray(output)) return false
+  const candidate = output as Record<string, unknown>
+  if (candidate.kind !== 'json') return false
+  const refs = z.array(AgentFlowAssetRefSchema).min(2).max(128).safeParse(rawRefs)
+  const outputSet = AgentOutputSetSchema.safeParse(candidate.data)
+  if (!refs.success || !outputSet.success) return false
+  const expected = agentReplyOutputProjection(refs.data, [...values])['out-json']
+  return Boolean(expected && canonicalFlowJson(expected) === canonicalFlowJson(output))
 }
 
 export function projectAgentOutputs(shape: NodeShape): RawNodeOutputs {

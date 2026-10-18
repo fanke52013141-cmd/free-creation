@@ -67,7 +67,9 @@ export function FlowReviewFeedback({ shape }: { shape: NodeCardShape }): React.J
   return (
     <div className="flow-review-feedback">
       <p className="agent-flow-pending">审核反馈 · 返工 {feedback.round}</p>
-      <pre className="agent-flow-output">{feedback.feedback}</pre>
+      <pre className="agent-flow-output" data-node-selectable-text="true">
+        {feedback.feedback}
+      </pre>
       {manual && (
         <NodePrimaryButton disabled={busy} onClick={() => void submit()}>
           提交返工新版本

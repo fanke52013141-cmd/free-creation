@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@tldraw/editor@4.5.12':
+    hash: e84e82c11eecd1fdfbde91c2223f2a729e5f753ba9b805fe2fe4a9ee012a4890
+    path: patches/@tldraw__editor@4.5.12.patch
+
 importers:
 
   .:
@@ -6961,7 +6966,7 @@ snapshots:
       '@tiptap/extensions': 3.30.2(@tiptap/core@3.30.2(@tiptap/pm@3.30.2))(@tiptap/pm@3.30.2)
       '@tiptap/pm': 3.30.2
 
-  '@tldraw/editor@4.5.12(@floating-ui/dom@1.8.0)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@tldraw/editor@4.5.12(patch_hash=e84e82c11eecd1fdfbde91c2223f2a729e5f753ba9b805fe2fe4a9ee012a4890)(@floating-ui/dom@1.8.0)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
       '@tiptap/core': 3.30.2(@tiptap/pm@3.30.2)
       '@tiptap/pm': 3.30.2
@@ -10427,7 +10432,7 @@ snapshots:
       '@tiptap/pm': 3.30.2
       '@tiptap/react': 3.30.2(@floating-ui/dom@1.8.0)(@tiptap/core@3.30.2(@tiptap/pm@3.30.2))(@tiptap/pm@3.30.2)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@tiptap/starter-kit': 3.30.2
-      '@tldraw/editor': 4.5.12(@floating-ui/dom@1.8.0)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@tldraw/editor': 4.5.12(patch_hash=e84e82c11eecd1fdfbde91c2223f2a729e5f753ba9b805fe2fe4a9ee012a4890)(@floating-ui/dom@1.8.0)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@tldraw/store': 4.5.12(react@19.2.8)
       classnames: 2.5.1
       hotkeys-js: 3.13.15

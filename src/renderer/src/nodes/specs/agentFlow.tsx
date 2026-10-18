@@ -50,18 +50,28 @@ const defaults = {
   'state-machine': DEFAULT_STATE_NODE_CONFIG
 }
 type FlowType = keyof typeof schemas
-function configOf(shape: NodeBodyProps['shape']): Record<string, unknown> {
+function parsedConfigOf(shape: NodeBodyProps['shape']): Record<string, unknown> | null {
   try {
-    return schemas[shape.props.nodeType as FlowType].parse(JSON.parse(shape.props.config))
+    const result = schemas[shape.props.nodeType as FlowType].safeParse(
+      JSON.parse(shape.props.config)
+    )
+    return result.success ? (result.data as Record<string, unknown>) : null
   } catch {
-    return {}
+    return null
   }
+}
+function configOf(shape: NodeBodyProps['shape']): Record<string, unknown> {
+  return (
+    parsedConfigOf(shape) ??
+    (defaults[shape.props.nodeType as FlowType] as Record<string, unknown>)
+  )
 }
 function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
   const config = configOf(shape)
   const agent = shape.props.nodeType === 'agent'
   const review = shape.props.nodeType === 'ai-review'
+  const configIsValid = parsedConfigOf(shape) !== null
   const [flowState, setFlowState] = useState<
     import('@shared/agent-flow/desktop-tasks').FlowAgentView | null
   >(null)
@@ -97,6 +107,22 @@ function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
     },
     [editor, shape]
   )
+  if (!configIsValid) {
+    return (
+      <div className="agent-flow-body">
+        <NodeIdentity>
+          <p className="agent-flow-pending" role="alert">
+            节点配置无效，执行已阻止。请打开设置修复配置。
+          </p>
+        </NodeIdentity>
+        <NodePrimaryButton
+          onClick={() => useNodePanelStore.getState().open('contract', shape.id, 'settings')}
+        >
+          修复节点配置
+        </NodePrimaryButton>
+      </div>
+    )
+  }
   if (!agent && !review)
     return (
       <div className="agent-flow-body">
@@ -194,6 +220,8 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
   const [draft, setDraft] = useState<Record<string, unknown>>(() => configOf(shape))
   const [error, setError] = useState('')
   const [catalog, setCatalog] = useState<FlowAgentCatalog | null>(null)
+  const [repairConfirmed, setRepairConfirmed] = useState(false)
+  const savedConfigIsValid = parsedConfigOf(shape) !== null
   useEffect(() => {
     if (type === 'state-machine' || !window.api.flowAgentCatalog) return
     let disposed = false
@@ -235,6 +263,7 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
   if (saved !== shape.props.config) {
     setSaved(shape.props.config)
     setDraft(configOf(shape))
+    setRepairConfirmed(false)
   }
   const update = (key: string, value: unknown): void => {
     setDraft({ ...draft, [key]: value })
@@ -315,6 +344,11 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
   )
   const save = (): void => {
     const terminal = beginFlowConfigEdit(projectId, shape.id, type)
+    if (!savedConfigIsValid && !repairConfirmed) {
+      setError('已保存的配置无效。请先恢复默认配置，再保存修复结果。')
+      terminal('failed', 'validation')
+      return
+    }
     const result = schemas[type].safeParse(draft)
     if (!result.success) {
       setError('配置格式无效，请检查节点 ID、版本、预算和状态转换。')
@@ -347,6 +381,26 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
   }
   return (
     <section className="node-settings agent-flow-settings">
+      {!savedConfigIsValid && !repairConfirmed && (
+        <div className="contract-settings-hint" role="alert">
+          <p>已保存的节点配置无效，当前无法运行。恢复默认配置后可检查并保存修复结果。</p>
+          <button
+            type="button"
+            onClick={() => {
+              setDraft(defaults[type] as Record<string, unknown>)
+              setRepairConfirmed(true)
+              setError('')
+            }}
+          >
+            恢复默认配置
+          </button>
+        </div>
+      )}
+      {!savedConfigIsValid && repairConfirmed && (
+        <p className="contract-settings-hint" role="status">
+          默认配置已载入草稿。保存后才会替换无效配置。
+        </p>
+      )}
       {type === 'agent' && (
         <>
           <label className="settings-field">

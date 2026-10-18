@@ -430,7 +430,7 @@ export class FlowCoordinatorHost {
             nodeId: child.nodeId,
             action: 'start',
             requestId: child.taskId
-          })
+          }, true)
           if (
             child.inputs.some(
               (ref) =>
@@ -492,7 +492,7 @@ export class FlowCoordinatorHost {
           nodeId: id,
           action: 'start',
           requestId: hash([run.taskId, id])
-        })
+        }, true)
         candidates.set(id, child)
         available.push({ nodeId: id, goal: child.goal, inputs: child.directInputs })
       } catch (error) {

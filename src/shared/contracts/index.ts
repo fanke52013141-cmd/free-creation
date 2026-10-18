@@ -211,6 +211,7 @@ export const IPC = {
     deleteConnection: 'models:connections:delete',
     discover: 'models:connections:discover',
     validate: 'models:definitions:validate',
+    validateAgentToolCalling: 'models:definitions:validate-agent-tool-calling',
     saveBinding: 'models:bindings:save',
     bindings: 'models:bindings:list',
     resolveBinding: 'models:bindings:resolve'
@@ -413,6 +414,14 @@ export interface ValidateModelDefinitionInput {
   modelDefinitionId: string
   operation: ModelOperation
   /** 真实验证会按该模型的最低请求计费，调用方必须显式确认。 */
+  allowCost: true
+}
+
+/** A deliberate two-request structured-tool probe that can be reused by Agent runs. */
+export interface ValidateAgentToolCallingInput {
+  connectionId: string
+  modelDefinitionId: string
+  /** The probe sends real provider requests and may incur a charge. */
   allowCost: true
 }
 

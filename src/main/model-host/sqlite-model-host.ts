@@ -11,6 +11,7 @@ import type {
   ModelDefinition,
   ModelOperation,
   ModelTarget,
+  ModelValidationSnapshot,
   VoiceResource
 } from '@free-creation/model-contracts'
 import type {
@@ -75,6 +76,7 @@ interface ConnectionRow {
   enabled: number
   created_at: string
   updated_at: string
+  agent_tool_calling_revision: number
 }
 
 interface ModelRow {
@@ -85,6 +87,7 @@ interface ModelRow {
   capabilities_json: string
   metadata_json: string
   enabled: number
+  agent_tool_calling_revision: number
 }
 
 const json = <T>(value: string, fallback: T): T => {
@@ -126,7 +129,7 @@ export class SqliteModelHost
 
   saveConnection(input: ModelCatalogConnectionInput): Connection {
     const now = new Date().toISOString()
-    const existing = this.db.prepare('SELECT secret_ref, created_at, protocol, base_url, headers_json FROM model_connections WHERE id = ?').get(input.id) as { secret_ref: string | null; created_at: string; protocol: string; base_url: string; headers_json: string } | undefined
+    const existing = this.db.prepare('SELECT secret_ref, created_at, protocol, base_url, headers_json, agent_tool_calling_revision FROM model_connections WHERE id = ?').get(input.id) as { secret_ref: string | null; created_at: string; protocol: string; base_url: string; headers_json: string; agent_tool_calling_revision: number } | undefined
     const secret = input.apiKey?.trim() ? encryptSecret(input.apiKey.trim()) : (existing?.secret_ref ?? null)
     const nextUrl = input.baseUrl.replace(/\/+$/, '')
     const nextHeaders = JSON.stringify(input.headers ?? {})
@@ -134,14 +137,16 @@ export class SqliteModelHost
       existing.protocol !== input.protocol || existing.base_url !== nextUrl ||
       existing.headers_json !== nextHeaders || Boolean(input.apiKey?.trim())
     ))
-    this.db.prepare(`INSERT INTO model_connections (id, name, protocol, base_url, secret_ref, headers_json, metadata_json, enabled, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    const toolCallingRevision = (existing?.agent_tool_calling_revision ?? 0) + Number(connectionChanged)
+    this.db.prepare(`INSERT INTO model_connections (id, name, protocol, base_url, secret_ref, headers_json, metadata_json, enabled, created_at, updated_at, agent_tool_calling_revision)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET name=excluded.name, protocol=excluded.protocol, base_url=excluded.base_url,
         secret_ref=excluded.secret_ref, headers_json=excluded.headers_json, metadata_json=excluded.metadata_json,
-        enabled=excluded.enabled, updated_at=excluded.updated_at`).run(
+        enabled=excluded.enabled, updated_at=excluded.updated_at,
+        agent_tool_calling_revision=excluded.agent_tool_calling_revision`).run(
       input.id, input.name.trim(), input.protocol, nextUrl, secret,
       nextHeaders, JSON.stringify(input.metadata ?? {}), input.enabled === false ? 0 : 1,
-      existing?.created_at ?? now, now
+      existing?.created_at ?? now, now, toolCallingRevision
     )
     if (connectionChanged) {
       this.db.prepare('DELETE FROM model_validations WHERE connection_id = ?').run(input.id)
@@ -157,7 +162,7 @@ export class SqliteModelHost
     const now = new Date().toISOString()
     // A model is one configured target that may implement several operations. The UI adds
     // capabilities incrementally, so locate by the stable connection+upstream-model key first.
-    const existing = this.db.prepare('SELECT id, connection_id, model_id, created_at, capabilities_json FROM model_definitions WHERE id = ? OR (connection_id = ? AND model_id = ?)').get(input.id, input.connectionId, input.modelId.trim()) as { id: string; connection_id: string; model_id: string; created_at: string; capabilities_json: string } | undefined
+    const existing = this.db.prepare('SELECT id, connection_id, model_id, created_at, capabilities_json, agent_tool_calling_revision FROM model_definitions WHERE id = ? OR (connection_id = ? AND model_id = ?)').get(input.id, input.connectionId, input.modelId.trim()) as { id: string; connection_id: string; model_id: string; created_at: string; capabilities_json: string; agent_tool_calling_revision: number } | undefined
     const previousCapabilities = existing ? json<Capability[]>(existing.capabilities_json, []) : []
     // Editing an existing definition replaces its declared capabilities. Adding an already
     // configured upstream model merges operations, with the incoming declaration taking precedence.
@@ -165,6 +170,14 @@ export class SqliteModelHost
       ? input.capabilities
       : [...previousCapabilities.filter((old) => !input.capabilities.some((next) => next.operation === old.operation)), ...input.capabilities]
     const definitionId = existing?.id ?? input.id
+    const previousTextCapability = previousCapabilities.find((item) => item.operation === 'text.generate')
+    const nextTextCapability = mergedCapabilities.find((item) => item.operation === 'text.generate')
+    const toolCallingDefinitionChanged = Boolean(existing && (
+      existing.connection_id !== input.connectionId ||
+      existing.model_id !== input.modelId.trim() ||
+      JSON.stringify(previousTextCapability ?? null) !== JSON.stringify(nextTextCapability ?? null)
+    ))
+    const toolCallingRevision = (existing?.agent_tool_calling_revision ?? 0) + Number(toolCallingDefinitionChanged)
     const changedOperations = new Set<ModelOperation>()
     if (existing) {
       for (const old of previousCapabilities) {
@@ -175,13 +188,17 @@ export class SqliteModelHost
         if (!previousCapabilities.some((old) => old.operation === next.operation)) changedOperations.add(next.operation)
       }
     }
-    this.db.prepare(`INSERT INTO model_definitions (id, connection_id, model_id, name, capabilities_json, metadata_json, enabled, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    this.db.prepare(`INSERT INTO model_definitions (id, connection_id, model_id, name, capabilities_json, metadata_json, enabled, created_at, updated_at, agent_tool_calling_revision)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET connection_id=excluded.connection_id, model_id=excluded.model_id, name=excluded.name,
-        capabilities_json=excluded.capabilities_json, metadata_json=excluded.metadata_json, enabled=excluded.enabled, updated_at=excluded.updated_at`).run(
+        capabilities_json=excluded.capabilities_json, metadata_json=excluded.metadata_json, enabled=excluded.enabled, updated_at=excluded.updated_at,
+        agent_tool_calling_revision=excluded.agent_tool_calling_revision`).run(
       definitionId, input.connectionId, input.modelId.trim(), input.name.trim(), JSON.stringify(mergedCapabilities),
-      JSON.stringify(input.metadata ?? {}), input.enabled === false ? 0 : 1, existing?.created_at ?? now, now
+      JSON.stringify(input.metadata ?? {}), input.enabled === false ? 0 : 1, existing?.created_at ?? now, now,
+      toolCallingRevision
     )
+    if (toolCallingDefinitionChanged)
+      this.db.prepare('DELETE FROM agent_tool_calling_validations WHERE model_definition_id = ?').run(definitionId)
     for (const operation of changedOperations) {
       this.db.prepare('DELETE FROM model_validations WHERE model_definition_id = ? AND operation = ?').run(definitionId, operation)
       this.db.prepare('DELETE FROM model_feature_bindings WHERE model_definition_id = ? AND operation = ?').run(definitionId, operation)
@@ -195,6 +212,7 @@ export class SqliteModelHost
     if (!existing) return false
     this.db.prepare('DELETE FROM model_feature_bindings WHERE model_definition_id = ?').run(modelDefinitionId)
     this.db.prepare('DELETE FROM model_validations WHERE model_definition_id = ?').run(modelDefinitionId)
+    this.db.prepare('DELETE FROM agent_tool_calling_validations WHERE model_definition_id = ?').run(modelDefinitionId)
     this.db.prepare('DELETE FROM model_definitions WHERE id = ?').run(modelDefinitionId)
     return true
   }
@@ -274,6 +292,23 @@ export class SqliteModelHost
         ...(item.message ? { message: item.message } : {})
       }
     }
+    const agentValidation = this.db.prepare(`SELECT v.status, v.message, v.checked_at, v.verified_at,
+      v.connection_revision, v.model_revision, c.agent_tool_calling_revision AS current_connection_revision
+      FROM agent_tool_calling_validations v
+      JOIN model_connections c ON c.id = v.connection_id
+      WHERE v.model_definition_id = ? AND v.connection_id = ?`).get(row.id, row.connection_id) as
+        | { status: ModelValidationSnapshot['status']; message: string | null; checked_at: string; verified_at: string | null; connection_revision: number; model_revision: number; current_connection_revision: number }
+        | undefined
+    const agentToolCallingValidation: ModelValidationSnapshot = agentValidation &&
+      agentValidation.connection_revision === agentValidation.current_connection_revision &&
+      agentValidation.model_revision === row.agent_tool_calling_revision
+      ? {
+          status: agentValidation.status,
+          checkedAt: agentValidation.checked_at,
+          ...(agentValidation.verified_at ? { verifiedAt: agentValidation.verified_at } : {}),
+          ...(agentValidation.message ? { message: agentValidation.message } : {})
+        }
+      : { status: 'unverified' }
     return {
       id: row.id,
       connectionId: row.connection_id,
@@ -281,6 +316,7 @@ export class SqliteModelHost
       name: row.name,
       capabilities: json<Capability[]>(row.capabilities_json, []),
       validation,
+      agentToolCallingValidation,
       metadata: json(row.metadata_json, {}),
       enabled: Boolean(row.enabled)
     }
@@ -322,6 +358,59 @@ export class SqliteModelHost
       record.connectionId, record.modelDefinitionId, record.operation, record.status,
       record.message ?? null, record.action ?? null, record.checkedAt, record.verifiedAt ?? null
     )
+  }
+
+  /** Persist a probe result only while the tested model and connection revisions are unchanged. */
+  saveAgentToolCallingValidation(input: {
+    connectionId: string
+    modelDefinitionId: string
+    snapshot: ModelValidationSnapshot
+    expectedConnectionRevision: number
+    expectedModelRevision: number
+  }): void {
+    const current = this.db.prepare(`SELECT c.agent_tool_calling_revision AS connection_revision,
+      m.agent_tool_calling_revision AS model_revision
+      FROM model_connections c JOIN model_definitions m ON m.connection_id = c.id
+      WHERE c.id = ? AND m.id = ?`).get(input.connectionId, input.modelDefinitionId) as
+        | { connection_revision: number; model_revision: number }
+        | undefined
+    if (!current) throw new Error('模型连接或模型定义已更改，请重新验证')
+    if (
+      current.connection_revision !== input.expectedConnectionRevision ||
+      current.model_revision !== input.expectedModelRevision
+    )
+      throw new Error('模型或连接在验证期间发生更改，请重新验证')
+    const { snapshot } = input
+    this.db.prepare(`INSERT INTO agent_tool_calling_validations
+      (connection_id, model_definition_id, status, message, checked_at, verified_at, connection_revision, model_revision)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(connection_id, model_definition_id) DO UPDATE SET status=excluded.status,
+        message=excluded.message, checked_at=excluded.checked_at, verified_at=excluded.verified_at,
+        connection_revision=excluded.connection_revision, model_revision=excluded.model_revision`).run(
+      input.connectionId,
+      input.modelDefinitionId,
+      snapshot.status,
+      snapshot.message ?? null,
+      snapshot.checkedAt ?? new Date().toISOString(),
+      snapshot.verifiedAt ?? null,
+      current.connection_revision,
+      current.model_revision
+    )
+  }
+
+  getAgentToolCallingRevisions(connectionId: string, modelDefinitionId: string): {
+    connectionRevision: number
+    modelRevision: number
+  } | null {
+    const row = this.db.prepare(`SELECT c.agent_tool_calling_revision AS connection_revision,
+      m.agent_tool_calling_revision AS model_revision
+      FROM model_connections c JOIN model_definitions m ON m.connection_id = c.id
+      WHERE c.id = ? AND m.id = ?`).get(connectionId, modelDefinitionId) as
+        | { connection_revision: number; model_revision: number }
+        | undefined
+    return row
+      ? { connectionRevision: row.connection_revision, modelRevision: row.model_revision }
+      : null
   }
 
   async loadTask(id: string): Promise<MediaTask | null> { return this.tasks.get(id) ?? null }

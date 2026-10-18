@@ -11,6 +11,7 @@
 // 因此执行器只需把运行结果写回 shape props / meta，投影交给运行器统一处理。
 import type { Editor, TLShapeId } from 'tldraw'
 import type { CanvasEdge, CanvasNode, ExecStatus, ProviderSummary } from '@shared/types'
+import type { FlowAssetVersion } from '@shared/agent-flow/assets'
 import { deriveGraph } from '../canvas/graph'
 import { markUndoPoint } from '../canvas/history'
 import { materializeArtifact, materializeDocumentArtifact } from '../canvas/artifact-materializer'
@@ -26,6 +27,10 @@ import type { NodeExecutionContext, NodeExecutionResult, SubflowRequest } from '
 import type { NodeMetaPatch } from '@shared/engine/executor-types'
 import { iterationItemValue } from '@shared/engine/inputs'
 import { rendererGateway } from './rendererGateway'
+import {
+  preflightAgentDecisionModels,
+  preflightReviewDecisionModels
+} from './agent-model-preflight'
 import { placeFlowAsset } from '../canvas/flow-asset-actions'
 import { operationPatchViolation } from '@shared/engine/node-invariants'
 import { fingerprintNodeInputs } from './resultFreshness'
@@ -60,7 +65,13 @@ import {
 import { emitDiagnosticsEvent } from './diagnosticsReporter'
 import { captureRunWorkload } from './run-workload'
 import type { FlowCommandGrant } from '@shared/agent-flow/commands'
-import { AgentFlowAssetRefSchema } from '@shared/agent-flow/node-contracts'
+import {
+  AgentFlowAssetRefSchema,
+  getAgentModelBindingStatus,
+  type AgentFlowAssetRef
+} from '@shared/agent-flow/node-contracts'
+import { AgentOutputSetSchema, agentOutputSetMatchesAssets } from '@shared/agent-flow/agent-outputs'
+import { canonicalFlowJson } from '@shared/agent-flow/semantic-revision'
 import { readPinnedOutputs } from '@shared/engine/deterministic-projections'
 
 export interface NodeCommandRunOptions {
@@ -262,6 +273,14 @@ export async function runNodeTest(
     }
     if (node.type === 'iterate') {
       return { status: 'skipped', reason: '循环节点需要真实下游流程，请在画布中运行', outputs: {} }
+    }
+    if (node.type === 'agent') {
+      const preflightError = await preflightAgentDecisionModels([node.params.config])
+      if (preflightError) return { status: 'failed', reason: preflightError, outputs: {} }
+    }
+    if (node.type === 'ai-review') {
+      const preflightError = await preflightReviewDecisionModels([node.params.config])
+      if (preflightError) return { status: 'failed', reason: preflightError, outputs: {} }
     }
 
     const runId = `test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -987,6 +1006,19 @@ function nodeResource(node: CanvasNode): string {
   return 'local'
 }
 
+function agentNeedsDecisionModel(editor: Editor, node: CanvasNode): boolean {
+  if (node.type !== 'agent' || getAgentModelBindingStatus(node.params.config) !== 'missing')
+    return false
+  const shape = editor.getShape<NodeCardShape>(node.id as TLShapeId)
+  try {
+    const meta = shape?.meta as Record<string, unknown> | undefined
+    const task = JSON.parse(String(meta?.agentTask ?? '{}'))
+    return !['running', 'waiting', 'blocked'].includes(String(task.state ?? ''))
+  } catch {
+    return true
+  }
+}
+
 async function executeNodeOnce(
   ctx: WorkflowContext,
   node: CanvasNode,
@@ -1039,7 +1071,9 @@ async function executeNodeOnce(
         return {
           status: 'skipped',
           reason:
-            'error' in available && available.error.code === 'FLOW_CONTROL_OCCUPIED'
+            'error' in available &&
+            (available.error.code === 'FLOW_CONTROL_OCCUPIED' ||
+              available.error.code === 'FLOW_NODE_OCCUPIED')
               ? '该节点由主 Agent 协调，请先停止对应流程'
               : 'error' in available && available.error.code === 'FLOW_REVIEW_NOT_READY'
                 ? '审核节点尚未接入执行，本次运行已跳过'
@@ -1161,26 +1195,68 @@ async function executeNodeUnscheduled(
           const packet = projected.value[portId]
           if (!packet) throw new Error('文档产物必须来自本次已校验的输出端口')
           if (node.type === 'agent') {
-            const result = JSON.parse(latest.meta.nodeResult as string)
+            const result = JSON.parse(String(latest.meta.nodeResult ?? '{}'))
+            if (typeof result.taskId !== 'string' || !Array.isArray(result.refs))
+              throw new Error('Agent 固定资产引用缺失')
+            if (result.refs.length > 128) throw new Error('Agent 固定资产引用无效')
+            const validRefs: AgentFlowAssetRef[] = []
+            for (const raw of result.refs as unknown[]) {
+              const parsed = AgentFlowAssetRefSchema.safeParse(raw)
+              if (!parsed.success) throw new Error('Agent 固定资产引用无效')
+              validRefs.push(parsed.data)
+            }
             let found = false
-            for (const ref of result.refs as Array<{ versionId: string }>) {
-              const version = await window.api.readFlowAsset({
-                projectId: ctx.projectId,
-                versionId: ref.versionId
-              })
-              if (!version.ok) throw new Error('Agent 固定资产读取失败')
-              const value = agentOutputValue(version.data.value)
-              if (JSON.stringify(value) === JSON.stringify(packet.value)) {
+            const outputSetValue =
+              packet.value.kind === 'json' &&
+              typeof packet.value.data === 'object' &&
+              packet.value.data !== null &&
+              (packet.value.data as { kind?: unknown }).kind === 'flow.agent-output-set'
+
+            if (outputSetValue) {
+              const outputSet = AgentOutputSetSchema.safeParse(
+                packet.value.kind === 'json' ? packet.value.data : null
+              )
+              if (
+                !outputSet.success ||
+                canonicalFlowJson(validRefs) !==
+                  canonicalFlowJson(outputSet.data.outputs.map((item) => item.ref))
+              )
+                throw new Error('Agent 固定资产集合无效')
+
+              const versions: FlowAssetVersion[] = []
+              for (const ref of validRefs) {
+                const version = await window.api.readFlowAsset({
+                  projectId: ctx.projectId,
+                  versionId: ref.versionId
+                })
+                if (
+                  !version.ok ||
+                  version.data.projectId !== ctx.projectId ||
+                  canonicalFlowJson(version.data.ref) !== canonicalFlowJson(ref)
+                )
+                  throw new Error('Agent 固定资产读取失败')
+                versions.push(version.data)
+              }
+              if (
+                !agentOutputSetMatchesAssets(
+                  packet.value,
+                  validRefs,
+                  versions.map((item) => item.value)
+                )
+              )
+                throw new Error('Agent 固定资产集合与固定版本不一致')
+
+              for (const version of versions) {
                 const present = editor
                   .getCurrentPageShapes()
                   .some(
                     (shape) =>
                       (shape.meta.agentTaskId === result.taskId ||
-                        version.data.value.kind === 'video') &&
-                      shape.meta.agentAssetVersionId === ref.versionId
+                        version.value.kind === 'video') &&
+                      shape.meta.agentAssetVersionId === version.ref.versionId
                   )
                 if (!present) {
-                  const placed = placeFlowAsset(editor, version.data, latest.id)
+                  const placed = placeFlowAsset(editor, version, latest.id)
                   const materialized = editor.getShape(placed)
                   editor.updateShape({
                     id: placed,
@@ -1188,15 +1264,56 @@ async function executeNodeUnscheduled(
                     meta: {
                       ...materialized?.meta,
                       agentTaskId: result.taskId,
-                      agentAssetVersionId: ref.versionId,
+                      agentAssetVersionId: version.ref.versionId,
                       artifactProducerId: latest.id,
                       artifactProducerPortId: portId,
                       artifactRunId: ctx.runId
                     }
                   })
                 }
-                found = true
-                break
+              }
+              found = true
+            } else {
+              for (const ref of validRefs) {
+                const version = await window.api.readFlowAsset({
+                  projectId: ctx.projectId,
+                  versionId: ref.versionId
+                })
+                if (
+                  !version.ok ||
+                  version.data.projectId !== ctx.projectId ||
+                  canonicalFlowJson(version.data.ref) !== canonicalFlowJson(ref)
+                )
+                  throw new Error('Agent 固定资产读取失败')
+                const value = agentOutputValue(version.data.value)
+                if (canonicalFlowJson(value) === canonicalFlowJson(packet.value)) {
+                  const present = editor
+                    .getCurrentPageShapes()
+                    .some(
+                      (shape) =>
+                        (shape.meta.agentTaskId === result.taskId ||
+                          version.data.value.kind === 'video') &&
+                        shape.meta.agentAssetVersionId === ref.versionId
+                    )
+                  if (!present) {
+                    const placed = placeFlowAsset(editor, version.data, latest.id)
+                    const materialized = editor.getShape(placed)
+                    editor.updateShape({
+                      id: placed,
+                      type: 'node-card',
+                      meta: {
+                        ...materialized?.meta,
+                        agentTaskId: result.taskId,
+                        agentAssetVersionId: ref.versionId,
+                        artifactProducerId: latest.id,
+                        artifactProducerPortId: portId,
+                        artifactRunId: ctx.runId
+                      }
+                    })
+                  }
+                  found = true
+                  break
+                }
               }
             }
             if (!found) throw new Error('Agent 固定资产引用缺失')
@@ -1488,6 +1605,25 @@ export async function runNodeManually(
   const graph = deriveGraph(editor)
   const node = graph.nodes.find((item) => item.id === nodeId)
   if (!node) return { status: 'skipped', reason: '节点不存在或尚未保存到画布' }
+  if (agentNeedsDecisionModel(editor, node)) {
+    const reason = '请在节点设置中选择决策模型。'
+    toast(reason)
+    return { status: 'failed', reason }
+  }
+  if (node.type === 'agent') {
+    const preflightError = await preflightAgentDecisionModels([node.params.config])
+    if (preflightError) {
+      toast(preflightError)
+      return { status: 'failed', reason: preflightError }
+    }
+  }
+  if (node.type === 'ai-review') {
+    const preflightError = await preflightReviewDecisionModels([node.params.config])
+    if (preflightError) {
+      toast(preflightError)
+      return { status: 'failed', reason: preflightError }
+    }
+  }
 
   const token = createRunControl()
   const commandKey = command
@@ -1572,13 +1708,28 @@ export async function runWorkflow(
 ): Promise<void> {
   const store = useEngineStore.getState()
   if (store.phase !== 'idle') return
+  const graph = deriveGraph(editor)
+  if (graph.nodes.length === 0) return toast('画布上没有节点')
+  const order = topoSort(graph)
+  if (!order) return toast('工作流存在循环连线，无法执行')
+  if (graph.nodes.some((node) => agentNeedsDecisionModel(editor, node)))
+    return toast('请在节点设置中选择决策模型。')
+  const agentConfigs = graph.nodes
+    .filter((node) => node.type === 'agent')
+    .map((node) => node.params.config)
+  if (agentConfigs.length > 0) {
+    const modelPreflightError = await preflightAgentDecisionModels(agentConfigs)
+    if (modelPreflightError) return toast(modelPreflightError)
+  }
+  const reviewConfigs = graph.nodes
+    .filter((node) => node.type === 'ai-review')
+    .map((node) => node.params.config)
+  if (reviewConfigs.length > 0) {
+    const reviewPreflightError = await preflightReviewDecisionModels(reviewConfigs)
+    if (reviewPreflightError) return toast(reviewPreflightError)
+  }
   useEngineStore.setState({ phase: 'starting' })
   try {
-    const graph = deriveGraph(editor)
-    if (graph.nodes.length === 0) return toast('画布上没有节点')
-    const order = topoSort(graph)
-    if (!order) return toast('工作流存在循环连线，无法执行')
-
     // T07（F07）：全图运行前明确范围与规模。确认弹窗仅在涉及生成模型时出现——
     // 费用提示是弹窗存在的意义；纯本地转换的画布直接运行，也避免测试环境挂起。
     const planBodies = iterationBodyNodeIds(graph)
@@ -1662,7 +1813,7 @@ export async function runWorkflowForNodes(
 ): Promise<void> {
   const store = useEngineStore.getState()
   if (store.phase !== 'idle') return
-  useEngineStore.setState({ phase: 'starting' })
+  let phaseStarted = false
   try {
     const fullGraph = deriveGraph(editor)
     const targets = [...new Set(targetNodeIds)].filter((id) =>
@@ -1689,6 +1840,24 @@ export async function runWorkflowForNodes(
     }
     const order = topoSort(graph)
     if (!order) return toast('所选子图存在循环连线，无法执行')
+    if (graph.nodes.some((node) => agentNeedsDecisionModel(editor, node)))
+      return toast('请在节点设置中选择决策模型。')
+    const agentConfigs = graph.nodes
+      .filter((node) => node.type === 'agent')
+      .map((node) => node.params.config)
+    if (agentConfigs.length > 0) {
+      const modelPreflightError = await preflightAgentDecisionModels(agentConfigs)
+      if (modelPreflightError) return toast(modelPreflightError)
+    }
+    const reviewConfigs = graph.nodes
+      .filter((node) => node.type === 'ai-review')
+      .map((node) => node.params.config)
+    if (reviewConfigs.length > 0) {
+      const reviewPreflightError = await preflightReviewDecisionModels(reviewConfigs)
+      if (reviewPreflightError) return toast(reviewPreflightError)
+    }
+    useEngineStore.setState({ phase: 'starting' })
+    phaseStarted = true
 
     const iterationBodies = iterationBodyNodeIds(graph)
     // R-03：子图运行对整条依赖闭包全量重跑，`outputs` 从空 Map 开始，没有任何
@@ -1772,8 +1941,10 @@ export async function runWorkflowForNodes(
     }
     markUndoPoint(editor, 'workflow-run-subgraph')
   } finally {
-    useEngineStore.getState().endRun()
-    clearRunControls()
+    if (phaseStarted) {
+      useEngineStore.getState().endRun()
+      clearRunControls()
+    }
   }
 }
 

@@ -18,6 +18,27 @@ const make = (id: string, type: string, config: unknown): FlowDeclarationNode =>
 const producer = make('producer', 'text', {})
 const next = make('next', 'text', {})
 describe('C1 control declarations', () => {
+  it.each(['controls', 'observes', 'review-gate', 'rework'])('COO-07 rejects self-referencing %s and leaves the data graph unchanged', kind => {
+    const owner = make('agent', 'agent', {
+      ...DEFAULT_AGENT_NODE_CONFIG,
+      relations: [{ relationId: 'self', sourceNodeId: 'agent', targetNodeId: 'agent', kind }]
+    })
+    const edges = [{ from: { nodeId: 'producer', portId: 'out-text' }, to: { nodeId: 'next', portId: 'in-text' } }]
+    const original = JSON.stringify({ owner, edges })
+    const result = resolveFlowDeclaration(owner, [owner, producer, next], edges)
+    expect(result.relations).toEqual([])
+    expect(result.issues.length).toBeGreaterThan(0)
+    expect(JSON.stringify({ owner, edges })).toBe(original)
+  })
+  it('CFG-05 retains a deleted authorized ID when a different replacement ID is present', () => {
+    const owner = make('agent', 'agent', { ...DEFAULT_AGENT_NODE_CONFIG, allowedNodeIds: ['deleted'] })
+    const replacement = { ...producer, id: 'new-id' }
+    const original = owner.config
+    const result = resolveFlowDeclaration(owner, [owner, replacement])
+    expect(result.relations).toEqual([])
+    expect(result.issues).toContain('关系目标已删除或指向自身')
+    expect(owner.config).toBe(original)
+  })
   it('derives controls from authorized scope without adding any data edges or changing config', () => {
     const owner = make('agent', 'agent', {
       ...DEFAULT_AGENT_NODE_CONFIG,

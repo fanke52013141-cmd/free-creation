@@ -27,6 +27,7 @@ import {
   reviewVideoValue
 } from '../src/main/agent-flow/video-review'
 import { supportsSampledVideoReview } from '../src/shared/agent-flow/video-review'
+import { supportsReviewAudioInput } from '../src/shared/agent-flow/media-review'
 import type { ProjectFile } from '../src/shared/types'
 import type { AgentModelPort } from '../src/main/agent-flow/runtime'
 import type { ReviewModelVerdict } from '../src/shared/agent-flow/review'
@@ -405,6 +406,37 @@ describe('fixed video sampled visual review', () => {
       supportsSampledVideoReview({
         ...model,
         capabilities: [{ ...model.capabilities[0], acceptedAssetKinds: [] }]
+      })
+    ).toBe(false)
+  })
+  it('requires declared audio input and current operation validation', () => {
+    const model = {
+      enabled: true,
+      capabilities: [
+        {
+          operation: 'text.generate' as const,
+          asynchronous: false,
+          streaming: true,
+          acceptedAssetKinds: ['audio' as const],
+          producedAssetKinds: [],
+          controls: {}
+        }
+      ],
+      validation: { 'text.generate': { status: 'verified' as const } }
+    }
+    expect(supportsReviewAudioInput(model)).toBe(true)
+    expect(supportsReviewAudioInput({ ...model, enabled: false })).toBe(false)
+    expect(supportsReviewAudioInput({ ...model, validation: {} })).toBe(false)
+    expect(
+      supportsReviewAudioInput({
+        ...model,
+        capabilities: [{ ...model.capabilities[0], acceptedAssetKinds: [] }]
+      })
+    ).toBe(false)
+    expect(
+      supportsReviewAudioInput({
+        ...model,
+        capabilities: [{ ...model.capabilities[0], acceptedAssetKinds: ['image'] }]
       })
     ).toBe(false)
   })

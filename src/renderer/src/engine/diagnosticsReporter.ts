@@ -86,6 +86,18 @@ export function diagnosticsTransportDropCount(): number {
   return droppedByTransport
 }
 
+// Main asks the renderer to drain before destroying its window. Keep this bridge
+// narrow: it returns delivery status only and never exposes event contents.
+if (typeof window !== 'undefined') {
+  const shutdownWindow = window as Window & {
+    __canvasDrainDiagnosticsForShutdown?: () => Promise<{ available: true; dropped: number }>
+  }
+  shutdownWindow.__canvasDrainDiagnosticsForShutdown = async () => {
+    await drainDiagnosticsEvents()
+    return { available: true, dropped: diagnosticsTransportDropCount() }
+  }
+}
+
 /** 测试辅助：重置内部状态。 */
 export function resetDiagnosticsReporterForTest(): void {
   buffer = []

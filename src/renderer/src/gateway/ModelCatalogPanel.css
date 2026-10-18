@@ -177,6 +177,25 @@
   gap: 6px;
   margin-left: auto;
 }
+.gw-verify-tool-button {
+  height: 28px;
+  padding: 0 9px;
+  border: 1px solid color-mix(in srgb, #42b9f5 42%, var(--line));
+  border-radius: 8px;
+  color: #78cbf5;
+  background: color-mix(in srgb, #42b9f5 8%, transparent);
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.gw-verify-tool-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, #42b9f5 65%, var(--line));
+  background: color-mix(in srgb, #42b9f5 15%, transparent);
+}
+.gw-verify-tool-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
 .gw-icon-action {
   display: grid;
   place-items: center;

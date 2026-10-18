@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 import { expect, it } from 'vitest'
-import { nodeOwnsPointer, nodeTextField } from '../src/renderer/src/canvas/node-pointer-policy'
+import {
+  nodeOwnsPointer,
+  nodeSelectableText,
+  nodeTextField
+} from '../src/renderer/src/canvas/node-pointer-policy'
 
 function element(html: string): Element {
   const root = document.createElement('div')
@@ -57,4 +61,12 @@ it('editable text/number inputs use double-click policy; readonly values remain 
   }
   expect(nodeTextField(element('<input data-target readonly>'))).toBe(null)
   expect(nodeTextField(element('<textarea data-target disabled></textarea>'))).toBe(null)
+})
+
+it('marked readonly result text keeps native selection without claiming other node surfaces', () => {
+  const resultText = element(
+    '<pre data-node-selectable-text="true"><span data-target>固定输出</span></pre>'
+  )
+  expect(nodeSelectableText(resultText)).toBe(true)
+  expect(nodeSelectableText(element('<div data-target>普通节点正文</div>'))).toBe(false)
 })

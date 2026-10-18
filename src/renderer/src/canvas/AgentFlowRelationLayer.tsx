@@ -7,6 +7,7 @@ import { useNodePanelStore } from '../stores/nodePanel'
 import { useEdgeSelectionStore } from '../stores/edgeSelection'
 import './agent-flow-relations.css'
 import { NODE_UI } from './node-ui-tokens'
+import { buildControlRelationGeometry } from './agent-flow-relation-geometry'
 
 /** Read-only control view. Config is the only persisted truth, not another shape/edge graph. */
 export function AgentFlowRelationLayer({
@@ -95,38 +96,8 @@ export function AgentFlowRelationLayer({
     const source = byId.get(relation.sourceNodeId)
     const target = byId.get(relation.targetNodeId)
     if (!source || !target) return []
-    const x1 = source.x + source.w / 2
-    const x2 = target.x + target.w / 2
-    const lift =
-      Math.min(source.y, target.y) -
-      40 -
-      ['controls', 'observes', 'review-gate', 'rework'].indexOf(relation.kind) * 20
-    const vertical = Math.abs(x2 - x1) < 100
-    const bendX =
-      Math.min(source.x, target.x) -
-      112 -
-      ['controls', 'observes', 'review-gate', 'rework'].indexOf(relation.kind) * 20
-    const labelX = vertical ? (x1 + x2) / 8 + (bendX * 3) / 4 : (x1 + x2) / 2
-    let labelY = (source.y + target.y) / 8 + (lift * 3) / 4
-    for (let attempt = 0; attempt < rects.length; attempt++) {
-      const overlap = rects.find(
-        (rect) =>
-          labelX + 36 > rect.x &&
-          labelX - 36 < rect.x + rect.w &&
-          labelY + 11 > rect.y &&
-          labelY - 11 < rect.y + rect.h
-      )
-      if (!overlap) break
-      labelY = overlap.y - 16
-    }
-    return [
-      {
-        ...relation,
-        path: `M ${x1} ${source.y} C ${vertical ? bendX : x1} ${lift}, ${vertical ? bendX : x2} ${lift}, ${x2} ${target.y}`,
-        labelX,
-        labelY
-      }
-    ]
+    // 视图只依赖屏幕矩形：关系语义、授权范围和配置都不参与几何计算。
+    return [{ ...relation, ...buildControlRelationGeometry(source, target, rects) }]
   })
   if (!lines.length) return null
   const openOwner = (id: string): void => {
@@ -162,6 +133,11 @@ export function AgentFlowRelationLayer({
             data-control-kind={line.kind}
             data-control-owner={line.ownerNodeId}
             data-control-target={line.targetNodeId}
+            data-control-source={line.sourceNodeId}
+            data-anchor-source={line.source.side}
+            data-anchor-target={line.target.side}
+            data-arrow-x={line.target.x}
+            data-arrow-y={line.target.y}
             d={line.path}
             markerEnd={`url(#${maskId}-arrow)`}
             stroke={NODE_ACCENTS['state-machine']}

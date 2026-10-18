@@ -515,11 +515,15 @@ describe('C4 supplier facts and conditional cancellation', () => {
   it('binds the original audio list and refuses unsupported model capability without POST', () => {
     seed({ flowCommandId: 'command', mode: 'reference', referenceAudioMediaIds: ['other'] })
     const input = audioInput()
+    const fetcher = vi.fn()
+    vi.stubGlobal('fetch', fetcher)
     fixture.db.prepare('UPDATE tasks SET model_id=?').run(input.modelId)
     expect(() => submitVideoTask(() => {}, input)).toThrow('原视频命令输入发生变化')
     expect(() =>
       submitVideoTask(() => {}, { ...input, modelId: 'doubao-seedance-1-5-pro' })
     ).toThrow('不支持该参考媒体或数量')
+    expect(fetcher).not.toHaveBeenCalled()
+    expect(fixture.db.prepare('SELECT count(*) AS n FROM tasks').get()).toEqual({ n: 1 })
   })
   it.each(['bytes', 'mime'] as const)(
     'checks actual asynchronously encoded audio %s before POST',
@@ -587,11 +591,15 @@ describe('C4 supplier facts and conditional cancellation', () => {
   it('rejects original video reference list drift and unsupported provider capability', () => {
     seed({ flowCommandId: 'command', mode: 'reference', referenceVideoMediaIds: ['other'] })
     const input = motionInput()
+    const fetcher = vi.fn()
+    vi.stubGlobal('fetch', fetcher)
     fixture.db.prepare('UPDATE tasks SET model_id=?').run(input.modelId)
     expect(() => submitVideoTask(() => {}, input)).toThrow('原视频命令输入发生变化')
     expect(() =>
       submitVideoTask(() => {}, { ...input, modelId: 'doubao-seedance-1-5-pro' })
     ).toThrow('不支持该参考媒体或数量')
+    expect(fetcher).not.toHaveBeenCalled()
+    expect(fixture.db.prepare('SELECT count(*) AS n FROM tasks').get()).toEqual({ n: 1 })
   })
   it('checks the actual asynchronously encoded video bytes before POST', async () => {
     const input = motionInput()
@@ -648,11 +656,15 @@ describe('C4 supplier facts and conditional cancellation', () => {
   it('rejects drift in an original reference task and unsupported model capability before POST', () => {
     seed({ flowCommandId: 'command', mode: 'reference', referenceImageMediaIds: ['tail', 'frame'] })
     const input = referenceInput()
+    const fetcher = vi.fn()
+    vi.stubGlobal('fetch', fetcher)
     fixture.db.prepare('UPDATE tasks SET model_id=?').run(input.modelId)
     expect(() => submitVideoTask(() => {}, input)).toThrow('原视频命令输入发生变化')
     expect(() =>
       submitVideoTask(() => {}, { ...input, modelId: 'doubao-seedance-1-5-pro' })
     ).toThrow('不支持该参考媒体或数量')
+    expect(fetcher).not.toHaveBeenCalled()
+    expect(fixture.db.prepare('SELECT count(*) AS n FROM tasks').get()).toEqual({ n: 1 })
   })
   it.each(['frame', 'tail'])(
     'checks actual encoded reference bytes for %s before POST',

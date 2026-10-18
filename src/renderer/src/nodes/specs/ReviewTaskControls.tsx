@@ -6,6 +6,7 @@ import { NodeIdentity, NodePrimaryButton } from '../../canvas/NodePresentation'
 import { useAppStore } from '../../stores/app'
 import { ensureCanvasSaved } from '../../canvas/flow-asset-actions'
 import { runNodeManually } from '../../engine/executor'
+import { preflightReviewDecisionModels } from '../../engine/agent-model-preflight'
 
 export function ReviewTaskControls({ shape }: Pick<NodeBodyProps, 'shape'>): React.JSX.Element {
   const editor = useEditor(),
@@ -40,6 +41,11 @@ export function ReviewTaskControls({ shape }: Pick<NodeBodyProps, 'shape'>): Rea
     setBusy(true)
     setError('')
     try {
+      const modelPreflightError = await preflightReviewDecisionModels([shape.props.config])
+      if (modelPreflightError) {
+        setError(modelPreflightError)
+        return
+      }
       await ensureCanvasSaved()
       const result = await runNodeManually(editor, projectId, [], shape.id)
       await ensureCanvasSaved()
@@ -58,7 +64,9 @@ export function ReviewTaskControls({ shape }: Pick<NodeBodyProps, 'shape'>): Rea
             <p className="agent-flow-summary">
               审核：{decision.passed ? '是' : '否'} · 第 {decision.reviewRevision + 1} 轮
             </p>
-            <pre className="agent-flow-output">{decision.feedback}</pre>
+            <pre className="agent-flow-output" data-node-selectable-text="true">
+              {decision.feedback}
+            </pre>
             {decision.videoEvidence && (
               <p className="agent-flow-pending">
                 抽样位置：

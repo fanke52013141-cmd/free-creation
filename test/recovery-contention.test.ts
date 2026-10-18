@@ -5,6 +5,7 @@ import { mkdtempSync, readFileSync, writeFileSync, utimesSync, existsSync, rmSyn
 import { basename, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import Database from 'better-sqlite3'
+import { DB_SCHEMA_VERSION } from '../src/main/store/db-migrations'
 
 const directories: string[] = [],
   children: ChildProcessWithoutNullStreams[] = []
@@ -352,7 +353,12 @@ describe('C4 independent process recovery contention', () => {
   it('concurrent v16 starters recheck schema inside the migration write lock', async () => {
     const directory = await setup()
     withDb(directory, (db) => {
-      db.exec('DROP TABLE process_locks')
+      // setup() creates the current schema; remove both M17 and M18 additions so
+      // this fixture represents the actual persisted v16 schema before racing starters.
+      db.exec(`DROP TABLE process_locks;
+        DROP TABLE agent_tool_calling_validations;
+        ALTER TABLE model_connections DROP COLUMN agent_tool_calling_revision;
+        ALTER TABLE model_definitions DROP COLUMN agent_tool_calling_revision;`)
       db.pragma('user_version=16')
     })
     const a = start(directory, 'migrate', 'a'),
@@ -363,7 +369,9 @@ describe('C4 independent process recovery contention', () => {
     expect((await a.wait('result')).result).toBe('success')
     expect((await b.wait('result')).result).toBe('success')
     await Promise.all([a.exited, b.exited])
-    expect(withDb(directory, (db) => db.pragma('user_version', { simple: true }))).toBe(17)
+    expect(withDb(directory, (db) => db.pragma('user_version', { simple: true }))).toBe(
+      DB_SCHEMA_VERSION
+    )
     expect(
       withDb(directory, (db) => db.prepare('SELECT count(*) AS n FROM process_locks').get())
     ).toEqual({ n: 0 })

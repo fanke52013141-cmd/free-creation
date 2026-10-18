@@ -6,6 +6,9 @@ import type { ModelRuntime } from '@free-creation/model-runtime'
 import { IPC, type DeleteModelConnectionInput, type DeleteModelDefinitionInput, type DeleteModelDefinitionsInput, type DiscoverModelDefinitionsInput, type DiscoveredModel, type IpcEnvelope, type ResolveModelFeatureInput, type ResolvedModelFeature, type SaveModelConnectionInput, type SaveModelDefinitionInput, type SaveModelFeatureBindingInput, type ValidateModelDefinitionInput } from '../../shared/contracts'
 import type { Connection, ModelDefinition } from '@free-creation/model-contracts'
 import { SqliteModelHost } from '../model-host/sqlite-model-host'
+import { createCatalogChatModel } from '../gateway/factory'
+import { probeAgentModel } from '../agent-flow/model-probe'
+import { newSpanId, newTraceId } from '../../shared/observability'
 
 const ok = <T>(data: T): IpcEnvelope<T> => ({ ok: true, data })
 const fail = (error: unknown): IpcEnvelope<never> => ({ ok: false, error: { code: 'MODEL_CONFIGURATION_ERROR', message: error instanceof Error ? error.message : String(error) } })
@@ -92,6 +95,94 @@ export function registerModelIpc(host: SqliteModelHost, runtime: ModelRuntime): 
       return ok(result)
     } catch (error) {
       emitDomainEvent('configuration.validation_failed', '模型能力验证失败', {
+        error,
+        connectionId: input?.connectionId,
+        attributes: { modelId: input?.modelDefinitionId }
+      })
+      return fail(error)
+    }
+  })
+  ipcMain.handle(IPC.models.validateAgentToolCalling, async (_event, input) => {
+    const context = { traceId: newTraceId(), spanId: newSpanId() }
+    emitDomainEvent('configuration.validation_started', 'Agent 工具调用能力验证开始', {
+      context,
+      connectionId: input?.connectionId,
+      attributes: { modelId: input?.modelDefinitionId }
+    })
+    try {
+      if (input?.allowCost !== true)
+        throw new Error('Agent 工具调用验证会向供应商发送真实请求，必须显式确认')
+      const connectionId = required(input.connectionId, '连接 ID')
+      const modelDefinitionId = required(input.modelDefinitionId, '模型定义 ID')
+      const modelDefinition = await host.getModel(modelDefinitionId)
+      if (
+        !modelDefinition?.enabled ||
+        modelDefinition.connectionId !== connectionId ||
+        !modelDefinition.capabilities.some((capability) => capability.operation === 'text.generate')
+      )
+        throw new Error('所选文本模型不可用，请检查模型设置')
+      const connection = await host.getConnection(connectionId)
+      if (!connection?.enabled) throw new Error('模型连接不可用，请检查模型设置')
+      if (!['openai', 'openai-compatible', 'openrouter', 'toapis'].includes(connection.protocol))
+        throw new Error('当前连接协议未适配 Agent 工具调用验证')
+      let address: URL
+      try {
+        address = new URL(connection.baseUrl)
+      } catch {
+        throw new Error('模型连接地址无效，请检查模型设置')
+      }
+      const local = ['localhost', '127.0.0.1', '[::1]'].includes(address.hostname)
+      const secret = await host.readSecret(connectionId)
+      if (!secret && !local) throw new Error('模型密钥不可用，请在模型设置中重新保存')
+      const revisions = host.getAgentToolCallingRevisions(connectionId, modelDefinitionId)
+      if (!revisions) throw new Error('模型连接或模型定义已更改，请重新验证')
+      const report = await probeAgentModel(
+        createCatalogChatModel({
+          connectionId,
+          baseURL: connection.baseUrl,
+          apiKey: secret ?? undefined,
+          headers: connection.headers,
+          modelId: modelDefinition.modelId
+        }),
+        context,
+        AbortSignal.timeout(65_000),
+        { providerId: connectionId, modelId: modelDefinitionId }
+      )
+      const checkedAt = new Date().toISOString()
+      const verified =
+        report.structuredToolCall === 'verified' && report.toolResultRoundTrip === 'verified'
+      const result = {
+        status: verified ? 'verified' as const : 'failed' as const,
+        message: verified
+          ? 'Agent 结构化工具调用与工具结果往返均已验证'
+          : report.structuredToolCall !== 'verified'
+            ? '模型未通过强制结构化工具调用验证'
+            : '模型未通过工具结果往返验证',
+        ...(!verified ? { action: '检查模型和连接配置后重试，或选择其他文本模型' } : {}),
+        checkedAt
+      }
+      host.saveAgentToolCallingValidation({
+        connectionId,
+        modelDefinitionId,
+        snapshot: {
+          status: result.status,
+          message: result.message,
+          checkedAt,
+          ...(verified ? { verifiedAt: checkedAt } : {})
+        },
+        expectedConnectionRevision: revisions.connectionRevision,
+        expectedModelRevision: revisions.modelRevision
+      })
+      emitDomainEvent('configuration.validation_completed', 'Agent 工具调用能力验证完成', {
+        context,
+        status: verified ? 'success' : 'failed',
+        connectionId,
+        attributes: { modelId: modelDefinitionId }
+      })
+      return ok(result)
+    } catch (error) {
+      emitDomainEvent('configuration.validation_failed', 'Agent 工具调用能力验证失败', {
+        context,
         error,
         connectionId: input?.connectionId,
         attributes: { modelId: input?.modelDefinitionId }

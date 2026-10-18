@@ -1,0 +1,105 @@
+diff --git a/dist-cjs/lib/editor/managers/FocusManager/FocusManager.js b/dist-cjs/lib/editor/managers/FocusManager/FocusManager.js
+index aeb5e7ac0842d68d025f09441195300d1fc79b8a..e8ed9ad62f58beaa234a3220964b49644ae5d720 100644
+--- a/dist-cjs/lib/editor/managers/FocusManager/FocusManager.js
++++ b/dist-cjs/lib/editor/managers/FocusManager/FocusManager.js
+@@ -24,6 +24,8 @@ module.exports = __toCommonJS(FocusManager_exports);
+ class FocusManager {
+   constructor(editor, autoFocus) {
+     this.editor = editor;
++    this.handleKeyDownBound = this.handleKeyDown.bind(this);
++    this.handleMouseDownBound = this.handleMouseDown.bind(this);
+     this.disposeSideEffectListener = editor.sideEffects.registerAfterChangeHandler(
+       "instance",
+       (prev, next) => {
+@@ -37,8 +39,8 @@ class FocusManager {
+       editor.updateInstanceState({ isFocused: !!autoFocus });
+     }
+     this.updateContainerClass();
+-    document.body.addEventListener("keydown", this.handleKeyDown.bind(this));
+-    document.body.addEventListener("mousedown", this.handleMouseDown.bind(this));
++    document.body.addEventListener("keydown", this.handleKeyDownBound);
++    document.body.addEventListener("mousedown", this.handleMouseDownBound);
+   }
+   disposeSideEffectListener;
+   /**
+@@ -82,8 +84,8 @@ class FocusManager {
+     this.editor.getContainer().blur();
+   }
+   dispose() {
+-    document.body.removeEventListener("keydown", this.handleKeyDown.bind(this));
+-    document.body.removeEventListener("mousedown", this.handleMouseDown.bind(this));
++    document.body.removeEventListener("keydown", this.handleKeyDownBound);
++    document.body.removeEventListener("mousedown", this.handleMouseDownBound);
+     this.disposeSideEffectListener?.();
+   }
+ }
+diff --git a/dist-esm/lib/editor/managers/FocusManager/FocusManager.mjs b/dist-esm/lib/editor/managers/FocusManager/FocusManager.mjs
+index c96049ec3f22c516e136a4471022e117712ebf24..2f1b595b05f346d52c115e1c27e6a224c2ee51e6 100644
+--- a/dist-esm/lib/editor/managers/FocusManager/FocusManager.mjs
++++ b/dist-esm/lib/editor/managers/FocusManager/FocusManager.mjs
+@@ -1,6 +1,8 @@
+ class FocusManager {
+   constructor(editor, autoFocus) {
+     this.editor = editor;
++    this.handleKeyDownBound = this.handleKeyDown.bind(this);
++    this.handleMouseDownBound = this.handleMouseDown.bind(this);
+     this.disposeSideEffectListener = editor.sideEffects.registerAfterChangeHandler(
+       "instance",
+       (prev, next) => {
+@@ -14,8 +16,8 @@ class FocusManager {
+       editor.updateInstanceState({ isFocused: !!autoFocus });
+     }
+     this.updateContainerClass();
+-    document.body.addEventListener("keydown", this.handleKeyDown.bind(this));
+-    document.body.addEventListener("mousedown", this.handleMouseDown.bind(this));
++    document.body.addEventListener("keydown", this.handleKeyDownBound);
++    document.body.addEventListener("mousedown", this.handleMouseDownBound);
+   }
+   disposeSideEffectListener;
+   /**
+@@ -59,8 +61,8 @@ class FocusManager {
+     this.editor.getContainer().blur();
+   }
+   dispose() {
+-    document.body.removeEventListener("keydown", this.handleKeyDown.bind(this));
+-    document.body.removeEventListener("mousedown", this.handleMouseDown.bind(this));
++    document.body.removeEventListener("keydown", this.handleKeyDownBound);
++    document.body.removeEventListener("mousedown", this.handleMouseDownBound);
+     this.disposeSideEffectListener?.();
+   }
+ }
+diff --git a/src/lib/editor/managers/FocusManager/FocusManager.ts b/src/lib/editor/managers/FocusManager/FocusManager.ts
+index 6ddd3e3e608c5bc1f092bdfd71dc1db76d0ced14..19f51047e668b0f8f28fb9ced1df16623e537bad 100644
+--- a/src/lib/editor/managers/FocusManager/FocusManager.ts
++++ b/src/lib/editor/managers/FocusManager/FocusManager.ts
+@@ -11,6 +11,8 @@ import type { Editor } from '../../Editor'
+  */
+ export class FocusManager {
+ 	private disposeSideEffectListener?: () => void
++	private readonly handleKeyDownBound = this.handleKeyDown.bind(this)
++	private readonly handleMouseDownBound = this.handleMouseDown.bind(this)
+ 
+ 	constructor(
+ 		public editor: Editor,
+@@ -31,8 +33,8 @@ export class FocusManager {
+ 		}
+ 		this.updateContainerClass()
+ 
+-		document.body.addEventListener('keydown', this.handleKeyDown.bind(this))
+-		document.body.addEventListener('mousedown', this.handleMouseDown.bind(this))
++		document.body.addEventListener('keydown', this.handleKeyDownBound)
++		document.body.addEventListener('mousedown', this.handleMouseDownBound)
+ 	}
+ 
+ 	/**
+@@ -84,8 +86,8 @@ export class FocusManager {
+ 	}
+ 
+ 	dispose() {
+-		document.body.removeEventListener('keydown', this.handleKeyDown.bind(this))
+-		document.body.removeEventListener('mousedown', this.handleMouseDown.bind(this))
++		document.body.removeEventListener('keydown', this.handleKeyDownBound)
++		document.body.removeEventListener('mousedown', this.handleMouseDownBound)
+ 		this.disposeSideEffectListener?.()
+ 	}
+ }

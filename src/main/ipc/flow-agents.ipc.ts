@@ -4,7 +4,8 @@ import { ipcMain, type BrowserWindow } from 'electron'
 import { IPC, type IpcEnvelope } from '../../shared/contracts'
 import {
   FlowAgentQuerySchema,
-  FlowAgentCollaborationSchema
+  FlowAgentCollaborationSchema,
+  FlowAgentRunSchema
 } from '../../shared/agent-flow/desktop-tasks'
 import { AgentRuntimeError } from '../../shared/agent-flow/runtime-contracts'
 import { flowAgentFailureMessage } from '../../shared/agent-flow/failure-messages'
@@ -18,7 +19,6 @@ import { SqliteModelHost } from '../model-host/sqlite-model-host'
 import { createCatalogChatModel } from '../gateway/factory'
 import { AgentSdkModel } from '../agent-flow/runtime-model'
 import { FlowAssetStore } from '../agent-flow/asset-store'
-import { probeAgentModel } from '../agent-flow/model-probe'
 import { emitGatewayEvent } from '../diagnostics/gateway-events'
 import { newTraceId, newSpanId } from '../../shared/observability'
 import { FlowCoordinatorHost } from '../agent-flow/coordinator-host'
@@ -29,6 +29,8 @@ import { BuildRequestSchema } from '../../shared/agent-flow/builder'
 import { FlowReviewHost } from '../agent-flow/review-host'
 import { FlowReviewStore, reviewBinding } from '../agent-flow/review-store'
 import { readStoredNodeRunStatus } from '../../shared/engine/run-status'
+import { AgentNodeConfigSchema, ReviewNodeConfigSchema } from '../../shared/agent-flow/node-contracts'
+import { ReviewRequestSchema } from '../../shared/agent-flow/review'
 
 export function registerFlowAgentsIpc(
   window: () => BrowserWindow | null,
@@ -38,11 +40,98 @@ export function registerFlowAgentsIpc(
   process.env.LANGCHAIN_TRACING_V2 = 'false'
   const catalog = new SqliteModelHost(getDb())
   const assets = new FlowAssetStore(getDb(), openProject)
-  const verified = new Set<string>()
   const inspectFailures = new Map<string, number>()
+  const assertToolCallingModel = async (
+    modelDefinitionId: string,
+    requirements: { image?: boolean; audio?: boolean } = {}
+  ): Promise<void> => {
+    const definition = await catalog.getModel(modelDefinitionId)
+    const textCapability = definition?.capabilities.find(
+      (capability) => capability.operation === 'text.generate'
+    )
+    if (!definition?.enabled || !textCapability)
+      throw new AgentRuntimeError('AGENT_MODEL_UNAVAILABLE', 'model-capability')
+    if (definition.agentToolCallingValidation?.status !== 'verified')
+      throw new AgentRuntimeError('AGENT_MODEL_TOOL_UNVERIFIED', 'model-capability')
+    const textValidation = definition.validation['text.generate']?.status === 'verified'
+    if (
+      (requirements.image &&
+        (!textCapability.acceptedAssetKinds.includes('image') || !textValidation)) ||
+      (requirements.audio &&
+        (!textCapability.acceptedAssetKinds.includes('audio') || !textValidation))
+    )
+      throw new AgentRuntimeError('AGENT_MODEL_UNAVAILABLE', 'model-capability')
+    const connection = await catalog.getConnection(definition.connectionId)
+    if (
+      !connection?.enabled ||
+      !['openai', 'openai-compatible', 'openrouter', 'toapis'].includes(connection.protocol)
+    )
+      throw new AgentRuntimeError('AGENT_MODEL_PROTOCOL', 'model-capability')
+    let address: URL
+    try {
+      address = new URL(connection.baseUrl)
+    } catch {
+      throw new AgentRuntimeError('AGENT_MODEL_PROTOCOL', 'model-capability')
+    }
+    if (
+      !(await catalog.readSecret(connection.id)) &&
+      !['localhost', '127.0.0.1', '[::1]'].includes(address.hostname)
+    )
+      throw new AgentRuntimeError('AGENT_MODEL_KEY_UNAVAILABLE', 'credentials')
+  }
+  const assertAgentScopeToolCalling = async (
+    projectId: string,
+    nodeId: string,
+    visited = new Set<string>()
+  ): Promise<void> => {
+    if (visited.has(nodeId)) return
+    visited.add(nodeId)
+    const file = openProject(projectId)
+    const shape = (
+      file?.tldrawSnapshot as {
+        store?: Record<string, { props?: { nodeType?: string; config?: string } }>
+      }
+    )?.store?.[nodeId]
+    if (!shape || shape.props?.nodeType !== 'agent') return
+    let rawConfig: unknown
+    try {
+      rawConfig = JSON.parse(shape.props.config ?? '')
+    } catch {
+      throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'validation')
+    }
+    const parsed = AgentNodeConfigSchema.safeParse(rawConfig)
+    if (!parsed.success) throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'validation')
+    if (parsed.data.modelDefinitionId)
+      await assertToolCallingModel(parsed.data.modelDefinitionId)
+    for (const targetId of parsed.data.allowedNodeIds) {
+      const target = (
+        file?.tldrawSnapshot as {
+          store?: Record<string, { props?: { nodeType?: string; config?: string } }>
+        }
+      )?.store?.[targetId]
+      if (target?.props?.nodeType === 'agent') {
+        await assertAgentScopeToolCalling(projectId, targetId, visited)
+      } else if (target?.props?.nodeType === 'ai-review') {
+        let rawReview: unknown
+        try {
+          rawReview = JSON.parse(target.props.config ?? '')
+        } catch {
+          throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'validation')
+        }
+        const review = ReviewNodeConfigSchema.safeParse(rawReview)
+        if (!review.success) throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'validation')
+        if (review.data.modelDefinitionId)
+          await assertToolCallingModel(review.data.modelDefinitionId, {
+            image: ['image', 'sampled-video', 'audio-video'].includes(
+              review.data.reviewMode ?? 'text-json'
+            ),
+            audio: ['audio', 'audio-video'].includes(review.data.reviewMode ?? 'text-json')
+          })
+      }
+    }
+  }
   const resolveModel = async (
-    snapshot: ModelIdentity,
-    signal: AbortSignal
+    snapshot: ModelIdentity
   ): Promise<AgentModelPort> => {
     const definition = await catalog.getModel(snapshot.config.modelDefinitionId ?? '')
     if (
@@ -50,6 +139,8 @@ export function registerFlowAgentsIpc(
       !definition.capabilities.some((capability) => capability.operation === 'text.generate')
     )
       throw new AgentRuntimeError('AGENT_MODEL_UNAVAILABLE', 'model-capability')
+    if (definition.agentToolCallingValidation?.status !== 'verified')
+      throw new AgentRuntimeError('AGENT_MODEL_TOOL_UNVERIFIED', 'model-capability')
     if (snapshot.requiresImageInput && !supportsSampledVideoReview(definition))
       throw new AgentRuntimeError('FLOW_VIDEO_REVIEW_MODEL_UNVERIFIED', 'model-capability')
     if (snapshot.requiresAudioInput && !supportsReviewAudioInput(definition))
@@ -82,16 +173,6 @@ export function registerFlowAgentsIpc(
       projectId: snapshot.projectId,
       nodeId: snapshot.agentNodeId,
       taskId: snapshot.taskId
-    }
-    const signature = JSON.stringify([definition, connection.updatedAt, connection.baseUrl])
-    if (!verified.has(signature)) {
-      const report = await probeAgentModel(model, context, signal, {
-        providerId: connection.id,
-        modelId: definition.id
-      })
-      if (report.structuredToolCall !== 'verified' || report.toolResultRoundTrip !== 'verified')
-        throw new AgentRuntimeError('AGENT_MODEL_TOOL_UNVERIFIED', 'model-capability')
-      verified.add(signature)
     }
     // Seed 2.1 thinking can consume the entire bounded discussion timeout.
     // Discussion and single-result builder/review opt out; task decisions retain their defaults.
@@ -208,6 +289,46 @@ export function registerFlowAgentsIpc(
         )
           throw new AgentRuntimeError('FLOW_SENDER_REJECTED', 'authorize')
         if (!query.success) throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'validation')
+        if (phase === 'run') {
+          const run = FlowAgentRunSchema.safeParse(raw)
+          if (run.success && ['start', 'continue'].includes(run.data.action))
+            await assertAgentScopeToolCalling(run.data.projectId, run.data.nodeId)
+        } else if (phase === 'cooperate' && collaboration?.success) {
+          if (['discuss', 'revise'].includes(collaboration.data.action))
+            await assertAgentScopeToolCalling(
+              collaboration.data.projectId,
+              collaboration.data.nodeId
+            )
+        } else if (phase === 'build' && build?.success && action === 'propose') {
+          await assertAgentScopeToolCalling(build.data.projectId, build.data.nodeId)
+        } else if (phase === 'review') {
+          const request = ReviewRequestSchema.safeParse(raw)
+          if (request.success) {
+            const file = openProject(request.data.projectId)
+            const shape = (
+              file?.tldrawSnapshot as {
+                store?: Record<string, { props?: { nodeType?: string; config?: string } }>
+              }
+            )?.store?.[request.data.nodeId]
+            if (shape?.props?.nodeType === 'ai-review') {
+              let rawConfig: unknown
+              try {
+                rawConfig = JSON.parse(shape.props.config ?? '')
+              } catch {
+                throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'validation')
+              }
+              const parsed = ReviewNodeConfigSchema.safeParse(rawConfig)
+              if (!parsed.success) throw new AgentRuntimeError('AGENT_INPUT_INVALID', 'validation')
+              if (parsed.data.modelDefinitionId)
+                await assertToolCallingModel(parsed.data.modelDefinitionId, {
+                  image: ['image', 'sampled-video', 'audio-video'].includes(
+                    parsed.data.reviewMode ?? 'text-json'
+                  ),
+                  audio: ['audio', 'audio-video'].includes(parsed.data.reviewMode ?? 'text-json')
+                })
+            }
+          }
+        }
         const data =
           phase === 'review'
             ? await review.run(raw)

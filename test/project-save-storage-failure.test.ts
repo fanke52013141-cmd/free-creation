@@ -182,6 +182,52 @@ describe('R09 last verified project snapshot under repeated storage failures', (
       }
     }
   )
+  it.each(['graph', 'workspace'] as const)(
+    'REC-04 rolls back %s persistence when SQLite reports read-only',
+    (kind) => {
+      const project = createProject('隔离只读数据库')
+      saveProject({ id: project.id, tldrawSnapshot: { edit: 'last-verified' } })
+      state.path = join(state.root, 'projects', project.id, 'project.json')
+      const prepare = state.db.prepare.bind(state.db)
+      vi.spyOn(state.db, 'prepare').mockImplementation((sql) => {
+        if (sql.startsWith('UPDATE projects SET updated_at'))
+          throw Object.assign(new Error('private-database-readonly'), { code: 'SQLITE_READONLY' })
+        return prepare(sql)
+      })
+
+      let failure: unknown
+      try {
+        if (kind === 'graph')
+          saveProject({
+            id: project.id,
+            expectedGraphVersion: 1,
+            tldrawSnapshot: { edit: 'must-not-commit' }
+          })
+        else
+          saveWorkspaceProfile(project.id, {
+            schemaVersion: 1,
+            presetId: 'custom',
+            visibleNodeTypeIds: ['text']
+          })
+      } catch (error) {
+        failure = error
+      }
+
+      expect(failure).toMatchObject({
+        phase: 'update-db',
+        code: 'STORAGE_WRITE_FAILED',
+        backupUsed: false,
+        rollbackFailed: false
+      })
+      vi.restoreAllMocks()
+      expect(openProject(project.id)?.tldrawSnapshot).toEqual({ edit: 'last-verified' })
+      expect(openProject(project.id)?.meta.graphVersion).toBe(1)
+      expect(state.db.prepare('SELECT graph_version FROM projects WHERE id=?').get(project.id)).toEqual({
+        graph_version: 1
+      })
+      expect(state.db.prepare('SELECT count(*) AS n FROM process_locks').get()).toEqual({ n: 0 })
+    }
+  )
   it.each(['null', '{}', '[]', '{"meta":null}', '{"meta":{"graphVersion":-1}}'])(
     'uses the verified backup when the main parses but is not a project: %s',
     (corrupt) => {

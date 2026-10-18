@@ -118,6 +118,122 @@ const SOURCE_MID_BINDINGS = {
 }
 
 describe('A01 · 3 节点顺序运行共享根 trace', () => {
+  it('拒绝无模型的新 Agent 任务，不启动工作流或排队节点', async () => {
+    const agent = node('shape:agent-no-model', 'agent', '缺少模型的任务目标')
+    agent.props.config = JSON.stringify({
+      schemaVersion: 1,
+      role: 'specialist',
+      interactionMode: 'autonomous',
+      skills: [],
+      tools: [],
+      allowedNodeIds: [],
+      maxSteps: 4,
+      relations: []
+    })
+    const { editor, events } = setupEditor([agent])
+
+    const result = await runNodeManually(editor, 'project-no-model', [], agent.id)
+    await drainDiagnosticsEvents()
+
+    expect(result).toEqual({ status: 'failed', reason: '请在节点设置中选择决策模型。' })
+    expect(events).toEqual([])
+    expect(agent.props.exec).toBe('idle')
+    expect(agent.meta.nodeRun).toBeUndefined()
+    expect(agent.meta.agentTask).toBeUndefined()
+  })
+
+  it('拒绝已禁用的文本模型，且不发出工作流事件', async () => {
+    const agent = node('shape:agent-disabled-model', 'agent', '禁用模型时不得进入队列')
+    agent.props.config = JSON.stringify({
+      schemaVersion: 1,
+      role: 'specialist',
+      interactionMode: 'autonomous',
+      modelDefinitionId: 'disabled-model',
+      skills: [],
+      tools: [],
+      allowedNodeIds: [],
+      maxSteps: 4,
+      relations: []
+    })
+    const { editor, events } = setupEditor([agent])
+    const api = (window as unknown as { api: Record<string, unknown> }).api
+    api.models = {
+      listDefinitions: async () => ({
+        ok: true,
+        data: [
+          {
+            id: 'disabled-model',
+            connectionId: 'connection-1',
+            enabled: false,
+            capabilities: [{ operation: 'text.generate' }]
+          }
+        ]
+      }),
+      listConnections: async () => ({
+        ok: true,
+        data: [{ id: 'connection-1', enabled: true, protocol: 'openai-compatible' }]
+      })
+    }
+
+    const result = await runNodeManually(editor, 'project-disabled-model', [], agent.id)
+    await drainDiagnosticsEvents()
+
+    expect(result).toEqual({
+      status: 'failed',
+      reason: '所选文本模型不可用，请检查模型设置。'
+    })
+    expect(events).toEqual([])
+    expect(agent.props.exec).toBe('idle')
+    expect(agent.meta.nodeRun).toBeUndefined()
+    expect(agent.meta.agentTask).toBeUndefined()
+  })
+
+  it('拒绝缺少图像输入能力的图片审核模型，不启动工作流或节点', async () => {
+    const review = node('shape:review-image-model', 'ai-review', '需要检查完整图片')
+    review.props.config = JSON.stringify({
+      schemaVersion: 1,
+      reviewMode: 'image',
+      modelDefinitionId: 'text-only-model',
+      rulesVersion: 'rules-1',
+      rejectPolicy: 'stop',
+      maxReworks: 0,
+      subjectSources: [{ nodeId: 'shape:source', portId: 'out-image' }],
+      gatedNodeIds: [],
+      relations: []
+    })
+    const { editor, events } = setupEditor([review])
+    const api = (window as unknown as { api: Record<string, unknown> }).api
+    api.models = {
+      listDefinitions: async () => ({
+        ok: true,
+        data: [
+          {
+            id: 'text-only-model',
+            connectionId: 'connection-1',
+            enabled: true,
+            capabilities: [{ operation: 'text.generate', acceptedAssetKinds: [] }],
+            validation: { 'text.generate': { status: 'verified' } }
+          }
+        ]
+      }),
+      listConnections: async () => ({
+        ok: true,
+        data: [{ id: 'connection-1', enabled: true, protocol: 'openai-compatible' }]
+      })
+    }
+
+    const result = await runNodeManually(editor, 'project-review-image-model', [], review.id)
+    await drainDiagnosticsEvents()
+
+    expect(result).toEqual({
+      status: 'failed',
+      reason: '所选审核模型未通过图像输入能力验证，请检查模型设置。'
+    })
+    expect(events).toEqual([])
+    expect(review.props.exec).toBe('idle')
+    expect(review.meta.nodeRun).toBeUndefined()
+  })
+
   it('gives repeated publications distinct workflow spans linked to the same parent operation', async () => {
     const source = node('shape:source', 'text', 'private-publication')
     const { editor, events } = setupEditor([source])

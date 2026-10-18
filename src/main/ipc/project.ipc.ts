@@ -20,6 +20,7 @@ import { exportCanvasStructure, importCanvasStructure } from '../store/canvas-st
 import { ProjectFileWatcher } from './project-watcher'
 import { newTraceId, newSpanId } from '../../shared/observability'
 import { projectSaveFailureDiagnostics } from '../store/project-save-error'
+import { AgentNodeConfigSchema } from '../../shared/agent-flow/node-contracts'
 
 function ok<T>(data: T): IpcEnvelope<T> {
   return { ok: true, data }
@@ -32,6 +33,49 @@ function err(code: string, message: string): IpcEnvelope<never> {
 function projectSaveContext(input: SaveProjectInput): GatewayDiagnosticsContext {
   return { traceId: newTraceId(), spanId: newSpanId(), projectId: input.id }
 }
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+/** Main-process validation is required because preload IPC is a public trust boundary. */
+function hasInvalidAgentConfig(input: SaveProjectInput): boolean {
+  const candidates: unknown[] = []
+  const addNodes = (nodes: unknown): void => {
+    if (!Array.isArray(nodes)) return
+    for (const node of nodes) {
+      if (!isRecord(node)) continue
+      if (node.type === 'agent' && isRecord(node.params)) candidates.push(node.params.config)
+      if (isRecord(node.props) && node.props.nodeType === 'agent') candidates.push(node.props.config)
+    }
+  }
+
+  addNodes(input.graph?.nodes)
+  if (isRecord(input.tldrawSnapshot) && isRecord(input.tldrawSnapshot.store)) {
+    addNodes(Object.values(input.tldrawSnapshot.store))
+  }
+
+  return candidates.some((raw) => {
+    let config = raw
+    if (typeof raw === 'string') {
+      try {
+        config = JSON.parse(raw)
+      } catch {
+        return true
+      }
+    }
+    return !AgentNodeConfigSchema.safeParse(config).success
+  })
+}
+
+function emitInvalidAgentConfigFailure(context: GatewayDiagnosticsContext): void {
+  emitDomainEvent('project.save.failed', '项目保存失败', {
+    context,
+    status: 'failed',
+    attributes: { phase: 'validate-agent-config', code: 'INVALID_AGENT_CONFIG' }
+  })
+}
+
 function transferFailure(
   context: { traceId: string; spanId: string; projectId?: string },
   error: unknown,
@@ -153,6 +197,13 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
     } else {
       setSetting('lastProjectId', '')
       watcher?.stopWatching()
+      if (repo.getProject(id)) {
+        emitDomainEvent('project.open.failed', '项目文件及备份不可读取', {
+          context: { traceId: newTraceId(), spanId: newSpanId(), projectId: id },
+          status: 'failed',
+          attributes: { phase: 'read-snapshot', code: 'PROJECT_OPEN_FAILED' }
+        })
+      }
     }
     return ok(file)
   })
@@ -165,6 +216,10 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
       emitDomainEvent('project.save.started', '项目保存开始', {
         context
       })
+      if (hasInvalidAgentConfig(input)) {
+        emitInvalidAgentConfigFailure(context)
+        return err('INVALID_AGENT_CONFIG', 'Agent 节点配置无效，项目未保存')
+      }
       try {
         const result = repo.saveProject(input)
         if (result) watcher?.notifySelfSave(result.graphVersion)
@@ -327,6 +382,11 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
   ipcMain.on(IPC.project.saveSync, (e, input: SaveProjectInput) => {
     const context = projectSaveContext(input)
     emitDomainEvent('project.save.started', '项目同步保存开始', { context })
+    if (hasInvalidAgentConfig(input)) {
+      emitInvalidAgentConfigFailure(context)
+      e.returnValue = err('INVALID_AGENT_CONFIG', 'Agent 节点配置无效，项目未保存')
+      return
+    }
     try {
       const result = repo.saveProject(input)
       if (result) watcher?.notifySelfSave(result.graphVersion)
@@ -369,6 +429,11 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
   ipcMain.on(IPC.project.saveRecoveryCopySync, (e, input: SaveProjectInput) => {
     const context = projectSaveContext(input)
     emitDomainEvent('project.save.started', '项目恢复副本保存开始', { context })
+    if (hasInvalidAgentConfig(input)) {
+      emitInvalidAgentConfigFailure(context)
+      e.returnValue = err('INVALID_AGENT_CONFIG', 'Agent 节点配置无效，恢复副本未保存')
+      return
+    }
     try {
       const result = repo.saveRecoveryCopySync(input)
       emitDomainEvent('project.save.completed', '项目恢复副本保存完成', {

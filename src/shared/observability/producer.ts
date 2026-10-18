@@ -59,7 +59,10 @@ export class DiagnosticsProducer {
     const normalizedError =
       options.normalizedError ??
       (options.error !== undefined
-        ? normalizeDiagnosticError(options.error, { withStack: options.withStack })
+        ? normalizeDiagnosticError(options.error, {
+            withStack: options.withStack,
+            privateValues: options.privateValues
+          })
         : undefined)
     const { attributes, truncatedFields, droppedKeys } = safeAttributes(
       definition,

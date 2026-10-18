@@ -200,9 +200,10 @@ describe('text model with image input', () => {
   it('invalidates old verification and binding when image input is enabled', () => {
     const db = new DatabaseSync(':memory:')
     try {
-      db.exec(`CREATE TABLE model_connections (id TEXT PRIMARY KEY, name TEXT, protocol TEXT, base_url TEXT, secret_ref TEXT, headers_json TEXT, metadata_json TEXT, enabled INTEGER, created_at TEXT, updated_at TEXT);
-        CREATE TABLE model_definitions (id TEXT PRIMARY KEY, connection_id TEXT, model_id TEXT, name TEXT, capabilities_json TEXT, metadata_json TEXT, enabled INTEGER, created_at TEXT, updated_at TEXT);
+      db.exec(`CREATE TABLE model_connections (id TEXT PRIMARY KEY, name TEXT, protocol TEXT, base_url TEXT, secret_ref TEXT, headers_json TEXT, metadata_json TEXT, enabled INTEGER, created_at TEXT, updated_at TEXT, agent_tool_calling_revision INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE model_definitions (id TEXT PRIMARY KEY, connection_id TEXT, model_id TEXT, name TEXT, capabilities_json TEXT, metadata_json TEXT, enabled INTEGER, created_at TEXT, updated_at TEXT, agent_tool_calling_revision INTEGER NOT NULL DEFAULT 0);
         CREATE TABLE model_validations (connection_id TEXT, model_definition_id TEXT, operation TEXT, status TEXT, checked_at TEXT, verified_at TEXT, message TEXT, PRIMARY KEY (connection_id, model_definition_id, operation));
+        CREATE TABLE agent_tool_calling_validations (connection_id TEXT, model_definition_id TEXT, status TEXT, message TEXT, checked_at TEXT, verified_at TEXT, connection_revision INTEGER NOT NULL, model_revision INTEGER NOT NULL, PRIMARY KEY (connection_id, model_definition_id));
         CREATE TABLE model_feature_bindings (feature_key TEXT PRIMARY KEY, connection_id TEXT, model_definition_id TEXT, operation TEXT);`)
       const host = new SqliteModelHost(db as unknown as ModelHostDatabase)
       host.saveConnection({
@@ -257,6 +258,81 @@ describe('text model with image input', () => {
         baseUrl: 'https://other.test/v1'
       })
       expect(host.listModels('connection-1')[0].validation['text.generate']).toBeUndefined()
+    } finally {
+      db.close()
+    }
+  })
+
+  it('persists Agent tool-call proof across host reload and invalidates it on relevant configuration changes', () => {
+    const db = new DatabaseSync(':memory:')
+    try {
+      db.exec(`CREATE TABLE model_connections (id TEXT PRIMARY KEY, name TEXT, protocol TEXT, base_url TEXT, secret_ref TEXT, headers_json TEXT, metadata_json TEXT, enabled INTEGER, created_at TEXT, updated_at TEXT, agent_tool_calling_revision INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE model_definitions (id TEXT PRIMARY KEY, connection_id TEXT, model_id TEXT, name TEXT, capabilities_json TEXT, metadata_json TEXT, enabled INTEGER, created_at TEXT, updated_at TEXT, agent_tool_calling_revision INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE model_validations (connection_id TEXT, model_definition_id TEXT, operation TEXT, status TEXT, checked_at TEXT, verified_at TEXT, message TEXT, PRIMARY KEY (connection_id, model_definition_id, operation));
+        CREATE TABLE agent_tool_calling_validations (connection_id TEXT, model_definition_id TEXT, status TEXT, message TEXT, checked_at TEXT, verified_at TEXT, connection_revision INTEGER NOT NULL, model_revision INTEGER NOT NULL, PRIMARY KEY (connection_id, model_definition_id));
+        CREATE TABLE model_feature_bindings (feature_key TEXT PRIMARY KEY, connection_id TEXT, model_definition_id TEXT, operation TEXT);`)
+      const host = new SqliteModelHost(db as unknown as ModelHostDatabase)
+      host.saveConnection({
+        id: 'connection-1',
+        name: 'test',
+        protocol: 'openai-compatible',
+        baseUrl: 'http://127.0.0.1:5200/v1'
+      })
+      host.saveModel({
+        id: 'model-1',
+        connectionId: 'connection-1',
+        modelId: 'test-model',
+        name: 'test',
+        capabilities: [capability(false)]
+      })
+      const revisions = host.getAgentToolCallingRevisions('connection-1', 'model-1')!
+      const snapshot = {
+        status: 'verified' as const,
+        message: 'synthetic validation',
+        checkedAt: '2026-10-18T00:00:00.000Z',
+        verifiedAt: '2026-10-18T00:00:00.000Z'
+      }
+      host.saveAgentToolCallingValidation({
+        connectionId: 'connection-1',
+        modelDefinitionId: 'model-1',
+        snapshot,
+        expectedConnectionRevision: revisions.connectionRevision,
+        expectedModelRevision: revisions.modelRevision
+      })
+      expect(new SqliteModelHost(db as unknown as ModelHostDatabase).listModels()[0].agentToolCallingValidation).toMatchObject({ status: 'verified' })
+
+      host.saveConnection({
+        id: 'connection-1',
+        name: 'test',
+        protocol: 'openai-compatible',
+        baseUrl: 'http://127.0.0.1:5300/v1'
+      })
+      expect(host.listModels()[0].agentToolCallingValidation?.status).toBe('unverified')
+      expect(() => host.saveAgentToolCallingValidation({
+        connectionId: 'connection-1',
+        modelDefinitionId: 'model-1',
+        snapshot,
+        expectedConnectionRevision: revisions.connectionRevision,
+        expectedModelRevision: revisions.modelRevision
+      })).toThrow('模型或连接在验证期间发生更改，请重新验证')
+
+      const current = host.getAgentToolCallingRevisions('connection-1', 'model-1')!
+      host.saveAgentToolCallingValidation({
+        connectionId: 'connection-1',
+        modelDefinitionId: 'model-1',
+        snapshot,
+        expectedConnectionRevision: current.connectionRevision,
+        expectedModelRevision: current.modelRevision
+      })
+      const changed = host.saveModel({
+        id: 'model-1',
+        connectionId: 'connection-1',
+        modelId: 'test-model',
+        name: 'test',
+        capabilities: [capability(true)]
+      })
+      expect(changed.agentToolCallingValidation?.status).toBe('unverified')
+      expect(db.prepare('SELECT * FROM agent_tool_calling_validations').all()).toHaveLength(0)
     } finally {
       db.close()
     }

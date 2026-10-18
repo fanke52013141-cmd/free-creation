@@ -45,6 +45,21 @@ export const AgentNodeConfigSchema = z
     relations: z.array(AgentFlowRelationSchema).max(256)
   })
   .strict()
+export function getAgentModelBindingStatus(
+  rawConfig: unknown
+): 'invalid' | 'missing' | 'configured' {
+  let value = rawConfig
+  if (typeof rawConfig === 'string') {
+    try {
+      value = JSON.parse(rawConfig)
+    } catch {
+      return 'invalid'
+    }
+  }
+  const parsed = AgentNodeConfigSchema.safeParse(value)
+  if (!parsed.success) return 'invalid'
+  return parsed.data.modelDefinitionId?.trim() ? 'configured' : 'missing'
+}
 export const ReviewNodeConfigSchema = z
   .object({
     schemaVersion: z.literal(1),

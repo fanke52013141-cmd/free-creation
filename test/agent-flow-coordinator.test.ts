@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { writeFile } from 'node:fs/promises'
 import Database from 'better-sqlite3'
 import type { CanvasNode, ProjectFile } from '../src/shared/types'
 import { migrateDatabase } from '../src/main/store/db-migrations'
@@ -242,7 +243,8 @@ function fixture(
     if (!options.review.manual)
       file.edges.push(edge('material', 'out-text', 'process-repair', 'in-value'))
   }
-  const open = (id: string): ProjectFile | null => (id === 'p' ? file : null)
+  const files = new Map<string, ProjectFile>([['p', file]])
+  const open = (id: string): ProjectFile | null => files.get(id) ?? null
   const assets = new FlowAssetStore(db, open),
     ledger = new FlowCommandLedger(db, open)
   let executions = 0,
@@ -440,6 +442,7 @@ function fixture(
   return {
     db,
     file,
+    files,
     byId,
     assets,
     ledger,
@@ -988,6 +991,195 @@ describe('C3.3 coordinator sequential handoff', () => {
       expect(f.coordinator.inspect({ projectId: 'p', nodeId: 'main' })?.state).toBe('blocked')
     }
   })
+  it('COO-08 rejects a second coordinator whose authorized scope overlaps a waiting coordinator', async () => {
+    const entered = deferred(),
+      release = deferred()
+    const f = fixture({
+      coordinate: async () => {
+        entered.resolve()
+        await release.promise
+        return { kind: 'wait' }
+      }
+    })
+    const firstConfig = JSON.parse(f.byId.main.props.config)
+    firstConfig.interactionMode = 'collaborative'
+    f.byId.main.props.config = JSON.stringify(firstConfig)
+    f.file.nodes.find((node) => node.id === 'main')!.params.config = f.byId.main.props.config
+    const running = f.host.run(input)
+    await entered.promise
+
+    const mainShape = structuredClone(f.byId.main),
+      stateShape = structuredClone(f.byId.state),
+      mainConfig = JSON.parse(mainShape.props.config) as Record<string, unknown> & {
+        allowedNodeIds: string[]
+        relations: object[]
+      }
+    mainShape.id = 'main-overlap'
+    mainShape.props.title = 'main-overlap'
+    mainConfig.allowedNodeIds = ['first']
+    mainConfig.relations = [
+      {
+        relationId: 'state-overlap',
+        kind: 'observes',
+        sourceNodeId: 'main-overlap',
+        targetNodeId: 'state-overlap'
+      }
+    ]
+    mainShape.props.config = JSON.stringify(mainConfig)
+    stateShape.id = 'state-overlap'
+    const shapes = (f.file.tldrawSnapshot as { store: Record<string, typeof mainShape> }).store
+    shapes['main-overlap'] = mainShape
+    shapes['state-overlap'] = stateShape
+
+    const mainNode = structuredClone(f.file.nodes.find((node) => node.id === 'main')!),
+      stateNode = structuredClone(f.file.nodes.find((node) => node.id === 'state')!)
+    mainNode.id = 'main-overlap'
+    mainNode.title = 'main-overlap'
+    mainNode.params.config = mainShape.props.config
+    stateNode.id = 'state-overlap'
+    stateNode.title = 'state-overlap'
+    f.file.nodes.push(mainNode, stateNode)
+
+    const competing = new FlowCoordinatorHost(
+      f.db,
+      (projectId) => (projectId === 'p' ? f.file : null),
+      () => true,
+      f.host,
+      async () => {
+        throw new Error('OVERLAPPING_COORDINATOR_MODEL_SHOULD_NOT_START')
+      },
+      async () => {
+        throw new Error('OVERLAPPING_COORDINATOR_PUBLICATION_SHOULD_NOT_START')
+      }
+    )
+    let firstResult!: FlowAgentReply
+    try {
+      await expect(
+        competing.run({
+          ...input,
+          nodeId: 'main-overlap',
+          requestId: 'flow-overlap',
+          traceId: 'overlap-trace'
+        })
+      ).rejects.toMatchObject({ code: 'FLOW_CONTROL_OCCUPIED' })
+    } finally {
+      release.resolve()
+      firstResult = await running
+    }
+    expect(firstResult.task.state).toBe('waiting')
+    await expect(
+      competing.run({
+        ...input,
+        nodeId: 'main-overlap',
+        requestId: 'flow-overlap-after-wait',
+        eventId: 'overlap-after-wait',
+        traceId: 'overlap-after-wait-trace'
+      })
+    ).rejects.toMatchObject({ code: 'FLOW_CONTROL_OCCUPIED' })
+    expect(f.coordinator.inspect({ projectId: 'p', nodeId: 'main' })?.state).toBe('waiting')
+    expect(f.coordinator.store.owner('p', 'first')).toBe('flow-1')
+    expect(
+      f.db.prepare('SELECT COUNT(*) AS n FROM flow_coordination_runs WHERE project_id=?').get('p')
+    ).toEqual({ n: 1 })
+
+    f.db
+      .prepare('INSERT INTO projects(id,name,created_at,updated_at) VALUES (?,?,0,0)')
+      .run('other-project', 'isolated-other-project')
+
+    const otherFile = structuredClone(f.file)
+    otherFile.meta = { ...otherFile.meta, id: 'other-project', name: 'isolated-other-project' }
+    f.files.set('other-project', otherFile)
+    const otherShapes = (otherFile.tldrawSnapshot as { store: Record<string, typeof mainShape> })
+      .store
+    delete otherShapes.main.meta.agentTask
+    delete otherShapes.main.meta.nodeRun
+    delete otherShapes.main.meta.nodeResult
+    const otherCoordinator = new FlowCoordinatorHost(
+      f.db,
+      (projectId) => (projectId === 'other-project' ? otherFile : null),
+      () => true,
+      f.host,
+      async () => ({
+        decide: async () => {
+          throw new Error('OTHER_PROJECT_SPECIALIST_SHOULD_NOT_START')
+        },
+        coordinate: async () => ({ kind: 'wait' })
+      }),
+      async () => {
+        throw new Error('OTHER_PROJECT_PUBLICATION_SHOULD_NOT_START')
+      }
+    )
+    const otherProjectReply = await otherCoordinator.run({
+      ...input,
+      projectId: 'other-project',
+      requestId: 'other-project-flow',
+      traceId: 'other-project-trace',
+      spanId: 'other-project-span'
+    })
+
+    expect(firstResult.task.state).toBe('waiting')
+    expect(otherProjectReply.task.state).toBe('waiting')
+    expect(f.coordinator.store.latest('p', 'main')?.state).toBe('waiting')
+    expect(otherCoordinator.store.latest('other-project', 'main')?.state).toBe('waiting')
+    expect(f.coordinator.store.owner('p', 'first')).toBe('flow-1')
+    expect(otherCoordinator.store.owner('other-project', 'first')).toBe('other-project-flow')
+    expect(
+      f.db.prepare('SELECT COUNT(*) AS n FROM flow_coordination_runs WHERE node_id=?').get('main')
+    ).toEqual({ n: 2 })
+  })
+  it.each([
+    ['a specialist-owned processor', 'process-first'],
+    ['a node outside the project', 'other-project-node']
+  ])('COO-08 blocks dispatch to %s before creating a child command', async (_label, nodeId) => {
+    const f = fixture({
+      coordinate: async (): Promise<CoordinationDecision> => ({
+        kind: 'dispatch',
+        nodeId,
+        goal: 'outside authorized coordinator scope',
+        completion: 'must never run',
+        inputs: []
+      })
+    })
+    await expect(f.host.run(input)).rejects.toThrow()
+    expect(f.coordinator.store.latest('p', 'main')?.state).toBe('blocked')
+    expect(f.count().executions).toBe(0)
+    expect(f.db.prepare('SELECT COUNT(*) AS n FROM flow_commands').get()).toEqual({ n: 0 })
+  })
+  it('CFG-05 never rebinds a deleted authorized node ID to a same-title replacement', async () => {
+    const replacementId = 'replacement-first'
+    const f = fixture({
+      coordinate: async (): Promise<CoordinationDecision> => ({
+        kind: 'dispatch',
+        nodeId: replacementId,
+        goal: 'must not inherit the deleted node permission',
+        completion: 'must never run',
+        inputs: []
+      })
+    })
+    const snapshot = f.file.tldrawSnapshot as { store: Record<string, typeof f.byId.first> }
+    const oldShape = snapshot.store.first
+    const oldNode = f.file.nodes.find((node) => node.id === 'first')!
+    delete snapshot.store.first
+    f.file.nodes = f.file.nodes.filter((node) => node.id !== 'first')
+    const replacementShape = structuredClone(oldShape)
+    replacementShape.id = replacementId
+    snapshot.store[replacementId] = replacementShape
+    const replacementNode = structuredClone(oldNode)
+    replacementNode.id = replacementId
+    f.file.nodes.push(replacementNode)
+
+    expect(replacementShape.props.title).toBe(oldShape.props.title)
+    expect(JSON.parse(f.byId.main.props.config).allowedNodeIds).toContain('first')
+    expect(JSON.parse(f.byId.main.props.config).allowedNodeIds).not.toContain(replacementId)
+    await expect(f.host.run(input)).rejects.toMatchObject({
+      code: 'FLOW_NODE_MISSING',
+      phase: 'scope'
+    })
+
+    expect(f.coordinator.store.latest('p', 'main')).toBeNull()
+    expect(f.count().executions).toBe(0)
+    expect(f.db.prepare('SELECT COUNT(*) AS n FROM flow_commands').get()).toEqual({ n: 0 })
+  })
   it('holds control occupancy, preserves publication failure facts, and never dispatches again after cancellation', async () => {
     const f = fixture({ publicationFails: true })
     await expect(f.host.run(input)).rejects.toThrow()
@@ -1005,8 +1197,12 @@ describe('C3.3 coordinator sequential handoff', () => {
   })
   it('pauses dispatch after a current model call, then continues without replay or refunding the decision budget', async () => {
     let pause!: () => void
+    const availableInputVersions: string[][] = []
     const f = fixture({
       coordinate: async (ctx) => {
+        availableInputVersions.push(
+          ctx.available.map((candidate) => candidate.inputs[0]?.versionId ?? '')
+        )
         if (!ctx.completed.length) pause()
         return ctx.available.length
           ? {
@@ -1021,6 +1217,9 @@ describe('C3.3 coordinator sequential handoff', () => {
     })
     pause = () => {
       f.host.pause({ projectId: 'p', nodeId: 'main' })
+      // Renderer continuation saves the waiting task metadata, advancing graphVersion while
+      // leaving the locked coordination scope and its actual inputs unchanged.
+      f.file.meta.graphVersion++
     }
     const waiting = await f.host.run(input)
     expect(waiting.task.state).toBe('waiting')
@@ -1036,6 +1235,7 @@ describe('C3.3 coordinator sequential handoff', () => {
     expect(done.task.state).toBe('completed')
     expect(done.task.decisions).toBe(4)
     expect(f.count().executions).toBe(4)
+    expect(availableInputVersions[1]).toEqual(availableInputVersions[0])
   })
 })
 
@@ -1121,6 +1321,25 @@ function deferred() {
   return { promise, resolve }
 }
 describe('bounded parallel coordination', () => {
+  it('PAR-02 rejects a one-assignment dispatch-many batch before starting any child', async () => {
+    let reduced = false
+    const f = fixture({
+      parallel: true,
+      coordinate: async (ctx) => {
+        const decision = await parallelDecision(ctx)
+        if (decision.kind === 'dispatch-many' && !reduced) {
+          reduced = true
+          return { ...decision, assignments: decision.assignments.slice(0, 1) }
+        }
+        return decision
+      }
+    })
+
+    await expect(f.host.run(input)).rejects.toThrow(/Too small/)
+    expect(f.coordinator.store.latest('p', 'main')!.children).toHaveLength(0)
+    expect(f.count().executions).toBe(0)
+  })
+
   it('saves both intents before effects and actually overlaps independent tasks', async () => {
     const both = deferred(),
       entered = new Set<string>()
@@ -1165,10 +1384,31 @@ describe('bounded parallel coordination', () => {
       'completed',
       'completed'
     ])
-    expect(entered).toEqual(new Set(['process-first', 'process-second', 'process-third', 'process-fourth']))
+    expect(entered).toEqual(
+      new Set(['process-first', 'process-second', 'process-third', 'process-fourth'])
+    )
     expect(f.count()).toEqual({ executions: 8, modelCalls: 2 })
     expect(f.coordinator.store.latest('p', 'main')!.controlSteps).toBe(3)
   })
+  it('PAR-02 rejects a five-assignment batch above the four-task cap before any child is reserved', async () => {
+    const f = fixture({
+      parallel: true,
+      coordinate: async (ctx) => {
+        const decision = await parallelDecision(ctx)
+        if (decision.kind !== 'dispatch-many') throw new Error('missing batch')
+        return {
+          ...decision,
+          assignments: [...decision.assignments, { ...decision.assignments[0]!, nodeId: 'fifth' }]
+        }
+      }
+    })
+    extendParallelFixture(f, 4)
+
+    await expect(f.host.run(input)).rejects.toThrow(/Too big/)
+    expect(f.count().executions).toBe(0)
+    expect(f.coordinator.store.latest('p', 'main')!.children).toHaveLength(0)
+  })
+
   it.each(['disabled', 'duplicate', 'invalid-input', 'budget'] as const)(
     'rejects the entire %s batch without starting any child',
     async (kind) => {
@@ -1192,7 +1432,9 @@ describe('bounded parallel coordination', () => {
       f.file.nodes.find((node) => node.id === 'main')!.params.config = f.byId.main.props.config
       await expect(f.host.run(input)).rejects.toThrow()
       expect(f.count().executions).toBe(0)
-      expect(f.coordinator.store.latest('p', 'main')!.children).toHaveLength(0)
+      const rejected = f.coordinator.store.latest('p', 'main')!
+      expect(rejected.children).toHaveLength(0)
+      expect(rejected.decisions).toBe(1)
     }
   )
   it('queues shared target assignments in dispatch order and releases the next branch only at terminal', async () => {
@@ -1277,6 +1519,153 @@ describe('bounded parallel coordination', () => {
     expect(resumed.task.children?.map((item) => item.state)).toEqual(['completed', 'completed'])
     expect(f.count().executions).toBe(4)
   })
+  it('PER-03 drains four shared-target branches without starvation across repeated bounded waves', async () => {
+    let activeDeliveries = 0,
+      maxActiveDeliveries = 0
+    const deliveryOrder: string[] = []
+    const firstDeliveryOrder: string[] = []
+    const firstDeliveryAt = new Map<string, number>()
+    const waitSamples: Array<{ wave: number; nodeId: string; taskId: string; waitMs: number }> = []
+    const childTaskIdsByWave: string[][] = []
+    let waveStartedAt = 0
+    const f = fixture({
+      parallel: true,
+      human: true,
+      coordinate: parallelDecision,
+      deliveryDuring: async (targetNodeId, taskId) => {
+        if (targetNodeId !== 'process-first') throw new Error('unexpected target')
+        activeDeliveries++
+        maxActiveDeliveries = Math.max(maxActiveDeliveries, activeDeliveries)
+        deliveryOrder.push(taskId)
+        if (!firstDeliveryAt.has(taskId)) {
+          firstDeliveryAt.set(taskId, performance.now())
+          firstDeliveryOrder.push(taskId)
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1))
+        activeDeliveries--
+      }
+    })
+    extendParallelFixture(f, 4)
+    for (const nodeId of ['second', 'third', 'fourth']) {
+      const config = JSON.parse(f.byId[nodeId].props.config)
+      config.allowedNodeIds = ['process-first']
+      config.interactionMode = 'autonomous'
+      f.byId[nodeId].props.config = JSON.stringify(config)
+      f.file.nodes.find((node) => node.id === nodeId)!.params.config = config
+    }
+    const firstConfig = JSON.parse(f.byId.first.props.config)
+    firstConfig.interactionMode = 'collaborative'
+    f.byId.first.props.config = JSON.stringify(firstConfig)
+    f.file.nodes.find((node) => node.id === 'first')!.params.config = firstConfig
+
+    const waveTaskIds: string[] = []
+    for (let wave = 0; wave < 4; wave++) {
+      const startedAt = Date.now()
+      waveStartedAt = performance.now()
+      const waiting = await f.host.run({
+        ...input,
+        requestId: `per03-wave-${wave}-start`,
+        traceId: `per03-wave-${wave}-start-trace`,
+        spanId: `per03-wave-${wave}-start-span`
+      })
+      expect(waiting.task.state).toBe('waiting')
+      expect(waiting.task.children?.map((child) => child.state)).toEqual([
+        'waiting',
+        'queued',
+        'queued',
+        'queued'
+      ])
+      expect(waiting.task.children?.map((child) => child.nodeId)).toEqual([
+        'first',
+        'second',
+        'third',
+        'fourth'
+      ])
+      childTaskIdsByWave.push((waiting.task.children ?? []).map((child) => child.taskId))
+      waveTaskIds.push(waiting.task.taskId)
+
+      const reconciled = await f.coordinator.run({
+        ...input,
+        action: 'reconcile',
+        requestId: `per03-wave-${wave}-reconcile`,
+        eventId: `per03-wave-${wave}-reconcile`,
+        expectedTaskId: waiting.task.taskId,
+        expectedWaitRevision: waiting.task.waitRevision
+      })
+      expect(reconciled.task.children?.map((child) => child.state)).toEqual([
+        'waiting',
+        'queued',
+        'queued',
+        'queued'
+      ])
+
+      const child = f.host.inspect({ projectId: 'p', nodeId: 'first' })!
+      const childDone = await f.host.run({
+        ...input,
+        nodeId: 'first',
+        action: 'continue',
+        requestId: `per03-wave-${wave}-child-continue`,
+        eventId: `per03-wave-${wave}-child-continue`,
+        expectedTaskId: child.taskId,
+        expectedWaitRevision: child.waitRevision
+      })
+      expect(childDone.task.state).toBe('completed')
+
+      const completed = await f.host.run({
+        ...input,
+        action: 'continue',
+        requestId: `per03-wave-${wave}-root-continue`,
+        eventId: `per03-wave-${wave}-root-continue`,
+        expectedTaskId: waiting.task.taskId,
+        expectedWaitRevision: reconciled.task.waitRevision
+      })
+      expect(completed.task.state).toBe('completed')
+      expect(completed.task.children?.map((child) => child.state)).toEqual([
+        'completed',
+        'completed',
+        'completed',
+        'completed'
+      ])
+      for (const child of waiting.task.children ?? []) {
+        const firstDelivery = firstDeliveryAt.get(child.taskId)
+        expect(firstDelivery, `missing first delivery for ${child.nodeId}`).toBeDefined()
+        waitSamples.push({
+          wave,
+          nodeId: child.nodeId,
+          taskId: child.taskId,
+          waitMs: Math.max(0, firstDelivery! - waveStartedAt)
+        })
+      }
+      expect(f.count().executions).toBe((wave + 1) * 8)
+      expect(Date.now() - startedAt).toBeLessThan(10000)
+      expect(activeDeliveries).toBe(0)
+      expect(() =>
+        f.ledger.assertNodeAvailable({ projectId: 'p', nodeId: 'process-first' })
+      ).not.toThrow()
+    }
+    expect(new Set(waveTaskIds).size).toBe(4)
+    expect(deliveryOrder).toHaveLength(32)
+    expect(firstDeliveryOrder).toEqual(childTaskIdsByWave.flat())
+    expect(maxActiveDeliveries).toBe(1)
+    expect(f.deliveryErrors).toEqual([])
+
+    const orderedWaits = waitSamples.map((sample) => sample.waitMs).sort((a, b) => a - b)
+    const percentile = (fraction: number): number =>
+      orderedWaits[Math.max(0, Math.ceil(orderedWaits.length * fraction) - 1)] ?? 0
+    const distribution = {
+      sampleCount: waitSamples.length,
+      minMs: orderedWaits[0] ?? 0,
+      p50Ms: percentile(0.5),
+      p95Ms: percentile(0.95),
+      maxMs: orderedWaits.at(-1) ?? 0,
+      samples: waitSamples
+    }
+    expect(distribution.sampleCount).toBe(16)
+    expect(Number.isFinite(distribution.p95Ms)).toBe(true)
+    if (process.env.CANVAS_PER03_WAIT_REPORT) {
+      await writeFile(process.env.CANVAS_PER03_WAIT_REPORT, JSON.stringify(distribution, null, 2))
+    }
+  })
   it('preserves a successful sibling when the other branch fails', async () => {
     const f = fixture({ parallel: true, coordinate: parallelDecision })
     const original = f.host.runAssignment.bind(f.host)
@@ -1291,6 +1680,41 @@ describe('bounded parallel coordination', () => {
     expect(run.children.map((child) => child.state)).toEqual(['completed', 'blocked'])
     expect(run.children[0].outputs).toHaveLength(1)
     expect(f.byId.first.meta.nodeResult).toBeTruthy()
+  })
+  it('reconciles a completed parallel sibling beside an unconfirmed child without replaying either branch', async () => {
+    const f = fixture({ parallel: true, coordinate: parallelDecision })
+    const original = f.host.runAssignment.bind(f.host)
+    vi.spyOn(f.host, 'runAssignment').mockImplementation((request, ...args) =>
+      request.nodeId === 'second'
+        ? Promise.reject(new Error('worker exited before its checkpoint was confirmed'))
+        : original(request, ...args)
+    )
+    await expect(f.host.run(input)).rejects.toThrow(
+      'worker exited before its checkpoint was confirmed'
+    )
+    const run = f.coordinator.store.latest('p', 'main')!
+    expect(run.state).toBe('blocked')
+    expect(run.children.map((child) => child.state)).toEqual(['completed', 'blocked'])
+    expect(f.byId.first.meta.nodeResult).toBeTruthy()
+    expect(f.byId.second.meta.nodeResult).toBeUndefined()
+    const before = f.count()
+    const reconciled = await f.host.run({
+      ...input,
+      action: 'reconcile',
+      requestId: 'reconcile-mixed-parallel-facts',
+      eventId: 'reconcile-mixed-parallel-facts',
+      expectedTaskId: run.taskId,
+      expectedWaitRevision: run.waitRevision
+    })
+    expect(reconciled.task.state).toBe('blocked')
+    expect(reconciled.task.children?.map((child) => child.state)).toEqual(['completed', 'blocked'])
+    expect(reconciled.task.recovery).toEqual({
+      reasons: ['FLOW_TASK_CHECKPOINT_UNCONFIRMED'],
+      canRestore: false
+    })
+    expect(f.byId.first.meta.nodeResult).toBeTruthy()
+    expect(f.byId.second.meta.nodeResult).toBeUndefined()
+    expect(f.count()).toEqual(before)
   })
   it('stops both in-flight branches and ignores late replies', async () => {
     const both = deferred(),

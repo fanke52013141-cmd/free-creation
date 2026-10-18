@@ -107,6 +107,19 @@ const RETRYABLE_CODES = new Set<DiagnosticsErrorCode>([
   'MEDIA_DOWNLOAD_FAILED'
 ])
 
+const SAFE_ERROR_NAMES = new Set([
+  'Error',
+  'TypeError',
+  'RangeError',
+  'SyntaxError',
+  'ReferenceError',
+  'URIError',
+  'EvalError',
+  'AggregateError',
+  'TimeoutError',
+  'AbortError'
+])
+
 /** HTTP 状态 → 稳定错误码；未识别的 4xx/5xx 不伪造语义。 */
 export function httpStatusToError(status: number): {
   code: DiagnosticsErrorCode
@@ -124,17 +137,24 @@ export function httpStatusToError(status: number): {
  * 安全 stack：保留错误类型与代码位置，去除用户主目录、盘符绝对路径与消息正文
  * 中的潜在敏感内容。只保留前若干帧，避免 4KiB 超限。
  */
-export function safeStack(error: unknown, maxChars = DIAGNOSTICS_STACK_MAX_CHARS): string {
-  const raw =
-    error instanceof Error && error.stack
-      ? error.stack
-      : `${(error as { name?: string })?.name ?? 'Error'}: safeStack(non-error)`
+export function safeStack(
+  error: unknown,
+  maxChars = DIAGNOSTICS_STACK_MAX_CHARS,
+  privateValues: readonly string[] = []
+): string {
+  const errorName =
+    error instanceof Error && SAFE_ERROR_NAMES.has(error.name) ? error.name : 'Error'
+  const stackLines = error instanceof Error && typeof error.stack === 'string'
+    ? error.stack.split(/\r?\n/).slice(1)
+    : []
+  const raw = `${errorName}: [message omitted]${stackLines.length ? `\n${stackLines.join('\n')}` : ''}`
   const sanitized = redactDiagnosticText(
     raw
       .replace(/\r?\n/g, ' | ')
       .replace(/(?:[A-Za-z]:)?(?:[\\/][^\s|]+)+/g, '[PATH]')
       .replace(/(?:\/(?:home|Users|root)[^\s|]*)/g, '[PATH]'),
-    maxChars
+    maxChars,
+    privateValues
   )
   return sanitized
 }
@@ -155,7 +175,7 @@ function rootCauseCode(error: unknown, depth = 0): string | undefined {
  */
 export function normalizeDiagnosticError(
   error: unknown,
-  options: { withStack?: boolean } = {}
+  options: { withStack?: boolean; privateValues?: readonly string[] } = {}
 ): NormalizedDiagnosticError {
   const sourceCode =
     typeof (error as { code?: unknown })?.code === 'string'
@@ -196,6 +216,7 @@ export function normalizeDiagnosticError(
   if (sourceCode) normalized.sourceCode = sourceCode
   const causeCode = rootCauseCode(error)
   if (causeCode) normalized.causeCode = causeCode
-  if (options.withStack) normalized.safeStack = safeStack(error)
+  if (options.withStack)
+    normalized.safeStack = safeStack(error, DIAGNOSTICS_STACK_MAX_CHARS, options.privateValues)
   return normalized
 }

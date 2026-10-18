@@ -3,7 +3,7 @@ import type { ModelOperation } from '@free-creation/model-contracts'
 import { nodePageIndex } from './node-page-index'
 // NodeCard 卡片视图：头部（序号/图标/标题/状态灯）+ 类型化内容体 + 端口圆点 + 媒体预览浮层
 import { HTMLContainer, stopEventPropagation, useEditor, useValue, getPointerInfo } from 'tldraw'
-import { nodeOwnsPointer, nodeTextField } from './node-pointer-policy'
+import { nodeOwnsPointer, nodeSelectableText, nodeTextField } from './node-pointer-policy'
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { getNodePorts, getNodeType, nodeIconColor, PORT_TYPE_LABELS } from '../nodes/registry'
@@ -1054,6 +1054,17 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             !event.currentTarget.contains(event.target)
           )
             return
+          if (nodeSelectableText(event.target)) {
+            if (
+              !event.shiftKey &&
+              !event.ctrlKey &&
+              !event.metaKey &&
+              !editor.getSelectedShapeIds().includes(shape.id)
+            )
+              editor.select(shape.id)
+            event.stopPropagation()
+            return
+          }
           const field = nodeTextField(event.target)
           if (nodeOwnsPointer(event.target) || (field && document.activeElement === field)) {
             if (

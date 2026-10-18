@@ -124,7 +124,7 @@ export function FlowBuilderControls({ shape }: Pick<NodeBodyProps, 'shape'>): Re
                   {i + 1}. {step.title} · {capabilityLabel[step.capability] ?? '流程步骤'} ·{' '}
                   {step.mode === 'collaborative' ? '人工确认' : '自主处理'}
                 </p>
-                <pre className="agent-flow-output">
+                <pre className="agent-flow-output" data-node-selectable-text="true">
                   {step.goal}
                   {step.template ? `\n模板：${step.template}` : ''}
                   {step.instruction ? `\n指令：${step.instruction}` : ''}

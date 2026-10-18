@@ -1,10 +1,12 @@
 // Isolated, hidden desktop acceptance; never imported by the application.
 import { app, BrowserWindow, dialog, protocol, net } from 'electron'
+import { execFile } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 import { getMediaAbsPath, importMedia } from '../store/media.repo'
 import { basename, join, resolve } from 'node:path'
-import { tmpdir } from 'node:os'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { cpus, tmpdir, totalmem } from 'node:os'
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { registerFlowCommandsIpc } from '../ipc/flow-commands.ipc'
 import { registerFlowAgentsIpc } from '../ipc/flow-agents.ipc'
 import { registerFlowAssetsIpc } from '../ipc/flow-assets.ipc'
@@ -45,7 +47,9 @@ const videoMode =
 const videoReview = process.argv.includes('--video-review')
 const mediaReview = process.argv.includes('--media-review')
 const videoRework = process.argv.includes('--video-rework')
-const parallelMedia = process.argv.includes('--parallel-media')
+const parallelQueueMedia = process.argv.includes('--parallel-queue-media')
+const parallelMedia = process.argv.includes('--parallel-media') || parallelQueueMedia
+const parallelMediaForcedExit = process.argv.includes('--parallel-media-forced-exit')
 const parallelReview = process.argv.includes('--parallel-review')
 const video = process.argv.includes('--video')
 if (video || videoReview || mediaReview || parallelMedia)
@@ -63,9 +67,22 @@ if (video || videoReview || mediaReview || parallelMedia)
   ])
 const collaboration = process.argv.includes('--collaboration')
 const coordination = process.argv.includes('--coordination')
+const agentHum07Pause = process.argv.includes('--agent-hum07-pause')
 const recovery = process.argv.includes('--recovery')
 const builderParallelMode = process.argv.includes('--builder-parallel')
 const builder = process.argv.includes('--builder') || builderParallelMode
+const agentGate = process.argv.includes('--agent-gate')
+const agentUnknown = process.argv.includes('--agent-unknown')
+const agentOutputSet = process.argv.includes('--agent-output-set')
+const agentFixedInputVersion = process.argv.includes('--agent-fixed-input-version')
+const agentResidency = process.argv.includes('--agent-residency')
+const agentPerfMatrix = process.argv.includes('--agent-perf-matrix')
+const agentPanelChurn = process.argv.includes('--agent-panel-churn')
+const agentPanelChurnHeapSnapshot = process.argv.includes('--agent-panel-churn-heap-snapshot')
+const agentRun06Fault = process.argv.includes('--agent-run06-fault')
+const agentPanelChurnForceGc =
+  agentPanelChurn && process.env.CANVAS_AGENT_PANEL_CHURN_FORCE_GC === '1'
+const agentResidencySeconds = Number(arg('agent-residency-seconds') ?? '7200')
 const review = process.argv.includes('--review')
 const rework = process.argv.includes('--rework')
 const reworkMode = process.env.CANVAS_AGENT_REWORK_MODE ?? 'autonomous'
@@ -73,7 +90,44 @@ if (
   !directory ||
   resolve(directory, '..') !== resolve(tmpdir()) ||
   !basename(directory).startsWith('canvas-flow-agent-') ||
-  !['execute', 'reopen'].includes(phase ?? '')
+  !['execute', 'reopen'].includes(phase ?? '') ||
+  (parallelMediaForcedExit && (!parallelMedia || parallelReview || phase !== 'execute' || real)) ||
+  (agentHum07Pause && (!coordination || recovery || collaboration || builder || review || rework || video || videoReview || mediaReview || parallelMedia || parallelReview || real || agentRun06Fault)) ||
+  (agentResidency &&
+    (!Number.isInteger(agentResidencySeconds) ||
+      agentResidencySeconds < 60 ||
+      agentResidencySeconds > 7200)) ||
+  (agentPerfMatrix &&
+    (agentGate ||
+      agentUnknown ||
+      agentResidency ||
+      collaboration ||
+      coordination ||
+      builder ||
+      review ||
+      rework ||
+      recovery ||
+      video ||
+      videoReview ||
+      mediaReview ||
+      parallelMedia ||
+      parallelReview ||
+      phase !== 'execute')) ||
+  (agentPanelChurn &&
+    (agentGate ||
+      agentUnknown ||
+      agentResidency ||
+      collaboration ||
+      coordination ||
+      builder ||
+      review ||
+      rework ||
+      recovery ||
+      video ||
+      videoReview ||
+      mediaReview ||
+      parallelMedia ||
+      parallelReview))
 ) {
   app.exit(2)
 } else {
@@ -81,7 +135,12 @@ if (
   app.setPath('userData', directory)
   app.on('window-all-closed', () => {})
   void app.whenReady().then(async () => {
-    const diagnostics = await initDiagnosticsService({ dataDir: directory, disableTimers: true })
+    // PER-01 runs beyond one bounded shutdown batch. Keep periodic diagnostics
+    // flushing enabled so its lifecycle audit covers the full residency window.
+    const diagnostics = await initDiagnosticsService({
+      dataDir: directory,
+      disableTimers: !agentResidency
+    })
     setGatewayEventSink(diagnostics)
     setDiagnosticsService(diagnostics)
     let foreign: BrowserWindow | undefined
@@ -240,8 +299,13 @@ if (
         const { installParallelReviewSupplier } = await import('./parallel-review-acceptance')
         installParallelReviewSupplier(directory, phase!)
       } else if (parallelMedia) {
-        const { installParallelMediaSupplier } = await import('./parallel-media-acceptance')
-        installParallelMediaSupplier(directory, phase!)
+        if (parallelQueueMedia) {
+          const { installParallelQueueMediaSupplier } = await import('./parallel-media-acceptance')
+          installParallelQueueMediaSupplier(directory, phase!)
+        } else {
+          const { installParallelMediaSupplier } = await import('./parallel-media-acceptance')
+          installParallelMediaSupplier(directory, phase!)
+        }
       }
       if (videoRework) {
         const { installVideoReworkSupplier } = await import('./video-rework-acceptance')
@@ -273,7 +337,27 @@ if (
           }
         ]
       })
-      if (videoReview || mediaReview)
+      if (!real) {
+        const revisions = host.getAgentToolCallingRevisions(
+          'agent-test-connection',
+          'agent-test-model'
+        )
+        if (!revisions) throw new Error('fixture model revisions unavailable')
+        const checkedAt = new Date().toISOString()
+        host.saveAgentToolCallingValidation({
+          connectionId: 'agent-test-connection',
+          modelDefinitionId: 'agent-test-model',
+          snapshot: {
+            status: 'verified',
+            message: '确定性本地验收夹具，不代表真实供应商验证',
+            checkedAt,
+            verifiedAt: checkedAt
+          },
+          expectedConnectionRevision: revisions.connectionRevision,
+          expectedModelRevision: revisions.modelRevision
+        })
+      }
+      if (videoReview || mediaReview || agentRun06Fault)
         await host.saveValidation({
           connectionId: 'agent-test-connection',
           modelDefinitionId: 'agent-test-model',
@@ -309,7 +393,7 @@ if (
         (desktop) => registerFlowAgentsIpc(() => active, desktop)
       )
       stage = 'setup-load'
-      await active.loadURL('http://127.0.0.1:5199')
+      await active.loadURL(process.env.CANVAS_AGENT_RENDERER_URL || 'http://127.0.0.1:5199')
       stage = 'setup-canvas'
       const deadline = Date.now() + 60000
       while (
@@ -330,7 +414,1291 @@ if (
         const wait=async(state)=>{for(let i=0;i<1800;i++){const task=await inspect();if(task?.state===state)return task;if(task&&['blocked','failed'].includes(task.state))throw new Error(task.code||'AGENT_TASK_FAILED');await new Promise(r=>setTimeout(r,100));}throw new Error('AGENT_TASK_TIMEOUT')};
         const click=()=>{const button=document.querySelector('[data-node-id="shape:c3-agent"] .node-standard-primary');if(!button||button.disabled)throw new Error('AGENT_BUTTON_UNAVAILABLE');button.click()};
       `
-      if (video) {
+      if (agentRun06Fault) {
+        const previous =
+          phase === 'reopen'
+            ? (JSON.parse(readFileSync(statePath, 'utf8')) as { taskId: string; late: { taskId: string } })
+            : null
+        report = await active.webContents.executeJavaScript(`(async()=>{
+          const projectId=${JSON.stringify(projectId)},phase=${JSON.stringify(phase)},expectedTaskId=${JSON.stringify(previous?.taskId ?? null)},expectedLateTaskId=${JSON.stringify(previous?.late.taskId ?? null)};
+          const value=reply=>{if(!reply.ok)throw new Error(reply.error.code);return reply.data};
+          const delay=()=>new Promise(resolve=>setTimeout(resolve,100));
+          const {ensureCanvasSaved}=await import('/src/canvas/flow-asset-actions.ts');
+          const appStore=(await import('/src/stores/app.ts')).useAppStore;
+          const editorStore=(await import('/src/stores/editor.ts')).useEditorStore;
+          if(phase==='execute'){
+            const editor=editorStore.getState().editor;
+            editor.createShape({id:'shape:run06-source',type:'node-card',x:100,y:100,props:{nodeType:'text',title:'本地材料',text:'run06 bounded fault fixture'}});
+            editor.createShape({id:'shape:run06-processor',type:'node-card',x:850,y:100,props:{nodeType:'processor',title:'不得执行的处理器',config:JSON.stringify({operation:'pass'})}});
+            const config={schemaVersion:1,role:'specialist',interactionMode:'autonomous',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'node.execute',version:'1'}],allowedNodeIds:['shape:run06-processor'],maxSteps:4,relations:[]};
+            editor.createShape({id:'shape:run06-agent',type:'node-card',x:100,y:450,props:{nodeType:'agent',title:'RUN-06 故障验收 Agent',text:'对授权处理器执行一次并依据回执结束。',config:JSON.stringify(config)}});
+            const {createEdge}=await import('/src/canvas/graph.ts');
+            createEdge(editor,{shapeId:'shape:run06-source',portId:'out-text'},{shapeId:'shape:run06-processor',portId:'in-value'});
+            createEdge(editor,{shapeId:'shape:run06-source',portId:'out-text'},{shapeId:'shape:run06-agent',portId:'in-text'});
+            await ensureCanvasSaved();
+            const button=document.querySelector('[data-node-id="shape:run06-agent"] .node-standard-primary');
+            if(!button||button.disabled)throw new Error('RUN06_AGENT_START_UNAVAILABLE');
+            button.click();
+          }else{
+            const saved=value(await window.api.openProject(projectId));
+            appStore.getState().openProject(saved.meta);
+            for(let i=0;i<200;i++){if(editorStore.getState().editor?.getShape('shape:run06-late-agent'))break;if(i===199)throw new Error('RUN06_REOPEN_CANVAS_TIMEOUT');await delay();}
+          }
+          const read=async(nodeId='shape:run06-agent')=>value(await window.api.inspectFlowAgent({projectId,nodeId}));
+          let task;
+          for(let i=0;i<300;i++){
+            task=await read();
+            if(['failed','blocked'].includes(task?.state))break;
+            if(task?.state==='completed')throw new Error('RUN06_FAULT_FALSE_SUCCESS');
+            if(i===299)throw new Error('RUN06_FAILURE_TIMEOUT');
+            await delay();
+          }
+          if(phase==='reopen'&&task?.taskId!==expectedTaskId)throw new Error('RUN06_FAILURE_TASK_ID_CHANGED');
+          if(task?.code!=='AGENT_MODEL_FAILED')throw new Error('RUN06_FAILURE_CODE_INVALID');
+          const editor=editorStore.getState().editor,agent=editor.getShape('shape:run06-agent'),processor=editor.getShape('shape:run06-processor');
+          for(let i=0;i<100;i++){if(agent.props.exec==='failed')break;if(i===99)throw new Error('RUN06_FAILURE_NOT_RENDERED');await delay();}
+          const statusLabel=document.querySelector('[data-node-id="shape:run06-agent"] .node-status')?.getAttribute('aria-label')||'';
+          const processorRunCount=processor.meta.nodeRunHistory?.length||0;
+          const {projectNodeOutputs}=await import('/src/nodes/nodeValues.ts');
+          const agentOutputCount=Object.keys(projectNodeOutputs(agent)).length;
+          if(!statusLabel.includes('运行失败'))throw new Error('RUN06_FAILURE_LABEL_MISSING');
+          if(processorRunCount!==0||agentOutputCount!==0)throw new Error('RUN06_FALSE_OUTPUT_OR_SIDE_EFFECT');
+          let late;
+          if(phase==='execute'){
+            editor.createShape({id:'shape:run06-late-processor',type:'node-card',x:850,y:820,props:{nodeType:'processor',title:'迟到响应不得触发的处理器',config:JSON.stringify({operation:'pass'})}});
+            editor.createShape({id:'shape:run06-late-agent',type:'node-card',x:100,y:1150,props:{nodeType:'agent',title:'RUN06_LATE_CANCEL',text:'RUN06_LATE_CANCEL：等待本地模拟模型迟到响应并验证停止终态稳定。',config:JSON.stringify({...JSON.parse(agent.props.config),allowedNodeIds:['shape:run06-late-processor']})}});
+            const {createEdge}=await import('/src/canvas/graph.ts');
+            createEdge(editor,{shapeId:'shape:run06-source',portId:'out-text'},{shapeId:'shape:run06-late-processor',portId:'in-value'});
+            createEdge(editor,{shapeId:'shape:run06-source',portId:'out-text'},{shapeId:'shape:run06-late-agent',portId:'in-text'});
+            await ensureCanvasSaved();
+            editor.select('shape:run06-late-agent');editor.zoomToSelection();
+            const start=document.querySelector('[data-node-id="shape:run06-late-agent"] .node-standard-primary');
+            if(!start||start.disabled)throw new Error('RUN06_LATE_START_UNAVAILABLE');
+            start.click();
+            let lateCurrent;
+            for(let i=0;i<200;i++){lateCurrent=await read('shape:run06-late-agent');if(lateCurrent?.state==='running')break;if(['blocked','failed','completed'].includes(lateCurrent?.state))throw new Error('RUN06_LATE_TASK_DID_NOT_START');if(i===199)throw new Error('RUN06_LATE_START_TIMEOUT');await delay();}
+            await new Promise(resolve=>setTimeout(resolve,500));
+            const stop=document.querySelector('[data-node-id="shape:run06-late-agent"] .node-standard-primary');
+            if(!stop||stop.disabled||!stop.textContent.includes('停止'))throw new Error('RUN06_LATE_STOP_CONTROL_UNAVAILABLE');
+            stop.click();
+            for(let i=0;i<100;i++){lateCurrent=await read('shape:run06-late-agent');if(lateCurrent?.state==='cancelled')break;if(i===99)throw new Error('RUN06_LATE_CANCEL_TIMEOUT');await delay();}
+            const lateCancelledAtUtc=new Date().toISOString();
+            await new Promise(resolve=>setTimeout(resolve,3800));
+            late=await read('shape:run06-late-agent');
+            if(late?.state!=='cancelled')throw new Error('RUN06_LATE_RESPONSE_CHANGED_TERMINAL');
+            const lateAgent=editor.getShape('shape:run06-late-agent'),lateProcessor=editor.getShape('shape:run06-late-processor');
+            const lateProcessorRunCount=lateProcessor.meta.nodeRunHistory?.length||0;
+            const lateAgentOutputCount=Object.keys(projectNodeOutputs(lateAgent)).length;
+            if(lateProcessorRunCount!==0||lateAgentOutputCount!==0)throw new Error('RUN06_LATE_RESPONSE_SIDE_EFFECT');
+            await ensureCanvasSaved();
+            late={taskId:late.taskId,taskState:late.state,taskCode:late.code||null,processorRunCount:lateProcessorRunCount,agentOutputCount:lateAgentOutputCount,cancelledAtUtc:lateCancelledAtUtc,verifiedAtUtc:new Date().toISOString()};
+          }else{
+            late=await read('shape:run06-late-agent');
+            const lateAgent=editor.getShape('shape:run06-late-agent'),lateProcessor=editor.getShape('shape:run06-late-processor');
+            const lateProcessorRunCount=lateProcessor?.meta.nodeRunHistory?.length||0;
+            const lateAgentOutputCount=lateAgent?Object.keys(projectNodeOutputs(lateAgent)).length:-1;
+            if(!late||late.taskId!==expectedLateTaskId||late.state!=='cancelled'||lateProcessorRunCount!==0||lateAgentOutputCount!==0)throw new Error('RUN06_LATE_FACTS_NOT_PERSISTED');
+            late={taskId:late.taskId,taskState:late.state,taskCode:late.code||null,processorRunCount:lateProcessorRunCount,agentOutputCount:lateAgentOutputCount};
+          }
+          await ensureCanvasSaved();
+          return {projectId,taskId:task.taskId,taskState:task.state,taskCode:task.code,nodeExec:agent.props.exec,processorRunCount,agentOutputCount,failureLabel:statusLabel,late,phase,checks:['synthetic provider failure becomes a failed Agent task','visible failed status is exposed to the canvas user','unauthorized successful output is not projected','downstream processor is not executed','failed facts are retained for reopen','cancelled Agent remains cancelled after delayed local provider response','late response creates no Agent output or processor execution','cancelled facts are retained for reopen']};
+        })()`)
+        if (phase === 'execute') writeFileSync(statePath, JSON.stringify(report))
+        else {
+          const expected = JSON.parse(readFileSync(statePath, 'utf8')) as {
+            taskId: string
+            taskCode: string
+            nodeExec: string
+            processorRunCount: number
+            agentOutputCount: number
+            late: { taskId: string; taskState: string; taskCode: string | null; processorRunCount: number; agentOutputCount: number }
+          }
+          if (
+            (report as { taskId?: string }).taskId !== expected.taskId ||
+            (report as { taskCode?: string }).taskCode !== expected.taskCode ||
+            (report as { nodeExec?: string }).nodeExec !== expected.nodeExec ||
+            (report as { processorRunCount?: number }).processorRunCount !== expected.processorRunCount ||
+            (report as { agentOutputCount?: number }).agentOutputCount !== expected.agentOutputCount ||
+            (report as { late?: { taskId?: string; taskState?: string; taskCode?: string | null; processorRunCount?: number; agentOutputCount?: number } }).late?.taskId !== expected.late.taskId ||
+            (report as { late?: { taskId?: string; taskState?: string; taskCode?: string | null; processorRunCount?: number; agentOutputCount?: number } }).late?.taskState !== expected.late.taskState ||
+            ((report as { late?: { taskId?: string; taskState?: string; taskCode?: string | null; processorRunCount?: number; agentOutputCount?: number } }).late?.taskCode ?? null) !== expected.late.taskCode ||
+            (report as { late?: { taskId?: string; taskState?: string; taskCode?: string | null; processorRunCount?: number; agentOutputCount?: number } }).late?.processorRunCount !== expected.late.processorRunCount ||
+            (report as { late?: { taskId?: string; taskState?: string; taskCode?: string | null; processorRunCount?: number; agentOutputCount?: number } }).late?.agentOutputCount !== expected.late.agentOutputCount
+          )
+            throw new Error('RUN06_REOPEN_FACTS_CHANGED')
+        }
+      } else if (agentPerfMatrix) {
+        const counts = [10, 50, 100]
+        const groups: Array<Record<string, unknown>> = []
+        let activeIds: string[] = []
+        const perfEvidenceDir = process.env.CANVAS_AGENT_EVIDENCE_DIR
+          ? resolve(process.env.CANVAS_AGENT_EVIDENCE_DIR)
+          : null
+        const delay = (ms: number): Promise<void> =>
+          new Promise((done) => setTimeout(done, ms))
+        const writeProgress = (value: Record<string, unknown>): void => {
+          if (perfEvidenceDir)
+            writeFileSync(join(perfEvidenceDir, 'agent-perf-progress.json'), JSON.stringify(value, null, 2))
+        }
+        const summarize = (values: number[]): { count: number; p50Ms: number; p95Ms: number; maxMs: number } => {
+          const sorted = [...values].sort((left, right) => left - right)
+          return {
+            count: sorted.length,
+            p50Ms: Math.round(sorted[Math.ceil(sorted.length * 0.5) - 1] * 100) / 100,
+            p95Ms: Math.round(sorted[Math.ceil(sorted.length * 0.95) - 1] * 100) / 100,
+            maxMs: Math.round(sorted.at(-1)! * 100) / 100
+          }
+        }
+        const dispatchMouse = (
+          type: 'mouseDown' | 'mouseUp' | 'mouseMove',
+          x: number,
+          y: number
+        ): void => active.webContents.sendInputEvent({ type, x, y, button: 'left' })
+
+        for (const count of counts) {
+          stage = `PER02_SETUP_${count}`
+          const columns = Math.ceil(Math.sqrt(count))
+          const rows = Math.ceil(count / columns)
+          const targetIndex = Math.floor((rows - 1) / 2) * columns + Math.floor((columns - 1) / 2)
+          const ids = Array.from({ length: count }, (_, index) => `shape:per02-${count}-${index + 1}`)
+          await active.webContents.executeJavaScript(`(async()=>{${common}
+            const previous=${JSON.stringify(activeIds)};
+            window.__per02Editor=editor;
+            if(previous.length)editor.deleteShapes(previous);
+            const count=${count};
+            const columns=Math.ceil(Math.sqrt(count));
+            const config={schemaVersion:1,role:'specialist',interactionMode:'collaborative',skills:[],tools:[],allowedNodeIds:[],maxSteps:8,relations:[]};
+            for(let index=0;index<count;index++){
+              const id='shape:per02-'+count+'-'+(index+1);
+              editor.createShape({id,type:'node-card',x:(index%columns)*380,y:Math.floor(index/columns)*280,props:{nodeType:'agent',title:'PER-02 Agent '+(index+1),text:'PER-02 隔离画布交互基准，不启动任务。',config:JSON.stringify(config)}});
+            }
+            const bounds=editor.getCurrentPageBounds();if(!bounds)throw new Error('PER02_PAGE_BOUNDS_MISSING');editor.zoomToBounds(bounds,{immediate:true});
+            await ensureCanvasSaved();
+            return {agentCount:editor.getCurrentPageShapes().filter(shape=>shape.type==='node-card'&&shape.props.nodeType==='agent').length,domNodeCount:document.getElementsByTagName('*').length,jsHeapUsedBytes:performance.memory?.usedJSHeapSize??null};
+          })()`)
+          activeIds = ids
+          const initial = (await active.webContents.executeJavaScript(
+            `(async()=>{await new Promise(resolve=>setTimeout(resolve,32));const editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;const id=${JSON.stringify(ids[targetIndex])};const element=document.querySelector('[data-node-id="'+id+'"] .agent-flow-summary');if(!element)throw new Error('PER02_TARGET_NOT_VISIBLE');const rect=element.getBoundingClientRect();return {count:editor.getCurrentPageShapes().filter(shape=>shape.type==='node-card'&&shape.props.nodeType==='agent').length,camera:editor.getCamera(),target:{x:rect.x+rect.width/2,y:rect.y+rect.height/2,width:rect.width,height:rect.height},shape:editor.getShape(id),domNodeCount:document.getElementsByTagName('*').length,jsHeapUsedBytes:performance.memory?.usedJSHeapSize??null}})()`
+          )) as {
+            count: number
+            camera: { x: number; y: number; z: number }
+            target: { x: number; y: number; width: number; height: number }
+            shape: { x: number; y: number }
+            domNodeCount: number
+            jsHeapUsedBytes: number | null
+          }
+          if (initial.count !== count || initial.target.width < 5 || initial.target.height < 3)
+            throw new Error('PER02_CANVAS_SETUP_INVALID')
+          writeProgress({ status: 'sampling', agentCount: count, samplesPerOperation: 30, completedPerOperation: 0 })
+          await active.webContents
+            .capturePage()
+            .then((image) => writeFileSync(join(directory, `agent-perf-${count}.png`), image.toPNG()))
+
+          const dragMs: number[] = []
+          const zoomMs: number[] = []
+          const panelOpenMs: number[] = []
+          const panelCloseMs: number[] = []
+          const targetId = ids[targetIndex]
+          const pointForTarget = async (): Promise<{ x: number; y: number }> =>
+            active.webContents.executeJavaScript(
+              `(()=>{const id=${JSON.stringify(targetId)},element=document.querySelector('[data-node-id="'+id+'"] .agent-flow-summary');if(!element)throw new Error('PER02_TARGET_NOT_VISIBLE');const rect=element.getBoundingClientRect();return {x:rect.x+rect.width/2,y:rect.y+rect.height/2}})()`
+            )
+          const resetCamera = async (): Promise<void> =>
+            active.webContents.executeJavaScript(
+              `(async()=>{const editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;const bounds=editor.getShapePageBounds(${JSON.stringify(targetId)});if(bounds)editor.zoomToBounds(bounds,{targetZoom:1,immediate:true,inset:0});await new Promise(resolve=>setTimeout(resolve,32))})()`
+            )
+          const shapePosition = async (): Promise<{ x: number; y: number }> =>
+            active.webContents.executeJavaScript(
+              `import('/src/stores/editor.ts').then(module=>{const shape=module.useEditorStore.getState().editor.getShape(${JSON.stringify(targetId)});return {x:shape.x,y:shape.y}})`
+            )
+          const waitForDrag = async (before: { x: number; y: number }): Promise<void> => {
+            await active.webContents.executeJavaScript(
+              `(async()=>{const editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;for(let i=0;i<80;i++){const shape=editor.getShape(${JSON.stringify(targetId)});if(shape.x!==${before.x}||shape.y!==${before.y}){await new Promise(resolve=>setTimeout(resolve,32));return;}await new Promise(resolve=>setTimeout(resolve,10));}throw new Error('PER02_DRAG_NOT_OBSERVED')})()`
+            )
+          }
+        const clickZoom = async (label: '放大' | '缩小'): Promise<number> =>
+          active.webContents.executeJavaScript(
+            `(async()=>{const editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;const bounds=editor.getCurrentPageBounds();if(bounds)editor.zoomToBounds(bounds,{immediate:true});await new Promise(resolve=>setTimeout(resolve,32));const button=document.querySelector('[aria-label="${label}"]');if(!button)throw new Error('PER02_ZOOM_BUTTON_MISSING');const before=editor.getCamera().z;const started=performance.now();button.click();for(let i=0;i<120;i++){if(editor.getCamera().z!==before){await new Promise(resolve=>setTimeout(resolve,32));return performance.now()-started;}await new Promise(resolve=>setTimeout(resolve,10));}throw new Error('PER02_ZOOM_NOT_OBSERVED')})()`
+          )
+
+          for (let index = 0; index < 30; index++) {
+            stage = `PER02_${count}_DRAG_${index + 1}_RESET`
+            await resetCamera()
+            stage = `PER02_${count}_DRAG_${index + 1}_POINT`
+            const point = await pointForTarget()
+            stage = `PER02_${count}_DRAG_${index + 1}_POSITION`
+            const before = await shapePosition()
+            const dx = index % 2 === 0 ? 38 : -38
+            const dy = index % 2 === 0 ? 22 : -22
+            const started = performance.now()
+            stage = `PER02_${count}_DRAG_${index + 1}_INPUT`
+            await active.webContents.executeJavaScript(
+              `(()=>{const hit=document.elementFromPoint(${point.x},${point.y});window.__per02LastInput=${JSON.stringify({ point, before, targetId })};window.__per02LastInput.hit=hit?{tag:hit.tagName,classes:String(hit.className||''),text:(hit.textContent||'').slice(0,80)}:null})()`
+            )
+            dispatchMouse('mouseMove', point.x, point.y)
+            dispatchMouse('mouseDown', point.x, point.y)
+            await delay(50)
+            dispatchMouse('mouseMove', point.x + dx * 0.6, point.y + dy * 0.6)
+            await delay(50)
+            dispatchMouse('mouseMove', point.x + dx, point.y + dy)
+            dispatchMouse('mouseUp', point.x + dx, point.y + dy)
+            await waitForDrag(before)
+            dragMs.push(performance.now() - started)
+
+            stage = `PER02_${count}_ZOOM_${index + 1}`
+            zoomMs.push(await clickZoom(index % 2 === 0 ? '放大' : '缩小'))
+            await delay(220)
+
+            stage = `PER02_${count}_PANEL_OPEN_${index + 1}`
+            const openStarted = performance.now()
+            await active.webContents.executeJavaScript(
+              `(async()=>{const panel=(await import('/src/stores/nodePanel.ts')).useNodePanelStore;panel.getState().open('contract',${JSON.stringify(targetId)},'collaboration');for(let i=0;i<120;i++){const element=document.querySelector('.agent-collaboration');if(element){await new Promise(resolve=>setTimeout(resolve,32));return;}await new Promise(resolve=>setTimeout(resolve,10));}throw new Error('PER02_PANEL_OPEN_TIMEOUT')})()`
+            )
+            panelOpenMs.push(performance.now() - openStarted)
+            stage = `PER02_${count}_PANEL_CLOSE_${index + 1}`
+            const closeStarted = performance.now()
+            await active.webContents.executeJavaScript(
+              `(async()=>{const panel=(await import('/src/stores/nodePanel.ts')).useNodePanelStore;panel.getState().close();for(let i=0;i<120;i++){if(!document.querySelector('.node-contract-panel')){await new Promise(resolve=>setTimeout(resolve,32));return;}await new Promise(resolve=>setTimeout(resolve,10));}throw new Error('PER02_PANEL_CLOSE_TIMEOUT')})()`
+            )
+            panelCloseMs.push(performance.now() - closeStarted)
+            if ((index + 1) % 5 === 0)
+              writeProgress({
+                status: 'sampling',
+                agentCount: count,
+                samplesPerOperation: 30,
+                completedPerOperation: index + 1,
+                operations: { drag: dragMs.length, zoom: zoomMs.length, panelOpen: panelOpenMs.length, panelClose: panelCloseMs.length }
+              })
+          }
+          const final = await active.webContents.executeJavaScript(
+            `(async()=>{const editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;const panels=(await import('/src/stores/nodePanel.ts')).useNodePanelStore.getState();return {count:editor.getCurrentPageShapes().filter(shape=>shape.type==='node-card'&&shape.props.nodeType==='agent').length,selectedCount:editor.getSelectedShapeIds().length,camera:editor.getCamera(),panel:panels.kind,domNodeCount:document.getElementsByTagName('*').length,jsHeapUsedBytes:performance.memory?.usedJSHeapSize??null}})()`
+          ) as { count: number; selectedCount: number; camera: { z: number }; panel: string | null; domNodeCount: number; jsHeapUsedBytes: number | null }
+          if (final.count !== count || final.panel !== null || dragMs.length !== 30 || zoomMs.length !== 30 || panelOpenMs.length !== 30 || panelCloseMs.length !== 30)
+            throw new Error('PER02_INTERACTION_MATRIX_INCOMPLETE')
+          groups.push({
+            agentCount: count,
+            baseline: count === 10,
+            warmupSamples: 0,
+            start: { camera: initial.camera, targetSize: { width: initial.target.width, height: initial.target.height }, domNodeCount: initial.domNodeCount, jsHeapUsedBytes: initial.jsHeapUsedBytes },
+            end: final,
+            samples: { dragMs, zoomMs, panelOpenMs, panelCloseMs },
+            latency: {
+              drag: summarize(dragMs),
+              zoom: summarize(zoomMs),
+              panelOpen: summarize(panelOpenMs),
+              panelClose: summarize(panelCloseMs)
+            }
+          })
+          writeProgress({ status: 'group-complete', agentCount: count, completedPerOperation: 30 })
+        }
+        const rows = getDb().prepare('SELECT COUNT(*) AS count FROM flow_agent_tasks WHERE project_id=?').get(projectId) as { count: number }
+        const commands = getDb().prepare('SELECT COUNT(*) AS count FROM flow_commands WHERE project_id=?').get(projectId) as { count: number }
+        if (rows.count !== 0 || commands.count !== 0) throw new Error('PER02_FIXTURE_CREATED_AGENT_TASKS')
+        const baseline = groups[0] as { latency: Record<string, { p50Ms: number; p95Ms: number }> }
+        const comparison = groups.slice(1).map((group) => {
+          const workload = group as { agentCount: number; latency: Record<string, { p50Ms: number; p95Ms: number }> }
+          return {
+            agentCount: workload.agentCount,
+            relativeTo10Nodes: Object.fromEntries(Object.entries(workload.latency).map(([operation, stats]) => [operation, {
+              p50Ratio: Math.round((stats.p50Ms / baseline.latency[operation].p50Ms) * 100) / 100,
+              p95Ratio: Math.round((stats.p95Ms / baseline.latency[operation].p95Ms) * 100) / 100
+            }]))
+          }
+        })
+        const result = {
+          status: 'completed',
+          recordedAt: new Date().toISOString(),
+          workload: { agentCounts: counts, measuredInteractionsPerOperationPerCount: 30, operations: ['drag', 'zoom', 'panelOpen', 'panelClose'], baselineAgentCount: 10 },
+          environment: {
+            platform: process.platform,
+            arch: process.arch,
+            electron: process.versions.electron,
+            chrome: process.versions.chrome,
+            node: process.versions.node,
+            rendererPid: active.webContents.getOSProcessId(),
+            cpuModel: cpus()[0]?.model ?? 'unknown',
+            logicalProcessors: cpus().length,
+            totalMemoryBytes: totalmem()
+          },
+          groups,
+          comparison,
+          projectId,
+          agentTasks: rows.count,
+          flowCommands: commands.count,
+          note: 'Latencies use nearest-rank P50/P95 and include Electron input dispatch through observed state change plus a 32 ms renderer settle interval. The hidden Electron window does not guarantee animation frames, so frame-present latency is not measured. The 10-node group is the same-device baseline. No product threshold or OS low-memory/disk quota was applied.'
+        }
+        writeFileSync(join(directory, 'agent-perf-matrix.json'), JSON.stringify(result, null, 2))
+        report = { performanceMatrix: 'completed', counts, baselineAgentCount: 10, measuredSamplesPerOperation: 30 }
+        writeFileSync(statePath, JSON.stringify(report))
+      } else if (agentPanelChurn) {
+        await active.webContents.executeJavaScript(
+          `(()=>{
+            window.__per04Failures=[];
+            const intervals=new Map(), intervalStats={created:0,cleared:0};
+            const nativeSet=window.setInterval.bind(window), nativeClear=window.clearInterval.bind(window);
+            window.setInterval=(handler,delay,...args)=>{const id=nativeSet(handler,delay,...args);intervals.set(id,Number(delay)||0);intervalStats.created++;return id;};
+            window.clearInterval=id=>{if(intervals.delete(id))intervalStats.cleared++;return nativeClear(id);};
+            window.__per04Intervals={active:intervals,stats:intervalStats};
+            const activeByTarget=new WeakMap(), sourceCounts=new Map(), totals={added:0,removed:0,finalized:0,signalListenersUntracked:0};
+            const nativeAdd=EventTarget.prototype.addEventListener, nativeRemove=EventTarget.prototype.removeEventListener;
+            const targetName=target=>{try{if(target===window)return 'Window';if(target===document)return 'Document';if(target instanceof Element){const id=target.id?'#'+target.id:'';const classes=target.classList?.length?'.'+Array.from(target.classList).join('.'):'';const marker=target.getAttribute('data-testid')||target.getAttribute('data-node-id');return target.tagName.toLowerCase()+id+classes+(marker?'['+marker+']':'');}return Object.prototype.toString.call(target);}catch{return 'EventTarget';}};
+            const targetRefs=new Map(), targetIds=new WeakMap();let nextTargetId=0;
+            const trackTarget=target=>{if(targetIds.has(target))return;const id=++nextTargetId;targetIds.set(target,id);targetRefs.set(id,new WeakRef(target));};
+            const activeTargets=()=>{const groups=new Map();for(const ref of targetRefs.values()){const target=ref.deref();if(!target)continue;let count=0;for(const registrations of activeByTarget.get(target)?.values()||[])count+=registrations.size;if(!count)continue;const name=targetName(target),connected=target.isConnected!==false,key=name+'|'+connected;const group=groups.get(key)||{target:name,connected,count:0};group.count++;groups.set(key,group);}return [...groups.values()].sort((a,b)=>b.count-a.count).slice(0,40);};
+            const adjust=(key,delta)=>{const next=(sourceCounts.get(key)||0)+delta;if(next<=0)sourceCounts.delete(key);else sourceCounts.set(key,next);};
+            const registry=new FinalizationRegistry(({key})=>{adjust(key,-1);totals.finalized++;});
+            const audit={enabled:false,totals,reset(){sourceCounts.clear();totals.added=0;totals.removed=0;totals.finalized=0;totals.signalListenersUntracked=0;},snapshot(){const outstanding=[...sourceCounts].sort((a,b)=>b[1]-a[1]).map(([source,count])=>({source,count}));return {totals:{...totals},outstanding:outstanding.slice(0,40),globalOutstanding:outstanding.filter(entry=>/^(Window|Document|body|html)\\b/.test(entry.source)),activeTargets:activeTargets()};}};
+            window.__per04ListenerAudit=audit;
+            EventTarget.prototype.addEventListener=function(type,listener,options){
+              if(audit.enabled&&listener){
+                trackTarget(this);
+                if(typeof options==='object'&&options?.signal)totals.signalListenersUntracked++;
+                else {
+                  let listeners=activeByTarget.get(this);if(!listeners){listeners=new Map();activeByTarget.set(this,listeners);}
+                  let registrations=listeners.get(listener);if(!registrations){registrations=new Map();listeners.set(listener,registrations);}
+                  const capture=typeof options==='boolean'?options:!!options?.capture, registrationKey=String(type)+'|'+capture;
+                  if(!registrations.has(registrationKey)){
+                    const stack=String(new Error().stack||'').split('\\n').slice(2,4).map(line=>line.trim()).join(' <- ');
+                    const key=targetName(this)+' '+String(type)+' @ '+stack, token={};
+                    registrations.set(registrationKey,{key,token});registry.register(this,{key},token);adjust(key,1);totals.added++;
+                  }
+                }
+              }
+              return nativeAdd.call(this,type,listener,options);
+            };
+            EventTarget.prototype.removeEventListener=function(type,listener,options){
+              if(audit.enabled&&listener){
+                const listeners=activeByTarget.get(this), registrations=listeners?.get(listener), capture=typeof options==='boolean'?options:!!options?.capture, registrationKey=String(type)+'|'+capture, entry=registrations?.get(registrationKey);
+                if(entry){registrations.delete(registrationKey);if(registrations.size===0)listeners.delete(listener);if(listeners.size===0)activeByTarget.delete(this);registry.unregister(entry.token);adjust(entry.key,-1);totals.removed++;}
+              }
+              return nativeRemove.call(this,type,listener,options);
+            };
+            window.addEventListener('error',event=>window.__per04Failures.push({message:String(event.message||''),source:String(event.filename||''),line:event.lineno||0}));
+            window.addEventListener('unhandledrejection',event=>window.__per04Failures.push({message:String(event.reason?.message||event.reason||'unhandled rejection')}));
+          })()`
+        )
+        if (phase === 'execute') {
+          const debuggerSession = active.webContents.debugger
+          debuggerSession.attach('1.3')
+          try {
+            await debuggerSession.sendCommand('Performance.enable')
+            if (agentPanelChurnForceGc) await debuggerSession.sendCommand('HeapProfiler.enable')
+            const project = (await active.webContents.executeJavaScript(
+              `(async()=>{${common}
+                const config={schemaVersion:1,role:'specialist',interactionMode:'collaborative',skills:[],tools:[],allowedNodeIds:[],maxSteps:12,relations:[]};
+                editor.createShape({id:'shape:per04-agent',type:'node-card',x:180,y:150,props:{nodeType:'agent',title:'PER-04 协作面板测试 Agent',text:'隔离面板挂载卸载测试，不启动任务。',config:JSON.stringify(config)}});
+                await ensureCanvasSaved();
+                const meta=value(await window.api.openProject(projectId)).meta;
+                const appStore=(await import('/src/stores/app.ts')).useAppStore;
+                const panelStore=(await import('/src/stores/nodePanel.ts')).useNodePanelStore;
+                const editorStore=(await import('/src/stores/editor.ts')).useEditorStore;
+                window.__per04EditorRefs=[];
+                window.__per04DomRefs=[];
+                const delay=()=>new Promise(resolve=>setTimeout(resolve,30));
+                const waitForUi=async(test,code)=>{for(let i=0;i<200;i++){if(test())return;if(i===199)throw new Error(code);await delay();}};
+                const panelCycle=async()=>{
+                  panelStore.getState().open('contract','shape:per04-agent','collaboration');
+                  await waitForUi(()=>{const panel=document.querySelector('.agent-collaboration');return !!panel&&panel.textContent?.includes('暂无任务。')===true;},'PER04_PANEL_OPEN_TIMEOUT');
+                  panelStore.getState().close();
+                  await waitForUi(()=>!document.querySelector('.node-contract-panel'),'PER04_PANEL_CLOSE_TIMEOUT');
+                };
+                const projectCycle=async()=>{
+                  const current=appStore.getState().currentProject||meta;
+                  const oldEditor=editorStore.getState().editor;
+                  if(oldEditor)window.__per04EditorRefs.push({ref:new WeakRef(oldEditor),storeCleared:false});
+                  const weak=(selector)=>{const element=document.querySelector(selector);return element?new WeakRef(element):null;};
+                  window.__per04DomRefs.push({canvasHost:weak('.canvas-host'),tldrawContainer:weak('.tl-container'),nodeCard:weak('.node-card-wrap'),actionBar:weak('.node-standard-action-bar'),textarea:weak('textarea.node-textarea'),queueControl:weak('details.resource-queue-control'),brandIcon:weak('img.canvas-brand-icon')});
+                  appStore.getState().setHome();
+                  await waitForUi(()=>appStore.getState().view==='home'&&!document.querySelector('.canvas-host'),'PER04_CANVAS_UNMOUNT_TIMEOUT');
+                  if(window.__per04EditorRefs.length)window.__per04EditorRefs[window.__per04EditorRefs.length-1].storeCleared=editorStore.getState().editor===null;
+                  appStore.getState().openProject(current);
+                  await waitForUi(()=>appStore.getState().view==='canvas'&&editorStore.getState().editor?.getShape('shape:per04-agent'),'PER04_CANVAS_REMOUNT_TIMEOUT');
+                  await ensureCanvasSaved();
+                };
+                const pageInspectUi=()=>({view:appStore.getState().view,panel:panelStore.getState().kind,domNodeCount:document.getElementsByTagName('*').length,jsHeapUsedBytes:performance.memory?.usedJSHeapSize??null,canvasShapeCount:editorStore.getState().editor?.getCurrentPageShapes().length??0,editorStoreIsNull:editorStore.getState().editor===null,previousEditorRefs:window.__per04EditorRefs.map((entry,index)=>({index:index+1,storeCleared:entry.storeCleared,alive:!!entry.ref.deref()})),previousDomRefs:window.__per04DomRefs.map((entry,index)=>({index:index+1,alive:Object.fromEntries(Object.entries(entry).map(([key,ref])=>[key,!!ref?.deref()]))}))});
+                await panelCycle();
+                await projectCycle();
+                await panelCycle();
+                await projectCycle();
+                await panelCycle();
+                await new Promise(resolve=>setTimeout(resolve,2000));
+                window.__per04EditorRefs=[];
+                window.__per04DomRefs=[];
+                window.__per04ListenerAudit.reset();
+                window.__per04ListenerAudit.enabled=true;
+                return {projectId,meta,warmup:pageInspectUi()};
+              })()`
+            )) as {
+              projectId: string
+              meta: {
+                id: string
+                name: string
+                createdAt: number
+                updatedAt: number
+                graphVersion: number
+              }
+              warmup: { view: string; panel: string | null }
+            }
+            const metric = async (): Promise<Record<string, number>> => {
+              const response = (await debuggerSession.sendCommand('Performance.getMetrics')) as {
+                metrics: Array<{ name: string; value: number }>
+              }
+              return Object.fromEntries(
+                response.metrics
+                  .filter((item) =>
+                    [
+                      'Documents',
+                      'Frames',
+                      'JSEventListeners',
+                      'Nodes',
+                      'JSHeapUsedSize',
+                      'JSHeapTotalSize'
+                    ].includes(item.name)
+                  )
+                  .map((item) => [item.name, item.value])
+              )
+            }
+            const pageInspect = async (): Promise<Record<string, unknown>> =>
+              active.webContents.executeJavaScript(
+                `(async()=>{const app=(await import('/src/stores/app.ts')).useAppStore.getState();const editorStore=(await import('/src/stores/editor.ts')).useEditorStore;const editor=editorStore.getState().editor;const panel=(await import('/src/stores/nodePanel.ts')).useNodePanelStore.getState();const queue=(await import('/src/engine/resource-queue.ts')).useResourceQueue.getState();const timers=window.__per04Intervals;return {view:app.view,panel:panel.kind,domNodeCount:document.getElementsByTagName('*').length,jsHeapUsedBytes:performance.memory?.usedJSHeapSize??null,canvasShapeCount:editor?.getCurrentPageShapes().length??0,queue:queue.tasks.length,activeIntervalCount:timers?.active.size??null,intervalsCreated:timers?.stats.created??null,intervalsCleared:timers?.stats.cleared??null,editorStoreIsNull:editorStore.getState().editor===null,rendererFailures:(window.__per04Failures||[]).slice(-20),previousEditorRefs:(window.__per04EditorRefs||[]).map((entry,index)=>({index:index+1,storeCleared:entry.storeCleared,alive:!!entry.ref.deref()})),previousDomRefs:(window.__per04DomRefs||[]).map((entry,index)=>({index:index+1,alive:Object.fromEntries(Object.entries(entry).map(([key,ref])=>[key,!!ref?.deref()]))}))}})()`
+              )
+            const sample = async (cycle: number): Promise<Record<string, unknown>> => {
+              if (agentPanelChurnForceGc)
+                await debuggerSession.sendCommand('HeapProfiler.collectGarbage')
+              const rendererMetric = app
+                .getAppMetrics()
+                .find((item) => item.pid === active.webContents.getOSProcessId())
+              return {
+                cycle,
+                timestamp: Date.now(),
+                rendererId: active.webContents.id,
+                rendererPid: active.webContents.getOSProcessId(),
+                metrics: await metric(),
+                page: await pageInspect(),
+                listenerAudit: await active.webContents.executeJavaScript(
+                  'window.__per04ListenerAudit.snapshot()'
+                ),
+                mainActiveHandles:
+                  (
+                    globalThis.process as unknown as { _getActiveHandles?: () => unknown[] }
+                  )._getActiveHandles?.().length ?? null,
+                rendererMemoryKB: rendererMetric?.memory.workingSetSize ?? null
+              }
+            }
+            const samples: Array<Record<string, unknown>> = [await sample(0)]
+            let projectCycles = 0
+            const taskCountBefore = (
+              getDb()
+                .prepare('SELECT COUNT(*) AS count FROM flow_agent_tasks WHERE project_id=?')
+                .get(project.projectId) as { count: number }
+            ).count
+            const commandCountBefore = (
+              getDb()
+                .prepare('SELECT COUNT(*) AS count FROM flow_commands WHERE project_id=?')
+                .get(project.projectId) as { count: number }
+            ).count
+            if (taskCountBefore !== 0 || commandCountBefore !== 0)
+              throw new Error('PER04_FIXTURE_NOT_EMPTY')
+            await active.webContents
+              .capturePage()
+              .then((image) =>
+                writeFileSync(join(directory, 'panel-churn-start.png'), image.toPNG())
+              )
+            for (let cycle = 1; cycle <= 30; cycle++) {
+              await active.webContents.executeJavaScript(
+                `(async()=>{const panel=(await import('/src/stores/nodePanel.ts')).useNodePanelStore;const delay=()=>new Promise(resolve=>setTimeout(resolve,30));const wait=async(test,code)=>{for(let i=0;i<200;i++){if(test())return;if(i===199)throw new Error(code);await delay();}};panel.getState().open('contract','shape:per04-agent','collaboration');await wait(()=>{const element=document.querySelector('.agent-collaboration');return !!element&&element.textContent?.includes('暂无任务。')===true;},'PER04_PANEL_OPEN_TIMEOUT');panel.getState().close();await wait(()=>!document.querySelector('.node-contract-panel'),'PER04_PANEL_CLOSE_TIMEOUT');})();`
+              )
+              if (cycle % 5 === 0) {
+                await active.webContents.executeJavaScript(
+                  `(async()=>{const app=(await import('/src/stores/app.ts')).useAppStore;const editor=(await import('/src/stores/editor.ts')).useEditorStore;const current=app.getState().currentProject;const oldEditor=editor.getState().editor;if(oldEditor)window.__per04EditorRefs.push({ref:new WeakRef(oldEditor),storeCleared:false});const weak=(selector)=>{const element=document.querySelector(selector);return element?new WeakRef(element):null;};window.__per04DomRefs.push({canvasHost:weak('.canvas-host'),tldrawContainer:weak('.tl-container'),nodeCard:weak('.node-card-wrap'),actionBar:weak('.node-standard-action-bar'),textarea:weak('textarea.node-textarea'),queueControl:weak('details.resource-queue-control'),brandIcon:weak('img.canvas-brand-icon')});app.getState().setHome();const delay=()=>new Promise(resolve=>setTimeout(resolve,30));for(let i=0;i<200;i++){if(app.getState().view==='home'&&!document.querySelector('.canvas-host'))break;if(i===199)throw new Error('PER04_CANVAS_UNMOUNT_TIMEOUT');await delay();}if(window.__per04EditorRefs.length)window.__per04EditorRefs[window.__per04EditorRefs.length-1].storeCleared=editor.getState().editor===null;app.getState().openProject(current);for(let i=0;i<200;i++){if(app.getState().view==='canvas'&&editor.getState().editor?.getShape('shape:per04-agent'))break;if(i===199)throw new Error('PER04_CANVAS_REMOUNT_TIMEOUT');await delay();}await (await import('/src/canvas/flow-asset-actions.ts')).ensureCanvasSaved();})();`
+                )
+                projectCycles++
+              }
+              samples.push(await sample(cycle))
+            }
+            // Record a second count after renderer cleanup and weak-reference
+            // processing have had time to settle. The immediate cycle-30
+            // sample remains the acceptance measurement for now.
+            await new Promise<void>((resolve) => setTimeout(resolve, 2_000))
+            if (agentPanelChurnForceGc)
+              await debuggerSession.sendCommand('HeapProfiler.collectGarbage')
+            const settledMetrics = await metric()
+            const finalCounts = getDb()
+              .prepare(
+                'SELECT (SELECT COUNT(*) FROM flow_agent_tasks WHERE project_id=?) AS tasks,(SELECT COUNT(*) FROM flow_commands WHERE project_id=?) AS commands'
+              )
+              .get(project.projectId, project.projectId) as { tasks: number; commands: number }
+            if (
+              finalCounts.tasks !== taskCountBefore ||
+              finalCounts.commands !== commandCountBefore ||
+              samples.length !== 31 ||
+              projectCycles !== 6
+            )
+              throw new Error('PER04_FACTS_CHANGED')
+            await active.webContents
+              .capturePage()
+              .then((image) => writeFileSync(join(directory, 'panel-churn-end.png'), image.toPNG()))
+            writeFileSync(
+              join(directory, 'panel-churn-samples.jsonl'),
+              samples.map((item) => JSON.stringify(item)).join('\n') + '\n'
+            )
+            if (agentPanelChurnForceGc && agentPanelChurnHeapSnapshot) {
+              await debuggerSession.sendCommand('HeapProfiler.collectGarbage')
+              const snapshotChunks: string[] = []
+              const onHeapSnapshotMessage = (
+                _event: Electron.Event,
+                method: string,
+                params: { chunk?: string }
+              ): void => {
+                if (method === 'HeapProfiler.addHeapSnapshotChunk' && params.chunk)
+                  snapshotChunks.push(params.chunk)
+              }
+              debuggerSession.on('message', onHeapSnapshotMessage)
+              try {
+                await debuggerSession.sendCommand('HeapProfiler.takeHeapSnapshot', {
+                  reportProgress: false,
+                  captureNumericValue: true
+                })
+              } finally {
+                debuggerSession.removeListener('message', onHeapSnapshotMessage)
+              }
+              writeFileSync(
+                join(directory, 'per04-heap-snapshot.heapsnapshot'),
+                snapshotChunks.join(''),
+                'utf8'
+              )
+              const trackedObjects: Array<Record<string, unknown>> = []
+              const eventListenerDetails: Array<Record<string, unknown>> = []
+              const captureEventListeners = async (
+                label: string,
+                expression: string
+              ): Promise<void> => {
+                const evaluated = (await debuggerSession.sendCommand('Runtime.evaluate', {
+                  expression,
+                  returnByValue: false,
+                  objectGroup: 'per04-event-listeners'
+                })) as { result?: { type?: string; subtype?: string; objectId?: string; className?: string } }
+                const remote = evaluated.result
+                if (!remote?.objectId || remote.subtype === 'null') {
+                  eventListenerDetails.push({ label, available: false })
+                  return
+                }
+                try {
+                  const result = (await debuggerSession.sendCommand(
+                    'DOMDebugger.getEventListeners',
+                    { objectId: remote.objectId, depth: 0, pierce: false }
+                  )) as {
+                    eventListeners?: Array<{
+                      type?: string
+                      useCapture?: boolean
+                      passive?: boolean
+                      once?: boolean
+                      scriptId?: string
+                      lineNumber?: number
+                      columnNumber?: number
+                      handler?: { description?: string; functionName?: string }
+                    }>
+                  }
+                  const listeners = (result.eventListeners ?? []).map((listener) => ({
+                    type: listener.type,
+                    useCapture: listener.useCapture,
+                    passive: listener.passive,
+                    once: listener.once,
+                    functionName: listener.handler?.functionName ?? '',
+                    description: listener.handler?.description?.slice(0, 180) ?? '',
+                    scriptId: listener.scriptId,
+                    lineNumber: listener.lineNumber,
+                    columnNumber: listener.columnNumber
+                  }))
+                  eventListenerDetails.push({
+                    label,
+                    className: remote.className ?? remote.type,
+                    count: listeners.length,
+                    listeners
+                  })
+                } catch (error) {
+                  eventListenerDetails.push({
+                    label,
+                    className: remote.className ?? remote.type,
+                    error: error instanceof Error ? error.message : String(error)
+                  })
+                }
+              }
+              const trackedCounts = (await active.webContents.executeJavaScript(
+                '({editors:window.__per04EditorRefs?.length??0,dom:window.__per04DomRefs?.length??0})'
+              )) as { editors: number; dom: number }
+              for (const [label, expression] of [
+                ['window', 'window'],
+                ['document', 'document'],
+                ['body', 'document.body']
+              ]) {
+                await captureEventListeners(label, expression)
+              }
+              for (let index = 0; index < trackedCounts.dom; index++) {
+                for (const key of ['canvasHost', 'tldrawContainer', 'nodeCard', 'actionBar']) {
+                  await captureEventListeners(
+                    `old-dom-${index + 1}-${key}`,
+                    `window.__per04DomRefs[${index}].${key}?.deref()`
+                  )
+                }
+              }
+              await debuggerSession
+                .sendCommand('Runtime.releaseObjectGroup', { objectGroup: 'per04-event-listeners' })
+                .catch(() => undefined)
+              writeFileSync(
+                join(directory, 'per04-event-listeners.json'),
+                JSON.stringify(
+                  { capturedAt: new Date().toISOString(), targets: eventListenerDetails },
+                  null,
+                  2
+                )
+              )
+              const captureHeapObject = async (
+                label: string,
+                expression: string
+              ): Promise<void> => {
+                const evaluated = (await debuggerSession.sendCommand('Runtime.evaluate', {
+                  expression,
+                  returnByValue: false,
+                  objectGroup: 'per04-heap-audit'
+                })) as { result?: { type?: string; subtype?: string; objectId?: string; className?: string } }
+                const remote = evaluated.result
+                if (!remote?.objectId || remote.subtype === 'null') {
+                  trackedObjects.push({ label, available: false })
+                  return
+                }
+                const heapObject = (await debuggerSession.sendCommand('HeapProfiler.getHeapObjectId', {
+                  objectId: remote.objectId
+                })) as { heapSnapshotObjectId?: string }
+                trackedObjects.push({
+                  label,
+                  available: true,
+                  className: remote.className ?? remote.type,
+                  heapSnapshotObjectId: heapObject.heapSnapshotObjectId
+                })
+              }
+              for (let index = 0; index < trackedCounts.editors; index++) {
+                await captureHeapObject(
+                  `old-editor-${index + 1}`,
+                  `window.__per04EditorRefs[${index}].ref.deref()`
+                )
+              }
+              for (let index = 0; index < trackedCounts.dom; index++) {
+                for (const key of ['canvasHost', 'tldrawContainer', 'nodeCard', 'actionBar']) {
+                  await captureHeapObject(
+                    `old-dom-${index + 1}-${key}`,
+                    `window.__per04DomRefs[${index}].${key}?.deref()`
+                  )
+                }
+              }
+              await debuggerSession
+                .sendCommand('Runtime.releaseObjectGroup', { objectGroup: 'per04-heap-audit' })
+                .catch(() => undefined)
+              writeFileSync(
+                join(directory, 'per04-heap-object-ids.json'),
+                JSON.stringify(
+                  {
+                    capturedAt: new Date().toISOString(),
+                    rendererId: active.webContents.id,
+                    rendererPid: active.webContents.getOSProcessId(),
+                    objects: trackedObjects
+                  },
+                  null,
+                  2
+                )
+              )
+            }
+            const beforeMetric = samples[0].metrics as Record<string, number>
+            const immediateAfterMetric = samples.at(-1)?.metrics as Record<string, number>
+            const beforePage = samples[0].page as Record<string, number | null>
+            const afterPage = samples.at(-1)?.page as Record<string, number | null>
+            const listenerDelta =
+              immediateAfterMetric.JSEventListeners - beforeMetric.JSEventListeners
+            const listenerSettledDelta =
+              settledMetrics.JSEventListeners - beforeMetric.JSEventListeners
+            const listenerGrowthLimit = Math.max(
+              100,
+              Math.ceil(beforeMetric.JSEventListeners * 0.25)
+            )
+            const intervalDelta =
+              beforePage.activeIntervalCount === null || afterPage.activeIntervalCount === null
+                ? null
+                : afterPage.activeIntervalCount - beforePage.activeIntervalCount
+            const listenerCleanupFailed = listenerDelta > listenerGrowthLimit
+            const intervalCleanupFailed = intervalDelta !== null && intervalDelta > 0
+            const acceptanceStatus =
+              listenerCleanupFailed || intervalCleanupFailed ? 'failed' : 'pass'
+            report = {
+              projectId: project.projectId,
+              rounds: 30,
+              panelOpenCloseCycles: 30,
+              projectCanvasUnmountRemountCycles: projectCycles,
+              rendererId: active.webContents.id,
+              rendererPid: active.webContents.getOSProcessId(),
+              sampleCount: samples.length,
+              taskCount: finalCounts.tasks,
+              commandCount: finalCounts.commands,
+              listenerStart: beforeMetric.JSEventListeners,
+              listenerEnd: immediateAfterMetric.JSEventListeners,
+              listenerSettledEnd: settledMetrics.JSEventListeners,
+              listenerDelta,
+              listenerSettledDelta,
+              listenerGrowthLimit,
+              domStart: beforePage.domNodeCount,
+              domEnd: afterPage.domNodeCount,
+              activeIntervalsStart: beforePage.activeIntervalCount,
+              activeIntervalsEnd: afterPage.activeIntervalCount,
+              activeIntervalDelta: intervalDelta,
+              forcedGcSamples: agentPanelChurnForceGc ? samples.length : 0,
+              warmupIdleMs: 2000,
+              acceptance: {
+                status: acceptanceStatus,
+                listenerCleanup: listenerCleanupFailed ? 'failed' : 'pass',
+                intervalCleanup: intervalCleanupFailed ? 'failed' : 'pass',
+                criteria:
+                  'after 30 closed-panel cycles, listeners may grow at most 25% (minimum allowance 100); global active setInterval count must return to its post-warmup baseline',
+                pollingMeasurement:
+                  'global window.setInterval calls made after instrumentation was installed'
+              },
+              checks: [
+                '30 collaboration-panel open/close cycles',
+                'six project/canvas unmount/remount cycles',
+                'same renderer observed via CDP',
+                'no Agent task or command side effects',
+                'per-cycle CDP listener/node/heap, renderer memory, and active global interval samples',
+                ...(agentPanelChurnForceGc
+                  ? ['forced CDP garbage collection before every baseline and cycle sample']
+                  : [])
+              ]
+            }
+            if (acceptanceStatus === 'failed') failed = true
+            writeFileSync(statePath, JSON.stringify({ projectId: project.projectId }))
+          } finally {
+            debuggerSession.detach()
+          }
+        } else {
+          const reopen = (await active.webContents.executeJavaScript(
+            `(async()=>{const app=(await import('/src/stores/app.ts')).useAppStore.getState();const editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;const file=await window.api.openProject(${JSON.stringify(projectId)});if(!file.ok)throw new Error('PER04_REOPEN_PROJECT_FAILED');const agent=editor?.getShape('shape:per04-agent');if(!agent||app.currentProject?.id!==${JSON.stringify(projectId)})throw new Error('PER04_REOPEN_STATE_MISSING');const facts=await window.api.inspectFlowAgent({projectId:${JSON.stringify(projectId)},nodeId:'shape:per04-agent'});if(!facts.ok&&facts.error.code!=='AGENT_TASK_NOT_FOUND')throw new Error('PER04_REOPEN_AGENT_FACT_FAILED');return {projectId:${JSON.stringify(projectId)},agentShapePresent:true,view:app.view,persisted:true};})()`
+          )) as { projectId: string; agentShapePresent: boolean; view: string; persisted: boolean }
+          const counts = getDb()
+            .prepare(
+              'SELECT (SELECT COUNT(*) FROM flow_agent_tasks WHERE project_id=?) AS tasks,(SELECT COUNT(*) FROM flow_commands WHERE project_id=?) AS commands'
+            )
+            .get(projectId, projectId) as { tasks: number; commands: number }
+          if (!reopen.agentShapePresent || counts.tasks !== 0 || counts.commands !== 0)
+            throw new Error('PER04_REOPEN_FACTS_CHANGED')
+          report = { ...reopen, tasks: counts.tasks, commands: counts.commands, noReplay: true }
+        }
+      } else if (agentGate) {
+        const gateFailureCount = async (): Promise<number> => {
+          await diagnostics.flushNow()
+          const result = await diagnostics.query({ limit: 5000 })
+          return result.events.filter(
+            (event) =>
+              event.event === 'command.operation.failed' &&
+              event.nodeId === 'shape:c3-agent' &&
+              event.attributes?.code === 'FLOW_REVIEW_NOT_READY'
+          ).length
+        }
+        const modelRequestCount = async (): Promise<number> => {
+          await diagnostics.flushNow()
+          const result = await diagnostics.query({ limit: 5000 })
+          return result.events.filter((event) => event.event === 'model.request.started').length
+        }
+        const waitForGateFailureCount = async (expected: number): Promise<void> => {
+          for (let attempt = 0; attempt < 40; attempt++) {
+            if ((await gateFailureCount()) === expected) return
+            await new Promise((done) => setTimeout(done, 50))
+          }
+          throw new Error('CMD08_AGENT_GATE_ENTRY_NOT_RECORDED')
+        }
+        if (phase === 'execute') {
+          report = await active.webContents.executeJavaScript(`(async()=>{${common}
+            const {createEdge}=await import('/src/canvas/graph.ts');
+            editor.createShape({id:'shape:c3-source',type:'node-card',x:100,y:100,props:{nodeType:'text',title:'固定材料',text:'private-c3-gate-material'}});
+            editor.createShape({id:'shape:c3-agent',type:'node-card',x:650,y:100,props:{nodeType:'agent',title:'受审核 Agent',text:'执行授权处理并交付固定结果。',config:JSON.stringify({schemaVersion:1,role:'specialist',interactionMode:'autonomous',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'node.execute',version:'1'}],allowedNodeIds:['shape:c3-worker'],maxSteps:8,relations:[]})}});
+            editor.createShape({id:'shape:c3-worker',type:'node-card',x:1100,y:100,props:{nodeType:'processor',title:'授权处理',config:JSON.stringify({operation:'pass'})}});
+            editor.createShape({id:'shape:c3-review',type:'node-card',x:400,y:520,props:{nodeType:'ai-review',title:'尚未完成的审核',text:'检查固定材料是否达到交付要求。',config:JSON.stringify({schemaVersion:1,rulesVersion:'rules-1',modelDefinitionId:'agent-test-model',rejectPolicy:'stop',maxReworks:0,responsibleNodeId:'shape:c3-source',subjectSources:[{nodeId:'shape:c3-source',portId:'out-text'}],gatedNodeIds:['shape:c3-agent'],relations:[]})}});
+            for(const [from,port,to,target] of [['shape:c3-source','out-text','shape:c3-review','in-text'],['shape:c3-source','out-text','shape:c3-agent','in-text'],['shape:c3-source','out-text','shape:c3-worker','in-value']])if(!createEdge(editor,{shapeId:from,portId:port},{shapeId:to,portId:target}))throw new Error('CMD08_AGENT_GATE_EDGE_MISSING');
+            await ensureCanvasSaved();
+            const title=document.querySelector('[data-node-id="shape:c3-agent"] .node-run-btn');if(!title||title.disabled)throw new Error('CMD08_AGENT_TITLE_ENTRY_UNAVAILABLE');title.click();
+            return {projectId,agentNodeId:'shape:c3-agent',entries:['title']};
+          })()`)
+          await waitForGateFailureCount(1)
+          const entries = ['title']
+          for (const entry of ['footer', 'multi-select']) {
+            await active.webContents.executeJavaScript(
+              `(async()=>{const editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;const delay=()=>new Promise(r=>setTimeout(r,50));if(${JSON.stringify(entry)}==='footer'){const button=[...document.querySelectorAll('[data-node-id="shape:c3-agent"] .node-standard-primary')].find(node=>node.textContent.trim()==='启动任务');if(!button||button.disabled)throw new Error('CMD08_AGENT_FOOTER_ENTRY_UNAVAILABLE');button.click();return;}editor.select('shape:c3-source','shape:c3-agent');editor.zoomToSelection();for(let i=0;i<40;i++){const button=document.querySelector('[data-tool="run"]');if(button){button.click();return;}await delay();}throw new Error('CMD08_AGENT_MULTISELECT_ENTRY_UNAVAILABLE');})()`
+            )
+            await waitForGateFailureCount(entries.length + 1)
+            entries.push(entry)
+          }
+          const manual = await active.webContents.executeJavaScript(
+            `(async()=>{${common}const {runNodeManually}=await import('/src/engine/executor.ts');const result=await runNodeManually(editor,projectId,[],'shape:c3-agent');return {status:result.status,reason:result.reason};})()`
+          )
+          if (manual.status !== 'skipped' || !String(manual.reason).includes('审核节点'))
+            throw new Error('CMD08_AGENT_MANUAL_GATE_CONTRACT_FAILED')
+          await waitForGateFailureCount(4)
+          if (
+            (
+              getDb()
+                .prepare('SELECT COUNT(*) AS count FROM flow_agent_tasks WHERE project_id=?')
+                .get(projectId) as { count: number }
+            ).count !== 0 ||
+            (
+              getDb()
+                .prepare('SELECT COUNT(*) AS count FROM flow_commands WHERE project_id=?')
+                .get(projectId) as { count: number }
+            ).count !== 0 ||
+            (
+              getDb()
+                .prepare('SELECT COUNT(*) AS count FROM flow_reviews WHERE project_id=?')
+                .get(projectId) as { count: number }
+            ).count !== 0
+          )
+            throw new Error('CMD08_AGENT_GATE_CREATED_EXECUTION_FACTS')
+          if ((await modelRequestCount()) !== 0)
+            throw new Error('CMD08_AGENT_GATE_SENT_MODEL_REQUEST')
+          report = {
+            ...(report as object),
+            entries: [...entries, 'manual-api'],
+            manual,
+            gateFailures: await gateFailureCount(),
+            databaseFacts: { agentTasks: 0, commands: 0, reviews: 0 },
+            modelRequests: await modelRequestCount(),
+            checks: [
+              'Agent title run enters the shared public admission gate',
+              'Agent footer start enters the shared public admission gate',
+              'multi-select run enters the shared public admission gate',
+              'direct manual executor returns the same review-gated skip',
+              'blocked entries create no Agent task, command, review or model request'
+            ]
+          }
+          writeFileSync(statePath, JSON.stringify(report))
+        } else {
+          const priorGateFailures = await gateFailureCount()
+          report = await active.webContents.executeJavaScript(`(async()=>{${common}
+            const gate=await window.api.checkFlowNodeAvailability({projectId,nodeId:'shape:c3-agent'});
+            if(gate.ok||gate.error.code!=='FLOW_REVIEW_NOT_READY')throw new Error('CMD08_AGENT_GATE_DID_NOT_SURVIVE_REOPEN');
+            const saved=value(await window.api.openProject(projectId));
+            const agent=saved.nodes.find(node=>node.id==='shape:c3-agent');
+            const review=saved.nodes.find(node=>node.id==='shape:c3-review');
+            if(!agent||!review||!JSON.parse(review.params.config).gatedNodeIds.includes('shape:c3-agent'))throw new Error('CMD08_AGENT_GATE_GRAPH_NOT_PERSISTED');
+            return {projectId,gateCode:gate.error.code,persistedGate:true};
+          })()`)
+          await waitForGateFailureCount(priorGateFailures + 1)
+          const previous = JSON.parse(readFileSync(statePath, 'utf8')) as { entries: string[] }
+          if (previous.entries.join(',') !== 'title,footer,multi-select,manual-api')
+            throw new Error('CMD08_AGENT_GATE_ENTRY_FACTS_NOT_PERSISTED')
+          if (
+            (
+              getDb()
+                .prepare('SELECT COUNT(*) AS count FROM flow_agent_tasks WHERE project_id=?')
+                .get(projectId) as { count: number }
+            ).count !== 0 ||
+            (
+              getDb()
+                .prepare('SELECT COUNT(*) AS count FROM flow_commands WHERE project_id=?')
+                .get(projectId) as { count: number }
+            ).count !== 0 ||
+            (
+              getDb()
+                .prepare('SELECT COUNT(*) AS count FROM flow_reviews WHERE project_id=?')
+                .get(projectId) as { count: number }
+            ).count !== 0
+          )
+            throw new Error('CMD08_AGENT_GATE_FACTS_CHANGED_AFTER_REOPEN')
+          report = { ...(report as object), originalEntriesAfterReopen: previous.entries }
+        }
+      } else if (agentUnknown) {
+        const occupancyBlockCount = async (): Promise<number> => {
+          await diagnostics.flushNow()
+          const result = await diagnostics.query({ limit: 5000 })
+          return result.events.filter(
+            (event) =>
+              event.event === 'agent.runtime.blocked' &&
+              event.nodeId === 'shape:c3-agent' &&
+              event.attributes?.code === 'FLOW_NODE_OCCUPIED'
+          ).length
+        }
+        if (phase === 'execute') {
+          report = await active.webContents.executeJavaScript(`(async()=>{${common}
+            const {createEdge}=await import('/src/canvas/graph.ts');
+            const bridge=await import('/src/engine/flow-command-bridge.ts');
+            editor.createShape({id:'shape:c3-source',type:'node-card',x:100,y:100,props:{nodeType:'text',title:'固定材料',text:'private-c3-unknown-footer-material'}});
+            editor.createShape({id:'shape:c3-agent',type:'node-card',x:650,y:100,props:{nodeType:'agent',title:'占用检查 Agent',text:'尝试执行授权处理并保留真实失败状态。',config:JSON.stringify({schemaVersion:1,role:'specialist',interactionMode:'autonomous',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'node.execute',version:'1'}],allowedNodeIds:['shape:c3-worker'],maxSteps:8,relations:[]})}});
+            editor.createShape({id:'shape:c3-worker',type:'node-card',x:1100,y:100,props:{nodeType:'processor',title:'已占用处理',config:JSON.stringify({operation:'pass'})}});
+            for(const [from,port,to,target] of [['shape:c3-source','out-text','shape:c3-agent','in-text'],['shape:c3-source','out-text','shape:c3-worker','in-value']])if(!createEdge(editor,{shapeId:from,portId:port},{shapeId:to,portId:target}))throw new Error('CMD08_UNKNOWN_FOOTER_EDGE_MISSING');
+            await ensureCanvasSaved();
+            const file=value(await window.api.openProject(projectId));
+            const asset=value(await window.api.submitFlowAsset({projectId,nodeId:'shape:c3-source',portId:'out-text',submissionId:'cmd08-unknown-footer-source',expectedGraphVersion:file.meta.graphVersion,traceId:'trace-cmd08-source',spanId:'span-cmd08-source'}));
+            const command={schemaVersion:1,kind:'node.execute',commandId:'cmd08-unknown-footer-reservation',projectId,taskId:'cmd08-reservation-task',agentNodeId:'shape:c3-agent',targetNodeId:'shape:c3-worker',contractVersion:1,expectedSemanticRevision:await bridge.canvasSemanticRevision(editor,file),inputs:[{targetPortId:'in-value',assets:[asset.ref]}],traceId:'trace-cmd08-reservation',spanId:'span-cmd08-reservation'};
+            const prepared=value(await window.api.prepareFlowCommand(command));
+            if(prepared.state!=='ready')throw new Error('CMD08_UNKNOWN_FOOTER_RESERVATION_NOT_PREPARED');
+            const unknown=value(await window.api.markFlowCommandUnknown({projectId,commandId:command.commandId,leaseId:prepared.grant.leaseId}));
+            if(unknown.state!=='unknown')throw new Error('CMD08_UNKNOWN_FOOTER_RESERVATION_NOT_UNKNOWN');
+            const beforeHistory=editor.getShape('shape:c3-worker').meta.nodeRunHistory?.length||0;
+            const worker=editor.getShape('shape:c3-worker');const beforeExec=worker.props.exec;const beforeResult=worker.meta.nodeResult??null;
+            const runButton=document.querySelector('[data-node-id="shape:c3-worker"] .node-run-btn');
+            if(!runButton||runButton.disabled)throw new Error('REL03_OCCUPIED_MANUAL_BUTTON_UNAVAILABLE');
+            runButton.click();
+            const toastStore=await import('/src/stores/toast.ts');let manualToast=null;
+            for(let i=0;i<40;i++){manualToast=toastStore.useToastStore.getState().msg;if(manualToast)break;await new Promise(done=>setTimeout(done,25));}
+            const afterManual=editor.getShape('shape:c3-worker');const afterHistory=afterManual.meta.nodeRunHistory?.length||0;
+            if(manualToast!=='该节点由主 Agent 协调，请先停止对应流程'||afterHistory!==beforeHistory||afterManual.props.exec!==beforeExec||(afterManual.meta.nodeResult??null)!==beforeResult)throw new Error('REL03_OCCUPIED_MANUAL_ENTRY_NOT_BLOCKED:'+JSON.stringify({manualToast,beforeHistory,afterHistory,beforeExec,afterExec:afterManual.props.exec,beforeResult,afterResult:afterManual.meta.nodeResult??null}));
+            const manualAttempt={buttonClicked:true,toast:manualToast,beforeHistory,afterHistory,beforeExec,afterExec:afterManual.props.exec,outputUnchanged:(afterManual.meta.nodeResult??null)===beforeResult};
+            const button=[...document.querySelectorAll('[data-node-id="shape:c3-agent"] .node-standard-primary')].find(node=>node.textContent.trim()==='启动任务');
+            if(!button||button.disabled)throw new Error('CMD08_UNKNOWN_FOOTER_ENTRY_UNAVAILABLE');
+            button.click();
+            return {projectId,agentNodeId:'shape:c3-agent',commandId:command.commandId,beforeHistory,manualAttempt};
+          })()`)
+          const state = report as {
+            projectId: string
+            agentNodeId: string
+            commandId: string
+            beforeHistory: number
+            manualAttempt: { buttonClicked: boolean; toast: string; beforeHistory: number; afterHistory: number; beforeExec: string; afterExec: string; outputUnchanged: boolean }
+          }
+          let blocked = false
+          for (let attempt = 0; attempt < 200; attempt++) {
+            if ((await occupancyBlockCount()) > 0) {
+              blocked = true
+              break
+            }
+            await new Promise((done) => setTimeout(done, 50))
+          }
+          if (!blocked) throw new Error('CMD08_UNKNOWN_FOOTER_OCCUPANCY_NOT_RECORDED')
+          const commandCount = Number(
+            (getDb().prepare('SELECT COUNT(*) AS count FROM flow_commands WHERE project_id=?').get(state.projectId) as { count: number }).count
+          )
+          if (commandCount !== 1) throw new Error(`REL03_OCCUPIED_MANUAL_CREATED_COMMAND_${commandCount}`)
+          await diagnostics.flushNow()
+          const manualGateEvents = (await diagnostics.query({ limit: 5000 })).events.filter(
+            (event) => event.event === 'command.operation.failed' &&
+              event.nodeId === 'shape:c3-worker' &&
+              event.attributes?.phase === 'occupancy' &&
+              event.attributes?.code === 'FLOW_NODE_OCCUPIED'
+          )
+          if (manualGateEvents.length !== 1) throw new Error(`REL03_OCCUPIED_MANUAL_GATE_EVENT_COUNT_${manualGateEvents.length}`)
+          const afterAction = await active.webContents.executeJavaScript(`(async()=>{${common}
+            const receipt=value(await window.api.lookupFlowCommand({projectId,commandId:'cmd08-unknown-footer-reservation'}));
+            const history=editor.getShape('shape:c3-worker').meta.nodeRunHistory?.length||0;
+            if(receipt.state!=='unknown'||history!==${JSON.stringify(state.beforeHistory)})throw new Error('CMD08_UNKNOWN_FOOTER_OCCUPANCY_EFFECT');
+            const beforeStop=await inspect();
+            if(beforeStop?.state!=='blocked')throw new Error('CMD08_UNKNOWN_FOOTER_TASK_NOT_BLOCKED');
+            const stopped=value(await window.api.stopFlowAgent({projectId,nodeId:'shape:c3-agent'}));
+            if(stopped?.state!=='cancelled')throw new Error('CMD08_UNKNOWN_FOOTER_TASK_CLEANUP_FAILED');
+            return {receiptState:receipt.state,workerHistory:history,taskStateBeforeStop:beforeStop.state,taskStateAfterStop:stopped.state};
+          })()`)
+          writeFileSync(statePath, JSON.stringify({ ...state, afterAction, commandCount }))
+          report = {
+            ...state,
+            ...afterAction,
+            commandCount,
+            manualGateEvents: manualGateEvents.map((event) => ({ event: event.event, phase: event.attributes?.phase, code: event.attributes?.code, nodeId: event.nodeId })),
+            occupancyBlocks: await occupancyBlockCount(),
+            modelRequests: (await diagnostics.query({ limit: 5000 })).events.filter(
+              (event) => event.event === 'model.request.started'
+            ).length,
+            checks: [
+              'Agent footer starts the Agent task in the real canvas UI',
+              'Agent runtime blocks the tool call with FLOW_NODE_OCCUPIED before command creation',
+              'legacy target manual run button displays the shared occupancy block and creates no run/output/command',
+              'unknown receipt and worker output history remain unchanged',
+              'blocked Agent task is explicitly stopped after evidence capture'
+            ]
+          }
+        } else {
+          const previous = JSON.parse(readFileSync(statePath, 'utf8')) as {
+            projectId: string
+            agentNodeId: string
+            commandId: string
+            afterAction: { receiptState: string; workerHistory: number }
+            manualAttempt: { buttonClicked: boolean; toast: string; beforeHistory: number; afterHistory: number; beforeExec: string; afterExec: string; outputUnchanged: boolean }
+            commandCount: number
+          }
+          report = await active.webContents.executeJavaScript(`(async()=>{${common}
+            const receipt=value(await window.api.lookupFlowCommand({projectId,commandId:${JSON.stringify(previous.commandId)}}));
+            const task=await inspect();
+            const history=editor.getShape('shape:c3-worker').meta.nodeRunHistory?.length||0;
+            if(receipt.state!=='unknown'||history!==${JSON.stringify(previous.afterAction.workerHistory)})throw new Error('CMD08_UNKNOWN_FOOTER_REOPEN_CHANGED_FACTS');
+            return {projectId,receiptState:receipt.state,workerHistory:history,taskState:task?.state||null,persistedUnknown:true};
+          })()`)
+          const currentBlockCount = await occupancyBlockCount()
+          if (currentBlockCount < 1)
+            throw new Error('CMD08_UNKNOWN_FOOTER_OCCUPANCY_DIAGNOSTIC_MISSING')
+          report = {
+            ...(report as object),
+            occupancyBlocks: currentBlockCount,
+            manualAttempt: previous.manualAttempt,
+            commandCount: previous.commandCount,
+            checks: [
+              'unknown reservation persists after a second process opens the project',
+              'reopen does not replay the blocked Agent action'
+            ]
+          }
+        }
+      } else if (agentResidency) {
+        const samplePath = join(directory, 'residency-samples.jsonl')
+        const processPath = join(directory, 'residency-processes.json')
+        if (phase === 'execute') {
+          const setup = await active.webContents.executeJavaScript(`(async()=>{${common}
+            const {createEdge}=await import('/src/canvas/graph.ts');
+            // Mirrors src/renderer/src/engine/runRecord.ts; recent node-run history is capped.
+            const NODE_RUN_HISTORY_LIMIT=12;
+            const delay=()=>new Promise(done=>setTimeout(done,100));
+            for(let attempt=0;!document.querySelector('.canvas-page');attempt++){if(attempt>600)throw new Error('PER01_CANVAS_PAGE_TIMEOUT');await delay();}
+            editor.createShape({id:'shape:per01-source',type:'node-card',x:100,y:100,props:{nodeType:'text',title:'固定长驻材料',text:'private-per01-residency-material'}});
+            editor.createShape({id:'shape:c3-worker',type:'node-card',x:1100,y:100,props:{nodeType:'processor',title:'长驻本地处理',config:JSON.stringify({operation:'pass'})}});
+            editor.createShape({id:'shape:c3-agent',type:'node-card',x:600,y:400,props:{nodeType:'agent',title:'长驻 Agent',text:'每轮调用本地处理两次，等待人工确认后继续并交付固定成果。',config:JSON.stringify({schemaVersion:1,role:'specialist',interactionMode:'collaborative',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'node.execute',version:'1'}],allowedNodeIds:['shape:c3-worker'],maxSteps:12,relations:[]})}});
+            if(!createEdge(editor,{shapeId:'shape:per01-source',portId:'out-text'},{shapeId:'shape:c3-agent',portId:'in-text'})||!createEdge(editor,{shapeId:'shape:per01-source',portId:'out-text'},{shapeId:'shape:c3-worker',portId:'in-value'}))throw new Error('PER01_FIXTURE_EDGES_FAILED');
+            await ensureCanvasSaved();
+            editor.select('shape:c3-agent');editor.zoomToSelection();
+            for(let attempt=0;!document.querySelector('[data-node-id="shape:c3-agent"] .node-standard-primary');attempt++){if(attempt>200)throw new Error('PER01_AGENT_CONTROLS_TIMEOUT');await delay();}
+            const clickPrimary=async()=>{for(let attempt=0;attempt<200;attempt++){const button=document.querySelector('[data-node-id="shape:c3-agent"] .node-standard-primary');if(button&&!button.disabled){button.click();return;}await delay();}throw new Error('PER01_AGENT_BUTTON_UNAVAILABLE');};
+            window.__agentResidencyProgress={cycle:0,stage:'ready',startedAt:Date.now()};
+            window.__agentResidencyRun=(async()=>{
+              const startedAt=Date.now(),durationMs=${agentResidencySeconds * 1000},intervalMs=60000,endAt=startedAt+durationMs,cycles=[];
+              while(Date.now()<endAt){
+                const cycle=cycles.length+1,cycleStartedAt=Date.now(),beforeHistory=editor.getShape('shape:c3-worker').meta.nodeRunHistory?.length||0;
+                window.__agentResidencyProgress={cycle,stage:'start',startedAt,cycleStartedAt};
+                await clickPrimary();
+                const waiting=await wait('waiting');
+                window.__agentResidencyProgress={cycle,stage:'human-wait',startedAt,cycleStartedAt,taskId:waiting.taskId};
+                await new Promise(done=>setTimeout(done,1000));
+                await clickPrimary();
+                const completed=await wait('completed');
+                while(editor.getShape('shape:c3-agent').props.exec==='running')await new Promise(done=>setTimeout(done,50));
+                await ensureCanvasSaved();
+                const afterHistory=editor.getShape('shape:c3-worker').meta.nodeRunHistory?.length||0;
+                if(afterHistory!==Math.min(beforeHistory+2,NODE_RUN_HISTORY_LIMIT))throw new Error('PER01_TOOL_HISTORY_DRIFT');
+                cycles.push({cycle,taskId:completed.taskId,cycleStartedAt,completedAt:Date.now(),workerHistory:afterHistory,waitKind:waiting.waitKind});
+                window.__agentResidencyProgress={cycle,stage:'complete',startedAt,completedAt:Date.now(),taskId:completed.taskId,workerHistory:afterHistory};
+                const nextAt=startedAt+cycles.length*intervalMs;
+                while(Date.now()<nextAt&&Date.now()<endAt)await new Promise(done=>setTimeout(done,Math.min(1000,nextAt-Date.now())));
+              }
+              while(Date.now()<endAt)await new Promise(done=>setTimeout(done,Math.min(1000,endAt-Date.now())));
+              await ensureCanvasSaved();
+              const lastTask=await inspect();
+              return {durationMs:Date.now()-startedAt,startedAt,completedAt:Date.now(),cycles,cycleCount:cycles.length,finalTaskId:lastTask?.taskId||null,finalTaskState:lastTask?.state||null,workerHistory:editor.getShape('shape:c3-worker').meta.nodeRunHistory?.length||0,rendererId:${active.webContents.id}};
+            })();
+            window.__agentResidencyFailure=null;
+            window.__agentResidencyRun.catch(error=>{const message=String(error?.message||''),reference=message.match(/^([A-Za-z_$][A-Za-z0-9_$]*) is not defined$/)?.[1];window.__agentResidencyFailure={name:String(error?.name||'unknown'),code:/^[A-Z0-9_]+$/.test(message)?message:'UNCLASSIFIED',...(reference?{reference}:{})};});
+            return {projectId,agentNodeId:'shape:c3-agent',workerNodeId:'shape:c3-worker',startedAt:window.__agentResidencyProgress.startedAt,targetSeconds:${agentResidencySeconds},cycleIntervalSeconds:60};
+          })()`)
+          const rendererPid = active.webContents.getOSProcessId()
+          writeFileSync(
+            processPath,
+            JSON.stringify({ mainPid: process.pid, rendererPid, rendererId: active.webContents.id })
+          )
+          let debuggerAttached = false
+          try {
+            active.webContents.debugger.attach('1.3')
+            await active.webContents.debugger.sendCommand('Performance.enable')
+            debuggerAttached = true
+          } catch {
+            debuggerAttached = false
+          }
+          let sampleCount = 0
+          let sampleErrors = 0
+          let lastScreenshotSlot = -1
+          let sampleInProgress = false
+          const sample = async (): Promise<void> => {
+            if (sampleInProgress) return
+            sampleInProgress = true
+            try {
+              const timestamp = Date.now()
+              const elapsedSeconds =
+                (timestamp - Number((setup as { startedAt?: number }).startedAt || timestamp)) /
+                1000
+              const page = await active.webContents.executeJavaScript(
+                `(async()=>{const queue=await import('/src/engine/resource-queue.ts');const tasks=queue.useResourceQueue.getState().tasks;const editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;return {jsHeapUsedBytes:performance.memory?.usedJSHeapSize??null,jsHeapTotalBytes:performance.memory?.totalJSHeapSize??null,domNodeCount:document.getElementsByTagName('*').length,canvasShapeCount:editor?.getCurrentPageShapes().length??0,queue:{total:tasks.length,queued:tasks.filter(task=>task.status==='queued').length,running:tasks.filter(task=>task.status==='running').length},progress:window.__agentResidencyProgress??null}})()`
+              )
+              const cdp = debuggerAttached
+                ? (
+                    (await active.webContents.debugger.sendCommand('Performance.getMetrics')) as {
+                      metrics?: Array<{ name: string; value: number }>
+                    }
+                  ).metrics
+                : undefined
+              const wantedMetrics = cdp?.filter((metric) =>
+                [
+                  'JSHeapUsedSize',
+                  'JSHeapTotalSize',
+                  'Documents',
+                  'Nodes',
+                  'JSEventListeners',
+                  'Frames'
+                ].includes(metric.name)
+              )
+              const processStats = await new Promise<unknown>((done) => {
+                const command = `$ids=@(${process.pid},${rendererPid}); Get-Process -Id $ids -ErrorAction SilentlyContinue | Select-Object Id,CPU,WorkingSet64,PrivateMemorySize64,HandleCount,@{Name='ThreadCount';Expression={$_.Threads.Count}} | ConvertTo-Json -Compress`
+                execFile(
+                  'powershell.exe',
+                  ['-NoProfile', '-Command', command],
+                  { windowsHide: true, timeout: 15000 },
+                  (error, stdout) => {
+                    if (error) return done({ error: 'OS_PROCESS_SAMPLE_FAILED' })
+                    try {
+                      const parsed = JSON.parse(stdout.trim()) as unknown
+                      done(Array.isArray(parsed) ? parsed : [parsed])
+                    } catch {
+                      done({ error: 'OS_PROCESS_SAMPLE_INVALID' })
+                    }
+                  }
+                )
+              })
+              const appMetrics = app
+                .getAppMetrics()
+                .filter((metric) => [process.pid, rendererPid].includes(metric.pid))
+                .map((metric) => ({
+                  pid: metric.pid,
+                  type: metric.type,
+                  cpu: metric.cpu,
+                  memory: metric.memory
+                }))
+              const processHandles =
+                (
+                  process as NodeJS.Process & { _getActiveHandles?: () => unknown[] }
+                )._getActiveHandles?.().length ?? null
+              const record = {
+                sample: sampleCount,
+                timestamp,
+                elapsedSeconds,
+                webContentsId: active.webContents.id,
+                mainPid: process.pid,
+                rendererPid,
+                mainMemory: process.memoryUsage(),
+                processHandles,
+                appMetrics,
+                cdpMetrics: wantedMetrics ?? null,
+                page,
+                osProcessStats: processStats
+              }
+              appendFileSync(samplePath, JSON.stringify(record) + '\n')
+              sampleCount += 1
+              const screenshotSlot = Math.floor(Math.max(0, elapsedSeconds) / 900)
+              if (screenshotSlot > lastScreenshotSlot) {
+                const screenshot = await active.webContents.capturePage()
+                const minute = screenshotSlot * 15
+                writeFileSync(
+                  join(directory, `residency-${String(minute).padStart(4, '0')}m.png`),
+                  screenshot.toPNG()
+                )
+                lastScreenshotSlot = screenshotSlot
+              }
+            } catch (error) {
+              sampleErrors += 1
+              appendFileSync(
+                samplePath,
+                JSON.stringify({
+                  sample: sampleCount,
+                  timestamp: Date.now(),
+                  error: String((error as Error)?.name ?? 'SAMPLE_FAILED')
+                }) + '\n'
+              )
+              sampleCount += 1
+            } finally {
+              sampleInProgress = false
+            }
+          }
+          await sample()
+          const sampler = setInterval(() => void sample(), 60000)
+          try {
+            const run = await active.webContents.executeJavaScript('window.__agentResidencyRun')
+            await sample()
+            if (
+              run.durationMs < agentResidencySeconds * 1000 ||
+              run.cycleCount !== Math.floor(agentResidencySeconds / 60)
+            )
+              throw new Error('PER01_TARGET_DURATION_OR_CYCLES_NOT_MET')
+            if (sampleErrors > 0 || sampleCount < Math.floor(agentResidencySeconds / 60) + 1)
+              throw new Error('PER01_RESOURCE_SAMPLING_INCOMPLETE')
+            const taskCount = (
+              getDb()
+                .prepare(
+                  'SELECT COUNT(*) AS count FROM flow_agent_tasks WHERE project_id=? AND agent_node_id=?'
+                )
+                .get(projectId, 'shape:c3-agent') as { count: number }
+            ).count
+            const commandCount = (
+              getDb()
+                .prepare(
+                  'SELECT COUNT(*) AS count FROM flow_commands WHERE project_id=? AND target_node_id=?'
+                )
+                .get(projectId, 'shape:c3-worker') as { count: number }
+            ).count
+            const screenshotCount = lastScreenshotSlot + 1
+            if (
+              taskCount !== run.cycleCount ||
+              commandCount !== run.cycleCount * 2 ||
+              screenshotCount < Math.floor(agentResidencySeconds / 900) + 1
+            )
+              throw new Error('PER01_DURABLE_FACTS_OR_SCREENSHOTS_MISMATCH')
+            report = {
+              ...(setup as object),
+              ...run,
+              status: 'pass',
+              taskCount,
+              commandCount,
+              sampleCount,
+              sampleErrors,
+              screenshotCount,
+              debuggerAttached,
+              evidenceFiles: [
+                'residency-samples.jsonl',
+                'residency-processes.json',
+                `residency-${String(lastScreenshotSlot * 15).padStart(4, '0')}m.png`
+              ]
+            }
+            writeFileSync(statePath, JSON.stringify(report))
+          } finally {
+            clearInterval(sampler)
+            if (debuggerAttached) active.webContents.debugger.detach()
+          }
+        } else {
+          const previous = JSON.parse(readFileSync(statePath, 'utf8')) as {
+            projectId: string
+            cycleCount: number
+            finalTaskId: string
+            workerHistory: number
+          }
+          report = await active.webContents.executeJavaScript(`(async()=>{${common}
+            const task=await inspect();
+            const workerHistory=editor.getShape('shape:c3-worker').meta.nodeRunHistory?.length||0;
+            const saved=value(await window.api.openProject(projectId));
+            if(task?.state!=='completed'||task.taskId!==${JSON.stringify(previous.finalTaskId)}||workerHistory!==${JSON.stringify(previous.workerHistory)})throw new Error('PER01_REOPEN_FACTS_CHANGED');
+            return {projectId,taskId:task.taskId,taskState:task.state,workerHistory,shapeCount:saved.nodes.length,persisted:true};
+          })()`)
+          const currentTasks = (
+            getDb()
+              .prepare(
+                'SELECT COUNT(*) AS count FROM flow_agent_tasks WHERE project_id=? AND agent_node_id=?'
+              )
+              .get(projectId, 'shape:c3-agent') as { count: number }
+          ).count
+          const currentCommands = (
+            getDb()
+              .prepare(
+                'SELECT COUNT(*) AS count FROM flow_commands WHERE project_id=? AND target_node_id=?'
+              )
+              .get(projectId, 'shape:c3-worker') as { count: number }
+          ).count
+          if (currentTasks !== previous.cycleCount || currentCommands !== previous.cycleCount * 2)
+            throw new Error('PER01_REOPEN_REPLAYED_WORK')
+          report = {
+            ...(report as object),
+            tasksUnchanged: true,
+            commandsUnchanged: true,
+            checks: [
+              'same renderer met two-hour run/wait/continue loop',
+              'per-minute process/heap/handle/queue sampling',
+              '15-minute screenshots captured',
+              'new process reopened final task and fixed outputs without replay'
+            ]
+          }
+        }
+      } else if (video) {
         const frame =
           firstFrame && phase === 'execute'
             ? await importMedia(projectId, join(directory, 'first-frame.png'))
@@ -794,6 +2162,82 @@ if (
           ;(report as { checks: string[] }).checks.push('feedback label/body select and drag')
         }
         if (phase === 'execute') writeFileSync(statePath, JSON.stringify(report))
+      } else if (agentOutputSet) {
+        const { acceptAgentOutputSet } = await import('./agent-output-set-acceptance')
+        report = await acceptAgentOutputSet({ window: active, directory, statePath, projectId, phase: phase! })
+      } else if (agentFixedInputVersion) {
+        const { acceptAgentFixedInputVersion } = await import('./agent-fixed-input-acceptance')
+        type Ast01Acceptance = {
+          projectId: string
+          taskId: string
+          sourceNodeId: string
+          agentNodeId: string
+          processorNodeId: string
+          v1VersionId: string
+          v2VersionId: string
+          assetId: string
+          v1Ordinal: number
+          v2Ordinal: number
+          selectedVersionId: string
+          state?: string
+          taskState?: string
+        }
+        const acceptance = await acceptAgentFixedInputVersion({ window: active, directory, statePath, projectId, phase: phase! }) as Ast01Acceptance
+        const row = getDb()
+          .prepare('SELECT task_id,snapshot_json,state,output_refs_json FROM flow_agent_tasks WHERE project_id=? AND agent_node_id=? AND task_id=?')
+          .get(projectId, acceptance.agentNodeId, acceptance.taskId) as { task_id: string; snapshot_json: string; state: string; output_refs_json: string } | undefined
+        if (!row) throw new Error('AST01_PERSISTED_TASK_MISSING')
+        const snapshot = JSON.parse(row.snapshot_json) as {
+          directInputs: Array<{ assetId: string; versionId: string; sourceNodeId: string; sourcePortId: string }>
+          targets: Array<{ nodeId: string; inputs: Array<{ assets: Array<{ assetId: string; versionId: string }> }> }>
+        }
+        const directInputVersionIds = snapshot.directInputs.map((ref) => ref.versionId)
+        const processor = snapshot.targets.find((target) => target.nodeId === acceptance.processorNodeId)
+        const targetInputVersionIds = processor?.inputs.flatMap((port) => port.assets.map((ref) => ref.versionId)) ?? []
+        if (!directInputVersionIds.includes(acceptance.v1VersionId) || !targetInputVersionIds.includes(acceptance.v1VersionId))
+          throw new Error('AST01_PERSISTED_V1_BINDING_MISMATCH')
+        const versions = getDb()
+          .prepare('SELECT version_id,asset_id,ordinal,value_json FROM flow_asset_versions WHERE project_id=? AND node_id=? AND port_id=? ORDER BY ordinal')
+          .all(projectId, acceptance.sourceNodeId, 'out-text') as Array<{ version_id: string; asset_id: string; ordinal: number; value_json: string }>
+        const v1 = versions.find((version) => version.version_id === acceptance.v1VersionId)
+        const v2 = versions.find((version) => version.version_id === acceptance.v2VersionId)
+        if (!v1 || !v2 || v1.asset_id !== acceptance.assetId || v2.asset_id !== acceptance.assetId || v1.ordinal !== 1 || v2.ordinal !== 2)
+          throw new Error('AST01_PERSISTED_ASSET_VERSIONS_INVALID')
+        if (JSON.parse(v1.value_json).text !== 'AST01_FIXED_V1' || JSON.parse(v2.value_json).text !== 'AST01_FIXED_V2')
+          throw new Error('AST01_PERSISTED_ASSET_CONTENT_INVALID')
+        const commands = getDb()
+          .prepare('SELECT command_json,target_node_id,state,receipt_json FROM flow_commands WHERE project_id=? AND task_id=? ORDER BY created_at,command_id')
+          .all(projectId, acceptance.taskId) as Array<{ command_json: string; target_node_id: string; state: string; receipt_json: string }>
+        const commandAudit = commands.map((command) => {
+          const parsed = JSON.parse(command.command_json) as { inputs: Array<{ assets: Array<{ versionId: string }> }> }
+          const receipt = JSON.parse(command.receipt_json) as { state: string; outputRefs: Array<{ versionId: string }> }
+          return { targetNodeId: command.target_node_id, state: command.state, inputVersionIds: parsed.inputs.flatMap((port) => port.assets.map((ref) => ref.versionId)), receiptState: receipt.state, outputVersionIds: receipt.outputRefs.map((ref) => ref.versionId) }
+        })
+        if (phase === 'execute' && (row.state !== 'waiting' || commands.length !== 0))
+          throw new Error('AST01_TOOL_STARTED_BEFORE_REOPEN')
+        if (phase === 'reopen') {
+          if (row.state !== 'completed' || commands.length !== 1 || commands[0].target_node_id !== acceptance.processorNodeId || commands[0].state !== 'committed')
+            throw new Error('AST01_RESUMED_COMMAND_NOT_COMMITTED')
+          if (!commandAudit[0].inputVersionIds.includes(acceptance.v1VersionId) || commandAudit[0].inputVersionIds.includes(acceptance.v2VersionId))
+            throw new Error('AST01_RESUMED_COMMAND_USED_WRONG_VERSION')
+          const outputAsset = getDb()
+            .prepare('SELECT value_json FROM flow_asset_versions WHERE project_id=? AND version_id=?')
+            .get(projectId, commandAudit[0].outputVersionIds[0]) as { value_json: string } | undefined
+          if (JSON.parse(outputAsset?.value_json ?? '{}').text !== 'AST01_FIXED_V1')
+            throw new Error('AST01_COMMITTED_OUTPUT_NOT_V1')
+        }
+        const persistedAudit = {
+          taskId: row.task_id,
+          taskState: row.state,
+          directInputVersionIds,
+          processorTargetInputVersionIds: targetInputVersionIds,
+          assetVersions: versions.filter((version) => [acceptance.v1VersionId, acceptance.v2VersionId].includes(version.version_id)).map((version) => ({ versionId: version.version_id, assetId: version.asset_id, ordinal: version.ordinal, value: JSON.parse(version.value_json) })),
+          commandCount: commands.length,
+          commands: commandAudit
+        }
+        report = { ...acceptance, persistedAudit }
+        writeFileSync(join(directory, `ast01-persisted-${phase}.json`), JSON.stringify(persistedAudit, null, 2))
+        writeFileSync(statePath, JSON.stringify(report))
       } else if (parallelReview) {
         const { acceptParallelReview } = await import('./parallel-review-acceptance')
         report = await acceptParallelReview({
@@ -805,15 +2249,47 @@ if (
         })
         if (phase === 'execute') writeFileSync(statePath, JSON.stringify(report))
       } else if (parallelMedia) {
-        const { acceptParallelMedia } = await import('./parallel-media-acceptance')
-        report = await acceptParallelMedia({
-          window: active,
-          directory,
-          projectId,
-          phase: phase!,
-          common
-        })
-        if (phase === 'execute') writeFileSync(statePath, JSON.stringify(report))
+        if (parallelQueueMedia) {
+          const { acceptParallelQueueMedia } = await import('./parallel-media-acceptance')
+          report = await acceptParallelQueueMedia({
+            window: active,
+            directory,
+            projectId,
+            phase: phase!,
+            common
+          })
+        } else {
+          const { acceptParallelMedia } = await import('./parallel-media-acceptance')
+          report = await acceptParallelMedia({
+            window: active,
+            directory,
+            projectId,
+            phase: phase!,
+            common
+          })
+        }
+        if (phase === 'execute') {
+          writeFileSync(statePath, JSON.stringify(report))
+          if (parallelMediaForcedExit) {
+            await window.webContents.executeJavaScript(`(async()=>{
+              const diagnostics=await import('/src/engine/diagnosticsReporter.ts');
+              await diagnostics.drainDiagnosticsEvents();
+              if(diagnostics.pendingDiagnosticsEventCount()||diagnostics.diagnosticsTransportDropCount())throw new Error('AGENT_DIAGNOSTICS_FLUSH_FAILED');
+            })()`)
+            await diagnostics.flushNow()
+            writeFileSync(
+              join(directory, 'parallel-media-forced-exit.json'),
+              JSON.stringify({
+                phase,
+                projectId,
+                taskId: (report as { taskId?: string }).taskId,
+                checkpointWritten: true,
+                diagnosticEventsFlushed: true
+              })
+            )
+            await new Promise<void>(() => {})
+          }
+        }
       } else if (videoRework) {
         const { acceptVideoRework } = await import('./video-rework-acceptance')
         report = await acceptVideoRework({
@@ -948,19 +2424,71 @@ if (
               {id:'shape:c3-second',nodeType:'agent',title:'整理 Agent',text:'加载 result-check Skill。执行 shape:c3-p2 两次，每次观察真实回执；两次后 wait_for_human。humanAccepted=true 后提交人工 selectedOutputs 或第二次回执的 outputRefs，不再执行。',config:JSON.stringify(specialist('shape:c3-second','shape:c3-p2','collaborative')),x:850,y:80},
               {id:'shape:c3-p1',nodeType:'processor',title:'分析处理',config:JSON.stringify({operation:'pass'}),x:450,y:650},
               {id:'shape:c3-p2',nodeType:'processor',title:'整理处理',config:JSON.stringify({operation:'pass'}),x:850,y:650},
-              {id:'shape:c3-agent',nodeType:'agent',title:'主 Agent',text:'先把材料交给分析 Agent，再把分析的真实成果交给整理 Agent。分派目标与完成条件保持专业节点原要求，不添加更多步骤。两者都真实完成后，仅提交整理 Agent 成果。',config:JSON.stringify({schemaVersion:1,role:'coordinator',interactionMode:'autonomous',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'agent.dispatch',version:'1'}],allowedNodeIds:['shape:c3-first','shape:c3-second'],maxSteps:8,relations:[{relationId:'state',kind:'observes',sourceNodeId:'shape:c3-agent',targetNodeId:'shape:c3-state'}]}),x:50,y:400},
+              {id:'shape:c3-agent',nodeType:'agent',title:'主 Agent',text:${JSON.stringify(agentHum07Pause ? 'HUM07_PAUSE_FIXTURE：先把材料交给分析 Agent，再把分析的真实成果交给整理 Agent。分派目标与完成条件保持专业节点原要求。' : '先把材料交给分析 Agent，再把分析的真实成果交给整理 Agent。分派目标与完成条件保持专业节点原要求，不添加更多步骤。两者都真实完成后，仅提交整理 Agent 成果。')},config:JSON.stringify({schemaVersion:1,role:'coordinator',interactionMode:'autonomous',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'agent.dispatch',version:'1'}],allowedNodeIds:['shape:c3-first','shape:c3-second'],maxSteps:8,relations:[{relationId:'state',kind:'observes',sourceNodeId:'shape:c3-agent',targetNodeId:'shape:c3-state'}]}),x:50,y:400},
               {id:'shape:c3-state',nodeType:'state-machine',title:'Flow 阶段',config:JSON.stringify({schemaVersion:1,initialState:'draft',states:['draft','working','waiting','completed'],transitions:[{from:'draft',event:'flow.started',to:'working'},...['agent.dispatched','agent.completed','human.wait','flow.paused','flow.completed'].map(event=>({from:'working',event,to:event==='flow.completed'?'completed':['human.wait','flow.paused'].includes(event)?'waiting':'working'})),{from:'waiting',event:'human.continue',to:'working'}],relations:[]}),x:1250,y:80}
             ];
             nodes.forEach(({id,x,y,...props})=>editor.createShape({id,type:'node-card',x,y,props}));
             const {createEdge}=await import('/src/canvas/graph.ts');
             for(const [from,port,to,target] of [['shape:c3-source','out-text','shape:c3-first','in-text'],['shape:c3-source','out-text','shape:c3-p1','in-value'],['shape:c3-first','out-text','shape:c3-second','in-text'],['shape:c3-first','out-text','shape:c3-p2','in-value']])createEdge(editor,{shapeId:from,portId:port},{shapeId:to,portId:target});
+            if(${JSON.stringify(agentHum07Pause)}){
+              const childConfig={schemaVersion:1,role:'specialist',interactionMode:'autonomous',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'node.execute',version:'1'}],allowedNodeIds:['shape:hum07-stop-processor'],maxSteps:4,relations:[]};
+              const rootConfig={schemaVersion:1,role:'coordinator',interactionMode:'autonomous',modelDefinitionId:'agent-test-model',skills:[],tools:[{id:'agent.dispatch',version:'1'}],allowedNodeIds:['shape:hum07-stop-child'],maxSteps:4,relations:[{relationId:'stop-state',kind:'observes',sourceNodeId:'shape:hum07-stop-root',targetNodeId:'shape:hum07-stop-state'}]};
+              editor.createShape({id:'shape:hum07-stop-processor',type:'node-card',x:1750,y:900,props:{nodeType:'processor',title:'停止后不得运行的处理器',config:JSON.stringify({operation:'pass'})}});
+              editor.createShape({id:'shape:hum07-stop-state',type:'node-card',x:1750,y:1300,props:{nodeType:'state-machine',title:'停止场景状态',config:JSON.stringify({schemaVersion:1,initialState:'draft',states:['draft','working','waiting','completed','cancelled'],transitions:[{from:'draft',event:'flow.started',to:'working'},...['agent.dispatched','agent.completed','human.wait','flow.paused','flow.completed','flow.cancelled'].map(event=>({from:'working',event,to:event==='flow.completed'?'completed':event==='flow.cancelled'?'cancelled':['human.wait','flow.paused'].includes(event)?'waiting':'working'})),{from:'waiting',event:'human.continue',to:'working'},{from:'waiting',event:'flow.cancelled',to:'cancelled'}],relations:[]})}});
+              editor.createShape({id:'shape:hum07-stop-child',type:'node-card',x:1300,y:900,props:{nodeType:'agent',title:'停止场景专业 Agent',text:'执行授权处理器并交付回执。',config:JSON.stringify(childConfig)}});
+              editor.createShape({id:'shape:hum07-stop-root',type:'node-card',x:1300,y:1300,props:{nodeType:'agent',title:'HUM-07 停止主 Agent',text:'HUM07_STOP_FIXTURE：把材料交给授权专业 Agent 并等待完成。',config:JSON.stringify(rootConfig)}});
+              createEdge(editor,{shapeId:'shape:c3-source',portId:'out-text'},{shapeId:'shape:hum07-stop-processor',portId:'in-value'});
+              createEdge(editor,{shapeId:'shape:c3-source',portId:'out-text'},{shapeId:'shape:hum07-stop-child',portId:'in-text'});
+              createEdge(editor,{shapeId:'shape:c3-source',portId:'out-text'},{shapeId:'shape:hum07-stop-root',portId:'in-text'});
+            }
             await ensureCanvasSaved();await delay();clickNode('shape:c3-agent');
+            let pauseStopAudit=null;
+            if(${JSON.stringify(agentHum07Pause)}){
+              await until('shape:c3-agent','running');
+              const controls=()=>[...document.querySelectorAll('[data-node-id="shape:c3-agent"] button')];
+              const pauseButton=controls().find(button=>button.textContent.trim()==='暂停派发');
+              const runningStop=controls().find(button=>button.textContent.trim()==='停止任务');
+              if(!pauseButton||!runningStop||pauseButton===runningStop)throw new Error('HUM07_RUNNING_CONTROLS_NOT_DISTINCT');
+              await delay();pauseButton.click();
+              const paused=await until('shape:c3-agent','waiting');
+              const unstartedReply=await window.api.inspectFlowAgent({projectId,nodeId:'shape:c3-first'});
+              if(!unstartedReply.ok&&unstartedReply.error.code!=='AGENT_TASK_NOT_FOUND')throw new Error('HUM07_CHILD_INSPECTION_FAILED');
+              const noDispatch=(!unstartedReply.ok||!unstartedReply.data)&&paused.children?.length===0&&(editor.getShape('shape:c3-p1').meta.nodeRunHistory?.length??0)===0&&(editor.getShape('shape:c3-p2').meta.nodeRunHistory?.length??0)===0;
+              if(!noDispatch)throw new Error('HUM07_PAUSE_DISPATCHED_CHILD');
+              let resumeButton,waitingStop;
+              for(let i=0;i<40;i++){const waitingControls=controls();resumeButton=waitingControls.find(button=>button.textContent.trim()==='确认并继续');waitingStop=waitingControls.find(button=>button.textContent.trim()==='停止任务');if(resumeButton&&waitingStop)break;await delay();}
+              if(!resumeButton||!waitingStop||resumeButton===waitingStop)throw new Error('HUM07_PAUSED_CONTROLS_NOT_DISTINCT');
+              resumeButton.click();
+              let resumed=false;
+              for(let i=0;i<1800;i++){const current=await inspectNode('shape:c3-agent');if(current?.state==='waiting'&&current.waitRevision>paused.waitRevision){resumed=true;break;}if(current&&['blocked','failed','cancelled'].includes(current.state))throw new Error(current.code||'HUM07_CONTINUE_FAILED');await delay();}
+              if(!resumed)throw new Error('HUM07_CONTINUE_DID_NOT_ADVANCE');
+              pauseStopAudit={pauseHeldDispatch:true,controlsDistinct:true,continuedAfterPause:true,pauseDecisionCount:paused.decisions,childrenBeforeContinue:paused.children.length,resumeButton:'确认并继续',stopButton:'停止任务'};
+            }
             const root=await until('shape:c3-agent','waiting');
             if(root.children?.length!==2||root.children[0].state!=='completed'||root.children[1].state!=='waiting')throw new Error('C33_CHILD_FACTS_INVALID');
             for(const id of ['shape:c3-p1','shape:c3-p2'])if(editor.getShape(id).meta.nodeRunHistory?.length!==2)throw new Error('C33_TWO_TOOL_PATH_MISSING');
             if((await inspectNode('shape:c3-state')).phase!=='waiting')throw new Error('C33_STATE_NOT_WAITING');
             const blocked=await window.api.checkFlowNodeAvailability({projectId,nodeId:'shape:c3-p2'});if(blocked.ok||blocked.error.code!=='FLOW_CONTROL_OCCUPIED')throw new Error('C33_MANUAL_SCOPE_BYPASS');
-            await ensureCanvasSaved();return {projectId,taskId:root.taskId,checks:['main canvas start','two independent specialist tasks','fixed first-to-second asset handoff','two tools per specialist','node-local human wait','authoritative state waiting','manual scope occupancy']};
+            let stopAudit=null;
+            if(${JSON.stringify(agentHum07Pause)}){
+              await ensureCanvasSaved();editor.select('shape:hum07-stop-root');editor.zoomToSelection();
+              const start=controls=>([...document.querySelectorAll('[data-node-id="shape:hum07-stop-root"] button')].find(button=>button.textContent.trim()==='启动任务'));
+              const startButton=start();if(!startButton||startButton.disabled)throw new Error('HUM07_STOP_TASK_START_UNAVAILABLE');startButton.click();
+              await until('shape:hum07-stop-root','running');await delay();
+              const stopButton=[...document.querySelectorAll('[data-node-id="shape:hum07-stop-root"] button')].find(button=>button.textContent.trim()==='停止任务');
+              const pauseControl=[...document.querySelectorAll('[data-node-id="shape:hum07-stop-root"] button')].find(button=>button.textContent.trim()==='暂停派发');
+              if(!stopButton||!pauseControl||stopButton===pauseControl)throw new Error('HUM07_STOP_CONTROLS_NOT_DISTINCT');
+              const stopClickedAt=performance.now();stopButton.click();
+              let stopUiFeedbackAt=null;for(let i=0;i<100;i++){const status=document.querySelector('[data-node-id="shape:hum07-stop-root"] .agent-flow-pending');if(status?.textContent?.includes('已停止')){stopUiFeedbackAt=performance.now();break;}if(i===99)throw new Error('HUM07_STOP_UI_FEEDBACK_TIMEOUT');await delay();}
+              let stopped;for(let i=0;i<100;i++){stopped=await inspectNode('shape:hum07-stop-root');if(stopped?.state==='cancelled')break;if(i===99)throw new Error('HUM07_STOP_TASK_CANCEL_TIMEOUT');await delay();}
+              const stopUiFeedbackLatencyMs=Math.round(stopUiFeedbackAt-stopClickedAt);const stopTaskObservedLatencyMs=Math.round(performance.now()-stopClickedAt);const stopCancelledAtUtc=new Date().toISOString();await new Promise(resolve=>setTimeout(resolve,2400));
+              stopped=await inspectNode('shape:hum07-stop-root');
+              const stopChildReply=await window.api.inspectFlowAgent({projectId,nodeId:'shape:hum07-stop-child'});if(!stopChildReply.ok&&stopChildReply.error.code!=='AGENT_TASK_NOT_FOUND')throw new Error('HUM07_STOP_CHILD_INSPECTION_FAILED');const stopChild=stopChildReply.ok?stopChildReply.data:null;
+              const stopProcessorRuns=editor.getShape('shape:hum07-stop-processor').meta.nodeRunHistory?.length||0;
+              if(stopped?.state!=='cancelled'||stopChild||stopProcessorRuns!==0)throw new Error('HUM07_STOP_DISPATCHED_SUCCESSOR');
+              await ensureCanvasSaved();stopAudit={stopTaskId:stopped.taskId,stopTaskState:stopped.state,stopClickedAtPerformanceMs:Math.round(stopClickedAt),stopUiFeedbackLatencyMs,stopTaskObservedLatencyMs,stopCancelledAtUtc,stopChildTaskExists:false,stopProcessorRuns};
+            }
+            await ensureCanvasSaved();return {projectId,taskId:root.taskId,pauseStopAudit,stopAudit,stopTaskId:stopAudit?.stopTaskId||null,stopTaskState:stopAudit?.stopTaskState||null,stopCancelledAtUtc:stopAudit?.stopCancelledAtUtc||null,checks:['main canvas start','two independent specialist tasks','fixed first-to-second asset handoff','two tools per specialist','node-local human wait','authoritative state waiting','manual scope occupancy',...(pauseStopAudit?['visible pause and stop controls are distinct','pause at an in-flight decision prevents child dispatch','explicit continue releases the paused coordinator','stop cancels a later in-flight handoff without dispatching its child']:[])]};
           }
           const root=await until('shape:c3-agent','waiting');
           const child=await until('shape:c3-second','waiting');
@@ -976,7 +2504,9 @@ if (
           if((await inspectNode('shape:c3-state')).phase!=='completed')throw new Error('C33_STATE_NOT_COMPLETED');
           const outputs=(await import('/src/nodes/nodeValues.ts')).projectNodeOutputs(editor.getShape('shape:c3-agent'));if(outputs['out-text']?.text!=='private-c3-material')throw new Error('C33_FORMAL_OUTPUT');
           const saved=value(await window.api.openProject(projectId));const version=value(await window.api.submitFlowAsset({projectId,nodeId:'shape:c3-agent',portId:'out-text',submissionId:'c33-final-publish',expectedGraphVersion:saved.meta.graphVersion,traceId:'c33-publish',spanId:'c33-span'}));if(version.value.text!=='private-c3-material')throw new Error('C33_OUTPUT_INVALID');
-          return {taskId:done.taskId,checks:['new process specialist selection and explicit continue','main observes child completion','no tool or specialist replay','authoritative state completed','formal main output','verified final asset publication']};
+          let stopTaskId=null,stopTaskState=null,stopChildTaskExists=false,stopProcessorRuns=0;
+          if(${JSON.stringify(agentHum07Pause)}){const stopped=await inspectNode('shape:hum07-stop-root'),childReply=await window.api.inspectFlowAgent({projectId,nodeId:'shape:hum07-stop-child'});if(!childReply.ok&&childReply.error.code!=='AGENT_TASK_NOT_FOUND')throw new Error('HUM07_STOP_CHILD_INSPECTION_FAILED_ON_REOPEN');const child=childReply.ok?childReply.data:null;stopTaskId=stopped?.taskId||null;stopTaskState=stopped?.state||null;stopChildTaskExists=!!child;stopProcessorRuns=editor.getShape('shape:hum07-stop-processor').meta.nodeRunHistory?.length||0;if(stopTaskId!==${JSON.stringify(null)}&&stopTaskState!=='cancelled')throw new Error('HUM07_STOP_TERMINAL_CHANGED_ON_REOPEN');if(stopChildTaskExists||stopProcessorRuns!==0)throw new Error('HUM07_STOP_SIDE_EFFECT_AFTER_REOPEN');}
+          return {taskId:done.taskId,stopTaskId,stopTaskState,stopChildTaskExists,stopProcessorRuns,checks:['new process specialist selection and explicit continue','main observes child completion','no tool or specialist replay','authoritative state completed','formal main output','verified Agent publication',...(stopTaskId?['stopped coordinator remains cancelled after reopen','stopped child is absent and processor has no run']:[])]};
         })()`)
         if (recovery && phase === 'reopen') {
           const originalSave = dialog.showSaveDialog,
@@ -1062,6 +2592,25 @@ if (
           return {projectId,taskId:task.taskId,history,checks:['Skill/tool settings selection','direct declared Agent input','canvas start','Skill progressive load','two public processor receipts','persistent human wait']};
         })()`)
         if (collaboration) {
+          const originalRecord = getDb()
+            .prepare(
+              'SELECT task_id,snapshot_json,skills_json FROM flow_agent_tasks WHERE project_id=? AND agent_node_id=? ORDER BY rowid DESC LIMIT 1'
+            )
+            .get(projectId, 'shape:c3-agent') as {
+            task_id: string
+            snapshot_json: string
+            skills_json: string
+          }
+          const originalCommands = (): unknown =>
+            getDb()
+              .prepare(
+                'SELECT command_json,receipt_json FROM flow_commands WHERE project_id=? AND task_id=? ORDER BY command_id'
+              )
+              .all(projectId, originalRecord.task_id)
+          const digest = (value: unknown): string =>
+            createHash('sha256').update(JSON.stringify(value)).digest('hex')
+          const oldSnapshotHash = digest(originalRecord)
+          const oldCommandsHash = digest(originalCommands())
           const progress = setInterval(() => {
             void active.webContents
               .executeJavaScript(
@@ -1090,11 +2639,20 @@ if (
             window.__c32stage='note';await fill('讨论或反馈','private-c3-discussion');await button('保存讨论');
             for(let i=0;(await get()).revision<1;i++){if(i>100)throw new Error('COLLABORATION_NOTE_TIMEOUT');await delay();}
             let before=await get();if(before.revision!==1)throw new Error('COLLABORATION_NOTE_MISSING');
-            window.__c32stage='discussion';await fill('讨论或反馈','private-c3-discuss-with-ai');await button('与 Agent 讨论');
-            for(let i=0;(await get()).revision<2;i++){if(i>300)throw new Error('COLLABORATION_REPLY_TIMEOUT');await delay();}
-            if((editor.getShape('shape:c3-processor').meta.nodeRunHistory?.length||0)!==2)throw new Error('COLLABORATION_IMPLICIT_EXECUTION');
+            const discussionTaskBefore=await inspect();
+            const discussionGraph=()=>JSON.stringify(editor.getCurrentPageShapes().filter(s=>s.type==='node-card').map(s=>({id:s.id,type:s.props.nodeType,text:s.props.text,config:s.props.config,fixed:s.meta.flowAssetRef,pinned:s.meta.pinnedOutput})).sort((a,b)=>a.id.localeCompare(b.id)));
+            const discussionGraphBefore=discussionGraph();
+            for(let round=0;round<3;round++){
+              window.__c32stage='discussion-'+(round+1);await fill('讨论或反馈','private-c3-discuss-with-ai-'+round);await button('与 Agent 讨论');
+              for(let i=0;(await get()).revision<round+2;i++){if(i>300)throw new Error('COLLABORATION_REPLY_TIMEOUT');await delay();}
+              const observed=await inspect();
+              if(observed.taskId!==discussionTaskBefore.taskId||observed.state!=='waiting'||observed.decisions!==discussionTaskBefore.decisions||observed.tools!==discussionTaskBefore.tools)throw new Error('COLLABORATION_DISCUSSION_TASK_CHANGED');
+              if(discussionGraph()!==discussionGraphBefore)throw new Error('COLLABORATION_DISCUSSION_GRAPH_CHANGED');
+              if((editor.getShape('shape:c3-processor').meta.nodeRunHistory?.length||0)!==2)throw new Error('COLLABORATION_IMPLICIT_EXECUTION');
+            }
+            const discussionAudit={rounds:3,taskId:discussionTaskBefore.taskId,decisionsBefore:discussionTaskBefore.decisions,decisionsAfter:(await inspect()).decisions,toolsBefore:discussionTaskBefore.tools,toolsAfter:(await inspect()).tools,toolHistoryBefore:2,toolHistoryAfter:editor.getShape('shape:c3-processor').meta.nodeRunHistory?.length||0,semanticGraphUnchanged:discussionGraph()===discussionGraphBefore};
             window.__c32stage='feedback';await fill('讨论或反馈','private-c3-human-feedback');await button('提交意见与选择');
-            for(let i=0;(await get()).revision<3;i++){if(i>100)throw new Error('COLLABORATION_SUBMIT_TIMEOUT');await delay();}
+            for(let i=0;(await get()).revision<5;i++){if(i>100)throw new Error('COLLABORATION_SUBMIT_TIMEOUT');await delay();}
             const original=await get();
             window.__c32stage='revision';await fill('新目标',editor.getShape('shape:c3-agent').props.text+' 新修订：保持同样两步处理与人工等待。');
             await button('采用为新要求');
@@ -1114,10 +2672,50 @@ if (
             for(let i=0;(await get()).revision<1;i++){if(i>100)throw new Error('COLLABORATION_FINAL_FEEDBACK');await delay();}
             const selected=(await get()).messages.at(-1);if(selected?.kind!=='submit')throw new Error('COLLABORATION_SELECTION_NOT_SAVED');
             panel.getState().close();await ensureCanvasSaved();
-            return {projectId,taskId:(await inspect()).taskId,history,checks:['node-local saved discussion','explicit AI discussion without tool execution','persistent human feedback','new immutable task revision prepared without execution','stale response rejected','explicit revised task launch','two more public tools']};
+            return {projectId,taskId:(await inspect()).taskId,history,discussionAudit,checks:['node-local saved discussion','three explicit AI discussions without task budget, graph or tool changes','persistent human feedback','new immutable task revision prepared without execution','stale response rejected','explicit revised task launch','two more public tools']};
           })()`)
           } finally {
             clearInterval(progress)
+          }
+          const afterRecord = getDb()
+            .prepare(
+              'SELECT task_id,snapshot_json,skills_json FROM flow_agent_tasks WHERE project_id=? AND task_id=?'
+            )
+            .get(projectId, originalRecord.task_id)
+          if (
+            digest(afterRecord) !== oldSnapshotHash ||
+            digest(originalCommands()) !== oldCommandsHash
+          )
+            throw new Error('COLLABORATION_OLD_FACTS_MUTATED')
+          const revisionAudit = {
+            oldTaskId: originalRecord.task_id,
+            oldSnapshotHash,
+            oldCommandsHash,
+            unchangedAfterRevision: true
+          }
+          writeFileSync(
+            join(directory, 'collaboration-immutability.json'),
+            JSON.stringify(revisionAudit)
+          )
+          const originalTaskSnapshot = JSON.parse(originalRecord.snapshot_json) as {
+            traceId?: string
+          }
+          const currentTaskId = (report as { taskId?: string }).taskId
+          const currentTaskRecord = currentTaskId
+            ? (getDb()
+                .prepare(
+                  'SELECT snapshot_json FROM flow_agent_tasks WHERE project_id=? AND task_id=?'
+                )
+                .get(projectId, currentTaskId) as { snapshot_json: string } | undefined)
+            : undefined
+          const currentTaskSnapshot = currentTaskRecord
+            ? (JSON.parse(currentTaskRecord.snapshot_json) as { traceId?: string })
+            : undefined
+          report = {
+            ...(report as object),
+            revisionAudit,
+            originalTaskSnapshotTraceId: originalTaskSnapshot.traceId,
+            currentTaskSnapshotTraceId: currentTaskSnapshot?.traceId
           }
         }
         writeFileSync(statePath, JSON.stringify(report))
@@ -1168,6 +2766,37 @@ if (
           return {taskId:done.taskId,checks:['new process human continue','observed tools not replayed','declared Agent output','fixed connected asset','verified Agent publication']};
         })()`)
         if (collaboration) {
+          const prior = JSON.parse(
+            readFileSync(join(directory, 'collaboration-immutability.json'), 'utf8')
+          ) as { oldTaskId: string; oldSnapshotHash: string; oldCommandsHash: string }
+          const snapshot = getDb()
+            .prepare(
+              'SELECT task_id,snapshot_json,skills_json FROM flow_agent_tasks WHERE project_id=? AND task_id=?'
+            )
+            .get(projectId, prior.oldTaskId)
+          const commands = getDb()
+            .prepare(
+              'SELECT command_json,receipt_json FROM flow_commands WHERE project_id=? AND task_id=? ORDER BY command_id'
+            )
+            .all(projectId, prior.oldTaskId)
+          const digest = (value: unknown): string =>
+            createHash('sha256').update(JSON.stringify(value)).digest('hex')
+          const discussions = getDb()
+            .prepare(
+              "SELECT COUNT(*) AS count FROM flow_agent_collaboration e JOIN flow_agent_tasks t ON t.thread=e.thread WHERE t.project_id=? AND t.task_id=? AND json_extract(e.body_json,'$.action')='discuss'"
+            )
+            .get(projectId, prior.oldTaskId) as { count: number }
+          if (
+            digest(snapshot) !== prior.oldSnapshotHash ||
+            digest(commands) !== prior.oldCommandsHash ||
+            discussions.count !== 3
+          )
+            throw new Error('COLLABORATION_REOPEN_FACTS_CHANGED')
+          report = {
+            ...(report as object),
+            originalFactsRestored: true,
+            discussionRecordsAfterReopen: discussions.count
+          }
           const chosen = getDb()
             .prepare(
               "SELECT body_json FROM flow_agent_collaboration WHERE json_extract(body_json,'$.action')='submit' ORDER BY rowid DESC LIMIT 1"
@@ -1205,6 +2834,9 @@ if (
           : 'AGENT_ACCEPTANCE_FAILED'
       let acceptanceStage: unknown
       let bindingChanges: unknown
+      let residencyState: unknown
+      let panelChurnFailures: unknown
+        let per02Debug: unknown
       try {
         acceptanceStage = await window?.webContents.executeJavaScript(
           'window.__reviewAcceptanceStage'
@@ -1212,6 +2844,22 @@ if (
         bindingChanges = await window?.webContents.executeJavaScript(
           'window.__reviewBindingChanges'
         )
+        if (agentResidency)
+          residencyState = await window?.webContents.executeJavaScript(
+            '({progress:window.__agentResidencyProgress??null,failure:window.__agentResidencyFailure??null})'
+          )
+        if (agentPanelChurn)
+          panelChurnFailures = await window?.webContents.executeJavaScript(
+            'window.__per04Failures??[]'
+          )
+        if (agentPerfMatrix)
+          await window?.webContents
+            .capturePage()
+            .then((image) => writeFileSync(join(directory, 'agent-perf-failure.png'), image.toPNG()))
+        if (agentPerfMatrix)
+          per02Debug = await window?.webContents.executeJavaScript(
+            `(()=>{const last=window.__per02LastInput||null;const editor=window.__per02Editor;return {last,camera:(editor?.getCamera?.()||null),target:last?.targetId?(()=>{const shape=editor.getShape(last.targetId),element=document.querySelector('[data-node-id="'+last.targetId+'"] .agent-flow-summary'),rect=element?.getBoundingClientRect(),hit=last.point?document.elementFromPoint(last.point.x,last.point.y):null;return {shape:shape?{x:shape.x,y:shape.y}:null,rect:rect?{x:rect.x,y:rect.y,width:rect.width,height:rect.height}:null,hit:hit?{tag:hit.tagName,classes:String(hit.className||''),text:(hit.textContent||'').slice(0,80)}:null,selectedIds:editor.getSelectedShapeIds()}})():null}})()`
+          )
       } catch {
         /* Safe fixture stage only. */
       }
@@ -1220,7 +2868,25 @@ if (
         stage,
         ...(typeof acceptanceStage === 'string' ? { acceptanceStage } : {}),
         ...(Array.isArray(bindingChanges) ? { bindingChanges } : {}),
+        ...(residencyState ? { residencyState } : {}),
+        ...(per02Debug ? { per02Debug } : {}),
+        ...(Array.isArray(panelChurnFailures) ? { rendererFailures: panelChurnFailures } : {}),
         errorName: error instanceof Error ? error.name : 'unknown',
+        ...(agentPanelChurn && error instanceof Error
+          ? { testFailureMessage: error.message.slice(0, 240) }
+          : {}),
+        ...(agentPerfMatrix && error instanceof Error
+          ? { testFailureMessage: error.message.slice(0, 240) }
+          : {}),
+        ...(agentFixedInputVersion && error instanceof Error
+          ? { testFailureMessage: error.message.slice(0, 240) }
+          : {}),
+        ...(agentRun06Fault && error instanceof Error
+          ? { testFailureMessage: error.message.slice(0, 240) }
+          : {}),
+        ...(parallelQueueMedia && error instanceof Error
+          ? { testFailureMessage: error.message.slice(0, 240) }
+          : {}),
         nativeCode:
           typeof (error as { code?: unknown })?.code === 'string' &&
           /^[A-Z0-9_]+$/.test((error as { code: string }).code)

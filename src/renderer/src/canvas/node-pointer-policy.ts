@@ -8,6 +8,11 @@ export function nodeTextField(target: Element): HTMLInputElement | HTMLTextAreaE
     : null
 }
 
+/** Read-only result text keeps native drag selection instead of starting canvas movement. */
+export function nodeSelectableText(target: Element): boolean {
+  return Boolean(target.closest('[data-node-selectable-text="true"]'))
+}
+
 export function nodeOwnsPointer(target: Element): boolean {
   const control = target.closest(
     'button, select, a, input[type="checkbox"], input[type="radio"], input[type="range"], input[type="file"], input[type="color"], [role="slider"], [role="combobox"], [contenteditable="true"], .port-dot, .crop-inline-canvas, [data-node-pointer="control"]'

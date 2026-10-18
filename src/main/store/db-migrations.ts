@@ -8,7 +8,7 @@ export interface MigrationDatabase {
   pragma(statement: string, options?: { simple?: boolean }): unknown
 }
 
-export const DB_SCHEMA_VERSION = 17
+export const DB_SCHEMA_VERSION = 18
 
 const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
@@ -417,6 +417,24 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
     database.exec(`CREATE TABLE process_locks (
       resource TEXT PRIMARY KEY, token TEXT NOT NULL, pid INTEGER NOT NULL
     );`)
+  },
+  // M18: persist Agent tool-call proof against capability-relevant model/connection revisions.
+  (database) => {
+    database.exec(`
+      ALTER TABLE model_connections ADD COLUMN agent_tool_calling_revision INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE model_definitions ADD COLUMN agent_tool_calling_revision INTEGER NOT NULL DEFAULT 0;
+      CREATE TABLE agent_tool_calling_validations (
+        connection_id TEXT NOT NULL,
+        model_definition_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        message TEXT,
+        checked_at TEXT NOT NULL,
+        verified_at TEXT,
+        connection_revision INTEGER NOT NULL,
+        model_revision INTEGER NOT NULL,
+        PRIMARY KEY(connection_id, model_definition_id)
+      );
+    `)
   }
 ]
 

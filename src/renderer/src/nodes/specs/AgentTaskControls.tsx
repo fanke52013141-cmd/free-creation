@@ -10,6 +10,8 @@ import { projectAgentOutputs } from '@shared/agent-flow/agent-outputs'
 import { useNodePanelStore } from '../../stores/nodePanel'
 import { useResourceQueue } from '../../engine/resource-queue'
 import { flowAgentFailureMessage } from '@shared/agent-flow/failure-messages'
+import { getAgentModelBindingStatus } from '@shared/agent-flow/node-contracts'
+import { preflightAgentDecisionModels } from '../../engine/agent-model-preflight'
 
 export function AgentTaskControls({ shape }: Pick<NodeBodyProps, 'shape'>): React.JSX.Element {
   const editor = useEditor()
@@ -84,15 +86,39 @@ export function AgentTaskControls({ shape }: Pick<NodeBodyProps, 'shape'>): Reac
     }
     setPending(true)
     try {
+      let actionableTask = task
+      if (getAgentModelBindingStatus(shape.props.config) === 'missing') {
+        if (window.api.inspectFlowAgent) {
+          const inspected = await window.api.inspectFlowAgent({ projectId, nodeId: shape.id })
+          if (!inspected.ok) {
+            setError(inspected.error.message)
+            return
+          }
+          actionableTask = inspected.data
+          setTask(inspected.data)
+        }
+        if (!['waiting', 'blocked'].includes(actionableTask?.state ?? '')) {
+          setError('请在节点设置中选择决策模型。')
+          return
+        }
+      }
+      const modelPreflightError = await preflightAgentDecisionModels([shape.props.config])
+      if (modelPreflightError) {
+        setError(modelPreflightError)
+        return
+      }
       await ensureCanvasSaved()
       // Resume selection is a control fact from main, not a canvas config rewrite.
-      if (task) {
+      if (actionableTask) {
         editor.updateShape({
           id: shape.id,
           type: 'node-card',
           meta: {
             ...shape.meta,
-            agentTask: JSON.stringify({ ...task, recoveryAction: restore ? 'restore' : undefined })
+            agentTask: JSON.stringify({
+              ...actionableTask,
+              recoveryAction: restore ? 'restore' : undefined
+            })
           }
         })
       }
@@ -144,7 +170,7 @@ export function AgentTaskControls({ shape }: Pick<NodeBodyProps, 'shape'>): Reac
         </p>
       ))}
       {Object.values(outputs).map((value, index) => (
-        <pre className="agent-flow-output" key={index}>
+        <pre className="agent-flow-output" data-node-selectable-text="true" key={index}>
           {value?.kind === 'json'
             ? JSON.stringify(value.data, null, 2)
             : value && 'text' in value

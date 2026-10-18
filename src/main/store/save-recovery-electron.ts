@@ -1,10 +1,15 @@
 // Isolated hidden acceptance only; never imported by the application.
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, session } from 'electron'
 import { basename, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import * as fs from 'node:fs'
 import { createRequire } from 'node:module'
-import { createProject, openProject } from './projects.repo'
+import {
+  createProject,
+  openProject,
+  readRecoveryCopy,
+  saveProject
+} from './projects.repo'
 import { getDb, closeDb, setSetting } from './db'
 import { registerProjectIpc } from '../ipc/project.ipc'
 import { registerLibraryIpc } from '../ipc/library.ipc'
@@ -22,6 +27,8 @@ import { initDiagnosticsService } from '../diagnostics/service'
 import { setGatewayEventSink } from '../diagnostics/gateway-events'
 import { IPC } from '../../shared/contracts'
 import { verifyStorageRecovery } from './save-storage-acceptance'
+import { FlowAgentDesktopHost } from '../agent-flow/desktop-host'
+import { FlowCommandLedger } from '../agent-flow/command-ledger'
 
 const argument = (key: string): string | undefined =>
   process.argv.find((value) => value.startsWith(`--${key}=`))?.slice(key.length + 3)
@@ -32,7 +39,15 @@ if (
   resolve(directory, '..') !== resolve(tmpdir()) ||
   !basename(directory).startsWith('canvas-save-crash-') ||
   !boundary ||
-  !['unsent', 'before-save', 'after-save', 'failed-save', 'storage-retry'].includes(boundary)
+  ![
+    'unsent',
+    'before-save',
+    'after-save',
+    'failed-save',
+    'storage-retry',
+    'agent-close-conflict',
+    'agent-close-conflict-reopen'
+  ].includes(boundary)
 )
   app.exit(2)
 else {
@@ -47,6 +62,19 @@ else {
       failed = false,
       stage = 'setup'
     let result: unknown
+    const externalHttpRequests: string[] = []
+    if (boundary.startsWith('agent-close-conflict')) {
+      session.defaultSession.webRequest.onBeforeRequest({ urls: ['*://*/*'] }, (details, done) => {
+        try {
+          const address = new URL(details.url)
+          if (!['localhost', '127.0.0.1', '[::1]'].includes(address.hostname))
+            externalHttpRequests.push(`${address.origin}${address.pathname}`)
+        } catch {
+          externalHttpRequests.push('INVALID_EXTERNAL_URL')
+        }
+        done({})
+      })
+    }
     const mutableFs = createRequire(__filename)('fs') as typeof fs,
       originalWrite = mutableFs.writeFileSync
     const originalHandle = ipcMain.handle.bind(ipcMain)
@@ -58,7 +86,14 @@ else {
       release = done
     })
     try {
-      const project = createProject('测试：renderer 保存中断')
+      const prior =
+        boundary === 'agent-close-conflict-reopen'
+          ? JSON.parse(fs.readFileSync(join(directory, 'agent-close-state.json'), 'utf8'))
+          : undefined
+      const project = prior
+        ? openProject(prior.projectId)?.meta
+        : createProject('测试：Agent 运行时关窗冲突恢复')
+      if (!project) throw new Error('SAVE_PROJECT_MISSING')
       setSetting('lastProjectId', project.id)
       const host = new SqliteModelHost(getDb())
       window = new BrowserWindow({
@@ -117,7 +152,225 @@ else {
           "(async()=>{const editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor,save=(await import('/src/stores/save-coordinator.ts')).useSaveCoordinator.getState();return !!editor&&!!save.deps&&!save.inFlight&&save.phase==='saved'})()"
         ) as Promise<boolean>
       await active.loadURL('http://127.0.0.1:5197')
-      await waitFor(ready)
+      if (boundary === 'agent-close-conflict-reopen') {
+        await waitFor(async () =>
+          (await active.webContents.executeJavaScript(
+            `!!document.querySelector('[role="dialog"][aria-label="检测到未保存副本"]')`
+          )) as boolean
+        )
+      } else {
+        await waitFor(ready)
+      }
+      if (boundary === 'agent-close-conflict' || boundary === 'agent-close-conflict-reopen') {
+        const agentNodeId = 'shape:rec09-agent'
+        const textOf = (file: NonNullable<ReturnType<typeof openProject>>, id = agentNodeId): string =>
+          String(
+            (
+              file.tldrawSnapshot as {
+                store: Record<string, { props?: { text?: string } }>
+              }
+            ).store[id]?.props?.text ?? ''
+          )
+        const waitForClosed = (target: BrowserWindow): Promise<void> =>
+          new Promise((done) => target.once('closed', () => done()))
+        if (boundary === 'agent-close-conflict') {
+          stage = 'agent-setup'
+          const config = JSON.stringify({
+            schemaVersion: 1,
+            role: 'specialist',
+            interactionMode: 'collaborative',
+            modelDefinitionId: 'fixture-local-only',
+            skills: [],
+            tools: [{ id: 'node.execute', version: '1' }],
+            allowedNodeIds: ['shape:rec09-processor'],
+            maxSteps: 4,
+            relations: []
+          })
+          await active.webContents.executeJavaScript(
+            `(async()=>{const editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;editor.createShape({id:'${agentNodeId}',type:'node-card',x:120,y:120,props:{nodeType:'agent',title:'REC-09 Agent',text:'本地未保存目标 v1',config:${JSON.stringify(config)}}});editor.createShape({id:'shape:rec09-processor',type:'node-card',x:520,y:120,props:{nodeType:'processor',title:'REC-09 授权处理器',config:JSON.stringify({operation:'pick',valueType:'any',fallback:'',path:'',template:''})}});await(await import('/src/canvas/flow-asset-actions.ts')).ensureCanvasSaved()})()`
+          )
+          const initial = openProject(project.id)!
+          const initialVersion = initial.meta.graphVersion
+          let modelCalls = 0
+          const neverResolve = new Promise<never>(() => {})
+          const desktop = {
+            ledger: new FlowCommandLedger(getDb(), openProject),
+            isActive: (projectId: string): boolean => projectId === project.id,
+            deliver: async (): Promise<void> => {
+              throw new Error('REC09_UNEXPECTED_TOOL_DISPATCH')
+            }
+          }
+          const host = new FlowAgentDesktopHost(getDb(), openProject, desktop, async () => ({
+            decide: async () => {
+              modelCalls++
+              return neverResolve
+            }
+          }))
+          const task = host
+            .run({
+              projectId: project.id,
+              nodeId: agentNodeId,
+              requestId: 'rec09-running-agent-task',
+              traceId: 'rec09-running-trace',
+              spanId: 'rec09-running-span',
+              action: 'start'
+            })
+            .catch(() => undefined)
+          await waitFor(async () => {
+            const row = getDb()
+              .prepare('SELECT state,decisions FROM flow_agent_tasks WHERE project_id=? AND agent_node_id=?')
+              .get(project.id, agentNodeId) as { state: string; decisions: number } | undefined
+            return modelCalls === 1 && row?.state === 'running' && row.decisions === 1
+          })
+          stage = 'external-concurrent-save'
+          const current = openProject(project.id)!
+          const externalSnapshot = structuredClone(
+            current.tldrawSnapshot as { store: Record<string, { props: Record<string, unknown> }> }
+          )
+          externalSnapshot.store[agentNodeId].props.text = '并发工作台目标 v2'
+          const externalSave = saveProject({
+            id: project.id,
+            tldrawSnapshot: externalSnapshot,
+            expectedGraphVersion: current.meta.graphVersion
+          })
+          if (!externalSave) throw new Error('REC09_EXTERNAL_SAVE_FAILED')
+          const workspace = await active.webContents.executeJavaScript(
+            `(async()=>{const saved=await window.api.saveWorkspaceProfile({projectId:'${project.id}',workspaceProfile:{schemaVersion:1,presetId:'custom',visibleNodeTypeIds:['agent','text']}});if(!saved.ok||!saved.data)throw new Error('REC09_WORKSPACE_SAVE_FAILED');return saved.data.id})()`
+          ) as string
+          if (workspace !== project.id) throw new Error('REC09_WORKSPACE_SAVE_FAILED')
+          await active.webContents.executeJavaScript(
+            `(async()=>{const editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;editor.updateShape({id:'${agentNodeId}',type:'node-card',props:{text:'本地未保存目标 v3'}})})()`
+          )
+          stage = 'beforeunload-conflict'
+          const closed = waitForClosed(active)
+          active.close()
+          await Promise.race([
+            closed,
+            new Promise<never>((_done, reject) =>
+              setTimeout(() => reject(new Error('REC09_BEFOREUNLOAD_CLOSE_TIMEOUT')), 15000)
+            )
+          ])
+          const disk = openProject(project.id)!
+          const recovery = readRecoveryCopy(project.id)
+          const taskRow = getDb()
+            .prepare('SELECT state,decisions FROM flow_agent_tasks WHERE project_id=? AND agent_node_id=?')
+            .get(project.id, agentNodeId) as { state: string; decisions: number }
+          const report = {
+            projectId: project.id,
+            agentNodeId,
+            initialVersion,
+            externalVersion: externalSave.graphVersion,
+            diskVersionAfterClose: disk.meta.graphVersion,
+            recoveryCopyVersion: recovery?.meta.graphVersion ?? null,
+            diskGoal: textOf(disk),
+            recoveryGoal: recovery ? textOf(recovery) : null,
+            diskWorkspaceProfile: disk.workspaceProfile,
+            recoveryWorkspaceProfile: recovery?.workspaceProfile ?? null,
+            recoveryCopyExists: !!recovery,
+            modelCalls,
+            externalHttpRequests,
+            taskStateBeforeRestart: taskRow.state,
+            taskDecisionsBeforeRestart: taskRow.decisions,
+            checks: {
+              realAgentRuntimeWasRunningAtClose: taskRow.state === 'running' && taskRow.decisions === 1,
+              externalGraphVersionWasPreserved: disk.meta.graphVersion === externalSave.graphVersion,
+              localEditWasSavedToRecoveryCopy: textOf(disk) === '并发工作台目标 v2' && !!recovery && textOf(recovery) === '本地未保存目标 v3',
+              workspaceEditWasPresentInCanonicalAndRecovery: disk.workspaceProfile?.visibleNodeTypeIds.join(',') === 'agent,text' && recovery?.workspaceProfile?.visibleNodeTypeIds.join(',') === 'agent,text',
+              syncConflictRecoveryCopyCreated: !!recovery,
+              oneDeterministicModelCallNoToolDispatch: modelCalls === 1,
+              realSupplierAndExternalHttpCalls: externalHttpRequests.length
+            }
+          }
+          if (Object.values(report.checks).some((check) => check !== true && check !== 0))
+            throw new Error('REC09_CLOSE_CONFLICT_ASSERTION_FAILED')
+          fs.writeFileSync(
+            join(directory, 'agent-close-state.json'),
+            JSON.stringify({ projectId: project.id, agentNodeId, initialVersion })
+          )
+          void task
+          result = report
+          return
+        }
+        stage = 'agent-reopen-inspect'
+        const state = prior as { projectId: string; agentNodeId: string; initialVersion: number }
+        let modelCalls = 0
+        const desktop = {
+          ledger: new FlowCommandLedger(getDb(), openProject),
+          isActive: (projectId: string): boolean => projectId === state.projectId,
+          deliver: async (): Promise<void> => {
+            throw new Error('REC09_UNEXPECTED_TOOL_DISPATCH')
+          }
+        }
+        const host = new FlowAgentDesktopHost(getDb(), openProject, desktop, async () => ({
+          decide: async () => {
+            modelCalls++
+            throw new Error('REC09_RECOVERY_MUST_NOT_REPLAY_MODEL')
+          }
+        }))
+        const interrupted = host.inspect({ projectId: state.projectId, nodeId: state.agentNodeId })
+        const blocked = interrupted?.state === 'blocked' && interrupted.code === 'AGENT_SESSION_LOST'
+        const beforeRestore = openProject(state.projectId)!
+        const copy = readRecoveryCopy(state.projectId)
+        if (!copy || !blocked) throw new Error('REC09_RECOVERY_OR_SESSION_STATE_MISSING')
+        stage = 'recovery-choice-and-save-retry'
+        const recoveryChoice = await active.webContents.executeJavaScript(
+          `(()=>{const dialog=document.querySelector('[role="dialog"][aria-label="检测到未保存副本"]');const button=[...dialog?.querySelectorAll('button')??[]].find(item=>item.textContent?.trim()==='使用恢复副本');if(!button)return false;button.click();return true})()`
+        ) as boolean
+        if (!recoveryChoice) throw new Error('REC09_RECOVERY_CHOICE_BUTTON_MISSING')
+        await waitFor(ready)
+        const restored = openProject(state.projectId)!.meta.graphVersion
+        const afterRestore = openProject(state.projectId)!
+        const reopenedGoal = textOf(afterRestore, state.agentNodeId)
+        const reopenedProfile = afterRestore.workspaceProfile
+        await active.loadURL('http://127.0.0.1:5197')
+        await waitFor(async () =>
+          (await active.webContents.executeJavaScript(
+            `(async()=>{const editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;return editor?.getShape('${state.agentNodeId}')?.props.text==='本地未保存目标 v3'})()`
+          )) as boolean
+        )
+        await waitFor(ready)
+        const retryBaseVersion = openProject(state.projectId)!.meta.graphVersion
+        await active.webContents.executeJavaScript(
+          `(async()=>{const editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;editor.updateShape({id:'${state.agentNodeId}',type:'node-card',props:{text:'恢复后重试保存 v4'}});await(await import('/src/canvas/flow-asset-actions.ts')).ensureCanvasSaved()})()`
+        )
+        await waitFor(async () => {
+          const file = openProject(state.projectId)
+          return !!file && file.meta.graphVersion > restored && textOf(file, state.agentNodeId) === '恢复后重试保存 v4'
+        })
+        const finalFile = openProject(state.projectId)!
+        const finalGoal = textOf(finalFile, state.agentNodeId)
+        const report = {
+          projectId: state.projectId,
+          task: interrupted,
+          diskGoalBeforeRestore: textOf(beforeRestore, state.agentNodeId),
+          recoveryGoalBeforeRestore: textOf(copy, state.agentNodeId),
+          restoredVersion: restored,
+          reopenedGoal,
+          workspaceProfileAfterRestore: reopenedProfile,
+          retryVersion: finalFile.meta.graphVersion,
+          finalVersion: finalFile.meta.graphVersion,
+          finalGoal,
+          recoveryCopyRemoved: !readRecoveryCopy(state.projectId),
+          modelCallsAfterRestart: modelCalls,
+          externalHttpRequests,
+          checks: {
+            runningTaskSafelyMarkedInterrupted: blocked,
+            originalTaskIdentityAndDecisionCountRetained: interrupted?.taskId === 'rec09-running-agent-task' && interrupted.decisions === 1,
+            recoveryRestoreUsedPublicIpc: restored === beforeRestore.meta.graphVersion + 1,
+            recoveryChoiceMadeThroughReopenDialog: recoveryChoice,
+            restoredCanvasReopenedWithLocalLastEdit: reopenedGoal === '本地未保存目标 v3',
+            workspaceProfilePreservedAfterRecovery: reopenedProfile?.visibleNodeTypeIds.join(',') === 'agent,text',
+          retrySaveAcceptedAfterRestore: finalGoal === '恢复后重试保存 v4' && finalFile.meta.graphVersion === retryBaseVersion + 1,
+            recoveryCopyConsumedAfterRestore: !readRecoveryCopy(state.projectId),
+            modelNotReplayedOrToolDispatched: modelCalls === 0,
+            realSupplierAndExternalHttpCalls: externalHttpRequests.length
+          }
+        }
+        result = report
+        if (Object.values(report.checks).some((check) => check !== true && check !== 0))
+          throw new Error('REC09_REOPEN_RETRY_ASSERTION_FAILED')
+        return
+      }
       await active.webContents.executeJavaScript(
         "(async()=>{const editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;editor.createShape({id:'shape:save-source',type:'node-card',x:100,y:100,props:{nodeType:'text',title:'测试材料',text:'private-save-original'}});await(await import('/src/canvas/flow-asset-actions.ts')).ensureCanvasSaved()})()"
       )
@@ -224,7 +477,8 @@ else {
         code:
           error instanceof Error && /^[A-Z0-9_]+$/.test(error.message)
             ? error.message
-            : 'SAVE_ACCEPTANCE_FAILED'
+            : 'SAVE_ACCEPTANCE_FAILED',
+        ...(result && typeof result === 'object' && 'checks' in result ? { details: result } : {})
       }
     } finally {
       armed = false

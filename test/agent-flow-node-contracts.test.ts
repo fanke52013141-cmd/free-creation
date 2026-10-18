@@ -35,6 +35,26 @@ const expected = {
   subjects: [subject]
 }
 describe('C1 Agent Flow protocol foundation', () => {
+  it.each(['duplicate-state', 'missing-initial', 'unknown-from', 'unknown-to', 'ambiguous-event'])('COO-03 rejects %s state declarations', variant => {
+    const config = { ...DEFAULT_STATE_NODE_CONFIG, states: ['draft', 'working', 'completed'], transitions: [{ from: 'draft', event: 'start', to: 'working' }] }
+    if (variant === 'duplicate-state') config.states.push('draft')
+    if (variant === 'missing-initial') config.states = ['working', 'completed']
+    if (variant === 'unknown-from') config.transitions[0].from = 'missing'
+    if (variant === 'unknown-to') config.transitions[0].to = 'missing'
+    if (variant === 'ambiguous-event') config.transitions.push({ from: 'draft', event: 'start', to: 'completed' })
+    expect(StateMachineNodeConfigSchema.safeParse(config).success).toBe(false)
+  })
+  it.each([1, 64, 65])('COO-03 state count boundary=%i', count => {
+    const states = Array.from({ length: count }, (_, index) => 'state-' + index)
+    expect(StateMachineNodeConfigSchema.safeParse({ ...DEFAULT_STATE_NODE_CONFIG, initialState: states[0], states, transitions: [] }).success).toBe(count <= 64)
+  })
+  it('COO-03 permits one event name in different source states without ambiguity', () => {
+    expect(StateMachineNodeConfigSchema.safeParse({ ...DEFAULT_STATE_NODE_CONFIG, states: ['draft', 'working', 'completed'], transitions: [{ from: 'draft', event: 'advance', to: 'working' }, { from: 'working', event: 'advance', to: 'completed' }] }).success).toBe(true)
+  })
+  it.each(['assetId', 'versionId', 'sourceNodeId', 'sourcePortId'] as const)('REV-03 rejects approved subject replacement at %s', (field) => {
+    expect(matchesReviewApproval(report, expected)).toBe(true)
+    expect(matchesReviewApproval(report, { ...expected, subjects: [{ ...subject, [field]: 'replacement' }] })).toBe(false)
+  })
   it('persists versioned config without task text, keys or implicit tool permission', () => {
     const config = {
       ...DEFAULT_AGENT_NODE_CONFIG,

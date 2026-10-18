@@ -635,6 +635,10 @@ export function installBrowserMock(): void {
               modelId: 'gpt-5.2',
               enabled: true,
               validation: {},
+              agentToolCallingValidation: {
+                status: 'verified',
+                message: '浏览器演示夹具，不代表真实供应商验证'
+              },
               metadata: {},
               capabilities: [
                 {
@@ -728,6 +732,7 @@ export function installBrowserMock(): void {
       deleteConnection: () => Promise.resolve(notImplementedInDemo('删除模型连接')),
       discover: () => Promise.resolve({ ok: true as const, data: [] }),
       validate: () => Promise.resolve(notImplementedInDemo('验证模型')),
+      validateAgentToolCalling: () => Promise.resolve(notImplementedInDemo('验证 Agent 工具调用能力')),
       saveBinding: () => Promise.resolve(notImplementedInDemo('保存功能绑定'))
     },
     gateway: {

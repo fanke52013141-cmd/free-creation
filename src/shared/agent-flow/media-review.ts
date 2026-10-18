@@ -61,6 +61,7 @@ export const AudioVideoTimelineEvidenceSchema = z
   .refine(
     (value) =>
       value.audioOffsetMs === value.audioStartMs - value.videoStartMs &&
+      value.audioEndMs === value.audioStartMs + value.audioDurationMs &&
       value.audioEndDeltaMs === value.audioEndMs - (value.videoStartMs + value.videoDurationMs) &&
       value.frames.every(
         (frame, index) =>

@@ -137,11 +137,24 @@ describe('错误归一化', () => {
     expect(JSON.stringify(unknown)).not.toContain('纯字符串错误')
   })
 
-  it('safeStack 去除绝对路径与换行，保留错误类型', () => {
+  it('safeStack 隐去异常消息，去除绝对路径并保留白名单错误类型与栈帧', () => {
     const error = new Error('boom')
     error.stack = 'Error: boom\n    at C:\\Users\\Administrator\\project\\src\\a.ts:1:1'
     const stack = safeStack(error)
     expect(stack).not.toContain('C:\\Users')
-    expect(stack).toContain('Error: boom')
+    expect(stack).not.toContain('boom')
+    expect(stack).toContain('Error: [message omitted]')
+    expect(stack).toContain('at [PATH]')
+  })
+
+  it('safeStack does not trust custom error names and redacts private frame values', () => {
+    const error = new Error('private body')
+    error.name = 'AGENT_PROMPT_PRIVATE_20261017'
+    error.stack = `${error.name}: private body\n    at ${'AGENT_RESPONSE_RAW_20261017'}/worker.js:1:1`
+    const stack = safeStack(error, undefined, ['AGENT_RESPONSE_RAW_20261017'])
+    expect(stack).toContain('Error: [message omitted]')
+    expect(stack).not.toContain('AGENT_PROMPT_PRIVATE_20261017')
+    expect(stack).not.toContain('private body')
+    expect(stack).not.toContain('AGENT_RESPONSE_RAW_20261017')
   })
 })

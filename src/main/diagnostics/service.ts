@@ -58,8 +58,8 @@ export interface DiagnosticsService {
   ): Promise<{ totalEvents: number; truncated: boolean; bytes: number; badLines: number }>
   /** 立即把队列落盘（测试与退出用）。 */
   flushNow(): Promise<void>
-  /** 正常退出：≤2s 等待 flush，超时留非完整状态标记。 */
-  flushOnQuit(): Promise<void>
+  /** 正常退出：等待上游与 main 队列 flush；不完整时保留未结束标记。 */
+  flushOnQuit(options?: { upstreamDrainComplete?: boolean; timeoutMs?: number }): Promise<void>
 }
 
 export async function initDiagnosticsService(
@@ -68,6 +68,7 @@ export async function initDiagnosticsService(
   const store = options.store ?? nodeFsStore()
   const clock = options.clock ?? systemClock()
   const sessionId = newSessionId()
+  const sessionStartedAt = new Date(clock.nowMs()).toISOString()
   const rootDir = join(options.dataDir, 'diagnostics')
   const eventsDir = join(rootDir, 'events')
   const sessionsDir = join(rootDir, 'sessions')
@@ -76,6 +77,8 @@ export async function initDiagnosticsService(
 
   let degraded = false
   let flushTimer: unknown = null
+  let flushInFlight: Promise<boolean> | null = null
+  let quitting = false
   let lastIngestErrorLogged = false
 
   const writer = new DiagnosticsShardWriter({
@@ -94,25 +97,44 @@ export async function initDiagnosticsService(
   })
 
   const scheduleFlush = (delayMs = DIAGNOSTICS_FLUSH_INTERVAL_MS): void => {
-    if (options.disableTimers || flushTimer) return
+    if (options.disableTimers || quitting || flushTimer !== null) return
     flushTimer = clock.setTimeout(() => {
       flushTimer = null
-      void flushNow()
+      void flushQueued()
     }, delayMs)
   }
 
-  const flushNow = async (): Promise<void> => {
-    if (queue.depth === 0) return
+  const flushOneBatch = (): Promise<boolean> => {
+    if (flushInFlight) return flushInFlight
+    if (queue.depth === 0) return Promise.resolve(true)
     const batch = queue.drain(DIAGNOSTICS_FLUSH_BATCH_ITEMS * 8)
-    const result = await writer.append(batch)
-    health.countWritten(result.written)
-    if (result.failed > 0) {
-      // 写失败的事件不回队（避免无限膨胀）：计入丢失，健康环有摘要。
-      health.incident('write.lost_batch', `${result.failed} events`)
-    }
+    const current = writer
+      .append(batch)
+      .then((result) => {
+        health.countWritten(result.written)
+        if (result.failed > 0) {
+          // 写失败的事件不回队（避免无限膨胀）：计入丢失，健康环有摘要。
+          health.incident('write.lost_batch', `${result.failed} events`)
+          return false
+        }
+        return true
+      })
+      .catch(() => false)
+      .finally(() => {
+        if (flushInFlight === current) flushInFlight = null
+        if (queue.depth > 0 && !quitting) scheduleFlush()
+      })
+    flushInFlight = current
+    return current
   }
 
-  const flushNowInternal = flushNow
+  const flushQueued = async (shouldContinue: () => boolean = () => true): Promise<boolean> => {
+    while (queue.depth > 0 || flushInFlight) {
+      if (!shouldContinue()) return false
+      if (!(await flushOneBatch())) return false
+    }
+    return true
+  }
 
   const finalize = (input: DiagnosticsEventInput): DiagnosticsEvent => {
     const meta = input.producerMeta
@@ -203,6 +225,9 @@ export async function initDiagnosticsService(
 
     async exportBundle(input, targetPath) {
       const BUNDLE_LIMIT_BYTES = 25 * 1024 * 1024
+      // Include accepted events still waiting in the bounded queue, especially the
+      // failure that led the user to export this bundle.
+      await flushQueued()
       // 二次脱敏：落盘前已清洗，导出再过一遍最后一道防线。
       const redactEvent = (event: DiagnosticsEvent): DiagnosticsEvent => ({
         ...event,
@@ -349,23 +374,46 @@ export async function initDiagnosticsService(
     },
 
     async flushNow(): Promise<void> {
-      await flushNowInternal()
+      await flushQueued()
     },
 
-    async flushOnQuit(): Promise<void> {
+    async flushOnQuit(
+      options: { upstreamDrainComplete?: boolean; timeoutMs?: number } = {}
+    ): Promise<void> {
+      quitting = true
+      if (flushTimer !== null) {
+        clock.clearTimeout(flushTimer)
+        flushTimer = null
+      }
+      let timeoutHandle: unknown = null
+      let timedOut = false
+      let flushComplete = false
+      const timeoutMs = Math.min(
+        DIAGNOSTICS_QUIT_FLUSH_TIMEOUT_MS,
+        Math.max(0, options.timeoutMs ?? DIAGNOSTICS_QUIT_FLUSH_TIMEOUT_MS)
+      )
       try {
-        await Promise.race([
-          flushNowInternal(),
-          new Promise<void>((resolve) => clock.setTimeout(resolve, DIAGNOSTICS_QUIT_FLUSH_TIMEOUT_MS))
+        flushComplete = await Promise.race([
+          flushQueued(() => !timedOut),
+          new Promise<boolean>((resolve) => {
+            timeoutHandle = clock.setTimeout(() => {
+              timedOut = true
+              resolve(false)
+            }, timeoutMs)
+          })
         ])
       } catch {
         // 退出 flush 失败：留非完整状态，不阻塞退出。
+        flushComplete = false
+      } finally {
+        if (timeoutHandle !== null) clock.clearTimeout(timeoutHandle)
       }
+      const sessionEnded = flushComplete && options.upstreamDrainComplete !== false
       await writeSessionState(store, sessionsDir, {
         sessionId,
-        startedAt: new Date(clock.nowMs()).toISOString(),
-        ended: true,
-        endedAt: new Date(clock.nowMs()).toISOString()
+        startedAt: sessionStartedAt,
+        ended: sessionEnded,
+        ...(sessionEnded ? { endedAt: new Date(clock.nowMs()).toISOString() } : {})
       })
     }
   }
@@ -376,7 +424,7 @@ export async function initDiagnosticsService(
     await store.mkdir(sessionsDir)
     await writeSessionState(store, sessionsDir, {
       sessionId,
-      startedAt: new Date(clock.nowMs()).toISOString(),
+      startedAt: sessionStartedAt,
       ended: false,
       ...(options.env ? { env: options.env } : {})
     })

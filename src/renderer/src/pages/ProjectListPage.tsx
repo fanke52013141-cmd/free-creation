@@ -26,7 +26,10 @@ export function ProjectListPage(): React.JSX.Element {
   const [cloneError, setCloneError] = useState('')
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  const [exportingDiagnostics, setExportingDiagnostics] = useState(false)
   const openProject = useAppStore((s) => s.openProject)
+  const projectOpenFailure = useAppStore((s) => s.projectOpenFailure)
+  const clearProjectOpenFailure = useAppStore((s) => s.clearProjectOpenFailure)
 
   const refresh = useCallback(async (): Promise<void> => {
     const res = await window.api.listProjects()
@@ -112,6 +115,24 @@ export function ProjectListPage(): React.JSX.Element {
     openProject(p)
   }
 
+  const exportOpenFailureDiagnostics = async (): Promise<void> => {
+    if (!projectOpenFailure) return
+    setExportingDiagnostics(true)
+    try {
+      const result = await window.api.exportDiagnosticsBundle({
+        scope: { since: Math.max(0, projectOpenFailure.failedAt - 60_000), until: Date.now() },
+        label: '项目打开失败'
+      })
+      if (result.ok) {
+        useToastStore.getState().show(`诊断包已导出（${result.data.totalEvents} 条事件）`)
+      } else if (result.error.code !== 'CANCELLED') {
+        useToastStore.getState().show(`导出诊断包失败：${result.error.message}`)
+      }
+    } finally {
+      setExportingDiagnostics(false)
+    }
+  }
+
   const handleExport = async (p: ProjectMeta): Promise<void> => {
     const res = await window.api.exportProject({ id: p.id, name: p.name })
     if (!res.ok) {
@@ -172,6 +193,37 @@ export function ProjectListPage(): React.JSX.Element {
             </button>
           </div>
         </header>
+
+        {projectOpenFailure && (
+          <section
+            className="project-open-failure"
+            role="alert"
+            aria-labelledby="project-open-failure-title"
+          >
+            <div>
+              <h2 id="project-open-failure-title">无法打开“{projectOpenFailure.projectName}”</h2>
+              <p>项目文件和备份都无法读取。原文件已保留，没有被覆盖。你可以导出诊断包供排查。</p>
+            </div>
+            <div className="project-open-failure-actions">
+              <button
+                type="button"
+                className="project-home-button project-home-button-quiet"
+                disabled={exportingDiagnostics}
+                onClick={() => void exportOpenFailureDiagnostics()}
+              >
+                {exportingDiagnostics ? '导出中…' : '导出诊断包'}
+              </button>
+              <button
+                type="button"
+                className="project-home-button project-home-button-quiet"
+                aria-label="关闭项目打开失败提示"
+                onClick={clearProjectOpenFailure}
+              >
+                关闭提示
+              </button>
+            </div>
+          </section>
+        )}
 
         {creating && (
           <ProjectCreateDialog

@@ -6,7 +6,10 @@ import { projectSemanticRevision } from '../src/main/agent-flow/command-intent'
 import { FlowAssetStore } from '../src/main/agent-flow/asset-store'
 import { migrateDatabase } from '../src/main/store/db-migrations'
 import { registerFlowCommandsIpc } from '../src/main/ipc/flow-commands.ipc'
+import { registerFlowAgentsIpc } from '../src/main/ipc/flow-agents.ipc'
+import { registerFlowAssetsIpc } from '../src/main/ipc/flow-assets.ipc'
 import { setGatewayEventSink } from '../src/main/diagnostics/gateway-events'
+import { SqliteModelHost } from '../src/main/model-host/sqlite-model-host'
 import { IPC } from '../src/shared/contracts'
 import type { DiagnosticsEventInput } from '../src/shared/observability'
 
@@ -144,9 +147,147 @@ function fixture() {
   }
   call(IPC.flowCommands.attach, { projectId: 'p' })
   events.length = 0
-  return { db, window, contents, event, call, ledger, command, events }
+  return { db, file, window, contents, event, call, ledger, command, events }
 }
 describe('desktop command IPC lifecycle and recovery', () => {
+  it.each(['submit', 'list', 'read'] as const)('SEC-05 trusted-window asset %s cannot resolve an unknown project', async (operation) => {
+    const f = fixture()
+    registerFlowAssetsIpc(() => f.window as never)
+    const original = f.db.prepare('SELECT version_id,digest FROM flow_asset_versions ORDER BY version_id').all()
+    const version = original[0] as { version_id: string }
+    const input = operation === 'read' ? { projectId: 'foreign-project', versionId: version.version_id }
+      : operation === 'list' ? { projectId: 'foreign-project', nodeId: 'shape:source', portId: 'out-text' }
+      : { projectId: 'foreign-project', nodeId: 'shape:source', portId: 'out-text', submissionId: 'foreign-submit', expectedGraphVersion: 1, traceId: 'trace', spanId: 'span' }
+    expect(await state.handlers.get(IPC.flowAssets[operation])!(f.event, input)).toMatchObject({ ok: false, error: { code: 'ASSET_PROJECT_MISSING' } })
+    expect(f.db.prepare('SELECT version_id,digest FROM flow_asset_versions ORDER BY version_id').all()).toEqual(original)
+    expect(f.contents.send).not.toHaveBeenCalled()
+    expect(JSON.stringify(f.events)).not.toContain('private-fixture')
+  })
+  it.each(['run', 'build', 'review', 'inspect', 'stop', 'pause', 'catalog', 'collaboration', 'cooperate'] as const)('SEC-01 blocks foreign sources on Agent %s before task effects', async (operation) => {
+    const f = fixture()
+    registerFlowAgentsIpc(() => f.window as never, { ledger: f.ledger, isActive: () => true, deliver: async () => { throw new Error('must not dispatch') } })
+    for (const source of [{ sender: {}, senderFrame: {} }, { sender: f.contents, senderFrame: {} }]) {
+      const result = await state.handlers.get(IPC.flowAgents[operation])!(source, { projectId: 'p', nodeId: 'shape:agent' })
+      expect(result).toMatchObject({ ok: false, error: { code: 'FLOW_SENDER_REJECTED' } })
+    }
+    expect(f.db.prepare('SELECT COUNT(*) AS n FROM flow_agent_tasks').get()).toEqual({ n: 0 })
+    expect(f.db.prepare('SELECT COUNT(*) AS n FROM flow_commands').get()).toEqual({ n: 0 })
+    expect(f.contents.send).not.toHaveBeenCalled()
+  })
+  it('CFG-03 rejects an unverified text-only model before creating an Agent task or model request', async () => {
+    const f = fixture()
+    const snapshot = f.file.tldrawSnapshot as {
+      store: Record<string, { props: { config: string } }>
+    }
+    const config = JSON.parse(snapshot.store['shape:agent'].props.config) as Record<string, unknown>
+    config.modelDefinitionId = 'text-only-model'
+    snapshot.store['shape:agent'].props.config = JSON.stringify(config)
+
+    const modelHost = new SqliteModelHost(f.db)
+    modelHost.saveConnection({
+      id: 'test-connection',
+      name: 'local text-only fixture',
+      protocol: 'openai-compatible',
+      baseUrl: 'http://127.0.0.1:5200/v1'
+    })
+    modelHost.saveModel({
+      id: 'text-only-model',
+      connectionId: 'test-connection',
+      modelId: 'text-only',
+      name: 'text-only',
+      capabilities: [{
+        operation: 'text.generate',
+        asynchronous: false,
+        streaming: true,
+        acceptedAssetKinds: [],
+        producedAssetKinds: [],
+        controls: {}
+      }]
+    })
+    registerFlowAgentsIpc(() => f.window as never, {
+      ledger: f.ledger,
+      isActive: () => true,
+      deliver: async () => { throw new Error('must not dispatch') }
+    })
+    const fetchSpy = vi.fn(async () => new Response('{}', { status: 200 }))
+    vi.stubGlobal('fetch', fetchSpy)
+    f.events.length = 0
+
+    const result = await state.handlers.get(IPC.flowAgents.run)!(f.event, {
+      projectId: 'p',
+      nodeId: 'shape:agent',
+      action: 'start',
+      requestId: 'request-cfg03',
+      traceId: 'trace-cfg03',
+      spanId: 'span-cfg03'
+    }) as { ok: boolean; error?: { code: string } }
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'AGENT_MODEL_TOOL_UNVERIFIED' } })
+    expect(f.db.prepare('SELECT COUNT(*) AS n FROM flow_agent_tasks').get()).toEqual({ n: 0 })
+    expect(f.db.prepare('SELECT COUNT(*) AS n FROM flow_commands').get()).toEqual({ n: 0 })
+    expect(f.file.meta.graphVersion).toBe(1)
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(f.events.some((event) => event.event.startsWith('workflow.'))).toBe(false)
+    expect(f.events.some((event) => event.event.startsWith('model.request.'))).toBe(false)
+    expect(f.events.some((event) => event.event === 'node.started')).toBe(false)
+  })
+  it.each(['submit', 'list', 'read'] as const)('SEC-01 blocks foreign sources on asset %s before version effects', async (operation) => {
+    const f = fixture()
+    registerFlowAssetsIpc(() => f.window as never)
+    const before = f.db.prepare('SELECT COUNT(*) AS n FROM flow_asset_versions').get()
+    for (const source of [{ sender: {}, senderFrame: {} }, { sender: f.contents, senderFrame: {} }]) {
+      expect(await state.handlers.get(IPC.flowAssets[operation])!(source, { projectId: 'p' })).toMatchObject({ ok: false, error: { code: 'ASSET_SENDER_REJECTED' } })
+    }
+    expect(f.db.prepare('SELECT COUNT(*) AS n FROM flow_asset_versions').get()).toEqual(before)
+    expect(f.contents.send).not.toHaveBeenCalled()
+  })
+  it.each(['prepare', 'dispatch', 'check', 'commit', 'lookup', 'unknown', 'abort', 'availability', 'attach', 'detach'] as const)('SEC-01 rejects foreign window and child-frame calls to %s without side effects', (operation) => {
+    const f = fixture()
+    const input = ['prepare', 'dispatch'].includes(operation) ? f.command
+      : ['check', 'unknown', 'abort'].includes(operation) ? { projectId: 'p', commandId: 'cmd', leaseId: 'lease' }
+      : operation === 'availability' ? { projectId: 'p', nodeId: 'shape:target' }
+      : ['attach', 'detach'].includes(operation) ? { projectId: 'p' }
+      : { projectId: 'p', commandId: 'cmd' }
+    for (const source of [{ sender: {}, senderFrame: {} }, { sender: f.contents, senderFrame: {} }]) {
+      expect(f.call(IPC.flowCommands[operation], input, source)).toMatchObject({ ok: false, error: { code: 'FLOW_SENDER_REJECTED' } })
+    }
+    expect(f.db.prepare('SELECT COUNT(*) AS n FROM flow_commands').get()).toEqual({ n: 0 })
+    expect(f.contents.send).not.toHaveBeenCalled()
+    const starts = f.events.filter(event => event.event === 'command.operation.started')
+    const ends = f.events.filter(event => event.event === 'command.operation.failed')
+    expect(starts).toHaveLength(2)
+    for (const start of starts) expect(ends.filter(end => end.traceId === start.traceId && end.spanId === start.spanId)).toHaveLength(1)
+    // Unauthorized attach/detach must not change the active project's owner.
+    expect(f.call(IPC.flowCommands.availability, { projectId: 'p', nodeId: 'shape:target' }).ok).toBe(true)
+  })
+  it.each(['long-id', 'unknown-key', 'prototype-key', 'duplicate-port', 'too-many-refs', 'self-target'])('SEC-02 rejects %s at command IPC without persistence or dispatch', (variant) => {
+    const f = fixture()
+    let command: unknown = f.command
+    if (variant === 'long-id') command = { ...f.command, commandId: 'x'.repeat(129) }
+    if (variant === 'unknown-key') command = { ...f.command, executeShell: true }
+    if (variant === 'prototype-key') command = JSON.parse(JSON.stringify(f.command).slice(0, -1) + ',"__proto__":{"polluted":true}}')
+    if (variant === 'duplicate-port') command = { ...f.command, inputs: [f.command.inputs[0], f.command.inputs[0]] }
+    if (variant === 'too-many-refs') command = { ...f.command, inputs: [{ ...f.command.inputs[0], assets: Array(129).fill(f.command.inputs[0].assets[0]) }] }
+    if (variant === 'self-target') command = { ...f.command, targetNodeId: f.command.agentNodeId }
+    const result = f.call(IPC.flowCommands.dispatch, command)
+    if (variant === 'prototype-key') {
+      // Confirm the malformed value carries an own key so the IPC boundary is
+      // tested against the raw object, not merely inherited prototype state.
+      expect(Object.prototype.hasOwnProperty.call(command, '__proto__')).toBe(true)
+      expect(({} as Record<string, unknown>).polluted).toBeUndefined()
+      expect(result).toMatchObject({ ok: false, error: { code: 'FLOW_INPUT_INVALID' } })
+      expect(JSON.stringify(result)).not.toContain('polluted')
+    }
+    expect(result.ok).toBe(false)
+    expect(f.db.prepare('SELECT COUNT(*) AS n FROM flow_commands').get()).toEqual({ n: 0 })
+    expect(f.contents.send).not.toHaveBeenCalled()
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined()
+    expect(JSON.stringify(f.events)).not.toContain('executeShell')
+    if (variant === 'prototype-key') {
+      expect(JSON.stringify(f.events)).not.toContain('__proto__')
+      expect(JSON.stringify(f.events)).not.toContain('polluted')
+    }
+  })
   it('rejects inactive projects before reserving or dispatching a command', () => {
     const f = fixture()
     f.call(IPC.flowCommands.detach, { projectId: 'p' })

@@ -24,7 +24,12 @@ import {
 } from './diagnostics/service'
 import { nodeFsStore } from './diagnostics/fs-types'
 import { setGatewayEventSink } from './diagnostics/gateway-events'
-import { DiagnosticsProducer, newProducerId } from '../shared/observability'
+import {
+  DIAGNOSTICS_QUIT_FLUSH_TIMEOUT_MS,
+  DiagnosticsProducer,
+  newProducerId
+} from '../shared/observability'
+import { drainRendererDiagnostics } from './diagnostics/renderer-shutdown'
 import { registerLibraryIpc } from './ipc/library.ipc'
 import { SqliteModelHost } from './model-host/sqlite-model-host'
 import { createDesktopModelRuntime } from './model-host/runtime'
@@ -50,10 +55,29 @@ log.info('main process starting', {
 // main 侧生产者：app.* 生命周期与网关边界事件的唯一来源；sessionId 由服务分配，
 // 环境/版本信息随服务写入 session 状态文件，诊断包据此携带。
 let diagnostics: DiagnosticsService | null = null
+let quitting = false
+let rendererDiagnosticsComplete = true
+let shutdownDeadlineAt: number | null = null
+const rendererDrainPromises = new Map<BrowserWindow, Promise<boolean>>()
 const mainProducer = new DiagnosticsProducer({
   process: 'main',
   producerId: newProducerId('main')
 })
+
+function remainingShutdownTimeMs(): number {
+  if (shutdownDeadlineAt === null) return DIAGNOSTICS_QUIT_FLUSH_TIMEOUT_MS
+  return Math.max(0, shutdownDeadlineAt - Date.now())
+}
+
+function drainWindowDiagnostics(window: BrowserWindow, timeoutMs: number): Promise<boolean> {
+  const existing = rendererDrainPromises.get(window)
+  if (existing) return existing
+  const draining = drainRendererDiagnostics(window, timeoutMs).finally(() => {
+    if (rendererDrainPromises.get(window) === draining) rendererDrainPromises.delete(window)
+  })
+  rendererDrainPromises.set(window, draining)
+  return draining
+}
 
 async function initDiagnostics(): Promise<DiagnosticsService | null> {
   try {
@@ -201,8 +225,40 @@ function createWindow(): BrowserWindow {
     mainWindow.show()
   })
 
+  let closeDrainPending = false
+  let closeAfterDiagnosticsDrain = false
+  mainWindow.on('close', (event) => {
+    if (quitting || closeAfterDiagnosticsDrain || !diagnostics) return
+    event.preventDefault()
+    if (closeDrainPending) return
+    closeDrainPending = true
+    // On platforms that quit after the last window closes, the renderer and main
+    // queues share one deadline. macOS may keep the session alive after window close.
+    const isLastWindow = BrowserWindow.getAllWindows().length <= 1
+    if (process.platform !== 'darwin' && isLastWindow && shutdownDeadlineAt === null) {
+      shutdownDeadlineAt = Date.now() + DIAGNOSTICS_QUIT_FLUSH_TIMEOUT_MS
+    }
+    const timeoutMs =
+      process.platform === 'darwin' || !isLastWindow
+        ? DIAGNOSTICS_QUIT_FLUSH_TIMEOUT_MS
+        : remainingShutdownTimeMs()
+    void drainWindowDiagnostics(mainWindow, timeoutMs)
+      .then((complete) => {
+        rendererDiagnosticsComplete = rendererDiagnosticsComplete && complete
+      })
+      .catch(() => {
+        rendererDiagnosticsComplete = false
+      })
+      .finally(() => {
+        closeDrainPending = false
+        closeAfterDiagnosticsDrain = true
+        if (!mainWindow.isDestroyed()) mainWindow.close()
+      })
+  })
+
   // 渲染进程崩溃/被杀：记录可用退出码，异常后仍执行原有窗口策略（不吞异常继续）。
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    rendererDiagnosticsComplete = false
     diagnostics?.emit(
       mainProducer.build(
         'app.process_exited',
@@ -328,24 +384,44 @@ app.whenReady().then(async () => {
 })
 
 app.on('window-all-closed', () => {
-  closeDb()
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
+  if (process.platform === 'darwin') shutdownDeadlineAt = null
+  else app.quit()
 })
 
 // 正常退出：等待日志 flush（≤2s，超时留非完整状态），写 session_ended，再关库退出。
-let quitting = false
 app.on('before-quit', (event) => {
   if (quitting) return
   quitting = true
   event.preventDefault()
+  if (shutdownDeadlineAt === null) {
+    shutdownDeadlineAt = Date.now() + DIAGNOSTICS_QUIT_FLUSH_TIMEOUT_MS
+  }
   void (async () => {
-    if (diagnostics) {
-      diagnostics.emit(mainProducer.build('app.session_ended', undefined, '主进程会话结束', {}))
-      await diagnostics.flushOnQuit()
+    try {
+      let upstreamDrainComplete = rendererDiagnosticsComplete
+      try {
+        const windows = BrowserWindow.getAllWindows()
+        const drained = await Promise.all(
+          windows.map((window) => drainWindowDiagnostics(window, remainingShutdownTimeMs()))
+        )
+        upstreamDrainComplete = upstreamDrainComplete && drained.every(Boolean)
+      } catch {
+        upstreamDrainComplete = false
+        log.warn('[diagnostics] renderer shutdown drain failed')
+      }
+      rendererDiagnosticsComplete = upstreamDrainComplete
+      if (diagnostics) {
+        diagnostics.emit(mainProducer.build('app.session_ended', undefined, '主进程会话结束', {}))
+        await diagnostics.flushOnQuit({
+          upstreamDrainComplete,
+          timeoutMs: remainingShutdownTimeMs()
+        })
+      }
+    } catch {
+      log.warn('[diagnostics] shutdown flush failed')
+    } finally {
+      closeDb()
+      app.quit()
     }
-    closeDb()
-    app.quit()
   })()
 })

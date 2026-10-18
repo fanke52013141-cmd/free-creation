@@ -24,11 +24,14 @@
   min-height: 72px;
   resize: vertical;
 }
-.agent-flow-output {
+.tl-container .node-card .agent-flow-output {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font-size: 12px;
   margin: 0;
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
 }
 .agent-flow-targets,
 .agent-flow-transitions {

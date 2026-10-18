@@ -230,6 +230,9 @@ describe('video scheduling contract and fixed preview', () => {
       ).toBe(true)
     for (const kinds of [[], Array(31).fill('image'), ['image', 'video'], ['audio']])
       expect(videoFlowInputsValid('reference', [{ targetPortId: 'in-images', kinds }])).toBe(false)
+    expect(videoFlowInputsValid('text', [{ targetPortId: 'in-images', kinds: ['image'] }])).toBe(
+      false
+    )
     expect(videoFlowInputsValid('reference', [])).toBe(false)
     expect(
       videoFlowInputsValid('reference', [

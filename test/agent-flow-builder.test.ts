@@ -113,6 +113,9 @@ function fixture() {
     setPlan: (plan: unknown) => {
       buildPlan = BuildPlanSchema.parse(plan)
     },
+    setRawPlan: (plan: unknown) => {
+      buildPlan = plan as typeof buildPlan
+    },
     during: (fn: () => void) => {
       duringBuild = fn
     }
@@ -120,6 +123,60 @@ function fixture() {
 }
 const request = { projectId: 'p', nodeId: 'builder', action: 'propose' as const, requestId: 'one' }
 describe('trusted graph builder', () => {
+  it('BLD-01 repeated discard leaves the graph unchanged and the cancelled preview cannot be authorized', async () => {
+    const f = fixture()
+    const before = JSON.stringify(f.file)
+    const preview = (await f.host.handle(request))!
+    expect(JSON.stringify(f.file)).toBe(before)
+    expect((await f.host.handle({ ...request, action: 'discard', buildId: preview.buildId }))?.state).toBe('discarded')
+    expect((await f.host.handle({ ...request, action: 'discard', buildId: preview.buildId }))?.state).toBe('discarded')
+    expect((await f.host.handle({ ...request, action: 'authorize', buildId: preview.buildId }))?.state).toBe('discarded')
+    expect(JSON.stringify(f.file)).toBe(before)
+    expect(f.calls()).toBe(1)
+    const reopened = new FlowBuilderHost(f.db, () => f.file, () => true, async () => { throw new Error('cancelled preview must not request a model') })
+    expect((await reopened.handle({ ...request, action: 'inspect' }))?.state).toBe('discarded')
+  })
+  it.each(['source-body', 'builder-config', 'data-edge'])('BLD-03 rejects %s edits before authorization without adding preview nodes', async (variant) => {
+    const f = fixture()
+    const preview = (await f.host.handle(request))!
+    const count = f.file.nodes.length
+    if (variant === 'source-body') f.store.text.props.text = 'new source'
+    if (variant === 'builder-config') {
+      f.store.builder.props.config = JSON.stringify({ ...JSON.parse(f.store.builder.props.config), maxSteps: 11 })
+      f.file.nodes[0].params.config = f.store.builder.props.config
+    }
+    if (variant === 'data-edge') f.file.edges.push({ id: 'changed-edge', from: { nodeId: 'text', portId: 'out-text' }, to: { nodeId: 'builder', portId: 'in-text' } })
+    await expect(f.host.handle({ ...request, action: 'authorize', buildId: preview.buildId })).rejects.toMatchObject({ code: 'FLOW_REVISION_CONFLICT' })
+    expect(f.file.nodes).toHaveLength(count)
+    expect(preview.nodes.every(node => !f.file.nodes.some(saved => saved.id === node.id))).toBe(true)
+    expect(f.calls()).toBe(1)
+  })
+  it.each([1, 4])('BLD-04 previews sequential %i steps with exact specialist and target counts', async (count) => {
+    const f = fixture()
+    f.setPlan({ title: 'bounded sequence', topology: 'sequential', steps: Array.from({ length: count }, (_, index) => ({ title: 'step ' + index, goal: 'format', mode: 'autonomous', template: '{{value}}' })) })
+    const before = JSON.stringify(f.file)
+    const preview = (await f.host.handle(request))!
+    expect(preview.plan.steps).toHaveLength(count)
+    expect(preview.nodes.filter(node => node.type === 'processor')).toHaveLength(count)
+    expect(preview.nodes.filter(node => node.type === 'agent')).toHaveLength(count + 1)
+    expect(new Set(preview.nodes.map(node => node.id)).size).toBe(preview.nodes.length)
+    expect(JSON.stringify(f.file)).toBe(before)
+    expect(f.calls()).toBe(1)
+  })
+  it.each([2, 3, 4])('BLD-04 previews parallel %i branches with the matching authorized cap', async (count) => {
+    const f = fixture()
+    f.setPlan({ title: 'bounded fork', topology: 'parallel-fork', steps: Array.from({ length: count }, (_, index) => ({ title: 'branch ' + index, goal: 'format', mode: 'autonomous', template: '{{value}}' })) })
+    const before = JSON.stringify(f.file)
+    const preview = (await f.host.handle(request))!
+    const main = preview.nodes.find(node => node.type === 'agent' && JSON.parse(node.config).role === 'coordinator')!
+    const config = AgentNodeConfigSchema.parse(JSON.parse(main.config))
+    const children = preview.nodes.filter(node => node.type === 'agent' && node.id !== main.id)
+    expect(children).toHaveLength(count)
+    expect(config.maxParallelTasks).toBe(count)
+    expect(config.allowedNodeIds.filter(id => children.some(child => child.id === id))).toHaveLength(count)
+    expect(preview.edges.filter(edge => edge.from.nodeId === 'text' && children.some(child => child.id === edge.to.nodeId))).toHaveLength(count)
+    expect(JSON.stringify(f.file)).toBe(before)
+  })
   it('persists a bounded preview without reading material or changing graph; replays proposals', async () => {
     const f = fixture(),
       before = JSON.stringify(f.file)
@@ -147,6 +204,64 @@ describe('trusted graph builder', () => {
     expect(await reopened.handle({ ...request, action: 'authorize', buildId: p.buildId })).toEqual(
       p
     )
+  })
+  it('BLD-07 preserves one preview across host reopen and confirms only one complete saved graph', async () => {
+    const f = fixture()
+    const initialNodeCount = f.file.nodes.length
+    const preview = (await f.host.handle(request))!
+    const reopened = new FlowBuilderHost(
+      f.db,
+      () => f.file,
+      () => true,
+      async () => { throw new Error('reopened preview must not invoke the builder model') }
+    )
+
+    expect(await reopened.handle({ ...request, action: 'inspect' })).toEqual(preview)
+    expect(f.calls()).toBe(1)
+
+    for (const node of preview.nodes) {
+      f.store[node.id] = {
+        id: node.id,
+        type: 'node-card',
+        x: node.x,
+        y: node.y,
+        props: {
+          w: 340,
+          h: 260,
+          nodeType: node.type,
+          title: node.title,
+          text: node.text,
+          config: node.config,
+          mediaId: '',
+          mediaPath: '',
+          mediaMime: ''
+        },
+        meta: { flowBuildId: preview.buildId }
+      }
+      f.file.nodes.push({
+        id: node.id,
+        type: node.type,
+        contractVersion: node.contractVersion
+      } as ProjectFile['nodes'][number])
+    }
+
+    expect((await reopened.handle({ ...request, action: 'inspect' }))?.state).toBe('preview')
+    f.file.edges = preview.edges.map((edge, index) => ({ id: `edge-${index}`, ...edge }))
+    expect((await reopened.handle({ ...request, action: 'inspect' }))?.state).toBe('committed')
+    expect((await reopened.handle({ ...request, action: 'authorize', buildId: preview.buildId }))?.state).toBe('committed')
+
+    const secondReopen = new FlowBuilderHost(
+      f.db,
+      () => f.file,
+      () => true,
+      async () => { throw new Error('committed graph recovery must not invoke the builder model') }
+    )
+    expect((await secondReopen.handle({ ...request, action: 'inspect' }))?.state).toBe('committed')
+    expect((await secondReopen.handle(request))?.buildId).toBe(preview.buildId)
+    expect(f.file.nodes).toHaveLength(initialNodeCount + preview.nodes.length)
+    expect(f.file.edges).toHaveLength(preview.edges.length)
+    expect(f.db.prepare('SELECT COUNT(*) AS n FROM flow_builds').get()).toEqual({ n: 1 })
+    expect(f.calls()).toBe(1)
   })
   it('normalizes persisted previews from the original sequential text builder', async () => {
     const f = fixture(),
@@ -286,6 +401,29 @@ describe('trusted graph builder', () => {
         })
       }).success
     ).toBe(false)
+  })
+
+  it('BLD-05 rejects an arbitrary executable capability before persisting a preview', async () => {
+    const f = fixture(),
+      before = JSON.stringify(f.file)
+    f.setRawPlan({
+      title: '执行任意命令',
+      topology: 'sequential',
+      steps: [
+        {
+          title: '运行shell',
+          goal: '读取本地文件',
+          mode: 'autonomous',
+          capability: 'shell@1',
+          command: 'type secrets.txt'
+        }
+      ]
+    })
+
+    await expect(f.host.handle(request)).rejects.toThrow()
+    expect(JSON.stringify(f.file)).toBe(before)
+    expect(f.db.prepare('SELECT COUNT(*) AS n FROM flow_builds').get()).toEqual({ n: 0 })
+    expect(f.calls()).toBe(1)
   })
 
   it('builds a versioned image generation and edit chain with host-owned ports/config', async () => {

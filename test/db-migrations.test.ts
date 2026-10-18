@@ -38,12 +38,14 @@ describe('SQLite user_version migrations', () => {
     expect(state.pragmas).toEqual(
       Array.from({ length: DB_SCHEMA_VERSION }, (_value, index) => `user_version = ${index + 1}`)
     )
-    expect(schemaExecs(state.execs).at(-6)).toContain('CREATE TABLE flow_commands')
-    expect(schemaExecs(state.execs).at(-5)).toContain('CREATE TABLE flow_agent_tasks')
-    expect(schemaExecs(state.execs).at(-4)).toContain('CREATE TABLE flow_agent_collaboration')
-    expect(schemaExecs(state.execs).at(-3)).toContain('CREATE TABLE flow_coordination_runs')
-    expect(schemaExecs(state.execs).at(-2)).toContain('CREATE TABLE flow_builds')
-    expect(schemaExecs(state.execs).at(-1)).toContain('CREATE TABLE process_locks')
+    const schemas = schemaExecs(state.execs)
+    expect(schemas.some((sql) => sql.includes('CREATE TABLE flow_commands'))).toBe(true)
+    expect(schemas.some((sql) => sql.includes('CREATE TABLE flow_agent_tasks'))).toBe(true)
+    expect(schemas.some((sql) => sql.includes('CREATE TABLE flow_agent_collaboration'))).toBe(true)
+    expect(schemas.some((sql) => sql.includes('CREATE TABLE flow_coordination_runs'))).toBe(true)
+    expect(schemas.some((sql) => sql.includes('CREATE TABLE flow_builds'))).toBe(true)
+    expect(schemas.some((sql) => sql.includes('CREATE TABLE process_locks'))).toBe(true)
+    expect(schemas.at(-1)).toContain('agent_tool_calling_validations')
   })
 
   it('每个迁移整体包在单个事务里：迁移语句与 user_version 推进同提交', () => {
@@ -136,7 +138,17 @@ describe('SQLite user_version migrations', () => {
           : sqlite.exec(`PRAGMA ${statement}`)
     }
     // M8 自身不依赖早期迁移的表，可直接把版本标到 7 构造 M8 前置状态。
-    sqlite.exec('PRAGMA user_version = 7')
+    sqlite.exec(`CREATE TABLE model_connections (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, protocol TEXT NOT NULL, base_url TEXT NOT NULL,
+      secret_ref TEXT, headers_json TEXT NOT NULL DEFAULT '{}', metadata_json TEXT NOT NULL DEFAULT '{}',
+      enabled INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+    );
+    CREATE TABLE model_definitions (
+      id TEXT PRIMARY KEY, connection_id TEXT NOT NULL, model_id TEXT NOT NULL, name TEXT NOT NULL,
+      capabilities_json TEXT NOT NULL, metadata_json TEXT NOT NULL DEFAULT '{}', enabled INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+    );
+    PRAGMA user_version = 7;`)
     // 破坏 M8：预置同名缺列表，IF NOT EXISTS 跳过建表后建索引因缺列失败——
     // 模拟「迁移中途失败」，同事务内已建的 library_category_versions 必须整体回滚。
     sqlite.exec('CREATE TABLE library_revision_blueprints (revision_id TEXT PRIMARY KEY)')

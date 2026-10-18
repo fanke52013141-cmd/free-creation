@@ -65,6 +65,25 @@ function fixture(): {
 }
 
 describe('production immutable text/JSON asset versions', () => {
+  it('SEC-05 cannot read an existing other project version even when node IDs are identical', () => {
+    const f = fixture()
+    const version = f.store.submit(f.input)
+    f.db.prepare('INSERT INTO projects(id,name,created_at,updated_at) VALUES (?,?,0,0)').run('project-b', 'isolated second project')
+    const second = JSON.parse(JSON.stringify(f.file)) as ProjectFile
+    second.meta.id = 'project-b'
+    const store = new FlowAssetStore(f.db, id => id === 'project-a' ? f.file : id === 'project-b' ? second : null)
+    expect(() => store.read('project-b', version.ref.versionId)).toThrow('ASSET_VERSION_MISSING')
+    expect(() => store.resolveInputs('project-b', [version.ref])).toThrow('ASSET_VERSION_MISSING')
+    expect(store.list('project-b', f.input.nodeId, f.input.portId)).toEqual([])
+    expect(store.read('project-a', version.ref.versionId)).toEqual(version)
+    expect(f.db.prepare('SELECT COUNT(*) AS n FROM flow_asset_versions').get()).toEqual({ n: 1 })
+  })
+  it.each(['assetId', 'sourceNodeId', 'sourcePortId'] as const)('AST-02 rejects a fixed reference with a forged %s', field => {
+    const f = fixture(), version = f.store.submit(f.input)
+    expect(() => f.store.resolveInputs('project-a', [{ ...version.ref, [field]: 'forged' }])).toThrow('ASSET_REFERENCE_MISMATCH')
+    expect(f.store.read('project-a', version.ref.versionId)).toEqual(version)
+    expect(f.db.prepare('SELECT COUNT(*) AS n FROM flow_asset_versions').get()).toEqual({ n: 1 })
+  })
   it('submits the formal trimmed output and keeps v1 fixed after draft edits/v2', () => {
     const { store, shape, input, file } = fixture()
     const v1 = store.submit(input)

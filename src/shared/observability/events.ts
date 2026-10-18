@@ -314,6 +314,10 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
     def('media.document_extract_failed', 'warn', 'main/media/document-text.ts'),
     def('media.read_failed', 'warn', 'main/store/media.repo.ts'),
     // project.save / restore / transfer
+    def('project.open.failed', 'error', 'main/ipc/project.ipc.ts', {
+      phase: 'short',
+      code: 'short'
+    }),
     def('project.save.started', 'info', 'main/ipc/project.ipc.ts', { operation: 'short' }),
     def('project.save.completed', 'info', 'main/ipc/project.ipc.ts', {
       graphVersion: 'int',
@@ -322,6 +326,7 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
     def('project.save.conflict', 'warn', 'main/ipc/project.ipc.ts'),
     def('project.save.failed', 'error', 'main/ipc/project.ipc.ts', {
       phase: 'short',
+      code: 'short',
       backupUsed: 'flag',
       rollbackFailed: 'flag',
       operation: 'short'
@@ -349,6 +354,10 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
     def('library.mutation_failed', 'error', 'main/ipc/library.ipc.ts'),
     // configuration.*：模型连接/能力验证/迁移
     def('configuration.changed', 'info', 'main/ipc/models.ipc.ts', { connectionId: 'id' }),
+    def('configuration.validation_started', 'info', 'main/ipc/models.ipc.ts', {
+      connectionId: 'id',
+      modelId: 'id'
+    }),
     def('configuration.validation_completed', 'info', 'main/ipc/models.ipc.ts', {
       connectionId: 'id',
       modelId: 'id'

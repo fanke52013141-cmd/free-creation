@@ -149,6 +149,8 @@ export const ModelDefinitionSchema = z.object({
   modelId: z.string().trim().min(1),
   capabilities: z.array(CapabilitySchema).min(1),
   validation: z.partialRecord(ModelOperationSchema, ModelValidationSnapshotSchema).default({}),
+  /** Separate proof; text.generate alone does not establish Agent tool-call support. */
+  agentToolCallingValidation: ModelValidationSnapshotSchema.optional(),
   enabled: z.boolean().default(true),
   metadata: z.record(z.string(), JsonValueSchema).default({})
 })

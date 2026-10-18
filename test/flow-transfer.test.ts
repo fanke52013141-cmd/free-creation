@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Database from 'better-sqlite3'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname, resolve, basename } from 'node:path'
 import { createHash } from 'node:crypto'
@@ -86,6 +86,56 @@ function fixture() {
   return { file, shape, asset }
 }
 describe('portable immutable Flow assets and graph references', () => {
+  it('REL-04 rejects a future project bundle version before creating import state', () => {
+    const f = fixture()
+    const futureProject = { ...f.file, version: 2 }
+    const bundlePath = join(dirname(state.root), 'future-version.canvasbundle')
+    const zip = new AdmZip()
+    zip.addFile('project.json', Buffer.from(JSON.stringify(futureProject)))
+    zip.writeZip(bundlePath)
+
+    const projectsBefore = state.db!.prepare('SELECT count(*) AS count FROM projects').get()
+    const mediaBefore = state.db!.prepare('SELECT count(*) AS count FROM media').get()
+    const versionsBefore = state.db!
+      .prepare('SELECT count(*) AS count FROM flow_asset_versions')
+      .get()
+    const directoriesBefore = readdirSync(state.root).sort()
+
+    expect(() => importProject(bundlePath)).toThrow('项目版本不兼容：文件为 v2，当前支持 v1')
+
+    expect(state.db!.prepare('SELECT count(*) AS count FROM projects').get()).toEqual(projectsBefore)
+    expect(state.db!.prepare('SELECT count(*) AS count FROM media').get()).toEqual(mediaBefore)
+    expect(
+      state.db!.prepare('SELECT count(*) AS count FROM flow_asset_versions').get()
+    ).toEqual(versionsBefore)
+    expect(readdirSync(state.root).sort()).toEqual(directoriesBefore)
+  })
+
+  it('CFG-06 characterizes malformed Agent configuration reaching an imported project (reachability evidence only)', () => {
+    const f = fixture()
+    const brokenId = 'shape:broken-agent'
+    const config = '{'
+    f.file.nodes.push({
+      id: brokenId, type: 'agent', contractVersion: 1, ports: [], params: { config }
+    } as unknown as ProjectFile['nodes'][number])
+    const snapshot = f.file.tldrawSnapshot as { store: Record<string, unknown> }
+    snapshot.store[brokenId] = {
+      id: brokenId, type: 'node-card', typeName: 'shape',
+      props: { nodeType: 'agent', config, text: 'isolated malformed configuration' }, meta: {}
+    }
+    const directory = join(state.root, 'source')
+    mkdirSync(directory)
+    writeFileSync(join(directory, 'project.json'), JSON.stringify(f.file))
+    const bundle = exportProject('source', join(state.root, 'invalid-agent-copy')).path
+    const meta = importProject(bundle)
+    const imported = JSON.parse(readFileSync(join(state.root, meta.id, 'project.json'), 'utf8')) as ProjectFile
+    const node = imported.nodes.find(node => node.type === 'agent')!
+    const shape = (imported.tldrawSnapshot as { store: Record<string, { props: { config: string } }> }).store[node.id]
+    // This asserts the observed entry path, not that accepting malformed input is
+    // desired. The separate browser CFG-06 negative checks controlled rendering.
+    expect(shape.props.config).toBe(config)
+    expect(meta.id).not.toBe('source')
+  })
   it('keeps the fixed presentation port distinct from the original processor output port', () => {
     const f = fixture()
     f.file.nodes[0].type = 'processor'
@@ -410,6 +460,61 @@ describe('portable immutable Flow assets and graph references', () => {
     expect(config.states).toEqual(['control'])
     expect(JSON.stringify(imported)).not.toContain('fake-secret')
     expect(shape.props.text).toBe('private-asset-material')
+  })
+  it('SEC-07 rejects a raw ZIP media path traversal before project or sibling-file visibility', () => {
+    const f = fixture(),
+      sourceDirectory = join(state.root, 'source')
+    mkdirSync(sourceDirectory)
+    writeFileSync(join(sourceDirectory, 'project.json'), JSON.stringify(f.file))
+    const bundlePath = exportProject('source', join(state.root, 'path-traversal')).path,
+      zip = new AdmZip(bundlePath)
+    zip.addFile('media/safe.bin', Buffer.from('outside sentinel'))
+    // AdmZip's public addFile normalizes traversal segments, so mutate the entry
+    // name after creation to retain a hostile central-directory path in the ZIP.
+    zip.getEntry('media/safe.bin')!.entryName = 'media/../../../escaped.bin'
+    zip.writeZip(bundlePath)
+
+    const escapedPath = join(dirname(state.root), 'escaped.bin'),
+      before = readdirSync(state.root).sort()
+    expect(existsSync(escapedPath)).toBe(false)
+    expect(() => importProject(bundlePath)).toThrow('项目包包含非法媒体路径')
+    expect(existsSync(escapedPath)).toBe(false)
+    expect(readdirSync(state.root).sort()).toEqual(before)
+    expect(state.db!.prepare('SELECT count(*) AS count FROM projects').get()).toEqual({ count: 1 })
+    expect(state.db!.prepare('SELECT count(*) AS count FROM media').get()).toEqual({ count: 0 })
+  })
+  it('SEC-07 removes credentials from an actual Agent project export and its import/export round trip', () => {
+    const f = fixture(),
+      sourceDirectory = join(state.root, 'source'),
+      apiKey = 'sk-agent-transfer-private-key-123456',
+      clientSecret = 'agent-transfer-client-secret-987654'
+    const config = {
+      modelDefinitionId: 'fixture-model',
+      apiKey,
+      nested: { client_secret: clientSecret, label: 'preserved' }
+    }
+    f.shape.props.nodeType = 'agent'
+    f.shape.props.config = JSON.stringify(config)
+    f.file.nodes[0]!.type = 'agent'
+    f.file.nodes[0]!.params = { config: JSON.stringify(config) }
+    mkdirSync(sourceDirectory)
+    writeFileSync(join(sourceDirectory, 'project.json'), JSON.stringify(f.file))
+
+    const exportedPath = exportProject('source', join(state.root, 'credential-export')).path
+    const packedProject = new AdmZip(exportedPath).readAsText('project.json')
+    expect(packedProject).not.toContain(apiKey)
+    expect(packedProject).not.toContain(clientSecret)
+    const packed = JSON.parse(packedProject) as ProjectFile
+    expect(JSON.parse(packed.nodes[0]!.params.config as string)).toEqual({
+      modelDefinitionId: 'fixture-model',
+      nested: { label: 'preserved' }
+    })
+
+    const imported = importProject(exportedPath)
+    const roundTripPath = exportProject(imported.id, join(state.root, 'credential-round-trip')).path
+    const roundTripProject = new AdmZip(roundTripPath).readAsText('project.json')
+    expect(roundTripProject).not.toContain(apiKey)
+    expect(roundTripProject).not.toContain(clientSecret)
   })
   it('rejects a bundle whose referenced fixed version is absent or whose value digest was tampered, before it creates a project', () => {
     const f = fixture(),

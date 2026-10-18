@@ -14,7 +14,7 @@ export const FixedNodeInputSchema = z
   .strict()
 
 /** Intent only. Parsing never authorizes dispatch or replaces the registered node contract. */
-export const NodeExecuteCommandSchema = z
+const NodeExecuteCommandObjectSchema = z
   .object({
     schemaVersion: z.literal(1),
     kind: z.literal('node.execute'),
@@ -55,6 +55,21 @@ export const NodeExecuteCommandSchema = z
       context.addIssue({ code: 'custom', message: 'Agent cannot execute itself' })
     }
   })
+/**
+ * JSON parsing preserves an own `__proto__` key, while object schema parsing may
+ * drop it before strict-key validation. Reject that reserved key on the raw
+ * value so malformed commands cannot reach ledger persistence or dispatch.
+ */
+export const NodeExecuteCommandSchema = z.preprocess((value, context) => {
+  if (
+    value !== null &&
+    typeof value === 'object' &&
+    Object.prototype.hasOwnProperty.call(value, '__proto__')
+  ) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'Reserved prototype key' })
+  }
+  return value
+}, NodeExecuteCommandObjectSchema)
 export type NodeExecuteCommand = z.infer<typeof NodeExecuteCommandSchema>
 
 export const CommandLookupSchema = z.object({ projectId: id, commandId: id }).strict()

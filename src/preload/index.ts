@@ -554,6 +554,10 @@ const api = {
       ipcRenderer.invoke(IPC.models.discover, input),
     validate: (input: ValidateModelDefinitionInput): Promise<IpcEnvelope<ModelValidationResult>> =>
       ipcRenderer.invoke(IPC.models.validate, input),
+    validateAgentToolCalling: (
+      input: import('../shared/contracts').ValidateAgentToolCallingInput
+    ): Promise<IpcEnvelope<ModelValidationResult>> =>
+      ipcRenderer.invoke(IPC.models.validateAgentToolCalling, input),
     saveBinding: (
       input: SaveModelFeatureBindingInput
     ): Promise<IpcEnvelope<import('@free-creation/model-contracts').FeatureBinding>> =>

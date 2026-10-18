@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import Database from 'better-sqlite3'
 import { migrateDatabase } from '../src/main/store/db-migrations'
 import { FlowReviewHost } from '../src/main/agent-flow/review-host'
@@ -10,7 +10,10 @@ import type { AgentModelPort } from '../src/main/agent-flow/runtime'
 import type { ReviewModelVerdict } from '../src/shared/agent-flow/review'
 import { projectReviewOutputs } from '../src/shared/agent-flow/review'
 const databases: Database.Database[] = []
-afterEach(() => databases.splice(0).forEach((db) => db.close()))
+afterEach(() => {
+  vi.useRealTimers()
+  databases.splice(0).forEach((db) => db.close())
+})
 const request = {
   projectId: 'p',
   nodeId: 'review',
@@ -125,6 +128,47 @@ function fixture(
   }
 }
 describe('fixed-version AI review and bounded manual rework', () => {
+  it.each([0, 1, 10])('REV-07 bounds maxReworks=%i and does not charge duplicate negative reports', async (maxReworks) => {
+    const f = fixture({ maxReworks, verdict: { passed: false, feedback: 'fixed negative fixture', issues: [] } })
+    const records: string[] = []
+    for (let round = 0; round <= maxReworks; round++) {
+      f.store.text.props.text = 'isolated review version ' + round
+      const decision = await f.host.run({ ...request, requestId: 'review-round-' + round })
+      f.publish(decision)
+      expect(decision.reviewRevision).toBe(round)
+      expect(decision.passed).toBe(false)
+      expect(f.calls()).toBe(round + 1)
+      const count = f.db.prepare('SELECT COUNT(*) AS n FROM flow_reviews').get()
+      expect(await f.host.run({ ...request, requestId: 'duplicate-round-' + round })).toEqual(decision)
+      expect(f.db.prepare('SELECT COUNT(*) AS n FROM flow_reviews').get()).toEqual(count)
+      expect(f.calls()).toBe(round + 1)
+      expect(() => f.ledger.assertNodeAvailable({ projectId: 'p', nodeId: 'target' })).toThrow('FLOW_REVIEW_NOT_READY')
+      records.push(decision.subjects[0].versionId)
+    }
+    expect(new Set(records).size).toBe(maxReworks + 1)
+    f.store.text.props.text = 'one beyond the allowed rework bound'
+    await expect(f.host.run({ ...request, requestId: 'beyond-limit' })).rejects.toMatchObject({ code: 'FLOW_REVIEW_BUDGET_EXHAUSTED' })
+    expect(f.calls()).toBe(maxReworks + 1)
+    expect(f.db.prepare('SELECT COUNT(*) AS n FROM flow_reviews').get()).toEqual({ n: maxReworks + 1 })
+  })
+  it.each(['rules-version', 'criteria', 'source-port', 'source-node', 'asset-version'])('REV-03 invalidates authoritative approval after %s changes before a second model request', async (variant) => {
+    const f = fixture()
+    const decision = await f.host.run(request)
+    f.publish(decision)
+    expect(new FlowReviewStore(f.db).approval(f.file, 'review')).not.toBeNull()
+    expect(() => f.ledger.assertNodeAvailable({ projectId: 'p', nodeId: 'target' })).not.toThrow()
+    const config = JSON.parse(f.store.review.props.config)
+    if (variant === 'rules-version') config.rulesVersion = 'rules-2'
+    if (variant === 'criteria') f.store.review.props.text = 'different required criteria'
+    if (variant === 'source-port') config.subjectSources[0].portId = 'out-json'
+    if (variant === 'source-node') config.subjectSources[0].nodeId = 'missing-source'
+    if (variant === 'asset-version') f.store.text.props.text = 'revised material v2'
+    f.store.review.props.config = JSON.stringify(config)
+    expect(new FlowReviewStore(f.db).approval(f.file, 'review')).toBeNull()
+    expect(() => f.ledger.assertNodeAvailable({ projectId: 'p', nodeId: 'target' })).toThrow()
+    expect(f.calls()).toBe(1)
+    expect(new FlowReviewStore(f.db).latest('p', 'review')?.decision).toEqual(decision)
+  })
   it('cancels even a model that ignores its signal and never commits a late verdict', async () => {
     let resolve!: (value: ReviewModelVerdict) => void
     let started!: () => void
@@ -147,6 +191,35 @@ describe('fixed-version AI review and bounded manual rework', () => {
     resolve({ passed: true, feedback: 'late', issues: [] })
     await Promise.resolve()
     expect(new FlowReviewStore(f.db).latest('p', 'review')).toBeNull()
+    expect(() => f.ledger.assertNodeAvailable({ projectId: 'p', nodeId: 'target' })).toThrow(
+      'FLOW_REVIEW_NOT_READY'
+    )
+  })
+  it('REV-05 times out an unresponsive review without persisting a verdict or releasing its gate', async () => {
+    vi.useFakeTimers()
+    let resolveLate!: (value: ReviewModelVerdict) => void
+    let markStarted!: () => void
+    let modelCalls = 0
+    const started = new Promise<void>((resolve) => { markStarted = resolve })
+    const f = fixture({
+      review: async () => {
+        modelCalls++
+        markStarted()
+        return new Promise<ReviewModelVerdict>((resolve) => { resolveLate = resolve })
+      }
+    })
+    const running = f.host.run({ ...request, requestId: 'review-timeout' })
+    const rejected = expect(running).rejects.toMatchObject({ code: 'AGENT_CANCELLED_OR_TIMED_OUT' })
+
+    await started
+    await vi.advanceTimersByTimeAsync(30000)
+    await rejected
+    resolveLate({ passed: true, feedback: 'late timeout verdict', issues: [] })
+    await Promise.resolve()
+
+    expect(modelCalls).toBe(1)
+    expect(new FlowReviewStore(f.db).latest('p', 'review')).toBeNull()
+    expect(f.db.prepare('SELECT COUNT(*) AS n FROM flow_reviews').get()).toEqual({ n: 0 })
     expect(() => f.ledger.assertNodeAvailable({ projectId: 'p', nodeId: 'target' })).toThrow(
       'FLOW_REVIEW_NOT_READY'
     )
@@ -225,6 +298,22 @@ describe('fixed-version AI review and bounded manual rework', () => {
     await expect(bad.host.run(request)).rejects.toThrow()
     expect(new FlowReviewStore(bad.db).latest('p', 'review')).toBeNull()
   })
+  it.each(['reviewId', 'cycleId', 'reviewNodeId'] as const)(
+    'REV-04 rejects a public report with a foreign %s',
+    async (field) => {
+      const f = fixture(),
+        decision = await f.host.run(request)
+      f.publish(decision)
+      f.store.review.meta.nodeResult = JSON.stringify({
+        ...decision,
+        [field]: 'foreign-review-identity'
+      })
+
+      expect(() => f.ledger.assertNodeAvailable({ projectId: 'p', nodeId: 'target' })).toThrow(
+        'FLOW_REVIEW_NOT_READY'
+      )
+    }
+  )
   it('binds negative quality to success and limits initial review plus configured reworks without duplicate consumption', async () => {
     const f = fixture({
       maxReworks: 1,

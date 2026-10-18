@@ -2,6 +2,9 @@
 // 全部使用可注入内存 FS + 手动时钟获得确定性故障（拒写、磁盘满、坏行、多实例）。
 import { describe, expect, it } from 'vitest'
 import {
+  DIAGNOSTICS_FLUSH_BATCH_ITEMS,
+  DIAGNOSTICS_FLUSH_INTERVAL_MS,
+  DIAGNOSTICS_QUIT_FLUSH_TIMEOUT_MS,
   DiagnosticsProducer,
   newEventId,
   type DiagnosticsEvent,
@@ -287,12 +290,188 @@ describe('诊断服务端到端（L02）', () => {
       disableTimers: true
     })
     await service.ingest([makeEvent()])
+    const initialSession = [...store.files.entries()].find(([path]) =>
+      path.includes(`session-${service.sessionId}.json`)
+    )
+    expect(initialSession).toBeDefined()
+    const initialStartedAt = JSON.parse(initialSession![1]).startedAt
+    clock.advance(1234)
     await service.flushOnQuit()
     const unclean = await findUncleanSessions(store, '/data/diagnostics/sessions')
     expect(unclean.filter((item) => item.sessionId === service.sessionId)).toHaveLength(0)
     const sessionFiles = [...store.files.keys()].filter((path) => path.includes('sessions/session-'))
     expect(sessionFiles.length).toBe(1)
-    expect(store.files.get(sessionFiles[0])).toContain('"ended":true')
+    const endedSession = JSON.parse(store.files.get(sessionFiles[0])!)
+    expect(endedSession.ended).toBe(true)
+    expect(endedSession.startedAt).toBe(initialStartedAt)
+    expect(endedSession.endedAt).toBe(new Date(clock.nowMs()).toISOString())
+  })
+
+  it('退出时等待已开始的分片写入确认，再标记会话 ended', async () => {
+    const base = memoryFsStore()
+    const clock = manualClock(0)
+    let startAppend!: () => void
+    const appendStarted = new Promise<void>((resolve) => {
+      startAppend = resolve
+    })
+    let releaseAppend!: () => void
+    const appendGate = new Promise<void>((resolve) => {
+      releaseAppend = resolve
+    })
+    let watchSessionWrite = false
+    let markSessionWrite!: () => void
+    const sessionWriteStarted = new Promise<void>((resolve) => {
+      markSessionWrite = resolve
+    })
+    const store = {
+      ...base,
+      appendFile: async (path: string, data: string): Promise<void> => {
+        startAppend()
+        await appendGate
+        await base.appendFile(path, data)
+      },
+      writeFile: async (path: string, data: string | Uint8Array): Promise<void> => {
+        if (watchSessionWrite && path.replaceAll('\\', '/').includes('/sessions/'))
+          markSessionWrite()
+        await base.writeFile(path, data)
+      }
+    }
+    const service = await initDiagnosticsService({ dataDir: '/data', store, clock })
+    await service.ingest([makeEvent()])
+    clock.advance(DIAGNOSTICS_FLUSH_INTERVAL_MS)
+    await appendStarted
+    watchSessionWrite = true
+
+    const quitting = service.flushOnQuit()
+    const sessionClosedBeforeAck = await Promise.race([
+      sessionWriteStarted.then(() => true),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 10))
+    ])
+    releaseAppend()
+    await quitting
+
+    expect(sessionClosedBeforeAck).toBe(false)
+    expect(service.health().queueDepth).toBe(0)
+    expect([...base.files.keys()].some((path) => path.endsWith('.jsonl'))).toBe(true)
+  })
+
+  it('退出时排空所有分片批次后才标记会话 ended', async () => {
+    const store = memoryFsStore()
+    const service = await initDiagnosticsService({
+      dataDir: '/data',
+      store,
+      clock: manualClock(0),
+      disableTimers: true
+    })
+    const expectedCount = DIAGNOSTICS_FLUSH_BATCH_ITEMS * 8 + 1
+    const firstBatch = await service.ingest(
+      Array.from({ length: expectedCount - 1 }, () => makeEvent())
+    )
+    const lastEvent = await service.ingest([makeEvent()])
+
+    await service.flushOnQuit()
+
+    expect(firstBatch.accepted + lastEvent.accepted).toBe(expectedCount)
+    expect(service.health().queueDepth).toBe(0)
+    const shard = [...store.files.entries()].find(([path]) => path.endsWith('.jsonl'))
+    expect(shard).toBeDefined()
+    expect(shard?.[1].trim().split('\n')).toHaveLength(expectedCount)
+    expect(
+      (await findUncleanSessions(store, '/data/diagnostics/sessions')).some(
+        (item) => item.sessionId === service.sessionId
+      )
+    ).toBe(false)
+  })
+
+  it('renderer 上游未确认时即使 main 队列落盘也保留未完整会话标记', async () => {
+    const store = memoryFsStore()
+    const service = await initDiagnosticsService({
+      dataDir: '/data',
+      store,
+      clock: manualClock(0),
+      disableTimers: true
+    })
+    await service.ingest([makeEvent()])
+
+    await service.flushOnQuit({ upstreamDrainComplete: false })
+
+    expect(service.health().queueDepth).toBe(0)
+    expect(service.health().written).toBe(1)
+    const unclean = await findUncleanSessions(store, '/data/diagnostics/sessions')
+    expect(unclean.some((item) => item.sessionId === service.sessionId)).toBe(true)
+    const sessionFile = [...store.files.entries()].find(([path]) =>
+      path.includes(`session-${service.sessionId}.json`)
+    )
+    expect(JSON.parse(sessionFile![1])).toMatchObject({ ended: false })
+    expect(JSON.parse(sessionFile![1]).endedAt).toBeUndefined()
+  })
+
+  it('写入失败时保留未完整会话标记', async () => {
+    const store = memoryFsStore({ failAppendAfterWrites: 0 })
+    const service = await initDiagnosticsService({
+      dataDir: '/data',
+      store,
+      clock: manualClock(0),
+      disableTimers: true
+    })
+    await service.ingest([makeEvent()])
+
+    await service.flushOnQuit()
+
+    expect(service.health().writeFailures).toBe(1)
+    const unclean = await findUncleanSessions(store, '/data/diagnostics/sessions')
+    expect(unclean.some((item) => item.sessionId === service.sessionId)).toBe(true)
+    const sessionFile = [...store.files.entries()].find(([path]) =>
+      path.includes(`session-${service.sessionId}.json`)
+    )
+    expect(JSON.parse(sessionFile![1])).toMatchObject({ ended: false })
+    expect(JSON.parse(sessionFile![1]).endedAt).toBeUndefined()
+  })
+
+  it('超过退出等待上限时保留未完整会话标记', async () => {
+    const base = memoryFsStore()
+    const clock = manualClock(0)
+    let startAppend!: () => void
+    const appendStarted = new Promise<void>((resolve) => {
+      startAppend = resolve
+    })
+    let releaseAppend!: () => void
+    const appendGate = new Promise<void>((resolve) => {
+      releaseAppend = resolve
+    })
+    const store = {
+      ...base,
+      appendFile: async (path: string, data: string): Promise<void> => {
+        startAppend()
+        await appendGate
+        await base.appendFile(path, data)
+      }
+    }
+    const service = await initDiagnosticsService({
+      dataDir: '/data',
+      store,
+      clock,
+      disableTimers: true
+    })
+    await service.ingest([makeEvent()])
+    const quitting = service.flushOnQuit()
+    await appendStarted
+    clock.advance(DIAGNOSTICS_QUIT_FLUSH_TIMEOUT_MS)
+    try {
+      await quitting
+      expect(
+        (await findUncleanSessions(base, '/data/diagnostics/sessions')).some(
+          (item) => item.sessionId === service.sessionId
+        )
+      ).toBe(true)
+      const sessionFile = [...base.files.entries()].find(([path]) =>
+        path.includes(`session-${service.sessionId}.json`)
+      )
+      expect(JSON.parse(sessionFile![1])).toMatchObject({ ended: false })
+      expect(JSON.parse(sessionFile![1]).endedAt).toBeUndefined()
+    } finally {
+      releaseAppend()
+    }
   })
 
   it('data 目录不可用时返回降级服务：接收计数但不写盘、available=false', async () => {
@@ -342,6 +521,56 @@ describe('诊断服务端到端（L02）', () => {
 })
 
 describe('L05 诊断包导出', () => {
+  it('exportBundle flushes a queued project-open failure before reading the requested time range', async () => {
+    const store = memoryFsStore()
+    const now = Date.now()
+    const service = await initDiagnosticsService({
+      dataDir: '/data',
+      store,
+      clock: manualClock(now),
+      disableTimers: true
+    })
+    const { DiagnosticsProducer } = await import('@shared/observability')
+    const producer = new DiagnosticsProducer({ process: 'main', producerId: 'main-project-open' })
+    const failure = producer.build(
+      'project.open.failed',
+      'error',
+      '项目文件及备份不可读取',
+      {
+        traceId: 'trace-project-open-failed',
+        spanId: 'span-project-open-failed',
+        projectId: 'project-open-failed'
+      },
+      {
+        status: 'failed',
+        attributes: { phase: 'read-snapshot', code: 'PROJECT_OPEN_FAILED' }
+      }
+    )
+    expect(failure).not.toBeNull()
+    await service.ingest([failure!])
+
+    await service.exportBundle(
+      { scope: { since: now - 1_000, until: now + 1_000 }, label: '项目打开失败' },
+      '/data/export/project-open-failed.zip'
+    )
+
+    const AdmZip = (await import('adm-zip')).default
+    const zip = new AdmZip(
+      Buffer.from(store.files.get('/data/export/project-open-failed.zip')!, 'latin1')
+    )
+    const exportedEvents = zip
+      .readAsText('events.jsonl')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line))
+    expect(exportedEvents).toHaveLength(1)
+    expect(exportedEvents[0]).toMatchObject({
+      event: 'project.open.failed',
+      projectId: 'project-open-failed',
+      attributes: { phase: 'read-snapshot', code: 'PROJECT_OPEN_FAILED' }
+    })
+  })
+
   it('exportBundle 产出 manifest/events/summary/coverage 四文件 zip，原子落盘，失败清理临时文件', async () => {
     const store = memoryFsStore()
     const clock = manualClock(new Date('2026-10-04T08:00:00Z').getTime())
@@ -387,5 +616,103 @@ describe('L05 诊断包导出', () => {
     expect(JSON.parse(eventsJsonl[0]).traceId).toBe('trace-export-1')
     const coverage = JSON.parse(zip.readAsText('coverage.json'))
     expect(Object.keys(coverage.familyCounts).length).toBeGreaterThan(0)
+  })
+
+  it('Agent failed diagnostic bundle preserves safe task context while excluding private prompt and credentials', async () => {
+    const store = memoryFsStore()
+    const service = await initDiagnosticsService({
+      dataDir: '/data',
+      store,
+      clock: manualClock(new Date('2026-10-17T07:00:00Z').getTime()),
+      disableTimers: true
+    })
+    const { DiagnosticsProducer } = await import('@shared/observability')
+    const agentProducer = new DiagnosticsProducer({ process: 'main', producerId: 'agent-test' })
+    const privatePrompt = 'AGENT_PRIVATE_PROMPT_MARKER_4821'
+    const privateResponse = 'AGENT_RESPONSE_RAW_MARKER_20261017'
+    const privateMedia = 'AGENT_MEDIA_BASE64_MARKER_20261017'
+    const fakeKey = 'sk-agent-diagnostic-private-key-4821'
+    const context = {
+      traceId: 'trace-agent-export',
+      spanId: 'span-agent-export',
+      runId: 'run-agent-export',
+      nodeExecutionId: 'execution-agent-export',
+      taskId: 'task-agent-export',
+      projectId: 'project-agent-export',
+      nodeId: 'shape:agent-export',
+      nodeType: 'agent'
+    }
+    const privateValues = [privatePrompt, privateResponse, privateMedia, fakeKey]
+    const completedEvent = agentProducer.build(
+      'agent.runtime.completed',
+      'info',
+      `Agent 完成；prompt=${privatePrompt} response=${privateResponse} media=${privateMedia} api_key=${fakeKey}`,
+      context,
+      { privateValues, attributes: { phase: 'completed' } }
+    )
+    const event = agentProducer.build(
+      'agent.runtime.failed',
+      'error',
+      `Agent 执行失败；api_key=${fakeKey}；目标=${privatePrompt}; response=${privateResponse}; media=${privateMedia}`,
+      context,
+      {
+        error: new Error(`${privatePrompt}; ${privateResponse}; ${privateMedia}; ${fakeKey}`),
+        withStack: true,
+        privateValues,
+        attributes: {
+          phase: 'model_decision',
+          code: 'UPSTREAM_FAILED',
+          prompt: privatePrompt,
+          apiKey: fakeKey
+        }
+      }
+    )
+    expect(event).not.toBeNull()
+    expect(completedEvent).not.toBeNull()
+    await service.ingest([completedEvent!, event!])
+    await service.flushNow()
+    await service.exportBundle(
+      { scope: { traceId: 'trace-agent-export' }, label: 'Agent 失败诊断' },
+      '/data/export/agent-bundle.zip'
+    )
+
+    const AdmZip = (await import('adm-zip')).default
+    const zip = new AdmZip(Buffer.from(store.files.get('/data/export/agent-bundle.zip')!, 'latin1'))
+    const manifest = JSON.parse(zip.readAsText('manifest.json'))
+    const eventsJsonl = zip.readAsText('events.jsonl').trim().split('\n')
+    const exportedEvents = eventsJsonl.map((line) => JSON.parse(line))
+    const exportedEvent = exportedEvents.find((candidate) => candidate.event === 'agent.runtime.failed')
+    const summary = zip.readAsText('summary.txt')
+    const exportedText = [
+      zip.readAsText('manifest.json'),
+      zip.readAsText('events.jsonl'),
+      summary,
+      zip.readAsText('coverage.json')
+    ].join('\n')
+
+    expect(manifest.scope).toMatchObject({ traceId: 'trace-agent-export' })
+    expect(manifest.privacy.includesApiKeys).toBe(false)
+    expect(exportedEvent).toMatchObject({
+      event: 'agent.runtime.failed',
+      traceId: 'trace-agent-export',
+      taskId: 'task-agent-export',
+      projectId: 'project-agent-export',
+      nodeId: 'shape:agent-export',
+      nodeType: 'agent',
+      attributes: { phase: 'model_decision', code: 'UPSTREAM_FAILED' }
+    })
+    expect(exportedEvents.map((candidate) => candidate.event)).toEqual([
+      'agent.runtime.completed',
+      'agent.runtime.failed'
+    ])
+    expect(exportedEvent.error.code).toBe('UNKNOWN')
+    expect(exportedEvent.error.safeStack).toContain('Error: [message omitted]')
+    expect(summary).toContain('agent.runtime.failed')
+    expect(exportedText).not.toContain(privatePrompt)
+    expect(exportedText).not.toContain(privateResponse)
+    expect(exportedText).not.toContain(privateMedia)
+    expect(exportedText).not.toContain(fakeKey)
+    expect(exportedText).not.toContain('apiKey')
+    expect(exportedText).not.toContain('"prompt"')
   })
 })

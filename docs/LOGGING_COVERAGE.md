@@ -1,5 +1,13 @@
 # 日志覆盖清单
 
+## 2026-10-17 CFG-04 Agent 配置保存校验
+
+异步项目保存、关窗同步保存与恢复副本保存在进入 `projects.repo` 前校验 Agent schema。拒绝时沿用唯一 `project.save.started` → `project.save.failed` 生命周期，阶段 `validate-agent-config` 与稳定错误码 `INVALID_AGENT_CONFIG` 进入事件白名单；不记录配置、具体越界值或用户正文，也不推进图版本。真实 SQLite/repository 的8个 Agent 数值边界、三个保存IPC入口、快照/派生图载荷及事件schema回归共37/37通过，拒绝路径无节点写入。诊断事件sink故障不改变保存结果的既有断言仍通过。日志和执行证据见 `qa/agent-comprehensive/run-20261017-cfg04-cfg06-current-v1/cfg04-focused-tests-electron-runtime.log` 与 `packaged-cfg06-recovery-results.json`。
+
+## 2026-10-16 Agent 三轮讨论与修订不可变性验收补充
+
+仅扩展 `desktop-electron.ts` 隔离验收入口（正常应用不导入），未修改业务执行器、IPC或事件SDK。沿用已有 Agent/model/project 生命周期配对与 `private-c3` 正文标记脱敏审计；不新增业务终态。当前源码构建后的三轮讨论在两进程桌面路径通过：决策4→4、工具预算3→3、处理器历史2→2，固定呈现及节点定义未变；新进程确认三条讨论记录仍在，旧任务快照/Skill与命令/回执哈希在修订和重开后保持。随后仅显式启动新修订产生两次新工具。证据位于 `qa/agent-comprehensive/run-20261016-203617/qa/agent-comprehensive-m04-reopen-facts/desktop/results.json`，17个模型生命周期记录及诊断脱敏通过。只覆盖确定性夹具，不代表独立人工业务验收、真实模型或全量日志链路完成；本轮不重跑历史90分钟压力。
+
 ## 2026-10-16 R09 时长压力运行器（44 包）
 
 只改开发验收：复用原 task.control/media 事件，每批新进程校验配对与脱敏，八轮仓库故障由安全 phase 断言，真实保存 IPC 日志仍由独立 renderer 门禁负责。用户选定 90 分钟后，隔离运行检查点越过 5400 秒并继续到 6117.524 秒（3584 批/28672 轮）；检查点、任务/下载/锁数量、保留诊断与脱敏通过，最终离线恢复和三个新进程重开通过，证据见 `qa/r09-soak/run-JGSEXB/duration-policy-audit.json` 与 `manual-final-recovery.json`。原 7200 秒 runner 被强制中断，临时夹具清理未完成，不记作两小时通过。仅开发脚本默认时长和验收文档变化，正式业务事件 SDK/IPC 不变；真实保存 IPC 的逐项日志由独立 renderer 门禁负责。最终完整 run-R6OhUK 退出 0（2041 通过/1 既有跳过，模型另 2，17 浏览器/构建/26 桌面路径）；R09 四次 renderer 重开、10 对唯一保存终态及实际诊断脱敏通过。多小时/长驻 renderer/真实掉电/远端撤回边界保持，见 [44 包](canvas-agent-flow/44-r09-duration-soak-runner.md)。
@@ -140,8 +148,8 @@ GLM/C3.3/C4 本批完整 verify 最终串行通过（164 文件、1763 通过、
 | 项目保存/冲突/恢复 | main/ipc/project.ipc.ts 的异步保存、关窗同步保存、恢复副本保存/正式恢复均发 project.save.started 与同 trace/span 唯一 completed/conflict/failed；导入导出沿 transfer.started/validated/committed/failed | 已验收 | 完整磁盘/物理掉电仍需独立故障验收 | 持久化维护者，L04        |
 | 项目导入导出       | 同上 transfer.* 事件（导出/导入）                                                                                                                                                                                             | 已验收 | 结构导出 exportStructure 未接                                    | 持久化维护者，L04 待办   |
 | 素材库             | main/ipc/library.ipc.ts：revision_published/materialization_completed/failed/mutation_failed                                                                                                                                  | 已验收 | 分类操作失败事件未接                                             | 素材库维护者，L04        |
-| 模型连接/能力验证  | main/ipc/models.ipc.ts validate：configuration.validation_completed/failed（connectionId/modelId）                                                                                                                            | 已验收 | 迁移 migration_* 事件未接                                        | 模型目录维护者，L04 待办 |
-| 应用生命周期       | main/index.ts：session_started/ended/previous_session_unclean/process_exited（render-process-gone）；before-quit flush≤2s                                                                                                     | 已验收 | 主进程自身崩溃（crash dump）事件未接                             | 桌面底座维护者，L02/L04  |
+| 模型连接/能力验证  | main/ipc/models.ipc.ts validate 与 validateAgentToolCalling：配置验证开始/完成/失败（connectionId/modelId）；Agent结构化工具验证复用 model.request 唯一终态和脱敏字段；保存可用性绑定模型/连接能力修订号并在配置变化后失效 | 已验收 | 迁移 migration_* 事件未接                                        | 模型目录维护者，L04 待办 |
+| 应用生命周期       | main/index.ts：session_started/ended/previous_session_unclean/process_exited（render-process-gone）；窗口关闭前等待 renderer IPC drain，再在共享≤2s截止时间内排空 main 队列；仅最后窗口消耗应用退出预算；任一上游丢失、超时或写盘失败均保留 ended=false；service 与 renderer drain 单测见 diagnostics-storage.test.ts、renderer-shutdown.test.ts | 已验收 | Electron真实窗口关闭期间的慢确认/IPC拒绝尚未做实机注入；主进程自身崩溃（crash dump）事件未接 | 桌面底座维护者，L02/L04  |
 | 日志文件/独立事件  | src/main/diagnostics：有界队列(2048/8MiB+128关键预留)、session 分片 JSONL（按天/10MiB 轮转）、14d/200MiB/错误配额 20MiB/硬上限 256MiB 保留、健康计数+事件环；diagnostics-storage.test.ts（A12/A13/A14）                       | 已验收 | 慢盘时延专项未测（注入为拒写/满盘）                              | 诊断底座维护者，L02      |
 | 查询/导出          | diagnostics:query/health/export-bundle IPC；RunsPanel 流程时间线+导出诊断包；导出 manifest/events/summary/coverage、25MiB 截断、原子写、二次脱敏（diagnostics-storage.test.ts L05 用例）                                      | 已验收 | 项目保存/恢复范围的导出入口未单列                                | 诊断UI维护者，L05        |
 | 自动日志门禁       | scripts/check-logging-bypass.mjs（增量 console/electron-log 旁路 + 新文件网络调用缺诊断接入）；scripts/logging-allowlist.json；test/observability/logging-gate.test.ts（A17/A18）；npm run verify 与 CI 已接入 verify:logging | 已验收 | 变更影响声明（logging-impact 机器可读匹配）未建，靠门禁规则兜底  | 工程门禁维护者，L06      |
@@ -438,3 +446,63 @@ video executor 现在通过 `gatewayDiagnostics(ctx)` 将运行 trace、节点�
 
 边界：A/V 模型只收到四个视觉样本，不宣称完整逐帧语义理解。旧任务重启后的祖先 trace 无法追溯时保留 `correlationMissing`；本地夹具不证明真实计费、远端撤回、实机掉电或完整跨操作 trace 树。
 
+### 2026-10-18 LOG-06 主进程退出诊断 drain 补充
+
+修复 `src/main/diagnostics/service.ts` 的退出收尾：正常退出会串行等待当前分片写入确认并循环排空所有已接收批次；超过2秒或分片写入失败时，session 保留 `ended=false` 且不写 `endedAt`，避免把日志不完整报告为正常结束。session `startedAt` 固定为创建时刻。没有新增事件或诊断字段，复用现有 `session_started` / `session_ended` 与未完整会话检测。
+
+影响判断：主进程退出时的诊断写盘及完整性标记；不改变 Agent 任务/节点终态，不回滚业务状态。失败路径保持尽力写盘，退出 drain 不向调用方抛出写入失败。
+
+验证：`test/observability/diagnostics-storage.test.ts` 覆盖 scheduled write 确认、513条跨批排空、写失败标记和2秒超时标记；既有 renderer IPC drain/拒绝丢弃覆盖在 `test/observability/agent-renderer-diagnostics.test.ts`。定向测试23/23通过，日志门禁、Node/Web typecheck与Electron/Vite构建结果见 `qa/agent-comprehensive/run-20261018-log06-main-drain-fix-v1/execution-manifest.json`。
+
+边界：这些是服务层与renderer传输测试，没有注入真实Electron关窗期间的IPC拒绝/慢确认，也没有组合验证诊断写失败和Agent业务终态；因此 LOG-06 主用例仍未执行。本次未调用真实模型、供应商、付费服务或外部HTTP。
+
+### 2026-10-18 LOG-06 生产窗口关闭前的 renderer drain
+
+`src/main/index.ts` 现在拦截用户关闭窗口，先调用 renderer 暴露的窄 drain bridge，等待现存队列及所有 IPC 确认后再销毁窗口；退出中的多窗口 drain 复用同一 Promise。非 macOS 最后一个窗口的 renderer drain 与 main 队列写入共享2秒截止时间；macOS 单独关窗会保留应用会话，之后真正退出再开始退出预算。`render-process-gone`、renderer 拒绝/超时或已丢弃事件会让会话完整性保持 false。`flushOnQuit` 接收上游完整性和剩余等待毫秒数，仍尽力写 main 队列，但只在 renderer 与 main 两段均成功时写 `ended=true`/`endedAt`。没有新增事件、schema字段或敏感内容。
+
+验证：`diagnostics-storage.test.ts` 22项、`renderer-shutdown.test.ts` 5项、`agent-renderer-diagnostics.test.ts` 2项定向回归共29/29通过。多窗口预算修正后的最终 `npm run verify` 当前工作树快照通过（run-4JSsYX），包含 lint、Node/Web/model 类型、190个 Vitest 文件2362通过/1跳过、model-runtime 2/2、日志门禁、优化 UI、Electron/Vite build 与桌面 fixture。完整证据与哈希见 `qa/verification/run-4JSsYX/execution-manifest.json`。
+
+边界：新增 Vitest 验证 drain helper 的成功/空队列/丢弃/异常/超时及 session 标记，并由生产构建和全量桌面 fixture 验证接线可编译；没有对正式应用真实窗口关闭时的慢 IPC 确认或拒绝做实机故障注入，也没有将诊断写失败与 Agent 业务终态合并成一次桌面故障场景。因此 LOG-06 主用例仍未执行。定向诊断回归没有模型、真实供应商、付费或外部 HTTP 调用。
+
+
+### 2026-10-17 Coordinator 暂停恢复固定输入提交回执
+
+协调器在人工暂停并继续后重新描述候选节点时，按项目和确定性 submission ID 复用既有固定资产提交回执；入口仍先校验已锁定的协调范围。复用既有 `agent.coordination.started/completed/failed` 与 `model.request.*` 生命周期事件，不新增日志事件或诊断字段。固定资产引用及内容不写入日志，错误仅使用已有安全阶段和稳定错误码。回归模拟暂停期间 graphVersion 前进并确认恢复决策仍使用相同固定输入引用；协调器/资产定向回归63/63通过，typecheck与Electron桌面执行/重开均通过。诊断生命周期配对、脱敏检查通过；真实供应商、付费服务、外部HTTP请求均为0。证据见 `qa/agent-comprehensive/run-20261017-agent-hum07-pause-stop-desktop-v7/`。
+
+### 2026-10-17 A/V 审核时间线一致性
+
+固定音视频审核证据现在除验证音轨偏移和相对视频结尾差外，还要求 `audioEndMs = audioStartMs + audioDurationMs`，拒绝互相一致但与原始起点/时长矛盾的结束时间。复用现有 `node`、`model.request` 诊断生命周期；无新增日志事件或字段，矛盾证据在媒体审核守卫中被拒绝，时间戳、固定媒体引用和正文不记录。33项媒体边界与4项审核守卫/复核通过；另有2进程桌面媒体审核/重开通过，诊断脱敏断言通过，使用本地媒体和合成模型，真实供应商、付费服务、外部HTTP请求为0。证据见 `qa/agent-comprehensive/run-20261017-agent-med04-desktop-v1/`。
+
+### 2026-10-17 Agent 命令 IPC 拒绝自有 `__proto__`
+
+`NodeExecuteCommandSchema` 在 Zod 对象解析前检查原始输入是否自有保留键 `__proto__`，避免对象解析先移除该键导致严格校验漏过。IPC 继续复用 `command.operation.started/failed`，固定失败码为 `FLOW_INPUT_INVALID`；拒绝发生在账本预留及 renderer grant 派发前。诊断只保留安全阶段/稳定码，不记录保留键、字段值或原始错误；无新增事件/字段。命令 IPC、账本、意图、执行器、视频审核及请求边界6个测试文件166/166通过；完整 `test/agent-flow` 范围28文件544/544通过；Node/Web typecheck通过。隔离测试，真实供应商、付费服务与外部HTTP请求均为0。证据分别见 `qa/agent-comprehensive/run-20261017-agent-sec02-prototype-fix-v1/` 和 `qa/agent-comprehensive/run-20261017-agent-flow-regression-after-sec02-med04-v4/`。
+
+### 2026-10-17 Agent 结果文本复制
+
+Agent/审核/建图只读结果允许原生鼠标选文；节点选中后不把选文手势交给画布拖动逻辑。此为呈现与指针路由修复，不改变任务、执行、持久化或诊断路径，不新增日志事件/字段；原有节点与诊断生命周期保持不变。隔离浏览器 SEC-08 的输出复制、纯文本安全、详情面板及错误状态断言通过，外部请求0；指针策略单测5/5、Node/Web typecheck通过。证据见 `qa/agent-comprehensive/run-20261017-agent-sec08-output-copy-fix-v4/`。未覆盖实际 Electron IPC 权限和独立人工验收。
+
+### 2026-10-17 LOG-04 opt-in 错误栈脱敏修复
+
+`s​​afeStack`（实际标识为 `safeStack`）不再输出异常 message，只保留白名单错误类型与路径/私密值脱敏后的栈帧；`DiagnosticsProducer` 将 `privateValues` 传入错误栈脱敏。成功及失败的合成 Agent 生命周期事件经过现有 producer、诊断存储和 ZIP 导出路径，检查所有 ZIP 文本文件未发现 prompt、response、media/base64 或凭据标记。复用既有诊断错误/业务生命周期，无新增事件或字段，未改变业务记录。`test/observability` 7文件54/54、Node/Web typecheck通过；真实Agent运行、供应商、付费及外部HTTP请求均为0。源码未发现生产 `withStack:true` 调用；不宣称运行级Agent UI验收。证据：`qa/agent-comprehensive/run-20261017-agent-log04-stack-fix-v1/`。
+
+### 2026-10-17 AST-05 多成果输出集合物化
+
+Agent 多成果固定资产集合的 renderer 物化路径继续复用现有 `node.output_validated`、`node.document_materialized` 与 `node.completed/failed` 生命周期；不新增日志事件或字段。集合引用、成果正文及媒体内容不写入诊断事件。验证包含双进程桌面成功/重开、双session脱敏扫描、输出集合12/12和 `test/agent-flow` 28文件545/545；模型fixture 5次，真实供应商、付费服务及外部HTTP请求为0。证据：`qa/agent-comprehensive/run-20261017-ast05-output-set-fix-v3/`。
+
+### 2026-10-17 CFG-03 缺失决策模型前置拒绝
+
+Agent 手动启动的无模型预检在 `ensureCanvasSaved`、workflow/task admission、节点状态更新和 `workflow.started` 之前结束；既有 waiting/blocked 任务仍可走继续路径。用户可见原因由节点内联错误提示呈现；被拒绝的无模型启动不产生 `agent.desktop`、workflow、node、task、command、save 或 model.request 事件，避免把未发生的执行记成运行生命周期。隔离 Windows 解包版复测在按钮点击后、应用关闭前未看到新增诊断事件；关闭应用阶段产生的 `project.save` 单独归属于退出快照，不归因到按钮拒绝。证据与哈希见 `qa/agent-comprehensive/run-20261017-cfg03-no-model-preflight-v1/`。限制：只覆盖无模型子例，禁用模型及工具/模态能力组合未测。
+
+### 2026-10-18 CFG-03 Agent 工具调用能力证明及启动前拒绝
+
+模型设置中的显式Agent验证复用 `configuration.validation_started/completed/failed` 和每次探测的 `model.request.*`，使用同一 trace/span 关联；事件只记录连接ID、模型ID和稳定状态，不记录提示、工具参数/结果、响应正文、密钥或fixture地址。验证状态与模型及连接能力修订绑定；设置变化后需重新验证。缺少有效通过证明时，启动/继续等入口在保存、工作流准入、任务写入和模型请求前直接拒绝，因此此拒绝不应产生运行期 Agent/workflow/node/task/command/save/model.request 事件。v3 Windows包负向复测点击阶段事件为0；退出时的 `project.save` 单独记录。正向模型目录UI复测由用户显式确认费用提示后，发出恰好两次合成fixture工具请求，`model.request.started/first_chunk/completed`分别配对且 `configuration.validation_started/completed`成对；SQLite证明状态和模型/连接当前修订号一致。UI验证是有意的供应商调用入口；两条复测均只访问loopback，真实供应商/付费调用=0。全量 `verify:logging` 和正式包逐文件哈希见 `qa/verification/run-5FkoS5/`、`qa/agent-comprehensive/run-20261018-cfg03-no-tool-calling-v3/execution-manifest.json` 与 `qa/agent-comprehensive/run-20261018-cfg03-tool-validation-ui-v3/execution-manifest.json`。
+
+### 2026-10-17 REC-03 损坏项目打开失败与诊断导出
+
+新增失败专用 `project.open.failed`，仅在项目记录存在但可用快照均无法读取时发出；绑定新 trace/span/projectId，attributes 仅含受控 `phase=read-snapshot` 与 `code=PROJECT_OPEN_FAILED`，不写路径、文件名、快照正文或异常文本。成功打开不新增重复生命周期事件。首页恢复提示提供最近失败时间窗的诊断导出；`DiagnosticsService.exportBundle` 先 flush 已接收队列再读取范围，避免用户刚遇到问题时丢掉尚未落盘的失败事件。Windows 解包版实际 ZIP 验收包含打开失败事件及标准四文件、脱敏通过；`diagnostics-storage.test.ts` 覆盖排队事件在导出前 flush。证据与哈希见 `qa/agent-comprehensive/run-20261017-rec03-recovery-ui-v2/`。
+
+### 2026-10-18 C4 单条已提交 Agent 成果的显式恢复呈现
+
+专业 Agent 的恢复仍复用 `agent.desktop.started/completed/failed`；成功补呈现复用既有 `agent.runtime.resumed/completed`、`command.recovery.*`、`node/workflow` 与项目保存事件，不新增事件名或字段。reconcile 只核实持久化事实并将单一 committed 回执标为“固定成果待呈现”；restore 只允许单条、范围内、输出引用可解析且当前画布无冲突的命令，随后将同一 task 完成并返回固定资产引用。pending/unknown、多个 committed 回执、父/协调任务或不匹配的画布呈现不能补呈现；不会调用模型或派发命令。诊断继续只记录受控阶段、状态和稳定原因，不记录目标文本、输入/输出正文、模型响应、fixture URL 或隔离路径。
+
+69项命令台账定向回归通过，覆盖单条回执可恢复及多个 committed 输出保持 fail-closed；当前源码构建的正式 Windows 解包版两进程场景通过：A 强杀、B 重开、事实核对、显式补呈现后原 task 完成且同回执输出进入 Agent 节点。模型请求总数保持4、命令仍为1；真实供应商/付费/外部HTTP为0。两session 111条事件JSONL无坏行/重复eventId/固定输入输出与fixture路径标记，重开进程 desktop 生命周期配对通过，数据库只读完整性检查为 `ok`。Node typecheck 与 `verify:logging` 通过。证据及应用bundle/截图/数据库hash见 `qa/agent-comprehensive/run-20261018-rel02-m08-explicit-restore-v1/execution-manifest.json`。该子场景仅覆盖单一 committed 本地处理命令，不证明异步供应商已接受但无回执或完整 REL-02/M08。

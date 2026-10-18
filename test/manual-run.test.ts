@@ -45,6 +45,50 @@ function node(id: string, nodeType: string, text: string): NodeCardShape {
 }
 
 describe('runNodeManually · 卡片内统一执行入口', () => {
+  it.each(['FLOW_CONTROL_OCCUPIED', 'FLOW_NODE_OCCUPIED'] as const)(
+    'Agent 占用目标时将 %s 映射为清晰的手动入口提示并跳过执行',
+    async (code) => {
+      const target = node(`shape:occupied-${code.toLowerCase()}`, 'text', '固定本地文本')
+      const shapes = new Map([[target.id, target]])
+      const editor = {
+        getCurrentPageShapes: () => Array.from(shapes.values()),
+        getShape: (id: string) => shapes.get(id as never),
+        getBindingsFromShape: () => [],
+        updateShape: (patch: { id: string; props?: Record<string, unknown> }) => {
+          const shape = shapes.get(patch.id as never)
+          if (shape && patch.props) Object.assign(shape.props, patch.props)
+        },
+        markHistoryStoppingPoint: () => undefined
+      } as unknown as Editor
+      const previousApi = Object.getOwnPropertyDescriptor(window, 'api')
+      Object.defineProperty(window, 'api', {
+        configurable: true,
+        value: {
+          checkFlowNodeAvailability: async () => ({
+            ok: false as const,
+            error: { code, message: 'target occupied' }
+          })
+        }
+      })
+
+      try {
+        const result = await runNodeManually(editor, 'project-occupied', [], target.id)
+
+        expect(result).toMatchObject({
+          status: 'skipped',
+          reason: '该节点由主 Agent 协调，请先停止对应流程'
+        })
+        expect(target.props.exec).toBe('idle')
+        expect(target.meta.nodeRun).toBeUndefined()
+        expect(target.meta.nodeRunHistory).toBeUndefined()
+        expect(target.meta.nodeResult).toBeUndefined()
+      } finally {
+        if (previousApi) Object.defineProperty(window, 'api', previousApi)
+        else delete (window as Window & { api?: unknown }).api
+      }
+    }
+  )
+
   it('节点测试使用临时契约输入，且不污染原节点内容或运行记录', async () => {
     const target = node('shape:test-processor', 'processor', '原始内容')
     const shapes = new Map([[target.id, target]])

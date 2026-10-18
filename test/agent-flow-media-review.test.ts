@@ -208,6 +208,25 @@ function fixture(mode: ReviewMode) {
 }
 
 describe('fixed image, audio and audiovisual review', () => {
+  it('MED-04 rejects inconsistent audio duration/end evidence at the saved-review media guard', async () => {
+    const f = fixture('audio-video')
+    const decision = await f.host.run({
+      projectId: 'p', nodeId: 'review', requestId: 'av-inconsistent-end',
+      traceId: 'trace', spanId: 'span'
+    })
+    expect(assertReviewEvidenceForMode(db, 'p', 'audio-video', decision)).toBe(true)
+    const evidence = decision.audioVideoEvidence!
+    expect(evidence.audioEndMs).toBe(evidence.audioStartMs + evidence.audioDurationMs)
+    const inconsistent = {
+      ...decision,
+      audioVideoEvidence: {
+        ...evidence,
+        audioEndMs: evidence.audioEndMs + 100,
+        audioEndDeltaMs: evidence.audioEndDeltaMs + 100
+      }
+    }
+    expect(() => assertReviewEvidenceForMode(db, 'p', 'audio-video', inconsistent)).toThrow()
+  })
   it('sends the full image bytes and invalidates a cached approval after source mutation', async () => {
     const f = fixture('image')
     const decision = await f.host.run({

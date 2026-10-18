@@ -6,3 +6,5 @@ allowBuilds:
   electron: true
   electron-winstaller: true
   esbuild: true
+patchedDependencies:
+  '@tldraw/editor@4.5.12': patches/@tldraw__editor@4.5.12.patch

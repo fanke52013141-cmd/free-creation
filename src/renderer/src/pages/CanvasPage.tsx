@@ -27,6 +27,7 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
   const [renaming, setRenaming] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const setHome = useAppStore((s) => s.setHome)
+  const setProjectOpenFailure = useAppStore((s) => s.setProjectOpenFailure)
   const openProject = useAppStore((s) => s.openProject)
   const currentProject = useAppStore((s) => s.currentProject)
   const openSettings = useGatewayStore((s) => s.openSettings)
@@ -81,6 +82,10 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
           // 检测失败不阻断打开
         }
       } else {
+        setProjectOpenFailure({
+          projectName: currentProject?.id === projectId ? currentProject.name : '所选项目',
+          failedAt: Date.now()
+        })
         setHome()
       }
       setLoading(false)

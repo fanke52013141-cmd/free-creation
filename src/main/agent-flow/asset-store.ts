@@ -296,6 +296,16 @@ export class FlowAssetStore {
     }
   }
 
+  readSubmission(projectId: string, submissionId: string): FlowAssetVersion | null {
+    if (!this.project(projectId)) fail('ASSET_PROJECT_MISSING')
+    const receipt = this.db
+      .prepare(
+        'SELECT version_id FROM flow_asset_submissions WHERE project_id = ? AND submission_id = ?'
+      )
+      .get(projectId, submissionId) as { version_id: string } | undefined
+    return receipt ? this.read(projectId, receipt.version_id) : null
+  }
+
   read(projectId: string, versionId: string): FlowAssetVersion {
     if (!this.project(projectId)) fail('ASSET_PROJECT_MISSING')
     const row = this.db

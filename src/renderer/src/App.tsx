@@ -50,6 +50,7 @@ function Content(): React.JSX.Element {
   const view = useAppStore((s) => s.view)
   const currentProject = useAppStore((s) => s.currentProject)
   const openProject = useAppStore((s) => s.openProject)
+  const setProjectOpenFailure = useAppStore((s) => s.setProjectOpenFailure)
   const [bootState, setBootState] = useState<BootState>({ kind: 'loading' })
 
   // 启动恢复：上次打开的项目直接进画布（M0 出口标准）
@@ -66,7 +67,11 @@ function Content(): React.JSX.Element {
         if (cancelled) return
         if (res.ok && res.data.lastProjectId) {
           const openRes = await window.api.openProject(res.data.lastProjectId)
-          if (openRes.ok && openRes.data) openProject(openRes.data.meta)
+          if (openRes.ok && openRes.data) {
+            openProject(openRes.data.meta)
+          } else {
+            setProjectOpenFailure({ projectName: '上次打开的项目', failedAt: Date.now() })
+          }
         }
         setBootState({ kind: 'ready' })
       } catch (error) {
@@ -81,7 +86,7 @@ function Content(): React.JSX.Element {
     return () => {
       cancelled = true
     }
-  }, [openProject])
+  }, [openProject, setProjectOpenFailure])
 
   if (bootState.kind === 'loading') return <div className="boot-screen">正在打开本地创作空间…</div>
   if (bootState.kind === 'failed') return <StartupFailure message={bootState.message} />
