@@ -400,7 +400,7 @@ describe('A01 · 3 节点顺序运行共享根 trace', () => {
 
     expect(delivered).toBe(1)
     expect(drained).toBe(false)
-    acknowledge({ ok: true })
+    acknowledge({ ok: true, data: { accepted: 1 } })
     await draining
 
     expect(drained).toBe(true)

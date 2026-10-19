@@ -68,7 +68,7 @@ describe('LOG-06 Agent renderer diagnostic transport', () => {
 
     expect(delivered).toEqual([completedEvent])
     expect(drained).toBe(false)
-    acknowledge({ ok: true })
+    acknowledge({ ok: true, data: { accepted: 1 } })
     await draining
 
     expect(drained).toBe(true)
@@ -84,5 +84,33 @@ describe('LOG-06 Agent renderer diagnostic transport', () => {
 
     await expect(drainDiagnosticsEvents()).resolves.toBeUndefined()
     expect(diagnosticsTransportDropCount()).toBe(1)
+  })
+
+  it.each([
+    { reply: { ok: false, error: { code: 'DIAGNOSTICS_UNAVAILABLE' } }, dropped: 2 },
+    { reply: { ok: true, data: { accepted: 1 } }, dropped: 1 },
+    { reply: { ok: true, data: { accepted: 0 } }, dropped: 2 },
+    { reply: { ok: true, data: { accepted: 2 } }, dropped: 0 },
+    { reply: { ok: true, data: { accepted: 3 } }, dropped: 2 },
+    { reply: { ok: true, data: { accepted: -1 } }, dropped: 2 },
+    { reply: { ok: true, data: { accepted: 0.5 } }, dropped: 2 },
+    { reply: { ok: true }, dropped: 2 },
+    { reply: null, dropped: 2 }
+  ])('accounts for resolved IPC acknowledgement $reply', async ({ reply, dropped }) => {
+    ;(window as unknown as { api: unknown }).api = {
+      reportDiagnosticsEvents: () => Promise.resolve(reply)
+    }
+    emitDiagnosticsEvent(agentNodeEvent('node.completed'))
+    emitDiagnosticsEvent(agentNodeEvent('node.failed'))
+
+    await expect(drainDiagnosticsEvents()).resolves.toBeUndefined()
+
+    expect(diagnosticsTransportDropCount()).toBe(dropped)
+    const bridge = (
+      window as unknown as {
+        __canvasDrainDiagnosticsForShutdown: () => Promise<{ dropped: number }>
+      }
+    ).__canvasDrainDiagnosticsForShutdown
+    await expect(bridge()).resolves.toEqual({ available: true, dropped })
   })
 })

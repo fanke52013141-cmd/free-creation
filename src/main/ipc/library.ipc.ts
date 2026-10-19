@@ -17,6 +17,37 @@ import { emitDomainEvent } from '../diagnostics/ipc-domain-events'
 import { existsSync } from 'fs'
 import { join } from 'path'
 import { getDataDir } from '../store/db'
+import { newTraceId, newSpanId } from '../../shared/observability'
+
+function categoryOperation<T>(operation: 'list' | 'save', action: () => T): IpcEnvelope<T> {
+  const context = { traceId: newTraceId(), spanId: newSpanId() }
+  const attributes = { operation }
+  emitDomainEvent('library.category.started', '素材分类操作开始', { context, attributes })
+  try {
+    const result = action()
+    emitDomainEvent('library.category.completed', '素材分类操作完成', {
+      context,
+      attributes,
+      status: 'success'
+    })
+    return ok(result)
+  } catch (error) {
+    emitDomainEvent('library.category.failed', '素材分类操作失败', {
+      context,
+      attributes: {
+        ...attributes,
+        phase: 'repository',
+        code: operation === 'list' ? 'READ_FAILED' : 'SAVE_FAILED'
+      },
+      status: 'failed',
+      // Repository validation can contain private labels. Log only this boundary's fixed code.
+      error: Object.assign(new Error('素材分类操作未完成'), {
+        code: operation === 'list' ? 'READ_FAILED' : 'SAVE_FAILED'
+      })
+    })
+    return err(operation === 'list' ? 'READ_FAILED' : 'SAVE_FAILED', error)
+  }
+}
 
 function ok<T>(data: T): IpcEnvelope<T> {
   return { ok: true, data }
@@ -26,6 +57,47 @@ function err(code: string, error: unknown): IpcEnvelope<never> {
   return {
     ok: false,
     error: { code, message: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+async function packageTransfer<T>(
+  operation: 'import' | 'export',
+  selectPath: () => Promise<string | undefined>,
+  execute: (path: string) => T
+): Promise<IpcEnvelope<T>> {
+  const context = { traceId: newTraceId(), spanId: newSpanId() }
+  let phase: 'dialog' | 'repository' = 'dialog'
+  emitDomainEvent('library.transfer.started', '资产包操作开始', {
+    context,
+    attributes: { operation }
+  })
+  try {
+    const path = await selectPath()
+    if (!path) {
+      emitDomainEvent('library.transfer.cancelled', '资产包操作已取消', {
+        context,
+        status: 'cancelled',
+        attributes: { operation, phase }
+      })
+      return err('CANCELLED', operation === 'export' ? '已取消导出' : '已取消导入')
+    }
+    phase = 'repository'
+    const result = execute(path)
+    emitDomainEvent('library.transfer.completed', '资产包操作完成', {
+      context,
+      status: 'success',
+      attributes: { operation }
+    })
+    return ok(result)
+  } catch (error) {
+    const code = operation === 'export' ? 'EXPORT_FAILED' : 'IMPORT_FAILED'
+    emitDomainEvent('library.transfer.failed', '资产包操作失败', {
+      context,
+      status: 'failed',
+      attributes: { operation, phase, code },
+      error: Object.assign(new Error('资产包操作未完成'), { code })
+    })
+    return err(code, error)
   }
 }
 
@@ -65,18 +137,10 @@ export function registerLibraryIpc(): void {
     }
   )
   ipcMain.handle(IPC.library.listCategories, () => {
-    try {
-      return ok(listCategories())
-    } catch (error) {
-      return err('READ_FAILED', error)
-    }
+    return categoryOperation('list', () => listCategories())
   })
   ipcMain.handle(IPC.library.saveCategory, (_event, input) => {
-    try {
-      return ok(saveCategory(input))
-    } catch (error) {
-      return err('SAVE_FAILED', error)
-    }
+    return categoryOperation('save', () => saveCategory(input))
   })
   ipcMain.handle(IPC.library.discardMaterialization, async (_event, input) => {
     try {
@@ -289,29 +353,31 @@ export function registerLibraryIpc(): void {
     }
   })
   ipcMain.handle(IPC.library.export, async (_event, input: { resourceIds?: string[] }) => {
-    const result = await dialog.showSaveDialog({
-      title: '导出资产包',
-      defaultPath: 'Canvas Studio 资产包.canvaslib',
-      filters: [{ name: 'Canvas Studio 资产包', extensions: ['canvaslib'] }]
-    })
-    if (result.canceled || !result.filePath) return err('CANCELLED', '已取消导出')
-    try {
-      return ok({ path: library.exportResourcePackage(result.filePath, input?.resourceIds) })
-    } catch (error) {
-      return err('EXPORT_FAILED', error)
-    }
+    return packageTransfer(
+      'export',
+      async () => {
+        const result = await dialog.showSaveDialog({
+          title: '导出资产包',
+          defaultPath: 'Canvas Studio 资产包.canvaslib',
+          filters: [{ name: 'Canvas Studio 资产包', extensions: ['canvaslib'] }]
+        })
+        return result.canceled ? undefined : result.filePath
+      },
+      (path) => ({ path: library.exportResourcePackage(path, input?.resourceIds) })
+    )
   })
   ipcMain.handle(IPC.library.import, async () => {
-    const result = await dialog.showOpenDialog({
-      title: '导入资产包',
-      properties: ['openFile'],
-      filters: [{ name: 'Canvas Studio 资产包', extensions: ['canvaslib'] }]
-    })
-    if (result.canceled || result.filePaths.length === 0) return err('CANCELLED', '已取消导入')
-    try {
-      return ok({ imported: library.importResourcePackage(result.filePaths[0]) })
-    } catch (error) {
-      return err('IMPORT_FAILED', error)
-    }
+    return packageTransfer(
+      'import',
+      async () => {
+        const result = await dialog.showOpenDialog({
+          title: '导入资产包',
+          properties: ['openFile'],
+          filters: [{ name: 'Canvas Studio 资产包', extensions: ['canvaslib'] }]
+        })
+        return result.canceled ? undefined : result.filePaths[0]
+      },
+      (path) => ({ imported: library.importResourcePackage(path) })
+    )
   })
 }

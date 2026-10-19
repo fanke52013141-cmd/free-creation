@@ -1,5 +1,27 @@
 # 日志覆盖清单
 
+## 2026-10-19 素材资产包生命周期（47 包）
+
+资产包导入/导出公共 IPC 补 library.transfer.started/completed/cancelled/failed，独立 trace/span 与唯一终态；操作区分 import/export，失败/取消标明 dialog/repository 阶段，错误码为固定 IMPORT_FAILED/EXPORT_FAILED。取消不调用仓库，对话框异常转为受控失败 envelope；原仓库成功/失败结果保持，不新增重试或回滚假记录。固定模板不记录路径、资源ID列表或原异常；logger抛错不改变四类业务结果。新增14项与分类、SQLite/包往返、schema/gateway共53/53通过，Node类型/定向lint/日志门禁通过。尚未真实窗口端到端或设备故障组合验收，其他素材路径仍待逐项迁移。详情及日志模板见 [47 包](canvas-agent-flow/47-library-package-transfer-diagnostics.md)。
+
+## 2026-10-19 素材分类生命周期（46 包）
+
+公共 listCategories/saveCategory IPC 新增 library.category.started/completed/failed，独立 trace/span、唯一终态；仅记录 operation=list/save，失败固定 phase=repository 与 READ_FAILED/SAVE_FAILED。原仓库调用、业务返回和错误提示保持；不记录分类名称/描述/ID/配置或原异常，logger 抛错不改变结果。7 项新增 IPC/service 序列化回归与原 SQLite 持久化、schema/gateway 回归共39/39通过，Node类型、定向lint和日志门禁通过。未验收真实界面点击、设备故障组合及仓库细分错误；其他素材操作仍按路径迁移。详见 [46 包与日志模板](canvas-agent-flow/46-library-category-diagnostics.md)。
+
+## 2026-10-19 诊断包会话环境（45 包）
+
+导出 manifest 新增 sessions/omittedSessions，按范围内真实事件 sessionId 分离历史环境与当前导出环境；仅输出经过白名单和格式校验的版本、平台、架构、packaged/commit。历史记录缺失、损坏、身份不符或读取失败时标明环境未知，不套用当前版本、不阻断导出、不改写旧记录。128 会话上限及历史文件体积预检，避免任意路径与元信息扩散；不新增业务生命周期或补造 trace。实际跨会话 ZIP 四个条目与私密字段排除回归通过，4/4 定向；首次 run-Y3hsMu 遇沙箱 rename EPERM 后停止，正常环境完整源码门禁 run-E3y2A7 退出 0（193 文件/2393 通过/1 既有跳过，模型另 2、19 浏览器、生产构建及全部桌面路径通过）；真实关窗 7 场景、R09 四次 renderer 重开、10 对保存终态与脱敏通过。此前“bundle 未携带环境”的缺口由本包处理，字段完整性及旧记录无法追溯仍为边界。日志检查模板、实现与验证见 [45 包](canvas-agent-flow/45-diagnostics-bundle-environment.md)。
+
+## 2026-10-19 源码验证：接收回执与历史会话判定
+
+renderer 的 `diagnosticsReporter.ts` 现在验证 diagnostics:event 的成功 envelope 与 accepted 整数范围，按未接收数计入 transport 丢弃；IPC 返回不可用、部分接收、异常回执不再伪装整批成功。沿用已有丢弃统计和关窗 drain bridge，无新事件/重复终态，不记录回执原文，不自动重发，日志失败不改变业务结果。main 的历史异常会话检测排除刚创建的当前 service.sessionId，仍识别历史未结束及损坏记录。
+
+退出重写 session 状态时保留初始化的 env 版本/平台/Electron 快照，正常和不完整退出均覆盖；仅保留已有运行环境字段，不附加用户配置。新增2项回归，当前日志定向合计4文件50项通过。七场景真实窗口脚本接入 `verify:checks`；诊断 bundle manifest 尚未直接附环境快照，仍列为导出版本上下文的缺口，不能宣称所有导出包完整承载运行环境。
+
+最终真实源码生产 main/preload + Vite renderer 隐藏窗口七场景通过：慢确认可正常结束；IPC拒绝、不可用、部分接收、超时和诊断写盘EIO保持 ended=false；全新目录不误报，历史未结束会话仍报警且原记录不改写。七场景环境信息、真实项目保存版本/正文保持、保存唯一终态与诊断脱敏通过。证据 `qa/verification/run-8BBmbb/qa/diagnostics-window-close/run-iqbyW3/results.json`；写盘EIO时transportDropped=0但会话正确标记不完整，不把IPC接收当作写盘成功。最终完整源码verify退出0（192文件2389通过/1既有跳过、模型另2，19浏览器及全部桌面夹具）；源码/构建/结果哈希见同目录`source-validation-manifest.json`。日志检查模板、失败尝试与完整边界见[源码验证记录](canvas-agent-flow/testing/SOURCE_VALIDATION_2026_10_19.md)。
+
+边界：node 事件为明确标识的合成传输探针，不作为 Agent 执行事实；窗口专项不含 Agent 真实业务终态与诊断写盘失败组合，不关闭整个 LOG-06。源码门禁不替代中文IME人工检查、性能/设备条件、真实供应商或安装包验收。默认90分钟专项进行中，不提前签署REC-11。
+
 ## 2026-10-17 CFG-04 Agent 配置保存校验
 
 异步项目保存、关窗同步保存与恢复副本保存在进入 `projects.repo` 前校验 Agent schema。拒绝时沿用唯一 `project.save.started` → `project.save.failed` 生命周期，阶段 `validate-agent-config` 与稳定错误码 `INVALID_AGENT_CONFIG` 进入事件白名单；不记录配置、具体越界值或用户正文，也不推进图版本。真实 SQLite/repository 的8个 Agent 数值边界、三个保存IPC入口、快照/派生图载荷及事件schema回归共37/37通过，拒绝路径无节点写入。诊断事件sink故障不改变保存结果的既有断言仍通过。日志和执行证据见 `qa/agent-comprehensive/run-20261017-cfg04-cfg06-current-v1/cfg04-focused-tests-electron-runtime.log` 与 `packaged-cfg06-recovery-results.json`。
@@ -146,10 +168,10 @@ GLM/C3.3/C4 本批完整 verify 最终串行通过（164 文件、1763 通过、
 | 本地媒体与导演输出 | 公共执行器终态事件已覆盖失败；media.repo 写盘失败经 node.failed 传播                                                                                                                                                          | 基础   | 外部进程退出码/信号专项事件                                      | 媒体维护者，L04 待办     |
 | 代码Worker         | 执行器公共终态事件覆盖超时/异常；源码禁记由白名单序列化保证                                                                                                                                                                   | 基础   | worker 退出码专项事件                                            | Worker维护者，L04 待办   |
 | 项目保存/冲突/恢复 | main/ipc/project.ipc.ts 的异步保存、关窗同步保存、恢复副本保存/正式恢复均发 project.save.started 与同 trace/span 唯一 completed/conflict/failed；导入导出沿 transfer.started/validated/committed/failed | 已验收 | 完整磁盘/物理掉电仍需独立故障验收 | 持久化维护者，L04        |
-| 项目导入导出       | 同上 transfer.* 事件（导出/导入）                                                                                                                                                                                             | 已验收 | 结构导出 exportStructure 未接                                    | 持久化维护者，L04 待办   |
-| 素材库             | main/ipc/library.ipc.ts：revision_published/materialization_completed/failed/mutation_failed                                                                                                                                  | 已验收 | 分类操作失败事件未接                                             | 素材库维护者，L04        |
+| 项目导入导出       | 同上 transfer.* 事件（导出/导入）                                                                                                                                                                                             | 已验收 | 结构导出已有 transfer 事件（旧清单未更新）；完整路径验收仍按实际证据                                    | 持久化维护者，L04 待办   |
+| 素材库             | main/ipc/library.ipc.ts：revision_published/materialization_completed/failed/mutation_failed                                                                                                                                  | 已验收 | 分类 list/save 生命周期已由46包定向验收；其他素材变更路径仍待逐项迁移                                             | 素材库维护者，L04        |
 | 模型连接/能力验证  | main/ipc/models.ipc.ts validate 与 validateAgentToolCalling：配置验证开始/完成/失败（connectionId/modelId）；Agent结构化工具验证复用 model.request 唯一终态和脱敏字段；保存可用性绑定模型/连接能力修订号并在配置变化后失效 | 已验收 | 迁移 migration_* 事件未接                                        | 模型目录维护者，L04 待办 |
-| 应用生命周期       | main/index.ts：session_started/ended/previous_session_unclean/process_exited（render-process-gone）；窗口关闭前等待 renderer IPC drain，再在共享≤2s截止时间内排空 main 队列；仅最后窗口消耗应用退出预算；任一上游丢失、超时或写盘失败均保留 ended=false；service 与 renderer drain 单测见 diagnostics-storage.test.ts、renderer-shutdown.test.ts | 已验收 | Electron真实窗口关闭期间的慢确认/IPC拒绝尚未做实机注入；主进程自身崩溃（crash dump）事件未接 | 桌面底座维护者，L02/L04  |
+| 应用生命周期       | main/index.ts：session_started/ended/previous_session_unclean/process_exited（render-process-gone）；窗口关闭前等待 renderer IPC drain，再在共享≤2s截止时间内排空 main 队列；仅最后窗口消耗应用退出预算；任一上游丢失、超时或写盘失败均保留 ended=false；service 与 renderer drain 单测见 diagnostics-storage.test.ts、renderer-shutdown.test.ts | 已验收 | 源码真实隐藏窗口慢确认/IPC拒绝/不可用/部分接收/超时已验收；Agent业务终态+诊断写盘失败组合未验收；主进程自身崩溃（crash dump）事件未接 | 桌面底座维护者，L02/L04  |
 | 日志文件/独立事件  | src/main/diagnostics：有界队列(2048/8MiB+128关键预留)、session 分片 JSONL（按天/10MiB 轮转）、14d/200MiB/错误配额 20MiB/硬上限 256MiB 保留、健康计数+事件环；diagnostics-storage.test.ts（A12/A13/A14）                       | 已验收 | 慢盘时延专项未测（注入为拒写/满盘）                              | 诊断底座维护者，L02      |
 | 查询/导出          | diagnostics:query/health/export-bundle IPC；RunsPanel 流程时间线+导出诊断包；导出 manifest/events/summary/coverage、25MiB 截断、原子写、二次脱敏（diagnostics-storage.test.ts L05 用例）                                      | 已验收 | 项目保存/恢复范围的导出入口未单列                                | 诊断UI维护者，L05        |
 | 自动日志门禁       | scripts/check-logging-bypass.mjs（增量 console/electron-log 旁路 + 新文件网络调用缺诊断接入）；scripts/logging-allowlist.json；test/observability/logging-gate.test.ts（A17/A18）；npm run verify 与 CI 已接入 verify:logging | 已验收 | 变更影响声明（logging-impact 机器可读匹配）未建，靠门禁规则兜底  | 工程门禁维护者，L06      |

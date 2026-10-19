@@ -40,7 +40,20 @@ export function flushDiagnosticsEvents(): void {
   const pending = Promise.resolve()
     .then(() => send({ events: batch as unknown[] }))
     .then(
-      () => undefined,
+      (result) => {
+        // IPC resolution only means the call returned. The envelope must also
+        // confirm how many events main accepted; partial/unavailable replies
+        // must not make shutdown claim a complete renderer timeline.
+        const reply = result as { ok?: unknown; data?: { accepted?: unknown } } | null
+        const accepted = reply?.ok === true ? reply.data?.accepted : undefined
+        droppedByTransport +=
+          typeof accepted === 'number' &&
+          Number.isInteger(accepted) &&
+          accepted >= 0 &&
+          accepted <= batch.length
+            ? batch.length - accepted
+            : batch.length
+      },
       () => {
         droppedByTransport += batch.length
       }

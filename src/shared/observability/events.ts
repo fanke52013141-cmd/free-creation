@@ -348,6 +348,24 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
       code: 'short'
     }),
     // library.*
+    def('library.transfer.started', 'info', 'main/ipc/library.ipc.ts', { operation: 'short' }),
+    def('library.transfer.completed', 'info', 'main/ipc/library.ipc.ts', { operation: 'short' }),
+    def('library.transfer.cancelled', 'info', 'main/ipc/library.ipc.ts', {
+      operation: 'short',
+      phase: 'short'
+    }),
+    def('library.transfer.failed', 'error', 'main/ipc/library.ipc.ts', {
+      operation: 'short',
+      phase: 'short',
+      code: 'short'
+    }),
+    def('library.category.started', 'info', 'main/ipc/library.ipc.ts', { operation: 'short' }),
+    def('library.category.completed', 'info', 'main/ipc/library.ipc.ts', { operation: 'short' }),
+    def('library.category.failed', 'error', 'main/ipc/library.ipc.ts', {
+      operation: 'short',
+      phase: 'short',
+      code: 'short'
+    }),
     def('library.revision_published', 'info', 'main/ipc/library.ipc.ts'),
     def('library.materialization_completed', 'info', 'main/ipc/library.ipc.ts'),
     def('library.materialization_failed', 'error', 'main/ipc/library.ipc.ts'),

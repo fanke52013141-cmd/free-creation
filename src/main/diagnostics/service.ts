@@ -31,6 +31,7 @@ import { DiagnosticsQueue } from './queue'
 import { enforceRetention } from './retention'
 import { findUncleanSessions, writeSessionState } from './session'
 import { DiagnosticsShardWriter } from './writer'
+import { bundleSessionEnvironments } from './bundle-environment'
 
 export interface DiagnosticsServiceOptions {
   dataDir: string
@@ -69,6 +70,7 @@ export async function initDiagnosticsService(
   const clock = options.clock ?? systemClock()
   const sessionId = newSessionId()
   const sessionStartedAt = new Date(clock.nowMs()).toISOString()
+  const sessionEnvironment = options.env ? { ...options.env } : undefined
   const rootDir = join(options.dataDir, 'diagnostics')
   const eventsDir = join(rootDir, 'events')
   const sessionsDir = join(rootDir, 'sessions')
@@ -295,6 +297,12 @@ export async function initDiagnosticsService(
       })
       const manifest = {
         format: 'canvas-studio-diagnostics-bundle-v1',
+        ...(await bundleSessionEnvironments(
+          store,
+          sessionsDir,
+          read.events.map((event) => event.sessionId),
+          { sessionId, env: sessionEnvironment }
+        )),
         exportedAt: new Date(clock.nowMs()).toISOString(),
         sessionId,
         scope: input.scope,
@@ -413,6 +421,7 @@ export async function initDiagnosticsService(
         sessionId,
         startedAt: sessionStartedAt,
         ended: sessionEnded,
+        ...(sessionEnvironment ? { env: sessionEnvironment } : {}),
         ...(sessionEnded ? { endedAt: new Date(clock.nowMs()).toISOString() } : {})
       })
     }
@@ -426,7 +435,7 @@ export async function initDiagnosticsService(
       sessionId,
       startedAt: sessionStartedAt,
       ended: false,
-      ...(options.env ? { env: options.env } : {})
+      ...(sessionEnvironment ? { env: sessionEnvironment } : {})
     })
   } catch {
     degraded = true
@@ -481,8 +490,9 @@ function makeUnavailableService(sessionId: string): DiagnosticsService {
 /** 启动时检查上次会话是否正常结束（供 app.previous_session_unclean）。 */
 export async function checkPreviousSession(
   store: DiagnosticsFileStore,
-  sessionsDir: string
+  sessionsDir: string,
+  currentSessionId?: string
 ): Promise<boolean> {
   const unclean = await findUncleanSessions(store, sessionsDir)
-  return unclean.length > 0
+  return unclean.some((session) => session.sessionId !== currentSessionId)
 }

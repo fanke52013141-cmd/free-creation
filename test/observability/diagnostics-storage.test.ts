@@ -14,7 +14,7 @@ import { DiagnosticsQueue } from '../../src/main/diagnostics/queue'
 import { DiagnosticsShardWriter } from '../../src/main/diagnostics/writer'
 import { enforceRetention } from '../../src/main/diagnostics/retention'
 import { findUncleanSessions, writeSessionState } from '../../src/main/diagnostics/session'
-import { initDiagnosticsService } from '../../src/main/diagnostics/service'
+import { checkPreviousSession, initDiagnosticsService } from '../../src/main/diagnostics/service'
 import { manualClock } from '../../src/main/diagnostics/clock'
 import { memoryFsStore } from '../../src/main/diagnostics/fs-types'
 
@@ -193,6 +193,20 @@ describe('分片 writer（L02）', () => {
 })
 
 describe('会话状态与保留清理（L02）', () => {
+  it('excludes the new active session while retaining real previous unclean sessions', async () => {
+    const store = memoryFsStore()
+    const dir = '/data/diagnostics/sessions'
+    await writeSessionState(store, dir, { sessionId: 'current', startedAt: 'x', ended: false })
+    await expect(checkPreviousSession(store, dir, 'current')).resolves.toBe(false)
+    await writeSessionState(store, dir, { sessionId: 'old-clean', startedAt: 'x', ended: true })
+    await expect(checkPreviousSession(store, dir, 'current')).resolves.toBe(false)
+    await writeSessionState(store, dir, { sessionId: 'old-unclean', startedAt: 'x', ended: false })
+    await expect(checkPreviousSession(store, dir, 'current')).resolves.toBe(true)
+    await store.writeFile(`${dir}/session-damaged.json`, '{')
+    await store.unlink(`${dir}/session-old-unclean.json`)
+    await expect(checkPreviousSession(store, dir, 'current')).resolves.toBe(true)
+  })
+
   it('非正常结束的会话能被发现；ended 会话不报', async () => {
     const store = memoryFsStore()
     const dir = '/data/diagnostics/sessions'
@@ -251,6 +265,26 @@ describe('会话状态与保留清理（L02）', () => {
 })
 
 describe('诊断服务端到端（L02）', () => {
+  it.each([true, false])(
+    'preserves version metadata when shutdown completeness is %s',
+    async (complete) => {
+      const store = memoryFsStore()
+      const env = { appVersion: '1.0.0', platform: 'win32', electron: '39.8.10', packaged: false }
+      const service = await initDiagnosticsService({
+        dataDir: '/data',
+        store,
+        clock: manualClock(0),
+        disableTimers: true,
+        env
+      })
+      await service.flushOnQuit({ upstreamDrainComplete: complete })
+      const file = [...store.files.entries()].find(([name]) =>
+        name.endsWith(`session-${service.sessionId}.json`)
+      )
+      expect(JSON.parse(file![1])).toMatchObject({ ended: complete, env })
+    }
+  )
+
   it('ingest 校验→入队→flush 落盘；非法事件被拒绝并计数', async () => {
     const store = memoryFsStore()
     const clock = manualClock(0)

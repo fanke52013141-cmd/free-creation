@@ -99,7 +99,7 @@ async function initDiagnostics(): Promise<DiagnosticsService | null> {
     diagnostics = service
     service.emit(mainProducer.build('app.session_started', undefined, '主进程会话开始', {}))
     const sessionsDir = join(getDataDir(), 'diagnostics', 'sessions')
-    if (await checkPreviousSession(nodeFsStore(), sessionsDir)) {
+    if (await checkPreviousSession(nodeFsStore(), sessionsDir, service.sessionId)) {
       service.emit(
         mainProducer.build('app.previous_session_unclean', undefined, '上次会话未正常结束', {})
       )
