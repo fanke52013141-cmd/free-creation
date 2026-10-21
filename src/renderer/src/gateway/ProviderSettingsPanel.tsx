@@ -94,7 +94,11 @@ function draftFromConfig(p: ProviderSummary): Draft {
     specId: p.specId,
     baseURL: p.baseURL,
     apiKey: '',
-    models: p.models.map((m) => ({ ...m })),
+    // 历史实例里可能残留已禁用的即梦型号：打开面板时就过滤掉，避免看起来"没禁干净"。
+    models: (p.specId === 'dreamina'
+      ? p.models.filter((model) => isDreaminaModelSupported(model.id))
+      : p.models
+    ).map((m) => ({ ...m })),
     createdAt: p.createdAt,
     hasApiKey: p.hasApiKey
   }
