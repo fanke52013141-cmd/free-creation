@@ -41,3 +41,55 @@ $ pnpm build:mac
 # For Linux
 $ pnpm build:linux
 ```
+
+## 即梦（Dreamina）本机 CLI 通道
+
+即梦是**可选**的本机 CLI 供应商：不需要 Base URL 或 API Key，凭据是本机的 OAuth 登录态，按即梦会员额度计费。
+它提供文生图、图生图、提示词生视频、首帧视频、首尾帧视频、参考生视频六项能力，全部落在既有的「生图」与「视频生成」节点上（不新增节点、不改变端口契约）。
+
+### 1. 安装 CLI（每台机器一次）
+
+Windows 请用 **Git Bash** 执行，不要用 WSL——WSL 里装出来的是 Linux 二进制，桌面端调不到：
+
+```bash
+curl -s https://jimeng.jianying.com/cli | bash
+```
+
+默认安装到 `~/bin/dreamina`（Windows 为 `%USERPROFILE%\bin\dreamina.exe`），并写入用户 PATH。
+若安装在别的路径，用环境变量指定，避免依赖 PATH：
+
+```bash
+CANVAS_STUDIO_DREAMINA_PATH=D:\tools\dreamina.exe
+```
+
+### 2. 登录（每台机器一次，**必须在终端手动触发**）
+
+> ⚠️ **应用内没有「登录」按钮。** 应用只负责检测登录态，不会替你发起 OAuth 授权。
+> 首次使用、以及登录态过期后，都需要你在终端执行一次：
+
+```bash
+dreamina login
+```
+
+该命令会打印授权链接与设备码，在浏览器完成授权后命令自动结束；登录态会持久化在本机，之后无需重复登录。
+
+检查登录是否有效：
+
+```bash
+dreamina user_credit
+```
+
+返回包含 `total_credit`、`vip_level` 的 JSON 即为已登录；若提示「未检测到有效登录态」，重新执行 `dreamina login` 即可。
+
+### 3. 在应用里启用
+
+设置 → 模型供应商 → 新建 → 选择「即梦（本机 CLI）」→ 点「检测本机 CLI」。
+面板会显示 CLI 版本、登录状态与剩余额度，无需填写 Base URL / API Key。
+
+### 4. 使用注意
+
+- 每次生成消耗**即梦会员额度**（不是 API 计费），提交即扣费，失败重试前请先核对任务。
+- 部分模型首次使用需要在即梦 Web 端先用它生成一次，否则会返回「合规确认」提示。
+- 视频排队时间随模型差异很大；长时间排队时可改用 `seedance2.5`（480p 起，队列通常更短）。
+- 分辨率与时长在节点上可选，默认停在最省成本的档位；部分模型有硬下限（4.x/5.0 图片最低 2k；seedance2.0 系列视频仅 720p）。
+- 完整协议、能力表与限制见 [即梦 CLI 接入方案](./docs/DREAMINA_CLI_ADAPTER_PLAN.md)。

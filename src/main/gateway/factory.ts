@@ -7,6 +7,7 @@ import type { ProviderConfig } from '../../shared/types'
 import type { SaveProviderInput } from '../../shared/contracts'
 import { getProvider } from './providers.repo'
 import { glmCompatibleFetch } from './glm-request'
+import { driverForSpec } from '../../shared/provider-driver'
 
 export class GatewayError extends Error {
   code: string
@@ -20,6 +21,9 @@ export class GatewayError extends Error {
 export function requireProvider(providerId: string): ProviderConfig {
   const p = getProvider(providerId)
   if (!p) throw new GatewayError('PROVIDER_NOT_FOUND', `供应商不存在：${providerId}`)
+  // 本机 CLI 通道（即梦）没有 Base URL / API Key：凭据是机器上的 OAuth 登录态，
+  // 因此不套用密钥校验，否则每次调用都会报“未配置 Base URL”。
+  if (driverForSpec(p.specId) === 'local-cli') return p
   if (!p.baseURL) throw new GatewayError('PROVIDER_NO_URL', `供应商「${p.name}」未配置 Base URL`)
   if (!p.apiKey) {
     throw new GatewayError(

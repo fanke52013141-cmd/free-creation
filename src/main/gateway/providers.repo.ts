@@ -6,6 +6,7 @@ import type { GatewayModelInfo, ProviderConfig, ProviderSummary } from '../../sh
 import type { SaveProviderInput } from '../../shared/contracts'
 import { getDb } from '../store/db'
 import { decryptSecret, encryptionAvailable, encryptSecret, isEncryptedSecret } from './keycrypto'
+import { driverForSpec } from '../../shared/provider-driver'
 import type { Capability, Connection, ModelOperation } from '@free-creation/model-contracts'
 import { SqliteModelHost } from '../model-host/sqlite-model-host'
 
@@ -308,7 +309,9 @@ export function saveProvider(input: SaveProviderInput): ProviderSummary {
   const id = input.id ?? nanoid(10)
   const existing = input.id ? getProvider(input.id) : null
   const apiKey = input.apiKey?.trim() ?? ''
-  if (!apiKey && !existing) throw new Error('新建供应商必须提供 API Key')
+  // 本机 CLI 通道（即梦）没有 API Key：凭据是机器上的 OAuth 登录态，不是密钥列。
+  if (driverForSpec(input.specId) !== 'local-cli' && !apiKey && !existing)
+    throw new Error('新建供应商必须提供 API Key')
 
   // F11 修复：读取原始行（而非解密后的 ProviderConfig），编辑未提交新 key 时
   // 把库里的 api_key_ref 逐字节原样写回。此前经 decryptSecret → encryptSecret

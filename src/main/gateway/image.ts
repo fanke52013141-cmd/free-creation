@@ -14,6 +14,7 @@ import { readMediaBuffer, saveBufferAsset } from '../store/media.repo'
 import { emitGatewayEvent, ensureRequestId } from '../diagnostics/gateway-events'
 import type { GatewayDiagnosticsContext } from '../../shared/contracts'
 import { createImageModel, GatewayError, requireProvider } from './factory'
+import { dreaminaMediaPath, generateImageWithDreamina } from './dreamina-cli'
 
 // 桌面启动后注入 Chromium 网络栈，图片上传/轮询/下载跟随系统代理。
 // 单测未启动 Electron 时保留可模拟的标准 fetch。
@@ -85,6 +86,9 @@ export async function generateImageToAsset(input: ImageGenerateInput): Promise<M
         break
       case 'openrouter-chat':
         asset = await generateWithOpenRouterChat(provider, input, capabilities)
+        break
+      case 'dreamina-cli':
+        asset = await generateWithDreaminaCli(provider, input, capabilities, diagnostics)
         break
       default:
         asset = await generateWithOpenAiImages(input, capabilities)
@@ -599,6 +603,37 @@ interface OpenRouterImagePart {
   type?: unknown
   image_url?: { url?: unknown } | unknown
   url?: unknown
+}
+
+/**
+ * 驱动四：即梦本机 CLI。
+ * 参考图直接传本地绝对路径（CLI 不收 base64），产物是带 x-expires 签名的 CDN URL，
+ * 必须立刻下载落盘——URL 会过期，绝不能写进运行记录。
+ */
+async function generateWithDreaminaCli(
+  _provider: ProviderConfig,
+  input: ImageGenerateInput,
+  capabilities: ImageCapabilities,
+  diagnostics?: GatewayDiagnosticsContext
+): Promise<MediaAsset> {
+  const referenceIds = uniqueReferenceIds(input).slice(0, capabilities.maxReferenceImages)
+  const referencePaths = referenceIds.map((id) => dreaminaMediaPath(id, '参考图'))
+  // 画幅是用户意图；CLI 只接受比例串，size 与 aspectRatio 在即梦能力表里是同一个值。
+  const ratio =
+    input.aspectRatio && input.aspectRatio !== 'auto'
+      ? input.aspectRatio
+      : input.size && input.size !== 'auto'
+        ? input.size
+        : undefined
+  const imageUrl = await generateImageWithDreamina({
+    modelId: input.modelId,
+    prompt: input.prompt.trim(),
+    ...(ratio ? { ratio } : {}),
+    // --resolution_type 是 CLI 的必填项；能力表已给出最便宜档，这里再兜一层。
+    resolution: input.resolution ?? capabilities.defaultResolution ?? '2k',
+    referencePaths
+  })
+  return downloadImageAsAsset(input.projectId, imageUrl, '即梦生成图片', { diagnostics })
 }
 
 async function generateWithOpenRouterChat(

@@ -59,6 +59,8 @@ const modalitiesForSpec = (specId: ProviderSpecId): GatewayModelInfo['modality']
   if (specId === 'openrouter') return ['text', 'image']
   if (specId === 'seedance') return ['video']
   if (specId === 'minimax') return ['video', 'audio']
+  // 即梦一个实例同时提供图片模型（5.0 / 5.0Pro / 4.x）与视频模型（seedance*）。
+  if (specId === 'dreamina') return ['image', 'video']
   if (specId === 'volc-speech') return ['audio']
   return ['text']
 }
@@ -182,8 +184,10 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
   const save = async (): Promise<void> => {
     if (!draft) return
     if (!draft.name.trim()) return toast('供应商名称不能为空')
-    if (!draft.baseURL.trim()) return toast('Base URL 不能为空')
-    if (!draft.apiKey.trim() && !draft.hasApiKey) return toast('API Key 不能为空')
+    // 本机 CLI 通道（即梦）没有 Base URL / API Key，凭据是机器上的登录态。
+    const localCli = driverForSpec(draft.specId) === 'local-cli'
+    if (!localCli && !draft.baseURL.trim()) return toast('Base URL 不能为空')
+    if (!localCli && !draft.apiKey.trim() && !draft.hasApiKey) return toast('API Key 不能为空')
     if (!draft.models.length) return toast('至少添加一个模型')
     setBusy('save')
     const res = await window.api.gateway.saveProvider({
@@ -208,7 +212,8 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
 
   const test = async (): Promise<void> => {
     if (!draft) return
-    if (!draft.baseURL.trim() || (!draft.apiKey.trim() && !draft.hasApiKey)) {
+    const localCli = driverForSpec(draft.specId) === 'local-cli'
+    if (!localCli && (!draft.baseURL.trim() || (!draft.apiKey.trim() && !draft.hasApiKey))) {
       return toast('请先填写 Base URL 与 API Key')
     }
     setBusy('test')
@@ -602,27 +607,40 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                       ))}
                     </AppSelect>
                   </label>
-                  <label className="gw-row">
-                    <span className="gw-label">Base URL</span>
-                    <input
-                      className="gw-input"
-                      value={draft.baseURL}
-                      spellCheck={false}
-                      placeholder="https://…（以 /v1 结尾）"
-                      onChange={(e) => patch({ baseURL: e.target.value })}
-                    />
-                  </label>
-                  <label className="gw-row">
-                    <span className="gw-label">API Key</span>
-                    <input
-                      className="gw-input"
-                      type="password"
-                      value={draft.apiKey}
-                      spellCheck={false}
-                      placeholder={draft.hasApiKey ? '已保存；留空则保持不变' : 'sk-…'}
-                      onChange={(e) => patch({ apiKey: e.target.value })}
-                    />
-                  </label>
+                  {driverForSpec(draft.specId) === 'local-cli' ? (
+                    <div className="gw-row">
+                      <span className="gw-label">本机通道</span>
+                      <div className="gw-empty">
+                        即梦 CLI 不需要 Base URL 与 API Key，直接使用本机登录态。
+                        首次使用请先在终端执行 <code>dreamina login</code> 完成授权，
+                        再点下方“检测本机 CLI”。
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <label className="gw-row">
+                        <span className="gw-label">Base URL</span>
+                        <input
+                          className="gw-input"
+                          value={draft.baseURL}
+                          spellCheck={false}
+                          placeholder="https://…（以 /v1 结尾）"
+                          onChange={(e) => patch({ baseURL: e.target.value })}
+                        />
+                      </label>
+                      <label className="gw-row">
+                        <span className="gw-label">API Key</span>
+                        <input
+                          className="gw-input"
+                          type="password"
+                          value={draft.apiKey}
+                          spellCheck={false}
+                          placeholder={draft.hasApiKey ? '已保存；留空则保持不变' : 'sk-…'}
+                          onChange={(e) => patch({ apiKey: e.target.value })}
+                        />
+                      </label>
+                    </>
+                  )}
                 </div>
 
                 <div className="gw-models-head">
@@ -794,7 +812,11 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                     disabled={busy !== null}
                     onClick={() => void test()}
                   >
-                    {busy === 'test' ? '测试中…' : '测试并拉取模型'}
+                    {busy === 'test'
+                      ? '测试中…'
+                      : driverForSpec(draft.specId) === 'local-cli'
+                        ? '检测本机 CLI'
+                        : '测试并拉取模型'}
                   </button>
                   <div className="gw-foot-right">
                     {!draft.id && (

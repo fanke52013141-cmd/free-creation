@@ -291,6 +291,7 @@ export type ProviderSpecId =
   | 'volc-speech'
   | 'toapis'
   | 'openrouter'
+  | 'dreamina'
 
 export interface ProviderConfig {
   id: string
@@ -343,6 +344,22 @@ export const PROVIDER_SPECS: ProviderSpec[] = [
     baseURL: 'https://toapis.com/v1',
     modality: 'image',
     suggestions: ['gpt-image-2']
+  },
+  {
+    id: 'dreamina',
+    label: '即梦（本机 CLI）',
+    desc: '即梦 Dreamina 本机 CLI 通道：只需安装并登录，不走 Base URL / API Key，按会员额度计费',
+    baseURL: '',
+    modality: 'image',
+    suggestions: [
+      '5.0',
+      '5.0Pro',
+      '4.7',
+      '4.5',
+      'seedance2.0fast',
+      'seedance2.0_vip',
+      'seedance2.5'
+    ]
   },
   {
     id: 'openrouter',

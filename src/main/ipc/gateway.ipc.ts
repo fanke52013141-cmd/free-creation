@@ -114,8 +114,11 @@ export function registerGatewayIpc(win: BrowserWindow): void {
   ipcMain.handle(IPC.gateway.saveProvider, (_e, input: SaveProviderInput) =>
     wrap(() => {
       if (!input?.name?.trim()) throw new GatewayError('INVALID_NAME', '供应商名称不能为空')
-      if (!input?.baseURL?.trim()) throw new GatewayError('INVALID_INPUT', 'Base URL 不能为空')
-      if (!input.id && !input.apiKey?.trim()) {
+      // 本机 CLI 通道（即梦）没有 Base URL 与 API Key，凭据是本机登录态。
+      const localCli = driverForSpec(input.specId) === 'local-cli'
+      if (!localCli && !input?.baseURL?.trim())
+        throw new GatewayError('INVALID_INPUT', 'Base URL 不能为空')
+      if (!localCli && !input.id && !input.apiKey?.trim()) {
         throw new GatewayError('PROVIDER_NO_KEY', '新建供应商必须填写 API Key')
       }
       return saveProvider(input)

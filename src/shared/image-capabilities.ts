@@ -2,7 +2,7 @@ import type { ProviderSpecId } from './types'
 import { parseRetryConfig } from './engine/retry'
 
 /** 图片生成的稳定配置；比例是用户意图，尺寸是当前模型的实际落点。 */
-export type ImageResolution = '1k' | '2k' | '4k'
+export type ImageResolution = '1k' | '1.5k' | '2k' | '4k'
 
 export const ALL_IMAGE_ASPECT_RATIOS = [
   'auto',
@@ -38,11 +38,15 @@ export function isImageAspectRatio(value: unknown): value is ImageAspectRatio {
   return (ALL_IMAGE_ASPECT_RATIOS as readonly string[]).includes(String(value))
 }
 
-/** 网关提交驱动：OpenAI Images 兼容 / TOAPIS 异步任务 / OpenRouter chat 生图。 */
-export type ImageGatewayDriver = 'openai-images' | 'toapis-task' | 'openrouter-chat'
+/** 网关提交驱动：OpenAI Images 兼容 / TOAPIS 异步任务 / OpenRouter chat 生图 / 即梦本机 CLI。 */
+export type ImageGatewayDriver =
+  | 'openai-images'
+  | 'toapis-task'
+  | 'openrouter-chat'
+  | 'dreamina-cli'
 
-/** 参考图提交方式：二进制内联 / 先上传供应商换 URL / chat 消息内联 data URL。 */
-export type ImageReferenceMode = 'binary' | 'upload-url' | 'chat-inline'
+/** 参考图提交方式：二进制内联 / 先上传供应商换 URL / chat 消息内联 data URL / 本机文件路径。 */
+export type ImageReferenceMode = 'binary' | 'upload-url' | 'chat-inline' | 'local-path'
 
 export interface ImageSizeOption {
   value: string
@@ -60,6 +64,11 @@ export interface ImageCapabilities {
   forwardsAspectRatio: boolean
   /** 分辨率档位；空数组表示供应商不支持：UI 隐藏且请求不携带。 */
   resolutions: ImageResolution[]
+  /**
+   * 缺省档位。只由"该参数为必填"的供应商（即梦 CLI 的 --resolution_type）声明；
+   * 其余供应商留空以保持历史行为——用户没选就不发送，避免改变既有默认出图档位。
+   */
+  defaultResolution?: ImageResolution
   /** OpenAI Images SDK 驱动固定携带 quality: 'low'；ToAPIS VIP 由任务驱动按模型显式发送 low。 */
   supportsQuality: boolean
   /** 供应商是否接受 background: 'transparent'；关闭时 UI 隐藏且请求不携带该字段。 */
@@ -89,7 +98,25 @@ export interface ImageGenerationConfig {
   retry?: { maxRetries: number; backoffMs: number }
 }
 
+/** ToAPIS 等既有供应商支持的档位。1.5k 是即梦 5.0Pro 独有的档，不能外溢到它们。 */
 const IMAGE_RESOLUTIONS: ImageResolution[] = ['1k', '2k', '4k']
+
+/** 全量档位：仅用于配置校验与成本排序，不代表任何供应商的支持范围。 */
+const ALL_IMAGE_RESOLUTIONS: ImageResolution[] = ['1k', '1.5k', '2k', '4k']
+
+/** 分辨率按成本从低到高。默认值只按这个顺序取，不依赖各能力表数组的书写顺序。 */
+const IMAGE_RESOLUTION_COST_ORDER: ImageResolution[] = ALL_IMAGE_RESOLUTIONS
+
+/** 该供应商支持范围内最便宜的一档；用户不主动加档就不会增加成本。 */
+export function cheapestImageResolution(
+  resolutions: ImageResolution[]
+): ImageResolution | undefined {
+  const rank = (value: ImageResolution): number => {
+    const index = IMAGE_RESOLUTION_COST_ORDER.indexOf(value)
+    return index === -1 ? IMAGE_RESOLUTION_COST_ORDER.length : index
+  }
+  return [...resolutions].sort((a, b) => rank(a) - rank(b))[0]
+}
 const DEFAULT_IMAGE_ASPECT_RATIOS: ImageAspectRatio[] = ['16:9', '3:2', '1:1']
 
 /** TOAPIS gpt-image-2 官方支持的 13 种画幅比例（size 直接提交比例串）。 */
@@ -195,6 +222,60 @@ const SAFE_OPENAI_COMPAT_CAPABILITIES: ImageCapabilities = {
 }
 
 /**
+ * 即梦 CLI：画幅只收比例串（无 auto），分辨率随 model_version 变化；且 text2image 与
+ * image2image 支持的模型集合不同——3.0/3.1 只能文生图，所以它们的参考图上限必须是 0，
+ * 让执行器在连线阶段就给出可操作错误，而不是提交后被上游拒绝。
+ */
+const DREAMINA_IMAGE_RATIOS: ImageAspectRatio[] = [
+  '21:9',
+  '16:9',
+  '3:2',
+  '4:3',
+  '1:1',
+  '3:4',
+  '2:3',
+  '9:16'
+]
+
+function dreaminaImageCapabilities(
+  resolutions: ImageResolution[],
+  maxReferenceImages: number
+): ImageCapabilities {
+  return {
+    ratios: DREAMINA_IMAGE_RATIOS,
+    // 即梦只接受比例串，size 与画幅是同一个值，UI 仍然只有"画幅"一个概念。
+    sizeOptions: DREAMINA_IMAGE_RATIOS.map((ratio) => ({ value: ratio, label: ratio, ratio })),
+    supportsSeed: false,
+    supportsReferenceImages: maxReferenceImages > 0,
+    maxReferenceImages,
+    // CLI 确实接受独立的 --ratio，因此执行器可以把 aspectRatio 传给网关。
+    forwardsAspectRatio: true,
+    resolutions,
+    defaultResolution: cheapestImageResolution(resolutions),
+    supportsQuality: false,
+    supportsTransparentBackground: false,
+    driver: 'dreamina-cli',
+    referenceMode: 'local-path'
+  }
+}
+
+/** 键统一小写；CLI 的模型名形如 5.0 / 5.0Pro。 */
+const DREAMINA_IMAGE_CAPABILITIES: Record<string, ImageCapabilities> = {
+  '3.0': dreaminaImageCapabilities(['1k', '2k'], 0),
+  '3.1': dreaminaImageCapabilities(['1k', '2k'], 0),
+  '4.0': dreaminaImageCapabilities(['2k', '4k'], 10),
+  '4.1': dreaminaImageCapabilities(['2k', '4k'], 10),
+  '4.5': dreaminaImageCapabilities(['2k', '4k'], 10),
+  '4.6': dreaminaImageCapabilities(['2k', '4k'], 10),
+  '4.7': dreaminaImageCapabilities(['2k', '4k'], 10),
+  '5.0': dreaminaImageCapabilities(['2k', '4k'], 10),
+  '5.0pro': dreaminaImageCapabilities(['1.5k', '2k', '4k'], 10)
+}
+
+/** 认不出的即梦模型一律按当前默认模型 5.0 的保守能力集处理。 */
+const DREAMINA_DEFAULT_IMAGE_CAPABILITIES = dreaminaImageCapabilities(['2k', '4k'], 10)
+
+/**
  * 图片模型能力的单一入口。画幅选项是稳定的用户意图，实际像素由供应商能力决定。
  * 选中哪个供应商就按哪张能力表提交参数、呈现 UI；未知模型一律使用保守集合。
  */
@@ -206,6 +287,12 @@ export function imageCapabilitiesFor(specId: ProviderSpecId, modelId = ''): Imag
       return OPENAI_IMAGE_CAPABILITIES
     case 'openrouter':
       return OPENROUTER_IMAGE_CAPABILITIES
+    case 'dreamina':
+      // 分辨率随模型变，所以这里必须真正启用 modelId 维度。
+      return (
+        DREAMINA_IMAGE_CAPABILITIES[(modelId || '').trim().toLowerCase()] ??
+        DREAMINA_DEFAULT_IMAGE_CAPABILITIES
+      )
     default: {
       const normalized = (modelId || '').toLowerCase().trim()
       if (
@@ -297,7 +384,10 @@ export function normalizeImageGenerationConfig(
     ? input.size!
     : (sizeOptions[0]?.value ?? capabilities.sizeOptions[0]?.value ?? 'auto')
   // 分辨率与供应商无关，跨供应商保留用户意图；发送与否由能力表决定。
-  const resolution = IMAGE_RESOLUTIONS.find((item) => item === input.resolution)
+  // defaultResolution 只由"该参数必填"的供应商（即梦 CLI）声明：其余供应商保持历史
+  // 行为（用户没选就不发送），不改变既有项目重跑时的默认出图档位。
+  const resolution =
+    ALL_IMAGE_RESOLUTIONS.find((item) => item === input.resolution) ?? capabilities.defaultResolution
   const rawCount = typeof input.count === 'number' ? input.count : Number(input.count)
   const count = Number.isFinite(rawCount) ? Math.max(1, Math.min(9, Math.trunc(rawCount))) : 1
   return {

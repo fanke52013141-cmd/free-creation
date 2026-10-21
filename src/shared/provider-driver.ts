@@ -3,9 +3,12 @@
 // 猜一遍——两份判定早晚会对不上。
 import type { ModelModality, ProviderSpecId } from './types'
 
-export type ProviderDriver = 'openai-compatible' | 'video' | 'native-speech'
+export type ProviderDriver = 'openai-compatible' | 'video' | 'native-speech' | 'local-cli'
 
 export function driverForSpec(specId: ProviderSpecId): ProviderDriver {
+  // 即梦走本机 CLI：凭据是本机 OAuth 登录态，既没有 Base URL 也没有 API Key，
+  // 因此既不能走 OpenAI 兼容驱动，也不能套用视频的 HTTP 任务驱动。
+  if (specId === 'dreamina') return 'local-cli'
   if (specId === 'minimax' || specId === 'seedance') return 'video'
   if (specId === 'volc-speech') return 'native-speech'
   return 'openai-compatible'
@@ -24,6 +27,9 @@ const MINIMAX_LLM_ID_RE = /(^|[^a-z])m[12]([^a-z]|$)|abab|minimax-(text|characte
  * 语音节点只列 audio 模型，所以猜错模态等于该模型在节点里选不到。
  */
 export function guessModelModality(id: string, specId: ProviderSpecId): ModelModality {
+  // 即梦一个实例同时挂图片与视频模型，而图片模型名形如 5.0 / 5.0Pro，不含 image 字样，
+  // 只能按 seedance 前缀把视频挑出来，其余一律按图片建模。
+  if (specId === 'dreamina') return /^seedance/i.test(id.trim()) ? 'video' : 'image'
   // 火山语音合成使用 /api/v3/tts/create，模型 ID 形如 seed-audio-1.0，
   // 不能仅靠一般的模型名正则推断模态。
   if (specId === 'volc-speech') return 'audio'

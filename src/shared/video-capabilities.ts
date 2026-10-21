@@ -23,6 +23,11 @@ export interface VideoCapabilities {
   maxReferenceImages: number
   maxReferenceVideos: number
   maxReferenceAudios: number
+  /**
+   * reference 模式是否必须有图像或视频锚点。即梦 2.0 家族要求至少 1 张图或 1 段视频，
+   * 2.5 允许纯音频；未声明时沿用原有校验（不做额外限制）。
+   */
+  requiresVisualReference?: boolean
   /** Undefined means the provider has not supplied a verified prompt ceiling. */
   maxPromptChars?: number
 }
@@ -168,6 +173,70 @@ const FALLBACK: VideoCapabilities = {
   maxReferenceAudios: 0
 }
 
+/**
+ * 即梦本机 CLI 的视频能力。与 HTTP 版 seedance 的差别有三处，必须进能力表而不能只靠
+ * UI 隐藏：① 2.5 在图生/首尾帧下拒绝 --ratio；② 2.0 家族参考模式禁止纯音频；
+ * ③ 没有 seed / watermark / 生成音频参数。
+ */
+const DREAMINA_VIDEO_RATIOS = ['1:1', '3:4', '16:9', '4:3', '9:16', '21:9']
+
+const dreaminaVideo = (
+  resolutions: string[],
+  durations: number[],
+  overrides: Partial<VideoCapabilities> = {}
+): VideoCapabilities => ({
+  parameterTransport: 'structured',
+  ratios: DREAMINA_VIDEO_RATIOS,
+  durations,
+  resolutions,
+  defaultRatio: '16:9',
+  defaultDuration: Math.min(...durations),
+  defaultResolution: cheapestResolution(resolutions),
+  modes: ['text', 'first-frame', 'first-last-frame', 'reference'],
+  supportsFirstLastFrames: true,
+  supportsReferenceImages: true,
+  supportsReferenceVideo: true,
+  supportsReferenceAudio: true,
+  supportsGeneratedAudio: false,
+  supportsSeed: false,
+  supportsWatermark: false,
+  maxReferenceImages: 9,
+  maxReferenceVideos: 3,
+  maxReferenceAudios: 3,
+  requiresVisualReference: true,
+  ...overrides
+})
+
+const DREAMINA_SEEDANCE_25 = dreaminaVideo(['480p', '720p', '1080p'], range(4, 30), {
+  maxReferenceImages: 30,
+  maxReferenceVideos: 10,
+  maxReferenceAudios: 10,
+  requiresVisualReference: false
+})
+const DREAMINA_SEEDANCE_20_VIP = dreaminaVideo(['720p', '1080p', '4k'], range(4, 15))
+/** 2.0 / 2.0fast / 2.0fast_vip / 2.0mini：CLI 只开放 720p。 */
+const DREAMINA_SEEDANCE_20 = dreaminaVideo(['720p'], range(4, 15))
+const DREAMINA_SEEDANCE_15_PRO = dreaminaVideo(['720p'], range(5, 12), {
+  modes: ['text', 'first-frame', 'first-last-frame'],
+  supportsReferenceImages: false,
+  supportsReferenceVideo: false,
+  supportsReferenceAudio: false,
+  maxReferenceImages: 0,
+  maxReferenceVideos: 0,
+  maxReferenceAudios: 0,
+  requiresVisualReference: false
+})
+const DREAMINA_SEEDANCE_10_FAST = dreaminaVideo(['720p'], range(5, 10), {
+  modes: ['first-frame'],
+  supportsReferenceImages: false,
+  supportsReferenceVideo: false,
+  supportsReferenceAudio: false,
+  maxReferenceImages: 0,
+  maxReferenceVideos: 0,
+  maxReferenceAudios: 0,
+  requiresVisualReference: false
+})
+
 export function isSeedanceGatewayProxy(specId: ProviderSpecId, baseURL: string): boolean {
   return specId === 'seedance' && baseURL.includes('/gateway/ark/')
 }
@@ -177,6 +246,14 @@ function profileFor(specId: ProviderSpecId, modelId: string): VideoCapabilities 
   if (specId === 'minimax') {
     if (model === 'minimax-h3-max') return H3_MAX
     if (model === 'minimax-h3') return H3
+  }
+  if (specId === 'dreamina') {
+    // canonicalVideoModelId 只把空格与下划线归一成 '-'：seedance2.0_vip -> seedance2.0-vip
+    if (model.includes('seedance2.5') || model.includes('seedance-2-5')) return DREAMINA_SEEDANCE_25
+    if (model.includes('seedance1.0')) return DREAMINA_SEEDANCE_10_FAST
+    if (model.includes('seedance1.5')) return DREAMINA_SEEDANCE_15_PRO
+    if (model.includes('seedance2.0-vip')) return DREAMINA_SEEDANCE_20_VIP
+    return DREAMINA_SEEDANCE_20
   }
   if (specId === 'seedance') {
     if (model.includes('seedance-2-5') || model.includes('seedance-2.5')) return SEEDANCE_25
@@ -214,7 +291,9 @@ export function videoRatioIsDerivedByFrames(
   if (!hasFirstOrLastFrame) return false
   return (
     specId === 'minimax' ||
-    (specId === 'seedance' && canonicalVideoModelId(modelId).includes('seedance-2-5'))
+    (specId === 'seedance' && canonicalVideoModelId(modelId).includes('seedance-2-5')) ||
+    // 即梦 CLI 的 seedance2.5 在图生/首尾帧下显式拒绝 --ratio，画幅只能跟首帧走。
+    (specId === 'dreamina' && canonicalVideoModelId(modelId).includes('seedance2.5'))
   )
 }
 
@@ -288,6 +367,13 @@ export function videoCapabilityIssues(
     issues.push('参考模式不能混用首帧或尾帧')
   if (mode === 'reference' && referenceImageCount > capabilities.maxReferenceImages)
     issues.push(`当前模型最多支持 ${capabilities.maxReferenceImages} 张参考图`)
+  if (
+    capabilities.requiresVisualReference &&
+    mode === 'reference' &&
+    imageCount === 0 &&
+    videoCount === 0
+  )
+    issues.push('当前模型的参考模式至少需要 1 张图片或 1 段视频，不能只用音频')
   if (videoCount > capabilities.maxReferenceVideos)
     issues.push(`当前模型最多支持 ${capabilities.maxReferenceVideos} 段参考视频`)
   if (audioCount > capabilities.maxReferenceAudios)

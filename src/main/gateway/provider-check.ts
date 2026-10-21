@@ -41,6 +41,8 @@ import {
   seedanceTasksUrl
 } from './video'
 import { buildVoiceDesignBody } from './voice'
+import { driverForSpec } from '../../shared/provider-driver'
+import { probeDreamina } from './dreamina-cli'
 
 /** 只读查询探测用的假任务号：查不到才是预期结果，且一定不产生费用。 */
 export const PROBE_UPSTREAM_TASK_ID = 'canvas-studio-connection-probe'
@@ -462,6 +464,9 @@ export async function probeProvider(input: ProbeProviderInput): Promise<ProbePro
 
 /** 供 testProvider 复用的一句话结论：不新增按钮也能知道密钥是否被接受。 */
 export async function freeConnectionMessage(p: ProviderConfig): Promise<string> {
+  // 本机 CLI 通道：探测 = 二进制可执行 + 版本 + 登录态 + 余额，零计费、不发起生成。
+  // 它没有 HTTP 端点可探测，不能走下面的 buildProbeSpecs。
+  if (driverForSpec(p.specId) === 'local-cli') return (await probeDreamina()).message
   const specs = await buildProbeSpecs(p)
   const free = specs.filter((spec) => spec.item.cost === 'free')
   if (!free.length) {
@@ -482,9 +487,11 @@ function authHeaderFor(p: ProviderConfig): string {
 /** 面板里未保存的草稿也要能自检，因此密钥解析规则与 testProvider 完全一致。 */
 export function draftToConfig(input: SaveProviderInput): ProviderConfig {
   const baseURL = input.baseURL.trim().replace(/\/+$/, '')
-  if (!baseURL) throw new GatewayError('PROVIDER_NO_URL', 'Base URL 不能为空')
+  // 本机 CLI 通道（即梦）没有 Base URL 与 API Key，草稿也要能直接探测。
+  const localCli = driverForSpec(input.specId) === 'local-cli'
+  if (!baseURL && !localCli) throw new GatewayError('PROVIDER_NO_URL', 'Base URL 不能为空')
   const apiKey = input.apiKey?.trim() || (input.id ? (getProvider(input.id)?.apiKey ?? '') : '')
-  if (!apiKey) throw new GatewayError('PROVIDER_NO_KEY', 'API Key 不能为空')
+  if (!apiKey && !localCli) throw new GatewayError('PROVIDER_NO_KEY', 'API Key 不能为空')
   return {
     id: input.id ?? 'draft',
     name: input.name,
