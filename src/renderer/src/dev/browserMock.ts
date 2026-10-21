@@ -799,6 +799,23 @@ export function installBrowserMock(): void {
             message: '浏览器演示不提供供应商协议自检，请在桌面端打开设置面板'
           }
         }),
+      // 设备流登录需要本机 CLI 与系统浏览器，浏览器演示里没有这些能力。
+      dreaminaLoginStart: () =>
+        Promise.resolve({
+          ok: false,
+          error: {
+            code: 'MOCK',
+            message: '浏览器演示不提供即梦本机登录，请在桌面端打开设置面板'
+          }
+        }),
+      dreaminaLoginCheck: () =>
+        Promise.resolve({
+          ok: false,
+          error: {
+            code: 'MOCK',
+            message: '浏览器演示不提供即梦本机登录，请在桌面端打开设置面板'
+          }
+        }),
       chatStart: () => Promise.resolve({ ok: true, data: { taskId: 'mock-task' } }),
       chatCancel: () => Promise.resolve({ ok: true, data: true }),
       audioGenerate: () =>

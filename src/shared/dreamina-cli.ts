@@ -154,3 +154,73 @@ export function classifyDreaminaTask(data: Record<string, unknown>): DreaminaTas
   // querying / running / queued / 空状态都按"还在跑"处理。
   return { status: 'running' }
 }
+
+// ── OAuth 设备流登录 ────────────────────────────────────────────────
+
+export interface DreaminaLoginMaterialResult {
+  status: 'already' | 'pending' | 'failed'
+  verificationUri?: string
+  userCode?: string
+  deviceCode?: string
+  expiresAt?: string
+  message: string
+}
+
+/**
+ * 解析 `dreamina login --headless` 的文本输出。
+ *
+ * 已登录时 CLI 不打印设备流材料，只说"已复用当前本地 OAuth 登录态"——这种情况必须
+ * 单独识别，否则面板会白等一轮轮询。
+ */
+export function parseLoginMaterial(raw: string): DreaminaLoginMaterialResult {
+  const text = raw.trim()
+  if (!text) return { status: 'failed', message: '即梦 CLI 未返回登录材料' }
+  const readField = (key: string): string | undefined => {
+    for (const line of text.split(/\r?\n/)) {
+      const trimmed = line.trim()
+      if (!trimmed.toLowerCase().startsWith(`${key}:`)) continue
+      const value = trimmed.slice(trimmed.indexOf(':') + 1).trim()
+      if (value) return value
+    }
+    return undefined
+  }
+  const deviceCode = readField('device_code')
+  const verificationUri = readField('verification_uri')
+  const userCode = readField('user_code')
+  const expiresAt = readField('expires_at')
+  if (deviceCode && (verificationUri || userCode)) {
+    return {
+      status: 'pending',
+      ...(verificationUri ? { verificationUri } : {}),
+      ...(userCode ? { userCode } : {}),
+      deviceCode,
+      ...(expiresAt ? { expiresAt } : {}),
+      message: '请在浏览器中完成授权'
+    }
+  }
+  // 没有设备码但提示已复用登录态：视为已登录，不需要用户再授权。
+  if (/已复用当前本地\s*OAuth|已登录/i.test(text))
+    return { status: 'already', message: '本机已有有效登录态' }
+  return { status: 'failed', message: text.slice(-200) }
+}
+
+/**
+ * 解析 `dreamina login checklogin --poll=0` 的结论。
+ *
+ * 授权未完成时的措辞未在 CLI 文档里固定，因此未知非零退出按"仍在等待"处理，
+ * 由面板按 expires_at 兜底停止；只有已知的终态错误（过期、无效）才立即结束轮询。
+ */
+export function classifyLoginCheck(
+  raw: string,
+  exitCode: number | null
+): { status: 'pending' | 'success' | 'expired' | 'failed'; message: string } {
+  const text = raw.trim()
+  if (exitCode === 0) return { status: 'success', message: text || '登录成功' }
+  if (/已过期|过期|expired/i.test(text))
+    return { status: 'expired', message: '授权已过期，请重新点击「登录即梦」' }
+  if (/无效|失败|错误|invalid|denied|拒绝/i.test(text))
+    return { status: 'failed', message: text.slice(-200) || '登录检查失败' }
+  if (/尚未授权|等待授权|未完成授权|authorization_pending|slow_down/i.test(text))
+    return { status: 'pending', message: '浏览器中尚未完成授权' }
+  return { status: 'pending', message: text.slice(-200) || '等待浏览器授权' }
+}

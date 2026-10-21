@@ -189,6 +189,8 @@ export const IPC = {
     importProviders: 'gateway:providers:import',
     testProvider: 'gateway:providers:test',
     probeProvider: 'gateway:providers:probe',
+    dreaminaLoginStart: 'gateway:dreamina:login:start',
+    dreaminaLoginCheck: 'gateway:dreamina:login:check',
     chatStart: 'gateway:chat:start',
     chatCancel: 'gateway:chat:cancel',
     imageGenerate: 'gateway:image:generate',
@@ -817,6 +819,25 @@ export interface ProbeProviderInput extends SaveProviderInput {
 export interface ProbeProviderResult {
   items: ProviderProbeItem[]
   summary: string
+}
+
+/**
+ * 即梦本机 CLI 的 OAuth 设备流登录材料（设置面板用）。
+ * `already` 表示本机已有有效登录态，CLI 直接复用了它，不需要用户再授权。
+ */
+export interface DreaminaLoginMaterial {
+  status: 'already' | 'pending' | 'failed'
+  verificationUri?: string
+  userCode?: string
+  deviceCode?: string
+  expiresAt?: string
+  message: string
+}
+
+/** 一次 checklogin 的结论：面板据此决定继续轮询、停止还是提示重新发起。 */
+export interface DreaminaLoginCheckResult {
+  status: 'pending' | 'success' | 'expired' | 'failed'
+  message: string
 }
 
 export interface ChatStartInput {

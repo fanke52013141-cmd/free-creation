@@ -538,10 +538,33 @@ function dreaminaAdapter(): { submit; poll }   // submit 按 mode 组装子命�
 | 首尾帧视频 | 仅有参数组装单测；**未做真实出片验证**（与首帧共用同一条 `frames2video` 提交+轮询落盘管线，差别仅多一个 `--last`） |
 | 参考生视频 | 仅有参数组装单测；**未做真实出片验证**（需要真实视频/音频素材，且 2.0 家族有"至少一个视觉锚点"限制） |
 | 首帧视频 | **已真实验证**（§13.2） |
-| 设置面板"一键登录" | **未做**；当前需在终端执行 `dreamina login`，面板只显示登录状态 |
+| 设置面板"一键登录" | **已做**（见 §13.5）；终端 `dreamina login` 保留为兜底 |
 | GUI 人工点击验收 | **未做**；本轮验收为编译 + 全量单测 + 真实 CLI 冒烟 + 首次构建 |
 | 项目导出/导入 | 未复测；本次无新增持久化字段，风险低 |
 | 并发排队可视化 | 未做；仅实现串行队列，界面无"排队中"提示 |
 | 30 分钟视频超时 | 未调整；长队列会在 30 分钟后按既有语义标记"结果未知"（不重复提交） |
 | CLI 专有诊断事件 | 未新增。生图/视频的 `model.request.started / completed / failed` 由既有网关入口统一发射，`npm run verify:logging` 通过；§6.1 里列的 `cli.probe / cli.task.*` 细分事件列为后续增强 |
+
+### 13.5 设置面板一键登录（补充落地）
+
+| 层 | 文件 | 改动 |
+| -- | ---- | ---- |
+| shared | `contracts/index.ts` | 新增 `dreaminaLoginStart` / `dreaminaLoginCheck` 两条 IPC 与 `DreaminaLoginMaterial`、`DreaminaLoginCheckResult` |
+| shared | `dreamina-cli.ts` | `parseLoginMaterial()` / `classifyLoginCheck()` 纯解析：识别"已复用登录态"、"授权已过期"、未知非零退出按等待处理 |
+| main | `gateway/dreamina-cli.ts` | `startDreaminaLogin()`（headless，不阻塞主进程）/ `checkDreaminaLogin(--poll=0)` |
+| main | `ipc/gateway.ipc.ts` | 两个 handler；发起成功后 `shell.openExternal` 自动打开浏览器 |
+| preload | `preload/index.ts` | 暴露 `dreaminaLoginStart` / `dreaminaLoginCheck` |
+| renderer | `ProviderSettingsPanel.tsx` | 「登录即梦」按钮、授权链接与设备码展示、「复制链接」、2.5s 轮询、成功/过期终态 |
+| renderer | `dev/browserMock.ts` | 浏览器演示返回 MOCK 错误，不伪造登录成功 |
+
+**流程**：点「登录即梦」→ 主进程 `login --headless` 拿材料并打开浏览器 → 面板每 2.5s 调 `checklogin --poll=0`
+→ `success` 自动刷新检测结论；`expired` / `failed` 立即停止轮询并提示重新发起。
+主进程**不读取、不存储、不转发任何 token**；登录态仍由 CLI 保存在 `~/.dreamina_cli`。
+
+**已验证**：`parseLoginMaterial`（headless 真实输出格式、已复用登录态、无法识别时失败）与
+`classifyLoginCheck`（真实过期文案、未知非零退出按等待处理、invalid 判失败），共 7 个单测。
+
+**未验证**：完整浏览器授权闭环需要人工在网页上点一次授权，本轮没有做端到端点击验收。
+「已登录」分支可安全复现（`login --headless` 输出"已复用当前本地 OAuth 登录态"），待授权分支的行为
+依据真实 CLI 文案与单测覆盖推断，首次使用时请留意面板提示。
 

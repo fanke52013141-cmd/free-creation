@@ -5,7 +5,9 @@ import {
   buildImageArgs,
   buildVideoArgs,
   classifyDreaminaTask,
-  DreaminaCliError
+  classifyLoginCheck,
+  DreaminaCliError,
+  parseLoginMaterial
 } from '@shared/dreamina-cli'
 
 describe('buildImageArgs', () => {
@@ -161,5 +163,54 @@ describe('classifyDreaminaTask', () => {
   it('querying 视为仍在运行', () => {
     expect(classifyDreaminaTask({ gen_status: 'querying' }).status).toBe('running')
     expect(classifyDreaminaTask({}).status).toBe('running')
+  })
+})
+
+describe('设备流登录材料解析', () => {
+  it('解析 headless 输出的四项材料', () => {
+    const stdout = [
+      '请使用浏览器完成 OAuth Device Flow 登录。',
+      'verification_uri: https://jimeng.jianying.com/ai-tool/cli-auth?x=1',
+      'user_code: a588ed0999762a1b6948092f6bdb5868',
+      'device_code: ad5c297caac5c2d511f63e8bd0255124',
+      'poll_interval: 1s',
+      'expires_at: 2026-10-21T20:24:12+08:00'
+    ].join('\n')
+    const material = parseLoginMaterial(stdout)
+    expect(material.status).toBe('pending')
+    expect(material.verificationUri).toContain('cli-auth')
+    expect(material.userCode).toBe('a588ed0999762a1b6948092f6bdb5868')
+    expect(material.deviceCode).toBe('ad5c297caac5c2d511f63e8bd0255124')
+    expect(material.expiresAt).toBe('2026-10-21T20:24:12+08:00')
+  })
+
+  it('已有登录态时识别为 already，而不是让面板空等', () => {
+    const material = parseLoginMaterial('已复用当前本地 OAuth 登录态。')
+    expect(material.status).toBe('already')
+  })
+
+  it('空输出或无法识别时返回失败，不能假装 pending', () => {
+    expect(parseLoginMaterial('').status).toBe('failed')
+    expect(parseLoginMaterial('some unexpected text').status).toBe('failed')
+  })
+})
+
+describe('checklogin 结论判定', () => {
+  it('退出码 0 即成功', () => {
+    expect(classifyLoginCheck('登录成功', 0).status).toBe('success')
+  })
+
+  it('真实过期文案判定为过期', () => {
+    // 该文案取自本机实测：checklogin 传无效 device_code 时的 stderr。
+    const state = classifyLoginCheck('登录已过期，请重新执行 dreamina login --headless', 1)
+    expect(state.status).toBe('expired')
+  })
+
+  it('未知的非零退出按“仍在等待”处理，避免把未授权误判为失败', () => {
+    expect(classifyLoginCheck('some transient output', 1).status).toBe('pending')
+  })
+
+  it('明确的无效/拒绝判定为失败', () => {
+    expect(classifyLoginCheck('invalid_grant', 1).status).toBe('failed')
   })
 })

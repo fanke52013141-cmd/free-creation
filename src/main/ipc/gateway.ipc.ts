@@ -1,7 +1,9 @@
 // 模型网关 IPC handlers（信封规范见《技术框架与规范》§10）
-import { dialog, ipcMain, type BrowserWindow } from 'electron'
+import { dialog, ipcMain, shell, type BrowserWindow } from 'electron'
 import { IPC } from '../../shared/contracts'
 import type {
+  DreaminaLoginCheckResult,
+  DreaminaLoginMaterial,
   GatewayEvent,
   IpcEnvelope,
   ProbeProviderInput,
@@ -15,6 +17,7 @@ import { driverForSpec } from '../../shared/provider-driver'
 import { startChat, cancelChat } from '../gateway/chat'
 import { GatewayError, testProvider } from '../gateway/factory'
 import { draftToConfig, freeConnectionMessage, probeProvider } from '../gateway/provider-check'
+import { checkDreaminaLogin, startDreaminaLogin } from '../gateway/dreamina-cli'
 import { generateImageToAsset } from '../gateway/image'
 import { transformImageEdit } from '../media/image-edit'
 import {
@@ -141,6 +144,21 @@ export function registerGatewayIpc(win: BrowserWindow): void {
   // 协议自检：默认只做请求构造 + 零计费只读探测；带 runItemId 且 allowCost 才真实提交。
   ipcMain.handle(IPC.gateway.probeProvider, (_e, input: ProbeProviderInput) =>
     wrapAsync<ProbeProviderResult>(() => probeProvider(input))
+  )
+
+  // 即梦本机 CLI 的 OAuth 设备流：发起后直接把浏览器打开，用户在网页上授权，
+  // 面板再按自己的节奏轮询 checklogin——主进程不阻塞等待，也不接触任何 token。
+  ipcMain.handle(IPC.gateway.dreaminaLoginStart, () =>
+    wrapAsync<DreaminaLoginMaterial>(async () => {
+      const material = await startDreaminaLogin()
+      if (material.status === 'pending' && material.verificationUri)
+        void shell.openExternal(material.verificationUri)
+      return material
+    })
+  )
+
+  ipcMain.handle(IPC.gateway.dreaminaLoginCheck, (_e, deviceCode: string) =>
+    wrapAsync<DreaminaLoginCheckResult>(() => checkDreaminaLogin(deviceCode ?? ''))
   )
 
   ipcMain.handle(IPC.gateway.chatStart, (_e, input: Parameters<typeof startChat>[1]) =>

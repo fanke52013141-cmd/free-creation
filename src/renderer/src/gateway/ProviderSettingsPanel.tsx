@@ -119,6 +119,15 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
   const [transferPasswordConfirm, setTransferPasswordConfirm] = useState('')
   const [transferError, setTransferError] = useState('')
   const [transferBusy, setTransferBusy] = useState(false)
+  /** 即梦本机 CLI 的设备流登录：pending 时持有授权材料并轮询 checklogin。 */
+  const [dreaminaLogin, setDreaminaLogin] = useState<{
+    verificationUri?: string
+    userCode?: string
+    deviceCode: string
+    expiresAt?: string
+  } | null>(null)
+  const [dreaminaLoginBusy, setDreaminaLoginBusy] = useState(false)
+  const [dreaminaLoginMsg, setDreaminaLoginMsg] = useState('')
 
   const loadSettingsProviders = async (): Promise<void> => {
     const result = await window.api.gateway.listProviders()
@@ -157,6 +166,41 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [open, close, modelPickerOpen, transferMode])
+
+  // 授权在浏览器里完成，面板按固定节奏查询；过期或失败即停止，避免无限轮询。
+  useEffect(() => {
+    const deviceCode = dreaminaLogin?.deviceCode
+    if (!deviceCode) return
+    let stopped = false
+    const timer = window.setInterval(() => {
+      void (async () => {
+        const res = await window.api.gateway.dreaminaLoginCheck(deviceCode)
+        if (stopped) return
+        if (!res.ok) {
+          setDreaminaLoginMsg(`检查登录失败：${res.error.message}`)
+          return
+        }
+        if (res.data.status === 'success') {
+          window.clearInterval(timer)
+          setDreaminaLogin(null)
+          setDreaminaLoginMsg('即梦登录成功，点「检测本机 CLI」刷新状态')
+          toast('即梦登录成功')
+          return
+        }
+        if (res.data.status === 'expired' || res.data.status === 'failed') {
+          window.clearInterval(timer)
+          setDreaminaLogin(null)
+          setDreaminaLoginMsg(res.data.message)
+          return
+        }
+        setDreaminaLoginMsg(res.data.message)
+      })()
+    }, 2500)
+    return () => {
+      stopped = true
+      window.clearInterval(timer)
+    }
+  }, [dreaminaLogin])
 
   if (!open) return null
 
@@ -240,6 +284,50 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
     setPickedModelIds(new Set())
     setModelSearch('')
     setModelPickerOpen(true)
+  }
+
+  /**
+   * 一键登录：主进程发起设备流并把浏览器打开，这里只负责展示材料与轮询结果。
+   * 登录态由 CLI 自己持久化，应用不接触任何 token。
+   */
+  const startDreaminaLogin = async (): Promise<void> => {
+    setDreaminaLoginBusy(true)
+    setDreaminaLoginMsg('')
+    const res = await window.api.gateway.dreaminaLoginStart()
+    setDreaminaLoginBusy(false)
+    if (!res.ok) {
+      setDreaminaLoginMsg(`发起登录失败：${res.error.message}`)
+      return
+    }
+    if (res.data.status === 'already') {
+      setDreaminaLogin(null)
+      setDreaminaLoginMsg(`${res.data.message}，无需重复授权`)
+      toast('本机已有有效登录态')
+      return
+    }
+    if (res.data.status !== 'pending' || !res.data.deviceCode) {
+      setDreaminaLogin(null)
+      setDreaminaLoginMsg(res.data.message)
+      return
+    }
+    setDreaminaLogin({
+      ...(res.data.verificationUri ? { verificationUri: res.data.verificationUri } : {}),
+      ...(res.data.userCode ? { userCode: res.data.userCode } : {}),
+      ...(res.data.expiresAt ? { expiresAt: res.data.expiresAt } : {}),
+      deviceCode: res.data.deviceCode
+    })
+    setDreaminaLoginMsg('已打开浏览器，请在页面中完成授权（本面板会自动检测结果）')
+  }
+
+  const copyDreaminaLink = (value: string): void => {
+    if (!navigator.clipboard) {
+      toast('当前环境不支持剪贴板，请手动复制')
+      return
+    }
+    void navigator.clipboard.writeText(value).then(
+      () => toast('已复制'),
+      () => toast('复制失败，请手动选择文本')
+    )
   }
 
   const addPickedModels = (): void => {
@@ -608,14 +696,48 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
                     </AppSelect>
                   </label>
                   {driverForSpec(draft.specId) === 'local-cli' ? (
-                    <div className="gw-row">
-                      <span className="gw-label">本机通道</span>
-                      <div className="gw-empty">
-                        即梦 CLI 不需要 Base URL 与 API Key，直接使用本机登录态。
-                        首次使用请先在终端执行 <code>dreamina login</code> 完成授权，
-                        再点下方“检测本机 CLI”。
+                    <>
+                      <div className="gw-row">
+                        <span className="gw-label">本机通道</span>
+                        <span className="gw-empty">
+                          即梦 CLI 不需要 Base URL 与 API Key，直接使用本机登录态
+                        </span>
                       </div>
-                    </div>
+                      <div className="gw-row">
+                        <span className="gw-label">登录</span>
+                        <button
+                          className="btn-ghost small"
+                          disabled={dreaminaLoginBusy}
+                          onClick={() => void startDreaminaLogin()}
+                        >
+                          {dreaminaLoginBusy ? '发起中…' : '登录即梦'}
+                        </button>
+                      </div>
+                      {dreaminaLogin && (
+                        <div className="gw-empty">
+                          已打开浏览器；若未自动跳转请手动打开
+                          {dreaminaLogin.verificationUri ? (
+                            <>
+                              {' '}
+                              <code>{dreaminaLogin.verificationUri}</code>{' '}
+                              <button
+                                className="btn-ghost small"
+                                onClick={() => copyDreaminaLink(dreaminaLogin.verificationUri!)}
+                              >
+                                复制链接
+                              </button>
+                            </>
+                          ) : null}
+                          {dreaminaLogin.userCode ? (
+                            <>
+                              {' '}
+                              并输入设备码 <code>{dreaminaLogin.userCode}</code>
+                            </>
+                          ) : null}
+                        </div>
+                      )}
+                      {dreaminaLoginMsg && <div className="gw-empty">{dreaminaLoginMsg}</div>}
+                    </>
                   ) : (
                     <>
                       <label className="gw-row">

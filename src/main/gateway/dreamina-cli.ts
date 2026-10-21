@@ -18,11 +18,15 @@ import {
   buildImageArgs,
   buildVideoArgs,
   classifyDreaminaTask,
+  classifyLoginCheck,
   DreaminaCliError,
+  parseLoginMaterial,
   type DreaminaImageArgs,
+  type DreaminaLoginMaterialResult,
   type DreaminaTaskState
 } from '../../shared/dreamina-cli'
 import type { VideoSubmitInput } from '../../shared/contracts'
+import type { DreaminaLoginCheckResult } from '../../shared/contracts'
 import { getDb } from '../store/db'
 import { getMediaAbsPath } from '../store/media.repo'
 import { GatewayError } from './factory'
@@ -416,4 +420,39 @@ export async function pollVideoWithDreamina(upstreamId: string): Promise<Dreamin
 /** 供诊断/设置面板展示当前 CLI 版本；未探测过时为 undefined。 */
 export function currentDreaminaVersion(): string | undefined {
   return cachedVersion
+}
+
+// ── OAuth 设备流登录（设置面板一键登录） ───────────────────────────
+
+/**
+ * 发起设备流登录：`login --headless` 只打印授权材料就退出，不在主进程里阻塞等待。
+ * 浏览器由 IPC 层调用 shell.openExternal 打开；面板随后用 checklogin 轮询结果。
+ */
+export async function startDreaminaLogin(): Promise<DreaminaLoginMaterialResult> {
+  const binary = await resolveBinary()
+  const result = await spawnDreamina(binary, ['login', '--headless'], undefined, 60_000)
+  const text = `${result.stdout}\n${result.stderr}`
+  const parsed = parseLoginMaterial(text)
+  if (parsed.status === 'pending') return parsed
+  if (result.code === 0) return parsed
+  return {
+    status: 'failed',
+    message: text.trim().slice(-300) || '即梦登录发起失败'
+  }
+}
+
+/**
+ * 查询一次授权结果（poll=0，由面板按自己的节奏轮询，便于 UI 显示与取消）。
+ */
+export async function checkDreaminaLogin(deviceCode: string): Promise<DreaminaLoginCheckResult> {
+  const code = deviceCode.trim()
+  if (!code) return { status: 'failed', message: '缺少 device_code，请重新发起登录' }
+  const binary = await resolveBinary()
+  const result = await spawnDreamina(
+    binary,
+    ['login', 'checklogin', `--device_code=${code}`, '--poll=0'],
+    undefined,
+    60_000
+  )
+  return classifyLoginCheck(`${result.stdout}\n${result.stderr}`, result.code)
 }

@@ -74,6 +74,8 @@ import type {
   ProbeProviderInput,
   ProbeProviderResult,
   TestProviderResult,
+  DreaminaLoginMaterial,
+  DreaminaLoginCheckResult,
   HistorySnapshotRecord,
   ImageGenerationTimingSample,
   GenerationTimingSample,
@@ -499,6 +501,10 @@ const api = {
       ipcRenderer.invoke(IPC.gateway.testProvider, input),
     probeProvider: (input: ProbeProviderInput): Promise<IpcEnvelope<ProbeProviderResult>> =>
       ipcRenderer.invoke(IPC.gateway.probeProvider, input),
+    dreaminaLoginStart: (): Promise<IpcEnvelope<DreaminaLoginMaterial>> =>
+      ipcRenderer.invoke(IPC.gateway.dreaminaLoginStart),
+    dreaminaLoginCheck: (deviceCode: string): Promise<IpcEnvelope<DreaminaLoginCheckResult>> =>
+      ipcRenderer.invoke(IPC.gateway.dreaminaLoginCheck, deviceCode),
     chatStart: (input: ChatStartInput): Promise<IpcEnvelope<{ taskId: string }>> =>
       ipcRenderer.invoke(IPC.gateway.chatStart, input),
     chatCancel: (taskId: string): Promise<IpcEnvelope<boolean>> =>
