@@ -27,6 +27,10 @@ import {
 } from '../../shared/dreamina-cli'
 import type { VideoSubmitInput } from '../../shared/contracts'
 import type { DreaminaLoginCheckResult } from '../../shared/contracts'
+import {
+  dreaminaUnsupportedModelMessage,
+  isDreaminaVideoModel
+} from '../../shared/dreamina-models'
 import { getDb } from '../store/db'
 import { getMediaAbsPath } from '../store/media.repo'
 import { GatewayError } from './factory'
@@ -351,6 +355,12 @@ export async function submitVideoWithDreamina(input: VideoSubmitInput): Promise<
   return withDreaminaSlot(async () => {
     const mode = input.mode ?? 'text'
     const params = input.params ?? {}
+    // 白名单外（1.x / 2.0 / 2.0fast 等）直接拒绝：实测排队数小时或无法出片。
+    if (!isDreaminaVideoModel(input.modelId))
+      throw new GatewayError(
+        'DREAMINA_MODEL_DISABLED',
+        dreaminaUnsupportedModelMessage(input.modelId)
+      )
     if (!params.resolution)
       throw new GatewayError('INVALID_INPUT', '即梦视频必须指定清晰度（video_resolution）')
     if (mode !== 'text' && mode !== 'first-frame' && mode !== 'first-last-frame' && mode !== 'reference')

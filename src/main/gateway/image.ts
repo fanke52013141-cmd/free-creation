@@ -15,6 +15,10 @@ import { emitGatewayEvent, ensureRequestId } from '../diagnostics/gateway-events
 import type { GatewayDiagnosticsContext } from '../../shared/contracts'
 import { createImageModel, GatewayError, requireProvider } from './factory'
 import { dreaminaMediaPath, generateImageWithDreamina } from './dreamina-cli'
+import {
+  dreaminaUnsupportedModelMessage,
+  isDreaminaImageModel
+} from '../../shared/dreamina-models'
 
 // 桌面启动后注入 Chromium 网络栈，图片上传/轮询/下载跟随系统代理。
 // 单测未启动 Electron 时保留可模拟的标准 fetch。
@@ -616,6 +620,12 @@ async function generateWithDreaminaCli(
   capabilities: ImageCapabilities,
   diagnostics?: GatewayDiagnosticsContext
 ): Promise<MediaAsset> {
+  // 白名单外（3.x / 4.x 等）直接拒绝：这些型号已下线，不能因为老配置里还留着就继续提交。
+  if (!isDreaminaImageModel(input.modelId))
+    throw new GatewayError(
+      'DREAMINA_MODEL_DISABLED',
+      dreaminaUnsupportedModelMessage(input.modelId)
+    )
   const referenceIds = uniqueReferenceIds(input).slice(0, capabilities.maxReferenceImages)
   const referencePaths = referenceIds.map((id) => dreaminaMediaPath(id, '参考图'))
   // 画幅是用户意图；CLI 只接受比例串，size 与 aspectRatio 在即梦能力表里是同一个值。

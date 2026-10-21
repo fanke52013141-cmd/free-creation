@@ -1,6 +1,7 @@
 // 核心数据模型（双进程共享单一事实源，见《技术框架与规范》§4）
 
 import type { WorkspaceProfile } from '../workspace-profile'
+import { DREAMINA_IMAGE_MODELS, DREAMINA_VIDEO_MODELS } from '../dreamina-models'
 
 /**
  * 能在新画布中创建、维护并完整执行的节点类型。
@@ -351,15 +352,8 @@ export const PROVIDER_SPECS: ProviderSpec[] = [
     desc: '即梦 Dreamina 本机 CLI 通道：只需安装并登录，不走 Base URL / API Key，按会员额度计费',
     baseURL: '',
     modality: 'image',
-    suggestions: [
-      '5.0',
-      '5.0Pro',
-      '4.7',
-      '4.5',
-      'seedance2.0fast',
-      'seedance2.0_vip',
-      'seedance2.5'
-    ]
+    // 预置清单直接引用白名单，避免"预置"与"能力表"两处各写一份而漂移。
+    suggestions: [...DREAMINA_IMAGE_MODELS, ...DREAMINA_VIDEO_MODELS]
   },
   {
     id: 'openrouter',

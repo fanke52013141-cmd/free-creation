@@ -214,10 +214,15 @@ const DREAMINA_SEEDANCE_25 = dreaminaVideo(['480p', '720p', '1080p'], range(4, 3
   requiresVisualReference: false
 })
 const DREAMINA_SEEDANCE_20_VIP = dreaminaVideo(['720p', '1080p', '4k'], range(4, 15))
-/** 2.0 / 2.0fast / 2.0fast_vip / 2.0mini：CLI 只开放 720p。 */
+/** 2.0fast_vip / 2.0mini：CLI 对除 2.0_vip 外的型号只开放 720p。 */
 const DREAMINA_SEEDANCE_20 = dreaminaVideo(['720p'], range(4, 15))
-const DREAMINA_SEEDANCE_15_PRO = dreaminaVideo(['720p'], range(5, 12), {
-  modes: ['text', 'first-frame', 'first-last-frame'],
+/**
+ * 白名单外的即梦型号（1.0fast / 1.5pro / 2.0 / 2.0fast 等）：不提供任何模式。
+ * 执行前会被网关拒绝并给出可用模型清单，这里只保证 UI 不会把它们当成可用能力。
+ */
+const DREAMINA_DISABLED_VIDEO: VideoCapabilities = {
+  ...dreaminaVideo(['720p'], [4]),
+  modes: [],
   supportsReferenceImages: false,
   supportsReferenceVideo: false,
   supportsReferenceAudio: false,
@@ -225,17 +230,7 @@ const DREAMINA_SEEDANCE_15_PRO = dreaminaVideo(['720p'], range(5, 12), {
   maxReferenceVideos: 0,
   maxReferenceAudios: 0,
   requiresVisualReference: false
-})
-const DREAMINA_SEEDANCE_10_FAST = dreaminaVideo(['720p'], range(5, 10), {
-  modes: ['first-frame'],
-  supportsReferenceImages: false,
-  supportsReferenceVideo: false,
-  supportsReferenceAudio: false,
-  maxReferenceImages: 0,
-  maxReferenceVideos: 0,
-  maxReferenceAudios: 0,
-  requiresVisualReference: false
-})
+}
 
 export function isSeedanceGatewayProxy(specId: ProviderSpecId, baseURL: string): boolean {
   return specId === 'seedance' && baseURL.includes('/gateway/ark/')
@@ -250,10 +245,16 @@ function profileFor(specId: ProviderSpecId, modelId: string): VideoCapabilities 
   if (specId === 'dreamina') {
     // canonicalVideoModelId 只把空格与下划线归一成 '-'：seedance2.0_vip -> seedance2.0-vip
     if (model.includes('seedance2.5') || model.includes('seedance-2-5')) return DREAMINA_SEEDANCE_25
-    if (model.includes('seedance1.0')) return DREAMINA_SEEDANCE_10_FAST
-    if (model.includes('seedance1.5')) return DREAMINA_SEEDANCE_15_PRO
     if (model.includes('seedance2.0-vip')) return DREAMINA_SEEDANCE_20_VIP
-    return DREAMINA_SEEDANCE_20
+    // 2.0fast_vip / 2.0mini 仍走 720p 档；其余型号（1.x / 2.0 / 2.0fast）已禁用。
+    if (
+      model.includes('seedance2.0fast-vip') ||
+      model.includes('seedance2.0fast_vip') ||
+      model.includes('seedance2.0mini') ||
+      model.includes('seedance2.0-mini')
+    )
+      return DREAMINA_SEEDANCE_20
+    return DREAMINA_DISABLED_VIDEO
   }
   if (specId === 'seedance') {
     if (model.includes('seedance-2-5') || model.includes('seedance-2.5')) return SEEDANCE_25

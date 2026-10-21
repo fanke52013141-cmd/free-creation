@@ -16,6 +16,7 @@ import type {
   SaveProviderInput
 } from '@shared/contracts'
 import { driverForSpec, guessModelModality } from '@shared/provider-driver'
+import { isDreaminaModelSupported } from '@shared/dreamina-models'
 import { useGatewayStore } from '../stores/gateway'
 import { useConfirmStore } from '../stores/confirm'
 import { toast } from '../stores/toast'
@@ -70,7 +71,12 @@ const normalizeModelsForSpec = (
   specId: ProviderSpecId
 ): GatewayModelInfo[] => {
   const allowed = modalitiesForSpec(specId)
-  return models.map((model) =>
+  // 即梦只保留白名单内的型号：切换规格或加载历史配置时直接剔除已禁用项。
+  const scoped =
+    specId === 'dreamina'
+      ? models.filter((model) => isDreaminaModelSupported(model.id))
+      : models
+  return scoped.map((model) =>
     allowed.includes(model.modality) ? model : { ...model, modality: allowed[0] }
   )
 }
@@ -233,6 +239,14 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
     if (!localCli && !draft.baseURL.trim()) return toast('Base URL 不能为空')
     if (!localCli && !draft.apiKey.trim() && !draft.hasApiKey) return toast('API Key 不能为空')
     if (!draft.models.length) return toast('至少添加一个模型')
+    // 即梦只允许白名单模型：保存时清掉已禁用的历史行，避免"能选但一跑就卡/失败"。
+    const modelsForSave =
+      draft.specId === 'dreamina'
+        ? draft.models.filter((model) => isDreaminaModelSupported(model.id))
+        : draft.models
+    if (!modelsForSave.length)
+      return toast('即梦只支持 5.0 / 5.0Pro 与 2.5 / 2.0_vip / 2.0fast_vip / 2.0mini')
+    const droppedModels = draft.models.length - modelsForSave.length
     setBusy('save')
     const res = await window.api.gateway.saveProvider({
       id: draft.id,
@@ -240,7 +254,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
       specId: draft.specId,
       baseURL: draft.baseURL.trim(),
       apiKey: draft.apiKey.trim() || undefined,
-      models: draft.models
+      models: modelsForSave
     })
     setBusy(null)
     if (!res.ok) return toast(`保存失败：${res.error.message}`)
@@ -251,7 +265,7 @@ export function ProviderSettingsPanel(): React.JSX.Element | null {
     })
     void loadSettingsProviders()
     void useGatewayStore.getState().load()
-    toast('供应商已保存')
+    toast(droppedModels > 0 ? `供应商已保存，已移除 ${droppedModels} 个不可用模型` : '供应商已保存')
   }
 
   const test = async (): Promise<void> => {

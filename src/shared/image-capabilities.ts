@@ -259,21 +259,25 @@ function dreaminaImageCapabilities(
   }
 }
 
-/** 键统一小写；CLI 的模型名形如 5.0 / 5.0Pro。 */
+/**
+ * 键统一小写；CLI 的模型名形如 5.0 / 5.0Pro。
+ * 只登记白名单内的型号：3.x / 4.x 已按产品决策下线，网关会在执行前拒绝它们
+ * （见 shared/dreamina-models），这里不再提供任何"看起来能跑"的能力集。
+ */
 const DREAMINA_IMAGE_CAPABILITIES: Record<string, ImageCapabilities> = {
-  '3.0': dreaminaImageCapabilities(['1k', '2k'], 0),
-  '3.1': dreaminaImageCapabilities(['1k', '2k'], 0),
-  '4.0': dreaminaImageCapabilities(['2k', '4k'], 10),
-  '4.1': dreaminaImageCapabilities(['2k', '4k'], 10),
-  '4.5': dreaminaImageCapabilities(['2k', '4k'], 10),
-  '4.6': dreaminaImageCapabilities(['2k', '4k'], 10),
-  '4.7': dreaminaImageCapabilities(['2k', '4k'], 10),
   '5.0': dreaminaImageCapabilities(['2k', '4k'], 10),
   '5.0pro': dreaminaImageCapabilities(['1.5k', '2k', '4k'], 10)
 }
 
-/** 认不出的即梦模型一律按当前默认模型 5.0 的保守能力集处理。 */
-const DREAMINA_DEFAULT_IMAGE_CAPABILITIES = dreaminaImageCapabilities(['2k', '4k'], 10)
+/**
+ * 白名单外的即梦模型：只用于让 UI 不崩，执行前会被网关拒绝。
+ * 刻意清空分辨率与参考图上限，避免任何调用方误以为它可以提交。
+ */
+const DREAMINA_DISABLED_IMAGE_CAPABILITIES: ImageCapabilities = {
+  ...dreaminaImageCapabilities([], 0),
+  ratios: [],
+  sizeOptions: []
+}
 
 /**
  * 图片模型能力的单一入口。画幅选项是稳定的用户意图，实际像素由供应商能力决定。
@@ -288,10 +292,10 @@ export function imageCapabilitiesFor(specId: ProviderSpecId, modelId = ''): Imag
     case 'openrouter':
       return OPENROUTER_IMAGE_CAPABILITIES
     case 'dreamina':
-      // 分辨率随模型变，所以这里必须真正启用 modelId 维度。
+      // 分辨率随模型变，所以这里必须真正启用 modelId 维度；白名单外的型号返回空能力集。
       return (
         DREAMINA_IMAGE_CAPABILITIES[(modelId || '').trim().toLowerCase()] ??
-        DREAMINA_DEFAULT_IMAGE_CAPABILITIES
+        DREAMINA_DISABLED_IMAGE_CAPABILITIES
       )
     default: {
       const normalized = (modelId || '').toLowerCase().trim()

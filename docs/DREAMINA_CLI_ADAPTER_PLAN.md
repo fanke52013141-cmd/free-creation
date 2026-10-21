@@ -493,7 +493,7 @@ function dreaminaAdapter(): { submit; poll }   // submit 按 mode 组装子命�
 | 层 | 文件 | 改动 |
 | -- | ---- | ---- |
 | shared | `src/shared/provider-driver.ts` | 新增 `'local-cli'` 驱动、`dreamina` 映射、模态推断 |
-| shared | `src/shared/types/index.ts` | `ProviderSpecId` + `PROVIDER_SPECS` 增加即梦模板（无 BaseURL，预置 7 个模型） |
+| shared | `src/shared/types/index.ts` | `ProviderSpecId` + `PROVIDER_SPECS` 增加即梦模板（无 BaseURL，预置 6 个模型：图片 `5.0`/`5.0Pro`，视频 `seedance2.5`/`2.0_vip`/`2.0fast_vip`/`2.0mini`） |
 | shared | `src/shared/image-capabilities.ts` | `1.5k` 档、`dreamina-cli` 驱动、`local-path` 参考模式、`defaultResolution`、`cheapestImageResolution()`、按 modelId 分表 |
 | shared | `src/shared/video-capabilities.ts` | 即梦 5 组模型 profile、`requiresVisualReference`、2.5 画幅跟随首帧 |
 | shared | `src/shared/dreamina-cli.ts`（新） | 纯协议层：命令组装 + stdout 归一化，零进程/DB 依赖，可直接单测 |
@@ -567,4 +567,30 @@ function dreaminaAdapter(): { submit; poll }   // submit 按 mode 组装子命�
 **未验证**：完整浏览器授权闭环需要人工在网页上点一次授权，本轮没有做端到端点击验收。
 「已登录」分支可安全复现（`login --headless` 输出"已复用当前本地 OAuth 登录态"），待授权分支的行为
 依据真实 CLI 文案与单测覆盖推断，首次使用时请留意面板提示。
+
+### 13.6 可用模型白名单与"彻底禁用"（2026-10-21 用户决策）
+
+**决策**：只保留实测能正常出片的型号，其余**彻底禁用**——不是"不预置"，而是选不到、存不进、跑不了。
+
+| 类别 | 允许 | 禁用 |
+| ---- | ---- | ---- |
+| 图片 | `5.0`、`5.0Pro` | `3.0`、`3.1`、`4.0`、`4.1`、`4.5`、`4.6`、`4.7` |
+| 视频 | `seedance2.5`、`seedance2.0_vip`、`seedance2.0fast_vip`、`seedance2.0mini` | `seedance2.0`、`seedance2.0fast`、`seedance1.5pro`、`seedance1.0fast` |
+
+**禁用依据**：`seedance2.0fast` / `seedance2.0` 实测提交后 `queue_length≈478,346`、预计 33,786 秒，
+5 分钟只前进 5 位；用户实际体验就是"一直卡死"。其余型号随产品收敛下线。
+
+**单一真值源**：`src/shared/dreamina-models.ts`
+（`DREAMINA_IMAGE_MODELS` / `DREAMINA_VIDEO_MODELS` / `isDreaminaModelSupported()` /
+`dreaminaUnsupportedModelMessage()`）。三处引用，缺一就会出现"能选不能跑"或"能跑选不到"：
+
+| 层 | 位置 | 行为 |
+| -- | ---- | ---- |
+| 预置 | `PROVIDER_SPECS.suggestions` | 直接展开白名单常量，新建实例只出现可用型号 |
+| 能力表 | `image-capabilities.ts` / `video-capabilities.ts` | 白名单外返回**空能力集**（无分辨率、无画幅、无参考图、无 video mode），UI 不会当成可用能力 |
+| 执行 | `gateway/image.ts` / `gateway/dreamina-cli.ts` | 提交前 `throw GatewayError('DREAMINA_MODEL_DISABLED', …)`，文案带上可用清单 |
+| 保存 | `ProviderSettingsPanel.tsx` | 保存与切换规格时过滤白名单外的模型行，并 toast 提示"已移除 N 个不可用模型" |
+
+**兼容性**：历史项目的 `modelKey` 若指向已禁用型号，运行时会被拦下并提示改用哪个模型，
+不会静默提交到 CLI；节点配置本身不改写，用户重新选择即可。
 
