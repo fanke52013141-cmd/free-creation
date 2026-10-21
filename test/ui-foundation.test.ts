@@ -189,4 +189,19 @@ describe('统一画布视觉基础', () => {
     expect(underlay).not.toContain('backdrop-filter')
     expect(underlay).not.toContain('-webkit-backdrop-filter')
   })
+
+  it('滚轮缩放期间把相机变换层提升为合成层（避免整层重栅格化）', () => {
+    // .tl-shapes/.tl-html-layer 默认 will-change:auto，Ctrl+滚轮连发时每一步都要整层
+    // 重栅格化，来不及绘制的区域会露出空白（"加载不完全"）。必须由滚轮处理器临时提升。
+    expect(foundation).toContain('.canvas-host.is-camera-interacting')
+    expect(foundation).toMatch(
+      /\.canvas-host\.is-camera-interacting[^{]*\{[^}]*will-change:\s*transform/
+    )
+    const editorSource = readFileSync(
+      resolve(root, 'src/renderer/src/canvas/CanvasEditor.tsx'),
+      'utf8'
+    )
+    expect(editorSource).toContain("classList.add('is-camera-interacting')")
+    expect(editorSource).toContain("classList.remove('is-camera-interacting')")
+  })
 })

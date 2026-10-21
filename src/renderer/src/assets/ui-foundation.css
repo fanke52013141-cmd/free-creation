@@ -73,6 +73,18 @@ body {
   background: #f2efe9 !important;
 }
 
+/* 2026-10-21 快速缩放闪烁修复（2/2）：滚轮改变相机期间把相机变换层提升为合成层。
+   .tl-shapes / .tl-html-layer 默认 will-change:auto，没有独立合成层，于是每个缩放
+   步进都要把整层内容（12 个节点实测 492 个 DOM 节点）重新栅格化；Ctrl+滚轮连发时
+   来不及绘制的区域会露出空白，看上去就是"闪一下、加载不完全"。
+   提升后 Chromium 直接缩放已有纹理，停止滚轮 220ms 后自动移除，稳态渲染与文字
+   清晰度不受影响（与 2026-10-04 的点阵背景修复同属"别在缩放路径上重栅格化"）。 */
+.canvas-host.is-camera-interacting .tl-canvas,
+.canvas-host.is-camera-interacting .tl-shapes,
+.canvas-host.is-camera-interacting .tl-html-layer {
+  will-change: transform;
+}
+
 /* ── Top bar: one quiet material, grouped actions ───────────────────────── */
 .logo-btn {
   min-height: 36px;

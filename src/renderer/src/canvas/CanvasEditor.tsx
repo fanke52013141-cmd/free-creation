@@ -424,13 +424,25 @@ export function CanvasEditor({
   useEffect(() => {
     const el = wrapRef.current
     if (!el || !editorInstance) return
+    let settleTimer: number | undefined
     const onWheel = (e: WheelEvent): void => {
       const editor = editorRef.current
       if (!editor) return
       routeCanvasWheel(e, editor)
+      // 滚轮改变相机期间提升合成层：直接缩放已有纹理，避免每个步进整层重栅格化
+      // （快速 Ctrl+滚轮时表现为"闪一下 / 加载不完全"）。停止 220ms 后恢复默认。
+      el.classList.add('is-camera-interacting')
+      window.clearTimeout(settleTimer)
+      settleTimer = window.setTimeout(() => {
+        el.classList.remove('is-camera-interacting')
+      }, 220)
     }
     el.addEventListener('wheel', onWheel, { capture: true, passive: false })
-    return () => el.removeEventListener('wheel', onWheel, { capture: true })
+    return () => {
+      window.clearTimeout(settleTimer)
+      el.classList.remove('is-camera-interacting')
+      el.removeEventListener('wheel', onWheel, { capture: true })
+    }
   }, [editorInstance])
 
   // 分组空白区拖动：tldraw 只有按中具体 shape 才能拖动，分组内部的空白区域会被当成
