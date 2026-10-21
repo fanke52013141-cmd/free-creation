@@ -180,4 +180,13 @@ describe('统一画布视觉基础', () => {
     expect(preview).toContain('referenceLayout')
     expect(preview).toContain('reference-more')
   })
+
+  it('相机变换层内的大面积表面不得使用 backdrop-filter（快速缩放闪烁）', () => {
+    // 选中框底色位于 tldraw 的 SelectionBackground 插槽（相机变换层内），多选时接近整屏；
+    // 若带 backdrop-filter，每个缩放步进都要重采样整屏背景，表现为"整块画布闪"。
+    const underlay = legacy.match(/\.canvas-selection-underlay\s*\{[^}]*\}/)?.[0] ?? ''
+    expect(underlay).toContain('background:')
+    expect(underlay).not.toContain('backdrop-filter')
+    expect(underlay).not.toContain('-webkit-backdrop-filter')
+  })
 })

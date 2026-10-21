@@ -1194,17 +1194,19 @@ select:focus-visible,
   display: none;
 }
 
+/* 2026-10-21 快速缩放闪烁修复：本层位于相机变换层内，且尺寸接近视口（实测多选时
+   1404×698），backdrop-filter 会让每个缩放步进都重新采样整屏背景并重算模糊，
+   表现为快速缩放时"整块画布闪"。改为纯半透明底色，视觉差异极小、缩放零重采样。
+   同类先例见 docs/WHEEL_FLICKER_FIX_2026-10-05.md（变换层内大面积材质是闪烁主因）。 */
 .canvas-selection-underlay {
   position: absolute;
   box-sizing: border-box;
   border: 1px solid rgba(234, 242, 250, 0.24);
   border-radius: 18px;
-  background: rgba(223, 236, 249, 0.055);
+  background: rgba(223, 236, 249, 0.075);
   box-shadow:
     inset 0 1px rgba(255, 255, 255, 0.055),
     0 10px 34px rgba(0, 0, 0, 0.12);
-  -webkit-backdrop-filter: blur(3px);
-  backdrop-filter: blur(3px);
   pointer-events: none;
 }
 
