@@ -1,5 +1,9 @@
 # 日志覆盖清单
 
+## 2026-10-23 Vidu 本机 CLI 供应商接入
+
+Vidu 视频生成接入不新增业务事件、不旁路公共执行器：提交/轮询/取消/恢复/成片入库完全复用网关视频任务既有 `model.request.started/accepted`、`task.state_changed`、`task.poll_summary`、`task.failed`、`task.control.*`、`task.resume_*`、`media.download_*`、`media.persist_*` 生命周期；取消改为先用 Vidu 轮询核对远端事实再落终态，仍走 `task.control.*` 同 trace 配对，不产生第二终态。模型验证走 `ViduValidationAdapter` 独立 trace/span 的 `model.request.started/accepted/completed/failed`，失败标注 phase（validation-fixture/upload-submit/poll）。脱敏：CLI stdout 仅整段 JSON 解析且失败不返回原文、stderr 丢弃、输出超 2MB 即断，错误文案不含提示词/Token/签名 URL（`test/vidu-cli.test.ts` 覆盖）；Token 仅经 `VIDU_TOKEN` 环境变量传子进程，不进 argv 与日志。L06 日志门禁通过：新文件无裸 console、无 electron-log 直连、spawn 不触发 A18、验证适配器自带诊断接入。证据：契约单测 5/5、Q4 真实冒烟回执 `qa/vidu/live-20261023-q4/receipt.json`（任务 3521107143975243，积分 10423→10419）。边界：Q3（3.2 首尾帧）真实链路、真实超时/取消后的远端状态核对、视频节点真实路径人工验收未做，不得宣称全链路完成；完整状态见 [Handoff](HANDOFF_2026_10_23_VIDU_CLI_PROVIDER.md)。
+
 ## 2026-10-19 素材资产包生命周期（47 包）
 
 资产包导入/导出公共 IPC 补 library.transfer.started/completed/cancelled/failed，独立 trace/span 与唯一终态；操作区分 import/export，失败/取消标明 dialog/repository 阶段，错误码为固定 IMPORT_FAILED/EXPORT_FAILED。取消不调用仓库，对话框异常转为受控失败 envelope；原仓库成功/失败结果保持，不新增重试或回滚假记录。固定模板不记录路径、资源ID列表或原异常；logger抛错不改变四类业务结果。新增14项与分类、SQLite/包往返、schema/gateway共53/53通过，Node类型/定向lint/日志门禁通过。尚未真实窗口端到端或设备故障组合验收，其他素材路径仍待逐项迁移。详情及日志模板见 [47 包](canvas-agent-flow/47-library-package-transfer-diagnostics.md)。
