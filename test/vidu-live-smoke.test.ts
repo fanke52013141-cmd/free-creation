@@ -6,11 +6,11 @@ import { describe, it, expect, vi } from 'vitest'
 vi.mock('../src/main/gateway/factory', () => ({ GatewayError: class extends Error { constructor(public code: string, message: string) { super(message) } } }))
 vi.mock('../src/main/store/db', () => ({ getDb: vi.fn() }))
 vi.mock('../src/main/store/media.repo', () => ({ getMediaAbsPath: vi.fn() }))
-import { pollVidu, runViduJson, submitViduWithPaths } from '../src/main/gateway/vidu-cli'
+import { pollVidu, runViduJson } from '../src/main/gateway/vidu-cli'
 import { VIDU_BASE_URL } from '@shared/vidu-cli'
 import { buildViduVideoArgs } from '@shared/vidu-cli'
 
-describe.skipIf(process.env.VIDU_LIVE_SMOKE !== '1')('Vidu Q4 real CLI smoke', () => {
+describe.skipIf(process.env.VIDU_LIVE_SMOKE !== '1')('Vidu Q3/Q4 real CLI smoke', () => {
   it('uploads a synthetic image, submits once, polls the same task and downloads MP4', async () => {
     const token = process.env.VIDU_TOKEN
     expect(token).toBeTruthy()
@@ -36,7 +36,7 @@ describe.skipIf(process.env.VIDU_LIVE_SMOKE !== '1')('Vidu Q4 real CLI smoke', (
     }
     const taskType = model === '3.2' ? 'headtailimg2video' : 'character2video'
     const args = buildViduVideoArgs({ modelId: model, mode, prompt: 'A blue ball gently moves to the right on a plain beige background. Static camera.', duration: 1, resolution, ratio: '1:1', imagePaths })
-    const quote = await runViduJson(credentials, ['task', 'cost', '--type', taskType, '--model-version', model, '--duration', '1', '--resolution', resolution, '--schedule-mode', 'normal'])
+    const quote = await runViduJson(credentials, ['task', 'cost', '--type', taskType, '--model-version', model, '--duration', '1', '--resolution', resolution, '--codec', 'h264', ...(model === '3.2' ? ['--transition', 'pro'] : ['--aspect-ratio', '1:1']), '--schedule-mode', 'normal'])
     expect(quote.can_submit).toBe(true)
     const before = await runViduJson(credentials, ['quota', 'credit'])
     const submitted = await runViduJson(credentials, args)
