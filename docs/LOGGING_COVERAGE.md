@@ -2,6 +2,8 @@
 
 ## 2026-10-23 Vidu 本机 CLI 供应商接入
 
+本机复验补充：`run-awurJV` 完整 verify 退出 0；Q3/Q4 CLI 真实生成、下载与解码均通过（合计 34 积分），Q3 报价遗漏 transition 参数已在测试修正。生产日志实现不变。CLI 冒烟 mock 数据库，不证明应用媒体入库/画布重开/验证适配器的生产诊断全链路；真实超时和取消核对仍未验收。见 [验证记录](VIDU_VERIFICATION_2026_10_23.md)。下方“Q3 未做”为原交接历史状态。
+
 Vidu 视频生成接入不新增业务事件、不旁路公共执行器：提交/轮询/取消/恢复/成片入库完全复用网关视频任务既有 `model.request.started/accepted`、`task.state_changed`、`task.poll_summary`、`task.failed`、`task.control.*`、`task.resume_*`、`media.download_*`、`media.persist_*` 生命周期；取消改为先用 Vidu 轮询核对远端事实再落终态，仍走 `task.control.*` 同 trace 配对，不产生第二终态。模型验证走 `ViduValidationAdapter` 独立 trace/span 的 `model.request.started/accepted/completed/failed`，失败标注 phase（validation-fixture/upload-submit/poll）。脱敏：CLI stdout 仅整段 JSON 解析且失败不返回原文、stderr 丢弃、输出超 2MB 即断，错误文案不含提示词/Token/签名 URL（`test/vidu-cli.test.ts` 覆盖）；Token 仅经 `VIDU_TOKEN` 环境变量传子进程，不进 argv 与日志。L06 日志门禁通过：新文件无裸 console、无 electron-log 直连、spawn 不触发 A18、验证适配器自带诊断接入。证据：契约单测 5/5、Q4 真实冒烟回执 `qa/vidu/live-20261023-q4/receipt.json`（任务 3521107143975243，积分 10423→10419）。边界：Q3（3.2 首尾帧）真实链路、真实超时/取消后的远端状态核对、视频节点真实路径人工验收未做，不得宣称全链路完成；完整状态见 [Handoff](HANDOFF_2026_10_23_VIDU_CLI_PROVIDER.md)。
 
 ## 2026-10-19 素材资产包生命周期（47 包）

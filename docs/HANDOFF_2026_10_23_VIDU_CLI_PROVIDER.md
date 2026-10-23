@@ -1,5 +1,7 @@
 # Handoff：Vidu 本机 CLI 供应商接入（2026-10-23）
 
+> 本机复验更新：完整 `npm run verify`（`run-awurJV`）退出 0；Q3/Q4 均已真实生成、下载、解码成功。Q3 冒烟报价漏传 `transition=pro` 已修正，1 秒实际扣费 30 积分，Q4 为 4 积分。详见 [本机验证记录](./VIDU_VERIFICATION_2026_10_23.md)。下方“Q3 未做”为原交接快照，以本条更新为准；画布真实端到端验收仍未完成。
+
 ## 状态总览
 
 Vidu 以「本机 CLI 供应商」形态接入，定位与即梦（Dreamina）同类，但凭据是 Vidu Token
