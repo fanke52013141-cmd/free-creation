@@ -1,4 +1,5 @@
 import type { ProviderSpecId, VideoGenParams, VideoGenerationMode } from './types'
+import { VIDU_Q4_MODEL, VIDU_Q3_MODEL, VIDU_MODELS, VIDU_RATIOS, VIDU_RESOLUTIONS } from './vidu-cli'
 
 /** Shared model profiles used by the UI and both video adapters. */
 export interface VideoCapabilities {
@@ -63,7 +64,7 @@ const range = (from: number, to: number): number[] =>
   Array.from({ length: to - from + 1 }, (_, index) => from + index)
 
 /** 厂商按分辨率档位定价，各家档位名写法不同，所以按像素档排序而不是数组位置。 */
-const RESOLUTION_COST_ORDER = ['480p', '720p', '768p', '1080p', '2k', '4k']
+const RESOLUTION_COST_ORDER = ['480p', '540p', '720p', '768p', '1080p', '2k', '4k']
 
 /** 该模型支持范围内最便宜的一档；认不出的写法排最后，宁可显式也不要猜。 */
 export function cheapestResolution(resolutions: string[]): string {
@@ -238,6 +239,19 @@ export function isSeedanceGatewayProxy(specId: ProviderSpecId, baseURL: string):
 
 function profileFor(specId: ProviderSpecId, modelId: string): VideoCapabilities {
   const model = canonicalVideoModelId(modelId)
+  if (specId === 'vidu') return {
+    ...FALLBACK,
+    ratios: [...VIDU_RATIOS],
+    resolutions: modelId === VIDU_Q4_MODEL ? [...VIDU_RESOLUTIONS] : modelId === VIDU_Q3_MODEL ? ['1080p'] : [],
+    durations: VIDU_MODELS.includes(modelId) ? range(1, 10) : [],
+    defaultDuration: 1,
+    defaultResolution: modelId === VIDU_Q3_MODEL ? '1080p' : '540p',
+    modes: modelId === VIDU_Q4_MODEL ? ['reference'] : modelId === VIDU_Q3_MODEL ? ['first-last-frame'] : [],
+    supportsFirstLastFrames: modelId === VIDU_Q3_MODEL,
+    supportsReferenceImages: modelId === VIDU_Q4_MODEL,
+    maxReferenceImages: modelId === VIDU_Q4_MODEL ? 7 : 0,
+    requiresVisualReference: true
+  }
   if (specId === 'minimax') {
     if (model === 'minimax-h3-max') return H3_MAX
     if (model === 'minimax-h3') return H3
@@ -292,6 +306,7 @@ export function videoRatioIsDerivedByFrames(
   if (!hasFirstOrLastFrame) return false
   return (
     specId === 'minimax' ||
+    specId === 'vidu' ||
     (specId === 'seedance' && canonicalVideoModelId(modelId).includes('seedance-2-5')) ||
     // 即梦 CLI 的 seedance2.5 在图生/首尾帧下显式拒绝 --ratio，画幅只能跟首帧走。
     (specId === 'dreamina' && canonicalVideoModelId(modelId).includes('seedance2.5'))

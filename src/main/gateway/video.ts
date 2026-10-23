@@ -36,6 +36,7 @@ import {
 } from './upstream-fetch'
 import { getProvider } from './providers.repo'
 import { pollVideoWithDreamina, submitVideoWithDreamina } from './dreamina-cli'
+import { pollVideoWithVidu, submitVideoWithVidu } from './vidu-cli'
 import { describeUpstreamHttpError } from '../../shared/upstream-error'
 import {
   providerDriftMessage,
@@ -759,6 +760,7 @@ function adaptersFor(p: ProviderConfig): {
   submit: (p: ProviderConfig, input: VideoSubmitInput) => Promise<string>
   poll: (p: ProviderConfig, upstreamId: string) => Promise<UpstreamState>
 } {
+  if (p.specId === 'vidu') return { submit: submitVideoWithVidu, poll: pollVideoWithVidu }
   // 即梦走本机 CLI：提交与查询都是 spawn 子进程，复用同一套 tasks 表、轮询与恢复链路。
   if (p.specId === 'dreamina')
     return {
@@ -1092,7 +1094,7 @@ export function submitVideoTask(send: Send, input: VideoSubmitInput): VideoSubmi
   if (!input.prompt?.trim()) throw new GatewayError('INVALID_INPUT', '提示词不能为空')
   const p = getProvider(input.providerId)
   if (!p) throw new GatewayError('PROVIDER_NOT_FOUND', '供应商不存在')
-  if (p.specId !== 'minimax' && p.specId !== 'seedance' && p.specId !== 'dreamina') {
+  if (p.specId !== 'minimax' && p.specId !== 'seedance' && p.specId !== 'dreamina' && p.specId !== 'vidu') {
     throw new GatewayError('WRONG_SPEC', '该供应商不支持视频生成')
   }
   // 同节点在途去重：双击/重放会让同一条视频在上游建两个计费任务。
@@ -1418,7 +1420,12 @@ export function controlVideoTask(taskId: string, cancel = false): Promise<VideoT
         return getVideoTask(taskId)
       // Ark DELETE also removes terminal records; a prior query cannot close that
       // race. Local stop only inspects facts until atomic cancellation is supported.
-      const fact = await queryArkTask(provider, state.upstreamTaskId)
+      const fact = provider.specId === 'vidu'
+        ? await pollVideoWithVidu(provider, state.upstreamTaskId).then((result) =>
+            result.status === 'succeeded' && result.url
+              ? { state: 'succeeded' as const, url: result.url }
+              : { state: result.status === 'running' ? 'running' as const : result.status === 'succeeded' ? 'unknown' as const : result.status })
+        : await queryArkTask(provider, state.upstreamTaskId)
       outcome = fact.state
       const latest = getDb().prepare('SELECT input FROM tasks WHERE id = ?').get(taskId) as {
         input: string

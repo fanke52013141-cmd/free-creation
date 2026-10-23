@@ -293,6 +293,7 @@ export type ProviderSpecId =
   | 'toapis'
   | 'openrouter'
   | 'dreamina'
+  | 'vidu'
 
 export interface ProviderConfig {
   id: string

@@ -71,6 +71,7 @@ export const ConnectionProtocolSchema = z.enum([
   'volcengine',
   'openrouter',
   'toapis',
+  'vidu-cli',
   'custom'
 ])
 export type ConnectionProtocol = z.infer<typeof ConnectionProtocolSchema>

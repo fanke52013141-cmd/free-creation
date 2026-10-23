@@ -34,6 +34,7 @@ interface CatalogRow {
 }
 
 const catalogSpec = (protocol: string): ProviderConfig['specId'] => {
+  if (protocol === 'vidu-cli') return 'vidu'
   if (protocol === 'minimax') return 'minimax'
   if (protocol === 'toapis') return 'toapis'
   if (protocol === 'volcengine') return 'volc-speech'
@@ -98,6 +99,7 @@ export interface LegacyCatalogEntry {
  */
 export function bootstrapLegacyProvidersToCatalog(host: SqliteModelHost): LegacyCatalogEntry[] {
   const protocolFor = (specId: ProviderConfig['specId']): Connection['protocol'] => {
+    if (specId === 'vidu') return 'vidu-cli'
     if (specId === 'minimax') return 'minimax'
     if (specId === 'toapis') return 'toapis'
     if (specId === 'volc-speech') return 'volcengine'

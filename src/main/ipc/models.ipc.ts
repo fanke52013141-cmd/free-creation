@@ -9,6 +9,7 @@ import { SqliteModelHost } from '../model-host/sqlite-model-host'
 import { createCatalogChatModel } from '../gateway/factory'
 import { probeAgentModel } from '../agent-flow/model-probe'
 import { newSpanId, newTraceId } from '../../shared/observability'
+import { validateViduBaseURL } from '../gateway/vidu-cli'
 
 const ok = <T>(data: T): IpcEnvelope<T> => ({ ok: true, data })
 const fail = (error: unknown): IpcEnvelope<never> => ({ ok: false, error: { code: 'MODEL_CONFIGURATION_ERROR', message: error instanceof Error ? error.message : String(error) } })
@@ -30,6 +31,7 @@ export function registerModelIpc(host: SqliteModelHost, runtime: ModelRuntime): 
   ipcMain.handle(IPC.models.saveConnection, (_event, input: SaveModelConnectionInput): IpcEnvelope<Connection> => {
     try {
       required(input.id, '连接 ID'); required(input.name, '连接名称'); required(input.baseUrl, 'Base URL')
+      if (input.protocol === 'vidu-cli') validateViduBaseURL(input.baseUrl)
       return ok(host.saveConnection(input))
     } catch (error) { return fail(error) }
   })
@@ -62,6 +64,7 @@ export function registerModelIpc(host: SqliteModelHost, runtime: ModelRuntime): 
       required(input.connectionId, '连接 ID')
       const connection = await host.getConnection(input.connectionId)
       if (!connection) throw new Error('连接不存在')
+      if (connection.protocol === 'vidu-cli') return ok([{ id: '3.4', name: 'Vidu Q4（图片参考生视频）' }, { id: '3.2', name: 'Vidu Q3（首尾帧生视频）' }])
       if (!['openai-compatible', 'openai', 'openrouter', 'toapis', 'custom'].includes(connection.protocol)) {
         throw new Error('此协议未提供统一的模型列表接口；请手动添加模型 ID')
       }
