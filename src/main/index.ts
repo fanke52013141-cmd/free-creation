@@ -8,6 +8,9 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import log from 'electron-log/main'
 import icon from '../../resources/icon.png?asset'
 import { registerProjectIpc } from './ipc/project.ipc'
+import { startLocalAccessServer, type LocalAccessServer } from './agent-access/server'
+import { createAccessDesktop } from './agent-access/desktop'
+import { emitDomainEvent } from './diagnostics/ipc-domain-events'
 import { registerFlowAssetsIpc } from './ipc/flow-assets.ipc'
 import { registerFlowCommandsIpc } from './ipc/flow-commands.ipc'
 import { registerFlowAgentsIpc } from './ipc/flow-agents.ipc'
@@ -34,6 +37,7 @@ import { registerLibraryIpc } from './ipc/library.ipc'
 import { SqliteModelHost } from './model-host/sqlite-model-host'
 import { createDesktopModelRuntime } from './model-host/runtime'
 import { closeDb, getDataDir, getDb, getProjectsDir } from './store/db'
+import { acquireProcessLock, type ProcessLock } from './store/process-lock'
 import { checkWorkspaceHealth, sweepStaleVideoTempFiles } from './store/workspace-health'
 import { bootstrapLegacyProvidersToCatalog, upgradeLegacyApiKeys } from './gateway/providers.repo'
 import { getMediaAbsPath } from './store/media.repo'
@@ -56,6 +60,8 @@ log.info('main process starting', {
 // 环境/版本信息随服务写入 session 状态文件，诊断包据此携带。
 let diagnostics: DiagnosticsService | null = null
 let quitting = false
+let localAccessServer: LocalAccessServer | null = null
+let desktopDataOwnership: ProcessLock | null = null
 let rendererDiagnosticsComplete = true
 let shutdownDeadlineAt: number | null = null
 const rendererDrainPromises = new Map<BrowserWindow, Promise<boolean>>()
@@ -293,6 +299,13 @@ function createWindow(): BrowserWindow {
 const isModelSmokeTest = process.argv.includes('--model-smoke-test')
 
 app.whenReady().then(async () => {
+  // A single desktop owner per data store protects unsaved renderers even without local access.
+  try {
+    desktopDataOwnership = acquireProcessLock('desktop-data-owner')
+  } catch {
+    app.exit(1)
+    return
+  }
   // 仅安装传输适配器；请求阶段仍由 gateway/image.ts 的 emitGatewayEvent 统一记录。
   setImageNetworkFetch((input, init) => net.fetch(input instanceof URL ? input.href : input, init))
   electronApp.setAppUserModelId('com.canvas-studio.app')
@@ -301,7 +314,7 @@ app.whenReady().then(async () => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // 诊断底座先于业务库初始化：app.session_started / 上次非正常结束检查。
+  // 数据目录锁准入后，先启用诊断，再执行业务：session_started / 上次非正常结束检查。
   await initDiagnostics()
 
   const database = getDb()
@@ -354,7 +367,7 @@ app.whenReady().then(async () => {
     return
   }
 
-  // 文件监听器：CLI/MCP 写入 project.json 时通知渲染进程实时刷新。
+  // 文件监听器用于外部文件变更；本地 Agent 仅通过主进程服务调用，不直写快照。
   // 窗口创建后赋值给引用，监听器通过 getter 延迟获取。
   let mainWindow: BrowserWindow | null = null
   const projectWatcher = new ProjectFileWatcher(() => mainWindow)
@@ -378,8 +391,25 @@ app.whenReady().then(async () => {
     (desktop) => registerFlowAgentsIpc(() => mainWindow, desktop)
   )
 
+  if (process.argv.includes('--local-agent-access')) {
+    try {
+      localAccessServer = await startLocalAccessServer({
+        dataDirectory: getDataDir(),
+        appVersion: app.getVersion(),
+        activeProjectId: () => projectWatcher.activeProjectId,
+        desktop: createAccessDesktop(() => mainWindow)
+      })
+      emitDomainEvent('agent.access.server_ready', '本地外部接入已就绪')
+    } catch {
+      emitDomainEvent('agent.access.server_failed', '本地外部接入未启动', {
+        status: 'failed',
+        attributes: { phase: 'startup', code: 'ACCESS_START_FAILED' }
+      })
+    }
+  }
+
   app.on('activate', function () {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow()
   })
 })
 
@@ -392,6 +422,8 @@ app.on('window-all-closed', () => {
 app.on('before-quit', (event) => {
   if (quitting) return
   quitting = true
+  localAccessServer?.close()
+  localAccessServer = null
   event.preventDefault()
   if (shutdownDeadlineAt === null) {
     shutdownDeadlineAt = Date.now() + DIAGNOSTICS_QUIT_FLUSH_TIMEOUT_MS
@@ -420,6 +452,12 @@ app.on('before-quit', (event) => {
     } catch {
       log.warn('[diagnostics] shutdown flush failed')
     } finally {
+      try {
+        desktopDataOwnership?.release()
+      } catch {
+        // Retain an unreleasable dead-owner row for conservative startup recovery.
+      }
+      desktopDataOwnership = null
       closeDb()
       app.quit()
     }

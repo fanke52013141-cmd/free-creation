@@ -5,6 +5,8 @@ An Electron application with React and TypeScript
 ## Architecture Rules
 
 - [画布原生 Agent Flow 方案](./docs/canvas-agent-flow/README.md) — 当前唯一 Agent Flow 设计：上帝 Agent 构建，主 Agent 协调，专业 Agent 执行；状态机和成果均由画布节点承载。包含节点协同规范，尚未实现。
+- [本地外部 Agent 接入方案](./docs/local-agent-access/README.md) — 整体规范、31 节点目标清单、同步门禁和实施计划；实际支持以交付台账为准。
+- [本地 Agent 项目操作台账](./docs/local-agent-access/06-a1-1-desktop-projects.md) — 本机 CLI/MCP、项目打开、活动画布保存/导出和名称更新；实际验证与限制以台账为准。
 - [Logging and diagnostics specification](./LOGGING_SPEC.md) — required impact assessment for every feature change, with implementation plan and coverage checklist.
 - [Node input/output contract specification](./NODE_CONTRACT_SPEC.md) — required reading before adding or changing a node.
 - [Development roadmap](./ROADMAP.md) — recommended implementation order and acceptance criteria.
@@ -93,9 +95,9 @@ dreamina user_credit
 
 **可用模型（白名单，其余型号已彻底禁用）**
 
-| 类别 | 允许 | 已禁用 |
-| ---- | ---- | ------ |
-| 图片 | `5.0`、`5.0Pro` | `3.0`、`3.1`、`4.0`、`4.1`、`4.5`、`4.6`、`4.7` |
+| 类别 | 允许                                                                       | 已禁用                                                                |
+| ---- | -------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| 图片 | `5.0`、`5.0Pro`                                                            | `3.0`、`3.1`、`4.0`、`4.1`、`4.5`、`4.6`、`4.7`                       |
 | 视频 | `seedance2.5`、`seedance2.0_vip`、`seedance2.0fast_vip`、`seedance2.0mini` | `seedance2.0`、`seedance2.0fast`、`seedance1.5pro`、`seedance1.0fast` |
 
 "禁用"的意思是**三层同时生效**：新建实例不预置、保存时自动移除、历史项目执行前直接拒绝并提示可用清单。

@@ -37,7 +37,24 @@ vi.mock('../src/main/store/artifact-recipes.repo', () => ({
 vi.mock('../src/main/store/db', (): { getProjectsDir: () => string; getDb: () => unknown } => {
   const statement = (
     sql: string
-  ): { all: () => unknown[]; run: (...values: unknown[]) => void } => ({
+  ): {
+    all: () => unknown[]
+    get: (id: string) => unknown
+    run: (...values: unknown[]) => void
+  } => ({
+    get: (id: string) => {
+      const row = state.projects.find((item) => item[0] === id)
+      return row
+        ? {
+            id: row[0],
+            name: row[1],
+            created_at: row[2],
+            updated_at: row[3],
+            graph_version: row[4] ?? 0,
+            cover_media_id: null
+          }
+        : undefined
+    },
     all: () =>
       sql.includes('artifact_recipes') || sql.includes('flow_asset_versions')
         ? []
@@ -248,6 +265,7 @@ describe('importProject · 本地导入集成', () => {
 describe('exportProject · 缺失媒体计数（R-33）', () => {
   it('缺失媒体不打断导出，并按数量返回 missingMediaCount', () => {
     const projectId = 'export-project'
+    state.projects.push([projectId, '导出', 1, 1, 0])
     mkdirSync(join(state.projectsDir, projectId, 'media'), { recursive: true })
     writeFileSync(join(state.projectsDir, projectId, 'media', 'exists.png'), Buffer.from([1]))
     writeFileSync(
@@ -288,6 +306,7 @@ describe('exportProject · 缺失媒体计数（R-33）', () => {
 
   it('媒体齐全时 missingMediaCount 为 0', () => {
     const projectId = 'export-complete'
+    state.projects.push([projectId, '导出', 1, 1, 0])
     mkdirSync(join(state.projectsDir, projectId, 'media'), { recursive: true })
     writeFileSync(join(state.projectsDir, projectId, 'media', 'full.png'), Buffer.from([1]))
     writeFileSync(

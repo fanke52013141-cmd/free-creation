@@ -45,7 +45,8 @@ describe('SQLite user_version migrations', () => {
     expect(schemas.some((sql) => sql.includes('CREATE TABLE flow_coordination_runs'))).toBe(true)
     expect(schemas.some((sql) => sql.includes('CREATE TABLE flow_builds'))).toBe(true)
     expect(schemas.some((sql) => sql.includes('CREATE TABLE process_locks'))).toBe(true)
-    expect(schemas.at(-1)).toContain('agent_tool_calling_validations')
+    expect(schemas.at(-2)).toContain('agent_tool_calling_validations')
+    expect(schemas.at(-1)).toContain('local_agent_operations')
   })
 
   it('每个迁移整体包在单个事务里：迁移语句与 user_version 推进同提交', () => {

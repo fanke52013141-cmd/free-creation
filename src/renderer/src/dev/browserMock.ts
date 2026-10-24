@@ -134,6 +134,9 @@ export function installBrowserMock(): void {
   }
 
   const mockApi: WindowApi = {
+    onLocalAgentDesktopRequest: () => () => {},
+    replyLocalAgentDesktop: () => {},
+    commitLocalAgentDesktop: async () => ({ ok: false }),
     buildFlowAgent: async () => notImplementedInDemo('画布建图'),
     reviewFlowAssets: async () => notImplementedInDemo('资产审核'),
     runFlowAgent: async () => notImplementedInDemo('画布 Agent 执行'),
@@ -732,7 +735,8 @@ export function installBrowserMock(): void {
       deleteConnection: () => Promise.resolve(notImplementedInDemo('删除模型连接')),
       discover: () => Promise.resolve({ ok: true as const, data: [] }),
       validate: () => Promise.resolve(notImplementedInDemo('验证模型')),
-      validateAgentToolCalling: () => Promise.resolve(notImplementedInDemo('验证 Agent 工具调用能力')),
+      validateAgentToolCalling: () =>
+        Promise.resolve(notImplementedInDemo('验证 Agent 工具调用能力')),
       saveBinding: () => Promise.resolve(notImplementedInDemo('保存功能绑定'))
     },
     gateway: {

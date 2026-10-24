@@ -84,10 +84,13 @@
     "test:agent-flow-video-rework": "node scripts/test-agent-flow-desktop.cjs --video-rework",
     "test:agent-flow-parallel-review": "node scripts/test-agent-flow-desktop.cjs --parallel-review",
     "test:agent-flow-video-multi-reference": "node scripts/test-agent-flow-desktop.cjs --video-multi-reference",
-    "verify:checks": "npm run lint && npm run typecheck && npm run typecheck:model && npm run test && npm run test:model && npm run verify:logging && npm run test:optimization-ui && electron-vite build && npm run test:diagnostics-window-close && npm run test:agent-flow-assets && npm run test:agent-flow-commands && npm run test:agent-flow-desktop && npm run test:agent-flow-collaboration && npm run test:agent-flow-coordination && npm run test:agent-flow-builder && npm run test:agent-flow-builder-parallel && npm run test:agent-flow-review && npm run test:agent-flow-rework && npm run test:agent-flow-recovery && npm run test:agent-flow-video && npm run test:agent-flow-video-first-frame && npm run test:agent-flow-video-first-last-frame && npm run test:agent-flow-video-reference && npm run test:agent-flow-video-motion-reference && npm run test:agent-flow-media-transfer && npm run test:agent-flow-video-audio-reference && npm run test:agent-flow-video-review && npm run test:agent-flow-media-review && npm run test:agent-flow-video-rework && npm run test:agent-flow-parallel-media && npm run test:agent-flow-parallel-review && npm run test:agent-flow-video-multi-reference && npm run test:r09-local-reliability",
+    "verify:checks": "npm run lint && npm run typecheck && npm run typecheck:model && npm run test && npm run test:model && npm run verify:logging && npm run verify:agent-access && npm run test:optimization-ui && electron-vite build && npm run test:local-agent-access && npm run test:diagnostics-window-close && npm run test:agent-flow-assets && npm run test:agent-flow-commands && npm run test:agent-flow-desktop && npm run test:agent-flow-collaboration && npm run test:agent-flow-coordination && npm run test:agent-flow-builder && npm run test:agent-flow-builder-parallel && npm run test:agent-flow-review && npm run test:agent-flow-rework && npm run test:agent-flow-recovery && npm run test:agent-flow-video && npm run test:agent-flow-video-first-frame && npm run test:agent-flow-video-first-last-frame && npm run test:agent-flow-video-reference && npm run test:agent-flow-video-motion-reference && npm run test:agent-flow-media-transfer && npm run test:agent-flow-video-audio-reference && npm run test:agent-flow-video-review && npm run test:agent-flow-media-review && npm run test:agent-flow-video-rework && npm run test:agent-flow-parallel-media && npm run test:agent-flow-parallel-review && npm run test:agent-flow-video-multi-reference && npm run test:r09-local-reliability",
     "test:r09-local-reliability": "node scripts/test-renderer-save-recovery.cjs --r09",
     "test:r09-soak": "node scripts/run-r09-soak.cjs",
-    "test:r09-soak:smoke": "node scripts/run-r09-soak.cjs --duration-seconds=60 --max-epochs=3 --interval-ms=0"
+    "test:r09-soak:smoke": "node scripts/run-r09-soak.cjs --duration-seconds=60 --max-epochs=3 --interval-ms=0",
+    "verify:agent-access": "node scripts/check-agent-access.cjs",
+    "agent:cli": "node out/main/local-agent.js",
+    "test:local-agent-access": "node scripts/test-local-agent-access.cjs"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.34",
@@ -96,6 +99,7 @@
     "@langchain/core": "1.2.9",
     "@langchain/langgraph": "1.4.14",
     "@langchain/langgraph-checkpoint": "1.1.5",
+    "@modelcontextprotocol/sdk": "1.32.1",
     "@napi-rs/canvas": "1.0.8",
     "@radix-ui/react-select": "2.3.7",
     "@react-three/drei": "^10.7.8",

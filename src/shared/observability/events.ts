@@ -38,6 +38,30 @@ const MODEL_ATTRS = {
 
 export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Object.fromEntries(
   [
+    def('project.watch.failed', 'warn', 'main/ipc/project-watcher', {
+      phase: 'short',
+      code: 'short'
+    }),
+    ...[
+      'started',
+      'completed',
+      'failed',
+      'unknown',
+      'rejected',
+      'server_ready',
+      'server_failed'
+    ].map((stage) =>
+      def(
+        `agent.access.${stage}`,
+        stage === 'failed' || stage === 'server_failed' ? 'error' : 'info',
+        'main/agent-access',
+        {
+          operation: 'short',
+          phase: 'short',
+          code: 'short'
+        }
+      )
+    ),
     ...['started', 'completed', 'failed'].map((stage) =>
       def(
         `workspace.recovery.${stage}`,

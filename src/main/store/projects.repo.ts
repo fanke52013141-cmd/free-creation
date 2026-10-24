@@ -218,8 +218,14 @@ export function listProjects(): ProjectMeta[] {
   return rows.map(rowToMeta)
 }
 
-export function createProject(name: string, workspaceProfile?: WorkspaceProfile): ProjectMeta {
-  const id = nanoid(12)
+export function createProject(
+  name: string,
+  workspaceProfile?: WorkspaceProfile,
+  reservedId?: string
+): ProjectMeta {
+  const id = reservedId ?? nanoid(12)
+  if (!/^[a-zA-Z0-9_-]{1,80}$/.test(id)) throw new Error('INVALID_PROJECT_ID')
+  if (getProject(id) || existsSync(projectDir(id))) throw new Error('PROJECT_ALREADY_EXISTS')
   const now = Date.now()
   const profile = workspaceProfile
     ? normalizeWorkspaceProfile(workspaceProfile)
@@ -540,6 +546,43 @@ export function renameProject(id: string, name: string): ProjectMeta | null {
     .run(name, now, id)
   if (result.changes === 0) return null
   return getProject(id)
+}
+
+/** Versioned closed-project metadata mutation; shares the normal snapshot transaction. */
+export function renameProjectAtVersion(
+  id: string,
+  name: string,
+  expectedGraphVersion: number
+): ProjectMeta | null {
+  return withProjectVersionLock(id, expectedGraphVersion, (file, fromBackup) => {
+    const now = Date.now()
+    file.meta = { ...file.meta, name, updatedAt: now, graphVersion: file.meta.graphVersion + 1 }
+    writeProjectSnapshot(id, file, fromBackup, () => {
+      getDb()
+        .prepare('UPDATE projects SET name=?,updated_at=?,graph_version=? WHERE id=?')
+        .run(name, now, file.meta.graphVersion, id)
+    })
+    return getProject(id)
+  })
+}
+
+/** Export and metadata writes use the same exclusive cross-process lock as normal saves. */
+export function withProjectVersionLock<T>(
+  id: string,
+  expectedGraphVersion: number,
+  action: (file: ProjectFile, fromBackup: boolean) => T
+): T | null {
+  if (!getProject(id)) return null
+  const release = acquireProjectWriteLock(projectJsonPath(id) + '.write-lock')
+  try {
+    const loaded = readProjectSnapshot(id)
+    if (!loaded) throw new ProjectSaveStorageError('read-snapshot', false, false, null)
+    if (loaded.file.meta.graphVersion !== expectedGraphVersion)
+      throw new GraphVersionConflictError(expectedGraphVersion, loaded.file.meta.graphVersion)
+    return action(loaded.file, loaded.fromBackup)
+  } finally {
+    release()
+  }
 }
 
 export function deleteProject(id: string): boolean {

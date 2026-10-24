@@ -8,7 +8,7 @@ export interface MigrationDatabase {
   pragma(statement: string, options?: { simple?: boolean }): unknown
 }
 
-export const DB_SCHEMA_VERSION = 18
+export const DB_SCHEMA_VERSION = 19
 
 const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
   (database) => {
@@ -435,6 +435,13 @@ const migrations: ReadonlyArray<(database: MigrationDatabase) => void> = [
         PRIMARY KEY(connection_id, model_definition_id)
       );
     `)
+  },
+  // M19: durable local-access receipts; no prompts, credentials or raw requests.
+  (database) => {
+    database.exec(`CREATE TABLE local_agent_operations (
+      idempotency_key TEXT PRIMARY KEY, intent_hmac TEXT NOT NULL,
+      status TEXT NOT NULL, receipt_json TEXT, created_at INTEGER NOT NULL
+    );`)
   }
 ]
 

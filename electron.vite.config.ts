@@ -32,6 +32,7 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve('src/main/index.ts'),
+          'local-agent': resolve('src/local-agent/index.ts'),
           'agent-flow-c0': resolve('src/main/agent-flow/c0-electron.ts'),
           'agent-flow-model-probe': resolve('src/main/agent-flow/model-probe-electron.ts'),
           'agent-flow-assets': resolve('src/main/agent-flow/assets-electron.ts'),

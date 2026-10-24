@@ -1,4 +1,6 @@
 import { reportCanvasFailure } from './canvas-diagnostics'
+import { ensureCanvasSaved } from './flow-asset-actions'
+import { useAppStore } from '../stores/app'
 import { nodeTextField } from './node-pointer-policy'
 import { ResourceInsertRequest } from '../library/ResourceInsertRequest'
 import { WorkflowSaveDialog } from './WorkflowSaveDialog'
@@ -792,6 +794,64 @@ export function CanvasEditor({
     saveFailedToastAtRef.current = now
     toast(`项目保存失败：${reason}，请检查磁盘空间后重试`, 6000)
   }
+
+  useEffect(
+    () =>
+      window.api.onLocalAgentDesktopRequest?.((request) => {
+        if (request.action === 'open' || request.projectId !== project.id) return
+        void (async () => {
+          try {
+            if (Date.now() >= request.expiresAt) throw new Error('REQUEST_EXPIRED')
+            const editor = editorRef.current
+            if (
+              !editor ||
+              restoreFailedRef.current ||
+              useAppStore.getState().currentProject?.id !== project.id
+            )
+              throw new Error('CANVAS_NOT_READY')
+            if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+            saveTimerRef.current = null
+            await ensureCanvasSaved()
+            if (
+              editorRef.current !== editor ||
+              useEditorStore.getState().editor !== editor ||
+              useAppStore.getState().currentProject?.id !== project.id
+            )
+              throw new Error('CANVAS_CHANGED')
+            if (Date.now() >= request.expiresAt) throw new Error('REQUEST_EXPIRED')
+            if (request.action === 'rename') {
+              const result = await window.api.commitLocalAgentDesktop({
+                requestId: request.requestId,
+                projectId: project.id,
+                graphVersion: graphVersionRef.current
+              })
+              if (!result.ok || !result.meta) throw new Error('METADATA_NOT_COMMITTED')
+              if (
+                editorRef.current !== editor ||
+                useEditorStore.getState().editor !== editor ||
+                useAppStore.getState().currentProject?.id !== project.id
+              )
+                throw new Error('CANVAS_CHANGED')
+              graphVersionRef.current = result.meta.graphVersion
+              useAppStore.getState().openProject(result.meta)
+            }
+            window.api.replyLocalAgentDesktop({
+              requestId: request.requestId,
+              projectId: project.id,
+              ok: true,
+              graphVersion: graphVersionRef.current
+            })
+          } catch {
+            window.api.replyLocalAgentDesktop({
+              requestId: request.requestId,
+              projectId: project.id,
+              ok: false
+            })
+          }
+        })()
+      }),
+    [project.id]
+  )
 
   const flushSave = (): void => {
     if (restoreFailedRef.current) return

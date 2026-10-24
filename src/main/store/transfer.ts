@@ -22,6 +22,7 @@ import type { MediaAsset, ProjectFile } from '../../shared/types'
 import { mimeForExtension } from '../../shared/mime'
 import { remapMediaReferences } from '../../shared/media-reference-remap'
 import { getDb, getProjectsDir } from './db'
+import { getProject } from './projects.repo'
 import { listArtifactRecipes, saveArtifactRecipe } from './artifact-recipes.repo'
 import { artifactRecipeSchema } from '../../shared/artifact-recipe'
 import {
@@ -121,14 +122,43 @@ export interface ProjectExportResult {
 }
 
 /** 导出项目为 zip 到 destPath；返回目标路径与缺失媒体计数。 */
-export function exportProject(id: string, destPath: string): ProjectExportResult {
+export function exportProject(
+  id: string,
+  destPath: string,
+  options: { requireComplete?: boolean } = {}
+): ProjectExportResult {
   const file = readProjectJson(id)
   if (!file) throw new Error('项目数据文件缺失或已损坏')
+  // Names are authoritative in the project index (active-canvas rename preserves
+  // its graph revision). Portable packages must match what the desktop displays.
+  const indexed = getProject(id)
+  if (!indexed) throw new Error('项目索引缺失')
+  file.meta = {
+    ...file.meta,
+    name: indexed.name,
+    updatedAt: Math.max(file.meta.updatedAt, indexed.updatedAt)
+  }
   const path = destPath.endsWith(BUNDLE_EXT) ? destPath : `${destPath}${BUNDLE_EXT}`
 
   const zip = new AdmZip()
   const flowRows = exportFlowVersions(getDb(), id)
   const projectMedia = listProjectMedia(id)
+  let missingReferences = 0
+  if (options.requireComplete) {
+    const known = {
+      ids: new Map(projectMedia.map((item) => [item.id, item.id])),
+      paths: new Map(projectMedia.map((item) => [item.path, item.path]))
+    }
+    const referenced = completeTransferMediaMap(file, known, id, [
+      listArtifactRecipes(id),
+      flowRows
+    ])
+    // Structured references may survive after an index entry disappears; these
+    // must not silently pass the external caller's complete-export requirement.
+    missingReferences =
+      [...referenced.ids.keys()].filter((key) => !known.ids.has(key)).length +
+      [...referenced.paths.keys()].filter((key) => !known.paths.has(key)).length
+  }
   const fixedBytes = new Map<string, Buffer>()
   validateFlowMedia(flowRows, (value) => {
     const media = projectMedia.find(
@@ -166,14 +196,19 @@ export function exportProject(id: string, destPath: string): ProjectExportResult
 
   // zip 内 media/<原文件名>。原文件名形如 <mediaId>.<ext>，用 mediaId + ext 也可还原。
   // 磁盘上缺失的媒体只计数不阻断导出：主文件仍可备份，但计数必须透传给用户告警。
-  let missingMediaCount = 0
+  let missingMediaCount = missingReferences
   for (const media of projectMedia) {
     const rel = media.path.replace(`projects/${id}/`, '') // media/<id>.<ext>
     const abs = join(getProjectsDir(), id, rel)
     const verified = fixedBytes.get(media.path)
     if (verified) zip.addFile(rel, verified)
-    else if (existsSync(abs)) zip.addLocalFile(abs, 'media')
-    else missingMediaCount += 1
+    else if (existsSync(abs)) {
+      const mediaRoot = realpathSync(join(getProjectsDir(), id, 'media'))
+      const child = relative(mediaRoot, realpathSync(abs))
+      if (!child || child.startsWith('..') || isAbsolute(child))
+        throw new Error('FLOW_TRANSFER_MEDIA_INVALID')
+      zip.addLocalFile(abs, 'media')
+    } else missingMediaCount += 1
   }
 
   zip.writeZip(path)

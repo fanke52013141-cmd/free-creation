@@ -3,6 +3,13 @@ import type { LibraryCategory, SaveLibraryCategoryInput } from '../shared/librar
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import { IPC } from '../shared/contracts'
+import {
+  ACCESS_DESKTOP_REQUEST,
+  ACCESS_DESKTOP_REPLY,
+  ACCESS_DESKTOP_COMMIT,
+  DesktopRequestSchema,
+  type DesktopRequest
+} from '../shared/agent-access/desktop'
 import type { AssetSubmit, FlowAssetVersion, FlowAssetSummary } from '../shared/agent-flow/assets'
 import type {
   NodeExecuteCommand,
@@ -116,6 +123,28 @@ import type {
 } from '../shared/types'
 
 const api = {
+  onLocalAgentDesktopRequest: (cb: (request: DesktopRequest) => void): (() => void) => {
+    const listener = (_event: unknown, raw: unknown): void => {
+      const parsed = DesktopRequestSchema.safeParse(raw)
+      if (parsed.success) cb(parsed.data)
+    }
+    ipcRenderer.on(ACCESS_DESKTOP_REQUEST, listener)
+    return () => {
+      ipcRenderer.off(ACCESS_DESKTOP_REQUEST, listener)
+    }
+  },
+  replyLocalAgentDesktop: (input: {
+    requestId: string
+    projectId: string
+    ok: boolean
+    graphVersion?: number
+  }): void => ipcRenderer.send(ACCESS_DESKTOP_REPLY, input),
+  commitLocalAgentDesktop: (input: {
+    requestId: string
+    projectId: string
+    graphVersion: number
+  }): Promise<{ ok: boolean; meta?: ProjectMeta }> =>
+    ipcRenderer.invoke(ACCESS_DESKTOP_COMMIT, input),
   reviewFlowAssets: (
     input: import('../shared/agent-flow/review').ReviewRequest
   ): Promise<IpcEnvelope<import('../shared/agent-flow/node-contracts').ReviewDecision>> =>

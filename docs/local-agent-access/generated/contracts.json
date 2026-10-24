@@ -1,0 +1,2044 @@
+{
+  "apiVersion": 1,
+  "operations": [
+    {
+      "operationId": "app.status",
+      "operationVersion": 1,
+      "effect": "read",
+      "description": "读取本地应用版本与实例身份",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "app.status"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "dataStoreId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "appVersion": {
+                "type": "string"
+              },
+              "apiVersion": {
+                "type": "number",
+                "const": 1
+              },
+              "nextIdempotencyKey": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instanceId",
+              "dataStoreId",
+              "appVersion",
+              "apiVersion",
+              "nextIdempotencyKey"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "capability.list",
+      "operationVersion": 1,
+      "effect": "read",
+      "description": "读取当前已开放操作及其输入契约",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "capability.list"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "operations": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              "limitations": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "operations",
+              "limitations"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false,
+        "$defs": {
+          "__schema0": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "node.type.list",
+      "operationVersion": 1,
+      "effect": "read",
+      "description": "读取节点接入状态；本包不开放节点操作",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "node.type.list"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "nodes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "typeId": {
+                      "type": "string",
+                      "enum": [
+                        "text",
+                        "image",
+                        "image-crop",
+                        "image-split",
+                        "image-gen",
+                        "image-edit",
+                        "website",
+                        "video",
+                        "video-asset",
+                        "video-frame",
+                        "video-clip",
+                        "video-depth",
+                        "video-clay",
+                        "audio",
+                        "sound-adjust",
+                        "file",
+                        "speech",
+                        "tts",
+                        "voice-design",
+                        "chat",
+                        "processor",
+                        "code",
+                        "json",
+                        "structured",
+                        "storyboard",
+                        "ai-process",
+                        "iterate",
+                        "director",
+                        "agent",
+                        "state-machine",
+                        "ai-review"
+                      ]
+                    },
+                    "actions": {
+                      "type": "string",
+                      "const": "planned"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "const": "NODE_ACCESS_NOT_IMPLEMENTED"
+                    }
+                  },
+                  "required": [
+                    "typeId",
+                    "actions",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "nodes"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "project.list",
+      "operationVersion": 1,
+      "effect": "read",
+      "description": "分页读取项目摘要",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "offset",
+          "limit"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "project.list"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "projects": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "number"
+                    },
+                    "updatedAt": {
+                      "type": "number"
+                    },
+                    "graphVersion": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "coverMediaId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "createdAt",
+                    "updatedAt",
+                    "graphVersion"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "total": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "projects",
+              "total"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "project.get",
+      "operationVersion": 1,
+      "effect": "read",
+      "description": "读取已保存项目摘要与内容数量，不返回原始快照",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "project.get"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "meta": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "createdAt": {
+                    "type": "number"
+                  },
+                  "updatedAt": {
+                    "type": "number"
+                  },
+                  "graphVersion": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "coverMediaId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "createdAt",
+                  "updatedAt",
+                  "graphVersion"
+                ],
+                "additionalProperties": false
+              },
+              "nodeCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "edgeCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "groupCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "saved": {
+                "type": "boolean",
+                "const": true
+              }
+            },
+            "required": [
+              "meta",
+              "nodeCount",
+              "edgeCount",
+              "groupCount",
+              "saved"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "project.create",
+      "operationVersion": 1,
+      "effect": "write",
+      "description": "幂等新建空项目",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "project.create"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "meta": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "createdAt": {
+                    "type": "number"
+                  },
+                  "updatedAt": {
+                    "type": "number"
+                  },
+                  "graphVersion": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "coverMediaId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "createdAt",
+                  "updatedAt",
+                  "graphVersion"
+                ],
+                "additionalProperties": false
+              },
+              "saved": {
+                "type": "boolean",
+                "const": true
+              }
+            },
+            "required": [
+              "meta",
+              "saved"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "project.open",
+      "operationVersion": 1,
+      "effect": "write",
+      "description": "保存当前画布后在桌面打开项目；等待画布就绪",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "project.open"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "meta": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "createdAt": {
+                    "type": "number"
+                  },
+                  "updatedAt": {
+                    "type": "number"
+                  },
+                  "graphVersion": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "coverMediaId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "createdAt",
+                  "updatedAt",
+                  "graphVersion"
+                ],
+                "additionalProperties": false
+              },
+              "opened": {
+                "type": "boolean",
+                "const": true
+              }
+            },
+            "required": [
+              "meta",
+              "opened"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "project.update",
+      "operationVersion": 1,
+      "effect": "write",
+      "description": "按版本修改项目名称；活动画布先保存并同步版本",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "expectedGraphVersion": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "projectId",
+          "expectedGraphVersion",
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "project.update"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "meta": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "createdAt": {
+                    "type": "number"
+                  },
+                  "updatedAt": {
+                    "type": "number"
+                  },
+                  "graphVersion": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "coverMediaId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "createdAt",
+                  "updatedAt",
+                  "graphVersion"
+                ],
+                "additionalProperties": false
+              },
+              "saved": {
+                "type": "boolean",
+                "const": true
+              }
+            },
+            "required": [
+              "meta",
+              "saved"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "project.rename",
+      "operationVersion": 1,
+      "effect": "write",
+      "description": "按已保存版本修改项目名称；活动画布经保存握手同步",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "expectedGraphVersion": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "projectId",
+          "expectedGraphVersion",
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "project.rename"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "meta": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "createdAt": {
+                    "type": "number"
+                  },
+                  "updatedAt": {
+                    "type": "number"
+                  },
+                  "graphVersion": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "coverMediaId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "createdAt",
+                  "updatedAt",
+                  "graphVersion"
+                ],
+                "additionalProperties": false
+              },
+              "saved": {
+                "type": "boolean",
+                "const": true
+              }
+            },
+            "required": [
+              "meta",
+              "saved"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "project.save",
+      "operationVersion": 1,
+      "effect": "write",
+      "description": "保存当前权威内容；活动画布等待最新编辑落盘，不接收客户端快照",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "expectedGraphVersion": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "projectId",
+          "expectedGraphVersion"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "project.save"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "graphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "saved": {
+                "type": "boolean",
+                "const": true
+              }
+            },
+            "required": [
+              "graphVersion",
+              "saved"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "project.clone",
+      "operationVersion": 1,
+      "effect": "write",
+      "description": "固定源版本复制项目（媒体ID/引用重映射）；活动源画布先保存，克隆不继承运行任务",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "expectedGraphVersion": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          }
+        },
+        "required": [
+          "projectId",
+          "expectedGraphVersion",
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "project.clone"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "meta": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "createdAt": {
+                    "type": "number"
+                  },
+                  "updatedAt": {
+                    "type": "number"
+                  },
+                  "graphVersion": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "coverMediaId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "createdAt",
+                  "updatedAt",
+                  "graphVersion"
+                ],
+                "additionalProperties": false
+              },
+              "saved": {
+                "type": "boolean",
+                "const": true
+              }
+            },
+            "required": [
+              "meta",
+              "saved"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "project.delete.precheck",
+      "operationVersion": 1,
+      "effect": "read",
+      "description": "读取删除影响摘要与占用阻塞项，无阻塞时签发短期确认令牌",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "project.delete.precheck"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "graphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "impact": {
+                "type": "object",
+                "properties": {
+                  "nodeCount": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "edgeCount": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "groupCount": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "mediaCount": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "mediaBytes": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "libraryUsageCount": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "nodeCount",
+                  "edgeCount",
+                  "groupCount",
+                  "mediaCount",
+                  "mediaBytes",
+                  "libraryUsageCount"
+                ],
+                "additionalProperties": false
+              },
+              "blockers": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "ACTIVE_PROJECT",
+                    "RECOVERY_COPY",
+                    "TASK_OCCUPANCY"
+                  ]
+                }
+              },
+              "impactToken": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "expiresAt": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "projectId",
+              "graphVersion",
+              "impact",
+              "blockers"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "project.delete",
+      "operationVersion": 1,
+      "effect": "delete",
+      "description": "凭预检令牌硬删除项目；拒绝活动画布、运行/未知占用，令牌过期或事实漂移需重新预检",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "impactToken": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "project.delete"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "deleted": {
+                "type": "boolean",
+                "const": true
+              },
+              "projectId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+              },
+              "graphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "deleted",
+              "projectId",
+              "graphVersion"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    },
+    {
+      "operationId": "project.export",
+      "operationVersion": 1,
+      "effect": "export",
+      "description": "活动画布先保存最新编辑，再导出完整项目到受控目录，不覆盖文件",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "expectedGraphVersion": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "fileName": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,100}\\.canvasbundle$"
+          }
+        },
+        "required": [
+          "projectId",
+          "expectedGraphVersion",
+          "fileName"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "const": "project.export"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "sourceGraphVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "byteSize": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "missingMediaCount": {
+                "type": "number",
+                "const": 0
+              }
+            },
+            "required": [
+              "path",
+              "sourceGraphVersion",
+              "byteSize",
+              "sha256",
+              "missingMediaCount"
+            ],
+            "additionalProperties": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "phase",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "apiVersion",
+          "requestId",
+          "operationId",
+          "traceId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "transports": [
+        "cli",
+        "mcp-stdio"
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "typeId": "text",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "image",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "image-crop",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "image-split",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "image-gen",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "image-edit",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "website",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "video",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "video-asset",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "video-frame",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "video-clip",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "video-depth",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "video-clay",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "audio",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "sound-adjust",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "file",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "speech",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "tts",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "voice-design",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "chat",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "processor",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "code",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "json",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "structured",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "storyboard",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "ai-process",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "iterate",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "director",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "agent",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "state-machine",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "ai-review",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    }
+  ]
+}

@@ -353,9 +353,10 @@ describe('C4 independent process recovery contention', () => {
   it('concurrent v16 starters recheck schema inside the migration write lock', async () => {
     const directory = await setup()
     withDb(directory, (db) => {
-      // setup() creates the current schema; remove both M17 and M18 additions so
+      // setup() creates the current schema; remove M17-M19 additions so
       // this fixture represents the actual persisted v16 schema before racing starters.
       db.exec(`DROP TABLE process_locks;
+        DROP TABLE local_agent_operations;
         DROP TABLE agent_tool_calling_validations;
         ALTER TABLE model_connections DROP COLUMN agent_tool_calling_revision;
         ALTER TABLE model_definitions DROP COLUMN agent_tool_calling_revision;`)

@@ -4,6 +4,9 @@ productName: canvas-studio
 # 导致桌面程序在加载主入口前退出。asar 不是安全边界；本地单机版改为目录打包，
 # 以保证原生模块和入口文件可稳定加载。
 asar: false
+extraFiles:
+  - from: build/canvas-studio-agent.cmd
+    to: canvas-studio-agent.cmd
 directories:
   buildResources: build
 files:

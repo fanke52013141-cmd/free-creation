@@ -1,5 +1,23 @@
 # 日志覆盖清单
 
+## 2026-10-24 A1.2 复制与预检确认删除
+
+project.clone/delete.precheck/delete 复用 main 公共接入的 agent.access.started 与唯一终态；删除新增失败阶段 delete-admission（确认缺失 IMPACT_CONFIRM_REQUIRED、令牌伪造/过期/事实漂移 IMPACT_TOKEN_INVALID），克隆占用/版本冲突沿用既有阶段。预检只读，无副作用终态之外的新事件；令牌 HMAC 绑定实例/目标/权威修订/影响摘要，密钥与令牌均不入诊断，事件仍只含 operation/phase/code 与安全关联 ID，不记录名称、路径或影响明细。定向 28/28 与源码真实桌面闭环（含克隆正文/名称脱敏的 JSONL 配对检查）通过；最终完整验证`qa/verification/run-ZfT4VL/`退出0（单元2499/5既有跳过），安装版打包闭环见`qa/local-agent-access/a12-package-manifest.json`，过程以[A1.2台账](local-agent-access/07-a1-2-clone-delete.md)为准。未覆盖：删除后 media/library_usages 孤儿行的级联清理（维持桌面硬删除共享现状）、HTTP、第三方 MCP 客户端。
+
+## 2026-10-24 A1.1 桌面项目握手
+
+project.open/update及活动rename/save/export继续复用main公共接入的agent.access.started与唯一终态；sender/frame/request/project/有效期校验失败、超时、renderer丢失、占用、版本与元数据竞争有稳定失败/unknown语义，桌面失败阶段desktop-handshake。renderer实际保存沿既有project.save事件，不重复外部终态；目前没有新增父span贯穿子保存，不宣称完整trace树。临时握手含请求名称但不入诊断，正式事件不含名称、正文、快照、路径、key或原始异常；logger拒写不影响业务，业务账本拒写仍阻断副作用。初轮28项定向与实际源码CLI/MCP/桌面闭环及JSONL配对/脱敏通过；最终完整验证`qa/verification/run-v3mcD2/`退出0，安装版打包闭环与入口哈希证据见`qa/local-agent-access/a11-package-manifest.json`，三轮收尾过程以[A1.1台账](local-agent-access/06-a1-1-desktop-projects.md)为准。未覆盖外部节点执行、HTTP、物理断电及第三方MCP客户端。
+
+## 2026-10-24 本地外部 Agent A0+A1 最小纵向包
+
+安全补充：文件监听不可用时发出失败专用 `project.watch.failed`，关联projectId和新trace/span，仅含固定 `phase=watch / code=WATCH_UNAVAILABLE`，不记录原始异常、路径或快照。失败后继续保留桌面占用，旧监听器迟到错误不能影响新监听器；三项定向验证通过。存在恢复副本时外部写/导出拒绝，并沿接入服务失败阶段记录；接入17项与监听3项联合通过。
+
+接续补充：桌面首页关闭项目重命名复用版本化仓库事务，沿project.save.started/completed/failed记录operation=project-rename及实际graphVersion；活动画布名称更新仍保留原图版本，外部写入拒绝。导出读取权威索引名称，普通UI部分包告警语义保持。新增重命名IPC三项和既有保存IPC/接入定向37通过，相关导出/接入26通过。节点说明面板嵌套Escape修复只影响键盘浮层关闭，不改变业务/执行/存储，日志影响不涉及；原键盘断言及父层独立关闭验证通过。最终完整verify以交付台账为准。
+
+新增 main 公共接入服务的 `agent.access.started/completed/failed/unknown/rejected`，以及server_ready/server_failed启动事件；共享事件白名单只允许operation/phase/code和安全关联ID。CLI/MCP共用服务，不直写业务日志/项目/数据库，不回显原始异常。重复幂等请求返回原回执，不再记第二业务终态。开始/终态覆盖新建、按版本重命名、保存、导出及只读查询；桌面/任务占用、版本冲突、缺失媒体、非法路径、过期/冲突key和未知结果有稳定阶段。日志写入失败不改变结果；账本写入失败则拒绝副作用。共享导出普通媒体真实路径校验沿UI现有transfer日志处理，外部由公共接入操作负责终态，无重复生命周期。
+
+最终证据：`qa/verification/run-4kUMWv/status.json` 完整verify退出0，单元2484通过/5既有跳过、模型另2通过，类型/lint/日志及接入门禁、浏览器、构建和全部桌面专项通过。真实隔离Electron→CLI创建→MCP重命名→CLI保存/导出→桌面打开核对→重启回执通过；该run下本地接入report与实际JSONL验证每个started恰一终态、名称/正文/路径不进日志，logger故障另有定向覆盖。当前构建的独立Windows目录包同闭环通过，入口哈希/包内依赖见 `qa/local-agent-access/package-manifest.json`，未安装发布。边界：本包没有外部模型请求、节点运行、HTTP、在线flush或自动unknown核对；第三方MCP客户端/跨账户ACL/断电设备故障未验收。详见[交付与日志检查](local-agent-access/05-a0-a1-minimal-delivery.md)。
+
 ## 2026-10-23 Vidu 本机 CLI 供应商接入
 
 本机复验补充：`run-awurJV` 完整 verify 退出 0；Q3/Q4 CLI 真实生成、下载与解码均通过（合计 34 积分），Q3 报价遗漏 transition 参数已在测试修正。生产日志实现不变。CLI 冒烟 mock 数据库，不证明应用媒体入库/画布重开/验证适配器的生产诊断全链路；真实超时和取消核对仍未验收。见 [验证记录](VIDU_VERIFICATION_2026_10_23.md)。下方“Q3 未做”为原交接历史状态。

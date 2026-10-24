@@ -232,7 +232,7 @@ export function CanvasPage({ projectId }: CanvasPageProps): React.JSX.Element {
   }
 
   return (
-    <div className="canvas-page canvas-theme-dark">
+    <div className="canvas-page canvas-theme-dark" data-local-agent-project={projectId}>
       <div className="canvas-topbar">
         {/* 左侧：项目菜单（撤销/重做已移到画布右侧历史簇） */}
         <ProjectMenu

@@ -15,6 +15,8 @@ import type { BrowserWindow } from 'electron'
 import { IPC } from '../../shared/contracts'
 import type { ProjectFile } from '../../shared/types'
 import { getProjectsDir } from '../store/db'
+import { emitDomainEvent } from '../diagnostics/ipc-domain-events'
+import { newTraceId, newSpanId } from '../../shared/observability'
 
 const DEBOUNCE_MS = 300
 
@@ -42,17 +44,30 @@ export class ProjectFileWatcher {
     // 记录当前版本号作为基准
     const file = this.readProjectFile(projectId)
     this.lastKnownGraphVersion = file?.meta.graphVersion ?? -1
+    const unavailable = (): void =>
+      emitDomainEvent('project.watch.failed', '项目文件监听不可用，桌面占用保留', {
+        context: { traceId: newTraceId(), spanId: newSpanId(), projectId },
+        status: 'failed',
+        attributes: { phase: 'watch', code: 'WATCH_UNAVAILABLE' }
+      })
 
     try {
-      this.watcher = watch(filePath, { persistent: false }, () => {
+      const watcher = watch(filePath, { persistent: false }, () => {
         this.scheduleCheck()
       })
-      this.watcher.on('error', () => {
-        // 文件被删除/移动时 watcher 自动失效，静默停止
-        this.stopWatching()
+      this.watcher = watcher
+      watcher.on('error', () => {
+        if (this.watcher !== watcher) return
+        this.watcher = null
+        watcher.close()
+        if (this.debounceTimer) clearTimeout(this.debounceTimer)
+        this.debounceTimer = null
+        // Losing a filesystem notification stream does not close the UI project.
+        // Keep ownership until explicit project:close/open to protect unsaved edits.
+        unavailable()
       })
     } catch {
-      // fs.watch 在某些环境下不可用，静默跳过
+      unavailable()
     }
   }
 
@@ -81,6 +96,11 @@ export class ProjectFileWatcher {
   /** 当前是否正在监听某个项目。 */
   get isWatching(): boolean {
     return this.watcher !== null
+  }
+
+  /** Claimed at project:open, even if fs.watch is unavailable. External writes must not race UI. */
+  get activeProjectId(): string | null {
+    return this.watchedProjectId
   }
 
   private scheduleCheck(): void {

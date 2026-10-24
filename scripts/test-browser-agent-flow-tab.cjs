@@ -218,12 +218,15 @@ const defaultConfigs = {
       type: 'agent-keyboard-controls',
       roleDropdownEscapeRestoresFocus: true,
       roleDropdownArrowAndEnterOperates: true,
+      parentEscapeClosesInspector: true,
       roleBefore,
       roleAfterKeyboardSelection,
       checkboxSpaceTogglesAndRestores: Boolean(await checkbox.count()),
       noTaskRunOrSave: true
     })
     await page.screenshot({ path: path.join(evidence, 'agent-keyboard-controls.png') })
+    await page.keyboard.press('Escape')
+    await page.locator('.node-contract-panel').waitFor({ state: 'detached' })
 
     fs.writeFileSync(
       path.join(evidence, 'results.json'),

@@ -46,7 +46,8 @@ function hasInvalidAgentConfig(input: SaveProjectInput): boolean {
     for (const node of nodes) {
       if (!isRecord(node)) continue
       if (node.type === 'agent' && isRecord(node.params)) candidates.push(node.params.config)
-      if (isRecord(node.props) && node.props.nodeType === 'agent') candidates.push(node.props.config)
+      if (isRecord(node.props) && node.props.nodeType === 'agent')
+        candidates.push(node.props.config)
     }
   }
 
@@ -180,7 +181,40 @@ export function registerProjectIpc(watcher?: ProjectFileWatcher): void {
     IPC.project.rename,
     (_e, input: { id: string; name: string }): IpcEnvelope<ProjectMeta | null> => {
       if (!input?.id || !input?.name?.trim()) return err('INVALID_INPUT', '参数不完整')
-      return ok(repo.renameProject(input.id, input.name.trim()))
+      const context = projectSaveContext({ id: input.id })
+      emitDomainEvent('project.save.started', '项目名称保存开始', {
+        context,
+        attributes: { operation: 'project-rename' }
+      })
+      try {
+        // Closed-project UI and external callers share the versioned snapshot transaction.
+        // The active canvas keeps its existing metadata-only behavior until online flush is adapted;
+        // external mutations of that project are rejected by the desktop ownership boundary.
+        const file = repo.openProject(input.id)
+        if (!file && repo.getProject(input.id)) throw new Error('PROJECT_OPEN_FAILED')
+        const result = !file
+          ? null
+          : watcher?.activeProjectId === input.id
+            ? repo.renameProject(input.id, input.name.trim())
+            : repo.renameProjectAtVersion(input.id, input.name.trim(), file.meta.graphVersion)
+        emitDomainEvent('project.save.completed', '项目名称保存完成', {
+          context,
+          status: result ? 'success' : 'skipped',
+          attributes: { operation: 'project-rename', graphVersion: result?.graphVersion }
+        })
+        return ok(result)
+      } catch (error) {
+        emitDomainEvent('project.save.failed', '项目名称保存失败', {
+          context,
+          status: 'failed',
+          ...projectSaveFailureDiagnostics(error),
+          attributes: {
+            ...projectSaveFailureDiagnostics(error).attributes,
+            operation: 'project-rename'
+          }
+        })
+        return err('RENAME_FAILED', '项目名称未保存，请检查项目或存储状态后重试')
+      }
     }
   )
 

@@ -406,7 +406,17 @@ export function NodeContractPanel({
   // Esc 关闭面板（与其它浮层面板行为统一）
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose()
+      if (e.key !== 'Escape' || e.defaultPrevented) return
+      // A nested portal consumes its own Escape. Its React handler can run after
+      // this native listener; inspect the original event path even if Radix has
+      // already detached the listbox and restored trigger focus.
+      if (
+        e
+          .composedPath()
+          .some((target) => target instanceof Element && target.matches('.app-select-content'))
+      )
+        return
+      onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

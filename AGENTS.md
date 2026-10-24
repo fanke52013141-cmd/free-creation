@@ -50,11 +50,31 @@ renderer 的 `emitDiagnosticsEvent` 和 main 的诊断入口。实际验收范�
 
 ## Agent 对接已下线（2026-09-17）
 
+2026-10-24 接续：用户已授权按 [本地外部接入规范](AGENT_ACCESS_SPEC.md) 落地 A0 + A1 最小纵向包。
+旧系统仍保持下线；新增本地接入的实际支持、验证和边界以
+[交付台账](docs/local-agent-access/05-a0-a1-minimal-delivery.md)为准，不把该最小包称为全部 A0/A1 完成。
+
+后续用户已授权A1.1，桌面打开、名称更新与活动画布保存/导出以[接续台账](docs/local-agent-access/06-a1-1-desktop-projects.md)为准。前包关闭项目限制保留为历史基线，不用于否定接续中已验收的支持。
+
 Agent/CLI/MCP/headless 的全部实现代码已从本仓库移除（`src/capabilities`、`src/application`、
 `src/cli`、`src/mcp`、`src/main/headless`、`test/agent`、`generated/` 及相关脚本与 CI 步骤）。
 原因：项目未稳定前对接反复返工，且 headless 链路存在契约缺口（详见
 `docs/HANDOFF_2026_09_15_CODE_REVIEW.md` F05–F09）。旧对接规划和旧 Agent 专用交接
 已退出当前工作区，不作为恢复依据。未来增加执行宿主仍须验证与桌面输出一致性。
+
+## 本地外部 Agent 接入同步维护
+
+新增功能、修改业务/执行/数据路径或修复故障前，必须阅读 `AGENT_ACCESS_SPEC.md`，
+核对 `docs/local-agent-access/02-capability-matrix.md`，并完成
+`docs/templates/AGENT_ACCESS_CHANGE_TEMPLATE.md` 的影响检查。
+受影响操作与节点须同包更新公共契约、支持状态、Schema、兼容说明、测试、日志覆盖和文档；
+纯样式或文案可说明“不涉及”。不得在 MCP/CLI/API 中另写执行器、直写项目快照/数据库，
+或绕过占用、版本、审核、固定资产和人工门禁。
+运行 `npm run verify:agent-access`；受保护源码变化时，以明确的影响说明刷新契约快照和
+`docs/local-agent-access/change-impact.json`，审查实际行为和测试证据，不能只刷新 hash 放行。
+接口Schema变化需明确兼容结论；没有接入声明、生成文件过期或声明与Active清单不一致应阻断。
+当前仅有登记/生成/影响确认门禁，完整版本差异、全部节点适配和外部执行仍按台账推进；
+不得将部分静态门禁宣称为全功能自动覆盖。交付仍须运行针对性检查和完整 `npm run verify`。
 
 ## 画布原生 Agent Flow（2026-10-11）
 
