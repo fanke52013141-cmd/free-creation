@@ -4,6 +4,8 @@ An Electron application with React and TypeScript
 
 ## Architecture Rules
 
+- [Skill Agent 上线与独立验证备注](./docs/RELEASE_SKILL_AGENT_2026_10_25.md) — 安装/绑定、自动输入输出、独立验证结果和支持边界。
+
 - [本地开发最新交接](./docs/HANDOFF_2026_10_24_LOCAL_DEVELOPMENT.md) — 已完成、待验收、待开发、最新验证与下一包入口；当前接续优先阅读。
 - [本地功能开发优先级](./docs/LOCAL_FUNCTION_DEVELOPMENT_2026_10_24.md) — 节点编辑、执行、停止、异常恢复与诊断排障；本地使用不以前置安装第三方客户端为条件。
 - [画布原生 Agent Flow 方案](./docs/canvas-agent-flow/README.md) — 当前唯一 Agent Flow 设计：上帝 Agent 构建，主 Agent 协调，专业 Agent 执行；状态机和成果均由画布节点承载。包含节点协同规范，尚未实现。
