@@ -15,6 +15,8 @@ import { buildChatCompressionPrompt, splitChatForCompression } from '../chat-mem
 import { isReasoningModelId } from '../../model-reasoning'
 import type { ChatImageAttachment } from '../../types'
 import { chatImageInput, resolveChatImageTarget } from '../chat-image'
+import { runSkillAgent } from '../skill-agent'
+import { skillAgentConfig, skillAgentInstructions, type SkillAgentConfig } from '../../skill-agent'
 
 function effectiveSystem(data: ReturnType<typeof parseChat>): string {
   const sections = [data.system.trim()]
@@ -31,6 +33,16 @@ function effectiveSystem(data: ReturnType<typeof parseChat>): string {
 
 export const chatExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
   const savedData = parseChat(ctx.shape.props.text)
+  let agent: SkillAgentConfig
+  try {
+    agent = skillAgentConfig(JSON.parse(ctx.shape.props.config || '{}').agent)
+  } catch {
+    return {
+      status: 'failed',
+      reason: 'Agent 技能配置无效或缺少必需工具',
+      diagnosticPhase: 'capability'
+    }
+  }
   // The executor has one unambiguous source of context: the active session
   // mirrored in props.text. It never scans a different conversation or calls
   // the model from a React component.
@@ -47,7 +59,13 @@ export const chatExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecu
     const resolved = await resolveChatImageTarget(ctx, data)
     if (!resolved) return { status: 'skipped', reason: '请启用生图技能并选择已验证图片模型' }
     const { target, option: imageOption } = resolved
-    const input = chatImageInput(target, imageOption, data.messages.at(-1)!.content)
+    const input = chatImageInput(
+      target,
+      imageOption,
+      [skillAgentInstructions(agent, true), data.messages.at(-1)!.content]
+        .filter(Boolean)
+        .join('\n\n')
+    )
     if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
     ctx.setDiagnosticTarget?.({
       operation: 'image.generate',
@@ -135,32 +153,54 @@ export const chatExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecu
   )
     ? await resolveChatImageTarget(ctx, data)
     : null
-  const reply = await waitForChat(
-    ctx.gateway,
-    {
-      providerId: option.provider.id,
-      modelId: option.model.id,
-      system: effectiveSystem(data),
-      messages:
-        data.autoCompress && data.summary && messages.some((message) => message.images?.length)
-          ? messages.slice(-40)
-          : messages,
-      temperature: data.temperature,
-      maxTokens: data.maxTokens,
-      reasoningEffort:
-        data.reasoningEffort !== 'off' && isReasoningModelId(option.model.id) ? 'high' : undefined,
-      diagnostics: requestDiagnostics,
-      ...(imageSkill ? { imageSkill: imageSkill.target } : {})
-    },
-    ctx.signal,
-    (progress) => {
-      streamedText = progress.text
-      streamedReasoning = progress.reasoning
-      streamedImages = progress.images ?? streamedImages
-      // 每个已抵达的分片立即写入节点，右侧对话面板订阅节点数据后逐字呈现。
-      persistStreamingReply()
-    }
-  )
+  const request = {
+    providerId: option.provider.id,
+    modelId: option.model.id,
+    system: effectiveSystem(data),
+    messages,
+    temperature: data.temperature,
+    maxTokens: data.maxTokens,
+    reasoningEffort:
+      data.reasoningEffort !== 'off' && isReasoningModelId(option.model.id)
+        ? ('high' as const)
+        : undefined
+  }
+  const reply =
+    agent.skills.length && !imageSkill
+      ? await runSkillAgent(ctx, agent, request)
+      : await waitForChat(
+          ctx.gateway,
+          {
+            providerId: option.provider.id,
+            modelId: option.model.id,
+            system: [effectiveSystem(data), skillAgentInstructions(agent, true)]
+              .filter(Boolean)
+              .join('\n\n'),
+            messages:
+              data.autoCompress &&
+              data.summary &&
+              messages.some((message) => message.images?.length)
+                ? messages.slice(-40)
+                : messages,
+            temperature: data.temperature,
+            maxTokens: data.maxTokens,
+            reasoningEffort:
+              data.reasoningEffort !== 'off' && isReasoningModelId(option.model.id)
+                ? 'high'
+                : undefined,
+            diagnostics: requestDiagnostics,
+            ...(imageSkill ? { imageSkill: imageSkill.target } : {}),
+            ...(imageSkill && agent.skills.length ? { toolStepLimit: agent.maxSteps } : {})
+          },
+          ctx.signal,
+          (progress) => {
+            streamedText = progress.text
+            streamedReasoning = progress.reasoning
+            streamedImages = progress.images ?? streamedImages
+            // 每个已抵达的分片立即写入节点，右侧对话面板订阅节点数据后逐字呈现。
+            persistStreamingReply()
+          }
+        )
   if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
   const completedMessages = [
     ...messages,

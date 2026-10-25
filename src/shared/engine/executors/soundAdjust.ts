@@ -4,6 +4,7 @@ import { readNodeConfig } from '../node-config'
 import { parseSoundAdjustConfig } from '@shared/sound-adjust'
 import { appendMediaResult, serializeMediaResultCollection } from '../values'
 import { capabilityFailure, unavailableLocalCapability } from '../preflight'
+import { runCancellableMedia } from '../media-cancel'
 
 export async function soundAdjustExecutor(ctx: NodeExecutionContext): Promise<NodeExecutionResult> {
   const audios = inputMedia(ctx.inputs, 'in-audio', 'audio')
@@ -22,17 +23,24 @@ export async function soundAdjustExecutor(ctx: NodeExecutionContext): Promise<No
     if (reason) return { status: 'failed', reason: capabilityFailure(capability, reason) }
   }
   try {
-    const result = await ctx.gateway.soundAdjust({
-      projectId: ctx.projectId,
-      sourceMediaId: source.mediaId,
-      kind,
-      config
-    })
+    // 取消立即请求主进程终止 ffmpeg；迟到完成的资产同样删除，不留孤儿。
+    const outcome = await runCancellableMedia(
+      ctx,
+      () =>
+        ctx.gateway.soundAdjust({
+          projectId: ctx.projectId,
+          sourceMediaId: source.mediaId,
+          nodeId: ctx.node.id,
+          kind,
+          config
+        }),
+      (envelope) => {
+        if (envelope?.ok) void ctx.gateway.deleteMedia?.(envelope.data.id).catch(() => undefined)
+      }
+    )
+    if (outcome.cancelled) return { status: 'skipped', reason: '已取消' }
+    const result = outcome.value
     if (!result.ok) return { status: 'failed', reason: result.error.message }
-    if (ctx.signal.cancelled) {
-      await ctx.gateway.deleteMedia?.(result.data.id).catch(() => undefined)
-      return { status: 'skipped', reason: '已取消' }
-    }
     const asset = result.data
     const prompt = config.mode === 'rate'
       ? `语速 ${config.rate} 倍 · 音量 ${config.volumePercent}%`

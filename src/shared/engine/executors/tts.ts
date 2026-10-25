@@ -65,6 +65,8 @@ export const ttsExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecut
       projectId: ctx.projectId,
       runId: ctx.runId,
       nodeId: ctx.node.id,
+      // P1-B：把运行根 trace 传给主进程，语音克隆阶段事件不再标记关联缺失。
+      ...(ctx.diagnostics?.traceId ? { traceId: ctx.diagnostics.traceId } : {}),
       referenceAudioId,
       config: effectiveConfig
     })

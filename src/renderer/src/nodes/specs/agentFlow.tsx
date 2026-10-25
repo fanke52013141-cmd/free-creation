@@ -12,12 +12,16 @@ import {
 } from '@shared/agent-flow/node-contracts'
 import {
   agentFlowPendingExecutor,
-  AGENT_FLOW_EXECUTION_PENDING
+  agentExecutor,
+  parseStateMachineInstance,
+  parseStateMachinePending,
+  reviewExecutor,
+  stateMachineExecutor
 } from '@shared/engine/executors/agentFlow'
-import { agentExecutor, reviewExecutor } from '@shared/engine/executors/agentFlow'
 import { projectReviewOutputs } from '@shared/agent-flow/review'
 import { ReviewTaskControls } from './ReviewTaskControls'
-import { projectAgentOutputs } from '@shared/agent-flow/agent-outputs'
+import { projectAgentOutputs, projectStateMachineOutputs } from '@shared/agent-flow/agent-outputs'
+import { useConfirmStore } from '../../stores/confirm'
 import { AgentTaskControls } from './AgentTaskControls'
 import { FlowBuilderControls } from './FlowBuilderControls'
 import type { FlowAgentCatalog } from '@shared/agent-flow/desktop-tasks'
@@ -62,8 +66,7 @@ function parsedConfigOf(shape: NodeBodyProps['shape']): Record<string, unknown> 
 }
 function configOf(shape: NodeBodyProps['shape']): Record<string, unknown> {
   return (
-    parsedConfigOf(shape) ??
-    (defaults[shape.props.nodeType as FlowType] as Record<string, unknown>)
+    parsedConfigOf(shape) ?? (defaults[shape.props.nodeType as FlowType] as Record<string, unknown>)
   )
 }
 function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
@@ -72,29 +75,6 @@ function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
   const agent = shape.props.nodeType === 'agent'
   const review = shape.props.nodeType === 'ai-review'
   const configIsValid = parsedConfigOf(shape) !== null
-  const [flowState, setFlowState] = useState<
-    import('@shared/agent-flow/desktop-tasks').FlowAgentView | null
-  >(null)
-  useEffect(() => {
-    if (shape.props.nodeType !== 'state-machine') return
-    let disposed = false
-    const timer = setInterval(() => {
-      void import('../../stores/app')
-        .then(({ useAppStore }) => {
-          const projectId = useAppStore.getState().currentProject?.id
-          if (projectId)
-            return window.api.inspectFlowAgent({ projectId, nodeId: shape.id }).then((reply) => {
-              if (!disposed && reply.ok) setFlowState(reply.data)
-            })
-          return undefined
-        })
-        .catch(() => {})
-    }, 750)
-    return () => {
-      disposed = true
-      clearInterval(timer)
-    }
-  }, [shape.id, shape.props.nodeType])
   const issue = useValue(
     'agent-flow-declaration-issue',
     () => {
@@ -123,35 +103,95 @@ function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
       </div>
     )
   }
-  if (!agent && !review)
+  if (!agent && !review) {
+    // 状态机独立执行（P2-A 首版）：卡片展示权威实例的当前阶段；人工提交事件
+    // 只写入 meta.stateMachinePending（类比聊天面板写待发送消息），
+    // 由 stateMachineExecutor 在下一次运行时校验修订并推进状态。
+    const meta = shape.meta as Record<string, unknown> | undefined
+    const instance = parseStateMachineInstance(meta?.stateMachine)
+    const pendingSubmission = parseStateMachinePending(meta?.stateMachinePending)
+    const currentState = instance?.state ?? String(config.initialState ?? '未配置')
+    const legalEvents = Array.isArray(config.transitions)
+      ? (config.transitions as { from: string; event: string; to: string }[]).filter(
+          (item) => item.from === currentState
+        )
+      : []
+    const nextRevision = instance?.revision ?? 1
     return (
       <div className="agent-flow-body">
         <NodeIdentity>
           <div className="agent-flow-summary">
-            {flowState ? '当前阶段' : '初始阶段'}：
-            {flowState?.phase ?? String(config.initialState ?? '未配置')}
+            当前阶段：{currentState}
+            {instance ? `（修订 ${instance.revision}）` : '（未启动）'}
           </div>
-          <p className="agent-flow-pending">
-            {flowState
-              ? flowState.state === 'completed'
-                ? '流程已完成'
-                : flowState.state === 'waiting'
-                  ? '等待继续'
-                  : flowState.state === 'cancelled'
-                    ? '流程已停止'
-                    : flowState.state === 'blocked'
-                      ? '流程已阻断，请核对主 Agent'
-                      : flowState.state === 'failed'
-                        ? '流程失败，请核对主 Agent'
-                        : '流程执行中'
-              : '等待主 Agent 启动'}
-          </p>
+          {pendingSubmission ? (
+            <p className="agent-flow-pending" role="status">
+              已提交事件「{pendingSubmission.event}」（基于修订 {pendingSubmission.expectedRevision}
+              ），运行节点后生效
+            </p>
+          ) : (
+            <p className="agent-flow-pending">
+              {instance
+                ? legalEvents.length > 0
+                  ? `可提交事件：${legalEvents.map((item) => item.event).join('、')}`
+                  : '当前阶段没有声明的出边事件，可在设置中添加转换'
+                : '运行节点即按初始阶段启动状态机任务'}
+            </p>
+          )}
           {issue && (
             <p className="agent-flow-pending" role="status">
               {issue}
             </p>
           )}
         </NodeIdentity>
+        {legalEvents.length > 0 && (
+          <NodePrimaryButton
+            onClick={async () => {
+              const event = legalEvents[0]?.event
+              if (!event) return
+              editor.updateShape({
+                id: shape.id,
+                type: 'node-card',
+                meta: {
+                  ...(shape.meta ?? {}),
+                  stateMachinePending: JSON.stringify({
+                    eventId: crypto.randomUUID(),
+                    event,
+                    expectedRevision: nextRevision
+                  })
+                }
+              })
+              markUndoPoint(editor, 'state-machine-submit-event')
+            }}
+          >
+            提交事件「{legalEvents[0]?.event}」
+          </NodePrimaryButton>
+        )}
+        {instance && (
+          <NodePrimaryButton
+            onClick={async () => {
+              const confirmed = await useConfirmStore.getState().confirm({
+                title: '重置状态机任务',
+                message: '将清除该节点的状态机实例与待应用事件，回到初始阶段。已产出的下游输出不受影响。',
+                confirmText: '重置',
+                danger: true
+              })
+              if (!confirmed) return
+              editor.updateShape({
+                id: shape.id,
+                type: 'node-card',
+                meta: {
+                  ...(shape.meta ?? {}),
+                  stateMachine: null,
+                  stateMachinePending: null
+                }
+              })
+              markUndoPoint(editor, 'state-machine-reset')
+            }}
+          >
+            重置任务
+          </NodePrimaryButton>
+        )}
         <NodePrimaryButton
           onClick={() => useNodePanelStore.getState().open('contract', shape.id, 'settings')}
         >
@@ -159,6 +199,7 @@ function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
         </NodePrimaryButton>
       </div>
     )
+  }
   return (
     <div className="agent-flow-body">
       <div className="agent-flow-summary">
@@ -462,12 +503,14 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
               <fieldset className="agent-flow-targets">
                 <legend>选择 Skills</legend>
                 {catalog.skills.map((skill) => (
-                  <label className="agent-flow-target-option" key={skill.id}>
+                  <label className="agent-flow-target-option" key={`${skill.id}@${skill.version}`}>
                     <input
                       type="checkbox"
                       aria-label={`Skill：${skill.name}`}
                       checked={(draft.skills as Array<{ id: string }>).some(
-                        (item) => item.id === skill.id
+                        (item) =>
+                          item.id === skill.id &&
+                          (item as { version?: string }).version === skill.version
                       )}
                       onChange={(event) =>
                         update(
@@ -597,17 +640,20 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
           )}
           {draft.reviewMode === 'image' && (
             <p className="contract-settings-hint">
-              只接一路固定 PNG、JPEG 或 WebP（最多 20 MiB），把完整图像字节提交给审核模型。所选文本模型必须声明图片输入，且图片识别探测与结构化工具验证均通过。
+              只接一路固定 PNG、JPEG 或 WebP（最多 20
+              MiB），把完整图像字节提交给审核模型。所选文本模型必须声明图片输入，且图片识别探测与结构化工具验证均通过。
             </p>
           )}
           {draft.reviewMode === 'audio' && (
             <p className="contract-settings-hint">
-              只接一路固定音频（最多 20 MiB、60 秒），宿主完整解码为 16 kHz 单声道 WAV 后发送。所选文本模型必须声明音频输入，并通过测试音调探测和结构化工具验证。
+              只接一路固定音频（最多 20 MiB、60 秒），宿主完整解码为 16 kHz 单声道 WAV
+              后发送。所选文本模型必须声明音频输入，并通过测试音调探测和结构化工具验证。
             </p>
           )}
           {draft.reviewMode === 'audio-video' && (
             <p className="contract-settings-hint">
-              只接一路含一个视频流和一个音频流的固定 MP4（0.1–60 秒、最多 20 MiB）。审核完整音轨和全帧时间戳摘要，画面仅提交四张时间锚点，不代表逐帧视觉判断；所选模型须验证图片与音频输入。
+              只接一路含一个视频流和一个音频流的固定 MP4（0.1–60 秒、最多 20
+              MiB）。审核完整音轨和全帧时间戳摘要，画面仅提交四张时间锚点，不代表逐帧视觉判断；所选模型须验证图片与音频输入。
             </p>
           )}
           {catalog && (
@@ -620,11 +666,7 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
               >
                 <option value="">选择审核模型</option>
                 {catalog.models.map((model) => (
-                  <option
-                    key={model.id}
-                    value={model.id}
-                    disabled={!supportsReviewModel(model)}
-                  >
+                  <option key={model.id} value={model.id} disabled={!supportsReviewModel(model)}>
                     {model.name}
                     {(draft.reviewMode === 'image' ||
                       draft.reviewMode === 'sampled-video' ||
@@ -838,9 +880,8 @@ export function registerAgentFlowNodeTypes(): void {
       description: review
         ? '审核固定版本的资产，给出是/否和反馈。返工通过显式控制关系调度。'
         : state
-          ? '声明任务阶段和合法转换，展示任务状态。'
+          ? '声明任务阶段与合法转换；人工提交事件、运行节点推进状态。'
           : '按职责和协作方式处理任务，可绑定版本化 Skills 与工具。',
-      ...(state ? { executionDisabledReason: AGENT_FLOW_EXECUTION_PENDING } : {}),
       ports: {
         in: state
           ? [port('in-json', 'json', 'in', 'json.any')]
@@ -859,9 +900,21 @@ export function registerAgentFlowNodeTypes(): void {
               )
       },
       executor:
-        type === 'agent' ? agentExecutor : review ? reviewExecutor : agentFlowPendingExecutor,
+        type === 'agent'
+          ? agentExecutor
+          : review
+            ? reviewExecutor
+            : state
+              ? stateMachineExecutor
+              : agentFlowPendingExecutor,
       projectOutputs:
-        type === 'agent' ? projectAgentOutputs : review ? projectReviewOutputs : () => ({}),
+        type === 'agent'
+          ? projectAgentOutputs
+          : review
+            ? projectReviewOutputs
+            : state
+              ? projectStateMachineOutputs
+              : () => ({}),
       Body: AgentFlowBody,
       SettingsPanel: AgentFlowSettings
     })

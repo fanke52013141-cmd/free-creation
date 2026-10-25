@@ -1352,7 +1352,7 @@ function parseInput(taskId: string): VideoInputState {
   }
 }
 
-export async function cancelVideoTask(taskId: string): Promise<boolean> {
+export async function cancelVideoTask(taskId: string, traceId?: string): Promise<boolean> {
   // Stop local execution first. Only provider facts can confirm remote cancellation.
   const row = getDb()
     .prepare("SELECT status FROM tasks WHERE id = ? AND kind = 'video'")
@@ -1365,7 +1365,7 @@ export async function cancelVideoTask(taskId: string): Promise<boolean> {
   if (run) run.stopped = true
   markUnknown(taskId)
   updateTask(taskId, { input: JSON.stringify({ ...parseInput(taskId), cancelRequested: true }) })
-  await controlVideoTask(taskId, true)
+  await controlVideoTask(taskId, true, traceId)
   clearCancelled(taskId)
   return true
 }
@@ -1377,13 +1377,17 @@ export function getVideoTask(taskId: string): VideoTaskInfo | null {
 }
 
 /** Serializes query/cancel/download so concurrent IPC calls cannot duplicate recovery. */
-export function controlVideoTask(taskId: string, cancel = false): Promise<VideoTaskInfo | null> {
+export function controlVideoTask(
+  taskId: string,
+  cancel = false,
+  traceId?: string
+): Promise<VideoTaskInfo | null> {
   const current = controls.get(taskId)
   if (current)
     return cancel
       ? current.then(() => {
           if (controls.get(taskId) === current) controls.delete(taskId)
-          return controlVideoTask(taskId, true)
+          return controlVideoTask(taskId, true, traceId)
         })
       : current
   const work = (async () => {
@@ -1391,7 +1395,11 @@ export function controlVideoTask(taskId: string, cancel = false): Promise<VideoT
       .prepare("SELECT * FROM tasks WHERE id = ? AND kind = 'video'")
       .get(taskId) as TaskRow | undefined
     if (!row || ['success', 'failed', 'cancelled'].includes(row.status)) return getVideoTask(taskId)
-    const diag = { traceId: newTraceId(), spanId: newSpanId(), taskId, correlationMissing: true }
+    // P1-B：运行中查询/取消由渲染器传入真实运行根 trace；启动恢复等确实没有
+    // 用户操作 trace 的路径保持显式 correlationMissing，不补造关联。
+    const diag = traceId
+      ? { traceId, spanId: newSpanId(), taskId }
+      : { traceId: newTraceId(), spanId: newSpanId(), taskId, correlationMissing: true }
     emitGatewayEvent('task.control.started', '远端视频事实核对开始', diag, {
       attributes: { operation: cancel ? 'video.cancel' : 'video.reconcile' }
     })

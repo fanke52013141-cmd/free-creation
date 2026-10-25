@@ -147,4 +147,44 @@ describe.skipIf(!toolsReady)('MiniMax 复刻的参考音频时长门禁', () => 
   it('参考音频记录缺失时报的是「不存在或已删除」，不是探测超时的误导提示', async () => {
     await expect(runClone('m-missing')).rejects.toThrow(/参考音频不存在或已删除/)
   })
+
+  it('P1-B：执行器传入 traceId 时阶段事件带真实祖先关联；旧输入显式标记 correlationMissing', async () => {
+    const { setGatewayEventSink } = await import('../src/main/diagnostics/gateway-events')
+    const events: Array<Record<string, unknown>> = []
+    setGatewayEventSink({ emit: (event: Record<string, unknown>) => events.push(event) })
+    try {
+      const module = await import('../src/main/media/tts-transform')
+      const run = (runId: string, traceId?: string) =>
+        module.transformTts({
+          projectId: 'p1',
+          runId,
+          nodeId: 'shape:tts',
+          ...(traceId ? { traceId } : {}),
+          referenceAudioId: 'm-long',
+          config: { ...DEFAULT_TTS_CONFIG, backend: 'minimax', providerId: 'p-minimax' }
+        })
+      await run('run-tts-trace', 'trace-tts-trace')
+      const correlated = events.filter(
+        (event) => event.event === 'node.stage' && event.runId === 'run-tts-trace'
+      )
+      expect(correlated.length).toBeGreaterThan(0)
+      for (const stage of correlated) {
+        expect(stage.traceId).toBe('trace-tts-trace')
+        expect(stage.correlationMissing).toBeUndefined()
+      }
+
+      events.length = 0
+      await run('run-tts-legacy')
+      const legacy = events.filter(
+        (event) => event.event === 'node.stage' && event.runId === 'run-tts-legacy'
+      )
+      expect(legacy.length).toBeGreaterThan(0)
+      for (const stage of legacy) {
+        expect(stage.traceId).toBeUndefined()
+        expect(stage.correlationMissing).toBe(true)
+      }
+    } finally {
+      setGatewayEventSink(null)
+    }
+  })
 })

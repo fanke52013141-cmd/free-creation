@@ -9,6 +9,8 @@ import react from '@vitejs/plugin-react'
  */
 export default defineConfig({
   root: resolve(__dirname, 'src/renderer'),
+  // Keep optimized browser modules inside this checkout when dependencies are shared.
+  cacheDir: resolve(__dirname, 'qa/vite-browser-cache'),
   plugins: [
     react(),
     {

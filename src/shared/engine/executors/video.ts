@@ -124,10 +124,15 @@ export const videoExecutor = async (ctx: NodeExecutionContext): Promise<NodeExec
     if (ctx.signal.cancelled) {
       // 提交已成功而取消先到：远端任务必须补偿取消，否则主进程轮询独立继续，
       // 任务会完成入库并计费，而节点已被标为 skipped（R-01）。
-      void ctx.gateway.videoCancel(submitted.data.taskId)
+      void ctx.gateway.videoCancel(submitted.data.taskId, ctx.diagnostics?.traceId)
       return { status: 'skipped', reason: '已取消' }
     }
-    const result = await waitForVideo(ctx.gateway, submitted.data.taskId, ctx.signal)
+    const result = await waitForVideo(
+      ctx.gateway,
+      submitted.data.taskId,
+      ctx.signal,
+      ctx.diagnostics?.traceId
+    )
     if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
     ctx.updateResult(
       serializeMediaResultCollection(

@@ -38,6 +38,7 @@ export default defineConfig({
           'agent-flow-assets': resolve('src/main/agent-flow/assets-electron.ts'),
           'agent-flow-commands': resolve('src/main/agent-flow/commands-electron.ts'),
           'agent-flow-desktop': resolve('src/main/agent-flow/desktop-electron.ts'),
+          'media-local': resolve('src/main/media/local-media-electron.ts'),
           'save-recovery': resolve('src/main/store/save-recovery-electron.ts')
         }
       }

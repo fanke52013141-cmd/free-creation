@@ -1,4 +1,4 @@
-import { ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron'
+import { app, ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron'
 import type { z } from 'zod'
 import { IPC, type IpcEnvelope } from '../../shared/contracts'
 import {
@@ -95,8 +95,19 @@ export function registerFlowCommandsIpc(
     )
     timer.unref()
   }
-  window()?.webContents.on('render-process-gone', () =>
+  // Renderer loss must stay observable across window rebuilds (macOS activate
+  // recreates the window after all windows closed): bind to the current window
+  // and to every window created later. At crash time only the window that is
+  // still the registered target marks pending commands unknown — a replaced
+  // window dying late must not disturb the live session.
+  const onRendererLost = (source: BrowserWindow): void => {
+    if (window() !== source) return
     recover('renderer-lost', () => ledger.loseRenderer())
+  }
+  const initial = window()
+  initial?.webContents.on('render-process-gone', () => onRendererLost(initial))
+  app.on('browser-window-created', (_event, created) =>
+    created.webContents.on('render-process-gone', () => onRendererLost(created))
   )
   recover('startup', () => ledger.recoverAbandoned())
   function handle<T extends { projectId: string; commandId?: string; nodeId?: string }, R>(

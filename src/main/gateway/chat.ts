@@ -60,7 +60,11 @@ export function startChat(send: Send, input: ChatStartInput): string {
                   }
                 )
               },
-              stopWhen: stepCountIs(3),
+              stopWhen: stepCountIs(
+                Number.isInteger(input.toolStepLimit)
+                  ? Math.min(12, Math.max(1, input.toolStepLimit!))
+                  : 3
+              ),
               maxRetries: 0
             }
           : {}),

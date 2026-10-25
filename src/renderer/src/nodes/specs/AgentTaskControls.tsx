@@ -109,12 +109,16 @@ export function AgentTaskControls({ shape }: Pick<NodeBodyProps, 'shape'>): Reac
       }
       await ensureCanvasSaved()
       // Resume selection is a control fact from main, not a canvas config rewrite.
+      // Re-read meta at write time: the awaits above let the publication channel
+      // materialize agentAssetVersionId/agentTaskId on this node, and merging a
+      // stale render snapshot would roll those facts back.
       if (actionableTask) {
+        const current = editor.getShape<NodeBodyProps['shape']>(shape.id)
         editor.updateShape({
           id: shape.id,
           type: 'node-card',
           meta: {
-            ...shape.meta,
+            ...(current?.meta ?? shape.meta),
             agentTask: JSON.stringify({
               ...actionableTask,
               recoveryAction: restore ? 'restore' : undefined

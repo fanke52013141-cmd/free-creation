@@ -1,3 +1,6 @@
+import { stableInputJson } from '@shared/engine/input-fingerprint'
+import { isDocumentRecordKey } from './external-reload'
+
 // T05（F02）：快照恢复前的媒体完整性预检。纯函数，供 CanvasSidePanel 的
 // 恢复流程与单元测试共用；不做任何 IO。
 /** 从 tldraw store 快照中提取全部节点卡片引用的媒体 ID（按出现顺序去重）。 */
@@ -100,23 +103,22 @@ export function snapshotNodeCount(snapshot: unknown): number {
     : 0
 }
 
-/** Node identities must survive migration/loading, including a deliberately empty canvas. */
+/** Verify persisted content and topology after migration/loading, excluding session state. */
 export function verifyRestoredSnapshot(expected: unknown, actual: unknown): void {
-  const ids = (snapshot: unknown): string[] => {
+  const document = (snapshot: unknown): Record<string, unknown> => {
     const store = (snapshot as { store?: Record<string, unknown> } | null)?.store
-    if (!store) throw new Error('快照缺少画布数据')
-    return Object.entries(store)
-      .filter(
-        ([, record]) =>
-          record &&
-          typeof record === 'object' &&
-          (record as { type?: unknown }).type === 'node-card'
+    if (!store || typeof store !== 'object' || Array.isArray(store))
+      throw new Error('快照缺少画布数据')
+    return Object.fromEntries(
+      Object.entries(store).filter(
+        ([key, record]) =>
+          isDocumentRecordKey(key) ||
+          (record && typeof record === 'object' && (record as { type?: unknown }).type === 'node-card')
       )
-      .map(([id]) => id)
-      .sort()
+    )
   }
-  if (JSON.stringify(ids(expected)) !== JSON.stringify(ids(actual))) {
-    throw new Error('恢复后的节点与版本内容不一致')
+  if (stableInputJson(document(expected)) !== stableInputJson(document(actual))) {
+    throw new Error('恢复后的节点内容、连线或素材与版本不一致')
   }
 }
 

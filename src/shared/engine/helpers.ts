@@ -251,7 +251,8 @@ export interface VideoMedia {
 export function waitForVideo(
   gateway: GatewayClient,
   taskId: string,
-  signal: CancelSignal
+  signal: CancelSignal,
+  traceId?: string
 ): Promise<VideoMedia> {
   return new Promise((resolve, reject) => {
     let stopped = false
@@ -264,7 +265,7 @@ export function waitForVideo(
     }
     const cancelRemote = (): void => {
       void Promise.resolve()
-        .then(() => gateway.videoCancel(taskId))
+        .then(() => gateway.videoCancel(taskId, traceId))
         .catch(() => undefined)
     }
     const fail = (error: Error, cancel = true): void => {
@@ -280,7 +281,7 @@ export function waitForVideo(
       polling = true
       void (async () => {
         try {
-          const result = await gateway.videoTask(taskId)
+          const result = await gateway.videoTask(taskId, traceId)
           if (stopped) return
           if (signal.cancelled) return fail(new Error('已取消'))
           if (!result.ok || !result.data) {

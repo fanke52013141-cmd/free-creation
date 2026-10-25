@@ -21,6 +21,23 @@ export class FlowSkillStore {
     this.operation('enablement', () => this.changeEnabled(id, version, enabled))
   }
 
+  list(): FixedSkill[] {
+    return this.operation('list', () => {
+      const rows = this.db
+        .prepare(
+          'SELECT skill_id, version, body_json FROM flow_skill_versions WHERE enabled=1 ORDER BY skill_id, version'
+        )
+        .all() as Array<{ skill_id: string; version: string; body_json: string }>
+      return rows.map((row) => {
+        const skill = SkillPackageSchema.parse(JSON.parse(row.body_json))
+        return this.bindVersions(
+          [{ id: row.skill_id, version: row.version }],
+          skill.requiredTools
+        )[0]
+      })
+    })
+  }
+
   bind(
     bindings: Array<{ id: string; version: string }>,
     tools: Array<{ id: string; version: string }>

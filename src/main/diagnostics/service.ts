@@ -277,15 +277,68 @@ export async function initDiagnosticsService(
         )
       }
       if (failures.length === 0) summaryLines.push('（范围内没有失败事件）')
-      const started = read.events.filter((event) => event.event === 'workflow.started')
-      const finished = read.events.filter((event) =>
-        ['workflow.completed', 'workflow.failed', 'workflow.cancelled'].includes(event.event)
+      // 未完成按 trace/span 身份配对：总数量会互相抵消（一次范围截断、重跑或
+      // 跨范围导出都能让“开始数 == 终态数”掩盖一个真正没有终态的流程）。
+      // 只有同一个 traceId/spanId 既看到开始、又看到唯一终态才算闭合。
+      const pairKey = (event: { traceId?: string; spanId?: string }): string =>
+        `${event.traceId ?? '-'}/${event.spanId ?? '-'}`
+      const startedSpans = new Map<string, DiagnosticsEvent>()
+      for (const event of read.events) {
+        if (event.event === 'workflow.started') startedSpans.set(pairKey(event), event)
+      }
+      const workflowTerminals = new Map<string, number>()
+      for (const event of read.events) {
+        if (['workflow.completed', 'workflow.failed', 'workflow.cancelled'].includes(event.event)) {
+          workflowTerminals.set(pairKey(event), (workflowTerminals.get(pairKey(event)) ?? 0) + 1)
+        }
+      }
+      const unfinishedWorkflows = [...startedSpans.entries()].filter(
+        ([key]) => !workflowTerminals.has(key)
       )
-      if (started.length > finished.length) {
+      // 终态没有对应开始：通常是范围截断丢掉了开始事件，单独标注，不算“未完成流程”。
+      const terminalsWithoutStart = [...workflowTerminals.keys()].filter(
+        (key) => !startedSpans.has(key)
+      )
+      const nodeStartedSpans = new Map<string, DiagnosticsEvent>()
+      for (const event of read.events) {
+        if (event.event === 'node.started') nodeStartedSpans.set(pairKey(event), event)
+      }
+      const nodeTerminalCounts = new Map<string, number>()
+      for (const event of read.events) {
+        if (
+          ['node.completed', 'node.failed', 'node.cancelled', 'node.skipped'].includes(event.event)
+        ) {
+          nodeTerminalCounts.set(pairKey(event), (nodeTerminalCounts.get(pairKey(event)) ?? 0) + 1)
+        }
+      }
+      const unfinishedNodes = [...nodeStartedSpans.entries()].filter(
+        ([key]) => !nodeTerminalCounts.has(key)
+      )
+      if (
+        unfinishedWorkflows.length > 0 ||
+        terminalsWithoutStart.length > 0 ||
+        unfinishedNodes.length > 0
+      ) {
         summaryLines.push('')
         summaryLines.push(
-          `## 未完成：${started.length - finished.length} 个已开始的流程没有观察到终态（可能中断/仍在运行）`
+          `## 未完成（按 trace/span 配对${read.truncated ? '；事件范围已截断，可能由截断造成' : ''}）`
         )
+        for (const [key, event] of unfinishedWorkflows) {
+          summaryLines.push(
+            `- 流程 ${key} 开始于 ${event.timestamp}：${event.message}（没有观察到终态：可能中断/仍在运行）`
+          )
+        }
+        for (const key of terminalsWithoutStart) {
+          summaryLines.push(`- 终态 ${key} 没有对应的开始事件（可能被范围截断）`)
+        }
+        for (const [key, event] of unfinishedNodes) {
+          summaryLines.push(
+            `- 节点执行 ${key} node=${event.nodeId ?? '-'} run=${event.runId ?? '-'} 开始于 ${event.timestamp}（没有观察到终态）`
+          )
+        }
+        if (unfinishedWorkflows.length === 0 && unfinishedNodes.length === 0) {
+          summaryLines.push('- 没有未完成的流程或节点执行；仅有孤立终态（见上）')
+        }
       }
 
       const healthSnapshot = health.snapshot({

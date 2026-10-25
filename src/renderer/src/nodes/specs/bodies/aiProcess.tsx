@@ -13,6 +13,7 @@ import type { NodeBodyProps, NodeSettingsProps } from '../../registry'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { AppSelect } from '../../../components/AppSelect'
 import { projectNodeOutputs } from '../../nodeValues'
+import { SkillAgentSettings } from './SkillAgentSettings'
 
 const AI_SCHEMA_OPTIONS = [
   { id: 'json.any', version: 1, label: '通用 JSON（json.any@1）' },
@@ -136,11 +137,17 @@ export function AiProcessSettings({ shape, editor }: NodeSettingsProps): React.J
   }
 
   if (options.length === 0) {
-    return <NoModelHint onOpen={() => openSettings()} presetIds={['relay']} />
+    return (
+      <section className="node-settings ai-process-settings">
+        <SkillAgentSettings value={config.agent} onChange={(agent) => save({ agent })} />
+        <NoModelHint onOpen={() => openSettings()} presetIds={['relay']} />
+      </section>
+    )
   }
 
   return (
     <section className="node-settings ai-process-settings">
+      <SkillAgentSettings value={config.agent} onChange={(agent) => save({ agent })} />
       <div className="settings-row">
         <span className="opt-label">模型</span>
         <ModelSelect

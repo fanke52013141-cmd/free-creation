@@ -22,6 +22,7 @@ import {
 } from '../nodes/chatData'
 import { modelsByModality, useGatewayStore } from '../stores/gateway'
 import { useAppStore } from '../stores/app'
+import { ChatSkillAgentSettings } from '../nodes/specs/bodies/SkillAgentSettings'
 import { gatherUpstreamText } from './graph'
 import { runNodeManually } from '../engine/executor'
 import { toast } from '../stores/toast'
@@ -498,6 +499,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
           </button>
         )}
       </label>
+      {shape && <ChatSkillAgentSettings shape={shape} editor={editor} disabled={running} />}
       <fieldset className="chat-dialog-image-settings" disabled={running}>
         <legend>生图技能</legend>
         <label className="chat-dialog-toggle">

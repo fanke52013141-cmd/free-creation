@@ -447,6 +447,7 @@ describe('视频处理执行器', () => {
     expect(api.separateVocals).toHaveBeenCalledWith({
       projectId: 'project-a',
       sourceMediaId: 'intermediate-audio',
+      nodeId: item.ctx.node.id,
       config: { version: 1, mode: 'quality', outputAccompaniment: false }
     })
     expect(api.deleteMedia).toHaveBeenCalledWith('intermediate-audio')

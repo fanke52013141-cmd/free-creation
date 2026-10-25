@@ -1,5 +1,29 @@
 # 日志覆盖清单
 
+## 2026-10-25：P1 残余收口、Agent 本地目标扩展与技能目录包
+
+提音/快速人声增强纳入真实 Electron 桌面验收（提音停止命中 `node.cancelled` 唯一终态；高质量分离在本机无 audio-separator 时验证稳定前置失败，不产生半成品）。视频任务轮询/取消的 `task.control.*` 事件改为运行中携带渲染器传入的真实运行根 trace（`videoTask/videoCancel` 可选 traceId），无 trace 的调用与启动恢复路径保持显式 `correlationMissing` 不补造；回归断言两种分支。裁剪/拆图/代码（单参数单输出）加入内部 Agent 可调度目标矩阵：准入沿用 command/lease/未知核对与唯一终态，输入校验拒绝非固定图片与类型不匹配，`portIdentity` 契约锁定含新增三类。技能目录包受控解析（路径穿越/绝对路径/嵌套/非 .md 拒绝、128 KiB 预算、内容寻址版本）不新增日志事件，沿用 skill.library 生命周期。定向：视频诊断 4、目标矩阵 5、命令账本 76、技能 15；全量 2575 通过/5 既有跳过。启动恢复的 correlationMissing 为登记的既有盲区（真实历史不可补造）。
+
+本地媒体变换（裁剪/拆图/取帧/截取/提音/声音调整/人声分离）接入按 `projectId/nodeId` 的取消作用域：停止时终止 ffmpeg/audio-separator 子进程并在宫格拆分格子间回滚，新增 `media.transform.cancelled`（固定字段 projectId/nodeId/cancelled，无路径/正文）；节点取消仍由公共 `node.cancelled` 唯一终态承载，媒体执行器不重复记终态。诊断包 summary 未完成清单改为按 trace/span 身份配对（开始无唯一终态才列未完成，孤立终态单独标注，节点执行带 nodeId/runId），回归覆盖“总量互相抵消仍能定位未闭合流程”。correlationMissing 祖先关联只补真实可得的：生成来源保存携带运行根 traceId（ArtifactRecipe 可选字段）、MiniMax 语音克隆阶段事件透传 `TtsGenerateInput.traceId`；旧输入/读取失败仍显式标记缺失，不补造。状态机独立执行复用公共节点生命周期（node.started/input_validated/迁移 trace/输出校验/唯一终态），实例与历史只进项目 meta，不进诊断。定向：媒体取消 13、诊断存储 26（含新配对）、tts/gateway 关联 38、状态机 18 及 agent-flow 系列 88；真实 Electron 两阶段桌面验收（一致性/停止/回滚/重开/脱敏断言）通过；全量 2569 通过/5 既有跳过。见[交付台账](LOCAL_MEDIA_STOP_STATE_MACHINE_2026_10_24.md)。边界：本机终止不等于远端供应商任务取消；单格同步渲染不可中断（迟到资产由渲染器清理兜底）；物理掉电与高质量分离真机验收未做。
+
+## 2026-10-24：本地L2–L4固定结果、恢复校验与诊断时间线
+
+统一复用projectNodeOutputs决定document/run/pinned输出，复用node/workflow生命周期；历史恢复核对已迁移文档内容和连线，失败复用project.restore失败/回滚阶段；诊断时间线提示截断/坏行并保留有效事件，不新增日志正文或旁路。6文件90项定向与实际renderer链路通过，最终完整run-KjZcLF退出0（2541单元/5既有跳过、模型2项、浏览器/构建/全部桌面/R09），原目录90项定向和构建再过；[交付台账](LOCAL_L2_L4_DELIVERY_2026_10_24.md)保留首次失败与隔离复跑边界。不宣称物理掉电、供应商撤回或全类型全模式完成。
+
+## 2026-10-24：AI 对话 / AI 处理的内容 Skill Agent
+
+最终复验：完整 `qa/verification/run-WBxuqL/status.json` 退出 0，2529 单元通过/5 既有跳过、模型另 2、全部浏览器/构建/桌面专项通过。最终打包 exe 的上传→两类节点自动保存→新进程重开→真实 JSONL 校验通过，15 对 Skill 生命周期、私有正文/假密钥不入诊断，证据 `qa/skill-agent/packaged/`。本次未调用收费模型，不宣称真实供应商成功率或脚本技能支持。
+
+共用版本化 Skill 库，安装/列表复用 `skill.library.started/completed/failed`；不重复记录业务终态。IPC 拒绝外部窗口与子框架。内容循环复用公共节点生命周期和每次模型请求的独立诊断上下文，trace 仅含技能数量、步数及固定阶段，不记录正文、资源、回复或原始异常。原对话生图继续走现有落盘/取消链路。17 项新增定向测试及相关49项通过，覆盖 immutable版本、依赖拒绝、资源自有键、自动修正、取消、生图兼容、日志脱敏/配对和 logger 故障。浏览器配置路径已通过；完整验证与真实环境边界见[交付记录](SKILL_AGENT_DELIVERY_2026_10_24.md)。不把 mocked 模型与 IPC 测试称为真实供应商/跨进程全链路验收。
+
+## 2026-10-24：本地停止准入与取消反馈
+
+公共运行器在占用检查、metadata与命令准入之后核对停止信号，节点测试在取得资源后核对停止；取消与迟到异常统一复用既有node/workflow取消终态，未开始节点时不补造节点生命周期。3文件28项定向与真实浏览器画布停止→编辑→再运行通过；诊断唯一终态和敏感样例排除有断言。完整run-lr4ynK退出1（参考视频重开超时），隔离复跑该场景通过；不将单项复跑当作整轮通过。后续共享run-yJHLvv中本包画布路径再次通过，整轮在另一聊天新增的Skill界面按钮定位超时后退出1（单元2529通过/5既有跳过）；本包不宣称整组全绿。不声称远端撤回或物理掉电验收，详见[本地功能台账](LOCAL_FUNCTION_DEVELOPMENT_2026_10_24.md)。
+
+## 2026-10-24：外部接入A1.4首包查询
+
+模型目录、资源库摘要检索、内部Agent任务基础状态和诊断健康复用main接入公共开始/唯一终态事件；不新增旁路logger，不记录目录/搜索词/正文/模型配置/incident明细。单测33项通过，包含新增查询分页、状态真实性、跨项目隔离、字段白名单和日志拒写；真实CLI/MCP与实际JSONL生命周期/脱敏闭环通过；完整`qa/verification/run-dRDuuy/`退出0（2504单元通过/5既有跳过、模型2项及全部既有桌面专项）。详见[查询台账](local-agent-access/08-a1-4-read-only-queries.md)。边界：无诊断包导出或通用节点/媒体任务控制，不宣称全链路覆盖。
+
 ## 2026-10-24 A1.2 复制与预检确认删除
 
 project.clone/delete.precheck/delete 复用 main 公共接入的 agent.access.started 与唯一终态；删除新增失败阶段 delete-admission（确认缺失 IMPACT_CONFIRM_REQUIRED、令牌伪造/过期/事实漂移 IMPACT_TOKEN_INVALID），克隆占用/版本冲突沿用既有阶段。预检只读，无副作用终态之外的新事件；令牌 HMAC 绑定实例/目标/权威修订/影响摘要，密钥与令牌均不入诊断，事件仍只含 operation/phase/code 与安全关联 ID，不记录名称、路径或影响明细。定向 28/28 与源码真实桌面闭环（含克隆正文/名称脱敏的 JSONL 配对检查）通过；最终完整验证`qa/verification/run-ZfT4VL/`退出0（单元2499/5既有跳过），安装版打包闭环见`qa/local-agent-access/a12-package-manifest.json`，过程以[A1.2台账](local-agent-access/07-a1-2-clone-delete.md)为准。未覆盖：删除后 media/library_usages 孤儿行的级联清理（维持桌面硬删除共享现状）、HTTP、第三方 MCP 客户端。

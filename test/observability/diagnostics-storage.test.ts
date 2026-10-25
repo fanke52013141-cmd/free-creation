@@ -749,4 +749,55 @@ describe('L05 诊断包导出', () => {
     expect(exportedText).not.toContain('apiKey')
     expect(exportedText).not.toContain('"prompt"')
   })
+
+  it('P1-B：summary 未完成按 trace/span 身份配对，开始/终态总数抵消不再掩盖未闭合流程', async () => {
+    const store = memoryFsStore()
+    const service = await initDiagnosticsService({
+      dataDir: '/data',
+      store,
+      clock: manualClock(new Date('2026-10-24T12:00:00Z').getTime()),
+      disableTimers: true
+    })
+    const { DiagnosticsProducer } = await import('@shared/observability')
+    const producer = new DiagnosticsProducer({ process: 'renderer', producerId: 'r-pairing' })
+    const events = [
+      // W1：完整闭合。
+      producer.build('workflow.started', 'info', '流程开始', { traceId: 't1', spanId: 's1' }, {}),
+      producer.build('workflow.completed', 'info', '流程完成', { traceId: 't1', spanId: 's1' }, {
+        status: 'success'
+      }),
+      // W2：只有开始，没有终态（真正未完成）。
+      producer.build('workflow.started', 'info', '被停止前中断的流程', { traceId: 't2', spanId: 's2' }, {}),
+      // W3：只有终态（模拟范围截断丢掉开始事件）。
+      producer.build('workflow.failed', 'error', '历史流程失败', { traceId: 't3', spanId: 's3' }, {
+        status: 'failed'
+      }),
+      // 节点：开始但没有终态，带节点/run 关联。
+      producer.build(
+        'node.started',
+        'info',
+        '开始收集并校验输入端口',
+        { traceId: 't2', spanId: 'n1', nodeId: 'shape:pairing', runId: 'run-pairing' },
+        { name: 'node.started' }
+      )
+    ]
+    await service.ingest(events.filter((event) => event !== null))
+    await service.flushNow()
+
+    await service.exportBundle(
+      { scope: { since: 0, until: Date.now() + 1000 }, label: '配对验收' },
+      '/data/export/pairing.zip'
+    )
+    const AdmZip = (await import('adm-zip')).default
+    const zip = new AdmZip(Buffer.from(store.files.get('/data/export/pairing.zip')!, 'latin1'))
+    const summary = zip.readAsText('summary.txt')
+    // 旧的总量估算：started=2, terminal=2 → 相互抵消后什么都不报。
+    // 新的配对逻辑：W2 明确列为未完成，W3 标注孤立终态，节点执行带 nodeId/runId。
+    expect(summary).toContain('未完成（按 trace/span 配对')
+    expect(summary).toContain('t2/s2')
+    expect(summary).toContain('node=shape:pairing run=run-pairing')
+    expect(summary).toContain('t3/s3 没有对应的开始事件')
+    // 已闭合的 W1 不进未完成清单。
+    expect(summary).not.toContain('t1/s1 没有观察到终态')
+  })
 })

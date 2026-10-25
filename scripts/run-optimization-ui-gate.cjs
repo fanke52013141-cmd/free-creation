@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type */
 const { spawn } = require('node:child_process')
 const path = require('node:path')
-const url = 'http://127.0.0.1:5194'
+const port = process.env.CANVAS_QA_GATE_PORT || '5194'
+const url = `http://127.0.0.1:${port}`
 ;(async () => {
   const server = spawn(
     process.execPath,
@@ -12,7 +13,7 @@ const url = 'http://127.0.0.1:5194'
       '--host',
       '127.0.0.1',
       '--port',
-      '5194',
+      port,
       '--strictPort'
     ],
     { stdio: 'ignore', windowsHide: true }
@@ -29,7 +30,7 @@ const url = 'http://127.0.0.1:5194'
       if (Date.now() > deadline) throw new Error('浏览器验收服务启动超时')
       await new Promise((resolve) => setTimeout(resolve, 250))
     }
-    for (const script of ['verify-remaining-optimization.cjs', 'test-browser-node-standard.cjs', 'test-browser-node-colors.cjs', 'test-browser-node-flexible.cjs', 'test-browser-node-selection.cjs', 'test-browser-node-references.cjs', 'test-browser-hidden-scrollbars.cjs', 'test-browser-menu-order.cjs', 'test-browser-storyboard-table.cjs', 'test-browser-node-resize.cjs', 'test-browser-canvas-proportions.cjs', 'test-browser-clay-settings.cjs', 'test-browser-chat-images.cjs', 'test-browser-node-pointer.cjs', 'test-browser-agent-flow-tab.cjs', 'test-browser-agent-flow-c1.cjs', 'test-browser-agent-flow-declarations.cjs', 'test-browser-agent-flow-relation-anchors.cjs', 'test-browser-agent-flow-assets.cjs']) {
+    for (const script of ['verify-remaining-optimization.cjs', 'test-browser-node-standard.cjs', 'test-browser-node-colors.cjs', 'test-browser-node-flexible.cjs', 'test-browser-node-selection.cjs', 'test-browser-node-references.cjs', 'test-browser-hidden-scrollbars.cjs', 'test-browser-menu-order.cjs', 'test-browser-storyboard-table.cjs', 'test-browser-node-resize.cjs', 'test-browser-canvas-proportions.cjs', 'test-browser-clay-settings.cjs', 'test-browser-chat-images.cjs', 'test-browser-node-pointer.cjs', 'test-browser-agent-flow-tab.cjs', 'test-browser-agent-flow-c1.cjs', 'test-browser-agent-flow-declarations.cjs', 'test-browser-agent-flow-relation-anchors.cjs', 'test-browser-agent-flow-assets.cjs', 'test-browser-local-stop.cjs', 'test-browser-local-consistency.cjs', 'test-browser-skill-agent.cjs']) {
     const code = await new Promise((resolve, reject) => {
       const test = spawn(
         process.execPath,

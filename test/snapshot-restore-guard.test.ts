@@ -259,6 +259,61 @@ describe('安全恢复事务', () => {
 })
 
 describe('恢复后验证', () => {
+  it.each(['text', 'config', 'media', 'binding', 'arrow'] as const)(
+    '拒绝节点ID相同但%s丢失或变更的恢复结果',
+    (field) => {
+      const expected: { store: Record<string, any> } = makeSnapshot(['a'])
+      expected.store['shape:node-0'].props.text = 'saved text'
+      expected.store['shape:node-0'].props.config = '{"operation":"pick","path":"saved"}'
+      expected.store['shape:edge'] = {
+        id: 'shape:edge',
+        type: 'arrow',
+        meta: { fromPort: 'out-image', toPort: 'in-image' }
+      }
+      expected.store['binding:edge'] = {
+        id: 'binding:edge',
+        typeName: 'binding',
+        type: 'arrow',
+        fromId: 'shape:edge',
+        toId: 'shape:node-0'
+      }
+      const actual = JSON.parse(JSON.stringify(expected))
+      if (field === 'text') actual.store['shape:node-0'].props.text = 'wrong text'
+      if (field === 'config') actual.store['shape:node-0'].props.config = '{}'
+      if (field === 'media') actual.store['shape:node-0'].props.mediaId = 'wrong-media'
+      if (field === 'binding') delete actual.store['binding:edge']
+      if (field === 'arrow') actual.store['shape:edge'].meta.toPort = 'wrong-port'
+      expect(() => verifyRestoredSnapshot(expected, actual)).toThrow('不一致')
+    }
+  )
+
+  it('忽略会话状态和对象键顺序，保留文档内容验证', () => {
+    const expected = makeSnapshot(['a'])
+    const actual = JSON.parse(JSON.stringify(expected))
+    actual.store['instance:session'] = { typeName: 'instance', selectedShapeIds: ['shape:node-0'] }
+    actual.store['shape:node-0'].props = Object.fromEntries(
+      Object.entries(actual.store['shape:node-0'].props).reverse()
+    )
+    expect(() => verifyRestoredSnapshot(expected, actual)).not.toThrow()
+  })
+
+  it('同ID正文恢复错误时触发真实验证并回滚到检查点', async () => {
+    const { steps, events } = restoreFixture()
+    let loaded: unknown = steps.current
+    let calls = 0
+    steps.apply = (snapshot) => {
+      loaded = JSON.parse(JSON.stringify(snapshot))
+      if (++calls === 1) (loaded as any).store['shape:node-0'].props.mediaId = 'wrong-restoration'
+    }
+    steps.verify = (expected) => verifyRestoredSnapshot(expected, loaded)
+    expect(await restoreSnapshotSafely(steps)).toEqual({
+      kind: 'failed',
+      stage: 'apply',
+      rollback: 'succeeded'
+    })
+    expect(loaded).toEqual(steps.current)
+    expect(events).toEqual(['started', 'checkpoint_created', 'failed', 'rollback_completed'])
+  })
   it('允许恢复有意保存的空画布，不能丢掉非空版本的节点', () => {
     expect(() => verifyRestoredSnapshot(makeSnapshot([]), makeSnapshot([]))).not.toThrow()
     expect(() => verifyRestoredSnapshot(makeSnapshot(['a']), makeSnapshot([]))).toThrow('不一致')

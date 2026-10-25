@@ -22,11 +22,17 @@ vi.mock('electron', () => ({
   ipcMain: {
     handle: (name: string, run: (event: unknown, input: unknown) => unknown) =>
       state.handlers.set(name, run)
-  }
+  },
+  // Production binds renderer-loss recovery to every window creation; tests
+  // only exercise registered handlers, so app event wiring is a no-op here.
+  app: { on: (): void => {} }
 }))
 vi.mock('../src/main/store/db', () => ({ getDb: () => state.db }))
 vi.mock('../src/main/store/projects.repo', () => ({
-  openProject: (id: string) => (state.file?.meta.id === id ? state.file : null)
+  openProject: (id: string) => (state.file?.meta.id === id ? state.file : null),
+  // The publication wait stat-gates on this path; a missing file falls back to
+  // openProject on every tick, matching the pre-gate behavior in tests.
+  projectJsonPath: (id: string) => `projects/${id}/project.json`
 }))
 afterEach(() => {
   vi.clearAllTimers()

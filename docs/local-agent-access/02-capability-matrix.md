@@ -1,6 +1,10 @@
 # 本地 Agent 接入能力矩阵（评审草案）
 
+2026-10-24 内容 Skill Agent 接续：AI 对话与 AI 处理桌面节点增加固定 Skill 配置和自主内容循环；外部节点执行、Skill 安装仍未开放，不提升本矩阵状态。公共端口/输出和外部 Schema 不变；接入影响、持久化、日志和验证见[本包交付记录](../SKILL_AGENT_DELIVERY_2026_10_24.md)。
+
 状态：评审草案；日期：2026-10-24；范围：本地单用户桌面应用。
+
+2026-10-24 A1.4接续：当前Registry为18项（14项项目/发现操作+4项只读查询），具体实现和验证见[最新查询台账](08-a1-4-read-only-queries.md)。下方9/11项描述保留为早期基线，不能用作当前总数。
 
 A1.1接续：当前Registry为11项操作，project.open/update及活动画布保存/导出已实施，最终验证状态见[桌面项目操作台账](06-a1-1-desktop-projects.md)。下文9项为前包历史基线，整个A1及31类节点不升级为完成。
 
@@ -51,16 +55,16 @@ A1.1接续：当前Registry为11项操作，project.open/update及活动画布�
 
 | 能力             | 建议 `operationId` | 阶段 | 当前外部状态 | 风险与约束                                                                                             | 验收                                                  |
 | ---------------- | ------------------ | ---- | ------------ | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
-| 列出项目         | `project.list`     | A1   | planned      | 只返回受控摘要；不回传本地绝对路径或 API Key                                                           | 空库/多项目排序/字段脱敏                              |
-| 读取项目语义 DTO | `project.get`      | A1   | planned      | 按 projectId 返回受控语义 DTO，不对外给任意原始快照                                                    | 旧快照、缺失媒体、只读不改版本                        |
-| 打开项目         | `project.open`     | A1   | planned      | 改变宿主驻留/呈现状态；协调当前未保存修改、活跃任务和占用                                              | 未保存内容保留；忙碌项目不能被替换                    |
-| 新建项目         | `project.create`   | A1   | planned      | 名称长度/字符校验；请求重试复用幂等键                                                                  | 同键不重复创建、保存重开可见                          |
-| 保存项目         | `project.save`     | A1   | planned      | 请求权威宿主flush并确认提交版本；不接收客户端语义 DTO或快照覆盖                                        | 冲突、备份、保存重开                                  |
-| 更新项目元数据   | `project.update`   | A1   | planned      | 只更新声明的元数据；图变化由 `graph.patch` 承担                                                        | 字段白名单、冲突、幂等                                |
-| 重命名           | `project.rename`   | A1   | planned      | 带期望版本或当前项目修订；不得借名称传递内容                                                           | 重试幂等、冲突、持久化                                |
+| 列出项目         | `project.list`     | A1   | verified（CLI/MCP，见[台账05](05-a0-a1-minimal-delivery.md)） | 只返回受控摘要；不回传本地绝对路径或 API Key                                                           | 空库/多项目排序/字段脱敏                              |
+| 读取项目语义 DTO | `project.get`      | A1   | verified（CLI/MCP，见[台账05](05-a0-a1-minimal-delivery.md)） | 按 projectId 返回受控语义 DTO，不对外给任意原始快照                                                    | 旧快照、缺失媒体、只读不改版本                        |
+| 打开项目         | `project.open`     | A1   | verified（CLI/MCP，见[台账06](06-a1-1-desktop-projects.md)） | 改变宿主驻留/呈现状态；协调当前未保存修改、活跃任务和占用                                              | 未保存内容保留；忙碌项目不能被替换                    |
+| 新建项目         | `project.create`   | A1   | verified（CLI/MCP，见[台账05](05-a0-a1-minimal-delivery.md)） | 名称长度/字符校验；请求重试复用幂等键                                                                  | 同键不重复创建、保存重开可见                          |
+| 保存项目         | `project.save`     | A1   | verified（CLI/MCP，见[台账06](06-a1-1-desktop-projects.md)） | 请求权威宿主flush并确认提交版本；不接收客户端语义 DTO或快照覆盖                                        | 冲突、备份、保存重开                                  |
+| 更新项目元数据   | `project.update`   | A1   | verified（CLI/MCP，见[台账06](06-a1-1-desktop-projects.md)） | 只更新声明的元数据；图变化由 `graph.patch` 承担                                                        | 字段白名单、冲突、幂等                                |
+| 重命名           | `project.rename`   | A1   | verified（CLI/MCP，见[台账05](05-a0-a1-minimal-delivery.md)） | 带期望版本或当前项目修订；不得借名称传递内容                                                           | 重试幂等、冲突、持久化                                |
 | 复制项目         | `project.clone`    | A1   | verified（CLI/MCP，见[台账07](07-a1-2-clone-delete.md)） | 复用 clone 的媒体 ID/结构化引用重映射；固定源版本，活动源先保存握手；不继承运行任务                       | 源项目不变、克隆可独立打开                            |
 | 删除项目         | `project.delete`（前置 `project.delete.precheck` 签发短期 impactToken） | A1   | verified（CLI/MCP，见[台账07](07-a1-2-clone-delete.md)） | 硬删除；必须精确 `projectId`、预检令牌绑定权威修订与影响摘要、显式确认；拒绝活动画布与运行/未知占用；禁止批量删除；同名新项目不受旧回执影响 | 确认缺失/令牌过期或事实漂移/占用拒绝；审计与幂等       |
-| 导出项目         | `project.export`   | A1   | planned      | 调用 [transfer.ts](../../src/main/store/transfer.ts)；目标限在调用方声明的已允许目录；回传缺失媒体计数 | API Key 排除、媒体与结构化引用检查、临时文件提交/清理 |
+| 导出项目         | `project.export`   | A1   | verified（CLI/MCP，见[台账06](06-a1-1-desktop-projects.md)） | 调用 [transfer.ts](../../src/main/store/transfer.ts)；目标限在调用方声明的已允许目录；回传缺失媒体计数 | API Key 排除、媒体与结构化引用检查、临时文件提交/清理 |
 | 导入项目包       | `project.import`   | —    | excluded     | 用户本轮明确不对接项目导入；保留桌面路径，不开放工具                                                   | tools/list 中不存在；直调返回稳定拒绝码               |
 
 “媒体受控接入”是把一个已选定的本地文件经受控目录、MIME/大小/哈希检查后物化为媒体资产；它不接受项目包，也不替代项目导入。因此它不违反上述 `project.import` 的排除范围。
@@ -73,7 +77,7 @@ A1.1接续：当前Registry为11项操作，project.open/update及活动画布�
 
 | 能力               | 建议 `operationId`                                      | 阶段        | 当前外部状态 | 风险与约束                                                                    | 验收                         |
 | ------------------ | ------------------------------------------------------- | ----------- | ------------ | ----------------------------------------------------------------------------- | ---------------------------- |
-| 搜索/列出/读取资源 | `library.search` / `library.get`                        | A1          | planned      | 分页、字段白名单、正文按需读取                                                | 权限外路径不可泄露、分页稳定 |
+| 搜索/列出/读取资源 | `library.search` / `library.get`                        | A1          | search摘要implemented；get planned      | 分页、字段白名单、正文按需读取                                                | 权限外路径不可泄露、分页稳定 |
 | 创建资源与文件夹   | `library.create_resource` / `library.create_folder`     | A2          | planned      | 文本及元数据结构校验；媒体只能走受控接入                                      | 幂等、失败不留半成品         |
 | 采集项目节点/媒体  | `library.capture_project_asset`                         | A2          | planned      | 固定来源 project/revision/media；不复制密钥                                   | 来源可追溯、源项目不变       |
 | 发布/归档资源修订  | `library.publish_revision` / `library.archive_revision` | A4          | planned      | 版本不可变；归档含确认                                                        | 修订冲突、回读一致           |
@@ -97,18 +101,20 @@ A1.1接续：当前Registry为11项操作，project.open/update及活动画布�
 | 校验图               | `graph.validate`                            | A2    | planned      | 只读；报告 portId/字段路径，不写入用户内容至诊断                                   | 断边、循环、schema、版本案例               |
 | 提交节点执行         | `node.execute`                              | A2–A3 | planned      | 逐节点按第 3 节开放；长任务不得伪装同步成功                                        | 状态机、取消、unknown、重开恢复            |
 
+A1.4首包接续：[查询交付台账](08-a1-4-read-only-queries.md)。`library.search`只开放摘要检索；`model.list`只回本地配置/验证事实，不探测在线；`run.get`仅覆盖持久化内部Agent任务；`diagnostics.summary`仅健康计数。其余动作继续planned。
+
 ### 2.4 模型、媒体和运行诊断
 
 | 能力                    | 建议 `operationId`                                                                  | 阶段                   | 当前外部状态 | 风险与约束                                                                            | 验收                                     |
 | ----------------------- | ----------------------------------------------------------------------------------- | ---------------------- | ------------ | ------------------------------------------------------------------------------------- | ---------------------------------------- |
-| 列出已验证模型能力      | `model.list`                                                                        | A1                     | planned      | 只给连接 ID、模型 ID、能力和状态；绝不返回密钥/完整 URL                               | 脱敏、离线/失效状态                      |
+| 列出已验证模型能力      | `model.list`                                                                        | A1                     | implemented（首包）      | 只给连接 ID、模型 ID、能力和状态；绝不返回密钥/完整 URL                               | 脱敏、离线/失效状态                      |
 | 受控媒体接入            | `media.ingest`                                                                      | A3                     | planned      | 目录授权、大小/MIME/内容校验、临时落盘后提交                                          | 失败回滚、媒体 ID/相对路径重映射         |
 | 读取媒体元信息/受控导出 | `media.get` / `media.export`                                                        | A3                     | planned      | 返回资源 ID、尺寸、MIME；文件传输须显式路径或二进制通道                               | 越界路径/签名 URL 不泄露                 |
-| 运行查询/取消/核对/继续 | `run.get` / `run.list` / `run.wait` / `run.cancel` / `run.reconcile` / `run.resume` | A1 基础查询，A2–A3扩展 | planned      | 按taskId；接受不等于完成；unknown 不重放；取消核对远端事实；resume逐类开放            | 超时、远端未知、重开、幂等               |
+| 运行查询/取消/核对/继续 | `run.get` / `run.list` / `run.wait` / `run.cancel` / `run.reconcile` / `run.resume` | A1 基础查询，A2–A3扩展 | run.get子集implemented；其余planned      | 按taskId；接受不等于完成；unknown 不重放；取消核对远端事实；resume逐类开放            | 超时、远端未知、重开、幂等               |
 | 输出列出/读取/选择/导出 | `output.list` / `output.get` / `output.select` / `output.export`                    | A2 基础，A3媒体扩展    | planned      | 选择只改变显式活动输出，不覆盖不可变产物；导出受控路径                                | 产物版本、来源、缺失媒体、导出脱敏       |
 | Flow 生命周期           | `flow.start` / `flow.get` / `flow.stop` / `flow.resume` / `flow.reconcile`          | A3                     | planned      | 复用命令账本/租约；未知不重放，不建立第二任务拓扑                                     | 占用、冲突、暂停、恢复、未知             |
 | 审核读取/AI 继续        | `review.get` / `review.continue`                                                    | A3                     | planned      | AI 只能按固定资产/规则继续；人类确认、发布、选择门禁不可由调用方冒充                  | 技术失败与质量拒绝区分；人工门禁拒绝伪造 |
-| 诊断摘要/导出           | `diagnostics.summary` / `diagnostics.export`                                        | A1                     | planned      | 复用诊断包；不能导出密钥、签名 URL 或原始请求响应；正文/提示词/回复不进入日志或诊断包 | 脱敏样例、范围/截断/丢失显示             |
+| 诊断摘要/导出           | `diagnostics.summary` / `diagnostics.export`                                        | A1                     | summary健康计数implemented；export planned      | 复用诊断包；不能导出密钥、签名 URL 或原始请求响应；正文/提示词/回复不进入日志或诊断包 | 脱敏样例、范围/截断/丢失显示             |
 | provider/API Key 管理   | —                                                                                   | —                      | excluded     | 外部 Agent 不读写供应商配置、密钥或任意 URL                                           | tools/list 不暴露，直调拒绝              |
 
 ## 3. 节点逐项对接清单
@@ -121,8 +127,8 @@ A1.1接续：当前Registry为11项操作，project.open/update及活动画布�
 | ----------------- | --------- | ---------------------------- | ---------------- | ---------------------------------------------------------------------- |
 | `text@3`          | 文本      | A2 结构化读写；无需远端执行  | 无               | 正文可由显式读取返回，不能进入诊断                                     |
 | `image@3`         | 图片      | A2 结构化读写；媒体接入 A3   | 无               | 只能引用受控媒体 ID，不能给任意路径                                    |
-| `image-crop@2`    | 裁剪      | A2 读写；A2 确定性执行       | 无               | 归一化裁剪配置与输出资产需校验                                         |
-| `image-split@3`   | 拆分      | A2 读写；A2 确定性执行       | 无               | 一次生成多资产，保持来源关系                                           |
+| `image-crop@2`    | 裁剪      | A2 读写；A2 确定性执行       | 支持 target      | 归一化裁剪配置与输出资产需校验；配置在命令准入处校验                   |
+| `image-split@3`   | 拆分      | A2 读写；A2 确定性执行       | 支持 target      | 一次生成多资产，保持来源关系；配置在命令准入处校验                     |
 | `image-gen@3`     | 生图      | A2 读写；A3 模型任务         | 支持 target      | 固定输入、单任务、模型能力与费用型重试规则                             |
 | `image-edit@2`    | P图       | A2 读写；A3 模型任务         | 支持 target      | 必须固定一张原图；遮罩为版本化配置                                     |
 | `website@1`       | 网址节点  | A2 读写；A4 执行             | 无               | 需要网络许可、域名/体积/超时策略                                       |
@@ -140,7 +146,7 @@ A1.1接续：当前Registry为11项操作，project.open/update及活动画布�
 | `voice-design@1`  | 音色设计  | A2 读写；A3 模型任务         | 无               | 模型适配、输出版本和脱敏单独验收                                       |
 | `chat@1`          | AI 对话   | A2 读写；A4 会话执行         | 无               | 多轮会话、附件和人工输入需专门协议；消息正文不得写入日志               |
 | `processor@1`     | 数据处理  | A2 读写与确定性执行          | 支持 target      | 与 `PROCESSOR_CONTRACT_VERSION` 保持一致；输入/输出 schema 校验        |
-| `code@3`          | 代码      | A2 读写；A4 执行             | 无               | 对外 sandbox 安全边界待专项核验；不得假定现有 `runCode` 已满足隔离要求 |
+| `code@3`          | 代码      | A2 读写；A4 执行             | 支持 target（限单参数单输出） | 内部调度仅接受 single 形态配置；对外 sandbox 安全边界仍待专项核验，不得假定现有 `runCode` 已满足隔离要求 |
 | `json@1`          | JSON      | A2 读写与确定性校验          | 无               | 结构必须通过声明 schema                                                |
 | `structured@1`    | 结构数据  | A2 读写与确定性校验          | 无               | 结构必须通过声明 schema                                                |
 | `storyboard@1`    | 分镜板    | A2 读写与确定性校验          | 无               | 保留字段标题映射，禁止隐式改 shots 语义                                |
@@ -148,10 +154,10 @@ A1.1接续：当前Registry为11项操作，project.open/update及活动画布�
 | `iterate@2`       | 循环      | A2 读写；A4 执行             | 无               | 子流程、暂停、取消、并行、恢复需与宿主等价                             |
 | `director@3`      | 3D 预演台 | A2 读写；A4 `manual-publish` | 无               | Agent 只能准备输入/请求发布，不能绕过人工发布                          |
 | `agent@1`         | Agent     | A2 读写；A3 专用 Flow 协议   | 专用协议         | 使用任务、租约、最小输入、固定结果与恢复，不作为普通 target            |
-| `state-machine@1` | 状态机    | A2 读写；执行待定            | 独立执行 pending | 当前不能宣称自动执行；事件/条件/迁移由可信宿主裁决                     |
+| `state-machine@1` | 状态机    | A2 读写；确定性执行          | 支持独立执行    | 执行不经网关，事件/条件/迁移由可信宿主裁决；外部接入执行仍按 A2/A3 推进 |
 | `ai-review@1`     | AI 审核   | A2 读写；A3 专用审核协议     | 专用协议         | 固定资产/规则/报告；质量拒绝不等于技术失败                             |
 
-当前 Flow target 只有六种：`processor@1`、`image-gen@3`、`image-edit@2`、`video@7`、`speech@4`、`tts@4`，其输入和输出由 [video-adapter.ts](../../src/shared/agent-flow/video-adapter.ts) 固定。接入 A3 必须先复用或抽取同等的输入固定、内容哈希、配置限制、占用、命令去重与修订检查，不能把这六个 target 的存在解释为所有节点已经“Agent 可调度”。
+当前 Flow target 共九种：`processor@1`、`image-gen@3`、`image-edit@2`、`video@7`、`speech@4`、`tts@4`、`image-crop@2`、`image-split@3`、`code@3`（限单参数单输出形态），其输入和输出由 [video-adapter.ts](../../src/shared/agent-flow/video-adapter.ts) 固定，裁剪/拆图配置在命令准入处校验。接入 A3 必须先复用或抽取同等的输入固定、内容哈希、配置限制、占用、命令去重与修订检查，不能把这九个 target 的存在解释为所有节点已经“Agent 可调度”。
 
 `script`、`video-audio`、`vocal-separate`、`group`、`compose` 是历史兼容类型：只能通过通用的历史项目读取和受控迁移保留；新建、重写和新执行入口均不开放。它们不计入 31 个 Active 节点覆盖率分母，但其读取迁移应有独立兼容测试。
 

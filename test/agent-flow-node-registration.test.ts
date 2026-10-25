@@ -58,35 +58,59 @@ it('C1 configuration is retained in the graph and control relations never become
     expect(node.content).toEqual({ kind: 'text', text: source.props.text })
   }
 })
-it('standalone state configuration cannot call gateways or mutate state and shows blocked readiness', async () => {
-  for (const type of ['state-machine'] as const) {
-    const spec = getNodeType(type)!
-    const context = new Proxy(
-      {},
-      {
-        get: () => {
-          throw new Error('C1 must not access execution context')
-        }
+it('P2-A：状态机独立执行初始化权威实例，不访问网关，投影 flow.state', async () => {
+  const spec = getNodeType('state-machine')!
+  expect(spec.executionDisabledReason).toBeUndefined()
+  // 网关一旦被访问立即抛错：状态机执行器不允许任何网关调用。
+  const gateway = new Proxy(
+    {},
+    {
+      get: () => {
+        throw new Error('状态机执行器不得访问网关')
       }
-    ) as NodeExecutionContext
-    expect(await getExecutor(type)!(context)).toEqual({
-      status: 'skipped',
-      reason: spec.executionDisabledReason
-    })
-    expect(
-      spec.projectOutputs!({ meta: { nodeResult: 'old result' } } as unknown as NodeCardShape)
-    ).toEqual({})
-    expect(
-      deriveNodeReadiness({
-        executionMode: 'auto',
-        exec: 'idle',
-        inputs: spec.ports.in,
-        incomingCounts: new Map(),
-        outputs: {},
-        configIssue: spec.executionDisabledReason
-      }).kind
-    ).toBe('blocked')
+    }
+  )
+  const props = {
+    nodeType: 'state-machine',
+    title: '状态机',
+    config: spec.initialConfig!,
+    text: '',
+    mediaId: '',
+    mediaPath: '',
+    mediaMime: '',
+    exec: 'idle',
+    w: 340,
+    h: 260
   }
+  const meta: Record<string, unknown> = {}
+  const result = await getExecutor('state-machine')!({
+    node: { id: 'shape:state-machine', type: 'state-machine' },
+    shape: { id: 'shape:state-machine', type: 'node-card', props, meta },
+    projectId: 'project-a',
+    runId: 'run-sm',
+    providers: [],
+    signal: { cancelled: false },
+    gateway,
+    updateMeta: (patch) => {
+      for (const [key, value] of Object.entries(patch)) {
+        if (value === undefined || value === null) delete meta[key]
+        else meta[key] = value
+      }
+    },
+    updateResult: () => undefined
+  } as unknown as NodeExecutionContext)
+  expect(result).toEqual({ status: 'done' })
+  const instance = JSON.parse(String(meta.stateMachine))
+  expect(instance).toMatchObject({
+    schemaVersion: 1,
+    revision: 1,
+    state: 'draft',
+    stateNodeId: 'shape:state-machine'
+  })
+  // 投影只认真实运行结果；旧结果/空结果不产生输出。
+  expect(
+    spec.projectOutputs!({ meta: { nodeResult: 'old result' } } as unknown as NodeCardShape)
+  ).toEqual({})
 })
 it('review uses the public executor and cannot fabricate a verdict without its trusted host', async () => {
   const spec = getNodeType('ai-review')!

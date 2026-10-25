@@ -90,6 +90,10 @@ function fakeDb(): {
           const row = runningRows.find((item) => item.id === args[0])
           return row ? { input: row.input } : undefined
         }
+        if (sql.includes('SELECT * FROM tasks')) {
+          const row = runningRows.find((item) => item.id === args[0])
+          return row ?? undefined
+        }
         if (sql.includes('SELECT status FROM tasks')) {
           const row = runningRows.find((item) => item.id === args[0])
           return row ? { status: row.status } : undefined
@@ -143,6 +147,34 @@ describe('L04 视频链路结构化事件', () => {
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
     runningRows = []
+  })
+
+  it('P1-B · 运行中查询/取消携带渲染器传入的真实 trace；无 trace 时显式标记缺失', async () => {
+    const { controlVideoTask } = await import('../../src/main/gateway/video')
+    // 两个独立 taskId，避免 controls 去重复用同一 work。
+    runningRows = [
+      { ...TASK_ROW, id: 'task-trace-1', input: JSON.stringify({ upstreamTaskId: 'up-1' }) },
+      { ...TASK_ROW, id: 'task-legacy-1', input: JSON.stringify({ upstreamTaskId: 'up-2' }) }
+    ]
+    const withTrace = controlVideoTask('task-trace-1', false, 'trace-poll-run-1')
+    void withTrace.catch(() => undefined)
+    await vi.waitFor(() => {
+      const started = events.find(
+        (event) => event.event === 'task.control.started' && event.taskId === 'task-trace-1'
+      )
+      expect(started).toBeTruthy()
+      expect(started!.traceId).toBe('trace-poll-run-1')
+      expect((started as { correlationMissing?: boolean }).correlationMissing).toBeUndefined()
+    })
+    const withoutTrace = controlVideoTask('task-legacy-1')
+    void withoutTrace.catch(() => undefined)
+    await vi.waitFor(() => {
+      const legacy = events.find(
+        (event) => event.event === 'task.control.started' && event.taskId === 'task-legacy-1'
+      )
+      expect(legacy).toBeTruthy()
+      expect((legacy as { correlationMissing?: boolean }).correlationMissing).toBe(true)
+    })
   })
 
   it('A09 · 重启恢复：resume_started → 恢复轮询 → 下载入库，绝不重复提交', async () => {

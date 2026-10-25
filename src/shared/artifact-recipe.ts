@@ -14,6 +14,8 @@ export const artifactRecipeSchema = z
     paramsJson: z.string().max(1_000_000),
     modelKey: z.string().max(256).optional(),
     providerId: z.string().max(128).optional(),
+    /** 产出该资产的运行根 trace；用于诊断祖先关联。旧记录没有该字段，不补造。 */
+    traceId: z.string().max(128).optional(),
     inputMediaIds: z.array(z.string().max(128)).max(10000),
     missingInputMediaIds: z.array(z.string().max(128)).max(10000).optional(),
     createdAt: z.number().int().nonnegative()

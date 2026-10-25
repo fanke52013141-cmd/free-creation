@@ -2,7 +2,7 @@ import type { RawNodeOutputs } from '../engine/values'
 import type { NodeShape } from '../engine/executor-types'
 import { parseStoredNodeValue } from '../engine/values'
 import { z } from 'zod'
-import { AgentFlowAssetRefSchema } from './node-contracts'
+import { AgentFlowAssetRefSchema, FlowStateSchema } from './node-contracts'
 import type { FlowAssetValue } from './assets'
 import { canonicalFlowJson } from './semantic-revision'
 
@@ -95,6 +95,17 @@ export function projectAgentOutputs(shape: NodeShape): RawNodeOutputs {
         outputs[port] = value
     }
     return outputs
+  } catch {
+    return {}
+  }
+}
+
+/** 状态机节点：持久化运行结果（flow.state@1）→ 正式 out-state 输出。 */
+export function projectStateMachineOutputs(shape: NodeShape): RawNodeOutputs {
+  try {
+    const parsed = FlowStateSchema.safeParse(JSON.parse(shape.meta?.nodeResult ?? ''))
+    if (!parsed.success) return {}
+    return { 'out-state': { kind: 'json', data: parsed.data } }
   } catch {
     return {}
   }

@@ -8,6 +8,7 @@ import {
 } from '@shared/video-transform'
 import { appendMediaResult, mediaDisplayName, serializeMediaResultCollection } from '../values'
 import { capabilityFailure, unavailableLocalCapability } from '../preflight'
+import { runCancellableMedia } from '../media-cancel'
 
 // ── 视频取帧 ──
 
@@ -26,12 +27,22 @@ export async function videoFrameExecutor(ctx: NodeExecutionContext): Promise<Nod
   }
   try {
     if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
-    const result = await ctx.gateway.extractVideoFrame({
-      projectId: ctx.projectId,
-      sourceMediaId: source.mediaId,
-      config
-    })
-    if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
+    // 取消立即请求主进程终止 ffmpeg；已完成的迟到资产删除，不留孤儿。
+    const outcome = await runCancellableMedia(
+      ctx,
+      () =>
+        ctx.gateway.extractVideoFrame({
+          projectId: ctx.projectId,
+          sourceMediaId: source.mediaId,
+          nodeId: ctx.node.id,
+          config
+        }),
+      (envelope) => {
+        if (envelope?.ok) void ctx.gateway.deleteMedia?.(envelope.data.id).catch(() => undefined)
+      }
+    )
+    if (outcome.cancelled) return { status: 'skipped', reason: '已取消' }
+    const result = outcome.value
     if (!result.ok) return { status: 'failed', reason: result.error.message }
     // 来源摘要只写用户看得懂的动作与时间点：mode=first 这类内部枚举和 mediaId 都不进文案。
     const prompt = `抽帧 ${videoName} · ${config.timeMs}ms · ${config.format}`
@@ -94,14 +105,34 @@ export async function videoClipExecutor(ctx: NodeExecutionContext): Promise<Node
     let intermediateAudioId: string | null = null
     let unpublishedVocalId: string | null = null
     let published = false
+    let cancelledExit = false
+    const deleteQuietly = (mediaId: string | null | undefined): Promise<void> =>
+      mediaId
+        ? ctx.gateway.deleteMedia?.(mediaId).catch(() => undefined).then(() => undefined) ??
+          Promise.resolve()
+        : Promise.resolve()
     try {
       if (config.keepVideo) {
         if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
-        const result = await ctx.gateway.clipVideo({
-          projectId: ctx.projectId,
-          sourceMediaId: source.mediaId,
-          config
-        })
+        // 取消立即请求主进程终止 ffmpeg；已完成的迟到截取产物删除，不留孤儿。
+        const outcome = await runCancellableMedia(
+          ctx,
+          () =>
+            ctx.gateway.clipVideo({
+              projectId: ctx.projectId,
+              sourceMediaId: source.mediaId,
+              nodeId: ctx.node.id,
+              config
+            }),
+          (envelope) => {
+            if (envelope?.ok) void ctx.gateway.deleteMedia?.(envelope.data.id).catch(() => undefined)
+          }
+        )
+        if (outcome.cancelled) {
+          cancelledExit = true
+          return { status: 'skipped', reason: '已取消' }
+        }
+        const result = outcome.value
         if (!result.ok) return { status: 'failed', reason: result.error.message }
         produced.push({
           kind: 'video',
@@ -112,31 +143,67 @@ export async function videoClipExecutor(ctx: NodeExecutionContext): Promise<Node
       }
       if (config.keepAudio) {
         if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
-        const result = await ctx.gateway.extractVideoAudio({
-          projectId: ctx.projectId,
-          sourceMediaId: source.mediaId,
-          config: {
-            version: 2,
-            startMs: config.startMs,
-            endMs: config.endMs,
-            format: config.audioFormat,
-            sampleRate: config.audioSampleRate
+        const audioOutcome = await runCancellableMedia(
+          ctx,
+          () =>
+            ctx.gateway.extractVideoAudio({
+              projectId: ctx.projectId,
+              sourceMediaId: source.mediaId,
+              nodeId: ctx.node.id,
+              config: {
+                version: 2,
+                startMs: config.startMs,
+                endMs: config.endMs,
+                format: config.audioFormat,
+                sampleRate: config.audioSampleRate
+              }
+            }),
+          (envelope) => {
+            // 迟到的音频在取消路径是孤儿（尚未登记为中间产物），直接删除。
+            if (envelope?.ok) {
+              void ctx.gateway.deleteMedia?.(envelope.data.id).catch(() => undefined)
+            }
           }
-        })
-        if (!result.ok) return { status: 'failed', reason: result.error.message }
-        let audioData = result.data
+        )
+        if (audioOutcome.cancelled) {
+          cancelledExit = true
+          return { status: 'skipped', reason: '已取消' }
+        }
+        const audioResult = audioOutcome.value
+        if (!audioResult.ok) return { status: 'failed', reason: audioResult.error.message }
+        let audioData = audioResult.data
         let audioTitle = `（音）${videoName}`
         if (config.extractVocals) {
-          intermediateAudioId = result.data.id
-          const vocalResult = await ctx.gateway.separateVocals({
-            projectId: ctx.projectId,
-            sourceMediaId: result.data.id,
-            config: {
-              version: 1,
-              mode: config.vocalMode,
-              outputAccompaniment: false
+          intermediateAudioId = audioResult.data.id
+          const vocalOutcome = await runCancellableMedia(
+            ctx,
+            () =>
+              ctx.gateway.separateVocals({
+                projectId: ctx.projectId,
+                sourceMediaId: audioResult.data.id,
+                nodeId: ctx.node.id,
+                config: {
+                  version: 1,
+                  mode: config.vocalMode,
+                  outputAccompaniment: false
+                }
+              }),
+            (envelope) => {
+              if (envelope?.ok) {
+                void ctx.gateway.deleteMedia?.(envelope.data.vocals.id).catch(() => undefined)
+                if (envelope.data.accompaniment) {
+                  void ctx.gateway
+                    .deleteMedia?.(envelope.data.accompaniment.id)
+                    .catch(() => undefined)
+                }
+              }
             }
-          })
+          )
+          if (vocalOutcome.cancelled) {
+            cancelledExit = true
+            return { status: 'skipped', reason: '已取消' }
+          }
+          const vocalResult = vocalOutcome.value
           if (!vocalResult.ok) return { status: 'failed', reason: vocalResult.error.message }
           audioData = vocalResult.data.vocals
           unpublishedVocalId = audioData.id
@@ -150,7 +217,10 @@ export async function videoClipExecutor(ctx: NodeExecutionContext): Promise<Node
           title: audioTitle
         })
       }
-      if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
+      if (ctx.signal.cancelled) {
+        cancelledExit = true
+        return { status: 'skipped', reason: '已取消' }
+      }
       const prompt = `${config.keepVideo ? '画面' : ''}${config.keepVideo && config.keepAudio ? '+' : ''}${config.keepAudio ? (config.extractVocals ? '人声' : '音频') : ''} · 截取 ${videoName} · ${config.startMs}-${config.endMs}ms`
       const previous =
         typeof ctx.shape.meta?.nodeResult === 'string' ? ctx.shape.meta.nodeResult : ''
@@ -184,10 +254,13 @@ export async function videoClipExecutor(ctx: NodeExecutionContext): Promise<Node
       published = true
       return { status: 'done' }
     } finally {
-      if (intermediateAudioId)
-        await ctx.gateway.deleteMedia?.(intermediateAudioId).catch(() => undefined)
-      if (!published && unpublishedVocalId)
-        await ctx.gateway.deleteMedia?.(unpublishedVocalId).catch(() => undefined)
+      await deleteQuietly(intermediateAudioId)
+      if (!published && unpublishedVocalId) await deleteQuietly(unpublishedVocalId)
+      if (cancelledExit) {
+        // 用户明确停止：本次运行已产出但未发布的资产全部删除；
+        // 失败路径保留已成功产物（部分成功不因后续失败丢失）。
+        for (const item of produced) await deleteQuietly(item.data.id)
+      }
     }
   } catch (error) {
     return { status: 'failed', reason: error instanceof Error ? error.message : String(error) }
@@ -207,12 +280,22 @@ export async function videoAudioExecutor(ctx: NodeExecutionContext): Promise<Nod
     const config = parseVideoAudioConfig(readNodeConfig(ctx.shape))
     const videoName = mediaDisplayName(source, '视频')
     if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
-    const result = await ctx.gateway.extractVideoAudio({
-      projectId: ctx.projectId,
-      sourceMediaId: source.mediaId,
-      config
-    })
-    if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
+    // 取消立即请求主进程终止 ffmpeg；已完成的迟到音频资产删除，不留孤儿。
+    const outcome = await runCancellableMedia(
+      ctx,
+      () =>
+        ctx.gateway.extractVideoAudio({
+          projectId: ctx.projectId,
+          sourceMediaId: source.mediaId,
+          nodeId: ctx.node.id,
+          config
+        }),
+      (envelope) => {
+        if (envelope?.ok) void ctx.gateway.deleteMedia?.(envelope.data.id).catch(() => undefined)
+      }
+    )
+    if (outcome.cancelled) return { status: 'skipped', reason: '已取消' }
+    const result = outcome.value
     if (!result.ok) return { status: 'failed', reason: result.error.message }
     const prompt = `提取音频 ${videoName} · ${config.startMs}-${config.endMs}ms · ${config.format} · ${config.sampleRate}Hz`
     ctx.updateResult(

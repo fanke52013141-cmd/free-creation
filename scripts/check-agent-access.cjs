@@ -19,12 +19,20 @@ const option = name => { const at=process.argv.indexOf(name);return at>=0?proces
 const snapshotPath = option('--snapshot-file') || path.join(directory, 'contracts.json')
 const impactPath = option('--impact-file') || path.join(root, 'docs/local-agent-access/change-impact.json')
 const scope = [
+  'src/renderer/src/engine/executor.ts', 'src/renderer/src/canvas/snapshot-restore.ts',
+  'src/renderer/src/canvas/RunTimeline.tsx', 'src/renderer/src/canvas/CanvasSidePanel.tsx',
+  'src/renderer/src/canvas/ChatSidePanel.tsx',
+  'src/shared/skill-agent.ts', 'src/shared/contracts/', 'src/main/ipc/skill-library.ipc.ts', 'src/main/ipc/flow-agents.ipc.ts', 'src/main/gateway/',
   'src/shared/agent-access/', 'src/main/agent-access/', 'src/local-agent/',
   'src/shared/types/', 'src/shared/engine/', 'src/shared/node-schemas.ts',
-  'src/renderer/src/nodes/', 'src/main/agent-flow/', 'src/main/ipc/project',
+  'src/renderer/src/nodes/', 'src/main/agent-flow/', 'src/main/ipc/project', 'src/main/ipc/gateway.ipc.ts',
+  'src/main/ipc/media.ipc.ts', 'src/main/media/',
   'src/main/store/projects.repo.ts', 'src/main/store/transfer.ts', 'src/main/store/db-migrations.ts',
+  'src/main/store/db.ts', 'src/main/store/process-lock.ts',
   'src/main/index.ts', 'src/shared/observability/', 'scripts/check-agent-access.cjs'
   , 'src/preload/index.ts', 'src/renderer/src/App.tsx', 'src/renderer/src/pages/CanvasPage.tsx',
+  'src/main/model-host/sqlite-model-host.ts', 'src/main/store/library.repo.ts',
+  'src/main/diagnostics/service.ts',
   'src/renderer/src/canvas/CanvasEditor.tsx', 'src/renderer/src/stores/save-coordinator.ts',
   'src/renderer/src/canvas/flow-asset-actions.ts'
 ]

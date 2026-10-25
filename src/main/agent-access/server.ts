@@ -15,6 +15,7 @@ import { ACCESS_MAX_BYTES } from '../../shared/agent-access/registry'
 import { acquireProcessLock } from '../store/process-lock'
 import { LocalAccessService } from './service'
 import type { AccessDesktop } from './desktop'
+import type { DiagnosticsService } from '../diagnostics/service'
 
 export interface LocalAccessServer {
   close(): void
@@ -24,6 +25,7 @@ export async function startLocalAccessServer(options: {
   appVersion: string
   activeProjectId: () => string | null
   desktop?: AccessDesktop
+  diagnostics?: Pick<DiagnosticsService, 'health'> | null
 }): Promise<LocalAccessServer> {
   const ownership = acquireProcessLock('local-agent-access-server')
   const instanceId = randomUUID()

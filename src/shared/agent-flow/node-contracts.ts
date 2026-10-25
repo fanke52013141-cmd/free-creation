@@ -168,6 +168,8 @@ export const FlowStateSchema = z
   })
   .strict()
 
+export type FlowState = z.infer<typeof FlowStateSchema>
+
 export type ReviewDecision = z.infer<typeof ReviewDecisionSchema>
 export type AgentFlowAssetRef = z.infer<typeof AgentFlowAssetRefSchema>
 

@@ -100,7 +100,9 @@ import type {
   ExportDiagnosticsBundleInput,
   ExportDiagnosticsBundleResult,
   VideoConversionInput,
-  VideoEngineStatus
+  VideoEngineStatus,
+  MediaCancelTransformsInput,
+  MediaCancelTransformsResult
 } from '../shared/contracts'
 import type {
   SaveModelConnectionInput,
@@ -145,6 +147,13 @@ const api = {
     graphVersion: number
   }): Promise<{ ok: boolean; meta?: ProjectMeta }> =>
     ipcRenderer.invoke(ACCESS_DESKTOP_COMMIT, input),
+  listSkills: (): Promise<
+    IpcEnvelope<import('../shared/agent-flow/runtime-contracts').FixedSkill[]>
+  > => ipcRenderer.invoke(IPC.skillLibrary.list),
+  installSkill: (
+    input: import('../shared/agent-flow/runtime-contracts').SkillPackage
+  ): Promise<IpcEnvelope<import('../shared/agent-flow/runtime-contracts').FixedSkill>> =>
+    ipcRenderer.invoke(IPC.skillLibrary.install, input),
   reviewFlowAssets: (
     input: import('../shared/agent-flow/review').ReviewRequest
   ): Promise<IpcEnvelope<import('../shared/agent-flow/node-contracts').ReviewDecision>> =>
@@ -438,6 +447,10 @@ const api = {
     ipcRenderer.invoke(IPC.media.videoConvertClay, input),
   cancelVideoConversion: (jobId: string): Promise<IpcEnvelope<boolean>> =>
     ipcRenderer.invoke(IPC.media.videoConvertCancel, { jobId }),
+  cancelMediaTransforms: (
+    input: MediaCancelTransformsInput
+  ): Promise<IpcEnvelope<MediaCancelTransformsResult>> =>
+    ipcRenderer.invoke(IPC.media.cancelTransforms, input),
   ttsGenerate: (input: TtsGenerateInput): Promise<IpcEnvelope<VoiceCloneResult>> =>
     ipcRenderer.invoke(IPC.media.ttsGenerate, input),
   pickMedia: (projectId: string): Promise<IpcEnvelope<MediaImportResult>> =>
@@ -544,10 +557,10 @@ const api = {
       ipcRenderer.invoke(IPC.gateway.imageEdit, input),
     videoSubmit: (input: VideoSubmitInput): Promise<IpcEnvelope<VideoSubmitResult>> =>
       ipcRenderer.invoke(IPC.gateway.videoSubmit, input),
-    videoCancel: (taskId: string): Promise<IpcEnvelope<boolean>> =>
-      ipcRenderer.invoke(IPC.gateway.videoCancel, { taskId }),
-    videoTask: (taskId: string): Promise<IpcEnvelope<VideoTaskInfo | null>> =>
-      ipcRenderer.invoke(IPC.gateway.videoTask, { taskId }),
+    videoCancel: (taskId: string, traceId?: string): Promise<IpcEnvelope<boolean>> =>
+      ipcRenderer.invoke(IPC.gateway.videoCancel, { taskId, traceId }),
+    videoTask: (taskId: string, traceId?: string): Promise<IpcEnvelope<VideoTaskInfo | null>> =>
+      ipcRenderer.invoke(IPC.gateway.videoTask, { taskId, traceId }),
     audioGenerate: (input: AudioGenerateInput): Promise<IpcEnvelope<MediaAsset>> =>
       ipcRenderer.invoke(IPC.gateway.audioGenerate, input),
     speechGenerate: (input: SpeechGenerateInput): Promise<IpcEnvelope<SpeechGenerateResult>> =>

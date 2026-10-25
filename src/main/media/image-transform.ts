@@ -2,6 +2,7 @@ import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { readFile } from 'fs/promises'
 import { getDb } from '../store/db'
 import { deleteMedia, getMediaAbsPath, saveBufferAsset } from '../store/media.repo'
+import { isMediaCancelled, MEDIA_TRANSFORM_CANCELLED } from './cancellation'
 import {
   parseImageCropConfig,
   type ImageCropConfig,
@@ -32,6 +33,9 @@ export async function transformImageCrop(input: ImageCropTransformInput): Promis
   const invalid = validateImageCropConfig(config)
   if (invalid) throw new Error(invalid)
   const image = await loadProjectImage(input.projectId, input.sourceMediaId)
+  // 已停止的运行不再开始像素渲染；渲染本身是同步 C++ 调用，一旦开始无法中断，
+  // 迟到资产由渲染器侧的取消清理兜底删除。
+  if (isMediaCancelled()) throw new Error(MEDIA_TRANSFORM_CANCELLED)
   const output =
     config.mode === 'rect' ? renderRect(image, config) : renderPerspective(image, config.points)
   return saveBufferAsset(input.projectId, output, '.png', '裁剪图片')
@@ -40,6 +44,8 @@ export async function transformImageCrop(input: ImageCropTransformInput): Promis
 /**
  * 宫格拆分：单个源图一次派生 N 个 PNG。任何一格落盘失败时清理本次已写入资产，
  * 不以半套结果覆盖节点当前输出，避免失败污染画布。
+ * 运行中停止在每个格子之间生效：检查到取消标记后同样清理已写资产，
+ * 以 MEDIA_TRANSFORM_CANCELLED 结束，不把半套格子留给媒体库。
  */
 export async function transformImageSplit(input: ImageSplitTransformInput): Promise<MediaAsset[]> {
   const config = parseImageSplitConfig(JSON.stringify(input.config))
@@ -47,6 +53,7 @@ export async function transformImageSplit(input: ImageSplitTransformInput): Prom
   const created: MediaAsset[] = []
   try {
     for (const tile of buildImageSplitTiles(config)) {
+      if (isMediaCancelled()) throw new Error(MEDIA_TRANSFORM_CANCELLED)
       const output = renderRect(image, {
         rect: tile.rect
       })

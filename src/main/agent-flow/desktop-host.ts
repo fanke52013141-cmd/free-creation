@@ -17,6 +17,7 @@ import {
   type FlowAgentCollaborationView
 } from '../../shared/agent-flow/desktop-tasks'
 import { FlowSkillStore, BUILTIN_FLOW_SKILLS } from './skill-store'
+import { BUILTIN_CONTENT_SKILLS } from '../../shared/skill-agent'
 import { FlowTaskStore, agentThread, type AgentTaskRecord } from './task-store'
 import { FlowAssetStore } from './asset-store'
 import { agentReplyOutputProjection } from '../../shared/agent-flow/agent-outputs'
@@ -35,6 +36,10 @@ import {
   speechFlowInputsValid,
   speechFlowConfigValid,
   ttsFlowInputsValid,
+  codeFlowInputsValid,
+  cropFlowConfigValid,
+  localImageFlowInputsValid,
+  splitFlowConfigValid,
   ttsFlowConfigValid,
   flowTargetContract,
   flowTargetPorts
@@ -97,7 +102,7 @@ export class FlowAgentDesktopHost {
     this.store = new FlowTaskStore(db)
     this.skills = new FlowSkillStore(db)
     this.assets = new FlowAssetStore(db, open)
-    for (const skill of BUILTIN_FLOW_SKILLS) this.skills.import(skill)
+    for (const skill of [...BUILTIN_FLOW_SKILLS, ...BUILTIN_CONTENT_SKILLS]) this.skills.import(skill)
   }
 
   private key(input: Identity): string {
@@ -241,7 +246,7 @@ export class FlowAgentDesktopHost {
         { id: 'agent.dispatch', version: '1', name: '分派专业 Agent 任务' },
         { id: 'review.execute', version: '1', name: '执行范围内的固定版本审核' }
       ],
-      skills: BUILTIN_FLOW_SKILLS.map(({ id, version, name, description }) => ({
+      skills: this.skills.list().map(({ id, version, name, description }) => ({
         id,
         version,
         name,
@@ -438,6 +443,32 @@ export class FlowAgentDesktopHost {
                 .map((version) => version.value)
             }))
           ))
+      )
+        throw new AgentRuntimeError('AGENT_INPUT_TYPE_UNSUPPORTED', 'admission')
+      if (
+        (node.type === 'image-crop' || node.type === 'image-split') &&
+        (!(node.type === 'image-crop' ? cropFlowConfigValid(targetConfig) : splitFlowConfigValid(targetConfig)) ||
+          !localImageFlowInputsValid(
+            inputs.map((input) => ({
+              targetPortId: input.targetPortId,
+              values: this.assets
+                .resolveInputs(raw.projectId, input.assets)
+                .map((version) => version.value)
+            }))
+          ))
+      )
+        throw new AgentRuntimeError('AGENT_INPUT_TYPE_UNSUPPORTED', 'admission')
+      if (
+        node.type === 'code' &&
+        !codeFlowInputsValid(
+          targetConfig,
+          inputs.map((input) => ({
+            targetPortId: input.targetPortId,
+            values: this.assets
+              .resolveInputs(raw.projectId, input.assets)
+              .map((version) => version.value)
+          }))
+        )
       )
         throw new AgentRuntimeError('AGENT_INPUT_TYPE_UNSUPPORTED', 'admission')
       return { nodeId, contractVersion: node.contractVersion as 1 | 2 | 3 | 4 | 7, inputs }

@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3'
+import type { AccessOutput } from '../../shared/agent-access/registry'
 import { createHash } from 'node:crypto'
 import { canonicalFlowJson } from '../../shared/agent-flow/semantic-revision'
 import {
@@ -46,6 +47,24 @@ export function agentThread(
 }
 export class FlowTaskStore {
   constructor(readonly db: Database.Database) {}
+
+  /** Read persisted facts without loading prompts, skills, outputs or checkpoint payloads. */
+  summary(projectId: string, taskId: string): AccessOutput<'run.get'> | null {
+    const row = this.db.prepare(`SELECT state, wait_revision, wait_kind FROM flow_agent_tasks
+      WHERE project_id=? AND task_id=?`).get(projectId, taskId) as
+      Pick<Row, 'state' | 'wait_revision' | 'wait_kind'> | undefined
+    if (!row) return null
+    const waitKind = row.state === 'waiting' || row.state === 'blocked' ? row.wait_kind : null
+    return {
+      projectId, taskId, source: 'flow-agent-task' as const, state: row.state,
+      waitRevision: row.wait_revision, waitKind,
+      stateReason: waitKind === 'reconcile' ? 'RECONCILE_REQUIRED'
+        : waitKind === 'human' ? 'HUMAN_REQUIRED'
+          : row.state === 'blocked' ? 'TASK_BLOCKED'
+            : row.state === 'failed' ? 'TASK_FAILED' : null,
+      reconcileRequired: waitKind === 'reconcile', allowedActions: []
+    }
+  }
 
   create(raw: unknown, skills: FixedSkill[]): AgentTaskRecord {
     const snapshot = AgentTaskSnapshotSchema.parse(raw)

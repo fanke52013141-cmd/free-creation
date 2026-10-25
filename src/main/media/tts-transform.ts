@@ -36,12 +36,14 @@ async function transformMiniMaxTts(input: TtsGenerateInput): Promise<VoiceCloneR
     config.promptMediaId
   ]
   // L04：语音克隆阶段事件走统一底座（含最后一道脱敏与字段白名单）；
-  // 旧 TTS 输入契约只有 runId/nodeId，trace 关联缺失会被显式标记而非补造。
+  // P1-B：执行器传入运行根 traceId 时建立真实祖先关联；旧输入没有 trace 时
+  // 仍显式标记 correlationMissing，不补造关联。
   const report = (level: 'info' | 'error', message: string, fields: Record<string, unknown> = {}): void => {
     emitGatewayEvent('node.stage', message, {
       runId: input.runId,
       nodeId: input.nodeId,
-      correlationMissing: true
+      ...(input.traceId ? { traceId: input.traceId } : {}),
+      ...(!input.traceId ? { correlationMissing: true } : {})
     }, {
       level,
       phase,

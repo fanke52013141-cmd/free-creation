@@ -24,6 +24,7 @@ import type {
   VoicePort
 } from '@free-creation/model-runtime'
 import { decryptSecret, encryptSecret } from '../gateway/keycrypto'
+import type { AccessOutput } from '../../shared/agent-access/registry'
 
 interface Statement {
   get(...values: unknown[]): unknown
@@ -117,6 +118,29 @@ export class SqliteModelHost
       ? this.db.prepare('SELECT * FROM model_definitions WHERE connection_id = ? ORDER BY name').all(connectionId)
       : this.db.prepare('SELECT * FROM model_definitions ORDER BY name').all()) as ModelRow[]
     return rows.map((row) => this.modelFromRow(row))
+  }
+
+  /** Bounded local catalog projection: never reads connection secrets, URLs or headers. */
+  listAccessModels(offset: number, limit: number): AccessOutput<'model.list'> {
+    const rows = this.db.prepare(`SELECT m.*, c.enabled AS connection_enabled
+      FROM model_definitions m JOIN model_connections c ON c.id = m.connection_id
+      ORDER BY m.id LIMIT ? OFFSET ?`).all(limit, offset) as Array<ModelRow & { connection_enabled: number }>
+    const total = this.db.prepare(`SELECT COUNT(*) AS n FROM model_definitions m
+      JOIN model_connections c ON c.id = m.connection_id`).get() as { n: number }
+    return {
+      models: rows.map((row) => {
+        const model = this.modelFromRow(row)
+        return {
+          id: model.id, connectionId: model.connectionId, modelId: model.modelId,
+          enabled: model.enabled, connectionEnabled: Boolean(row.connection_enabled),
+          capabilitiesTruncated: model.capabilities.length > 32,
+          capabilities: model.capabilities.slice(0, 32).map(({ operation }) => ({
+            operation, validation: model.validation?.[operation]?.status ?? 'unverified'
+          }))
+        }
+      }),
+      total: total.n, reachability: 'not-probed' as const
+    }
   }
 
   listBindings(): FeatureBinding[] {

@@ -280,7 +280,7 @@ function generatorFixture(type: 'image-gen' | 'speech', config: string) {
 
 async function withMediaInputFixture(
   sourceKind: 'image' | 'audio',
-  targetType: 'image-edit' | 'tts',
+  targetType: 'image-edit' | 'tts' | 'image-crop' | 'image-split',
   config: string,
   run: (
     fixture: ReturnType<typeof fixture>,
@@ -347,7 +347,14 @@ async function withMediaInputFixture(
     f.target.props.config = config
     const targetNode = f.file.nodes.find((node) => node.id === f.target.id)!
     targetNode.type = targetType
-    targetNode.contractVersion = targetType === 'image-edit' ? 2 : 4
+    targetNode.contractVersion =
+      targetType === 'image-edit'
+        ? 2
+        : targetType === 'tts'
+          ? 4
+          : targetType === 'image-crop'
+            ? 2
+            : 3
     targetNode.params.config = config
     targetNode.ports =
       targetType === 'image-edit' ? IMAGE_EDIT_FLOW_PORTS : flowTargetPorts(targetNode)
@@ -532,6 +539,39 @@ describe('image generation and speech Agent targets', () => {
           mediaId: 'generated-image',
           contentSha256: expect.stringMatching(/^[a-f0-9]{64}$/)
         })
+      }
+    ))
+
+  it('P2-B：裁剪目标以固定图片准入，未声明配置在准入处拒绝', () =>
+    withMediaInputFixture(
+      'image',
+      'image-crop',
+      JSON.stringify({ version: 1, mode: 'rect', aspectRatio: 'free', rect: { x: 0, y: 0, width: 0.5, height: 0.5 } }),
+      (f, commandForRun) => {
+        const command = commandForRun()
+        const prepared = f.ledger.prepare(command)
+        if (prepared.state !== 'ready') throw new Error('expected crop grant')
+        expect(prepared.grant.command.inputs[0].targetPortId).toBe('in-image')
+      }
+    ))
+
+  it('P2-B：拆图目标以固定图片准入，契约版本锁定 3', () =>
+    withMediaInputFixture(
+      'image',
+      'image-split',
+      JSON.stringify({ version: 1, rows: 2, columns: 2, scalePercent: 100 }),
+      (f, commandForRun) => {
+        const command = { ...commandForRun(), contractVersion: 3 }
+        const prepared = f.ledger.prepare(command)
+        if (prepared.state !== 'ready') throw new Error('expected split grant')
+        // 契约版本不匹配在准入处以 FLOW_CONTRACT_MISMATCH 抛出。
+        expect(() =>
+          f.ledger.prepare({
+            ...command,
+            commandId: `${command.commandId}-mismatch`,
+            contractVersion: 1
+          })
+        ).toThrow('FLOW_CONTRACT_MISMATCH')
       }
     ))
 

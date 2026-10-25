@@ -14,7 +14,8 @@ import { FlowAssetError } from '../../shared/agent-flow/assets'
 import { FlowAgentDesktopHost } from '../agent-flow/desktop-host'
 import type { FlowCommandDesktop } from './flow-commands.ipc'
 import { getDb } from '../store/db'
-import { openProject } from '../store/projects.repo'
+import { openProject, projectJsonPath } from '../store/projects.repo'
+import { statSync } from 'node:fs'
 import { SqliteModelHost } from '../model-host/sqlite-model-host'
 import { createCatalogChatModel } from '../gateway/factory'
 import { AgentSdkModel } from '../agent-flow/runtime-model'
@@ -31,11 +32,13 @@ import { FlowReviewStore, reviewBinding } from '../agent-flow/review-store'
 import { readStoredNodeRunStatus } from '../../shared/engine/run-status'
 import { AgentNodeConfigSchema, ReviewNodeConfigSchema } from '../../shared/agent-flow/node-contracts'
 import { ReviewRequestSchema } from '../../shared/agent-flow/review'
+import { registerSkillLibraryIpc } from './skill-library.ipc'
 
 export function registerFlowAgentsIpc(
   window: () => BrowserWindow | null,
   desktop: FlowCommandDesktop
 ): FlowAgentDesktopHost {
+  registerSkillLibraryIpc(window)
   process.env.LANGSMITH_TRACING = 'false'
   process.env.LANGCHAIN_TRACING_V2 = 'false'
   const catalog = new SqliteModelHost(getDb())
@@ -199,44 +202,60 @@ export function registerFlowAgentsIpc(
           throw new AgentRuntimeError('FLOW_PROJECT_INACTIVE', 'publication')
         active.webContents.send(IPC.flowAgents.publication, grant)
         const deadline = Date.now() + 30000
+        // Every confirmation condition below is derived from the saved snapshot;
+        // while project.json is byte-identical (same file id/size/mtime) the
+        // outcome cannot change, so the full parse is skipped between saves.
+        const snapshotPath = projectJsonPath(grant.projectId)
+        let lastStatKey: string | undefined
         while (!signal.aborted && Date.now() < deadline && desktop.isActive(grant.projectId)) {
-          const file = openProject(grant.projectId)
-          const shape = (
-            file?.tldrawSnapshot as {
-              store?: Record<string, { meta?: { agentTask?: string; nodeResult?: string } }>
-            }
-          )?.store?.[grant.nodeId]
+          let statKey: string | undefined
           try {
-            const task = JSON.parse(shape?.meta?.agentTask ?? '{}')
-            const result = JSON.parse(shape?.meta?.nodeResult ?? '{}')
-            if (grant.kind === 'review') {
-              const record =
-                new FlowReviewStore(getDb()).forRequest(grant.projectId, grant.taskId) ??
-                new FlowReviewStore(getDb()).latest(grant.projectId, grant.nodeId)
-              const nodeRun = (shape?.meta as Record<string, unknown>)?.nodeRun
+            const stat = statSync(snapshotPath)
+            statKey = `${stat.ino}|${stat.size}|${stat.mtimeMs}`
+          } catch {
+            /* Missing main file still falls back to .bak inside openProject. */
+          }
+          if (statKey === undefined || statKey !== lastStatKey) {
+            lastStatKey = statKey
+            const file = openProject(grant.projectId)
+            const shape = (
+              file?.tldrawSnapshot as {
+                store?: Record<string, { meta?: { agentTask?: string; nodeResult?: string } }>
+              }
+            )?.store?.[grant.nodeId]
+            try {
+              const task = JSON.parse(shape?.meta?.agentTask ?? '{}')
+              const result = JSON.parse(shape?.meta?.nodeResult ?? '{}')
+              if (grant.kind === 'review') {
+                const record =
+                  new FlowReviewStore(getDb()).forRequest(grant.projectId, grant.taskId) ??
+                  new FlowReviewStore(getDb()).latest(grant.projectId, grant.nodeId)
+                const nodeRun = (shape?.meta as Record<string, unknown>)?.nodeRun
+                if (
+                  file &&
+                  record &&
+                  record.signature === reviewBinding(file, grant.nodeId).signature &&
+                  record.decision.reviewId === result.reviewId &&
+                  readStoredNodeRunStatus(nodeRun) === 'success' &&
+                  (nodeRun as { runId: string }).runId === grant.taskId
+                )
+                  return
+              }
               if (
-                file &&
-                record &&
-                record.signature === reviewBinding(file, grant.nodeId).signature &&
-                record.decision.reviewId === result.reviewId &&
-                readStoredNodeRunStatus(nodeRun) === 'success' &&
-                (nodeRun as { runId: string }).runId === grant.taskId
+                task.taskId === grant.taskId &&
+                ['success', 'skipped'].includes(
+                  readStoredNodeRunStatus((shape?.meta as Record<string, unknown>)?.nodeRun) ?? ''
+                ) &&
+                ((shape?.meta as Record<string, unknown>)?.nodeRun as
+                  | { runId?: string }
+                  | undefined)?.runId === grant.taskId &&
+                (task.state === 'waiting' ||
+                  (task.state === 'completed' && result.taskId === grant.taskId))
               )
                 return
+            } catch {
+              /* Wait only for the saved public projection. */
             }
-            if (
-              task.taskId === grant.taskId &&
-              ['success', 'skipped'].includes(
-                readStoredNodeRunStatus((shape?.meta as Record<string, unknown>)?.nodeRun) ?? ''
-              ) &&
-              ((shape?.meta as Record<string, unknown>)?.nodeRun as { runId?: string } | undefined)
-                ?.runId === grant.taskId &&
-              (task.state === 'waiting' ||
-                (task.state === 'completed' && result.taskId === grant.taskId))
-            )
-              return
-          } catch {
-            /* Wait only for the saved public projection. */
           }
           await new Promise((done) => setTimeout(done, 100))
         }

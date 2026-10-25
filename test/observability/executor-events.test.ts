@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 // L01 验收 A01/A02：3 节点顺序运行共享同一根 trace、各自独立执行实例、
 // 唯一终态；失败节点可定位阶段；敏感 fixture 不进入事件输出。
-import { beforeAll, afterEach, describe, expect, it } from 'vitest'
+import { beforeAll, afterEach, describe, expect, it, vi } from 'vitest'
 import type { Editor } from 'tldraw'
-import { runWorkflow, runNodeManually } from '@renderer/engine/executor'
+import { runWorkflow, runNodeManually, runNodeTest } from '@renderer/engine/executor'
 import {
   drainDiagnosticsEvents,
   diagnosticsTransportDropCount,
@@ -13,9 +13,16 @@ import {
 import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
 import { registerAllNodeTypes } from '../helpers/registerNodes'
 import type { DiagnosticsEventInput } from '@shared/observability'
+import { getNodeType } from '@renderer/nodes/registry'
+import { useEngineStore } from '@renderer/engine/store'
+import { useResourceQueue } from '@renderer/engine/resource-queue'
+import * as workload from '@renderer/engine/run-workload'
 
 beforeAll(() => registerAllNodeTypes())
-afterEach(() => resetDiagnosticsReporterForTest())
+afterEach(() => {
+  vi.restoreAllMocks()
+  resetDiagnosticsReporterForTest()
+})
 
 function node(id: string, nodeType: string, text: string): NodeCardShape {
   return {
@@ -116,6 +123,210 @@ const SOURCE_MID_BINDINGS = {
     { props: { terminal: 'end' }, toId: 'shape:target' }
   ]
 }
+
+describe('local edited and persisted output consistency', () => {
+  it.each(['failed', 'cancelled', 'running'] as const)(
+    'consumes pinned processor output after a %s retry and JSON reopen',
+    async (status) => {
+      const source = node('shape:pinned-processor', 'processor', '')
+      source.props.config = JSON.stringify({ fallback: 'edited future candidate' })
+      source.meta.nodeRun = { runId: 'retry', status, startedAt: 1, inputs: {} }
+      source.meta.nodeResult = JSON.stringify({ kind: 'text', text: 'unconfirmed candidate' })
+      source.meta.pinnedOutput = JSON.stringify({
+        version: 1,
+        outputs: { 'out-value': { kind: 'text', text: 'fixed prior result' } }
+      })
+      const target = node('shape:consume-pinned', 'processor', '')
+      target.props.config = JSON.stringify({ operation: 'template', template: 'read:{{value}}' })
+      const reopened = JSON.parse(JSON.stringify(source)) as NodeCardShape
+      const { editor } = setupEditor(
+        [reopened, target, arrow('shape:pinned-edge', 'out-value', 'in-value')],
+        {
+          'shape:pinned-edge': [
+            { props: { terminal: 'start' }, toId: reopened.id },
+            { props: { terminal: 'end' }, toId: target.id }
+          ]
+        }
+      )
+      const result = await runNodeManually(editor, 'project-pinned-parity', [], target.id)
+      expect(result.status).toBe('done')
+      expect(JSON.parse(String(target.meta.nodeResult))).toEqual({
+        kind: 'text',
+        text: 'read:fixed prior result'
+      })
+      expect(reopened.meta.nodeRun).toMatchObject({ runId: 'retry', status })
+      // Removing the pin restores the normal rejection of an unsuccessful upstream result.
+      delete reopened.meta.pinnedOutput
+      expect((await runNodeManually(editor, 'project-pinned-parity', [], target.id)).status).toBe(
+        'failed'
+      )
+    }
+  )
+})
+
+describe('local stop admission boundaries', () => {
+  it.each(['manual', 'test'] as const)(
+    'returns cancellation rather than failure when a stopped %s executor rejects late',
+    async (mode) => {
+      const source = node('shape:stop-rejection', 'text', 'private rejection fixture')
+      const { editor, events } = setupEditor([source])
+      let release!: () => void
+      let entered!: () => void
+      const ready = new Promise<void>((resolve) => {
+        entered = resolve
+      })
+      const waiting = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      vi.spyOn(getNodeType('text')!, 'executor').mockImplementationOnce(async () => {
+        entered()
+        await waiting
+        throw new Error('private late response')
+      })
+      const running =
+        mode === 'manual'
+          ? runNodeManually(editor, 'project-stop-late', [], source.id)
+          : runNodeTest(editor, 'project-stop-late', [], source.id, {})
+      await ready
+      try {
+        useResourceQueue.getState().tasks[0].cancel()
+      } finally {
+        release()
+      }
+      expect(await running).toMatchObject({
+        status: 'skipped',
+        reason: mode === 'manual' ? '已取消' : '测试已取消'
+      })
+      await drainDiagnosticsEvents()
+      if (mode === 'manual') expect(source.meta.nodeRun).toMatchObject({ status: 'cancelled' })
+      else expect(source.meta.nodeRun).toBeUndefined()
+      expect(events.filter((event) => event.event === 'node.cancelled')).toHaveLength(
+        mode === 'manual' ? 1 : 0
+      )
+      expect(events.filter((event) => event.event === 'workflow.cancelled')).toHaveLength(
+        mode === 'manual' ? 1 : 0
+      )
+      expect(
+        events.some((event) => event.event === 'node.failed' || event.event === 'workflow.failed')
+      ).toBe(false)
+      expect(JSON.stringify(events)).not.toContain('private late response')
+      expect(useResourceQueue.getState().tasks).toHaveLength(0)
+    }
+  )
+
+  it('does not start a node test cancelled at the resource admission boundary', async () => {
+    const source = node('shape:stop-test', 'text', 'private test fixture')
+    const { editor } = setupEditor([source])
+    const executor = vi.spyOn(getNodeType('text')!, 'executor')
+    let cancelled = false
+    const unsubscribe = useResourceQueue.subscribe((state) => {
+      const task = state.tasks.find(
+        (task) => task.key === `project-stop-test/${source.id}` && task.status === 'running'
+      )
+      if (task && !cancelled) {
+        cancelled = true
+        task.cancel()
+      }
+    })
+    try {
+      expect(await runNodeTest(editor, 'project-stop-test', [], source.id, {})).toMatchObject({
+        status: 'skipped',
+        outputs: {}
+      })
+      expect(cancelled).toBe(true)
+      expect(executor).not.toHaveBeenCalled()
+      expect(source.props.exec).toBe('idle')
+      expect(source.meta.nodeRun).toBeUndefined()
+      expect(useResourceQueue.getState().tasks).toHaveLength(0)
+    } finally {
+      unsubscribe()
+    }
+  })
+  it.each(['resolved', 'rejected'] as const)(
+    'does not invoke an executor after stop during %s workload capture',
+    async (outcome) => {
+      const source = node('shape:stop-source', 'text', 'private stop fixture')
+      const { editor, events } = setupEditor([source])
+      let release!: () => void
+      let entered!: () => void
+      const ready = new Promise<void>((resolve) => {
+        entered = resolve
+      })
+      const waiting = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      vi.spyOn(workload, 'captureRunWorkload').mockImplementationOnce(async () => {
+        entered()
+        await waiting
+        if (outcome === 'rejected') throw new Error('private metadata error')
+        return { features: {}, providerKey: 'local', modelKey: 'text' }
+      })
+      const executor = vi.spyOn(getNodeType('text')!, 'executor')
+      const running = runWorkflow(editor, 'project-stop', [])
+      await ready
+      try {
+        useEngineStore.getState().stop!()
+      } finally {
+        release()
+      }
+      await running
+      await drainDiagnosticsEvents()
+      expect(executor).not.toHaveBeenCalled()
+      expect(source.props.exec).toBe('cancelled')
+      expect(source.meta.nodeRun).toMatchObject({ status: 'cancelled' })
+      expect(useResourceQueue.getState().tasks).toHaveLength(0)
+      expect(useEngineStore.getState().phase).toBe('idle')
+      expect(events.filter((event) => event.event === 'node.started')).toHaveLength(1)
+      expect(events.filter((event) => event.event === 'node.cancelled')).toHaveLength(1)
+      expect(
+        events.some((event) => event.event === 'node.completed' || event.event === 'node.failed')
+      ).toBe(false)
+      expect(events.filter((event) => event.event === 'workflow.cancelled')).toHaveLength(1)
+      expect(JSON.stringify(events)).not.toMatch(/private stop fixture|private metadata error/)
+      // A stopped admission must release ownership so editing and rerunning work normally.
+      source.props.text = 'edited after stop'
+      await runWorkflow(editor, 'project-stop', [])
+      expect(executor).toHaveBeenCalledTimes(1)
+      expect(source.meta.nodeRun).toMatchObject({ status: 'success' })
+    }
+  )
+
+  it('cancels before creating a node run when stop arrives during the main occupancy check', async () => {
+    const source = node('shape:stop-check', 'text', 'private check fixture')
+    const { editor, events } = setupEditor([source])
+    let release!: () => void
+    let entered!: () => void
+    const ready = new Promise<void>((resolve) => {
+      entered = resolve
+    })
+    const waiting = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    Object.assign(window.api, {
+      checkFlowNodeAvailability: async () => {
+        entered()
+        await waiting
+        return { ok: true, data: true }
+      }
+    })
+    const executor = vi.spyOn(getNodeType('text')!, 'executor')
+    const running = runWorkflow(editor, 'project-stop-check', [])
+    await ready
+    try {
+      useEngineStore.getState().stop!()
+    } finally {
+      release()
+    }
+    await running
+    await drainDiagnosticsEvents()
+    expect(executor).not.toHaveBeenCalled()
+    expect(source.props.exec).toBe('cancelled')
+    expect(source.meta.nodeRun).toBeUndefined()
+    expect(useResourceQueue.getState().tasks).toHaveLength(0)
+    expect(events.some((event) => event.event === 'node.started')).toBe(false)
+    expect(events.filter((event) => event.event === 'workflow.cancelled')).toHaveLength(1)
+  })
+})
 
 describe('A01 · 3 节点顺序运行共享根 trace', () => {
   it('拒绝无模型的新 Agent 任务，不启动工作流或排队节点', async () => {

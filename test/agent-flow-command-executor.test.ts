@@ -12,7 +12,7 @@ import { projectSemanticRevision } from '../src/main/agent-flow/command-intent'
 import type { NodeCardShape } from '@renderer/canvas/NodeCardShape'
 import { deriveGraph } from '@renderer/canvas/graph'
 import { getNodeType } from '@renderer/nodes/registry'
-import { runNodeManually } from '@renderer/engine/executor'
+import { runNodeManually, cancelFlowCommandExecution } from '@renderer/engine/executor'
 import { runFlowNodeCommand, executeFlowCommandGrant } from '@renderer/engine/flow-command-bridge'
 import {
   acquireNodeResource,
@@ -223,6 +223,38 @@ async function queued() {
   )
 }
 describe('manual/Agent command shared executor parity', () => {
+  it.each(['resolved', 'rejected'] as const)(
+    'does not enter an executor after stop during %s command admission',
+    async (outcome) => {
+      const f = fixture()
+      let release!: () => void
+      let entered!: () => void
+      const ready = new Promise<void>((resolve) => {
+        entered = resolve
+      })
+      const waiting = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      const running = runNodeManually(f.editor, 'project-a', [], f.target.id, {
+        grant: f.grant,
+        beforeExecutor: async () => {
+          entered()
+          await waiting
+          if (outcome === 'rejected') throw new Error('private admission response')
+        }
+      })
+      await ready
+      try {
+        cancelFlowCommandExecution({ projectId: 'project-a', commandId: f.command.commandId })
+      } finally {
+        release()
+      }
+      expect(await running).toEqual({ status: 'skipped', reason: '已取消' })
+      expect(f.spy).not.toHaveBeenCalled()
+      expect(f.target.meta.nodeRun).toMatchObject({ status: 'cancelled' })
+      expect(useResourceQueue.getState().tasks).toHaveLength(0)
+    }
+  )
   it('replays a completed command after semantic edits instead of rejecting or executing it again', async () => {
     const f = fixture()
     const first = await runFlowNodeCommand(f.editor, 'project-a', [], f.command)

@@ -318,7 +318,7 @@ if (
         protocol: 'openai-compatible',
         baseUrl: real
           ? (process.env.CANVAS_AGENT_PROBE_BASE_URL ?? 'https://ark.cn-beijing.volces.com/api/v3')
-          : 'http://127.0.0.1:5200/v1',
+          : (process.env.CANVAS_AGENT_FIXTURE_BASE_URL ?? 'http://127.0.0.1:5200/v1'),
         ...(real ? { apiKey: process.env.CANVAS_AGENT_PROBE_KEY } : {})
       })
       host.saveModel({

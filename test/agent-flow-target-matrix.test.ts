@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { CanvasNode } from '../src/shared/types'
-import { flowTargetContract, flowTargetPorts } from '../src/shared/agent-flow/video-adapter'
+import {
+  codeFlowInputsValid,
+  cropFlowConfigValid,
+  flowTargetContract,
+  flowTargetPorts,
+  localImageFlowInputsValid,
+  splitFlowConfigValid
+} from '../src/shared/agent-flow/video-adapter'
 
 /** REL-03 的 Agent 支持目标矩阵：执行器实际接入的节点类型与契约版本。 */
 const SUPPORTED = [
@@ -24,7 +31,25 @@ const SUPPORTED = [
     inputs: ['in-text', 'in-voice', 'in-audio'],
     output: 'out-audio'
   },
-  { type: 'tts', contractVersion: 4, inputs: ['in-audio'], output: 'out-json' }
+  { type: 'tts', contractVersion: 4, inputs: ['in-audio'], output: 'out-json' },
+  // P2-B：本地媒体与本地代码目标（code 限单参数单输出形态）。
+  { type: 'image-crop', contractVersion: 2, inputs: ['in-image'], output: 'out-image' },
+  { type: 'image-split', contractVersion: 3, inputs: ['in-image'], output: 'out-image' },
+  {
+    type: 'code',
+    contractVersion: 3,
+    inputs: ['in-param-input'],
+    output: 'out-output',
+    config: {
+      source: 'async function main(args) { return args.input }',
+      inputName: 'input',
+      inputType: 'string',
+      outputName: 'output',
+      outputType: 'string',
+      outputMode: 'single',
+      params: [{ name: 'input', type: 'string' }]
+    }
+  }
 ] as const
 
 const UNSUPPORTED_TYPES = [
@@ -37,7 +62,6 @@ const UNSUPPORTED_TYPES = [
   'speech-to-text',
   'chat',
   'json',
-  'code',
   'storyboard',
   'ai-process',
   'agent',
@@ -66,11 +90,15 @@ function node(type: string, contractVersion: number, config: Record<string, unkn
 describe('REL-03 Agent 支持目标矩阵', () => {
   it('支持的目标与端口和冻结矩阵完全一致', () => {
     for (const entry of SUPPORTED) {
-      const contract = flowTargetContract(node(entry.type, entry.contractVersion))
+      const contract = flowTargetContract(
+        node(entry.type, entry.contractVersion, 'config' in entry ? entry.config : {})
+      )
       expect(contract, `${entry.type}@${entry.contractVersion} 应受支持`).not.toBeNull()
       expect(contract?.inputs).toEqual(entry.inputs)
       expect(contract?.output).toBe(entry.output)
-      const ports = flowTargetPorts(node(entry.type, entry.contractVersion))
+      const ports = flowTargetPorts(
+        node(entry.type, entry.contractVersion, 'config' in entry ? entry.config : {})
+      )
       const requiredInputs =
         entry.type === 'speech' ? entry.inputs.filter((portId) => portId !== 'in-audio') : entry.inputs
       for (const portId of requiredInputs) {
@@ -93,6 +121,55 @@ describe('REL-03 Agent 支持目标矩阵', () => {
     for (const type of UNSUPPORTED_TYPES) {
       expect(flowTargetContract(node(type, 1)), `${type} 不应受支持`).toBeNull()
     }
+  })
+
+  it('P2-B：code 目标只接受单参数单输出形态，输入值类型与参数匹配', () => {
+    const single = {
+      source: 'async function main(args) { return args.input }',
+      inputName: 'input',
+      inputType: 'string',
+      outputName: 'output',
+      outputType: 'string',
+      outputMode: 'single',
+      params: [{ name: 'input', type: 'string' }]
+    }
+    expect(flowTargetContract(node('code', 3, single))?.inputs).toEqual(['in-param-input'])
+    const fields = { ...single, outputMode: 'fields', outputs: [{ name: 'a', type: 'string' }] }
+    expect(flowTargetContract(node('code', 3, fields))).toBeNull()
+    const multiParams = { ...single, params: [{ name: 'a', type: 'string' }, { name: 'b', type: 'string' }] }
+    expect(flowTargetContract(node('code', 3, multiParams))).toBeNull()
+    const image = { kind: 'image', mediaId: 'm1', mediaPath: 'p', mime: 'image/png', contentSha256: 'a'.repeat(64) }
+    expect(
+      codeFlowInputsValid(single, [
+        { targetPortId: 'in-param-input', values: [{ kind: 'text', text: 'hello' }] }
+      ])
+    ).toBe(true)
+    expect(
+      codeFlowInputsValid(single, [
+        { targetPortId: 'in-param-input', values: [image as never] }
+      ])
+    ).toBe(false)
+    expect(localImageFlowInputsValid([{ targetPortId: 'in-image', values: [image as never] }])).toBe(true)
+    expect(
+      localImageFlowInputsValid([
+        { targetPortId: 'in-image', values: [{ kind: 'text', text: 'x' } as never] }
+      ])
+    ).toBe(false)
+    expect(
+      cropFlowConfigValid({ version: 1, mode: 'rect', aspectRatio: 'free', rect: { x: 0, y: 0, width: 0.5, height: 0.5 } })
+    ).toBe(true)
+    // parse 归一化把未知枚举/越界值收敛为安全默认（与主进程 IPC 完全一致），
+    // 因此“无效配置”不存在——准入闸门拒绝的是非对象/坏 JSON。
+    expect(
+      cropFlowConfigValid({ mode: 'rect', rect: { x: 0.1, y: 0.1, width: 0, height: 0.5 } })
+    ).toBe(true)
+    // parseImageCropConfig 对坏字符串也容错为默认（真实准入在 JSON.parse 处已拒）；
+    // 校验器拒绝的是非对象输入。
+    expect(cropFlowConfigValid(42)).toBe(false)
+    expect(cropFlowConfigValid(null)).toBe(false)
+    expect(splitFlowConfigValid({ rows: 2, columns: 2, scalePercent: 100 })).toBe(true)
+    expect(splitFlowConfigValid({ rows: 'bad', columns: null })).toBe(true)
+    expect(splitFlowConfigValid(undefined)).toBe(false)
   })
 
   it('speech 目标的输入端口随保存的后端收敛', () => {

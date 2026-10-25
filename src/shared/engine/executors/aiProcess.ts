@@ -15,10 +15,13 @@ import { featureKeyOf, modelKeyOf, resolveFeatureOption } from '../models'
 import { parseJsonObj, waitForChat } from '../helpers'
 import { readNodeConfig } from '../node-config'
 import { parseRetryConfig, withRetry, type RetryConfig } from '../retry'
+import { runSkillAgent } from '../skill-agent'
+import { skillAgentConfig, type SkillAgentConfig } from '../../skill-agent'
 
 export type AiOutputMode = 'text' | 'markdown' | 'json'
 
 export interface AiProcessConfig {
+  agent?: SkillAgentConfig
   modelKey: string
   /** Selected verified model profile; raw provider/model are never execution inputs. */
   featureKey?: string
@@ -61,6 +64,7 @@ export function parseAiProcess(text: string): AiProcessConfig {
         } as AiProcessConfig['result'])
       : undefined
   return {
+    ...(value?.agent !== undefined ? { agent: value.agent as SkillAgentConfig } : {}),
     modelKey: typeof value?.modelKey === 'string' ? value.modelKey : '',
     ...(typeof value?.featureKey === 'string' ? { featureKey: value.featureKey } : {}),
     system: typeof value?.system === 'string' ? value.system : '',
@@ -119,6 +123,16 @@ export const aiProcessExecutor = async (
   ctx: NodeExecutionContext
 ): Promise<NodeExecutionResult> => {
   const config = parseAiProcess(readNodeConfig(ctx.shape))
+  let agent: SkillAgentConfig
+  try {
+    agent = skillAgentConfig(config.agent)
+  } catch {
+    return {
+      status: 'failed',
+      reason: 'Agent 技能配置无效或缺少必需工具',
+      diagnosticPhase: 'capability'
+    }
+  }
   // 组装一次性的用户消息：优先用上游文本；上游 JSON 作为补充上下文注入。
   const textInput = inputText(ctx.inputs, 'in-text').trim()
   const jsonInputs = inputJson(ctx.inputs, 'in-json')
@@ -151,35 +165,63 @@ export const aiProcessExecutor = async (
   // 校验不过 / 瞬时网络错误）按指数退避重试；配置类错误立即失败。取消随时生效。
   let result: AiProcessConfig['result']
   try {
-    const normalized = await withRetry(
-      async () => {
-        const reply = await waitForChat(
-          ctx.gateway,
-          {
-            providerId: option.provider.id,
-            modelId: option.model.id,
-            system: config.system || undefined,
-            messages: [{ role: 'user', content: userContent }],
-            temperature: config.temperature,
-            maxTokens: config.maxTokens
-          },
-          ctx.signal
-        )
-        if (ctx.signal.cancelled) throw new Error('已取消')
-        // text/markdown 模式空回复不得标成功：零输出会把错误推迟到下游 skipped，
-        // 难以定位（R-19）；json 模式的空回复会在 normalizeResult 里报「不是合法 JSON」。
-        // 两者都属可重试的模型随机性失败，交给 withRetry 分类处理。
-        if (config.mode !== 'json' && !reply.trim()) throw new Error('模型返回为空')
-        return { reply, result: normalizeResult(reply, config.mode, config.jsonSchema) }
-      },
-      {
-        retry: config.retry,
-        signal: ctx.signal,
-        onRetry: (attempt, reason, delayMs) =>
-          ctx.trace?.('request', 'info', `第 ${attempt} 次尝试失败（${reason}），${delayMs}ms 后自动重试`)
-      }
-    )
-    result = normalized.result
+    if (agent.skills.length) {
+      const reply = await runSkillAgent(
+        ctx,
+        agent,
+        {
+          providerId: option.provider.id,
+          modelId: option.model.id,
+          system: [
+            config.system,
+            `最终输出格式：${config.mode}${config.jsonSchema ? `；Schema：${config.jsonSchema.id}@${config.jsonSchema.version}` : ''}`
+          ]
+            .filter(Boolean)
+            .join('\n'),
+          messages: [{ role: 'user', content: userContent }],
+          temperature: config.temperature,
+          maxTokens: config.maxTokens
+        },
+        (output) => {
+          normalizeResult(output, config.mode, config.jsonSchema)
+        }
+      )
+      result = normalizeResult(reply, config.mode, config.jsonSchema)
+    } else {
+      const normalized = await withRetry(
+        async () => {
+          const reply = await waitForChat(
+            ctx.gateway,
+            {
+              providerId: option.provider.id,
+              modelId: option.model.id,
+              system: config.system || undefined,
+              messages: [{ role: 'user', content: userContent }],
+              temperature: config.temperature,
+              maxTokens: config.maxTokens
+            },
+            ctx.signal
+          )
+          if (ctx.signal.cancelled) throw new Error('已取消')
+          // text/markdown 模式空回复不得标成功：零输出会把错误推迟到下游 skipped，
+          // 难以定位（R-19）；json 模式的空回复会在 normalizeResult 里报「不是合法 JSON」。
+          // 两者都属可重试的模型随机性失败，交给 withRetry 分类处理。
+          if (config.mode !== 'json' && !reply.trim()) throw new Error('模型返回为空')
+          return { reply, result: normalizeResult(reply, config.mode, config.jsonSchema) }
+        },
+        {
+          retry: config.retry,
+          signal: ctx.signal,
+          onRetry: (attempt, reason, delayMs) =>
+            ctx.trace?.(
+              'request',
+              'info',
+              `第 ${attempt} 次尝试失败（${reason}），${delayMs}ms 后自动重试`
+            )
+        }
+      )
+      result = normalized.result
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     if (message === '已取消' || ctx.signal.cancelled) {

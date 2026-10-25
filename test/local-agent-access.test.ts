@@ -22,6 +22,8 @@ import {
 import { startLocalAccessServer, type LocalAccessServer } from '../src/main/agent-access/server'
 import { callLocalOperation } from '../src/local-agent/client'
 import { DesktopAccessError, type AccessDesktop } from '../src/main/agent-access/desktop'
+import { SqliteModelHost } from '../src/main/model-host/sqlite-model-host'
+import { createResource, archiveResource, searchResources } from '../src/main/store/library.repo'
 
 let directory: string
 let service: LocalAccessService
@@ -74,6 +76,237 @@ afterEach(() => {
 })
 
 describe('local Agent vertical slice', () => {
+  it('pages model metadata without exposing connection configuration or probe messages', async () => {
+    const host = new SqliteModelHost(getDb())
+    host.saveConnection({
+      id: 'conn',
+      name: 'private name',
+      protocol: 'openai-compatible',
+      baseUrl: 'https://private.invalid/?token=secret-url',
+      headers: { Authorization: 'Bearer fake-secret' },
+      metadata: { private: 'private metadata' },
+      enabled: false
+    })
+    for (const id of ['model-a', 'model-b'])
+      host.saveModel({
+        id,
+        connectionId: 'conn',
+        modelId: id,
+        name: 'private model name',
+        enabled: id === 'model-a',
+        capabilities: [
+          {
+            operation: 'text.generate',
+            asynchronous: false,
+            streaming: false,
+            acceptedAssetKinds: [],
+            producedAssetKinds: [],
+            controls: { secret: 'private controls' }
+          }
+        ]
+      })
+    await host.saveValidation({
+      connectionId: 'conn',
+      modelDefinitionId: 'model-a',
+      operation: 'text.generate',
+      status: 'failed',
+      message: 'private failure response',
+      checkedAt: new Date().toISOString()
+    })
+    const first = await call('model.list', { limit: 1 })
+    expect(first.status).toBe('completed')
+    expect(first.data).toEqual({
+      models: [
+        {
+          id: 'model-a',
+          connectionId: 'conn',
+          modelId: 'model-a',
+          enabled: true,
+          connectionEnabled: false,
+          capabilitiesTruncated: false,
+          capabilities: [{ operation: 'text.generate', validation: 'failed' }]
+        }
+      ],
+      total: 2,
+      reachability: 'not-probed'
+    })
+    expect((await call('model.list', { offset: 1, limit: 1 })).data).toMatchObject({
+      models: [{ id: 'model-b', enabled: false, capabilities: [{ validation: 'unverified' }] }]
+    })
+    const serialized = JSON.stringify([first, events])
+    for (const secret of [
+      'private.invalid',
+      'secret-url',
+      'fake-secret',
+      'private metadata',
+      'private controls',
+      'private model name',
+      'private failure response'
+    ])
+      expect(serialized).not.toContain(secret)
+  })
+
+  it('searches the shared library with pagination and exposes no component contents or paths', async () => {
+    const first = createResource({
+      title: 'Resource A',
+      formPreset: 'prompt',
+      components: [{ role: 'prompt', valueType: 'text', text: '中文私密提示词-only-fixture' }]
+    })
+    const second = createResource({
+      title: 'Resource B',
+      formPreset: 'prompt',
+      components: [{ role: 'prompt', valueType: 'text', text: '中文私密提示词-only-fixture' }]
+    })
+    const page = await call('library.search', { query: '中文私密提示词-only-fixture', limit: 1 })
+    expect(page.status).toBe('completed')
+    const result = page.data as { items: Array<{ id: string }>; nextCursor: string }
+    expect(result.items).toHaveLength(1)
+    const next = await call('library.search', {
+      query: '中文私密提示词-only-fixture',
+      limit: 1,
+      cursor: result.nextCursor
+    })
+    expect(
+      new Set([...result.items, ...(next.data as typeof result).items].map((item) => item.id))
+    ).toEqual(new Set([first.id, second.id]))
+    expect((page.data as typeof result).items[0].id).toBe(
+      searchResources({ query: '中文私密提示词-only-fixture', limit: 1 }).items[0].id
+    )
+    expect(JSON.stringify([page, next, events])).not.toContain('中文私密提示词-only-fixture')
+    archiveResource(first.id, true)
+    expect((await call('library.search', { includeArchived: false })).data).toMatchObject({
+      items: [{ id: second.id }]
+    })
+    expect((await call('library.search', { includeArchived: true })).data).toMatchObject({
+      items: expect.arrayContaining([expect.objectContaining({ id: first.id, archived: true })])
+    })
+  })
+
+  it('reads persisted Agent task facts with project scoping and no checkpoint or output payload', async () => {
+    const project = createProject('task fixture')
+    const other = createProject('other fixture')
+    getDb()
+      .prepare(
+        `INSERT INTO flow_agent_tasks
+      (thread,project_id,task_id,agent_node_id,snapshot_json,skills_json,state,wait_kind,wait_revision,code,output_refs_json)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+      )
+      .run(
+        'thread',
+        project.id,
+        'task-1',
+        'agent-1',
+        '{"goal":"private goal"}',
+        '["private skill"]',
+        'waiting',
+        'human',
+        3,
+        'private error',
+        '["private output"]'
+      )
+    const receipt = await call('run.get', { projectId: project.id, taskId: 'task-1' })
+    expect(receipt.status).toBe('completed')
+    expect(receipt.data).toEqual({
+      projectId: project.id,
+      taskId: 'task-1',
+      source: 'flow-agent-task',
+      state: 'waiting',
+      waitKind: 'human',
+      waitRevision: 3,
+      reconcileRequired: false,
+      stateReason: 'HUMAN_REQUIRED',
+      allowedActions: []
+    })
+    expect((await call('run.get', { projectId: other.id, taskId: 'task-1' })).error?.code).toBe(
+      'NOT_FOUND'
+    )
+    getDb().prepare("UPDATE flow_agent_tasks SET state='blocked',wait_kind='reconcile'").run()
+    expect((await call('run.get', { projectId: project.id, taskId: 'task-1' })).data).toMatchObject(
+      {
+        state: 'blocked',
+        reconcileRequired: true,
+        stateReason: 'RECONCILE_REQUIRED',
+        allowedActions: []
+      }
+    )
+    getDb().prepare("UPDATE flow_agent_tasks SET state='completed'").run()
+    expect((await call('run.get', { projectId: project.id, taskId: 'task-1' })).data).toMatchObject(
+      {
+        state: 'completed',
+        reconcileRequired: false,
+        stateReason: null,
+        waitKind: null
+      }
+    )
+    expect(JSON.stringify([receipt, events])).not.toMatch(
+      /private goal|private skill|private error|private output/
+    )
+    expect(getDb().prepare('SELECT COUNT(*) AS n FROM local_agent_operations').get()).toEqual({
+      n: 0
+    })
+  })
+
+  it('reports diagnostic availability and safe counters without raw incident details', async () => {
+    expect((await call('diagnostics.summary')).data).toMatchObject({
+      available: false,
+      degraded: true
+    })
+    service = new LocalAccessService({
+      instanceId: randomUUID(),
+      appVersion: 'test',
+      exportDirectory: join(directory, 'agent-exports'),
+      activeProjectId: () => null,
+      diagnostics: {
+        health: () => ({
+          available: true,
+          sessionId: 'session',
+          degraded: true,
+          received: 12,
+          written: 5,
+          queueDepth: 2,
+          queueBytes: 123,
+          droppedTotal: 3,
+          writeFailures: 2,
+          badLines: 1,
+          lastWriteErrorAt: 'private path',
+          incidentLog: [{ at: 'now', kind: 'write', detail: 'secret incident' }]
+        })
+      }
+    })
+    const result = await call('diagnostics.summary')
+    expect(result.data).toEqual({
+      available: true,
+      degraded: true,
+      received: 12,
+      written: 5,
+      queueDepth: 2,
+      droppedTotal: 3,
+      writeFailures: 2,
+      badLines: 1
+    })
+    expect(JSON.stringify([result, events])).not.toMatch(/secret incident|private path/)
+  })
+
+  it('rejects unbounded or undeclared query input and preserves queries when logging throws', async () => {
+    for (const [operation, input] of [
+      ['model.list', { limit: 101 }],
+      ['model.list', { offset: -1 }],
+      ['library.search', { query: 'x'.repeat(301) }],
+      ['library.search', { cursor: '../' }],
+      ['library.search', { includeContents: true }],
+      ['run.get', { projectId: 'x', taskId: 'x', resume: true }],
+      ['diagnostics.summary', { path: 'C:/private' }]
+    ] as const)
+      expect((await call(operation, input)).error?.code).toBe('INVALID_INPUT')
+    setGatewayEventSink({
+      emit: () => {
+        throw new Error('logger unavailable')
+      }
+    })
+    expect((await call('model.list')).status).toBe('completed')
+    expect((await call('library.search')).status).toBe('completed')
+  })
+
   function withDesktop(desktop: AccessDesktop): void {
     service = new LocalAccessService({
       instanceId: randomUUID(),
@@ -641,12 +874,22 @@ describe('local Agent vertical slice', () => {
     expect(copy.nodes[0].id).not.toBe('n')
     expect((copy.nodes[0].params as any).text).toBe('{"keep":true}')
     expect(
-      (await call('project.clone', { projectId: p.id, expectedGraphVersion: 0, name: 'stale' }, key())).error
-        ?.code
+      (
+        await call(
+          'project.clone',
+          { projectId: p.id, expectedGraphVersion: 0, name: 'stale' },
+          key()
+        )
+      ).error?.code
     ).toBe('REVISION_CONFLICT')
     expect(
-      (await call('project.clone', { projectId: 'missing', expectedGraphVersion: 0, name: 'x' }, key())).error
-        ?.code
+      (
+        await call(
+          'project.clone',
+          { projectId: 'missing', expectedGraphVersion: 0, name: 'x' },
+          key()
+        )
+      ).error?.code
     ).toBe('NOT_FOUND')
   })
 
@@ -729,9 +972,9 @@ describe('local Agent vertical slice', () => {
         groups: []
       }
     })
-    expect(
-      (await call('project.delete', { projectId: p.id }, key())).error?.code
-    ).toBe('IMPACT_CONFIRM_REQUIRED')
+    expect((await call('project.delete', { projectId: p.id }, key())).error?.code).toBe(
+      'IMPACT_CONFIRM_REQUIRED'
+    )
     expect(
       (
         await call(
@@ -797,9 +1040,9 @@ describe('local Agent vertical slice', () => {
       deleteKey
     )
     expect(replay.data).toEqual(deleted.data)
-    expect(
-      (await call('project.delete.precheck', { projectId: p.id })).error?.code
-    ).toBe('NOT_FOUND')
+    expect((await call('project.delete.precheck', { projectId: p.id })).error?.code).toBe(
+      'NOT_FOUND'
+    )
     const namesake = createProject('delete-me')
     expect(openProject(namesake.id)).not.toBeNull()
     expect(namesake.id).not.toBe(p.id)

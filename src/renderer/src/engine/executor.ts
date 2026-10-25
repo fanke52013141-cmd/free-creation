@@ -48,7 +48,6 @@ import {
   appendNodeRunHistory,
   appendNodeRunTrace,
   inputSources,
-  readNodeRunRecord,
   type NodeRunRecord,
   type NodeRunPhase,
   type NodeRunStatus
@@ -83,6 +82,10 @@ interface RunControl {
   cancelled: boolean
   paused: boolean
   resumeWaiters: Array<() => void>
+  /** 取消订阅回调：停止时同步触发，让进行中的本地媒体调用立即请求终止。 */
+  cancelListeners: Array<() => void>
+  /** CancelSignal 订阅入口；已停止时立即执行监听器。 */
+  onCancel(listener: () => void): () => void
 }
 
 interface WorkflowContext {
@@ -130,6 +133,7 @@ export function cancelFlowCommandExecution(input: { projectId: string; commandId
     control.cancelled = true
     control.paused = false
     releasePause(control)
+    fireCancelListeners(control)
     for (const task of useResourceQueue.getState().tasks) {
       if (task.status === 'queued' && queuedControls.get(task.key) === control) task.cancel()
     }
@@ -189,12 +193,47 @@ function emitWorkflowEvent(
 }
 
 function createRunControl(): RunControl {
-  return { cancelled: false, paused: false, resumeWaiters: [] }
+  const control: RunControl = {
+    cancelled: false,
+    paused: false,
+    resumeWaiters: [],
+    cancelListeners: [],
+    onCancel(listener) {
+      if (control.cancelled) {
+        // 已经停止：同步执行，保持「订阅即生效」语义。
+        try {
+          listener()
+        } catch {
+          // 与 fireCancelListeners 一致：回调失败不阻断流程。
+        }
+        return () => undefined
+      }
+      control.cancelListeners.push(listener)
+      return () => {
+        const index = control.cancelListeners.indexOf(listener)
+        if (index >= 0) control.cancelListeners.splice(index, 1)
+      }
+    }
+  }
+  return control
 }
 
 function releasePause(control: RunControl): void {
   const waiters = control.resumeWaiters.splice(0)
   for (const resolve of waiters) resolve()
+}
+
+/** 触发取消订阅回调（停止入口统一走这里，保证媒体终止请求不遗漏）。 */
+function fireCancelListeners(control: RunControl): void {
+  if (!control.cancelled) return
+  const listeners = control.cancelListeners.splice(0)
+  for (const listener of listeners) {
+    try {
+      listener()
+    } catch {
+      // 取消回调失败不阻断停止流程；媒体作业由主进程超时或完成自然收尾。
+    }
+  }
 }
 
 function waitForResume(control: RunControl): Promise<void> {
@@ -212,6 +251,7 @@ function registerRunControls(control: RunControl): void {
     }
     control.paused = false
     releasePause(control)
+    fireCancelListeners(control)
     useEngineStore.getState().setStopping()
   })
   store.setPause(() => {
@@ -359,6 +399,7 @@ export async function runNodeTest(
       if (!release) return { status: 'skipped', reason: '排队测试已取消', outputs: {} }
       let result: NodeExecutionResult
       try {
+        if (token.cancelled) return { status: 'skipped', reason: '测试已取消', outputs: {} }
         result = await spec.executor(context)
       } finally {
         release()
@@ -382,6 +423,7 @@ export async function runNodeTest(
       }
       return { status: 'done', outputs: output.value }
     } catch (error) {
+      if (token.cancelled) return { status: 'skipped', reason: '测试已取消', outputs: {} }
       return {
         status: 'failed',
         reason: error instanceof Error ? error.message : String(error),
@@ -861,6 +903,8 @@ async function invokeExecutor(
               paramsJson: submittedRecipe?.paramsJson ?? recipeParams(shape.props.config),
               modelKey: record.target?.modelId,
               providerId: record.target?.providerId,
+              // P1-B：生成来源保存/失败的诊断事件用真实 trace 关联，不再标记 correlationMissing。
+              ...(record.traceId ? { traceId: record.traceId } : {}),
               inputMediaIds: [
                 ...new Set(
                   Array.from(inputs.values()).flatMap((packets) =>
@@ -1036,6 +1080,9 @@ async function executeNodeOnce(
       ctx.token.cancelled = true
       ctx.token.paused = false
       releasePause(ctx.token)
+      // 同一运行里正在执行的节点可能已订阅取消（本地媒体终止）；
+      // fireCancelListeners 幂等（触发后即清空），提前终止不重复。
+      fireCancelListeners(ctx.token)
     }
   })
   if (!pending) return { status: 'skipped', reason: '当前节点已在运行或排队' }
@@ -1065,6 +1112,10 @@ async function executeNodeOnce(
           ...(ctx.controlledRequestId ? { controlledRequestId: ctx.controlledRequestId } : {})
         })
         .catch(() => ({ ok: false as const }))
+      if (ctx.token.cancelled) {
+        setExec(ctx.editor, node.id as TLShapeId, 'cancelled')
+        return { status: 'skipped', reason: '任务已取消' }
+      }
       if (!available.ok) {
         ctx.outputs.delete(node.id)
         setExec(ctx.editor, node.id as TLShapeId, node.exec.status)
@@ -1121,6 +1172,12 @@ async function executeNodeUnscheduled(
   recordRunTrace(ctx, node, record, 'input', 'info', '开始收集并校验输入端口', {
     name: 'node.started'
   })
+  const finishCancelled = (): NodeExecutionResult => {
+    setExec(editor, shapeId, 'cancelled')
+    recordRunTrace(ctx, node, record, 'execution', 'info', '运行已取消')
+    finishRunRecord(ctx, node, shapeId, record, 'cancelled')
+    return { status: 'skipped', reason: '已取消' }
+  }
   try {
     const collected = collectNodeInputs(ctx, node, injection)
     record.inputs = inputSources(collected.value)
@@ -1151,15 +1208,16 @@ async function executeNodeUnscheduled(
     }
     // 本次执行接管该节点的输出；失败或跳过时不能让本轮继续消费上一次结果。
     ctx.outputs.delete(node.id)
+    // Preparation may await main or media metadata. Stop must be checked again
+    // before admitting any executor effect, even when metadata collection failed.
+    if (ctx.token.cancelled) return finishCancelled()
     if (ctx.command) await ctx.command.beforeExecutor()
+    if (ctx.token.cancelled) return finishCancelled()
     recordRunTrace(ctx, node, record, 'execution', 'info', '开始调用节点执行器')
     const result = await invokeExecutor(ctx, node, shape, collected.value, runSubflow, record)
     const latest = editor.getShape<NodeCardShape>(shapeId)
     if (ctx.token.cancelled) {
-      setExec(editor, shapeId, 'cancelled')
-      recordRunTrace(ctx, node, record, 'execution', 'info', '运行已取消')
-      finishRunRecord(ctx, node, shapeId, record, 'cancelled')
-      return { status: 'skipped', reason: '已取消' }
+      return finishCancelled()
     }
     if (result.status === 'done') {
       if (!latest) throw new Error('节点执行后已不存在')
@@ -1374,9 +1432,7 @@ async function executeNodeUnscheduled(
     return result
   } catch (error) {
     if (ctx.token.cancelled) {
-      setExec(editor, shapeId, 'cancelled')
-      recordRunTrace(ctx, node, record, 'execution', 'info', '运行已取消')
-      finishRunRecord(ctx, node, shapeId, record, 'cancelled')
+      return finishCancelled()
     } else {
       const reason = error instanceof Error ? error.message : String(error)
       const phase: 'input' | 'execution' = reason.includes('输入契约') ? 'input' : 'execution'
@@ -1537,8 +1593,8 @@ async function runSubflowForIterate(
 
 /**
  * 正文/资产类节点（outputSource: 'document'）的统一判定：输出即卡片当前内容，
- * 与运行状态无关，重跑也不会产生费用。seed 放行判定（与 nodeValues.projectNodeOutputs
- * 对齐）与子图运行的付费上游计数共用这一谓词，不得各写一套。
+ * 与运行状态无关，重跑也不会产生费用。用于子图运行的上游重跑确认；
+ * 具体输出可见性由 nodeValues.projectNodeOutputs 统一决定。
  */
 function isDocumentOutputNode(nodeType: string): boolean {
   return getNodeType(nodeType)?.outputSource === 'document'
@@ -1552,15 +1608,8 @@ function seedPersistedOutputs(ctx: WorkflowContext): void {
   for (const node of ctx.graph.nodes) {
     const shape = ctx.editor.getShape<NodeCardShape>(node.id as TLShapeId)
     if (!shape) continue
-    // 有运行记录时，仅成功结果可作为手动运行的上游输入，避免失败节点遗留旧值。
-    // 例外：正文/资产类节点（outputSource: 'document'）的投影只读卡片当前内容，
-    // 与运行状态无关（同一谓词见 nodeValues.projectNodeOutputs），skipped / failed
-    // 都不代表卡片内容失效，seeding 必须与投影层同样放行。不加这条例外的后果：
-    // 用户在一个空文本节点上误点一次运行，之后它写好的正文就再也连不进下游，
-    // 报「上游未产生 out-text 输出」。run 型节点的闸门行为不变。
-    const lastRun = readNodeRunRecord(shape.meta?.nodeRun)
-    const fromDocument = isDocumentOutputNode(node.type)
-    if (lastRun && lastRun.status !== 'success' && !fromDocument) continue
+    // The projection owns document/run/pinned visibility. A second status gate
+    // here would incorrectly mute a fixed output after an unsuccessful retry.
     const projected = buildOutputPackets(node, projectNodeOutputs(shape), ctx.runId)
     if (projected.errors.length === 0 && Object.keys(projected.value).length > 0) {
       if (shape.meta?.flowAssetRef && readPinnedOutputs(shape.meta.pinnedOutput)) {

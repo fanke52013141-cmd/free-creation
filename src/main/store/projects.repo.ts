@@ -54,7 +54,7 @@ function projectDir(id: string): string {
   return join(getProjectsDir(), id)
 }
 
-function projectJsonPath(id: string): string {
+export function projectJsonPath(id: string): string {
   return join(projectDir(id), 'project.json')
 }
 
@@ -128,12 +128,40 @@ function acquireProjectWriteLock(lockPath: string): () => void {
 }
 
 // 主文件损坏时回退 .bak（保存时每次轮转一份）
+
+// Hot paths (semantic-revision asserts, publication polls, asset reads) re-read
+// the same snapshot many times per second. The stat triple (file id, size,
+// mtime) invalidates every write: saves rotate via tmp+rename (new file id)
+// and any rewrite updates mtime. Each caller still parses its own isolated
+// object, so mutation by callers cannot leak across reads.
+const snapshotTextCache = new Map<string, string>()
+const SNAPSHOT_TEXT_CACHE_MAX = 4
+
+function readProjectText(p: string, stat: { ino: number; size: number; mtimeMs: number }): string {
+  const key = `${p}|${stat.ino}|${stat.size}|${stat.mtimeMs}`
+  const hit = snapshotTextCache.get(key)
+  if (hit !== undefined) return hit
+  const text = readFileSync(p, 'utf-8')
+  if (snapshotTextCache.size >= SNAPSHOT_TEXT_CACHE_MAX) {
+    const oldest = snapshotTextCache.keys().next().value
+    if (oldest !== undefined) snapshotTextCache.delete(oldest)
+  }
+  snapshotTextCache.set(key, text)
+  return text
+}
+
 function readProjectSnapshot(id: string): { file: ProjectFile; fromBackup: boolean } | null {
   const path = projectJsonPath(id)
   for (const p of [path, path + '.bak']) {
-    if (!existsSync(p)) continue
+    let stat: { isFile(): boolean; ino: number; size: number; mtimeMs: number }
     try {
-      const file = JSON.parse(readFileSync(p, 'utf-8')) as ProjectFile
+      stat = statSync(p)
+    } catch {
+      continue
+    }
+    if (!stat.isFile()) continue
+    try {
+      const file = JSON.parse(readProjectText(p, stat)) as ProjectFile
       if (
         !file ||
         !file.meta ||

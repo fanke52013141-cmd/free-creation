@@ -271,7 +271,7 @@ if (real && (!process.env.CANVAS_AGENT_PROBE_KEY || !process.env.CANVAS_AGENT_PR
     if(videoReview){await cp(resolve('test/fixtures/agent-video.mp4'),join(directory,'review-blue.mp4'));await cp(resolve('test/fixtures/agent-review-red.mp4'),join(directory,'review-red.mp4'));}
     if(parallelMedia) await cp(resolve('test/fixtures/agent-video.mp4'),join(directory,'parallel.mp4'))
     if(video) await cp(resolve('test/fixtures/agent-video.mp4'),join(directory,'fixture.mp4'))
-    if (!real) await new Promise((done, reject) => { provider.once('error', reject); provider.listen(5200, '127.0.0.1', done) })
+    if (!real) await new Promise((done, reject) => { provider.once('error', reject); provider.listen(0, '127.0.0.1', done) })
     const deadline = Date.now() + 30000
     while (true) {
       if (server.exitCode !== null) throw new Error('AGENT_VITE_UNAVAILABLE')
@@ -288,7 +288,7 @@ if (real && (!process.env.CANVAS_AGENT_PROBE_KEY || !process.env.CANVAS_AGENT_PR
     }
     for (const phase of (agentPerfMatrix ? ['execute'] : ['execute', 'reopen'])) {
       currentPhase = phase
-      const env = { ...process.env, CANVAS_AGENT_RENDERER_URL: rendererUrl }; delete env.ELECTRON_RUN_AS_NODE
+      const env = { ...process.env, CANVAS_AGENT_RENDERER_URL: rendererUrl, ...(!real ? { CANVAS_AGENT_FIXTURE_BASE_URL: `http://127.0.0.1:${provider.address().port}/v1` } : {}) }; delete env.ELECTRON_RUN_AS_NODE
       const exit = await new Promise((done, reject) => {
         const child = spawn(require('electron'), [resolve('out/main/agent-flow-desktop.js'), `--agent-directory=${directory}`, `--agent-phase=${phase}`, ...(agentGate ? ['--agent-gate'] : []), ...(agentUnknown ? ['--agent-unknown'] : []), ...(agentOutputSet ? ['--agent-output-set'] : []), ...(agentFixedInputVersion ? ['--agent-fixed-input-version'] : []), ...(agentResidency ? ['--agent-residency', `--agent-residency-seconds=${residencySeconds}`] : []), ...(agentPerfMatrix ? ['--agent-perf-matrix'] : []), ...(agentPanelChurn ? ['--agent-panel-churn'] : []), ...(agentPanelChurnHeapSnapshot && phase === 'execute' ? ['--agent-panel-churn-heap-snapshot'] : []), ...(run06Fault ? ['--agent-run06-fault'] : []), ...(agentHum07Pause ? ['--agent-hum07-pause'] : []), ...(real ? ['--real-model'] : []), ...(collaboration ? ['--collaboration'] : []), ...(coordination ? ['--coordination'] : []), ...(builder ? ['--builder'] : []), ...(builderParallel ? ['--builder-parallel'] : []), ...(review ? ['--review'] : []), ...(rework ? ['--rework'] : []), ...(recovery ? ['--recovery'] : []), ...(video ? ['--video'] : []), ...(firstFrame ? ['--video-first-frame'] : []), ...(lastFrame ? ['--video-first-last-frame'] : []), ...(referenceImages ? ['--video-reference-images'] : []), ...(motionReference ? ['--video-motion-reference'] : []), ...(audioReference ? ['--video-audio-reference'] : []), ...(videoReview ? ['--video-review'] : []), ...(mediaReview ? ['--media-review'] : []), ...(videoRework ? ['--video-rework'] : []), ...(parallelMedia ? ['--parallel-media'] : []), ...(parallelQueueMedia ? ['--parallel-queue-media'] : []), ...(parallelMediaForcedExit && phase === 'execute' ? ['--parallel-media-forced-exit'] : []), ...(parallelReview ? ['--parallel-review'] : []), ...(mediaTransfer ? ['--media-transfer'] : []), ...(multiReference ? ['--video-multi-reference'] : [])],
           { env, stdio: 'ignore', windowsHide: true })
@@ -456,7 +456,9 @@ if (real && (!process.env.CANVAS_AGENT_PROBE_KEY || !process.env.CANVAS_AGENT_PR
         for(const post of posts){
           const accepted=events.find(event=>event.event==='model.request.accepted'&&event.requestId===post.requestId)
           if(!accepted||!accepted.taskId||accepted.traceId!==post.traceId||accepted.spanId!==post.spanId)throw new Error('ASYNC_MEDIA_ACCEPTANCE_CONTEXT_INVALID')
-          const related=events.filter(event=>event.taskId===accepted.taskId&&!event.correlationMissing&&(/^(task|media)\./.test(event.event)))
+          // task.control.* 是运行中查询/取消探针（P1-B 后携带调用方真实 trace），
+          // 不属于媒体生命周期归属检查；state_changed/download/persist 仍锁定提交上下文。
+          const related=events.filter(event=>event.taskId===accepted.taskId&&!event.correlationMissing&&(/^(task|media)\./.test(event.event))&&!/^task\.control\./.test(event.event))
           if(!related.some(event=>event.event==='task.state_changed'&&event.attributes?.state==='running'))throw new Error('ASYNC_MEDIA_TASK_CONTEXT_MISSING')
           if(related.some(event=>event.traceId!==post.traceId||event.spanId!==post.spanId||event.requestId!==post.requestId))throw new Error('ASYNC_MEDIA_CONTEXT_DRIFT')
           for(const started of related.filter(event=>['media.download_started','media.persist_started'].includes(event.event))){

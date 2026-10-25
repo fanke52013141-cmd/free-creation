@@ -8,8 +8,45 @@ const identifier = z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/)
 const empty = z.object({}).strict()
 const project = z.object({ projectId: identifier }).strict()
 const revision = project.extend({ expectedGraphVersion: z.number().int().nonnegative() }).strict()
+const page = z
+  .object({
+    offset: z.number().int().min(0).max(100000).default(0),
+    limit: z.number().int().min(1).max(100).default(50)
+  })
+  .strict()
 
 export const ACCESS_OPERATIONS = {
+  'model.list': {
+    effect: 'read',
+    description: '分页读取本地模型ID、启用状态与能力验证状态；不联网探测，不返回凭据、地址或配置',
+    input: page
+  },
+  'library.search': {
+    effect: 'read',
+    description: '分页检索资源库摘要；不返回组件正文、媒体路径或资源包',
+    input: z
+      .object({
+        query: z.string().max(300).optional(),
+        cursor: z
+          .string()
+          .regex(/^\d{1,6}$/)
+          .optional(),
+        limit: z.number().int().min(1).max(100).default(40),
+        includeArchived: z.boolean().default(false)
+      })
+      .strict()
+  },
+  'run.get': {
+    effect: 'read',
+    description:
+      '按项目和taskId读取持久化内部Agent任务基础状态；不含命令、模型媒体任务、正文或控制操作',
+    input: project.extend({ taskId: z.string().regex(/^[a-zA-Z0-9_:-]{1,160}$/) }).strict()
+  },
+  'diagnostics.summary': {
+    effect: 'read',
+    description: '读取诊断存储健康计数；不返回事件正文或诊断包，不代表任务执行成功',
+    input: empty
+  },
   'app.status': { effect: 'read', description: '读取本地应用版本与实例身份', input: empty },
   'capability.list': {
     effect: 'read',
@@ -145,6 +182,90 @@ const metadata = z
   .strict()
 const savedMetadata = z.object({ meta: metadata, saved: z.literal(true) }).strict()
 export const ACCESS_OUTPUTS = {
+  'model.list': z
+    .object({
+      models: z
+        .array(
+          z
+            .object({
+              id: z.string().max(200),
+              connectionId: z.string().max(200),
+              modelId: z.string().max(300),
+              enabled: z.boolean(),
+              connectionEnabled: z.boolean(),
+              capabilitiesTruncated: z.boolean(),
+              capabilities: z
+                .array(
+                  z
+                    .object({
+                      operation: z.string().max(80),
+                      validation: z.enum([
+                        'unverified',
+                        'validating',
+                        'verified',
+                        'failed',
+                        'unsupported'
+                      ])
+                    })
+                    .strict()
+                )
+                .max(32)
+            })
+            .strict()
+        )
+        .max(100),
+      total: z.number().int().nonnegative(),
+      reachability: z.literal('not-probed')
+    })
+    .strict(),
+  'library.search': z
+    .object({
+      items: z
+        .array(
+          z
+            .object({
+              id: identifier,
+              title: z.string().max(200),
+              formPreset: z.enum(['image', 'prompt', 'character', 'scene', 'style', 'custom']),
+              latestRevisionId: identifier,
+              revisionNumber: z.number().int().positive(),
+              componentCount: z.number().int().nonnegative(),
+              updatedAt: z.number(),
+              archived: z.boolean()
+            })
+            .strict()
+        )
+        .max(100),
+      nextCursor: z.string().nullable()
+    })
+    .strict(),
+  'run.get': z
+    .object({
+      projectId: identifier,
+      taskId: z.string().max(160),
+      source: z.literal('flow-agent-task'),
+      state: z.enum(['ready', 'running', 'waiting', 'blocked', 'completed', 'failed', 'cancelled']),
+      waitRevision: z.number().int().nonnegative(),
+      waitKind: z.enum(['human', 'reconcile']).nullable(),
+      reconcileRequired: z.boolean(),
+      stateReason: z
+        .enum(['HUMAN_REQUIRED', 'RECONCILE_REQUIRED', 'TASK_BLOCKED', 'TASK_FAILED'])
+        .nullable(),
+      allowedActions: z.array(z.never()).max(0)
+    })
+    .strict(),
+  'diagnostics.summary': z
+    .object({
+      available: z.boolean(),
+      degraded: z.boolean(),
+      received: z.number().int().nonnegative(),
+      written: z.number().int().nonnegative(),
+      queueDepth: z.number().int().nonnegative(),
+      droppedTotal: z.number().int().nonnegative(),
+      writeFailures: z.number().int().nonnegative(),
+      badLines: z.number().int().nonnegative()
+    })
+    .strict(),
   'app.status': z
     .object({
       instanceId: z.string().uuid(),
@@ -226,6 +347,7 @@ export const ACCESS_OUTPUTS = {
     })
     .strict()
 } satisfies Record<AccessOperationId, z.ZodType>
+export type AccessOutput<K extends AccessOperationId> = z.infer<(typeof ACCESS_OUTPUTS)[K]>
 
 export function operationResponseSchema(id: AccessOperationId): z.ZodObject {
   return AccessResponseSchema.extend({
@@ -313,7 +435,11 @@ export function validateAccessRegistry(
   for (const id of declared) if (!active.has(id)) errors.push(`INACTIVE_NODE:${id}`)
   if (declared.size !== declarations.length) errors.push('DUPLICATE_NODE')
   for (const [id, spec] of Object.entries(ACCESS_OPERATIONS)) {
-    if (!spec.input || !spec.description || !['read', 'write', 'export', 'delete'].includes(spec.effect))
+    if (
+      !spec.input ||
+      !spec.description ||
+      !['read', 'write', 'export', 'delete'].includes(spec.effect)
+    )
       errors.push(`INVALID_OPERATION:${id}`)
     if (id.includes('import')) errors.push(`EXCLUDED_OPERATION:${id}`)
   }

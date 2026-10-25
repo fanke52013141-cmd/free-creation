@@ -183,16 +183,20 @@ export function registerGatewayIpc(win: BrowserWindow): void {
     wrap<VideoSubmitResult>(() => submitVideoTask(send, input))
   )
 
-  ipcMain.handle(IPC.gateway.videoCancel, (_e, { taskId }: { taskId: string }) =>
-    wrapAsync(() => cancelVideoTask(taskId ?? ''))
+  ipcMain.handle(
+    IPC.gateway.videoCancel,
+    (_e, { taskId, traceId }: { taskId: string; traceId?: string }) =>
+      wrapAsync(() => cancelVideoTask(taskId ?? '', traceId))
   )
 
-  ipcMain.handle(IPC.gateway.videoTask, (_e, { taskId }: { taskId: string }) =>
-    wrapAsync<VideoTaskInfo | null>(() =>
-      getVideoTask(taskId ?? '')?.status === 'unknown'
-        ? controlVideoTask(taskId ?? '')
-        : Promise.resolve(getVideoTask(taskId ?? ''))
-    )
+  ipcMain.handle(
+    IPC.gateway.videoTask,
+    (_e, { taskId, traceId }: { taskId: string; traceId?: string }) =>
+      wrapAsync<VideoTaskInfo | null>(() =>
+        getVideoTask(taskId ?? '')?.status === 'unknown'
+          ? controlVideoTask(taskId ?? '', false, traceId)
+          : Promise.resolve(getVideoTask(taskId ?? ''))
+      )
   )
 
   ipcMain.handle(

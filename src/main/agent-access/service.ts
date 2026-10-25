@@ -33,6 +33,10 @@ import * as projects from '../store/projects.repo'
 import { exportProject } from '../store/transfer'
 import { emitGatewayEvent } from '../diagnostics/gateway-events'
 import { DesktopAccessError, type AccessDesktop } from './desktop'
+import { SqliteModelHost } from '../model-host/sqlite-model-host'
+import { FlowTaskStore } from '../agent-flow/task-store'
+import type { DiagnosticsService } from '../diagnostics/service'
+import { accessDiagnosticsSummary, searchAccessLibrary } from './queries'
 
 class AccessFailure extends Error {
   constructor(
@@ -58,6 +62,7 @@ export interface LocalAccessOptions {
   exportDirectory: string
   activeProjectId: () => string | null
   desktop?: AccessDesktop
+  diagnostics?: Pick<DiagnosticsService, 'health'> | null
 }
 
 /** Only this main-process service touches repositories; CLI/MCP are transport clients. */
@@ -418,6 +423,18 @@ export class LocalAccessService {
   private execute(operation: AccessOperationId, input: Record<string, unknown>): unknown {
     const id = input.projectId as string
     switch (operation) {
+      case 'model.list':
+        return new SqliteModelHost(getDb()).listAccessModels(input.offset as number, input.limit as number)
+      case 'library.search':
+        return searchAccessLibrary(ACCESS_OPERATIONS['library.search'].input.parse(input))
+      case 'run.get': {
+        if (!projects.getProject(id)) throw new AccessFailure('NOT_FOUND', 'read')
+        const task = new FlowTaskStore(getDb()).summary(id, input.taskId as string)
+        if (!task) throw new AccessFailure('NOT_FOUND', 'flow-task-read')
+        return task
+      }
+      case 'diagnostics.summary':
+        return accessDiagnosticsSummary(this.options.diagnostics)
       case 'app.status':
         return {
           instanceId: this.options.instanceId,

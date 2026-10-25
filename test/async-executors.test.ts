@@ -217,7 +217,7 @@ describe('异步网关等待器', () => {
     const rejected = expect(pending).rejects.toThrow('已取消')
     await vi.advanceTimersByTimeAsync(3_000)
     await rejected
-    expect(videoCancel).toHaveBeenCalledWith('task-cancel')
+    expect(videoCancel).toHaveBeenCalledWith('task-cancel', undefined)
   })
 
   it('waitForVideo 10 分钟超时放弃等待前先补偿取消远端任务（R-01）', async () => {
@@ -227,7 +227,7 @@ describe('异步网关等待器', () => {
     const rejected = expect(pending).rejects.toThrow('视频生成超时（10 分钟）')
     await vi.advanceTimersByTimeAsync(600_000)
     await rejected
-    expect(videoCancel).toHaveBeenCalledWith('task-timeout')
+    expect(videoCancel).toHaveBeenCalledWith('task-timeout', undefined)
   })
 })
 
@@ -626,7 +626,7 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     // 取消恰好在 videoSubmit 返回之后、轮询开始之前抵达。
     ctx.signal.cancelled = true
     await expect(pending).resolves.toEqual({ status: 'skipped', reason: '已取消' })
-    expect(videoCancel).toHaveBeenCalledWith('video-cancel-me')
+    expect(videoCancel).toHaveBeenCalledWith('video-cancel-me', undefined)
   })
 
   it('video executor forwards a connected motion reference to the gateway', async () => {

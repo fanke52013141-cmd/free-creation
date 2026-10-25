@@ -2,6 +2,7 @@
 import type { NodeShape } from './executor-types'
 
 export const CONFIG_NODE_TYPES = new Set([
+  'chat',
   'agent',
   'state-machine',
   'ai-review',

@@ -134,6 +134,8 @@ export function installBrowserMock(): void {
   }
 
   const mockApi: WindowApi = {
+    listSkills: async () => ({ ok: true, data: [] }),
+    installSkill: async () => notImplementedInDemo('技能库安装（请在桌面应用中使用）'),
     onLocalAgentDesktopRequest: () => () => {},
     replyLocalAgentDesktop: () => {},
     commitLocalAgentDesktop: async () => ({ ok: false }),
@@ -448,6 +450,8 @@ export function installBrowserMock(): void {
         error: { code: 'MOCK', message: '浏览器演示不支持本地白模视频转换' }
       }),
     cancelVideoConversion: () => Promise.resolve({ ok: true, data: false }),
+    // 浏览器演示没有真实本地媒体作业；取消请求按「无作业可终止」成功返回。
+    cancelMediaTransforms: () => Promise.resolve({ ok: true, data: { cancelled: 0 } }),
     pickMedia: async (projectId: string) => ({ ok: true, data: await media.pick(projectId) }),
     previewLibraryFiles: async () => ({ ok: true, data: { missingComponentIds: [] } }),
     saveArtifactRecipe: async (input) => {

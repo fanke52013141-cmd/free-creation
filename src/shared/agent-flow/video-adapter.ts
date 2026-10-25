@@ -4,6 +4,14 @@ import { validateNodeSchema } from '../node-schemas'
 import { PROCESSOR_PORTS } from './processor-contract'
 import { parseImageEditConfig, validateImageEditConfig } from '../image-edit'
 import { parseTtsConfig } from '../tts'
+import { parseImageCropConfig, validateImageCropConfig } from '../image-crop'
+import { parseImageSplitConfig } from '../image-split'
+import {
+  codeParamPortId,
+  mapVarTypeToPortType,
+  outputFieldPortId,
+  parseCodeConfigs
+} from '../engine/executors/code'
 
 /** Structural ceiling; the selected provider's lower reference limits also apply. */
 export const VIDEO_FLOW_MAX_REFERENCES = 30
@@ -34,7 +42,44 @@ export function flowTargetContract(node: CanvasNode): { inputs: string[]; output
     return { inputs: ['in-text', 'in-voice', 'in-audio'], output: 'out-audio' }
   if (node.type === 'tts' && node.contractVersion === 4)
     return { inputs: ['in-audio'], output: 'out-json' }
+  // P2-B：本地媒体与代码目标。端口静态/可从配置精确重建，执行走公共执行器，
+  // 取消走媒体取消作用域；code 限单参数单输出形态以保持固定输入/输出。
+  if (node.type === 'image-crop' && node.contractVersion === 2)
+    return { inputs: ['in-image'], output: 'out-image' }
+  if (node.type === 'image-split' && node.contractVersion === 3)
+    return { inputs: ['in-image'], output: 'out-image' }
+  if (node.type === 'code' && node.contractVersion === 3) {
+    if (!codeFlowSingleOutputConfig(node.params.config)) return null
+    return { inputs: codeFlowInputPortIds(node.params.config), output: codeFlowOutputPortId(node.params.config) }
+  }
   return null
+}
+
+/** Agent 调度的 code 目标只接受单参数、单输出（single 模式）配置。 */
+export function codeFlowSingleOutputConfig(rawConfig: unknown): boolean {
+  let config
+  try {
+    config = parseCodeConfigs(typeof rawConfig === 'string' ? rawConfig : JSON.stringify(rawConfig ?? {}))
+  } catch {
+    return false
+  }
+  if (config.outputMode !== 'single') return false
+  if (config.params.length !== 1) return false
+  return config.outputType === 'string' || config.outputType === 'json'
+}
+
+function codeFlowParsed(rawConfig: unknown): ReturnType<typeof parseCodeConfigs> {
+  return parseCodeConfigs(typeof rawConfig === 'string' ? rawConfig : JSON.stringify(rawConfig ?? {}))
+}
+
+export function codeFlowInputPortIds(rawConfig: unknown): string[] {
+  const config = codeFlowParsed(rawConfig)
+  return config.params.map((param) => codeParamPortId(param))
+}
+
+export function codeFlowOutputPortId(rawConfig: unknown): string {
+  const config = codeFlowParsed(rawConfig)
+  return outputFieldPortId({ name: config.outputName, type: config.outputType })
 }
 
 export interface FlowInputValues {
@@ -399,8 +444,171 @@ export const TTS_FLOW_PORTS: PortDecl[] = [
   }
 ]
 
+/** 裁剪/拆图目标端口与注册表一致（in-image 必填单值；拆图另暴露集合口）。 */
+export const CROP_FLOW_PORTS: PortDecl[] = [
+  {
+    id: 'in-image',
+    name: '原图',
+    dir: 'in',
+    type: 'image',
+    description: '必须连接的一张源图片。',
+    required: true,
+    cardinality: 'one'
+  },
+  {
+    id: 'out-image',
+    name: '裁剪图',
+    dir: 'out',
+    type: 'image',
+    description: '本地裁剪完成并落盘的新图片资产。',
+    required: true,
+    cardinality: 'one'
+  }
+]
+
+export const SPLIT_FLOW_PORTS: PortDecl[] = [
+  CROP_FLOW_PORTS[0],
+  {
+    id: 'out-image',
+    name: '当前图片',
+    dir: 'out',
+    type: 'image',
+    description: '从图片集合中选中的一格。',
+    required: true,
+    cardinality: 'one'
+  },
+  {
+    id: 'out-images',
+    name: '图片集合',
+    dir: 'out',
+    type: 'json',
+    description: '所有格子对应的真实图片资产引用列表。',
+    required: true,
+    cardinality: 'one',
+    schema: { id: 'list.items', version: 1 }
+  }
+]
+
+/** 重建 code 节点在 single 模式下的解析端口；portIdentity 准入依赖逐字段一致。 */
+function codeFlowPorts(rawConfig: unknown): PortDecl[] {
+  if (!codeFlowSingleOutputConfig(rawConfig)) return []
+  const config = codeFlowParsed(rawConfig)
+  const param = config.params[0]
+  const paramType = mapVarTypeToPortType(param.type)
+  const outputType = mapVarTypeToPortType(config.outputType)
+  return [
+    {
+      id: 'in-text',
+      name: '文本输入',
+      dir: 'in',
+      type: 'text',
+      description: '代码运行时 input.text 读取的合并文本。',
+      required: false,
+      cardinality: 'many'
+    },
+    {
+      id: 'in-json',
+      name: '数据输入',
+      dir: 'in',
+      type: 'json',
+      description: '代码运行时 input.json 读取的结构化值列表。',
+      required: false,
+      cardinality: 'many',
+      schema: { id: 'json.any', version: 1 }
+    },
+    {
+      id: codeParamPortId(param),
+      name: param.name,
+      dir: 'in',
+      type: paramType,
+      description: `自定义参数：${param.name}（${param.type}）`,
+      required: false,
+      cardinality: param.cardinality ?? 'one',
+      ...(paramType === 'json' ? { schema: { id: 'json.any', version: 1 } as const } : {}),
+      ...(paramType === 'camera' ? { schema: { id: 'previs.camera', version: 1 } as const } : {})
+    },
+    {
+      id: outputFieldPortId({ name: config.outputName, type: config.outputType }),
+      name: config.outputName,
+      dir: 'out',
+      type: outputType,
+      description: `代码 return 对象字段 ${config.outputName}（${config.outputType}）。`,
+      required: true,
+      cardinality: 'one',
+      ...(outputType === 'json' ? { schema: { id: 'json.any', version: 1 } as const } : {}),
+      ...(outputType === 'camera' ? { schema: { id: 'previs.camera', version: 1 } as const } : {})
+    }
+  ]
+}
+
+/** 裁剪/拆图：唯一 in-image，单张带固定版本摘要的图片。 */
+export function localImageFlowInputsValid(inputs: FlowInputValues[]): boolean {
+  if (new Set(inputs.map((input) => input.targetPortId)).size !== inputs.length) return false
+  const source = inputs.find((input) => input.targetPortId === 'in-image')
+  return Boolean(
+    source &&
+      inputs.length === 1 &&
+      source.values.length === 1 &&
+      source.values[0].kind === 'image' &&
+      source.values[0].contentSha256
+  )
+}
+
+/** 裁剪配置：与主进程 IPC 相同的 parse→validate 两步；归一化后再校验几何。 */
+export function cropFlowConfigValid(rawConfig: unknown): boolean {
+  if (typeof rawConfig !== 'string' && (rawConfig === null || typeof rawConfig !== 'object')) {
+    return false
+  }
+  try {
+    const text = typeof rawConfig === 'string' ? rawConfig : JSON.stringify(rawConfig)
+    return validateImageCropConfig(parseImageCropConfig(text)) === null
+  } catch {
+    return false
+  }
+}
+
+export function splitFlowConfigValid(rawConfig: unknown): boolean {
+  if (typeof rawConfig !== 'string' && (rawConfig === null || typeof rawConfig !== 'object')) {
+    return false
+  }
+  try {
+    parseImageSplitConfig(typeof rawConfig === 'string' ? rawConfig : JSON.stringify(rawConfig))
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** code 目标输入：唯一参数端口，值类型与 inputType 匹配。 */
+export function codeFlowInputsValid(rawConfig: unknown, inputs: FlowInputValues[]): boolean {
+  if (!codeFlowSingleOutputConfig(rawConfig)) return false
+  const config = codeFlowParsed(rawConfig)
+  if (new Set(inputs.map((input) => input.targetPortId)).size !== inputs.length) return false
+  if (inputs.length !== 1) return false
+  const input = inputs[0]
+  if (input.targetPortId !== codeParamPortId(config.params[0])) return false
+  if (input.values.length !== 1) return false
+  const value = input.values[0]
+  switch (config.params[0].type) {
+    case 'string':
+      return value.kind === 'text' || value.kind === 'markdown'
+    case 'number':
+    case 'boolean':
+    case 'object':
+    case 'array':
+      return value.kind === 'json'
+    case 'any':
+      return ['text', 'markdown', 'json'].includes(value.kind)
+    default:
+      return false
+  }
+}
+
 export function flowTargetPorts(node: CanvasNode): PortDecl[] {
   if (node.type === 'processor') return [...PROCESSOR_PORTS.in, ...PROCESSOR_PORTS.out]
+  if (node.type === 'image-crop') return CROP_FLOW_PORTS
+  if (node.type === 'image-split') return SPLIT_FLOW_PORTS
+  if (node.type === 'code') return codeFlowPorts(node.params.config)
   if (node.type === 'video') return VIDEO_FLOW_PORTS
   if (node.type === 'image-gen') return IMAGE_GEN_FLOW_PORTS
   if (node.type === 'image-edit') return IMAGE_EDIT_FLOW_PORTS

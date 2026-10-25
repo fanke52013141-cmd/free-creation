@@ -4,9 +4,12 @@ An Electron application with React and TypeScript
 
 ## Architecture Rules
 
+- [本地开发最新交接](./docs/HANDOFF_2026_10_24_LOCAL_DEVELOPMENT.md) — 已完成、待验收、待开发、最新验证与下一包入口；当前接续优先阅读。
+- [本地功能开发优先级](./docs/LOCAL_FUNCTION_DEVELOPMENT_2026_10_24.md) — 节点编辑、执行、停止、异常恢复与诊断排障；本地使用不以前置安装第三方客户端为条件。
 - [画布原生 Agent Flow 方案](./docs/canvas-agent-flow/README.md) — 当前唯一 Agent Flow 设计：上帝 Agent 构建，主 Agent 协调，专业 Agent 执行；状态机和成果均由画布节点承载。包含节点协同规范，尚未实现。
 - [本地外部 Agent 接入方案](./docs/local-agent-access/README.md) — 整体规范、31 节点目标清单、同步门禁和实施计划；实际支持以交付台账为准。
 - [本地 Agent 项目操作台账](./docs/local-agent-access/06-a1-1-desktop-projects.md) — 本机 CLI/MCP、项目打开、活动画布保存/导出和名称更新；实际验证与限制以台账为准。
+- [本地 Agent 查询与后续路线](./docs/local-agent-access/08-a1-4-read-only-queries.md) — A1.4首包的模型/资源库/任务/诊断查询及后续分期；以台账验证记录为准。
 - [Logging and diagnostics specification](./LOGGING_SPEC.md) — required impact assessment for every feature change, with implementation plan and coverage checklist.
 - [Node input/output contract specification](./NODE_CONTRACT_SPEC.md) — required reading before adding or changing a node.
 - [Development roadmap](./ROADMAP.md) — recommended implementation order and acceptance criteria.

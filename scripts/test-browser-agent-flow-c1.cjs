@@ -52,12 +52,14 @@ const fs = require('node:fs')
         type === 'state-machine' ? value : Number(value))
       assert.equal(saved.edges, 0)
       assert.deepEqual(saved.outputs, {})
-      assert.equal(saved.disabled, type === 'state-machine')
-      evidence.push({ type, settingsSaved: true, snapshotRestored: true, executionDisabled: type !== 'agent' })
+      // P2-A 后状态机开放独立执行：不再有 executionDisabledReason；
+      // 无运行结果时投影仍为空（上面 saved.outputs 已断言）。
+      assert.equal(saved.disabled, false)
+      evidence.push({ type, settingsSaved: true, snapshotRestored: true, executionDisabled: false })
     }
     fs.mkdirSync(qaOutputPath('qa/canvas-agent-flow/C1'), { recursive: true })
     fs.writeFileSync(qaOutputPath('qa/canvas-agent-flow/C1/settings-results.json'), JSON.stringify(evidence, null, 2))
     await page.screenshot({ path: qaOutputPath('qa/canvas-agent-flow/C1/review-settings.png') })
-    console.log('C1 三种节点设置、快照/图一致性、无假输出与执行可用性通过')
+    console.log('C1 三种节点设置、快照/图一致性、无假输出与执行可用性通过（P2-A 后状态机开放独立执行）')
   } finally { await browser.close() }
 })().catch((error) => { console.error(error); process.exitCode = 1 })

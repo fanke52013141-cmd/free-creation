@@ -4,6 +4,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { getDb } from '../store/db'
 import { deleteMedia, getMediaAbsPath, saveFileAsset } from '../store/media.repo'
+import { trackMediaJob } from './cancellation'
 import type {
   AudioWaveformInput,
   AudioWaveformResult,
@@ -591,6 +592,8 @@ function runAudioSeparator(args: string[]): Promise<string> {
 function runProcess(binary: string, args: string[], missingHint: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(binary, args, { windowsHide: true })
+    // 运行中停止：把子进程终止句柄登记到当前媒体作用域，停止时由主进程统一 kill。
+    const untrack = trackMediaJob(() => child.kill())
     let stdout = ''
     let stderr = ''
     child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()))
@@ -603,11 +606,12 @@ function runProcess(binary: string, args: string[], missingHint: string): Promis
         new Error((error as NodeJS.ErrnoException).code === 'ENOENT' ? missingHint : error.message)
       )
     )
-    child.once('close', (code) =>
+    child.once('close', (code) => {
+      untrack()
       code === 0
         ? resolve(stdout)
         : reject(new Error(stderr.trim() || `${binary} 退出码 ${code ?? '未知'}`))
-    )
+    })
   })
 }
 
@@ -617,11 +621,14 @@ function runFfmpeg(args: string[]): Promise<void> {
     const child = spawn(binary, ['-hide_banner', '-loglevel', 'error', ...args], {
       windowsHide: true
     })
+    // 运行中停止：同 runProcess，停止时由媒体作用域统一终止子进程。
+    const untrack = trackMediaJob(() => child.kill())
     let stderr = ''
     child.stderr.on('data', (chunk: Buffer) => {
       stderr = `${stderr}${chunk.toString()}`.slice(-4000)
     })
     child.once('error', (error) => {
+      untrack()
       const code = (error as NodeJS.ErrnoException).code
       const hint =
         code === 'ENOENT'
@@ -630,6 +637,7 @@ function runFfmpeg(args: string[]): Promise<void> {
       reject(new Error(hint))
     })
     child.once('close', (code) => {
+      untrack()
       if (code === 0) resolve()
       else reject(new Error(`视频处理失败：${stderr.trim() || `FFmpeg 退出码 ${code ?? '未知'}`}`))
     })

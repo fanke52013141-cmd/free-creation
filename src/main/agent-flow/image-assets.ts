@@ -24,6 +24,35 @@ export function fixedFlowImage(
 }
 
 /** Conservative fixed input budget; generated video outputs retain their existing size support. */
+
+// Fixed media is content-addressed and immutable by contract, but every read used
+// to re-hash up to 20 MiB from disk; agent flows re-read the same assets many
+// times per command (prepare/check/commit and each model decision round). The
+// stat triple (file id, size, mtime) invalidates every replace: materialization
+// always writes a new file, and an in-place rewrite updates mtime. DB row,
+// containment and size validation still re-run on every call — only the byte
+// hash of identical bytes is reused.
+const contentHashCache = new Map<string, string>()
+const CONTENT_HASH_CACHE_MAX = 256
+
+function cachedContentSha256(
+  path: string,
+  stat: { ino: number; size: number; mtimeMs: number }
+): string {
+  const key = `${path}|${stat.ino}|${stat.size}|${stat.mtimeMs}`
+  const hit = contentHashCache.get(key)
+  if (hit !== undefined) return hit
+  const bytes = readFileSync(path)
+  if (bytes.length !== stat.size) throw new Error()
+  const digest = createHash('sha256').update(bytes).digest('hex')
+  if (contentHashCache.size >= CONTENT_HASH_CACHE_MAX) {
+    const oldest = contentHashCache.keys().next().value
+    if (oldest !== undefined) contentHashCache.delete(oldest)
+  }
+  contentHashCache.set(key, digest)
+  return digest
+}
+
 export function fixedFlowMedia<K extends 'image' | 'video' | 'audio'>(
   db: Database.Database,
   projectId: string,
@@ -55,9 +84,7 @@ export function fixedFlowMedia<K extends 'image' | 'video' | 'audio'>(
     if (!realChild || realChild.startsWith('..') || isAbsolute(realChild)) throw new Error()
     const stat = statSync(path)
     if (!stat.isFile() || stat.size !== media.size_bytes) throw new Error()
-    const bytes = readFileSync(path)
-    if (bytes.length !== stat.size) throw new Error()
-    const contentSha256 = createHash('sha256').update(bytes).digest('hex')
+    const contentSha256 = cachedContentSha256(path, stat)
     if (value.contentSha256 && value.contentSha256 !== contentSha256) throw new Error()
     return {
       kind: value.kind,

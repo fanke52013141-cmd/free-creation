@@ -3,6 +3,7 @@ import { inputMedia } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
 import { readNodeConfig } from '../node-config'
 import { parseImageSplitConfig } from '@shared/image-split'
+import { runCancellableMedia } from '../media-cancel'
 import { mediaDisplayName, serializeMediaResultCollection } from '../values'
 
 export const imageSplitExecutor = async (
@@ -14,12 +15,27 @@ export const imageSplitExecutor = async (
   const config = parseImageSplitConfig(readNodeConfig(ctx.shape))
   const sourceName = mediaDisplayName(source, '图片')
   try {
-    const response = await ctx.gateway.splitImageGrid({
-      projectId: ctx.projectId,
-      sourceMediaId: source.mediaId,
-      config
-    })
-    if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
+    // 拆分在主进程逐格落盘；取消会在格子之间生效并回滚已写资产，
+    // 迟到完成的整包结果同样删除，避免孤儿资产。
+    const outcome = await runCancellableMedia(
+      ctx,
+      () =>
+        ctx.gateway.splitImageGrid({
+          projectId: ctx.projectId,
+          sourceMediaId: source.mediaId,
+          nodeId: ctx.node.id,
+          config
+        }),
+      (envelope) => {
+        if (envelope.ok && Array.isArray(envelope.data)) {
+          for (const asset of envelope.data) {
+            void ctx.gateway.deleteMedia?.(asset.id).catch(() => undefined)
+          }
+        }
+      }
+    )
+    if (outcome.cancelled) return { status: 'skipped', reason: '已取消' }
+    const response = outcome.value
     if (!response.ok) return { status: 'failed', reason: response.error.message }
     if (response.data.length === 0) return { status: 'failed', reason: '图片拆分未生成任何结果' }
     const now = Date.now()

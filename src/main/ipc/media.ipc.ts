@@ -41,6 +41,13 @@ import { emitGatewayEvent } from '../diagnostics/gateway-events'
 import { transformImageCrop, transformImageSplit } from '../media/image-transform'
 import { transformTts } from '../media/tts-transform'
 import {
+  cancelMediaJobs,
+  isMediaCancelled,
+  MEDIA_TRANSFORM_CANCELLED,
+  mediaScopeKey,
+  runWithMediaScope
+} from '../media/cancellation'
+import {
   transformVideoAudio,
   transformSoundAdjust,
   transformVideoClip,
@@ -65,6 +72,45 @@ function ok<T>(data: T): IpcEnvelope<T> {
 
 function err(code: string, message: string): IpcEnvelope<never> {
   return { ok: false, error: { code, message } }
+}
+
+/** 媒体作用域内的取消哨兵：把「已停止」与普通失败区分开，不泄露底层异常文本。 */
+const MEDIA_CANCELLED_SIGNAL = Symbol('media-cancelled')
+
+/**
+ * 把一次本地媒体变换放进可取消作用域（P1-A 运行中停止）。
+ * 执行器传入 nodeId 时，停止工作流可通过 media:cancel-transforms 终止该节点
+ * 名下仍在执行的 ffmpeg 子进程/拆分循环；终止后返回稳定的
+ * MEDIA_TRANSFORM_CANCELLED 信封。未传 nodeId 保持旧行为。
+ */
+async function runCancellableTransform<T>(
+  input: { projectId?: string; nodeId?: string },
+  transform: () => Promise<T>,
+  failureCode: string
+): Promise<IpcEnvelope<T>> {
+  const key = mediaScopeKey(input?.projectId, input?.nodeId)
+  try {
+    return ok(
+      await runWithMediaScope(key, async () => {
+        try {
+          return await transform()
+        } catch (error) {
+          if (
+            isMediaCancelled() ||
+            (error instanceof Error && error.message === MEDIA_TRANSFORM_CANCELLED)
+          ) {
+            throw MEDIA_CANCELLED_SIGNAL
+          }
+          throw error
+        }
+      })
+    )
+  } catch (error) {
+    if (error === MEDIA_CANCELLED_SIGNAL) {
+      return err(MEDIA_TRANSFORM_CANCELLED, '本地媒体任务已停止')
+    }
+    return err(failureCode, error instanceof Error ? error.message : String(error))
+  }
 }
 
 const MEDIA_FILTERS = [
@@ -168,23 +214,21 @@ async function importAll(projectId: string, paths: string[]): Promise<MediaImpor
 
 export function registerMediaIpc(): void {
   ipcMain.handle(IPC.media.saveRecipe, (_event, input) => {
-    emitGatewayEvent('artifact.recipe_started', '开始保存生成来源', {
+    // P1-B：执行器保存生成来源时携带运行根 traceId；旧调用没有 trace 时
+    // 由 emitGatewayEvent 自动标记 correlationMissing，不补造关联。
+    const recipeCorrelation = {
       projectId: input?.projectId,
       runId: input?.runId,
       nodeId: input?.producerNodeId,
-      correlationMissing: true
-    })
+      ...(input?.traceId ? { traceId: input.traceId } : {})
+    }
+    emitGatewayEvent('artifact.recipe_started', '开始保存生成来源', recipeCorrelation)
     try {
       saveArtifactRecipe(artifactRecipeSchema.parse(input))
-      emitGatewayEvent('artifact.recipe_saved', '生成来源已保存', {
-        projectId: input.projectId,
-        runId: input.runId,
-        nodeId: input.producerNodeId,
-        correlationMissing: true
-      })
+      emitGatewayEvent('artifact.recipe_saved', '生成来源已保存', recipeCorrelation)
       return ok(true)
     } catch {
-      emitGatewayEvent('artifact.recipe_failed', '生成来源保存失败', { correlationMissing: true })
+      emitGatewayEvent('artifact.recipe_failed', '生成来源保存失败', recipeCorrelation)
       return err('RECIPE_SAVE_FAILED', '生成来源保存失败')
     }
   })
@@ -193,6 +237,7 @@ export function registerMediaIpc(): void {
       return ok(getArtifactRecipe(input.projectId, input.mediaId))
     } catch {
       emitGatewayEvent('artifact.recipe_read_failed', '生成来源读取失败', {
+        projectId: input?.projectId,
         correlationMissing: true
       })
       return err('RECIPE_READ_FAILED', '生成来源读取失败')
@@ -298,11 +343,7 @@ export function registerMediaIpc(): void {
     async (_e, input: ImageSplitTransformInput): Promise<IpcEnvelope<MediaAsset[]>> => {
       if (!input?.projectId || !input.sourceMediaId || !input.config)
         return err('INVALID_INPUT', '缺少图片宫格拆分参数')
-      try {
-        return ok(await transformImageSplit(input))
-      } catch (error) {
-        return err('IMAGE_SPLIT_FAILED', error instanceof Error ? error.message : String(error))
-      }
+      return runCancellableTransform(input, () => transformImageSplit(input), 'IMAGE_SPLIT_FAILED')
     }
   )
 
@@ -312,11 +353,7 @@ export function registerMediaIpc(): void {
     async (_e, input: VideoFrameTransformInput): Promise<IpcEnvelope<MediaAsset>> => {
       if (!input?.projectId || !input.sourceMediaId || !input.config)
         return err('INVALID_INPUT', '缺少视频取帧参数')
-      try {
-        return ok(await transformVideoFrame(input))
-      } catch (error) {
-        return err('VIDEO_FRAME_FAILED', error instanceof Error ? error.message : String(error))
-      }
+      return runCancellableTransform(input, () => transformVideoFrame(input), 'VIDEO_FRAME_FAILED')
     }
   )
   ipcMain.handle(
@@ -324,11 +361,7 @@ export function registerMediaIpc(): void {
     async (_e, input: VideoClipTransformInput): Promise<IpcEnvelope<MediaAsset>> => {
       if (!input?.projectId || !input.sourceMediaId || !input.config)
         return err('INVALID_INPUT', '缺少视频截取参数')
-      try {
-        return ok(await transformVideoClip(input))
-      } catch (error) {
-        return err('VIDEO_CLIP_FAILED', error instanceof Error ? error.message : String(error))
-      }
+      return runCancellableTransform(input, () => transformVideoClip(input), 'VIDEO_CLIP_FAILED')
     }
   )
   ipcMain.handle(
@@ -336,11 +369,7 @@ export function registerMediaIpc(): void {
     async (_e, input: VideoAudioTransformInput): Promise<IpcEnvelope<MediaAsset>> => {
       if (!input?.projectId || !input.sourceMediaId || !input.config)
         return err('INVALID_INPUT', '缺少音频提取参数')
-      try {
-        return ok(await transformVideoAudio(input))
-      } catch (error) {
-        return err('VIDEO_AUDIO_FAILED', error instanceof Error ? error.message : String(error))
-      }
+      return runCancellableTransform(input, () => transformVideoAudio(input), 'VIDEO_AUDIO_FAILED')
     }
   )
   ipcMain.handle(
@@ -353,11 +382,7 @@ export function registerMediaIpc(): void {
         !['audio', 'video'].includes(input.kind)
       )
         return err('INVALID_INPUT', '缺少声音调整参数')
-      try {
-        return ok(await transformSoundAdjust(input))
-      } catch (error) {
-        return err('SOUND_ADJUST_FAILED', error instanceof Error ? error.message : String(error))
-      }
+      return runCancellableTransform(input, () => transformSoundAdjust(input), 'SOUND_ADJUST_FAILED')
     }
   )
   /** 时间轴缩略图：均匀采样指定数量的帧，返回 base64 JPEG data URL 数组。 */
@@ -392,12 +417,29 @@ export function registerMediaIpc(): void {
   ipcMain.handle(IPC.media.vocalSeparate, async (_e, input: VocalSeparateInput) => {
     if (!input?.projectId || !input.sourceMediaId || !input.config)
       return err('INVALID_INPUT', '缺少人声分离参数')
-    try {
-      return ok(await separateVocals(input))
-    } catch (error) {
-      return err('VOCAL_SEPARATE_FAILED', error instanceof Error ? error.message : String(error))
-    }
+    return runCancellableTransform(input, () => separateVocals(input), 'VOCAL_SEPARATE_FAILED')
   })
+
+  /** 运行中停止：终止该节点名下仍在执行的本地媒体变换，返回终止的作业数量。 */
+  ipcMain.handle(
+    IPC.media.cancelTransforms,
+    async (_e, input: { projectId: string; nodeId: string }) => {
+      if (!input?.projectId || !input.nodeId) return err('INVALID_INPUT', '缺少取消关联参数')
+      const cancelled = cancelMediaJobs(mediaScopeKey(input.projectId, input.nodeId))
+      if (cancelled > 0) {
+        log.info(
+          JSON.stringify({
+            event: 'media.transform.cancelled',
+            at: new Date().toISOString(),
+            projectId: input.projectId,
+            nodeId: input.nodeId,
+            cancelled
+          })
+        )
+      }
+      return ok({ cancelled })
+    }
+  )
 
   ipcMain.handle(
     IPC.media.importBuffer,
@@ -441,11 +483,7 @@ export function registerMediaIpc(): void {
       if (!input?.projectId || !input.sourceMediaId || !input.config) {
         return err('INVALID_INPUT', '缺少图片裁剪参数')
       }
-      try {
-        return ok(await transformImageCrop(input))
-      } catch (error) {
-        return err('IMAGE_CROP_FAILED', error instanceof Error ? error.message : String(error))
-      }
+      return runCancellableTransform(input, () => transformImageCrop(input), 'IMAGE_CROP_FAILED')
     }
   )
 

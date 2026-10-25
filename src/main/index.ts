@@ -397,6 +397,7 @@ app.whenReady().then(async () => {
         dataDirectory: getDataDir(),
         appVersion: app.getVersion(),
         activeProjectId: () => projectWatcher.activeProjectId,
+        diagnostics,
         desktop: createAccessDesktop(() => mainWindow)
       })
       emitDomainEvent('agent.access.server_ready', '本地外部接入已就绪')

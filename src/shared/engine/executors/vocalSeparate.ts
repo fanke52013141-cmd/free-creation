@@ -4,6 +4,7 @@ import { readNodeConfig } from '../node-config'
 import { parseVocalSeparationConfig } from '@shared/video-transform'
 import type { VocalMode } from '@shared/video-transform'
 import { capabilityFailure, unavailableLocalCapability } from '../preflight'
+import { runCancellableMedia } from '../media-cancel'
 
 export interface VocalSeparationNodeResult {
   kind: 'vocal-separation'
@@ -58,12 +59,27 @@ export async function vocalSeparateExecutor(
       return { status: 'failed', reason: capabilityFailure(key, capabilityReason) }
   }
   try {
-    const result = await ctx.gateway.separateVocals({
-      projectId: ctx.projectId,
-      sourceMediaId: source.mediaId,
-      config
-    })
-    if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
+    // 取消立即请求主进程终止 audio-separator/ffmpeg；迟到完成的人声/伴奏删除，不留孤儿。
+    const outcome = await runCancellableMedia(
+      ctx,
+      () =>
+        ctx.gateway.separateVocals({
+          projectId: ctx.projectId,
+          sourceMediaId: source.mediaId,
+          nodeId: ctx.node.id,
+          config
+        }),
+      (envelope) => {
+        if (envelope?.ok) {
+          void ctx.gateway.deleteMedia?.(envelope.data.vocals.id).catch(() => undefined)
+          if (envelope.data.accompaniment) {
+            void ctx.gateway.deleteMedia?.(envelope.data.accompaniment.id).catch(() => undefined)
+          }
+        }
+      }
+    )
+    if (outcome.cancelled) return { status: 'skipped', reason: '已取消' }
+    const result = outcome.value
     if (!result.ok) return { status: 'failed', reason: result.error.message }
 
     const value: VocalSeparationNodeResult = {

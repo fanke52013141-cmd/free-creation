@@ -99,7 +99,7 @@ describe('声音调整节点契约与持久化', () => {
     const { ctx, result, artifacts, adjust } = context('audio', config)
     expect(await soundAdjustExecutor(ctx)).toEqual({ status: 'done' })
     expect(adjust).toHaveBeenCalledWith({
-      projectId: 'p1', sourceMediaId: 'source-audio', kind: 'audio', config: parseSoundAdjustConfig(config)
+      projectId: 'p1', sourceMediaId: 'source-audio', nodeId: 'shape:adjust', kind: 'audio', config: parseSoundAdjustConfig(config)
     })
     expect(ctx.shape.props.config).toBe(config)
     expect(artifacts).toMatchObject([{ kind: 'audio', portId: 'out-audio', mediaId: 'new-media' }])

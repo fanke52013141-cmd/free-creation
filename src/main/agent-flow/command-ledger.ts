@@ -3,7 +3,10 @@ import { randomUUID, createHash } from 'node:crypto'
 import type { ProjectFile, PortDecl } from '../../shared/types'
 import type { NodeShape } from '../../shared/engine/executor-types'
 import {
+  codeFlowSingleOutputConfig,
+  cropFlowConfigValid,
   flowTargetContract,
+  splitFlowConfigValid,
   flowTargetPorts,
   videoFlowInputsValid,
   videoFlowAssetValid,
@@ -293,6 +296,12 @@ export class FlowCommandLedger {
       fail('FLOW_INPUT_CONTRACT_INVALID', 'speech-config')
     if (node.type === 'tts' && !ttsFlowConfigValid(targetConfig))
       fail('FLOW_INPUT_CONTRACT_INVALID', 'tts-config')
+    if (node.type === 'image-crop' && !cropFlowConfigValid(targetConfig))
+      fail('FLOW_INPUT_CONTRACT_INVALID', 'crop-config')
+    if (node.type === 'image-split' && !splitFlowConfigValid(targetConfig))
+      fail('FLOW_INPUT_CONTRACT_INVALID', 'split-config')
+    if (node.type === 'code' && !codeFlowSingleOutputConfig(targetConfig))
+      fail('FLOW_INPUT_CONTRACT_INVALID', 'code-config')
     if (
       command.contractVersion !== node.contractVersion ||
       portIdentity(node.ports) !== portIdentity(flowTargetPorts(node)) ||
@@ -333,44 +342,55 @@ export class FlowCommandLedger {
     command: NodeExecuteCommand,
     project: ProjectFile
   ): FlowCommandGrant['inputs'] {
-    if (
-      savedShape(project, command.targetNodeId).props.nodeType === 'video' &&
-      !videoFlowInputsValid(
-        JSON.parse(savedShape(project, command.targetNodeId).props.config || '{}').mode,
-        command.inputs.map((item) => ({
-          targetPortId: item.targetPortId,
-          kinds: this.assets
-            .resolveInputs(command.projectId, item.assets)
-            .map((version) => version.value.kind)
-        }))
-      )
-    )
-      fail('FLOW_INPUT_CONTRACT_INVALID', 'video-input')
     const shape = savedShape(project, command.targetNodeId)
-    const resolvedInputs = command.inputs.map((input) => {
-      const versions = this.assets.resolveInputs(command.projectId, input.assets)
+    // Resolve each input once: the video mode precheck and the per-input checks
+    // below share one resolution pass instead of re-freezing every media asset.
+    const resolved = command.inputs.map((input) => ({
+      input,
+      versions: this.assets.resolveInputs(command.projectId, input.assets)
+    }))
+    if (shape.props.nodeType === 'video') {
+      let config: unknown = {}
+      try {
+        config = JSON.parse(String(shape.props.config || '{}'))
+      } catch {
+        fail('FLOW_INPUT_CONTRACT_INVALID', 'input')
+      }
       if (
-        savedShape(project, command.targetNodeId).props.nodeType === 'video' &&
-        versions.some((version) => !videoFlowAssetValid(input.targetPortId, version.value))
-      )
-        fail('FLOW_INPUT_CONTRACT_INVALID', 'video-input')
-      if (
-        ['in-reference-video', 'in-reference-audio'].includes(input.targetPortId) &&
-        versions.some(
-          (version) =>
-            !['video', 'audio'].includes(version.value.kind) ||
-            !('contentSha256' in version.value) ||
-            !version.value.contentSha256
+        !videoFlowInputsValid(
+          (config as { mode?: unknown }).mode,
+          resolved.map(({ input, versions }) => ({
+            targetPortId: input.targetPortId,
+            kinds: versions.map((version) => version.value.kind)
+          }))
         )
       )
         fail('FLOW_INPUT_CONTRACT_INVALID', 'video-input')
-      if (
-        input.targetPortId === 'in-images' &&
-        new Set(
-          versions.map((version) => (version.value.kind === 'image' ? version.value.mediaId : null))
-        ).size !== versions.length
-      )
-        fail('FLOW_INPUT_CONTRACT_INVALID', 'video-input')
+    }
+    const resolvedInputs = resolved.map(({ input, versions }) => {
+      if (shape.props.nodeType === 'video') {
+        if (versions.some((version) => !videoFlowAssetValid(input.targetPortId, version.value)))
+          fail('FLOW_INPUT_CONTRACT_INVALID', 'video-input')
+        if (
+          ['in-reference-video', 'in-reference-audio'].includes(input.targetPortId) &&
+          versions.some(
+            (version) =>
+              !['video', 'audio'].includes(version.value.kind) ||
+              !('contentSha256' in version.value) ||
+              !version.value.contentSha256
+          )
+        )
+          fail('FLOW_INPUT_CONTRACT_INVALID', 'video-input')
+        if (
+          input.targetPortId === 'in-images' &&
+          new Set(
+            versions.map((version) =>
+              version.value.kind === 'image' ? version.value.mediaId : null
+            )
+          ).size !== versions.length
+        )
+          fail('FLOW_INPUT_CONTRACT_INVALID', 'video-input')
+      }
       const edges = project.edges.filter(
         (edge) => edge.to.nodeId === command.targetNodeId && edge.to.portId === input.targetPortId
       )

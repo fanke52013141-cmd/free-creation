@@ -3,6 +3,7 @@ import { inputMedia } from '../inputs'
 import type { NodeExecutionContext, NodeExecutionResult } from '../executor-types'
 import { readNodeConfig } from '../node-config'
 import { parseImageCropConfig } from '@shared/image-crop'
+import { runCancellableMedia } from '../media-cancel'
 import {
   appendMediaResult,
   mediaDisplayName,
@@ -31,12 +32,23 @@ export const imageCropExecutor = async (
     config.aspectRatio === 'free' ? '' : ` · ${config.aspectRatio}`
   }`
   try {
-    const result = await ctx.gateway.cropImage({
-      projectId: ctx.projectId,
-      sourceMediaId: source.mediaId,
-      config
-    })
-    if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
+    // 裁剪的像素渲染是主进程同步调用，无法中断；取消时主进程不再开始新渲染，
+    // 已自然完成的迟到资产在这里删除，避免媒体库留下孤儿。
+    const outcome = await runCancellableMedia(
+      ctx,
+      () =>
+        ctx.gateway.cropImage({
+          projectId: ctx.projectId,
+          sourceMediaId: source.mediaId,
+          nodeId: ctx.node.id,
+          config
+        }),
+      (envelope) => {
+        if (envelope?.ok) void ctx.gateway.deleteMedia?.(envelope.data.id).catch(() => undefined)
+      }
+    )
+    if (outcome.cancelled) return { status: 'skipped', reason: '已取消' }
+    const result = outcome.value
     if (!result.ok) return { status: 'failed', reason: result.error.message }
     const previous = parseMediaResultCollection(
       typeof ctx.shape.meta?.nodeResult === 'string' ? ctx.shape.meta.nodeResult : ''

@@ -35,8 +35,8 @@ export const rendererGateway: GatewayClient = {
   imageGenerate: (input) => window.api.gateway.imageGenerate(input),
   imageEdit: (input) => window.api.gateway.imageEdit(input),
   videoSubmit: (input) => window.api.gateway.videoSubmit(input),
-  videoCancel: (taskId) => window.api.gateway.videoCancel(taskId),
-  videoTask: (taskId) => window.api.gateway.videoTask(taskId),
+  videoCancel: (taskId, traceId) => window.api.gateway.videoCancel(taskId, traceId),
+  videoTask: (taskId, traceId) => window.api.gateway.videoTask(taskId, traceId),
   audioGenerate: (input) => window.api.gateway.audioGenerate(input),
   speechGenerate: (input) => window.api.gateway.speechGenerate(input),
   voiceDesign: (input) => window.api.gateway.voiceDesign(input),
@@ -57,5 +57,6 @@ export const rendererGateway: GatewayClient = {
   soundAdjust: (input) => window.api.soundAdjust(input),
   separateVocals: (input) => window.api.separateVocals(input),
   deleteMedia: (mediaId) => window.api.deleteMedia(mediaId),
+  cancelMediaTransforms: (input) => window.api.cancelMediaTransforms(input),
   ttsGenerate: (input) => window.api.ttsGenerate(input)
 }

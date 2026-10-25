@@ -7,6 +7,7 @@ import { Icon } from '../../../components/Icon'
 import { ModelSelect, NoModelHint } from './shared'
 import type { NodeBodyProps, NodeSettingsProps } from '../../registry'
 import { useNodePanelStore } from '../../../stores/nodePanel'
+import { ChatSkillAgentSettings } from './SkillAgentSettings'
 
 export function ChatBody({ shape }: NodeBodyProps): React.JSX.Element {
   return (
@@ -54,11 +55,17 @@ export function ChatSettings({ shape, editor }: NodeSettingsProps): React.JSX.El
   }
 
   if (options.length === 0) {
-    return <NoModelHint onOpen={() => openSettings()} presetIds={['relay']} />
+    return (
+      <section className="node-settings chat-node-settings">
+        <ChatSkillAgentSettings shape={shape} editor={editor} />
+        <NoModelHint onOpen={() => openSettings()} presetIds={['relay']} />
+      </section>
+    )
   }
 
   return (
     <section className="node-settings chat-node-settings">
+      <ChatSkillAgentSettings shape={shape} editor={editor} />
       <div className="settings-row">
         <span className="opt-label">模型</span>
         <ModelSelect

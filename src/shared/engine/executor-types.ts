@@ -35,6 +35,13 @@ export interface NodeShape {
      * 用独立字段而不是塞进 nodeResult，避免破坏媒体结果集合的同一种输出语义。
      */
     nodeExtra?: string
+    /**
+     * 状态机节点的权威实例（JSON 字符串）。只有 stateMachineExecutor 推进它；
+     * UI 只写 stateMachinePending 提交人工事件。
+     */
+    stateMachine?: string
+    /** 状态机节点待应用的人工提交事件（JSON 字符串），运行时由执行器校验并消费。 */
+    stateMachinePending?: string
   }
 }
 
@@ -45,12 +52,23 @@ export interface NodeShape {
 export interface NodeMetaPatch {
   agentTask?: string
   nodeExtra?: string
+  /** 状态机节点权威实例（仅 stateMachineExecutor 写入）。 */
+  stateMachine?: string
+  /** 状态机节点待应用人工事件；执行器消费后写空串清除（tldraw meta 浅合并，删键不生效）。 */
+  stateMachinePending?: string
 }
 
 /** 运行控制信号。暂停在当前原子任务结束后生效；停止会解除暂停等待。 */
 export interface CancelSignal {
   readonly cancelled: boolean
   readonly paused?: boolean
+  /**
+   * 订阅本次运行的取消（停止），返回退订函数。用于本地媒体等
+   * 不值得等待的进行中调用：停止一旦发生立即回调，执行器可以通知
+   * 主进程终止子进程，而不是等 IPC 自然返回后再丢弃结果。
+   * 渲染器运行控制已实现；纯执行器单测的最小 mock 可以不注入。
+   */
+  onCancel?(listener: () => void): () => void
 }
 
 /**

@@ -75,7 +75,27 @@ async function captureDesktop(app,file){
     client=new Client({name:'canvas-local-acceptance',version:'1.0.0'},{capabilities:{}})
     await client.connect(transport)
     const tools=await client.listTools()
-    check(tools.tools.length===14&&!tools.tools.some(t=>/import|invoke|execute/.test(t.name)),'MCP_TOOL_DIRECTORY_INVALID')
+    check(tools.tools.length===18&&!tools.tools.some(t=>/import|invoke|execute/.test(t.name)),'MCP_TOOL_DIRECTORY_INVALID')
+    const queryFixture=await page.evaluate(async()=>{
+      const connection=await window.api.models.saveConnection({id:'a14-connection',name:'A14 private connection',protocol:'openai-compatible',baseUrl:'https://a14-private.invalid',headers:{Authorization:'Bearer a14-fake-secret'},enabled:false})
+      const model=await window.api.models.saveDefinition({id:'a14-model',connectionId:'a14-connection',modelId:'a14-model',name:'A14 private model',capabilities:[{operation:'text.generate',asynchronous:false,streaming:false,acceptedAssetKinds:[],producedAssetKinds:[],controls:{}}]})
+      const resource=await window.api.createLibraryResource({title:'A14 query resource',formPreset:'prompt',components:[{role:'prompt',valueType:'text',text:'a14-private-prompt'}]})
+      return {ok:connection.ok&&model.ok&&resource.ok,resourceId:resource.data?.id}
+    })
+    check(queryFixture.ok,'QUERY_UI_FIXTURE_FAILED')
+    for (const [name,input] of [['model_list',{limit:1}],['library_search',{limit:1}],['diagnostics_summary',{}]]) {
+      const mcp=await client.callTool({name,arguments:{input}})
+      const cli=await runCli(directory,name.split('_'),{input})
+      check(mcp.structuredContent.status==='completed'&&cli.response.status==='completed',`QUERY_FAILED:${name}`)
+      if(name!=='diagnostics_summary') check(JSON.stringify(mcp.structuredContent.data)===JSON.stringify(cli.response.data),`QUERY_PARITY:${name}`)
+      else check(mcp.structuredContent.data.available===true&&cli.response.data.available===true,'DIAGNOSTICS_NOT_AVAILABLE')
+      if(name==='model_list') check(mcp.structuredContent.data.models[0]?.id==='a14-model'&&mcp.structuredContent.data.models[0]?.connectionEnabled===false,'MODEL_SHARED_FACT_MISMATCH')
+      if(name==='library_search') check(mcp.structuredContent.data.items[0]?.id===queryFixture.resourceId,'LIBRARY_SHARED_FACT_MISMATCH')
+      check(!/a14-private\.invalid|a14-fake-secret|a14-private-prompt/.test(JSON.stringify([mcp,cli])),'QUERY_CONTENT_LEAK')
+    }
+    const missingRun=await client.callTool({name:'run_get',arguments:{input:{projectId,taskId:'missing-task'}}})
+    check(missingRun.structuredContent.error?.code==='NOT_FOUND','RUN_QUERY_SCOPE_INVALID')
+    receipt.checks.push('A1.4 read-only model/library parity, diagnostic health and scoped missing run via real CLI/MCP')
     const same=await client.callTool({name:'project_create',arguments:{input:{name:'Agent vertical slice'},idempotencyKey:created.response.idempotencyKey}})
     check(same.structuredContent.data.meta.id===projectId,'CROSS_TRANSPORT_DUPLICATION')
     receipt.checks.push('MCP SDK initialize/list/call; cross-transport idempotency')
@@ -183,7 +203,7 @@ async function captureDesktop(app,file){
     const starts=events.filter(e=>e.event==='agent.access.started')
     check(starts.length>=5,'ACCESS_LOGS_MISSING')
     for(const start of starts)check(events.filter(e=>e.traceId===start.traceId&&['agent.access.completed','agent.access.failed','agent.access.unknown'].includes(e.event)).length===1,'DUPLICATE_OR_MISSING_TERMINAL')
-    check(!['Agent renamed project','UI renamed project','A11 active project','private-a11-latest-unsaved-text','A11 cloned slice'].some(value=>JSON.stringify(events).includes(value)),'LOG_CONTENT_LEAK')
+    check(!['Agent renamed project','UI renamed project','A11 active project','private-a11-latest-unsaved-text','A11 cloned slice','A14 private connection','A14 private model','a14-private.invalid','a14-fake-secret','a14-private-prompt'].some(value=>JSON.stringify(events).includes(value)),'LOG_CONTENT_LEAK')
     await cp(join(directory,'diagnostics'),join(evidence,'diagnostics'),{recursive:true})
     receipt.checks.push('actual JSONL lifecycle + content redaction')
     receipt.status='passed'

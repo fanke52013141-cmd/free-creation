@@ -23,6 +23,8 @@ import type {
   AudioGenerateInput,
   ImageCropTransformInput,
   ImageSplitTransformInput,
+  MediaCancelTransformsInput,
+  MediaCancelTransformsResult,
   VideoFrameTransformInput,
   VideoClipTransformInput,
   VideoAudioTransformInput,
@@ -71,8 +73,9 @@ export interface GatewayClient {
   imageGenerate(input: ImageGenerateInput): Promise<IpcEnvelope<MediaAsset>>
   imageEdit(input: ImageEditInput): Promise<IpcEnvelope<MediaAsset>>
   videoSubmit(input: VideoSubmitInput): Promise<IpcEnvelope<VideoSubmitResult>>
-  videoCancel(taskId: string): Promise<IpcEnvelope<boolean>>
-  videoTask(taskId: string): Promise<IpcEnvelope<VideoTaskInfo | null>>
+  /** traceId：运行中查询/取消携带节点运行根 trace；缺失时主进程显式标记关联缺失。 */
+  videoCancel(taskId: string, traceId?: string): Promise<IpcEnvelope<boolean>>
+  videoTask(taskId: string, traceId?: string): Promise<IpcEnvelope<VideoTaskInfo | null>>
   audioGenerate(input: AudioGenerateInput): Promise<IpcEnvelope<MediaAsset>>
   /** 配音节点：按 config.backend 走 MiniMax 异步或火山语音合成 1.0。 */
   speechGenerate(input: SpeechGenerateInput): Promise<IpcEnvelope<SpeechGenerateResult>>
@@ -102,5 +105,10 @@ export interface GatewayClient {
   separateVocals(input: VocalSeparateInput): Promise<IpcEnvelope<VocalSeparationResult>>
   /** Best-effort cleanup for intermediate assets created inside a composite media operation. */
   deleteMedia?(mediaId: string): Promise<IpcEnvelope<boolean>>
+  /**
+   * 运行中停止：终止该节点仍在执行的本地媒体变换（ffmpeg 子进程、拆分循环）。
+   * 返回实际收到终止信号的作业数量；主进程不可用时调用方静默降级为旧行为。
+   */
+  cancelMediaTransforms?(input: MediaCancelTransformsInput): Promise<IpcEnvelope<MediaCancelTransformsResult>>
   ttsGenerate(input: TtsGenerateInput): Promise<IpcEnvelope<VoiceCloneResult>>
 }

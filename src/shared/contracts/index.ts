@@ -49,6 +49,10 @@ import type {
 } from '@free-creation/model-contracts'
 
 export const IPC = {
+  skillLibrary: {
+    list: 'skill-library:list',
+    install: 'skill-library:install'
+  },
   flowAgents: {
     review: 'flow-agents:review',
     build: 'flow-agents:build',
@@ -129,6 +133,8 @@ export const IPC = {
     videoConvertDepth: 'media:video-convert-depth',
     videoConvertClay: 'media:video-convert-clay',
     videoConvertCancel: 'media:video-convert-cancel',
+    /** 运行中停止：终止该节点仍在执行的本地媒体变换（ffmpeg 子进程/拆分循环）。 */
+    cancelTransforms: 'media:cancel-transforms',
     pick: 'media:pick',
     list: 'media:list',
     delete: 'media:delete',
@@ -567,22 +573,28 @@ export interface ImportMediaBufferInput {
   data: Uint8Array
 }
 
-export interface ImageCropTransformInput {
+/**
+ * 本地媒体变换输入的公共字段。
+ * `nodeId` 是可选的取消关联：执行器传入发起节点后，运行中停止可以
+ * 通过 `media:cancel-transforms` 终止该节点仍在执行的本地变换
+ * （ffmpeg 子进程、拆分循环）；不传则该次调用不可取消，行为与旧版一致。
+ */
+export interface MediaTransformSourceInput {
   projectId: string
   sourceMediaId: string
+  /** 发起本次变换的节点 ID；仅用于取消关联，不进入媒体元数据。 */
+  nodeId?: string
+}
+
+export interface ImageCropTransformInput extends MediaTransformSourceInput {
   config: ImageCropConfig
 }
 
-export interface ImageSplitTransformInput {
-  projectId: string
-  sourceMediaId: string
+export interface ImageSplitTransformInput extends MediaTransformSourceInput {
   config: ImageSplitConfig
 }
 
-export interface VideoTransformSourceInput {
-  projectId: string
-  sourceMediaId: string
-}
+export interface VideoTransformSourceInput extends MediaTransformSourceInput {}
 
 export interface VideoFrameTransformInput extends VideoTransformSourceInput {
   config: VideoFrameConfig
@@ -635,10 +647,23 @@ export interface AudioWaveformResult {
   sampleRate: number
 }
 
-export interface VocalSeparateInput {
-  projectId: string
-  sourceMediaId: string
+export interface VocalSeparateInput extends MediaTransformSourceInput {
   config: VocalSeparationConfig
+}
+
+/**
+ * 运行中停止时终止本地媒体变换。只接受 projectId + nodeId 关联；
+ * 主进程终止该节点名下仍在执行的 ffmpeg/拆分作业，已落盘的半成品按
+ * 各变换的回滚规则清理，不产生孤儿资产。
+ */
+export interface MediaCancelTransformsInput {
+  projectId: string
+  nodeId: string
+}
+
+export interface MediaCancelTransformsResult {
+  /** 实际收到终止信号的本地作业数量；0 表示该节点没有进行中的本地变换。 */
+  cancelled: number
 }
 
 export interface VocalSeparationResult {
@@ -685,6 +710,8 @@ export interface TtsGenerateInput {
   /** Correlates the renderer node run with main-process voice-clone logs. */
   runId?: string
   nodeId?: string
+  /** 运行根 trace；主进程阶段事件据此建立祖先关联，缺失时显式标记 correlationMissing。 */
+  traceId?: string
   /** 参考音频（音色来源）在本地图库中的 mediaId。 */
   referenceAudioId: string
   /** 云端音色克隆参数。 */
@@ -849,6 +876,8 @@ export interface ChatStartInput {
   maxTokens?: number
   reasoningEffort?: 'high'
   imageSkill?: import('../chat-image-skill').ChatImageSkillTarget
+  /** Bounded tool loop; absent preserves the existing three-step image dialogue. */
+  toolStepLimit?: number
   /** 诊断关联（L03）；main 侧只取 ID/模型身份，不读正文。 */
   diagnostics?: GatewayDiagnosticsContext
 }
