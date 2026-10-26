@@ -121,7 +121,7 @@ async function captureDesktop(app,file){
     const opened=await page.evaluate(async id=>await window.api.openProject(id),projectId)
     check(opened.ok&&opened.data.meta.name==='UI renamed project'&&opened.data.meta.graphVersion===3,'DESKTOP_READBACK_FAILED')
     await captureDesktop(app,join(evidence,'desktop-readback.png'))
-    await page.getByRole('button',{name:'展开输入与 AI节点',exact:true}).click()
+    await page.getByRole('button',{name:'展开输入与素材节点',exact:true}).click()
     await page.getByRole('button',{name:'添加文本节点',exact:true}).click()
     await page.locator('.node-text').first().dblclick()
     await page.locator('textarea.node-textarea').fill('private-a11-unsaved-text')

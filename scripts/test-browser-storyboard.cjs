@@ -55,7 +55,7 @@ async function main() {
 
   const openDemo = page.getByRole('button', { name: '打开项目 浏览器演示项目', exact: true })
   if (await openDemo.count()) await openDemo.click()
-  const expandLogic = page.getByRole('button', { name: '展开流程与高级节点', exact: true })
+  const expandLogic = page.getByRole('button', { name: '展开视频创作节点', exact: true })
   if (await expandLogic.count()) await expandLogic.click()
   await page.getByRole('button', { name: '添加分镜板节点', exact: true }).click()
   const topbarBottom = await page.evaluate(() => {

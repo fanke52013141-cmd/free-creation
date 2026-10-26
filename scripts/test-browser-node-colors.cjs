@@ -80,7 +80,8 @@ function contrast(a, b) {
       await page.screenshot({ path: `${output}/all-nodes-${theme}.png`, timeout: 60000 })
     }
     await page.evaluate(() => document.querySelectorAll('.canvas-host, .canvas-page').forEach((el) => { el.classList.remove('canvas-theme-light'); el.classList.add('canvas-theme-dark') }))
-    for (const label of ['输入与 AI', '图片创作', '视频创作', '声音创作', '流程与高级']) {
+    // 默认工作区 profile 不含数据分类节点，Dock 只显示有可见节点的分类。
+    for (const label of ['输入与素材', '图片创作', '视频创作', '声音创作', 'AI 与自动化']) {
       const category = page.getByRole('button', { name: `展开${label}节点`, exact: true })
       await category.hover()
       await page.waitForSelector('.palette-node-flyout')

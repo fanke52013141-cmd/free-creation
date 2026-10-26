@@ -74,7 +74,36 @@
 
 **优化意见与修复**：见 §5-R1（与 F2 一并处理）。
 
+### F5（P2·门禁回归，源自基线之上的 c25d2fa）UI 分类重组 5→6 未同步验收脚本，且新分类默认不可见
+
+**现象**：测试收尾期间上游合入 `c25d2fa`（UI 审查落地：分类重组 5→6、节点详情 Rail 化）。该提交把 `input` 分类文案改为"输入与素材"、新增"AI 与自动化/数据与代码"分类并移动了节点归属，但未同步 6 个硬编码旧分类文案的验收脚本：`test-browser-menu-order`、`test-browser-node-colors`（两者在 `test:optimization-ui` 门禁内）、`test-local-agent-access`（在 `verify:checks` 内）、`test-skill-agent-electron`、`test-browser-storyboard`、`test-browser-director-studio`。在合并树上实测：`test-skill-agent-electron` 因等待"展开输入与 AI节点"超时失败；`test-browser-node-standard` 因门禁残留服务的模块实例分裂抛"未注册"错误。
+
+另发现一个产品级不一致：默认工作区 profile（`GENERAL_WORKSPACE_NODE_TYPES`）不含任何数据分类节点（processor/json/structured/iterate/code），而 `CanvasEditor` 的 Dock 只渲染"有可见节点"的分类，导致重组出的第 6 分类"数据与代码"在默认界面**不可见**；但程序化挂载的 `NodeCreateMenu` 会展示全部 6 个分类。数据分类节点在旧方案下同样不在默认可见集（历史行为），因此这是"重组意图与默认可见集不一致"的设计问题而非新回归，但其单元测试期望 6 分类，产品意图需要确认。
+
+**处置**：6 个脚本的分类文案与断言按合并树实际行为修正（Dock 按可见分类断言 5 项、创建菜单断言 6 项；storyboard/director 的展开按钮改为"视频创作"）；"数据与代码默认不可见"作为决策项记录（见 §7），不在本轮擅自改产品默认值。
+
+### F6（P3·基础设施）门禁服务 kill 不可靠导致僵尸 vite 接管端口
+
+**现象**：`run-optimization-ui-gate.cjs` 结束时 `server.kill()` 与 bash `kill` 在 Windows 上多次未真正结束 vite 子进程；实测遗留 4 个僵尸 vite 占据 5173/5194/5195/5196。由于门禁只用 `fetch` 判断"服务就绪"，新一轮门禁的 vite 绑定失败后，测试实际打到了残留的旧模块图服务上，出现评估导入的注册表实例与应用实例分裂（`allNodeTypes()` 返回 0）这类诡异失败，极难排障。
+
+**优化意见与修复**：见 §5-R4（启动前端口占用快失败 + 首屏预热）；`test-browser-node-standard` 的建形状逻辑同步加固（§5-R5）。
+
 ## 5. 修复记录
+
+### R3 修复 F5：六处验收脚本与 c25d2fa 分类重组同步
+
+- `test-browser-menu-order.cjs`：Dock 按默认可见分类断言 5 项并注明原因；程序化挂载的 NodeCreateMenu 单独断言全部 6 个分类。
+- `test-browser-node-colors.cjs`：分类遍历改为默认可见的 5 个分类（颜色期望仍从页面 `PALETTE_CATEGORY_META` 动态读取）。
+- `test-local-agent-access.cjs`、`test-skill-agent-electron.cjs`：展开按钮更新为新分类（素材 / AI 与自动化——chat 与 ai-process 已归入 AI 分类）。
+- `test-browser-storyboard.cjs`、`test-browser-director-studio.cjs`：展开按钮"流程与高级"→"视频创作"（storyboard/director 已归入视频分类）。这两个脚本经 fdea986 基线复跑确认为**既有失修**（不在任何门禁内，基线上同样失败于添加按钮超时），本轮只同步文案，深层失修见 §7 决策项。
+
+### R4 修复 F6：门禁运行器启动前快失败 + 首屏预热
+
+`run-optimization-ui-gate.cjs`：spawn vite 前先探测目标端口，已被占用（残留服务）立即报错退出，不再对着过期模块图跑验收；服务就绪后先打开一次真实页面等待 `.tl-canvas` 稳定，触发 vite 依赖发现与可能的整页重载，避免首个验收脚本承受冷启动重载。
+
+### R5 修复 F6：node-standard 建形状单次 evaluate + 重试 + 注册诊断
+
+`test-browser-node-standard.cjs`：就绪检查与建形状合并进同一次 `page.evaluate`（消除两次 evaluate 之间被页面重载撕裂的窗口），失败最多重试 6 次并在最终失败时输出注册数/分组/画布状态诊断与截图，把隐晦的 `undefined.label` 变成可定位证据。
 
 ### R1 修复 F2/F4：SQLite 预检失败信息给出真实原因与可执行恢复命令
 
@@ -86,14 +115,27 @@
 - `scripts/run-optimization-ui-gate.cjs`：`test-browser-state-machine.cjs` 加入浏览器行为门禁列表（随 `npm run test:optimization-ui` 进 `verify:checks`，无外部依赖）。
 - `test:media-local-acceptance` 与 `test:skill-agent-electron` 有意不进默认 `verify:checks`（前者依赖本机 ffmpeg，后者需完整 Electron 启动；两者均已验证可独立运行），按交付批次以 npm script 执行，避免门禁环境差异造成假失败。
 
-### R3 修复记录补充：并发会话问题（F1）以流程约束处理
+### R6 处理 F1：并发会话问题以流程约束处理
 
 不修改并发会话的未提交文件；本报告与方案文档落在 docs/，测试与修复全部在隔离 worktree 完成并基于 fdea986 提交，保证推送内容不含外部改动。
 
 ## 6. 修复后回归
 
-- 定向 vitest 经 `run-vitest.cjs` 包装器完整链路（`test/node-status.test.ts`）：退出 0（`R-vitest-targeted.log`）。
-- 全量 `npm run lint`：退出 0（`R-lint.log`）。
-- `npm run test:optimization-ui`（现含状态机画布验收，共 23 个浏览器脚本）：退出 0（`R-optimization-ui.log`）。
-- `package.json` JSON 解析合法；`node --check` 两个脚本语法通过。
-- §2 中 `test:browser-state-machine` / `test:media-local-acceptance` / `test:skill-agent-electron` 的执行即等价于新 npm script 的验证（接线前以相同脚本文件直接运行）。
+**fdea986 基线 + 修复（R1/R2）**：
+
+- 定向 vitest 经 `run-vitest.cjs` 包装器完整链路：退出 0（`R-vitest-targeted.log`）。
+- 全量 `npm run lint`：退出 0；`package.json` JSON 解析合法；`node --check` 语法通过。
+- `npm run test:optimization-ui`（23 个浏览器脚本）：退出 0（`R-optimization-ui.log`）。
+
+**合并树（fdea986 + 上游 c25d2fa + 全部修复 R1–R5，变基后复验）**：
+
+- `npm run typecheck` / `npm run lint` / `npx electron-vite build`：全部退出 0。
+- `npm run test:optimization-ui`（预热 + 23 个浏览器脚本）：退出 0（`R2-gate-run9.log`）。
+- `npm run test:local-agent-access`：退出 0（`R2-local-agent-access-merged.log`）。
+- `node scripts/test-skill-agent-electron.cjs`：退出 0（`R2-skill-merged2.log`）。
+
+## 7. 留给用户的决策项（本轮不擅自改动）
+
+1. **"数据与代码"分类默认不可见**：默认工作区 profile 不含 processor/json/structured/iterate/code，Dock 按可见节点过滤后该分类在默认界面消失，与 6 分类重组的意图（单元测试期望 6 分类）不一致。可选：把数据分类节点补入 `GENERAL_WORKSPACE_NODE_TYPES`（并同步 `normalizeWorkspaceProfile` 的预设迁移），或确认"高级节点从项目设置开启"为既定设计并在重组说明中注明。
+2. **两个既有失修脚本**：`test-browser-storyboard.cjs` 与 `test-browser-director-studio.cjs` 在 fdea986 基线上即失败（添加按钮交互已过期），且不在任何门禁内。建议按当前抽屉式面板交互重写或显式退役，避免长期假信号。
+3. **vite 服务进程清理**：Windows 上 `server.kill()`/bash kill 对 vite 子进程不可靠，本机曾累积 4 个僵尸服务。长期可考虑门禁 runner 以进程树方式结束（taskkill /T）或使用唯一端口文件协调。

@@ -40,9 +40,9 @@ async function clean(directory) {
     await page.getByRole('button', { name: '创建项目', exact: true }).click()
     await page.locator('.node-palette').waitFor()
     const projectId = await page.evaluate(async name => (await window.api.listProjects()).data.find(item => item.name === name).id, name)
-    await page.getByRole('button', { name: '展开输入与 AI节点', exact: true }).click()
+    await page.getByRole('button', { name: '展开AI 与自动化节点', exact: true }).click()
     await page.getByRole('button', { name: /添加.*AI 对话.*节点/ }).click()
-    await page.getByRole('button', { name: '展开输入与 AI节点', exact: true }).click()
+    await page.getByRole('button', { name: '展开AI 与自动化节点', exact: true }).click()
     await page.getByRole('button', { name: /添加.*AI 处理.*节点/ }).click()
     for (const type of ['chat', 'ai-process']) {
       const card = page.locator(`[data-node-type="${type}"]`).first()

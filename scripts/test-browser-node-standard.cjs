@@ -22,15 +22,38 @@ function contrast(first, second) {
     await page.waitForSelector('.tl-canvas')
     const columns = await page.evaluate(async () => Math.max(...Object.values((await import('/src/canvas/palette-categories.ts')).PALETTE_NODE_GROUPS).map(ids => ids.length)))
     await page.setViewportSize({ width: 210 + columns * 355 + 60, height: 2750 })
-    await page.evaluate(async () => {
-      const { PALETTE_NODE_GROUPS } = await import('/src/canvas/palette-categories.ts')
-      const { getNodeType } = await import('/src/nodes/registry.tsx')
-      const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
-      editor.deleteShapes([...editor.getCurrentPageShapeIds()])
-      Object.values(PALETTE_NODE_GROUPS).forEach((ids,row) => ids.forEach((id,col) => editor.createShape({ id: `shape:standard-${id}`, type: 'node-card', x: 210 + col * 355, y: 100 + row * 500, props: { nodeType: id, title: getNodeType(id).label } })))
-      editor.setCamera({ x: 0, y: 0, z: 1 }, { immediate: true })
-      editor.selectNone()
-    })
+    // vite 依赖重优化会在两次 evaluate 之间整页重载，重载后的新页面注册表为空；
+    // 就绪检查与建形状必须在同一次 evaluate 内完成，失败按脚本级重试等页面稳定。
+    let created = false
+    for (let attempt = 0; attempt < 6 && !created; attempt++) {
+      created = await page.evaluate(async () => {
+        const { PALETTE_NODE_GROUPS } = await import('/src/canvas/palette-categories.ts')
+        const { getNodeType } = await import('/src/nodes/registry.tsx')
+        if (!Object.values(PALETTE_NODE_GROUPS).every((ids) => ids.every((id) => Boolean(getNodeType(id))))) return false
+        const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
+        editor.deleteShapes([...editor.getCurrentPageShapeIds()])
+        Object.values(PALETTE_NODE_GROUPS).forEach((ids,row) => ids.forEach((id,col) => { const spec = getNodeType(id); if (!spec) throw new Error(`面板分组中的节点未注册：${id}`); editor.createShape({ id: `shape:standard-${id}`, type: 'node-card', x: 210 + col * 355, y: 100 + row * 500, props: { nodeType: id, title: spec.label } }) }))
+        editor.setCamera({ x: 0, y: 0, z: 1 }, { immediate: true })
+        editor.selectNone()
+        return true
+      }).catch(() => false)
+      if (!created) await page.waitForTimeout(1500)
+    }
+    if (!created) {
+      const debug = await page.evaluate(async () => {
+        const registry = await import('/src/nodes/registry.tsx')
+        const canvas = await import('/src/canvas/palette-categories.ts')
+        return {
+          registered: registry.allNodeTypes().length,
+          groups: Object.entries(canvas.PALETTE_NODE_GROUPS).map(([k, v]) => `${k}=${v.length}`).join(','),
+          hasCanvas: Boolean(document.querySelector('.tl-canvas')),
+          readyState: document.readyState
+        }
+      }).catch((error) => ({ evaluateError: String(error).slice(0, 200) }))
+      process.stderr.write(`诊断：${JSON.stringify(debug)}\n`)
+      await page.screenshot({ path: `${output}/boot-debug.png`, timeout: 15000 }).catch(() => {})
+    }
+    assert.ok(created, '未能为全部分组节点创建形状（页面重载后注册未就绪）')
     await page.waitForTimeout(1200)
     const geometry = await page.locator('.node-card').evaluateAll((cards) => cards.map((card) => {
       const bounds = card.getBoundingClientRect()
