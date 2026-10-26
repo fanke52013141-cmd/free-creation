@@ -20,9 +20,13 @@ if (!process.versions.electron) {
     const Database = require('better-sqlite3')
     const database = new Database(':memory:')
     database.close()
-  } catch {
+  } catch (error) {
+    // install-app-deps 依赖预编译产物；Electron 版本缺少可用预编译时会静默保留
+    // 系统 Node ABI 的二进制，此时必须从源码重编才能通过本预检。
+    const detail = error instanceof Error ? error.message.split('\n')[0] : String(error)
     process.stderr.write(
-      'SQLite does not match the Electron runtime. Run electron-builder install-app-deps before testing.\n'
+      `SQLite does not match the Electron runtime: ${detail}\n` +
+        'Run "npx electron-rebuild -f -w better-sqlite3" to rebuild from source, then retry.\n'
     )
     process.exitCode = 1
   }
