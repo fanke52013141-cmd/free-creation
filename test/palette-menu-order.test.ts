@@ -23,13 +23,31 @@ describe('统一菜单排序', () => {
     expect(nodes[0].type).toBe('text')
   })
   it('使用新默认顺序，保留已有有效自定义顺序', () => {
-    expect(defaultPalettePreferences().order).toEqual(['image', 'input', 'video', 'audio', 'logic'])
+    expect(defaultPalettePreferences().order).toEqual([
+      'image',
+      'input',
+      'video',
+      'audio',
+      'ai',
+      'data'
+    ])
     expect(normalizePalettePreferences({ order: ['audio', 'input'] }).order).toEqual([
       'audio',
       'input',
       'image',
       'video',
-      'logic'
+      'ai',
+      'data'
+    ])
+  })
+  it('迁移：旧版 logic 分类与未知分类被丢弃，新增分类自动补齐', () => {
+    expect(normalizePalettePreferences({ order: ['input', 'logic', 'future-one'] }).order).toEqual([
+      'input',
+      'image',
+      'video',
+      'audio',
+      'ai',
+      'data'
     ])
   })
 })

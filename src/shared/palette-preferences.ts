@@ -6,7 +6,7 @@
  */
 import { DEFAULT_PALETTE_CATEGORY_ORDER } from './palette-menu-order'
 
-export const NODE_CATEGORY_IDS = ['input', 'image', 'video', 'audio', 'logic'] as const
+export const NODE_CATEGORY_IDS = ['input', 'image', 'video', 'audio', 'ai', 'data'] as const
 
 export type NodeCategoryId = (typeof NODE_CATEGORY_IDS)[number]
 

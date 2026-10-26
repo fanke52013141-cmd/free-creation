@@ -9,15 +9,17 @@
   backdrop-filter: blur(12px);
 }
 
+/* 色彩全部走 ui-foundation.css 的全局 token（--panel/--card/--line/--brand 等），
+   与主界面共用同一套深色系；不再维护弹窗自带的独立色板。 */
 .project-create-dialog {
   width: min(840px, 100%);
   max-height: 90vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  color: #e0e2ee;
-  background: rgb(20 23 33 / 90%);
-  border: 1px solid #262b3a;
+  color: var(--txt);
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  border: 1px solid var(--line);
   border-radius: 16px;
   box-shadow: 0 24px 60px -12px rgb(0 0 0 / 75%);
   backdrop-filter: blur(28px);
@@ -30,8 +32,8 @@
   justify-content: space-between;
   gap: 20px;
   padding: 20px 24px;
-  background: #141721;
-  border-bottom: 1px solid #262b3a;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
 }
 
 .project-create-heading {
@@ -47,15 +49,15 @@
   display: grid;
   place-items: center;
   flex: 0 0 auto;
-  color: #06b6d4;
-  background: #1a1e2b;
-  border: 1px solid #262b3a;
+  color: var(--brand);
+  background: var(--card);
+  border: 1px solid var(--line);
   border-radius: 8px;
 }
 
 .project-create-header h2 {
   margin: 0;
-  color: #f1f5f9;
+  color: var(--txt);
   font-size: 18px;
   font-weight: 600;
   letter-spacing: -0.015em;
@@ -67,7 +69,7 @@
   display: grid;
   place-items: center;
   flex: 0 0 auto;
-  color: #64748b;
+  color: var(--txt-dim);
   background: transparent;
   border: 0;
   border-radius: 8px;
@@ -76,8 +78,8 @@
 }
 
 .project-create-close:hover:not(:disabled) {
-  color: #f1f5f9;
-  background: #222737;
+  color: var(--txt);
+  background: var(--card-hover);
 }
 
 .project-create-close:disabled {
@@ -109,12 +111,17 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
+/* 展开态的“收起工具配置”折行到整行，避免和名称输入挤在一行。 */
+.project-create-top-config > .project-create-config-toggle {
+  grid-column: 1 / -1;
+}
+
 .project-create-name,
 .project-create-search {
   min-width: 0;
   display: grid;
   gap: 6px;
-  color: #94a3b8;
+  color: var(--muted);
   font-size: 12px;
   font-weight: 500;
   line-height: 16px;
@@ -129,18 +136,18 @@
 }
 
 .project-create-name > span > svg {
-  color: #06b6d4;
+  color: var(--brand);
 }
 
 .project-create-search > span:first-child > svg {
-  color: #38bdf8;
+  color: var(--brand);
 }
 
 .project-create-name input,
 .project-create-search-field input {
   min-width: 0;
   width: 100%;
-  color: #f1f5f9;
+  color: var(--txt);
   background: transparent;
   border: 0;
   outline: 0;
@@ -152,13 +159,13 @@
 
 .project-create-name input::placeholder,
 .project-create-search-field input::placeholder {
-  color: #64748b;
+  color: var(--txt-dim);
 }
 
 .project-create-name > input {
   height: 42px;
   padding: 0 12px;
-  background: #121520;
+  background: var(--sunk);
   border-radius: 12px;
   box-shadow: inset 0 2px 4px rgb(0 0 0 / 20%);
   transition: box-shadow 0.16s ease;
@@ -166,7 +173,9 @@
 
 .project-create-name > input:focus,
 .project-create-search-field:focus-within {
-  box-shadow: 0 0 0 1px #06b6d4, 0 0 16px rgb(6 182 212 / 20%);
+  box-shadow:
+    0 0 0 1px var(--brand),
+    0 0 16px color-mix(in srgb, var(--brand) 20%, transparent);
 }
 
 .project-create-search-field {
@@ -175,8 +184,8 @@
   align-items: center;
   gap: 8px;
   padding: 0 12px;
-  color: #64748b;
-  background: #121520;
+  color: var(--txt-dim);
+  background: var(--sunk);
   border-radius: 12px;
   box-shadow: inset 0 2px 4px rgb(0 0 0 / 20%);
   transition: box-shadow 0.16s ease;
@@ -193,7 +202,7 @@
   place-items: center;
   flex: 0 0 auto;
   padding: 0;
-  color: #64748b;
+  color: var(--txt-dim);
   background: transparent;
   border: 0;
   border-radius: 6px;
@@ -201,8 +210,45 @@
 }
 
 .project-create-search-field button:hover {
-  color: #f1f5f9;
-  background: #222737;
+  color: var(--txt);
+  background: var(--card-hover);
+}
+
+/* “高级：自定义可见工具”折叠条：ghost 按钮形态。
+   全局 button 无边框（!important），用 inset box-shadow 画 1px 描边。 */
+.project-create-config-toggle {
+  min-width: 0;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  color: var(--muted);
+  background: var(--sunk);
+  border: 0;
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 1px var(--line);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.project-create-config-toggle:hover {
+  color: var(--txt);
+  background: var(--card-hover);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand) 40%, var(--line));
+}
+
+.project-create-config-toggle > svg {
+  flex: 0 0 auto;
+  color: var(--brand);
 }
 
 .project-create-categories {
@@ -217,7 +263,7 @@
 }
 
 .project-create-category {
-  --category-accent: #06b6d4;
+  --category-accent: var(--brand);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -225,17 +271,24 @@
   border: 0;
 }
 
+/* 分类强调色与 palette-categories.ts 的 PALETTE_CATEGORY_META 一致。 */
+.project-create-category[data-category='input'] {
+  --category-accent: #f472b6;
+}
 .project-create-category[data-category='image'] {
-  --category-accent: #10b981;
+  --category-accent: #4ade80;
 }
 .project-create-category[data-category='video'] {
-  --category-accent: #f43f5e;
+  --category-accent: #60a5fa;
 }
 .project-create-category[data-category='audio'] {
-  --category-accent: #f59e0b;
+  --category-accent: #c084fc;
 }
-.project-create-category[data-category='logic'] {
-  --category-accent: #6366f1;
+.project-create-category[data-category='ai'] {
+  --category-accent: var(--brand);
+}
+.project-create-category[data-category='data'] {
+  --category-accent: #fb923c;
 }
 
 .project-create-category > header {
@@ -260,7 +313,7 @@
 }
 
 .project-create-category > header strong {
-  color: #f1f5f9;
+  color: var(--txt);
   font-size: 14px;
   font-weight: 600;
   line-height: 20px;
@@ -280,7 +333,7 @@
   min-height: 24px;
   margin-left: auto;
   padding: 0 4px;
-  color: #64748b;
+  color: var(--txt-dim);
   background: transparent;
   border: 0;
   border-radius: 6px;
@@ -309,8 +362,8 @@
   align-items: center;
   gap: 8px;
   padding: 12px;
-  color: #f1f5f9;
-  background: #1a1e2b;
+  color: var(--txt);
+  background: var(--card);
   border: 0;
   border-radius: 12px;
   box-shadow: 0 1px 2px rgb(0 0 0 / 20%);
@@ -319,16 +372,16 @@
 }
 
 .project-create-node:hover {
-  background: #222737;
+  background: var(--card-hover);
 }
 
 .project-create-node:has(input:focus-visible) {
-  outline: 2px solid #38bdf8;
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
 .project-create-node.is-highlighted {
-  box-shadow: 0 0 0 1px rgb(6 182 212 / 40%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand) 40%, transparent);
 }
 
 .project-create-node input {
@@ -349,7 +402,7 @@
   place-items: center;
   flex: 0 0 auto;
   color: var(--node-color);
-  background: #121520;
+  background: var(--sunk);
   border: 0;
   border-radius: 8px;
   transition: transform 0.15s ease;
@@ -363,7 +416,7 @@
   min-width: 0;
   flex: 1;
   overflow: hidden;
-  color: #f1f5f9;
+  color: var(--txt);
   font-size: 13px;
   font-weight: 500;
   line-height: 20px;
@@ -378,15 +431,15 @@
   place-items: center;
   flex: 0 0 auto;
   color: transparent;
-  background: #121520;
+  background: var(--sunk);
   border: 0;
   border-radius: 6px;
   transition: color 0.15s ease, background 0.15s ease;
 }
 
 .project-create-node.is-selected .project-create-node-check {
-  color: #141721;
-  background: #06b6d4;
+  color: var(--panel);
+  background: var(--brand);
 }
 
 .project-create-no-results {
@@ -396,7 +449,7 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: #94a3b8;
+  color: var(--muted);
   text-align: center;
 }
 
@@ -406,13 +459,13 @@
   margin-bottom: 3px;
   display: grid;
   place-items: center;
-  color: #94a3b8;
-  background: #1a1e2b;
-  border: 1px solid #262b3a;
+  color: var(--muted);
+  background: var(--card);
+  border: 1px solid var(--line);
   border-radius: 11px;
 }
 .project-create-no-results strong {
-  color: #f1f5f9;
+  color: var(--txt);
   font-size: 13px;
   font-weight: 600;
 }
@@ -426,8 +479,8 @@
   align-items: center;
   gap: 8px;
   padding: 12px 24px;
-  background: #181b24;
-  border-top: 1px solid #262b3a;
+  background: var(--surface-1);
+  border-top: 1px solid var(--line);
 }
 
 .project-create-error {
@@ -450,13 +503,13 @@
 }
 
 .project-create-cancel {
-  color: #94a3b8;
+  color: var(--muted);
   background: transparent;
   border: 0;
 }
 .project-create-cancel:hover:not(:disabled) {
-  color: #f1f5f9;
-  background: #222737;
+  color: var(--txt);
+  background: var(--card-hover);
 }
 
 .project-create-submit {
@@ -464,14 +517,14 @@
   align-items: center;
   justify-content: center;
   gap: 7px;
-  color: #00424f;
-  background: #06b6d4;
+  color: #06283d;
+  background: var(--brand);
   border: 0;
-  box-shadow: 0 0 12px rgb(6 182 212 / 35%);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--brand) 30%, transparent);
 }
 
 .project-create-submit:hover:not(:disabled) {
-  background: #22c4e1;
+  background: color-mix(in srgb, var(--brand) 86%, white);
 }
 .project-create-cancel:disabled,
 .project-create-submit:disabled {

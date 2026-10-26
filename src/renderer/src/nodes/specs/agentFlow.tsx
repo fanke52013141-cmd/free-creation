@@ -875,7 +875,7 @@ export function registerAgentFlowNodeTypes(): void {
       icon: review ? 'check' : state ? 'workflow' : 'spark',
       color: NODE_ACCENTS[type],
       defaultSize: { w: 340, h: 260 },
-      category: 'logic',
+      category: 'ai',
       initialConfig: JSON.stringify(defaults[type]),
       description: review
         ? '审核固定版本的资产，给出是/否和反馈。返工通过显式控制关系调度。'

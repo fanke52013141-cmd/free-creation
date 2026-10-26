@@ -18,12 +18,24 @@ describe('节点详情面板', () => {
   })
 
   it('在输入输出页提供未连线测试，而不是把测试入口藏在运行页', () => {
-    const ioStart = panelSource.indexOf("{tab === 'io' &&")
-    const runStart = panelSource.indexOf("{tab === 'run' &&")
+    const ioStart = panelSource.indexOf("{activeTab === 'io' &&")
+    const runStart = panelSource.indexOf("{activeTab === 'run' &&")
     expect(ioStart).toBeGreaterThan(-1)
     expect(runStart).toBeGreaterThan(ioStart)
     expect(panelSource.slice(ioStart, runStart)).toContain('<TestHarness')
     expect(panelSource.slice(runStart)).not.toContain('<TestHarness')
+  })
+
+  it('tab 固定为概览→输入输出→设置→运行，协作 tab 覆盖全部 Agent 系节点', () => {
+    const overview = panelSource.indexOf("{ id: 'overview', label: '概览', icon: 'info' }")
+    const io = panelSource.indexOf("{ id: 'io', label: '输入输出', icon: 'node-library' }")
+    const settings = panelSource.indexOf("{ id: 'settings', label: '设置', icon: 'settings' }")
+    const run = panelSource.indexOf("{ id: 'run', label: '运行', icon: 'play' }")
+    expect(overview).toBeGreaterThan(-1)
+    expect(io).toBeGreaterThan(overview)
+    expect(settings).toBeGreaterThan(io)
+    expect(run).toBeGreaterThan(settings)
+    expect(panelSource).toContain("new Set(['agent', 'ai-review', 'state-machine'])")
   })
 
   it('文本测试输入失焦后会回写文本节点，面板本身可延伸至画布底部滚动', () => {

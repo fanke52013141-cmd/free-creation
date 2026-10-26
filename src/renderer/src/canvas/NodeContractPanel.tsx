@@ -3,7 +3,7 @@ import { useValue, type Editor } from 'tldraw'
 import type { MediaAsset, PortDecl, PortType, ProviderSummary } from '@shared/types'
 import { getNodePorts, getNodeType, nodeIconColor, PORT_TYPE_LABELS } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
-import { Icon } from '../components/Icon'
+import { Icon, type IconName } from '../components/Icon'
 import { AppSelect } from '../components/AppSelect'
 import { projectNodeOutputs, type NodeValue } from '../nodes/nodeValues'
 import { useNodePanelStore, type NodePanelInitialTab } from '../stores/nodePanel'
@@ -138,6 +138,23 @@ function valuePreview(value: NodeValue | undefined): string | null {
 }
 
 type InspectorTab = 'overview' | 'io' | 'settings' | 'run' | 'collaboration'
+
+/** 节点详情固定 tab（顺序即规范）：概览 → 输入输出 → 设置 → 运行；Rail 布局纵向排列。 */
+const CONTRACT_TAB_ITEMS: ReadonlyArray<{ id: InspectorTab; label: string; icon: IconName }> = [
+  { id: 'overview', label: '概览', icon: 'info' },
+  { id: 'io', label: '输入输出', icon: 'node-library' },
+  { id: 'settings', label: '设置', icon: 'settings' },
+  { id: 'run', label: '运行', icon: 'play' }
+]
+
+const COLLAB_TAB_ITEM: { id: InspectorTab; label: string; icon: IconName } = {
+  id: 'collaboration',
+  label: '协作',
+  icon: 'group'
+}
+
+/** 参与 Agent 协作回路的节点共享「协作」tab；无任务时面板自行显示空态。 */
+const COLLAB_NODE_TYPES = new Set(['agent', 'ai-review', 'state-machine'])
 
 function safeConfigPreview(text: string): string {
   if (!text.trim()) return '此节点没有固定配置；全部值来自连线或媒体资产。'
@@ -452,6 +469,13 @@ export function NodeContractPanel({
   if (!spec) return null
   const ports = getNodePorts(spec, shape)
   const SettingsPanel = spec.SettingsPanel
+  const collabSupported = COLLAB_NODE_TYPES.has(shape.props.nodeType)
+  // 打开入口可能带 'collaboration'（Agent 工作流跳转）；不支持的节点回落到设置页。
+  const activeTab: InspectorTab = tab === 'collaboration' && !collabSupported ? 'settings' : tab
+  const tabs: ReadonlyArray<{ id: InspectorTab; label: string; icon: IconName }> = collabSupported
+    ? [...CONTRACT_TAB_ITEMS, COLLAB_TAB_ITEM]
+    : CONTRACT_TAB_ITEMS
+  const nodeExec = shape.props.exec
 
   const incoming = new Map<string, string[]>()
   const outgoing = new Map<string, string[]>()
@@ -609,31 +633,34 @@ export function NodeContractPanel({
         </button>
       </header>
       <div className="contract-body">
-        <nav className="contract-tabs" aria-label="节点详情分页" role="tablist">
-          {(
-            [
-              ['overview', '概览'],
-              ['io', '输入输出'],
-              ['settings', '设置'],
-              ['run', '运行'],
-              ...(shape.props.nodeType === 'agent' ? [['collaboration', '协作'] as const] : [])
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              className={tab === id ? 'active' : ''}
-              role="tab"
-              id={`contract-tab-${id}`}
-              aria-selected={tab === id}
-              aria-controls={`contract-tabpanel-${id}`}
-              onClick={() => setTab(id)}
-            >
-              {label}
-            </button>
-          ))}
+        <nav
+          className="contract-tabs"
+          aria-label="节点详情分页"
+          role="tablist"
+          style={{ '--contract-accent': nodeIconColor(spec.color) } as React.CSSProperties}
+        >
+          {tabs.map((item) => {
+            const showExecDot = item.id === 'run' && nodeExec !== 'idle'
+            return (
+              <button
+                key={item.id}
+                className={activeTab === item.id ? 'active' : ''}
+                role="tab"
+                id={`contract-tab-${item.id}`}
+                aria-selected={activeTab === item.id}
+                aria-controls={`contract-tabpanel-${item.id}`}
+                data-exec={showExecDot ? nodeExec : undefined}
+                onClick={() => setTab(item.id)}
+              >
+                <Icon name={item.icon} size={17} />
+                {item.label}
+                {showExecDot && <span className="contract-tab-dot" aria-hidden="true" />}
+              </button>
+            )
+          })}
         </nav>
         <div className="contract-scroll">
-          {tab === 'collaboration' && shape.props.nodeType === 'agent' && (
+          {activeTab === 'collaboration' && collabSupported && (
             <div role="tabpanel" id="contract-tabpanel-collaboration">
               <AgentCollaborationPanel
                 key={`${projectId}/${shape.id}`}
@@ -643,7 +670,7 @@ export function NodeContractPanel({
               />
             </div>
           )}
-          {tab === 'overview' && (
+          {activeTab === 'overview' && (
             <div role="tabpanel" id="contract-tabpanel-overview" className="contract-overview">
               <p className="contract-description">{spec.description}</p>
               <div className="contract-rule">
@@ -686,7 +713,7 @@ export function NodeContractPanel({
               </div>
             </div>
           )}
-          {tab === 'io' && (
+          {activeTab === 'io' && (
             <div role="tabpanel" id="contract-tabpanel-io">
               <PortRows
                 title={
@@ -719,7 +746,7 @@ export function NodeContractPanel({
               />
             </div>
           )}
-          {tab === 'settings' && (
+          {activeTab === 'settings' && (
             <div role="tabpanel" id="contract-tabpanel-settings">
               {SettingsPanel ? (
                 <SettingsPanel key={shape.id} shape={shape} editor={editor} projectId={projectId} />
@@ -734,7 +761,7 @@ export function NodeContractPanel({
               )}
             </div>
           )}
-          {tab === 'run' && (
+          {activeTab === 'run' && (
             <div role="tabpanel" id="contract-tabpanel-run">
               <section className="contract-section">
                 <h4>运行操作</h4>

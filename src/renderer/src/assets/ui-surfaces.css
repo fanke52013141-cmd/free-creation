@@ -1217,17 +1217,12 @@ button {
 }
 
 .side-panel-body,
-.contract-body,
 .csp-messages {
   padding-bottom: 22px;
 }
 
-.contract-tabs {
-  position: sticky;
-  top: -2px;
-  z-index: 2;
-  box-shadow: 0 8px 15px rgba(15, 18, 23, 0.12);
-}
+/* tab 栏已改为左侧垂直 Rail（见 app.css .contract-tabs），
+   旧的吸顶横条样式（sticky / 投影）随之移除。 */
 
 .side-panel-empty,
 .contract-empty,
@@ -1685,7 +1680,8 @@ button {
 
 /* 契约抽屉本身就是节点的说明书，不能为了紧凑牺牲文字可读性。 */
 .node-contract-panel {
-  width: clamp(350px, 25vw, 390px);
+  /* Rail 占 76px，面板整体略放宽以补偿内容区宽度。 */
+  width: clamp(380px, 26vw, 420px);
   /* 抽屉延伸至画布底部；底部工具条改为全局居中显示，不再挤压内容。 */
   bottom: 0;
 }
@@ -1693,7 +1689,7 @@ button {
 .contract-body {
   min-height: 0;
   flex: 1 1 auto;
-  overflow: auto;
+  overflow: hidden;
 }
 
 .contract-head {
@@ -1713,21 +1709,15 @@ button {
 }
 
 .contract-body {
-  padding: 16px;
-}
-
-.contract-tabs {
-  gap: 5px;
-  padding: 5px;
-  border-radius: 11px;
+  padding: 0;
 }
 
 .contract-tabs button {
-  min-height: 32px;
-  padding: 6px 4px;
-  color: #bdcad6;
-  font-size: 13px;
-  font-weight: 650;
+  min-height: 50px;
+  padding: 7px 2px;
+  color: var(--muted, #9aa4b2);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .contract-description {
@@ -1836,16 +1826,18 @@ button {
 .canvas-theme-light .contract-tabs {
   border-color: rgba(54, 69, 82, 0.14);
   background: rgba(225, 235, 241, 0.48);
-  box-shadow: 0 8px 15px rgba(73, 61, 45, 0.08);
 }
 
 .canvas-theme-light .contract-tabs button {
   color: #405466;
 }
 
+.canvas-theme-light .contract-tabs button:hover {
+  background: rgba(255, 255, 255, 0.55);
+}
+
 .canvas-theme-light .contract-tabs button.active {
-  border-color: rgba(24, 136, 191, 0.26);
-  background: rgba(45, 171, 222, 0.14);
+  background: color-mix(in srgb, var(--contract-accent, #2dabde) 16%, white);
   color: #0e5478;
 }
 
@@ -4148,10 +4140,8 @@ button {
 
 .node-contract-panel .contract-body {
   padding: 0;
-}
-
-.node-contract-panel .contract-tabs {
-  margin: 12px var(--inspector-edge-inset) 0;
+  /* Rail 与内容区之间靠 Rail 的右边框分隔，不留缝。 */
+  gap: 0;
 }
 
 .node-contract-panel .contract-scroll {

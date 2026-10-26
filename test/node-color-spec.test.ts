@@ -33,7 +33,7 @@ describe('节点颜色规范', () => {
     }
   })
 
-  it('五大分类使用规范主色，每个可创建节点都有唯一展示分类', () => {
+  it('六大分类使用规范主色，每个可创建节点都有唯一展示分类', () => {
     for (const [category, meta] of Object.entries(PALETTE_CATEGORY_META)) {
       const row = standard.split('\n').find((line) => line.startsWith(`| ${category} |`))
       expect(row, category).toContain(`\`${meta.color}\``)

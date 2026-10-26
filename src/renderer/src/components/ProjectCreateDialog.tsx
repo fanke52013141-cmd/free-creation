@@ -156,7 +156,7 @@ export function ProjectCreateDialog({
         <header className="project-create-header">
           <div className="project-create-heading">
             <span className="project-create-brand-icon" aria-hidden="true">
-              <Icon name="workflow" size={18} />
+              <Icon name="layers" size={18} />
             </span>
             <div>
               <h2>{title}</h2>

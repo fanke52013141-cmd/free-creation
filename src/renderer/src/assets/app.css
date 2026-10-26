@@ -4280,52 +4280,84 @@ select:focus-visible,
 
 .contract-body {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   min-height: 0;
   overflow: hidden;
-  /* tab 栏是固定标题；内容区由 .contract-scroll 单独滚动，避免内容滚上来遮挡 tab。 */
+  /* tab 栏是左侧垂直 Rail；内容区由 .contract-scroll 单独滚动。 */
 }
 
 .contract-scroll {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow: auto;
   padding: 14px;
 }
 
+/* 节点详情统一 tab Rail：概览 / 输入输出 / 设置 / 运行（/ 协作）纵向排列，
+   4 tab 与 5 tab 永远同一布局，不再按列数折行；激活色取节点 accent。 */
 .contract-tabs {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 3px;
+  display: flex;
+  flex-direction: column;
   flex-shrink: 0;
+  gap: 4px;
+  width: 76px;
   margin: 0;
-  padding: 8px 14px 4px;
-  border-right: none;
-  border-left: none;
-  border-top: none;
-  border-bottom: 1px solid var(--line);
+  padding: 10px 8px;
+  border: none;
+  border-right: 1px solid var(--line);
   border-radius: 0;
-  background: rgba(255, 255, 255, 0.025);
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .contract-tabs button {
+  position: relative;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
   border: none;
-  border-radius: 5px;
-  padding: 5px 2px;
+  border-radius: 8px;
+  padding: 8px 2px;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  font-size: 10px;
+  font-size: 11px;
+  line-height: 1.15;
   white-space: nowrap;
 }
 
 .contract-tabs button:hover {
   color: var(--txt);
+  background: rgba(255, 255, 255, 0.04);
 }
 .contract-tabs button.active {
-  background: rgba(9, 202, 245, 0.12);
-  color: #9cecff;
+  background: color-mix(in srgb, var(--contract-accent, var(--brand)) 13%, transparent);
+  color: var(--contract-accent, var(--brand));
+}
+
+/* 运行 tab 的状态点：节点非 idle 时提示执行状态。 */
+.contract-tabs .contract-tab-dot {
+  position: absolute;
+  top: 7px;
+  right: 12px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--muted);
+}
+.contract-tabs button[data-exec='pending'] .contract-tab-dot,
+.contract-tabs button[data-exec='queued'] .contract-tab-dot,
+.contract-tabs button[data-exec='running'] .contract-tab-dot {
+  background: #42b9f5;
+}
+.contract-tabs button[data-exec='success'] .contract-tab-dot,
+.contract-tabs button[data-exec='cached'] .contract-tab-dot {
+  background: #4ade80;
+}
+.contract-tabs button[data-exec='failed'] .contract-tab-dot {
+  background: #ff6b6b;
 }
 
 .contract-overview-grid {

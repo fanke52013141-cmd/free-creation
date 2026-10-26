@@ -23,7 +23,8 @@ export const NODE_CATEGORIES = [
   { id: 'image', label: '图像处理' },
   { id: 'video', label: '视频处理' },
   { id: 'audio', label: '音频语音' },
-  { id: 'logic', label: '逻辑流程' }
+  { id: 'ai', label: 'AI 智能体' },
+  { id: 'data', label: '数据与代码' }
 ] as const satisfies ReadonlyArray<{ id: NodeCategoryId; label: string }>
 
 export { NODE_CATEGORY_IDS, type NodeCategoryId }

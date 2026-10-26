@@ -6,27 +6,27 @@ export const DEFAULT_PALETTE_CATEGORY_ORDER: readonly PaletteCategoryId[] = [
   'input',
   'video',
   'audio',
-  'logic'
+  'ai',
+  'data'
 ]
 
 /** 每个分类内从常用到进阶排列；左侧菜单和拖线菜单共用。 */
 export const PALETTE_NODE_GROUPS = {
-  input: ['text', 'ai-process', 'chat', 'file', 'website'],
+  input: ['text', 'file', 'website'],
   image: ['image-gen', 'image', 'image-edit', 'image-crop', 'image-split'],
-  video: ['video', 'video-asset', 'video-clip', 'video-frame', 'video-depth', 'video-clay'],
-  audio: ['speech', 'audio', 'tts', 'voice-design', 'sound-adjust'],
-  logic: [
-    'agent',
-    'ai-review',
-    'state-machine',
+  video: [
+    'video',
+    'video-asset',
+    'video-clip',
+    'video-frame',
+    'video-depth',
+    'video-clay',
     'storyboard',
-    'processor',
-    'json',
-    'structured',
-    'iterate',
-    'director',
-    'code'
-  ]
+    'director'
+  ],
+  audio: ['speech', 'audio', 'tts', 'voice-design', 'sound-adjust'],
+  ai: ['agent', 'ai-process', 'chat', 'ai-review', 'state-machine'],
+  data: ['processor', 'json', 'structured', 'iterate', 'code']
 } as const satisfies Record<PaletteCategoryId, readonly string[]>
 
 /** 保留同类型不同端口的候选项，以及未来尚未配置排序的节点。 */

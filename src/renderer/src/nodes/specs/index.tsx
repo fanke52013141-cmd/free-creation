@@ -834,7 +834,7 @@ export function registerScriptNodeType(): void {
     color: NODE_ACCENTS.script,
     defaultSize: { w: 340, h: 260 },
     description: '旧版复合脚本节点，仅兼容保留；新流程用「文本 → 处理 → JSON」。',
-    category: 'logic',
+    category: 'data',
     creatable: false,
     ports: {
       in: [
@@ -871,7 +871,7 @@ export function registerExtendedNodeTypes(): void {
     color: NODE_ACCENTS.processor,
     defaultSize: { w: 340, h: 260 },
     description: '单值透传并保持原类型；也可从 JSON 取字段或转成文本模板。',
-    category: 'logic',
+    category: 'data',
     ports: PROCESSOR_PORTS,
     projectOutputs: projectProcessorOutputs,
     executor: processorExecutor,
@@ -885,7 +885,7 @@ export function registerExtendedNodeTypes(): void {
     color: NODE_ACCENTS.json,
     defaultSize: { w: 340, h: 260 },
     description: '解析并格式化通用 JSON，支持手工编辑；多条 JSON 连线会汇总成数组。',
-    category: 'logic',
+    category: 'data',
     ports: {
       in: [
         input(
@@ -919,7 +919,7 @@ export function registerExtendedNodeTypes(): void {
     color: NODE_ACCENTS.structured,
     defaultSize: { w: 340, h: 260 },
     description: '按 Schema 校验 JSON 正文，运行时可插入连线值占位符。',
-    category: 'logic',
+    category: 'data',
     ports: {
       in: [
         input(
@@ -977,7 +977,7 @@ export function registerExtendedNodeTypes(): void {
     color: NODE_ACCENTS.code,
     defaultSize: { w: 340, h: 260 },
     description: '本地运行 JavaScript，支持具名输入和多字段输出。',
-    category: 'logic',
+    category: 'data',
     ports: {
       in: [
         input('in-text', '文本输入', 'text', '代码运行时 input.text 读取的合并文本。', {
@@ -1058,7 +1058,7 @@ export function registerExtendedNodeTypes(): void {
     color: NODE_ACCENTS.storyboard,
     defaultSize: { w: STORYBOARD_UI.width, h: STORYBOARD_UI.height },
     description: '按镜头 JSON 字段生成可编辑表格，并输出完整分镜数据与文字摘要。',
-    category: 'logic',
+    category: 'video',
     ports: {
       in: [
         input('in-json', '分镜数据', 'json', '符合分镜 Schema 的镜头列表。', {
@@ -1087,7 +1087,7 @@ export function registerExtendedNodeTypes(): void {
     color: NODE_ACCENTS['ai-process'],
     defaultSize: { w: 340, h: 260 },
     description: '把上游文本/JSON 交给文本模型，产出文本、Markdown 或 JSON。',
-    category: 'logic',
+    category: 'ai',
     ports: {
       in: [
         input('in-text', '文本', 'text', '一个或多个上游文本，作为本次转换的输入。', {
@@ -1121,7 +1121,7 @@ export function registerExtendedNodeTypes(): void {
     color: NODE_ACCENTS.iterate,
     defaultSize: { w: 340, h: 260 },
     description: '按顺序逐项运行循环体，并汇总结果。',
-    category: 'logic',
+    category: 'data',
     ports: {
       in: [
         input('in-list', '列表', 'json', '列表项按顺序逐个运行连接的循环体。', {
@@ -1162,7 +1162,7 @@ export function registerExtendedNodeTypes(): void {
     color: NODE_ACCENTS.director,
     defaultSize: { w: 340, h: 260 },
     description: '3D 白模预演台；发布后帧、视频与机位才成为下游输入。',
-    category: 'logic',
+    category: 'video',
     executionMode: 'manual-publish',
     ports: {
       in: [

@@ -14,11 +14,11 @@ export const PALETTE_CATEGORY_META: Record<
   { label: string; shortLabel: string; icon: IconName; color: string; description: string }
 > = {
   input: {
-    label: '输入与 AI',
-    shortLabel: '输入',
-    icon: 'text',
+    label: '输入与素材',
+    shortLabel: '素材',
+    icon: 'upload',
     color: '#F472B6',
-    description: '文本、文件、网址和对话'
+    description: '文本、文件与网址素材'
   },
   image: {
     label: '图片创作',
@@ -32,7 +32,7 @@ export const PALETTE_CATEGORY_META: Record<
     shortLabel: '视频',
     icon: 'video',
     color: '#60A5FA',
-    description: '生成、截取和转换视频'
+    description: '生成、截取视频与分镜预演'
   },
   audio: {
     label: '声音创作',
@@ -41,12 +41,19 @@ export const PALETTE_CATEGORY_META: Record<
     color: '#C084FC',
     description: '语音合成、音色与声音处理'
   },
-  logic: {
-    label: '流程与高级',
-    shortLabel: '流程',
-    icon: 'workflow',
+  ai: {
+    label: 'AI 与自动化',
+    shortLabel: 'AI',
+    icon: 'spark',
+    color: '#42B9F5',
+    description: '智能体编排与模型能力'
+  },
+  data: {
+    label: '数据与代码',
+    shortLabel: '数据',
+    icon: 'code',
     color: '#FB923C',
-    description: '组织数据、批量任务和高级工作流'
+    description: '数据处理、JSON 与本地脚本'
   }
 }
 
