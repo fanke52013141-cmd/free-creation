@@ -115,6 +115,20 @@
 - `scripts/run-optimization-ui-gate.cjs`：`test-browser-state-machine.cjs` 加入浏览器行为门禁列表（随 `npm run test:optimization-ui` 进 `verify:checks`，无外部依赖）。
 - `test:media-local-acceptance` 与 `test:skill-agent-electron` 有意不进默认 `verify:checks`（前者依赖本机 ffmpeg，后者需完整 Electron 启动；两者均已验证可独立运行），按交付批次以 npm script 执行，避免门禁环境差异造成假失败。
 
+### R7 落地决策①：数据分类节点补入默认可见集
+
+`src/shared/workspace-profile.ts`：`GENERAL_WORKSPACE_NODE_TYPES` 补入 processor/json/structured/iterate/code 五个数据分类节点；`normalizeWorkspaceProfile` 的 general/all 预设迁移同步补齐（旧项目保存的预设随版本自动获得新成员，custom 保持用户逐项选择）。此后 Dock 在默认界面展示全部六个分类，与分类重组意图一致。
+
+### R8 落地决策②：重写两个失修脚本并接入门禁
+
+- `test-browser-storyboard.cjs`：按当前表格契约重写——字段列按镜头键动态生成、id 永不成为列（由行 `data-shot-id` 承载）、`th[title]` 为稳定字段名、可见表头为中文标题；工具条断言改为"N 个镜头 · M 列 + 创建批处理流程/新增镜头/编辑 JSON"（旧的 out-json/out-text 端口文案已随 UI 演进移除）；JSON 编辑写回保留 sound/camera 的核心场景原样保留。定位器改用仓库统一的 `qa-browser`/`CANVAS_QA_URL` 模式。
+- `test-browser-director-studio.cjs`：3D 预演台不在默认可见集，改按真实用户路径开启——项目菜单 → 工作台节点设置 → 高级：自定义可见工具 → 全选视频创作 → 保存设置（同时钉住"设置里开启的节点真的回到 Dock"）；面板定位器从 `getByRole(name)` 改为按可见文本（工具条按钮的可访问名是面向读屏的描述句，如同步按钮的 aria-label 是"……连上之后才能同步"，会遮蔽可见文案）；撤销按钮改为 `.undo-redo-btn[aria-label="撤销"]`（旧 `title^="撤销"` 已不存在）。四条核心缺陷断言（撤销跟随文档/上限夹取/2D 专属控件/同步按钮状态）原样保留。
+- 两个脚本加入 `test:optimization-ui` 门禁列表（现 25 个浏览器脚本），此后不再失修。
+
+### R9 落地决策③：门禁服务按进程树结束
+
+`run-optimization-ui-gate.cjs`：`finally` 改用 `killTree`——win32 下经 System32 绝对路径调 `taskkill.exe /PID <pid> /T /F`（本机精简 PATH 上没有 taskkill，spawn 不做 PATHEXT 解析也不能只写 `taskkill.exe`）；spawn 失败或 3 秒未完成时回退直接结束 vite 主进程（端口由主进程持有，主进程终止端口即释放）。配合既有的启动前端口占用快失败，消除僵尸服务接管的整类故障；门禁收尾不再挂起、退出后无残留监听。
+
 ### R6 处理 F1：并发会话问题以流程约束处理
 
 不修改并发会话的未提交文件；本报告与方案文档落在 docs/，测试与修复全部在隔离 worktree 完成并基于 fdea986 提交，保证推送内容不含外部改动。
@@ -134,8 +148,14 @@
 - `npm run test:local-agent-access`：退出 0（`R2-local-agent-access-merged.log`）。
 - `node scripts/test-skill-agent-electron.cjs`：退出 0（`R2-skill-merged2.log`）。
 
-## 7. 留给用户的决策项（本轮不擅自改动）
+**决策落地（R7–R9）后**：
 
-1. **"数据与代码"分类默认不可见**：默认工作区 profile 不含 processor/json/structured/iterate/code，Dock 按可见节点过滤后该分类在默认界面消失，与 6 分类重组的意图（单元测试期望 6 分类）不一致。可选：把数据分类节点补入 `GENERAL_WORKSPACE_NODE_TYPES`（并同步 `normalizeWorkspaceProfile` 的预设迁移），或确认"高级节点从项目设置开启"为既定设计并在重组说明中注明。
-2. **两个既有失修脚本**：`test-browser-storyboard.cjs` 与 `test-browser-director-studio.cjs` 在 fdea986 基线上即失败（添加按钮交互已过期），且不在任何门禁内。建议按当前抽屉式面板交互重写或显式退役，避免长期假信号。
-3. **vite 服务进程清理**：Windows 上 `server.kill()`/bash kill 对 vite 子进程不可靠，本机曾累积 4 个僵尸服务。长期可考虑门禁 runner 以进程树方式结束（taskkill /T）或使用唯一端口文件协调。
+- `npm run typecheck` / lint / `node --check`：退出 0（`O-typecheck.log`）。
+- 全量 `npm run test`：**2577 通过 / 5 既有跳过**，退出 0（`O-unit.log`，较此前 +2 项，默认可见集变更无回归）。
+- `npm run test:optimization-ui`（预热 + 25 个浏览器脚本，含重写的分镜板/导演台验收）：**退出 0，0 次重试，收尾无残留监听**（`O-gate5.log`）。
+
+## 7. 决策项处置结果（2026-10-27 用户已决策）
+
+1. **"数据与代码"分类默认不可见** → **已决策补默认可见集并落地（R7）**：数据分类五节点入 `GENERAL_WORKSPACE_NODE_TYPES`，general/all 预设迁移同步；Dock 默认展示六个分类。
+2. **两个既有失修脚本** → **已决策重写并落地（R8）**：按当前交互与 DOM 契约重写分镜板/导演台两个验收，全部核心断言保留，并接入 `test:optimization-ui` 门禁，不再失修。
+3. **vite 服务进程清理** → **已决策按进程树结束并落地（R9）**：win32 用 `taskkill /T /F` 结束门禁服务进程树，配合端口占用快失败与首屏预热。

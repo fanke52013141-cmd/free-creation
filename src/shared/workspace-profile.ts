@@ -24,7 +24,12 @@ export const GENERAL_WORKSPACE_NODE_TYPES = [
   'storyboard',
   'agent',
   'ai-review',
-  'state-machine'
+  'state-machine',
+  'processor',
+  'json',
+  'structured',
+  'iterate',
+  'code'
 ] as const
 
 export function defaultWorkspaceProfile(): WorkspaceProfile {
@@ -55,7 +60,18 @@ export function normalizeWorkspaceProfile(value: unknown): WorkspaceProfile | nu
   // 旧项目保存预设时，新发布的节点尚不存在；预设需随版本补入新成员。
   // 用户逐项选择的 custom 配置保持原样。
   if (presetId === 'general' || presetId === 'all') {
-    for (const type of ['website', 'sound-adjust', 'agent', 'ai-review', 'state-machine'])
+    for (const type of [
+      'website',
+      'sound-adjust',
+      'agent',
+      'ai-review',
+      'state-machine',
+      'processor',
+      'json',
+      'structured',
+      'iterate',
+      'code'
+    ])
       if (!ids.includes(type)) ids.push(type)
   } else if (presetId === 'audio' || presetId === 'video') {
     if (!ids.includes('sound-adjust')) ids.push('sound-adjust')

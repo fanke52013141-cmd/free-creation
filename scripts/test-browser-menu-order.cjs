@@ -7,8 +7,8 @@ const assert = require('node:assert/strict')
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
     await page.goto(process.env.CANVAS_QA_URL || 'http://127.0.0.1:5189')
     await page.waitForSelector('.tl-canvas')
-    // 默认工作区 profile 不含数据分类节点，Dock 只显示有可见节点的分类。
-    const labels = ['图片创作', '输入与素材', '视频创作', '声音创作', 'AI 与自动化']
+    // 默认工作区可见集覆盖全部六个分类；Dock 与创建菜单共用同一顺序。
+    const labels = ['图片创作', '输入与素材', '视频创作', '声音创作', 'AI 与自动化', '数据与代码']
     assert.deepEqual(await page.locator('.palette-category-item').allTextContents(), labels)
     await page.evaluate(async () => {
       const { default: React } = await import('/@id/react')
@@ -22,9 +22,7 @@ const assert = require('node:assert/strict')
       }))
     })
     await page.waitForSelector('.node-menu-category-item')
-    // NodeCreateMenu 不带工作区 profile，展示全部分类；与 Dock 的可见分类分开断言。
-    const menuLabels = ['图片创作', '输入与素材', '视频创作', '声音创作', 'AI 与自动化', '数据与代码']
-    assert.deepEqual(await page.locator('.node-menu-category-item').allTextContents(), menuLabels)
+    assert.deepEqual(await page.locator('.node-menu-category-item').allTextContents(), labels)
     const gaps = await page.locator('.node-menu-category-item').evaluateAll(rows => rows.map(row => {
       const icon = row.querySelector('.item-icon').getBoundingClientRect()
       const text = row.querySelector('span:last-child').getBoundingClientRect()
