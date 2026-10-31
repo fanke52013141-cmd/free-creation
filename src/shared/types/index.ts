@@ -2,6 +2,7 @@
 
 import type { WorkspaceProfile } from '../workspace-profile'
 import { DREAMINA_IMAGE_MODELS, DREAMINA_VIDEO_MODELS } from '../dreamina-models'
+import { VIDU_MODELS } from '../vidu-cli'
 
 /**
  * 能在新画布中创建、维护并完整执行的节点类型。
@@ -355,6 +356,16 @@ export const PROVIDER_SPECS: ProviderSpec[] = [
     modality: 'image',
     // 预置清单直接引用白名单，避免"预置"与"能力表"两处各写一份而漂移。
     suggestions: [...DREAMINA_IMAGE_MODELS, ...DREAMINA_VIDEO_MODELS]
+  },
+  {
+    // 2026-10-31 修复：a13a29c 引入 vidu-cli 通道时漏加了本模板条目，导致「添加供应商」
+    // 列表里看不到 Vidu（用户无法重新添加）。驱动与能力表此前已完整。
+    id: 'vidu',
+    label: 'Vidu（本机 CLI）',
+    desc: 'Vidu 本机 CLI 通道：参考图生视频（3.4）与首尾帧过渡（3.2），凭据为本机 Vidu Token',
+    baseURL: '',
+    modality: 'video',
+    suggestions: [...VIDU_MODELS]
   },
   {
     id: 'openrouter',

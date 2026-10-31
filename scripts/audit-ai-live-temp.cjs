@@ -1,0 +1,2267 @@
+/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type */
+// §8 P2 逐节点操作矩阵（真实 Electron，全程免费通道：不配置供应商、不调用任何模型）
+//
+// 回答的问题很具体：每个节点在真实桌面上能不能「新建 → 看到契约端口 → 无输入时诚实拦截 →
+// 配置 → 连单输入 → 连多输入 → 运行成功 → 失败有原因 → 保存重载后不丢」。
+// 任何一步做不到就是缺陷，本门禁同时给出界面证据（截图）与磁盘真值（tldrawSnapshot）。
+//
+// 隔离：默认在 %LOCALAPPDATA%\canvas-node-matrix-<时间戳> 建全新数据目录，绝不读写用户
+// 真实项目库；也可用 E2E_DATA_DIR 指定。
+// 节点间有依赖（循环吃结构数据的列表输出），因此按 RECIPES 顺序整跑；
+// MATRIX=text,json 可只跑前几项做定位。
+const { _electron } = require('playwright')
+const { execFileSync, spawnSync } = require('child_process')
+const fs = require('fs')
+const os = require('os')
+const path = require('path')
+
+// 必须指向当前工作区：硬编码旧安装目录会让 CI/本地开发启动到过期构建，甚至直接找不到
+// Electron。脚本所在目录稳定在仓库根的 scripts/ 下，因此由自身位置解析即可。
+const ROOT = path.resolve(__dirname, '..')
+const DATA_DIR =
+  process.env.E2E_DATA_DIR ||
+  path.join(process.env.LOCALAPPDATA || os.tmpdir(), `canvas-node-matrix-${Date.now()}`)
+// 每轮矩阵使用独立证据目录，避免覆盖以前的截图或用户留下的审计结果。
+const SHOT_DIR = process.env.MATRIX_SHOT_DIR
+  ? path.resolve(process.env.MATRIX_SHOT_DIR)
+  : path.join(ROOT, 'artifacts', `node-matrix-${new Date().toISOString().replace(/[:.]/g, '-')}`)
+const RESULT_FILE = process.env.MATRIX_RESULT_PATH
+  ? path.resolve(process.env.MATRIX_RESULT_PATH)
+  : null
+const SELECTED = (process.env.MATRIX || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean)
+
+const results = []
+const pageErrors = new Map()
+const firstStack = new Map()
+const log = (...a) => console.log('[matrix]', ...a)
+function check(name, ok, detail) {
+  results.push({ name, ok: Boolean(ok), detail: detail === undefined ? '' : String(detail) })
+  log(
+    `${ok ? 'PASS' : 'FAIL'} ${name}${detail === undefined ? '' : ` :: ${String(detail).slice(0, 240)}`}`
+  )
+}
+
+let app
+let win
+let projectId
+let currentProject = ''
+let shotSeq = 0
+
+async function launchApp() {
+  app = await _electron.launch({
+    executablePath: path.join(ROOT, 'node_modules/electron/dist/electron.exe'),
+    // 必须以项目目录（package.json main）启动，与 dev/packaged 的解析一致：
+    // 直启 out/main/index.js 会让 app.getAppPath() 变成 out/main，
+    // 主进程 video-conversion 就找不到 resources/video-conversion/runner.py。
+    args: [ROOT],
+    env: { ...process.env, CANVAS_DATA_DIR: DATA_DIR, NODE_ENV: 'development', ELECTRON_RENDERER_URL: 'http://127.0.0.1:5196' }
+  })
+  win = await app.firstWindow()
+  win.on('console', (m) => {
+    const t = m.text()
+    if (m.type() === 'error' && !/Content Security Policy|cdn\.tldraw|NetworkError/.test(t)) {
+      log('renderer>', t.slice(0, 200))
+    }
+  })
+  win.on('pageerror', (e) => {
+    const msg = String(e.message).slice(0, 160)
+    pageErrors.set(msg, (pageErrors.get(msg) || 0) + 1)
+    if (!firstStack.has(msg)) firstStack.set(msg, String(e.stack || '').slice(0, 500))
+  })
+  await win.waitForLoadState()
+}
+
+/** 真的关掉进程再开一次：重载窗口验证不了主进程重启后的恢复。 */
+async function restartApp() {
+  await win.waitForTimeout(1500)
+  await app.close()
+  await launchApp()
+  for (let i = 0; i < 30; i += 1) {
+    await win.waitForTimeout(400)
+    if ((await win.locator('.node-card-wrap').count()) > 0) break
+    const open = win.getByRole('button', { name: new RegExp(`^打开项目 ${currentProject}$`) })
+    if (await open.count()) await open.first().click()
+  }
+  await win.locator('.node-palette').waitFor({ timeout: 30000 })
+  check('关掉应用重开后回到同一个项目', (await win.locator('.node-card-wrap').count()) > 0)
+}
+
+async function shot(name) {
+  shotSeq += 1
+  const file = path.join(SHOT_DIR, `${String(shotSeq).padStart(2, '0')}-${name}.png`)
+  try {
+    await win.screenshot({ path: file })
+  } catch (error) {
+    log('截图失败', name, error.message)
+  }
+}
+
+/** 磁盘真值：主进程存结构化对象，浏览器 mock 才存字符串，两种都要能读。 */
+function obj(v) {
+  if (v === undefined || v === null || v === '') return {}
+  if (typeof v !== 'string') return v
+  try {
+    return JSON.parse(v)
+  } catch {
+    // 代码节点的 config 允许是一段裸源码（历史兼容），执行器同样按原文处理。
+    return { raw: v }
+  }
+}
+
+/**
+ * 读一次落盘真值：直接读主进程写出的 projects/<id>/project.json。
+ * 「保存重载」要验的就是这个文件，读它比再调一次 openProject 更直白，
+ * 也不会让验收脚本反复去打开项目。
+ */
+async function readDoc() {
+  const file = path.join(DATA_DIR, 'projects', projectId, 'project.json')
+  for (let round = 0; round < 10; round += 1) {
+    if (fs.existsSync(file)) {
+      try {
+        const project = JSON.parse(fs.readFileSync(file, 'utf8'))
+        const snap = project.tldrawSnapshot
+        const doc = typeof snap === 'string' ? JSON.parse(snap) : snap
+        if (doc) return Object.values(doc.store || doc)
+      } catch {
+        // 正在写盘：下一轮再读
+      }
+    }
+    await win.waitForTimeout(300)
+  }
+  return { error: `读不到 ${file} 里的 tldrawSnapshot` }
+}
+
+async function readShapes() {
+  const raw = await readDoc()
+  if (!Array.isArray(raw)) throw new Error(`读取磁盘快照失败：${raw.error}`)
+  return new Map(
+    raw
+      .filter((v) => v && v.props && typeof v.props === 'object' && 'nodeType' in v.props)
+      .map((v) => [
+        v.id,
+        {
+          id: v.id,
+          nodeType: v.props.nodeType,
+          title: v.props.title,
+          text: v.props.text ?? '',
+          exec: v.props.exec,
+          config: obj(v.props.config),
+          mediaId: v.props.mediaId ?? '',
+          mediaPath: v.props.mediaPath ?? '',
+          run: obj((v.meta || {}).nodeRun),
+          resultRaw:
+            typeof (v.meta || {}).nodeResult === 'string'
+              ? (v.meta || {}).nodeResult
+              : (v.meta || {}).nodeResult
+        }
+      ])
+  )
+}
+
+/** 等自动保存落库；predicate 不满足就继续轮询（最多约 15s）。 */
+async function disk(id, predicate) {
+  let shape = null
+  for (let round = 0; round < 25; round += 1) {
+    const shapes = await readShapes()
+    shape = shapes.get(id) ?? null
+    if (shape && (!predicate || predicate(shape))) return shape
+    await win.waitForTimeout(600)
+  }
+  return shape
+}
+
+function card(id) {
+  return win.locator(`.node-card-wrap[data-node-id="${id}"]`)
+}
+
+async function hittable(locator) {
+  return locator.evaluate((el) => {
+    const r = el.getBoundingClientRect()
+    const cx = r.x + r.width / 2
+    const cy = r.y + r.height / 2
+    const hit = document.elementFromPoint(cx, cy)
+    return {
+      ok: Boolean(hit && el.contains(hit)),
+      cx,
+      cy,
+      rect: `${Math.round(r.x)},${Math.round(r.y)} ${Math.round(r.width)}×${Math.round(r.height)}`
+    }
+  })
+}
+
+/** 布局快照：卡片落在屏幕哪里、视口多大、某个坐标上压着哪一层。遮挡类失败靠它定位。 */
+async function dumpLayout(x, y) {
+  return win.evaluate(
+    ({ px, py }) => {
+      const chain = []
+      let el = document.elementFromPoint(px, py)
+      for (let i = 0; el && i < 6; i += 1) {
+        chain.push(`${el.tagName.toLowerCase()}.${String(el.className).split(' ')[0]}`)
+        el = el.parentElement
+      }
+      return {
+        viewport: `${innerWidth}×${innerHeight}`,
+        cards: Array.from(document.querySelectorAll('.node-card-wrap')).map((node) => {
+          const r = node.getBoundingClientRect()
+          return `${node.querySelector('.node-card')?.dataset.nodeType ?? '?'}:${String(node.dataset.nodeId).slice(-4)}@${Math.round(r.x)},${Math.round(r.y)} ${Math.round(r.width)}×${Math.round(r.height)}`
+        }),
+        atPoint: chain.join(' < ')
+      }
+    },
+    { px: x, py: y }
+  )
+}
+
+/** 控件是否真的可点：命中不了就直接中止本配方，盲点会落到别的卡片上，制造假失败。 */
+async function ensureClickable(locator, label) {
+  for (let i = 0; i < 4; i += 1) {
+    if ((await hittable(locator)).ok) return true
+    await win.waitForTimeout(250)
+  }
+  // 卡片内容超过最高档位时底部工具条会落在卡片的内部滚动区里，先像用户那样滚出来。
+  await locator.scrollIntoViewIfNeeded().catch(() => undefined)
+  await win.waitForTimeout(300)
+  for (let i = 0; i < 4; i += 1) {
+    if ((await hittable(locator)).ok) return true
+    await win.waitForTimeout(250)
+  }
+  const r = await hittable(locator)
+  const layout = await dumpLayout(r.cx, r.cy)
+  check(
+    `${label}：控件可命中（不被顶栏/别的卡片遮挡）`,
+    false,
+    `${r.rect}｜视口 ${layout.viewport}｜卡片 ${layout.cards.join(' ')}｜压在上面：${layout.atPoint}`
+  )
+  throw new Error(`${label} 点不到（${r.rect}），后面的点击会落到别的卡片上，直接中止本配方`)
+}
+
+/** 只按「缩小」把相机降到指定比例以下。 */
+async function shrinkTo(percent) {
+  for (let i = 0; i < 14; i += 1) {
+    const current = Number((await win.locator('.dock-zoom-label').innerText()).replace('%', ''))
+    if (current <= percent) return current / 100
+    await win.getByRole('button', { name: '缩小', exact: true }).click()
+    await win.waitForTimeout(320)
+  }
+  return Number((await win.locator('.dock-zoom-label').innerText()).replace('%', '')) / 100
+}
+
+/** 先把相机复位到 100%，再退到指定比例以下，网格布局才是确定的。 */
+async function zoomAtMost(percent) {
+  const reset = win.getByRole('button', { name: '重置缩放到 100%', exact: true })
+  await reset.waitFor({ timeout: 10000 })
+  await reset.click()
+  await win.waitForTimeout(450)
+  return shrinkTo(percent)
+}
+
+// 固定网格只用于拖拽落点，不作为无重叠的证据：分镜板和第三行会超出这些固定格子。
+// 新建后通过用户可用的“整理画布”快捷键，按真实卡片尺寸排列并自动取景。
+const GRID = { cols: 3, cellW: 320, cellH: 300, originX: 240, originY: 150 }
+const NODE_W = 340
+const NODE_H = 260
+let zoom = 1
+let slot = 0
+
+async function organizeForInteraction() {
+  await win.keyboard.press('Shift+Alt+f')
+  await win.waitForTimeout(450)
+}
+
+/**
+ * 每条配方开一个全新项目：画布天生空白、相机天生归位，
+ * 不需要「删卡片」或「平移镜头」这类本身也要验收的能力来给矩阵铺路。
+ */
+async function freshProject(key) {
+  const home = win.getByRole('button', { name: '回到主页' })
+  if (await home.count()) {
+    // 长矩阵后半程曾出现按钮可见但 30 秒点不动（疑似顶层 toast/动画挡住指针）：
+    // 先常规点击，失败则清掉浮层并强制点击，随后仍以「新建项目」按钮出现为准。
+    try {
+      await home.click({ timeout: 5000 })
+    } catch {
+      await win.keyboard.press('Escape')
+      await win.waitForTimeout(400)
+      try {
+        await home.click({ timeout: 5000 })
+      } catch {
+        await home.click({ force: true, timeout: 5000 })
+      }
+    }
+  }
+  const create = win.getByRole('button', { name: '新建项目' })
+  await create.waitFor({ timeout: 15000 })
+  await create.click()
+  const name = `矩阵-${key}`
+  currentProject = name
+  // 2026-09-26 项目创建对话框重构（bdddbff）：输入框 placeholder 与提交按钮文案
+  // 分别改为「给这个项目起个名字」「创建项目」，脚本选择器必须随之更新。
+  await win.locator('input[placeholder="给这个项目起个名字"]').fill(name)
+  await win.getByRole('button', { name: '创建项目', exact: true }).click()
+  await win.locator('.node-palette').waitFor({ timeout: 30000 })
+  projectId = await win.evaluate(
+    async (projectName) =>
+      (await window.api.listProjects()).data.find((p) => p.name === projectName).id,
+    name
+  )
+  check(`${name}：全新项目可创建并进入画布`, Boolean(projectId), projectId)
+  zoom = await zoomAtMost(60)
+  slot = 0
+  const visible = await win.locator('.node-card-wrap').count()
+  check('新项目的画布是空的', visible === 0, `${visible} 张卡片`)
+}
+
+async function addNode(label) {
+  // 落点给的是卡片中心：exactCentered 建卡时以光标为中心放置。
+  const where = GRID.originX + (slot % GRID.cols) * GRID.cellW + (NODE_W * zoom) / 2
+  const y =
+    GRID.originY + Math.floor(slot / GRID.cols) * GRID.cellH + (NODE_H * zoom) / 2
+  const before = await win.$$eval('.node-card-wrap', (els) => els.map((e) => e.dataset.nodeId))
+  const btn = await revealNodeButton(label)
+  await btn.scrollIntoViewIfNeeded()
+  slot += 1
+  // 从面板按住拖到画布指定位置松手：走的是真实用户的第二种创建手势，
+  // 且落点由光标决定，不像点击那样会被避让算法堆到同一处。
+  const from = await btn.boundingBox()
+  if (!from) throw new Error(`创建面板里没有「${label}」按钮`)
+  await win.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
+  await win.mouse.down()
+  for (let step = 1; step <= 12; step += 1) {
+    await win.mouse.move(
+      from.x + ((where - from.x) * step) / 12,
+      from.y + ((y - from.y) * step) / 12
+    )
+    await win.waitForTimeout(20)
+  }
+  await win.mouse.up()
+  for (let i = 0; i < 40; i += 1) {
+    await win.waitForTimeout(120)
+    const after = await win.$$eval('.node-card-wrap', (els) =>
+      els.map((e) => e.dataset.nodeId)
+    )
+    const fresh = after.filter((x) => !before.includes(x))
+    if (fresh.length) {
+      await card(fresh[0]).waitFor({ timeout: 5000 })
+      await organizeForInteraction()
+      return fresh[0]
+    }
+  }
+  throw new Error(`点击「添加${label}节点」后没有出现新卡片`)
+}
+
+/** 左侧入口为两级 Dock：逐个悬浮一级分类，直到二级列表提供目标创建按钮。 */
+async function revealNodeButton(label) {
+  const btn = win.getByRole('button', { name: `添加${label}节点`, exact: true })
+  if (await btn.isVisible().catch(() => false)) return btn
+  const categories = win.locator('.palette-category-item')
+  const count = await categories.count()
+  for (let index = 0; index < count; index += 1) {
+    const category = categories.nth(index)
+    const categoryName = (await category.getAttribute('aria-label')) || `分类 ${index + 1}`
+    await category.hover()
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      if ((await category.getAttribute('aria-expanded')) === 'true' && await btn.isVisible().catch(() => false)) {
+        check(`${label}：两级分类展开并显示创建入口`, true, categoryName)
+        return btn
+      }
+      await win.waitForTimeout(80)
+    }
+    // 某些屏幕阅读器/自动化指针路径下 hover 会被合成 click 状态覆盖，点击可确定展开。
+    await category.click()
+    if (await btn.isVisible().catch(() => false)) {
+      check(`${label}：两级分类展开并显示创建入口`, true, categoryName)
+      return btn
+    }
+  }
+  check(`${label}：两级分类展开并显示创建入口`, false, '未找到对应二级节点按钮')
+  throw new Error(`一级分类均已检查，但没有展开出「添加${label}节点」`)
+}
+
+/** 遍历两级分类后确认某节点已从创建入口退役（人声分离 2026-09-25 起不再可新建）。 */
+async function nodeButtonAbsent(label) {
+  const btn = win.getByRole('button', { name: `添加${label}节点`, exact: true })
+  if (await btn.isVisible().catch(() => false)) return false
+  const categories = win.locator('.palette-category-item')
+  const count = await categories.count()
+  for (let index = 0; index < count; index += 1) {
+    const category = categories.nth(index)
+    await category.hover().catch(() => {})
+    await win.waitForTimeout(120)
+    if ((await category.getAttribute('aria-expanded')) !== 'true') {
+      await category.click()
+      await win.waitForTimeout(120)
+    }
+    if (await btn.isVisible().catch(() => false)) return false
+  }
+  return true
+}
+
+async function portBox(id, dir, portId, timeout = 5000) {
+  const sel = `.node-card-wrap[data-node-id="${id}"] .port-dot.${dir}[data-port-id="${portId}"]`
+  const loc = win.locator(sel)
+  await loc.waitFor({ timeout })
+  // 圆点的命中区是外层 18px span，可见小圆点只是 ::after；坐标必须真的落在这个口上，
+  // 否则拖线会变成画布框选或误连相邻端口。
+  let hitInfo = '（从未命中）'
+  for (let i = 0; i < 12; i += 1) {
+    const box = await loc.boundingBox()
+    if (box) {
+      const cx = box.x + box.width / 2
+      const cy = box.y + box.height / 2
+      const probe = await win.evaluate(({ x, y, s }) => {
+        const el = document.elementFromPoint(x, y)
+        return {
+          ok: Boolean(el && el.closest(s)),
+          what: el
+            ? `${el.tagName.toLowerCase()}.${String(el.className).split(' ')[0]}#${el.dataset?.portId ?? ''}#${el.closest('.node-card-wrap')?.dataset?.nodeId?.slice(-4) ?? ''}`
+            : 'null'
+        }
+      }, { x: cx, y: cy, s: sel })
+      hitInfo = probe.what
+      if (probe.ok) return { cx, cy }
+    }
+    await win.waitForTimeout(150)
+  }
+  const box = await loc.boundingBox()
+  const layout = await dumpLayout(box ? box.x + box.width / 2 : 0, box ? box.y + box.height / 2 : 0)
+  throw new Error(
+    `端口 ${portId} 无法命中（缩放重叠或被遮挡）｜${box ? `${Math.round(box.x)},${Math.round(box.y)} ${Math.round(box.width)}×${Math.round(box.height)}` : '无盒子'}｜命中到：${hitInfo}｜视口 ${layout.viewport}｜卡片 ${layout.cards.join(' ')}`
+  )
+}
+
+async function edgeCount() {
+  const raw = await readDoc()
+  if (!Array.isArray(raw)) return -1
+  return raw.filter((v) => v.typeName === 'shape' && v.type === 'arrow' && v.meta?.fromPort).length
+}
+
+/** 连线的磁盘真值：端口对 + 两端绑在哪张卡上。用于区分「没连上」和「连错口」。 */
+async function describeEdges() {
+  const raw = await readDoc()
+  if (!Array.isArray(raw)) return []
+  const label = (id) => {
+    const hit = raw.find((v) => v && v.id === id)
+    return hit && hit.props ? `${hit.props.nodeType}:${String(id).slice(-4)}` : String(id).slice(-6)
+  }
+  const arrows = raw.filter((v) => v.typeName === 'shape' && v.type === 'arrow')
+  const bindings = raw.filter((v) => v.typeName === 'binding' && v.type === 'arrow')
+  return arrows.map((a) => {
+    const ends = bindings.filter((b) => b.fromId === a.id)
+    const at = (terminal) =>
+      label((ends.find((b) => b.props?.terminal === terminal) || {}).toId ?? '?')
+    return {
+      from: `${at('start')}.${a.meta?.fromPort ?? '?'}`,
+      to: `${at('end')}.${a.meta?.toPort ?? '?'}`
+    }
+  })
+}
+
+/** 从 A 的输出端口拖线到 B 的输入端口；返回是否真的多了一条连线。
+ *
+ * 2026-09-27 端口分组设计（fb12c06）后，空闲态每侧只显示首个类型组的代表端口，
+ * 其余端口在拖线候选时才临时显现。因此：
+ *  - 目标输入端口在拖动开始后才会渲染，坐标必须拖动中途再取；
+ *  - 源输出端口本身隐藏时无法起拖，改走用户同样可达的反向路径：
+ *    从 B 的输入端口起拖（拖动会让 A 的兼容输出端口显现），落到 A 的目标输出端口上。
+ */
+async function connect(fromId, outPort, toId, inPort) {
+  await win.keyboard.press('Escape')
+  await organizeForInteraction()
+  const before = await edgeCount()
+  let a
+  try {
+    a = await portBox(fromId, 'out', outPort, 3000)
+  } catch {
+    return connectReverse(toId, inPort, fromId, outPort, before)
+  }
+  await win.mouse.move(a.cx, a.cy)
+  await win.mouse.down()
+  await win.waitForTimeout(200)
+  // 拖动开始后兼容的候选端口才会渲染；取不到说明「候选显现」这条用户路径断了。
+  const b = await portBox(toId, 'in', inPort, 8000)
+  for (let step = 1; step <= 20; step += 1) {
+    await win.mouse.move(
+      a.cx + ((b.cx - a.cx) * step) / 20,
+      a.cy + ((b.cy - a.cy) * step) / 20
+    )
+    await win.waitForTimeout(16)
+  }
+  await win.mouse.move(b.cx, b.cy)
+  await win.waitForTimeout(150)
+  await win.mouse.up()
+  for (let i = 0; i < 12; i += 1) {
+    await win.waitForTimeout(250)
+    if ((await edgeCount()) > before) return true
+  }
+  // 拖到空白处会留下「待建节点」的连线草稿和创建菜单，不清掉会污染后面的操作。
+  await win.keyboard.press('Escape')
+  await win.waitForTimeout(300)
+  return false
+}
+
+/** 反向连线：从 B 的输入端口拖向 A 隐藏的输出端口。落点解析会挑最近的兼容输出。 */
+async function connectReverse(toId, inPort, fromId, outPort, before) {
+  const b = await portBox(toId, 'in', inPort, 5000)
+  await win.mouse.move(b.cx, b.cy)
+  await win.mouse.down()
+  await win.waitForTimeout(200)
+  const a = await portBox(fromId, 'out', outPort, 8000)
+  for (let step = 1; step <= 20; step += 1) {
+    await win.mouse.move(
+      b.cx + ((a.cx - b.cx) * step) / 20,
+      b.cy + ((a.cy - b.cy) * step) / 20
+    )
+    await win.waitForTimeout(16)
+  }
+  await win.mouse.move(a.cx, a.cy)
+  await win.waitForTimeout(150)
+  await win.mouse.up()
+  for (let i = 0; i < 12; i += 1) {
+    await win.waitForTimeout(250)
+    if ((await edgeCount()) > before) return true
+  }
+  await win.keyboard.press('Escape')
+  await win.waitForTimeout(300)
+  return false
+}
+
+async function statusOf(id) {
+  const aria = (await card(id).locator('.node-status').getAttribute('aria-label')) || ''
+  const btn = card(id).locator('.node-run-btn')
+  const disabled = (await btn.count()) === 0 ? null : await btn.isDisabled()
+  return { aria, disabled }
+}
+
+async function portsOf(id) {
+  return card(id).evaluate((el) => ({
+    in: Array.from(el.querySelectorAll('.port-dot.in[data-port-id]')).map((n) => n.dataset.portId),
+    out: Array.from(el.querySelectorAll('.port-dot.out[data-port-id]')).map(
+      (n) => n.dataset.portId
+    )
+  }))
+}
+
+/** NODE_COMPLIANCE_MATRIX.md 声明的端口必须与画布实际渲染的一致。 */
+async function checkPorts(id, nodeType, expectedIn, expectedOut) {
+  const got = await portsOf(id)
+  const same = (a, b) => JSON.stringify(a.slice().sort()) === JSON.stringify(b.slice().sort())
+  check(
+    `${nodeType}：端口渲染与契约矩阵一致`,
+    same(got.in, expectedIn) && same(got.out, expectedOut),
+    `实际 in=${got.in.join('/') || '无'} out=${got.out.join('/') || '无'}｜期望 in=${expectedIn.join('/')} out=${expectedOut.join('/')}`
+  )
+}
+
+/**
+ * 点击运行并等待「这一次」的运行落库；返回磁盘上的节点真值。
+ * minutes > 0 时用于本地推理这类分钟级长任务：栅栏逻辑不变（新 runId + 执行落定），
+ * 只是轮询拉长并每 30 秒报一次进度，其余配方不传参、行为与原来完全一致。
+ */
+async function runNode(id, minutes = 0) {
+  // 上一次执行可能在视口外新建资产卡；正常用户先整理/取景再点击，不用离屏坐标假装可操作。
+  await organizeForInteraction()
+  const st = await statusOf(id)
+  if (st.disabled !== false) return { blocked: true, aria: st.aria }
+  const btn = card(id).locator('.node-run-btn')
+  if (!(await ensureClickable(btn, `${id} 运行按钮`))) return { blocked: true, aria: '被遮挡' }
+  // 自动保存有防抖：只等「状态已落定」会读到上一次运行留下的旧记录。runId 每次运行都换，
+  // 用它当栅栏才是真的等到了这一次。
+  const previous = await disk(id)
+  const settled = (s) =>
+    s.exec !== 'running' &&
+    s.exec !== 'queued' &&
+    Boolean(s.run && s.run.status) &&
+    s.run.runId !== (previous?.run ?? {}).runId
+  await btn.click()
+  if (minutes > 0) {
+    const deadline = Date.now() + minutes * 60_000
+    const startedAt = Date.now()
+    let lastLog = 0
+    for (;;) {
+      const shape = (await readShapes()).get(id)
+      if (shape && settled(shape)) return { blocked: false, shape }
+      if (Date.now() > deadline) return { blocked: false, shape: shape ?? (await disk(id)) }
+      if (Date.now() - lastLog > 30_000) {
+        lastLog = Date.now()
+        log(`节点 ${String(id).slice(-4)} 仍在执行，已等待 ${Math.round((Date.now() - startedAt) / 1000)}s（上限 ${minutes} 分钟）`)
+      }
+      await win.waitForTimeout(2_000)
+    }
+  }
+  const shape = await disk(id, settled)
+  return { blocked: false, shape: shape ?? (await disk(id)) }
+}
+
+async function fillInto(ta, value) {
+  await ta.fill(value)
+  await ta.blur()
+  await win.waitForTimeout(600)
+}
+
+/** 文本类节点：双击正文 → textarea → 填 → blur 提交。 */
+async function setText(id, value) {
+  const target = card(id).locator('.node-text').first()
+  await ensureClickable(target, '文本正文区')
+  await target.dblclick()
+  const ta = card(id).locator('textarea.node-textarea')
+  await ta.waitFor({ timeout: 5000 })
+  await fillInto(ta, value)
+}
+
+/** 折叠态的 JSON/代码/分镜节点：先点「编辑…」按钮进入 textarea。 */
+async function editCodeLike(id, buttonText, value) {
+  const c = card(id)
+  const btn = c.getByRole('button', { name: new RegExp(buttonText) }).first()
+  if (await btn.count()) {
+    await ensureClickable(btn, `${buttonText} 按钮`)
+    await btn.click()
+  }
+  const ta = c.locator('textarea').last()
+  await ta.waitFor({ timeout: 5000 })
+  await fillInto(ta, value)
+}
+
+/**
+ * AppSelect（fb12c06 起）是 Radix 自定义下拉：触发器是 button.app-select-trigger，
+ * 选项渲染在 body portal 的 role=option 里，原生 selectOption 已不可用。
+ * 按「选项显示文本」选择，与用户看到的列表一致。
+ */
+async function pickOption(trigger, optionText) {
+  await ensureClickable(trigger, `下拉触发器（${optionText}）`)
+  await trigger.click()
+  const item = win.getByRole('option', { name: optionText, exact: true })
+  await item.waitFor({ timeout: 5000 })
+  await item.click()
+  await win.waitForTimeout(400)
+}
+
+async function reload() {
+  await win.waitForTimeout(1500)
+  await win.reload()
+  await win.waitForLoadState()
+  for (let i = 0; i < 30; i += 1) {
+    await win.waitForTimeout(400)
+    if ((await win.locator('.node-card-wrap').count()) > 0) return true
+    const open = win.locator('[aria-label^="打开项目"]')
+    if (await open.count()) await open.first().click()
+  }
+  return false
+}
+
+// ============================ 节点配方 ============================
+
+/** 文本：无必填输入，靠正文与上游合并。 */
+async function recipeText() {
+  const a = await addNode('文本')
+  await checkPorts(a, '文本', ['in-text'], ['out-text'])
+  // 空态提示从「双击输入」改为显式「输入文本」按钮（fb12c06 交互面统一）。
+  check(
+    '文本：空卡片给出可发现的输入提示',
+    (await card(a).locator('.node-standard-action-bar [data-original-action="text-empty-action"]').count()) === 1,
+    await card(a).innerText()
+  )
+
+  // T06 就绪预检：空正文时运行按钮置灰并说明「待补充」，而不是跑出一次假成功。
+  const emptySt = await statusOf(a)
+  check(
+    '文本：空正文运行被就绪预检拦下并说明原因',
+    emptySt.disabled === true && /待补充|缺少/.test(emptySt.aria),
+    emptySt.aria
+  )
+  const emptyShape = await disk(a)
+  check('文本：空正文从未产生运行记录', !emptyShape.run || !emptyShape.run.status, JSON.stringify({ run: emptyShape.run && emptyShape.run.status }))
+
+  await setText(a, '上游甲：一句话')
+  const b = await addNode('文本')
+  await setText(b, '下游乙：另一句话')
+  check('文本：out-text → in-text 拖线成功建连', await connect(a, 'out-text', b, 'in-text'))
+  check('文本：连上后状态灯不再报缺少输入', !/缺少输入/.test((await statusOf(b)).aria), (await statusOf(b)).aria)
+  const r = await runNode(b)
+  const sourceA = await disk(a)
+  check(
+    '文本：运行后真的并入上游正文',
+    r.shape.text.includes('上游甲') && r.shape.text.includes('下游乙'),
+    JSON.stringify({
+      run: r.shape.run.status,
+      err: r.shape.run.error,
+      a: sourceA.text,
+      b: r.shape.text,
+      edges: await describeEdges()
+    })
+  )
+  await shot('text-consumed-upstream')
+
+  const c = await addNode('文本')
+  await setText(c, '上游丙：第三条')
+  check('文本：同一输入端口可接第二个上游', await connect(c, 'out-text', b, 'in-text'))
+  const r2 = await runNode(b)
+  check('文本：多上游全部被消费', r2.shape.text.includes('上游丙'), JSON.stringify(r2.shape.text))
+
+  await reload()
+  check('文本：重载后卡片数不丢', (await win.locator('.type-text').count()) >= 3)
+  const persisted = await disk(b, (s) => s.text.includes('上游丙'))
+  check('文本：重载后正文里的上游内容仍在', persisted.text.includes('上游丙'), JSON.stringify(persisted.text))
+  await shot('text-reload')
+  return b
+}
+
+/** JSON：正文即输入；非法 JSON 必须给原因；可消费上游结构化值。 */
+async function recipeJson() {
+  const a = await addNode('JSON')
+  await checkPorts(a, 'JSON', ['in-json'], ['out-json'])
+  await editCodeLike(a, '粘贴 JSON', '{"title":"开场","shots":[{"n":1},{"n":2}]}')
+  const cards = await card(a).locator('.json-data-card').count()
+  check('JSON：合法正文渲染结构化卡片', cards === 2, `${cards} 张`)
+  const r = await runNode(a)
+  check('JSON：合法正文运行成功', r.shape.run.status === 'success', JSON.stringify(r.shape.run))
+  check(
+    'JSON：输出被格式化回正文（两位缩进）',
+    r.shape.text.includes('\n  "title"'),
+    JSON.stringify(r.shape.text.slice(0, 40))
+  )
+
+  const bad = await addNode('JSON')
+  await editCodeLike(bad, '粘贴 JSON', '{"broken":')
+  check(
+    'JSON：非法正文在界面即时标红',
+    (await card(bad).locator('.json-status.invalid').count()) === 1
+  )
+  const rb = await runNode(bad)
+  check(
+    'JSON：非法正文运行失败且给出原因',
+    rb.shape.run.status === 'failed' && /JSON/.test(JSON.stringify(rb.shape.run.error ?? '')),
+    JSON.stringify(rb.shape.run.error ?? rb.shape.run.status)
+  )
+  await shot('json-invalid-reason')
+
+  const consumer = await addNode('JSON')
+  check('JSON：out-json → in-json 建连', await connect(a, 'out-json', consumer, 'in-json'))
+  const rc = await runNode(consumer)
+  check(
+    'JSON：消费上游结构化值而不是自身空正文',
+    rc.shape.text.includes('"title"') && rc.shape.run.status === 'success',
+    JSON.stringify(rc.shape.text.slice(0, 40))
+  )
+
+  const textSource = await addNode('文本')
+  await setText(textSource, '{"source":"text"}')
+  const textOnly = await addNode('JSON')
+  check('JSON：文本输出可连接到 in-text', await connect(textSource, 'out-text', textOnly, 'in-text'))
+  const fromText = await runNode(textOnly)
+  check(
+    'JSON：无 JSON 输入时解析上游文本',
+    fromText.shape.run.status === 'success' && JSON.parse(fromText.shape.text).source === 'text',
+    JSON.stringify({ status: fromText.shape.run.status, text: fromText.shape.text })
+  )
+
+  const both = await addNode('JSON')
+  check('JSON：JSON 输入连到 in-json', await connect(a, 'out-json', both, 'in-json'))
+  check('JSON：文本输入可同时连到 in-text', await connect(textSource, 'out-text', both, 'in-text'))
+  const fromBoth = await runNode(both)
+  const bothValue = fromBoth.shape.run.status === 'success' ? JSON.parse(fromBoth.shape.text) : null
+  check(
+    'JSON：同时收到两类输入时 JSON 优先',
+    bothValue?.title === '开场' && bothValue.source !== 'text',
+    JSON.stringify(bothValue)
+  )
+  await reload()
+  const after = await disk(a, (s) => s.text.includes('"title"'))
+  check('JSON：重载后格式化结果仍在', after.text.includes('"title"'))
+  await shot('json-reload')
+}
+
+/** 处理：固定值兜底、字段提取的成功/失败两态。 */
+async function recipeProcessor() {
+  const a = await addNode('数据处理')
+  await checkPorts(a, '数据处理', ['in-value'], ['out-value'])
+  const empty = await runNode(a)
+  const emptyShape = empty.shape ?? (await disk(a))
+  check(
+    '处理：无连线且无固定值时不假成功',
+    emptyShape.run.status !== 'success',
+    JSON.stringify(emptyShape.run.status)
+  )
+
+  const fix = card(a).locator('input[aria-label="固定值"]')
+  await ensureClickable(fix, '固定值输入框')
+  await fix.fill('直接传递的固定文本')
+  await win.waitForTimeout(600)
+  const invalidMode = await statusOf(a)
+  check('处理：纯文本字段提取在运行前拦截并指明改用模板', invalidMode.disabled && /JSON.*字符串模板/.test(invalidMode.aria), invalidMode.aria)
+  await pickOption(card(a).locator('button[aria-label="处理方式"]'), '字符串模板')
+  await card(a).locator('input[aria-label="字符串模板"]').fill('镜头：{{value}}')
+  await win.waitForTimeout(600)
+  const r1 = await runNode(a)
+  check('处理：固定值字符串模板运行成功', r1.shape.run.status === 'success', JSON.stringify(r1.shape.run.status))
+  check(
+    '处理：结果里能看到输出值',
+    String(r1.shape.resultRaw).includes('直接传递的固定文本'),
+    JSON.stringify(r1.shape.resultRaw)
+  )
+
+  const feeder = await addNode('JSON')
+  await editCodeLike(feeder, '粘贴 JSON', '{"scene":"雨夜街道"}')
+
+  const pick = await addNode('数据处理')
+  await pickOption(card(pick).locator('button[aria-label="处理方式"]'), '提取字段')
+  await win.waitForTimeout(500)
+  const pathInput = card(pick).locator('input[aria-label="字段路径"]')
+  await pathInput.waitFor({ timeout: 5000 })
+  await pathInput.fill('不存在的字段')
+  await win.waitForTimeout(600)
+  check('处理：JSON 输出可接入 any 输入端口', await connect(feeder, 'out-json', pick, 'in-value'))
+  const invalidPath = await statusOf(pick)
+  check(
+    '处理：字段路径不存在时在运行前报出具体路径',
+    invalidPath.disabled && /不存在的字段/.test(invalidPath.aria),
+    invalidPath.aria
+  )
+  await shot('processor-pick-missing-path')
+
+  await pathInput.fill('scene')
+  await win.waitForTimeout(600)
+  const r3 = await runNode(pick)
+  check(
+    '处理：路径修正后取到字段',
+    r3.shape.run.status === 'success' && String(r3.shape.resultRaw).includes('雨夜街道'),
+    JSON.stringify(r3.shape.resultRaw)
+  )
+  await reload()
+  const persisted = await disk(pick, (s) => s.run.status === 'success')
+  check('处理：重载后运行记录仍在', persisted.run.status === 'success', JSON.stringify(persisted.run.status))
+  await shot('processor-reload')
+}
+
+/** 分镜板：粘贴 JSON → 表格行渲染 → 合成文本流入下游。 */
+async function recipeStoryboard() {
+  const a = await addNode('分镜板')
+  await checkPorts(a, '分镜板', ['in-json'], ['out-json'])
+  await editCodeLike(
+    a,
+    '编辑 JSON',
+    '{"shots":[{"scene":"雨夜街景","dialogue":"走吧。","duration":"3s"},{"scene":"天台","dialogue":"","duration":"5s"}]}'
+  )
+  const shots = await card(a).locator('.storyboard-table tbody tr').count()
+  check('分镜板：粘贴后渲染两张表格行', shots === 2, `${shots} 行`)
+  const r = await runNode(a)
+  check('分镜板：运行成功', r.shape.run.status === 'success', JSON.stringify(r.shape.run))
+  check(
+    '分镜板：画面描述没有被静默丢掉',
+    JSON.stringify(r.shape.config).includes('雨夜街景') || r.shape.text.includes('雨夜街景'),
+    JSON.stringify({ config: r.shape.config, text: r.shape.text.slice(0, 60) })
+  )
+  const b = await addNode('文本')
+  await setText(b, '下游占位')
+  check('分镜板：out-text 可供文本节点消费', await connect(a, 'out-text', b, 'in-text'))
+  const rb = await runNode(b)
+  check(
+    '分镜板：合成文本真的流入下游',
+    rb.shape.text.includes('走吧') || rb.shape.text.includes('雨夜街景'),
+    JSON.stringify(rb.shape.text.slice(0, 90))
+  )
+  await shot('storyboard-flows-downstream')
+  await reload()
+  const afterShots = await card(a).locator('.storyboard-table tbody tr').count()
+  check('分镜板：重载后表格行仍渲染', afterShots === 2, `${afterShots} 行`)
+  await shot('storyboard-reload')
+}
+
+/** 结构数据：按 Schema 校验，合法/非法两态即时可见。 */
+async function recipeStructured() {
+  const a = await addNode('结构数据')
+  await checkPorts(a, '结构数据', ['in-context'], ['out-json'])
+  await pickOption(card(a).locator('button[aria-label="结构 Schema"]'), '对象列表')
+  await win.waitForTimeout(500)
+  await editCodeLike(a, '输入 JSON', '[{"id":"s1"},{"id":"s2"},{"id":"s3"}]')
+  const badge = card(a).locator('.json-status').first()
+  check(
+    '结构数据：符合对象列表 Schema 时给出可用提示',
+    (await card(a).locator('.json-status.valid').count()) === 1,
+    (await badge.count()) ? await badge.innerText() : '（无状态徽标）'
+  )
+  const r = await runNode(a)
+  check('结构数据：合法结构运行成功', r.shape.run.status === 'success', JSON.stringify(r.shape.run))
+
+  const bad = await addNode('结构数据')
+  await pickOption(card(bad).locator('button[aria-label="结构 Schema"]'), '对象列表')
+  await win.waitForTimeout(500)
+  await editCodeLike(bad, '输入 JSON', '{"not":"a list"}')
+  check(
+    '结构数据：不符合 Schema 即时标红而不是静默通过',
+    (await card(bad).locator('.json-status.invalid').count()) === 1
+  )
+  const rb = await runNode(bad)
+  check(
+    '结构数据：不符合 Schema 的运行不记为成功',
+    rb.shape.run.status !== 'success',
+    JSON.stringify(rb.shape.run.status)
+  )
+  await shot('structured-invalid-schema')
+  await reload()
+  const after = await disk(a)
+  check(
+    '结构数据：重载后 Schema 与正文仍在',
+    JSON.stringify(after.config).includes('list.items') && after.text.includes('s1'),
+    JSON.stringify({ config: after.config, text: after.text.slice(0, 40) })
+  )
+  await shot('structured-reload')
+}
+
+/** 代码：命名输入/输出、受限运行时、自定义参数端口。 */
+async function recipeCode() {
+  const a = await addNode('代码')
+  const ports = await portsOf(a)
+  check(
+    '代码：默认契约端口渲染（命名输入 + 单个命名输出）',
+    // 空闲态只显示首个类型组（in-text）；in-json 拖线候选时显现，下方连线步骤覆盖。
+    ports.in.includes('in-text') && ports.out.length === 1,
+    `in=${ports.in.join('/')} out=${ports.out.join('/')}`
+  )
+
+  const bad = await addNode('代码')
+  await editCodeLike(bad, '编写代码', 'async function main(args) { return 1 +')
+  const rb = await runNode(bad)
+  check(
+    '代码：语法错误运行失败且原因可见',
+    rb.shape.run.status === 'failed' && Boolean(rb.shape.run.error),
+    JSON.stringify(rb.shape.run.error ?? rb.shape.run.status)
+  )
+  check('代码：卡片上能看到失败标记', (await card(bad).locator('.code-result.error').count()) === 1)
+  await shot('code-syntax-error')
+
+  const feeder = await addNode('文本')
+  await setText(feeder, '代码输入内容')
+  await editCodeLike(
+    a,
+    '编写代码',
+    'async function main(args) {\n  const text = String(args.text || "")\n  return { len: text.length, head: text.slice(0, 2) }\n}'
+  )
+  check('代码：out-text → in-text 建连', await connect(feeder, 'out-text', a, 'in-text'))
+  const r = await runNode(a)
+  check('代码：合法代码运行成功', r.shape.run.status === 'success', JSON.stringify(r.shape.run))
+  check(
+    '代码：运行时真的读到上游文本（长度 6、前两个字）',
+    String(r.shape.resultRaw).includes('6') && String(r.shape.resultRaw).includes('代码'),
+    JSON.stringify(r.shape.resultRaw)
+  )
+  check('代码：卡片显示成功结果条', (await card(a).locator('.code-result.success').count()) === 1)
+  await shot('code-run-success')
+
+  const addInputParam = card(a).locator(
+    '.code-params-section:not(.code-outputs-section) .code-params-header button'
+  )
+  await addInputParam.click()
+  await win.waitForTimeout(600)
+  await card(a).locator('input.code-param-name').last().fill('prefix')
+  await win.waitForTimeout(800)
+  const configuredParamShape = await disk(
+    a,
+    (shape) => (shape.config.params || []).some((item) => item.name === 'prefix')
+  )
+  const paramConfig = configuredParamShape?.config || {}
+  const prefixParam = (paramConfig.params || []).find((item) => item.name === 'prefix')
+  const prefixPortId = prefixParam?.portId || 'in-param-prefix'
+  const withParam = await portsOf(a)
+  check(
+    '代码：声明参数后浮出同名输入端口',
+    withParam.in.includes(prefixPortId),
+    `名称=prefix 端口=${prefixPortId} in=${withParam.in.join('/')}`
+  )
+  const feedJson = await addNode('JSON')
+  await editCodeLike(feedJson, '粘贴 JSON', '{"k":"v"}')
+  check('代码：自定义参数端口可被连线接入', await connect(feedJson, 'out-json', a, prefixPortId))
+
+  const prefixRow = card(a).locator('.code-params-section:not(.code-outputs-section) .code-param-row').last()
+  await pickOption(prefixRow.locator('button.app-select-trigger.code-param-type'), '对象')
+  await pickOption(prefixRow.locator('button.app-select-trigger.code-param-cardinality'), '多值')
+  // 类型切换后端口从 any 变为 json：等配置落盘再拖线，否则拖线期间端口类型还是旧的。
+  await disk(a, (s) => (s.config.params || []).some((item) => item.name === 'prefix' && item.type === 'object'))
+  log('参数行当前状态：', (await prefixRow.innerText()).replace(/\n/g, ' '))
+  const feedJson2 = await addNode('JSON')
+  await editCodeLike(feedJson2, '粘贴 JSON', '{"k":"w"}')
+  check('代码：many 参数可接第二路同类型输入', await connect(feedJson2, 'out-json', a, prefixPortId))
+  await editCodeLike(
+    a,
+    '编辑代码',
+    'async function main(args) {\n  const text = String(args.text || "")\n  return { len: text.length, head: text.slice(0, 2), keys: args.prefix.map((item) => item.k) }\n}'
+  )
+  const customRun = await runNode(a)
+  check(
+    '代码：具名 many 输入按顺序作为数组进入真实 Worker',
+    customRun.shape.run.status === 'success' &&
+      String(customRun.shape.resultRaw).includes('["v","w"]'),
+    JSON.stringify(customRun.shape.resultRaw)
+  )
+
+  const outputSection = card(a).locator('.code-outputs-section')
+  await outputSection.locator('.code-params-header button').click()
+  await win.waitForTimeout(400)
+  const firstOutput = outputSection.locator('.code-output-row').nth(0)
+  await firstOutput.locator('input.code-param-name').fill('length')
+  await pickOption(firstOutput.locator('button.app-select-trigger.code-param-type'), '数字')
+  await outputSection.locator('.code-params-header button').click()
+  await win.waitForTimeout(400)
+  const secondOutput = outputSection.locator('.code-output-row').nth(1)
+  await secondOutput.locator('input.code-param-name').fill('caption')
+  await pickOption(secondOutput.locator('button.app-select-trigger.code-param-type'), '文本')
+  await editCodeLike(
+    a,
+    '编辑代码',
+    'async function main(args) {\n  const text = String(args.text || "")\n  return { length: text.length, caption: args.prefix.map((item) => item.k).join(",") }\n}'
+  )
+  const multiRun = await runNode(a)
+  const multiValues = obj(multiRun.shape.resultRaw).values || {}
+  check(
+    '代码：一个 return 对象映射为 number 与 text 两个端口',
+    multiRun.shape.run.status === 'success' &&
+      multiValues['out-output']?.kind === 'json' &&
+      multiValues['out-output']?.data === 6 &&
+      multiValues['out-output2']?.kind === 'text' &&
+      multiValues['out-output2']?.text === 'v,w',
+    JSON.stringify(multiValues)
+  )
+
+  const textConsumer = await addNode('文本')
+  check(
+    '代码：具名文本输出可供文本节点消费',
+    await connect(a, 'out-output2', textConsumer, 'in-text')
+  )
+  const textConsumed = await runNode(textConsumer)
+  check(
+    '代码：多输出文本字段真实流入下游',
+    textConsumed.shape.run.status === 'success' && textConsumed.shape.text.includes('v,w'),
+    JSON.stringify(textConsumed.shape.text)
+  )
+  const jsonConsumer = await addNode('JSON')
+  check(
+    '代码：具名 JSON 数值输出可供 JSON 节点消费',
+    await connect(a, 'out-output', jsonConsumer, 'in-json')
+  )
+  const jsonConsumed = await runNode(jsonConsumer)
+  check(
+    '代码：多输出数值字段真实流入下游',
+    jsonConsumed.shape.run.status === 'success' && JSON.parse(jsonConsumed.shape.text) === 6,
+    JSON.stringify(jsonConsumed.shape.text)
+  )
+  await reload()
+  const persisted = await disk(a)
+  const persistedPrefix = (persisted.config.params || []).find((item) => item.name === 'prefix')
+  const reloadedPorts = await portsOf(a)
+  check(
+    '代码：重载后自定义参数与端口仍在',
+    Boolean(persistedPrefix?.portId) && reloadedPorts.in.includes(persistedPrefix.portId),
+    `${JSON.stringify(persistedPrefix)} in=${reloadedPorts.in.join('/')}`
+  )
+  await shot('code-reload')
+}
+
+/** 循环：in-list 必填（未连时按钮必须置灰），循环体逐项执行。 */
+async function recipeIterate() {
+  const a = await addNode('循环')
+  await checkPorts(a, '循环', ['in-list'], ['out-item'])
+  const st = await statusOf(a)
+  check(
+    '循环：未接列表时运行按钮置灰并写明缺少输入',
+    st.disabled === true && /缺少输入/.test(st.aria),
+    st.aria
+  )
+  await shot('iterate-blocked')
+
+  // 列表来源：结构数据节点选「对象列表」Schema，它的 out-json 才是 list.items@1。
+  const list = await addNode('结构数据')
+  await pickOption(card(list).locator('button[aria-label="结构 Schema"]'), '对象列表')
+  await win.waitForTimeout(500)
+  await editCodeLike(list, '输入 JSON', '[{"id":"s1"},{"id":"s2"},{"id":"s3"}]')
+  check('循环：符合 list.items 的结构数据可接入 in-list', await connect(list, 'out-json', a, 'in-list'))
+  check('循环：接上列表后按钮解除置灰', (await statusOf(a)).disabled === false, (await statusOf(a)).aria)
+
+  // 没接循环体时必须说明为什么什么都没跑（而不是静默成功）。
+  const noBody = await runNode(a)
+  check(
+    '循环：未接循环体时给出可执行的提示而不是假成功',
+    noBody.shape.run.status !== 'success' &&
+      /循环体/.test(JSON.stringify(noBody.shape.run.error ?? '')),
+    JSON.stringify(noBody.shape.run.error ?? noBody.shape.run.status)
+  )
+  await shot('iterate-no-body')
+
+  const body = await addNode('JSON')
+  check(
+    '循环：out-item 可标记循环体（连到 JSON 节点的数据输入）',
+    await connect(a, 'out-item', body, 'in-json')
+  )
+  const r = await runNode(a)
+  check('循环：批量执行成功', r.shape.run.status === 'success', JSON.stringify(r.shape.run))
+  const result = obj(r.shape.resultRaw)
+  const items = Array.isArray(result.items) ? result.items : []
+  check(
+    '循环：三项列表逐项产出且进度一致',
+    items.length === 3 && result.progress && result.progress.total === 3,
+    JSON.stringify(result.progress ?? { items: items.length })
+  )
+  check(
+    '循环：每项结果带来源序号可追溯',
+    items.length > 0 && items.every((it) => typeof (it.source || {}).index === 'number'),
+    JSON.stringify(items.map((it) => (it.source || {}).index))
+  )
+  await shot('iterate-items')
+  await reload()
+  const after = obj((await disk(a)).resultRaw)
+  check(
+    '循环：重载后逐项结果不丢',
+    Array.isArray(after.items) && after.items.length === 3,
+    JSON.stringify((after.items || []).length)
+  )
+  await shot('iterate-reload')
+}
+
+// ============================ 媒体夹具 ============================
+
+const FIX_DIR = path.join(DATA_DIR, 'fixtures')
+
+/** 用 ffmpeg 造真实字节（不是 1×1 占位图）；文件只留在隔离目录里，界面走的是拖拽导入。 */
+function makeFixtures() {
+  fs.mkdirSync(FIX_DIR, { recursive: true })
+  const run = (args) => execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args])
+  const out = {}
+  out.png = path.join(FIX_DIR, 'rgb-640x480.png')
+  if (!fs.existsSync(out.png))
+    run(['-f', 'lavfi', '-i', 'rgbtestsrc=size=640x480:rate=1', '-frames:v', '1', out.png])
+  out.mp4 = path.join(FIX_DIR, 'clip-4s.mp4')
+  if (!fs.existsSync(out.mp4))
+    run([
+      '-f', 'lavfi', '-i', 'testsrc2=size=320x240:rate=25:duration=4',
+      '-f', 'lavfi', '-i', 'sine=frequency=440:duration=4',
+      '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', out.mp4
+    ])
+  out.txt = path.join(FIX_DIR, 'notes.txt')
+  if (!fs.existsSync(out.txt))
+    fs.writeFileSync(out.txt, '第一行\n第二行\n', 'utf8')
+  return out
+}
+
+let FIX
+
+function documentFixtures() {
+  // 与解析器测试复用同一批真实 OOXML/PDF 字节，避免另写一套不一致的样张。
+  const ts = require('typescript')
+  const Module = require('node:module')
+  const filename = path.join(ROOT, 'test/helpers/document-fixtures.ts')
+  const module = new Module(filename)
+  module.paths = Module._nodeModulePaths(path.dirname(filename))
+  module._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true }
+  }).outputText, filename)
+  const fixtures = module.exports
+  const examples = [
+    ['sample.docx', fixtures.DOCX, fixtures.DOCX_TEXT],
+    ['sample.xlsx', fixtures.XLSX, fixtures.XLSX_TEXT],
+    ['sample.pptx', fixtures.PPTX, fixtures.PPTX_TEXT],
+    ['sample.pdf', fixtures.cjkPdf('中文分镜描述'), '中文分镜描述'],
+    ['sample.md', Buffer.from('# 分镜\n雨夜街道', 'utf8'), '# 分镜\n雨夜街道'],
+    ['scan.pdf', fixtures.imageOnlyPdf(), '']
+  ]
+  return examples.map(([name, bytes, expected]) => {
+    const file = path.join(FIX_DIR, name)
+    fs.writeFileSync(file, bytes)
+    return { file, name, expected }
+  })
+}
+
+async function recipeDocuments() {
+  const document = await addNode('文件')
+  const text = await addNode('文本')
+  await app.evaluate(({ dialog }) => {
+    globalThis.__matrixOpenDialog = dialog.showOpenDialog
+  })
+  try {
+    let imported = false
+    let previousMediaId = ''
+    for (const fixture of documentFixtures()) {
+      await app.evaluate(({ dialog }, filePath) => {
+        dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filePath] })
+      }, fixture.file)
+      await organizeForInteraction()
+      await card(document).getByRole('button', { name: imported ? '替换' : '导入文件', exact: true }).click()
+      const saved = await disk(document, (shape) => Boolean(shape.mediaId) && shape.mediaId !== previousMediaId)
+      imported = true
+      previousMediaId = saved.mediaId
+      check(`文件抽取 ${fixture.name}：真实导入、正文与落盘`, assetOnDisk(saved.mediaPath) && (fixture.expected ? saved.text.includes(fixture.expected) : saved.text === ''), saved.text)
+      if (fixture.expected) {
+        if (await edgeCount() === 0) check('文档抽取：文本输出可连接', await connect(document, 'out-text', text, 'in-text'))
+        const run = await runNode(text)
+        check(`文件抽取 ${fixture.name}：下游消费正文`, run.shape.run.status === 'success' && run.shape.text.includes(fixture.expected))
+      } else {
+        check('扫描 PDF：不虚构正文且明确说明未抽出文字', /未抽出文字/.test(await card(document).innerText()))
+      }
+      await shot(`document-${fixture.name}`)
+    }
+    await reload()
+    check('文件抽取：重载保持最后文档真实资源', assetOnDisk((await disk(document)).mediaPath))
+  } finally {
+    await app.evaluate(({ dialog }) => {
+      dialog.showOpenDialog = globalThis.__matrixOpenDialog
+      delete globalThis.__matrixOpenDialog
+    })
+  }
+}
+
+/**
+ * 把文件拖进画布：Chromium 里合成的 File 拿不到本机路径，
+ * 于是走 handleDrop 的 importMediaBuffer 分支——字节进主进程、探测真实类型、落盘、建卡，
+ * 与原生对话框用的是同一条导入实现。
+ */
+async function dropFile(name, mime, file, x, y) {
+  const base64 = fs.readFileSync(file).toString('base64')
+  await win.evaluate(
+    ({ fileName, fileMime, b64, cx, cy }) => {
+      const bytes = Uint8Array.from(atob(b64), (char) => char.charCodeAt(0))
+      const transfer = new DataTransfer()
+      transfer.items.add(new File([bytes], fileName, { type: fileMime }))
+      const target = document.querySelector('.canvas-host')
+      if (!target) throw new Error('找不到画布宿主元素')
+      target.dispatchEvent(
+        new DragEvent('drop', {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer: transfer,
+          clientX: cx,
+          clientY: cy
+        })
+      )
+    },
+    { fileName: name, fileMime: mime, b64: base64, cx: x, cy: y }
+  )
+  await win.waitForTimeout(700)
+}
+
+async function cardIds() {
+  return win.$$eval('.node-card-wrap', (els) => els.map((e) => e.dataset.nodeId))
+}
+
+// ============================ 媒体族配方 ============================
+
+/** 拖入文件后新出现的卡：id + 实际节点类型（导入建的是哪种卡，本身就是要验的行为）。 */
+async function freshCards(before) {
+  for (let i = 0; i < 40; i += 1) {
+    await win.waitForTimeout(400)
+    const found = await win.evaluate((known) => {
+      return Array.from(document.querySelectorAll('.node-card-wrap[data-node-id]'))
+        .filter((el) => !known.includes(el.dataset.nodeId))
+        .map((el) => ({ id: el.dataset.nodeId, type: el.querySelector('.node-card')?.dataset.nodeType }))
+    }, before)
+    if (found.length) return found
+  }
+  return []
+}
+
+/**
+ * 拖入一个真实文件：返回建出来的卡 + 当时那条提示条原文。
+ * 合成的 File 在 Chromium 里拿不到本机路径，所以走的是 handleDrop 的 importBuffer 分支
+ * （真实资源管理器拖入会拿到 webUtils.getPathForFile，走的是 importMedia 路径分支）。
+ */
+async function dropAsset(file, name, mime, x, y) {
+  const before = await cardIds()
+  await dropFile(name, mime, file, x ?? 470, y ?? 250)
+  const note = await win.locator('.global-toast').innerText().catch(() => '')
+  const created = await freshCards(before)
+  return { created, note: note.trim() }
+}
+
+/** 拖入一段真实 MP4，返回它建出来的视频资产卡。 */
+async function dropVideo() {
+  const { created } = await dropAsset(FIX.mp4, 'clip-4s.mp4', 'video/mp4')
+  const video = created.find((c) => c.type === 'video-asset')
+  if (!video) throw new Error(`拖入 MP4 没有建出视频资产卡：${JSON.stringify(created)}`)
+  return video.id
+}
+
+/** 产物文件是否真的在磁盘上（mediaPath 是相对数据目录的路径）。 */
+function assetOnDisk(relativePath) {
+  if (!relativePath) return false
+  const abs = path.join(DATA_DIR, relativePath)
+  return fs.existsSync(abs) && fs.statSync(abs).size > 0
+}
+
+/** 图片资产：拖入真实 PNG → 缩略图解码 → 输出可被裁剪节点取用 → 重载不丢。 */
+async function recipeImage() {
+  // 空态先验收：新建的图片卡必须自己说清「要导入一张图片」，且不能拿任何旧值冒充已导入。
+  const empty = await addNode('图片')
+  const emptyText = await card(empty).innerText()
+  check('图片：空卡片给出可发现的导入入口', /导入图片/.test(emptyText), emptyText.replace(/\n+/g, ' / ').slice(0, 90))
+  check(
+    '图片：空卡片没有 mediaPath',
+    !(await disk(empty)).mediaPath,
+    JSON.stringify((await disk(empty)).mediaPath)
+  )
+
+  const { created } = await dropAsset(FIX.png, 'rgb-640x480.png', 'image/png')
+  check(
+    '图片：拖入 PNG 建出的是图片资产节点',
+    created.length === 1 && created[0].type === 'image',
+    JSON.stringify(created)
+  )
+  const a = created[0].id
+  await checkPorts(a, '图片', [], ['out-image'])
+  const decoded = await card(a)
+    .locator('.node-media img')
+    .evaluate((el) => ({ w: el.naturalWidth, h: el.naturalHeight, complete: el.complete }))
+    .catch(() => null)
+  check(
+    '图片：卡片里的缩略图真的解码成 640×480',
+    decoded && decoded.w === 640 && decoded.h === 480,
+    JSON.stringify(decoded)
+  )
+  const diskA = await disk(a, (s) => Boolean(s.mediaPath))
+  check('图片：导入落盘后 mediaPath 已写进节点', Boolean(diskA.mediaPath), JSON.stringify(diskA.mediaPath))
+  const asset = await win.evaluate(
+    async ({ pid }) => (await window.api.listMedia(pid)).data.filter((x) => x.kind === 'image'),
+    { pid: projectId }
+  )
+  check('图片：项目资产表里能查到这张图', asset.length === 1, JSON.stringify(asset[0] && { kind: asset[0].kind, size: asset[0].sizeBytes }))
+  await shot('image-imported')
+
+  // 下游真的取到这张图：图片 → 裁剪
+  const crop = await addNode('裁剪')
+  check('图片：out-image → 裁剪 in-image 建连', await connect(a, 'out-image', crop, 'in-image'))
+  const cropStatus = await statusOf(crop)
+  check('裁剪：接上原图后不再报缺少输入', !/缺少输入/.test(cropStatus.aria), cropStatus.aria)
+  const r = await runNode(crop)
+  const cropShape = r.shape
+  check('裁剪：按默认参数运行成功', cropShape.run.status === 'success', JSON.stringify(cropShape.run.error ?? cropShape.run.status))
+  const cropped = await win.evaluate(
+    async ({ pid, seen }) =>
+      (await window.api.listMedia(pid)).data.filter(
+        (x) => x.kind === 'image' && !seen.includes(x.id)
+      ),
+    { pid: projectId, seen: asset.map((x) => x.id) }
+  )
+  check('裁剪：产物是一张新的图片资产', cropped.length === 1, JSON.stringify(cropped[0] && { id: cropped[0].id, size: cropped[0].sizeBytes }))
+  // 产物的落点是独立资产卡：源卡 + 产物卡各渲染一张解得开的图。
+  const rendered = await win.locator('.type-image .node-media img').count()
+  const decodable = await win.$$eval('.type-image .node-media img', (els) =>
+    els.filter((el) => el.naturalWidth > 0).length
+  )
+  check(
+    '裁剪：源卡与产物卡各自渲染出图片',
+    rendered === 2 && decodable === 2,
+    `${decodable}/${rendered} 张解码成功`
+  )
+
+  await reload()
+  const after = await disk(a, (s) => s.mediaPath === diskA.mediaPath && Boolean(s.mediaPath))
+  check('图片：重载后 mediaPath 仍在', Boolean(after.mediaPath), after.mediaPath)
+  check(
+    '图片：重载后缩略图仍解码',
+    await card(a)
+      .locator('.node-media img')
+      .evaluate((el) => el.naturalWidth === 640)
+      .catch(() => false)
+  )
+  await shot('image-reload')
+}
+
+/** 图片拆分：真实宫格 → 每格都是磁盘上存在的图片资产。 */
+async function recipeSplit() {
+  const { created } = await dropAsset(FIX.png, 'rgb-640x480.png', 'image/png')
+  const src = created[0].id
+  const split = await addNode('拆分')
+  await checkPorts(split, '图片拆分', ['in-image'], ['out-image'])
+  const empty = await statusOf(split)
+  check('图片拆分：未接原图时按钮置灰并写明缺少输入', empty.disabled === true && /缺少输入/.test(empty.aria), empty.aria)
+  check('图片拆分：out-image → in-image 建连', await connect(src, 'out-image', split, 'in-image'))
+  const r = await runNode(split)
+  check('图片拆分：按默认宫格运行成功', r.shape.run.status === 'success', JSON.stringify(r.shape.run.error ?? r.shape.run.status))
+  const collection = obj(r.shape.resultRaw)
+  const results = Array.isArray(collection.results) ? collection.results : []
+  check('图片拆分：结果集合里每一格都落盘了', results.length >= 2 && results.every((x) => assetOnDisk(x.mediaPath)), `${results.length} 格`)
+  check('图片拆分：默认选中第一格作为当前输出', Boolean(collection.selectedMediaId) && collection.selectedMediaId === results[0]?.mediaId, JSON.stringify(collection.selectedMediaId))
+  await shot('split-grid')
+  await reload()
+  const after = obj((await disk(split)).resultRaw)
+  check('图片拆分：重载后每格仍可取用', Array.isArray(after.results) && after.results.length === results.length, `${after.results?.length} 格`)
+  await shot('split-reload')
+}
+
+/** 文件节点：空态诚实；文本类文件走拖拽导入时按契约进文本节点正文。 */
+async function recipeFile() {
+  const f = await addNode('文件')
+  await checkPorts(f, '文件', [], ['out-file'])
+  const body = await card(f).innerText()
+  check('文件：空卡片说清要导入什么', /导入|拖入|支持/.test(body), body.replace(/\n+/g, ' / ').slice(0, 120))
+  const r = await runNode(f)
+  check('文件：没导入时不假成功', r.blocked || r.shape.run.status !== 'success', JSON.stringify({ blocked: r.blocked, run: r.shape && r.shape.run.status }))
+
+  const dropped = await dropAsset(FIX.txt, 'notes.txt', 'text/plain', 900, 250)
+  check('文件：拖入 txt 没有静默失败（要么建卡，要么给原因）', Boolean(dropped.created.length || dropped.note), JSON.stringify(dropped))
+  check(
+    '文件：缓冲导入只收图片/视频时，提示条把原因说清楚',
+    !dropped.created.length && /仅支持|失败/.test(dropped.note),
+    JSON.stringify(dropped.note)
+  )
+  await shot('file-txt-drop-feedback')
+  // 只替换系统选择器返回路径；真正的按钮、IPC、文档抽取、媒体落盘与卡片更新仍走产品链路。
+  await app.evaluate(({ dialog }, filePath) => {
+    globalThis.__matrixOpenDialog = dialog.showOpenDialog
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filePath] })
+  }, FIX.txt)
+  try {
+    await organizeForInteraction()
+    await card(f).getByRole('button', { name: '导入文件', exact: true }).click()
+    const imported = await disk(f, (shape) => Boolean(shape.mediaId) && shape.text.includes('第一行'))
+    check('文件：系统选择路径导入真实 TXT 并提取正文', assetOnDisk(imported.mediaPath) && imported.text === '第一行\n第二行\n', imported.text)
+    const target = await addNode('文本')
+    check('文件：抽取文本能连接下游文本', await connect(f, 'out-text', target, 'in-text'))
+    await runNode(target)
+    check('文件：抽取正文真实流入下游', (await disk(target)).text.includes('第二行'))
+    await reload()
+    check('文件：文档路径与正文重载保留', (await disk(f)).text.includes('第二行') && assetOnDisk((await disk(f)).mediaPath))
+    await shot('file-txt-import-reload')
+  } finally {
+    await app.evaluate(({ dialog }) => {
+      dialog.showOpenDialog = globalThis.__matrixOpenDialog
+      delete globalThis.__matrixOpenDialog
+    })
+  }
+}
+
+/** 视频资产：拖入真实 MP4 建出来的必须是视频资产节点，且带可播放的媒体引用。 */
+async function recipeVideoAsset() {
+  const { created } = await dropAsset(FIX.mp4, 'clip-4s.mp4', 'video/mp4')
+  check(
+    '视频资产：拖入 MP4 建出的是视频资产节点',
+    created.length === 1 && created[0].type === 'video-asset',
+    JSON.stringify(created)
+  )
+  if (!created.length) return
+  const v = created[0].id
+  await checkPorts(v, '视频资产', [], ['out-video'])
+  const shape = await disk(v, (s) => Boolean(s.mediaPath))
+  check('视频资产：mediaPath 已落盘且文件存在', assetOnDisk(shape.mediaPath), shape.mediaPath)
+  check('视频资产：卡片渲染出可播放的视频元素', (await card(v).locator('video').count()) >= 1)
+  await reload()
+  check('视频资产：重载后 mediaPath 仍在', assetOnDisk((await disk(v)).mediaPath), (await disk(v)).mediaPath)
+  await shot('video-asset-reload')
+}
+
+/** 当前画布上所有卡的类型（产物落点评的是「有没有建成卡」）。 */
+async function allCards() {
+  return win.evaluate(() =>
+    Array.from(document.querySelectorAll('.node-card-wrap[data-node-id]')).map((el) => ({
+      id: el.dataset.nodeId,
+      type: el.querySelector('.node-card')?.dataset.nodeType
+    }))
+  )
+}
+
+/** 搭一条「视频资产 → 视频截取」并跑到出产物；返回两张卡与运行结果。 */
+async function runClipOnFixtureVideo() {
+  const src = await dropVideo()
+  const clip = await addNode('视频截取')
+  await checkPorts(clip, '视频截取', ['in-video'], ['out-video'])
+  if (!(await connect(src, 'out-video', clip, 'in-video')))
+    throw new Error('视频截取：out-video → in-video 建连失败')
+  const r = await runNode(clip)
+  return { src, clip, run: r }
+}
+
+/** 视频取帧：真实首帧落盘成图片资产。 */
+async function recipeVideoFrame() {
+  const src = await dropVideo()
+  const frame = await addNode('抽帧')
+  await checkPorts(frame, '视频取帧', ['in-video'], ['out-image'])
+  check('视频取帧：未接源视频时按钮置灰', (await statusOf(frame)).disabled === true, (await statusOf(frame)).aria)
+  check('视频取帧：out-video → in-video 建连', await connect(src, 'out-video', frame, 'in-video'))
+  const r = await runNode(frame)
+  check('视频取帧：默认首帧运行成功', r.shape.run.status === 'success', JSON.stringify(r.shape.run.error ?? r.shape.run.status))
+  const collection = obj(r.shape.resultRaw)
+  const first = (collection.results || [])[0]
+  check('视频取帧：产物是一张真实存在的图片', Boolean(first) && assetOnDisk(first.mediaPath), JSON.stringify(first && first.mediaPath))
+  // 产物的唯一落点是独立资产卡（操作节点自己不保存预览），所以要验的是「有没有长出这张卡」。
+  const frameCards = (await allCards()).filter((c) => c.type === 'image')
+  check('视频取帧：取到的帧建成独立图片卡', frameCards.length === 1, JSON.stringify(frameCards.map((c) => c.id.slice(-4))))
+  if (frameCards.length) {
+    check(
+      '视频取帧：那张帧卡真的解码出一张图',
+      await card(frameCards[0].id)
+        .locator('img')
+        .first()
+        .evaluate((el) => el.naturalWidth > 0)
+        .catch(() => false)
+    )
+  }
+  await shot('video-frame-output')
+  await reload()
+  check(
+    '视频取帧：重载后运行记录与产物仍在',
+    obj((await disk(frame)).resultRaw).results?.length === collection.results.length
+  )
+}
+
+/** 视频截取：产物时长必须真的落在源片之内，且音频输出也建成卡。 */
+async function recipeVideoClip() {
+  const { run } = await runClipOnFixtureVideo()
+  check('视频截取：按默认区间运行成功', run.shape.run.status === 'success', JSON.stringify(run.shape.run.error ?? run.shape.run.status))
+  const collection = obj(run.shape.resultRaw)
+  const first = (collection.results || [])[0]
+  check('视频截取：产物视频已落盘', Boolean(first) && assetOnDisk(first.mediaPath), JSON.stringify(first && first.mediaPath))
+  if (first && assetOnDisk(first.mediaPath)) {
+    const seconds = probeDuration(path.join(DATA_DIR, first.mediaPath))
+    check('视频截取：产物时长不超过 4 秒的源片', seconds > 0.2 && seconds <= 4.2, `${seconds}s`)
+  }
+  const cards = await allCards()
+  const produced = cards.filter((c) => c.type === 'video-asset').length
+  check('视频截取：截出来的视频落成独立资产卡', produced >= 2, `${produced} 张视频资产卡`)
+  await shot('video-clip-output')
+}
+
+// ── 深度/白模视频（本地 CUDA 推理，VID-06/VID-07）──────────────────────────
+// 引擎只装在用户真实数据目录（ready.json + 5.8GB python-env + 116MB 权重），
+// 隔离数据目录不可能重装（要下载约 3.4GB CUDA 依赖）。这里用 NTFS junction 把
+// python-env 与 models 链进隔离目录、只复制轻量的 ready.json：主进程 runtimeReady()
+// 的每一项检查（ready.json 哈希、venv、权重字节数）照常生效，推理路径一字不改。
+const ENGINE_SOURCE = path.join(
+  process.env.APPDATA || '',
+  'canvas-studio',
+  'data',
+  'video-conversion'
+)
+
+/** 把已装好的推理引擎接进隔离数据目录；引擎缺失时返回 false（配方向上标 BLOCKED）。 */
+function linkVideoEngine() {
+  if (!fs.existsSync(path.join(ENGINE_SOURCE, 'ready.json'))) return false
+  const target = path.join(DATA_DIR, 'video-conversion')
+  fs.mkdirSync(target, { recursive: true })
+  for (const name of ['python-env', 'models']) {
+    const link = path.join(target, name)
+    if (!fs.existsSync(link)) fs.symlinkSync(path.join(ENGINE_SOURCE, name), link, 'junction')
+  }
+  fs.copyFileSync(path.join(ENGINE_SOURCE, 'ready.json'), path.join(target, 'ready.json'))
+  return true
+}
+
+/**
+ * ffprobe 产物体检：时长/编码/尺寸/体积一次量完，摘要原文进 check detail 当证据。
+ * 与 probeDuration 的区别：这里还核编码与分辨率上限，深度/白模的产物字节必须可解码。
+ */
+function probeVideoSummary(absFile) {
+  try {
+    const out = execFileSync('ffprobe', [
+      '-v', 'error', '-select_streams', 'v:0',
+      '-show_entries', 'stream=codec_name,width,height:format=duration,size',
+      '-of', 'default=noprint_wrappers=1', absFile
+    ]).toString()
+    const pick = (key) => new RegExp(`^${key}=(.*)$`, 'm').exec(out)?.[1] ?? ''
+    return {
+      codec: pick('codec_name'),
+      width: Number(pick('width')),
+      height: Number(pick('height')),
+      duration: Number(pick('duration')),
+      bytes: Number(pick('size')),
+      raw: out.trim().replace(/\n/g, ' ')
+    }
+  } catch (error) {
+    return {
+      codec: '', width: 0, height: 0, duration: -1, bytes: 0,
+      raw: `ffprobe 失败：${error.message}`
+    }
+  }
+}
+
+/**
+ * 深度/白模视频：同一源片的 out-video 分别独立接两个转换节点（FLOW-07 连法），
+ * 各跑一次真实 CUDA 本地推理；白模改浮雕强度后重跑，验证参数改变对应新产物（VID-07）。
+ */
+async function recipeVideoAi() {
+  // 引擎健康先行：健康检查不过就原样报 BLOCKED，不为过而放宽断言。
+  const linked = linkVideoEngine()
+  const health = await win.evaluate(async () => {
+    const response = await window.api.getVideoEngineStatus()
+    return response.ok ? response.data : { ready: false, message: response.error?.message }
+  })
+  check(
+    '深度/白模：本地推理引擎健康检查（ready.json 校验 + venv + 权重）',
+    linked && health.ready === true,
+    health.ready
+      ? `GPU=${health.gpuName || '未知'}｜引擎源=${ENGINE_SOURCE}`
+      : `BLOCKED：linked=${linked}｜${JSON.stringify(health)}`
+  )
+  if (!linked || !health.ready) {
+    throw new Error(`本地推理引擎未就绪，BLOCKED：${JSON.stringify(health)}`)
+  }
+
+  // 2 秒 50 帧的短样本：把本地推理墙钟压到最低，同时保留「解码 → 推理 → 编码」全链路。
+  const short = path.join(FIX_DIR, 'clip-2s.mp4')
+  if (!fs.existsSync(short)) {
+    execFileSync('ffmpeg', [
+      '-hide_banner', '-loglevel', 'error', '-y',
+      '-f', 'lavfi', '-i', 'testsrc2=size=320x240:rate=25:duration=2',
+      '-c:v', 'libx264', '-pix_fmt', 'yuv420p', short
+    ])
+  }
+  // 源片拖到网格行下方的空白处：端口被更上层卡片盖住（±12px 容差）时会整颗剔除，
+  // 源片卡若挤在两个转换节点中间，out-video 会被 slot 1 的白模卡遮挡而无法连线。
+  const { created } = await dropAsset(short, 'clip-2s.mp4', 'video/mp4', 470, 640)
+  check(
+    '深度/白模：拖入 2 秒 MP4 建出视频资产节点',
+    created.length === 1 && created[0].type === 'video-asset',
+    JSON.stringify(created)
+  )
+  const src = created[0]?.id
+  if (!src) throw new Error('视频资产卡未建立，后续连线无法进行')
+
+  const depth = await addNode('深度视频')
+  await checkPorts(depth, '深度视频', ['in-video'], ['out-video'])
+  const clay = await addNode('白模视频')
+  await checkPorts(clay, '白模视频', ['in-video'], ['out-video'])
+  const emptyDepth = await statusOf(depth)
+  const emptyClay = await statusOf(clay)
+  check(
+    '深度：未接源视频时按钮置灰并写明缺少输入',
+    emptyDepth.disabled === true && /缺少输入/.test(emptyDepth.aria),
+    emptyDepth.aria
+  )
+  check(
+    '白模：未接源视频时按钮置灰并写明缺少输入',
+    emptyClay.disabled === true && /缺少输入/.test(emptyClay.aria),
+    emptyClay.aria
+  )
+
+  // 两路转换各自独立接原片的 out-video，不是深度串白模。
+  check('深度：源视频 out-video → in-video 建连', await connect(src, 'out-video', depth, 'in-video'))
+  check('白模：同一 out-video → 白模 in-video 建连', await connect(src, 'out-video', clay, 'in-video'))
+
+  const knownVideoIds = await win.evaluate(
+    async ({ pid }) =>
+      (await window.api.listMedia(pid)).data.filter((x) => x.kind === 'video').map((x) => x.id),
+    { pid: projectId }
+  )
+
+  // 本地推理含模型加载，单次可能要几分钟：超时给足 12 分钟。
+  const depthStart = Date.now()
+  const rd = await runNode(depth, 12)
+  const depthSeconds = ((Date.now() - depthStart) / 1000).toFixed(1)
+  check(
+    '深度：本地推理运行成功',
+    rd.shape?.run?.status === 'success',
+    `耗时=${depthSeconds}s｜${JSON.stringify(rd.shape?.run ?? rd)}`
+  )
+  const depthResults = obj(rd.shape?.resultRaw).results || []
+  const depthItem = depthResults[0]
+  check(
+    '深度：产物视频已落库且文件在磁盘上',
+    Boolean(depthItem) && assetOnDisk(depthItem.mediaPath),
+    JSON.stringify(depthItem && depthItem.mediaPath)
+  )
+  if (depthItem && assetOnDisk(depthItem.mediaPath)) {
+    const probe = probeVideoSummary(path.join(DATA_DIR, depthItem.mediaPath))
+    check(
+      '深度：ffprobe 产物体检（可解码时长>0、h264、尺寸≤512 上限）',
+      probe.duration > 0.2 && probe.duration <= 3.5 && probe.codec === 'h264' &&
+        probe.width > 0 && probe.width <= 512 && probe.height > 0 && probe.height <= 512,
+      `耗时=${depthSeconds}s｜${probe.raw}｜体积=${probe.bytes}B`
+    )
+  }
+  const newAfterDepth = await win.evaluate(
+    async ({ pid, seen }) =>
+      (await window.api.listMedia(pid)).data.filter(
+        (x) => x.kind === 'video' && !seen.includes(x.id)
+      ),
+    { pid: projectId, seen: knownVideoIds }
+  )
+  check(
+    '深度：项目媒体表新增一份视频资产',
+    newAfterDepth.length === 1,
+    JSON.stringify(newAfterDepth.map((x) => ({ id: x.id, size: x.sizeBytes })))
+  )
+  check(
+    '深度：产物落成独立视频资产卡',
+    (await allCards()).filter((c) => c.type === 'video-asset').length >= 2,
+    `${(await allCards()).filter((c) => c.type === 'video-asset').length} 张视频资产卡`
+  )
+  await shot('video-ai-depth-output')
+
+  const clayStart = Date.now()
+  const rc = await runNode(clay, 12)
+  const claySeconds = ((Date.now() - clayStart) / 1000).toFixed(1)
+  check(
+    '白模：本地推理运行成功',
+    rc.shape?.run?.status === 'success',
+    `耗时=${claySeconds}s｜${JSON.stringify(rc.shape?.run ?? rc)}`
+  )
+  const clayResults = obj(rc.shape?.resultRaw).results || []
+  const clayItem = clayResults[0]
+  check(
+    '白模：产物视频已落库且文件在磁盘上',
+    Boolean(clayItem) && assetOnDisk(clayItem.mediaPath),
+    JSON.stringify(clayItem && clayItem.mediaPath)
+  )
+  if (clayItem && assetOnDisk(clayItem.mediaPath)) {
+    const probe = probeVideoSummary(path.join(DATA_DIR, clayItem.mediaPath))
+    check(
+      '白模：ffprobe 产物体检（可解码时长>0、h264、尺寸≤512 上限）',
+      probe.duration > 0.2 && probe.duration <= 3.5 && probe.codec === 'h264' &&
+        probe.width > 0 && probe.width <= 512 && probe.height > 0 && probe.height <= 512,
+      `耗时=${claySeconds}s｜${probe.raw}｜体积=${probe.bytes}B`
+    )
+  }
+  await shot('video-ai-clay-output')
+
+  // VID-07：改白模参数再跑一次，产物数量必须跟着变（像素差异不做强断言）。
+  // 参数在契约面板「设置」页的滑杆里：卡片说明按钮 → 设置页签 → 浮雕强度拉到上限。
+  const info = card(clay).locator('.node-info-btn')
+  await ensureClickable(info, '白模卡片说明按钮')
+  await info.click()
+  const panel = win.locator('.node-contract-panel')
+  await panel.waitFor({ timeout: 10_000 })
+  await panel.getByRole('tab', { name: '设置' }).click()
+  // 引擎状态条是异步读的，首轮渲染停在「正在读取本机推理环境…」，等它落到就绪态。
+  let engineReady = false
+  let engineText = ''
+  for (let i = 0; i < 20; i += 1) {
+    engineText = await win
+      .locator('.video-ai-engine-state')
+      .innerText()
+      .catch(() => '（无引擎状态条）')
+    if ((await win.locator('.video-ai-engine-state.is-ready').count()) === 1) {
+      engineReady = true
+      break
+    }
+    await win.waitForTimeout(500)
+  }
+  check('白模：设置页显示本地推理环境已就绪', engineReady, engineText)
+  const relief = win
+    .locator('label.video-ai-range', { hasText: /浮雕强度|立体程度/ })
+    .locator('input[type=range]')
+  await relief.waitFor({ timeout: 5_000 })
+  await relief.click()
+  await win.keyboard.press('End')
+  await win.waitForTimeout(600)
+  const clayConfigShape = await disk(clay, (s) => obj(s.config).reliefStrength === 5)
+  check(
+    '白模：浮雕强度改为 5 并已持久化到节点配置',
+    obj(clayConfigShape.config).reliefStrength === 5,
+    JSON.stringify(clayConfigShape.config)
+  )
+  const closePanel = win.getByRole('button', { name: '关闭节点说明面板' })
+  if (await closePanel.count()) await closePanel.click()
+  await win.waitForTimeout(400)
+
+  const clayStart2 = Date.now()
+  const rc2 = await runNode(clay, 12)
+  const claySeconds2 = ((Date.now() - clayStart2) / 1000).toFixed(1)
+  check(
+    '白模：改参数后再次运行成功',
+    rc2.shape?.run?.status === 'success',
+    `耗时=${claySeconds2}s｜${JSON.stringify(rc2.shape?.run ?? rc2)}`
+  )
+  const clayResults2 = obj(rc2.shape?.resultRaw).results || []
+  check(
+    '白模：参数改变产生了第二份独立产物',
+    clayResults2.length === 2 &&
+      clayResults2[0].mediaId !== clayResults2[1].mediaId &&
+      clayResults2.every((x) => assetOnDisk(x.mediaPath)),
+    JSON.stringify(clayResults2.map((x) => x.mediaPath))
+  )
+  if (clayResults2[1] && assetOnDisk(clayResults2[1].mediaPath)) {
+    const probe = probeVideoSummary(path.join(DATA_DIR, clayResults2[1].mediaPath))
+    check(
+      '白模：第二份产物 ffprobe 体检仍可通过',
+      probe.duration > 0.2 && probe.duration <= 3.5 && probe.codec === 'h264',
+      `耗时=${claySeconds2}s｜${probe.raw}`
+    )
+  }
+  check(
+    '白模：两次产物各落成独立资产卡',
+    (await allCards()).filter((c) => c.type === 'video-asset').length >= 4,
+    `${(await allCards()).filter((c) => c.type === 'video-asset').length} 张视频资产卡`
+  )
+  await shot('video-ai-clay-reconfigured')
+
+  await reload()
+  check(
+    '深度/白模：重载后两张转换节点卡片仍在',
+    (await win.locator('.type-video-depth').count()) >= 1 &&
+      (await win.locator('.type-video-clay').count()) >= 1,
+    `depth=${await win.locator('.type-video-depth').count()} clay=${await win.locator('.type-video-clay').count()}`
+  )
+  const depthAfter = await disk(depth)
+  check(
+    '深度：重载后运行记录与产物引用仍在',
+    depthAfter.run?.status === 'success' &&
+      assetOnDisk(obj(depthAfter.resultRaw).results?.[0]?.mediaPath),
+    JSON.stringify(obj(depthAfter.resultRaw).results?.[0]?.mediaPath)
+  )
+  const clayAfter = await disk(clay)
+  check(
+    '白模：重载后两份产物引用与改过的参数仍在',
+    (obj(clayAfter.resultRaw).results || []).length === 2 &&
+      obj(clayAfter.config).reliefStrength === 5,
+    JSON.stringify({ results: obj(clayAfter.resultRaw).results?.length, config: clayAfter.config })
+  )
+  await shot('video-ai-reload')
+}
+
+/** 音频资产 + 人声分离：音频卡由截取节点的 out-audio 产物建立。 */
+async function recipeAudio() {
+  const { run } = await runClipOnFixtureVideo()
+  const cards = await allCards()
+  const audio = cards.find((c) => c.type === 'audio')
+  check(
+    '音频：视频截取的音频产物建成独立音频资产卡',
+    Boolean(audio) && run.shape.run.status === 'success',
+    JSON.stringify({ types: cards.map((c) => c.type) })
+  )
+  if (!audio) return
+  await checkPorts(audio.id, '音频', [], ['out-audio'])
+  check('音频：卡片渲染出播放器', (await card(audio.id).locator('audio').count()) >= 1)
+  const shape = await disk(audio.id, (s) => Boolean(s.mediaPath))
+  check('音频：产物文件真的在磁盘上', assetOnDisk(shape.mediaPath), shape.mediaPath)
+  const r = await runNode(audio.id)
+  check('音频：运行后把自身音频交给下游', r.shape.run.status === 'success', JSON.stringify(r.shape.run.error ?? r.shape.run.status))
+
+  // 人声分离节点 2026-09-25 退役：新流程由视频操作在同一次任务内产出人声，
+  // 创建入口必须不再出现，否则用户会建出一个不再维护的节点。
+  check('人声分离：已退役节点不再出现在创建入口', await nodeButtonAbsent('人声分离'))
+  await shot('vocal-separate-retired')
+  await reload()
+  check('音频：源卡与产物卡重载后都还在', (await allCards()).filter((c) => c.type === 'audio').length >= 1, JSON.stringify((await allCards()).map((c) => c.type)))
+}
+
+/** 真音频 → 节点内参数 → FFmpeg 产物：同时验证倍率、目标秒数与静音。 */
+async function recipeSoundAdjust() {
+  await runClipOnFixtureVideo()
+  const audio = (await allCards()).find((item) => item.type === 'audio')
+  if (!audio) throw new Error('声音调整夹具未产出音频')
+  const source = await disk(audio.id)
+  const duration = probeDuration(path.join(DATA_DIR, source.mediaPath))
+  const adjust = await addNode('声音调整')
+  check('声音调整：未连线不显示假引用', !(await card(adjust).innerText()).includes('源音频'))
+  check('声音调整：真实音频可以连接', await connect(audio.id, 'out-audio', adjust, 'in-audio'))
+  await card(adjust).getByLabel('播放倍率', { exact: true }).fill('2')
+  await card(adjust).getByLabel('声量（%）', { exact: true }).fill('0')
+  await card(adjust).getByRole('button', { name: '保存调整参数' }).click()
+  const first = await runNode(adjust)
+  check('声音调整：2倍速静音运行成功', first.shape.run.status === 'success', first.shape.run.error)
+  const result = obj(first.shape.resultRaw)
+  const asset = result.results?.find((item) => item.mediaId === result.selectedMediaId)?.mediaPath
+  check('声音调整：2倍速产物真实落盘且时长减半', assetOnDisk(asset) && Math.abs(probeDuration(path.join(DATA_DIR, asset)) - duration / 2) < 0.15, asset)
+  // volumedetect 将数字零也量成 -91dB；检查解码 PCM 的实际样本，而非错误期望 -Infinity。
+  const samples = execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', path.join(DATA_DIR, asset), '-f', 's16le', '-acodec', 'pcm_s16le', '-'])
+  check('声音调整：0% 产物实际静音', samples.length > 0 && samples.every(byte => byte === 0))
+  await card(adjust).getByRole('button', { name: '按目标秒数', exact: true }).click()
+  await card(adjust).getByLabel('目标时长（秒）', { exact: true }).fill(String(duration))
+  await card(adjust).getByLabel('声量（%）', { exact: true }).fill('100')
+  await card(adjust).getByRole('button', { name: '保存调整参数' }).click()
+  const second = await runNode(adjust)
+  check('声音调整：目标秒数运行成功', second.shape.run.status === 'success', second.shape.run.error)
+  const secondResult = obj(second.shape.resultRaw)
+  const secondAsset = secondResult.results?.find((item) => item.mediaId === secondResult.selectedMediaId)?.mediaPath
+  check('声音调整：目标时长产物可探测', assetOnDisk(secondAsset) && Math.abs(probeDuration(path.join(DATA_DIR, secondAsset)) - duration) < 0.15, secondAsset)
+  check('声音调整：100% 产物恢复原声量', Math.abs(probePeakDb(path.join(DATA_DIR, secondAsset)) - probePeakDb(path.join(DATA_DIR, source.mediaPath))) < 2)
+  await reload()
+  check('声音调整：参数与产物重载恢复', (await disk(adjust)).config.mode === 'duration' && assetOnDisk(secondAsset))
+  await shot('sound-adjust-reload')
+}
+
+/** 网址配置通过正常设置侧栏验证；不把系统浏览器行为当作网络成功。 */
+async function recipeWebsite() {
+  const website = await addNode('网址节点')
+  await card(website).getByRole('button', { name: '配置网址', exact: true }).click()
+  const panel = win.locator('.website-settings')
+  await panel.getByLabel('名称', { exact: true }).fill('验收网址')
+  for (const invalid of ['javascript:alert(1)', 'https://user:password@example.com']) {
+    await panel.getByLabel('网址', { exact: true }).fill(invalid)
+    await panel.getByRole('button', { name: '保存网址' }).click()
+    check('网址：非法协议或凭据在保存前拦截', /有效的 HTTP/.test(await panel.getByRole('alert').innerText()))
+  }
+  await panel.getByLabel('网址', { exact: true }).fill('example.com')
+  await panel.getByRole('button', { name: '保存网址' }).click()
+  await win.keyboard.press('Escape')
+  check('网址：保存时自动补齐 HTTPS', (await disk(website)).config.url === 'https://example.com/')
+  await reload()
+  check('网址：名称和网址重载后可辨认', /验收网址/.test(await card(website).innerText()) && (await card(website).getByRole('button', { name: '打开网址', exact: true }).count()) === 1)
+  await shot('website-reload')
+}
+
+/** 导演台：卡片摘要 → 打开预演台 → 发布当前帧 → 产物与漂移状态 → 重载。 */
+async function recipeDirector() {
+  const d = await addNode('3D 预演台')
+  await checkPorts(d, '导演台', ['in-storyboard'], ['out-frame'])
+  const summary = await card(d).innerText()
+  check('导演台：卡片未发布时说清当前状态', /尚未发布|已发布/.test(summary), summary.replace(/\n+/g, ' / ').slice(0, 120))
+  const st = await statusOf(d)
+  check('导演台：没发布输出时状态灯说「等待发布」而不是「可运行」', /等待发布|已发布/.test(st.aria), st.aria)
+
+  const open = card(d).getByRole('button', { name: /打开 3D 预演台/ })
+  await ensureClickable(open, '打开 3D 预演台 按钮')
+  await open.click()
+  const panel = win.locator('.director-studio')
+  await panel.waitFor({ timeout: 20000 })
+  check('导演台：预演台以对话框打开', (await win.locator('[role="dialog"][aria-label="3D 预演台"]').count()) === 1)
+  await shot('director-opened')
+
+  await win.locator('button[aria-label="发布当前预演帧"]').click()
+  let note = ''
+  for (let i = 0; i < 25; i += 1) {
+    await win.waitForTimeout(800)
+    note = await win.locator('.global-toast').innerText().catch(() => '')
+    if (note.trim()) break
+  }
+  check('导演台：发布当前帧给出明确结果', /已发布/.test(note), note.trim())
+  const shape = await disk(d, (s) => Boolean(s.resultRaw))
+  check('导演台：发布记录写进 meta.nodeResult', Boolean(shape.resultRaw), JSON.stringify(shape.resultRaw).slice(0, 120))
+
+  // 发布的帧不自动长卡，而是作为 out-frame 端口供下游取用——那就让裁剪节点真去吃它。
+  const close = win.locator('button[aria-label="关闭 3D 预演台"]')
+  if (await close.count()) await close.click()
+  else await win.keyboard.press('Escape')
+  await win.locator('.director-studio').waitFor({ state: 'detached', timeout: 10000 })
+  const crop = await addNode('裁剪')
+  check('导演台：out-frame → 裁剪 in-image 建连', await connect(d, 'out-frame', crop, 'in-image'))
+  const cropped = await runNode(crop)
+  check(
+    '导演台：发布的帧能被下游节点当真实图片消费',
+    cropped.shape.run.status === 'success',
+    JSON.stringify(cropped.shape.run.error ?? cropped.shape.run.status)
+  )
+  const images = await win.evaluate(
+    async ({ pid }) => (await window.api.listMedia(pid)).data.filter((x) => x.kind === 'image').length,
+    { pid: projectId }
+  )
+  check('导演台：帧与裁剪产物都进了项目图片资产', images >= 2, `${images} 张`)
+  await reload()
+  const after = await disk(d)
+  check('导演台：重载后发布记录仍在', Boolean(after.resultRaw))
+  const reloaded = (await card(d).innerText()).replace(/\n+/g, ' / ')
+  check(
+    '导演台：重载后卡片说「当前镜头已发布」，不谎报成另一个镜头',
+    /已发布/.test(reloaded) && !/另一个镜头|尚未发布/.test(reloaded),
+    reloaded.slice(0, 140)
+  )
+  await shot('director-reload')
+}
+
+/** ffprobe 量真实时长（只用于产物字节，不用于任何界面断言）。 */
+function probePeakDb(absFile) {
+  const result = spawnSync('ffmpeg', ['-hide_banner', '-i', absFile, '-af', 'volumedetect', '-f', 'null', '-'], { encoding: 'utf8' })
+  if (result.status !== 0) throw new Error('声量探测失败')
+  const match = /max_volume:\s*(-inf|[-\d.]+) dB/.exec(result.stderr)
+  if (!match) throw new Error('声量探测没有峰值')
+  return match[1] === '-inf' ? -Infinity : Number(match[1])
+}
+
+function probeDuration(absFile) {
+  try {
+    const out = execFileSync('ffprobe', [
+      '-v', 'error', '-show_entries', 'format=duration',
+      '-of', 'default=noprint_wrappers=1', absFile
+    ]).toString()
+    return Number(/duration=([\d.]+)/.exec(out)?.[1] ?? '0')
+  } catch (error) {
+    log('ffprobe 失败', error.message)
+    return -1
+  }
+}
+
+/** 等整条工作流回到空闲（顶栏重新出现「运行」，停止按钮消失）。 */
+async function waitWorkflowIdle(rounds = 60) {
+  for (let i = 0; i < rounds; i += 1) {
+    if ((await win.getByRole('button', { name: '运行', exact: true }).count()) === 1) return true
+    await win.waitForTimeout(500)
+  }
+  return false
+}
+
+/** §8 P3：工作流跑一半停止 → 续跑复用已完成项 → 关掉进程重开恢复。 */
+async function recipeCancelResume() {
+  const TOTAL = 4
+  // 每项一个 2 秒忙等的代码节点：单项远低于代码运行的 10 秒上限，整轮却够长，能在中途停下。
+  const list = await addNode('结构数据')
+  await pickOption(card(list).locator('button[aria-label="结构 Schema"]'), '对象列表')
+  await win.waitForTimeout(500)
+  await editCodeLike(
+    list,
+    '输入 JSON',
+    JSON.stringify(Array.from({ length: TOTAL }, (_, i) => ({ id: `s${i + 1 }` })))
+  )
+  const loop = await addNode('循环')
+  check('停止续跑：结构数据可接入 in-list', await connect(list, 'out-json', loop, 'in-list'))
+  const body = await addNode('代码')
+  await editCodeLike(
+    body,
+    '编写代码',
+    'async function main(args) {\n  await new Promise((resolve) => setTimeout(resolve, 2000))\n  return { ok: true }\n}'
+  )
+  check('停止续跑：out-item 接进循环体', await connect(loop, 'out-item', body, 'in-json'))
+
+  const runAll = win.getByRole('button', { name: '运行', exact: true })
+  await ensureClickable(runAll, '顶栏运行工作流')
+  await runAll.click()
+  let progressSeen = false
+  for (let i = 0; i < 40; i += 1) {
+    if (await win.locator('.engine-progress-text').count()) {
+      progressSeen = true
+      break
+    }
+    await win.waitForTimeout(100)
+  }
+  check(
+    '停止续跑：点「运行」后顶栏真的进入运行态',
+    progressSeen,
+    `顶栏文案：${await win.locator('.engine-controls').innerText().catch(() => '（无）')}｜循环运行记录：${JSON.stringify((await disk(loop)).run)}`
+  )
+  if (!progressSeen) {
+    log(
+      '带「运行」字样的按钮：',
+      JSON.stringify(
+        await win.evaluate(() =>
+          Array.from(document.querySelectorAll('button'))
+            .filter((b) => (b.textContent || '').includes('运行'))
+            .map((b) => `${b.className}#${(b.textContent || '').trim()}#${b.closest('.engine-controls') ? 'topbar' : b.closest('.canvas-dock') ? 'dock' : 'other'}`)
+        )
+      )
+    )
+    await shot('p3-no-run-state')
+    return
+  }
+  // 单项 2 秒：等 4.5 秒再停，让前 1~2 项真正跑完，续跑时才有「复用」可验。
+  await win.waitForTimeout(4500)
+  const stop = win.getByRole('button', { name: '停止', exact: true })
+  check('停止续跑：运行中顶栏出现可点的停止按钮', (await stop.count()) === 1)
+  await stop.click()
+  check('停止续跑：工作流能回到空闲（不是停不下来）', await waitWorkflowIdle())
+  // 停止之后节点必须落定：自动保存有防抖，等它写完再判定，别把「还没落盘」当成「卡住」。
+  const stoppedShape = await disk(loop, (s) => s.run.status !== 'running')
+  const stoppedProgress = obj(stoppedShape.resultRaw).progress || {}
+  check(
+    '停止续跑：停止后循环节点落定，不留在执行中',
+    stoppedShape.run.status !== 'running',
+    JSON.stringify({ status: stoppedShape.run.status, error: stoppedShape.run.error })
+  )
+  check(
+    '停止续跑：停止时确实有项没跑完（不是跑完才返回）',
+    stoppedProgress.skipped > 0 && stoppedProgress.done < TOTAL,
+    JSON.stringify(stoppedProgress)
+  )
+  check(
+    '停止续跑：被中止的这一轮不记成成功',
+    stoppedShape.run.status !== 'success',
+    JSON.stringify({ status: stoppedShape.run.status, error: stoppedShape.run.error })
+  )
+  await shot('cancel-mid-run')
+
+  // 续跑：只补未完成项，已完成的必须复用而不是重跑
+  // 运行策略是 iterate-config 里的第二个 AppSelect（上限是数字输入，之后依次为 运行/失败时）。
+  const runModeSelect = card(loop).locator('.iterate-config .app-select-trigger').first()
+  await pickOption(runModeSelect, '续跑未完成')
+  await win.waitForTimeout(900)
+  check(
+    '停止续跑：运行策略下拉能切到「续跑未完成」',
+    (await runModeSelect.innerText()).includes('续跑未完成'),
+    await runModeSelect.innerText()
+  )
+  await runAll.click()
+  await win.waitForTimeout(1000)
+  check('停止续跑：续跑能跑到收尾', await waitWorkflowIdle(120))
+  const resumedShape = await disk(loop, (s) => s.run.status !== 'running')
+  const resumedItems = obj(resumedShape.resultRaw).items || []
+  const resumed = obj(resumedShape.resultRaw).progress || {}
+  // 复用过的项保留自己的 status:'reused'，所以「补完」= 每项都是 done 或 reused，而不是全是 done。
+  const finished = resumedItems.filter((item) => item.status === 'done' || item.status === 'reused')
+  check(
+    '停止续跑：续跑把每一项都补完',
+    finished.length === TOTAL && resumed.pending === 0,
+    JSON.stringify({ statuses: resumedItems.map((item) => item.status), progress: resumed })
+  )
+  check(
+    '停止续跑：上一轮已成功的项被复用而不是重跑',
+    resumed.reused > 0 && resumed.done + resumed.reused === TOTAL,
+    JSON.stringify(resumed)
+  )
+  await shot('resume-after-cancel')
+
+  await restartApp()
+  // 重启后相机可能停在别处，卡片没进视口就不会渲染 DOM——先适配画布再读界面。
+  if (!(await win.locator(`.node-card-wrap[data-node-id="${loop}"]`).count())) {
+    const fit = win.getByRole('button', { name: '适配画布（缩放到所有节点）', exact: true })
+    if (await fit.count()) {
+      await fit.click()
+      await win.waitForTimeout(1500)
+    }
+  }
+  const after = obj((await disk(loop)).resultRaw)
+  check(
+    '重启恢复：逐项结果全部回来',
+    (after.items || []).length === TOTAL,
+    `${(after.items || []).length} / ${TOTAL} 条`
+  )
+  const loopText = await card(loop).innerText()
+  check(
+    '重启恢复：卡片仍显示满进度',
+    loopText.includes(`${TOTAL}/${TOTAL}`),
+    loopText.replace(/\n+/g, ' / ').slice(0, 180)
+  )
+  check(
+    '重启恢复：循环体节点的运行结果仍在磁盘上',
+    Boolean((await disk(body)).resultRaw),
+    JSON.stringify((await disk(body)).resultRaw).slice(0, 80)
+  )
+  await shot('restart-recovered')
+}
+
+
+async function recipeAiReal(type) {
+ const providers=await win.evaluate(async()=>{const s=(await import('/src/stores/gateway.ts')).useGatewayStore; await s.getState().load(); return s.getState().providers.map(p=>({id:p.id,specId:p.specId,models:p.models}))})
+ const source=await addNode('文本'); await setText(source, type==='speech'?'这是语音合成节点的功能测试。':'请将内容简洁改写成一句话。')
+ const label=type==='speech'?'语音合成':'AI 处理'
+ const node=await addNode(label)
+ const provider=providers.find(p=>type==='speech'?p.specId==='minimax'&&p.models.some(m=>m.modality==='audio'):p.models.some(m=>m.id==='glm-5.3-flash'))
+ if(!provider) throw new Error('未找到对应测试供应商')
+ const model=provider.models.find(m=>type==='speech'?m.modality==='audio':m.id==='glm-5.3-flash')
+ const config=type==='speech'?{providerId:provider.id,modelId:model.id,backend:'minimax'}:{modelKey:`${provider.id}::${model.id}`,mode:'text',maxTokens:256}
+ await win.evaluate(async({id,config})=>{const editor=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor; editor.updateShape({id,type:'node-card',props:{config:JSON.stringify(config),text:''}})},{id:node,config})
+ check(label+' 文本连线',await connect(source,'out-text',node,'in-text'))
+ const result=await runNode(node,3); const shape=result.shape
+ check(label+' 真实运行',shape?.run?.status==='success',JSON.stringify(shape?.run?.error||shape?.run?.reason||shape?.run?.status))
+ const data=obj(shape?.resultRaw)
+ if(type==='speech') {const file=(data.results||[])[0]?.mediaPath;check(label+' 音频落盘',assetOnDisk(file),file)} else check(label+' 有实际输出',Boolean(shape?.resultRaw),JSON.stringify(data).slice(0,250))
+ await shot('live-'+type); await reload(); const restored=await disk(node); check(label+' 运行重载',restored?.run?.status==='success'&&Boolean(restored.resultRaw))
+}
+
+
+async function recipeVoiceDesignReal() {
+ const providers=await win.evaluate(async()=>{const store=(await import('/src/stores/gateway.ts')).useGatewayStore;await store.getState().load();return store.getState().providers})
+ const provider=providers.find(p=>p.specId==='minimax'&&p.models.some(m=>m.modality==='audio'))
+ if(!provider)throw new Error('未找到 MiniMax 测试供应商')
+ const model=provider.models.find(m=>m.modality==='audio'&&(!m.operations||m.operations.includes('voice.design'))) || provider.models.find(m=>m.modality==='audio')
+ const voice=await addNode('音色设计')
+ await win.evaluate(async({id,providerId,modelId})=>{const ed=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;ed.updateShape({id,type:'node-card',props:{config:JSON.stringify({providerId,modelId,previewText:'你好，这是测试语音。'}),text:'温和清晰的中文女声，语速平稳'}})},{id:voice,providerId:provider.id,modelId:model.id})
+ const first=await runNode(voice,3)
+ check('音色设计真实运行',first.shape?.run?.status==='success',JSON.stringify(first.shape?.run?.error||first.shape?.run?.reason||first.shape?.run?.status))
+ if(first.shape?.run?.status!=='success')return
+ const speech=await addNode('语音合成')
+ await win.evaluate(async({id,providerId,modelId})=>{const ed=(await import('/src/stores/editor.ts')).useEditorStore.getState().editor;ed.updateShape({id,type:'node-card',props:{config:JSON.stringify({providerId,modelId,backend:'minimax'}),text:'这是一段测试语音。'}})},{id:speech,providerId:provider.id,modelId:model.id})
+ check('音色设计连语音合成',await connect(voice,'out-json',speech,'in-voice'))
+ const second=await runNode(speech,3); check('设计音色真实合成',second.shape?.run?.status==='success',JSON.stringify(second.shape?.run?.error||second.shape?.run?.reason||second.shape?.run?.status))
+ const file=(obj(second.shape?.resultRaw).results||[])[0]?.mediaPath; check('设计音色合成落盘',assetOnDisk(file),file)
+ await reload(); const a=await disk(voice),b=await disk(speech);check('音色设计和合成重载',a?.run?.status==='success'&&b?.run?.status==='success')
+}
+
+const RECIPES = [
+ ['design-live','音色设计真实流程',recipeVoiceDesignReal],
+ ['speech-live','真实语音合成',()=>recipeAiReal('speech')],
+ ['ai-live','真实 AI 处理',()=>recipeAiReal('ai-process')],
+  ['text', '文本', recipeText],
+  ['json', 'JSON', recipeJson],
+  ['processor', '处理', recipeProcessor],
+  ['storyboard', '分镜板', recipeStoryboard],
+  ['structured', '结构数据', recipeStructured],
+  ['iterate', '循环', recipeIterate],
+  ['code', '代码', recipeCode],
+  ['image', '图片', recipeImage],
+  ['split', '图片拆分', recipeSplit],
+  ['file', '文件', recipeFile],
+  ['documents', '文档逐格式抽取', recipeDocuments],
+  ['video-asset', '视频资产', recipeVideoAsset],
+  ['video-frame', '视频取帧', recipeVideoFrame],
+  ['video-clip', '视频截取', recipeVideoClip],
+  ['video-ai', '深度/白模', recipeVideoAi],
+  ['audio', '音频 + 人声分离', recipeAudio],
+  ['sound-adjust', '声音调整', recipeSoundAdjust],
+  ['website', '网址', recipeWebsite],
+  ['director', '导演台', recipeDirector],
+  ['p3', '停止续跑与重启恢复', recipeCancelResume]
+]
+
+async function main() {
+  fs.mkdirSync(DATA_DIR, { recursive: true })
+  fs.mkdirSync(SHOT_DIR, { recursive: true })
+  FIX = makeFixtures()
+  log('数据目录（与用户真实库隔离）', DATA_DIR)
+  await launchApp()
+  // 首条配方自己会建项目；这里只确认落地页可用。
+  await win.locator('.node-palette').or(win.getByRole('button', {name:'新建项目',exact:true})).first().waitFor({timeout:30000})
+  if (await win.locator('.node-palette').isVisible().catch(()=>false)) await win.getByRole('button', {name:'回到主页',exact:true}).click()
+  await win.getByRole('button', { name: '新建项目' }).waitFor({ timeout: 30000 })
+  check('全新数据目录进入项目列表页', true, DATA_DIR)
+
+  for (const [key, label, fn] of RECIPES) {
+    if (SELECTED.length && !SELECTED.includes(key)) continue
+    log(`---- ${label} ----`)
+    try {
+      await freshProject(key)
+      await fn()
+    } catch (error) {
+      check(`${label}：配方执行未中断`, false, error.message)
+      await shot(`${key}-aborted`)
+    }
+  }
+  // 已知未修：tldraw 把默认字体/图片资源指向 cdn.tldraw.com，桌面离线（且 CSP 受限）时
+  // 会反复抛「The source image cannot be decoded」和「Failed to fetch」。
+  // 它们与节点无关、也不影响本矩阵的断言，另计一条并留在日志里（见 §7.9），
+  // 但不能混进「未预期异常」，否则这条门禁就永远是红的、盖住真正的新异常。
+  const KNOWN = [/source image cannot be decoded/, /^Failed to fetch$/]
+  const knownErrors = new Map()
+  const unexpected = new Map()
+  for (const [msg, n] of pageErrors) {
+    if (KNOWN.some((re) => re.test(msg))) knownErrors.set(msg, n)
+    else unexpected.set(msg, n)
+  }
+  check(
+    '整轮没有未预期的前端异常',
+    unexpected.size === 0,
+    Array.from(unexpected)
+      .map(([m, n]) => `${n}× ${m}`)
+      .join(' | ')
+  )
+  if (knownErrors.size) {
+    log('已知未修的前端异常（另计，见 §7.9）：')
+    for (const [m, n] of knownErrors) log(`  ${n}× ${m}`)
+  }
+  await app.close()
+}
+
+main()
+  .then(() => {
+    const failed = results.filter((r) => !r.ok)
+    if (RESULT_FILE) {
+      fs.mkdirSync(path.dirname(RESULT_FILE), { recursive: true })
+      fs.writeFileSync(
+        RESULT_FILE,
+        JSON.stringify(
+          {
+            passed: results.length - failed.length,
+            failed: failed.length,
+            total: results.length,
+            results,
+            dataDir: DATA_DIR,
+            shotDir: SHOT_DIR
+          },
+          null,
+          2
+        ) + '\n'
+      )
+    }
+    console.log('\n==== 节点操作矩阵 SUMMARY ====')
+    for (const r of results) console.log(`${r.ok ? 'PASS' : 'FAIL'} | ${r.name} | ${r.detail}`)
+    if (pageErrors.size) {
+      console.log('\n---- 未捕获的前端异常（去重计数）----')
+      for (const [msg, n] of pageErrors) {
+        console.log(`${n}× ${msg}`)
+        console.log(firstStack.get(msg))
+      }
+    }
+    console.log(`\n${results.length - failed.length}/${results.length} passed · ${SHOT_DIR}`)
+    process.exit(failed.length ? 1 : 0)
+  })
+  .catch((e) => {
+    console.log('\n==== SUMMARY（异常中断）====')
+    for (const r of results) console.log(`${r.ok ? 'PASS' : 'FAIL'} | ${r.name} | ${r.detail}`)
+    for (const [msg, n] of pageErrors) console.log(`${n}× 未捕获异常 ${msg}`)
+    console.error('[matrix] ABORT:', e.stack || e.message)
+    process.exit(2)
+  })

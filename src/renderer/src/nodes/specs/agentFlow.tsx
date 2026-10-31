@@ -71,6 +71,7 @@ function configOf(shape: NodeBodyProps['shape']): Record<string, unknown> {
 }
 function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
+  const [selectedEvent, setSelectedEvent] = useState('')
   const config = configOf(shape)
   const agent = shape.props.nodeType === 'agent'
   const review = shape.props.nodeType === 'ai-review'
@@ -117,6 +118,8 @@ function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
         )
       : []
     const nextRevision = instance?.revision ?? 1
+    const eventOptions = [...new Set(legalEvents.map((item) => item.event))]
+    const chosenEvent = eventOptions.includes(selectedEvent) ? selectedEvent : eventOptions[0]
     return (
       <div className="agent-flow-body">
         <NodeIdentity>
@@ -144,10 +147,19 @@ function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
             </p>
           )}
         </NodeIdentity>
-        {legalEvents.length > 0 && (
+        {eventOptions.length > 1 && (
+          <AppSelect
+            aria-label="选择状态机事件"
+            value={chosenEvent}
+            onChange={(event) => setSelectedEvent(event.currentTarget.value)}
+          >
+            {eventOptions.map((event) => <option key={event} value={event}>{event}</option>)}
+          </AppSelect>
+        )}
+        {eventOptions.length > 0 && (
           <NodePrimaryButton
             onClick={async () => {
-              const event = legalEvents[0]?.event
+              const event = chosenEvent
               if (!event) return
               editor.updateShape({
                 id: shape.id,
@@ -164,7 +176,7 @@ function AgentFlowBody({ shape }: NodeBodyProps): React.JSX.Element {
               markUndoPoint(editor, 'state-machine-submit-event')
             }}
           >
-            提交事件「{legalEvents[0]?.event}」
+            提交事件「{chosenEvent}」
           </NodePrimaryButton>
         )}
         {instance && (

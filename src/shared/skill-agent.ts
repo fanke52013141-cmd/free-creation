@@ -16,6 +16,14 @@ export const SkillAgentConfigSchema = z
   })
 export type SkillAgentConfig = z.infer<typeof SkillAgentConfigSchema>
 export const SKILL_AGENT_TOOLS = [{ id: 'skill.read-resource', version: '1' }]
+/** 出厂内置技能 id 清单（内容技能 + 流程示范包）；列表 UI 用「内置」徽标区分用户上传。 */
+export const BUILTIN_SKILL_IDS: ReadonlySet<string> = new Set([
+  'content-analysis',
+  'content-organize',
+  'material-analysis',
+  'json-organize',
+  'result-check'
+])
 export const BUILTIN_CONTENT_SKILLS: SkillPackage[] = [
   {
     schemaVersion: 1,

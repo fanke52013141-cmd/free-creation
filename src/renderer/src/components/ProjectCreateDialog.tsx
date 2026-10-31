@@ -156,7 +156,7 @@ export function ProjectCreateDialog({
         <header className="project-create-header">
           <div className="project-create-heading">
             <span className="project-create-brand-icon" aria-hidden="true">
-              <Icon name="layers" size={18} />
+              <Icon name="folder" size={18} />
             </span>
             <div>
               <h2>{title}</h2>
@@ -177,10 +177,7 @@ export function ProjectCreateDialog({
           <div className="project-create-top-config">
             {nameRequired && (
               <label className="project-create-name" htmlFor={nameInputId}>
-                <span>
-                  <Icon name="edit" size={15} />
-                  <span>项目名称</span>
-                </span>
+                <span>项目名称</span>
                 <input
                   id={nameInputId}
                   autoFocus
@@ -194,17 +191,38 @@ export function ProjectCreateDialog({
                 />
               </label>
             )}
-            {showNodeConfig && (
-              <button
-                type="button"
-                className="project-create-config-toggle"
-                aria-expanded="true"
-                onClick={() => setShowNodeConfig(false)}
+            <button
+              type="button"
+              className="project-create-config-toggle"
+              aria-expanded={showNodeConfig}
+              onClick={() => setShowNodeConfig((current) => !current)}
+            >
+              <span className="project-create-config-icon">
+                <Icon name="settings" size={16} />
+              </span>
+              <span className="project-create-config-copy">
+                <strong>高级：自定义可见工具</strong>
+                <span>
+                  {showNodeConfig
+                    ? `当前 ${selected.size} 项已选，创建后可随时调整`
+                    : `默认沿用上次配置 · 当前 ${selected.size} 项`}
+                </span>
+              </span>
+              <svg
+                className="project-create-config-chevron"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
               >
-                <Icon name="minimap" size={14} />
-                收起工具配置（当前 {selected.size} 项已选，创建后可随时调整）
-              </button>
-            )}
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </button>
             {showNodeConfig && (
               <label className="project-create-search" htmlFor={searchInputId}>
                 <span>
@@ -311,18 +329,6 @@ export function ProjectCreateDialog({
                 </p>
               )}
             </>
-          )}
-          {showNodeConfig || (
-            <button
-              type="button"
-              className="project-create-config-toggle"
-              aria-expanded="false"
-              onClick={() => setShowNodeConfig(true)}
-              style={{ marginTop: 10 }}
-            >
-              <Icon name="settings" size={14} />
-              高级：自定义可见工具（默认沿用上次配置，当前 {selected.size} 项）
-            </button>
           )}
         </div>
 

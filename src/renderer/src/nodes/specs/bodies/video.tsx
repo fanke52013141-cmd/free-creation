@@ -475,6 +475,9 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
 
   return (
     <div className="gen-panel video-gen-panel">
+      {opt?.provider.specId === 'dreamina' && audioReferences.length > 0 && (
+        <p className="gen-capability-note">即梦参考音频须为 2–30 秒，提交前会检查时长。</p>
+      )}
       {capabilityIssues.length > 0 && (
         <div className="gen-capability-note capability-error" role="alert">
           <Icon name="info" size={13} />

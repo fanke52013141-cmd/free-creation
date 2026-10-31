@@ -940,7 +940,6 @@ export function VideoOperationsWorkbench({
                       onSeeked={(event) => {
                         const timeMs = Math.round(event.currentTarget.currentTime * 1000)
                         setCurrentTimeMs(timeMs)
-                        if (mode === 'frame') savePoint(timeMs)
                       }}
                       onVolumeChange={(event) => {
                         setVolume(event.currentTarget.volume)
@@ -1303,6 +1302,11 @@ export function VideoOperationsWorkbench({
                         ))}
                       </div>
                     </div>
+                  )}
+                  {clipOutput !== 'audio-only' && clipCfg.quality === 'fast' && (
+                    <p className="node-wiring">
+                      快速复制按关键帧截取，起止位置可能偏移；需要精确区间请选择平衡或高质量。
+                    </p>
                   )}
                   {clipOutput !== 'video-only' && (
                     <>
