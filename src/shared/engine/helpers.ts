@@ -147,6 +147,7 @@ export function promptBundleText(value: unknown): string {
 export interface ChatInput {
   providerId: string
   modelId: string
+  projectId?: string
   system?: string
   messages: ChatMessage[]
   temperature?: number

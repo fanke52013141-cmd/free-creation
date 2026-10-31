@@ -85,7 +85,7 @@ function messagesFrom(value: unknown): ChatMessage[] {
       ...(message.role === 'user' && message.intent === 'image'
         ? { intent: 'image' as const }
         : {}),
-      ...(message.role === 'assistant' && Array.isArray(message.images)
+      ...(Array.isArray(message.images)
         ? {
             images: message.images.flatMap((item: unknown) => {
               if (!item || typeof item !== 'object') return []

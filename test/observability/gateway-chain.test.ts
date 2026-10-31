@@ -355,4 +355,14 @@ describe('生图 TOAPIS 链路 task/media 事件（L03）', () => {
     expect(failed!.error?.code).toBe('UPSTREAM_FAILED')
     expect(failed!.error?.retryable).toBe(true)
   })
+
+  it('生图失败诊断不会记录带历史上下文的提示词', async () => {
+    const { generateImageToAsset } = await import('../../src/main/gateway/image')
+    const input = { ...imageInput(), prompt: '历史私有内容 与 本次生图要求' }
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(500, JSON.stringify({ error: input.prompt }))))
+    await expect(generateImageToAsset(input)).rejects.toThrow()
+    expect(events.some((event) => event.event === 'model.request.failed')).toBe(true)
+    expect(JSON.stringify(events)).not.toContain(input.prompt)
+    expect(JSON.stringify(events)).not.toContain('历史私有内容')
+  })
 })

@@ -31,6 +31,30 @@ function effectiveSystem(data: ReturnType<typeof parseChat>): string {
   return sections.filter(Boolean).join('\n\n')
 }
 
+/** Explicit image mode uses a text-to-image endpoint, so include the active
+ * conversation as text rather than relying on a tool-calling model to do it. */
+function imagePromptWithContext(
+  data: ReturnType<typeof parseChat>,
+  instructions: string,
+  limit = 32000
+): string | null {
+  const current = data.messages.at(-1)?.content.trim() ?? ''
+  const base = [instructions, current].filter(Boolean).join('\n\n')
+  if (base.length > limit) return null
+  const history = data.messages
+    .slice(0, -1)
+    .filter((message) => message.content.trim())
+    .map((message) => `${message.role === 'user' ? '用户' : 'AI'}：${message.content.trim()}`)
+    .join('\n\n')
+  const context = [effectiveSystem(data), history].filter(Boolean).join('\n\n')
+  if (!context) return base
+  const prefix = '以下是当前会话的背景，结合背景理解本次绘图要求：\n'
+  const suffix = '\n\n本次绘图要求：\n'
+  const available = limit - base.length - prefix.length - suffix.length
+  if (available <= 0) return base
+  return `${prefix}${context.slice(-available)}${suffix}${base}`
+}
+
 export const chatExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
   const savedData = parseChat(ctx.shape.props.text)
   let agent: SkillAgentConfig
@@ -50,22 +74,27 @@ export const chatExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecu
   const data = {
     ...savedData,
     messages: activeConversation.messages,
-    summary: activeConversation.summary ?? savedData.summary ?? ''
+    summary:
+      activeConversation.summary ??
+      (savedData.conversations?.length ? '' : (savedData.summary ?? ''))
   }
   const pendingImage =
     data.messages.at(-1)?.role === 'user' && data.messages.at(-1)?.intent === 'image'
   // Explicit skill entry works even when the text provider lacks tool calling.
   if (pendingImage) {
+    if (data.messages.at(-1)?.images?.length)
+      return {
+        status: 'failed',
+        reason: '生图模式暂不支持图片附件，请先用对话模式分析图片',
+        diagnosticPhase: 'input'
+      }
     const resolved = await resolveChatImageTarget(ctx, data)
     if (!resolved) return { status: 'skipped', reason: '请启用生图技能并选择已验证图片模型' }
     const { target, option: imageOption } = resolved
-    const input = chatImageInput(
-      target,
-      imageOption,
-      [skillAgentInstructions(agent, true), data.messages.at(-1)!.content]
-        .filter(Boolean)
-        .join('\n\n')
-    )
+    const prompt = imagePromptWithContext(data, skillAgentInstructions(agent, true))
+    if (!prompt)
+      return { status: 'failed', reason: '生图要求过长，请缩短后重试', diagnosticPhase: 'input' }
+    const input = chatImageInput(target, imageOption, prompt)
     if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
     ctx.setDiagnosticTarget?.({
       operation: 'image.generate',
@@ -156,6 +185,7 @@ export const chatExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecu
   const request = {
     providerId: option.provider.id,
     modelId: option.model.id,
+    projectId: ctx.projectId,
     system: effectiveSystem(data),
     messages,
     temperature: data.temperature,
@@ -173,6 +203,7 @@ export const chatExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecu
           {
             providerId: option.provider.id,
             modelId: option.model.id,
+            projectId: ctx.projectId,
             system: [effectiveSystem(data), skillAgentInstructions(agent, true)]
               .filter(Boolean)
               .join('\n\n'),

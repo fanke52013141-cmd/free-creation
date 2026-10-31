@@ -25,7 +25,7 @@ export function createChatImageTool(
   onImage: (image: ChatImageAttachment) => void
 ): Tool<
   { prompt: string },
-  { generated: boolean; name: string; resolution: '1k' | '4k'; quality: string }
+  { generated: boolean; name: string; resolution: '1k' | '2k' | '4k'; quality: string }
 > {
   let submitted = false
   return tool({
@@ -41,7 +41,7 @@ export function createChatImageTool(
       if (!model || (model.operations && !model.operations.includes('image.generate'))) {
         throw new GatewayError('INVALID_INPUT', '图片模型不可用或未验证生图能力')
       }
-      if (!target.projectId || !['1k', '4k'].includes(target.resolution)) {
+      if (!target.projectId || !['1k', '2k', '4k'].includes(target.resolution)) {
         throw new GatewayError('INVALID_INPUT', '生图项目或分辨率不合法')
       }
       const parameters = chatImageParameters(provider.specId, model.id, target.resolution)
@@ -77,7 +77,7 @@ export function createChatImageTool(
           status: 'success',
           attributes: { ...attributes, mediaId: image.mediaId }
         })
-        return { generated: true, name: image.name, resolution: target.resolution, quality: 'low' }
+        return { generated: true, name: image.name, resolution: target.resolution, quality: provider.specId === 'dreamina' ? 'default' : 'low' }
       } catch (error) {
         emitGatewayEvent('skill.execution.failed', '对话生图技能失败', context, {
           status: 'failed',

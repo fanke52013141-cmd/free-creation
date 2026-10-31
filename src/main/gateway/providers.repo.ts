@@ -144,6 +144,7 @@ export function bootstrapLegacyProvidersToCatalog(host: SqliteModelHost): Legacy
       .get(connectionId) as
       | { protocol: Connection['protocol']; base_url: string; secret_ref: string | null }
       | undefined
+    const secretChanged = !currentConnection || decryptSecret(currentConnection.secret_ref) !== provider.apiKey
     const currentModels = host.listModels(connectionId)
     const nextModelIds = new Set(provider.models.map((model) => model.id))
     const currentModelIds = new Set(currentModels.map((model) => model.modelId))
@@ -163,7 +164,7 @@ export function bootstrapLegacyProvidersToCatalog(host: SqliteModelHost): Legacy
       Boolean(currentConnection) &&
       (currentConnection!.protocol !== protocol ||
         currentConnection!.base_url !== provider.baseURL ||
-        decryptSecret(currentConnection!.secret_ref) !== provider.apiKey ||
+        secretChanged ||
         modelListChanged ||
         changedCapabilityModelIds.size > 0)
     if (connectionChanged) {
@@ -175,7 +176,7 @@ export function bootstrapLegacyProvidersToCatalog(host: SqliteModelHost): Legacy
       name: provider.name,
       protocol,
       baseUrl: provider.baseURL,
-      apiKey: provider.apiKey
+      ...(secretChanged ? { apiKey: provider.apiKey } : {})
     })
     for (const model of currentModels) {
       if (!nextModelIds.has(model.modelId) || changedCapabilityModelIds.has(model.modelId)) {

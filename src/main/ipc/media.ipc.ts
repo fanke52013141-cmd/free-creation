@@ -38,6 +38,7 @@ import { getDb } from '../store/db'
 import { artifactRecipeSchema } from '../../shared/artifact-recipe'
 import { saveArtifactRecipe, getArtifactRecipe } from '../store/artifact-recipes.repo'
 import { emitGatewayEvent } from '../diagnostics/gateway-events'
+import { newSpanId, newTraceId } from '../../shared/observability'
 import { transformImageCrop, transformImageSplit } from '../media/image-transform'
 import { transformTts } from '../media/tts-transform'
 import {
@@ -382,7 +383,11 @@ export function registerMediaIpc(): void {
         !['audio', 'video'].includes(input.kind)
       )
         return err('INVALID_INPUT', '缺少声音调整参数')
-      return runCancellableTransform(input, () => transformSoundAdjust(input), 'SOUND_ADJUST_FAILED')
+      return runCancellableTransform(
+        input,
+        () => transformSoundAdjust(input),
+        'SOUND_ADJUST_FAILED'
+      )
     }
   )
   /** 时间轴缩略图：均匀采样指定数量的帧，返回 base64 JPEG data URL 数组。 */
@@ -444,15 +449,26 @@ export function registerMediaIpc(): void {
   ipcMain.handle(
     IPC.media.importBuffer,
     async (_e, input: ImportMediaBufferInput): Promise<IpcEnvelope<MediaAsset>> => {
+      const context = { traceId: newTraceId(), spanId: newSpanId(), projectId: input?.projectId }
+      emitGatewayEvent('media.buffer_import.started', '媒体附件导入开始', context)
       if (
         !input?.projectId ||
+        !/^[a-zA-Z0-9_-]{1,80}$/.test(input.projectId) ||
         (!input.mime?.startsWith('image/') && !input.mime?.startsWith('video/')) ||
-        !input.data
+        !(input.data instanceof Uint8Array)
       ) {
+        emitGatewayEvent('media.buffer_import.failed', '媒体附件导入参数无效', context, {
+          status: 'failed',
+          phase: 'input'
+        })
         return err('INVALID_INPUT', '仅支持图片或视频缓冲数据')
       }
       const buffer = Buffer.from(input.data)
       if (buffer.length === 0 || buffer.length > 200 * 1024 * 1024) {
+        emitGatewayEvent('media.buffer_import.failed', '媒体附件体积无效', context, {
+          status: 'failed',
+          phase: 'input'
+        })
         return err('INVALID_INPUT', '媒体缓冲为空或超过 200MB')
       }
       const extByMime: Record<string, string> = {
@@ -466,13 +482,28 @@ export function registerMediaIpc(): void {
         'video/mp4': '.mp4'
       }
       const ext = extByMime[input.mime] ?? '.png'
-      const asset = await saveBufferAsset(
-        input.projectId,
-        buffer,
-        ext,
-        input.name?.replace(/\.[^.]+$/, '') || '粘贴图片'
-      )
-      return ok(asset)
+      try {
+        const asset = await saveBufferAsset(
+          input.projectId,
+          buffer,
+          ext,
+          input.name?.replace(/\.[^.]+$/, '') || '粘贴图片'
+        )
+        emitGatewayEvent('media.buffer_import.completed', '媒体附件导入完成', context, {
+          status: 'success',
+          mediaId: asset.id,
+          byteSize: buffer.length,
+          mime: asset.mime
+        })
+        return ok(asset)
+      } catch (error) {
+        emitGatewayEvent('media.buffer_import.failed', '媒体附件保存失败', context, {
+          status: 'failed',
+          phase: 'persist',
+          error
+        })
+        return err('MEDIA_WRITE_FAILED', '附件保存失败，请检查项目存储空间')
+      }
     }
   )
 

@@ -53,7 +53,7 @@ describe('受控生图工具和技能说明', () => {
   }
   const options = { toolCallId: 'call-1', messages: [] }
   it('从已打包的SKILL.md读取规则，真实附件通过回调返回，不返回伪造URL', async () => {
-    expect(loadImageSkillInstructions()).toContain('质量始终为最低档 low')
+    expect(loadImageSkillInstructions()).toContain('支持质量参数的模型使用最低档 low')
     const onImage = vi.fn()
     const imageTool = createChatImageTool(
       target,
@@ -83,6 +83,17 @@ describe('受控生图工具和技能说明', () => {
     expect(generateImageToAsset).toHaveBeenCalledOnce()
     expect(events.map((event) => event.event)).toContain('skill.execution.failed')
     expect(JSON.stringify(events)).not.toContain('私有提示词')
+  })
+  it('自动生图工具接受能力表支持的 2K', async () => {
+    const imageTool = createChatImageTool(
+      { ...target, resolution: '2k' },
+      undefined,
+      new AbortController().signal,
+      vi.fn()
+    )
+    const result = await imageTool.execute!({ prompt: '画图' }, options)
+    expect(result).toMatchObject({ resolution: '2k', quality: 'low' })
+    expect(generateImageToAsset).toHaveBeenCalledWith(expect.objectContaining({ resolution: '2k' }))
   })
   it('请求前取消不提交图片 API', async () => {
     const controller = new AbortController()

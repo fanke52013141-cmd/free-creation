@@ -1326,7 +1326,8 @@ async function pollLoop(
   } catch (e) {
     if (['success', 'failed', 'cancelled'].includes(getVideoTask(taskId)?.status ?? '')) return
     const msg = e instanceof Error ? e.message : String(e)
-    const definitive = e instanceof GatewayError && e.code === 'GEN_FAILED'
+    const definitive = e instanceof GatewayError &&
+      (e.code === 'GEN_FAILED' || e.code === 'DREAMINA_REFERENCE_AUDIO_INVALID')
     if (definitive) updateTask(taskId, { status: 'failed', error: msg })
     else if (!(e instanceof GraphWriteInProgressError)) markUnknown(taskId)
     clearCancelled(taskId)

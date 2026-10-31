@@ -52,7 +52,7 @@ function fixture(settings: Record<string, unknown> = {}) {
 }
 
 describe('对话生图技能', () => {
-  it('默认1K，4K仍保持同一最低质量策略，不接受其他档位', () => {
+  it('默认1K，支持模型可选择2K与4K，均保持最低质量策略', () => {
     expect(parseChatImageSkill(undefined)).toEqual({
       enabled: true,
       modelKey: '',
@@ -62,9 +62,85 @@ describe('对话生图技能', () => {
       size: '1:1',
       resolution: '4k'
     })
+    expect(parseChatImageSkill({ resolution: '2k' }).resolution).toBe('2k')
+    expect(chatImageParameters('toapis', 'gpt-image-2-vip', '2k')).toEqual({
+      size: '1:1',
+      resolution: '2k'
+    })
+    expect(() => chatImageParameters('openai', 'gpt-image-1', '2k')).toThrow('不支持 2K')
     expect(parseChatImageSkill({ resolution: '8k' }).resolution).toBe('1k')
     expect(() => chatImageParameters('openai', 'gpt-image-1', '4k')).toThrow('不支持 4K')
     expect(() => chatImageParameters('toapis', 'gpt-image-2', '1k')).toThrow('最低质量')
+    expect(chatImageParameters('dreamina', '5.0', '2k')).toEqual({ size: '1:1', resolution: '2k' })
+    expect(() => chatImageParameters('dreamina', '5.0', '1k')).toThrow('不支持 1K')
+  })
+  it('显式生图携带当前会话的文本历史与摘要，不混入其他会话', async () => {
+    const { ctx, gateway } = fixture({ resolution: '2k' })
+    const data = JSON.parse(ctx.shape.props.text)
+    data.conversations = [
+      { id: 'other', title: '其他', messages: [{ role: 'user', content: '无关秘密' }] },
+      {
+        id: 'current',
+        title: '当前',
+        summary: '青色城市',
+        messages: [
+          { role: 'user', content: '制作科幻短片' },
+          { role: 'assistant', content: '场景是一座未来城市' },
+          { role: 'user', content: '根据以上内容生成分镜', intent: 'image' }
+        ]
+      }
+    ]
+    data.activeConversationId = 'current'
+    ctx.shape.props.text = JSON.stringify(data)
+    expect(await chatExecutor(ctx)).toEqual({ status: 'done' })
+    const request = gateway.imageGenerate.mock.calls[0][0]
+    expect(request.resolution).toBe('2k')
+    expect(request.prompt).toContain('青色城市')
+    expect(request.prompt).toContain('场景是一座未来城市')
+    expect(request.prompt).toContain('根据以上内容生成分镜')
+    expect(request.prompt).not.toContain('无关秘密')
+  })
+  it('历史过长时优先保留近期内容和本次要求，限制请求长度', async () => {
+    const { ctx, gateway } = fixture()
+    const data = JSON.parse(ctx.shape.props.text)
+    data.messages = [
+      { role: 'user', content: '旧'.repeat(40000) },
+      { role: 'assistant', content: '近期场景' },
+      { role: 'user', content: '根据以上内容画图', intent: 'image' }
+    ]
+    ctx.shape.props.text = JSON.stringify(data)
+    expect(await chatExecutor(ctx)).toEqual({ status: 'done' })
+    const prompt = gateway.imageGenerate.mock.calls[0][0].prompt
+    expect(prompt.length).toBeLessThanOrEqual(32000)
+    expect(prompt).toContain('近期场景')
+    expect(prompt).toContain('根据以上内容画图')
+  })
+  it('没有摘要的新会话不会复用顶层遗留摘要', async () => {
+    const { ctx, gateway } = fixture()
+    const data = JSON.parse(ctx.shape.props.text)
+    data.summary = '旧会话私有摘要'
+    data.conversations = [
+      {
+        id: 'current',
+        title: '当前',
+        messages: [
+          { role: 'user', content: '未来城市' },
+          { role: 'user', content: '根据以上内容画图', intent: 'image' }
+        ]
+      }
+    ]
+    data.activeConversationId = 'current'
+    ctx.shape.props.text = JSON.stringify(data)
+    expect(await chatExecutor(ctx)).toEqual({ status: 'done' })
+    expect(gateway.imageGenerate.mock.calls[0][0].prompt).not.toContain('旧会话私有摘要')
+  })
+  it('本次生图要求超出长度限制时不提交付费请求', async () => {
+    const { ctx, gateway } = fixture()
+    const data = JSON.parse(ctx.shape.props.text)
+    data.messages[0].content = '画'.repeat(32001)
+    ctx.shape.props.text = JSON.stringify(data)
+    expect(await chatExecutor(ctx)).toMatchObject({ status: 'failed', diagnosticPhase: 'input' })
+    expect(gateway.imageGenerate).not.toHaveBeenCalled()
   })
   it('显式生图无需文本模型，调用一次并保存真实图片附件', async () => {
     const { ctx, gateway, patches } = fixture()

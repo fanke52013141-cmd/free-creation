@@ -870,6 +870,8 @@ export interface DreaminaLoginCheckResult {
 export interface ChatStartInput {
   providerId: string
   modelId: string
+  /** Required for user image attachments; main validates ownership before reading. */
+  projectId?: string
   system?: string
   messages: ChatMessage[]
   temperature?: number

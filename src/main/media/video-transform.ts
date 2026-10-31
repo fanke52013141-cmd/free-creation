@@ -129,10 +129,10 @@ export async function transformVideoClip(input: VideoClipTransformInput): Promis
     // 快速模式：关键帧对齐复制，边界可能不精确
     const audioArgs = config.includeAudio ? ['-map', '0:a?'] : ['-an']
     return runToAsset(input.projectId, 'clip.mp4', '.mp4', '视频片段', [
-      '-i',
-      source.path,
       '-ss',
       seconds(config.startMs),
+      '-i',
+      source.path,
       '-t',
       durationSec,
       '-map',
@@ -142,7 +142,7 @@ export async function transformVideoClip(input: VideoClipTransformInput): Promis
       'copy',
       '-avoid_negative_ts',
       'make_zero'
-    ])
+    ], true)
   }
 
   // balanced/high 模式：精确重编码
@@ -171,7 +171,7 @@ export async function transformVideoClip(input: VideoClipTransformInput): Promis
     'yuv420p',
     '-movflags',
     '+faststart'
-  ])
+  ], true)
 }
 
 // ── 提音 ──
@@ -531,7 +531,8 @@ async function runToAsset(
   outputName: string,
   ext: string,
   assetName: string,
-  args: string[]
+  args: string[],
+  requireVideo = false
 ): Promise<MediaAsset> {
   const dir = await mkdtemp(join(tmpdir(), 'canvas-studio-video-'))
   const output = join(dir, outputName)
@@ -539,6 +540,16 @@ async function runToAsset(
     await runFfmpeg([...args, '-y', output])
     const created = await stat(output).catch(() => null)
     if (!created?.isFile() || created.size === 0) throw new Error('本地媒体引擎未生成有效文件')
+    if (requireVideo) {
+      const streams = await runFfprobe([
+        '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=codec_type',
+        '-of', 'csv=p=0', output
+      ]).catch(() => { throw new Error('无法检查视频产物，请确认 FFprobe 可用后重试。') })
+      if (!streams.trim())
+        throw new Error('未生成有效画面。快速复制受关键帧限制，请选择平衡质量后重试。')
+      await runFfmpeg(['-v', 'error', '-i', output, '-map', '0:v:0', '-frames:v', '1', '-f', 'null', '-'])
+        .catch(() => { throw new Error('视频画面无法解码，请选择平衡质量后重试。') })
+    }
     return await saveFileAsset(projectId, output, ext, assetName)
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => undefined)

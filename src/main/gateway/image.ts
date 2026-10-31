@@ -4,6 +4,9 @@
 //   openrouter-chat —— OpenRouter：chat-completions modalities 生图，参考图内联 data URL
 // 产物统一走 media 管线 saveBufferAsset 入库，节点侧拿到 MediaAsset 即可展示。
 import { generateImage } from 'ai'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import log from 'electron-log/main'
 import type { ImageEditInput, ImageGenerateInput } from '../../shared/contracts'
 import { IMAGE_EDIT_SIZES } from '../../shared/image-edit'
@@ -108,6 +111,7 @@ export async function generateImageToAsset(input: ImageGenerateInput): Promise<M
       status: 'failed',
       durationMs: Date.now() - startedAt,
       error,
+      privateValues: [input.prompt],
       attributes: modelAttributes
     })
     throw error
@@ -700,6 +704,38 @@ export async function generateImageEditToAsset(
   }
   const provider = requireProvider(input.providerId)
   const capabilities = imageCapabilitiesFor(provider.specId, input.modelId)
+
+  if (capabilities.driver === 'dreamina-cli') {
+    if (!isDreaminaImageModel(input.modelId))
+      throw new GatewayError('DREAMINA_MODEL_DISABLED', dreaminaUnsupportedModelMessage(input.modelId))
+    if (!referenceImages.length || referenceImages.length > capabilities.maxReferenceImages)
+      throw new GatewayError('INVALID_INPUT', '即梦图片修改需要有效的参考图片。')
+    const directory = await mkdtemp(join(tmpdir(), 'canvas-dreamina-edit-'))
+    try {
+      const referencePaths: string[] = []
+      for (const [index, bytes] of referenceImages.entries()) {
+        const ext = bytes[0] === 0xff && bytes[1] === 0xd8 ? 'jpg'
+          : bytes.subarray(0, 4).toString('ascii') === 'RIFF' ? 'webp' : 'png'
+        const path = join(directory, `reference-${index}.${ext}`)
+        await writeFile(path, bytes)
+        referencePaths.push(path)
+      }
+      const ratio = input.config?.aspectRatio && input.config.aspectRatio !== 'auto'
+        ? input.config.aspectRatio
+        : input.size && input.size !== 'auto' ? input.size : undefined
+      const imageUrl = await generateImageWithDreamina({
+        modelId: input.modelId, prompt, ...(ratio ? { ratio } : {}),
+        resolution: input.config?.resolution ?? capabilities.defaultResolution ?? '2k', referencePaths
+      }).catch((error: unknown) => {
+        if (error instanceof GatewayError && error.code === 'DREAMINA_CLI_FAILED')
+          throw new GatewayError(error.code, '即梦图片修改失败，请检查参考图片和模型后重试。')
+        throw error
+      })
+      return await downloadImageAsAsset(input.projectId, imageUrl, '即梦修改图片')
+    } finally {
+      await rm(directory, { recursive: true, force: true }).catch(() => undefined)
+    }
+  }
 
   if (capabilities.driver === 'toapis-task') {
     const referenceUrls: string[] = []

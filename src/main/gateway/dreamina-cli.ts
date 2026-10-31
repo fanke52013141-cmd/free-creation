@@ -33,6 +33,7 @@ import {
 } from '../../shared/dreamina-models'
 import { getDb } from '../store/db'
 import { getMediaAbsPath } from '../store/media.repo'
+import { probeMediaDurationMs } from '../media/video-transform'
 import { GatewayError } from './factory'
 
 const VERSION_TIMEOUT_MS = 20_000
@@ -365,6 +366,16 @@ export async function submitVideoWithDreamina(input: VideoSubmitInput): Promise<
       throw new GatewayError('INVALID_INPUT', '即梦视频必须指定清晰度（video_resolution）')
     if (mode !== 'text' && mode !== 'first-frame' && mode !== 'first-last-frame' && mode !== 'reference')
       throw new GatewayError('INVALID_INPUT', '即梦不支持该视频生成模式')
+    const referenceAudioPaths = (input.referenceAudioMediaIds ?? []).map((id) =>
+      dreaminaMediaPath(id, '参考音频')
+    )
+    for (const path of referenceAudioPaths) {
+      const durationMs = await probeMediaDurationMs(path).catch(() => {
+        throw new GatewayError('DREAMINA_REFERENCE_AUDIO_INVALID', '无法读取参考音频时长，请检查音频文件与本机 FFprobe。')
+      })
+      if (durationMs < 2000 || durationMs > 30000)
+        throw new GatewayError('DREAMINA_REFERENCE_AUDIO_INVALID', '即梦参考音频时长须为 2–30 秒，请调整音频后重试。')
+    }
     let args: string[]
     try {
       args = buildVideoArgs({
@@ -394,12 +405,8 @@ export async function submitVideoWithDreamina(input: VideoSubmitInput): Promise<
               )
             }
           : {}),
-        ...(input.referenceAudioMediaIds?.length
-          ? {
-              referenceAudioPaths: input.referenceAudioMediaIds.map((id) =>
-                dreaminaMediaPath(id, '参考音频')
-              )
-            }
+        ...(referenceAudioPaths.length
+          ? { referenceAudioPaths }
           : {})
       })
     } catch (error) {

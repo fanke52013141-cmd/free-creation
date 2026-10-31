@@ -337,6 +337,16 @@ export const DIAGNOSTICS_EVENTS: Record<string, DiagnosticsEventDefinition> = Ob
     def('application.render_failed', 'error', 'renderer/App.tsx'),
     def('media.document_extract_failed', 'warn', 'main/media/document-text.ts'),
     def('media.read_failed', 'warn', 'main/store/media.repo.ts'),
+    def('media.buffer_import.started', 'info', 'main/ipc/media.ipc.ts', {
+      byteSize: 'int',
+      mime: 'short'
+    }),
+    def('media.buffer_import.completed', 'info', 'main/ipc/media.ipc.ts', {
+      mediaId: 'id',
+      byteSize: 'int',
+      mime: 'short'
+    }),
+    def('media.buffer_import.failed', 'error', 'main/ipc/media.ipc.ts', { phase: 'short' }),
     // project.save / restore / transfer
     def('project.open.failed', 'error', 'main/ipc/project.ipc.ts', {
       phase: 'short',

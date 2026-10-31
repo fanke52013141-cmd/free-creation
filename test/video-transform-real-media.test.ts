@@ -319,6 +319,53 @@ describe.skipIf(!toolsReady)('真实 FFmpeg 媒体处理器', () => {
     expect(ms).toBeLessThanOrEqual(2600)
   })
 
+  it.each(['balanced', 'fast'] as const)('仅画面截取（%s）不包含音轨', async (quality) => {
+    const { transformVideoClip } = await import('../src/main/media/video-transform')
+    const before = h.saved.length
+    await transformVideoClip({
+      projectId: 'p1',
+      sourceMediaId: 'source-video',
+      config: {
+        version: 3,
+        startMs: 500,
+        endMs: 1500,
+        keepVideo: true,
+        keepAudio: false,
+        includeAudio: false,
+        quality,
+        audioFormat: 'wav',
+        audioSampleRate: 44100
+      } as never
+    })
+    const res = spawnSync(
+      'ffprobe',
+      ['-v', 'error', '-show_entries', 'stream=codec_type', '-of', 'csv=p=0', h.saved[before].path],
+      { encoding: 'utf8' }
+    )
+    expect(res.status, res.stderr).toBe(0)
+    expect(res.stdout).toContain('video')
+    expect(res.stdout).not.toContain('audio')
+    expect(durationMs(h.saved[before].path)).toBeGreaterThan(0)
+    const decode = spawnSync(
+      'ffmpeg',
+      [
+        '-v',
+        'error',
+        '-i',
+        h.saved[before].path,
+        '-map',
+        '0:v:0',
+        '-frames:v',
+        '1',
+        '-f',
+        'null',
+        '-'
+      ],
+      { encoding: 'utf8' }
+    )
+    expect(decode.status, decode.stderr).toBe(0)
+  })
+
   it('提音：WAV 采样率与区间时长都落到产物里', async () => {
     const { transformVideoAudio } = await import('../src/main/media/video-transform')
     const before = h.saved.length
@@ -355,7 +402,9 @@ describe.skipIf(!toolsReady)('真实 FFmpeg 媒体处理器', () => {
     const source = h.byId.get('center-audio')?.abs as string
     const before = h.saved.length
     await transformSoundAdjust({
-      projectId: 'p1', sourceMediaId: 'center-audio', kind: 'audio',
+      projectId: 'p1',
+      sourceMediaId: 'center-audio',
+      kind: 'audio',
       config: { version: 1, mode: 'rate', rate: 2, targetDurationMs: 1000, volumePercent: 50 }
     })
     const output = h.saved[before]
@@ -370,7 +419,9 @@ describe.skipIf(!toolsReady)('真实 FFmpeg 媒体处理器', () => {
     const { transformSoundAdjust } = await import('../src/main/media/video-transform')
     const before = h.saved.length
     await transformSoundAdjust({
-      projectId: 'p1', sourceMediaId: 'source-video', kind: 'video',
+      projectId: 'p1',
+      sourceMediaId: 'source-video',
+      kind: 'video',
       config: { version: 1, mode: 'duration', rate: 1, targetDurationMs: 1000, volumePercent: 150 }
     })
     const output = h.saved[before]
@@ -379,10 +430,14 @@ describe.skipIf(!toolsReady)('真实 FFmpeg 媒体处理器', () => {
     expect(durationMs(output.path)).toBeLessThanOrEqual(1250)
     expect(streamFields(output.path)).toContain('h264')
     expect(streamFields(output.path)).toContain('aac')
-    await expect(transformSoundAdjust({
-      projectId: 'p1', sourceMediaId: 'silent-video', kind: 'video',
-      config: { version: 1, mode: 'rate', rate: 2, targetDurationMs: 1000, volumePercent: 150 }
-    })).rejects.toThrow('没有音轨')
+    await expect(
+      transformSoundAdjust({
+        projectId: 'p1',
+        sourceMediaId: 'silent-video',
+        kind: 'video',
+        config: { version: 1, mode: 'rate', rate: 2, targetDurationMs: 1000, volumePercent: 150 }
+      })
+    ).rejects.toThrow('没有音轨')
   })
 
   it('源视频不存在时在执行前就报错，不去调用 FFmpeg', async () => {
