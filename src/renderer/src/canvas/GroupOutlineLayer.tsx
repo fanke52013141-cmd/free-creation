@@ -122,10 +122,7 @@ function selectedNodeIds(editor: Editor): TLShapeId[] {
   return [...ids]
 }
 
-function selectionBoundsForNodes(
-  editor: Editor,
-  ids: readonly TLShapeId[]
-): PageBoundsLike | null {
+function selectionBoundsForNodes(editor: Editor, ids: readonly TLShapeId[]): PageBoundsLike | null {
   if (ids.length < 2) return null
   return selectionBoundsUnion(ids.map((id) => editor.getShapePageBounds(id)))
 }
@@ -174,6 +171,8 @@ const OUTLINE_SIDE_PAD = 12
 // 标签条带：显示在分组框上边缘外，双击进入重命名（window 捕获命中带，不拦截常规画布交互）
 const LABEL_BAND_TOP = 26
 const LABEL_BAND_HEIGHT = 20
+/** 折叠组合标题行高度：框内顶部一行放「可复用」徽标与展开/运行按钮（固定屏幕像素）。 */
+const COMBO_HEADER_H = 26
 
 /**
  * tldraw 原生 group 是一种父子状态，不是业务节点；这里仅补一层常驻视觉框。
@@ -225,9 +224,11 @@ export function GroupOutlineLayer({
           nextCombos.push({
             id: shape.id,
             left: topLeft.x - hostBounds.left - sidePad,
-            top: topLeft.y - hostBounds.top - sidePad,
+            // 2026-10-31 用户裁决：可复用徽标与展开/运行按钮收进框体顶部标题行，
+            // 不再骑在框边外；框架上移一个标题行高度给标题行留位。
+            top: topLeft.y - hostBounds.top - sidePad - COMBO_HEADER_H,
             width: bottomRight.x - topLeft.x + sidePad * 2,
-            height: bottomRight.y - topLeft.y + sidePad * 2,
+            height: bottomRight.y - topLeft.y + sidePad * 2 + COMBO_HEADER_H,
             nodeCount: collapsedGroupNodeIds(editor, shape.id).length,
             zoom
           })
@@ -255,10 +256,8 @@ export function GroupOutlineLayer({
         return
       }
       const nodeBounds = selectionBoundsForNodes(editor, selectedIds)
-      const geometry = selectionGeometryFromPageBounds(
-        nodeBounds,
-        hostBounds,
-        (point) => editor.pageToScreen(point)
+      const geometry = selectionGeometryFromPageBounds(nodeBounds, hostBounds, (point) =>
+        editor.pageToScreen(point)
       )
       if (!geometry) {
         setSelection((current) => (current === null ? current : null))
@@ -356,31 +355,30 @@ export function GroupOutlineLayer({
     setEditingId(null)
   }
 
-  const batchPort =
-    selection?.batchSource
-      ? createPortal(
-          <button
-            type="button"
-            className="canvas-selection-batch-port"
-            aria-label={`批量连接 ${selection.batchSource.memberIds?.length ?? 0} 个节点`}
-            style={{
-              left: selection.hostLeft + selection.left + selection.width,
-              top: selection.hostTop + selection.top + selection.height / 2
-            }}
-            onPointerDown={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              beginConnectionDrag(selection.batchSource!, {
-                x: event.clientX,
-                y: event.clientY
-              })
-            }}
-          >
-            <span>{selection.batchSource.memberIds?.length}</span>
-          </button>,
-          document.body
-        )
-      : null
+  const batchPort = selection?.batchSource
+    ? createPortal(
+        <button
+          type="button"
+          className="canvas-selection-batch-port"
+          aria-label={`批量连接 ${selection.batchSource.memberIds?.length ?? 0} 个节点`}
+          style={{
+            left: selection.hostLeft + selection.left + selection.width,
+            top: selection.hostTop + selection.top + selection.height / 2
+          }}
+          onPointerDown={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            beginConnectionDrag(selection.batchSource!, {
+              x: event.clientX,
+              y: event.clientY
+            })
+          }}
+        >
+          <span>{selection.batchSource.memberIds?.length}</span>
+        </button>,
+        document.body
+      )
+    : null
 
   return (
     <div className="canvas-group-outline-layer">
@@ -439,38 +437,41 @@ export function GroupOutlineLayer({
             left: combo.left,
             top: combo.top,
             width: combo.width,
-            height: combo.height,
-            ['--combo-zoom' as string]: combo.zoom
+            height: combo.height
           }}
         >
-          <span className="canvas-combo-badge" title={`可复用组合 · ${combo.nodeCount} 个节点`}>
-            <Icon name="layers" size={12} />
-            可复用
-          </span>
-          <button
-            type="button"
-            className="canvas-combo-btn"
-            aria-label="展开组合"
-            title={`展开组合（${combo.nodeCount} 个节点）`}
-            onClick={(event) => {
-              event.stopPropagation()
-              toggleGroupCollapse(editor, combo.id)
-            }}
-          >
-            <Icon name="unfold" size={14} />
-          </button>
-          <button
-            type="button"
-            className="canvas-combo-btn canvas-combo-run"
-            aria-label="运行组合"
-            title={`运行组合内 ${combo.nodeCount} 个节点及依赖`}
-            onClick={(event) => {
-              event.stopPropagation()
-              onRunFlow(collapsedGroupNodeIds(editor, combo.id))
-            }}
-          >
-            <Icon name="play" size={14} />
-          </button>
+          {/* 2026-10-31 标题行固定在框内顶部（badge + 展开/运行），尺寸不随缩放变化。 */}
+          <div className="canvas-combo-header">
+            <span className="canvas-combo-badge" title={`可复用组合 · ${combo.nodeCount} 个节点`}>
+              <Icon name="layers" size={12} />
+              可复用
+            </span>
+            <span className="canvas-combo-header-space" aria-hidden="true" />
+            <button
+              type="button"
+              className="canvas-combo-btn"
+              aria-label="展开组合"
+              title={`展开组合（${combo.nodeCount} 个节点）`}
+              onClick={(event) => {
+                event.stopPropagation()
+                toggleGroupCollapse(editor, combo.id)
+              }}
+            >
+              <Icon name="unfold" size={14} />
+            </button>
+            <button
+              type="button"
+              className="canvas-combo-btn canvas-combo-run"
+              aria-label="运行组合"
+              title={`运行组合内 ${combo.nodeCount} 个节点及依赖`}
+              onClick={(event) => {
+                event.stopPropagation()
+                onRunFlow(collapsedGroupNodeIds(editor, combo.id))
+              }}
+            >
+              <Icon name="play" size={14} />
+            </button>
+          </div>
         </div>
       ))}
       {batchPort}

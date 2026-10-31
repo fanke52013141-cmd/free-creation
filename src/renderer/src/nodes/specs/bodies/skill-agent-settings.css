@@ -18,3 +18,95 @@
 .skill-agent-settings .settings-row span {
   overflow-wrap: anywhere;
 }
+
+/* 2026-10-31 技能格式帮助：legend 旁的「?」开关 + 校验说明弹层（锚定 fieldset）。 */
+.skill-agent-settings {
+  position: relative;
+}
+
+.skill-help-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 6px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  vertical-align: middle;
+  transition:
+    color 140ms ease,
+    border-color 140ms ease;
+}
+
+.skill-help-toggle:hover {
+  color: var(--txt);
+  border-color: var(--border-soft);
+}
+
+.skill-help-popover {
+  position: absolute;
+  top: 30px;
+  left: 10px;
+  z-index: 30;
+  width: min(420px, 86vw);
+  max-height: 320px;
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.35);
+  color: var(--txt);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.skill-help-popover strong {
+  display: block;
+  margin: 8px 0 4px;
+}
+
+.skill-help-popover strong:first-child {
+  margin-top: 0;
+}
+
+.skill-help-popover ul {
+  margin: 0;
+  padding-left: 16px;
+}
+
+.skill-help-popover li {
+  margin: 2px 0;
+  color: var(--muted);
+}
+
+.skill-help-popover pre {
+  margin: 6px 0;
+  padding: 8px 10px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--sunk);
+  color: var(--txt);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.skill-builtin-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 5px;
+  border: 1px solid rgba(66, 185, 245, 0.35);
+  border-radius: 4px;
+  background: rgba(66, 185, 245, 0.12);
+  color: #8bdcff;
+  font-size: 10px;
+  line-height: 1.4;
+  vertical-align: 1px;
+}

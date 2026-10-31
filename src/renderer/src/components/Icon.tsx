@@ -83,6 +83,7 @@ export type IconName =
   | 'fold'
   | 'unfold'
   | 'layers'
+  | 'folder'
 
 interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {
   name: IconName
@@ -247,9 +248,12 @@ const PATHS: Record<IconName, React.ReactNode> = {
     </>
   ),
   settings: (
+    // 2026-10-31 用户裁决：原齿轮在小尺寸下发糊难看，改用「调节旋钮」造型（Lucide settings-2）
     <>
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.04.04-2.2 2.2-.04-.04a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V20.4h-3.1v-.11a1.7 1.7 0 0 0-1.03-1.56 1.7 1.7 0 0 0-1.87.34l-.04.04-2.2-2.2.04-.04A1.7 1.7 0 0 0 6.8 15 1.7 1.7 0 0 0 5.24 14H5.1v-3.1h.14A1.7 1.7 0 0 0 6.8 9.87a1.7 1.7 0 0 0-.34-1.87l-.04-.04 2.2-2.2.04.04a1.7 1.7 0 0 0 1.87.34 1.7 1.7 0 0 0 1.03-1.56V4.4h3.1v.18a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.04-.04 2.2 2.2-.04.04A1.7 1.7 0 0 0 19.4 9.9a1.7 1.7 0 0 0 1.5 1h.1V14h-.1a1.7 1.7 0 0 0-1.5 1Z" />
+      <path d="M20 7h-9" />
+      <path d="M14 17H5" />
+      <circle cx="17" cy="17" r="3" />
+      <circle cx="7" cy="7" r="3" />
     </>
   ),
   home: (
@@ -563,6 +567,7 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="m3 21 7-7" />
     </>
   ),
+  folder: <path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6Z" />,
   layers: (
     <>
       <path d="m12 2 10 5-10 5L2 7Z" />

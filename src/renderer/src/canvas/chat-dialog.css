@@ -129,12 +129,7 @@
   overflow: hidden;
   color: #e7eefb;
   background-color: var(--chat-obsidian-900);
-  background-image:
-    radial-gradient(75% 110px at 50% 0%, rgba(6, 182, 212, 0.07), transparent 100%),
-    radial-gradient(rgba(255, 255, 255, 0.045) 0.8px, transparent 0.9px);
-  background-size:
-    auto,
-    24px 24px;
+  background-image: none;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 0;
   box-shadow:
@@ -143,6 +138,11 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
   -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
+}
+
+.chat-dialog.is-fullscreen {
+  width: 100vw;
+  max-width: none;
 }
 
 .chat-dialog button {
@@ -166,10 +166,16 @@
 }
 
 .chat-dialog button:focus-visible,
-.chat-dialog select:focus-visible,
-.chat-dialog-bubble textarea:focus-visible {
-  outline: 2px solid var(--chat-cyan-300);
+.chat-dialog select:focus-visible {
+  outline: 2px solid rgba(231, 238, 247, 0.5);
   outline-offset: 2px;
+}
+
+/* 2026-10-31 用户裁决：编辑态去蓝色系外描边；文本框聚焦用中性边框高亮。 */
+.chat-dialog-bubble textarea:focus-visible,
+.chat-dialog-composer textarea:focus-visible {
+  outline: none;
+  border-color: rgba(148, 163, 184, 0.45);
 }
 
 .chat-dialog button:disabled {
@@ -208,6 +214,27 @@
   border-color: rgba(148, 163, 184, 0.22);
 }
 
+.chat-dialog-session-picker {
+  min-width: 0;
+}
+
+.chat-dialog-session-picker .app-select {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.chat-dialog-session-picker .app-select > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-dialog-session-picker .app-select-chevron,
+.chat-dialog-new {
+  flex-shrink: 0;
+}
+
 .chat-dialog-new,
 .chat-dialog-actions button {
   width: 34px;
@@ -227,50 +254,12 @@
   color: #f4f8ff;
 }
 
-.chat-dialog-model-dot {
-  position: relative;
-  display: inline-flex;
-  width: 8px;
-  height: 8px;
-  flex: 0 0 8px;
-  border-radius: 50%;
-  background: #64748b;
-}
-
-.chat-dialog-heading.is-ready .chat-dialog-model-dot {
-  background: var(--chat-cyan-500);
-  box-shadow: 0 0 9px rgba(6, 182, 212, 0.52);
-}
-
-.chat-dialog-heading.is-ready .chat-dialog-model-dot > span {
-  position: absolute;
-  inset: -3px;
-  border: 1px solid rgba(34, 211, 238, 0.38);
-  border-radius: inherit;
-  opacity: 0;
-}
-
-.chat-dialog-heading.is-running .chat-dialog-model-dot > span {
-  animation: chat-dialog-model-pulse 1.8s ease-out infinite;
-}
-
 .chat-dialog-heading > span:last-child {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12px;
   letter-spacing: 0.025em;
-}
-
-@keyframes chat-dialog-model-pulse {
-  0% {
-    opacity: 0.8;
-    transform: scale(0.7);
-  }
-  100% {
-    opacity: 0;
-    transform: scale(1.8);
-  }
 }
 
 .chat-dialog-actions {
@@ -523,7 +512,7 @@
   height: 36px;
   flex: 0 0 36px;
   border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 50%;
+  border-radius: 8px;
   object-fit: cover;
   box-shadow: 0 5px 16px rgba(6, 182, 212, 0.16);
 }
@@ -831,12 +820,20 @@
   display: flex;
   align-items: center;
   gap: 11px;
-  padding: 12px 15px;
+  padding: 0;
   color: #dbe6f4;
-  border: 1px solid rgba(34, 211, 238, 0.22);
-  border-radius: 13px;
-  background: linear-gradient(180deg, rgba(16, 24, 39, 0.88), rgba(12, 16, 27, 0.95));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.chat-dialog-thinking .generation-loading-card,
+.chat-dialog-bubble .generation-loading-card {
+  width: auto;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .chat-dialog-thinking > span {
@@ -907,12 +904,83 @@
 .chat-dialog-composer {
   display: grid;
   grid-template-columns: 38px minmax(0, 1fr) 42px;
-  gap: 8px;
+  gap: 10px;
   align-items: end;
   padding: 14px clamp(22px, 7vw, 96px) 18px;
   border-top: 1px solid rgba(255, 255, 255, 0.07);
   background: rgba(7, 9, 14, 0.56);
   box-shadow: 0 -12px 28px rgba(7, 9, 14, 0.16);
+}
+
+.chat-dialog-attachments {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chat-dialog-attachment {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 220px;
+  gap: 6px;
+  padding: 3px 4px 3px 8px;
+  color: #cbd5e1;
+  background: var(--chat-obsidian-800);
+  border-radius: 7px;
+  font-size: 12px;
+}
+
+.chat-dialog-attachment > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-dialog .chat-dialog-attachment button {
+  flex: 0 0 auto;
+  min-height: 24px;
+  width: 24px;
+  padding: 0;
+  background: transparent;
+}
+
+.chat-dialog-composer .chat-dialog-skill-controls {
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding-bottom: 2px;
+}
+
+.chat-dialog-composer .chat-dialog-model-select {
+  /* 2026-10-31：关闭态只显示模型名（triggerLabel），宽度随内容自适应；
+     上限只防极端超长模型名，全称在下拉列表中可见。 */
+  max-width: min(340px, 42vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-dialog-control-label {
+  color: #91a1b5;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.chat-dialog-control-divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 3px;
+  background: rgba(148, 163, 184, 0.2);
+}
+
+.chat-dialog-composer .chat-dialog-skill-controls .app-select-trigger {
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 7px;
+  background: var(--chat-obsidian-800);
+  color: #cbd5e1;
 }
 
 .chat-dialog-composer textarea {
@@ -1012,7 +1080,6 @@
   .chat-dialog-thinking > span,
   .chat-dialog-message,
   .chat-dialog-message.is-streaming .chat-dialog-markdown:last-child::after,
-  .chat-dialog-heading.is-running .chat-dialog-model-dot > span,
   .chat-dialog-reasoning.is-live .chat-dialog-reasoning-dot::after {
     animation: none !important;
   }
@@ -1044,7 +1111,7 @@
     min-width: 0;
   }
   .chat-dialog-session-picker .app-select {
-    width: min(240px, calc(100vw - 112px));
+    width: min(240px, calc(100vw - 164px));
   }
   .chat-dialog-heading {
     grid-area: model;

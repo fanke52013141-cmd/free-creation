@@ -176,6 +176,9 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
   const [, force] = useState(0)
   const [draft, setDraft] = useState('')
   const [sendMode, setSendMode] = useState<'chat' | 'image'>('chat')
+  const [draftImages, setDraftImages] = useState<ChatImageAttachment[]>([])
+  const [importingAttachments, setImportingAttachments] = useState(false)
+  const [fullscreen, setFullscreen] = useState(false)
   const [previewImage, setPreviewImage] = useState<ChatImageAttachment | null>(null)
   const [previewError, setPreviewError] = useState(false)
   const previewRef = useRef<HTMLDivElement>(null)
@@ -313,33 +316,120 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
   const handleDocUpload = async (event: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
     const files = Array.from(event.target.files ?? [])
     event.target.value = ''
+    if (importingAttachments || running) return
+    setImportingAttachments(true)
     const docs: ChatDocument[] = []
-    for (const file of files) {
-      if (!/\.(txt|md|json|csv|log|xml|html?|js|ts|py|ya?ml)$/i.test(file.name)) {
-        toast(`${file.name}：当前对话上下文仅支持可读取的文本文件`)
-        continue
+    const images: ChatImageAttachment[] = []
+    try {
+      for (const file of files) {
+        if (['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.type)) {
+          if (!project) {
+            toast('项目未就绪')
+            continue
+          }
+          if (draftImages.length + images.length >= 4) {
+            toast('每次最多添加 4 张图片')
+            continue
+          }
+          if (file.size > 10 * 1024 * 1024) {
+            toast(`${file.name}：图片不能超过 10MB`)
+            continue
+          }
+          try {
+            const result = await window.api.importMediaBuffer({
+              projectId: project.id,
+              name: file.name,
+              mime: file.type,
+              data: new Uint8Array(await file.arrayBuffer())
+            })
+            if (!result.ok) {
+              toast(`${file.name}：图片导入失败`)
+              continue
+            }
+            images.push({
+              mediaId: result.data.id,
+              mediaPath: result.data.path,
+              name: file.name,
+              mime: result.data.mime
+            })
+          } catch {
+            toast(`${file.name}：图片导入失败`)
+          }
+          continue
+        }
+        if (/\.(pdf|docx|xlsx|pptx)$/i.test(file.name)) {
+          if (!project) {
+            toast('项目未就绪')
+            continue
+          }
+          if (file.size > 50 * 1024 * 1024) {
+            toast(`${file.name}：文档不能超过 50MB`)
+            continue
+          }
+          const path = window.api.getDroppedFilePath(file)
+          if (!path) {
+            toast(`${file.name}：请在桌面版中添加此文档`)
+            continue
+          }
+          try {
+            const result = await window.api.importMedia({ projectId: project.id, paths: [path] })
+            const text = result.ok ? result.data.assets[0]?.textContent : undefined
+            if (!text?.trim()) {
+              toast(`${file.name}：无法提取文字，请确认文件有可读取的文本`)
+              continue
+            }
+            docs.push({ name: file.name, content: text })
+          } catch {
+            toast(`${file.name}：文档读取失败`)
+          }
+          continue
+        }
+        if (!/\.(txt|md|json|csv|log|xml|html?|js|ts|py|ya?ml)$/i.test(file.name)) {
+          toast(`${file.name}：暂不支持此附件格式`)
+          continue
+        }
+        if (file.size > 512 * 1024) {
+          toast(`${file.name}：文件过大（上限 512KB）`)
+          continue
+        }
+        try {
+          docs.push({ name: file.name, content: await file.text() })
+        } catch {
+          toast(`${file.name}：读取失败`)
+        }
       }
-      if (file.size > 512 * 1024) {
-        toast(`${file.name}：文件过大（上限 512KB）`)
-        continue
+      const latestShape = editor.getShape(shapeId) as NodeCardShape | undefined
+      const latestProject = useAppStore.getState().currentProject
+      const latestData = latestShape?.props.text ? parseChat(latestShape.props.text) : null
+      if (
+        !latestData ||
+        latestProject?.id !== project?.id ||
+        activeChatConversation(latestData).id !== activeConversation.id
+      ) {
+        if (docs.length || images.length) toast('对话已切换，请重新添加附件')
+        return
       }
-      try {
-        docs.push({ name: file.name, content: await file.text() })
-      } catch {
-        toast(`${file.name}：读取失败`)
+      if (docs.length) {
+        update({ ...latestData, documents: [...(latestData.documents ?? []), ...docs] })
+        toast(`已添加 ${docs.length} 个附件`)
       }
-    }
-    if (docs.length) {
-      update({ ...data, documents: [...(data.documents ?? []), ...docs] })
-      toast(`已添加 ${docs.length} 个参考文档`)
+      if (images.length) {
+        setDraftImages((current) => [...current, ...images])
+        toast(`已添加 ${images.length} 张图片附件`)
+      }
+    } finally {
+      setImportingAttachments(false)
     }
   }
 
   const send = async (): Promise<void> => {
     if (!project) return toast('项目未就绪')
+    if (importingAttachments) return toast('请等待附件导入完成')
     if (sendMode === 'chat' && !selectedModel) return toast('请先在设置中选择对话模型')
     if (sendMode === 'image' && (!imageSkill.enabled || !imageOptions.length))
       return toast('请启用生图技能并配置图片模型')
+    if (sendMode === 'image' && draftImages.length)
+      return toast('图片附件可在对话模式中分析，生图模式暂不支持图片附件')
     if (!draft.trim() || running) return
     const upstream = gatherUpstreamText(editor, shapeId)
     const content = upstream ? `${upstream}${TEXT_MERGE_SEPARATOR}${draft.trim()}` : draft.trim()
@@ -357,10 +447,16 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
     update(
       updateActiveChatConversation(titled, [
         ...messages,
-        { role: 'user', content, ...(sendMode === 'image' ? { intent: 'image' as const } : {}) }
+        {
+          role: 'user',
+          content,
+          ...(draftImages.length ? { images: draftImages } : {}),
+          ...(sendMode === 'image' ? { intent: 'image' as const } : {})
+        }
       ])
     )
     setDraft('')
+    setDraftImages([])
     setRunning(true)
     try {
       await runNodeManually(editor, project.id, providers, shapeId)
@@ -479,15 +575,20 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
   const settings = showSettings ? (
     <section className="chat-dialog-settings" aria-label="对话设置">
       <label>
-        模型
+        文本模型
         {options.length ? (
           <AppSelect
+            aria-label="文本模型"
             value={data.modelKey}
             onChange={(event) => update({ ...data, modelKey: event.target.value })}
           >
             <option value="">选择模型</option>
             {options.map((option) => (
-              <option key={option.key} value={option.key}>
+              <option
+                key={option.key}
+                value={option.key}
+                data-trigger-label={option.model.name || option.model.id}
+              >
                 {option.provider.name} / {option.model.name || option.model.id}
               </option>
             ))}
@@ -531,7 +632,9 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
                 ))}
               </AppSelect>
             </label>
-            <span className="chat-dialog-image-quality">质量：最低档（low）</span>
+            <span className="chat-dialog-image-quality">
+              质量：支持时使用最低档；即梦使用模型默认质量，5.0 请选 2K 或 4K
+            </span>
           </>
         )}
       </fieldset>
@@ -589,7 +692,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
         />
       </label>
       <div className="chat-dialog-documents">
-        <span>参考文档 {data.documents?.length ?? 0}</span>
+        <span>附件 {data.documents?.length ?? 0}</span>
         {(data.documents ?? []).map((document, index) => (
           <div key={`${document.name}-${index}`}>
             <span title={document.content.slice(0, 160)}>{document.name}</span>
@@ -608,7 +711,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
           </div>
         ))}
         <button type="button" onClick={() => fileInputRef.current?.click()}>
-          <Icon name="attach" size={14} /> 添加文本文件
+          <Icon name="attach" size={14} /> 添加附件
         </button>
       </div>
     </section>
@@ -625,7 +728,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
       }}
     >
       <div
-        className="chat-dialog"
+        className={`chat-dialog${fullscreen ? ' is-fullscreen' : ''}`}
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
@@ -638,9 +741,12 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
           <div className="chat-dialog-session-picker">
             <AppSelect
               aria-label="历史对话"
-              disabled={running}
+              disabled={running || importingAttachments}
               value={activeConversation.id}
-              onChange={(event) => update(selectChatConversation(data, event.target.value))}
+              onChange={(event) => {
+                setDraftImages([])
+                update(selectChatConversation(data, event.target.value))
+              }}
             >
               {conversations.map((conversation) => (
                 <option value={conversation.id} key={conversation.id}>
@@ -652,18 +758,16 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
               type="button"
               className="chat-dialog-new"
               aria-label="新建对话"
-              disabled={running}
-              onClick={() => update(createChatConversation(data))}
+              disabled={running || importingAttachments}
+              onClick={() => {
+                setDraftImages([])
+                update(createChatConversation(data))
+              }}
             >
               <Icon name="add" size={16} />
             </button>
           </div>
-          <div
-            className={`chat-dialog-heading${selectedModel ? ' is-ready' : ''}${running ? ' is-running' : ''}`}
-          >
-            <span className="chat-dialog-model-dot" aria-hidden="true">
-              <span />
-            </span>
+          <div className="chat-dialog-heading">
             <span id="chat-dialog-title">
               {selectedModel ? selectedModel.model.name || selectedModel.model.id : 'AI 对话'}
             </span>
@@ -671,8 +775,16 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
           <div className="chat-dialog-actions">
             <button
               type="button"
+              aria-label={fullscreen ? '退出全屏' : '全屏显示'}
+              aria-pressed={fullscreen}
+              onClick={() => setFullscreen((current) => !current)}
+            >
+              <Icon name={fullscreen ? 'fullscreen-exit' : 'fullscreen'} size={16} />
+            </button>
+            <button
+              type="button"
               aria-label="对话设置"
-              disabled={running}
+              disabled={running || importingAttachments}
               aria-pressed={showSettings}
               onClick={() => setSettingsPreference(showSettings ? 'closed' : 'open')}
             >
@@ -795,7 +907,48 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
               )}
             </main>
             <footer className="chat-dialog-composer">
+              {Boolean(data.documents?.length || draftImages.length) && (
+                <div className="chat-dialog-attachments" aria-label="已添加的附件">
+                  {draftImages.map((image) => (
+                    <span className="chat-dialog-attachment" key={image.mediaId}>
+                      <Icon name="image" size={14} />
+                      <span title={image.name}>{image.name}</span>
+                      <button
+                        type="button"
+                        aria-label={`移除 ${image.name}`}
+                        onClick={() =>
+                          setDraftImages((current) =>
+                            current.filter((item) => item.mediaId !== image.mediaId)
+                          )
+                        }
+                      >
+                        <Icon name="close" size={13} />
+                      </button>
+                    </span>
+                  ))}
+                  {data.documents?.map((document, index) => (
+                    <span className="chat-dialog-attachment" key={`${document.name}-${index}`}>
+                      <Icon name="document" size={14} />
+                      <span title={document.name}>{document.name}</span>
+                      <button
+                        type="button"
+                        aria-label={`移除 ${document.name}`}
+                        onClick={() =>
+                          update({
+                            ...data,
+                            documents:
+                              data.documents?.filter((_, current) => current !== index) ?? []
+                          })
+                        }
+                      >
+                        <Icon name="close" size={13} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
               <div className="chat-dialog-skill-controls">
+                <span className="chat-dialog-control-label">模式</span>
                 <AppSelect
                   aria-label="发送方式"
                   value={sendMode}
@@ -809,29 +962,87 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
                     生图
                   </option>
                 </AppSelect>
-                {imageSkill.enabled && (
+                <span className="chat-dialog-control-divider" aria-hidden="true" />
+                <span className="chat-dialog-control-label">
+                  {sendMode === 'chat' ? '文本模型' : '图片模型'}
+                </span>
+                {sendMode === 'chat' ? (
                   <AppSelect
-                    aria-label="生图分辨率"
-                    value={imageSkill.resolution}
+                    aria-label="发送栏文本模型"
+                    className="chat-dialog-model-select"
+                    value={data.modelKey}
+                    disabled={running}
+                    onChange={(event) => update({ ...data, modelKey: event.target.value })}
+                  >
+                    <option value="">选择文本模型</option>
+                    {options.map((option) => (
+                      <option
+                        key={option.key}
+                        value={option.key}
+                        data-trigger-label={option.model.name || option.model.id}
+                      >
+                        {option.label}
+                      </option>
+                    ))}
+                  </AppSelect>
+                ) : (
+                  <AppSelect
+                    aria-label="发送栏图片模型"
+                    className="chat-dialog-model-select"
+                    value={imageSkill.modelKey}
                     disabled={running}
                     onChange={(event) =>
                       update({
                         ...data,
-                        imageSkill: {
-                          ...imageSkill,
-                          resolution: event.target.value === '4k' ? '4k' : '1k'
-                        }
+                        imageSkill: { ...imageSkill, modelKey: event.target.value }
                       })
                     }
                   >
-                    <option value="1k">1K</option>
-                    <option value="4k">4K</option>
+                    <option value="">默认图片模型</option>
+                    {imageOptions.map((option) => (
+                      <option
+                        key={option.key}
+                        value={option.key}
+                        data-trigger-label={option.model.name || option.model.id}
+                      >
+                        {option.label}
+                      </option>
+                    ))}
                   </AppSelect>
+                )}
+                {imageSkill.enabled && sendMode === 'image' && (
+                  <>
+                    <span className="chat-dialog-control-divider" aria-hidden="true" />
+                    <span className="chat-dialog-control-label">分辨率</span>
+                    <AppSelect
+                      aria-label="生图分辨率"
+                      value={imageSkill.resolution}
+                      disabled={running}
+                      onChange={(event) =>
+                        update({
+                          ...data,
+                          imageSkill: {
+                            ...imageSkill,
+                            resolution:
+                              event.target.value === '4k' || event.target.value === '2k'
+                                ? event.target.value
+                                : '1k'
+                          }
+                        })
+                      }
+                    >
+                      <option value="1k">1K</option>
+                      <option value="2k">2K</option>
+                      <option value="4k">4K</option>
+                    </AppSelect>
+                  </>
                 )}
               </div>
               <button
                 type="button"
-                aria-label="添加参考文档"
+                aria-label="添加附件"
+                title="添加图片、文本或文档附件"
+                disabled={running || importingAttachments}
                 onClick={() => fileInputRef.current?.click()}
               >
                 <Icon name="attach" size={17} />
@@ -862,7 +1073,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
                 type="button"
                 className="chat-dialog-send"
                 aria-label="发送消息"
-                disabled={!draft.trim() || running}
+                disabled={!draft.trim() || running || importingAttachments}
                 onClick={() => void send()}
               >
                 <Icon name="send" size={17} />
@@ -873,7 +1084,7 @@ export function ChatSidePanel({ editor, shapeId, onClose }: ChatSidePanelProps):
         <input
           ref={fileInputRef}
           type="file"
-          accept=".txt,.md,.json,.csv,.log,.xml,.html,.htm,.js,.ts,.py,.yaml,.yml"
+          accept=".txt,.md,.json,.csv,.log,.xml,.html,.htm,.js,.ts,.py,.yaml,.yml,.png,.jpg,.jpeg,.webp,.gif,.pdf,.docx,.xlsx,.pptx"
           multiple
           hidden
           onChange={(event) => void handleDocUpload(event)}

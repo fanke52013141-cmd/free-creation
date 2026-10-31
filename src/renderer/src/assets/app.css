@@ -142,17 +142,23 @@ input {
 }
 
 input:focus {
-  border-color: var(--brand);
+  /* 2026-10-31 用户裁决：聚焦态不再使用蓝色边框，统一中性灰描边。 */
+  border-color: rgba(148, 163, 184, 0.45);
 }
 
+/* 键盘可见性保留，但改中性色；文本输入框靠边框高亮，不再叠加蓝色外描边
+   （文本输入聚焦始终命中 :focus-visible，是此前「蓝色边框」的主要来源）。 */
 button:focus-visible,
-input:focus-visible,
-textarea:focus-visible,
-select:focus-visible,
 [contenteditable='true']:not(.node-title):focus-visible,
 [tabindex]:focus-visible {
-  outline: 2px solid var(--brand);
+  outline: 2px solid rgba(231, 238, 247, 0.5);
   outline-offset: 2px;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
 }
 
 /* ── 项目列表 ── */
@@ -395,6 +401,18 @@ select:focus-visible,
   width: 240px;
   padding: 4px 10px;
   font-size: 14px;
+  /* 2026-10-31 编辑态重设计：与标题同字重，安静暗色胶囊，去掉全局蓝色聚焦边框 */
+  font-weight: 600;
+  border-radius: 9px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+  caret-color: var(--brand);
+}
+
+.title-input:focus,
+.title-input:focus-visible {
+  outline: none;
+  border-color: rgba(148, 163, 184, 0.42);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
 }
 
 .topbar-spacer {
@@ -1025,7 +1043,8 @@ select:focus-visible,
   top: calc(-26px * var(--group-zoom, 1));
   width: 180px;
   padding: 0 6px;
-  border: 1px solid rgba(93, 156, 236, 0.6);
+  /* 2026-10-31 用户裁决：分组重命名去掉蓝色边框，改为安静暗色描边（与项目重命名一致）。 */
+  border: 1px solid rgba(148, 163, 184, 0.42);
   border-radius: 6px;
   background: rgba(16, 21, 29, 0.96);
   color: #e8eef7;
@@ -1033,6 +1052,7 @@ select:focus-visible,
   font-weight: 600;
   line-height: 18px;
   outline: none;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
   pointer-events: auto;
 }
 
@@ -1070,53 +1090,62 @@ select:focus-visible,
    区别于展开态分组框；本身不占交互，徽标与按钮显式恢复 auto。 */
 .canvas-combo-frame {
   position: absolute;
+  display: flex;
+  flex-direction: column;
   border: 1px solid rgba(140, 160, 190, 0.35);
-  border-radius: calc(18px * var(--combo-zoom, 1));
+  border-radius: 14px;
   background: rgba(140, 160, 190, 0.06);
   pointer-events: none;
 }
 
-/* 左上角"可复用"徽标：骑在框顶边，layers 图标 + 文案，青色调。 */
+/* 2026-10-31 标题行收进框内顶部：可复用徽标在左，展开/运行在右，
+   固定屏幕像素（不再按 zoom 缩放），位置不随画布缩放漂移。 */
+.canvas-combo-frame .canvas-combo-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
+  pointer-events: auto;
+}
+
 .canvas-combo-frame .canvas-combo-badge {
-  position: absolute;
-  top: calc(-10px * var(--combo-zoom, 1));
-  left: calc(14px * var(--combo-zoom, 1));
   display: inline-flex;
   align-items: center;
-  gap: calc(4px * var(--combo-zoom, 1));
-  height: calc(20px * var(--combo-zoom, 1));
-  padding: 0 calc(8px * var(--combo-zoom, 1));
+  gap: 4px;
+  height: 20px;
+  padding: 0 8px;
   border: 1px solid rgba(34, 211, 238, 0.4);
   border-radius: 999px;
   background: rgba(16, 21, 29, 0.9);
   color: #67e8f9;
-  font-size: calc(11px * var(--combo-zoom, 1));
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.04em;
   white-space: nowrap;
-  pointer-events: auto;
 }
 
 .canvas-combo-frame .canvas-combo-badge svg {
-  width: calc(12px * var(--combo-zoom, 1));
-  height: calc(12px * var(--combo-zoom, 1));
+  width: 12px;
+  height: 12px;
+}
+
+.canvas-combo-header-space {
+  flex: 1 1 auto;
 }
 
 .canvas-combo-frame .canvas-combo-btn {
-  position: absolute;
-  top: calc(-10px * var(--combo-zoom, 1));
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: calc(24px * var(--combo-zoom, 1));
-  height: calc(20px * var(--combo-zoom, 1));
+  width: 24px;
+  height: 20px;
   padding: 0;
   border: 1px solid rgba(231, 238, 247, 0.22);
-  border-radius: calc(6px * var(--combo-zoom, 1));
+  border-radius: 6px;
   background: rgba(16, 21, 29, 0.9);
   color: rgba(218, 227, 237, 0.75);
   cursor: pointer;
-  pointer-events: auto;
   transition:
     color 0.15s ease,
     border-color 0.15s ease,
@@ -1129,13 +1158,8 @@ select:focus-visible,
   color: #9cc2ec;
 }
 
-/* 展开在左、运行在右：骑在框顶边右上角。 */
-.canvas-combo-frame .canvas-combo-btn:first-of-type {
-  right: calc(30px * var(--combo-zoom, 1));
-}
-
+/* 展开在左、运行在右（标题行内顺序排列）。 */
 .canvas-combo-frame .canvas-combo-btn.canvas-combo-run {
-  right: calc(6px * var(--combo-zoom, 1));
   border-color: rgba(103, 208, 146, 0.4);
   color: rgba(150, 222, 188, 0.9);
 }
@@ -1152,9 +1176,10 @@ select:focus-visible,
   flex: 1;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* 2026-10-31 用户裁决：组合名称置于折叠框上部（不再垂直居中）。 */
+  justify-content: flex-start;
   gap: 6px;
-  padding: 18px 14px;
+  padding: 14px 14px 18px;
   user-select: none;
 }
 
@@ -1613,33 +1638,187 @@ select:focus-visible,
 /* 统一的已连接输入（呈现规范 v1.0 §11–§17）：由真实 arrow + port + projectOutputs 驱动，
    所有节点共用。仅存在实际边时渲染；图片用缩略图，文本正文换行展开，其余保持紧凑摘要。 */
 /* NODE_REFERENCE_SPEC: one row, all details in an interactive opaque portal. */
-.connected-inputs { width: 100%; min-width: 0; flex: 0 0 auto; padding: 0; margin-bottom: var(--reference-bottom-gap, 8px); box-sizing: border-box; }
-.connected-input-list { display: flex; flex-wrap: nowrap; gap: var(--reference-gap, 6px); height: var(--reference-height, 36px); overflow: hidden; min-width: 0; }
-.connected-input-item, .reference-thumb, .reference-more { box-sizing: border-box; height: var(--reference-height, 36px); flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: flex-start; gap: 6px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--txt); font: inherit; font-size: 11px; pointer-events: auto; cursor: pointer; }
-.connected-input-item { min-width: 0; }
-.connected-input-item > svg, .connected-input-target { flex: 0 0 auto; }
-.connected-input-target { flex: 0 1 auto; max-width: 35%; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
-.connected-input-value { display: block; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.reference-thumb { position: relative; width: 48px; padding: 0; justify-content: center; overflow: hidden; background: #ffffff; }
-.reference-thumb :is(img, video) { width: 100%; height: 100%; object-fit: contain; }
-.reference-video-mark { position: absolute; right: 2px; bottom: 2px; color: #fff; background: #19212c; border-radius: 3px; }
-.reference-more { min-width: 36px; justify-content: center; }
-:is(.connected-input-item, .reference-thumb, .reference-more):hover { border-color: var(--brand); }
-:is(.connected-input-item, .reference-thumb, .reference-more):focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
-.reference-fullview { position: fixed; z-index: calc(var(--z-modal) - 1); width: min(480px, calc(100vw - 16px)); max-height: min(420px, calc(100vh - 16px)); overflow: auto; overscroll-behavior: contain; box-sizing: border-box; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--txt); box-shadow: 0 16px 40px #0006; pointer-events: auto; font-size: 13px; line-height: 1.5; user-select: text; }
-.reference-detail { position: relative; min-width: 0; }
-.reference-detail + .reference-detail { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px; }
-.reference-detail header { display: flex; flex-direction: column; gap: 4px; padding-right: 32px; margin-bottom: 10px; overflow-wrap: anywhere; }
-.reference-detail header span, .reference-detail small { color: var(--muted); }
-.reference-copy { position: absolute; top: 0; right: 0; width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--txt); cursor: pointer; }
-.reference-detail pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; font-family: inherit; }
-.reference-detail-media { display: block; width: 100%; max-height: 300px; object-fit: contain; cursor: pointer; }
-.reference-detail audio { width: 100%; }
-.reference-markdown { overflow-wrap: anywhere; }
-.reference-markdown pre { overflow-x: auto; white-space: pre; font-family: monospace; }
-.reference-markdown table { border-collapse: collapse; display: block; overflow-x: auto; }
-.reference-markdown :is(td, th) { border: 1px solid var(--line); padding: 4px 8px; }
-.reference-list-title { display: block; margin-bottom: 12px; }
+.connected-inputs {
+  width: 100%;
+  min-width: 0;
+  flex: 0 0 auto;
+  padding: 0;
+  margin-bottom: var(--reference-bottom-gap, 8px);
+  box-sizing: border-box;
+}
+.connected-input-list {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--reference-gap, 6px);
+  height: var(--reference-height, 36px);
+  overflow: hidden;
+  min-width: 0;
+}
+.connected-input-item,
+.reference-thumb,
+.reference-more {
+  box-sizing: border-box;
+  height: var(--reference-height, 36px);
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--txt);
+  font: inherit;
+  font-size: 11px;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.connected-input-item {
+  min-width: 0;
+}
+.connected-input-item > svg,
+.connected-input-target {
+  flex: 0 0 auto;
+}
+.connected-input-target {
+  flex: 0 1 auto;
+  max-width: 35%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+}
+.connected-input-value {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.reference-thumb {
+  position: relative;
+  width: 48px;
+  padding: 0;
+  justify-content: center;
+  overflow: hidden;
+  background: #ffffff;
+}
+.reference-thumb :is(img, video) {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.reference-video-mark {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  color: #fff;
+  background: #19212c;
+  border-radius: 3px;
+}
+.reference-more {
+  min-width: 36px;
+  justify-content: center;
+}
+:is(.connected-input-item, .reference-thumb, .reference-more):hover {
+  border-color: var(--brand);
+}
+:is(.connected-input-item, .reference-thumb, .reference-more):focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+.reference-fullview {
+  position: fixed;
+  z-index: calc(var(--z-modal) - 1);
+  width: min(480px, calc(100vw - 16px));
+  max-height: min(420px, calc(100vh - 16px));
+  overflow: auto;
+  overscroll-behavior: contain;
+  box-sizing: border-box;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--txt);
+  box-shadow: 0 16px 40px #0006;
+  pointer-events: auto;
+  font-size: 13px;
+  line-height: 1.5;
+  user-select: text;
+}
+.reference-detail {
+  position: relative;
+  min-width: 0;
+}
+.reference-detail + .reference-detail {
+  border-top: 1px solid var(--line);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+.reference-detail header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 32px;
+  margin-bottom: 10px;
+  overflow-wrap: anywhere;
+}
+.reference-detail header span,
+.reference-detail small {
+  color: var(--muted);
+}
+.reference-copy {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--txt);
+  cursor: pointer;
+}
+.reference-detail pre {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  font-family: inherit;
+}
+.reference-detail-media {
+  display: block;
+  width: 100%;
+  max-height: 300px;
+  object-fit: contain;
+  cursor: pointer;
+}
+.reference-detail audio {
+  width: 100%;
+}
+.reference-markdown {
+  overflow-wrap: anywhere;
+}
+.reference-markdown pre {
+  overflow-x: auto;
+  white-space: pre;
+  font-family: monospace;
+}
+.reference-markdown table {
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+}
+.reference-markdown :is(td, th) {
+  border: 1px solid var(--line);
+  padding: 4px 8px;
+}
+.reference-list-title {
+  display: block;
+  margin-bottom: 12px;
+}
 /* 所有节点生成任务共用同一套轨道行星加载态；百分比由任务耗时估算驱动。 */
 .node-execution-overlay {
   position: absolute;
@@ -7121,8 +7300,7 @@ select:focus-visible,
   overflow: hidden;
   border-radius: 7px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.008)),
-    var(--sunk);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.008)), var(--sunk);
 }
 
 /* 音频没有画面：用品牌色渐变 + 波形填补原本的空黑块（渐变取自 Stitch 方案） */
@@ -10253,8 +10431,7 @@ select:focus-visible,
   border-radius: 5px;
   background: var(--panel, rgba(255, 255, 255, 0.04));
   border: 1px solid var(--line);
-  font-family:
-    'Cascadia Code', 'JetBrains Mono', Consolas, 'Courier New', monospace;
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, 'Courier New', monospace;
   font-size: 10px;
   line-height: 1.5;
   color: var(--text-secondary, #9ca3af);
@@ -11085,7 +11262,10 @@ select:focus-visible,
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
 }
 .btn-generate:hover:not(:disabled) {
   border-color: rgba(103, 190, 215, 0.38);
@@ -11419,13 +11599,40 @@ select:focus-visible,
 }
 .website-node-empty,
 .website-node-link {
+  /* 2026-10-31 用户裁决：图标与名称垂直居中对齐（此前无布局规则，inline 基线排列
+     导致图标偏高、名称贴基线）。URL 与按钮各自成行，行距沿用 §19 间距 token。 */
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 8px;
   color: inherit;
   text-decoration: none;
   cursor: pointer;
   background: transparent;
 }
+
+.website-node-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.website-node-link > strong {
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.2;
+  min-width: 0;
+  max-width: calc(100% - 34px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .website-node-url {
   display: -webkit-box;
+  flex: 1 1 100%;
   overflow: hidden;
   max-width: 100%;
   color: #8abce8;
@@ -11510,11 +11717,25 @@ select:focus-visible,
   background: color-mix(in srgb, var(--node-accent) 15%, transparent);
   color: var(--node-accent);
 }
-.sound-adjust-body strong { font-size: 17px; }
-.sound-adjust-body span:not(.sound-adjust-body-icon) { color: var(--muted); font-size: 12px; }
-.sound-adjust-body small { color: var(--muted); font-size: 11px; }
-.sound-adjust-settings-label { color: var(--txt); font-size: 12px; }
-.sound-adjust-mode { display: flex; gap: 6px; }
+.sound-adjust-body strong {
+  font-size: 17px;
+}
+.sound-adjust-body span:not(.sound-adjust-body-icon) {
+  color: var(--muted);
+  font-size: 12px;
+}
+.sound-adjust-body small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.sound-adjust-settings-label {
+  color: var(--txt);
+  font-size: 12px;
+}
+.sound-adjust-mode {
+  display: flex;
+  gap: 6px;
+}
 .sound-adjust-mode button {
   flex: 1;
   min-height: 34px;
@@ -11529,7 +11750,10 @@ select:focus-visible,
   background: color-mix(in srgb, var(--brand) 14%, transparent);
   color: var(--txt);
 }
-.sound-adjust-settings .settings-field { color: var(--txt); font-size: 12px; }
+.sound-adjust-settings .settings-field {
+  color: var(--txt);
+  font-size: 12px;
+}
 .sound-adjust-settings .settings-field input {
   box-sizing: border-box;
   width: 100%;
@@ -11542,9 +11766,17 @@ select:focus-visible,
   color: var(--txt);
   font: inherit;
 }
-.sound-adjust-settings .settings-field input:focus { border-color: var(--brand); }
-.sound-adjust-settings .contract-settings-hint { margin: 0; }
-.sound-adjust-error { margin: 0; color: var(--red); font-size: 12px; }
+.sound-adjust-settings .settings-field input:focus {
+  border-color: var(--brand);
+}
+.sound-adjust-settings .contract-settings-hint {
+  margin: 0;
+}
+.sound-adjust-error {
+  margin: 0;
+  color: var(--red);
+  font-size: 12px;
+}
 .sound-adjust-save {
   display: inline-flex;
   align-items: center;
@@ -11557,7 +11789,9 @@ select:focus-visible,
   color: var(--txt);
   cursor: pointer;
 }
-.sound-adjust-save:hover { background: color-mix(in srgb, var(--brand) 24%, transparent); }
+.sound-adjust-save:hover {
+  background: color-mix(in srgb, var(--brand) 24%, transparent);
+}
 
 /* ── P1-3 历史版本面板 ── */
 .history-panel {
@@ -12702,27 +12936,131 @@ canvas.tl-canvas-indicators {
 }
 
 /* 结果折叠功能已移除（2026-10-05 用户要求）：本轮产物始终全部可见。 */
-.search-hit-active { outline:2px solid #769cff; outline-offset:-2px; }
+.search-hit-active {
+  outline: 2px solid #769cff;
+  outline-offset: -2px;
+}
 
 /* 节点库：搜索与列表对齐，动作采用同尺寸图标按钮。 */
-.workflow-panel .wf-search { display: flex; align-items: center; gap: 8px; height: 40px; margin: 16px 16px 12px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--muted); }
-.workflow-panel .wf-search input { flex: 1; width: 100%; min-width: 0; height: 38px; margin: 0; padding: 0; border: 0; outline: 0; background: transparent; color: var(--txt); font: inherit; font-size: 13px; }
-.workflow-panel .wf-search:focus-within { border-color: var(--brand); }
-.workflow-panel .wf-template-list { padding: 0 16px 16px; gap: 8px; }
-.workflow-panel .wf-template-card { min-height: 64px; padding: 12px; gap: 12px; }
-.workflow-panel .wf-template-info { gap: 4px; }
-.workflow-panel .wf-template-name { font-size: 13px; }
-.workflow-panel .wf-template-meta { font-size: 11px; }
-.workflow-panel .wf-template-actions { align-items: center; gap: 4px; }
-.workflow-panel .wf-action-btn { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 6px; }
-.workflow-panel .wf-action-btn:hover { background: var(--card-hover); }
+.workflow-panel .wf-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  margin: 16px 16px 12px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--muted);
+}
+.workflow-panel .wf-search input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--txt);
+  font: inherit;
+  font-size: 13px;
+}
+.workflow-panel .wf-search:focus-within {
+  border-color: var(--brand);
+}
+.workflow-panel .wf-template-list {
+  padding: 0 16px 16px;
+  gap: 8px;
+}
+.workflow-panel .wf-template-card {
+  min-height: 64px;
+  padding: 12px;
+  gap: 12px;
+}
+.workflow-panel .wf-template-info {
+  gap: 4px;
+}
+.workflow-panel .wf-template-name {
+  font-size: 13px;
+}
+.workflow-panel .wf-template-meta {
+  font-size: 11px;
+}
+.workflow-panel .wf-template-actions {
+  align-items: center;
+  gap: 4px;
+}
+.workflow-panel .wf-action-btn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+}
+.workflow-panel .wf-action-btn:hover {
+  background: var(--card-hover);
+}
 
-.processor-type-label { display:flex; align-items:center; justify-content:space-between; gap:8px; color:var(--txt); font-size:12px; }
-.processor-type-label .processor-fixed-type, .processor-type-label .gen-select { width:140px; flex:0 0 140px; min-width:0; }
-.processor-output { display:flex; flex-direction:column; gap:8px; font-size:12px; }
-.processor-output pre { margin:0; padding:10px; white-space:pre-wrap; overflow-wrap:anywhere; border-radius:6px; background:var(--bg); }
+.processor-type-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--txt);
+  font-size: 12px;
+}
+.processor-type-label .processor-fixed-type,
+.processor-type-label .gen-select {
+  width: 140px;
+  flex: 0 0 140px;
+  min-width: 0;
+}
+.processor-output {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+}
+.processor-output pre {
+  margin: 0;
+  padding: 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border-radius: 6px;
+  background: var(--bg);
+}
 
-.reference-overflow-item { display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: center; gap: 4px 8px; width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--txt); text-align: left; cursor: pointer; }
-.reference-overflow-item + .reference-overflow-item { margin-top: 6px; }
-.reference-overflow-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.reference-overflow-item small { grid-column: 2; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reference-overflow-item {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 4px 8px;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--txt);
+  text-align: left;
+  cursor: pointer;
+}
+.reference-overflow-item + .reference-overflow-item {
+  margin-top: 6px;
+}
+.reference-overflow-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reference-overflow-item small {
+  grid-column: 2;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

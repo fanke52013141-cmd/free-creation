@@ -21,6 +21,8 @@ interface NativeOption {
   id: string
   value: string
   label: ReactNode
+  /** 关闭态触发器显示的短标签；缺省回落到完整 label（2026-10-31 对话模型选择器需求）。 */
+  triggerLabel: string | null
   disabled: boolean
 }
 
@@ -64,14 +66,18 @@ function collectOptions(children: ReactNode): NativeOption[] {
         value?: string | number
         disabled?: boolean
         children?: ReactNode
+        'data-trigger-label'?: string | number
       }
       const value =
         props.value === undefined ? textValue(props.children).trim() : String(props.value)
       const index = options.length
+      const triggerLabel = props['data-trigger-label']
       options.push({
         id: value === '' ? `${EMPTY_OPTION_ID}-${index}` : `app-select-option-${index}`,
         value,
         label: props.children ?? value,
+        triggerLabel:
+          triggerLabel === undefined || triggerLabel === '' ? null : String(triggerLabel),
         disabled: Boolean(props.disabled)
       })
     })
@@ -143,7 +149,12 @@ export function AppSelect({
         className={`app-select app-select-trigger ${className}`.trim()}
         aria-haspopup="listbox"
       >
-        <Select.Value placeholder={selectedValue} />
+        {/* 有 triggerLabel 的选项：关闭态显示短标签（如仅模型名），下拉里仍展示完整 label */}
+        <Select.Value placeholder={selectedValue}>
+          {selectedOption?.triggerLabel ? (
+            <span className="app-select-value">{selectedOption.triggerLabel}</span>
+          ) : undefined}
+        </Select.Value>
         <Select.Icon className="app-select-chevron" aria-hidden="true">
           <span />
         </Select.Icon>

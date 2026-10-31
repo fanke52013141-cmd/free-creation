@@ -851,16 +851,20 @@
 .canvas-topbar .topbar-center {
   position: static;
   order: initial;
-  flex: 1;
+  /* 2026-10-31 用户裁决：项目名称不再绝对居中，移到 logo 右侧并排（同参考稿）。
+     flex:0 让标题只占内容宽度，剩余空间由 topbar-spacer 吸收，右侧控件照旧贴右。 */
+  flex: 0 1 auto;
   min-width: 0;
   width: auto;
-  max-width: none;
+  max-width: min(420px, 42vw);
   transform: none;
-  text-align: center;
+  text-align: left;
+  margin-left: 2px;
 }
 
 .canvas-topbar .topbar-spacer {
-  display: none;
+  display: block;
+  flex: 1 1 auto;
 }
 
 .canvas-topbar :is(.engine-controls, .topbar-actions) {
@@ -949,16 +953,19 @@
   min-height: 32px;
   margin: 0 0 0 3px;
   padding: 0 16px;
+  border: 0;
   border-radius: 9px;
-  background: linear-gradient(120deg, #39bdf8, #50a9e8);
-  box-shadow:
-    0 7px 20px rgba(37, 163, 232, 0.22),
-    inset 0 1px rgba(255, 255, 255, 0.22);
+  /* 2026-10-31 用户裁决：运行按钮改用主页「新建项目」同款主色调（青色渐变+深色字） */
+  background: linear-gradient(100deg, #22d3ee, #5eead4 52%, #38bdf8);
+  box-shadow: 0 2px 14px rgba(34, 211, 238, 0.3);
+  color: #080a0f;
+  font-weight: 650;
   font-size: 13px;
 }
 
 .engine-controls .run-btn:not(.search-trigger):hover {
-  background: linear-gradient(120deg, #57c8fb, #66b5ee);
+  background: linear-gradient(100deg, #67e8f9, #99f6e4 52%, #7dd3fc);
+  box-shadow: 0 2px 18px rgba(34, 211, 238, 0.45);
 }
 
 .engine-controls .run-btn.running {

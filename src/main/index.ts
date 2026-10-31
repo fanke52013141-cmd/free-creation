@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, protocol, Menu, net } from 'electron'
+import { app, clipboard, shell, BrowserWindow, protocol, Menu, net } from 'electron'
 import { setImageNetworkFetch } from './gateway/image'
 import { join, extname } from 'path'
 import { createReadStream } from 'fs'
@@ -210,7 +210,25 @@ function registerMediaProtocol(): void {
 }
 
 function createWindow(): BrowserWindow {
-  Menu.setApplicationMenu(null)
+  // 2026-10-31 修复「选中文本无法复制」：应用菜单置空会让 role 快捷键（Ctrl+C/X/V/A）
+  // 全部失效，且右键无菜单。改为安装仅含编辑角色的应用菜单，窗口菜单栏仍保持隐藏
+  // （mainWindow.setMenu(null) 只隐藏菜单栏，不动 accelerators）。
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      {
+        label: '编辑',
+        submenu: [
+          { role: 'undo' },
+          { role: 'redo' },
+          { type: 'separator' },
+          { role: 'cut' },
+          { role: 'copy' },
+          { role: 'paste' },
+          { role: 'selectAll' }
+        ]
+      }
+    ])
+  )
   const mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -226,6 +244,33 @@ function createWindow(): BrowserWindow {
   })
 
   mainWindow.setMenu(null)
+
+  // 右键上下文菜单：可编辑区给剪切/复制/粘贴，有选区给复制，链接/图片给对应复制项。
+  mainWindow.webContents.on('context-menu', (_event, params) => {
+    const template: Electron.MenuItemConstructorOptions[] = []
+    if (params.isEditable) {
+      template.push(
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { type: 'separator' },
+        { role: 'selectAll' }
+      )
+    } else if (params.selectionText.trim()) {
+      template.push({ role: 'copy' })
+    } else if (params.mediaType === 'image' && params.srcURL) {
+      template.push({
+        label: '复制图片链接',
+        click: () => clipboard.writeText(params.srcURL)
+      })
+    } else if (params.linkURL) {
+      template.push({
+        label: '复制链接地址',
+        click: () => clipboard.writeText(params.linkURL)
+      })
+    }
+    if (template.length) Menu.buildFromTemplate(template).popup({ window: mainWindow })
+  })
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()

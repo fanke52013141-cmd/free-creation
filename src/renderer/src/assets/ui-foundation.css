@@ -535,8 +535,9 @@ body {
 .node-card textarea:focus,
 .node-card input:focus,
 .node-card select:focus {
-  border-color: rgba(66, 185, 245, 0.62);
-  box-shadow: 0 0 0 2px rgba(66, 185, 245, 0.11);
+  /* 2026-10-31 用户裁决：节点内编辑聚焦去蓝框，统一中性灰描边 + 微光晕。 */
+  border-color: rgba(148, 163, 184, 0.5);
+  box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.12);
 }
 
 /* AppSelect：单选菜单统一走 Radix Portal，避免原生 option 被系统接管。 */
