@@ -28,8 +28,12 @@ export function dynamicPortIdsForShape(shape: NodeCardShape): {
   const pinnedIn = shape.props.nodeType === 'speech' ? ['in-voice'] : []
   const pinnedOut = shape.props.nodeType === 'voice-design' ? ['out-json'] : []
   return {
-    in: new Set(resolved.in.filter((p) => !staticIds.has(p.id) || pinnedIn.includes(p.id)).map((p) => p.id)),
-    out: new Set(resolved.out.filter((p) => !staticIds.has(p.id) || pinnedOut.includes(p.id)).map((p) => p.id))
+    in: new Set(
+      resolved.in.filter((p) => !staticIds.has(p.id) || pinnedIn.includes(p.id)).map((p) => p.id)
+    ),
+    out: new Set(
+      resolved.out.filter((p) => !staticIds.has(p.id) || pinnedOut.includes(p.id)).map((p) => p.id)
+    )
   }
 }
 
@@ -1143,7 +1147,18 @@ export function gatherUpstreamMediaList<K extends 'image' | 'video' | 'audio' | 
   targetPortId: string,
   kind: K
 ): Extract<NodeValue, { kind: K }>[] {
-  const assets: Extract<NodeValue, { kind: K }>[] = []
+  return gatherUpstreamMediaSources(editor, targetNodeId, targetPortId, kind).map(
+    (item) => item.value
+  )
+}
+
+export function gatherUpstreamMediaSources<K extends 'image' | 'video' | 'audio' | 'file'>(
+  editor: Editor,
+  targetNodeId: TLShapeId,
+  targetPortId: string,
+  kind: K
+): { source: NodeCardShape; value: Extract<NodeValue, { kind: K }> }[] {
+  const assets: { source: NodeCardShape; value: Extract<NodeValue, { kind: K }> }[] = []
   for (const shape of orderedPageArrows(editor)) {
     const { start, end } = getArrowBindings(editor, shape.id)
     if (
@@ -1157,7 +1172,8 @@ export function gatherUpstreamMediaList<K extends 'image' | 'video' | 'audio' | 
     const source = editor.getShape<NodeCardShape>(start.toId)
     if (!source || source.type !== 'node-card') continue
     const output = projectNodeOutputs(source)[shape.meta.fromPort]
-    if (output?.kind === kind) assets.push(output as Extract<NodeValue, { kind: K }>)
+    if (output?.kind === kind)
+      assets.push({ source, value: output as Extract<NodeValue, { kind: K }> })
   }
   return assets
 }
