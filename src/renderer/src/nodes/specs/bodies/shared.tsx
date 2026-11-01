@@ -121,17 +121,34 @@ export function ModelSelect({
   options: ReturnType<typeof modelsByModality>
   onChange: (key: string) => void
 }): React.JSX.Element {
+  // 关闭态只显示模型名（单行）；供应商信息放悬浮 title，重名模型在下拉里附注供应商。
+  const current = options.find((o) => o.key === value)
+  const nameCounts = new Map<string, number>()
+  for (const o of options) {
+    const name = o.model.name || o.model.id
+    nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1)
+  }
+  const modelDisplayName = (o: (typeof options)[number]): string => {
+    const name = o.model.name || o.model.id
+    return (nameCounts.get(name) ?? 0) > 1 ? `${name}（${o.provider.name}）` : name
+  }
   return (
     <AppSelect
       className="gen-select"
       value={value}
+      title={current ? current.provider.name : undefined}
       onPointerDown={(e) => stopEventPropagation(e)}
       onChange={(e) => onChange(e.target.value)}
     >
       {!options.some((o) => o.key === value) && <option value="">选择模型…</option>}
       {options.map((o) => (
-        <option key={o.key} value={o.key}>
-          {o.label}
+        <option
+          key={o.key}
+          value={o.key}
+          data-trigger-label={modelDisplayName(o)}
+          title={`${o.provider.name} · ${o.model.name || o.model.id}`}
+        >
+          {`${o.provider.name} · ${o.model.name || o.model.id}`}
         </option>
       ))}
     </AppSelect>
@@ -964,7 +981,10 @@ export function expandSplitResults(
         y: position.y,
         props: {
           nodeType: 'image',
-          title: `${source.props.title || '图片拆分'} · 第 ${index + 1} 格`,
+          // 与主进程/执行器命名一致：「图N+原始命名」；优先用资产落盘名（即原始图名）。
+          title:
+            useMediaStore.getState().assets.find((asset) => asset.id === item.mediaId)?.name ||
+            `图${index + 1}+${source.props.title || '图片拆分'}`,
           mediaId: item.mediaId,
           mediaPath: item.mediaPath,
           mediaMime: item.mime,

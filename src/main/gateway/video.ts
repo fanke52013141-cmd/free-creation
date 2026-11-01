@@ -845,6 +845,9 @@ function isTransientPollError(error: unknown): boolean {
   // fetch 层的网络断开（DNS/连接被拒/TLS）不带 GatewayError 包装，任务可能仍在运行
   if (!(error instanceof GatewayError)) return true
   if (error.code === 'TIMEOUT') return true
+  // Vidu CLI 的查询失败（404 任务未就绪、4xx 抖动、HTTP 未知）不代表任务已终态；
+  // 付费任务仍可能在上游运行，一次失败就判死会诱导重投再扣费。连续阈值由 pollUpstream 把关。
+  if (error.code === 'VIDU_CLI_FAILED') return true
   return error instanceof UpstreamStatusError && error.status >= 500
 }
 

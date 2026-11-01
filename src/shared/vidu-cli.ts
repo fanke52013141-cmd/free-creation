@@ -74,5 +74,7 @@ export function classifyViduTask(data: Record<string, unknown>): {
   if (data.state === 'canceled' || data.state === 'cancelled') return { status: 'cancelled' }
   if (['created', 'queueing', 'queued', 'processing', 'running'].includes(String(data.state)))
     return { status: 'running' }
-  return { status: 'unknown' }
+  // 文档之外的状态值（或暂时缺 state 的响应）按仍在运行处理：任务已在上游计费运行，
+  // 误判成 unknown 会立刻终止轮询，远端成功后本地再也取不回结果（Vidu Q4 实测踩坑）。
+  return { status: 'running' }
 }

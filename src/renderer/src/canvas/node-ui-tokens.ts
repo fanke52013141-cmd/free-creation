@@ -20,6 +20,8 @@ export const NODE_UI = {
     rich: 380,
     /** H3 自动上限：多媒体集合等密集内容；超过后内容内部滚动 */
     autoMax: 440,
+    /** 视频生成节点上限：引用缩略图 + 三段配置 + 主操作，引用多图时不得裁掉输出参数 */
+    autoMaxVideoGen: 560,
     /** v1.2：手动与自动高度共用上限 */
     manualMax: 440,
     /** 历史兼容保护值：仅用于旧项目异常尺寸迁移判断，不属于 UI 规范 */
@@ -54,11 +56,16 @@ export const NODE_UI = {
 } as const
 
 /** 内容所需高度 → 就近固定档位（呈现规范 v1.0 §3.4）。
- *  只允许 260 → 320 → 380 → 440 跳档，禁止内容驱动的连续高度。
- *  超过 autoMax 的内容由调用方（node-body）内部滚动承载。 */
-export function resolveNodeHeight(required: number): number {
+ *  只允许 260 → 320 → 380 → 440（→ 视频生成节点 560）跳档，禁止内容驱动的连续高度。
+ *  超过档位的内容由调用方（node-body）内部滚动承载。 */
+export function resolveNodeHeight(
+  required: number,
+  cap: number = NODE_UI.height.autoMax
+): number {
   if (required <= NODE_UI.height.default) return NODE_UI.height.default
   if (required <= NODE_UI.height.expanded) return NODE_UI.height.expanded
   if (required <= NODE_UI.height.rich) return NODE_UI.height.rich
+  if (required <= NODE_UI.height.autoMax) return NODE_UI.height.autoMax
+  if (cap > NODE_UI.height.autoMax && required <= cap) return cap
   return NODE_UI.height.autoMax
 }

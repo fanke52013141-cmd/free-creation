@@ -173,8 +173,10 @@ export function createBrowserMedia(): {
     try {
       const config = parseImageSplitConfig(JSON.stringify(rawConfig))
       const tiles = buildImageSplitTiles(config)
+      // 与主进程命名一致：「图N+原始命名」。
+      const sourceName = source.name?.trim() || '图片'
       const output: MediaAsset[] = []
-      for (const tile of tiles) {
+      for (const [index, tile] of tiles.entries()) {
         const sx = Math.floor(tile.rect.x * image.naturalWidth)
         const sy = Math.floor(tile.rect.y * image.naturalHeight)
         const sw = Math.max(1, Math.floor(tile.rect.width * image.naturalWidth))
@@ -187,7 +189,7 @@ export function createBrowserMedia(): {
         // 与主进程 renderRect 一致：1:1 拷贝时关闭平滑，否则每格边缘会渗进邻格颜色。
         context.imageSmoothingEnabled = false
         context.drawImage(image, sx, sy, sw, sh, 0, 0, sw, sh)
-        output.push(await saveCanvas(projectId, canvas, `拆分图-R${tile.row}C${tile.column}`))
+        output.push(await saveCanvas(projectId, canvas, `图${index + 1}+${sourceName}`))
       }
       return output
     } finally {

@@ -95,8 +95,10 @@ export async function runViduJson(
     child.on('error', () => finish(new ViduCliError('VIDU_CLI_MISSING', 'Vidu CLI 不可用，请安装 npm install -g vidu-cli@0.2.33，或设置 CANVAS_STUDIO_VIDU_PATH 指向原生可执行文件')))
     child.on('close', (code) => {
       if (settled) return
+      // CLI v0.2.33 对一切失败（含 HTTP 4xx/5xx/限流）都以退出码 1 结束，但会把带
+      // http_status 的 JSON 错误写到 stdout。必须先解析 stdout 再看退出码，否则
+      // 429/5xx 会被吞成笼统的 VIDU_CLI_FAILED，轮询层一次抖动就把付费任务判死。
       try {
-        if (code !== 0) throw new ViduCliError('VIDU_CLI_FAILED', 'Vidu CLI 调用失败，请检查 Token、额度、网络和 CLI 版本；已提交任务请先核对，避免重复计费')
         const data = parseViduOutput(stdout)
         if (data.ok === false || data.error) {
           const error = data.error && typeof data.error === 'object' ? data.error as Record<string, unknown> : {}
@@ -110,7 +112,18 @@ export async function runViduJson(
         }
         binary = selected
         finish(undefined, data)
-      } catch (error) { finish(error as Error) }
+      } catch (error) {
+        if (error instanceof ViduCliError && error.code === 'VIDU_BAD_OUTPUT') {
+          // stdout 里没有 JSON 才走这里：退出码非 0 是调用失败，0 则是坏输出。
+          finish(
+            code === 0
+              ? new ViduCliError('VIDU_BAD_OUTPUT', 'Vidu CLI 返回了无法解析的结果，请核对原任务，避免重复提交')
+              : new ViduCliError('VIDU_CLI_FAILED', 'Vidu CLI 调用失败，请检查 Token、额度、网络和 CLI 版本；已提交任务请先核对，避免重复计费')
+          )
+          return
+        }
+        finish(error as Error)
+      }
     })
     if (signal?.aborted) abort()
   })

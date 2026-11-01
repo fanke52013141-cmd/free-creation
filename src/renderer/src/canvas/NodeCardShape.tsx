@@ -141,7 +141,10 @@ export class NodeCardUtil extends BaseBoxShapeUtil<NodeCardShape> {
         }
       }
     }
-    const clamped = Math.max(NODE_UI.height.min, Math.min(NODE_UI.height.manualMax, height))
+    // 视频生成节点允许拖到专用上限（引用多图时输出参数不能被裁掉）；其余节点共用通用上限。
+    const manualCap =
+      shape.props.nodeType === 'video' ? NODE_UI.height.autoMaxVideoGen : NODE_UI.height.manualMax
+    const clamped = Math.max(NODE_UI.height.min, Math.min(manualCap, height))
     const anchor = info.handle.startsWith('top')
       ? 1
       : info.handle === 'left' || info.handle === 'right'

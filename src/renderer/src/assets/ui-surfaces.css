@@ -2838,17 +2838,7 @@ button {
   }
 }
 
-/* 视频提示词的 @ 图片引用：只是“创建真实参考图连线”的快捷界面，不保存隐藏媒体。 */
-.video-reference-mention {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: -2px;
-  color: var(--ui-text-muted, #93a0b3);
-  font-size: 12px;
-}
-
+/* 视频提示词的 @ 图片引用：@图N 即「把第 N 张连接图片当参考图」，提交时由执行器统一替换。 */
 .video-mention-menu {
   display: grid;
   width: 100%;
@@ -3120,7 +3110,8 @@ button {
 }
 
 .video-gen-panel .video-gen-prompt {
-  min-height: 86px;
+  /* 描述框加高（rows=5）：@引用按钮移除后空间让给正文，长描述不再频繁内部滚动。 */
+  min-height: 132px;
   flex: 0 0 auto;
   padding: 9px 10px;
   border-color: color-mix(in srgb, var(--ui-border, #3b4656) 78%, transparent);
@@ -3132,46 +3123,6 @@ button {
 .video-gen-panel .video-gen-prompt:focus {
   border-color: #38bdf8;
   box-shadow: 0 0 0 2px rgb(56 189 248 / 12%);
-}
-
-.video-prompt-toolbar {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  color: var(--ui-text-muted, #9ba9bb);
-  font-size: 9px;
-}
-
-.video-prompt-toolbar > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.video-gen-panel .video-reference-mention {
-  margin: 0;
-}
-
-.video-gen-panel .video-reference-mention > button {
-  min-height: 26px;
-  padding: 3px 8px;
-  border-color: color-mix(in srgb, #38bdf8 24%, var(--ui-border, #3b4656));
-  border-radius: 7px;
-  background: rgb(56 189 248 / 8%);
-  color: #8bdcff;
-  font-size: 10px;
-}
-
-.video-gen-panel .video-reference-mention > button:hover:not(:disabled) {
-  border-color: rgb(56 189 248 / 52%);
-  background: rgb(56 189 248 / 15%);
-  color: #c4f0ff;
-}
-
-.video-gen-panel .video-reference-mention > button:disabled {
-  opacity: 0.5;
 }
 
 .video-gen-panel .video-param-grid {

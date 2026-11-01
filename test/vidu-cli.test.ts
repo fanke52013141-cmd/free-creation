@@ -42,4 +42,12 @@ describe('Vidu CLI task contract', () => {
     expect(classifyViduTask({ state: 'failed', err_msg: 'private prompt' })).toEqual({ status: 'failed', error: 'Vidu 远端生成失败，请查看任务状态' })
     expect(() => parseViduOutput('private prompt and signed url')).toThrow('无法解析')
   })
+
+  it('treats unrecognized or missing in-flight states as still running, never terminal unknown', () => {
+    // Vidu Q4 实测：任务刚提交时 state 可能是文档之外的值甚至缺省；
+    // 误判成 unknown 会终止轮询，远端成功后本地取不回结果。
+    expect(classifyViduTask({ state: 'generating' }).status).toBe('running')
+    expect(classifyViduTask({}).status).toBe('running')
+    expect(classifyViduTask({ task_id: 'x', ok: true }).status).toBe('running')
+  })
 })

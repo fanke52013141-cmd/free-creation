@@ -847,6 +847,9 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         if (!latest) return
         const metadata = latest.meta
         const current = latest.props.h
+        // 视频生成节点引用多图时内容超过通用上限，允许跳到专用档，避免输出参数被裁掉。
+        const heightCap =
+          latest.props.nodeType === 'video' ? NODE_UI.height.autoMaxVideoGen : NODE_UI.height.autoMax
         if (latest.props.nodeType === 'storyboard') {
           if (metadata.nodeHeightMode === 'manual') return
           const table = body.querySelector<HTMLTableElement>('.storyboard-table')
@@ -876,7 +879,8 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           }
           return
         }
-        const clamped = Math.max(NODE_UI.height.min, Math.min(NODE_UI.height.manualMax, current))
+        // 旧尺寸迁移：超过上限（视频生成节点用专用上限）才回收，不碰合法档位。
+        const clamped = Math.max(NODE_UI.height.min, Math.min(heightCap, current))
         if (clamped !== current) {
           editor.run(
             () =>
@@ -895,7 +899,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           return
         }
         if (metadata.nodeHeightMode === 'manual') return
-        if (!metadata.nodeHeightMode && resolveNodeHeight(current) !== current) {
+        if (!metadata.nodeHeightMode && resolveNodeHeight(current, heightCap) !== current) {
           editor.run(
             () =>
               editor.updateShape({
@@ -958,7 +962,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
           ? resolveNodeHeight(
               NODE_UI.height.default + (references ? references + NODE_UI.reference.bottomGap : 0)
             )
-          : resolveNodeHeight(referencedMinimum)
+          : resolveNodeHeight(referencedMinimum, heightCap)
         const focused = document.activeElement
         const editingInput =
           scroll.contains(focused) &&
@@ -1066,7 +1070,20 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
             return
           }
           const field = nodeTextField(event.target)
-          if (nodeOwnsPointer(event.target) || (field && document.activeElement === field)) {
+          if (field) {
+            // 用户要求：点击输入框直接进入输入态——放行原生 focus（不再 preventDefault），
+            // 同时顺手选中节点；阻止冒泡避免 wrapper 启动节点拖拽。
+            if (
+              !event.shiftKey &&
+              !event.ctrlKey &&
+              !event.metaKey &&
+              !editor.getSelectedShapeIds().includes(shape.id)
+            )
+              editor.select(shape.id)
+            event.stopPropagation()
+            return
+          }
+          if (nodeOwnsPointer(event.target)) {
             if (
               !event.shiftKey &&
               !event.ctrlKey &&
@@ -1076,7 +1093,6 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
               editor.select(shape.id)
             return
           }
-          if (field) event.preventDefault()
           // Descendant blanket stopPropagation must not swallow selection or movement.
           // Use tldraw's public pointer API once, with its normal modifier/group/undo semantics.
           event.stopPropagation()

@@ -388,9 +388,8 @@ describe('真实宫格拆分', () => {
     expect(assets).toHaveLength(6)
     const expected = [RED, GREEN, BLUE, YELLOW, MAGENTA, CYAN]
     for (const [index, asset] of assets.entries()) {
-      const row = Math.floor(index / 3) + 1
-      const column = (index % 3) + 1
-      expect(asset.name).toBe(`拆分图-R${row}C${column}`)
+      // 拆分格统一命名「图N+原始命名」；测试源图未登记名称，回退为「图片」。
+      expect(asset.name).toBe(`图${index + 1}+图片`)
       expect(asset.path).toBe(`projects/p1/media/${asset.id}.png`)
       const rendered = await decode(asset)
       // 四角与中心都必须是本格颜色：任何一角发灰/混色，就说明采样读到了格外的邻格像素。
@@ -465,7 +464,7 @@ describe('真实宫格拆分', () => {
     expect(assets.length).toBeLessThanOrEqual(64)
     // 保行数、下调列数：64 格上限下 200 行只能 1 列 → 64 格。
     expect(assets.length).toBe(64)
-    expect(assets[0].name).toBe('拆分图-R1C1')
-    expect(assets[63].name).toBe('拆分图-R64C1')
+    expect(assets[0].name).toBe('图1+图片')
+    expect(assets[63].name).toBe('图64+图片')
   })
 })

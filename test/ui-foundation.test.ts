@@ -124,6 +124,12 @@ describe('统一画布视觉基础', () => {
     expect(resolveNodeHeight(380)).toBe(380)
     expect(resolveNodeHeight(381)).toBe(440)
     expect(resolveNodeHeight(900)).toBe(NODE_UI.height.autoMax)
+    // 视频生成节点专用档：引用多图时输出参数不得被 440 上限裁掉。
+    expect(
+      resolveNodeHeight(500, NODE_UI.height.autoMaxVideoGen)
+    ).toBe(NODE_UI.height.autoMaxVideoGen)
+    expect(resolveNodeHeight(440, NODE_UI.height.autoMaxVideoGen)).toBe(440)
+    expect(resolveNodeHeight(900, NODE_UI.height.autoMaxVideoGen)).toBe(NODE_UI.height.autoMax)
     // 超档内容在 node-body 内部滚动，不再撑高卡片。
     expect(foundation).toMatch(/\.node-body\s*\{[^}]*overflow-y:\s*auto/)
   })

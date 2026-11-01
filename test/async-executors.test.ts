@@ -607,6 +607,53 @@ describe('chat / audio / video executors with a mocked gateway', () => {
     expect(JSON.parse(result.value ?? '{}').results[0].runId).toBe('run-1')
   })
 
+  it('video executor：@图N 按连接顺序解析为「第N张参考图」后提交', async () => {
+    const videoSubmit = vi.fn().mockResolvedValue({ ok: true, data: { taskId: 'video-task' } })
+    installGateway({
+      videoSubmit,
+      videoTask: vi.fn().mockResolvedValue({
+        ok: true,
+        data: { status: 'success', mediaId: 'video-1', mediaPath: 'projects/p/video.mp4' }
+      }),
+      videoCancel: vi.fn()
+    })
+    const viduProvider = {
+      id: 'provider-vidu',
+      name: 'Vidu（本机 CLI）',
+      specId: 'vidu',
+      baseURL: 'https://service.vidu.cn',
+      hasApiKey: true,
+      createdAt: 0,
+      models: [{ id: '3.4', name: 'Vidu Q4', modality: 'video', providerId: 'provider-vidu' }]
+    } as ProviderSummary
+    const { ctx } = makeContext(
+      'video',
+      JSON.stringify({ modelKey: 'provider-vidu::3.4', params: {} }),
+      [viduProvider],
+      '@图1 全景推进，@图2 特写；@图9 不存在'
+    )
+    const image = (id: string) => ({
+      kind: 'image',
+      mediaId: id,
+      mediaPath: `projects/p/${id}.png`,
+      mime: 'image/png'
+    })
+    ;(ctx as { inputs: Map<string, unknown[]> }).inputs = new Map([
+      ['in-images', [{ value: image('img-1') }, { value: image('img-2') }]]
+    ])
+    const pending = videoExecutor(ctx)
+    await vi.runAllTicks()
+    await vi.advanceTimersByTimeAsync(3_000)
+    await expect(pending).resolves.toEqual({ status: 'done' })
+    expect(videoSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: '第1张参考图 全景推进，第2张参考图 特写；@图9 不存在',
+        mode: 'reference',
+        referenceImageMediaIds: ['img-1', 'img-2']
+      })
+    )
+  })
+
   it('video executor：提交成功后取消 → 补偿取消远端任务再 skipped（R-01）', async () => {
     const videoCancel = vi.fn().mockResolvedValue({ ok: true, data: true })
     const videoSubmit = vi.fn().mockResolvedValue({ ok: true, data: { taskId: 'video-cancel-me' } })

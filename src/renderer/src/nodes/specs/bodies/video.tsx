@@ -1,7 +1,7 @@
 import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
 // 视频节点 Body（路线图 R6：bodies.tsx 拆分）
 import { useEffect, useRef, useState } from 'react'
-import { stopEventPropagation, useEditor, type TLShapeId } from 'tldraw'
+import { stopEventPropagation, useEditor } from 'tldraw'
 import type { VideoGenerationMode, VideoGenParams } from '@shared/types'
 import {
   isSeedanceGatewayProxy,
@@ -11,10 +11,10 @@ import {
   resolveVideoMode,
   videoRatioIsDerivedByFrames
 } from '@shared/video-capabilities'
-import { getNodeType, mediaUrl, type NodeBodyProps } from '../../registry'
+import { mediaUrl, type NodeBodyProps } from '../../registry'
 import { toast } from '../../../stores/toast'
 import { markUndoPoint } from '../../../canvas/history'
-import { gatherUpstreamMediaList, gatherUpstreamMediaSources } from '../../../canvas/graph'
+import { gatherUpstreamMediaList } from '../../../canvas/graph'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { runNodeManually } from '../../../engine/executor'
 import { useAppStore } from '../../../stores/app'
@@ -87,12 +87,6 @@ function parseVideoGen(text: string): VideoGenData {
   )
 }
 
-interface MentionableImage {
-  shapeId: TLShapeId
-  title: string
-  mediaPath: string
-}
-
 export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Element {
   const guard = useClickGuard()
   const editor = useEditor()
@@ -137,32 +131,12 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
   const data = parseVideoGen(readNodeConfig(shape))
   const [draft, setDraft] = useState(shape.props.text)
   const [submitting, setSubmitting] = useState(false)
-  const [mentionOpen, setMentionOpen] = useState(false)
-  const [mentionStart, setMentionStart] = useState<number | null>(null)
-  const [mentionQuery, setMentionQuery] = useState('')
-  const [mentionIndex, setMentionIndex] = useState(0)
   const promptRef = useRef<HTMLTextAreaElement>(null)
-  const mentionMenuRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (mentionOpen) mentionMenuRef.current?.scrollIntoView({ block: 'nearest' })
-  }, [mentionOpen])
   // 视频的所有图片只占一个绿色端口；模式决定连接顺序的协议角色。
   const images = gatherUpstreamMediaList(editor, shape.id, 'in-images', 'image')
   const motionReferences = gatherUpstreamMediaList(editor, shape.id, 'in-reference-video', 'video')
   const audioReferences = gatherUpstreamMediaList(editor, shape.id, 'in-reference-audio', 'audio')
-  const availableMentions: MentionableImage[] = gatherUpstreamMediaSources(
-    editor,
-    shape.id,
-    'in-images',
-    'image'
-  ).map(({ source, value }) => ({
-    shapeId: source.id,
-    title: source.props.title || getNodeType(source.props.nodeType)?.label || '图片',
-    mediaPath: value.mediaPath
-  }))
-  const filteredMentions = availableMentions.filter((item) =>
-    item.title.toLowerCase().includes(mentionQuery.toLowerCase())
-  )
+  // @-提及功能已按用户要求移除；图片引用仍通过首/尾帧与多参考模式传入
   const opt = options.find((o) => o.key === data.modelKey)
   // 兼容网关代理属于供应商接入事实，统一收在能力层；UI 只读取结构化能力。
   const gatewayProxy = Boolean(
@@ -287,22 +261,6 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     }
   }
 
-  const addImageMention = (item: MentionableImage): void => {
-    const input = promptRef.current
-    const end = input?.selectionStart ?? draft.length
-    const start = mentionStart ?? end
-    const insert = `@${item.title} `
-    const nextPrompt = draft.slice(0, start) + insert + draft.slice(end)
-    setDraft(nextPrompt)
-    updateText(nextPrompt)
-    setMentionOpen(false)
-    setMentionStart(null)
-    setMentionQuery('')
-    requestAnimationFrame(() => {
-      input?.focus()
-      input?.setSelectionRange(start + insert.length, start + insert.length)
-    })
-  }
 
   if (isAssetNode && !shape.props.mediaPath) {
     // 视频资产空态：所有 Hook 已在上方无条件调用，这里早退是安全的。
@@ -543,113 +501,19 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           ref={promptRef}
           className="gen-prompt video-gen-prompt"
           value={draft}
-          rows={3}
+          rows={5}
           spellCheck={false}
           maxLength={capabilities?.maxPromptChars}
           placeholder="描述视频内容、镜头与氛围…"
           onChange={(e) => {
-            const value = e.target.value
-            const cursor = e.target.selectionStart
-            setDraft(value)
-            const match = value.slice(0, cursor).match(/@([^@\s]*)$/)
-            if (match) {
-              setMentionStart(cursor - match[1].length - 1)
-              setMentionQuery(match[1])
-              setMentionIndex(0)
-              setMentionOpen(true)
-            } else {
-              setMentionOpen(false)
-              setMentionStart(null)
-            }
+            setDraft(e.target.value)
           }}
           onBlur={() => {
             update({ ...data, params })
             updateText(draft)
           }}
-          onKeyDown={(e) => {
-            if (!mentionOpen || e.nativeEvent.isComposing) return
-            if (e.key === 'Escape') {
-              e.preventDefault()
-              setMentionOpen(false)
-              setMentionStart(null)
-            } else if (filteredMentions.length && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
-              e.preventDefault()
-              setMentionIndex(
-                (index) =>
-                  (index + (e.key === 'ArrowDown' ? 1 : -1) + filteredMentions.length) %
-                  filteredMentions.length
-              )
-            } else if (filteredMentions.length && (e.key === 'Enter' || e.key === 'Tab')) {
-              e.preventDefault()
-              addImageMention(filteredMentions[Math.min(mentionIndex, filteredMentions.length - 1)])
-            }
-          }}
           onPointerDown={(e) => e.stopPropagation()}
         />
-        <div className="video-prompt-toolbar">
-          <div className="video-reference-mention">
-            <button
-              type="button"
-              className="btn-ghost small"
-              onPointerDown={(event) => {
-                event.preventDefault()
-                stopEventPropagation(event)
-              }}
-              onClick={(event) => {
-                stopEventPropagation(event)
-                setMentionStart(null)
-                setMentionQuery('')
-                setMentionIndex(0)
-                setMentionOpen((open) => !open)
-              }}
-              disabled={availableMentions.length === 0}
-              title={
-                availableMentions.length
-                  ? '引用已连线的图片（也可在提示词里输入 @）'
-                  : '请先连接图片到视频节点'
-              }
-            >
-              <Icon name="attach" size={13} /> @ 引用图片
-            </button>
-          </div>
-          <span>输入 @ 引用已连接图片</span>
-        </div>
-        {mentionOpen && (
-          <div
-            className="video-mention-menu"
-            role="listbox"
-            aria-label="选择已连接的参考图"
-            ref={mentionMenuRef}
-          >
-            <div className="video-mention-heading">
-              已连接的图片 <span>↑↓ 选择 · Enter 确认</span>
-            </div>
-            {filteredMentions.length ? (
-              filteredMentions.map((item, index) => (
-                <button
-                  type="button"
-                  key={`${item.shapeId}-${index}`}
-                  role="option"
-                  aria-selected={index === mentionIndex}
-                  onPointerDown={(event) => {
-                    event.preventDefault()
-                    stopEventPropagation(event)
-                  }}
-                  onMouseEnter={() => setMentionIndex(index)}
-                  onClick={(event) => {
-                    stopEventPropagation(event)
-                    addImageMention(item)
-                  }}
-                >
-                  <img src={mediaUrl(item.mediaPath)} alt="" draggable={false} />
-                  <span title={item.title}>{item.title}</span>
-                </button>
-              ))
-            ) : (
-              <div className="video-mention-empty">{availableMentions.length ? '没有匹配的图片' : '请先连接图片到视频节点'}</div>
-            )}
-          </div>
-        )}
       </section>
       {capabilities && (
         <section className="video-gen-section video-output-settings" aria-label="视频输出参数">

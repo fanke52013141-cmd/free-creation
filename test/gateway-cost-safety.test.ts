@@ -271,6 +271,25 @@ describe('轮询连续瞬时错误容错', () => {
     )
   })
 
+  it('Vidu CLI 查询失败按瞬时容错：付费任务不因一次查询抖动被判死', async () => {
+    const { pollUpstream } = await import('../src/main/gateway/video')
+    const failures = { count: 0 }
+    const poll = async (): Promise<UpstreamState> => {
+      // Vidu CLI v0.2.33 对一切失败都以退出码 1 结束；任务刚提交时查询可能 404 未就绪
+      throw new GatewayError('VIDU_CLI_FAILED', 'Vidu 服务拒绝请求（HTTP 404），请检查 Token、额度和模型参数')
+    }
+    for (let i = 1; i <= 4; i++) {
+      await expect(pollUpstream(poll, provider, undefined, 'up-1', failures)).resolves.toEqual({
+        status: 'running'
+      })
+      expect(failures.count).toBe(i)
+    }
+    await expect(pollUpstream(poll, provider, undefined, 'up-1', failures)).rejects.toThrow(
+      'HTTP 404'
+    )
+    expect(failures.count).toBe(5)
+  })
+
   it('401/403/404 是确定性错误，第一次就立即失败', async () => {
     const { pollUpstream } = await import('../src/main/gateway/video')
     for (const status of [401, 403, 404]) {

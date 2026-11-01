@@ -32,7 +32,7 @@ export async function transformImageCrop(input: ImageCropTransformInput): Promis
   const config = parseImageCropConfig(JSON.stringify(input.config))
   const invalid = validateImageCropConfig(config)
   if (invalid) throw new Error(invalid)
-  const image = await loadProjectImage(input.projectId, input.sourceMediaId)
+  const { image } = await loadProjectImage(input.projectId, input.sourceMediaId)
   // 已停止的运行不再开始像素渲染；渲染本身是同步 C++ 调用，一旦开始无法中断，
   // 迟到资产由渲染器侧的取消清理兜底删除。
   if (isMediaCancelled()) throw new Error(MEDIA_TRANSFORM_CANCELLED)
@@ -49,16 +49,17 @@ export async function transformImageCrop(input: ImageCropTransformInput): Promis
  */
 export async function transformImageSplit(input: ImageSplitTransformInput): Promise<MediaAsset[]> {
   const config = parseImageSplitConfig(JSON.stringify(input.config))
-  const image = await loadProjectImage(input.projectId, input.sourceMediaId)
+  const { image, sourceName } = await loadProjectImage(input.projectId, input.sourceMediaId)
   const created: MediaAsset[] = []
   try {
-    for (const tile of buildImageSplitTiles(config)) {
+    for (const [index, tile] of buildImageSplitTiles(config).entries()) {
       if (isMediaCancelled()) throw new Error(MEDIA_TRANSFORM_CANCELLED)
       const output = renderRect(image, {
         rect: tile.rect
       })
+      // 拆分格统一命名「图N+原始命名」：连接顺序即 N，下游（视频参考、资源库）都按此显示。
       created.push(
-        await saveBufferAsset(input.projectId, output, '.png', `拆分图-R${tile.row}C${tile.column}`)
+        await saveBufferAsset(input.projectId, output, '.png', `图${index + 1}+${sourceName}`)
       )
     }
     return created
@@ -70,16 +71,20 @@ export async function transformImageSplit(input: ImageSplitTransformInput): Prom
 
 type CanvasImage = Awaited<ReturnType<typeof loadImage>>
 
-async function loadProjectImage(projectId: string, sourceMediaId: string): Promise<CanvasImage> {
+async function loadProjectImage(
+  projectId: string,
+  sourceMediaId: string
+): Promise<{ image: CanvasImage; sourceName: string }> {
   if (!projectId || !sourceMediaId) throw new Error('缺少项目或源图片')
   // 不使用 LIKE：projectId 来自 IPC，通配符不能被解释为跨项目匹配。
   const projectPrefix = `projects/${projectId}/media/`
   const source = getDb()
     .prepare(
-      'SELECT path, mime, kind, size_bytes FROM media WHERE id = ? AND substr(path, 1, length(?)) = ? LIMIT 1'
+      'SELECT path, mime, kind, size_bytes, name FROM media WHERE id = ? AND substr(path, 1, length(?)) = ? LIMIT 1'
     )
     .get(sourceMediaId, projectPrefix, projectPrefix) as
-    { path: string; mime: string; kind: string; size_bytes: number } | undefined
+    | { path: string; mime: string; kind: string; size_bytes: number; name: string | null }
+    | undefined
   if (!source || source.kind !== 'image' || !source.mime.startsWith('image/')) {
     throw new Error('输入图片不存在，或不属于当前项目')
   }
@@ -91,7 +96,8 @@ async function loadProjectImage(projectId: string, sourceMediaId: string): Promi
   if (image.width * image.height > MAX_IMAGE_PIXELS) {
     throw new Error('图片解码后超过 6400 万像素，暂不支持本地裁剪')
   }
-  return image
+  const sourceName = source.name?.trim() || '图片'
+  return { image, sourceName }
 }
 
 function renderRect(image: CanvasImage, config: Pick<ImageCropConfig, 'rect'>): Buffer {
