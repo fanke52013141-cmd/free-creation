@@ -216,7 +216,9 @@ export function createEdge(
   editor: Editor,
   from: EdgeEndpoint,
   to: EdgeEndpoint,
-  markHistory = true
+  markHistory = true,
+  /** 批量连线时的接入顺序（1 起）；deriveGraph 按它决定多值端口的 图N 顺序 */
+  connectOrder?: number
 ): boolean {
   const fromShape = editor.getShape<NodeCardShape>(from.shapeId)
   const toShape = editor.getShape<NodeCardShape>(to.shapeId)
@@ -286,7 +288,11 @@ export function createEdge(
         labelPosition: 0.5,
         scale: 1
       },
-      meta: { fromPort: fromPort.id, toPort: toPort.id }
+      meta: {
+        fromPort: fromPort.id,
+        toPort: toPort.id,
+        ...(connectOrder !== undefined ? { connectOrder } : {})
+      }
     })
     editor.createBinding({
       type: 'arrow',
@@ -574,10 +580,19 @@ export function tryConnectBatch(
   }
   let created = 0
   editor.run(() => {
-    for (const sourceId of plan) {
-      if (createEdge(editor, { shapeId: sourceId, portId: from.portId }, endpoint, false))
+    plan.forEach((sourceId, order) => {
+      // connectOrder 记录框选/接触顺序：deriveGraph 据此决定多值端口的 图N 序
+      if (
+        createEdge(
+          editor,
+          { shapeId: sourceId, portId: from.portId },
+          endpoint,
+          false,
+          order + 1
+        )
+      )
         created += 1
-    }
+    })
   })
   if (created > 0) editor.markHistoryStoppingPoint('create-batch-edges')
   return { created, skipped: memberIds.length - created }
@@ -967,7 +982,10 @@ export function deriveGraph(editor: Editor): {
       edges.push({
         id: shape.id,
         from: { nodeId: start.toId, portId: (shape.meta?.fromPort as string) ?? '' },
-        to: { nodeId: end.toId, portId: (shape.meta?.toPort as string) ?? '' }
+        to: { nodeId: end.toId, portId: (shape.meta?.toPort as string) ?? '' },
+        ...(typeof shape.meta?.connectOrder === 'number'
+          ? { connectOrder: shape.meta.connectOrder as number }
+          : {})
       })
     } else if (shape.type === 'group') {
       const nodeIds = editor
@@ -1159,7 +1177,17 @@ export function gatherUpstreamMediaSources<K extends 'image' | 'video' | 'audio'
   kind: K
 ): { source: NodeCardShape; value: Extract<NodeValue, { kind: K }> }[] {
   const assets: { source: NodeCardShape; value: Extract<NodeValue, { kind: K }> }[] = []
-  for (const shape of orderedPageArrows(editor)) {
+  // 批量接入的箭头带 connectOrder（框选/接触顺序），优先按它排序；
+  // 未标注的箭头维持 z 序，且排在有标注的之后，避免与 图N 顺序交叉。
+  const ordered = orderedPageArrows(editor).sort((a, b) => {
+    const ao = typeof a.meta?.connectOrder === 'number' ? (a.meta.connectOrder as number) : null
+    const bo = typeof b.meta?.connectOrder === 'number' ? (b.meta.connectOrder as number) : null
+    if (ao !== null && bo !== null) return ao - bo
+    if (ao !== null) return -1
+    if (bo !== null) return 1
+    return 0
+  })
+  for (const shape of ordered) {
     const { start, end } = getArrowBindings(editor, shape.id)
     if (
       !start ||

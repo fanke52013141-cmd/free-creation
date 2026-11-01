@@ -161,7 +161,17 @@ export function collectContractInputs(
     mutable.set(target.id, values)
   }
 
-  for (const edge of edges) {
+  // 多值端口（如图N）的顺序 = 批量接入顺序：带 connectOrder 的边排在前面按序取值，
+  // 未标注的边（逐条手连）维持既有 z 序，且统一排在标注边之后。
+  const orderedEdges = [...edges].sort((a, b) => {
+    const ao = a.connectOrder ?? null
+    const bo = b.connectOrder ?? null
+    if (ao !== null && bo !== null) return ao - bo
+    if (ao !== null) return -1
+    if (bo !== null) return 1
+    return 0
+  })
+  for (const edge of orderedEdges) {
     if (edge.to.nodeId !== node.id) continue
     if (options.ignoreEdgeIds?.includes(edge.id)) continue
     const connectionKey = `${edge.from.nodeId}:${edge.from.portId}->${edge.to.nodeId}:${edge.to.portId}`

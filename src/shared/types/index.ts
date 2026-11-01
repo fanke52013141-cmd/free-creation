@@ -173,6 +173,8 @@ export interface CanvasEdge {
   id: string
   from: { nodeId: string; portId: string }
   to: { nodeId: string; portId: string }
+  /** 批量连线时的接入顺序（1 起）：多值端口按它决定 图N/输入序 */
+  connectOrder?: number
 }
 
 export interface GroupDecl {
