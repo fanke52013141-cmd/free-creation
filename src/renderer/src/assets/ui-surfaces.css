@@ -3178,6 +3178,7 @@ button {
 }
 
 .video-gen-panel .video-gen-submit {
+  width: 100%;
   min-height: 36px;
   margin-top: 0;
   border: 1px solid rgb(103 232 249 / 45%);
@@ -4457,7 +4458,16 @@ button {
   background: #1a1f28;
 }
 
-.node-card:is(.type-image-gen, .type-image-edit, .type-video) .gen-row {
+.
+/* 视频节点：去掉生成面板外框（用户要求只保留三个分组框），按钮/分组与卡片同宽 */
+.node-card.type-video .gen-panel {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+node-card:is(.type-image-gen, .type-image-edit, .type-video) .gen-row {
   gap: 6px;
 }
 

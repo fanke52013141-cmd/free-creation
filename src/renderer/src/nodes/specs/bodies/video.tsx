@@ -446,7 +446,6 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
       <section className="video-gen-section video-gen-source" aria-label="生成配置">
         <div className="video-gen-section-heading">
           <span>生成配置</span>
-          <span className="video-gen-section-hint">向下滚动查看更多参数</span>
         </div>
         <div className="video-model-mode-row">
           <label>
@@ -519,7 +518,6 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
         <section className="video-gen-section video-output-settings" aria-label="视频输出参数">
           <div className="video-gen-section-heading">
             <span>输出参数</span>
-            <span className="video-gen-section-hint">按模型能力提供选项</span>
           </div>
           <div className="video-param-grid">
             {framesDetermineRatio ? (
