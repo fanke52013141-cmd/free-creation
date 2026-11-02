@@ -2426,7 +2426,8 @@ button {
 
 .data-edge-visible {
   fill: none;
-  stroke-width: 3;
+  /* 2026-11-03 用户裁决：节点与节点之间的连线宽度降为原来的一半（3 → 1.5）。 */
+  stroke-width: 1.5;
   stroke-linecap: round;
   opacity: 0.78;
   pointer-events: none;
@@ -2442,7 +2443,8 @@ button {
   fill: none;
   /* 与端口及底线使用同一来源色；避免流光叠加一层偏白色相造成色差。 */
   stroke: currentColor;
-  stroke-width: 4.5;
+  /* 流光段同步减半（4.5 → 2.25），保持与底线比例一致。 */
+  stroke-width: 2.25;
   stroke-linecap: round;
   /* pathLength=1000：流动段占整条连接路径的 1/6，余下 5/6 为间隔。 */
   stroke-dasharray: 166.667 833.333;
@@ -2456,7 +2458,8 @@ button {
 
 /* 追溯线表达“由该操作产生”，不参与执行，但保持来源色与流向动画。 */
 .artifact-provenance-edge {
-  stroke-width: 3;
+  /* 追溯线同步减半，保持与主连线一致。 */
+  stroke-width: 1.5;
   opacity: 0.78;
 }
 

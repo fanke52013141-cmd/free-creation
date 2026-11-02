@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   TIMELINE_LIMITS,
   addClip,
+  addReferences,
   addTrack,
   clipEndMs,
   clipsOfTrack,
@@ -15,13 +16,15 @@ import {
   parseTimeline,
   removeClip,
   removeTrack,
+  removeReference,
   rulerStepMs,
   serializeTimeline,
   splitClip,
   splitClipKeep,
   timelineDurationMs,
   trimClip,
-  type TimelineData
+  type TimelineData,
+  type TimelineReference
 } from '@shared/timeline'
 
 function base(): TimelineData {
@@ -287,6 +290,52 @@ describe('轨道线数据模型 · 轨道排序与分割三态', () => {
     const first = withVideo(base(), 5000)
     expect(splitClipKeep(first.data, first.clipId, 10, 'left').ok).toBe(false)
     expect(splitClipKeep(first.data, first.clipId, 4990, 'right').ok).toBe(false)
+  })
+})
+
+describe('轨道线数据模型 · 引用素材池', () => {
+  const ref = (id: string, kind: 'video' | 'image' | 'audio' = 'video'): TimelineReference => ({
+    mediaId: id,
+    mediaPath: `projects/p/media/${id}.mp4`,
+    name: id,
+    kind
+  })
+
+  it('追加引用按传入顺序去重，不产生片段', () => {
+    const base0 = base()
+    const added = addReferences(base0, [ref('a'), ref('b'), ref('a')])
+    expect(added.ok).toBe(true)
+    if (!added.ok) return
+    expect(added.data.references.map((item) => item.mediaId)).toEqual(['a', 'b'])
+    expect(added.data.clips).toHaveLength(0)
+  })
+
+  it('引用素材经过序列化往返不丢', () => {
+    const added = addReferences(base(), [ref('a', 'image')])
+    if (!added.ok) return
+    const round = parseTimeline(serializeTimeline(added.data))
+    expect(round.ok).toBe(true)
+    if (round.ok) expect(round.data.references).toEqual(added.data.references)
+  })
+
+  it('移除引用不影响已铺到轨道的片段', () => {
+    const added = addReferences(base(), [ref('a')])
+    if (!added.ok) return
+    const withClip = addClip(added.data, {
+      trackId: trackA(added.data),
+      kind: 'video',
+      mediaId: 'a',
+      mediaPath: 'projects/p/media/a.mp4',
+      name: 'a',
+      sourceDurationMs: 4000
+    })
+    if (!withClip.ok) return
+    const removed = removeReference(withClip.data, 'a')
+    expect(removed.ok).toBe(true)
+    if (removed.ok) {
+      expect(removed.data.references).toEqual([])
+      expect(removed.data.clips).toHaveLength(1)
+    }
   })
 })
 

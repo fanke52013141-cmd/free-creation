@@ -9,7 +9,7 @@
 // - 预览支持播放/暂停、比例切换、音量、全屏播放；导出成片走节点运行链路。
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { stopEventPropagation } from 'tldraw'
-import type { MediaAsset } from '@shared/types'
+
 import {
   clipsOfTrack,
   formatTimecode,
@@ -18,7 +18,6 @@ import {
   type TimelineData
 } from '@shared/timeline'
 import { Icon } from '../../../components/Icon'
-import { useMediaStore } from '../../../stores/media'
 import { mediaUrl } from '../../registry'
 import { clipCovers, type TimelineEditorAsset } from './timeline-editor-shared'
 import { VideoThumb } from './media-thumbnail'
@@ -55,20 +54,6 @@ function formatClock(ms: number): string {
   return [hours, minutes, seconds].map((value) => String(value).padStart(2, '0')).join(':')
 }
 
-function assetOfMedia(media: MediaAsset): TimelineEditorAsset | null {
-  if (media.kind !== 'image' && media.kind !== 'video' && media.kind !== 'audio') return null
-  return {
-    mediaId: media.id,
-    mediaPath: media.path,
-    name: media.name ?? media.path.split(/[\\/]/).pop() ?? '素材',
-    kind: media.kind,
-    durationMs:
-      typeof media.durationSec === 'number' && media.durationSec > 0
-        ? Math.round(media.durationSec * 1000)
-        : undefined
-  }
-}
-
 /** 播放头位置上最上层的画面片段（音频不参与预览画面）。 */
 function visualClipAtPlayhead(data: TimelineData, playheadMs: number): TimelineClip | null {
   for (let index = data.tracks.length - 1; index >= 0; index -= 1) {
@@ -92,29 +77,32 @@ export interface TimelineEditorStageProps {
   resolution: string
   playheadMs: number
   onSeek: (ms: number) => void
+  /** 左侧面板内容：与轨道线连接的引用素材（连线 + 本地/画布导入）。 */
+  references: TimelineEditorAsset[]
+  mediaTitles: Record<string, string>
   /** 多选素材按顺序落轨：assets 顺序即用户选择顺序；startMs 提供时依次紧挨着摆放。 */
   onAddAssets: (assets: TimelineEditorAsset[], trackId?: string, startMs?: number) => void
-  onImportFiles: () => void
+  onImportLocal: () => void
+  onImportCanvas: () => void
   onExport: () => void
   onClose: () => void
   exporting: boolean
 }
 
 export function TimelineEditorStage({
-  projectId,
   data,
   resolution,
   playheadMs,
   onSeek,
+  references,
+  mediaTitles,
   onAddAssets,
-  onImportFiles,
+  onImportLocal,
+  onImportCanvas,
   onExport,
   onClose,
   exporting
 }: TimelineEditorStageProps): React.JSX.Element {
-  const assets = useMediaStore((state) => state.assets)
-  const loaded = useMediaStore((state) => state.loaded)
-  const load = useMediaStore((state) => state.load)
   const [filter, setFilter] = useState<'all' | TimelineEditorAsset['kind']>('all')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const lastClickedRef = useRef<string | null>(null)
@@ -122,6 +110,7 @@ export function TimelineEditorStage({
   const [aspect, setAspect] = useState('16:9')
   const [volume, setVolume] = useState(80)
   const [layout, setLayout] = useState<'left' | 'right' | 'hidden'>('left')
+  const [importMenuOpen, setImportMenuOpen] = useState(false)
   const [ghost, setGhost] = useState<{ x: number; y: number; asset: TimelineEditorAsset } | null>(
     null
   )
@@ -132,14 +121,7 @@ export function TimelineEditorStage({
   const playStartedAtRef = useRef(0)
   const playBaseRef = useRef(0)
 
-  useEffect(() => {
-    if (!loaded) void load(projectId)
-  }, [loaded, load, projectId])
-
-  const importedAssets = useMemo(
-    () => assets.map(assetOfMedia).filter((asset): asset is TimelineEditorAsset => asset !== null),
-    [assets]
-  )
+  const importedAssets = references
   const visible = filter === 'all' ? importedAssets : importedAssets.filter((a) => a.kind === filter)
   const selectedAssets = useMemo(
     () =>
@@ -366,20 +348,49 @@ export function TimelineEditorStage({
                 </button>
               ))}
             </div>
-            <button
-              type="button"
-              className="tl-bin-import"
-              data-node-pointer="control"
-              onPointerDown={(event) => stopEventPropagation(event)}
-              onClick={onImportFiles}
-            >
-              <Icon name="add" size={12} />
-              导入
-            </button>
+            <div className="tl-bin-import-wrap">
+              <button
+                type="button"
+                className="tl-bin-import"
+                data-node-pointer="control"
+                aria-expanded={importMenuOpen}
+                onPointerDown={(event) => stopEventPropagation(event)}
+                onClick={() => setImportMenuOpen((open) => !open)}
+              >
+                <Icon name="add" size={12} />
+                导入
+              </button>
+              {importMenuOpen ? (
+                <div className="tl-import-menu" role="menu" data-node-pointer="control">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setImportMenuOpen(false)
+                      onImportLocal()
+                    }}
+                  >
+                    从本地导入
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setImportMenuOpen(false)
+                      onImportCanvas()
+                    }}
+                  >
+                    从画布导入
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
           <div className="tl-bin-grid">
             {visible.length === 0 ? (
-              <p className="tl-bin-empty">将文件拖至此处添加</p>
+              <p className="tl-bin-empty">
+                还没有引用素材：点「导入」从本地或画布添加
+              </p>
             ) : (
               visible.map((asset) => {
                 const order = orderOf(asset.mediaId)
@@ -390,7 +401,7 @@ export function TimelineEditorStage({
                     className={`tl-asset is-${asset.kind}${order >= 0 ? ' is-selected' : ''}`}
                     data-media-id={asset.mediaId}
                     data-node-pointer="control"
-                    title={`${asset.name} · ${KIND_LABEL[asset.kind]}（点击追加；Ctrl/⌘ 多选，长按拖到轨道）`}
+                    title={`${mediaTitles[asset.mediaId] ?? asset.name} · ${KIND_LABEL[asset.kind]}（点击追加；Ctrl/⌘ 多选，长按拖到轨道）`}
                     onPointerDown={(event) => {
                       stopEventPropagation(event)
                       beginLongPressDrag(event, asset)
@@ -418,16 +429,13 @@ export function TimelineEditorStage({
                         <span className="tl-asset-duration">{formatTimecode(asset.durationMs)}</span>
                       ) : null}
                     </span>
-                    <span className="tl-asset-name">{asset.name}</span>
+                    <span className="tl-asset-name">{mediaTitles[asset.mediaId] ?? asset.name}</span>
                   </button>
                 )
               })
             )}
           </div>
           <div className="tl-bin-footer">
-            <span className="tl-bin-hint">
-              点击多选（按选择顺序排列）；长按拖到轨道可指定位置
-            </span>
             <button
               type="button"
               className="tl-bin-append"

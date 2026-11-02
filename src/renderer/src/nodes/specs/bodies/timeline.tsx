@@ -12,6 +12,7 @@ import { useEditor, useValue } from 'tldraw'
 import {
   TIMELINE_LIMITS,
   addClip,
+  addReferences,
   addTrack,
   clipEndMs,
   clipsOfTrack,
@@ -1006,6 +1007,81 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
    * 素材库 → 轨道（支持多选，按传入顺序依次落位）。
    * 2026-11-03 用户裁决：一次框选多个素材时，先选中的排前面，后选中的依次跟在后面。
    */
+  /** 从本地导入到「引用素材」池（不自动铺轨，由用户点选/长按拖入轨道）。 */
+  const importLocalReferences = async (): Promise<void> => {
+    if (!project) return toast('项目未就绪')
+    try {
+      const response = await window.api.pickMedia(project.id)
+      if (!response.ok) return toast(`导入失败：${response.error.message}`)
+      if (response.data.errors.length > 0) toast(response.data.errors[0].reason)
+      const refs: TimelineEditorAsset[] = []
+      for (const asset of response.data.assets) {
+        const kind = assetKind(asset)
+        if (!kind) continue
+        refs.push({
+          mediaId: asset.id,
+          mediaPath: asset.path,
+          name: asset.name ?? CLIP_KIND_LABEL[kind],
+          kind
+        })
+      }
+      if (refs.length === 0) return
+      const result = addReferences(data, refs)
+      if (!result.ok) return toast(result.reason)
+      commit(result.data, 'timeline-import-local-references')
+      toast(`已导入 ${refs.length} 个素材到引用素材`)
+    } catch (error) {
+      toast(`导入失败：${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  /** 从画布导入：优先取选中的媒体节点；没选中时导入画布上全部媒体节点。 */
+  const importCanvasSelection = (): void => {
+    const collect = (shapes: ReturnType<typeof editor.getSelectedShapes>): TimelineEditorAsset[] => {
+      const refs: TimelineEditorAsset[] = []
+      const seen = new Set<string>()
+      for (const candidate of shapes) {
+        if (candidate.type !== 'node-card') continue
+        const props = candidate.props as unknown as {
+          mediaId?: string
+          mediaPath?: string
+          mediaMime?: string
+          title?: string
+        }
+        const mediaId = typeof props.mediaId === 'string' ? props.mediaId : ''
+        const mediaPath = typeof props.mediaPath === 'string' ? props.mediaPath : ''
+        if (!mediaId || !mediaPath || seen.has(mediaId)) continue
+        const mime = typeof props.mediaMime === 'string' ? props.mediaMime : ''
+        const kind = mime.startsWith('video/')
+          ? 'video'
+          : mime.startsWith('audio/')
+            ? 'audio'
+            : mime.startsWith('image/')
+              ? 'image'
+              : null
+        if (!kind) continue
+        seen.add(mediaId)
+        refs.push({
+          mediaId,
+          mediaPath,
+          name: (typeof props.title === 'string' && props.title) || '画布素材',
+          kind
+        })
+      }
+      return refs
+    }
+    let refs = collect(editor.getSelectedShapes())
+    if (refs.length === 0) {
+      refs = collect(editor.getCurrentPageShapes())
+      if (refs.length > 0) toast('未选中素材，已导入画布上全部素材')
+    }
+    if (refs.length === 0) return toast('画布上还没有可导入的图片/视频/音频素材')
+    const result = addReferences(data, refs)
+    if (!result.ok) return toast(result.reason)
+    commit(result.data, 'timeline-import-canvas-references')
+    toast(`已从画布导入 ${refs.length} 个素材`)
+  }
+
   const addAssetsToTrack = async (
     assets: TimelineEditorAsset[],
     trackId?: string,
@@ -1116,7 +1192,30 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
     () => editor.getCurrentPageShapes().filter((item) => item.type === 'arrow').length,
     [editor]
   )
-  const refAssets = useMemo<TimelineEditorAsset[]>(() => {
+
+  // 媒体 id → 画布节点标题：视频/图片改名后，轨道片段与引用条同步显示新名字。
+  const mediaTitlesJson = useValue(
+    'timeline media titles',
+    () => {
+      const map: Record<string, string> = {}
+      for (const candidate of editor.getCurrentPageShapes()) {
+        if (candidate.type !== 'node-card') continue
+        const props = candidate.props as unknown as { mediaId?: string; title?: string }
+        const mediaId = typeof props.mediaId === 'string' ? props.mediaId : ''
+        const title = typeof props.title === 'string' ? props.title.trim() : ''
+        if (mediaId && title) map[mediaId] = title
+      }
+      return JSON.stringify(map)
+    },
+    [editor]
+  )
+  const mediaTitles = useMemo<Record<string, string>>(
+    () => JSON.parse(mediaTitlesJson) as Record<string, string>,
+    [mediaTitlesJson]
+  )
+
+  // 连线素材（运行时派生，不落盘）：与 data.references 合并后就是左侧「引用素材」池。
+  const connectedRefs = useMemo<TimelineEditorAsset[]>(() => {
     const connected = readConnectedNodeInputs(editor, shape.id)
     const seen = new Set<string>()
     const found: TimelineEditorAsset[] = []
@@ -1134,6 +1233,28 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
     return found
     // inputVersion 让连线增删后重新取引用；shape.props.text 变化时也刷新名称。
   }, [editor, shape.id, inputVersion, shape.props.text])
+
+  // 引用素材池 = 已落盘引用（本地/画布导入） ∪ 当前连线素材（按连线顺序）。
+  const allRefs = useMemo<TimelineEditorAsset[]>(() => {
+    const out: TimelineEditorAsset[] = []
+    const seen = new Set<string>()
+    for (const reference of data.references) {
+      if (seen.has(reference.mediaId)) continue
+      seen.add(reference.mediaId)
+      out.push({
+        mediaId: reference.mediaId,
+        mediaPath: reference.mediaPath,
+        name: mediaTitles[reference.mediaId] ?? reference.name,
+        kind: reference.kind
+      })
+    }
+    for (const reference of connectedRefs) {
+      if (seen.has(reference.mediaId)) continue
+      seen.add(reference.mediaId)
+      out.push({ ...reference, name: mediaTitles[reference.mediaId] ?? reference.name })
+    }
+    return out
+  }, [data.references, connectedRefs, mediaTitles])
 
   // 快捷键：选中片段时 Delete/Backspace 只删片段；节点失去选中时片段选中态随之清空，
   // 画布的全局 Delete 恢复原样。作用域判断不参与删除决策——单击片段已经把上下文说清楚了。
@@ -1196,27 +1317,6 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [fullscreen])
-
-  // 媒体 id → 画布节点标题：视频/图片改名后，轨道片段与引用条同步显示新名字。
-  const mediaTitlesJson = useValue(
-    'timeline media titles',
-    () => {
-      const map: Record<string, string> = {}
-      for (const candidate of editor.getCurrentPageShapes()) {
-        if (candidate.type !== 'node-card') continue
-        const props = candidate.props as unknown as { mediaId?: string; title?: string }
-        const mediaId = typeof props.mediaId === 'string' ? props.mediaId : ''
-        const title = typeof props.title === 'string' ? props.title.trim() : ''
-        if (mediaId && title) map[mediaId] = title
-      }
-      return JSON.stringify(map)
-    },
-    [editor]
-  )
-  const mediaTitles = useMemo<Record<string, string>>(
-    () => JSON.parse(mediaTitlesJson) as Record<string, string>,
-    [mediaTitlesJson]
-  )
 
   // 全屏编辑：拖动分隔条调整时间轴高度（提高轨道区高度）。
   const beginTimelineResize = (event: React.PointerEvent<HTMLDivElement>): void => {
@@ -1287,7 +1387,7 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
     <div className="tl-body" ref={surfaceRef}>
       {fullscreen ? null : (
         <TimelineRefStrip
-          assets={refAssets}
+          assets={allRefs}
           mediaTitles={mediaTitles}
           onAdd={(asset, trackId, startMs) => void addAssetsToTrack([asset], trackId, startMs)}
         />
@@ -1311,7 +1411,10 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
                   onAddAssets={(assets, trackId, startMs) =>
                     void addAssetsToTrack(assets, trackId, startMs)
                   }
-                  onImportFiles={() => void importMediaToTrack(activeTrackId)}
+                  references={allRefs}
+                  mediaTitles={mediaTitles}
+                  onImportLocal={() => void importLocalReferences()}
+                  onImportCanvas={importCanvasSelection}
                   onExport={() => void exportComposition()}
                   onClose={() => setFullscreen(false)}
                   exporting={exporting}

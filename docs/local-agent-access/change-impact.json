@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "reason": "轨道线交互第三批：分割三态、轨道拖动排序、缩放滚轴、视频首帧封面、全屏分隔条、播放条精简、改名同步、吸附图标；刷新受保护源码哈希，契约未变",
+  "reason": "轨道线引用素材池落盘、二级导入菜单（本地/画布）、删除提示语；连线宽度减半（3→1.5，流光 4.5→2.25）；刷新受保护源码哈希，契约未变",
   "declaration": "Registry, transport, persistence, logging and compatibility impact reviewed. See delivery ledger for evidence.",
   "sourceHashes": {
     "scripts/check-agent-access.cjs": "97d2ffb5e2403b33a2d3ac8ab3eee8272f78cf948e4c73ab53cc662bd73a5a6f",
@@ -144,8 +144,8 @@
     "src/renderer/src/nodes/specs/bodies/structured.tsx": "5de3141e42cb475af619d96542a856850845779fc399176b433d1453e54ca42e",
     "src/renderer/src/nodes/specs/bodies/text.tsx": "c6691c3391df796f67396df675579ec14793814ab2542a27f2285377a9670763",
     "src/renderer/src/nodes/specs/bodies/timeline-editor-shared.ts": "f1f39061e851875ba968f5990d99a2c8b86b8fa2fd4e9d97d5590efa141392cd",
-    "src/renderer/src/nodes/specs/bodies/timeline-editor.tsx": "461d04eb733059230f6e98d049ee5ae977978d9111c135906aba7f6b8b60a623",
-    "src/renderer/src/nodes/specs/bodies/timeline.tsx": "7f34504992f80f7de6f2e39a5bef5cc8f6200f50194872eea7be9832d3ca8eec",
+    "src/renderer/src/nodes/specs/bodies/timeline-editor.tsx": "4b0869c71c6875bbf1579147efe2019ee9604b5aeaa1d0abb8cc82e8ce58ccf6",
+    "src/renderer/src/nodes/specs/bodies/timeline.tsx": "e4ce080ba12d87109e651602eea59089420022d89a5e3b0001888ac9c099e92c",
     "src/renderer/src/nodes/specs/bodies/tts.tsx": "a0caa20b013a5a8b91bf44aca682fe470473ca161d81600ca2197fc044423f14",
     "src/renderer/src/nodes/specs/bodies/video-ai.tsx": "48a65aea89908e9475129dc35e19ccd74d14cae0f16dd74ed5423f2598a83d67",
     "src/renderer/src/nodes/specs/bodies/video-transforms.tsx": "bd89d108717569f339145e0be229493e27350e605a83fc0f6b743749b94cee10",

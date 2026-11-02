@@ -1584,3 +1584,43 @@ body.tl-asset-dragging {
   background: #191d24;
   color: #e6edf7;
 }
+
+/* 导入二级菜单：从本地导入 / 从画布导入（2026-11-03 用户裁决） */
+.tl-bin-import-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.tl-import-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 30;
+  display: flex;
+  min-width: 132px;
+  flex-direction: column;
+  padding: 4px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 8px;
+  background: #222730;
+  box-shadow: 0 10px 24px rgb(0 0 0 / 45%);
+}
+
+.tl-import-menu button {
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #e6edf7;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tl-import-menu button:hover {
+  background: rgb(35 154 211 / 18%);
+}
+
+.tl-bin-footer {
+  justify-content: flex-end;
+}

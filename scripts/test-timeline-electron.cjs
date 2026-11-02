@@ -572,15 +572,43 @@ async function main() {
     const layoutLeft = await page.locator('.tl-editor-main.is-bin-left').count()
     check('布局可在左/右/收起之间切换', layoutRight === 1 && layoutHidden === 1 && layoutLeft === 1)
 
-    // 从素材库导入两张素材后，素材库应出现条目
-    await setNextFiles([fixtures.pic, fixtures.clipA])
+    // 左侧是「引用素材」池：导入是二级菜单（本地 / 画布），且不再显示操作提示语
+    check('引用素材提示语已删除', (await page.locator('.tl-bin-hint').count()) === 0)
+    const refsBeforeImport = await page.locator('.tl-modal .tl-asset').count()
     await page.locator('.tl-bin-import').click()
+    check(
+      '导入是二级菜单（从本地 / 从画布）',
+      (await page.locator('.tl-import-menu [role="menuitem"]').count()) === 2,
+      JSON.stringify(await page.locator('.tl-import-menu [role="menuitem"]').allInnerTexts())
+    )
+    await page.getByRole('menuitem', { name: '从画布导入' }).click()
+    await page.waitForTimeout(900)
+    const refsAfterCanvas = await page.locator('.tl-modal .tl-asset').count()
+    const selectedOnCanvas = await page.locator('.node-card-wrap.is-selected').count()
+    const canvasImportToast = await page.evaluate(
+      () => document.querySelector('.toast, .toast-item, [role="status"]')?.textContent?.trim() ?? ''
+    )
+    check(
+      '从画布导入把选中素材加入引用素材',
+      refsAfterCanvas > refsBeforeImport,
+      `${refsBeforeImport} → ${refsAfterCanvas} / 画布选中 ${selectedOnCanvas} / toast: ${canvasImportToast}`
+    )
+
+    await setNextFiles([fixtures.pic])
+    const clipsBeforeLocalImport = await card.locator('.tl-clip').count()
+    await page.locator('.tl-bin-import').click()
+    await page.getByRole('menuitem', { name: '从本地导入' }).click()
     await page.waitForFunction(
-      () => document.querySelectorAll('.tl-modal .tl-asset').length >= 2,
-      undefined,
+      (before) => document.querySelectorAll('.tl-modal .tl-asset').length > before,
+      refsBeforeImport + 1,
       { timeout: 60_000 }
     )
-    check('素材库导入后出现素材条目', (await page.locator('.tl-asset').count()) >= 2)
+    check('从本地导入把素材加入引用素材（不自动铺轨）', true, `引用 ${await page.locator('.tl-modal .tl-asset').count()}`)
+    check(
+      '导入只进引用素材，不直接生成片段',
+      (await card.locator('.tl-clip').count()) === clipsBeforeLocalImport,
+      `${clipsBeforeLocalImport} → ${await card.locator('.tl-clip').count()}`
+    )
 
     // 多选顺序：先点第 1 个，再 Ctrl+点第 2 个 → 序号 1 / 2
     const tile1 = page.locator('.tl-modal .tl-asset').first()

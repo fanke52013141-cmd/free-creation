@@ -50,12 +50,26 @@ export interface TimelineClip {
   volume: number
 }
 
+/**
+ * 引用素材（2026-11-03 用户裁决）：左侧面板展示的是「与轨道线连接的素材」，
+ * 不是整个项目素材库。连线进来的、以及从本地/画布导入的素材都记在这里，
+ * 用户点选或长按拖入轨道后才产生片段。
+ */
+export interface TimelineReference {
+  mediaId: string
+  mediaPath: string
+  name: string
+  kind: TimelineClipKind
+}
+
 export interface TimelineData {
   schemaVersion: typeof TIMELINE_SCHEMA_VERSION
   /** 合成基准帧率；只影响成片，不影响编辑坐标。 */
   frameRate: number
   tracks: TimelineTrack[]
   clips: TimelineClip[]
+  /** 引用素材池：只存媒体引用与名称，不产生片段。 */
+  references: TimelineReference[]
 }
 
 export type TimelineParseResult =
@@ -65,6 +79,7 @@ export type TimelineParseResult =
 export const TIMELINE_LIMITS = {
   maxTracks: 12,
   maxClips: 500,
+  maxReferences: 200,
   minClipMs: 100,
   /** 图片片段的默认时长（用户拖入图片时使用） */
   defaultImageClipMs: 4000,
@@ -94,7 +109,8 @@ export function createEmptyTimeline(): TimelineData {
     schemaVersion: TIMELINE_SCHEMA_VERSION,
     frameRate: DEFAULT_TIMELINE_FRAME_RATE,
     tracks,
-    clips: []
+    clips: [],
+    references: []
   }
 }
 
@@ -111,6 +127,12 @@ const asString = (value: unknown, fallback = ''): string =>
   typeof value === 'string' ? value : fallback
 
 const CLIP_KINDS: readonly TimelineClipKind[] = ['video', 'image', 'audio']
+
+const REFERENCE_KIND_LABEL: Record<TimelineClipKind, string> = {
+  video: '视频',
+  image: '图片',
+  audio: '音频'
+}
 
 /** 画面类片段：同一轨道内不允许重叠（重叠语义不明确）。 */
 function isVisualKind(kind: TimelineClipKind): boolean {
@@ -170,6 +192,24 @@ export function normalizeTimeline(raw: unknown): TimelineData {
       volume: Math.min(1, Math.max(0, typeof item.volume === 'number' ? item.volume : 1))
     })
   }
+  const references: TimelineReference[] = []
+  const rawReferences = Array.isArray(raw.references) ? raw.references : []
+  for (const item of rawReferences.slice(0, TIMELINE_LIMITS.maxReferences)) {
+    if (!isObject(item)) continue
+    const mediaId = asString(item.mediaId).trim()
+    const mediaPath = asString(item.mediaPath).trim()
+    const kind = CLIP_KINDS.includes(item.kind as TimelineClipKind)
+      ? (item.kind as TimelineClipKind)
+      : null
+    if (!mediaId || !mediaPath || !kind) continue
+    if (references.some((reference) => reference.mediaId === mediaId)) continue
+    references.push({
+      mediaId,
+      mediaPath,
+      kind,
+      name: asString(item.name, REFERENCE_KIND_LABEL[kind])
+    })
+  }
   return {
     schemaVersion: TIMELINE_SCHEMA_VERSION,
     frameRate: Math.min(
@@ -180,7 +220,8 @@ export function normalizeTimeline(raw: unknown): TimelineData {
       )
     ),
     tracks,
-    clips: sortClips(clips)
+    clips: sortClips(clips),
+    references
   }
 }
 
@@ -260,6 +301,39 @@ export type TimelineEditResult =
   | { ok: false; reason: string }
 
 // ── 轨道操作 ──
+
+// ── 引用素材池 ──
+
+/** 追加引用素材：按传入顺序去重，不产生片段。 */
+export function addReferences(
+  data: TimelineData,
+  refs: TimelineReference[]
+): TimelineEditResult {
+  const existing = new Set(data.references.map((reference) => reference.mediaId))
+  const next = [...data.references]
+  for (const ref of refs) {
+    if (next.length >= TIMELINE_LIMITS.maxReferences) break
+    if (existing.has(ref.mediaId)) continue
+    existing.add(ref.mediaId)
+    next.push(ref)
+  }
+  if (next.length === data.references.length) return { ok: true, data }
+  return { ok: true, data: { ...data, references: next } }
+}
+
+/** 移除一条引用素材（不影响已经在轨道上的片段）。 */
+export function removeReference(data: TimelineData, mediaId: string): TimelineEditResult {
+  if (!data.references.some((reference) => reference.mediaId === mediaId)) {
+    return { ok: false, reason: '引用素材不存在' }
+  }
+  return {
+    ok: true,
+    data: {
+      ...data,
+      references: data.references.filter((reference) => reference.mediaId !== mediaId)
+    }
+  }
+}
 
 export function addTrack(data: TimelineData, name?: string): TimelineEditResult {
   if (data.tracks.length >= TIMELINE_LIMITS.maxTracks) {

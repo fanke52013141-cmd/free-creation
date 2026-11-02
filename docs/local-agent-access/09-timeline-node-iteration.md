@@ -236,7 +236,32 @@ Agent 自动调度仍显式不支持：`flowTargetContract` 返回 null，准入
 
 验证：scripts/test-timeline-electron.cjs 扩到 **46 项，46/46 通过**，新增覆盖：向左/向右分割结果、轨道拖动排序、缩放滚轴、首帧封面存在、播放条时间码格式、全屏分隔条存在。typecheck、eslint、build、erify:logging、erify:agent-access 通过。
 
+## 5.9 2026-11-03 第四批：引用素材池与二级导入菜单、连线宽度减半
+
+用户澄清：左侧「全部/图片/视频/音频」不是整个项目素材库，而是**与轨道线连接的素材**；
+导入分「从本地导入 / 从画布导入」两种，应做成二级菜单；删除操作提示语；节点间连线宽度减为一半。
+
+实现：
+1. **引用素材池落盘**：TimelineData.references（TimelineReference[]，只存 mediaId/mediaPath/name/kind，
+   不产生片段），ddReferences() 按传入顺序去重、emoveReference() 移除不影响已铺片段；
+   
+ormalizeTimeline 负责旧数据补空数组与往返序列化。
+2. **左侧面板 = 引用素材池**：全屏编辑器素材库改为「已落盘引用 ∪ 当前连线素材」，
+   按连线/导入顺序展示，类型筛选（全部/图片/视频/音频）作用在引用池上。
+3. **导入二级菜单**：导入 展开「从本地导入 / 从画布导入」。本地导入只加入引用池（**不自动铺轨**）；
+   从画布导入取当前选中的媒体节点（按选择顺序），未选中时回退导入画布上全部媒体节点并提示。
+4. **删除提示语**：素材库底部「点击多选…长按拖到轨道…」文案移除，只保留「加入轨道（N）」按钮。
+5. **连线宽度减半**：.data-edge-visible 3 → 1.5，.data-edge-flow 4.5 → 2.25，
+   追溯线 .artifact-provenance-edge 同步 1.5（命中热区仍保持 14px 不变）。
+
+验证：
+- scripts/test-timeline-electron.cjs **50/50**：新增「引用素材提示语已删除」「导入是二级菜单（本地/画布）」
+  「从画布导入把选中素材加入引用素材」「从本地导入只进引用素材、不直接生成片段」。
+- 	est/timeline-model.test.ts 新增引用池 3 项（顺序去重、序列化往返、移除不影响片段），32 项通过。
+- typecheck(node/web)、eslint、electron-vite build、verify:logging、verify:agent-access 通过。
+
 ## 6. 未覆盖边界
+
 
 
 
