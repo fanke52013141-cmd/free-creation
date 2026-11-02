@@ -310,7 +310,7 @@ export function ImageContinuationActions({
     const imageNodeAction = variant === 'image-node'
     return (
       <button
-        className={`btn-ghost small${imageNodeAction ? ' image-node-action-button' : ''}${imageNodeAction && action.type === 'video' ? ' image-node-action-video' : ''}`}
+        className={`btn-ghost small${imageNodeAction ? ' media-action-button' : ''}${imageNodeAction && action.type === 'video' ? ' media-action-wide' : ''}`}
         key={action.type}
         aria-label={action.title}
         type="button"
@@ -342,17 +342,17 @@ export function ImageContinuationActions({
   })
   return (
     <div
-      className={`node-media-next-actions${variant === 'image-node' ? ' image-node-action-toolbar' : ''}`}
+      className={`node-media-next-actions${variant === 'image-node' ? ' media-action-toolbar' : ''}`}
       role="group"
       aria-label="图片后续操作"
     >
       {variant === 'image-node' ? (
         <>
-          <div className="image-node-primary-actions">
+          <div className="media-action-primary">
             {actionButtons}
             {extra}
           </div>
-          <span className="image-node-action-divider" aria-hidden="true" />
+          <span className="media-action-divider" aria-hidden="true" />
           <MediaFileActions shape={shape} />
         </>
       ) : (
@@ -496,6 +496,7 @@ export const LOCAL_ENGINE_SOURCE_LABELS: Readonly<Record<string, string>> = {
   'local:ffmpeg-audio': '本地提取音频',
   'local:ffmpeg-sound-adjust': '本地声音调整',
   'local:vocal-extraction': '本地提取人声',
+  'local:ffmpeg-timeline': '本地时间线合成',
   'local:video-depth-anything-small': '本地视频深度估计'
 }
 

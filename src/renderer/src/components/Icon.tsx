@@ -10,11 +10,17 @@ export type IconName =
   | 'image-gen'
   | 'video'
   | 'video-asset'
+  | 'timeline'
   | 'depth'
   | 'clay'
   | 'frame'
   | 'clip'
   | 'audio'
+  | 'sound-adjust'
+  | 'speech'
+  | 'voice-clone'
+  | 'voice-design'
+  | 'vocal-separate'
   | 'mic'
   | 'chat'
   | 'script'
@@ -68,9 +74,14 @@ export type IconName =
   | 'add'
   | 'check'
   | 'grid'
+  | 'iterate'
   | 'compare'
   | 'target'
   | 'spark'
+  | 'agent'
+  | 'ai-process'
+  | 'ai-review'
+  | 'state-machine'
   | 'more'
   | 'trash'
   | 'edit'
@@ -123,6 +134,16 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <rect x="3" y="5" width="18" height="14" rx="2" />
       <path d="m10 9 5 3-5 3V9Z" />
+    </>
+  ),
+  // 时间线：顶部刻度尺 + 两行轨道片段 + 贯穿的播放头
+  timeline: (
+    <>
+      <path d="M3 4.5h18" />
+      <path d="M6 4.5v2M10 4.5v2M14 4.5v2M18 4.5v2" />
+      <rect x="3.5" y="9" width="10" height="3.5" rx="1" />
+      <rect x="10" y="14.5" width="10" height="3.5" rx="1" />
+      <path d="M13 7.5v12.5" />
     </>
   ),
   'video-asset': (
@@ -592,6 +613,91 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="m2 12 10 5 10-5" />
       <path d="m2 17 10 5 10-5" />
     </>
+  ),
+  // ── 节点身份图标（2026-11-02 重绘，设计源：design/2026-11-node-identity/icons/icon-drafts.tsx）──
+  // 声音调整：三根推子 + 三个错高的旋钮，表达音量/时长/速度各自可调
+  'sound-adjust': (
+    <>
+      <path d="M6 5v14M12 5v14M18 5v14" />
+      <rect x="3.5" y="6.8" width="5" height="2.4" rx="1.2" />
+      <rect x="9.5" y="13.8" width="5" height="2.4" rx="1.2" />
+      <rect x="15.5" y="9.8" width="5" height="2.4" rx="1.2" />
+    </>
+  ),
+  // 语音合成：麦克风 + 两条发射弧；与录音控件 mic 的区别写进 UI_ICON_SYSTEM 语义字典
+  speech: (
+    <>
+      <rect x="9" y="3" width="6" height="8" rx="3" />
+      <path d="M6.5 10.6v.5a5.5 5.5 0 0 0 11 0v-.5M12 16.6v3.4M8.6 20h6.8" />
+      <path d="M16.8 4.4a2.8 2.8 0 0 1 0 3.6" />
+      <path d="M19.1 3.2a4.4 4.4 0 0 1 0 5.6" />
+    </>
+  ),
+  // 语音克隆：两条错位声波 = 原声 + 复刻回声
+  'voice-clone': (
+    <>
+      <path d="M3 8.2c2-2.6 4-2.6 6 0c2 2.6 4 2.6 6 0c2-2.6 4-2.6 6 0" />
+      <path d="M5 15.8c1.556 2.6 3.111 2.6 4.667 0c1.556-2.6 3.111-2.6 4.667 0c1.556 2.6 3.111 2.6 4.667 0" />
+    </>
+  ),
+  // 音色设计：左下声纹扇形 + 右上四角星 = 从文字描述设计音色
+  'voice-design': (
+    <>
+      <path d="M8.01 7.56a10.4 10.4 0 0 1 8.49 8.79" />
+      <path d="M7.47 10.61a7.3 7.3 0 0 1 5.96 6.17" />
+      <path d="M6.93 13.66a4.2 4.2 0 0 1 3.43 3.56" />
+      <path d="M17.4 4.4 18.14 6.06 19.8 6.8 18.14 7.54 17.4 9.2 16.66 7.54 15 6.8 16.66 6.06Z" />
+    </>
+  ),
+  // 人声分离（退役）：左侧短声波柱向右分叉为两支
+  'vocal-separate': (
+    <>
+      <path d="M3.2 9.6v4.8M6.6 8v8M10 10v4M10 12h3.2" />
+      <path d="M13.2 12c2.6 0 2.4-4.8 5.5-4.8M16.5 5l2.2 2.2-2.2 2.2" />
+      <path d="M13.2 12c2.6 0 2.4 4.8 5.5 4.8M16.5 15l2.2 2.2-2.2 2.2" />
+    </>
+  ),
+  // Agent：机器人头 + 天线 + 实心眼点 = 会执行任务的代理
+  agent: (
+    <>
+      <rect x="5" y="7" width="14" height="11" rx="4" />
+      <path d="M12 7V5.4" />
+      <circle cx="12" cy="4.2" r="1.1" fill="currentColor" stroke="none" />
+      <circle cx="9.5" cy="12.5" r="1.25" fill="currentColor" stroke="none" />
+      <circle cx="14.5" cy="12.5" r="1.25" fill="currentColor" stroke="none" />
+    </>
+  ),
+  // AI 处理：魔杖 + 大小两颗四角星 = 对输入做一次模型处理
+  'ai-process': (
+    <>
+      <path d="M4 20 14.6 8.9" />
+      <path d="M17.4 4.4 18.14 6.06 19.8 6.8 18.14 7.54 17.4 9.2 16.66 7.54 15 6.8 16.66 6.06Z" />
+      <path d="M19.2 11.9 19.66 12.94 20.7 13.4 19.66 13.86 19.2 14.9 18.74 13.86 17.7 13.4 18.74 12.94Z" />
+    </>
+  ),
+  // AI 审核：盾牌 + 对勾 = 审过并背书，区别于动作语义的裸 check
+  'ai-review': (
+    <>
+      <path d="M12 3 4 6v6.4c0 4.1 3.4 7.6 8 8.6c4.6-1 8-4.5 8-8.6V6L12 3Z" />
+      <path d="M8.4 11.6 10.8 14 15.6 9.2" />
+    </>
+  ),
+  // 状态机：两个状态圆 + 带箭头的迁移曲线 = 状态与迁移，不是矩形流程图
+  'state-machine': (
+    <>
+      <circle cx="7.6" cy="14.6" r="3.9" />
+      <circle cx="18.2" cy="7.2" r="2.6" />
+      <path d="M10.8 12.4c1.5-1.85 2.4-2.4 3.9-2.75" />
+      <path d="M13.7 11.6 14.75 9.6 12.55 9.9" />
+    </>
+  ),
+  // 循环：三条递减横线 + 回绕箭头
+  iterate: (
+    <>
+      <path d="M6 8h7.8M6 12h5.8M6 16h3.8" />
+      <path d="M9.8 16c0 2 1.2 2.6 3 2.6h4.6a2.6 2.6 0 0 0 2.6-2.6v-4.6a2.6 2.6 0 0 0-2.6-2.6h-1.6" />
+      <path d="M18 6.8 15.8 8.8 18 10.8" />
+    </>
   )
 }
 
@@ -604,9 +710,11 @@ export const ICON_NAMES = Object.freeze(Object.keys(PATHS) as IconName[])
 export function Icon({
   name,
   size = 18,
-  strokeWidth = 1.8,
+  strokeWidth,
   ...props
 }: IconProps): React.JSX.Element {
+  // 默认 1.8；密集图标（音色设计的三条声纹弧）降到 1.65 才不粘。调用方显式传值时优先。
+  const resolvedStroke = strokeWidth ?? (name === 'voice-design' ? 1.65 : 1.8)
   return (
     <svg
       width={size}
@@ -614,7 +722,7 @@ export function Icon({
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth={strokeWidth}
+      strokeWidth={resolvedStroke}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"

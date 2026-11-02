@@ -65,15 +65,28 @@ export function NodeIdentity({ children }: { children?: ReactNode }): React.JSX.
   )
 }
 
+/** 区块标题：纯文字，无图标、无下划线（v1.5 用户裁决，2026-11-02）。 */
+export function NodeSectionTitle({ children }: { children: ReactNode }): React.JSX.Element {
+  return (
+    <div className="node-section-title">
+      <span>{children}</span>
+    </div>
+  )
+}
+
 /** 通过 React portal 保留 Body 原有回调/状态，将主按钮呈现在卡片固定底部。 */
 export function NodePrimaryButton({
   allowWhileBusy = false,
   children,
   className,
+  variant = 'primary',
   onPointerDown,
   onClick,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { allowWhileBusy?: boolean }): React.JSX.Element | null {
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  allowWhileBusy?: boolean
+  variant?: 'primary' | 'secondary'
+}): React.JSX.Element | null {
   const context = useContext(Context)
   const register = context?.registerAction
   useEffect(() => {
@@ -87,9 +100,10 @@ export function NodePrimaryButton({
         ? flatten(child.props.children)
         : [child]
     )
-  const elements = flatten(children)
-  const icons = elements.filter((child) => isValidElement(child) && child.type === Icon)
-  const content = elements.filter((child) => !icons.includes(child))
+  // 卡片内不再呈现任何图标（v1.5）；传入的 Icon 子元素统一忽略，只保留文字。
+  const content = flatten(children).filter(
+    (child) => !(isValidElement(child) && child.type === Icon)
+  )
   const button = (
     <button
       {...props}
@@ -102,7 +116,8 @@ export function NodePrimaryButton({
       }
       type="button"
       data-original-action={className}
-      className="node-standard-primary"
+      data-variant={variant}
+      className={`node-standard-primary node-standard-primary--${variant}`}
       onPointerDown={(event) => {
         event.stopPropagation()
         onPointerDown?.(event)
@@ -113,9 +128,6 @@ export function NodePrimaryButton({
         onClick?.(event)
       }}
     >
-      <span className="node-standard-primary-icon">
-        {icons.length ? icons[0] : <Icon name="arrow" size={16} />}
-      </span>
       <span className="node-standard-primary-label">{content}</span>
     </button>
   )

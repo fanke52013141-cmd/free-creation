@@ -55,7 +55,7 @@ function contrast(a, b) {
       const colors = await page.evaluate(() => [...document.querySelectorAll('.node-card-wrap')].map((wrap) => {
         const icon = wrap.querySelector('.node-icon'), card = wrap.querySelector('.node-card')
         const bodyIcon = card.querySelector('.node-standard-identity-icon, .node-empty-icon, .asset-empty > svg, .audio-empty-icon, .sound-adjust-body-icon, .website-node-icon')
-        return { id: card.dataset.nodeType, color: getComputedStyle(icon).color, opacity: getComputedStyle(icon).opacity, stroke: getComputedStyle(icon.querySelector('svg')).stroke, background: getComputedStyle(wrap.closest('.canvas-host')).getPropertyValue('--bg').trim(), bodyColor: bodyIcon && getComputedStyle(bodyIcon).color, bodyBackground: bodyIcon && getComputedStyle(bodyIcon).backgroundColor, sectionIcons: [...card.querySelectorAll('.tts-section-label svg')].map((el) => getComputedStyle(el).color) }
+        return { id: card.dataset.nodeType, color: getComputedStyle(icon).color, opacity: getComputedStyle(icon).opacity, stroke: getComputedStyle(icon.querySelector('svg')).stroke, background: getComputedStyle(wrap.closest('.canvas-host')).getPropertyValue('--bg').trim(), cardBackground: getComputedStyle(card).backgroundColor, bodyColor: bodyIcon && getComputedStyle(bodyIcon).color, bodyBackground: bodyIcon && getComputedStyle(bodyIcon).backgroundColor, sectionIcons: [...card.querySelectorAll('.tts-section-label svg')].map((el) => getComputedStyle(el).color) }
       }))
       assert.equal(colors.length, nodes.length)
       for (const node of colors) {
@@ -70,7 +70,10 @@ function contrast(a, b) {
         assert.ok(node.contrast >= 3, `${theme} ${node.id} 对比度 ${node.contrast}`)
         if (node.bodyColor) {
           rgb(node.bodyColor).forEach((channel, i) => assert.ok(Math.abs(channel - actual[i]) < 1, `${theme} ${node.id} 正文图标`))
-          const background = theme === 'light' ? node.bodyBackground : '#303640'
+          // 2026-11-02 起空态身份图标改为无框大图标（无底板）。没有底板时按卡片底色测量，
+          // 否则 `rgba(0, 0, 0, 0)` 会被解析成黑色，得到 2.x 的假失败。
+          const hasPlate = Boolean(node.bodyBackground) && node.bodyBackground !== 'transparent' && !/^rgba?\(\s*0,\s*0,\s*0,\s*0\s*\)$/.test(node.bodyBackground)
+          const background = hasPlate ? (theme === 'light' ? node.bodyBackground : '#303640') : node.cardBackground
           node.bodyContrast = contrast(node.bodyColor, background)
           assert.ok(node.bodyContrast >= 3, `${theme} ${node.id} 图标底板对比度 ${node.bodyContrast}`)
         }

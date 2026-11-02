@@ -123,8 +123,10 @@ describe('画布连线宽度与流动段比例', () => {
       /\.data-edge-visible\s*\{[^}]*stroke-width:\s*3;[\s\S]*?\.data-edge-flow\s*\{[^}]*stroke-width:\s*4\.5;[^}]*stroke-dasharray:\s*166\.667 833\.333;/
     )
     expect(foundation).toMatch(/\.conn-water-path\s*\{[^}]*stroke-dasharray:\s*166\.667 833\.333;/)
-    expect(dataEdgeLayer).toContain('strokeWidth: 3 * zoom')
-    expect(dataEdgeLayer).toContain('strokeWidth: 4.5 * zoom')
+    // 2026-11-02 起连线层改为页面坐标 + 镜像 tldraw 相机 transform：线宽在 CSS 中按页面单位
+    // 声明，缩放由 transform 一次性缩放，组件内不得再乘 zoom 逐帧改写 style。
+    expect(dataEdgeLayer).toContain("querySelector<HTMLElement>('.tl-shapes')")
+    expect(dataEdgeLayer).not.toMatch(/strokeWidth:\s*[\d.]+\s*\*\s*zoom/)
   })
 })
 
@@ -197,17 +199,64 @@ describe('v1.2 §16.5 媒体后续动作按钮只放文字', () => {
 
   it('视频节点操作只保留抽帧 / 视频截取，人声提取由视频操作处理', () => {
     const video = read('src/renderer/src/nodes/specs/bodies/video.tsx')
-    const block = video.match(/aria-label="视频操作"[\s\S]*?<\/div>/)?.[0] ?? ''
+    const block =
+      video.match(
+        /className="node-media-next-actions media-action-toolbar"[\s\S]*?<span className="node-media-file-actions"/
+      )?.[0] ?? ''
     expect(block).not.toBe('')
     for (const label of ['抽帧', '视频截取']) {
       expect(block).toContain(label)
     }
-    const textActions = block.split('<span className="node-video-action-divider"')[0]
+    // 2026-11-02 用户裁决：视频操作条撤掉私有浮层底/描边/模糊，改用图片节点的公共样式。
+    expect(block).toContain('media-action-toolbar')
+    expect(block).toContain('media-action-button')
+    const textActions = block.split('<span className="media-action-divider"')[0]
     expect(block).not.toContain('截人声')
     // 截音频已并入「视频截取」，视频节点不再单独提供该入口
     expect(block).not.toContain('截音频')
     expect(textActions).not.toContain('<Icon')
     expect(video).not.toContain('一键提取人声')
+  })
+
+  it('视频节点不再保留私有操作条材质，图片与视频共用同一条公共样式', () => {
+    // 样式只留一份：app.css 里的视频私有浮层底、app.css 的私有按钮尺寸都必须消失。
+    expect(stripComments(app)).not.toContain('node-video-action-group')
+    expect(stripComments(app)).not.toContain('node-video-icon-action')
+    expect(stripComments(app)).not.toContain('node-video-action-divider')
+    expect(stripComments(videoBody)).not.toContain('node-video-action-group')
+    // 公共操作条不再按节点类型分流，图片与视频取到同一组规则。
+    expect(surfaces).toContain('.node-card .node-media-next-actions.media-action-toolbar')
+    expect(surfaces).toContain('.node-card .media-action-toolbar .media-action-button')
+    expect(surfaces).not.toContain('image-node-action-toolbar')
+  })
+})
+
+describe('2026-11-02 视频生成卡片：删提示、模式留空、分组框不套外框', () => {
+  it('能力错误横幅删除，生成模式无素材时留空而不是两行占位文案', () => {
+    const video = stripComments(videoBody)
+    // 用户裁决：这行提示不需要，卡片上不再渲染能力错误横幅。
+    expect(video).not.toContain('请更换模型')
+    expect(video).not.toContain('gen-capability-note capability-error')
+    // 没有素材时模式下拉留空，不再显示「当前素材组合不可用」把触发器撑成两行。
+    expect(video).not.toContain('当前素材组合不可用')
+    expect(video).toContain('{!mode && <option value="" />}')
+    // 拦截仍然有效：无效组合仍在提交前被 capabilityIssues 挡下。
+    expect(video).toContain('capabilityIssues.length > 0')
+  })
+
+  it('生成面板不再套外框，提示词分组吃掉剩余高度、与主按钮保持规范 8px', () => {
+    // 视频生成节点只保留「生成配置 / 视频描述 / 输出参数」三个分组框。
+    expect(surfaces).toMatch(
+      /\.node-card\.type-video \.gen-panel\s*\{[^}]*border:\s*0;[^}]*background:\s*transparent;/
+    )
+    // 面板、正文与滚动区一起填满卡片，提示词分组吃掉剩余高度。
+    expect(surfaces).toContain(
+      '.node-card.type-video:not(:has(.video-thumbnail-wrap)) .node-standard-scroll'
+    )
+    expect(surfaces).toContain('.node-card.type-video .video-prompt-section {')
+    expect(surfaces).toContain('.node-card.type-video .video-gen-panel .video-gen-prompt {')
+    // 孤儿选择器会把整条规则吞掉（2026-11-02 的回归就是外层框消失没生效）。
+    expect(surfaces).not.toMatch(/^\s*\.\s*$/m)
   })
 })
 
@@ -305,7 +354,8 @@ describe('v1.2 §16.11 代码/JSON 节点：契约因果可见，教学句清零
   })
 
   it('JSON 节点空态不渲染状态徽标，合法时给出结构规模', () => {
-    expect(json).toMatch(/\{text && \(\s*<span\s+className=\{`json-status/)
+    // 2026-11-02：状态徽标与格式化/复制同属「有正文才出现」的工具栏，空态整条不渲染。
+    expect(json).toMatch(/\{text && \(\s*<div className="code-toolbar">/)
     expect(json).not.toContain('等待输入')
     expect(json).toContain('structSummary')
   })
@@ -317,6 +367,34 @@ describe('v1.2 §16.11 代码/JSON 节点：契约因果可见，教学句清零
     expect(json).not.toContain("'JSON 格式有误'")
     expect(structured).toContain('jsonErrorLocation(raw, parseError)')
     expect(structured).not.toContain("'JSON 格式有误'")
+  })
+})
+
+describe('2026-11-02 JSON 节点：空态无空横线，编辑态改成暗色字段', () => {
+  const json = read('src/renderer/src/nodes/specs/bodies/json.tsx')
+
+  it('空态不再渲染只有描边的空工具栏（主按钮上方那道横线）', () => {
+    // 工具栏只在有正文时出现；主按钮经 portal 落到底部操作条，不依赖工具栏存在。
+    expect(json).toContain("{text ? '编辑数据' : '粘贴 JSON'}")
+    expect(json).toMatch(/\{text && \(\s*<div className="code-toolbar">/)
+    // 工具栏关闭标记（</div>）之后紧接主按钮，说明「粘贴 JSON」不在工具栏容器里。
+    const toolbarEnd = json.indexOf('</div>\n      )}\n      <NodePrimaryButton')
+    expect(toolbarEnd).toBeGreaterThan(-1)
+  })
+
+  it('编辑态与文本节点同构（双击进入、填满正文、底部保存），但用暗色字段而不是白底', () => {
+    expect(json).toContain('data-node-interactive="json-editor"')
+    expect(json).toContain('保存 JSON')
+    expect(json).toContain('onPointerDown={(event) => event.preventDefault()}')
+    // 白底只属于文本节点；JSON 编辑框用深色字段 + 8px 圆角，描边交给公共白色描边规则。
+    expect(surfaces).toMatch(
+      /\.node-textarea\[data-node-interactive='json-editor'\]\s*\{[^}]*border-radius:\s*8px;[^}]*color:\s*#e5ebf2;/
+    )
+    expect(surfaces).toContain(
+      ".node-standard-scroll:has(.node-textarea[data-node-interactive='json-editor'])"
+    )
+    // 自动高度不能把 flex 填满的高度反算成内容需求，否则编辑时逐档膨胀。
+    expect(nodeCardView).toContain('.node-textarea[data-node-interactive="json-editor"]')
   })
 })
 
@@ -1234,8 +1312,9 @@ describe('v1.3 底部操作区持有 8px 留白', () => {
       "['--node-action-bottom-inset' as string]: `${NODE_UI.actionBar.bottomInset}px`"
     )
     expect(imageGenAdaptive).toMatch(/\.gen-panel\s*\{[^}]*padding:\s*0/)
+    // v1.5 卡片有 1px 外框：内容留白 7px + 外框 1px = 距卡体外沿 8px。
     expect(read('src/renderer/src/canvas/node-presentation.css')).toContain(
-      'padding: 8px var(--node-standard-padding) var(--node-standard-bottom-inset)'
+      'padding: 8px var(--node-standard-padding) 7px'
     )
     // 操作经 portal 进入独立底栏，表单不再重复留底边距。
     expect(app).toMatch(/\.gen-go\s*\{[^}]*margin-bottom:\s*0/)

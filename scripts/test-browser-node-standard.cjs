@@ -81,9 +81,10 @@ function contrast(first, second) {
     assert.deepEqual(clipped,[],'身份图标和说明不能被私有容器裁掉')
     for (const node of geometry) {
       assert.ok(node.height >= 260 && (node.type === 'storyboard' || node.height <= 440), `${node.type} height ${node.height}`)
-      assert.ok(node.buttons.length <= (['agent','ai-review','storyboard'].includes(node.type) ? 2 : 1), `${node.type} explicit primary actions`)
+      assert.ok(node.buttons.length <= (['agent','ai-review','storyboard','tts'].includes(node.type) ? 2 : 1), `${node.type} explicit primary actions`)
       for (const button of node.buttons) {
-      assert.equal(button.width, node.buttons.length === 1 ? node.width - 24 : (node.width - 24 - 8) / 2, `${node.type} width`)
+      // v1.5 卡片有 1px 外框：可用正文宽度 = 卡宽 - 2(border) - 24(左右内边距)。
+      assert.equal(button.width, node.buttons.length === 1 ? node.width - 26 : (node.width - 26 - 8) / 2, `${node.type} width`)
       assert.equal(button.height, 32, `${node.type} height`)
       assert.ok(Math.abs(button.bottom - 8) < 1.1, `${node.type} inset ${button.bottom}`)
       }

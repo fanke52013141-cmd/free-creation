@@ -884,7 +884,7 @@ export function registerAgentFlowNodeTypes(): void {
       type,
       contractVersion: 1,
       label: review ? 'AI 审核' : state ? '状态机' : 'Agent',
-      icon: review ? 'check' : state ? 'workflow' : 'spark',
+      icon: review ? 'ai-review' : state ? 'state-machine' : 'agent',
       color: NODE_ACCENTS[type],
       defaultSize: { w: 340, h: 260 },
       category: 'ai',

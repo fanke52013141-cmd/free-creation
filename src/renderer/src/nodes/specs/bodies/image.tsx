@@ -92,7 +92,7 @@ export function ImageBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
           variant="image-node"
           extra={
             <button
-              className="btn-ghost small image-node-action-button"
+              className="btn-ghost small media-action-button"
               aria-label="替换图片"
               type="button"
               onPointerDown={(e) => stopEventPropagation(e)}

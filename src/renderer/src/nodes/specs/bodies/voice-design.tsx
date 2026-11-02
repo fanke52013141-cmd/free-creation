@@ -1,4 +1,4 @@
-import { NodePrimaryButton } from '../../../canvas/NodePresentation'
+import { NodePrimaryButton, NodeSectionTitle } from '../../../canvas/NodePresentation'
 // 音色设计节点 Body（MiniMax voice_design）。
 //
 // 节点定位：输入音色描述 → 输出试听音频与可复用的音色 ID。
@@ -12,7 +12,6 @@ import { markUndoPoint } from '../../../canvas/history'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { runNodeManually } from '../../../engine/executor'
 import { useAppStore } from '../../../stores/app'
-import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
 import { useGatewayStore } from '../../../stores/gateway'
 import {
@@ -142,10 +141,7 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
   return (
     <div className="node-tts node-voice-design">
       <div className="tts-section voice-design-provider-section">
-        <div className="tts-section-label">
-          <Icon name="settings" size={13} />
-          <span>MiniMax 供应商</span>
-        </div>
+        <NodeSectionTitle>MiniMax 供应商</NodeSectionTitle>
         <AppSelect
           className="gen-select voice-design-provider-select"
           aria-label="MiniMax 供应商"
@@ -180,10 +176,7 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
       </div>
 
       <div className="tts-section voice-design-description-section">
-        <div className="tts-section-label">
-          <Icon name="text" size={13} />
-          <span>音色描述</span>
-        </div>
+        <NodeSectionTitle>音色描述</NodeSectionTitle>
         <textarea
           className="gen-textarea tts voice-design-prompt"
           rows={3}
@@ -200,10 +193,7 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
       </div>
 
       <div className="tts-section voice-design-parameters-section">
-        <div className="tts-section-label">
-          <Icon name="settings" size={13} />
-          <span>设计参数</span>
-        </div>
+        <NodeSectionTitle>设计参数</NodeSectionTitle>
         <label
           className="opt-label voice-design-field-label"
           htmlFor={`voice-design-preview-${shape.id}`}
@@ -250,22 +240,12 @@ export function VoiceDesignBody({ shape, openPreview }: NodeBodyProps): React.JS
           void generate()
         }}
       >
-        {busy ? (
-          '设计中…'
-        ) : (
-          <>
-            <span>设计音色</span>
-            <Icon name="spark" size={14} />
-          </>
-        )}
+        {busy ? '设计中…' : '设计音色'}
       </NodePrimaryButton>
 
       {voiceId && (
         <div className="tts-section voice-id-card">
-          <div className="tts-section-label">
-            <Icon name="check" size={13} />
-            <span>音色 ID</span>
-          </div>
+          <NodeSectionTitle>音色 ID</NodeSectionTitle>
           <div className="voice-id-row">
             <code className="voice-id-value" title={voiceId}>
               {voiceId}

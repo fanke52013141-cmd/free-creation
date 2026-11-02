@@ -340,74 +340,86 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
             openPreview({ kind: 'video', url: mediaUrl(item.mediaPath), title: shape.props.title })
           }
         />
-        {/* 功能按钮与节点级辅助操作同列呈现，定位/复制节点沿用参考稿中的图标入口。 */}
-        <div className="node-media-next-actions node-video-action-group" aria-label="视频操作">
-          <button
-            className="btn-ghost small"
-            title="替换视频"
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onClick={(e) => {
-              e.stopPropagation()
-              void chooseAsset()
-            }}
-          >
-            替换
-          </button>
-          <button
-            className="btn-ghost small"
-            title="打开视频截取"
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onClick={(e) => {
-              e.stopPropagation()
-              setVideoOperationsMode('clip')
-              setVideoOperationsOpen(true)
-            }}
-          >
-            视频截取
-          </button>
-          <button
-            className="btn-ghost small"
-            title="打开抽帧"
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onClick={(e) => {
-              e.stopPropagation()
-              setVideoOperationsMode('frame')
-              setVideoOperationsOpen(true)
-            }}
-          >
-            抽帧
-          </button>
-          <span className="node-video-action-divider" aria-hidden="true" />
-          <button
-            className="icon-btn node-video-icon-action"
-            title="在画布中定位居中"
-            aria-label="在画布中定位居中"
-            onPointerDown={stopEventPropagation}
-            onClick={(event) => {
-              stopEventPropagation(event)
-              const bounds = editor.getShapePageBounds(shape.id)
-              if (!bounds) return
-              editor.centerOnPoint(
-                { x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 },
-                { animation: { duration: 250 } }
-              )
-            }}
-          >
-            <Icon name="target" size={14} />
-          </button>
-          <button
-            className="icon-btn node-video-icon-action"
-            title="复制节点"
-            aria-label="复制节点"
-            onPointerDown={stopEventPropagation}
-            onClick={(event) => {
-              stopEventPropagation(event)
-              markUndoPoint(editor, 'duplicate-video-node')
-              editor.duplicateShapes([shape.id])
-            }}
-          >
-            <Icon name="copy" size={14} />
-          </button>
+        {/* 操作条与图片节点共用同一套公共样式（NODE_UI_STANDARD §19：按钮 32px、按可用宽度分配）：
+            不再使用节点私有的浮层底、描边与背景模糊。 */}
+        <div
+          className="node-media-next-actions media-action-toolbar"
+          role="group"
+          aria-label="视频操作"
+        >
+          <div className="media-action-primary">
+            <button
+              className="btn-ghost small media-action-button"
+              title="替换视频"
+              onPointerDown={(e) => stopEventPropagation(e)}
+              onClick={(e) => {
+                e.stopPropagation()
+                void chooseAsset()
+              }}
+            >
+              替换
+            </button>
+            <button
+              className="btn-ghost small media-action-button"
+              title="打开视频截取"
+              onPointerDown={(e) => stopEventPropagation(e)}
+              onClick={(e) => {
+                e.stopPropagation()
+                setVideoOperationsMode('clip')
+                setVideoOperationsOpen(true)
+              }}
+            >
+              视频截取
+            </button>
+            <button
+              className="btn-ghost small media-action-button"
+              title="打开抽帧"
+              onPointerDown={(e) => stopEventPropagation(e)}
+              onClick={(e) => {
+                e.stopPropagation()
+                setVideoOperationsMode('frame')
+                setVideoOperationsOpen(true)
+              }}
+            >
+              抽帧
+            </button>
+          </div>
+          <span className="media-action-divider" aria-hidden="true" />
+          {/* 定位/复制节点的图标入口沿用媒体文件操作的按钮材质，与图片节点同列。 */}
+          <span className="node-media-file-actions" role="group" aria-label="节点辅助操作">
+            <button
+              type="button"
+              className="icon-btn media-file-action-btn"
+              title="在画布中定位居中"
+              aria-label="在画布中定位居中"
+              onPointerDown={stopEventPropagation}
+              onClick={(event) => {
+                stopEventPropagation(event)
+                const bounds = editor.getShapePageBounds(shape.id)
+                if (!bounds) return
+                editor.centerOnPoint(
+                  { x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 },
+                  { animation: { duration: 250 } }
+                )
+              }}
+            >
+              <Icon name="target" size={16} />
+            </button>
+            <button
+              type="button"
+              className="icon-btn media-file-action-btn"
+              title="复制节点"
+              aria-label="复制节点"
+              onPointerDown={stopEventPropagation}
+              onClick={(event) => {
+                stopEventPropagation(event)
+                markUndoPoint(editor, 'duplicate-video-node')
+                editor.duplicateShapes([shape.id])
+              }}
+            >
+              <Icon name="copy" size={16} />
+            </button>
+          </span>
         </div>
         {videoOperationsOpen && (
           <VideoOperationsWorkbench
@@ -428,12 +440,6 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
     <div className="gen-panel video-gen-panel">
       {opt?.provider.specId === 'dreamina' && audioReferences.length > 0 && (
         <p className="gen-capability-note">即梦参考音频须为 2–30 秒，提交前会检查时长。</p>
-      )}
-      {capabilityIssues.length > 0 && (
-        <div className="gen-capability-note capability-error" role="alert">
-          <Icon name="info" size={13} />
-          <span>{capabilityIssues.join('；')}；请更换模型、调整参数或断开该输入后再运行。</span>
-        </div>
       )}
       {capabilities?.parameterTransport === 'gateway-compatibility' && (
         <div className="gen-capability-note">
@@ -477,7 +483,7 @@ export function VideoBody({ shape, openPreview }: NodeBodyProps): React.JSX.Elem
                 })
               }}
             >
-              {!mode && <option value="">当前素材组合不可用</option>}
+              {!mode && <option value="" />}
               {(modeResolution?.availableModes ?? []).map((candidate) => (
                 <option key={candidate} value={candidate}>
                   {MODE_LABELS[candidate]}

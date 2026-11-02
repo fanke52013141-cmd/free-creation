@@ -2447,99 +2447,9 @@ select:focus-visible {
   white-space: nowrap;
 }
 
-.node-card .node-video-action-group {
-  width: max-content;
-  max-width: calc(100% - 16px);
-  justify-content: flex-start;
-  gap: 6px;
-  margin: 5px auto 7px;
-  padding: 5px;
-  border: 1px solid rgba(34, 44, 66, 0.95);
-  border-radius: 12px;
-  background: rgba(17, 23, 36, 0.86);
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22);
-  backdrop-filter: blur(12px);
-}
-
-.node-card .node-video-action-group .btn-ghost.small {
-  flex: 0 0 auto;
-  min-height: 27px;
-  padding: 5px 11px;
-  border-color: rgba(255, 255, 255, 0.06);
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.055);
-  color: #cbd5e1;
-  font-weight: 500;
-  letter-spacing: 0.01em;
-  transition:
-    border-color 140ms ease,
-    background-color 140ms ease,
-    color 140ms ease;
-}
-
-.node-card .node-video-action-group .btn-ghost.small:hover {
-  border-color: rgba(255, 255, 255, 0.12);
-  background: rgba(71, 85, 105, 0.52);
-  color: #fff;
-}
-
-.node-card .node-video-action-divider {
-  width: 1px;
-  height: 16px;
-  flex: 0 0 1px;
-  margin: 0 2px;
-  background: rgba(148, 163, 184, 0.32);
-}
-
-.node-card .node-video-action-group .node-video-icon-action {
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
-  border-color: rgba(255, 255, 255, 0.06);
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.055);
-  color: #cbd5e1;
-}
-
-.node-card .node-video-action-group .node-video-icon-action:hover {
-  border-color: rgba(255, 255, 255, 0.12);
-  background: rgba(71, 85, 105, 0.52);
-  color: #fff;
-}
-
-.canvas-theme-light .node-card .node-video-action-group {
-  border-color: rgba(42, 55, 67, 0.2);
-  background: rgba(247, 243, 236, 0.96);
-  box-shadow: 0 8px 22px rgba(45, 62, 74, 0.14);
-}
-
-.canvas-theme-light .node-card .node-video-action-group .btn-ghost.small {
-  border-color: rgba(42, 55, 67, 0.16);
-  background: rgba(255, 253, 250, 0.82);
-  color: #3b5161;
-}
-
-.canvas-theme-light .node-card .node-video-action-group .btn-ghost.small:hover {
-  border-color: rgba(24, 143, 202, 0.45);
-  background: rgba(66, 185, 245, 0.12);
-  color: #11658e;
-}
-
-.canvas-theme-light .node-card .node-video-action-divider {
-  background: rgba(42, 55, 67, 0.2);
-}
-
-.canvas-theme-light .node-card .node-video-action-group .node-video-icon-action {
-  border-color: rgba(42, 55, 67, 0.16);
-  background: rgba(255, 253, 250, 0.82);
-  color: #3b5161;
-}
-
-.canvas-theme-light .node-card .node-video-action-group .node-video-icon-action:hover {
-  border-color: rgba(24, 143, 202, 0.45);
-  background: rgba(66, 185, 245, 0.12);
-  color: #11658e;
-}
+/* 视频节点的操作条已并入公共媒体操作条（ui-surfaces.css `.media-action-toolbar`）：
+   不再使用节点私有的浮层底、描边、阴影与背景模糊，按钮材质与图片节点一致
+   （NODE_UI_STANDARD §19：多操作按钮 32px、按可用正文宽度分配）。 */
 
 .node-media-badge-overlay {
   position: absolute;
@@ -3264,20 +3174,20 @@ select:focus-visible {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 16px 12px;
-  border-radius: 8px;
-  border: 1.5px dashed var(--border);
-  background: var(--card);
+  padding: 4px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--node-edge-strong);
+  background: var(--node-control-bg);
   cursor: pointer;
   transition:
     border-color 0.15s,
     background 0.15s;
-  color: var(--txt);
+  color: var(--node-text);
 }
 
 .tts-upload-btn:hover {
-  border-color: var(--accent);
-  background: var(--card-hover);
+  border-color: var(--node-edge-hover);
+  background: var(--node-control-bg-hover);
 }
 
 .tts-upload-hint {
@@ -8503,7 +8413,6 @@ select:focus-visible {
   margin-bottom: 0;
 }
 
-
 /* NoModelHint 第二行：点明该节点要哪个供应商预设，措辞比主标题弱一档 */
 
 .gen-running {
@@ -12357,21 +12266,19 @@ canvas.tl-canvas-indicators {
 }
 
 .node-speech .speech-reference-section .tts-upload-btn {
-  flex-direction: row;
-  justify-content: flex-start;
-  gap: 10px;
   width: 100%;
-  min-height: 54px;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg) 70%, var(--card));
-  text-align: left;
+  min-height: 32px;
+  padding: 4px 10px;
+  border: 1px solid var(--node-edge-strong);
+  border-radius: 7px;
+  background: var(--node-control-bg);
+  color: var(--node-text);
+  text-align: center;
 }
 
 .node-speech .speech-reference-section .tts-upload-btn:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--brand) 38%, var(--line));
-  background: color-mix(in srgb, var(--brand) 6%, var(--bg));
+  border-color: var(--node-edge-hover);
+  background: var(--node-control-bg-hover);
 }
 
 .node-speech .speech-reference-section .tts-upload-btn:disabled {
@@ -12556,10 +12463,10 @@ canvas.tl-canvas-indicators {
 
 /* 音色 ID 结果卡：可复制，供下游配音节点引用 */
 .voice-id-card {
-  padding: 6px 8px;
-  border: 1px solid rgba(9, 202, 245, 0.28);
-  border-radius: 7px;
-  background: rgba(9, 202, 245, 0.06);
+  padding: 8px;
+  border: 1px solid var(--node-edge-strong);
+  border-radius: 8px;
+  background: var(--node-input-bg);
 }
 
 .voice-id-row {
@@ -12646,17 +12553,17 @@ canvas.tl-canvas-indicators {
   width: 100%;
 }
 
-/* 音色设计节点内部：沿用参考稿的分组、深色输入区与青色主操作，不改节点外壳和端口。 */
+/* 音色设计节点内部（v1.5）：与语音克隆/语音合成共用中性灰卡面。 */
 .node-card.type-voice-design .node-voice-design {
-  --voice-design-input: #10131d;
-  --voice-design-edge: #23293e;
-  --voice-design-text: #e2e8f0;
-  --voice-design-muted: #94a3b8;
-  --voice-design-accent: #38bdf8;
+  --voice-design-input: var(--node-input-bg);
+  --voice-design-edge: var(--node-edge-strong);
+  --voice-design-text: var(--node-text);
+  --voice-design-muted: var(--node-text-muted);
+  --voice-design-accent: var(--node-edge-hover);
   box-sizing: border-box;
-  gap: 14px;
-  padding: 14px;
-  color: var(--voice-design-text);
+  gap: 12px;
+  padding: 0;
+  color: var(--node-text);
 }
 
 .node-card.type-voice-design .node-voice-design .tts-section {
@@ -12686,10 +12593,10 @@ canvas.tl-canvas-indicators {
 .node-card.type-voice-design .voice-design-parameters-section .gen-input {
   box-sizing: border-box;
   width: 100%;
-  border: 1px solid var(--voice-design-edge);
-  border-radius: 9px;
-  background: var(--voice-design-input);
-  color: var(--voice-design-text);
+  border: 1px solid var(--node-edge-strong);
+  border-radius: 7px;
+  background: var(--node-input-bg);
+  color: var(--node-text);
   font-size: 12px;
   transition:
     border-color 160ms ease,
@@ -12697,21 +12604,21 @@ canvas.tl-canvas-indicators {
 }
 
 .node-card.type-voice-design .voice-design-provider-select {
-  min-height: 40px;
-  padding: 9px 11px;
+  min-height: 28px;
+  padding: 4px 8px;
 }
 
 .node-card.type-voice-design .voice-design-prompt {
-  min-height: 76px;
+  min-height: 72px;
   max-height: 100px;
-  padding: 11px 12px;
+  padding: 8px;
   line-height: 1.65;
   resize: none;
 }
 
 .node-card.type-voice-design .voice-design-parameters-section .gen-input {
-  min-height: 38px;
-  padding: 9px 11px;
+  min-height: 28px;
+  padding: 4px 8px;
 }
 
 .node-card.type-voice-design .voice-design-parameters-section .voice-design-id-input {
@@ -12721,8 +12628,8 @@ canvas.tl-canvas-indicators {
 .node-card.type-voice-design .voice-design-provider-select:focus,
 .node-card.type-voice-design .voice-design-prompt:focus,
 .node-card.type-voice-design .voice-design-parameters-section .gen-input:focus {
-  border-color: color-mix(in srgb, var(--voice-design-accent) 70%, transparent);
-  box-shadow: 0 0 10px color-mix(in srgb, var(--voice-design-accent) 15%, transparent);
+  border-color: var(--node-focus);
+  box-shadow: none;
   outline: none;
 }
 
@@ -12756,35 +12663,37 @@ canvas.tl-canvas-indicators {
 
 .node-card.type-voice-design .voice-design-provider-section [data-purpose='config-model-button'] {
   display: flex;
-  width: 100%;
-  min-height: 38px;
+  width: auto;
+  align-self: flex-start;
+  min-height: 28px;
   align-items: center;
   justify-content: center;
-  padding: 8px 10px;
-  border: 1px solid #29324b;
-  border-radius: 9px;
-  background: #191f2e;
-  color: #cbd5e1;
-  font-size: 11px;
-  letter-spacing: 0.01em;
+  padding: 3px 10px;
+  border: 1px solid var(--node-edge-strong);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--node-text);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: normal;
 }
 
 .node-card.type-voice-design
   .voice-design-provider-section
   [data-purpose='config-model-button']:hover {
-  border-color: rgba(56, 189, 248, 0.4);
-  background: #20273a;
-  color: #f1f5f9;
+  border-color: var(--node-edge-hover);
+  background: var(--node-control-bg-hover);
+  color: var(--node-text);
 }
 
 /* 2026-09-29 UI 统一：删除 voice-design 对 .btn-generate 的私改（42px/渐变/r10/位移），
    主操作按钮在所有节点内共用 .btn-generate 标准材质（28px/r7/令牌），不再按节点各写一套。 */
 
 .node-card.type-voice-design .voice-id-card {
-  padding: 9px 10px;
-  border-color: rgba(34, 211, 238, 0.24);
-  border-radius: 10px;
-  background: rgba(8, 145, 178, 0.07);
+  padding: 8px;
+  border-color: var(--node-edge-strong);
+  border-radius: 8px;
+  background: var(--node-input-bg);
 }
 
 .node-card.type-voice-design .node-audio-player {

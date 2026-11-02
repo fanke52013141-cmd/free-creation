@@ -24,6 +24,20 @@
   --node-header-h: 28px;
   --elevation-1: 0 14px 34px rgba(0, 0, 0, 0.22);
   --elevation-float: 0 18px 48px rgba(0, 0, 0, 0.34);
+  /* 节点卡片 v1.5：卡片、分区、控件统一使用中性灰，不再使用节点分类色。 */
+  --node-surface: #20242a;
+  --node-surface-hover: #242930;
+  --node-edge: #343a43;
+  --node-edge-strong: #444c57;
+  --node-edge-hover: #4a525d;
+  --node-divider: #2b3038;
+  --node-input-bg: #14171d;
+  --node-control-bg: #292e36;
+  --node-control-bg-hover: #333a43;
+  --node-control-bg-active: #242930;
+  --node-text: #f1f4f7;
+  --node-text-muted: #9aa4b2;
+  --node-focus: #8b96a5;
 }
 
 body {
@@ -72,7 +86,8 @@ body {
    清晰度不受影响（与 2026-10-04 的点阵背景修复同属"别在缩放路径上重栅格化"）。 */
 .canvas-host.is-camera-interacting .tl-canvas,
 .canvas-host.is-camera-interacting .tl-shapes,
-.canvas-host.is-camera-interacting .tl-html-layer {
+.canvas-host.is-camera-interacting .tl-html-layer,
+.canvas-host.is-camera-interacting .data-edge-frame {
   will-change: transform;
 }
 
@@ -274,8 +289,8 @@ body {
   width: 100%;
   height: 100%;
   /* 节点正文始终使用不透明材质：在大缩放与高 DPI 下也保持文字、媒体清晰。 */
-  background: var(--card);
-  border: none;
+  background: var(--node-surface);
+  border: 1px solid var(--node-edge);
   border-radius: var(--node-radius);
   overflow: hidden;
   user-select: none;
@@ -286,23 +301,6 @@ body {
   transition:
     box-shadow 200ms ease,
     transform 200ms ease;
-}
-
-/* Voice clone keeps the shared node shell, with the darker framed surface from its reference. */
-.node-card.type-tts {
-  --tts-card-surface: #161a25;
-  --tts-input-surface: #10131c;
-  --tts-edge: rgba(255, 255, 255, 0.1);
-  --tts-text: #e2e8f0;
-  --tts-muted: #94a3b8;
-  --tts-accent: #38bdf8;
-  background:
-    radial-gradient(150px 130px at 0 0, rgba(56, 189, 248, 0.1), transparent 76%),
-    var(--tts-card-surface);
-  border-radius: var(--node-radius);
-  box-shadow:
-    inset 0 0 0 1px var(--tts-edge),
-    0 12px 28px -20px rgba(0, 0, 0, 0.76);
 }
 
 .node-card-wrap:not(.is-selected):hover .node-card {
@@ -894,7 +892,8 @@ body {
   stroke-dashoffset: 1000;
   opacity: 0.7;
   filter: drop-shadow(0 0 5px rgba(104, 236, 210, 0.58));
-  animation: edge-water-flow 1.6s linear infinite;
+  /* 与正式连线流光同步：用户裁决把连线动画速度降到 1/3（1.6s → 4.8s）。 */
+  animation: edge-water-flow 4.8s linear infinite;
 }
 
 @keyframes edge-water-flow {

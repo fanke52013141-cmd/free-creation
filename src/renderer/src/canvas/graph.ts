@@ -24,16 +24,12 @@ export function dynamicPortIdsForShape(shape: NodeCardShape): {
   if (!spec) return { in: new Set<string>(), out: new Set<string>() }
   const resolved = getNodePorts(spec, shape)
   const staticIds = new Set<string>([...spec.ports.in, ...spec.ports.out].map((p) => p.id))
-  // 音色档案是设计与合成之间的主要业务连接；试听资产或文本连接不能把它挤掉。
-  const pinnedIn = shape.props.nodeType === 'speech' ? ['in-voice'] : []
-  const pinnedOut = shape.props.nodeType === 'voice-design' ? ['out-json'] : []
+  // v1.5（2026-11-02 用户裁决）：节点每侧默认只显示一个代表端口。
+  // 语音合成的 in-voice、音色设计的 out-json 都属于“按类型分组”的普通静态端口，
+  // 不再 pin 成强制端口；真实连接或拖线候选时由 node-port-layout 自动展开。
   return {
-    in: new Set(
-      resolved.in.filter((p) => !staticIds.has(p.id) || pinnedIn.includes(p.id)).map((p) => p.id)
-    ),
-    out: new Set(
-      resolved.out.filter((p) => !staticIds.has(p.id) || pinnedOut.includes(p.id)).map((p) => p.id)
-    )
+    in: new Set(resolved.in.filter((p) => !staticIds.has(p.id)).map((p) => p.id)),
+    out: new Set(resolved.out.filter((p) => !staticIds.has(p.id)).map((p) => p.id))
   }
 }
 

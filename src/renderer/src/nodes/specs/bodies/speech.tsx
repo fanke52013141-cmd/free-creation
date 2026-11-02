@@ -1,4 +1,4 @@
-import { NodePrimaryButton } from '../../../canvas/NodePresentation'
+import { NodePrimaryButton, NodeSectionTitle } from '../../../canvas/NodePresentation'
 // 语音合成节点 Body（MiniMax 异步 / 火山引擎语音合成 1.0）。
 //
 // 这里不绕过 executor 调用模型：按钮只把当前配置与正文写回节点，然后交给统一的
@@ -13,7 +13,6 @@ import { markUndoPoint } from '../../../canvas/history'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { runNodeManually } from '../../../engine/executor'
 import { useAppStore } from '../../../stores/app'
-import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import {
@@ -266,10 +265,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
     <div className="node-tts node-speech">
       {/* ── 协议与模型：决定下面所有参数分组与节点端口 ── */}
       <div className="tts-section speech-channel-section">
-        <div className="tts-section-label speech-section-label">
-          <Icon name="settings" size={13} />
-          <span>合成通道</span>
-        </div>
+        <NodeSectionTitle>合成通道</NodeSectionTitle>
         <div className="tts-options speech-field-row">
           <label className="opt-label">供应商</label>
           <AppSelect
@@ -330,10 +326,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
 
       {/* ── 音色：用户强调音色与 ID 是最重要的信息 ── */}
       <div className="tts-section speech-voice-section">
-        <div className="tts-section-label speech-section-label">
-          <Icon name="audio" size={13} />
-          <span>音色</span>
-        </div>
+        <NodeSectionTitle>音色</NodeSectionTitle>
         <input
           className="gen-input"
           aria-label="音色 ID"
@@ -348,10 +341,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
       {/* ── 火山引擎语音合成 1.0 可选参考音频 ── */}
       {config.backend === 'volc' && (
         <div className="tts-section tts-reference-section speech-reference-section">
-          <div className="tts-section-label speech-section-label">
-            <Icon name="audio" size={13} />
-            <span>参考音频（可选）</span>
-          </div>
+          <NodeSectionTitle>参考音频（可选）</NodeSectionTitle>
           {uploadedReference ? (
             <div className="tts-ref-player">
               <button
@@ -401,15 +391,10 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
                 void uploadReferenceAudio()
               }}
             >
-              <span className="speech-reference-upload-icon" aria-hidden="true">
-                <Icon name="upload" size={17} />
-              </span>
-              <span className="speech-reference-upload-copy">
-                <span className="speech-reference-upload-title">上传参考音频</span>
-                <span className="tts-upload-hint">WAV / MP3 / PCM / OGG OPUS · ≤10 MB</span>
-              </span>
+              上传参考音频
             </button>
           )}
+          <small className="tts-upload-hint">WAV / MP3 / PCM / OGG OPUS · ≤10 MB</small>
           <span className={`node-wiring speech-reference-status ${referenceCount > 0 ? 'ok' : ''}`}>
             {referenceCount > 0
               ? `使用 ${incomingReferences} 段连线音频${uploadedReference ? '和 1 段本节点上传音频' : ''}`
@@ -425,10 +410,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
 
       {/* ── 朗读文本 ── */}
       <div className="tts-section speech-text-section">
-        <div className="tts-section-label speech-section-label">
-          <Icon name="text" size={13} />
-          <span>朗读文本</span>
-        </div>
+        <NodeSectionTitle>朗读文本</NodeSectionTitle>
         <textarea
           className="gen-textarea tts"
           aria-label="朗读文本"
@@ -450,10 +432,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
       {/* ── MiniMax 语音参数 ── */}
       {config.backend === 'minimax' && (
         <div className="tts-section speech-parameter-panel">
-          <div className="tts-section-label speech-section-label">
-            <Icon name="spark" size={13} />
-            <span>语音参数</span>
-          </div>
+          <NodeSectionTitle>语音参数</NodeSectionTitle>
           <div className="tts-sliders">
             <div className="tts-slider-row speech-range-row">
               <div className="speech-range-labels">
@@ -525,10 +504,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
 
       {config.backend === 'minimax' && (
         <div className="tts-section speech-pronunciation-section">
-          <div className="tts-section-label speech-section-label">
-            <Icon name="text" size={13} />
-            <span>读音纠正（可选）</span>
-          </div>
+          <NodeSectionTitle>读音纠正（可选）</NodeSectionTitle>
           <textarea
             className="gen-textarea tts short speech-pronunciation-input"
             aria-label="读音纠正（可选）"
@@ -542,10 +518,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
       {/* ── 火山引擎语音合成 1.0 参数 ── */}
       {config.backend === 'volc' && (
         <div className="tts-section speech-parameter-panel">
-          <div className="tts-section-label speech-section-label">
-            <Icon name="spark" size={13} />
-            <span>语音参数</span>
-          </div>
+          <NodeSectionTitle>语音参数</NodeSectionTitle>
           <div className="tts-sliders">
             <div className="tts-slider-row speech-range-row">
               <div className="speech-range-labels">
@@ -617,14 +590,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
           void generate()
         }}
       >
-        {busy ? (
-          '合成中…'
-        ) : (
-          <>
-            <Icon name="audio" size={14} />
-            合成语音
-          </>
-        )}
+        {busy ? '合成中…' : '合成语音'}
       </NodePrimaryButton>
 
       {hasOutput && (
@@ -718,10 +684,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
       {/* ── 字幕：只有火山语音合成 1.0 开启字幕时才有内容 ── */}
       {sentences.length > 0 && (
         <div className="tts-section speech-subtitle">
-          <div className="tts-section-label">
-            <Icon name="text" size={13} />
-            <span>字幕时间轴（{sentences.length} 句）</span>
-          </div>
+          <NodeSectionTitle>字幕时间轴（{sentences.length} 句）</NodeSectionTitle>
           <ol className="speech-subtitle-list">
             {sentences.slice(0, 8).map((sentence, index) => (
               <li key={`${sentence.start_time}-${index}`}>

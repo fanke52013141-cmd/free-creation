@@ -1,8 +1,10 @@
-# 无限画布 UI 图标系统规范（v1）
+# 无限画布 UI 图标系统规范（v2）
 
 > 状态：已定稿的设计与接入规范。新节点、新工具和重做既有图标时必须遵循本文件。
 >
 > 视觉母版：[ui-icon-master-v1.png](assets/ui-icon-master-v1.png)。母版由生图生成，用于确定轮廓、留白和色彩节奏；**不得直接切图或作为 UI 图标发布**。
+>
+> v2（2026-11-02）：节点身份图标按 Stitch 方案重绘并落地——声音创作 6 个、AI 与自动化 5 个、循环 1 个，见 §4 语义字典与 §7 I4。图标设计源：`design/2026-11-node-identity/icons/icon-drafts.tsx`。
 
 ## 1. 目标与边界
 
@@ -57,7 +59,18 @@
 | `frame` | 视频取帧 | 胶片网格/定位帧 | `crop` |
 | `clip` | 视频截取 | 时间区段 + 两个边界 | `frame` |
 | `audio` | 音频 | 五根节奏不同的声波线 | `video` |
+| `sound-adjust` | 声音调整 | 三根竖向推子 + 三个错高旋钮 | `audio`、`voice-clone` |
+| `speech` | 语音合成 | 麦克风 + 两条发射弧（节点身份） | `mic`、`voice-clone` |
+| `voice-clone` | 语音克隆 | 上下两条错位声波（原声 + 回声） | `audio`、`sound-adjust` |
+| `voice-design` | 音色设计 | 左下三弧声纹 + 右上四角星；唯一 1.65 描边 | `image-gen`（星）、`audio` |
+| `vocal-separate` | 人声分离（退役） | 左侧声波柱向右分叉两支 | `sound-adjust` |
+| `mic` | 录音/麦克风控件 | 胶囊麦克风 + U 支架 + 底座 | `speech`（节点身份） |
 | `chat` | 对话 | 单气泡 + 两条内容线 | `script` |
+| `agent` | Agent | 机器人头 + 天线 + 两个实心眼点 | `spark`、`ai-process` |
+| `ai-process` | AI 处理 | 斜向魔杖 + 大小两颗四角星 | `agent`、`spark` |
+| `ai-review` | AI 审核 | 盾牌 + 内部对勾 | `check`（动作） |
+| `state-machine` | 状态机 | 两个状态圆 + 带箭头迁移曲线 | `workflow`（流程图）、`reset` |
+| `iterate` | 循环 | 三条递减横线 + 右侧回绕箭头 | `grid`、`text` |
 | `script` | 脚本 | 文档 + 内容线 | `text`、`code` |
 | `processor` | 处理 | 输入/输出流向与中间节点 | `workflow` |
 | `json` | 结构化数据 | 花括号 + 三条字段线 | `code` |
@@ -65,6 +78,8 @@
 | `storyboard` | 分镜 | 胶片分格 | `video` |
 | `director` | 3D 预演台 | 摄像机/空间视角，不使用电影场记板 | `video` |
 | `grid` | JSON 卡片/表格呈现 | 均匀网格 | `storyboard` |
+
+**节点图标与工具/动作图标互斥**：`mic` 只用于录音控件，`speech` 独占“麦克风 + 发射弧”作为语音合成节点身份；`check` 只表示“通过”动作，`ai-review` 用盾牌对勾表示审核节点；`workflow` 只表示流程入口，`state-machine` 用“状态圆 + 迁移箭头”；`spark` 是品牌/AI 装饰点，`agent`、`ai-process` 各有独立轮廓。节点标题图标只描述“对象”，不得借用动作或状态语义。
 
 ### 工具与导航（核心 13 个）
 
@@ -114,6 +129,14 @@
 - 加入图标渲染覆盖测试：`IconName`、`PATHS` 和各节点规格引用三者一致。
 - 在新节点检查项中加入本规范链接；节点契约审查和 UI 审查必须同时通过。
 - 后续图标变更以视觉母版为方向、以 SVG 源码为唯一交付物；位图母版仅作为审阅参考。
+
+### I4 — 节点身份图标落地（2026-11-02）
+
+- 新增/重绘 11 个 `IconName`：`sound-adjust`、`speech`、`voice-clone`、`voice-design`、`vocal-separate`、`agent`、`ai-process`、`ai-review`、`state-machine`、`iterate`、`audio`（族锚点保留）。
+- 节点映射：声音调整/语音合成/语音克隆/音色设计/人声分离不再共用 `audio`；Agent、AI 处理不再共用 `spark`；AI 审核不再用裸 `check`；状态机不再用 `workflow`；循环不再用 `grid`。
+- 状态机在 16px 下放弃“初始点”语义（r1.25 内点会糊），改为大/小两个状态圆 + 带箭头迁移曲线；这是 2026-11-02 用户验收后的裁决。
+- `voice-design` 是唯一按 1.65 描边渲染的图标（`Icon` 组件内按名字降描边），其余保持 1.8。
+- 设计源、预览与 16px 实测见 `design/2026-11-node-identity/icons/`；新增图标契约测试 `test/icon-contract.test.ts`。
 
 ## 8. 本次生成素材
 

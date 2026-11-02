@@ -106,32 +106,47 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
   }
 
   if (editing) {
+    // 编辑态与文本节点同构（填满正文、底部保存按钮），但不用白底：
+    // 2026-11-02 用户裁决「白色太突兀」，改用视频描述框那种暗色字段（见 ui-surfaces.json-editor）。
     return (
-      <textarea
-        ref={textareaRef}
-        className="node-textarea code-edit"
-        autoFocus
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') commit()
-          // Tab key 支持
-          if (e.key === 'Tab') {
-            e.preventDefault()
-            const target = e.currentTarget
-            const start = target.selectionStart
-            const end = target.selectionEnd
-            const newVal = draft.slice(0, start) + '  ' + draft.slice(end)
-            setDraft(newVal)
-            requestAnimationFrame(() => {
-              target.selectionStart = target.selectionEnd = start + 2
-            })
-          }
-        }}
-        onPointerDown={(e) => stopEventPropagation(e)}
-        spellCheck={false}
-      />
+      <>
+        <textarea
+          ref={textareaRef}
+          className="node-textarea code-edit"
+          data-node-interactive="json-editor"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') commit()
+            // Tab key 支持
+            if (e.key === 'Tab') {
+              e.preventDefault()
+              const target = e.currentTarget
+              const start = target.selectionStart
+              const end = target.selectionEnd
+              const newVal = draft.slice(0, start) + '  ' + draft.slice(end)
+              setDraft(newVal)
+              requestAnimationFrame(() => {
+                target.selectionStart = target.selectionEnd = start + 2
+              })
+            }
+          }}
+          /* 只阻止冒泡到画布层；不能 preventDefault，否则文本框无法聚焦（与文本节点同款）。 */
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onMouseDown={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.stopPropagation()}
+          spellCheck={false}
+        />
+        <NodePrimaryButton
+          onPointerDown={(event) => event.preventDefault()}
+          onClick={() => commit()}
+        >
+          <Icon name="check" size={16} />
+          保存 JSON
+        </NodePrimaryButton>
+      </>
     )
   }
 
@@ -200,29 +215,16 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
           </NodeIdentity>
         </div>
       )}
-      <div className="code-toolbar">
-        {text && (
+      {/* 2026-11-02 用户裁决：空态不再渲染这条只有一条描边的空工具栏（按钮上方那道横线）。
+          主按钮经 portal 落到卡片底部操作条，DOM 位置不影响它的呈现。 */}
+      {text && (
+        <div className="code-toolbar">
           <span
             className={`json-status ${isValid ? 'valid' : 'invalid'}`}
             title={parseError ?? undefined}
           >
             {isValid ? structSummary : jsonErrorLocation(text, parseError ?? '')}
           </span>
-        )}
-        <NodePrimaryButton
-          className="btn-ghost small"
-          onPointerDown={(e) => stopEventPropagation(e)}
-          onClick={(e) => {
-            e.stopPropagation()
-            enterEditing()
-          }}
-        >
-          <>
-            <Icon name="edit" size={14} />
-            {text ? '编辑数据' : '粘贴 JSON'}
-          </>
-        </NodePrimaryButton>
-        {text && (
           <button
             className="btn-ghost small"
             onPointerDown={(e) => stopEventPropagation(e)}
@@ -236,8 +238,6 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
               格式化
             </>
           </button>
-        )}
-        {text && (
           <button
             className="btn-ghost small"
             aria-label="复制当前 JSON"
@@ -249,8 +249,21 @@ export function JsonBody({ shape }: NodeBodyProps): React.JSX.Element {
           >
             <Icon name="copy" size={14} />
           </button>
-        )}
-      </div>
+        </div>
+      )}
+      <NodePrimaryButton
+        className="btn-ghost small"
+        onPointerDown={(e) => stopEventPropagation(e)}
+        onClick={(e) => {
+          e.stopPropagation()
+          enterEditing()
+        }}
+      >
+        <>
+          <Icon name="edit" size={14} />
+          {text ? '编辑数据' : '粘贴 JSON'}
+        </>
+      </NodePrimaryButton>
     </div>
   )
 }

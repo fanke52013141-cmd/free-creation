@@ -136,7 +136,7 @@
   overflow: visible;
 }
 .node-card .node-standard-shell .node-standard-identity-icon {
-  color: color-mix(in srgb, var(--node-accent) var(--node-identity-strength, 100%), #17232d);
+  color: color-mix(in srgb, var(--node-identity-accent, var(--node-accent)) var(--node-identity-strength, 100%), #17232d);
 }
 .node-standard-shell[data-has-identity='true'] .node-standard-scroll,
 .node-standard-shell[data-has-identity='true'] .node-body-content {
@@ -163,7 +163,7 @@
   display: grid;
   flex: 0 0 auto;
   place-items: center;
-  color: color-mix(in srgb, var(--node-accent) var(--node-identity-strength, 100%), #17232d);
+  color: color-mix(in srgb, var(--node-identity-accent, var(--node-accent)) var(--node-identity-strength, 100%), #17232d);
 }
 /* 2026-11-02 用户裁决：纯空态（identity 内只有图标、无提示文案）时，
    图标正居中于节点卡片几何中心（横向 + 纵向）。绝对定位脱离 flow，
@@ -216,41 +216,190 @@
   justify-content: center;
   box-sizing: border-box;
   height: var(--node-standard-action-height);
-  padding: 8px var(--node-standard-padding) var(--node-standard-bottom-inset);
+  /* 卡片已有 1px 外框；7px 内容留白 + 外框 = 距卡体外沿 8px。 */
+  padding: 8px var(--node-standard-padding) 7px;
   gap: 8px;
 }
 /* 浅色卡片有 1px 实体边框，底边距按卡片外沿计量。 */
 .canvas-theme-light .node-standard-action-bar {
-  padding-bottom: calc(var(--node-standard-bottom-inset) - 1px);
+  padding-bottom: 7px;
 }
+/* v1.5（2026-11-02 用户裁决）：卡片正文不使用节点分类色。
+   端口、卡外标题栏、空态身份图标仍保留类型色；其余正文边框/底色统一中性灰。 */
+.node-card .node-body {
+  --node-accent: var(--node-edge-strong);
+}
+/* 空态身份图标仍使用节点类型色（其底板/描边/图形同色，保证对比度）。 */
+.node-card
+  .node-body
+  :is(
+    .node-standard-identity-icon,
+    .node-empty-icon,
+    .asset-empty > svg,
+    .crop-empty > svg,
+    .file-asset-empty > svg,
+    .website-node-icon,
+    .sound-adjust-body-icon,
+    .audio-empty-icon-wrap,
+    .audio-empty-icon
+  ) {
+  --node-accent: var(--node-identity-accent, var(--node-edge-strong));
+}
+.node-card .node-body :is(
+  .gen-panel,
+  .video-gen-panel,
+  .video-prompt-section,
+  .video-output-settings,
+  .crop-inline-toolbar,
+  .crop-inline-preview,
+  .director-node-preview,
+  .director-node-frame,
+  .director-node-publish,
+  .vocal-result-card,
+  .vocal-result-row,
+  .processor-body,
+  .iterate-body,
+  .structured-preview,
+  .json-data-card,
+  .json-object-card,
+  .tts-section,
+  .tts-ref-player,
+  .tts-upload-btn,
+  .voice-id-card,
+  .node-media,
+  .node-wiring,
+  .gen-capability-note
+) {
+  background-image: none;
+}
+
+/* 输入/控件聚焦统一为中性灰，不使用节点分类色。 */
+.node-card .node-body :is(input, textarea, select):focus {
+  border-color: var(--node-focus);
+  box-shadow: none;
+}
+.node-card .node-body :is(input[type='checkbox'], input[type='range']) {
+  accent-color: var(--node-focus);
+}
+.node-card .node-body :is(button, a, [role='button'], [contenteditable='true']:not(.node-title)):focus-visible {
+  outline: 2px solid var(--node-focus);
+  outline-offset: 2px;
+}
+
+/* 空态身份图标下方的说明/提示保持中性灰。 */
+.node-standard-identity small,
+.node-standard-identity .node-wiring {
+  color: var(--node-text-muted);
+}
+
+/* v1.5：文字按钮不再显示图标（纯图标功能控件保留，如播放/缩放/删除）。 */
+.node-card .node-body
+  :is(
+    .btn-ghost,
+    .btn-primary,
+    .tts-upload-btn,
+    .media-action-button,
+    .gen-go,
+    .text-empty-action,
+    .chat-open-button,
+    .ai-process-config-button,
+    .audio-upload-btn,
+    .file-import-button,
+    .node-media-next-actions button,
+    .crop-inline-actions button
+  )
+  > svg {
+  display: none;
+}
+
+/* 语音节点的二级区块保持平面，不再出现嵌套面板。 */
+.node-card .node-body .speech-parameter-panel {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.node-card .node-body .tts-upload-btn,
+.node-card .node-body .tts-ref-player {
+  border: 1px solid var(--node-edge-strong);
+  border-radius: 7px;
+  background: var(--node-control-bg);
+  color: var(--node-text);
+}
+
+.node-card .node-body .node-voice-design {
+  padding: 0;
+  gap: 12px;
+  color: var(--node-text);
+}
+.node-card .node-body .node-voice-design :is(.gen-input, .gen-textarea, .app-select-trigger) {
+  border: 1px solid var(--node-edge-strong);
+  border-radius: 7px;
+  background: var(--node-input-bg);
+  color: var(--node-text);
+  box-shadow: none;
+}
+.node-card .node-body .node-voice-design :is(.gen-input, .gen-textarea):focus {
+  border-color: var(--node-focus);
+  box-shadow: none;
+  outline: none;
+}
+
+/* 语音等节点的旧分区标题类已废弃：即使历史样式残留也不再绘制图标和下划线。 */
+.tts-section-label {
+  padding: 0;
+  border: 0;
+  gap: 0;
+  color: var(--node-text);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.tts-section-label > svg {
+  display: none;
+}
+
+/* v1.5（2026-11-02 用户裁决）：区块标题纯文字，无图标、无下划线。 */
+.node-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  color: var(--node-text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+.node-section-title > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .node-standard-action-bar .node-standard-primary {
   display: flex;
   flex: 1 1 0;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 0;
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
   height: var(--node-standard-button-height);
   min-height: var(--node-standard-button-height);
   padding: 0 10px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--node-edge-strong);
   border-radius: var(--node-standard-button-radius);
-  background: var(--card-hover);
-  color: var(--txt);
+  background: var(--node-control-bg);
+  color: var(--node-text);
   font-size: 12px;
   font-weight: 600;
   line-height: 18px;
   cursor: pointer;
 }
-.node-standard-primary-icon {
-  display: flex;
-  flex: 0 0 16px;
-}
-.node-standard-primary-icon svg {
-  width: 16px;
-  height: 16px;
+.node-standard-primary--secondary {
+  background: var(--node-control-bg);
 }
 .node-standard-primary-label {
   overflow: hidden;
@@ -258,7 +407,11 @@
   text-overflow: ellipsis;
 }
 .node-standard-primary:hover:not(:disabled) {
-  border-color: var(--brand);
+  border-color: var(--node-edge-hover);
+  background: var(--node-control-bg-hover);
+}
+.node-standard-primary:active:not(:disabled) {
+  background: var(--node-control-bg-active);
 }
 .node-standard-primary:disabled {
   opacity: 0.5;
@@ -266,7 +419,7 @@
 }
 .node-standard-primary:focus-visible,
 .node-standard-description:focus-visible {
-  outline: 2px solid var(--brand);
+  outline: 2px solid var(--node-focus);
   outline-offset: 2px;
 }
 
@@ -350,7 +503,7 @@
 .node-card.type-image-split .image-split-quick {
   grid-template-rows: auto minmax(0, 1fr);
 }
-.node-standard-action-bar .image-node-action-toolbar,
+.node-standard-action-bar .media-action-toolbar,
 .node-standard-action-bar .crop-inline-actions {
   position: static;
   transform: none;
@@ -365,13 +518,13 @@
   justify-content: center;
   gap: 6px;
 }
-.node-standard-action-bar .image-node-primary-actions {
+.node-standard-action-bar .media-action-primary {
   display: flex;
   flex: 1;
   gap: 4px;
   min-width: 0;
 }
-.node-standard-action-bar .image-node-action-button {
+.node-standard-action-bar .media-action-button {
   flex: 1;
   min-width: 0;
   padding: 0 3px;

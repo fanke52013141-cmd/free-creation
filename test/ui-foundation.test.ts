@@ -35,7 +35,8 @@ describe('统一画布视觉基础', () => {
   it('节点卡片保持清晰不透明材质，悬浮与角标采用节点色，端口具统一环形高光（2026-09-24）', () => {
     // 深色主题卡片保持不透明，避免节点重叠时背景纹理穿透正文。
     const nodeCardRule = foundation.match(/\.node-card\s*\{[^}]*\}/)?.[0] ?? ''
-    expect(nodeCardRule).toContain('background: var(--card);')
+    expect(nodeCardRule).toContain('background: var(--node-surface);')
+    expect(nodeCardRule).toContain('border: 1px solid var(--node-edge);')
     expect(nodeCardRule).not.toContain('backdrop-filter:')
     expect(foundation).toMatch(/\.node-card\s*\{[\s\S]*?inset 0 1px 0 rgba\(255, 255, 255, 0\.07\)/)
     expect(foundation).toMatch(/\.node-card::before\s*\{[^}]*background:\s*linear-gradient\(/)
