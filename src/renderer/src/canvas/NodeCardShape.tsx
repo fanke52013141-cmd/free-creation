@@ -10,6 +10,7 @@ import {
 } from 'tldraw'
 import { NodeCardView } from './NodeCardView'
 import { NODE_UI } from './node-ui-tokens'
+import { getNodeType } from '../nodes/registry'
 
 // 声明合并：把 node-card 并入 tldraw 的 TLShape 联合类型（官方扩展点）
 declare module '@tldraw/tlschema' {
@@ -132,7 +133,10 @@ export class NodeCardUtil extends BaseBoxShapeUtil<NodeCardShape> {
     const resized = super.onResize(shape, info)
     if (info.mode !== 'resize_bounds') return resized
     const height = resized?.props?.h ?? shape.props.h
-    if (shape.props.nodeType === 'storyboard') {
+    // content/free 尺寸节点（分镜板、时间线）不夹取高度：内容自适应或用户拖动说了算。
+    // 统一档位只约束 standard 节点，这里不再按具体节点类型写白名单。
+    const sizePolicy = getNodeType(shape.props.nodeType)?.sizePolicy
+    if (sizePolicy === 'content' || sizePolicy === 'free') {
       return {
         ...resized,
         meta: {

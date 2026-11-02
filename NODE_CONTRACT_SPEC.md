@@ -562,6 +562,39 @@ interface NodeValuePacket {
 伪装为首尾帧硬约束。执行器必须把真实 `mediaId` 交给网关；网关要么如实提交，要么返回
 明确的供应商能力错误，不能静默忽略任何已连接的参考端口。
 
+### 8.3 时间线（`timeline`）与自由尺寸节点
+
+时间线是 2026-11-02 新增的复合编辑节点（contractVersion 1），用于把图片、视频、音频摆到多轨
+时间线上，分割拖动后合成为一条成片。它不属于 §8.1 的 3D 预演台，也不复用导演台的发布语义。
+
+**尺寸策略**：`NodeTypeSpec.sizePolicy` 有三档——`standard`（缺省，340×260 与手动高度档位）、
+`content`（分镜板：宽高随内容自适应）、`free`（时间线：默认 880×420，宽高完全由用户控制）。
+`content`/`free` 节点都豁免旧尺寸迁移与高度夹取；新增节点需要非常规尺寸时必须声明策略，
+不得在 `NodeCardShape.onResize` 或 `NodeCardView.fitHeight` 里再加按类型判断的白名单。
+
+**数据真值**：时间线内容存放在 `props.text` 的 JSON（`schemaVersion=1`，字段见
+`src/shared/timeline.ts`），不新增 tldraw shape prop。`props.config` 只放渲染配置
+（`render.width/render.height`，缺省 1920×1080）。片段的媒体引用必须是独立字符串字段
+`mediaId` / `mediaPath`，否则项目包导入的重映射（`src/shared/media-reference-remap.ts`）命中不到。
+
+**端口语义**：
+
+| 端口 | 类型 | 语义 |
+| --- | --- | --- |
+| `in-video` | video many | 上游视频素材，用于追加到视频轨（首次连线/首次运行导入，不覆盖用户已编辑内容） |
+| `in-audio` | audio many | 上游音频素材，追加到音频轨 |
+| `in-image` | image many | 上游图片素材，追加到视频轨末端 |
+| `out-video` | video（可选） | 合成成片；只在最近一次成功运行后投影，失败/跳过时为空 |
+
+**执行与产物**：`outputSource: 'run'`。执行器先做本机 FFmpeg 预检（缺失时返回显式失败原因，
+不进入执行），再经 `media:timeline-compose` 交给主进程合成；产物**不回写本节点的
+mediaId/mediaPath**（`node-invariants`），必须 `emitArtifact` 成本独立视频资产节点，
+`nodeResult` 记录本次成片以供 `out-video` 投影。取消沿用媒体作用域的 ffmpeg 子进程终止链。
+
+**编辑规则**（`src/shared/timeline.ts`）：时间为整数毫秒；分割产生两段共享 mediaId、不同 inMs，
+不复制媒体文件；同一条视频轨不允许片段重叠（音频轨允许重叠做混音）；`inMs + durationMs`
+超过源时长时按源尾截断而不是报错；音频片段只能进音频轨，画面片段只能进视频轨。
+
 ## 9. 分阶段改造方案
 
 ### P0：契约基础（已完成）

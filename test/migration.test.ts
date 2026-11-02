@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { registerAllNodeTypes } from './helpers/registerNodes'
 import { needsNodeSizeMigration, getNodeType, allNodeTypes } from '@renderer/nodes/registry'
+import { TIMELINE_UI } from '@renderer/canvas/node-ui-tokens'
 import type { NodeTypeId } from '@shared/types'
 
 beforeAll(() => {
@@ -75,13 +76,35 @@ describe('needsNodeSizeMigration · 历史尺寸真值表', () => {
 })
 
 describe('节点默认尺寸稳定性（统一 340×260 规范）', () => {
-  it('所有可创建节点的 defaultSize 保持 340×260', () => {
+  it('standard 节点的 defaultSize 保持 340×260', () => {
     for (const spec of allNodeTypes()) {
-      // 2026-11-02 用户裁决：分镜板默认尺寸与其他节点一致（340×260），宽高自适应无上限。
+      // sizePolicy 为 content/free 的节点在各自令牌里声明尺寸（分镜板 / 时间线），
+      // 统一规范只约束 standard 节点。
+      if ((spec.sizePolicy ?? 'standard') !== 'standard') continue
       expect(spec.defaultSize, `${spec.type} 默认尺寸异常`).toEqual({ w: 340, h: 260 })
-      if (spec.type === 'storyboard')
-        expect(needsNodeSizeMigration(spec.type, 5000, 10000)).toBe(false)
     }
+  })
+
+  it('content/free 节点声明自己的默认尺寸，且不被旧尺寸迁移重置', () => {
+    const policyNodes = allNodeTypes().filter(
+      (spec) => (spec.sizePolicy ?? 'standard') !== 'standard'
+    )
+    expect(policyNodes.length, '应至少有一个非 standard 尺寸节点').toBeGreaterThan(0)
+    for (const spec of policyNodes) {
+      expect(spec.defaultSize.w, `${spec.type} 默认宽`).toBeGreaterThan(0)
+      expect(spec.defaultSize.h, `${spec.type} 默认高`).toBeGreaterThan(0)
+      expect(
+        needsNodeSizeMigration(spec.type, spec.defaultSize.w, spec.defaultSize.h),
+        `${spec.type} 默认尺寸不应被判为历史异常`
+      ).toBe(false)
+      expect(
+        needsNodeSizeMigration(spec.type, 5000, 10000),
+        `${spec.type} 允许任意宽高`
+      ).toBe(false)
+    }
+    const timeline = getNodeType('timeline')
+    expect(timeline?.sizePolicy).toBe('free')
+    expect(timeline?.defaultSize).toEqual({ w: TIMELINE_UI.width, h: TIMELINE_UI.height })
   })
 
   it('script（兼容节点）也保持统一默认尺寸', () => {

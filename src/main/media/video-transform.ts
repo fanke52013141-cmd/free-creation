@@ -5,6 +5,7 @@ import { join } from 'path'
 import { getDb } from '../store/db'
 import { deleteMedia, getMediaAbsPath, saveFileAsset } from '../store/media.repo'
 import { trackMediaJob } from './cancellation'
+import { probeMedia } from './media-probe'
 import type {
   AudioWaveformInput,
   AudioWaveformResult,
@@ -359,35 +360,14 @@ async function separateWithModel(input: VocalSeparateInput): Promise<VocalSepara
 
 export async function probeVideo(input: VideoProbeInput): Promise<VideoProbeResult> {
   const source = await resolveVideoSource(input.projectId, input.sourceMediaId)
-  const raw = await runFfprobe([
-    '-v',
-    'error',
-    '-show_entries',
-    'format=duration',
-    '-show_entries',
-    'stream=codec_type,avg_frame_rate',
-    '-of',
-    'json',
-    source.path
-  ])
-  try {
-    const parsed = JSON.parse(raw) as {
-      format?: { duration?: string }
-      streams?: Array<{ codec_type?: string; avg_frame_rate?: string }>
-    }
-    const durationMs = Math.max(0, Math.round(Number(parsed.format?.duration ?? 0) * 1000))
-    const video = parsed.streams?.find((stream) => stream.codec_type === 'video')
-    const [n, d] = String(video?.avg_frame_rate ?? '')
-      .split('/')
-      .map(Number)
-    const fps = Number.isFinite(n) && Number.isFinite(d) && d > 0 ? n / d : null
-    return {
-      durationMs,
-      fps,
-      hasAudio: Boolean(parsed.streams?.some((stream) => stream.codec_type === 'audio'))
-    }
-  } catch {
-    throw new Error('无法读取视频时长和帧率，请确认文件可被 FFmpeg 解码。')
+  // 字段口径统一走 media/media-probe（单次 ffprobe 拿全量字段）；本函数只保留
+  // 既有返回结构：没有时长时沿用 0（下游按 0 兜底），失败仍然抛错。
+  const probe = await probeMedia(source.path)
+  if (!probe.ok) throw new Error(probe.reason)
+  return {
+    durationMs: probe.meta.durationMs ?? 0,
+    fps: probe.meta.fps,
+    hasAudio: probe.meta.hasAudio
   }
 }
 

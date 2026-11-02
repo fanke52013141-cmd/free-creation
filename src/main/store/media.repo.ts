@@ -249,3 +249,54 @@ export async function deleteMedia(mediaId: string): Promise<boolean> {
 function normalizePath(p: string): string {
   return p.replace(/\\/g, '/').replace(/\/+/g, '/')
 }
+
+/** 回填用的元数据补丁：字段缺失或为 null 表示「这次没探测到」，不覆盖库里已有值。 */
+export interface MediaMetadataPatch {
+  width?: number | null
+  height?: number | null
+  durationSec?: number | null
+}
+
+/**
+ * 按 id 回填媒体元数据（时间线 M3）：只 UPDATE 调用方明确给出的非 null 字段。
+ *
+ * 为什么不整行写入：一次探测可能只拿到尺寸（图片没有 duration）或只拿到时长
+ * （纯音频没有宽高），用 null 覆盖会把之前探测到的正确数据擦掉。库里列名遵循
+ * media 建表 SQL：width / height 是 INTEGER，duration_sec 是 REAL（秒）。
+ * 调用方负责把探测到的毫秒换算成秒（durationSec = durationMs / 1000）。
+ */
+export function updateMediaMetadata(id: string, meta: MediaMetadataPatch): void {
+  const assignments: string[] = []
+  const values: number[] = []
+  const add = (
+    column: string,
+    value: number | null | undefined,
+    normalize: (input: number) => number | null
+  ): void => {
+    if (value === null || value === undefined) return
+    const normalized = normalize(value)
+    if (normalized === null) return
+    assignments.push(`${column} = ?`)
+    values.push(normalized)
+  }
+  add('width', meta.width, positiveDimension)
+  add('height', meta.height, positiveDimension)
+  add('duration_sec', meta.durationSec, nonNegativeSeconds)
+  // 三项都没探测到时不发一条空 UPDATE，避免无意义的写锁与事件。
+  if (assignments.length === 0) return
+  getDb()
+    .prepare(`UPDATE media SET ${assignments.join(', ')} WHERE id = ?`)
+    .run(...values, id)
+}
+
+/** 宽高是像素整数；非正数/NaN 一律视为没探测到。 */
+function positiveDimension(value: number): number | null {
+  if (!Number.isFinite(value) || value <= 0) return null
+  return Math.round(value)
+}
+
+/** 时长按毫秒精度落库，保留三位小数即可，避免浮点尾数进数据库。 */
+function nonNegativeSeconds(value: number): number | null {
+  if (!Number.isFinite(value) || value < 0) return null
+  return Math.round(value * 1000) / 1000
+}

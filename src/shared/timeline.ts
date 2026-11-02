@@ -1,0 +1,574 @@
+// 时间线数据模型（时间线节点唯一真值）
+//
+// 存放位置：节点 `props.text` 的 JSON 字符串（与分镜板同构），不新增 tldraw shape prop——
+// 新增 prop 需要改 NodeCardProps + 迁移序列 + 快照 schema，代价远大于收益。
+//
+// 设计约束（对应 docs 与 NODE_CONTRACT_SPEC）：
+// 1. 时间单位一律整数毫秒；任何 UI 交互都换算成毫秒再写模型。
+// 2. 媒体引用必须是独立字符串字段 `mediaId` / `mediaPath`，项目包导入的重映射按字符串
+//    精确值替换（src/shared/media-reference-remap.ts）；拼成 "id|path" 会漏映射。
+// 3. 分割不复制媒体文件：一段切两段，共享 mediaId，各自不同的 inMs。
+// 4. 同一条视频轨不允许片段重叠；音频轨允许重叠（混音）。
+// 5. 本模块必须是纯函数：不碰 React、不碰 DOM、不碰 IPC，执行器与单元测试共用。
+import type { PortType } from './types'
+
+export const TIMELINE_SCHEMA_VERSION = 1
+
+/** 轨道种类：视频轨承载画面（图片/视频），音频轨承载声音。 */
+export type TimelineTrackKind = 'video' | 'audio'
+
+/** 片段种类决定它占用哪类轨道与合成方式。 */
+export type TimelineClipKind = 'video' | 'image' | 'audio'
+
+export interface TimelineTrack {
+  id: string
+  kind: TimelineTrackKind
+  name: string
+  muted: boolean
+  locked: boolean
+  visible: boolean
+}
+
+export interface TimelineClip {
+  id: string
+  trackId: string
+  kind: TimelineClipKind
+  /** 媒体引用：必须是独立字符串，供项目包导入时重映射。 */
+  mediaId: string
+  mediaPath: string
+  name: string
+  /** 时间线上的起点（毫秒） */
+  startMs: number
+  /** 在时间线上的长度（毫秒） */
+  durationMs: number
+  /** 源素材内的起点（毫秒）；图片恒为 0。 */
+  inMs: number
+  /** 源素材总时长（毫秒）；图片为 0，表示无源时长约束。 */
+  sourceDurationMs: number
+  /** 音量 0..1（音频片段与视频原音都适用）。 */
+  volume: number
+}
+
+export interface TimelineData {
+  schemaVersion: typeof TIMELINE_SCHEMA_VERSION
+  /** 合成基准帧率；只影响成片，不影响编辑坐标。 */
+  frameRate: number
+  tracks: TimelineTrack[]
+  clips: TimelineClip[]
+}
+
+export type TimelineParseResult =
+  | { ok: true; data: TimelineData; empty: boolean }
+  | { ok: false; reason: string }
+
+export const TIMELINE_LIMITS = {
+  maxTracks: 12,
+  maxClips: 500,
+  minClipMs: 100,
+  /** 图片片段的默认时长（用户拖入图片时使用） */
+  defaultImageClipMs: 4000,
+  maxFrameRate: 60,
+  minFrameRate: 1
+} as const
+
+export const DEFAULT_TIMELINE_FRAME_RATE = 30
+
+/** 与 tldraw/Node 侧 ID 习惯一致；crypto 不可用时退化为随机串（单机场景足够）。 */
+export function timelineId(prefix: string): string {
+  const uuid = globalThis.crypto?.randomUUID?.()
+  const suffix = uuid ? uuid.slice(0, 8) : Math.random().toString(36).slice(2, 10)
+  return `${prefix}-${suffix}`
+}
+
+export function createEmptyTimeline(): TimelineData {
+  return {
+    schemaVersion: TIMELINE_SCHEMA_VERSION,
+    frameRate: DEFAULT_TIMELINE_FRAME_RATE,
+    tracks: [
+      { id: timelineId('t'), kind: 'video', name: '视频 1', muted: false, locked: false, visible: true },
+      { id: timelineId('t'), kind: 'audio', name: '音频 1', muted: false, locked: false, visible: true }
+    ],
+    clips: []
+  }
+}
+
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const asInt = (value: unknown, fallback: number): number =>
+  typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : fallback
+
+const asBool = (value: unknown, fallback: boolean): boolean =>
+  typeof value === 'boolean' ? value : fallback
+
+const asString = (value: unknown, fallback = ''): string =>
+  typeof value === 'string' ? value : fallback
+
+const CLIP_KINDS: readonly TimelineClipKind[] = ['video', 'image', 'audio']
+const TRACK_KINDS: readonly TimelineTrackKind[] = ['video', 'audio']
+
+/** 片段种类 → 允许放它的轨道种类。 */
+export function trackKindForClip(kind: TimelineClipKind): TimelineTrackKind {
+  return kind === 'audio' ? 'audio' : 'video'
+}
+
+/**
+ * 把任意来源的数据规整成合法时间线：丢弃孤儿片段、夹取时长、排序、去重。
+ * 这是“读”的唯一入口，卡片与执行器都必须经过它，避免两边口径不一致。
+ */
+export function normalizeTimeline(raw: unknown): TimelineData {
+  const fallback = createEmptyTimeline()
+  if (!isObject(raw)) return fallback
+  const rawTracks = Array.isArray(raw.tracks) ? raw.tracks : []
+  const tracks: TimelineTrack[] = []
+  for (const item of rawTracks.slice(0, TIMELINE_LIMITS.maxTracks)) {
+    if (!isObject(item)) continue
+    const id = asString(item.id).trim()
+    if (!id || tracks.some((track) => track.id === id)) continue
+    const kind = TRACK_KINDS.includes(item.kind as TimelineTrackKind)
+      ? (item.kind as TimelineTrackKind)
+      : 'video'
+    tracks.push({
+      id,
+      kind,
+      name: asString(item.name, kind === 'video' ? '视频轨' : '音频轨'),
+      muted: asBool(item.muted, false),
+      locked: asBool(item.locked, false),
+      visible: asBool(item.visible, true)
+    })
+  }
+  const trackById = new Map(tracks.map((track) => [track.id, track]))
+  const clips: TimelineClip[] = []
+  const rawClips = Array.isArray(raw.clips) ? raw.clips : []
+  for (const item of rawClips.slice(0, TIMELINE_LIMITS.maxClips)) {
+    if (!isObject(item)) continue
+    const id = asString(item.id).trim()
+    const trackId = asString(item.trackId).trim()
+    if (!id || clips.some((clip) => clip.id === id)) continue
+    const track = trackById.get(trackId)
+    if (!track) continue
+    const kind = CLIP_KINDS.includes(item.kind as TimelineClipKind)
+      ? (item.kind as TimelineClipKind)
+      : 'video'
+    if (trackKindForClip(kind) !== track.kind) continue
+    const sourceDurationMs = Math.max(0, asInt(item.sourceDurationMs, 0))
+    const durationMs = Math.max(TIMELINE_LIMITS.minClipMs, asInt(item.durationMs, 1000))
+    const inMs = Math.max(0, asInt(item.inMs, 0))
+    clips.push({
+      id,
+      trackId,
+      kind,
+      mediaId: asString(item.mediaId).trim(),
+      mediaPath: asString(item.mediaPath).trim(),
+      name: asString(item.name, '素材'),
+      startMs: Math.max(0, asInt(item.startMs, 0)),
+      durationMs,
+      // 图片没有源时长约束；视频/音频按源尾截断。
+      inMs: kind === 'image' ? 0 : inMs,
+      sourceDurationMs: kind === 'image' ? 0 : sourceDurationMs,
+      volume: Math.min(1, Math.max(0, typeof item.volume === 'number' ? item.volume : 1))
+    })
+  }
+  return {
+    schemaVersion: TIMELINE_SCHEMA_VERSION,
+    frameRate: Math.min(
+      TIMELINE_LIMITS.maxFrameRate,
+      Math.max(
+        TIMELINE_LIMITS.minFrameRate,
+        asInt(raw.frameRate, DEFAULT_TIMELINE_FRAME_RATE) || DEFAULT_TIMELINE_FRAME_RATE
+      )
+    ),
+    tracks,
+    clips: sortClips(clips)
+  }
+}
+
+/** 空卡片与坏 JSON 是两件事：前者是正常空态，后者要让用户看到“需要修数据”。 */
+export function parseTimeline(text: string): TimelineParseResult {
+  const trimmed = (text ?? '').trim()
+  if (!trimmed) return { ok: true, data: createEmptyTimeline(), empty: true }
+  let raw: unknown
+  try {
+    raw = JSON.parse(trimmed)
+  } catch {
+    return { ok: false, reason: '时间线数据不是合法 JSON' }
+  }
+  if (!isObject(raw) || (!Array.isArray(raw.tracks) && !Array.isArray(raw.clips))) {
+    return { ok: false, reason: '时间线数据缺少 tracks/clips 字段' }
+  }
+  return { ok: true, data: normalizeTimeline(raw), empty: false }
+}
+
+export function serializeTimeline(data: TimelineData): string {
+  return JSON.stringify(normalizeTimeline(data))
+}
+
+function sortClips(clips: TimelineClip[]): TimelineClip[] {
+  return [...clips].sort((a, b) => a.startMs - b.startMs || a.id.localeCompare(b.id))
+}
+
+export function clipEndMs(clip: TimelineClip): number {
+  return clip.startMs + clip.durationMs
+}
+
+/** 时间线总时长 = 所有片段末端的最大值（毫秒）。 */
+export function timelineDurationMs(data: TimelineData): number {
+  return data.clips.reduce((max, clip) => Math.max(max, clipEndMs(clip)), 0)
+}
+
+export function findTrack(data: TimelineData, trackId: string): TimelineTrack | undefined {
+  return data.tracks.find((track) => track.id === trackId)
+}
+
+export function findClip(data: TimelineData, clipId: string): TimelineClip | undefined {
+  return data.clips.find((clip) => clip.id === clipId)
+}
+
+export function clipsOfTrack(data: TimelineData, trackId: string): TimelineClip[] {
+  return sortClips(data.clips.filter((clip) => clip.trackId === trackId))
+}
+
+/** 同轨冲突检查：视频轨不允许重叠，音频轨允许（混音）。 */
+export function overlappingClips(
+  data: TimelineData,
+  candidate: { trackId: string; startMs: number; durationMs: number },
+  ignoreClipId?: string
+): TimelineClip[] {
+  const track = findTrack(data, candidate.trackId)
+  if (!track || track.kind === 'audio') return []
+  const start = candidate.startMs
+  const end = candidate.startMs + candidate.durationMs
+  return data.clips.filter((clip) => {
+    if (clip.trackId !== candidate.trackId) return false
+    if (ignoreClipId && clip.id === ignoreClipId) return false
+    return clip.startMs < end && clipEndMs(clip) > start
+  })
+}
+
+export type TimelineEditResult =
+  | { ok: true; data: TimelineData; clipId?: string; trackId?: string }
+  | { ok: false; reason: string }
+
+// ── 轨道操作 ──
+
+export function addTrack(
+  data: TimelineData,
+  kind: TimelineTrackKind,
+  name?: string
+): TimelineEditResult {
+  if (data.tracks.length >= TIMELINE_LIMITS.maxTracks) {
+    return { ok: false, reason: `最多 ${TIMELINE_LIMITS.maxTracks} 条轨道` }
+  }
+  const index = data.tracks.filter((track) => track.kind === kind).length + 1
+  const track: TimelineTrack = {
+    id: timelineId('t'),
+    kind,
+    name: name?.trim() || `${kind === 'video' ? '视频' : '音频'} ${index}`,
+    muted: false,
+    locked: false,
+    visible: true
+  }
+  return {
+    ok: true,
+    trackId: track.id,
+    data: { ...data, tracks: [...data.tracks, track] }
+  }
+}
+
+export function removeTrack(data: TimelineData, trackId: string): TimelineEditResult {
+  if (!findTrack(data, trackId)) return { ok: false, reason: '轨道不存在' }
+  if (data.tracks.length <= 1) return { ok: false, reason: '至少保留一条轨道' }
+  return {
+    ok: true,
+    data: {
+      ...data,
+      tracks: data.tracks.filter((track) => track.id !== trackId),
+      clips: data.clips.filter((clip) => clip.trackId !== trackId)
+    }
+  }
+}
+
+export function updateTrack(
+  data: TimelineData,
+  trackId: string,
+  patch: Partial<Pick<TimelineTrack, 'name' | 'muted' | 'locked' | 'visible'>>
+): TimelineEditResult {
+  if (!findTrack(data, trackId)) return { ok: false, reason: '轨道不存在' }
+  return {
+    ok: true,
+    data: {
+      ...data,
+      tracks: data.tracks.map((track) => (track.id === trackId ? { ...track, ...patch } : track))
+    }
+  }
+}
+
+// ── 片段操作 ──
+
+export interface AddClipInput {
+  trackId: string
+  kind: TimelineClipKind
+  mediaId: string
+  mediaPath: string
+  name: string
+  sourceDurationMs: number
+  /** 缺省：视频/音频用源全长，图片用默认时长 */
+  durationMs?: number
+  /** 缺省：追加到该轨末端 */
+  startMs?: number
+  inMs?: number
+}
+
+/** 视频/音频在源尾被截断后、放上时间线的实际可用长度。 */
+export function availableSourceMs(kind: TimelineClipKind, inMs: number, sourceDurationMs: number): number {
+  if (kind === 'image') return Infinity
+  if (sourceDurationMs <= 0) return Infinity
+  return Math.max(0, sourceDurationMs - inMs)
+}
+
+export function addClip(data: TimelineData, input: AddClipInput): TimelineEditResult {
+  if (data.clips.length >= TIMELINE_LIMITS.maxClips) {
+    return { ok: false, reason: `最多 ${TIMELINE_LIMITS.maxClips} 个片段` }
+  }
+  const track = findTrack(data, input.trackId)
+  if (!track) return { ok: false, reason: '目标轨道不存在' }
+  if (trackKindForClip(input.kind) !== track.kind) {
+    return { ok: false, reason: input.kind === 'audio' ? '音频片段只能放到音频轨' : '画面片段只能放到视频轨' }
+  }
+  const sourceDurationMs = Math.max(0, Math.round(input.sourceDurationMs))
+  const inMs = Math.max(0, Math.round(input.inMs ?? 0))
+  if (input.kind !== 'image' && sourceDurationMs > 0 && inMs >= sourceDurationMs) {
+    return { ok: false, reason: '源内起点超出素材时长' }
+  }
+  const available = availableSourceMs(input.kind, inMs, sourceDurationMs)
+  // 源时长未知（未探测到）时不能把片段长度算成 Infinity：给一个可编辑的占位长度，
+  // 用户之后可以裁剪；探测到真实时长后 addClip 会按源尾截断。
+  const fallbackMs = input.kind === 'image' ? TIMELINE_LIMITS.defaultImageClipMs : 5000
+  const requested =
+    input.durationMs ??
+    (Number.isFinite(available) ? available : fallbackMs)
+  const bounded = Number.isFinite(requested) ? requested : fallbackMs
+  const durationMs = Math.max(
+    TIMELINE_LIMITS.minClipMs,
+    Math.round(Number.isFinite(available) ? Math.min(bounded, available) : bounded)
+  )
+  const startMs =
+    input.startMs !== undefined
+      ? Math.max(0, Math.round(input.startMs))
+      : clipsOfTrack(data, input.trackId).reduce((end, clip) => Math.max(end, clipEndMs(clip)), 0)
+  const clip: TimelineClip = {
+    id: timelineId('c'),
+    trackId: input.trackId,
+    kind: input.kind,
+    mediaId: input.mediaId.trim(),
+    mediaPath: input.mediaPath.trim(),
+    name: input.name.trim() || '素材',
+    startMs,
+    durationMs,
+    inMs: input.kind === 'image' ? 0 : inMs,
+    sourceDurationMs: input.kind === 'image' ? 0 : sourceDurationMs,
+    volume: 1
+  }
+  if (overlappingClips(data, clip).length > 0) {
+    return { ok: false, reason: '该位置已有片段，请拖到空格或换轨' }
+  }
+  return {
+    ok: true,
+    clipId: clip.id,
+    data: { ...data, clips: sortClips([...data.clips, clip]) }
+  }
+}
+
+/** 移动片段（可跨轨）。同轨重叠会被拒绝，调用方据此回弹。 */
+export function moveClip(
+  data: TimelineData,
+  clipId: string,
+  target: { trackId?: string; startMs: number }
+): TimelineEditResult {
+  const clip = findClip(data, clipId)
+  if (!clip) return { ok: false, reason: '片段不存在' }
+  const trackId = target.trackId ?? clip.trackId
+  const track = findTrack(data, trackId)
+  if (!track) return { ok: false, reason: '目标轨道不存在' }
+  if (trackKindForClip(clip.kind) !== track.kind) return { ok: false, reason: '不能放到不同类别的轨道' }
+  const startMs = Math.max(0, Math.round(target.startMs))
+  if (overlappingClips(data, { trackId, startMs, durationMs: clip.durationMs }, clipId).length > 0) {
+    return { ok: false, reason: '与同轨片段重叠' }
+  }
+  return {
+    ok: true,
+    clipId,
+    data: {
+      ...data,
+      clips: sortClips(
+        data.clips.map((item) => (item.id === clipId ? { ...item, trackId, startMs } : item))
+      )
+    }
+  }
+}
+
+/** 裁剪：左边缘改变 inMs 与时长，右边缘只改时长。两端都被源素材夹住。 */
+export function trimClip(
+  data: TimelineData,
+  clipId: string,
+  edge: 'start' | 'end',
+  timeMs: number
+): TimelineEditResult {
+  const clip = findClip(data, clipId)
+  if (!clip) return { ok: false, reason: '片段不存在' }
+  if (clip.kind === 'image') {
+    // 图片没有源时长约束，只能拉长度，不能改变“源内起点”。
+    if (edge === 'start') {
+      const end = clipEndMs(clip)
+      const nextStart = Math.max(0, Math.min(Math.round(timeMs), end - TIMELINE_LIMITS.minClipMs))
+      return {
+        ok: true,
+        clipId,
+        data: {
+          ...data,
+          clips: sortClips(
+            data.clips.map((item) =>
+              item.id === clipId
+                ? { ...item, startMs: nextStart, durationMs: end - nextStart }
+                : item
+            )
+          )
+        }
+      }
+    }
+    const durationMs = Math.max(
+      TIMELINE_LIMITS.minClipMs,
+      Math.round(timeMs) - clip.startMs
+    )
+    return {
+      ok: true,
+      clipId,
+      data: {
+        ...data,
+        clips: sortClips(
+          data.clips.map((item) => (item.id === clipId ? { ...item, durationMs } : item))
+        )
+      }
+    }
+  }
+  const sourceRemain = availableSourceMs(clip.kind, clip.inMs, clip.sourceDurationMs)
+  if (edge === 'start') {
+    const end = clipEndMs(clip)
+    const rawStart = Math.round(timeMs)
+    // 左边缘向右最多拉到“保留最短片段”，向左最多回到源起点。
+    const minStart = Math.max(0, clip.startMs - clip.inMs)
+    const maxStart = end - TIMELINE_LIMITS.minClipMs
+    const nextStart = Math.max(minStart, Math.min(rawStart, maxStart))
+    const delta = nextStart - clip.startMs
+    const nextIn = clip.inMs + delta
+    const nextDuration = Math.max(
+      TIMELINE_LIMITS.minClipMs,
+      Math.min(end - nextStart, sourceRemain - delta)
+    )
+    return {
+      ok: true,
+      clipId,
+      data: {
+        ...data,
+        clips: sortClips(
+          data.clips.map((item) =>
+            item.id === clipId
+              ? { ...item, startMs: nextStart, inMs: nextIn, durationMs: nextDuration }
+              : item
+          )
+        )
+      }
+    }
+  }
+  const rawEnd = Math.round(timeMs)
+  const maxDuration = Math.min(rawEnd - clip.startMs, Number.isFinite(sourceRemain) ? sourceRemain : Infinity)
+  const durationMs = Math.max(TIMELINE_LIMITS.minClipMs, maxDuration)
+  return {
+    ok: true,
+    clipId,
+    data: {
+      ...data,
+      clips: sortClips(
+        data.clips.map((item) => (item.id === clipId ? { ...item, durationMs } : item))
+      )
+    }
+  }
+}
+
+/**
+ * 在播放头处分割。分割点必须落在片段内部（留出最小片段长度），
+ * 两段共享同一 mediaId，靠不同的 inMs 指向各自源区间。
+ */
+export function splitClip(data: TimelineData, clipId: string, atMs: number): TimelineEditResult {
+  const clip = findClip(data, clipId)
+  if (!clip) return { ok: false, reason: '片段不存在' }
+  const offset = Math.round(atMs) - clip.startMs
+  if (offset < TIMELINE_LIMITS.minClipMs || clip.durationMs - offset < TIMELINE_LIMITS.minClipMs) {
+    return { ok: false, reason: '分割点太靠近片段边缘' }
+  }
+  const left: TimelineClip = { ...clip, durationMs: offset }
+  const right: TimelineClip = {
+    ...clip,
+    id: timelineId('c'),
+    startMs: clip.startMs + offset,
+    durationMs: clip.durationMs - offset,
+    inMs: clip.kind === 'image' ? 0 : clip.inMs + offset
+  }
+  return {
+    ok: true,
+    clipId: right.id,
+    data: {
+      ...data,
+      clips: sortClips(data.clips.flatMap((item) => (item.id === clipId ? [left, right] : [item])))
+    }
+  }
+}
+
+export function removeClip(data: TimelineData, clipId: string): TimelineEditResult {
+  if (!findClip(data, clipId)) return { ok: false, reason: '片段不存在' }
+  return { ok: true, data: { ...data, clips: data.clips.filter((clip) => clip.id !== clipId) } }
+}
+
+/** 找到播放头所在位置的片段（用于“分割”按钮的默认目标）。 */
+export function clipAtTime(
+  data: TimelineData,
+  trackId: string,
+  timeMs: number
+): TimelineClip | undefined {
+  return clipsOfTrack(data, trackId).find(
+    (clip) => timeMs > clip.startMs && timeMs < clipEndMs(clip)
+  )
+}
+
+/** 时间码：时间线刻度用 mm:ss；不足一小时不显示小时位。 */
+export function formatTimecode(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000))
+  const minutes = Math.floor(total / 60)
+  const seconds = total % 60
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}
+
+/** 刻度步长：按缩放级别选一个“整”间隔，避免刻度标签挤在一起。 */
+export function rulerStepMs(pixelsPerSecond: number, minLabelPx = 72): number {
+  const candidates = [500, 1000, 2000, 5000, 10000, 15000, 30000, 60000, 120000, 300000]
+  const perMs = pixelsPerSecond / 1000
+  return candidates.find((step) => step * perMs >= minLabelPx) ?? candidates[candidates.length - 1]
+}
+
+/** 片段 kind → 端口/媒体类型，做连线与素材校验时共用。 */
+export function clipPortType(kind: TimelineClipKind): PortType {
+  return kind === 'image' ? 'image' : kind === 'audio' ? 'audio' : 'video'
+}
+
+/** 统计：给卡片摘要与执行器日志用，不参与业务判断。 */
+export function timelineSummary(data: TimelineData): {
+  trackCount: number
+  clipCount: number
+  durationMs: number
+} {
+  return {
+    trackCount: data.tracks.length,
+    clipCount: data.clips.length,
+    durationMs: timelineDurationMs(data)
+  }
+}

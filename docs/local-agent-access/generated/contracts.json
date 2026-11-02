@@ -961,6 +961,7 @@
                         "video-clip",
                         "video-depth",
                         "video-clay",
+                        "timeline",
                         "audio",
                         "sound-adjust",
                         "file",
@@ -2605,6 +2606,11 @@
     },
     {
       "typeId": "video-clay",
+      "actions": "planned",
+      "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
+    },
+    {
+      "typeId": "timeline",
       "actions": "planned",
       "reason": "NODE_ACCESS_NOT_IMPLEMENTED"
     },

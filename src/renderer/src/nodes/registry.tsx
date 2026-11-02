@@ -30,46 +30,48 @@ export const NODE_CATEGORIES = [
 export { NODE_CATEGORY_IDS, type NodeCategoryId }
 
 /**
- * 节点身份色唯一来源，分配表见 docs/NODE_COLOR_SPEC.md。
- * 输入玫红、图片绿、视频蓝、声音紫、流程橙；颜色绑定稳定节点 ID。
+ * 节点身份色唯一来源，分配表见 docs/NODE_COLOR_SPEC.md（v1.4，2026-11-02）。
+ * 六族色相带：输入玫红、图片绿、视频蓝、声音紫、AI 青蓝、数据橙；
+ * 颜色绑定稳定节点 ID，族内用色相偏移 + 明度/色度阶梯区分同类功能。
  */
 export const NODE_ACCENTS = {
   text: '#F9A8D4',
   image: '#4ADE80',
-  'image-crop': '#6EE7B7',
-  'image-split': '#A3E635',
-  'image-gen': '#22C55E',
-  'image-edit': '#2DBD9A',
+  'image-crop': '#ABE9CC',
+  'image-split': '#9EEB50',
+  'image-gen': '#2FAE46',
+  'image-edit': '#1DBFA1',
   website: '#FB637E',
   video: '#60A5FA',
-  'video-asset': '#9EC5FE',
-  'video-frame': '#29C8EF',
-  'video-clip': '#3364F0',
-  'video-audio': '#75B5ED',
-  'video-depth': '#4F6BE0',
-  'video-clay': '#A9B6E6',
-  audio: '#D8B4FE',
-  'sound-adjust': '#B18AE8',
-  'vocal-separate': '#B595D9',
+  'video-asset': '#A8D6FF',
+  'video-frame': '#6CC9FF',
+  'video-clip': '#5583FE',
+  'video-audio': '#7788C9',
+  'video-depth': '#8491E2',
+  'video-clay': '#D1DAF6',
+  timeline: '#239AD3',
+  audio: '#E7CBFA',
+  'sound-adjust': '#AEA0F4',
+  'vocal-separate': '#B17DB5',
   speech: '#C084FC',
-  tts: '#A366E0',
-  'voice-design': '#C4A7E7',
-  file: '#E284B4',
-  chat: '#F472B6',
-  'ai-process': '#DB5B99',
-  processor: '#D99048',
-  json: '#F6B44C',
-  structured: '#FDBA74',
-  code: '#F78C62',
-  storyboard: '#FB923C',
-  iterate: '#E87932',
-  director: '#E8AD85',
-  script: '#EAA05C',
-  group: '#DDA66C',
-  compose: '#ED9950',
-  agent: '#F7A35C',
-  'state-machine': '#D99647',
-  'ai-review': '#E6B26A'
+  tts: '#9269E4',
+  'voice-design': '#DDA7EA',
+  file: '#EA7AAE',
+  chat: '#A9E4E6',
+  'ai-process': '#009D8E',
+  processor: '#C97152',
+  json: '#FF9C58',
+  structured: '#FACF9E',
+  code: '#C26E12',
+  storyboard: '#A4B2E2',
+  iterate: '#D99C00',
+  director: '#1A83DB',
+  script: '#CC6526',
+  group: '#9E765F',
+  compose: '#CD8E5E',
+  agent: '#59D4CD',
+  'state-machine': '#49D2EA',
+  'ai-review': '#00AEBD'
 } satisfies Record<NodeTypeId, string>
 
 /** 图标前景按主题统一加深；卡片强调色、端口和数据类型色仍使用原身份色。 */
@@ -103,6 +105,15 @@ export interface NodeTypeSpec {
   icon: IconName
   color: string
   defaultSize: { w: number; h: number }
+  /**
+   * 尺寸策略。缺省 `standard`：默认 340×260，手动缩放高度夹在 UI 规范档位内，
+   * 宽高异常时会被旧尺寸迁移重置。
+   * `content`：默认尺寸由节点自己的令牌声明，宽高随内容自适应增长（分镜板）。
+   * `free`：默认尺寸由节点自己的令牌声明，宽高完全由用户控制，不参与内容自适应
+   * （时间线）。后两种都不进入旧尺寸迁移，也禁止再往 NodeCardShape /
+   * NodeCardView 里加按类型判断的白名单。
+   */
+  sizePolicy?: 'standard' | 'content' | 'free'
   /** Only for creation; loading/importing existing nodes must retain their saved config. */
   initialConfig?: string
   /** 节点的业务职责；在选中节点的右侧 I/O 面板中常驻呈现。 */
@@ -251,6 +262,9 @@ export const MAX_AUTO_NODE_HEIGHT = NODE_UI.height.legacyGuard
 
 export function needsNodeSizeMigration(type: string, w: number, h: number): boolean {
   if (type === 'storyboard') return false
+  // content/free 尺寸节点（分镜板、时间线）允许任意宽高，不能被当作历史异常尺寸重置。
+  const policy = getNodeType(type)?.sizePolicy
+  if (policy === 'free' || policy === 'content') return false
   const legacy = LEGACY_DEFAULT_SIZES[type as NodeTypeId]
   if (legacy && w === legacy.w && h === legacy.h) return true
   const preStandard = PRE_STANDARD_DEFAULT_SIZES[type as NodeTypeId]
@@ -380,13 +394,23 @@ function validateNodeTypeSpec(spec: NodeTypeSpec): void {
     errors.push('defaultSize 必须是大于 0 的有效数字')
   }
   if (
-    spec.creatable !== false &&
-    (spec.defaultSize.w !==
-      (spec.type === 'storyboard' ? STORYBOARD_UI.width : STANDARD_NODE_SIZE.w) ||
-      spec.defaultSize.h !==
-        (spec.type === 'storyboard' ? STORYBOARD_UI.height : STANDARD_NODE_SIZE.h))
+    spec.sizePolicy !== undefined &&
+    spec.sizePolicy !== 'standard' &&
+    spec.sizePolicy !== 'content' &&
+    spec.sizePolicy !== 'free'
   ) {
-    errors.push(`可创建节点的 defaultSize 必须为 ${STANDARD_NODE_SIZE.w} × ${STANDARD_NODE_SIZE.h}`)
+    errors.push("sizePolicy 必须是 'standard'、'content' 或 'free'")
+  }
+  // 统一尺寸规范只约束 standard 节点；content/free 节点在各自令牌里声明默认尺寸
+  // （storyboard 走 STORYBOARD_UI，timeline 走 TIMELINE_UI）。
+  if (spec.creatable !== false && (spec.sizePolicy ?? 'standard') === 'standard') {
+    const standard =
+      spec.type === 'storyboard'
+        ? { w: STORYBOARD_UI.width, h: STORYBOARD_UI.height }
+        : { w: STANDARD_NODE_SIZE.w, h: STANDARD_NODE_SIZE.h }
+    if (spec.defaultSize.w !== standard.w || spec.defaultSize.h !== standard.h) {
+      errors.push(`可创建节点的 defaultSize 必须为 ${standard.w} × ${standard.h}`)
+    }
   }
 
   errors.push(...portValidationErrors(spec.ports))

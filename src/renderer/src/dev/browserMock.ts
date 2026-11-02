@@ -412,6 +412,10 @@ export function installBrowserMock(): void {
       }),
     separateVocals: () =>
       Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持人声分离' } }),
+    composeTimeline: () =>
+      Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持时间线合成' } }),
+    probeMediaMetadata: () =>
+      Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持素材探测' } }),
     ttsGenerate: () =>
       Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持本地配音' } }),
     getLocalMediaCapabilities: () =>

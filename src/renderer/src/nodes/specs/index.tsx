@@ -6,7 +6,7 @@ import { registerAgentFlowNodeTypes } from './agentFlow'
 import { DEFAULT_VIDEO_CLAY_CONFIG, serializeVideoClayConfig } from '@shared/video-conversion'
 import { NODE_ACCENTS, registerNodeType, unregisterNodeType } from '../registry'
 import { readNodeConfig } from '../../canvas/node-persistence'
-import { STORYBOARD_UI } from '../../canvas/node-ui-tokens'
+import { STORYBOARD_UI, TIMELINE_UI } from '../../canvas/node-ui-tokens'
 import {
   parseSpeechConfig,
   VOLC_REFERENCE_AUDIO_MAX_BYTES,
@@ -36,6 +36,7 @@ import {
   StoryboardBody,
   StructuredBody,
   TextBody,
+  TimelineBody,
   TtsBody,
   SpeechBody,
   SpeechSettings,
@@ -94,6 +95,7 @@ import {
 import { videoDepthExecutor, videoClayExecutor } from '../../engine/executors/videoAi'
 import { vocalSeparateExecutor } from '../../engine/executors/vocalSeparate'
 import { directorExecutor } from '../../engine/executors/director'
+import { timelineExecutor } from '../../engine/executors/timeline'
 import {
   projectAiProcessOutputs,
   projectAudioOutputs,
@@ -124,6 +126,7 @@ import {
   projectVideoClipOutputs,
   projectVideoFrameOutputs,
   projectVideoAiOutputs,
+  projectTimelineOutputs,
   projectVocalSeparateOutputs
 } from './outputProjections'
 import { parseStructuredDataConfig } from '../structured-data'
@@ -615,7 +618,7 @@ export function registerBaseNodeTypes(): void {
     type: 'vocal-separate',
     contractVersion: 4,
     label: '人声分离',
-    icon: 'audio',
+    icon: 'vocal-separate',
     color: NODE_ACCENTS['vocal-separate'],
     defaultSize: { w: 340, h: 260 },
     description: '已退役：新视频操作直接提取人声；历史画布中的节点仍可运行。',
@@ -664,7 +667,7 @@ export function registerBaseNodeTypes(): void {
     type: 'sound-adjust',
     contractVersion: 1,
     label: '声音调整',
-    icon: 'audio',
+    icon: 'sound-adjust',
     color: NODE_ACCENTS['sound-adjust'],
     defaultSize: { w: 340, h: 260 },
     description: '按倍率或目标时长调整音频/视频速度与声量。',
@@ -722,7 +725,7 @@ export function registerBaseNodeTypes(): void {
     type: 'speech',
     contractVersion: 4,
     label: '语音合成',
-    icon: 'mic',
+    icon: 'speech',
     color: NODE_ACCENTS.speech,
     defaultSize: { w: 340, h: 260 },
     description: '按所选供应商和语音参数，把文本合成为音频。供应商相关输入输出规则见“输入输出”。',
@@ -738,7 +741,7 @@ export function registerBaseNodeTypes(): void {
     type: 'tts',
     contractVersion: 4,
     label: '语音克隆',
-    icon: 'audio',
+    icon: 'voice-clone',
     color: NODE_ACCENTS.tts,
     defaultSize: { w: 340, h: 260 },
     description: '根据参考语音登记可复用音色 ID，连接语音合成节点使用。',
@@ -760,7 +763,7 @@ export function registerBaseNodeTypes(): void {
     type: 'voice-design',
     contractVersion: 1,
     label: '音色设计',
-    icon: 'audio',
+    icon: 'voice-design',
     color: NODE_ACCENTS['voice-design'],
     defaultSize: { w: 340, h: 260 },
     description: '用文字描述设计音色，产出试听音频与可复用的音色 ID。',
@@ -1057,6 +1060,7 @@ export function registerExtendedNodeTypes(): void {
     icon: 'storyboard',
     color: NODE_ACCENTS.storyboard,
     defaultSize: { w: STORYBOARD_UI.width, h: STORYBOARD_UI.height },
+    sizePolicy: 'content',
     description: '按镜头 JSON 字段生成可编辑表格，并输出完整分镜数据与文字摘要。',
     category: 'video',
     ports: {
@@ -1083,7 +1087,7 @@ export function registerExtendedNodeTypes(): void {
     type: 'ai-process',
     contractVersion: 1,
     label: 'AI 处理',
-    icon: 'spark',
+    icon: 'ai-process',
     color: NODE_ACCENTS['ai-process'],
     defaultSize: { w: 340, h: 260 },
     description: '把上游文本/JSON 交给文本模型，产出文本、Markdown 或 JSON。',
@@ -1117,7 +1121,7 @@ export function registerExtendedNodeTypes(): void {
     type: 'iterate',
     contractVersion: 2,
     label: '循环',
-    icon: 'grid',
+    icon: 'iterate',
     color: NODE_ACCENTS.iterate,
     defaultSize: { w: 340, h: 260 },
     description: '按顺序逐项运行循环体，并汇总结果。',
@@ -1221,5 +1225,40 @@ export function registerExtendedNodeTypes(): void {
     projectOutputs: projectDirectorOutputs,
     executor: directorExecutor,
     Body: DirectorBody
+  })
+  registerNodeType({
+    type: 'timeline',
+    contractVersion: 1,
+    label: '时间线',
+    icon: 'timeline',
+    color: NODE_ACCENTS.timeline,
+    defaultSize: { w: TIMELINE_UI.width, h: TIMELINE_UI.height },
+    // 2026-11-02 用户裁决：时间线默认比常规节点长，宽高由用户自由拖动控制，
+    // 不参与内容自适应，也不进入旧尺寸迁移。这是尺寸规范的第二类例外，
+    // 机制见 registry 的 sizePolicy（分镜板是 content）。
+    sizePolicy: 'free',
+    description: '把图片、视频、音频摆到多轨时间线上，分割拖动后合成成片。',
+    category: 'video',
+    ports: {
+      in: [
+        input('in-video', '视频素材', 'video', '按连线顺序追加到视频轨。', {
+          cardinality: 'many'
+        }),
+        input('in-audio', '音频素材', 'audio', '按连线顺序追加到音频轨。', {
+          cardinality: 'many'
+        }),
+        input('in-image', '图片素材', 'image', '按连线顺序追加到视频轨末端。', {
+          cardinality: 'many'
+        })
+      ],
+      out: [
+        output('out-video', '合成视频', 'video', '按时间线合成出的成片。', {
+          required: false
+        })
+      ]
+    },
+    projectOutputs: projectTimelineOutputs,
+    executor: timelineExecutor,
+    Body: TimelineBody
   })
 }

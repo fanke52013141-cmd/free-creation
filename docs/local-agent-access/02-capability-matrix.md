@@ -6,7 +6,7 @@
 
 2026-10-24 A1.4接续：当前Registry为18项（14项项目/发现操作+4项只读查询），具体实现和验证见[最新查询台账](08-a1-4-read-only-queries.md)。下方9/11项描述保留为早期基线，不能用作当前总数。
 
-A1.1接续：当前Registry为11项操作，project.open/update及活动画布保存/导出已实施，最终验证状态见[桌面项目操作台账](06-a1-1-desktop-projects.md)。下文9项为前包历史基线，整个A1及31类节点不升级为完成。
+A1.1接续：当前Registry为11项操作，project.open/update及活动画布保存/导出已实施，最终验证状态见[桌面项目操作台账](06-a1-1-desktop-projects.md)。下文9项为前包历史基线，整个A1及32类节点不升级为完成。
 
 实施接续：以下矩阵为完整目标基线；A0+A1最小包的9项实际操作、入口、验证与限制见[交付台账](05-a0-a1-minimal-delivery.md)。其机器目录见[当前契约快照](generated/contracts.json)；未列入已交付子集的项目/节点动作继续planned，不将整行或整个阶段升级为verified。
 
@@ -27,7 +27,7 @@ A1.1接续：当前Registry为11项操作，project.open/update及活动画布�
 
 “内部 Flow 支持”只表示画布原生 Agent Flow 已有目标适配/命令协议；它不是 `implemented`，也不是外部 MCP/CLI/API 的可用证明。桌面节点有 executor 同样不能推导为可由外部 Agent 自动执行。
 
-覆盖率分母由主规范的 operation Registry 自动生成：每个唯一 `operationId`、每个 transport 暴露和 31 个 Active 节点分别计数。每次发布报告列出 `implemented / verified / excluded / planned` 的实际 operation、transport 和节点清单，不以“已有 IPC 数”或“已有 executor 数”替代。
+覆盖率分母由主规范的 operation Registry 自动生成：每个唯一 `operationId`、每个 transport 暴露和 32 个 Active 节点分别计数。每次发布报告列出 `implemented / verified / excluded / planned` 的实际 operation、transport 和节点清单，不以“已有 IPC 数”或“已有 executor 数”替代。
 
 ### 1.2 阶段
 
@@ -35,7 +35,7 @@ A1.1接续：当前Registry为11项操作，project.open/update及活动画布�
 | ---- | -------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | `A0` | 规范、操作目录、统一请求信封、身份与日志门禁底座   | 本文件、接口规范、变更门禁和测试模板进入 CI；没有业务接口                                   |
 | `A1` | 一条端到端 MCP + CLI 路径，项目读写与导出          | `run.get`、项目 CRUD/导出在隔离数据中完成，并发/幂等/脱敏通过                               |
-| `A2` | 图与全部 31 节点的结构化读取、编辑；确定性节点执行 | 任意 Active 节点均可被枚举、读取契约、创建/更新配置、连线和删除；已开放执行的节点有独立验收 |
+| `A2` | 图与全部 32 节点的结构化读取、编辑；确定性节点执行 | 任意 Active 节点均可被枚举、读取契约、创建/更新配置、连线和删除；已开放执行的节点有独立验收 |
 | `A3` | 模型/媒体长任务与已有 Agent Flow 协议              | 租约、固定输入、异步状态、取消、unknown、恢复和结果版本与桌面一致                           |
 | `A4` | 复杂交互、高风险动作及可选 localhost HTTP          | 专项安全与人工确认完成；HTTP 不早于 stdio MCP/CLI 验证后开放                                |
 
@@ -93,7 +93,7 @@ A1.1接续：当前Registry为11项操作，project.open/update及活动画布�
 | -------------------- | ------------------------------------------- | ----- | ------------ | ---------------------------------------------------------------------------------- | ------------------------------------------ |
 | 读取图与契约目录     | `graph.get` / `node.type.list`              | A1    | planned      | 返回稳定 nodeId/type/contractVersion/ports/schema 引用                             | 与注册表快照一致                           |
 | 受控原子图写         | `graph.patch`                               | A2    | planned      | 显式 add/update/remove node/edge 与关系类型；不接收任意快照覆盖                    | 全成或全拒绝、修订冲突、关系类型校验       |
-| 创建节点             | `node.create`                               | A2    | planned      | 只接受 Active 类型与声明 config/text；必须经注册校验                               | 31 类型逐项创建、旧类型拒绝                |
+| 创建节点             | `node.create`                               | A2    | planned      | 只接受 Active 类型与声明 config/text；必须经注册校验                               | 32 类型逐项创建、旧类型拒绝                |
 | 读取节点/运行摘要    | `node.get`                                  | A2    | planned      | 默认安全摘要；正文可在显式字段选择下返回，但不得进入诊断                           | 结果与保存快照一致                         |
 | 更新配置或正文       | `node.update`                               | A2    | planned      | config 与 text 分离；契约版本不可由更新伪造                                        | 输入 schema、冲突、保存恢复                |
 | 重命名/摆放/删除节点 | `node.rename` / `node.move` / `node.delete` | A2    | planned      | 删除仅影响声明关系；产物/来源按现有业务规则处理                                    | 连线清理、产物不被隐式误删                 |

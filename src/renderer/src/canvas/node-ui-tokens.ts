@@ -9,6 +9,36 @@ export const STORYBOARD_UI = {
   tableChromeWidth: 224
 } as const
 
+/**
+ * 自由尺寸节点（sizePolicy='free'）的尺寸令牌。
+ *
+ * 2026-11-02 用户裁决：时间线节点需要"默认长一点、宽高可自定义"，因此允许它在
+ * 340×260 统一规范之外声明自己的默认尺寸。这里只放时间轴的几何真值：卡片内
+ * 轨道区、刻度尺、片段条都从这些值推导，禁止在 Body 里散落硬编码。
+ * 宽高都没有上限，下限保证至少能放下工具栏、刻度尺与一条轨道。
+ */
+export const TIMELINE_UI = {
+  width: 880,
+  height: 420,
+  minWidth: 560,
+  minHeight: 260,
+  /** 轨道头固定宽度（不随时间轴滚动） */
+  trackHeaderWidth: 96,
+  /** 单条轨道高度 */
+  trackHeight: 56,
+  /** 刻度尺高度 */
+  rulerHeight: 24,
+  /** 工具栏高度 */
+  toolbarHeight: 36,
+  /** 片段条内部上下留白 */
+  clipInset: 6,
+  /** 时间轴尾部留白：让用户看得到"继续往右拖"的空间 */
+  tailPaddingMs: 2000,
+  /** 缩放档位：每秒像素数 */
+  pixelsPerSecondSteps: [10, 20, 40, 80, 160] as const,
+  defaultPixelsPerSecond: 40
+} as const
+
 export const NODE_UI = {
   width: 340,
   height: {

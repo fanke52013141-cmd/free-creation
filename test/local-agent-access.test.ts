@@ -442,7 +442,7 @@ describe('local Agent vertical slice', () => {
     expect(validateAccessRegistry()).toEqual([])
     expect(validateAccessRegistry(['new-node'], [])).toContain('UNDECLARED_NODE:new-node')
     expect(validateAccessRegistry(['text'], ['text', 'text'])).toContain('DUPLICATE_NODE')
-    expect(nodeAccessDirectory()).toHaveLength(31)
+    expect(nodeAccessDirectory()).toHaveLength(32)
     expect(nodeAccessDirectory().every((n) => n.actions === 'planned')).toBe(true)
     expect(Object.keys(ACCESS_OPERATIONS)).not.toContain('project.import')
     expect(

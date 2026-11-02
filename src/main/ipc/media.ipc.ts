@@ -4,7 +4,8 @@ import { emitDomainEvent } from '../diagnostics/ipc-domain-events'
 import { ipcMain, dialog, clipboard, shell } from 'electron'
 import log from 'electron-log/main'
 import { constants as fsConstants, existsSync, lstatSync } from 'fs'
-import { copyFile } from 'fs/promises'
+import { copyFile, mkdtemp, rm } from 'fs/promises'
+import { tmpdir } from 'os'
 import { basename, extname, join } from 'path'
 import { IPC } from '../../shared/contracts'
 import { redactDiagnosticText } from '../../shared/diagnostics'
@@ -24,6 +25,10 @@ import type {
   VideoProbeInput,
   VideoThumbnailsInput,
   VideoThumbnailsResult,
+  TimelineComposeClipInput,
+  TimelineComposeInput,
+  MediaMetadataProbeInput,
+  MediaMetadataProbeResult,
   VocalSeparateInput
 } from '../../shared/contracts'
 import type { MediaAsset, MediaImportError, MediaImportResult } from '../../shared/types'
@@ -32,7 +37,9 @@ import {
   getMediaAbsPath,
   importMedia,
   listMedia,
-  saveBufferAsset
+  saveBufferAsset,
+  saveFileAsset,
+  updateMediaMetadata
 } from '../store/media.repo'
 import { getDb } from '../store/db'
 import { artifactRecipeSchema } from '../../shared/artifact-recipe'
@@ -66,6 +73,8 @@ import {
   getVideoEngineStatus,
   installVideoEngine
 } from '../media/video-conversion'
+import { probeMedia } from '../media/media-probe'
+import { composeTimeline, type TimelineComposeClip } from '../media/timeline-compose'
 
 function ok<T>(data: T): IpcEnvelope<T> {
   return { ok: true, data }
@@ -77,6 +86,32 @@ function err(code: string, message: string): IpcEnvelope<never> {
 
 /** 媒体作用域内的取消哨兵：把「已停止」与普通失败区分开，不泄露底层异常文本。 */
 const MEDIA_CANCELLED_SIGNAL = Symbol('media-cancelled')
+
+/** mediaId → 媒体表相对路径 → 绝对路径。素材被删或索引缺失时返回 null。 */
+function mediaAbsPathById(mediaId: string): string | null {
+  const row = getDb().prepare('SELECT path FROM media WHERE id = ?').get(mediaId) as
+    | { path?: string }
+    | undefined
+  if (!row?.path) return null
+  return getMediaAbsPath(row.path)
+}
+
+/** 时间线片段：把 mediaId 解析成主进程可读的绝对路径；缺失即明确失败，不静默跳过。 */
+function resolveTimelineClips(clips: TimelineComposeClipInput[]): TimelineComposeClip[] {
+  return clips.map((clip) => {
+    const abs = mediaAbsPathById(clip.mediaId)
+    if (!abs) throw new Error('时间线里的素材文件已不存在，请重新导入后再运行')
+    return {
+      kind: clip.kind,
+      sourcePath: abs,
+      startMs: clip.startMs,
+      durationMs: clip.durationMs,
+      ...(clip.inMs === undefined ? {} : { inMs: clip.inMs }),
+      ...(clip.sourceDurationMs === undefined ? {} : { sourceDurationMs: clip.sourceDurationMs }),
+      ...(clip.volume === undefined ? {} : { volume: clip.volume })
+    }
+  })
+}
 
 /**
  * 把一次本地媒体变换放进可取消作用域（P1-A 运行中停止）。
@@ -207,10 +242,32 @@ async function importAll(projectId: string, paths: string[]): Promise<MediaImpor
   const errors: MediaImportError[] = []
   for (const p of paths) {
     const r = await importMedia(projectId, p)
-    if (r.ok) assets.push(r.asset)
-    else errors.push({ path: p, reason: r.reason })
+    if (r.ok) {
+      assets.push(r.asset)
+      // 导入成功即可返回；元数据回填异步进行，失败只意味着少一份时长/尺寸，
+      // 不改变导入结果（时间线在缺少元数据时按占位长度摆放，探测到后再裁）。 
+      void backfillMediaMetadata(r.asset)
+    } else errors.push({ path: p, reason: r.reason })
   }
   return { assets, errors }
+}
+
+/** 导入后回填媒体元数据：一次 ffprobe 拿到时长/宽高，写回 media 表。 */
+async function backfillMediaMetadata(asset: MediaAsset): Promise<void> {
+  if (asset.kind !== 'image' && asset.kind !== 'video' && asset.kind !== 'audio') return
+  try {
+    const abs = getMediaAbsPath(asset.path)
+    if (!abs) return
+    const probe = await probeMedia(abs)
+    if (!probe.ok) return
+    updateMediaMetadata(asset.id, {
+      width: probe.meta.width,
+      height: probe.meta.height,
+      durationSec: probe.meta.durationMs === null ? null : probe.meta.durationMs / 1000
+    })
+  } catch {
+    // 探测/写库失败不阻断导入；调用方仍可用占位时长。
+  }
 }
 
 export function registerMediaIpc(): void {
@@ -371,6 +428,70 @@ export function registerMediaIpc(): void {
       if (!input?.projectId || !input.sourceMediaId || !input.config)
         return err('INVALID_INPUT', '缺少音频提取参数')
       return runCancellableTransform(input, () => transformVideoAudio(input), 'VIDEO_AUDIO_FAILED')
+    }
+  )
+
+  /** 时间线素材元数据：只读探测时长/尺寸/音轨，不产生资产、不落库。 */
+  ipcMain.handle(
+    IPC.media.probeMetadata,
+    async (_e, input: MediaMetadataProbeInput): Promise<IpcEnvelope<MediaMetadataProbeResult>> => {
+      if (!input?.projectId || !input?.mediaId) return err('INVALID_INPUT', '缺少素材元数据参数')
+      const abs = mediaAbsPathById(input.mediaId)
+      if (!abs) return err('MEDIA_NOT_FOUND', '素材文件不存在或已被删除')
+      try {
+        const probe = await probeMedia(abs)
+        if (!probe.ok) {
+          return err(probe.missingTool ? 'FFPROBE_MISSING' : 'MEDIA_PROBE_FAILED', probe.reason)
+        }
+        return ok(probe.meta)
+      } catch (error) {
+        return err('MEDIA_PROBE_FAILED', error instanceof Error ? error.message : String(error))
+      }
+    }
+  )
+
+  /**
+   * 时间线合成：多段视频/图片/音频 → 一条 MP4。
+   * 中间成片写在系统临时目录，登记为项目媒体资产后由 finally 清理临时目录；
+   * 用户停止工作流时沿用媒体作用域 kill ffmpeg 子进程，不产生半截产物。
+   */
+  ipcMain.handle(
+    IPC.media.timelineCompose,
+    async (_e, input: TimelineComposeInput): Promise<IpcEnvelope<MediaAsset>> => {
+      if (
+        !input?.projectId ||
+        !input?.nodeId ||
+        !Array.isArray(input.clips) ||
+        input.clips.length === 0
+      ) {
+        return err('INVALID_INPUT', '缺少时间线合成参数')
+      }
+      return runCancellableTransform(
+        input,
+        async () => {
+          const tempDir = await mkdtemp(join(tmpdir(), 'canvas-studio-timeline-out-'))
+          try {
+            const result = await composeTimeline({
+              outputPath: join(tempDir, 'timeline.mp4'),
+              width: input.width,
+              height: input.height,
+              frameRate: input.frameRate,
+              clips: resolveTimelineClips(input.clips),
+              audioClips: resolveTimelineClips(input.audioClips ?? [])
+            })
+            if (!result.ok) throw new Error(result.reason)
+            return await saveFileAsset(
+              input.projectId,
+              result.outputPath,
+              '.mp4',
+              `时间线-${Date.now()}`
+            )
+          } finally {
+            await rm(tempDir, { recursive: true, force: true }).catch(() => undefined)
+          }
+        },
+        'TIMELINE_COMPOSE_FAILED'
+      )
     }
   )
   ipcMain.handle(

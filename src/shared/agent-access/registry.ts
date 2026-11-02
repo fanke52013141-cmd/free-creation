@@ -383,6 +383,7 @@ export const NODE_ACCESS_DECLARATIONS = [
   'video-clip',
   'video-depth',
   'video-clay',
+  'timeline',
   'audio',
   'sound-adjust',
   'file',

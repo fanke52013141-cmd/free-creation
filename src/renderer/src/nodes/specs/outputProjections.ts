@@ -173,6 +173,14 @@ export const projectVideoAiOutputs = (shape: NodeCardShape): RawNodeOutputs =>
   latestResultMediaOutput(shape, 'video', 'out-video')
 
 /**
+ * 时间线的 out-video：只投影最近一次成功运行产出的成片。
+ * 时间线数据本身是文档真值（在 props.text），但成片不是——没有跑过就没有可连线的视频，
+ * 否则下游会把“还没合成”当成“已经有一条视频”。
+ */
+export const projectTimelineOutputs = (shape: NodeCardShape): RawNodeOutputs =>
+  latestResultMediaOutput(shape, 'video', 'out-video')
+
+/**
  * 视频截取（合并节点，契约 v5）一次运行可物化两条产物：画面写入 out-video、
  * 音频写入 out-audio。结果集合是扁平列表且跨运行累积，因此先按本次运行 runId
  * 圈定产物，再按 MIME 主类型各取最近一条，而不是共用 latestResultMediaOutput

@@ -21,6 +21,7 @@ export const PALETTE_NODE_GROUPS = {
     'video-frame',
     'video-depth',
     'video-clay',
+    'timeline',
     'storyboard',
     'director'
   ],

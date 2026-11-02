@@ -22,6 +22,7 @@ export const ACTIVE_NODE_TYPE_IDS = [
   'video-clip',
   'video-depth',
   'video-clay',
+  'timeline',
   'audio',
   'sound-adjust',
   'file',

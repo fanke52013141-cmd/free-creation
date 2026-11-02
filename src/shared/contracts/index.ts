@@ -124,6 +124,10 @@ export const IPC = {
     videoAudio: 'media:video-audio',
     soundAdjust: 'media:sound-adjust',
     videoProbe: 'media:video-probe',
+    /** 时间线合成：多段视频/图片/音频按起始毫秒合成为一条 MP4。 */
+    timelineCompose: 'media:timeline-compose',
+    /** 时间线素材元数据探测（时长/宽高/音轨），只读，不产生资产。 */
+    probeMetadata: 'media:probe-metadata',
     videoThumbnails: 'media:video-thumbnails',
     audioWaveform: 'media:audio-waveform',
     vocalSeparate: 'media:vocal-separate',
@@ -621,6 +625,50 @@ export interface VideoProbeResult {
   /** 源视频的平均帧率；不可用时为 null，时间轴仍以毫秒为准。 */
   fps: number | null
   hasAudio: boolean
+}
+
+/** 时间线合成片段：mediaId 由主进程解析成绝对路径，渲染进程不接触本地绝对路径。 */
+export interface TimelineComposeClipInput {
+  kind: 'video' | 'image' | 'audio'
+  mediaId: string
+  /** 时间线起点（毫秒） */
+  startMs: number
+  /** 时间线上的长度（毫秒） */
+  durationMs: number
+  /** 源素材内起点（毫秒） */
+  inMs?: number
+  sourceDurationMs?: number
+  /** 0..1；0 表示该片段静音 */
+  volume?: number
+}
+
+export interface TimelineComposeInput {
+  projectId: string
+  nodeId: string
+  width: number
+  height: number
+  frameRate: number
+  /** 视频轨（视频与图片），按 startMs 升序 */
+  clips: TimelineComposeClipInput[]
+  /** 音频轨，各自按 startMs 对齐混入 */
+  audioClips?: TimelineComposeClipInput[]
+}
+
+/** 时间线素材元数据：一次探测返回时长、尺寸、帧率与音轨信息。 */
+export interface MediaMetadataProbeInput {
+  projectId: string
+  mediaId: string
+}
+
+export interface MediaMetadataProbeResult {
+  kind: 'image' | 'video' | 'audio' | 'unknown'
+  durationMs: number | null
+  width: number | null
+  height: number | null
+  fps: number | null
+  hasAudio: boolean
+  sampleRate: number | null
+  channels: number | null
 }
 
 /** 时间轴缩略图请求：均匀采样指定数量的帧返回 data URL 数组。 */
