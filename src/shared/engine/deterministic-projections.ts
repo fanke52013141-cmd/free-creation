@@ -33,6 +33,8 @@ export const DETERMINISTIC_PROJECTIONS = {
   tts: projectTtsOutputs,
   video: projectVideoOutputs,
   'video-asset': projectVideoAssetOutputs,
+  // 轨道线成片走与视频生成相同的 out-video 投影：只认最近一次成功运行的产物。
+  timeline: projectVideoOutputs,
   'ai-review': projectReviewOutputs,
   agent: projectAgentOutputs,
   text: projectTextOutputs,

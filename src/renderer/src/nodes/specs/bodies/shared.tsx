@@ -496,7 +496,8 @@ export const LOCAL_ENGINE_SOURCE_LABELS: Readonly<Record<string, string>> = {
   'local:ffmpeg-audio': '本地提取音频',
   'local:ffmpeg-sound-adjust': '本地声音调整',
   'local:vocal-extraction': '本地提取人声',
-  'local:ffmpeg-timeline': '本地时间线合成',
+  'local:ffmpeg-timeline': '本地轨道线合成',
+  'local:indextts': '本地 IndexTTS 2.5',
   'local:video-depth-anything-small': '本地视频深度估计'
 }
 

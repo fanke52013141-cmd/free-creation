@@ -103,6 +103,46 @@ describe('配音配置解析', () => {
     expect(config.bitrate).toBe(DEFAULT_SPEECH_CONFIG.bitrate)
   })
 
+  it('本地 IndexTTS 通道：清空云端供应商/模型/音色，固定 wav 22.05kHz', () => {
+    const config = parseSpeechConfig(
+      JSON.stringify({
+        backend: 'indextts',
+        providerId: 'prov-1',
+        modelId: 'speech-2.8-hd',
+        voiceId: 'male-qn-qingse',
+        format: 'mp3',
+        referenceAudioId: 'ref-1',
+        referenceAudioPath: 'projects/p/media/ref-1.wav',
+        durationFactor: 9,
+        localDevice: 'cpu',
+        localFp16: false,
+        localLang: 'EN'
+      })
+    )
+    expect(config.backend).toBe('indextts')
+    expect(config.providerId).toBe('')
+    expect(config.modelId).toBe('')
+    expect(config.voiceId).toBe('')
+    expect(config.format).toBe('wav')
+    expect(config.sampleRate).toBe(22050)
+    expect(config.referenceAudioId).toBe('ref-1')
+    // duration_factor 收敛到 [0.5, 2]；设备与语言按受控取值。
+    expect(config.durationFactor).toBe(2)
+    expect(config.localDevice).toBe('cpu')
+    expect(config.localFp16).toBe(false)
+    expect(config.localLang).toBe('EN')
+  })
+
+  it('本地 IndexTTS 的默认值：cuda + 半精度 + 中文 + 1.0 时长因子', () => {
+    const config = parseSpeechConfig(JSON.stringify({ backend: 'indextts' }))
+    expect(config.localDevice).toBe('cuda')
+    expect(config.localFp16).toBe(true)
+    expect(config.localLang).toBe('ZH')
+    expect(config.durationFactor).toBe(1)
+    expect(config.localPythonPath).toBe('')
+    expect(config.localModelDir).toBe('')
+  })
+
   it('序列化后可原样解析回来（保存模型往返一致）', () => {
     const config = parseSpeechConfig(
       JSON.stringify({

@@ -166,8 +166,8 @@ function createHarness(
 
 function timelineWithClips(): TimelineData {
   const data = createEmptyTimeline()
-  const videoTrack = data.tracks.find((track) => track.kind === 'video')!
-  const audioTrack = data.tracks.find((track) => track.kind === 'audio')!
+  // 轨道通用：同一条轨道放画面，另一条放音频，合成时按片段 kind 分流。
+  const [videoTrack, audioTrack] = data.tracks
   let next = data
   for (const mediaId of ['vid1', 'vid2']) {
     const added = addClip(next, {

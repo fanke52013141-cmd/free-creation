@@ -8,6 +8,7 @@ import { markUndoPoint } from './history'
 import { Icon } from '../components/Icon'
 import { GenerationLoadingOverlay } from './GenerationLoadingOverlay'
 import { AppSelect } from '../components/AppSelect'
+import { NumberStepper } from '../components/NumberStepper'
 import {
   createDirectorId,
   createDirectorPublishRecord,
@@ -1091,19 +1092,22 @@ export function DirectorStudioPanel({
                   title={`等效水平视角 ${directorCameraFov(shot.camera.focalLengthMm).toFixed(0)}°；超过 ${DIRECTOR_FOCAL_RANGE_MM[1]}mm 画面不再变化`}
                 >
                   焦距（{DIRECTOR_FOCAL_RANGE_MM[0]}–{DIRECTOR_FOCAL_RANGE_MM[1]}mm）
-                  <input
-                    type="number"
+                  <NumberStepper
+                    ariaLabel="焦距"
                     min={DIRECTOR_FOCAL_RANGE_MM[0]}
                     max={DIRECTOR_FOCAL_RANGE_MM[1]}
-                    value={shot.camera.focalLengthMm}
-                    onChange={(event) =>
+                    step={1}
+                    value={String(shot.camera.focalLengthMm)}
+                    onChange={(next) => {
+                      const raw = Number(next)
+                      if (!Number.isFinite(raw)) return
                       patchCamera({
                         focalLengthMm: Math.max(
                           DIRECTOR_FOCAL_RANGE_MM[0],
-                          Math.min(DIRECTOR_FOCAL_RANGE_MM[1], Number(event.target.value) || 35)
+                          Math.min(DIRECTOR_FOCAL_RANGE_MM[1], raw || 35)
                         )
                       })
-                    }
+                    }}
                   />
                 </label>
               )}
@@ -1125,19 +1129,22 @@ export function DirectorStudioPanel({
               </label>
               <label>
                 时长（秒，{DIRECTOR_DURATION_RANGE_SEC[0]}–{DIRECTOR_DURATION_RANGE_SEC[1]}）
-                <input
-                  type="number"
+                <NumberStepper
+                  ariaLabel="时长"
                   min={DIRECTOR_DURATION_RANGE_SEC[0]}
                   max={DIRECTOR_DURATION_RANGE_SEC[1]}
-                  value={shot.camera.durationSec}
-                  onChange={(event) =>
+                  step={1}
+                  value={String(shot.camera.durationSec)}
+                  onChange={(next) => {
+                    const raw = Number(next)
+                    if (!Number.isFinite(raw)) return
                     patchCamera({
                       durationSec: Math.max(
                         DIRECTOR_DURATION_RANGE_SEC[0],
-                        Math.min(DIRECTOR_DURATION_RANGE_SEC[1], Number(event.target.value) || 5)
+                        Math.min(DIRECTOR_DURATION_RANGE_SEC[1], raw || 5)
                       )
                     })
-                  }
+                  }}
                 />
               </label>
               {advancedMode && (

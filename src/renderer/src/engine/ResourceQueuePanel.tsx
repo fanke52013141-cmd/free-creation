@@ -1,5 +1,6 @@
 import { setResourceLimit, useResourceQueue } from './resource-queue'
 import { Icon } from '../components/Icon'
+import { NumberStepper } from '../components/NumberStepper'
 
 export function ResourceQueuePanel({ projectId }: { projectId: string }): React.JSX.Element {
   const tasks = useResourceQueue((state) => state.tasks)
@@ -44,15 +45,19 @@ export function ResourceQueuePanel({ projectId }: { projectId: string }): React.
             style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}
           >
             {label}
-            <input
-              aria-label={label}
-              type="number"
-              min={1}
-              max={64}
-              value={limits[resource]}
-              style={{ width: 60 }}
-              onChange={(event) => setResourceLimit(resource, Number(event.target.value))}
-            />
+            <span style={{ display: 'block', width: 96 }}>
+              <NumberStepper
+                ariaLabel={label}
+                min={1}
+                max={64}
+                step={1}
+                value={String(limits[resource] ?? 1)}
+                onChange={(next) => {
+                  const value = Number(next)
+                  if (Number.isFinite(value)) setResourceLimit(resource, value)
+                }}
+              />
+            </span>
           </label>
         ))}
         <p style={{ fontSize: 12 }}>额度适用于当前窗口。调整不会中断运行中的任务。</p>

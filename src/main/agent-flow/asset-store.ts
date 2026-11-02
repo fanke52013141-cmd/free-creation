@@ -124,7 +124,7 @@ export class FlowAssetStore {
         const runStatus = readStoredNodeRunStatus(record.meta?.nodeRun)
         if (
           !pinned &&
-          ['processor', 'agent', 'video', 'image-gen', 'image-edit', 'speech', 'tts'].includes(
+          ['processor', 'agent', 'video', 'image-gen', 'image-edit', 'speech', 'tts', 'timeline'].includes(
             record.props.nodeType
           ) &&
           runStatus &&
@@ -144,7 +144,7 @@ export class FlowAssetStore {
                     ? 'out-audio'
                     : record.props.nodeType === 'tts'
                       ? 'out-json'
-                      : ['video', 'video-asset', 'image'].includes(record.props.nodeType)
+                      : ['video', 'video-asset', 'timeline', 'image'].includes(record.props.nodeType)
                         ? record.props.nodeType === 'image'
                           ? 'out-image'
                           : 'out-video'
@@ -225,7 +225,12 @@ export class FlowAssetStore {
             fail('ASSET_OUTPUT_INVALID')
           value = fixedFlowMedia(this.db, input.projectId, value)
         }
-        if (value.kind === 'video' && record.props.nodeType === 'video-asset' && !pinned) {
+        if (
+          value.kind === 'video' &&
+          (record.props.nodeType === 'video-asset' || record.props.nodeType === 'timeline') &&
+          !pinned
+        ) {
+          // 轨道线的成片与视频资产同源：都是本机已落盘的固定媒体，直接固化引用。
           value = fixedFlowMedia(this.db, input.projectId, value)
         } else if (value.kind === 'video') {
           if (

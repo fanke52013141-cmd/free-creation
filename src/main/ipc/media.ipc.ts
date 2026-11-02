@@ -29,6 +29,8 @@ import type {
   TimelineComposeInput,
   MediaMetadataProbeInput,
   MediaMetadataProbeResult,
+  IndexTtsRuntimeInfo,
+  IndexTtsSynthesizeInput,
   VocalSeparateInput
 } from '../../shared/contracts'
 import type { MediaAsset, MediaImportError, MediaImportResult } from '../../shared/types'
@@ -75,6 +77,7 @@ import {
 } from '../media/video-conversion'
 import { probeMedia } from '../media/media-probe'
 import { composeTimeline, type TimelineComposeClip } from '../media/timeline-compose'
+import { detectIndexTts, synthesizeWithIndexTts } from '../media/indextts-engine'
 
 function ok<T>(data: T): IpcEnvelope<T> {
   return { ok: true, data }
@@ -447,6 +450,54 @@ export function registerMediaIpc(): void {
       } catch (error) {
         return err('MEDIA_PROBE_FAILED', error instanceof Error ? error.message : String(error))
       }
+    }
+  )
+
+  /** 本地 IndexTTS 2.5 运行时探测：只读，不缓存（用户装好后重开面板即生效）。 */
+  ipcMain.handle(
+    IPC.media.indexttsDetect,
+    async (): Promise<IpcEnvelope<IndexTtsRuntimeInfo>> => {
+      try {
+        return ok(await detectIndexTts())
+      } catch (error) {
+        return err('INDEXTTS_DETECT_FAILED', error instanceof Error ? error.message : String(error))
+      }
+    }
+  )
+
+  /**
+   * 本地 IndexTTS 2.5 合成：参考音频 → 本机推理 → 项目音频资产。
+   * 解释器与模型目录由引擎模块探测（配置优先、其次环境变量、再次已知安装位置）。
+   */
+  ipcMain.handle(
+    IPC.media.indexttsSynthesize,
+    async (_e, input: IndexTtsSynthesizeInput): Promise<IpcEnvelope<MediaAsset>> => {
+      if (!input?.projectId || !input?.nodeId || !input?.text || !input?.referenceAudioId) {
+        return err('INVALID_INPUT', '缺少本地 IndexTTS 合成参数')
+      }
+      if (input.text.length > 3000) return err('INVALID_INPUT', '朗读文本超过 3000 字符上限')
+      const referenceAbs = mediaAbsPathById(input.referenceAudioId)
+      if (!referenceAbs) return err('MEDIA_NOT_FOUND', '参考音频文件不存在或已被删除')
+      return runCancellableTransform(
+        input,
+        async () => {
+          const result = await synthesizeWithIndexTts({
+            projectId: input.projectId,
+            nodeId: input.nodeId,
+            text: input.text,
+            referenceAudioPath: referenceAbs,
+            pythonPath: input.pythonPath,
+            modelDir: input.modelDir,
+            device: input.device,
+            fp16: input.fp16,
+            durationFactor: input.durationFactor,
+            lang: input.lang
+          })
+          if (!result.ok) throw new Error(result.reason)
+          return result.asset
+        },
+        'INDEXTTS_SYNTHESIZE_FAILED'
+      )
     }
   )
 

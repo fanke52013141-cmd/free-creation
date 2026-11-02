@@ -54,6 +54,8 @@ import type {
   VideoAudioTransformInput,
   SoundAdjustTransformInput,
   TimelineComposeInput,
+  IndexTtsRuntimeInfo,
+  IndexTtsSynthesizeInput,
   MediaMetadataProbeInput,
   MediaMetadataProbeResult,
   VideoThumbnailsInput,
@@ -434,6 +436,10 @@ const api = {
     input: MediaMetadataProbeInput
   ): Promise<IpcEnvelope<MediaMetadataProbeResult>> =>
     ipcRenderer.invoke(IPC.media.probeMetadata, input),
+  indexttsDetect: (): Promise<IpcEnvelope<IndexTtsRuntimeInfo>> =>
+    ipcRenderer.invoke(IPC.media.indexttsDetect),
+  indexttsSynthesize: (input: IndexTtsSynthesizeInput): Promise<IpcEnvelope<MediaAsset>> =>
+    ipcRenderer.invoke(IPC.media.indexttsSynthesize, input),
   probeVideo: (input: VideoProbeInput): Promise<IpcEnvelope<VideoProbeResult>> =>
     ipcRenderer.invoke(IPC.media.videoProbe, input),
   generateVideoThumbnails: (

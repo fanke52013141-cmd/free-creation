@@ -10,7 +10,7 @@
  *   volc    → 火山引擎语音合成 1.0 POST /api/v3/tts/create
  */
 
-export type SpeechBackend = 'minimax' | 'volc'
+export type SpeechBackend = 'minimax' | 'volc' | 'indextts'
 
 export type SpeechFormat =
   'mp3' | 'wav' | 'pcm' | 'flac' | 'pcmu_raw' | 'pcmu_wav' | 'opus' | 'ogg_opus'
@@ -55,6 +55,20 @@ export interface SpeechConfig {
   referenceAudioId: string
   referenceAudioPath: string
   referenceAudioName: string
+
+  // ── 本地 IndexTTS 2.5（2026-11-02）──
+  /** 本机 Python 解释器路径；空串表示自动探测（环境变量 > 常见安装位置）。 */
+  localPythonPath: string
+  /** IndexTTS 2.5 模型目录；空串表示自动探测。 */
+  localModelDir: string
+  /** 推理设备；RTX 显卡用 cuda，无显卡退回 cpu。 */
+  localDevice: 'cuda' | 'cpu'
+  /** 半精度推理，仅 cuda 生效。 */
+  localFp16: boolean
+  /** IndexTTS duration_factor，[0.5, 2]；>1 语速更慢。与云供应商的 speed 不是同一参数。 */
+  durationFactor: number
+  /** IndexTTS 语言码。 */
+  localLang: 'ZH' | 'EN' | 'JA' | 'ES' | 'AR'
 
   // ── MiniMax voice_setting ──
   /** 语速，[0.5, 2]。 */
@@ -118,6 +132,10 @@ export const SPEECH_BACKENDS: ReadonlyArray<{
   {
     value: 'volc',
     label: '火山引擎 · 语音合成 1.0'
+  },
+  {
+    value: 'indextts',
+    label: '本地 · IndexTTS 2.5（参考音频克隆）'
   }
 ]
 
@@ -246,18 +264,22 @@ export function defaultSpeechSampleRate(backend: SpeechBackend, format: SpeechFo
     if (format === 'wav' || format === 'pcm') return 40000
     return 44100
   }
+  // 本地 IndexTTS 固定输出 22.05kHz 单声道 wav。
+  if (backend === 'indextts') return 22050
   return 32000
 }
 
 /** 各协议实际接受的输出格式；节点 UI 与网关都必须按同一份真值收敛。 */
 export const SPEECH_FORMATS_BY_BACKEND: Record<SpeechBackend, ReadonlyArray<SpeechFormat>> = {
   minimax: ['mp3', 'pcm', 'flac', 'wav', 'pcmu_raw', 'pcmu_wav', 'opus'],
-  volc: ['mp3', 'wav', 'pcm', 'ogg_opus']
+  volc: ['mp3', 'wav', 'pcm', 'ogg_opus'],
+  // 本地 IndexTTS 只输出 22050Hz 单声道 wav。
+  indextts: ['wav']
 }
 
 /** 配音节点固定使用的默认输出格式；高级接口字段不在节点 UI 中暴露。 */
 export function defaultSpeechFormat(backend: SpeechBackend): SpeechFormat {
-  return backend === 'volc' ? 'wav' : 'mp3'
+  return backend === 'volc' || backend === 'indextts' ? 'wav' : 'mp3'
 }
 
 export function isSpeechEmotionSupported(modelId: string, emotion: SpeechEmotion): boolean {
@@ -282,7 +304,9 @@ export const SPEECH_SAMPLE_RATE_BACKENDS: ReadonlyArray<SpeechBackend> = ['minim
 /** 火山 text_prompt 的上限；MiniMax 为 5 万字符。执行前按后端分别校验。 */
 export const SPEECH_TEXT_LIMITS: Record<SpeechBackend, number> = {
   minimax: 50000,
-  volc: 3000
+  volc: 3000,
+  // 本地模型长文按段合成，但一次请求仍限制在 3000 字，避免过长的单次等待。
+  indextts: 3000
 }
 
 export const DEFAULT_SPEECH_CONFIG: SpeechConfig = {
@@ -294,6 +318,12 @@ export const DEFAULT_SPEECH_CONFIG: SpeechConfig = {
   referenceAudioId: '',
   referenceAudioPath: '',
   referenceAudioName: '',
+  localPythonPath: '',
+  localModelDir: '',
+  localDevice: 'cuda',
+  localFp16: true,
+  durationFactor: 1,
+  localLang: 'ZH',
   speed: 1,
   volume: 1,
   pitch: 0,
@@ -333,7 +363,8 @@ export function parseSpeechConfig(text: string): SpeechConfig {
     return { ...DEFAULT_SPEECH_CONFIG }
   }
 
-  const backend: SpeechBackend = raw.backend === 'volc' ? 'volc' : 'minimax'
+  const backend: SpeechBackend =
+    raw.backend === 'volc' ? 'volc' : raw.backend === 'indextts' ? 'indextts' : 'minimax'
   // 不把已移除通道保存的供应商/模型 ID 带入 MiniMax，避免误发给其他供应商。
   const validBackend = raw.backend === undefined || raw.backend === backend
   const merged = validBackend ? raw : { ...raw, providerId: '', modelId: '' }
@@ -352,14 +383,31 @@ export function parseSpeechConfig(text: string): SpeechConfig {
     version: 1,
     featureKey: typeof merged.featureKey === 'string' ? merged.featureKey : undefined,
     backend,
-    providerId: typeof merged.providerId === 'string' ? merged.providerId : '',
-    modelId,
-    voiceId: typeof merged.voiceId === 'string' ? merged.voiceId : '',
+    // 本地引擎没有供应商/模型/音色 ID 的概念：一律清空，避免跨后端串值。
+    providerId: backend === 'indextts' ? '' : typeof merged.providerId === 'string' ? merged.providerId : '',
+    modelId: backend === 'indextts' ? '' : modelId,
+    voiceId: backend === 'indextts' ? '' : typeof merged.voiceId === 'string' ? merged.voiceId : '',
     referenceAudioId: typeof merged.referenceAudioId === 'string' ? merged.referenceAudioId : '',
     referenceAudioPath:
       typeof merged.referenceAudioPath === 'string' ? merged.referenceAudioPath : '',
     referenceAudioName:
       typeof merged.referenceAudioName === 'string' ? merged.referenceAudioName : '',
+    // 本地 IndexTTS 不认云端音色/模型字段：切到本地时强制清空，避免把旧 ID 当成配置带回去。
+    localPythonPath:
+      backend === 'indextts' && typeof merged.localPythonPath === 'string'
+        ? merged.localPythonPath
+        : typeof merged.localPythonPath === 'string'
+          ? merged.localPythonPath
+          : '',
+    localModelDir: typeof merged.localModelDir === 'string' ? merged.localModelDir : '',
+    localDevice: merged.localDevice === 'cpu' ? 'cpu' : 'cuda',
+    localFp16: merged.localFp16 !== false,
+    durationFactor: clamp(merged.durationFactor, 0.5, 2, 1),
+    localLang: (['ZH', 'EN', 'JA', 'ES', 'AR'] as const).includes(
+      merged.localLang as 'ZH'
+    )
+      ? (merged.localLang as SpeechConfig['localLang'])
+      : 'ZH',
     speed: clamp(merged.speed, 0.5, 2, 1),
     volume: clamp(merged.volume, 0.01, 10, 1),
     pitch: clamp(merged.pitch, -12, 12, 0),

@@ -16,6 +16,9 @@ import {
   type TimelineClip
 } from '@shared/timeline'
 
+/** 合成最长等待：超过即判失败，避免节点永久停在「执行中」。 */
+const TIMELINE_COMPOSE_TIMEOUT_MS = 8 * 60 * 1000
+
 /** 成片画布。默认 1080p；节点配置可覆盖（props.config 的 render 段）。 */
 export const TIMELINE_DEFAULT_RENDER = { width: 1920, height: 1080 } as const
 
@@ -83,7 +86,7 @@ export async function timelineExecutor(ctx: NodeExecutionContext): Promise<NodeE
     return { status: 'failed', reason: '当前运行环境不支持时间线合成（缺少本地媒体通道）' }
   }
 
-  // 视频轨提供画面，音频轨提供声音；静音轨上的片段整段跳过，不影响画面。
+  // 轨道是通用的：画面/音频由片段自己的 kind 决定去向，不由轨道类型决定。
   const videoClips: ComposeClipPayload[] = []
   const audioClips: ComposeClipPayload[] = []
   for (const track of data.tracks) {
@@ -92,8 +95,8 @@ export async function timelineExecutor(ctx: NodeExecutionContext): Promise<NodeE
     for (const clip of clipsOfTrack(data, track.id)) {
       if (!clip.mediaId) continue
       const payload = toComposePayload(clip, muted)
-      if (track.kind === 'video') videoClips.push(payload)
-      else audioClips.push(payload)
+      if (clip.kind === 'audio') audioClips.push(payload)
+      else videoClips.push(payload)
     }
   }
   const hasVisual = videoClips.some((clip) => clip.kind === 'video' || clip.kind === 'image')
@@ -122,19 +125,33 @@ export async function timelineExecutor(ctx: NodeExecutionContext): Promise<NodeE
   } 片段${firstTrackName ? ` · 起始轨 ${firstTrackName}` : ''}`
 
   try {
-    const outcome = await runCancellableMedia(
-      ctx,
-      () =>
-        compose({
-          projectId: ctx.projectId,
-          nodeId: ctx.node.id,
-          width: render.width,
-          height: render.height,
-          frameRate: data.frameRate,
-          clips: videoClips,
-          audioClips
-        }),
-      (envelope) => {
+    // 安全网：主进程若在 normalize/concat 阶段卡住（2026-11-03 真机发现的一次挂起），
+    // 这里必须给出可读失败，而不是让节点永远停在「执行中」。
+    let timeoutTimer: ReturnType<typeof setTimeout> | undefined
+    const composeWithTimeout = async (): Promise<Awaited<ReturnType<typeof compose>>> => {
+      try {
+        return await Promise.race([
+          compose({
+            projectId: ctx.projectId,
+            nodeId: ctx.node.id,
+            width: render.width,
+            height: render.height,
+            frameRate: data.frameRate,
+            clips: videoClips,
+            audioClips
+          }),
+          new Promise<never>((_, reject) => {
+            timeoutTimer = setTimeout(
+              () => reject(new Error('合成超时：ffmpeg 长时间无进展，本次运行已终止')),
+              TIMELINE_COMPOSE_TIMEOUT_MS
+            )
+          })
+        ])
+      } finally {
+        if (timeoutTimer) clearTimeout(timeoutTimer)
+      }
+    }
+    const outcome = await runCancellableMedia(ctx, composeWithTimeout, (envelope) => {
         // 取消后迟到的成片属于孤儿，直接删掉，不留在项目媒体库里。
         if (envelope?.ok) void ctx.gateway.deleteMedia?.(envelope.data.id).catch(() => undefined)
       }

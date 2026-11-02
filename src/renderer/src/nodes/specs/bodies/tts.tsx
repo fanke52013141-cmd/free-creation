@@ -100,13 +100,11 @@ export function TtsBody({ shape }: NodeBodyProps): React.JSX.Element {
       <input className="gen-input" aria-label="自定义音色 ID" placeholder="可选：自定义音色 ID" value={config.voiceId} onPointerDown={(event) => event.stopPropagation()} onChange={(event) => updateConfig({ voiceId: event.target.value })} />
       {invalidId && <small className="gen-capability-note error">音色 ID 需 8～256 位，以字母开头，末位不能是 - 或 _。</small>}
       <input className="gen-input" aria-label="参考语音原文" placeholder="可选：参考语音原文，用于内容校验" value={config.textValidation} onPointerDown={(event) => event.stopPropagation()} onChange={(event) => updateConfig({ textValidation: event.target.value.slice(0, 200) })} />
-      <button className="btn-ghost small node-inline-action" onPointerDown={stopEventPropagation} onClick={(event) => { event.stopPropagation(); void uploadAudio(true) }}>{config.promptMediaId ? '替换辅助提示音' : '添加辅助提示音（可选）'}</button>
-      {config.promptMediaId && <><small>{config.promptMediaName || '辅助提示音'} · 小于 8 秒</small>
-        <input className="gen-input" aria-label="辅助提示音原文" placeholder="填写辅助提示音原文" value={config.promptText} onPointerDown={(event) => event.stopPropagation()} onChange={(event) => updateConfig({ promptText: event.target.value })} />
-        <button className="btn-ghost small node-inline-action" onPointerDown={stopEventPropagation} onClick={(event) => { event.stopPropagation(); updateConfig({ promptMediaId: '', promptMediaPath: '', promptMediaMime: '', promptMediaName: '', promptText: '' }) }}>移除辅助提示音</button></>}
     </div>
     <NodePrimaryButton variant="secondary" onPointerDown={stopEventPropagation} onClick={(event) => { event.stopPropagation(); void uploadAudio(false) }}>{config.refMediaId ? '替换参考语音' : '上传参考语音'}</NodePrimaryButton>
-    <NodePrimaryButton disabled={busy || !selected || (incomingRef === 0 && !config.refMediaId) || invalidId || (Boolean(config.promptMediaId) && !config.promptText.trim())} onPointerDown={stopEventPropagation} onClick={(event) => { event.stopPropagation(); void clone() }}>{busy ? '克隆中…' : '克隆音色'}</NodePrimaryButton>
+    {/* 2026-11-02 用户裁决：去掉「添加辅助提示音」——它和参考语音在上传上重复，
+        克隆只需要一段参考语音；配置里的 prompt 字段保留以兼容旧项目与网关协议。 */}
+    <NodePrimaryButton disabled={busy || !selected || (incomingRef === 0 && !config.refMediaId) || invalidId} onPointerDown={stopEventPropagation} onClick={(event) => { event.stopPropagation(); void clone() }}>{busy ? '克隆中…' : '克隆音色'}</NodePrimaryButton>
     {voiceId && <div className="tts-section voice-id-card"><NodeSectionTitle>已生成音色 ID</NodeSectionTitle>
       <div className="voice-id-row"><code className="voice-id-value">{voiceId}</code><button className="btn-ghost small" onPointerDown={stopEventPropagation} onClick={(event) => { event.stopPropagation(); void navigator.clipboard.writeText(voiceId).then(() => toast('已复制音色 ID')) }}>复制</button></div>
       <small>将右侧音色档案端口连接到“语音合成”节点，再输入要朗读的文字。</small></div>}

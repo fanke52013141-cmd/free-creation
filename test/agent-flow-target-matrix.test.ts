@@ -66,7 +66,10 @@ const UNSUPPORTED_TYPES = [
   'ai-process',
   'agent',
   'state-machine',
-  'ai-review'
+  'ai-review',
+  // 2026-11-02 轨道线：成片可作为固定资产，但尚未适配 Agent 自动调度，
+  // flowTargetContract 返回 null → 运行期 FLOW_TYPE_UNSUPPORTED（显式拒绝）。
+  'timeline'
 ]
 
 function node(type: string, contractVersion: number, config: Record<string, unknown> = {}): CanvasNode {

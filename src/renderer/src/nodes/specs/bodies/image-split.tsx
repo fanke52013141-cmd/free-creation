@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { stopEventPropagation, useEditor } from 'tldraw'
+import { useEditor } from 'tldraw'
 import {
   buildImageSplitTiles,
   imageSplitCount,
@@ -14,6 +14,7 @@ import { markUndoPoint } from '../../../canvas/history'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { mediaUrl, type NodeBodyProps, type NodeSettingsProps } from '../../registry'
 import { NodeIdentity } from '../../../canvas/NodePresentation'
+import { NumberStepper } from '../../../components/NumberStepper'
 import { useClickGuard, useSourceWiringNotice, useStoredNodeConfig } from './shared'
 
 function positiveInteger(value: string, fallback: number): number {
@@ -70,53 +71,42 @@ export function ImageSplitBody({ shape, openPreview }: NodeBodyProps): React.JSX
       <div className="image-split-quick-controls" aria-label="快速拆分设置">
         <label>
           行数
-          <input
-            type="number"
-            min="1"
-            max="64"
-            value={config.rows}
-            onPointerDown={stopEventPropagation}
-            onChange={(event) =>
-              save(
-                { rows: positiveInteger(event.currentTarget.value, config.rows) },
-                'image-split-rows'
-              )
+          <NumberStepper
+            ariaLabel="行数"
+            min={1}
+            max={64}
+            step={1}
+            value={String(config.rows)}
+            onChange={(next) =>
+              save({ rows: positiveInteger(next, config.rows) }, 'image-split-rows')
             }
           />
         </label>
         <label>
           列数
-          <input
-            type="number"
-            min="1"
+          <NumberStepper
+            ariaLabel="列数"
+            min={1}
             max={maxImageSplitColumns(config.rows)}
-            value={config.columns}
-            onPointerDown={stopEventPropagation}
-            onChange={(event) =>
-              save(
-                { columns: positiveInteger(event.currentTarget.value, config.columns) },
-                'image-split-columns'
-              )
+            step={1}
+            value={String(config.columns)}
+            onChange={(next) =>
+              save({ columns: positiveInteger(next, config.columns) }, 'image-split-columns')
             }
           />
         </label>
         <label>
           面积
           <span className="image-split-percent-input">
-            <input
-              type="number"
-              min="1"
-              max="100"
-              value={config.scalePercent}
-              onPointerDown={stopEventPropagation}
-              onChange={(event) =>
+            <NumberStepper
+              ariaLabel="面积"
+              min={1}
+              max={100}
+              step={1}
+              value={String(config.scalePercent)}
+              onChange={(next) =>
                 save(
-                  {
-                    scalePercent: Math.min(
-                      100,
-                      positiveInteger(event.currentTarget.value, config.scalePercent)
-                    )
-                  },
+                  { scalePercent: Math.min(100, positiveInteger(next, config.scalePercent)) },
                   'image-split-scale'
                 )
               }
@@ -237,50 +227,42 @@ export function ImageSplitSettings({ shape, editor }: NodeSettingsProps): React.
       <div className="image-split-controls">
         <label>
           行数
-          <input
-            type="number"
-            min="1"
-            max="64"
-            value={config.rows}
-            onChange={(event) =>
-              save(
-                { rows: positiveInteger(event.currentTarget.value, config.rows) },
-                'image-split-rows'
-              )
+          <NumberStepper
+            ariaLabel="行数"
+            min={1}
+            max={64}
+            step={1}
+            value={String(config.rows)}
+            onChange={(next) =>
+              save({ rows: positiveInteger(next, config.rows) }, 'image-split-rows')
             }
           />
         </label>
         <label>
           列数
-          <input
-            type="number"
-            min="1"
+          <NumberStepper
+            ariaLabel="列数"
+            min={1}
             max={columnCap}
-            value={config.columns}
-            onChange={(event) =>
-              save(
-                { columns: positiveInteger(event.currentTarget.value, config.columns) },
-                'image-split-columns'
-              )
+            step={1}
+            value={String(config.columns)}
+            onChange={(next) =>
+              save({ columns: positiveInteger(next, config.columns) }, 'image-split-columns')
             }
           />
         </label>
         <label>
           面积缩放
           <span className="image-split-percent-input">
-            <input
-              type="number"
-              min="1"
-              max="100"
-              value={config.scalePercent}
-              onChange={(event) =>
+            <NumberStepper
+              ariaLabel="面积缩放"
+              min={1}
+              max={100}
+              step={1}
+              value={String(config.scalePercent)}
+              onChange={(next) =>
                 save(
-                  {
-                    scalePercent: Math.min(
-                      100,
-                      positiveInteger(event.currentTarget.value, config.scalePercent)
-                    )
-                  },
+                  { scalePercent: Math.min(100, positiveInteger(next, config.scalePercent)) },
                   'image-split-scale'
                 )
               }

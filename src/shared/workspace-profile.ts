@@ -3,6 +3,8 @@ export interface WorkspaceProfile {
   schemaVersion: 1
   presetId: 'general' | 'image' | 'video' | 'audio' | 'all' | 'custom'
   visibleNodeTypeIds: string[]
+  /** 节点集版本；缺省按 0 处理，用于把新版本新增的节点补进旧配置（见 normalize）。 */
+  nodeSetRevision?: number
 }
 
 /** A focused default; advanced node types remain available from the project settings dialog. */
@@ -17,6 +19,7 @@ export const GENERAL_WORKSPACE_NODE_TYPES = [
   'video-asset',
   'video',
   'video-frame',
+  'timeline',
   'audio',
   'sound-adjust',
   'speech',
@@ -36,8 +39,23 @@ export function defaultWorkspaceProfile(): WorkspaceProfile {
   return {
     schemaVersion: 1,
     presetId: 'general',
-    visibleNodeTypeIds: [...GENERAL_WORKSPACE_NODE_TYPES]
+    visibleNodeTypeIds: [...GENERAL_WORKSPACE_NODE_TYPES],
+    nodeSetRevision: WORKSPACE_NODE_SET_REVISION
   }
+}
+
+/**
+ * 节点集版本（2026-11-02 起）。
+ *
+ * `visibleNodeTypeIds` 是保存时的节点快照，新版本发布的节点天然不在里面——包括用户
+ * 手工挑过节点的 `custom` 配置。只靠 preset 补丁永远补不到 custom，于是表现为
+ * 「更新后节点面板里根本找不到新节点」。这里按版本号一次性把新节点补进已保存配置；
+ * 之后用户再主动隐藏，版本号已到位，不会被反复加回来。
+ */
+export const WORKSPACE_NODE_SET_REVISION = 2
+
+const NODES_ADDED_BY_REVISION: Record<number, readonly string[]> = {
+  2: ['timeline']
 }
 
 /** `null` means a legacy project: show every currently creatable node. */
@@ -70,11 +88,25 @@ export function normalizeWorkspaceProfile(value: unknown): WorkspaceProfile | nu
       'json',
       'structured',
       'iterate',
-      'code'
+      'code',
+      // 2026-11-02 时间线节点：老项目保存预设时该节点还不存在，必须随版本补入，
+      // 否则「general/all」项目升级后永远看不到新建入口。
+      'timeline'
     ])
       if (!ids.includes(type)) ids.push(type)
   } else if (presetId === 'audio' || presetId === 'video') {
     if (!ids.includes('sound-adjust')) ids.push('sound-adjust')
   }
-  return { schemaVersion: 1, presetId, visibleNodeTypeIds: ids }
+  // 按节点集版本补齐新节点（含 custom）：老配置里没有版本号时按 0 处理。
+  const revision = typeof raw.nodeSetRevision === 'number' ? raw.nodeSetRevision : 0
+  for (const [addedAt, types] of Object.entries(NODES_ADDED_BY_REVISION)) {
+    if (revision >= Number(addedAt)) continue
+    for (const type of types) if (!ids.includes(type)) ids.push(type)
+  }
+  return {
+    schemaVersion: 1,
+    presetId,
+    visibleNodeTypeIds: ids,
+    nodeSetRevision: Math.max(revision, WORKSPACE_NODE_SET_REVISION)
+  }
 }

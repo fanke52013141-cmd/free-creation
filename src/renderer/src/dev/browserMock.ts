@@ -416,6 +416,13 @@ export function installBrowserMock(): void {
       Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持时间线合成' } }),
     probeMediaMetadata: () =>
       Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持素材探测' } }),
+    indexttsDetect: () =>
+      Promise.resolve({
+        ok: true,
+        data: { ready: false, pythonPath: null, modelDir: null, reason: '浏览器演示不支持本地 IndexTTS' }
+      }),
+    indexttsSynthesize: () =>
+      Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持本地 IndexTTS' } }),
     ttsGenerate: () =>
       Promise.resolve({ ok: false, error: { code: 'MOCK', message: '浏览器演示不支持本地配音' } }),
     getLocalMediaCapabilities: () =>

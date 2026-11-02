@@ -12,6 +12,7 @@ import { ModelSelect, NoModelHint } from './shared'
 import type { NodeBodyProps, NodeSettingsProps } from '../../registry'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { AppSelect } from '../../../components/AppSelect'
+import { NumberStepper } from '../../../components/NumberStepper'
 import { projectNodeOutputs } from '../../nodeValues'
 import { SkillAgentSettings } from './SkillAgentSettings'
 
@@ -218,50 +219,53 @@ export function AiProcessSettings({ shape, editor }: NodeSettingsProps): React.J
         />
       </label>
       <div className="settings-row ai-process-number-settings">
-        <label className="opt-label" htmlFor={`ai-process-temperature-${shape.id}`}>
-          温度
-        </label>
-        <input
-          id={`ai-process-temperature-${shape.id}`}
-          type="number"
-          min="0"
-          max="2"
-          step="0.1"
-          value={config.temperature}
-          onChange={(event) => save({ temperature: Number(event.target.value) || 0 })}
+        <span className="opt-label">温度</span>
+        <NumberStepper
+          ariaLabel="温度"
+          min={0}
+          max={2}
+          step={0.1}
+          value={String(config.temperature)}
+          onChange={(next) => {
+            const value = Number(next)
+            if (Number.isFinite(value)) save({ temperature: value })
+          }}
         />
-        <label className="opt-label" htmlFor={`ai-process-tokens-${shape.id}`}>
-          最大输出
-        </label>
-        <input
-          id={`ai-process-tokens-${shape.id}`}
-          type="number"
-          min="256"
-          step="256"
-          value={config.maxTokens}
-          onChange={(event) => save({ maxTokens: Number(event.target.value) || 4096 })}
+        <span className="opt-label">最大输出</span>
+        <NumberStepper
+          ariaLabel="最大输出"
+          min={256}
+          max={32768}
+          step={256}
+          value={String(config.maxTokens)}
+          onChange={(next) => {
+            const value = Number(next)
+            // 清空输入时保留旧值，不把空串折算成 0 个 token。
+            if (next.trim() && Number.isFinite(value)) save({ maxTokens: value })
+          }}
         />
-        <label
+        <span
           className="opt-label"
-          htmlFor={`ai-process-retry-${shape.id}`}
           title="失败后自动重试次数（仅限空返回 / 坏 JSON / 网络与 5xx 等瞬时错误）；重试可能产生额外请求费用"
         >
           自动重试
-        </label>
-        <input
-          id={`ai-process-retry-${shape.id}`}
-          type="number"
-          min="0"
-          max="5"
-          value={config.retry.maxRetries}
-          onChange={(event) =>
+        </span>
+        <NumberStepper
+          ariaLabel="自动重试"
+          min={0}
+          max={5}
+          step={1}
+          value={String(config.retry.maxRetries)}
+          onChange={(next) => {
+            const value = Number(next)
+            if (!Number.isFinite(value)) return
             save({
               retry: {
-                maxRetries: Math.min(5, Math.max(0, Number(event.target.value) || 0)),
+                maxRetries: Math.min(5, Math.max(0, value)),
                 backoffMs: config.retry.backoffMs
               }
             })
-          }
+          }}
         />
       </div>
     </section>

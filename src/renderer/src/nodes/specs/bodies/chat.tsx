@@ -4,6 +4,7 @@ import { stopEventPropagation } from 'tldraw'
 import { modelsByModality, useGatewayStore } from '../../../stores/gateway'
 import { parseChat, serializeChat, type ChatData } from '../../chatData'
 import { Icon } from '../../../components/Icon'
+import { NumberStepper } from '../../../components/NumberStepper'
 import { ModelSelect, NoModelHint } from './shared'
 import type { NodeBodyProps, NodeSettingsProps } from '../../registry'
 import { useNodePanelStore } from '../../../stores/nodePanel'
@@ -90,28 +91,30 @@ export function ChatSettings({ shape, editor }: NodeSettingsProps): React.JSX.El
         />
       </label>
       <div className="settings-row ai-process-number-settings">
-        <label className="opt-label" htmlFor={`chat-temperature-${shape.id}`}>
-          温度
-        </label>
-        <input
-          id={`chat-temperature-${shape.id}`}
-          type="number"
-          min="0"
-          max="2"
-          step="0.05"
-          value={data.temperature}
-          onChange={(event) => save({ temperature: Number(event.target.value) || 0 })}
+        <span className="opt-label">温度</span>
+        <NumberStepper
+          ariaLabel="温度"
+          min={0}
+          max={2}
+          step={0.05}
+          value={String(data.temperature)}
+          onChange={(next) => {
+            const value = Number(next)
+            if (Number.isFinite(value)) save({ temperature: value })
+          }}
         />
-        <label className="opt-label" htmlFor={`chat-tokens-${shape.id}`}>
-          最大输出
-        </label>
-        <input
-          id={`chat-tokens-${shape.id}`}
-          type="number"
-          min="256"
-          step="256"
-          value={data.maxTokens}
-          onChange={(event) => save({ maxTokens: Number(event.target.value) || 4096 })}
+        <span className="opt-label">最大输出</span>
+        <NumberStepper
+          ariaLabel="最大输出"
+          min={256}
+          max={32768}
+          step={256}
+          value={String(data.maxTokens)}
+          onChange={(next) => {
+            const value = Number(next)
+            // 清空输入时保留旧值，不把空串折算成 0 个 token。
+            if (next.trim() && Number.isFinite(value)) save({ maxTokens: value })
+          }}
         />
       </div>
     </section>

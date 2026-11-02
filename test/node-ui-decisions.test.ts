@@ -1004,11 +1004,13 @@ describe('v1.2 §16.26 导入落空要有去向说明，输入上限等于引擎
       // .find() 会静默丢掉多选的其余文件，正是本轮修掉的缺陷形状。
       expect(source, file).not.toMatch(/assets\.find\(/)
     }
-    // 两个上传口共用 uploadAudio，文件导入只经过同一个筛选出口。
+    // 文件导入只经过同一个筛选出口。
+    // 2026-11-02 用户裁决：克隆节点去掉「辅助提示音」入口，只剩参考语音一个上传口；
+    // uploadAudio 的 prompt 参数保留给旧配置与网关协议，但 UI 不再调用 uploadAudio(true)。
     const tts = read(`${bodies}/tts.tsx`)
     expect(tts.match(/pickImportedAsset\(\{/g)).toHaveLength(1)
     expect(tts).toContain('uploadAudio(false)')
-    expect(tts).toContain('uploadAudio(true)')
+    expect(tts).not.toContain('uploadAudio(true)')
   })
 
   it('多出的文件说明去向并真的刷进素材库，取消选择保持静默', () => {
@@ -1149,13 +1151,15 @@ describe('v1.2 §16.28 3D 预演台：读文档真值、连线数上按钮、只
   })
 
   it('焦距与时长只有一个真值，切片时长由镜头时长夹出来', () => {
+    // 2026-11-02：两行改成统一 NumberStepper 后不再有 event.target，
+    // 但「上限取自同一常量 + 空值回退默认」这两条语义必须保留。
     expect(studio).toContain('max={DIRECTOR_FOCAL_RANGE_MM[1]}')
-    expect(studio).toContain(
-      'Math.min(DIRECTOR_FOCAL_RANGE_MM[1], Number(event.target.value) || 35)'
+    expect(studio).toMatch(
+      /Math\.min\(\s*DIRECTOR_FOCAL_RANGE_MM\[1\],\s*raw \|\| 35\s*\)/
     )
     expect(studio).toContain('max={DIRECTOR_DURATION_RANGE_SEC[1]}')
-    expect(studio).toContain(
-      'Math.min(DIRECTOR_DURATION_RANGE_SEC[1], Number(event.target.value) || 5)'
+    expect(studio).toMatch(
+      /Math\.min\(\s*DIRECTOR_DURATION_RANGE_SEC\[1\],\s*raw \|\| 5\s*\)/
     )
     // WebM 导出与界面同一上限：曾经界面 10 秒、告警 12 秒、导出又截成 10 秒。
     expect(studio).toContain('DIRECTOR_DURATION_RANGE_SEC[1] * 1000')

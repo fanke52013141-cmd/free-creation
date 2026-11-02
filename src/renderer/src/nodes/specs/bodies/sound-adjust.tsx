@@ -3,6 +3,7 @@ import { NodePrimaryButton } from '../../../canvas/NodePresentation'
 import { useState } from 'react'
 import type { NodeBodyProps, NodeSettingsProps } from '../../registry'
 import { Icon } from '../../../components/Icon'
+import { NumberStepper } from '../../../components/NumberStepper'
 import { markUndoPoint } from '../../../canvas/history'
 import { parseSoundAdjustConfig, type SoundAdjustConfig } from '@shared/sound-adjust'
 
@@ -89,37 +90,37 @@ export function SoundAdjustSettings({
       {draft.mode === 'rate' ? (
         <label className="settings-field">
           播放倍率
-          <input
-            type="number"
-            min="0.25"
-            max="4"
-            step="0.05"
+          <NumberStepper
+            ariaLabel="播放倍率"
+            min={0.25}
+            max={4}
+            step={0.05}
             value={draft.rate}
-            onChange={(event) => setDraft({ ...draft, rate: event.currentTarget.value })}
+            onChange={(next) => setDraft({ ...draft, rate: next })}
           />
         </label>
       ) : (
         <label className="settings-field">
           目标时长（秒）
-          <input
-            type="number"
-            min="0.1"
-            max="36000"
-            step="0.1"
+          <NumberStepper
+            ariaLabel="目标时长"
+            min={0.1}
+            max={36000}
+            step={0.1}
             value={draft.seconds}
-            onChange={(event) => setDraft({ ...draft, seconds: event.currentTarget.value })}
+            onChange={(next) => setDraft({ ...draft, seconds: next })}
           />
         </label>
       )}
       <label className="settings-field">
         声量（%）
-        <input
-          type="number"
-          min="0"
-          max="300"
-          step="5"
+        <NumberStepper
+          ariaLabel="声量"
+          min={0}
+          max={300}
+          step={5}
           value={draft.volume}
-          onChange={(event) => setDraft({ ...draft, volume: event.currentTarget.value })}
+          onChange={(next) => setDraft({ ...draft, volume: next })}
         />
       </label>
       {!inline && (

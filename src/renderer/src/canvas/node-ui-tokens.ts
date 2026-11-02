@@ -19,11 +19,15 @@ export const STORYBOARD_UI = {
  */
 export const TIMELINE_UI = {
   width: 880,
-  height: 420,
+  /**
+   * 默认高度按「两条轨道」算（2026-11-02 用户裁决）：
+   * 工具栏 30 + 间距 8 + 刻度尺 24 + 2×56 轨 = 186，加正文内边距与描边约 200。
+   */
+  height: 210,
   minWidth: 560,
-  minHeight: 260,
-  /** 轨道头固定宽度（不随时间轴滚动） */
-  trackHeaderWidth: 96,
+  minHeight: 188,
+  /** 轨道头固定宽度（不随时间轴滚动）；要放得下「视频 1 / 音频 1」全名 + 两个小按钮 */
+  trackHeaderWidth: 132,
   /** 单条轨道高度 */
   trackHeight: 56,
   /** 刻度尺高度 */

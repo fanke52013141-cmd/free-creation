@@ -93,15 +93,26 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
   const incomingReferences = countIncomingConnections(editor, shape.id, 'in-audio')
   const uploadedReference = Boolean(config.referenceAudioId && config.referenceAudioPath)
   const referenceCount =
-    config.backend === 'volc' ? incomingReferences + (uploadedReference ? 1 : 0) : 0
+    config.backend === 'minimax' ? 0 : incomingReferences + (uploadedReference ? 1 : 0)
+  const isLocal = config.backend === 'indextts'
+  // 本地 IndexTTS 的运行时状态；未探测到时空着，不假装可用。
+  const [localRuntime, setLocalRuntime] = useState<{
+    ready: boolean
+    pythonPath: string | null
+    modelDir: string | null
+    reason: string | null
+  } | null>(null)
+  const [localRuntimeBusy, setLocalRuntimeBusy] = useState(false)
 
-  const options = modelsByModality(providers, 'audio').filter(
-    (option) =>
-      acceptsProvider(config.backend, option.provider.specId) &&
-      (config.backend === 'minimax'
-        ? MINIMAX_ASYNC_SPEECH_MODELS.includes(option.model.id)
-        : option.model.id === 'seed-audio-1.0')
-  )
+  const options = isLocal
+    ? []
+    : modelsByModality(providers, 'audio').filter(
+        (option) =>
+          acceptsProvider(config.backend, option.provider.specId) &&
+          (config.backend === 'minimax'
+            ? MINIMAX_ASYNC_SPEECH_MODELS.includes(option.model.id)
+            : option.model.id === 'seed-audio-1.0')
+      )
   const emotionOptions = SPEECH_EMOTIONS.filter((item) =>
     isSpeechEmotionSupported(config.modelId, item.value)
   )
@@ -113,6 +124,38 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
   useEffect(() => {
     if (!providersLoaded) void loadProviders()
   }, [providersLoaded, loadProviders])
+
+  const detectLocalRuntime = async (): Promise<void> => {
+    setLocalRuntimeBusy(true)
+    try {
+      const result = await window.api.indexttsDetect()
+      setLocalRuntime(
+        result.ok
+          ? result.data
+          : { ready: false, pythonPath: null, modelDir: null, reason: result.error.message }
+      )
+    } catch (error) {
+      setLocalRuntime({
+        ready: false,
+        pythonPath: null,
+        modelDir: null,
+        reason: error instanceof Error ? error.message : String(error)
+      })
+    } finally {
+      setLocalRuntimeBusy(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!isLocal) return
+    // 推迟到下一个任务再探测：探测结果会 setState，直接在 effect 同步段调用会触发级联渲染告警。
+    const timer = setTimeout(() => {
+      void detectLocalRuntime()
+    }, 0)
+    return () => clearTimeout(timer)
+    // 只在切到本地引擎时探测一次；用户装好后可用「重新检测」按钮刷新。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLocal])
 
   useEffect(() => {
     return () => {
@@ -159,15 +202,27 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
     })
     if (!asset) return
     const extension = asset.path.slice(asset.path.lastIndexOf('.')).toLowerCase()
-    if (!['.wav', '.mp3', '.pcm', '.ogg', '.opus'].includes(extension)) {
-      toast('火山语音合成 1.0 参考音频仅支持 wav、mp3、pcm 或 ogg_opus 格式')
-      return
-    }
-    if (asset.sizeBytes > VOLC_REFERENCE_AUDIO_MAX_BYTES) {
-      toast(
-        `火山语音合成 1.0 参考音频单段不能超过 ${VOLC_REFERENCE_AUDIO_MAX_BYTES / (1024 * 1024)} MB`
-      )
-      return
+    if (isLocal) {
+      // 本地 IndexTTS 用 librosa 解码：wav/mp3/ogg/flac 稳妥；pcm 裸流先不接。
+      if (!['.wav', '.mp3', '.ogg', '.flac', '.m4a'].includes(extension)) {
+        toast('本地 IndexTTS 参考音频支持 wav、mp3、ogg、flac')
+        return
+      }
+      if (asset.sizeBytes > 50 * 1024 * 1024) {
+        toast('本地 IndexTTS 参考音频不能超过 50 MB')
+        return
+      }
+    } else {
+      if (!['.wav', '.mp3', '.pcm', '.ogg', '.opus'].includes(extension)) {
+        toast('火山语音合成 1.0 参考音频仅支持 wav、mp3、pcm 或 ogg_opus 格式')
+        return
+      }
+      if (asset.sizeBytes > VOLC_REFERENCE_AUDIO_MAX_BYTES) {
+        toast(
+          `火山语音合成 1.0 参考音频单段不能超过 ${VOLC_REFERENCE_AUDIO_MAX_BYTES / (1024 * 1024)} MB`
+        )
+        return
+      }
     }
     updateConfig({
       referenceAudioId: asset.id,
@@ -213,7 +268,8 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
       sampleRate: defaultSpeechSampleRate(backend, format),
       // 供应商与协议强绑定：换协议必须重选，不能把 MiniMax 实例留给火山通道。
       providerId: '',
-      modelId: backend === 'volc' ? 'seed-audio-1.0' : 'speech-2.8-hd',
+      // 本地引擎没有云模型，留空避免被当成「未绑定模型」。
+      modelId: backend === 'indextts' ? '' : backend === 'volc' ? 'seed-audio-1.0' : 'speech-2.8-hd',
       // 两家供应商的音色 ID 不兼容，切换时清空以免把旧 ID 发给另一家。
       voiceId: ''
     })
@@ -253,13 +309,18 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
   }
 
   const hasOutput = Boolean(shape.props.mediaPath)
-  const canGenerate =
-    Boolean(draft.trim()) &&
-    options.some(
-      (option) => option.provider.id === config.providerId && option.model.id === config.modelId
-    ) &&
-    draft.length <= limit &&
-    referenceCount <= VOLC_REFERENCE_AUDIO_MAX_COUNT
+  const canGenerate = isLocal
+    ? Boolean(draft.trim()) &&
+      draft.length <= limit &&
+      Boolean(config.referenceAudioId || incomingReferences > 0) &&
+      localRuntime?.ready === true &&
+      !localRuntimeBusy
+    : Boolean(draft.trim()) &&
+      options.some(
+        (option) => option.provider.id === config.providerId && option.model.id === config.modelId
+      ) &&
+      draft.length <= limit &&
+      referenceCount <= VOLC_REFERENCE_AUDIO_MAX_COUNT
 
   return (
     <div className="node-tts node-speech">
@@ -282,66 +343,96 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
             ))}
           </AppSelect>
         </div>
-        <div className="tts-options speech-field-row">
-          <label className="opt-label">模型</label>
-          <AppSelect
-            className="gen-select"
-            aria-label="模型"
-            value={config.providerId ? `${config.providerId}::${config.modelId}` : ''}
-            onPointerDown={(e) => e.stopPropagation()}
-            onChange={(e) => {
-              const selected = options.find((item) => item.key === e.target.value)
-              if (selected) {
-                updateConfig({
-                  providerId: selected.provider.id,
-                  modelId: selected.model.id,
-                  emotion: isSpeechEmotionSupported(selected.model.id, config.emotion)
-                    ? config.emotion
-                    : ''
-                })
-              }
-            }}
-          >
-            <option value="">{providersLoaded ? '选择语音模型…' : '加载模型中…'}</option>
-            {options.map((item) => (
-              <option key={item.key} value={item.key}>
-                {item.label}
-              </option>
-            ))}
-          </AppSelect>
-        </div>
-        {providersLoaded && options.length === 0 && (
-          <button
-            className="btn-ghost small"
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onClick={(e) => {
-              e.stopPropagation()
-              void openSettings()
-            }}
-          >
-            去配置该协议的供应商
-          </button>
+        {isLocal ? (
+          <div className="speech-local-runtime" data-testid="indextts-runtime">
+            <label className="opt-label">本地运行时</label>
+            <span
+              className={`node-wiring ${localRuntime?.ready ? 'ok' : 'warn'}`}
+              title={localRuntime?.reason ?? undefined}
+            >
+              {localRuntimeBusy
+                ? '检测中…'
+                : localRuntime?.ready
+                  ? '已就绪 · IndexTTS 2.5'
+                  : (localRuntime?.reason ?? '尚未检测')}
+            </span>
+            <button
+              className="btn-ghost small speech-local-runtime-detect"
+              onPointerDown={(e) => stopEventPropagation(e)}
+              onClick={(e) => {
+                e.stopPropagation()
+                void detectLocalRuntime()
+              }}
+            >
+              重新检测
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="tts-options speech-field-row">
+              <label className="opt-label">模型</label>
+              <AppSelect
+                className="gen-select"
+                aria-label="模型"
+                value={config.providerId ? `${config.providerId}::${config.modelId}` : ''}
+                onPointerDown={(e) => e.stopPropagation()}
+                onChange={(e) => {
+                  const selected = options.find((item) => item.key === e.target.value)
+                  if (selected) {
+                    updateConfig({
+                      providerId: selected.provider.id,
+                      modelId: selected.model.id,
+                      emotion: isSpeechEmotionSupported(selected.model.id, config.emotion)
+                        ? config.emotion
+                        : ''
+                    })
+                  }
+                }}
+              >
+                <option value="">{providersLoaded ? '选择语音模型…' : '加载模型中…'}</option>
+                {options.map((item) => (
+                  <option key={item.key} value={item.key}>
+                    {item.label}
+                  </option>
+                ))}
+              </AppSelect>
+            </div>
+            {providersLoaded && options.length === 0 && (
+              <button
+                className="btn-ghost small"
+                onPointerDown={(e) => stopEventPropagation(e)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void openSettings()
+                }}
+              >
+                去配置该协议的供应商
+              </button>
+            )}
+          </>
         )}
       </div>
 
       {/* ── 音色：用户强调音色与 ID 是最重要的信息 ── */}
-      <div className="tts-section speech-voice-section">
-        <NodeSectionTitle>音色</NodeSectionTitle>
-        <input
-          className="gen-input"
-          aria-label="音色 ID"
-          spellCheck={false}
-          value={config.voiceId}
-          placeholder={config.backend === 'minimax' ? '音色 ID' : 'speaker 音色 ID（可选）'}
-          onPointerDown={(e) => e.stopPropagation()}
-          onChange={(e) => updateConfig({ voiceId: e.target.value })}
-        />
-      </div>
+      {!isLocal && (
+        <div className="tts-section speech-voice-section">
+          <NodeSectionTitle>音色</NodeSectionTitle>
+          <input
+            className="gen-input"
+            aria-label="音色 ID"
+            spellCheck={false}
+            value={config.voiceId}
+            placeholder={config.backend === 'minimax' ? '音色 ID' : 'speaker 音色 ID（可选）'}
+            onPointerDown={(e) => e.stopPropagation()}
+            onChange={(e) => updateConfig({ voiceId: e.target.value })}
+          />
+        </div>
+      )}
 
-      {/* ── 火山引擎语音合成 1.0 可选参考音频 ── */}
-      {config.backend === 'volc' && (
+      {/* ── 参考音频：本地 IndexTTS 必填；火山可选 ── */}
+      {config.backend !== 'minimax' && (
         <div className="tts-section tts-reference-section speech-reference-section">
-          <NodeSectionTitle>参考音频（可选）</NodeSectionTitle>
+          <NodeSectionTitle>{isLocal ? '参考音频（必填）' : '参考音频（可选）'}</NodeSectionTitle>
           {uploadedReference ? (
             <div className="tts-ref-player">
               <button
@@ -384,7 +475,7 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
             <button
               className="tts-upload-btn"
               type="button"
-              disabled={referenceCount >= VOLC_REFERENCE_AUDIO_MAX_COUNT}
+              disabled={!isLocal && referenceCount >= VOLC_REFERENCE_AUDIO_MAX_COUNT}
               onPointerDown={(e) => stopEventPropagation(e)}
               onClick={(e) => {
                 e.stopPropagation()
@@ -394,13 +485,17 @@ export function SpeechBody({ shape, openPreview }: NodeBodyProps): React.JSX.Ele
               上传参考音频
             </button>
           )}
-          <small className="tts-upload-hint">WAV / MP3 / PCM / OGG OPUS · ≤10 MB</small>
-          <span className={`node-wiring speech-reference-status ${referenceCount > 0 ? 'ok' : ''}`}>
-            {referenceCount > 0
-              ? `使用 ${incomingReferences} 段连线音频${uploadedReference ? '和 1 段本节点上传音频' : ''}`
-              : '未设置参考音频'}
-          </span>
-          {referenceCount > VOLC_REFERENCE_AUDIO_MAX_COUNT && (
+          <small className="tts-upload-hint">
+            {isLocal ? 'WAV / MP3 / OGG / FLAC · ≤50 MB · 建议 5–10 秒' : 'WAV / MP3 / PCM / OGG OPUS · ≤10 MB'}
+          </small>
+          {!isLocal && (
+            <span className={`node-wiring speech-reference-status ${referenceCount > 0 ? 'ok' : ''}`}>
+              {referenceCount > 0
+                ? `使用 ${incomingReferences} 段连线音频${uploadedReference ? '和 1 段本节点上传音频' : ''}`
+                : '未设置参考音频'}
+            </span>
+          )}
+          {!isLocal && referenceCount > VOLC_REFERENCE_AUDIO_MAX_COUNT && (
             <div className="gen-capability-note error" role="alert">
               最多使用 {VOLC_REFERENCE_AUDIO_MAX_COUNT} 段参考音频，请减少连线数量。
             </div>

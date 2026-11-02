@@ -15,14 +15,15 @@ import type { PortType } from './types'
 export const TIMELINE_SCHEMA_VERSION = 1
 
 /** 轨道种类：视频轨承载画面（图片/视频），音频轨承载声音。 */
-export type TimelineTrackKind = 'video' | 'audio'
-
-/** 片段种类决定它占用哪类轨道与合成方式。 */
+/** 片段种类决定合成方式（画面 / 图片静帧 / 音频）；轨道本身不绑定类型。 */
 export type TimelineClipKind = 'video' | 'image' | 'audio'
 
+/**
+ * 轨道是「通用轨道」：不区分视频轨/音频轨，放进去什么素材就按素材类型处理
+ * （视频/图片走画面与静帧，音频走声音）。2026-11-02 用户裁决：不要给轨道规定类型。
+ */
 export interface TimelineTrack {
   id: string
-  kind: TimelineTrackKind
   name: string
   muted: boolean
   locked: boolean
@@ -81,13 +82,18 @@ export function timelineId(prefix: string): string {
 }
 
 export function createEmptyTimeline(): TimelineData {
+  // 2026-11-02 用户裁决：默认两条通用轨道（可放任何素材），高度按两条轨道算。
+  const tracks: TimelineTrack[] = [1, 2].map((index) => ({
+    id: timelineId('t'),
+    name: `轨道 ${index}`,
+    muted: false,
+    locked: false,
+    visible: true
+  }))
   return {
     schemaVersion: TIMELINE_SCHEMA_VERSION,
     frameRate: DEFAULT_TIMELINE_FRAME_RATE,
-    tracks: [
-      { id: timelineId('t'), kind: 'video', name: '视频 1', muted: false, locked: false, visible: true },
-      { id: timelineId('t'), kind: 'audio', name: '音频 1', muted: false, locked: false, visible: true }
-    ],
+    tracks,
     clips: []
   }
 }
@@ -105,11 +111,10 @@ const asString = (value: unknown, fallback = ''): string =>
   typeof value === 'string' ? value : fallback
 
 const CLIP_KINDS: readonly TimelineClipKind[] = ['video', 'image', 'audio']
-const TRACK_KINDS: readonly TimelineTrackKind[] = ['video', 'audio']
 
-/** 片段种类 → 允许放它的轨道种类。 */
-export function trackKindForClip(kind: TimelineClipKind): TimelineTrackKind {
-  return kind === 'audio' ? 'audio' : 'video'
+/** 画面类片段：同一轨道内不允许重叠（重叠语义不明确）。 */
+function isVisualKind(kind: TimelineClipKind): boolean {
+  return kind === 'video' || kind === 'image'
 }
 
 /**
@@ -125,13 +130,10 @@ export function normalizeTimeline(raw: unknown): TimelineData {
     if (!isObject(item)) continue
     const id = asString(item.id).trim()
     if (!id || tracks.some((track) => track.id === id)) continue
-    const kind = TRACK_KINDS.includes(item.kind as TimelineTrackKind)
-      ? (item.kind as TimelineTrackKind)
-      : 'video'
     tracks.push({
       id,
-      kind,
-      name: asString(item.name, kind === 'video' ? '视频轨' : '音频轨'),
+      // 旧数据里的 kind（视频轨/音频轨）不再参与判定：轨道是通用的，读到就丢弃。
+      name: asString(item.name, `轨道 ${tracks.length + 1}`),
       muted: asBool(item.muted, false),
       locked: asBool(item.locked, false),
       visible: asBool(item.visible, true)
@@ -150,7 +152,6 @@ export function normalizeTimeline(raw: unknown): TimelineData {
     const kind = CLIP_KINDS.includes(item.kind as TimelineClipKind)
       ? (item.kind as TimelineClipKind)
       : 'video'
-    if (trackKindForClip(kind) !== track.kind) continue
     const sourceDurationMs = Math.max(0, asInt(item.sourceDurationMs, 0))
     const durationMs = Math.max(TIMELINE_LIMITS.minClipMs, asInt(item.durationMs, 1000))
     const inMs = Math.max(0, asInt(item.inMs, 0))
@@ -228,18 +229,27 @@ export function clipsOfTrack(data: TimelineData, trackId: string): TimelineClip[
   return sortClips(data.clips.filter((clip) => clip.trackId === trackId))
 }
 
-/** 同轨冲突检查：视频轨不允许重叠，音频轨允许（混音）。 */
+/**
+ * 同轨冲突检查：画面片段（视频/图片）不允许重叠；音频片段允许重叠（混音）。
+ * 轨道本身不再区分类型，所以判定依据是「候选片段的种类」，不是轨道。
+ */
 export function overlappingClips(
   data: TimelineData,
-  candidate: { trackId: string; startMs: number; durationMs: number },
+  candidate: {
+    trackId: string
+    startMs: number
+    durationMs: number
+    kind?: TimelineClipKind
+  },
   ignoreClipId?: string
 ): TimelineClip[] {
-  const track = findTrack(data, candidate.trackId)
-  if (!track || track.kind === 'audio') return []
+  if (!findTrack(data, candidate.trackId)) return []
+  if (candidate.kind && !isVisualKind(candidate.kind)) return []
   const start = candidate.startMs
   const end = candidate.startMs + candidate.durationMs
   return data.clips.filter((clip) => {
     if (clip.trackId !== candidate.trackId) return false
+    if (!isVisualKind(clip.kind)) return false
     if (ignoreClipId && clip.id === ignoreClipId) return false
     return clip.startMs < end && clipEndMs(clip) > start
   })
@@ -251,19 +261,13 @@ export type TimelineEditResult =
 
 // ── 轨道操作 ──
 
-export function addTrack(
-  data: TimelineData,
-  kind: TimelineTrackKind,
-  name?: string
-): TimelineEditResult {
+export function addTrack(data: TimelineData, name?: string): TimelineEditResult {
   if (data.tracks.length >= TIMELINE_LIMITS.maxTracks) {
     return { ok: false, reason: `最多 ${TIMELINE_LIMITS.maxTracks} 条轨道` }
   }
-  const index = data.tracks.filter((track) => track.kind === kind).length + 1
   const track: TimelineTrack = {
     id: timelineId('t'),
-    kind,
-    name: name?.trim() || `${kind === 'video' ? '视频' : '音频'} ${index}`,
+    name: name?.trim() || `轨道 ${data.tracks.length + 1}`,
     muted: false,
     locked: false,
     visible: true
@@ -332,9 +336,6 @@ export function addClip(data: TimelineData, input: AddClipInput): TimelineEditRe
   }
   const track = findTrack(data, input.trackId)
   if (!track) return { ok: false, reason: '目标轨道不存在' }
-  if (trackKindForClip(input.kind) !== track.kind) {
-    return { ok: false, reason: input.kind === 'audio' ? '音频片段只能放到音频轨' : '画面片段只能放到视频轨' }
-  }
   const sourceDurationMs = Math.max(0, Math.round(input.sourceDurationMs))
   const inMs = Math.max(0, Math.round(input.inMs ?? 0))
   if (input.kind !== 'image' && sourceDurationMs > 0 && inMs >= sourceDurationMs) {
@@ -390,9 +391,14 @@ export function moveClip(
   const trackId = target.trackId ?? clip.trackId
   const track = findTrack(data, trackId)
   if (!track) return { ok: false, reason: '目标轨道不存在' }
-  if (trackKindForClip(clip.kind) !== track.kind) return { ok: false, reason: '不能放到不同类别的轨道' }
   const startMs = Math.max(0, Math.round(target.startMs))
-  if (overlappingClips(data, { trackId, startMs, durationMs: clip.durationMs }, clipId).length > 0) {
+  if (
+    overlappingClips(
+      data,
+      { trackId, startMs, durationMs: clip.durationMs, kind: clip.kind },
+      clipId
+    ).length > 0
+  ) {
     return { ok: false, reason: '与同轨片段重叠' }
   }
   return {

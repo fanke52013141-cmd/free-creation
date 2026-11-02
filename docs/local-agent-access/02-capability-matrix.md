@@ -121,7 +121,7 @@ A1.4首包接续：[查询交付台账](08-a1-4-read-only-queries.md)。`library
 
 节点标识、版本和可创建范围以 [共享节点清单](../../src/shared/types/index.ts) 和 [注册表](../../src/renderer/src/nodes/specs/index.tsx) 为准。下表的“结构化适配”均为 A2 目标：列举、读取契约与安全摘要、创建、更新 config/text、端口连线和图校验。`执行`描述的是建议开放阶段，并不表示当前对外可执行。
 
-**31个节点的外部动作目前全部为planned，登记完成不等于可调用。** 实施账本按 `discover/read/create/update/connect/execute/result/export` × transport 记录独立状态、证据链接和不适用原因；表中合并展示的A2目标不能代替动作级验收。资产节点可查询/投影而无需创建执行任务；没有对应端口或产物的动作明确不适用。
+**32个节点的外部动作目前全部为planned，登记完成不等于可调用。** 实施账本按 `discover/read/create/update/connect/execute/result/export` × transport 记录独立状态、证据链接和不适用原因；表中合并展示的A2目标不能代替动作级验收。资产节点可查询/投影而无需创建执行任务；没有对应端口或产物的动作明确不适用。
 
 | 节点              | 标签      | 结构化适配与执行建议         | 当前内部 Flow    | 外部限制                                                               |
 | ----------------- | --------- | ---------------------------- | ---------------- | ---------------------------------------------------------------------- |
@@ -138,6 +138,7 @@ A1.4首包接续：[查询交付台账](08-a1-4-read-only-queries.md)。`library
 | `video-clip@5`    | 视频截取  | A2 读写；A3 媒体处理         | 无               | 起止范围/多输出受契约约束                                              |
 | `video-depth@1`   | 深度视频  | A2 读写；A3 本地异步任务     | 无               | 本地 Python/CUDA/ffmpeg 安装状态、资源预算、取消清理与保存恢复另验收   |
 | `video-clay@1`    | 白模视频  | A2 读写；A3 本地异步任务     | 无               | 本地 Python/CUDA/ffmpeg 安装状态、资源预算、取消清理与保存恢复另验收   |
+| `timeline@1`      | 轨道线    | A2 读写；仅手动执行          | 未适配（无 target） | 成片可作为固定资产/审核输入（`out-video` 走本地媒体固化）；Agent 自动调度未声明，`flowTargetContract` 返回 null → 运行期显式 `FLOW_TYPE_UNSUPPORTED`/`AGENT_TARGET_UNSUPPORTED` |
 | `audio@3`         | 音频      | A2 读写；媒体接入 A3         | 无               | 仅媒体 ID 与安全摘要                                                   |
 | `sound-adjust@1`  | 声音调整  | A2 读写；A3 媒体处理         | 无               | exclusiveGroup 输入与媒体输出校验                                      |
 | `file@2`          | 文件      | A2 读写；受控接入 A3         | 无               | MIME/大小/路径白名单；不解析任意可执行文件                             |
@@ -159,7 +160,7 @@ A1.4首包接续：[查询交付台账](08-a1-4-read-only-queries.md)。`library
 
 当前 Flow target 共九种：`processor@1`、`image-gen@3`、`image-edit@2`、`video@7`、`speech@4`、`tts@4`、`image-crop@2`、`image-split@3`、`code@3`（限单参数单输出形态），其输入和输出由 [video-adapter.ts](../../src/shared/agent-flow/video-adapter.ts) 固定，裁剪/拆图配置在命令准入处校验。接入 A3 必须先复用或抽取同等的输入固定、内容哈希、配置限制、占用、命令去重与修订检查，不能把这九个 target 的存在解释为所有节点已经“Agent 可调度”。
 
-`script`、`video-audio`、`vocal-separate`、`group`、`compose` 是历史兼容类型：只能通过通用的历史项目读取和受控迁移保留；新建、重写和新执行入口均不开放。它们不计入 31 个 Active 节点覆盖率分母，但其读取迁移应有独立兼容测试。
+`script`、`video-audio`、`vocal-separate`、`group`、`compose` 是历史兼容类型：只能通过通用的历史项目读取和受控迁移保留；新建、重写和新执行入口均不开放。它们不计入 32 个 Active 节点覆盖率分母，但其读取迁移应有独立兼容测试。
 
 ## 4. transport 与工具目录
 
@@ -197,7 +198,7 @@ A1.4首包接续：[查询交付台账](08-a1-4-read-only-queries.md)。`library
 | 阶段 | 必须验证的用户路径                                                                                       | 必须验证的失败/安全路径                                                                      |
 | ---- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | A1   | Agent 列项目 → 新建 → 打开语义 DTO → 更新元数据 → 保存重开 → 导出；诊断包可查到安全关联                  | 重试不重复创建；版本冲突；导出失败清理临时文件；API Key/未授权路径不进入结果，正文不进入诊断 |
-| A2   | Agent 枚举 31 节点 → 读取每个契约 → 创建/更新/连线/保存重开；确定性节点产生可连接结果                    | 非 Active/legacy 新建拒绝；schema/基数/exclusiveGroup 拒绝；不合法边零部分提交               |
+| A2   | Agent 枚举 32 节点 → 读取每个契约 → 创建/更新/连线/保存重开；确定性节点产生可连接结果                    | 非 Active/legacy 新建拒绝；schema/基数/exclusiveGroup 拒绝；不合法边零部分提交               |
 | A3   | 对已适配模型节点提交固定输入 → `accepted` → 查询 → 成果资产/端口投影 → 项目重开；审核/任务沿既有协议继续 | 取消、供应商超时、unknown、命令冲突、语义修订冲突、重复 operationId；不会重放副作用          |
 | A4   | 导演台人工发布、代码 sandbox、循环恢复及可选 HTTP 分别完成专项路径                                       | 删除确认失效、sandbox 越权、网络越权、localhost Origin/令牌/DNS rebinding 防护               |
 

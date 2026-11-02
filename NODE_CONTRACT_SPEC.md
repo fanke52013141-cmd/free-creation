@@ -562,17 +562,23 @@ interface NodeValuePacket {
 伪装为首尾帧硬约束。执行器必须把真实 `mediaId` 交给网关；网关要么如实提交，要么返回
 明确的供应商能力错误，不能静默忽略任何已连接的参考端口。
 
-### 8.3 时间线（`timeline`）与自由尺寸节点
+### 8.3 轨道线（`timeline`）与自由尺寸节点
 
-时间线是 2026-11-02 新增的复合编辑节点（contractVersion 1），用于把图片、视频、音频摆到多轨
-时间线上，分割拖动后合成为一条成片。它不属于 §8.1 的 3D 预演台，也不复用导演台的发布语义。
+轨道线是 2026-11-02 新增的复合编辑节点（contractVersion 1），用于把图片、视频、音频摆到多条
+轨道上，分割拖动后合成为一条成片。它不属于 §8.1 的 3D 预演台，也不复用导演台的发布语义。
 
 **尺寸策略**：`NodeTypeSpec.sizePolicy` 有三档——`standard`（缺省，340×260 与手动高度档位）、
-`content`（分镜板：宽高随内容自适应）、`free`（时间线：默认 880×420，宽高完全由用户控制）。
+`content`（分镜板：宽高随内容自适应）、`free`（轨道线：默认 880×210，宽高完全由用户控制）。
 `content`/`free` 节点都豁免旧尺寸迁移与高度夹取；新增节点需要非常规尺寸时必须声明策略，
 不得在 `NodeCardShape.onResize` 或 `NodeCardView.fitHeight` 里再加按类型判断的白名单。
 
-**数据真值**：时间线内容存放在 `props.text` 的 JSON（`schemaVersion=1`，字段见
+**轨道语义（2026-11-02 用户裁决）**：轨道是**通用轨道**，不区分视频轨/音频轨——同一轨道可以放
+图片、视频、音频，合成时按**片段自己的 kind** 分流（画面/静帧进画面轨，音频进混音）。因此：
+`TimelineTrack` 没有 `kind` 字段（旧数据里的 `kind` 读入即丢弃），`addTrack()` 不再接收类型；
+同轨重叠约束只针对画面片段（视频/图片），音频片段允许重叠（混音）。默认两条通用轨道，
+默认高度按「工具栏 + 刻度尺 + 两条轨道」计算（880×210）。
+
+**数据真值**：轨道线内容存放在 `props.text` 的 JSON（`schemaVersion=1`，字段见
 `src/shared/timeline.ts`），不新增 tldraw shape prop。`props.config` 只放渲染配置
 （`render.width/render.height`，缺省 1920×1080）。片段的媒体引用必须是独立字符串字段
 `mediaId` / `mediaPath`，否则项目包导入的重映射（`src/shared/media-reference-remap.ts`）命中不到。

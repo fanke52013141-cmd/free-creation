@@ -1724,8 +1724,9 @@ button {
 }
 
 .contract-tabs button {
-  min-height: 50px;
-  padding: 7px 2px;
+  /* 2026-11-02 用户裁决：分页改为顶部横向一行后不再需要竖排 50px 的点击高度。 */
+  min-height: 32px;
+  padding: 6px 8px;
   color: var(--muted, #9aa4b2);
   font-size: 11px;
   font-weight: 600;

@@ -10,6 +10,7 @@ import {
 } from '@shared/skill-agent'
 import './skill-agent-settings.css'
 import { Icon } from '../../../components/Icon'
+import { NumberStepper } from '../../../components/NumberStepper'
 import { parseJsonObj } from '@shared/engine/helpers'
 import type { NodeSettingsProps } from '../../registry'
 
@@ -280,17 +281,19 @@ export function SkillAgentSettings({
       )}
       <label className="settings-row">
         最多执行步数
-        <input
-          type="number"
+        <NumberStepper
+          ariaLabel="最多执行步数"
           min={1}
           max={12}
-          value={maxSteps}
-          onChange={(event) =>
-            save({
-              skills: selected,
-              maxSteps: Math.min(12, Math.max(1, Number(event.target.value) || 6))
-            })
-          }
+          step={1}
+          value={String(maxSteps)}
+          onChange={(next) => {
+            const parsed = Number(next)
+            // 空串沿用原来的默认上限 6，不把清空折算成 1。
+            const steps = next.trim() ? parsed : 6
+            if (!Number.isFinite(steps)) return
+            save({ skills: selected, maxSteps: Math.min(12, Math.max(1, steps)) })
+          }}
         />
       </label>
       {error && <p role="alert">{error}</p>}

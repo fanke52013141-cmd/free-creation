@@ -7,6 +7,7 @@ import { stopEventPropagation, useEditor, useValue } from 'tldraw'
 import type { NodeBodyProps } from '../../registry'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { AppSelect } from '../../../components/AppSelect'
+import { NumberStepper } from '../../../components/NumberStepper'
 import { deriveGraph, readConnectedNodeInputs } from '../../../canvas/graph'
 import {
   parseIterate,
@@ -177,12 +178,16 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
         <div className="ai-row ai-row-num">
           <label title="只处理列表前 N 项，0 表示不限">
             <span className="ai-row-label">上限</span>
-            <input
-              type="number"
-              min="0"
-              value={data.limit}
-              onPointerDown={(e) => stopEventPropagation(e)}
-              onChange={(e) => updateConfig({ ...data, limit: Number(e.target.value) || 0 })}
+            <NumberStepper
+              ariaLabel="上限"
+              min={0}
+              max={100000}
+              step={1}
+              value={String(data.limit)}
+              onChange={(next) => {
+                const value = Number(next)
+                if (Number.isFinite(value)) updateConfig({ ...data, limit: value })
+              }}
             />
           </label>
         </div>
@@ -232,13 +237,16 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
             <span className="ai-row-label" title="单项失败后额外执行几次，用尽仍失败才跳过">
               重试
             </span>
-            <input
-              type="number"
-              min="0"
-              max="10"
-              value={data.maxRetries}
-              onPointerDown={(e) => stopEventPropagation(e)}
-              onChange={(e) => updateConfig({ ...data, maxRetries: Number(e.target.value) || 0 })}
+            <NumberStepper
+              ariaLabel="重试"
+              min={0}
+              max={10}
+              step={1}
+              value={String(data.maxRetries)}
+              onChange={(next) => {
+                const value = Number(next)
+                if (Number.isFinite(value)) updateConfig({ ...data, maxRetries: value })
+              }}
             />
           </label>
         )}
@@ -249,15 +257,16 @@ export function IterateBody({ shape }: NodeBodyProps): React.JSX.Element {
           >
             并行
           </span>
-          <input
-            type="number"
-            min="1"
-            max="4"
-            value={data.concurrency}
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onChange={(e) =>
-              updateConfig({ ...data, concurrency: Number(e.target.value) || 1 })
-            }
+          <NumberStepper
+            ariaLabel="并行"
+            min={1}
+            max={4}
+            step={1}
+            value={String(data.concurrency)}
+            onChange={(next) => {
+              const value = Number(next)
+              if (Number.isFinite(value)) updateConfig({ ...data, concurrency: value })
+            }}
           />
         </label>
       </div>

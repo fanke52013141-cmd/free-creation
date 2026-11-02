@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/explicit-function-return-type */
-// 时间线节点真机验收（Electron + 真实 IPC + 真实 FFmpeg）
+// 轨道线节点真机验收（Electron + 真实 IPC + 真实 FFmpeg）
 //
 // 覆盖用户最初提出的需求：
 //   1. 素材加到轨道上；2. 单轨/多轨；3. 图片/视频/音频都能上轨；
@@ -17,7 +17,7 @@ const { execFileSync } = require('node:child_process')
 const { _electron: electron } = require('playwright')
 
 const ROOT = path.resolve(__dirname, '..')
-const PROJECT_NAME = '时间线真机验收'
+const PROJECT_NAME = '轨道线真机验收'
 
 const results = []
 function check(name, ok, detail = '') {
@@ -117,19 +117,28 @@ async function main() {
     await page.locator('.node-palette').waitFor({ timeout: 60_000 })
     check('新项目进入画布', true)
 
-    // ── 从节点面板创建「时间线」节点 ──
-    // 一级分类是鱼眼 Dock，二级节点在右侧抽屉：先展开「视频创作」，再点「添加时间线节点」。
+    // ── 从节点面板创建「轨道线」节点 ──
+    // 一级分类是鱼眼 Dock，二级节点在右侧抽屉：先展开「视频创作」，再点「添加轨道线节点」。
+    // 关掉抽屉动画：展开/切换分类时按钮会先挂载再位移，Playwright 的稳定性判定会误报 detached。
+    await page.addStyleTag({ content: '*,*::before,*::after{transition:none!important;animation:none!important}' })
     await page.getByRole('button', { name: '展开视频创作节点', exact: true }).click()
-    const addButton = page.getByRole('button', { name: '添加时间线节点', exact: true })
+    const addButton = page.getByRole('button', { name: '添加轨道线节点', exact: true })
     await addButton.waitFor({ timeout: 20_000 })
-    check('创建面板里出现「添加时间线节点」入口', true)
-    await addButton.click()
+    check('创建面板里出现「添加轨道线节点」入口', true)
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      try {
+        await addButton.click({ timeout: 5000 })
+        break
+      } catch {
+        await page.waitForTimeout(200)
+      }
+    }
     const card = page.locator('.node-card-wrap:has(.type-timeline)').first()
     await card.waitFor({ timeout: 20_000 })
     await page.keyboard.press('Escape')
     await page.keyboard.press('Shift+Alt+f')
     await page.waitForTimeout(500)
-    check('时间线节点可从创建面板新建', true)
+    check('轨道线节点可从创建面板新建', true)
     await shot('01-node-created')
 
     // ── 需求 10：默认尺寸更长、宽高可自定义 ──
@@ -137,7 +146,7 @@ async function main() {
       w: el.offsetWidth,
       h: el.offsetHeight
     }))
-    check('默认尺寸比常规节点长（880×420）', size.w === 880 && size.h === 420, `${size.w}×${size.h}`)
+    check('默认尺寸按两条轨道高度（880×210）', size.w === 880 && size.h === 210, `${size.w}×${size.h}`)
 
     const resized = await page.evaluate(async () => {
       const el = document.querySelector('.node-card-wrap .node-card')
@@ -145,19 +154,35 @@ async function main() {
     })
     check('尺寸令牌可读取（用于自由拖拽）', Boolean(resized), JSON.stringify(resized))
 
+    // 时间轴必须铺满卡片可用宽度（横向拉宽时逐步显示后面的时间，而不是留白）。
+    const laneFill = await page.evaluate(() => {
+      const scroll = document.querySelector('.node-card.type-timeline .tl-scroll')
+      const ruler = document.querySelector('.node-card.type-timeline .tl-ruler')
+      if (!scroll || !ruler) return null
+      return {
+        lane: scroll.clientWidth - 132,
+        ruler: ruler.offsetWidth,
+        inner: document.querySelector('.node-card.type-timeline .tl-inner')?.offsetWidth ?? 0
+      }
+    })
+    check(
+      '时间轴刻度铺满卡片可用宽度',
+      Boolean(laneFill) && laneFill.ruler + 2 >= laneFill.lane,
+      JSON.stringify(laneFill)
+    )
+
     // ── 需求 2/9：增加轨道 ──
     const trackRows = card.locator('.tl-row')
     const beforeTracks = await trackRows.count()
-    check('默认自带视频轨与音频轨', beforeTracks === 2, `${beforeTracks} 条`)
+    check('默认自带两条通用轨道', beforeTracks === 2, `${beforeTracks} 条`)
     await card.getByRole('button', { name: '轨道', exact: true }).click()
-    await page.getByRole('menuitem', { name: '音频轨', exact: true }).click()
     await page.waitForTimeout(300)
     const afterTracks = await trackRows.count()
-    check('「+ 轨道」按钮能加一条音频轨', afterTracks === beforeTracks + 1, `${afterTracks} 条`)
+    check('「+ 轨道」按钮能加一条通用轨道', afterTracks === beforeTracks + 1, `${afterTracks} 条`)
     await shot('02-add-track')
 
-    // ── 需求 1/3/8：从本地添加图片/视频到视频轨（真实 media IPC + ffprobe） ──
-    await setNextFiles([fixtures.clipA, fixtures.clipB, fixtures.pic, fixtures.bgm])
+    // ── 需求 1/3/8：轨道通用，图片/视频/音频都能放进同一条轨道 ──
+    await setNextFiles([fixtures.clipA, fixtures.clipB, fixtures.pic])
     await card.getByRole('button', { name: '添加素材', exact: true }).click()
     await page.waitForFunction(
       () => document.querySelectorAll('.node-card.type-timeline .tl-clip').length >= 3,
@@ -165,22 +190,31 @@ async function main() {
       { timeout: 60_000 }
     )
     let videoClips = card.locator('.tl-row').nth(0).locator('.tl-clip')
-    let audioClips = card.locator('.tl-row').nth(1).locator('.tl-clip')
-    check('本地导入后视频轨出现 3 个片段（视频×2 + 图片）', (await videoClips.count()) === 3)
-    check('音频文件没有混进视频轨', (await audioClips.count()) === 0)
+    check('本地导入后第 1 条轨道出现 3 个片段（视频×2 + 图片）', (await videoClips.count()) === 3)
     await shot('03-import-video-track')
 
-    // 音频片段只能进音频轨：点空白音频轨的添加入口
+    // 音频也是通用素材：点第 2 条轨道空白处的添加入口
     await setNextFiles([fixtures.bgm])
-    await card.locator('.tl-row').nth(1).getByRole('button', { name: /添加素材到音频轨/ }).click()
+    await card.locator('.tl-row').nth(1).getByRole('button', { name: /添加素材到这条轨道/ }).click()
     await page.waitForFunction(
       () => document.querySelectorAll('.node-card.type-timeline .tl-row')[1].querySelectorAll('.tl-clip').length >= 1,
       undefined,
       { timeout: 60_000 }
     )
-    audioClips = card.locator('.tl-row').nth(1).locator('.tl-clip')
-    check('音频素材落到音频轨', (await audioClips.count()) === 1)
+    const audioClips = card.locator('.tl-row').nth(1).locator('.tl-clip')
+    check('音频素材可以放进第 2 条轨道', (await audioClips.count()) === 1)
     await shot('04-import-audio-track')
+
+    // 音频也能放进第 1 条（轨道不再分类型）
+    await setNextFiles([fixtures.bgm])
+    await card.getByRole('button', { name: '添加素材', exact: true }).click()
+    await page.waitForFunction(
+      () => document.querySelectorAll('.node-card.type-timeline .tl-row')[0].querySelectorAll('.tl-clip').length >= 4,
+      undefined,
+      { timeout: 60_000 }
+    )
+    check('音频素材同样可以放进已有画面片段的轨道', (await videoClips.count()) === 4)
+    await shot('05-import-audio-same-track')
 
     const timecodeText = async () => (await card.locator('.tl-timecode').innerText()).trim()
     const totalBefore = await timecodeText()
@@ -193,7 +227,7 @@ async function main() {
     await page.mouse.move(picBox.x + picBox.width / 2, picBox.y + picBox.height / 2)
     await page.mouse.down()
     for (let step = 1; step <= 10; step += 1) {
-      await page.mouse.move(picBox.x + picBox.width / 2 + (120 * step) / 10, picBox.y + picBox.height / 2)
+      await page.mouse.move(picBox.x + picBox.width / 2 + (320 * step) / 10, picBox.y + picBox.height / 2)
       await page.waitForTimeout(20)
     }
     await page.mouse.up()
@@ -254,15 +288,14 @@ async function main() {
     )
     await shot('08-drag-card')
 
-    // ── 全屏编辑 ──
-    await card.getByRole('button', { name: '全屏编辑', exact: true }).click()
-    await page.locator('.tl-modal').waitFor({ timeout: 10_000 })
-    check('全屏编辑能打开', (await page.locator('.tl-modal').isVisible()) === true)
-    await shot('09-fullscreen')
-    await page.keyboard.press('Escape')
-    await page.waitForTimeout(300)
-
     // ── 需求 11：真实合成出片 ──
+    // 先记下时间线当前总时长，成片时长必须与它对齐（而不是写死某个秒数）。
+    const totalCode = await timecodeText()
+    const expectedMs = (() => {
+      const [, total] = totalCode.split('/').map((part) => part.trim())
+      const [minutes, seconds] = total.split(':').map(Number)
+      return (minutes * 60 + seconds) * 1000
+    })()
     const beforeArtifacts = await page.locator('.node-card-wrap:has(.type-video-asset)').count()
     await card.locator('.node-run-btn').click()
     await page.waitForFunction(
@@ -270,7 +303,8 @@ async function main() {
         document.querySelectorAll('.node-card-wrap .type-video-asset').length > 0 ||
         document.querySelectorAll('.node-card-wrap').length > before,
       beforeArtifacts,
-      { timeout: 180_000 }
+      // 28 秒、9 个片段的合成要重新编码全部素材并混音，给足 7 分钟。
+      { timeout: 420_000 }
     ).catch(() => undefined)
     await page.waitForTimeout(1500)
     const artifactNodes = await page.locator('.node-card-wrap:has(.type-video-asset)').count()
@@ -302,8 +336,12 @@ async function main() {
     })
     const composed = probed.find((item) => item.duration >= 5)
     check(
-      '成片落盘且时长与时间线一致（约 12 秒 / 1920×1080 / 带音轨）',
-      Boolean(composed) && composed.duration >= 10 && composed.duration <= 14 && composed.width === 1920 && composed.height === 1080 && composed.hasAudio,
+      `成片落盘且时长与轨道线一致（时间线 ${totalCode} / 1920×1080 / 带音轨）`,
+      Boolean(composed) &&
+        Math.abs(composed.duration * 1000 - expectedMs) <= 1200 &&
+        composed.width === 1920 &&
+        composed.height === 1080 &&
+        composed.hasAudio,
       JSON.stringify(composed ?? probed)
     )
 
@@ -313,6 +351,178 @@ async function main() {
       return list.ok ? list.data.find((p) => p.name === name)?.id : null
     }, PROJECT_NAME)
     check('项目已持久化', Boolean(projectId), projectId || '')
+    // ── 全屏编辑 ──
+    await card.getByRole('button', { name: '全屏编辑', exact: true }).click()
+    await page.locator('.tl-modal').waitFor({ timeout: 10_000 })
+    check('全屏编辑能打开', (await page.locator('.tl-modal').isVisible()) === true)
+    await shot('09-fullscreen')
+
+    // ── 全屏编辑器三段式：素材库 / 预览 / 时间轴 ──
+    const editor = page.locator('.tl-modal .tl-editor')
+    check('全屏编辑器有素材库与预览区', (await editor.count()) === 1)
+    check(
+      '素材库只有「已导入资产」并按类型筛选',
+      (await page.locator('.tl-bin-source button').count()) === 0 &&
+        (await page.locator('.tl-bin-filter-group button').count()) === 4
+    )
+    check(
+      '预览区有播放/导出/比例/音量/全屏控制',
+      (await page.locator('.tl-transport-play').count()) === 1 &&
+        (await page.locator('.tl-editor-export').count()) === 1 &&
+        (await page.locator('[aria-label="预览比例"]').count()) === 1 &&
+        (await page.locator('[aria-label="预览音量"]').count()) === 1 &&
+        (await page.locator('.tl-preview-fullscreen').count()) === 1
+    )
+    check(
+      '时间轴工具栏有撤销/重做/左右裁剪/自动吸附',
+      (await page.locator('.tl-toolbar .tl-btn').count()) >= 8 &&
+        (await page.locator('[data-tl-snap="on"]').count()) === 1
+    )
+    // 布局切换：素材库在左 → 在右 → 收起
+    await page.locator('.tl-editor-layout').click()
+    const layoutRight = await page.locator('.tl-editor-main.is-bin-right').count()
+    await page.locator('.tl-editor-layout').click()
+    const layoutHidden = await page.locator('.tl-editor-main.is-bin-hidden').count()
+    await page.locator('.tl-editor-layout').click()
+    const layoutLeft = await page.locator('.tl-editor-main.is-bin-left').count()
+    check('布局可在左/右/收起之间切换', layoutRight === 1 && layoutHidden === 1 && layoutLeft === 1)
+
+    // 从素材库导入两张素材后，素材库应出现条目
+    await setNextFiles([fixtures.pic, fixtures.clipA])
+    await page.locator('.tl-bin-import').click()
+    await page.waitForFunction(
+      () => document.querySelectorAll('.tl-modal .tl-asset').length >= 2,
+      undefined,
+      { timeout: 60_000 }
+    )
+    check('素材库导入后出现素材条目', (await page.locator('.tl-asset').count()) >= 2)
+
+    // 多选顺序：先点第 1 个，再 Ctrl+点第 2 个 → 序号 1 / 2
+    const tile1 = page.locator('.tl-modal .tl-asset').first()
+    const tile2 = page.locator('.tl-modal .tl-asset').nth(1)
+    await tile1.click()
+    await tile2.click({ modifiers: ['Control'] })
+    const orders = await page.locator('.tl-modal .tl-asset-order').allInnerTexts()
+    check('多选按点击顺序编号', orders.join(',') === '1,2', orders.join(','))
+    const selectedOrder = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('.tl-modal .tl-asset.is-selected'))
+        .map((el) => ({
+          id: el.dataset.mediaId ?? '',
+          name: (el.querySelector('.tl-asset-name') || {}).textContent?.trim() ?? '',
+          order: Number((el.querySelector('.tl-asset-order') || {}).textContent || 0)
+        }))
+        .sort((a, b) => a.order - b.order)
+    )
+    const stateIds = await page.locator('.tl-modal .tl-bin').getAttribute('data-selected-ids')
+
+    const clipsBeforeAppend = await page.locator('.tl-modal .tl-clip').count()
+    await page.locator('.tl-bin-append').click()
+    await page.waitForFunction(
+      (before) => document.querySelectorAll('.tl-modal .tl-clip').length >= before + 2,
+      clipsBeforeAppend,
+      { timeout: 30_000 }
+    )
+    const appended = await page.evaluate(() => {
+      const row = document.querySelectorAll('.tl-modal .tl-row')[0]
+      if (!row) return []
+      return Array.from(row.querySelectorAll('.tl-clip'))
+        .slice(-2)
+        .map((el) => ({
+          id: el.dataset.mediaId ?? '',
+          name: (el.querySelector('.tl-clip-name') || {}).textContent?.trim() ?? ''
+        }))
+    })
+    check(
+      '加入轨道按选择顺序追加（先选在前）',
+      appended.length === 2 &&
+        appended[0].id === selectedOrder[0].id &&
+        appended[1].id === selectedOrder[1].id,
+      `选择顺序 ${selectedOrder.map((item) => `${item.name}#${item.id}`).join(' → ')} / 实际 ${appended
+        .map((item) => `${item.name}#${item.id}`)
+        .join(' → ')}`
+    )
+
+    // 长按素材拖到空轨道（第 3 条）：按住 300ms 后移动到轨道中部松手
+    const clipsBeforeLongPress = await page.locator('.tl-modal .tl-clip').count()
+    const tileBox = await tile1.boundingBox()
+    const emptyLane = page.locator('.tl-modal .tl-lane').nth(2)
+    const laneBox = await emptyLane.boundingBox()
+    await page.mouse.move(tileBox.x + tileBox.width / 2, tileBox.y + tileBox.height / 2)
+    await page.mouse.down()
+    await page.waitForTimeout(320)
+    const dropX = laneBox.x + laneBox.width * 0.35
+    const dropY = laneBox.y + laneBox.height / 2
+    for (let step = 1; step <= 8; step += 1) {
+      await page.mouse.move(
+        tileBox.x + tileBox.width / 2 + ((dropX - tileBox.x - tileBox.width / 2) * step) / 8,
+        tileBox.y + tileBox.height / 2 + ((dropY - tileBox.y - tileBox.height / 2) * step) / 8
+      )
+      await page.waitForTimeout(30)
+    }
+    check('长按素材出现拖动浮层', (await page.locator('.tl-asset-ghost').count()) === 1)
+    await page.mouse.up()
+    await page.waitForFunction(
+      (before) => document.querySelectorAll('.tl-modal .tl-clip').length > before,
+      clipsBeforeLongPress,
+      { timeout: 20_000 }
+    )
+    check(
+      '长按拖动能把素材放到轨道落点',
+      true,
+      `${clipsBeforeLongPress} → ${await page.locator('.tl-modal .tl-clip').count()}`
+    )
+
+    // 自动吸附：把最后一段拖到前一段右边缘附近（+6px），应精确贴合
+    const geom = async () =>
+      page.evaluate(() => {
+        const row = document.querySelectorAll('.tl-modal .tl-row')[0]
+        if (!row) return []
+        return Array.from(row.querySelectorAll('.tl-clip'))
+          .map((el) => {
+            const rect = el.getBoundingClientRect()
+            return { left: Math.round(rect.left), right: Math.round(rect.right) }
+          })
+          .sort((a, b) => a.left - b.left)
+      })
+    const beforeSnap = await geom()
+    const last = beforeSnap[beforeSnap.length - 1]
+    const prev = beforeSnap[beforeSnap.length - 2]
+    if (last && prev) {
+      const shiftPx = prev.right + 6 - last.left
+      await page.mouse.move(last.left + 6, (await page.locator('.tl-modal .tl-row').first().boundingBox()).y + 20)
+      await page.mouse.down()
+      await page.mouse.move(last.left + 6 + shiftPx / 2, (await page.locator('.tl-modal .tl-row').first().boundingBox()).y + 20)
+      await page.mouse.move(last.left + 6 + shiftPx, (await page.locator('.tl-modal .tl-row').first().boundingBox()).y + 20)
+      await page.mouse.up()
+      await page.waitForTimeout(300)
+      const afterSnap = await geom()
+      const moved = afterSnap.reduce((best, item) =>
+        Math.abs(item.left - (last.left + shiftPx)) < Math.abs(best.left - (last.left + shiftPx))
+          ? item
+          : best
+      )
+      check(
+        '自动吸附把片段贴到相邻边缘',
+        Math.abs(moved.left - prev.right) <= 2,
+        `吸附后 ${moved.left} vs 前段右边缘 ${prev.right}`
+      )
+      await page.locator('[data-tl-snap="on"]').click()
+      check('可以关闭自动吸附', (await page.locator('[data-tl-snap="off"]').count()) === 1)
+      await page.locator('[data-tl-snap="off"]').click()
+    }
+
+    // 预览播放：播放头应推进、时间码随之变化（时间码精确到秒，等 1.6s 才能看出变化）
+    const timeBeforePlay = await page.locator('.tl-transport-time').innerText()
+    await page.locator('.tl-transport-play').click()
+    await page.waitForTimeout(1600)
+    const timeAfterPlay = await page.locator('.tl-transport-time').innerText()
+    await page.locator('.tl-transport-play').click()
+    check('预览播放会推进播放头', timeBeforePlay !== timeAfterPlay, `${timeBeforePlay} → ${timeAfterPlay}`)
+    await shot('10-fullscreen-editor')
+
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(300)
+
   } catch (error) {
     check('验收脚本执行未中断', false, error instanceof Error ? error.message : String(error))
     if (page) await page.screenshot({ path: path.join(shotDir, 'error.png') }).catch(() => undefined)

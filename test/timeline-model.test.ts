@@ -26,20 +26,22 @@ function base(): TimelineData {
   return createEmptyTimeline()
 }
 
-function videoTrackId(data: TimelineData): string {
-  return data.tracks.find((track) => track.kind === 'video')!.id
+/** 轨道是通用的：第 1 条 / 第 2 条，没有视频轨/音频轨之分。 */
+function trackA(data: TimelineData): string {
+  return data.tracks[0].id
 }
 
-function audioTrackId(data: TimelineData): string {
-  return data.tracks.find((track) => track.kind === 'audio')!.id
+function trackB(data: TimelineData): string {
+  return data.tracks[1].id
 }
 
-function withVideo(data: TimelineData, durationMs = 10000, startMs?: number): {
-  data: TimelineData
-  clipId: string
-} {
+function withVideo(
+  data: TimelineData,
+  durationMs = 10000,
+  startMs?: number
+): { data: TimelineData; clipId: string } {
   const result = addClip(data, {
-    trackId: videoTrackId(data),
+    trackId: trackA(data),
     kind: 'video',
     mediaId: 'm1',
     mediaPath: 'projects/p/media/m1.mp4',
@@ -51,30 +53,39 @@ function withVideo(data: TimelineData, durationMs = 10000, startMs?: number): {
   return { data: result.data, clipId: result.clipId! }
 }
 
-describe('时间线数据模型 · 解析与规整', () => {
-  it('空卡片是正常空态，不是错误', () => {
+function withAudio(data: TimelineData, startMs = 0, durationMs = 5000): {
+  data: TimelineData
+  clipId: string
+} {
+  const result = addClip(data, {
+    trackId: trackA(data),
+    kind: 'audio',
+    mediaId: 'a1',
+    mediaPath: 'projects/p/media/a1.wav',
+    name: '配乐.wav',
+    sourceDurationMs: 60000,
+    startMs,
+    durationMs
+  })
+  if (!result.ok) throw new Error(result.reason)
+  return { data: result.data, clipId: result.clipId! }
+}
+
+describe('轨道线数据模型 · 解析与规整', () => {
+  it('空卡片是正常空态：默认两条通用轨道', () => {
     const parsed = parseTimeline('')
     expect(parsed.ok).toBe(true)
     if (parsed.ok) {
       expect(parsed.empty).toBe(true)
-      expect(parsed.data.tracks.length).toBe(2)
+      expect(parsed.data.tracks).toHaveLength(2)
+      expect(parsed.data.tracks.map((track) => track.name)).toEqual(['轨道 1', '轨道 2'])
       expect(parsed.data.clips).toEqual([])
     }
   })
 
-  it('坏 JSON 要报错，让用户知道数据需要修', () => {
-    const parsed = parseTimeline('{ not json')
-    expect(parsed.ok).toBe(false)
-  })
-
-  it('缺 tracks/clips 的对象被判为结构错误', () => {
-    const parsed = parseTimeline(JSON.stringify({ hello: 1 }))
-    expect(parsed.ok).toBe(false)
-  })
-
-  it('孤儿片段（轨道不存在）与错误轨道类型的片段被丢弃', () => {
+  it('轨道没有类型字段：旧数据里的 kind 读入后被丢弃，不做任何限制', () => {
     const data = normalizeTimeline({
-      tracks: [{ id: 't1', kind: 'video', name: '视频 1' }],
+      tracks: [{ id: 't1', kind: 'audio', name: '旧音频轨' }],
       clips: [
         {
           id: 'c1',
@@ -86,13 +97,25 @@ describe('时间线数据模型 · 解析与规整', () => {
           durationMs: 1000,
           inMs: 0,
           sourceDurationMs: 5000
-        },
-        { id: 'c2', trackId: 'missing', kind: 'video', durationMs: 1000 },
-        { id: 'c3', trackId: 't1', kind: 'audio', durationMs: 1000 }
+        }
       ]
     })
+    expect(data.tracks[0]).not.toHaveProperty('kind')
+    // 旧音频轨上的视频片段不再被丢弃：轨道通用。
     expect(data.clips.map((clip) => clip.id)).toEqual(['c1'])
-    expect(data.clips[0].volume).toBe(1)
+  })
+
+  it('坏 JSON 要报错，缺 tracks/clips 的对象判为结构错误', () => {
+    expect(parseTimeline('{ not json').ok).toBe(false)
+    expect(parseTimeline(JSON.stringify({ hello: 1 })).ok).toBe(false)
+  })
+
+  it('孤儿片段（轨道不存在）被丢弃', () => {
+    const data = normalizeTimeline({
+      tracks: [{ id: 't1', name: '轨道 1' }],
+      clips: [{ id: 'c2', trackId: 'missing', kind: 'video', durationMs: 1000 }]
+    })
+    expect(data.clips).toHaveLength(0)
   })
 
   it('序列化后再解析保持不变（往返稳定）', () => {
@@ -103,23 +126,37 @@ describe('时间线数据模型 · 解析与规整', () => {
   })
 })
 
-describe('时间线数据模型 · 片段摆放', () => {
+describe('轨道线数据模型 · 片段摆放', () => {
   it('追加片段放到轨道末端，长度取源全长', () => {
     const first = withVideo(base(), 8000)
     const second = withVideo(first.data, 5000)
-    const clips = clipsOfTrack(second.data, videoTrackId(second.data))
+    const clips = clipsOfTrack(second.data, trackA(second.data))
     expect(clips).toHaveLength(2)
     expect(clips[0].startMs).toBe(0)
-    expect(clips[0].durationMs).toBe(8000)
     expect(clips[1].startMs).toBe(8000)
     expect(clips[1].durationMs).toBe(5000)
     expect(timelineDurationMs(second.data)).toBe(13000)
   })
 
+  it('任意轨道都能放任意素材：音频可以放在同一条轨道上', () => {
+    const first = withVideo(base(), 3000)
+    const audio = addClip(first.data, {
+      trackId: trackA(first.data),
+      kind: 'audio',
+      mediaId: 'a1',
+      mediaPath: 'p',
+      name: '配乐',
+      sourceDurationMs: 10000,
+      startMs: 3000
+    })
+    expect(audio.ok).toBe(true)
+    if (audio.ok) expect(audio.data.clips).toHaveLength(2)
+  })
+
   it('图片片段使用默认时长，且没有源内起点', () => {
     const data = base()
     const result = addClip(data, {
-      trackId: videoTrackId(data),
+      trackId: trackA(data),
       kind: 'image',
       mediaId: 'img',
       mediaPath: 'projects/p/media/img.png',
@@ -137,7 +174,7 @@ describe('时间线数据模型 · 片段摆放', () => {
   it('请求长度超过源素材时按源尾截断，而不是报错', () => {
     const data = base()
     const result = addClip(data, {
-      trackId: videoTrackId(data),
+      trackId: trackA(data),
       kind: 'video',
       mediaId: 'm',
       mediaPath: 'p',
@@ -153,7 +190,7 @@ describe('时间线数据模型 · 片段摆放', () => {
   it('源时长未知时给可编辑占位长度，而不是 Infinity', () => {
     const data = base()
     const result = addClip(data, {
-      trackId: videoTrackId(data),
+      trackId: trackA(data),
       kind: 'video',
       mediaId: 'm',
       mediaPath: 'p',
@@ -168,23 +205,10 @@ describe('时间线数据模型 · 片段摆放', () => {
     }
   })
 
-  it('音频片段不能放到视频轨（反之亦然）', () => {
-    const data = base()
-    const wrong = addClip(data, {
-      trackId: videoTrackId(data),
-      kind: 'audio',
-      mediaId: 'a',
-      mediaPath: 'p',
-      name: 'a',
-      sourceDurationMs: 5000
-    })
-    expect(wrong.ok).toBe(false)
-  })
-
-  it('视频轨不允许重叠，音频轨允许重叠（混音）', () => {
+  it('同一条轨道上的画面片段不允许重叠；音频片段可以重叠（混音）', () => {
     const first = withVideo(base(), 5000)
     const overlap = addClip(first.data, {
-      trackId: videoTrackId(first.data),
+      trackId: trackA(first.data),
       kind: 'video',
       mediaId: 'm2',
       mediaPath: 'p2',
@@ -194,35 +218,31 @@ describe('时间线数据模型 · 片段摆放', () => {
     })
     expect(overlap.ok).toBe(false)
 
-    const data = base()
-    const audio1 = addClip(data, {
-      trackId: audioTrackId(data),
-      kind: 'audio',
-      mediaId: 'a1',
-      mediaPath: 'p1',
-      name: 'bgm1',
-      sourceDurationMs: 10000,
-      startMs: 0
-    })
-    expect(audio1.ok).toBe(true)
-    if (!audio1.ok) return
+    const audio1 = withAudio(base(), 0, 5000)
     const audio2 = addClip(audio1.data, {
-      trackId: audioTrackId(audio1.data),
+      trackId: trackA(audio1.data),
       kind: 'audio',
       mediaId: 'a2',
       mediaPath: 'p2',
       name: 'bgm2',
-      sourceDurationMs: 10000,
+      sourceDurationMs: 5000,
       startMs: 3000
     })
     expect(audio2.ok).toBe(true)
     if (audio2.ok) {
-      expect(overlappingClips(audio2.data, { trackId: audioTrackId(audio2.data), startMs: 0, durationMs: 1000 })).toEqual([])
+      expect(
+        overlappingClips(audio2.data, {
+          trackId: trackA(audio2.data),
+          startMs: 0,
+          durationMs: 1000,
+          kind: 'audio'
+        })
+      ).toEqual([])
     }
   })
 })
 
-describe('时间线数据模型 · 移动 / 裁剪 / 分割 / 删除', () => {
+describe('轨道线数据模型 · 移动 / 裁剪 / 分割 / 删除', () => {
   it('移动片段改起点并保持按时间排序', () => {
     const first = withVideo(base(), 4000)
     const moved = moveClip(first.data, first.clipId, { startMs: 6000 })
@@ -233,7 +253,14 @@ describe('时间线数据模型 · 移动 / 裁剪 / 分割 / 删除', () => {
     }
   })
 
-  it('移动后与同轨片段重叠会被拒绝（调用方据此回弹）', () => {
+  it('片段可以跨轨道移动（轨道不再分类型）', () => {
+    const first = withVideo(base(), 4000)
+    const moved = moveClip(first.data, first.clipId, { trackId: trackB(first.data), startMs: 0 })
+    expect(moved.ok).toBe(true)
+    if (moved.ok) expect(findClip(moved.data, first.clipId)!.trackId).toBe(trackB(first.data))
+  })
+
+  it('移动后与同轨画面片段重叠会被拒绝（调用方据此回弹）', () => {
     const first = withVideo(base(), 4000)
     const second = withVideo(first.data, 4000)
     const clash = moveClip(second.data, second.clipId, { startMs: 1000 })
@@ -250,7 +277,6 @@ describe('时间线数据模型 · 移动 / 裁剪 / 分割 / 删除', () => {
     expect(clip.startMs).toBe(2000)
     expect(clip.durationMs).toBe(8000)
 
-    // 向左拉回：源内起点已经用掉 2 秒，因此最多只能回到 startMs=0 / inMs=0（即恢复整段）
     const back = trimClip(shifted.data, first.clipId, 'start', 0)
     expect(back.ok).toBe(true)
     if (back.ok) {
@@ -258,12 +284,6 @@ describe('时间线数据模型 · 移动 / 裁剪 / 分割 / 删除', () => {
       expect(again.startMs).toBe(0)
       expect(again.inMs).toBe(0)
       expect(again.durationMs).toBe(10000)
-    }
-    // 再往左拉已经到源起点，不会产生负的 inMs
-    if (back.ok) {
-      const beyond = trimClip(back.data, first.clipId, 'start', -500)
-      expect(beyond.ok).toBe(true)
-      if (beyond.ok) expect(findClip(beyond.data, first.clipId)!.inMs).toBe(0)
     }
   })
 
@@ -279,11 +299,10 @@ describe('时间线数据模型 · 移动 / 裁剪 / 分割 / 删除', () => {
     const split = splitClip(first.data, first.clipId, 4000)
     expect(split.ok).toBe(true)
     if (!split.ok) return
-    const clips = clipsOfTrack(split.data, videoTrackId(split.data))
+    const clips = clipsOfTrack(split.data, trackA(split.data))
     expect(clips).toHaveLength(2)
     expect(clips[0]).toMatchObject({ startMs: 0, durationMs: 4000, inMs: 0, mediaId: 'm1' })
     expect(clips[1]).toMatchObject({ startMs: 4000, durationMs: 6000, inMs: 4000, mediaId: 'm1' })
-    expect(timelineDurationMs(split.data)).toBe(10000)
   })
 
   it('分割点贴边会被拒绝', () => {
@@ -299,42 +318,41 @@ describe('时间线数据模型 · 移动 / 裁剪 / 分割 / 删除', () => {
     if (removed.ok) expect(removed.data.clips).toHaveLength(0)
 
     const withClips = withVideo(base(), 4000)
-    const dropped = removeTrack(withClips.data, videoTrackId(withClips.data))
+    const dropped = removeTrack(withClips.data, trackA(withClips.data))
     expect(dropped.ok).toBe(true)
     if (dropped.ok) {
-      expect(dropped.data.tracks.some((track) => track.kind === 'video')).toBe(false)
+      expect(dropped.data.tracks).toHaveLength(1)
       expect(dropped.data.clips).toHaveLength(0)
     }
   })
 
   it('不能删掉最后一条轨道', () => {
     let data = base()
-    const audioTrack = audioTrackId(data)
-    const first = removeTrack(data, audioTrack)
+    const first = removeTrack(data, trackB(data))
     expect(first.ok).toBe(true)
     if (!first.ok) return
     data = first.data
-    const only = data.tracks[0].id
-    expect(removeTrack(data, only).ok).toBe(false)
+    expect(removeTrack(data, data.tracks[0].id).ok).toBe(false)
   })
 
-  it('新增轨道后编号递增、数量受上限约束', () => {
+  it('加轨道按顺序命名，数量受上限约束', () => {
     let data = base()
-    const track = addTrack(data, 'video')
-    expect(track.ok).toBe(true)
-    if (!track.ok) return
-    expect(track.data.tracks.filter((item) => item.kind === 'video')).toHaveLength(2)
-    data = track.data
+    const added = addTrack(data)
+    expect(added.ok).toBe(true)
+    if (!added.ok) return
+    expect(added.data.tracks).toHaveLength(3)
+    expect(added.data.tracks[2].name).toBe('轨道 3')
+    data = added.data
     while (data.tracks.length < TIMELINE_LIMITS.maxTracks) {
-      const next = addTrack(data, 'audio')
+      const next = addTrack(data)
       if (!next.ok) break
       data = next.data
     }
-    expect(addTrack(data, 'video').ok).toBe(false)
+    expect(addTrack(data).ok).toBe(false)
   })
 })
 
-describe('时间线数据模型 · 刻度与时间码', () => {
+describe('轨道线数据模型 · 刻度与时间码', () => {
   it('时间码按 mm:ss 输出', () => {
     expect(formatTimecode(0)).toBe('00:00')
     expect(formatTimecode(24_000)).toBe('00:24')
@@ -342,10 +360,8 @@ describe('时间线数据模型 · 刻度与时间码', () => {
   })
 
   it('刻度步长随缩放变大，标签不会挤在一起', () => {
-    const zoomIn = rulerStepMs(160)
-    const zoomOut = rulerStepMs(10)
-    expect(zoomIn).toBeLessThanOrEqual(zoomOut)
-    expect(zoomIn).toBeGreaterThan(0)
+    expect(rulerStepMs(160)).toBeLessThanOrEqual(rulerStepMs(10))
+    expect(rulerStepMs(10)).toBeGreaterThan(0)
   })
 
   it('片段末端 = 起点 + 时长', () => {

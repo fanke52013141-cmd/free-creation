@@ -115,7 +115,9 @@ export class NodeCardUtil extends BaseBoxShapeUtil<NodeCardShape> {
 
   /** 文本节点允许进入 tldraw 编辑态——编辑期间 tldraw 不再拦截键盘事件。 */
   override canEdit(shape: NodeCardShape): boolean {
-    return shape.props.nodeType === 'text'
+    // 时间线在选中片段期间也进入编辑态：tldraw 会关闭自己的键盘快捷键，
+    // 于是 Delete 不会被画布拿去删整张节点，只由时间线删片段。
+    return shape.props.nodeType === 'text' || shape.props.nodeType === 'timeline'
   }
 
   /**

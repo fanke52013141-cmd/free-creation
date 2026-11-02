@@ -96,6 +96,7 @@ export type IconName =
   | 'fold'
   | 'unfold'
   | 'layers'
+  | 'magnet'
   | 'folder'
 
 interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {
@@ -136,14 +137,18 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="m10 9 5 3-5 3V9Z" />
     </>
   ),
-  // 时间线：顶部刻度尺 + 两行轨道片段 + 贯穿的播放头
+  // 轨道线（Stitch Variant A 改良，2026-11-02）：向下刻度的时间尺 + 两条错位轨道 + 播放头。
+  // 刻度朝下而不是朝上：朝上在 17px 下容易读成日历图标。
   timeline: (
     <>
-      <path d="M3 4.5h18" />
-      <path d="M6 4.5v2M10 4.5v2M14 4.5v2M18 4.5v2" />
-      <rect x="3.5" y="9" width="10" height="3.5" rx="1" />
-      <rect x="10" y="14.5" width="10" height="3.5" rx="1" />
-      <path d="M13 7.5v12.5" />
+      <line x1="3" y1="4" x2="21" y2="4" />
+      <line x1="5" y1="4" x2="5" y2="6" />
+      <line x1="12" y1="4" x2="12" y2="6" />
+      <line x1="19" y1="4" x2="19" y2="6" />
+      <rect x="3" y="8.5" width="8" height="5" rx="1.2" />
+      <rect x="14" y="8.5" width="7" height="5" rx="1.2" />
+      <rect x="6" y="16.5" width="11" height="5" rx="1.2" />
+      <line x1="9" y1="1.5" x2="9" y2="22.5" />
     </>
   ),
   'video-asset': (
@@ -612,6 +617,14 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="m12 2 10 5-10 5L2 7Z" />
       <path d="m2 12 10 5 10-5" />
       <path d="m2 17 10 5 10-5" />
+    </>
+  ),
+  // 吸附（磁铁）：两条竖臂 + 两端磁极横线，13px 下也能读成「吸」。
+  magnet: (
+    <>
+      <path d="M6 3v9a6 6 0 0 0 12 0V3" />
+      <path d="M6 8.5h4" />
+      <path d="M14 8.5h4" />
     </>
   ),
   // ── 节点身份图标（2026-11-02 重绘，设计源：design/2026-11-node-identity/icons/icon-drafts.tsx）──

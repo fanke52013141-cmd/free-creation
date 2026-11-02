@@ -17,7 +17,9 @@
 }
 .agent-flow-text textarea {
   width: 100%;
-  min-height: 72px;
+  /* 2026-11-02 用户裁决：任务目标是一个正经输入框——加高、圆角，与下方按钮留出距离。 */
+  min-height: 132px;
+  border-radius: 8px;
   resize: none;
 }
 .agent-flow-settings textarea {

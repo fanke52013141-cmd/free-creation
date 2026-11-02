@@ -39,6 +39,8 @@ export const rendererGateway: GatewayClient = {
   videoTask: (taskId, traceId) => window.api.gateway.videoTask(taskId, traceId),
   audioGenerate: (input) => window.api.gateway.audioGenerate(input),
   speechGenerate: (input) => window.api.gateway.speechGenerate(input),
+  indexttsRuntime: () => window.api.indexttsDetect(),
+  indexttsSynthesize: (input) => window.api.indexttsSynthesize(input),
   voiceDesign: (input) => window.api.gateway.voiceDesign(input),
   onEvent: (cb) => window.api.gateway.onEvent(cb),
 

@@ -4330,7 +4330,7 @@ select:focus-visible {
   z-index: var(--z-panel-nested);
   display: flex;
   flex-direction: column;
-  width: 292px;
+  width: 360px;
   background: var(--card);
   border-left: 1px solid var(--line);
   box-shadow: -8px 0 24px rgba(0, 0, 0, 0.24);
@@ -4368,10 +4368,10 @@ select:focus-visible {
 
 .contract-body {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  /* tab 栏是左侧垂直 Rail；内容区由 .contract-scroll 单独滚动。 */
+  /* 2026-11-02 用户裁决：分页改为顶部横向一行，四类与五类节点同一套排列，不再左侧竖排 Rail。 */
 }
 
 .contract-scroll {
@@ -4382,18 +4382,18 @@ select:focus-visible {
   padding: 14px;
 }
 
-/* 节点详情统一 tab Rail：概览 / 输入输出 / 设置 / 运行（/ 协作）纵向排列，
-   4 tab 与 5 tab 永远同一布局，不再按列数折行；激活色取节点 accent。 */
+/* 节点详情统一分页：概览 / 输入输出 / 设置 / 运行（/ 协作）在顶部横向均分一行，
+   4 tab 与 5 tab 永远同一布局，不再按列数折行或竖排；激活色取节点 accent。 */
 .contract-tabs {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   flex-shrink: 0;
   gap: 4px;
-  width: 76px;
+  width: 100%;
   margin: 0;
-  padding: 10px 8px;
+  padding: 8px 10px;
   border: none;
-  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
   border-radius: 0;
   background: rgba(255, 255, 255, 0.02);
 }
@@ -4401,13 +4401,15 @@ select:focus-visible {
 .contract-tabs button {
   position: relative;
   min-width: 0;
+  flex: 1 1 0;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 3px;
+  justify-content: center;
+  gap: 5px;
   border: none;
   border-radius: 8px;
-  padding: 8px 2px;
+  padding: 7px 6px;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
@@ -6826,7 +6828,7 @@ select:focus-visible {
 
   .side-panel,
   .node-contract-panel {
-    width: min(320px, 88vw);
+    width: min(360px, 92vw);
   }
 }
 

@@ -165,14 +165,16 @@
   place-items: center;
   color: color-mix(in srgb, var(--node-identity-accent, var(--node-accent)) var(--node-identity-strength, 100%), #17232d);
 }
-/* 2026-11-02 用户裁决：纯空态（identity 内只有图标、无提示文案）时，
+/* 2026-11-02 用户裁决：纯空态（identity 内只有图标、无**可见**提示文案）时，
    图标正居中于节点卡片几何中心（横向 + 纵向）。绝对定位脱离 flow，
    identity 自身保留 min-height 占位，高度自适应测算（offsetHeight-minHeight）不受影响。
+   判据来自 NodeIdentity 运行时的可见性测量（data-icon-only），不用 CSS :has()：
+   结构上的隐藏子项（<small>、条件出现的 .node-wiring）会把纯空态误判成「有内容」，
+   导致 JSON / P图 这类节点退回 flex 布局、偏移 20~30px。
    定位基准是 position:relative 的 .node-body（中间层 .node-text/.node-audio-empty
    等均无 position/transform）。纵向补偿量 = (动作栏高 + scroll 底部内边距 - 顶部内边距)/2：
    有动作栏时 body 区间为 [12, 高度-48]，需下移 (48-12)/2 才对齐卡片中心。 */
-.node-standard-identity:not(:has(> :not(.node-standard-identity-icon)))
-  .node-standard-identity-icon {
+.node-standard-identity[data-icon-only='true'] .node-standard-identity-icon {
   position: absolute;
   left: 50%;
   top: calc(50% + (var(--node-standard-action-height) - var(--node-standard-padding)) / 2);
@@ -180,7 +182,7 @@
 }
 /* 无动作栏时动作区高度归零、scroll 增加 8px 底部内边距，改为上移 (12-8)/2。 */
 .node-standard-shell[data-has-actions='false']
-  .node-standard-identity:not(:has(> :not(.node-standard-identity-icon)))
+  .node-standard-identity[data-icon-only='true']
   .node-standard-identity-icon {
   top: calc(50% - 2px);
 }
@@ -310,6 +312,14 @@
   )
   > svg {
   display: none;
+}
+
+/* 上述规则只针对“带文字”的按钮；纯图标按钮（定位/复制等）必须保留图标，
+   否则会变成一排没有图形的空按钮。 */
+.node-card .node-body .icon-btn > svg,
+.node-card .node-body .node-media-file-actions .icon-btn > svg,
+.node-card .node-body .media-preview-actions .icon-btn > svg {
+  display: block;
 }
 
 /* 语音节点的二级区块保持平面，不再出现嵌套面板。 */
@@ -703,4 +713,132 @@
   flex: 1 1 0;
   min-height: 220px;
   height: auto;
+}
+
+/* ── 数字步进器统一（2026-11-02 用户裁决）────────────────────────────
+   原生 input[type=number] 的小三角在不同缩放/主题下又小又难点，各节点样式也不一致。
+   统一为「输入框 + 右侧上下两个大点击区」：隐藏原生 spin 按钮，点击区覆盖整个右侧。 */
+.number-stepper {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: stretch;
+}
+
+.number-stepper-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 44px 6px 12px;
+  border: 1px solid var(--node-edge-strong, var(--line));
+  border-radius: 8px;
+  background: var(--node-control-bg, rgba(12, 15, 19, 0.34));
+  color: var(--txt);
+  font: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.number-stepper-input:focus-visible {
+  border-color: color-mix(in srgb, var(--brand) 65%, var(--line));
+  outline: none;
+}
+
+.number-stepper-input::-webkit-outer-spin-button,
+.number-stepper-input::-webkit-inner-spin-button {
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.number-stepper-buttons {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  bottom: 2px;
+  display: flex;
+  width: 40px;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 1px solid var(--node-edge-strong, var(--line));
+  border-radius: 0 6px 6px 0;
+}
+
+.number-stepper-button {
+  flex: 1 1 50%;
+  padding: 0;
+  border: 0;
+  color: var(--node-text-muted, var(--muted));
+  background: transparent;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.number-stepper-button + .number-stepper-button {
+  border-top: 1px solid var(--node-edge-strong, var(--line));
+}
+
+.number-stepper-button:hover:not(:disabled) {
+  color: var(--txt);
+  background: rgb(255 255 255 / 8%);
+}
+
+.number-stepper-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+/* 本地 IndexTTS 运行时行：状态与「重新检测」按钮同一行，按钮靠右。 */
+.node-card .node-body .speech-local-runtime {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.node-card .node-body .speech-local-runtime .node-wiring {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-card .node-body .speech-local-runtime .speech-local-runtime-detect {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* 节点内其余数字输入（尚未换成 NumberStepper 的）：统一字段材质，并把原生上下箭头
+   放大成可点的窄条，避免又小又难点。换用 NumberStepper 的输入框不受这条影响。 */
+.node-card .node-body input[type='number']:not(.number-stepper-input) {
+  box-sizing: border-box;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--node-edge-strong, var(--line));
+  border-radius: 8px;
+  background: var(--node-control-bg, rgba(12, 15, 19, 0.34));
+  color: var(--txt);
+  font: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.node-card .node-body input[type='number']:not(.number-stepper-input)::-webkit-inner-spin-button,
+.node-card .node-body input[type='number']:not(.number-stepper-input)::-webkit-outer-spin-button {
+  width: 18px;
+  height: 100%;
+  margin: 0;
+  opacity: 0.55;
+  cursor: ns-resize;
+}
+
+/* 节点内文本输入框统一圆角（2026-11-02 用户反馈：任务目标框没有圆角）。 */
+.node-card .node-body .agent-flow-text .node-textarea {
+  border-radius: 8px;
 }

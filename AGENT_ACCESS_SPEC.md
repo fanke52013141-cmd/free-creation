@@ -38,7 +38,7 @@ A1.1接续：项目打开、名称更新及活动画布保存/导出采用桌面
 | 项目操作已有 main IPC/repo，导出 IPC 带文件对话框              | [项目 IPC](src/main/ipc/project.ipc.ts)、[项目仓库](src/main/store/projects.repo.ts)、[传输实现](src/main/store/transfer.ts)                              | 抽出公共业务入口，交互式对话框由 UI 适配器处理       |
 | 内部 Flow 命令已有账本、租约、语义修订及 unknown 恢复          | [命令契约](src/shared/agent-flow/commands.ts)、[命令账本](src/main/agent-flow/command-ledger.ts)、[桌面桥](src/main/ipc/flow-commands.ipc.ts)             | 扩展准入，不绕过账本或假造回执                       |
 | 普通执行仍依赖桌面运行宿主，main 账本不是通用节点运行器        | [桌面桥](src/main/ipc/flow-commands.ipc.ts)、[命令账本](src/main/agent-flow/command-ledger.ts)                                                            | 首版要求应用和执行宿主可用，不声称纯 headless        |
-| 内部普通 target adapter 仅覆盖 6 类，另有 Agent/审核专用协议   | [目标适配器](src/shared/agent-flow/video-adapter.ts)、[协同规范](docs/canvas-agent-flow/05-node-coordination-standard.md)                                 | 有 executor 不等于可被 Agent 自动协调                |
+| 内部普通 target adapter 仅覆盖 9 类，另有 Agent/审核专用协议   | [目标适配器](src/shared/agent-flow/video-adapter.ts)、[协同规范](docs/canvas-agent-flow/05-node-coordination-standard.md)                                 | 有 executor 不等于可被 Agent 自动协调                |
 | 旧外部接口已撤下，曾发生配置、输出、正文、取消和多路输入不一致 | [历史审查 F05–F09](docs/HANDOFF_2026_09_15_CODE_REVIEW.md)                                                                                                | 历史代码不作恢复基线，必须有桌面与外部入口一致性验收 |
 
 部分旧文档开头的“尚未实现”和源码中的 headless 注释早于后续实现，不能作为当前支持状态的唯一证据。当前内部交付证据参见 [开发台账](docs/canvas-agent-flow/08-development-ledger.md) 和 [后续完成计划](docs/canvas-agent-flow/38-agent-completion-plan.md)。本轮做了静态调查，没有重新运行这些历史验收。

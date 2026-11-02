@@ -631,6 +631,12 @@ export function openProject(id: string): ProjectFile | null {
   if (!meta) return null
   const file = readProjectFile(id)
   if (!file) return null
+  // 读盘即迁移工作台节点可见集：项目里保存的是创建/上次设置时的节点快照，
+  // 新版本发布的节点（如 2026-11-02 的 timeline）不在其中；不归一化就永远进不了创建面板。
+  // 没有 workspaceProfile 的旧项目保持 undefined（= 显示全部当前可创建节点）。
+  if (file.workspaceProfile !== undefined) {
+    file.workspaceProfile = normalizeWorkspaceProfile(file.workspaceProfile) ?? defaultWorkspaceProfile()
+  }
   // graphVersion 以 project.json 为准：json 是图数据的唯一事实源。外部写入
   // （CLI / 脚本 / 手工迁移）只改 json 不动 SQLite；若用 DB 的旧版本号打开，
   // 渲染进程的乐观锁（expectedGraphVersion）会与磁盘永久错位，每次保存都
@@ -706,6 +712,12 @@ function saveProjectUnlocked(input: {
   }
 
   if (input.tldrawSnapshot !== undefined) file.tldrawSnapshot = input.tldrawSnapshot
+  // 顺手把工作台可见集归一化后落盘：打开旧项目时内存里已经迁移过，这里保证下一次
+  // 保存会把「补入的新节点 + 节点集版本号」写回文件，而不是永远停在旧快照上。
+  if (file.workspaceProfile !== undefined) {
+    file.workspaceProfile =
+      normalizeWorkspaceProfile(file.workspaceProfile) ?? defaultWorkspaceProfile()
+  }
   if (input.graph) {
     file.nodes = input.graph.nodes as ProjectFile['nodes']
     file.edges = input.graph.edges as ProjectFile['edges']

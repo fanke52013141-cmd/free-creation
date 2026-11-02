@@ -146,7 +146,11 @@ export const IPC = {
     copyPath: 'media:copy-path',
     open: 'media:open',
     batchExport: 'media:batch-export',
-    ttsGenerate: 'media:tts-generate'
+    ttsGenerate: 'media:tts-generate',
+    /** 本地 IndexTTS 2.5：探测本机运行时。 */
+    indexttsDetect: 'media:indextts-detect',
+    /** 本地 IndexTTS 2.5：参考音频克隆合成。 */
+    indexttsSynthesize: 'media:indextts-synthesize'
   },
   workspace: {
     listTemplates: 'workspace:templates:list',
@@ -1061,6 +1065,33 @@ export interface SpeechGenerateResult {
    * "用了默认音色"。
    */
   voiceId?: string
+}
+
+// ── 本地 IndexTTS 2.5（本机推理，不经过模型网关）──
+
+/** 本地 IndexTTS 运行时探测结果；missingRuntime 时 reason 给可操作提示。 */
+export interface IndexTtsRuntimeInfo {
+  ready: boolean
+  pythonPath: string | null
+  modelDir: string | null
+  reason: string | null
+}
+
+export interface IndexTtsSynthesizeInput {
+  projectId: string
+  nodeId: string
+  /** 已与上游文本合并后的朗读正文。 */
+  text: string
+  /** 参考音频素材 ID（节点内上传或连线输入二选一，执行器已解析）。 */
+  referenceAudioId: string
+  /** 空串表示自动探测解释器。 */
+  pythonPath?: string
+  /** 空串表示自动探测模型目录。 */
+  modelDir?: string
+  device?: 'cuda' | 'cpu'
+  fp16?: boolean
+  durationFactor?: number
+  lang?: string
 }
 
 // ── 音色设计节点（MiniMax voice_design）──

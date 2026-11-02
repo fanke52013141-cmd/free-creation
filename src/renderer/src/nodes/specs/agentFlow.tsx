@@ -37,6 +37,7 @@ import { NodeIdentity, NodePrimaryButton } from '../../canvas/NodePresentation'
 import { useNodePanelStore } from '../../stores/nodePanel'
 import { markUndoPoint } from '../../canvas/history'
 import { AppSelect } from '../../components/AppSelect'
+import { NumberStepper } from '../../components/NumberStepper'
 import { FlowNodeSelect, FlowNodeTargets, FlowTransitions } from './agentFlowEditors'
 import { canvasFlowDeclarations } from '../../canvas/agent-flow-declarations'
 import { resolveFlowDeclaration } from '@shared/agent-flow/declarations'
@@ -335,13 +336,16 @@ function AgentFlowSettings({ shape, editor, projectId }: NodeSettingsProps): Rea
   const numberField = (label: string, key: string, min: number, max: number): React.JSX.Element => (
     <label className="settings-field">
       {label}
-      <input
-        aria-label={label}
-        type="number"
+      <NumberStepper
+        ariaLabel={label}
         min={min}
         max={max}
-        value={Number(draft[key] ?? min)}
-        onChange={(event) => update(key, Number(event.target.value))}
+        step={1}
+        value={String(draft[key] ?? min)}
+        onChange={(next) => {
+          const value = Number(next)
+          if (Number.isFinite(value)) update(key, value)
+        }}
       />
     </label>
   )

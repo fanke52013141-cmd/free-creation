@@ -205,7 +205,9 @@ function speechPorts(backend: SpeechBackend): {
     'in-audio',
     '参考音频',
     'audio',
-    `火山引擎语音合成 1.0 的可选参考音频；最多 ${VOLC_REFERENCE_AUDIO_MAX_COUNT} 段，节点上传项追加在连线音频之后；单段不超过 ${VOLC_REFERENCE_AUDIO_MAX_SECONDS} 秒 / ${VOLC_REFERENCE_AUDIO_MAX_BYTES / (1024 * 1024)} MB，支持 wav、mp3、pcm、ogg_opus。speaker ID 可与参考音频同时使用。`,
+    backend === 'indextts'
+      ? '本地 IndexTTS 2.5 的音色参考音频：节点内可上传一段，或连接上游音频；单段不超过 15 秒（超出会被模型截断）。'
+      : `火山引擎语音合成 1.0 的可选参考音频；最多 ${VOLC_REFERENCE_AUDIO_MAX_COUNT} 段，节点上传项追加在连线音频之后；单段不超过 ${VOLC_REFERENCE_AUDIO_MAX_SECONDS} 秒 / ${VOLC_REFERENCE_AUDIO_MAX_BYTES / (1024 * 1024)} MB，支持 wav、mp3、pcm、ogg_opus。speaker ID 可与参考音频同时使用。`,
     { cardinality: 'many' }
   )
   const inText = input(
@@ -225,7 +227,9 @@ function speechPorts(backend: SpeechBackend): {
     'audio',
     backend === 'minimax'
       ? 'MiniMax 异步语音合成（t2a_async_v2，默认通道）；支持语气词标签、音色 ID、情绪、语速、音量和音调。'
-      : '火山引擎语音合成 1.0；参考音频可选，可使用 speaker ID，并调节语速、音量和音调；可选返回字幕时间轴。'
+      : backend === 'indextts'
+        ? '本地 IndexTTS 2.5 以参考音频克隆音色合成；输出 22050Hz 单声道 wav，不需要云端供应商与模型配置。'
+        : '火山引擎语音合成 1.0；参考音频可选，可使用 speaker ID，并调节语速、音量和音调；可选返回字幕时间轴。'
   )
   const outSubtitle = output(
     'out-subtitle',
@@ -237,6 +241,10 @@ function speechPorts(backend: SpeechBackend): {
 
   if (backend === 'volc') {
     return { in: [inText, inAudio], out: [outAudio, outSubtitle] }
+  }
+  // 本地 IndexTTS：参考音频必填（节点内上传或连线二选一），不产生字幕。
+  if (backend === 'indextts') {
+    return { in: [inText, inAudio], out: [outAudio] }
   }
   return { in: [inText, inVoice], out: [outAudio] }
 }
@@ -257,9 +265,10 @@ function speechStaticPorts(): {
   ]
   const minimax = speechPorts('minimax')
   const volc = speechPorts('volc')
+  const indextts = speechPorts('indextts')
   return {
-    in: mergeById(minimax.in, volc.in),
-    out: mergeById(minimax.out, volc.out)
+    in: mergeById(mergeById(minimax.in, volc.in), indextts.in),
+    out: mergeById(mergeById(minimax.out, volc.out), indextts.out)
   }
 }
 
@@ -1229,15 +1238,15 @@ export function registerExtendedNodeTypes(): void {
   registerNodeType({
     type: 'timeline',
     contractVersion: 1,
-    label: '时间线',
+    label: '轨道线',
     icon: 'timeline',
     color: NODE_ACCENTS.timeline,
     defaultSize: { w: TIMELINE_UI.width, h: TIMELINE_UI.height },
-    // 2026-11-02 用户裁决：时间线默认比常规节点长，宽高由用户自由拖动控制，
+    // 2026-11-02 用户裁决：轨道线默认比常规节点长，宽高由用户自由拖动控制，
     // 不参与内容自适应，也不进入旧尺寸迁移。这是尺寸规范的第二类例外，
     // 机制见 registry 的 sizePolicy（分镜板是 content）。
     sizePolicy: 'free',
-    description: '把图片、视频、音频摆到多轨时间线上，分割拖动后合成成片。',
+    description: '把图片、视频、音频铺到多条轨道上，分割拖动后合成成片。',
     category: 'video',
     ports: {
       in: [

@@ -17,7 +17,7 @@
 | 视频资产 `video-asset`    | 2    | 无                                                              | `out-video` video                                               | executor + projectOutputs                | 通过 |
 | 深度视频 `video-depth`    | 1    | `in-video` video / one / 必填                                   | `out-video` video                                               | executor + projectOutputs                | 通过 |
 | 白模视频 `video-clay`     | 1    | `in-video` video / one / 必填                                   | `out-video` video                                               | executor + projectOutputs                | 通过 |
-| 时间线 `timeline`         | 1    | `in-video` video / many；`in-audio` audio / many；`in-image` image / many | `out-video` video（可选）                              | executor + projectOutputs                | 通过 |
+| 轨道线 `timeline`         | 1    | `in-video` video / many；`in-audio` audio / many；`in-image` image / many | `out-video` video（可选）                              | executor + projectOutputs                | 通过 |
 | 视频取帧 `video-frame`    | 4    | `in-video` video / one / 必填                                   | `out-image` image                                               | executor + projectOutputs                | 通过 |
 | 视频截取 `video-clip`     | 5    | `in-video` video / one / 必填                                   | `out-video` video（可选）；`out-audio` audio（可选）            | executor + projectOutputs                | 通过 |
 | 视频提音 `video-audio`    | 4    | `in-video` video / one / 必填                                   | `out-audio` audio                                               | 历史兼容，不新建                         | 退役 |

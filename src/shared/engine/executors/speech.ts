@@ -15,12 +15,103 @@ import { mergedPrompt } from '../helpers'
 import { readNodeConfig } from '../node-config'
 import { appendMediaResult, serializeMediaResultCollection } from '../values'
 import { featureKeyOf, resolveFeatureOption } from '../models'
+import { runCancellableMedia } from '../media-cancel'
+
+/**
+ * 本地 IndexTTS 2.5：不走模型网关，调用本机运行时合成。
+ * 参考音频二选一——节点内上传优先，其次连线 `in-audio`；两处都没有就明确跳过。
+ */
+async function runLocalIndexTts(
+  ctx: NodeExecutionContext,
+  config: ReturnType<typeof parseSpeechConfig>,
+  text: string
+): Promise<NodeExecutionResult> {
+  const limit = SPEECH_TEXT_LIMITS.indextts
+  if (text.length > limit) {
+    return { status: 'failed', reason: `朗读文本超过 ${limit} 字符上限（当前 ${text.length}）` }
+  }
+  const uploadedReference =
+    config.referenceAudioId && config.referenceAudioPath ? config.referenceAudioId : ''
+  const connectedReference = inputMedia(ctx.inputs, 'in-audio', 'audio')[0]?.mediaId ?? ''
+  const referenceAudioId = uploadedReference || connectedReference
+  if (!referenceAudioId) {
+    return {
+      status: 'skipped',
+      reason: '本地 IndexTTS 需要一段参考音频：在节点内上传，或连接一段音频到「参考音频」'
+    }
+  }
+  if (!ctx.gateway.indexttsSynthesize) {
+    return { status: 'failed', reason: '当前运行环境不支持本地 IndexTTS（缺少本地合成通道）' }
+  }
+  if (ctx.signal.cancelled) return { status: 'skipped', reason: '已取消' }
+  ctx.trace?.('request', 'info', '开始本地 IndexTTS 合成')
+  try {
+    const outcome = await runCancellableMedia(
+      ctx,
+      () =>
+        ctx.gateway.indexttsSynthesize!({
+          projectId: ctx.projectId,
+          nodeId: ctx.node.id,
+          text,
+          referenceAudioId,
+          pythonPath: config.localPythonPath,
+          modelDir: config.localModelDir,
+          device: config.localDevice,
+          fp16: config.localFp16,
+          durationFactor: config.durationFactor,
+          lang: config.localLang
+        }),
+      (envelope) => {
+        // 停止后迟到的音频属于孤儿，直接删掉。
+        if (envelope?.ok) void ctx.gateway.deleteMedia?.(envelope.data.id).catch(() => undefined)
+      }
+    )
+    if (outcome.cancelled) return { status: 'skipped', reason: '已取消' }
+    const result = outcome.value
+    if (!result.ok) return { status: 'failed', reason: result.error.message }
+    const asset = result.data
+    ctx.updateResult(
+      serializeMediaResultCollection(
+        appendMediaResult(
+          typeof ctx.shape.meta?.nodeResult === 'string' ? ctx.shape.meta.nodeResult : '',
+          { mediaId: asset.id, mediaPath: asset.path, mime: asset.mime },
+          {
+            nodeId: ctx.node.id,
+            modelKey: 'local:indextts',
+            // 只留短前缀，完整正文不进诊断与结果溯源。
+            prompt: `本地 IndexTTS 2.5 · ${text.slice(0, 40)}`,
+            runId: ctx.runId
+          }
+        )
+      )
+    )
+    ctx.updateMeta?.({ nodeExtra: undefined })
+    ctx.emitArtifact?.({
+      kind: 'audio',
+      mediaId: asset.id,
+      mediaPath: asset.path,
+      mime: asset.mime,
+      portId: 'out-audio',
+      title: asset.name || '本地配音'
+    })
+    ctx.trace?.('result', 'info', '本地 IndexTTS 合成完成')
+    return { status: 'done' }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    ctx.trace?.('request', 'error', `本地 IndexTTS 合成异常：${message}`)
+    if (message === '已取消') return { status: 'skipped', reason: '已取消' }
+    return { status: 'failed', reason: `本地配音失败：${message}` }
+  }
+}
 
 export const speechExecutor = async (ctx: NodeExecutionContext): Promise<NodeExecutionResult> => {
   const config = parseSpeechConfig(readNodeConfig(ctx.shape))
   // 固定参数归 config，用户正文归 props.text；与节点契约和保存模型一致。
   const text = mergedPrompt(ctx.shape.props.text, inputText(ctx.inputs, 'in-text')).trim()
   if (!text) return { status: 'skipped', reason: '无朗读文本' }
+
+  // 本地引擎不经过模型网关：先分流，避免被「未绑定已验证语音模型」拦下。
+  if (config.backend === 'indextts') return runLocalIndexTts(ctx, config, text)
 
   const option = ctx.gateway.resolveModelFeature
     ? await resolveFeatureOption(ctx.gateway, ctx.providers, featureKeyOf(config, 'speech.synthesize'), 'speech.synthesize', config.providerId && config.modelId ? `${config.providerId}::${config.modelId}` : undefined)

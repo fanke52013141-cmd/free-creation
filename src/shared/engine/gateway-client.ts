@@ -82,6 +82,12 @@ export interface GatewayClient {
   audioGenerate(input: AudioGenerateInput): Promise<IpcEnvelope<MediaAsset>>
   /** 配音节点：按 config.backend 走 MiniMax 异步或火山语音合成 1.0。 */
   speechGenerate(input: SpeechGenerateInput): Promise<IpcEnvelope<SpeechGenerateResult>>
+  /** 本地 IndexTTS 2.5：探测本机运行时（解释器 / 模型目录）。 */
+  indexttsRuntime?(): Promise<IpcEnvelope<import('../contracts').IndexTtsRuntimeInfo>>
+  /** 本地 IndexTTS 2.5：用参考音频克隆音色合成。 */
+  indexttsSynthesize?(
+    input: import('../contracts').IndexTtsSynthesizeInput
+  ): Promise<IpcEnvelope<import('../types').MediaAsset>>
   /** 音色设计：返回试听音频资产与可复用的 voice_id。 */
   voiceDesign(input: VoiceDesignInput): Promise<IpcEnvelope<VoiceDesignResult>>
   /** 订阅网关事件（流式分片 / 视频进度），返回取消订阅函数。 */

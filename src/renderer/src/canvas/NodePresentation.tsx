@@ -5,7 +5,9 @@ import {
   isValidElement,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type ButtonHTMLAttributes,
   type ReactNode
@@ -46,17 +48,53 @@ export function NodeDescription(): React.JSX.Element | null {
   )
 }
 
-/** 空态共用居中大图标（无框、不重复标题）；必要提示与业务操作按需通过 children 接入。 */
+/**
+ * 空态共用居中大图标（无框、不重复标题）；必要提示与业务操作按需通过 children 接入。
+ *
+ * `data-icon-only` 表示「identity 里除图标外没有任何**看得见**的内容」，是图标几何居中的
+ * 唯一判据。不能交给 CSS `:has(> :not(...))` 判断结构：调用方常传入 `<small>` 或
+ * `.node-wiring`（默认 display:none、条件出现），结构上算有子项，视觉上仍是纯空态，
+ * 结果就是 JSON / P图 这类节点的图标退回 flex 布局、偏离卡片中心 20~30px。
+ */
 export function NodeIdentity({ children }: { children?: ReactNode }): React.JSX.Element | null {
   const context = useContext(Context)
   const register = context?.registerIdentity
+  const hostRef = useRef<HTMLDivElement>(null)
+  const [iconOnly, setIconOnly] = useState(false)
   useEffect(() => {
     register?.(1)
     return () => register?.(-1)
   }, [register])
+  // 以真实可见性判断：display:none / visibility:hidden / 零尺寸都不算内容。
+  // 同时监听尺寸变化——模型提示、连线警告等是条件渲染的，出现后要退回 flex 布局。
+  useLayoutEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+    const measure = (): void => {
+      const icon = host.querySelector(':scope > .node-standard-identity-icon')
+      const hasVisibleChild = Array.from(host.children).some((child) => {
+        if (child === icon) return false
+        const style = getComputedStyle(child)
+        if (style.display === 'none' || style.visibility === 'hidden') return false
+        const rect = child.getBoundingClientRect()
+        return rect.width > 0 && rect.height > 0
+      })
+      setIconOnly((previous) => (previous === !hasVisibleChild ? previous : !hasVisibleChild))
+    }
+    measure()
+    // jsdom 等无 ResizeObserver 的环境退化为「每次渲染测一次」，不影响运行时正确性。
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(host)
+    return () => observer.disconnect()
+  })
   if (!context) return null
   return (
-    <div className="node-standard-identity">
+    <div
+      className="node-standard-identity"
+      ref={hostRef}
+      data-icon-only={iconOnly ? 'true' : undefined}
+    >
       <span className="node-standard-identity-icon">
         <Icon name={context.spec.icon} size={NODE_UI.identity.iconSize} strokeWidth={2} />
       </span>

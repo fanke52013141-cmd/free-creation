@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { WorkspaceProfile } from '@shared/workspace-profile'
+import { normalizeWorkspaceProfile } from '@shared/workspace-profile'
 import { NODE_CATEGORY_IDS, type PaletteCategoryId } from '@shared/palette-preferences'
 import { allNodeTypes, nodeIconColor } from '../nodes/registry'
 import {
@@ -44,7 +45,9 @@ export function ProjectCreateDialog({
   const lastProfile = (() => {
     try {
       const raw = window.localStorage.getItem('canvas-studio.last-create-profile')
-      return raw ? (JSON.parse(raw) as WorkspaceProfile) : null
+      // 归一化后再用：这份 localStorage 是「上次创建时勾选的节点快照」，
+      // 新版本发布的节点不在里面，直接用会让新建项目永远看不到新节点。
+      return raw ? normalizeWorkspaceProfile(JSON.parse(raw)) : null
     } catch {
       return null
     }
