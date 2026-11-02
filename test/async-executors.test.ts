@@ -220,12 +220,12 @@ describe('异步网关等待器', () => {
     expect(videoCancel).toHaveBeenCalledWith('task-cancel', undefined)
   })
 
-  it('waitForVideo 10 分钟超时放弃等待前先补偿取消远端任务（R-01）', async () => {
+  it('waitForVideo 31 分钟兜底超时（大于网关 30 分钟上限）放弃等待前先补偿取消远端任务（R-01）', async () => {
     const videoCancel = vi.fn().mockResolvedValue({ ok: true })
     installGateway({ videoTask: vi.fn().mockResolvedValue({ ok: true, data: { status: 'running' } }), videoCancel })
     const pending = waitForVideo('task-timeout', { cancelled: false })
-    const rejected = expect(pending).rejects.toThrow('视频生成超时（10 分钟）')
-    await vi.advanceTimersByTimeAsync(600_000)
+    const rejected = expect(pending).rejects.toThrow('视频生成等待超时（31 分钟仍无结果）')
+    await vi.advanceTimersByTimeAsync(31 * 60 * 1000)
     await rejected
     expect(videoCancel).toHaveBeenCalledWith('task-timeout', undefined)
   })

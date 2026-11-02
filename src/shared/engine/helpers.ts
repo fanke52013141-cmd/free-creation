@@ -248,7 +248,9 @@ export interface VideoMedia {
   mime: string
 }
 
-/** 每 3 秒轮询视频任务状态；成功取媒体，失败/取消走 reject，10 分钟超时兜底。 */
+/** 每 3 秒轮询视频任务状态；成功取媒体，失败/取消走 reject。兜底超时须大于主进程
+ * 网关的 30 分钟轮询上限（gateway/video.ts 的 VIDEO_TIMEOUT_MS），否则渲染层会先放弃、
+ * 并误取消一个可能已完成（且已计费）的远端任务；多出的 1 分钟让主进程先行报错。 */
 export function waitForVideo(
   gateway: GatewayClient,
   taskId: string,
@@ -312,7 +314,7 @@ export function waitForVideo(
         }
       })()
     }, 3_000)
-    const timeout = setTimeout(() => fail(new Error('视频生成超时（10 分钟）')), 600_000)
+    const timeout = setTimeout(() => fail(new Error('视频生成等待超时（31 分钟仍无结果）')), 31 * 60 * 1000)
   })
 }
 
