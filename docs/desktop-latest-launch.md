@@ -14,9 +14,9 @@ powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File scripts/install-
 
 以后点击 `启动 Canvas Studio` 时，会显示一个 PowerShell 更新窗口，并按以下顺序执行：
 
-1. 如果应用仍在运行，等待你保存工作并完全退出，然后继续。
-2. 非交互地从 `origin` 获取最新的 `main`，并使用 Git 的快进合并。未提交的本地修改会保留；若远端更新与这些修改冲突，Git 会阻止合并。本地未跟踪文件保持原样。
-3. 用 `pnpm install --frozen-lockfile` 同步依赖，清理旧打包目录，然后运行 `pnpm run build:desktop-latest`，其中包含 Node/Web 类型检查、Electron Vite 构建和 Windows 目录打包。
-4. 检查新应用及渲染页面存在，记录源码提交和构建时间，再启动 `dist/current-source-release/win-unpacked/canvas-studio.exe`。
+1. 仅在 `main` 分支执行 `git pull --ff-only origin main` 快进同步；离线、历史分叉或非 main 分支时自动改用本地现有代码照常启动。本地未提交的修改始终包含在本次构建中，无需提交即可生效。
+2. `pnpm-lock.yaml` 比上次安装新时才执行 `pnpm install --frozen-lockfile`，否则跳过（平时秒过）。
+3. `src/` 或 `packages/` 源码（排除 `node_modules`）比上次构建新时才运行 `electron-vite build` 增量构建（约 10–40 秒），否则跳过。
+4. 若应用正在运行，像点击窗口 × 一样优雅关闭旧实例（正常保存退出）；无法退出时提示手动关闭。然后直接从源码启动 `node_modules\electron\dist\electron.exe`。
 
-网络、Git 合并、依赖或构建失败时，窗口会保留并显示原因，不会启动旧版本；成功启动后窗口会自动关闭。若本地修改与远端更新冲突，请先处理冲突再点击快捷方式。当前本地保存的修改会进入新构建。Windows PowerShell 使用带 BOM 的 UTF-8 读取含中文的 `.ps1` 文件；仓库的 `.editorconfig` 已固定这一编码。
+成功启动后更新窗口自动关闭；依赖安装、构建或启动失败时窗口保留并显示原因，不会启动半成品。启动状态标记保存在 `%LOCALAPPDATA%\canvas-studio-launcher`。需要启动「严格校验的打包版本」（`dist/current-source-release` 的 electron-builder 产物）时，使用 `scripts/launch-verified-desktop.ps1`。Windows PowerShell 使用带 BOM 的 UTF-8 读取含中文的 `.ps1` 文件；仓库的 `.editorconfig` 已固定这一编码。
