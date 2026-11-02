@@ -115,8 +115,9 @@
 .node-standard-scroll .node-standard-identity-icon svg {
   color: inherit;
   stroke: currentColor;
-  width: 48px;
-  height: 48px;
+  /* 2026-11-02 裁决：默认态图标放大两倍（48→96），与 NODE_UI.identity.iconSize 同步 */
+  width: 96px;
+  height: 96px;
 }
 .node-standard-identity > small {
   display: none;
@@ -163,6 +164,25 @@
   flex: 0 0 auto;
   place-items: center;
   color: color-mix(in srgb, var(--node-accent) var(--node-identity-strength, 100%), #17232d);
+}
+/* 2026-11-02 用户裁决：纯空态（identity 内只有图标、无提示文案）时，
+   图标正居中于节点卡片几何中心（横向 + 纵向）。绝对定位脱离 flow，
+   identity 自身保留 min-height 占位，高度自适应测算（offsetHeight-minHeight）不受影响。
+   定位基准是 position:relative 的 .node-body（中间层 .node-text/.node-audio-empty
+   等均无 position/transform）。纵向补偿量 = (动作栏高 + scroll 底部内边距 - 顶部内边距)/2：
+   有动作栏时 body 区间为 [12, 高度-48]，需下移 (48-12)/2 才对齐卡片中心。 */
+.node-standard-identity:not(:has(> :not(.node-standard-identity-icon)))
+  .node-standard-identity-icon {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + (var(--node-standard-action-height) - var(--node-standard-padding)) / 2);
+  transform: translate(-50%, -50%);
+}
+/* 无动作栏时动作区高度归零、scroll 增加 8px 底部内边距，改为上移 (12-8)/2。 */
+.node-standard-shell[data-has-actions='false']
+  .node-standard-identity:not(:has(> :not(.node-standard-identity-icon)))
+  .node-standard-identity-icon {
+  top: calc(50% - 2px);
 }
 .node-standard-description {
   display: -webkit-box;

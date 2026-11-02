@@ -31,8 +31,9 @@ export const NODE_UI = {
   header: { height: 28 },
   radius: 12,
   identity: {
-    /** 空态居中大图标尺寸（2026-11-02 裁决：无框、不重复节点名称） */
-    iconSize: 48,
+    /** 空态居中大图标尺寸（2026-11-02 裁决：无框、不重复节点名称；
+     *  同日追加裁决：默认态图标放大两倍至 96px，并正居中于节点卡片中心） */
+    iconSize: 96,
     minHeight: 178
   },
   description: { height: 36, maxLines: 2 },

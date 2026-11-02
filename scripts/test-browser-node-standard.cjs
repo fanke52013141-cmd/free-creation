@@ -88,7 +88,7 @@ function contrast(first, second) {
       assert.ok(Math.abs(button.bottom - 8) < 1.1, `${node.type} inset ${button.bottom}`)
       }
       assert.equal(node.descriptions, 0, `${node.type} no automatic description`)
-      if (node.icon) { assert.equal(node.icon.box, 48); assert.equal(node.icon.svg, 48) }
+      if (node.icon) { assert.equal(node.icon.box, 96); assert.equal(node.icon.svg, 96) }
     }
     const imageAlignment = await page.locator('[data-node-type="image-gen"]').evaluate(card => {
       const prompt = card.querySelector('.gen-prompt').getBoundingClientRect()
