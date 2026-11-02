@@ -101,6 +101,8 @@ describe('画布创建节点交互', () => {
     expect(dataEdgeLayerSource).toContain('mask={`url(#${overlapMaskId})`}')
     expect(dataEdgeLayerSource).toContain('<rect key={index} {...rect} fill="black" />')
     expect(dataEdgeLayerSource).toContain('className="data-edge-visible"')
+    // 追溯线（artifact:）只可视化、不可交互：不得为它注册命中路径，否则点击/框选被吞。
+    expect(dataEdgeLayerSource).toContain('.filter((edge) => !edge.provenance)')
     expect(edgeSurfaceSource).not.toMatch(/\.data-edge-visible\s*\{[^}]*stroke-dasharray/m)
   })
 

@@ -386,7 +386,12 @@ export function DataEdgeLayer({ editor }: { editor: Editor }): React.JSX.Element
     )
     if (insidePortZone) return null
     for (const path of svg.querySelectorAll<SVGPathElement>('.data-edge-hit')) {
-      if (path.isPointInStroke(point)) return path.dataset.edgeId as TLShapeId
+      if (path.isPointInStroke(point)) {
+        const edgeId = path.dataset.edgeId
+        // 追溯线（artifact:）不可选中/不可删除；防御性兜底，正常渲染也不会为它生成命中路径。
+        if (!edgeId || edgeId.startsWith('artifact:')) return null
+        return edgeId as TLShapeId
+      }
     }
     return null
   }
@@ -563,14 +568,17 @@ export function DataEdgeLayer({ editor }: { editor: Editor }): React.JSX.Element
                 })}
               </g>
             )}
-            {edges.map((edge) => (
-              <path
-                className="data-edge-hit"
-                key={`hit-${edge.id}`}
-                d={edge.path}
-                data-edge-id={edge.id}
-              />
-            ))}
+            {/* 追溯线（artifact:）只可视化、不可交互：不得注册命中路径，否则点击/框选会被吞掉。 */}
+            {edges
+              .filter((edge) => !edge.provenance)
+              .map((edge) => (
+                <path
+                  className="data-edge-hit"
+                  key={`hit-${edge.id}`}
+                  d={edge.path}
+                  data-edge-id={edge.id}
+                />
+              ))}
           </svg>
         </div>
       </div>

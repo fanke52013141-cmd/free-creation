@@ -7,9 +7,12 @@
 //
 // 验收方式（可重复、不依赖肉眼）：
 //   - 相机变化只允许改连线层的镜像 transform，不得重写 path 的 d、滤镜或描边宽度；
-//   - 任一缩放档位下，连线端点必须仍贴合对应端口的圆心；
+//   - 每个缩放档位、每一条连线都要验证端点仍贴合对应端口（逐条聚焦，避免高倍率下
+//     被视口剔除的端口让断言静默跳过）；
+//   - 页面坐标 mask 仍必须逐条挖空节点卡片（这是本次改动的核心语义）；
 //   - 流光动画时长必须是 4.05s（基线 1.35s 的 1/3）；
-//   - 连线悬浮/选中/剪刀删除仍然可用（命中层改成页面坐标后必须回归）。
+//   - 连线悬浮/选中/剪刀删除在低/中/高倍率都可用（命中层改成页面坐标后必须回归）；
+//   - 追溯线（artifact:）只可视化、不可交互，不得生成命中路径。
 //
 // 运行：先启动浏览器验收服务（pnpm dev:browser），再 node scripts/test-browser-edge-zoom-stability.cjs
 // 可用 CANVAS_QA_URL 指定地址；证据写入 qa/edge-zoom-flicker-2026-11-02/。
@@ -20,6 +23,9 @@ const assert = require('node:assert/strict')
 
 const OUT = path.resolve('qa/edge-zoom-flicker-2026-11-02')
 const ZOOMS = [0.5, 1, 2, 2.8]
+// 交互回归的倍率下限取 0.7：端口有 27 屏幕像素的优先命中圈，0.5 倍率下相邻端口之间的
+// 连线中段也会落进端口圈（属于既有产品行为），不适合用来验证连线自身的命中。
+const INTERACTION_ZOOMS = [0.7, 1, 2.8]
 const NODE_W = 340
 const NODE_H = 260
 const NODE_COUNT = 4
@@ -160,25 +166,13 @@ async function launchQaBrowser() {
       { timeout: 10000 }
     )
 
-    // ── 1. 每个缩放档位：镜像 transform 一致、端点贴合端口、命中宽度换算正确 ──
+    // ── 1. 每个缩放档位、每条连线：镜像 transform、端点贴合、命中宽度、流光时长 ──
     const alignment = []
     for (const zoom of ZOOMS) {
       const report = await page.evaluate(
         async ({ zoom, edgeIds, nodeGap, nodeW }) => {
           const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
-          // tldraw 相机：屏幕坐标 = (页面坐标 + camera) * zoom，因此把 focus 放到画布中心时
-          // camera = 画布中心 / zoom - focus。早前按屏幕像素推算会在高倍率下把视口甩出链路。
           const host = document.querySelector('.canvas-host').getBoundingClientRect()
-          const focusX = 80 + nodeGap + nodeW / 2 + nodeGap / 2
-          const focusY = 120 + 260 / 2
-          editor.setCamera(
-            {
-              x: host.width / 2 / zoom - focusX,
-              y: host.height / 2 / zoom - focusY,
-              z: zoom
-            },
-            { immediate: true }
-          )
           const waitFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()))
           const portCenter = (nodeId, portId) => {
             const dot = document.querySelector(
@@ -190,103 +184,188 @@ async function launchQaBrowser() {
             if (rect.width < 2 || rect.height < 2) return null
             return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
           }
-          const measure = () => {
+          const measureEdge = (edge) => {
             const svg = document.querySelector('.data-edge-layer')
             const ctm = svg.getScreenCTM()
-            return edgeIds.map((edge) => {
-              const edgePath = document.querySelector(
-                `[data-edge-id="${edge.arrowId}"] .data-edge-visible`
-              )
-              if (!edgePath) return { tailToTargetPort: null, headToSourcePort: null }
-              const start = edgePath.getPointAtLength(0)
-              const end = edgePath.getPointAtLength(edgePath.getTotalLength())
-              const head = new DOMPoint(start.x, start.y).matrixTransform(ctm)
-              const tail = new DOMPoint(end.x, end.y).matrixTransform(ctm)
-              const targetPort = portCenter(edge.toId, edge.toPort)
-              const sourcePort = portCenter(edge.fromId, edge.fromPort)
-              return {
-                tailToTargetPort: targetPort
-                  ? Math.hypot(tail.x - targetPort.x, tail.y - targetPort.y)
-                  : null,
-                headToSourcePort: sourcePort
-                  ? Math.hypot(head.x - sourcePort.x, head.y - sourcePort.y)
-                  : null
-              }
-            })
-          }
-          // 刚进入视口的节点会先自动校正高度（一次文档变更），连线在其后一帧更新；
-          // 这里等到几何稳定再断言，避免把"节点自身在变高"误判成连线漂移。
-          let rows = []
-          let framesToStable = 0
-          for (; framesToStable < 30; framesToStable += 1) {
-            await waitFrame()
-            rows = measure()
-            const measured = rows.filter((row) => row.tailToTargetPort !== null)
-            const worst = measured.reduce(
-              (max, row) => Math.max(max, row.tailToTargetPort ?? 0, row.headToSourcePort ?? 0),
-              0
+            const edgePath = document.querySelector(
+              `[data-edge-id="${edge.arrowId}"] .data-edge-visible`
             )
-            if (measured.length >= 1 && worst <= 2.5) break
+            if (!edgePath) return { pathFound: false, tailError: null, headError: null }
+            const start = edgePath.getPointAtLength(0)
+            const end = edgePath.getPointAtLength(edgePath.getTotalLength())
+            const head = new DOMPoint(start.x, start.y).matrixTransform(ctm)
+            const tail = new DOMPoint(end.x, end.y).matrixTransform(ctm)
+            const targetPort = portCenter(edge.toId, edge.toPort)
+            const sourcePort = portCenter(edge.fromId, edge.fromPort)
+            return {
+              pathFound: true,
+              tailError: targetPort
+                ? Math.hypot(tail.x - targetPort.x, tail.y - targetPort.y)
+                : null,
+              headError: sourcePort
+                ? Math.hypot(head.x - sourcePort.x, head.y - sourcePort.y)
+                : null
+            }
           }
-          const tailErrors = rows
-            .map((row) => row.tailToTargetPort)
-            .filter((value) => value !== null)
-          const headErrors = rows
-            .map((row) => row.headToSourcePort)
-            .filter((value) => value !== null)
+          // 逐条把镜头对准该连线的两端口中间：高倍率下也保证两端的端口都在视口内可量测。
+          const perEdge = []
+          for (const [index, edge] of edgeIds.entries()) {
+            const sourceRight = 80 + index * nodeGap + nodeW
+            const targetLeft = 80 + (index + 1) * nodeGap
+            const focusX = (sourceRight + targetLeft) / 2
+            const focusY = 120 + 260 / 2
+            // tldraw 相机：screen = (page + camera) * zoom → camera = 画布中心 / zoom - focus。
+            editor.setCamera(
+              {
+                x: host.width / 2 / zoom - focusX,
+                y: host.height / 2 / zoom - focusY,
+                z: zoom
+              },
+              { immediate: true }
+            )
+            let row = { pathFound: false, tailError: null, headError: null }
+            let framesToStable = 0
+            // 刚进入视口的节点会先自动校正高度（一次文档变更），连线在其后一帧更新。
+            for (; framesToStable < 30; framesToStable += 1) {
+              await waitFrame()
+              row = measureEdge(edge)
+              const worst = Math.max(
+                row.tailError === null ? Number.POSITIVE_INFINITY : row.tailError,
+                row.headError === null ? Number.POSITIVE_INFINITY : row.headError
+              )
+              if (row.pathFound && worst <= 2.5) break
+            }
+            perEdge.push({ edgeId: edge.arrowId, framesToStable, ...row })
+          }
           const hit = document.querySelector('.data-edge-hit')
           const frame = document.querySelector('.data-edge-frame')
           const tlShapes = document.querySelector('.tl-shapes')
           return {
             zoom,
-            framesToStable,
             sameTransform: frame.style.transform === tlShapes.style.transform,
             transform: frame.style.transform,
             hitStrokeWidth: hit ? parseFloat(getComputedStyle(hit).strokeWidth) : null,
-            measuredEdges: tailErrors.length,
-            maxTailToTargetPort: tailErrors.length ? Math.max(...tailErrors) : null,
-            maxHeadToSourcePort: headErrors.length ? Math.max(...headErrors) : null,
-            rows,
+            visiblePaths: document.querySelectorAll('.data-edge-visible').length,
             flowAnimation: getComputedStyle(document.querySelector('.data-edge-flow'))
-              .animationDuration
+              .animationDuration,
+            perEdge
           }
         },
         { zoom, edgeIds: fixture.edgeIds, nodeGap: NODE_GAP, nodeW: NODE_W }
       )
       alignment.push(report)
-      if (report.measuredEdges < (zoom <= 1 ? 3 : 1)) {
-        console.log('ALIGN_DEBUG ' + JSON.stringify(report))
-      }
-      assert.ok(
-        report.measuredEdges >= (zoom <= 1 ? 3 : 1),
-        `zoom ${zoom}: 完整可见的连线数量不足，实际 ${report.measuredEdges}`
+      assert.equal(
+        report.visiblePaths,
+        fixture.edgeIds.length,
+        `zoom ${zoom}: 连线层必须始终保留全部 ${fixture.edgeIds.length} 条可见连线`
       )
       assert.ok(report.sameTransform, `zoom ${zoom}: 连线层 transform 必须镜像 .tl-shapes`)
-      assert.ok(
-        report.maxTailToTargetPort <= 2.5,
-        `zoom ${zoom}: 连线终点必须贴合目标输入端口，实际偏差 ${report.maxTailToTargetPort}px`
-      )
-      assert.ok(
-        report.maxHeadToSourcePort <= 2.5,
-        `zoom ${zoom}: 连线起点必须贴合源输出端口，实际偏差 ${report.maxHeadToSourcePort}px`
-      )
       assert.ok(
         Math.abs(report.hitStrokeWidth - 14 / zoom) <= 0.6,
         `zoom ${zoom}: 命中描边必须保持屏幕空间 14px，实际 ${report.hitStrokeWidth}`
       )
       assert.equal(report.flowAnimation, '4.05s', `zoom ${zoom}: 流光动画时长必须是 4.05s`)
+      for (const row of report.perEdge) {
+        assert.ok(row.pathFound, `zoom ${zoom}: 连线 ${row.edgeId} 的可见路径缺失`)
+        assert.ok(
+          row.tailError !== null,
+          `zoom ${zoom}: 连线 ${row.edgeId} 的目标输入端口不可量测（不能静默跳过）`
+        )
+        assert.ok(
+          row.headError !== null,
+          `zoom ${zoom}: 连线 ${row.edgeId} 的源输出端口不可量测（不能静默跳过）`
+        )
+        assert.ok(
+          row.tailError <= 2.5,
+          `zoom ${zoom}: 连线 ${row.edgeId} 终点必须贴合目标端口，实际偏差 ${row.tailError}px`
+        )
+        assert.ok(
+          row.headError <= 2.5,
+          `zoom ${zoom}: 连线 ${row.edgeId} 起点必须贴合源端口，实际偏差 ${row.headError}px`
+        )
+      }
       await page.screenshot({ path: path.join(OUT, `edge-zoom-${zoom}x.png`) })
     }
 
-    // ── 2. 只动相机：不允许重写 path 几何/滤镜/描边 ──
-    const cameraOnly = await page.evaluate(async () => {
+    // ── 2. 页面坐标 mask 仍必须逐条挖空节点 ──
+    const maskCheck = await page.evaluate(async () => {
+      const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
+      const mask = document.querySelector('.data-edge-layer mask')
+      if (!mask) return null
+      const rects = Array.from(mask.querySelectorAll('rect')).map((rect) => ({
+        x: Number(rect.getAttribute('x')),
+        y: Number(rect.getAttribute('y')),
+        width: Number(rect.getAttribute('width')),
+        height: Number(rect.getAttribute('height')),
+        fill: rect.getAttribute('fill')
+      }))
+      const white = rects.find((rect) => rect.fill === 'white')
+      const black = rects.filter((rect) => rect.fill === 'black')
+      const nodes = editor
+        .getCurrentPageShapes()
+        .filter((shape) => shape.type === 'node-card')
+        .flatMap((shape) => {
+          const bounds = editor.getShapePageBounds(shape.id)
+          return bounds
+            ? [{ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }]
+            : []
+        })
+      return {
+        attrs: {
+          x: Number(mask.getAttribute('x')),
+          y: Number(mask.getAttribute('y')),
+          width: Number(mask.getAttribute('width')),
+          height: Number(mask.getAttribute('height'))
+        },
+        white,
+        black,
+        nodes
+      }
+    })
+    assert.ok(maskCheck, '连线层必须存在节点遮罩 mask')
+    assert.equal(
+      maskCheck.black.length,
+      maskCheck.nodes.length,
+      `mask 必须为每个节点卡片生成一个挖空矩形（实际 ${maskCheck.black.length}/${maskCheck.nodes.length}）`
+    )
+    for (const node of maskCheck.nodes) {
+      const matched = maskCheck.black.some(
+        (rect) =>
+          Math.abs(rect.x - node.x) <= 0.01 &&
+          Math.abs(rect.y - node.y) <= 0.01 &&
+          Math.abs(rect.width - node.width) <= 0.01 &&
+          Math.abs(rect.height - node.height) <= 0.01
+      )
+      assert.ok(matched, `mask 挖空矩形必须与节点页面边界一致：${JSON.stringify(node)}`)
+      assert.ok(
+        maskCheck.attrs.x <= node.x &&
+          maskCheck.attrs.y <= node.y &&
+          maskCheck.attrs.x + maskCheck.attrs.width >= node.x + node.width &&
+          maskCheck.attrs.y + maskCheck.attrs.height >= node.y + node.height,
+        `mask 覆盖范围必须包含节点 ${JSON.stringify(node)}`
+      )
+    }
+
+    // ── 3. 只动相机：不允许重写 path 几何/滤镜/描边，连线数量不得跳变 ──
+    const cameraOnly = await page.evaluate(async (expectedEdges) => {
       const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
       const layer = document.querySelector('.data-edge-layer')
-      const mutations = { d: 0, filter: 0, strokeWidth: 0, otherAttributes: 0 }
+      const mutations = { d: 0, filter: 0, strokeWidth: 0, otherStyleAttributes: 0 }
       const flowFilters = new Set()
-      const visibleCounts = new Set()
+      const edgeCounts = new Set()
+      let transformMismatches = 0
       let documentChanges = 0
       const waitFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()))
+      // MutationObserver 在微任务队列里回调：排空微任务后再比对，等价于"浏览器绘制前"的同步结果。
+      const settleMicrotasks = async () => {
+        await Promise.resolve()
+        await Promise.resolve()
+      }
+      const assertSynced = () => {
+        const frame = document.querySelector('.data-edge-frame')
+        const tlShapes = document.querySelector('.tl-shapes')
+        if (frame.style.transform !== tlShapes.style.transform) transformMismatches += 1
+      }
       const cameraAt = (frame) => {
         const progress = frame / 35
         return {
@@ -299,6 +378,8 @@ async function launchQaBrowser() {
         for (let frame = 0; frame < 36; frame += 1) {
           await waitFrame()
           editor.setCamera(cameraAt(frame), { immediate: true })
+          await settleMicrotasks()
+          assertSynced()
         }
         await waitFrame()
       }
@@ -313,8 +394,10 @@ async function launchQaBrowser() {
             const style = record.target.getAttribute('style') || ''
             if (style.includes('filter')) mutations.filter += 1
             if (style.includes('stroke-width')) mutations.strokeWidth += 1
-            else mutations.otherAttributes += 1
-          } else mutations.otherAttributes += 1
+            if (!style.includes('filter') && !style.includes('stroke-width')) {
+              mutations.otherStyleAttributes += 1
+            }
+          } else mutations.otherStyleAttributes += 1
         }
       })
       observer.observe(layer, { subtree: true, attributes: true })
@@ -327,9 +410,11 @@ async function launchQaBrowser() {
       for (let frame = 0; frame < 36; frame += 1) {
         await waitFrame()
         editor.setCamera(cameraAt(frame), { immediate: true })
+        await settleMicrotasks()
+        assertSynced()
         const flow = document.querySelector('.data-edge-flow')
         if (flow) flowFilters.add(getComputedStyle(flow).filter)
-        visibleCounts.add(document.querySelectorAll('.data-edge-visible').length)
+        edgeCounts.add(document.querySelectorAll('.data-edge-visible').length)
       }
       await waitFrame()
       observer.disconnect()
@@ -338,57 +423,199 @@ async function launchQaBrowser() {
         mutations: { ...mutations },
         documentChanges,
         distinctFlowFilters: flowFilters.size,
-        visibleCounts: [...visibleCounts]
+        edgeCounts: [...edgeCounts],
+        expectedEdges,
+        transformMismatches
       }
-    })
+    }, fixture.edgeIds.length)
     assert.equal(cameraOnly.documentChanges, 0, '第二轮扫描不应再出现文档变更（预热不足）')
+    assert.equal(cameraOnly.transformMismatches, 0, '每一帧镜像 transform 都必须与 .tl-shapes 一致')
     assert.equal(cameraOnly.mutations.d, 0, '相机变化不得重写连线 path 的 d')
     assert.equal(cameraOnly.mutations.filter, 0, '相机变化不得重写滤镜')
     assert.equal(cameraOnly.mutations.strokeWidth, 0, '相机变化不得重写描边宽度')
     assert.equal(cameraOnly.distinctFlowFilters, 1, '缩放期间流光滤镜必须保持单一取值')
-    assert.equal(cameraOnly.visibleCounts.length, 1, '缩放期间可见连线数量不得跳变')
+    assert.deepEqual(
+      cameraOnly.edgeCounts,
+      [fixture.edgeIds.length],
+      '缩放期间可见连线数量不得跳变，也不得为 0'
+    )
 
-    // ── 3. 交互回归：悬浮出现剪刀、按下选中、剪刀删除 ──
-    await page.evaluate(async () => {
+    // ── 4. 追溯线（artifact:）只可视化、不可交互 ──
+    const provenance = await page.evaluate(async (expectedEdges) => {
       const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
-      editor.setCamera({ x: -60, y: -40, z: 1 }, { immediate: true })
-      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
-    })
-    const interactionPoint = await page.evaluate(() => {
+      const assetId = 'shape:edge-zoom-asset'
+      editor.createShape({
+        id: assetId,
+        type: 'node-card',
+        x: 80,
+        y: 760,
+        props: {
+          w: 240,
+          h: 160,
+          nodeType: 'image',
+          title: '追溯资产',
+          text: ''
+        },
+        meta: {
+          artifactProducerId: 'shape:edge-zoom-node-0',
+          artifactProducerPortId: 'out-text'
+        }
+      })
+      const waitFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()))
+      for (let frame = 0; frame < 30; frame += 1) {
+        await waitFrame()
+        if (document.querySelectorAll('.data-edge-visible').length === expectedEdges + 1) break
+      }
+      const host = document.querySelector('.canvas-host').getBoundingClientRect()
+      const focusX = 80 + 170
+      const focusY = (120 + 260 + 760) / 2
+      editor.setCamera(
+        { x: host.width / 2 - focusX, y: host.height / 2 - focusY, z: 1 },
+        { immediate: true }
+      )
+      for (let frame = 0; frame < 5; frame += 1) await waitFrame()
       const svg = document.querySelector('.data-edge-layer')
       const ctm = svg.getScreenCTM()
-      const edgePath = document.querySelector('.data-edge-visible')
-      const middle = edgePath.getPointAtLength(edgePath.getTotalLength() / 2)
-      const point = new DOMPoint(middle.x, middle.y).matrixTransform(ctm)
-      return { x: point.x, y: point.y }
-    })
-    await page.mouse.move(interactionPoint.x, interactionPoint.y)
-    await page.waitForSelector('.data-edge-scissors', { timeout: 5000 })
-    // 剪刀按钮始终贴在光标上，真实点击会落到按钮；这里用同坐标的 pointerdown 验证
-    // "按下连线即选中"的命中几何，随后再用真实点击验证剪刀删除。
-    await page.evaluate(({ x, y }) => {
-      window.dispatchEvent(
-        new PointerEvent('pointerdown', {
-          clientX: x,
-          clientY: y,
-          bubbles: true,
-          cancelable: true,
-          pointerId: 1,
-          pointerType: 'mouse',
-          button: 0,
-          buttons: 1
-        })
+      const provenancePath = document.querySelector(
+        '[data-edge-id^="artifact:"] .data-edge-visible'
       )
-    }, interactionPoint)
-    await page.waitForTimeout(120)
-    const selected = await page.locator('.data-edge.is-selected').count()
-    assert.equal(selected, 1, '点击连线必须选中该连线')
-    const before = await page.locator('.data-edge-layer .data-edge-visible').count()
-    await page.mouse.move(interactionPoint.x + 1, interactionPoint.y + 1)
+      const hitPaths = document.querySelectorAll('.data-edge-hit[data-edge-id^="artifact:"]').length
+      let point = null
+      if (provenancePath) {
+        const middle = provenancePath.getPointAtLength(provenancePath.getTotalLength() / 2)
+        const screen = new DOMPoint(middle.x, middle.y).matrixTransform(ctm)
+        point = { x: screen.x, y: screen.y }
+      }
+      return {
+        created: Boolean(provenancePath),
+        visibleCount: document.querySelectorAll('.data-edge-visible').length,
+        hitPaths,
+        point,
+        assetId
+      }
+    }, fixture.edgeIds.length)
+    assert.ok(provenance.created, '追溯线必须正常绘制')
+    assert.equal(provenance.hitPaths, 0, '追溯线不得注册命中路径（否则点击/框选会被吞）')
+    if (provenance.point) {
+      await page.mouse.move(provenance.point.x, provenance.point.y)
+      await page.waitForTimeout(200)
+      assert.equal(
+        await page.locator('.data-edge-scissors').count(),
+        0,
+        '悬浮追溯线不得出现剪刀（不可删除）'
+      )
+      await page.evaluate(({ x, y }) => {
+        window.dispatchEvent(
+          new PointerEvent('pointerdown', {
+            clientX: x,
+            clientY: y,
+            bubbles: true,
+            cancelable: true,
+            pointerId: 1,
+            pointerType: 'mouse',
+            button: 0,
+            buttons: 1
+          })
+        )
+      }, provenance.point)
+      await page.waitForTimeout(120)
+      assert.equal(
+        await page.locator('.data-edge.is-selected').count(),
+        0,
+        '点击追溯线不得选中伪边 ID'
+      )
+    }
+    await page.evaluate(async (assetId) => {
+      const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
+      editor.deleteShapes([assetId])
+      await new Promise((resolve) => requestAnimationFrame(() => resolve()))
+    }, provenance.assetId)
+    await page.waitForFunction(
+      (expected) => document.querySelectorAll('.data-edge-visible').length === expected,
+      fixture.edgeIds.length,
+      { timeout: 5000 }
+    )
+
+    // ── 5. 低/中/高倍率：悬浮出现剪刀 + 按下选中（覆盖 getScreenCTM 与命中宽度换算） ──
+    const interaction = []
+    for (const zoom of INTERACTION_ZOOMS) {
+      const point = await page.evaluate(
+        async ({ zoom, nodeW, nodeGap }) => {
+          const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
+          const host = document.querySelector('.canvas-host').getBoundingClientRect()
+          const sourceRight = 80 + nodeW
+          const targetLeft = 80 + nodeGap
+          const focusX = (sourceRight + targetLeft) / 2
+          const focusY = 250
+          editor.setCamera(
+            { x: host.width / 2 / zoom - focusX, y: host.height / 2 / zoom - focusY, z: zoom },
+            { immediate: true }
+          )
+          await new Promise((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(resolve))
+          )
+          const svg = document.querySelector('.data-edge-layer')
+          const ctm = svg.getScreenCTM()
+          const edgePath = document.querySelector(
+            '[data-edge-id="shape:edge-zoom-edge-0"] .data-edge-visible'
+          )
+          const middle = edgePath.getPointAtLength(edgePath.getTotalLength() / 2)
+          const screen = new DOMPoint(middle.x, middle.y).matrixTransform(ctm)
+          return { x: screen.x, y: screen.y }
+        },
+        { zoom, nodeW: NODE_W, nodeGap: NODE_GAP }
+      )
+      await page.mouse.move(point.x, point.y)
+      await page.waitForSelector('.data-edge-scissors', { timeout: 5000 })
+      // 剪刀按钮始终贴在光标上，真实点击会落到按钮；用同坐标 pointerdown 验证"按下连线即选中"。
+      await page.evaluate(({ x, y }) => {
+        window.dispatchEvent(
+          new PointerEvent('pointerdown', {
+            clientX: x,
+            clientY: y,
+            bubbles: true,
+            cancelable: true,
+            pointerId: 1,
+            pointerType: 'mouse',
+            button: 0,
+            buttons: 1
+          })
+        )
+      }, point)
+      await page.waitForTimeout(120)
+      const selected = await page.locator('.data-edge.is-selected').count()
+      assert.equal(selected, 1, `zoom ${zoom}: 点击连线必须选中该连线`)
+      const selectedId = await page
+        .locator('.data-edge.is-selected')
+        .getAttribute('data-edge-id')
+      assert.equal(selectedId, 'shape:edge-zoom-edge-0', `zoom ${zoom}: 选中的必须是命中的那条连线`)
+      interaction.push({ zoom, point, selectedId })
+      // 移开指针清除 hover，避免影响下一轮。
+      await page.mouse.move(1240, 780)
+      await page.waitForTimeout(120)
+      assert.equal(await page.locator('.data-edge-scissors').count(), 0, `zoom ${zoom}: 移开后剪刀必须消失`)
+    }
+
+    // ── 6. 剪刀删除（中倍率真实点击）──
+    const deletePoint = await page.evaluate(async () => {
+      const editor = (await import('/src/stores/editor.ts')).useEditorStore.getState().editor
+      const host = document.querySelector('.canvas-host').getBoundingClientRect()
+      const focusX = (80 + 340 + 550) / 2
+      editor.setCamera({ x: host.width / 2 - focusX, y: host.height / 2 - 250, z: 1 }, { immediate: true })
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      const svg = document.querySelector('.data-edge-layer')
+      const ctm = svg.getScreenCTM()
+      const edgePath = document.querySelectorAll('.data-edge-visible')[0]
+      const middle = edgePath.getPointAtLength(edgePath.getTotalLength() / 2)
+      const screen = new DOMPoint(middle.x, middle.y).matrixTransform(ctm)
+      return { x: screen.x, y: screen.y }
+    })
+    await page.mouse.move(deletePoint.x, deletePoint.y)
     await page.waitForSelector('.data-edge-scissors', { timeout: 5000 })
+    const before = await page.locator('.data-edge-layer .data-edge-visible').count()
     await page.locator('.data-edge-scissors').click()
     await page.waitForFunction(
-      (expected) => document.querySelectorAll('.data-edge-layer .data-edge-visible').length === expected,
+      (expected) => document.querySelectorAll('.data-edge-visible').length === expected,
       before - 1,
       { timeout: 5000 }
     )
@@ -398,13 +625,13 @@ async function launchQaBrowser() {
     fs.writeFileSync(
       path.join(OUT, 'evidence.json'),
       JSON.stringify(
-        { zooms: ZOOMS, alignment, cameraOnly, interactionPoint, before, after },
+        { zooms: ZOOMS, alignment, maskCheck, cameraOnly, provenance, interaction, before, after },
         null,
         2
       )
     )
     console.log(
-      'PASS: 连线随相机同帧变换、端点贴合端口、缩放期间零几何/滤镜重写、流光 4.05s、悬浮/选中/删除可用'
+      'PASS: 连线随相机同帧变换、逐条端点贴合端口、页面坐标 mask 仍挖空节点、缩放期间零几何/滤镜重写、流光 4.05s、低/中/高倍率悬浮/选中/删除可用'
     )
   } finally {
     await browser.close()
