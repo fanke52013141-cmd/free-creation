@@ -1,12 +1,13 @@
 // 左下角停靠簇：小地图（弹出） + 缩放控制
 // 小地图完全重写：即时拖拽响应（无动画延迟）、实时视口跟随、连线可视化、点击节点聚焦
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Box, type Editor, type TLShapeId } from 'tldraw'
+import { type Editor, type TLShapeId } from 'tldraw'
 import type { NodeCardShape } from './NodeCardShape'
 import { getNodeType } from '../nodes/registry'
 import { markUndoPoint } from './history'
 import { Icon } from '../components/Icon'
 import { Tooltip } from '../components/Tooltip'
+import { focusCanvas } from './focus-canvas'
 
 const BOX_W = 220
 const BOX_H = 150
@@ -100,31 +101,7 @@ function organizeCanvas(editor: Editor): void {
     }))
   )
   markUndoPoint(editor, 'organize-canvas')
-  // Only reserve the surfaces actually covering each side. Symmetric inset also
-  // consumes vertical space and makes even one card tiny on a short viewport.
-  const viewport = editor.getViewportScreenBounds()
-  const palette = editor.getContainer().ownerDocument.querySelector('.node-palette')
-  const paletteWidth = palette ? palette.getBoundingClientRect().right - viewport.x : 0
-  const bounds = shapes.flatMap((shape) => {
-    const bounds = editor.getShapePageBounds(shape.id)
-    return bounds ? [bounds] : []
-  })
-  if (bounds.length) {
-    const box = Box.Common(bounds)
-    const left = Math.max(32, paletteWidth + 32)
-    const top = 48
-    const width = Math.max(1, viewport.w - left - 32)
-    const height = Math.max(1, viewport.h - top - 88)
-    const zoom = Math.min(1, width / Math.max(1, box.w), height / Math.max(1, box.h))
-    editor.setCamera(
-      {
-        x: (left + width / 2) / zoom - box.center.x,
-        y: (top + height / 2) / zoom - box.center.y,
-        z: zoom
-      },
-      { animation: { duration: 300 } }
-    )
-  }
+  focusCanvas(editor)
 }
 
 export function CanvasBottomDock({ editor }: DockProps): React.JSX.Element {
@@ -518,16 +495,13 @@ export function CanvasBottomDock({ editor }: DockProps): React.JSX.Element {
               <Icon name="zoom-out" size={16} />
             </button>
           </Tooltip>
-          <Tooltip label="重置缩放到 100%">
+          <Tooltip label="定位画布内容">
             <button
               className="dock-btn"
-              aria-label="重置缩放到 100%"
-              onClick={() =>
-                editor &&
-                editor.setCamera({ ...editor.getCamera(), z: 1 }, { animation: { duration: 220 } })
-              }
+              aria-label="定位画布内容"
+              onClick={() => editor && focusCanvas(editor)}
             >
-              <Icon name="reset" size={16} />
+              <Icon name="target" size={16} />
             </button>
           </Tooltip>
         </div>
