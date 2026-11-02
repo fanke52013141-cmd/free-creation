@@ -1,4 +1,17 @@
-import { useEffect, useId, useRef, useState, type RefObject } from 'react'
+// 节点数据连线覆盖层（页面坐标 + 镜像 tldraw 相机变换）。
+//
+// 此前的实现是"屏幕坐标 SVG"：每当相机变化（编辑器 tick / resize），就用 requestAnimationFrame
+// 触发一次 React 全量重渲染，把每条连线的 path 的 d、strokeWidth、drop-shadow 半径、mask 都
+// 按新 zoom 重写一遍，再用页面坐标换算端点。快速 Ctrl+滚轮缩放时这等于每帧重算整层：
+//   - 连线几何与节点卡片各自在不同的帧提交，端点会短暂脱离端口（视觉上"线闪一下/消失再出现"）；
+//   - drop-shadow 半径随 zoom 每帧变化，而 .data-edge-visible 的 transition 又包含 filter，
+//     等于每帧重新启动一次滤镜过渡，整层滤镜持续重算；
+//   - 大面积 mask + 每帧失效的 SVG 内容，让缩放路径上的光栅化远超一帧预算。
+//
+// 现在几何只依赖页面坐标，缩放/平移交给与 tldraw 完全一致的 CSS transform 镜像：
+// 路径、滤镜、mask 只在文档变化时重算，相机变化只写一个 transform 字符串（在绘制前由
+// MutationObserver 同步），连线因此与节点卡片在同一合成层节奏上移动，不再闪烁。
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import type { Editor, TLShapeId } from 'tldraw'
 import { getNodePorts, getNodeType, PORT_COLORS } from '../nodes/registry'
 import type { NodeCardShape } from './NodeCardShape'
@@ -7,10 +20,11 @@ import { buildDataEdgePath, NODE_PORT_OUTSET } from './edge-geometry'
 import { useConnectionStore, type ConnectionFrom } from '../stores/connection'
 import { dynamicPortIdsForShape, portPairCompatible } from './graph'
 import { collectNodePortConnections, createNodePortLayout } from './node-port-layout'
+import { edgeMaskExtents, type EdgePageRect } from './edge-visual-extents'
 import { markUndoPoint } from './history'
 import { toast } from '../stores/toast'
 
-interface ScreenEdge {
+interface PageEdge {
   id: TLShapeId
   path: string
   color: string
@@ -26,46 +40,24 @@ interface ScreenEdge {
   invalid?: boolean
 }
 
-interface ScreenNodeRect {
-  x: number
-  y: number
-  width: number
-  height: number
-}
+type PageRect = EdgePageRect
 
 /**
- * 返回节点卡片在当前 SVG 坐标系中的边界。
+ * 节点页面边界（不是屏幕边界）。
  *
  * 数据线会被这些矩形挖空。节点始终是画布最上层的实体，连线不能穿透其内容区。
  */
-function collectNodeRects(editor: Editor, host: HTMLDivElement): ScreenNodeRect[] {
-  const hostRect = host.getBoundingClientRect()
-  return editor
-    .getCurrentPageShapes()
-    .filter((shape): shape is NodeCardShape => shape.type === 'node-card')
-    .flatMap((shape) => {
-      const bounds = editor.getShapePageBounds(shape.id)
-      if (!bounds) return []
-      const topLeft = editor.pageToScreen({ x: bounds.x, y: bounds.y })
-      const bottomRight = editor.pageToScreen({ x: bounds.maxX, y: bounds.maxY })
-      return [
-        {
-          x: topLeft.x - hostRect.left,
-          y: topLeft.y - hostRect.top,
-          width: Math.max(0, bottomRight.x - topLeft.x),
-          height: Math.max(0, bottomRight.y - topLeft.y)
-        }
-      ]
-    })
+function collectNodeRects(editor: Editor): PageRect[] {
+  return editor.getCurrentPageShapes().flatMap((shape) => {
+    if (shape.type !== 'node-card') return []
+    const bounds = editor.getShapePageBounds(shape.id)
+    if (!bounds) return []
+    return [{ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }]
+  })
 }
 
-function collectEdges(
-  editor: Editor,
-  host: HTMLDivElement,
-  draftFrom: ConnectionFrom | null
-): ScreenEdge[] {
-  const hostRect = host.getBoundingClientRect()
-  const result: ScreenEdge[] = []
+function collectEdges(editor: Editor, draftFrom: ConnectionFrom | null): PageEdge[] {
+  const result: PageEdge[] = []
   const connections = collectNodePortConnections(editor)
   const layouts = new Map<string, Map<string, number>>()
   const getOffsets = (
@@ -157,14 +149,7 @@ function collectEdges(
           ? targetBounds.y + (targetBounds.height * toY) / target.props.h
           : targetBounds.y
     // 端口圆心位于卡片外侧，正式数据线也以圆心为锚点，不能留一段“线没接上”的空隙。
-    const startScreen = editor.pageToScreen({
-      x: sourceBounds.maxX + NODE_PORT_OUTSET,
-      y: sourceAnchorY
-    })
-    const endScreen = editor.pageToScreen({
-      x: targetBounds.x - NODE_PORT_OUTSET,
-      y: targetAnchorY
-    })
+    // 这里的坐标全部是页面坐标：屏幕位置由镜像的相机 transform 一次性给出。
     const fromPort = sourcePorts.out[fromIndex]
     result.push({
       id: arrow.id,
@@ -177,8 +162,8 @@ function collectEdges(
       targetId: target.id,
       invalid: portMissing,
       path: buildDataEdgePath(
-        { x: startScreen.x - hostRect.left, y: startScreen.y - hostRect.top },
-        { x: endScreen.x - hostRect.left, y: endScreen.y - hostRect.top }
+        { x: sourceBounds.maxX + NODE_PORT_OUTSET, y: sourceAnchorY },
+        { x: targetBounds.x - NODE_PORT_OUTSET, y: targetAnchorY }
       )
     })
   }
@@ -218,14 +203,6 @@ function collectEdges(
         ? assetBounds.y + (assetBounds.height * toY) / (asset as NodeCardShape).props.h
         : assetBounds.y + assetBounds.height / 2
 
-    const start = editor.pageToScreen({
-      x: producerBounds.maxX + NODE_PORT_OUTSET,
-      y: sourceAnchorY
-    })
-    const end = editor.pageToScreen({
-      x: assetBounds.x - NODE_PORT_OUTSET,
-      y: targetAnchorY
-    })
     const outPort = outIdx >= 0 ? producerPorts.out[outIdx] : undefined
     // 追溯线同样从生产节点出发，颜色必须跟随该节点的输出色。
     const assetOutType = assetPorts.out[0]?.type
@@ -242,8 +219,8 @@ function collectEdges(
       targetId: asset.id,
       provenance: true,
       path: buildDataEdgePath(
-        { x: start.x - hostRect.left, y: start.y - hostRect.top },
-        { x: end.x - hostRect.left, y: end.y - hostRect.top }
+        { x: producerBounds.maxX + NODE_PORT_OUTSET, y: sourceAnchorY },
+        { x: assetBounds.x - NODE_PORT_OUTSET, y: targetAnchorY }
       )
     })
   }
@@ -259,6 +236,61 @@ function getNodePortsForShape(shape: NodeCardShape): {
 }
 
 /**
+ * 把 tldraw 的相机变换镜像到连线层。
+ *
+ * tldraw 4.x 把 `scale(z) translate(x, y)` 写在 `.tl-html-layer.tl-shapes` 的 inline style 上；
+ * 连线层使用同样的 1×1 盒模型与默认 transform-origin，直接复制该字符串即可与节点逐像素同步，
+ * 不依赖 tldraw 内部坐标常量的推算。MutationObserver 在浏览器绘制前回调，因此同一帧内对齐。
+ */
+function mirrorCameraTransform(editor: Editor, frame: HTMLElement): () => void {
+  const container = editor.getContainer()
+  let layer: HTMLElement | null = null
+  let attached = false
+  let retryTimer: number | undefined
+  const observer = new MutationObserver(() => sync())
+
+  const sync = (): void => {
+    if (!layer || !layer.isConnected) {
+      const next = container.querySelector<HTMLElement>('.tl-shapes')
+      if (!next) return
+      if (next !== layer) {
+        // tldraw 重挂载时层节点可能被替换；始终把观察器挂到当前节点上。
+        observer.disconnect()
+        observer.observe(next, { attributes: true, attributeFilter: ['style'] })
+        layer = next
+        attached = true
+      }
+    }
+    const transform = layer.style.transform
+    if (transform && frame.style.transform !== transform) frame.style.transform = transform
+    // 命中层需要保持屏幕空间恒定的 14px 容差，页面坐标下折算成 14/zoom（见 CSS）。
+    const zoom = editor.getCamera().z || 1
+    const hitWidth = `${14 / zoom}px`
+    if (frame.style.getPropertyValue('--edge-hit-width') !== hitWidth) {
+      frame.style.setProperty('--edge-hit-width', hitWidth)
+    }
+  }
+
+  sync()
+  if (!attached) {
+    // 编辑器挂载通常早于本层；极少数情况下重试几次，避免永久丢失同步。
+    let retries = 0
+    retryTimer = window.setInterval(() => {
+      sync()
+      retries += 1
+      if (attached || retries > 40) {
+        window.clearInterval(retryTimer)
+        retryTimer = undefined
+      }
+    }, 50)
+  }
+  return () => {
+    observer.disconnect()
+    if (retryTimer !== undefined) window.clearInterval(retryTimer)
+  }
+}
+
+/**
  * 节点数据连线覆盖层。
  *
  * 事件策略：本层此前用 14px 宽的透明描边路径直接拦截 pointerdown（DOM 层级在
@@ -267,15 +299,8 @@ function getNodePortsForShape(shape: NodeCardShape): {
  * 改为在 window 捕获阶段用 SVGGeometryElement.isPointInStroke 手动判定：
  * 命中连线才拦截事件，其余区域完全放行给 tldraw。
  */
-export function DataEdgeLayer({
-  editor,
-  hostRef
-}: {
-  editor: Editor
-  hostRef: RefObject<HTMLDivElement | null>
-}): React.JSX.Element | null {
+export function DataEdgeLayer({ editor }: { editor: Editor }): React.JSX.Element {
   const [, setRevision] = useState(0)
-  const [host, setHost] = useState<HTMLDivElement | null>(null)
   const selectedEdgeId = useEdgeSelectionStore((state) => state.selectedEdgeId)
   // `from` is stable while the pointer moves, so edge anchors reflow once when a
   // connection gesture starts or ends instead of recalculating on every mouse frame.
@@ -288,8 +313,15 @@ export function DataEdgeLayer({
     clientY: number
   } | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
+  const frameRef = useRef<HTMLDivElement | null>(null)
   const reactId = useId().replace(/:/g, '')
   const overlapMaskId = `data-edge-node-mask-${reactId}`
+
+  useLayoutEffect(() => {
+    const frame = frameRef.current
+    if (!frame) return
+    return mirrorCameraTransform(editor, frame)
+  }, [editor])
 
   useEffect(() => {
     let frame = 0
@@ -300,48 +332,34 @@ export function DataEdgeLayer({
         setRevision((value) => value + 1)
       })
     }
+    // 相机变化不再重算几何；只有文档变化（位置、端口、节点尺寸、连线本身）才需要重新收集。
+    // 不再监听 session：tldraw 把相机放在实例状态里，session 会在每个缩放帧触发一次全量重渲染。
     const offDocument = editor.store.listen(update, { scope: 'document' })
-    const offSession = editor.store.listen(update, { scope: 'session' })
-    // tldraw 的相机缩放/平移不会产生 document 变更；它只在每帧更新 camera。
-    // 连线坐标是 pageToScreen 的结果，因此必须在 camera tick 中重算，否则缩放时
-    // 节点已经移动而 SVG 仍保留上一帧的端点，视觉上就会出现“线变形/脱离节点”。
-    const onTick = (): void => update()
-    editor.on('tick', onTick)
-    editor.on('resize', onTick)
-    window.addEventListener('resize', update)
     return () => {
       offDocument()
-      offSession()
-      editor.off('tick', onTick)
-      editor.off('resize', onTick)
       if (frame) cancelAnimationFrame(frame)
-      window.removeEventListener('resize', update)
     }
   }, [editor])
 
-  useEffect(() => {
-    setHost(hostRef.current)
-  }, [hostRef])
-
-  // store/视口监听会触发本组件重绘，确保拖动、缩放和连线后重新换算屏幕坐标。
-  const edges = host
-    ? collectEdges(editor, host, draftFrom).filter(
-        (edge) => !editor.isShapeHidden(edge.sourceId) && !editor.isShapeHidden(edge.targetId)
-      )
-    : []
-  const nodeRects = host ? collectNodeRects(editor, host) : []
-  const nodeRectsRef = useRef<ScreenNodeRect[]>([])
+  const edges = collectEdges(editor, draftFrom).filter(
+    (edge) => !editor.isShapeHidden(edge.sourceId) && !editor.isShapeHidden(edge.targetId)
+  )
+  const nodeRects = collectNodeRects(editor)
+  const nodeRectsRef = useRef<PageRect[]>([])
   useEffect(() => {
     nodeRectsRef.current = nodeRects
   })
+  const mask = edgeMaskExtents(nodeRects)
+  const hoveredEdgeId = hoveredEdge?.id ?? null
 
   /** 判断屏幕坐标是否落在任一连线的可点击描边区域内。 */
   const hitTest = (clientX: number, clientY: number): TLShapeId | null => {
     const svg = svgRef.current
     if (!svg) return null
-    const rect = svg.getBoundingClientRect()
-    if (rect.width === 0 && rect.height === 0) return null
-    const point = new DOMPoint(clientX - rect.left, clientY - rect.top)
+    const matrix = svg.getScreenCTM()
+    if (!matrix) return null
+    // 指针换算到连线层的 user space（= 页面坐标），与 path 的 d 同一坐标系。
+    const point = new DOMPoint(clientX, clientY).matrixTransform(matrix.inverse())
     // 数据线即使几何上穿过卡片，也只能在节点下方；节点内部不能选中线、更不能出现剪刀。
     if (
       nodeRectsRef.current.some(
@@ -382,7 +400,8 @@ export function DataEdgeLayer({
       // 预览弹层通过 portal 挂到 body；弹层上方即使覆盖着一条画布连线，也不能
       // 被连线的 window 捕获监听抢走 pointerdown，否则关闭按钮会收不到 click。
       if (event.target instanceof Element && event.target.closest('.media-preview-mask')) return
-      if (event.target instanceof Element && event.target.closest('.agent-flow-control-label')) return
+      if (event.target instanceof Element && event.target.closest('.agent-flow-control-label'))
+        return
       // 端口与节点卡片在连接层之上（呈现规范 §8）。连线的 14px 命中描边端点
       // 恰好覆盖端口圆心，若不在这里放行，输出端口一旦接过一条连线就永远
       // 无法再从该端口拖出新连线，所有"一输出扇出多输入"的流程都会被阻断。
@@ -398,7 +417,8 @@ export function DataEdgeLayer({
       select(hit)
     }
     const onContextMenu = (event: MouseEvent): void => {
-      if (event.target instanceof Element && event.target.closest('.agent-flow-control-label')) return
+      if (event.target instanceof Element && event.target.closest('.agent-flow-control-label'))
+        return
       if (event.target instanceof Element && event.target.closest('.media-preview-mask')) return
       // 与 pointerdown 同理：落在节点/端口上的右键属于节点，交给节点侧处理。
       if (event.target instanceof Element && event.target.closest('.node-card-wrap')) return
@@ -443,14 +463,6 @@ export function DataEdgeLayer({
     }
   }, [editor, select])
 
-  if (!host) return null
-  const hostBounds = host.getBoundingClientRect()
-  // Edge paths are already expressed in screen coordinates, so SVG stroke widths
-  // do not inherit tldraw's camera zoom. Scale widths and glow with the camera to
-  // keep their proportions aligned with the zooming node cards.
-  const zoom = editor.getCamera().z || 1
-  const hoveredEdgeId = hoveredEdge?.id ?? null
-
   const deleteHoveredEdge = (): void => {
     if (!hoveredEdge || !editor.getShape(hoveredEdge.id)) return
     markUndoPoint(editor, 'delete-connection')
@@ -462,108 +474,106 @@ export function DataEdgeLayer({
 
   return (
     <>
-      <svg className="data-edge-layer" ref={svgRef} aria-label="节点数据连线">
-        <defs>
-          <mask
-            id={overlapMaskId}
-            maskUnits="userSpaceOnUse"
-            x={0}
-            y={0}
-            width={hostBounds.width}
-            height={hostBounds.height}
+      <div className="data-edge-clip">
+        <div className="data-edge-frame" ref={frameRef}>
+          <svg
+            className="data-edge-layer"
+            ref={svgRef}
+            aria-label="节点数据连线"
+            xmlns="http://www.w3.org/2000/svg"
           >
-            <rect width={hostBounds.width} height={hostBounds.height} fill="white" />
-            {nodeRects.map((rect, index) => (
-              <rect key={index} {...rect} fill="black" />
-            ))}
-          </mask>
-        </defs>
-        {edges.map((edge) => {
-          if (edge.provenance) {
-            // 追溯线只在节点之外可见且不可交互，但沿用普通连线的颜色和流动层级。
-            return (
-              <g key={edge.id}>
-                <path
-                  className="data-edge-visible artifact-provenance-edge"
-                  d={edge.path}
-                  mask={`url(#${overlapMaskId})`}
-                  style={{
-                    stroke: edge.color,
-                    strokeWidth: 3 * zoom,
-                    filter: `drop-shadow(0 0 ${5 * zoom}px ${edge.color})`,
-                    pointerEvents: 'none'
-                  }}
-                />
-                <path
-                  className="data-edge-flow artifact-provenance-flow"
-                  d={edge.path}
-                  pathLength="1000"
-                  mask={`url(#${overlapMaskId})`}
-                  style={{
-                    color: edge.color,
-                    strokeWidth: 4.5 * zoom,
-                    filter: `drop-shadow(0 0 ${7 * zoom}px ${edge.color})`
-                  }}
-                />
-              </g>
-            )
-          }
-          const active = edge.id === selectedEdgeId
-          const hovered = edge.id === hoveredEdgeId
-          if (edge.invalid) {
-            // 失效边：红色虚线并降透明度，不画流光；命中路径照常注册，
-            // 用户仍可选中 / 悬浮出剪刀手动删除（不做自动清理）。
-            return (
-              <g
-                className={`data-edge is-invalid${active ? ' is-selected' : ''}${
-                  hovered ? ' is-hovered' : ''
-                }`}
-                key={edge.id}
+            <defs>
+              <mask
+                id={overlapMaskId}
+                maskUnits="userSpaceOnUse"
+                x={mask.x}
+                y={mask.y}
+                width={mask.width}
+                height={mask.height}
               >
-                <path
-                  className="data-edge-visible"
-                  d={edge.path}
-                  mask={`url(#${overlapMaskId})`}
-                  style={{
-                    strokeWidth: (active ? 3.4 : hovered ? 3 : 2.4) * zoom,
-                    strokeDasharray: `${10 * zoom} ${7 * zoom}`
-                  }}
-                />
-                <path className="data-edge-hit" d={edge.path} data-edge-id={edge.id} />
+                <rect x={mask.x} y={mask.y} width={mask.width} height={mask.height} fill="white" />
+                {nodeRects.map((rect, index) => (
+                  <rect key={index} {...rect} fill="black" />
+                ))}
+              </mask>
+            </defs>
+            {edges.length > 0 && (
+              <g mask={`url(#${overlapMaskId})`}>
+                {edges.map((edge) => {
+                  if (edge.provenance) {
+                    // 追溯线只在节点之外可见且不可交互，但沿用普通连线的颜色和流动层级。
+                    return (
+                      <g key={edge.id} data-edge-id={edge.id}>
+                        <path
+                          className="data-edge-visible artifact-provenance-edge"
+                          d={edge.path}
+                          style={{ stroke: edge.color, color: edge.color }}
+                        />
+                        <path
+                          className="data-edge-flow artifact-provenance-flow"
+                          d={edge.path}
+                          pathLength="1000"
+                          style={{ color: edge.color }}
+                        />
+                      </g>
+                    )
+                  }
+                  const active = edge.id === selectedEdgeId
+                  const hovered = edge.id === hoveredEdgeId
+                  if (edge.invalid) {
+                    // 失效边：红色虚线并降透明度，不画流光；命中路径照常注册，
+                    // 用户仍可选中 / 悬浮出剪刀手动删除（不做自动清理）。
+                    return (
+                      <g
+                        className={`data-edge is-invalid${active ? ' is-selected' : ''}${
+                          hovered ? ' is-hovered' : ''
+                        }`}
+                        key={edge.id}
+                        data-edge-id={edge.id}
+                      >
+                        <path
+                          className="data-edge-visible"
+                          d={edge.path}
+                          style={{ strokeDasharray: '10 7' }}
+                        />
+                      </g>
+                    )
+                  }
+                  return (
+                    <g
+                      className={`data-edge${active ? ' is-selected' : ''}${
+                        hovered ? ' is-hovered' : ''
+                      }`}
+                      key={edge.id}
+                      data-edge-id={edge.id}
+                    >
+                      <path
+                        className="data-edge-visible"
+                        d={edge.path}
+                        style={{ stroke: edge.color, color: edge.color }}
+                      />
+                      <path
+                        className="data-edge-flow"
+                        d={edge.path}
+                        pathLength="1000"
+                        style={{ color: edge.color }}
+                      />
+                    </g>
+                  )
+                })}
               </g>
-            )
-          }
-          return (
-            <g
-              className={`data-edge${active ? ' is-selected' : ''}${hovered ? ' is-hovered' : ''}`}
-              key={edge.id}
-            >
+            )}
+            {edges.map((edge) => (
               <path
-                className="data-edge-visible"
+                className="data-edge-hit"
+                key={`hit-${edge.id}`}
                 d={edge.path}
-                mask={`url(#${overlapMaskId})`}
-                style={{
-                  stroke: edge.color,
-                  strokeWidth: (active ? 4.1 : hovered ? 3.8 : 3) * zoom,
-                  filter: `drop-shadow(0 0 ${5 * zoom}px ${edge.color})`
-                }}
+                data-edge-id={edge.id}
               />
-              <path
-                className="data-edge-flow"
-                d={edge.path}
-                pathLength="1000"
-                mask={`url(#${overlapMaskId})`}
-                style={{
-                  color: edge.color,
-                  strokeWidth: 4.5 * zoom,
-                  filter: `drop-shadow(0 0 ${7 * zoom}px ${edge.color})`
-                }}
-              />
-              <path className="data-edge-hit" d={edge.path} data-edge-id={edge.id} />
-            </g>
-          )
-        })}
-      </svg>
+            ))}
+          </svg>
+        </div>
+      </div>
       {hoveredEdge && !hoveredEdge.id.startsWith('artifact:') && (
         <button
           className="data-edge-scissors"

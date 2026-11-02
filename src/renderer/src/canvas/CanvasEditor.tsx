@@ -2112,7 +2112,7 @@ export function CanvasEditor({
           onRunFlow={(ids) => void runWorkflowForNodes(editorInstance, project.id, providers, ids)}
         />
       )}
-      {editorInstance && <DataEdgeLayer editor={editorInstance} hostRef={wrapRef} />}
+      {editorInstance && <DataEdgeLayer editor={editorInstance} />}
       {editorInstance && <AgentFlowRelationLayer editor={editorInstance} hostRef={wrapRef} />}
       {editorInstance && (
         <FlowBuildPreviewLayer editor={editorInstance} hostRef={wrapRef} projectId={project.id} />
