@@ -11,6 +11,8 @@ import { referenceLayout } from './reference-layout'
 import { NODE_UI } from './node-ui-tokens'
 
 type OpenPreview = (next: { url: string; kind: 'image' | 'video' | 'audio'; title: string }) => void
+/** 上方可读空间的最小值：低于该值浮层才回退到缩略图下方展开。 */
+const REFERENCE_FALLBACK_BELOW_SPACE = 140
 const keyOf = (input: ConnectedNodeInput): string =>
   `${input.targetPortId}:${input.sourceNodeId}:${input.sourcePortId}:${input.order}`
 const isMediaThumb = (input: ConnectedNodeInput): boolean =>
@@ -34,9 +36,26 @@ function summary(input: ConnectedNodeInput): string {
     return voiceId(input) ?? JSON.stringify(value.data)
   return value.name || input.sourceNodeName || value.kind
 }
+/** 2026-11-02 用户裁决：浮层标题只保留「文件名」，类型改用图标表达，不再显示端口名与来源行。 */
+function nameOf(input: ConnectedNodeInput): string {
+  const value = input.value
+  if (!value) return input.targetPortName
+  if (
+    value.kind === 'text' ||
+    value.kind === 'markdown' ||
+    value.kind === 'json' ||
+    value.kind === 'camera'
+  )
+    return input.sourceNodeName || input.targetPortName
+  return value.name || input.sourceNodeName || input.targetPortName
+}
 function iconOf(input: ConnectedNodeInput): IconName {
   if (voiceId(input) !== null) return 'mic'
   switch (input.value?.kind) {
+    case 'image':
+      return 'image'
+    case 'video':
+      return 'video'
     case 'audio':
       return 'audio'
     case 'file':
@@ -91,7 +110,7 @@ function ReferenceDetail({
   input: ConnectedNodeInput
   openPreview: OpenPreview
 }): React.JSX.Element {
-  const [info, setInfo] = useState('')
+  const [failed, setFailed] = useState(false)
   const value = input.value
   const text =
     value?.kind === 'text' || value?.kind === 'markdown'
@@ -99,26 +118,25 @@ function ReferenceDetail({
       : value?.kind === 'json' || value?.kind === 'camera'
         ? JSON.stringify(value.data, null, 2)
         : null
+  const title = nameOf(input)
   return (
     <article className="reference-detail">
       <header>
-        <strong>{input.targetPortName}</strong>
-        <span>
-          {input.sourceNodeName} · {input.sourcePortName}
-        </span>
+        <Icon name={iconOf(input)} size={14} />
+        <strong title={title}>{title}</strong>
+        {text !== null && (
+          <button
+            type="button"
+            className="reference-copy"
+            onClick={() => {
+              void navigator.clipboard.writeText(voiceId(input) ?? text)
+            }}
+            aria-label={voiceId(input) !== null ? '复制音色 ID' : '复制完整内容'}
+          >
+            <Icon name="copy" size={14} />
+          </button>
+        )}
       </header>
-      {text !== null && (
-        <button
-          type="button"
-          className="reference-copy"
-          onClick={() => {
-            void navigator.clipboard.writeText(voiceId(input) ?? text)
-          }}
-          aria-label={voiceId(input) !== null ? '复制音色 ID' : '复制完整内容'}
-        >
-          <Icon name="copy" size={16} />
-        </button>
-      )}
       {value?.kind === 'markdown' ? (
         <div className="reference-markdown">
           <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>
@@ -127,15 +145,12 @@ function ReferenceDetail({
         </div>
       ) : text !== null ? (
         <pre>{text || '空文本'}</pre>
-      ) : value?.kind === 'image' ? (
+      ) : value?.kind === 'image' && !failed ? (
         <img
           className="reference-detail-media"
           src={mediaUrl(value.mediaPath)}
-          alt={summary(input)}
-          onLoad={(event) =>
-            setInfo(`${event.currentTarget.naturalWidth} × ${event.currentTarget.naturalHeight}`)
-          }
-          onError={() => setInfo('图片无法读取')}
+          alt={title}
+          onError={() => setFailed(true)}
           onClick={() =>
             openPreview({
               url: mediaUrl(value.mediaPath),
@@ -144,20 +159,14 @@ function ReferenceDetail({
             })
           }
         />
-      ) : value?.kind === 'video' ? (
+      ) : value?.kind === 'video' && !failed ? (
         <video
           className="reference-detail-media"
           src={mediaUrl(value.mediaPath)}
           preload="metadata"
           muted
           playsInline
-          onLoadedMetadata={(event) => {
-            const media = event.currentTarget
-            setInfo(
-              `${media.videoWidth} × ${media.videoHeight}${Number.isFinite(media.duration) ? ` · ${media.duration.toFixed(1)} 秒` : ''}`
-            )
-          }}
-          onError={() => setInfo('视频无法读取')}
+          onError={() => setFailed(true)}
           onClick={() =>
             openPreview({
               url: mediaUrl(value.mediaPath),
@@ -167,26 +176,16 @@ function ReferenceDetail({
           }
         />
       ) : value?.kind === 'audio' ? (
-        <>
-          <p>{summary(input)}</p>
-          <audio
-            controls
-            preload="metadata"
-            src={mediaUrl(value.mediaPath)}
-            onLoadedMetadata={(event) => {
-              if (Number.isFinite(event.currentTarget.duration))
-                setInfo(`${event.currentTarget.duration.toFixed(1)} 秒`)
-            }}
-            onError={() => setInfo('音频无法读取')}
-          />
-        </>
+        <audio
+          controls
+          preload="metadata"
+          src={mediaUrl(value.mediaPath)}
+          onError={() => setFailed(true)}
+        />
       ) : value?.kind === 'file' ? (
-        <>
-          <p>{summary(input)}</p>
-          <small>{value.mime}</small>
-        </>
+        <small>{value.mime}</small>
       ) : null}
-      {info && <small>{info}</small>}
+      {failed && <small role="alert">媒体无法读取</small>}
     </article>
   )
 }
@@ -240,7 +239,6 @@ export function ConnectedInputPreview({
       const box = panel.current?.getBoundingClientRect()
       const panelWidth = box?.width ?? 480
       const panelHeight = box?.height ?? 340
-      const above = anchor.top - panelHeight - 8
       const theme = getComputedStyle(row.current ?? detail.anchor)
       const colors = Object.fromEntries(
         ['--bg', '--line', '--txt', '--muted', '--brand'].map((name) => [
@@ -248,13 +246,20 @@ export function ConnectedInputPreview({
           theme.getPropertyValue(name)
         ])
       )
+      // 2026-11-02 用户裁决：浮层向上展开（贴缩略图上方），不再向下遮挡节点正文；
+      // 上方空间不足时通过 --ref-fullview-max 压缩浮层高度，只有上方小到无法阅读时才回退到下方。
+      const spaceAbove = anchor.top - 16
+      const maxHeight =
+        spaceAbove >= REFERENCE_FALLBACK_BELOW_SPACE ? `${Math.round(spaceAbove)}px` : undefined
+      const top =
+        maxHeight !== undefined
+          ? Math.max(8, anchor.top - panelHeight - 8)
+          : Math.max(8, Math.min(anchor.bottom + 8, window.innerHeight - panelHeight - 8))
       setPosition({
         ...colors,
+        ...(maxHeight ? { '--ref-fullview-max': maxHeight } : {}),
         left: Math.max(8, Math.min(anchor.left, window.innerWidth - panelWidth - 8)),
-        top: Math.max(
-          8,
-          Math.min(above >= 8 ? above : anchor.bottom + 8, window.innerHeight - panelHeight - 8)
-        )
+        top
       })
     }
     const observer = new ResizeObserver(place)
@@ -394,16 +399,7 @@ export function ConnectedInputPreview({
                     onMouseEnter={(event) => show(event.currentTarget, keyOf(input), 300)}
                     onClick={(event) => show(event.currentTarget, keyOf(input))}
                   >
-                    <Icon
-                      name={
-                        isMediaThumb(input)
-                          ? input.value?.kind === 'video'
-                            ? 'video'
-                            : 'image'
-                          : iconOf(input)
-                      }
-                      size={16}
-                    />
+                    <Icon name={iconOf(input)} size={16} />
                     <span>
                       {input.targetPortName} · {summary(input)}
                     </span>

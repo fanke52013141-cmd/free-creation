@@ -212,9 +212,13 @@ describe('v1.2 §16.5 媒体后续动作按钮只放文字', () => {
 })
 
 describe('v1.2 §16.6 悬浮全貌统一在上方', () => {
-  it('浮层优先落在引用上方，完整来源信息只进入详情', () => {
-    expect(inputPreview).toContain('const above = anchor.top - panelHeight - 8')
-    expect(inputPreview).toContain('above >= 8 ? above : anchor.bottom + 8')
+  it('浮层向上展开，空间不足压缩高度而不是翻到下方', () => {
+    // 2026-11-02 用户裁决：浮层固定向上展开（不再向下遮挡节点正文）；上方放不下时用
+    // --ref-fullview-max 钳制高度，仅当上方空间小到无法阅读（< REFERENCE_FALLBACK_BELOW_SPACE）才回退下方。
+    expect(inputPreview).toContain('anchor.top - panelHeight - 8')
+    expect(inputPreview).toContain('REFERENCE_FALLBACK_BELOW_SPACE')
+    expect(inputPreview).toContain('--ref-fullview-max')
+    expect(app).toContain('--ref-fullview-max')
     expect(inputPreview).not.toContain('reference-fullview-caption')
     expect(app).not.toContain('.reference-fullview-caption')
   })
