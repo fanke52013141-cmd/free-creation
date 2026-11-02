@@ -268,6 +268,77 @@ async function main() {
     const clipsAfterUndo = await card.locator('.tl-row').nth(0).locator('.tl-clip').count()
     check('撤销一步恢复被删除的片段', clipsAfterUndo === clipsAfterSplit, `${clipsAfterDelete} → ${clipsAfterUndo}`)
 
+    // ── 分割三态：向左分割（删右边）、向右分割（删左边） ──
+    const firstRowClips = card.locator('.tl-row').nth(0).locator('.tl-clip')
+    const widthOfFirstClip = async () =>
+      firstRowClips.first().evaluate((el) => parseFloat(el.style.width))
+    await firstRowClips.first().click()
+    await page.keyboard.press('Escape')
+    await page.mouse.click(rulerBox.x + 20, rulerBox.y + rulerBox.height / 2)
+    await page.waitForTimeout(150)
+    await firstRowClips.first().click()
+    const widthBeforeLeftSplit = await widthOfFirstClip()
+    const countBeforeLeftSplit = await firstRowClips.count()
+    await card.locator('[title^="向左分割"]').click()
+    await page.waitForTimeout(400)
+    const widthAfterLeftSplit = await widthOfFirstClip()
+    check(
+      '向左分割：保留左侧、删除右侧（片段数不变、宽度变短）',
+      (await firstRowClips.count()) === countBeforeLeftSplit &&
+        widthAfterLeftSplit < widthBeforeLeftSplit,
+      `${Math.round(widthBeforeLeftSplit)} → ${Math.round(widthAfterLeftSplit)}px`
+    )
+
+    await firstRowClips.first().click()
+    await page.mouse.click(rulerBox.x + 10, rulerBox.y + rulerBox.height / 2)
+    await page.waitForTimeout(150)
+    await firstRowClips.first().click()
+    const leftBeforeRightSplit = await firstRowClips.first().evaluate((el) => parseFloat(el.style.left))
+    await card.locator('[title^="向右分割"]').click()
+    await page.waitForTimeout(400)
+    const leftAfterRightSplit = await firstRowClips.first().evaluate((el) => parseFloat(el.style.left))
+    check(
+      '向右分割：保留右侧、删除左侧（起点右移）',
+      leftAfterRightSplit > leftBeforeRightSplit,
+      `${Math.round(leftBeforeRightSplit)} → ${Math.round(leftAfterRightSplit)}px`
+    )
+
+    // ── 轨道拖动排序：第 2 条拖到第 1 条之前 ──
+    const rowTracks = () =>
+      card.locator('.tl-row').evaluateAll((rows) =>
+        rows.map((row) => row.getAttribute('data-timeline-track'))
+      )
+    const tracksBeforeDrag = await rowTracks()
+    const header2 = await card.locator('.tl-row-header').nth(1).boundingBox()
+    const header1 = await card.locator('.tl-row-header').nth(0).boundingBox()
+    await page.mouse.move(header2.x + 30, header2.y + header2.height / 2)
+    await page.mouse.down()
+    for (let step = 1; step <= 8; step += 1) {
+      await page.mouse.move(
+        header2.x + 30,
+        header2.y + header2.height / 2 + ((header1.y + 4 - header2.y - header2.height / 2) * step) / 8
+      )
+      await page.waitForTimeout(25)
+    }
+    await page.mouse.up()
+    await page.waitForTimeout(400)
+    const tracksAfterDrag = await rowTracks()
+    check(
+      '轨道可拖动排序（第 2 条移到最前）',
+      tracksAfterDrag[0] === tracksBeforeDrag[1] && tracksAfterDrag[1] === tracksBeforeDrag[0],
+      `${tracksBeforeDrag.join(',')} → ${tracksAfterDrag.join(',')}`
+    )
+
+    // ── 时间轴缩放滚轴 ──
+    const widthBeforeZoom = await widthOfFirstClip()
+    const zoomSlider = page.locator('.tl-zoom input[type="range"]')
+    await zoomSlider.focus()
+    await zoomSlider.press('End')
+    await page.waitForTimeout(400)
+    const widthAfterZoom = await widthOfFirstClip()
+    check('时间轴缩放滚轴生效', widthAfterZoom > widthBeforeZoom, `${Math.round(widthBeforeZoom)} → ${Math.round(widthAfterZoom)}px`)
+
+
     // ── §19：空白区域仍可拖动整张卡片 ──
     const spacer = card.locator('.tl-toolbar-spacer')
     const spacerBox = await spacer.boundingBox()
@@ -412,21 +483,29 @@ async function main() {
 
     // 点击引用素材：追加到当前轨道
     await card.locator('.tl-ref').first().click()
-    await page.waitForFunction(
-      (before) => document.querySelectorAll('.node-card.type-timeline .tl-clip').length > before,
-      clipsBeforeConnect,
-      { timeout: 20_000 }
+    await page.waitForTimeout(900)
+    const clipsAfterRefClick = await card.locator('.tl-clip').count()
+    const refToast = await page.evaluate(
+      () => document.querySelector('.toast, .toast-item, [role="status"]')?.textContent?.trim() ?? ''
     )
-    check('点击引用素材可追加到轨道', true)
+    check(
+      '点击引用素材可追加到轨道',
+      clipsAfterRefClick > clipsBeforeConnect,
+      `${clipsBeforeConnect} → ${clipsAfterRefClick} / toast: ${refToast}`
+    )
 
-    // 长按引用素材拖到第 2 条轨道指定位置
+    // 长按引用素材拖到轨道指定位置：先把缩放复位，落到第 1 条轨道靠后的空白处
+    const zoomReset = page.locator('.tl-zoom input[type="range"]')
+    await zoomReset.focus()
+    await zoomReset.press('Home')
+    await page.waitForTimeout(300)
     const clipsBeforeRefDrag = await card.locator('.tl-clip').count()
     const refBox = await card.locator('.tl-ref').first().boundingBox()
-    const refLane = await card.locator('.tl-row').nth(1).boundingBox()
+    const refLane = await card.locator('.tl-row').nth(0).boundingBox()
     await page.mouse.move(refBox.x + refBox.width / 2, refBox.y + refBox.height / 2)
     await page.mouse.down()
     await page.waitForTimeout(320)
-    const refDropX = refLane.x + 132 + refLane.width * 0.4
+    const refDropX = refLane.x + 132 + (refLane.width - 132) * 0.85
     const refDropY = refLane.y + refLane.height / 2
     for (let step = 1; step <= 8; step += 1) {
       await page.mouse.move(
@@ -466,10 +545,19 @@ async function main() {
       '预览区有播放/导出/比例/音量/全屏控制',
       (await page.locator('.tl-transport-play').count()) === 1 &&
         (await page.locator('.tl-editor-export').count()) === 1 &&
-        (await page.locator('[aria-label="预览比例"]').count()) === 1 &&
-        (await page.locator('[aria-label="预览音量"]').count()) === 1 &&
-        (await page.locator('.tl-preview-fullscreen').count()) === 1
+        (await page.locator('.tl-transport [aria-label="预览比例"]').count()) === 1 &&
+        (await page.locator('.tl-transport [aria-label="预览音量"]').count()) === 1 &&
+        (await page.locator('.tl-transport [aria-label="全屏播放预览"]').count()) === 1
     )
+    check(
+      '播放条时间码为 HH:MM:SS',
+      /^\d{2}:\d{2}:\d{2}\s*\/\s*\d{2}:\d{2}:\d{2}$/.test(
+        (await page.locator('.tl-transport-time').innerText()).replace(/\s+/g, ' ').trim()
+      ),
+      await page.locator('.tl-transport-time').innerText()
+    )
+    check('视频片段显示首帧封面', (await page.locator('.tl-modal .tl-clip-thumb-img').count()) > 0)
+    check('全屏时间轴可拖动分隔条', (await page.locator('.tl-timeline-splitter').count()) === 1)
     check(
       '时间轴工具栏有撤销/重做/左右裁剪/自动吸附',
       (await page.locator('.tl-toolbar .tl-btn').count()) >= 8 &&
@@ -512,12 +600,36 @@ async function main() {
     )
     const stateIds = await page.locator('.tl-modal .tl-bin').getAttribute('data-selected-ids')
 
-    const clipsBeforeAppend = await page.locator('.tl-modal .tl-clip').count()
+    const clipGeometry = async () =>
+      page.evaluate(() =>
+        Array.from(document.querySelectorAll('.tl-modal .tl-row')).flatMap((row, index) =>
+          Array.from(row.querySelectorAll('.tl-clip')).map((el) => ({
+            row: index,
+            id: el.dataset.mediaId ?? '',
+            key: `${index}:${el.style.left}`
+          }))
+        )
+      )
+    const beforeAppendClips = await clipGeometry()
+    const clipsBeforeAppend = beforeAppendClips.length
     await page.locator('.tl-bin-append').click()
     await page.waitForFunction(
       (before) => document.querySelectorAll('.tl-modal .tl-clip').length >= before + 2,
       clipsBeforeAppend,
       { timeout: 30_000 }
+    )
+    const beforeKeys = new Set(beforeAppendClips.map((item) => item.key))
+    const newClips = (await clipGeometry())
+      .filter((item) => !beforeKeys.has(item.key))
+      .sort((a, b) => a.row - b.row || Number.parseFloat(a.key.split(':')[1]) - Number.parseFloat(b.key.split(':')[1]))
+    check(
+      '加入轨道按选择顺序追加（先选在前）',
+      newClips.length === 2 &&
+        newClips[0].id === selectedOrder[0].id &&
+        newClips[1].id === selectedOrder[1].id,
+      `选择 ${selectedOrder.map((i) => `${i.name}#${i.id}`).join(' → ')} / 新增 ${newClips
+        .map((i) => `${i.id}@${i.key}`)
+        .join(' → ')}`
     )
     const appended = await page.evaluate(() => {
       const row = document.querySelectorAll('.tl-modal .tl-row')[0]
@@ -533,27 +645,6 @@ async function main() {
         name: (el.querySelector('.tl-asset-name') || {}).textContent?.trim() ?? ''
       }))
     )
-    const allClips = await page.evaluate(() =>
-      Array.from(document.querySelectorAll('.tl-modal .tl-row')).flatMap((row, index) =>
-        Array.from(row.querySelectorAll('.tl-clip')).map((el) => ({
-          row: index,
-          id: el.dataset.mediaId ?? '',
-          order: index * 1e9 + parseFloat(el.style.left || '0')
-        }))
-      )
-    )
-    const lastIndexOf = (id) => {
-      const matches = allClips.filter((item) => item.id === id)
-      return matches.length ? matches[matches.length - 1].order : -1
-    }
-    const firstAdded = lastIndexOf(selectedOrder[0].id)
-    const secondAdded = lastIndexOf(selectedOrder[1].id)
-    check(
-      '加入轨道按选择顺序追加（先选在前）',
-      firstAdded >= 0 && secondAdded >= 0 && secondAdded > firstAdded,
-      `选择 ${selectedOrder.map((i) => `${i.name}#${i.id}`).join(' → ')} / 顺序位置 ${firstAdded} < ${secondAdded}`
-    )
-
     // 长按素材拖到空轨道（第 3 条）：按住 300ms 后移动到轨道中部松手
     const clipsBeforeLongPress = await page.locator('.tl-modal .tl-clip').count()
     const tileBox = await tile1.boundingBox()

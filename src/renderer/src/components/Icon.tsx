@@ -97,6 +97,8 @@ export type IconName =
   | 'unfold'
   | 'layers'
   | 'magnet'
+  | 'link'
+  | 'link-off'
   | 'folder'
 
 interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {
@@ -625,6 +627,23 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M6 3v9a6 6 0 0 0 12 0V3" />
       <path d="M6 8.5h4" />
       <path d="M14 8.5h4" />
+    </>
+  ),
+  // 吸附开：链接（链环相连）
+  link: (
+    <>
+      <path d="M9 17H7A5 5 0 0 1 7 7h2" />
+      <path d="M15 7h2a5 5 0 1 1 0 10h-2" />
+      <line x1="8" y1="12" x2="16" y2="12" />
+    </>
+  ),
+  // 吸附关：断开链接（链环错开 + 斜杠）
+  'link-off': (
+    <>
+      <path d="M9 17H7A5 5 0 0 1 7 7h2" />
+      <path d="M15 7h2a5 5 0 1 1 0 10h-2" />
+      <line x1="8" y1="12" x2="16" y2="12" />
+      <line x1="3" y1="3" x2="21" y2="21" />
     </>
   ),
   // ── 节点身份图标（2026-11-02 重绘，设计源：design/2026-11-node-identity/icons/icon-drafts.tsx）──

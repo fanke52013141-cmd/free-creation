@@ -9,6 +9,7 @@ import {
   findClip,
   formatTimecode,
   moveClip,
+  moveTrack,
   normalizeTimeline,
   overlappingClips,
   parseTimeline,
@@ -17,6 +18,7 @@ import {
   rulerStepMs,
   serializeTimeline,
   splitClip,
+  splitClipKeep,
   timelineDurationMs,
   trimClip,
   type TimelineData
@@ -239,6 +241,52 @@ describe('轨道线数据模型 · 片段摆放', () => {
         })
       ).toEqual([])
     }
+  })
+})
+
+describe('轨道线数据模型 · 轨道排序与分割三态', () => {
+  it('轨道拖到最前：轨道顺序变化，片段仍跟着原轨道', () => {
+    const data = base()
+    const first = withVideo(data, 5000) // 片段放在轨道 1
+    const target = moveTrack(first.data, trackB(first.data), 0)
+    expect(target.ok).toBe(true)
+    if (!target.ok) return
+    expect(target.data.tracks[0].id).toBe(trackB(first.data))
+    // 片段还在原轨道（轨道 1），没有被挤到别的轨道
+    expect(target.data.clips[0].trackId).toBe(trackA(first.data))
+  })
+
+  it('轨道自身移动到末尾保持顺序稳定', () => {
+    const data = base()
+    const moved = moveTrack(data, trackA(data), 1)
+    expect(moved.ok).toBe(true)
+    if (moved.ok) expect(moved.data.tracks[1].id).toBe(trackA(data))
+  })
+
+  it('向左分割：保留左边、删掉右边', () => {
+    const first = withVideo(base(), 10000)
+    const result = splitClipKeep(first.data, first.clipId, 4000, 'left')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    const clips = clipsOfTrack(result.data, trackA(result.data))
+    expect(clips).toHaveLength(1)
+    expect(clips[0]).toMatchObject({ startMs: 0, durationMs: 4000, inMs: 0 })
+  })
+
+  it('向右分割：保留右边、删掉左边，源内起点随切点前移', () => {
+    const first = withVideo(base(), 10000)
+    const result = splitClipKeep(first.data, first.clipId, 4000, 'right')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    const clips = clipsOfTrack(result.data, trackA(result.data))
+    expect(clips).toHaveLength(1)
+    expect(clips[0]).toMatchObject({ startMs: 4000, durationMs: 6000, inMs: 4000 })
+  })
+
+  it('分割三态都拒绝贴边切点', () => {
+    const first = withVideo(base(), 5000)
+    expect(splitClipKeep(first.data, first.clipId, 10, 'left').ok).toBe(false)
+    expect(splitClipKeep(first.data, first.clipId, 4990, 'right').ok).toBe(false)
   })
 })
 

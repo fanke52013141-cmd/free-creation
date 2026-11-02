@@ -21,6 +21,7 @@ import { Icon } from '../../../components/Icon'
 import { useMediaStore } from '../../../stores/media'
 import { mediaUrl } from '../../registry'
 import { clipCovers, type TimelineEditorAsset } from './timeline-editor-shared'
+import { VideoThumb } from './media-thumbnail'
 
 const KIND_LABEL: Record<TimelineEditorAsset['kind'], string> = {
   video: '视频',
@@ -44,6 +45,15 @@ const ASPECTS: ReadonlyArray<{ id: string; label: string; ratio: string }> = [
 
 /** 长按起拖的判定时间（毫秒）。 */
 const LONG_PRESS_MS = 220
+
+/** 播放条时间码：HH:MM:SS（与剪映一致）。 */
+function formatClock(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000))
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const seconds = total % 60
+  return [hours, minutes, seconds].map((value) => String(value).padStart(2, '0')).join(':')
+}
 
 function assetOfMedia(media: MediaAsset): TimelineEditorAsset | null {
   if (media.kind !== 'image' && media.kind !== 'video' && media.kind !== 'audio') return null
@@ -185,10 +195,6 @@ export function TimelineEditorStage({
     if (videoRef.current) videoRef.current.volume = volume / 100
   }, [volume, previewUrl])
 
-  const seekBy = (deltaMs: number): void => {
-    onSeek(Math.min(totalMs, Math.max(0, playheadMs + deltaMs)))
-  }
-
   // ── 多选（保持点击顺序）与长按拖动 ────────────────────────────────
   const orderOf = (id: string): number => selectedIds.indexOf(id)
   const toggleSelect = (event: React.MouseEvent, id: string): void => {
@@ -317,21 +323,6 @@ export function TimelineEditorStage({
             <Icon name="layers" size={13} />
             {layout === 'left' ? '素材在左' : layout === 'right' ? '素材在右' : '素材收起'}
           </button>
-          <label className="tl-editor-aspect" title="预览比例（只影响预览，不影响成片）">
-            <Icon name="rectangle" size={13} />
-            <select
-              aria-label="预览比例"
-              data-node-pointer="control"
-              value={aspect}
-              onChange={(event) => setAspect(event.target.value)}
-            >
-              {ASPECTS.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </label>
           <button
             type="button"
             className="tl-editor-export"
@@ -417,8 +408,10 @@ export function TimelineEditorStage({
                     <span className="tl-asset-thumb">
                       {asset.kind === 'image' ? (
                         <img src={mediaUrl(asset.mediaPath)} alt="" draggable={false} />
+                      ) : asset.kind === 'video' ? (
+                        <VideoThumb path={asset.mediaPath} />
                       ) : (
-                        <Icon name={asset.kind === 'video' ? 'video' : 'audio'} size={18} />
+                        <Icon name="audio" size={18} />
                       )}
                       <span className="tl-asset-kind">{KIND_LABEL[asset.kind]}</span>
                       {typeof asset.durationMs === 'number' ? (
@@ -475,21 +468,6 @@ export function TimelineEditorStage({
               )}
             </div>
             <span className="tl-preview-badge">{resolution}</span>
-            <button
-              type="button"
-              className="tl-preview-fullscreen"
-              data-node-pointer="control"
-              title="全屏播放预览"
-              aria-label="全屏播放预览"
-              onClick={() => {
-                const host = stageRef.current
-                if (!host) return
-                if (document.fullscreenElement) void document.exitFullscreen()
-                else void host.requestFullscreen?.().catch(() => undefined)
-              }}
-            >
-              <Icon name="fullscreen" size={13} />
-            </button>
             <div className="tl-transport">
               <button
                 type="button"
@@ -506,31 +484,26 @@ export function TimelineEditorStage({
                 <Icon name={playing ? 'pause' : 'play'} size={14} />
               </button>
               <span className="tl-transport-time">
-                {formatTimecode(playheadMs)}
+                {formatClock(playheadMs)}
                 <i>/</i>
-                {formatTimecode(totalMs)}
+                {formatClock(totalMs)}
               </span>
-              <span className="tl-transport-divider" />
-              <button
-                type="button"
-                className="tl-transport-btn"
-                data-node-pointer="control"
-                title="后退 1 秒"
-                aria-label="后退 1 秒"
-                onClick={() => seekBy(-1000)}
-              >
-                <Icon name="undo" size={13} />
-              </button>
-              <button
-                type="button"
-                className="tl-transport-btn"
-                data-node-pointer="control"
-                title="前进 1 秒"
-                aria-label="前进 1 秒"
-                onClick={() => seekBy(1000)}
-              >
-                <Icon name="redo" size={13} />
-              </button>
+              <span className="tl-transport-spacer" />
+              <label className="tl-transport-ratio" title="预览比例（只影响预览，不影响成片）">
+                <Icon name="rectangle" size={12} />
+                <select
+                  aria-label="预览比例"
+                  data-node-pointer="control"
+                  value={aspect}
+                  onChange={(event) => setAspect(event.target.value)}
+                >
+                  {ASPECTS.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <span className="tl-transport-volume">
                 <Icon name={volume === 0 ? 'volume-off' : 'volume'} size={13} />
                 <input
@@ -544,6 +517,21 @@ export function TimelineEditorStage({
                   onChange={(event) => setVolume(Number(event.target.value))}
                 />
               </span>
+              <button
+                type="button"
+                className="tl-transport-btn"
+                data-node-pointer="control"
+                title="全屏播放预览"
+                aria-label="全屏播放预览"
+                onClick={() => {
+                  const host = stageRef.current
+                  if (!host) return
+                  if (document.fullscreenElement) void document.exitFullscreen()
+                  else void host.requestFullscreen?.().catch(() => undefined)
+                }}
+              >
+                <Icon name="fullscreen" size={13} />
+              </button>
             </div>
           </div>
         </section>

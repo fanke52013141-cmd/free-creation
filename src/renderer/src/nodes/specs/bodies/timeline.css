@@ -1,4 +1,4 @@
-﻿/* 鏃堕棿绾胯妭鐐瑰竷灞€鏍峰紡銆?   NODE_UI_STANDARD 搂19锛氭湰鑺傚彧琛ュ竷灞€锛岃壊褰?杈规/鎸夐挳鏉愯川涓€寰嬭蛋鍏ㄥ眬浠ょ墝锛?   婊氬姩鏉＄敱 assets/scrollbars.css 鍏ㄥ眬闅愯棌锛岃繖閲屼笉鍗曠嫭鐢绘粴鍔ㄦ潯銆?*/
+/* 鏃堕棿绾胯妭鐐瑰竷灞€鏍峰紡銆?   NODE_UI_STANDARD 搂19锛氭湰鑺傚彧琛ュ竷灞€锛岃壊褰?杈规/鎸夐挳鏉愯川涓€寰嬭蛋鍏ㄥ眬浠ょ墝锛?   婊氬姩鏉＄敱 assets/scrollbars.css 鍏ㄥ眬闅愯棌锛岃繖閲屼笉鍗曠嫭鐢绘粴鍔ㄦ潯銆?*/
 
 /* 鍗＄墖鍐呰鏃堕棿绾块摵婊″彲鐢ㄩ珮搴︼細閫氱敤澹虫妸 body 璁句负 auto 楂樺害锛屾椂闂寸嚎闇€瑕佹拺婊°€?*/
 .node-card.type-timeline .node-standard-scroll {
@@ -1164,10 +1164,7 @@
   box-shadow: 0 0 0 1px #239ad3;
 }
 
-.tl-modal .tl-playhead,
-.tl-modal .tl-playhead::before {
-  background: #239ad3;
-}
+/* 播放头：全屏与非全屏统一（2026-11-03 用户裁决），不再给全屏单独换色。 */
 
 /* 编辑器内不再显示时间轴自带的「退出」按钮：关闭由顶栏 X / Esc 负责。 */
 .tl-modal [data-tl-fullscreen-toggle='true'] {
@@ -1457,4 +1454,133 @@ body.tl-asset-dragging {
 
 .tl-refs {
   width: 100%;
+}
+
+/* ���� 2026-11-03 �ڶ��������������̬�ָ���Ź��ᡢ�ָ�������֡���� ���� */
+.tl-row-header {
+  cursor: grab;
+}
+
+.tl-row.is-track-dragging {
+  opacity: 0.55;
+}
+
+.tl-row.is-drop-target .tl-row-header {
+  box-shadow: inset 0 2px 0 #239ad3;
+  border-radius: 4px;
+}
+
+.tl-zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  color: #8a97a8;
+}
+
+.tl-zoom input[type='range'] {
+  width: 96px;
+  height: 14px;
+  accent-color: #239ad3;
+  cursor: pointer;
+}
+
+.tl-zoom-step {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.tl-zoom-step:hover {
+  background: rgb(255 255 255 / 8%);
+  color: #e6edf7;
+}
+
+.tl-clip-thumb-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* ȫ���ָ������϶�������Ԥ��/ʱ���᡹�߶ȱ��� */
+.tl-timeline-splitter {
+  position: relative;
+  flex: 0 0 auto;
+  height: 10px;
+  margin: 2px 0;
+  border-radius: 5px;
+  cursor: ns-resize;
+}
+
+.tl-timeline-splitter::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  right: 45%;
+  left: 45%;
+  height: 3px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 14%);
+}
+
+.tl-timeline-splitter:hover::before {
+  background: rgb(35 154 211 / 75%);
+}
+
+.tl-timeline-pane {
+  display: flex;
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.tl-timeline-pane > .tl-surface.is-fullscreen {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 10px;
+}
+
+.tl-modal > .tl-surface.is-fullscreen {
+  height: auto;
+  max-height: none;
+}
+
+/* ��������������������� */
+.tl-transport-spacer {
+  flex: 1 1 auto;
+}
+
+.tl-transport-ratio {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #bec8d1;
+}
+
+.tl-transport-ratio select {
+  border: 0;
+  background: transparent;
+  color: #e6edf7;
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+}
+
+.tl-transport-ratio option {
+  background: #191d24;
+  color: #e6edf7;
 }

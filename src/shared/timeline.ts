@@ -279,6 +279,25 @@ export function addTrack(data: TimelineData, name?: string): TimelineEditResult 
   }
 }
 
+/**
+ * 轨道拖动排序（2026-11-03）：把某条轨道移动到目标下标，片段跟着轨道走。
+ * 用户预期是「轨道整体换位置」，不是把片段挤到别的轨道里。
+ */
+export function moveTrack(
+  data: TimelineData,
+  trackId: string,
+  toIndex: number
+): TimelineEditResult {
+  const from = data.tracks.findIndex((track) => track.id === trackId)
+  if (from < 0) return { ok: false, reason: '轨道不存在' }
+  const index = Math.max(0, Math.min(data.tracks.length - 1, Math.round(toIndex)))
+  if (index === from) return { ok: true, data }
+  const tracks = [...data.tracks]
+  const [moved] = tracks.splice(from, 1)
+  tracks.splice(index, 0, moved)
+  return { ok: true, trackId: moved.id, data: { ...data, tracks } }
+}
+
 export function removeTrack(data: TimelineData, trackId: string): TimelineEditResult {
   if (!findTrack(data, trackId)) return { ok: false, reason: '轨道不存在' }
   if (data.tracks.length <= 1) return { ok: false, reason: '至少保留一条轨道' }
@@ -526,6 +545,44 @@ export function splitClip(data: TimelineData, clipId: string, atMs: number): Tim
     data: {
       ...data,
       clips: sortClips(data.clips.flatMap((item) => (item.id === clipId ? [left, right] : [item])))
+    }
+  }
+}
+
+/**
+ * 分割并删掉一侧（2026-11-03 用户裁决，剪映三态分割）：
+ * - keep='left'（向左分割）：保留切点左边的片段，右边删掉；
+ * - keep='right'（向右分割）：保留切点右边的片段，左边删掉。
+ * 与普通 splitClip（两边都留）共用同一套边界校验。
+ */
+export function splitClipKeep(
+  data: TimelineData,
+  clipId: string,
+  atMs: number,
+  keep: 'left' | 'right'
+): TimelineEditResult {
+  const clip = findClip(data, clipId)
+  if (!clip) return { ok: false, reason: '片段不存在' }
+  const offset = Math.round(atMs) - clip.startMs
+  if (offset < TIMELINE_LIMITS.minClipMs) return { ok: false, reason: '切点太靠近片段起点' }
+  if (clip.durationMs - offset < TIMELINE_LIMITS.minClipMs) {
+    return { ok: false, reason: '切点太靠近片段终点' }
+  }
+  const kept: TimelineClip =
+    keep === 'left'
+      ? { ...clip, durationMs: offset }
+      : {
+          ...clip,
+          startMs: clip.startMs + offset,
+          durationMs: clip.durationMs - offset,
+          inMs: clip.kind === 'image' ? 0 : clip.inMs + offset
+        }
+  return {
+    ok: true,
+    clipId: kept.id,
+    data: {
+      ...data,
+      clips: sortClips(data.clips.map((item) => (item.id === clipId ? kept : item)))
     }
   }
 }
