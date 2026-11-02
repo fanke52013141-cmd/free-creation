@@ -115,9 +115,9 @@
 .node-standard-scroll .node-standard-identity-icon svg {
   color: inherit;
   stroke: currentColor;
-  /* 2026-11-02 裁决：默认态图标放大两倍（48→96），与 NODE_UI.identity.iconSize 同步 */
-  width: 96px;
-  height: 96px;
+  /* 2026-11-02 裁决：96px 的 75%（96×0.75=72），与 NODE_UI.identity.iconSize 同步 */
+  width: 72px;
+  height: 72px;
 }
 .node-standard-identity > small {
   display: none;
