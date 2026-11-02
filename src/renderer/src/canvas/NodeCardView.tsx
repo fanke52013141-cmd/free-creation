@@ -913,10 +913,15 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
         }
         const identity = scroll.querySelector<HTMLElement>('.node-standard-identity')
         // 正文实际子项与顶部说明量高；不把 flex 填充的空白反算成内容。
+        // 文本节点编辑态 textarea 用 flex 填满正文剩余空间（用户 2026-11-02 裁决），
+        // 填充后的高度不是内容需求，按名义高度参与测算，避免逐档膨胀到高度上限。
         const content = body.querySelector<HTMLElement>('.node-body-content')
         const natural = content
           ? Array.from(content.children).reduce((sum, child) => {
               if (!(child instanceof HTMLElement)) return sum
+              if (child.matches('.node-textarea[data-node-interactive="text-editor"]')) {
+                return sum + NODE_UI.textEditor.naturalHeight
+              }
               const style = getComputedStyle(child)
               return (
                 sum +

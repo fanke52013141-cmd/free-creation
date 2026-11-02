@@ -1013,7 +1013,7 @@ function ImageEditEditorCore({
       />
       {invalid && <p className="crop-invalid">{invalid}</p>}
       {!options.length && (
-        <NoModelHint onOpen={openProviderSettings} presetIds={['toapis', 'relay']} />
+        <NoModelHint onOpen={openProviderSettings} />
       )}
       <button
         className="btn-primary small gen-go"

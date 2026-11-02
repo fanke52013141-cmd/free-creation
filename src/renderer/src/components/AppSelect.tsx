@@ -3,6 +3,7 @@ import {
   Children,
   Fragment,
   isValidElement,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -107,8 +108,15 @@ export function AppSelect({
   const [uncontrolledValue, setUncontrolledValue] = useState(initialValue)
   const [open, setOpen] = useState(false)
   const owner = useRef(Symbol('app-select'))
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
   const selectedValue = value === undefined ? uncontrolledValue : value
   const selectedOption = options.find((option) => option.value === selectedValue)
+
+  const closeSelect = useCallback((): void => {
+    if (activeAppSelect?.owner === owner.current) activeAppSelect = null
+    setOpen(false)
+  }, [])
 
   const handleOpenChange = (nextOpen: boolean): void => {
     if (nextOpen) {
@@ -119,6 +127,21 @@ export function AppSelect({
     }
     setOpen(nextOpen)
   }
+
+  // 画布与节点外壳会在 pointerdown 冒泡路径上 stopPropagation，Radix 的 document 级
+  // dismiss 监听（冒泡阶段）收不到外部点击，下拉会一直悬着。这里改用捕获阶段监听，
+  // 统一保证“点击下拉外部（画布空白、其他节点、面板）即关闭”；触发器自身的开合仍交给 Radix。
+  useEffect(() => {
+    if (!open) return
+    const handlePointerDown = (event: PointerEvent): void => {
+      if (!(event.target instanceof Node)) return
+      if (triggerRef.current?.contains(event.target)) return
+      if (contentRef.current?.contains(event.target)) return
+      closeSelect()
+    }
+    document.addEventListener('pointerdown', handlePointerDown, true)
+    return () => document.removeEventListener('pointerdown', handlePointerDown, true)
+  }, [open, closeSelect])
 
   useEffect(
     () => () => {
@@ -145,6 +168,7 @@ export function AppSelect({
       disabled={disabled}
     >
       <Select.Trigger
+        ref={triggerRef}
         {...triggerProps}
         className={`app-select app-select-trigger ${className}`.trim()}
         aria-haspopup="listbox"
@@ -161,6 +185,7 @@ export function AppSelect({
       </Select.Trigger>
       <Select.Portal>
         <Select.Content
+          ref={contentRef}
           className="app-select-content"
           position="popper"
           side="bottom"

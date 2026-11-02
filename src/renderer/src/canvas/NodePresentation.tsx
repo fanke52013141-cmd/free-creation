@@ -46,7 +46,7 @@ export function NodeDescription(): React.JSX.Element | null {
   )
 }
 
-/** 空态共用图标和名称；必要提示与业务操作按需通过 children 接入。 */
+/** 空态共用居中大图标（无框、不重复标题）；必要提示与业务操作按需通过 children 接入。 */
 export function NodeIdentity({ children }: { children?: ReactNode }): React.JSX.Element | null {
   const context = useContext(Context)
   const register = context?.registerIdentity
@@ -60,7 +60,6 @@ export function NodeIdentity({ children }: { children?: ReactNode }): React.JSX.
       <span className="node-standard-identity-icon">
         <Icon name={context.spec.icon} size={NODE_UI.identity.iconSize} strokeWidth={2} />
       </span>
-      <strong title={context.spec.label}>{context.spec.label}</strong>
       {children}
     </div>
   )
@@ -196,13 +195,10 @@ export function NodeCardShell({
         className="node-standard-shell"
         style={
           {
-            '--node-standard-icon-box': `${NODE_UI.identity.boxSize}px`,
-            '--node-standard-icon-radius': `${NODE_UI.identity.radius}px`,
             '--node-standard-identity-height': `${NODE_UI.identity.minHeight}px`,
             '--node-standard-description-height': `${NODE_UI.description.height}px`,
             '--node-standard-padding': `${NODE_UI.content.padding}px`,
             '--node-standard-action-height': `${NODE_UI.actionBar.height}px`,
-            '--node-standard-button-width': `${NODE_UI.primaryButton.width}px`,
             '--node-standard-button-height': `${NODE_UI.primaryButton.height}px`,
             '--node-standard-button-radius': `${NODE_UI.primaryButton.radius}px`,
             '--node-standard-bottom-inset': `${NODE_UI.actionBar.bottomInset}px`

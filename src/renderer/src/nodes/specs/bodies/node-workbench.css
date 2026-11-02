@@ -610,10 +610,7 @@
   min-height: 30px;
   font-size: 11px;
 }
-
-.video-operations-inline-select .app-select:focus {
-  border-color: #38bdf8;
-}
+/* 2026-11-02 用户裁决：下拉框聚焦不加选中边框（全局规则，此处不再单独覆盖）。 */
 
 .video-operations-capability {
   margin-left: 72px;

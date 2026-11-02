@@ -140,7 +140,7 @@ export function AiProcessSettings({ shape, editor }: NodeSettingsProps): React.J
     return (
       <section className="node-settings ai-process-settings">
         <SkillAgentSettings value={config.agent} onChange={(agent) => save({ agent })} />
-        <NoModelHint onOpen={() => openSettings()} presetIds={['relay']} />
+        <NoModelHint onOpen={() => openSettings()} />
       </section>
     )
   }

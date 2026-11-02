@@ -2327,6 +2327,34 @@ button {
   font-size: 14px;
 }
 
+/* 文本节点编辑态（2026-11-02 用户裁决）：编辑框白底深字、中性灰描边；
+   高度用 flex 填满正文剩余空间，底边正好落在保存按钮上方 8px 的操作栏内边距处。
+   仅作用于文本节点的编辑框（data-node-interactive="text-editor"），
+   不影响代码/JSON 等其他 node-textarea 使用方。 */
+.node-textarea[data-node-interactive='text-editor'] {
+  flex: 1 1 0;
+  height: auto;
+  min-height: 96px;
+  background: #ffffff;
+  color: #16202b;
+  caret-color: #16202b;
+  border: 1px solid rgba(148, 163, 184, 0.55);
+  border-radius: 8px;
+}
+
+/* 正文外壳 .node-standard-scroll 默认 display:block，.node-body 的 flex:1 不生效，
+   编辑框只能拿到内容高度。编辑态把滚动容器临时切为 flex，让正文一路填到底，
+   底边正好落在操作条中保存按钮上方 8px。仅编辑态生效，展示态布局不变。 */
+.node-standard-scroll:has(.node-textarea[data-node-interactive='text-editor']) {
+  display: flex;
+  flex-direction: column;
+}
+.node-standard-scroll:has(.node-textarea[data-node-interactive='text-editor']) .node-body,
+.node-standard-scroll:has(.node-textarea[data-node-interactive='text-editor']) .node-body-content {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
 .node-hint {
   padding: 7px 9px;
 }
@@ -3740,62 +3768,11 @@ button {
 }
 
 /* Missing-model prompts use the same icon / title / detail / action rhythm. */
-.node-card .gen-empty {
-  gap: 0;
-  padding: 14px 16px;
-  color: #e9edf2;
-  text-align: center;
-}
 
-.node-card .gen-empty > svg {
-  box-sizing: border-box;
-  width: 68px;
-  height: 68px;
-  margin-bottom: 12px;
-  padding: 17px;
-  border: 1px solid color-mix(in srgb, var(--node-accent, #42b9f5) 22%, transparent);
-  border-radius: 17px;
-  color: color-mix(in srgb, var(--node-accent, #42b9f5) 64%, white);
-  background: linear-gradient(180deg, #2b3039, #22262f);
-  box-shadow:
-    inset 0 1px 1px rgba(255, 255, 255, 0.08),
-    0 10px 20px rgba(0, 0, 0, 0.2);
-}
 
-.node-card .gen-empty > span:first-of-type {
-  color: #e9edf2;
-  font-size: 15px;
-  font-weight: 650;
-}
 
-.node-card .gen-empty-presets {
-  margin-top: 7px;
-  color: #aab3bd;
-  font-size: 11px;
-  line-height: 1.45;
-  opacity: 1;
-}
 
-.node-card .gen-empty > button {
-  width: min(200px, 100%);
-  min-height: 36px;
-  margin-top: 15px;
-  border: 0;
-  border-radius: 8px;
-  color: #cbd3dc;
-  background: #2b3039;
-  box-shadow:
-    inset 0 0 0 1px rgba(170, 187, 194, 0.16),
-    0 2px 8px rgba(0, 0, 0, 0.22);
-}
 
-.node-card .gen-empty > button:hover:not(:disabled) {
-  color: #f1f5f8;
-  background: #343a43;
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--node-accent, #42b9f5) 48%, transparent),
-    0 0 16px color-mix(in srgb, var(--node-accent, #42b9f5) 18%, transparent);
-}
 
 /* The audio upload tile is itself the action, so retain its click target and
    give it the same accent tile and low-contrast surface. */
@@ -3831,8 +3808,9 @@ button {
   color: #aab3bd;
 }
 
-/* Keep configuration controls in every node on that node's own accent color. */
-.node-card :is(input, textarea, select, .app-select-trigger):focus {
+/* 输入类控件保持该节点强调色聚焦描边；下拉触发器除外
+   （2026-11-02 用户裁决：所有下拉框聚焦/展开一律不加选中边框）。 */
+.node-card :is(input, textarea, select):focus {
   border-color: color-mix(in srgb, var(--node-accent, #42b9f5) 70%, white);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--node-accent, #42b9f5) 19%, transparent);
 }
@@ -4365,22 +4343,6 @@ button {
   font-size: 9px;
 }
 
-.node-card.type-storyboard .storyboard-empty-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 7px;
-  width: min(250px, 100%);
-  margin-top: 6px;
-}
-
-.node-card.type-storyboard .storyboard-empty-actions button {
-  justify-content: center;
-  min-width: 0;
-  min-height: 30px;
-  padding: 0 7px;
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--node-accent) 8%, #2b3039);
-}
 
 .node-card.type-image-split .image-split-quick {
   box-sizing: border-box;
@@ -4393,33 +4355,16 @@ button {
   background: linear-gradient(145deg, color-mix(in srgb, var(--node-accent) 11%, #202630), #171b23);
 }
 
+/* 2026-11-02 用户裁决：拆分节点预览框一律中性白，不使用节点强调色；
+   空态已不渲染网格预览（统一身份块），网格线仅存在于有图预览之下，一并去色。 */
 .node-card.type-image-split .image-split-quick-grid {
-  border-color: color-mix(in srgb, var(--node-accent) 24%, #3c4652);
+  border-color: rgba(255, 255, 255, 0.28);
   background-color: #171c24;
-  background-image:
-    linear-gradient(color-mix(in srgb, var(--node-accent) 8%, transparent) 1px, transparent 1px),
-    linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--node-accent) 8%, transparent) 1px,
-      transparent 1px
-    ),
-    radial-gradient(
-      ellipse at center,
-      color-mix(in srgb, var(--node-accent) 6%, #212630),
-      #151a22 76%
-    );
-  background-size:
-    24px 24px,
-    24px 24px,
-    auto;
-}
-
-.node-card.type-image-split .image-split-quick-empty {
-  color: #aab5c2;
+  background-image: none;
 }
 
 .node-card.type-image-split .image-split-quick-controls input {
-  border-color: color-mix(in srgb, var(--node-accent) 20%, var(--line));
+  border-color: var(--line);
   background: #1c222b;
 }
 
@@ -5151,9 +5096,7 @@ node-card:is(.type-image-gen, .type-image-edit, .type-video) .gen-row {
 .node-card:is(.type-image-gen, .type-image-edit, .type-video) .gen-go,
 .node-card .btn-primary,
 .canvas-theme-light .node-card.type-tts .tts-upload-btn,
-.node-card .gen-empty > button,
 .node-card.type-image-crop .crop-inline-actions button,
-.node-card.type-storyboard .storyboard-empty-actions button,
 .node-card.type-tts .tts-upload-btn,
 .node-card.type-speech .tts-upload-btn,
 .node-card.type-audio .audio-empty-select {
@@ -5215,9 +5158,7 @@ node-card:is(.type-image-gen, .type-image-edit, .type-video) .gen-row {
 .node-card.type-ai-process .ai-process-config-button:hover:not(:disabled),
 .node-card:is(.type-image-gen, .type-image-edit, .type-video) .gen-go:hover:not(:disabled),
 .node-card .btn-primary:hover:not(:disabled),
-.node-card .gen-empty > button:hover:not(:disabled),
 .node-card.type-image-crop .crop-inline-actions button:hover:not(:disabled),
-.node-card.type-storyboard .storyboard-empty-actions button:hover:not(:disabled),
 .node-card.type-tts .tts-upload-btn:hover:not(:disabled),
 .node-card.type-speech .tts-upload-btn:hover:not(:disabled),
 .node-card.type-audio .audio-empty-select:hover:not(:disabled) {
@@ -5437,7 +5378,6 @@ node-card:is(.type-image-gen, .type-image-edit, .type-video) .gen-row {
 .node-card.type-file .file-asset-empty > svg,
 .node-card.type-file .file-asset-icon,
 .node-card .file-asset-binary > svg,
-.node-card .gen-empty > svg,
 .node-card.type-image-crop .crop-empty > svg,
 .node-card .website-node-icon,
 .node-card .sound-adjust-body-icon,
@@ -5557,3 +5497,22 @@ node-card:is(.type-image-gen, .type-image-edit, .type-video) .gen-row {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
+
+/* 节点表单与单个主操作共用正文宽度；多项控件按行分配空间。 */
+.node-card .node-standard-scroll .gen-row { width: 100%; min-width: 0; }
+.node-card.type-image-gen .gen-image-model-row > .gen-select-fit,
+.node-card .node-standard-scroll .gen-row > .gen-select { flex: 1 1 0; width: auto; min-width: 0; }
+/* 2026-11-02 用户裁决：生图选项行按内容紧凑宽度排布（不再等分拉宽），
+   行两端与提示词/主按钮对齐，顺序为 数量 | 画幅 | 分辨率 | 透明底。 */
+.node-card.type-image-gen .gen-options-row { justify-content: space-between; }
+.node-card.type-image-gen .gen-options-row > .gen-select {
+  flex: 0 0 auto;
+  width: max-content;
+  min-width: 0;
+  max-width: 100%;
+}
+/* 透明底并入选项行（2026-11-02 用户裁决：置于分辨率之后，与数量/画幅/分辨率同排）。 */
+.node-card.type-image-gen .gen-options-row > .gen-check { flex: 0 0 auto; align-self: center; }
+/* 文本字段使用统一中性白色描边，不继承节点分类色。 */
+.node-card .node-standard-scroll :is(textarea, input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file'])) { border-color: rgb(255 255 255 / 65%) !important; box-shadow: none !important; }
+.node-card .node-standard-scroll :is(textarea, input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file'])):focus { border-color: #fff !important; box-shadow: none !important; outline: 1px solid #fff; outline-offset: 0; }

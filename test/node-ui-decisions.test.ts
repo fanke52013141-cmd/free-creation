@@ -1173,48 +1173,26 @@ describe('v1.2 §16.30 文档真值节点：跳过运行不得静音输出，卡
   })
 })
 
-describe('v1.2 §16.31 空模型引导点名供应商预设', () => {
+describe('2026-11-02 空模型引导统一身份块', () => {
   const bodySource = (name: string): string =>
     read(`src/renderer/src/nodes/specs/bodies/${name}.tsx`)
 
-  /** 从 `presetIds={['a', 'b']}` 里取出 id；写错 id 会静默退化成裸字符串，所以必须查目录。 */
-  const presetIdsOf = (source: string): string[] => {
-    const match = /presetIds=\{\[([^\]]*)\]\}/.exec(source)
-    expect(match, '该节点必须给 NoModelHint 传 presetIds').not.toBeNull()
-    return [...(match?.[1].matchAll(/'([^']+)'/g) ?? [])].map((m) => m[1])
-  }
-
-  it('标签取自 PROVIDER_SPECS，不再第二处手写中文名', () => {
-    expect(sharedBodies).toContain("import { PROVIDER_SPECS } from '@shared/types'")
-    expect(sharedBodies).toContain('PROVIDER_SPECS.find((s) => s.id === id)?.label')
-    expect(sharedBodies).toContain('className="gen-empty-presets"')
-    // 组件内不得写死任何供应商名。
+  // 2026-11-02 用户裁决：空模型引导不再点名供应商预设，主操作进底部操作条。
+  it('NoModelHint 不再展示预设清单，按钮走底部操作条', () => {
     const hint = sharedBodies.slice(sharedBodies.indexOf('export function NoModelHint'))
     const hintBody = hint.slice(0, hint.indexOf('\n}\n'))
-    expect(hintBody).toContain('PROVIDER_SPECS')
-    for (const name of ['MiniMax', 'Seedance', 'ToAPIS', '海螺', '火山']) {
-      expect(hintBody, `NoModelHint 不得写死 ${name}`).not.toContain(name)
-    }
+    expect(hintBody).not.toContain('presetIds')
+    expect(hintBody).not.toContain('gen-empty-presets')
+    expect(hintBody).toContain('<NodeIdentity>')
+    expect(hintBody).toContain('<NodePrimaryButton')
+    expect(hintBody).toContain('打开模型设置')
   })
 
-  it('每个节点点名自己那一条链路的预设，且 id 真实存在于目录', () => {
-    const expected: Record<string, string[]> = {
-      video: ['minimax', 'seedance'],
-      'image-gen': ['toapis', 'relay'],
-      'image-edit': ['toapis', 'relay'],
-      chat: ['relay'],
-      aiProcess: ['relay']
+  it('各节点调用点不再传 presetIds', () => {
+    for (const name of ['video', 'image-gen', 'image-edit', 'chat', 'aiProcess']) {
+      expect(bodySource(name).replace(/\s/g, ''), name).not.toContain('presetIds=')
     }
-    const catalog = PROVIDER_SPECS.map((s) => s.id)
-    for (const [body, ids] of Object.entries(expected)) {
-      const passed = presetIdsOf(bodySource(body))
-      expect(passed, body).toEqual(ids)
-      for (const id of passed) expect(catalog, `${body} 的预设 id ${id}`).toContain(id)
-    }
-  })
-
-  it('预设行有样式归属，不会和主标题糊成一行', () => {
-    expect(app).toMatch(/\.gen-empty-presets\s*\{[^}]*font-size/)
+    expect(app).not.toContain('.gen-empty-presets')
   })
 })
 

@@ -1,9 +1,10 @@
 // 节点 UI 契约 Token（呈现规范 v1.0 §22）：
 // CSS、NodeCardView、Registry、NodeCardShape 与测试引用的唯一尺寸真值来源。
 // 节点内禁止散落硬编码高度/宽度；Shell 契约全局统一，节点只能声明业务 Body。
+// 2026-11-02 用户裁决：分镜板默认尺寸与其他节点一致（340×260），宽高随内容自适应增长，无上限。
 export const STORYBOARD_UI = {
-  width: 960,
-  height: 420,
+  width: 340,
+  height: 260,
   columnWidth: 220,
   tableChromeWidth: 224
 } as const
@@ -29,10 +30,14 @@ export const NODE_UI = {
   },
   header: { height: 28 },
   radius: 12,
-  identity: { boxSize: 72, iconSize: 32, radius: 16, minHeight: 178 },
+  identity: {
+    /** 空态居中大图标尺寸（2026-11-02 裁决：无框、不重复节点名称） */
+    iconSize: 48,
+    minHeight: 178
+  },
   description: { height: 36, maxLines: 2 },
   content: { padding: 12 },
-  primaryButton: { width: 200, height: 32, radius: 8 },
+  primaryButton: { height: 32, radius: 8 },
   accent: { height: 4 },
   reference: {
     /** 引用区最多展示行数，超出折叠为 +N */
@@ -52,6 +57,11 @@ export const NODE_UI = {
     /** 主操作按钮与节点卡片底边的统一留白 */
     bottomInset: 8,
     maxVisibleActions: 3
+  },
+  textEditor: {
+    /** 文本节点编辑态 textarea 的名义高度：flex 填满正文剩余空间，
+     *  填充高度不反算为内容需求（呈现规范 §19），自动高度按此名义值测算 */
+    naturalHeight: 160
   }
 } as const
 

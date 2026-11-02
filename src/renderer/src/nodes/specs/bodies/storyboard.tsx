@@ -193,7 +193,7 @@ export function StoryboardBody({ shape }: NodeBodyProps): React.JSX.Element {
   if (editingInput) {
     return (
       <textarea
-        className="node-textarea code-edit"
+        className="node-textarea code-edit storyboard-json-edit"
         autoFocus
         value={draftInput}
         placeholder='{"shots":[{"scene":"画面描述","dialogue":"","duration":"3s"}]}'
@@ -213,46 +213,34 @@ export function StoryboardBody({ shape }: NodeBodyProps): React.JSX.Element {
   }
 
   if (shotCount === 0) {
+    // 2026-11-02 用户裁决：空态只保留居中大图标，提示语全部去掉；
+    // 新增镜头与编辑 JSON 作为两个主按钮均分底部操作条。
     return (
-      <div
-        className="node-hint center"
-        data-node-interactive="double-click-content"
-        onDoubleClick={(e) => {
-          e.stopPropagation()
-          openJsonEditor()
-        }}
-      >
+      <>
         <NodeIdentity />
-        {wiring.text}
-        <br />
-        可逐镜填写，也可直接粘贴分镜 JSON
-        <div className="storyboard-empty-actions">
-          <NodePrimaryButton
-            type="button"
-            className="btn-ghost small"
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onClick={(e) => {
-              e.stopPropagation()
-              addShot()
-            }}
-          >
-            <Icon name="add" size={14} />
-            新增镜头
-          </NodePrimaryButton>
-          <button
-            type="button"
-            className="btn-ghost small"
-            onPointerDown={(e) => stopEventPropagation(e)}
-            onClick={(e) => {
-              e.stopPropagation()
-              openJsonEditor()
-            }}
-          >
-            <Icon name="edit" size={14} />
-            编辑 JSON
-          </button>
-        </div>
-      </div>
+        <NodePrimaryButton
+          type="button"
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onClick={(e) => {
+            e.stopPropagation()
+            addShot()
+          }}
+        >
+          <Icon name="add" size={14} />
+          新增镜头
+        </NodePrimaryButton>
+        <NodePrimaryButton
+          type="button"
+          onPointerDown={(e) => stopEventPropagation(e)}
+          onClick={(e) => {
+            e.stopPropagation()
+            openJsonEditor()
+          }}
+        >
+          <Icon name="edit" size={14} />
+          编辑 JSON
+        </NodePrimaryButton>
+      </>
     )
   }
 

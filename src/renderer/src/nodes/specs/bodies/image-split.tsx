@@ -13,7 +13,7 @@ import { gatherUpstreamMedia } from '../../../canvas/graph'
 import { markUndoPoint } from '../../../canvas/history'
 import { readNodeConfig } from '../../../canvas/node-persistence'
 import { mediaUrl, type NodeBodyProps, type NodeSettingsProps } from '../../registry'
-import { Icon } from '../../../components/Icon'
+import { NodeIdentity } from '../../../canvas/NodePresentation'
 import { useClickGuard, useSourceWiringNotice, useStoredNodeConfig } from './shared'
 
 function positiveInteger(value: string, fallback: number): number {
@@ -125,86 +125,83 @@ export function ImageSplitBody({ shape, openPreview }: NodeBodyProps): React.JSX
           </span>
         </label>
       </div>
-      <div
-        ref={previewContainerRef}
-        className="image-split-quick-grid"
-        aria-label={source ? '预览原图' : `${config.rows} 行 ${config.columns} 列拆分预览`}
-        data-node-interactive="media-preview"
-        role="button"
-        tabIndex={source ? 0 : -1}
-        title={source ? '回车或双击预览原图' : '请先连接原图'}
-        onPointerDown={guard.onPointerDown}
-        onDoubleClick={(event) => {
-          if (!source) return
-          guard.onDoubleClick(event, openSourcePreview)
-        }}
-        onKeyDown={(event) => {
-          if (!source) return
-          if (event.key !== 'Enter' && event.key !== ' ') return
-          event.preventDefault()
-          event.stopPropagation()
-          openSourcePreview()
-        }}
-      >
-        {source ? (
-          <div
-            className="image-split-canvas"
-            style={
-              containerSize && previewAspect
-                ? containerSize.w / containerSize.h > previewAspect
-                  ? {
-                      height: `${containerSize.h}px`,
-                      width: `${Math.round(containerSize.h * previewAspect)}px`,
-                      aspectRatio: previewAspect
-                    }
-                  : {
-                      width: `${containerSize.w}px`,
-                      height: `${Math.round(containerSize.w / previewAspect)}px`,
-                      aspectRatio: previewAspect
-                    }
-                : previewAspect
-                  ? { aspectRatio: previewAspect }
-                  : { width: '100%', height: '100%' }
-            }
-          >
-            <img
-              ref={(image) => {
-                if (image?.complete && image.naturalWidth && image.naturalHeight) {
-                  const aspect = image.naturalWidth / image.naturalHeight
-                  if (aspect !== previewAspect) setPreviewAspect(aspect)
-                }
+      {source ? (
+        <div
+          ref={previewContainerRef}
+          className="image-split-quick-grid"
+          aria-label="预览原图"
+          data-node-interactive="media-preview"
+          role="button"
+          tabIndex={0}
+          title="回车或双击预览原图"
+          onPointerDown={guard.onPointerDown}
+          onDoubleClick={(event) => {
+            guard.onDoubleClick(event, openSourcePreview)
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return
+            event.preventDefault()
+            event.stopPropagation()
+            openSourcePreview()
+          }}
+        >
+        <div
+          className="image-split-canvas"
+          style={
+            containerSize && previewAspect
+              ? containerSize.w / containerSize.h > previewAspect
+                ? {
+                    height: `${containerSize.h}px`,
+                    width: `${Math.round(containerSize.h * previewAspect)}px`,
+                    aspectRatio: previewAspect
+                  }
+                : {
+                    width: `${containerSize.w}px`,
+                    height: `${Math.round(containerSize.w / previewAspect)}px`,
+                    aspectRatio: previewAspect
+                  }
+              : previewAspect
+                ? { aspectRatio: previewAspect }
+                : { width: '100%', height: '100%' }
+          }
+        >
+          <img
+            ref={(image) => {
+              if (image?.complete && image.naturalWidth && image.naturalHeight) {
+                const aspect = image.naturalWidth / image.naturalHeight
+                if (aspect !== previewAspect) setPreviewAspect(aspect)
+              }
+            }}
+            src={mediaUrl(source.mediaPath)}
+            alt="拆分范围预览"
+            draggable={false}
+            onLoad={(event) => {
+              const image = event.currentTarget
+              if (image.naturalWidth && image.naturalHeight) {
+                setPreviewAspect(image.naturalWidth / image.naturalHeight)
+              }
+            }}
+          />
+          {tiles.map((tile) => (
+            <span
+              className="image-split-preview-tile"
+              key={tile.index}
+              style={{
+                left: `${tile.rect.x * 100}%`,
+                top: `${tile.rect.y * 100}%`,
+                width: `${tile.rect.width * 100}%`,
+                height: `${tile.rect.height * 100}%`
               }}
-              src={mediaUrl(source.mediaPath)}
-              alt="拆分范围预览"
-              draggable={false}
-              onLoad={(event) => {
-                const image = event.currentTarget
-                if (image.naturalWidth && image.naturalHeight) {
-                  setPreviewAspect(image.naturalWidth / image.naturalHeight)
-                }
-              }}
-            />
-            {tiles.map((tile) => (
-              <span
-                className="image-split-preview-tile"
-                key={tile.index}
-                style={{
-                  left: `${tile.rect.x * 100}%`,
-                  top: `${tile.rect.y * 100}%`,
-                  width: `${tile.rect.width * 100}%`,
-                  height: `${tile.rect.height * 100}%`
-                }}
-              >
-                <em>{tile.index + 1}</em>
-              </span>
-            ))}
-          </div>
-        ) : (
-          <span className="image-split-quick-empty">
-            <Icon name="image" size={19} />
-          </span>
-        )}
-      </div>
+            >
+              <em>{tile.index + 1}</em>
+            </span>
+          ))}
+        </div>
+        </div>
+      ) : (
+        /* 2026-11-02 用户裁决：拆分空态不渲染网格预览，统一为居中大图标身份块。 */
+        <NodeIdentity />
+      )}
     </div>
   )
 }

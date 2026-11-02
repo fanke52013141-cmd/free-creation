@@ -64,4 +64,52 @@ describe('AppSelect', () => {
       expect.objectContaining({ target: { value: 'model-a' }, currentTarget: { value: 'model-a' } })
     )
   })
+
+  it('点击下拉外部立即关闭（画布与节点会拦截冒泡，必须用捕获阶段监听）', async () => {
+    const select = createElement(
+      AppSelect,
+      {},
+      createElement('option', { value: 'a' }, '选项 A'),
+      createElement('option', { value: 'b' }, '选项 B')
+    ) as ReactElement
+
+    await act(async () => root.render(select))
+    const trigger = container.querySelector('button')
+
+    await act(async () => {
+      trigger?.focus()
+      trigger?.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowDown' }))
+    })
+    expect(document.body.querySelector('[role="listbox"]')).not.toBeNull()
+
+    // 模拟点击画布空白：pointerdown 的目标在触发器与下拉内容之外。
+    await act(async () => {
+      document.body.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }))
+    })
+    expect(document.body.querySelector('[role="listbox"]')).toBeNull()
+  })
+
+  it('点击下拉内部不会关闭', async () => {
+    const select = createElement(
+      AppSelect,
+      {},
+      createElement('option', { value: 'a' }, '选项 A'),
+      createElement('option', { value: 'b' }, '选项 B')
+    ) as ReactElement
+
+    await act(async () => root.render(select))
+    const trigger = container.querySelector('button')
+
+    await act(async () => {
+      trigger?.focus()
+      trigger?.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowDown' }))
+    })
+    const listbox = document.body.querySelector('[role="listbox"]')
+    expect(listbox).not.toBeNull()
+
+    await act(async () => {
+      listbox?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }))
+    })
+    expect(document.body.querySelector('[role="listbox"]')).not.toBeNull()
+  })
 })

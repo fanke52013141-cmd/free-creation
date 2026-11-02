@@ -15,11 +15,11 @@ import { readNodeConfig } from '../../../canvas/node-persistence'
 import { getNodeType, mediaUrl } from '../../registry'
 import { Icon } from '../../../components/Icon'
 import { AppSelect } from '../../../components/AppSelect'
+import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
 import { toast } from '../../../stores/toast'
 import { useConfirmStore } from '../../../stores/confirm'
 import { useMediaStore } from '../../../stores/media'
-import type { MediaAsset, MediaImportResult, ProviderSpecId } from '@shared/types'
-import { PROVIDER_SPECS } from '@shared/types'
+import type { MediaAsset, MediaImportResult } from '@shared/types'
 import { parseImageSplitConfig } from '@shared/image-split'
 import {
   clearMediaResultHistory,
@@ -155,35 +155,25 @@ export function ModelSelect({
   )
 }
 
-// 未配置任何对应模态模型时的占位引导
-export function NoModelHint({
-  onOpen,
-  presetIds = []
-}: {
-  onOpen: () => void
-  /** 该节点需要哪个供应商预设；名字直接取自 PROVIDER_SPECS，避免两处各写一套。 */
-  presetIds?: ProviderSpecId[]
-}): React.JSX.Element {
-  const labels = presetIds.map((id) => PROVIDER_SPECS.find((s) => s.id === id)?.label ?? id)
+// 未配置任何对应模态模型时的占位引导（2026-11-02 裁决：统一空态身份块，
+// 不再展示供应商预设清单，主操作进底部操作条与其他节点一致）
+export function NoModelHint({ onOpen }: { onOpen: () => void }): React.JSX.Element {
   return (
-    <div className="gen-empty">
-      <Icon name="spark" size={30} />
-      <span>尚未配置可用模型</span>
-      {labels.length > 0 && (
-        <span className="gen-empty-presets">可新增预设：{labels.join('、')}</span>
-      )}
-      <button
-        className="btn-ghost small"
+    <>
+      <NodeIdentity>
+        <span className="gen-empty-model-hint">尚未配置可用模型</span>
+      </NodeIdentity>
+      <NodePrimaryButton
         onPointerDown={(e) => stopEventPropagation(e)}
         onClick={(e) => {
           e.stopPropagation()
           onOpen()
         }}
       >
+        <Icon name="settings" size={14} />
         打开模型设置
-        <Icon name="settings" size={13} />
-      </button>
-    </div>
+      </NodePrimaryButton>
+    </>
   )
 }
 

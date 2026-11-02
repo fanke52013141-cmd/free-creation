@@ -1,10 +1,13 @@
 import { NodeIdentity, NodePrimaryButton } from '../../../canvas/NodePresentation'
 import { Icon } from '../../../components/Icon'
-import { useEditor } from 'tldraw'
+import { stopEventPropagation, useEditor } from 'tldraw'
 import { useCallback, useEffect, useState } from 'react'
 import type { NodeBodyProps, NodeSettingsProps } from '../../registry'
 import type { VideoEngineStatus } from '@shared/contracts'
 import { AppSelect } from '../../../components/AppSelect'
+import { runNodeManually } from '../../../engine/executor'
+import { useAppStore } from '../../../stores/app'
+import { useGatewayStore } from '../../../stores/gateway'
 import {
   DEFAULT_VIDEO_CLAY_CONFIG,
   DEFAULT_VIDEO_DEPTH_CONFIG,
@@ -28,24 +31,60 @@ function statusText(status: VideoEngineStatus | null): string {
 
 export function VideoAiBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
+  const project = useAppStore((s) => s.currentProject)
+  const providers = useGatewayStore((s) => s.providers)
+  const [submitting, setSubmitting] = useState(false)
   const mode: Mode = shape.props.nodeType === 'video-depth' ? 'depth' : 'clay'
   const config = mode === 'depth'
     ? parseVideoDepthConfig(shape.props.config || DEFAULT_VIDEO_DEPTH_CONFIG)
     : parseVideoClayConfig(shape.props.config)
+  const clayV1 = mode === 'clay' && config.version === 1
+  const engineBusy = ['queued', 'running', 'pending'].includes(shape.props.exec)
+
+  const run = async (): Promise<void> => {
+    if (!project) return
+    setSubmitting(true)
+    try {
+      await runNodeManually(editor, project.id, providers, shape.id)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
     <div className="video-ai-body">
-      <NodeIdentity />
-
       {mode === 'clay' ? (
         <ClayOptions config={parseVideoClayConfig(shape.props.config)} onChange={(patch) => {
           editor.updateShape({ id: shape.id, type: 'node-card', props: {
             config: serializeVideoClayConfig({ ...parseVideoClayConfig(shape.props.config), ...patch })
           } })
         }} />
-      ) : <div className="video-ai-body-meta">
-        <span>上限 {config.maxResolution}px</span>
-        <span>Video Depth Anything Small · 本地 CUDA</span>
-      </div>}
+      ) : null}
+      <NodeIdentity />
+      {/* 2026-11-02 用户裁决：配置行置顶、身份图标居中，补齐与其他节点一致的底部主操作。
+          v1 旧配置保留“升级白模效果”入口，此时不重复出运行按钮。 */}
+      {!clayV1 && (
+        <NodePrimaryButton
+          disabled={submitting || engineBusy}
+          title={engineBusy && !submitting ? '当前节点已在运行或排队' : undefined}
+          onPointerDown={stopEventPropagation}
+          onClick={(e) => {
+            e.stopPropagation()
+            void run()
+          }}
+        >
+          {submitting ? (
+            '生成中…'
+          ) : engineBusy ? (
+            '节点执行中，稍候…'
+          ) : (
+            <>
+              <span>{mode === 'depth' ? '生成深度视频' : '生成白模视频'}</span>
+              <Icon name="spark" size={14} />
+            </>
+          )}
+        </NodePrimaryButton>
+      )}
     </div>
   )
 }

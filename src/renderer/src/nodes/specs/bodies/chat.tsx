@@ -58,7 +58,7 @@ export function ChatSettings({ shape, editor }: NodeSettingsProps): React.JSX.El
     return (
       <section className="node-settings chat-node-settings">
         <ChatSkillAgentSettings shape={shape} editor={editor} />
-        <NoModelHint onOpen={() => openSettings()} presetIds={['relay']} />
+        <NoModelHint onOpen={() => openSettings()} />
       </section>
     )
   }

@@ -31,20 +31,6 @@
   line-height: 1.55;
 }
 
-.video-ai-body-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.video-ai-body-meta span {
-  padding: 3px 7px;
-  border-radius: 5px;
-  color: var(--muted);
-  background: rgb(255 255 255 / 5%);
-  font-size: 10px;
-}
-
 .video-ai-settings {
   display: grid;
   gap: 14px;

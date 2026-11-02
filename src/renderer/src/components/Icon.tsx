@@ -10,6 +10,8 @@ export type IconName =
   | 'image-gen'
   | 'video'
   | 'video-asset'
+  | 'depth'
+  | 'clay'
   | 'frame'
   | 'clip'
   | 'audio'
@@ -125,22 +127,38 @@ const PATHS: Record<IconName, React.ReactNode> = {
   ),
   'video-asset': (
     <>
-      <rect x="2" y="4" width="20" height="16" rx="2" />
-      <path d="m10 8 6 4-6 4V8Z" />
-      <path d="M2 8h4M2 16h4M18 8h4M18 16h4" />
+      <rect x="2.5" y="5" width="19" height="14" rx="2" />
+      <path d="M6.5 5v14M17.5 5v14" />
+      <path d="M2.5 9.5h4M2.5 14.5h4M17.5 9.5h4M17.5 14.5h4" />
     </>
   ),
   frame: (
     <>
-      <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
-      <path d="M7.5 4.5v15M16.5 4.5v15M3.5 8.5h4M16.5 8.5h4M3.5 15.5h4M16.5 15.5h4" />
-      <rect x="9.5" y="8" width="5" height="8" rx=".8" />
+      <rect x="2.5" y="13" width="11.5" height="6.5" rx="1" />
+      <path d="M5 15.5v1.5M8 15.5v1.5M11 15.5v1.5" />
+      <rect x="15" y="3" width="6.5" height="5.5" rx="1" />
+      <path d="M13 11.5 17 7.5" />
+      <path d="M17 10.5v-3h-3" />
     </>
   ),
   clip: (
     <>
       <rect x="3" y="5" width="18" height="14" rx="2" />
-      <path d="m9 12 3-3v6l-3-3ZM15 12l-3-3v6l3-3Z" />
+      <path d="M7 5v14M17 5v14" strokeDasharray="2 2.4" />
+      <path d="m10.5 9.5 3.5 2.5-3.5 2.5V9.5Z" />
+    </>
+  ),
+  depth: (
+    <>
+      <path d="M12 3 4 7l8 4 8-4-8-4Z" />
+      <path d="m4 12 8 4 8-4" />
+      <path d="m4 16.5 8 4 8-4" />
+    </>
+  ),
+  clay: (
+    <>
+      <path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7L12 2.5Z" />
+      <path d="M3.5 7 12 11.5 20.5 7M12 11.5v10" />
     </>
   ),
   audio: (

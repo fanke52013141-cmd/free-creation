@@ -2874,21 +2874,6 @@ select:focus-visible {
   pointer-events: none;
 }
 
-.image-split-quick-empty {
-  display: grid;
-  width: 100%;
-  height: 100%;
-  place-items: center;
-  align-content: center;
-  gap: 5px;
-  /* 缺输入提示是一句完整结论，需要换行而不是溢出裁掉 */
-  padding: 0 12px;
-  line-height: 1.5;
-  text-align: center;
-  color: var(--muted, #8e9bab);
-  font-size: 11px;
-}
-
 .image-split-quick-summary {
   overflow: hidden;
   color: var(--muted, #8e9bab);
@@ -4953,8 +4938,8 @@ select:focus-visible {
   box-sizing: border-box;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(94, 234, 212, 0.92);
-  background: rgba(45, 212, 191, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.08);
   box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.035);
 }
 
@@ -8431,10 +8416,6 @@ select:focus-visible {
   flex: 0 0 auto;
 }
 
-.gen-select:focus {
-  border-color: var(--brand);
-}
-
 /* P 图参数行的比例下拉（唯一使用者）：按内容定宽不换行，「默认比例」必须完整可见；
    剩余宽度让给模型下拉。 */
 .gen-select.w92 {
@@ -8508,24 +8489,8 @@ select:focus-visible {
   margin-bottom: 0;
 }
 
-.gen-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 100%;
-  color: var(--muted);
-  font-size: 12px;
-}
 
 /* NoModelHint 第二行：点明该节点要哪个供应商预设，措辞比主标题弱一档 */
-.gen-empty-presets {
-  font-size: 11px;
-  opacity: 0.75;
-  text-align: center;
-  padding: 0 8px;
-}
 
 .gen-running {
   display: flex;
@@ -11287,12 +11252,6 @@ select:focus-visible {
 }
 
 /* ── Storyboard 分镜板工具条与空态 ── */
-.storyboard-empty-actions {
-  display: flex;
-  gap: 6px;
-  justify-content: center;
-  margin-top: 6px;
-}
 .storyboard-toolbar {
   display: flex;
   align-items: center;
