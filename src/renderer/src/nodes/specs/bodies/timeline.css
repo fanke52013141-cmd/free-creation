@@ -1379,3 +1379,82 @@ body.tl-asset-dragging {
   border-color: rgb(255 255 255 / 20%);
   color: #e6edf7;
 }
+
+/* 引用素材条（2026-11-03）：连线素材先作为引用展示，点选追加、长按拖到轨道。 */
+.tl-refs {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 0 6px;
+  min-width: 0;
+}
+
+.tl-refs-title {
+  flex: 0 0 auto;
+  color: #8a97a8;
+  font-size: 11px;
+}
+
+.tl-refs-list {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.tl-ref {
+  display: inline-flex;
+  max-width: 160px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px 3px 3px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 7px;
+  background: rgb(255 255 255 / 4%);
+  color: #e6edf7;
+  font-size: 11px;
+  cursor: grab;
+}
+
+.tl-ref:hover {
+  border-color: rgb(35 154 211 / 45%);
+  background: rgb(35 154 211 / 10%);
+}
+
+.tl-ref-thumb {
+  display: inline-flex;
+  width: 26px;
+  height: 20px;
+  flex: 0 0 26px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 4px;
+  background: rgb(0 0 0 / 40%);
+  color: #8a97a8;
+}
+
+.tl-ref-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tl-ref-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 引用素材条在节点内独占一行（.tl-body 默认是横向 flex，条会被挤到左侧列）。 */
+.tl-body {
+  flex-direction: column;
+}
+
+.tl-refs {
+  width: 100%;
+}

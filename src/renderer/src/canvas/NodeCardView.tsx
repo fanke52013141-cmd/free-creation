@@ -1043,7 +1043,7 @@ export function NodeCardView({ shape }: { shape: NodeCardShape }): React.JSX.Ele
 
   // 裁剪和拆图以主预览承载素材，AI 处理只显示输出；这些节点不重复呈现输入。
   // 视频生成及其他节点统一使用顶部引用区。
-  const hasDedicatedInputSurface = ['image-crop', 'image-split', 'ai-process'].includes(
+  const hasDedicatedInputSurface = ['image-crop', 'image-split', 'ai-process', 'timeline'].includes(
     shape.props.nodeType
   )
 

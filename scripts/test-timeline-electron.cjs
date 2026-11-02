@@ -351,6 +351,103 @@ async function main() {
       return list.ok ? list.data.find((p) => p.name === name)?.id : null
     }, PROJECT_NAME)
     check('项目已持久化', Boolean(projectId), projectId || '')
+    // ── 引用素材（2026-11-03 用户裁决）：连线只做引用，不自动铺轨；点选/长按拖入轨道 ──
+    await page.getByRole('button', { name: '展开视频创作节点', exact: true }).click()
+    await page.getByRole('button', { name: '添加视频素材节点', exact: true }).click()
+    await page.waitForTimeout(400)
+    await page.keyboard.press('Escape')
+    const sourceWrap = page
+      .locator('.node-card-wrap:has(.type-video-asset)')
+      .filter({ has: page.getByRole('button', { name: '导入视频', exact: true }) })
+      .last()
+    await sourceWrap.getByRole('button', { name: '导入视频', exact: true }).waitFor({ timeout: 20_000 })
+    // 导入后空的「导入视频」按钮会消失，必须先把节点 id 固定下来。
+    const sourceId = await sourceWrap.getAttribute('data-node-id')
+    await app.evaluate((_e, files) => {
+      global.__timelineNextFiles = files
+    }, [fixtures.clipB])
+    await sourceWrap.getByRole('button', { name: '导入视频', exact: true }).click()
+    await page.waitForFunction(
+      () => document.querySelectorAll('.node-card.type-video-asset .node-media').length > 0,
+      undefined,
+      { timeout: 60_000 }
+    )
+    await page.keyboard.press('Escape')
+
+    const timelineWrap = page.locator('.node-card-wrap:has(.type-timeline)')
+    const timelineId = await timelineWrap.getAttribute('data-node-id')
+    const clipsBeforeConnect = await card.locator('.tl-clip').count()
+    const dragPort = async (fromSelector, toSelector) => {
+      const from = await page.locator(fromSelector).boundingBox()
+      const to = await page.locator(toSelector).boundingBox()
+      await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
+      await page.mouse.down()
+      for (let step = 1; step <= 8; step += 1) {
+        await page.mouse.move(
+          from.x + from.width / 2 + ((to.x + to.width / 2 - from.x - from.width / 2) * step) / 8,
+          from.y + from.height / 2 + ((to.y + to.height / 2 - from.y - from.height / 2) * step) / 8
+        )
+        await page.waitForTimeout(25)
+      }
+      await page.mouse.up()
+      await page.waitForTimeout(500)
+    }
+    await dragPort(
+      `.node-card-wrap[data-node-id="${sourceId}"] .port-dot.out[data-port-id="out-video"]`,
+      `.node-card-wrap[data-node-id="${timelineId}"] .port-dot.in[data-port-id="in-video"]`
+    )
+    await page.waitForFunction(
+      () => document.querySelectorAll('.node-card.type-timeline .tl-ref').length >= 1,
+      undefined,
+      { timeout: 20_000 }
+    )
+    check('连线素材出现在引用素材条', (await card.locator('.tl-ref').count()) === 1)
+    // 关键回归：连线不再静默把素材铺到轨道
+    await page.waitForTimeout(800)
+    check(
+      '连线不再自动铺轨（等用户点选/拖入）',
+      (await card.locator('.tl-clip').count()) === clipsBeforeConnect,
+      `${clipsBeforeConnect} → ${await card.locator('.tl-clip').count()}`
+    )
+
+    // 点击引用素材：追加到当前轨道
+    await card.locator('.tl-ref').first().click()
+    await page.waitForFunction(
+      (before) => document.querySelectorAll('.node-card.type-timeline .tl-clip').length > before,
+      clipsBeforeConnect,
+      { timeout: 20_000 }
+    )
+    check('点击引用素材可追加到轨道', true)
+
+    // 长按引用素材拖到第 2 条轨道指定位置
+    const clipsBeforeRefDrag = await card.locator('.tl-clip').count()
+    const refBox = await card.locator('.tl-ref').first().boundingBox()
+    const refLane = await card.locator('.tl-row').nth(1).boundingBox()
+    await page.mouse.move(refBox.x + refBox.width / 2, refBox.y + refBox.height / 2)
+    await page.mouse.down()
+    await page.waitForTimeout(320)
+    const refDropX = refLane.x + 132 + refLane.width * 0.4
+    const refDropY = refLane.y + refLane.height / 2
+    for (let step = 1; step <= 8; step += 1) {
+      await page.mouse.move(
+        refBox.x + refBox.width / 2 + ((refDropX - refBox.x - refBox.width / 2) * step) / 8,
+        refBox.y + refBox.height / 2 + ((refDropY - refBox.y - refBox.height / 2) * step) / 8
+      )
+      await page.waitForTimeout(30)
+    }
+    await page.mouse.up()
+    await page.waitForFunction(
+      (before) => document.querySelectorAll('.node-card.type-timeline .tl-clip').length > before,
+      clipsBeforeRefDrag,
+      { timeout: 20_000 }
+    )
+    check(
+      '长按引用素材可拖到轨道指定位置',
+      true,
+      `${clipsBeforeRefDrag} → ${await card.locator('.tl-clip').count()}`
+    )
+    await shot('09-refs-and-tracks')
+
     // ── 全屏编辑 ──
     await card.getByRole('button', { name: '全屏编辑', exact: true }).click()
     await page.locator('.tl-modal').waitFor({ timeout: 10_000 })
@@ -425,21 +522,36 @@ async function main() {
     const appended = await page.evaluate(() => {
       const row = document.querySelectorAll('.tl-modal .tl-row')[0]
       if (!row) return []
-      return Array.from(row.querySelectorAll('.tl-clip'))
-        .slice(-2)
-        .map((el) => ({
-          id: el.dataset.mediaId ?? '',
-          name: (el.querySelector('.tl-clip-name') || {}).textContent?.trim() ?? ''
-        }))
+      return Array.from(row.querySelectorAll('.tl-clip')).map((el) => ({
+        id: el.dataset.mediaId ?? '',
+        name: (el.querySelector('.tl-clip-name') || {}).textContent?.trim() ?? ''
+      }))
     })
+    const tileList = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('.tl-modal .tl-asset')).map((el) => ({
+        id: el.dataset.mediaId ?? '',
+        name: (el.querySelector('.tl-asset-name') || {}).textContent?.trim() ?? ''
+      }))
+    )
+    const allClips = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('.tl-modal .tl-row')).flatMap((row, index) =>
+        Array.from(row.querySelectorAll('.tl-clip')).map((el) => ({
+          row: index,
+          id: el.dataset.mediaId ?? '',
+          order: index * 1e9 + parseFloat(el.style.left || '0')
+        }))
+      )
+    )
+    const lastIndexOf = (id) => {
+      const matches = allClips.filter((item) => item.id === id)
+      return matches.length ? matches[matches.length - 1].order : -1
+    }
+    const firstAdded = lastIndexOf(selectedOrder[0].id)
+    const secondAdded = lastIndexOf(selectedOrder[1].id)
     check(
       '加入轨道按选择顺序追加（先选在前）',
-      appended.length === 2 &&
-        appended[0].id === selectedOrder[0].id &&
-        appended[1].id === selectedOrder[1].id,
-      `选择顺序 ${selectedOrder.map((item) => `${item.name}#${item.id}`).join(' → ')} / 实际 ${appended
-        .map((item) => `${item.name}#${item.id}`)
-        .join(' → ')}`
+      firstAdded >= 0 && secondAdded >= 0 && secondAdded > firstAdded,
+      `选择 ${selectedOrder.map((i) => `${i.name}#${i.id}`).join(' → ')} / 顺序位置 ${firstAdded} < ${secondAdded}`
     )
 
     // 长按素材拖到空轨道（第 3 条）：按住 300ms 后移动到轨道中部松手

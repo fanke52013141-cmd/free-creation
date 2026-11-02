@@ -676,6 +676,148 @@ function TimelineSurface({
   )
 }
 
+/**
+ * 引用素材条（2026-11-03 用户裁决）：连线进来的图片/视频/音频先作为「引用」展示，
+ * 不再自动铺到轨道。点一下追加到当前轨道末尾；长按 220ms 可拖到轨道任意位置。
+ */
+const REF_LONG_PRESS_MS = 220
+
+function TimelineRefStrip({
+  assets,
+  onAdd
+}: {
+  assets: TimelineEditorAsset[]
+  onAdd: (asset: TimelineEditorAsset, trackId?: string, startMs?: number) => void
+}): React.JSX.Element | null {
+  const [ghost, setGhost] = useState<{ x: number; y: number; asset: TimelineEditorAsset } | null>(
+    null
+  )
+  const pressRef = useRef<{
+    asset: TimelineEditorAsset
+    originX: number
+    originY: number
+    x: number
+    y: number
+    started: boolean
+    timer: ReturnType<typeof setTimeout> | null
+  } | null>(null)
+  if (assets.length === 0) return null
+
+  const laneAt = (x: number, y: number): { trackId: string; startMs: number } | null => {
+    const element = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-timeline-lane]')
+    if (!element) return null
+    const trackId = element.dataset.timelineLane ?? ''
+    const pps = Number(element.dataset.timelinePps ?? '0')
+    if (!trackId || !pps) return null
+    const rect = element.getBoundingClientRect()
+    return { trackId, startMs: Math.max(0, Math.round(((x - rect.left) / pps) * 1000)) }
+  }
+
+  const startPress = (event: React.PointerEvent, asset: TimelineEditorAsset): void => {
+    if (event.button !== 0) return
+    event.stopPropagation()
+    const state = {
+      asset,
+      originX: event.clientX,
+      originY: event.clientY,
+      x: event.clientX,
+      y: event.clientY,
+      started: false,
+      timer: null as ReturnType<typeof setTimeout> | null
+    }
+    pressRef.current = state
+    state.timer = setTimeout(() => {
+      state.started = true
+      setGhost({ x: state.x, y: state.y, asset })
+      document.body.classList.add('tl-asset-dragging')
+    }, REF_LONG_PRESS_MS)
+    const cleanup = (): void => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+    }
+    const onMove = (moveEvent: PointerEvent): void => {
+      const current = pressRef.current
+      if (!current) return
+      current.x = moveEvent.clientX
+      current.y = moveEvent.clientY
+      const moved =
+        Math.abs(moveEvent.clientX - current.originX) +
+          Math.abs(moveEvent.clientY - current.originY) >
+        6
+      if (!current.started && moved && current.timer) {
+        clearTimeout(current.timer)
+        current.timer = null
+        pressRef.current = null
+        cleanup()
+        return
+      }
+      setGhost((prev) => (prev ? { ...prev, x: current.x, y: current.y } : prev))
+    }
+    const onUp = (upEvent: PointerEvent): void => {
+      const current = pressRef.current
+      pressRef.current = null
+      if (current?.timer) clearTimeout(current.timer)
+      const dragging = Boolean(current?.started)
+      if (dragging) {
+        const target = laneAt(upEvent.clientX, upEvent.clientY)
+        if (target) onAdd(asset, target.trackId, target.startMs)
+      } else if (current) {
+        onAdd(asset)
+      }
+      setGhost(null)
+      document.body.classList.remove('tl-asset-dragging')
+      cleanup()
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
+  }
+
+  return (
+    <div className="tl-refs" data-node-pointer="control" aria-label="引用素材">
+      <span className="tl-refs-title">引用素材</span>
+      <div className="tl-refs-list">
+        {assets.map((asset) => (
+          <button
+            key={`${asset.mediaId}-${asset.mediaPath}`}
+            type="button"
+            className={`tl-ref is-${asset.kind}`}
+            data-node-pointer="control"
+            data-media-id={asset.mediaId}
+            title={`${asset.name} · 点击追加到轨道，长按拖到指定位置`}
+            onPointerDown={(event) => startPress(event, asset)}
+          >
+            <span className="tl-ref-thumb">
+              {asset.kind === 'image' ? (
+                <img src={mediaUrl(asset.mediaPath)} alt="" draggable={false} />
+              ) : (
+                <Icon name={asset.kind === 'video' ? 'video' : 'audio'} size={13} />
+              )}
+            </span>
+            <span className="tl-ref-name">{asset.name}</span>
+          </button>
+        ))}
+      </div>
+      {ghost ? (
+        <div
+          className="tl-asset-ghost"
+          style={{ left: ghost.x + 14, top: ghost.y + 12 }}
+          aria-hidden="true"
+        >
+          <Icon
+            name={
+              ghost.asset.kind === 'video' ? 'video' : ghost.asset.kind === 'audio' ? 'audio' : 'image'
+            }
+            size={14}
+          />
+          {ghost.asset.name}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
   const editor = useEditor()
   const project = useAppStore((store) => store.currentProject)
@@ -782,7 +924,8 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
     if (!targetTrackId) return toast('请先添加一条轨道')
     const bridge = probeBridge()
     let next = data
-    let cursor = startMs
+    // 显式给起点：多个素材按顺序首尾相接，不依赖 addClip 各自的「追加到末尾」推算。
+    let cursor = startMs ?? timelineDurationMs(data)
     let firstClipId: string | null = null
     for (const asset of assets) {
       let durationMs = asset.durationMs ?? 0
@@ -800,7 +943,7 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
         mediaPath: asset.mediaPath,
         name: asset.name,
         sourceDurationMs: durationMs,
-        ...(cursor === undefined ? {} : { startMs: cursor })
+        startMs: cursor
       })
       if (!added.ok) {
         toast(added.reason)
@@ -808,10 +951,8 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
       }
       next = added.data
       if (!firstClipId) firstClipId = added.clipId ?? null
-      if (cursor !== undefined) {
-        const placed = findClip(next, added.clipId ?? '')
-        cursor += placed?.durationMs ?? 0
-      }
+      const placed = findClip(next, added.clipId ?? '')
+      cursor += placed?.durationMs ?? 0
     }
     if (next === data) return
     commit(next, 'timeline-add-asset')
@@ -871,49 +1012,31 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
     editor.redo()
   }
 
-  // 上游素材只自动导入一次：用户已经编辑过时间线（或手动清空）后不再被覆盖。
-  // 与分镜板同构——连线是“首次铺素材”的便捷入口，不是每次渲染都重写的真值来源。
-  const upstreamImportedRef = useRef(false)
-  useEffect(() => {
-    if (upstreamImportedRef.current || !project) return
-    if (data.clips.length > 0) {
-      upstreamImportedRef.current = true
-      return
-    }
+  // 上游素材不再自动铺轨（2026-11-03 用户裁决）：连线只是「引用」，
+  // 由用户从引用素材条点选或长按拖到轨道上，顺序与落点都由用户决定。
+  const inputVersion = useValue(
+    'timeline connected inputs',
+    () => editor.getCurrentPageShapes().filter((item) => item.type === 'arrow').length,
+    [editor]
+  )
+  const refAssets = useMemo<TimelineEditorAsset[]>(() => {
     const connected = readConnectedNodeInputs(editor, shape.id)
-    const media = connected
-      .map((input) => ({ input, value: mediaValueOf(input.value) }))
-      .filter((entry): entry is { input: (typeof connected)[number]; value: NonNullable<ReturnType<typeof mediaValueOf>> } => Boolean(entry.value))
-    if (media.length === 0) return
-    upstreamImportedRef.current = true
-    void (async () => {
-      const bridge = probeBridge()
-      let next = data
-      for (const { value } of media) {
-        // 轨道通用：上游素材统一落到第一条轨道，后续用户自己拖到别处。
-        const track = next.tracks[0]
-        if (!track) continue
-        let durationMs: number | null = null
-        if (value.kind !== 'image' && bridge.probeMediaMetadata) {
-          const probe = await bridge.probeMediaMetadata({
-            projectId: project.id,
-            mediaId: value.mediaId
-          })
-          if (probe.ok && probe.data) durationMs = probe.data.durationMs
-        }
-        const added = addClip(next, {
-          trackId: track.id,
-          kind: value.kind,
-          mediaId: value.mediaId,
-          mediaPath: value.mediaPath,
-          name: value.name ?? CLIP_KIND_LABEL[value.kind],
-          sourceDurationMs: durationMs ?? 0
-        })
-        if (added.ok) next = added.data
-      }
-      if (next !== data) commit(next, 'timeline-import-upstream')
-    })()
-  }, [data, editor, project, shape.id])
+    const seen = new Set<string>()
+    const found: TimelineEditorAsset[] = []
+    for (const input of connected) {
+      const value = mediaValueOf(input.value)
+      if (!value || seen.has(value.mediaId)) continue
+      seen.add(value.mediaId)
+      found.push({
+        mediaId: value.mediaId,
+        mediaPath: value.mediaPath,
+        name: value.name ?? CLIP_KIND_LABEL[value.kind],
+        kind: value.kind
+      })
+    }
+    return found
+    // inputVersion 让连线增删后重新取引用；shape.props.text 变化时也刷新名称。
+  }, [editor, shape.id, inputVersion, shape.props.text])
 
   // 快捷键：选中片段时 Delete/Backspace 只删片段；节点失去选中时片段选中态随之清空，
   // 画布的全局 Delete 恢复原样。作用域判断不参与删除决策——单击片段已经把上下文说清楚了。
@@ -1023,6 +1146,12 @@ export function TimelineBody({ shape }: NodeBodyProps): React.JSX.Element {
 
   return (
     <div className="tl-body" ref={surfaceRef}>
+      {fullscreen ? null : (
+        <TimelineRefStrip
+          assets={refAssets}
+          onAdd={(asset, trackId, startMs) => void addAssetsToTrack([asset], trackId, startMs)}
+        />
+      )}
       {fullscreen ? null : surface}
       {fullscreen
         ? createPortal(
