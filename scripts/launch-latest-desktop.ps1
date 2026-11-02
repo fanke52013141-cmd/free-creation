@@ -120,7 +120,9 @@ try {
   }
 
   Write-Host '正在同步依赖……' -ForegroundColor Cyan
-  & $PnpmCommandPath install --frozen-lockfile
+  # modules 目录元数据与当前 pnpm 不一致时会要求删除重建并交互确认；
+  # 无人值守启动必须自动确认，否则窗口会一直等待输入并持有启动互斥锁。
+  & $PnpmCommandPath install --frozen-lockfile --config.confirmModulesPurge=false
   if ($LASTEXITCODE -ne 0) {
     throw "依赖同步失败，退出代码：$LASTEXITCODE。"
   }
