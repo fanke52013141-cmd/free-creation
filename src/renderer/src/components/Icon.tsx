@@ -151,24 +151,25 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="m14.5 19.5 6-6-2-2-6 6-1 3 3-1Z" />
     </>
   ),
-  // 2026-11-03 用户裁决：分割用「括号 + 切点」表达，不再借用裁剪/对齐图标。
+  // 2026-11-03 用户裁决：分割=左右方括号都实心（中间虚线是切点）；左分割=右括号虚线（删右侧）；
+  // 右分割=左括号虚线（删左侧）。
   split: (
     <>
-      <path d="M8 5H4v14h4" />
-      <path d="M16 5h4v14h-4" />
-      <path d="M12 3v18" strokeDasharray="2 2.6" />
+      <path d="M9 4H4v16h5" />
+      <path d="M15 4h5v16h-5" />
+      <path d="M12 4v16" strokeDasharray="2 2.6" />
     </>
   ),
   'split-left': (
     <>
-      <path d="M11 5H4v14h7" />
-      <path d="M15 4v16" />
+      <path d="M9 4H4v16h5" />
+      <path d="M15 4h5v16h-5" strokeDasharray="2 2.6" />
     </>
   ),
   'split-right': (
     <>
-      <path d="M13 5h7v14h-7" />
-      <path d="M9 4v16" />
+      <path d="M9 4H4v16h5" strokeDasharray="2 2.6" />
+      <path d="M15 4h5v16h-5" />
     </>
   ),
   'image-gen': (
@@ -190,11 +191,11 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <line x1="7.8" y1="14" x2="16.2" y2="14" />
     </>
   ),
+  // 2026-11-03 用户裁决：去掉下方箭头，视频框按高度撑满（18×17）+ 居中播放三角。
   video: (
     <>
-      <rect x="3" y="3" width="18" height="11" rx="2" />
-      <path d="m10 6 4.5 2.5L10 11V6Z" />
-      <path d="M4 19h13M14.5 16.5 17 19l-2.5 2.5" />
+      <rect x="3" y="3.5" width="18" height="17" rx="2.5" />
+      <path d="M10 8.25 16 12l-6 3.75z" />
     </>
   ),
   // 2026-11-03 用户裁决：轨道线用铁轨表达——两条钢轨 + 枕木，不再画时间尺/播放头。
@@ -392,18 +393,9 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="m9 9 6 6M15 9l-6 6" />
     </>
   ),
-  'zoom-in': (
-    <>
-      <circle cx="10.5" cy="10.5" r="6.5" />
-      <path d="M10.5 7.5v6M7.5 10.5h6M16 16l4.5 4.5" />
-    </>
-  ),
-  'zoom-out': (
-    <>
-      <circle cx="10.5" cy="10.5" r="6.5" />
-      <path d="M7.5 10.5h6M16 16l4.5 4.5" />
-    </>
-  ),
+  // 2026-11-03 用户裁决：缩放按钮不用放大镜（太小太丑），改成干净的 − / +，16px 下清晰可辨。
+  'zoom-in': <path d="M12 5v14M5 12h14" strokeWidth={2} />,
+  'zoom-out': <path d="M5 12h14" strokeWidth={2} />,
   reset: (
     <>
       <circle cx="12" cy="12" r="8" />

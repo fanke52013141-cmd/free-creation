@@ -58,10 +58,13 @@
 | `image-edit` | P图 | 相框 + 斜向画笔（节点身份） | `image-gen`、`edit` |
 | `edit` | 通用编辑动作 | 铅笔/单笔触（只作动作） | `image-edit` |
 | `website` | 网址节点 | 浏览器窗 + 地址栏 + 地球 | `external`（动作）、`link` |
-| `video` | 视频生成 | 视频框 + 播放 + 横向箭头 | `director`、`video-asset` |
+| `video` | 视频生成 | 视频框（18×17，占满高度）+ 居中播放三角（不加下方箭头） | `director`、`video-asset` |
 | `video-asset` | 视频素材 | 胶片条 + 齿孔 + 播放三角 | `video`、`frame` |
 | `frame` | 视频取帧 | 加高胶片条 + 一条竖线 | `crop`、`clip` |
 | `clip` | 视频截取 | 加高胶片条 + 两条竖线（入点/出点） | `frame`、`split` |
+| `split` | 分割（动作） | 左右方括号实心 + 中间虚线切点 | `clip`、`split-left` |
+| `split-left` | 向左分割（保左删右） | 左方括号实心、右方括号虚线 | `split`、`split-right` |
+| `split-right` | 向右分割（保右删左） | 左方括号虚线、右方括号实心 | `split`、`split-left` |
 | `depth` | 深度视频 | 高重叠前后两框 + 斜向 Z 轴箭头 | `director`、`layers` |
 | `clay` | 白模视频 | 立体方块 + 右面播放三角 | `assets`、`depth` |
 | `audio` | 音频 | 五根节奏不同的声波线 | `video` |
@@ -92,6 +95,9 @@
 ### 工具与导航（核心 13 个）
 
 `upload`（向上箭头落入托盘）、`assets`（立方体/资产盒）、`workflow`（一进二出的关系图）、`history`（时钟回箭头）、`search`（放大镜）、`settings`（齿轮）、`home`（房屋）、`minimap`（小画布）、`fit`（四角收束）、`zoom-in` / `zoom-out`、`undo` / `redo`、`play` / `pause` / `send` / `close` 等应优先使用国际通用形状。
+
+> 2026-11-03 用户裁决：时间轴缩放的 `zoom-in` / `zoom-out` 不再画放大镜（13px 下太小太碎），改为干净的 − / +，
+> 按钮尺寸 24px、图标 16px；其余场景仍优先使用放大镜形状。
 
 操作图标永远描述动作，节点图标永远描述对象。例如“打开右侧输入输出说明”使用 `info`，不复用 `processor`；“运行”使用 `play`，不使用 `video`。
 
@@ -164,7 +170,7 @@
 - 用户裁决：按每个节点“一句话功能”直接指定轮廓；生图、Agent 最后按点名修正。
 - 当前几何：
   - image-gen：横向图片框（16×13）+ 山形/太阳 + 右上四角星。
-  - video：视频框 + 播放三角 + 横向箭头。
+  - video：视频框 + 居中播放三角（2026-11-03 用户裁决：去掉下方横向箭头，框按高度撑满 18×17）。
   - frame：加高胶片条（18×11）+ 一条贯穿竖线。
   - clip：加高胶片条（18×11）+ 两条竖线。
   - depth：高重叠前后两框 + 斜向 Z 轴箭头。
