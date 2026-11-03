@@ -61,7 +61,7 @@
 | `audio` | 音频 | 五根节奏不同的声波线 | `video` |
 | `sound-adjust` | 声音调整 | 三根竖向推子 + 三个错高旋钮 | `audio`、`voice-clone` |
 | `speech` | 语音合成 | 麦克风 + 两条发射弧（节点身份） | `mic`、`voice-clone` |
-| `voice-clone` | 语音克隆 | 上下两条错位声波（原声 + 回声） | `audio`、`sound-adjust` |
+| `voice-clone` | 语音克隆 | 两个并排人形轮廓（双胞胎）+ 右侧三条声波柱 | `audio`、`sound-adjust` |
 | `voice-design` | 音色设计 | 左下三弧声纹 + 右上四角星；唯一 1.65 描边 | `image-gen`（星）、`audio` |
 | `vocal-separate` | 人声分离（退役） | 左侧声波柱向右分叉两支 | `sound-adjust` |
 | `mic` | 录音/麦克风控件 | 胶囊麦克风 + U 支架 + 底座 | `speech`（节点身份） |
@@ -144,3 +144,9 @@
 - 路径：`docs/assets/ui-icon-master-v1.png`。
 - 用途：深色画布 UI 的轮廓、留白、类型色参考。
 - 生成约束：5×4 图标方向稿、无文字/Logo/水印、单线条、圆端角、可简化为 24×24 SVG。
+
+### I5 — 语音克隆图标重绘（2026-11-03）
+
+- 用户裁决：`voice-clone` 用「双胞胎 + 音频」表达，不再用两条错位声波——后者与 `audio`、`sound-adjust` 的声波语言过于接近。
+- 轮廓：两个相同的人形（头 + 肩）并排，右侧三条声波柱表示复刻后的声音；保持 1.8 描边、24×24 网格、圆角端点。
+- 同步更新桌面图标导出（`Canvas Studio 节点图标`）与 `Icon.tsx` 语义注释。
