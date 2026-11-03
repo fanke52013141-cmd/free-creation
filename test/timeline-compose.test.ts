@@ -63,6 +63,33 @@ function probeStreams(file: string): {
   }
 }
 
+/**
+ * 音轨平均电平（dB）。只有流存在还不够——2026-11-03 真机事故就是「有音轨但整条静音」：
+ * ffprobe 探测漏了 captureStdout，把所有素材判成无音轨，合成时全部补 anullsrc。
+ * 这里必须用 volumedetect 量真实电平，静音轨会是 -91 dB 左右。
+ */
+function probeMeanVolumeDb(file: string): number {
+  const res = spawnSync(
+    'ffmpeg',
+    [
+      '-hide_banner',
+      '-nostats',
+      '-i',
+      file,
+      '-map',
+      '0:a:0?',
+      '-af',
+      'volumedetect',
+      '-f',
+      'null',
+      '-'
+    ],
+    { encoding: 'utf8' }
+  )
+  const match = /mean_volume:\s*(-?[\d.]+) dB/.exec(`${res.stderr ?? ''}`)
+  return match ? Number(match[1]) : Number.NaN
+}
+
 beforeAll(async () => {
   if (!toolsReady) return
   root = await mkdtemp(join(tmpdir(), 'canvas-studio-timeline-test-'))
@@ -189,8 +216,38 @@ describe.skipIf(!toolsReady)('composeTimeline 真实 FFmpeg 合成', () => {
       expect(streams.hasAudio).toBe(true)
       expect(streams.width).toBe(320)
       expect(streams.height).toBe(240)
+      // 不是「有音轨就算过」：混入的音频轨必须真的出声。
+      expect(probeMeanVolumeDb(outputPath)).toBeGreaterThan(-50)
       expect(stages.has('prepare')).toBe(true)
       expect(stages.has('mux')).toBe(true)
+    },
+    120_000
+  )
+
+  it(
+    '视频片段自带的原音会进入成片（不是静音补齐）',
+    async () => {
+      const outputPath = join(root, 'clip-audio.mp4')
+      const result = await composeTimeline({
+        outputPath,
+        width: 320,
+        height: 240,
+        frameRate: 30,
+        clips: [
+          {
+            kind: 'video',
+            sourcePath: videoWithAudio,
+            startMs: 0,
+            durationMs: 2000,
+            inMs: 0,
+            sourceDurationMs: 2000
+          }
+        ]
+      })
+      expect(result.ok, result.ok ? '' : result.reason).toBe(true)
+      if (!result.ok) return
+      expect(probeStreams(outputPath).hasAudio).toBe(true)
+      expect(probeMeanVolumeDb(outputPath)).toBeGreaterThan(-50)
     },
     120_000
   )

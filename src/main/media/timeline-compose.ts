@@ -500,7 +500,10 @@ async function probeHasAudio(filePath: string): Promise<boolean> {
       'csv=p=0',
       filePath
     ],
-    FFPROBE_MISSING_HINT
+    FFPROBE_MISSING_HINT,
+    // 必须显式收 stdout：runProcess 默认不累积，漏掉就会把「有没有音轨」永远判成 false，
+    // 合成时给每段补静音轨（2026-11-03 真机「成片没声音」的根因）。
+    { captureStdout: true }
   )
   return stdout.trim().length > 0
 }
@@ -511,7 +514,8 @@ async function probeDurationMs(filePath: string): Promise<number | null> {
     const stdout = await runProcess(
       resolveFfprobeBinary(),
       ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', filePath],
-      FFPROBE_MISSING_HINT
+      FFPROBE_MISSING_HINT,
+      { captureStdout: true }
     )
     const ms = Math.round(Number(stdout.trim()) * 1000)
     return Number.isFinite(ms) && ms > 0 ? ms : null

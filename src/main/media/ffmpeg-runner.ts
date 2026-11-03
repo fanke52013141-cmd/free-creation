@@ -33,7 +33,13 @@ export function resolveFfprobeBinary(): string {
 export interface RunProcessOptions {
   /** 需要实时读取 stdout（FFmpeg 的 -progress pipe:1 走这里）。 */
   onStdout?: (chunk: string) => void
-  /** stdout 是否仍要累积后返回；默认 false（进度流会很大，不保留）。 */
+  /**
+   * stdout 是否累积后作为返回值。
+   * 默认：没有 onStdout 时累积（调用方通常就是要返回值，如 ffprobe 探测）；
+   * 提供 onStdout 时默认不累积（进度流会很大，不保留）。
+   * 2026-11-03 修正：原先默认 false，导致 ffprobe 探测拿到空串——时间线合成因此
+   * 把所有素材判成「无音轨」，成片整条静音。
+   */
   captureStdout?: boolean
   timeoutMs?: number
 }
@@ -48,6 +54,7 @@ export function runProcess(
   missingHint: string,
   options: RunProcessOptions = {}
 ): Promise<string> {
+  const captureStdout = options.captureStdout ?? !options.onStdout
   return new Promise((resolve, reject) => {
     const child = spawn(binary, args, { windowsHide: true })
     const untrack = trackMediaJob(() => {
@@ -68,7 +75,7 @@ export function runProcess(
     }
     child.stdout.on('data', (chunk: Buffer) => {
       const text = chunk.toString()
-      if (options.captureStdout) stdout += text
+      if (captureStdout) stdout += text
       options.onStdout?.(text)
     })
     child.stderr.on('data', (chunk: Buffer) => {
